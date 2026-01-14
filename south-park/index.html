@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<style>
+body {background-color:#69b5d5;}
+svg {position:fixed; top:0px; left:0px; z-index:10;}
+#msg {position:fixed; width:100%; z-index:10; font-family: 'Comic Sans MS'; font-size: 50px; border-radius:10px;}
+.text {position:fixed; top:5px; right:150px; color:yellow; z-index:9; font-family:'Comic Sans MS'; font-size:20px; z-index:999;}
+input[type="range"] {position:fixed; top:5px; right:10px; height:30px; z-index:1000;}
+</style>
+</head>
+<body style="margin:0px; overflow:hidden;" onload="init()">
+<div id="msg"></div>
+<div id="vol" class="text" style="right:150px;">Volume</div>
+<input type="range" id="vBar" min="0" max="0.2" step="0.01" value="0.05"/>
+<div id="score" class="text" style="left:20px;">Score: 0</div>
+<div id="bonusscore" class="text" style="left:45%; color:blue;">Bonus: 200</div>
+<script>
+let w = window.innerWidth;
+let h = window.innerHeight;
+const BOX = 100;
+const svgNS = "http://www.w3.org/2000/svg";
+const characters = [];
+const dirtySnow = [];
+const mouse = {x:0, y:0};
+const start = (new Date()).getTime();
+const msg = {text:"", clear:9999999999999};
+const keys = [];
+const answers = [];
+const NUM_OF_ANSWERS = 5;
+const SPEED = 5;
+const BPM = 0.5
+let lastScheduled = -1;
+let audioCtx;
+let volume = 0.05;
+let ufo, beam = undefined;
+let selected = -1;
+let snow = undefined;
+let gameStep = 0;
+let bonusScore = 200;
+let score = 0;
+
+function animate() {
+  if (bonusScore > 0) {
+    if (answers.length > 0 && beam == undefined) bonusScore -= 0.5;
+    document.getElementById("bonusscore").innerHTML = "Bonus: " + Math.floor(bonusScore);
+  } else document.getElementById("bonusscore").innerHTML = "";
+  processCharacterMovement();
+  processGameActions();
+  if (audioCtx && volume > 0) playSong();
+  requestAnimationFrame(animate);
+}
+
+function processGameActions() {
+  if (msg.text.length == 0) {
+    if (gameStep == 0 && selected == -1)
+      sendMessage({y:50, text:"Pick Your Character", len:99000, size:70, color:"yellow"});
+    else if (gameStep == 1)
+      sendMessage({x:470,y:40,text:"Do you see any intelligent life?",len:1000,size:20,back:'white',color:'black',width:'290'});
+    else if (gameStep == 2)
+      sendMessage({x:180,y:40,text:"I don't see any.",len:500,size:20,back:'white',color:'black',width:'150'});
+    else if (gameStep == 3)
+      sendMessage({x:470,y:40,text:"Mark this world for destruction.",len:1000,size:18,back:'white',color:'black',width:'280'});
+    else if (gameStep == 4)
+      sendMessage({x:20,y:40,text:"Wait. I will test these creatures.",len:1000,size:20,back:'white',color:'black',width:'320'});
+    else if (gameStep == 5)
+      createQuestions();
+    else if (gameStep == 6)
+      sendMessage({x:420,y:40,text:"This human is showing signs of intelligence.",len:2000,size:18,back:'white',color:'black',width:'340'});
+    else if (gameStep == 7)
+      sendMessage({x:20,y:40,text:"I will give them more questions",len:2000,size:20,back:'white',color:'black',width:'320'});
+    else if (gameStep == 8)
+      createQuestions();
+    if (ufo.z > 0.7) gameStep += 1;
+  }
+  if (beam) moveUFO();
+  ufo.update();
+  if (msg.text.length > 0 && (new Date()).getTime() > msg.clear) sendMessage({});
+}
+
+function createQuestions() {
+  const colors = shuffleArray(["red", "purple", "magenta", "blue", "orange"]);
+  const locations = getLocations();
+  for (answer of answers) removeAnswer();
+  const tempNums = [];
+  while (tempNums.length < NUM_OF_ANSWERS) {
+    const n1 = rn(2,9);
+    const n2 = rn(2,9);
+    if (tempNums.indexOf(n1*n2) == -1) {
+      let index = answers.length;
+      tempNums.push(n1*n2);
+      answers.push(createAnswer(n1*n2, n1+" x "+n2, colors[index], locations[index]));
+    }
+  }
+  sendMessage({x:20,y:20,text:answers[0].text,size:60});
+}
+
+//Returns a shuffled list of potential answer locations (not hidden by trees). It checks to
+//Make sure the character is not standing on one and gets it wrong right away.
+function getLocations() {
+  const locations = shuffleArray([[120,0.8], [250,0.95], [450,0.9], [550,0.75], [700,0.95], [88, 0.98], [549, 0.98]]);
+  let c = characters[selected];
+  for (let i=0; i<7; i++) {
+    if (distance({x:c.x, y:c.z*1000}, {x:locations[6-i][0], y:locations[6-i][1]*1000}) < 50)
+      locations.splice(i, 1);
+    if (locations.length == 5) break;
+  }
+  return locations;
+}
+
+function createAnswer(n, text, color, location) {
+  const num = new SVG3d({'num':[]}, location[0], h-600, location[1], 200, 200);
+  num.svg.innerHTML='<text x="50" y="100" text-anchor="middle" dominant-baseline="middle" fill="'+color+'" font-family="Comic Sans MS" font-size="100">'+n+'</text>';
+  num.update();
+  num.value = n;
+  num.text = text;
+  return num;
+}
+
+function removeAnswer() {
+  removeSVG(answers[0].svg);
+  answers.splice(0,1);
+}
+
+function removeSVG(svg) {svg.parentElement.removeChild(svg);}
+
+function shuffleArray(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    array.push(array.splice(Math.floor(Math.random()*array.length),1)[0])
+  }
+  return array;
+}
+
+function sendMessage(options) {
+  const msgBox = document.getElementById('msg');
+  if ('x' in options) {
+    msgBox.style['left'] = options.x+'px';
+    msgBox.style['text-align'] = 'left';
+  } else {
+    msgBox.style['left'] = '0px';
+    msgBox.style['text-align'] = 'center';
+  }
+  if ('y' in options) msgBox.style['top'] = options.y+'px';
+  msgBox.innerHTML = msg.text = ('text' in options)? options.text:"";
+  msg.clear = (new Date()).getTime() + (('len' in options)? options.len : 9999999);
+  if ('size' in options) msgBox.style['font-size'] = options.size + 'px';
+  if ('color' in options) msgBox.style['color'] = options.color;
+  if ('back' in options) msgBox.style['background-color'] = options.back;
+  else msgBox.style['background-color'] = 'transparent';
+  msgBox.style['width'] = ('width' in options)? options.width+"px":"100%";
+}
+
+function characterPicked(n) {
+  for (let i=0; i<characters.length; i++) {
+    characters[i].speed = 5;
+    if (i != n) {
+      const newX = (characters[i].x < w/2)? -200 : w + 200;
+      characters[i].goal = {x:newX, z:0.68};
+    } else characters[i].speed = 8;
+  }
+  selected = n;
+  if (gameStep == 0) sendMessage({});
+}
+
+function processCharacterMovement() {
+  for (let i=0; i<characters.length; i++) {
+    const c = characters[i];
+    if (i == selected) {
+      const answer = isOnAnswer(c)
+      if (answer) characterOnAnswer(c, answer);
+      else characterNotOnAnswer(c);
+    }
+    c.process();
+  }
+  
+  if (keys.length > 0 && selected > -1 && characters[selected].enabled) {
+    let c = characters[selected];
+    if (keys.indexOf('w') > -1) {if (c.z > 0.68) c.z -= c.speed/2000;}
+    if (keys.indexOf('a') > -1) {if (c.x > 50) c.x -= c.speed*0.4;}
+    if (keys.indexOf('s') > -1) {if (c.z < 1.05) c.z += c.speed/2000;}
+    if (keys.indexOf('d') > -1) {if (c.x < window.innerWidth-50) c.x += c.speed*0.4;}
+    c.update();
+    if (Math.random() > 0.1) dropDirtySnow(c);
+  }
+}
+
+function dropDirtySnow(c) {
+  const rand = Math.floor(220 + Math.random()*30);
+  const color = 'rgba('+ rand + ',' + rand + ',' + rand + ', 0.5)'
+  const x = c.x + Math.random()*30-15;
+  const y = 250 + (c.z - 1) * 200;
+  dirtySnow.push(new SVG3d({'dirtysnow':[color]}, x, y, c.z-0.1, 300, 300));
+}
+
+function characterOnAnswer(c, answer) {
+  if (c.parts[2][0].indexOf('body') > -1) {
+    c.parts[2][0] = (c.parts[2][0].indexOf('fat') == 0)? "fatarmsup":"armsup";
+    c.draw();
+    answer.y -= 100 * answer.z;
+    answer.update();
+  } else {
+    if (beam == undefined)
+      beam = new SVG3d({'beam':[]}, ufo.x, ufo.y+60, ufo.z-0.002, 300, h*1.2);
+    if (distance({x:c.x, y:c.z*1000},{x:ufo.x,y:ufo.z*1000}) < 50) 
+      checkAnswer(answer);
+  }
+}
+
+function characterNotOnAnswer(c) {
+  if (c.parts[2][0].indexOf('armsup') > -1) {
+    c.parts[2][0] = (c.parts[2][0].indexOf('fat') == 0)? "fatbody":"body";
+    c.draw();
+    for (let ans of answers) {
+      ans.y = h-600;
+      ans.update();
+    }
+    if (beam) removeBeam();
+  }
+}
+
+function removeBeam() {
+  removeSVG(beam.svg);
+  beam = undefined;
+  ufo.goal = {x:w/2, y:-100, z:0.8};
+}
+
+function isOnAnswer(c) {
+  for (let answer of answers) {
+    if (distance({x:c.x, y:c.z*1000},{x:answer.x,y:answer.z*1000}) < 50)
+      return answer;
+  }
+  return false;
+}
+
+function checkAnswer(answer) {
+  const question = msg.text.split(" x ");
+  const rightAns = question[0] * question[1];
+  
+  //If the correct answer is picked it is raised to the ufo. Then it is removed and a
+  //new question will be asked. If it is the last one, new questions are generated
+  if (answer.value == rightAns) {
+    answer.y -= 1;
+    if (answer.y < ufo.y) {
+      characters[selected].smile();
+      score += 50 + bonusScore;
+      bonusScore = 200;
+      document.getElementById("score").innerHTML = "Score: " + Math.floor(score);
+      removeAnswer();
+      removeBeam(); 
+      if (answers.length > 0)
+        sendMessage({x:20,y:20,text:answers[0].text,size:60});
+      else {
+        gameStep = 6;
+        sendMessage({});
+      }
+    }
+    answer.update();
+  }
+  //If the wrong answer is picked the character is disabled so they can't escape the beam
+  //The character will be raised and rotated. Once they are high enough they are removed
+  //Then the other characters will return so they can be selected.
+  else {
+    const c = characters[selected];
+    c.frown();
+    c.y -= 1;
+    c.enabled = false;
+    c.svg.setAttribute('transform', "rotate("+c.counter%360+",0,-30)");
+    if (c.y < ufo.y) {
+      removeBeam();
+      removeSVG(c.svg);
+      characters.splice(selected, 1);
+      selected = -1;
+      if (characters.length == 0) gameStep = 9;
+      for (let i=0; i<characters.length; i++) {
+        const space = w/characters.length;
+        characters[i].goal = {x:(i+1)*space-space/2, z:1};
+        characters[i].speed = 30;
+      }
+    }
+  }
+}
+
+function moveUFO() {
+  if (selected > -1) {
+    const c = characters[selected];
+    ufo.goal.x = c.x;
+    ufo.goal.z = c.z;
+  }
+  beam.x = ufo.x;
+  beam.z = ufo.z-0.002;
+  beam.update();
+}
+
+function init() {
+  vBar.addEventListener("input", function() {
+    volume = Number(document.getElementById("vBar").value);
+  });
+  createBackground();
+  
+  characters.push(new Character({x:70, name:'stan', 'parts':{'legs':['#353f84'], 'feet':[],  'body':['#924531','#b0171c','#900000'], 'buttons1':[], 'collar':['#b0171c'], 'head':['#f9d6ae'], 'eyes':[], 'frown':[], 'stanhat':['#353f84', '#b0171c', '#900000']}}));
+  
+  characters.push(new Character({x:200, name:'kyle', 'parts':{'legs':['#186757'], 'feet':[], 'body':['#df5f24','#128c58','#027c48'], 'pockets':[], 'collar':['#0e875a'], 'head':['#f9d6ae'], 'eyes':[], 'frown':[], 'kylehat':['#66b564', '#0e875a']}}));
+  
+  characters.push(new Character({x:350, width:200, name:'eric', 'parts':{'fatlegs':['#72382c'], 'fatfeet':[], 'fatbody':['#ca2f35','#eac91e'], 'buttons2':[], 'head':['#f9d6ae'], 'eyes':[], 'frown':[], 'erichat':['#53b2c8', '#f3cd20']}}));
+  
+  characters.push(new Character({x:500, name:'kenny', 'parts':{'legs':['#e05f24'], 'feet':[], 'body':['#e05f24','#582919','#380900'], 'head':['#f9d6ae'], 'eyes':[], 'frown':[], 'kennyhat':['#582919', '#e05f24']}}));
+  
+  characters.push(new Character({x:620, name:'butters', 'parts':{'legs':['#175536'], 'feet':[], 'body':['#32dbbd','#f9d6ae','#d9b69e'],'head':['#f9d6ae'], 'eyes':[], 'frown':[], 'buttershat':['#f1f42e']}}));
+
+  animate();
+}
+
+function createBackground() {
+  snow = new SVG3d({'snow':[]}, w*0.5, h*0.75, 0.1, w*5000, h*600);
+  new SVG3d({'mountain':['#0b3f35']}, 400, 200, 0.2, 64000, 63000);
+  new SVG3d({'mountain':['#0b3f35']}, 1000, 200, 0.2, 64000, 63000);
+  new SVG3d({'mountain':['#135f53']}, 100, 210, 0.21, 63000, 62000);
+  new SVG3d({'mountain':['#135f53']}, 1400, 210, 0.21, 63000, 62000);
+  new SVG3d({'mountain':['#0c5c41']}, 700, 215, 0.22, 62000, 61000);
+  new SVG3d({'tree':['#0a6d37']}, 100, 60, 0.67, 600, 699);
+  new SVG3d({'tree':['#0a6d37']}, 1200, 60, 0.67, 600, 699);
+  new SVG3d({'tree':['#0a6d37']}, 800, 60, 0.67, 600, 699);
+  new SVG3d({'tree':['#0a6d37']}, 1400, 30, 0.8, 600, 699);
+  new SVG3d({'tree':['#0a6d37']}, 950, 30, 0.8, 600, 699);
+  new SVG3d({'tree':['#0a6d37']}, 400, 30, 0.8, 600, 699);
+  new SVG3d({'tree':['#0a6d37']}, 250, 0, 0.9, 600, 699);
+  new SVG3d({'tree':['#0a6d37']}, 700, 0, 0.9, 600, 699);
+  ufo = new SVG3d({'ufo':[]}, w/2, -100, 0.3, 1000, 1000);
+  ufo.speed = 20;
+  ufo.goal.z = 1;
+}
+
+class SVG3d{
+  constructor(parts, x, y, z, width, height) {
+    this.parts = Object.entries(parts);
+    this.x = x;
+    this.y = y;
+    this.z = z;
+    this.width = width;
+    this.height = height;
+    this.counter = rn(1,20);
+    this.speed = SPEED;
+    this.goal = {x:x, y:y, z:z};
+    this.svg = document.createElementNS(svgNS, "svg");
+    this.svg.setAttribute("viewBox", "0 0 "+BOX+" "+BOX*2);
+    document.body.appendChild(this.svg);
+    if (this.width != this.height)
+      this.svg.setAttribute('preserveAspectRatio', 'none');
+    this.draw();
+    this.update();
+  }
+  
+  draw() {
+    this.svg.innerHTML = '';
+    for (let i=0; i<this.parts.length; i++) {
+      let partSVG = svgLib[this.parts[i][0]];
+      for (let j=0; j<this.parts[i][1].length; j++) {
+        partSVG = partSVG.replaceAll("color"+j,this.parts[i][1][j]);
+      }
+      this.svg.innerHTML += partSVG;
+    }
+  }
+  
+  update() {
+    if (distance({x:this.x, y:this.z*1000}, {x:this.goal.x, y:this.goal.z*1000}) > 5 &&
+        this != characters[selected])
+      this.move();
+    const width = this.width * Math.pow(this.z, 3);
+    const height = this.height * Math.pow(this.z, 3);
+    this.svg.style.top = (this.y - height/2) + this.z*500 + "px";
+    this.svg.style.left = (this.x - width/2) + "px";
+    this.svg.style.width =  width + "px";
+    this.svg.style.height = height + "px";
+    this.svg.style['z-index'] = Math.floor(this.z * 1000); 
+  }
+  
+  move() {
+    if (this.goal.x > this.x + 5) this.x += this.speed/20;
+    else if (this.goal.x < this.x - 5) this.x -= this.speed/20;
+    if (this.goal.z > this.z + 0.005) this.z += this.speed/20000;
+    else if (this.goal.z < this.z - 0.005) this.z -= this.speed/20000;
+  }
+}
+
+class Character extends SVG3d {
+  constructor(data) {
+    super(data.parts, data.x, 100, 1, ('width' in data)? data.width:150, 300);
+    this.svg.id = data.name + "-" + characters.length;
+    this.enabled = true;
+  }
+  
+  //Process is to tick character animation and change the mouth depending on mouse distance
+  process() {
+    this.counter += 1;
+    this.y += Math.sin(this.counter/10)/10;
+    const y = (this.y - (this.height * Math.pow(this.z, 3))/2) + this.z*500 + 100;
+    if (selected == -1) this.changeMouthOnMouseHover();
+    this.update();
+  }
+  
+  changeMouthOnMouseHover() {
+    const mPos = this.parts.length - 2;
+    if (distance({x:this.x, y:window.innerHeight - 200}, mouse) < 90) {
+      if (this.parts[mPos][0] == 'frown') {
+        this.smile();
+      }      
+    } else if (this.parts[mPos][0] == 'grin') {
+      this.frown();
+    }
+  }
+  
+  smile() {
+    this.parts[this.parts.length - 2][0] = 'grin';
+    this.draw();
+  }
+  
+  frown() {
+    this.parts[this.parts.length - 2][0] = 'frown';
+    this.draw();
+  }
+}
+
+document.addEventListener('mousedown', function(event) {
+  if (audioCtx == undefined) audioCtx = new AudioContext();
+  for (let i=0; i<characters.length; i++) {
+   if (characters[i].svg === event.target.parentElement)
+     characterPicked(i);
+  }
+});
+
+document.addEventListener('mousemove', function(event) {
+  mouse.x = event.clientX;
+  mouse.y = event.clientY;
+});
+
+document.addEventListener('keydown', function(event) {
+  if (keys.indexOf(event.key) < 0) {
+    keys.push(event.key);
+    playFootSteps();
+  }
+});
+
+document.addEventListener('keyup', function(event) {
+  keys.splice(keys.indexOf(event.key),1);
+});
+
+function rn(min,max){return Math.floor(Math.random()*(max-min+1)+min)}
+
+function distance(p1, p2) {
+  return Math.sqrt(Math.pow(p1.x-p2.x, 2) + Math.pow(p1.y-p2.y, 2));
+}
+
+//Library with the SVG images to be used in the scene
+const svgLib = {
+  head:'<circle cx="50" cy="53" r="35" fill="color0"></circle>',
+  body:'<path d="M 33 81 C 41 91 60 91 66 80 C 76 88 80 93 82 107 L 73 108 L 73 116 C 61 122 39 122 27 116 L 27 108 L 18 107 C 20 93 24 87 33 81" fill="color0"></path><path d="M 73 108 L 71 98 M 27 108 L 29 98" stroke="#000000" stroke-width="0.3"></path><path d="M 50 87 L 50 121" stroke="#000000" stroke-width="0.8"></path><circle cx="22" cy="110" r="5" fill="color1"></circle><circle cx="78" cy="110" r="5" fill="color1"></circle><circle cx="25" cy="108" r="1.7" stroke="color2" stroke-width="0.5" fill="color1"></circle><circle cx="75" cy="108" r="1.7" stroke="color2" stroke-width="0.5" fill="color1"></circle>',
+  fatbody:'<path d="M 93 90 C 86 89 91 80 72 66 C 63 87 41 95 28 66 C 14 69 10 87 4 90 L 11 115 C 24 123 30 124 40 124 C 44 124 47 125 51 124 C 64 126 67 121 72 122 C 85 119 89 122 93 117 C 96 115 97 99 93 90" fill="color0"></path><path d="M 50 85 C 58 114 49 110 53 124" stroke="#000000" stroke-width="0.6" fill="none"></path><path d="M 51 119 L 51 121" stroke="#000000" stroke-width="0.8" fill="none"></path><path d="M 9 88 C 0 88 0 103 8 105 C 14 106 19 105 22 104 C 28 102 16 92 9 88" stroke="none" stroke-width="0.5" fill="color1"></path><path d="M 96 107 C 103 104 93 90 93 90 L 84 92 C 81 95 70 109 83 105 C 87 104 92 113 96 107" stroke="none" stroke-width="0.5" fill="color1"></path>',
+  armsup:'<path d="M 34 80 C 40 91 60 91 66 80 C 75 74 79 68 81 56 L 91 56 C 91 79 71 86 71 98 L 73 116 C 61 122 39 122 27 116 L 29 98 C 29 86 9 79 11 56 L 20 56 C 21 68 25 74 34 80" fill="color0"></path><path d="M 50 87 L 50 121" stroke="#000000" stroke-width="0.8"></path><circle cx="12" cy="60" r="5" fill="color1"></circle><circle cx="88" cy="60" r="5" fill="color1"></circle><circle cx="15" cy="58" r="1.7" stroke="color2" stroke-width="0.5" fill="color1"></circle><circle cx="85" cy="58" r="1.7" stroke="color2" stroke-width="0.5" fill="color1"></circle>',
+  fatarmsup:'<path d="M 82 44 C 80 49 80 58 72 66 C 63 87 41 95 28 66 C 26 62 24 49 23 41 L 9 54 C 5 68 13 113 13 117 C 44 124 47 125 51 124 C 64 126 67 121 80 123 C 88 121 88 116 84 103 C 84 94 99 58 95 49" fill="color0"></path><path d="M 50 85 C 58 114 49 110 53 124" stroke="#000000" stroke-width="0.6" fill="none"></path><path d="M 51 119 L 51 121" stroke="#000000" stroke-width="0.8" fill="none"></path><path d="M 51 119 L 51 121" stroke="#000000" stroke-width="0.8" fill="none"></path><path d="M 9 54 C 0 54 0 39 8 37 C 14 36 19 37 22 38 C 28 40 16 50 9 54" stroke="none" stroke-width="0.5" fill="color1"></path><path d="M 96 37 C 103 40 93 54 93 54 L 84 52 C 81 49 70 35 83 39 C 87 40 92 31 96 37" stroke="none" stroke-width="0.5" fill="color1"></path>',
+  collar:'<path d="M 32 80 C 40 89 60 89 67 80 L 73 85 C 60 96 40 96 27 85" fill="color0"></path>',
+  buttons1:'<circle cx="48" cy="98" r="1" fill="#000000"></circle><circle cx="48" cy="105" r="1" fill="#000000"></circle><circle cx="48" cy="112" r="1" fill="#000000"></circle>',
+  buttons2:'<path d="M 49 91 L 49 93" stroke="#000000" stroke-width="1" fill="none"></path><path d="M 52 105 L 52 107" stroke="#000000" stroke-width="1" fill="none"></path><path d="M 51 121 L 51 123" stroke="#000000" stroke-width="1" fill="none"></path>',
+  pockets:'<path d="M 50 88 L 50 121 M 55 96 L 55 108 L 65 108 L 65 96 L 60 100 L 55 96 L 65 96 M 45 96 L 45 108 L 35 108 L 35 96 L 40 100 L 45 96 L 35 96" stroke="#000000" stroke-width="0.4" fill="none"></path>',
+  legs:'<path d="M 30 115 L 70 115 L 70 133 L 30 133" fill="color0"></path>',
+  fatlegs:'<path d="M 13 115 L 87 115 L 80 133 L 20 133" fill="color0"></path>',
+  feet:'<path d="M 30 133 C 37 128 43 128 50 133 C 57 128 63 128 70 133" fill="#000000"></path>',
+  fatfeet:'<path d="M 25 133 C 30 128 43 128 50 133 C 57 128 70 128 75 133" fill="#000000"></path>',
+  stanhat:'<path d="M 15 41 C 20 1 80 1 85 43" fill="color0"></path><path d="M 14 50 C 40 40 60 40 86 50 L 86 42 C 60 33 40 33 14 41" fill="color1"></path><path d="M 59 16 L 51 15 L 58 19 L 57 20 L 50 15 L 55 21 L 54 22 L 50 16 L 46 21 L 45 20 L 49 15 L 44 19 L 43 18 L 48 15 L 42 16 L 42 15 L 48 14 L 42 13 L 42 12 L 50 14 L 43.1 10 L 44.3 8.7 L 48.8 12.3 L 46.3 7.4 L 47.8 6.7 L 50 11.9 L 53 6 L 54 7 L 51.1 12.3 L 56 8 L 57 9 L 51.8 13.1 L 58 11 L 59 12 L 51.8 14.2 L 59 15 L 59 16" stroke="color1" stroke-width="0.5" fill="color2"></path><path d="M 50 6 L 49 22 L 50 22 L 51.4 5.9 L 50.1 5.8" stroke="color3" stroke-width="0.5" fill="color2"></path>',
+  kylehat:'<path d="M 50 14 C 93 14 83 12 85 40 L 16 40 C 17 12 7 14 50 14" fill="color0"></path><path d="M 78 52 C 90 76 97 64 90 49 C 84 32 71 35 78 52 M 22 52 C 10 76 3 64 10 49 C 16 32 29 35 22 52" stroke="color2" stroke-width="0.2" fill="color0"></path><path d="M 20 46 C 46 41 54 41 80 46 L 80 26 L 20 26" fill="color1"></path>',
+  erichat:'<path d="M 14 50 C 20 2 76 3 85 44 C 61 35 36 35 14 50" fill="color0"></path><path d="M 14 53 C 44 35 67 40 85 46 L 85 43 C 58 34 43 34 14 49" fill="color1"></path><path d="M 42 13 C 45 10 56 10 58 14 C 61 16 58 17 56 16 C 55 17 53 18 51 15 C 50 14 44 18 46 14 C 44 16 38 17 42 13" fill="color1"></path><path d="M 24 69 C 39 88 67 87 78 66" stroke="#000000" stroke-width="0.1" fill="none"></path><path d="M 47 80 C 51 81 55 80 58 80" stroke="#000000" stroke-width="0.2" fill="none"></path>',
+  kennyhat:'<path d="M 50 72 C 72 60 72 40 50 28 C 90 20 90 80 50 72 C 28 60 28 40 50 28 C 10 20 10 80 50 72" fill="color0"></path><path d="M 50 72 C 88 73 83 27 50 28 L 50 15 C 95 15 99 86 50 89 C 1 86 5 15 50 15 L 50 28 C 17 27 12 73 50 72" fill="color1"></path><path d="M 50 77 C 81 77 96 34 50 28 C 5 34 19 78 50 77" stroke="color0" stroke-width="0.3" fill="none"></path><path d="M 54 82 C 51 81 53 74 50 72" stroke="color0" stroke-width="0.5" fill="none"></path><path d="M 48 80 C 50 77 48 74 50 72" stroke="color0" stroke-width="0.5" fill="none"></path>',
+  buttershat:'<path d="M 34 8 C 43 8 49 8 51 14 L 69 7 L 60 14 C 67 15 70.6 19.3 77 24 L 64 21 L 74 34 L 51 24 L 34 36 L 39 22 L 20 26 C 32 20 32 13 42 14 C 42 11 36.6 10 34 8" stroke="none" stroke-width="0.5" fill="color0"></path>',
+  eyes:'<path d="M 65 61 C 55 68 44 48 54 44 C 66 39 71 58 65 61 M 35 61 C 45 68 56 48 46 44 C 34 39 29 58 35 61" fill="#fefefe"></path><circle cx="45" cy="52" r="1.2" fill="#000000"></circle><circle cx="55" cy="52" r="1.2" fill="#000000"></circle>',
+  grin:'<path d="M 40 72 C 41 71 58 71 59 72 C 54 76 52 75 50 78" fill="#000000"></path><path d="M 42 72 C 44 75 52 77 57 72" fill="#f5f5f5"></path><path d="M 45 74 L 45 72 M 49 75 L 49 72 M 52 75 L 53 72 M 48 76 L 56 74 L 44 74" stroke="#000000" stroke-width="0.5"></path>',
+  frown:'<path d="M 42 72 C 48 69 52 70 58 73" stroke="#000000" stroke-width="0.5" fill="none"></path>',
+  snow: '<path d="M 0 0 L 100 0 L 100 200 L 0 200" fill="#eeeeee"></path>',
+  dirtysnow: '<path d="M 22 50 C 21 60 77 59 77 50 C 79 41 23 41 22 50" fill="color0"></path>',
+  mountain:'<path d="M 0 140 C 47 44 56 44 100 140" fill="color0"></path><path d="M 28 86 C 50 58 50 48 73 86 L 74 90 L 70 86 L 71 90 C 67 90 63 84 60 82 C 55 94 54 88 51 80 C 46.6 80.6 42 92 38 82 C 35 88 31 90 28 86" fill="#f3f1f1"></path>',
+  tree: '<path d="M 49 14 C 47 20 47 30 47 34 L 45 40 L 47 44 C 44 46 43 48 42 52 L 42 54 L 41 56 L 40 62 L 42 60 L 43 64 L 42 66 L 43 66 L 42 72 L 41 74 L 40 78 L 38 82 L 37 82 L 37 86 L 36 88 L 37 88 L 36 90 L 38 92 L 32 104 L 33 106 L 32 108 L 34 108 L 32 112 L 32 114 L 34 114 L 30 120 L 31 122 L 29 124 L 26 132 L 26 140 L 24 146 L 26 148 L 28 148 L 27 152 L 29 152 L 30 150 L 31 152 L 30 154 L 35 152 L 37 154 L 38 152 L 40 154 L 41 150 L 42 152 L 45 152 L 46 154 L 47 154 L 48 152 L 48 150 L 50 150 L 50 152 L 52 154 L 53 152 L 55 152 L 56 152 L 57 154 L 58 148 L 60 148 L 60 152 L 62 148 L 63 150 L 65 148 L 66 152 L 68 148 L 70 148 L 70 144 L 71 142 L 70 138 L 70 134 L 67 124 L 68 122 L 69 124 L 68.8 120.6 L 69.1 119 L 67.2 116 L 64.6 110 L 65.1 108.4 L 63.1 105 L 64.6 105 L 64.6 103.2 L 65.4 102.8 L 64 99.2 L 62 98 L 59.8 92 L 59 87.8 L 60.4 87.2 L 59.5 85.2 L 61.1 83.6 L 60.2 82 L 59.3 81.6 L 60.4 78.4 L 58.5 79 L 56.7 75.8 L 55.2 73.6 L 55.2 69.6 L 53.9 65.4 L 53.9 63 L 55.2 65.6 L 55.8 63.2 L 57.1 63.8 L 55.5 60.2 L 55.2 56 L 53.7 54.2 L 53.5 51.2 L 51.1 46.8 L 51 42 L 51.4 43.4 L 51.8 41.6 L 52 40 L 53 40.4 L 50.9 34.8 L 52 34.4 L 50.7 31.2 L 50.5 28.8 C 49 24 48 20 49 14" fill="color0"></path><path d="M 50 40 L 51 42 C 51 43.6 51 44 52 46 L 53.5 50.4 L 53.9 53.8 L 51.6 51.8 L 50.1 51.6 L 50 56 C 50 60 49 60 49 56 C 48 58 46 58 46.8 55 C 44 58 45.6 52.2 45 50 C 44 54 43 54 42 52 L 43.1 47.6 L 44.3 45.6 L 46.1 41.8 C 47 38 48.8 40.2 50.1 39.6" fill="#e0e0e0"></path><path d="M 47 76 C 48 82 44 84 43 78 C 43 84 41 84 38 82 L 40.1 76.8 L 40.9 73.2 L 42.3 71 L 43.2 66.2 L 44.1 64.8 L 44.8 68 L 45.5 65.4 L 46.1 69.2 L 46.8 67 L 47.9 70.8 L 48.5 68.4 L 49.9 69.6 L 51.2 65.8 L 51.6 68.2 L 52.2 66.2 L 53.9 66.2 L 55.2 69.2 L 55.2 74 L 58 78.4 C 57 80 56 82 54.3 77.4 C 53 92 52 84 51.1 79 L 50.3 79.6 L 49.2 77.8 L 48.2 78.4" fill="#e0e0e0"></path><path d="M 52 98 C 54 110 58 106 57 96 C 60 106 60 102 61.4 98.2 L 63.2 99.2 L 63.7 97.6 L 59.9 92.2 L 59.3 88 L 58.6 85.6 L 57.8 86.8 L 56.8 84.2 L 56.3 86.8 L 55.9 85 L 53.3 83 L 52.1 83 C 52 88 50 90 48.7 91.4 L 48.2 89 L 46.4 94.6 L 45.1 93.8 L 44.5 89.8 L 43.4 92.4 L 43.1 94 L 42.2 92.4 L 41.1 95 L 41 91.6 L 40.2 91.4 L 40.1 88 L 38.2 89.8 L 37.9 92.4 L 33.3 100.8 C 35 106 36 104 36.5 100.2 C 37 104 38 102 38.7 99.8 C 38 114 42 106 43.1 101.8 C 43 106 45 104 45.5 101.8 C 47 112 49.9 99.2 52.2 98" fill="#e0e0e0"></path><path d="M 42 120 C 41 130 44 128 45 114 C 46 118 47 120 47.4 115.4 C 48 118 48 118 49 116.4 C 50 120 50 120 51.6 117.2 C 53 124 55 122 56.8 117.6 C 57 122 58 120 58 118 C 59 120 59 120 60 118 C 60 120 62 122 61.2 116.8 C 62 118 63 122 63.2 115.4 C 65 120 67 118 67.5 115.4 L 64.6 109.6 L 63.2 111.2 L 60.2 105 L 56.7 101.8 L 56.4 105.6 L 58.9 109.2 L 58.5 111.8 L 57.4 113 L 56.3 109.2 L 55.8 110.8 L 55.2 108.6 L 54.6 111.2 L 53.7 108.6 L 52.5 107.4 L 51.6 109.2 L 51.4 105 L 50.5 104 L 49.4 106.8 L 49.9 101 L 44 100 L 45.5 107 L 44.4 106.6 L 43.8 111.6 L 43.1 110.4 L 42.6 112 L 41.8 109.6 L 41.1 113.4 L 40.6 112 L 40.1 114.4 L 38.5 109.6 L 39.8 105.8 L 39.2 103.4 L 36.3 107 L 36.3 109.2 L 35.4 107.4 L 33.7 108.2 L 32.2 111.2 L 33.5 114.4 L 31.2 118 L 31.2 120.6 L 33 118 C 33 126 35 122 36.6 118.2 C 35 132 38 124 39.8 118.8 C 40 126 41.4 119.6 42.3 120.2" fill="#e0e0e0"></path><path d="M 49 132 C 52 142 55 144 55 136 C 56 144 57 138 57.1 136.2 C 58 146 59 140 59 136.2 C 60 138 61 136 60.7 134 C 62 138 64 140 65.5 136 C 67 148 67 134 67.5 132.4 L 69.8 134.2 L 67.2 123.8 L 66.7 127.4 L 65.5 124.8 L 63.4 123.8 L 62.5 126.8 L 61.6 128.8 L 60.6 125.4 L 60.1 128.2 L 59.4 124.8 L 58.5 128.4 L 58 124.2 C 56 128 54 128 56.4 117.8 L 53.1 119 C 55 124 54 128 53 128 L 53 125.6 L 52.1 127.4 L 51.3 123 L 50.4 128.4 L 48.8 124.8 C 49 130 47 132 44.8 129.2 L 43.8 132.4 L 43.6 129 C 42 132 42 132 41.1 126.6 L 39.7 129.2 L 38.9 131 L 38.5 127.6 L 37.8 129.2 L 37.4 126.2 L 35.7 127.4 L 35.4 130.6 L 34.2 126.4 L 32.9 129.4 L 32.5 128 L 30.8 129.2 L 30.5 127.4 L 29.7 128 L 29.8 125.6 L 28.5 124.8 L 25.8 131.6 L 25.6 138.8 L 27.1 139.2 L 27.9 136 C 28 142 29 140 30 136 C 30 146 32 144 32
+  ufo:'<path d="M 29 38 C 40 47 60 47 70 38 C 55 16 45 16 29 38" fill="#5bd4ec"></path><path d="M 44 25 C 35 25 44 39 44 39 C 44 39 53 25 44 25 M 43 36 L 37 45 L 39 44 L 43 38 L 43 46 L 45 46 L 45 38 L 49 46 L 50 46 L 46 36" fill="#ffffff"></path><path d="M 43 34 C 41 32 40 29 41 28 C 43 28 45 33 43 34 M 47 28 C 48 30 46 34 45 34 C 43 32 45 29 47 28" fill="#000000"></path><path d="M 56 25 C 65 25 56 39 56 39 C 56 39 47 25 56 25 M 57 36 L 62 44 L 61 44 L 57 39 L 57 46 L 56 46 L 55 39 L 51 46 L 50 46 L 55 36" fill="#ffffff"></path><path d="M 57 34 C 59 32 60 29 59 28 C 57 28 55 33 57 34 M 53 28 C 52 30 54 34 55 34 C 57 32 55 29 53 28" fill="#000000"></path><path d="M 3 50 C 48 65 52 65 97 50" fill="#378b68"></path><path d="M 97 50 C 90 42 80 38 70 38 C 60 46 40 46 30 38 C 20 38 10 42 3 50" fill="#4dc792"></path><path d="M 39 60 C 45 64 55 64 61 60" fill="#733380"></path><path d="M 69 50 C 48 63 27 70 86 50" fill="#733380"></path><path d="M 45 50 C 46 67 52 67 55 50" stroke="none" stroke-width="0.5" fill="#733380"></path><path d="M 14 50 C 64 68 57 66 30 50" fill="#733380"></path>',
+  beam:'<path d="M 30 162 C 35 180 65 180 70 162 L 55 14 L 45 14" stroke="none" stroke-width="0.5" fill="rgba(255,255,255,0.5)"></path>',
+  num:'<text></text>'
+}
+
+//   SSSSS    OOOO     U     U   NN    N   DDD       SSSSSS
+//  S        O    O    U     U   N  N  N   D   D    S
+//   SSSS    O    O    U     U   N   N N   D    D    SSSSS
+//       S   O    O    U     U   N    NN   D   D          S
+//  SSSSS     OOOO      UUUUU    N     N   DDDD     SSSSSS
+//                                                  
+//Creates and repeats a footstep noise
+function playFootSteps() {
+  if (keys.length != 1 || volume == 0) return;
+  const bufferSize = audioCtx.sampleRate * 0.2;
+  const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+  const data = buffer.getChannelData(0);
+  
+  for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+  }
+  
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = buffer;
+  
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 2000;
+  filter.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 0.2);
+  
+  const gain = audioCtx.createGain();
+  gain.gain.setValueAtTime(0.001, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(volume*10, audioCtx.currentTime + 0.1);
+  gain.gain.exponentialRampToValueAtTime(0.2, audioCtx.currentTime + 0.2);
+  
+  noise.connect(filter);
+  filter.connect(gain);
+  gain.connect(audioCtx.destination);
+  noise.start(audioCtx.currentTime);
+  setTimeout(playFootSteps, 300);
+}
+
+//playSong will get called each frame and schedule notes to be played for the next
+//second. If it finds notes to play, it will call pluck and bass to schedule them.
+function playSong() {
+  const time = audioCtx.currentTime%(64*BPM);
+  const second = Math.floor(time)
+  if (second == lastScheduled) return;
+  lastScheduled = second;
+  for (let s of song) {
+    if (Math.floor(s.time*BPM) != second) continue;
+    let time = audioCtx.currentTime+s.time*BPM-second+1;
+    if (s.sound == 1) pluck(time, s.note, s.length*BPM);
+    else bass(time, s.note, s.length*BPM);
+  }
+  
+}
+
+//Creates a plucky sound with a sawtooth oscillator
+function pluck(time, frequency, length) {
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  
+  osc.type = 'sawtooth';
+  osc.frequency.value = frequency;
+  
+  gain.gain.setValueAtTime(0, time);
+  gain.gain.linearRampToValueAtTime(volume, time + length * 0.05);
+  gain.gain.exponentialRampToValueAtTime(0.01, time + length);
+  
+  const filter = audioCtx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.value = 1000;
+  
+  osc.connect(gain);
+  gain.connect(filter);
+  filter.connect(audioCtx.destination);
+  
+  osc.start(time);
+  osc.stop(time + length);
+}
+
+//creates a bassy sound with a sine oscillator
+function bass(time, frequency, length) {
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  
+  osc.type = 'sine';
+  osc.frequency.value = frequency;
+  
+  gain.gain.setValueAtTime(0, time);
+  gain.gain.linearRampToValueAtTime(volume + 0.2, time + length * 0.1);
+  gain.gain.linearRampToValueAtTime(volume + 0.05, time + length * 0.33);
+  gain.gain.linearRampToValueAtTime(volume + 0.05, time + length * 0.66);
+  gain.gain.linearRampToValueAtTime(0.001, time + length);
+  
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  
+  osc.start(time);
+  osc.stop(time + length);
+}
+
+//Song data that sounds somewhat South Parkish. It will get read by playSong on repeat
+const song = [{"time":0,"length":0.5,"note":185,"sound":0},{"time":0,"length":0.25,"note":1047,"sound":1},{"time":0.25,"length":0.25,"note":1047,"sound":1},{"time":0.5,"length":0.5,"note":220,"sound":0},{"time":0.5,"length":0.5,"note":1047,"sound":1},{"time":1,"length":0.25,"note":277,"sound":0},{"time":1,"length":0.5,"note":1047,"sound":1},{"time":1.5,"length":0.5,"note":1047,"sound":1},{"time":2,"length":0.5,"note":185,"sound":0},{"time":2,"length":0.25,"note":1047,"sound":1},{"time":2.25,"length":0.25,"note":1047,"sound":1},{"time":2.5,"length":0.5,"note":220,"sound":0},{"time":2.5,"length":0.5,"note":1109,"sound":1},{"time":3,"length":0.25,"note":277,"sound":0},{"time":3,"length":0.5,"note":740,"sound":1},{"time":3.5,"length":0.5,"note":880,"sound":1},{"time":4,"length":0.5,"note":185,"sound":0},{"time":4,"length":0.25,"note":880,"sound":1},{"time":4.25,"length":0.25,"note":880,"sound":1},{"time":4.5,"length":0.5,"note":220,"sound":0},{"time":4.5,"length":0.5,"note":880,"sound":1},{"time":5,"length":0.25,"note":277,"sound":0},{"time":5,"length":0.25,"note":831,"sound":1},{"time":5.25,"length":0.25,"note":277,"sound":0},{"time":5.25,"length":0.25,"note":831,"sound":1},{"time":5.5,"length":0.25,"note":277,"sound":0},{"time":5.5,"length":0.5,"note":831,"sound":1},{"time":5.75,"length":0.25,"note":220,"sound":0},{"time":6,"length":0.5,"note":185,"sound":0},{"time":6,"length":1,"note":740,"sound":1},{"time":6.5,"length":0.5,"note":220,"sound":0},{"time":7,"length":0.5,"note":277,"sound":0},{"time":7.5,"length":0.25,"note":331,"sound":0},{"time":7.75,"length":0.25,"note":349,"sound":0},{"time":8,"length":0.5,"note":370,"sound":0},{"time":8,"length":0.5,"note":659,"sound":1},{"time":8.5,"length":0.5,"note":185,"sound":0},{"time":8.5,"length":0.5,"note":740,"sound":1},{"time":9,"length":0.5,"note":277,"sound":0},{"time":9,"length":0.5,"note":740,"sound":1},{"time":9.5,"length":0.5,"note":185,"sound":0},{"time":9.5,"length":0.25,"note":740,"sound":1},{"time":9.75,"length":0.5,"note":659,"sound":1},{"time":10,"length":0.5,"note":370,"sound":0},{"time":10.25,"length":0.5,"note":740,"sound":1},{"time":10.5,"length":0.5,"note":185,"sound":0},{"time":11,"length":0.5,"note":277,"sound":0},{"time":11,"length":0.5,"note":740,"sound":1},{"time":11.5,"length":0.5,"note":185,"sound":0},{"time":11.5,"length":0.5,"note":740,"sound":1},{"time":12,"length":0.5,"note":370,"sound":0},{"time":12,"length":0.5,"note":880,"sound":1},{"time":12.5,"length":0.5,"note":185,"sound":0},{"time":12.5,"length":0.5,"note":880,"sound":1},{"time":13,"length":0.5,"note":277,"sound":0},{"time":13,"length":0.25,"note":740,"sound":1},{"time":13.25,"length":0.5,"note":740,"sound":1},{"time":13.5,"length":0.5,"note":185,"sound":0},{"time":13.75,"length":0.25,"note":880,"sound":1},{"time":14,"length":0.5,"note":370,"sound":0},{"time":14,"length":1,"note":880,"sound":1},{"time":14.5,"length":0.5,"note":185,"sound":0},{"time":15,"length":0.5,"note":370,"sound":0},{"time":15.5,"length":0.5,"note":185,"sound":0},{"time":16,"length":0.5,"note":220,"sound":0},{"time":16,"length":0.5,"note":740,"sound":1},{"time":16.5,"length":0.5,"note":220,"sound":0},{"time":16.5,"length":0.5,"note":740,"sound":1},{"time":17,"length":1,"note":220,"sound":0},{"time":17,"length":0.5,"note":740,"sound":1},{"time":17.5,"length":0.5,"note":740,"sound":1},{"time":18,"length":0.5,"note":262,"sound":0},{"time":18,"length":0.5,"note":880,"sound":1},{"time":18,"length":0.5,"note":880,"sound":1},{"time":18.5,"length":0.5,"note":262,"sound":0},{"time":18.5,"length":0.5,"note":880,"sound":1},{"time":19,"length":1,"note":262,"sound":0},{"time":19,"length":1,"note":880,"sound":1},{"time":20,"length":0.5,"note":220,"sound":0},{"time":20,"length":0.5,"note":740,"sound":1},{"time":20.5,"length":0.5,"note":220,"sound":0},{"time":20.5,"length":0.5,"note":740,"sound":1},{"time":21,"length":1,"note":220,"sound":0},{"time":21,"length":0.5,"note":740,"sound":1},{"time":21.5,"length":0.25,"note":740,"sound":1},{"time":21.75,"length":0.25,"note":880,"sound":1},{"time":22,"length":0.5,"note":262,"sound":0},{"tim
+
+</script>
+</body>
+</html>
