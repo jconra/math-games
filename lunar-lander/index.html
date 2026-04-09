@@ -622,12 +622,12 @@
         const sunLight = new THREE.DirectionalLight(0xffffff, 1.2);
         sunLight.position.set(0, 1, 1);
         sunLight.castShadow = true;
-        sunLight.shadow.mapSize.width = 2048;
-        sunLight.shadow.mapSize.height = 2048;
-        sunLight.shadow.camera.left = -500;
-        sunLight.shadow.camera.right = 500;
-        sunLight.shadow.camera.top = 500;
-        sunLight.shadow.camera.bottom = -500;
+        sunLight.shadow.mapSize.width = 512;
+        sunLight.shadow.mapSize.height = 512;
+        sunLight.shadow.camera.left = -100;
+        sunLight.shadow.camera.right = 100;
+        sunLight.shadow.camera.top = 100;
+        sunLight.shadow.camera.bottom = -100;
         sunLight.shadow.camera.near = 0.5;
         sunLight.shadow.camera.far = 2000;
         scene.add(sunLight);
@@ -1065,13 +1065,14 @@
                     landerVelocity.y += thrustPower / fpsScaler;
                 } else if (usingKeyboard) {
                     // WASD: lateral thrust only
-                    landerVelocity.x -= inputX * thrustPower * 0.5 / fpsScaler;
-                    landerVelocity.z += inputY * thrustPower * 0.5 / fpsScaler;
+                    landerVelocity.x -= inputX * thrustPower / fpsScaler;
+                    landerVelocity.z += inputY * thrustPower / fpsScaler;
                 } else {
                     // Mouse: upward + lateral thrust
-                    landerVelocity.y += thrustPower / fpsScaler;
-                    landerVelocity.x -= inputX * thrustPower * 0.5 / fpsScaler;
-                    landerVelocity.z += inputY * thrustPower * 0.5 / fpsScaler;
+                    let powerSplit = Math.max(Math.abs(inputX), Math.abs(inputY)) + 0.5;
+                    landerVelocity.y += thrustPower / fpsScaler * (( 0.5 - powerSplit) + 1.5);
+                    landerVelocity.x -= inputX * thrustPower * 0.5 / fpsScaler * powerSplit;
+                    landerVelocity.z += inputY * thrustPower * 0.5 / fpsScaler * powerSplit;
                 }
             } else {
                 // Smoothly return to neutral position
@@ -1108,12 +1109,14 @@
 
                 lander.position.add(landerVelocity);
                 
-                // Update shadow camera to follow lander
-                sunLight.shadow.camera.left = lander.position.x - 500;
-                sunLight.shadow.camera.right = lander.position.x + 500;
-                sunLight.shadow.camera.top = lander.position.z + 500;
-                sunLight.shadow.camera.bottom = lander.position.z - 500;
-                sunLight.shadow.camera.updateProjectionMatrix();
+                sunLight.position.set(
+                    lander.position.x - 10,
+                    lander.position.y + 20,
+                    lander.position.z + 10
+                );
+                
+                sunLight.target.position.copy(lander.position);
+                sunLight.target.updateMatrixWorld();
                 
                 // Smoothly follow lander with camera (relative offset)
                 const targetCameraY = lander.position.y + 30;
