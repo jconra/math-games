@@ -329,6 +329,9 @@
         let answerCraters = []; // Craters with answers
         let answerPadOffset = -8; // Y offset for landing pads
         
+        let frames = 0;
+        let startTime = Date.now();
+
         // Math game setup
         let currentQuestion = null;
         let score = 0;
@@ -740,6 +743,10 @@
         window.addEventListener('touchend', () => {
             setFlames(false);
         });
+
+        window.addEventListener('dblclick', (event) => {
+            event.preventDefault();
+        }, { passive: false });
         
         // Create lander
         let lander = createLander();
@@ -905,7 +912,7 @@
         
         // Lander physics
         let landerVelocity = new THREE.Vector3(0, 0, 0);
-        const gravity = -0.15;
+        const gravity = -0.2;
         const thrustPower = 0.25;
         let physicsStarted = false;
         let altitude = 0;
@@ -1019,6 +1026,8 @@
         
         function animate() {
             requestAnimationFrame(animate);
+            frames++;
+            let fps = frames / ((Date.now() - startTime) / 1000);
             
             // Update bonus time display
             if (gameStarted && currentQuestion && !answerSubmitted) {
@@ -1041,6 +1050,7 @@
             const inputX = usingKeyboard ? keyboardX : mouseX;
             const inputY = usingKeyboard ? keyboardY : mouseY;
             
+            let fpsScaler = fps / 12; 
             // Tilt lander based on input when flames active
             if (flamesActive) {
                 // Tilt left/right based on input
@@ -1051,16 +1061,16 @@
                 // Apply thrust
                 if (keys[' ']) {
                     // Spacebar: upward thrust only
-                    landerVelocity.y += thrustPower;
+                    landerVelocity.y += thrustPower / fpsScaler;
                 } else if (usingKeyboard) {
                     // WASD: lateral thrust only
-                    landerVelocity.x -= inputX * thrustPower * 0.5;
-                    landerVelocity.z += inputY * thrustPower * 0.5;
+                    landerVelocity.x -= inputX * thrustPower * 0.5 / fpsScaler;
+                    landerVelocity.z += inputY * thrustPower * 0.5 / fpsScaler;
                 } else {
                     // Mouse: upward + lateral thrust
-                    landerVelocity.y += thrustPower;
-                    landerVelocity.x -= inputX * thrustPower * 0.5;
-                    landerVelocity.z += inputY * thrustPower * 0.5;
+                    landerVelocity.y += thrustPower / fpsScaler;
+                    landerVelocity.x -= inputX * thrustPower * 0.5 / fpsScaler;
+                    landerVelocity.z += inputY * thrustPower * 0.5 / fpsScaler;
                 }
             } else {
                 // Smoothly return to neutral position
@@ -1119,7 +1129,7 @@
                 const landerBottomY = lander.position.y - 15; // Approximate leg length
                 altitude = landerBottomY - terrainHeight;
                 
-                if (altitude > 0) landerVelocity.y += gravity;
+                if (altitude > 0) landerVelocity.y += gravity / fpsScaler;
                 else {
                     const landingSpeed = Math.abs(landerVelocity.y);
                     const hardLanding = landingSpeed > 2;
