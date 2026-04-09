@@ -1015,10 +1015,11 @@
             scoreEl.textContent = `SCORE: ${score}`;
         }
         
-        function showFeedback(message, color) {
+        function showFeedback(message, color, size=64) {
             const feedbackEl = document.getElementById('feedback-message');
             feedbackEl.textContent = message;
             feedbackEl.style.color = color;
+            feedbackEl.style['font-size'] = size+'px';
             feedbackEl.style.opacity = '1';
             setTimeout(() => {
                 feedbackEl.style.opacity = '0';
@@ -1040,7 +1041,7 @@
             // Handle keyboard input for tilt
             let keyboardX = 0;
             let keyboardY = 0;
-            const usingKeyboard = keys['w'] || keys['a'] || keys['s'] || keys['d'];
+            const usingKeyboard = keys['w'] || keys['a'] || keys['s'] || keys['d'] || keys[' '];
             
             if (keys['a']) keyboardX = -1;  // Left
             if (keys['d']) keyboardX = 1;   // Right
@@ -1060,10 +1061,9 @@
                 lander.rotation.x = inputY * maxTilt;
                 
                 // Apply thrust
-                if (keys[' ']) {
+                if (usingKeyboard) {
                     // Spacebar: upward thrust only
-                    landerVelocity.y += thrustPower / fpsScaler;
-                } else if (usingKeyboard) {
+                    if (keys[' ']) landerVelocity.y += thrustPower / fpsScaler;
                     // WASD: lateral thrust only
                     landerVelocity.x -= inputX * thrustPower / fpsScaler;
                     landerVelocity.z += inputY * thrustPower / fpsScaler;
@@ -1088,12 +1088,12 @@
             // VSI color based on descent rate
             let vsiColor = '#0f0'; // Green
             if (vsi < 0) { // Descending
-                if (vsiAbs > 2) vsiColor = '#f00'; // Red - will crash
-                else if (vsiAbs > 1) vsiColor = '#ff8800'; // Orange - warning
+                if (vsiAbs > 1.5) vsiColor = '#f00'; // Red - will crash
+                else if (vsiAbs > 0.75) vsiColor = '#ff8800'; // Orange - warning
             }
             
             // VSI bar extends from center up (positive) or down (negative)
-            const vsiHeight = Math.min(50, vsiAbs * 10); // Max 50% of bar height
+            const vsiHeight = Math.min(50, vsiAbs * 30); // Max 50% of bar height
             vsiFill.style.background = vsiColor;
             vsiFill.style.height = vsiHeight + '%';
             if (vsi >= 0) {
@@ -1136,7 +1136,7 @@
                 if (altitude > 0) landerVelocity.y += gravity / fpsScaler;
                 else {
                     const landingSpeed = Math.abs(landerVelocity.y);
-                    const hardLanding = landingSpeed > 2;
+                    const hardLanding = landingSpeed > 1.5;
                     
                     lander.position.y = terrainHeight + 15;
                     landerVelocity.y = 0;
@@ -1154,9 +1154,9 @@
                             if (hardLanding) {
                                 const penalty = 20;
                                 points = Math.max(0, points - penalty);
-                                showFeedback(`CORRECT! +${points} (Hard Landing -${penalty})`, '#ff8800');
+                                showFeedback(`CORRECT! +${points} (Hard Landing -${penalty})`, '#ff8800', 40);
                             } else {
-                                showFeedback(`CORRECT! +${points}`, '#0f0');
+                                showFeedback(`CORRECT! +${points}`, '#0c0');
                             }
                             
                             score += points;
