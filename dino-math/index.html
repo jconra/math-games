@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Model Viewer</title>
+<style>
+body{margin: 0;padding: 0; overflow:hidden;}
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.180.0/three.module.js",
+		"datGui": "https://cdn.jsdelivr.net/npm/dat.gui@0.7.9/+esm"
+  }
+}
+</script>
+
+</head>
+<body>
+<script type="module">
+import * as THREE from 'three';
+import * as dat from 'datGui';
+import { GLTFLoader } from 'https://cdn.jsdelivr.net/npm//three@0.165.0/examples/jsm/loaders/GLTFLoader.js';
+
+//Dat GUI are the controls in the top-right corner
+const gui = new dat.GUI()
+const controls = {
+  camera_distance: 20,
+  lookAt_height: 5,
+  camera_height: 20,
+  player_speed:0.5
+}
+gui.add(controls, "camera_distance", 1, 100);
+gui.add(controls, "lookAt_height", 0, 50);
+gui.add(controls, "camera_height", 1, 100);
+gui.add(controls, "player_speed", 0.1, 0.9);
+
+const mouse = { down: false, x:0, y:0};
+const gltfLoader = new GLTFLoader();
+const clock = new THREE.Clock();
+
+//Set up THREE.JS
+const scene = new THREE.Scene();
+const renderer = new THREE.WebGLRenderer();
+renderer.setSize( window.innerWidth, window.innerHeight );
+document.body.appendChild( renderer.domElement );
+
+const camera = new THREE.PerspectiveCamera( 40, window.innerWidth / window.innerHeight, 1, 1000 );
+camera.position.set(0,5,5);
+scene.add(camera);
+
+// Create ambient light and add to scene.
+const light = new THREE.AmbientLight(0x404040); // soft white light
+scene.add(light);
+
+// Create directional light and add to scene.
+const directionalLight = new THREE.DirectionalLight(0xffffff);
+directionalLight.position.set(1, 1, 1);
+scene.add(directionalLight);
+
+// Create player and add to the scene
+const player = new THREE.Group();
+createPlayer();
+scene.add(player);
+
+const keys = [];
+
+createFloor();
+animate();
+
+function createPlayer() {
+  gltfLoader.load( './models/trex.gltf', function (gltf) {
+    player.add(gltf.scene);
+    player.actions = {};
+    player.mixer = new THREE.AnimationMixer( player.children[0] );
+    gltf.animations.forEach((action) => {
+      player.actions[action.name] = player.mixer.clipAction( action );
+    });
+    player.actions.idle.play();
+  });
+}
+
+// The floor is so you can see relative movement. It uses a canvas as texture
+function createFloor() {
+  const floorGeometry = new THREE.PlaneGeometry( 20, 20 )
+  const floorTexture = new THREE.CanvasTexture(createGridCanvas());
+  floorTexture.repeat.set(256,256); 
+  floorTexture.wrapS = floorTexture.wrapT = THREE.RepeatWrapping;
+  const floorMaterial = new THREE.MeshBasicMaterial( {map: floorTexture} );
+  const floor = new THREE.Mesh( floorGeometry, floorMaterial );
+  floor.rotation.x = - Math.PI / 2;
+  floor.scale.set( 25, 25, 25 );
+  scene.add( floor );
+}
+
+// This creates and draws on the canvas that is used to pattern the floor
+function createGridCanvas() {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 16;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle="#070e24"; //Outside border color
+  ctx.fillRect(0,0,15,15); 
+  ctx.fillStyle="#06020a"; //Inside rectangle color 
+  ctx.fillRect(2,2,11,11);
+  return canvas;
+}
+
+// First we get the vector that is between the camera and player to base movement off of
+// This works by adding or subtracting to get forward and backwards movement
+// Then for sideways movement the vector is simply rotated 90 degrees
+// If we wanted, we coould use q or e for rotating like horizontal mouse movement does
+function movePlayer() {
+  const vec = getPlayerCameraVector().multiplyScalar(controls.player_speed);
+  faceModel(vec);
+  if (keys.indexOf('w') > -1) player.position.add(vec);
+  if (keys.indexOf('s') > -1) player.position.sub(vec);
+	
+	vec.applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
+  if (keys.indexOf('a') > -1) player.position.add(vec);
+  if (keys.indexOf('d') > -1) player.position.sub(vec);
+}
+
+// Camera gets repositioned each frame to keep distance from player consistent
+// It works by using the vector between player and camera, then starting at the player's
+// position, it is moved away from the player along the vector to the specified distance.
+// The camera's height is set (which could be based off player). Then the camera looks at
+// the player. An offset is used so you can adjust if it's looking too high or low.
+// The last line syncs the player and camera rotation so you are always loooking at the back.
+// The characters rotation could be set based from it's direction instead
+function moveCamera(vec) {
+	camera.position.copy(player.position);
+	camera.position.sub(vec.multiplyScalar(controls.camera_distance));
+	camera.position.y = controls.camera_height;
+	const lookAtOffset = new THREE.Vector3(0, controls.lookAt_height, 0);
+	camera.lookAt(player.position.clone().add(lookAtOffset));
+	//player.rotation.copy(camera.rotation);
+}
+
+// Returns normalized vector between camera and player in X and Z axis
+function getPlayerCameraVector() {
+  const player2cameraV = player.position.clone().sub(camera.position);
+	player2cameraV.y = 0;
+	return player2cameraV.normalize();
+}
+
+function changeAnimation(n) {
+  Object.keys(player.actions).forEach((key) => player.actions[key].fadeOut(0.2));
+  player.actions[n].reset().fadeIn(0.2).play();
+}
+
+function faceModel(vec) {
+  player.lookAt(player.position.clone().add(vec));
+  if (keys.length == 1) {
+	  if (keys.indexOf('s') > -1) player.rotateY(Math.PI);
+	  if (keys.indexOf('a') > -1) player.rotateY(Math.PI / 2);
+	  if (keys.indexOf('d') > -1) player.rotateY(-Math.PI / 2);
+  } else {
+	  if (keys.indexOf('s') > -1 && keys.indexOf('d') > -1) player.rotateY(Math.PI * -0.75);
+		if (keys.indexOf('s') > -1 && keys.indexOf('a') > -1) player.rotateY(Math.PI * 0.75);
+		if (keys.indexOf('w') > -1 && keys.indexOf('d') > -1) player.rotateY(Math.PI * -0.25);
+		if (keys.indexOf('w') > -1 && keys.indexOf('a') > -1) player.rotateY(Math.PI * 0.25);
+	}
+}
+
+// This is the main game loop
+function animate() {
+  requestAnimationFrame(animate);
+
+  if (player.mixer) {
+    if (keys.length > 0) movePlayer();
+    moveCamera(getPlayerCameraVector());
+    const delta = clock.getDelta();
+    player.mixer.update(delta);
+  }
+  renderer.render(scene, camera);
+}
+
+window.addEventListener('keydown', (e) => {
+  if (keys.length == 0) changeAnimation('run');
+  if (keys.indexOf(e.key) < 0) keys.push(e.key);
+});
+
+window.addEventListener('keyup', (e) => {
+  keys.splice(keys.indexOf(e.key), 1);
+  if (keys.length == 0) changeAnimation('idle');
+});
+
+window.addEventListener('mouseup', (e) => {mouse.down = false;});
+window.addEventListener('mousedown', (e) => {
+  mouse.down = true;
+	mouse.x = e.clientX;
+	mouse.y = e.clientY;
+});
+
+window.addEventListener('wheel', (event) => {
+  controls.camera_distance += (event.deltaY > 0)? 2:-2
+});
+
+//If the mouse is down and dragging across the screen horizontal mouse will rotate the camera 
+//around the players Y axis and it will adjust the camera height with vertical mouse movement.
+window.addEventListener('mousemove', (e) => {
+  if (mouse.down) {
+	  const vec = getPlayerCameraVector();
+		vec.applyAxisAngle(new THREE.Vector3(0, 1, 0), (mouse.x - e.clientX) / 100);
+		controls.camera_height -= (mouse.y - e.clientY) / 10;
+		if (controls.camera_height < 1) controls.camera_height = 1;
+		moveCamera(vec);
+		mouse.x = e.clientX;
+		mouse.y = e.clientY;
+	}
+});
+</script>
+</body>
+</html>
+
