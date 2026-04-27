@@ -35,9 +35,11 @@ gui.add(controls, "lookAt_height", 0, 50);
 gui.add(controls, "camera_height", 1, 100);
 gui.add(controls, "player_speed", 0.1, 0.9);
 
-const mouse = { down: false, x:0, y:0};
+const mouse = { down: false, x:0, y:0, sx:0, xy:0};
 const gltfLoader = new GLTFLoader();
 const clock = new THREE.Clock();
+const raycaster = new THREE.Raycaster();
+const objects = [];
 
 //Set up THREE.JS
 const scene = new THREE.Scene();
@@ -91,6 +93,7 @@ function createFloor() {
   floor.rotation.x = - Math.PI / 2;
   floor.scale.set( 25, 25, 25 );
   scene.add( floor );
+  objects.push(floor);
 }
 
 // This creates and draws on the canvas that is used to pattern the floor
@@ -118,6 +121,7 @@ function movePlayer() {
 	vec.applyAxisAngle(new THREE.Vector3(0, 1, 0), Math.PI / 2);
   if (keys.indexOf('a') > -1) player.position.add(vec);
   if (keys.indexOf('d') > -1) player.position.sub(vec);
+  player.target = undefined;
 }
 
 // Camera gets repositioned each frame to keep distance from player consistent
@@ -162,12 +166,20 @@ function faceModel(vec) {
 	}
 }
 
+function autoMove() {
+  const diff = player.position.clone().sub(player.target);
+  diff.normalize().multiplyScalar(controls.player_speed);
+  player.position.sub(diff);
+  if (player.position.distanceTo(player.target) < 0.5) changeAnimation('idle');
+}
+
 // This is the main game loop
 function animate() {
   requestAnimationFrame(animate);
 
   if (player.mixer) {
     if (keys.length > 0) movePlayer();
+    if (player.target && player.position.distanceTo(player.target) > 0.5) autoMove();
     moveCamera(getPlayerCameraVector());
     const delta = clock.getDelta();
     player.mixer.update(delta);
@@ -185,30 +197,57 @@ window.addEventListener('keyup', (e) => {
   if (keys.length == 0) changeAnimation('idle');
 });
 
-window.addEventListener('mouseup', (e) => {mouse.down = false;});
+window.addEventListener('mouseup', (e) => { checkClick(e); });
 window.addEventListener('mousedown', (e) => {
   mouse.down = true;
-	mouse.x = e.clientX;
-	mouse.y = e.clientY;
+	mouse.x = mouse.sx = e.clientX;
+	mouse.y = mouse.sy = e.clientY;
 });
+
+window.addEventListener('touchstop', (e) => { checkClick(e.touches[0]); });
+window.addEventListener('touchstart', (e) => {
+  mouse.down = true;
+  mouse.x = mouse.sx = e.touches[0].clientX;
+	mouse.y = mouse.sy = e.touches[0].clientY;
+});
+
+function checkClick(e) {
+  mouse.down = false;
+  if (Math.abs(e.clientX - mouse.sx) < 20 && Math.abs(e.clientY - mouse.sy) < 20) {
+    const m = new THREE.Vector3(( e.clientX / window.innerWidth ) * 2 - 1,   //x
+                               -( e.clientY / window.innerHeight ) * 2 + 1,  //y
+                                0.5 );
+  raycaster.setFromCamera( m, camera );
+  const intersects = raycaster.intersectObjects( objects );
+  player.target = intersects[0].point;
+  player.target.y = player.position.y;
+  player.lookAt(player.target);
+  changeAnimation('run');
+  }
+}
 
 window.addEventListener('wheel', (event) => {
   controls.camera_distance += (event.deltaY > 0)? 2:-2
 });
 
+window.addEventListener('mousemove', (e) => { rotate( e.clientX, e.clientY)});
+
+window.addEventListener('touchmove', (e) => { rotate( e.touches[0].clientX, e.touches[0].clientY ) });
+
 //If the mouse is down and dragging across the screen horizontal mouse will rotate the camera 
 //around the players Y axis and it will adjust the camera height with vertical mouse movement.
-window.addEventListener('mousemove', (e) => {
+function rotate(x, y) {
   if (mouse.down) {
 	  const vec = getPlayerCameraVector();
-		vec.applyAxisAngle(new THREE.Vector3(0, 1, 0), (mouse.x - e.clientX) / 100);
-		controls.camera_height -= (mouse.y - e.clientY) / 10;
+		vec.applyAxisAngle(new THREE.Vector3(0, 1, 0), (mouse.x - x) / 100);
+		controls.camera_height -= (mouse.y - y) / 10;
 		if (controls.camera_height < 1) controls.camera_height = 1;
 		moveCamera(vec);
-		mouse.x = e.clientX;
-		mouse.y = e.clientY;
+		mouse.x = x;
+		mouse.y = y;
 	}
-});
+}
+
 </script>
 </body>
 </html>
