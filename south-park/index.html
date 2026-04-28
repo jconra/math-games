@@ -4,14 +4,18 @@
 <style>
 body {background-color:#69b5d5;}
 svg {position:fixed; top:0px; left:0px; z-index:10;}
-#msg {position:fixed; width:100%; z-index:800; font-family: 'Comic Sans MS'; font-size: 50px; border-radius:10px;}
+#msg {position:fixed; width:100%; z-index:8200; font-family: 'Comic Sans MS'; font-size: 50px; border-radius:10px;}
 .text {position:fixed; top:5px; right:150px; color:yellow; z-index:9; font-family:'Comic Sans MS'; font-size:20px; z-index:999;}
-input[type="range"] {position:fixed; top:5px; right:10px; height:30px; z-index:1000;}
+#vBar {top:5px; right:220px; z-index:1000;
+  position: fixed;
+  transform: scale(2.5);
+  transform-origin: 0 0;
+}
 </style>
 </head>
 <body style="margin:0px; overflow:hidden;" onload="init()">
 <div id="msg"></div>
-<div id="vol" class="text" style="right:150px;">Volume</div>
+<div id="vol" class="text" style="right:30px; top:50px;">Volume</div>
 <input type="range" id="vBar" min="0" max="0.2" step="0.01" value="0.05"/>
 <div id="score" class="text" style="left:20px;">Score: 0</div>
 <div id="bonusscore" class="text" style="left:45%; color:blue;">Bonus: 200</div>
@@ -59,19 +63,19 @@ function processGameActions() {
     if (gameStep == 0 && selected == -1)
       sendMessage({y:50, text:"Pick Your Character", len:99000, size:70, color:"yellow"});
     else if (gameStep == 1)
-      sendMessage({x:w/2+100,y:h/4-70,text:"Do you see any intelligent life?",len:1500,size:20,back:'white',color:'black',width:'290'});
+      sendMessage({x:w/2,y:70,text:"Do you see any intelligent life?",len:1500,size:30,color:'black'});
     else if (gameStep == 2)
-      sendMessage({x:w/2-300,y:h/4-70,text:"I don't see any.",len:1000,size:20,back:'white',color:'black',width:'150'});
+      sendMessage({x:w/2-400,y:70,text:"I don't see any.",len:1000,size:30,color:'black'});
     else if (gameStep == 3)
-      sendMessage({x:w/2+100,y:h/4-70,text:"Mark this world for destruction.",len:1500,size:18,back:'white',color:'black',width:'280'});
+      sendMessage({x:w/2,y:70,text:"Mark this world for destruction.",len:1500,size:30,color:'black'});
     else if (gameStep == 4)
-      sendMessage({x:w/2-390,y:h/4-70,text:"Wait. I will test these creatures.",len:1500,size:20,back:'white',color:'black',width:'320'});
+      sendMessage({x:w/2-400,y:70,text:"Wait. I will test these creatures.",len:1500,size:30,color:'black'});
     else if (gameStep == 5)
       createQuestions();
     else if (gameStep == 6)
-      sendMessage({x:w/2-300,y:h/4-70,text:"This human is showing signs of intelligence.",len:2000,size:18,back:'white',color:'black',width:'340'});
+      sendMessage({x:w/2-200,y:70,text:"This human is showing signs of intelligence.",len:2000,size:30,color:'black'});
     else if (gameStep == 7)
-      sendMessage({x:w/2+100,y:h/4-70,text:"I will give them more questions",len:2000,size:20,back:'white',color:'black',width:'320'});
+      sendMessage({x:w/2-400,y:70,text:"I will give them more questions",len:2000,size:30,color:'black'});
     else if (gameStep == 8)
       createQuestions();
     if (ufo.z > 0.5) gameStep += 1;
@@ -130,7 +134,7 @@ function isPointUnderSVG(x, z, s, svgs) {
 function createAnswer(n, text, color) {
   const loc = getLocation();
   const num = new SVG3d({'num':[]}, loc[0], 0, loc[1], 150, 150);
-  num.svg.innerHTML='<text x="50" y="100" text-anchor="middle" dominant-baseline="middle" fill="'+color+'" font-family="Comic Sans MS" font-size="100">'+n+'</text>';
+  num.svg.innerHTML='<text x="50" y="100" text-anchor="middle" dominant-baseline="middle" fill="'+color+'" font-family="Comic Sans MS" font-size="100" style="cursor: pointer">'+n+'</text>';
   num.update();
   num.value = n;
   num.text = text;
@@ -172,11 +176,11 @@ function sendMessage(options) {
 
 function characterPicked(n) {
   for (let i=0; i<characters.length; i++) {
-    characters[i].speed = 10;
+    characters[i].speed = 15;
     if (i != n) {
       const newX = (characters[i].x < w/2)? -200 : w + 200;
       characters[i].goal = {x:newX, z:0.68};
-    } else characters[i].speed = 7;
+    }
   }
   selected = n;
   if (gameStep == 0) sendMessage({});
@@ -195,10 +199,11 @@ function processCharacterMovement() {
   
   if (keys.length > 0 && selected > -1 && characters[selected].enabled) {
     let c = characters[selected];
-    if (keys.indexOf('w') > -1) {if (c.z > 0.5) c.z -= c.speed/1700;}
-    if (keys.indexOf('a') > -1) {if (c.x > 0) c.x -= c.speed;}
-    if (keys.indexOf('s') > -1) {if (c.z < 1.5) c.z += c.speed/1700;}
-    if (keys.indexOf('d') > -1) {if (c.x < w) c.x += c.speed;}
+    if (keys.indexOf('w') > -1) {if (c.z > 0.5) c.z -= c.speed/2000;}
+    if (keys.indexOf('a') > -1) {if (c.x > 0) c.x -= c.speed/2;}
+    if (keys.indexOf('s') > -1) {if (c.z < 1.5) c.z += c.speed/2000;}
+    if (keys.indexOf('d') > -1) {if (c.x < w) c.x += c.speed/2;}
+    c.goal = {x:c.x, y:c.y, z:c.z};
 		c.svg.setAttribute('transform', "rotate("+((c.counter/2)%3 - 1)+",0,0)");
     c.update();
     if (Math.random() > 0.8) dropDirtySnow(c);
@@ -247,6 +252,7 @@ function removeBeam() {
 }
 
 function isOnAnswer(c) {
+  if (distance({x:c.x, y:c.z*1000}, {x:c.goal.x, y:c.goal.z*1000}) > 50) return false;
   for (let answer of answers) {
     if (distance({x:c.x, y:c.z*1000},{x:answer.x,y:answer.z*1000}) < 50)
       return answer;
@@ -341,8 +347,6 @@ window.addEventListener('resize', function () {
         svg.parentNode.removeChild(svg);
     }
   });
-  //characters.length = 0;
-  //dirtySnow.length = 0
   createBackground();
   ufo.goal.x = w/2;
 });
@@ -401,7 +405,7 @@ function createTrees() {
     let color = "rgb("+(9 + Math.floor(Math.random()*20 - darken)) + ","+
                        (130 + Math.floor(Math.random()*20 - darken)) + ","+
                        (73 + Math.floor(Math.random()*20 - darken)) + ")";
-    new SVG3d({'tree':[color]}, x, 0, z, 700, 600);
+    new SVG3d({'tree':[color]}, x, 0, z, 250, 600);
   }
 }
 
@@ -444,8 +448,7 @@ class SVG3d{
   }
   
   update() {
-    if (distance({x:this.x, y:this.z*1000}, {x:this.goal.x, y:this.goal.z*1000}) > 5 &&
-        this != characters[selected])
+    if (distance({x:this.x, y:this.z*1000}, {x:this.goal.x, y:this.goal.z*1000}) > this.speed)
       this.move();
     const width = this.width * Math.pow(this.z, 1.5);
     const height = this.height * Math.pow(this.z, 1.5);
@@ -457,10 +460,12 @@ class SVG3d{
   }
   
   move() {
-    if (this.goal.x > this.x + 5) this.x += this.speed/20;
-    else if (this.goal.x < this.x - 5) this.x -= this.speed/20;
-    if (this.goal.z > this.z + 0.005) this.z += this.speed/10000;
-    else if (this.goal.z < this.z - 0.005) this.z -= this.speed/10000;
+    if (Math.random() > 0.8) dropDirtySnow(this);
+    this.svg.setAttribute('transform', "rotate("+((this.counter/4)%3 - 1)+",0,0)");
+    if (this.goal.x > this.x + this.speed/4) this.x += this.speed/2;
+    else if (this.goal.x < this.x - this.speed/4) this.x -= this.speed/2;
+    if (this.goal.z > this.z + 0.005) this.z += this.speed/4000;
+    else if (this.goal.z < this.z - 0.005) this.z -= this.speed/4000;
   }
 }
 
@@ -503,11 +508,23 @@ class Character extends SVG3d {
 
 document.addEventListener('mousedown', function(event) {
   if (audioCtx == undefined) audioCtx = new AudioContext();
-  for (let i=0; i<characters.length; i++) {
-   if (characters[i].svg === event.target.parentElement)
-     characterPicked(i);
+});
+
+document.addEventListener('mouseup', function(event) {
+  if (selected == -1) {
+    for (let i=0; i<characters.length; i++) {
+     if (characters[i].svg === event.target.parentElement)
+       characterPicked(i);
+    }
+  } else if (event.target.nodeName == "text") {
+    for (let i=0; i<answers.length; i++) {
+      if (answers[i].value == event.target.innerHTML) {
+        characters[selected].goal = {x:answers[i].x, y:0, z:answers[i].z};
+      }
+    }
   }
 });
+
 
 document.addEventListener('mousemove', function(event) {
   mouse.x = event.clientX;
@@ -556,7 +573,7 @@ const svgLib = {
   frown:'<path d="M 42 139 C 48 136 52 137 58 140" stroke="#000000" stroke-width="0.5" fill="none"></path>',
   dirtysnow: '<path d="M 22 50 C 21 60 77 59 77 50 C 79 41 23 41 22 50" fill="color0"></path>',
   mountain:'<path d="M 0 200 C 47 0 56 0 100 200" fill="color0"></path><path d="M 28 87 C 50 29 50 8 73 87 L 74 96 L 70 87 L 71 96 C 67 96 63 83 60 79 C 55 104 54 92 51 75 C 46.6 76 42 100 38 79 C 35 92 31 96 28 87" fill="#f3f1f1"></path>',
-  tree: '<path d="M 49 0 C 47 9 47 23 47 29 L 45 37 L 47 43 C 44 46 43 49 42 54 L 42 57 L 41 60 L 40 69 L 42 66 L 43 71 L 42 74 L 43 74 L 42 83 L 41 86 L 40 91 L 38 97 L 37 97 L 37 103 L 36 106 L 37 106 L 36 109 L 38 111 L 32 129 L 33 131 L 32 134 L 34 134 L 32 140 L 32 143 L 34 143 L 30 151 L 31 154 L 29 157 L 26 169 L 26 180 L 24 189 L 26 191 L 28 191 L 27 197 L 29 197 L 30 194 L 31 197 L 30 200 L 35 197 L 37 200 L 38 197 L 40 200 L 41 194 L 42 197 L 45 197 L 46 200 L 47 200 L 48 197 L 48 194 L 50 194 L 50 197 L 52 200 L 53 197 L 55 197 L 56 197 L 57 200 L 58 191 L 60 191 L 60 197 L 62 191 L 63 194 L 65 191 L 66 197 L 68 191 L 70 191 L 70 186 L 71 183 L 70 177 L 70 171 L 67 157 L 68 154 L 69 157 L 68.8 153 L 69.1 150 L 67.2 146 L 64.6 137 L 65.1 134 L 63.1 130 L 64.6 130 L 64.6 127 L 65.4 127 L 64 121 L 62 120 L 59.8 111 L 59 106 L 60.4 104 L 59.5 101 L 61.1 100 L 60.2 97 L 59.3 97 L 60.4 91 L 58.5 93 L 56.7 89 L 55.2 86 L 55.2 80 L 53.9 73 L 53.9 70 L 55.2 74 L 55.8 70 L 57.1 71 L 55.5 66 L 55.2 60 L 53.7 57 L 53.5 53 L 51.1 47 L 51 40 L 51.4 41 L 51.8 40 L 52 37 L 53 37 L 50.9 30 L 52 29 L 50.7 24 L 50.5 21 C 49 14 48 9 49 0" fill="color0"></path><path d="M 50 37 L 51 40 C 51 43 51 43 52 46 L 53.5 51 L 53.9 57 L 51.6 54 L 50.1 54 L 50 60 C 50 66 49 66 49 60 C 48 63 46 63 46.8 59 C 44 63 45.6 54 45 51 C 44 57 43 57 42 54 L 43.1 49 L 44.3 46 L 46.1 40 C 47 34 48.8 37 50.1 37" fill="#e0e0e0"></path><path d="M 47 89 C 48 97 44 100 43 91 C 43 100 41 100 38 97 L 40.1 90 L 40.9 84 L 42.3 81 L 43.2 74 L 44.1 73 L 44.8 77 L 45.5 73 L 46.1 79 L 46.8 76 L 47.9 81 L 48.5 77 L 49.9 80 L 51.2 74 L 51.6 77 L 52.2 74 L 53.9 74 L 55.2 79 L 55.2 86 L 58 91 C 57 94 56 97 54.3 90 C 53 111 52 100 51.1 93 L 50.3 94 L 49.2 91 L 48.2 91" fill="#e0e0e0"></path><path d="M 52 120 C 54 137 58 131 57 117 C 60 131 60 126 61.4 120 L 63.2 121 L 63.7 120 L 59.9 111 L 59.3 106 L 58.6 103 L 57.8 104 L 56.8 100 L 56.3 104 L 55.9 101 L 53.3 99 L 52.1 99 C 52 106 50 109 48.7 110 L 48.2 107 L 46.4 116 L 45.1 114 L 44.5 109 L 43.4 111 L 43.1 114 L 42.2 111 L 41.1 116 L 41 111 L 40.2 110 L 40.1 106 L 38.2 109 L 37.9 111 L 33.3 124 C 35 131 36 129 36.5 123 C 37 129 38 126 38.7 123 C 38 143 42 131 43.1 126 C 43 131 45 129 45.5 126 C 47 140 49.9 121 52.2 120" fill="#e0e0e0"></path><path d="M 42 151 C 41 166 44 163 45 143 C 46 149 47 151 47.4 144 C 48 149 48 149 49 146 C 50 151 50 151 51.6 147 C 53 157 55 154 56.8 149 C 57 154 58 151 58 149 C 59 151 59 151 60 149 C 60 151 62 154 61.2 147 C 62 149 63 154 63.2 144 C 65 151 67 149 67.5 144 L 64.6 137 L 63.2 139 L 60.2 130 L 56.7 126 L 56.4 131 L 58.9 136 L 58.5 140 L 57.4 141 L 56.3 136 L 55.8 139 L 55.2 136 L 54.6 139 L 53.7 136 L 52.5 133 L 51.6 136 L 51.4 130 L 50.5 129 L 49.4 133 L 49.9 124 L 44 123 L 45.5 133 L 44.4 133 L 43.8 140 L 43.1 137 L 42.6 140 L 41.8 137 L 41.1 141 L 40.6 140 L 40.1 143 L 38.5 137 L 39.8 131 L 39.2 127 L 36.3 133 L 36.3 136 L 35.4 133 L 33.7 134 L 32.2 139 L 33.5 143 L 31.2 149 L 31.2 153 L 33 149 C 33 160 35 154 36.6 149 C 35 169 38 157 39.8 150 C 40 160 41.4 151 42.3 151" fill="#e0e0e0"></path><path d="M 49 169 C 52 183 55 186 55 174 C 56 186 57 177 57.1 174 C 58 189 59 180 59 174 C 60 177 61 174 60.7 171 C 62 177 64 180 65.5 174 C 67 191 67 171 67.5 169 L 69.8 171 L 67.2 157 L 66.7 161 L 65.5 159 L 63.4 157 L 62.5 161 L 61.6 164 L 60.6 159 L 60.1 163 L 59.4 159 L 58.5 163 L 58 157 C 56 163 54 163 56.4 149 L 53.1 150 C 55 157 54 163 53 163 L 53 160 L 52.1 161 L 51.3 156 L 50.4 163 L 48.8 159 C 49 166 47 169 44.8 164 L 43.8 169 L 43.6 164 C 42 169 42 169 41.1 161 L 39.7 164 L 38.9 167 L 38.5 163 L 37.8 164 L 37.4 160 L 35.7 161 L 35.4 167 L 34.2 160 L 32.9 164 L 32.5 163 L 30.8 164 L 30.5 161 L 29.7 163 L 29.8 160 L 28.5 159 L 25.8 169 L 25.6 179 L 27.1 179 L 27.9 174 C 28 183 29 180 30 174 C 30 189 32 186 32 177 C 32 197 34 183 33.8 179 C 35 186 36 183 36.6 176 L 37.8 176 C 38 191 42 183 41.5 177 L 42.2 180 L 43 177 C 45 191 47 177 46.9 171 C 48 180 49 174 50.1 171" fill="#e0e0e0"></path>',
+  tree:'<path d="M 53 0 C 48 9 48 23 48 29 L 44 37 L 48 43 C 42 46 40 49 38 54 L 38 57 L 36 60 L 34 69 L 38 66 L 40 71 L 38 74 L 40 74 L 38 83 L 36 86 L 34 91 L 29 97 L 27 97 L 27 103 L 25 106 L 27 106 L 25 109 L 29 111 L 17 129 L 19 131 L 17 134 L 21 134 L 17 140 L 17 143 L 21 143 L 13 151 L 15 154 L 11 157 L 4 169 L 4 180 L 0 189 L 4 191 L 8 191 L 6 197 L 11 197 L 13 194 L 15 197 L 13 200 L 23 197 L 27 200 L 29 197 L 34 200 L 36 194 L 38 197 L 44 197 L 46 200 L 48 200 L 50 197 L 50 194 L 55 194 L 55 197 L 59 200 L 61 197 L 65 197 L 67 197 L 69 200 L 71 191 L 76 191 L 76 197 L 80 191 L 82 194 L 86 191 L 88 197 L 92 191 L 97 191 L 97 186 L 99 183 L 97 177 L 97 171 L 90 157 L 92 154 L 95 157 L 95 153 L 95 150 L 90 146 L 86 137 L 86 134 L 82 130 L 86 130 L 86 127 L 86 127 L 84 121 L 80 120 L 76 111 L 74 106 L 76 104 L 76 101 L 78 100 L 76 97 L 74 97 L 76 91 L 74 93 L 69 89 L 65 86 L 65 80 L 63 73 L 63 70 L 65 74 L 67 70 L 69 71 L 67 66 L 65 60 L 63 57 L 63 53 L 57 47 L 57 40 L 57 41 L 59 40 L 59 37 L 61 37 L 57 30 L 59 29 L 57 24 L 57 21 C 53 14 50 9 53 0" fill="color0"></path><path d="M 55 37 L 57 40 C 57 43 57 43 59 46 L 63 51 L 63 57 L 59 54 L 55 54 L 55 60 C 55 66 53 66 53 60 C 50 63 46 63 48 59 C 42 63 46 54 44 51 C 42 57 40 57 38 54 L 40 49 L 42 46 L 46 40 C 48 34 53 37 55 37" fill="#e0e0e0"></path><path d="M 48 89 C 50 97 42 100 40 91 C 40 100 36 100 29 97 L 34 90 L 36 84 L 38 81 L 40 74 L 42 73 L 44 77 L 46 73 L 46 79 L 48 76 L 50 81 L 53 77 L 55 80 L 57 74 L 59 77 L 59 74 L 63 74 L 65 79 L 65 86 L 71 91 C 69 94 67 97 63 90 C 61 111 59 100 57 93 L 55 94 L 53 91 L 50 91" fill="#e0e0e0"></path><path d="M 59 120 C 63 137 71 131 69 117 C 76 131 76 126 78 120 L 82 121 L 84 120 L 76 111 L 74 106 L 74 103 L 71 104 L 69 100 L 67 104 L 67 101 L 61 99 L 59 99 C 59 106 55 109 53 110 L 50 107 L 46 116 L 44 114 L 44 109 L 40 111 L 40 114 L 38 111 L 36 116 L 36 111 L 34 110 L 34 106 L 29 109 L 29 111 L 19 124 C 23 131 25 129 27 123 C 27 129 29 126 32 123 C 29 143 38 131 40 126 C 40 131 44 129 46 126 C 48 140 55 121 59 120" fill="#e0e0e0"></path><path d="M 38 151 C 36 166 42 163 44 143 C 46 149 48 151 48 144 C 50 149 50 149 53 146 C 55 151 55 151 59 147 C 61 157 65 154 69 149 C 69 154 71 151 71 149 C 74 151 74 151 76 149 C 76 151 80 154 78 147 C 80 149 82 154 82 144 C 86 151 90 149 92 144 L 86 137 L 82 139 L 76 130 L 69 126 L 67 131 L 74 136 L 74 140 L 69 141 L 67 136 L 67 139 L 65 136 L 65 139 L 63 136 L 61 133 L 59 136 L 57 130 L 57 129 L 53 133 L 55 124 L 42 123 L 46 133 L 42 133 L 42 140 L 40 137 L 40 140 L 38 137 L 36 141 L 36 140 L 34 143 L 32 137 L 34 131 L 32 127 L 25 133 L 25 136 L 23 133 L 21 134 L 17 139 L 21 143 L 15 149 L 15 153 L 19 149 C 19 160 23 154 27 149 C 23 169 29 157 34 150 C 34 160 36 151 38 151" fill="#e0e0e0"></path><path d="M 53 169 C 59 183 65 186 65 174 C 67 186 69 177 69 174 C 71 189 74 180 74 174 C 76 177 78 174 78 171 C 80 177 84 180 88 174 C 90 191 90 171 92 169 L 97 171 L 90 157 L 90 161 L 88 159 L 82 157 L 82 161 L 80 164 L 78 159 L 76 163 L 74 159 L 74 163 L 71 157 C 67 163 63 163 67 149 L 61 150 C 65 157 63 163 61 163 L 61 160 L 59 161 L 57 156 L 55 163 L 53 159 C 53 166 48 169 44 164 L 42 169 L 42 164 C 38 169 38 169 36 161 L 34 164 L 32 167 L 32 163 L 29 164 L 27 160 L 25 161 L 23 167 L 21 160 L 19 164 L 19 163 L 15 164 L 15 161 L 13 163 L 13 160 L 11 159 L 4 169 L 4 179 L 6 179 L 8 174 C 8 183 11 180 13 174 C 13 189 17 186 17 177 C 17 197 21 183 21 179 C 23 186 25 183 27 176 L 29 176 C 29 191 38 183 38 177 L 38 180 L 40 177 C 44 191 48 177 48 171 C 50 180 53 174 55 171" fill="#e0e0e0"></path>',
   farTrees:'<path d="M 92 200 L 11 200 L 19 40 L 21 190 L 25 120 L 26 190 L 29 140 L 31 180 L 34 50 L 37 170 L 40 90 L 43 150 L 48 80 L 50 150 L 54 30 L 59 160 L 65 70 L 69 160 L 72 90 L 75 150 L 81 0 L 83 150 L 87 70" fill="#081a13"></path>',
   ufo:'<path d="M 29 38 C 40 47 60 47 70 38 C 55 16 45 16 29 38" fill="#5bd4ec"></path><path d="M 44 25 C 35 25 44 39 44 39 C 44 39 53 25 44 25 M 43 36 L 37 45 L 39 44 L 43 38 L 43 46 L 45 46 L 45 38 L 49 46 L 50 46 L 46 36" fill="#ffffff"></path><path d="M 43 34 C 41 32 40 29 41 28 C 43 28 45 33 43 34 M 47 28 C 48 30 46 34 45 34 C 43 32 45 29 47 28" fill="#000000"></path><path d="M 56 25 C 65 25 56 39 56 39 C 56 39 47 25 56 25 M 57 36 L 62 44 L 61 44 L 57 39 L 57 46 L 56 46 L 55 39 L 51 46 L 50 46 L 55 36" fill="#ffffff"></path><path d="M 57 34 C 59 32 60 29 59 28 C 57 28 55 33 57 34 M 53 28 C 52 30 54 34 55 34 C 57 32 55 29 53 28" fill="#000000"></path><path d="M 3 50 C 48 65 52 65 97 50" fill="#378b68"></path><path d="M 97 50 C 90 42 80 38 70 38 C 60 46 40 46 30 38 C 20 38 10 42 3 50" fill="#4dc792"></path><path d="M 39 60 C 45 64 55 64 61 60" fill="#733380"></path><path d="M 69 50 C 48 63 27 70 86 50" fill="#733380"></path><path d="M 45 50 C 46 67 52 67 55 50" stroke="none" stroke-width="0.5" fill="#733380"></path><path d="M 14 50 C 64 68 57 66 30 50" fill="#733380"></path>',
   beam:'<path d="M 30 162 C 35 180 65 180 70 162 L 55 14 L 45 14" stroke="none" stroke-width="0.5" fill="rgba(255,255,255,0.5)"></path>',
@@ -663,7 +680,7 @@ function bass(time, frequency, length) {
 
 //Song data that sounds somewhat South Parkish. It will get read by playSong on repeat
 const song = [{"time":0,"length":0.5,"note":185,"sound":0},{"time":0,"length":0.25,"note":1047,"sound":1},{"time":0.25,"length":0.25,"note":1047,"sound":1},{"time":0.5,"length":0.5,"note":220,"sound":0},{"time":0.5,"length":0.5,"note":1047,"sound":1},{"time":1,"length":0.25,"note":277,"sound":0},{"time":1,"length":0.5,"note":1047,"sound":1},{"time":1.5,"length":0.5,"note":1047,"sound":1},{"time":2,"length":0.5,"note":185,"sound":0},{"time":2,"length":0.25,"note":1047,"sound":1},{"time":2.25,"length":0.25,"note":1047,"sound":1},{"time":2.5,"length":0.5,"note":220,"sound":0},{"time":2.5,"length":0.5,"note":1109,"sound":1},{"time":3,"length":0.25,"note":277,"sound":0},{"time":3,"length":0.5,"note":740,"sound":1},{"time":3.5,"length":0.5,"note":880,"sound":1},{"time":4,"length":0.5,"note":185,"sound":0},{"time":4,"length":0.25,"note":880,"sound":1},{"time":4.25,"length":0.25,"note":880,"sound":1},{"time":4.5,"length":0.5,"note":220,"sound":0},{"time":4.5,"length":0.5,"note":880,"sound":1},{"time":5,"length":0.25,"note":277,"sound":0},{"time":5,"length":0.25,"note":831,"sound":1},{"time":5.25,"length":0.25,"note":277,"sound":0},{"time":5.25,"length":0.25,"note":831,"sound":1},{"time":5.5,"length":0.25,"note":277,"sound":0},{"time":5.5,"length":0.5,"note":831,"sound":1},{"time":5.75,"length":0.25,"note":220,"sound":0},{"time":6,"length":0.5,"note":185,"sound":0},{"time":6,"length":1,"note":740,"sound":1},{"time":6.5,"length":0.5,"note":220,"sound":0},{"time":7,"length":0.5,"note":277,"sound":0},{"time":7.5,"length":0.25,"note":331,"sound":0},{"time":7.75,"length":0.25,"note":349,"sound":0},{"time":8,"length":0.5,"note":370,"sound":0},{"time":8,"length":0.5,"note":659,"sound":1},{"time":8.5,"length":0.5,"note":185,"sound":0},{"time":8.5,"length":0.5,"note":740,"sound":1},{"time":9,"length":0.5,"note":277,"sound":0},{"time":9,"length":0.5,"note":740,"sound":1},{"time":9.5,"length":0.5,"note":185,"sound":0},{"time":9.5,"length":0.25,"note":740,"sound":1},{"time":9.75,"length":0.5,"note":659,"sound":1},{"time":10,"length":0.5,"note":370,"sound":0},{"time":10.25,"length":0.5,"note":740,"sound":1},{"time":10.5,"length":0.5,"note":185,"sound":0},{"time":11,"length":0.5,"note":277,"sound":0},{"time":11,"length":0.5,"note":740,"sound":1},{"time":11.5,"length":0.5,"note":185,"sound":0},{"time":11.5,"length":0.5,"note":740,"sound":1},{"time":12,"length":0.5,"note":370,"sound":0},{"time":12,"length":0.5,"note":880,"sound":1},{"time":12.5,"length":0.5,"note":185,"sound":0},{"time":12.5,"length":0.5,"note":880,"sound":1},{"time":13,"length":0.5,"note":277,"sound":0},{"time":13,"length":0.25,"note":740,"sound":1},{"time":13.25,"length":0.5,"note":740,"sound":1},{"time":13.5,"length":0.5,"note":185,"sound":0},{"time":13.75,"length":0.25,"note":880,"sound":1},{"time":14,"length":0.5,"note":370,"sound":0},{"time":14,"length":1,"note":880,"sound":1},{"time":14.5,"length":0.5,"note":185,"sound":0},{"time":15,"length":0.5,"note":370,"sound":0},{"time":15.5,"length":0.5,"note":185,"sound":0},{"time":16,"length":0.5,"note":220,"sound":0},{"time":16,"length":0.5,"note":740,"sound":1},{"time":16.5,"length":0.5,"note":220,"sound":0},{"time":16.5,"length":0.5,"note":740,"sound":1},{"time":17,"length":1,"note":220,"sound":0},{"time":17,"length":0.5,"note":740,"sound":1},{"time":17.5,"length":0.5,"note":740,"sound":1},{"time":18,"length":0.5,"note":262,"sound":0},{"time":18,"length":0.5,"note":880,"sound":1},{"time":18,"length":0.5,"note":880,"sound":1},{"time":18.5,"length":0.5,"note":262,"sound":0},{"time":18.5,"length":0.5,"note":880,"sound":1},{"time":19,"length":1,"note":262,"sound":0},{"time":19,"length":1,"note":880,"sound":1},{"time":20,"length":0.5,"note":220,"sound":0},{"time":20,"length":0.5,"note":740,"sound":1},{"time":20.5,"length":0.5,"note":220,"sound":0},{"time":20.5,"length":0.5,"note":740,"sound":1},{"time":21,"length":1,"note":220,"sound":0},{"time":21,"length":0.5,"note":740,"sound":1},{"time":21.5,"length":0.25,"note":740,"sound":1},{"time":21.75,"length":0.25,"note":880,"sound":1},{"time":22,"length":0.5,"note":262,"sound":0},{"time":22,"length":0.5,"note":880,"sound":1},{"time":22.5,"length":0.5,"note":262,"sound":0},{"time":22.5,"length":0.5,"note":880,"sound":1},{"time":23,"length":1,"note":262,"sound":0},{"time":23,"length":0.5,"note":880,"sound":1},{"time":23.5,"length":0.5,"note":880,"sound":1},{"time":24,"length":0.5,"note":370,"sound":0},{"time":24,"length":0.5,"note":659,"sound":1},{"time":24.5,"length":0.5,"note":185,"sound":0},{"time":24.5,"length":0.5,"note":740,"sound":1},{"time":25,"length":0.5,"note":277,"sound":0},{"time":25,"length":0.5,"note":740,"sound":1},{"time":25.5,"length":0.5,"note":185,"sound":0},{"time":25.5,"length":0.25,"note":740,"sound":1},{"time":25.75,"length":0.5,"note":831,"sound":1},{"time":26,"length":0.5,"note":370,"sound":0},{"time":26.25,"length":0.5,"note":740,"sound":1},{"time":26.5,"length":0.5,"note":185,"sound":0},{"time":27,"length":0.5,"note":277,"sound":0},{"time":27,"length":0.5,"note":740,"sound":1},{"time":27.5,"length":0.5,"note":185,"sound":0},{"time":27.5,"length":0.5,"note":740,"sound":1},{"time":28,"length":0.5,"note":370,"sound":0},{"time":28,"length":0.5,"note":740,"sound":1},{"time":28.5,"length":0.5,"note":185,"sound":0},{"time":28.5,"length":0.5,"note":659,"sound":1},{"time":29,"length":0.5,"note":277,"sound":0},{"time":29,"length":0.5,"note":880,"sound":1},{"time":29.5,"length":0.5,"note":185,"sound":0},{"time":29.5,"length":0.25,"note":740,"sound":1},{"time":29.75,"length":0.5,"note":740,"sound":1},{"time":30,"length":0.5,"note":370,"sound":0},{"time":30.5,"length":0.5,"note":185,"sound":0},{"time":31,"length":0.5,"note":370,"sound":0},{"time":31.5,"length":0.5,"note":185,"sound":0},{"time":32,"length":0.5,"note":880,"sound":1},{"time":32.5,"length":0.5,"note":220,"sound":0},{"time":32.5,"length":0.5,"note":880,"sound":1},{"time":33,"length":0.5,"note":880,"sound":1},{"time":33.5,"length":0.5,"note":220,"sound":0},{"time":33.5,"length":0.5,"note":880,"sound":1},{"time":34,"length":0.5,"note":1047,"sound":1},{"time":34.5,"length":0.5,"note":262,"sound":0},{"time":34.5,"length":0.5,"note":1047,"sound":1},{"time":35,"length":1,"note":1047,"sound":1},{"time":35.5,"length":0.5,"note":262,"sound":0},{"time":36,"length":0.5,"note":880,"sound":1},{"time":36.5,"length":0.5,"note":220,"sound":0},{"time":36.5,"length":0.5,"note":880,"sound":1},{"time":37,"length":0.5,"note":880,"sound":1},{"time":37.5,"length":0.5,"note":220,"sound":0},{"time":37.5,"length":0.5,"note":880,"sound":1},{"time":38,"length":0.5,"note":1047,"sound":1},{"time":38.5,"length":0.5,"note":262,"sound":0},{"time":38.5,"length":0.5,"note":1047,"sound":1},{"time":39,"length":0.5,"note":1047,"sound":1},{"time":39.5,"length":0.5,"note":262,"sound":0},{"time":39.5,"length":0.5,"note":1047,"sound":1},{"time":40,"length":0.5,"note":370,"sound":0},{"time":40,"length":0.25,"note":659,"sound":1},{"time":40.25,"length":0.25,"note":659,"sound":1},{"time":40.5,"length":0.5,"note":185,"sound":0},{"time":40.5,"length":0.5,"note":740,"sound":1},{"time":41,"length":0.5,"note":277,"sound":0},{"time":41,"length":0.5,"note":740,"sound":1},{"time":41.5,"length":0.5,"note":185,"sound":0},{"time":41.5,"length":0.25,"note":659,"sound":1},{"time":41.75,"length":0.5,"note":880,"sound":1},{"time":42,"length":0.5,"note":370,"sound":0},{"time":42.25,"length":0.5,"note":740,"sound":1},{"time":42.5,"length":0.5,"note":185,"sound":0},{"time":43,"length":0.5,"note":277,"sound":0},{"time":43,"length":0.5,"note":740,"sound":1},{"time":43.5,"length":0.5,"note":185,"sound":0},{"time":43.5,"length":0.5,"note":740,"sound":1},{"time":44,"length":0.5,"note":370,"sound":0},{"time":44,"length":0.5,"note":880,"sound":1},{"time":44.5,"length":0.5,"note":185,"sound":0},{"time":44.5,"length":0.5,"note":880,"sound":1},{"time":45,"length":0.5,"note":277,"sound":0},{"time":45,"length":0.25,"note":740,"sound":1},{"time":45.25,"length":0.5,"note":740,"sound":1},{"time":45.5,"length":0.5,"note":185,"sound":0},{"time":45.75,"length":0.25,"note":880,"sound":1},{"time":46,"length":0.5,"note":370,"sound":0},{"time":46,"length":1,"note":880,"sound":1},{"time":46.5,"length":0.5,"note":185,"sound":0},{"time":47,"length":0.5,"note":370,"sound":0},{"time":47.5,"length":0.5,"note":185,"sound":0},{"time":48,"length":0.5,"note":220,"sound":0},{"time":48,"length":0.5,"note":880,"sound":1},{"time":48.5,"length":0.5,"note":220,"sound":0},{"time":48.5,"length":0.5,"note":880,"sound":1},{"time":49,"length":1,"note":220,"sound":0},{"time":49,"length":0.5,"note":880,"sound":1},{"time":49.5,"length":0.5,"note":880,"sound":1},{"time":50,"length":0.5,"note":262,"sound":0},{"time":50,"length":0.5,"note":1047,"sound":1},{"time":50.5,"length":0.5,"note":262,"sound":0},{"time":50.5,"length":0.5,"note":1047,"sound":1},{"time":51,"length":1,"note":262,"sound":0},{"time":51,"length":0.5,"note":1047,"sound":1},{"time":51.5,"length":0.5,"note":1047,"sound":1},{"time":52,"length":0.5,"note":220,"sound":0},{"time":52,"length":0.5,"note":880,"sound":1},{"time":52.5,"length":0.5,"note":220,"sound":0},{"time":52.5,"length":0.5,"note":880,"sound":1},{"time":53,"length":1,"note":220,"sound":0},{"time":53,"length":0.5,"note":880,"sound":1},{"time":53.5,"length":0.5,"note":880,"sound":1},{"time":54,"length":0.5,"note":262,"sound":0},{"time":54,"length":0.5,"note":1047,"sound":1},{"time":54.5,"length":0.5,"note":262,"sound":0},{"time":54.5,"length":0.5,"note":1047,"sound":1},{"time":55,"length":1,"note":262,"sound":0},{"time":55,"length":0.5,"note":1047,"sound":1},{"time":55.5,"length":0.5,"note":659,"sound":1},{"time":55.5,"length":0.5,"note":1047,"sound":1},{"time":56,"length":0.5,"note":370,"sound":0},{"time":56,"length":0.5,"note":659,"sound":1},{"time":56.5,"length":0.5,"note":185,"sound":0},{"time":56.5,"length":0.5,"note":740,"sound":1},{"time":57,"length":0.5,"note":277,"sound":0},{"time":57,"length":0.5,"note":740,"sound":1},{"time":57.5,"length":0.5,"note":185,"sound":0},{"time":57.5,"length":0.25,"note":740,"sound":1},{"time":57.75,"length":0.5,"note":880,"sound":1},{"time":58,"length":0.5,"note":370,"sound":0},{"time":58.25,"length":0.5,"note":740,"sound":1},{"time":58.5,"length":0.5,"note":185,"sound":0},{"time":59,"length":0.5,"note":277,"sound":0},{"time":59,"length":0.5,"note":740,"sound":1},{"time":59.5,"length":0.5,"note":185,"sound":0},{"time":59.5,"length":0.5,"note":740,"sound":1},{"time":60,"length":0.5,"note":370,"sound":0},{"time":60,"length":0.5,"note":740,"sound":1},{"time":60.5,"length":0.5,"note":185,"sound":0},{"time":60.5,"length":0.5,"note":659,"sound":1},{"time":61,"length":0.5,"note":277,"sound":0},{"time":61,"length":0.5,"note":880,"sound":1},{"time":61.5,"length":0.5,"note":185,"sound":0},{"time":61.5,"length":0.25,"note":740,"sound":1},{"time":61.75,"length":0.5,"note":740,"sound":1},{"time":62.25,"length":0.25,"note":740,"sound":1},{"time":62.5,"length":0.5,"note":185,"sound":0},{"time":63,"length":0.5,"note":277,"sound":0},{"time":63,"length":0.5,"note":370,"sound":0},{"time":63.5,"length":0.5,"note":185,"sound":0}];
-
 </script>
 </body>
 </html>
+
