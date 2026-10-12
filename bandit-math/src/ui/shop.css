@@ -1,0 +1,74 @@
+/* The counters (src/shop.js) and the pause menu: one plain panel over the paused valley.
+   z-index 32: over the HUD (12), under the times chart's button (35) and the lock box (60). */
+.bms {
+  --ink: #f4e8cf; --ink-2: #dccaa5; --mute: #a8957a; --brass: #e2ad4c; --brass-hi: #f3c56b; --rust: #e08566; --good: #a9d67f;
+  position: fixed; inset: 0; z-index: 32; display: grid; place-items: center; padding: 16px;
+  font: 500 16px/1.4 Bitter, Georgia, serif; color: var(--ink);
+}
+.bms-dim { position: absolute; inset: 0; background: rgba(12, 8, 5, 0.55); opacity: 0; transition: opacity 0.2s; }
+.bms-card {
+  position: relative; width: min(560px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; overscroll-behavior: contain;
+  padding: 20px 24px 22px; border-radius: 12px;
+  background: linear-gradient(180deg, rgba(58, 40, 24, 0.97), rgba(36, 24, 14, 0.98));
+  border: 1px solid rgba(226, 173, 76, 0.5); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 230, 180, 0.12);
+  opacity: 0; transform: translateY(10px) scale(0.98); transition: opacity 0.2s, transform 0.2s;
+}
+.bms.is-wide .bms-card { width: min(680px, 100%); }
+.bms.is-in .bms-dim, .bms.is-in .bms-card { opacity: 1; transform: none; }
+.bms.is-out .bms-dim, .bms.is-out .bms-card { opacity: 0; transform: translateY(6px); }
+.bms button, .bms input { font: inherit; color: inherit; }
+.bms-x { position: absolute; right: 12px; top: 12px; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(226, 173, 76, 0.3); cursor: pointer; }
+.bms-x svg { width: 16px; height: 16px; }
+.bms-x:hover { border-color: var(--brass); }
+.bms-title { font: 400 30px/1.1 Rye, Georgia, serif; color: var(--ink); letter-spacing: 0.02em; padding-right: 40px; }
+.bms-sub { font: 400 15px Smokum, Georgia, serif; letter-spacing: 0.05em; color: var(--brass); margin-top: 3px; }
+.bms-body { margin-top: 12px; }
+.bms-purse { display: inline-flex; align-items: center; gap: 6px; font-size: 15px; color: var(--ink-2); margin-bottom: 6px; }
+.bms-purse svg { width: 20px; height: 20px; }
+.bms-purse b { font: 700 19px Bitter, Georgia, serif; color: var(--brass-hi); }
+.bms-note { margin: 4px 0 10px; padding: 8px 12px; border-radius: 8px; background: rgba(169, 214, 127, 0.12); border: 1px solid rgba(169, 214, 127, 0.35);
+  color: var(--good); font-weight: 600; }
+.bms-h { font: 400 15px Smokum, Georgia, serif; letter-spacing: 0.08em; color: var(--mute); text-transform: uppercase; margin: 14px 0 6px;
+  border-bottom: 1px solid rgba(226, 173, 76, 0.2); padding-bottom: 3px; }
+.bms-row { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px dashed rgba(226, 173, 76, 0.14); }
+.bms-row:last-of-type { border-bottom: 0; }
+.bms-what { flex: 1; min-width: 0; }
+.bms-what b { display: block; font: 700 18px Bitter, Georgia, serif; }
+.bms-what small { display: block; font-size: 14px; color: var(--ink-2); line-height: 1.35; }
+.bms-act { display: flex; align-items: center; gap: 10px; flex: none; }
+.bms-price { display: inline-flex; align-items: center; gap: 4px; }
+.bms-price svg { width: 18px; height: 18px; }
+.bms-price b { font: 700 18px Bitter, Georgia, serif; color: var(--brass-hi); }
+.bms-act button, .bms-menu button, .bms-kinds button {
+  min-width: 92px; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-weight: 700 !important;
+  background: linear-gradient(#7a5530, #5a3d22); border: 1px solid #2b1d12; box-shadow: inset 0 1px 0 rgba(255, 220, 160, 0.25);
+}
+.bms-act button:hover:not([disabled]), .bms-menu button:hover, .bms-kinds button:hover { background: linear-gradient(#8c6239, #684629); }
+.bms-act button:focus-visible, .bms-menu button:focus-visible, .bms-kinds button:focus-visible, .bms-name input:focus-visible { outline: 2px solid var(--brass-hi); outline-offset: 2px; }
+.bms-act button.is-main, .bms-menu button.is-main { background: linear-gradient(#e2ad4c, #b47f2c); color: #1d140c; border-color: #7a5524; }
+.bms-act button.is-main:hover { background: linear-gradient(#f3c56b, #c89236); }
+.bms-act button[disabled] { opacity: 0.55; cursor: default; font-weight: 600 !important; font-size: 14px; }
+.bms-tag { font-size: 14px; color: var(--mute); padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(226, 173, 76, 0.25); white-space: nowrap; }
+.bms-tag.is-on { color: var(--good); border-color: rgba(169, 214, 127, 0.45); }
+.bms-kinds { display: flex; gap: 8px; margin-top: 8px; }
+.bms-kinds button { min-width: 0; padding: 6px 14px; }
+.bms-kinds button.is-on { background: linear-gradient(#e2ad4c, #b47f2c); color: #1d140c; border-color: #7a5524; }
+.bms-name { margin-top: 8px; }
+.bms-name input { width: min(240px, 100%); padding: 7px 10px; border-radius: 7px; border: 1px solid rgba(226, 173, 76, 0.45);
+  background: rgba(0, 0, 0, 0.3); font-size: 17px; }
+.bms-tip { margin-top: 12px; font-size: 14px; color: var(--ink-2); }
+.bms-tip kbd { display: inline-block; min-width: 22px; padding: 0 5px; border-radius: 4px; text-align: center; font: 700 13px/20px Bitter, Georgia, serif;
+  color: #1d140c; background: linear-gradient(#f3c56b, #c89236); }
+/* the pause menu and the "just lock boxes" menu */
+.bms-menu { display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
+.bms-menu button { width: 100%; padding: 12px 16px; font-size: 18px; text-align: left; }
+.bms-menu small { display: block; font-weight: 500; font-size: 13px; color: var(--ink-2); }
+.bms-menu button.is-main small { color: #3b2a1e; }
+.bms-keys { margin-top: 14px; font-size: 13px; color: var(--ink-2); line-height: 1.7; }
+.bms-keys kbd { display: inline-block; min-width: 22px; padding: 0 5px; border-radius: 4px; text-align: center; font: 700 12px/19px Bitter, Georgia, serif;
+  color: #1d140c; background: linear-gradient(#f3c56b, #c89236); margin-right: 2px; }
+@media (max-width: 520px) {
+  .bms-row { flex-wrap: wrap; }
+  .bms-act { width: 100%; justify-content: flex-end; }
+}

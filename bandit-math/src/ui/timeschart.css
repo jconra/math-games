@@ -1,0 +1,284 @@
+/* The times-table chart and the "Peek at the chart" button (src/ui/timeschart.js).
+   Same look as the rest of the game: a dark wood frame with a brass edge, cream paper for the numbers, brass for what
+   matters now, rust for a wrong pick. Everything is under .tch / .tch-offer so it can't clash with other styles.
+   The script sets --cell (the width of one square) to fit the screen; every size below follows from it. */
+@import url('fonts/fonts.css');
+
+.tch, .tch-offer {
+  --ink: #f4e8cf;            /* text on wood: warm cream */
+  --ink-2: #dccaa5;
+  --mute: #a8957a;
+  --brass: #e2ad4c;
+  --brass-hi: #f3c56b;
+  --brass-lo: #a8742a;
+  --rust: #d9785a;
+  --rust-deep: #b4492f;
+  --paper: #f6edd6;
+  /* the squares (3 x 3, 4 x 4...): a faint grey-brown shade laid over the paper. It stays well under the lit row and
+     column, which are the marks that matter, and its cooler colour keeps it from looking like part of them. */
+  --sq-tint: rgba(110, 84, 56, 0.085);
+  --pencil: #2b2219;         /* numbers on paper */
+  --gridline: rgba(92, 66, 36, 0.17);
+  --gridline-5: rgba(92, 66, 36, 0.42);
+  --lit-row: rgba(226, 173, 76, 0.48);    /* the table's row: the strongest mark on the paper */
+  --lit-col: rgba(226, 173, 76, 0.36);    /* its column: a little lighter than the row, still well above the squares */
+  --lit-both: rgba(226, 173, 76, 0.68);   /* where they cross */
+}
+
+/* ---- the chart ------------------------------------------------------------------------------------------------- */
+.tch {
+  --cell: 40px;
+  --rowf: 0.84;              /* rows are a little shorter than they are wide */
+  --row: calc(var(--cell) * var(--rowf));
+  position: fixed; inset: 0; z-index: 40;
+  display: flex; align-items: center; justify-content: flex-start;
+  padding: 20px;             /* the script replaces this with the room the chart may use */
+  box-sizing: border-box;
+  pointer-events: none;      /* only the panel takes clicks: the game behind stays playable */
+  color: var(--ink);
+  font: 400 16px/1.35 Bitter, Georgia, 'Times New Roman', serif;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none; -webkit-user-select: none;
+}
+.tch[data-side="right"] { justify-content: flex-end; }
+.tch *, .tch *::before, .tch *::after { box-sizing: border-box; }
+
+.tch-panel {
+  pointer-events: auto;
+  position: relative;
+  display: grid;
+  grid-template-columns: auto;
+  grid-template-areas: "head" "paper" "words";
+  gap: calc(var(--cell) * 0.18 + 4px);
+  max-height: 100%;
+  padding: calc(var(--cell) * 0.2 + 6px) calc(var(--cell) * 0.24 + 8px) calc(var(--cell) * 0.22 + 8px);
+  border-radius: 16px;
+  background:
+    repeating-linear-gradient(92deg, rgba(255, 220, 170, 0.025) 0 3px, rgba(0, 0, 0, 0.03) 3px 7px, rgba(255, 220, 170, 0.015) 7px 13px),
+    linear-gradient(180deg, #34231a, #241810 60%, #1e140d);
+  box-shadow: 0 0 0 2px #120b06, 0 0 0 4px rgba(168, 116, 42, 0.6), 0 20px 60px rgba(0, 0, 0, 0.55);
+  opacity: 0; transform: translateX(-28px);
+  transition: opacity 0.22s ease, transform 0.3s cubic-bezier(.2, .8, .25, 1);
+}
+.tch[data-side="right"] .tch-panel { transform: translateX(28px); }
+.tch.in .tch-panel { opacity: 1; transform: none; }
+/* a very small screen where even the smallest squares don't fit (the script decides): scroll rather than spill */
+.tch.is-cramped .tch-panel { overflow-y: auto; overscroll-behavior: contain; }
+.tch.out .tch-panel { opacity: 0; transition-duration: 0.18s; }
+
+/* the heading: a small label, the big title, the close button */
+.tch-head { grid-area: head; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; column-gap: 12px; }
+.tch-kick {
+  grid-column: 1; font: 400 calc(var(--cell) * 0.22 + 4px)/1 Smokum, Georgia, serif; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--brass);
+}
+.tch-title {
+  grid-column: 1; margin: 4px 0 0;
+  font: 400 calc(var(--cell) * 0.4 + 10px)/1.05 Rye, Georgia, serif; color: #f6e3b8; letter-spacing: 0.01em;
+  text-shadow: 0 2px 0 #4a2d14, 0 6px 18px rgba(0, 0, 0, 0.45);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tch-x {
+  grid-column: 2; grid-row: 1 / span 2; align-self: start;
+  width: 44px; height: 46px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+  margin: -4px -6px 0 0;
+  border-radius: 10px; border: 1px solid rgba(244, 232, 207, 0.18); background: rgba(0, 0, 0, 0.22);
+  color: var(--ink-2); cursor: pointer; padding: 0; font: inherit;
+  transition: background 0.15s, color 0.15s;
+}
+.tch-x:hover { background: rgba(255, 238, 205, 0.1); color: var(--ink); }
+.tch-x:focus { outline: none; }
+.tch-x:focus-visible { outline: 2px solid var(--brass-hi); outline-offset: 2px; }
+.tch-x svg { width: 18px; height: 18px; }
+.tch-esc { font: 600 10px/1 Bitter, Georgia, serif; letter-spacing: 0.04em; color: var(--mute); }
+@media (hover: none) { .tch-esc { display: none; } }
+
+/* the paper the grid is printed on */
+.tch-paper {
+  grid-area: paper; justify-self: start;
+  padding: calc(var(--cell) * 0.08 + 2px);
+  border-radius: 9px;
+  background:
+    radial-gradient(ellipse at 30% 20%, rgba(255, 255, 255, 0.35), rgba(255, 255, 255, 0) 60%),
+    linear-gradient(180deg, #f8f0db, #efe3c5);
+  box-shadow: inset 0 0 0 1px rgba(120, 84, 40, 0.25), inset 0 0 26px rgba(150, 110, 60, 0.18), 0 3px 10px rgba(0, 0, 0, 0.35);
+}
+.tch-gridwrap { position: relative; }
+.tch-grid, .tch-over {
+  display: grid;
+  grid-template-columns: repeat(var(--n), var(--cell));
+  grid-template-rows: repeat(var(--n), var(--row));
+}
+.tch-over { position: absolute; inset: 0; pointer-events: none; }
+.tch-tr { display: contents; }
+
+/* every square */
+.tch-c, .tch-h, .tch-corner {
+  display: grid; place-items: center;
+  font: 700 calc(var(--cell) * 0.4)/1 Bitter, Georgia, serif;
+  font-variant-numeric: tabular-nums lining-nums;
+  letter-spacing: -0.01em;
+}
+.tch-c {
+  color: var(--pencil);
+  background-color: transparent;
+  border-right: 1px solid var(--gridline); border-bottom: 1px solid var(--gridline);
+  transition: background-color 0.12s, box-shadow 0.12s;
+}
+.tch-c.five { border-right-color: var(--gridline-5); }       /* a darker line after x5 to count on from */
+.tch-c.fiveR { border-bottom-color: var(--gridline-5); }
+.tch-c.sq { background-color: var(--sq-tint); }
+.tch-c.row { background-image: linear-gradient(var(--lit-row), var(--lit-row)); }
+.tch-c.col { background-image: linear-gradient(var(--lit-col), var(--lit-col)); }
+.tch-c.row.col { background-image: linear-gradient(var(--lit-both), var(--lit-both)); }
+.tch-c.row { color: #22170c; }
+
+/* the header row and column: dark wood with cream numbers, like the frame */
+.tch-h, .tch-corner {
+  color: #f6e3b8;
+  background: linear-gradient(180deg, #4a3220, #34231a);
+  font-size: calc(var(--cell) * 0.42);
+}
+.tch-top { border-right: 1px solid rgba(0, 0, 0, 0.35); border-bottom: 2px solid var(--brass-lo); }
+.tch-left { border-bottom: 1px solid rgba(0, 0, 0, 0.35); border-right: 2px solid var(--brass-lo); }
+.tch-corner {
+  color: var(--brass); font-size: calc(var(--cell) * 0.46);
+  border-right: 2px solid var(--brass-lo); border-bottom: 2px solid var(--brass-lo);
+  border-top-left-radius: 6px;
+}
+.tch-tr:first-child .tch-h:last-child { border-top-right-radius: 6px; }
+.tch-tr:last-child .tch-left { border-bottom-left-radius: 6px; }
+.tch-h.lit {
+  color: #2b1a0b;
+  background: linear-gradient(180deg, #f6cd76, #e2ad4c 55%, #c58b35);
+  text-shadow: 0 1px 0 rgba(255, 236, 190, 0.6);
+}
+.tch-h.miss { color: #ffd9c9; background: linear-gradient(180deg, #8f3c27, #6e2c1b); }
+
+/* the two numbers either side of the gap, the found number, and a wrong try on a missing-number card */
+.tch-c.side { box-shadow: inset 0 calc(var(--row) * -0.09) 0 rgba(180, 73, 47, 0.75); }
+.tch-c.found { box-shadow: inset 0 0 0 3px #5f8f3f; color: #22401a; }
+.tch-c.wrong { box-shadow: inset 0 0 0 3px rgba(180, 73, 47, 0.95); color: #7d2f1d; }
+
+/* pointing at a number: it and its two headers light up, so the eye learns where the facts come from */
+.tch-c.hot { box-shadow: inset 0 0 0 2px #7a5220; background-image: linear-gradient(rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.45)); }
+.tch-c.row.hot { background-image: linear-gradient(rgba(243, 197, 107, 0.85), rgba(243, 197, 107, 0.85)); }
+.tch-h.hot:not(.lit) { background: linear-gradient(180deg, #6b4a2c, #4f3520); color: #fff3d6; }
+@media (hover: none) { .tch-c { cursor: default; } }
+
+/* the missed number pinned into the gap: a rust line down the gap, and a tag on the line just above the row.
+   The tag is the label the chart is there to show, so on small squares it is kept at 13px rather than shrinking with
+   them. Only squares too small for that (a phone held upright) shrink it further, so it still fits between the rows'
+   numbers instead of sitting on them. */
+.tch-gapline {
+  justify-self: start; width: 4px; height: 100%; margin-left: -2px;
+  background: var(--rust-deep); border-radius: 2px; box-shadow: 0 0 0 1px rgba(255, 240, 220, 0.6);
+  position: relative; z-index: 2;
+}
+.tch-gapline.end { justify-self: end; margin-left: 0; margin-right: -2px; }
+.tch-tag {
+  justify-self: center; align-self: start; position: relative; z-index: 3;
+  transform: translateY(-50%);
+  padding: 0.1em 0.38em 0.08em;
+  border-radius: 7px;
+  font: 700 max(min(13px, calc(var(--cell) * 0.42)), calc(var(--cell) * 0.32 + 1px))/1 Bitter, Georgia, serif;
+  font-variant-numeric: tabular-nums;
+  color: #fff3e0;
+  background: linear-gradient(180deg, #c8573b, #a33f27);
+  box-shadow: 0 0 0 1.5px #fff1dc, 0 3px 8px rgba(60, 20, 10, 0.4);
+  animation: tch-drop 0.5s cubic-bezier(.2, 1.4, .4, 1) 0.25s both;
+}
+.tch-tag::after {   /* a small point aimed down into the gap */
+  content: ''; position: absolute; left: 50%; bottom: -5px; margin-left: -5px;
+  border: 5px solid transparent; border-bottom: 0; border-top-color: #a33f27;
+}
+.tch-tag.end { justify-self: end; transform: translate(50%, -50%); }
+@keyframes tch-drop { from { opacity: 0; translate: 0 -10px; } to { opacity: 1; translate: 0 0; } }
+
+/* the words under the grid */
+.tch-words { grid-area: words; display: grid; gap: 6px; max-width: calc(var(--cell) * var(--n) + 10px); }
+.tch-words p { margin: 0; }
+.tch-line { font: 600 calc(var(--cell) * 0.16 + 11px)/1.3 Bitter, Georgia, serif; color: var(--ink); text-wrap: pretty; }
+.tch-line.is-miss { padding-left: 11px; border-left: 3px solid var(--rust); }
+.tch-note { font-size: calc(var(--cell) * 0.1 + 10.5px); color: var(--ink-2); text-wrap: pretty; }
+.tch-read { min-height: 1.4em; font: 600 calc(var(--cell) * 0.12 + 11px)/1.3 Bitter, Georgia, serif; color: var(--ink); }
+.tch-read b { color: var(--brass-hi); font-weight: 700; }
+.tch-read-idle { font-weight: 400; color: var(--mute); font-size: 0.86em; }
+.tch-foot { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 14px; margin-top: 2px; }
+.tch-key { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--mute); white-space: nowrap; }
+.tch-sw {   /* the key's sample square: paper with the same shade on it */
+  width: 14px; height: 14px; border-radius: 3px; align-self: center;
+  background: linear-gradient(var(--sq-tint), var(--sq-tint)), #f2e8cf;
+  box-shadow: inset 0 0 0 1px rgba(120, 84, 40, 0.35);
+}
+
+/* a phone on its side: the words go beside the grid, the frame gets thinner */
+.tch.is-short .tch-panel {
+  grid-template-columns: auto minmax(140px, 190px);
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas: "paper head" "paper words";
+  column-gap: 12px; row-gap: 6px;
+  padding: 8px 10px 8px 8px; border-radius: 12px;
+}
+.tch.is-short .tch-words { align-content: start; max-width: none; }
+.tch.is-short .tch-title { font-size: 21px; white-space: normal; }
+.tch.is-short .tch-kick { font-size: 12px; }
+.tch.is-short .tch-x { width: 34px; height: 34px; margin: -2px -4px 0 0; }
+.tch.is-short .tch-foot { flex-direction: column; align-items: flex-start; }
+.tch.is-short .tch-line { font-size: 14.5px; }
+.tch.is-short .tch-note { font-size: 12.5px; }
+.tch.is-short .tch-read { font-size: 13.5px; }
+.tch.is-short .tch-key { font-size: 11.5px; }
+.tch.is-short .tch-tag { font-size: 13px; }
+.tch.is-short .tch-tag::after { bottom: -5px; border-width: 5px; margin-left: -5px; }
+
+/* ---- the "Peek at the chart" button ------------------------------------------------------------------------------ */
+.tch-offer {
+  position: fixed; z-index: 35;
+  top: var(--tch-offer-top, 96px); left: 50%;
+  display: flex; align-items: center; gap: 11px;
+  padding: 9px 18px 9px 12px; margin: 0;
+  border-radius: 13px;
+  border: 1px solid rgba(226, 173, 76, 0.75);
+  background: rgba(30, 20, 13, 0.86);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+  color: var(--ink);
+  font: 400 16px/1.2 Bitter, Georgia, 'Times New Roman', serif; text-align: left;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 238, 205, 0.08);
+  cursor: pointer;
+  opacity: 0; transform: translate(-50%, -14px);
+  transition: opacity 0.25s ease, transform 0.35s cubic-bezier(.2, 1.3, .4, 1), background 0.15s, border-color 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none; -webkit-user-select: none;
+  white-space: nowrap;
+}
+.tch-offer.in { opacity: 1; transform: translate(-50%, 0); }
+.tch-offer.is-away, .tch-offer.out { opacity: 0; transform: translate(-50%, -14px); pointer-events: none; }
+.tch-offer:hover { background: rgba(52, 36, 22, 0.92); border-color: var(--brass-hi); }
+.tch-offer:active { transform: translate(-50%, 1px); }
+.tch-offer:focus { outline: none; }
+.tch-offer:focus-visible { outline: 2px solid var(--brass-hi); outline-offset: 3px; }
+.tch-offer-ico { width: 28px; height: 28px; flex: none; color: var(--brass); }
+.tch-offer-words { display: grid; gap: 2px; }
+.tch-offer-words b { font-weight: 700; font-size: 16.5px; color: var(--ink); letter-spacing: 0.01em; }
+.tch-offer-words small { font-size: 13px; color: var(--brass-hi); }
+/* one soft glow when it arrives (and again for a fresh miss); it doesn't keep blinking at the kid */
+.tch-offer.in.nudge { animation: tch-glow 1.5s ease 0.35s 2; }
+@keyframes tch-glow {
+  0%, 100% { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 0 0 rgba(243, 197, 107, 0); }
+  45% { box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4), 0 0 0 6px rgba(243, 197, 107, 0.28); }
+}
+
+@media (max-height: 560px) {
+  .tch-offer { top: var(--tch-offer-top, 64px); padding: 6px 13px 6px 9px; gap: 8px; border-radius: 11px; }
+  .tch-offer-ico { width: 22px; height: 22px; }
+  .tch-offer-words b { font-size: 14.5px; }
+  .tch-offer-words small { font-size: 11.5px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tch-panel, .tch-offer { transition: opacity 0.15s ease; transform: none !important; }
+  .tch-offer { transform: translate(-50%, 0) !important; }
+  .tch-tag { animation: none; }
+  .tch-offer.in.nudge { animation: none; }
+}

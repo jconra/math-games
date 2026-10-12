@@ -1,0 +1,211 @@
+/* The riding HUD (src/ui/hud.js): purse, compass, rule card, notes, the door prompt, Old Hob's captions.
+   Everything here stays under z-index 35: the times chart's Peek button is 35 and the chart 40. */
+.bmh {
+  --ink: #f4e8cf;
+  --ink-2: #dccaa5;
+  --mute: #a8957a;
+  --brass: #e2ad4c;
+  --brass-hi: #f3c56b;
+  --rust: #e08566;
+  --good: #a9d67f;
+  --wood: rgba(30, 20, 12, 0.8);
+  --wood-edge: rgba(226, 173, 76, 0.35);
+  --paper: #f6edd6;
+  --paper-ink: #2b2219;
+  position: fixed; inset: 0; z-index: 12; pointer-events: none;
+  color: var(--ink); font: 500 15px/1.35 Bitter, Georgia, serif;
+  transition: opacity 0.35s ease, visibility 0s linear 0s;
+  -webkit-user-select: none; user-select: none;
+}
+.bmh.is-hidden { opacity: 0; visibility: hidden; transition: opacity 0.25s ease, visibility 0s linear 0.25s; }
+.bmh button { font: inherit; color: inherit; pointer-events: auto; cursor: pointer; }
+.bmh svg { display: block; }
+
+/* ── the purse, top left ───────────────────────────────────────────────────────────────────────────────────── */
+.bmh-purse {
+  position: absolute; left: 16px; top: 14px; min-width: 190px; max-width: 290px;
+  padding: 9px 14px 10px; border-radius: 10px; background: var(--wood); border: 1px solid var(--wood-edge);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35); backdrop-filter: blur(3px);
+}
+.bmh-gold { display: flex; align-items: center; gap: 8px; }
+.bmh-gold svg { width: 30px; height: 30px; filter: drop-shadow(0 1px 1px rgba(0,0,0,.4)); }
+.bmh-gold b { font: 700 30px/1 Bitter, Georgia, serif; color: var(--brass-hi); letter-spacing: 0.01em; font-variant-numeric: tabular-nums; }
+.bmh-gold span { font: 400 15px Smokum, Georgia, serif; color: var(--ink-2); letter-spacing: 0.04em; margin-top: 6px; }
+.bmh-rank { margin-top: 5px; font-size: 14px; color: var(--ink-2); }
+.bmh-title { font: 400 17px Rye, Georgia, serif; color: var(--ink); letter-spacing: 0.02em; }
+.bmh-next { font-size: 12px; color: var(--mute); margin-top: 1px; }
+.bmh-next:empty { display: none; }
+.bmh-badges { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+.bmh-badges:empty { display: none; }
+.bmh-badge { display: inline-flex; align-items: center; gap: 4px; font: 600 12px Bitter, Georgia, serif; color: #1d140c;
+  background: linear-gradient(#f3c56b, #c89236); border-radius: 999px; padding: 2px 8px 2px 5px; }
+.bmh-badge svg { width: 12px; height: 12px; }
+.bmh-bag { display: flex; align-items: center; gap: 6px; margin-top: 7px; font-size: 13px; color: var(--ink-2); }
+.bmh-bag svg { width: 22px; height: 22px; flex: none; }
+.bmh-bag[hidden] { display: none; }
+.bmh-pop { position: absolute; left: 44px; top: 4px; display: flex; align-items: center; gap: 4px; pointer-events: none;
+  animation: bmh-pop 1.4s ease-out forwards; }
+.bmh-pop svg { width: 20px; height: 20px; }
+.bmh-pop b { font: 700 22px Bitter, Georgia, serif; color: var(--brass-hi); text-shadow: 0 2px 4px rgba(0, 0, 0, 0.7); }
+@keyframes bmh-pop { 0% { opacity: 0; transform: translateY(6px) scale(0.8); } 15% { opacity: 1; transform: translateY(0) scale(1.08); }
+  100% { opacity: 0; transform: translateY(-34px) scale(1); } }
+
+/* ── the compass, the rule card and the line under it: top middle ───────────────────────────────────────────── */
+.bmh-top { position: absolute; left: 0; right: 0; top: 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.bmh-compass {
+  position: relative; width: min(560px, 46vw); height: 40px; overflow: hidden; border-radius: 8px;
+  background: linear-gradient(90deg, rgba(30, 20, 12, 0) 0%, var(--wood) 14%, var(--wood) 86%, rgba(30, 20, 12, 0) 100%);
+}
+.bmh-ticks, .bmh-marks { position: absolute; inset: 0; }
+.bmh-tick { position: absolute; left: 0; top: 0; width: 1px; height: 7px; background: rgba(244, 232, 207, 0.45); }
+.bmh-point { position: absolute; left: -12px; top: 10px; width: 24px; text-align: center; font: 700 15px/1 Bitter, Georgia, serif; color: var(--ink); }
+.bmh-point.is-minor { font-size: 11px; top: 12px; color: var(--mute); }
+.bmh-notch { position: absolute; left: 50%; top: 0; width: 0; height: 0; margin-left: -6px;
+  border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 7px solid var(--brass); }
+.bmh-mark { position: absolute; left: -13px; top: 3px; width: 26px; display: flex; flex-direction: column; align-items: center; color: var(--ink); }
+.bmh-mark svg { width: 22px; height: 22px; filter: drop-shadow(0 1px 1px rgba(0,0,0,.6)); }
+.bmh-mark small { font: 600 10px/1 Bitter, Georgia, serif; color: var(--ink-2); white-space: nowrap; margin-top: 1px; }
+.bmh-mark.is-job { color: #7dff8a; }
+.bmh-mark.is-job svg { width: 24px; height: 24px; }
+.bmh-mark.is-horse { color: #e6c08a; }
+.bmh-mark.is-cabin { color: #f0d9a8; }
+.bmh-mark.is-dog { color: #d8b878; }
+.bmh-mark.is-edge { opacity: 0.6; }
+
+/* the rule card and the line under it, kept together (the times chart's "Peek" button goes under the pair) */
+.bmh-job { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.bmh-rule {
+  position: relative; min-width: 230px; max-width: min(640px, 70vw); padding: 8px 22px 9px; text-align: center;
+  border-radius: 8px; background: var(--paper); color: var(--paper-ink);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4), inset 0 0 0 2px rgba(122, 85, 48, 0.35), inset 0 0 0 5px var(--paper), inset 0 0 0 6px rgba(122, 85, 48, 0.25);
+}
+.bmh-rule[hidden] { display: none; }
+.bmh-rule-main { font: 700 30px/1.15 Bitter, Georgia, serif; letter-spacing: 0.01em; }
+.bmh-rule-sub { font: 500 14px/1.3 Bitter, Georgia, serif; color: #5d4a36; margin-top: 2px; }
+.bmh-rule-sub:empty { display: none; }
+.bmh-rule.is-travel .bmh-rule-main { font-size: 21px; }
+.bmh-rule-btns { display: flex; justify-content: center; gap: 8px; margin-top: 6px; }
+.bmh-rule-btns[hidden] { display: none; }
+.bmh-rule-btns button { font: 600 14px Bitter, Georgia, serif; color: #f4e8cf; background: #6d4b2b; border: 1px solid #3b2a1e;
+  border-radius: 6px; padding: 4px 12px; }
+.bmh-rule-btns button:hover { background: #82593a; }
+
+.bmh-hint {
+  max-width: min(640px, 80vw); padding: 8px 16px 10px; border-radius: 9px; text-align: center;
+  background: rgba(24, 16, 10, 0.86); border: 1px solid rgba(224, 133, 102, 0.45); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  animation: bmh-in 0.25s ease-out;
+}
+.bmh-hint[hidden] { display: none; }
+.bmh-hint-say { font: italic 600 18px Bitter, Georgia, serif; color: var(--rust); }
+.bmh-hint-line { font: 600 18px/1.3 Bitter, Georgia, serif; color: var(--ink); margin-top: 1px; }
+.bmh-skip { display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline; gap: 2px 7px; margin-top: 5px;
+  font: 600 20px Bitter, Georgia, serif; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.bmh-skip i { font-style: normal; color: var(--mute); }
+.bmh-skip em { font-style: normal; font-size: 14px; color: var(--mute); margin-right: 6px; }
+.bmh-skip .miss { color: var(--rust); font-weight: 800; }
+.bmh-hint-also { font-size: 14px; color: var(--mute); margin-top: 3px; }
+@keyframes bmh-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+
+/* ── top right: the menu button and ?perf ──────────────────────────────────────────────────────────────────── */
+.bmh-corner { position: absolute; right: 14px; top: 14px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.bmh-menu { display: flex; align-items: center; gap: 6px; padding: 7px 12px 7px 9px; border-radius: 8px;
+  background: var(--wood); border: 1px solid var(--wood-edge); font: 400 15px Smokum, Georgia, serif !important; letter-spacing: 0.05em; }
+.bmh-menu svg { width: 20px; height: 20px; }
+.bmh-menu:hover { border-color: var(--brass); }
+.bmh-perf { font: 12px/1.45 ui-monospace, Menlo, monospace; white-space: pre; text-align: right; color: #e9f2d9;
+  background: rgba(0, 0, 0, 0.55); padding: 5px 8px; border-radius: 6px; }
+
+/* ── bottom: the number line box, the door prompt, the notes ─────────────────────────────────────────────── */
+.bmh-help { position: absolute; left: 0; right: 0; bottom: 104px; margin: 0 auto; width: min(960px, 92vw);
+  display: flex; justify-content: center; }
+.bmh-help > * { pointer-events: auto; }
+.bmh-bottom { position: absolute; left: 0; right: 0; bottom: 26px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.bmh-prompt { display: flex; align-items: center; gap: 10px; padding: 8px 16px 8px 9px; border-radius: 9px;
+  background: var(--wood); border: 1px solid var(--brass); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  font: 600 18px Bitter, Georgia, serif !important; animation: bmh-in 0.2s ease-out; }
+.bmh-prompt[hidden] { display: none; }
+.bmh-prompt kbd { display: inline-grid; place-items: center; min-width: 30px; height: 30px; padding: 0 6px; border-radius: 6px;
+  font: 700 17px Bitter, Georgia, serif; color: #1d140c; background: linear-gradient(#f3c56b, #c89236); box-shadow: 0 2px 0 #7a5524; }
+.bmh-toast { min-height: 0; max-width: min(640px, 86vw); padding: 0 18px; border-radius: 8px; text-align: center;
+  font: 600 18px/1.3 Bitter, Georgia, serif; color: var(--ink); background: rgba(30, 20, 12, 0.84);
+  opacity: 0; transform: translateY(6px); transition: opacity 0.3s, transform 0.3s; }
+.bmh-toast.is-on { opacity: 1; transform: none; padding: 9px 18px; }
+.bmh-toast.is-good { color: var(--good); }
+.bmh-toast.is-gold { color: var(--brass-hi); }
+.bmh-toast.is-warn { color: var(--rust); }
+
+/* ── a new belt buckle: low in the middle, above the notes (and above the lock-box panel: z-index 70) ─────────── */
+.bmh-buckle {
+  position: fixed; left: 50%; bottom: 84px; z-index: 70; pointer-events: none;
+  display: flex; align-items: center; gap: 14px; width: max-content; max-width: min(560px, 92vw); padding: 10px 20px 10px 12px;
+  border-radius: 14px; background: rgba(28, 18, 10, 0.93); border: 1px solid rgba(226, 173, 76, 0.7);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 238, 205, 0.08);
+  color: #f4e8cf; font: 500 15px/1.3 Bitter, Georgia, serif; -webkit-user-select: none; user-select: none;
+  opacity: 0; visibility: hidden; transform: translate(-50%, 16px) scale(0.94);
+}
+.bmh-buckle.is-high { bottom: auto; top: 112px; }
+.bmh-buckle.is-on { visibility: visible; animation: bmh-buckle-in 0.45s cubic-bezier(.2, .9, .3, 1.25) forwards; }
+.bmh-buckle.is-off { animation: bmh-buckle-out 0.4s ease-in forwards; }
+.bmh-buckle-art { position: relative; flex: none; width: 92px; height: 63px; border-radius: 50%; overflow: hidden; }
+.bmh-buckle-art svg { display: block; width: 100%; height: 100%; }
+.bmh-buckle.is-on .bmh-buckle-art { animation: bmh-buckle-drop 0.6s cubic-bezier(.25, .9, .35, 1.3) both; }
+/* a glint that runs across the new buckle once it has landed */
+.bmh-buckle-art::after {
+  content: ''; position: absolute; inset: -10% -60%; pointer-events: none;
+  background: linear-gradient(105deg, rgba(255, 255, 255, 0) 40%, rgba(255, 255, 255, 0.75) 50%, rgba(255, 255, 255, 0) 60%);
+  transform: translateX(-70%); opacity: 0;
+}
+.bmh-buckle.is-on .bmh-buckle-art::after { animation: bmh-buckle-glint 0.9s ease-out 0.55s both; }
+.bmh-buckle-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.bmh-buckle-text b { font: 400 25px/1.05 Rye, Georgia, serif; color: #f3c56b; letter-spacing: 0.01em;
+  text-shadow: 0 2px 0 rgba(60, 36, 14, 0.9); }
+.bmh-buckle-text span { color: #dccaa5; }
+@keyframes bmh-buckle-in { from { opacity: 0; transform: translate(-50%, 16px) scale(0.94); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
+@keyframes bmh-buckle-out { from { opacity: 1; transform: translate(-50%, 0) scale(1); } to { opacity: 0; transform: translate(-50%, 10px) scale(0.97); } }
+@keyframes bmh-buckle-drop { 0% { transform: translateY(-26px) rotate(-14deg) scale(1.35); opacity: 0; } 60% { opacity: 1; } 100% { transform: none; opacity: 1; } }
+@keyframes bmh-buckle-glint { 0% { transform: translateX(-70%); opacity: 1; } 100% { transform: translateX(70%); opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .bmh-buckle.is-on .bmh-buckle-art, .bmh-buckle.is-on .bmh-buckle-art::after { animation: none; }
+}
+
+/* ── Old Hob, bottom left ─────────────────────────────────────────────────────────────────────────────────── */
+.bmh-hob { position: absolute; left: 16px; bottom: 22px; display: flex; align-items: flex-start; gap: 10px; max-width: min(430px, 44vw);
+  padding: 9px 14px 10px 10px; border-radius: 10px; background: var(--wood); border: 1px solid var(--wood-edge);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35); opacity: 0; transform: translateY(8px); transition: opacity 0.35s, transform 0.35s; }
+.bmh-hob[hidden] { display: none; }
+.bmh-hob.is-on { opacity: 1; transform: none; }
+.bmh-hob-face svg { width: 46px; height: 46px; flex: none; }
+.bmh-hob-text b { display: block; font: 400 13px Smokum, Georgia, serif; letter-spacing: 0.06em; color: var(--brass); }
+.bmh-hob-text span { font: 500 16px/1.35 Bitter, Georgia, serif; color: var(--ink); }
+
+/* ── touch buttons, bottom right ─────────────────────────────────────────────────────────────────────────── */
+.bmh-touch { position: absolute; right: 16px; bottom: 18px; display: flex; gap: 12px; align-items: flex-end; }
+.bmh-touch[hidden] { display: none; }
+.bmh-touch button { width: 68px; height: 68px; border-radius: 50%; background: rgba(40, 28, 16, 0.78); border: 2px solid rgba(226, 173, 76, 0.6);
+  font: 600 13px Bitter, Georgia, serif; touch-action: manipulation; }
+.bmh-touch button.is-big { width: 84px; height: 84px; font-size: 16px; background: rgba(30, 80, 30, 0.72); border-color: #7dff8a; }
+
+@media (max-width: 760px), (max-height: 480px) {
+  .bmh-purse { left: 8px; top: 8px; min-width: 0; padding: 6px 10px; }
+  .bmh-gold b { font-size: 22px; }
+  .bmh-gold svg { width: 22px; height: 22px; }
+  .bmh-next, .bmh-bag span { display: none; }
+  .bmh-compass { width: 40vw; height: 34px; }
+  .bmh-rule-main { font-size: 22px; }
+  .bmh-hob { max-width: 52vw; bottom: 110px; }
+  .bmh-help { bottom: 96px; }
+  .bmh-buckle, .bmh-buckle.is-high { bottom: auto; top: 30%; gap: 10px; padding: 8px 14px 8px 8px; font-size: 13.5px; }
+  .bmh-buckle-art { width: 70px; height: 48px; }
+  .bmh-buckle-text b { font-size: 20px; }
+}
+/* a phone on its side: over the lock-box panel the note covers the panel's top strip (the stars) rather than the
+   chest and its coins */
+@media (max-height: 480px) {
+  .bmh-buckle.is-high { top: 4px; }
+  /* in play, the bottom left: under Old Hob's line, clear of the banner and of the touch buttons on the right */
+  .bmh-buckle:not(.is-high) { top: auto; bottom: 10px; left: 12px; transform: translate(0, 16px) scale(0.94); }
+  .bmh-buckle.is-on:not(.is-high) { animation-name: bmh-buckle-in-left; }
+  .bmh-buckle.is-off:not(.is-high) { animation-name: bmh-buckle-out-left; }
+}
+@keyframes bmh-buckle-in-left { from { opacity: 0; transform: translate(0, 16px) scale(0.94); } to { opacity: 1; transform: none; } }
+@keyframes bmh-buckle-out-left { from { opacity: 1; transform: none; } to { opacity: 0; transform: translate(0, 10px) scale(0.97); } }

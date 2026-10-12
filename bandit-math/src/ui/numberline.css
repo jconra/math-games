@@ -1,0 +1,140 @@
+/* The number line (numberline.js). Two looks: dark, over the game, and light, on the lock box's paper.
+   The negative half of the line is a cool slate colour and the positive half a warm one, so the two sides read
+   differently even before the numbers are read; zero is the tallest, brightest mark. The words "negative" and
+   "positive" under each half do the same job for anyone who can't tell the colours apart.
+   Everything is under .bm-nl so it can't clash with the rest of the game. */
+@import url('fonts/fonts.css');
+
+.bm-nl {
+  /* dark: over the game */
+  --nl-ink: #f4e8cf;          /* numbers and words */
+  --nl-ink-2: #dccaa5;        /* the plain tick numbers */
+  --nl-mute: #a8957a;         /* small captions */
+  --nl-neg-line: #7f9cba;     /* the negative half of the line */
+  --nl-neg-ink: #b4c9de;      /* numbers below zero */
+  --nl-pos-line: #e3cfa6;     /* the positive half */
+  --nl-zero: #ffffff;
+  --nl-hop: #eeb04a;          /* the hop: arcs, arrowheads, the landing */
+  --nl-hop-ink: #f6c661;      /* the hop's words */
+  --nl-on-hop: #241608;       /* the answer printed on the landing pill */
+  --nl-dot-fill: #1d140c;     /* inside the hollow start dot */
+  --nl-pick: #b993ff;         /* the kid's wrong pick: violet, far from the hop's gold for every kind of colour sight */
+  margin: 0;
+  color: var(--nl-ink);
+  font: 400 16px/1.35 Bitter, Georgia, 'Times New Roman', serif;
+  -webkit-user-select: none; user-select: none;
+}
+.bm-nl--light {
+  /* light: on paper */
+  --nl-ink: #2b2219;
+  --nl-ink-2: #4a3d2e;
+  --nl-mute: #7a6a55;
+  --nl-neg-line: #4d6b8c;
+  --nl-neg-ink: #34557a;
+  --nl-pos-line: #6b5138;
+  --nl-zero: #120c06;
+  --nl-hop: #b9571d;
+  --nl-hop-ink: #9a440f;
+  --nl-on-hop: #fff8ea;
+  --nl-dot-fill: #f6edd6;
+  --nl-pick: #6a3fa0;
+}
+.bm-nl--full { display: block; }
+.bm-nl--full .bm-nl-svg { display: block; width: 100%; height: auto; margin: 0 auto; overflow: visible; }
+.bm-nl--inline { display: inline-block; vertical-align: middle; line-height: 0; }
+.bm-nl--inline .bm-nl-svg { display: block; overflow: visible; }
+
+/* the smoky panel behind the full dark one, so it reads over sky, grass or the HUD */
+.bm-nl--backing {
+  padding: 12px 18px 16px;
+  border-radius: 16px;
+  background: rgba(22, 15, 10, 0.88);
+  border: 1px solid rgba(226, 173, 76, 0.32);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 238, 205, 0.06);
+}
+
+.bm-nl text { font-family: Bitter, Georgia, 'Times New Roman', serif; }
+
+/* the line, its ends and its ticks */
+.bm-nl .nl-track { stroke-linecap: round; }
+.bm-nl .nl-track.neg { stroke: var(--nl-neg-line); }
+.bm-nl .nl-track.pos { stroke: var(--nl-pos-line); }
+.bm-nl .nl-end.neg { fill: var(--nl-neg-line); }
+.bm-nl .nl-end.pos { fill: var(--nl-pos-line); }
+.bm-nl .nl-tick { stroke-width: 2; stroke-linecap: round; }
+.bm-nl .nl-tick.major { stroke-width: 3; }
+.bm-nl .nl-tick.neg { stroke: var(--nl-neg-line); }
+.bm-nl .nl-tick.pos { stroke: var(--nl-pos-line); }
+.bm-nl .nl-tick.zero { stroke: var(--nl-zero); stroke-width: 4.5; }
+.bm-nl--inline .nl-tick { stroke-width: 1.4; }
+.bm-nl--inline .nl-tick.major { stroke-width: 1.8; }
+.bm-nl--inline .nl-tick.zero { stroke-width: 2.6; }
+.bm-nl .nl-num { fill: var(--nl-ink-2); font-weight: 500; }
+.bm-nl .nl-num.neg { fill: var(--nl-neg-ink); }
+
+/* the start, zero, the pick */
+.bm-nl .nl-key { fill: var(--nl-ink); font-weight: 700; }
+.bm-nl .nl-key.start.neg { fill: var(--nl-neg-ink); }
+.bm-nl .nl-key.zero { fill: var(--nl-zero); font-weight: 800; }
+.bm-nl .nl-key.pick { fill: var(--nl-pick); font-weight: 600; }
+.bm-nl .nl-start { fill: var(--nl-dot-fill); stroke: var(--nl-ink); stroke-width: 3.5; }
+.bm-nl--inline .nl-start { stroke-width: 2; }
+.bm-nl .nl-pickmark { stroke: var(--nl-pick); stroke-width: 3.5; stroke-linecap: round; fill: none; }
+.bm-nl--inline .nl-pickmark { stroke-width: 2; }
+/* the pick's number sits in an outlined box (the answer's is filled), so the two differ in shape as well as colour */
+.bm-nl .nl-pickbox { fill: none; stroke: var(--nl-pick); stroke-width: 2; }
+/* thin lines from a number that had to move aside back to its spot on the line */
+.bm-nl .nl-lead { stroke-width: 1.5; stroke-linecap: round; opacity: 0.75; stroke: var(--nl-ink-2); }
+.bm-nl .nl-lead.end { stroke: var(--nl-hop); }
+.bm-nl .nl-lead.pick { stroke: var(--nl-pick); }
+.bm-nl .nl-lead.zero { stroke: var(--nl-zero); }
+
+/* the hop */
+.bm-nl .nl-arc { fill: none; stroke: var(--nl-hop); stroke-linecap: round; }
+.bm-nl .nl-arrow { fill: var(--nl-hop); }
+.bm-nl .nl-arclab { fill: var(--nl-hop-ink); font-weight: 700; }
+.bm-nl .nl-arclead { stroke: var(--nl-hop); stroke-width: 1.5; stroke-linecap: round; opacity: 0.7; }
+.bm-nl .nl-rider { fill: var(--nl-hop); stroke: var(--nl-dot-fill); stroke-width: 2; }
+.bm-nl .nl-land circle { fill: var(--nl-hop); stroke: var(--nl-dot-fill); stroke-width: 3; }
+.bm-nl--inline .nl-land circle { stroke-width: 1.5; }
+.bm-nl .nl-endlab rect { fill: var(--nl-hop); }
+.bm-nl .nl-endlab text { fill: var(--nl-on-hop); font-weight: 800; }
+.bm-nl .nl-endlab.guess rect { fill: none; stroke: var(--nl-hop); stroke-width: 2.5; stroke-dasharray: 5 4; }
+.bm-nl--inline .nl-endlab.guess rect { stroke-width: 1.5; stroke-dasharray: 3 2; }
+.bm-nl .nl-endlab.guess text { fill: var(--nl-hop-ink); }
+
+/* the turn-around: "Taking away −3 is the same as adding 3", the little arrow that swings round, and the mark that
+   stays in the finished picture (dashed the way the sign seems to say, a loop, solid the way the hop goes) */
+.bm-nl .nl-turn { fill: var(--nl-ink); font-weight: 600; }
+.bm-nl .nl-flip path { stroke: var(--nl-hop); fill: none; stroke-linecap: round; }
+.bm-nl .nl-flip path.head { fill: var(--nl-hop); stroke: none; }
+.bm-nl .nl-uturn path { stroke: var(--nl-hop); stroke-width: 3; fill: none; stroke-linecap: round; }
+.bm-nl .nl-uturn path.ghost { stroke: var(--nl-mute); stroke-width: 2.5; stroke-dasharray: 4 4; }
+.bm-nl .nl-uturn path.head { fill: var(--nl-hop); stroke: none; }
+
+/* small words under the numbers */
+.bm-nl .nl-cap { fill: var(--nl-mute); font-weight: 600; letter-spacing: 0.04em; }
+.bm-nl .nl-cap.end { fill: var(--nl-hop-ink); }
+.bm-nl .nl-cap.pick { fill: var(--nl-pick); }
+.bm-nl .nl-cap.side-neg { fill: var(--nl-neg-ink); opacity: 0.85; }
+.bm-nl .nl-cap.side-pos { fill: var(--nl-mute); }
+/* a caption in two parts: "lands here (you picked 12)", "start (your pick)" */
+.bm-nl .nl-cap tspan.start { fill: var(--nl-mute); }
+.bm-nl .nl-cap tspan.end { fill: var(--nl-hop-ink); }
+.bm-nl .nl-cap tspan.pick { fill: var(--nl-pick); }
+
+/* the one plain line under the picture */
+.bm-nl-reason {
+  margin: 6px auto 0; max-width: 62ch; text-wrap: balance;
+  font: 500 20px/1.35 Bitter, Georgia, 'Times New Roman', serif; text-align: center;
+  color: var(--nl-ink);
+}
+.bm-nl--light .bm-nl-reason { font-weight: 600; }
+
+@media (max-width: 700px) {
+  .bm-nl-reason { font-size: 17px; }
+  .bm-nl--backing { padding: 10px 10px 12px; }
+}
+/* the shorter one, for a short window (a phone held sideways) */
+.bm-nl--compact.bm-nl--backing { padding: 6px 10px 8px; border-radius: 12px; }
+.bm-nl--compact .bm-nl-reason { margin-top: 2px; font-size: 15px; line-height: 1.3; }

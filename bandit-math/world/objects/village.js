@@ -1,0 +1,205 @@
+// THE VILLAGE: Jacob's Tripo buildings, the procedural props (townProps.js) and town trees, placed from a layout,
+// with stone roads painted on. The layout is plain data, so it saves, copies and pastes:
+//   { v: 1, items: [{ id, type: 'model' | 'prop' | 'tree', kind, x, z, rot (degrees: where the front faces, 0 = +z), size, level, y (raised or sunk, m) }],
+//          roads: [{ mat: 'cobbles' | 'flagstones' | 'erase', w (m), pts: [[x, z], ...] }] }
+//   size: a model's longest side in metres; a prop's or a tree's scale (1 = as made)
+// It knows nothing of the Terrain Lab: the land is handed in (heights, a ground-ray function), and the lab asks it
+// for the ground pads (levelPads), the cells to keep clear of plants and trees (blockGrid) and the road picture.
+import * as THREE from 'three';
+import { BASE } from '../base.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { makeProp, PROP_KINDS } from './townProps.js';
+import { TOWN_ASSETS, modelFootprint, levels, levelPads } from './townAssets.js';
+export { TOWN_ASSETS, levels, levelPads };   // (the buildings' data and the ground pads live in townAssets.js, with no three.js)
+
+// town trees (drawn by the Terrain Lab's forest, so they get its imposters, wind and shade): kind -> base height (m)
+export const TOWN_TREES = { oak: 'Oak', ash: 'Ash', aspen: 'Aspen', pine: 'Pine' };
+const FRONT_YAW = { '+Z': 0, '-Z': Math.PI, '+X': -Math.PI / 2, '-X': Math.PI / 2 };   // turns the model so its front faces +z
+
+// an item's footprint (width along its own x, depth along its own z, metres) and height
+export function footprintOf(it) {
+  if (it.type === 'model') return modelFootprint(it);
+  if (it.type === 'prop') { const P = PROP_KINDS.find(p => p.kind === it.kind); const f = P ? P.footprint : [1.5, 1.5]; return { w: f[0] * it.size, d: f[1] * it.size, h: propHeight(it.kind) * it.size }; }
+  return { w: 5 * it.size, d: 5 * it.size, h: 14 * it.size };                               // a tree: its trunk's surroundings
+}
+// a prop's real height (measured once a kind), for its pick box
+const PROP_H = {};
+function propHeight(kind) { if (!(kind in PROP_H)) { try { const b = new THREE.Box3().setFromObject(makeProp(kind)); PROP_H[kind] = Math.max(0.5, b.max.y); } catch (e) { PROP_H[kind] = 2; } } return PROP_H[kind]; }
+
+// THE ROADS, painted: a picture over the whole land (P x P, R cobbles, G flagstones), strokes drawn in order, erase strokes
+// cutting both. Returns the canvas (the shader reads it).
+export function paintRoads(canvas, layout, SIZE, P = 2048) {
+  canvas.width = canvas.height = P;
+  const g = canvas.getContext('2d', { willReadFrequently: true }), k = P / SIZE;
+  g.clearRect(0, 0, P, P); g.lineCap = g.lineJoin = 'round';
+  for (const r of layout.roads) drawStroke(g, r, SIZE, P);
+  sealSeams(canvas, layout.roads, SIZE);
+  return canvas;
+}
+// SEAMS: where two strokes' soft (anti-aliased) edges cross inside the paving, as the plaza's rim crossing a road's edge,
+// a pixel can be left partly covered by each and wholly by neither: a pinhole that reads as unpaved, a stone missing
+// there in the 3D paving and the painted. A partly covered pixel with paving on 6 or more of its 8 sides takes its
+// strongest neighbour's colour (a real edge has fewer, and a rubbed-out patch is bare all round). Only over the roads'
+// own box. Returns how many were sealed
+export function sealSeams(canvas, roads, SIZE) {
+  const P = canvas.width, k = P / SIZE; if (!roads || !roads.length) return 0;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const r of roads) for (const [x, z] of r.pts) { const h = (r.w || 0) / 2 + 2; x0 = Math.min(x0, x - h); x1 = Math.max(x1, x + h); y0 = Math.min(y0, z - h); y1 = Math.max(y1, z + h); }
+  const i0 = Math.max(1, Math.floor((x0 + SIZE / 2) * k)), i1 = Math.min(P - 2, Math.ceil((x1 + SIZE / 2) * k)), j0 = Math.max(1, Math.floor((y0 + SIZE / 2) * k)), j1 = Math.min(P - 2, Math.ceil((y1 + SIZE / 2) * k));
+  if (i1 <= i0 || j1 <= j0) return 0;
+  const g = canvas.getContext('2d', { willReadFrequently: true }), W = i1 - i0 + 3, H = j1 - j0 + 3, img = g.getImageData(i0 - 1, j0 - 1, W, H), d = img.data;
+  const paved = (o) => d[o + 3] * Math.max(d[o], d[o + 1]) > 32512;   // (alpha x the stronger of cobbles and flagstones over one half, as the paving reads it)
+  const fix = [];
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+    const o = (y * W + x) * 4; if (!d[o + 3] || paved(o)) continue;
+    let n = 0, best = -1, bv = 0;
+    for (const q of [o - 4, o + 4, o - W * 4, o + W * 4, o - W * 4 - 4, o - W * 4 + 4, o + W * 4 - 4, o + W * 4 + 4]) if (paved(q)) { n++; const v = d[q + 3] * Math.max(d[q], d[q + 1]); if (v > bv) { bv = v; best = q; } }
+    if (n >= 6) fix.push(o, best);
+  }
+  for (let f = 0; f < fix.length; f += 2) { const o = fix[f], q = fix[f + 1]; d[o] = d[q]; d[o + 1] = d[q + 1]; d[o + 2] = d[q + 2]; d[o + 3] = d[q + 3]; }
+  if (fix.length) g.putImageData(img, i0 - 1, j0 - 1);
+  return fix.length / 2;
+}
+export function drawStroke(g, r, SIZE, P = 2048, from = 0) {
+  const k = P / SIZE;
+  g.globalCompositeOperation = r.mat === 'erase' ? 'destination-out' : 'source-over';   // the newest stroke wins: cobbles over flagstones and back
+  g.strokeStyle = g.fillStyle = r.mat === 'flagstones' ? 'rgb(0,255,0)' : r.mat === 'erase' ? '#fff' : 'rgb(255,0,0)';
+  g.lineWidth = Math.max(1, r.w * k);
+  const p = (q) => [(q[0] + SIZE / 2) * k, (q[1] + SIZE / 2) * k];
+  if (r.pts.length === 1 || from >= r.pts.length - 1) { const [x, y] = p(r.pts[r.pts.length - 1]); g.beginPath(); g.arc(x, y, g.lineWidth / 2, 0, 6.283); g.fill(); }
+  else { g.beginPath(); const [x0, y0] = p(r.pts[Math.max(0, from)]); g.moveTo(x0, y0); for (let q = Math.max(0, from) + 1; q < r.pts.length; q++) { const [x, y] = p(r.pts[q]); g.lineTo(x, y); } g.stroke(); }
+  g.globalCompositeOperation = 'source-over';
+}
+
+// THE CELLS KEPT CLEAR (0..1 a cell, N x N over SIZE): under and round the buildings and props (`pad` m beyond their
+// footprints), round the town trees' trunks, and the roads (from the road picture). And THE YARDS: round the buildings
+// (fading out over `yardM` m) and along the roads (~6 m), where the wild meadow gives way to mown lawn. (Bandit Math: a
+// metre's pad and a 5 m yard, where the Terrain Lab has 2 m and 14 m: the meadow grows up close round a western town)
+export function blockGrid(layout, roadCanvas, N, SIZE, TEX, pad = 1, yardM = 5) {
+  const B = new Float32Array(N * N), road = new Float32Array(N * N), yard = new Float32Array(N * N), bridge = new Float32Array(N * N);
+  for (const it of layout.items) {
+    if (it.type === 'prop' && it.kind === 'stateMap') continue;        // (a state's outline: a garden, its border planted; nothing to keep clear)
+    if (it.type === 'model' && it.kind === 'bridge') {                  // a bridge is a way across, not in the way: its deck counts as road
+      const { w, d } = footprintOf(it), a = it.rot * Math.PI / 180, c = Math.cos(a), s = Math.sin(a), R = Math.hypot(w, d) / 2 + TEX;
+      for (let j = Math.max(0, Math.floor((it.z - R + SIZE / 2) / TEX)); j <= Math.min(N - 1, Math.ceil((it.z + R + SIZE / 2) / TEX)); j++)
+        for (let i = Math.max(0, Math.floor((it.x - R + SIZE / 2) / TEX)); i <= Math.min(N - 1, Math.ceil((it.x + R + SIZE / 2) / TEX)); i++) {
+          const x = (i + 0.5) * TEX - SIZE / 2 - it.x, z = (j + 0.5) * TEX - SIZE / 2 - it.z;
+          if (Math.abs(c * x - s * z) < w / 2 && Math.abs(s * x + c * z) < d / 2 + TEX) bridge[j * N + i] = 1;
+        }
+      continue;
+    }
+    const { w, d } = footprintOf(it), a = it.rot * Math.PI / 180, c = Math.cos(a), s = Math.sin(a), hw = w / 2 + pad, hd = d / 2 + pad, Y = it.type === 'model' ? yardM : it.type === 'prop' ? 4 : 0, R = Math.hypot(hw, hd) + Math.max(TEX, Y);
+    const i0 = Math.max(0, Math.floor((it.x - R + SIZE / 2) / TEX)), i1 = Math.min(N - 1, Math.ceil((it.x + R + SIZE / 2) / TEX));
+    const j0 = Math.max(0, Math.floor((it.z - R + SIZE / 2) / TEX)), j1 = Math.min(N - 1, Math.ceil((it.z + R + SIZE / 2) / TEX));
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const x = (i + 0.5) * TEX - SIZE / 2 - it.x, z = (j + 0.5) * TEX - SIZE / 2 - it.z, lx = c * x - s * z, lz = s * x + c * z;
+      const out = Math.hypot(Math.max(0, Math.abs(lx) - hw), Math.max(0, Math.abs(lz) - hd));
+      const v = it.type === 'tree' ? 0.6 * Math.max(0, 1 - out / TEX) : Math.max(0, 1 - out / TEX); if (v > B[j * N + i]) B[j * N + i] = v;
+      if (Y) { const t = Math.min(1, out / Y), y = 1 - t * t * (3 - 2 * t); if (y > yard[j * N + i]) yard[j * N + i] = y; }
+    }
+  }
+  if (roadCanvas && roadCanvas.width) {
+    const P = roadCanvas.width, d = roadCanvas.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, P, P).data, f = P / N;
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      let m = 0; for (let y = 0; y < f; y += 2) for (let x = 0; x < f; x += 2) { const o = ((j * f + y) * P + i * f + x) * 4; m = Math.max(m, d[o], d[o + 1]); }
+      road[j * N + i] = m / 255; if (road[j * N + i] > B[j * N + i]) B[j * N + i] = road[j * N + i];
+    }
+    // the verges: the roads spread two cells each way (~6 m)
+    const tmp = new Float32Array(N * N);
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { let m = 0; for (let d = -2; d <= 2; d++) { const ii = i + d; if (ii >= 0 && ii < N) m = Math.max(m, road[j * N + ii] * (1 - Math.abs(d) * 0.3)); } tmp[j * N + i] = m; }
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { let m = 0; for (let d = -2; d <= 2; d++) { const jj = j + d; if (jj >= 0 && jj < N) m = Math.max(m, tmp[jj * N + i] * (1 - Math.abs(d) * 0.3)); } if (m > yard[j * N + i]) yard[j * N + i] = m; }
+  }
+  for (let k = 0; k < N * N; k++) if (bridge[k] > road[k]) road[k] = bridge[k];
+  return { block: B, road, yard, bridge };
+}
+
+// ── the things themselves ───────────────────────────────────────────────────────────────────────────────────────
+const loader = new GLTFLoader(), modelCache = {};
+export function loadModel(kind, lo) {   // -> { scene (the model as loaded, shared: clone it to use it), centre, minY, box }
+  const key = kind + (lo ? '-lo' : '');
+  return modelCache[key] || (modelCache[key] = new Promise((ok, bad) => loader.load(`${BASE}models/town/${lo ? 'lo/' : ''}${kind}.glb`, g => {
+    const o = g.scene; o.updateMatrixWorld(true);
+    // a model in many parts (the Lurcher's 69) as one mesh a material: a draw each, not a part each (parts whose attributes
+    // differ are kept as they are)
+    const meshes = []; o.traverse((m) => { if (m.isMesh && !m.isSkinnedMesh) meshes.push(m); });
+    if (meshes.length > 4) {
+      const by = new Map(); for (const m of meshes) { const k = m.material.uuid + '|' + Object.keys(m.geometry.attributes).sort().join(',') + (m.geometry.index ? '|i' : ''); if (!by.has(k)) by.set(k, []); by.get(k).push(m); }
+      for (const list of by.values()) { if (list.length < 2) continue;
+        const geo = mergeGeometries(list.map((m) => m.geometry.clone().applyMatrix4(m.matrixWorld))); if (!geo) continue;
+        const one = new THREE.Mesh(geo, list[0].material); one.name = list[0].name; o.add(one);
+        for (const m of list) m.parent.remove(m); }
+      o.updateMatrixWorld(true);
+    }
+    o.traverse(m => { if (m.isMesh) { m.castShadow = m.receiveShadow = true; for (const mt of [].concat(m.material)) { mt.side = THREE.DoubleSide; if (mt.map) mt.map.anisotropy = 4; } } });   // (both sides: a gable or wall made as one face shows from behind too)
+    const bb = new THREE.Box3().setFromObject(o), c = bb.getCenter(new THREE.Vector3());
+    ok({ scene: o, centre: c, minY: bb.min.y, box: bb.getSize(new THREE.Vector3()) });
+  }, undefined, bad)));
+}
+
+// how a model stands (worked out once a model): turned upright by its tilt, then its middle put over the spot and its
+// lowest point on the ground (less its sink). -> { tilt (radians, about x), at (the model's position, its own units) }
+function standOf(m, A) {
+  if (m.stand && m.stand.A === A) return m.stand;
+  const tilt = (A.tilt || 0) * Math.PI / 180, R = new THREE.Matrix4().makeRotationX(tilt), c = m.centre.clone().applyMatrix4(R);
+  let low = m.minY;
+  if (tilt) {   // (the lowest point once turned: every point looked at, as the box turned with it would sit too low)
+    low = Infinity; const v = new THREE.Vector3(), M = new THREE.Matrix4();
+    m.scene.traverse((o) => { if (!o.isMesh) return; M.multiplyMatrices(R, o.matrixWorld); const P = o.geometry.attributes.position;
+      for (let i = 0; i < P.count; i++) { const y = v.fromBufferAttribute(P, i).applyMatrix4(M).y; if (y < low) low = y; } });
+  }
+  return (m.stand = { A, tilt, at: new THREE.Vector3(-c.x, -low - (A.sink || 0), -c.z) });
+}
+
+// every item's object: a group placed at (x, ground, z), turned by rot, scaled; inside it the thing, centred and with its
+// front to +z; and an invisible box the size of its footprint, for picking it with the mouse
+export class Village {
+  constructor({ scene, lo = false, heightAt, size }) {
+    this.scene = scene; this.lo = lo; this.heightAt = heightAt; this.size = size;    // size: the land's width (m), for the road picture
+    this.group = new THREE.Group(); scene.add(this.group);
+    this.objs = new Map();                                        // id -> { group, pick, it }
+    this.pickMat = new THREE.MeshBasicMaterial({ visible: false });
+    this.layout = { v: 1, items: [], roads: [] };
+  }
+  setLayout(layout) { this.layout = normalise(layout); this.sync(); }
+  // makes the scene match the layout (new items built, gone ones removed, the rest placed)
+  sync() {
+    const ids = new Set(this.layout.items.map(i => i.id));
+    for (const [id, o] of this.objs) if (!ids.has(id)) { this.group.remove(o.group); this.objs.delete(id); }
+    for (const it of this.layout.items) { let o = this.objs.get(it.id); if (!o || o.kind !== it.kind) { if (o) this.group.remove(o.group); o = this.build(it); } o.it = it; this.place(o); }
+  }
+  build(it) {
+    const group = new THREE.Group(), pick = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), this.pickMat); pick.userData.id = it.id; group.add(pick);
+    const o = { group, pick, it, kind: it.kind, inner: null };
+    if (it.type === 'model') loadModel(it.kind, this.lo).then(m => { if (this.objs.get(it.id) !== o) return;
+      const A = TOWN_ASSETS[it.kind], inner = new THREE.Group(), body = m.scene.clone(true), st = standOf(m, A);
+      body.position.copy(st.at); body.rotation.x = st.tilt; inner.add(body); inner.rotation.y = FRONT_YAW[A.front] || 0; o.inner = inner; group.add(inner); this.place(o); this.onLoaded && this.onLoaded(); });
+    else if (it.type === 'prop') { o.inner = makeProp(it.kind); group.add(o.inner); }
+    this.group.add(group); this.objs.set(it.id, o);
+    return o;
+  }
+  place(o) {
+    const it = o.it, { w, d, h } = footprintOf(it);
+    o.group.position.set(it.x, this.heightAt(it.x, it.z) + (it.y || 0), it.z); o.group.rotation.y = it.rot * Math.PI / 180;   // (y: raised or sunk from the ground, m)
+    if (o.inner) { if (it.type === 'model') { const A = TOWN_ASSETS[it.kind]; o.inner.scale.setScalar(it.size / Math.max(A.box[0], A.box[2])); } else o.inner.scale.setScalar(it.size); }
+    o.pick.scale.set(w, h, d); o.pick.position.set(0, h / 2, 0);
+    o.group.visible = it.type !== 'tree' || !!this.showTreePicks;   // trees are drawn by the forest; their group only holds the pick box
+  }
+  pickables() { return [...this.objs.values()].map(o => o.pick); }
+  item(id) { return this.layout.items.find(i => i.id === id); }
+}
+let nextId = 1;
+export const newId = () => 'i' + (Date.now().toString(36)) + (nextId++).toString(36);
+export function normalise(L) {
+  const out = { v: 1, items: [], roads: [] };
+  for (const it of (L && L.items) || []) {
+    if (!['model', 'prop', 'tree'].includes(it.type)) continue;
+    if (it.type === 'model' && !TOWN_ASSETS[it.kind]) continue;
+    if (it.type === 'prop' && !PROP_KINDS.some(p => p.kind === it.kind)) continue;   // (a layout from a newer page: skipped, not a crash)
+    if (it.type === 'tree' && !TOWN_TREES[it.kind]) continue;
+    out.items.push({ id: it.id || newId(), type: it.type, kind: it.kind, x: +it.x || 0, z: +it.z || 0, rot: ((+it.rot || 0) % 360 + 360) % 360,
+      size: +it.size || (it.type === 'model' ? TOWN_ASSETS[it.kind].size : 1), ...(it.level === true ? { level: true } : {}), ...(+it.y ? { y: +(+it.y).toFixed(2) } : {}) });
+  }
+  for (const r of (L && L.roads) || []) if (r && r.pts && r.pts.length) out.roads.push({ mat: r.mat || 'cobbles', w: +r.w || 4, pts: r.pts.map(p => [+(+p[0]).toFixed(2), +(+p[1]).toFixed(2)]) });
+  return out;
+}

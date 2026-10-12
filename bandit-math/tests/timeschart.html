@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bandit Math: times chart lab</title>
+<script src="../oops.js"></script>
+<link rel="stylesheet" href="../src/ui/fonts/fonts.css">
+<style>
+  /* A stand-in round-up for src/ui/timeschart.js: a painted pasture, a rule card at the top, a herd of number tags.
+     Pick a wrong number and the "Peek at the chart" button slides in; sit still for the wait and it slides in too.
+     Address switches for rigs: ?table=6 &miss=27 &find=56 &pick=9 &size=12 &open=1 &offer=1 &wait=8 &nobar=1 */
+  :root {
+    --ink: #f4e8cf; --ink-2: #dccaa5; --mute: #a8957a; --brass: #e2ad4c; --brass-lo: #a8742a; --rust: #d9785a;
+    --sage: #a9c07f; --line: rgba(244, 232, 207, 0.15);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; color: var(--ink); font: 16px/1.4 Bitter, Georgia, serif; }
+  body {
+    background:
+      radial-gradient(ellipse 60% 40% at 70% 34%, rgba(255, 214, 150, 0.55), rgba(255, 214, 150, 0) 70%),
+      radial-gradient(ellipse 120% 60% at 20% 108%, #3f5a2a 0 52%, transparent 53%),
+      radial-gradient(ellipse 120% 55% at 85% 110%, #4a6630 0 50%, transparent 51%),
+      radial-gradient(ellipse 140% 50% at 50% 100%, #5f7a3a 0 58%, transparent 59%),
+      linear-gradient(180deg, #4b6c92 0%, #8aa7bf 38%, #d7c3a0 56%, #8c9a5a 57%, #5c7436 100%);
+  }
+  button { font: inherit; color: inherit; cursor: pointer; }
+
+  /* the rule card, the way the round-up shows it */
+  #card {
+    position: fixed; top: 18px; left: 50%; transform: translateX(-50%); z-index: 10;
+    padding: 10px 26px 12px; border-radius: 14px; text-align: center;
+    background: rgba(30, 20, 13, 0.84); border: 1px solid rgba(226, 173, 76, 0.55);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  }
+  #card small { display: block; font: 13px/1 Smokum, Georgia, serif; letter-spacing: 0.14em; color: var(--brass); text-transform: uppercase; }
+  #rule { display: block; font: 34px/1.1 Rye, Georgia, serif; color: #f6e3b8; margin-top: 4px; white-space: nowrap; }
+
+  /* what the trail boss says after a pick */
+  #say {
+    position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 10; max-width: min(640px, 92vw);
+    padding: 10px 16px; border-radius: 12px; background: rgba(30, 20, 13, 0.84); border: 1px solid var(--line); text-align: center;
+  }
+  #say:empty { display: none; }
+  #say .who { font: 15px/1 Smokum, Georgia, serif; letter-spacing: 0.1em; color: var(--rust); }
+  #say .who.good { color: var(--sage); }
+  #say .line { font-size: 17px; margin-top: 4px; }
+  #say .skip { font: 600 17px/1.4 Bitter, Georgia, serif; color: var(--ink-2); margin-top: 3px; }
+  #say .skip b { color: var(--rust); }
+
+  /* the herd: number tags standing in for branded cattle */
+  #herd { position: fixed; inset: 0; z-index: 5; }
+  .tag {
+    position: absolute; transform: translate(-50%, -50%);
+    min-width: 64px; height: 52px; padding: 0 12px; border-radius: 12px 12px 22px 22px;
+    border: 2px solid rgba(255, 246, 225, 0.85); background: #5b3b22; color: #fff3dc;
+    font: 700 26px/1 Bitter, Georgia, serif; box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
+    transition: opacity 0.4s, transform 0.2s;
+  }
+  .tag:hover { transform: translate(-50%, -54%); }
+  .tag.roped { opacity: 0; pointer-events: none; }
+  .tag.tangled { opacity: 0.55; border-style: dashed; animation: shake 0.4s; pointer-events: none; }
+  @keyframes shake { 0%, 100% { translate: 0 0; } 25% { translate: -5px 0; rotate: -3deg; } 75% { translate: 5px 0; rotate: 3deg; } }
+
+  /* dev controls, bottom left */
+  #bar {
+    position: fixed; left: 10px; bottom: 10px; z-index: 30; display: flex; flex-wrap: wrap; gap: 6px 8px; align-items: center;
+    max-width: min(560px, calc(100vw - 20px)); padding: 8px 10px; border-radius: 10px;
+    background: rgba(20, 14, 9, 0.88); border: 1px solid var(--line); font-size: 13px; color: var(--ink-2);
+  }
+  #bar select, #bar input { font: inherit; color: var(--ink); background: rgba(255, 238, 205, 0.06); border: 1px solid var(--line); border-radius: 6px; padding: 3px 5px; }
+  #bar input { width: 46px; }
+  #bar button { padding: 4px 9px; border-radius: 7px; border: 1px solid var(--line); background: rgba(255, 238, 205, 0.06); }
+  #bar button:hover { background: rgba(255, 238, 205, 0.12); }
+  #log { flex-basis: 100%; color: var(--mute); font-size: 12px; min-height: 1.2em; }
+  body.nobar #bar { display: none; }
+</style>
+</head>
+<body>
+<div id="card"><small>Round-up</small><span id="rule">Rope the 6-herd</span></div>
+<div id="herd"></div>
+<div id="say"></div>
+<div id="bar">
+  <label>Card <select id="pickTable"></select></label>
+  <label>Size <select id="pickSize"><option value="">auto</option><option>10</option><option>12</option></select></label>
+  <label>Wait <input id="wait" type="number" min="1" max="60" value="8"> s</label>
+  <button id="newCard">New card</button>
+  <button id="offerNow">Offer now</button>
+  <button id="openNow">Open chart</button>
+  <div id="log"></div>
+</div>
+<div id="ui"></div>
+
+<script type="module">
+import { offerChart, showChart, closeChart, isChartOpen, chartOptions, watchHesitation, ensureChartCss } from '../src/ui/timeschart.js';
+import { skipLine, seeded } from '../src/math/times.js';
+
+const Q = new URLSearchParams(location.search);
+const num = (k) => (Q.has(k) && Q.get(k) !== '' && Number.isFinite(Number(Q.get(k))) ? Number(Q.get(k)) : null);
+if (Q.has('nobar')) document.body.classList.add('nobar');
+const $ = (id) => document.getElementById(id);
+const ui = $('ui');
+ensureChartCss();
+
+// ---- cards, built the same shape the trainer's waves have (kind, table, rule, reach, targets)
+const rand = seeded(num('seed') ?? 7);
+const pick = (a) => a[Math.floor(rand() * a.length)];
+function ruleCard(t, reach = t >= 11 ? 12 : 10) {
+  const goods = [], used = new Set();
+  const ks = [2, 3, 4, 6, 7, 8, 9].filter((k) => k <= reach);
+  while (goods.length < 5) { const n = t * pick(ks); if (!used.has(n)) { used.add(n); goods.push(n); } }
+  const traps = [];
+  let guard = 0;
+  while (traps.length < 5 && guard++ < 400) {
+    const n = t * pick(ks) + pick([1, -1, 2, -2, 3, -3]);
+    if (n > 0 && n % t && !used.has(n)) { used.add(n); traps.push(n); }
+  }
+  const targets = [...goods.map((n) => ({ n, good: true })), ...traps.map((n) => ({ n, good: false }))];
+  return { kind: 'rule', table: t, reach, rule: `Rope the ${t}-herd`, targets };
+}
+function missingCard(t, a) {
+  const prod = t * a, ns = new Set([a]);
+  for (const d of [1, -1, 2, -2, 3]) if (a + d >= 2 && a + d <= 12) ns.add(a + d);
+  return { kind: 'missing', table: t, reach: Math.max(10, a), rule: `${t} × ? = ${prod}`,
+    targets: [...ns].slice(0, 6).map((n) => ({ n, good: n === a })) };
+}
+
+// ---- the herd on screen
+const SPOTS = [[0.22, 0.52], [0.38, 0.47], [0.55, 0.5], [0.72, 0.46], [0.86, 0.55], [0.3, 0.66], [0.47, 0.63], [0.63, 0.67],
+  [0.8, 0.7], [0.16, 0.74], [0.42, 0.79], [0.66, 0.82]];
+let wave = null, offer = null, hes = null, say = $('say');
+function log(s) { $('log').textContent = s; }
+
+function newCard(w) {
+  closeChart();
+  if (offer) { offer.remove(); offer = null; }
+  if (hes) hes.cancel();
+  wave = w;
+  $('rule').textContent = w.rule;
+  say.innerHTML = '';
+  const herd = $('herd');
+  herd.innerHTML = '';
+  w.targets.forEach((x, i) => {
+    const b = document.createElement('button');
+    b.className = 'tag';
+    b.textContent = x.n;
+    b.dataset.n = x.n;
+    const [fx, fy] = SPOTS[i % SPOTS.length];
+    b.style.left = (fx * 100) + '%'; b.style.top = (fy * 100) + '%';
+    b.addEventListener('click', () => onPick(x, b));
+    herd.appendChild(b);
+  });
+  hes = watchHesitation({ after: (Number($('wait').value) || 8) * 1000, onShow: () => { log('no pick for a while: offering the chart'); showOffer(); } });
+}
+
+// The round-up's side of the deal: the offer comes up after a wrong pick or a long wait; any pick closes the chart.
+// The wait running out while the offer is already up calls this again with no miss: the button glows once more and an
+// open chart is left as it is. The chart keeps clear of the rule card and, if it can, the trail boss's hint line.
+function showOffer(missed) {
+  const size = $('pickSize').value ? Number($('pickSize').value) : undefined;
+  const o = { ...chartOptions(wave, missed), anchor: $('card'), avoid: $('say') };
+  if (size) o.size = size;
+  if (offer) offer.update(o); else offer = offerChart(ui, { ...o, onOpen: () => log('chart opened'), onClose: () => log('chart closed') });
+}
+
+function onPick(x, el) {
+  closeChart();
+  hes.answered();
+  hes.restart();          // the card still has numbers to rope: start the quiet-for-a-while wait again
+  const t = wave.table;
+  if (x.good) {
+    el.classList.add('roped');
+    say.innerHTML = `<div class="who good">Got one</div><div class="line">${wave.kind === 'missing' ? `${t} × ${x.n} = ${t * x.n}` : `${x.n} = ${x.n / t} × ${t}`}</div>`;
+    if (wave.kind === 'missing' || ![...document.querySelectorAll('.tag')].some((b) => !b.classList.contains('roped') && wave.targets.find((y) => String(y.n) === b.dataset.n)?.good)) {
+      log('card done'); setTimeout(() => newCard(makeCard()), 900);
+    }
+    return;
+  }
+  el.classList.add('tangled');
+  setTimeout(() => el.classList.remove('tangled'), 1500);
+  const s = wave.kind === 'missing' ? null : skipLine(t, x.n).skip;
+  say.innerHTML = `<div class="who">Not me, partner</div>` +
+    (s ? `<div class="skip">${s.map((v) => (typeof v === 'string' ? `<b>${v}</b>` : v)).join(' · ')}</div>`
+      : `<div class="line">${t} × ${x.n} = ${t * x.n}</div>`);
+  showOffer(x.n);
+}
+
+// ---- the dev bar
+const sel = $('pickTable');
+for (let t = 2; t <= 12; t++) sel.add(new Option(`Rope the ${t}-herd`, 'r' + t));
+for (const [t, a] of [[7, 8], [6, 9], [8, 7], [12, 11]]) sel.add(new Option(`${t} × ? = ${t * a}`, `m${t}x${a}`));
+function makeCard() {
+  const v = sel.value;
+  if (v[0] === 'm') { const [t, a] = v.slice(1).split('x').map(Number); return missingCard(t, a); }
+  return ruleCard(Number(v.slice(1)));
+}
+sel.addEventListener('change', () => newCard(makeCard()));
+$('newCard').addEventListener('click', () => newCard(makeCard()));
+$('offerNow').addEventListener('click', () => showOffer());
+$('openNow').addEventListener('click', () => { const o = { ...chartOptions(wave), anchor: $('card'), avoid: $('say') }; const s = $('pickSize').value; if (s) o.size = Number(s); showChart(ui, o); });
+
+// ---- address switches (for the rig)
+const T = num('table') ?? 6, find = num('find'), pickN = num('pick'), miss = num('miss');
+if (num('wait')) $('wait').value = num('wait');
+if (num('size')) $('pickSize').value = String(num('size'));
+if (find) {
+  const a = find / T;
+  const opt = `m${T}x${a}`;
+  if (![...sel.options].some((o) => o.value === opt)) sel.add(new Option(`${T} × ? = ${find}`, opt));
+  sel.value = opt;
+} else sel.value = 'r' + T;
+let first = makeCard();
+if (miss && first.kind === 'rule' && !first.targets.some((x) => x.n === miss)) first.targets[first.targets.length - 1] = { n: miss, good: false };
+newCard(first);
+if (miss) {
+  const el = [...document.querySelectorAll('.tag')].find((b) => Number(b.dataset.n) === miss);
+  if (el) onPick({ n: miss, good: false }, el);
+} else if (pickN && wave.kind === 'missing') {
+  const el = [...document.querySelectorAll('.tag')].find((b) => Number(b.dataset.n) === pickN);
+  if (el) onPick({ n: pickN, good: false }, el);
+} else if (Q.has('offer') || Q.has('open')) showOffer();
+if (Q.has('open')) offer.openChart();
+
+// Stand-in for a game that listens on the whole page: count the presses that reach it. The chart and its button must
+// keep theirs to themselves (the rig checks this count).
+window.__worldPresses = 0;
+window.addEventListener('pointerdown', () => { window.__worldPresses++; });
+
+window.TCH = { showOffer, newCard, makeCard, get offer() { return offer; }, get wave() { return wave; }, showChart: (o) => showChart(ui, { avoid: $('say'), ...o }), closeChart, isChartOpen };
+window.__ready = true;
+</script>
+</body>
+</html>

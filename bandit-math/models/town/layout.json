@@ -1,0 +1,136 @@
+{
+ "v": 1,
+ "items": [
+  {
+   "id": "sheriff",
+   "type": "model",
+   "kind": "sheriff",
+   "x": -1.92,
+   "z": -184.67,
+   "rot": 225,
+   "size": 11.7,
+   "level": true
+  },
+  {
+   "id": "generalStore",
+   "type": "model",
+   "kind": "generalStore",
+   "x": 8.33,
+   "z": -195.63,
+   "rot": 225,
+   "size": 11,
+   "level": true
+  },
+  {
+   "id": "saloon",
+   "type": "model",
+   "kind": "saloon",
+   "x": -12.57,
+   "z": -172.76,
+   "rot": 225,
+   "size": 13.5,
+   "level": true
+  },
+  {
+   "id": "stage",
+   "type": "model",
+   "kind": "stage",
+   "x": -26.5,
+   "z": -184.14,
+   "rot": 160,
+   "size": 7,
+   "level": true
+  },
+  {
+   "id": "stable",
+   "type": "model",
+   "kind": "stable",
+   "x": -41.7,
+   "z": -182.37,
+   "rot": 165,
+   "size": 14,
+   "level": true
+  },
+  {
+   "id": "cabin",
+   "type": "model",
+   "kind": "cabin",
+   "x": 4.97,
+   "z": -221.97,
+   "rot": 285,
+   "size": 9.5,
+   "level": true
+  },
+  {
+   "id": "signpost1",
+   "type": "prop",
+   "kind": "signpost",
+   "x": 5.32,
+   "z": -209.6,
+   "rot": 45,
+   "size": 1
+  },
+  {
+   "id": "picnicTable2",
+   "type": "prop",
+   "kind": "picnicTable",
+   "x": 3.56,
+   "z": -231.87,
+   "rot": 300,
+   "size": 1
+  },
+  {
+   "id": "tree1",
+   "type": "tree",
+   "kind": "oak",
+   "x": 7.8,
+   "z": -238.94,
+   "rot": 0,
+   "size": 1.0
+  },
+  {
+   "id": "tree2",
+   "type": "tree",
+   "kind": "ash",
+   "x": -28.97,
+   "z": -168.23,
+   "rot": 0,
+   "size": 0.9
+  }
+ ],
+ "roads": [],
+ "game": {
+  "spawn": {
+   "x": -16.24,
+   "z": -209.24,
+   "rot": 45
+  },
+  "square": {
+   "x": -12.0,
+   "z": -205.0,
+   "r": 15.0
+  },
+  "pasture": {
+   "x": 175.0,
+   "z": -172.0,
+   "r": 28.0
+  },
+  "corral": {
+   "x": 130.0,
+   "z": -188.0,
+   "w": 22.0,
+   "d": 18.0,
+   "rot": 0,
+   "gate": {
+    "side": "+x",
+    "at": 0,
+    "width": 4.0
+   }
+  },
+  "crowd": {
+   "x": -23.84,
+   "z": -191.39,
+   "r": 5.0
+  }
+ }
+}

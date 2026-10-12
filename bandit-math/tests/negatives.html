@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Bandit Math: positive and negative lab</title>
+<script src="../oops.js"></script>
+<link rel="stylesheet" href="../src/ui/fonts/fonts.css">
+<link rel="stylesheet" href="../src/ui/numberline.css">
+<style>
+  /* A plain test bench for src/math/negatives.js and src/ui/numberline.js: play the cards as answer tags (no 3D),
+     see the number line after a wrong pick or 8 seconds of thinking, in the dark game look and on light paper.
+     ?gallery shows a fixed set of number lines for screenshots. Same colours and fonts as the title screen. */
+  :root {
+    --bg: #1b140f; --panel: #241a13; --card: rgba(255, 238, 205, 0.06); --card-hi: rgba(255, 238, 205, 0.12);
+    --ink: #f4e8cf; --ink-2: #dccaa5; --mute: #a8957a; --brass: #e2ad4c; --brass-lo: #a8742a; --rust: #d9785a;
+    --sage: #a9c07f; --line: rgba(244, 232, 207, 0.15); --paper: #f6edd6; --pencil: #2b2219;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.45 Bitter, Georgia, serif; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  h1 { font: 34px/1 Rye, Georgia, serif; color: var(--brass); margin: 0; letter-spacing: 0.5px; }
+  h2 { font: 20px/1.1 Smokum, Georgia, serif; color: var(--brass); margin: 0 0 10px; letter-spacing: 1px; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 22px 16px 40px; }
+  header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 20px; margin-bottom: 16px; }
+  #level { color: var(--ink-2); flex-basis: 100%; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 99px; overflow: hidden; }
+  .seg button { background: none; border: 0; padding: 6px 14px; color: var(--ink-2); }
+  .seg button[aria-pressed="true"] { background: var(--brass); color: #2a1a0c; }
+  #ladder { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 6px; flex-basis: 100%; }
+  #ladder i { height: 10px; border-radius: 3px; background: var(--card-hi); }
+  #ladder i.past { background: var(--brass-lo); }
+  #ladder i.now { background: var(--brass); box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px var(--brass); }
+
+  /* the play panel: dark like the game, or paper like the lock box */
+  #play { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 20px; }
+  body.light #play { background: var(--paper); color: var(--pencil); border-color: #cdbb94; }
+  #cardrow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; margin-bottom: 14px; }
+  #card { font: 700 46px/1.1 Bitter, Georgia, serif; letter-spacing: 0.01em; }
+  #say { color: var(--mute); font-style: italic; }
+  body.light #say { color: #7a6a55; }
+  .chip { font: 13px/1 Smokum, Georgia, serif; letter-spacing: 1px; padding: 6px 9px 5px; border-radius: 99px; border: 1px solid var(--line); color: var(--ink-2); }
+  body.light .chip { color: #6b5138; border-color: #cdbb94; }
+  #herd { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
+  .tag { position: relative; height: 76px; border-radius: 12px 12px 18px 18px; border: 1px solid var(--line); background: var(--card);
+    font: 700 30px/1 Bitter, Georgia, serif; transition: transform 0.12s, background 0.2s, opacity 0.3s; }
+  body.light .tag { background: #fffaf0; border-color: #cdbb94; color: var(--pencil); }
+  .tag:hover:not(:disabled) { background: var(--card-hi); transform: translateY(-2px); }
+  .tag.roped { background: rgba(169, 192, 127, 0.18); border-color: var(--sage); color: var(--sage); cursor: default; }
+  body.light .tag.roped { color: #4f6b2a; border-color: #7f9a4f; }
+  .tag.tangled { opacity: 0.45; border-style: dashed; cursor: default; }
+  .tag small { position: absolute; left: 0; right: 0; bottom: 6px; font: 10.5px/1 Bitter, Georgia, serif; color: var(--mute); }
+  #tools { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin: 16px 0 10px; }
+  .btn { border: 1px solid var(--brass); background: none; color: var(--brass); border-radius: 99px; padding: 7px 16px; }
+  body.light .btn { color: #9a440f; border-color: #b9571d; }
+  #wait { color: var(--mute); font-size: 14px; }
+  #helpbox { min-height: 40px; margin-top: 8px; }
+  #say2 { min-height: 28px; font-size: 18px; margin-top: 10px; }
+  #say2 .good { color: var(--sage); }
+  #say2 .bad { color: var(--rust); }
+  body.light #say2 .bad { color: #b3261e; }
+
+  /* gallery */
+  .gal { display: grid; gap: 18px; }
+  .shot { border-radius: 14px; padding: 14px 16px; }
+  .shot h3 { margin: 0 0 6px; font: 15px/1.2 Smokum, Georgia, serif; letter-spacing: 1px; color: var(--brass); }
+  .shot.dark { background: linear-gradient(180deg, #2c3d52 0%, #4a4441 60%, #2a2219 100%); }
+  .shot.light { background: var(--paper); color: var(--pencil); }
+  .shot.light h3 { color: #9a440f; }
+  /* a stand-in for the lock box's leather mat with one printed sum on it */
+  .mat { background: linear-gradient(180deg, #4c3524, #3b2819); border-radius: 14px; padding: 26px 20px; display: flex; gap: 40px; flex-wrap: wrap; align-items: flex-start; }
+  .calc { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px 12px 6px; border-radius: 8px;
+    font: 600 21px/1.2 Bitter, serif; color: #2b2016; background: var(--paper); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45); border-bottom: 3px solid var(--brass); }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  @media (max-width: 900px) { .row2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<script type="module">
+// ?gallery          a fixed set of number lines (dark and light, full and tiny), for screenshots
+// ?gallery&still    the same, drawn finished (no animation)
+// ?only=<name>      the gallery with one picture only (the rig uses this): cross, under, down, turn, fifty, pick, guess, inline
+// ?light            start the play panel on paper
+// ?seed=N           a seeded trainer, so a rig sees the same cards every time
+// ?after=ms         how long the "still thinking?" wait is (default 8000)
+// ?step=N           start the trainer at a step of the ladder
+import { showNumberLine, watchHesitation, ensureNumberLineStyles } from '../src/ui/numberline.js';
+const q = new URLSearchParams(location.search);
+const app = document.getElementById('app');
+window.NL = { showNumberLine, watchHesitation };
+
+const GALLERY = [
+  { id: 'cross', title: '−10 + 18: crosses zero (her test question)', o: { start: -10, change: 18, op: '+', term: 18, reason: 'You went down 18. Adding 18 goes UP the line: 10 steps to zero, 8 more.' } },
+  { id: 'under', title: '−7 + 3: stays below zero', o: { start: -7, change: 3, op: '+', term: 3, reason: 'Up 3 from −7 doesn’t reach zero: it stops at −4.' } },
+  { id: 'down', title: '−4 − 5: further down', o: { start: -4, change: -5, op: '−', term: 5, reason: 'Taking away 5 goes DOWN the line: from −4, down 5 more is −9.' } },
+  { id: 'turn', title: '5 − (−3): taking away a negative', o: { start: 5, change: 3, op: '−', term: -3, reason: 'Taking away a negative turns around: it goes UP. 5 up 3 is 8.' } },
+  { id: 'fifty', title: '−35 + 48: a big one', o: { start: -35, change: 48, op: '+', term: 48, reason: 'Adding 48 goes UP: 35 steps to zero, 13 more.' } },
+  { id: 'pick', title: '−10 − 18 with a wrong pick of 8', o: { start: -10, change: -18, op: '−', term: 18, picked: 8, reason: 'You went up 18. Taking away 18 goes DOWN the line: from −10, down 18 more is −28.' } },
+  { id: 'guess', title: 'After 8 s of thinking: −10 + 18, answer hidden', o: { start: -10, change: 18, op: '+', term: 18, reveal: false, reason: 'Adding 18 goes up. 10 steps gets you to zero. How many more?' } },
+];
+
+function gallery() {
+  const still = q.has('still');
+  const only = q.get('only');
+  app.innerHTML = '<header><h1>Number line gallery</h1></header><div class="gal" id="gal"></div>';
+  const gal = document.getElementById('gal');
+  const items = GALLERY.filter((g) => !only || g.id === only);
+  for (const g of items) {
+    const row = document.createElement('div');
+    row.className = 'row2';
+    row.dataset.shot = g.id;
+    for (const theme of ['dark', 'light']) {
+      const box = document.createElement('div');
+      box.className = `shot ${theme}`;
+      box.innerHTML = `<h3>${g.title} · ${theme}</h3>`;
+      gal.appendChild(row); row.appendChild(box);
+      const holder = document.createElement('div');
+      box.appendChild(holder);
+      showNumberLine(holder, { ...g.o, theme, animate: !still });
+    }
+  }
+  if (!only || only === 'inline') {
+    // the tiny version, under printed sums on the lock box's leather mat
+    const box = document.createElement('div');
+    box.className = 'shot dark';
+    box.dataset.shot = 'inline';
+    box.innerHTML = '<h3>Tiny version under the lock box’s printed sums</h3><div class="mat"></div>';
+    gal.appendChild(box);
+    const mat = box.querySelector('.mat');
+    for (const [a, b, text] of [[-10, 18, '−10 + 18 = 8'], [-7, 3, '−7 + 3 = −4'], [6, -9, '6 − 9 = −3'], [-35, 48, '−35 + 48 = 13'], [-6, 6, '−6 + 6 = 0']]) {
+      const c = document.createElement('span');
+      c.className = 'calc';
+      c.innerHTML = `<span>${text}</span>`;
+      mat.appendChild(c);
+      showNumberLine(c, { start: a, change: b, size: 'inline', theme: 'light', width: 230, animate: !still });
+    }
+  }
+  window.ready = true;
+}
+
+async function play() {
+  const { makeNegatives, seeded } = await import('../src/math/negatives.js');
+  const after = Number(q.get('after')) || 8000;
+  const KEY = 'bandit-math.negatives.lab';
+  let state = {};
+  if (!q.has('seed')) { try { state = JSON.parse(localStorage.getItem(KEY) || '{}'); } catch (e) { state = {}; } }
+  const N = makeNegatives(state, q.has('seed') ? { rand: seeded(Number(q.get('seed')) || 1) } : {});
+  if (q.has('step')) N.setStep(Number(q.get('step')));
+  const keep = () => { if (q.has('seed')) return; try { localStorage.setItem(KEY, JSON.stringify(N.state)); } catch (e) { /* blocked */ } };
+  window.N = N;
+  if (q.has('light')) document.body.classList.add('light');
+
+  app.innerHTML = `
+    <header>
+      <h1>Positive &amp; negative lab</h1>
+      <span class="seg" role="group" aria-label="Look"><button data-theme="dark">Dark (game)</button><button data-theme="light">Light (paper)</button></span>
+      <div id="level"></div><div id="ladder"></div>
+    </header>
+    <section id="play">
+      <div id="cardrow"><span id="card"></span><span id="say"></span><span id="chips"></span></div>
+      <div id="herd"></div>
+      <div id="tools"><button class="btn" id="showme">Show me</button><span id="wait"></span><button class="btn" id="next" hidden>Next wave</button></div>
+      <div id="say2"></div>
+      <div id="helpbox"></div>
+    </section>`;
+  const $ = (s) => document.querySelector(s);
+  const paintTheme = () => document.querySelectorAll('[data-theme]').forEach((b) => b.setAttribute('aria-pressed', String(document.body.classList.contains('light') === (b.dataset.theme === 'light'))));
+  document.querySelectorAll('[data-theme]').forEach((b) => b.onclick = () => { document.body.classList.toggle('light', b.dataset.theme === 'light'); paintTheme(); redrawHelp(); });
+  paintTheme();
+
+  let wave = null, card = null, help = null, helpArgs = null, watch = null, tick = 0, waitStart = 0;
+  const theme = () => (document.body.classList.contains('light') ? 'light' : 'dark');
+  function showHelp(args) {
+    helpArgs = args;
+    if (help) help.remove();
+    help = showNumberLine($('#helpbox'), { ...args, theme: theme() });
+    window.lastHelp = args;
+  }
+  function redrawHelp() { if (helpArgs) showHelp({ ...helpArgs, animate: false }); }
+  function clearHelp() { if (help) help.remove(); help = null; helpArgs = null; }
+
+  function paintLevel() {
+    const lv = N.level();
+    $('#level').textContent = lv.line;
+    $('#ladder').innerHTML = Array.from({ length: lv.of }, (_, i) => `<i class="${i + 1 < lv.step ? 'past' : i + 1 === lv.step ? 'now' : ''}" title="${i + 1}"></i>`).join('');
+  }
+  function startWatch() {
+    if (watch) watch.cancel();
+    clearInterval(tick);
+    waitStart = performance.now();
+    watch = watchHesitation({ after, onShow: () => { clearInterval(tick); $('#wait').textContent = 'Still thinking? Here is the line.'; showHelp(N.help(card)); } });
+    tick = setInterval(() => { const s = Math.max(0, Math.ceil((after - (performance.now() - waitStart)) / 1000)); $('#wait').textContent = `help in ${s} s`; }, 250);
+  }
+  function showCard(c) {
+    card = c;
+    clearHelp();
+    $('#say2').innerHTML = '';
+    if (!c) { $('#card').textContent = 'Wave done!'; $('#say').textContent = ''; $('#herd').innerHTML = ''; $('#next').hidden = false; clearInterval(tick); $('#wait').textContent = ''; if (watch) watch.cancel(); return; }
+    $('#next').hidden = true;
+    $('#card').textContent = `${c.text} = ?`;
+    $('#say').textContent = c.say;
+    const chips = [];
+    if (wave.warmup) chips.push('<span class="chip">warm-up</span>');
+    if (c.back) chips.push('<span class="chip">back again</span>');
+    if (c.review) chips.push('<span class="chip">review</span>');
+    chips.push(`<span class="chip">step ${c.rung}</span>`);
+    $('#chips').innerHTML = chips.join(' ');
+    $('#herd').innerHTML = c.targets.map((t) => `<button class="tag" data-n="${t.n}">${t.label}<small>${q.has('kinds') ? (t.good ? 'right' : t.trap) : ''}</small></button>`).join('');
+    startWatch();
+  }
+  function newWave() {
+    wave = N.wave({ count: 5 });
+    keep();
+    paintLevel();
+    showCard(wave.card);
+  }
+  $('#herd').addEventListener('click', (e) => {
+    const b = e.target.closest('.tag');
+    if (!b || b.disabled || !card) return;
+    const n = Number(b.dataset.n);
+    const t = card.targets.find((x) => x.n === n);
+    const thisCard = card;
+    const r = N.answer(n, t.good, thisCard.id);   // the card's id: a pick that lands after its card is gone changes nothing
+    keep();
+    paintLevel();
+    if (t.good) {
+      b.classList.add('roped'); b.disabled = true;
+      if (watch) watch.answered();
+      $('#say2').innerHTML = `<span class="good">${thisCard.text} = ${t.label}</span>`;
+      setTimeout(() => showCard(r.card), 900);
+    } else {
+      b.classList.add('tangled'); b.disabled = true;
+      if (watch) watch.answered();
+      clearInterval(tick); $('#wait').textContent = '';
+      const ex = N.explain(thisCard, n);
+      $('#say2').innerHTML = `<span class="bad">Not me, partner.</span>`;
+      showHelp({ ...ex.numberLine, picked: n });
+    }
+  });
+  $('#showme').onclick = () => { if (card) { if (watch) watch.cancel(); clearInterval(tick); $('#wait').textContent = ''; showHelp(N.help(card)); } };
+  $('#next').onclick = newWave;
+  newWave();
+  window.ready = true;
+}
+
+try {
+  await ensureNumberLineStyles();
+  await document.fonts.ready;
+  if (q.has('gallery')) gallery(); else await play();
+} catch (e) { window.oops ? oops(e) : console.error(e); }
+</script>
+</body>
+</html>

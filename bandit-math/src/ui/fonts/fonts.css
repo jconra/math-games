@@ -1,0 +1,8 @@
+/* The game's three fonts, kept in the repo so the game needs no font service.
+   Rye (Sorkin Type, SIL Open Font License) for the big western headline, Smokum (Astigmatic, Apache 2.0) for
+   labels and buttons, Bitter (The Bitter Project Authors, SIL Open Font License) for everything you read.
+   Latin letters only. Any page can link this file and use font-family: Rye / Smokum / Bitter. */
+@font-face { font-family: 'Rye'; src: url('rye.woff2') format('woff2'); font-display: block; }
+@font-face { font-family: 'Smokum'; src: url('smokum.woff2') format('woff2'); font-display: block; }
+@font-face { font-family: 'Bitter'; src: url('bitter.woff2') format('woff2'); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: 'Bitter'; src: url('bitter-italic.woff2') format('woff2'); font-weight: 100 900; font-style: italic; font-display: swap; }

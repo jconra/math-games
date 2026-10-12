@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Bandit Math</title>
+<meta name="description" content="A western math game: rope the right numbers, crack lock boxes by solving for x.">
+<!-- the on-screen error box comes first, so a crash shows on screen instead of a black page -->
+<script src="oops.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; color: #f4e8cf; font: 15px/1.4 Bitter, Georgia, serif; }
+  /* the dark backdrop while the valley loads (and behind "Just lock boxes") */
+  body { background: radial-gradient(ellipse at 50% 35%, #3a2a1c 0%, #1d140c 55%, #0e0906 100%) #1d140c; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; opacity: 0; transition: opacity 0.9s ease; }
+  #game.is-on { opacity: 1; }
+  #title-root, #hud-root { position: fixed; inset: 0; pointer-events: none; }
+  #title-root > * { pointer-events: auto; }
+  noscript { position: fixed; inset: 0; display: grid; place-items: center; font: 600 18px Georgia, serif; }
+</style>
+<script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/" } }</script>
+</head>
+<body>
+<canvas id="game" aria-label="The valley"></canvas>
+<div id="hud-root"></div>
+<div id="title-root"></div>
+<noscript>Bandit Math needs JavaScript turned on.</noscript>
+<script type="module" src="src/main.js?v=1"></script>
+</body>
+</html>

@@ -1,0 +1,109 @@
+{
+ "about": "The guns for slice 2 (Quaternius, coloured in Blender by rigs/fbx2glb_guns.py). The files are as made: each in its own units and turned its own way. scale: model units to metres (real length: a Peacemaker 0.33 m, a saddle carbine 1.0 m, a coach gun 1.0 m). forward: the barrel's direction in the model's own space (muzzle that way); up: the sights' side. grip: the Trigger bone, where the hand closes (model space); muzzle: the barrel's mouth (model space), for the smoke and the shot's line. clips: the Blender names of the fire and reload clips. To hold one: a holder turned so forward is +Z and up is +Y, scaled, with the gun moved by -grip inside it; then the holder on the hand bone.",
+ "guns": {
+  "Revolver": {
+   "file": "Revolver.glb",
+   "scale": 0.03435,
+   "length": 0.33,
+   "forward": [
+    0,
+    0,
+    -1
+   ],
+   "up": [
+    -0.007,
+    1,
+    0
+   ],
+   "grip": [
+    0.0117,
+    0.1807,
+    1.235
+   ],
+   "muzzle": [
+    0,
+    1.9133,
+    -4.7123
+   ],
+   "clips": {
+    "fire": "RevolverArmature|RevolverArmature|Fire",
+    "fireEmpty": null,
+    "reload": "RevolverArmature|RevolverArmature|Reload"
+   },
+   "durations": {
+    "RevolverArmature|RevolverArmature|Fire": 0.75,
+    "RevolverArmature|RevolverArmature|Reload": 1.96
+   }
+  },
+  "Rifle": {
+   "file": "Rifle.glb",
+   "scale": 0.1042,
+   "length": 1,
+   "forward": [
+    0,
+    0,
+    -1
+   ],
+   "up": [
+    -0.003,
+    1,
+    0
+   ],
+   "grip": [
+    0.0009,
+    0.0307,
+    1.8958
+   ],
+   "muzzle": [
+    -0.0005,
+    0.5417,
+    -4.6159
+   ],
+   "clips": {
+    "fire": "RifleArmature|RifleArmature|FireWBullet",
+    "fireEmpty": "RifleArmature|RifleArmature|FireWOBullet",
+    "reload": "RifleArmature|RifleArmature|Reload"
+   },
+   "durations": {
+    "RifleArmature|RifleArmature|FireWBullet": 2.1,
+    "RifleArmature|RifleArmature|FireWOBullet": 1.2,
+    "RifleArmature|RifleArmature|Reload": 1.2
+   }
+  },
+  "Shotgun": {
+   "file": "Shotgun.glb",
+   "scale": 0.11715,
+   "length": 1,
+   "forward": [
+    0,
+    0,
+    -1
+   ],
+   "up": [
+    0.004,
+    1,
+    0
+   ],
+   "grip": [
+    0.0015,
+    0.0368,
+    -1.254
+   ],
+   "muzzle": [
+    0.0032,
+    0.423,
+    -6.6235
+   ],
+   "clips": {
+    "fire": "ShotgunArmature|ShotgunArmature|FireWBullet",
+    "fireEmpty": "ShotgunArmature|ShotgunArmature|FireWOBullet",
+    "reload": "ShotgunArmature|ShotgunArmature|Reload"
+   },
+   "durations": {
+    "ShotgunArmature|ShotgunArmature|FireWBullet": 0.75,
+    "ShotgunArmature|ShotgunArmature|FireWOBullet": 0.46,
+    "ShotgunArmature|ShotgunArmature|Reload": 0.29
+   }
+  }
+ }
+}
