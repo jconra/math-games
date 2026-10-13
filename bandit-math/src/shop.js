@@ -1,9 +1,11 @@
 // THE SHOPS: walk up to a building's door and press E (or tap the prompt) to open its counter as a simple panel over the
 // paused game. There is no inside in 3D: each counter is a panel.
-//   stable          saddles (any one lets you ride; the horse wears the one you pick) and the white horse
+//   stable          saddles (any one lets you ride; the horse wears the one you pick) and horses: the bay comes free, the
+//                   others are bought (each has its name, coat and paces: player.js HORSE_LOOKS), the one picked is ridden
 //   general store   "Mind the counter": the word-problem job (src/missions/store.js: townsfolk bring order slips); and
 //                   dogs: a Shiba, a Husky or the pug (the cheap joke pick), each named by the kid; more than one can be
-//                   bought, and the one picked follows you while the others wait at home; hats are coming
+//                   bought, and the one picked follows you while the others wait at home; and hats (src/hats.js): bought
+//                   once, worn at once, swapped back and forth free
 //   sheriff's desk  open the lock boxes you won, or crack seized boxes for the sheriff's pay (as many as you like)
 //   cabin           your table: open the lock boxes you won
 //
@@ -24,11 +26,14 @@
 import { spend, saveRider } from './save.js';
 import { TIER_NAME, TIER_GOLD } from './lockbox/index.js';
 import { RUNG_IDS, RUNG } from './lockbox/generate.js';
+import { HATS, hatOf, hatIcon } from './hats.js';
+import { PALETTES } from './actors/folk.js';
 
 // ── PRICES AND PAY (gold) ─────────────────────────────────────────────────────────────────────────────────────────
 export const PRICES = {
   saddle: { plain: 15, tooled: 60, silver: 150 },   // the first saddle is cheap and quick; fancier ones cost more
-  horse: { white: 150 },                            // the bay comes free
+  horse: { donkey: 20, chestnut: 60, palomino: 100, white: 150, midnight: 200 },   // the bay comes free; the donkey is the joke mount
+  hat: { white: 20, straw: 30, bowler: 50, ranger: 80, cattleman: 120, sombrero: 200 },   // the old cowboy hat comes free
   dog: { shiba: 60, husky: 60, pug: 25 },           // the pug is the cheap joke pick
 };
 export const PAY = {
@@ -53,8 +58,12 @@ export const SADDLES = [
   { id: 'silver', name: 'Silver saddle', line: 'Tooled, with silver and turquoise conchos.' },
 ];
 export const HORSES = [
-  { id: 'bay', name: 'Bay horse', line: 'Your trusty bay. Free.' },
-  { id: 'white', name: 'White horse', line: 'A white horse, the talk of the valley.' },
+  { id: 'bay', name: 'Chester the bay', line: 'Your trusty bay. Gallops fast. Free.' },
+  { id: 'donkey', name: 'Jasper the donkey', line: 'Slow as molasses and twice as stubborn, but he\'ll get you there.' },
+  { id: 'chestnut', name: 'Copper the chestnut', line: 'A steady farm horse with a red-brown coat. Gallops a little slower.' },
+  { id: 'palomino', name: 'Goldie the palomino', line: 'A golden coat that shines in the sun. Gallops fast.' },
+  { id: 'white', name: 'Willow the white horse', line: 'A white horse, the talk of the valley. Gallops fast.' },
+  { id: 'midnight', name: 'Midnight', line: 'A black horse, dark as a moonless night. Gallops fast.' },
 ];
 export const DOGS = [
   { id: 'shiba', name: 'Shiba', line: 'Quick and clever. Keeps up on foot and on the trail.' },
@@ -66,7 +75,7 @@ export const DOG_NAMES = ['Biscuit', 'Dusty', 'Scout', 'Pepper', 'Rusty', 'Bandi
 // which door is which, and what its prompt says
 export const COUNTERS = {
   stable: { place: 'stable', prompt: 'Talk to the stable keeper', title: 'The Stable', sub: 'Saddles and horses' },
-  store: { place: 'store', prompt: 'Visit the general store', title: 'General Store', sub: 'Orders, dogs, and hats soon' },
+  store: { place: 'store', prompt: 'Visit the general store', title: 'General Store', sub: 'Orders, dogs and hats' },
   sheriff: { place: 'sheriff', prompt: "Sheriff's desk", title: "Sheriff's Office", sub: 'Lock boxes and bounties' },
   cabin: { place: 'cabin', prompt: 'Sit at your cabin table', title: 'Your Cabin', sub: 'Open your lock boxes at the table' },
 };
@@ -168,9 +177,17 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
   const price = (n) => `<span class="bms-price">${COIN}<b>${n}</b></span>`;
   const short = (n) => `Need ${n - rider.gold} more`;
 
-  function row({ name, line, right, extra = '' }) {
-    return `<div class="bms-row"><div class="bms-what"><b>${esc(name)}</b><small>${esc(line)}</small>${extra}</div><div class="bms-act">${right}</div></div>`;
+  function row({ name, line, right, extra = '', pic = '' }) {
+    return `<div class="bms-row">${pic}<div class="bms-what"><b>${esc(name)}</b><small>${esc(line)}</small>${extra}</div><div class="bms-act">${right}</div></div>`;
   }
+  // the hats a rider owns: the old cowboy hat always, and those bought (owned.hats)
+  const hatsOwned = () => {
+    const o = owned();
+    const list = Array.isArray(o.hats) ? o.hats.filter((h) => PRICES.hat[h] != null) : [];
+    return ['cowboy', ...new Set(list)];
+  };
+  // the old hat's colour: the rider's palette's hat colour, as the title screen draws it
+  const palHat = () => (PALETTES[rider.look && rider.look.palette] || PALETTES.drifter)[3];
 
   // ── each counter's content ──
   const BUILD = {
@@ -195,7 +212,9 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
         else right = `${price(cost)}<button type="button" data-do="buy-horse" data-id="${x.id}" ${rider.gold < cost ? 'disabled' : ''}>${rider.gold < cost ? short(cost) : 'Buy'}</button>`;
         h += row({ name: x.name, line: x.line, right });
       }
-      h += `<p class="bms-tip"><kbd>H</kbd> whistles your horse over · <kbd>E</kbd> gets on and off · <kbd>Shift</kbd> gallops</p>`;
+      const fingers = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;   // (a phone or tablet: its buttons, not keys)
+      h += fingers ? `<p class="bms-tip">Horse whistles your horse over · On / off gets on and off · push the thumb stick to its edge to gallop</p>`
+        : `<p class="bms-tip"><kbd>H</kbd> whistles your horse over · <kbd>E</kbd> gets on and off · <kbd>Shift</kbd> gallops</p>`;
       return note + h;
     },
     store(note) {
@@ -228,7 +247,17 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
           <div class="bms-name"><input type="text" maxlength="12" placeholder="Name your dog" value="${esc(S.dogName || '')}" aria-label="Your new dog's name" data-name="new"></div></div>
           <div class="bms-act">${price(cost)}<button type="button" data-do="buy-dog" ${rider.gold < cost ? 'disabled' : ''}>${rider.gold < cost ? short(cost) : 'Buy'}</button></div></div>`;
       }
-      h += `<h3 class="bms-h">Hats</h3>` + row({ name: 'Hats', line: 'New hats are on the wagon from back east. Coming soon!', right: '<span class="bms-tag">Soon</span>' });
+      // hats: the one on your head, the ones you own (put one on), and the rest with a price
+      h += `<h3 class="bms-h">Hats</h3>`;
+      const hats = hatsOwned(), wearing = hatOf(rider.look);
+      for (const x of HATS) {
+        const cost = PRICES.hat[x.id] || 0;
+        let right;
+        if (wearing === x.id) right = `<span class="bms-tag is-on">On your head</span>`;
+        else if (hats.includes(x.id)) right = `<button type="button" data-do="wear-hat" data-id="${x.id}">Wear it</button>`;
+        else right = `${price(cost)}<button type="button" data-do="buy-hat" data-id="${x.id}" ${rider.gold < cost ? 'disabled' : ''}>${rider.gold < cost ? short(cost) : 'Buy'}</button>`;
+        h += row({ name: x.name, line: x.line, right, pic: hatIcon(x.id, x.colour || palHat()) });
+      }
       return note + h;
     },
     sheriff(note) {
@@ -294,9 +323,18 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
     } else if (what === 'buy-horse') {
       if (!spend(rider, PRICES.horse[id])) { draw('Not enough gold yet.'); return; }
       o.horses = [...new Set([...horsesOwned(), id])]; o.horse = id; saveRider(rider);
-      onBuy('horse'); draw(`The ${HORSES.find((h) => h.id === id).name.toLowerCase()} is yours, saddled up by the stable.`);
+      const nm = HORSES.find((h) => h.id === id).name;
+      onBuy('horse'); draw(saddlesOwned().length ? `${nm} is yours, saddled up by the stable.` : `${nm} is yours, waiting by the stable. You'll need a saddle to ride.`);
     } else if (what === 'use-horse') {
       o.horses = horsesOwned(); o.horse = id; saveRider(rider); onBuy('horse'); draw();
+    } else if (what === 'buy-hat') {
+      if (!spend(rider, PRICES.hat[id])) { draw('Not enough gold yet.'); return; }
+      o.hats = [...new Set([...hatsOwned().filter((h) => h !== 'cowboy'), id])];
+      rider.look = { ...(rider.look || {}), hatStyle: id, hat: true }; saveRider(rider);
+      onBuy('hat');
+      draw(`The ${HATS.find((x) => x.id === id).name.toLowerCase()} is on your head. It suits you!`);
+    } else if (what === 'wear-hat') {
+      rider.look = { ...(rider.look || {}), hatStyle: id, hat: true }; saveRider(rider); onBuy('hat'); draw();
     } else if (what === 'kind') {
       S.dogKind = id; draw();
     } else if (what === 'buy-dog') {

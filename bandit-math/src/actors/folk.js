@@ -13,24 +13,26 @@
 //   loadFolk(base, { shade }) -> Promise<lib>   base: the game's folder (default: found from this file), its models/
 //                                               folder, or the people folder itself. shade(shader): the world's own
 //                                               lighting patch, run after the colours' one (as the world's Person takes)
-//   makePerson(lib, { outfit, palette, skin, hair, hat, hatColour, shadows, kid }) -> person
+//   makePerson(lib, { outfit, palette, skin, hair, hat, hatColour, hatStyle, shadows, kid }) -> person
 //     outfit   farmer_m (default; the player), adventurer_m, adventurer_f, casual_m, casual_f, worker_m, suit_m,
 //              suit_f, formal_f
 //     palette  a name from PALETTES, or four colours [top, bottom, shoes, hat/pack]
 //     skin, hair   a colour ('#c68d62', 0xc68d62, a THREE.Color) or a number: an index into SKINS / HAIRS
 //     hat      true: the cowboy hat on the Head bone (hair that would poke through tucked in); false: bare-headed.
 //              Default: on, but for the formal dress (her piled-up hair won't go under it). hatColour: the hat apart
-//              from the palette's fourth colour
+//              from the palette's fourth colour. hatStyle: which hat (an id from src/hats.js: the cowboy hat when
+//              unset; the others are shaped in hatshapes.js and come in their own colour unless hatColour is given)
 //   person.root (place and turn it: feet on y = 0, facing +Z, 1.8 m or so), .mesh, .bones { name: bone } (three.js
 //     drops the dots: Wrist.R is bones.WristR), .hat (the hat's mesh, on bones.Head; null without one), .play(name,
 //     { fade, speed, once }), .update(dt), .stride (m/s the Walk and Run clips carry them at speed 1), .clips,
 //     .setPalette(p), .setSkin(c), .setHair(c), .hatOff() -> the hat, let go of in the world where it was (to tumble),
-//     .hatOn(), .dispose()
+//     .hatOn(), .setHat(style) (another hat, the same place), .hatStyle, .dispose()
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { loadPeople, Person, STRIDE } from '../../world/objects/people.js';
 import { softShade } from './shading.js';
+import { hatPiece } from './hatshapes.js';
 
 export const OUTFITS = ['farmer_m', 'adventurer_m', 'adventurer_f', 'casual_m', 'casual_f', 'worker_m', 'suit_m', 'suit_f', 'formal_f'];
 // period colours (sRGB, as a picker shows them): [top, bottom, shoes, hat / pack]
@@ -170,7 +172,7 @@ const toColour = (c, list, fallback) => {
   return new THREE.Color(fallback);
 };
 
-export function makePerson(lib, { outfit = 'farmer_m', palette = 'drifter', skin = 2, hair = 2, hat, hatColour = null, shadows = true, kid = false } = {}) {
+export function makePerson(lib, { outfit = 'farmer_m', palette = 'drifter', skin = 2, hair = 2, hat, hatColour = null, hatStyle = null, shadows = true, kid = false } = {}) {
   const kind = lib.byOutfit[outfit];
   if (!kind) throw new Error('no such outfit: ' + outfit + ' (have ' + Object.keys(lib.byOutfit).join(', ') + ')');
   if (hat === undefined) hat = !BARE[outfit];
@@ -187,11 +189,19 @@ export function makePerson(lib, { outfit = 'farmer_m', palette = 'drifter', skin
   u.fkHead.value = p.mesh.skeleton.bones.indexOf(bones.Head);
   // the hat: the farmer's, on this person's Head bone (his own folded away, so his can come off too). hatMesh is a holder
   // fitted to this skeleton's head; the hat itself sits inside it as the file placed it
-  let hatMesh = null, hatU = null;
+  let hatMesh = null, hatU = null, piece = null;
+  // (which hat: the farmer's cowboy hat unless hatStyle names another of src/hats.js; its shape from hatshapes.js)
+  const fitPiece = (inner) => {
+    if (piece.matrix) piece.matrix.decompose(inner.position, inner.quaternion, inner.scale);
+    else { inner.position.set(0, 0, 0); inner.quaternion.identity(); inner.scale.set(1, 1, 1); }
+    hatU.fkMean.value.set(1, 1, 1, piece.mean);
+  };
   if (lib.hat) {
-    hatU = { ...u, fkMean: { value: lib.hat.mean.clone() }, fkHide: { value: 0 } };
-    const inner = new THREE.Mesh(lib.hat.geometry, folkMaterial(hatU, lib.shade, 'hat'));
-    lib.hat.matrix.decompose(inner.position, inner.quaternion, inner.scale);
+    piece = hatPiece(lib, hatStyle);
+    // (its own colour: the farmer's gloves are in the same clothes group as a hat, and keep the palette's)
+    hatU = { ...u, fkHat: { value: new THREE.Color() }, fkMean: { value: lib.hat.mean.clone() }, fkHide: { value: 0 } };
+    const inner = new THREE.Mesh(piece.geometry, folkMaterial(hatU, lib.shade, 'hat'));
+    fitPiece(inner);
     inner.castShadow = shadows; inner.receiveShadow = shadows;
     hatMesh = new THREE.Group(); hatMesh.name = 'hat'; hatMesh.add(inner); hatMesh.userData.mesh = inner;
     const fit = HAT_FIT[kind.body] || HAT_FIT.m; hatMesh.scale.fromArray(fit.scale); hatMesh.position.fromArray(fit.at);
@@ -206,10 +216,18 @@ export function makePerson(lib, { outfit = 'farmer_m', palette = 'drifter', skin
     setPalette(pal) {
       const c = Array.isArray(pal) ? pal : PALETTES[pal] || PALETTES.drifter;
       u.fkTop.value.set(c[0]); u.fkBottom.value.set(c[1]); u.fkShoes.value.set(c[2]); u.fkHat.value.set(hatColour || c[3]);
+      if (hatU) hatU.fkHat.value.set(hatColour || (piece && piece.colour) || c[3]);
       person.palette = pal;
     },
     setSkin(c) { u.fkSkin.value.copy(toColour(c, SKINS, SKINS[2])); },
     setHair(c) { u.fkHair.value.copy(toColour(c, HAIRS, HAIRS[2])); },
+    // another hat of src/hats.js (its id; the cowboy hat for an unknown one), in its own colour (or the palette's)
+    setHat(style) {
+      if (!hatMesh) return;
+      piece = hatPiece(lib, style); const inner = hatMesh.userData.mesh;
+      inner.geometry = piece.geometry; fitPiece(inner); person.hatStyle = piece.id;
+      person.setPalette(person.palette);
+    },
     // the hat let go of where it is in the world (the caller adds it to the scene and lets it tumble); hatOn puts it back
     hatOff() {
       if (!hatMesh || !hatMesh.parent || hatMesh.parent !== bones.Head) return null;
@@ -227,6 +245,7 @@ export function makePerson(lib, { outfit = 'farmer_m', palette = 'drifter', skin
       p.root.removeFromParent();
     },
   };
+  person.hatStyle = piece ? piece.id : null;
   person.setPalette(palette); person.setSkin(skin); person.setHair(hair);
   p.play('Idle', { fade: 0 }); p.update(Math.random() * 2);       // (a crowd shouldn't breathe in step)
   return person;

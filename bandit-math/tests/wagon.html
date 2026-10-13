@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bandit Math: the wagons</title>
+<script src="../oops.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; background: #2c3036; color: #e8e0d0; font: 13px/1.45 ui-sans-serif, system-ui, sans-serif; }
+  canvas { display: block; touch-action: none; }
+  #hud { position: fixed; top: 10px; left: 12px; z-index: 5; font: 12px/1.5 ui-monospace, monospace; text-shadow: 0 1px 3px #000; pointer-events: none; white-space: pre; }
+  #go { position: fixed; top: 10px; right: 12px; z-index: 5; display: flex; flex-wrap: wrap; gap: 4px; max-width: 60vw; justify-content: flex-end; }
+  #go button { font: 600 11px ui-monospace, monospace; background: rgba(40, 28, 16, .8); color: #f0d9a8; border: 1px solid #7a5a3a; border-radius: 4px; padding: 5px 8px; cursor: pointer; }
+  #load { position: fixed; inset: 0; display: grid; place-items: center; z-index: 6; background: #1c140c; font: 600 15px ui-monospace, monospace; color: #f0d9a8; }
+</style>
+<script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/" } }</script>
+</head>
+<body>
+<div id="load">Loading the wagons…</div>
+<div id="hud"></div>
+<div id="go"></div>
+<script type="module">
+// THE WAGONS (src/wagon.js) on their own: the four kinds on rolling test ground, driving round a loop, with a free camera
+// (drag to turn, right-drag to slide, wheel to zoom). The buttons pick what to follow. ?straight: side by side on a
+// straight road instead (for pictures); ?flat: level ground; ?speed=, ?at=, ?kinds=a,b. ?world puts them in the real valley
+// on the road through it instead (src/world.js; ?q= picks the tier). For rigs: window.TW = { lib, wagons, camera,
+// renderer, scene, step(dt), look(wagon, view), still(kind, view), ready, W }.
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { loadAnimals } from '../src/actors/animals.js';
+import { loadFolk } from '../src/actors/folk.js';
+import { loadWagons, makeWagon, roadCurve, WAGON_KINDS } from '../src/wagon.js';
+
+const Q = new URLSearchParams(location.search), WORLD = Q.has('world');
+const $ = (id) => document.getElementById(id);
+const renderer = new THREE.WebGLRenderer({ antialias: Q.get('q') !== 'potato' });
+renderer.setSize(innerWidth, innerHeight); document.body.appendChild(renderer.domElement);
+renderer.shadowMap.enabled = true; renderer.outputColorSpace = THREE.SRGBColorSpace;
+const camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 5000);
+let W = null, scene;
+if (WORLD) {
+  const { makeWorld } = await import('../src/world.js');
+  W = await makeWorld({ renderer, camera, onProgress: (p, t) => { $('load').textContent = `${t}… ${Math.round(p * 100)}%`; } });
+  scene = W.scene;
+} else {
+  // rolling test ground: gentle swells and a few bumps, so the tilt and the wheels have something to do
+  scene = new THREE.Scene(); scene.background = new THREE.Color(0x8fa6bf);
+  scene.add(new THREE.HemisphereLight(0xdfe8ff, 0x6a5a40, 1.4));
+  const sun = new THREE.DirectionalLight(0xfff2dc, 2.4); sun.position.set(30, 50, 20); sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -40, right: 40, top: 40, bottom: -40, far: 200 }); scene.add(sun);
+  const hAt = (x, z) => 0.6 * Math.sin(x / 9) * Math.cos(z / 11) + 0.25 * Math.sin(x / 3.1 + z / 4.3) + (Q.has('flat') ? -0.6 * Math.sin(x / 9) * Math.cos(z / 11) - 0.25 * Math.sin(x / 3.1 + z / 4.3) : 0);
+  const g = new THREE.PlaneGeometry(160, 160, 320, 320).rotateX(-Math.PI / 2), p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) p.setY(i, hAt(p.getX(i), p.getZ(i)));
+  g.computeVertexNormals();
+  // a checker so a sliding wheel would show against the ground
+  const c = document.createElement('canvas'); c.width = c.height = 64; const x = c.getContext('2d');
+  for (let j = 0; j < 8; j++) for (let i = 0; i < 8; i++) { x.fillStyle = (i + j) % 2 ? '#8c7a58' : '#7a6a4c'; x.fillRect(i * 8, j * 8, 8, 8); }
+  const tex = new THREE.CanvasTexture(c); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.repeat.set(80, 80); tex.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95 })); m.receiveShadow = true; scene.add(m);
+  W = { heightAt: hAt, places: { trail: [] } };
+}
+const [animals, folk] = await Promise.all([loadAnimals(undefined, { kinds: [] }), loadFolk()]);
+const lib = await loadWagons({ animals, folk });
+$('load').remove();
+
+const controls = new OrbitControls(camera, renderer.domElement); controls.enableDamping = true;
+const wagons = [];
+let curve;
+if (WORLD) curve = roadCurve(W, Q.get('road') || 'through');
+else if (Q.has('straight')) {
+  // a straight road (for pictures), the wagons side by side 12 m apart
+  curve = new THREE.LineCurve3(new THREE.Vector3(0, 0, -60), new THREE.Vector3(0, 0, 60));
+} else {
+  // a long loop with bends both ways
+  const pts = []; for (let i = 0; i <= 60; i++) { const a = i / 60 * Math.PI * 2 * 3; const r = 30 + 8 * Math.sin(a * 1.5); pts.push(new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r * 0.8)); }
+  for (const v of pts) v.y = W.heightAt(v.x, v.z);
+  curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal'); curve.arcLengthDivisions = 2000;
+}
+const kinds = (Q.get('kinds') || WAGON_KINDS.join(',')).split(',');
+kinds.forEach((k, i) => {
+  const wg = makeWagon(lib, { kind: k, W });
+  scene.add(wg.root); wg.setPath(curve, { at: (+Q.get('at') || 0.02) + i * (WORLD ? 0.004 : Q.has('straight') ? 0 : 0.035) }); wg.speed = +(Q.get('speed') || 2.2);
+  if (Q.has('straight')) wg.lane = (i - 1.5) * 12;
+  wagons.push(wg);
+});
+let follow = 0, view = 'chase';
+const VIEWS = { chase: [-1.2, 0.35, -1], side: [1, 0.15, 0], front: [0, 0.2, 1], q: [1, 0.45, 1], eye: [0.9, 0, 0.2], low: [1, -0.02, 0.15] };
+// the camera on a wagon: from a direction in its own frame (VIEWS), at a distance that frames it
+function look(wg, v = view, dist = null) {
+  const d = new THREE.Vector3(...(VIEWS[v] || v)).normalize();
+  const c = Math.cos(wg.heading), s = Math.sin(wg.heading);
+  const dir = new THREE.Vector3(d.x * c + d.z * s, d.y, -d.x * s + d.z * c);
+  const tgt = wg.pos.clone(); tgt.y += 1.2;
+  const r = dist || wg.length * 1.05;
+  camera.position.copy(tgt).addScaledVector(dir, r);
+  if (v === 'eye') { camera.position.y = W.heightAt(camera.position.x, camera.position.z) + 2.3; }   // (a rider's eye)
+  camera.lookAt(tgt); controls.target.copy(tgt);
+}
+function step(dt) { for (const w of wagons) w.update(dt); }
+let last = performance.now(), paused = Q.has('still');
+renderer.setAnimationLoop(() => {
+  const now = performance.now(), dt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (!paused) step(dt);
+  if (!TW.manual && wagons[follow]) look(wagons[follow]);
+  if (W.update) { W.camTarget.copy(controls.target); W.update(dt); W.render(); } else { controls.update(); renderer.render(scene, camera); }
+  const w = wagons[follow];
+  if (w) $('hud').textContent = `${w.kind}  ${w.pace.toFixed(2)} m/s  u ${w.u.toFixed(1)} / ${w.L.toFixed(0)} m\n${renderer.info.render.calls} draws  ${(renderer.info.render.triangles / 1000).toFixed(0)}k tris`;
+});
+const go = $('go');
+const btn = (t, f) => { const b = document.createElement('button'); b.textContent = t; b.onclick = f; go.appendChild(b); };
+wagons.forEach((w, i) => btn(w.kind, () => { follow = i; }));
+for (const v of Object.keys(VIEWS)) btn(v, () => { view = v; });
+btn('pause', () => { paused = !paused; });
+// a still picture of one kind standing on flat ground at the middle (for the sheet)
+function still(kind, v) {
+  const i = wagons.findIndex((w) => w.kind === kind); if (i < 0) return null;
+  follow = i; view = v; look(wagons[i], v); return wagons[i];
+}
+window.TW = { lib, wagons, camera, renderer, scene, controls, step, look, still, W, curve, manual: false, ready: true, V: THREE.Vector3, THREE,
+  pause(p = true) { paused = p; } };
+</script>
+</body>
+</html>

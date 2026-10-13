@@ -25,6 +25,7 @@ import {
   bucklesOf, buckleProgress, jobWords, BUCKLE_NAMES, TOPICS, MISSIONS, LOOKS, SKINS, HAIRS, MAX_RIDERS,
 } from '../save.js';
 import { buckleSVG } from './hud.js';
+import { hatSVG, hatOf, hatColour } from '../hats.js';
 
 // ---- small drawings --------------------------------------------------------------------------------------------
 
@@ -80,7 +81,7 @@ function hex(c, dflt) { return typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c
 
 // A head-and-shoulders drawing of a rider's look (a 64 x 64 picture, shown inside a round frame), so a rider can
 // find their card by face and hat. Braces for the farmer outfits; a beard, a bedroll and pack straps for the
-// explorers; longer hair for the women's outfits; the cowboy hat unless look.hat is false.
+// explorers; longer hair for the women's outfits; their hat (look.hatStyle, the cowboy hat if none) unless look.hat is false.
 export function faceSVG(look) {
   look = look || {};
   const pal = PALETTE[look.palette] || PALETTE.drifter;
@@ -128,15 +129,8 @@ export function faceSVG(look) {
   s.push(`<ellipse cx="28.2" cy="35" rx="1.35" ry="1.6" fill="#1f150e"/><ellipse cx="35.8" cy="35" rx="1.35" ry="1.6" fill="#1f150e"/>`);
   s.push(`<path d="M32 36l-1.2 3h2" fill="none" stroke="${deep}" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/>`);
   if (kind !== 'explorer') s.push(`<path d="M29.4 41.6q2.6 1.5 5.2 0" fill="none" stroke="${deep}" stroke-width="1.3" stroke-linecap="round"/>`);
-  // the cowboy hat: a crown with a pinch, a band, and a wide brim curled up at the sides
-  if (hatOn) {
-    const band = mix(hatC, '#120c08', 0.55), lit = mix(hatC, '#fff3dc', 0.18);
-    s.push(`<path d="M20.6 28C20 19.8 23 13.4 27.6 13.4Q32 16 36.4 13.4C41 13.4 44 19.8 43.4 28Z" fill="${hatC}"/>`);
-    s.push(`<path d="M32 15.2C30 17.8 29.6 21.8 30.4 24.8" stroke="${band}" stroke-width="1.1" fill="none" opacity="0.6"/>`);
-    s.push(`<path d="M20.9 24.2H43.1L43.4 28.2H20.6Z" fill="${band}"/>`);
-    s.push(`<path d="M6.5 25C9 30.4 20 32.4 32 32.4S55 30.4 57.5 25C55.5 27.4 47 28.4 32 28.4S8.5 27.4 6.5 25Z" fill="${lit}"/>`);
-    s.push(`<path d="M6.5 25C9 30.4 20 32.4 32 32.4S55 30.4 57.5 25C57 28.6 50 33.6 32 33.6S7 28.6 6.5 25Z" fill="${mix(hatC, '#120c08', 0.25)}"/>`);
-  }
+  // the hat (src/hats.js): the cowboy hat in the outfit's hat colour, or the one bought at the general store
+  if (hatOn) s.push(hatSVG(hatOf(look), hatColour(look, hatC)));
   // drawn on a 64 x 64 square, shown a little closer in (the round frame trims the corners anyway)
   return `<svg viewBox="4 6 56 56" aria-hidden="true">${s.join('')}</svg>`;
 }

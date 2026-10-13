@@ -236,7 +236,7 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
     if (text === promptText) return;
     promptText = text;
     promptEl.hidden = !text;
-    if (text) promptEl.innerHTML = `<kbd>E</kbd><span>${esc(text)}</span>`;
+    if (text) promptEl.innerHTML = `${touchEl.hidden ? '<kbd>E</kbd>' : ''}<span>${esc(text)}</span>`;   // (no key to show on a phone: the prompt is tapped)
     placeBottom();
   }
   let hobT = 0;
@@ -326,7 +326,7 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
       t.el.style.display = on ? '' : 'none';
       if (on) t.el.style.transform = `translateX(${x.toFixed(1)}px)`;
     }
-    const seen = new Set();
+    const seen = new Set(), placed = [];
     for (const m of marks) {
       seen.add(m.id);
       let e = markEls.get(m.id);
@@ -344,6 +344,13 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
       const small = e.querySelector('small');
       const txt = m.dist == null ? '' : m.dist < 12 ? '' : `${Math.round(m.dist)} m`;
       if (small.textContent !== txt) small.textContent = txt;
+      placed.push({ x, small, d: m.dist == null ? Infinity : m.dist });
+    }
+    // two marks close together on the strip: only the nearer one's distance shows (the numbers would run together)
+    placed.sort((a, b) => a.d - b.d);
+    for (let i = 0; i < placed.length; i++) {
+      const crowd = placed.slice(0, i).some((o) => o.small.style.visibility !== 'hidden' && Math.abs(o.x - placed[i].x) < 44);
+      placed[i].small.style.visibility = crowd ? 'hidden' : '';
     }
     for (const [id, e] of markEls) if (!seen.has(id)) { e.remove(); markEls.delete(id); }
   }
@@ -395,7 +402,7 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
     el, ruleEl, hintEl, helpEl, jobEl: $('.bmh-job'),
     show(on) { el.classList.toggle('is-hidden', !on); if (!on) { prompt(null); caption(null); if (quiet()) { buckleQ.length = 0; if (buckleBusy && buckleWatch) endBuckle(); } } },
     purse, toast, prompt, caption, rule, hint, compass, buckle,
-    touch(on) { if (touchEl.hidden === !on) return; touchEl.hidden = !on; placeBottom(); },
+    touch(on) { if (touchEl.hidden === !on) return; touchEl.hidden = !on; if (promptText) { const t = promptText; promptText = null; prompt(t); } placeBottom(); },
     perf(text) { perfEl.hidden = !text; if (text) perfEl.textContent = text; },
     dispose() { clearTimeout(toastT); clearTimeout(hobT); clearInterval(buckleWatch); for (const t of buckleTs) clearTimeout(t); el.remove(); buckleEl.remove(); },
   };

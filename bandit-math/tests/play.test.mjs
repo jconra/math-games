@@ -83,9 +83,19 @@ test('the saddles and horses a rider can own are on disk', () => {
   const saddles = Object.fromEntries([...p.match(/SADDLE_FILES = \{([^}]+)\}/)[1].matchAll(/(\w+): '(\w+)'/g)].map((m) => [m[1], m[2]]));
   assert.deepEqual(Object.keys(saddles).sort(), ['plain', 'silver', 'tooled'], 'the shop\'s three saddles (save.js: owned.saddle)');
   for (const f of Object.values(saddles)) assert.equal(glb(`models/saddles/${f}.glb`).asset.version, '2.0');
-  const horses = [...p.match(/HORSE_KINDS = \{([^}]+)\}/)[1].matchAll(/(\w+): '(\w+)'/g)].map((m) => m[2]);
-  assert.ok(horses.length >= 2);
-  for (const kind of horses) assert.ok(animals[kind], kind + ' in animals.json');
+  // (the mounts: player.js HORSE_LOOKS, one line each, { kind: '<animal>', ... })
+  const looks = p.match(/HORSE_LOOKS = \{\n([\s\S]*?)\n\};/)[1];
+  const mounts = Object.fromEntries([...looks.matchAll(/^\s+(\w+): \{ kind: '(\w+)'/gm)].map((m) => [m[1], m[2]]));
+  assert.ok(Object.keys(mounts).length >= 2 && mounts.bay === 'horse', 'the bay comes free (save.js: owned.horse defaults to bay)');
+  for (const kind of Object.values(mounts)) assert.ok(animals[kind], kind + ' in animals.json');
+  // every horse the stable sells is one the player knows how to ride, with a price (the bay is free)
+  const shop = source('src/shop.js');
+  const sold = [...shop.match(/export const HORSES = \[([\s\S]*?)\n\];/)[1].matchAll(/id: '(\w+)'/g)].map((m) => m[1]);
+  const prices = shop.match(/horse: \{([^}]+)\}/)[1];
+  for (const id of sold) {
+    assert.ok(mounts[id], `the stable's ${id} is in HORSE_LOOKS`);
+    if (id !== 'bay') assert.match(prices, new RegExp(`\\b${id}: \\d+`), `a price for the ${id}`);
+  }
 });
 
 test('the rider sits at the offset the riding clips were built for', () => {

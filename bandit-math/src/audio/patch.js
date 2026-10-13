@@ -984,4 +984,43 @@ export const PATCH_PRESETS = {
     ],
   },
   // ── end of STAGE MUSIC ──
+  // ── VOICE (Bandit Math: Old Hob's babble, 2026-10-12) ──
+  // OLD HOB, one syllable of his babble: a low buzzing voice (saw at 104 Hz, an old man's pitch, falling a touch) shaken by
+  // a slow random wobble in loudness (the gravel), through two vowel resonances (F1 / F2 of an 'ah': the game moves them
+  // per syllable for 'ee', 'oh', 'oo'...) and a soft top; a breath of noise; one short swell and fall. The game plays it
+  // a syllable a word or so (src/audio/voice.js), each at its own pitch, quietly.
+  'VOICE — OLD HOB': {
+    name: 'Old Hob (babble)', group: 'VOICE', kind: 'voice', dur: 0.4,
+    nodes: [
+      { id: 'buzz', type: 'osc', name: 'voice', wave: 'sawtooth', freq: 104, freqMod: 9, level: 1 },
+      { id: 'buzz2', type: 'osc', name: 'voice (rough)', wave: 'square', freq: 52, freqMod: 4.5, level: 0.18 },
+      { id: 'drop', type: 'env', name: 'pitch fall', peak: -1, attack: 0.03, attackCurve: 'lin', decay: 0.16, sustain: 0, release: 0.05 },
+      { id: 'gravel', type: 'noise', name: 'gravel', freq: 34, steps: 1, loopLen: 2, rate: 1, level: 0.42 },
+      { id: 'rough', type: 'gain', name: 'gravel', gain: 1 },
+      { id: 'f1', type: 'filter', name: 'vowel 1', ftype: 'bandpass', freq: 700, Q: 4.5 },
+      { id: 'f2', type: 'filter', name: 'vowel 2', ftype: 'bandpass', freq: 1100, Q: 6 },
+      { id: 'f1-g', type: 'gain', name: 'vowel 1', gain: 1 },
+      { id: 'f2-g', type: 'gain', name: 'vowel 2', gain: 0.55 },
+      { id: 'chest', type: 'filter', name: 'chest', ftype: 'lowpass', freq: 380, Q: 0.7 },
+      { id: 'chest-g', type: 'gain', name: 'chest', gain: 0.5 },
+      { id: 'breath', type: 'noise', name: 'breath', freq: 600, steps: 256, loopLen: 0.6, rate: 1, level: 1 },
+      { id: 'br-f', type: 'filter', name: 'breath', ftype: 'bandpass', freq: 1500, Q: 0.9 },
+      { id: 'br-g', type: 'gain', name: 'breath', gain: 0.05 },
+      { id: 'mix', type: 'gain', name: 'mix', gain: 1 },
+      { id: 'amp', type: 'env', name: 'loudness', peak: 1, attack: 0.018, attackCurve: 'lin', decay: 0.13, sustain: 0, release: 0.05 },
+      { id: 'vca', type: 'gain', name: 'loudness', gain: 0 },
+      { id: 'tone', type: 'filter', name: 'soft top', ftype: 'lowpass', freq: 2600, Q: 0.5 },
+      { id: 'out', type: 'out', name: 'output', gain: 0.5 },
+    ],
+    cables: [
+      { from: 'drop', to: 'buzz', port: 'freq' }, { from: 'drop', to: 'buzz2', port: 'freq' },
+      { from: 'buzz', to: 'rough' }, { from: 'buzz2', to: 'rough' }, { from: 'gravel', to: 'rough', port: 'gain' },
+      { from: 'rough', to: 'f1' }, { from: 'rough', to: 'f2' }, { from: 'rough', to: 'chest' },
+      { from: 'f1', to: 'f1-g' }, { from: 'f2', to: 'f2-g' }, { from: 'chest', to: 'chest-g' },
+      { from: 'f1-g', to: 'mix' }, { from: 'f2-g', to: 'mix' }, { from: 'chest-g', to: 'mix' },
+      { from: 'breath', to: 'br-f' }, { from: 'br-f', to: 'br-g' }, { from: 'br-g', to: 'mix' },
+      { from: 'mix', to: 'vca' }, { from: 'amp', to: 'vca', port: 'gain' }, { from: 'vca', to: 'tone' }, { from: 'tone', to: 'out' },
+    ],
+  },
+  // ── end of VOICE ──
 };

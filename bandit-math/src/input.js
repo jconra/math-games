@@ -48,7 +48,9 @@ export function makeInput(canvas, { camera = null } = {}) {
   const listeners = new Set();
   const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
   const I = {
-    move: { x: 0, y: 0, mag: 0 }, run: false, lookedAt: -1e9, pick: [], camera, touch: false, dragging: false,
+    // (touch is also true from the start on a phone or tablet, so its buttons and words show before the first touch)
+    move: { x: 0, y: 0, mag: 0 }, run: false, lookedAt: -1e9, pick: [], camera, dragging: false,
+    touch: typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches && (navigator.maxTouchPoints || 0) > 0,
     get look() { return { dx: look.dx, dy: look.dy }; },
     get enabled() { return enabled; },
     set enabled(on) { enabled = !!on; if (!enabled) letGo(); },

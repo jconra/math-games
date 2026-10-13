@@ -70,7 +70,7 @@ export const TOPICS = [
 // The missions in the order the title screen shows them.
 export const MISSIONS = [
   { id: 'roundup', name: 'Round-up', line: 'Rope the right numbers', ready: true },
-  { id: 'wagon', name: 'Protect the wagon', line: 'Ride shotgun and keep the cargo safe', ready: false },
+  { id: 'wagon', name: 'Protect the wagon', line: 'Ride shotgun and keep the cargo safe', ready: true },
   { id: 'hunt', name: 'Hunting', line: 'Track and tag deer in the woods', ready: false },
   { id: 'loot', name: 'Loot the gang', line: 'Take back what the gang stole', ready: false },
 ];
@@ -93,7 +93,10 @@ export const MISSIONS = [
 //     three or four, silver (150) and gold (400) the long goals. A first guess, like sheep's, until it's been played.
 //   pigs: a batch is five pigs and takes a few minutes of herding, so tin (10) comes after two batches on a first
 //     visit; still a first guess until the job has been played for real.
-//   bandits, deliveries: guesses until those jobs are built; set them from a real sitting then.
+//   deliveries: a delivery is an order worked out at the store and two rides (out to a camp and back), two or three
+//     minutes, so tin (3) comes in a first sitting and copper (10) after a few; a first guess until it's been played.
+//   bandits: a gang's wave on the wagon road has 3 to 5 bandits and takes a couple of minutes, so tin (3) comes with
+//     the first wave and copper (15) after four or five; still a first guess until it's been played for real.
 export const BUCKLES = ['tin', 'copper', 'silver', 'gold'];
 export const BUCKLE_NAMES = { tin: 'Tin', copper: 'Copper', silver: 'Silver', gold: 'Gold' };
 export const JOBS = [
@@ -102,8 +105,8 @@ export const JOBS = [
   { id: 'sheep', name: 'Sheep healed', words: ['sheep healed', 'sheep healed'], at: [5, 20, 75, 200], ready: true },
   { id: 'orders', name: 'Orders filled', words: ['order filled', 'orders filled'], at: [10, 40, 150, 400], ready: true },
   { id: 'pigs', name: 'Pigs penned', words: ['pig penned', 'pigs penned'], at: [10, 50, 200, 500], ready: true },
-  { id: 'bandits', name: 'Bandits brought in', words: ['bandit brought in', 'bandits brought in'], at: [3, 15, 50, 150], ready: false },
-  { id: 'deliveries', name: 'Deliveries made', words: ['delivery made', 'deliveries made'], at: [3, 10, 30, 100], ready: false },
+  { id: 'bandits', name: 'Bandits brought in', words: ['bandit brought in', 'bandits brought in'], at: [3, 15, 50, 150], ready: true },
+  { id: 'deliveries', name: 'Deliveries made', words: ['delivery made', 'deliveries made'], at: [3, 10, 30, 100], ready: true },
 ];
 
 // The keepsake each job will put in the rider's cabin (not used yet: it waits for the cabin). `from` = the buckle

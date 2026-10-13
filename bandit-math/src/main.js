@@ -33,11 +33,16 @@ import { makeFarm } from './farm.js';
 import { makeSheepJob } from './missions/sheep.js';
 import { makePigJob } from './missions/pigs.js';
 import { makeStoreJob } from './missions/store.js';
+import { makeCamps } from './camps.js';
+import { makeDeliveryJob } from './missions/delivery.js';
+import { makeWagonJob } from './missions/wagonjob.js';
 import { makeShops, makePanel, boxTier, PRICES, PAY } from './shop.js';
 import { makeHob } from './hob.js';
 import { makeStage } from './stage.js';
+import { makeTraffic } from './traffic.js';
 import { makeCabin } from './cabin/cabin.js';
 import { makeAudio, volumeRow } from './audio/audio.js';
+import { makeHobVoice, voiceRow } from './audio/voice.js';
 import { openLockbox, TIER_NAME } from './lockbox/index.js';
 import { loadRiders, saveRider, earn, recordLockbox, titleOf, nextTitle, badgesOf, cleanBoxes, BOX_TIERS } from './save.js';
 
@@ -61,6 +66,7 @@ const T = showTitle($('title-root'), { riders: loadRiders(), build: BUILD, onRid
 T.setProgress(0.01, 'Riding into the valley');
 // the game's sound (src/audio/audio.js): it wakes on the first click or key press, and is quiet on the title and while paused
 const AUD = makeAudio(); AUD.hold('title', true);
+const VOICE = makeHobVoice(AUD); BM.voice = VOICE;   // Old Hob's babble under his lines (src/audio/voice.js; its switch is in the menu)
 Object.defineProperty(BM, 'stage', { get: () => stage }); BM.audio = AUD;
 const hud = makeHud($('hud-root'), {
   onMenu: () => openMenu(),
@@ -92,11 +98,14 @@ const loading = Promise.all([
 let state = 'loading', paused = false, pausedBy = new Set();
 let rider = null, mode = 'lasso', P = null, D = null, RU = null, hob = null, shops = null, door = null, menu = null, boxOpen = false;
 let stage = null;   // the band on the town's stage and its music (src/stage.js)
+let traffic = null;   // wagons travelling the road through the valley now and then (src/traffic.js)
 let cabin = null;   // the player's cabin: walk in through its door (src/cabin/cabin.js)
 let farm = null, SH = null;   // the farm north of town (src/farm.js) and its sick-sheep job (src/missions/sheep.js)
 let PG = null;   // the farm's loose-pigs job (src/missions/pigs.js)
 let SJ = null;   // the general store's counter: word problems on order slips (src/missions/store.js)
-const atCounter = () => !!(SJ && SJ.active);   // (working the counter: the rider stands still, the store's camera)
+let WJ = null;   // protect the wagon: the gang on the road east of the pasture (src/missions/wagonjob.js), when ticked
+let camps = null, DL = null;   // the camps out in the valley (src/camps.js) and their deliveries (src/missions/delivery.js)
+const atCounter = () => !!(SJ && SJ.active) || !!(DL && DL.active);   // (or making up a camp's order on the slip)   // (working the counter: the rider stands still, the store's camera)
 
 function pause(why) {
   pausedBy.add(why);
@@ -107,6 +116,7 @@ function pause(why) {
   if (RU) RU.paused = true;
   if (SH) SH.paused = true;
   if (PG) PG.paused = true;
+  if (WJ) WJ.paused = true;
   hud.prompt(null);
   AUD.hold('pause', true);
 }
@@ -119,6 +129,7 @@ function resume(why) {
   if (RU) RU.paused = atCounter();
   if (SH) SH.paused = false;
   if (PG) PG.paused = false;
+  if (WJ) WJ.paused = false;
   AUD.hold('pause', false);
   last = performance.now();
 }
@@ -134,12 +145,13 @@ async function ride(r) {
   I.enabled = true;
   P = makePlayer({ W, folk, animals, rider, input: I, camera, say: (t) => hud.toast(t) });
   makeDogIfOwned();
-  hob = makeHob({ W, hud, rider, I });
+  hob = makeHob({ W, hud, rider, I, voice: VOICE });
   stage = makeStage({ W, folk, audio: AUD });
+  traffic = makeTraffic({ W, animals, folk, audio: AUD, obstacles: trafficThings });
   AUD.hold('pause', false); AUD.hold('title', false);
   shops = makeShops({ W, rider, say: (t, k) => hud.toast(t, k),
     onOpen: () => pause('counter'), onClose: () => resume('counter'),
-    onBuy: (what) => { refresh(); if (what === 'saddle' || what === 'horse') P.refreshOwned(); if (what === 'dog') { makeDogIfOwned(); if (cabin) cabin.dogsChanged(); } hob.event(what); },
+    onBuy: (what) => { refresh(); if (what === 'saddle' || what === 'horse') P.refreshOwned(); if (what === 'dog') { makeDogIfOwned(); if (cabin) cabin.dogsChanged(); } if (what === 'hat' && P && P.person) { if (!P.person.hat) P.person.hatOn(); P.person.setHat(rider.look.hatStyle); } hob.event(what); },
     onLockbox: (box, o) => openBox(box, o), onStoreJob: () => { if (SJ) SJ.start(); } });
   cabin = makeCabin({ W, renderer, camera, animals, rider, hud, input: I, audio: AUD, player: () => P, follower: () => D,
     onBuy: () => refresh(), onLockbox: (box, o) => openBox(box, o) });
@@ -151,13 +163,37 @@ async function ride(r) {
     openBox: (problem, after) => !paused && openBox({ tier: problem.tier, from: 'store' }, { problem, after }),   // (false: not now, the store tries again)
     onStart: () => { I.enabled = false; if (RU) RU.paused = true; hud.prompt(null); hud.rule(null); hud.hint(null); },
     onStop: () => { I.enabled = !paused; if (RU) RU.paused = paused; } });
+  camps = makeCamps({ W, folk, camera, audio: AUD });
+  DL = makeDeliveryJob({ W, camps, P, camera, rider, hud, hob, refresh,
+    onStart: () => { P.enabled = false; I.enabled = false; if (RU) RU.paused = true; hud.prompt(null); },
+    onStop: () => { P.enabled = !paused; I.enabled = !paused; if (RU) RU.paused = paused; },
+    quiet: () => !!((RU && RU.near) || (SH && SH.near) || (PG && PG.near) || (SJ && SJ.active) || (WJ && WJ.near)) });
+  WJ = rider.missions && rider.missions.wagon ? makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, audio: AUD, refresh,
+    times: () => RU && RU.trainer('times'),   // (one times trainer for both jobs)
+    wagonLib: () => traffic && traffic.ready,   // (the wagon models the traffic loads, shared)
+    quiet: () => !!((RU && RU.near) || (SH && SH.near) || (PG && PG.near) || atCounter() || (DL && DL.card)) }) : null;
   RU.start();
   hob.trail(true);
   hud.show(true); hud.touch(I.touch);
   refresh();
-  hob.event('ride', { mode });
+  hob.event('ride', { mode, wagon: !!WJ });
   P.cam.snap();
   last = performance.now();
+}
+// what a wagon on the road slows and stops for: the player, the player's horse, the dog, the round-up's cattle
+const thingsNear = [], horseEnds = [new THREE.Vector3(), new THREE.Vector3()];
+function trafficThings() {
+  thingsNear.length = 0;
+  if (!P) return thingsNear;
+  thingsNear.push(P.position);
+  if (P.horse && P.horse.root) {
+    // the horse's middle, and its nose and tail (side on to the road it reaches more than a metre past its middle)
+    const r = P.horse.root, hp = r.position, h = r.rotation.y;
+    thingsNear.push(hp, horseEnds[0].set(hp.x + Math.sin(h) * 1.1, hp.y, hp.z + Math.cos(h) * 1.1), horseEnds[1].set(hp.x - Math.sin(h) * 1.1, hp.y, hp.z - Math.cos(h) * 1.1));
+  }
+  if (D && D.position) thingsNear.push(D.position);
+  if (RU && RU.targets) for (const t of RU.targets) if (t.root) thingsNear.push(t.root.position);
+  return thingsNear;
 }
 function makeDogIfOwned() {
   const dog = rider && rider.owned && rider.owned.dog;
@@ -176,11 +212,16 @@ function endRide() {
   if (SH) SH.dispose();
   if (PG) PG.dispose();
   if (SJ) SJ.dispose();
+  if (DL) DL.dispose();
+  if (WJ) { WJ.dispose(); WJ = null; }
+  if (camps) camps.dispose();
+  DL = camps = null;
   if (farm) farm.dispose();
   if (hob) hob.dispose();
   if (D) D.dispose();
   if (P) P.dispose();
   if (stage) stage.dispose();
+  if (traffic) { traffic.dispose(); traffic = null; }
   RU = hob = shops = D = P = stage = SH = PG = SJ = farm = null; door = null;
   AUD.hold('title', true);
   pausedBy.clear(); paused = false;
@@ -196,7 +237,7 @@ function endRide() {
 // them, so the round-up's own (its travel card, counting the metres to the pasture) is held back there
 function roundupHud() {
   const h = Object.create(hud);
-  const atFarm = () => !!((SH && SH.near) || (PG && PG.near));   // (the sheep pasture or the pig yard)
+  const atFarm = () => !!((SH && SH.near) || (PG && PG.near) || (DL && DL.card && !(RU && RU.near)) || (WJ && (WJ.near || (WJ.on && !(RU && RU.near)))));   // (and a delivery's card)   // (the sheep pasture or the pig yard)
   h.rule = (o) => (atFarm() || atCounter() ? hud.ruleEl : hud.rule(o));   // (nor at the store's counter)
   h.hint = (o) => { if (!atFarm() && !atCounter()) hud.hint(o); };
   return h;
@@ -278,13 +319,15 @@ function openMenu() {
   const boxes = (rider.lockboxes || []).length;
   const body = document.createElement('div');
   body.innerHTML = `<div class="bms-menu">
-      <button type="button" class="is-main" data-do="resume">Keep riding<small>Esc</small></button>
+      <button type="button" class="is-main" data-do="resume">Keep riding<small>${I && I.touch ? 'Back to the game' : 'Esc'}</small></button>
       ${boxes ? `<button type="button" data-do="box">Open a lock box<small>${boxes} in your saddlebags</small></button>` : ''}
       <button type="button" data-do="home">Go back to town<small>Straight to the town square</small></button>
       <button type="button" data-do="title">Back to the title<small>Your gold is already saved</small></button></div>
-    <div class="bms-keys"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · drag to look · <kbd>Shift</kbd> run or gallop ·
-      click a steer (or <kbd>F</kbd>) to rope it · <kbd>H</kbd> call your horse · <kbd>E</kbd> on and off, or talk at a door</div>`;
-  body.querySelector('.bms-menu').after(volumeRow(AUD));
+    <div class="bms-keys">${I && I.touch
+      ? 'thumb stick on the left to move (push it to the edge to gallop) · drag to look · tap a steer or a rider, or press Rope · Horse calls your horse · On / off gets on and off · tap the prompt at a door'
+      : `<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · drag to look · <kbd>Shift</kbd> run or gallop ·
+      click a steer (or <kbd>F</kbd>) to rope it · <kbd>H</kbd> call your horse · <kbd>E</kbd> on and off, or talk at a door`}</div>`;
+  body.querySelector('.bms-menu').after(volumeRow(AUD), voiceRow(VOICE));
   let then = null;
   menu = makePanel({ title: 'Taking a breather', sub: `${rider.name} · ${titleOf(rider)}${mode === 'shoot' ? ' · shooting comes soon' : ''}`, body,
     onClose: () => { menu = null; resume('menu'); if (then) then(); } });
@@ -320,9 +363,17 @@ function doors() {
   const hd = h ? Math.hypot(h.x - P.position.x, h.z - P.position.z) : Infinity;
   const mount = hd < MOVE.mountNear;
   const d = shops.door(P.position);
-  if (d && !(mount && hd < d.dist)) door = d;
-  hud.prompt(door ? (door.id === 'cabin' ? 'Go into your cabin' : door.prompt) : mount ? 'Get on your horse' : null);
+  const called = mount && P.horseCameAt && performance.now() - P.horseCameAt < 6000;   // (just whistled over: E gets on, even by a door)
+  // (a horse on its way after a whistle, or one just bought or picked at the stable and waiting a few steps off: E gets
+  // on it too, rather than opening the door again; the horse walks up if it isn't close enough yet)
+  const fresh = h && hd < 14 && (P.horseComing || (P.horsePickedAt && performance.now() - P.horsePickedAt < 8000));
+  if (d && !(mount && (hd < d.dist || called)) && !fresh) door = d;
+  hud.prompt(door ? (door.id === 'cabin' ? 'Go into your cabin' : door.prompt) : mount || fresh ? 'Get on your horse' : null);
   if (door && I.enabled && I.tap('KeyE')) openCounter(door.id);
+  // a camp's foreman close by (src/missions/delivery.js): E talks to him about an order
+  // (just got down beside a foreman, the horse still at his elbow: E talks rather than getting straight back on)
+  const talkFirst = mount && P.downAt && performance.now() - P.downAt < 6000;
+  if (!door && (!mount || talkFirst) && !fresh && DL && DL.prompt) { hud.prompt(DL.prompt); if (I.enabled && I.tap('KeyE')) DL.talk(); }
   // the saloon's doors and the stage have no counter yet: walking up to them, Old Hob says so
   if (hob) for (const k of ['saloon', 'stage']) {
     const pl = W.places[k];
@@ -338,6 +389,8 @@ function compass() {
   const pa = W.places.pasture; if (RU && pa) add('job', 'job', pa.x, pa.z, 'The round-up');
   const sp = farm && farm.layout.sheep; if (SH && sp) add('farm', 'job', sp.x, sp.z, 'The farm: sick sheep');
   const py = farm && farm.layout.yard; if (PG && py) add('pigs', 'job', py.x, py.z, 'The farm: loose pigs');
+  if (DL) for (const m of DL.marks()) add(m.id, m.icon, m.x, m.z, m.label);   // (the store or the camp for a delivery)
+  if (WJ) { const w = WJ.where(); add('wagon', 'job', w.x, w.z, 'Protect the wagon'); }
   if (P.horse && !P.onHorse) { const h = P.horse.root.position; add('horse', 'horse', h.x, h.z, 'Your horse'); }
   hud.compass(P.cam.yaw, marks);
 }
@@ -374,19 +427,28 @@ function step(dt) {
   const home = !!(cabin && cabin.inside);   // (in the cabin only it is drawn: the town waits)
   townLife(W, state === 'play' && (paused || home) ? 0 : dt, P, D);   // the chickens about the town (made on the first call)
   if (state === 'play') {
+    // (a horse picked at the stable stays "just picked" while the stable's panel is open: E after closing it gets on)
+    if (paused && P && P.horsePickedAt > performance.now() - 8000) P.horsePickedAt = performance.now();
     if (paused) { if (needDraw) { needDraw = false; if (home) cabin.render(); else W.render(); } return; }
     if (home) { door = null; cabin.update(dt); cabin.render(); return; }   // (no town door while inside: E and the prompt are the cabin's)
     if (atCounter()) hud.prompt(null); else if (!(cabin && cabin.busy)) doors();
     P.update(dt);
     if (D) D.update(dt);
     if (cabin) cabin.town(dt);
+    // (the wagon's gang took the shared times trainer's wave: back at the herd, the round-up deals its own afresh, but
+    // never while the gang's wave is still open beside the wagon, or the two jobs take the trainer from each other)
+    if (WJ && WJ.tookTrainer && RU.near && !(WJ.near && WJ.wave && !WJ.wave.done)) { WJ.tookTrainer = false; RU.newWave(); }
     RU.update(dt);
     if (farm) farm.update(dt, P.position);
     if (SH) SH.update(dt);
     if (PG) PG.update(dt);
     if (SJ) SJ.update(dt);   // (after the player: it places the camera while the counter is open)
+    if (camps) camps.update(dt, P.position);   // (the camps' people and campfires)
+    if (DL) DL.update(dt);
+    if (WJ) WJ.update(dt);
     hob.update(dt, P.position);
     if (stage) stage.update(dt, P.position);
+    if (traffic) traffic.update(dt, P.position, camera.position);
     W.update(dt); W.render();
     AUD.listen(camera);
     compass();
@@ -405,7 +467,7 @@ renderer.setAnimationLoop(() => {
       const info = renderer.info.render;
       // (the third line: the animals or folk of the job in view; none in the cabin or away from every job)
       const job = cabin && cabin.inside ? '' : SJ && SJ.active ? `${SJ.state().people.length} customers` : PG && PG.near ? `${PG.pigs.length} pigs`
-        : SH && SH.near ? `${SH.sheep.length} sheep` : RU && RU.near ? `${RU.targets.length} cattle` : '';
+        : SH && SH.near ? `${SH.sheep.length} sheep` : RU && RU.near ? `${RU.targets.length} cattle` : WJ && WJ.near ? `${WJ.targets.length} riders` : '';
       hud.perf(`${W.tier} · ${fpsNow.toFixed(0)} fps\n${info.calls} draws · ${(info.triangles / 1e6).toFixed(2)} M tris${job || paused ? '\n' : ''}${job}${paused ? (job ? ' · ' : '') + 'paused' : ''}`);
       const pb = perfEl();   // (hidden while riding: the HUD has its own)
       if (state !== 'play') pb.textContent = `${W.tier} · ${fpsNow.toFixed(0)} fps · ${info.calls} draws`;
@@ -438,6 +500,10 @@ const SPOTS = {
 for (const k of ['cabin', 'stable', 'store', 'sheriff', 'saloon', 'stage']) {
   SPOTS[k] = () => { const b = W.places[k]; if (!b) return W.places.spawn; return { x: b.door.x + Math.sin(b.rot) * 1.2, z: b.door.z + Math.cos(b.rot) * 1.2, rot: b.rot + Math.PI }; };
 }
+// the camps (src/camps.js): out front, where a horse with crates is unloaded, facing the camp
+for (const id of ['cow', 'hollis', 'survey']) SPOTS['camp-' + id] = () => { const c = camps && camps.byId(id); if (!c) return W.places.spawn; return { x: c.drop.x, z: c.drop.z, rot: Math.atan2(c.x - c.drop.x, c.z - c.drop.z) }; };
+// beside the wagon, facing the way it rolls
+SPOTS.wagon = () => { if (!WJ) return W.places.spawn; const w = WJ.where(), q = WJ.road.at(WJ.state().s); return { x: w.x - q.nx * 5, z: w.z - q.nz * 5, rot: q.h }; };
 const dev = {
   get tier() { return W ? W.tier : quality.tier; },
   gold(n = 100) { if (!rider) return; earn(rider, n); refresh(); },
@@ -450,11 +516,15 @@ const dev = {
   },
   lockbox(tier) { if (!rider) return false; if (state === 'play') openBox({ tier: tier || boxTier(rider), from: 'sheriff' }); return true; },
   saddle(kind = 'plain') { if (!rider) return; const o = rider.owned; o.saddles = [...new Set([...(o.saddles || []), kind])]; o.saddle = kind; saveRider(rider); if (P) P.refreshOwned(); refresh(); },
+  // a wagon on the road coming toward the player (from about 70 m up the road)
+  wagon(dir, kind, o = {}) { if (!traffic || !P) return null; return traffic.sendNear(P.position, { dir, kind, ...o }); },
   dog(kind = 'shiba', name = 'Biscuit') { if (!rider) return; rider.owned.dog = { kind, name }; saveRider(rider); makeDogIfOwned(); },
   box(tier) { if (!rider) return; (rider.lockboxes = rider.lockboxes || []).push({ tier: tier || boxTier(rider), from: 'loot' }); saveRider(rider); refresh(); },
   // the title's backdrop camera: where round the square it is now, and (for a rig trying views) its settings
   orbit(at = null, o = {}) { fixedAt = at; Object.assign(TITLE_CAM, o); titleCam(0); },
 };
+{ const m = dev.mission; dev.mission = (name, ...a) => (name === 'delivery' ? !!(DL && DL.orderFrom(a[0] || 'cow')) : m(name, ...a)); }   // (an order from a camp, without riding out to it)
+{ const m = dev.mission; dev.mission = (name, ...a) => { if (name !== 'wagon') return m(name, ...a); if (!WJ) return false; dev.goto('wagon'); WJ.newWave(); return true; }; }   // (a gang at once, beside the wagon)
 if (DEV) {
   const bar = document.createElement('div');
   bar.style.cssText = 'position:fixed;left:12px;top:50%;transform:translateY(-50%);z-index:26;display:flex;flex-direction:column;gap:4px;max-height:70vh;overflow:auto';
@@ -470,10 +540,13 @@ if (DEV) {
   add('new sick sheep', () => dev.mission('sheep'));
   add('new loose pigs', () => dev.mission('pigs'));
   add('mind the store', () => dev.mission('store'));
+  add('take a delivery order', () => dev.mission('delivery'));
+  add('protect the wagon', () => dev.mission('wagon'));
   add('open a lock box', () => dev.lockbox());
   add('give a lock box', () => dev.box());
   add('give saddle', () => dev.saddle('plain'));
   add('give dog', () => dev.dog('shiba', 'Biscuit'));
+  add('send a wagon', () => dev.wagon());
   add('into the cabin', () => { dev.goto('cabin'); if (cabin) cabin.enter(); });
   document.body.appendChild(bar);
   const sync = () => { bar.style.display = state === 'play' ? 'flex' : 'none'; };
@@ -489,9 +562,10 @@ function screenOf(o) {
 }
 Object.defineProperties(BM, {
   world: { get: () => W }, player: { get: () => P }, rider: { get: () => rider }, state: { get: () => (state === 'play' && paused ? 'paused' : state) },
-  roundup: { get: () => RU }, sheep: { get: () => SH }, pigs: { get: () => PG }, farm: { get: () => farm }, shops: { get: () => shops }, dog: { get: () => D }, input: { get: () => I }, hob: { get: () => hob },
+  roundup: { get: () => RU }, traffic: { get: () => traffic }, sheep: { get: () => SH }, pigs: { get: () => PG }, wagon: { get: () => WJ }, farm: { get: () => farm }, shops: { get: () => shops }, dog: { get: () => D }, input: { get: () => I }, hob: { get: () => hob },
   door: { get: () => door }, store: { get: () => SJ }, paused: { get: () => paused }, mode: { get: () => mode }, cabin: { get: () => cabin },
 });
+Object.defineProperties(BM, { camps: { get: () => camps }, delivery: { get: () => DL } });   // (the camps and their deliveries; DL.rob() is the bandits' hook)
 Object.assign(BM, {
   dev, hud, title: T, camera, renderer, screenOf, prices: PRICES, loading,
   fps: (seconds = 3) => new Promise((res) => { let n = 0; const a = performance.now(); const f = () => { n++; if (performance.now() - a < seconds * 1000) requestAnimationFrame(f); else res(n * 1000 / (performance.now() - a)); }; requestAnimationFrame(f); }),

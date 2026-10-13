@@ -279,6 +279,13 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
     for (let i = 0; i < pen.length - ROUNDUP.pen; i++) { pen[i].state = 'sold'; pen[i].fade = 1; }
   }
 
+  // another job (the wagon's gang) has an open wave on the shared times trainer: dealing now would close it under the
+  // kid, so a wave waits until the player is back at the herd
+  const mine = new Set();   // (the times waves this job dealt)
+  function othersWave() {
+    const c = trainer('times').state.cur;
+    return !!(c && !c.closed && !mine.has(c.id));
+  }
   // ── THE WAVE ───────────────────────────────────────────────────────────────────────────────────────────────────
   function newWave() {
     endHelp();
@@ -290,6 +297,7 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
       deal(w.card.targets, w.card.id);
     } else {
       const w = T.wave({ count: ROUNDUP.herd });
+      if (topic === 'times') mine.add(w.id);
       wave = { topic, T, w, kind: 'herd', goods: w.targets.filter((t) => t.good).length, caught: 0, misses: 0 };
       deal(w.targets);
     }
@@ -380,6 +388,8 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
   // the loop has landed: this is the answer
   function landed(s, w, good) {
     if (w !== wave || !wave) return;                       // (a throw from a wave that's gone)
+    // (the wagon's gang holds the shared times trainer: this pick isn't counted against its wave)
+    if (w.kind === 'herd' && w.topic === 'times' && !mine.has((w.T.state.cur || {}).id)) { if (s.state === 'throw') { s.state = 'graze'; s.a.play('Idle'); } setTimeout(() => P.cancelLasso(), 0); return; }
     closeChart();
     if (hes) hes.answered();
     const T = w.T;
@@ -503,7 +513,7 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
 
     // a new wave, once the last one has had its moment
     if (nextWaveT > 0 && (nextWaveT -= dt) <= 0) {
-      if (RU.near || d < 120) newWave(); else nextWaveT = 0.5;
+      if (RU.near || (d < 120 && !othersWave())) newWave(); else nextWaveT = 0.5;
     }
 
     // F (or Space on foot) ropes the ringed one

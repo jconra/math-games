@@ -26,6 +26,10 @@
 @keyframes bmo-out { from { opacity: 1; transform: rotate(-0.6deg); } to { opacity: 0; transform: translateY(-30px) translateX(30px) rotate(4deg); } }
 
 .bmo-top { display: flex; align-items: center; gap: 10px; border-bottom: 1.5px dashed rgba(122, 85, 48, 0.45); padding-bottom: 8px; }
+/* the header stays at the top while the slip scrolls (a why and a picture can make it taller than a phone's screen):
+   it reaches up over the slip's top padding, so nothing shows above it; the frame's inner lines stay drawn */
+.bmo-top { position: sticky; z-index: 2; --pad: 16px; top: calc(-1 * var(--pad)); margin-top: calc(-1 * var(--pad)); padding-top: var(--pad);
+  background: linear-gradient(to bottom, transparent 7px, var(--paper) 7px); }
 .bmo-from { flex: 1; min-width: 0; line-height: 1.1; }
 .bmo-from small { display: block; font: 400 14px Smokum, Georgia, serif; letter-spacing: 0.08em; color: var(--mute); text-transform: uppercase; }
 .bmo-from b { display: block; font: 400 24px Rye, Georgia, serif; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -104,6 +108,7 @@
 @media (max-width: 760px) {
   .bmo { font-size: 16px; }
   .bmo-slip { left: 10px; right: 10px; top: auto; bottom: 10px; width: auto; max-height: 64vh; padding: 12px 14px 10px; }
+  .bmo-top { --pad: 12px; }
   .bmo-from b { font-size: 18px; }
   .bmo-done { padding: 6px 8px; }
   .bmo-story { font-size: 18px; margin-top: 8px; }
@@ -123,7 +128,7 @@
 @media (max-height: 480px) and (min-width: 761px) {
   .bmo { font-size: 15px; }
   .bmo-slip { top: 50px; right: 10px; width: min(470px, 54vw); max-height: calc(100vh - 58px); padding: 8px 14px 8px; }
-  .bmo-top { padding-bottom: 4px; }
+  .bmo-top { padding-bottom: 4px; --pad: 8px; }
   .bmo-from small { font-size: 12px; }
   .bmo-from b { font-size: 18px; }
   .bmo-done { padding: 4px 8px; }

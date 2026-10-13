@@ -24,7 +24,8 @@
 //                for one with the animal or person in .a / .animal / .person / .body (or a .root). A record may carry
 //                .ring = { y, z, radius } (metres, in its own space) to place its ring by hand, and .label: its number
 //                card (a THREE.Sprite in the scene: pointing at it counts as pointing at the target, and while ringed it
-//                is drawn on top with a frame; or a page element, which gets the class 'ringed' while ringed)
+//                is drawn on top with a frame; or a page element, which gets the class 'ringed' while ringed), and
+//                .also: other things whose bodies count as its own when pointed at (a rider's horse: [horse.root])
 //       player   the player (P: its .position is read) or a Vector3: the reach and the soft lock are measured from it
 //       pointer  { x, y } in page pixels, or null for none; left out, the mouse over the canvas is followed here
 //       reach    the lasso's reach in metres (default 15, as player.js MOVE.reach)
@@ -120,6 +121,7 @@ function specOf(t) {
   }
   const o = t.ring;
   if (o) { if (o.y != null) s.y = o.y; if (o.z != null) s.z = o.z; if (o.radius != null) s.radius = o.radius; }
+  if (Array.isArray(t.also) && t.also.length) s.also = t.also;
   return s;
 }
 
@@ -428,13 +430,16 @@ export function makeTargetRing({ scene, camera, canvas, W = null }) {
     s.meshes = []; s.box = new THREE.Box3();
     s.root.updateWorldMatrix(true, true);
     const toRoot = new THREE.Matrix4().copy(s.root.matrixWorld).invert();
-    s.root.traverse((o) => {
+    const each = (o) => {
       if (!o.isMesh || !o.geometry || !o.geometry.attributes.position) return;
       s.meshes.push(o);
       const pos = posedOf(o); tmpBox.makeEmpty();
       for (let i = 0; i + 2 < pos.length; i += 3) tmpBox.expandByPoint(hitAt.set(pos[i], pos[i + 1], pos[i + 2]));
       if (!tmpBox.isEmpty()) s.box.union(tmpBox.applyMatrix4(tmpM.multiplyMatrices(toRoot, o.matrixWorld)));
-    });
+    };
+    s.root.traverse(each);
+    // (what goes with it and counts as its body too: a rider's horse)
+    if (s.also) for (const a of s.also) { if (a && a.isObject3D) { a.updateWorldMatrix(true, true); a.traverse(each); } }
     if (!s.box.isEmpty()) {
       const z = s.box.getSize(hitAt);
       s.box.expandByVector(hitAt.set(z.x * 0.2 + 0.1, z.y * 0.12 + 0.1, z.z * 0.2 + 0.1));
@@ -694,6 +699,8 @@ export function makeTargetRing({ scene, camera, canvas, W = null }) {
     return { x: r0.left + (v.x + 1) / 2 * r0.width, y: r0.top + (1 - v.y) / 2 * r0.height, r: rad * camera.projectionMatrix.elements[5] / d * r0.height / 2,
       on: Math.abs(v.x) <= 1 && Math.abs(v.y) <= 1 };
   };
+  // (for rigs: why each target can or can't be picked, as last measured)
+  R.why = () => lastTargets.map((t, i) => { const c = cands[i] || {}; return { ok: !!c.ok, hidden: hidden.get(t) === true, dist: +(+c.dist).toFixed(1), x: Math.round(c.x), y: Math.round(c.y) }; });
   // a mouse click: the target to throw at (see the top of this file), or null
   R.click = (x, y) => {
     if (disposed || lastHold || lastBusy) return null;

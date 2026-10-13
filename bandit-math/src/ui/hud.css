@@ -116,6 +116,11 @@
 .bmh-menu:hover { border-color: var(--brass); }
 .bmh-perf { font: 12px/1.45 ui-monospace, Menlo, monospace; white-space: pre; text-align: right; color: #e9f2d9;
   background: rgba(0, 0, 0, 0.55); padding: 5px 8px; border-radius: 6px; }
+/* (?perf is for testing: on a narrow screen it goes to the bottom left corner, small, where the thumb stick's empty
+   ground is, rather than over the job card) */
+@media (max-width: 760px) {
+  .bmh-perf { position: fixed; left: 6px; bottom: 6px; font-size: 10px; line-height: 1.3; padding: 3px 6px; pointer-events: none; opacity: 0.85; text-align: left; }
+}
 
 /* ── bottom: the number line box, the door prompt, the notes ─────────────────────────────────────────────── */
 .bmh-help { position: absolute; left: 0; right: 0; bottom: 104px; margin: 0 auto; width: min(960px, 92vw);

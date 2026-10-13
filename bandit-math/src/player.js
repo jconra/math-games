@@ -28,6 +28,9 @@
 //   P.heading, P.speed  the way they face (radians, facing (sin, cos)), m/s
 //   P.onHorse, P.canRide (owns a saddle), P.horse (the horse, from makeAnimal; null until loaded), P.person, P.cam
 //   P.mount(), P.dismount(), P.callHorse()     as E and H do
+//   P.horseCameAt  when (performance.now()) a whistled horse last pulled up beside the player
+//   P.horsePickedAt  when another horse was last picked at the stable (it waits there);  P.horseComing  whistled, on its way
+//   P.downAt       when the rider last got down off the horse
 //   P.throwLasso(target, { good, onCaught, onMissed, onLand, onCancel, hold, lead }) -> true if started (false: a throw
 //                       is already under way). Moving the player away (keys or stick) while they are still walking up
 //                       to a far target, or P.cancelLasso() / P.teleport() before the throw is settled, calls onCancel
@@ -76,7 +79,21 @@ export const GAITS = {
   person: { walkBelow: 2.7, least: 0.45, most: 2 },   // (on foot the clips match the ground exactly: speed / STRIDE, kept within least..most)
 };
 export const SADDLE_FILES = { plain: 'basic', tooled: 'battle', silver: 'fancy' };
-export const HORSE_KINDS = { bay: 'horse', white: 'horseWhite' };
+// THE MOUNTS the stable has (their names and prices: HORSES and PRICES.horse in shop.js): which animal, a coat tint laid
+// over it (makeAnimal's tint), and its own paces (m/s; unset: MOVE.horse's). Each pace is kept to what its clips play
+// with the hooves planted (gaitFor: a clip is played at pace / stride, up to `most` times its own speed): the farm
+// horse's gallop is short-strided (3.49 m/s at speed 1), so it may play its gallop a little quicker (most) to reach 11;
+// the donkey is the slow joke mount. (The bay's and the white's 13 m/s gallop is past their planted top of about
+// 11 m/s, as it always was: see GAITS below.)
+export const HORSE_LOOKS = {
+  bay: { kind: 'horse' },
+  white: { kind: 'horseWhite' },
+  palomino: { kind: 'horseWhite', tint: '#f3d394' },
+  midnight: { kind: 'horse', tint: '#615753' },
+  chestnut: { kind: 'farmHorse', walk: 2, trot: 5.5, gallop: 11, most: { Gallop: 3.2 } },
+  donkey: { kind: 'donkey', walk: 1.6, trot: 4, gallop: 8 },
+};
+export const HORSE_KINDS = Object.fromEntries(Object.entries(HORSE_LOOKS).map(([id, h]) => [id, h.kind]));
 export const SAY = { saddle: 'You need a saddle - the stable sells them', whistle: 'You whistle for your horse', here: 'Your horse is right here',
   unreachable: "Can't get any closer to that one from here" };
 
@@ -167,7 +184,7 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
 
   // ── THE HORSE ───────────────────────────────────────────────────────────────────────────────────────────────
   // H: { a: the animal, x, z, heading, speed, yawRate, pitch, roll, mode: 'stand' | 'come' | 'ridden', ... }
-  let H = null, horseKind = null, saddleKind = null, pendingMount = false, pendingDismount = false;
+  let H = null, horseId = null, saddleKind = null, pendingMount = false, pendingDismount = false;
   let disposed = false;   // set by P.dispose: a horse or saddle still loading then is never added to the scene
   function homeSpot() {
     if (horseAt) return { x: horseAt.x, z: horseAt.z, rot: horseAt.rot || 0 };
@@ -179,16 +196,20 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
   // room for a horse standing here facing h: its middle, nose and tail clear
   const NOSE = 1.0;                // (the horse's chest, ahead of its middle: kept clear as it moves)
   const clearFor = (x, z, h) => !W.blocked(x, z) && !W.blocked(x + Math.sin(h) * 1.15, z + Math.cos(h) * 1.15) && !W.blocked(x - Math.sin(h) * 1.1, z - Math.cos(h) * 1.1);
-  async function makeHorse(kind) {
-    horseKind = kind;
+  async function makeHorse(id) {
+    horseId = id;
+    const look = HORSE_LOOKS[id] || HORSE_LOOKS.bay, kind = look.kind;
     try { await animals.need(kind); } catch (e) { console.warn('player: no horse', kind, e); return; }
-    if (disposed || horseKind !== kind) return;                        // (the ride ended, or another was asked for meanwhile)
-    const a = makeAnimal(animals, kind);
-    let at = H ? { x: H.x, z: H.z, rot: H.heading } : homeSpot();
+    if (disposed || horseId !== id) return;                            // (the ride ended, or another was asked for meanwhile)
+    const a = makeAnimal(animals, kind, look.tint ? { tint: look.tint } : {});
+    if (look.most) a.info = { ...a.info, gait: { ...(a.info.gait || {}), most: { ...((a.info.gait && a.info.gait.most) || {}), ...look.most } } };
+    // (another horse picked at the stable waits there, saddled; one swapped while riding is under the rider at once)
+    let at = H && P.onHorse ? { x: H.x, z: H.z, rot: H.heading } : homeSpot();
+    if (H && !P.onHorse) P.horsePickedAt = performance.now();   // (just bought or picked: E by the stable gets on it)
     if (H) { if (seat.horse === H.a) seat.horse = a; H.a.dispose(); }     // (a new horse while riding: the rider moves across)
     scene.add(a.root);
     H = { a, x: at.x, z: at.z, heading: at.rot, speed: 0, yawRate: 0, pitch: 0, roll: 0, mode: H ? H.mode : 'stand', idleT: 4 + Math.random() * 4, stuck: 0, best: Infinity, gait: 'Idle' };
-    P.horse = a; saddleKind = null; placeHorse(0);
+    P.horse = a; P.horseId = id; saddleKind = null; placeHorse(0);
     refreshSaddle();
   }
   async function refreshSaddle() {
@@ -202,10 +223,13 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
       if (!disposed && saddleKind === want && H) saddleOn(H.a, sc.clone());
     } catch (e) { console.warn('player: saddle', want, e); saddleKind = null; }
   }
+  Object.defineProperty(P, 'horseComing', { get: () => !!H && H.mode === 'come' });
   P.refreshOwned = () => {
-    const kind = HORSE_KINDS[owned().horse] || 'horse';
-    if (kind !== horseKind) makeHorse(kind); else refreshSaddle();
+    const id = HORSE_LOOKS[owned().horse] ? owned().horse : 'bay';
+    if (id !== horseId) makeHorse(id); else refreshSaddle();
   };
+  // the paces of the horse being ridden now (m/s): its own, else MOVE.horse's
+  const pace = (name) => { const l = HORSE_LOOKS[horseId]; return (l && l[name]) || MOVE.horse[name]; };
   P.refreshOwned();
 
   // the horse's place, slope and lean, from its x, z and heading
@@ -311,7 +335,7 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
     const d = Math.hypot(H.x - pos.x, H.z - pos.z);
     if (d > MOVE.mountNear) { pendingMount = true; if (H.mode !== 'come') P.callHorse(); return false; }
     if (job && !job.thrown) P.cancelLasso();
-    pendingMount = false; H.mode = 'ridden'; H.speed = 0; H.yawRate = 0;
+    pendingMount = false; H.mode = 'ridden'; H.speed = 0; H.yawRate = 0; P.horsePickedAt = 0;
     P.mode = 'mounting'; P.speed = 0;
     person.play(has('Ride') ? 'Ride' : 'Idle', { fade: 0.25, speed: 0.2 });
     seat.mount(H.a, { time: Math.min(0.75, 0.42 + d * 0.07), onDone: () => { P.mode = 'horse'; P.heading = H.heading; } });   // (a longer hop from further off)
@@ -326,7 +350,7 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
     if (!spot) spot = new THREE.Vector3(H.x - Math.sin(H.heading) * 2, 0, H.z - Math.cos(H.heading) * 2);
     spot.y = W.heightAt(spot.x, spot.z);
     P.mode = 'dismounting'; H.mode = 'stand'; H.speed = 0; H.yawRate = 0; H.idleT = 3;
-    seat.dismount(spot, { onDone: () => { P.mode = 'foot'; pos.copy(spot); P.heading = H.heading; P.speed = 0; person.root.rotation.set(0, P.heading, 0); person.play('Idle', { fade: 0.25 }); } });
+    seat.dismount(spot, { onDone: () => { P.mode = 'foot'; P.downAt = performance.now(); pos.copy(spot); P.heading = H.heading; P.speed = 0; person.root.rotation.set(0, P.heading, 0); person.play('Idle', { fade: 0.25 }); } });
     return true;
   };
   P.teleport = (x, z, rot = P.heading) => {
@@ -417,13 +441,13 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
     if (want.dir !== null) {
       const diff = wrap(want.dir - H.heading), max = lerpTable(M.turn, H.speed);
       wantRate = Math.max(-max, Math.min(max, diff * 3));
-      target = want.run ? M.gallop : want.mag < 0.55 ? M.walk : M.trot;
-      if (want.approach && !want.run) target = M.trot;
+      target = want.run ? pace('gallop') : want.mag < 0.55 ? pace('walk') : pace('trot');
+      if (want.approach && !want.run) target = pace('trot');
       target = Math.min(target, lerpTable(M.turnSpeed, Math.abs(diff)));   // (slowing for a sharp turn)
     }
     turnHorse(dt, wantRate, want.dir !== null ? 7 : 10);
     if (W.waterAt(H.x, H.z) > 0.3) target *= 0.65;
-    const up = target > M.trot ? M.gallopAccel : M.accel, v0 = H.speed;
+    const up = target > pace('trot') ? M.gallopAccel : M.accel, v0 = H.speed;
     H.speed = target > H.speed ? Math.min(target, H.speed + up * dt) : Math.max(target, H.speed - M.brake * dt);
     moveHorse(dt, want.dir, v0);
     P.speed = H.speed; P.heading = H.heading;
@@ -475,8 +499,8 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
         if (W.blocked(H.goal.x, H.goal.z)) { H.goal.x = pos.x - ux * 2.6; H.goal.z = pos.z - uz * 2.6; }
       }
       const dx = H.goal.x - H.x, dz = H.goal.z - H.z, gd = Math.hypot(dx, dz);
-      let target = gd > 30 ? C.gallop : gd > 10 ? C.trot : Math.min(C.walk, gd * 1.2);
-      if (gd <= 0.8 || d < 1.6) { target = 0; if (H.speed < 0.3) { H.mode = 'stand'; H.idleT = 6; H.goal = null; } }
+      let target = gd > 30 ? Math.min(C.gallop, pace('gallop')) : gd > 10 ? Math.min(C.trot, pace('trot')) : Math.min(C.walk, pace('walk'), gd * 1.2);
+      if (gd <= 0.8 || d < 1.6) { target = 0; if (H.speed < 0.3) { H.mode = 'stand'; H.idleT = 6; H.goal = null; P.horseCameAt = performance.now(); } }
       // steer: straight for the player if the way is clear, else the nearest clear heading either side
       const want = Math.atan2(dx, dz); let h = want;
       for (const t of [0, 0.4, -0.4, 0.8, -0.8, 1.2, -1.2, 1.7, -1.7, 2.3, -2.3]) {
@@ -507,7 +531,8 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
   // ── CLIPS ───────────────────────────────────────────────────────────────────────────────────────────────────
   function horseGait() {
     const v = H.speed, a = H.a;
-    if (v < 0.2) { a.play(H.mode === 'ridden' ? 'Idle' : (H.idle || 'Idle'), { fade: 0.35 }); H.gait = 'Idle'; H.clipSpeed = 0.2; return; }
+    // (an idle this animal has no clip for, the farm horse's grazing: it just stands)
+    if (v < 0.2) { const idle = H.mode === 'ridden' ? 'Idle' : (H.idle || 'Idle'); a.play(a.actions[idle] ? idle : 'Idle', { fade: 0.35 }); H.gait = 'Idle'; H.clipSpeed = 0.2; return; }
     H.idle = null;
     const [clip, speed] = gaitFor(a, v, H.gait);
     H.gait = clip || 'Walk'; H.clipSpeed = speed;
@@ -537,8 +562,9 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
       else person.play(g, { fade: 0.25, speed: s });
     } else if (P.mode === 'horse') {
       if (!has('Ride')) { person.play('Idle', { fade: 0.25 }); return; }
-      // the rider's clip at the horse's clip speed (Ride is as long as the horse's Walk, Ride_Gallop as its Gallop)
-      const ride = H.gait === 'Gallop' ? 'Ride_Gallop' : 'Ride', s = H.gait === 'Idle' ? 0.2 : (H.clipSpeed || 1);
+      // the rider's clip at the horse's clip speed (Ride is as long as the bay's Walk, Ride_Gallop as its Gallop); a
+      // horse whose loop is longer or shorter (the farm horse, the donkey) has the rider's clip sped to keep in step
+      const ride = H.gait === 'Gallop' ? 'Ride_Gallop' : 'Ride', s = H.gait === 'Idle' ? 0.2 : (H.clipSpeed || 1) * loopRatio(ride);
       if (lc) { person.play(part(ride, 'legs'), { fade: 0.2, speed: s }); setLayer(lc[0], { once: lc[1] }); }
       else { person.play(ride, { fade: 0.25, speed: s }); setLayer(null); }
     }
@@ -548,7 +574,14 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
     if (P.mode !== 'horse' || !H) return;
     const ha = H.a.actions[H.a.clip], ra = pa().cur;
     if (!ha || !ra || H.gait === 'Idle') return;
-    const d = ra.getClip().duration; if (Math.abs(d - ha.getClip().duration) < 0.02) ra.time = ha.time % d;
+    const d = ra.getClip().duration, hd = ha.getClip().duration;
+    if (Math.abs(d - hd) < 0.02) ra.time = ha.time % d;
+    else if (ra.getClip().name.startsWith('Ride')) ra.time = (ha.time % hd) / hd * d;   // (the same share of the stride)
+  }
+  // the rider's loop over the horse's (the same gait's), so the two go round together
+  function loopRatio(ride) {
+    const ra = pa().actions[ride], ha = H && H.a.actions[H.gait === 'Gallop' ? 'Gallop' : 'Walk'];
+    return ra && ha ? ra.getClip().duration / ha.getClip().duration : 1;
   }
   // from the saddle, the body turns at the waist toward what it is throwing at (up to about 75 degrees either way)
   const _q = new THREE.Quaternion(), _pq = new THREE.Quaternion(), _iq = new THREE.Quaternion(), Y = new THREE.Vector3(0, 1, 0);
@@ -566,7 +599,7 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
   P.state = () => ({
     mode: P.mode, speed: +P.speed.toFixed(2), heading: +P.heading.toFixed(3), x: +pos.x.toFixed(2), z: +pos.z.toFixed(2), clip: person.clip,
     layer: layerName, lasso: lasso.phase, job: job ? (job.thrown ? 'thrown' : 'approach') : null,
-    horse: H ? { mode: H.mode, x: +H.x.toFixed(2), z: +H.z.toFixed(2), speed: +H.speed.toFixed(2), gait: H.gait, clip: H.a.clip, clipSpeed: +(H.clipSpeed || 0).toFixed(2), saddle: saddleKind, dist: +Math.hypot(H.x - pos.x, H.z - pos.z).toFixed(2) } : null,
+    horse: H ? { id: horseId, kind: H.a.kind, mode: H.mode, x: +H.x.toFixed(2), z: +H.z.toFixed(2), speed: +H.speed.toFixed(2), gait: H.gait, clip: H.a.clip, clipSpeed: +(H.clipSpeed || 0).toFixed(2), saddle: saddleKind, dist: +Math.hypot(H.x - pos.x, H.z - pos.z).toFixed(2) } : null,
     canRide: P.canRide, cam: { yaw: +cam.yaw.toFixed(3), pitch: +cam.pitch.toFixed(3), zoom: +cam.zoom.toFixed(2) },
   });
   P.dispose = () => { disposed = true; lasso.dispose(); person.dispose(); if (H) H.a.dispose(); };
