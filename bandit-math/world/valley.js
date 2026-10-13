@@ -1440,12 +1440,16 @@ function lawnCentre() {
   const c = camera.position.clone().addScaledVector(fwd.lengthSq() > 1e-6 ? fwd.normalize() : fwd, LAWN.radius * COVER.ahead); c.y = 0;
   return c;
 }
+// (Bandit Math) places the game keeps clear of lawn tufts: tests (x, z) -> true for no tufts there (a pig pen's floor,
+// so a small piglet isn't lost in the grass); the game adds and removes them, the tufts follow on the lawn's next move
+const LAWN_SKIP = [];
+const lawnSkip = (p) => { for (const f of LAWN_SKIP) if (f(p.x, p.z)) return true; return false; };
 function withLawnPlanting(spots) {
   const t = plantNow();
-  const kept = spots.filter((p) => keepWild('plant', p.x, p.z)), R2 = LAWN.radius * LAWN.radius, at = lawnCentre();
+  const kept = spots.filter((p) => keepWild('plant', p.x, p.z) && !(LAWN_SKIP.length && lawnSkip(p))), R2 = LAWN.radius * LAWN.radius, at = lawnCentre();
   const painted = paintedPlants(paintedOnly(t, true), null, { at, radius: LAWN.radius, far: 1, sizeOf: () => 1 });
   const own = (p) => { const e = Math.sin(p.x * 39.346 + p.z * 11.135) * 24634.6345; return (1 - FOREST.spread * 0.5 * (e - Math.floor(e))) ** 2; };   // (each tuft's own edge, as the land's lawn)
-  for (const p of painted) if (p.sp === PLANT.LAWN_KIND && (p.x - at.x) ** 2 + (p.z - at.z) ** 2 < R2 * own(p) && paintable(p)) {
+  for (const p of painted) if (p.sp === PLANT.LAWN_KIND && (p.x - at.x) ** 2 + (p.z - at.z) ** 2 < R2 * own(p) && paintable(p) && !(LAWN_SKIP.length && lawnSkip(p))) {
     const h = Math.sin(p.x * 12.9898 + p.z * 78.233) * 43758.5453, r = h - Math.floor(h);
     kept.push({ x: p.x, z: p.z, turn: p.yaw, size: 0.7 + 0.7 * Math.min(1, p.scale / 1.25), yellow: r < 0.2 ? 0.35 : 0, light: (r - 0.5) * 0.25 });
   }
@@ -2238,7 +2242,7 @@ function bakeData() {
     hashes: { heights: fnvBytes([hpre]), cells: fnvBytes([wd, pond, gully, fan]), water: fnvBytes([waterRgba], 61), paths: fnvBytes([MAPS.path], 61) } };
 }
 return {
-  scene, sky, sun, hemi, ground, mat, lawn, U, MAPS, TOWN, PLANT, COVER, GROW, PLANT_KINDS, FAMILY, FOREST, LEAF, LAND, VALLEY, SHAPE, WATER, PAVE, DAY, DL, STONES, LAWN, CALM, FOLK, SHOW, BEAMS, RAIN, FENCE, FOG_EDGE: FOG_DIR.edge,
+  scene, sky, sun, hemi, ground, mat, lawn, LAWN_SKIP, U, MAPS, TOWN, PLANT, COVER, GROW, PLANT_KINDS, FAMILY, FOREST, LEAF, LAND, VALLEY, SHAPE, WATER, PAVE, DAY, DL, STONES, LAWN, CALM, FOLK, SHOW, BEAMS, RAIN, FENCE, FOG_EDGE: FOG_DIR.edge,
   TS, QUAL, TEXTURES, LAYERS, TREE_SPECIES, TOWN_DEFAULT, PLANTING_FIRST, weights, FLOW, SETTLE, WDEPTH, ACC, POND, OUTLETS, Hg, N, SIZE, TEX, SEG, groundTiles, SUN_NOW, FOG_DIR, LAMPU,
   BAKE, bakeData, update, render, settled, heightAt, groundAt, slopeAt, waterAt, coverGround, buildLand, buildHeights, shapeMesh, fastMesh, baseGrid, erodeSteps, smoothErosion, cutRavines, addCrags, findWater, townLand, paintWater,
   placeCover, placeTrees, placeStones, placeLawn, calmCover, buildPaving, applyPave, paveLater, composePathRoad, tex, setAverages, applyWeights, drawPaths, followShadow, followCover, townRebuildNow, beamsReady,

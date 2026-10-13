@@ -9,7 +9,7 @@
 .bms-card {
   position: relative; width: min(560px, 100%); max-height: calc(100vh - 32px); overflow-y: auto; overscroll-behavior: contain;
   padding: 20px 24px 22px; border-radius: 12px;
-  background: linear-gradient(180deg, rgba(58, 40, 24, 0.97), rgba(36, 24, 14, 0.98));
+  background: linear-gradient(180deg, rgb(58, 40, 24), rgb(36, 24, 14));   /* (solid: the HUD's bright mission banner behind it showed through a see-through card) */
   border: 1px solid rgba(226, 173, 76, 0.5); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 230, 180, 0.12);
   opacity: 0; transform: translateY(10px) scale(0.98); transition: opacity 0.2s, transform 0.2s;
 }
@@ -28,7 +28,8 @@
 .bms-purse { display: inline-flex; align-items: center; gap: 6px; font-size: 15px; color: var(--ink-2); margin-bottom: 6px; }
 .bms-purse svg { width: 20px; height: 20px; }
 .bms-purse b { font: 700 19px Bitter, Georgia, serif; color: var(--brass-hi); }
-.bms-note { scroll-margin-top: 30px; margin: 4px 0 10px; padding: 8px 12px; border-radius: 8px; background: rgba(169, 214, 127, 0.12); border: 1px solid rgba(169, 214, 127, 0.35);
+/* (scroll-margin: a note scrolled into view lands below the pinned close button, which reaches about 46 px into the card) */
+.bms-note { scroll-margin-top: 56px; margin: 4px 0 10px; padding: 8px 12px; border-radius: 8px; background: rgba(169, 214, 127, 0.12); border: 1px solid rgba(169, 214, 127, 0.35);
   color: var(--good); font-weight: 600; }
 .bms-h { font: 400 15px Smokum, Georgia, serif; letter-spacing: 0.08em; color: var(--mute); text-transform: uppercase; margin: 14px 0 6px;
   border-bottom: 1px solid rgba(226, 173, 76, 0.2); padding-bottom: 3px; }

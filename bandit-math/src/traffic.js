@@ -39,8 +39,12 @@ export const TRAFFIC = {
   gap: 3,                   // m it stops short of what is in its way (from the lead horses' noses)
   wait: 1.2,                // s the way must be clear before it moves off again
   oncoming: 70,             // m ahead a driver looks for a wagon coming the other way, where the road narrows to one lane
-  stop: { chance: 0.6, time: [15, 35], at: 14 },   // how often one pulls up in the square, for how long (s), and how far
-                            // past the square's middle it stops (m)
+  // how often one pulls up in the square, for how long (s), and how far past the square's middle it stops (m), by the way
+  // it is going (east = +1, west = -1). An eastbound wagon pulls up just short of the middle instead: further on it
+  // would stand in the street in front of the general store (about 20 m east of the middle), right in the picture of
+  // the store counter's camera (src/missions/store.js STORE.cam) for the whole stop. Measured with
+  // ~/pw/bandit-math/rigs/fixer-r2/stopview.cjs: a wagon is out of that picture west of about 6 m past the middle.
+  stop: { chance: 0.6, time: [15, 35], at: { 1: -8, '-1': 14 } },
 };
 const rnd = (a, b) => a + Math.random() * (b - a);
 
@@ -70,7 +74,7 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
     nextDir = -dir;
     const t = {
       kind: kind || WAGON_KINDS[sent % WAGON_KINDS.length], dir, u: dir > 0 ? 0 : L, speed: rnd(...TRAFFIC.speed), pace: 0,
-      stop: Math.random() < TRAFFIC.stop.chance ? square + dir * TRAFFIC.stop.at : null, until: 0, clearFor: 0,
+      stop: Math.random() < TRAFFIC.stop.chance ? square + dir * TRAFFIC.stop.at[dir] : null, until: 0, clearFor: 0,
       wg: null, why: '', number: sent++,
     };
     t.pace = t.speed;

@@ -178,7 +178,7 @@ export const SALE_FORMS = [
   { upTo: 99, forms: ['unit', 'leftover'] },
 ];
 export const SELL = {
-  every: 3,         // a customer buys goods at most once in this many orders (the first order of a sitting may be one)
+  every: 3,         // a customer buys goods once in this many orders (the first sale of a ride: any of the first this many)
 };
 const formsFor = (step) => (SALE_FORMS.find((s) => step <= s.upTo) || SALE_FORMS[SALE_FORMS.length - 1]).forms;
 const GOLD = ['gold', 'gold'];
@@ -198,6 +198,12 @@ const SALE_GOODS = {
   wool: { item: ['pound', 'pounds'], lot: ['pound', 'pounds'], per: 1, price: [2, 3], most: 20, shape: 'fleece', what: 'wool',
     bundle: { per: [2, 3], price: [3, 4, 5] } },
 };
+// a wool bundle's size and price: never as many gold as pounds (3 gold for every 3 pounds is just a gold a pound: the
+// gold would be the pounds again, with nothing to work out)
+function woolBundle(G, pick) {
+  const per = pick(G.bundle.per);
+  return { per, lot: ['bundle', 'bundles'], price: pick(G.bundle.price.filter((p) => p > per)) };
+}
 
 // a sale order for the store counter, from what the rider carries, or null when there's nothing to sell at this step.
 // carried: { eggs, wool, milk }; step: the store's ladder step; who: the townsperson buying ({ name, she })
@@ -257,7 +263,7 @@ function saleCore(g, form, c, { rand, pick, step, f }) {
 
   // lots and count: whole lots only (wool: by the pound in lots; in 2- or 3-pound bundles when counted)
   let per = G.per, lot = G.lot, price = pick(G.price);
-  if (g === 'wool' && form === 'count') { per = pick(G.bundle.per); lot = ['bundle', 'bundles']; price = pick(G.bundle.price); }
+  if (g === 'wool' && form === 'count') ({ per, lot, price } = woolBundle(G, pick));
   const kMax = per === 1 ? 9 : 6, k = Math.min(Math.floor(c / per), kMax);
   if (k < 2) return null;   // (one lot is just the price: nothing to work out)
   const nItems = k * per, ans = k * price;
@@ -300,7 +306,7 @@ function leftoverCore(g, c, { pick, f, G, half = false, tell = true }) {
   const They = f.she ? 'She' : 'He';
   let per = G.per, lot = G.lot, price = pick(G.price), wp = G.wrong;
   if (half) { per = G.half.per; lot = G.half.lot; price = pick(G.half.price); wp = G.half.wrong; }
-  if (g === 'wool') { per = pick(G.bundle.per); lot = ['bundle', 'bundles']; price = pick(G.bundle.price); wp = null; }
+  if (g === 'wool') { ({ per, lot, price } = woolBundle(G, pick)); wp = null; }
   const n = Math.min(c, G.most), k = Math.floor(n / per), left = n - k * per;
   if (k < 2) return null;
   const ans = k * price;

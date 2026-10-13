@@ -104,7 +104,7 @@ export async function loadAnimals(base, { kinds = null } = {}) {
       g.scene.traverse((o) => { if (o.isMesh && o.material) { o.material.vertexColors = true; o.material.roughness = 0.75; o.geometry = softShade(o.geometry); } });
       lib.kinds[kind] = { scene: g.scene, clips: g.animations, info: info[kind] };
       return lib.kinds[kind];
-    }));
+    }, (e) => { delete lib.loading[kind]; throw e; }));   // (a failed load is forgotten: the next need tries again)
   };
   await Promise.all((kinds || Object.keys(info)).map(lib.need));
   return lib;

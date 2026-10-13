@@ -37,6 +37,7 @@ export const SLIP = {
   countMs: 550,      // the purse counting up
   thanksMs: 1300,    // the right answer's line stays this long (with the coins) before the slip slides away
   leaveMs: 320,      // the slip sliding away
+  picLeast: 84,      // px: the shortest a wrong pick's picture is shrunk to, to fit the slip on a short screen
 };
 
 export function makeStoreSlip(root = document.body, { onPick = () => {}, onDone = () => {}, onDraw = () => {} } = {}) {
@@ -113,15 +114,28 @@ export function makeStoreSlip(root = document.body, { onPick = () => {}, onDone 
     help.hidden = false;
     drawBtn.hidden = true;
     help.classList.remove('is-pop'); void help.offsetWidth; help.classList.add('is-pop');
-    // on a short screen the reason and the picture land below the coins: bring them up into view
-    seeEnd(help);
+    // on a short screen the reason and the picture land below the coins: on a window (not a phone's sheet, where the
+    // picture keeps its size and the slip scrolls) the picture shrinks to fit (down to SLIP.picLeast px tall); what
+    // still doesn't fit is brought up into view
+    const svg = $('.bmo-svg svg');
+    if (svg) svg.style.maxHeight = '';
+    requestAnimationFrame(() => {
+      const over = slip.scrollHeight - slip.clientHeight;
+      if (svg && over > 0 && roomy()) svg.style.maxHeight = `${Math.max(SLIP.picLeast, svg.getBoundingClientRect().height - over - 2)}px`;
+      seeEnd(help);
+    });
   }
-  // scrolls the slip (only the slip) so the part just shown sits in view, its top first if it can't all fit
+  // (the slip's window layout, not a phone's: storeslip.css's two phone layouts start below these sizes)
+  const roomy = () => innerWidth > 760 && innerHeight > 480;
+  // scrolls the slip (only the slip) so the part just shown sits in view, its top first if it can't all fit. On a
+  // window with room for it (not a phone's sheet), never so far that the story's first line goes under the pinned
+  // header: the kid is still reading it (the rest of the picture is a scroll away)
   function seeEnd(part) {
     requestAnimationFrame(() => {
       const s = slip.getBoundingClientRect(), r = part.getBoundingClientRect();
       if (r.bottom <= s.bottom - 4 && r.top >= s.top) return;
-      const by = Math.min(r.bottom - s.bottom + 12, r.top - s.top - 8);
+      let by = Math.min(r.bottom - s.bottom + 12, r.top - s.top - 8);
+      if (roomy()) by = Math.min(by, $('.bmo-story').getBoundingClientRect().top - $('.bmo-top').getBoundingClientRect().bottom - 2);
       if (by > 0) slip.scrollBy({ top: by, behavior: 'smooth' });
     });
   }

@@ -184,3 +184,18 @@ test('a price-for-a-bigger-lot egg sale always has two dozen or more to work out
   }
   assert.ok(units > 50, 'egg sales by the bigger lot still happen: ' + units);
 });
+
+test('wool never sells at a gold a pound (the gold would just be the pounds again)', () => {
+  const rand = seeded(29);
+  let bundles = 0;
+  for (let step = 1; step <= 9; step++) {
+    for (let i = 0; i < 400; i++) {
+      const o = G.makeSale({ eggs: 0, wool: 2 + Math.floor(rand() * 39), milk: 0 }, { step, rand });
+      if (!o) continue;
+      assert.equal(o.sale.goods, 'wool');
+      assert.ok(o.sale.gold > o.sale.sold, `${o.key}: ${o.story} (${o.sale.gold} gold for ${o.sale.sold} pounds)`);
+      if (o.pic.lot && o.pic.lot[0] === 'bundle') { bundles++; assert.ok(o.pic.price > o.pic.per, `${o.key}: ${o.pic.price} gold for ${o.pic.per} pounds`); }
+    }
+  }
+  assert.ok(bundles > 100, 'bundle sales were dealt');
+});

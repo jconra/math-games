@@ -53,6 +53,7 @@ export const YARD = {
   room: { hen: 0.55, pig: 1.6, sheep: 1.3, cow: 2.4 },   // how far apart animals of a home keep
   young: 0.6,          // a just-given lamb or piglet's size (it grows to 1 over GROW seconds of play)
   saveEvery: 30,       // seconds between saves while goods are being laid up
+  retry: 20,           // seconds before an animal whose model failed to load is tried again
   shadowNear: 25,      // metres from the camera's target within which an animal casts a shadow
   mowFade: 4,          // metres round the homes over which the mown ground gives way to the meadow
 };
@@ -224,13 +225,14 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
 
   function penPieces(out, segs) {
     const R = YARD.pen;
-    // board fence: posts every 1.75 m and three boards on the outside
+    // board fence: posts every 1.75 m and three boards on the outside (narrow boards with a hand's gap between, so a
+    // young piglet shows through them)
     for (const line of fenceLines(R)) {
       const ps = postsAlong(line, 1.75);
       for (let i = 0; i < ps.length; i++) {
         const [x, y, z] = ps[i];
         out.push(piece(box(0.13, 1.05, 0.13), COL.post, { at: [x, y + 0.42, z], shade: 0.1 }));
-        if (i) for (const h of [0.18, 0.46, 0.74]) { const [px, py, pz] = ps[i - 1]; out.push(beam([px, py + h, pz], [x, y + h, z], 0.04, 0.2, h > 0.5 ? COL.old : COL.wood, { shade: 0.12 })); }
+        if (i) for (const h of [0.16, 0.45, 0.74]) { const [px, py, pz] = ps[i - 1]; out.push(beam([px, py + h, pz], [x, y + h, z], 0.04, 0.15, h > 0.5 ? COL.old : COL.wood, { shade: 0.12 })); }
       }
       segs.push([line[0][0], line[0][1], line[1][0], line[1][1]]);
     }
@@ -363,18 +365,25 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
       }
     const forget = () => { const c = V.COVER && V.COVER.cache; if (c && c.tiles) c.tiles.clear(); };
     forget();
-    return () => { for (const [k, v] of old) T.yard[k] = v; forget(); };
+    // the pen's floor: no lawn tufts at all (trodden bare by the pigs), so a young piglet isn't lost in the grass
+    const R = YARD.pen, bare = ks.includes('pen') && V.LAWN_SKIP ? (x, z) => { const p = L.local(x, z); return p.x > R.x0 && p.x < R.x1 && p.z > R.z0 && p.z < R.z1; } : null;
+    if (bare) V.LAWN_SKIP.push(bare);
+    return () => { for (const [k, v] of old) T.yard[k] = v; if (bare) { const i = V.LAWN_SKIP.indexOf(bare); if (i >= 0) V.LAWN_SKIP.splice(i, 1); } forget(); };
   }
 
   // ── THE ANIMALS ──────────────────────────────────────────────────────────────────────────────────────────────
   const herd = [];    // { rec (the rider's record), kind, home, a (animal or chicken), hen, tag, goal, t, state, size }
   // (the hens are clones of the town flock's chickens: one set of files loaded once for the whole visit, never per ride)
   let view = null;    // (the camera the names were last drawn for)
-  let chickensLib = null, chickensP = null;
-  const needChickens = () => chickensP || (chickensP = preloadChickens().then((lib) => { chickensLib = lib; return lib; }));
+  // (a load that fails is forgotten, so the next need tries again: a hiccup on the network doesn't leave the coop empty
+  // for the whole ride; a missing animal is looked for again every YARD.retry seconds)
+  let chickensLib = null, chickensP = null, retryT = 0, missing = false;
+  const needChickens = () => chickensP || (chickensP = preloadChickens().then((lib) => { chickensLib = lib; return lib; },
+    (e) => { chickensP = null; throw e; }));
   let making = 0;
   async function syncAnimals() {
     const recs = animalsOf(rider), my = ++making;
+    missing = false;
     // (the ones no longer owned go; an animal's record is matched by kind and name)
     for (let i = herd.length - 1; i >= 0; i--) if (!recs.includes(herd[i].rec)) { dropAnimal(herd[i]); herd.splice(i, 1); }
     for (const rec of recs) {
@@ -388,7 +397,7 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
           a = makeChicken(chickensLib, k, { shadows });
         } else a = makeAnimal(animals, MODEL_OF[rec.kind], { shadows });
         addAnimal(rec, a, hen);
-      } catch (e) { console.warn('homestead: an animal could not be made', e); }
+      } catch (e) { missing = true; retryT = 0; console.warn('homestead: an animal could not be made (tried again shortly)', e); }
     }
   }
   const hash = (s) => { let h = 7; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) | 0; return h; };
@@ -398,9 +407,16 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
     let p = L.random(home), rot = Math.random() * Math.PI * 2;
     // (a free spot: room round its middle, and for the big animals its whole body clear of the others')
     const me = { a, size: sizeOf(rec), base: 1 };
-    const crowded = (x, z) => herd.some((o) => o.home === home && (Math.hypot(o.a.root.position.x - x, o.a.root.position.z - z) < YARD.room[rec.kind] * 1.5
-      || (!hen && !o.hen && gap(body(me, x, z, rot), body(o, o.a.root.position.x, o.a.root.position.z, o.a.root.rotation.y)) < 0.3)));
-    for (let t = 0; t < 40 && (!clearFor(home, p.x, p.z) || crowded(p.x, p.z)); t++) { p = L.random(home); rot = Math.random() * Math.PI * 2; }
+    // (how roomy a spot is: the smallest gap to the others' bodies, and room round the middles; with no free spot in
+    // a full pen, the roomiest one tried, never just the last)
+    const roomAt = (x, z, yaw) => { let m = Infinity; for (const o of herd) { if (o.home !== home) continue;
+      m = Math.min(m, Math.hypot(o.a.root.position.x - x, o.a.root.position.z - z) - YARD.room[rec.kind] * 1.5);
+      if (!hen && !o.hen) m = Math.min(m, gap(body(me, x, z, yaw), body(o, o.a.root.position.x, o.a.root.position.z, o.a.root.rotation.y)) - 0.3); } return m; };
+    let best = clearFor(home, p.x, p.z) ? roomAt(p.x, p.z, rot) : -Infinity;
+    for (let t = 0; t < 60 && best < 0; t++) {
+      const q = L.random(home), yaw = Math.random() * Math.PI * 2; if (!clearFor(home, q.x, q.z)) continue;
+      const m = roomAt(q.x, q.z, yaw); if (m > best) { best = m; p = q; rot = yaw; }
+    }
     a.root.position.set(p.x, W.heightAt(p.x, p.z), p.z); a.root.rotation.y = rot;
     const size = sizeOf(rec), base = hen ? 0.9 + (Math.abs(hash(rec.name)) % 20) / 100 : 1;
     a.root.scale.setScalar(size * base);
@@ -433,14 +449,15 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
       }
     } else {
       const dx = h.goal.x - r.position.x, dz = h.goal.z - r.position.z, d = Math.hypot(dx, dz);
-      const want = Math.atan2(dx, dz), turn = wrap(want - r.rotation.y);
+      const want = Math.atan2(dx, dz), turn = wrap(want - r.rotation.y), yaw0 = r.rotation.y;
       r.rotation.y += turn * Math.min(1, (h.hen ? 6 : 2.5) * dt);
       const v = h.v * (Math.abs(turn) > 1.2 ? 0.35 : 1), stepD = Math.min(d, v * dt);
       const nx = r.position.x + Math.sin(r.rotation.y) * stepD, nz = r.position.z + Math.cos(r.rotation.y) * stepD;
       const nose = h.hen ? 0.15 : (a.length || 1) * 0.5 * h.size, hx = nx + Math.sin(r.rotation.y) * nose, hz = nz + Math.cos(r.rotation.y) * nose;
       const bump = herd.some((o) => o !== h && o.home === h.home && (h.hen || o.hen
         ? Math.hypot(o.a.root.position.x - nx, o.a.root.position.z - nz) < YARD.room[h.kind] * 0.7 * Math.max(h.size, 0.7)
-        : closer(h, nx, nz, r.rotation.y, o)));
+        : closer(h, nx, nz, r.rotation.y, o, yaw0)));
+      if (bump && !h.hen) r.rotation.y = yaw0;   // (nor does it swing its rump into a neighbour turning)
       if (d < 0.08 || bump || !clearFor(h.home, nx, nz) || !L.inside(h.home, hx, hz, h.hen ? 0.12 : 0.3)) { h.goal = null; h.state = 'stand'; h.t = h.hen ? rnd(1.5, 5) : rnd(4, 12); idle(h); }
       else {
         r.position.set(nx, W.heightAt(nx, nz), nz);
@@ -450,28 +467,27 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
       }
     }
   }
-  // a body seen from above as a rounded bar from nose to tail: the ends of its middle line, and how wide it is
+  // a body seen from above as a box from nose to tail (as the mesh is: a rounded bar let two animals' square corners
+  // sink into each other's flanks): its middle, the way it faces, half its length and half its width
   function body(h, x, z, yaw) {
-    const len = (h.a.length || 1) * h.size * h.base, w = len * 0.36, half = Math.max(0, len * 0.5 - w * 0.5);
-    const sx = Math.sin(yaw) * half, sz = Math.cos(yaw) * half;
-    return { ax: x - sx, az: z - sz, bx: x + sx, bz: z + sz, w };
+    const len = (h.a.length || 1) * h.size * h.base;
+    return { x, z, s: Math.sin(yaw), c: Math.cos(yaw), hl: len * 0.5, hw: len * 0.18 };
   }
-  // how far apart two bodies' edges are (below 0: they overlap)
+  // how far apart two bodies' edges are (below 0: they overlap, by that much): the widest gap along either box's sides
   function gap(p, q) {
-    const near = (px, pz, s) => {    // a point to a middle line
-      const dx = s.bx - s.ax, dz = s.bz - s.az, l2 = dx * dx + dz * dz;
-      const t = l2 ? Math.max(0, Math.min(1, ((px - s.ax) * dx + (pz - s.az) * dz) / l2)) : 0;
-      return Math.hypot(px - s.ax - dx * t, pz - s.az - dz * t);
-    };
-    const d = Math.min(near(p.ax, p.az, q), near(p.bx, p.bz, q), near(q.ax, q.az, p), near(q.bx, q.bz, p));
-    return d - (p.w + q.w) * 0.5 - 0.1;
+    let sep = -Infinity;
+    for (const [nx, nz] of [[p.s, p.c], [p.c, -p.s], [q.s, q.c], [q.c, -q.s]]) {
+      const reach = (b) => b.hl * Math.abs(b.s * nx + b.c * nz) + b.hw * Math.abs(b.c * nx - b.s * nz);
+      sep = Math.max(sep, Math.abs((q.x - p.x) * nx + (q.z - p.z) * nz) - reach(p) - reach(q));
+    }
+    return sep - 0.1;
   }
-  // a step that would bring two bodies into each other (a step that moves them apart is always fine, so two that
-  // somehow ended up touching can walk free)
-  function closer(h, nx, nz, yaw, o) {
+  // a step (or a turn: yaw0 is the way it faced before this frame's turn) that would bring two bodies into each other
+  // (one that moves them apart is always fine, so two that somehow ended up touching can walk free)
+  function closer(h, nx, nz, yaw, o, yaw0 = yaw) {
     const q = body(o, o.a.root.position.x, o.a.root.position.z, o.a.root.rotation.y);
     const after = gap(body(h, nx, nz, yaw), q);
-    return after < 0 && after < gap(body(h, h.a.root.position.x, h.a.root.position.z, h.a.root.rotation.y), q);
+    return after < 0 && after < gap(body(h, h.a.root.position.x, h.a.root.position.z, yaw0), q);
   }
   function idle(h) { if (h.hen) h.a.play('Idle', 0.25); else h.a.play('Idle', { fade: 0.35 }); }
   function roomy(h, x, z) {
@@ -491,6 +507,7 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
     const grew = lay(rider, dt);
     if (grew.length) { for (const n of grew) { if (hob) hob.event('animalGrew', { name: n }); } saveRider(rider); }
     if ((saveT += dt) > YARD.saveEvery) { saveT = 0; saveRider(rider); }
+    if (missing && (retryT += dt) > YARD.retry) { retryT = 0; syncAnimals(); }   // (one that failed to load: try again)
     if (!at) return;
     const far = Math.hypot(at.x - L.x, at.z - L.z);
     // a few times a second: goods picked up as you walk past, the waiting goods shown, the young ones' size
@@ -572,8 +589,10 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
     if (hob) hob.event('animalGift', { kind: a.kind, name: a.name });
     return a;
   };
-  // the store asks at every new customer: now and then (never twice within SELL.every orders) one buys your goods
-  let sinceSale = Infinity;
+  // the store asks at every new customer: now and then (never twice within SELL.every orders) one buys your goods.
+  // The first sale of a ride comes on the first, second or third customer (by chance), so a ride with goods in the
+  // saddlebags doesn't always open with a sale.
+  let sinceSale = Math.floor(Math.random() * SELL.every);
   H.saleOrder = ({ step = 1, who = null } = {}) => {
     if (++sinceSale < SELL.every) return null;
     const o = makeSale(homestead(rider).goods, { step, who });
