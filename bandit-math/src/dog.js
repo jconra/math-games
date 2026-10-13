@@ -14,6 +14,7 @@
 //   D.dog              the animal (from makeAnimal; null until loaded);  D.position: where it is
 //   D.state()          what it is doing, for a HUD or a test: { x, z, speed, gait, pose: 'stand'|'sit'|'lie', sit, ... }
 //   D.dispose()
+//   makeTag(name)      the name tag on its own (a sprite with .setText(name)), for the dogs waiting at the cabin
 import * as THREE from 'three';
 import { makeAnimal } from './actors/animals.js';
 
@@ -39,11 +40,12 @@ const damp = (a, b, k, dt) => b + (a - b) * Math.exp(-k * dt);
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
 // the name tag: a little rounded label drawn on a canvas, shown as a sprite (always facing the camera)
-function makeTag(name) {
+export function makeTag(name) {
   const cv = document.createElement('canvas'), tex = new THREE.CanvasTexture(cv);
   tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
   // (the same size on screen near or far: sizeAttenuation off makes its scale a share of the view's height, not metres)
-  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, toneMapped: false, fog: false, sizeAttenuation: false });
+  // (drawn over everything, as the sum cards are, so a grass blade or a fence post never cuts through the name)
+  const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false, toneMapped: false, fog: false, sizeAttenuation: false });
   const s = new THREE.Sprite(mat); s.name = 'dog-tag'; s.renderOrder = 10; s.center.set(0.5, 0);
   s.setText = (text) => {
     const px = 64, font = `600 ${px * 0.62}px Georgia, 'Times New Roman', serif`, ctx = cv.getContext('2d');

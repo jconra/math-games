@@ -72,7 +72,7 @@ export const HOB_FACE = `<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx=
 // ── BELT BUCKLES ─────────────────────────────────────────────────────────────────────────────────────────────────
 // A western trophy buckle for a job (save.js JOBS): an oval plate with a rope edge, a sunk middle with a little
 // engraving, the job's sign raised in the middle (a longhorn for cattle, a sprung padlock for lock boxes, a bell for
-// sheep, a pig, a star for bandits, a wagon wheel for deliveries). The metal says the tier; the better buckles carry
+// sheep, a flour sack for store orders, a pig, a star for bandits, a wagon wheel for deliveries). The metal says the tier; the better buckles carry
 // more: rivets on tin and copper, turquoise stones on silver, turquoise and tiny stars on gold. tier = null draws the
 // buckle still to win, as a faint outline. The title screen's rider card and the toast below both use it.
 const METAL = {
@@ -96,6 +96,10 @@ const SIGN = {
     <circle cx="32" cy="23.6" r="1.6" fill="${ink}"/><path d="M31.3 24.2H32.7L33.1 27.6H30.9Z" fill="${ink}"/>`,
   sheep: (f, ink) => `<path d="M32 12.8C31 12.8 30.4 13.5 30.4 14.4V15C26.8 16 25.7 19.6 25.5 24.2L24 27.4H40L38.5 24.2C38.3 19.6 37.2 16 33.6 15V14.4C33.6 13.5 33 12.8 32 12.8Z" fill="${f}" stroke="${ink}" stroke-width="0.8" stroke-linejoin="round"/>
     <path d="M26.8 23.4H37.2" stroke="${ink}" stroke-width="0.7" opacity="0.6"/><circle cx="32" cy="29.4" r="1.8" fill="${f}" stroke="${ink}" stroke-width="0.8"/>`,
+  // a tied flour sack, for the orders filled at the general store
+  orders: (f, ink) => `<path d="M27.6 17.6C25 20.6 24.4 26.6 26.4 29.4Q32 31 37.6 29.4C39.6 26.6 39 20.6 36.4 17.6Z" fill="${f}" stroke="${ink}" stroke-width="0.8" stroke-linejoin="round"/>
+    <path d="M27.8 17.6L26.2 13.4Q29 15 32 14.2Q35 15 37.8 13.4L36.2 17.6Z" fill="${f}" stroke="${ink}" stroke-width="0.8" stroke-linejoin="round"/>
+    <path d="M27.4 17.6H36.6" stroke="${ink}" stroke-width="1.6" stroke-linecap="round"/><path d="M28.6 22.6Q32 21.4 35.4 22.6M28.4 25.8Q32 24.8 35.6 25.8" fill="none" stroke="${ink}" stroke-width="0.7" opacity="0.6"/>`,
   pigs: (f, ink) => `<path d="M25.4 17.4L24.6 12.6 29 15.4ZM38.6 17.4L39.4 12.6 35 15.4Z" fill="${f}" stroke="${ink}" stroke-width="0.7" stroke-linejoin="round"/>
     <circle cx="32" cy="22.6" r="7.6" fill="${f}" stroke="${ink}" stroke-width="0.8"/><circle cx="29.3" cy="20.4" r="0.8" fill="${ink}"/><circle cx="34.7" cy="20.4" r="0.8" fill="${ink}"/>
     <ellipse cx="32" cy="25.4" rx="3.4" ry="2.3" fill="${f}" stroke="${ink}" stroke-width="0.8"/><circle cx="30.8" cy="25.4" r="0.6" fill="${ink}"/><circle cx="33.2" cy="25.4" r="0.6" fill="${ink}"/>`,
@@ -224,7 +228,8 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
     toastEl.textContent = text;
     toastEl.className = 'bmh-toast is-on' + (kind ? ' is-' + kind : '');
     clearTimeout(toastT);
-    toastT = setTimeout(() => { toastEl.classList.remove('is-on'); }, Math.max(2200, 900 + text.length * 45));
+    toastT = setTimeout(() => { toastEl.classList.remove('is-on'); placeBottom(); }, Math.max(2200, 900 + text.length * 45));
+    placeBottom();
   }
   let promptText = null;
   function prompt(text) {
@@ -232,6 +237,7 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
     promptText = text;
     promptEl.hidden = !text;
     if (text) promptEl.innerHTML = `<kbd>E</kbd><span>${esc(text)}</span>`;
+    placeBottom();
   }
   let hobT = 0;
   function caption(text, ms) {
@@ -241,8 +247,36 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
     hobEl.querySelector('.bmh-hob-text span').textContent = text;
     void hobEl.offsetWidth;
     hobEl.classList.add('is-on');
+    placeBottom();
     hobT = setTimeout(() => hobEl.classList.remove('is-on'), ms || Math.max(4500, 1800 + text.length * 55));
   }
+
+  // On a phone the bottom of the screen is crowded: the touch buttons, the door prompt, the number line box and Old Hob's
+  // line all want it. They stack instead of covering each other: the prompt sits just above the buttons (the CSS), the
+  // number line box above the prompt when one shows, and Hob's line above whatever is showing. When there is no room
+  // left for Hob above the number line (a phone on its side), his line waits, tucked away, until the box goes.
+  const narrow = matchMedia('(max-width: 760px), (max-height: 480px)');
+  const helpEl = $('.bmh-help'), touchEl = $('.bmh-touch');
+  const shown = (e) => !e.hidden && e.offsetParent !== null;
+  function placeBottom() {
+    if (!narrow.matches) { helpEl.style.bottom = ''; hobEl.style.bottom = ''; hobEl.classList.remove('is-tucked'); return; }
+    const vh = innerHeight;
+    // the door prompt and a note that is showing (they stack in one column) both push the number line box up
+    const low = [promptEl, toastEl].filter((e) => shown(e) && (e !== toastEl || e.classList.contains('is-on')));
+    helpEl.style.bottom = '';
+    if (low.length) helpEl.style.bottom = `${vh - Math.min(...low.map((e) => e.getBoundingClientRect().top)) + 8}px`;
+    let top = vh;
+    for (const e of [...helpEl.children, ...low, ...touchEl.children]) {
+      if (!shown(e)) continue;
+      const r = e.getBoundingClientRect();
+      if (r.width > 2 && r.height > 2) top = Math.min(top, r.top);
+    }
+    const bottom = vh - top + 8;
+    hobEl.style.bottom = top < vh ? `${bottom}px` : '';
+    hobEl.classList.toggle('is-tucked', vh - bottom - hobEl.offsetHeight < vh * 0.14);
+  }
+  new ResizeObserver(() => placeBottom()).observe(helpEl);
+  narrow.addEventListener('change', () => placeBottom());
 
   // ── THE RULE CARD AND THE LINE UNDER IT ───────────────────────────────────────────────────────────────────────
   function rule(o) {
@@ -358,10 +392,10 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
   }
 
   const H = {
-    el, ruleEl, hintEl, helpEl: $('.bmh-help'), jobEl: $('.bmh-job'),
+    el, ruleEl, hintEl, helpEl, jobEl: $('.bmh-job'),
     show(on) { el.classList.toggle('is-hidden', !on); if (!on) { prompt(null); caption(null); if (quiet()) { buckleQ.length = 0; if (buckleBusy && buckleWatch) endBuckle(); } } },
     purse, toast, prompt, caption, rule, hint, compass, buckle,
-    touch(on) { $('.bmh-touch').hidden = !on; },
+    touch(on) { if (touchEl.hidden === !on) return; touchEl.hidden = !on; placeBottom(); },
     perf(text) { perfEl.hidden = !text; if (text) perfEl.textContent = text; },
     dispose() { clearTimeout(toastT); clearTimeout(hobT); clearInterval(buckleWatch); for (const t of buckleTs) clearTimeout(t); el.remove(); buckleEl.remove(); },
   };

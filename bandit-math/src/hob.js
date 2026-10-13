@@ -4,13 +4,20 @@
 // Each teaching line is said once per rider (remembered in rider.flags.hob, saved with the rider), so a returning
 // rider isn't told the same things again.
 //
-//   const B = makeHob({ W, hud, rider, scene })
+//   const B = makeHob({ W, hud, rider, scene, I })   (I: the input, so a phone player is told to tap, not press F)
 //   B.event(name, data)   what just happened; Hob decides whether to say something:
 //                         'ride' (riding out; data.mode), 'arrive' (at the herd), 'catch', 'miss', 'waveDone' (data.gold),
 //                         'boxWon', 'saddle', 'dog', 'horse', 'title' (data.title), 'near' (data.place: at the saloon's
 //                         doors, nothing behind them yet, or the front of the stage, where the town band plays; said
 //                         again only after NEAR_AGAIN)
-//   B.say(text)           says a line now
+//                         The farm (missions/sheep.js): 'farmArrive' (at the sheep pasture), 'sheepHealed', 'sheepWrong' (a
+//                         wrong bottle), 'sheepFine' (medicine for a healthy sheep: a short line, the why is in the hint), 'flockDone'
+//                         The pig yard (missions/pigs.js): 'pigsArrive', 'pigPenned', 'pigWrong' (data.line: why not that pen,
+//                         said at once), 'pigsDone'
+//                         The store counter (missions/store.js): 'storeStart', 'storeMiss' (a wrong coin), 'storeEquation'
+//                         (a story told backwards, off to the lock box), 'storeDone' (data.filled)
+//                         'storeRight' (a right coin: a 'pick again' line still up or waiting is dropped)
+//   B.say(text)           says a line now (or after the line he is saying)
 //   B.trail(on)           the hoofprints to the pasture on or off (they fade in and out)
 //   B.update(dt, at)      each frame: at = the player's position (the trail fades away once they reach the herd)
 //   B.dispose()
@@ -32,6 +39,7 @@ const LINES = {
     "Fine day for a round-up. Pasture's east, past the creek."],
   shoot: "Shooting comes in a later update, partner. It's the lasso for now, same pay.",
   arrive: 'Each steer carries a number. Rope the ones the card up top asks for: point at one and click, or press F.',
+  arriveTouch: 'Each steer carries a number. Rope the ones the card up top asks for: tap one, or the Rope button.',
   catch: "Nice throw! It'll gallop itself over to the corral.",
   miss: 'No harm done. Read why it wasn\'t that one, then try another.',
   waveSaddle: "That's a day's wages! Enough for a saddle. The stable's back in town.",
@@ -41,6 +49,24 @@ const LINES = {
   dog: 'Every cowhand needs a dog. Yours will keep up, never you mind.',
   dogPug: "A pug! Them little legs won't keep up with a horse, but he'll find you. He always does.",
   horse: 'Fine-looking horse. Treat her well.',
+  // the farm north of town: the sick-sheep job
+  farmTip: "There's a farm north of town, behind your cabin. The settler's sheep are poorly, if you've a mind for doctoring.",
+  farmArrive: "Some of these sheep are sick, but they look like the rest. Only her sum gives her away: find the wrong ones. Point at a sheep, press F and pick the medicine that fixes it.",
+  farmArriveTouch: "Some of these sheep are sick, but they look like the rest. Only her sum gives her away: find the wrong ones. Tap a sheep, then tap the medicine that fixes it.",
+  sheepHealed: "That's the cure. She'll be right as rain.",
+  sheepWrong: 'Not that bottle. Read why, then try another. No harm done.',
+  sheepFine: ["She's fine, partner. Nothing wrong with that sum.", 'That one\'s healthy. Save the medicine.', 'Fit as a fiddle, that one. Check the others.'],
+  flockDone: ["Whole flock's on its feet. The settler thanks you kindly.", "That's the flock seen to. More sums for you to check.", 'Good doctoring.'],
+  // the farm's pig yard: the loose-pigs job
+  pigsArrive: "The pigs got loose! Each one's got a sum on it. Herd it into the pen whose sign shows the answer. They run from you, so come at them from behind.",
+  pigPenned: "In she goes. That's the right pen.",
+  pigsDone: ["That's every pig penned. The settler's obliged.", 'All penned. Here come some more sums.', 'Fine herding, partner.'],
+  // the general store's counter: townsfolk bring order slips (word problems)
+  storeStart: "Folks bring their orders on a slip. Read it through, picture what's going on, then pick the coin.",
+  storeBack: ['Counter\'s open. Here they come.', 'Busy day at the store. Slips at the ready.'],
+  storeMiss: 'Not that one. The picture on the slip shows how the story goes together. Pick again, no charge.',
+  storeEquation: 'This one\'s told backwards. Write the story as an equation, then crack it like a lock box.',
+  storeDone: ['Store\'s in good hands with you.', 'Fine work at the counter.', 'The storekeeper says thank you kindly.'],
   // walking up to the saloon's doors (nothing to open yet) and the front of the stage (the town band plays there)
   saloon: ["Saloon's shut till sundown, partner. Lock boxes are next door at the sheriff's.",
     "Doors stay shut till evening. The band out front keeps folks company meanwhile."],
@@ -48,22 +74,46 @@ const LINES = {
     "Stand a spell and listen, if you like. They play from sunup to sundown.",
     "Josie learned that harmonica on a cattle drive. The Professor plays it all by ear."],
 };
+// which job each line belongs to. A line still waiting its turn is dropped once the player is at another job, or once it
+// has waited longer than KEEP_JOB seconds: said late it would be about a moment that has passed.
+const JOB = { arrive: 'roundup', catch: 'roundup', miss: 'roundup', farmArrive: 'sheep', sheepHealed: 'sheep', sheepWrong: 'sheep',
+  sheepFine: 'sheep', flockDone: 'sheep', pigsArrive: 'pigs', pigPenned: 'pigs', pigWrong: 'pigs', pigsDone: 'pigs', storeStart: 'store',
+  storeMiss: 'store', storeEquation: 'store', storeDone: 'store' };
+const KEEP_JOB = 5;
 const NEAR_AGAIN = 180;  // seconds before Hob says something about the same place again (walking past again and again doesn't set him off each time)
 
-export function makeHob({ W, hud, rider, scene = W.scene }) {
+export function makeHob({ W, hud, rider, scene = W.scene, I = null }) {
+  const touch = () => !!(I && I.touch);
   const flags = () => { rider.flags = rider.flags && typeof rider.flags === 'object' ? rider.flags : {}; const f = rider.flags; f.hob = f.hob || {}; return f.hob; };
   const once = (id) => { const f = flags(); if (f[id]) return false; f[id] = 1; saveRider(rider); return true; };
   const queue = [];
+  let fineN = 0, doneN = 0;       // ('sheepFine', 'flockDone': which line said last)
+  let pigN = 0;                   // ('pigsDone': which line said last)
+  let storeN = 0;                 // ('storeBack', 'storeDone': which line said last)
   const nearAt = {}, nearN = {};   // ('near': when each place was last remarked on, and which line it said)
-  let speaking = 0;
+  let speaking = 0, now = 0;
+  let saying = null;               // the line on screen: { text, key } (key = the event it came from)
+  let key = null;                  // (the event being handled, so the line it says remembers where it came from)
   const B = {};
   B.say = (text, ms) => {
     if (!text) return;
-    if (speaking > 0) { if (!queue.includes(text)) queue.push(text); return; }
+    if (speaking > 0) { if (!queue.some((q) => q.text === text)) queue.push({ text, ms, key, at: now }); return; }
     const t = ms || Math.max(4500, 1800 + text.length * 55);
-    hud.caption(text, t); speaking = t / 1000 + 0.4;
+    hud.caption(text, t); speaking = t / 1000 + 0.4; saying = { text, key };
+  };
+  // a moment has passed: drop those lines, whether waiting or on screen
+  const drop = (...keys) => {
+    for (let i = queue.length - 1; i >= 0; i--) if (keys.includes(queue[i].key)) queue.splice(i, 1);
+    if (saying && speaking > 0 && keys.includes(saying.key)) { hud.caption(null); speaking = 0; saying = null; }
   };
   B.event = (name, data = {}) => {
+    const job = JOB[name];
+    // at another job now: what was waiting to be said about the last one no longer fits
+    if (job) for (let i = queue.length - 1; i >= 0; i--) if (JOB[queue[i].key] && JOB[queue[i].key] !== job) queue.splice(i, 1);
+    key = name;
+    try { said(name, data); } finally { key = null; }
+  };
+  function said(name, data) {
     switch (name) {
       case 'ride': {
         const first = !flags().firstDay;
@@ -72,12 +122,14 @@ export function makeHob({ W, hud, rider, scene = W.scene }) {
         if (data.mode === 'shoot') B.say(LINES.shoot);
         break;
       }
-      case 'arrive': if (once('arrive')) B.say(LINES.arrive, 7000); break;
-      case 'catch': if (once('catch')) B.say(LINES.catch); break;
+      case 'arrive': if (once('arrive')) B.say(touch() ? LINES.arriveTouch : LINES.arrive, 7000); break;
+      case 'catch': drop('miss'); if (once('catch')) B.say(LINES.catch); break;
       case 'miss': if (once('miss')) B.say(LINES.miss); break;
       case 'waveDone':
+        drop('miss');
         if (!(rider.owned && rider.owned.saddle) && rider.gold >= (data.saddle || 15) && once('waveSaddle')) B.say(LINES.waveSaddle, 6500);
         else if (once('wave')) B.say(LINES.wave);
+        else if (once('farmTip')) B.say(LINES.farmTip, 6500);
         break;
       case 'boxWon': if (once('boxWon')) B.say(LINES.boxWon, 6500); break;
       case 'saddle': if (once('saddle')) B.say(LINES.saddle, 6500); break;
@@ -88,6 +140,22 @@ export function makeHob({ W, hud, rider, scene = W.scene }) {
         break;
       }
       case 'horse': B.say(LINES.horse); break;
+      case 'farmArrive': if (once('farmArrive')) B.say(touch() ? LINES.farmArriveTouch : LINES.farmArrive, 9000); break;
+      case 'sheepHealed': drop('sheepWrong', 'sheepFine'); if (once('sheepHealed')) B.say(LINES.sheepHealed); break;
+      case 'sheepWrong': if (once('sheepWrong')) B.say(LINES.sheepWrong); break;
+      // (said at once, over anything he was saying: said later it would seem to be about some other sheep)
+      case 'sheepFine': queue.length = 0; speaking = 0; B.say(LINES.sheepFine[(fineN++) % LINES.sheepFine.length], 3500); break;
+      case 'flockDone': drop('sheepWrong', 'sheepFine', 'sheepHealed'); B.say(LINES.flockDone[(doneN++) % LINES.flockDone.length]); break;
+      case 'pigsArrive': if (once('pigsArrive')) B.say(LINES.pigsArrive, 9000); break;
+      case 'pigPenned': if (once('pigPenned')) B.say(LINES.pigPenned); break;
+      // (the why, said at once over anything else: the pig is trotting back out right now)
+      case 'pigWrong': queue.length = 0; speaking = 0; B.say(data.line, Math.max(5000, 1800 + String(data.line || '').length * 55)); break;
+      case 'pigsDone': drop('pigWrong', 'pigPenned'); B.say(LINES.pigsDone[(pigN++) % LINES.pigsDone.length]); break;
+      case 'storeStart': if (once('storeStart')) B.say(LINES.storeStart, 7000); else B.say(LINES.storeBack[(storeN++) % LINES.storeBack.length], 3000); break;
+      case 'storeRight': drop('storeMiss'); break;
+      case 'storeMiss': if (once('storeMiss')) B.say(LINES.storeMiss, 6500); break;
+      case 'storeEquation': if (once('storeEquation')) B.say(LINES.storeEquation, 6500); break;
+      case 'storeDone': drop('storeMiss', 'storeEquation', 'storeStart'); if (data.filled) B.say(LINES.storeDone[(storeN++) % LINES.storeDone.length], 3500); break;
       case 'near': {
         const L = LINES[data.place], t = performance.now() / 1000;
         if (!Array.isArray(L) || t - (nearAt[data.place] ?? -1e9) < NEAR_AGAIN) break;
@@ -97,7 +165,7 @@ export function makeHob({ W, hud, rider, scene = W.scene }) {
       }
       default: break;
     }
-  };
+  }
 
   // ── THE HOOFPRINTS ────────────────────────────────────────────────────────────────────────────────────────────
   const path = (W.places.trail || []).map(([x, z]) => new THREE.Vector2(x, z));
@@ -157,7 +225,13 @@ export function makeHob({ W, hud, rider, scene = W.scene }) {
   B.trail = (on) => { want = !!on; };
   B.update = (dt, at) => {
     time += dt;
-    if (speaking > 0 && (speaking -= dt) <= 0 && queue.length) B.say(queue.shift());
+    now += dt;
+    // (a job line that waited too long is dropped, not said late)
+    for (let i = queue.length - 1; i >= 0; i--) if (JOB[queue[i].key] && now - queue[i].at > KEEP_JOB) queue.splice(i, 1);
+    if (speaking > 0 && (speaking -= dt) <= 0) {
+      saying = null;
+      if (queue.length) { const q = queue.shift(); key = q.key; B.say(q.text, q.ms); key = null; }
+    }
     const pa = W.places.pasture;
     const near = at && pa ? Math.hypot(at.x - pa.x, at.z - pa.z) < HOB.hideNear : false;
     const target = want && !near ? 1 : 0;

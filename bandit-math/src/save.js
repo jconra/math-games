@@ -19,11 +19,12 @@
 //   topics:   { times: {...}, algebra: {...} }   each math module keeps its own progress object in here
 //   missions: { roundup, wagon, hunt, loot }    which missions are ticked
 //   owned:    { saddle: null|'plain'|'tooled'|'silver', horse: 'bay', dog: null|{ kind, name } }
+//             (+ cabin: ['rug', 'bed', ...] the furnishings bought for the cabin, once any are: src/cabin/slots.js)
 //   lockboxes: [{ tier }, ...]   unopened boxes in the saddlebags
 //   stats:    { answered, right, recent: [1,0,...],          every answer, recent = the last 50 (1 right, 0 wrong)
 //               byMode: { lasso: {answered, right, recent}, shoot: {...} },   the same, split by mode (for the badges)
 //               boxes, parBoxes,                             lock boxes solved, and solved in the fewest moves
-//               jobs: { cattle, boxes, sheep, pigs, bandits, deliveries } }   how much of each job was done (the
+//               jobs: { cattle, boxes, sheep, orders, pigs, bandits, deliveries } }   how much of each job was done (the
 //                                                            belt buckles come from these; see JOBS below)
 //   badges:   ['Top Hand', ...]   badges once earned stay earned
 //   made, last   when the rider was made and last rode out (ms since 1970; last is 0 until the first ride)
@@ -85,14 +86,22 @@ export const MISSIONS = [
 //     is the long goal (about a hundred waves).
 //   boxes: a lock box is a whole equation (half a minute to a few minutes), one comes with every wave and the sheriff
 //     always has more, so the steps are about half the cattle's: tin after five boxes, gold after 250.
-//   sheep, pigs, bandits, deliveries: guesses until those jobs are built; set them from a real sitting then.
+//   sheep: a flock has one or two sick sheep and takes a few minutes, so tin (5) comes after three or four flocks on a
+//     first visit to the farm; still a first guess until the job has been played for real.
+//   orders: an order at the general store counter is one word problem (about half a minute with the reading), so a
+//     sitting of ten to fifteen minutes fills fifteen to twenty-five: tin (10) in the first sitting, copper (40) after
+//     three or four, silver (150) and gold (400) the long goals. A first guess, like sheep's, until it's been played.
+//   pigs: a batch is five pigs and takes a few minutes of herding, so tin (10) comes after two batches on a first
+//     visit; still a first guess until the job has been played for real.
+//   bandits, deliveries: guesses until those jobs are built; set them from a real sitting then.
 export const BUCKLES = ['tin', 'copper', 'silver', 'gold'];
 export const BUCKLE_NAMES = { tin: 'Tin', copper: 'Copper', silver: 'Silver', gold: 'Gold' };
 export const JOBS = [
   { id: 'cattle', name: 'Cattle corralled', words: ['steer corralled', 'cattle corralled'], at: [10, 50, 200, 500], ready: true },
   { id: 'boxes', name: 'Lock boxes cracked', words: ['lock box cracked', 'lock boxes cracked'], at: [5, 25, 100, 250], ready: true },
-  { id: 'sheep', name: 'Sheep healed', words: ['sheep healed', 'sheep healed'], at: [5, 20, 75, 200], ready: false },
-  { id: 'pigs', name: 'Pigs penned', words: ['pig penned', 'pigs penned'], at: [10, 50, 200, 500], ready: false },
+  { id: 'sheep', name: 'Sheep healed', words: ['sheep healed', 'sheep healed'], at: [5, 20, 75, 200], ready: true },
+  { id: 'orders', name: 'Orders filled', words: ['order filled', 'orders filled'], at: [10, 40, 150, 400], ready: true },
+  { id: 'pigs', name: 'Pigs penned', words: ['pig penned', 'pigs penned'], at: [10, 50, 200, 500], ready: true },
   { id: 'bandits', name: 'Bandits brought in', words: ['bandit brought in', 'bandits brought in'], at: [3, 15, 50, 150], ready: false },
   { id: 'deliveries', name: 'Deliveries made', words: ['delivery made', 'deliveries made'], at: [3, 10, 30, 100], ready: false },
 ];
@@ -105,6 +114,7 @@ export const KEEPSAKES = {
   cattle: { name: 'Steer horns', where: 'over the cabin door', from: 'tin' },
   boxes: { name: 'A cracked safe door', where: 'leaning by the hearth', from: 'tin' },
   sheep: { name: 'A sheep bell', where: 'hanging by the door', from: 'tin' },
+  orders: { name: 'A brass counter bell', where: 'on the table', from: 'tin', standIn: true },
   pigs: { name: 'A carved wooden pig', where: 'on the mantel', from: 'tin', standIn: true },
   bandits: { name: 'Wanted posters', where: 'on the wall, one more for each buckle', from: 'tin' },
   deliveries: { name: 'A freight company sign', where: 'on the porch', from: 'tin', standIn: true },
@@ -249,6 +259,8 @@ export function fixRider(r) {
       saddle: owned.saddle == null ? null : String(owned.saddle),
       horse: typeof owned.horse === 'string' ? owned.horse : 'bay',
       dog: owned.dog && typeof owned.dog === 'object' ? owned.dog : null,
+      // the cabin's furnishings bought (slot ids, src/cabin/slots.js), only when the rider has any
+      ...(owned.cabin !== undefined ? { cabin: [...new Set((Array.isArray(owned.cabin) ? owned.cabin : []).filter(c => typeof c === 'string'))] } : {}),
     },
     lockboxes: cleanBoxes(r.lockboxes),
     stats: {

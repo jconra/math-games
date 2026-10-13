@@ -1,0 +1,153 @@
+/* The order slip at the general store counter (src/ui/storeslip.js): parchment, like the round-up's rule card.
+   z-index 30: over the HUD (12), under the counters' panels (32), the times chart (35) and the lock box (60). */
+.bmo {
+  --paper: #f6edd6; --paper-2: #ecdcb8; --ink: #2b2219; --ink-2: #5a4632; --mute: #8a7558; --brass: #b47f2c; --brass-hi: #e2ad4c;
+  --rust: #b5523a; --good: #4f7a2c;
+  position: fixed; inset: 0; z-index: 30; pointer-events: none; display: none;
+  font: 500 17px/1.45 Bitter, Georgia, serif; color: var(--ink);
+}
+.bmo.is-on { display: block; }
+.bmo button { font: inherit; color: inherit; }
+
+/* the slip: the right side of the screen, under the compass */
+.bmo-slip {
+  pointer-events: auto; position: absolute; right: 22px; top: 76px; width: min(500px, 46vw); max-height: calc(100vh - 100px);
+  overflow-y: auto; overscroll-behavior: contain; padding: 16px 20px 12px; border-radius: 6px;
+  background:
+    radial-gradient(120% 90% at 0% 0%, rgba(190, 150, 90, 0.18), transparent 55%),
+    radial-gradient(120% 90% at 100% 100%, rgba(160, 110, 60, 0.2), transparent 60%),
+    linear-gradient(175deg, var(--paper), var(--paper-2));
+  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5), inset 0 0 0 2px rgba(122, 85, 48, 0.35), inset 0 0 0 6px var(--paper), inset 0 0 0 7px rgba(122, 85, 48, 0.25);
+  opacity: 0; transform: translateX(40px) rotate(1.5deg);
+}
+.bmo-slip.is-in { animation: bmo-in 0.38s cubic-bezier(.2, .9, .3, 1.1) forwards; }
+.bmo-slip.is-out { animation: bmo-out 0.32s ease-in forwards; }
+@keyframes bmo-in { from { opacity: 0; transform: translateX(60px) rotate(3deg); } to { opacity: 1; transform: rotate(-0.6deg); } }
+@keyframes bmo-out { from { opacity: 1; transform: rotate(-0.6deg); } to { opacity: 0; transform: translateY(-30px) translateX(30px) rotate(4deg); } }
+
+.bmo-top { display: flex; align-items: center; gap: 10px; border-bottom: 1.5px dashed rgba(122, 85, 48, 0.45); padding-bottom: 8px; }
+.bmo-from { flex: 1; min-width: 0; line-height: 1.1; }
+.bmo-from small { display: block; font: 400 14px Smokum, Georgia, serif; letter-spacing: 0.08em; color: var(--mute); text-transform: uppercase; }
+.bmo-from b { display: block; font: 400 24px Rye, Georgia, serif; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bmo-purse { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; background: rgba(43, 34, 25, 0.88); }
+.bmo-purse svg { width: 20px; height: 20px; }
+.bmo-purse b { font: 700 19px Bitter, Georgia, serif; color: #f3c56b; font-variant-numeric: tabular-nums; min-width: 2ch; }
+.bmo-purse.is-bump { animation: bmo-bump 0.45s ease-out; }
+@keyframes bmo-bump { 40% { transform: scale(1.18); } }
+.bmo-done { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border-radius: 7px; cursor: pointer; font-size: 14px !important; font-weight: 700 !important;
+  background: rgba(43, 34, 25, 0.1); border: 1px solid rgba(122, 85, 48, 0.55); white-space: nowrap; }
+.bmo-done:hover { background: rgba(43, 34, 25, 0.18); }
+.bmo-done kbd { font: 600 11px ui-monospace, monospace; padding: 1px 4px; border-radius: 3px; border: 1px solid rgba(122, 85, 48, 0.5); color: var(--ink-2); }
+
+.bmo-story { margin: 12px 2px 4px; font-size: 21px; line-height: 1.45; color: var(--ink); }
+.bmo-ask { margin: 6px 2px 12px; font: 700 21px/1.4 Bitter, Georgia, serif; color: var(--ink); }
+
+/* the coins */
+.bmo-coins { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 10px; }
+.bmo-coins.is-eq { grid-template-columns: repeat(2, 1fr); }
+.bmo-coin {
+  position: relative; display: grid; place-items: center; aspect-ratio: 1; min-height: 96px; border-radius: 50%; cursor: pointer; padding: 6px;
+  background: radial-gradient(circle at 35% 30%, #fbe3a2, #e2ad4c 45%, #b47f2c 80%, #8a5e1e);
+  border: 2px solid #6b4614; box-shadow: 0 4px 0 #5a3c12, 0 6px 12px rgba(0, 0, 0, 0.3), inset 0 0 0 5px rgba(255, 240, 200, 0.25), inset 0 0 0 7px rgba(107, 70, 20, 0.35);
+  transition: transform 0.12s, filter 0.2s, opacity 0.25s;
+}
+.bmo-coin.is-eq { aspect-ratio: auto; min-height: 64px; border-radius: 14px; }
+.bmo-coin:hover:not([disabled]) { transform: translateY(-2px) scale(1.03); }
+.bmo-coin:focus-visible { outline: 3px solid var(--ink); outline-offset: 3px; }
+.bmo-face { display: flex; flex-direction: column; align-items: center; line-height: 1; color: #3b260c; text-shadow: 0 1px 0 rgba(255, 240, 200, 0.6); }
+.bmo-face b { font: 800 30px/1 Bitter, Georgia, serif; letter-spacing: -0.01em; }
+.bmo-coin.is-eq .bmo-face b { font-size: 24px; white-space: nowrap; }
+.bmo-face small { font: 700 13px/1.1 Bitter, Georgia, serif; margin-top: 4px; max-width: 9ch; text-align: center; }
+.bmo-coin kbd { position: absolute; left: 50%; bottom: -9px; transform: translateX(-50%); font: 700 11px ui-monospace, monospace; padding: 0 5px; border-radius: 4px;
+  background: var(--paper); border: 1px solid rgba(122, 85, 48, 0.6); color: var(--ink-2); }
+.bmo-coin.is-wrong { filter: grayscale(0.85) brightness(0.85); opacity: 0.55; cursor: default; }
+.bmo-coin.is-shake { animation: bmo-shake 0.45s; }
+@keyframes bmo-shake { 20% { transform: translateX(-7px) rotate(-6deg); } 40% { transform: translateX(6px) rotate(5deg); } 60% { transform: translateX(-4px); } 80% { transform: translateX(3px); } }
+.bmo-coin.is-right { animation: bmo-glow 0.9s ease-out forwards; }
+@keyframes bmo-glow { 0% { transform: scale(1); } 30% { transform: scale(1.12); box-shadow: 0 0 0 6px rgba(120, 180, 70, 0.6), 0 0 30px rgba(255, 220, 120, 0.9); } 100% { transform: scale(1.05); box-shadow: 0 0 0 4px rgba(120, 180, 70, 0.55), 0 0 18px rgba(255, 220, 120, 0.6); } }
+.bmo-coin.is-fade { opacity: 0.3; filter: grayscale(0.5); }
+
+/* the help: the reason for the slip and the picture */
+.bmo-help { margin-top: 14px; padding: 10px 12px; border-radius: 6px; background: rgba(255, 252, 240, 0.55); border: 1px solid rgba(122, 85, 48, 0.35); }
+.bmo-help.is-pop { animation: bmo-pop 0.3s ease-out; }
+@keyframes bmo-pop { from { opacity: 0; transform: translateY(6px); } }
+.bmo-why { margin: 0 0 6px; font: italic 600 17px/1.4 Bitter, Georgia, serif; color: var(--rust); }
+.bmo-pic { margin: 0; }
+.bmo-pic figcaption { font: 400 14px Smokum, Georgia, serif; letter-spacing: 0.08em; text-transform: uppercase; color: var(--mute); }
+.bmo-svg svg { display: block; width: 100%; height: auto; max-height: 190px; margin: 2px 0; }
+.bmo-picline { margin: 2px 0 0; font-size: 15px; color: var(--ink-2); }
+.bmo-draw { margin-top: 12px; padding: 7px 14px; border-radius: 8px; cursor: pointer; font-size: 15px !important; font-weight: 700 !important;
+  background: rgba(43, 34, 25, 0.08); border: 1.5px dashed rgba(122, 85, 48, 0.7); animation: bmo-pop 0.3s ease-out; }
+.bmo-draw:hover { background: rgba(43, 34, 25, 0.15); }
+
+.bmo-thanks { margin: 14px 0 0; padding: 8px 12px; border-radius: 6px; background: rgba(120, 170, 70, 0.18); border: 1px solid rgba(79, 122, 44, 0.45); animation: bmo-pop 0.25s ease-out; }
+.bmo-thanks b { display: block; font: 700 18px/1.35 Bitter, Georgia, serif; color: var(--good); }
+.bmo-tip { display: block; font-size: 15px; color: var(--ink-2); margin-top: 2px; }
+.bmo-news { display: block; font: 700 15px Bitter, Georgia, serif; color: var(--brass); margin-top: 3px; }
+
+.bmo-foot { display: flex; justify-content: space-between; gap: 10px; margin-top: 16px; padding-top: 6px; border-top: 1px dashed rgba(122, 85, 48, 0.3);
+  font-size: 13px; color: var(--mute); }
+
+/* nobody at the counter yet */
+.bmo-wait { position: absolute; right: 22px; top: 76px; padding: 8px 14px; border-radius: 8px; background: rgba(30, 20, 12, 0.8); color: #f4e8cf;
+  font: italic 500 16px Bitter, Georgia, serif; opacity: 0; transition: opacity 0.3s; }
+.bmo-wait.is-on { opacity: 1; }
+
+/* the coins flying to the purse */
+.bmo-fly { position: absolute; inset: 0; pointer-events: none; }
+.bmo-flycoin { position: fixed; width: 26px; height: 26px; margin: -13px 0 0 -13px; animation: bmo-fly 0.65s cubic-bezier(.5, 0, .7, .4) forwards; opacity: 0; }
+.bmo-flycoin svg { width: 100%; height: 100%; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.4)); }
+@keyframes bmo-fly { 0% { opacity: 1; transform: translate(0, 0) scale(1.1); } 50% { transform: translate(calc(var(--dx) * 0.45), calc(var(--dy) * 0.45 - 50px)) scale(1); opacity: 1; }
+  100% { opacity: 0.9; transform: translate(var(--dx), var(--dy)) scale(0.6); } }
+
+/* a phone (or a narrow window): the slip is a sheet along the bottom */
+@media (max-width: 760px) {
+  .bmo { font-size: 16px; }
+  .bmo-slip { left: 10px; right: 10px; top: auto; bottom: 10px; width: auto; max-height: 64vh; padding: 12px 14px 10px; }
+  .bmo-from b { font-size: 18px; }
+  .bmo-done { padding: 6px 8px; }
+  .bmo-story { font-size: 18px; margin-top: 8px; }
+  .bmo-ask { font-size: 18px; margin-bottom: 10px; }
+  .bmo-coins { grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .bmo-coins.is-eq { grid-template-columns: repeat(2, 1fr); }
+  .bmo-coin { min-height: 0; padding: 4px; }
+  .bmo-face b { font-size: 22px; }
+  .bmo-face small { font-size: 11px; }
+  .bmo-coin.is-eq .bmo-face b { font-size: 19px; }
+  .bmo-keys { display: none; }
+  .bmo-wait { right: 10px; left: 10px; top: auto; bottom: 14px; text-align: center; }
+  .bmo-done kbd { display: none; }
+}
+/* a phone on its side (short and wide): the slip runs nearly the full height on the right, the type and coins smaller,
+   so the story, the question and all the coins show at once */
+@media (max-height: 480px) and (min-width: 761px) {
+  .bmo { font-size: 15px; }
+  .bmo-slip { top: 50px; right: 10px; width: min(470px, 54vw); max-height: calc(100vh - 58px); padding: 8px 14px 8px; }
+  .bmo-top { padding-bottom: 4px; }
+  .bmo-from small { font-size: 12px; }
+  .bmo-from b { font-size: 18px; }
+  .bmo-done { padding: 4px 8px; }
+  .bmo-done kbd { display: none; }
+  .bmo-story { font-size: 16px; line-height: 1.35; margin: 6px 2px 2px; }
+  .bmo-ask { font-size: 16px; line-height: 1.3; margin: 4px 2px 8px; }
+  .bmo-coins { grid-template-columns: repeat(4, minmax(0, 76px)); justify-content: center; gap: 10px; }
+  .bmo-coins.is-eq { grid-template-columns: repeat(2, 1fr); }
+  .bmo-coin { min-height: 0; padding: 3px; }
+  .bmo-coin.is-eq { min-height: 48px; }
+  .bmo-face b { font-size: 21px; }
+  .bmo-face small { font-size: 10.5px; margin-top: 2px; }
+  .bmo-coin.is-eq .bmo-face b { font-size: 18px; }
+  .bmo-help { margin-top: 10px; padding: 6px 10px; }
+  .bmo-why { font-size: 15px; margin-bottom: 2px; }
+  .bmo-svg svg { max-height: 120px; }
+  .bmo-picline { font-size: 13.5px; }
+  .bmo-thanks { margin-top: 10px; padding: 6px 10px; }
+  .bmo-thanks b { font-size: 16px; }
+  .bmo-foot { display: none; }
+  .bmo-wait { top: 50px; right: 10px; }
+  /* (Old Hob's line, on the left, stops short of the slip instead of running under it) */
+  body:has(.bmo.is-on) .bmh-hob { max-width: calc(100vw - min(470px, 54vw) - 30px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bmo-slip.is-in, .bmo-slip.is-out, .bmo-coin.is-shake, .bmo-coin.is-right, .bmo-flycoin { animation-duration: 0.01s; }
+}

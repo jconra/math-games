@@ -65,7 +65,7 @@ function makeLabel() {
   const cv = document.createElement('canvas'); cv.width = CARD_W; cv.height = CARD_H;
   const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
   const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, depthWrite: false, toneMapped: false, fog: false });
-  const s = new THREE.Sprite(mat); s.center.set(0.5, 0); s.renderOrder = 20; s.name = 'steer-number';
+  const s = new THREE.Sprite(mat); s.center.set(0.5, 0); s.renderOrder = 1000; s.name = 'steer-number';   // (after the target ring's loop, 996-999, so the ring never crosses a card; the ringed card is drawn again above, 1001)
   s.userData = { cv, tex, text: null, wide: 1 };   // wide: the drawn card's width over the canvas's
   return s;
 }

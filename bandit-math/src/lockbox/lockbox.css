@@ -129,7 +129,7 @@
   padding: 5px 11px; border-radius: 9px; background: rgba(30, 20, 12, 0.55); border: 1px solid rgba(244, 232, 207, 0.16);
   opacity: 0; transition: opacity 0.3s;
 }
-.lbx-hurry .tch { display: none; }
+.lbx-hurry .lbx-tap { display: none; }
 .checking .lbx-hurry, .opened .lbx-hurry { opacity: 0.9; }
 /* the first few boxes of a sitting: the note sits right under the check instead (on a big enough screen) */
 .ck-hurry {
@@ -139,7 +139,7 @@
   animation: lbx-fade 0.4s ease-out 0.5s both;
 }
 .ck-hurry kbd { font-size: 13px; color: var(--ink); padding: 2px 6px; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(226, 173, 76, 0.55); }
-.ck-hurry .tch { display: none; }
+.ck-hurry .lbx-tap { display: none; }
 .hurry-near .ck-hurry { display: inline-flex; }
 .hurry-near.checking:not(.opened) .lbx-hurry { opacity: 0; }
 /* (a phone's mat is short: there it stays in the corner) */
@@ -147,10 +147,11 @@
   .hurry-near .ck-hurry { display: none; }
   .hurry-near.checking .lbx-hurry { opacity: 0.9; }
 }
+.opened.counted .lbx-hurry, .hurry-near.opened.counted .lbx-hurry { opacity: 0; }
 .checking .lbx-leave, .opened .lbx-leave { display: none; }
 @media (hover: none) and (pointer: coarse) {
-  .lbx-hurry .kb, .ck-hurry .kb { display: none; }
-  .lbx-hurry .tch, .ck-hurry .tch { display: inline; }
+  .lbx-hurry .lbx-kb, .ck-hurry .lbx-kb { display: none; }
+  .lbx-hurry .lbx-tap, .ck-hurry .lbx-tap { display: inline; }
 }
 /* the gold, counting up as the coins land */
 .lbx-purse {

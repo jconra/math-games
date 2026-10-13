@@ -22,6 +22,7 @@
 //   W.settled()        true once the trees and plants are laid and baked
 //   W.blocked(x, z)    true where a walker can't go: a building (its footprint and half a metre round it), a fence, a tree's
 //                      trunk, ground steeper than ~39 degrees, water deeper than 0.7 m, or off the land's edge
+//   W.addBlocker(fn)   fn(x, z) -> true also blocks there (the farm's fences and barn); returns a function that takes it off
 //   W.places     where things are (metres; rot: radians, the way the thing faces: a front facing +z is 0, as three's
 //                rotation.y, so the facing direction is (sin rot, cos rot)):
 //                  spawn:   { x, z, rot }                      the square, facing the sheriff's office
@@ -36,6 +37,9 @@
 //                           a fenced square w by d (r: a circle inside it); gate: the gap in the fence (rot: the way out; width: m),
 //                           in / out: a few metres inside and outside it, for walking an animal through
 //                  trail:   [[x, z], ...]                       the dirt trail from the square to the pasture
+//                  farm:    { x, z, rot, r, w, d }              open, nearly flat ground north of the town (behind the
+//                           cabin), where src/farm.js lays out the barn, the pens and the sheep pasture (its rot as
+//                           the buildings': the farm's front, and its lane in, face the town)
 //   W.tier       'potato' | 'normal' | 'gaming'
 //   W.camTarget  a THREE.Vector3 the game keeps on the player: the plants' and trees' circles and the sun's shadows
 //                follow it (the valley reads it as its "controls target")
@@ -97,6 +101,10 @@ export async function makeWorld({ renderer, camera, quality = null, look = 'gree
   Object.defineProperty(places, 'buildings', { value: Object.values(PLACE_OF).map((k) => places[k]).filter(Boolean), enumerable: false });   // (not enumerable: a loop over the places still meets each building once)
   const trail = (V.PLANTING_FIRST && V.PLANTING_FIRST.strokes || []).find((st) => st.id === 'trail');
   places.trail = trail ? trail.pts.map(([x, z]) => [x, z]) : [];
+  // the farm: a spot picked from a survey of the land (height within about 2.5 m over its 56 by 48 m, no water, no
+  // trees, clear of the trail, the corral and the pasture); the layout's `game.farm` can move it
+  places.farm = GAME.farm ? { ...xz(GAME.farm, true), r: +GAME.farm.r || 34, w: +GAME.farm.w || 56, d: +GAME.farm.d || 48 }
+    : { x: -6, z: -278, rot: 0, r: 34, w: 56, d: 48 };
 
   // ── WHERE A WALKER CAN'T GO ────────────────────────────────────────────────────────────────────────────
   const segNear = (x, z, ax, az, bx, bz, r) => { const vx = bx - ax, vz = bz - az, L2 = vx * vx + vz * vz || 1e-9, t = Math.max(0, Math.min(1, ((x - ax) * vx + (z - az) * vz) / L2)), dx = ax + vx * t - x, dz = az + vz * t - z; return dx * dx + dz * dz < r * r; };
@@ -107,8 +115,12 @@ export async function makeWorld({ renderer, camera, quality = null, look = 'gree
     for (const t of (f && f.fixed) || []) { const k = Math.floor(t.x / 8) + ',' + Math.floor(t.z / 8); let c = TREES.cells.get(k); if (!c) TREES.cells.set(k, c = []); c.push([t.x, t.z, TRUNK * (t.scale || 1)]); }
     return TREES.cells;
   }
+  // more things that block, added by the game after the world is made (the farm's fences and barn): W.addBlocker(fn),
+  // fn(x, z) -> true where a walker can't go
+  const EXTRA = [];
   function blocked(x, z) {
     if (!(Math.abs(x) < EDGE && Math.abs(z) < EDGE)) return true;
+    for (let i = 0; i < EXTRA.length; i++) if (EXTRA[i](x, z)) return true;
     { const cells = trunks(), ci = Math.floor(x / 8), cj = Math.floor(z / 8);
       for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) { const c = cells.get((ci + di) + ',' + (cj + dj)); if (c) for (const [tx, tz, r] of c) if ((x - tx) ** 2 + (z - tz) ** 2 < r * r) return true; } }
     for (const b of FOOT) { const dx = x - b.x, dz = z - b.z; if (Math.abs(b.c * dx - b.s * dz) < b.hw && Math.abs(b.s * dx + b.c * dz) < b.hd) return true; }
@@ -121,6 +133,7 @@ export async function makeWorld({ renderer, camera, quality = null, look = 'gree
 
   const W = {
     scene: V.scene, V, tier: QUAL.tier, quality: QUAL, look, camTarget, places, blocked,
+    addBlocker: (fn) => { EXTRA.push(fn); return () => { const i = EXTRA.indexOf(fn); if (i >= 0) EXTRA.splice(i, 1); }; },
     heightAt: V.heightAt, waterAt: V.waterAt, settled: V.settled,
     update: (dt) => V.update(Math.min(dt, 0.1)),                       // (a long pause, a tab come back, counts as a tenth of a second)
     render: () => V.render(),

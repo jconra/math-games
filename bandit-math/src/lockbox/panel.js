@@ -310,7 +310,7 @@ export function openLockbox(root = document.body, opts = {}) {
       <div class="lbx-rotate">Turn your phone sideways for bigger numbers</div>
       <div class="lbx-hob"><span class="lbx-hob-face">${HOB_SVG}</span><span class="lbx-hob-say" aria-live="polite"></span></div>
       <button class="lbx-leave" type="button" hidden>Skip this box</button>
-      <div class="lbx-hurry" aria-hidden="true"><span class="kb">Enter or click: hurry</span><span class="tch">Tap: hurry</span></div>`;
+      <div class="lbx-hurry" aria-hidden="true"><span class="lbx-kb">Enter or click: hurry</span><span class="lbx-tap">Tap: hurry</span></div>`;
     body.appendChild(stageEl);
 
     const tray = h('section', 'lbx-tray');
@@ -1075,7 +1075,7 @@ export function openLockbox(root = document.body, opts = {}) {
         <div class="ck-head"><span class="ck-key">${KEY_SVG}<b>${esc(val)}</b></span><span class="ck-title">${mathHTML('x =')} <b class="ck-n">${esc(val)}</b> in the start line</span></div>
         <div class="ck-line"><div class="ck-side" data-s="L"><span class="ck-txt">${mathHTML(sideText(problem.start.L))}</span></div>${hingeEl().outerHTML}<div class="ck-side" data-s="R"><span class="ck-txt">${mathHTML(sideText(problem.start.R))}</span></div></div>
         <div class="ck-nls"><div class="ck-nl" data-s="L"></div><div class="ck-nl" data-s="R"></div></div>
-        <div class="ck-hurry" aria-hidden="true"><span class="kb"><kbd>Enter</kbd> or click to hurry</span><span class="tch">Tap to hurry</span></div></div>`;
+        <div class="ck-hurry" aria-hidden="true"><span class="lbx-kb"><kbd>Enter</kbd> or click to hurry</span><span class="lbx-tap">Tap to hurry</span></div></div>`;
       // the first few boxes of a sitting say so right under the check, where the kid is looking (later, and on a
       // phone, only the quiet note in the corner)
       body.classList.toggle('hurry-near', session.solved < QUICK_AFTER);
@@ -1396,6 +1396,8 @@ export function openLockbox(root = document.body, opts = {}) {
             shown = i === n - 1 ? after : Math.min(after, before + Math.round(gain * (i + 1) / n));
             purseN.textContent = String(shown);
             purseEl.classList.remove('bump'); void purseEl.offsetWidth; purseEl.classList.add('bump');
+            // the last coin is in: nothing is left to hurry, so the note goes
+            if (i === n - 1) ctrl.body.classList.add('counted');
           };
         }
       };

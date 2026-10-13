@@ -13,7 +13,7 @@
 //                stepped together); update() then leaves the swing out for that frame
 //   C.yaw, C.pitch     where it looks from (yaw as heading: yaw = heading is straight behind); pitch: radians down
 //   C.zoom             the wheel's zoom (1: the usual distance)
-//   C.snap()           straight behind the player at once (after a jump to another place)
+//   C.snap()           behind the player at once (after a jump to another place; off to the side if a building is behind)
 //   C.enabled          false: the game moves the camera itself (a close-up); update() then only keeps W.camTarget
 import * as THREE from 'three';
 
@@ -57,6 +57,16 @@ export function makeCamera({ camera, W, input = null }) {
   let lastDragAt = -1e9, lastHeading = 0;
   const lastAim = new THREE.Vector3();                               // (where the focus was making for last frame)
   C.snap = () => { C.started = false; };
+  // how much of the way back the view would get at this yaw before a building's wall (1: all of it)
+  function clearFor(yaw) {
+    const d = C.dist * C.zoom, cp = Math.cos(C.pitch), sp = Math.sin(C.pitch);
+    const wx = focus.x - Math.sin(yaw) * cp * d, wy = focus.y + sp * d, wz = focus.z - Math.cos(yaw) * cp * d;
+    for (let i = 1; i <= 10; i++) {
+      const f = i / 10;
+      if (inBuilding(focus.x + (wx - focus.x) * f, focus.y + (wy - focus.y) * f, focus.z + (wz - focus.z) * f)) return f - 0.1;
+    }
+    return 1;
+  }
   let swung = false;
   // back round behind the player once they are moving and the view has been left alone for a moment
   function swingBack(dt, heading, onHorse, speed) {
@@ -86,8 +96,16 @@ export function makeCamera({ camera, W, input = null }) {
     }
     const baseDist = onHorse ? CAM.horseDist : CAM.dist, eye = onHorse ? CAM.horseEye : CAM.eye;
     if (!C.started) {                                                // (the first frame, or after snap(): straight behind)
-      C.started = true; C.yaw = heading; C.pitch = onHorse ? CAM.horsePitch : CAM.pitch; C.dist = baseDist; C.eye = eye;
+      C.started = true; C.yaw = heading; C.pitch = onHorse ? CAM.horsePitch : CAM.pitch; C.dist = baseDist; C.eye = eye; C.reach = 1;
       focus.set(at.x, at.y + eye, at.z); lastAim.copy(focus); lastHeading = heading;
+      // straight behind runs into a building (stepping out of a door, or away from the store's counter): stand off to
+      // the side instead, the nearest way round that is clear, so the view starts at its usual distance and not tight
+      // on the player's back. It swings round behind once they walk on.
+      if (clearFor(C.yaw) < 0.8) {
+        for (const off of [0.6, -0.6, 1.1, -1.1, 1.6, -1.6, 2.2, -2.2, Math.PI]) {
+          if (clearFor(heading + off) >= 0.8) { C.yaw = wrap(heading + off); lastDragAt = performance.now(); break; }
+        }
+      }
     }
     if (!swung) swingBack(dt, heading, onHorse, speed);
     swung = false;

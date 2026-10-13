@@ -1,0 +1,22 @@
+/* The cabin's own bits over the view: the fade in and out, a small dot in the middle of the view (what E picks is
+   what the dot is on), and the card that shows a piece's name and price. z-index under the HUD's 35 (the times chart's
+   button) and the lock box's 60; the fade sits over the HUD's notes (30) so the change of scene is clean. */
+.bmc-fade { position: fixed; inset: 0; z-index: 33; background: #120c07; opacity: 0; pointer-events: none;
+  transition: opacity 0.28s ease; display: grid; place-items: center; }
+.bmc-fade.is-on { opacity: 1; }
+.bmc-fade span { font: 600 20px Bitter, Georgia, serif; color: #e9cf96; letter-spacing: 0.04em; }
+.bmc-dot { position: fixed; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; z-index: 26;
+  background: rgba(255, 240, 210, 0.75); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35); pointer-events: none; }
+.bmc-dot[hidden], .bmc-card[hidden] { display: none; }
+.bmc-card { position: fixed; left: 50%; top: calc(50% + 34px); transform: translateX(-50%); z-index: 27; pointer-events: none;
+  width: max-content; max-width: min(380px, 88vw); padding: 10px 14px 11px; border-radius: 10px;
+  background: rgba(30, 20, 12, 0.86); border: 1px solid rgba(226, 173, 76, 0.55); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  color: #f3e6c8; font: 15px/1.35 Bitter, Georgia, serif; display: grid; grid-template-columns: 1fr auto; column-gap: 12px;
+  animation: bmc-in 0.18s ease-out; }
+.bmc-card b { font-size: 17px; color: #f6dc9c; }
+.bmc-card small { grid-column: 1 / -1; font-size: 14px; color: #dccbaa; margin-top: 2px; }
+.bmc-card em { grid-column: 1 / -1; font-style: normal; font-size: 14px; color: #e59a6a; margin-top: 4px; }
+.bmc-price { display: inline-flex; align-items: center; gap: 4px; font-weight: 700; color: #f3c56b; }
+.bmc-price svg { width: 17px; height: 17px; }
+@keyframes bmc-in { from { opacity: 0; transform: translate(-50%, 4px); } to { opacity: 1; transform: translateX(-50%); } }
+@media (max-width: 520px) { .bmc-card { top: calc(50% + 24px); font-size: 14px; } .bmc-card b { font-size: 15px; } .bmc-card small, .bmc-card em { font-size: 13px; } }

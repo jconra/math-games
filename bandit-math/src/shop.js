@@ -1,7 +1,8 @@
 // THE SHOPS: walk up to a building's door and press E (or tap the prompt) to open its counter as a simple panel over the
 // paused game. There is no inside in 3D: each counter is a panel.
 //   stable          saddles (any one lets you ride; the horse wears the one you pick) and the white horse
-//   general store   dogs: a Shiba, a Husky or the pug (the cheap joke pick), each named by the kid; more than one can be
+//   general store   "Mind the counter": the word-problem job (src/missions/store.js: townsfolk bring order slips); and
+//                   dogs: a Shiba, a Husky or the pug (the cheap joke pick), each named by the kid; more than one can be
 //                   bought, and the one picked follows you while the others wait at home; hats are coming
 //   sheriff's desk  open the lock boxes you won, or crack seized boxes for the sheriff's pay (as many as you like)
 //   cabin           your table: open the lock boxes you won
@@ -9,7 +10,8 @@
 // Every price and pay amount in the game is in the tables right below, so they can be tuned in one place after
 // watching the kids play.
 //
-//   const S = makeShops({ W, rider, onOpen, onClose, onBuy, onLockbox, say })
+//   const S = makeShops({ W, rider, onOpen, onClose, onBuy, onLockbox, onStoreJob, say })
+//     onStoreJob(): "Mind the counter" was picked at the general store (the panel has closed; main.js starts the job)
 //     onOpen() / onClose(): the game pauses and resumes; onBuy(what): something was bought (the player looks at
 //     rider.owned again, the HUD's purse is redrawn); onLockbox(box, { own, after }): open a lock box (main.js
 //     does it: it pays, records and calls after(result) when the box closes); say(text, kind): a short note
@@ -35,6 +37,11 @@ export const PAY = {
   negEvery: 2,        // ... or every this many steps up the positive & negative ladder
   wave: 5,            // a finished wave
   firstDay: 10,       // a rider's very first finished wave (the plain saddle is in reach at once)
+  // the general store's counter (word problems): an order takes about half a minute to read and work out, so a tip is
+  // worth a steer or two
+  order: 3,           // each order filled
+  orderEvery: 3,      // ... plus 1 for every this many steps up the word-problem ladder
+  orderFirst: 1,      // ... plus 1 when the first coin picked was the right one
 };
 // lock-box tiers by the rider's solving-for-x rung: from each rung up (tin 10, iron 20, brass 35, vault 60 at 3 stars)
 export const BOX_TIER = [['R0a', 'tin'], ['R5', 'iron'], ['R10', 'brass'], ['R14', 'vault']];
@@ -59,7 +66,7 @@ export const DOG_NAMES = ['Biscuit', 'Dusty', 'Scout', 'Pepper', 'Rusty', 'Bandi
 // which door is which, and what its prompt says
 export const COUNTERS = {
   stable: { place: 'stable', prompt: 'Talk to the stable keeper', title: 'The Stable', sub: 'Saddles and horses' },
-  store: { place: 'store', prompt: 'Visit the general store', title: 'General Store', sub: 'Dogs, and hats soon' },
+  store: { place: 'store', prompt: 'Visit the general store', title: 'General Store', sub: 'Orders, dogs, and hats soon' },
   sheriff: { place: 'sheriff', prompt: "Sheriff's desk", title: "Sheriff's Office", sub: 'Lock boxes and bounties' },
   cabin: { place: 'cabin', prompt: 'Sit at your cabin table', title: 'Your Cabin', sub: 'Open your lock boxes at the table' },
 };
@@ -121,7 +128,7 @@ export function makePanel({ title = '', sub = '', body = '', onClose = () => {},
 export const anyPanelOpen = () => openPanels > 0;
 
 // ── THE COUNTERS ─────────────────────────────────────────────────────────────────────────────────────────────────
-export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onBuy = () => {}, onLockbox = () => {}, say = () => {} }) {
+export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onBuy = () => {}, onLockbox = () => {}, onStoreJob = null, say = () => {} }) {
   let panel = null, openId = null;
   const S = { get isOpen() { return !!panel; }, get openId() { return openId; } };
 
@@ -193,7 +200,15 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
     },
     store(note) {
       const mine = dogsOwned(), dog = owned().dog;
-      let h = `<h3 class="bms-h">${mine.length > 1 ? 'Your dogs' : 'A dog to ride with'}</h3>`;
+      let h = '';
+      // the job at the counter: townsfolk bring order slips (word problems), each one filled tips gold
+      if (onStoreJob) {
+        const n = (rider.stats && rider.stats.jobs && rider.stats.jobs.orders) || 0;
+        h += `<h3 class="bms-h">Mind the counter</h3>` + row({ name: 'Fill the townsfolk\'s orders',
+          line: `Read each order slip and pick the right coin. Every order filled earns a tip.${n ? ` ${n} filled so far.` : ''}`,
+          right: `<button type="button" data-do="store-job" class="is-main">Mind the counter</button>` });
+      }
+      h += `<h3 class="bms-h">${mine.length > 1 ? 'Your dogs' : 'A dog to ride with'}</h3>`;
       for (const d of mine) {
         if (dog && d.kind === dog.kind) {
           h += `<div class="bms-row"><div class="bms-what"><b>${esc(d.name)} the ${esc(breedName(d.kind))}</b><small>Follows you everywhere. Want a new name?</small>
@@ -307,6 +322,9 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
     } else if (what === 'open-seized') {
       const back = openId; panel.close();
       onLockbox({ tier: boxTier(rider), from: 'sheriff' }, { own: false, after: (r) => S.open(back, resultNote(r)) });
+    } else if (what === 'store-job') {
+      panel.close();
+      if (onStoreJob) onStoreJob();
     }
   }
   function resultNote(r) {
