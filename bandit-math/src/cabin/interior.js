@@ -247,6 +247,19 @@ export async function makeInterior({ renderer, tier = 'normal', base = new URL('
       else if (spec.made === 'dogbeds') {
         const n = Math.max(1, Math.min(BED_SPOTS.length, opts.dogs || 1)), tints = ['#8e3b30', '#3f5a78', '#5f6e3a'];
         for (let i = 0; i < n; i++) { const b = made(makePiece('dogbed', { tint: tints[i] })), s = BED_SPOTS[i]; b.position.set(s.x, floorUnder(s.x, s.z, 1.6), s.z); b.rotation.y = s.rot; g.add(b); }
+      } else if (spec.made === 'rifles') {
+        // the rifle and the shotgun (models/guns, as the riders' own: guns.json says each one's scale and which way its
+        // barrel points), laid along the rack, muzzles opposite ways, each centred on it
+        const facts = await fetch(`${base}models/guns/guns.json`).then((r) => r.json()).then((j) => j.guns).catch(() => null);
+        const guns = facts && (await Promise.all(['Rifle', 'Shotgun'].map(async (name, i) => {
+          const f = facts[name], gun = (await loader.loadAsync(`${base}models/guns/${f.file}`)).scene;
+          gun.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
+          const turn = new THREE.Group(); turn.add(gun); gun.scale.setScalar(f.scale);
+          turn.rotation.y = Math.atan2(-f.forward[0], -f.forward[2]) + (i ? -1 : 1) * Math.PI / 2;   // (barrel along -x, then +x)
+          turn.updateMatrixWorld(true); const mid = new THREE.Box3().setFromObject(turn).getCenter(new THREE.Vector3());
+          const lay = new THREE.Group(); turn.position.sub(mid); lay.add(turn); return lay;
+        })).catch(() => null));
+        const m = made(makePiece('rifles', { guns })); stand(m, spec); g.add(m);
       } else if (spec.made) { const m = made(makePiece(spec.made)); stand(m, spec); g.add(m); }
       else { const m = await placeFile(spec, !!spec.wall); stand(m, spec); g.add(m); }
       if (spec.also) { const m = made(makePiece(spec.also, { scale: spec.fitH || 1 })); stand(m, spec); g.add(m); }

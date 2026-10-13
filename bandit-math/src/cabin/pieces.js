@@ -108,19 +108,35 @@ const MAKERS = {
     const pad = mesh(new THREE.CylinderGeometry(r, r * 0.97, 0.08, 28), std(0xb9a98c, { roughness: 1 }), 0, 0.045, 0);
     const grp = new THREE.Group(); grp.add(rim, pad); return grp;
   },
-  // a rack on the wall: a board, three pegs high and three low, two rifles across them (wood stocks, dark steel)
-  rifles() {
-    const grp = new THREE.Group(), wood = std(0x6b4527, { roughness: 0.7 }), dark = std(0x3b2414, { roughness: 0.6 }), steel = std(0x30302e, { roughness: 0.45, metalness: 0.7 });
-    grp.add(mesh(new THREE.BoxGeometry(1.3, 0.12, 0.03), dark, 0, 0.32, 0.015), mesh(new THREE.BoxGeometry(1.3, 0.12, 0.03), dark, 0, -0.18, 0.015));
-    for (const px of [-0.5, 0, 0.5]) for (const py of [0.3, -0.2]) grp.add(mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.1, 8).rotateX(Math.PI / 2), wood, px, py - 0.04, 0.07));
-    for (const [y, flip] of [[0.235, 1], [-0.265, -1]]) {
-      const r = new THREE.Group(); r.position.set(0, y, 0.085); r.scale.x = flip;
+  // a rack on the wall: a pine backboard with a shaped top, a darker frame, two pairs of pegs and two long guns across
+  // them. guns: the guns to lay on it (from models/guns, each lying along x, centred, real size: interior.js), the top
+  // one first; without them, two plain rifles made here stand in.
+  rifles({ guns = null } = {}) {
+    // (the board's grain: long streaks across, a few knots; the extruded face's UVs are its own metres, so it repeats per metre)
+    const grain = canvasTex(256, 256, (x, w, h) => {
+      x.fillStyle = '#8a5c34'; x.fillRect(0, 0, w, h);
+      for (let k = 0; k < 70; k++) { const y = (k * 37.3) % h, a = 0.08 + ((k * 13) % 7) / 50; x.strokeStyle = k % 3 ? `rgba(60,34,16,${a})` : `rgba(190,140,90,${a})`; x.lineWidth = 1 + (k % 4);
+        x.beginPath(); x.moveTo(0, y); for (let px = 0; px <= w; px += 16) x.lineTo(px, y + Math.sin(px / 40 + k) * 2.5); x.stroke(); }
+      for (const [kx, ky] of [[60, 80], [190, 170]]) { x.fillStyle = 'rgba(55,30,14,0.55)'; x.beginPath(); x.ellipse(kx, ky, 9, 5, 0, 0, Math.PI * 2); x.fill(); }
+    }, { repeat: [1, 1] });
+    const grp = new THREE.Group(), pine = std(0xffffff, { map: grain, roughness: 0.75 }), dark = std(0x4a2c18, { roughness: 0.65 }), wood = std(0x6b4527, { roughness: 0.7 }), steel = std(0x30302e, { roughness: 0.45, metalness: 0.7 });
+    const board = new THREE.Shape(); board.moveTo(-0.62, -0.36); board.lineTo(0.62, -0.36); board.lineTo(0.62, 0.3);
+    board.quadraticCurveTo(0.35, 0.3, 0.2, 0.38); board.quadraticCurveTo(0, 0.46, -0.2, 0.38); board.quadraticCurveTo(-0.35, 0.3, -0.62, 0.3); board.lineTo(-0.62, -0.36);
+    grp.add(mesh(new THREE.ExtrudeGeometry(board, { depth: 0.025, bevelEnabled: true, bevelSize: 0.008, bevelThickness: 0.006, bevelSegments: 1 }), pine, 0, 0, 0.004));
+    for (const y of [-0.35, 0.29]) grp.add(mesh(new THREE.BoxGeometry(1.28, 0.04, 0.04), dark, 0, y, 0.025));
+    for (const x of [-0.63, 0.63]) grp.add(mesh(new THREE.BoxGeometry(0.04, 0.68, 0.04), dark, x, -0.03, 0.025));
+    // the pegs: each a short dowel with a hook turned up at its end, so a gun rests in it
+    const peg = new THREE.CylinderGeometry(0.016, 0.018, 0.13, 10).rotateX(Math.PI / 2), lip = new THREE.CylinderGeometry(0.015, 0.016, 0.05, 10);
+    const rows = [0.12, -0.2];
+    for (const px of [-0.4, 0.4]) for (const py of rows) grp.add(mesh(peg, dark, px, py, 0.095), mesh(lip, dark, px, py + 0.02, 0.15));
+    if (guns) guns.forEach((g, i) => { g.position.set(0, rows[i] + 0.03, 0.105); grp.add(g); });   // (down in the hooks)
+    else for (const [y, flip] of [[rows[0] + 0.045, 1], [rows[1] + 0.045, -1]]) {
+      const r = new THREE.Group(); r.position.set(0, y, 0.105); r.scale.x = flip;
       const stock = new THREE.Shape(); stock.moveTo(-0.62, -0.06); stock.lineTo(-0.62, 0.035); stock.lineTo(-0.3, 0.02); stock.lineTo(-0.2, 0.02); stock.lineTo(-0.2, -0.02); stock.lineTo(-0.36, -0.03); stock.lineTo(-0.5, -0.07); stock.lineTo(-0.62, -0.06);
       r.add(mesh(new THREE.ExtrudeGeometry(stock, { depth: 0.035, bevelEnabled: false }).translate(0, 0, -0.0175), wood));
       r.add(mesh(new THREE.BoxGeometry(0.2, 0.05, 0.04), steel, -0.1, 0.005, 0));          // the action
       r.add(mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.68, 8).rotateZ(Math.PI / 2), steel, 0.34, 0.015, 0));   // the barrel
       r.add(mesh(new THREE.BoxGeometry(0.42, 0.035, 0.034), wood, 0.2, -0.012, 0));        // the fore-end
-      r.add(mesh(new THREE.TorusGeometry(0.035, 0.007, 6, 12, Math.PI), steel, -0.16, -0.035, 0).rotateZ(Math.PI));   // the lever loop
       grp.add(r);
     }
     return grp;
