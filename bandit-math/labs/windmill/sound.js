@@ -70,20 +70,13 @@ function tone(t0, dur, { freq = 200, freqTo = null, type = 'sine', gain = 0.4, a
   const g = c.createGain(); g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(gain, t0 + attack); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
   o.connect(g); g.connect(dest || A.sfx); o.start(t0); o.stop(t0 + dur + 0.05);
 }
-// a ringing that dies away (one mode of a struck board or a nail): fast attack, exponential decay
-function ring(t0, freq, gain, decay, dest) {
-  const c = A.ctx, o = c.createOscillator(); o.frequency.value = freq;
-  const g = c.createGain(); g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(gain, t0 + 0.0015); g.gain.setTargetAtTime(0, t0 + 0.0015, decay / 3);
-  o.connect(g); g.connect(dest || A.sfx); o.start(t0); o.stop(t0 + decay * 2 + 0.05);
-}
 const panned = (dest, pan) => { const p = A.ctx.createStereoPanner(); p.pan.value = pan; p.connect(dest); return p; };
 
-// a board struck somewhere: the free-bar modes (1 : 2.76 : 5.40) ring briefly, with a clack of contact noise on top
+// a board struck somewhere: no ringing tones (they sound like glass or a xylophone). A dry clack of filtered noise,
+// pitched by the board (longer boards lower), over a short dull thump of the wood's body
 function knock(t, f, gain, decay, { bright = 1, dest } = {}) {
-  ring(t, f, gain, decay, dest);
-  ring(t, f * 2.76 * rnd(0.98, 1.02), gain * 0.45, decay * 0.55, dest);
-  ring(t, f * 5.40 * rnd(0.97, 1.03), gain * 0.2 * bright, decay * 0.3, dest);
-  noise(t, 0.025, { freq: clamp(f * 6, 900, 4200), q: 1.3, gain: gain * 0.9 * bright, attack: 0.001, dest });
+  noise(t, Math.max(0.018, decay * 0.35), { freq: clamp(f * 3, 700, 2600), q: 1.1, gain: gain * 1.1 * bright, attack: 0.0008, dest });
+  noise(t, decay * 0.8, { type: 'lowpass', freq: clamp(f * 1.4, 250, 900), gain: gain * 0.9, attack: 0.001, dest });
 }
 
 // ── wood handling: a hollow board clack (longer boards sound lower) ──────────────────────────────────────────────
@@ -274,7 +267,7 @@ export function setWind(level, at) {
 export function crack(at) {
   if (!ok()) return; const t = now(at);
   noise(t, 0.09, { type: 'highpass', freq: 1800, gain: 0.55, attack: 0.002 });
-  tone(t, 0.07, { freq: 900, freqTo: 300, type: 'square', gain: 0.08 });
+  noise(t + 0.003, 0.05, { freq: 1100, q: 0.9, gain: 0.3, attack: 0.001 });                    // the splinter behind the snap
 }
 // a board hitting the ground (big = how hard)
 export function thud(big = 0.5, at) {
