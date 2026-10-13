@@ -157,21 +157,16 @@ export function saw(len = 8, cutAt = len / 2, at) {
 }
 
 // ── the hammer ───────────────────────────────────────────────────────────────────────────────────────────────────
-// one blow: the hammer face ticking on the nail head (a short inharmonic ping), and the board's knock under it; as the
-// nail sinks (sink 0..1) the knock climbs and dries. The last blow, nail seated: a dead, solid thunk.
+// one blow: no ringing tones at all (those read as a percussion instrument). A hammer on a nail is a CRACK: a short
+// broad burst of noise, like a clap, with a couple of tiny echoes a few milliseconds apart, over a dull thump of the board.
+// As the nail sinks (sink 0..1) the crack gets drier and tighter; the last blow, nail seated, is mostly a dead thump.
 function blow(t, sink, { last = false, gain = 1, dest, pitch = 1 } = {}) {
-  gain *= 0.7;
-  if (!last) {
-    noise(t, 0.012, { type: 'highpass', freq: 4500, gain: 0.5 * gain, attack: 0.0008, dest });
-    const p = pitch * rnd(0.98, 1.02);
-    ring(t, 3150 * p, 0.12 * gain, 0.045, dest); ring(t, 4720 * p, 0.08 * gain, 0.03, dest); ring(t, 7230 * p, 0.05 * gain, 0.018, dest);
-    knock(t + 0.001, (175 + 130 * sink) * pitch, 0.45 * gain, 0.17 - 0.09 * sink, { bright: 0.9 - 0.3 * sink, dest });
-  } else {
-    noise(t, 0.012, { freq: 2600, q: 1.2, gain: 0.25 * gain, attack: 0.0008, dest });            // the face meets wood
-    knock(t, 135 * pitch, 0.6 * gain, 0.06, { bright: 0.5, dest });
-    tone(t, 0.1, { freq: 95, freqTo: 55, gain: 0.45 * gain, attack: 0.002, dest });
-    noise(t, 0.07, { type: 'lowpass', freq: 420, gain: 0.5 * gain, attack: 0.002, dest });
-  }
+  gain *= 1.1;
+  const crack = (last ? 0.35 : 1) * gain, f = (1700 + 600 * sink) * pitch * rnd(0.92, 1.08);
+  noise(t, 0.03 - 0.01 * sink, { freq: f, q: 0.6, gain: 0.75 * crack, attack: 0.0006, dest });            // the crack
+  noise(t + 0.004, 0.018, { freq: f * 1.6, q: 0.8, gain: 0.35 * crack, attack: 0.0006, dest });           // its rattle
+  noise(t + rnd(0.009, 0.013), 0.014, { freq: f * 0.8, q: 0.7, gain: 0.2 * crack, attack: 0.0006, dest });
+  noise(t, last ? 0.09 : 0.05, { type: 'lowpass', freq: last ? 380 : 520 + 200 * sink, gain: (last ? 0.8 : 0.45) * gain, attack: 0.001, dest });   // the board's thump
 }
 function nailBlows(t, { gain = 1, dest, pitch = 1, gap = 1 } = {}) {
   const n = Math.random() < 0.5 ? 3 : 4;
