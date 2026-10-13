@@ -24,7 +24,7 @@
 export const SLOTS = [
   { id: 'rug', name: 'Rag rug', price: 15, made: 'rug', line: 'A braided rag rug for the middle of the floor. Warm on the feet.',
     at: [0.35, null, -1.2], rot: 0, size: [2.1, 1.4], box: null, looks: [[0.35, 0.82, -1.2]] },
-  { id: 'lanterns', name: 'Two lanterns', price: 30, made: 'lanterns', line: 'Two oil lanterns hung from the beams. The room glows at night.',
+  { id: 'lanterns', name: 'Two lanterns', price: 30, made: 'lanterns', file: 'lantern', line: 'Two oil lanterns hung from the beams. The room glows at night.',
     at: [0, 0, 0], rot: 0, box: null, looks: [[-0.69, 2.84, -1.75], [1.44, 2.84, -1.0]] },
   { id: 'picture', name: 'A painting', price: 40, file: 'picture', line: 'A painting of a farm by a river, in a gilt frame, over the bed.',
     at: [-1.35, 2.35, -2.9], wall: [0, 0, -1], rot: 0, fit: 0.75, box: null, looks: [[-1.35, 2.35, -2.75]] },

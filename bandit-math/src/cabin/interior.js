@@ -233,7 +233,17 @@ export async function makeInterior({ renderer, tier = 'normal', base = new URL('
     const spec = SLOT[id];
     const p = (async () => {
       const g = new THREE.Group(); g.name = 'slot-' + id;
-      if (spec.made === 'lanterns') g.add(made(makePiece('lanterns', { at: spec.looks })));
+      if (spec.made === 'lanterns') {
+        // the lantern model (cut from camp 3's tent) hung at each spot, 0.34 m tall, its glass round the flame; the light,
+        // the glow and the cord made in code. Its tin glows a little warm from the flame inside.
+        const tpl = spec.file ? await loadFile(spec.file) : null;
+        g.add(made(makePiece('lanterns', { at: spec.looks, body: !tpl })));
+        if (tpl) {
+          tpl.traverse((o) => { if (o.isMesh && !o.material.userData.warm) { o.material.userData.warm = true; o.material.emissive.set(0xff9a40); o.material.emissiveMap = o.material.map; o.material.emissiveIntensity = 0.35; } });
+          const b = tpl.userData.box, k = 0.34 / (b.max.y - b.min.y), mid = b.getCenter(new THREE.Vector3());
+          for (const [x, y, z] of spec.looks) { const c = tpl.clone(); c.scale.setScalar(k); c.position.set(x - mid.x * k, y - 0.156 - b.min.y * k, z - mid.z * k); g.add(c); }
+        }
+      }
       else if (spec.made === 'dogbeds') {
         const n = Math.max(1, Math.min(BED_SPOTS.length, opts.dogs || 1)), tints = ['#8e3b30', '#3f5a78', '#5f6e3a'];
         for (let i = 0; i < n; i++) { const b = made(makePiece('dogbed', { tint: tints[i] })), s = BED_SPOTS[i]; b.position.set(s.x, floorUnder(s.x, s.z, 1.6), s.z); b.rotation.y = s.rot; g.add(b); }

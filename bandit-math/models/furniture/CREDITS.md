@@ -14,7 +14,8 @@ re-encoded as WebP (colour 1024 or 512, the rest 512) by ~/pw/bandit-math/rigs/c
 
 bed.glb (the quilted log bed) and stove.glb (the iron pot-belly stove) are made for this game in Tripo by its author, and
 share this repository's licence; ~/pw/bandit-math/rigs/furniture_tripo.mjs re-encodes their textures as WebP and narrows
-the bed to a single.
+the bed to a single. lantern.glb is the oil lantern hanging on the tent of camp 3 (also the author's, made in Tripo),
+cut out with its own small picture by ~/pw/bandit-math/rigs/lantern_from_camp3.mjs.
 
-The rug, the lanterns, the dog beds, the rifle rack, the stove's fire and pipe, and the belt-buckle keepsakes are made in code
+The rug, the lanterns' light and cords, the dog beds, the rifle rack, the stove's fire and pipe, and the belt-buckle keepsakes are made in code
 (src/cabin/pieces.js).

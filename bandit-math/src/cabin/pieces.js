@@ -71,8 +71,9 @@ const MAKERS = {
     m.position.y = 0.012; m.receiveShadow = true;
     const grp = new THREE.Group(); grp.add(m); return grp;
   },
-  // two hanging oil lanterns with a warm light each (as the walk-in test's): where SLOT.lanterns.looks says
-  lanterns({ at = [[-0.69, 2.84, -1.75], [1.44, 2.84, -1.0]], power = 3.2 } = {}) {
+  // two hanging oil lanterns with a warm light each (as the walk-in test's): where SLOT.lanterns.looks says. With
+  // body false only the light, the flame's glow and the cord are made (the lantern itself is a model: interior.js)
+  lanterns({ at = [[-0.69, 2.84, -1.75], [1.44, 2.84, -1.0]], power = 3.2, body = true } = {}) {
     const grp = new THREE.Group(); grp.lights = []; const flames = [];
     const metal = std(0x2a2520, { roughness: 0.6, metalness: 0.6 });
     const glass = new THREE.MeshStandardMaterial({ color: 0x3a2814, emissive: 0xff8a30, emissiveIntensity: 0.25, roughness: 0.15, transparent: true, opacity: 0.45, depthWrite: false });
@@ -89,7 +90,8 @@ const MAKERS = {
       const cap = new THREE.Mesh(G.cap, metal); cap.position.y = 0.125;
       const base = new THREE.Mesh(G.base, metal); base.position.y = -0.095;
       const cord = new THREE.Mesh(G.cord, metal); cord.position.y = 0.26;
-      g.add(new THREE.Mesh(G.body, glass), cap, base, cord); grp.add(g);
+      if (body) g.add(new THREE.Mesh(G.body, glass), cap, base); else { glow.scale.set(0.55, 0.55, 1); cord.scale.y = 0.9; cord.position.y = 0.27; }
+      g.add(cord); grp.add(g);
     }
     // a gentle flicker (each lamp its own)
     grp.tick = (dt, t) => grp.lights.forEach((l, i) => { const f = 1 + 0.05 * Math.sin(t * 7.3 + i * 2) + 0.03 * Math.sin(t * 17.1 + i); l.intensity = power * f; flames[i].scale.y = 0.032 * f; });
