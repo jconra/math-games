@@ -27,8 +27,13 @@
 //                         'banditMiss', 'banditLoop' (a rider has galloped off round the bend), 'banditsDone' (data.n),
 //                         'wagonStop' ("Done for now")
 //                         The homestead (homestead.js): 'animal' (data.kind, data.name: one bought), 'animalGift' (data.kind,
-//                         data.name: a thank-you lamb or piglet), 'animalGrew' (data.name), 'goodsCollected' (picked up
+//                         data.name, data.unlocked: a thank-you lamb, piglet or calf; unlocked: the first of its kind, so
+//                         the store sells that kind now), 'animalGrew' (data.name), 'goodsCollected' (picked up
 //                         at the yard), 'goodsSold' (sold at the store counter)
+//                         Deer photographs (missions/deerjob.js): 'deerArrive' (near the herd), 'deerSpooked' (it bolted),
+//                         'deerSetup' (the viewfinder is up), 'deerFlip' (the ground glass turns the right way up),
+//                         'deerRight', 'deerWrong' (data.line: why not that deer, said at once), 'deerDone' (a herd's
+//                         pictures all taken), 'deerStop' ("Done for now"); 'ride' with data.deer: the job is on
 //   B.say(text)           says a line now (or after the line he is saying)
 //   B.trail(on)           the hoofprints to the pasture on or off (they fade in and out)
 //   B.update(dt, at)      each frame: at = the player's position (the trail fades away once they reach the herd)
@@ -96,7 +101,7 @@ const LINES = {
   // protect the wagon: the gang wears its numbers; the townsfolk riding along look just the same
   wagonArrive: "A gang's after this wagon! Every bandit wears a number from the gang's table. Townsfolk ride along too, wearing other numbers, and they look just like the gang. Rope the bandits: point at a rider and click, or press F.",
   wagonArriveTouch: "A gang's after this wagon! Every bandit wears a number from the gang's table. Townsfolk ride along too, wearing other numbers, and they look just like the gang. Rope the bandits: tap a rider, or the Rope button.",
-  banditCatch: "Got him! He'll keep, trussed up by the road. The deputies will bring him in.",
+  banditCatch: "Got him! Once he's caught his breath, he'll walk himself to the sheriff.",
   banditMiss: "That's an honest townsman. No harm done: check the count on the rail, then pick again.",
   banditLoop: "One's galloped on ahead. Don't fret: they always come back round the bend.",
   banditsDone: ['The wagon rolls on safe. More road ahead, and likely more trouble.', "That's the gang seen to. Keep alongside, partner.", 'Fine riding. Eyes on the road.'],
@@ -112,24 +117,38 @@ const LINES = {
   animal: {
     hen: "A hen of your own! She'll lay eggs in the coop behind your cabin. Walk past to pick them up, and sell them at the store counter.",
     pig: "A pig! Pigs don't lay a blessed thing, partner. They're just good company.",
-    sheep: "A sheep! Her wool grows slow and steady. Pick it up by the corral and sell it by the pound at the store.",
+    sheep: "A sheep! Her wool grows slow and steady. Pick it up by the corral: townsfolk at the store buy a share of it, a half or a third or so.",
     cow: "A milk cow! Pick up the milk by the corral. The store buys it by the gallon, and four quarts make a gallon.",
   },
   animalAgain: ['{name} settles right in.', '{name} looks happy out back.', 'Another mouth to feed. {name} will earn their keep.'],
   animalGift: {
     sheep: "The settler sent you a lamb by way of thanks. {name} is waiting in your corral behind the cabin.",
     pig: "The settler sent you a piglet by way of thanks. {name} is waiting in your pen behind the cabin.",
+    cow: "The rancher sent you a calf for all that roping. {name} is waiting in your corral behind the cabin.",
   },
+  // (said after the thank-you line when it is the first of its kind: the store sells that kind from now on)
+  animalUnlock: { pig: 'And the store will sell you pigs now.', sheep: 'And the store will sell you sheep now.', cow: 'And the store will sell you milk cows now.' },
   animalGrew: '{name} is all grown up now.',
   goodsCollected: "Those go in your saddlebags. The townsfolk at the general store will buy them: mind the counter.",
   goodsSold: "Sold! That's how a homestead pays its way: a little figuring at the counter.",
+  // deer photographs: Hob's old box camera, the herds out in the valley
+  deerTip: "A newspaper back East pays for pictures of wild deer. My old camera's packed up for you: follow the compass to a herd.",
+  deerArrive: "Easy now. Deer bolt if you crowd 'em. Set the camera up a good ways off: the card up top says when you're close enough.",
+  deerSpooked: ["Too close, partner! They'll settle again. Give 'em more room this time.", "Off they go! Let 'em settle, then set up from further back."],
+  deerSetup: "Each deer's wearing a number tag, and only one number makes that equation true. Work it out, then take that deer's picture.",
+  deerSetupTouch: "Each deer's wearing a number tag, and only one number makes that equation true. Work it out, then tap that deer.",
+  deerFlip: "Ground glass shows the world upside down! I fixed a little mirror in mine to turn it the right way up.",
+  deerRight: "Hold still... there! That's one for the album.",
+  deerDone: ["That's a fine roll of pictures. They've had enough: the compass knows where the next herd is.", 'Three for the album. Pack her up and find another herd.', 'The newspaper will be pleased with those.'],
+  deerStop: "The deer will keep. Set the camera up again whenever you like.",
 };
 // which job each line belongs to. A line still waiting its turn is dropped once the player is at another job, or once it
 // has waited longer than KEEP_JOB seconds: said late it would be about a moment that has passed.
 const JOB = { arrive: 'roundup', catch: 'roundup', miss: 'roundup', farmArrive: 'sheep', sheepHealed: 'sheep', sheepWrong: 'sheep',
   sheepFine: 'sheep', flockDone: 'sheep', pigsArrive: 'pigs', pigPenned: 'pigs', pigWrong: 'pigs', pigsDone: 'pigs', storeStart: 'store',
   storeMiss: 'store', storeEquation: 'store', storeDone: 'store', deliveryWork: 'delivery', deliveryMiss: 'delivery', deliveryRight: 'delivery',
-  deliveryRoundUp: 'delivery', animal: 'home', goodsCollected: 'home', goodsSold: 'store', wagonArrive: 'wagon', banditCatch: 'wagon', banditMiss: 'wagon', banditLoop: 'wagon', banditsDone: 'wagon' };
+  deliveryRoundUp: 'delivery', animal: 'home', goodsCollected: 'home', goodsSold: 'store', wagonArrive: 'wagon', banditCatch: 'wagon', banditMiss: 'wagon', banditLoop: 'wagon', banditsDone: 'wagon',
+  deerArrive: 'deer', deerSpooked: 'deer', deerSetup: 'deer', deerFlip: 'deer', deerRight: 'deer', deerWrong: 'deer', deerDone: 'deer' };
 const KEEP_JOB = 5;
 const NEAR_AGAIN = 180;  // seconds before Hob says something about the same place again (walking past again and again doesn't set him off each time)
 
@@ -145,6 +164,7 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
   let hatN = 0;                   // ('hat': which line said last)
   let wagonN = 0;                 // ('banditsDone': which line said last)
   let animalN = 0;                // ('animal' after the first of a kind: which line said last)
+  let deerN = 0, spookN = 0;      // ('deerDone', 'deerSpooked': which line said last)
   const nearAt = {}, nearN = {};   // ('near': when each place was last remarked on, and which line it said)
   let speaking = 0, now = 0;
   let saying = null;               // the line on screen: { text, key } (key = the event it came from)
@@ -177,6 +197,7 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
         else B.say(LINES.back[Math.floor(Math.random() * LINES.back.length)]);
         if (data.mode === 'shoot') B.say(LINES.shoot);
         if (data.wagon && once('wagonWaits')) B.say(LINES.wagonWaits, 6500);   // (the first ride with "Protect the wagon" ticked)
+        if (data.deer && once('deerTip')) B.say(LINES.deerTip, 6500);   // (the first ride with "Deer photographs" ticked)
         break;
       }
       case 'arrive': if (once('arrive')) B.say(touch() ? LINES.arriveTouch : LINES.arrive, 7000); break;
@@ -247,9 +268,9 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
       case 'animalGift': {
         // (said straight after the job's own line: ahead of any older tip still waiting its turn)
         const L = LINES.animalGift[data.kind]; if (!L) break;
-        const text = L.replace('{name}', data.name || 'The little one');
+        const text = L.replace('{name}', data.name || 'The little one') + (data.unlocked && LINES.animalUnlock[data.kind] ? ' ' + LINES.animalUnlock[data.kind] : '');
         if (speaking > 0) {
-          let i = 0; queue.forEach((q, k) => { if (q.key === 'flockDone' || q.key === 'pigsDone') i = k + 1; });
+          let i = 0; queue.forEach((q, k) => { if (q.key === 'flockDone' || q.key === 'pigsDone' || q.key === 'waveDone') i = k + 1; });
           queue.splice(i, 0, { text, ms: 6500, key, at: now });
         } else B.say(text, 6500);
         break;
@@ -257,6 +278,16 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
       case 'animalGrew': B.say(LINES.animalGrew.replace('{name}', data.name || 'Your little one'), 3500); break;
       case 'goodsCollected': if (once('goodsCollected')) B.say(LINES.goodsCollected, 6500); break;
       case 'goodsSold': if (once('goodsSold')) B.say(LINES.goodsSold, 4500); break;
+      // deer photographs (missions/deerjob.js)
+      case 'deerArrive': if (once('deerArrive')) B.say(LINES.deerArrive, 7000); break;
+      case 'deerSpooked': B.say(LINES.deerSpooked[(spookN++) % LINES.deerSpooked.length], 4500); break;
+      case 'deerSetup': if (once('deerSetup')) B.say(touch() ? LINES.deerSetupTouch : LINES.deerSetup, 7500); break;
+      case 'deerFlip': if (once('deerFlip')) B.say(LINES.deerFlip, 5000); break;
+      case 'deerRight': drop('deerWrong'); if (once('deerRight')) B.say(LINES.deerRight, 3500); break;
+      // (the why, said at once over anything else: it is about the deer just picked)
+      case 'deerWrong': queue.length = 0; speaking = 0; B.say(data.line, Math.max(5000, 1800 + String(data.line || '').length * 55)); break;
+      case 'deerDone': drop('deerWrong', 'deerRight'); B.say(LINES.deerDone[(deerN++) % LINES.deerDone.length], 4500); break;
+      case 'deerStop': drop('deerWrong'); if (once('deerStop')) B.say(LINES.deerStop, 3500); break;
       default: break;
     }
   }

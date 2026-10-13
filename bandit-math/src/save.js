@@ -29,6 +29,7 @@
 //               jobs: { cattle, boxes, sheep, orders, pigs, bandits, deliveries } }   how much of each job was done (the
 //                                                            belt buckles come from these; see JOBS below)
 //   badges:   ['Top Hand', ...]   badges once earned stay earned
+//   album:    [{ eq, x, img, at, rung }]   the deer photographs taken (src/ui/album.js), once there are any
 //   made, last   when the rider was made and last rode out (ms since 1970; last is 0 until the first ride)
 // }
 
@@ -75,7 +76,7 @@ export const TOPICS = [
 export const MISSIONS = [
   { id: 'roundup', name: 'Round-up', line: 'Rope the right numbers', ready: true },
   { id: 'wagon', name: 'Protect the wagon', line: 'Ride shotgun and keep the cargo safe', ready: true },
-  { id: 'hunt', name: 'Hunting', line: 'Track and tag deer in the woods', ready: false },
+  { id: 'hunt', name: 'Deer photographs', line: 'Snap the deer with the answer', ready: true },   // (the id stays 'hunt': older saves keep their tick)
   { id: 'loot', name: 'Loot the gang', line: 'Take back what the gang stole', ready: false },
 ];
 

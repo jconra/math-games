@@ -349,6 +349,10 @@ export class Forest {
     this.built = []; this.ready = false;
   }
 
+  // some plants left out for now (Bandit Math: the ones between a camera's lens and what it photographs):
+  // fn(x, z, plant, species) true hides that one; null shows them all again. Takes effect at the next assign
+  setHide(fn) { this.hide = fn || null; this.lastAt = null; }
+
   // far plants calmed toward one colour: { calmCol (THREE.Color), calmFrom, calmTo (m), calmAmt (0..1) };
   // kept for species not built yet
   setCalm(c) {
@@ -377,9 +381,12 @@ export class Forest {
       if (b.near) for (const k of b.near) { aFade[k] = 1; if (k < lo) lo = k; if (k > hi) hi = k; }   // last time's near plants: whole imposters again
       b.near = [];
       const live = Math.min(trees.length, aFade.length);                 // (the plants drawn: past them nothing need be sent)
+      const hide = this.hide;
+      if ((!meshes.length || D <= 0) && hide) for (let k = 0; k < trees.length; k++) { const p = trees[k].pos; if (hide(p.x, p.z, trees[k], sp)) { aFade[k] = 0; b.near.push(k); if (k < lo) lo = k; if (k > hi) hi = k; } }
       if (!meshes.length || D <= 0) { if (full && live) sendPart(iFade, 0, live - 1); else if (hi >= lo) sendPart(iFade, lo, hi); for (const m of meshes) m.count = 0; continue; }
       const cand = [];
       for (let k = 0; k < trees.length; k++) { const t = trees[k], p = t.pos, dx = p.x - cx, dy = p.y - cy, dz = p.z - cz, d2 = dx * dx + dy * dy + dz * dz;
+        if (hide && hide(p.x, p.z, t, sp)) { aFade[k] = 0; b.near.push(k); if (k < lo) lo = k; if (k > hi) hi = k; continue; }   // (hidden for now: see setHide)
         if (d2 >= reach2) continue;
         if (t.sw === undefined) t.sw = switchHash(p.x, p.z);              // (0..1, fixed by where the tree stands)
         const Dk = D * (1 + S * (t.sw - 0.5)), d = Math.sqrt(d2);

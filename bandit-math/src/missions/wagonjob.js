@@ -4,7 +4,8 @@
 // the number is the only tell). The kid rides alongside and ropes riders with the lasso and the green target ring;
 // choosing the rider IS the answer.
 //   right: the bandit is pulled from the saddle, lands face down and is hogtied; he drops sacks that show the fact
-//          (24 drops 4 sacks of 6: "24 = 4 × 6", written a few ways); his horse gallops off; gold
+//          (24 drops 4 sacks of 6: "24 = 4 × 6", written a few ways); his horse gallops off; gold. A little later he
+//          gets up, his hands still tied behind him, and walks off to the sheriff's office (OFF TO THE SHERIFF below)
 //   wrong: the rope tangles (about a second and a half), the townsman tips his hat ("Not me, partner"), a skip-count
 //          rail shows over the road ahead (6 · 12 · 18 · 24 · (27) · 30) with one plain line why, the times chart
 //          offers a peek, and that number comes back 2 to 4 answers later (the same rider shows it again, or a new one
@@ -37,6 +38,8 @@
 //   WJ.throwAt(rec)   rope this one (as a click on it does)
 //   WJ.start(), WJ.stop()   start now (dev) / "Done for now"
 //   WJ.newWave()      a new gang now (dev)
+//   WJ.tieAt(x, z)    (dev and rigs) a bandit pulled down and tied there now: he gets up and walks off to the sheriff's
+//   WJ.walkers        the roped bandits walking off ({ x, z }: the town's wagons stop for them)
 //   WJ.tookTrainer    true once a wave here has taken the shared trainer's current wave (the round-up deals afresh)
 //   WJ.state()        for rigs: { on, near, wave, riders, wagon, speed, music, sound }
 //   WJ.music          the action music (or null)
@@ -44,7 +47,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeAnimal, gaitFor } from '../actors/animals.js';
-import { loadRiderKit, makeRider, makeCard, drawCard, RIDERS } from '../actors/riders.js';
+import { loadRiderKit, makeRider, makeCard, drawCard, RIDERS, TIE, tiePose } from '../actors/riders.js';
 import { makeTimes } from '../math/times.js';
 import { makeTargetRing } from '../targetring.js';
 import { offerChart, closeChart, chartOptions, watchHesitation as watchChart, ensureChartCss } from '../ui/timeschart.js';
@@ -52,7 +55,7 @@ import { recordAnswer, earn, saveRider, countJob } from '../save.js';
 import { PAY, boxTier } from '../shop.js';
 import { TIER_NAME } from '../lockbox/index.js';
 import { makeActionMusic } from '../audio/actionmusic.js';
-import { loadWagons, makeWagon } from '../wagon.js';
+import { loadWagons, makeWagon, inWagons, wagonAt } from '../wagon.js';
 import { makeWagonSound } from '../audio/wagonsound.js';
 import { ROAD_POINTS, makeRoad, SLOTS, gangLine, sacksFor, nextSpeed } from './wagonplan.js';
 export { ROAD_POINTS, makeRoad, SLOTS, gangLine, sacksFor, nextSpeed };
@@ -75,7 +78,21 @@ export const WAGONJOB = {
   hintFor: 12,            // seconds the "Not me, partner" line and the skip-count rail stay up
   hold: 1.1,              // seconds the rope stays on a roped bandit (he is pulled down meanwhile)
   fact: 6,                // seconds the fact card ("24 = 4 × 6") shows over a hogtied bandit
-  leaveDown: 70,          // m behind the player a hogtied bandit is left for the deputies (put away)
+  leaveDown: 70,          // m behind the player a hogtied bandit's sacks are left (put away)
+  // a roped bandit, a while after he is tied, gets up (his hands still tied behind him) and walks to the sheriff's office
+  getUp: 8,               // seconds after he is down (the fact card gone, his horse gone)
+  rise: 1.2,              // seconds getting to his feet
+  walk: 1.15,             // m/s: a slow, sulky walk
+  townNear: 150,          // m from the sheriff's door: nearer than this he walks all the way there (round the buildings)
+  goneFar: 60,            // ... further, he heads for town and is gone once this far from the player and out of view
+  goneAnyway: 120,        // ... or this far, in view or not (fading out)
+  fadeIn: 2,              // m from the foot of the steps up and in at the door, fading out
+  lineUp: 2.2,            // m straight out in front of the door where his way there ends (he walks the rest square on)
+  stuckRetry: 4,          // s held up in town before he looks for a fresh way round
+  stuckGone: 12,          // s held up in town before he simply fades away
+  // his hands tied behind him: the way each upper arm points (down, back a little, out a little) and each forearm
+  // (across his back toward the other, a little back and up), in his own frame
+  hands: { arm: { back: 0.25, out: 0.12 }, fore: { across: 0.6, back: 0.75, up: 0 } },
   farOff: 180,            // m from the wagon past which the riders wait out of sight (not drawn, not moved)
   pay: { bandit: 3, wave: 6 },   // gold for each bandit roped (+ a little for harder tables, as the round-up), and a wave
 };
@@ -577,7 +594,7 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
     }
     const fact = makeCard(); scene.add(fact);
     drawCard(fact, rec.fact || String(rec.n), { font: '700 54px Bitter, Georgia, serif' });
-    downs.push({ rec, mesh, fact, factT: WAGONJOB.fact, at: p.clone(), wave: w });
+    downs.push({ rec, mesh, fact, factT: WAGONJOB.fact, at: p.clone(), wave: w, t: 0 });
   }
   const _up = new THREE.Vector3(0, 1, 0);
   // where a tied rider's head, hands and feet are on the ground
@@ -592,7 +609,211 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
     const i = downs.indexOf(d); if (i >= 0) downs.splice(i, 1);
     if (d.mesh) { d.mesh.removeFromParent(); d.mesh.dispose(); }
     d.fact.removeFromParent(); d.fact.material.dispose(); d.fact.userData.tex.dispose();
-    removeRec(d.rec);
+    if (d.rec) removeRec(d.rec);   // (one who got up and walked off is the walker's to put away)
+  }
+
+  // ── OFF TO THE SHERIFF ─────────────────────────────────────────────────────────────────────────────────────────
+  // A while after he is tied (the fact card gone, his horse gone), a roped bandit gets up, his hands still tied behind
+  // him, and walks off to the sheriff's office. Near town he walks all the way, by a way round the buildings, up to its
+  // door and in, and is gone. Out on the job's road (well east of town) he sets off toward town and is gone once well
+  // out of the player's sight, rather than walking the whole way. His sacks stay where he lay.
+  const walkers = WJ.walkers = [];
+  const _wq = new THREE.Quaternion(), _we = new THREE.Euler(), _wv = new THREE.Vector3(), _wv2 = new THREE.Vector3();
+  const LEGS = { thigh: TIE.thigh, knee: TIE.knee, arm: [0, 0, 0], fore: [0, 0, 0] };
+  let ropeGeo = null, ropeMat = null;
+  function getUp(d) {
+    const rec = d.rec; d.rec = null;
+    const i = recs.indexOf(rec); if (i >= 0) recs.splice(i, 1);
+    const r = rec.r, person = r.person;
+    if (!person.root.visible) { r.dispose(); return; }   // (out of sight with the gang: nobody sees him go)
+    // the rope from his wrists to his ankles comes off (a short one stays round his wrists)
+    person.root.traverse((o) => { if (o.isMesh && o.geometry && o.geometry.parameters && o.geometry.parameters.radiusTop === 0.018) o.visible = false; });
+    person.play('Idle', { fade: 0.3 });
+    if (!ropeGeo) { ropeGeo = new THREE.CylinderGeometry(0.022, 0.022, 1, 6, 1).translate(0, 0.5, 0); ropeMat = new THREE.MeshStandardMaterial({ color: 0xc9a46a, roughness: 0.9 }); }
+    const wrists = new THREE.Mesh(ropeGeo, ropeMat); wrists.castShadow = false; scene.add(wrists);
+    const p = person.root.position, door = W.places.sheriff ? W.places.sheriff.door : null;
+    const k = { r, person, wrists, phase: 'rise', t: 0, x: p.x, z: p.z, h: 0, path: null, at: 0, fade: 1, q0: person.root.quaternion.clone(), y0: p.y };
+    // the way: near town, round the buildings to the sheriff's door; else just toward town
+    if (door && Math.hypot(door.x - p.x, door.z - p.z) < WAGONJOB.townNear) k.path = toDoor(p.x, p.z);
+    const first = k.path && k.path.length > 1 ? k.path[1] : door || { x: p.x - 1, z: p.z };
+    k.h = Math.atan2(first.x - p.x, first.z - p.z);
+    walkers.push(k);
+  }
+  // the way to the sheriff's door: round the buildings to a spot a couple of metres straight out in front of it, then
+  // square on to the foot of the steps (so he goes in at the door, not into the porch beside it)
+  function toDoor(x, z) {
+    const o = W.places.sheriff, door = o.door, dx = door.x - o.x, dz = door.z - o.z, n = Math.hypot(dx, dz) || 1;
+    const fx = door.x + (dx / n) * WAGONJOB.lineUp, fz = door.z + (dz / n) * WAGONJOB.lineUp;
+    const path = W.blocked(fx, fz) ? null : wayRound(x, z, fx, fz);
+    if (!path) return wayRound(x, z, door.x, door.z);
+    path.push({ x: door.x, z: door.z });
+    return path;
+  }
+  // a way on foot from (ax, az) to (bx, bz) that keeps out of the buildings, fences and trees (W.blocked): the
+  // shortest on a 1 m grid round them, then straightened wherever a straight line is clear. null if there is none
+  function wayRound(ax, az, bx, bz) {
+    const pad = 30, x0 = Math.min(ax, bx) - pad, z0 = Math.min(az, bz) - pad, nx = Math.ceil(Math.abs(ax - bx) + 2 * pad), nz = Math.ceil(Math.abs(az - bz) + 2 * pad);
+    if (nx * nz > 250000) return null;
+    const idx = (i, j) => j * nx + i, cx = (i) => x0 + i + 0.5, cz = (j) => z0 + j + 0.5;
+    const free = new Uint8Array(nx * nz);
+    for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) free[idx(i, j)] = W.blocked(cx(i), cz(j)) || inWagons(cx(i), cz(j), 0.4) ? 0 : 1;
+    const si = Math.floor(ax - x0), sj = Math.floor(az - z0), gi = Math.floor(bx - x0), gj = Math.floor(bz - z0);
+    free[idx(si, sj)] = 1; free[idx(gi, gj)] = 1;
+    const g = new Float32Array(nx * nz).fill(Infinity), from = new Int32Array(nx * nz).fill(-1), shut = new Uint8Array(nx * nz);
+    const open = [[0, idx(si, sj)]]; g[idx(si, sj)] = 0;
+    const hz = (n) => Math.hypot((n % nx) - gi, Math.floor(n / nx) - gj);
+    const push = (f, n) => { open.push([f, n]); let c = open.length - 1; while (c > 0) { const pa = (c - 1) >> 1; if (open[pa][0] <= open[c][0]) break; [open[pa], open[c]] = [open[c], open[pa]]; c = pa; } };
+    const pop = () => { const top = open[0], last = open.pop(); if (open.length) { open[0] = last; let c = 0; for (;;) { const l = 2 * c + 1, rr = l + 1; let m = c; if (l < open.length && open[l][0] < open[m][0]) m = l; if (rr < open.length && open[rr][0] < open[m][0]) m = rr; if (m === c) break; [open[m], open[c]] = [open[c], open[m]]; c = m; } } return top; };
+    const goal = idx(gi, gj);
+    let found = false;
+    while (open.length) {
+      const [, n] = pop(); if (shut[n]) continue; shut[n] = 1;
+      if (n === goal) { found = true; break; }
+      const i = n % nx, j = Math.floor(n / nx);
+      for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+        if (!di && !dj) continue;
+        const a = i + di, b = j + dj; if (a < 0 || b < 0 || a >= nx || b >= nz) continue;
+        const m = idx(a, b); if (!free[m] || shut[m]) continue;
+        if (di && dj && (!free[idx(i + di, j)] || !free[idx(i, j + dj)])) continue;   // (no cutting a corner)
+        const ng = g[n] + (di && dj ? 1.4142 : 1); if (ng >= g[m]) continue;
+        g[m] = ng; from[m] = n; push(ng + hz(m), m);
+      }
+    }
+    if (!found) return null;
+    const cells = []; for (let n = goal; n >= 0; n = from[n]) cells.push(n);
+    cells.reverse();
+    const pts = cells.map((n) => ({ x: cx(n % nx), z: cz(Math.floor(n / nx)) }));
+    pts[0] = { x: ax, z: az }; pts[pts.length - 1] = { x: bx, z: bz };
+    const clear = (p, q) => { const L = Math.hypot(q.x - p.x, q.z - p.z); for (let t = 0; t <= L; t += 0.4) { const f = t / (L || 1), x = p.x + (q.x - p.x) * f, z = p.z + (q.z - p.z) * f; if (W.blocked(x, z) || inWagons(x, z, 0.4)) return false; } return true; };
+    const out = [pts[0]];
+    for (let a = 0; a < pts.length - 1;) {
+      let b = pts.length - 1; while (b > a + 1 && !clear(pts[a], pts[b])) b--;
+      out.push(pts[b]); a = b;
+    }
+    return out;
+  }
+  // each frame: getting up, walking his way, in at the door (false: he is gone)
+  function walkStep(k, dt) {
+    const { person, r } = k;
+    k.t += dt;
+    const door = W.places.sheriff && W.places.sheriff.door, office = W.places.sheriff;
+    let v = 0;
+    if (k.phase === 'rise') {
+      // up onto his feet, turning to face the way he will go (pivoting on his feet, where the lying body's root is)
+      const f = Math.min(1, k.t / WAGONJOB.rise), e = f * f * (3 - 2 * f);
+      _wq.setFromEuler(_we.set(0, k.h, 0));
+      person.root.quaternion.slerpQuaternions(k.q0, _wq, e);
+      person.root.position.set(k.x, k.y0 + (W.heightAt(k.x, k.z) - k.y0) * e, k.z);
+      person.update(dt);
+      tiePose(person, 1 - e, LEGS);
+      if (f >= 1) { k.phase = k.path ? 'town' : 'away'; k.at = 1; person.play('Walk', { fade: 0.3, speed: WAGONJOB.walk / ((person.stride && person.stride.Walk) || 1.4) }); }
+    } else {
+      let goal = null;
+      if (k.phase === 'town') {
+        goal = k.path[k.at];
+        if (Math.hypot(goal.x - k.x, goal.z - k.z) < 0.6) { k.at++; if (k.at >= k.path.length) { k.phase = 'in'; k.inFrom = { x: k.x, z: k.z }; } goal = k.path[Math.min(k.at, k.path.length - 1)]; }
+      }
+      if (k.phase === 'in') {
+        // up the steps and in at the door, fading out
+        goal = { x: door.x + (office.x - door.x) * 0.5, z: door.z + (office.z - door.z) * 0.5 };
+        const gone = Math.hypot(k.x - k.inFrom.x, k.z - k.inFrom.z) / WAGONJOB.fadeIn;
+        k.fade = Math.max(0, 1 - gone);
+        if (k.fade <= 0) return false;
+      }
+      if (k.phase === 'away') {
+        // toward town (the sheriff's door), round anything in the way; gone once well out of the player's sight
+        goal = door || { x: 0, z: 0 };
+        const far = Math.hypot(k.x - P.position.x, k.z - P.position.z);
+        if (far > WAGONJOB.goneFar && !inViewAt(k.x, k.z)) return false;
+        if (far > WAGONJOB.goneAnyway) { k.fade -= dt; if (k.fade <= 0) return false; }
+        if (door && k.t >= (k.retry || 0) && Math.hypot(door.x - k.x, door.z - k.z) < WAGONJOB.townNear * 0.8) {   // (walked near enough: the way round to the door)
+          const path = toDoor(k.x, k.z); if (path) { k.path = path; k.at = 1; k.phase = 'town'; k.stall = 0; }
+          else k.retry = k.t + 3;   // (no way round just now: walk on and look again in a while, not every frame)
+        }
+      }
+      // turn toward the goal (stepping round what blocks the way straight there) and walk; stop for the player
+      let want = Math.atan2(goal.x - k.x, goal.z - k.z);
+      if (k.phase === 'away') for (const off of [0, 0.5, -0.5, 1, -1, 1.5, -1.5, 2.2, -2.2]) { const a = want + off; if (!W.blocked(k.x + Math.sin(a) * 1.5, k.z + Math.cos(a) * 1.5)) { want = a; break; } }
+      const turn = Math.atan2(Math.sin(want - k.h), Math.cos(want - k.h));
+      k.h += Math.max(-3 * dt, Math.min(3 * dt, turn));
+      v = Math.abs(turn) > 1.2 ? WAGONJOB.walk * 0.3 : WAGONJOB.walk;
+      const ahead = Math.hypot(P.position.x - (k.x + Math.sin(k.h) * 0.9), P.position.z - (k.z + Math.cos(k.h) * 0.9));
+      // a wagon in his way: one rolling by, he waits for; one standing still (parked, or standing for good) he goes
+      // round, sidestepping it out here, or by a fresh way round it in town
+      const G = wagonAt(k.x + Math.sin(k.h) * 0.8, k.z + Math.cos(k.h) * 0.8, 0.3);
+      const still = G && (G.standing || G.pace < 0.05);
+      if (still && k.phase === 'away') {
+        for (const off of [0.5, -0.5, 1, -1, 1.5, -1.5, 2.2, -2.2]) { const a = k.h + off; if (!W.blocked(k.x + Math.sin(a) * 1.5, k.z + Math.cos(a) * 1.5) && !inWagons(k.x + Math.sin(a) * 1.5, k.z + Math.cos(a) * 1.5, 0.3)) { k.h += Math.max(-3 * dt, Math.min(3 * dt, off)); break; } }
+      }
+      if (ahead < (P.onHorse ? 1.6 : 0.9) || G) v = 0;
+      // in town, stuck a while (a wagon parked across his way, or the player): a fresh way round from here; stuck
+      // much longer, he slips off out of the way and is gone (he never stands about for good)
+      if (k.phase === 'town') {
+        k.stall = v > 0 ? Math.max(0, (k.stall || 0) - dt) : (k.stall || 0) + dt;
+        if (k.stall > WAGONJOB.stuckRetry && !k.retried && door) {
+          k.retried = true;
+          const path = toDoor(k.x, k.z); if (path) { k.path = path; k.at = 1; }
+        }
+        if (k.stall > WAGONJOB.stuckGone) k.leaving = true;
+        if (k.leaving) { k.fade -= dt; if (k.fade <= 0) return false; }
+        if (v > 0 && k.stall < 0.5) k.retried = false;
+      }
+      k.x += Math.sin(k.h) * v * dt; k.z += Math.cos(k.h) * v * dt;
+      person.root.position.set(k.x, W.heightAt(k.x, k.z), k.z);
+      person.root.rotation.set(0, k.h, 0);
+      if (person.person && person.person.cur) person.person.cur.setEffectiveTimeScale(v > 0 ? v / ((person.stride && person.stride.Walk) || 1.4) : 0.3);
+      person.update(dt);
+    }
+    // the hands tied behind him: each arm pointed where WAGONJOB.hands says, in his own frame (whatever the clip did)
+    person.root.updateMatrixWorld(true);
+    person.root.getWorldQuaternion(_wq);
+    _fw.set(0, 0, 1).applyQuaternion(_wq); _lf.set(1, 0, 0).applyQuaternion(_wq); _upw.set(0, 1, 0).applyQuaternion(_wq);
+    const A = WAGONJOB.hands.arm, F = WAGONJOB.hands.fore;
+    for (const [s, sg] of [['L', 1], ['R', -1]]) {
+      const ua = person.bones['UpperArm' + s], la = person.bones['LowerArm' + s];
+      if (!ua || !la) continue;
+      pointBone(ua, _dir.copy(_upw).negate().addScaledVector(_fw, -A.back).addScaledVector(_lf, sg * A.out));
+      pointBone(la, _dir.copy(_lf).multiplyScalar(-sg * F.across).addScaledVector(_fw, -F.back).addScaledVector(_upw, F.up));
+    }
+    // the short rope round his wrists
+    const b = person.bones;
+    if (b.WristL && b.WristR) {
+      person.root.updateMatrixWorld(true);
+      b.WristL.getWorldPosition(_wv); b.WristR.getWorldPosition(_wv2);
+      const len = _wv.distanceTo(_wv2);
+      k.wrists.position.copy(_wv); k.wrists.scale.set(1, Math.max(0.05, len), 1);
+      k.wrists.quaternion.setFromUnitVectors(_up, _wv2.sub(_wv).normalize());
+    }
+    if (k.fade < 1) fadeTo(k, k.fade);
+    return true;
+  }
+  // a bone turned so that it points (its +y, along it to its child) along the world direction `dir`
+  const _fw = new THREE.Vector3(), _lf = new THREE.Vector3(), _upw = new THREE.Vector3(), _dir = new THREE.Vector3(), _by = new THREE.Vector3();
+  const _bq = new THREE.Quaternion(), _pq = new THREE.Quaternion(), _tq = new THREE.Quaternion();
+  function pointBone(bone, dir) {
+    dir.normalize();
+    bone.getWorldQuaternion(_bq);
+    _by.set(0, 1, 0).applyQuaternion(_bq);
+    _tq.setFromUnitVectors(_by, dir).multiply(_bq);   // (its turn in the world, then into its parent's)
+    bone.parent.getWorldQuaternion(_pq);
+    bone.quaternion.copy(_pq.invert().multiply(_tq));
+    bone.updateMatrixWorld(true);
+  }
+  // fading out: every part of him see-through by the same amount
+  function fadeTo(k, a) {
+    if (!k.mats) { k.mats = []; k.person.root.traverse((o) => { if (o.isMesh && o.material) for (const m of [].concat(o.material)) if (!k.mats.includes(m)) { m.transparent = true; m.needsUpdate = true; k.mats.push(m); } }); }
+    for (const m of k.mats) m.opacity = a;
+    k.wrists.visible = a > 0.5;
+  }
+  const _ivp = new THREE.Vector3();
+  function inViewAt(x, z) {
+    _pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); _fr.setFromProjectionMatrix(_pm);
+    return _fr.containsPoint(_ivp.set(x, W.heightAt(x, z) + 1, z));
+  }
+  function endWalk(k) {
+    const i = walkers.indexOf(k); if (i >= 0) walkers.splice(i, 1);
+    k.wrists.removeFromParent();
+    k.r.dispose();
   }
 
   // the bandits roped in a wave go on the rider's count once, whether the wave finished or was cut short
@@ -609,7 +830,7 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
     w.done = true;
     endHelp(); hint(null); hideRail();
     const T = w.T, lv = T.level();
-    // the bandits are brought in (the deputies collect them from the roadside)
+    // the bandits are brought in (each roped one walks himself to the sheriff's office: see OFF TO THE SHERIFF)
     bankCaught(w, 2600);
     rider.lockboxes = rider.lockboxes || [];
     const tier = boxTier(rider);
@@ -688,6 +909,17 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
     showCard();
   };
   WJ.newWave = () => { if (state !== 'on') WJ.start(); newWave(); };
+  // (dev and rigs) a bandit pulled down and tied at (x, z) now, as if roped there: he gets up and walks off as any does
+  WJ.tieAt = (x, z) => {
+    if (!kit) return false;
+    const r = makeRider(kit, { W, folk, scene });
+    r.place(x, z, 0);
+    const rec = { r, person: r.person, label: r.label, slot: 0, state: 'caught', n: 12, text: '12', good: true, trap: null, alpha: 0, lift: 0, say: 0,
+      fact: '12 = 2 × 6', dev: true, also: [r.horse.root], tgt: { root: r.person.root, neck: (o) => r.neck(o), neckRadius: 0.13, height: 2.4 } };
+    recs.push(rec);
+    r.fall({ x: x + 3, z }, { onDown: () => downed(rec, { table: 6, kind: 'rule', done: true }) });
+    return true;
+  };
   WJ.where = () => (wagon ? { x: wagon.pos.x, z: wagon.pos.z } : (road.at(0, qw), { x: qw.x, z: qw.z }));
 
   // ── PICKS ──────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -798,12 +1030,15 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
     // (far off, the gang waits out of sight: nothing of it is drawn or moved until the player comes back)
     const away = dW > WAGONJOB.farOff;
     if (away !== WJ.away) { WJ.away = away; for (const rec of recs) rec.r.show(!away); }
-    if (!away) for (let i = recs.length - 1; i >= 0; i--) { const rec = recs[i]; if (rec.r.mode !== 'down' && rec.r.mode !== 'fall') riderStep(rec, dt); else rec.r.update(dt); }
+    for (let i = recs.length - 1; i >= 0; i--) { const rec = recs[i]; if (away && !rec.dev) continue; if (rec.r.mode !== 'down' && rec.r.mode !== 'fall') riderStep(rec, dt); else rec.r.update(dt); }
     for (let i = downs.length - 1; i >= 0; i--) {
       const d = downs[i], far = Math.hypot(d.at.x - P.position.x, d.at.z - P.position.z);
       if (d.factT > 0) d.factT -= dt;
+      d.t += dt;
+      if (d.rec && d.t >= WAGONJOB.getUp && d.factT <= 0 && d.rec.r.horseGone()) getUp(d);
       if (far > WAGONJOB.leaveDown && (d.wave.done || d.wave !== wave)) removeDown(d);
     }
+    for (let i = walkers.length - 1; i >= 0; i--) if (!walkStep(walkers[i], dt)) endWalk(walkers[i]);
     labels(dt);
     // the rail
     if (railT > 0) {
@@ -898,7 +1133,8 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
     wagon: wagon ? { x: +wagon.pos.x.toFixed(1), z: +wagon.pos.z.toFixed(1), real: !wagon.root } : null,
     wave: wave && { n: waveN, table: wave.table, kind: wave.kind, rule: wave.kind === 'missing' ? wave.w.rule : `The ${wave.table}-Gang`, goods: wave.goods, caught: wave.caught, misses: wave.misses, done: !!wave.done },
     riders: recs.map((x) => ({ n: x.n, good: x.good, state: x.state, mode: x.r.mode, x: +x.r.x.toFixed(1), z: +x.r.z.toFixed(1), speed: +x.r.speed.toFixed(2), clip: x.r.horse.clip, label: x.label.visible })),
-    downs: downs.length, music: music ? music.state() : null, rail: railT > 0, sound: rumble ? rumble.state() : null,
+    downs: downs.length, walkers: walkers.map((k) => ({ phase: k.phase, x: +k.x.toFixed(1), z: +k.z.toFixed(1), fade: +k.fade.toFixed(2), path: k.path ? k.path.length : 0 })),
+    music: music ? music.state() : null, rail: railT > 0, sound: rumble ? rumble.state() : null,
   });
   WJ.dispose = () => {
     disposed = true;
@@ -906,6 +1142,8 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
     offPick(); endHelp(); unsee(); if (WJ.near) { hud.rule(null); hud.hint(null); }
     for (const rec of [...recs]) removeRec(rec);
     for (const d of [...downs]) removeDown(d);
+    for (const k of [...walkers]) endWalk(k);
+    if (ropeGeo) { ropeGeo.dispose(); ropeMat.dispose(); ropeGeo = ropeMat = null; }   // (the walkers' wrist ropes)
     if (rumble) { rumble.dispose(); rumble = null; }
     if (wagon) wagon.dispose();
     rail.dispose(); R.dispose();

@@ -436,7 +436,7 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
       if (d < 0.7) { const k = d > 1e-4 ? (0.7 - d) / d : 0, nx = pos.x + (d > 1e-4 ? dx * k : c * 0.7), nz = pos.z + (d > 1e-4 ? dz * k : -s * 0.7); if (!W.blocked(nx, nz)) { pos.x = nx; pos.z = nz; } }
     }
     // not through a wagon or its team either: out to its edge (src/wagon.js pushFromWagons)
-    { const o = pushFromWagons(pos.x, pos.z, WAGON_R.foot, W); if (o) { pos.x = o.x; pos.z = o.z; } }
+    { const o = pushFromWagons(pos.x, pos.z, WAGON_R.foot, W); if (o) { const nx = o.x - pos.x, nz = o.z - pos.z; pos.x = o.x; pos.z = o.z; slideRound(pos, nx, nz, P.heading, v * dt, WAGON_R.foot); } }
     pos.y = W.heightAt(pos.x, pos.z);
   }
 
@@ -488,17 +488,36 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
     const v = (v0 + H.speed) / 2, o = { x: H.x, z: H.z }, got = walk(o, H.heading, v * dt, NOSE);
     if (got < v * dt * 0.3) H.speed = got / Math.max(dt, 1e-4);   // (stopped by it: stands, rather than walking on the spot)
     H.x = o.x; H.z = o.z;
-    offWagons();
+    offWagons(v * dt);
   }
   // not through a wagon or its team: the horse's body (circles from its head to its rump, each WAGON_R.horse round)
   // put out to the wagon's edge by the most any of them is in
-  function offWagons() {
+  function offWagons(step = 0) {
     let bx = 0, bz = 0, most = 0;
     for (const f of WAGON_R.along) {
       const px = H.x + Math.sin(H.heading) * f, pz = H.z + Math.cos(H.heading) * f, q = pushFromWagons(px, pz, WAGON_R.horse, W);
       if (q && Math.hypot(q.x - px, q.z - pz) > most) { most = Math.hypot(q.x - px, q.z - pz); bx = q.x - px; bz = q.z - pz; }
     }
-    if (most > 0 && !W.blocked(H.x + bx, H.z + bz)) { H.x += bx; H.z += bz; }
+    if (most > 0 && !W.blocked(H.x + bx, H.z + bz)) {
+      H.x += bx; H.z += bz;
+      if (step > 0) { const q = { x: H.x, z: H.z }; slideRound(q, bx, bz, H.heading, step, WAGON_R.horse, Math.max(...WAGON_R.along)); H.x = q.x; H.z = q.z; }
+    }
+  }
+  // heading straight into a wagon's side (as when one has stopped in the road ahead, its driver waiting for you):
+  // slide along that side toward the way you lean (else the way last taken), so pressing on gets round it rather
+  // than standing nose to nose with the team. Glancing into it slides along by itself already. (p: moved in place;
+  // nx, nz: the way it was just pushed out; reach: how far ahead of p to check the way is clear, for the horse's head)
+  let slideSide = 1;
+  function slideRound(p, nx, nz, heading, step, r, reach = 0) {
+    const n = Math.hypot(nx, nz); if (n < 1e-5 || step <= 0) return;
+    nx /= n; nz /= n;
+    const hx = Math.sin(heading), hz = Math.cos(heading);
+    if (hx * nx + hz * nz > -0.6) return;
+    const tx = -nz, tz = nx, lean = hx * tx + hz * tz;
+    if (Math.abs(lean) > 0.1) slideSide = Math.sign(lean);
+    const qx = p.x + tx * slideSide * step * 0.8, qz = p.z + tz * slideSide * step * 0.8;
+    const fx = qx + hx * reach, fz = qz + hz * reach;
+    if (!W.blocked(qx, qz) && !W.blocked(fx, fz) && !pushFromWagons(qx, qz, r, W)) { p.x = qx; p.z = qz; } else slideSide = -slideSide;
   }
 
   // the horse on its own: standing about (now and then grazing), or coming when called

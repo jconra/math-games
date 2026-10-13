@@ -26,6 +26,8 @@
 //     .stop() / .go(speed)
 //     .update(dt)     each frame: moves it along its path and sets everything moving
 //     .lane           m to the right of the path's middle it keeps to (the way it is going; default 0)
+//     .bend           { s0, r1, hold, r2, by } or null: a step sideways off the lane to go round something (src/traffic.js);
+//                     .offsetAt(s) how far it puts the path s metres along; .teamAhead m from .u to the team's middles
 //     .pace           m/s it is going now        .u  metres along the path (its middle)   .t  the same, 0..1
 //     .pos            the middle of the wagon on the ground (Vector3)    .heading  radians, as three's rotation.y
 //     .front          the lead horses' noses (Vector3, on the ground)    .ended  at an end of its path (it stops there)
@@ -36,7 +38,14 @@
 //     .team           [left horse, right horse] (actors/animals.js animals)     .driver   the person (or null)
 //     .body           the wagon itself (moves and tilts each frame)       .kind, .info (its wagons.json entry)
 //     .boxes          [the wagon, its team]: boxes on the ground, kept up to date (see WAGONS_OUT below)
+//     .idle           true: standing still, the team shifts about now and then (Idle, Idle_2, head low, cropping)
+//     .climbDown(x, z, face) / .climbUp()   the driver gets down and stands at (x, z), or back up on the seat;
+//                     .driverDown
+//     .restTongue()   a wagon with no team: its tongue let down to the ground (after it is placed)
 //     .dispose()
+//   standWagon(lib, { kind, W, x, z, heading, team, driver, shadows })   a wagon standing still at (x, z) (its middle),
+//                     facing `heading`: made, placed and returned (add .root to the scene); one with a team: .update(dt)
+//                     keeps the horses moving
 //   WAGONS_OUT            every wagon made and not yet put away (a Set)
 //   pushFromWagons(x, z, r, W)   a walker r metres round at (x, z) inside a wagon or its team: where to put it just
 //                         outside (never into a wall or another wagon), or null (src/player.js: on foot and the horse)
@@ -73,6 +82,8 @@ export const WAGON = {
   seatDrop: 0.45,           // m from the seat's top down to the driver's feet (the Drive clip's root: build_drive_clip.py)
   driverAt: -0.3,           // m across the seat: the driver (on the right), and a passenger (on the left)
   besideAt: 0.32,
+  rests: ['Idle', 'Idle_2', 'Idle_Headlow', 'Eating'],   // what a team standing a while plays now and then (wagon.idle)
+  restFor: [5, 13],         // s each one lasts
   drivers: [                // who drives (folk.js looks), picked by the wagon's number
     { outfit: 'farmer_m', palette: 'rancher', skin: 3, hair: 1 },
     { outfit: 'adventurer_m', palette: 'homestead', skin: 5, hair: 0 },
@@ -329,8 +340,13 @@ export const WAGONS_OUT = new Set();
 const inBox = (b, x, z, r) => { const dx = x - b.x, dz = z - b.z, lx = dx * b.c - dz * b.s, lz = dx * b.s + dz * b.c; return Math.abs(lx) < b.hw + r && Math.abs(lz) < b.hl + r; };
 // true where a walker r metres round at (x, z) would be inside a wagon or its team
 export function inWagons(x, z, r = 0) {
-  for (const G of WAGONS_OUT) if (G.boxes && Math.abs(x - G.pos.x) < 14 && Math.abs(z - G.pos.z) < 14) for (const b of G.boxes) if (inBox(b, x, z, r)) return true;
-  return false;
+  return !!wagonAt(x, z, r);
+}
+// the wagon a walker r metres round at (x, z) would be inside (or null): a walker can tell one rolling by (wait for it)
+// from one standing still (.pace near 0, or .standing for good: go round it)
+export function wagonAt(x, z, r = 0) {
+  for (const G of WAGONS_OUT) if (G.boxes && Math.abs(x - G.pos.x) < 14 && Math.abs(z - G.pos.z) < 14) for (const b of G.boxes) if (inBox(b, x, z, r)) return G;
+  return null;
 }
 // a walker r metres round standing at (x, z) inside a wagon or its team: the nearest place just outside it (out the
 // side it is nearest, else the next nearest, and so on: never into a wall, W.blocked, or another wagon), or null when it
@@ -443,6 +459,21 @@ export function makeWagon(lib, { kind = 'covered', W = null, team = true, driver
     width: Math.max(info.box.max[0] - info.box.min[0], track + 0.3, horses.length ? WAGON.gap + horses[0].info.width : 0),
     curve: null, L: 0,
     boxes: null,
+    teamAhead: halfWheel + (horses.length ? WAGON.ahead : 0),   // m from its middle forward to the team's middles
+    // going round something standing in its way (src/traffic.js): an extra step sideways off its lane, `by` metres (to
+    // the right of the way it is going; below 0, to the left), eased in over r1 metres of path from s0 (path metres),
+    // held for `hold` metres, and eased back over r2. null: none
+    bend: null,
+  };
+  G.offsetAt = (s) => {
+    const B = G.bend; if (!B) return 0;
+    const x = (s - B.s0) * G.dir;
+    if (x <= 0) return 0;
+    if (x < B.r1) return B.by * (1 - Math.cos(Math.PI * x / B.r1)) / 2;
+    const y = x - B.r1 - B.hold;
+    if (y <= 0) return B.by;
+    if (y < B.r2) return B.by * (1 + Math.cos(Math.PI * y / B.r2)) / 2;
+    return 0;
   };
   // its two boxes on the ground (see WAGONS_OUT): the wagon (its model's own size), and the team with the tongue and
   // the doubletree, from just in front of the front axle to the lead horses' noses
@@ -459,7 +490,7 @@ export function makeWagon(lib, { kind = 'covered', W = null, team = true, driver
   const tmpT = new THREE.Vector3();
   // (where the road is tight, its lane comes in toward the middle, or moves out: the curve's laneAt, from roadCurve)
   function at(s, out) {
-    const C = G.curve, L = G.L, lane = G.lane && C.laneAt ? C.laneAt(s, G.dir, G.lane) : G.lane;
+    const C = G.curve, L = G.L, lane = (G.lane && C.laneAt ? C.laneAt(s, G.dir, G.lane) : G.lane) + (G.bend ? G.offsetAt(s) : 0);
     if (s <= 0) { C.getPointAt(0, out); C.getTangentAt(0, tmpT); out.addScaledVector(tmpT, s); }
     else if (s >= L) { C.getPointAt(1, out); C.getTangentAt(1, tmpT); out.addScaledVector(tmpT, s - L); }
     else { C.getPointAt(s / L, out); if (lane) C.getTangentAt(s / L, tmpT); }
@@ -479,7 +510,7 @@ export function makeWagon(lib, { kind = 'covered', W = null, team = true, driver
   G.go = (v = 2) => { G.speed = v; G.ended = false; };
 
   const ground = (x, z) => (W ? W.heightAt(x, z) : 0);
-  const Pf = new THREE.Vector3(), Pr = new THREE.Vector3(), Ph = new THREE.Vector3(), Dh = new THREE.Vector3(), Y = new THREE.Vector3();
+  const Pf = new THREE.Vector3(), Pr = new THREE.Vector3(), Ph = new THREE.Vector3(), Dh = new THREE.Vector3(), Y = new THREE.Vector3(), Pf2 = new THREE.Vector3();
   // put everything where the path says for G.u (dt: the frame's time, for the wheels' turn and the tilt's give)
   function place(dt) {
     const half = halfWheel, d = G.dir;
@@ -505,7 +536,9 @@ export function makeWagon(lib, { kind = 'covered', W = null, team = true, driver
 
     // the team: their middles on the path ahead of the front axle, side by side, facing along it, tipped with the ground
     const uh = G.u + d * (half + WAGON.ahead);
-    at(uh, Ph); dirAt(uh, Dh);
+    at(uh, Ph);
+    // (going round something: the team faces along its way round)
+    if (G.bend) { at(uh + d * 0.6, Pf2); at(uh - d * 0.6, Dh); Dh.subVectors(Pf2, Dh).setY(0).normalize(); } else dirAt(uh, Dh);
     const hh = Math.atan2(Dh.x, Dh.z), hs = Math.sin(hh), hc = Math.cos(hh);
     for (const h of horses) {
       const x = Ph.x + hc * h.side * WAGON.gap / 2, z = Ph.z - hs * h.side * WAGON.gap / 2;
@@ -566,7 +599,7 @@ export function makeWagon(lib, { kind = 'covered', W = null, team = true, driver
       }
     }
     // the reins: from the driver's fists to each horse's head
-    if (person && person.bones.Middle1L && person.bones.Middle1R) {
+    if (person && !down && person.bones.Middle1L && person.bones.Middle1R) {
       for (const h of horses) {
         const hand = h.side > 0 ? person.bones.Middle1L : person.bones.Middle1R;
         hand.getWorldPosition(_a);
@@ -590,18 +623,55 @@ export function makeWagon(lib, { kind = 'covered', W = null, team = true, driver
     place(dt);
     for (const h of horses) {
       // walking (sped up) at a wagon's usual paces; a gallop only when it really runs (gaitFor's own switch is lower)
-      if (G.pace >= 0.05 && G.pace < WAGON.walkMost) h.play('Walk', { speed: G.pace / h.stride.Walk });
-      else h.pace(G.pace);
+      if (G.pace >= 0.05 && G.pace < WAGON.walkMost) { h.play('Walk', { speed: G.pace / h.stride.Walk }); h.rest = 0; }
+      else if (G.pace < 0.05 && G.idle) {
+        // standing a while: now and then each horse shifts, drops its head or crops at the ground
+        if ((h.rest = (h.rest || 0) - dt) <= 0) {
+          h.rest = WAGON.restFor[0] + Math.random() * (WAGON.restFor[1] - WAGON.restFor[0]);
+          const list = WAGON.rests.filter((n) => h.clips.includes(n));
+          h.play(list[Math.floor(Math.random() * list.length)] || 'Idle', { fade: 0.6 });
+        }
+      } else h.pace(G.pace);
       h.update(dt);
     }
     if (person) {
-      // the driver's jog keeps time with the team's steps (the clip is two of the horses' Walk steps long)
+      // the driver's jog keeps time with the team's steps (the clip is two of the horses' Walk steps long); down on the
+      // ground, the clip plays at its own speed
       const walk = horses.length ? horses[0].stride.Walk : 1;
-      if (person.person && person.person.cur) person.person.cur.setEffectiveTimeScale(Math.max(0.25, Math.min(2.5, G.pace / walk)));
+      if (!down && person.person && person.person.cur) person.person.cur.setEffectiveTimeScale(Math.max(0.25, Math.min(2.5, G.pace / walk)));
       person.update(dt);
     }
     root.updateMatrixWorld(true);
     harness();
+  };
+  // the driver climbs down and stands on the ground at (x, z) facing `face` (radians, as three's rotation.y), or back
+  // up onto the seat (the reins are put away while nobody holds them)
+  let down = false;
+  G.climbDown = (x, z, face = 0) => {
+    if (!person || down) return false;
+    down = true;
+    root.add(person.root);   // (the root stays put at the world's origin: a child of it is placed in the world)
+    person.root.position.set(x, ground(x, z), z); person.root.rotation.set(0, face, 0);
+    person.play(Math.random() < 0.5 ? 'Idle' : 'Idle_Neutral', { fade: 0.3 });
+    if (person.person && person.person.cur) person.person.cur.setEffectiveTimeScale(1);
+    return true;
+  };
+  G.climbUp = () => {
+    if (!person || !down) return false;
+    down = false;
+    body.add(person.root);
+    person.root.position.set(WAGON.driverAt, info.seat.y - WAGON.seatDrop, info.seat.z); person.root.rotation.set(0, 0, 0);
+    if (!person.play('Drive', { fade: 0.3 })) person.play('Idle', { fade: 0.3 });
+    return true;
+  };
+  Object.defineProperty(G, 'driverDown', { get: () => down });
+  // a wagon left standing with no team: its tongue let down to rest its tip on the ground
+  G.restTongue = () => {
+    if (horses.length || !K.tongue || !info.tongue) return;
+    fore.updateMatrixWorld(true); fore.getWorldPosition(Y);
+    const h = G.heading + steer, tx = Y.x + Math.sin(h) * info.tongue.tip, tz = Y.z + Math.cos(h) * info.tongue.tip;
+    const drop = Y.y - ground(tx, tz) - 0.06;
+    pole.rotation.x = Math.asin(Math.max(-0.9, Math.min(0.9, drop / info.tongue.tip))) + tilt.pitch;
   };
   G.dispose = () => {
     WAGONS_OUT.delete(G);
@@ -611,4 +681,18 @@ export function makeWagon(lib, { kind = 'covered', W = null, team = true, driver
     root.removeFromParent();
   };
   return G;
+}
+
+// a wagon standing still at (x, z), facing `heading`: on a short straight path of its own, so everything is placed as
+// a rolling one would be; with no team, its tongue rests on the ground
+export function standWagon(lib, { kind = 'farm', W = null, x = 0, z = 0, heading = 0, team = false, driver = false, shadows = true } = {}) {
+  const wg = makeWagon(lib, { kind, W, team, driver, shadows });
+  const s = Math.sin(heading), c = Math.cos(heading), y = W ? W.heightAt(x, z) : 0;
+  const line = new THREE.LineCurve3(new THREE.Vector3(x - s * 20, y, z - c * 20), new THREE.Vector3(x + s * 20, y, z + c * 20));
+  wg.setPath(line, { at: 0.5, dir: 1 });
+  wg.idle = true;
+  wg.standing = true;   // (it never moves: walkers go round it rather than wait for it)
+  wg.update(0);
+  wg.restTongue();
+  return wg;
 }

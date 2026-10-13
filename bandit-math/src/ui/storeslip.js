@@ -127,15 +127,15 @@ export function makeStoreSlip(root = document.body, { onPick = () => {}, onDone 
   }
   // (the slip's window layout, not a phone's: storeslip.css's two phone layouts start below these sizes)
   const roomy = () => innerWidth > 760 && innerHeight > 480;
-  // scrolls the slip (only the slip) so the part just shown sits in view, its top first if it can't all fit. On a
-  // window with room for it (not a phone's sheet), never so far that the story's first line goes under the pinned
-  // header: the kid is still reading it (the rest of the picture is a scroll away)
+  // scrolls the slip (only the slip) so the part just shown sits in view, its top first if it can't all fit. Never so
+  // far that the story's first line goes under the pinned header (on a window; on a phone too for a wrong pick's
+  // reason and picture): the kid is still reading it (the rest of the picture is a scroll away)
   function seeEnd(part) {
     requestAnimationFrame(() => {
       const s = slip.getBoundingClientRect(), r = part.getBoundingClientRect();
       if (r.bottom <= s.bottom - 4 && r.top >= s.top) return;
       let by = Math.min(r.bottom - s.bottom + 12, r.top - s.top - 8);
-      if (roomy()) by = Math.min(by, $('.bmo-story').getBoundingClientRect().top - $('.bmo-top').getBoundingClientRect().bottom - 2);
+      if (part === help || roomy()) by = Math.min(by, $('.bmo-story').getBoundingClientRect().top - $('.bmo-top').getBoundingClientRect().bottom - 2);
       if (by > 0) slip.scrollBy({ top: by, behavior: 'smooth' });
     });
   }

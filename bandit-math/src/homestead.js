@@ -13,20 +13,23 @@
 //
 // Bought at the general store (shop.js: the "Farm animals" rows come from H.shop): the store already has the
 // counter where goods are sold and the dogs' buy-and-name row, so the animals sit beside them (simpler than a new
-// farmer at the settlers' farm). Thank-yous: a whole flock healed or a whole batch of pigs penned now and then gives a
-// lamb or a piglet (H.jobDone), when there's room.
+// farmer at the settlers' farm). Hens are for sale from the start; pigs, sheep and milk cows only once the rider has
+// earned a young one of that kind (src/math/goods.js unlocked): a locked kind shows one line saying what earns it.
+// Thank-yous: a whole flock healed, a whole batch of pigs penned or a whole wave roped at the round-up now and then gives
+// a lamb, a piglet or a calf (H.jobDone), when there's room; the first of each kind comes for sure within a few jobs
+// and unlocks that kind at the store (a toast and a line from Hob say so).
 //
 //   const H = makeHomestead({ W, animals, rider, hud, hob, refresh })
 //     animals: the animal library (actors/animals.js; the pig, sheep and farm cow are loaded when first needed)
 //   H.update(dt, at)        each frame of play (not while paused or inside the cabin): at = the player's position
 //   H.changed()             the rider's animals changed (one bought, a thank-you): the homes and animals are made again
-//   H.jobDone(event)        a farm job finished ('flockDone', 'pigsDone'): maybe a thank-you lamb or piglet
+//   H.jobDone(event)        a whole job finished ('flockDone', 'pigsDone', 'waveDone'): maybe a thank-you lamb, piglet or calf
 //   H.saleOrder({ step, who }) -> a sale order for the store counter, or null (not this time, or nothing to sell)
 //   H.sold(order)           a sale's right coin: the goods come out of the saddlebags
 //   H.goodsLine()           the saddlebags' goods for the HUD ('30 eggs · 6 qt milk to sell', or '')
 //   H.shop                  the general store's rows: { store: { html(), click(what, id, body), input(e) } } (shop.js)
 //   H.layout                the yard in the world: { at(lx, lz), local(x, z), homes: { coop, pen, corral } }
-//   H.state(), H.dev: { give(kind, name, young), goods(n), lay(seconds) }, H.dispose()
+//   H.state(), H.dev: { give(kind, name, young), goods(n), lay(seconds), gift(event), unlock(kind) }, H.dispose()
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeAnimal } from './actors/animals.js';
@@ -35,7 +38,7 @@ import { makeTag } from './dog.js';
 import { saveRider, spend } from './save.js';
 import {
   ANIMALS, KINDS, GOODS, GOODS_IDS, GROW, homestead, animalsOf, countOf, hasRoom, buyAnimal, thankYou, lay, waiting, collect,
-  gotLine, goodsLine, makeSale, sold, SELL, cleanName,
+  gotLine, goodsLine, makeSale, sold, SELL, cleanName, YOUNG, GIFT, unlocked, earnLine,
 } from './math/goods.js';
 
 export const YARD = {
@@ -52,6 +55,7 @@ export const YARD = {
   awake: 140,          // metres from the player within which the animals move (beyond, they stand still)
   room: { hen: 0.55, pig: 1.6, sheep: 1.3, cow: 2.4 },   // how far apart animals of a home keep
   young: 0.6,          // a just-given lamb or piglet's size (it grows to 1 over GROW seconds of play)
+  youngOf: { cow: 0.5 },   // (a calf starts smaller: a grown milk cow is far bigger than a sheep or a pig)
   saveEvery: 30,       // seconds between saves while goods are being laid up
   retry: 20,           // seconds before an animal whose model failed to load is tried again
   shadowNear: 25,      // metres from the camera's target within which an animal casts a shadow
@@ -401,7 +405,7 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
     }
   }
   const hash = (s) => { let h = 7; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) | 0; return h; };
-  function sizeOf(rec) { return rec.young ? YARD.young + (1 - YARD.young) * Math.min(1, (rec.age || 0) / GROW) : 1; }
+  function sizeOf(rec) { const y = YARD.youngOf[rec.kind] || YARD.young; return rec.young ? y + (1 - y) * Math.min(1, (rec.age || 0) / GROW) : 1; }
   function addAnimal(rec, a, hen) {
     const home = HOME_OF[rec.kind];
     let p = L.random(home), rot = Math.random() * Math.PI * 2;
@@ -580,13 +584,22 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
 
   // ── CHANGES, THANK-YOUS, SALES ─────────────────────────────────────────────────────────────────────────────
   H.changed = () => { homestead(rider); buildHomes(); syncAnimals(); refresh(); };
+  // (who sends the young one: the settler at the farm, the rancher whose cattle are rounded up)
+  const FROM = { pig: 'the settler', sheep: 'the settler', cow: 'the rancher' };
   H.jobDone = (event) => {
+    const kind = GIFT.from[event], jobs = homestead(rider).farm.jobs, before = jobs[kind];
     const a = thankYou(rider, event);
-    if (!a) return null;
+    // (a whole job counted toward a locked kind is saved, so the count shown at the store survives a closed tab)
+    if (!a) { if (kind && jobs[kind] !== before) saveRider(rider); return null; }
     saveRider(rider); H.changed();
-    const what = a.kind === 'sheep' ? 'a lamb' : 'a piglet', where = a.kind === 'sheep' ? 'corral' : 'pen';
-    setTimeout(() => { if (!disposed) hud.toast(`A thank-you from the settler: ${what} named ${a.name}! In your ${where} behind the cabin.`, 'good'); }, 4600);
-    if (hob) hob.event('animalGift', { kind: a.kind, name: a.name });
+    const what = `a ${YOUNG[a.kind]}`, where = HOME_OF[a.kind];
+    setTimeout(() => {
+      if (disposed) return;
+      hud.toast(`A thank-you from ${FROM[a.kind]}: ${what} named ${a.name}! In your ${where} behind the cabin.`, 'good');
+      // (the first of a kind unlocks it at the store: said after the thank-you has had its moment)
+      if (a.unlocked) setTimeout(() => { if (!disposed) hud.toast(`The store will sell you ${ANIMALS[a.kind].many} now.`, 'gold'); }, 5200);
+    }, 4600);
+    if (hob) hob.event('animalGift', { kind: a.kind, name: a.name, unlocked: !!a.unlocked });
     return a;
   };
   // the store asks at every new customer: now and then (never twice within SELL.every orders) one buys your goods.
@@ -603,6 +616,7 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
   H.goodsLine = () => goodsLine(rider);
 
   // ── THE GENERAL STORE'S ROWS (shop.js puts them in the store's panel) ──────────────────────────────────────────
+  const LOCK = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true" style="vertical-align:-2px"><rect x="5" y="10" width="14" height="11" rx="2" fill="currentColor"/><path d="M8 10V7a4 4 0 0 1 8 0v3" fill="none" stroke="currentColor" stroke-width="2.2"/></svg>';
   const COIN = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#e2ad4c"/><circle cx="12" cy="12" r="7.4" fill="none" stroke="#a8742a" stroke-width="1.6"/></svg>';
   const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const shop = { kind: null, name: '' };
@@ -613,25 +627,34 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
     if (mine.length) {
       const by = KINDS.filter((k) => countOf(rider, k)).map((k) => {
         const list = mine.filter((a) => a.kind === k), A = ANIMALS[k];
-        return `${list.length} ${list.length === 1 ? A.name.toLowerCase() : A.many} (${list.map((a) => esc(a.name) + (a.young ? (k === 'sheep' ? ', a lamb' : ', a piglet') : '')).join(', ')})`;
+        return `${list.length} ${list.length === 1 ? A.name.toLowerCase() : A.many} (${list.map((a) => esc(a.name) + (a.young ? `, a ${YOUNG[k]}` : '')).join(', ')})`;
       });
       const g = goodsLine(rider);
       h += `<div class="bms-row"><div class="bms-what"><b>Your animals</b><small>${by.join(' · ')}. They live behind your cabin.${g ? ` In your saddlebags: ${esc(g.replace(/ to sell$/, ''))}. Townsfolk buy them at the counter.` : ''}</small></div><div class="bms-act"></div></div>`;
     }
-    if (!KINDS.includes(shop.kind)) shop.kind = KINDS.find((k) => hasRoom(rider, k) && rider.gold >= ANIMALS[k].price) || KINDS.find((k) => hasRoom(rider, k)) || 'hen';
+    // (the kinds the store sells this rider: hens from the start, the others once earned; a locked kind gets a row of
+    // its own below with the one line saying what earns it, and no button)
+    const open = KINDS.filter((k) => unlocked(rider, k)), locked = KINDS.filter((k) => !open.includes(k));
+    if (!open.includes(shop.kind)) shop.kind = open.find((k) => hasRoom(rider, k) && rider.gold >= ANIMALS[k].price) || open.find((k) => hasRoom(rider, k)) || 'hen';
     const A = ANIMALS[shop.kind], room = hasRoom(rider, shop.kind), short = rider.gold < A.price;
     const line = room ? A.line : `Your ${HOME_NAME[A.home]} is full: ${A.most} ${A.most === 1 ? A.name.toLowerCase() : A.many} is all it holds.`;
-    h += `<div class="bms-row is-tall"><div class="bms-what"><b>${mine.length ? 'Another farm animal' : 'A farm animal for your homestead'}</b><small>${esc(line)}</small>
-      <div class="bms-kinds" role="radiogroup" aria-label="Which animal">${KINDS.map((k) => `<button type="button" role="radio" aria-checked="${shop.kind === k}" data-do="animal-kind" data-id="${k}" class="${shop.kind === k ? 'is-on' : ''}">${ANIMALS[k].name}</button>`).join('')}</div>
+    // (with only hens for sale there is nothing to pick between: no one-button choice, the row just says "A hen")
+    const title = open.length > 1 ? (mine.length ? 'Another farm animal' : 'A farm animal for your homestead') : countOf(rider, shop.kind) ? `Another ${A.name.toLowerCase()}` : `A ${A.name.toLowerCase()} for your homestead`;
+    h += `<div class="bms-row is-tall"><div class="bms-what"><b>${title}</b><small>${esc(line)}</small>
+      ${open.length > 1 ? `<div class="bms-kinds" role="radiogroup" aria-label="Which animal">${open.map((k) => `<button type="button" role="radio" aria-checked="${shop.kind === k}" data-do="animal-kind" data-id="${k}" class="${shop.kind === k ? 'is-on' : ''}">${ANIMALS[k].name}</button>`).join('')}</div>` : ''}
       <div class="bms-name"><input type="text" maxlength="12" placeholder="Name your ${esc(A.name.toLowerCase())}" value="${esc(shop.name)}" aria-label="Your new animal's name" data-animal-name></div></div>
       <div class="bms-act"><span class="bms-price">${COIN}<b>${A.price}</b></span><button type="button" data-do="buy-animal" ${!room || short ? 'disabled' : ''}>${!room ? 'No room' : short ? `Need ${A.price - rider.gold} more` : 'Buy'}</button></div></div>`;
+    for (const k of locked) {
+      const L = ANIMALS[k], Many = L.many[0].toUpperCase() + L.many.slice(1);
+      h += `<div class="bms-row is-locked" data-locked="${k}"><div class="bms-what"><b>${Many}</b><small>${esc(earnLine(rider, k))}</small></div><div class="bms-act"><span class="bms-tag">${LOCK} Not yet</span></div></div>`;
+    }
     return h;
   }
   // -> undefined (not ours), or { note, bought }
   function shopClick(what, id, body) {
     if (what === 'animal-kind') {
       // (a name typed while the last kind's home was full was never used: it goes, so new typing isn't added onto it)
-      if (ANIMALS[id] && id !== shop.kind) { if (shop.kind && !hasRoom(rider, shop.kind)) shop.name = ''; shop.kind = id; }
+      if (ANIMALS[id] && unlocked(rider, id) && id !== shop.kind) { if (shop.kind && !hasRoom(rider, shop.kind)) shop.name = ''; shop.kind = id; }
       return { note: '' };
     }
     if (what !== 'buy-animal') return undefined;
@@ -639,6 +662,7 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
     const name = cleanName(input ? input.value : shop.name);
     const res = buyAnimal(rider, kind, name, spend);
     if (res === 'short') return { note: 'Not enough gold yet.' };
+    if (res === 'locked') return { note: earnLine(rider, kind) };
     if (res === 'full') return { note: `No room for another: your ${HOME_NAME[ANIMALS[kind].home]} is full.` };
     if (res !== 'bought') return { note: '' };
     const a = animalsOf(rider).filter((x) => x.kind === kind).pop();
@@ -655,15 +679,18 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
     homes: built ? built.split(',') : [], animals: herd.map((h) => ({ kind: h.kind, name: h.rec.name, young: !!h.rec.young, size: +h.size.toFixed(2),
       x: +h.a.root.position.x.toFixed(2), z: +h.a.root.position.z.toFixed(2), inside: L.inside(h.home, h.a.root.position.x, h.a.root.position.z, 0), clip: h.a.clip, tag: h.tag.visible })),
     goods: { ...homestead(rider).goods }, yard: { ...homestead(rider).yard }, owned: animalsOf(rider).length,
+    farm: { unlocked: KINDS.filter((k) => unlocked(rider, k)), jobs: { ...homestead(rider).farm.jobs } },
   });
   H.dev = {
     give(kind = 'hen', name = '', young = false) { if (!hasRoom(rider, kind)) return false; animalsOf(rider).push({ kind, name: cleanName(name) || `${ANIMALS[kind].name} ${countOf(rider, kind) + 1}`, ...(young ? { young: true, age: 0 } : {}) }); saveRider(rider); H.changed(); return true; },
     goods(n = 30) { const g = homestead(rider).goods; for (const k of GOODS_IDS) g[k] = Math.min(GOODS[k].bag, g[k] + n); saveRider(rider); refresh(); },
     lay(seconds = 600) { lay(rider, seconds); },
     gift(event = 'flockDone') { const c = GIFT_TRY(event); return c; },
+    // (a kind unlocked at the store without earning it, for a rig)
+    unlock(kind) { const f = homestead(rider).farm; if (GIFT.sure[kind] && !f.unlocked.includes(kind)) f.unlocked.push(kind); saveRider(rider); refresh(); return unlocked(rider, kind); },
   };
   // (a thank-you for a rig, whatever the dice say)
-  const GIFT_TRY = (event) => { const a = thankYou(rider, event, () => 0); if (!a) return null; saveRider(rider); H.changed(); if (hob) hob.event('animalGift', { kind: a.kind, name: a.name }); hud.toast(`A thank-you from the settler: ${a.kind === 'sheep' ? 'a lamb' : 'a piglet'} named ${a.name}!`, 'good'); return a; };
+  const GIFT_TRY = (event) => { const a = thankYou(rider, event, () => 0); if (!a) return null; saveRider(rider); H.changed(); if (hob) hob.event('animalGift', { kind: a.kind, name: a.name, unlocked: !!a.unlocked }); hud.toast(`A thank-you from ${FROM[a.kind]}: a ${YOUNG[a.kind]} named ${a.name}!${a.unlocked ? ` The store will sell you ${ANIMALS[a.kind].many} now.` : ''}`, 'good'); return a; };
   // (the goods and the young ones' age since the last save are kept when the page is closed or put away)
   const keep = () => { if (!disposed) saveRider(rider); };
   const onHide = () => { if (document.visibilityState === 'hidden') keep(); };

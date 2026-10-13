@@ -1,29 +1,51 @@
 // The homestead's animals and their goods, as numbers: what each animal costs, how many of each fit in the yard by the
-// cabin, what they lay up over play time (eggs from the hens, wool from the sheep, milk from the cow; the pigs give
-// nothing, they are just good company), collecting it into the saddlebags, the thank-you lamb or piglet from the farm
-// jobs, and SELLING the goods at the general store counter as word problems. The yard itself (the coop, the pen, the
-// corral and the animals walking about in them) is src/homestead.js.
+// cabin, which kinds the store will sell yet, what they lay up over play time (eggs from the hens, wool from the sheep,
+// milk from the cow; the pigs give nothing, they are just good company), collecting it into the saddlebags, the
+// thank-you piglet, lamb or calf from the jobs, and SELLING the goods at the general store counter as word problems. The
+// yard itself (the coop, the pen, the corral and the animals walking about in them) is src/homestead.js.
+//
+// Hens can be bought from the start. Pigs, sheep and milk cows are a reward: the store sells a kind only once the rider
+// has earned a young one of it as a thank-you from that kind's job (a piglet for penning a whole batch of pigs, a lamb
+// for healing a whole flock, a calf for roping a whole wave at the round-up). The first one of each kind comes for sure
+// by GIFT.sure whole jobs (sooner by luck), so earning it is a goal the kid can see coming, not a lucky draw. A rider who
+// already owns one of a kind (an older save) has that kind unlocked.
 //
 // The goods only turn into gold through the math: they are laid up while the kid plays (never while the game is shut),
 // a little at a time, collected by walking past the yard, and sold to the townsfolk at the store's counter, where each
-// sale is an order slip like the others (src/missions/store.js): "You bring 30 eggs. Mrs. Abernathy pays 2 gold a
-// dozen, whole dozens only..." and the kid picks the coin with the gold it comes to. The wrong coins are the real slips:
-// paid for every egg instead of every dozen, stopped at the number of dozens, counted the leftover eggs as gold or as a
-// dozen of their own, used 10 for a dozen (or 2 quarts for a gallon). Each has a one-line why and a picture: the eggs
-// packed into cartons of a dozen with the leftover ones beside them, the quarts in gallon jugs, the wool in bundles.
+// sale is an order slip like the others (src/missions/store.js) and the kid picks the coin with the answer. Each of the
+// goods has its own kind of problem:
+//   eggs and milk  by the dozen / the gallon: "You bring 30 eggs. Mrs. Abernathy pays 2 gold a dozen, whole dozens
+//                  only..." The wrong coins are the real slips: paid for every egg instead of every dozen, stopped at the
+//                  number of dozens, counted the leftover eggs as gold, used 10 for a dozen (or 2 quarts for a gallon).
+//                  The picture: the eggs packed into cartons of a dozen with the leftover ones beside them, quarts in jugs.
+//   wool           FRACTIONS: "You bring 12 pounds of wool. Mrs. Reed buys 3/4 of it. How many pounds does she take?"
+//                  The wrong coins: divided by the top number instead of the bottom, took the whole lot, took the part
+//                  she leaves, stopped at one part, forgot the price. The picture: the wool as a bale cut into equal
+//                  parts with the bought parts shaded (never the answer).
 //
-// The sales are levelled to the kid by the store's own word-problem ladder (rider.topics.store's step, SALE_FORMS):
-//   steps 1-2  lots      the amount is told in dozens / gallons / pounds: 3 dozen at 2 gold a dozen (equal groups)
-//   steps 3-4  count     the amount is told in eggs / quarts, and it comes out even: 36 eggs, 2 gold a dozen
-//   steps 5-6  leftover  whole dozens only, the rest stay in the saddlebags (dividing with a remainder); half-dozens
-//   steps 7-9  unit      a price for a bigger lot: 12 gold for a 4-pound bale, the same for every pound (unit price);
-//                        and gallons without being told a gallon is 4 quarts
+// The sales are levelled to the kid by the store's own word-problem ladder (rider.topics.store's step):
+//   eggs and milk (SALE_FORMS)
+//     steps 1-2  lots      the amount is told in dozens / gallons: 3 dozen at 2 gold a dozen (equal groups)
+//     steps 3-4  count     the amount is told in eggs / quarts, and it comes out even: 36 eggs, 2 gold a dozen
+//     steps 5-6  leftover  whole dozens only, the rest stay in the saddlebags (dividing with a remainder); half-dozens
+//     steps 7-9  unit      a price for a bigger lot: 6 gold for 2 dozen, the same for every dozen (unit price);
+//                          and gallons without being told a gallon is 4 quarts
+//   wool (WOOL.forms)
+//     steps 1-2  unit      one part of an easy whole: 1/2 of 8, 1/3 of 9, 1/4 of 12 (how many pounds)
+//     steps 3-4  part      more than one part: 3/4 of 12, 2/5 of 10 (how many pounds)
+//     steps 5-6  priced    a share at a price a pound: 2/3 of 12 pounds at 2 gold a pound (how much gold)
+//     steps 7-9  two       two buyers' shares of one bale: how many pounds in all, how many more one takes, how many are
+//                          left (halves with quarters, thirds with sixths: the picture cuts the bale into the smaller parts)
+//                          (and now and then a priced share again)
+//   Every answer is a whole number.
 //
 // Everything is kept on the rider (saved with it, save.js keeps it tidy):
-//   rider.owned.animals  [{ kind: 'hen'|'pig'|'sheep'|'cow', name, young?, age? }]   young: a lamb or a piglet given as a
-//                        thank-you (smaller; it grows up after GROW seconds of play, counted in age)
+//   rider.owned.animals  [{ kind: 'hen'|'pig'|'sheep'|'cow', name, young?, age? }]   young: a piglet, a lamb or a calf
+//                        given as a thank-you (smaller; it grows up after GROW seconds of play, counted in age)
 //   rider.owned.goods    { eggs, wool, milk }   whole numbers in the saddlebags (eggs; pounds of wool; quarts of milk)
 //   rider.owned.yard     { eggs, wool, milk }   laid up at the yard, waiting to be collected (parts of one included)
+//   rider.owned.farm     { unlocked: ['pig', ...], jobs: { pig, sheep, cow } }   the kinds the store sells this rider
+//                        (besides hens), and how many whole jobs of each kind were done while that kind was still locked
 //
 // Pure: no page, no three.js. tests/homestead.test.mjs checks it.
 
@@ -36,11 +58,13 @@ export const ANIMALS = {
   pig: { id: 'pig', name: 'Pig', many: 'pigs', price: 35, most: 3, home: 'pen', goods: null,
     line: 'Lays nothing at all, but grunts happily in the mud. Pure company.' },
   sheep: { id: 'sheep', name: 'Sheep', many: 'sheep', price: 50, most: 3, home: 'corral', goods: 'wool', every: 260,
-    line: 'Grows wool to sell by the pound. Lives in a little corral.' },
+    line: 'Grows wool. Townsfolk buy a share of it: a half, a third, three quarters. Lives in a little corral.' },
   cow: { id: 'cow', name: 'Milk cow', many: 'milk cows', price: 120, most: 2, home: 'corral', goods: 'milk', every: 80,
     line: 'Gives milk by the quart. Shares the corral with the sheep.' },
 };
 export const KINDS = ['hen', 'pig', 'sheep', 'cow'];
+// the young one of each kind (the thank-yous), and the one line a locked kind shows at the store: what earns it
+export const YOUNG = { hen: 'chick', pig: 'piglet', sheep: 'lamb', cow: 'calf' };
 // names for an animal given as a thank-you (or bought without a name typed)
 export const NAMES = {
   hen: ['Henrietta', 'Pip', 'Dottie', 'Nugget', 'Clucky', 'Ginger', 'Peaches', 'Biddy'],
@@ -60,12 +84,23 @@ export const GOODS = {
 export const GOODS_IDS = ['eggs', 'wool', 'milk'];
 export const GROW = 900;       // seconds of play a thank-you lamb or piglet takes to grow up (about a quarter of an hour)
 
-// the thank-yous: finishing a whole job now and then (not every time) brings a young one, if there's room for it
+// the thank-yous: finishing a whole job now and then (not every time) brings a young one, if there's room for it. The
+// first one of each kind (the one that unlocks the kind at the store) comes for sure by the `sure`th whole job.
 export const GIFT = {
   chance: 0.35,
-  from: { flockDone: 'sheep', pigsDone: 'pig' },   // a lamb after healing the flock, a piglet after penning the pigs
+  // (a round-up wave is quicker than a flock or a batch of pigs, and a cow is the dearest animal: calves come rarer)
+  chanceOf: { cow: 0.15 },
+  // a piglet after penning the pigs, a lamb after healing the flock, a calf after roping a whole wave of cattle
+  from: { flockDone: 'sheep', pigsDone: 'pig', waveDone: 'cow' },
+  sure: { pig: 2, sheep: 2, cow: 3 },
 };
-
+const chanceOf = (kind) => (GIFT.chanceOf[kind] != null ? GIFT.chanceOf[kind] : GIFT.chance);
+// what earns each locked kind, in words: [the job done once, the job done n times]
+const EARN = {
+  pig: ['Pen a whole batch of pigs at the farm', (n) => `Pen ${n} whole batches of pigs at the farm`],
+  sheep: ['Heal a whole flock of sick sheep at the farm', (n) => `Heal ${n} whole flocks of sick sheep at the farm`],
+  cow: ['Rope a whole wave at the round-up', (n) => `Rope ${n} whole waves at the round-up`],
+};
 const whole = (v) => { v = Number(v); return Number.isFinite(v) && v > 0 ? Math.floor(v) : 0; };
 const amount = (v) => { v = Number(v); return Number.isFinite(v) && v > 0 ? v : 0; };
 export const cleanName = (s) => String(s == null ? '' : s).replace(/[^\p{L}\p{N} '\-]/gu, '').trim().slice(0, 12);
@@ -97,17 +132,37 @@ const tidied = new WeakMap();
 export function homestead(rider) {
   const o = rider.owned && typeof rider.owned === 'object' ? rider.owned : (rider.owned = {});
   const t = tidied.get(o);
-  if (t && t.animals === o.animals && t.goods === o.goods && t.yard === o.yard) return o;
+  if (t && t.animals === o.animals && t.goods === o.goods && t.yard === o.yard && t.farm === o.farm) return o;
   o.animals = cleanAnimals(o.animals);
   o.goods = cleanGoods(o.goods);
   o.yard = cleanGoods(o.yard, { parts: true });
-  tidied.set(o, { animals: o.animals, goods: o.goods, yard: o.yard });
+  o.farm = cleanFarm(o.farm, o.animals);
+  tidied.set(o, { animals: o.animals, goods: o.goods, yard: o.yard, farm: o.farm });
   return o;
+}
+// the kinds unlocked and the whole jobs counted, from a saved one (made when missing). A kind the rider owns counts as
+// unlocked (an older save that bought pigs before kinds were locked keeps them buyable).
+export function cleanFarm(f, animals = []) {
+  const o = f && typeof f === 'object' && !Array.isArray(f) ? f : {};
+  const jobs = o.jobs && typeof o.jobs === 'object' ? o.jobs : {};
+  const unlocked = new Set((Array.isArray(o.unlocked) ? o.unlocked : []).filter((k) => GIFT.sure[k]));
+  for (const a of Array.isArray(animals) ? animals : []) if (a && GIFT.sure[a.kind]) unlocked.add(a.kind);
+  const out = { unlocked: KINDS.filter((k) => unlocked.has(k)), jobs: {} };
+  for (const k of Object.keys(GIFT.sure)) out.jobs[k] = whole(jobs[k]);
+  return out;
 }
 
 export const animalsOf = (rider) => homestead(rider).animals;
 export const countOf = (rider, kind) => animalsOf(rider).filter((a) => a.kind === kind).length;
 export const hasRoom = (rider, kind) => !!ANIMALS[kind] && countOf(rider, kind) < ANIMALS[kind].most;
+// can the store sell this kind to the rider yet? (hens always; the others once one of that kind was earned)
+export const unlocked = (rider, kind) => kind === 'hen' || (!!ANIMALS[kind] && (homestead(rider).farm.unlocked.includes(kind) || countOf(rider, kind) > 0));
+// the one line a locked kind shows at the store: 'Pen 2 whole batches of pigs at the farm to earn your first piglet (1 done).'
+export function earnLine(rider, kind) {
+  const E = EARN[kind]; if (!E || unlocked(rider, kind)) return '';
+  const n = GIFT.sure[kind], done = Math.min(n - 1, homestead(rider).farm.jobs[kind] || 0);
+  return `${n > 1 ? E[1](n) : E[0]} to earn your first ${YOUNG[kind]}${done ? ` (${done} done)` : ''}. Then the store sells ${ANIMALS[kind].many}.`;
+}
 // a name not yet used by one of the rider's animals of that kind
 export function freeName(rider, kind, rand = Math.random) {
   const used = new Set(animalsOf(rider).map((a) => a.name));
@@ -116,22 +171,32 @@ export function freeName(rider, kind, rand = Math.random) {
   return (free.length ? free : list)[Math.floor(rand() * (free.length || list.length))];
 }
 
-// buys one: spend(rider, gold) -> true when paid (save.js spend, which saves). -> 'bought' | 'short' | 'full' | 'unknown'
+// buys one: spend(rider, gold) -> true when paid (save.js spend, which saves).
+// -> 'bought' | 'short' | 'full' | 'locked' | 'unknown'
 export function buyAnimal(rider, kind, name, spend) {
   const A = ANIMALS[kind]; if (!A) return 'unknown';
+  if (!unlocked(rider, kind)) return 'locked';
   if (!hasRoom(rider, kind)) return 'full';
   if (!spend(rider, A.price)) return 'short';
   animalsOf(rider).push({ kind, name: cleanName(name) || freeName(rider, kind) });
   return 'bought';
 }
-// a thank-you after a whole job (event: 'flockDone' | 'pigsDone'): now and then a lamb or a piglet, when there's room.
-// -> the young animal added ({ kind, name, young }) or null. (Not saved here: the caller saves.)
+// a thank-you after a whole job (event: 'flockDone' | 'pigsDone' | 'waveDone'): now and then a lamb, a piglet or a calf,
+// when there's room. While the kind is still locked the whole job is counted, and the GIFT.sure'th one brings it for
+// sure. -> a copy of the young animal added ({ kind, name, young, age, unlocked: true when it unlocked its kind at the
+// store }) or null. (Not saved here: the caller saves.)
 export function thankYou(rider, event, rand = Math.random) {
   const kind = GIFT.from[event];
-  if (!kind || !hasRoom(rider, kind) || rand() >= GIFT.chance) return null;
+  if (!kind) return null;
+  const farm = homestead(rider).farm, first = !unlocked(rider, kind);
+  if (first) farm.jobs[kind] = (farm.jobs[kind] || 0) + 1;
+  if (!hasRoom(rider, kind)) return null;
+  const sure = first && farm.jobs[kind] >= GIFT.sure[kind];
+  if (!sure && rand() >= chanceOf(kind)) return null;
   const a = { kind, name: freeName(rider, kind, rand), young: true, age: 0 };
   animalsOf(rider).push(a);
-  return a;
+  if (first) farm.unlocked = KINDS.filter((k) => k === kind || farm.unlocked.includes(k));
+  return { ...a, unlocked: first };
 }
 
 // time passes at the yard (dt seconds of play): the grown animals lay up their goods (up to what the yard holds) and the
@@ -170,7 +235,7 @@ export function goodsLine(rider) {
 }
 
 // ---- selling at the store counter --------------------------------------------------------------------------------------
-// which forms of sale each store step deals (the store's word-problem ladder, 1..9)
+// which forms of egg and milk sale each store step deals (the store's word-problem ladder, 1..9)
 export const SALE_FORMS = [
   { upTo: 2, forms: ['lots'] },
   { upTo: 4, forms: ['count'] },
@@ -185,7 +250,8 @@ const GOLD = ['gold', 'gold'];
 const u = (n, unit) => `${n} ${n === 1 ? unit[0] : unit[1]}`;
 // a count of lots: '3 dozen' (never '3 dozens'), '2 gallons', '1 pound'
 const lotN = (k, lot) => (lot[0] === 'dozen' ? `${k} dozen` : u(k, lot));
-// how each of the goods is counted and sold: item (one unit), lot (what the store prices: a dozen, a gallon, a pound),
+// how eggs and milk are counted and sold (wool sells as fractions: WOOL below): item (one unit), lot (what the store
+// prices: a dozen, a gallon),
 // per (items in a lot), half (the half-lot, where there is one), wrong (the slip for the lot's size: 10 for a dozen),
 // shape (what the picture draws), price (gold a lot, to pick from), most (the most brought to one sale)
 const SALE_GOODS = {
@@ -195,15 +261,7 @@ const SALE_GOODS = {
   milk: { item: ['quart', 'quarts'], lot: ['gallon', 'gallons'], per: 4, price: [2, 3, 4], most: 30, shape: 'jar', what: 'milk',
     half: { lot: ['half-gallon', 'half-gallons'], per: 2, price: [1, 2], wrong: { per: 4, why: 'Four quarts make a whole gallon. A half-gallon is 2 quarts.' } },
     wrong: { per: 2, why: 'Two quarts is only half a gallon. A gallon is 4 quarts.' }, tell: '4 quarts make a gallon.' },
-  wool: { item: ['pound', 'pounds'], lot: ['pound', 'pounds'], per: 1, price: [2, 3], most: 20, shape: 'fleece', what: 'wool',
-    bundle: { per: [2, 3], price: [3, 4, 5] } },
 };
-// a wool bundle's size and price: never as many gold as pounds (3 gold for every 3 pounds is just a gold a pound: the
-// gold would be the pounds again, with nothing to work out)
-function woolBundle(G, pick) {
-  const per = pick(G.bundle.per);
-  return { per, lot: ['bundle', 'bundles'], price: pick(G.bundle.price.filter((p) => p > per)) };
-}
 
 // a sale order for the store counter, from what the rider carries, or null when there's nothing to sell at this step.
 // carried: { eggs, wool, milk }; step: the store's ladder step; who: the townsperson buying ({ name, she })
@@ -215,17 +273,18 @@ export function makeSale(carried, { step = 1, who = null, rand = Math.random, co
   const pick = (a) => a[Math.floor(rand() * a.length)];
   const order = [...GOODS_IDS].sort(() => rand() - 0.5);
   for (let tries = 0; tries < 12; tries++) {
-    const form = pick(forms);
+    const form = pick(forms), wform = pick(woolForms(step));
     for (const g of order) {
-      const core = saleCore(g, form, whole(carried && carried[g]), { rand, pick, step, f });
+      const core = g === 'wool' ? woolCore(wform, whole(carried && carried[g]), { pick, f })
+        : saleCore(g, form, whole(carried && carried[g]), { rand, pick, step, f });
       if (!core) continue;
       const coins = coinsFor(core, n, rand);
       if (!coins) continue;
       return {
         id: Math.floor(rand() * 1e9).toString(36), type: 'sale', step, key: `sale:${g}:${form}`, who: f,
-        story: core.story, ask: core.ask, coins, answer: coins.find((c) => c.good).label, unit: GOLD, cents: false,
+        story: core.story, ask: core.ask, coins, answer: coins.find((c) => c.good).label, unit: core.unit || GOLD, cents: false,
         pic: core.pic, rightWhy: core.rightWhy, afterWhy: '', equation: null, picture,
-        sale: { goods: g, sold: core.sold, gold: core.answer, left: whole(carried[g]) - core.sold, form },
+        sale: { goods: g, sold: core.sold, gold: core.gold != null ? core.gold : core.answer, left: whole(carried[g]) - core.sold, form: g === 'wool' ? wform : form },
       };
     }
   }
@@ -239,7 +298,8 @@ export function sold(rider, order) {
 }
 
 function coinsFor(core, n, rand) {
-  const face = (v) => ({ v, big: String(v), small: 'gold', label: `${v} gold` });
+  // (gold, or pounds when a wool sale asks how many pounds)
+  const face = core.unit ? (v) => ({ v, big: String(v), small: 'lb', label: `${v} lb` }) : (v) => ({ v, big: String(v), small: 'gold', label: `${v} gold` });
   const used = new Set([core.answer]), wrong = [];
   for (const s of core.slips) {
     if (wrong.length >= n - 1) break;
@@ -258,13 +318,12 @@ function saleCore(g, form, c, { rand, pick, step, f }) {
   const buys = `${f.name} wants to buy your ${G.what}.`;
   const ask = 'How much gold do you get?';
   if (form === 'half' && !G.half) return null;
-  if (form === 'unit') return g === 'wool' ? unitWool(c, { rand, pick, f, G }) : g === 'eggs' ? unitEggs(c, { rand, pick, f, G }) : leftoverCore(g, c, { pick, f, G, tell: false });
+  if (form === 'unit') return g === 'eggs' ? unitEggs(c, { rand, pick, f, G }) : leftoverCore(g, c, { pick, f, G, tell: false });
   if (form === 'leftover' || form === 'half') return leftoverCore(g, c, { pick, f, G, half: form === 'half', tell: step < 7 });
 
-  // lots and count: whole lots only (wool: by the pound in lots; in 2- or 3-pound bundles when counted)
-  let per = G.per, lot = G.lot, price = pick(G.price);
-  if (g === 'wool' && form === 'count') ({ per, lot, price } = woolBundle(G, pick));
-  const kMax = per === 1 ? 9 : 6, k = Math.min(Math.floor(c / per), kMax);
+  // lots and count: whole lots only
+  const per = G.per, lot = G.lot, price = pick(G.price);
+  const kMax = 6, k = Math.min(Math.floor(c / per), kMax);
   if (k < 2) return null;   // (one lot is just the price: nothing to work out)
   const nItems = k * per, ans = k * price;
   if (form === 'lots') {
@@ -284,10 +343,9 @@ function saleCore(g, form, c, { rand, pick, step, f }) {
     };
   }
   // count: told in items, it comes out even
-  const tell = g === 'wool' ? '' : ` ${G.tell}`;
-  const wp = g === 'wool' ? null : G.wrong;
+  const tell = ` ${G.tell}`, wp = G.wrong;
   return {
-    story: `${buys} You bring ${u(nItems, G.item)}${g === 'milk' ? ' of milk' : g === 'wool' ? ' of wool' : ''}.${tell} ${They} pays ${price} gold ${per > 1 && g === 'wool' ? `for every ${per} pounds` : `a ${lot[0]}`}.`, ask,
+    story: `${buys} You bring ${u(nItems, G.item)}${g === 'milk' ? ' of milk' : ''}.${tell} ${They} pays ${price} gold a ${lot[0]}.`, ask,
     answer: ans, sold: nItems,
     slips: [
       { v: nItems * price, slip: 'perItem', why: `${nItems} × ${price} pays ${price} gold for every ${G.item[0]}. First see how many ${lot[1]} ${nItems} ${G.item[1]} make.` },
@@ -306,12 +364,11 @@ function leftoverCore(g, c, { pick, f, G, half = false, tell = true }) {
   const They = f.she ? 'She' : 'He';
   let per = G.per, lot = G.lot, price = pick(G.price), wp = G.wrong;
   if (half) { per = G.half.per; lot = G.half.lot; price = pick(G.half.price); wp = G.half.wrong; }
-  if (g === 'wool') { ({ per, lot, price } = woolBundle(G, pick)); wp = null; }
   const n = Math.min(c, G.most), k = Math.floor(n / per), left = n - k * per;
   if (k < 2) return null;
   const ans = k * price;
-  const leftWords = g === 'eggs' ? 'any eggs left over stay' : g === 'milk' ? 'what\'s left over stays' : 'any wool left over stays';
-  const priced = g === 'wool' ? `for every ${per} pounds, whole bundles only` : `a ${lot[0]}${g === 'milk' && tell && !half ? ' (4 quarts)' : ''}, whole ${lot[1]} only`;
+  const leftWords = g === 'eggs' ? 'any eggs left over stay' : 'what\'s left over stays';
+  const priced = `a ${lot[0]}${g === 'milk' && tell && !half ? ' (4 quarts)' : ''}, whole ${lot[1]} only`;
   const slips = [];
   if (left > 0) {
     slips.push({ v: (k + 1) * price, slip: 'roundedUp', why: `That pays for ${lotN(k + 1, lot)}, but ${u(n, G.item)} only fill ${k}. ${left === 1 ? 'The last one stays' : `The last ${left} stay`} in your saddlebags.` });
@@ -321,7 +378,7 @@ function leftoverCore(g, c, { pick, f, G, half = false, tell = true }) {
   slips.push({ v: n * price, slip: 'perItem', why: `${n} × ${price} pays for every ${G.item[0]}. The store pays ${price} gold a ${lot[0]}: first see how many whole ${lot[1]} there are.` });
   slips.push({ v: k, slip: 'lotsOnly', why: `${k} is how many ${lot[1]} there are. Each one pays ${price} gold.` });
   return {
-    story: `${f.name} wants to buy your ${G.what}. You bring ${u(n, G.item)}${g === 'milk' ? ' of milk' : g === 'wool' ? ' of wool' : ''}. ${They} pays ${price} gold ${priced}; ${leftWords} in your saddlebags.`,
+    story: `${f.name} wants to buy your ${G.what}. You bring ${u(n, G.item)}${g === 'milk' ? ' of milk' : ''}. ${They} pays ${price} gold ${priced}; ${leftWords} in your saddlebags.`,
     ask: 'How much gold do you get?', answer: ans, sold: k * per, slips,
     pic: { kind: 'lots', n, per, price, item: G.item, lot, shape: G.shape, given: 'items', leftover: true },
     rightWhy: left > 0
@@ -330,25 +387,6 @@ function leftoverCore(g, c, { pick, f, G, half = false, tell = true }) {
   };
 }
 
-// a price for a bigger lot: 12 gold for a 4-pound bale, the same for every pound; you bring 5 pounds -> 15 gold
-function unitWool(c, { pick, f, G }) {
-  const They = f.she ? 'She' : 'He';
-  const m = pick([2, 3, 4, 5]), q = pick([2, 3]), P = m * q, n = Math.min(c, 12);
-  if (n < 2 || n === m) return null;
-  const ans = n * q;
-  return {
-    story: `${f.name} wants to buy your wool. ${They} pays ${P} gold for a ${m}-pound bale, and the same for every pound of it. You bring ${n} pounds of wool.`,
-    ask: 'How much gold do you get?', answer: ans, sold: n,
-    slips: [
-      { v: n * P, slip: 'bigLot', why: `${P} gold is for a whole ${m}-pound bale, not for each pound. One pound fetches ${P} ÷ ${m}.` },
-      { v: P, slip: 'oneBale', why: `${P} gold is what ${m} pounds fetch. You bring ${n} pounds.` },
-      { v: q, slip: 'one', why: `${q} gold is one pound's worth. You bring ${n} pounds.` },
-      { v: P + n, slip: 'added', why: `${P} + ${n} adds the gold to the pounds. Find a pound's price first.` },
-    ],
-    pic: { kind: 'unit', big: m, bigGold: P, n, item: ['pound', 'pounds'] },
-    rightWhy: `${P} gold ÷ ${m} pounds = ${q} gold a pound, and ${n} × ${q} = ${ans} gold`,
-  };
-}
 // eggs priced by the 2 or 3 dozen: 6 gold for 2 dozen, the same for every dozen; you bring 40 eggs -> 3 dozen, 9 gold
 function unitEggs(c, { pick, f, G }) {
   const They = f.she ? 'She' : 'He';
@@ -371,12 +409,153 @@ function unitEggs(c, { pick, f, G }) {
   };
 }
 
+// ---- wool, sold as fractions ----------------------------------------------------------------------------------------
+// A townsperson buys a share of the wool you bring: "You bring 12 pounds of wool. Mrs. Reed buys 3/4 of it. How many
+// pounds does she take?" The wool is paid for at a price a pound either way (said in the right answer's line when the
+// question is only about pounds), so the gold always comes from the share.
+export const WOOL = {
+  // which kind of share each store step deals (the store's word-problem ladder, 1..9)
+  forms: [
+    { upTo: 2, forms: ['unit'] },             // one part of an easy whole: 1/2 of 8, 1/3 of 9, 1/4 of 12
+    { upTo: 4, forms: ['part'] },             // more than one part: 3/4 of 12, 2/5 of 10
+    { upTo: 6, forms: ['priced'] },           // a share at a price a pound: how much gold
+    { upTo: 99, forms: ['two', 'two', 'priced'] },   // two buyers' shares of one bale (in all, how many more, how many left)
+  ],
+  price: 2,            // gold a pound when the question asks only for pounds
+  prices: [2, 3],      // gold a pound to pick from when the price is part of the question
+  most: 30,            // the most pounds brought to one sale
+  unit: [2, 3, 4],     // the bottom numbers of the one-part shares
+  part: [[2, 3], [3, 4], [2, 5], [3, 5], [4, 5], [5, 6]],   // the shares of more than one part (top, bottom)
+  // two buyers' shares [top, bottom, top, bottom]: halves with quarters or thirds, thirds with sixths, quarters with
+  // eighths, fifths with fifths (the picture cuts the bale into the smaller parts); never all of it between them
+  two: [[1, 2, 1, 4], [1, 4, 1, 2], [1, 2, 1, 3], [1, 3, 1, 2], [1, 3, 1, 6], [1, 6, 1, 3], [2, 3, 1, 6], [1, 6, 2, 3],
+    [1, 4, 1, 8], [3, 8, 1, 4], [1, 8, 1, 2], [2, 5, 1, 5], [1, 5, 3, 5]],
+};
+const woolForms = (step) => (WOOL.forms.find((s) => step <= s.upTo) || WOOL.forms[WOOL.forms.length - 1]).forms;
+const POUNDS = ['pound', 'pounds'];
+const OTHERS = ['Widow Collins', 'Jed Turner', 'Hattie Bell', 'Ike Malone', 'Old Silas', 'Doc Harlan', 'Clara Dunn'];
+const PART_WORD = { 2: 'a half', 3: 'a third', 4: 'a quarter', 5: 'a fifth', 6: 'a sixth', 8: 'an eighth' };
+const lcm = (a, b) => { let x = a, y = b; while (y) [x, y] = [y, x % y]; return (a * b) / x; };
+const fr = (a, b) => `${a}/${b}`;
+const lb = (n) => u(n, POUNDS);
+// every number the picture and its line show (the answer must not be one of them)
+const shownNumbers = (pic) => { const p = picture(pic), t = (p.svg.match(/>([^<]*)</g) || []).join(' ') + ' ' + p.line; return (t.match(/\d+/g) || []).map(Number); };
+
+// one wool sale's numbers, words and slips (or null: not enough wool for this form)
+function woolCore(form, c, { pick, f }) {
+  const She = f.she ? 'She' : 'He', she = f.she ? 'she' : 'he';
+  const most = Math.min(c, WOOL.most);
+  for (let tries = 0; tries < 24; tries++) {
+    let core = null;
+    if (form === 'two') core = twoBuyers(most, { pick, f });
+    else {
+      const [a, b] = form === 'unit' ? [1, pick(WOOL.unit)] : form === 'priced' ? pick([...WOOL.part, [1, 3], [1, 4]]) : pick(WOOL.part);
+      const ks = [2, 3, 4, 5].filter((k) => b * k <= most && a * k !== b);
+      if (!ks.length) continue;
+      const k = pick(ks), n = b * k, s = a * k, priced = form === 'priced', p = priced ? pick(WOOL.prices) : WOOL.price;
+      const name = f.name, frac = fr(a, b), leave = fr(b - a, b);
+      const story = `${name} wants to buy some of your wool. You bring ${lb(n)} of wool. ${She} buys ${frac} of it${a === 1 && PART_WORD[b] ? ` (${PART_WORD[b]})` : ''}${priced ? ` and pays ${p} gold a pound` : ''}.`;
+      const each = `${n} ÷ ${b} = ${k} in each part`;
+      let slips;
+      if (!priced) {
+        slips = [
+          { v: n / a, slip: 'divTop', why: `${n} ÷ ${a} divides by the top number. The bottom number, ${b}, is how many equal parts: ${n} ÷ ${b}, then take ${a}.` },
+          { v: k, slip: 'onePart', why: `${k} pounds is just one part (1/${b}). ${She} buys ${a} of those parts.` },
+          { v: n - s, slip: 'leftover', why: `That's the part ${she} leaves (${leave}). ${She} buys the other ${frac}.` },
+          { v: n, slip: 'whole', why: `That's all ${lb(n)} you brought. ${She} buys only ${frac} of it.` },
+          { v: n * a, slip: 'timesTop', why: `${n} × ${a} is more than all your wool. Cut ${n} into ${b} equal parts first.` },
+          { v: n - b, slip: 'minusBottom', why: `${n} − ${b} takes away ${b} pounds. ${frac} means ${b} equal parts: ${n} ÷ ${b}.` },
+          ...(b !== 2 ? [{ v: n / 2, slip: 'half', why: `That's half of it. ${frac} cuts the wool into ${b} equal parts, not 2.` }] : []),
+        ];
+        // (for one part, dividing by the top is just "all of it": that slip is the whole's)
+        if (a === 1) slips = slips.filter((x) => x.slip !== 'divTop' && x.slip !== 'onePart');
+        core = {
+          story, ask: `How many pounds does ${she} take?`, answer: s, gold: s * p, sold: s, unit: POUNDS, slips,
+          pic: { kind: 'fraction', n, parts: b, shares: [{ name, frac, parts: a }], ask: 'pounds', she },
+          rightWhy: `${a === 1 ? `${n} ÷ ${b} = ${s}` : `${each}, and ${a} × ${k} = ${s}`}: ${frac} of ${n} is ${lb(s)}. At ${p} gold a pound, ${s * p} gold.`,
+        };
+      } else {
+        const g = s * p;
+        core = {
+          story, ask: 'How much gold do you get?', answer: g, sold: s, slips: [
+            { v: s, slip: 'noPrice', why: `${s} is the pounds ${she} takes. ${She} pays ${p} gold for every one of them.` },
+            { v: n * p, slip: 'whole', why: `That pays for all ${lb(n)}. ${She} buys only ${frac} of it.` },
+            { v: (n - s) * p, slip: 'leftover', why: `That pays for the part ${she} leaves (${leave}). ${She} buys the ${frac}.` },
+            ...(a > 1 ? [{ v: k * p, slip: 'onePart', why: `That pays for one part (1/${b}) only. ${She} buys ${a} parts.` }] : []),
+            ...(a > 1 ? [{ v: (n / a) * p, slip: 'divTop', why: `${n} ÷ ${a} divides by the top number. Cut it into ${b} equal parts (the bottom number).` }] : []),
+            { v: s + p, slip: 'added', why: `${s} + ${p} adds the price on. Each of the ${lb(s)} pays ${p} gold: multiply.` },
+          ],
+          pic: { kind: 'fraction', n, parts: b, shares: [{ name, frac, parts: a }], ask: 'gold', price: p, she },
+          rightWhy: `${a === 1 ? `${n} ÷ ${b} = ${s} pounds` : `${each}, ${a} × ${k} = ${lb(s)}`}, and ${s} × ${p} gold = ${g} gold.`,
+        };
+      }
+    }
+    if (!core) continue;
+    // (the picture shows the numbers to work with, never the answer: a sale whose answer it would show is dealt again)
+    if (shownNumbers(core.pic).includes(core.answer)) continue;
+    return core;
+  }
+  return null;
+}
+// two buyers share one bale: how many pounds in all, how many more one takes than the other, how many are left
+function twoBuyers(most, { pick, f }) {
+  const [a1, b1, a2, b2] = pick(WOOL.two), D = lcm(b1, b2);
+  // (two pounds or more in a part where the wool allows: a part of 1 pound leaves nothing to work out)
+  const fit = [1, 2, 3, 4, 5].filter((k) => D * k <= most && D * k >= 6), ks = fit.some((k) => k > 1) ? fit.filter((k) => k > 1) : fit;
+  if (!ks.length) return null;
+  const k = pick(ks), n = D * k, s1 = (a1 * n) / b1, s2 = (a2 * n) / b2, m1 = (a1 * D) / b1, m2 = (a2 * D) / b2;
+  const A = f.name, B = pick(OTHERS.filter((x) => x !== A)), p = WOOL.price;
+  const ask = pick(s1 === s2 ? ['all', 'left'] : ['all', 'more', 'left']);
+  const big = s1 > s2 ? A : B, small = s1 > s2 ? B : A, sBig = Math.max(s1, s2), sSmall = Math.min(s1, s2);
+  const both = s1 + s2, left = n - both;
+  const story = `${A} and ${B} both want your wool. You bring ${lb(n)}. ${A} buys ${fr(a1, b1)} of it and ${B} buys ${fr(a2, b2)}.`;
+  const shares = `${fr(a1, b1)} of ${n} = ${s1} and ${fr(a2, b2)} of ${n} = ${s2}`;
+  const tb = (a1 + a2) * n % (b1 + b2) === 0 ? (a1 + a2) * n / (b1 + b2) : null;
+  const tbWhy = `${fr(a1, b1)} + ${fr(a2, b2)} isn't ${fr(a1 + a2, b1 + b2)}: work out each share in pounds, then put them together.`;
+  const gold = `At ${p} gold a pound, ${both * p} gold for the two of them.`;
+  const base = { n, parts: D, shares: [{ name: A, frac: fr(a1, b1), parts: m1 }, { name: B, frac: fr(a2, b2), parts: m2 }] };
+  if (ask === 'all') return {
+    story, ask: 'How many pounds do they take in all?', answer: both, gold: both * p, sold: both, unit: POUNDS,
+    slips: [
+      { v: s1, slip: 'oneShare', why: `That's only ${A}'s share. Add ${B}'s to it.` },
+      { v: s2, slip: 'oneShare', why: `That's only ${B}'s share. Add ${A}'s to it.` },
+      ...(tb ? [{ v: tb, slip: 'topsBottoms', why: tbWhy }] : []),
+      { v: left, slip: 'leftover', why: `That's the wool nobody buys. They take the rest.` },
+      { v: n, slip: 'whole', why: `That's all ${lb(n)}. Together they buy less than the whole bale.` },
+    ],
+    pic: { kind: 'fraction', ...base, ask: 'all' },
+    rightWhy: `${shares}: ${s1} + ${s2} = ${lb(both)}. ${gold}`,
+  };
+  if (ask === 'more') return {
+    story, ask: `How many more pounds does ${big} take than ${small}?`, answer: sBig - sSmall, gold: both * p, sold: both, unit: POUNDS,
+    slips: [
+      { v: both, slip: 'added', why: `That adds the two shares. The question asks how many MORE: take one from the other.` },
+      { v: sBig, slip: 'oneShare', why: `That's ${big}'s whole share. Take away ${small}'s to see how many more.` },
+      { v: sSmall, slip: 'oneShare', why: `That's ${small}'s share. How many more does ${big} take than that?` },
+      { v: n - sBig, slip: 'leftover', why: `That's all the wool ${big} leaves. Compare the two shares instead.` },
+    ],
+    pic: { kind: 'fraction', ...base, ask: 'more', big, small },
+    rightWhy: `${shares}: ${sBig} − ${sSmall} = ${lb(sBig - sSmall)} more. ${gold}`,
+  };
+  return {
+    story, ask: `How many of the ${n} pounds are left?`, answer: left, gold: both * p, sold: both, unit: POUNDS,
+    slips: [
+      { v: both, slip: 'added', why: `That's what they take between them. Take it away from the ${n} to see what's left.` },
+      { v: n - s1, slip: 'oneShare', why: `That takes away only ${A}'s share. ${B} buys some too.` },
+      { v: n - s2, slip: 'oneShare', why: `That takes away only ${B}'s share. ${A} buys some too.` },
+      { v: n, slip: 'whole', why: `That's all ${lb(n)}, before anyone buys. Take both shares away.` },
+    ],
+    pic: { kind: 'fraction', ...base, ask: 'left' },
+    rightWhy: `${shares}: ${n} − ${s1} − ${s2} = ${lb(left)} left. ${gold}`,
+  };
+}
+
 // ---- the pictures (a wrong coin, or "Draw it for me") -------------------------------------------------------------------
 // The same look as the store's (src/ui/storepics.js): ink on the parchment, a "?" where the answer goes, never the answer.
-//   lots   the goods packed into their lots (cartons of a dozen eggs, gallon jugs of quarts, bundles of wool), each lot
-//          labelled with what it pays, the ones left over beside them ("stay in your bags")
-//   unit   a little table: the big lot and its gold, one pound (?), what you bring (?)
-const INK = '#2b2219', SOFT = '#8a7558', FILL = '#ead9b2', FILL2 = '#d9bf8a', ASK = '#b5523a', EGG = '#f4ead4', MILK = '#f7f4ec', WOOL = '#efe8da';
+//   lots      the goods packed into their lots (cartons of a dozen eggs, gallon jugs of quarts), each lot labelled with
+//             what it pays, the ones left over beside them ("stay in your bags")
+//   fraction  the wool as a bale cut into equal parts, the parts each buyer buys shaded, a "?" in every part
+const INK = '#2b2219', SOFT = '#8a7558', FILL = '#ead9b2', FILL2 = '#d9bf8a', ASK = '#b5523a', EGG = '#f4ead4', MILK = '#f7f4ec', FLEECE = '#efe8da', WOOLA = '#d6a85c', WOOLB = '#9fbf9a';
 const PW = 360;
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const text = (x, y, s, { size = 13, fill = INK, anchor = 'middle', weight = 600 } = {}) =>
@@ -386,7 +565,7 @@ const svgOf = (h, body) => `<svg viewBox="0 0 ${PW} ${h}" xmlns="http://www.w3.o
 function thing(shape, x, y, s = 1) {
   if (shape === 'egg') return `<ellipse cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" rx="${(3.6 * s).toFixed(1)}" ry="${(4.6 * s).toFixed(1)}" fill="${EGG}" stroke="${INK}" stroke-width="0.9"/>`;
   if (shape === 'jar') return `<rect x="${(x - 4 * s).toFixed(1)}" y="${(y - 6 * s).toFixed(1)}" width="${(8 * s).toFixed(1)}" height="${(12 * s).toFixed(1)}" rx="2" fill="${MILK}" stroke="${INK}" stroke-width="0.9"/><rect x="${(x - 2.4 * s).toFixed(1)}" y="${(y - 8 * s).toFixed(1)}" width="${(4.8 * s).toFixed(1)}" height="${(2.4 * s).toFixed(1)}" fill="${SOFT}"/>`;
-  return `<circle cx="${(x - 3 * s).toFixed(1)}" cy="${y.toFixed(1)}" r="${(4 * s).toFixed(1)}" fill="${WOOL}" stroke="${INK}" stroke-width="0.8"/><circle cx="${(x + 3 * s).toFixed(1)}" cy="${y.toFixed(1)}" r="${(4 * s).toFixed(1)}" fill="${WOOL}" stroke="${INK}" stroke-width="0.8"/><circle cx="${x.toFixed(1)}" cy="${(y - 3 * s).toFixed(1)}" r="${(4 * s).toFixed(1)}" fill="${WOOL}" stroke="${INK}" stroke-width="0.8"/>`;
+  return `<circle cx="${(x - 3 * s).toFixed(1)}" cy="${y.toFixed(1)}" r="${(4 * s).toFixed(1)}" fill="${FLEECE}" stroke="${INK}" stroke-width="0.8"/><circle cx="${(x + 3 * s).toFixed(1)}" cy="${y.toFixed(1)}" r="${(4 * s).toFixed(1)}" fill="${FLEECE}" stroke="${INK}" stroke-width="0.8"/><circle cx="${x.toFixed(1)}" cy="${(y - 3 * s).toFixed(1)}" r="${(4 * s).toFixed(1)}" fill="${FLEECE}" stroke="${INK}" stroke-width="0.8"/>`;
 }
 const PICS = {
   lots(p) {
@@ -437,20 +616,48 @@ const PICS = {
     s += text(PW - 12, h - 6, 'in all: ? gold', { size: 14, anchor: 'end', fill: ASK, weight: 800 });
     return { svg: svgOf(h, s), line };
   },
-  unit(p) {
-    const rows = [[`${p.big} pounds`, `${p.bigGold} gold`, false], ['1 pound', '?', true], [`${p.n} pounds`, '?', true]];
-    let s = '';
-    rows.forEach(([a, b, ask], i) => {
-      const y = 14 + i * 34;
-      s += `<rect x="60" y="${y}" width="110" height="26" rx="3" fill="${FILL}" stroke="${INK}" stroke-width="1.2"/>` + text(115, y + 18, a);
-      s += `<rect x="200" y="${y}" width="100" height="26" rx="3" fill="${ask ? 'none' : FILL2}" stroke="${ask ? ASK : INK}" stroke-width="1.2"${ask ? ' stroke-dasharray="4 3"' : ''}/>` + text(250, y + 18, b, ask ? { fill: ASK, weight: 800, size: 16 } : {});
-    });
-    s += text(28, 48 + 6, `÷ ${p.big}`, { size: 12, fill: SOFT }) + text(28, 82 + 6, `× ${p.n}`, { size: 12, fill: SOFT });
-    s += `<path d="M44 30 Q36 44 44 58 M44 64 Q36 78 44 92" fill="none" stroke="${SOFT}" stroke-width="1.2"/>`;
-    return { svg: svgOf(116, s), line: `${p.big} pounds fetch ${p.bigGold} gold. Find what 1 pound fetches, then ${p.n} pounds.` };
+  // the wool as a long bale cut into equal parts: each buyer's parts shaded (a colour each) with "Name buys 3/4" under
+  // them, the parts nobody buys left plain; a "?" in every part (how many pounds in one part is the first thing to find)
+  fraction(p) {
+    const D = p.parts, x0 = 14, x1 = PW - 14, gap = 3, w = (x1 - x0 - gap * (D - 1)) / D, top = 22, hBar = 34;
+    const shade = [WOOLA, WOOLB];
+    let s = text(PW / 2, 15, `${lb(p.n)} of wool`, { size: 13 });
+    let at = 0;
+    const spans = p.shares.map((sh, i) => { const from = at; at += sh.parts; return { ...sh, from, to: at, fill: shade[i] }; });
+    for (let i = 0; i < D; i++) {
+      const x = x0 + i * (w + gap), sp = spans.find((q) => i >= q.from && i < q.to);
+      s += `<rect x="${x.toFixed(1)}" y="${top}" width="${w.toFixed(1)}" height="${hBar}" rx="5" fill="${sp ? sp.fill : FLEECE}" stroke="${INK}" stroke-width="1.2"/>`;
+      // (two bands of twine round each part, as a bale is tied: only their ends, where they wrap over the top and the
+      // bottom edge, so they never look like the lines between the parts)
+      for (const t of [0.3, 0.7]) { const tx = (x + w * t).toFixed(1); s += `<path d="M${tx} ${top - 2} v6 M${tx} ${top + hBar - 4} v6" stroke="${SOFT}" stroke-width="1.6" stroke-linecap="round"/>`; }
+      s += text(x + w / 2, top + hBar / 2 + 5, '?', { size: 14, fill: ASK, weight: 800 });
+    }
+    // under the bale: a bracket under each buyer's parts (and the parts nobody buys) with its words; words that would
+    // run into ones already placed go on a second row
+    const by = top + hBar + 4, placed = [];
+    let rows = 1;
+    const under = (from, to, words, color) => {
+      const a = x0 + from * (w + gap), b = x0 + to * (w + gap) - gap;
+      s += `<path d="M${a.toFixed(1)} ${by} v4 H${b.toFixed(1)} v-4" fill="none" stroke="${color}" stroke-width="1.4"/>`;
+      const tw = words.length * 6.6, tx = Math.max(4, Math.min((a + b) / 2 - tw / 2, PW - 4 - tw));
+      let row = 0; while (placed.some((q) => q.row === row && tx < q.b + 8 && tx + tw > q.a - 8)) row++;
+      placed.push({ a: tx, b: tx + tw, row }); rows = Math.max(rows, row + 1);
+      s += text(tx, by + 20 + row * 17, words, { size: 13, anchor: 'start', fill: color, weight: 700 });
+    };
+    for (const sp of spans) under(sp.from, sp.to, `${sp.name} buys ${sp.frac}`, INK);
+    if (at < D) under(at, D, p.shares.length > 1 ? 'nobody buys these' : `${p.she || 'she'} leaves these`, SOFT);
+    const y = by + 20 + (rows - 1) * 17 + 4;
+    const q = { pounds: `${p.she || 'she'} takes: ? lb`, gold: 'in all: ? gold', all: 'in all: ? lb', more: `${p.big} takes ? lb more`, left: 'left: ? lb' }[p.ask] || '? lb';
+    if (p.ask === 'gold') s += text(x0, y + 16, `each pound: ${p.price} gold`, { size: 13, anchor: 'start', fill: SOFT, weight: 700 });
+    s += text(PW - 12, y + 16, q, { size: 15, anchor: 'end', fill: ASK, weight: 800 });
+    const one = `Find one part first: ${p.n} ÷ ${D}.`;
+    const line = p.shares.length > 1
+      ? `${lb(p.n)} cut into ${D} equal parts: ${p.shares.map((sh) => `${sh.frac} is ${sh.parts === 1 ? '1 part' : `${sh.parts} parts`}`).join(', ')}. ${one}`
+      : `${lb(p.n)} cut into ${D} equal parts (the bottom number). ${p.shares[0].parts === 1 ? `One part is ${p.shares[0].frac}: ${p.n} ÷ ${D}.` : `${one} Then take ${p.shares[0].parts} parts (the top number).`}${p.ask === 'gold' ? ` Then ${p.price} gold for every pound.` : ''}`;
+    return { svg: svgOf(y + 22, s), line };
   },
 };
-const PIC_TITLES = { lots: 'Packed into lots', unit: 'One pound first' };
+const PIC_TITLES = { lots: 'Packed into lots', fraction: 'Cut into equal parts' };
 export function picture(pic) {
   const d = PICS[pic && pic.kind];
   if (!d) return { svg: '', title: '', line: '' };
