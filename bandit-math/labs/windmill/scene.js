@@ -12,9 +12,15 @@ const GAME = new URL('../../', import.meta.url).href;            // the game's f
 const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 
 // the shape of the hill: flat round the tower, then falling away, with gentle lumps
-export function groundY(x, z) {
+function hillY(x, z) {
   const r = Math.hypot(x, z), fall = Math.max(0, r - 11);
   return -fall * fall * 0.011 - fall * 0.05 + (Math.sin(x * 0.11) * Math.cos(z * 0.13) + Math.sin(x * 0.037 + z * 0.05)) * Math.min(1, fall / 10) * 1.6;
+}
+// a level yard dug into the slope for the mill house (it stands at MILL_AT), blending back into the hill
+const MILL_AT = [-10.5, -9.5], MILL_Y = hillY(MILL_AT[0], MILL_AT[1]);
+export function groundY(x, z) {
+  const d = Math.hypot(x - MILL_AT[0], z - MILL_AT[1]), t = Math.min(1, Math.max(0, (d - 5) / 4));
+  return MILL_Y + (hillY(x, z) - MILL_Y) * t * t * (3 - 2 * t);
 }
 
 // the wind every swaying thing reads: dir (where it blows TO, flat, length 1) and level (0 still .. 1 a big gust)
@@ -118,10 +124,13 @@ export function makeScene({ low = false } = {}) {
   }
 
   // ── the mill house: a stone ground floor, plank walls above, a shingle roof, a door, flour sacks ───────────────────
-  const mill = new THREE.Group(); mill.position.set(-10.5, 0, -9.5); mill.rotation.y = 0.6; scene.add(mill);
+  const mill = new THREE.Group(); mill.position.set(MILL_AT[0], 0, MILL_AT[1]); mill.rotation.y = 0.6; scene.add(mill);
   const planks = plankTexture(3, [128, 92, 60]); planks.repeat.set(3, 1.2);
   const stone = new THREE.MeshLambertMaterial({ color: 0x9c958a });
-  const base = new THREE.Mesh(new THREE.BoxGeometry(6, 1.6, 5), stone); base.position.y = 0.8; mill.add(base);
+  // the hill falls away under it: stand it on the highest corner and run the stone footing down past the lowest
+  const corners = [[-3, -2.5], [3, -2.5], [-3, 2.5], [3, 2.5], [0, 0]].map(([a, b]) => groundY(mill.position.x + a * Math.cos(0.6) + b * Math.sin(0.6), mill.position.z - a * Math.sin(0.6) + b * Math.cos(0.6)));
+  const hi = Math.max(...corners), drop = hi - Math.min(...corners) + 0.4; mill.position.y = hi;
+  const base = new THREE.Mesh(new THREE.BoxGeometry(6, 1.6 + drop, 5), stone); base.position.y = 0.8 - drop / 2; mill.add(base);
   const walls = new THREE.Mesh(new THREE.BoxGeometry(5.8, 2.6, 4.8), new THREE.MeshLambertMaterial({ map: planks })); walls.position.y = 2.9; mill.add(walls);
   // the roof: a long triangle shape pushed out into a prism
   const rs = new THREE.Shape(); rs.moveTo(-3.3, 0); rs.lineTo(0, 2.2); rs.lineTo(3.3, 0); rs.lineTo(-3.3, 0);
