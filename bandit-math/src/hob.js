@@ -26,6 +26,9 @@
 //                         Protect the wagon (missions/wagonjob.js): 'wagonArrive' (the job starts), 'banditCatch',
 //                         'banditMiss', 'banditLoop' (a rider has galloped off round the bend), 'banditsDone' (data.n),
 //                         'wagonStop' ("Done for now")
+//                         The homestead (homestead.js): 'animal' (data.kind, data.name: one bought), 'animalGift' (data.kind,
+//                         data.name: a thank-you lamb or piglet), 'animalGrew' (data.name), 'goodsCollected' (picked up
+//                         at the yard), 'goodsSold' (sold at the store counter)
 //   B.say(text)           says a line now (or after the line he is saying)
 //   B.trail(on)           the hoofprints to the pasture on or off (they fade in and out)
 //   B.update(dt, at)      each frame: at = the player's position (the trail fades away once they reach the herd)
@@ -105,13 +108,28 @@ const LINES = {
   stage: ["That's the town band. The Professor on the piano, Josie on the harmonica.",
     "Stand a spell and listen, if you like. They play from sunup to sundown.",
     "Josie learned that harmonica on a cattle drive. The Professor plays it all by ear."],
+  // the homestead behind your cabin: the first of each kind bought, the thank-yous, the goods
+  animal: {
+    hen: "A hen of your own! She'll lay eggs in the coop behind your cabin. Walk past to pick them up, and sell them at the store counter.",
+    pig: "A pig! Pigs don't lay a blessed thing, partner. They're just good company.",
+    sheep: "A sheep! Her wool grows slow and steady. Pick it up by the corral and sell it by the pound at the store.",
+    cow: "A milk cow! Pick up the milk by the corral. The store buys it by the gallon, and four quarts make a gallon.",
+  },
+  animalAgain: ['{name} settles right in.', '{name} looks happy out back.', 'Another mouth to feed. {name} will earn their keep.'],
+  animalGift: {
+    sheep: "The settler sent you a lamb by way of thanks. {name} is waiting in your corral behind the cabin.",
+    pig: "The settler sent you a piglet by way of thanks. {name} is waiting in your pen behind the cabin.",
+  },
+  animalGrew: '{name} is all grown up now.',
+  goodsCollected: "Those go in your saddlebags. The townsfolk at the general store will buy them: mind the counter.",
+  goodsSold: "Sold! That's how a homestead pays its way: a little figuring at the counter.",
 };
 // which job each line belongs to. A line still waiting its turn is dropped once the player is at another job, or once it
 // has waited longer than KEEP_JOB seconds: said late it would be about a moment that has passed.
 const JOB = { arrive: 'roundup', catch: 'roundup', miss: 'roundup', farmArrive: 'sheep', sheepHealed: 'sheep', sheepWrong: 'sheep',
   sheepFine: 'sheep', flockDone: 'sheep', pigsArrive: 'pigs', pigPenned: 'pigs', pigWrong: 'pigs', pigsDone: 'pigs', storeStart: 'store',
   storeMiss: 'store', storeEquation: 'store', storeDone: 'store', deliveryWork: 'delivery', deliveryMiss: 'delivery', deliveryRight: 'delivery',
-  deliveryRoundUp: 'delivery', wagonArrive: 'wagon', banditCatch: 'wagon', banditMiss: 'wagon', banditLoop: 'wagon', banditsDone: 'wagon' };
+  deliveryRoundUp: 'delivery', animal: 'home', goodsCollected: 'home', goodsSold: 'store', wagonArrive: 'wagon', banditCatch: 'wagon', banditMiss: 'wagon', banditLoop: 'wagon', banditsDone: 'wagon' };
 const KEEP_JOB = 5;
 const NEAR_AGAIN = 180;  // seconds before Hob says something about the same place again (walking past again and again doesn't set him off each time)
 
@@ -126,6 +144,7 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
   let haulN = 0;                  // ('deliveryDone': which line said last)
   let hatN = 0;                   // ('hat': which line said last)
   let wagonN = 0;                 // ('banditsDone': which line said last)
+  let animalN = 0;                // ('animal' after the first of a kind: which line said last)
   const nearAt = {}, nearN = {};   // ('near': when each place was last remarked on, and which line it said)
   let speaking = 0, now = 0;
   let saying = null;               // the line on screen: { text, key } (key = the event it came from)
@@ -219,6 +238,25 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
         B.say(L[(nearN[data.place] = ((nearN[data.place] ?? -1) + 1)) % L.length]);
         break;
       }
+      case 'animal': {
+        const L = LINES.animal[data.kind]; if (!L) break;
+        if (once('animal_' + data.kind)) B.say(L, 7000);
+        else B.say(LINES.animalAgain[(animalN++) % LINES.animalAgain.length].replace('{name}', data.name || 'That one'), 3000);
+        break;
+      }
+      case 'animalGift': {
+        // (said straight after the job's own line: ahead of any older tip still waiting its turn)
+        const L = LINES.animalGift[data.kind]; if (!L) break;
+        const text = L.replace('{name}', data.name || 'The little one');
+        if (speaking > 0) {
+          let i = 0; queue.forEach((q, k) => { if (q.key === 'flockDone' || q.key === 'pigsDone') i = k + 1; });
+          queue.splice(i, 0, { text, ms: 6500, key, at: now });
+        } else B.say(text, 6500);
+        break;
+      }
+      case 'animalGrew': B.say(LINES.animalGrew.replace('{name}', data.name || 'Your little one'), 3500); break;
+      case 'goodsCollected': if (once('goodsCollected')) B.say(LINES.goodsCollected, 6500); break;
+      case 'goodsSold': if (once('goodsSold')) B.say(LINES.goodsSold, 4500); break;
       default: break;
     }
   }

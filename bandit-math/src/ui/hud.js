@@ -8,7 +8,8 @@
 //     onMenu(): the Menu button (Esc does the same in main.js); onPrompt(): a click or tap on the door prompt
 //     onTouch(code): a touch button ('KeyF' rope, 'KeyH' horse, 'KeyE' on/off)
 //   H.show(on)                 shown while riding, hidden on the title screen
-//   H.purse({ gold, bounty, title, next, badges, boxes })   the purse; gold going up pops a "+n" coin by it
+//   H.purse({ gold, bounty, title, next, badges, boxes, goods })   the purse; gold going up pops a "+n" coin by it;
+//                              goods: the homestead's goods in the saddlebags, as words ('30 eggs · 6 qt milk to sell')
 //   H.toast(text, kind)        a short note at the bottom for a couple of seconds (kind: 'good' | 'gold' | 'warn')
 //   H.prompt(text | null)      the door prompt ('E' then the words), or null to hide it
 //   H.rule({ main, sub, kind, buttons }) | H.rule(null)   the rule card under the compass ("Rope the 6-herd");
@@ -154,6 +155,8 @@ export function buckleSVG(tier, job = 'cattle') {
 
 // how much of the compass strip one radian takes (the strip shows about 100 degrees either side)
 const COMPASS_SPAN = 1.75;
+// a basket of eggs: the homestead's goods in the saddlebags
+const GOODS_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="9" cy="10" rx="3" ry="3.8" fill="#f2e8d2" stroke="#3b2a1e" stroke-width="1"/><ellipse cx="14.5" cy="9.5" rx="3" ry="3.8" fill="#efe2c4" stroke="#3b2a1e" stroke-width="1"/><path d="M3 12h18l-2.4 8H5.4z" fill="#8b6a3e" stroke="#3b2a1e" stroke-width="1.2" stroke-linejoin="round"/><path d="M6 15h12M7 18h10" stroke="#5b4428" stroke-width="1"/></svg>';
 
 export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch = () => {} } = {}) {
   ensureCss();
@@ -167,6 +170,7 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
       <div class="bmh-next"></div>
       <div class="bmh-badges"></div>
       <div class="bmh-bag" hidden>${ICON.box}<span></span></div>
+      <div class="bmh-bag bmh-goods" hidden>${GOODS_ICON}<span></span></div>
     </div>
     <div class="bmh-top">
       <div class="bmh-compass" aria-hidden="true"><div class="bmh-ticks"></div><div class="bmh-marks"></div><i class="bmh-notch"></i></div>
@@ -204,7 +208,7 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
 
   // ── THE PURSE ─────────────────────────────────────────────────────────────────────────────────────────────────
   let lastGold = null;
-  function purse({ gold = 0, bounty = 0, title = '', next = null, badges = [], boxes = 0 } = {}) {
+  function purse({ gold = 0, bounty = 0, title = '', next = null, badges = [], boxes = 0, goods = '' } = {}) {
     goldN.textContent = fmt(gold);
     if (lastGold !== null && gold > lastGold) pop(`+${fmt(gold - lastGold)}`);
     lastGold = gold;
@@ -214,6 +218,7 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
     badgesEl.innerHTML = badges.map((b) => `<span class="bmh-badge">${ICON.star}${esc(b)}</span>`).join('');
     bagEl.hidden = !boxes;
     bagEl.querySelector('span').textContent = boxes === 1 ? '1 lock box in your saddlebags' : `${boxes} lock boxes in your saddlebags`;
+    const ge = $('.bmh-goods'); ge.hidden = !goods; ge.querySelector('span').textContent = goods || '';
   }
   function pop(text) {
     const p = document.createElement('div');

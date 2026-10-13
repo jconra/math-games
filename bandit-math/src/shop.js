@@ -12,7 +12,9 @@
 // Every price and pay amount in the game is in the tables right below, so they can be tuned in one place after
 // watching the kids play.
 //
-//   const S = makeShops({ W, rider, onOpen, onClose, onBuy, onLockbox, onStoreJob, say })
+//   const S = makeShops({ W, rider, onOpen, onClose, onBuy, onLockbox, onStoreJob, say, extra })
+//     extra: more rows for a counter from elsewhere: { store: { html(), click(what, id, body) -> undefined (not its
+//     button) | { note, bought }, input(e), keydown(e, body) } } (the homestead's farm animals: src/homestead.js)
 //     onStoreJob(): "Mind the counter" was picked at the general store (the panel has closed; main.js starts the job)
 //     onOpen() / onClose(): the game pauses and resumes; onBuy(what): something was bought (the player looks at
 //     rider.owned again, the HUD's purse is redrawn); onLockbox(box, { own, after }): open a lock box (main.js
@@ -75,7 +77,7 @@ export const DOG_NAMES = ['Biscuit', 'Dusty', 'Scout', 'Pepper', 'Rusty', 'Bandi
 // which door is which, and what its prompt says
 export const COUNTERS = {
   stable: { place: 'stable', prompt: 'Talk to the stable keeper', title: 'The Stable', sub: 'Saddles and horses' },
-  store: { place: 'store', prompt: 'Visit the general store', title: 'General Store', sub: 'Orders, dogs and hats' },
+  store: { place: 'store', prompt: 'Visit the general store', title: 'General Store', sub: 'Orders, dogs, farm animals and hats' },
   sheriff: { place: 'sheriff', prompt: "Sheriff's desk", title: "Sheriff's Office", sub: 'Lock boxes and bounties' },
   cabin: { place: 'cabin', prompt: 'Sit at your cabin table', title: 'Your Cabin', sub: 'Open your lock boxes at the table' },
 };
@@ -137,7 +139,7 @@ export function makePanel({ title = '', sub = '', body = '', onClose = () => {},
 export const anyPanelOpen = () => openPanels > 0;
 
 // ── THE COUNTERS ─────────────────────────────────────────────────────────────────────────────────────────────────
-export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onBuy = () => {}, onLockbox = () => {}, onStoreJob = null, say = () => {} }) {
+export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onBuy = () => {}, onLockbox = () => {}, onStoreJob = null, say = () => {}, extra = null }) {
   let panel = null, openId = null;
   const S = { get isOpen() { return !!panel; }, get openId() { return openId; } };
 
@@ -248,6 +250,7 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
           <div class="bms-act">${price(cost)}<button type="button" data-do="buy-dog" ${rider.gold < cost ? 'disabled' : ''}>${rider.gold < cost ? short(cost) : 'Buy'}</button></div></div>`;
       }
       // hats: the one on your head, the ones you own (put one on), and the rest with a price
+      if (extra && extra.store) h += extra.store.html();   // (the farm animals)
       h += `<h3 class="bms-h">Hats</h3>`;
       const hats = hatsOwned(), wearing = hatOf(rider.look);
       for (const x of HATS) {
@@ -299,6 +302,7 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
     draw(note);
     panel.body.addEventListener('click', onClick);
     panel.body.addEventListener('input', (e) => { if (e.target.matches('[data-name="new"]')) S.dogName = e.target.value; });
+    for (const t of ['input', 'keydown']) panel.body.addEventListener(t, (e) => { const x = extra && extra[openId]; if (x && x[t]) x[t](e, panel.body); });
     panel.body.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches('[data-name]')) { const b = panel.body.querySelector(e.target.dataset.name === 'rename' ? '[data-do="rename"]' : '[data-do="buy-dog"]'); if (b && !b.disabled) b.click(); } });
   };
   S.close = () => { if (panel) panel.close(); };
@@ -308,10 +312,15 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
     const n = note ? `<div class="bms-note">${esc(note)}</div>` : '';
     panel.body.innerHTML = `<div class="bms-purse">${COIN}<b>${rider.gold}</b> gold</div>` + BUILD[openId](n);
     if (keep) { const [d, i] = keep.split(':'); const b = panel.body.querySelector(`[data-do="${d}"]${i ? `[data-id="${i}"]` : ''}`); if (b && !b.disabled) b.focus({ preventScroll: true }); }
+    // (on a small screen the panel scrolls: a note just said, "Snowy is yours!", is brought into view)
+    const ne = note && panel.body.querySelector('.bms-note'); if (ne && ne.scrollIntoView) ne.scrollIntoView({ block: 'nearest' });
   }
   function onClick(e) {
     const b = e.target.closest('button[data-do]'); if (!b || b.disabled) return;
     const what = b.dataset.do, id = b.dataset.id, o = owned();
+    // (another counter's rows: their buttons are theirs)
+    const x = extra && extra[openId] && extra[openId].click ? extra[openId].click(what, id, panel.body) : undefined;
+    if (x !== undefined) { if (x && x.bought) onBuy(x.bought); draw((x && x.note) || ''); return; }
     if (what === 'buy-saddle') {
       if (!spend(rider, PRICES.saddle[id])) { draw('Not enough gold yet.'); return; }
       o.saddles = [...new Set([...saddlesOwned(), id])]; o.saddle = id; saveRider(rider);

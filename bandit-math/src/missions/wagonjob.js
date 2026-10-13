@@ -22,7 +22,8 @@
 //
 //   const WJ = makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, audio, refresh, times, wagonLib, quiet })
 //     times(): the round-up's times trainer (RU.trainer('times')), so both jobs share one; left out, one is made here
-//     audio: src/audio/audio.js's (the action music plays while the job runs; see src/audio/actionmusic.js)
+//     audio: src/audio/audio.js's (the action music plays while the job runs; see src/audio/actionmusic.js; the wagon
+//     rumbles, creaks and clops as the traffic's wagons do: src/audio/wagonsound.js)
 //     wagonLib(): the wagons' library already loading for the town's traffic (src/wagon.js loadWagons: a promise), so
 //     it isn't loaded twice; left out, it is loaded here
 //     quiet(): true while another job has the card (at the herd, the farm, a counter): the wagon's "it waits for you"
@@ -37,7 +38,7 @@
 //   WJ.start(), WJ.stop()   start now (dev) / "Done for now"
 //   WJ.newWave()      a new gang now (dev)
 //   WJ.tookTrainer    true once a wave here has taken the shared trainer's current wave (the round-up deals afresh)
-//   WJ.state()        for rigs: { on, near, wave, riders, wagon, speed, music }
+//   WJ.state()        for rigs: { on, near, wave, riders, wagon, speed, music, sound }
 //   WJ.music          the action music (or null)
 //   WJ.dispose()
 import * as THREE from 'three';
@@ -52,6 +53,7 @@ import { PAY, boxTier } from '../shop.js';
 import { TIER_NAME } from '../lockbox/index.js';
 import { makeActionMusic } from '../audio/actionmusic.js';
 import { loadWagons, makeWagon } from '../wagon.js';
+import { makeWagonSound } from '../audio/wagonsound.js';
 import { ROAD_POINTS, makeRoad, SLOTS, gangLine, sacksFor, nextSpeed } from './wagonplan.js';
 export { ROAD_POINTS, makeRoad, SLOTS, gangLine, sacksFor, nextSpeed };
 
@@ -759,7 +761,7 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
 
   // ── EACH FRAME ─────────────────────────────────────────────────────────────────────────────────────────────────
   const camFwd = new THREE.Vector3(), lp = new THREE.Vector3();
-  let wasNear = false, cardT = 0;
+  let wasNear = false, cardT = 0, rumble = null;
   WJ.update = (dt) => {
     time += dt;
     if (!kit || !wagon) return;
@@ -786,6 +788,8 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
     }
     wagon.update(dt, want);
     s = wagon.s; v = wagon.v;
+    // its rumble, creaks and hooves, as the town's traffic wagons have (src/audio/wagonsound.js: quiet far off)
+    if (audio && wagon.wagon) { if (!rumble) rumble = makeWagonSound(audio, wagon.wagon); rumble.update(dt, camera.position); }
 
     if (state === 'on' && nextWaveT > 0 && (nextWaveT -= dt) <= 0) { if (WJ.near) newWave(); else nextWaveT = 0.5; }
 
@@ -894,7 +898,7 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
     wagon: wagon ? { x: +wagon.pos.x.toFixed(1), z: +wagon.pos.z.toFixed(1), real: !wagon.root } : null,
     wave: wave && { n: waveN, table: wave.table, kind: wave.kind, rule: wave.kind === 'missing' ? wave.w.rule : `The ${wave.table}-Gang`, goods: wave.goods, caught: wave.caught, misses: wave.misses, done: !!wave.done },
     riders: recs.map((x) => ({ n: x.n, good: x.good, state: x.state, mode: x.r.mode, x: +x.r.x.toFixed(1), z: +x.r.z.toFixed(1), speed: +x.r.speed.toFixed(2), clip: x.r.horse.clip, label: x.label.visible })),
-    downs: downs.length, music: music ? music.state() : null, rail: railT > 0,
+    downs: downs.length, music: music ? music.state() : null, rail: railT > 0, sound: rumble ? rumble.state() : null,
   });
   WJ.dispose = () => {
     disposed = true;
@@ -902,6 +906,7 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
     offPick(); endHelp(); unsee(); if (WJ.near) { hud.rule(null); hud.hint(null); }
     for (const rec of [...recs]) removeRec(rec);
     for (const d of [...downs]) removeDown(d);
+    if (rumble) { rumble.dispose(); rumble = null; }
     if (wagon) wagon.dispose();
     rail.dispose(); R.dispose();
     if (music) music.stop({ now: true });

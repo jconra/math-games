@@ -25,7 +25,7 @@ import { loadAnimals } from './actors/animals.js';
 import { makeInput } from './input.js';
 import { makePlayer, MOVE } from './player.js';
 import { makeDog, dogKind } from './dog.js';
-import { townLife } from './townlife.js';
+import { townLife, preloadChickens } from './townlife.js';
 import { showTitle } from './ui/title.js';
 import { makeHud } from './ui/hud.js';
 import { makeRoundup } from './missions/roundup.js';
@@ -40,7 +40,9 @@ import { makeShops, makePanel, boxTier, PRICES, PAY } from './shop.js';
 import { makeHob } from './hob.js';
 import { makeStage } from './stage.js';
 import { makeTraffic } from './traffic.js';
+import { roadCurve } from './wagon.js';
 import { makeCabin } from './cabin/cabin.js';
+import { makeHomestead } from './homestead.js';
 import { makeAudio, volumeRow } from './audio/audio.js';
 import { makeHobVoice, voiceRow } from './audio/voice.js';
 import { openLockbox, TIER_NAME } from './lockbox/index.js';
@@ -82,6 +84,7 @@ const loading = Promise.all([
   makeWorld({ renderer, camera, quality, look: LOOK, onProgress: (p, text) => { worldP = p; progress(text); } }),
   loadFolk().then((f) => { libsDone++; progress(); return f; }),
   loadAnimals(undefined, { kinds: ['cow', 'bull'] }).then((a) => { libsDone++; progress(); return a; }),
+  preloadChickens().catch(() => null),   // (the town's chickens: in before "ready"; town life says if they can't load)
 ]).then(([w, f, a]) => {
   W = w; folk = f; animals = a;
   I = makeInput(canvas, { camera }); I.enabled = false;
@@ -91,6 +94,7 @@ const loading = Promise.all([
   if (state !== 'boxes') canvas.classList.add('is-on');   // ("Just lock boxes" keeps its plain dark backdrop)
   T.setProgress(1, 'Ready to ride');
   BM.ready = true;
+  setTimeout(() => { try { roadCurve(W); } catch (e) { console.warn('the road could not be laid', e); } }, 300);   // (the wagons' road, worked out once while the title shows, so riding out doesn't wait on it)
 }).catch((e) => { console.error('Bandit Math could not load the valley', e); T.setProgress(0, 'The valley could not load: please reload the page'); });
 
 // ── THE GAME'S STATE ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -104,6 +108,7 @@ let farm = null, SH = null;   // the farm north of town (src/farm.js) and its si
 let PG = null;   // the farm's loose-pigs job (src/missions/pigs.js)
 let SJ = null;   // the general store's counter: word problems on order slips (src/missions/store.js)
 let WJ = null;   // protect the wagon: the gang on the road east of the pasture (src/missions/wagonjob.js), when ticked
+let HS = null;   // the rider's own farm animals in a yard behind the cabin, and their goods (src/homestead.js)
 let camps = null, DL = null;   // the camps out in the valley (src/camps.js) and their deliveries (src/missions/delivery.js)
 const atCounter = () => !!(SJ && SJ.active) || !!(DL && DL.active);   // (or making up a camp's order on the slip)   // (working the counter: the rider stands still, the store's camera)
 
@@ -149,7 +154,8 @@ async function ride(r) {
   stage = makeStage({ W, folk, audio: AUD });
   traffic = makeTraffic({ W, animals, folk, audio: AUD, obstacles: trafficThings });
   AUD.hold('pause', false); AUD.hold('title', false);
-  shops = makeShops({ W, rider, say: (t, k) => hud.toast(t, k),
+  HS = makeHomestead({ W, animals, rider, hud, hob, refresh });
+  shops = makeShops({ W, rider, say: (t, k) => hud.toast(t, k), extra: HS.shop,
     onOpen: () => pause('counter'), onClose: () => resume('counter'),
     onBuy: (what) => { refresh(); if (what === 'saddle' || what === 'horse') P.refreshOwned(); if (what === 'dog') { makeDogIfOwned(); if (cabin) cabin.dogsChanged(); } if (what === 'hat' && P && P.person) { if (!P.person.hat) P.person.hatOn(); P.person.setHat(rider.look.hatStyle); } hob.event(what); },
     onLockbox: (box, o) => openBox(box, o), onStoreJob: () => { if (SJ) SJ.start(); } });
@@ -157,9 +163,11 @@ async function ride(r) {
     onBuy: () => refresh(), onLockbox: (box, o) => openBox(box, o) });
   RU = makeRoundup({ W, animals, P, I, camera, canvas, rider, hud: roundupHud(), hob, refresh });
   farm = makeFarm({ W, animals });
-  SH = makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hud, hob, refresh, defer: (at) => !!(PG && PG.wants(at)) });
-  PG = makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, hob, refresh });
-  SJ = makeStoreJob({ W, folk, P, I, camera, rider, hud, hob, refresh, pay: PAY,
+  // (the farm jobs' Hob also hears a whole flock healed or a batch penned: now and then a thank-you lamb or piglet)
+  const farmHob = Object.create(hob); farmHob.event = (n, d) => { hob.event(n, d); if (HS && (n === 'flockDone' || n === 'pigsDone')) HS.jobDone(n); };
+  SH = makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hud, hob: farmHob, refresh, defer: (at) => !!(PG && PG.wants(at)) });
+  PG = makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, hob: farmHob, refresh });
+  SJ = makeStoreJob({ W, folk, P, I, camera, rider, hud, hob, refresh, pay: PAY, goods: HS,
     openBox: (problem, after) => !paused && openBox({ tier: problem.tier, from: 'store' }, { problem, after }),   // (false: not now, the store tries again)
     onStart: () => { I.enabled = false; if (RU) RU.paused = true; hud.prompt(null); hud.rule(null); hud.hint(null); },
     onStop: () => { I.enabled = !paused; if (RU) RU.paused = paused; } });
@@ -180,7 +188,8 @@ async function ride(r) {
   P.cam.snap();
   last = performance.now();
 }
-// what a wagon on the road slows and stops for: the player, the player's horse, the dog, the round-up's cattle
+// what a wagon on the road slows and stops for: the player, the player's horse, the dog, the round-up's cattle, the
+// general store's customers walking to and from the square
 const thingsNear = [], horseEnds = [new THREE.Vector3(), new THREE.Vector3()];
 function trafficThings() {
   thingsNear.length = 0;
@@ -193,6 +202,7 @@ function trafficThings() {
   }
   if (D && D.position) thingsNear.push(D.position);
   if (RU && RU.targets) for (const t of RU.targets) if (t.root) thingsNear.push(t.root.position);
+  if (SJ && SJ.people) for (const c of SJ.people) thingsNear.push(c);
   return thingsNear;
 }
 function makeDogIfOwned() {
@@ -217,6 +227,7 @@ function endRide() {
   if (camps) camps.dispose();
   DL = camps = null;
   if (farm) farm.dispose();
+  if (HS) { HS.dispose(); HS = null; }
   if (hob) hob.dispose();
   if (D) D.dispose();
   if (P) P.dispose();
@@ -246,7 +257,7 @@ function roundupHud() {
 // the purse on the HUD, from the rider
 function refresh() {
   if (!rider) return;
-  hud.purse({ gold: rider.gold, bounty: rider.bounty, title: titleOf(rider), next: nextTitle(rider), badges: badgesOf(rider), boxes: (rider.lockboxes || []).length });
+  hud.purse({ gold: rider.gold, bounty: rider.bounty, title: titleOf(rider), next: nextTitle(rider), badges: badgesOf(rider), boxes: (rider.lockboxes || []).length, goods: HS ? HS.goodsLine() : '' });
   if (shops && shops.isOpen) shops.redraw();
 }
 
@@ -440,6 +451,7 @@ function step(dt) {
     if (WJ && WJ.tookTrainer && RU.near && !(WJ.near && WJ.wave && !WJ.wave.done)) { WJ.tookTrainer = false; RU.newWave(); }
     RU.update(dt);
     if (farm) farm.update(dt, P.position);
+    if (HS) HS.update(dt, P.position);   // (the farm animals behind the cabin; their goods are laid up over play time)
     if (SH) SH.update(dt);
     if (PG) PG.update(dt);
     if (SJ) SJ.update(dt);   // (after the player: it places the camera while the counter is open)
@@ -525,6 +537,10 @@ const dev = {
 };
 { const m = dev.mission; dev.mission = (name, ...a) => (name === 'delivery' ? !!(DL && DL.orderFrom(a[0] || 'cow')) : m(name, ...a)); }   // (an order from a camp, without riding out to it)
 { const m = dev.mission; dev.mission = (name, ...a) => { if (name !== 'wagon') return m(name, ...a); if (!WJ) return false; dev.goto('wagon'); WJ.newWave(); return true; }; }   // (a gang at once, beside the wagon)
+// the homestead behind the cabin: between the cabin's back wall and the animals' homes, looking out at them; an animal
+// of a kind (hen, pig, sheep, cow) or goods in the saddlebags without buying
+SPOTS.yard = () => { if (!HS) return W.places.spawn; const L = HS.layout, p = L.at(0, 5.6); return { x: p.x, z: p.z, rot: L.rot }; };
+Object.assign(dev, { animal: (kind = 'hen', name = '', young = false) => !!(HS && HS.dev.give(kind, name, young)), goods: (n = 30) => { if (HS) HS.dev.goods(n); } });
 if (DEV) {
   const bar = document.createElement('div');
   bar.style.cssText = 'position:fixed;left:12px;top:50%;transform:translateY(-50%);z-index:26;display:flex;flex-direction:column;gap:4px;max-height:70vh;overflow:auto';
@@ -546,6 +562,7 @@ if (DEV) {
   add('give a lock box', () => dev.box());
   add('give saddle', () => dev.saddle('plain'));
   add('give dog', () => dev.dog('shiba', 'Biscuit'));
+  add('give farm animals + goods', () => { for (const k of ['hen', 'hen', 'pig', 'sheep', 'cow']) dev.animal(k); dev.goods(30); });
   add('send a wagon', () => dev.wagon());
   add('into the cabin', () => { dev.goto('cabin'); if (cabin) cabin.enter(); });
   document.body.appendChild(bar);
@@ -565,7 +582,7 @@ Object.defineProperties(BM, {
   roundup: { get: () => RU }, traffic: { get: () => traffic }, sheep: { get: () => SH }, pigs: { get: () => PG }, wagon: { get: () => WJ }, farm: { get: () => farm }, shops: { get: () => shops }, dog: { get: () => D }, input: { get: () => I }, hob: { get: () => hob },
   door: { get: () => door }, store: { get: () => SJ }, paused: { get: () => paused }, mode: { get: () => mode }, cabin: { get: () => cabin },
 });
-Object.defineProperties(BM, { camps: { get: () => camps }, delivery: { get: () => DL } });   // (the camps and their deliveries; DL.rob() is the bandits' hook)
+Object.defineProperties(BM, { camps: { get: () => camps }, delivery: { get: () => DL }, homestead: { get: () => HS } });   // (the camps and their deliveries; DL.rob() is the bandits' hook)
 Object.assign(BM, {
   dev, hud, title: T, camera, renderer, screenOf, prices: PRICES, loading,
   fps: (seconds = 3) => new Promise((res) => { let n = 0; const a = performance.now(); const f = () => { n++; if (performance.now() - a < seconds * 1000) requestAnimationFrame(f); else res(n * 1000 / (performance.now() - a)); }; requestAnimationFrame(f); }),

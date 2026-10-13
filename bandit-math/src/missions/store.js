@@ -10,14 +10,17 @@
 // Started from the general store's counter (shop.js: "Mind the counter"). Each filled order counts toward the "orders
 // filled" belt buckle (save.js JOBS).
 //
-//   const J = makeStoreJob({ W, folk, P, I, camera, rider, hud, hob, refresh, openBox, onStart, onStop, pay })
+//   const J = makeStoreJob({ W, folk, P, I, camera, rider, hud, hob, refresh, openBox, onStart, onStop, pay, goods })
+//     goods: the homestead (src/homestead.js), or null: now and then a customer buys the rider's own eggs, wool or milk
+//     instead of bringing an order (goods.saleOrder: a sale slip, levelled by this job's ladder step; it pays the gold
+//     the answer comes to, and doesn't move the ladder); goods.sold(order) takes them out of the saddlebags
 //     openBox(problem, after(result)): opens the lock-box panel on that problem (main.js pays and pauses); false when it
 //     can't just then (paused, or a box already open), and it is asked again shortly; pay: { order,
 //     orderEvery, orderFirst } (shop.js PAY); onStart / onStop: the game puts the round-up and the keys away meanwhile
 //   J.start()   to the counter (off the horse first, if riding)
 //   J.stop()    "Done for now": the customers wander off, the camera comes back to the rider
 //   J.update(dt)   each frame (also after stopping: the last customers walk away)
-//   J.active, J.state() (for rigs), J.dispose()
+//   J.active, J.state() (for rigs), J.people (the customers about, live: each has x, z), J.dispose()
 import * as THREE from 'three';
 import { makePerson } from '../actors/folk.js';
 import { makeWordProblems, lockboxProblem, FOLK } from '../math/wordproblems.js';
@@ -47,7 +50,7 @@ export const STORE = {
 };
 
 export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, refresh = () => {}, openBox = null,
-  onStart = () => {}, onStop = () => {}, pay = { order: 3, orderEvery: 3, orderFirst: 1 }, scene = W.scene }) {
+  onStart = () => {}, onStop = () => {}, pay = { order: 3, orderEvery: 3, orderFirst: 1 }, scene = W.scene, goods = null }) {
   const place = W.places.store;
   if (!rider.topics || typeof rider.topics !== 'object') rider.topics = {};
   if (!rider.topics.store || typeof rider.topics.store !== 'object') rider.topics.store = {};
@@ -146,7 +149,7 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
   // ── AN ORDER AT THE COUNTER ──────────────────────────────────────────────────────────────────────────────────────
   function serve(c) {
     c.state = 'serve';
-    order = Q.next({ who: c.who });
+    order = (goods && goods.saleOrder({ step: Q.level().step, who: c.who })) || Q.next({ who: c.who });
     missed = false; helped = false; thinkT = 0; eqPending = false;
     U.purse(rider.gold);   // (in step with the gold, the lock box's pay included)
     U.show(order, { filled });
@@ -161,12 +164,13 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
   async function pick(i) {
     if (!order || U.busy || eqPending) return;
     const o = order, c = o.coins[i]; if (!c) return;
-    const res = Q.answer(o, c, { helped });
+    const res = o.sale ? { first: !o.picked } : Q.answer(o, c, { helped });   // (a sale of your goods doesn't move the ladder)
+    o.picked = true;
     // (a badge won by this first pick is told on the slip with the tip)
     if (res.first) { const rec = recordAnswer(rider, c.good); if (rec && rec.badge) news.push(`You earned the ${rec.badge} badge!`); }
     if (!c.good) {
       missed = true;
-      U.wrong(i, { why: c.why, pic: picture(o.pic) });
+      U.wrong(i, { why: c.why, pic: (o.picture || picture)(o.pic) });
       if (hob) hob.event('storeMiss');
       saveRider(rider);
       return;
@@ -194,10 +198,15 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
       setTimeout(toBox, STORE.eqWait * 1000);
       return;
     }
+    if (o.sale) {   // (your goods sold: the gold the answer comes to)
+      if (goods) goods.sold(o);
+      await finishOrder(o, front, { line: o.rightWhy, gold: o.sale.gold, first: !missed, paid: `+${o.sale.gold} gold for your ${o.sale.goods}` });
+      return;
+    }
     await finishOrder(o, front, { line: o.rightWhy, gold: tip() + (missed ? 0 : pay.orderFirst), first: !missed });
   }
   // pays (when it's a tip), counts the order, plays the coins, and sends the customer off; the next steps up
-  async function finishOrder(o, c, { line, gold = 0, boxGold = 0, unfilled = false, first = false }) {
+  async function finishOrder(o, c, { line, gold = 0, boxGold = 0, unfilled = false, first = false, paid = '' }) {
     let from = rider.gold, buckle = null;
     if (gold > 0) { const e = earn(rider, gold); earned += gold; if (e && e.newTitle) news.push(`You're a ${e.newTitle} now!`); }
     if (boxGold) { earned += boxGold; from = rider.gold; }
@@ -208,7 +217,7 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
     // the customer tips their hat and goes, and the one waiting in line steps up while the coins fly
     if (c) { c.p.play('Wave', { fade: 0.2, once: true }); setTimeout(() => { if (c.state === 'serve') leave(c); moveUp(); }, 900); }
     const told = news.splice(0);
-    await U.right(o.coins.findIndex((k) => k.good), { line, gold, from, to: rider.gold, note: first ? 'right first time' : '', news: told });
+    await U.right(o.coins.findIndex((k) => k.good), { line, gold, from, to: rider.gold, note: first ? 'right first time' : '', news: told, paid });
     if (!J.active) return;
     await U.leave();
     if (!J.active) return;
@@ -220,7 +229,7 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
   function draw() {
     if (!order || U.busy) return;
     helped = true;
-    U.drawn(picture(order.pic));
+    U.drawn((order.picture || picture)(order.pic));
   }
 
   // ── STARTING AND STOPPING ────────────────────────────────────────────────────────────────────────────────────
@@ -288,8 +297,9 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
   };
   addEventListener('keydown', onKey, true);
 
-  J.state = () => ({ active: J.active, phase, filled, earned, order: order ? { type: order.type, step: order.step, key: order.key, coins: order.coins.map((c) => ({ label: c.label, good: c.good })), equation: order.equation } : null,
+  J.state = () => ({ active: J.active, phase, filled, earned, order: order ? { type: order.type, step: order.step, key: order.key, coins: order.coins.map((c) => ({ label: c.label, good: c.good })), equation: order.equation, sale: order.sale || null } : null,
     people: people.map((c) => ({ who: c.who.name, state: c.state, x: +c.x.toFixed(2), z: +c.z.toFixed(2) })), level: Q.level(), busy: U.busy });
+  J.people = people;    // (read each frame by the wagons, which stop for customers: no copies made)
   J.trainer = Q;
   J.dispose = () => { removeEventListener('keydown', onKey, true); if (J.active) J.stop(); for (const c of [...people]) removePerson(c); U.dispose(); };
   return J;

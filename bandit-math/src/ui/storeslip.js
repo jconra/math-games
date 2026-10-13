@@ -9,7 +9,8 @@
 //   U.wrong(i, { why, pic })      coin i was wrong: shake it, dull it, show the reason and the picture ({ svg, title, line })
 //   U.drawn(pic)                  the picture without a reason (the kid asked for it: "Draw it")
 //   U.offerDraw(on)               the "Draw it" button, offered after a long think
-//   U.right(i, { line, gold, from, to, note, news }) -> Promise   coin i was right: glow, the line, coins fly, count up
+//   U.right(i, { line, gold, from, to, note, news, paid }) -> Promise   coin i was right: glow, the line, coins fly, count up
+//                                 (paid: the words for the gold instead of '+3 gold tip', e.g. '+6 gold for your eggs')
 //                                 (news: a badge or a new title won with this order, a line under the tip)
 //   U.equation(i, { line })       the top step: the equation picked is right; "now crack it" shows (the lock box opens next)
 //   U.leave() -> Promise          the slip slides away
@@ -160,13 +161,13 @@ export function makeStoreSlip(root = document.body, { onPick = () => {}, onDone 
     });
     shown = to;
   }
-  U.right = async (i, { line, gold = 0, from = shown, to = shown, note = '', news = [] } = {}) => {
+  U.right = async (i, { line, gold = 0, from = shown, to = shown, note = '', news = [], paid = '' } = {}) => {
     busy = true;
     const b = coinsEl.querySelector(`[data-i="${i}"]`);
     for (const x of coinsEl.querySelectorAll('.bmo-coin')) { x.disabled = true; if (x !== b) x.classList.add('is-fade'); }
     if (b) b.classList.add('is-right');
     drawBtn.hidden = true;
-    thanks.innerHTML = `<b>${esc(line || '')}</b>${gold ? `<span class="bmo-tip">+${gold} gold tip${note ? ` · ${esc(note)}` : ''}</span>` : ''}`
+    thanks.innerHTML = `<b>${esc(line || '')}</b>${gold ? `<span class="bmo-tip">${paid ? esc(paid) : `+${gold} gold tip`}${note ? ` · ${esc(note)}` : ''}</span>` : ''}`
       + news.map((t) => `<span class="bmo-news">${esc(t)}</span>`).join('');
     // the working and the tip are what matter now: the wrong pick's picture folds away so they show on a short screen
     help.hidden = true;

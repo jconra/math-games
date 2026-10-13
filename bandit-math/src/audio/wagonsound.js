@@ -4,12 +4,13 @@
 //                   runs while the wagon is near, louder the faster it goes, silent when it stands)
 //   WAGON — CREAK   the wood and the iron: now and then a short creak, a different pitch each time
 //   WAGON — HOOF    one hoof coming down on the dirt: a dull thud with a small knock; played for every hoof of the team
-//                   as it lands in the horses' Walk (four a step, each horse a little out of time with the other)
+//                   as it lands in the horses' Walk or Gallop (four a stride, each horse a little out of time with the other)
 // Each wagon's sound comes from where it is (a PannerNode at the wagon and one at the team; the camera is the ears,
 // as for the stage band), quiet, and off altogether past WAGON_SOUND.far metres.
 //
 //   const S = makeWagonSound(audio, wg)   audio: src/audio/audio.js's; wg: a wagon from src/wagon.js
 //   S.update(dt, ears)    each frame after the wagon's update: ears = where the listener is (the camera's position)
+//   S.state()             for rigs: { on, d, level, rumble, creaks, hooves }
 //   S.dispose()
 import { playPatch } from './patch.js';
 
@@ -77,7 +78,10 @@ export const WAGON_SOUND = {
   rumble: 0.4,              // the rumble at a walk (it grows with the pace: x pace / 1.8 m/s, up to 1.6x)
   creak: [1.6, 5],          // s between creaks while moving
   hoof: 0.9,                // each hoof's loudness
-  hoofAt: [0.02, 0.27, 0.5, 0.77],   // where in the horses' Walk clip each hoof lands (share of the clip)
+  // where in the horses' clips each hoof lands (share of the clip; measured on the farm horse's feet:
+  // ~/pw/bandit-math/rigs/polish/hoofphase.cjs): the Walk, and the Gallop a team breaks into past a fast walk (the
+  // "Protect the wagon" job's wagon at its higher speeds)
+  hoofAt: { Walk: [0.16, 0.51, 0.67, 0.9], Gallop: [0.14, 0.29, 0.49, 0.66] },
   near: 6, far: 70,         // m: the sound starts at `far` (fading in from there), and is full by `near`
   ref: 4, rolloff: 1.2,     // the panners: full at ref metres, softening as 1 / distance past it
 };
@@ -87,8 +91,8 @@ let count = 0;
 export function makeWagonSound(audio, wg) {
   const who = 'wagon' + (count++);
   let ctx = null, bus = null, pW = null, pT = null, rumble = null, rumbleGain = null, alive = true, on = false;
-  let nextCreak = rnd(...WAGON_SOUND.creak);
-  const last = wg.team.map(() => -1);
+  let nextCreak = rnd(...WAGON_SOUND.creak), dist = Infinity, hooves = 0, creaks = 0;
+  const last = wg.team.map(() => -1), lastClip = wg.team.map(() => '');
   const panner = () => {
     const n = ctx.createPanner(); n.panningModel = 'equalpower'; n.distanceModel = 'inverse';
     n.refDistance = WAGON_SOUND.ref; n.rolloffFactor = WAGON_SOUND.rolloff; n.maxDistance = 1000;
@@ -113,7 +117,7 @@ export function makeWagonSound(audio, wg) {
   return {
     update(dt, ears) {
       if (!alive || !ears) return;
-      const d = Math.hypot(wg.pos.x - ears.x, wg.pos.z - ears.z);
+      const d = Math.hypot(wg.pos.x - ears.x, wg.pos.z - ears.z); dist = d;
       const want = d < WAGON_SOUND.far && !!audio.ctx;
       audio.need(who, want);   // (the game's sound sleeps while nobody has any to make)
       if (want && !on) { if (audio.running) { build(); on = true; } }
@@ -131,25 +135,29 @@ export function makeWagonSound(audio, wg) {
           nextCreak = rnd(...WAGON_SOUND.creak) / Math.min(1.5, Math.max(0.6, pace / 1.8));
           const semi = rnd(-5, 6), p = WAGON_PATCHES['WAGON — CREAK'];
           const n = p.nodes.map((x) => (x.type === 'osc' && x.id === 'wood' ? { ...x, freq: x.freq * Math.pow(2, semi / 12) } : x.type === 'out' ? { ...x, gain: x.gain * rnd(0.5, 1) } : x));
-          playPatch(ctx, null, pW, null, { ...p, nodes: n }, null);
+          playPatch(ctx, null, pW, null, { ...p, nodes: n }, null); creaks++;
         }
       }
-      // the hooves: each time a horse's Walk clip passes a hoof's landing
+      // the hooves: each time a horse's Walk (or Gallop) clip passes a hoof's landing
       wg.team.forEach((h, i) => {
-        const a = h.actions && h.actions.Walk;
-        if (!a || h.clip !== 'Walk' || pace < 0.05) { last[i] = -1; return; }
+        const lands = WAGON_SOUND.hoofAt[h.clip], a = lands && h.actions && h.actions[h.clip];
+        if (!a || pace < 0.05) { last[i] = -1; lastClip[i] = ''; return; }
+        if (lastClip[i] !== h.clip) { last[i] = -1; lastClip[i] = h.clip; }
         const ph = (a.time / a.getClip().duration) % 1;
-        if (last[i] >= 0) for (const at of WAGON_SOUND.hoofAt) {
+        if (last[i] >= 0) for (const at of lands) {
           const crossed = last[i] <= ph ? at > last[i] && at <= ph : at > last[i] || at <= ph;
           if (crossed) {
             const p = WAGON_PATCHES['WAGON — HOOF'];
             const n = p.nodes.map((x) => (x.type === 'out' ? { ...x, gain: x.gain * WAGON_SOUND.hoof * rnd(0.7, 1) } : x.id === 'knock-f' ? { ...x, freq: x.freq * rnd(0.8, 1.25) } : x));
-            playPatch(ctx, null, pT, null, { ...p, nodes: n }, null, { at: t + 0.01 + i * 0.004 });
+            playPatch(ctx, null, pT, null, { ...p, nodes: n }, null, { at: t + 0.01 + i * 0.004 }); hooves++;
           }
         }
         last[i] = ph;
       });
     },
+    // for rigs: whether it is sounding, how far the ears are, the wagon's level and the rumble's now, and how many creaks
+    // and hooves it has played
+    state() { return { on, d: +dist.toFixed(1), level: bus ? +bus.gain.value.toFixed(3) : 0, rumble: rumbleGain ? +rumbleGain.gain.value.toFixed(3) : 0, creaks, hooves }; },
     dispose() { alive = false; if (on) teardown(); on = false; audio.need(who, false); },
   };
 }

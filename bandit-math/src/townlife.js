@@ -1,6 +1,7 @@
 // TOWN LIFE: a dozen chickens about the town square and the buildings, so the town isn't empty. Each one has a spot of
 // its own near a building or the square: it walks a few steps, pecks at the ground, stands and looks about, and when
-// the player, the horse or the dog comes close it scatters (running, wings flapping), then settles and wanders back.
+// the player, the horse, the dog or a wagon comes close it scatters (running, wings flapping), then settles and wanders
+// back.
 // The chickens are Tripo models (models/animals/chicken_white|gold|black.glb), rigged and given their clips in
 // Blender (~/pw/bandit-math/rigs/animals/chicken_rig.py): Idle, Walk, Peck, Run. Their legs keep to the ground: a clip
 // plays at the pace over its stride (CHICKEN.stride, measured on the feet).
@@ -11,6 +12,7 @@
 //   townLifeNow()           the flock townLife made (or null)
 //   makeTownLife({ W, scene, count, spots }) -> T   the same flock for a page of its own:
 //     T.update(dt, P, D)    T.ready (a promise)    T.chickens (their records)    T.state()    T.dispose()
+//   preloadChickens()       starts the chickens' files loading now (once; the flock uses them): -> Promise<lib>
 //   loadChickens(base) -> Promise<lib>;  makeChicken(lib, kind) -> { root, play(name, fade, speed), update(dt), clip }
 //   CHICKEN                 the numbers: how many, how big, how fast, how near something scares one
 // Cheap: nothing is made new each frame, and the far ones are moved a few times a second (or not at all out of sight).
@@ -18,6 +20,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
+import { WAGONS_OUT, inWagons, pushFromWagons } from './wagon.js';
 
 export const CHICKEN = {
   count: 12,
@@ -28,8 +31,11 @@ export const CHICKEN = {
   run: [1.7, 2.4],             // m/s a scattering one
   runFrom: 0.75,               // m/s: faster than this it runs (the Walk clip would have to go faster than about 3x)
   roam: 6,                     // it wanders this far from its spot (m)
-  // how close a mover scares it (m): a person on foot, a horse, the dog; half as far if the mover is standing still
-  scare: { foot: 3, horse: 5.5, dog: 3.6 },
+  // how close a mover scares it (m): a person on foot, a horse, the dog; half as far if the mover is standing still. A
+  // wagon on the move scares the ones within `wagon` metres of either side of it, and in its way up to `wagon` metres
+  // and a second and a half of its going ahead of the team (it runs out to the side, away from the wheels); a wagon
+  // standing still, only those right up against it
+  scare: { foot: 3, horse: 5.5, dog: 3.6, wagon: 2.5 },
   panic: 2.2,                  // a chicken that bolts sets off the others this close to it (m)
   calm: [1.0, 1.8],            // seconds it runs before it settles (it keeps running while the mover is still close)
   ruffleAt: 1.8,               // seconds into its Idle clip just before it ruffles its wings (2.0 to 2.5 s)
@@ -46,6 +52,12 @@ const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 const rnd = (a, b) => a + Math.random() * (b - a);
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
+// the game's chickens, loading once for the whole visit: the game starts this with the valley (so they are in before
+// the title screen says it's ready, rather than still loading after it), and every flock after shares them
+let preload = null;
+export function preloadChickens() {
+  return preload || (preload = loadChickens(GAME).catch((e) => { preload = null; throw e; }));
+}
 export function loadChickens(base = GAME, kinds = ['white', 'gold', 'black']) {
   let b = String(base); if (!b.endsWith('/')) b += '/';
   const dir = /animals\/$/.test(b) ? b : b + 'models/animals/';
@@ -104,7 +116,7 @@ export function makeTownLife({ W, scene = W.scene, count = W.tier === 'potato' ?
   const S = spots || spotsOf(W);
   // the movers that scare chickens: their places and how fast they go (kept from frame to frame, made once)
   const movers = [0, 1, 2].map(() => ({ on: false, x: 0, z: 0, px: 0, pz: 0, vx: 0, vz: 0, v: 0, scare: 0, seen: false }));
-  T.ready = loadChickens(GAME).then((lib) => {
+  T.ready = preloadChickens().then((lib) => {
     const total = S.reduce((a, s) => a + s.share, 0) || 1;
     let made = 0;
     S.forEach((s, i) => {
@@ -177,12 +189,33 @@ export function makeTownLife({ W, scene = W.scene, count = W.tier === 'potato' ?
     const H = P && !P.onHorse && P.horse && P.horse.root;
     if (H) setMover(movers[1], dt, H.position.x, H.position.z, CHICKEN.scare.horse); else movers[1].seen = false;
     if (D && D.dog) setMover(movers[2], dt, D.position.x, D.position.z, CHICKEN.scare.dog); else movers[2].seen = false;
+    // and every wagon about (the town's traffic, the job's): after the three, one each
+    let n = 3;
+    for (const G of WAGONS_OUT) {
+      if (!G.boxes) continue;
+      const m = movers[n] || (movers[n] = { on: false, seen: false });
+      m.wagon = G; m.on = true; m.x = G.pos.x; m.z = G.pos.z; m.v = G.pace; m.s = Math.sin(G.heading); m.c = Math.cos(G.heading);
+      m.vx = m.s * m.v; m.vz = m.c * m.v; m.scare = CHICKEN.scare.wagon;
+      n++;
+    }
+    for (; n < movers.length; n++) { movers[n].on = false; movers[n].wagon = null; }
+  }
+  // where a chicken is beside a wagon: across it (lx, metres from its middle line) and along it (lz, + ahead)
+  const along = (c, m) => { const dx = c.x - m.x, dz = c.z - m.z; return [dx * m.c - dz * m.s, dx * m.s + dz * m.c]; };
+  // how close a wagon is to being on top of this chicken (metres to its side, 0 in its way), or Infinity when it's no
+  // bother: moving, it scares along both sides and well ahead of the team; standing, only right up against it
+  function wagonNear(c, m) {
+    const G = m.wagon, [lx, lz] = along(c, m), moving = m.v > 0.2;
+    const side = G.width / 2 + (moving ? m.scare : m.scare * 0.3), ahead = G.nose + (moving ? m.scare + m.v * 1.5 : 0.8), behind = G.tail + (moving ? 1 : 0.5);
+    if (Math.abs(lx) >= side || lz >= ahead || lz <= -behind) return Infinity;
+    return Math.max(0, Math.abs(lx) - G.width / 2);
   }
   // the nearest mover close enough to scare this chicken (its index, or -1)
   function threat(c) {
     let best = -1, bd = 1e9;
     for (let i = 0; i < movers.length; i++) {
       const m = movers[i]; if (!m.on) continue;
+      if (m.wagon) { const d = wagonNear(c, m); if (d < bd) { bd = d; best = i; } continue; }
       const d = Math.hypot(c.x - m.x, c.z - m.z), r = m.scare * (m.v > 0.4 ? 1 : 0.5);
       if (d < r && d < bd) { bd = d; best = i; }
     }
@@ -192,7 +225,8 @@ export function makeTownLife({ W, scene = W.scene, count = W.tier === 'potato' ?
   function think(c, dt) {
     const s = c.home;
     const th = threat(c);
-    if (th >= 0 && c.state !== 'run') {
+    // (a wagon coming takes over from whatever else it is running from: its way is the one to get out of)
+    if (th >= 0 && (c.state !== 'run' || (movers[th].wagon && c.from !== th))) {
       begin(c, 'run'); c.from = th;
       // one bolts, and the ones beside it go too
       for (let i = 0; i < T.chickens.length; i++) {
@@ -204,7 +238,14 @@ export function makeTownLife({ W, scene = W.scene, count = W.tier === 'potato' ?
     switch (c.state) {
       case 'run': {
         const m = movers[c.from];
-        if (m && m.on) {
+        if (m && m.on && m.wagon) {
+          // a wagon: out to the side it is already on (the side it picked, when right in the way), a little back from
+          // the team, and on until it is clear of the wagon's way
+          const [lx] = along(c, m);
+          if (Math.abs(lx) > 0.3 || !c.side) c.side = lx < 0 ? -1 : 1;
+          wantH = Math.atan2(c.side * m.c - 0.35 * m.s, -c.side * m.s - 0.35 * m.c);
+          if (wagonNear(c, m) < Infinity) c.t = Math.max(c.t, 0.3);
+        } else if (m && m.on) {
           // away from it, with a little dodge either way, and back toward its spot if it has run far
           wantH = Math.atan2(c.x - m.x, c.z - m.z) + Math.sin(c.n * 0.07) * 0.4;
           // something coming faster than it can run: out of its way, to the side, rather than straight ahead of it
@@ -240,9 +281,11 @@ export function makeTownLife({ W, scene = W.scene, count = W.tier === 'potato' ?
     c.v += (c.want - c.v) * Math.min(1, (c.want > c.v ? 7 : 5) * dt);
     if (c.v > 0.02) {
       const step = c.v * dt, nx = c.x + Math.sin(c.h) * step, nz = c.z + Math.cos(c.h) * step;
-      if (!W.blocked(nx, nz) && W.waterAt(nx, nz) < 0.3) { c.x = nx; c.z = nz; }
+      if (!W.blocked(nx, nz) && W.waterAt(nx, nz) < 0.3 && !inWagons(nx, nz, 0.12)) { c.x = nx; c.z = nz; }
       else { c.h += (c.n & 1 ? 1 : -1) * 1.2; if (c.state === 'walk') begin(c, 'stand'); }
     }
+    // (never under a wagon: one that rolled up against it puts it out to its edge)
+    if (WAGONS_OUT.size) { const o = pushFromWagons(c.x, c.z, 0.12, W); if (o) { c.x = o.x; c.z = o.z; } }
     c.n++;
     animate(c);
     const r = c.ch.root;

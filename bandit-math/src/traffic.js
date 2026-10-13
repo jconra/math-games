@@ -3,14 +3,15 @@
 // on its right-hand side, often pulls up in the town square for a while, then drives on out the other way and is gone;
 // later another comes back. One to three are on the road at a time.
 // They keep a safe distance: each driver looks along the road ahead of the team, and slows and stops for the player (on
-// foot or riding), the player's horse, the dog, the cattle of the round-up and the wagon in front, and moves on again
-// once the way is clear. (Nobody has to pull off the road for them.)
+// foot or riding), the player's horse, the dog, the cattle of the round-up, townsfolk walking across the square (the
+// general store's customers) and the wagon in front, and moves on again once the way is clear. (Nobody has to pull off
+// the road for them.) The town's chickens get out of a wagon's way themselves (src/townlife.js).
 // They cost nothing far away: a wagon is only made (its model, its team, its driver) while it is within TRAFFIC.show
 // metres of the player; beyond that it is just a number moving along the road.
 //
 //   const T = makeTraffic({ W, scene, animals, folk, audio, obstacles })
 //        audio: src/audio/audio.js's (each wagon near enough rumbles, creaks and clops: src/audio/wagonsound.js);
-//        obstacles(): the things to stop for this frame: a list of Vector3s (or objects with a .position); called once
+//        obstacles(): the things to stop for this frame: a list of Vector3s (or objects with a .position, or { x, z }); called once
 //        a frame while a wagon is near
 //   T.update(dt, at, ears)   each frame while riding: at = the player's position, ears = the camera's
 //   T.wagons           the travellers: { kind, dir, u (m along the road), wg (the wagon while it is made, else null), ... }
@@ -37,6 +38,7 @@ export const TRAFFIC = {
   wide: 1.7,                // m either side of its lane it looks
   gap: 3,                   // m it stops short of what is in its way (from the lead horses' noses)
   wait: 1.2,                // s the way must be clear before it moves off again
+  oncoming: 70,             // m ahead a driver looks for a wagon coming the other way, where the road narrows to one lane
   stop: { chance: 0.6, time: [15, 35], at: 14 },   // how often one pulls up in the square, for how long (s), and how far
                             // past the square's middle it stops (m)
 };
@@ -56,9 +58,11 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
 
   // a point on the road s metres along, out to the right of the way it is going by the lane
   const _p = new THREE.Vector3(), _t = new THREE.Vector3();
+  // (in toward the middle, or out, where the road is tight: road.laneAt in src/wagon.js)
+  const laneAt = (s, dir) => (road.laneAt ? road.laneAt(s, dir, TRAFFIC.lane) : TRAFFIC.lane);
   function spot(s, dir, out) {
-    const u = Math.min(1, Math.max(0, s / L)); road.getPointAt(u, out); road.getTangentAt(u, _t);
-    out.x += -_t.z * dir * TRAFFIC.lane; out.z += _t.x * dir * TRAFFIC.lane;
+    const u = Math.min(1, Math.max(0, s / L)), k = laneAt(s, dir); road.getPointAt(u, out); road.getTangentAt(u, _t);
+    out.x += -_t.z * dir * k; out.z += _t.x * dir * k;
     return out;
   }
 
@@ -93,6 +97,24 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
     return t;
   };
 
+  // a wagon giving way at a one-way stretch: how far its middle is from the stretch it must wait outside (m), or Infinity
+  const narrows = road.narrows || [];
+  function giveWay(t) {
+    let S = null, d = Infinity;
+    for (const n of narrows) {
+      if (t.u >= n[0] && t.u <= n[1]) return Infinity;   // (in one already)
+      const e = ((t.dir > 0 ? n[0] : n[1]) - t.u) * t.dir;
+      if (e > 0 && e < d) { d = e; S = n; }
+    }
+    if (!S || d > TRAFFIC.oncoming) return Infinity;
+    for (const o of T.wagons) {
+      if (o === t || o.dir === t.dir || o.ended) continue;
+      if (o.u >= S[0] && o.u <= S[1]) return d;
+      const e = ((o.dir > 0 ? S[0] : S[1]) - o.u) * o.dir;
+      if (e > 0 && (e < d || (e === d && o.number < t.number))) return d;
+    }
+    return Infinity;
+  }
   // what the driver of t wants to do this frame: its wanted speed (0 to stop) and why
   const _a = new THREE.Vector3(), _f = new THREE.Vector3();
   function want(t, now, things, dt) {
@@ -106,13 +128,18 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
     if (t.stop != null) {   // easing in to the stop
       const left = Math.abs(t.stop - t.u); v = Math.min(v, Math.max(0.35, Math.sqrt(2 * 0.6 * left)));
     }
-    if (!t.wg) return v;
+    // a one-way stretch ahead (src/wagon.js road.narrows: too narrow for two to pass): it waits short of it while a wagon
+    // coming the other way is in it, or will get to it first (nearer its own end of it; just as near: the one that set
+    // off first goes). A wagon already in one carries on.
+    const way = giveWay(t);
+    if (!t.wg) { if (way < 8) { t.why = 'giving way'; return 0; } return v; }
+    let block = way < Infinity ? Math.max(0, way - t.wg.nose) : Infinity;
+    if (block < Infinity) t.giveWay = true;
     // the way ahead of the team, along its lane: anything in it within the stopping distance (and a bit) stops it
     const wg = t.wg, reach = (wg.pace * wg.pace) / (2 * 1.2) + TRAFFIC.look + TRAFFIC.gap;
     const front = wg.u + t.dir * wg.nose;
-    let block = Infinity;
     for (const q of things) {
-      const p = q.isVector3 ? q : q.position; if (!p) continue;
+      const p = q.isVector3 ? q : q.position || q; if (p.x === undefined) continue;
       // (quick: only things within reach of the team's noses)
       if (Math.abs(p.x - wg.front.x) > reach + 6 || Math.abs(p.z - wg.front.z) > reach + 6) continue;
       for (let d = 0; d <= reach + 0.01; d += 1) {
@@ -126,7 +153,7 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
       const gap = (o.u - t.u) * t.dir - (o.wg ? o.wg.tail + wg.nose : 7);
       if (gap > 0 && gap < reach + 2) block = Math.min(block, gap - 2);
     }
-    if (block < Infinity) { t.clearFor = 0; t.why = 'waiting'; return block < TRAFFIC.gap ? 0 : Math.min(v, Math.sqrt(2 * 1.2 * (block - TRAFFIC.gap))); }
+    if (block < Infinity) { t.clearFor = 0; t.why = t.giveWay ? 'giving way' : 'waiting'; t.giveWay = false; return block < TRAFFIC.gap ? 0 : Math.min(v, Math.sqrt(2 * 1.2 * (block - TRAFFIC.gap))); }
     if (wg.pace < 0.05 && t.clearFor < TRAFFIC.wait) { t.clearFor += dt; t.why = 'moving off'; return t.clearFor >= TRAFFIC.wait ? v : 0; }
     return v;
   }

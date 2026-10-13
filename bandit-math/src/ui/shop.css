@@ -17,8 +17,9 @@
 .bms.is-in .bms-dim, .bms.is-in .bms-card { opacity: 1; transform: none; }
 .bms.is-out .bms-dim, .bms.is-out .bms-card { opacity: 0; transform: translateY(6px); }
 .bms button, .bms input { font: inherit; color: inherit; }
-.bms-x { position: absolute; right: 12px; top: 12px; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 8px;
-  background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(226, 173, 76, 0.3); cursor: pointer; }
+/* (the close button stays pinned at the card's top right while a long panel scrolls on a phone) */
+.bms-x { position: sticky; top: -8px; float: right; margin: -8px -12px 0 8px; z-index: 2; width: 34px; height: 34px; display: grid; place-items: center; border-radius: 8px;
+  background: rgba(30, 20, 12, 0.92); border: 1px solid rgba(226, 173, 76, 0.3); cursor: pointer; }
 .bms-x svg { width: 16px; height: 16px; }
 .bms-x:hover { border-color: var(--brass); }
 .bms-title { font: 400 30px/1.1 Rye, Georgia, serif; color: var(--ink); letter-spacing: 0.02em; padding-right: 40px; }
@@ -27,7 +28,7 @@
 .bms-purse { display: inline-flex; align-items: center; gap: 6px; font-size: 15px; color: var(--ink-2); margin-bottom: 6px; }
 .bms-purse svg { width: 20px; height: 20px; }
 .bms-purse b { font: 700 19px Bitter, Georgia, serif; color: var(--brass-hi); }
-.bms-note { margin: 4px 0 10px; padding: 8px 12px; border-radius: 8px; background: rgba(169, 214, 127, 0.12); border: 1px solid rgba(169, 214, 127, 0.35);
+.bms-note { scroll-margin-top: 30px; margin: 4px 0 10px; padding: 8px 12px; border-radius: 8px; background: rgba(169, 214, 127, 0.12); border: 1px solid rgba(169, 214, 127, 0.35);
   color: var(--good); font-weight: 600; }
 .bms-h { font: 400 15px Smokum, Georgia, serif; letter-spacing: 0.08em; color: var(--mute); text-transform: uppercase; margin: 14px 0 6px;
   border-bottom: 1px solid rgba(226, 173, 76, 0.2); padding-bottom: 3px; }

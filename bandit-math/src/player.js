@@ -51,6 +51,7 @@ import { makeAnimal, saddleOn, gaitFor } from './actors/animals.js';
 import { makeSeat, sideOf } from './actors/seat.js';
 import { makeCamera } from './camera.js';
 import { makeLasso } from './lasso.js';
+import { pushFromWagons } from './wagon.js';
 
 export const MOVE = {
   walk: 1.6, run: 4.6,              // on foot, m/s (a brisk walk; Shift: a run)
@@ -70,6 +71,9 @@ export const MOVE = {
   reach: 15, throwFrom: 12,         // the lasso's reach (m); from out of reach, walk or ride up to this
   mountNear: 4.5,                   // E gets on from this close (m)
 };
+// how big the player and the horse are to a wagon (m; src/wagon.js pushFromWagons): on foot, round the feet; the horse,
+// circles along it (at these metres ahead of its middle: from the head to the rump)
+export const WAGON_R = { foot: 0.35, horse: 0.45, along: [1.2, 0.3, -0.6, -1.0] };
 // which clip, how fast, at a speed. On foot: exact (speed / STRIDE). The horse: the animals' own rule (gaitFor in
 // actors/animals.js): Walk, then Gallop, each played at speed / its stride, so a hoof that is down stays put. The pack's
 // gallop is short-strided (4.55 m/s at speed 1), so the trot (6 m/s) is its gallop at 1.3x, and past about 11 m/s the
@@ -431,6 +435,8 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
       const qx = ax + (bx - ax) * t, qz = az + (bz - az) * t, dx = pos.x - qx, dz = pos.z - qz, d = Math.hypot(dx, dz);
       if (d < 0.7) { const k = d > 1e-4 ? (0.7 - d) / d : 0, nx = pos.x + (d > 1e-4 ? dx * k : c * 0.7), nz = pos.z + (d > 1e-4 ? dz * k : -s * 0.7); if (!W.blocked(nx, nz)) { pos.x = nx; pos.z = nz; } }
     }
+    // not through a wagon or its team either: out to its edge (src/wagon.js pushFromWagons)
+    { const o = pushFromWagons(pos.x, pos.z, WAGON_R.foot, W); if (o) { pos.x = o.x; pos.z = o.z; } }
     pos.y = W.heightAt(pos.x, pos.z);
   }
 
@@ -464,7 +470,7 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
   // fence; with no way clear it stops. want: the heading wanted (or null); v0: its speed at the start of the frame (it
   // moves on by the frame's average speed)
   function moveHorse(dt, want, v0 = H.speed) {
-    if (H.speed <= 0.01 && v0 <= 0.01) return;
+    if (H.speed <= 0.01 && v0 <= 0.01) { offWagons(); return; }   // (standing: a wagon may still roll up against it)
     const reach = NOSE + Math.min(1.6, H.speed * 0.12);
     // (points all along the way ahead: a fence's band or a thin trunk can sit anywhere between its middle and its nose)
     const ahead = (h) => { const s = Math.sin(h), c = Math.cos(h); for (const d of [0.1, 0.25, 0.45, NOSE, reach]) if (W.blocked(H.x + s * d, H.z + c * d)) return true; return false; };
@@ -482,6 +488,17 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
     const v = (v0 + H.speed) / 2, o = { x: H.x, z: H.z }, got = walk(o, H.heading, v * dt, NOSE);
     if (got < v * dt * 0.3) H.speed = got / Math.max(dt, 1e-4);   // (stopped by it: stands, rather than walking on the spot)
     H.x = o.x; H.z = o.z;
+    offWagons();
+  }
+  // not through a wagon or its team: the horse's body (circles from its head to its rump, each WAGON_R.horse round)
+  // put out to the wagon's edge by the most any of them is in
+  function offWagons() {
+    let bx = 0, bz = 0, most = 0;
+    for (const f of WAGON_R.along) {
+      const px = H.x + Math.sin(H.heading) * f, pz = H.z + Math.cos(H.heading) * f, q = pushFromWagons(px, pz, WAGON_R.horse, W);
+      if (q && Math.hypot(q.x - px, q.z - pz) > most) { most = Math.hypot(q.x - px, q.z - pz); bx = q.x - px; bz = q.z - pz; }
+    }
+    if (most > 0 && !W.blocked(H.x + bx, H.z + bz)) { H.x += bx; H.z += bz; }
   }
 
   // the horse on its own: standing about (now and then grazing), or coming when called

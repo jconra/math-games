@@ -20,6 +20,8 @@
 //   missions: { roundup, wagon, hunt, loot }    which missions are ticked
 //   owned:    { saddle: null|'plain'|'tooled'|'silver', horse: 'bay', dog: null|{ kind, name } }
 //             (+ cabin: ['rug', 'bed', ...] the furnishings bought for the cabin, once any are: src/cabin/slots.js)
+//             (+ animals: [{ kind, name, young?, age? }], goods: { eggs, wool, milk } in the saddlebags, yard: { eggs, wool,
+//               milk } waiting behind the cabin: the homestead's farm animals, once there are any: src/math/goods.js)
 //   lockboxes: [{ tier }, ...]   unopened boxes in the saddlebags
 //   stats:    { answered, right, recent: [1,0,...],          every answer, recent = the last 50 (1 right, 0 wrong)
 //               byMode: { lasso: {answered, right, recent}, shoot: {...} },   the same, split by mode (for the badges)
@@ -29,6 +31,8 @@
 //   badges:   ['Top Hand', ...]   badges once earned stay earned
 //   made, last   when the rider was made and last rode out (ms since 1970; last is 0 until the first ride)
 // }
+
+import { cleanAnimals, cleanGoods } from './math/goods.js';
 
 const VERSION = 1;
 let KEY = 'bandit-math.riders';
@@ -264,6 +268,10 @@ export function fixRider(r) {
       dog: owned.dog && typeof owned.dog === 'object' ? owned.dog : null,
       // the cabin's furnishings bought (slot ids, src/cabin/slots.js), only when the rider has any
       ...(owned.cabin !== undefined ? { cabin: [...new Set((Array.isArray(owned.cabin) ? owned.cabin : []).filter(c => typeof c === 'string'))] } : {}),
+      // the homestead's animals and their goods (src/math/goods.js), only when the rider has any
+      ...(owned.animals !== undefined ? { animals: cleanAnimals(owned.animals) } : {}),
+      ...(owned.goods !== undefined ? { goods: cleanGoods(owned.goods) } : {}),
+      ...(owned.yard !== undefined ? { yard: cleanGoods(owned.yard, { parts: true }) } : {}),
     },
     lockboxes: cleanBoxes(r.lockboxes),
     stats: {
