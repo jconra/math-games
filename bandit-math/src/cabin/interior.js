@@ -198,9 +198,10 @@ export async function makeInterior({ renderer, tier = 'normal', base = new URL('
 
   // ── THE FURNISHINGS ──
   const files = new Map();     // file -> Promise<template scene>
+  const TINT = { chair: 0x9a7150 };   // the chairs come painted white: stained to a warm wood brown to match the room
   const loadFile = (file) => {
     if (!files.has(file)) files.set(file, loader.loadAsync(`${base}models/furniture/${file}.glb`).then((g) => {
-      const s = g.scene; s.traverse((o) => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; for (const m of [].concat(o.material)) for (const t of [m.map, m.normalMap]) if (t) t.anisotropy = Math.min(8, maxAniso); } });
+      const s = g.scene; s.traverse((o) => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; for (const m of [].concat(o.material)) { for (const t of [m.map, m.normalMap]) if (t) t.anisotropy = Math.min(8, maxAniso); if (TINT[file]) m.color.setHex(TINT[file]); } } });
       s.updateMatrixWorld(true); s.userData.box = new THREE.Box3().setFromObject(s); return s;
     }));
     return files.get(file);
