@@ -196,3 +196,12 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .stage { top: 108px; min-width: 0; width: calc(100% - 20px); }
   .stage b { font-size: 19px; }
 }
+/* the sound control: a speaker button (tap to mute) and a small volume slider */
+.snd { display: flex; align-items: center; gap: 4px; }
+.snd svg { width: 18px; height: 18px; fill: none; stroke: var(--ink); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; display: block; }
+.snd .spk { fill: var(--ink); stroke: none; }
+.snd .x { display: none; }
+.snd .is-muted .wav { display: none; }
+.snd .is-muted .x { display: inline; stroke: var(--rust); }
+.snd input { width: 64px; accent-color: var(--brass); }
+@media (max-width: 700px) { .snd input { display: none; } }

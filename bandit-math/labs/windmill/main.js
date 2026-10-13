@@ -154,7 +154,9 @@ app.nail = () => {
     t.walls[wall].push(rec);
   }
   app.placed.push({ rec, face: k });
-  app.held = null; sound.hammer(3);
+  // a board touching at two places gets two nails
+  const nails = build.contactsOf(h).length >= 2 ? 2 : 1;
+  app.held = null; sound.hammer(nails);
   rebuild();
   // keep the top of the work in view
   const top = Math.max(h.y, h.y + Math.sin(h.ang) * h.len);
@@ -199,7 +201,7 @@ function pickUp(src) {
     loose.forEach(drop);
   }
   for (const len of back) build.returnPiece(len);
-  sound.clunk(); app.select(null); rebuild();
+  sound.clatter(back[0] || 4, 'set'); app.select(null); rebuild();
 }
 
 function rebuild() {
@@ -558,6 +560,15 @@ addEventListener('keydown', (e) => {
   else if (e.key === 'r' || e.key === 'R') el.turnBtn.click();
 });
 addEventListener('pointerdown', () => sound.audioOn(), { capture: true });
+// the sound control in the top bar: tap the speaker to mute, slide for volume
+{
+  const btn = $('mute'), vol = $('vol');
+  const show = () => { const v = sound.getVolume(); btn.classList.toggle('is-muted', v.muted || v.volume === 0); btn.setAttribute('aria-pressed', String(v.muted)); vol.value = Math.round(v.volume * 100); };
+  btn.onclick = () => { const v = sound.getVolume(); sound.setVolume(v.volume || 0.8, !v.muted); show(); };
+  vol.oninput = () => { sound.setVolume(vol.value / 100, false); show(); };
+  vol.addEventListener('keydown', (e) => e.stopPropagation());   // (arrow keys move the slider, not the camera)
+  show();
+}
 
 // ── start ────────────────────────────────────────────────────────────────────────────────────────────────────────────
 addEventListener('resize', resize);

@@ -82,7 +82,7 @@ export function makeBuild(app) {
   });
   function cut() {
     const b = L.bench; if (!b || b.len <= SNAP * 1.5) return;
-    sound.audioOn(); sound.saw();
+    sound.audioOn(); sound.saw(b.len, cutAt);
     const lo = newPiece(cutAt), hi = newPiece(b.len - cutAt); lo.fresh = hi.fresh = true;
     L.pieces.push(lo, hi);
     nextBench(); cutAt = Math.min(4, (L.bench ? L.bench.len : 8) - SNAP);
@@ -93,7 +93,7 @@ export function makeBuild(app) {
   // put a waiting piece on the bench to cut it smaller (a fresh board there goes back on the stack)
   function toBench(p) {
     if (L.bench) { if (L.bench.full) L.stack++; else L.pieces.push(L.bench); }
-    L.pieces = L.pieces.filter((q) => q !== p); L.bench = p; cutAt = snapTo(p.len / 2); sound.clunk(); renderPanel();
+    L.pieces = L.pieces.filter((q) => q !== p); L.bench = p; cutAt = snapTo(p.len / 2); sound.clatter(p.len, 'set'); renderPanel();
   }
 
   // ── dragging a piece (or the whole board on the bench) from the panel onto the tower ─────────────────────────────
@@ -139,6 +139,7 @@ export function makeBuild(app) {
     let p = piece;
     if (fromBench) { p = L.bench; if (!p) return; nextBench(); }
     else L.pieces = L.pieces.filter((q) => q !== p);
+    sound.clatter(p.len, 'pick');
     app.held = { piece: p, len: p.len, x: W / 2, y: 0, ang: Math.PI / 2, fresh: true };
     renderPanel(); app.select(null); app.dirty = true;
   }
@@ -148,6 +149,7 @@ export function makeBuild(app) {
     if (h.piece.full && h.piece.len === BOARD_FT && !L.bench) L.bench = h.piece;
     else if (h.piece.full && h.piece.len === BOARD_FT) L.stack++;
     else L.pieces.push(h.piece);
+    sound.clatter(h.len, 'set');
     app.held = null; renderPanel(); app.dirty = true;
   }
   // a board taken down goes back: a whole one onto the stack, a cut one among the pieces
@@ -407,7 +409,7 @@ export function makeBuild(app) {
 
   el.nailBtn.addEventListener('click', () => { if (app.held && contactsOf(app.held).length) app.nail(); });
   el.turnBtn.addEventListener('click', turnHeld);
-  el.backBtn.addEventListener('click', () => { putBack(); sound.clunk(); });
+  el.backBtn.addEventListener('click', () => putBack());
 
   return { freshStack, renderPanel, frame, putBack, returnPiece, contactsOf, cut, takeUp, snapMove, snapSwing, toBench, get cutAt() { return cutAt; }, set cutAt(v) { cutAt = v; renderPanel(); } };
 }
