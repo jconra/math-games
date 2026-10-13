@@ -14,7 +14,8 @@
 //   SLOTS                 the slots, cheapest first: { id, name, line, price, file | made, at, rot, fit, fitH, box, looks }
 //                         at: [x, y, z] (y null: on the floor); rot: degrees about y (0: the piece's front faces +z, the
 //                         door); box: [w, d] the floor it takes (you walk round it), null for a rug or a wall piece;
-//                         looks: the points you look at to pick it (as E picks)
+//                         looks: the points you look at to pick it (as E picks); also: a piece made in code that goes
+//                         with the file (the stove's fire and pipe)
 //   ownedPieces(rider)    -> the slot ids this rider owns (from rider.owned.cabin; anything unknown dropped)
 //   nextPiece(rider)      -> the cheapest slot not owned yet, or null when the cabin is full
 //   homeDogs(rider)       -> the rider's dogs as { kind, name, following }: the one following you and the ones at home
@@ -35,11 +36,11 @@ export const SLOTS = [
   { id: 'porch', name: 'Porch rockers', price: 80, file: 'porch_chair', line: 'Two rocking chairs out on the porch, to watch the sun go down.',
     at: [-1.45, null, 1.55], rot: 200, fit: 0.83, box: null, looks: [[-1.4, 1.9, 0.62]],
     extra: [{ file: 'porch_chair', at: [1.95, null, 1.55], rot: 160, fit: 0.83, box: null }] },
-  { id: 'bed', name: 'Quilted bed', price: 100, file: 'bed', line: 'A wooden bed with a patchwork quilt, under the painting.',
-    at: [-1.35, null, -2.33], rot: 0, fit: 1.97, box: [2.0, 0.9], looks: [[-1.35, 1.3, -2.33]] },
+  { id: 'bed', name: 'Quilted bed', price: 100, file: 'bed', line: 'A log bed with a patchwork quilt, under the painting.',
+    at: [-1.38, null, -2.25], rot: 90, fit: 1.9, box: [1.06, 1.9], looks: [[-1.35, 1.3, -2.25]] },   // (head to the left wall)
   { id: 'rifles', name: 'Rifle rack', price: 120, made: 'rifles', line: 'A rack on the wall with two rifles, like any ranch house.',
     at: [-2.4, 2.0, -0.45], wall: [-1, 0, 0], rot: 90, box: null, looks: [[-2.25, 2.0, -0.45]] },
-  { id: 'stove', name: 'Iron stove', price: 220, made: 'stove', line: 'A cast-iron wood stove with a fire in it. The heart of a home.',
+  { id: 'stove', name: 'Iron stove', price: 220, file: 'stove', also: 'stovefire', fitH: 1.05, line: 'A cast-iron wood stove with a fire in it. The heart of a home.',
     at: [2.45, null, -2.3], rot: -45, box: [0.85, 0.85], looks: [[2.45, 1.4, -2.3]] },
 ];
 export const SLOT = Object.fromEntries(SLOTS.map((s) => [s.id, s]));

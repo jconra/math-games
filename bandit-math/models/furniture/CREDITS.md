@@ -7,11 +7,14 @@ re-encoded as WebP (colour 1024 or 512, the rest 512) by ~/pw/bandit-math/rigs/c
 
 | File | Model | Page | Licence |
 | --- | --- | --- | --- |
-| bed.glb | Vintage Day Bed | <https://polyhaven.com/a/vintage_day_bed> | CC0 |
 | table.glb | Wooden Table 02 | <https://polyhaven.com/a/wooden_table_02> | CC0 |
 | chair.glb | Painted Wooden Chair 01 | <https://polyhaven.com/a/painted_wooden_chair_01> | CC0 |
 | picture.glb | Fancy Picture Frame 01 | <https://polyhaven.com/a/fancy_picture_frame_01> | CC0 |
 | porch_chair.glb | Rocking Chair 01 | <https://polyhaven.com/a/Rockingchair_01> | CC0 |
 
-The rug, the lanterns, the dog beds, the rifle rack, the stove and the belt-buckle keepsakes are made in code
+bed.glb (the quilted log bed) and stove.glb (the iron pot-belly stove) are made for this game in Tripo by its author, and
+share this repository's licence; ~/pw/bandit-math/rigs/furniture_tripo.mjs re-encodes their textures as WebP and narrows
+the bed to a single.
+
+The rug, the lanterns, the dog beds, the rifle rack, the stove's fire and pipe, and the belt-buckle keepsakes are made in code
 (src/cabin/pieces.js).

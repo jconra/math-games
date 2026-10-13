@@ -1,5 +1,5 @@
 // THE PIECES MADE IN CODE for the cabin: the ones no free model fitted (a braided rug, the hanging lanterns, dog beds, a
-// rifle rack, a cast-iron stove) and the belt-buckle keepsakes (steer horns, a cracked safe door, a sheep bell, a carved
+// rifle rack, the iron stove's fire) and the belt-buckle keepsakes (steer horns, a cracked safe door, a sheep bell, a carved
 // pig, wanted posters, a freight sign). Plain shapes with a few pictures drawn on canvases, so they cost nothing to
 // download. Each stands on y = 0 (or hangs from its own middle, for a wall piece), its front facing +z, real size.
 //
@@ -123,25 +123,15 @@ const MAKERS = {
     }
     return grp;
   },
-  // a cast-iron box stove on four legs, a fire glowing through its grate, a kettle on top, the pipe up through the roof
-  stove({ power = 2.2 } = {}) {
+  // what goes with the iron stove's model (models/furniture/stove.glb, a pot-belly 1 m tall before `scale`): the fire
+  // glowing out through its door's grate, a flickering light, and its pipe carried on from the stub up through the roof
+  stovefire({ power = 2.2, scale: k = 1 } = {}) {
     const grp = new THREE.Group(); grp.lights = [];
-    const iron = std(0x232120, { roughness: 0.55, metalness: 0.55 }), trim = std(0x3a3532, { roughness: 0.45, metalness: 0.7 });
-    for (const [x, z] of [[-0.24, -0.18], [0.24, -0.18], [-0.24, 0.18], [0.24, 0.18]]) grp.add(mesh(new THREE.CylinderGeometry(0.025, 0.035, 0.16, 8), iron, x, 0.08, z));
-    grp.add(mesh(new THREE.BoxGeometry(0.6, 0.5, 0.46), iron, 0, 0.41, 0));
-    grp.add(mesh(new THREE.BoxGeometry(0.66, 0.035, 0.52), trim, 0, 0.675, 0), mesh(new THREE.BoxGeometry(0.64, 0.03, 0.5), trim, 0, 0.17, 0));
-    // the door's grate: bars over a glowing fire (the fire unlit, so it glows in the dark)
-    const fire = new THREE.MeshBasicMaterial({ color: 0xff7a24 }); fire.userData.glow = true;
-    const fireM = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.2), fire); fireM.position.set(0, 0.41, 0.232); grp.add(fireM);
-    for (let k = -2; k <= 2; k++) grp.add(mesh(new THREE.BoxGeometry(0.018, 0.22, 0.02), trim, k * 0.065, 0.41, 0.24));
-    grp.add(mesh(new THREE.BoxGeometry(0.36, 0.025, 0.025), trim, 0, 0.52, 0.24), mesh(new THREE.BoxGeometry(0.36, 0.025, 0.025), trim, 0, 0.3, 0.24));
     const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowPicture(), color: 0xff7a30, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.6 }));
-    glow.scale.set(0.7, 0.5, 1); glow.position.set(0, 0.41, 0.3); grp.add(glow);
-    // the kettle, and the pipe (out the back of the top, a bend, then straight up past the roof)
-    grp.add(mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.13, 14), trim, 0.13, 0.76, 0.05), mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.1, 6).rotateZ(1.0), trim, 0.22, 0.79, 0.05));
-    grp.add(mesh(new THREE.CylinderGeometry(0.075, 0.075, 4.6, 14), iron, -0.12, 0.69 + 2.3, -0.1));
-    const light = new THREE.PointLight(0xff8a3c, power, 6, 1.6); light.position.set(0, 0.45, 0.45); grp.add(light); grp.lights.push(light);
-    grp.tick = (dt, t) => { const f = 1 + 0.12 * Math.sin(t * 9.1) + 0.07 * Math.sin(t * 23.7) + 0.05 * Math.sin(t * 3.3); light.intensity = power * f; glow.material.opacity = 0.5 + 0.1 * f; fire.color.setRGB(1, 0.42 + 0.06 * f, 0.13); };
+    glow.scale.set(0.45 * k, 0.32 * k, 1); glow.position.set(0, 0.4 * k, 0.3 * k); grp.add(glow);
+    grp.add(mesh(new THREE.CylinderGeometry(0.064 * k, 0.064 * k, 4.4, 14), std(0x232120, { roughness: 0.55, metalness: 0.55 }), -0.075 * k, 0.99 * k + 2.2, -0.044 * k));
+    const light = new THREE.PointLight(0xff8a3c, power, 6, 1.6); light.position.set(0, 0.42 * k, 0.5 * k); grp.add(light); grp.lights.push(light);
+    grp.tick = (dt, t) => { const f = 1 + 0.12 * Math.sin(t * 9.1) + 0.07 * Math.sin(t * 23.7) + 0.05 * Math.sin(t * 3.3); light.intensity = power * f; glow.material.opacity = 0.5 + 0.1 * f; };
     return grp;
   },
 };

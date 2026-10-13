@@ -239,6 +239,7 @@ export async function makeInterior({ renderer, tier = 'normal', base = new URL('
         for (let i = 0; i < n; i++) { const b = made(makePiece('dogbed', { tint: tints[i] })), s = BED_SPOTS[i]; b.position.set(s.x, floorUnder(s.x, s.z, 1.6), s.z); b.rotation.y = s.rot; g.add(b); }
       } else if (spec.made) { const m = made(makePiece(spec.made)); stand(m, spec); g.add(m); }
       else { const m = await placeFile(spec, !!spec.wall); stand(m, spec); g.add(m); }
+      if (spec.also) { const m = made(makePiece(spec.also, { scale: spec.fitH || 1 })); stand(m, spec); g.add(m); }
       for (const ex of spec.extra || []) { const m = await placeFile(ex, false); stand(m, ex); g.add(m); }
       if (id !== 'porch') litTree(g);
       g.userData.ticks = []; g.traverse((o) => { if (o.tick) g.userData.ticks.push(o.tick); });
