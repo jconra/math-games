@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Windmill Tower Lab</title>
+<meta name="description" content="A Bandit Math prototype: build a windmill tower from a stack of lumber, then let the wind test it.">
+<!-- the on-screen error box comes first, so a crash shows on screen instead of a blank page -->
+<script src="../../oops.js"></script>
+<link rel="stylesheet" href="../../src/ui/fonts/fonts.css">
+<link rel="stylesheet" href="windmill.css?v=1">
+<script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/" } }</script>
+</head>
+<body>
+<div id="app">
+  <aside id="panel" aria-label="Lumber">
+    <header class="pn-head">
+      <h1>Lumber</h1>
+      <div class="pn-count"><b id="count">12</b> <span id="count-word">full boards left</span></div>
+    </header>
+    <div class="bench-wrap">
+      <div class="bench-label" id="bench-label">Fresh 8 ft board</div>
+      <div class="bench" id="bench">
+        <div class="tape" id="tape"></div>
+        <div class="board-v" id="bench-board" title="Drag the whole board onto the tower, or pick a spot and cut it">
+          <div class="saw" id="saw"><i></i><span id="saw-label">4 ft | 4 ft</span></div>
+        </div>
+      </div>
+      <div class="bench-empty" id="bench-empty" hidden>No full boards left</div>
+    </div>
+    <button class="btn cut" id="cut">Cut</button>
+    <div class="pieces-head">Cut pieces</div>
+    <div class="pieces" id="pieces"></div>
+    <div class="pieces-empty" id="pieces-empty">Cut pieces wait here. Drag one onto the tower.</div>
+  </aside>
+  <main id="view">
+    <canvas id="c" aria-label="The hilltop and the tower"></canvas>
+    <svg id="overlay"></svg>
+    <div class="gz move" id="g-move" hidden title="Slide the board"><svg viewBox="0 0 24 24"><path d="M12 2l3 3h-2v6h6V9l3 3-3 3v-2h-6v6h2l-3 3-3-3h2v-6H5v2l-3-3 3-3v2h6V5H9z"/></svg></div>
+    <div class="gz end" id="g-a" hidden title="Swing this end"></div>
+    <div class="gz end" id="g-b" hidden title="Swing this end"></div>
+
+    <div class="bar top">
+      <div class="faces">
+        <button class="btn icon" id="prev" aria-label="Go round to the left">&#9664;</button>
+        <div class="face-name"><b id="face-name">Front wall</b><small id="face-sub">the back mirrors it</small></div>
+        <button class="btn icon" id="next" aria-label="Go round to the right">&#9654;</button>
+      </div>
+      <div class="stats">
+        <div><small>Height</small><b id="height">0 ft</b></div>
+        <div><small>Best</small><b id="best">0 ft</b></div>
+      </div>
+      <div class="tools">
+        <button class="btn" id="undo" title="Take down the last board">Undo</button>
+        <button class="btn" id="mode" title="Build two walls (mirrored) or all four">Mirror walls</button>
+      </div>
+    </div>
+    <div class="scroll">
+      <button class="btn icon" id="up" aria-label="Look higher">&#9650;</button>
+      <button class="btn icon" id="down" aria-label="Look lower">&#9660;</button>
+    </div>
+    <div class="bar held" id="held-bar" hidden>
+      <div class="hint" id="held-hint"></div>
+      <div class="row">
+        <button class="btn" id="turn">Turn</button>
+        <button class="btn" id="back">Back to pile</button>
+        <button class="btn go" id="nail">Nail it</button>
+      </div>
+    </div>
+    <div class="bar sel" id="sel-bar" hidden>
+      <div class="hint" id="sel-hint">This board</div>
+      <div class="row"><button class="btn" id="leave">Leave it</button><button class="btn go" id="pickup">Pick it up</button></div>
+    </div>
+    <button class="btn wind" id="wind"><svg viewBox="0 0 24 24"><path d="M3 8h10a3 3 0 1 0-3-3M3 12h15a3 3 0 1 1-3 3M3 16h7"/></svg>Call the wind</button>
+
+    <div class="say" id="say" hidden><div class="who">The miller</div><div id="say-text"></div></div>
+    <div class="stage" id="stage" hidden><b id="stage-name"></b><span id="stage-sub"></span><div class="gauge"><i id="stage-bar"></i></div></div>
+    <div class="card" id="question" hidden></div>
+    <div class="card" id="result" hidden></div>
+    <div class="flybonus" id="flybonus" hidden>+1 board</div>
+    <div class="perf" id="perf" hidden></div>
+  </main>
+</div>
+<div class="loading" id="loading">Climbing the hill…</div>
+<script type="module" src="main.js?v=1"></script>
+</body>
+</html>
