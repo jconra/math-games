@@ -35,7 +35,7 @@ export const CAMPFIRE = {
   leanPer: 1.1,          // ... as this many times the camera's angle down onto the fire
   glow: { r: 2.8, strength: 0.42, flicker: 0.22, colour: 0xff8a3a },   // the patch on the ground: reach (m), how bright,
                                                                      // how much it flickers (a share of strength)
-  sound: { hear: 30, level: 0.55, ref: 2.0, rolloff: 1.3 },   // within hear metres; its level at the fire
+  sound: { hear: 30, level: 0.165, ref: 2.0, rolloff: 1.3 },   // within hear metres; its level at the fire (the loop now peaks at 0.67, so as loud in town as before)
   bright: 0.9,           // extra brightness for the valley's daylight (the shader's own "flash" punch held on: 0.9 is
                          // nearly twice as bright as the fire lab's night flames, which read pale against a sunlit meadow)
 };

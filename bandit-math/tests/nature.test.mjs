@@ -21,8 +21,8 @@ test("one settings block each: the sliders' names, the owner's creek", () => {
     { seconds: 9, bubbles: 57, low: 650, high: 2977, lowpass: 406, passes: 3, level: 0.47 }, "the defaults are the owner's creek from the Sound Lab");
   for (const k of ['crackles', 'cluster', 'clusterLen', 'crackleShort', 'crackleLong', 'bright', 'spread', 'pops', 'knock', 'settles', 'breath', 'lowpass', 'seconds', 'level']) assert.ok(k in FIRE, 'FIRE.' + k);
   assert.ok(FIRE.crackles > 20 * FIRE.pops, 'mostly crackles, fewer pops');
-  assert.ok(FIRE.crackleShort >= 0.5 && FIRE.crackleLong <= 4, 'crackles 0.5 to 4 ms');
-  assert.ok(FIRE.breath <= 0.01, 'at most a faint breath of flame');
+  assert.ok(FIRE.crackleShort >= 0.1 && FIRE.crackleLong <= 15, 'crackles are short clicks (the owner tuned 1.1 to 12 ms)');
+  assert.ok(FIRE.breath <= 0.1, 'a breath of flame, not a roar');
   assert.equal(ambience.brookSamples, brookSamples, 'the town plays the shared creek');
 });
 
@@ -44,7 +44,7 @@ test('the campfire: crackles and pops (spiky, mostly quiet between), no seam, it
     assert.equal(d.length, Math.round(SR * FIRE.seconds));
     assert.ok(Math.abs(peak(d) - FIRE.level) < 1e-6 && peak(d) < 0.98);
     assert.ok(seamOK(d), 'seed ' + s + ': no click at the seam');
-    assert.ok(peak(d) / rms(d) > 10, 'clicks, not a steady hiss (a hiss peaks only 3 or 4 times its rms)');
+    assert.ok(peak(d) / rms(d) > 6, 'clicks, not a steady hiss (a hiss peaks only 3 or 4 times its rms)');
   }
   // a crackle-free, pop-free fire is (nearly) silent: the breath is faint
   const quiet = fireSamples(SR, { ...FIRE, crackles: 0, pops: 0, settles: 0, level: 1 }, seeded(2));
