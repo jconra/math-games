@@ -6,10 +6,14 @@
 // When every right one is roped, the wave pays a bonus and puts a lock box in the saddlebags, and a new bunch wanders in.
 // There is no game over and no timer.
 //
-// The math comes from the topic trainers (src/math/times.js, src/math/negatives.js): they deal the numbers, judge the
-// answers and climb or ease off. Topics take turns wave by wave when more than one is ticked, never mid-wave. When the
-// kid is stuck (8 s without a pick) or right after a miss, help appears: the times chart's "Peek" button, or the number
-// line for positive & negative cards (with a "Show me" on the card).
+// The math comes from the topic trainers (src/math/times.js, src/math/negatives.js, and the others in src/math/topic.js
+// such as dividing): they deal the numbers, judge the answers and climb or ease off. Topics take turns wave by wave when
+// more than one is ticked, never mid-wave. A card topic (positive & negative, dividing: the trainer's mode is 'cards')
+// deals one card at a time, each with its own small herd of answers. When the kid is stuck (8 s without a pick) or right
+// after a miss, help appears: the times chart's "Peek" button, the number line for positive & negative cards (with a
+// "Show me" on the card), or the card topic's own picture (its `helper`: rows of dots for dividing, src/ui/groups.js, or
+// the times chart's "Peek" for the big division facts; ten-frames and a number line with hops for counting, adding and
+// taking away, src/ui/counthelp.js).
 //
 //   const RU = makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob, refresh })
 //     P, I: the player and the input; hud: makeHud's; hob: makeHob's (for its lines); refresh(): redraw the purse
@@ -26,6 +30,9 @@ import * as THREE from 'three';
 import { makeAnimal, COATS } from '../actors/animals.js';
 import { makeTimes } from '../math/times.js';
 import { makeNegatives } from '../math/negatives.js';
+import { makeTopic, hasTopic, HERD_TOPICS } from '../math/topic.js';
+import { showGroups } from '../ui/groups.js';
+import { showCountHelp } from '../ui/counthelp.js';
 import { makeTargetRing } from '../targetring.js';
 import { offerChart, closeChart, chartOptions, watchHesitation as watchChart, ensureChartCss } from '../ui/timeschart.js';
 import { showNumberLine, ensureNumberLineStyles, watchHesitation as watchLine } from '../ui/numberline.js';
@@ -96,6 +103,7 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
     if (topics[id]) return topics[id];
     rider.topics = rider.topics || {};
     if (id === 'negatives') topics[id] = makeNegatives(rider.topics.negatives || (rider.topics.negatives = {}));
+    else if (id !== 'times' && hasTopic(id)) topics[id] = makeTopic(id, rider.topics[id] || (rider.topics[id] = {}));   // (dividing and the other herd topics)
     else topics[id] = makeTimes(rider.topics.times || (rider.topics.times = {}));
     return topics[id];
   }
@@ -103,7 +111,7 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
   // Solving for x lives in the lock boxes)
   const herdTopics = () => {
     const on = rider.topicsOn || {};
-    const list = ['times', 'negatives'].filter((t) => on[t]);
+    const list = ['times', ...HERD_TOPICS.filter((t) => t !== 'times'), 'negatives'].filter((t) => on[t]);
     return list.length ? list : ['times'];
   };
 
@@ -291,7 +299,7 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
     endHelp();
     waveN++;
     const list = herdTopics(), topic = list[(waveN - 1) % list.length], T = trainer(topic);
-    if (topic === 'negatives') {
+    if (topic === 'negatives' || T.mode === 'cards') {
       const w = T.wave({ count: ROUNDUP.cardSize });
       wave = { topic, T, w, card: w.card, kind: 'card', caught: 0, cards: w.cards.length, cardNo: 1, misses: 0 };
       deal(w.card.targets, w.card.id);
@@ -316,8 +324,8 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
     if (wave.done) { hud.rule({ main: 'Wave done!', sub: 'Another bunch is wandering in…' }); return; }
     if (wave.kind === 'card') {
       const c = wave.card;
-      hud.rule({ main: `${c.text} = ?`, sub: `Rope the answer · card ${wave.cardNo} of ${wave.cards}`,
-        buttons: [{ label: 'Show me', onClick: () => showLine(wave.T.help(c)) }] });
+      hud.rule({ main: c.rule || `${c.text} = ?`, sub: `${c.sub || 'Rope the answer'} · card ${wave.cardNo} of ${wave.cards}`,
+        buttons: [{ label: 'Show me', onClick: () => showLine(wave.T.help(c), { asked: true }) }] });
     } else if (wave.w.kind === 'missing') {
       hud.rule({ main: wave.w.rule, sub: 'Rope the missing number' });
     } else {
@@ -340,13 +348,28 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
   }
   // the "Not me, partner" line under the rule card comes and goes (the Peek button is placed again each time)
   function hint(o) { hud.hint(o); placeOffer(); }
-  function showLine(opts) {
+  // (a card topic's picture: its helper says which; the number line when it says none. asked: the kid pressed "Show
+  // me", so a chart opens at once rather than offering a Peek button to press as well)
+  function showLine(opts, { asked = false } = {}) {
     if (!opts) return;
+    if (opts.helper === 'chart') { cardChart(opts, asked); return; }
     if (nl) nl.remove();
-    nl = showNumberLine(hud.helpEl, { ...opts, theme: NL_THEME });
+    nl = opts.helper === 'groups' ? showGroups(hud.helpEl, opts) : opts.helper === 'count' ? showCountHelp(hud.helpEl, opts)
+      : showNumberLine(hud.helpEl, { ...opts, theme: NL_THEME });
     nlCard = wave && wave.card ? wave.card.id : null;
   }
-  function hideLine() { if (nl) { nl.remove(); nl = null; nlCard = null; } }
+  // the times chart's "Peek" for a card (a big division fact: find the number in the table's row, then look up); a new
+  // button for each card. open: show the chart itself now (the kid asked for it)
+  function cardChart(o, open = false) {
+    const opts = { ...o, anchor: hud.jobEl, avoid: hud.hintEl, side: 'right' };
+    if (offer) offer.update(opts); else offer = offerChart(document.body, opts);
+    placeOffer();
+    if (open) offer.openChart();
+  }
+  function hideLine() {
+    if (nl) { nl.remove(); nl = null; nlCard = null; }
+    if (offer && wave && wave.kind === 'card') { closeChart(); offer.remove(); offer = null; }
+  }
   function endHelp() {
     if (hes) { hes.cancel(); hes = null; }
     closeChart();
@@ -405,12 +428,12 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
     if (right) {
       s.state = 'held'; s.label.visible = false; w.caught++;
       const hard = w.kind === 'card' ? (s.cardRung || (w.card && w.card.rung) || 1) : (w.w.hard || 1);
-      const pay = PAY.catch + Math.floor((hard - 1) / (w.topic === 'negatives' ? PAY.negEvery : PAY.hardEvery));
+      const pay = PAY.catch + Math.floor((hard - 1) / (T.payEvery || (w.topic === 'negatives' ? PAY.negEvery : PAY.hardEvery)));
       const e = earn(rider, pay);
       hud.buckle(countJob(rider, 'cattle').buckle, { delay: 700 });   // counted as it's roped: it heads to the corral by itself
       hint(null);
       if (w.kind === 'card') {
-        hud.toast(`Roped the ${s.text}! ${w.card.text} = ${s.text}`, 'good');
+        hud.toast(`Roped the ${s.text}! ${w.card.done || `${w.card.text} = ${s.text}`}`, 'good');
         hideLine();
       } else {
         const ex = T.explain(s.n);
@@ -549,7 +572,9 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
   };
 
   // Number cards that would overlap on screen (cattle bunched up far off) are stacked: the nearest keeps its place and
-  // a farther one moves up just clear of it, so every number can be read. The lift eases in and out.
+  // a farther one moves up just clear of it, so every number can be read. A card that would sit under the page's own
+  // boxes up top (the rule card, the hint line under it, the chart's Peek offer) moves down below them instead, and
+  // then stacks downward too. The lift eases in and out.
   const stackV = new THREE.Vector3(), rects = [];
   function unstack(px, h, dt) {
     const w = canvas.clientWidth || innerWidth, list = [];
@@ -565,15 +590,19 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
     list.sort((a, b) => a.d - b.d);
     rects.length = 0;
     const g = ROUNDUP.stackGap;
+    const cv = canvas.getBoundingClientRect(), page = [];
+    for (const e of [hud.ruleEl, hud.hintEl, offer && offer.el]) {
+      if (!e || e.hidden || !e.offsetParent) continue;
+      const q = e.getBoundingClientRect();
+      if (q.height && q.width) page.push({ x0: q.left - cv.left, x1: q.right - cv.left, y0: q.top - cv.top, y1: q.bottom - cv.top });
+    }
+    const hits = (it, bottom, r) => !(it.x + it.cw / 2 + g <= r.x0 || it.x - it.cw / 2 - g >= r.x1) && !(bottom - px - g >= r.y1 || bottom + g <= r.y0);
     for (const it of list) {
-      let bottom = it.y, moved = true, n = 0;
+      let bottom = it.y, down = false, moved = true, n = 0;
       while (moved && n++ < 12) {
         moved = false;
-        for (const r of rects) {
-          if (it.x + it.cw / 2 + g <= r.x0 || it.x - it.cw / 2 - g >= r.x1) continue;
-          if (bottom - px - g >= r.y1 || bottom + g <= r.y0) continue;
-          bottom = r.y0 - g; moved = true;
-        }
+        for (const r of page) if (hits(it, bottom, r)) { bottom = r.y1 + g + px; down = true; moved = true; }
+        for (const r of rects) if (hits(it, bottom, r)) { bottom = down ? r.y1 + g + px : r.y0 - g; moved = true; }
       }
       rects.push({ x0: it.x - it.cw / 2, x1: it.x + it.cw / 2, y0: bottom - px, y1: bottom });
       const want = (it.y - bottom) * it.s.label.userData.perPx;   // metres up

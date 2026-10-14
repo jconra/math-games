@@ -63,11 +63,11 @@ export const TITLES = [
 
 // The math topics in the order the title screen shows them. `ready` = playable in this build.
 export const TOPICS = [
-  { id: 'counting', name: 'Counting', ages: '4-6', ready: false },
-  { id: 'adding', name: 'Adding', ages: '5-8', ready: false },
-  { id: 'taking', name: 'Taking away', ages: '6-8', ready: false },
+  { id: 'counting', name: 'Counting', ages: '4-6', ready: true },      // off until ticked; progress in topics.counting (src/math/counting.js), made when first played
+  { id: 'adding', name: 'Adding', ages: '5-8', ready: true },          // ... topics.adding (src/math/adding.js)
+  { id: 'taking', name: 'Taking away', ages: '6-8', ready: true },     // ... topics.taking (src/math/taking.js)
   { id: 'times', name: 'Times tables', ages: '7-10', ready: true },
-  { id: 'dividing', name: 'Dividing', ages: '8-11', ready: false },
+  { id: 'dividing', name: 'Dividing', ages: '8-11', ready: true },    // off until ticked; progress in topics.dividing (src/math/dividing.js), made when first played
   { id: 'negatives', name: 'Positive & negative', ages: '11-13', ready: true },   // off until ticked; progress in topics.negatives, made when first played
   { id: 'algebra', name: 'Solving for x', ages: '11+', ready: true },
 ];
@@ -77,7 +77,7 @@ export const MISSIONS = [
   { id: 'roundup', name: 'Round-up', line: 'Rope the right numbers', ready: true },
   { id: 'wagon', name: 'Protect the wagon', line: 'Ride shotgun and keep the cargo safe', ready: true },
   { id: 'hunt', name: 'Deer photographs', line: 'Snap the deer with the answer', ready: true },   // (the id stays 'hunt': older saves keep their tick)
-  { id: 'loot', name: 'Loot the gang', line: 'Take back what the gang stole', ready: false },
+  { id: 'loot', name: 'Loot the gang', line: 'Take back what the gang stole', ready: true },   // (src/missions/loot.js; its ladder in topics.loot)
 ];
 
 // ---- jobs and belt buckles -----------------------------------------------------------------------------------
@@ -100,6 +100,11 @@ export const MISSIONS = [
 //     visit; still a first guess until the job has been played for real.
 //   deliveries: a delivery is an order worked out at the store and two rides (out to a camp and back), two or three
 //     minutes, so tin (3) comes in a first sitting and copper (10) after a few; a first guess until it's been played.
+//   loot: a bundle of the gang's loot handed back (one sharing problem); a trip is 2 or 3 bundles and a ride out and
+//     back (three or four minutes), so tin (5) comes on the second trip; a first guess until it's been played.
+//   targets: a bottle or tin can shot down at the target range (Shooting mode only: mode 'shoot', so a lasso rider's card
+//     doesn't show it unless they have some); a string of five cards is ten to fifteen right targets in two or three
+//     minutes, so tin (15) comes with the first string or two and copper (60) after a few sittings; a first guess.
 //   bandits: a gang's wave on the wagon road has 3 to 5 bandits and takes a couple of minutes, so tin (3) comes with
 //     the first wave and copper (15) after four or five; still a first guess until it's been played for real.
 export const BUCKLES = ['tin', 'copper', 'silver', 'gold'];
@@ -112,10 +117,13 @@ export const JOBS = [
   { id: 'pigs', name: 'Pigs penned', words: ['pig penned', 'pigs penned'], at: [10, 50, 200, 500], ready: true },
   { id: 'bandits', name: 'Bandits brought in', words: ['bandit brought in', 'bandits brought in'], at: [3, 15, 50, 150], ready: true },
   { id: 'deliveries', name: 'Deliveries made', words: ['delivery made', 'deliveries made'], at: [3, 10, 30, 100], ready: true },
+  { id: 'loot', name: 'Loot returned', words: ['bundle of loot returned', 'bundles of loot returned'], at: [5, 20, 60, 150], ready: true },
+  { id: 'targets', name: 'Targets hit', words: ['target hit', 'targets hit'], at: [15, 60, 250, 600], ready: true, mode: 'shoot' },
 ];
 
-// The keepsake each job will put in the rider's cabin (not used yet: it waits for the cabin). `from` = the buckle
-// that brings it; later buckles can dress it up (the cabin decides how). `where` is a suggestion for its spot.
+// The keepsake each job puts in the rider's cabin (src/cabin/: slots.js has its spot, pieces.js its shape). `from` =
+// the buckle that brings it; later buckles can dress it up (the cabin decides how). `where` is a description in words
+// (shown nowhere today; slots.js has the real spot).
 // The steer horns, safe door, sheep bell and wanted posters were asked for; the pig and the delivery ones are
 // stand-ins until someone picks.
 export const KEEPSAKES = {
@@ -126,6 +134,8 @@ export const KEEPSAKES = {
   pigs: { name: 'A carved wooden pig', where: 'on the mantel', from: 'tin', standIn: true },
   bandits: { name: 'Wanted posters', where: 'on the wall, one more for each buckle', from: 'tin' },
   deliveries: { name: 'A freight company sign', where: 'on the porch', from: 'tin', standIn: true },
+  loot: { name: 'A recovered strongbox', where: 'on the floor against the back wall', from: 'tin', standIn: true },
+  targets: { name: 'A row of shot-up tin cans', where: 'on a shelf over the table', from: 'tin', standIn: true },
 };
 
 // The period looks a new rider can pick from: a people model, one of the clothes palettes (the same names as the
@@ -441,7 +451,8 @@ export function buckleOf(rider, id) {
 
 // The buckles for every job this build has, in the rider card's order.
 export function bucklesOf(rider) {
-  return JOBS.filter(j => j.ready).map(j => buckleOf(rider, j.id));
+  // (a job only one mode has, the target range's in Shooting mode, shows for a rider in that mode, or once they have some)
+  return JOBS.filter(j => j.ready && (!j.mode || (rider && rider.mode) === j.mode || jobCount(rider, j.id) > 0)).map(j => buckleOf(rider, j.id));
 }
 
 // The progress line under a buckle: '37 / 50 to copper', or '512 · Gold buckle' at the top.

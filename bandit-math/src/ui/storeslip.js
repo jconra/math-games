@@ -1,5 +1,5 @@
 // The order slip at the general store counter: a parchment slip over the right of the screen (the bottom on a phone) with
-// the customer's story, the question, and 3 or 4 coins to pick from (keys 1-4). A wrong coin shakes and goes dull, and
+// the customer's story, the question, and 3 or 4 coins to pick from (keys 1 to 3 or 1 to 4). A wrong coin shakes and goes dull, and
 // the slip shows one plain line about that slip and the picture for that kind of problem (src/ui/storepics.js); then the
 // kid picks again. A right coin glows, the coins fly from it into the slip's purse and it counts up, and the slip slides
 // away for the next customer's. No buttons between orders; "Done for now" (or Esc) stops.
@@ -98,6 +98,8 @@ export function makeStoreSlip(root = document.body, { onPick = () => {}, onDone 
     coinsEl.innerHTML = o.coins.map((c, i) => `<button type="button" class="bmo-coin${o.equation ? ' is-eq' : ''}" data-i="${i}" aria-label="${esc(c.label)}">
         <span class="bmo-face"><b>${esc(c.big)}</b>${c.small ? `<small>${esc(c.small)}</small>` : ''}</span><kbd>${i + 1}</kbd></button>`).join('');
     help.hidden = true; drawBtn.hidden = true; thanks.hidden = true;
+    slip.classList.remove('has-help');
+    $('.bmo-keys').textContent = `keys 1 to ${o.coins.length} pick a coin`;
     slip.scrollTop = 0;   // (a slip scrolled down to the last one's picture would open with its header cut off)
     $('.bmo-filled').textContent = filled ? `${filled} order${filled === 1 ? '' : 's'} filled` : 'First order of the day';
     slip.classList.remove('is-out', 'is-in');
@@ -113,6 +115,7 @@ export function makeStoreSlip(root = document.body, { onPick = () => {}, onDone 
     $('.bmo-picline').textContent = pic.line || '';
     help.hidden = false;
     drawBtn.hidden = true;
+    slip.classList.add('has-help');   // (a phone's sheet grows up to the HUD to hold the reason and the picture)
     help.classList.remove('is-pop'); void help.offsetWidth; help.classList.add('is-pop');
     // on a short screen the reason and the picture land below the coins: on a window (not a phone's sheet, where the
     // picture keeps its size and the slip scrolls) the picture shrinks to fit (down to SLIP.picLeast px tall); what

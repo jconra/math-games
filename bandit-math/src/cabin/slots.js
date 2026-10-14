@@ -95,6 +95,8 @@ export const KEEPSAKE_SPOTS = {
   bandits: { at: [-2.4, 2.45, -1.75], wall: [-1, 0, 0] },     // the wanted posters, on the left-hand wall over the bed's foot
   deliveries: { at: [-1.55, 3.0, 0.62], wall: [0, 0, 1] },    // the freight company's sign, high on the front wall
   orders: { at: [2.3, null, -0.62], table: 0.8, rot: -60 },  // the store's brass counter bell, on the table (on a crate till there is one)
+  loot: { at: [0.55, null, -2.5], rot: 0 },                  // the gang's strongbox, on the floor against the back wall (between the bed's foot and the safe door)
+  targets: { at: [2.95, 1.6, -1.22], wall: [1, 0, 0] },        // the shot-up tin cans from the target range, on a little shelf on the right-hand wall over the table
 };
 // Not built yet (the farm jobs' later work): where a rider's own farm animals would live, in the town cabin's own space
 // (metres from its middle, its front +z): a chicken coop on its left side, a pig pen and a little corral behind it.

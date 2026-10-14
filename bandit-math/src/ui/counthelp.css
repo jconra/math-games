@@ -1,0 +1,84 @@
+/* The early topics' helper (counthelp.js): ten-frames and a number line with a hop for each step, on a smoky panel
+   over the game. Its colours match the number line's (numberline.css): cream ink, the hop in gold, the kid's pick in
+   violet (far from the gold for every kind of colour sight). Everything is under .bm-ch so it can't clash. */
+@import url('fonts/fonts.css');
+
+.bm-ch {
+  --ch-ink: #f4e8cf;          /* numbers and words */
+  --ch-ink-2: #dccaa5;        /* the plain tick numbers */
+  --ch-mute: #a8957a;         /* small captions, the frames' grid */
+  --ch-line: #e3cfa6;         /* the number line */
+  --ch-hop: #eeb04a;          /* the hops, the landing, the counters added */
+  --ch-hop-ink: #f6c661;      /* the hops' numbers */
+  --ch-on-hop: #241608;       /* the answer printed on the landing pill */
+  --ch-dot: #f4e8cf;          /* the counters the sum starts with */
+  --ch-dot-ink: #2b2219;      /* the count written on a counter */
+  --ch-gone: #e0704a;         /* the cross on a counter taken away */
+  --ch-pick: #b993ff;         /* the kid's wrong pick */
+  --ch-fill: #1d140c;         /* inside the hollow start dot */
+  display: block; margin: 0 auto; max-width: 660px;
+  color: var(--ch-ink);
+  font: 400 16px/1.35 Bitter, Georgia, 'Times New Roman', serif;
+  -webkit-user-select: none; user-select: none;
+}
+.bm-ch--backing {
+  padding: 10px 16px 12px;
+  border-radius: 16px;
+  background: rgba(22, 15, 10, 0.88);
+  border: 1px solid rgba(226, 173, 76, 0.32);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 238, 205, 0.06);
+}
+.bm-ch svg { display: block; width: 100%; height: auto; margin: 0 auto; overflow: visible; }
+.bm-ch text { font-family: Bitter, Georgia, 'Times New Roman', serif; }
+
+/* the ten-frames */
+.bm-ch .ch-frame { fill: rgba(255, 240, 210, 0.05); stroke: var(--ch-line); stroke-width: 2.5; }
+.bm-ch .ch-cell { stroke: var(--ch-mute); stroke-width: 1.2; opacity: 0.7; }
+.bm-ch .ch-dot { fill: var(--ch-dot); stroke: rgba(0, 0, 0, 0.35); stroke-width: 1.5; }
+.bm-ch .ch-dot.more { fill: var(--ch-hop); }
+.bm-ch .ch-dot.gone { opacity: 0.38; }
+.bm-ch .ch-dot.empty { fill: none; stroke: var(--ch-hop); stroke-width: 2.2; stroke-dasharray: 4 3; }
+.bm-ch .ch-cross { stroke: var(--ch-gone); stroke-width: 3; stroke-linecap: round; }
+.bm-ch .ch-count { fill: var(--ch-dot-ink); font-weight: 800; }
+.bm-ch .ch-fsum { fill: var(--ch-ink); font-weight: 700; }
+
+/* the number line */
+.bm-ch .ch-track { stroke: var(--ch-line); stroke-linecap: round; }
+.bm-ch .ch-end { fill: var(--ch-line); }
+.bm-ch .ch-tick { stroke: var(--ch-line); stroke-width: 2; stroke-linecap: round; }
+.bm-ch .ch-tick.major { stroke-width: 3; }
+.bm-ch .ch-num { fill: var(--ch-ink-2); font-weight: 500; }
+.bm-ch .ch-num.key { fill: var(--ch-ink); font-weight: 800; }
+.bm-ch .ch-start { fill: var(--ch-fill); stroke: var(--ch-ink); stroke-width: 3; }
+.bm-ch .ch-arc { fill: none; stroke: var(--ch-hop); stroke-width: 3; stroke-linecap: round; }
+.bm-ch .ch-head { fill: var(--ch-hop); }
+.bm-ch .ch-hoplab { fill: var(--ch-hop-ink); font-weight: 700; }
+.bm-ch .ch-land circle { fill: var(--ch-hop); stroke: var(--ch-fill); stroke-width: 2.5; }
+.bm-ch .ch-pill rect { fill: var(--ch-hop); }
+.bm-ch .ch-pill text { fill: var(--ch-on-hop); font-weight: 800; }
+.bm-ch .ch-pill.guess rect { fill: none; stroke: var(--ch-hop); stroke-width: 2.5; stroke-dasharray: 5 4; }
+.bm-ch .ch-pill.guess text { fill: var(--ch-hop-ink); }
+.bm-ch .ch-pick { stroke: var(--ch-pick); stroke-width: 3.5; stroke-linecap: round; }
+.bm-ch .ch-pickcap { fill: var(--ch-pick); font-weight: 600; }
+.bm-ch .ch-badge { fill: var(--ch-hop-ink); font-weight: 700; }
+
+/* the one plain line under the picture */
+.bm-ch-reason {
+  margin: 4px auto 0; max-width: 62ch; text-wrap: balance;
+  font: 500 19px/1.35 Bitter, Georgia, 'Times New Roman', serif; text-align: center; color: var(--ch-ink);
+}
+.bm-ch--compact .bm-ch-reason { font-size: 15px; }
+
+/* the pieces come in one after another: the counters pop in, the hops draw themselves, the landing pops */
+.bm-ch .ch-in { animation: bmch-pop 260ms cubic-bezier(.3, 1.6, .5, 1) both; transform-box: fill-box; transform-origin: center; }
+.bm-ch .ch-fade { animation: bmch-fade 240ms ease-out both; }
+.bm-ch .ch-draw { stroke-dasharray: 1; animation: bmch-draw 260ms ease-out both; }
+.bm-ch--still .ch-in, .bm-ch--still .ch-fade, .bm-ch--still .ch-draw { animation: none; }
+.bm-ch--still .ch-draw { stroke-dasharray: none; }
+@keyframes bmch-pop { from { opacity: 0; transform: scale(0.2); } to { opacity: 1; transform: none; } }
+@keyframes bmch-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes bmch-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .bm-ch .ch-in, .bm-ch .ch-fade, .bm-ch .ch-draw { animation: none; }
+  .bm-ch .ch-draw { stroke-dasharray: none; }
+}

@@ -36,9 +36,11 @@ import { makeStoreJob } from './missions/store.js';
 import { makeCamps } from './camps.js';
 import { makeDeer } from './deer.js';
 import { makeDeerJob } from './missions/deerjob.js';
+import { makeShootingJob } from './missions/shooting.js';
 import { albumBody, prints } from './ui/album.js';
 import { makeDeliveryJob } from './missions/delivery.js';
 import { makeWagonJob } from './missions/wagonjob.js';
+import { makeLootJob } from './missions/loot.js';
 import { makeShops, makePanel, boxTier, PRICES, PAY } from './shop.js';
 import { makeHob } from './hob.js';
 import { makeJobFolk } from './jobfolk.js';
@@ -65,6 +67,9 @@ addEventListener('error', (e) => BM.errors.push(String(e.message)));
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: Q.get('q') !== 'potato', powerPreference: 'high-performance' });
 renderer.setSize(innerWidth, innerHeight);
+// (?perf counts every pass of a frame: the valley, then the six-shooter over it. Left to itself each render() would wipe
+// the count, and the readout would show only the gun's pass)
+if (PERF) renderer.info.autoReset = false;
 const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 5000);
 const quality = chooseTier(renderer);
 
@@ -118,8 +123,10 @@ let HS = null;   // the rider's own farm animals in a yard behind the cabin, and
 let camps = null, DL = null;   // the camps out in the valley (src/camps.js) and their deliveries (src/missions/delivery.js)
 let deer = null;   // the wild deer herds out in the valley (src/deer.js)
 let DJ = null;   // deer photographs with Miss Wren's box camera (src/missions/deerjob.js), when ticked
+let SR = null;   // target shooting at the range on the east edge of town (src/missions/shooting.js), for a rider in Shooting mode
 let JF = null;   // a person at each job who says what's going on, and thanks you after (src/jobfolk.js)
-const atCounter = () => !!(SJ && SJ.active) || !!(DL && DL.active) || !!(DJ && DJ.active);   // (or making up a camp's order on the slip)   // (working the counter: the rider stands still, the store's camera)
+let LJ = null;   // loot the gang: the gang's cache out in the valley, handed back at the sheriff's office (src/missions/loot.js), when ticked
+const atCounter = () => !!(SJ && SJ.active) || !!(DL && DL.active) || !!(DJ && DJ.active) || !!(SR && SR.active);   // (or making up a camp's order on the slip)   // (working the counter: the rider stands still, the store's camera)
 
 function pause(why) {
   pausedBy.add(why);
@@ -132,6 +139,8 @@ function pause(why) {
   if (PG) PG.paused = true;
   if (WJ) WJ.paused = true;
   if (DJ) DJ.paused = true;
+  if (SR) SR.paused = true;
+  if (LJ) LJ.paused = true;
   hud.prompt(null);
   AUD.hold('pause', true);
 }
@@ -146,6 +155,8 @@ function resume(why) {
   if (PG) PG.paused = false;
   if (WJ) WJ.paused = false;
   if (DJ) DJ.paused = false;
+  if (SR) SR.paused = false;
+  if (LJ) LJ.paused = false;
   AUD.hold('pause', false);
   last = performance.now();
 }
@@ -193,6 +204,11 @@ async function ride(r) {
     onStart: () => { P.enabled = false; I.enabled = false; if (RU) RU.paused = true; hud.prompt(null); },
     onStop: () => { P.enabled = !paused; I.enabled = !paused; if (RU) RU.paused = paused; },
     busy: () => !!((WJ && (WJ.on || WJ.near)) || (RU && RU.near) || (SH && SH.near) || (PG && PG.near) || (DL && (DL.active || DL.card))) }) : null;   // (another job has the player: the deer card stands aside)
+  // Shooting mode: bottles and tin cans at the range, never anything alive (cattle and bandits are still roped)
+  SR = mode === 'shoot' ? makeShootingJob({ W, folk, P, I, camera, canvas, renderer, rider, hud, hob, audio: AUD, refresh,
+    onStart: () => { P.enabled = false; I.enabled = false; if (RU) RU.paused = true; hud.prompt(null); },
+    onStop: () => { P.enabled = !paused; I.enabled = !paused; if (RU) RU.paused = paused; },
+    busy: () => !!((WJ && WJ.on) || (DL && DL.active) || (DJ && DJ.active)) }) : null;
   DL = makeDeliveryJob({ W, camps, P, camera, rider, hud, hob, refresh,
     onStart: () => { P.enabled = false; I.enabled = false; if (RU) RU.paused = true; hud.prompt(null); },
     onStop: () => { P.enabled = !paused; I.enabled = !paused; if (RU) RU.paused = paused; },
@@ -202,14 +218,17 @@ async function ride(r) {
     times: () => RU && RU.trainer('times'),   // (one times trainer for both jobs)
     wagonLib: () => traffic && traffic.ready,   // (the wagon models the traffic loads, shared)
     quiet: () => !!((RU && RU.near) || (SH && SH.near) || (PG && PG.near) || atCounter() || (DL && DL.card)) }) : null;
+  LJ = rider.missions && rider.missions.loot ? makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, refresh,
+    voice: (k, who) => { if (SHOUT) SHOUT.say(k, who); },   // (a townsman's recorded lines: "Is that my stuff?", a thank-you)
+    quiet: () => !!((RU && RU.near) || (SH && SH.near) || (PG && PG.near) || atCounter() || (WJ && WJ.near) || (DL && DL.card) || (DJ && DJ.card)) }) : null;
   JF = makeJobFolk({ W, folk, P, camera, hud,
-    jobs: { roundup: () => RU, sheep: () => SH, pigs: () => PG, wagon: () => WJ, deer: () => DJ, camps: () => camps, farm: () => farm, delivery: () => DL },
+    jobs: { roundup: () => RU, sheep: () => SH, pigs: () => PG, wagon: () => WJ, deer: () => DJ, camps: () => camps, farm: () => farm, delivery: () => DL, loot: () => LJ },
     actions: { sheriff: () => openCounter('sheriff') }, onTalk: (what, id, who) => { if (SHOUT) SHOUT.talk(what, who && { id, ...who }); } });
   RU.start();
   hob.trail(true);
   hud.show(true); hud.touch(I.touch);
   refresh();
-  hob.event('ride', { mode, wagon: !!WJ, deer: !!DJ });
+  hob.event('ride', { mode, wagon: !!WJ, deer: !!DJ, loot: !!LJ });
   P.cam.snap();
   last = performance.now();
 }
@@ -229,6 +248,7 @@ function trafficThings() {
   if (RU && RU.targets) for (const t of RU.targets) if (t.root) thingsNear.push(t.root.position);
   if (SJ && SJ.people) for (const c of SJ.people) thingsNear.push(c);
   if (WJ && WJ.walkers) for (const k of WJ.walkers) thingsNear.push(k);   // (the roped bandits walking to the sheriff's)
+  if (LJ && LJ.people) for (const c of LJ.people) thingsNear.push(c);   // (the folks come for their stolen goods)
   return thingsNear;
 }
 function makeDogIfOwned() {
@@ -252,6 +272,8 @@ function endRide() {
   if (WJ) { WJ.dispose(); WJ = null; }
   if (camps) camps.dispose();
   if (DJ) { DJ.dispose(); DJ = null; }
+  if (SR) { SR.dispose(); SR = null; }
+  if (LJ) { LJ.dispose(); LJ = null; }
   if (JF) { JF.dispose(); JF = null; }
   if (deer) { deer.dispose(); deer = null; }
   DL = camps = null;
@@ -279,7 +301,7 @@ function endRide() {
 // them, so the round-up's own (its travel card, counting the metres to the pasture) is held back there
 function roundupHud() {
   const h = Object.create(hud);
-  const atFarm = () => !!((SH && SH.near) || (PG && PG.near) || (DL && DL.card && !(RU && RU.near)) || (WJ && (WJ.near || (WJ.on && !(RU && RU.near)))) || (DJ && DJ.card));   // (and a delivery's card)   // (the sheep pasture or the pig yard)
+  const atFarm = () => !!((SH && SH.near) || (PG && PG.near) || (DL && DL.card && !(RU && RU.near)) || (WJ && (WJ.near || (WJ.on && !(RU && RU.near)))) || (DJ && DJ.card) || (LJ && LJ.card && !(RU && RU.near)));   // (and a delivery's card)   // (the sheep pasture or the pig yard)
   h.rule = (o) => (atFarm() || atCounter() ? hud.ruleEl : hud.rule(o));   // (nor at the store's counter)
   h.hint = (o) => { if (!atFarm() && !atCounter()) hud.hint(o); };
   return h;
@@ -374,7 +396,7 @@ function openMenu() {
       click a steer (or <kbd>F</kbd>) to rope it · <kbd>H</kbd> call your horse · <kbd>E</kbd> on and off, or talk at a door`}</div>`;
   body.querySelector('.bms-menu').after(volumeRow(AUD));
   let then = null;
-  menu = makePanel({ title: 'Taking a breather', sub: `${rider.name} · ${titleOf(rider)}${mode === 'shoot' ? ' · shooting comes soon' : ''}`, body,
+  menu = makePanel({ title: 'Taking a breather', sub: `${rider.name} · ${titleOf(rider)}${mode === 'shoot' ? ' · Shooting: bottles and cans at the range' : ''}`, body,
     onClose: () => { menu = null; resume('menu'); if (then) then(); } });
   body.addEventListener('click', (e) => {
     const b = e.target.closest('button[data-do]'); if (!b) return;
@@ -427,6 +449,8 @@ function doors() {
   if (!door && !fresh && DJ && DJ.prompt) { say = DJ.prompt; act = () => DJ.setUp(); }
   // a job's person close by (src/jobfolk.js): E does what they ask (the wagon rolls, the camera goes up, the sheriff's desk)
   if (!door && (!mount || talkFirst) && !fresh && JF && JF.prompt) { say = JF.prompt; act = () => JF.talk(); }
+  // at the target range (src/missions/shooting.js): E by Miss Opal takes up her six-shooter
+  if (!door && !fresh && SR && SR.prompt) { say = SR.prompt; act = () => SR.start(); }
   hud.prompt(say);
   if (act && I.enabled && I.tap('KeyE')) act();
   // the saloon's doors and the stage have no counter yet: walking up to them, Old Hob says so
@@ -447,6 +471,8 @@ function compass() {
   if (DL) for (const m of DL.marks()) add(m.id, m.icon, m.x, m.z, m.label);   // (the store or the camp for a delivery)
   if (WJ) { const w = WJ.where(); add('wagon', 'job', w.x, w.z, 'Protect the wagon'); }
   if (DJ) for (const m of DJ.marks()) add(m.id, m.icon, m.x, m.z, m.label);   // (the deer job's herd)
+  if (SR) for (const m of SR.marks()) add(m.id, m.icon, m.x, m.z, m.label);   // (the target range)
+  if (LJ) for (const m of LJ.marks()) add(m.id, m.icon, m.x, m.z, m.label);   // (the gang's cache, or the sheriff's office with the loot)
   if (P.horse && !P.onHorse) { const h = P.horse.root.position; add('horse', 'horse', h.x, h.z, 'Your horse'); }
   hud.compass(P.cam.yaw, marks);
 }
@@ -485,7 +511,7 @@ function townSounds(dt, indoor) {
 }
 
 // ── EACH FRAME ───────────────────────────────────────────────────────────────────────────────────────────────────
-let last = performance.now(), frames = 0, fpsT = last, fpsNow = 0, needDraw = false;
+let last = performance.now(), frames = 0, fpsT = last, fpsNow = 0, needDraw = false, drawn = { calls: 0, triangles: 0 };
 function step(dt) {
   if (!W) return;
   const home = !!(cabin && cabin.inside);   // (in the cabin only it is drawn: the town waits)
@@ -514,11 +540,14 @@ function step(dt) {
     if (DL) DL.update(dt);
     if (WJ) WJ.update(dt);
     if (DJ) DJ.update(dt);   // (after the player: it places the camera while the viewfinder is up)
+    if (SR) SR.update(dt);   // (after the player: it places the camera while the six-shooter is up)
+    if (LJ) LJ.update(dt);
     hob.update(dt, P.position);
     if (stage) stage.update(dt, P.position);
     if (traffic) { traffic.keepView = SJ && SJ.active && !P.cam.enabled ? camera : null; traffic.update(dt, P.position, camera.position); }   // (no wagon through the store counter's picture)
     townSounds(dt, false);
     W.update(dt); W.render();
+    if (SR) SR.draw();   // (the six-shooter, drawn over the valley)
     AUD.listen(camera);
     compass();
     if (I.touch) hud.touch(true);
@@ -528,12 +557,14 @@ function step(dt) {
 }
 renderer.setAnimationLoop(() => {
   const now = performance.now(), dt = Math.min(0.1, (now - last) / 1000); last = now;
+  if (PERF) renderer.info.reset();   // (the frame's count starts here: see autoReset above)
   step(dt);
+  if (PERF && renderer.info.render.calls) drawn = { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles };   // (the last frame that drew: a paused game draws only now and then)
   frames++;
   if (now - fpsT > 500) {
     fpsNow = frames * 1000 / (now - fpsT); frames = 0; fpsT = now;
     if (PERF && W) {
-      const info = renderer.info.render;
+      const info = drawn;
       // (the third line: the animals or folk of the job in view; none in the cabin or away from every job)
       const job = cabin && cabin.inside ? '' : SJ && SJ.active ? `${SJ.state().people.length} customers` : PG && PG.near ? `${PG.pigs.length} pigs`
         : SH && SH.near ? `${SH.sheep.length} sheep` : RU && RU.near ? `${RU.targets.length} cattle` : WJ && WJ.near ? `${WJ.targets.length} riders` : '';
@@ -573,6 +604,8 @@ for (const k of ['cabin', 'stable', 'store', 'sheriff', 'saloon', 'stage']) {
 for (const id of ['cow', 'hollis', 'survey']) SPOTS['camp-' + id] = () => { const c = camps && camps.byId(id); if (!c) return W.places.spawn; return { x: c.drop.x, z: c.drop.z, rot: Math.atan2(c.x - c.drop.x, c.z - c.drop.z) }; };
 // beside the wagon, facing the way it rolls
 SPOTS.wagon = () => { if (!WJ) return W.places.spawn; const w = WJ.where(), q = WJ.road.at(WJ.state().s); return { x: w.x - q.nx * 5, z: w.z - q.nz * 5, rot: q.h }; };
+// at the target range, a couple of steps behind the firing line, facing downrange (Shooting mode)
+SPOTS.range = () => { if (!SR) return W.places.spawn; const L = SR.layout, p = L.at(0.6, -2.4); return { x: p.x, z: p.z, rot: L.rot }; };
 const dev = {
   get tier() { return W ? W.tier : quality.tier; },
   gold(n = 100) { if (!rider) return; earn(rider, n); refresh(); },
@@ -595,10 +628,16 @@ const dev = {
 { const m = dev.mission; dev.mission = (name, ...a) => (name === 'delivery' ? !!(DL && DL.orderFrom(a[0] || 'cow')) : m(name, ...a)); }   // (an order from a camp, without riding out to it)
 { const m = dev.mission; dev.mission = (name, ...a) => { if (name !== 'wagon') return m(name, ...a); if (!WJ) return false; dev.goto('wagon'); WJ.newWave(); return true; }; }   // (a gang at once, beside the wagon)
 { const m = dev.mission; dev.mission = (name, ...a) => { if (name !== 'deer') return m(name, ...a); const H = DJ && DJ.herd(); if (!H) return false; const sq = W.places.square, l = Math.hypot(sq.x - H.mid.x, sq.z - H.mid.z) || 1, x = H.mid.x + (sq.x - H.mid.x) / l * 32, z = H.mid.z + (sq.z - H.mid.z) / l * 32; P.teleport(x, z, Math.atan2(H.mid.x - x, H.mid.z - z)); return true; }; }   // (32 m from the deer job's herd, on the town's side)
+{ const m = dev.mission; dev.mission = (name, ...a) => { if (name !== 'range') return m(name, ...a); if (!SR) return false; dev.goto('range'); setTimeout(() => { if (SR && SR.prompt) SR.start(); }, 400); return true; }; }   // (the six-shooter up at the range, in Shooting mode)
 // the homestead behind the cabin: between the cabin's back wall and the animals' homes, looking out at them; an animal
 // of a kind (hen, pig, sheep, cow) or goods in the saddlebags without buying
 SPOTS.yard = () => { if (!HS) return W.places.spawn; const L = HS.layout, p = L.at(0, 5.6); return { x: p.x, z: p.z, rot: L.rot }; };
 Object.assign(dev, { animal: (kind = 'hen', name = '', young = false) => !!(HS && HS.dev.give(kind, name, young)), goods: (n = 30) => { if (HS) HS.dev.goods(n); } });
+// loot the gang: beside the gang's cache, or at the sheriff's office where it's handed back; mission('loot') rides to the cache
+SPOTS.cache = () => (LJ && LJ.dev.at()) || W.places.spawn;
+SPOTS['loot-town'] = () => (LJ ? LJ.dev.town() : W.places.spawn);
+{ const m = dev.mission; dev.mission = (name, ...a) => { if (name !== 'loot') return m(name, ...a); if (!LJ) return false; return dev.goto('cache'); }; }
+dev.lootLoad = () => !!(LJ && LJ.dev.load());   // (straight to the cache with the horse, to load it)
 if (DEV) {
   const bar = document.createElement('div');
   bar.style.cssText = 'position:fixed;left:12px;top:50%;transform:translateY(-50%);z-index:26;display:flex;flex-direction:column;gap:4px;max-height:70vh;overflow:auto';
@@ -617,6 +656,9 @@ if (DEV) {
   add('take a delivery order', () => dev.mission('delivery'));
   add('protect the wagon', () => dev.mission('wagon'));
   add('deer photographs', () => dev.mission('deer'));
+  add('the shooting range', () => dev.mission('range'));
+  add('loot: the cache', () => dev.mission('loot'));
+  add('loot: load it', () => dev.lootLoad());
   add('open a lock box', () => dev.lockbox());
   add('give a lock box', () => dev.box());
   add('give saddle', () => dev.saddle('plain'));
@@ -642,7 +684,8 @@ Object.defineProperties(BM, {
   door: { get: () => door }, store: { get: () => SJ }, paused: { get: () => paused }, mode: { get: () => mode }, cabin: { get: () => cabin },
 });
 Object.defineProperties(BM, { deer: { get: () => deer }, deerjob: { get: () => DJ }, jobfolk: { get: () => JF } });
-Object.defineProperties(BM, { camps: { get: () => camps }, delivery: { get: () => DL }, homestead: { get: () => HS } });   // (the camps and their deliveries; DL.rob() is the bandits' hook)
+Object.defineProperties(BM, { range: { get: () => SR } });   // (the target range, in Shooting mode)
+Object.defineProperties(BM, { camps: { get: () => camps }, delivery: { get: () => DL }, homestead: { get: () => HS }, loot: { get: () => LJ } });   // (the camps and their deliveries; DL.rob() is the bandits' hook)
 Object.assign(BM, {
   dev, hud, title: T, camera, renderer, screenOf, prices: PRICES, loading,
   fps: (seconds = 3) => new Promise((res) => { let n = 0; const a = performance.now(); const f = () => { n++; if (performance.now() - a < seconds * 1000) requestAnimationFrame(f); else res(n * 1000 / (performance.now() - a)); }; requestAnimationFrame(f); }),

@@ -9,7 +9,7 @@ import { JOB_FOLK, FOLK_BY_ID, FOREMAN_HELLO, TALK, sayMs, standSpot, makeGreete
 
 test('a person at every outdoor job and the sheriff, each with a name, a role and a look', () => {
   const jobs = JOB_FOLK.map((f) => f.job).sort();
-  assert.deepEqual(jobs, ['boxes', 'deer', 'pigs', 'roundup', 'sheep', 'wagon'].sort());
+  assert.deepEqual(jobs, ['boxes', 'deer', 'loot', 'pigs', 'roundup', 'sheep', 'wagon'].sort());
   assert.equal(new Set(JOB_FOLK.map((f) => f.id)).size, JOB_FOLK.length, 'ids are different');
   assert.equal(new Set(JOB_FOLK.map((f) => f.name)).size, JOB_FOLK.length, 'names are different');
   for (const f of JOB_FOLK) {
@@ -38,7 +38,7 @@ test('the hello is two short lines: the problem, then what to do', () => {
 });
 
 test('thank-yous: each job event goes to its own person, who has a few to take turns with', () => {
-  const pairs = { waveDone: 'boss', flockDone: 'vet', pigsDone: 'wife', banditsDone: 'driver', deerDone: 'naturalist', sheriffDone: 'sheriff' };
+  const pairs = { waveDone: 'boss', flockDone: 'vet', pigsDone: 'wife', banditsDone: 'driver', deerDone: 'naturalist', sheriffDone: 'sheriff', lootDone: 'deputy' };
   for (const [ev, id] of Object.entries(pairs)) { assert.equal(thanksFor(ev), id); assert.ok(FOLK_BY_ID[id].thanks.length >= 2, id); }
   assert.equal(thanksFor('catch'), null);
   assert.ok(FOLK_BY_ID.driver.start, 'the driver says something as the wagon rolls');
@@ -47,7 +47,7 @@ test('thank-yous: each job event goes to its own person, who has a few to take t
 test('walking away: the area jobs and the wagon have a toast, the sit-down ones none', () => {
   for (const id of ['boss', 'vet', 'wife', 'driver']) assert.match(FOLK_BY_ID[id].leave, /will wait for you$/, id);
   assert.equal(FOLK_BY_ID.driver.leave, 'The wagon will wait for you');
-  for (const id of ['naturalist', 'sheriff']) assert.equal(FOLK_BY_ID[id].leave, undefined, id);
+  for (const id of ['naturalist', 'sheriff', 'deputy']) assert.equal(FOLK_BY_ID[id].leave, undefined, id);
 });
 
 test('a line stays up longer the longer it is, and never less than about four seconds', () => {

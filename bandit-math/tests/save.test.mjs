@@ -195,10 +195,10 @@ test('a saved lock box of a tier the game does not know is read as an iron one',
 test('a new rider starts every job at 0, with no buckle yet and the tin one to aim for', () => {
   fresh();
   const r = S.newRider('Lou');
-  assert.deepEqual(r.stats.jobs, { cattle: 0, boxes: 0, sheep: 0, orders: 0, pigs: 0, bandits: 0, deliveries: 0 });
+  assert.deepEqual(r.stats.jobs, { cattle: 0, boxes: 0, sheep: 0, orders: 0, pigs: 0, bandits: 0, deliveries: 0, loot: 0, targets: 0 });
   const list = S.bucklesOf(r);
-  assert.deepEqual(list.map(b => b.job), ['cattle', 'boxes', 'sheep', 'orders', 'pigs', 'bandits', 'deliveries'], 'only the jobs this build has are shown');
-  assert.deepEqual(list.map(b => b.tier), [null, null, null, null, null, null, null]);
+  assert.deepEqual(list.map(b => b.job), ['cattle', 'boxes', 'sheep', 'orders', 'pigs', 'bandits', 'deliveries', 'loot'], 'only the jobs this build has are shown');
+  assert.deepEqual(list.map(b => b.tier), [null, null, null, null, null, null, null, null]);
   assert.deepEqual(S.buckleOf(r, 'cattle').next, { tier: 'tin', at: 10, toGo: 10 });
   assert.equal(S.buckleProgress(S.buckleOf(r, 'cattle')), '0 / 10 to tin');
   assert.equal(S.buckleProgress(S.buckleOf(r, 'boxes')), '0 / 5 to tin');
@@ -212,7 +212,7 @@ test('the job table: four rising milestones a job, a keepsake for each, cattle, 
     assert.ok(S.KEEPSAKES[j.id] && S.KEEPSAKES[j.id].name, `${j.id} has a keepsake`);
     assert.ok(S.BUCKLES.includes(S.KEEPSAKES[j.id].from));
   }
-  assert.deepEqual(S.JOBS.filter(j => j.ready).map(j => j.id), ['cattle', 'boxes', 'sheep', 'orders', 'pigs', 'bandits', 'deliveries']);
+  assert.deepEqual(S.JOBS.filter(j => j.ready).map(j => j.id), ['cattle', 'boxes', 'sheep', 'orders', 'pigs', 'bandits', 'deliveries', 'loot', 'targets']);
   assert.deepEqual(S.JOBS.find(j => j.id === 'cattle').at, [10, 50, 200, 500]);
   assert.equal(S.jobWords('cattle', 1), '1 steer corralled');
   assert.equal(S.jobWords('cattle', 1200), '1,200 cattle corralled');
@@ -262,12 +262,12 @@ test('an old save without job counts loads safely and keeps the work it already 
   ] }));
   const rs = S.loadRiders(), by = (id) => rs.find(r => r.id === id);
   // every right answer before the counts existed was a steer roped; stats.boxes is the boxes solved
-  assert.deepEqual(by('o1').stats.jobs, { cattle: 23, boxes: 7, sheep: 0, orders: 0, pigs: 0, bandits: 0, deliveries: 0 });
-  assert.deepEqual(S.bucklesOf(by('o1')).map(b => b.tier), ['tin', 'tin', null, null, null, null, null]);
+  assert.deepEqual(by('o1').stats.jobs, { cattle: 23, boxes: 7, sheep: 0, orders: 0, pigs: 0, bandits: 0, deliveries: 0, loot: 0, targets: 0 });
+  assert.deepEqual(S.bucklesOf(by('o1')).map(b => b.tier), ['tin', 'tin', null, null, null, null, null, null]);
   assert.equal(by('o1').stats.parBoxes, 3, 'the old counts are untouched');
-  assert.deepEqual(by('o2').stats.jobs, { cattle: 0, boxes: 0, sheep: 0, orders: 0, pigs: 0, bandits: 0, deliveries: 0 });
+  assert.deepEqual(by('o2').stats.jobs, { cattle: 0, boxes: 0, sheep: 0, orders: 0, pigs: 0, bandits: 0, deliveries: 0, loot: 0, targets: 0 });
   // a save that has counts is read as it is (cleaned up), never topped up from the answers again; extra jobs kept
-  assert.deepEqual(by('o3').stats.jobs, { cattle: 0, boxes: 2, sheep: 0, orders: 0, pigs: 3, bandits: 0, deliveries: 0, lassoed: 9 });
+  assert.deepEqual(by('o3').stats.jobs, { cattle: 0, boxes: 2, sheep: 0, orders: 0, pigs: 3, bandits: 0, deliveries: 0, loot: 0, targets: 0, lassoed: 9 });
   // the next lock box on the old save counts once, not twice
   const o = by('o1');
   S.recordLockbox(o, { solved: true, moves: 1, par: 1 });
@@ -289,4 +289,16 @@ test('a rider object with no stats at all can still be counted, and counting wor
   assert.equal(S.countJob(r, 'cattle').buckle.tier, 'tin');
   assert.equal(S.loadRiders()[0].stats.jobs.cattle, 10, 'kept in memory');
   assert.equal(S.countJob(bare, 'sheep').count, 1);
+});
+
+// The target range's count (Shooting mode): its buckle shows for a rider in Shooting mode, or once there are some
+test('the targets-hit buckle shows for a shooting rider, not for a lasso rider with none', () => {
+  const lasso = S.newRider('Lasso'), shoot = S.newRider('Shoot'); shoot.mode = 'shoot';
+  assert.ok(!S.bucklesOf(lasso).some(b => b.job === 'targets'), 'a lasso rider: no Targets hit buckle');
+  assert.ok(S.bucklesOf(shoot).some(b => b.job === 'targets'), 'a shooting rider: the Targets hit buckle');
+  const r = S.countJob(shoot, 'targets', 15);
+  assert.equal(r.count, 15); assert.equal(r.buckle && r.buckle.tier, 'tin');
+  shoot.mode = 'lasso';
+  assert.ok(S.bucklesOf(shoot).some(b => b.job === 'targets'), 'switched to lasso with some targets hit: still shown');
+  assert.equal(S.jobWords('targets', 1), '1 target hit');
 });

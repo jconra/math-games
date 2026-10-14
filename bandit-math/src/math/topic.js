@@ -22,11 +22,20 @@
 //                                      without it they ride in with the next wave of their table.
 //
 // Counting, Adding, Taking away and Dividing plug in here as they are built, using the same shape.
+// Card topics (T.mode === 'cards': counting, adding and taking away in src/math/early.js's card trainer, and dividing)
+// deal one card at a time, as positive & negative does: wave() -> { kind: 'card', rule, card, cards, targets, ... } with
+// exactly one right target per card; answer(n, good, cardId) -> { right, card (the card to show now), waveDone, stale };
+// explain(card, n) -> { line, numberLine } and help(card), the picture (its `helper` says which drawing: 'count' is
+// src/ui/counthelp.js); T.payEvery: the steps per extra gold a steer.
 // Solving for x lives in the lock boxes (src/lockbox/) and has its own shape there.
 
 import { makeTimes } from './times.js';
+import { makeDividing } from './dividing.js';
+import { makeCounting } from './counting.js';
+import { makeAdding } from './adding.js';
+import { makeTaking } from './taking.js';
 
-const MAKERS = { times: makeTimes };
+const MAKERS = { times: makeTimes, counting: makeCounting, adding: makeAdding, taking: makeTaking, dividing: makeDividing };
 
 // The topics that can run a herd in this build (ids match TOPICS in save.js).
 export const HERD_TOPICS = Object.keys(MAKERS);

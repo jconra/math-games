@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Early topics helper</title>
+<script src="../oops.js"></script>
+<style>
+  body { margin: 0; padding: 16px; background: linear-gradient(#6f8a5a, #4b6436); font: 15px Georgia, serif; color: #f4e8cf; }
+  h1 { font-size: 18px; margin: 0 0 8px; }
+  .row { margin: 0 0 18px; }
+  .row > p { margin: 0 0 4px; font-size: 13px; color: #fff3d8; text-shadow: 0 1px 2px #000; }
+  .box { width: min(960px, 92vw); margin: 0 auto; }
+</style>
+</head>
+<body>
+<h1>The early topics' helper (src/ui/counthelp.js)</h1>
+<p>?only=counting|adding|taking picks a topic; ?hidden shows them before a pick (answer hidden).</p>
+<div id="out"></div>
+<script type="module">
+  import { showCountHelp } from '../src/ui/counthelp.js';
+  import { SPEC as C } from '../src/math/counting.js';
+  import { SPEC as A } from '../src/math/adding.js';
+  import { SPEC as T } from '../src/math/taking.js';
+  import { seeded } from '../src/math/early.js';
+  const q = new URLSearchParams(location.search);
+  const only = q.get('only'), hidden = q.has('hidden');
+  const out = document.getElementById('out');
+  const cases = {
+    counting: [{ shape: 'dots', n: 7 }, { shape: 'dots', n: 13 }, { shape: 'after', n: 7 }, { shape: 'before', n: 30 }, { shape: 'skip', by: 5, start: 5 }, { shape: 'tenMore', n: 34 }],
+    adding: [{ shape: 'sum', a: 8, b: 5 }, { shape: 'sum', a: 2, b: 6 }, { shape: 'part', a: 3, t: 8 }, { shape: 'sum', a: 27, b: 6 }, { shape: 'sum', a: 36, b: 27 }],
+    taking: [{ shape: 'diff', a: 9, b: 4 }, { shape: 'diff', a: 13, b: 5 }, { shape: 'part', a: 8, r: 5 }, { shape: 'diff', a: 52, b: 27 }, { shape: 'left', a: 7, b: 3 }],
+  };
+  const specs = { counting: C, adding: A, taking: T };
+  const rand = seeded(7);
+  for (const [topic, list] of Object.entries(cases)) {
+    if (only && only !== topic) continue;
+    const S = specs[topic];
+    for (const p of list) {
+      const card = { ...S.card(p, { size: 5, rand }), parts: p, shape: p.shape };
+      const wrong = card.targets.find((t) => !t.good);
+      const row = document.createElement('div'); row.className = 'row';
+      row.innerHTML = `<p>${topic}: ${card.rule} ${hidden ? '(stuck, answer hidden)' : `(picked ${wrong.n})`}</p><div class="box"></div>`;
+      out.appendChild(row);
+      const pic = S.picture(card);
+      showCountHelp(row.querySelector('.box'), hidden
+        ? { ...pic, reveal: false, reason: S.nudge(card) }
+        : { ...pic, reveal: true, picked: wrong.n, reason: S.whyNot(card, wrong.n).line });
+    }
+  }
+  window.ready = true;
+</script>
+</body>
+</html>

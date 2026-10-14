@@ -247,6 +247,38 @@ const KEEP = {
     const grp = new THREE.Group(); grp.add(mesh(new THREE.BoxGeometry(1.0, 0.25, 0.03), [std(0x3d4a3a), std(0x3d4a3a), std(0x3d4a3a), std(0x3d4a3a), std(0xffffff, { map: tex }), std(0x3d4a3a)], 0, 0, 0.015));
     return grp;
   },
+  // three tin cans from the target range on a little wall shelf, shot through (dark holes, one dented and knocked
+  // over on its side); a small plate on the shelf's edge in the buckle's metal
+  targets(tier) {
+    const grp = new THREE.Group(), dark = std(0x5a3a22), tin = std(0xb9bcbd, { roughness: 0.35, metalness: 0.6 }), hole = std(0x161412, { roughness: 0.9 });
+    grp.add(mesh(new THREE.BoxGeometry(0.46, 0.03, 0.16), dark, 0, 0, 0.08));
+    for (const [x, col, down] of [[-0.14, 0xa8382c, false], [0.0, 0x2f5d8a, false], [0.15, 0xc4932c, true]]) {
+      const can = new THREE.Group(); can.position.set(x, 0.015, 0.085);
+      can.add(mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.1, 12), tin, 0, 0.05, 0));
+      can.add(mesh(new THREE.CylinderGeometry(0.0355, 0.0355, 0.07, 12), std(col, { roughness: 0.6 }), 0, 0.05, 0));
+      for (const [y, a] of [[0.06, 0.3], [0.035, -0.5]]) can.add(mesh(new THREE.SphereGeometry(0.007, 6, 4).scale(1, 1, 0.4), hole, Math.sin(a) * 0.035, y, Math.cos(a) * 0.035));
+      if (down) { can.rotation.set(0, 0.5, Math.PI / 2); can.position.set(x, 0.05, 0.085); can.scale.set(1, 0.92, 1); }
+      grp.add(can);
+    }
+    grp.add(mesh(new THREE.BoxGeometry(0.07, 0.022, 0.004), std(TIER_COL[tier] || TIER_COL.tin, { metalness: 0.8, roughness: 0.3 }), 0, 0, 0.162));
+    return grp;
+  },
+  // the gang's strongbox, brought back from a cache (Loot the gang): iron-banded, its lid thrown back, a few silver
+  // dollars still in it; the lock plate in the buckle's metal. (On the floor the cabin leans a keepsake back a little,
+  // as the safe door leans on the wall: this one sits level inside that.)
+  loot(tier) {
+    const grp = new THREE.Group(), box = new THREE.Group(), wood = std(0x4a3020, { roughness: 0.8 }), iron = std(0x3a3836, { roughness: 0.5, metalness: 0.6 });
+    const plate = std(TIER_COL[tier] || TIER_COL.tin, { metalness: 0.85, roughness: 0.3 }), silver = std(0xe2e5ea, { metalness: 0.7, roughness: 0.25, emissive: 0x2a2a2a });
+    box.rotation.x = 0.18; grp.add(box);
+    for (const [w, h, d, x, y, z] of [[0.46, 0.03, 0.3, 0, 0.015, 0], [0.46, 0.2, 0.03, 0, 0.11, 0.135], [0.46, 0.2, 0.03, 0, 0.11, -0.135], [0.03, 0.2, 0.3, 0.215, 0.11, 0], [0.03, 0.2, 0.3, -0.215, 0.11, 0]]) box.add(mesh(new THREE.BoxGeometry(w, h, d), wood, x, y, z));
+    for (const x of [-0.13, 0.13]) box.add(mesh(new THREE.BoxGeometry(0.035, 0.205, 0.305), iron, x, 0.11, 0));
+    box.add(mesh(new THREE.BoxGeometry(0.07, 0.08, 0.012), plate, 0, 0.13, 0.152));
+    const lid = new THREE.Group(); lid.position.set(0, 0.21, -0.15); lid.rotation.x = -1.9; box.add(lid);
+    lid.add(mesh(new THREE.BoxGeometry(0.46, 0.03, 0.3), wood, 0, 0.015, 0.15));
+    for (const x of [-0.13, 0.13]) lid.add(mesh(new THREE.BoxGeometry(0.035, 0.035, 0.305), iron, x, 0.016, 0.15));
+    for (const [x, z, t, y] of [[-0.08, 0.03, 0.2, 0.05], [0.02, -0.04, -0.3, 0.05], [0.1, 0.05, 0.5, 0.05], [-0.02, 0.06, 0.1, 0.06], [0.14, -0.06, -0.2, 0.05], [-0.14, -0.05, 0.4, 0.05], [0.05, 0.0, 0.15, 0.07]]) { const c = mesh(new THREE.CylinderGeometry(0.034, 0.034, 0.007, 14), silver, x, y, z); c.rotation.set(t, 0, t * 0.6); box.add(c); }
+    return grp;
+  },
 };
 // plank crates standing in for a table: two stacked (the top one turned a little) when the height wants more than one
 // crate. Board sides drawn on a canvas (planks with dark gaps and grain) and battens along the edges, as shipping crates.

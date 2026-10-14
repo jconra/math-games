@@ -95,3 +95,35 @@ test('topics and levels from the rider', () => {
   assert.equal(levelOf({ topics: { negatives: { step: 99 } } }, 'negatives'), NEG_LADDER.length);
   assert.equal(levelOf({ topics: { algebra: { rung: 'R6' } } }, 'algebra'), RUNG_IDS.indexOf('R6') + 1);
 });
+
+// A sum over a sheep is read the plain way: the number after = is the answer. So a sick sum's slip must be that number
+// (the bottle changes it), and no "wrong" bottle may make the sum shown true when it takes that place. A missing number
+// written with the slip in the middle broke both ("5 + 8 = 8": the cure was 5 + 3 = 8, and "should be 13" made it true).
+test('every sum over a sheep: the slip and the bottles are the number after =, and no wrong bottle makes it true', async () => {
+  const { LADDER: COUNT } = await import('../src/math/counting.js');
+  const { LADDER: ADD } = await import('../src/math/adding.js');
+  const { LADDER: TAKE } = await import('../src/math/taking.js');
+  const { LADDER: DIV } = await import('../src/math/dividing.js');
+  const plain = (t) => String(t).replace(/−/g, '-').replace(/×/g, '*').replace(/÷/g, '/');
+  const SUM = /^(-?\d+) ([+\-*/]) (-?\d+) = (-?\d+)$/;
+  const ops = { '+': (x, y) => x + y, '-': (x, y) => x - y, '*': (x, y) => x * y, '/': (x, y) => x / y };
+  const levels = { counting: COUNT.length, adding: ADD.length, taking: TAKE.length, times: TIMES_LADDER.length, dividing: DIV.length, negatives: NEG_LADDER.length };
+  const rand = seeded(29);
+  for (const [topic, top] of Object.entries(levels)) {
+    let sums = 0;
+    for (let lv = 1; lv <= top; lv++) {
+      const rider = { topicsOn: { [topic]: true }, topics: { [topic]: { step: lv, placed: true } } };
+      for (let n = 0; n < 60; n++) for (const s of makeFlock(rider, topic, { rand }).sheep) {
+        const a = plain(s.shown).match(SUM), f = plain(s.fixed).match(SUM);
+        if (!a || !f) continue;
+        sums++;
+        const where = `${topic} ${lv}: "${s.shown}" (${s.bottles.map((b) => b.label + (b.right ? '*' : '')).join(' / ')})`;
+        assert.equal(`${a[1]} ${a[2]} ${a[3]}`, `${f[1]} ${f[2]} ${f[3]}`, `${where}: only the number after = is ever wrong`);
+        const truth = ops[a[2]](+a[1], +a[3]);
+        assert.equal(truth, +f[4], `${where}: the fixed sum is true`);
+        for (const b of s.bottles) if (!b.right) assert.notEqual(+plain(b.value), truth, `${where}: a wrong bottle makes the sum true`);
+      }
+    }
+    if (topic !== 'counting') assert.ok(sums > 100, `${topic}: sums were checked (${sums})`);
+  }
+});

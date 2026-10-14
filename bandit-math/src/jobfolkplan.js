@@ -66,6 +66,11 @@ export const JOB_FOLK = [
   { id: 'sheriff', job: 'boxes', name: 'Sheriff Boone', role: 'sheriff', look: { outfit: 'suit_m', palette: 'mustard', skin: 4, hair: 1 },
     hello: ['Seized lock boxes keep piling up on my desk.', "Crack 'em open and I'll pay you for every one. Step inside."],
     thanks: ['Fine work on those boxes. Come back any time.', "That's a few less on my desk. Obliged!", 'Good safecracking, partner.'] },
+  // (out front of the sheriff's office too, the other side of the steps: only when "Loot the gang" is ticked)
+  { id: 'deputy', job: 'loot', name: 'Deputy Mills', role: 'deputy', look: { outfit: 'adventurer_m', palette: 'rancher', skin: 2, hair: 3 },
+    hello: ['The gang that hits the freight wagons stashed what they stole out in the valley.',
+      "Find their cache on your compass, haul it back here, and help me share it out fair."],
+    thanks: ['Every family got back what was theirs. Obliged, partner!', "That's one stash cleaned out. Word is there's more.", 'Folks in this town owe you. Thank you kindly.'] },
 ];
 export const FOLK_BY_ID = Object.fromEntries(JOB_FOLK.map((f) => [f.id, f]));
 
@@ -77,7 +82,7 @@ export const FOREMAN_HELLO = {
 };
 
 // which person thanks the player for which job event (the game's Hob events: src/hob.js)
-const THANKS = { waveDone: 'boss', flockDone: 'vet', pigsDone: 'wife', banditsDone: 'driver', deerDone: 'naturalist', sheriffDone: 'sheriff' };
+const THANKS = { waveDone: 'boss', flockDone: 'vet', pigsDone: 'wife', banditsDone: 'driver', deerDone: 'naturalist', sheriffDone: 'sheriff', lootDone: 'deputy' };
 export const thanksFor = (event) => THANKS[event] || null;
 // the job events that count as working at an area job (a pick, right or wrong), by the area's person
 export const WORK = { catch: 'boss', miss: 'boss', waveDone: 'boss', sheepHealed: 'vet', sheepWrong: 'vet', sheepFine: 'vet', flockDone: 'vet',

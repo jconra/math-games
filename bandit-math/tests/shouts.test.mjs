@@ -18,7 +18,9 @@ test('every voice clip is in sounds/voice as .ogg and .m4a; every clip but the o
   for (const [k, K] of Object.entries(SHOUTS.kinds)) for (const [n] of K.clips) { assert.ok(VOICE_CLIPS[n], k + ': ' + n); used.add(n); }
   for (const [n] of SHOUTS.morning.clips) { assert.ok(VOICE_CLIPS[n], n); used.add(n); }
   for (const n of Object.keys(VOICE_CLIPS)) assert.ok(used.has(n) !== SHOUTS.unused.includes(n), n + (used.has(n) ? ' is played' : ' is played somewhere, or listed as kept for later'));
-  assert.deepEqual(SHOUTS.unused, ['mystuff_1']);
+  assert.deepEqual(SHOUTS.unused, []);   // (mystuff_1 is Loot the gang's now)
+  assert.ok(SHOUTS.kinds.mystuff.him && SHOUTS.kinds.mystuff.clips[0][0] === 'mystuff_1');
+  assert.equal(SHOUTS.events.lootDone, 'done');
   for (const f of fs.readdirSync(VOICE).filter((f) => /\.(ogg|m4a)$/.test(f))) assert.ok(VOICE_CLIPS[f.replace(/\.(ogg|m4a)$/, '')], f + ' is listed');
   for (const k of Object.values(SHOUTS.events)) assert.ok(SHOUTS.kinds[k], k);
 });

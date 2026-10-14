@@ -201,9 +201,14 @@ function ensureStyles(done) {
 
 // Where the Grown-ups corner finds each topic's level, when the game didn't pass `levels`.
 const LEVEL_SOURCES = {
+  counting: { path: '../math/counting.js', make: 'makeCounting' },
+  adding: { path: '../math/adding.js', make: 'makeAdding' },
+  taking: { path: '../math/taking.js', make: 'makeTaking' },
   times: { path: '../math/times.js', make: 'makeTimes' },
+  dividing: { path: '../math/dividing.js', make: 'makeDividing' },
   negatives: { path: '../math/negatives.js', make: 'makeNegatives' },
   algebra: { path: '../lockbox/algebra.js', make: 'makeAlgebra' },
+  numbersense: { path: '../math/numbersense.js', make: 'makeNumberSense' },   // (the target range's, in Shooting mode)
 };
 
 // ---- the screen ------------------------------------------------------------------------------------------------
@@ -307,7 +312,7 @@ export function showTitle(root, opts = {}) {
     }).join('');
     const modes = [
       ['lasso', 'Lasso only', 'Rope ’em. No guns anywhere.', ICON.lasso],
-      ['shoot', 'Shooting', 'Comes soon: lasso for now', ICON.target],
+      ['shoot', 'Shooting', 'Bottles and cans only, no living targets', ICON.target],
     ].map(([id, name, line, icon]) => `
       <button class="bmt-mode" role="radio" aria-checked="${r.mode === id}" tabindex="${r.mode === id ? 0 : -1}"
           data-act="mode" data-id="${id}" data-k="mode:${id}">${icon}<b>${name}</b><small>${line}</small></button>`).join('');
@@ -320,7 +325,7 @@ export function showTitle(root, opts = {}) {
       </button>`;
     }).join('');
     const note = r.mode === 'shoot'
-      ? '<b>Shooting comes soon</b>, so you ride with the lasso for now. Picked here only: it stays the same for the whole ride.'
+      ? '<b>Shooting</b> adds a target range at the east end of town: bottles and tin cans only. Cattle and bandits are still roped, and deer are photographed. Picked here only: it stays the same for the whole ride.'
       : 'Picked here only: it stays the same for the whole ride.';
     return `
       <div class="bmt-head"><h2>Settings for <em>${esc(r.name)}</em></h2><p>${toNext(r)}</p></div>
@@ -506,9 +511,14 @@ export function showTitle(root, opts = {}) {
         <h3>${esc(r.name)}<small>${titleOf(r)} · ${fmt(r.bounty)} fame · ${fmt(r.gold)} gold to spend</small></h3>
         <dl class="bmt-facts">
           <dt>Accuracy</dt><dd>${accText}${split ? ` (${split})` : ''}</dd>
+          <dt>Counting</dt><dd>${esc(levelText('counting', r.topics.counting))}</dd>
+          <dt>Adding</dt><dd>${esc(levelText('adding', r.topics.adding))}</dd>
+          <dt>Taking away</dt><dd>${esc(levelText('taking', r.topics.taking))}</dd>
           <dt>Times tables</dt><dd>${esc(levelText('times', r.topics.times))}</dd>
+          <dt>Dividing</dt><dd>${esc(levelText('dividing', r.topics.dividing))}</dd>
           <dt>Positive &amp; negative</dt><dd>${esc(levelText('negatives', r.topics.negatives))}</dd>
           <dt>Solving for x</dt><dd>${esc(levelText('algebra', r.topics.algebra))}</dd>
+          ${r.mode === 'shoot' || (r.topics.numbersense && Object.keys(r.topics.numbersense).length) ? `<dt>Target range</dt><dd>${esc(levelText('numbersense', r.topics.numbersense))}${r.range && r.range.best ? ` · best streak ${fmt(r.range.best)}` : ''}</dd>` : ''}
           <dt>Lock boxes</dt><dd>${boxes}</dd>
           <dt>Jobs done</dt><dd>${bucklesOf(r).map(b => `${esc(jobWords(b.job, b.count))}${b.tier ? ` (${BUCKLE_NAMES[b.tier].toLowerCase()} buckle)` : ''}`).join(' · ')}</dd>
           <dt>Badges</dt><dd>${badges.length ? badges.map(esc).join(', ') : 'none yet'}</dd>
@@ -606,7 +616,7 @@ export function showTitle(root, opts = {}) {
       case 'mode':
         if (!r || r.mode === data.id) return;
         r.mode = data.id === 'shoot' ? 'shoot' : 'lasso';
-        keepFocus(renderPanel);
+        keepFocus(() => { renderRiders(); renderPanel(); });   // (the rider's card too: Shooting adds the target range's buckle)
         changed(r);
         return;
       case 'mission': {

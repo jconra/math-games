@@ -73,9 +73,10 @@ export const HOB_FACE = `<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx=
 // ── BELT BUCKLES ─────────────────────────────────────────────────────────────────────────────────────────────────
 // A western trophy buckle for a job (save.js JOBS): an oval plate with a rope edge, a sunk middle with a little
 // engraving, the job's sign raised in the middle (a longhorn for cattle, a sprung padlock for lock boxes, a bell for
-// sheep, a flour sack for store orders, a pig, a star for bandits, a wagon wheel for deliveries). The metal says the tier; the better buckles carry
-// more: rivets on tin and copper, turquoise stones on silver, turquoise and tiny stars on gold. tier = null draws the
-// buckle still to win, as a faint outline. The title screen's rider card and the toast below both use it.
+// sheep, a flour sack for store orders, a pig, a star for bandits, a wagon wheel for deliveries, a strongbox for the
+// loot). The metal says the tier; the better buckles carry more: rivets on tin and copper, turquoise stones on silver,
+// turquoise and tiny stars on gold. tier = null draws the buckle still to win, as a faint outline. The title screen's
+// rider card and the toast below both use it.
 const METAL = {
   tin: { hi: '#c4cacd', mid: '#7c858a', lo: '#3f464b', ink: '#262b2f' },   // dull pewter, so it never passes for silver
   copper: { hi: '#f7c4a0', mid: '#c26d3c', lo: '#6a3214', ink: '#3f1d0a' },
@@ -104,6 +105,10 @@ const SIGN = {
   pigs: (f, ink) => `<path d="M25.4 17.4L24.6 12.6 29 15.4ZM38.6 17.4L39.4 12.6 35 15.4Z" fill="${f}" stroke="${ink}" stroke-width="0.7" stroke-linejoin="round"/>
     <circle cx="32" cy="22.6" r="7.6" fill="${f}" stroke="${ink}" stroke-width="0.8"/><circle cx="29.3" cy="20.4" r="0.8" fill="${ink}"/><circle cx="34.7" cy="20.4" r="0.8" fill="${ink}"/>
     <ellipse cx="32" cy="25.4" rx="3.4" ry="2.3" fill="${f}" stroke="${ink}" stroke-width="0.8"/><circle cx="30.8" cy="25.4" r="0.6" fill="${ink}"/><circle cx="33.2" cy="25.4" r="0.6" fill="${ink}"/>`,
+  // a bottle and a tin can, for the targets hit at the range
+  targets: (f, ink) => `<path d="M26.6 11.6H29.8V14.6C29.8 15.6 32.4 17 32.4 19.6V31H24V19.6C24 17 26.6 15.6 26.6 14.6Z" fill="${f}" stroke="${ink}" stroke-width="0.8" stroke-linejoin="round"/>
+    <path d="M26.2 11.6H30.2" stroke="${ink}" stroke-width="1.4" stroke-linecap="round"/><path d="M25.6 22.4H30.8V27.2H25.6Z" fill="none" stroke="${ink}" stroke-width="0.7" opacity="0.65"/>
+    <rect x="33.6" y="20.4" width="7" height="10.6" rx="1" fill="${f}" stroke="${ink}" stroke-width="0.8"/><path d="M33.6 22.4H40.6M33.6 29H40.6" stroke="${ink}" stroke-width="0.7" opacity="0.65"/>`,
   bandits: (f, ink) => {
     const p = [];
     for (let i = 0; i < 12; i++) { const a = -Math.PI / 2 + (i * Math.PI) / 6, d = i % 2 ? 4.3 : 8.6; p.push(`${(32 + d * Math.cos(a)).toFixed(2)},${(22 + d * Math.sin(a)).toFixed(2)}`); }
@@ -118,6 +123,11 @@ const SIGN = {
       <circle cx="32" cy="22" r="8.2" fill="none" stroke="${ink}" stroke-width="3.2"/><circle cx="32" cy="22" r="8.2" fill="none" stroke="${f}" stroke-width="2"/>
       <circle cx="32" cy="22" r="2.4" fill="${f}" stroke="${ink}" stroke-width="0.8"/>`;
   },
+  // a strongbox, its lid domed, two iron bands and a lock, for the gang's loot handed back
+  loot: (f, ink) => `<path d="M24.2 18.6Q24.2 14 32 14Q39.8 14 39.8 18.6Z" fill="${f}" stroke="${ink}" stroke-width="0.8" stroke-linejoin="round"/>
+    <rect x="24.2" y="18.6" width="15.6" height="10.8" rx="1" fill="${f}" stroke="${ink}" stroke-width="0.8"/>
+    <path d="M28.2 14.6V29.4M35.8 14.6V29.4" stroke="${ink}" stroke-width="0.8" opacity="0.7"/>
+    <rect x="30.5" y="19.8" width="3" height="3.8" rx="0.6" fill="${ink}"/>`,
 };
 const signAt = (sign, job, f, ink) => { const k = SIGN_BIG[job] || 1.3; return `<g transform="translate(32 22) scale(${k}) translate(-32 -22)">${sign(f, ink)}</g>`; };
 let buckleN = 0;   // each drawing gets its own shading names, so many buckles can share a page

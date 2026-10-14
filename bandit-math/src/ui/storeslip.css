@@ -108,6 +108,9 @@
 @media (max-width: 760px) {
   .bmo { font-size: 16px; }
   .bmo-slip { left: 10px; right: 10px; top: auto; bottom: 10px; width: auto; max-height: 64vh; padding: 12px 14px 10px; }
+  /* (after a wrong coin the sheet grows up to just under the HUD, so the reason, the whole picture and its words fit
+     without a scroll on a phone held upright; the next slip starts short again) */
+  .bmo-slip.has-help { max-height: calc(100vh - 86px); max-height: calc(100dvh - 86px); }
   .bmo-top { --pad: 12px; }
   .bmo-from b { font-size: 18px; }
   .bmo-done { padding: 6px 8px; }

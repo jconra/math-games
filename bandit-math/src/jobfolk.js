@@ -8,6 +8,8 @@
 //                        back up when it rolls (Protect the wagon)
 //   the naturalist       a good way off the herd the deer job is after, on the town's side: she lends the camera
 //   the sheriff          out in front of his office, to one side of the steps (lock boxes at his desk)
+//   the deputy           the other side of the steps, when "Loot the gang" is ticked: the gang's stash out in the valley;
+//                        carrying the loot back, E by him shares it out (src/missions/loot.js)
 //   the camp foremen     already at the camps (src/camps.js): here they get a name tag, a hello and the speech card for
 //                        what the delivery job has them say
 // Each stands with the idle clips, shows a name tag when the player is near, and turns to face the player close by.
@@ -60,7 +62,7 @@ export const STAND = {
 const voiceOf = (r) => ({ at: () => ({ x: r.x, z: r.z }), male: r.def && r.def.look ? /_m$/.test(r.def.look.outfit || '') : r.id === 'driver' });
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
-const HATS = { boss: 'cattleman', vet: 'bowler', wife: 'straw', naturalist: 'ranger', sheriff: 'white' };
+const HATS = { boss: 'cattleman', vet: 'bowler', wife: 'straw', naturalist: 'ranger', sheriff: 'white', deputy: 'cowboy' };
 
 export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, scene = W.scene, onTalk = null }) {
   const get = (k) => { try { return jobs[k] ? jobs[k]() : null; } catch (e) { return null; } };
@@ -127,6 +129,13 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     let at = null;
     for (const k of [1, -1]) { const x = sh.door.x + o.x * STAND.sheriff.out + s.x * STAND.sheriff.side * k, z = sh.door.z + o.z * STAND.sheriff.out + s.z * STAND.sheriff.side * k; if (free(x, z)) { at = { x, z }; break; } }
     addPerson(FOLK_BY_ID.sheriff, at || { x: sh.door.x + o.x * 3.5, z: sh.door.z + o.z * 3.5 }, sh.rot);
+    // the deputy, the other side of the steps (the loot job is on)
+    if (get('loot')) {
+      const k = at && Math.abs((at.x - sh.door.x) * s.x + (at.z - sh.door.z) * s.z - STAND.sheriff.side) < 0.01 ? -1 : 1;
+      let dp = null;
+      for (const kk of [k, -k]) { const x = sh.door.x + o.x * STAND.sheriff.out + s.x * STAND.sheriff.side * kk, z = sh.door.z + o.z * STAND.sheriff.out + s.z * STAND.sheriff.side * kk; if (free(x, z) && !(at && Math.hypot(x - at.x, z - at.z) < 1)) { dp = { x, z }; break; } }
+      addPerson(FOLK_BY_ID.deputy, dp || { x: sh.door.x + o.x * 4.5 + s.x * 2, z: sh.door.z + o.z * 4.5 + s.z * 2 }, sh.rot);
+    }
   }
   // the naturalist: placed by the deer job's herd once it has one (see placeNaturalist)
   const naturalist = get('deer') ? addPerson(FOLK_BY_ID.naturalist, { x: 0, z: 0 }, 0) : null;
@@ -252,12 +261,14 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     if (best.id === 'driver' && WJ && (WJ.phase === 'waiting' || WJ.phase === 'stopped') && best.down && bd < TALK.hail) { JF.prompt = `Ride along with ${best.name.split(' ')[0]}`; promptFor = best; }
     else if (best.id === 'naturalist' && DJ && DJ.prompt && bd < TALK.prompt) { JF.prompt = `Borrow ${best.name.replace(/ Ada/, '')}'s camera`; promptFor = best; }
     else if (best.id === 'sheriff' && actions.sheriff && bd < TALK.prompt) { JF.prompt = 'Crack lock boxes for the sheriff'; promptFor = best; }
+    else if (best.id === 'deputy' && bd < TALK.prompt) { const LJ = get('loot'); if (LJ && LJ.canShare) { JF.prompt = 'Share out the loot'; promptFor = best; } }
   }
   JF.talk = () => {
     const r = promptFor; if (!r) return false;
     if (r.id === 'driver') { const WJ = get('wagon'); if (WJ) WJ.start(); return true; }   // (his "let's roll" comes with the job's start: heard below)
     if (r.id === 'naturalist') { const DJ = get('deer'); if (DJ && DJ.setUp()) { talking = null; card.hidden = true; } return true; }
     if (r.id === 'sheriff') { actions.sheriff(); return true; }
+    if (r.id === 'deputy') { const LJ = get('loot'); if (LJ) LJ.share(); return true; }
     return false;
   };
 
@@ -344,12 +355,40 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
         card.hidden = false;   // (shown before it is measured)
         if (d > far) { talking = null; card.hidden = true; }
         else if (d < TALK.thanksNear && (card.classList.remove('is-pinned'), place(r, card, 1))) { /* over the speaker's head */ }
-        else if (talking.pin) { card.classList.add('is-pinned'); card.style.left = '50%'; card.style.top = ''; card.style.transform = ''; }
+        else if (talking.pin) pinCard();
         else card.hidden = true;   // (just out of view: back when the speaker is)
       }
     }
     promptStep();
   };
+
+  // The page's own boxes the speech card keeps clear of: the job's card up top (with the hint line under it and the times
+  // chart's "Peek" offer under those), and the help box at the bottom (the number line, the ten-frames: what a stuck kid
+  // is looking at). topFloor(left, w): the lowest bottom of the top ones over that stretch of the screen; helpTop(): the
+  // top of the help's pictures (Infinity when none is up).
+  function topFloor(left, w, least) {
+    let floor = least;
+    for (const e of [hud.ruleEl, hud.hintEl, ...document.querySelectorAll('.tch-offer')]) {
+      if (!e || e.hidden || !e.offsetParent) continue;
+      const q = e.getBoundingClientRect();
+      if (q.height && q.top < innerHeight * 0.5 && q.right > left - 6 && q.left < left + w + 6) floor = Math.max(floor, q.bottom + 10);
+    }
+    return floor;
+  }
+  function helpTop() {
+    let top = Infinity;
+    for (const e of (hud.helpEl ? hud.helpEl.children : [])) { const q = e.getBoundingClientRect(); if (q.height) top = Math.min(top, q.top); }
+    return top;
+  }
+  // a card of its own, the speaker out of sight: low in the middle (on a phone, near the top), moved down off the job's
+  // card and up off the help box (where there's room for both: a hello is short, the help comes first)
+  function pinCard() {
+    card.classList.add('is-pinned'); card.style.left = '50%'; card.style.top = ''; card.style.bottom = ''; card.style.transform = '';
+    const c = card.getBoundingClientRect(), floor = topFloor(c.left, c.width, 0), help = helpTop();
+    let top = Math.max(c.top, floor);
+    if (top + c.height > help - 10) top = Math.max(floor, help - 10 - c.height);
+    if (Math.abs(top - c.top) > 0.5) { card.style.top = `${Math.round(top)}px`; card.style.bottom = 'auto'; }
+  }
 
   // a page element over a person's head (lift 0: the name tag; 1: the speech card above it); false when out of sight
   function place(r, el, lift) {
@@ -365,14 +404,10 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     const left = Math.max(12, Math.min(innerWidth - w - 12, x - w / 2));
     // (never over the job's card up top: below it when they would overlap; the tail is dropped then, as the card may sit
     // below the speaker's head)
-    let floor = 70;
-    // (the job card, the hint line under it, and the times chart's "Peek" offer that sits under those)
-    for (const e of [hud.ruleEl, hud.hintEl, ...document.querySelectorAll('.tch-offer')]) {
-      if (!e || e.hidden || !e.offsetParent) continue;
-      const q = e.getBoundingClientRect();
-      if (q.height && q.top < innerHeight * 0.5 && q.right > left - 6 && q.left < left + w + 6) floor = Math.max(floor, q.bottom + 10);
-    }
-    const want = Math.min(innerHeight * 0.72 - h, y - h - 30), top = Math.max(floor, want);
+    // (the job card, the hint line under it, and the times chart's "Peek" offer that sits under those; and not down over
+    // the help box)
+    const floor = topFloor(left, w, 70);
+    const want = Math.min(innerHeight * 0.72 - h, y - h - 30, helpTop() - 10 - h), top = Math.max(floor, want);
     el.classList.toggle('is-low', want < floor && floor > 70);
     el.style.transform = `translate(${Math.round(left)}px, ${Math.round(top)}px)`;
     el.style.setProperty('--tail', `${Math.max(16, Math.min(w - 16, x - left))}px`);

@@ -12,7 +12,7 @@
 //   a bottle for a healthy sheep: Old Hob says she's fine and why her sum is right. No penalty, nothing taken off
 // When every sick sheep is healed the flock is paid (like a round-up wave), and after a few seconds the same flock shows
 // a new set of sums: nothing to click. Topics take turns flock by flock (the ticked ones this job knows: times tables,
-// positive & negative, solving for x). Each sheep healed counts toward the "Sheep healed" belt buckle (stats.jobs.sheep).
+// positive & negative, solving for x, dividing, and counting, adding and taking away). Each sheep healed counts toward the "Sheep healed" belt buckle (stats.jobs.sheep).
 //
 //   const SH = makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hud, hob, refresh, defer })
 //     defer(at): true while another farm job has the player (the pig yard, say): the sheep job's card and help step aside
@@ -34,6 +34,7 @@ import { makeTargetRing } from '../targetring.js';
 import { makeFlock, flockTopics } from './sheepmath.js';
 import { offerChart, closeChart, ensureChartCss } from '../ui/timeschart.js';
 import { showNumberLine, ensureNumberLineStyles, watchHesitation } from '../ui/numberline.js';
+import { showCountHelp } from '../ui/counthelp.js';
 import { recordAnswer, earn, countJob } from '../save.js';
 
 export const SHEEP = {
@@ -50,7 +51,8 @@ export const SHEEP = {
   big: 1.55,             // the cured sum shows this much bigger ...
   show: 2.8,             // ... for this many seconds, then fades away (a cured sheep has nothing left to check)
   nextFlock: 4,          // seconds after a flock is done before its new sums show
-  wrongShow: 1.4,        // seconds the last wrong bottle's line shows before the cure goes in by itself
+  wrongShow: 3.5,        // seconds the last wrong bottle's line shows before the cure goes in by itself (long enough
+                         // to read why that bottle was wrong: on a two-bottle sheep it is the kid's only pick)
   tapGuard: 0.35,        // seconds after the bottles come up during which a click on them is ignored (on a touch screen
                          // the tap that opened them sends a click of its own, which would land on a bottle)
   helpAfter: 12000,      // ms near the flock without a dose before help is offered (reading sums takes longer than a number)
@@ -188,7 +190,7 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
   // the help on the card: the number line for the ringed sheep's sum (answer hidden), or the golden rule of solving
   function helpButton() {
     if (!cur) return null;
-    if (cur.topic === 'negatives') return { label: 'Show me', onClick: () => { const s = R.target || flock.find((x) => !x.healed); if (s && s.item) lineFor(s.item, null, false); } };
+    if (cur.topic === 'negatives' || cur.topic === 'counting' || cur.topic === 'adding' || cur.topic === 'taking') return { label: 'Show me', onClick: () => { const s = R.target || flock.find((x) => !x.healed); if (s && s.item) lineFor(s.item, null, false); } };
     if (cur.topic === 'algebra') return { label: 'The rule', onClick: () => hint({ say: 'Check her step', line: 'Whatever you do to one side, do to the other. To undo + 5, take 5 from both sides; to undo × 3, divide both sides by 3.' }) };
     return null;   // (times tables: the Peek button comes up under the card when the kid is stuck)
   }
@@ -196,13 +198,15 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
   // ── HELP ───────────────────────────────────────────────────────────────────────────────────────────────────────
   function hint(o) { hud.hint(o); hintT = o ? 14 : 0; }
   function lineFor(item, picked, reveal = true, reason = '') {
-    const h = item.help; if (!h || h.kind !== 'line') return;
+    const h = item.help; if (!h || (h.kind !== 'line' && h.kind !== 'count')) return;
     if (nl) nl.remove();
+    // (the early topics' picture: ten-frames and a number line with hops, src/ui/counthelp.js)
+    if (h.kind === 'count') { nl = showCountHelp(hud.helpEl, { ...h, reveal, picked: picked ?? undefined, reason }); return; }
     nl = showNumberLine(hud.helpEl, { start: h.start, change: h.change, op: h.op, term: h.term, reveal, picked: picked ?? undefined, reason, theme: 'dark' });
   }
   function chartFor(item, missed) {
     const h = item && item.help; if (!h || h.kind !== 'chart') return;
-    const o = { table: h.table, missed: missed ?? undefined, anchor: hud.jobEl, avoid: hud.hintEl, side: 'right' };
+    const o = { table: h.table, find: h.find, rule: h.rule, missed: missed ?? undefined, anchor: hud.jobEl, avoid: hud.hintEl, side: 'right' };   // (find, rule: a division fact, read the times chart's way round)
     if (offer) offer.update(o); else offer = offerChart(document.body, o);
   }
   function startHelp() {
@@ -210,8 +214,9 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
     hes = watchHesitation({ after: SHEEP.helpAfter, onShow: () => {
       const s = (R.target && !R.target.healed && R.target) || flock.find((x) => x.item && !x.healed);
       if (!s) return;
-      if (cur.topic === 'times') chartFor(s.item, null);
-      else if (cur.topic === 'negatives') lineFor(s.item, null, false);
+      if (cur.topic === 'times' || (s.item.help && s.item.help.kind === 'chart')) chartFor(s.item, null);
+      else if (cur.topic === 'negatives' || (s.item.help && s.item.help.kind === 'count')) lineFor(s.item, null, false);
+      else if (s.item.help && s.item.help.kind === 'rule' && cur.topic !== 'algebra') hint({ say: 'Take your time', line: s.item.help.line });
       else hint({ say: 'Take your time', line: 'Read each step: was the same thing done to both sides, and the right way?' });
     } });
   }
@@ -289,7 +294,7 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
     s.crossed.add(i);
     const btn = picker.el.querySelector(`button[data-i="${i}"]`); if (btn) { btn.classList.add('is-crossed', 'is-shake'); btn.disabled = true; }
     hint({ say: 'Not that bottle', line: b.why });
-    if (it.help.kind === 'line') lineFor(it, b.value, true, '');
+    if (it.help.kind === 'line' || it.help.kind === 'count') lineFor(it, b.value, true, '');
     else if (it.help.kind === 'chart') chartFor(it, it.answer === b.value ? null : b.value);
     hob.event('sheepWrong');
     const left = it.bottles.filter((x, k) => !s.crossed.has(k));
@@ -315,6 +320,8 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
     hud.toast(`Healed! ${s.item.fixed}  +${gold} gold`, 'good');
     hint({ say: 'She perks right up', line: s.item.healed });
     if (nl) { nl.remove(); nl = null; }
+    closeChart();
+    if (offer) { offer.remove(); offer = null; }   // (the Peek was for her sum: it comes back if the kid is stuck on the next)
     if (e.newTitle) setTimeout(() => hud.toast(`You're a ${e.newTitle} now!`, 'gold'), 1600);
     hob.event('sheepHealed');
     refresh();
@@ -358,8 +365,9 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
     if (hintT > 0 && (hintT -= dt) <= 0) hud.hint(null);
     if (nextT > 0 && (nextT -= dt) <= 0) newFlock();
 
-    // F (or Space on foot, or the Rope button) gives medicine to the ringed sheep
-    const pressed = I.enabled && P.enabled && (I.tap('KeyF') || (!P.onHorse && SH.near && I.tap('Space')));
+    // F (or Space on foot, or the Rope button) gives medicine to the ringed sheep (only read at the farm: away from it,
+    // the press is left for the job the player is at, the wagon's bandits or the gang's guard)
+    const pressed = I.enabled && P.enabled && SH.near && (I.tap('KeyF') || (!P.onHorse && I.tap('Space')));
     if (pressed && SH.near && R.target && !picker) openPicker(R.target);
     // walking off with the bottles up puts them away
     if (picker && Math.hypot(picker.s.root.position.x - P.position.x, picker.s.root.position.z - P.position.z) > SHEEP.walkAway) closePicker();

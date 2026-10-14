@@ -24,8 +24,8 @@
 //   when an order or a sale is paid (about half the time)       Much obliged, partner
 //   a store customer leaving, a job person as you walk away     Ya have a nice day now (now and then)
 //   a store customer come to buy the rider's own goods          Whatcha got there
-//   (UNUSED for now: mystuff_1, "Is that my stuff?", kept for the "Loot the gang" mission: stolen goods handed back
-//   to their owner. It is in VOICE_CLIPS and SHOUTS.unused, in no kind yet, and not loaded.)
+//   a townsman seeing his stolen goods ride into town           Is that my stuff? (Loot the gang: src/missions/loot.js)
+//   (the gang's guard at the cache roped: his "you got me", as a bandit's on the wagon road)
 //
 // Each kind has a chance and a wait before it may come again, any two clips are a few seconds apart (but an answer
 // follows its line closely), the same clip never plays twice running, one at a time, and a few may wait their turn
@@ -64,7 +64,7 @@ export const VOICE_CLIPS = {
   tarnation_1: 1, whatareyoudoin_1: 1, whoareyou_1: 1,
   thankya_partner_1: 1.25, lifesaver_1: 1, obliged_1: 1.1, obliged_2: 1.3, thankya_kindly_1: 1.25, thankya_kindly_2: 1.3,
   thankya_kindly_3: 1.24, obliged_partner_1: 1.27, niceday_1: 1.13, whatchagot_1: 1,
-  mystuff_1: 1.3,   // (unused for now: "Loot the gang")
+  mystuff_1: 1.3,   // ("Loot the gang": a townsman sees his goods)
 };
 const W = (names, w = 1) => names.map((n) => [n, w]);
 const range = (pre, n) => Array.from({ length: n }, (_, i) => `${pre}_${i + 1}`);
@@ -107,14 +107,15 @@ export const SHOUTS = {
     thanksStore: { him: true, chance: 0.5, cool: [25, 45], prio: 2, delay: 0.2, wait: 3, group: 'thanks', clips: THANKS },
     niceday: { him: true, chance: 0.35, cool: [60, 120], prio: 1, delay: 0.4, wait: 5, clips: W(['niceday_1']) },
     whatchagot: { him: true, chance: 0.6, cool: [60, 90], prio: 2, delay: 0.6, wait: 3, clips: W(['whatchagot_1']) },
+    mystuff: { him: true, chance: 1, cool: [20, 30], prio: 2, delay: 0.2, wait: 4, clips: W(['mystuff_1']) },
   },
   morning: { chance: 0.5, clips: W(['goodmorning_1', 'goodmorning_2']) },   // the first hello of a ride, sometimes
   // the Hob events that are each kind's moment (banditCatch and banditMiss: below, they need the rider)
   events: {
-    waveDone: 'done', flockDone: 'done', pigsDone: 'done', banditsDone: 'done', deerDone: 'done', deliveryDone: 'done',
+    waveDone: 'done', flockDone: 'done', pigsDone: 'done', banditsDone: 'done', deerDone: 'done', deliveryDone: 'done', lootDone: 'done',
     catch: 'along', pigPenned: 'along', wagonStop: 'bye', deerStop: 'bye', sheepDose: 'easy', deerSetup: 'easy',
   },
-  unused: ['mystuff_1'],   // recorded for later ("Loot the gang"): in no kind yet
+  unused: [],   // clips recorded for later, in no kind yet (none now)
 };
 
 // a man, by his folk.js look (the outfits end _m or _f)
@@ -278,7 +279,7 @@ export function makeShouts({ audio, base = GAME }) {
   const ask = (kind, o) => { if (alive && B.ask(kind, clock, o)) asked++; };
   const him = (d) => (d && d.at ? { at: d.at, male: !!d.male, id: d.id ?? d.name ?? d.n ?? null } : null);
   S.heard = (event, data) => {
-    if (event === 'banditCatch') { const w = him(data); ask('sitdown', { then: w && w.male ? { kind: 'gotme', who: w, sure: true } : null }); return; }
+    if (event === 'banditCatch' || event === 'lootGuard') { const w = him(data); ask('sitdown', { then: w && w.male ? { kind: 'gotme', who: w, sure: true } : null }); return; }   // (lootGuard: the gang's guard at the cache)
     if (event === 'banditMiss') { ask('huh', { who: him(data) }); return; }
     const k = SHOUTS.events[event]; if (k) ask(k);
   };

@@ -35,6 +35,9 @@
 //                         'deerSetup' (the viewfinder is up), 'deerFlip' (the ground glass turns the right way up),
 //                         'deerRight', 'deerWrong' (data.line: why not that deer, said at once), 'deerDone' (a herd's
 //                         pictures all taken), 'deerStop' ("Done for now"); 'ride' with data.deer: the job is on
+//                         Loot the gang (missions/loot.js): 'lootGuard' (the cache's guard roped), 'lootFled' (he ran),
+//                         'lootLoaded', 'lootNoSaddle', 'lootShare' (the slip at the sheriff's office), 'lootMiss',
+//                         'lootDone' (data.trips), 'lootWord' (data.place: the next cache); 'ride' with data.loot: the job is on
 //   B.say(text)           says a line now (or after the line he is saying)
 //   B.trail(on)           the hoofprints to the pasture on or off (they fade in and out)
 //   B.update(dt, at)      each frame: at = the player's position (the trail fades away once they reach the herd)
@@ -55,7 +58,7 @@ const LINES = {
   firstDay: "Mornin'! Rancher next door needs a hand with his herd. His trail boss is out by the corral: follow the hoofprints.",
   back: ["Herd's waiting out in the pasture. The hoofprints know the way.", "Good to see you. The rancher's got more cattle needing a rope.",
     "Fine day for a round-up. Pasture's east, past the creek."],
-  shoot: "Shooting comes in a later update, partner. It's the lasso for now, same pay.",
+  shoot: "Miss Opal keeps a target range across the creek, east end of town. Bottles and tin cans only, mind: it's still the rope for cattle and bandits.",
   arrive: 'Each steer carries a number. Rope the ones the card up top asks for: point at one and click, or press F.',
   arriveTouch: 'Each steer carries a number. Rope the ones the card up top asks for: tap one, or the Rope button.',
   catch: "Nice throw! It'll gallop itself over to the corral.",
@@ -142,6 +145,16 @@ const LINES = {
   deerRight: "Hold still... there! That's one for the album.",
   deerDone: ["That's a fine roll of pictures. They've had enough: the compass knows where the next herd is.", 'Three for the album. Pack her up and find another herd.', "Those'll look fine in her book."],
   deerStop: "The deer will keep. Set the camera up again whenever you like.",
+  // loot the gang: the gang's cache out in the valley, handed back at the sheriff's office
+  lootTip: "The deputy says the gang stashed what they stole out in the valley. It's on your compass: bring it back and share it out fair.",
+  lootGuard: "Got him! He'll keep there till the sheriff collects him.",
+  lootFled: "Let him run, partner. It's the loot that counts.",
+  lootLoaded: "Loot's on your horse. Take it back to the sheriff's office: the folks it was taken from will be waiting.",
+  lootNoSaddle: "That's too much to carry by hand. You'll want a saddled horse: the stable sells saddles.",
+  lootShare: "Read who lost what, then pick the coin that shares it out fair. Whatever won't go round is the leftover.",
+  lootMiss: "Not that one. The picture shows the sharing: deal it out round and round. Pick again, no charge.",
+  lootDone: ['Every family got their goods back. That\'s good work.', 'The town owes you one, partner.', 'Fair shares all round.'],
+  lootWord: "Word is the gang hid more loot out at {place}. It's on your compass.",
 };
 // which job each line belongs to. A line still waiting its turn is dropped once the player is at another job, or once it
 // has waited longer than KEEP_JOB seconds: said late it would be about a moment that has passed.
@@ -149,7 +162,8 @@ const JOB = { arrive: 'roundup', catch: 'roundup', miss: 'roundup', farmArrive: 
   sheepFine: 'sheep', flockDone: 'sheep', pigsArrive: 'pigs', pigPenned: 'pigs', pigWrong: 'pigs', pigsDone: 'pigs', storeStart: 'store',
   storeMiss: 'store', storeEquation: 'store', storeDone: 'store', deliveryWork: 'delivery', deliveryMiss: 'delivery', deliveryRight: 'delivery',
   deliveryRoundUp: 'delivery', animal: 'home', goodsCollected: 'home', goodsSold: 'store', wagonArrive: 'wagon', banditCatch: 'wagon', banditMiss: 'wagon', banditLoop: 'wagon', banditsDone: 'wagon',
-  deerArrive: 'deer', deerSpooked: 'deer', deerSetup: 'deer', deerFlip: 'deer', deerRight: 'deer', deerWrong: 'deer', deerDone: 'deer' };
+  deerArrive: 'deer', deerSpooked: 'deer', deerSetup: 'deer', deerFlip: 'deer', deerRight: 'deer', deerWrong: 'deer', deerDone: 'deer',
+  lootShare: 'loot', lootMiss: 'loot', lootGuard: 'loot', lootFled: 'loot' };
 const KEEP_JOB = 5;
 const NEAR_AGAIN = 180;  // seconds before Hob says something about the same place again (walking past again and again doesn't set him off each time)
 
@@ -166,6 +180,7 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
   let wagonN = 0;                 // ('banditsDone': which line said last)
   let animalN = 0;                // ('animal' after the first of a kind: which line said last)
   let deerN = 0, spookN = 0;      // ('deerDone', 'deerSpooked': which line said last)
+  let lootN = 0;                  // ('lootDone': which line said last)
   const nearAt = {}, nearN = {};   // ('near': when each place was last remarked on, and which line it said)
   let speaking = 0, now = 0;
   let saying = null;               // the line on screen: { text, key } (key = the event it came from)
@@ -196,9 +211,10 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
         const first = !flags().firstDay;
         if (first) { once('firstDay'); B.say(LINES.firstDay, 7000); }
         else B.say(LINES.back[Math.floor(Math.random() * LINES.back.length)]);
-        if (data.mode === 'shoot') B.say(LINES.shoot);
+        if (data.mode === 'shoot' && once('rangeTip')) B.say(LINES.shoot, 7000);   // (where the target range is: told once)
         if (data.wagon && once('wagonWaits')) B.say(LINES.wagonWaits, 6500);   // (the first ride with "Protect the wagon" ticked)
         if (data.deer && once('deerTip')) B.say(LINES.deerTip, 6500);   // (the first ride with "Deer photographs" ticked)
+        if (data.loot && once('lootTip')) B.say(LINES.lootTip, 7000);   // (the first ride with "Loot the gang" ticked)
         break;
       }
       case 'arrive': if (once('arrive')) B.say(touch() ? LINES.arriveTouch : LINES.arrive, 7000); break;
@@ -289,6 +305,14 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
       case 'deerWrong': queue.length = 0; speaking = 0; B.say(data.line, Math.max(5000, 1800 + String(data.line || '').length * 55)); break;
       case 'deerDone': drop('deerWrong', 'deerRight'); B.say(LINES.deerDone[(deerN++) % LINES.deerDone.length], 4500); break;
       case 'deerStop': drop('deerWrong'); if (once('deerStop')) B.say(LINES.deerStop, 3500); break;
+      case 'lootGuard': if (once('lootGuard')) B.say(LINES.lootGuard); break;
+      case 'lootFled': if (once('lootFled')) B.say(LINES.lootFled, 3500); break;
+      case 'lootLoaded': if (once('lootLoaded')) B.say(LINES.lootLoaded, 6500); break;
+      case 'lootNoSaddle': if (once('lootNoSaddle')) B.say(LINES.lootNoSaddle, 6000); break;
+      case 'lootShare': if (once('lootShare')) B.say(LINES.lootShare, 7000); break;
+      case 'lootMiss': if (once('lootMiss')) B.say(LINES.lootMiss, 6000); break;
+      case 'lootDone': drop('lootMiss', 'lootShare'); B.say(LINES.lootDone[(lootN++) % LINES.lootDone.length], 3500); break;
+      case 'lootWord': B.say(LINES.lootWord.replace('{place}', data.place || 'another spot'), 6000); break;
       default: break;
     }
   }

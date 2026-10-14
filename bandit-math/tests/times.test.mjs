@@ -751,10 +751,11 @@ test('a wave holds `count` targets (the round-up spawns one steer per target)', 
 });
 
 test('the topic interface other topics will share', () => {
-  assert.deepEqual(HERD_TOPICS, ['times']);
+  // (more topics join as they are built: times tables is always one of them, and an unknown id is never one)
+  assert.equal(HERD_TOPICS[0], 'times');
   assert.equal(hasTopic('times'), true);
-  assert.equal(hasTopic('adding'), false);
-  assert.equal(makeTopic('adding', {}), null);
+  assert.equal(hasTopic('nope'), false);
+  assert.equal(makeTopic('nope', {}), null);
   const state = {};
   const T = makeTopic('times', state, { rand: seeded(1) });
   assert.equal(T.topic, 'times');

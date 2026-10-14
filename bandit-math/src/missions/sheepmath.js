@@ -6,6 +6,13 @@
 //   algebra    a step of solving for x done wrong: the undoing done the wrong way (x + 5 = 12, so x = 17), or done to
 //              one side only (x = 12), or on a times, taking away instead of dividing (3x = 12, so x = 9). The lock box's
 //              steps card in reverse: the kid checks someone else's step
+//   dividing   a division fact a row off (24 ÷ 6 = 5 is 30 ÷ 6: one 6 too many) or taken away instead (24 ÷ 6 = 18); on
+//              the remainder steps (src/math/dividing.js) the leftover dropped (17 ÷ 5 = 3) or left big enough to go
+//              round again (17 ÷ 5 = 2 r 7)
+//   counting, adding, taking   a fact from the early topics with one of their real slips in it (after 6 comes 8, a
+//              number skipped; 8 + 5 = 12, the 8 counted as a hop; 9 − 4 = 6, the same going back): their own files
+//              (src/math/counting.js, adding.js, taking.js) make the sheep (sheepItem), help: { kind: 'count', ... }
+//              is drawn by src/ui/counthelp.js
 // Each sheep comes with two or three medicine bottles, each a fix ("should be 56"): on a sick sheep one is right and the
 // others are other real slips; on a healthy sheep all of them would "fix" a right sum, so the bottles never give away
 // which sheep is sick. The math is the only tell.
@@ -26,17 +33,22 @@
 //       fine    what Old Hob says when a healthy sheep is dosed: she's fine, and why her sum is right
 //       healed  the line shown when the cure is given
 //       help    the picture that helps: { kind: 'chart', table, missed } | { kind: 'line', start, change, op, term }
-//               | { kind: 'rule', line }
+//               | { kind: 'rule', line } | { kind: 'count', frame, line } (src/ui/counthelp.js's picture)
 //   SHEEP_MATH                            the dials
 import { slipsFor, explainPick, problemText, numText, LADDER as NEG_LADDER, CONTRAST_CHANCE } from '../math/negatives.js';
 import { tablesAt, reachAt } from '../math/times.js';
 import { RUNG_IDS } from '../lockbox/generate.js';
+import { LADDER as DIV_LADDER, remCode, remLabel } from '../math/dividing.js';
+import { LADDER as COUNT_LADDER, sheepItem as countItem } from '../math/counting.js';
+import { LADDER as ADD_LADDER, sheepItem as addItem } from '../math/adding.js';
+import { LADDER as TAKE_LADDER, sheepItem as takeItem } from '../math/taking.js';
+const EARLY = { counting: { ladder: COUNT_LADDER, item: countItem }, adding: { ladder: ADD_LADDER, item: addItem }, taking: { ladder: TAKE_LADDER, item: takeItem } };
 
 export const SHEEP_MATH = {
   size: 6,               // sheep in a flock
   sick: [1, 2],          // how many are sick (each count as likely)
   bottles: 3,            // medicine bottles to pick from (2 when a sum has too few real slips to fill 3)
-  topics: ['times', 'negatives', 'algebra'],
+  topics: ['counting', 'adding', 'taking', 'times', 'dividing', 'negatives', 'algebra'],
 };
 
 const MINUS = '−', TIMES = '×';
@@ -55,7 +67,7 @@ export function levelOf(rider, topic) {
   const T = (rider && rider.topics) || {};
   if (topic === 'algebra') { const i = RUNG_IDS.indexOf((T.algebra && T.algebra.rung) || 'R1'); return Math.max(1, i + 1); }
   const st = T[topic] && Number.isFinite(+T[topic].step) ? Math.round(+T[topic].step) : 1;
-  const top = topic === 'negatives' ? NEG_LADDER.length : 99;
+  const top = topic === 'negatives' ? NEG_LADDER.length : topic === 'dividing' ? DIV_LADDER.length : EARLY[topic] ? EARLY[topic].ladder.length : 99;
   return Math.max(1, Math.min(top, st));
 }
 
@@ -231,6 +243,64 @@ function algebraOne(kind, negs, rand) {
     ].filter((s) => s.value !== x) };
 }
 
+// ── DIVIDING: a division fact (or a remainder) checked ────────────────────────────────────────────────────────────
+// The fact from the kid's own dividing step (src/math/dividing.js): the sharing steps and the facts written as a sum
+// (12 ÷ 3 = 4), the remainder steps with their leftover (17 ÷ 5 = 3 r 2). A sick sum is a row off the times table, or
+// taken away instead of shared; a sick remainder dropped its leftover or stopped dealing a round early. Its values are
+// plain numbers (a remainder's is each × 100 + left over, as the round-up's), each with its label.
+function divItem(step, sick, rand, used) {
+  const row = DIV_LADDER[step - 1] || DIV_LADDER[0];
+  const tables = row.older && rand() < 0.3 ? row.older : row.tables;
+  let d = 2, q = 2, r = 0;
+  for (let k = 0; k < 30; k++) {
+    d = pick(tables, rand); q = int(2, row.most, rand); r = row.kind === 'rem' ? int(1, d - 1, rand) : 0;
+    if (!used.has(`${d * q + r}/${d}`)) break;
+  }
+  const n = d * q + r; used.add(`${n}/${d}`);
+  const DIV = '÷', sum = `${n} ${DIV} ${d}`;
+  if (row.kind === 'rem') {
+    const ans = remCode(q, r), lab = (v) => remLabel(Math.floor(v / 100), v % 100);
+    const kinds = [
+      { slip: 'noRem', value: remCode(q, 0), why: `${q} ${TIMES} ${d} = ${q * d}, and ${n} ${MINUS} ${q * d} = ${r} is left over. Keep the leftover: ${q} r ${r}.` },
+      ...(q >= 2 ? [{ slip: 'short', value: remCode(q - 1, r + d), why: `${r + d} left over is enough for another round of ${d}. The leftover is always smaller than ${d}.` }] : []),
+      { slip: 'over', value: remCode(q + 1, 0), why: `${q + 1} ${TIMES} ${d} = ${(q + 1) * d}: more than ${n}. Only ${q} whole rounds fit.` },
+      ...(r + 1 < d ? [{ slip: 'near', value: remCode(q, r + 1), why: `${q} ${TIMES} ${d} = ${q * d}, and ${n} ${MINUS} ${q * d} = ${r}, not ${r + 1}.` }] : []),
+      ...(r >= 2 ? [{ slip: 'near', value: remCode(q, r - 1), why: `${q} ${TIMES} ${d} = ${q * d}, and ${n} ${MINUS} ${q * d} = ${r}, not ${r - 1}.` }] : []),
+    ].filter((k) => k.value !== ans);
+    const main = kinds.filter((k) => k.slip === 'noRem' || k.slip === 'short');
+    const slipK = sick ? pick(main, rand) : null;
+    const shown = sick ? slipK.value : ans;
+    const wrong = dedupe(kinds.filter((k) => k !== slipK), ans, shown).slice(0, sick ? SHEEP_MATH.bottles - 1 : SHEEP_MATH.bottles);
+    const bottles = shuffle([...(sick ? [{ value: ans, right: true, why: null }] : []), ...wrong.map((k) => ({ value: k.value, right: false, why: k.why }))], rand)
+      .map((x) => ({ ...x, label: `should be ${lab(x.value)}` }));
+    const how = `${sum} = ${q} r ${r}: ${q} ${TIMES} ${d} = ${q * d}, and ${r} left over.`;
+    return {
+      kind: 'dividing', sick, top: null, shown: `${sum} = ${lab(shown)}`, fixed: `${sum} = ${q} r ${r}`, answer: ans, slip: sick ? slipK.slip : null,
+      bottles, fine: `She's fine: ${how}`, healed: sick ? `${how} ${slipK.slip === 'noRem' ? 'Her sum dropped the leftover.' : 'Her sum stopped a round short.'}` : how,
+      help: { kind: 'rule', line: `Deal ${n} out ${d} at a time. The leftover is what can't go round again: always smaller than ${d}.` },
+    };
+  }
+  const kinds = [
+    { slip: 'rowUp', value: q + 1, why: `${q + 1} ${TIMES} ${d} = ${(q + 1) * d}, one ${d} too many. ${q} ${TIMES} ${d} = ${n}, so ${sum} = ${q}.` },
+    { slip: 'rowDown', value: q - 1, why: `${q - 1} ${TIMES} ${d} = ${(q - 1) * d}, one ${d} short. ${q} ${TIMES} ${d} = ${n}, so ${sum} = ${q}.` },
+    { slip: 'sub', value: n - d, why: `${n} ${MINUS} ${d} takes ${d} away once. Sharing asks how many ${d}s make ${n}: ${q}.` },
+    { slip: 'divisor', value: d, why: `${d} is what ${n} is shared by. ${q} ${TIMES} ${d} = ${n}, so each gets ${q}.` },
+  ].filter((k) => k.value > 0 && k.value !== q);
+  const main = kinds.filter((k) => k.slip === 'rowUp' || k.slip === 'rowDown' || (k.slip === 'sub' && rand() < 0.4));
+  const slipK = sick ? pick(main, rand) : null;
+  const shown = sick ? slipK.value : q;
+  const wrong = dedupe(kinds.filter((k) => k !== slipK), q, shown).slice(0, sick ? SHEEP_MATH.bottles - 1 : SHEEP_MATH.bottles);
+  const bottles = shuffle([...(sick ? [{ value: q, right: true, why: null }] : []), ...wrong.map((k) => ({ value: k.value, right: false, why: k.why }))], rand)
+    .map((x) => ({ ...x, label: `should be ${x.value}` }));
+  const how = `${sum} = ${q}, because ${q} ${TIMES} ${d} = ${n}.`;
+  const said = { rowUp: `${shown} was one ${d} too many.`, rowDown: `${shown} was one ${d} short.`, sub: `${shown} took ${d} away instead of sharing.` };
+  return {
+    kind: 'dividing', sick, top: null, shown: `${sum} = ${shown}`, fixed: `${sum} = ${q}`, answer: q, slip: sick ? slipK.slip : null,
+    bottles, fine: `She's fine: ${how}`, healed: sick ? `${how} ${said[slipK.slip] || ''}`.trim() : how,
+    help: { kind: 'chart', table: d, find: n, rule: `${d} ${TIMES} ? = ${n}` },
+  };
+}
+
 // ── A FLOCK ──────────────────────────────────────────────────────────────────────────────────────────────────────
 export function makeFlock(rider, topic = 'times', { size = SHEEP_MATH.size, sick = null, rand = Math.random } = {}) {
   const level = levelOf(rider, topic);
@@ -239,7 +309,8 @@ export function makeFlock(rider, topic = 'times', { size = SHEEP_MATH.size, sick
   const used = new Set(), sheep = [];
   for (let i = 0; i < size; i++) {
     const ill = which.has(i);
-    sheep.push(topic === 'negatives' ? negItem(level, ill, rand, used) : topic === 'algebra' ? algebraItem(level, ill, rand, used) : timesItem(level, ill, rand, used));
+    sheep.push(topic === 'negatives' ? negItem(level, ill, rand, used) : topic === 'algebra' ? algebraItem(level, ill, rand, used)
+      : topic === 'dividing' ? divItem(level, ill, rand, used) : EARLY[topic] ? EARLY[topic].item(level, ill, rand, used) : timesItem(level, ill, rand, used));
   }
   return { topic, level, sick: nSick, sheep };
 }

@@ -3,7 +3,8 @@
 //
 // The equation comes from the lock boxes' own recipes (src/lockbox/generate.js), at the kid's current rung of the
 // solving-for-x ladder (rider.topics.algebra), so it is as hard as their lock boxes are now. A rider without "Solving
-// for x" ticked gets the simplest one-step equations (x + 4 = 9, x − 3 = 5; 3x = 12 too when times tables are ticked).
+// for x" ticked gets the simplest one-step equations (x + 4 = 9, x − 3 = 5; 3x = 12 too when times tables or dividing
+// are ticked).
 // The deer never move the ladder: that stays the lock boxes' job.
 //
 // The wrong tags are the numbers kids really land on: adding where they should take away, forgetting to divide,
@@ -48,7 +49,7 @@ export function rungFor(rider, rng = makeRng()) {
     return { rung, size: DEERMATH.sizeOf[level] || 2, from: 'algebra' };
   }
   if (on.algebra) return { rung: 'R1', size: 1, from: 'algebra' };   // (ticked, never played: the first rung)
-  const pool = on.times ? [...DEERMATH.simple, DEERMATH.withTimes] : DEERMATH.simple;
+  const pool = on.times || on.dividing ? [...DEERMATH.simple, DEERMATH.withTimes] : DEERMATH.simple;   // (3x = 12 is a division: times tables or dividing)
   return { rung: rng.pick(pool), size: 1, from: 'simple' };
 }
 
