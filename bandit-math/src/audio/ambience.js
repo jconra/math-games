@@ -253,7 +253,7 @@ export function airCut(d) {
 // always comes; fewer answer more often than many)
 // the creek's sound, made sample by sample into a loop: a babbling brook is not a hiss (that reads as surf) but
 // thousands of tiny bubbles, each a short pure note whose pitch climbs as it rings out (the "plink" of poured water).
-// Mostly small, bright ones (1-4.5 kHz), a few bigger gurgles lower down, and a faint fizz of spray on top. The loop
+// Mostly small ones (0.65-2.9 kHz, softened above 2 kHz), a few bigger gurgles lower down, and a faint fizz of spray on top. The loop
 // wraps round, so it has no seam. rand is passed in so tests can make the same brook twice.
 export function brookSamples(rate, secs = 7, rand = Math.random) {
   const n = Math.round(rate * secs), out = new Float32Array(n), TAU = Math.PI * 2;
@@ -264,12 +264,15 @@ export function brookSamples(rate, secs = 7, rand = Math.random) {
       ph += TAU * f / rate; out[(t0 + i) % n] += Math.sin(ph) * amp * env;
     }
   };
-  for (let k = 0, m = Math.round(secs * 70); k < m; k++)   // small bright bubbles: the crisp poured-water sound
-    bubble(Math.floor(rand() * n), 1000 + Math.pow(rand(), 1.6) * 3500, 0.06 + Math.pow(rand(), 3) * 0.3, 0.012 + rand() * 0.03);
-  for (let k = 0, m = Math.round(secs * 6); k < m; k++)    // a few bigger gurgles
-    bubble(Math.floor(rand() * n), 320 + rand() * 500, 0.1 + rand() * 0.2, 0.04 + rand() * 0.05);
+  for (let k = 0, m = Math.round(secs * 38); k < m; k++)   // small bubbles: the crisp poured-water sound (not too many)
+    bubble(Math.floor(rand() * n), 650 + Math.pow(rand(), 1.8) * 2200, 0.06 + Math.pow(rand(), 3) * 0.3, 0.02 + rand() * 0.04);
+  for (let k = 0, m = Math.round(secs * 8); k < m; k++)    // a few bigger gurgles
+    bubble(Math.floor(rand() * n), 260 + rand() * 420, 0.12 + rand() * 0.2, 0.05 + rand() * 0.06);
   let prev = 0;                                             // the fizz: white noise with its lows taken off, very quiet
   for (let i = 0; i < n; i++) { const w = rand() * 2 - 1; out[i] += (w - prev) * 0.012; prev = w; }
+  // soften the top: two gentle low-pass passes (about 2 kHz), run round the loop twice so the seam matches
+  const k1 = 1 - Math.exp(-2 * Math.PI * 2000 / rate); let y1 = 0, y2 = 0;
+  for (let pass = 0; pass < 2; pass++) for (let i = 0; i < n; i++) { y1 += k1 * (out[i] - y1); y2 += k1 * (y1 - y2); if (pass) out[i] = y2; }
   let pk = 0; for (let i = 0; i < n; i++) pk = Math.max(pk, Math.abs(out[i]));
   for (let i = 0; i < n; i++) out[i] *= 0.6 / (pk || 1);
   return out;
