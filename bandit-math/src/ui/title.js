@@ -43,6 +43,7 @@ const ICON = {
   // a six-point sheriff's star with little balls on the tips
   star: '<svg viewBox="0 0 16 16" aria-hidden="true"><polygon points="' + starPoints(8, 8.3, 7, 3.6, 6) + '" fill="currentColor"/></svg>',
   plus: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v11M2.5 8h11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+  strongbox: '<svg viewBox="0 0 28 28" aria-hidden="true"><path d="M4 12.2V9.6Q4 6 7.6 6h12.8Q24 6 24 9.6v2.6z" fill="currentColor"/><rect x="4" y="13.4" width="20" height="10.6" rx="1.4" fill="currentColor"/><path d="M8.6 6v18M19.4 6v18" stroke="#1d140c" stroke-width="1.5" opacity=".55"/><rect x="11.4" y="10" width="5.2" height="7.4" rx="1.1" fill="#1d140c"/><circle cx="14" cy="12.9" r="1.15" fill="currentColor"/><path d="M14 13.6v2" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>',
   lock: '<svg viewBox="0 0 28 28" aria-hidden="true"><path d="M8.5 12V9a5.5 5.5 0 0 1 11 0v3" fill="none" stroke="currentColor" stroke-width="2.4"/><rect x="5" y="12" width="18" height="13" rx="2.5" fill="currentColor"/><circle cx="14" cy="17.4" r="2" fill="#1d140c"/><path d="M14 18.6v3" stroke="#1d140c" stroke-width="2" stroke-linecap="round"/></svg>',
   // a rope loop with its tail
   lasso: '<svg viewBox="0 0 40 40" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round"><ellipse cx="23" cy="13" rx="13" ry="7.5" stroke-width="2.6"/><ellipse cx="23" cy="13" rx="9.6" ry="4.9" stroke-width="1.1" opacity="0.55"/><path d="M13.2 18.2c-2.6 3.4-2.2 7.2 1 9.2 3.4 2.1 3.6 5.6.6 9.1" stroke-width="2.6"/><circle cx="13.6" cy="18" r="2" fill="currentColor" stroke="none"/></svg>',
@@ -416,7 +417,7 @@ export function showTitle(root, opts = {}) {
     const why = whyNot(r);
     const label = S.riding ? 'Riding out…' : S.waiting ? 'Saddling up…' : 'RIDE OUT';
     actionsEl.innerHTML = `
-      <button class="bmt-boxes" data-act="boxes" data-k="boxes" ${S.riding ? 'disabled' : ''}>${ICON.lock}<b>Just lock boxes</b><small>Solve for x, no riding</small></button>
+      <button class="bmt-boxes" data-act="boxes" data-k="boxes" ${S.riding ? 'disabled' : ''}>${ICON.strongbox}<b>Just lock boxes</b><small>Solve for x, no riding</small></button>
       <button class="bmt-ride ${S.waiting ? 'is-waiting' : ''}" data-act="ride" data-k="ride" ${why || S.riding ? 'disabled' : ''}
           aria-describedby="bmt-status"><i class="bmt-fill"></i><span>${label}</span></button>
       <div class="bmt-status" id="bmt-status" aria-live="polite">${why
