@@ -1,8 +1,10 @@
 // DRAWING THE TOWER: one box per board (a 2x4: 3.5 by 1.5 inches), nail heads at every joint, the board being placed,
-// the sway during the wind test, and the prize on top (a windmill head with sails) once the tower stands tall enough.
+// the glowing twins (where a board just nailed could be matched on the other walls: see-through gold boards with
+// bright edges, grey when there is no wood or room for them), the sway during the wind test, and the prize on top (a
+// windmill head with sails) once the tower stands tall enough.
 // The tower's numbers are in feet (tower.js); here they become metres (FT).
 import * as THREE from 'three';
-import { worldBoards, faceSegments, faceToWorld, FACE_NORMAL, W, cornerXZ } from './tower.js';
+import { worldBoards, faceSegments, faceToWorld, FACE_NORMAL, cornerXZ } from './tower.js';
 import { findJoints, touch } from './frame.js';
 import { boardTexture } from './wood.js';
 import { FT } from './scene.js';
@@ -55,6 +57,7 @@ export function makeTowerView(scene) {
   const outward = (k, layer) => (POST / 2 + BT * (layer - 0.5) + 0.004) * FT;
 
   function rebuild(tower) {
+    const W = tower.W;
     for (const b of boards.values()) { group.remove(b.mesh); b.mesh.geometry.dispose(); }
     boards.clear();
     const layers = layersOf(tower);
@@ -64,7 +67,7 @@ export function makeTowerView(scene) {
       mesh.castShadow = true; mesh.receiveShadow = true;
       let z, a, b;
       if (post) {
-        const [cx, cz] = cornerXZ(wb.corner); z = new THREE.Vector3(cx, 0, cz).normalize();
+        const [cx, cz] = cornerXZ(W, wb.corner); z = new THREE.Vector3(cx, 0, cz).normalize();
         a = new THREE.Vector3(wb.a.X * FT, wb.a.Y * FT, wb.a.Z * FT); b = new THREE.Vector3(wb.b.X * FT, wb.b.Y * FT, wb.b.Z * FT);
       } else {
         const n = FACE_NORMAL[wb.face]; z = new THREE.Vector3(n[0], 0, n[1]); const off = outward(wb.face, layers.get(wb.src.id) || 1);
@@ -83,7 +86,7 @@ export function makeTowerView(scene) {
         const wallItems = h.items.filter((it) => !segs[it.s].post);
         if (!wallItems.length) continue;
         const L = Math.max(...wallItems.map((it) => layers.get(segs[it.s].id) || 1));
-        const w = faceToWorld(k, h.x, h.y), off = outward(k, L) + BT / 2 * FT + 0.002;
+        const w = faceToWorld(W, k, h.x, h.y), off = outward(k, L) + BT / 2 * FT + 0.002;
         const tx = new THREE.Vector3(k === 0 ? 1 : k === 2 ? -1 : 0, 0, k === 1 ? -1 : k === 3 ? 1 : 0);
         for (const [dx, dy] of [[-0.03, 0.02], [0.03, 0.02], [0, -0.025]]) {
           const p = new THREE.Vector3(w.X * FT, Math.max(0.03, h.y * FT + dy), w.Z * FT).addScaledVector(z, off).addScaledVector(tx, dx);
@@ -114,18 +117,61 @@ export function makeTowerView(scene) {
     placeNails(sway);
   }
 
-  // the board being placed, on face k at wall coordinates (x, y), angle ang, len feet
+  // the board being placed, on face k (of a tower W feet wide) at wall coordinates (x, y), angle ang, len feet
   let held = null;
-  function showHeld(k, x, y, ang, len, isPost) {
-    if (k === null) { if (held) { group.remove(held); held.geometry.dispose(); held = null; } return; }
+  function showHeld(W, k, x, y, ang, len, isPost) {
+    if (W === null) { if (held) { group.remove(held); held.geometry.dispose(); held = null; } return; }
     if (!held || held.userData.len !== len || held.userData.isPost !== isPost) {
       if (held) { group.remove(held); held.geometry.dispose(); }
       held = new THREE.Mesh(isPost ? boxFor(len, POST, POST) : boxFor(len, BW, BT), heldMat); held.userData = { len, isPost }; held.castShadow = true; group.add(held);
     }
     const n = FACE_NORMAL[k], z = new THREE.Vector3(n[0], 0, n[1]), off = isPost ? 0 : outward(k, 4.5);
-    const A = faceToWorld(k, x, y), B = faceToWorld(k, x + Math.cos(ang) * len, y + Math.sin(ang) * len);
-    pose(held, new THREE.Vector3(A.X * FT, A.Y * FT, A.Z * FT).addScaledVector(z, off), new THREE.Vector3(B.X * FT, B.Y * FT, B.Z * FT).addScaledVector(z, off), isPost ? new THREE.Vector3(...[n[0] + (x < 1 ? -1 : 1) * (k % 2 ? 0 : 0), 0, n[1]]).normalize() : z);
+    const A = faceToWorld(W, k, x, y), B = faceToWorld(W, k, x + Math.cos(ang) * len, y + Math.sin(ang) * len);
+    pose(held, new THREE.Vector3(A.X * FT, A.Y * FT, A.Z * FT).addScaledVector(z, off), new THREE.Vector3(B.X * FT, B.Y * FT, B.Z * FT).addScaledVector(z, off), z);
   }
+
+  // the twins: list [{ kind: 'post', corner, y, len } | { kind: 'wall', face, x, y, ang, len }, with ok (true: gold and
+  // tappable, false: grey)]. Each gets a see-through box with dark edges (so it reads against the pale sky as well as
+  // the hillside) inside a fatter soft glow; meshes carry userData.ghost = index.
+  const ghostGroup = new THREE.Group(); group.add(ghostGroup);
+  const ghostMat = { ok: new THREE.MeshBasicMaterial({ color: 0xffa31a, transparent: true, opacity: 0.62, depthWrite: false }),
+    grey: new THREE.MeshBasicMaterial({ color: 0x8c877e, transparent: true, opacity: 0.4, depthWrite: false }) };
+  const ghostGlow = new THREE.MeshBasicMaterial({ color: 0xffc23d, transparent: true, opacity: 0.24, depthWrite: false });
+  const ghostEdge = { ok: new THREE.LineBasicMaterial({ color: 0x7a4300, transparent: true, opacity: 0.9, depthWrite: false }),
+    grey: new THREE.LineBasicMaterial({ color: 0x4a463f, transparent: true, opacity: 0.6, depthWrite: false }) };
+  let ghostFade = 1;
+  let ghostKey = '';
+  function setGhosts(list, W) {
+    // (rebuilt only when something about them changed)
+    const key = W + '|' + list.map((g) => [g.kind, g.face, g.corner, g.x, g.y, g.ang, g.len, g.ok].join(',')).join(';');
+    if (key === ghostKey) return;
+    ghostKey = key;
+    for (const m of [...ghostGroup.children]) { ghostGroup.remove(m); m.geometry.dispose(); m.children.forEach((c) => c.geometry.dispose()); }
+    list.forEach((g, i) => {
+      const post = g.kind === 'post', geo = post ? boxFor(g.len, POST, POST) : boxFor(g.len, BW, BT), key = g.ok ? 'ok' : 'grey';
+      const mesh = new THREE.Mesh(geo, ghostMat[key]); mesh.renderOrder = 5;
+      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo), ghostEdge[key]); edges.renderOrder = 6; edges.raycast = () => {};
+      mesh.add(edges);
+      if (g.ok) {
+        const glow = new THREE.Mesh(post ? boxFor(g.len + 0.25, POST * 2.6, POST * 2.6) : boxFor(g.len + 0.25, BW * 2.6, BT * 3), ghostGlow);
+        glow.renderOrder = 4; glow.raycast = () => {}; mesh.add(glow);
+      }
+      let a, b, z;
+      if (post) {
+        const [cx, cz] = cornerXZ(W, g.corner); z = new THREE.Vector3(cx, 0, cz).normalize();
+        a = new THREE.Vector3(cx * FT, g.y * FT, cz * FT); b = new THREE.Vector3(cx * FT, (g.y + g.len) * FT, cz * FT);
+      } else {
+        const n = FACE_NORMAL[g.face], off = outward(g.face, 2); z = new THREE.Vector3(n[0], 0, n[1]);
+        const A = faceToWorld(W, g.face, g.x, g.y), B = faceToWorld(W, g.face, g.x + Math.cos(g.ang) * g.len, g.y + Math.sin(g.ang) * g.len);
+        a = new THREE.Vector3(A.X * FT, A.Y * FT, A.Z * FT).addScaledVector(z, off); b = new THREE.Vector3(B.X * FT, B.Y * FT, B.Z * FT).addScaledVector(z, off);
+      }
+      pose(mesh, a, b, z);
+      mesh.userData = { ghost: i, ok: g.ok };
+      ghostGroup.add(mesh);
+    });
+  }
+  // fade: 1 shown, 0 gone (they fade out when ignored)
+  function fadeGhosts(f) { ghostFade = f; ghostGroup.visible = f > 0.01; }
 
   // light up the boards (by their source board) that a tap picked
   function highlight(src) { for (const b of boards.values()) b.mesh.material = b.src === src ? pickMat : b.mat; }
@@ -134,7 +180,8 @@ export function makeTowerView(scene) {
   const head = new THREE.Group(); head.visible = false; group.add(head);
   {
     const iron = new THREE.MeshLambertMaterial({ color: 0x4a4038 }), cloth = new THREE.MeshLambertMaterial({ color: 0xefe6d0, side: THREE.DoubleSide }), wood = mats[2];
-    const deck = new THREE.Mesh(new THREE.BoxGeometry((W + 0.8) * FT, 0.08, (W + 0.8) * FT), wood); head.add(deck);
+    // (the deck is sized to the tower's width when the head is shown)
+    const deck = new THREE.Mesh(new THREE.BoxGeometry(1, 0.08, 1), wood); head.add(deck); head.userData.deck = deck;
     const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 0.5, 0.7, 8), new THREE.MeshLambertMaterial({ color: 0x6d4b2b })); cap.position.y = 0.4; head.add(cap);
     const roof = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.45, 8), new THREE.MeshLambertMaterial({ color: 0x5b3f2c })); roof.position.y = 0.97; head.add(roof);
     const hub = new THREE.Group(); hub.position.set(0, 0.45, 0.62); head.add(hub);
@@ -147,9 +194,21 @@ export function makeTowerView(scene) {
     head.userData.hub = hub;
     head.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   }
-  function showHead(on, topFt, faceAz = 0) { head.visible = on; if (on) { head.position.set(0, topFt * FT + 0.04, 0); head.rotation.y = faceAz; } }
+  function showHead(on, topFt, faceAz = 0, W = 6) {
+    head.visible = on;
+    if (on) { head.position.set(0, topFt * FT + 0.04, 0); head.rotation.y = faceAz; head.userData.deck.scale.set((W + 0.8) * FT, 1, (W + 0.8) * FT); }
+  }
 
-  function update(dt, windLevel) { if (head.visible) head.userData.hub.rotation.z -= dt * (0.6 + windLevel * 3); }
+  let time = 0;
+  function update(dt, windLevel) {
+    time += dt;
+    if (head.visible) head.userData.hub.rotation.z -= dt * (0.6 + windLevel * 3);
+    // the twins breathe gently, so they read as "not built yet"
+    const pulse = 0.75 + 0.25 * Math.sin(time * 3.2);
+    ghostMat.ok.opacity = 0.62 * (0.8 + 0.2 * pulse) * ghostFade; ghostGlow.opacity = 0.3 * pulse * ghostFade; ghostEdge.ok.opacity = 0.9 * ghostFade;
+    ghostMat.grey.opacity = 0.4 * ghostFade; ghostEdge.grey.opacity = 0.6 * ghostFade;
+  }
 
-  return { group, boards, rebuild, setSway, showHeld, highlight, showHead, update, meshes: () => [...boards.values()].map((b) => b.mesh), nails };
+  return { group, boards, rebuild, setSway, showHeld, highlight, showHead, update, setGhosts, fadeGhosts,
+    meshes: () => [...boards.values()].map((b) => b.mesh), ghostMeshes: () => (ghostGroup.visible ? ghostGroup.children : []), nails };
 }

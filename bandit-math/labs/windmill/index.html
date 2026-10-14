@@ -8,7 +8,7 @@
 <!-- the on-screen error box comes first, so a crash shows on screen instead of a blank page -->
 <script src="../../oops.js"></script>
 <link rel="stylesheet" href="../../src/ui/fonts/fonts.css">
-<link rel="stylesheet" href="windmill.css?v=2">
+<link rel="stylesheet" href="windmill.css?v=4">
 <script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/" } }</script>
 </head>
 <body>
@@ -16,7 +16,7 @@
   <aside id="panel" aria-label="Lumber">
     <header class="pn-head">
       <h1>Lumber</h1>
-      <div class="pn-count"><b id="count">12</b> <span id="count-word">full boards left</span></div>
+      <div class="pn-count"><b id="count">28</b> <span id="count-word">full boards left</span></div>
     </header>
     <div class="bench-wrap">
       <div class="bench-label" id="bench-label">Fresh 8 ft board</div>
@@ -39,38 +39,28 @@
     <div class="gz move" id="g-move" hidden title="Slide the board"><svg viewBox="0 0 24 24"><path d="M12 2l3 3h-2v6h6V9l3 3-3 3v-2h-6v6h2l-3 3-3-3h2v-6H5v2l-3-3 3-3v2h6V5H9z"/></svg></div>
     <div class="gz end" id="g-a" hidden title="Swing this end"></div>
     <div class="gz end" id="g-b" hidden title="Swing this end"></div>
+    <button class="nail-it" id="nail" hidden aria-label="Nail it" title="Nail it (Enter)"><svg viewBox="0 0 24 24"><path d="M4.5 12.5l5 5L19.5 7"/></svg></button>
+    <div class="gz stone" id="stone-0" hidden title="Drag the stone in or out"></div>
+    <div class="gz stone" id="stone-1" hidden title="Drag the stone in or out"></div>
+    <div class="gz stone" id="stone-2" hidden title="Drag the stone in or out"></div>
+    <div class="gz stone" id="stone-3" hidden title="Drag the stone in or out"></div>
 
     <div class="bar top">
-      <div class="faces">
-        <button class="btn icon" id="prev" aria-label="Go round to the left">&#9664;</button>
-        <div class="face-name"><b id="face-name">Front wall</b><small id="face-sub">the back mirrors it</small></div>
-        <button class="btn icon" id="next" aria-label="Go round to the right">&#9654;</button>
-      </div>
       <div class="stats">
         <div><small>Height</small><b id="height">0 ft</b></div>
-        <div><small>Best</small><b id="best">0 ft</b></div>
+        <div><small>Base</small><b id="base">6 ft</b></div>
+        <div><small>Best</small><b id="best">0 ft</b><i id="best-base"></i></div>
       </div>
       <div class="tools">
-        <button class="btn" id="undo" title="Take down the last board">Undo</button>
-        <button class="btn" id="mode" title="Build two walls (mirrored) or all four">Mirror walls</button>
+        <button class="btn" id="undo" title="Take down the last board (Ctrl+Z)">Undo</button>
         <div class="snd"><button class="btn icon" id="mute" aria-label="Sound on or off" title="Sound on/off"><svg viewBox="0 0 24 24"><path class="spk" d="M4 9h4l5-4v14l-5-4H4z"/><path class="wav" d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/><path class="x" d="M16 9l6 6M22 9l-6 6"/></svg></button><input type="range" id="vol" min="0" max="100" value="80" aria-label="Volume" title="Volume"></div>
       </div>
     </div>
-    <div class="scroll">
-      <button class="btn icon" id="up" aria-label="Look higher">&#9650;</button>
-      <button class="btn icon" id="down" aria-label="Look lower">&#9660;</button>
-    </div>
-    <div class="bar held" id="held-bar" hidden>
-      <div class="hint" id="held-hint"></div>
-      <div class="row">
-        <button class="btn" id="turn">Turn</button>
-        <button class="btn" id="back">Back to pile</button>
-        <button class="btn go" id="nail">Nail it</button>
-      </div>
-    </div>
+    <div class="wall-name" id="face-name">Front wall</div>
+    <div class="hint-line" id="hint"></div>
     <div class="bar sel" id="sel-bar" hidden>
       <div class="hint" id="sel-hint">This board</div>
-      <div class="row"><button class="btn" id="leave">Leave it</button><button class="btn go" id="pickup">Pick it up</button></div>
+      <div class="row"><button class="btn" id="pickup">Take it down</button></div>
     </div>
     <button class="btn wind" id="wind"><svg viewBox="0 0 24 24"><path d="M3 8h10a3 3 0 1 0-3-3M3 12h15a3 3 0 1 1-3 3M3 16h7"/></svg>Call the wind</button>
 
@@ -83,6 +73,6 @@
   </main>
 </div>
 <div class="loading" id="loading">Climbing the hill…</div>
-<script type="module" src="main.js?v=2"></script>
+<script type="module" src="main.js?v=4"></script>
 </body>
 </html>

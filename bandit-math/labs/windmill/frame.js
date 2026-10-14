@@ -21,9 +21,13 @@
 //     the wind's push turns into a straight pull or push along the brace. The flatter or steeper the brace, the more
 //     force it needs to carry the same push (and a long one buckles), so near 45 degrees is best. A short knee brace
 //     helps, but it acts on a short lever, so its nails carry several times the wind's push.
+//   * The width between the footing stones shows up twice. In each wall: the narrower the wall, the harder the posts
+//     are pulled and squeezed to hold the tower up against the wind, and the steeper (weaker) a brace corner to corner
+//     has to be. And for the whole tower: it can tip over in one piece on its downwind stones, like a box on a table,
+//     when the wind's turning push beats its weight and the stones it has to lift (tipping, below).
 //
 // Units: feet, pounds, radians.
-import { W, faceSegments, worldBoards, FACE_NORMAL, trimTower, towerHeight } from './tower.js';
+import { faceSegments, worldBoards, FACE_NORMAL, trimTower, towerHeight, woodFeet } from './tower.js';
 
 // ── the wood and the nails (a 2x4: 1.5 by 3.5 inches, nailed flat against the wall, so it bends on its wide side) ──────
 export const WOOD = {
@@ -338,7 +342,7 @@ function crossWeight(t, k) {
     if (s.post) continue;
     // a board on the near end of this wall (face f's right edge meets face k's left one... either way, half to each end)
     const y = (s.ay + s.by) / 2, F = WOOD.weight * s.len / 2;
-    down.push({ y, x: 0, F: F / 2 }, { y, x: W, F: F / 2 });
+    down.push({ y, x: 0, F: F / 2 }, { y, x: t.W, F: F / 2 });
   }
   return down;
 }
@@ -353,12 +357,7 @@ export function windCase(t, axis, sign, mph) {
   const dirOf = (k) => (k === 0 ? 1 : k === 2 ? -1 : k === 1 ? -1 : 1);
   const solveFace = (k, share) => solveWall(faceSegments(t, k),
     { side: pushes.map((p) => ({ y: p.y, F: p.F * share * dirOf(k) })), down: crossWeight(t, k) });
-  if (t.mode === 'mirror') {
-    // the twin walls are mirror images: each carries half (solving one tells us both)
-    const r = solveFace(faces[0], 0.5);
-    return { ...r, face: faces[0], axis, sign, mph, total };
-  }
-  // four separate walls: they share the push by how stiff each one is (a stiffer wall takes more)
+  // the two walls share the push by how stiff each one is (a stiffer wall takes more)
   const probe = faces.map((k) => solveWall(faceSegments(t, k), { side: pushes.map((p) => ({ y: p.y, F: p.F * 0.5 * dirOf(k) })) }, { pdelta: false }));
   const give = probe.map((r) => (r.mechanism || !r.levels ? Infinity : Math.max(1e-6, Math.abs(r.levels[r.levels.length - 1].ux))));
   const stiff = give.map((g) => (Number.isFinite(g) ? 1 / g : 0)), sum = stiff[0] + stiff[1];
@@ -368,7 +367,32 @@ export function windCase(t, axis, sign, mph) {
     const r = solveFace(k, share[i] || 0.001);
     if (!worst || (r.worst && r.worst.util > (worst.worst ? worst.worst.util : -1))) worst = { ...r, face: k };
   });
-  return { ...worst, axis, sign, mph, total };
+  // and the whole tower tipping over on its downwind stones
+  const tip = tipping(t, pushes);
+  if (tip.util > (worst.worst ? worst.worst.util : -1)) {
+    const it = { type: 'tip', util: tip.util, y: 0, x: sign > 0 === (worst.face === 0 || worst.face === 3) ? 0 : t.W, text: 'the wind tipped the whole tower over: the stones on the windward side lifted' };
+    worst = { ...worst, worst: it, ok: worst.ok && tip.util <= 1 };
+  }
+  return { ...worst, axis, sign, mph, total, tip };
+}
+
+// ── tipping over ────────────────────────────────────────────────────────────────────────────────────────────────────
+// The frame solve above checks each wall's boards and nails. A tower can also go over in one piece, like a box on a
+// table: the wind's push, times how high up it pushes, tries to turn the tower about its downwind edge (the line
+// through the two downwind stones). Against it: the tower's own weight, acting at its middle (half the width from that
+// edge), and the two windward footing stones the posts are strapped to, which have to be lifted with it (a full width
+// from that edge). So a tower twice as wide stands against more than twice the push (and a wider base has room for
+// bigger stones); a tall narrow one goes over first.
+// One footing stone's weight, by how far apart the stones are set: flat fieldstones all about as thick, so the weight
+// grows with the stone's area, and four big ones only fit round a wide square. 250 lb at half a foot apart, 500 lb at
+// 3 feet, 800 lb at 6, 1000 lb at 8. (The page draws each stone at the matching size: scene.js.)
+export const stoneLb = (w) => 200 + 100 * w;
+export function tipping(t, pushes) {
+  let turn = 0, side = 0;
+  for (const p of pushes) { turn += Math.abs(p.F) * p.y; side += Math.abs(p.F); }
+  const weight = woodFeet(t) * WOOD.weight;
+  const hold = weight * t.W / 2 + 2 * stoneLb(t.W) * t.W;
+  return { util: hold > 0 ? turn / hold : 0, turn, hold, weight, push: side };
 }
 
 // the whole wind test: each stage tries the wind from all four sides. Stops at the first stage that breaks something.
@@ -394,17 +418,19 @@ export function whatStands(t, test, stages = STAGES) {
   let tower = t, fail = test.fail, guard = 0, lastCut = Infinity;
   while (guard++ < 12) {
     const w = fail.worst || { y: 0 }, hubs = fail.hubs || [];
+    // tipped over: it all goes
+    if (w.type === 'tip') return { height: 0, tower: trimTower(t, -1), cut: 0, tipped: true };
     // the break's height: a storey that leaned too far breaks from its floor up; a joint at its own height; a board
     // from its lower end
     let y = w.y;
     if (w.type === 'board' && fail.segs && fail.segs[w.s]) y = Math.min(fail.segs[w.s].ay, fail.segs[w.s].by);
     // the floor under the break: the highest row of joints at (or just under) it that spans the wall (joints on both
     // edges), so what is left is a whole wall. If that leaves the tower as it was, the floor below that one.
-    const floors = [];
+    const floors = [], edge = Math.min(0.5, t.W / 4);
     for (const h of hubs) {
       if (h.ground) continue;
       const level = hubs.filter((q) => !q.ground && Math.abs(q.y - h.y) < 0.4);
-      if (level.some((q) => q.x < 0.5) && level.some((q) => q.x > W - 0.5)) floors.push(h.y);
+      if (level.some((q) => q.x < edge) && level.some((q) => q.x > t.W - edge)) floors.push(h.y);
     }
     floors.sort((a, b) => b - a);
     let cut = floors.find((f) => f <= y + 0.3 && f < lastCut - 0.3) || 0;

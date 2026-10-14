@@ -45,7 +45,7 @@ export function makeFall(scene) {
     for (let k = 0; k < 4; k++) {
       const segs = faceSegments(tower, k);
       for (const h of findJoints(segs)) {
-        const w = faceToWorld(k, h.x, h.y), at = new THREE.Vector3(w.X * FT, w.Y * FT, w.Z * FT);
+        const w = faceToWorld(tower.W, k, h.x, h.y), at = new THREE.Vector3(w.X * FT, w.Y * FT, w.Z * FT);
         if (sway) at.add(sway(h.y));
         // (each board's spot nearest the joint: boards nailed face to face sit a few centimetres apart)
         const items = h.items.map((it) => { const st = byKey.get(keyOf(segs[it.s], k)); return { st, u: st ? nearestU(st, at) : 0 }; });

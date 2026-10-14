@@ -3,6 +3,9 @@
 //   angle   the three corners of any triangle add up to 180 degrees: two are shown, find the third
 //   length  a right-angled triangle whose sides are whole feet (3-4-5, 6-8-10, 5-12-13, 8-15-17): two sides are shown,
 //           find the third (most often where the brace lands: how far along the other board)
+// And one about the tower's own size: when a crosspiece closes a bay (posts both sides, the ground or a crosspiece
+// below) whose width and height are the short sides of a whole-number right triangle, how long a brace reaches from
+// corner to corner (the stones set 3 feet apart and a crosspiece 4 feet up make a 5 foot brace).
 // Pure functions (no page, no three.js) so node can test them.
 import { touch } from './frame.js';
 
@@ -40,7 +43,7 @@ function angleAt(p, q, r) {   // the corner angle at p, in degrees
 }
 const shuffle = (arr, rnd) => { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
 const whole = (v) => Math.abs(v - Math.round(v)) < 0.04;
-const nameOf = (s) => (s.ground ? 'the ground' : s.post ? 'the corner post' : 'the board');
+const nameOf = (s) => (s.ground ? 'the ground' : s.post ? 'the corner post' : Math.abs(s.ay - s.by) < 0.05 * s.len ? 'the crosspiece' : Math.abs(s.ax - s.bx) < 0.05 * s.len ? 'the post' : 'the other board');
 
 // pick one question for the triangles a new board made, or null. rnd: a 0..1 random function (for tests)
 export function makeQuestion(tris, newSeg, rnd = Math.random) {
@@ -51,6 +54,25 @@ export function makeQuestion(tris, newSeg, rnd = Math.random) {
   const scored = tris.map((t) => { const [P, Q, R] = t.pts; const ang = [angleAt(P, Q, R), angleAt(Q, R, P), angleAt(R, P, Q)]; return { t, ang, right: ang.some((a) => Math.abs(a - 90) < 1) }; });
   scored.sort((x, y) => y.right - x.right);
   return angleQuestion(scored[0].t, scored[0].ang, rnd);
+}
+
+// a bay w feet wide and h feet tall: the brace corner to corner, when it comes out whole and fits on one board
+export function bayQuestion(w, h, y0, rnd = Math.random, longest = 8) {
+  const a = Math.min(w, h), b = Math.max(w, h), c = Math.hypot(w, h);
+  if (!whole(a) || !whole(b) || !whole(c) || c > longest + 0.01) return null;
+  const s = [Math.round(a), Math.round(b), Math.round(c)];
+  if (!TRIPLES.some((tr) => tr[0] === s[0] && tr[1] === s[1] && tr[2] === s[2])) return null;
+  const C = s[2], wrong = [s[0] + s[1], C + 1, C - 1, s[0] * s[0] + s[1] * s[1]];
+  const choices = shuffle([C, ...shuffle([...new Set(wrong.filter((v) => v > 0 && v !== C))], rnd).slice(0, 3)], rnd);
+  // the triangle: the foot of the left post, the top of the right one, the foot of the right one (the square corner)
+  const pts = [{ x: 0, y: y0 }, { x: w, y: y0 + h }, { x: w, y: y0 }];
+  return {
+    kind: 'length', pts, sideLabels: ['?', Math.round(h) + ' ft', Math.round(w) + ' ft'], angleLabels: ['', '', ''], ask: 0, square: 2,
+    prompt: `This bay is ${Math.round(w)} ft wide and ${Math.round(h)} ft tall. How long a brace reaches from corner to corner?`,
+    choices, answer: C, unit: ' ft',
+    why: `Square the two short sides and add: ${s[0]}×${s[0]} + ${s[1]}×${s[1]} = ${s[0] * s[0]} + ${s[1] * s[1]} = ${C * C}, and ${C}×${C} = ${C * C}. So the brace is ${C} ft.`,
+    helper: { kind: 'squares', a: s[0], b: s[1], c: C }, bay: true,
+  };
 }
 
 function angleQuestion(t, ang, rnd) {

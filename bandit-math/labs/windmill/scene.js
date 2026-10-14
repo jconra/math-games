@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { plankTexture, boardTexture, softDot, rng } from './wood.js';
-import { W } from './tower.js';
+import { stoneLb } from './frame.js';
 
 export const FT = 0.3048;
 const GAME = new URL('../../', import.meta.url).href;            // the game's folder (read only: models, textures)
@@ -115,16 +115,23 @@ export function makeScene({ low = false } = {}) {
   const far = new THREE.Mesh(farGeo, new THREE.MeshLambertMaterial({ color: 0x9a9070, side: THREE.BackSide }));
   far.position.y = -40; scene.add(far);
 
-  // ── the footing stones under the four corners ──────────────────────────────────────────────────────────────────────
+  // ── the footing stones under the four corners (they move when the builder sets the tower's width) ─────────────────
+  // Flat fieldstones, all about as thick: their size goes with their weight in the tipping check (frame.js stoneLb), so
+  // a wide base sits on big stones (about two and a half feet across at 6 feet apart) and a narrow one on small ones.
   const stoneMat = new THREE.MeshLambertMaterial({ color: 0x8d877c });
-  const h = W / 2 * FT;
-  for (const [x, z] of [[-h, h], [h, h], [h, -h], [-h, -h]]) {
+  const stones = [0, 1, 2, 3].map((c) => {
     const s = new THREE.Mesh(new THREE.DodecahedronGeometry(0.2, 0), stoneMat);
-    s.scale.set(1.2, 0.45, 1.2); s.position.set(x, 0.0, z); s.rotation.y = x * 3 + z; s.castShadow = s.receiveShadow = true; scene.add(s);
+    s.rotation.y = c * 1.9 + 0.4; s.castShadow = s.receiveShadow = true; scene.add(s); return s;
+  });
+  const CORNER = [[-1, 1], [1, 1], [1, -1], [-1, -1]];
+  function setStones(widthFt) {
+    const h = widthFt / 2 * FT, size = 1.9 * Math.sqrt(stoneLb(widthFt) / stoneLb(6));
+    stones.forEach((s, c) => { s.position.set(CORNER[c][0] * h, 0, CORNER[c][1] * h); s.scale.set(size, 0.45 * 1.9 * 0.75, size); });
   }
+  setStones(6);
 
   // ── the mill house: a stone ground floor, plank walls above, a shingle roof, a door, flour sacks ───────────────────
-  const mill = new THREE.Group(); mill.position.set(MILL_AT[0], 0, MILL_AT[1]); mill.rotation.y = 0.6; scene.add(mill);
+  const mill = new THREE.Group(); mill.position.set(MILL_AT[0], 0, MILL_AT[1]); mill.rotation.y = 0.6; mill.userData.crown = 4.2; scene.add(mill);
   const planks = plankTexture(3, [128, 92, 60]); planks.repeat.set(3, 1.2);
   const stone = new THREE.MeshLambertMaterial({ color: 0x9c958a });
   // the hill falls away under it: stand it on the highest corner and run the stone footing down past the lowest
@@ -187,7 +194,7 @@ export function makeScene({ low = false } = {}) {
       for (const t of treeSpots) {
         let m = proto[t.file] ? proto[t.file].clone() : codeTree();
         if (proto[t.file]) m.scale.setScalar(t.h / 66);
-        m.position.set(t.x, groundY(t.x, t.z) - 0.1, t.z); m.rotation.y = t.x * 1.7 + t.z;
+        m.position.set(t.x, groundY(t.x, t.z) - 0.1, t.z); m.rotation.y = t.x * 1.7 + t.z; m.userData.crown = t.h * 0.36;
         m.traverse((o) => { if (o.isMesh) { o.receiveShadow = true; o.castShadow = !low && Math.hypot(t.x, t.z) < 12; } });
         trees.add(m);
       }
@@ -255,9 +262,22 @@ export function makeScene({ low = false } = {}) {
     for (const k of ['x', 'z']) { const half = BOX[k]; let d = v[k] - centre[k]; if (d > half) v[k] -= half * 2; else if (d < -half) v[k] += half * 2; }
   };
   const tmpM = new THREE.Matrix4(), tmpQ = new THREE.Quaternion(), one = new THREE.Vector3(1, 1, 1), zero = new THREE.Vector3(0, 0, 0);
+  // a tree (or the mill house) standing between the eye and the tower, or round the eye itself, is left out while it
+  // is in the way, so walking round the tower never puts a crown of leaves or a wall over the view
+  function clearView(eye) {
+    const ex = eye.x, ez = eye.z, L2 = ex * ex + ez * ez || 1;
+    for (const m of [...trees.children, mill]) {
+      const r = m.userData.crown || 3, tx = m.position.x, tz = m.position.z;
+      const u = ((tx - ex) * -ex + (tz - ez) * -ez) / L2;            // 0 at the eye, 1 at the tower
+      const d = Math.hypot(ex + -ex * Math.max(0, Math.min(1, u)) - tx, ez + -ez * Math.max(0, Math.min(1, u)) - tz);
+      const inWay = (u > -0.05 && u < 0.85 && d < r) || Math.hypot(tx - ex, tz - ez) < r + 1;
+      m.visible = !inWay;
+    }
+  }
   // how many of each are showing grows with the wind; the rest wait out of sight
   function update(dt, centre, eye = null) {
     wind.time += dt;
+    if (eye) clearView(eye);
     const L = wind.level, gust = L * (0.82 + 0.18 * Math.sin(wind.time * 2.3) * Math.sin(wind.time * 0.7 + 1));
     windU.uTime.value = wind.time; windU.uWind.value.copy(wind.dir).multiplyScalar(gust);
     const speed = 1.5 + L * 15, d = wind.dir;
@@ -295,7 +315,7 @@ export function makeScene({ low = false } = {}) {
     }
   }
 
-  return { scene, sun, sky, setPile, update, treeLoad, mill, pile };
+  return { scene, sun, sky, setPile, setStones, stones, update, treeLoad, mill, pile };
 }
 
 // ── the miller: one of the game's townsfolk, dusted with flour. If the game's people can't load, a plain figure ───────

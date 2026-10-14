@@ -263,6 +263,13 @@ export function setWind(level, at) {
   A.duck.gain.setTargetAtTime(1 - clamp((l - 0.15) / 0.35, 0, 0.85), t, 0.25);
 }
 
+// a footing stone shoved along the ground: a short gritty scrape and a dull knock as it settles (wider: a touch lower)
+export function stone(width = 6, at) {
+  if (!ok()) return; const t = now(at), f = clamp(900 - width * 50, 450, 900);
+  noise(t, 0.16, { freq: f * 2.2, q: 0.7, gain: 0.2, attack: 0.02, freqTo: f * 1.6 });
+  noise(t + 0.1, 0.09, { type: 'lowpass', freq: f * 0.4, gain: 0.9, attack: 0.002 });
+}
+
 // a joint popping apart: a sharp crack
 export function crack(at) {
   if (!ok()) return; const t = now(at);
@@ -298,7 +305,7 @@ export async function renderOffline(seconds, script, { sampleRate = 44100, chann
   const keep = A, keepYard = { ...yard };
   const off = new OfflineAudioContext(channels, Math.ceil(seconds * sampleRate), sampleRate);
   A = makeDesk(off, true); yard.until = 0;
-  try { script({ saw, hammer, clatter, clunk, setWind, crack, thud, crash, chime, soft, ambience }, off); }
+  try { script({ saw, hammer, clatter, clunk, setWind, crack, thud, crash, chime, soft, ambience, stone }, off); }
   finally { A = keep; Object.assign(yard, keepYard); }
   return off.startRendering();
 }

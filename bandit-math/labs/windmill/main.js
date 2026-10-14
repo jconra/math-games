@@ -2,19 +2,26 @@
 // much of it stands. A Bandit Math prototype page, standing on its own (it changes nothing in the game; it reads the
 // game's fonts, ground textures, trees and townsfolk).
 //
-// How a round goes: cut boards on the left, drag the pieces up onto the tower (front wall and side wall; the back and
-// far side mirror them, or build all four), nail them. Now and then the miller asks about a triangle you just made; a
-// right answer earns an extra board. Call the wind: a breeze, then growing gusts from every side. A real (simple) frame
-// calculation decides what holds (frame.js). If something gives, the tower comes down; the miller pays flour for the
-// height left standing, the yard is cleared and a fresh stack of lumber waits.
+// How a round goes: first set the four footing stones (drag one in or out: how wide the tower stands, half a foot to
+// 8 feet; it locks when the first board is nailed). Cut boards on the left, drag the pieces up onto the tower, nail
+// them. Each board nailed shows its twins glowing on the other walls (the same post on the other corners, the same
+// crosspiece or brace on the other walls), and the view eases round a little so they show: a tap builds one with wood
+// from the stack, a double tap builds them all. Drag anywhere else to walk round the tower and up and down it; you
+// build on whichever wall faces you (lifting a piece off the panel squares the view up on it again). Now and then
+// the miller asks about a triangle you just made, or how long a brace a bay needs; a right answer earns an extra board.
+// Call the wind: a breeze, then growing gusts from every side. A real (simple) frame calculation decides what holds
+// (frame.js), and whether the whole tower tips over on its stones. If something gives, the tower comes down; the miller
+// pays flour for the height left standing, the yard is cleared and a fresh stack of lumber waits (the stones stay
+// where they were set).
 //
-// Files: tower.js (the tower as data), frame.js (the physics), questions.js (the math), build.js (the panel and
-// placing), tower3d.js (drawing the boards), fall.js (the crash), scene.js (the hilltop, wind, the miller), sound.js.
-// window.WM is a handle for test scripts. ?perf shows frames per second.
+// Files: tower.js (the tower as data), frame.js (the physics), questions.js (the math), build.js (the panel, placing,
+// and every touch on the view), tower3d.js (drawing the boards and the twins), fall.js (the crash), scene.js (the
+// hilltop, wind, the stones, the miller), sound.js.
+// window.WM is a handle for test scripts. ?perf shows frames per second, ?askall asks at every chance.
 import * as THREE from 'three';
-import { W, BOARDS, newTower, faceSegments, faceToWorld, FACE_NORMAL, towerHeight, worldBoards, postSide, ends, faceWall, cornerList } from './tower.js';
-import { windTest, whatStands, STAGES, findJoints, isKnee } from './frame.js';
-import { trianglesOf, makeQuestion } from './questions.js';
+import { START_W, MAX_W, BOARDS, BOARD_FT, newTower, faceSegments, faceToWorld, FACE_NORMAL, cornerXZ, towerHeight, worldBoards, postSide, ends, boardCount, twinsOf, spotTaken } from './tower.js';
+import { windTest, whatStands, STAGES, findJoints, isKnee, touch, TOL } from './frame.js';
+import { trianglesOf, makeQuestion, bayQuestion } from './questions.js';
 import { makeScene, makeMiller, wind, FT, groundY } from './scene.js';
 import { makeTowerView } from './tower3d.js';
 import { makeFall } from './fall.js';
@@ -28,10 +35,10 @@ const params = new URLSearchParams(location.search);
 const phone = matchMedia('(max-width: 700px)').matches || /Mobi|Android/i.test(navigator.userAgent);
 
 const el = {
-  view: $('view'), canvas: $('c'), overlay: $('overlay'),
+  view: $('view'), canvas: $('c'), overlay: $('overlay'), hint: $('hint'),
   count: $('count'), countWord: $('count-word'), bench: $('bench'), benchEmpty: $('bench-empty'), benchBoard: $('bench-board'), benchLabel: $('bench-label'),
   tape: $('tape'), saw: $('saw'), sawLabel: $('saw-label'), cutBtn: $('cut'), pieces: $('pieces'), piecesEmpty: $('pieces-empty'),
-  gMove: $('g-move'), gA: $('g-a'), gB: $('g-b'), heldBar: $('held-bar'), heldHint: $('held-hint'), nailBtn: $('nail'), turnBtn: $('turn'), backBtn: $('back'),
+  gMove: $('g-move'), gA: $('g-a'), gB: $('g-b'), nailBtn: $('nail'), stoneHandles: [0, 1, 2, 3].map((c) => $('stone-' + c)),
   selBar: $('sel-bar'), selHint: $('sel-hint'),
 };
 
@@ -47,18 +54,23 @@ const towerView = makeTowerView(scene);
 const fall = makeFall(scene);
 
 const app = {
-  el, tower: newTower('mirror'), face: 0, phase: 'build', held: null, selected: null, dirty: true, autoScroll: 0,
+  el, tower: newTower(START_W), face: 0, phase: 'build', held: null, selected: null, dirty: true, autoScroll: 0,
   lumber: { stack: BOARDS, bench: null, pieces: [] }, placed: [],
 };
 let miller = null;
-let best = 0; try { best = +(JSON.parse(localStorage.getItem('bm-windmill-best') || '{}').height || 0); } catch (e) { best = 0; }
+let best = { height: 0, width: 0 };
+try { const b = JSON.parse(localStorage.getItem('bm-windmill-best') || '{}'); best = { height: +b.height || 0, width: +b.width || 0 }; } catch (e) { /* no storage: no record yet */ }
 
-// ── the camera: square on the wall being built, looking up and down it; round the side for the wind test ───────────
-const cam = { az: 0, azT: 0, y: 6, yT: 6, mode: 'face', pos: new THREE.Vector3(0, 3, 14), look: new THREE.Vector3(0, 2, 0), d: 10 };
+// ── the camera: walks round the tower (any angle), up and down it, zooms a little; round the side for the wind test ─
+// az: the angle round the tower (0 looks at the front wall), y: the height it looks at (feet), pitch: how far it looks
+// down (steeper while the stones are being set), zoom: 1 is the distance that fits the wall
+// fit: how much further back the camera stands so a long held board fits a narrow view (1: not at all)
+const cam = { az: 0, azV: 0, squareT: null, y: 4, yT: 4, stones: 1, zoom: 1, fit: 1, follow: true, mode: 'face', pos: new THREE.Vector3(0, 3, 14), look: new THREE.Vector3(0, 2, 0), d: 10 };
 const azOf = (k) => Math.atan2(FACE_NORMAL[k][0], FACE_NORMAL[k][1]);
+const ZOOM = [0.55, 1.6];
 function fitDistance() {
-  const r = el.view.getBoundingClientRect(), aspect = r.width / Math.max(1, r.height), t = Math.tan(camera.fov / 2 * DEG);
-  const hw = (W / 2 + 2.6) * FT, hh = 8 * FT;
+  const r = el.view.getBoundingClientRect(), aspect = r.width / Math.max(1, r.height), t = Math.tan(camera.fov / 2 * DEG), W = app.tower.W;
+  const hw = (W / 2 + (aspect < 0.6 ? 1.7 : 2.6)) * FT, hh = 8 * FT;
   return Math.max(hw / (t * aspect), hh / t) + W / 2 * FT;
 }
 function resize() {
@@ -68,23 +80,34 @@ function resize() {
   camera.fov = camera.aspect < 0.6 ? 46 : camera.aspect < 1 ? 36 : 30; camera.updateProjectionMatrix();
   cam.d = fitDistance(); build && build.renderPanel(); app.dirty = true;
 }
+const topY = () => towerHeight(app.tower) + 12;
+let orbiting = false;
 function updateCamera(dt) {
-  if (app.autoScroll) cam.yT = Math.max(5, Math.min(towerHeight(app.tower) + 12, cam.yT + app.autoScroll * 10 * dt));
-  cam.az += angDiff(cam.azT, cam.az) * Math.min(1, dt * 7);
+  if (app.autoScroll) cam.yT = Math.max(3, Math.min(topY(), cam.yT + app.autoScroll * 10 * dt));
+  // a flick keeps turning a moment; taking up a board settles the view square on the wall
+  if (!orbiting && Math.abs(cam.azV) > 0.01) { cam.az += cam.azV * dt; cam.azV *= Math.exp(-3.2 * dt); } else if (!orbiting) cam.azV = 0;
+  if (cam.squareT !== null) { const d = angDiff(cam.squareT, cam.az); cam.az += d * Math.min(1, dt * 5); if (Math.abs(d) < 0.002) { cam.az = cam.squareT; cam.squareT = null; } }
   cam.y += (cam.yT - cam.y) * Math.min(1, dt * 6);
+  // setting the stones: look down on the square of stones from higher up; building: level with the wall
+  const stonesT = app.phase === 'build' && stonesOpen() && !app.held ? 1 : 0;
+  cam.stones += (stonesT - cam.stones) * Math.min(1, dt * 3);
+  const pitch = 0.035 + cam.stones * 0.43;
+  if (!app.held) cam.fit += (1 - cam.fit) * Math.min(1, dt * 2.5);
+  updateFace();
   const want = new THREE.Vector3(), look = new THREE.Vector3();
   let rate = 9;
   if (cam.mode === 'face') {
-    const ly = cam.y * FT; look.set(0, ly, 0);
-    want.set(Math.sin(cam.az) * cam.d, ly + 0.35, Math.cos(cam.az) * cam.d);
+    const ly = (cam.y + (0.5 - cam.y) * cam.stones) * FT, D = cam.d * cam.zoom * cam.fit * (1 + cam.stones * 0.12); look.set(0, ly, 0);
+    want.set(Math.sin(cam.az) * Math.cos(pitch) * D, ly + Math.sin(pitch) * D, Math.cos(cam.az) * Math.cos(pitch) * D);
+    rate = orbiting ? 30 : 9;
   } else if (cam.mode === 'test') {
     // (once it is coming down, closer in, on the pile)
     const H = (test && test.crashing && fall.time > 0.8 ? 9 : Math.max(8, towerHeight(app.tower) || 8)) * FT, t = Math.tan(camera.fov / 2 * DEG), aspect = camera.aspect;
     const narrow = aspect < 0.6;
-    const d = Math.max((H / 2 + 1.5) / t, (W * FT + (narrow ? 1.2 : 5)) / (t * aspect)) * (narrow ? 1 : 1.1) + 2;
+    const d = (Math.max((H / 2 + 1.5) / t, (app.tower.W * FT + (narrow ? 1.2 : 5)) / (t * aspect)) * (narrow ? 1 : 1.1) + 2) * Math.min(1.25, cam.zoom);
     // (on a phone the result card covers the lower half: look lower so the tower sits up top)
     const ly = H * 0.45 - (narrow && app.phase === 'result' ? d * t * 0.45 : 0);
-    const a = cam.testAz; look.set(0, ly, 0); want.set(Math.sin(a) * d, H * 0.45 + 1.5, Math.cos(a) * d); rate = 2.2;
+    const a = cam.testAz; look.set(0, ly, 0); want.set(Math.sin(a) * d, H * 0.45 + 1.5, Math.cos(a) * d); rate = orbiting ? 12 : 2.2;
   } else if (cam.mode === 'miller' && miller) {
     const p = miller.root.position, f = new THREE.Vector3(Math.sin(miller.root.rotation.y), 0, Math.cos(miller.root.rotation.y));
     look.set(p.x, p.y + 1.35, p.z); want.copy(look).addScaledVector(f, 4.2).add(new THREE.Vector3(0, 0.25, 0)); rate = 3;
@@ -97,85 +120,196 @@ function updateCamera(dt) {
   const gy = groundY(camera.position.x, camera.position.z) + 0.4; if (camera.position.y < gy) camera.position.y = gy;
 }
 const angDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
+// the wall you build on is the one facing the camera most (it changes a little past the corner, so it doesn't flicker)
+function updateFace() {
+  if (cam.mode !== 'face') return;
+  const k = ((Math.round(cam.az / (Math.PI / 2)) % 4) + 4) % 4;
+  if (k === app.face || Math.abs(angDiff(cam.az, azOf(k))) > Math.PI / 4 - 0.07) return;
+  app.face = k; showFaceName(); walkMiller(); app.dirty = true;
+}
+// a drag on the view: sideways walks round, up and down climbs (the tower follows the finger)
+app.orbit = (dx, dy) => {
+  const r = el.view.getBoundingClientRect();
+  if (app.phase === 'build') {
+    orbiting = true; cam.squareT = null; cam.azV = 0; app.orbited = true;
+    cam.az -= dx / r.width * Math.PI * 1.1;
+    const ftPerPx = 2 * cam.d * cam.zoom * cam.fit * Math.tan(camera.fov / 2 * DEG) / FT / r.height;
+    if (Math.abs(dy) > 0.5) { cam.yT = Math.max(3, Math.min(topY(), cam.yT + dy * ftPerPx)); cam.y = cam.yT; cam.follow = false; }
+  } else if (cam.mode === 'test') { orbiting = true; cam.testAz -= dx / r.width * Math.PI; }
+};
+app.orbitRelease = (vx) => {
+  orbiting = false;
+  const r = el.view.getBoundingClientRect();
+  if (app.phase === 'build') cam.azV = Math.max(-4, Math.min(4, -vx * 1000 / r.width * Math.PI * 1.1));
+};
+Object.defineProperty(app, 'zoom', { get: () => cam.zoom });
+// a held board running off the sides of a narrow view (a phone): the camera backs off a little each frame until both
+// ends are in sight (called only while no finger is moving it, so it never slides out from under one)
+app.fitHeld = (A, B, r) => {
+  const most = ZOOM[1] * 1.15 / cam.zoom, room = Math.min(A.x, B.x, r.width - A.x, r.width - B.x);
+  if (room < 30 && cam.fit < most) cam.fit = Math.min(most, cam.fit * 1.025);
+  else if (room > 60 && cam.fit > 1) cam.fit = Math.max(1, cam.fit / 1.01);     // (and closes in again once there is room)
+};
+app.setZoom = (z) => { cam.zoom = Math.max(ZOOM[0], Math.min(ZOOM[1], z)); };
+// lifting a piece off the panel: the view starts to square up on the wall facing you while the piece is carried over
+// (so it has mostly settled by the time the piece reaches the tower); taking it up: square, and follow the work again
+const squareUp = () => { cam.azV = 0; cam.squareT = azOf(app.face) + Math.round((cam.az - azOf(app.face)) / (Math.PI * 2)) * Math.PI * 2; };
+app.onDragStart = () => { if (app.phase === 'build') squareUp(); };
+app.onTakeUp = () => { cam.follow = true; squareUp(); };
 
 // wall coordinates (feet on face k) <-> the screen (pixels inside the view)
 const v3 = new THREE.Vector3();
 app.toScreen = (k, x, y) => {
-  const w = faceToWorld(k, x, y), n = FACE_NORMAL[k];
+  const w = faceToWorld(app.tower.W, k, x, y), n = FACE_NORMAL[k];
   v3.set(w.X * FT + n[0] * 0.06, w.Y * FT, w.Z * FT + n[1] * 0.06).project(camera);
   const r = el.view.getBoundingClientRect();
   return { x: (v3.x + 1) / 2 * r.width, y: (1 - v3.y) / 2 * r.height };
 };
+app.worldToScreen = (X, Y, Z) => {
+  v3.set(X * FT, Y * FT, Z * FT).project(camera);
+  const r = el.view.getBoundingClientRect();
+  return { x: (v3.x + 1) / 2 * r.width, y: (1 - v3.y) / 2 * r.height, behind: v3.z > 1 };
+};
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+const aim = (cx, cy) => { const r = el.view.getBoundingClientRect(); ndc.set((cx - r.left) / r.width * 2 - 1, -((cy - r.top) / r.height) * 2 + 1); ray.setFromCamera(ndc, camera); };
 app.toWall = (cx, cy) => {
-  const r = el.view.getBoundingClientRect(); ndc.set((cx - r.left) / r.width * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
-  ray.setFromCamera(ndc, camera);
-  const k = app.face, n = FACE_NORMAL[k], N = new THREE.Vector3(n[0], 0, n[1]);
+  aim(cx, cy);
+  const k = app.face, n = FACE_NORMAL[k], N = new THREE.Vector3(n[0], 0, n[1]), W = app.tower.W;
   const plane = new THREE.Plane(N, -(W / 2 * FT + 0.06)), hit = new THREE.Vector3();
   if (!ray.ray.intersectPlane(plane, hit)) return null;
-  const o = faceToWorld(k, 0, 0), t = [[1, 0], [0, -1], [-1, 0], [0, 1]][k];
+  const o = faceToWorld(W, k, 0, 0), t = [[1, 0], [0, -1], [-1, 0], [0, 1]][k];
   return { x: ((hit.x - o.X * FT) * t[0] + (hit.z - o.Z * FT) * t[1]) / FT, y: hit.y / FT };
 };
-app.pxToFt = (px) => { const a = app.toWall(innerWidth / 2, innerHeight / 2), b = app.toWall(innerWidth / 2 + px, innerHeight / 2); return a && b ? Math.abs(b.x - a.x) : 0.5; };
-
-// ── the walls: names, going round ───────────────────────────────────────────────────────────────────────────────────
-const FACE_NAMES = { mirror: [['Front wall', 'the back mirrors it'], ['Side wall', 'the far side mirrors it'], ['Back wall', 'a mirror of the front'], ['Far side', 'a mirror of the side']],
-  four: [['Front wall', 'built on its own'], ['Right side', 'built on its own'], ['Back wall', 'built on its own'], ['Left side', 'built on its own']] };
-function showFaceName() { const [a, b] = FACE_NAMES[app.tower.mode][app.face]; $('face-name').textContent = a; $('face-sub').textContent = b; }
-app.turn = (dir) => {
-  app.face = (app.face + dir + 4) % 4; cam.azT = cam.azT + dir * Math.PI / 2;
-  showFaceName(); app.select(null); app.dirty = true; walkMiller();
+// a point on the ground under the pointer (feet, the tower's middle at 0)
+app.toGround = (cx, cy) => {
+  aim(cx, cy); const hit = new THREE.Vector3();
+  if (!ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hit)) return null;
+  return { X: hit.x / FT, Z: hit.z / FT };
 };
-$('prev').onclick = () => app.phase === 'build' && app.turn(-1);
-$('next').onclick = () => app.phase === 'build' && app.turn(1);
-$('up').onclick = () => { cam.yT = Math.min(towerHeight(app.tower) + 12, cam.yT + 4); };
-$('down').onclick = () => { cam.yT = Math.max(5, cam.yT - 4); };
-el.view.addEventListener('wheel', (e) => { if (app.phase === 'build') { cam.yT = Math.max(5, Math.min(towerHeight(app.tower) + 12, cam.yT - e.deltaY * 0.01)); e.preventDefault(); } }, { passive: false });
+app.pxToFt = (px) => { const r = el.view.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2, a = app.toWall(cx, cy), b = app.toWall(cx + px, cy); return a && b ? Math.abs(b.x - a.x) : 0.5; };
+
+// ── the walls: names ─────────────────────────────────────────────────────────────────────────────────────────────────
+const FACE_NAMES = ['Front wall', 'Right side', 'Back wall', 'Left side'];
+function showFaceName() { $('face-name').textContent = FACE_NAMES[app.face]; }
 
 // ── the panel ────────────────────────────────────────────────────────────────────────────────────────────────────────
 const build = makeBuild(app);
-app.onLumber = (n) => { world.setPile(n); };
+app.onLumber = (n) => { world.setPile(n); if (ghosts) refreshGhosts(); };
+app.onSawOff = (len, kept) => { say(kept ? `${fmt(len)} offcut. It's with your cut pieces.` : `That bit's too short to use. Kindling for my stove.`, { key: kept ? 'offcut' : 'kindling', times: 2, force: true, ms: 4000 }); };
+app.onTowerChanged = (src) => {
+  // (a board sawn shorter: its twins are worked out again from it, so they take the new length)
+  if (src && ghosts && ghosts.src === src) ghosts.list = twinsOf(app.tower, src, ghosts.where);
+  rebuild();
+  if (src && app.selected === src) app.select(src);
+};
+
+// ── the footing stones: the first step ──────────────────────────────────────────────────────────────────────────────
+// They can be moved until the first board is nailed (and again once the tower is all taken down).
+const stonesOpen = () => boardCount(app.tower) === 0;
+app.stonesOpen = stonesOpen;
+// (while a stone is being dragged the camera holds still, so the stone stays under the finger; it refits after)
+app.setWidth = (w, dragging = false) => {
+  if (!stonesOpen()) return false;
+  app.tower.W = w; world.setStones(w); if (!dragging) cam.d = fitDistance(); sound.stone(w); ghosts = null; rebuild();
+  return true;
+};
+app.onStonesSet = () => {
+  const W = app.tower.W;
+  cam.d = fitDistance();
+  if (W <= 2) say(`${fmt(W)} apart: mighty narrow. Cheap on wood, but a tall narrow tower tips right over in a gust.`, { key: 'narrow', times: 3, force: true });
+  else if (W >= 7) say(`${fmt(W)} apart: she'll stand steady, but every crossbar is a whole board, and corner to corner is longer than any board.`, { key: 'wide', times: 3, force: true });
+  else say(`Stones ${fmt(W)} apart. They'll stay put once the first board is nailed.`, { key: 'stones', times: 4, force: true });
+};
 
 // ── nailing, picking up, undo ────────────────────────────────────────────────────────────────────────────────────────
 let idN = 1;
+// put a board on the tower: a corner post (on corner c) or a wall board (on face k). Returns the record.
+function addBoard(spec) {
+  const t = app.tower;
+  if (spec.kind === 'post') { const rec = { id: 'p' + idN++, y: spec.y, len: spec.len }; t.corners[spec.corner].push(rec); app.placed.push({ rec, corner: spec.corner }); return rec; }
+  const rec = { id: 'b' + idN++, x: spec.x, y: spec.y, ang: Math.atan2(Math.sin(spec.ang), Math.cos(spec.ang)), len: spec.len };
+  t.walls[spec.face].push(rec); app.placed.push({ rec, face: spec.face }); return rec;
+}
 app.nail = () => {
   const h = app.held; if (!h) return;
-  const k = app.face, side = postSide(h), t = app.tower;
-  let rec;
-  if (side !== null) {
-    // a corner post: it belongs to the corner (both walls that meet there)
-    const c = side === 0 ? k : (k + 1) % 4, e = ends(h);
-    rec = { id: 'p' + idN++, y: Math.min(e.ay, e.by), len: h.len };
-    cornerList(t, c).push(rec);
-  } else {
-    const { wall, flip } = faceWall(t, k);
-    rec = flip ? { id: 'b' + idN++, x: W - h.x, y: h.y, ang: Math.PI - h.ang, len: h.len } : { id: 'b' + idN++, x: h.x, y: h.y, ang: h.ang, len: h.len };
-    rec.ang = Math.atan2(Math.sin(rec.ang), Math.cos(rec.ang));
-    t.walls[wall].push(rec);
-  }
-  app.placed.push({ rec, face: k });
+  const k = app.face, side = postSide(h, app.tower.W), e = ends(h);
+  const spec = side !== null ? { kind: 'post', corner: side === 0 ? k : (k + 1) % 4, y: Math.min(e.ay, e.by), len: h.len } : { kind: 'wall', face: k, x: h.x, y: h.y, ang: h.ang, len: h.len };
+  const first = stonesOpen();
+  const rec = addBoard(spec);
   // a board touching at two places gets two nails
   const nails = build.contactsOf(h).length >= 2 ? 2 : 1;
   app.held = null; sound.hammer(nails);
+  // its twins on the other walls, glowing, a tap away
+  makeGhosts(rec, spec);
   rebuild();
   // keep the top of the work in view
-  const top = Math.max(h.y, h.y + Math.sin(h.ang) * h.len);
-  if (top > cam.yT + 4) cam.yT = top - 2;
-  afterNail(rec, k, side !== null);
+  const top = Math.max(e.ay, e.by);
+  if (cam.follow && top > cam.yT + 4) cam.yT = top - 2;
+  // square on to a wall, the twins on the other walls hide behind it or show only their edges: the view eases round a
+  // little toward a three-quarter look so they show (taking up the next board squares it again)
+  if (ghosts && ghosts.list.some((g) => g.ok)) {
+    const base = azOf(app.face) + Math.round((cam.az - azOf(app.face)) / (Math.PI * 2)) * Math.PI * 2, off = cam.az - base;
+    if (Math.abs(off) < 0.3) { cam.squareT = base + (off < -0.02 ? -1 : 1) * 0.46; cam.azV = 0; }
+  }
+  afterNail(rec, spec, first);
 };
 app.select = (src) => {
   app.selected = src; towerView.highlight(src);
   el.selBar.hidden = !src || app.phase !== 'build';
-  if (src) $('sel-hint').textContent = (src.ang === undefined ? 'Corner post' : 'Board') + ', ' + fmt(src.len);
+  if (src) { el.selHint.textContent = (src.ang === undefined ? 'Corner post' : 'Board') + ', ' + fmt(src.len); $('say').hidden = true; }
 };
-app.pickAt = (cx, cy) => {
+// a twin (or any board spec) on the screen: its two ends in view pixels, and how far it is from the camera (metres)
+function specOnScreen(g) {
+  const W = app.tower.W;
+  let a, b;
+  if (g.kind === 'post') { const [X, Z] = cornerXZ(W, g.corner); a = { X, Y: g.y, Z }; b = { X, Y: g.y + g.len, Z }; }
+  else { const e = ends(g); a = faceToWorld(W, g.face, e.ax, e.ay); b = faceToWorld(W, g.face, e.bx, e.by); }
+  const A = app.worldToScreen(a.X, a.Y, a.Z), B = app.worldToScreen(b.X, b.Y, b.Z);
+  const depth = camera.position.distanceTo(v3.set((a.X + b.X) / 2 * FT, (a.Y + b.Y) / 2 * FT, (a.Z + b.Z) / 2 * FT));
+  return { A, B, depth, behind: A.behind || B.behind };
+}
+const distToSeg = (p, A, B) => { const vx = B.x - A.x, vy = B.y - A.y, L2 = vx * vx + vy * vy || 1, t = Math.max(0, Math.min(1, ((p.x - A.x) * vx + (p.y - A.y) * vy) / L2)); return Math.hypot(A.x + vx * t - p.x, A.y + vy * t - p.y); };
+const TWIN_REACH = 22;    // CSS pixels: a tap this close to a twin builds it
+// the twin a tap at (cx, cy) means: one the tap lands right on, else the nearest within a fingertip of it, unless a
+// nailed board under the finger stands in front of that twin. -> { g } or { board } or {}
+function pickAt(cx, cy) {
+  aim(cx, cy);
+  const hitG = ray.intersectObjects(towerView.ghostMeshes(), false)[0], b = app.held ? null : ray.intersectObjects(towerView.meshes(), false)[0];
+  if (hitG && ghosts && (!b || hitG.distance < b.distance + 0.02)) return { g: ghosts.list[hitG.object.userData.ghost] };
+  if (ghosts && towerView.ghostMeshes().length) {
+    const r = el.view.getBoundingClientRect(), p = { x: cx - r.left, y: cy - r.top };
+    let best = null, bd = TWIN_REACH;
+    for (const g of ghosts.list) { const o = specOnScreen(g); if (o.behind) continue; const d = distToSeg(p, o.A, o.B); if (d < bd) { bd = d; best = { g, depth: o.depth }; } }
+    // (with a nailed board under the finger as well, the twin wins when it stands in front of that board, or when the
+    // tap is nearer the twin's line on screen than the board's own: so the board can still be picked by tapping it
+    // squarely, and a twin peeking out just beside it can still be built)
+    if (best && (!b || best.depth < b.distance + 0.05 || bd < screenDistToBoard(b.object, p) - 1)) return { g: best.g };
+  }
+  return b ? { board: b.object.userData.src } : {};
+}
+function screenDistToBoard(mesh, p) {
+  const rec = towerView.boards.get(mesh.userData.key); if (!rec) return 0;
+  const r = el.view.getBoundingClientRect(), S = (v) => { v3.copy(v).project(camera); return { x: (v3.x + 1) / 2 * r.width, y: (1 - v3.y) / 2 * r.height }; };
+  return distToSeg(p, S(rec.a), S(rec.b));
+}
+// what a tap with nothing in hand lands on: a glowing twin (built), a grey one (the miller says why), or a nailed
+// board (picked out)
+let lastTwinTap = { t: 0, x: 0, y: 0, g: null };
+app.tapAt = (cx, cy) => {
   if (app.phase !== 'build') return;
-  const r = el.view.getBoundingClientRect(); ndc.set((cx - r.left) / r.width * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
-  ray.setFromCamera(ndc, camera);
-  const hit = ray.intersectObjects(towerView.meshes(), false)[0];
-  app.select(hit ? hit.object.userData.src : null);
+  // a quick second tap on the twin just built (the spot it filled): build all the rest
+  if (performance.now() - lastTwinTap.t < 450 && Math.hypot(cx - lastTwinTap.x, cy - lastTwinTap.y) < 40 && lastTwinTap.g) {
+    const r = el.view.getBoundingClientRect(), o = specOnScreen(lastTwinTap.g);
+    if (!o.behind && distToSeg({ x: cx - r.left, y: cy - r.top }, o.A, o.B) < TWIN_REACH) { lastTwinTap.t = 0; confirmAll(); return; }
+  }
+  const pick = pickAt(cx, cy), gh = pick.g;
+  if (gh) {
+    if (gh.ok) { if (confirmGhost(gh)) lastTwinTap = { t: performance.now(), x: cx, y: cy, g: gh }; }
+    else say(gh.reason === 'no wood left' ? 'No wood left for that one. A right answer to my questions earns another board.' : 'That one would have nothing to nail to yet. Put up the posts it hangs on first.', { key: 'grey-' + gh.reason, times: 3, force: true, ms: 5000 });
+    return;
+  }
+  if (!app.held) app.select(pick.board || null);
 };
-$('leave').onclick = () => app.select(null);
 $('pickup').onclick = () => { if (app.selected) pickUp(app.selected); };
 $('undo').onclick = () => { if (app.phase !== 'build') return; if (app.held) { build.putBack(); return; } const last = app.placed[app.placed.length - 1]; if (last) pickUp(last.rec); };
 // take a board down (it goes back to the cut pieces); anything left with nothing holding it up comes down too
@@ -201,22 +335,84 @@ function pickUp(src) {
     loose.forEach(drop);
   }
   for (const len of back) build.returnPiece(len);
+  // (the twins of a board that came down go with it)
+  if (ghosts && ![...t.walls.flat(), ...t.corners.flat()].includes(ghosts.src)) ghosts = null;
   sound.clatter(back[0] || 4, 'set'); app.select(null); rebuild();
 }
 
 function rebuild() {
   towerView.rebuild(app.tower); towerView.nails.visible = true; towerView.highlight(app.selected); towerView.showHead(false);
-  const h = towerHeight(app.tower);
-  $('height').textContent = fmt(h).replace(' ft', '') + ' ft';
-  $('best').textContent = fmt(best).replace(' ft', '') + ' ft';
+  $('height').textContent = fmt(towerHeight(app.tower));
+  $('base').textContent = fmt(app.tower.W);
+  showBest();
+  refreshGhosts();
   app.dirty = true;
+}
+function showBest() { $('best').textContent = fmt(best.height); $('best-base').textContent = best.height && best.width ? 'on ' + fmt(best.width) : ''; }
+
+// ── the twins: glowing boards in the matching spots on the other walls ─────────────────────────────────────────────
+// Made when a board is nailed by hand (a new board's twins replace the last one's). Each is checked again whenever the
+// tower or the lumber changes: built already (gone), nothing to nail it to yet or no wood for it (grey, with the
+// reason). They fade away if left alone a while.
+let ghosts = null;     // { src (the board nailed), where (its corner or wall), list, born }
+const GHOST_STAY = 16000, GHOST_FADE = 5000;
+function makeGhosts(rec, spec) {
+  const where = spec.kind === 'post' ? { corner: spec.corner } : { face: spec.face };
+  ghosts = { src: rec, where, list: twinsOf(app.tower, rec, where), born: performance.now() };
+}
+function twinHolds(t, g) {
+  const segs = [];
+  let me;
+  if (g.kind === 'post') {
+    if (g.y < TOL) return true;
+    me = { ax: 0, ay: g.y, bx: 0, by: g.y + g.len, len: g.len };
+    for (const f of [g.corner, (g.corner + 3) % 4]) for (const s of faceSegments(t, f)) segs.push(f === g.corner ? s : { ...s, ax: s.ax - t.W, bx: s.bx - t.W });
+  } else {
+    me = { ...ends(g), len: g.len };
+    if (Math.min(me.ay, me.by) < TOL) return true;
+    segs.push(...faceSegments(t, g.face));
+  }
+  return segs.some((s) => touch(me, s).length > 0);
+}
+function refreshGhosts() {
+  if (!ghosts) { towerView.setGhosts([], app.tower.W); return; }
+  const t = app.tower;
+  ghosts.list = ghosts.list.filter((g) => !spotTaken(t, g));
+  for (const g of ghosts.list) {
+    const holds = twinHolds(t, g), wood = build.woodFor(g.len);
+    g.ok = holds && !!wood; g.reason = !holds ? 'nothing to nail to' : !wood ? 'no wood left' : '';
+  }
+  if (!ghosts.list.length) ghosts = null;
+  towerView.setGhosts(ghosts ? ghosts.list : [], t.W);
+}
+app.ghostList = () => (ghosts ? ghosts.list : []);
+// build one twin: wood from the stack (a matching cut piece, else a fresh board sawn to length), hammered in
+function confirmGhost(g, delay = 0) {
+  if (!g || !g.ok || !ghosts) return false;
+  const paid = build.payFor(g.len); if (!paid) { refreshGhosts(); return false; }
+  addBoard(g);
+  const nails = g.kind === 'wall' ? 2 : 1;
+  setTimeout(() => sound.hammer(nails), delay + (paid.cut ? 900 : 0));
+  ghosts.born = performance.now(); said.twinsBuilt = (said.twinsBuilt || 0) + 1;
+  rebuild();
+  if (!said.twinTip && app.placed.length >= 2) { said.twinTip = 1; setTimeout(() => say('Every board comes off your stack, twins too. Count your wood before you build them all.', { key: 'twin-wood', times: 1 }), 1500); }
+  return true;
+}
+function confirmAll() {
+  let n = 0;
+  for (let guard = 0; guard < 8 && ghosts; guard++) {
+    const g = ghosts.list.find((q) => q.ok); if (!g) break;
+    confirmGhost(g, n * 450); n++;
+  }
+  return n;
 }
 
 // ── the miller's advice: friendly, now and then, never twice in a row the same ───────────────────────────────────
 const said = {}; let sayTimer = null, lastSay = 0;
 function say(text, { key = text, times = 2, force = false, ms = 7000 } = {}) {
+  // (each line at most `times` times; force: say it now, even if the miller spoke a moment ago)
   const now = performance.now();
-  if (!force && ((said[key] || 0) >= times || now - lastSay < 5000)) return false;
+  if ((said[key] || 0) >= times || (!force && now - lastSay < 5000)) return false;
   said[key] = (said[key] || 0) + 1; lastSay = now;
   $('say-text').textContent = text; $('say').hidden = false;
   clearTimeout(sayTimer); sayTimer = setTimeout(() => { $('say').hidden = true; }, ms);
@@ -231,41 +427,98 @@ function gesture(name, ms = 1700) {
   clearTimeout(gestureTimer); gestureTimer = setTimeout(() => { if (miller && !miller.walking) miller.play('Idle', { fade: 0.4 }); }, ms);
   return ok;
 }
-function hasDiagonal(segs) { return segs.some((s) => !s.post && Math.abs(Math.abs(Math.atan2(s.by - s.ay, s.bx - s.ax)) % Math.PI - Math.PI / 2) < 1.35 && !isLevel(s) && !isUpright(s)); }
+// "a" or "an" before a length said aloud ("an 8½ ft brace", "an 11 ft board")
+const an = (s) => (/^(8|11|18)(\D|$)/.test(s) ? 'an ' : 'a ') + s;
 const angDeg = (s) => { let a = Math.abs(Math.atan2(s.by - s.ay, s.bx - s.ax)) / DEG; if (a > 90) a = 180 - a; return a; };
 const isLevel = (s) => angDeg(s) < 3, isUpright = (s) => angDeg(s) > 87;
+const hasDiagonal = (segs) => segs.some((s) => !s.post && !isLevel(s) && !isUpright(s));
+// a bubble of help at the foot of the view when nothing else is going on
+app.idleHint = () => {
+  const ok = ghosts ? ghosts.list.filter((g) => g.ok) : [];
+  if (ok.length) {
+    // can any of them be seen? (square on to a wall, the twin behind the board just nailed and the ones on the side
+    // walls, seen edge on, hardly show)
+    const r = el.view.getBoundingClientRect(), w = ghosts.where;
+    const src = specOnScreen(w.corner !== undefined ? { kind: 'post', corner: w.corner, y: ghosts.src.y, len: ghosts.src.len } : { kind: 'wall', face: w.face, x: ghosts.src.x, y: ghosts.src.y, ang: ghosts.src.ang, len: ghosts.src.len });
+    const seen = ok.some((g) => {
+      const o = specOnScreen(g), mx = (o.A.x + o.B.x) / 2, my = (o.A.y + o.B.y) / 2;
+      if (o.behind || mx < 0 || mx > r.width || my < 50 || my > r.height) return false;
+      if (Math.hypot(o.B.x - o.A.x, o.B.y - o.A.y) < 18) return false;
+      return !(distToSeg(o.A, src.A, src.B) < 8 && distToSeg(o.B, src.A, src.B) < 8);
+    });
+    if (!seen) return `${ok.length === 1 ? 'Its twin glows' : `${ok.length} twins glow`} on the other walls: drag sideways to walk round and tap them`;
+    if ((said.twinsBuilt || 0) < 3) return 'Tap a glowing twin to build it · double-tap builds them all';
+  }
+  if (!app.orbited && boardCount(app.tower) > 0) return 'Drag to walk round the tower and climb it';
+  return '';
+};
 
 let sinceQuestion = 3, questionsAsked = 0;
-function afterNail(rec, k, isPost) {
+function afterNail(rec, spec, first) {
+  const k = spec.kind === 'wall' ? spec.face : app.face, isPost = spec.kind === 'post';
   const segs = faceSegments(app.tower, k), me = segs.find((s) => s.src === rec);
-  const n = app.placed.length, H = towerHeight(app.tower);
-  // a question about a triangle this board just made?
+  const n = app.placed.length, H = towerHeight(app.tower), W = app.tower.W;
+  const forced = params.has('askall');
   sinceQuestion++;
+  const chance = questionsAsked === 0 ? 0.7 : sinceQuestion >= 5 ? 0.9 : 0.35;
+  const askNow = () => forced || (sinceQuestion >= 2 && Math.random() < chance);
+  // a crosspiece that closes a bay: how long a brace would reach corner to corner?
+  const bay = me && !isPost && isLevel(me) ? bayUnder(segs, me, W) : null;
+  if (bay && askNow()) {
+    const q = bayQuestion(W, bay.h, bay.y0);
+    if (q) { setTimeout(() => ask(q), 450); sinceQuestion = 0; questionsAsked++; return; }
+  }
+  // a question about a triangle this board just made?
   if (me && !isPost) {
     const tris = trianglesOf(segs, me.id);
-    const chance = questionsAsked === 0 ? 0.7 : sinceQuestion >= 5 ? 0.9 : 0.35;
-    const forced = params.has('askall');
-    if (tris.length && sinceQuestion >= 2 && (forced || Math.random() < chance)) {
+    if (tris.length && askNow()) {
       const q = makeQuestion(tris, me);
       if (q) { setTimeout(() => ask(q), 450); sinceQuestion = 0; questionsAsked++; return; }
     }
   }
   // otherwise, maybe a word from the miller
-  if (n === 1) { if (isPost) say('Good: a post on the corner, straight up. A post wants to be plumb, 90 degrees.', { force: true }); else say('Start with the corner posts, standing straight up. A post wants to be plumb, 90 degrees.', { force: true }); return; }
+  if (first) {
+    say(isPost ? 'Good: a post on the corner, straight up. See the glowing ones? Tap one to put the same post on that corner.' : 'Start with the corner posts, standing straight up. A post wants to be plumb, 90 degrees.', { force: true, ms: 9000 });
+    return;
+  }
   if (!me) return;
-  const a = angDeg(me);
-  if (!isPost && a > 70 && a < 87) { say('That one leans. A post wants to be plumb, 90 degrees, or the weight pushes it over.', { key: 'plumb' }); return; }
-  if (!isLevel(me) && !isUpright(me)) {
+  const a = angDeg(me), slant = !isPost && !isLevel(me) && !isUpright(me);
+  const tris = slant ? trianglesOf(segs, me.id) : [];
+  // a slanting board nailed to both posts, or one closing a triangle, is a brace however steep it is (on a narrow base
+  // the corner-to-corner brace can't be any flatter), not a post that leans
+  const posts = new Set(segs.filter((s) => s.post && touch(me, s).length).map((s) => (s.ax < W / 2 ? 0 : 1)));
+  const isBrace = slant && (posts.size === 2 || tris.length > 0);
+  if (slant && a > 70 && a < 87 && !isBrace) { say('That one leans. A post wants to be plumb, 90 degrees, or the weight pushes it over.', { key: 'plumb' }); return; }
+  if (bay) {
+    const diag = Math.hypot(W, bay.h);
+    if (diag > BOARD_FT + 0.01) { say(`Corner to corner, that bay wants ${an(fmt(diag))} brace: longer than a board. Brace from a post up to the crosspiece, or make the bay shorter.`, { key: 'longbay', times: 2 }); return; }
+  }
+  if (slant) {
+    const others = () => { const bare = [1, 2, 3].map((d) => (k + d) % 4).filter((f) => !hasDiagonal(faceSegments(app.tower, f))); if (bare.length) setTimeout(() => say('Wind blows from every side. Every wall needs its own brace: tap the glowing twins.', { key: 'other' }), 5200); };
     if (isKnee(me)) { say('A knee brace helps some, but its nails take a beating in a big gust. A long brace corner to corner holds better.', { key: 'knee' }); return; }
+    if (!tris.length) { say('That brace makes no triangle: an end stops short of the corner, so the square can still fold. Set its ends right on the corners.', { key: 'notri', times: 3, force: true }); return; }
+    if (a > 60 && isBrace && W < 4) { say('Steep, but on a base this narrow that\'s as good as a brace gets.', { key: 'steepnarrow', times: 1 }); others(); return; }
     if (a < 30 || a > 60) { say(`That brace is at ${Math.round(a)} degrees. Brace it nearer 45 and she'll hold.`, { key: 'steep' }); return; }
     say('Brace it at 45 and she\'ll hold. A triangle can\'t fold.', { key: 'good45', times: 1 });
-    const other = faceSegments(app.tower, (k + 1) % 4);
-    if (!hasDiagonal(other)) setTimeout(() => say('Wind blows from every side. That other wall needs its own brace too.', { key: 'other' }), 5200);
+    others();
     return;
   }
   if (isLevel(me) && !hasDiagonal(segs) && segs.filter((s) => s.post).length >= 2) { say('A square with no brace folds over like a card table in the wind.', { key: 'card', times: 2 }); return; }
   if (H >= 16 && !said.h16) { said.h16 = 1; say('Sixteen feet! Taller than my mill roof.', { key: 'h16', force: true }); return; }
-  if (build && app.lumber.stack === 0 && !app.lumber.bench && app.lumber.pieces.length <= 1) say('That\'s the last of the lumber. Call the wind when you\'re ready.', { key: 'last', times: 1 });
+  if (n >= 3 && !app.orbited) { say('Drag the hillside to walk round the tower, and up and down to climb it.', { key: 'orbit', times: 1 }); return; }
+  if (app.lumber.stack === 0 && !app.lumber.bench && app.lumber.pieces.length <= 1) say('That\'s the last of the lumber. Call the wind when you\'re ready.', { key: 'last', times: 1 });
+}
+// the bay a level board closes: posts on both edges reaching from the floor below (the ground or a crosspiece the
+// full width) up to it. -> { y0, h } or null
+function bayUnder(segs, me, W) {
+  const y = (me.ay + me.by) / 2, lo = Math.min(me.ax, me.bx), hi = Math.max(me.ax, me.bx);
+  if (lo > 0.05 || hi < W - 0.05) return null;
+  let y0 = 0;
+  for (const s of segs) if (s !== me && !s.post && isLevel(s) && Math.min(s.ax, s.bx) < 0.05 && Math.max(s.ax, s.bx) > W - 0.05) { const sy = (s.ay + s.by) / 2; if (sy < y - 0.3 && sy > y0) y0 = sy; }
+  // posts on both edges covering y0..y
+  const covered = (x) => { let top = y0; const ps = segs.filter((s) => s.post && Math.abs(s.ax - x) < 0.05).sort((a, b) => a.ay - b.ay); for (const p of ps) if (p.ay <= top + 0.05 && p.by > top) top = p.by; return top >= y - 0.05; };
+  if (!covered(0) || !covered(W)) return null;
+  return { y0, h: y - y0 };
 }
 
 // ── a math question card ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -273,7 +526,7 @@ function ask(q) {
   if (app.phase !== 'build') return;
   app.phase = 'question';
   const card = $('question');
-  card.innerHTML = `<h2>A triangle!</h2><div class="sub">Get it right and the miller adds a board to your stack.</div>
+  card.innerHTML = `<h2>${q.bay ? 'How long a brace?' : 'A triangle!'}</h2><div class="sub">Get it right and the miller adds a board to your stack.</div>
     ${trianglePic(q)}<p>${q.prompt}</p>
     <div class="choices">${q.choices.map((c) => `<button data-v="${c}">${c}${q.unit === '°' ? '°' : ''}</button>`).join('')}</div>
     <div class="why" hidden></div><div class="row" hidden><button class="btn go" id="q-ok">Back to building</button></div>`;
@@ -285,7 +538,7 @@ function ask(q) {
     const why = card.querySelector('.why'); why.hidden = false;
     if (right) {
       sound.chime(); why.innerHTML = `<b>Right!</b> ${q.why} The miller adds a fresh board to your stack.`;
-      app.lumber.stack++; build.renderPanel();
+      build.giveBoard();
       const f = $('flybonus'); f.hidden = false; f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); setTimeout(() => { f.hidden = true; }, 1300);
     } else {
       b.classList.add('is-wrong'); sound.soft();
@@ -299,10 +552,11 @@ function ask(q) {
 function trianglePic(q) {
   const pts = q.pts, xs = pts.map((p) => p.x), ys = pts.map((p) => p.y);
   const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
-  const s = Math.min(240 / Math.max(0.1, maxX - minX), 130 / Math.max(0.1, maxY - minY));
-  const P = pts.map((p) => ({ x: 40 + (p.x - minX) * s + (240 - (maxX - minX) * s) / 2, y: 160 - (p.y - minY) * s - (130 - (maxY - minY) * s) / 2 - 10 }));
+  // (room all round for the labels pushed out from the sides)
+  const s = Math.min(240 / Math.max(0.1, maxX - minX), 118 / Math.max(0.1, maxY - minY));
+  const P = pts.map((p) => ({ x: 40 + (p.x - minX) * s + (240 - (maxX - minX) * s) / 2, y: 154 - (p.y - minY) * s - (118 - (maxY - minY) * s) / 2 }));
   const cx = (P[0].x + P[1].x + P[2].x) / 3, cy = (P[0].y + P[1].y + P[2].y) / 3;
-  let out = `<svg class="pic" viewBox="0 0 320 175"><polygon points="${P.map((p) => p.x + ',' + p.y).join(' ')}" fill="rgba(210,165,113,.35)" stroke="#6d4b2b" stroke-width="5" stroke-linejoin="round"/>`;
+  let out = `<svg class="pic" viewBox="0 0 320 186"><polygon points="${P.map((p) => p.x + ',' + p.y).join(' ')}" fill="rgba(210,165,113,.35)" stroke="#6d4b2b" stroke-width="5" stroke-linejoin="round"/>`;
   // the sides' labels (side i runs from point i to point i+1), pushed outward from the middle
   q.sideLabels.forEach((l, i) => {
     if (!l) return; const a = P[i], b = P[(i + 1) % 3], mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, dx = mx - cx, dy = my - cy, d = Math.hypot(dx, dy) || 1;
@@ -345,16 +599,30 @@ $('wind').onclick = () => startTest();
 function startTest() {
   if (app.phase !== 'build') return;
   sound.audioOn();
-  if (!towerHeight(app.tower)) { say('Put some boards up first! Corner posts make a good start.', { force: true }); return; }
+  if (!towerHeight(app.tower)) { say('Put some boards up first! Corner posts make a good start.', { force: true, times: 99 }); return; }
   if (app.held) build.putBack();
   app.select(null);
   const result = windTest(app.tower), stands = whatStands(app.tower, result);
   test = { result, stands, i: 0, t: 0, crashing: false };
-  app.phase = 'test'; cam.mode = 'test';
-  // the watching spot: round the corner from the wall you were on, along one of the clear lines between the trees
-  const wantAz = cam.az + 0.65, clear = [0.62, -0.55, 1.58];
-  cam.testAz = clear.map((a) => a + Math.round((wantAz - a) / (Math.PI * 2)) * Math.PI * 2).sort((a, b) => Math.abs(a - wantAz) - Math.abs(b - wantAz))[0];
-  $('say').hidden = true; $('wind').hidden = true; el.heldBar.hidden = true; el.selBar.hidden = true; $('stage').hidden = false;
+  app.phase = 'test'; cam.mode = 'test'; cam.azV = 0; ghosts = null; refreshGhosts();
+  // the watching spot: along one of the clear lines between the trees, as square on to the wind of the stage that
+  // decides it as the lines allow (a tower that tips falls away downwind: side on, its fall shows long, not end on
+  // as a heap), and of those the nearest to round the corner from the wall you were on
+  // (and from the side where downwind is to the left of the screen, so a fall lands clear of the result card, which
+  // sits on the right)
+  const decide = result.failedAt >= 0 ? result.fail : result.stages[result.stages.length - 1].worst;
+  const dX = decide && decide.axis === 'X' ? decide.sign : 0, dZ = decide && decide.axis === 'Z' ? decide.sign : 0;
+  const side = dZ ? Math.PI / 2 : 0;      // (side on to wind along X: looking along Z)
+  const wantAz = cam.az + 0.65, clear = [0.62, -0.55, 1.58, 2.78, -1.85, -0.2];
+  const near = (a) => a + Math.round((wantAz - a) / (Math.PI * 2)) * Math.PI * 2;
+  const score = (a) => (1 - Math.abs(Math.cos(a - side))) * 3 + Math.abs(near(a) - wantAz) * 0.15 + (dX * Math.cos(a) - dZ * Math.sin(a) > 0.3 ? 0.6 : 0);
+  cam.testAz = near(clear.slice().sort((a, b) => score(a) - score(b))[0]);
+  // the miller steps back upwind of the tower, out from under it, on the side nearer the watcher
+  if (decide) {
+    const r = app.tower.W / 2 * FT + 2.4, px = -dZ, pz = dX, toCam = Math.sign(px * Math.sin(cam.testAz) + pz * Math.cos(cam.testAz)) || 1;
+    millerTarget = new THREE.Vector3(-dX * r + px * toCam * 1.6, 0, -dZ * r + pz * toCam * 1.6);
+  }
+  $('say').hidden = true; $('wind').hidden = true; el.selBar.hidden = true; $('stage').hidden = false;
   beginStage(0);
 }
 function caseOf(i) { const r = test.result; return i === r.failedAt ? r.fail : r.stages[i].worst; }
@@ -368,6 +636,8 @@ function beginStage(i) {
   // the sway of each floor (feet, from the calculation), drawn larger so the eye can see it
   const levels = (c.levels || [{ y: 0, ux: 0 }]).map((l) => ({ y: l.y, d: Math.abs(l.ux) }));
   test.profile = levels;
+  // (a tower going over on its stones leans as one piece, more the higher up)
+  test.tipping = i === test.result.failedAt && c.worst && c.worst.type === 'tip';
 }
 function swayAt(y, gain) {
   const L = test.profile; let d = 0;
@@ -376,6 +646,7 @@ function swayAt(y, gain) {
     else if (y >= L[L.length - 1].y) d = L[L.length - 1].d;
     else for (let i = 1; i < L.length; i++) if (y <= L[i].y) { const u = (y - L[i - 1].y) / Math.max(0.01, L[i].y - L[i - 1].y); d = L[i - 1].d + (L[i].d - L[i - 1].d) * u; break; }
   }
+  if (test.tipping) d = Math.max(d, y * 0.004);
   return new THREE.Vector3().copy(wind.dir).multiplyScalar(Math.min(0.9, d * 7 * FT) * gain);
 }
 function stepTest(dt) {
@@ -414,7 +685,7 @@ function crash(gain) {
   const fallen = new Set(worldBoards(app.tower).map((b) => b.key)), standing = new Set(worldBoards(test.stands.tower).map((b) => b.key));
   for (const k of standing) fallen.delete(k);
   const w = test.result.fail.worst, k = test.result.fail.face ?? 0;
-  const breakAt = faceToWorld(k, w.x ?? W / 2, w.y || 0);
+  const breakAt = faceToWorld(app.tower.W, k, w.x ?? app.tower.W / 2, w.y || 0);
   const sway = (y) => swayAt(y, gain);
   towerView.setSway(null); towerView.nails.visible = false;
   fall.start({ tower: app.tower, view: towerView, falling: fallen, windDir: wind.dir.clone(), sway, breakAt });
@@ -425,26 +696,31 @@ function crash(gain) {
 function finishTest() {
   app.phase = 'result'; wind.level = 0.1; sound.setWind(0.1);
   $('stage').hidden = true;
-  const r = test.result, h = test.stands.height, stood = r.failedAt < 0;
+  const r = test.result, h = test.stands.height, stood = r.failedAt < 0, W = app.tower.W;
   if (stood) towerView.setSway(null);
   const sacks = flourFor(h);
-  const newBest = h > best;
-  if (newBest) { best = h; try { localStorage.setItem('bm-windmill-best', JSON.stringify({ height: best, at: Date.now() })); } catch (e) { /* storage blocked: the record lasts this visit */ } }
-  $('best').textContent = fmt(best).replace(' ft', '') + ' ft';
-  if (stood && h >= TARGET_FT) towerView.showHead(true, h, Math.atan2(camera.position.x, camera.position.z));   // (sails turned to face us)
+  const newBest = h > best.height;
+  if (newBest) { best = { height: h, width: W }; try { localStorage.setItem('bm-windmill-best', JSON.stringify({ height: h, width: W, at: Date.now() })); } catch (e) { /* storage blocked: the record lasts this visit */ } }
+  showBest();
+  if (stood && h >= TARGET_FT) towerView.showHead(true, h, Math.atan2(camera.position.x, camera.position.z), W);   // (sails turned to face us)
   const st = r.failedAt >= 0 ? STAGES[r.failedAt] : null, c = r.fail;
   const title = stood ? (h >= TARGET_FT ? 'She stood! Sails up!' : 'She stood!') : h > 0 ? 'The top came down' : 'Down she came!';
   const why = stood ? 'Through the breeze and every gust, from all four sides.'
     : `In the ${st.name.toLowerCase()} (${st.mph} mph ${COMPASS[c.axis + c.sign]}), ${c.worst.text}.`;
+  const braced = !stood && c.worst.type === 'sway' ? bracesWhereItFolded(c) : null;
   const advice = stood ? (h >= TARGET_FT ? 'Now that\'s a windmill. She\'ll grind flour all summer.' : `Good and stout. Reach ${TARGET_FT} feet and I'll put the sails on her.`)
+    : c.worst.type === 'tip' ? (W >= MAX_W - 1e-6 ? 'She went over in one piece. The stones can\'t go any wider than 8 feet, so build her lower.'
+      : 'Too narrow a base for her height: she went over in one piece. Set the stones wider, or build her lower.')
+    : braced && braced.length && !braced.some((b) => b.closes) ? 'That wall had a brace, but its end stopped short of the corner, so the square could still fold. Set a brace\'s ends right on the corners.'
+    : braced && braced.length && !/knee/.test(c.worst.text) ? 'She had a brace there, but that storey still leaned too far. A second brace crossing the first, or a shorter bay, stiffens her.'
     : c.worst.type === 'sway' && !/knee/.test(c.worst.text) ? 'No brace in that square, so it folded. Put a long brace corner to corner, near 45 degrees, in every wall.'
     : /knee/.test(c.worst.text) ? 'Knee braces help, but a long brace corner to corner holds better.'
     : /butt/.test(c.worst.text) ? 'Two boards end to end hardly hold. Nail a crosspiece or a brace over the joint.'
     : 'Something gave. Braces near 45 degrees spread the load best.';
   const card = $('result'); card.classList.add('is-side');
   card.innerHTML = `<h2>${title}</h2><p class="sub">${why}</p>
-    <div class="stat"><div><small>Left standing</small><div class="big">${fmt(h)}</div></div><div><small>Best</small><div class="big">${fmt(best)}</div></div></div>
-    <div class="sacks">${SACK}<div><b>The miller pays ${sacks} sack${sacks === 1 ? '' : 's'} of flour</b><br><small>${newBest && h > 0 ? 'A new best height!' : 'A sack for every foot left standing' + (h >= TARGET_FT ? ', and five more for the sails' : '')}</small></div></div>
+    <div class="stat"><div><small>Left standing</small><div class="big">${fmt(h)}</div></div><div><small>Base</small><div class="big">${fmt(W)}</div></div><div><small>Best</small><div class="big">${fmt(best.height)}</div></div></div>
+    <div class="sacks">${SACK}<div><b>The miller pays ${sacks} sack${sacks === 1 ? '' : 's'} of flour</b><br><small>${newBest && h > 0 ? `A new best height, with the stones ${fmt(W)} apart!` : 'A sack for every foot left standing' + (h >= TARGET_FT ? ', and five more for the sails' : '')}</small></div></div>
     <p class="miller">"${advice}"</p>
     <div class="row">${stood ? '<button class="btn" id="r-fresh">Start fresh</button><button class="btn go" id="r-keep">Keep building</button>' : '<button class="btn go" id="r-again">Try again</button>'}</div>`;
   card.hidden = false;
@@ -452,6 +728,14 @@ function finishTest() {
   if (again) again.onclick = () => { card.hidden = true; millerBeat(advice); };
   if (fresh) fresh.onclick = () => { card.hidden = true; millerBeat('Fresh lumber\'s on the sawhorses.'); };
   if (keep) keep.onclick = () => { card.hidden = true; backToBuild(); };
+}
+// the long braces on the wall that gave, in and just below the storey that leaned too far (a brace whose top stops
+// short of the crosspiece leaves the bit above it to fold), and whether each closes a triangle
+function bracesWhereItFolded(c) {
+  const segs = faceSegments(app.tower, c.face ?? 0), y0 = c.worst.y || 0;
+  const above = (c.levels || []).map((l) => l.y).filter((y) => y > y0 + 0.3).sort((a, b) => a - b)[0] ?? y0 + 8;
+  return segs.filter((s) => !s.post && !isLevel(s) && !isUpright(s) && s.len > 4.01 && Math.min(s.ay, s.by) < above - 0.3 && Math.max(s.ay, s.by) > y0 - 8)
+    .map((s) => ({ s, closes: trianglesOf(segs, s.id).length > 0 }));
 }
 function flourFor(h) { return Math.floor(h + 1e-6) + (h >= TARGET_FT ? 5 : 0); }
 const SACK = '<svg viewBox="0 0 32 32"><path d="M9 6c2 2 12 2 14 0l-1 4c4 3 6 9 5 15-1 4-5 5-11 5S6 29 5 25c-1-6 1-12 5-15z" fill="#efe6d0" stroke="#7a5530" stroke-width="1.5"/><path d="M10 10c3 1 9 1 12 0" stroke="#7a5530" stroke-width="1.5" fill="none"/><text x="16" y="23" text-anchor="middle" font-size="7" font-family="Smokum, Georgia, serif" fill="#7a5530">FLOUR</text></svg>';
@@ -464,37 +748,29 @@ function millerBeat(line) {
   gesture('Wave', 2000) || gesture('Interact');
   setTimeout(() => {
     fall.clear(towerView);
-    resetAll(app.tower.mode);
+    resetAll();
   }, 700);
   setTimeout(() => { $('say').hidden = true; backToBuild(); }, 1900);
 }
 function backToBuild() {
-  app.phase = 'build'; cam.mode = 'face'; cam.az = Math.atan2(cam.pos.x, cam.pos.z); towerView.showHead(false); towerView.setSway(null);
+  app.phase = 'build'; cam.mode = 'face'; cam.az = Math.atan2(cam.pos.x, cam.pos.z); cam.azV = 0; towerView.showHead(false); towerView.setSway(null);
   $('wind').hidden = false; wind.level = 0.06; wind.dir.set(1, 0, 0.2).normalize(); test = null; app.dirty = true;
+  walkMiller();
 }
-function resetAll(mode) {
-  app.tower = newTower(mode); app.placed = []; app.held = null; app.selected = null;
-  build.freshStack(mode === 'four' ? BOARDS * 2 : BOARDS);
-  app.face = 0; cam.azT = Math.round(cam.az / (Math.PI * 2)) * Math.PI * 2; cam.yT = 6;
+// a cleared yard and a fresh stack; the stones stay where they were set
+function resetAll(w = app.tower.W) {
+  app.tower = newTower(w); app.placed = []; app.held = null; app.selected = null; ghosts = null;
+  world.setStones(w); cam.d = fitDistance();
+  build.freshStack(BOARDS);
+  cam.squareT = azOf(app.face) + Math.round((cam.az - azOf(app.face)) / (Math.PI * 2)) * Math.PI * 2; cam.yT = 4; cam.follow = true;
   showFaceName(); rebuild(); walkMiller(); sinceQuestion = 3;
 }
-$('mode').onclick = () => {
-  if (app.phase !== 'build') return;
-  const next = app.tower.mode === 'mirror' ? 'four' : 'mirror';
-  const go = () => { resetAll(next); $('mode').textContent = next === 'mirror' ? 'Mirror walls' : 'All four walls'; say(next === 'four' ? 'All four walls on their own, then. Twice the lumber, twice the work.' : 'Back to two walls: the far ones mirror them.', { force: true }); };
-  if (!towerHeight(app.tower)) { go(); return; }
-  const card = $('result'); card.classList.remove('is-side');
-  card.innerHTML = `<h2>Start over?</h2><p>${next === 'four' ? 'Build all four walls on their own (with twice the lumber)?' : 'Build two walls and mirror them?'} This takes the tower down.</p><div class="row"><button class="btn" id="m-no">Keep this tower</button><button class="btn go" id="m-yes">Start over</button></div>`;
-  card.hidden = false; app.phase = 'confirm';
-  $('m-no').onclick = () => { card.hidden = true; app.phase = 'build'; };
-  $('m-yes').onclick = () => { card.hidden = true; app.phase = 'build'; go(); };
-};
 
 // ── the miller walks round to stand by whichever wall you are building ──────────────────────────────────────────────
 let millerTarget = null;
 function millerSpot(k) {
-  const n = FACE_NORMAL[k], t = [[1, 0], [0, -1], [-1, 0], [0, 1]][k];
-  return new THREE.Vector3(n[0] * 0.9 + t[0] * 2.3, 0, n[1] * 0.9 + t[1] * 2.3);
+  const n = FACE_NORMAL[k], t = [[1, 0], [0, -1], [-1, 0], [0, 1]][k], side = app.tower.W / 2 * FT + 1.4;
+  return new THREE.Vector3(n[0] * 0.9 + t[0] * side, 0, n[1] * 0.9 + t[1] * side);
 }
 function walkMiller() { millerTarget = millerSpot(app.face); }
 function updateMiller(dt) {
@@ -534,13 +810,19 @@ function loop() {
     sound.setWind(wind.level);
   }
   if (app.phase === 'result' && fall.running) { const ev = fall.update(dt, wind.dir); soundEvents(ev); }
+  // the twins fade away if left alone
+  if (ghosts) {
+    const age = performance.now() - ghosts.born, f = age < GHOST_STAY ? 1 : 1 - (age - GHOST_STAY) / GHOST_FADE;
+    if (f <= 0) { ghosts = null; refreshGhosts(); } else towerView.fadeGhosts(f);
+  }
   world.update(dt, cam.look, camera.position);
   updateCamera(dt);
   updateMiller(dt);
   towerView.update(dt, wind.level);
-  if (app.held && app.phase === 'build') towerView.showHeld(app.face, app.held.x, app.held.y, app.held.ang, app.held.len, postSide(app.held) !== null);
+  if (app.held && app.phase === 'build') towerView.showHeld(app.tower.W, app.face, app.held.x, app.held.y, app.held.ang, app.held.len, postSide(app.held, app.tower.W) !== null);
   else towerView.showHeld(null);
   build.frame();
+  $('face-name').hidden = app.phase !== 'build';
   // the sun's shadow box follows the camera's target
   world.sun.position.set(cam.look.x - 0.55 * 40, 0.62 * 40, cam.look.z + 0.56 * 40); world.sun.target.position.copy(cam.look); world.sun.target.position.y = 0;
   renderer.render(scene, camera);
@@ -550,14 +832,15 @@ function loop() {
 // ── keys ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
 addEventListener('keydown', (e) => {
   if (app.phase !== 'build') return;
-  if (e.key === 'ArrowLeft') app.turn(-1);
-  else if (e.key === 'ArrowRight') app.turn(1);
-  else if (e.key === 'ArrowUp') cam.yT = Math.min(towerHeight(app.tower) + 12, cam.yT + 2);
-  else if (e.key === 'ArrowDown') cam.yT = Math.max(5, cam.yT - 2);
+  const quarter = (d) => { const base = cam.squareT ?? (azOf(app.face) + Math.round((cam.az - azOf(app.face)) / (Math.PI * 2)) * Math.PI * 2); cam.squareT = base + d * Math.PI / 2; cam.azV = 0; };
+  if (e.key === 'ArrowLeft') quarter(-1);
+  else if (e.key === 'ArrowRight') quarter(1);
+  else if (e.key === 'ArrowUp') { cam.yT = Math.min(topY(), cam.yT + 2); cam.follow = false; }
+  else if (e.key === 'ArrowDown') { cam.yT = Math.max(3, cam.yT - 2); cam.follow = false; }
   else if (e.key === 'Escape') { if (app.held) build.putBack(); else app.select(null); }
   else if (e.key === 'Enter' && app.held) el.nailBtn.click();
   else if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey)) $('undo').click();
-  else if (e.key === 'r' || e.key === 'R') el.turnBtn.click();
+  else if (e.key === 'r' || e.key === 'R') build.turnHeld();
 });
 addEventListener('pointerdown', () => sound.audioOn(), { capture: true });
 // the sound control in the top bar: tap the speaker to mute, slide for volume
@@ -574,25 +857,41 @@ addEventListener('pointerdown', () => sound.audioOn(), { capture: true });
 addEventListener('resize', resize);
 resize();
 build.freshStack(BOARDS);
+world.setStones(app.tower.W);
 showFaceName(); rebuild();
-cam.az = cam.azT = 0; cam.pos.set(0, 4, cam.d + 6);
+cam.az = 0; cam.pos.set(0, 4, cam.d + 6);
 loop();
 world.treeLoad.then(() => { $('loading').classList.add('is-done'); });
 setTimeout(() => $('loading').classList.add('is-done'), 6000);
 makeMiller(scene).then((m) => {
   miller = m; miller.root.position.copy(millerSpot(0)); walkMiller();
-  setTimeout(() => say('Howdy! Build me a windmill tower, tall as you can. Cut a board on the left and drag the pieces up onto the tower.', { force: true, ms: 9000 }), 900);
+  setTimeout(() => {
+    if (!stonesOpen()) return;
+    say('Howdy! First, the footing stones: drag one in or out. A wide base stands steadier once she\'s braced, but every crossbar and brace costs more wood.', { force: true, ms: 10000 });
+    setTimeout(() => { if (stonesOpen() && !app.held) say('When the stones suit you, cut a board on the left and drag it up onto a corner.', { key: 'start2', times: 1, force: true, ms: 9000 }); }, 10500);
+  }, 900);
 });
 
 // ── a handle for test scripts ────────────────────────────────────────────────────────────────────────────────────────
-// WM.add(face, x, y, angleDegrees, length) nails a board as if dragged there (same snapping, same questions)
+// WM.add(face, x, y, angleDegrees, length) nails a board as if dragged there (same snapping, same questions, same
+// twins); WM.setWidth(w) sets the stones (only while nothing is built); WM.ghosts() lists the twins on show;
+// WM.confirm(i) builds twin i as a tap would.
 window.WM = {
   app, camera, renderer, scene, wind, cam, test: () => test, build, startTest, towerView, fall,
   add(face, x, y, angDeg, len) {
-    if (app.face !== face) { app.face = face; cam.azT = azOf(face) + Math.round((cam.azT - azOf(face)) / (Math.PI * 2)) * Math.PI * 2; showFaceName(); }
+    if (app.face !== face) { app.face = face; cam.az = azOf(face) + Math.round((cam.az - azOf(face)) / (Math.PI * 2)) * Math.PI * 2; cam.squareT = null; showFaceName(); }
     app.held = { piece: { id: 'dev', len }, len, x, y, ang: angDeg * DEG }; app.nail();
   },
-  state: () => ({ phase: app.phase, face: app.face, height: towerHeight(app.tower), boards: worldBoards(app.tower).length, lumber: { stack: app.lumber.stack, bench: app.lumber.bench && app.lumber.bench.len, pieces: app.lumber.pieces.map((p) => p.len) }, held: app.held && { x: app.held.x, y: app.held.y, ang: app.held.ang / DEG, len: app.held.len }, best, fps, question: !$('question').hidden ? $('question').innerText : null, result: !$('result').hidden ? $('result').innerText : null, falling: fall.sticks.length }),
+  setWidth: (w) => app.setWidth(w),
+  ghosts: () => app.ghostList().map((g) => ({ kind: g.kind, face: g.face, corner: g.corner, x: g.x, y: g.y, ang: g.ang, len: g.len, ok: g.ok, reason: g.reason })),
+  confirm: (i) => confirmGhost(app.ghostList()[i]),
+  confirmAll,
+  turnTo: (face) => { cam.squareT = azOf(face) + Math.round((cam.az - azOf(face)) / (Math.PI * 2)) * Math.PI * 2; },
+  state: () => ({ phase: app.phase, face: app.face, W: app.tower.W, height: towerHeight(app.tower), boards: boardCount(app.tower), az: cam.az, camY: cam.y, zoom: cam.zoom, stonesOpen: stonesOpen(),
+    full: build.fullCount(), lumber: { stack: app.lumber.stack, bench: app.lumber.bench && app.lumber.bench.len, pieces: app.lumber.pieces.map((p) => +p.len.toFixed(3)) },
+    held: app.held && { x: app.held.x, y: app.held.y, ang: app.held.ang / DEG, len: app.held.len }, ghosts: app.ghostList().length, best, fps,
+    question: !$('question').hidden ? $('question').innerText : null, result: !$('result').hidden ? $('result').innerText : null, falling: fall.sticks.length, hint: el.hint.textContent, say: $('say').hidden ? null : $('say-text').textContent }),
   toScreen: (k, x, y) => { const p = app.toScreen(k, x, y), r = el.view.getBoundingClientRect(); return { x: p.x + r.left, y: p.y + r.top }; },
+  worldToScreen: (X, Y, Z) => { const p = app.worldToScreen(X, Y, Z), r = el.view.getBoundingClientRect(); return { x: p.x + r.left, y: p.y + r.top }; },
   resetAll, flourFor, STAGES,
 };
