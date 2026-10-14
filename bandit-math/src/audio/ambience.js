@@ -32,7 +32,7 @@
 //                                                                         also talks, and rarely howls), the pug's small
 //                                                                         woof; the grating bark only rarely
 //   behind the general store                                                sawing and hammering (heard, not seen)
-//   the creek                                                               a murmur, near the running water
+//   the creek                                                               a brook of tiny bubbles, near the running water
 //   the player's horse moving                                               a hoof on the dirt for every hoof that lands
 //                                                                         (walk, trot, gallop), a splash in water
 // (dog_whine, a hurt or frightened dog, isn't shipped: nothing in the game hurts a dog.)
@@ -251,6 +251,30 @@ export function airCut(d) {
 }
 // a burst's calls: [{ who: 0 for the one that starts, 1.. for the ones that answer }], n answers at most (the first
 // always comes; fewer answer more often than many)
+// the creek's sound, made sample by sample into a loop: a babbling brook is not a hiss (that reads as surf) but
+// thousands of tiny bubbles, each a short pure note whose pitch climbs as it rings out (the "plink" of poured water).
+// Mostly small, bright ones (1-4.5 kHz), a few bigger gurgles lower down, and a faint fizz of spray on top. The loop
+// wraps round, so it has no seam. rand is passed in so tests can make the same brook twice.
+export function brookSamples(rate, secs = 7, rand = Math.random) {
+  const n = Math.round(rate * secs), out = new Float32Array(n), TAU = Math.PI * 2;
+  const bubble = (t0, f0, amp, life) => {
+    const len = Math.round(life * rate), rise = 0.25 + rand() * 0.6; let ph = 0;
+    for (let i = 0; i < len; i++) {
+      const u = i / len, f = f0 * (1 + rise * u), env = Math.min(1, i / (0.0008 * rate)) * Math.exp(-5 * u);
+      ph += TAU * f / rate; out[(t0 + i) % n] += Math.sin(ph) * amp * env;
+    }
+  };
+  for (let k = 0, m = Math.round(secs * 70); k < m; k++)   // small bright bubbles: the crisp poured-water sound
+    bubble(Math.floor(rand() * n), 1000 + Math.pow(rand(), 1.6) * 3500, 0.06 + Math.pow(rand(), 3) * 0.3, 0.012 + rand() * 0.03);
+  for (let k = 0, m = Math.round(secs * 6); k < m; k++)    // a few bigger gurgles
+    bubble(Math.floor(rand() * n), 320 + rand() * 500, 0.1 + rand() * 0.2, 0.04 + rand() * 0.05);
+  let prev = 0;                                             // the fizz: white noise with its lows taken off, very quiet
+  for (let i = 0; i < n; i++) { const w = rand() * 2 - 1; out[i] += (w - prev) * 0.012; prev = w; }
+  let pk = 0; for (let i = 0; i < n; i++) pk = Math.max(pk, Math.abs(out[i]));
+  for (let i = 0; i < n; i++) out[i] *= 0.6 / (pk || 1);
+  return out;
+}
+
 export function burstPlan(most, rand = Math.random) {
   const out = [{ who: 0 }];
   let n = 0; while (n < most && rand() < 0.62) n++;
@@ -481,6 +505,7 @@ export function makeAmbience({ audio, W, tier = W && W.tier, base = GAME }) {
     }
     return { at: best, d: bd, missing };
   }
+  let brook = null;   // (the brook's loop, made once per ride on first need)
   let creek = null, creekG = null, creekP = null, creekT = 0, creekAt = null, creekD = Infinity, dryT = 0;
   function doCreek(dt, at) {
     if (!W || !W.waterAt) return;
@@ -496,7 +521,9 @@ export function makeAmbience({ audio, W, tier = W && W.tier, base = GAME }) {
       creekG = ctx.createGain(); creekG.gain.value = 0;
       const p = ctx.createPanner(); p.panningModel = AMB.panner; p.distanceModel = 'inverse'; p.refDistance = 6; p.rolloffFactor = 1; p.maxDistance = 10000;
       p.connect(bus); creekP = p; creekG.connect(p);
-      creek = playPatch(ctx, null, creekG, null, TOWN_PATCHES['TOWN — CREEK'], null);
+      if (!brook) { const d = brookSamples(ctx.sampleRate); brook = ctx.createBuffer(1, d.length, ctx.sampleRate); brook.copyToChannel(d, 0); }
+      const src = ctx.createBufferSource(); src.buffer = brook; src.loop = true; src.connect(creekG); src.start(ctx.currentTime, Math.random() * brook.duration);
+      creek = { stop: (dt = 0) => { try { src.stop(ctx.currentTime + dt); src.disconnect(); } catch (e) { /* gone */ } } };
     } else if (creek && (dryT > 4 || !audio.running)) {
       const c = creek, g = creekG, p = creekP; creek = creekG = creekP = null;
       g.gain.setTargetAtTime(0, ctx.currentTime, 0.2); setTimeout(() => { c.stop(0.05); try { g.disconnect(); p.disconnect(); } catch (e) { /* gone */ } }, 1500);
