@@ -229,6 +229,24 @@ test('the climb: the first visit climbs fast and forgives one slip, then three c
   assert.equal(makeNumberSense({ step: 99 }).state.step, STEPS.length - 1, 'a broken save is clamped');
 });
 
+test('a card cleared after its number line came up by itself pays but never climbs, and is no slip either', () => {
+  const rng = makeRng(5);
+  const deal = (N) => { let c; do { c = N.card({ rng }); if (c.review) N.finish(c, 0); } while (c.review); return c; };
+  // the first visit: a helped card doesn't climb and isn't the slip that places the rider
+  const st = {}, N = makeNumberSense(st);
+  const r = N.finish(deal(N), 0, { helped: true });
+  assert.deepEqual([r.clean, r.moved, st.step, st.placed, st.misses], [false, 0, 0, false, 0]);
+  N.finish(deal(N), 0); assert.equal(st.step, 1, 'a clean card still climbs after it');
+  // placed: the clean run waits through a helped card (neither counted nor reset)
+  const st2 = { step: 4, placed: true }, M = makeNumberSense(st2);
+  M.finish(deal(M), 0); M.finish(deal(M), 0);
+  M.finish(deal(M), 0, { helped: true });
+  assert.deepEqual([st2.step, st2.clean], [4, 2], 'helped: no climb, the run of 2 waits');
+  M.finish(deal(M), 0); assert.equal(st2.step, 5, 'the third clean card climbs');
+  // a helped card with wrong shots still counts its wrong shots
+  M.newString(); M.finish(deal(M), 2, { helped: true }); assert.equal(st2.step, 4, 'two wrong shots still step down');
+});
+
 test('review cards from lower down come now and then and never move the ladder', () => {
   const rng = makeRng(8), st = { step: 6, placed: true }, N = makeNumberSense(st);
   let reviews = 0;

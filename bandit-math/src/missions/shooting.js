@@ -189,13 +189,19 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
 
   // ── THE VIEW: the rider's eyes at the line, fitted so the shelf fills the room between the card and the bar ──────
   const lookAt = new THREE.Vector3(), eyeQ = new THREE.Quaternion(), dummy = new THREE.Object3D(), fitNow = { fov: null, dx: 0, dy: 0 };
+  // (once the help card has moved the shelf over, it stays over until the card is cleared: a shelf sliding back and
+  // forth as the help comes and goes is a moving target. held: { w, right } for this screen width)
+  let held = null;
   function viewFit() {
     const L = R.layout, eye = L.eye, look = L.look;
     let top = 70, bot = innerHeight - 70, left = 0, right = innerWidth;
     if (ui) {
       top = ui.cardEl.getBoundingClientRect().bottom + 6; bot = ui.barEl.getBoundingClientRect().top - 6;
       // (the help card at the side of a wide screen: the shelf moves over to the room left of it)
-      if (!ui.helpEl.hidden && innerWidth > 760) { const h = ui.helpEl.getBoundingClientRect(); if (h.width && h.top < bot) right = Math.max(innerWidth * 0.55, h.left - 8); }
+      if (!ui.helpEl.hidden && innerWidth > 760) {
+        const h = ui.helpEl.getBoundingClientRect();
+        if (h.width && h.top < bot) { held = { w: innerWidth, right: Math.min(Math.max(innerWidth * 0.55, h.left - 8), held && held.w === innerWidth ? held.right : Infinity) }; right = held.right; }
+      } else if (held && held.w === innerWidth) right = held.right;
     }
     if (innerWidth < innerHeight) bot = Math.min(bot, innerHeight * 0.66);   // (a phone held upright: the help sheet goes under it)
     const bandH = Math.max(140, bot - top), bandMid = (top + bot) / 2, bandW = right - left, d = eye.distanceTo(look);
@@ -284,7 +290,7 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
   function newCard() {
     card = N.card({ rng, recent });
     recent.push(card.key); if (recent.length > 12) recent.shift();
-    gone = new Set(); tried = new Set(); wrong = 0; idle = 0; helped = false; between = false;
+    gone = new Set(); tried = new Set(); wrong = 0; idle = 0; helped = false; between = false; held = null;
     R.setCard(card.targets.map(() => ({ kind: card.what })), { narrow: innerWidth < innerHeight * 0.8 });
     if (!ui) return;
     ui.ruleEl.textContent = card.rule;
@@ -354,6 +360,7 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
     const at = R.hit(i);
     if (T.kind === 'bottle') SND.shatter(at); else SND.clank(at);
     gone.add(i);
+    if (ui) for (const k of rightNow(card, gone)) { const t = ui.tagEls[k]; if (t) t.classList.remove('is-wrong'); }   // (the ones to shoot now never look struck out)
     if (choice) { const rec = recordAnswer(rider, true); if (rec && rec.badge) hud.toast(`You earned the ${rec.badge} badge!`, 'gold'); }
     streak++;
     let gold = SHOOT.pay.target + Math.floor(card.step / SHOOT.pay.every);
@@ -375,7 +382,9 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
     const at = R.ping(i);
     SND.ping(at);
     const el = ui && ui.tagEls[i];
-    if (el) { el.classList.remove('is-shake'); void el.offsetWidth; el.classList.add('is-shake', 'is-wrong'); }
+    // (struck through only when it is wrong for good: on an order card every target is shot in the end, so one shot
+    // out of turn just shakes; a line through it would say "never this one")
+    if (el) { el.classList.remove('is-shake'); void el.offsetWidth; el.classList.add('is-shake'); if (card.kind !== 'order') el.classList.add('is-wrong'); }
     if (!tried.has(i)) {
       tried.add(i); wrong++;
       const rec = recordAnswer(rider, false); if (rec && rec.badge) hud.toast(`You earned the ${rec.badge} badge!`, 'gold');
@@ -391,7 +400,8 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
     ui.el.appendChild(f); setTimeout(() => f.remove(), 1200);
   }
   function cardDone() {
-    const res = N.finish(card, wrong);
+    held = null;   // (the shelf glides back to the middle while the next targets are on their way)
+    const res = N.finish(card, wrong, { helped });   // (cleared after the number line came up by itself: paid, but not a clean card)
     between = true;
     inString++; dots();
     if (res.moved > 0 && res.placed) hud.toast('Nice shooting! Harder numbers next', 'good');   // (the first visit's quick climb says nothing: the card's step shows it)
@@ -515,6 +525,7 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
   J.draw = () => { if (G && (state === 'aim' || state === 'in' || state === 'out')) G.render(renderer); };
 
   J.marks = () => (state === 'idle' ? [{ id: 'range', icon: 'job', x: R.layout.x, z: R.layout.z, label: 'The target range' }] : []);
+  J.speaking = () => !say.hidden;   // (Miss Opal's speech card is on the screen: Old Hob waits his turn on a phone)
   J.tags = () => (card ? R.targets.map((T, i) => { const s = screenOf(T.top), b = screenOf(T.mid); return { n: card.targets[i].n, x: Math.round(b.x), y: Math.round(b.y), tagX: Math.round(s.x), tagY: Math.round(s.y), alive: T.alive, right: rightNow(card, gone).includes(i) }; }) : []);
   J.pick = (n) => { if (!card) return false; const i = card.targets.findIndex((x, k) => x.n === n && R.targets[k].alive); if (i < 0) return false; const b = screenOf(R.targets[i].mid); return fire(b.x, b.y); };
   J.state = () => ({ state, card: card ? { kind: card.kind, rule: card.rule, step: card.step, review: card.review, targets: card.targets.map((x) => x.n), right: rightNow(card, gone).map((i) => card.targets[i].n) } : null,
@@ -589,16 +600,22 @@ export function lineSvg(L, width = 320) {
     if (L.arrow.label) out.push(`<text x="${mid.toFixed(1)}" y="${(y0 - 13 - up).toFixed(1)}" class="nl-arct">${esc(L.arrow.label)}</text>`);
   }
   // the dots, their numbers above (stepped up when two would overlap)
+  const arcUp = L.arrow ? Math.min(30, 12 + Math.abs(X(L.arrow.to) - X(L.arrow.from)) * 0.25) : 0;   // (how high the hop's arc rises)
   const dots = [...(L.dots || [])].sort((p, q) => p.v - q.v);
   let lastX = -1e9, lift = 0;
   for (const d of dots) {
     const x = X(d.v), w = String(d.label || '').length * 7.5;
     lift = x - lastX < w / 2 + 16 ? lift + 1 : 0; lastX = x;
-    const ly = y0 - 15 - lift * 15 - (L.arrow ? 0 : 0);
+    // (the arc never runs through the number where a hop starts: a pick's number goes beside its dot, on the side away
+    // from the hop; a longer one, like "19 + 22 = 41", goes over the top of the arc)
+    const arcFrom = L.arrow && d.v === L.arrow.from && Math.abs(X(L.arrow.to) - x) > 18;
+    const hop = arcFrom && d.kind === 'pick' && !lift ? Math.sign(X(L.arrow.to) - x) : 0;
+    const lx = hop ? Math.max(w / 2 + 1, Math.min(width - w / 2 - 1, x - hop * (w / 2 + 6))) : x;
+    const ly = hop ? y0 - 13 : arcFrom ? Math.min(y0 - 15 - lift * 15, y0 - 14 - arcUp) : y0 - 15 - lift * 15;
     if (d.kind === 'exact') out.push(`<path d="M${x.toFixed(1)} ${y0 - 7} l7 7 l-7 7 l-7 -7z" class="nl-exact"/>`);
     else if (d.kind === 'pick') out.push(`<circle cx="${x.toFixed(1)}" cy="${y0}" r="7" class="nl-pick"/><path d="M${(x - 4).toFixed(1)} ${y0 - 4} l8 8 m0 -8 l-8 8" class="nl-pickx"/>`);
     else out.push(`<circle cx="${x.toFixed(1)}" cy="${y0}" r="${d.kind === 'right' ? 6.5 : 5}" class="nl-dot is-${d.kind}"/>`);
-    if (d.label) out.push(`<text x="${x.toFixed(1)}" y="${ly.toFixed(1)}" class="nl-dott is-${d.kind}">${esc(d.label)}</text>`);
+    if (d.label) out.push(`<text x="${lx.toFixed(1)}" y="${ly.toFixed(1)}" class="nl-dott is-${d.kind}">${esc(d.label)}</text>`);
   }
   return `<svg class="bsr-nl" viewBox="0 0 ${width} ${H}" width="100%" aria-hidden="true">${out.join('')}</svg>`;
 }

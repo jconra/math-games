@@ -180,6 +180,7 @@ test('some lines, word for word', () => {
   assert.equal(K({ shape: 'diff', a: 9, b: 4 }, 6), 'You counted the 9 as a hop. Start at 9 and hop back 4: 8, 7, 6, 5.');
   assert.equal(K({ shape: 'diff', a: 13, b: 5 }, 12), "That did 5 − 3. 3 can't take away 5: go back 3 to 10, then 2 more: 8.");
   assert.equal(K({ shape: 'part', a: 8, r: 5 }, 8), "That's the 8 you started with. 8 − 3 = 5, so 3 were taken.");
+  assert.equal(K({ shape: 'diff', a: 56, b: 47 }, 19), 'You broke a ten into ones, but kept it too: 5 tens became 4. 16 − 7 = 9 ones, and 4 tens − 4 tens = 0 tens: 9.');
 });
 
 test('no guessing rule beats a plain guess by much: where the answer sits among the numbers is random', (t) => {
@@ -320,6 +321,32 @@ test('the saved state is plain JSON and a reload mid-wave carries on; a stale pi
     assert.equal(junk.state.step, 1); assert.equal(junk.state.cur, null);
     assert.ok(junk.wave().card);
   }
+});
+
+test('a card keeps its line for a right pick (the round-up toast), before and after it is answered and after a reload', () => {
+  for (const topic of Object.keys(TOPIC)) {
+    const T = make(topic, 11);
+    for (let step = 1; step <= TOPIC[topic].LADDER.length; step++) {
+      T.setStep(step);
+      let c = T.wave().card, guard = 0;
+      while (c && guard++ < 8) {
+        const want = TOPIC[topic].card(c.parts, { size: 3, rand: seeded(1) }).done;
+        assert.equal(typeof c.done, 'string'); assert.equal(c.done, want, `${topic} ${c.rule}`);
+        assert.equal(T.explain(c, c.answer).line, want, `${topic} ${c.rule}: explain() of the answer is the card's line`);
+        assert.ok(c.done.includes(String(c.answer)), `${topic} ${c.rule}: "${c.done}" names the answer`);
+        const id = c.id, r = T.answer(c.answer, true, id);
+        if (r.waveDone) break;
+        c = r.card;
+      }
+    }
+  }
+  // a wave saved when the line was written over with a number gets its line back
+  const state = {}, T = make('adding', 12, state);
+  T.setStep(3); T.wave();
+  const copy = JSON.parse(JSON.stringify(state));
+  for (const c of copy.cur.cards) { c.done = 0; delete c.got; }
+  const T2 = make('adding', 12, copy), c2 = T2.card();
+  assert.equal(c2.done, Ad.card(c2.parts, { size: 3, rand: seeded(1) }).done);
 });
 
 test('explain() and help(): the picture for the helper, the answer hidden until a pick', () => {

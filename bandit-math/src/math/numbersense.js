@@ -29,7 +29,8 @@
 //                                  dots: [{ v, kind: 'pick' | 'right' | 'other' | 'gone' | 'exact', label }],
 //                                  arrow: { from, to, label } | null, caption }
 //                                hint: the card's line before any pick (a kid stuck for a while): no answer marked
-//   N.finish(card, wrong)     -> { clean, moved, step, placed }   once a card is cleared (wrong: its wrong shots)
+//   N.finish(card, wrong, { helped })  -> { clean, moved, step, placed }   once a card is cleared (wrong: its wrong
+//                                shots; helped: its number line came up by itself before it was cleared)
 //   N.newString()             a new string of cards begins (a step down can come once a string)
 //   N.level()                 -> { step, of, label, line }
 //   numText(n)                -> '−3', '450', '1,050' (the real minus sign)
@@ -396,10 +397,13 @@ export function makeNumberSense(state = {}) {
     return { ...card, step: stepI, id: step.id, what: S.what, review };
   };
 
-  N.finish = (card, wrong = 0) => {
-    const clean = wrong === 0;
+  N.finish = (card, wrong = 0, { helped = false } = {}) => {
+    const clean = wrong === 0 && !helped;
     let moved = 0;
     if (card.review) return { clean, moved, step: S.step, placed: S.placed };
+    // cleared with no wrong shot, but after the number line had shown where the numbers sit: well shot and paid, but
+    // not a clean card, so it neither climbs nor counts as a slip (the clean run waits)
+    if (helped && wrong === 0) return { clean, moved, step: S.step, placed: S.placed };
     if (!S.placed) {
       // the first visit: up a step with each clean card; the second card that isn't clean ends the climb
       if (clean) { if (S.step < STEPS.length - 1) { S.step++; moved = 1; } else S.placed = true; }

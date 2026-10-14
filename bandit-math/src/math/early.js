@@ -278,6 +278,8 @@ export function makeCardTrainer(SPEC, state, opts = {}) {
       const most = Math.max(0, ...S.cur.cards.map((c) => Number(String(c.id || '').split('.')[1]) || 0));
       S.cur.nextId = Math.max(most + 1, Math.floor(num(S.cur.nextId, 0)));
       S.cur.downs = clampInt(num(S.cur.downs, 0), 0, 9);
+      // (a wave saved before `got` had its right-pick line written over with a number: make the line again)
+      for (const c of S.cur.cards) if (typeof c.done !== 'string') { c.got = num(c.done, 0); c.done = SPEC.card(c.parts, { size: c.targets.length, rand: R }).done || ''; }
     }
     return S;
   }
@@ -317,7 +319,8 @@ export function makeCardTrainer(SPEC, state, opts = {}) {
     const c = SPEC.card(p, { size, rand: R, avoid: extra.after });
     const id = extra.into ? `${extra.into.id}.${extra.into.nextId++}` : `${S.waves + 1}.${dealing++}`;
     const { into, after, ...rest } = extra;
-    return { id, ...c, parts: { ...p }, shape: p.shape, rung, back: false, review: false, ...rest, tried: false, done: 0, misses: 0 };
+    // (got: 1 right first time, 2 right later; the card's own `done` is its line for a right pick, so it isn't reused)
+    return { id, ...c, parts: { ...p }, shape: p.shape, rung, back: false, review: false, ...rest, tried: false, got: 0, misses: 0 };
   }
 
   // Can a card with answer `ans` go at `pos` in `list`? Never the same answer on two cards in a row (the card before
@@ -489,7 +492,7 @@ export function makeCardTrainer(SPEC, state, opts = {}) {
     let comeback = null;
 
     if (right) {
-      x.done = first ? 1 : 2;
+      x.got = first ? 1 : 2;
       S.clock++;
       if (first && x.helped) {
         // right, after the helper came up but before any pick: well done and paid, but not a clean card (the streak waits)

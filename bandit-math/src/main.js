@@ -542,7 +542,7 @@ function step(dt) {
     if (DJ) DJ.update(dt);   // (after the player: it places the camera while the viewfinder is up)
     if (SR) SR.update(dt);   // (after the player: it places the camera while the six-shooter is up)
     if (LJ) LJ.update(dt);
-    hob.update(dt, P.position);
+    hob.update(dt, P.position, { hold: !!((JF && JF.speaking()) || (SR && SR.speaking())) });   // (on a phone, Hob waits while a job person is talking)
     if (stage) stage.update(dt, P.position);
     if (traffic) { traffic.keepView = SJ && SJ.active && !P.cam.enabled ? camera : null; traffic.update(dt, P.position, camera.position); }   // (no wagon through the store counter's picture)
     townSounds(dt, false);

@@ -173,7 +173,13 @@ export function whyNot(c, picked) {
         ? `That did ${ob} ${MINUS} ${oa}. ${oa} can't take away ${ob}: go back ${oa} to 10, then ${ob - oa} more: ${r}.`
         : `That did ${ob} ${MINUS} ${oa}. ${oa} can't take away ${ob}, so break a ten: ${10 + oa} ${MINUS} ${ob} = ${10 + oa - ob}, and ${sum}.`;
       break;
-    case 'noBorrow': line = `You broke a ten for the ones, but kept it too. ${10 + oa} ${MINUS} ${ob} = ${10 + oa - ob}, and one ten fewer: ${r}.`; break;
+    case 'noBorrow': {
+      // (where the tens went: one was broken into ones, so there's one ten fewer to take the tens from)
+      const ta = Math.floor(a / 10), tb = Math.floor(b / 10), left = ta - 1 - tb, tens = (n) => `${n} ten${n === 1 ? '' : 's'}`;
+      line = `You broke a ten into ones, but kept it too: ${tens(ta)} became ${ta - 1}. ${10 + oa} ${MINUS} ${ob} = ${10 + oa - ob} ones, and `
+        + (tb ? `${tens(ta - 1)} ${MINUS} ${tens(tb)} = ${tens(left)}` : left ? `${tens(left)} ${left === 1 ? 'is' : 'are'} left` : 'no tens are left') + `: ${r}.`;
+      break;
+    }
     case 'place': line = `The ${b / 10} tens came off the ones. ${b} is ${b / 10} tens: ${sum}.`; break;
     case 'zeros': line = `${a / 10} tens take away ${b / 10} tens is ${r / 10} tens: ${r}, not ${r / 10}.`; break;
     case 'half': line = `That only took away the ${b - ob}. Take the ${ob} too: ${sum}.`; break;

@@ -37,10 +37,12 @@
 //                         pictures all taken), 'deerStop' ("Done for now"); 'ride' with data.deer: the job is on
 //                         Loot the gang (missions/loot.js): 'lootGuard' (the cache's guard roped), 'lootFled' (he ran),
 //                         'lootLoaded', 'lootNoSaddle', 'lootShare' (the slip at the sheriff's office), 'lootMiss',
+//                         'lootRight' (a right coin: a 'pick again' line still up or waiting is dropped),
 //                         'lootDone' (data.trips), 'lootWord' (data.place: the next cache); 'ride' with data.loot: the job is on
 //   B.say(text)           says a line now (or after the line he is saying)
 //   B.trail(on)           the hoofprints to the pasture on or off (they fade in and out)
-//   B.update(dt, at)      each frame: at = the player's position (the trail fades away once they reach the herd)
+//   B.update(dt, at, { hold })   each frame: at = the player's position (the trail fades away once they reach the herd);
+//                         hold: a job person's speech card is up (on a narrow screen Hob then waits his turn)
 //   B.dispose()
 import * as THREE from 'three';
 import { saveRider } from './save.js';
@@ -163,7 +165,7 @@ const JOB = { arrive: 'roundup', catch: 'roundup', miss: 'roundup', farmArrive: 
   storeMiss: 'store', storeEquation: 'store', storeDone: 'store', deliveryWork: 'delivery', deliveryMiss: 'delivery', deliveryRight: 'delivery',
   deliveryRoundUp: 'delivery', animal: 'home', goodsCollected: 'home', goodsSold: 'store', wagonArrive: 'wagon', banditCatch: 'wagon', banditMiss: 'wagon', banditLoop: 'wagon', banditsDone: 'wagon',
   deerArrive: 'deer', deerSpooked: 'deer', deerSetup: 'deer', deerFlip: 'deer', deerRight: 'deer', deerWrong: 'deer', deerDone: 'deer',
-  lootShare: 'loot', lootMiss: 'loot', lootGuard: 'loot', lootFled: 'loot' };
+  lootShare: 'loot', lootMiss: 'loot', lootRight: 'loot', lootGuard: 'loot', lootFled: 'loot' };
 const KEEP_JOB = 5;
 const NEAR_AGAIN = 180;  // seconds before Hob says something about the same place again (walking past again and again doesn't set him off each time)
 
@@ -183,14 +185,16 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
   let lootN = 0;                  // ('lootDone': which line said last)
   const nearAt = {}, nearN = {};   // ('near': when each place was last remarked on, and which line it said)
   let speaking = 0, now = 0;
-  let saying = null;               // the line on screen: { text, key } (key = the event it came from)
+  let saying = null;               // the line on screen: { text, ms, key, urgent } (key = the event it came from)
+  let hold = false;                // (a narrow screen with a job person's speech card up: Hob waits his turn, see B.update)
   let key = null;                  // (the event being handled, so the line it says remembers where it came from)
   const B = {};
-  B.say = (text, ms) => {
+  // (urgent: the why of a pick just made, said even while Hob is waiting his turn)
+  B.say = (text, ms, { urgent = false } = {}) => {
     if (!text) return;
-    if (speaking > 0) { if (!queue.some((q) => q.text === text)) queue.push({ text, ms, key, at: now }); return; }
+    if (speaking > 0 || (hold && !urgent)) { if (!queue.some((q) => q.text === text)) queue.push({ text, ms, key, at: now }); return; }
     const t = ms || Math.max(4500, 1800 + text.length * 55);
-    hud.caption(text, t); speaking = t / 1000 + 0.4; saying = { text, key };
+    hud.caption(text, t); speaking = t / 1000 + 0.4; saying = { text, ms, key, urgent };
     if (voice) voice.speak(text, { key });
   };
   // a moment has passed: drop those lines, whether waiting or on screen
@@ -241,12 +245,12 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
       case 'sheepHealed': drop('sheepWrong', 'sheepFine'); if (once('sheepHealed')) B.say(LINES.sheepHealed); break;
       case 'sheepWrong': if (once('sheepWrong')) B.say(LINES.sheepWrong); break;
       // (said at once, over anything he was saying: said later it would seem to be about some other sheep)
-      case 'sheepFine': queue.length = 0; speaking = 0; B.say(LINES.sheepFine[(fineN++) % LINES.sheepFine.length], 3500); break;
+      case 'sheepFine': queue.length = 0; speaking = 0; B.say(LINES.sheepFine[(fineN++) % LINES.sheepFine.length], 3500, { urgent: true }); break;
       case 'flockDone': drop('sheepWrong', 'sheepFine', 'sheepHealed'); B.say(LINES.flockDone[(doneN++) % LINES.flockDone.length]); break;
       case 'pigsArrive': drop('farmArrive', 'sheepWrong', 'sheepFine', 'sheepHealed'); if (once('pigsArrive')) B.say(LINES.pigsArrive, 9000); break;   // (the sheep's lines are done with: next door is the pigs)
       case 'pigPenned': if (once('pigPenned')) B.say(LINES.pigPenned); break;
       // (the why, said at once over anything else: the pig is trotting back out right now)
-      case 'pigWrong': queue.length = 0; speaking = 0; B.say(data.line, Math.max(5000, 1800 + String(data.line || '').length * 55)); break;
+      case 'pigWrong': queue.length = 0; speaking = 0; B.say(data.line, Math.max(5000, 1800 + String(data.line || '').length * 55), { urgent: true }); break;
       case 'pigsDone': drop('pigWrong', 'pigPenned'); B.say(LINES.pigsDone[(pigN++) % LINES.pigsDone.length]); break;
       case 'storeStart': if (once('storeStart')) B.say(LINES.storeStart, 7000); else B.say(LINES.storeBack[(storeN++) % LINES.storeBack.length], 3000); break;
       case 'storeRight': drop('storeMiss'); break;
@@ -302,7 +306,7 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
       case 'deerFlip': if (once('deerFlip')) B.say(LINES.deerFlip, 5000); break;
       case 'deerRight': drop('deerWrong'); if (once('deerRight')) B.say(LINES.deerRight, 3500); break;
       // (the why, said at once over anything else: it is about the deer just picked)
-      case 'deerWrong': queue.length = 0; speaking = 0; B.say(data.line, Math.max(5000, 1800 + String(data.line || '').length * 55)); break;
+      case 'deerWrong': queue.length = 0; speaking = 0; B.say(data.line, Math.max(5000, 1800 + String(data.line || '').length * 55), { urgent: true }); break;
       case 'deerDone': drop('deerWrong', 'deerRight'); B.say(LINES.deerDone[(deerN++) % LINES.deerDone.length], 4500); break;
       case 'deerStop': drop('deerWrong'); if (once('deerStop')) B.say(LINES.deerStop, 3500); break;
       case 'lootGuard': if (once('lootGuard')) B.say(LINES.lootGuard); break;
@@ -311,6 +315,7 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
       case 'lootNoSaddle': if (once('lootNoSaddle')) B.say(LINES.lootNoSaddle, 6000); break;
       case 'lootShare': if (once('lootShare')) B.say(LINES.lootShare, 7000); break;
       case 'lootMiss': if (once('lootMiss')) B.say(LINES.lootMiss, 6000); break;
+      case 'lootRight': drop('lootMiss'); break;
       case 'lootDone': drop('lootMiss', 'lootShare'); B.say(LINES.lootDone[(lootN++) % LINES.lootDone.length], 3500); break;
       case 'lootWord': B.say(LINES.lootWord.replace('{place}', data.place || 'another spot'), 6000); break;
       default: break;
@@ -373,16 +378,29 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
 
   let want = false, fade = 0, time = 0;
   B.trail = (on) => { want = !!on; };
-  B.update = (dt, at) => {
+  B.update = (dt, at, o = {}) => {
     time += dt;
     if (voice) voice.update(dt);
     now += dt;
+    // On a narrow screen, while a job person's speech card is up (the trail boss's hello on arriving), Hob waits his
+    // turn so the phone isn't all talk: his line goes away and comes back with the time it had left once they're done,
+    // and what's waiting keeps its place (the time held doesn't count toward a job line going stale). If a line about
+    // the job came up meanwhile, it goes first and the one from before (a tip, the ride's hello) waits its turn again.
+    const wait = !!o.hold && (innerWidth <= 760 || innerHeight <= 480) && !voice;
+    if (wait !== hold) {
+      hold = wait;
+      if (saying && !saying.urgent && speaking > 0) {
+        if (hold) hud.caption(null);
+        else if (!JOB[saying.key] && queue.some((q) => JOB[q.key])) { queue.unshift({ text: saying.text, ms: saying.ms, key: saying.key, at: now }); speaking = 0; saying = null; }
+        else hud.caption(saying.text, Math.max(1500, (speaking - 0.4) * 1000));
+      }
+    }
+    if (hold) for (const q of queue) q.at += dt;
     // (a job line that waited too long is dropped, not said late)
     for (let i = queue.length - 1; i >= 0; i--) if (JOB[queue[i].key] && now - queue[i].at > KEEP_JOB) queue.splice(i, 1);
-    if (speaking > 0 && (speaking -= dt) <= 0) {
-      saying = null;
-      if (queue.length) { const q = queue.shift(); key = q.key; B.say(q.text, q.ms); key = null; }
-    }
+    if (speaking > 0 && !(hold && saying && !saying.urgent) && (speaking -= dt) <= 0) saying = null;
+    // (next: a line about a job before a tip, as a job line that waits too long is dropped and a tip can wait)
+    if (speaking <= 0 && !hold && queue.length) { const j = queue.findIndex((q) => JOB[q.key]); const q = queue.splice(Math.max(0, j), 1)[0]; key = q.key; B.say(q.text, q.ms); key = null; }
     const pa = W.places.pasture;
     const near = at && pa ? Math.hypot(at.x - pa.x, at.z - pa.z) < HOB.hideNear : false;
     const target = want && !near ? 1 : 0;

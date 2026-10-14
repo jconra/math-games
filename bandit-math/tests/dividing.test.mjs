@@ -80,7 +80,7 @@ test('the real slips are there: a row off, the dropped leftover, the one already
   assert.ok(kinds.rem.noRem > kinds.rem.swap && kinds.rem.short, 'dropping the leftover leads on remainder cards');
   const c = makeCard({ kind: 'fact', n: 24, d: 6, rand: seeded(2), size: 6 });
   assert.equal(classify(c, 18), 'sub'); assert.match(explainPick(c, 18).line, /24 − 6 = 18/);
-  assert.match(explainPick(c, 5).line, /5 × 6 = 30/);
+  assert.equal(explainPick(c, 5).line, '5 in each of 6 rows is 30: 6 too many. 24 makes 4 in each row.');
   const r = makeCard({ kind: 'rem', n: 13, d: 4, rand: seeded(2), size: 6 });
   assert.equal(classify(r, remCode(3, 0)), 'noRem'); assert.match(explainPick(r, remCode(3, 0)).line, /left over/);
   assert.equal(classify(r, remCode(2, 5)), 'short');

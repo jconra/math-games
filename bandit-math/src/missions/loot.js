@@ -478,6 +478,7 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
     if (res.first) { const rec = recordAnswer(rider, c.good); if (rec && rec.badge) hud.toast(`You earned the ${rec.badge} badge!`, 'gold'); }
     if (!c.good) {
       missed = true; trip.clean = false;
+      if (res.first && res.moved) redealRest(trip.at + 1);
       U.wrong(i, { why: c.why, pic: picture(p.pic) });
       if (hob) hob.event('lootMiss');
       saveRider(rider);
@@ -489,8 +490,10 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
     const rec = countJob(rider, 'loot', 1);
     if (rec.buckle) hud.buckle(rec.buckle, { delay: 900 });
     setTimeout(refresh, 700);
+    if (hob) hob.event('lootRight');   // (his "pick again" from the last coin is done with)
     handOver(p);
     trip.at++;
+    if (res.first && res.moved) redealRest(trip.at);
     showBundles(trip.problems.length - trip.at);
     if (res.moved > 0) setTimeout(() => hud.toast('Up a step!', 'good'), 900);
     const news = e && e.newTitle ? [`You're a ${e.newTitle} now!`] : [];
@@ -501,6 +504,12 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
     if (trip.at >= trip.problems.length) finishTrip(); else showProblem();
   }
   function draw() { if (!LJ.active || !trip || U.busy) return; helped = true; U.drawn(picture(trip.problems[trip.at].pic)); }
+  // When an answer moves the ladder, the bundles still to come are dealt again at the new step, from the same folks
+  // waiting at the office, so every answer on a trip counts (not just the first). One that can't be made from them stays.
+  function redealRest(from) {
+    const names = trip.families.map((f) => f.name);
+    for (let k = from; k < trip.problems.length; k++) { const q = Q.next({ among: names, only: true }); if (q) trip.problems[k] = q; }
+  }
   // the families (and the parson, for the church box) step up and take their share, and one or two say thank you
   function handOver(p) {
     const takers = p.hand.filter((h) => h.gets > 0).map((h) => byFamily(h.family)).filter(Boolean);

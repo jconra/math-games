@@ -2,7 +2,7 @@
 // Run with:  node --test bandit-math/tests/shares.test.mjs   (SEED_OFFSET=1000 for another seed set)
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makeShares, makeShare, picture, LADDER, KINDS, FAMILIES, GOODS, seeded as seededAt,
+import { makeShares, makeShare, picture, LADDER, KINDS, FAMILIES, GOODS, PARSON, seeded as seededAt,
   CLEAN_TO_CLIMB, MISS_DOWN, PLACEMENT_MISSES, PLACE_BELOW } from '../src/math/shares.js';
 
 const OFFSET = Number(process.env.SEED_OFFSET) || 0;
@@ -56,7 +56,10 @@ test('every problem: the sum works, one right coin, wrong coins are named real s
       if (!c.good) { assert.ok(c.slip && c.why && c.why.length > 20 && c.why.length < 200, `${p.kind}: ${c.label}: ${c.why}`); }
     }
     // the small words never tell the right coin apart (but a leftover coin says its own leftover)
-    if (p.kind !== 'rem') assert.equal(new Set(p.coins.map((c) => c.small)).size, 1, `${p.kind}: ${p.coins.map((c) => c.small)}`);
+    // (a coin showing 1 says it in the singular, "1 full box", "1 trip": that follows its number, not whether it's right)
+    const plural = (c) => (c.big === '1' ? { 'full box': 'full boxes' }[c.small] || c.small.replace(/^(trip|dollar|sack|blanket|can|jar|shoe|bolt)$/, '$1s') : c.small);
+    for (const c of p.coins) if (c.big === '1') assert.doesNotMatch(c.small, /^(full boxes|trips|dollars|sacks|blankets|cans|jars|shoes|bolts)$/, `1 ${c.small}`);
+    if (p.kind !== 'rem') assert.equal(new Set(p.coins.map(plural)).size, 1, `${p.kind}: ${p.coins.map((c) => c.small)}`);
     else for (const c of p.coins) assert.match(c.small, /^each, (none|\d+) left$/);
     // the people: real families, none twice, no family asked to avoid (when there's room)
     assert.equal(new Set(p.owners.map((f) => f.name)).size, p.owners.length);
@@ -120,6 +123,40 @@ test('climbing: 3 right first time up, a miss down, the first visit climbs and f
   // the missed kind comes back within 2 to 4 problems
   const kinds = []; for (let i = 0; i < 4; i++) kinds.push(Q.next().kind);
   assert.ok(kinds.includes(p.kind));
+});
+
+test('a trip dealt again from the folks already waiting: only their names, the church box only with the parson', () => {
+  for (let seed = 1; seed <= 40; seed++) {
+    const Q = makeShares({}, { rand: seeded(seed) });
+    Q.setStep(1 + (seed % LADDER.length));
+    const waiting = FAMILIES.slice(seed % 6, (seed % 6) + 2 + (seed % 4)).map((f) => f.name);
+    const withParson = seed % 2 ? [...waiting, PARSON.name] : waiting;
+    for (let k = 0; k < 6; k++) {
+      const p = Q.next({ among: withParson, only: true });
+      if (!p) continue;
+      for (const h of p.hand) assert.ok(waiting.includes(h.family.name), `${h.family.name} is not waiting (${waiting})`);
+      if (!withParson.includes(PARSON.name)) assert.equal(p.church, 0, 'no church box without the parson');
+      assert.equal(p.step, Q.level().step);
+    }
+  }
+  // nobody waiting: nothing can be made, and the ladder's comebacks are kept for later
+  const st = {}, Q = makeShares(st, { rand: seeded(3) });
+  Q.setStep(3); st.due.push({ kind: 'rem', at: 0 });
+  assert.equal(Q.next({ among: [], only: true }), null);
+  assert.equal(st.due.length, 1);
+});
+
+test('placing on a first trip: every bundle can climb when the rest are dealt again at the new step', () => {
+  const Q = makeShares({}, { rand: seeded(21) });
+  const trip = [Q.next(), Q.next(), Q.next()];
+  const names = [...new Set(trip.flatMap((p) => p.hand.map((h) => h.family.name)))];
+  let climbed = 0;
+  for (let at = 0; at < trip.length; at++) {
+    const p = trip[at], r = Q.answer(p, p.coins.find((c) => c.good));
+    climbed += r.moved;
+    if (r.moved) for (let k = at + 1; k < trip.length; k++) { const q = Q.next({ among: names, only: true }); if (q) trip[k] = q; }
+  }
+  assert.equal(climbed, 3, 'three right first time on the first visit: three steps');
 });
 
 test('the state saves as plain JSON; a damaged one is mended', () => {

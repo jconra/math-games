@@ -469,22 +469,27 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
   // nearest way either side that is clear (first the side the rider wants), slowing to a walk, as a horse veers off a
   // fence; with no way clear it stops. want: the heading wanted (or null); v0: its speed at the start of the frame (it
   // moves on by the frame's average speed)
+  // (veer: the side it turned to last, kept while the way ahead stays blocked and the rider pushes straight on. Picked
+  // afresh each step, "the side the rider wants" flips with every small turn when the rider wants straight ahead, and
+  // a horse pushed straight at a fence's end stood there turning a hair this way and that, never getting off it)
+  let veer = 0;
   function moveHorse(dt, want, v0 = H.speed) {
     if (H.speed <= 0.01 && v0 <= 0.01) { offWagons(); return; }   // (standing: a wagon may still roll up against it)
     const reach = NOSE + Math.min(1.6, H.speed * 0.12);
     // (points all along the way ahead: a fence's band or a thin trunk can sit anywhere between its middle and its nose)
     const ahead = (h) => { const s = Math.sin(h), c = Math.cos(h); for (const d of [0.1, 0.25, 0.45, NOSE, reach]) if (W.blocked(H.x + s * d, H.z + c * d)) return true; return false; };
     if (ahead(H.heading)) {
-      const first = want === null ? 1 : Math.sign(wrap(want - H.heading)) || 1;
+      const lean = want === null ? 0 : wrap(want - H.heading);
+      const first = Math.abs(lean) > 0.35 ? Math.sign(lean) : veer || Math.sign(lean) || 1;
       let turn = null;
       for (const t of [0.3, 0.6, 0.9, 1.3, 1.8, 2.4]) {
         for (const side of [first, -first]) { if (!ahead(H.heading + t * side)) { turn = t * side; break; } }
         if (turn !== null) break;
       }
-      if (turn !== null) { H.heading = wrap(H.heading + Math.sign(turn) * Math.min(Math.abs(turn), 3 * dt)); H.speed = Math.min(H.speed, MOVE.horse.walk + 1.5); }
+      if (turn !== null) { veer = Math.sign(turn); H.heading = wrap(H.heading + veer * Math.min(Math.abs(turn), 3 * dt)); H.speed = Math.min(H.speed, MOVE.horse.walk + 1.5); }
       else H.speed = Math.max(0, H.speed - 25 * dt);
       v0 = H.speed;
-    }
+    } else veer = 0;
     const v = (v0 + H.speed) / 2, o = { x: H.x, z: H.z }, got = walk(o, H.heading, v * dt, NOSE);
     if (got < v * dt * 0.3) H.speed = got / Math.max(dt, 1e-4);   // (stopped by it: stands, rather than walking on the spot)
     H.x = o.x; H.z = o.z;

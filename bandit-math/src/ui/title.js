@@ -209,6 +209,7 @@ const LEVEL_SOURCES = {
   negatives: { path: '../math/negatives.js', make: 'makeNegatives' },
   algebra: { path: '../lockbox/algebra.js', make: 'makeAlgebra' },
   numbersense: { path: '../math/numbersense.js', make: 'makeNumberSense' },   // (the target range's, in Shooting mode)
+  loot: { path: '../math/shares.js', make: 'makeShares' },                    // (Loot the gang's fair shares)
 };
 
 // ---- the screen ------------------------------------------------------------------------------------------------
@@ -519,6 +520,7 @@ export function showTitle(root, opts = {}) {
           <dt>Positive &amp; negative</dt><dd>${esc(levelText('negatives', r.topics.negatives))}</dd>
           <dt>Solving for x</dt><dd>${esc(levelText('algebra', r.topics.algebra))}</dd>
           ${r.mode === 'shoot' || (r.topics.numbersense && Object.keys(r.topics.numbersense).length) ? `<dt>Target range</dt><dd>${esc(levelText('numbersense', r.topics.numbersense))}${r.range && r.range.best ? ` · best streak ${fmt(r.range.best)}` : ''}</dd>` : ''}
+          ${(r.missions && r.missions.loot) || (r.topics.loot && Object.keys(r.topics.loot).length) ? `<dt>Loot the gang</dt><dd>${esc(levelText('loot', r.topics.loot))}</dd>` : ''}
           <dt>Lock boxes</dt><dd>${boxes}</dd>
           <dt>Jobs done</dt><dd>${bucklesOf(r).map(b => `${esc(jobWords(b.job, b.count))}${b.tier ? ` (${BUCKLE_NAMES[b.tier].toLowerCase()} buckle)` : ''}`).join(' · ')}</dd>
           <dt>Badges</dt><dd>${badges.length ? badges.map(esc).join(', ') : 'none yet'}</dd>

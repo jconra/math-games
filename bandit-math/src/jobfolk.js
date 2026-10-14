@@ -35,6 +35,7 @@
 //   JF.heard(event, data)   a Hob event (src/hob.js): the thank-yous and the driver's "let's roll" come from these;
 //                       also 'sheriffDone' (lock boxes cracked for the sheriff)
 //   JF.say(id, text)    a person (an id of JOB_FOLK, or a camp's id for its foreman) says a line now
+//   JF.speaking()       true while a speech card is on the screen
 //   JF.people           the records: { id, name, role, p (the person), x, z, face }
 //   JF.state()          for rigs;  JF.dispose()
 import * as THREE from 'three';
@@ -244,6 +245,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
   }
   const JF = { people, prompt: null };
   JF.say = (id, text) => { const r = byId(id); if (r) { say(r, text); return true; } return false; };
+  JF.speaking = () => !!talking && !card.hidden;   // (a speech card is on the screen: Old Hob waits his turn on a phone)
 
   // ── TALKING: E by a person ─────────────────────────────────────────────────────────────────────────────────────
   let promptFor = null;

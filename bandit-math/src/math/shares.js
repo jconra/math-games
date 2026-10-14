@@ -27,10 +27,10 @@
 // Everything it remembers lives in the plain object it is given (rider.topics.loot), saved with the rider.
 //
 //   const Q = makeShares(rider.topics.loot ||= {}, { rand })
-//   Q.next({ avoid, among }) -> a share problem: { id, kind, step, key, story, ask, coins: [{ big, small, label, good, slip,
+//   Q.next({ avoid, among, only }) -> a share problem: { id, kind, step, key, story, ask, coins: [{ big, small, label, good, slip,
 //                           why, v }], answer, goods, total, groups, owners: [family], each, left, pic, rightWhy, hand:
 //                           [{ family, gets }], church }   (avoid: family names not to use; among: the trip's own families,
-//                           taken first when there are enough)
+//                           taken first when there are enough; only: from among and nowhere else, or null)
 //   Q.answer(problem, coin, { helped }) -> { right, first, moved, step, placed }
 //   Q.level()            -> { step, of, label, placing, line }
 //   picture(pic)         -> { svg, title, line }   the slip's drawing of the sharing (never the answer)
@@ -105,6 +105,9 @@ const familiesOf = (owners) => (owners.length <= 4 ? `${num(owners.length)} fami
 // a coin: v (what it says, for "no repeats"), big and small (its two lines on the slip), label (read aloud), and for a
 // wrong one its slip and why
 const coin = (v, big, small, label, slip = null, why = '') => ({ v: String(v), big: String(big), small, label, good: !slip, slip, why });
+// a coin's small words for its number: "1 full box", "1 trip", "1 dollar" (the words of 2 or more stay as they are)
+const ONE = { 'full boxes': 'full box', trips: 'trip', dollars: 'dollar', sacks: 'sack', blankets: 'blanket', cans: 'can', jars: 'jar', shoes: 'shoe', bolts: 'bolt' };
+const smallFor = (big, small) => (String(big) === '1' && ONE[small] ? ONE[small] : small);
 
 function sizes(size, t) {
   // (families, and how many each): small numbers first
@@ -180,14 +183,14 @@ const MAKE = {
       const T = full + 1;
       const right = coin(T, T, 'trips', `${T} trips`);
       const wrong = [
-        coin(full, full, 'trips', `${full} trips`, 'roundDown', `${full} trips carry ${full * per}: the last ${r} would still be waiting. They need a trip too.`),
-        coin(r, r, 'trips', `${r} trips`, 'left', `${r} is how many are left after the full trips. Count the trips, part-full one too.`),
+        coin(full, full, 'trips', `${full} trips`, 'roundDown', `${full} trips carry ${full * per}: ${r === 1 ? 'the last one would still be waiting. It needs' : `the last ${r} would still be waiting. They need`} a trip too.`),
+        coin(r, r, 'trips', `${r} trips`, 'left', `${r === 1 ? '1 is the one' : `${r} is how many are`} left after the full trips. Count the trips, part-full one too.`),
         coin(total - per, total - per, 'trips', `${total - per} trips`, 'sub', `${total} − ${per} takes one load away. How many loads of ${per} does it take to carry ${total}?`),
         coin(per, per, 'trips', `${per} trips`, 'groups', `${per} is how many go on each trip, not how many trips.`),
       ];
       return { key: `trips:${total}:${per}`, goods, total, groups: per, owners: [owner], each: T, left: r, story, ask, right, wrong,
         pic: { kind: 'loads', total, per, unit: 'trip', goods: goods[0], need: true },
-        rightWhy: `${full} full trips carry ${full * per}, and the last ${r} need one more: ${T} trips.`, hand: [{ family: owner, gets: total }], church: 0 };
+        rightWhy: `${full} full trips carry ${full * per}, and the last ${r === 1 ? 'one needs' : `${r} need`} one more: ${T} trips.`, hand: [{ family: owner, gets: total }], church: 0 };
     }
     const goods = t.pick(GOODS.filter((x) => !x[2] && /horseshoes|cans|jars/.test(x[0])));
     const story = `${owner.rep} is packing the ${many(total, goods)} the gang took into boxes of ${per} to sell back at the store. Only full boxes go.`;
@@ -195,13 +198,13 @@ const MAKE = {
     const right = coin(full, full, 'full boxes', `${full} full boxes`);
     const wrong = [
       coin(full + 1, full + 1, 'full boxes', `${full + 1} full boxes`, 'roundUp', `The last box would only have ${r} in it: it isn't full. Count the full ones.`),
-      coin(r, r, 'full boxes', `${r} full boxes`, 'left', `${r} is how many are left over after packing the full boxes.`),
+      coin(r, r, 'full boxes', `${r} full boxes`, 'left', `${r === 1 ? '1 is the one' : `${r} is how many are`} left over after packing the full boxes.`),
       coin(total - per, total - per, 'full boxes', `${total - per} full boxes`, 'sub', `${total} − ${per} takes one box away. How many boxes of ${per} fit in ${total}?`),
       coin(per, per, 'full boxes', `${per} full boxes`, 'groups', `${per} is how many go in each box, not how many boxes.`),
     ];
     return { key: `boxes:${total}:${per}`, goods, total, groups: per, owners: [owner], each: full, left: r, story, ask, right, wrong,
       pic: { kind: 'loads', total, per, unit: 'box', goods: goods[0], need: false },
-      rightWhy: `${full} boxes of ${per} hold ${full * per}; the ${r} left over don't fill a box.`, hand: [{ family: owner, gets: total }], church: 0 };
+      rightWhy: `${full} boxes of ${per} hold ${full * per}; the ${r} left over ${r === 1 ? "doesn't" : "don't"} fill a box.`, hand: [{ family: owner, gets: total }], church: 0 };
   },
   rule(t, step, size, fam) {
     const [a, b] = t.pick([[3, 1], [2, 1], [4, 1], [3, 2], [5, 1]]), per = t.int(2, size >= 3 ? 9 : 6), parts = a + b, total = parts * per;
@@ -248,21 +251,26 @@ const MAKE = {
 };
 
 // A share problem of one kind at a step. avoid: family names not to use; among: the families to take them from first
-// (a trip's own: the ones waiting at the sheriff's office), when there are enough of them. -> see the top
-export function makeShare(kind, { rand = Math.random, step = 1, avoid = [], among = null } = {}) {
+// (a trip's own: the ones waiting at the sheriff's office), when there are enough of them. only: take them from among
+// and nowhere else (the church box only when the parson's name is in among too), or make none: -> null. -> see the top
+const TOO_FEW = {};   // (thrown when only the families in among may be used and there aren't enough of them)
+export function makeShare(kind, { rand = Math.random, step = 1, avoid = [], among = null, only = false } = {}) {
   const t = tools(rand), row = LADDER[Math.max(1, Math.min(LADDER.length, step)) - 1];
   const fam = (n) => {
     const mine = among ? FAMILIES.filter((f) => among.includes(f.name) && !avoid.includes(f.name)) : [];
     if (mine.length >= n) return t.shuffle(mine).slice(0, n);
+    if (only) throw TOO_FEW;
     const free = FAMILIES.filter((f) => !avoid.includes(f.name));
     return t.shuffle([...(free.length >= n ? free : FAMILIES)]).slice(0, n);
   };
   for (let tries = 0; tries < 30; tries++) {
-    const p = MAKE[kind](t, step, row.size, fam);
+    let p = null;
+    try { p = MAKE[kind](t, step, row.size, fam); } catch (e) { if (e !== TOO_FEW) throw e; }
     if (!p) continue;
+    if (only && p.church > 0 && !(among || []).includes(PARSON.name)) continue;
     // every coin of a problem has the same small words under its number (but the leftover ones, which say their own
     // leftover), so the words never tell the right coin from the wrong
-    if (kind !== 'rem') for (const c of [p.right, ...p.wrong]) { c.small = p.right.small; c.label = `${c.big} ${c.small}`; }
+    if (kind !== 'rem') for (const c of [p.right, ...p.wrong]) { c.small = smallFor(c.big, p.right.small); c.label = `${c.big} ${c.small}`; }
     const vals = new Set([p.right.v]);
     // the wrong coins: no repeats, never the right one's words, never a nonsense number (0 each, a negative)
     const wrong = t.shuffle(p.wrong.filter((c) => {
@@ -281,6 +289,7 @@ export function makeShare(kind, { rand = Math.random, step = 1, avoid = [], amon
       owners: p.owners, each: p.each, left: p.left, pic: p.pic, rightWhy: p.rightWhy, hand: p.hand, church: p.church,
     };
   }
+  if (only) return null;
   throw new Error(`no ${kind} share could be made`);
 }
 
@@ -297,9 +306,9 @@ function fill(s) {
 export function makeShares(state = {}, { rand = Math.random } = {}) {
   const s = fill(state);
   const t = tools(rand);
-  function pickKind() {
+  function pickKind(take = true) {
     const di = s.due.findIndex((x) => x.at <= s.n);
-    if (di >= 0) return s.due.splice(di, 1)[0].kind;
+    if (di >= 0) return take ? s.due.splice(di, 1)[0].kind : s.due[di].kind;
     const mix = LADDER[s.step - 1].mix;
     const run = s.kinds.slice(-2);
     const blocked = run.length === 2 && run[0] === run[1] && Object.keys(mix).length > 1 ? run[0] : null;
@@ -308,10 +317,19 @@ export function makeShares(state = {}, { rand = Math.random } = {}) {
     for (const [k, w] of entries) if ((r -= w) <= 0) return k;
     return entries[entries.length - 1][0];
   }
-  function next({ avoid = [], among = null } = {}) {
-    const kind = pickKind();
+  function next({ avoid = [], among = null, only = false } = {}) {
+    let kind = pickKind(!only);
     let p = null;
-    for (let tries = 0; tries < 20; tries++) { p = makeShare(kind, { rand: t.rand, step: s.step, avoid, among }); if (!s.recent.includes(p.key) || tries > 12) break; }
+    if (only) {
+      // (only these families: a kind that can't be made from them gives way to another of the step's kinds, or none)
+      const kinds = [kind, ...Object.keys(LADDER[s.step - 1].mix).filter((k) => k !== kind)];
+      for (const k of kinds) {
+        for (let tries = 0; tries < 8; tries++) { const q = makeShare(k, { rand: t.rand, step: s.step, avoid, among, only }); if (!q) break; p = q; if (!s.recent.includes(q.key)) break; }
+        if (p) { kind = k; break; }
+      }
+      if (!p) return null;
+      const di = s.due.findIndex((x) => x.at <= s.n && x.kind === kind); if (di >= 0) s.due.splice(di, 1);
+    } else for (let tries = 0; tries < 20; tries++) { p = makeShare(kind, { rand: t.rand, step: s.step, avoid, among }); if (!s.recent.includes(p.key) || tries > 12) break; }
     s.recent.push(p.key); if (s.recent.length > 10) s.recent.splice(0, s.recent.length - 10);
     s.kinds.push(kind); if (s.kinds.length > 6) s.kinds.splice(0, s.kinds.length - 6);
     s.n++;
@@ -402,7 +420,8 @@ const DRAW = {
     const mid0 = x0 + shown * per * scale, lastX = x1 - left * scale;
     if (full > shown) s += box(mid0, lastX - 2, 62, 30, { fill: 'none', dash: true }) + text((mid0 + lastX) / 2, 82, `more ${p.unit === 'trip' ? 'trips' : 'boxes'} of ${per}…`, { size: 12, fill: SOFT });
     s += box(lastX, x1, 62, 30, { fill: '#f3c9b4', stroke: ASK });
-    s += text(x1 - 2, 112, p.need ? `the last ${left}: they need a trip too` : `the last ${left}: not a full box`, { size: 12, anchor: 'end', fill: ASK, weight: 700 });
+    const last = left === 1 ? 'the last one' : `the last ${left}`;
+    s += text(x1 - 2, 112, p.need ? `${last}: ${left === 1 ? 'it needs' : 'they need'} a trip too` : `${last}: not a full box`, { size: 12, anchor: 'end', fill: ASK, weight: 700 });
     const line = p.need ? `${per} go on each trip. The last few still have to get home, even though the mule isn't full.` : `Each box holds ${per}. A box with fewer in it isn't full, so it doesn't count.`;
     return { svg: svg(122, s), line };
   },

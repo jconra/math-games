@@ -284,9 +284,10 @@ export function explainPick(c, picked) {
   }
   const story = c.kind === 'share' && c.story && !/^Split/.test(c.rule) ? c.story : null;
   const lines = {
-    near: picked > q
-      ? `${picked} ${TIMES} ${d} = ${picked * d}: ${word(picked - q)} ${d}${picked - q > 1 ? 's' : ''} too many to make ${n}.`
-      : `${picked} ${TIMES} ${d} = ${picked * d}: ${word(q - picked)} ${d}${q - picked > 1 ? 's' : ''} short of ${n}.`,
+    // (said the way the picture deals it: so many in each row, or for each horse)
+    near: (story ? `${d} ${story[2]} with ${picked} ${story[4]}` : `${picked} in each of ${d} rows`)
+      + (picked > q ? ` is ${picked * d}: ${picked * d - n} too many.` : ` is only ${picked * d}: ${n - picked * d} short of ${n}.`)
+      + (story ? ` ${n} ${story[0]} make ${q} ${story[4]}.` : ` ${n} makes ${q} in each row.`),
     divisor: story ? `${d} is how many ${story[2]} there are. How many ${story[4]}? Think ? ${TIMES} ${d} = ${n}.`
       : `${d} is how many rows there are. How many in each row? Think ? ${TIMES} ${d} = ${n}.`,
     sub: `${n} ${MINUS} ${d} = ${picked} takes ${d} away once. Sharing asks how many ${d}s fit in ${n}.`,
