@@ -112,7 +112,10 @@ export function makeTowerView(scene) {
     for (const b of boards.values()) {
       if (b.falling) continue;
       if (!sway) { pose(b.mesh, b.a, b.b, b.z); continue; }
-      sa.copy(b.a).add(sway(b.y0)); sb.copy(b.b).add(sway(b.y1)); pose(b.mesh, sa, sb, b.z);
+      sa.copy(b.a).add(sway(b.y0)); sb.copy(b.b).add(sway(b.y1));
+      // (a leaning board keeps its length: its upper end goes along the lean from the lower one)
+      if (sa.y <= sb.y) sb.sub(sa).setLength(b.len * FT).add(sa); else sa.sub(sb).setLength(b.len * FT).add(sb);
+      pose(b.mesh, sa, sb, b.z);
     }
     placeNails(sway);
   }

@@ -34,8 +34,11 @@ export function makeFall(scene) {
       const b = view.boards.get(key); if (!b) continue;
       const off0 = sway ? sway(b.y0) : new THREE.Vector3(), off1 = sway ? sway(b.y1) : new THREE.Vector3();
       const p0 = b.a.clone().add(off0), p1 = b.b.clone().add(off1);
+      // (every stick keeps its board's true length: the lower end where the lean put it, the upper one along the lean)
+      const len = b.a.distanceTo(b.b), [lo, hi] = p0.y <= p1.y ? [p0, p1] : [p1, p0];
+      hi.sub(lo).setLength(len).add(lo);
       top = Math.max(top, p0.y, p1.y);
-      const st = { key, b, p: [p0, p1], q: [p0.clone(), p1.clone()], len: p0.distanceTo(p1), side: b.z.clone(), spin: 0, roll: 0, landed: false, pins: [] };
+      const st = { key, b, p: [p0, p1], q: [p0.clone(), p1.clone()], len, side: b.z.clone(), spin: 0, roll: 0, landed: false, pins: [] };
       b.falling = true; sticks.push(st); byKey.set(key, st);
     }
     // a little push to start: the wind leaning on it, more at the top

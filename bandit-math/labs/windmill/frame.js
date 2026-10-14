@@ -9,14 +9,21 @@
 //   * Posts that stand on the hilltop are tied to the ground the same way (stronger: they sit on footing stones with an
 //     iron strap).
 //   * Loads: the tower's own weight, and the wind's push on every board, which grows with wind speed squared and a
-//     little with height. The wind on the front face is carried down by the two side walls (the walls whose plane it
-//     blows along), and the other way round.
+//     little with height. The boards on the wall facing the wind take its full push; everything behind them (the far
+//     wall, the far posts, the side walls' boards seen edge on) sits partly in their wind shadow, more so the more
+//     solid the near wall is and the closer behind it they stand. The wind on the front face is carried down by the
+//     two side walls (the walls whose plane it blows along): a board on the front hangs between their corner posts, so
+//     each side wall takes the part of its push nearer its own corner, and each side wall takes the wind on its own
+//     boards. There are no floors tying the two side walls together, so a side wall with no brace in it gets no help
+//     from a braced one: every wall needs its own brace.
 //   * We solve "stiffness times movement = load" for every joint and board end at once (one big set of equations), then
 //     solve again with the weight leaning on the movement (a tall tower that sways a bit is pushed further by its own
 //     weight), and check: did any nail group get more force or twist than it holds, did any board bend or squash past
 //     what it holds (a long board in compression buckles sideways long before it crushes), and did the wall sway so far
 //     that it is folding over (a square with no brace in it has nothing stopping it but the nails' grip, so it RACKS:
-//     folds sideways like a card table)?
+//     folds sideways like a card table)? A post whose top is nailed to nothing (a post standing on its own, or one
+//     sticking up past the last crosspiece) is checked the same way: if its top leans further than that, it is
+//     bending over.
 //   * A brace makes a triangle, and a triangle can't change shape without stretching a board, which boards hardly do;
 //     the wind's push turns into a straight pull or push along the brace. The flatter or steeper the brace, the more
 //     force it needs to carry the same push (and a long one buckles), so near 45 degrees is best. A short knee brace
@@ -27,7 +34,7 @@
 //     when the wind's turning push beats its weight and the stones it has to lift (tipping, below).
 //
 // Units: feet, pounds, radians.
-import { faceSegments, worldBoards, FACE_NORMAL, trimTower, towerHeight, woodFeet } from './tower.js';
+import { faceSegments, worldBoards, FACE_NORMAL, trimTower, towerHeight, woodFeet, ends } from './tower.js';
 
 // ── the wood and the nails (a 2x4: 1.5 by 3.5 inches, nailed flat against the wall, so it bends on its wide side) ──────
 export const WOOD = {
@@ -57,7 +64,14 @@ export const STAGES = [
   { name: 'Big gust', mph: 65 },
 ];
 export const DRAG = 2.0;              // how hard wind pushes on a flat board (a drag coefficient)
-export const LEE_SHADE = 0.6;         // boards on the far side get only part of the wind (the near side shades them)
+// The wind shadow. A board on the far wall, straight behind the near wall's boards at its height, gets this share of
+// the wind: 0.8 behind a near wall that is all gaps, less the more of the near wall is wood (about 0.6 on a 6 ft wall
+// with posts and a brace, down to 0.15 behind a narrow, solid one). solidity: the part of the near wall that is wood.
+export const leeShade = (solidity) => Math.max(0.15, Math.min(0.8, 0.8 - 1.4 * solidity));
+// A board straight downwind of a post (the far post, and the side walls' boards, which run back from the near post
+// edge on) is in that post's wake: close behind it most of the wind misses it, and the wind fills in again the further
+// back it stands (half a foot back: 0.2 of the wind; 1½ ft: 0.4; 6 ft: 0.85). d: feet behind the post.
+export const wakeShade = (d) => 1 - 0.9 * Math.exp(-Math.max(0, d) / (12 * WOOD.width));
 
 // ── where boards touch: contacts, merged into joints (hubs) ─────────────────────────────────────────────────────────
 // segs: [{ id, ax, ay, bx, by, len }]. Returns hubs: [{ x, y, ground, butt, items: [{ s (seg index), t (feet along) }] }]
@@ -121,7 +135,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 // segs: one wall's boards. loads: { side: [{ y, F }] sideways pushes (pounds, + = toward +x) handed to the joints nearest
 // that height; down: [{ y, x, F }] extra weight from the walls at right angles }. weightShare(seg): how much of a board's
 // weight this wall carries (corner posts are shared by two walls). Returns what broke (if anything) and how it moved.
-export function solveWall(segs, loads, { weightShare = (s) => (s.post ? 0.5 : 1), pdelta = true } = {}) {
+export function solveWall(segs, loads, { weightShare = (s) => (s.post ? 0.5 : 1), pdelta = true, W } = {}) {
   const hubs = findJoints(segs);
   // board nodes: one at every joint along each board
   const nodes = [];   // { s, t, x, y } or a hub node { hub }
@@ -136,7 +150,7 @@ export function solveWall(segs, loads, { weightShare = (s) => (s.post ? 0.5 : 1)
   // wind and has weight, and hangs on that nail)
   segs.forEach((s, si) => {
     const list = boardNodes[si]; if (!list.length) return;
-    for (const t of [0, s.len]) if (!list.some((m) => Math.abs(nodes[m].t - t) < 0.05)) { nodes.push({ s: si, t, x: t ? s.bx : s.ax, y: t ? s.by : s.ay }); list.push(nodes.length - 1); }
+    for (const t of [0, s.len]) if (!list.some((m) => Math.abs(nodes[m].t - t) < 0.05)) { nodes.push({ s: si, t, x: t ? s.bx : s.ax, y: t ? s.by : s.ay, free: true }); list.push(nodes.length - 1); }
   });
   boardNodes.forEach((list) => list.sort((a, b) => nodes[a].t - nodes[b].t));
   const hubNode = hubs.map((h) => { if (h.ground) return -1; nodes.push({ hub: h, x: h.x, y: h.y }); return nodes.length - 1; });
@@ -218,32 +232,50 @@ export function solveWall(segs, loads, { weightShare = (s) => (s.post ? 0.5 : 1)
     if (r > drift) { drift = r; driftAt = levels[i - 1].y; }
   }
   items.push({ type: 'sway', util: drift / DRIFT_LIMIT, y: driftAt, drift });
+  // a post whose top is nailed to nothing (standing on its own, or sticking up a foot or more past its last joint):
+  // how far its top leans over its whole height, against the same limit. (tops: where it leans, for the page to draw)
+  const tops = [];
+  segs.forEach((s, si) => {
+    const list = boardNodes[si]; if (list.length < 2 || !isUp(s)) return;
+    const lo = list.reduce((a, m) => (nodes[m].y < nodes[a].y ? m : a)), hi = list.reduce((a, m) => (nodes[m].y > nodes[a].y ? m : a));
+    if (!nodes[hi].free) return;
+    const below = list.filter((m) => !nodes[m].free).reduce((a, m) => Math.max(a, nodes[m].y), -Infinity);
+    if (nodes[hi].y - below < 1) return;
+    const lean = Math.abs(u[hi * 3] - u[lo * 3]) / Math.max(1, nodes[hi].y - nodes[lo].y);
+    tops.push({ y: nodes[hi].y, ux: u[hi * 3], from: nodes[lo].y });
+    items.push({ type: 'sway', free: true, util: lean / DRIFT_LIMIT, y: nodes[lo].y, x: nodes[lo].x, s: si, id: s.id, drift: lean });
+  });
   let worst = null; for (const it of items) if (!worst || it.util > worst.util) worst = it;
-  if (worst) worst.text = describe(worst, segs);
-  return { ok: !(worst && worst.util > 1), worst, items, hubs, nodes, u, levels, segs };
+  if (worst) worst.text = describe(worst, segs, W);
+  return { ok: !(worst && worst.util > 1), worst, items, hubs, nodes, u, levels, tops, segs };
 }
 
-// a plain sentence for what gave way
-export function describe(it, segs) {
+// a plain sentence for what gave way (W: how wide the wall is, so a short brace reaching from post to post on a
+// narrow wall is called a brace, not a knee brace)
+export function describe(it, segs, W) {
+  if (it.type === 'sway' && it.free) return 'a post stood with nothing holding its top, and the wind bent it over';
   if (it.type === 'sway') {
     // a storey with knee braces in it bends its posts below the knees and leans over; one with nothing just folds
-    const knees = segs.some((s) => isKnee(s) && Math.min(s.ay, s.by) >= it.y - 0.3 && Math.min(s.ay, s.by) < it.y + 9);
+    const knees = segs.some((s) => isKnee(s, W) && Math.min(s.ay, s.by) >= it.y - 0.3 && Math.min(s.ay, s.by) < it.y + 9);
     return knees ? 'the knee braces could not hold it square: the posts bent and it racked over' : 'the square racked: it folded over sideways';
   }
   if (it.type === 'joint') {
     if (it.ground) return 'a post tore loose from its footing';
     if (it.butt) return 'two boards butted end to end pulled apart';
     const s = segs[it.s];
-    return isKnee(s) ? 'the nails in a knee brace pulled out' : 'the nails at a joint pulled out';
+    return isKnee(s, W) ? 'the nails in a knee brace pulled out' : 'the nails at a joint pulled out';
   }
   const s = segs[it.s];
-  const what = s.post ? 'a corner post' : isLevel(s) ? 'a crosspiece' : isUp(s) ? 'a post' : isKnee(s) ? 'a knee brace' : 'a brace';
+  const what = s.post ? 'a corner post' : isLevel(s) ? 'a crosspiece' : isUp(s) ? 'a post' : isKnee(s, W) ? 'a knee brace' : 'a brace';
   return what + (it.buckle ? ' buckled under the squeeze' : ' snapped');
 }
 const angOf = (s) => Math.abs(Math.atan2(s.by - s.ay, s.bx - s.ax) * 180 / Math.PI) % 180;
 const isLevel = (s) => { const a = angOf(s); return a < 8 || a > 172; };
 const isUp = (s) => Math.abs(angOf(s) - 90) < 8;
-export const isKnee = (s) => !isLevel(s) && !isUp(s) && s.len <= 4;
+// a knee brace: a short slanting board (4 ft or less) that props a post against a crosspiece near the corner, so it
+// does not reach across the wall from post to post. On a narrow wall (W feet wide) a brace corner to corner can be
+// that short too, and it is a real brace.
+export const isKnee = (s, W) => !isLevel(s) && !isUp(s) && s.len <= 4 && !(W > 0 && Math.abs(s.bx - s.ax) > W - 0.25);
 
 // one beam piece's stiffness (plus, when it carries a push or pull, how that push changes its sideways stiffness: the
 // "geometric" part that makes a squeezed board softer, the P-delta effect) added into the big matrix
@@ -310,30 +342,61 @@ function solve(K, F, n) {
 // wind pressure (pounds per square foot) at a height: speed squared, a little stronger higher up
 export function pressure(mph, y) { return 0.00256 * mph * mph * Math.pow(Math.max(y, 5) / 15, 2 / 7); }
 
-// the wind's push on every board for wind blowing along world axis 'X' or 'Z' (sign +1 / -1): [{ y, F, face }]
-// Each board catches wind on its wide face if it faces the wind, on its thin edge if the wind runs along its wall.
+// the wind's push on every board for wind blowing along world axis 'X' or 'Z' (sign +1 / -1):
+// [{ y, F, face, x (feet along its face, for a wall board), corner (for a post) }]
+// Each board catches wind on its wide face if it faces the wind, on its thin edge if the wind runs along its wall; the
+// ones behind the wall facing the wind get only part of it (the wind shadow: leeShade, wakeShade).
 export function windPushes(t, axis, sign, mph) {
-  const out = [], wb = worldBoards(t);
+  const out = [], wb = worldBoards(t), W = t.W, ax = axis === 'X' ? 0 : 1;
+  // the wall facing the wind (its outside looks upwind), and how much of it is wood at each height
+  const near = FACE_NORMAL.findIndex((n) => n[ax] === -sign), solid = solidityOf(t, near);
+  // feet downwind of the near wall's plane, for a world point
+  const back = (p) => sign * (ax ? p.Z : p.X) + W / 2;
   for (const b of wb) {
     const dx = b.b.X - b.a.X, dy = b.b.Y - b.a.Y, dz = b.b.Z - b.a.Z;
     const along = axis === 'X' ? dx : dz, proj = Math.sqrt(Math.max(0, b.len * b.len - along * along));
-    let width = WOOD.width, shade = 1;
+    let width = WOOD.width, shade = () => 1;
+    const e = b.face >= 0 ? ends(b.src) : null;
     if (b.face >= 0) {
-      const nrm = FACE_NORMAL[b.face], facing = axis === 'X' ? nrm[0] : nrm[1];
-      if (facing === 0) width = WOOD.thick;              // a wall the wind runs along: it sees only the boards' edges
-      else if (facing === sign) shade = LEE_SHADE;        // the far wall (its outside faces downwind)
-    }
+      const facing = FACE_NORMAL[b.face][ax];
+      if (facing === 0) { width = WOOD.thick; shade = (i) => wakeShade(back(at(b, i))); }   // a wall the wind runs along: only the boards' edges, behind the near post
+      else if (facing === sign) shade = (i) => leeShade(solid(at(b, i).Y));             // the far wall, behind the near one
+    } else if (b.corner !== near && b.corner !== (near + 1) % 4) shade = () => wakeShade(W);   // a far post, behind a near one
     // sampled at four spots along the board, each with the wind for its height
     for (let i = 0; i < 4; i++) {
       const y = b.a.Y + dy * (i + 0.5) / 4;
-      out.push({ y, F: sign * pressure(mph, y) * DRAG * width * shade * proj / 4, face: b.face });
+      const p = { y, F: sign * pressure(mph, y) * DRAG * width * shade(i) * proj / 4, face: b.face };
+      if (e) p.x = e.ax + (e.bx - e.ax) * (i + 0.5) / 4; else p.corner = b.corner;
+      out.push(p);
     }
   }
   return out;
 }
+const at = (b, i) => ({ X: b.a.X + (b.b.X - b.a.X) * (i + 0.5) / 4, Y: b.a.Y + (b.b.Y - b.a.Y) * (i + 0.5) / 4, Z: b.a.Z + (b.b.Z - b.a.Z) * (i + 0.5) / 4 });
+// how much of a wall is wood, by height: (y) -> 0..1, the boards' area in each foot of height over the wall's
+// (including the corner posts at its edges)
+function solidityOf(t, k) {
+  const band = [], wide = t.W + WOOD.width;
+  for (const s of faceSegments(t, k)) {
+    const n = Math.max(1, Math.ceil(s.len / 0.25));
+    for (let i = 0; i < n; i++) { const y = s.ay + (s.by - s.ay) * (i + 0.5) / n, j = Math.max(0, Math.floor(y)); band[j] = (band[j] || 0) + s.len / n * WOOD.width; }
+  }
+  return (y) => Math.min(1, (band[Math.max(0, Math.floor(y))] || 0) / wide);
+}
 
-// which faces carry wind blowing along an axis (the walls it blows along), and their share of it
+// which faces carry wind blowing along an axis (the walls it blows along)
 function carriers(t, axis) { return axis === 'X' ? [0, 2] : [1, 3]; }
+// how much of one push carrying wall k takes: all of the wind on its own boards and on the posts at its corners; for a
+// board on the wall facing the wind (or the far wall), which hangs between the two carrying walls' corner posts, the
+// part nearer each corner goes to that corner's wall (as a plank resting on two trestles shares its load)
+function shareOf(p, k, W) {
+  const mine = (c) => c === k || c === (k + 1) % 4;
+  if (p.corner !== undefined) return mine(p.corner) ? 1 : 0;
+  if (p.face === k) return 1;
+  if (p.face === (k + 2) % 4) return 0;
+  const u = W > 0 ? Math.max(0, Math.min(1, p.x / W)) : 0.5;
+  return (mine(p.face) ? 1 - u : 0) + (mine((p.face + 1) % 4) ? u : 0);
+}
 
 // the weight of the walls at right angles, handed to this wall's edges (where they are nailed to the corner posts)
 function crossWeight(t, k) {
@@ -355,18 +418,15 @@ export function windCase(t, axis, sign, mph) {
   // the wind's push in each carrying wall's own sideways direction: face 0's x runs along +X, face 2's along -X,
   // face 1's along -Z, face 3's along +Z
   const dirOf = (k) => (k === 0 ? 1 : k === 2 ? -1 : k === 1 ? -1 : 1);
-  const solveFace = (k, share) => solveWall(faceSegments(t, k),
-    { side: pushes.map((p) => ({ y: p.y, F: p.F * share * dirOf(k) })), down: crossWeight(t, k) });
-  // the two walls share the push by how stiff each one is (a stiffer wall takes more)
-  const probe = faces.map((k) => solveWall(faceSegments(t, k), { side: pushes.map((p) => ({ y: p.y, F: p.F * 0.5 * dirOf(k) })) }, { pdelta: false }));
-  const give = probe.map((r) => (r.mechanism || !r.levels ? Infinity : Math.max(1e-6, Math.abs(r.levels[r.levels.length - 1].ux))));
-  const stiff = give.map((g) => (Number.isFinite(g) ? 1 / g : 0)), sum = stiff[0] + stiff[1];
-  const share = sum ? stiff.map((k) => k / sum) : [0.5, 0.5];
+  // each carrying wall takes the pushes that land on it (shareOf), storey by storey as they come: a wall with a
+  // storey left unbraced has to hold that storey's wind itself
   let worst = null;
-  faces.forEach((k, i) => {
-    const r = solveFace(k, share[i] || 0.001);
+  for (const k of faces) {
+    const side = [];
+    for (const p of pushes) { const s = shareOf(p, k, t.W); if (s > 0) side.push({ y: p.y, F: p.F * s * dirOf(k) }); }
+    const r = solveWall(faceSegments(t, k), { side, down: crossWeight(t, k) }, { W: t.W });
     if (!worst || (r.worst && r.worst.util > (worst.worst ? worst.worst.util : -1))) worst = { ...r, face: k };
-  });
+  }
   // and the whole tower tipping over on its downwind stones
   const tip = tipping(t, pushes);
   if (tip.util > (worst.worst ? worst.worst.util : -1)) {

@@ -7,7 +7,8 @@
 //     onto the panel (or Undo) to put it back on the pile. While a board is
 //     held, its length and the angles where it meets other boards are drawn over the view, and the spots where it will
 //     be nailed glow. A part sticking out past the last board it meets (an overhang) is drawn pale with a saw line at
-//     the joint: tap it to saw it off right there.
+//     the joint: tap it (or its "saw off" label) to saw it off right there. (A post's top above its last crosspiece is
+//     not an overhang: the next crosspiece or post goes there.)
 //   * anywhere else: drag to walk round the tower (sideways) and climb it (up and down); two fingers or the wheel zoom.
 //     A tap picks a glowing twin (builds it: main.js takes any twin within a fingertip of the tap) or a nailed board (to
 //     take it down, or saw its overhang off).
@@ -15,17 +16,19 @@
 // Snapping, so a shaky finger still builds square: positions go to the half foot; an end that comes near a joint (a
 // corner's foot, where a post meets a crosspiece) lands right on it from furthest off, then one near another board's
 // end, a corner line, the ground or a board's edge; an angle goes to every 5 degrees, or to exactly where the free end
-// lands on a board. Before a swing, the end it swings about settles onto a joint if it is near one, so a brace dropped
-// a little off the corner still braces corner to corner (a long brace whose end stops near a corner without sitting on
-// it gets a red ring: it makes no triangle there). A board standing straight up on a wall's left or right edge becomes
-// a corner post. A held board the same length as a glowing twin on this wall snaps onto it.
+// lands on a board. Before a swing, the end it swings about settles onto a joint if it is near one (from up to 2 feet
+// off when the board is just the length of the slant between two joints), so a brace dropped a little off the corner
+// still braces corner to corner (a brace whose end stops near a corner without sitting on it gets a red ring: it makes
+// no triangle there). A board standing straight up on a wall's left or right edge becomes a corner post. A held board
+// the same length as a glowing twin on this wall snaps onto it.
 //
 // On a narrow screen a long held board can run off the view: once nothing is dragging it, the view backs off until both
-// its ends are in reach. Labels over the view (lengths, angles, saw-offs) keep clear of each other and of the handles.
-// A finger on the cut pieces: up and down scrolls the panel, across toward the view lifts the piece.
+// its ends are in reach. Labels over the view (lengths, angles, saw-offs, why a twin is grey) keep clear of each other
+// and of the handles; a "saw off" label can be tapped as well as the pale end it names.
+// A finger on the cut pieces: straight up and down scrolls the panel; any other way, or onto the view, lifts the piece.
 import { SNAP, BOARD_FT, MIN_W, MAX_W, faceSegments, postSide, ends, cornerXZ, faceToWorld } from './tower.js';
 import { trianglesOf } from './questions.js';
-import { touch, findJoints } from './frame.js';
+import { touch, findJoints, isKnee } from './frame.js';
 import * as sound from './sound.js';
 
 const DEG = Math.PI / 180;
@@ -79,8 +82,9 @@ export function makeBuild(app) {
       el.sawLabel.innerHTML = `${fmt(cutAt)} <span>|</span> ${fmt(b.len - cutAt)}`;
       el.benchLabel.textContent = b.full ? 'Fresh 8 ft board' : fmt(b.len) + ' piece';
     }
+    // (the panel keeps its place when the pieces are redrawn: lifting one off a scrolled panel doesn't jump it back up)
+    const pxFt = Math.min(15, (el.pieces.clientWidth || 120) > 160 ? 15 : 11), keep = el.panel ? el.panel.scrollTop : 0;
     el.pieces.innerHTML = '';
-    const pxFt = Math.min(15, (el.pieces.clientWidth || 120) > 160 ? 15 : 11);
     L.pieces.sort((a, b) => b.len - a.len);
     for (const p of L.pieces) {
       const d = document.createElement('div'); d.className = 'piece' + (p.fresh ? ' is-new' : ''); p.fresh = false;
@@ -89,6 +93,7 @@ export function makeBuild(app) {
       wireDrag(d, p); el.pieces.appendChild(d);
     }
     el.piecesEmpty.hidden = L.pieces.length > 0;
+    if (el.panel) el.panel.scrollTop = keep;
     app.onLumber && app.onLumber(fullCount());
   }
   // the saw line: drag it up and down the board (snaps to the half foot), then Cut
@@ -119,8 +124,10 @@ export function makeBuild(app) {
     renderPanel(); app.onCut && app.onCut(lo, hi);
   }
   el.cutBtn.addEventListener('click', cut);
-  // put a waiting piece on the bench to cut it smaller (a fresh board there goes back on the stack)
+  // put a waiting piece on the bench to cut it smaller (a fresh board there goes back on the stack). (A piece already
+  // gone, built into a twin by another finger a moment ago, stays gone.)
   function toBench(p) {
+    if (!L.pieces.includes(p)) { renderPanel(); return; }
     if (L.bench) { if (L.bench.full) L.stack++; else L.pieces.push(L.bench); }
     L.pieces = L.pieces.filter((q) => q !== p); L.bench = p; cutAt = snapTo(p.len / 2); sound.clatter(p.len, 'set'); renderPanel();
   }
@@ -166,17 +173,22 @@ export function makeBuild(app) {
   function wireDrag(node, piece, fromBench = false) {
     node.addEventListener('pointerdown', (e) => {
       if (e.button > 0 || app.phase !== 'build') return;
-      // (a finger on a cut piece: a mostly up-and-down swipe scrolls the panel, the browser's own scroll, so the piece
-      // is only lifted once the finger heads across toward the view; the board on the bench lifts either way)
-      const finger = e.pointerType === 'touch' && !fromBench;
-      if (!finger) e.preventDefault();
+      // (a finger on a cut piece: a swipe straight up or down that stays on the panel scrolls it, by hand, since the
+      // pieces don't let the browser scroll; any other way, or as soon as the finger crosses onto the view whatever
+      // way it went, the piece is lifted. A panel with nothing to scroll lifts the piece whichever way it goes.)
+      const finger = e.pointerType === 'touch' && !fromBench, panel = el.panel;
+      const canScroll = finger && panel && panel.scrollHeight > panel.clientHeight + 2, top0 = panel ? panel.scrollTop : 0;
+      e.preventDefault();
       sound.audioOn();
-      const sx = e.clientX, sy = e.clientY; let dragging = false, ghost = null, onView = false, lifted = null;
+      const sx = e.clientX, sy = e.clientY; let dragging = false, scrolling = false, ghost = null, onView = false, lifted = null, dropped = false;
       // (listening on the window: the panel redraws its pieces while one is being dragged)
       const move = (ev) => {
-        if (ev.pointerId !== e.pointerId) return;
-        if (!dragging && Math.hypot(ev.clientX - sx, ev.clientY - sy) < 7) return;
-        if (!dragging && finger && Math.abs(ev.clientY - sy) > Math.abs(ev.clientX - sx)) return;
+        if (ev.pointerId !== e.pointerId || dropped) return;
+        const dx = ev.clientX - sx, dy = ev.clientY - sy;
+        if (!dragging && !scrolling && Math.hypot(dx, dy) < 7) return;
+        if (!dragging && canScroll && ev.clientX < panel.getBoundingClientRect().right - 2 && (scrolling || Math.abs(dx) < Math.abs(dy) * 0.45)) {
+          scrolling = true; panel.scrollTop = top0 - dy; return;
+        }
         if (!dragging) {
           dragging = true; ghost = document.createElement('div'); ghost.className = 'ghost-piece';
           ghost.innerHTML = `<div class="stick"></div><span>${fmt(piece.len)}</span>`; document.body.appendChild(ghost); node.classList.add('is-lifted');
@@ -185,13 +197,17 @@ export function makeBuild(app) {
         ghost.style.transform = `translate(${ev.clientX}px, ${ev.clientY}px)`;
         const r = el.view.getBoundingClientRect();
         const over = ev.clientX > r.left + 4 && ev.clientX < r.right && ev.clientY > r.top && ev.clientY < r.bottom;
-        if (over && !onView) { onView = true; lifted = takeUp(piece, fromBench); }
+        if (over && !onView) {
+          onView = true; lifted = takeUp(piece, fromBench);
+          if (!lifted) { dropped = true; ghost.remove(); ghost = null; node.classList.remove('is-lifted'); carrying = false; return; }
+        }
         if (onView && app.held) { ghost.style.opacity = over ? 0 : 1; if (over) { placeAtPointer(ev.clientX, ev.clientY, true); edgeWatch(ev.clientY); } }
       };
       const up = (ev) => {
         if (ev.pointerId !== e.pointerId) return;
         removeEventListener('pointermove', move); removeEventListener('pointerup', up); removeEventListener('pointercancel', up);
         node.classList.remove('is-lifted'); if (ghost) ghost.remove(); stopEdge(); carrying = false;
+        if (dropped || scrolling) return;
         if (!dragging) { if (!fromBench && ev.type === 'pointerup') toBench(piece); return; }
         dragJustEnded = true; setTimeout(() => { dragJustEnded = false; }, 50);
         const r = el.view.getBoundingClientRect();
@@ -207,6 +223,7 @@ export function makeBuild(app) {
 
   // lift a piece off the panel into the builder's hands
   function takeUp(piece, fromBench) {
+    if (!fromBench && !L.pieces.includes(piece)) return null;     // (spent on a twin meanwhile)
     if (app.held) putBack();
     let p = piece;
     if (fromBench) { p = L.bench; if (!p) return null; nextBench(); }
@@ -302,9 +319,18 @@ export function makeBuild(app) {
   }
   // before a swing: the end it swings about, if it is near a joint, settles right onto it (so a board dropped a little
   // off the corner still braces corner to corner)
+  // A board just as long as the slant between two joints (a brace cut to reach a bay corner to corner, like the 5 ft
+  // brace in a bay 3 ft wide and 4 ft tall) settles its pivot onto the nearer joint of that pair from further off (2
+  // feet), so dropping it level in the bay and swinging one end up still lands it corner to corner.
   function snapPivot(h, pivotEnd) {
     const e = ends(h), P = pivotEnd === 'a' ? { x: e.ax, y: e.ay } : { x: e.bx, y: e.by };
-    const j = nearestJoint(P.x, P.y); if (!j || Math.hypot(j.x - P.x, j.y - P.y) < 0.01) return;
+    const js = jointsHere();
+    let j = null, bd = 2.05;
+    for (const q of js) {
+      const d = Math.hypot(q.x - P.x, q.y - P.y); if (d >= bd) continue;
+      if (js.some((o) => Math.abs(o.x - q.x) > 0.3 && Math.abs(o.y - q.y) > 0.3 && Math.abs(Math.hypot(o.x - q.x, o.y - q.y) - h.len) < 0.12)) { j = q; bd = d; }
+    }
+    j = j || nearestJoint(P.x, P.y); if (!j || Math.hypot(j.x - P.x, j.y - P.y) < 0.01) return;
     h.x += j.x - P.x; h.y += j.y - P.y;
   }
   // swing: one end stays put (pivot), the other follows the pointer's direction
@@ -388,15 +414,18 @@ export function makeBuild(app) {
 
   // ── overhang: the part of a board past the last board (or the ground) it is nailed to ────────────────────────────
   // seg: the board as a segment; hits: where it touches others [{ x, y }]. Returns [{ end: 'a' | 'b', t0, t1 }] in feet
-  // along the board from its a end (the stretch that sticks out), only when it is nailed at two places or more.
+  // along the board from its a end (the stretch that sticks out), only when it is nailed at two places or more. The
+  // top of a post standing up past its last crosspiece is no overhang: that is where the next crosspiece (or the next
+  // post) goes.
   function overhangOf(seg, hits) {
     if (hits.length < 2) return [];
     const dx = (seg.bx - seg.ax) / seg.len, dy = (seg.by - seg.ay) / seg.len;
     const ts = hits.map((c) => clamp((c.x - seg.ax) * dx + (c.y - seg.ay) * dy, 0, seg.len));
     const lo = Math.min(...ts), hi = Math.max(...ts), out = [];
     if (hi - lo < 0.3) return out;
-    if (lo > 0.12) out.push({ end: 'a', t0: 0, t1: lo });
-    if (seg.len - hi > 0.12) out.push({ end: 'b', t0: hi, t1: seg.len });
+    const upright = Math.abs(dx) < 0.1, top = dy > 0 ? 'b' : 'a';
+    if (lo > 0.12 && !(upright && top === 'a')) out.push({ end: 'a', t0: 0, t1: lo });
+    if (seg.len - hi > 0.12 && !(upright && top === 'b')) out.push({ end: 'b', t0: hi, t1: seg.len });
     return out;
   }
   // the held board's overhangs
@@ -421,7 +450,7 @@ export function makeBuild(app) {
     return { face, seg, list: overhangOf(seg, pts) };
   }
   // saw a board off at t (feet from its a end), keeping the part on the far side of `end`
-  function sawOff(len, o) { sound.saw(len, o.t1 - o.t0); const off = o.t1 - o.t0; const kept = addOffcut(off); renderPanel(); app.onSawOff && app.onSawOff(off, kept); }
+  function sawOff(len, o, nailed = false) { sound.saw(len, o.t1 - o.t0); const off = o.t1 - o.t0; const kept = addOffcut(off); renderPanel(); app.onSawOff && app.onSawOff(off, kept, nailed); }
   function cutHeld(o) {
     const h = app.held; if (!h) return;
     const s = segOf(h), dx = (s.bx - s.ax) / s.len, dy = (s.by - s.ay) / s.len, before = h.len;
@@ -437,9 +466,9 @@ export function makeBuild(app) {
       const e = ends(src), dx = (e.bx - e.ax) / src.len, dy = (e.by - e.ay) / src.len;
       if (o.end === 'a') { src.x = e.ax + dx * o.t1; src.y = e.ay + dy * o.t1; src.len -= o.t1; } else src.len = o.t0;
     }
-    sawOff(before, o); app.onTowerChanged && app.onTowerChanged(src);
+    sawOff(before, o, true); app.onTowerChanged && app.onTowerChanged(src, `Sawed ${fmt(o.t1 - o.t0)} off`);
   }
-  // which overhang (if any) the screen point is on
+  // which overhang (if any) the screen point is on: the pale part itself, or its "saw off" tag
   function overhangAt(cx, cy, face, seg, list) {
     const r = el.view.getBoundingClientRect(), px = cx - r.left, py = cy - r.top;
     for (const o of list) {
@@ -448,8 +477,11 @@ export function makeBuild(app) {
       const vx = B.x - A.x, vy = B.y - A.y, L2 = vx * vx + vy * vy || 1, t = clamp(((px - A.x) * vx + (py - A.y) * vy) / L2, 0, 1);
       if (Math.hypot(A.x + vx * t - px, A.y + vy * t - py) < 16) return o;
     }
-    return null;
+    const tag = overTags.find((q) => px > q.x - 6 && px < q.x + q.w + 6 && py > q.y - 6 && py < q.y + q.h + 6);
+    return (tag && list.find((o) => o.end === tag.end)) || null;
   }
+  let overTags = [];     // the "saw off" tags drawn last frame (view pixels), so a tap on one saws
+  let selectTapAt = 0;   // when a tap last picked out a nailed board
 
   // ── the view's pointers: handles, stones, overhangs, walking round, zooming, taps ───────────────────────────────
   const pointers = new Map();          // every finger or mouse button down on the view: id -> { x, y }
@@ -494,7 +526,7 @@ export function makeBuild(app) {
     if (pointers.size > 2) return;
     const h = app.held;
     if (h && app.phase === 'build') {
-      // on (or near) the held board: slide it (a tap on its overhang saws that off instead)
+      // on (or near) the held board: slide it (a tap on its overhang, or on the overhang's tag, saws that off instead)
       const cut = overhangAt(e.clientX, e.clientY, app.face, segOf(h), heldOverhang());
       const p = app.toWall(e.clientX, e.clientY), s = segOf(h);
       if (cut || (p && (() => { const c = nearestOn(s, p.x, p.y); return Math.hypot(c.x - p.x, c.y - p.y) < Math.max(0.7, app.pxToFt(26)); })())) { startGrab('move', e, { cut, body: true }); return; }
@@ -553,15 +585,18 @@ export function makeBuild(app) {
   el.view.addEventListener('wheel', (e) => { e.preventDefault(); app.setZoom(app.zoom * Math.exp(e.deltaY * 0.0012)); }, { passive: false });
 
   // a tap with nothing in hand: the selected board's overhang (saw it off), else whatever is under it (main.js decides:
-  // a twin is built, a board is picked out)
+  // a twin is built, a board is picked out). A tap hard on the heels of the one that picked the board out, or the
+  // second tap of a double tap on a twin, is never a saw cut: it was meant as a double tap.
   function tapAt(cx, cy) {
     if (app.phase !== 'build') return;
-    if (app.selected && !app.held) {
+    if (app.selected && !app.held && now() - selectTapAt > 500 && !(app.twinDoubleTap && app.twinDoubleTap(cx, cy))) {
       const n = nailedOverhang(app.selected);
       const o = n && overhangAt(cx, cy, n.face, n.seg, n.list);
       if (o) { cutNailed(app.selected, o); return; }
     }
+    const was = app.selected;
     app.tapAt(cx, cy);
+    if (app.selected && app.selected !== was) selectTapAt = now();
   }
 
   // turn the held board a step round its middle: upright, 45, level, 135
@@ -574,12 +609,12 @@ export function makeBuild(app) {
     sound.clatter(h.len * 0.6, 'set', undefined, 0.35);
   }
 
-  // a long brace (not level, not upright, longer than a knee brace) that closes no triangle, with an end stopping close
-  // to a joint but not on it: [{ x, y }] the contact at that end (the quick drop that leaves a brace's foot half a foot
-  // off the corner, nailed to the post a little way up)
+  // a brace (not level, not upright, not a knee brace: on a narrow wall a short brace reaching post to post counts)
+  // that closes no triangle, with an end stopping close to a joint but not on it: [{ x, y }] the contact at that end
+  // (the quick drop that leaves a brace's foot half a foot off the corner, nailed to the post a little way up)
   function cornerMiss(h, cs) {
     const s = segOf(h), a = Math.abs(Math.atan2(s.by - s.ay, s.bx - s.ax)) * 180 / Math.PI, lean = Math.min(a, 180 - a);
-    if (lean < 5 || lean > 85 || h.len <= 4.01 || cs.length < 2) return [];
+    if (lean < 5 || lean > 85 || isKnee(s, W()) || cs.length < 2) return [];
     if (trianglesOf([...context().segs, s], '__held').length) return [];
     const dx = (s.bx - s.ax) / s.len, dy = (s.by - s.ay) / s.len, along = (c) => (c.x - s.ax) * dx + (c.y - s.ay) * dy;
     const sorted = [...cs].sort((p, q) => along(p) - along(q)), joints = jointsHere(), out = [];
@@ -626,18 +661,20 @@ export function makeBuild(app) {
       const ux = B.x - A.x, uy = B.y - A.y, ul = Math.hypot(ux, uy) || 1, nx = -uy / ul, ny = ux / ul;
       out += `<line class="over" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}"/>`;
       out += `<line class="sawline" x1="${J.x - nx * 15}" y1="${J.y - ny * 15}" x2="${J.x + nx * 15}" y2="${J.y + ny * 15}"/>`;
-      const c = place(88, 21, [-26, 26, -50, 50, -74, 74].map((d) => ({ x: M.x + nx * d, y: M.y + ny * d }))), txt = 'saw off ' + fmt(o.t1 - o.t0);
-      out += `<g class="overtag"><rect x="${c.x - 44}" y="${c.y - 11}" width="88" height="21" rx="10"/><text x="${c.x}" y="${c.y + 4}">${txt}</text></g>`;
+      const c = place(96, 24, [-28, 28, -52, 52, -76, 76].map((d) => ({ x: M.x + nx * d, y: M.y + ny * d }))), txt = '✂ saw off ' + fmt(o.t1 - o.t0);
+      out += `<g class="overtag"><rect x="${c.x - 48}" y="${c.y - 12}" width="96" height="24" rx="12"/><text x="${c.x}" y="${c.y + 4}">${txt}</text></g>`;
+      overTags.push({ end: o.end, x: c.x - 48, y: c.y - 12, w: 96, h: 24 });
     }
     return out;
   }
   let hintText = '';
   function frame() {
     const h = app.held, svg = el.overlay, building = app.phase === 'build';
-    const show = !!h && building;
+    const show = !!h && building && (!app.facingWall || app.facingWall());
     for (const g of [el.gMove, el.gA, el.gB]) g.hidden = !show;
     el.nailBtn.hidden = !show; el.view.classList.toggle('is-holding', show);
     let out = '', hint = '';
+    overTags = [];
     // the footing stones (until the first board is nailed): a handle on each, and the tape between the near two
     const stones = building && app.stonesOpen() && !h;
     el.stoneHandles.forEach((n, c) => { n.hidden = !stones; if (stones) { const [X, Z] = cornerXZ(W(), c); place(n, app.worldToScreen(X, 0.2, Z)); } });
@@ -717,23 +754,24 @@ export function makeBuild(app) {
       el.nailBtn.disabled = !ok;
       hint = !ok ? 'Touch it to a board or the ground to nail it'
         : miss.length ? 'Slide or swing its end onto the corner, so it makes a triangle'
-        : over.length ? 'Tap the pale end to saw it off at the joint, or ✓ to nail it'
+        : over.length ? 'Tap ✂ saw off (or the pale end) to cut it at the joint, or ✓ to nail it'
         : h.ghost ? 'Lined up with its twin: ✓ to nail it'
         : postSide(h, W()) !== null ? 'Corner post, straight up: ✓ to nail it' : 'Tap ✓ to nail it';
     } else if (building && app.selected) {
       const n = nailedOverhang(app.selected);
-      if (n && n.list.length) { out += drawOverhang(n.face, n.seg, n.list); hint = 'Tap the pale end to saw it off'; }
+      if (n && n.list.length) { out += drawOverhang(n.face, n.seg, n.list); hint = 'Tap ✂ saw off (or the pale end) to cut it off'; }
     }
-    // the twins with no wood or no room: say why, small, at their middle
+    // the twins with no wood or no room: say why, small, by their middle (each tag clear of the others)
     if (building && !h) {
-      const r = el.view.getBoundingClientRect();
+      const r = el.view.getBoundingClientRect(), tag = tagPlacer(r);
       for (const g of app.ghostList()) {
         if (g.ok || !g.reason) continue;
         let P;
         if (g.kind === 'post') { const [X, Z] = cornerXZ(W(), g.corner); P = app.worldToScreen(X, g.y + g.len / 2, Z); }
         else { const w = faceToWorld(W(), g.face, g.x + Math.cos(g.ang) * g.len / 2, g.y + Math.sin(g.ang) * g.len / 2); P = app.worldToScreen(w.X, w.Y, w.Z); }
         if (P.behind || P.x < 40 || P.x > r.width - 40 || P.y < 60 || P.y > r.height - 10) continue;
-        out += `<g class="ghosttag"><rect x="${P.x - 42}" y="${P.y - 10}" width="84" height="19" rx="9"/><text x="${P.x}" y="${P.y + 4}">${g.reason}</text></g>`;
+        const c = tag(108, 19, [[0, 0], [0, -24], [0, 24], [0, -48], [0, 48], [-70, 0], [70, 0]].map(([dx, dy]) => ({ x: P.x + dx, y: P.y + dy })));
+        out += `<g class="ghosttag"><rect x="${c.x - 54}" y="${c.y - 10}" width="108" height="19" rx="9"/><text x="${c.x}" y="${c.y + 4}">${g.reason}</text></g>`;
       }
     }
     svg.innerHTML = out;
