@@ -16,7 +16,8 @@
 //     the answer comes to, and doesn't move the ladder); goods.sold(order) takes them out of the saddlebags
 //     openBox(problem, after(result)): opens the lock-box panel on that problem (main.js pays and pauses); false when it
 //     can't just then (paused, or a box already open), and it is asked again shortly; pay: { order,
-//     orderEvery, orderFirst } (shop.js PAY); onStart / onStop: the game puts the round-up and the keys away meanwhile
+//     orderEvery, orderFirst } (shop.js PAY); onStart / onStop: the game puts the round-up and the keys away meanwhile;
+//     voice(kind, { at, male }): a customer's recorded line ('whatchagot', 'thanksStore', 'niceday': src/audio/shouts.js)
 //   J.start()   to the counter (off the horse first, if riding)
 //   J.stop()    "Done for now": the customers wander off, the camera comes back to the rider
 //   J.update(dt)   each frame (also after stopping: the last customers walk away)
@@ -50,7 +51,9 @@ export const STORE = {
 };
 
 export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, refresh = () => {}, openBox = null,
-  onStart = () => {}, onStop = () => {}, pay = { order: 3, orderEvery: 3, orderFirst: 1 }, scene = W.scene, goods = null }) {
+  onStart = () => {}, onStop = () => {}, pay = { order: 3, orderEvery: 3, orderFirst: 1 }, scene = W.scene, goods = null, voice = null }) {
+  // a customer's recorded line (src/audio/shouts.js: the men only; it knows by `male`), from where they stand
+  const speak = (kind, c) => { if (voice && c) voice(kind, { at: () => ({ x: c.x, z: c.z }), male: !c.who.she }); };
   const place = W.places.store;
   if (!rider.topics || typeof rider.topics !== 'object') rider.topics = {};
   if (!rider.topics.store || typeof rider.topics.store !== 'object') rider.topics.store = {};
@@ -153,6 +156,7 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
     missed = false; helped = false; thinkT = 0; eqPending = false;
     U.purse(rider.gold);   // (in step with the gold, the lock box's pay included)
     U.show(order, { filled });
+    if (order.sale) speak('whatchagot', c);   // (come to buy the rider's own goods)
     if (c.walking) c.hand = true; else handOver(c);
   }
   // the customer holds out the slip (once they've stopped walking)
@@ -215,7 +219,7 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
     setTimeout(refresh, 700);   // (the HUD's purse goes up as the slip's coins land)
     order = null; eqPending = false;
     // the customer tips their hat and goes, and the one waiting in line steps up while the coins fly
-    if (c) { c.p.play('Wave', { fade: 0.2, once: true }); setTimeout(() => { if (c.state === 'serve') leave(c); moveUp(); }, 900); }
+    if (c) { if (!unfilled) speak('thanksStore', c); c.p.play('Wave', { fade: 0.2, once: true }); setTimeout(() => { if (c.state === 'serve') { leave(c); speak('niceday', c); } moveUp(); }, 900); }
     const told = news.splice(0);
     await U.right(o.coins.findIndex((k) => k.good), { line, gold, from, to: rider.gold, note: first ? 'right first time' : '', news: told, paid });
     if (!J.active) return;

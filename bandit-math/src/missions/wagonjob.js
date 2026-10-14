@@ -534,7 +534,7 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
       hud.toast(`Roped the ${rec.text}! ${rec.fact}`, 'good');
       if (e.newTitle) setTimeout(() => hud.toast(`You're a ${e.newTitle} now!`, 'gold'), 1600);
       if (r.moved > 0) setTimeout(() => hud.toast('Up a step!', 'good'), 900);
-      hob.event('banditCatch');
+      hob.event('banditCatch', { at: () => ({ x: rec.r.x, z: rec.r.z }), male: /_m$/.test((rec.r.look && rec.r.look.outfit) || '') });   // (who he is and where: his "you got me", shouts.js)
       if (music) music.hit();
       refresh();
     } else {
@@ -547,7 +547,7 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
       showRail(ex.skip, ex.anchor);
       chartHelp(rec.n);
       hintT = WAGONJOB.hintFor;
-      hob.event('banditMiss');
+      hob.event('banditMiss', { at: () => ({ x: rec.r.x, z: rec.r.z }), male: /_m$/.test((rec.r.look && rec.r.look.outfit) || '') });   // (the rider roped by mistake has his say: shouts.js)
       refresh();
     }
     // numbers due back now (2 to 4 answers after a miss): the townsman wearing it shows it again, or one rides in

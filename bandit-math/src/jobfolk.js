@@ -25,7 +25,8 @@
 //   const JF = makeJobFolk({ W, folk, P, camera, hud, jobs, actions })
 //     folk: the people library; jobs: getters for the jobs and places { roundup, sheep, pigs, wagon, deer, camps, farm,
 //     delivery } (each returns the job or null); actions: { sheriff() } (opens the sheriff's desk); onTalk(what, id): a
-//     person's hello ('hello') and the walking-away toast ('leave'), for the player's own howdy and see-ya (shouts.js)
+//     person's hello ('hello'), the walking-away toast ('leave') and a person's thank-you ('thanks'), for the player's
+//     own howdy and see-ya and the men's recorded thanks and goodbyes (shouts.js); id: the person; who: { at, male }
 //   JF.update(dt, { hidden })   each frame while riding, before the doors are looked at (hidden: a panel or the cabin is
 //                       up: the tags and the speech card are put away and the people wait)
 //   JF.prompt           the prompt's words when E by a person does something, else null; JF.talk() does it
@@ -54,6 +55,9 @@ export const STAND = {
   trail: 3.5,                         // m a person stands at least from the middle of the trail to the pasture
 };
 
+// a person as a voice: where they stand, and whether he is a man (the recorded voices are the game maker's: men only;
+// the freight driver has no look of his own, and is a man)
+const voiceOf = (r) => ({ at: () => ({ x: r.x, z: r.z }), male: r.def && r.def.look ? /_m$/.test(r.def.look.outfit || '') : r.id === 'driver' });
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const HATS = { boss: 'cattleman', vet: 'bowler', wife: 'straw', naturalist: 'ranger', sheriff: 'white' };
@@ -206,7 +210,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
       const h = c.foreman.person;
       if (!h) continue;
       const lines = FOREMAN_HELLO[c.id] || FOREMAN_HELLO.cow;
-      const r = addPerson({ id: c.id, name: c.foreman.name, role: c.short.replace(/^the /, ''), hello: lines }, { x: h.x, z: h.z }, h.face, { person: h.p, kind: 'foreman' });
+      const r = addPerson({ id: c.id, name: c.foreman.name, role: c.short.replace(/^the /, ''), hello: lines, look: c.foreman.look }, { x: h.x, z: h.z }, h.face, { person: h.p, kind: 'foreman' });
       if (r) { r.camp = c; r.h = h; foremen.push(r); }
     }
   }
@@ -290,7 +294,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     for (const a of areas) {
       const job = get(a.job), m = a.mid(); if (!job || !m) continue;
       const d = Math.hypot(at.x - m.x, at.z - m.z);
-      if (a.watch.update(dt, !!job.near, d)) { hud.toast(FOLK_BY_ID[a.id].leave); if (onTalk) onTalk('leave', a.id); }
+      if (a.watch.update(dt, !!job.near, d)) { hud.toast(FOLK_BY_ID[a.id].leave); const r = byId(a.id); if (onTalk) onTalk('leave', a.id, r ? voiceOf(r) : null); }
       a.near = !!job.near;
     }
     for (const r of people) {
@@ -327,7 +331,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     }
     // a thank-you waiting its turn: said once nothing else is being said
     for (let i = pending.length - 1; i >= 0; i--) if ((pending[i].t -= dt) <= 0) pending.splice(i, 1);
-    if (pending.length && (!talking || talking.t < 0.6)) { const q = pending.shift(); say(q.r, q.text, { pin: true }); }
+    if (pending.length && (!talking || talking.t < 0.6)) { const q = pending.shift(); say(q.r, q.text, { pin: true }); if (onTalk) onTalk('thanks', q.r.id, voiceOf(q.r)); }
     // the speech card: over the speaker's head, or a card of its own in the middle when the speaker is out of sight
     if (talking) {
       if ((talking.t -= dt) <= 0) { talking = null; card.hidden = true; }

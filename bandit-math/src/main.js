@@ -183,7 +183,7 @@ async function ride(r) {
   const farmHob = Object.create(hob); farmHob.event = (n, d) => { hob.event(n, d); if (HS && (n === 'flockDone' || n === 'pigsDone')) HS.jobDone(n); };
   SH = makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hud, hob: farmHob, refresh, defer: (at) => !!(PG && PG.wants(at)) });
   PG = makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, hob: farmHob, refresh });
-  SJ = makeStoreJob({ W, folk, P, I, camera, rider, hud, hob, refresh, pay: PAY, goods: HS,
+  SJ = makeStoreJob({ W, folk, P, I, camera, rider, hud, hob, refresh, pay: PAY, goods: HS, voice: (k, who) => { if (SHOUT) SHOUT.say(k, who); },
     openBox: (problem, after) => !paused && openBox({ tier: problem.tier, from: 'store' }, { problem, after }),   // (false: not now, the store tries again)
     onStart: () => { I.enabled = false; if (RU) RU.paused = true; hud.prompt(null); hud.rule(null); hud.hint(null); },
     onStop: () => { I.enabled = !paused; if (RU) RU.paused = paused; } });
@@ -204,7 +204,7 @@ async function ride(r) {
     quiet: () => !!((RU && RU.near) || (SH && SH.near) || (PG && PG.near) || atCounter() || (DL && DL.card)) }) : null;
   JF = makeJobFolk({ W, folk, P, camera, hud,
     jobs: { roundup: () => RU, sheep: () => SH, pigs: () => PG, wagon: () => WJ, deer: () => DJ, camps: () => camps, farm: () => farm, delivery: () => DL },
-    actions: { sheriff: () => openCounter('sheriff') }, onTalk: (what) => { if (SHOUT) SHOUT.talk(what); } });
+    actions: { sheriff: () => openCounter('sheriff') }, onTalk: (what, id, who) => { if (SHOUT) SHOUT.talk(what, who); } });
   RU.start();
   hob.trail(true);
   hud.show(true); hud.touch(I.touch);

@@ -141,7 +141,7 @@ export function makeCamps({ W, folk = null, camera, audio = null, scene = W.scen
     root.position.set(x, y, z); root.rotation.y = rot;
     scene.add(root);
     const camp = { id: def.id, kind: def.kind, name: def.name, short: def.short, x, z, y, rot, at, local, root, hands: [], fire: null, mesh: null, crates: null, shown: 0, mow: def.mow || CAMP.mow,
-      foreman: { ...at(K.foreman.x, K.foreman.z), rot: rot + K.foreman.face, name: def.foreman.name, person: null },
+      foreman: { ...at(K.foreman.x, K.foreman.z), rot: rot + K.foreman.face, name: def.foreman.name, look: def.foreman.look, person: null },
       drop: at(K.drop.x, K.drop.z), unload: at(K.stack.x, K.stack.z) };
 
     // the model (loaded once a kind; the same picture and shape shared)
