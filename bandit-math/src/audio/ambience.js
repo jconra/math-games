@@ -46,7 +46,8 @@
 //   A.update(dt, { at, flock, P, D, HS, farm, RU, SH, PG, traffic, indoor, music, voice })   each frame of play: at:
 //        where the player is; flock: the town's chickens (townLifeNow()); P: the player; D: the dog (or null); HS: the
 //        homestead; farm, SH, PG: the farm and its sheep and pig jobs (or null); RU: the round-up; traffic: the wagons;
-//        indoor: in the cabin; music 0..1: how loud the action music is; voice: true while Hob speaks
+//        indoor: in the cabin; music 0..1: how loud the action music is; voice: true while a voice speaks (the player's
+//        shouts, src/audio/shouts.js)
 //   A.state()     for rigs: what has played, how many sound at once, the creek, the hooves, the bus level
 //   A.dispose()
 //   Pure helpers for tests: clipExt(canPlayType), pickClip(list, last, now, lastAt, rand, repeat), crossed(last, now,

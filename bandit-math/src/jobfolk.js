@@ -24,7 +24,8 @@
 //
 //   const JF = makeJobFolk({ W, folk, P, camera, hud, jobs, actions })
 //     folk: the people library; jobs: getters for the jobs and places { roundup, sheep, pigs, wagon, deer, camps, farm,
-//     delivery } (each returns the job or null); actions: { sheriff() } (opens the sheriff's desk)
+//     delivery } (each returns the job or null); actions: { sheriff() } (opens the sheriff's desk); onTalk(what, id): a
+//     person's hello ('hello') and the walking-away toast ('leave'), for the player's own howdy and see-ya (shouts.js)
 //   JF.update(dt, { hidden })   each frame while riding, before the doors are looked at (hidden: a panel or the cabin is
 //                       up: the tags and the speech card are put away and the people wait)
 //   JF.prompt           the prompt's words when E by a person does something, else null; JF.talk() does it
@@ -57,7 +58,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const HATS = { boss: 'cattleman', vet: 'bowler', wife: 'straw', naturalist: 'ranger', sheriff: 'white' };
 
-export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, scene = W.scene }) {
+export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, scene = W.scene, onTalk = null }) {
   const get = (k) => { try { return jobs[k] ? jobs[k]() : null; } catch (e) { return null; } };
   const shadows = !!(W.V && W.V.SHADOW ? W.V.SHADOW.on : true);
   const people = [];
@@ -289,7 +290,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     for (const a of areas) {
       const job = get(a.job), m = a.mid(); if (!job || !m) continue;
       const d = Math.hypot(at.x - m.x, at.z - m.z);
-      if (a.watch.update(dt, !!job.near, d)) hud.toast(FOLK_BY_ID[a.id].leave);
+      if (a.watch.update(dt, !!job.near, d)) { hud.toast(FOLK_BY_ID[a.id].leave); if (onTalk) onTalk('leave', a.id); }
       a.near = !!job.near;
     }
     for (const r of people) {
@@ -308,7 +309,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
       if (r.id === 'naturalist') { const DJ = get('deer'); near = near && !(DJ && DJ.active); }
       if (r.kind === 'foreman') { const DL = get('delivery'); near = near && !(DL && DL.phase !== 'none'); }
       const away = d > TALK.away && !(area && area.near) && !(r.id === 'driver' && d < TALK.hail);
-      if (r.greet.update(dt, near, away)) say(r, r.def.hello, { pin: !!(area && area.near), hello: true });   // (over anybody else's: the newest one met is the one in front of you; arriving at the job from where the person is out of sight, in a card of its own)
+      if (r.greet.update(dt, near, away)) { say(r, r.def.hello, { pin: !!(area && area.near), hello: true }); if (onTalk) onTalk('hello', r.id); }   // (over anybody else's: the newest one met is the one in front of you; arriving at the job from where the person is out of sight, in a card of its own)
       // idle about, turn to the player when close (the camps turn their own foremen; the driver only on the ground)
       if (r.kind === 'own' || (r.kind === 'driver' && r.down)) {
         if (d < TALK.awake) {

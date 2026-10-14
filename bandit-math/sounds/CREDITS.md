@@ -5,7 +5,8 @@ given here as a courtesy). Each comes as `.ogg` (Ogg Vorbis) and `.m4a` (AAC, fo
 loads whichever the browser can play (src/audio/ambience.js). Each was trimmed, faded at both ends and evened in loudness
 (about -18 LUFS) from the source recording; a few loud-cracking ones went through a gentle limiter, and the far herd
 through a low-pass so it sounds far off. Everything else the game sounds like (hooves,
-hammering, sawing, the creek, a pig's grunt, the music, Old Hob's voice) is made in the browser, no recordings.
+hammering, sawing, the creek, a pig's grunt, the music) is made in the browser, no recordings. The player's own shouts in voice/ (hyah, whoa, yeehaw,
+howdy and the rest) were recorded by the game's maker.
 
 | file | what | source | author | licence |
 |---|---|---|---|---|

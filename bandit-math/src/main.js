@@ -49,6 +49,7 @@ import { makeCabin } from './cabin/cabin.js';
 import { makeHomestead } from './homestead.js';
 import { makeAudio, volumeRow } from './audio/audio.js';
 import { makeAmbience } from './audio/ambience.js';
+import { makeShouts } from './audio/shouts.js';
 import { openLockbox, TIER_NAME } from './lockbox/index.js';
 import { loadRiders, saveRider, earn, recordLockbox, titleOf, nextTitle, badgesOf, cleanBoxes, BOX_TIERS } from './save.js';
 
@@ -107,6 +108,7 @@ let rider = null, mode = 'lasso', P = null, D = null, RU = null, hob = null, sho
 let stage = null;   // the band on the town's stage and its music (src/stage.js)
 let traffic = null;   // wagons travelling the road through the valley now and then (src/traffic.js)
 let AMBI = null;   // the town's sounds: animals, birds, work out back, the creek, the horse's hooves (src/audio/ambience.js)
+let SHOUT = null;   // the player's own voice: hyah, whoa, yeehaw, howdy (src/audio/shouts.js)
 let cabin = null;   // the player's cabin: walk in through its door (src/cabin/cabin.js)
 let farm = null, SH = null;   // the farm north of town (src/farm.js) and its sick-sheep job (src/missions/sheep.js)
 let PG = null;   // the farm's loose-pigs job (src/missions/pigs.js)
@@ -160,10 +162,11 @@ async function ride(r) {
   P = makePlayer({ W, folk, animals, rider, input: I, camera, say: (t) => hud.toast(t) });
   makeDogIfOwned();
   hob = makeHob({ W, hud, rider, I });   // (no babble voice: the owner found reading works better; src/audio/voice.js is kept for the Sound Lab)
-  { const heard = hob.event; hob.event = (n, d) => { heard(n, d); if (JF) JF.heard(n, d); }; }   // (the job folk hear the jobs too: their thank-yous)
+  { const heard = hob.event; hob.event = (n, d) => { heard(n, d); if (JF) JF.heard(n, d); if (SHOUT) SHOUT.heard(n, d); }; }   // (the job folk hear the jobs too: their thank-yous; and the player's yeehaw at a job's end)
   stage = makeStage({ W, folk, audio: AUD });
   traffic = makeTraffic({ W, animals, folk, audio: AUD, obstacles: trafficThings, camps: () => camps });
   AMBI = makeAmbience({ audio: AUD, W }); BM.ambience = AMBI;
+  SHOUT = makeShouts({ audio: AUD }); BM.shouts = SHOUT;
   AUD.hold('pause', false); AUD.hold('title', false);
   HS = makeHomestead({ W, animals, rider, hud, hob, refresh });
   shops = makeShops({ W, rider, say: (t, k) => hud.toast(t, k), extra: HS.shop,
@@ -201,7 +204,7 @@ async function ride(r) {
     quiet: () => !!((RU && RU.near) || (SH && SH.near) || (PG && PG.near) || atCounter() || (DL && DL.card)) }) : null;
   JF = makeJobFolk({ W, folk, P, camera, hud,
     jobs: { roundup: () => RU, sheep: () => SH, pigs: () => PG, wagon: () => WJ, deer: () => DJ, camps: () => camps, farm: () => farm, delivery: () => DL },
-    actions: { sheriff: () => openCounter('sheriff') } });
+    actions: { sheriff: () => openCounter('sheriff') }, onTalk: (what) => { if (SHOUT) SHOUT.talk(what); } });
   RU.start();
   hob.trail(true);
   hud.show(true); hud.touch(I.touch);
@@ -260,6 +263,7 @@ function endRide() {
   if (stage) stage.dispose();
   if (traffic) { traffic.dispose(); traffic = null; }
   if (AMBI) { AMBI.dispose(); AMBI = BM.ambience = null; }
+  if (SHOUT) { SHOUT.dispose(); SHOUT = BM.shouts = null; }
   RU = hob = shops = D = P = stage = SH = PG = SJ = farm = null; door = null;
   AUD.hold('title', true);
   pausedBy.clear(); paused = false;
@@ -476,7 +480,8 @@ function titleCam(dt) {
 function townSounds(dt, indoor) {
   if (!AMBI || !P) return;
   const m = WJ && WJ.music ? WJ.music.state() : null;
-  AMBI.update(dt, { at: P.position, flock: townLifeNow(), P, D, HS, farm, RU, SH, PG, traffic, indoor, music: m ? Math.min(1, m.action + (m.trail > 0.05 ? 0.4 : 0)) : 0 });
+  if (SHOUT && !indoor) SHOUT.update(dt, { P, I });   // (the player's shouts: a spur, a pull-up, a hello, a job done)
+  AMBI.update(dt, { at: P.position, flock: townLifeNow(), P, D, HS, farm, RU, SH, PG, traffic, indoor, music: m ? Math.min(1, m.action + (m.trail > 0.05 ? 0.4 : 0)) : 0, voice: !!(SHOUT && SHOUT.speaking) });
 }
 
 // ── EACH FRAME ───────────────────────────────────────────────────────────────────────────────────────────────────
