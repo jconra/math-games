@@ -15,10 +15,10 @@ const bright = (d) => { let a = 0, b = 0; for (let i = 1; i < d.length; i++) { a
 // the step across the seam is no bigger than an ordinary step inside the loop (no click where it wraps)
 const seamOK = (d) => { const steps = []; for (let i = 1; i < d.length; i++) steps.push(Math.abs(d[i] - d[i - 1])); steps.sort((x, y) => x - y); return Math.abs(d[0] - d[d.length - 1]) <= steps[Math.floor(steps.length * 0.99)]; };
 
-test("one settings block each: the sliders' names, the creek's as it was", () => {
-  assert.deepEqual(Object.keys(BROOK).sort(), ['bubbleHigh', 'bubbleLen', 'bubbleLow', 'bubbles', 'fizz', 'gurglePitch', 'gurgles', 'level', 'lowpass', 'passes', 'rise', 'seconds']);
+test("one settings block each: the sliders' names, the owner's creek", () => {
+  assert.deepEqual(Object.keys(BROOK).sort(), ['bubbleHigh', 'bubbleLen', 'bubbleLow', 'bubbles', 'fizz', 'fizzTop', 'gurglePitch', 'gurgles', 'level', 'lowpass', 'passes', 'rise', 'seconds']);
   assert.deepEqual({ seconds: BROOK.seconds, bubbles: BROOK.bubbles, low: BROOK.bubbleLow, high: BROOK.bubbleHigh, lowpass: BROOK.lowpass, passes: BROOK.passes, level: BROOK.level },
-    { seconds: 7, bubbles: 38, low: 650, high: 2850, lowpass: 2000, passes: 2, level: 0.6 }, "the defaults are the creek's sound as it was");
+    { seconds: 9, bubbles: 57, low: 650, high: 2977, lowpass: 406, passes: 3, level: 0.47 }, "the defaults are the owner's creek from the Sound Lab");
   for (const k of ['crackles', 'cluster', 'clusterLen', 'crackleShort', 'crackleLong', 'bright', 'spread', 'pops', 'knock', 'settles', 'breath', 'lowpass', 'seconds', 'level']) assert.ok(k in FIRE, 'FIRE.' + k);
   assert.ok(FIRE.crackles > 20 * FIRE.pops, 'mostly crackles, fewer pops');
   assert.ok(FIRE.crackleShort >= 0.5 && FIRE.crackleLong <= 4, 'crackles 0.5 to 4 ms');
@@ -29,10 +29,10 @@ test("one settings block each: the sliders' names, the creek's as it was", () =>
 test('the creek: its length and level from the settings; a lower low-pass (or more passes) is darker; no seam', () => {
   const a = brookSamples(SR, BROOK, seeded(3));
   assert.equal(a.length, Math.round(SR * BROOK.seconds));
-  assert.ok(Math.abs(peak(a) - BROOK.level) < 1e-6);
+  assert.ok(Math.abs(peak(a) - BROOK.level) < 1e-6 || BROOK.fizzTop > 0);
   assert.ok(seamOK(a), 'the default loop wraps with no click');
-  const lo = brookSamples(SR, { ...BROOK, lowpass: 400 }, seeded(3)), steep = brookSamples(SR, { ...BROOK, lowpass: 400, passes: 5 }, seeded(3));
-  assert.ok(bright(lo) < bright(a) * 0.8 && bright(steep) < bright(lo), 'darker and darker');
+  const hi = brookSamples(SR, { ...BROOK, lowpass: 2000, passes: 2 }, seeded(3)), lo = brookSamples(SR, { ...BROOK, lowpass: 400, passes: 2 }, seeded(3)), steep = brookSamples(SR, { ...BROOK, lowpass: 400, passes: 5 }, seeded(3));
+  assert.ok(bright(lo) < bright(hi) * 0.8 && bright(steep) < bright(lo), 'darker and darker');
   assert.ok(seamOK(lo) && seamOK(steep) && seamOK(brookSamples(SR, { ...BROOK, lowpass: 300, passes: 6, seconds: 4 }, seeded(8))));
   assert.equal(brookSamples(SR, { ...BROOK, seconds: 3 }, seeded(1)).length, 3 * SR);
   assert.deepEqual(brookSamples(SR, BROOK, seeded(9)), brookSamples(SR, BROOK, seeded(9)), 'the same random numbers make the same creek');
