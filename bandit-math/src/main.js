@@ -48,7 +48,6 @@ import { roadCurve } from './wagon.js';
 import { makeCabin } from './cabin/cabin.js';
 import { makeHomestead } from './homestead.js';
 import { makeAudio, volumeRow } from './audio/audio.js';
-import { makeHobVoice, voiceRow } from './audio/voice.js';
 import { makeAmbience } from './audio/ambience.js';
 import { openLockbox, TIER_NAME } from './lockbox/index.js';
 import { loadRiders, saveRider, earn, recordLockbox, titleOf, nextTitle, badgesOf, cleanBoxes, BOX_TIERS } from './save.js';
@@ -73,7 +72,6 @@ const T = showTitle($('title-root'), { riders: loadRiders(), build: BUILD, onRid
 T.setProgress(0.01, 'Riding into the valley');
 // the game's sound (src/audio/audio.js): it wakes on the first click or key press, and is quiet on the title and while paused
 const AUD = makeAudio(); AUD.hold('title', true);
-const VOICE = makeHobVoice(AUD); BM.voice = VOICE;   // Old Hob's babble under his lines (src/audio/voice.js; its switch is in the menu)
 Object.defineProperty(BM, 'stage', { get: () => stage }); BM.audio = AUD;
 const hud = makeHud($('hud-root'), {
   onMenu: () => openMenu(),
@@ -161,7 +159,7 @@ async function ride(r) {
   I.enabled = true;
   P = makePlayer({ W, folk, animals, rider, input: I, camera, say: (t) => hud.toast(t) });
   makeDogIfOwned();
-  hob = makeHob({ W, hud, rider, I, voice: VOICE });
+  hob = makeHob({ W, hud, rider, I });   // (no babble voice: the owner found reading works better; src/audio/voice.js is kept for the Sound Lab)
   { const heard = hob.event; hob.event = (n, d) => { heard(n, d); if (JF) JF.heard(n, d); }; }   // (the job folk hear the jobs too: their thank-yous)
   stage = makeStage({ W, folk, audio: AUD });
   traffic = makeTraffic({ W, animals, folk, audio: AUD, obstacles: trafficThings, camps: () => camps });
@@ -370,7 +368,7 @@ function openMenu() {
       ? 'thumb stick on the left to move (push it to the edge to gallop) · drag to look · tap a steer or a rider, or press Rope · Horse calls your horse · On / off gets on and off · tap the prompt at a door'
       : `<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · drag to look · <kbd>Shift</kbd> run or gallop ·
       click a steer (or <kbd>F</kbd>) to rope it · <kbd>H</kbd> call your horse · <kbd>E</kbd> on and off, or talk at a door`}</div>`;
-  body.querySelector('.bms-menu').after(volumeRow(AUD), voiceRow(VOICE));
+  body.querySelector('.bms-menu').after(volumeRow(AUD));
   let then = null;
   menu = makePanel({ title: 'Taking a breather', sub: `${rider.name} · ${titleOf(rider)}${mode === 'shoot' ? ' · shooting comes soon' : ''}`, body,
     onClose: () => { menu = null; resume('menu'); if (then) then(); } });
@@ -478,7 +476,7 @@ function titleCam(dt) {
 function townSounds(dt, indoor) {
   if (!AMBI || !P) return;
   const m = WJ && WJ.music ? WJ.music.state() : null;
-  AMBI.update(dt, { at: P.position, flock: townLifeNow(), P, D, HS, farm, RU, SH, PG, traffic, indoor, music: m ? Math.min(1, m.action + (m.trail > 0.05 ? 0.4 : 0)) : 0, voice: VOICE.speaking });
+  AMBI.update(dt, { at: P.position, flock: townLifeNow(), P, D, HS, farm, RU, SH, PG, traffic, indoor, music: m ? Math.min(1, m.action + (m.trail > 0.05 ? 0.4 : 0)) : 0 });
 }
 
 // ── EACH FRAME ───────────────────────────────────────────────────────────────────────────────────────────────────
