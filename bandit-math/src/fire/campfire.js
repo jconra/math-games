@@ -8,9 +8,11 @@
 //
 // No light is added to the scene (a PointLight a fire would make every lit material in the valley costlier): the glow
 // is a soft orange patch laid on the ground under the fire, added to what is there (brighter, never darker), that
-// flickers with the flame. The crackle is two Sound Lab patches (FIRE_PATCHES below; the same ones are in the Sound Lab,
-// ~/sound-lab/patch.js, to tune by ear): a low steady hiss and short pops at random, positioned at the fire, heard
-// within CAMPFIRE.sound.hear metres. Away from the fire nothing is worked out: the flame isn't sliced or drawn past
+// flickers with the flame. The crackle is a loop made sample by sample (fireSamples in src/audio/nature.js, its FIRE
+// settings tuned by ear on the Sound Lab's creek and campfire page): mostly tiny crackles in little bursts, now and then
+// a bigger pop with a woody knock, a log settling once in a while. Positioned at the fire, heard within
+// CAMPFIRE.sound.hear metres; each fire starts the loop at its own place and plays it a touch faster or slower, so two
+// fires never crackle alike. Away from the fire nothing is worked out: the flame isn't sliced or drawn past
 // CAMPFIRE.near metres or behind the camera, and the sound sleeps.
 //
 //   const F = makeCampfire({ W, scene, camera, x, z, y, width, audio, id })
@@ -22,7 +24,7 @@
 //   F.dispose()
 import * as THREE from 'three';
 import VolumetricFire from './VolumetricFire.js';
-import { playPatch, voicePatch } from '../audio/patch.js';
+import { fireSamples } from '../audio/nature.js';
 
 export const CAMPFIRE = {
   box: [2, 4, 2],        // the volume, in its own units (the Shipwrecked campfire's): 2 wide, 4 tall; the flame you see is
@@ -33,54 +35,18 @@ export const CAMPFIRE = {
   leanPer: 1.1,          // ... as this many times the camera's angle down onto the fire
   glow: { r: 2.8, strength: 0.42, flicker: 0.22, colour: 0xff8a3a },   // the patch on the ground: reach (m), how bright,
                                                                      // how much it flickers (a share of strength)
-  sound: { hear: 30, level: 0.55, ref: 2.0, rolloff: 1.3, pops: 2.4 },   // within hear metres; pops a second (on average)
+  sound: { hear: 30, level: 0.55, ref: 2.0, rolloff: 1.3 },   // within hear metres; its level at the fire
   bright: 0.9,           // extra brightness for the valley's daylight (the shader's own "flash" punch held on: 0.9 is
                          // nearly twice as bright as the fire lab's night flames, which read pale against a sunlit meadow)
 };
 
-// The fire's two sounds as Sound Lab patches (plain data; src/audio/patch.js plays them).
-//   FIRE — EMBERS HISS: steady filtered noise, its loudness wandering a little (no envelope: it plays until stopped)
-//   FIRE — CRACKLE POP: a tiny bright snap with a soft thump under it; played at random pitches, a few a second
-export const FIRE_PATCHES = {
-  'FIRE — EMBERS HISS': {
-    name: 'Embers hiss', group: 'WORLD', kind: 'engine', dur: 4,
-    nodes: [
-      { id: 'hiss', type: 'noise', name: 'hiss', freq: 600, steps: 256, loopLen: 2.4, rate: 1, level: 1 },
-      { id: 'hp', type: 'filter', name: 'low cut', ftype: 'highpass', freq: 160, Q: 0.6 },
-      { id: 'lp', type: 'filter', name: 'top end', ftype: 'lowpass', freq: 1500, Q: 0.5 },
-      { id: 'roar', type: 'filter', name: 'roar', ftype: 'lowpass', freq: 260, Q: 0.7 },
-      { id: 'roar-g', type: 'gain', name: 'roar', gain: 0.9 },
-      { id: 'flutter', type: 'gain', name: 'flutter', gain: 0.6 },
-      { id: 'wander', type: 'noise', name: 'wander', freq: 7, steps: 1, loopLen: 5, rate: 1, level: 1 },
-      { id: 'wander-f', type: 'filter', name: 'wander', ftype: 'lowpass', freq: 5, Q: 0.5 },
-      { id: 'wander-d', type: 'math', name: 'wander', mul: 0.45 },
-      { id: 'out', type: 'out', name: 'output', gain: 0.07 },
-    ],
-    cables: [
-      { from: 'hiss', to: 'hp' }, { from: 'hp', to: 'lp' }, { from: 'lp', to: 'flutter' },
-      { from: 'hiss', to: 'roar' }, { from: 'roar', to: 'roar-g' }, { from: 'roar-g', to: 'flutter' },
-      { from: 'wander', to: 'wander-f' }, { from: 'wander-f', to: 'wander-d' }, { from: 'wander-d', to: 'flutter', port: 'gain' },
-      { from: 'flutter', to: 'out' },
-    ],
-  },
-  'FIRE — CRACKLE POP': {
-    name: 'Crackle pop', group: 'WORLD', kind: 'perc', dur: 0.2,
-    nodes: [
-      { id: 'n', type: 'noise', name: 'noise', freq: 600, steps: 256, loopLen: 0.6, rate: 1, level: 1 },
-      { id: 'snap-f', type: 'filter', name: 'snap', ftype: 'bandpass', freq: 2600, Q: 1.8 },
-      { id: 'snap-e', type: 'env', name: 'snap', peak: 1, attack: 0, decay: 0.022, sustain: 0 },
-      { id: 'snap', type: 'gain', name: 'snap', gain: 0 },
-      { id: 'thump-f', type: 'filter', name: 'thump', ftype: 'lowpass', freq: 420, Q: 0.9 },
-      { id: 'thump-e', type: 'env', name: 'thump', peak: 0.7, attack: 0.002, decay: 0.07, sustain: 0 },
-      { id: 'thump', type: 'gain', name: 'thump', gain: 0 },
-      { id: 'out', type: 'out', name: 'output', gain: 0.5 },
-    ],
-    cables: [
-      { from: 'n', to: 'snap-f' }, { from: 'snap-f', to: 'snap' }, { from: 'snap-e', to: 'snap', port: 'gain' }, { from: 'snap', to: 'out' },
-      { from: 'n', to: 'thump-f' }, { from: 'thump-f', to: 'thump' }, { from: 'thump-e', to: 'thump', port: 'gain' }, { from: 'thump', to: 'out' },
-    ],
-  },
-};
+// the crackle's loop, made once per sound context (every fire plays the same one, each from its own place)
+const loops = new WeakMap();
+function fireLoop(ctx) {
+  let buf = loops.get(ctx);
+  if (!buf) { const d = fireSamples(ctx.sampleRate); buf = ctx.createBuffer(1, d.length, ctx.sampleRate); buf.copyToChannel(d, 0); loops.set(ctx, buf); }
+  return buf;
+}
 
 // (the flame's two pictures sit beside this file)
 VolumetricFire.texturePath = new URL('./', import.meta.url).href;
@@ -131,7 +97,8 @@ export function makeCampfire({ W, scene = W.scene, camera, x, z, y = null, width
   scene.add(glow);
 
   // THE CRACKLE: made the first time the fire is heard; a panner at the fire, a gain to fade it in and out
-  let snd = null, popT = 0;
+  let snd = null;
+  const rate = 0.94 + Math.random() * 0.12;   // (this fire's own speed for the loop)
   function makeSound(ctx, out) {
     const pan = ctx.createPanner();
     pan.panningModel = 'equalpower'; pan.distanceModel = 'inverse'; pan.refDistance = C.sound.ref; pan.rolloffFactor = C.sound.rolloff; pan.maxDistance = 10000;
@@ -145,7 +112,11 @@ export function makeCampfire({ W, scene = W.scene, camera, x, z, y = null, width
     if (!snd) return;
     const t = snd.ctx.currentTime;
     snd.fade.gain.setTargetAtTime(on ? C.sound.level : 0, t, 0.4);
-    if (on && !snd.bed) snd.bed = playPatch(snd.ctx, null, snd.pan, null, FIRE_PATCHES['FIRE — EMBERS HISS']);
+    if (on && !snd.bed) {
+      const src = snd.ctx.createBufferSource(), buf = fireLoop(snd.ctx);
+      src.buffer = buf; src.loop = true; src.playbackRate.value = rate; src.connect(snd.pan); src.start(t, Math.random() * buf.duration);
+      snd.bed = { stop: (dt = 0) => { try { src.stop(snd.ctx.currentTime + dt); src.disconnect(); } catch (e) { /* (gone) */ } } };
+    }
     if (!on && snd.bed) { const b = snd.bed; snd.bed = null; setTimeout(() => b.stop(0.05), 1500); }
   }
 
@@ -175,15 +146,7 @@ export function makeCampfire({ W, scene = W.scene, camera, x, z, y = null, width
       const hear = d < C.sound.hear;
       if (hear !== hearing) { hearing = hear; audio.need(name, hear); if (!hear) soundOn(false); }
       if (hear && audio.ctx && !snd) makeSound(audio.ctx, audio.out);
-      if (hear && snd && audio.running) {
-        if (!snd.bed) soundOn(true);
-        // a pop now and then (each at its own pitch and loudness), scheduled a moment ahead so timers can't wobble it
-        if ((popT -= dt) <= 0) {
-          popT = -Math.log(1 - Math.random()) / C.sound.pops;
-          const p = voicePatch(FIRE_PATCHES['FIRE — CRACKLE POP'], { semi: (Math.random() - 0.5) * 14, gain: 0.35 + Math.random() * 0.65 });
-          playPatch(snd.ctx, null, snd.pan, null, p, null, { at: snd.ctx.currentTime + 0.05 + Math.random() * 0.05 });
-        }
-      }
+      if (hear && snd && audio.running && !snd.bed) soundOn(true);
     }
   };
   F.dispose = () => {

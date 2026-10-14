@@ -4,8 +4,9 @@
 // The animals and the birds are short RECORDED clips (CC0 / public domain, listed with their sources in
 // sounds/CREDITS.md; each comes as .ogg and .m4a, and the browser gets the one it can play). Everything else is made
 // in the browser: the hammer and the hand saw are the Windmill lab's (labs/windmill/sound.js, played the same way here),
-// and a pig's grunt, the creek, and a hoof on dirt or splashing through water are Sound Lab patches (TOWN_PATCHES below,
-// the same in ~/sound-lab/patch.js so they can be tuned by ear there). Knocks and hits are bursts of noise (a hammer is
+// a pig's grunt and a hoof on dirt or splashing through water are Sound Lab patches (TOWN_PATCHES below, the same in
+// ~/sound-lab/patch.js so they can be tuned by ear there), and the creek is a loop made sample by sample (nature.js;
+// its settings are tuned on the Sound Lab's creek and campfire page, nature.html). Knocks and hits are bursts of noise (a hammer is
 // a crack, like a clap, over a dull thump), never ringing tones.
 //
 // Each sound comes from where its animal (or the work, or the water) is: a PannerNode at that spot, the camera as the
@@ -50,8 +51,9 @@
 //   A.dispose()
 //   Pure helpers for tests: clipExt(canPlayType), pickClip(list, last, now, lastAt, rand, repeat), crossed(last, now,
 //   at), duckOf({ music, voice, indoor }), airCut(d), burstPlan(n, rand), CLIPS, SOURCES, BURST, AMB, HOOVES,
-//   TOWN_PATCHES
+//   TOWN_PATCHES, brookSamples(rate, settings, rand) and BROOK (from nature.js)
 import { playPatch } from './patch.js';
+import { brookSamples } from './nature.js';
 
 // ── THE CLIPS (sounds/<name>.ogg|.m4a): each one's level (they are all made about as loud: -18 LUFS; the two marked
 // quieter were left a few dB softer rather than squashed) and, for a rare one, the seconds before it may play again
@@ -251,32 +253,9 @@ export function airCut(d) {
 }
 // a burst's calls: [{ who: 0 for the one that starts, 1.. for the ones that answer }], n answers at most (the first
 // always comes; fewer answer more often than many)
-// the creek's sound, made sample by sample into a loop: a babbling brook is not a hiss (that reads as surf) but
-// thousands of tiny bubbles, each a short pure note whose pitch climbs as it rings out (the "plink" of poured water).
-// Mostly small ones (0.65-2.9 kHz, softened above 2 kHz), a few bigger gurgles lower down, and a faint fizz of spray on top. The loop
-// wraps round, so it has no seam. rand is passed in so tests can make the same brook twice.
-export function brookSamples(rate, secs = 7, rand = Math.random) {
-  const n = Math.round(rate * secs), out = new Float32Array(n), TAU = Math.PI * 2;
-  const bubble = (t0, f0, amp, life) => {
-    const len = Math.round(life * rate), rise = 0.25 + rand() * 0.6; let ph = 0;
-    for (let i = 0; i < len; i++) {
-      const u = i / len, f = f0 * (1 + rise * u), env = Math.min(1, i / (0.0008 * rate)) * Math.exp(-5 * u);
-      ph += TAU * f / rate; out[(t0 + i) % n] += Math.sin(ph) * amp * env;
-    }
-  };
-  for (let k = 0, m = Math.round(secs * 38); k < m; k++)   // small bubbles: the crisp poured-water sound (not too many)
-    bubble(Math.floor(rand() * n), 650 + Math.pow(rand(), 1.8) * 2200, 0.06 + Math.pow(rand(), 3) * 0.3, 0.02 + rand() * 0.04);
-  for (let k = 0, m = Math.round(secs * 8); k < m; k++)    // a few bigger gurgles
-    bubble(Math.floor(rand() * n), 260 + rand() * 420, 0.12 + rand() * 0.2, 0.05 + rand() * 0.06);
-  let prev = 0;                                             // the fizz: white noise with its lows taken off, very quiet
-  for (let i = 0; i < n; i++) { const w = rand() * 2 - 1; out[i] += (w - prev) * 0.012; prev = w; }
-  // soften the top: two gentle low-pass passes (about 2 kHz), run round the loop twice so the seam matches
-  const k1 = 1 - Math.exp(-2 * Math.PI * 2000 / rate); let y1 = 0, y2 = 0;
-  for (let pass = 0; pass < 2; pass++) for (let i = 0; i < n; i++) { y1 += k1 * (out[i] - y1); y2 += k1 * (y1 - y2); if (pass) out[i] = y2; }
-  let pk = 0; for (let i = 0; i < n; i++) pk = Math.max(pk, Math.abs(out[i]));
-  for (let i = 0; i < n; i++) out[i] *= 0.6 / (pk || 1);
-  return out;
-}
+// the creek's sound, made sample by sample into a loop (src/audio/nature.js: BROOK holds its settings, tuned by ear on
+// the Sound Lab's creek page): thousands of tiny bubbles, a few bigger gurgles, a faint fizz of spray, the top softened
+export { brookSamples, BROOK } from './nature.js';
 
 export function burstPlan(most, rand = Math.random) {
   const out = [{ who: 0 }];
