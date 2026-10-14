@@ -21,6 +21,8 @@
 //                       deer: { a (the animal), kind: 'deer' | 'stag', x, z, h (heading), v (m/s), arrived }
 //   D.herd(id), D.nearest(at, { except })   one herd; the nearest to a spot (except: a herd to leave out)
 //   herd.shy = { alert, flee } | null    metres (on foot) at which it looks up and bolts; null: the usual DEER ones
+//   herd.keepNear = { x, z, min, max } | null    while grazing, the herd only drifts to where its middle stays between
+//                       min and max metres of this spot (the naturalist's: her herd stays in reach but never on top of her)
 //   herd.pose(spots)    each deer walks to its spot { x, z, h } and stands there (grazing, looking about) till released
 //   herd.release()      back to grazing where they stand
 //   herd.leave(x, z)    the herd walks off away from (x, z) and settles further on
@@ -159,7 +161,9 @@ export function makeDeer({ W, animals, scene = W.scene }) {
       const dx = d.goal.x - d.x, dz = d.goal.z - d.z, dist = Math.hypot(dx, dz);
       d.goalT = (d.goalT || 0) + dt;
       // (there, or as near as it can get: a spot it can't reach after a good try is given up where it stands)
-      if ((dist < 0.5 && d.v < 1) || (d.goalT > (d.giveUp || DEER.giveUp) && d.v < 2.6)) { d.goal = null; d.arrived = true; d.want = 0; d.goalT = 0; d.giveUp = 0; }
+      // (and one still going round and round after twice that, unable to get in, stops too)
+      const gu = d.giveUp || DEER.giveUp;
+      if ((dist < 0.5 && d.v < 1) || (d.goalT > gu && d.v < 2.6) || d.goalT > gu * 2) { d.goal = null; d.arrived = true; d.want = 0; d.goalT = 0; d.giveUp = 0; }
       else {
         const turn = d.v > 3 ? 2.6 : 3.4;
         const dh = wrap(Math.atan2(dx, dz) - d.h); d.h = wrap(d.h + Math.sign(dh) * Math.min(Math.abs(dh), turn * dt));
@@ -174,14 +178,19 @@ export function makeDeer({ W, animals, scene = W.scene }) {
     if (d.v > 0.01) {
       // (a tree or the creek ahead: the nearest way round it, a little to one side or the other, looking a few metres on)
       const look = Math.max(1.5, d.v * 0.5);
+      let moved = false;
       for (const turn of VEER) {
         const h = d.h + turn;
         if (turn && !free(d.x + Math.sin(h) * look, d.z + Math.cos(h) * look)) continue;
         const nx = d.x + Math.sin(h) * d.v * dt, nz = d.z + Math.cos(h) * d.v * dt;
         if (!free(nx, nz)) continue;
         d.x = nx; d.z = nz; if (turn) d.h = wrap(d.h + turn * Math.min(1, dt * 6));
+        moved = true;
         break;
       }
+      // (boxed in every way: it stops, so its try at the spot runs out and it gives up there; kept at full speed
+      // against a fence it would never give up, and a bolting herd would stay bolted for good)
+      if (!moved) d.v = 0;
     }
     if (animate) {
       d.a.root.position.set(d.x, W.heightAt(d.x, d.z), d.z);
@@ -216,7 +225,8 @@ export function makeDeer({ W, animals, scene = W.scene }) {
         if ((H.moveT -= dt) <= 0) {   // (now and then the whole herd drifts on a little)
           H.moveT = rand(25, 50);
           const a = rand(-Math.PI, Math.PI), r = rand(4, DEER.roam), x = H.mid.x + Math.sin(a) * r, z = H.mid.z + Math.cos(a) * r;
-          if (free(x, z) && Math.hypot(x - sq.x, z - sq.z) > DEER.keepFrom && !busy(x, z)) H.mid = { x, z };
+          const kn = H.keepNear, kd = kn ? Math.hypot(x - kn.x, z - kn.z) : 0;
+          if (free(x, z) && Math.hypot(x - sq.x, z - sq.z) > DEER.keepFrom && !busy(x, z) && (!kn || (kd >= kn.min && kd <= kn.max))) H.mid = { x, z };
         }
         if (at && (near < fleeR || (o.speed > DEER.gallop && near < alertR))) run(H, at.x, at.z, true);
         else if (at && near < alertR) { H.state = 'alert'; H.t = 0; H.alertFrom = near; }

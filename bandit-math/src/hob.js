@@ -1,4 +1,5 @@
-// OLD HOB: the old hand next door. He says a short line now and then (a caption at the bottom left, with a short babble
+// OLD HOB: the old hand next door, the trail buddy with the hints (the people at each job say what is going on there:
+// src/jobfolk.js). He says a short line now and then (a caption at the bottom left, with a short babble
 // of a voice under it: src/audio/voice.js, when the game gives him one) and
 // lays a trail of glowing hoofprints from the town square out to the job, so a new rider knows where to go.
 //
@@ -51,7 +52,7 @@ export const HOB = {
 };
 
 const LINES = {
-  firstDay: "Mornin'! Rancher next door needs a hand with his herd. Follow the hoofprints out to the pasture.",
+  firstDay: "Mornin'! Rancher next door needs a hand with his herd. His trail boss is out by the corral: follow the hoofprints.",
   back: ["Herd's waiting out in the pasture. The hoofprints know the way.", "Good to see you. The rancher's got more cattle needing a rope.",
     "Fine day for a round-up. Pasture's east, past the creek."],
   shoot: "Shooting comes in a later update, partner. It's the lasso for now, same pay.",
@@ -69,17 +70,17 @@ const LINES = {
   donkey: "A donkey! Slow as molasses, but he won't quit on you.",
   hat: ['Now that is a fine hat.', 'Suits you, partner.', 'Look at you! A proper hat for a proper rider.'],
   // the farm north of town: the sick-sheep job
-  farmTip: "There's a farm north of town, behind your cabin. The settler's sheep are poorly, if you've a mind for doctoring.",
-  farmArrive: "Some of these sheep are sick, but they look like the rest. Only her sum gives her away: find the wrong ones. Point at a sheep, press F and pick the medicine that fixes it.",
-  farmArriveTouch: "Some of these sheep are sick, but they look like the rest. Only her sum gives her away: find the wrong ones. Tap a sheep, then tap the medicine that fixes it.",
+  farmTip: "There's a farm north of town, behind your cabin. The vet out there could use a hand with the sheep, and the pigs got loose.",
+  farmArrive: 'Point at a sheep with a wrong sum, press F, and pick the medicine that fixes it.',
+  farmArriveTouch: 'Tap a sheep with a wrong sum, then tap the medicine that fixes it.',
   sheepHealed: "That's the cure. She'll be right as rain.",
   sheepWrong: 'Not that bottle. Read why, then try another. No harm done.',
   sheepFine: ["She's fine, partner. Nothing wrong with that sum.", 'That one\'s healthy. Save the medicine.', 'Fit as a fiddle, that one. Check the others.'],
-  flockDone: ["Whole flock's on its feet. The settler thanks you kindly.", "That's the flock seen to. More sums for you to check.", 'Good doctoring.'],
+  flockDone: ["Whole flock's on its feet.", "That's the flock seen to. More sums for you to check.", 'Good doctoring.'],
   // the farm's pig yard: the loose-pigs job
-  pigsArrive: "The pigs got loose! Each one's got a sum on it. Herd it into the pen whose sign shows the answer. They run from you, so come at them from behind.",
+  pigsArrive: "Pigs run from you: come at one from the side away from the pen you want, and it runs ahead of you.",
   pigPenned: "In she goes. That's the right pen.",
-  pigsDone: ["That's every pig penned. The settler's obliged.", 'All penned. Here come some more sums.', 'Fine herding, partner.'],
+  pigsDone: ["That's every pig penned.", 'All penned. Here come some more sums.', 'Fine herding, partner.'],
   // the general store's counter: townsfolk bring order slips (word problems)
   storeStart: "Folks bring their orders on a slip. Read it through, picture what's going on, then pick the coin.",
   storeBack: ['Counter\'s open. Here they come.', 'Busy day at the store. Slips at the ready.'],
@@ -99,14 +100,14 @@ const LINES = {
   deliveryNoSaddle: "Crates need a saddled horse to carry 'em. The stable sells saddles.",
   deliveryRobbed: "The gang got the crates! Don't fret: ride back to the store and they'll make it up again.",
   // protect the wagon: the gang wears its numbers; the townsfolk riding along look just the same
-  wagonArrive: "A gang's after this wagon! Every bandit wears a number from the gang's table. Townsfolk ride along too, wearing other numbers, and they look just like the gang. Rope the bandits: point at a rider and click, or press F.",
-  wagonArriveTouch: "A gang's after this wagon! Every bandit wears a number from the gang's table. Townsfolk ride along too, wearing other numbers, and they look just like the gang. Rope the bandits: tap a rider, or the Rope button.",
+  wagonArrive: "Every bandit wears a number from the gang's table. Townsfolk ride along too, looking just like the gang: only the number tells. Point at a rider and click, or press F.",
+  wagonArriveTouch: "Every bandit wears a number from the gang's table. Townsfolk ride along too, looking just like the gang: only the number tells. Tap a rider, or the Rope button.",
   banditCatch: "Got him! Once he's caught his breath, he'll walk himself to the sheriff.",
   banditMiss: "That's an honest townsman. No harm done: check the count on the rail, then pick again.",
   banditLoop: "One's galloped on ahead. Don't fret: they always come back round the bend.",
   banditsDone: ['The wagon rolls on safe. More road ahead, and likely more trouble.', "That's the gang seen to. Keep alongside, partner.", 'Fine riding. Eyes on the road.'],
   wagonStop: "The wagon will wait. Come back any time.",
-  wagonWaits: "There's a wagon waiting for you on the road east of the pasture: follow the wagon on your compass and ride up alongside it.",
+  wagonWaits: "A freight driver's waiting with his wagon on the road east of the pasture: follow the wagon on your compass and ride up to him.",
   // walking up to the saloon's doors (nothing to open yet) and the front of the stage (the town band plays there)
   saloon: ["Saloon's shut till sundown, partner. Lock boxes are next door at the sheriff's.",
     "Doors stay shut till evening. The band out front keeps folks company meanwhile."],
@@ -131,15 +132,15 @@ const LINES = {
   animalGrew: '{name} is all grown up now.',
   goodsCollected: "Those go in your saddlebags. The townsfolk at the general store will buy them: mind the counter.",
   goodsSold: "Sold! That's how a homestead pays its way: a little figuring at the counter.",
-  // deer photographs: Hob's old box camera, the herds out in the valley
-  deerTip: "A newspaper back East pays for pictures of wild deer. My old camera's packed up for you: follow the compass to a herd.",
+  // deer photographs: the naturalist's box camera, the herds out in the valley
+  deerTip: "There's a naturalist out by the deer, making a book of the valley's animals. She'll lend you her camera: follow the compass to the herd.",
   deerArrive: "Easy now. Deer bolt if you crowd 'em. Set the camera up a good ways off: the card up top says when you're close enough.",
   deerSpooked: ["Too close, partner! They'll settle again. Give 'em more room this time.", "Off they go! Let 'em settle, then set up from further back."],
   deerSetup: "Each deer's wearing a number tag, and only one number makes that equation true. Work it out, then take that deer's picture.",
   deerSetupTouch: "Each deer's wearing a number tag, and only one number makes that equation true. Work it out, then tap that deer.",
-  deerFlip: "Ground glass shows the world upside down! I fixed a little mirror in mine to turn it the right way up.",
+  deerFlip: "Ground glass shows the world upside down! There's a little mirror in this one to turn it the right way up.",
   deerRight: "Hold still... there! That's one for the album.",
-  deerDone: ["That's a fine roll of pictures. They've had enough: the compass knows where the next herd is.", 'Three for the album. Pack her up and find another herd.', 'The newspaper will be pleased with those.'],
+  deerDone: ["That's a fine roll of pictures. They've had enough: the compass knows where the next herd is.", 'Three for the album. Pack her up and find another herd.', "Those'll look fine in her book."],
   deerStop: "The deer will keep. Set the camera up again whenever you like.",
 };
 // which job each line belongs to. A line still waiting its turn is dropped once the player is at another job, or once it
@@ -175,7 +176,7 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
     if (speaking > 0) { if (!queue.some((q) => q.text === text)) queue.push({ text, ms, key, at: now }); return; }
     const t = ms || Math.max(4500, 1800 + text.length * 55);
     hud.caption(text, t); speaking = t / 1000 + 0.4; saying = { text, key };
-    if (voice) voice.speak(text);
+    if (voice) voice.speak(text, { key });
   };
   // a moment has passed: drop those lines, whether waiting or on screen
   const drop = (...keys) => {
@@ -226,7 +227,7 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
       // (said at once, over anything he was saying: said later it would seem to be about some other sheep)
       case 'sheepFine': queue.length = 0; speaking = 0; B.say(LINES.sheepFine[(fineN++) % LINES.sheepFine.length], 3500); break;
       case 'flockDone': drop('sheepWrong', 'sheepFine', 'sheepHealed'); B.say(LINES.flockDone[(doneN++) % LINES.flockDone.length]); break;
-      case 'pigsArrive': if (once('pigsArrive')) B.say(LINES.pigsArrive, 9000); break;
+      case 'pigsArrive': drop('farmArrive', 'sheepWrong', 'sheepFine', 'sheepHealed'); if (once('pigsArrive')) B.say(LINES.pigsArrive, 9000); break;   // (the sheep's lines are done with: next door is the pigs)
       case 'pigPenned': if (once('pigPenned')) B.say(LINES.pigPenned); break;
       // (the why, said at once over anything else: the pig is trotting back out right now)
       case 'pigWrong': queue.length = 0; speaking = 0; B.say(data.line, Math.max(5000, 1800 + String(data.line || '').length * 55)); break;

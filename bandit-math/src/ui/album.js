@@ -45,7 +45,7 @@ export function albumBody(rider) {
   ensureAlbumCss();
   const list = prints(rider);
   const el = document.createElement('div'); el.className = 'bma';
-  if (!list.length) { el.innerHTML = '<p class="bma-none">No prints yet. Tick <b>Deer photographs</b> on the title screen and Old Hob lends you his camera.</p>'; return el; }
+  if (!list.length) { el.innerHTML = '<p class="bma-none">No prints yet. Tick <b>Deer photographs</b> on the title screen and Miss Wren, the naturalist, lends you her camera.</p>'; return el; }
   el.innerHTML = `<p class="bma-count">${list.length} print${list.length === 1 ? '' : 's'}${list.length >= ALBUM.max ? ` (the album holds ${ALBUM.max}: a new one lets the oldest go)` : ''}</p>
     <div class="bma-grid">${list.map((p) => `<figure class="bma-print">
       ${p.img ? `<img src="${p.img}" alt="A photograph of a deer">` : '<div class="bma-blank">faded</div>'}

@@ -96,6 +96,60 @@
    "z": -168.23,
    "rot": 0,
    "size": 0.9
+  },
+  {
+   "id": "shade-stable-back",
+   "type": "tree",
+   "kind": "oak",
+   "x": -50.0,
+   "z": -170.0,
+   "rot": 0,
+   "size": 1.05
+  },
+  {
+   "id": "shade-stable-west",
+   "type": "tree",
+   "kind": "ash",
+   "x": -63.0,
+   "z": -186.0,
+   "rot": 0,
+   "size": 0.9
+  },
+  {
+   "id": "shade-cabin-side",
+   "type": "tree",
+   "kind": "ash",
+   "x": -22.0,
+   "z": -233.0,
+   "rot": 0,
+   "size": 0.85
+  },
+  {
+   "id": "shade-yard-east",
+   "type": "tree",
+   "kind": "oak",
+   "x": 35.5,
+   "z": -230.0,
+   "rot": 0,
+   "size": 0.95
+  },
+  {
+   "id": "shade-store-back",
+   "type": "tree",
+   "kind": "ash",
+   "x": 24.0,
+   "z": -181.0,
+   "rot": 0,
+   "size": 0.9
+  },
+  {
+   "id": "shade-saloon-back",
+   "type": "tree",
+   "kind": "oak",
+   "x": 2.0,
+   "z": -165.0,
+   "rot": 0,
+   "size": 1.0
   }
  ],
  "roads": [],

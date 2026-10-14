@@ -37,6 +37,8 @@ export const PIGS = {
   near: 24,              // the job's card shows within this many metres of the pig yard's middle ...
   yardReach: 8,          // ... and this close to the yard's fence, and nearer the yard's fence than the sheep pasture's (so
                          // the lane up the middle by the barn stays the sheep job's: the medicine reaches 34 m)
+  byWife: { x: 6.8, z: 3.5, r: 5 },   // ... or this close to the farmer's wife, who asks for help with the pigs (where she
+                         // stands in the farm's frame: STAND.wife in jobfolk.js), so her hello comes with the pigs' card
   scare: 6.5,            // a pig runs from a player on foot within this many metres ...
   scareHorse: 9,         // ... and from a rider within this many
   run: [1.0, 2.6],       // m/s a pig runs: just inside the scare distance, and with the player right on it (the Gallop
@@ -434,8 +436,10 @@ export function makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, ho
     return lookingAtSheep;
   }
   PG.wants = (at) => {
+    const p = L.local(at.x, at.z), bw = PIGS.byWife;
+    if (Math.hypot(p.x - bw.x, p.z - bw.z) < bw.r) return true;
     if (Math.hypot(at.x - yardAt.x, at.z - yardAt.z) >= PIGS.near) return false;
-    const p = L.local(at.x, at.z), dy = fromEdge(p, Y.box);
+    const dy = fromEdge(p, Y.box);
     if (!(dy < PIGS.yardReach && dy < fromEdge(p, sheepAt.box))) return false;
     return dy === 0 || !facing(at);
   };

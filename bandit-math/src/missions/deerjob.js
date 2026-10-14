@@ -1,8 +1,8 @@
-// DEER PHOTOGRAPHS: Old Hob lends the rider his camera (a big wooden box camera on a tripod, src/boxcamera.js), strapped
-// behind the saddle, and the compass leads to a herd of wild deer (src/deer.js). Ride or walk up, but not too close:
-// within SNAP.setMax metres (and no nearer than SNAP.setMin) E sets the camera up. The rider gets down, the tripod's
-// legs swing out, and the view goes under the focusing cloth: the ground glass, which shows the world upside down for a
-// moment until Hob's little mirror turns it the right way up.
+// DEER PHOTOGRAPHS: the naturalist (src/jobfolk.js) lends the rider her camera (a big wooden box camera on a tripod,
+// src/boxcamera.js), strapped behind the saddle, and the compass leads to a herd of wild deer (src/deer.js). Ride or walk
+// up, but not too close: within SNAP.setMax metres (and no nearer than SNAP.setMin) E sets the camera up. The rider gets
+// down, the tripod's legs swing out, and the view goes under the focusing cloth: the ground glass, which shows the world
+// upside down for a moment until the camera's little mirror turns it the right way up.
 //
 // The herd stands side-on for its picture, each deer wearing a small number tag, and one equation sits over the frame
 // ("3x − 4 = 11"), as hard as the rider's lock boxes are now (src/math/deermath.js). Exactly one deer's number makes it
@@ -21,6 +21,7 @@
 //
 //   const DJ = makeDeerJob({ W, deer, P, I, camera, canvas, rider, hud, hob, audio, refresh, onStart, onStop })
 //     deer: makeDeer's herds; I: the input (a touch screen is told to tap); onStart / onStop: the game hands over the controls while the camera is up, and back
+//     busy(): optional, true while another job has the player (the wagon, the round-up, the farm jobs): the deer job's card and prompt stand aside
 //   DJ.update(dt)     each frame, after the player (it places the camera while the viewfinder is up)
 //   DJ.prompt         'Set up the camera' when E would set it up here, else null; DJ.setUp() does it (as E does)
 //   DJ.near           the player is within SNAP.near of the job's herd; DJ.card: the job's card is up (the HUD's rule card)
@@ -69,7 +70,7 @@ export const SNAP = {
 const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, hob, audio = null, refresh = () => {}, onStart = () => {}, onStop = () => {} }) {
+export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, hob, audio = null, refresh = () => {}, onStart = () => {}, onStop = () => {}, busy = () => false }) {
   ensureCss();
   const touch = () => !!(I && I.touch);
   const K = makeBoxCamera({ scene: W.scene }); K.root.visible = false;
@@ -107,9 +108,11 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
     if (herd.state === 'flee' && near && !spooked) { spooked = true; hob.event('deerSpooked'); }
     if (herd.state !== 'flee') spooked = false;
     const settled = herd.state === 'calm' || herd.state === 'alert';
-    const ok = settled && d >= SNAP.setMin && d <= SNAP.setMax && (P.mode === 'foot' || P.mode === 'horse');
+    // (another job has the player, say a wagon gang riding in near the herd: no card or prompt, so that job's card stays up)
+    const other = !!busy();
+    const ok = !other && settled && d >= SNAP.setMin && d <= SNAP.setMax && (P.mode === 'foot' || P.mode === 'horse');
     DJ.prompt = ok ? 'Set up the camera' : null;
-    if (near) {
+    if (near && !other) {
       const sub = !settled ? 'They bolted! Let them settle, then try again from further off'
         : d > SNAP.setMax ? `${Math.round(d)} m to the herd: get within ${SNAP.setMax} m`
         : d < SNAP.setMin ? 'Too close: they\'ll bolt. Back off a few steps'

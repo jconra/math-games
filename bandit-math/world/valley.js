@@ -729,6 +729,11 @@ function erosionBytes() {
   for (let q = 0; q < N * N; q++) { gully[q] = g[q] * 255; fan[q] = Math.min(1, f[q] * 2) * 255; }
   return { gully, fan };
 }
+// (Bandit Math) a tree at (x, z) in the land's tree map (one cell a tree, as the land's own)
+function markTree(tree, x, z) {
+  const i = Math.floor((x + SIZE / 2) / TEX), j = Math.floor((z + SIZE / 2) / TEX);
+  if (i >= 0 && j >= 0 && i < N && j < N) tree[j * N + i] = 1;
+}
 function* landSteps({ light = false, pads = true } = {}) {
   const layout = TOWN.village ? TOWN.village.layout : TOWN.layout;
   if (!light) paintRoads(TOWN.canvas, layout, SIZE);
@@ -766,6 +771,11 @@ function* landSteps({ light = false, pads = true } = {}) {
       if (hash(t[0] * 0.37 + 5.1, t[2] * 0.53 - 2.7) < LAND.giants * THREE.MathUtils.smoothstep(d, 0.7, 0.95)) t[3] *= LAND.giantSize;
     }
   }
+  // (Bandit Math) the trees placed by hand (the planting's, and the town's own) count as wood too: the ground under
+  // them darkens and takes the shade and the shade plants, as it does under the land's own trees. (Marked after the
+  // sizing above, so the land's own trees keep the sizes they had: a placed tree doesn't make its neighbours giants.)
+  for (const it of plantNow().planting.items) if (SORT.tree(it.kind)) markTree(tree, it.x, it.z);
+  for (const it of layout.items) if (it.type === 'tree') markTree(tree, it.x, it.z);
   const canopy = blur(tree, 1), wide = blur(tree, LAND.shadeReach);
   for (let k = 0; k < N * N; k++) canopy[k] = Math.min(1, canopy[k] * 3.2);
   MAPS.wet = wet; MAPS.dry = dry; MAPS.canopy = canopy; MAPS.wide = wide; MAPS.steep = steep;

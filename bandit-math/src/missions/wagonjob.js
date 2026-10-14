@@ -14,7 +14,8 @@
 // comes back in from behind: a missed bandit never escapes. There is no timer and no way to lose.
 // Wave done: the wagon rolls on safe, gold and bounty are paid, a strongbox from the gang goes in the saddlebags, the
 // roped bandits are "brought in" (stats.jobs.bandits and its belt buckle), the townsfolk ride on ahead, and the next
-// stretch of road brings the next gang. Nothing to click. "Done for now" on the card stops it; the wagon waits.
+// stretch of road brings the next gang. Nothing to click. Riding well away from the wagon stops it (as "Let the wagon
+// wait" in the pause menu does); the wagon waits.
 //
 // The math is the times-table trainer the round-up uses (src/math/times.js, the same trainer and the kid's own step,
 // shared through `times`). Two separate dials, never raised together: the math step (the trainer's own climb), and the
@@ -36,7 +37,8 @@
 //   WJ.where()        the wagon's place { x, z } (for the compass)
 //   WJ.targets        the riders' records { r (actors/riders.js), n, text, good, state, label, person }
 //   WJ.throwAt(rec)   rope this one (as a click on it does)
-//   WJ.start(), WJ.stop()   start now (dev) / "Done for now"
+//   WJ.start(), WJ.stop({ away })   start now (dev, or E by the driver) / stop (the pause menu; away: rode off)
+//   WJ.rig, WJ.phase  the wagon (src/wagon.js's, or null) and the job's state ('loading' | 'waiting' | 'on' | 'stopped')
 //   WJ.newWave()      a new gang now (dev)
 //   WJ.tieAt(x, z)    (dev and rigs) a bandit pulled down and tied there now: he gets up and walks off to the sheriff's
 //   WJ.walkers        the roped bandits walking off ({ x, z }: the town's wagons stop for them)
@@ -65,6 +67,11 @@ export const WAGONJOB = {
   speeds: [2.0, 2.6, 3.3, 4.0],   // the wagon's speed (m/s) at each notch of its dial: the team walks up to 2.6, then runs
   startNear: 26,          // m from the wagon: riding up this close starts the job
   near: 60,               // ... the job's card shows within this (and the round-up's card stands aside)
+  leave: 90,              // ... and riding off further than this from the wagon ends the job ("The wagon will wait for you")
+  leaveAhead: 200,        // ... but up the road ahead of it (chasing a rider who galloped on, or scouting), this far:
+                          // straight ahead off the road, or along the road itself (the road loops round, so along it
+                          // the room runs out about half way round, some 187 m on, where ahead turns into behind)
+  roadNear: 30,           // m from the road's middle that still counts as riding up the road
   wait: 34,               // the wagon slows and waits when the player is farther than this behind it
   firstWave: 4,           // seconds after the start before the first gang rides in
   nextWave: 9,            // seconds of quiet road after a wave before the next gang
@@ -224,8 +231,8 @@ function sackMaterial(per) {
   return m;
 }
 
-// the job's own looks for the cards at the top: the gang's rule card on one short row (the gang's name, the count and
-// "Done for now" side by side), a card faded nearly away while a rider's number is behind it, and the chart's Peek
+// the job's own looks for the cards at the top: the gang's rule card on one short row (the gang's name and the count
+// side by side), a card faded nearly away while a rider's number is behind it, and the chart's Peek
 // button as just its picture on a phone
 let wagonCss = false;
 function ensureWagonCss() {
@@ -448,13 +455,13 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
       }
       return;
     }
-    const stop = [{ label: 'Done for now', onClick: () => WJ.stop() }];
-    if (state !== 'on') { hud.rule({ main: 'Protect the wagon', sub: state === 'stopped' ? 'The wagon waits here. Ride off and come back to start again' : 'Ride up to the wagon to set off' }); return; }
-    if (!wave) { hud.rule({ main: 'Protect the wagon', sub: 'Keep alongside. The gang rides in soon…', buttons: stop }); return; }
-    if (wave.done) { hud.rule({ main: 'The wagon rolls on safe!', sub: 'More road ahead…', buttons: stop }); return; }
+    // (no "Done for now" button: riding away from the wagon stops the job, as the pause menu's "Let the wagon wait" does)
+    if (state !== 'on') { hud.rule({ main: 'Protect the wagon', sub: state === 'stopped' ? 'The wagon waits here. Ride along with the driver when you\'re ready' : 'Ride up to the wagon to set off' }); return; }
+    if (!wave) { hud.rule({ main: 'Protect the wagon', sub: 'Keep alongside. The gang rides in soon…' }); return; }
+    if (wave.done) { hud.rule({ main: 'The wagon rolls on safe!', sub: 'More road ahead…' }); return; }
     const left = wave.goods - wave.caught;
-    if (wave.kind === 'missing') hud.rule({ kind: 'gang', main: wave.w.rule, sub: 'Rope the rider wearing the missing number', buttons: stop });
-    else hud.rule({ kind: 'gang', main: `The ${wave.table}-Gang`, sub: `Every bandit wears a multiple of ${wave.table} · ${wave.caught ? `${wave.caught} roped · ${left} to go` : `${left} to rope`}`, buttons: stop });
+    if (wave.kind === 'missing') hud.rule({ kind: 'gang', main: wave.w.rule, sub: 'Rope the rider wearing the missing number' });
+    else hud.rule({ kind: 'gang', main: `The ${wave.table}-Gang`, sub: `Every bandit wears a multiple of ${wave.table} · ${wave.caught ? `${wave.caught} roped · ${left} to go` : `${left} to rope`}` });
   }
 
   // ── HELP WHEN STUCK: the times chart's Peek (as in the round-up) ───────────────────────────────────────────────
@@ -493,7 +500,7 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
     const w = wave;
     const ok = P.throwLasso(rec.tgt, {
       good: rec.good, hold: WAGONJOB.hold, lead: false,
-      onLand: (good) => { if (good) curTarget = null; landed(rec, w, good); },   // (a settled catch: "Done for now" lets it finish)
+      onLand: (good) => { if (good) curTarget = null; landed(rec, w, good); },   // (a settled catch: stopping lets it finish)
       onCaught: (h) => { curTarget = null; rec.handle = h; rec.r.fall(P.position, { onDown: () => downed(rec, w) }); },
       onMissed: () => { curTarget = null; },
       onCancel: () => {
@@ -895,7 +902,8 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
     showCard();
     return true;
   };
-  WJ.stop = () => {
+  // (away: the player rode off well clear of the wagon: a quiet toast, no word from Hob)
+  WJ.stop = ({ away = false } = {}) => {
     if (state !== 'on') return;
     state = 'stopped'; WJ.on = false;
     endHelp(); hint(null); hideRail(); unsee();
@@ -904,8 +912,8 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
     bankCaught(wave);   // (bandits roped before stopping still count)
     wave = null; WJ.wave = null; nextWaveT = -1;
     if (music) music.action(false);
-    hud.toast('The wagon will wait here for you.');
-    hob.event('wagonStop');
+    if (away) { hud.toast('The wagon will wait for you'); if (!quiet()) hud.rule(null); }
+    else { hud.toast('The wagon will wait here for you.'); hob.event('wagonStop'); }
     showCard();
   };
   WJ.newWave = () => { if (state !== 'on') WJ.start(); newWave(); };
@@ -994,12 +1002,22 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
   // ── EACH FRAME ─────────────────────────────────────────────────────────────────────────────────────────────────
   const camFwd = new THREE.Vector3(), lp = new THREE.Vector3();
   let wasNear = false, cardT = 0, rumble = null;
+  const qUp = {};
   WJ.update = (dt) => {
     time += dt;
     if (!kit || !wagon) return;
     const wp = wagon.pos, dW = Math.hypot(P.position.x - wp.x, P.position.z - wp.z);
     WJ.near = dW < WAGONJOB.near;
     if (state === 'waiting' && dW < WAGONJOB.startNear) WJ.start();
+    // (rode away: the job ends, nothing lost; riding on up the road ahead of the wagon is still riding with it, so that
+    // is given much more room)
+    let up = (P.position.x - wp.x) * Math.sin(wagon.heading) + (P.position.z - wp.z) * Math.cos(wagon.heading) > 0;
+    if (state === 'on' && !up && dW > WAGONJOB.leave) {
+      // (straight ahead soon isn't ahead on a road that bends round: up the road counts by the road's own measure)
+      const ps = road.nearest(P.position.x, P.position.z), g = road.gap(s, ps); road.at(ps, qUp);
+      up = g > 0 && g < WAGONJOB.leaveAhead && Math.hypot(P.position.x - qUp.x, P.position.z - qUp.z) < WAGONJOB.roadNear;
+    }
+    if (state === 'on' && dW > (up ? WAGONJOB.leaveAhead : WAGONJOB.leave)) WJ.stop({ away: true });
     if (state === 'stopped' && dW > WAGONJOB.near) { state = 'waiting'; showCard(); }
     if (WJ.near !== wasNear) {
       wasNear = WJ.near;
@@ -1128,6 +1146,10 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
   });
   WJ.ring = R;
   WJ.road = road;
+  // the wagon itself (src/wagon.js's: its driver gets down while it waits, src/jobfolk.js), or null for the stand-in;
+  // and the job's state: 'loading' | 'waiting' | 'on' | 'stopped'
+  Object.defineProperty(WJ, 'rig', { get: () => (wagon && wagon.wagon) || null });
+  Object.defineProperty(WJ, 'phase', { get: () => state });
   WJ.state = () => ({
     state, on: WJ.on, near: WJ.near, loaded: !!kit, s: +s.toFixed(1), speed: +v.toFixed(2), notch: dial().speed,
     wagon: wagon ? { x: +wagon.pos.x.toFixed(1), z: +wagon.pos.z.toFixed(1), real: !wagon.root } : null,

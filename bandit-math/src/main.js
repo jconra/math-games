@@ -25,7 +25,7 @@ import { loadAnimals } from './actors/animals.js';
 import { makeInput } from './input.js';
 import { makePlayer, MOVE } from './player.js';
 import { makeDog, dogKind } from './dog.js';
-import { townLife, preloadChickens } from './townlife.js';
+import { townLife, townLifeNow, preloadChickens } from './townlife.js';
 import { showTitle } from './ui/title.js';
 import { makeHud } from './ui/hud.js';
 import { makeRoundup } from './missions/roundup.js';
@@ -41,6 +41,7 @@ import { makeDeliveryJob } from './missions/delivery.js';
 import { makeWagonJob } from './missions/wagonjob.js';
 import { makeShops, makePanel, boxTier, PRICES, PAY } from './shop.js';
 import { makeHob } from './hob.js';
+import { makeJobFolk } from './jobfolk.js';
 import { makeStage } from './stage.js';
 import { makeTraffic } from './traffic.js';
 import { roadCurve } from './wagon.js';
@@ -48,6 +49,7 @@ import { makeCabin } from './cabin/cabin.js';
 import { makeHomestead } from './homestead.js';
 import { makeAudio, volumeRow } from './audio/audio.js';
 import { makeHobVoice, voiceRow } from './audio/voice.js';
+import { makeAmbience } from './audio/ambience.js';
 import { openLockbox, TIER_NAME } from './lockbox/index.js';
 import { loadRiders, saveRider, earn, recordLockbox, titleOf, nextTitle, badgesOf, cleanBoxes, BOX_TIERS } from './save.js';
 
@@ -106,6 +108,7 @@ let state = 'loading', paused = false, pausedBy = new Set();
 let rider = null, mode = 'lasso', P = null, D = null, RU = null, hob = null, shops = null, door = null, menu = null, boxOpen = false;
 let stage = null;   // the band on the town's stage and its music (src/stage.js)
 let traffic = null;   // wagons travelling the road through the valley now and then (src/traffic.js)
+let AMBI = null;   // the town's sounds: animals, birds, work out back, the creek, the horse's hooves (src/audio/ambience.js)
 let cabin = null;   // the player's cabin: walk in through its door (src/cabin/cabin.js)
 let farm = null, SH = null;   // the farm north of town (src/farm.js) and its sick-sheep job (src/missions/sheep.js)
 let PG = null;   // the farm's loose-pigs job (src/missions/pigs.js)
@@ -114,7 +117,8 @@ let WJ = null;   // protect the wagon: the gang on the road east of the pasture 
 let HS = null;   // the rider's own farm animals in a yard behind the cabin, and their goods (src/homestead.js)
 let camps = null, DL = null;   // the camps out in the valley (src/camps.js) and their deliveries (src/missions/delivery.js)
 let deer = null;   // the wild deer herds out in the valley (src/deer.js)
-let DJ = null;   // deer photographs with Hob's box camera (src/missions/deerjob.js), when ticked
+let DJ = null;   // deer photographs with Miss Wren's box camera (src/missions/deerjob.js), when ticked
+let JF = null;   // a person at each job who says what's going on, and thanks you after (src/jobfolk.js)
 const atCounter = () => !!(SJ && SJ.active) || !!(DL && DL.active) || !!(DJ && DJ.active);   // (or making up a camp's order on the slip)   // (working the counter: the rider stands still, the store's camera)
 
 function pause(why) {
@@ -158,8 +162,10 @@ async function ride(r) {
   P = makePlayer({ W, folk, animals, rider, input: I, camera, say: (t) => hud.toast(t) });
   makeDogIfOwned();
   hob = makeHob({ W, hud, rider, I, voice: VOICE });
+  { const heard = hob.event; hob.event = (n, d) => { heard(n, d); if (JF) JF.heard(n, d); }; }   // (the job folk hear the jobs too: their thank-yous)
   stage = makeStage({ W, folk, audio: AUD });
   traffic = makeTraffic({ W, animals, folk, audio: AUD, obstacles: trafficThings, camps: () => camps });
+  AMBI = makeAmbience({ audio: AUD, W }); BM.ambience = AMBI;
   AUD.hold('pause', false); AUD.hold('title', false);
   HS = makeHomestead({ W, animals, rider, hud, hob, refresh });
   shops = makeShops({ W, rider, say: (t, k) => hud.toast(t, k), extra: HS.shop,
@@ -184,15 +190,20 @@ async function ride(r) {
   deer = makeDeer({ W, animals });
   DJ = rider.missions && rider.missions.hunt ? makeDeerJob({ W, deer, P, I, camera, canvas, rider, hud, hob, audio: AUD, refresh,
     onStart: () => { P.enabled = false; I.enabled = false; if (RU) RU.paused = true; hud.prompt(null); },
-    onStop: () => { P.enabled = !paused; I.enabled = !paused; if (RU) RU.paused = paused; } }) : null;
+    onStop: () => { P.enabled = !paused; I.enabled = !paused; if (RU) RU.paused = paused; },
+    busy: () => !!((WJ && (WJ.on || WJ.near)) || (RU && RU.near) || (SH && SH.near) || (PG && PG.near) || (DL && (DL.active || DL.card))) }) : null;   // (another job has the player: the deer card stands aside)
   DL = makeDeliveryJob({ W, camps, P, camera, rider, hud, hob, refresh,
     onStart: () => { P.enabled = false; I.enabled = false; if (RU) RU.paused = true; hud.prompt(null); },
     onStop: () => { P.enabled = !paused; I.enabled = !paused; if (RU) RU.paused = paused; },
-    quiet: () => !!((RU && RU.near) || (SH && SH.near) || (PG && PG.near) || (SJ && SJ.active) || (WJ && WJ.near)) });
+    quiet: () => !!((RU && RU.near) || (SH && SH.near) || (PG && PG.near) || (SJ && SJ.active) || (WJ && WJ.near)),
+    say: (id, t) => !!(JF && JF.say(id, t)) });   // (the foremen's words in the job folk's speech card)
   WJ = rider.missions && rider.missions.wagon ? makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, audio: AUD, refresh,
     times: () => RU && RU.trainer('times'),   // (one times trainer for both jobs)
     wagonLib: () => traffic && traffic.ready,   // (the wagon models the traffic loads, shared)
     quiet: () => !!((RU && RU.near) || (SH && SH.near) || (PG && PG.near) || atCounter() || (DL && DL.card)) }) : null;
+  JF = makeJobFolk({ W, folk, P, camera, hud,
+    jobs: { roundup: () => RU, sheep: () => SH, pigs: () => PG, wagon: () => WJ, deer: () => DJ, camps: () => camps, farm: () => farm, delivery: () => DL },
+    actions: { sheriff: () => openCounter('sheriff') } });
   RU.start();
   hob.trail(true);
   hud.show(true); hud.touch(I.touch);
@@ -240,6 +251,7 @@ function endRide() {
   if (WJ) { WJ.dispose(); WJ = null; }
   if (camps) camps.dispose();
   if (DJ) { DJ.dispose(); DJ = null; }
+  if (JF) { JF.dispose(); JF = null; }
   if (deer) { deer.dispose(); deer = null; }
   DL = camps = null;
   if (farm) farm.dispose();
@@ -249,6 +261,7 @@ function endRide() {
   if (P) P.dispose();
   if (stage) stage.dispose();
   if (traffic) { traffic.dispose(); traffic = null; }
+  if (AMBI) { AMBI.dispose(); AMBI = BM.ambience = null; }
   RU = hob = shops = D = P = stage = SH = PG = SJ = farm = null; door = null;
   AUD.hold('title', true);
   pausedBy.clear(); paused = false;
@@ -315,6 +328,7 @@ function openBox(box, { own = false, after = null, problem = null } = {}) {
       try {
         refresh();
         // (a counter the panel closes back onto says it in its own note: no toast on top of it)
+        if (JF && res.solved && box.from === 'sheriff') JF.heard('sheriffDone');   // (the sheriff's thank-you, once back in the street)
         if (res.solved && !after) hud.toast(`Cracked ${res.boxes > 1 ? `${res.boxes} boxes` : `the ${TIER_NAME[box.tier] ? TIER_NAME[box.tier].toLowerCase() : 'box'}`}! +${res.gold} gold`, 'gold');
       } finally {
         resume('box');
@@ -349,6 +363,7 @@ function openMenu() {
       <button type="button" class="is-main" data-do="resume">Keep riding<small>${I && I.touch ? 'Back to the game' : 'Esc'}</small></button>
       ${boxes ? `<button type="button" data-do="box">Open a lock box<small>${boxes} in your saddlebags</small></button>` : ''}
       ${prints(rider).length ? `<button type="button" data-do="album">Photo album<small>${prints(rider).length} deer photographs</small></button>` : ''}
+      ${WJ && WJ.on ? '<button type="button" data-do="wagon">Let the wagon wait<small>Stop riding along for now</small></button>' : ''}
       <button type="button" data-do="home">Go back to town<small>Straight to the town square</small></button>
       <button type="button" data-do="title">Back to the title<small>Your gold is already saved</small></button></div>
     <div class="bms-keys">${I && I.touch
@@ -362,6 +377,7 @@ function openMenu() {
   body.addEventListener('click', (e) => {
     const b = e.target.closest('button[data-do]'); if (!b) return;
     const what = b.dataset.do;
+    if (what === 'wagon') then = () => { if (WJ) WJ.stop(); };
     if (what === 'home') then = () => { if (SJ) SJ.stop(); const s = W.places.spawn; if (cabin && cabin.inside) cabin.leave({ to: s }); else P.teleport(s.x, s.z, s.rot); };
     if (what === 'title') then = () => endRide();
     if (what === 'box') then = () => { const bx = rider.lockboxes[0]; if (bx) openBox({ tier: bx.tier, from: 'loot' }, { own: true }); };
@@ -397,14 +413,20 @@ function doors() {
   // on it too, rather than opening the door again; the horse walks up if it isn't close enough yet)
   const fresh = h && hd < 14 && (P.horseComing || (P.horsePickedAt && performance.now() - P.horsePickedAt < 8000));
   if (d && !(mount && (hd < d.dist || called)) && !fresh) door = d;
-  hud.prompt(door ? (door.id === 'cabin' ? 'Go into your cabin' : door.prompt) : mount || fresh ? 'Get on your horse' : null);
-  if (door && I.enabled && I.tap('KeyE')) openCounter(door.id);
+  // (one prompt a frame: the later ones below take over from the earlier, and hud.prompt is called once at the end, so the
+  // prompt never flickers off and on within a frame, which kept restarting its fade-in on a phone)
+  let say = door ? (door.id === 'cabin' ? 'Go into your cabin' : door.prompt) : mount || fresh ? 'Get on your horse' : null;
+  let act = door ? () => openCounter(door.id) : null;
   // a camp's foreman close by (src/missions/delivery.js): E talks to him about an order
   // (just got down beside a foreman, the horse still at his elbow: E talks rather than getting straight back on)
   const talkFirst = mount && P.downAt && performance.now() - P.downAt < 6000;
-  if (!door && (!mount || talkFirst) && !fresh && DL && DL.prompt) { hud.prompt(DL.prompt); if (I.enabled && I.tap('KeyE')) DL.talk(); }
+  if (!door && (!mount || talkFirst) && !fresh && DL && DL.prompt) { say = DL.prompt; act = () => DL.talk(); }
   // in sight of the deer job's herd (src/missions/deerjob.js): E sets the camera up (before getting on the horse)
-  if (!door && !fresh && DJ && DJ.prompt) { hud.prompt(DJ.prompt); if (I.enabled && I.tap('KeyE')) DJ.setUp(); }
+  if (!door && !fresh && DJ && DJ.prompt) { say = DJ.prompt; act = () => DJ.setUp(); }
+  // a job's person close by (src/jobfolk.js): E does what they ask (the wagon rolls, the camera goes up, the sheriff's desk)
+  if (!door && (!mount || talkFirst) && !fresh && JF && JF.prompt) { say = JF.prompt; act = () => JF.talk(); }
+  hud.prompt(say);
+  if (act && I.enabled && I.tap('KeyE')) act();
   // the saloon's doors and the stage have no counter yet: walking up to them, Old Hob says so
   if (hob) for (const k of ['saloon', 'stage']) {
     const pl = W.places[k];
@@ -452,17 +474,25 @@ function titleCam(dt) {
   W.camTarget.set(c.x, y0, c.z);
 }
 
+// the town's sounds each frame of play (quieter and muffled inside the cabin; dipped under the action music and Hob)
+function townSounds(dt, indoor) {
+  if (!AMBI || !P) return;
+  const m = WJ && WJ.music ? WJ.music.state() : null;
+  AMBI.update(dt, { at: P.position, flock: townLifeNow(), P, D, HS, farm, RU, SH, PG, traffic, indoor, music: m ? Math.min(1, m.action + (m.trail > 0.05 ? 0.4 : 0)) : 0, voice: VOICE.speaking });
+}
+
 // ── EACH FRAME ───────────────────────────────────────────────────────────────────────────────────────────────────
 let last = performance.now(), frames = 0, fpsT = last, fpsNow = 0, needDraw = false;
 function step(dt) {
   if (!W) return;
   const home = !!(cabin && cabin.inside);   // (in the cabin only it is drawn: the town waits)
+  if (state === 'play' && JF) JF.update(paused || home ? 0 : dt, { hidden: paused || home || atCounter() });   // (the job folk: before the doors, which show their prompt)
   townLife(W, state === 'play' && (paused || home) ? 0 : dt, P, D);   // the chickens about the town (made on the first call)
   if (state === 'play') {
     // (a horse picked at the stable stays "just picked" while the stable's panel is open: E after closing it gets on)
     if (paused && P && P.horsePickedAt > performance.now() - 8000) P.horsePickedAt = performance.now();
     if (paused) { if (needDraw) { needDraw = false; if (home) cabin.render(); else W.render(); } return; }
-    if (home) { door = null; cabin.update(dt); cabin.render(); return; }   // (no town door while inside: E and the prompt are the cabin's)
+    if (home) { door = null; townSounds(dt, true); cabin.update(dt); cabin.render(); return; }   // (no town door while inside: E and the prompt are the cabin's)
     if (atCounter()) hud.prompt(null); else if (!(cabin && cabin.busy)) doors();
     P.update(dt);
     if (D) D.update(dt);
@@ -484,6 +514,7 @@ function step(dt) {
     hob.update(dt, P.position);
     if (stage) stage.update(dt, P.position);
     if (traffic) { traffic.keepView = SJ && SJ.active && !P.cam.enabled ? camera : null; traffic.update(dt, P.position, camera.position); }   // (no wagon through the store counter's picture)
+    townSounds(dt, false);
     W.update(dt); W.render();
     AUD.listen(camera);
     compass();
@@ -607,7 +638,7 @@ Object.defineProperties(BM, {
   roundup: { get: () => RU }, traffic: { get: () => traffic }, sheep: { get: () => SH }, pigs: { get: () => PG }, wagon: { get: () => WJ }, farm: { get: () => farm }, shops: { get: () => shops }, dog: { get: () => D }, input: { get: () => I }, hob: { get: () => hob },
   door: { get: () => door }, store: { get: () => SJ }, paused: { get: () => paused }, mode: { get: () => mode }, cabin: { get: () => cabin },
 });
-Object.defineProperties(BM, { deer: { get: () => deer }, deerjob: { get: () => DJ } });
+Object.defineProperties(BM, { deer: { get: () => deer }, deerjob: { get: () => DJ }, jobfolk: { get: () => JF } });
 Object.defineProperties(BM, { camps: { get: () => camps }, delivery: { get: () => DL }, homestead: { get: () => HS } });   // (the camps and their deliveries; DL.rob() is the bandits' hook)
 Object.assign(BM, {
   dev, hud, title: T, camera, renderer, screenOf, prices: PRICES, loading,

@@ -19,9 +19,11 @@
 // card says so, and the store makes the order up again for free: the kid rides back for it); DL.on(fn) hears every
 // change: fn(event, info) with event 'order' | 'loaded' | 'delivered' | 'robbed' | 'cancel'.
 //
-//   const DL = makeDeliveryJob({ W, camps, P, camera, rider, hud, hob, refresh, onStart, onStop, quiet })
+//   const DL = makeDeliveryJob({ W, camps, P, camera, rider, hud, hob, refresh, onStart, onStop, quiet, say })
 //     camps: makeCamps(...); onStart / onStop: the slip opening and closing (the game holds the keys and the round-up
 //     meanwhile); quiet(): true while another job wants the job card (the herd, the farm, the store's counter)
+//     say(campId, text): a foreman's words go in the job folk's speech card over his head (src/jobfolk.js; false: not
+//     said there, so they show as a note at the bottom as before)
 //   DL.update(dt)       each frame, after the player
 //   DL.prompt           the words for the door prompt while by a foreman ('Take an order from Dusty'), or null
 //   DL.talk()           E by the foreman (main.js calls it when the prompt is DL's)
@@ -59,7 +61,9 @@ export const DELIVERY = {
   camPhone: { at: 0.35, out: 9.0, side: 2.0, up: 3.6, lookUp: -0.4, hold: 2.5 },   // (a phone: the slip is a sheet along the bottom)
 };
 
-export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, refresh = () => {}, onStart = () => {}, onStop = () => {}, quiet = () => false }) {
+export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, refresh = () => {}, onStart = () => {}, onStop = () => {}, quiet = () => false, say = null }) {
+  // a foreman's words: in the speech card over his head (say(campId, text): src/jobfolk.js), else a note at the bottom
+  const speak = (c, text, kind) => { if (!(say && say(c.id, text))) hud.toast(`${c.foreman.name}: ${text}`, kind); };
   if (!rider.topics || typeof rider.topics !== 'object') rider.topics = {};
   if (!rider.topics.delivery || typeof rider.topics.delivery !== 'object') rider.topics.delivery = {};
   const S = makeSupplies(rider.topics.delivery);
@@ -206,11 +210,11 @@ export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, r
     const c = near;
     if (phase !== 'none') {
       // already on an order: the foreman says what's up
-      if (camp === c) hud.toast(phase === 'carrying' ? `${c.foreman.name}: Bring 'em right over here!` : `${c.foreman.name}: The general store will make up our order. We'll be here.`, 'good');
-      else hud.toast(`${c.foreman.name}: Finish that order for ${camp.short} first, partner.`, 'warn');
+      if (camp === c) speak(c, phase === 'carrying' ? "Bring 'em right over here!" : "The general store will make up our order. We'll be here.", 'good');
+      else speak(c, `Finish that order for ${camp.short} first, partner.`, 'warn');
       return true;
     }
-    if (!P.canRide) { hud.toast(`${c.foreman.name}: Need a saddled horse to haul crates. The stable in town sells saddles.`, 'warn'); if (hob) hob.event('deliveryNoSaddle'); return true; }
+    if (!P.canRide) { speak(c, 'Need a saddled horse to haul crates. The stable in town sells saddles.', 'warn'); if (hob) hob.event('deliveryNoSaddle'); return true; }
     newOrder(c);
     return true;
   };
@@ -220,7 +224,7 @@ export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, r
     part = 0; clean = true; away = true;
     phase = 'ordered';
     if (c.foreman.person) { c.foreman.person.p.play('Interact', { fade: 0.2, once: true }); setTimeout(() => { const h = c.foreman.person; if (h && !h.busy) h.p.play('Idle', { fade: 0.4 }); }, 1500); }
-    hud.toast(`${c.foreman.name}: Could you haul us some ${order.load.goods}? Work the order out at the general store.`, 'good');
+    speak(c, `Could you haul us some ${order.load.goods}? Work the order out at the general store.`, 'good');
     if (hob) hob.event('deliveryOrder', { camp: c.short });
     emit('order', { camp: c.id, order });
     cardKey = '';
