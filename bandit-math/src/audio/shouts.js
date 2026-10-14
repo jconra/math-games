@@ -75,6 +75,9 @@ export const SHOUTS = {
   ref: 6,                 // m: full loudness this near (the camera rides a few metres behind), softer past it
   head: { foot: 1.6, horse: 2.4 },   // m above the ground the player's voice comes from (another person's: `head.foot`)
   rate: [0.98, 1.02],     // a touch faster or slower each time (a voice: only a touch)
+  // the other men's voices (see voiceOf): a speed/pitch from these (none near the player's own 1.0), a nasal or chesty
+  // bump somewhere in peak Hz by up to +-peakDb, the top darker or brighter by up to top dB, the chest by up to low dB
+  voices: { rates: [0.84, 0.88, 0.92, 1.08, 1.12, 1.16], peak: [650, 2600], peakDb: 6, top: 9, low: 4 },
   loud: [0.9, 1.05],      // ... and a touch louder or softer
   gap: 3,                 // s at least from the end of one clip to the start of the next (an answer: its own delay)
   most: 3,                // clips waiting their turn at most
@@ -221,6 +224,23 @@ export function makeShouts({ audio, base = GAME }) {
     return { x: a.x, y: a.y ?? (me ? me.ground + SHOUTS.head.foot : SHOUTS.head.foot), z: a.z };
   };
   const place = (p) => { if (!panner || !p) return; if (panner.positionX) { panner.positionX.value = p.x; panner.positionY.value = p.y; panner.positionZ.value = p.z; } else panner.setPosition(p.x, p.y, p.z); };
+  // other men are all the maker's voice: each gets his own colour so they don't sound like one guy. A man with an id (a
+  // job person's name, a bandit's number, a customer's name) always gets the same voice; one without gets a fresh one.
+  // The player's own lines stay as recorded.
+  const voices = new Map();
+  function voiceOf(who) {
+    if (!who) return null;
+    const key = who.id == null ? null : String(who.id);
+    if (key && voices.has(key)) return voices.get(key);
+    let h = 2166136261; for (const ch of key || String(Math.random())) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; }
+    const r = (k) => ((h = Math.imul(h ^ (h >>> 15), 2246822519 + k) >>> 0) / 4294967296);
+    const v = SHOUTS.voices, rate = v.rates[Math.floor(r(1) * v.rates.length)];
+    const deep = rate < 1;   // (a deeper, slower man is usually darker on top too)
+    const out = { rate, peakHz: v.peak[0] * Math.pow(v.peak[1] / v.peak[0], r(2)), peakDb: (r(3) * 2 - 1) * v.peakDb,
+      top: deep ? -v.top * (0.4 + 0.6 * r(4)) : (r(4) * 2 - 1) * v.top * 0.5, low: (r(5) * 2 - 1) * v.low };
+    if (key) voices.set(key, out);
+    return out;
+  }
   function play(name, who) {
     const at = where(who);
     if (!ctx || !audio.running || !buffers[name] || !at) { B.ended(clock); return false; }
@@ -228,11 +248,16 @@ export function makeShouts({ audio, base = GAME }) {
     panner.refDistance = SHOUTS.ref; panner.rolloffFactor = 1; panner.maxDistance = 10000;
     place(at); panner.connect(bus);
     const s = src = ctx.createBufferSource(); s.buffer = buffers[name];
-    s.playbackRate.value = rnd(SHOUTS.rate[0], SHOUTS.rate[1]);
+    const vo = voiceOf(who);
+    s.playbackRate.value = rnd(SHOUTS.rate[0], SHOUTS.rate[1]) * (vo ? vo.rate : 1);
     const g = ctx.createGain(); g.gain.value = VOICE_CLIPS[name] * rnd(SHOUTS.loud[0], SHOUTS.loud[1]);
-    const p = panner;
-    s.connect(g).connect(p);
-    s.onended = () => { try { s.disconnect(); g.disconnect(); p.disconnect(); } catch (e) { /* gone */ } if (src === s) { src = null; panner = null; S.speaking = false; nowWho = null; B.ended(clock); } };
+    const p = panner, fx = [];
+    let last = s;
+    if (vo) for (const [type, freq, gain, Q] of [['peaking', vo.peakHz, vo.peakDb, 1.1], ['highshelf', 3200, vo.top, 0.7], ['lowshelf', 220, vo.low, 0.7]]) {
+      const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.gain.value = gain; f.Q.value = Q; last.connect(f); last = f; fx.push(f);
+    }
+    last.connect(g).connect(p);
+    s.onended = () => { try { s.disconnect(); g.disconnect(); p.disconnect(); for (const f of fx) f.disconnect(); } catch (e) { /* gone */ } if (src === s) { src = null; panner = null; S.speaking = false; nowWho = null; B.ended(clock); } };
     s.start(ctx.currentTime + 0.01);
     S.speaking = true; now = name; nowWho = who; played[name] = (played[name] || 0) + 1;
     return true;
@@ -251,7 +276,7 @@ export function makeShouts({ audio, base = GAME }) {
     if (n) play(n.name, n.who);
   };
   const ask = (kind, o) => { if (alive && B.ask(kind, clock, o)) asked++; };
-  const him = (d) => (d && d.at ? { at: d.at, male: !!d.male } : null);
+  const him = (d) => (d && d.at ? { at: d.at, male: !!d.male, id: d.id ?? d.name ?? d.n ?? null } : null);
   S.heard = (event, data) => {
     if (event === 'banditCatch') { const w = him(data); ask('sitdown', { then: w && w.male ? { kind: 'gotme', who: w, sure: true } : null }); return; }
     if (event === 'banditMiss') { ask('huh', { who: him(data) }); return; }

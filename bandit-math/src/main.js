@@ -204,7 +204,7 @@ async function ride(r) {
     quiet: () => !!((RU && RU.near) || (SH && SH.near) || (PG && PG.near) || atCounter() || (DL && DL.card)) }) : null;
   JF = makeJobFolk({ W, folk, P, camera, hud,
     jobs: { roundup: () => RU, sheep: () => SH, pigs: () => PG, wagon: () => WJ, deer: () => DJ, camps: () => camps, farm: () => farm, delivery: () => DL },
-    actions: { sheriff: () => openCounter('sheriff') }, onTalk: (what, id, who) => { if (SHOUT) SHOUT.talk(what, who); } });
+    actions: { sheriff: () => openCounter('sheriff') }, onTalk: (what, id, who) => { if (SHOUT) SHOUT.talk(what, who && { id, ...who }); } });
   RU.start();
   hob.trail(true);
   hud.show(true); hud.touch(I.touch);
