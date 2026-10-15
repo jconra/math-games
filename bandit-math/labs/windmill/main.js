@@ -775,12 +775,18 @@ function finishTest() {
       : c.worst.type === 'tip' || c.worst.free ? c.worst.text : `${c.worst.text}, on ${place}`}.`;
   const braced = fold ? bracesWhereItFolded(c) : null;
   const Place = place.charAt(0).toUpperCase() + place.slice(1);
+  // a storey with no brace whose wall across was braced there: the crosspieces tied the two together, so that wall held
+  // it up for a while
+  const across = fold && !(braced && braced.length) ? ((c.face ?? 0) + 2) % 4 : -1;
+  const heldUp = across >= 0 && bracesWhereItFolded({ ...c, face: across }).some((b) => b.closes);
+  const Across = across >= 0 ? WALLS[across].charAt(0).toUpperCase() + WALLS[across].slice(1) : '';
   const advice = stood ? (h >= TARGET_FT ? 'Now that\'s a windmill. She\'ll grind flour all summer.' : `Good and stout. Reach ${TARGET_FT} feet and I'll put the sails on her.`)
     : c.worst.type === 'tip' ? (W >= MAX_W - 1e-6 ? 'She went over in one piece. The stones can\'t go any wider than 8 feet, so build her lower.'
       : 'Too narrow a base for her height: she went over in one piece. Set the stones wider, or build her lower.')
     : c.worst.free ? 'A post standing on its own just bends over in the wind. Tie the posts\' tops together with crosspieces, and brace every wall.'
     : braced && braced.length && !braced.some((b) => b.closes) ? `${Place} had a brace, but its end stopped short of the corner, so the square could still fold. Set a brace's ends right on the corners.`
     : braced && braced.length && !/knee/.test(c.worst.text) ? `${Place} had a brace, but still leaned too far. A second brace crossing the first, or a shorter bay, stiffens her.`
+    : fold && !/knee/.test(c.worst.text) && heldUp ? `${Place} had no brace, so it folded. ${Across} held it up a while through the crosspieces, but every wall needs its own long brace corner to corner, near 45 degrees.`
     : fold && !/knee/.test(c.worst.text) ? `${Place} had no brace, so it folded. Every wall needs a long brace corner to corner in every storey, near 45 degrees.`
     : /knee/.test(c.worst.text) ? 'Knee braces help, but a long brace corner to corner holds better.'
     : /butt/.test(c.worst.text) ? 'Two boards end to end hardly hold. Nail a crosspiece or a brace over the joint.'

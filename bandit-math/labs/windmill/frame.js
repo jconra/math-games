@@ -14,8 +14,10 @@
 //     solid the near wall is and the closer behind it they stand. The wind on the front face is carried down by the
 //     two side walls (the walls whose plane it blows along): a board on the front hangs between their corner posts, so
 //     each side wall takes the part of its push nearer its own corner, and each side wall takes the wind on its own
-//     boards. There are no floors tying the two side walls together, so a side wall with no brace in it gets no help
-//     from a braced one: every wall needs its own brace.
+//     boards. The two side walls are tied together at every storey by the front and back walls' crosspieces and
+//     braces, nailed to their corner posts: a side wall that leans further than the other bends those boards the thin
+//     way, and they hand part of its push across to the steadier wall (ties, below). Only part: the tie boards bend and
+//     their corner nails turn, so a wall with no brace of its own still leans more and racks first.
 //   * We solve "stiffness times movement = load" for every joint and board end at once (one big set of equations), then
 //     solve again with the weight leaning on the movement (a tall tower that sways a bit is pushed further by its own
 //     weight), and check: did any nail group get more force or twist than it holds, did any board bend or squash past
@@ -135,7 +137,9 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 // segs: one wall's boards. loads: { side: [{ y, F }] sideways pushes (pounds, + = toward +x) handed to the joints nearest
 // that height; down: [{ y, x, F }] extra weight from the walls at right angles }. weightShare(seg): how much of a board's
 // weight this wall carries (corner posts are shared by two walls). Returns what broke (if anything) and how it moved.
-export function solveWall(segs, loads, { weightShare = (s) => (s.post ? 0.5 : 1), pdelta = true, W } = {}) {
+// probes: [{ y, x }] spots to report on (windCase's ties): how far each moves under these loads without the weight
+// leaning in (u0), and how far each moves for a one-pound push at each of them (flex[i][j]: at i, pushed at j).
+export function solveWall(segs, loads, { weightShare = (s) => (s.post ? 0.5 : 1), pdelta = true, W, probes = null } = {}) {
   const hubs = findJoints(segs);
   // board nodes: one at every joint along each board
   const nodes = [];   // { s, t, x, y } or a hub node { hub }
@@ -175,7 +179,8 @@ export function solveWall(segs, loads, { weightShare = (s) => (s.post ? 0.5 : 1)
     if (y < Math.min(...free.map((i) => nodes[i].y)) * 0.5) return [];
     return set;
   };
-  for (const p of loads.side || []) { const set = nearestAt(p.y); for (const i of set) F[i * 3] += p.F / set.length; }
+  for (const p of loads.side || []) { const set = nearestAt(p.y, p.x); for (const i of set) F[i * 3] += p.F / set.length; }
+  const probeSets = (probes || []).map((p) => nearestAt(p.y, p.x));
   for (const p of loads.down || []) { const set = nearestAt(p.y, p.x); for (const i of set) F[i * 3 + 1] -= p.F / set.length; }
 
   // the parts: beam pieces and nail springs
@@ -187,13 +192,20 @@ export function solveWall(segs, loads, { weightShare = (s) => (s.post ? 0.5 : 1)
     for (const it of h.items) springs.push({ hub: hi, node: it.node, to: hubNode[hi], kind, s: it.s });
   });
 
-  let u = null, N = new Float64Array(elems.length);
+  let u = null, N = new Float64Array(elems.length), probe = null;
   for (let pass = 0; pass < (pdelta ? 3 : 1); pass++) {
     const K = new Float64Array(n * n);
     for (let e = 0; e < elems.length; e++) addBeam(K, n, nodes, elems[e], pass ? N[e] : 0);
     for (const sp of springs) addSpring(K, n, sp);
-    const sol = solve(K, F.slice(), n);
-    if (!sol) return { ok: false, hubs, nodes, worst: { kind: 'fold', util: 99, y: 0, text: 'folded over' }, items: [], u: null, mechanism: true };
+    // (the first pass also pushes one pound at each probe, through the same equations)
+    const unit = pass ? [] : probeSets.map((set) => { const P = new Float64Array(n); for (const i of set) P[i * 3] = 1 / set.length; return P; });
+    const sols = solveMany(K, [F.slice(), ...unit], n);
+    if (!sols) return { ok: false, hubs, nodes, worst: { kind: 'fold', util: 99, y: 0, text: 'folded over' }, items: [], u: null, mechanism: true };
+    const sol = sols[0];
+    if (!pass && probes) {
+      const at = (x, set) => (set.length ? set.reduce((a, i) => a + x[i * 3], 0) / set.length : 0);
+      probe = { u0: probeSets.map((set) => at(sol, set)), flex: probeSets.map((si) => unit.map((_, j) => at(sols[1 + j], si))) };
+    }
     u = sol;
     for (let e = 0; e < elems.length; e++) N[e] = beamForces(nodes, elems[e], u).N;
   }
@@ -247,7 +259,7 @@ export function solveWall(segs, loads, { weightShare = (s) => (s.post ? 0.5 : 1)
   });
   let worst = null; for (const it of items) if (!worst || it.util > worst.util) worst = it;
   if (worst) worst.text = describe(worst, segs, W);
-  return { ok: !(worst && worst.util > 1), worst, items, hubs, nodes, u, levels, tops, segs };
+  return { ok: !(worst && worst.util > 1), worst, items, hubs, nodes, u, levels, tops, segs, probe };
 }
 
 // a plain sentence for what gave way (W: how wide the wall is, so a short brace reaching from post to post on a
@@ -318,24 +330,29 @@ function addSpring(K, n, sp) {
   }
 }
 // plain Gaussian elimination with row swaps; null when the set has no answer (a part free to flop about)
-function solve(K, F, n) {
+// (several right-hand sides at once: rhs is a list of load vectors; returns a list of answers, or null)
+function solveMany(K, rhs, n) {
   let big = 0; for (let i = 0; i < n; i++) big = Math.max(big, Math.abs(K[i * n + i]));
   for (let c = 0; c < n; c++) {
     let p = c, pv = Math.abs(K[c * n + c]);
     for (let r = c + 1; r < n; r++) { const v = Math.abs(K[r * n + c]); if (v > pv) { pv = v; p = r; } }
     if (pv < big * 1e-11) return null;
-    if (p !== c) { for (let j = c; j < n; j++) { const t = K[c * n + j]; K[c * n + j] = K[p * n + j]; K[p * n + j] = t; } const t = F[c]; F[c] = F[p]; F[p] = t; }
+    if (p !== c) { for (let j = c; j < n; j++) { const t = K[c * n + j]; K[c * n + j] = K[p * n + j]; K[p * n + j] = t; } for (const F of rhs) { const t = F[c]; F[c] = F[p]; F[p] = t; } }
     const d = K[c * n + c];
     for (let r = c + 1; r < n; r++) {
       const f = K[r * n + c] / d; if (!f) continue;
       for (let j = c; j < n; j++) K[r * n + j] -= f * K[c * n + j];
-      F[r] -= f * F[c];
+      for (const F of rhs) F[r] -= f * F[c];
     }
   }
-  const x = new Float64Array(n);
-  for (let r = n - 1; r >= 0; r--) { let v = F[r]; for (let j = r + 1; j < n; j++) v -= K[r * n + j] * x[j]; x[r] = v / K[r * n + r]; }
-  for (let i = 0; i < n; i++) if (!Number.isFinite(x[i])) return null;
-  return x;
+  const out = [];
+  for (const F of rhs) {
+    const x = new Float64Array(n);
+    for (let r = n - 1; r >= 0; r--) { let v = F[r]; for (let j = r + 1; j < n; j++) v -= K[r * n + j] * x[j]; x[r] = v / K[r * n + r]; }
+    for (let i = 0; i < n; i++) if (!Number.isFinite(x[i])) return null;
+    out.push(x);
+  }
+  return out;
 }
 
 // ── the wind on the whole tower ─────────────────────────────────────────────────────────────────────────────────────
@@ -418,13 +435,35 @@ export function windCase(t, axis, sign, mph) {
   // the wind's push in each carrying wall's own sideways direction: face 0's x runs along +X, face 2's along -X,
   // face 1's along -Z, face 3's along +Z
   const dirOf = (k) => (k === 0 ? 1 : k === 2 ? -1 : k === 1 ? -1 : 1);
-  // each carrying wall takes the pushes that land on it (shareOf), storey by storey as they come: a wall with a
-  // storey left unbraced has to hold that storey's wind itself
+  // each carrying wall takes the pushes that land on it (shareOf), storey by storey as they come...
+  const side = {};
+  for (const k of faces) { side[k] = []; for (const p of pushes) { const s = shareOf(p, k, t.W); if (s > 0) side[k].push({ y: p.y, F: p.F * s * dirOf(k) }); } }
+  // ...and the ties between them hand some across: how far each wall would lean on its own where the ties land, how
+  // each gives to a push there, and so the pull in every tie (T, pounds: + pulls the first end's wall back toward the
+  // second's). A wall that leans less on its own gets pulled along by the one that leans more, and holds it back.
+  const links = ties(t, faces), T = links.map(() => 0);
+  if (links.length) {
+    const probes = {}; for (const k of faces) probes[k] = [];
+    const at = links.map((l) => l.land.map((e) => { probes[e.k].push({ y: e.y, x: e.x }); return probes[e.k].length - 1; }));
+    const lone = {};
+    for (const k of faces) lone[k] = solveWall(faceSegments(t, k), { side: side[k], down: crossWeight(t, k) }, { W: t.W, pdelta: false, probes: probes[k] }).probe;
+    if (faces.every((k) => lone[k])) {
+      const n = links.length, A = new Float64Array(n * n), d = new Float64Array(n), sgn = [-1, 1];
+      // how far (along the wind) the tie's end e moves for every pound of pull in tie m
+      const give = (l, e, m) => { const k = links[l].land[e].k; let g = 0; for (let e2 = 0; e2 < 2; e2++) if (links[m].land[e2].k === k) g += lone[k].flex[at[l][e]][at[m][e2]] * sgn[e2]; return g; };
+      for (let l = 0; l < n; l++) {
+        const [a, b] = links[l].land;
+        d[l] = dirOf(a.k) * lone[a.k].u0[at[l][0]] - dirOf(b.k) * lone[b.k].u0[at[l][1]];
+        for (let m = 0; m < n; m++) A[l * n + m] = (l === m ? 1 / links[l].k : 0) - give(l, 0, m) + give(l, 1, m);
+      }
+      const sol = solveMany(A, [d], n);
+      if (sol) sol[0].forEach((v, i) => { T[i] = v; });
+      links.forEach((l, i) => l.land.forEach((e, j) => side[e.k].push({ y: e.y, x: e.x, F: sgn[j] * T[i] * dirOf(e.k) })));
+    }
+  }
   let worst = null;
   for (const k of faces) {
-    const side = [];
-    for (const p of pushes) { const s = shareOf(p, k, t.W); if (s > 0) side.push({ y: p.y, F: p.F * s * dirOf(k) }); }
-    const r = solveWall(faceSegments(t, k), { side, down: crossWeight(t, k) }, { W: t.W });
+    const r = solveWall(faceSegments(t, k), { side: side[k], down: crossWeight(t, k) }, { W: t.W });
     if (!worst || (r.worst && r.worst.util > (worst.worst ? worst.worst.util : -1))) worst = { ...r, face: k };
   }
   // and the whole tower tipping over on its downwind stones
@@ -433,7 +472,33 @@ export function windCase(t, axis, sign, mph) {
     const it = { type: 'tip', util: tip.util, y: 0, x: sign > 0 === (worst.face === 0 || worst.face === 3) ? 0 : t.W, text: 'the wind tipped the whole tower over: the stones on the windward side lifted' };
     worst = { ...worst, worst: it, ok: worst.ok && tip.util <= 1 };
   }
-  return { ...worst, axis, sign, mph, total, tip };
+  return { ...worst, axis, sign, mph, total, tip, ties: links.map((l, i) => ({ id: l.id, face: l.face, L: l.L, k: l.k, T: T[i], ys: l.land.map((e) => e.y) })) };
+}
+
+// The ties between the two walls the wind blows along: every crosspiece or brace on the two walls at right angles that
+// reaches from one corner post to the other. If one carrying wall leans further than the other, the tie gets bent
+// sideways (the thin way) and its corner nails turn; how hard that pulls back is its stiffness k (pounds per foot of
+// difference). The nails turn more easily than the board bends, and a long tie gives far more than a short one, so on
+// a narrow tower the walls lean almost as one, and on a wide one each wall does most of its own holding.
+// Returns [{ id, face, land: [{ k (carrying wall), x, y }, ...the far end], L, k }]
+function ties(t, faces) {
+  const out = [], W = t.W;
+  const onPost = (c, y) => t.corners[c].some((p) => y > p.y - 0.3 && y < p.y + p.len + 0.3);
+  for (let f = 0; f < 4; f++) {
+    if (faces.includes(f)) continue;
+    for (const s of faceSegments(t, f)) {
+      const x0 = Math.min(s.ax, s.bx), x1 = Math.max(s.ax, s.bx);
+      if (s.post || x1 - x0 < 0.1 || x0 > 0.35 || x1 < W - 0.35) continue;   // it has to reach both corner posts
+      const yAt = (x) => s.ay + (s.by - s.ay) * Math.max(0, Math.min(1, (x - s.ax) / (s.bx - s.ax)));
+      const ends = [[f, 0], [(f + 1) % 4, W]].map(([c, x]) => ({ c, y: yAt(x) }));
+      if (!ends.every((e) => onPost(e.c, e.y))) continue;
+      // corner c is the left edge (x 0) of wall c, or the right edge (x W) of the wall before it
+      const land = ends.map((e) => (faces.includes(e.c) ? { k: e.c, x: 0, y: e.y } : { k: (e.c + 3) % 4, x: W, y: e.y }));
+      const L = Math.hypot(W, ends[1].y - ends[0].y);
+      out.push({ id: s.id, face: f, land, L, k: 1 / (L * L / (2 * NAILS.face.kr) + L ** 3 / (12 * WOOD.E * WOOD.Iweak)) });
+    }
+  }
+  return out;
 }
 
 // ── tipping over ────────────────────────────────────────────────────────────────────────────────────────────────────
