@@ -8,7 +8,7 @@
 <!-- the on-screen error box comes first, so a crash shows on screen instead of a blank page -->
 <script src="../../oops.js"></script>
 <link rel="stylesheet" href="../../src/ui/fonts/fonts.css">
-<link rel="stylesheet" href="windmill.css?v=9">
+<link rel="stylesheet" href="windmill.css?v=13">
 <script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/" } }</script>
 </head>
 <body>
@@ -48,7 +48,7 @@
     <div class="bar top">
       <div class="stats">
         <div><small>Height</small><b id="height">0 ft</b></div>
-        <div><small>Base</small><b id="base">6 × 6 ft</b></div>
+        <div class="st-base"><small>Base</small><b id="base">6 × 6 ft</b></div>
         <div><small>Best</small><b id="best">0 ft</b><i id="best-base"></i></div>
       </div>
       <div class="tools">
@@ -74,6 +74,6 @@
   </main>
 </div>
 <div class="loading" id="loading">Climbing the hill…</div>
-<script type="module" src="main.js?v=9"></script>
+<script type="module" src="main.js?v=13"></script>
 </body>
 </html>

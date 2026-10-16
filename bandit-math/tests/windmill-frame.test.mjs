@@ -368,3 +368,260 @@ test('shelter: a crosspiece shelters about half a foot either side of it, not th
   assert.ok(s1 > 0.55 && s1 < 0.85, `8 to 9 ft: ${s1}`);
   assert.ok(s2 > 0.98, `9 to 10 ft: ${s2}`);
 });
+
+// ── v4: walls that lean (LEAN.md) ──────────────────────────────────────────────────────────────────────────────────────
+// Towers with leaning walls, as data (board = { id, a, b, len, n, t }). shapeL(W, D, { F, B, R, L }): the four outer walls,
+// each leaning IN k inches in a foot (negative: out): the front wall Z = D/2 - (F/12) Y, the back Z = -D/2 + (B/12) Y,
+// the right X = W/2 - (R/12) Y, the left X = -W/2 + (L/12) Y. Corners 0 front-left, 1 front-right, 2 back-right,
+// 3 back-left; a corner leg's own wall alternates Z, X, Z, X as the twins put up corner posts (legN: all one way).
+const CORN = [[-1, 1], [1, 1], [1, -1], [-1, -1]];
+const BL = (id, a, b, n, t = 0) => ({ ...B(id, a, b, n), ...(t ? { t: r6(t) } : {}) });
+function shapeL(W, D, k = {}) {
+  const tin = { F: (k.F ?? 0) / 12, B: (k.B ?? 0) / 12, R: (k.R ?? 0) / 12, L: (k.L ?? 0) / 12 };
+  const tZ = (sz) => (sz > 0 ? -tin.F : tin.B), tX = (sx) => (sx > 0 ? -tin.R : tin.L);
+  const corner = (c, Y) => { const [sx, sz] = CORN[c]; return [sx * W / 2 + tX(sx) * Y, Y, sz * D / 2 + tZ(sz) * Y]; };
+  const dir = (c) => { const [sx, sz] = CORN[c], v = [tX(sx), 1, tZ(sz)], l = Math.hypot(...v); return v.map((x) => x / l); };
+  const WALLS = { front: [0, 1, 'Z', () => tZ(1)], right: [1, 2, 'X', () => tX(1)], back: [2, 3, 'Z', () => tZ(-1)], left: [3, 0, 'X', () => tX(-1)] };
+  return { W, D, tX, tZ, corner, dir, WALLS };
+}
+const legTL = (s, c, n) => (n === 'Z' ? s.tZ(CORN[c][1]) : s.tX(CORN[c][0]));
+// a leg up each corner from y0, len long; returns { boards, top }
+function legsL(s, y0, len, tag, legN = (c) => (c % 2 ? 'X' : 'Z')) {
+  const out = []; let top = 0;
+  for (let c = 0; c < 4; c++) { const A = s.corner(c, y0), d = s.dir(c), Bp = A.map((x, i) => x + len * d[i]); out.push(BL(`leg${tag}${c}`, A, Bp, legN(c), legTL(s, c, legN(c)))); top = Bp[1]; }
+  return { boards: out, top };
+}
+// the crosspieces at height y (two pieces lapped a foot in the middle when longer than a board)
+function crossL(s, y, tag) {
+  const out = [];
+  for (const [w, [c0, c1, fam, tf]] of Object.entries(s.WALLS)) {
+    const A = s.corner(c0, y), Bp = s.corner(c1, y), L = Math.hypot(Bp[0] - A[0], Bp[2] - A[2]);
+    if (L <= 8 + 1e-9) { out.push(BL(`x${tag}${w}`, A, Bp, fam, tf())); continue; }
+    const u = [(Bp[0] - A[0]) / L, 0, (Bp[2] - A[2]) / L], M1 = A.map((x, i) => x + u[i] * (L / 2 + 0.5)), M0 = A.map((x, i) => x + u[i] * (L / 2 - 0.5));
+    out.push(BL(`x${tag}${w}a`, A, M1, fam, tf()), BL(`x${tag}${w}b`, M0, Bp, fam, tf()));
+  }
+  return out;
+}
+// an 8 ft brace in each wall (the twins' pinwheel) from its first corner at y0 up to where it reaches the far leg
+function bracesL(s, y0, ymax, tag) {
+  return Object.entries(s.WALLS).map(([w, [c0, c1, fam, tf]]) => {
+    const A = s.corner(c0, y0), far = (Y) => { const Q = s.corner(c1, Y); return Math.hypot(Q[0] - A[0], Q[1] - A[1], Q[2] - A[2]); };
+    let lo = y0, hi = y0 + 8; for (let i = 0; i < 80; i++) { const m = (lo + hi) / 2; if (far(m) < 8) lo = m; else hi = m; }
+    return BL(`br${tag}${w}`, A, s.corner(c1, Math.min(lo, ymax)), fam, tf());
+  });
+}
+// storeys of whole 8 ft legs, crosspieces at their tops (the way the page builds: a leg's foot stays, its top comes in)
+function taperL(W, D, k, { storeys = 2, braces = false, legN } = {}) {
+  const s = shapeL(W, D, k), boards = []; let y = 0;
+  for (let i = 0; i < storeys; i++) { const L = legsL(s, y, 8, i, legN); boards.push(...L.boards, ...crossL(s, L.top, i)); if (braces) boards.push(...bracesL(s, y, L.top, i)); y = L.top; }
+  return { W, D, boards, top: y };
+}
+// a pyramid: legs from the stones meeting at a point (spliced from 8 ft boards lapped a foot), a ring of crosspieces
+// every `ring` ft (while it is a foot across or more), braces from the stones in every face
+function pyramidL(W, k, { ring = 6, braces = true } = {}) {
+  const s = shapeL(W, W, { F: k, B: k, R: k, L: k }), apex = (W / 2) / (k / 12), boards = [];
+  for (let c = 0; c < 4; c++) {
+    const A = s.corner(c, 0), d = s.dir(c), L = apex / d[1], n = c % 2 ? 'X' : 'Z';
+    for (let st = 0, i = 0; ; i++) { const e = Math.min(L, st + 8); boards.push(BL(`pl${c}_${i}`, A.map((x, j) => x + st * d[j]), A.map((x, j) => x + e * d[j]), n, legTL(s, c, n))); if (e >= L - 1e-9) break; st = e - 1; }
+  }
+  for (let y = ring; y < apex - 0.75 && W - 2 * y * k / 12 >= 1; y += ring) boards.push(...crossL(s, y, 'r' + y));
+  if (braces) boards.push(...bracesL(s, 0, apex, 'p'));
+  return { W, D: W, boards, apex };
+}
+// first-fit, longest first, from 8 ft boards: how many boards
+const boardsCut = (t) => { const bins = []; for (const p of t.boards.map((b) => b.len).sort((x, y) => y - x)) { const i = bins.findIndex((r) => r >= p - 1e-9); if (i >= 0) bins[i] -= p; else bins.push(8 - p); } return bins.length; };
+const firstGave = (r) => r.stages.findIndex((s) => s.gave);
+const oneWindL = (t, k, mph) => { const st = { W: t.W, D: t.D, boards: JSON.parse(JSON.stringify(t.boards)), cuts: [], hinges: [], M: null, models: 0 }, M = I.modelOf(st), sol = I.solveWind(M, k, mph); return { M, sol, chk: I.checkAll(M, sol) }; };
+const LEAN = {
+  straight16: taperL(6, 6, {}), slight: taperL(6, 6, { F: 1, B: 1, R: 1, L: 1 }), taper16: taperL(6, 6, { F: 1.5, B: 1.5, R: 1.5, L: 1.5 }),
+  steep: taperL(6, 6, { F: 2, B: 2, R: 2, L: 2 }), leanOut16: taperL(6, 6, { F: -2, B: -2, R: -2, L: -2 }), frontBack: taperL(6, 6, { F: 1.5, B: 1.5 }),
+  taper16Braced: taperL(6, 6, { F: 1.5, B: 1.5, R: 1.5, L: 1.5 }, { braces: true }), pyramid: pyramidL(6, 1.5),
+};
+
+test('v4 no lean: the reference towers give exactly what they gave before walls could lean (whole results, hashed)', async () => {
+  const crypto = await import('node:crypto');
+  const hash = (r) => { const o = { ...r }; delete o.ms; return crypto.createHash('sha1').update(JSON.stringify(o)).digest('hex').slice(0, 16); };
+  // (made with the frame.js of v3, before leaning walls: rigs/windmill/v4/physics/hashes.mjs)
+  const V3 = { unbraced8: '49f3f19b0f22359c', unbraced16: 'f85e320e7f7e5a41', unbraced24: 'c6e0012074b42a0d', knee16: '5360ec7b763dc593', diag16: '3f729de8a816a84a', diag24: '1650aaaccc00636a', cross16: '7df34192755ff50c', missingUpperFront16: '8772db4249b8bbb8', missingLowerFront16: 'd4c186f0d161a40d', missingLowerRight16: 'a17227b7bbe85e2b', diag16_w2: 'f051c02aeaa9ee1c', diag16_w4: '02142d500bc822dc', diag16_w8: '72c9309e2ce790fb', cross16_w4: 'e8b2449767deccda', topHeavy24: '9ed20faaa05d8d8c', lonePostOnTop: '330bf83531f2bc8d', loneBoardOnTop: 'a44af5afe1c3013b', setback: 'a79b574f0b0a9fb9', setbackOpen: '6099975c00398980' };
+  for (const [k, r] of Object.entries(R)) assert.equal(hash(r), V3[k], k);
+  assert.equal(hash(windTest(setback(true))), V3.setback);
+  assert.equal(hash(windTest(setback(false))), V3.setbackOpen);
+  // t: 0 written on every board changes nothing; nor does a brace leaning 3 in a foot in an upright wall with no leaning
+  // wall round it (the CONTRACT calls it a leg; with no board standing in its second wall, it is a brace as before)
+  const zero = { ...T.diag16, boards: T.diag16.boards.map((b) => ({ ...b, t: 0 })) }, rz = windTest(zero);
+  rz.standing.boards = rz.standing.boards.map(({ t, ...b }) => b);       // (what stands keeps the boards as handed in)
+  assert.equal(hash(rz), V3.diag16);
+  const narrow = { W: 6, D: 2, boards: [...storey([], -3, 3, -1, 1, 0, 8, { braces: false, tag: 'n' }), B('br', [3, 0, 1], [3, 8, -1], 'X')] };
+  const st = { W: 6, D: 2, boards: narrow.boards, cuts: [], hinges: [], M: null, models: 0 };
+  assert.ok(!I.modelOf(st).boards.some((b) => b.leg), 'no leg without a leaning wall round it');
+});
+test('v4 walls: a leg lies in its two walls, keyed as tower.js keys them; a crosspiece across leaning legs shares their wall', () => {
+  const bs = I.prepBoards(LEAN.taper16), legs = bs.filter((b) => b.id.startsWith('leg0'));
+  assert.equal(legs.length, 4);
+  for (const b of legs) assert.ok(b.leg && b.walls.length === 2, b.id + ' in two walls');
+  const fl = bs.find((b) => b.id === 'leg00');
+  assert.deepEqual(fl.walls.map(I.keyOfWall), ['Z:3~-1.5', 'X:-3~1.5'], 'the front wall leaning in 1½, the left side leaning in 1½');
+  assert.ok(I.sharePlane(bs.find((b) => b.id === 'x0front'), fl), 'the front crosspiece and the front-left leg share the front wall');
+  assert.ok(I.sharePlane(bs.find((b) => b.id === 'x0left'), fl), '...and the left crosspiece the left wall');
+  // (the front crosspiece is lapped onto the leg in their wall; the leg, met in its other wall, turns about that wall)
+  const st = { W: 6, D: 6, boards: LEAN.taper16.boards, cuts: [], hinges: [], M: null, models: 0 }, M = I.modelOf(st);
+  const hub = M.hubs.find((h) => h.items.some((it) => M.boards[it.b].id === 'x0front') && h.items.some((it) => M.boards[it.b].id === 'leg01'));
+  const it = hub.items.find((x) => M.boards[x.b].id === 'x0front'), lg = hub.items.find((x) => M.boards[x.b].id === 'leg01');
+  assert.ok(it.lapped, 'the crosspiece is lapped onto the leg');
+  const front = [0, 1.5 / 12, 1].map((x) => x / Math.hypot(1, 1.5 / 12));
+  assert.ok(lg.soft.some((ax) => Math.abs(ax[0] * front[0] + ax[1] * front[1] + ax[2] * front[2]) > 0.99), 'the leg turns about the leaning front wall\'s normal there (and its own wall\'s)');
+});
+test('v4 shelter: boards in one leaning wall do not shade each other; a leaning front wall shelters the back at every height', () => {
+  // a leg rising up a front wall leaning 7 in a foot, a crosspiece across it at 2 ft: the wind from the south meets the
+  // wall; just above the crosspiece the leg stands a hair downwind of it, in the same wall, not behind it
+  // (leaning out, toward the wind, the leg just BELOW the crosspiece is the part downwind of it; leaning in, just above)
+  for (const [k, ys] of [[7, [1.95, 1.9, 1.85]], [-7, [2.05, 2.1, 2.15]]]) {
+    const t = k / 12, s = Math.sqrt(1 + t * t), bs = I.prepBoards({ W: 6, D: 6, boards: [BL('leg', [0, 0, 3], [0, 4 / s, 3 + t * 4 / s], 'Z', t), BL('x', [-2, 2, 3 + 2 * t], [2, 2, 3 + 2 * t], 'Z', t)] });
+    const shade = I.shelterFor(bs, [0, 0, -1]), leg = bs.findIndex((b) => b.id === 'leg');
+    for (const y of ys) assert.equal(shade([0, y, 3 + t * y], leg), 1, `k=${k}, ${y} ft`);
+  }
+  // and behind the wall, at each height, the back crosspieces are sheltered (both storeys)
+  const w = windOn(LEAN.taper16, 3, 50);
+  for (const id of ['x0back', 'x1back']) {
+    const open = windOn({ ...LEAN.taper16, boards: [LEAN.taper16.boards.find((b) => b.id === id)] }, 3, 50).per[id].along;
+    assert.ok(w.per[id].along < 0.6 * open && w.per[id].along > 0.15 * open, `${id}: ${(w.per[id].along / open).toFixed(2)} of the open push`);
+  }
+});
+test('v4 hand check: a board in a leaning wall bends the thin way across the tilted wall (P L^3 / 3 E Iweak), the wide way in it', () => {
+  const keep = { ...F.NAILS.stone }, w = WOOD.weight; Object.assign(F.NAILS.stone, { kt: 1e14, kr: 1e14, kb: 1e14 }); WOOD.weight = 0;
+  try {
+    for (const k of [-5, 3]) {
+      const t = k / 12, s = Math.sqrt(1 + t * t), L = 8, up = [0, 1 / s, t / s], nrm = [0, -t / s, 1 / s];
+      const st = { W: 6, D: 6, boards: [BL('b', [-3, 0, 3], [-3, L * up[1], 3 + L * up[2]], 'Z', t)], cuts: [], hinges: [], M: null, models: 0 }, M = I.modelOf(st);
+      const tip = M.boardNodes[0].reduce((p, m) => (M.nodes[m].t > M.nodes[p].t ? m : p));
+      const push = (f) => { const v = new Float64Array(M.n); for (let q = 0; q < 3; q++) v[M.dof(tip, q)] = f[q]; const u = I.solveEnv(M.env, v); return [0, 1, 2].map((q) => u[M.dof(tip, q)]); };
+      const a = push(nrm.map((x) => 100 * x)), b = push([100, 0, 0]);
+      const dotp = (p, q) => p[0] * q[0] + p[1] * q[1] + p[2] * q[2];
+      assert.ok(Math.abs(dotp(a, nrm) / (100 * L ** 3 / (3 * WOOD.E * WOOD.Iweak)) - 1) < 1e-6, `k=${k} thin way`);
+      assert.ok(Math.abs(b[0] / (100 * L ** 3 / (3 * WOOD.E * WOOD.I)) - 1) < 1e-6, `k=${k} wide way`);
+    }
+  } finally { Object.assign(F.NAILS.stone, keep); WOOD.weight = w; }
+});
+test('v4 hand check: the wind across a board in a wall leaning 7 in a foot: cos^2 of the push up the slope, lifting or pressing; a level one by its tilted shadow', () => {
+  const mph = 50, L = 4, q = pressure(mph, 0) * DRAG, near = (a, b) => Math.abs(a - b) < 1e-6 * Math.max(1, Math.abs(b));
+  for (const k of [7, -7]) {
+    const t = k / 12, s = Math.sqrt(1 + t * t), cos = 1 / s, sin = Math.abs(t) / s;
+    const up = windOn({ W: 8, D: 8, boards: [BL('u', [0, 0, 3], [0, L / s, 3 + t * L / s], 'Z', t)] }, 3, mph).per.u;
+    assert.ok(near(Math.hypot(...up.force), q * WOOD.width * L * cos * cos), `k=${k} push`);
+    assert.ok(near(up.force[1], (k > 0 ? 1 : -1) * q * WOOD.width * L * cos * cos * sin), `k=${k} lift`);
+    const lv = windOn({ W: 8, D: 8, boards: [BL('c', [-2, 2, 3 + 2 * t], [2, 2, 3 + 2 * t], 'Z', t)] }, 3, mph).per.c;
+    assert.ok(near(-lv.force[2], q * (WOOD.width * cos + WOOD.thick * sin) * L), `k=${k} level`);
+  }
+});
+test('v4 hand check: a tapered portal pushed sideways: half the push at each foot, the turn by statics; stiffer by its joints as it narrows', () => {
+  const w = WOOD.weight; WOOD.weight = 0;
+  try {
+    const stiff = {};
+    for (const b of [3, 1]) {
+      const bs = [BL('L', [-3, 0, 3], [-b, 6, 3], 'Z'), BL('R', [3, 0, 3], [b, 6, 3], 'Z'), BL('C', [-b, 6, 3], [b, 6, 3], 'Z')];
+      const st = { W: 6, D: 6, boards: bs, cuts: [], hinges: [], M: null, models: 0 }, M = I.modelOf(st), H = 100;
+      const iC = M.boards.findIndex((x) => x.id === 'C'), ends = [0, M.boards[iC].L].map((tt) => M.boardNodes[iC].reduce((p, m) => (Math.abs(M.nodes[m].t - tt) < Math.abs(M.nodes[p].t - tt) ? m : p)));
+      const f = new Float64Array(M.n); for (const e of ends) f[M.dof(e, 0)] += H / 2;
+      const u = I.solveEnv(M.env, f);
+      const sp = (id) => M.springs.find((x) => M.boards[x.it.b].id === id && x.it.kind === 'stone');
+      const R = (id) => { const s = sp(id), d = M.dof(s.node, 0); return [0, 1, 2].map((q) => -s.kt * u[d + q]); };
+      const Mz = (id) => { const s = sp(id), d = M.dof(s.node, 3); return -(s.R[6] * u[d] + s.R[7] * u[d + 1] + s.R[8] * u[d + 2]); };
+      assert.ok(Math.abs(-R('L')[0] / (H / 2) - 1) < 1e-6 && Math.abs(-R('R')[0] / (H / 2) - 1) < 1e-6, 'half the push at each foot');
+      const V = (H * 6 - Mz('L') - Mz('R')) / 6;
+      assert.ok(Math.abs(R('R')[1] / V - 1) < 1e-6 && Math.abs(-R('L')[1] / V - 1) < 1e-6, `the feet press and lift by (H h - the straps' turn) / 2a: ${R('R')[1]}, ${-R('L')[1]} vs ${V}`);
+      const sway = (u[M.dof(ends[0], 0)] + u[M.dof(ends[1], 0)]) / 2, hand = 2 * (F.NAILS.stone.kr + F.NAILS.face.kr / 2 * (3 / b) ** 2) / 36;
+      assert.ok(Math.abs(H / sway / hand - 1) < 0.1, `b=${b}: within 10% of the joint-spring sum (${(H / sway).toFixed(0)} vs ${hand.toFixed(0)})`);
+      stiff[b] = H / sway;
+    }
+    assert.ok(stiff[1] > 3 * stiff[3], 'narrowing from 6 ft to 2 ft at 6 ft up: over three times as stiff');
+  } finally { WOOD.weight = w; }
+});
+test('v4 hand check: two legs meeting at a peak each carry P / 2cos(a); the feet push out P/2 tan(a); the peak nails slide by that', () => {
+  const w = WOOD.weight; WOOD.weight = 0;
+  try {
+    for (const k of [0, -3]) {
+      const t = k / 12, s = Math.sqrt(1 + t * t), up = [0, 1 / s, t / s], peak = [0, 6 * up[1], 3 + 6 * up[2]], P = 200;
+      const st = { W: 6, D: 6, boards: [BL('L', [-3, 0, 3], peak, 'Z', t), BL('R', [3, 0, 3], peak, 'Z', t)], cuts: [], hinges: [], M: null, models: 0 }, M = I.modelOf(st);
+      const hub = M.hubs.find((h) => !h.ground), f = new Float64Array(M.n); for (let q = 0; q < 3; q++) f[M.dof(hub.node, q)] = -P * up[q];
+      const u = I.solveEnv(M.env, f), chk = I.checkAll(M, { u, N: new Float64Array(M.elems.length), unstable: false, k: 0, mph: 0 });
+      const a = Math.atan(3 / 6), N = P / (2 * Math.cos(a)), iL = M.boards.findIndex((x) => x.id === 'L');
+      const leg = chk.items.find((it) => it.type === 'board' && it.b === iL), foot = chk.items.find((it) => it.type === 'joint' && it.kind === 'stone' && it.b === iL);
+      const nails = chk.items.find((it) => it.type === 'joint' && it.kind === 'face' && it.b === iL);
+      assert.ok(Math.abs(-leg.N / N - 1) < 0.02, `k=${k}: leg squeeze ${-leg.N} vs ${N}`);
+      assert.ok(Math.abs(foot.force / Math.hypot(P / 2 * Math.tan(a), P / 2 * Math.abs(t) / s) - 1) < 0.02, `k=${k}: foot slide`);
+      assert.ok(Math.abs(nails.force / N - 1) < 0.02, `k=${k}: peak nails`);
+    }
+  } finally { WOOD.weight = w; }
+});
+test('v4 symmetry: a tapered tower strains the same from the west as from the east, mirrored, and turned half round', () => {
+  const flip = (b, fx, fz) => ({ ...b, a: { X: fx * b.a.X, Y: b.a.Y, Z: fz * b.a.Z }, b: { X: fx * b.b.X, Y: b.b.Y, Z: fz * b.b.Z }, ...(b.t ? { t: (b.n === 'X' ? fx : fz) * b.t } : {}) });
+  const check = (t, fx, fz) => {
+    const west = strainIn(t, 0, 50), east = strainIn(t, 1, 50), f = (p) => ({ X: fx * p.X, Y: p.Y, Z: fz * p.Z });
+    for (const b of t.boards) {
+      const m = imageOf(t, b, f); assert.ok(m, b.id + ' has its image');
+      const img = flip(b, fx, fz); assert.ok(m.n === img.n && Math.abs((m.t || 0) - (img.t || 0)) < 1e-9, b.id + ': its image leans the same way, mirrored');
+      assert.ok(Math.abs(west[b.id] - east[m.id]) < 1e-6, `${b.id}: ${west[b.id]} vs ${east[m.id]}`);
+    }
+    assert.ok(Math.max(...Object.values(west)) > 0.05);
+  };
+  // every leg's own wall the front or back: the mirror X -> -X takes the tower onto itself
+  check(taperL(6, 6, { F: 1.5, B: 1.5, R: 1.5, L: 1.5 }, { braces: false, legN: () => 'Z' }), -1, 1);
+  // the twins' legs (Z, X, Z, X) and pinwheel braces: the half turn takes it onto itself
+  check(LEAN.taper16Braced, -1, -1);
+});
+test('v4: racking counts the change in lean, not the lean as built; a tower leaning past its stones tips by its weight', () => {
+  const calm = oneWindL(LEAN.taper16, 0, 0).chk;
+  assert.ok(Math.max(...calm.items.filter((it) => it.type === 'drift').map((it) => it.util)) < 0.02, 'legs leaning 1/8 as built, nothing in still air');
+  // all four walls leaning toward +X 7 in a foot (the right wall out, the left in): its weight past the +X stones
+  const s = shapeL(6, 6, { R: -7, L: 7 }), bs = [];
+  for (let c = 0; c < 4; c++) bs.push(BL('a' + c, s.corner(c, 0), s.corner(c, 7.5), c % 2 ? 'X' : 'Z', legTL(s, c, c % 2 ? 'X' : 'Z')), BL('b' + c, s.corner(c, 7.5), s.corner(c, 15), c % 2 ? 'X' : 'Z', legTL(s, c, c % 2 ? 'X' : 'Z')));
+  bs.push(...crossL(s, 7.5, 'm'), ...crossL(s, 15, 't'));
+  const t = { W: 6, D: 6, boards: bs }, M = oneWindL(t, 0, 0).M;
+  let wt = 0, a = 0; for (const b of M.boards) { const x = WOOD.weight * b.L; wt += x; a += x * (b.A[0] + b.B[0]) / 2; }
+  const hand = wt * (a / wt - 3) / (2 * F.stoneLb(6) * 6), tip = oneWindL(t, 0, 0).chk.items.find((it) => it.type === 'tip');
+  assert.ok(a / wt > 3 && Math.abs(tip.util - hand) < 1e-9, `weight ${(a / wt).toFixed(2)} ft out; ${tip.util} vs ${hand}`);
+});
+test('v4 outcomes (what the physics says, LEAN.md item 5): taper, slight and steep, leaning out, front and back, tiers, braced', () => {
+  const r = Object.fromEntries(Object.entries(LEAN).map(([k, t]) => [k, windTest(t)]));
+  // a taper with no braces resists sway far better than the straight tower: it racks two stages later
+  assert.ok(r.taper16.stages[0].peak < 0.5 * r.straight16.stages[0].peak);
+  assert.ok(firstGave(r.taper16) > firstGave(r.straight16) && firstGave(r.straight16) >= 0);
+  // ...but not because its legs brace it: with every joint turning a thousand times more easily it folds like the
+  // straight tower; legs meeting at a point (a pyramid) do brace it
+  const hinged = (t) => {
+    const keep = {}; for (const k of Object.keys(F.NAILS)) { keep[k] = { ...F.NAILS[k] }; F.NAILS[k].kr /= 1000; F.NAILS[k].kb = Math.max(F.NAILS[k].kr, F.NAILS[k].kb / 1000); }
+    const sway = (tt) => { const st = { W: tt.W, D: tt.D, boards: tt.boards, cuts: [], hinges: [], M: null, models: 0 }, M = I.modelOf(st), Wd = I.windOf(M, 0); return Math.max(...M.hubs.filter((h) => h.node >= 0).map((h) => Wd.u[M.dof(h.node, 0)])); };
+    try { return sway(t); } finally { for (const k of Object.keys(keep)) Object.assign(F.NAILS[k], keep[k]); }
+  };
+  const swayOf = (t) => { const st = { W: t.W, D: t.D, boards: t.boards, cuts: [], hinges: [], M: null, models: 0 }, M = I.modelOf(st), Wd = I.windOf(M, 0); return Math.max(...M.hubs.filter((h) => h.node >= 0).map((h) => Wd.u[M.dof(h.node, 0)])); };
+  assert.ok(hinged(LEAN.taper16) / swayOf(LEAN.taper16) > 100, 'the tapered frame is held square by its joints');
+  assert.ok(hinged(LEAN.pyramid) / swayOf(LEAN.pyramid) < 3, 'the pyramid is a truss');
+  // a slight taper works its feet and corner nails harder than a steeper one (it sways more)
+  const use = (t) => { const c = oneWindL(t, 0, 35).chk; return { feet: Math.max(...c.items.filter((it) => it.type === 'joint' && it.kind === 'stone').map((it) => it.util)), nails: Math.max(...c.items.filter((it) => it.type === 'joint' && it.kind === 'face' && it.P[1] > 1).map((it) => it.util)) }; };
+  const u1 = use(LEAN.slight), u15 = use(LEAN.taper16), u2 = use(LEAN.steep);
+  assert.ok(u1.feet > u15.feet && u15.feet > u2.feet && u1.nails > u15.nails && u15.nails > u2.nails, JSON.stringify([u1, u15, u2]));
+  // leaning out: more tipping than the straight tower in the big gust (its wide top catches more wind), and it racks no later
+  const tipOf = (t) => oneWindL(t, 0, 65).chk.items.find((it) => it.type === 'tip').util;
+  assert.ok(tipOf(LEAN.leanOut16) > 1.2 * tipOf(LEAN.straight16));
+  assert.ok(firstGave(r.leanOut16) <= firstGave(r.straight16) && r.leanOut16.stages[0].peak > r.straight16.stages[0].peak);
+  // front and back walls leaning in: stiffer against the wind into them (north, south) than along them (west, east)
+  const worst = (t, k) => oneWindL(t, k, 35).chk.worst.util;
+  assert.ok(worst(LEAN.frontBack, 2) < 0.75 * worst(LEAN.frontBack, 0) && worst(LEAN.frontBack, 0) < worst(LEAN.straight16, 0));
+  // braced: the tapered tower stands with more to spare than the straight one (and fewer boards); the braced pyramid stands
+  assert.ok(r.taper16Braced.stood && R.diag16.stood && r.taper16Braced.stages[3].peak < R.diag16.stages[3].peak);
+  assert.ok(boardsCut(LEAN.taper16Braced) < boardsCut(T.diag16));
+  assert.ok(r.pyramid.stood && Math.abs(r.pyramid.height - LEAN.pyramid.apex) < 1e-6 && boardsCut(LEAN.pyramid) <= 28, `the pyramid: ${r.pyramid.height} ft`);
+});
+test('v4 a tapered tier on beams: its feet toe-nailed to the beams; with no braces it folds in the big gust and the base stands', () => {
+  const base = T.diag16.boards.filter((b) => Math.max(b.a.Y, b.b.Y) <= 8.001), s = shapeL(4, 4, { F: 1.5, B: 1.5, R: 1.5, L: 1.5 });
+  const L = legsL(s, 0, 8, 't'), lift = (b) => ({ ...b, a: { ...b.a, Y: r6(b.a.Y + 8) }, b: { ...b.b, Y: r6(b.b.Y + 8) } });
+  const t = { W: 6, D: 6, boards: [...base, B('beamL', [-2, 8, 3], [-2, 8, -3], 'X'), B('beamR', [2, 8, 3], [2, 8, -3], 'X'), ...[...L.boards, ...crossL(s, L.top, 't')].map(lift)] };
+  const M = oneWindL(t, 0, 0).M, toes = M.hubs.flatMap((h) => h.items.filter((it) => it.kind === 'toe' && M.boards[it.b].id.startsWith('beam') && M.boards[it.toeEnd].id.startsWith('leg')));
+  assert.equal(toes.length, 4, 'each leg\'s foot toe-nailed onto a beam');
+  const r = windTest(t);
+  assert.equal(firstGave(r), 3);
+  assert.equal(r.height, 8);
+});
+test('v4 speed: braced leaning towers and a braced pyramid take well under 400 ms', () => {
+  for (const t of [LEAN.taper16Braced, LEAN.pyramid, LEAN.leanOut16]) { windTest(t); const a = performance.now(); windTest(t); assert.ok(performance.now() - a < 400); }
+});

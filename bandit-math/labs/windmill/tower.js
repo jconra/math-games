@@ -2,25 +2,35 @@
 // node can load it for the tests (rigs) as well as the page.
 //
 //   tower = { W, D, boards: [board, ...] }
-//   board = { id, a: { X, Y, Z }, b: { X, Y, Z }, len, n }
+//   board = { id, a: { X, Y, Z }, b: { X, Y, Z }, len, n, t }      (t only when its wall leans)
 //
 // Distances are in FEET (the boards are 8-foot boards and the math talks in feet); the page turns feet into metres only
 // when it draws. The tower's middle is at X = Z = 0, the ground at Y = 0; the front wall faces +Z, the right side +X.
 // The four footing stones sit at (±W/2, ±D/2): W across the front, D along the sides. The base is the first thing a
 // builder settles (drag a stone in or out); it stays with the tower, so every function here reads it from the tower.
 //
-// a, b: the middles of a board's two ends. n: which way its wide (3½ in) face looks. 'Z': it lies flat in a plane of
-// constant Z (parallel to the front and back walls); 'X': flat in a plane of constant X (parallel to the sides). Every
-// board lies in such an upright plane, at any offset over the stones: a 6 × 4 base, a 2 × 3 tier on beams above it, a
-// 1 × 1 on top. (Only 'X' and 'Z' so far. Code that assumes it says so: PLANES ARE X OR Z, below.)
+// a, b: the middles of a board's two ends. n: which family of wall it lies flat in: 'Z' a wall like the front and back
+// (it runs across X), 'X' a wall like the sides (it runs across Z). t: how much that wall LEANS: k inches in (or out)
+// for every foot up, t = k / 12, k by the half inch from -7 to 7 (7 in a foot is about 30 degrees). The wall is the
+// plane Z = c + t·Y for an n: 'Z' board (X = c + t·Y for 'X'), c where it meets the ground (Y = 0), even for a wall that
+// starts higher up, like a tier's. No t (or 0): an upright wall, exactly as before walls could lean. (A level board
+// can't show its wall's lean from its ends, which is why t is kept.) Its wide (3½ in) face looks along the wall's
+// normal, e_n - t·e_Y. A wall at any offset over the stones: a 6 × 4 base, a 2 × 3 tier on beams above it, a 1 × 1 on
+// top; and with leaning walls a tower that narrows as it climbs, its corner legs leaning in two ways at once.
 //
-// A board standing straight up is a POST: it lies in both upright planes through its line, so boards in either can be
-// nailed to it. It is one 2x4: its n is the plane it was put up in (its wide face looks that way). A post on a stone
-// (±W/2, ±D/2) is a corner post.
+// A board standing straight up is a POST: it lies in both upright walls through its line, so boards in either can be
+// nailed to it. It is one 2x4: its n is the wall it was put up in (its wide face looks that way). A post on a stone
+// (±W/2, ±D/2) is a corner post. A board that is not level and leans across its own wall by a whole half inch in a foot
+// (7 at most) lies in that other wall too: a LEG (posts included), the line where two walls meet. A tapered tower's
+// corner legs are legs: boards in either leaning wall are nailed to them.
 //
-// Planes have keys: 'Z:1.5' is the plane Z = 1.5, 'X:-1' the plane X = -1. On a plane, a point is (u, y): in a Z-plane
-// u = X, in an X-plane u = -Z, so seen from the +Z (or +X) side u runs to the right. (A view from the back or the left
-// sees u run to its left: the view flips it, never the data.)
+// Planes (walls) have keys: 'Z:1.5' is the upright plane Z = 1.5, 'X:-1' the plane X = -1, and a leaning one says its
+// lean after a '~': 'Z:3~-2' is the plane Z = 3 - (2/12)·Y (the front wall of a 6 ft base leaning in 2 in a foot). On a
+// plane, a point is (u, y), TRUE lengths (angles, board lengths and the math depend on it): u along the wall, level, as
+// before (in a Z-plane u = X, in an X-plane u = -Z, so seen from the +Z (or +X) side u runs to the right), y up the
+// slope of the wall from its ground line (so a point y feet up the slope stands Y = y / √(1 + t²) high). On an upright
+// plane y is just the height. Anything shown as a height uses Y. (A view from the back or the left sees u run to its
+// left: the view flips it, never the data.)
 import { touchesAny } from './touch.js';
 
 export const START_W = 6;           // a new lab starts with the stones 6 feet apart each way
@@ -29,12 +39,28 @@ export const BOARD_FT = 8;          // a fresh board from the stack
 export const BOARDS = 28;           // full boards in a fresh stack (every board on the tower comes out of it: a 16 ft
                                     // tower braced corner to corner on a 6 ft base takes 24, so a few to spare)
 export const SNAP = 0.5;            // cuts and positions snap to half a foot
+export const LEAN_MAX = 7;          // inches in a foot: the steepest a wall may lean, in or out (about 30 degrees)
+export const LEAN_STEP = 0.5;       // and it goes by the half inch in a foot (a 6 ft base tapering to 2 ft at 16 ft
+                                    // leans 1½ in a foot)
 // the outward direction of face k (0 front, 1 right side, 2 back, 3 left side), [X, Z]: the camera uses it
 export const FACE_NORMAL = [[0, 1], [1, 0], [0, -1], [-1, 0]];
 
 const r6 = (v) => { const r = Math.round(v * 1e6) / 1e6; return r === 0 ? 0 : r; };
 const r3 = (v) => { const r = Math.round(v * 1e3) / 1e3; return r === 0 ? 0 : r; };
 export const roundPt = (p) => ({ X: r6(p.X), Y: r6(p.Y), Z: r6(p.Z) });
+
+// ── leans ────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// a lean in inches a foot (k) on the half inch, and back and forth to t (feet across per foot up)
+export const snapK = (k) => { const r = Math.round(k / LEAN_STEP) * LEAN_STEP; return Math.max(-LEAN_MAX, Math.min(LEAN_MAX, r === 0 ? 0 : r)); };
+export const tOfK = (k) => r6(k / 12);
+export const kOfT = (t) => { const r = Math.round(t * 12 / LEAN_STEP) * LEAN_STEP; return r === 0 ? 0 : r; };
+// is a ratio (feet across per foot up) a lean a wall can have: on the half inch a foot, 7 at most?
+export const onLeanGrid = (r) => Math.abs(r) <= LEAN_MAX / 12 + 1e-6 && Math.abs(r - kOfT(r) / 12) < 1e-4;
+// a lean in words: "2 in", "1½ in", "½ in"
+export function leanIn(k) {
+  const a = Math.abs(k), f = Math.floor(a + 1e-9), half = a - f > 0.25;
+  return (half ? (f || '') + '½' : String(f)) + ' in';
+}
 
 export function newTower(W = START_W, D = W) { return { W, D, boards: [] }; }
 
@@ -43,41 +69,111 @@ export const isPost = (b) => Math.abs(b.a.X - b.b.X) < 1e-6 && Math.abs(b.a.Z - 
 // a corner post: a post on a stone
 export const isCornerPost = (t, b) => isPost(b) && Math.abs(Math.abs(b.a.X) - t.W / 2) < 1e-6 && Math.abs(Math.abs(b.a.Z) - t.D / 2) < 1e-6;
 
-// ── planes (PLANES ARE X OR Z: these few functions are where that is assumed) ────────────────────────────────────────
-export const planeKey = (axis, off) => axis + ':' + r3(off);
-export function parseKey(key) { const i = key.indexOf(':'); return { axis: key.slice(0, i), off: +key.slice(i + 1) }; }
-// the plane a board was put up in (by n), and every plane it lies in (a post: two, its own first)
-export const planeKeyOf = (b) => (b.n === 'X' ? planeKey('X', b.a.X) : planeKey('Z', b.a.Z));
-export function planesOf(b) {
-  if (!isPost(b)) return [planeKeyOf(b)];
-  const other = b.n === 'X' ? planeKey('Z', b.a.Z) : planeKey('X', b.a.X);
-  return [planeKeyOf(b), other];
+// ── planes (PLANES ARE X OR Z FAMILIES, upright or leaning: these few functions are where that is assumed) ───────────
+// planeKey(axis, c, k): the plane axis = c + (k/12)·Y; k = 0 (or none) is the upright plane, keyed as it always was
+export const planeKey = (axis, off, k = 0) => { const kk = snapK(k); return axis + ':' + r3(off) + (kk ? '~' + kk : ''); };
+// -> { axis, off (c: where it meets the ground), k (inches a foot), t (k / 12) }
+export function parseKey(key) {
+  const i = key.indexOf(':'), j = key.indexOf('~');
+  const axis = key.slice(0, i), off = +key.slice(i + 1, j < 0 ? undefined : j), k = j < 0 ? 0 : +key.slice(j + 1);
+  return { axis, off, k, t: tOfK(k) };
 }
-// world <-> a plane's own (u, y)
-export function toPlane(key, p) { return key[0] === 'Z' ? { u: p.X, y: p.Y } : { u: -p.Z, y: p.Y }; }
-export function fromPlane(key, u, y) { const { axis, off } = parseKey(key); return axis === 'Z' ? { X: u, Y: y, Z: off } : { X: off, Y: y, Z: -u }; }
-// the plane's outward normal (away from the tower's middle; a plane through the middle: toward +), [X, Z]
-export function planeNormal(key) { const { axis, off } = parseKey(key), s = off < 0 ? -1 : 1; return axis === 'Z' ? [0, s] : [s, 0]; }
+const famOf = (b) => (b.n === 'X' ? 'X' : 'Z');
+const coord = (axis, p) => (axis === 'Z' ? p.Z : p.X);
+// a board's own lean: its stored t (a level board's), else what its own ends say
+export function leanOf(b) {
+  const dy = b.b.Y - b.a.Y;
+  if (Math.abs(dy) < 1e-6) return b.t || 0;
+  const r = (coord(famOf(b), b.b) - coord(famOf(b), b.a)) / dy;
+  return onLeanGrid(r) ? tOfK(kOfT(r)) : r6(r);
+}
+// the plane a board lies in by its n (its own wall)
+export function planeKeyOf(b) {
+  const ax = famOf(b), t = leanOf(b), k = kOfT(t);
+  return planeKey(ax, coord(ax, b.a) - tOfK(k) * b.a.Y, k);
+}
+// every plane a board lies in: its own first, and the other family's plane through its line when that plane's lean is
+// allowed (the board is not level, and leans across that way by a whole half inch a foot, 7 at most). A post: two
+// upright planes; a tapered tower's corner leg: two leaning ones.
+export function planesOf(b) {
+  const own = planeKeyOf(b), dy = b.b.Y - b.a.Y;
+  if (Math.abs(dy) < 1e-6) return [own];
+  const ax = famOf(b) === 'X' ? 'Z' : 'X', r = (coord(ax, b.b) - coord(ax, b.a)) / dy;
+  if (!onLeanGrid(r)) return [own];
+  const k = kOfT(r);
+  return [own, planeKey(ax, coord(ax, b.a) - tOfK(k) * b.a.Y, k)];
+}
+// a leg: a board lying in two planes (posts included)
+export const isLeg = (b) => planesOf(b).length === 2;
+// world <-> a plane's own (u, y) (true lengths: y up the slope)
+export function toPlane(key, p) {
+  const { axis, t } = parseKey(key), s = Math.sqrt(1 + t * t);
+  return axis === 'Z' ? { u: p.X, y: p.Y * s } : { u: -p.Z, y: p.Y * s };
+}
+export function fromPlane(key, u, y) {
+  const { axis, off, t } = parseKey(key), Y = t ? y / Math.sqrt(1 + t * t) : y;
+  return axis === 'Z' ? { X: u, Y, Z: off + t * Y } : { X: off + t * Y, Y, Z: -u };
+}
+// where the plane stands across its family's axis at height Y (its offset there: c + t·Y)
+export const offsetAt = (key, Y) => { const { off, t } = parseKey(key); return off + t * Y; };
+// the plane's outward unit normal (away from the tower's middle; a plane through the middle: toward +), { X, Y, Z }.
+// Which side is out is read where the plane stands at height Y (its ground line, unless told).
+export function planeNormal(key, Y = 0) {
+  const { axis, t } = parseKey(key), o = offsetAt(key, Y), s = o < -1e-9 ? -1 : 1, l = Math.sqrt(1 + t * t);
+  return axis === 'Z' ? { X: 0, Y: -s * t / l, Z: s / l } : { X: s / l, Y: -s * t / l, Z: 0 };
+}
 // how far the footprint reaches along a plane: u from -half to +half
 export const planeHalf = (t, key) => (key[0] === 'Z' ? t.W / 2 : t.D / 2);
-// the plane at right angles to `key` through a world point (the plane an end moves in when its board is pushed in or out)
+// the upright plane at right angles to `key` through a world point (the plane the view looks along when it sees `key`
+// end on: an end moves in it when its board is pushed in or out)
 export const crossKey = (key, p) => (key[0] === 'Z' ? planeKey('X', p.X) : planeKey('Z', p.Z));
-// the outer plane of face k
+// the outer plane of face k (upright)
 export function facePlane(t, k) { return [planeKey('Z', t.D / 2), planeKey('X', t.W / 2), planeKey('Z', -t.D / 2), planeKey('X', -t.W / 2)][k]; }
-// which face an outer plane is (or -1 for an inner plane)
-export function faceOfPlane(t, key) { for (let k = 0; k < 4; k++) if (facePlane(t, k) === key) return k; return -1; }
-// is a plane inside the footprint (its offset within the stones)?
-export function planeInside(t, key) { const { axis, off } = parseKey(key); return Math.abs(off) <= (axis === 'Z' ? t.D : t.W) / 2 + 1e-6; }
+// which face an outer plane is (a plane standing on the stones' edge, upright or leaning), or -1 for an inner plane
+export function faceOfPlane(t, key) {
+  const { axis, off } = parseKey(key);
+  for (let k = 0; k < 4; k++) { const f = parseKey(facePlane(t, k)); if (f.axis === axis && r3(f.off) === r3(off)) return k; }
+  return -1;
+}
+// does the plane lean in (toward the tower's middle) as it climbs? +1 in, -1 out, 0 upright. (A plane through the middle
+// leans toward a side: -1 there means toward -Z or -X.) Y: the height where its side of the middle is read.
+export function leansIn(key, Y = 0) {
+  const { k } = parseKey(key); if (!k) return 0;
+  const o = offsetAt(key, Y);
+  if (Math.abs(o) < 1e-6) return k > 0 ? -1 : 1;
+  return Math.sign(o) * k < 0 ? 1 : -1;
+}
+// is a plane over the footprint? (where it stands at height Y within the stones, or as far out as a lean allows)
+export function planeInside(t, key, Y = 0) {
+  const { axis } = parseKey(key), half = (axis === 'Z' ? t.D : t.W) / 2;
+  return Math.abs(offsetAt(key, Y)) <= half + (parseKey(key).k ? LEAN_MAX / 12 * Y : 0) + 1e-6;
+}
 
 // a plane in words: "the front wall", "the right side", ..., or for an inner plane "the inside wall 1½ ft in from the
-// front" (short: "1½ ft in from the front")
-export function planeName(t, key, short = false) {
-  const k = faceOfPlane(t, key);
-  if (k >= 0) return short ? ['front wall', 'right side', 'back wall', 'left side'][k] : ['the front wall', 'the right side', 'the back wall', 'the left side'][k];
-  const { axis, off } = parseKey(key), half = axis === 'Z' ? t.D / 2 : t.W / 2;
-  const from = axis === 'Z' ? (off >= 0 ? 'front' : 'back') : (off >= 0 ? 'right side' : 'left side');
-  const words = Math.abs(off) < 1e-6 ? `halfway between the ${axis === 'Z' ? 'front and back' : 'two sides'}` : `${feet(half - Math.abs(off))} in from the ${from}`;
-  return short ? words : 'the inside wall ' + words;
+// front" (short: "1½ ft in from the front"); a leaning one says so: "the front wall, leaning in 2 in a foot". An inner
+// plane's place is read where it stands at height atY (by default: at the foot of its lowest board, else the ground).
+export function planeName(t, key, short = false, atY = null) {
+  const k = faceOfPlane(t, key), lean = parseKey(key).k;
+  let Y = atY;
+  if (Y === null && !lean) Y = 0;
+  if (Y === null) { Y = Infinity; for (const s of planeSegments(t, key)) Y = Math.min(Y, s.src.a.Y, s.src.b.Y); if (!Number.isFinite(Y)) Y = 0; }
+  let words;
+  if (k >= 0) words = short ? ['front wall', 'right side', 'back wall', 'left side'][k] : ['the front wall', 'the right side', 'the back wall', 'the left side'][k];
+  else {
+    const { axis } = parseKey(key), half = axis === 'Z' ? t.D / 2 : t.W / 2, off = r3(offsetAt(key, Y));
+    const from = axis === 'Z' ? (off >= 0 ? 'front' : 'back') : (off >= 0 ? 'right side' : 'left side');
+    const w = Math.abs(off) < 1e-6 ? `halfway between the ${axis === 'Z' ? 'front and back' : 'two sides'}` : Math.abs(off) > half + 1e-6 ? `${feet(Math.abs(off) - half)} out past the ${from}` : `${feet(half - Math.abs(off))} in from the ${from}`;
+    words = short ? w : 'the inside wall ' + w;
+  }
+  return lean ? words + ', ' + leanWords(t, key, Y) : words;
+}
+// the lean of a plane in words: "leaning in 2 in a foot", "leaning out ½ in a foot", for a plane through the middle
+// "leaning toward the back 1 in a foot"
+export function leanWords(t, key, Y = 0) {
+  const { axis, k } = parseKey(key); if (!k) return 'upright';
+  const dir = leansIn(key, Y), o = offsetAt(key, Y);
+  if (Math.abs(o) < 1e-6) return `leaning toward the ${axis === 'Z' ? (k > 0 ? 'front' : 'back') : (k > 0 ? 'right side' : 'left side')} ${leanIn(k)} a foot`;
+  return `leaning ${dir > 0 ? 'in' : 'out'} ${leanIn(k)} a foot`;
 }
 // feet the way a carpenter says them ("1½ ft", "2 ft", "1 ft 3 in")
 function feet(ft) {
@@ -87,41 +183,67 @@ function feet(ft) {
   return (f ? f + ' ft ' : '') + i + ' in';
 }
 
-// every board lying in a plane (posts in it included), in that plane's own coordinates:
-// [{ id, ax, ay, bx, by, len, post, src }]
+// every board lying in a plane (posts and legs in it included), in that plane's own coordinates:
+// [{ id, ax, ay, bx, by, len, post, leg, corner, src }]
 export function planeSegments(t, key) {
   const out = [];
   for (const b of t.boards) {
-    if (!planesOf(b).includes(key)) continue;
+    const ps = planesOf(b); if (!ps.includes(key)) continue;
     const A = toPlane(key, b.a), B = toPlane(key, b.b);
-    out.push({ id: b.id, ax: A.u, ay: A.y, bx: B.u, by: B.y, len: b.len, post: isPost(b), corner: isCornerPost(t, b), src: b });
+    out.push({ id: b.id, ax: A.u, ay: A.y, bx: B.u, by: B.y, len: b.len, post: isPost(b), leg: ps.length === 2, corner: isCornerPost(t, b), src: b });
   }
   return out;
 }
-// How wide the wall is that a board on plane `key` stands in, at its height: the span between the posts standing in
-// that plane either side of its middle, over the height it spans (a 2 × 3 tier's front wall is 2 ft wide even though
-// its plane crosses the whole 6 ft base; a 1 × 1 top's walls are 1 ft). The plane's full width if no posts bracket it.
+// The WALLS in use: every upright plane any board lies in (as before walls could lean), and the leaning planes that are
+// some board's own wall, or the second wall of a leg whose own wall leans (a tapered tower's corner legs). A steep
+// brace in an upright wall that happens to slant by a whole half inch a foot lies in a leaning plane too, but nothing
+// else is built there, so it is no wall: building near it goes on as it always did. -> Set of keys
+export function wallsInUse(t) {
+  const s = new Set();
+  for (const b of t.boards) {
+    const ps = planesOf(b), ownLeans = parseKey(ps[0]).k !== 0;
+    ps.forEach((k, i) => { if (i === 0 || !parseKey(k).k || ownLeans) s.add(k); });
+  }
+  return s;
+}
+// the planes a board lies in that are walls (its own always)
+export function wallPlanesOf(t, b, walls = wallsInUse(t)) { return planesOf(b).filter((k, i) => i === 0 || walls.has(k)); }
+// a board drawn and treated as a line where two walls meet: a post, or a leg whose two planes are both walls
+export const isCornerLine = (t, b, walls) => isPost(b) || wallPlanesOf(t, b, walls).length === 2;
+// the walls in use standing on face k's line of stones (upright or leaning), the upright one first if it is there
+export function faceWalls(t, k) {
+  const out = [...wallsInUse(t)].filter((key) => faceOfPlane(t, key) === k);
+  return out.sort((a, b) => Math.abs(parseKey(a).k) - Math.abs(parseKey(b).k));
+}
+// a board's u on a plane's segment at in-plane height y (a leg's place across its wall at that height)
+const uAt = (s, y) => (Math.abs(s.by - s.ay) < 1e-9 ? (s.ax + s.bx) / 2 : s.ax + (s.bx - s.ax) * (y - s.ay) / (s.by - s.ay));
+// How wide the wall is that a board on plane `key` stands in, at its height: the span between the posts (or the legs
+// where two walls meet) standing in that plane either side of its middle, over the height it spans (a 2 × 3 tier's
+// front wall is 2 ft wide even though its plane crosses the whole 6 ft base; a 1 × 1 top's walls are 1 ft; a tapered
+// wall is as wide as its legs are apart at the board's middle). The plane's full width if no posts bracket it.
 // s: the board on the plane, { ax, ay, bx, by }.
 export function wallSpan(t, key, s) {
-  const lo = Math.min(s.ay, s.by), hi = Math.max(s.ay, s.by), m = (s.ax + s.bx) / 2;
+  const lo = Math.min(s.ay, s.by), hi = Math.max(s.ay, s.by), m = (s.ax + s.bx) / 2, ym = (s.ay + s.by) / 2, walls = wallsInUse(t);
   let L = -Infinity, R = Infinity;
   for (const p of planeSegments(t, key)) {
-    if (!p.post || Math.min(p.ay, p.by) > hi - 0.1 || Math.max(p.ay, p.by) < lo + 0.1) continue;
-    if (p.ax <= m) L = Math.max(L, p.ax);
-    if (p.ax >= m) R = Math.min(R, p.ax);
+    if (!(p.post || (p.leg && isCornerLine(t, p.src, walls))) || Math.min(p.ay, p.by) > hi - 0.1 || Math.max(p.ay, p.by) < lo + 0.1) continue;
+    const u = p.post ? p.ax : uAt(p, Math.max(Math.min(p.ay, p.by), Math.min(Math.max(p.ay, p.by), ym)));
+    if (u <= m) L = Math.max(L, u);
+    if (u >= m) R = Math.min(R, u);
   }
   return Number.isFinite(L) && Number.isFinite(R) && R - L > 0.25 ? R - L : planeHalf(t, key) * 2;
 }
 // where boards that cross a plane pass through it (a beam running in from the front crosspiece crosses every plane of
-// the other kind it spans): [{ u, y, t (feet along that board from its a end), src }]. Boards lying in the plane, and
-// boards parallel to it (posts, and boards in planes of its own kind), don't cross it. (PLANES ARE X OR Z)
+// the other kind it spans; a post in the middle crosses a leaning wall at one height): [{ u, y, t (feet along that
+// board from its a end), src }]. Boards lying in the plane, and boards parallel to it, don't cross it.
 export function crossings(t, key) {
-  const out = [], { axis, off } = parseKey(key), c = (p) => (axis === 'Z' ? p.Z : p.X);
+  // (g: a point's place across the plane's family, less the lean's share of its height: the plane is g = off)
+  const out = [], { axis, off, t: lean } = parseKey(key), g = (p) => coord(axis, p) - lean * p.Y;
   for (const b of t.boards) {
-    if (isPost(b) || planesOf(b).includes(key)) continue;
-    const ca = c(b.a), cb = c(b.b);
-    if (Math.abs(ca - cb) < 1e-6) continue;
-    const s = (off - ca) / (cb - ca);
+    if (planesOf(b).includes(key)) continue;
+    const ga = g(b.a), gb = g(b.b);
+    if (Math.abs(ga - gb) < 1e-6) continue;
+    const s = (off - ga) / (gb - ga);
     if (s < -1e-6 || s > 1 + 1e-6) continue;
     const q = toPlane(key, { X: b.a.X + (b.b.X - b.a.X) * s, Y: b.a.Y + (b.b.Y - b.a.Y) * s, Z: b.a.Z + (b.b.Z - b.a.Z) * s });
     out.push({ u: q.u, y: q.y, t: s * b.len, src: b });
@@ -146,10 +268,11 @@ export function floorsAcross(t, key) {
   return out;
 }
 // a board lying on a plane, from its a end at (u, y) on it, at angle ang (radians, 0 = level toward +u, PI/2 = straight
-// up) and len feet long -> { a, b, len, n } in the world (n: the plane's kind, so its wide face lies flat on the plane)
+// up the slope) and len feet long -> { a, b, len, n, t? } in the world (n: the plane's kind, so its wide face lies flat
+// on the plane; t: the plane's lean, only when it leans)
 export function boardOnPlane(key, u, y, ang, len) {
-  const a = roundPt(fromPlane(key, u, y)), b = roundPt(fromPlane(key, u + Math.cos(ang) * len, y + Math.sin(ang) * len));
-  return { a, b, len, n: key[0] };
+  const a = roundPt(fromPlane(key, u, y)), b = roundPt(fromPlane(key, u + Math.cos(ang) * len, y + Math.sin(ang) * len)), { t } = parseKey(key);
+  return t ? { a, b, len, n: key[0], t } : { a, b, len, n: key[0] };
 }
 // every plane any board lies in
 export function planesInUse(t) { const s = new Set(); for (const b of t.boards) for (const k of planesOf(b)) s.add(k); return [...s]; }
@@ -166,10 +289,21 @@ export function trimTower(t, top) {
   return { W: t.W, D: t.D, boards: t.boards.filter((b) => Math.max(b.a.Y, b.b.Y) <= top + 0.05).map((b) => ({ ...b, a: { ...b.a }, b: { ...b.b } })) };
 }
 export function cloneTower(t) { return JSON.parse(JSON.stringify(t)); }
-// a board from its two ends (rounded so equal planes compare equal)
-export function makeBoard(id, a, b, n, len) {
-  const A = roundPt(a), B = roundPt(b);
-  return { id, a: A, b: B, len: len ?? Math.hypot(B.X - A.X, B.Y - A.Y, B.Z - A.Z), n };
+// a board from its two ends (rounded so equal planes compare equal). t: its wall's lean (kept only when it leans). A
+// board that is not level is squared up onto its own wall (its b end's place across the wall worked out from its a end
+// with the lean as stored), so a·n - t·a.Y equals b·n - t·b.Y to the millionth; a leg (leg: true) onto its other wall
+// as well. (An upright wall's board is left exactly as given.)
+export function makeBoard(id, a, b, n, len, t = 0, leg = false) {
+  const A = roundPt(a), B = roundPt(b), ax = n === 'X' ? 'X' : 'Z', other = ax === 'X' ? 'Z' : 'X', dy = B.Y - A.Y;
+  let lean = t ? tOfK(kOfT(t)) : 0;
+  if (Math.abs(dy) > 1e-6) {
+    const r = (coord(ax, B) - coord(ax, A)) / dy;
+    if (onLeanGrid(r)) { lean = tOfK(kOfT(r)); if (lean) B[ax] = r6(A[ax] + lean * dy); } else lean = r6(r);
+    if (leg) { const r2 = (coord(other, B) - coord(other, A)) / dy; if (onLeanGrid(r2) && kOfT(r2)) B[other] = r6(A[other] + tOfK(kOfT(r2)) * dy); }
+  }
+  const out = { id, a: A, b: B, len: len ?? Math.hypot(B.X - A.X, B.Y - A.Y, B.Z - A.Z), n };
+  if (lean) out.t = lean;
+  return out;
 }
 
 // ── twins: where a board just nailed would be matched round the tower ────────────────────────────────────────────────
@@ -179,17 +313,32 @@ export function makeBoard(id, a, b, n, len) {
 //                    X-plane one), and on a square base also the two walls round the corner: a quarter turn and the
 //                    mirror across the diagonal (n swaps X <-> Z), the ones v2 offered (front and right side carry the
 //                    board as it is, seen from outside; back and left side its mirror image)
-//   a post        -> its three mirror images (mirror X, mirror Z, both): the diagonally opposite one faces the same way,
+//   a post or leg -> its three mirror images (mirror X, mirror Z, both): the diagonally opposite one faces the same way,
 //                    the two beside it are turned a quarter (as the four would be if the tower were turned round), so a
 //                    tower built from twins is about equally stiff both ways
+// A wall's lean goes with it: the image of a wall leaning in leans in on the opposite wall (a mirror turns a Z-plane's
+// t to -t; the quarter turns carry the lean into the other family).
 // An image that leaves the footprint, lands on itself, or touches nothing is not offered.
-// Returns [{ a, b, len, n }], the opposite one first, not yet checked for wood.
+// Returns [{ a, b, len, n, t? }], the opposite one first, not yet checked for wood.
 const swapN = (n) => (n === 'X' ? 'Z' : 'X');
 export function twinsOf(t, board, touches = (g) => touchesAny(g, t.boards)) {
-  const out = [], square = Math.abs(t.W - t.D) < 1e-6;
-  const img = (f, n) => ({ a: roundPt(f(board.a)), b: roundPt(f(board.b)), len: board.len, n });
+  // (a leg where two walls meet is matched like a post; once any wall leans, a board may stand out past the stones as
+  // far as a lean allows: a crosspiece across legs leaning out reaches past them)
+  const walls = wallsInUse(t), out = [], square = Math.abs(t.W - t.D) < 1e-6, leg = isCornerLine(t, board, walls), lean = leanOf(board);
+  const leans = [...walls].some((k) => parseKey(k).k !== 0);
+  const unit = { X: { X: 1, Y: 0, Z: 0 }, Z: { X: 0, Y: 0, Z: 1 } };
+  // the image under f (a linear map of the ground), its n given; its lean: a level board's by where f sends its wall's
+  // normal, any other by its own ends
+  const img = (f, n) => {
+    const a = roundPt(f(board.a)), b = roundPt(f(board.b)), g = { a, b, len: board.len, n };
+    let tt;
+    if (Math.abs(b.Y - a.Y) > 1e-6) { const r = (coord(n, b) - coord(n, a)) / (b.Y - a.Y); tt = onLeanGrid(r) ? tOfK(kOfT(r)) : r6(r); }
+    else { const e = f(unit[famOf(board)]); tt = r6(lean * (n === 'X' ? e.X : e.Z)); }
+    if (tt) g.t = tt;
+    return g;
+  };
   const mX = (p) => ({ X: -p.X, Y: p.Y, Z: p.Z }), mZ = (p) => ({ X: p.X, Y: p.Y, Z: -p.Z });
-  if (isPost(board)) {
+  if (leg) {
     out.push(img((p) => mZ(mX(p)), board.n), img(mX, swapN(board.n)), img(mZ, swapN(board.n)));
   } else {
     const R = (p) => ({ X: p.Z, Y: p.Y, Z: -p.X }), Ri = (p) => ({ X: -p.Z, Y: p.Y, Z: p.X }), Rd = (p) => ({ X: -p.Z, Y: p.Y, Z: -p.X });
@@ -200,14 +349,24 @@ export function twinsOf(t, board, touches = (g) => touchesAny(g, t.boards)) {
   const kept = [];
   for (const g of out) {
     if (same(g, board) || kept.some((k) => same(k, g))) continue;
-    if (!inFootprint(t, g.a) || !inFootprint(t, g.b)) continue;
+    if (!inFootprint(t, g.a, leans) || !inFootprint(t, g.b, leans)) continue;
+    // (an image on an outer wall's line of stones where a wall already stands with another lean is no twin: the front
+    // and back walls lean out, the sides stand upright, and a side's crosspiece turned a quarter would hang in the air
+    // inside the back wall)
+    const own = planeKeyOf(g), f = faceOfPlane(t, own);
+    if (f >= 0) { const there = [...walls].filter((k) => faceOfPlane(t, k) === f); if (there.length && !there.includes(own)) continue; }
     if (touches && !touches(g)) continue;
     kept.push(g);
   }
   return kept;
 }
 const near = (p, q) => Math.abs(p.X - q.X) < 1e-4 && Math.abs(p.Y - q.Y) < 1e-4 && Math.abs(p.Z - q.Z) < 1e-4;
-export const inFootprint = (t, p) => Math.abs(p.X) <= t.W / 2 + 1e-4 && Math.abs(p.Z) <= t.D / 2 + 1e-4;
+// is a point over the stones? (on the ground: within them; higher up, as far out past them as the steepest lean allows,
+// 7 in for every foot up. lean false: within the stones at any height, for a board in upright walls)
+export const inFootprint = (t, p, lean = true) => {
+  const more = lean ? LEAN_MAX / 12 * Math.max(0, p.Y) : 0;
+  return Math.abs(p.X) <= t.W / 2 + more + 1e-4 && Math.abs(p.Z) <= t.D / 2 + more + 1e-4;
+};
 
 // is a spot already taken? (a board lying along the same line, in the same plane, overlapping it by more than a hair)
 export function spotTaken(t, g) {

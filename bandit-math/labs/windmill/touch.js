@@ -5,7 +5,8 @@
 //
 // Two flavours:
 //   * on one plane, in its own (u, y) coordinates: touch(p, q) and findJoints(segs), for segments
-//     { ax, ay, bx, by, len } (tower.js planeSegments): the v2 rules, unchanged
+//     { ax, ay, bx, by, len } (tower.js planeSegments): the v2 rules, unchanged. A leaning wall's coordinates are true
+//     lengths up its slope (tower.js toPlane), so these hold on it just as on an upright one.
 //   * in the world, across planes: touch3(p, q), joints3(boards), contactsOf(board, boards) for boards
 //     { a: { X, Y, Z }, b, len } (a beam's end on the front crosspiece, a post's foot on a beam)
 

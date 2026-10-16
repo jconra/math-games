@@ -36,8 +36,18 @@
 //     them. The rest is solved again in the same wind, and the test carries on to the end: what is left standing after
 //     the big gust is the tower's height.
 //
-// Units: feet, pounds, radians. The tower: { W, D, boards: [{ id, a: { X, Y, Z }, b: { X, Y, Z }, len, n }] } (tower.js),
+// Units: feet, pounds, radians. The tower: { W, D, boards: [{ id, a: { X, Y, Z }, b: { X, Y, Z }, len, n, t }] } (tower.js),
 // the front facing +Z, the ground at Y = 0, the stones at (±W/2, ±D/2).
+//
+// Walls that lean (LEAN.md): a board's t is how much its own wall leans (an 'X' wall is X = c + t·Y, a 'Z' wall
+// Z = c + t·Y; t = k/12, k inches in or out for every foot up). Its wide face looks square to that tilted wall, so it bends
+// the thin way across the wall as it leans, and the wind sees its tilted faces. A LEG (a board that also leans across its
+// own wall the way the other family's wall through it leans, like the corner leg of a tower whose walls all lean in) lies
+// in both walls, and boards in either are nailed to it, as boards in either upright wall are nailed to a post. Leaning
+// legs only brace a tower like a truss when they meet at a point (a pyramid); a tower that tapers to a smaller top is
+// stiffer than a straight one because its crosspieces must tilt as it sways, which its joints resist. A tower whose walls
+// lean out past its stones can tip by its own weight. No t (or 0): an upright wall, and every sum below is exactly what
+// it was before walls could lean, number for number (the code keeps that path apart: a board's `plain`).
 //
 // Exports: windTest (the CONTRACT in DESIGN.md), and the numbers the page may want to show or draw by (STAGES, WINDS,
 // WOOD, NAILS, DRIFT_LIMIT, TOL, DRAG, pressure, stoneLb, leeShade, wakeShade), windOn (the wind's push on each board,
@@ -153,48 +163,111 @@ const r3 = (v) => { const r = Math.round(v * 1e3) / 1e3; return r === 0 ? 0 : r;
 const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
 // ── the boards, ready for the sums ──────────────────────────────────────────────────────────────────────────────────
-// Which way a board's wide face looks. PLANES ARE X OR Z this round ('X': flat in a plane of constant X, 'Z': constant
-// Z); a later round's leaning planes may hand a direction { X, Y, Z } instead, and that works here too. This is the one
-// place that reads n.
-function faceNormal(b, d) {
-  let n = b.n === 'X' ? [1, 0, 0] : b.n === 'Z' ? [0, 0, 1] : b.n && typeof b.n === 'object' ? [b.n.X || 0, b.n.Y || 0, b.n.Z || 0] : [0, 0, 1];
+// A board's wall: its family ('X': a plane X = c + t·Y, 'Z': Z = c + t·Y; null when n is handed as a direction
+// { X, Y, Z }, which works too) and its lean t (k/12: k inches in a foot; absent or 0: upright). A post stands straight up,
+// so its own wall can't lean: its t is ignored.
+const famOf = (src) => (src.n === 'X' || src.n === 'Z' ? src.n : null);
+// A board's lean, as tower.js reads it: a level board's is its stored t (its ends can't show it); a rising board's is
+// what its own ends say (in an 'X' wall X = c + t·Y, so t = dX/dY along the board, whichever way it runs in the wall),
+// on the half inch a foot when it is within 1e-4 of it.
+const leanOf = (src) => {
+  const fam = famOf(src); if (!fam) return 0;
+  const dy = src.b.Y - src.a.Y;
+  let t;
+  if (Math.abs(dy) < 1e-6) t = +src.t || 0;
+  else { const r = (fam === 'X' ? src.b.X - src.a.X : src.b.Z - src.a.Z) / dy, g = Math.round(r * 24) / 24; t = Math.abs(r - g) < 1e-4 ? g : r; }
+  return Number.isFinite(t) && t ? t : 0;
+};
+const LEAN_MAX = 7 / 12;                // the steepest a wall may lean: 7 inches in a foot (about 30 degrees)
+// a wall's key, as tower.js makes it: its lean k in inches a foot on the half inch, and c where it meets the ground
+// (to 1e-3), worked with that k: 'Z:3~-1.5' is Z = 3 - (1.5/12)·Y; an upright wall 'Z:3', as it always was
+const keyK = (t) => { const k = Math.round(t * 24) / 2; return k === 0 ? 0 : k; };
+const r6k = (v) => { const r = Math.round(v * 1e6) / 1e6; return r === 0 ? 0 : r; };
+const wallKey = (fam, coordA, yA, t) => { const k = keyK(t); return fam + ':' + r3(k ? coordA - r6k(k / 12) * yA : coordA) + (k ? '~' + k : ''); };
+// Which way a board's wide face looks: square to its own wall, normalize(e_n - t·e_Y) (e_n: the X or Z axis). This is
+// the one place that reads n.
+function faceNormal(b, d, t = leanOf(b)) {
+  let n = t ? (b.n === 'X' ? [1, -t, 0] : [0, -t, 1])
+    : b.n === 'X' ? [1, 0, 0] : b.n === 'Z' ? [0, 0, 1] : b.n && typeof b.n === 'object' ? [b.n.X || 0, b.n.Y || 0, b.n.Z || 0] : [0, 0, 1];
   // (square it up against the board's own line, in case it is a hair off)
   const k = dot(n, d); n = [n[0] - k * d[0], n[1] - k * d[1], n[2] - k * d[2]];
   if (norm(n) < 1e-6) n = Math.abs(d[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
   return unit(n);
 }
-// the plane key of a board's own plane ('Z:1.5', 'X:-1'; null for a leaning plane), as tower.js names them
+// A wall (a plane): { fam, t, c, n (its unit normal), P0 (a point on it) }; its key, when words need it: keyOfWall
+function wallOf(fam, t, c, P0) {
+  const n = t ? (fam === 'X' ? unit([1, -t, 0]) : unit([0, -t, 1])) : fam === 'X' ? [1, 0, 0] : [0, 0, 1];
+  return { fam, t, c, n, P0 };
+}
+const keyOfWall = (w) => (w.fam ? wallKey(w.fam, w.fam === 'X' ? w.P0[0] : w.P0[2], w.P0[1], w.t) : null);
+// the key of a board's own wall ('Z:1.5', 'X:-1', 'Z:3~-1.5'; null when n is a direction)
 function planeKeyOf(b) {
-  if (b.n === 'X') return 'X:' + r3(b.a.X);
-  if (b.n === 'Z') return 'Z:' + r3(b.a.Z);
-  return null;
+  const fam = famOf(b); if (!fam) return null;
+  return wallKey(fam, fam === 'X' ? b.a.X : b.a.Z, b.a.Y, leanOf(b));
+}
+// Two walls are one when they are the same family, lean the same, and lie within TOL of each other (square across).
+// (A wall handed as a direction: the same as before, square to each other within 8 degrees and within TOL.)
+function sameWall(a, b) {
+  if (a.fam && b.fam) return a.fam === b.fam && Math.abs(a.t - b.t) < 1e-4 && Math.abs(a.c - b.c) < TOL * Math.sqrt(1 + a.t * a.t);
+  return Math.abs(dot(a.n, b.n)) > 0.99 && Math.abs(dot(a.n, sub(b.P0, a.P0))) < TOL;
 }
 function prepBoards(t) {
   const out = [];
   for (const src of t.boards) {
     const A = [src.a.X, src.a.Y, src.a.Z], B = [src.b.X, src.b.Y, src.b.Z], L = dist(A, B);
     if (!(L > 0.05)) continue;                         // (a board with no length is no board)
-    const d = sub(B, A).map((v) => v / L), n = faceNormal(src, d), w = cross(n, d);
     const post = Math.abs(A[0] - B[0]) < 1e-6 && Math.abs(A[2] - B[2]) < 1e-6;
-    const b = { id: src.id, src, A, B, L, len: src.len || L, d, n, w, post, upright: post || Math.abs(d[1]) > UP, level: Math.abs(d[1]) < 0.14, key: planeKeyOf(src) };
+    const lean = post ? 0 : leanOf(src);
+    const d = sub(B, A).map((v) => v / L), n = faceNormal(src, d, lean), w = cross(n, d);
+    const b = { id: src.id, src, A, B, L, len: src.len || L, d, n, w, post, upright: post || Math.abs(d[1]) > UP, level: Math.abs(d[1]) < 0.14, key: planeKeyOf(src), t: lean };
     // which way is "outward" for this board's nails: away from the tower's middle (it is nailed on the outside of what
     // is under it, as the page draws it); a plane through the middle: toward + (tower.js planeNormal)
     const mid = [(A[0] + B[0]) / 2, 0, (A[2] + B[2]) / 2], s = dot(n, mid);
     b.nOut = s < -1e-9 ? [-n[0], -n[1], -n[2]] : n;
     b.lo = Math.min(A[1], B[1]); b.hi = Math.max(A[1], B[1]);
+    // its own wall (where that wall meets the ground: c = its coordinate across the wall less t·Y)
+    const fam = famOf(src);
+    b.walls = [fam ? wallOf(fam, lean, (fam === 'X' ? A[0] : A[2]) - lean * A[1], A) : { fam: null, t: 0, c: 0, n, P0: A }];
     out.push(b);
   }
   out.forEach((b, i) => { b.i = i; });
+  // The other wall through a board's line: a post stands in both upright walls through it (as before). A board leaning
+  // across its own wall (by r feet in a foot, |r| <= 7/12) lies in the other family's wall leaning r too: a LEG (the
+  // CONTRACT: r a whole k/12, as the page snaps it; the sums take any r). That second wall counts when it is a wall some
+  // board stands in as its own (a crosspiece slid in between two leaning legs takes their wall's lean); a brace that
+  // happens to lean 3 in a foot in an upright side wall, with no wall leaning that way round it, is a brace in one wall,
+  // as it always was.
+  const owns = out.map((b) => b.walls[0]).filter((x) => x.fam);
+  for (const b of out) {
+    const own = b.walls[0];
+    if (!own.fam) continue;
+    const other = own.fam === 'X' ? 'Z' : 'X', ax = other === 'X' ? 0 : 2;
+    if (b.post) { b.walls.push(wallOf(other, 0, b.A[ax], b.A)); continue; }
+    const dy = b.B[1] - b.A[1]; if (Math.abs(dy) < 1e-9) continue;
+    const r = (b.B[ax] - b.A[ax]) / dy;
+    if (Math.abs(r) > LEAN_MAX + 1e-6) continue;
+    const wall = wallOf(other, r, b.A[ax] - r * b.A[1], b.A);
+    if (owns.some((o) => sameWall(o, wall))) { b.walls.push(wall); b.leg = true; }
+  }
+  // (plain: an upright wall and no second wall but a post's, so everything about it is worked out as it was before walls
+  // could lean)
+  for (const b of out) b.plain = !b.t && !b.leg;
   return out;
 }
 // do two boards lie in one plane (so they are nailed face to face, lapped)? A post lies in every upright plane through
-// its line.
+// its line; a leg in its two walls.
 function inPlaneOf(b, P) { return Math.abs(dot(b.n, sub(P, b.A))) < TOL; }
 function sharePlane(p, q) {
+  if (!p.plain || !q.plain) return !!commonWall(p, q);
   if (p.post && q.post) return true;
   if (p.post) return inPlaneOf(q, p.A) && inPlaneOf(q, p.B);
   if (q.post) return inPlaneOf(p, q.A) && inPlaneOf(p, q.B);
   return Math.abs(dot(p.n, q.n)) > 0.99 && inPlaneOf(p, q.A) && inPlaneOf(p, q.B);
+}
+// the wall two boards share (one of p's), or null
+function commonWall(p, q) {
+  for (const a of p.walls) for (const b of q.walls) if (sameWall(a, b)) return a;
+  return null;
 }
 
 // ── where boards touch (the same rule as touch.js touch3, so the page's green circles and the physics agree) ─────────
@@ -316,7 +389,8 @@ function contactKind(boards, c) {
   const stands = (b, t, o) => endOf(b, t) && !o.post && ((foot(b, t) && (b.post || o.level)) || (!b.post && !shared));
   if (stands(p, c.ti, q) && !endOf(q, c.tj)) return { type: 'toe', end: c.i, tEnd: c.ti, carrier: c.j };
   if (stands(q, c.tj, p) && !endOf(p, c.ti)) return { type: 'toe', end: c.j, tEnd: c.tj, carrier: c.i };
-  return { type: 'face', shared };
+  // (with a leaning wall or a leg in it: which wall they share)
+  return { type: 'face', shared, wall: shared && (!p.plain || !q.plain) ? commonWall(p, q) : null };
 }
 function classify(boards, hubs) {
   for (const h of hubs) {
@@ -364,7 +438,12 @@ function classify(boards, hubs) {
         butt = false;
         if (c.type === 'toe') continue;            // (standing on a carrier: the carrier holds the toe joint)
         face = true;
-        if (c.shared) { if (!b.post) { soft.push(b.n); it.lapped = true; } else if (!o.post) soft.push(o.n); else soft.push(b.n); }
+        if (c.wall) {
+          // a board in a leaning wall, or a leg: lapped onto the other when the wall they share is its own; a leg met in
+          // its other wall is met as a post is (the other board is nailed onto it, and it turns about that wall's normal)
+          if (!b.post && sameWall(c.wall, b.walls[0])) { soft.push(b.n); it.lapped = true; } else soft.push(c.wall.n);
+        }
+        else if (c.shared) { if (!b.post) { soft.push(b.n); it.lapped = true; } else if (!o.post) soft.push(o.n); else soft.push(b.n); }
         else { const c2 = cross(b.d, o.d); if (norm(c2) > 0.1) soft.push(unit(c2)); }
       }
       it.endToEnd = it.endToEnd && !!it.eIn;
@@ -395,6 +474,8 @@ function springOf(it) {
   const R = [k.kb, 0, 0, 0, k.kb, 0, 0, 0, k.kb];
   // turning easily about the soft axes: kb + (kr - kb) * (s s^T) for each (a hinge: nails that twisted loose about that
   // axis, kr * HINGE)
+  // (a strap turns easily about the two level axes and hard about the upright one, whatever the board's lean, as it was
+  // before walls could lean: a steep leg's twist about its own line is held partly by the stiff upright axis)
   const soft = it.kind === 'face' ? it.soft : it.kind === 'stone' ? [[1, 0, 0], [0, 0, 1]] : null;
   if (soft) {
     for (const s of soft) {
@@ -629,12 +710,22 @@ function across(b, v) {
 const BAND = 0.25, SPREAD = 0.5;
 function shelterFor(boards, v) {
   const lat = [-v[2], 0, v[0]];               // across the wind, level
-  // the walls facing the wind (PLANES ARE X OR Z: the planes square to a wind along X or Z; posts stand in all of them)
-  const screens = new Map();
+  // The walls facing the wind: the walls whose family is square to it (the winds blow along X or Z), upright or leaning;
+  // posts stand in all the upright ones, legs in their two walls. A wall that leans stands further along the wind the
+  // higher you go: at height Y it is at a + slope·Y (a wall leaning in on the windward side: its top further downwind).
+  const screens = new Map(), wallOfBoard = boards.map(() => null);
+  const screenOf = (key, a, slope) => { let S = screens.get(key); if (!S) { S = { a, slope, bands: new Map() }; screens.set(key, S); } return S; };
   for (const b of boards) {
-    if (!b.post && Math.abs(dot(b.n, v)) < 0.99) continue;
-    const a = dot(b.A, v), key = Math.round(a * 1000);
-    let S = screens.get(key); if (!S) { S = { a, bands: new Map() }; screens.set(key, S); }
+    let S;
+    if (b.plain) {
+      if (!b.post && Math.abs(dot(b.n, v)) < 0.99) continue;
+      const a = dot(b.A, v); S = screenOf(Math.round(a * 1000), a, 0);
+    } else {
+      const wall = b.walls.find((p) => p.fam && Math.abs(v[p.fam === 'X' ? 0 : 2]) > 0.99); if (!wall) continue;
+      const sg = v[wall.fam === 'X' ? 0 : 2], a = sg * wall.c;
+      S = screenOf(wall.t ? wall.fam + Math.round(wall.t * 2400) + ':' + Math.round(a * 1000) : Math.round(a * 1000), a, sg * wall.t);
+      if (wall.t) wallOfBoard[b.i] = S;
+    }
     const [s2, vp] = across(b, v); if (!s2) continue;
     const wide = seenWidth(b, vp), m = Math.max(1, Math.ceil(b.L / 0.25)), ds = b.L / m;
     // (how tall one bit of it stands: its length's rise, and its cross-section's height: 3½ in where its wide side is
@@ -672,9 +763,10 @@ function shelterFor(boards, v) {
     const aP = dot(P, v), uP = dot(P, lat);
     let s = 1;
     // behind a wall: the more of it is wood at this height, the more shelter (only well inside its edges: the wind wraps
-    // round the edges of a wall, and a board right at its edge is sheltered by the post's wake instead)
+    // round the edges of a wall, and a board right at its edge is sheltered by the post's wake instead). A leaning wall
+    // shelters what is behind it at each height, where it stands at that height.
     for (const S of walls) {
-      if (aP - S.a <= 0.3) continue;
+      if (aP - (S.a + S.slope * P[1]) <= 0.3) continue;
       const band = windowOf(S, P[1]);
       if (!band || uP <= band.lo + 0.25 || uP >= band.hi - 0.25) continue;
       s = Math.min(s, leeShade(band.area / (2 * SPREAD * (band.hi - band.lo + WOOD.width))));
@@ -684,6 +776,10 @@ function shelterFor(boards, v) {
     const prP = sub(P, v.map((x) => x * aP)), mine = strips[self] ? strips[self].wide : WOOD.width;
     for (const st of strips) {
       if (st.b.i === self || P[1] < st.ylo || P[1] > st.yhi) continue;
+      // (boards in one leaning wall don't shade each other, as boards in one upright wall don't: next to a crosspiece in
+      // a wall leaning out toward the wind, the leg just below it stands a hair downwind of it (just above, leaning
+      // away), but beside it in the wall, not behind it)
+      if (wallOfBoard[self] && wallOfBoard[self] === wallOfBoard[st.b.i]) continue;
       const r = sub(st.prA, prP), pp = dot(st.pd, st.pd), rp = dot(r, st.pd), rr = dot(r, r), h2 = st.h * st.h;
       let s1, s2;
       if (pp < 1e-12) { if (rr > h2) continue; s1 = 0; s2 = st.b.L; }
@@ -898,9 +994,10 @@ function checkAll(M, sol) {
       }
     }
   }
-  // the whole tower tipping on its downwind stones
-  const tip = tipping(M, W, q);
-  items.push({ type: 'tip', util: tip.util, P: [W.v[0] * M.W / 2, 0, W.v[2] * M.D / 2], ...tip });
+  // the whole tower tipping on its downwind stones (in still air: over whichever edge its weight leans past, if any)
+  let tip = tipping(M, W, q), tv = W.v;
+  if (q === 0) { const still = tippingStill(M); if (still && still.util > tip.util) { tv = still.v; tip = still; } }
+  items.push({ type: 'tip', util: tip.util, P: [tv[0] * M.W / 2, 0, tv[2] * M.D / 2], ...tip });
   if (sol.unstable) {
     // past holding itself up: the worst lean goes, whatever it measured
     let w = null; for (const it of items) if ((it.type === 'drift' || it.type === 'top') && (!w || it.util > w.util)) w = it;
@@ -977,13 +1074,28 @@ function nailUse(b, it, F, Mo, h) {
 // Tipping over in one piece, like a box on a table: the wind's turning push about the downwind edge of the stones,
 // against the tower's weight (from its centre of weight to that edge) and the two windward stones it would have to lift
 // (each stoneLb of the smaller of W and D, a full depth from that edge).
+// Walls leaning out can carry the tower's weight out past the downwind stones (its centre of weight beyond their edge):
+// then the weight turns the tower over that edge along with the wind, instead of holding it back, and only the windward
+// stones hold. (In still air the weight alone is checked over all four edges: tippingStill.)
 function tipping(M, W, q) {
   let weight = 0, a = 0;
   for (const b of M.boards) { const w = WOOD.weight * b.L; weight += w; a += w * (dot(b.A, W.v) + dot(b.B, W.v)) / 2; }
   const cg = weight ? a / weight : 0;
-  const hold = weight * (W.depth / 2 - cg) + 2 * stoneLb(Math.min(M.W, M.D)) * W.depth;
-  const turn = q * W.turn;
+  const lever = weight * (W.depth / 2 - cg), stones = 2 * stoneLb(Math.min(M.W, M.D)) * W.depth;
+  const hold = lever >= 0 ? lever + stones : stones;
+  const turn = lever >= 0 ? q * W.turn : q * W.turn - lever;
   return { util: hold > 0 ? Math.max(0, turn / hold) : (turn > 0 ? 99 : 0), turn, hold, weight, push: q * W.total };
+}
+// the weight alone, over each of the four edges of the stones: the worst ({ util, ... } as tipping), or null when the
+// centre of weight is inside the stones every way
+function tippingStill(M) {
+  let worst = null;
+  for (const wd of WINDS) {
+    const v = [wd.dir.X, 0, wd.dir.Z], depth = Math.abs(v[0]) > 0.5 ? M.W : M.D;
+    const r = tipping(M, { v, depth, turn: 0, total: 0 }, 0);
+    if (r.util > 0 && (!worst || r.util > worst.util)) worst = { ...r, v };
+  }
+  return worst;
 }
 
 // ── words ───────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -991,6 +1103,11 @@ function tipping(M, W, q) {
 // (a short slanting board that props a post against a crosspiece, not reaching across its wall), a brace
 function roleOf(b, W, D, hubs, boards) {
   if (b.post) return Math.abs(Math.abs(b.A[0]) - W / 2) < 1e-6 && Math.abs(Math.abs(b.A[2]) - D / 2) < 1e-6 ? 'a corner post' : 'a post';
+  // a leg: in two walls, at least one leaning (a corner leg: its foot on a stone corner)
+  if (b.leg) {
+    const foot = b.A[1] <= b.B[1] ? b.A : b.B;
+    return foot[1] < TOL && Math.abs(Math.abs(foot[0]) - W / 2) < STRAP && Math.abs(Math.abs(foot[2]) - D / 2) < STRAP ? 'a corner leg' : 'a leg';
+  }
   if (b.upright) return 'a post';
   if (b.level) {
     // (a beam stands by its ends on other boards: it is what stands on a toe joint)
@@ -1011,8 +1128,9 @@ function roleOf(b, W, D, hubs, boards) {
     return (p0.size && others(h1, (o) => o.level).size) || (p1.size && others(h0, (o) => o.level).size) ? 'a knee brace' : 'a brace';
   }
   if (b.L > 4) return 'a brace';
-  // (no joints to look at: by its reach, as v2 did: one that spans its wall is a brace)
-  const span = Math.abs(b.n[0]) > 0.9 ? D : W, reach = Math.hypot(b.B[0] - b.A[0], b.B[2] - b.A[2]);
+  // (no joints to look at: by its reach, as v2 did: one that spans its wall is a brace. Its wall's family says which
+  // way the wall runs, whatever it leans; a board handed with a direction for n: by which way that looks)
+  const fam = b.walls && b.walls[0].fam, span = fam ? (fam === 'X' ? D : W) : Math.abs(b.n[0]) > 0.9 ? D : W, reach = Math.hypot(b.B[0] - b.A[0], b.B[2] - b.A[2]);
   return reach < span - 0.25 ? 'a knee brace' : 'a brace';
 }
 // a board's name in words, as the test names it ("a corner post", "a beam", "a knee brace"...), from the joints it has in
@@ -1042,9 +1160,10 @@ function describe(M, it) {
       // (knee braces only count when they lie inside the storey that racked, both ends between its floors, in a wall
       // through the post that leaned: the braces of the storey above start on this one's top floor and are not its own)
       const knees = M.boards.some((o) => !o.upright && !o.level && o.lo >= it.y0 - 0.3 && o.hi <= it.y1 + 0.3 && sharePlane(o, b) && roleOf(o, M.W, M.D, M.hubs, M.boards) === 'a knee brace');
-      return knees ? 'the knee braces could not hold it square: the posts bent and it racked over' : 'the square racked: it folded over sideways';
+      if (knees) return 'the knee braces could not hold it square: the posts bent and it racked over';
+      return b.plain ? 'the square racked: it folded over sideways' : 'the leaning walls racked: it folded over sideways';
     }
-    case 'top': return (b.post ? 'a post' : 'a board') + ' stood with nothing holding its top, and the wind bent it over';
+    case 'top': return (b.post ? 'a post' : b.leg ? 'a leg' : 'a board') + ' stood with nothing holding its top, and the wind bent it over';
     case 'tip': return 'the wind tipped the whole tower over: the stones on the windward side lifted';
     case 'loose': return role + ' had nothing holding it still, and came loose';
     default: return 'something gave way';
@@ -1119,9 +1238,13 @@ function giveWay(state, M, chk, w) {
   else if (w.type === 'loose') { const set = new Set(chk.items.filter((it) => it.type === 'loose').map((it) => it.id)); broke = [...set]; out = [...set]; }
   if (out.length) remove(state, out);
   const fell = [...out, ...settle(state)];
-  // where (and in which plane): a board's own plane; for a rack, the upright plane it leaned in
+  // where (and in which plane): a board's own plane; for a rack, the wall it leaned in (upright, or leaning as it does)
   let plane = b ? b.key : null;
-  if (w.type === 'drift' && b) plane = Math.abs(w.dir[0]) >= Math.abs(w.dir[1]) ? 'Z:' + r3(b.A[2]) : 'X:' + r3(b.A[0]);
+  if (w.type === 'drift' && b) {
+    const fam = Math.abs(w.dir[0]) >= Math.abs(w.dir[1]) ? 'Z' : 'X', wall = b.plain ? null : b.walls.find((x) => x.fam === fam);
+    // (a leg or a board in a leaning wall: the wall it leaned in, leaning as it does)
+    plane = wall ? keyOfWall(wall) : fam === 'Z' ? 'Z:' + r3(b.A[2]) : 'X:' + r3(b.A[0]);
+  }
   const at = { X: w.P[0], Y: w.P[1], Z: w.P[2] };
   const ev = { kind, text, at, plane, broke, fell, util: +w.util.toFixed(3) };
   if (hinge) ev.hinge = true;
@@ -1173,8 +1296,10 @@ export function windTest(tower, { stages = STAGES } = {}) {
     while (chk && chk.worst && chk.worst.util > 1 && guard++ < 100) {
       const ev = giveWay(state, M, chk, chk.worst);
       ev.calm = true;
-      // (in still air nothing is blown: a top that leans over goes under its own weight)
+      // (in still air nothing is blown: a top that leans over goes under its own weight; a tower whose walls lean out
+      // past its stones tips over by its own weight)
       ev.text = ev.text.replace(/, and the wind bent it over$/, ', and it fell over under its own weight');
+      if (ev.kind === 'tip') ev.text = 'the tower leaned out past its stones and tipped over under its own weight';
       // (named by what it stood on: nothing. The event that brings those posts down says so.)
       if (nofoot.length) {
         const bare = footless(ev);
@@ -1312,4 +1437,4 @@ export function windOn(tower, k, mph) {
 }
 
 // for the rigs and tests only (the page should not need these)
-export const internals = { prepBoards, findHubs, classify, groundedSet, buildModel, solveEnv, factor, solveWind, checkAll, windOf, shelterFor, across, seenWidth, localK, toWorld, describe, roleOf, modelOf, settle, nailUse, touch3, rcm, makeEnvelope };
+export const internals = { keyOfWall, sharePlane, commonWall, prepBoards, findHubs, classify, groundedSet, buildModel, solveEnv, factor, solveWind, checkAll, windOf, shelterFor, across, seenWidth, localK, toWorld, describe, roleOf, modelOf, settle, nailUse, touch3, rcm, makeEnvelope };

@@ -8,7 +8,11 @@
 // to the front wall from the front or back, to the sides from a side), on the nearest plane that already has a board
 // within its reach, else on the outer wall facing you. Turn the view a quarter, so you see the board end on, and grab
 // it again: now it moves in and out over the stones. That is how a tower narrows as it rises: a 6 × 4 base, beams laid
-// across its top, a 2 × 3 tier standing on the beams, a 1 × 1 on top. While a board is held, green circles show every
+// across its top, a 2 × 3 tier standing on the beams, a 1 × 1 on top. Walls can LEAN, in or out, each on its own: seen
+// end on, a board's top end has a handle; drag it in and its whole wall leans about its foot, by the half inch in a foot
+// (a post or leg swung near upright, seen from the side, leans the same way), so a tower can narrow as it climbs on
+// corner legs leaning two ways at once, its crosspieces cut to the width between the legs where they go. While a board
+// is held, green circles show every
 // spot it will be nailed (a red ring: an end close to a board but not touching). Each board nailed shows its twins
 // glowing round the tower (the same board mirrored on the opposite wall, and on a square base round the corners too;
 // a post's twins on the other corners of its rectangle): a tap builds one with wood from the stack, a double tap builds
@@ -32,27 +36,36 @@
 //   WM.add(face, x, y, angDeg, len)    nail a board on an outer wall the v2 way (x from that wall's left corner seen from
 //                                      outside), as if dragged there: same questions, same twins
 //   WM.addOn(key, u, y, angDeg, len)   nail a board on any plane ('Z:1.5', 'X:-1'), its a end at (u, y) on it
-//   WM.addWorld(a, b, n)               nail a board between two world points (on the plane they share; a post faces n,
-//                                      or the plane kind facing the view). add, addOn and addWorld take their wood off
+//   WM.addWorld(a, b, n, t)            nail a board between two world points (on the plane they share; a post faces n,
+//                                      or the plane kind facing the view). t: its wall's lean (feet across per foot up,
+//                                      k/12 by the half inch k), needed only for a level board in a leaning wall; a
+//                                      board that is not level takes its lean from its ends (and a leg, leaning across
+//                                      its own wall too, lies in both). add, addOn and addWorld take their wood off
 //                                      the pile like a twin (sawn as needed); with none left the board goes up anyway
+//   (addOn takes a leaning plane's key too: 'Z:3~-1.5' is the front wall of a 6 ft base leaning in 1½ in a foot)
 //   WM.setBase(W, D), WM.setWidth(w)   the stones (only while nothing is built); WM.footprint() -> { W, D }
-//   WM.boards() -> [{ id, a, b, len, n }], WM.planes() -> [{ key, name, boards }]
-//   WM.ghosts() -> the twins on show [{ a, b, len, n, ok, reason }]; WM.confirm(i), WM.confirmAll()
-//   WM.held() -> the board in hand { key, x, y, ang, len, endOn, a, b } and its spots on the screen (page pixels):
-//                { ends: [A, B], mid, plane (its name) }
+//   WM.boards() -> [{ id, a, b, len, n, t? }], WM.planes() -> [{ key, name, boards }] (the walls in use, leaning ones
+//                                      keyed 'Z:3~-1.5' and named "the front wall, leaning in 1½ in a foot")
+//   WM.ghosts() -> the twins on show [{ a, b, len, n, t (its wall's lean), ok, reason }]; WM.confirm(i), WM.confirmAll()
+//   WM.held() -> the board in hand { key, x, y, ang, len, endOn, a, b, n, t, k (its wall's lean, inches a foot), leg,
+//                planes (every plane it lies in) } and its spots on the screen (page pixels): { ends: [A, B], mid,
+//                plane (its name), lean (the lean handle's spot seen end on, or null) }
 //   WM.planeToScreen(key, u, y), WM.worldToScreen(X, Y, Z), WM.toScreen(face, x, y) (v2 wall coordinates)
 //   WM.turnTo(face), WM.state(), WM.resetAll(W, D), WM.startTest()
 //   WM.load(tower)                     a whole tower { W, D, boards } put up at once on a fresh yard (its wood paid from
 //                                      the pile, no questions)
 //   WM.test() -> the wind test as it plays: { phase, gust, of, stage, from, breaks: [...], height, ms (the sums),
 //                wallMs (the worker's answer, call to reply), card, shown: [[id, strain now]] } or null
+//   WM.result() -> the wind test's whole answer as the page got it (frame.js windTest, from the worker), or null: a rig
+//                compares it with node's windTest on WM.boards()
 import * as THREE from 'three';
 import { START_W, MAX_W, BOARDS, BOARD_FT, newTower, FACE_NORMAL, towerHeight, boardCount, twinsOf, spotTaken, isPost, isCornerPost, planesOf, planeKey, parseKey,
-  planeSegments, planeNormal, planeHalf, planeName, facePlane, faceOfPlane, fromPlane, toPlane, makeBoard, planesInUse, wallSpan, floorsAcross } from './tower.js';
+  planeSegments, planeNormal, planeHalf, planeName, facePlane, faceOfPlane, fromPlane, toPlane, makeBoard, planesInUse, wallSpan, floorsAcross,
+  wallsInUse, wallPlanesOf, isCornerLine, faceWalls, offsetAt, leanWords, leansIn, planeKeyOf, kOfT, onLeanGrid } from './tower.js';
 import { isKnee, touch, touchesAny, grounded } from './touch.js';
 import { STAGES } from './frame.js';
 import { makeTestRun, flourFor } from './testrun.js';
-import { trianglesOf, makeQuestion, bayQuestion } from './questions.js';
+import { trianglesOf, makeQuestion, bayQuestion, slopeQuestion } from './questions.js';
 import { makeScene, makeMiller, wind, FT, groundY } from './scene.js';
 import { makeTowerView, HELD_OFF } from './tower3d.js';
 import { makeFall } from './fall.js';
@@ -110,7 +123,7 @@ function resize() {
   renderer.setSize(r.width, r.height, false); camera.aspect = r.width / Math.max(1, r.height);
   // a tall narrow screen (a phone held upright) gets a wider lens, or the tower would be a speck
   camera.fov = camera.aspect < 0.6 ? 46 : camera.aspect < 1 ? 36 : 30; camera.updateProjectionMatrix();
-  cam.d = fitDistance(); build && build.renderPanel(); placeFaceName(); app.dirty = true;
+  cam.d = fitDistance(); build && build.renderPanel(); fitStats(); placeFaceName(); app.dirty = true;
 }
 const topY = () => Math.max(towerHeight(app.tower), app.held ? Math.max(app.held.y, app.held.y + Math.sin(app.held.ang) * app.held.len) : 0) + 12;
 let orbiting = false;
@@ -253,16 +266,18 @@ const v3 = new THREE.Vector3();
 const project = (X, Y, Z) => { v3.set(X * FT, Y * FT, Z * FT).project(camera); const r = el.view.getBoundingClientRect(); return { x: (v3.x + 1) / 2 * r.width, y: (1 - v3.y) / 2 * r.height, behind: v3.z > 1 }; };
 app.worldToScreen = (X, Y, Z) => project(X, Y, Z);
 app.planeToScreen = (key, u, y, lifted = true) => {
-  const p = fromPlane(key, u, y), [nx, nz] = planeNormal(key), o = lifted ? HELD_OFF : 0;
-  return project(p.X + nx * o, p.Y, p.Z + nz * o);
+  const p = fromPlane(key, u, y), n = planeNormal(key, p.Y), o = lifted ? HELD_OFF : 0;
+  return project(p.X + n.X * o, p.Y + n.Y * o, p.Z + n.Z * o);
 };
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 const aim = (cx, cy) => { const r = el.view.getBoundingClientRect(); ndc.set((cx - r.left) / r.width * 2 - 1, -((cy - r.top) / r.height) * 2 + 1); ray.setFromCamera(ndc, camera); };
 // the point on a plane under the pointer: in the world (feet), or in the plane's own (x = u, y)
+// (a leaning plane axis = c + t·Y has the normal e_axis - t·e_Y: N·p = c, in metres c·FT, scaled to a unit normal)
 app.toWorld = (key, cx, cy) => {
   aim(cx, cy);
-  const { axis, off } = parseKey(key), N = axis === 'Z' ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, 0, 0), hit = new THREE.Vector3();
-  if (!ray.ray.intersectPlane(new THREE.Plane(N, -off * FT), hit)) return null;
+  const { axis, off, t } = parseKey(key), l = Math.sqrt(1 + t * t), hit = new THREE.Vector3();
+  const N = axis === 'Z' ? new THREE.Vector3(0, -t / l, 1 / l) : new THREE.Vector3(1 / l, -t / l, 0);
+  if (!ray.ray.intersectPlane(new THREE.Plane(N, -off * FT / l), hit)) return null;
   return { X: hit.x / FT, Y: hit.y / FT, Z: hit.z / FT };
 };
 app.toPlane = (key, cx, cy) => { const w = app.toWorld(key, cx, cy); if (!w) return null; const q = toPlane(key, w); return { x: q.u, y: q.y }; };
@@ -277,12 +292,14 @@ app.toGround = (cx, cy) => {
 // it: nearest of all; on a near tie, the plane nearer you), so long as one is within the piece's reach from where the
 // pointer holds it; else the outer wall facing you
 app.facingPlane = () => facePlane(app.tower, app.face);
+// (walls that lean: where each stands under the pointer, at the height the pointer finds on it)
 app.pickPlane = (cx, cy, len) => {
-  const t = app.tower, kind = app.face % 2 ? 'X' : 'Z', reach = Math.max(1.2, len / 2 + 0.3);
+  const t = app.tower, kind = app.face % 2 ? 'X' : 'Z', reach = Math.max(1.2, len / 2 + 0.3), walls = wallsInUse(t);
   const s = kind === 'Z' ? (Math.cos(cam.az) >= 0 ? 1 : -1) : (Math.sin(cam.az) >= 0 ? 1 : -1);
-  const keys = planesInUse(t).filter((k) => k[0] === kind && parseKey(k).off * s >= -1e-6).sort((a, b) => parseKey(b).off * s - parseKey(a).off * s);
+  const offHere = (k) => { if (!parseKey(k).k) return parseKey(k).off; const w = app.toWorld(k, cx, cy); return w ? offsetAt(k, w.Y) : parseKey(k).off; };
+  const keys = [...walls].filter((k) => k[0] === kind && offHere(k) * s >= -1e-6).sort((a, b) => offHere(b) * s - offHere(a) * s);
   aim(cx, cy);
-  const under = new Set(); for (const hit of ray.intersectObjects(towerView.meshes(), false)) for (const k of planesOf(hit.object.userData.src)) under.add(k);
+  const under = new Set(); for (const hit of ray.intersectObjects(towerView.meshes(), false)) for (const k of wallPlanesOf(t, hit.object.userData.src, walls)) under.add(k);
   let best = null;
   for (const k of keys) {
     const p = app.toPlane(k, cx, cy); if (!p) continue;
@@ -299,7 +316,7 @@ const FACE_NAMES = ['Front wall', 'Right side', 'Back wall', 'Left side'];
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 let faceText = '';
 function showFaceName() {
-  const txt = app.held && app.phase === 'build' ? cap(planeName(app.tower, app.held.key, true)) : FACE_NAMES[app.face];
+  const txt = app.held && app.phase === 'build' ? cap(build.planeText || planeName(app.tower, app.held.key, true)) : FACE_NAMES[app.face];
   if (txt !== faceText) { faceText = txt; $('face-name').textContent = txt; $('face-name').classList.toggle('is-held', !!app.held); }
 }
 
@@ -310,7 +327,7 @@ app.onLumber = (n) => { world.setPile(n); if (ghosts) refreshGhosts(); };
 app.onSawOff = (len, kept, nailed) => { if (!nailed) say(kept ? `${fmt(len)} offcut. It's with your cut pieces.` : `That bit's too short to use. Kindling for my stove.`, { key: kept ? 'offcut' : 'kindling', times: 2, force: true, ms: 4000 }); };
 app.onTowerChanged = (src, note) => {
   // (a board sawn shorter: its twins are worked out again from it, so they take the new length)
-  if (src && ghosts && ghosts.src === src) ghosts.list = twinsOf(app.tower, src);
+  if (src && ghosts && ghosts.src === src) { const keep = ghosts; makeGhosts(src); ghosts.born = keep.born; }
   rebuild();
   if (src && app.selected === src) app.select(src, note);
 };
@@ -336,9 +353,9 @@ app.onStonesSet = () => {
 
 // ── nailing, picking up, undo ────────────────────────────────────────────────────────────────────────────────────────
 let idN = 1;
-// put a board on the tower: { a, b, len, n } in the world. Returns the record.
+// put a board on the tower: { a, b, len, n, t?, leg? } in the world. Returns the record.
 function addBoard(spec) {
-  const rec = makeBoard('b' + idN++, spec.a, spec.b, spec.n, spec.len);
+  const rec = makeBoard('b' + idN++, spec.a, spec.b, spec.n, spec.len, spec.t || 0, !!spec.leg);
   app.tower.boards.push(rec); app.placed.push({ rec }); return rec;
 }
 app.nail = () => {
@@ -373,7 +390,12 @@ app.select = (src, note) => {
   el.selBar.hidden = !src || app.phase !== 'build';
   if (!src) return;
   const inner = faceOfPlane(app.tower, planesOf(src)[0]) < 0 && !isCornerPost(app.tower, src);
-  const what = (isCornerPost(app.tower, src) ? 'Corner post' : isPost(src) ? 'Post' : 'Board') + ', ' + fmt(src.len) + (inner ? ', ' + planeName(app.tower, planesOf(src)[0], true) : '');
+  // (a leg: how it leans, across the two walls it stands in; a board in a leaning outer wall: that wall's lean)
+  const legNow = !isPost(src) && isCornerLine(app.tower, src), own = planesOf(src)[0];
+  const leans = legNow ? wallPlanesOf(app.tower, src).filter((k) => parseKey(k).k).map((k) => leanWords(app.tower, k, Math.min(src.a.Y, src.b.Y)).replace('leaning ', '')) : [];
+  const leanTxt = leans.length === 2 && leans[0] === leans[1] ? leans[0] + ' both ways' : leans.join(' and ');
+  const what = (isCornerPost(app.tower, src) ? 'Corner post' : isPost(src) ? 'Post' : legNow ? 'Leg' : 'Board') + ', ' + fmt(src.len)
+    + (legNow ? (leanTxt ? ', leaning ' + leanTxt : '') : inner ? ', ' + planeName(app.tower, own, true) : parseKey(own).k ? ', ' + leanWords(app.tower, own, Math.min(src.a.Y, src.b.Y)) : '');
   el.selHint.textContent = note ? `${note} · ${what}` : what; $('say').hidden = true;
   if (note) { el.selHint.classList.remove('is-sawn'); void el.selHint.offsetWidth; el.selHint.classList.add('is-sawn'); }
   if (!again && app.phase === 'build') showTwinsOf(src);
@@ -478,6 +500,15 @@ function rebuild() {
   app.dirty = true;
 }
 function showBest() { $('best').innerHTML = fmtStat(best.height); $('best-base').textContent = best.height && best.W ? 'on ' + fmtBase(best.W, best.D || best.W, true) : ''; placeFaceName(); }
+// A phone's top bar: once legs lean, heights with inches are the rule ("15 ft 11 in" for the height and the best), and
+// three stats may not fit beside the tools. Then the base gives way (it is locked once building starts, and the card
+// shows it), so the height and the best are never cut off. Checked whenever a stat changes, and when the view resizes.
+function fitStats() {
+  const box = document.querySelector('.bar.top .stats'); if (!box) return;
+  box.classList.remove('is-tight');
+  if (box.scrollWidth > box.clientWidth + 0.5) box.classList.add('is-tight');
+}
+new MutationObserver(fitStats).observe(document.querySelector('.bar.top .stats'), { subtree: true, childList: true, characterData: true });
 // the wall's name sits just under the stats box, however tall the box has grown (a best height adds a line to it)
 function placeFaceName() {
   const v = el.view.getBoundingClientRect(), b = document.querySelector('.bar.top .stats').getBoundingClientRect();
@@ -490,7 +521,8 @@ function placeFaceName() {
 // nothing to nail it to any more or no wood for it (grey, with the reason). They fade away if left alone a while.
 let ghosts = null;     // { src (the board nailed), list, born }
 const GHOST_STAY = 16000, GHOST_FADE = 5000;
-function makeGhosts(rec) { ghosts = { src: rec, list: twinsOf(app.tower, rec), born: performance.now() }; }
+// (a leg's twins are legs too: drawn on their lines, as the leg is)
+function makeGhosts(rec) { const line = !isPost(rec) && isCornerLine(app.tower, rec); ghosts = { src: rec, list: twinsOf(app.tower, rec).map((g) => (line ? { ...g, line: true, leg: true } : g)), born: performance.now() }; }
 function refreshGhosts() {
   if (!ghosts) { towerView.setGhosts([]); return; }
   const t = app.tower;
@@ -551,7 +583,10 @@ function gesture(name, ms = 1700) {
 const an = (s) => (/^(8|11|18)(\D|$)/.test(s) ? 'an ' : 'a ') + s;
 const angDeg = (s) => { let a = Math.abs(Math.atan2(s.by - s.ay, s.bx - s.ax)) / DEG; if (a > 90) a = 180 - a; return a; };
 const isLevel = (s) => angDeg(s) < 3, isUpright = (s) => angDeg(s) > 87;
-const hasDiagonal = (segs) => segs.some((s) => !s.post && !isLevel(s) && !isUpright(s));
+// (a leg where two leaning walls meet slants across its wall too, but it is no brace)
+const hasDiagonal = (segs) => segs.some((s) => !s.post && !isLevel(s) && !isUpright(s) && !(s.leg && isCornerLine(app.tower, s.src)));
+// the walls of face f in use (upright or leaning; the upright one even when empty)
+const faceWallsOf = (f) => [...new Set([facePlane(app.tower, f), ...faceWalls(app.tower, f)])];
 // a bubble of help at the foot of the view when nothing else is going on
 app.idleHint = () => {
   const ok = ghosts ? ghosts.list.filter((g) => g.ok) : [];
@@ -580,6 +615,12 @@ function afterNail(rec, key, first) {
   sinceQuestion++;
   const chance = questionsAsked === 0 ? 0.7 : sinceQuestion >= 5 ? 0.9 : 0.35;
   const askNow = () => forced || (sinceQuestion >= 2 && Math.random() < chance);
+  // a board in a leaning wall (or a leg leaning across two): a question about the lean itself, as a rate
+  const leanKeys = post ? [] : wallPlanesOf(t, rec).filter((w) => parseKey(w).k), leg = !post && isCornerLine(t, rec);
+  if (leanKeys.length && askNow()) {
+    const q = slopeQuestion(slopeSpec(rec, leanKeys[0], leg));
+    if (q) { setTimeout(() => ask(q), 450); sinceQuestion = 0; questionsAsked++; return; }
+  }
   // a crosspiece that closes a bay: how long a brace would reach corner to corner?
   const bay = me && !post && isLevel(me) ? bayUnder(segs, me) : null;
   if (bay && askNow()) {
@@ -600,6 +641,14 @@ function afterNail(rec, key, first) {
     return;
   }
   if (!me) return;
+  // a leg, or a board in a leaning wall: a word about leaning, not about plumb posts and braces
+  if (leg || (leanKeys.length && !isLevel(me))) {
+    const w = leanKeys[0], dir = w ? leansIn(w, Math.min(rec.a.Y, rec.b.Y)) : 0, kk = w ? Math.abs(parseKey(w).k) : 0;
+    if (dir > 0 && kk >= 6) say(`Leaning in ${leanWords(t, w).replace(/^leaning (in|out) /, '')}: steep. She narrows fast, so she won't climb far before her walls meet.`, { key: 'lean-steep', times: 1 });
+    else if (dir > 0) say(leg ? 'Legs leaning in brace each other: the wind pushes down them into the stones. Lean every wall the same and she narrows as she climbs.' : 'A wall leaning in. Twins lean in to match on the other side.', { key: leg ? 'lean-leg' : 'lean-in', times: 1 });
+    else if (dir < 0) say('Leaning out: wider up top than at her stones. A gust gets a longer lever on her that way.', { key: 'lean-out', times: 1 });
+    return;
+  }
   if (post && k < 0 && !said.innerPost && Math.min(rec.a.Y, rec.b.Y) > 0.5) { said.innerPost = 1; say(`A post standing on ${planeName(t, key)}. Its foot is only toe-nailed: give it a brace or two.`, { key: 'innerpost', times: 1 }); return; }
   const a = angDeg(me), slant = !post && !isLevel(me) && !isUpright(me);
   // (a tier's floor is the beams crossing its walls: they close a triangle too)
@@ -619,7 +668,7 @@ function afterNail(rec, key, first) {
     // other walls of that tier: the planes round the posts standing at the same height as the ones it is nailed to)
     const others = () => {
       let bare;
-      if (k >= 0) bare = [1, 2, 3].map((d) => (k + d) % 4).filter((f) => !hasDiagonal(planeSegments(app.tower, facePlane(app.tower, f))));
+      if (k >= 0) bare = [1, 2, 3].map((d) => (k + d) % 4).filter((f) => !faceWallsOf(f).some((w) => hasDiagonal(planeSegments(app.tower, w))));
       else {
         const mine = segs.filter((sg) => sg.post && touch(me, sg).length).map((sg) => sg.src), foot = Math.min(...mine.map((p) => Math.min(p.a.Y, p.b.Y)));
         const tier = app.tower.boards.filter((p) => isPost(p) && Math.abs(Math.min(p.a.Y, p.b.Y) - foot) < 0.3);
@@ -667,14 +716,26 @@ function bayUnder(segs, me) {
   return { y0, h: y - y0, w: hi - lo };
 }
 
+// what the slope question needs about a board's leaning wall: its lean (inches a foot) and which way; the width across
+// at the stones when the wall opposite leans the same way (a taper: the width question); its length when it is a leg
+function slopeSpec(rec, w, leg) {
+  const t = app.tower, q = parseKey(w), foot = Math.min(rec.a.Y, rec.b.Y), dir = leansIn(w, foot) > 0 ? 'in' : 'out';
+  let base = null;
+  for (const o of wallsInUse(t)) {
+    const p = parseKey(o);
+    if (faceOfPlane(t, w) >= 0 && p.axis === q.axis && Math.abs(p.off + q.off) < 1e-3 && p.k === -q.k && Math.abs(q.off) > 0.25) { base = Math.abs(2 * q.off); break; }
+  }
+  return { k: Math.abs(q.k), dir, base, legLen: leg ? rec.len : null };
+}
+
 // ── a math question card ─────────────────────────────────────────────────────────────────────────────────────────────
 function ask(q) {
   if (app.phase !== 'build') return;
   app.phase = 'question'; app.select(null);
   const card = $('question');
-  card.innerHTML = `<h2>${q.bay ? 'How long a brace?' : 'A triangle!'}</h2><div class="sub">Get it right and the miller adds a board to your stack.</div>
-    ${trianglePic(q)}<p>${q.prompt}</p>
-    <div class="choices">${q.choices.map((c) => `<button data-v="${c}">${c}${q.unit}</button>`).join('')}</div>
+  card.innerHTML = `<h2>${q.title || (q.bay ? 'How long a brace?' : 'A triangle!')}</h2><div class="sub">Get it right and the miller adds a board to your stack.</div>
+    ${q.kind === 'slope' ? slopePic(q.pic) : trianglePic(q)}<p>${q.prompt}</p>
+    <div class="choices${q.labels ? ' is-words' : ''}">${q.choices.map((c, i) => `<button data-v="${c}">${q.labels ? q.labels[i] : c + q.unit}</button>`).join('')}</div>
     <div class="why" hidden></div><div class="row" hidden><button class="btn go" id="q-ok">Back to building</button></div>`;
   card.hidden = false;
   gesture('Interact');
@@ -720,9 +781,77 @@ function trianglePic(q) {
   return out + '</svg>';
 }
 const norm = (x, y) => { const d = Math.hypot(x, y) || 1; return { x: x / d, y: y / d }; };
+// A leaning wall seen end on, for a slope question: the stones' line, the wall leaning from its foot (by its lean, drawn
+// a little steeper than true so the lean shows), a plumb line from the foot, the height marked, and the "?" across.
+// pic: { kind: 'lean', k, Y, dir } | { kind: 'taper', k, Y, W, dir } | { kind: 'leg', L, r }
+const PIC_FONT = 'font-family="Bitter, Georgia, serif" font-weight="700"';
+function slopePic(pic) {
+  const ink = '#2b2219', wood = '#8a5a32', red = '#b0401f';
+  let out = '<svg class="pic" viewBox="0 0 320 186">';
+  out += `<line x1="16" y1="166" x2="304" y2="166" stroke="${ink}" stroke-width="2"/>`;
+  if (pic.kind === 'leg') {
+    // a right triangle: the leg from its foot, its top r ft across; the plumb line from the top down
+    const s = Math.min(130 / pic.L, 22), h = Math.sqrt(pic.L * pic.L - pic.r * pic.r) * s, run = pic.r * s, x0 = 110, x1 = x0 + run;
+    out += `<line x1="${x1}" y1="166" x2="${x1}" y2="${166 - h}" stroke="${ink}" stroke-width="2" stroke-dasharray="6 5"/>`;
+    out += `<line x1="${x0}" y1="166" x2="${x1}" y2="${166 - h}" stroke="${wood}" stroke-width="9" stroke-linecap="round"/>`;
+    out += `<path d="M${x1 - 12} 166 v-12 h12" fill="none" stroke="${ink}" stroke-width="2"/>`;
+    out += `<text x="${(x0 + x1) / 2 - 26}" y="${166 - h / 2}" text-anchor="end" ${PIC_FONT} font-size="18" fill="${ink}">${pic.L} ft</text>`;
+    out += `<text x="${(x0 + x1) / 2}" y="184" text-anchor="middle" ${PIC_FONT} font-size="16" fill="${ink}">${pic.r} ft</text>`;
+    out += `<text x="${x1 + 12}" y="${166 - h / 2 + 6}" ${PIC_FONT} font-size="20" fill="${red}">?</text>`;
+    return out + '</svg>';
+  }
+  const Y = pic.Y, s = 140 / Math.max(Y, 1), lean = Math.min(1.2, pic.k / 12 * 2.2), sg = pic.dir === 'out' ? -1 : 1;
+  const wall = (fx, side) => {
+    const tx = fx + side * sg * lean * Y * s;
+    return { tx, svg: `<line x1="${fx}" y1="166" x2="${tx}" y2="${166 - Y * s}" stroke="${wood}" stroke-width="9" stroke-linecap="round"/>`
+      + `<line x1="${fx}" y1="166" x2="${fx}" y2="${166 - Y * s}" stroke="${ink}" stroke-width="1.5" stroke-dasharray="5 5"/>` };
+  };
+  if (pic.kind === 'taper') {
+    const half = Math.min(110, 40 + pic.W * 12), L = wall(160 - half, 1), R = wall(160 + half, -1), ty = 166 - Y * s;
+    out += L.svg + R.svg;
+    out += `<text x="160" y="184" text-anchor="middle" ${PIC_FONT} font-size="15" fill="${ink}">${pic.W} ft across at the stones</text>`;
+    out += `<line x1="${L.tx + 8}" y1="${ty}" x2="${R.tx - 8}" y2="${ty}" stroke="${red}" stroke-width="2" stroke-dasharray="4 4"/>`;
+    out += `<text x="160" y="${ty - 8}" text-anchor="middle" ${PIC_FONT} font-size="20" fill="${red}">?</text>`;
+    out += `<text x="${160 + half + 6}" y="${166 - Y * s / 2}" ${PIC_FONT} font-size="14" fill="${ink}">${Y} ft</text>`;
+    return out + '</svg>';
+  }
+  const fx = 120, W0 = wall(fx, 1), ty = 166 - Y * s;
+  out += W0.svg;
+  out += `<line x1="${fx}" y1="${ty}" x2="${W0.tx}" y2="${ty}" stroke="${red}" stroke-width="2.5"/>`;
+  out += `<text x="${(fx + W0.tx) / 2}" y="${ty - 8}" text-anchor="middle" ${PIC_FONT} font-size="20" fill="${red}">?</text>`;
+  out += `<text x="${fx - 10}" y="${166 - Y * s / 2}" text-anchor="end" ${PIC_FONT} font-size="15" fill="${ink}">${Y} ft up</text>`;
+  out += `<text x="${Math.max(fx, W0.tx) + 16}" y="120" ${PIC_FONT} font-size="14" fill="${ink}">leans ${pic.dir} ${String(pic.k).replace('.5', '½').replace(/^0½/, '½')} in</text>`;
+  out += `<text x="${Math.max(fx, W0.tx) + 16}" y="138" ${PIC_FONT} font-size="14" fill="${ink}">every foot up</text>`;
+  return out + '</svg>';
+}
+// the slope inch by inch: a stair of steps, each one foot up and the lean's inches across, counted as it climbs
+function stepsPic(k, Y, label = (n) => `${String(k * n).replace('.5', '½').replace(/^0½/, '½')} in`) {
+  // (big steps for a short climb, small ones for a long one; the stair in the middle of the picture)
+  const n = Math.min(Y, 12), sx = Math.min(30, 150 / Math.max(1, k * n)), sy = Math.min(44, 130 / n), y0 = 154, x0 = Math.max(60, 150 - k * n * sx / 2);
+  let d = `M${x0} ${y0}`, marks = '';
+  for (let i = 1; i <= n; i++) {
+    const x = x0 + k * (i - 1) * sx, y = y0 - i * sy;
+    d += ` L${x} ${y} L${x + k * sx} ${y}`;
+    if (i === 1 || i === n || (n <= 8 && i % 2 === 0)) marks += `<text x="${x + k * sx + 6}" y="${y + 5}" ${PIC_FONT} font-size="12" fill="#2b2219">${label(i)}</text>`;
+  }
+  const more = Y > n ? `<text x="${x0}" y="22" ${PIC_FONT} font-size="12" fill="#2b2219">…and on up to ${Y} ft</text>` : '';
+  return `<svg class="pic" viewBox="0 0 320 172"><path d="${d}" fill="none" stroke="#8a5a32" stroke-width="3" stroke-linejoin="round"/>
+    <line x1="${x0}" y1="${y0}" x2="${x0}" y2="${y0 - n * sy}" stroke="#2b2219" stroke-width="1.5" stroke-dasharray="4 4"/>
+    <text x="${x0 - 8}" y="${y0 - n * sy / 2}" text-anchor="end" ${PIC_FONT} font-size="12" fill="#2b2219">${n} ft</text>${marks}${more}
+    <text x="160" y="170" text-anchor="middle" ${PIC_FONT} font-size="12" fill="#2b2219">every foot up, ${String(k).replace('.5', '½').replace(/^0½/, '½')} in across</text></svg>`;
+}
 // a small picture that shows WHY: the three corners laid side by side make a straight line (180), or the squares on
-// the sides of a right triangle
+// the sides of a right triangle; for a leaning wall, the slope inch by inch
 function helperPic(q) {
+  if (q.helper.kind === 'steps') return stepsPic(q.helper.k, q.helper.Y);
+  if (q.helper.kind === 'taper') return stepsPic(q.helper.k, q.helper.Y, (n) => `${String(q.helper.k * n).replace('.5', '½')} in each side`);
+  if (q.helper.kind === 'legsq') {
+    const { L, r, h, exact } = q.helper;
+    if (exact) return helperPic({ helper: { kind: 'squares', a: Math.min(r, Math.round(h)), b: Math.max(r, Math.round(h)), c: L } });
+    return `<svg class="pic" viewBox="0 0 320 110"><text x="160" y="34" text-anchor="middle" ${PIC_FONT} font-size="17" fill="#2b2219">${L}×${L} − ${r}×${r} = ${L * L - r * r}</text>
+      <text x="160" y="64" text-anchor="middle" ${PIC_FONT} font-size="17" fill="#2b2219">${h.toFixed(2)} × ${h.toFixed(2)} ≈ ${(h * h).toFixed(1)}</text>
+      <text x="160" y="94" text-anchor="middle" ${PIC_FONT} font-size="14" fill="#6d4b2b">so the top is about ${fmt(h)} up: less than the leg is long</text></svg>`;
+  }
   if (q.helper.kind === 'angles') {
     const [a, b] = q.helper.shown, c = q.helper.answer, cx = 160, cy = 120, r = 90;
     const wedge = (from, to, col, label) => {
@@ -869,7 +998,7 @@ function loop() {
   const h = app.held && app.phase === 'build' ? app.held : null, hi = build.heldInfo;
   if (h) {
     const w = build.worldOf(h);
-    towerView.showHeld({ ...w, key: h.key, glowA: !!(hi && hi.glowA), glowB: !!(hi && hi.glowB) });
+    towerView.showHeld({ ...w, key: h.key, glowA: !!(hi && hi.glowA), glowB: !!(hi && hi.glowB), line: build.lineLike(h) });
     towerView.showPlane({ key: h.key, half: planeHalf(app.tower, h.key), top: Math.max(towerHeight(app.tower), w.a.Y, w.b.Y) + 1, endOn: !!h.endOn });
   } else { towerView.showHeld(null); towerView.showPlane(null); }
   showFaceName();
@@ -929,12 +1058,13 @@ makeMiller(scene).then((m) => {
 const toPage = (p) => { const r = el.view.getBoundingClientRect(); return { x: p.x + r.left, y: p.y + r.top, behind: p.behind }; };
 // (the wood comes off the pile, sawn as needed, as a twin's does, so Undo puts back only what was taken; with no wood
 // left for it the board is nailed anyway: a rig's board)
-function nailOn(key, u, y, ang, len) {
+function nailOn(key, u, y, ang, len, legN = null) {
   build.payFor(len);
-  app.held = { piece: { id: 'dev', len }, len, key, x: u, y, ang, endOn: false }; app.nail();
+  app.held = { piece: { id: 'dev', len }, len, key, x: u, y, ang, endOn: false }; if (legN) { app.held.leg = true; app.held.n = legN; }
+  app.nail();
 }
 window.WM = {
-  app, camera, renderer, scene, wind, cam, test: () => testRun.state(), build, startTest, towerView, fall,
+  app, camera, renderer, scene, wind, cam, test: () => testRun.state(), result: () => testRun.result || null, build, startTest, towerView, fall,
   // a board on an outer wall in the v2 wall coordinates (x from the wall's left corner seen from outside)
   add(face, x, y, angDeg, len) {
     if (app.face !== face) { app.face = face; cam.az = azOf(face) + Math.round((cam.az - azOf(face)) / (Math.PI * 2)) * Math.PI * 2; cam.squareT = null; showFaceName(); }
@@ -942,16 +1072,31 @@ window.WM = {
     nailOn(facePlane(app.tower, face), back ? half - x : x - half, y, (back ? 180 - angDeg : angDeg) * DEG, len);
   },
   addOn: (key, u, y, angDeg, len) => nailOn(key, u, y, angDeg * DEG, len),
-  addWorld(a, b, n) {
+  addWorld(a, b, n, t = 0) {
     const post = Math.abs(a.X - b.X) < 1e-6 && Math.abs(a.Z - b.Z) < 1e-6, kind = n || (app.face % 2 ? 'X' : 'Z');
-    const key = post ? planeKey(kind, kind === 'X' ? a.X : a.Z) : Math.abs(a.Z - b.Z) < 1e-6 ? planeKey('Z', a.Z) : planeKey('X', a.X);
+    let key = post ? planeKey(kind, kind === 'X' ? a.X : a.Z) : Math.abs(a.Z - b.Z) < 1e-6 ? planeKey('Z', a.Z) : planeKey('X', a.X);
+    // (a board in a leaning wall: its family n and its lean t, or what its ends say; a board in no upright wall leans
+    // with its own; a leg, leaning across its wall by a lean a wall can have, lies in two walls)
+    const dy = b.Y - a.Y, cN = (f, p) => (f === 'X' ? p.X : p.Z), rOf = (f) => (Math.abs(dy) > 1e-6 ? (cN(f, b) - cN(f, a)) / dy : 0);
+    const inUpright = Math.abs(a.Z - b.Z) < 1e-6 || Math.abs(a.X - b.X) < 1e-6;
+    let fam = null, leg = false;
+    if (!post) {
+      if (t) fam = kind;
+      else if (n && Math.abs(dy) > 1e-6 && onLeanGrid(rOf(n)) && kOfT(rOf(n))) fam = n;
+      else if (!inUpright) fam = n || (onLeanGrid(rOf(kind)) ? kind : kind === 'X' ? 'Z' : 'X');
+    }
+    if (fam) {
+      const k = kOfT(Math.abs(dy) > 1e-6 ? rOf(fam) : t);
+      key = planeKey(fam, cN(fam, a) - (k / 12) * a.Y, k);
+      leg = Math.abs(dy) > 1e-6 && onLeanGrid(rOf(fam === 'X' ? 'Z' : 'X'));
+    }
     const A = toPlane(key, a), B = toPlane(key, b);
-    nailOn(key, A.u, A.y, Math.atan2(B.y - A.y, B.u - A.u), Math.hypot(B.u - A.u, B.y - A.y));
+    nailOn(key, A.u, A.y, Math.atan2(B.y - A.y, B.u - A.u), Math.hypot(B.u - A.u, B.y - A.y), leg ? fam : null);
   },
   // a whole tower at once, on a fresh yard: its wood comes off the pile (sawn as needed), no questions, no twins
   load(t) {
     resetAll(t.W, t.D ?? t.W);
-    for (const b of t.boards) { build.payFor(b.len); addBoard({ a: b.a, b: b.b, n: b.n, len: b.len }); }
+    for (const b of t.boards) { build.payFor(b.len); addBoard({ a: b.a, b: b.b, n: b.n, len: b.len, t: b.t || 0 }); }
     rebuild();
     return app.tower.boards.length;
   },
@@ -959,16 +1104,18 @@ window.WM = {
   setWidth: (w) => app.setBase(w, w),
   footprint: () => ({ W: app.tower.W, D: app.tower.D }),
   boards: () => JSON.parse(JSON.stringify(app.tower.boards)),
-  planes: () => planesInUse(app.tower).map((key) => ({ key, name: planeName(app.tower, key), boards: planeSegments(app.tower, key).length })),
-  ghosts: () => app.ghostList().map((g) => ({ a: g.a, b: g.b, len: g.len, n: g.n, ok: g.ok, reason: g.reason })),
+  planes: () => [...wallsInUse(app.tower)].map((key) => ({ key, name: planeName(app.tower, key), boards: planeSegments(app.tower, key).length })),
+  ghosts: () => app.ghostList().map((g) => ({ a: g.a, b: g.b, len: g.len, n: g.n, t: g.t || 0, ok: g.ok, reason: g.reason })),
   confirm: (i) => confirmGhost(app.ghostList()[i]),
   confirmAll,
   held: () => {
     const h = app.held; if (!h) return null;
-    const w = build.worldOf(h), e = { ax: h.x, ay: h.y, bx: h.x + Math.cos(h.ang) * h.len, by: h.y + Math.sin(h.ang) * h.len }, post = Math.abs(Math.cos(h.ang)) < 1e-6;
-    return { key: h.key, x: h.x, y: h.y, ang: h.ang / DEG, len: h.len, endOn: !!h.endOn, a: w.a, b: w.b, plane: planeName(app.tower, h.key),
+    const w = build.worldOf(h), e = { ax: h.x, ay: h.y, bx: h.x + Math.cos(h.ang) * h.len, by: h.y + Math.sin(h.ang) * h.len }, post = build.lineLike(h);
+    const lean = (id) => { const n = $(id); if (n.hidden || !n.classList.contains('is-lean')) return null; const r = n.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; };
+    return { key: h.key, x: h.x, y: h.y, ang: h.ang / DEG, len: h.len, endOn: !!h.endOn, a: w.a, b: w.b, n: w.n, t: w.t || 0, k: parseKey(h.key).k, leg: !!h.leg, planes: planesOf(w),
+      plane: planeName(app.tower, h.key, false, Math.min(w.a.Y, w.b.Y)),
       ends: [toPage(app.planeToScreen(h.key, e.ax, e.ay, !post)), toPage(app.planeToScreen(h.key, e.bx, e.by, !post))],
-      mid: toPage(app.planeToScreen(h.key, (e.ax + e.bx) / 2, (e.ay + e.by) / 2, !post)) };
+      mid: toPage(app.planeToScreen(h.key, (e.ax + e.bx) / 2, (e.ay + e.by) / 2, !post)), lean: lean('g-a') || lean('g-b') };
   },
   turnTo: (face) => { cam.squareT = azOf(face) + Math.round((cam.az - azOf(face)) / (Math.PI * 2)) * Math.PI * 2; },
   state: () => ({ phase: app.phase, face: app.face, W: app.tower.W, D: app.tower.D, height: towerHeight(app.tower), boards: boardCount(app.tower), az: cam.az, camY: cam.y, zoom: cam.zoom, stonesOpen: stonesOpen(),
