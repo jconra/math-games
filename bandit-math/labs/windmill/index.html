@@ -8,7 +8,7 @@
 <!-- the on-screen error box comes first, so a crash shows on screen instead of a blank page -->
 <script src="../../oops.js"></script>
 <link rel="stylesheet" href="../../src/ui/fonts/fonts.css">
-<link rel="stylesheet" href="windmill.css?v=6">
+<link rel="stylesheet" href="windmill.css?v=9">
 <script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/" } }</script>
 </head>
 <body>
@@ -19,7 +19,7 @@
       <div class="pn-count"><b id="count">28</b> <span id="count-word">full boards left</span></div>
     </header>
     <div class="bench-wrap">
-      <div class="bench-label" id="bench-label">Fresh 8 ft board</div>
+      <div class="bench-label" id="bench-label">8 ft board ×28</div>
       <div class="bench" id="bench">
         <div class="tape" id="tape"></div>
         <div class="board-v" id="bench-board" title="Drag the whole board onto the tower, or pick a spot and cut it">
@@ -48,7 +48,7 @@
     <div class="bar top">
       <div class="stats">
         <div><small>Height</small><b id="height">0 ft</b></div>
-        <div><small>Base</small><b id="base">6 ft</b></div>
+        <div><small>Base</small><b id="base">6 × 6 ft</b></div>
         <div><small>Best</small><b id="best">0 ft</b><i id="best-base"></i></div>
       </div>
       <div class="tools">
@@ -65,7 +65,8 @@
     <button class="btn wind" id="wind"><svg viewBox="0 0 24 24"><path d="M3 8h10a3 3 0 1 0-3-3M3 12h15a3 3 0 1 1-3 3M3 16h7"/></svg>Call the wind</button>
 
     <div class="say" id="say" hidden><div class="who">The miller</div><div id="say-text"></div></div>
-    <div class="stage" id="stage" hidden><b id="stage-name"></b><span id="stage-sub"></span><div class="gauge"><i id="stage-bar"></i></div></div>
+    <div class="stage" id="stage" hidden><b id="stage-name"></b><span id="stage-sub"></span><div class="gauge"><i id="stage-bar"></i></div>
+      <div class="legend" id="legend" hidden><small>Strain</small><i></i><span><em>green easy</em><em>red breaking</em></span></div></div>
     <div class="card" id="question" hidden></div>
     <div class="card" id="result" hidden></div>
     <div class="flybonus" id="flybonus" hidden>+1 board</div>
@@ -73,6 +74,6 @@
   </main>
 </div>
 <div class="loading" id="loading">Climbing the hill…</div>
-<script type="module" src="main.js?v=6"></script>
+<script type="module" src="main.js?v=9"></script>
 </body>
 </html>

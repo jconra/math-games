@@ -276,10 +276,19 @@ export function crack(at) {
   noise(t, 0.09, { type: 'highpass', freq: 1800, gain: 0.55, attack: 0.002 });
   noise(t + 0.003, 0.05, { freq: 1100, q: 0.9, gain: 0.3, attack: 0.001 });                    // the splinter behind the snap
 }
-// a board hitting the ground (big = how hard)
+// a part of the tower giving way in the wind test (size 0..1: a lone board's nails letting go .. a storey folding): a
+// sharp crack of noise, the splinters behind it, and for a big one the dull wrench of the wood (all noise: no tones)
+export function snap(size = 0.5, at) {
+  if (!ok()) return; const t = now(at), k = clamp(size, 0, 1);
+  noise(t, 0.07 + k * 0.05, { type: 'highpass', freq: 2200 - k * 600, gain: 0.5 + k * 0.3, attack: 0.001 });
+  noise(t + 0.004, 0.06, { freq: 1200, q: 0.9, gain: 0.32 + k * 0.2, attack: 0.001 });
+  noise(t, 0.16 + k * 0.2, { type: 'lowpass', freq: 380 - k * 120, freqTo: 120, gain: 0.35 + k * 0.45, attack: 0.002 });
+  for (let i = 0; i < 3 + Math.round(k * 9); i++) noise(t + 0.02 + Math.pow(Math.random(), 1.4) * (0.15 + k * 0.4), rnd(0.012, 0.035), { type: 'highpass', freq: rnd(1800, 4200), gain: rnd(0.06, 0.18), attack: 0.001 });
+}
+// a board hitting the ground (big = how hard): a dull thump of low noise and the wood's clack
 export function thud(big = 0.5, at) {
   if (!ok()) return; const t = now(at);
-  tone(t, 0.25, { freq: 110 + Math.random() * 40, freqTo: 50, gain: 0.25 + big * 0.35 });
+  noise(t, 0.22, { type: 'lowpass', freq: 220 + Math.random() * 60, freqTo: 80, gain: 0.35 + big * 0.45, attack: 0.002 });
   noise(t, 0.12, { freq: 900 + Math.random() * 900, q: 4, gain: 0.15 + big * 0.25 });   // the wood's clack
 }
 // the whole tower coming down: a long roar, timbers splintering, and boards landing all over
@@ -289,7 +298,7 @@ export function crash(at) {
   for (let i = 0; i < 9; i++) {
     const s = t + 0.05 + Math.random() * 1.3;
     noise(s, 0.1, { freq: 1200 + Math.random() * 2000, q: 5, gain: 0.25 + Math.random() * 0.15 });
-    tone(s, 0.3, { freq: 70 + Math.random() * 60, freqTo: 40, gain: 0.25 });
+    noise(s, 0.28, { type: 'lowpass', freq: 160 + Math.random() * 80, freqTo: 60, gain: 0.4, attack: 0.002 });   // (a timber landing)
   }
   // splintering: bursts of tiny cracks while it leans and goes
   for (let i = 0; i < 26; i++) noise(t + Math.pow(Math.random(), 1.5) * 0.9, rnd(0.015, 0.04), { type: 'highpass', freq: rnd(1800, 4000), gain: rnd(0.08, 0.22), attack: 0.001 });

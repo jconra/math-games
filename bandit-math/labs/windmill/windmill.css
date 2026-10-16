@@ -31,6 +31,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
   background: repeating-linear-gradient(90deg, rgba(90,52,22,.0) 0 3px, rgba(90,52,22,.22) 3px 4px, rgba(90,52,22,0) 4px 7px),
               linear-gradient(90deg, #b98a58, #d2a571 45%, #b58552); box-shadow: 0 2px 6px rgba(0,0,0,.6), inset 0 0 0 1px rgba(60,35,15,.5); }
 .board-v.is-cut { animation: pop .35s ease-out; }
+/* (the fresh stack: more boards showing behind the one on the bench) */
+.board-v.is-stack { box-shadow: 4px -4px 0 #9c7146, 8px -8px 0 #86603a, 0 2px 6px rgba(0,0,0,.6), inset 0 0 0 1px rgba(60,35,15,.5); }
+.bench-label b { font: 700 15px Bitter, Georgia, serif; color: var(--brass-hi); letter-spacing: 0; }
 @keyframes pop { 0% { transform: translateY(-14px); } 100% { transform: none; } }
 .saw { position: absolute; left: -22px; right: -60px; height: 0; touch-action: none; cursor: ns-resize; }
 .saw::before { content: ''; position: absolute; left: 0; right: 0; top: -16px; height: 32px; }   /* (a fat target for fingers) */
@@ -50,6 +53,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .cut { align-self: center; min-width: 120px; font: 400 18px Smokum, Georgia, serif; letter-spacing: .08em; }
 .pieces-head { font: 400 14px Smokum, Georgia, serif; letter-spacing: 0.05em; color: var(--ink-2); border-top: 1px solid rgba(226,173,76,.2); padding-top: 8px; }
 .pieces { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 8px; min-height: 30px; }
+/* the cut pieces, one little stack per length, "×N" beside the length */
 .pieces-empty { color: var(--mute); font-size: 13px; font-style: italic; }
 /* (a finger on a piece is the page's to read, not the browser's: a swipe straight up or down scrolls the panel by
    hand, any other way lifts the piece) */
@@ -59,6 +63,10 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .piece.is-new { animation: pop .4s ease-out; }
 .piece .stick, .ghost-piece .stick { width: 16px; border-radius: 2px; background: linear-gradient(90deg, #b98a58, #d2a571 45%, #b58552); box-shadow: 0 1px 4px rgba(0,0,0,.6), inset 0 0 0 1px rgba(60,35,15,.5); }
 .piece span { font: 700 13px Bitter, Georgia, serif; color: var(--ink); white-space: nowrap; }
+.piece span b { margin-left: 3px; font-weight: 700; color: var(--brass-hi); }
+.piece .pile { position: relative; }
+.piece .pile i { position: absolute; width: 16px; border-radius: 2px; background: linear-gradient(90deg, #b98a58, #d2a571 45%, #b58552);
+  box-shadow: 0 1px 4px rgba(0,0,0,.6), inset 0 0 0 1px rgba(60,35,15,.5); }
 .ghost-piece { position: fixed; left: 0; top: 0; z-index: 50; pointer-events: none; display: flex; flex-direction: column; align-items: center; margin: -40px 0 0 -20px; }
 .ghost-piece .stick { height: 60px; transform: rotate(-12deg); }
 .ghost-piece span { font: 700 14px Bitter, Georgia, serif; background: var(--paper); color: var(--paper-ink); border-radius: 5px; padding: 0 6px; margin-top: 4px; }
@@ -74,7 +82,17 @@ button { font: inherit; color: inherit; cursor: pointer; }
 #overlay .ang rect { fill: rgba(30,20,12,.88); stroke: var(--brass); stroke-width: 1; }
 #overlay .ang text { font: 700 13px Bitter, Georgia, serif; fill: var(--brass-hi); text-anchor: middle; }
 #overlay .ang.is-square text { fill: var(--good); }
-#overlay .nail { fill: var(--brass-hi); stroke: #2a1a08; stroke-width: 2; }
+/* where the held board will be nailed: a bold green circle; the joints just nailed flash green */
+#overlay .joint { fill: rgba(62,224,90,.3); stroke: #2fd14d; stroke-width: 4.5; filter: drop-shadow(0 0 2px rgba(0,40,0,.9)); }
+#overlay .joint.is-end { fill: rgba(62,224,90,.18); stroke-width: 5; }
+/* (an end handle whose end touches a board, or the ground, turns green: "the sides turn green") */
+.gz.end.is-touching { background: #3ee05a; border-color: #0b4416; box-shadow: 0 0 0 3px rgba(62,224,90,.45), 0 0 14px rgba(62,224,90,.9); }
+.gz.move.is-touching { border-color: #3ee05a; box-shadow: 0 0 0 3px rgba(62,224,90,.5); }
+#overlay .twinend { fill: rgba(255,194,61,.28); stroke: #ffb21f; stroke-width: 4.5; filter: drop-shadow(0 0 2px rgba(60,30,0,.9)); }
+#overlay .flash { fill: none; stroke: #3ee05a; stroke-width: 5; filter: drop-shadow(0 0 3px rgba(0,60,0,.8)); }
+/* the plane a board seen end on is on ("1½ ft in from the front") */
+#overlay .planetag rect { fill: rgba(255,244,214,.96); stroke: #b88a2c; stroke-width: 1.4; filter: drop-shadow(0 2px 2px rgba(0,0,0,.45)); }
+#overlay .planetag text { font: 700 13px Bitter, Georgia, serif; fill: #4a2f17; text-anchor: middle; }
 /* an overhang: the part of a board past its last joint, pale, with the saw line where it comes off */
 #overlay .over { stroke: #fff6e0; stroke-width: 13; opacity: .55; stroke-linecap: butt; }
 #overlay .sawline { stroke: #b0401f; stroke-width: 3; stroke-dasharray: 4 3; filter: drop-shadow(0 0 2px #fff); }
@@ -85,10 +103,12 @@ button { font: inherit; color: inherit; cursor: pointer; }
 #overlay .tapeleg { stroke: #f2d466; stroke-width: 1.5; stroke-dasharray: 3 3; opacity: .9; }
 #overlay .tapetag rect { fill: var(--paper); stroke: #7a5530; stroke-width: 1; }
 #overlay .tapetag text { font: 700 15px Bitter, Georgia, serif; fill: var(--paper-ink); text-anchor: middle; }
+#overlay .tapetag.is-side rect { fill: #f3e6c4; }
 /* a brace's end that stops near a corner without sitting on it */
 #overlay .miss { fill: none; stroke: #d2401c; stroke-width: 3.5; filter: drop-shadow(0 0 2px #fff); }
 #overlay .misstag rect { fill: rgba(255,246,224,.95); stroke: #d2401c; stroke-width: 1.2; }
 #overlay .misstag text { font: 700 12px Bitter, Georgia, serif; fill: #a2301a; text-anchor: middle; }
+#overlay .miss { stroke-dasharray: 5 3; }
 /* why a twin is grey */
 #overlay .ghosttag rect { fill: rgba(30,20,12,.72); }
 #overlay .ghosttag text { font: 600 11px Bitter, Georgia, serif; fill: #e8e0d0; text-anchor: middle; }
@@ -98,6 +118,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .gz.end { width: 30px; height: 30px; margin: -15px 0 0 -15px; background: var(--brass-hi); border-color: #2a1a08; }
 .gz.end::after { content: ''; position: absolute; inset: -9px; border-radius: 50%; }     /* (bigger target than it looks) */
 .gz[hidden] { display: none; }
+/* a piece short on the screen: its end handles are open rings round its ends (the board shows through them) */
+#view.is-short .gz.end { width: 26px; height: 26px; margin: -13px 0 0 -13px; background: transparent; border: 3px solid var(--brass-hi); box-shadow: 0 0 0 1.5px rgba(0,0,0,.5), inset 0 0 0 1.5px rgba(0,0,0,.5); }
+#view.is-short .gz.end.is-touching { background: transparent; border-color: #3ee05a; box-shadow: 0 0 0 1.5px #0b4416, inset 0 0 0 1.5px #0b4416, 0 0 10px rgba(62,224,90,.8); }
 /* a footing stone's handle: a ring round the stone with arrows in and out */
 .gz.stone { width: 46px; height: 46px; margin: -23px 0 0 -23px; background: rgba(30,20,12,.28); border: 2px dashed var(--brass-hi); cursor: move; }
 .gz.stone::before { content: '\2194'; font: 700 20px Bitter, Georgia, serif; color: var(--brass-hi); text-shadow: 0 1px 2px #000; }
@@ -107,7 +130,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .nail-it { position: absolute; left: 0; top: 0; z-index: 7; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; padding: 0; touch-action: manipulation;
   border: 2px solid #6d4a17; background: linear-gradient(#f3c56b, #c4882e); box-shadow: 0 3px 10px rgba(0,0,0,.5); display: grid; place-items: center; }
 .nail-it svg { width: 26px; height: 26px; fill: none; stroke: #2a1a08; stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; }
-.nail-it:disabled { background: rgba(60,45,30,.7); border-color: rgba(226,173,76,.4); cursor: default; }
+.nail-it:disabled { background: rgba(60,45,30,.7); border-color: rgba(226,173,76,.4); cursor: default; pointer-events: none; }   /* (a drag starting on it turns the view) */
 .nail-it:disabled svg { stroke: rgba(243,197,107,.45); }
 .nail-it[hidden] { display: none; }
 /* the wall you are building on (the one facing you), small, just under the stats box (main.js sets its top from the
@@ -117,6 +140,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .hint-line { position: absolute; z-index: 7; left: 50%; bottom: 18px; transform: translateX(-50%); max-width: calc(100% - 330px); pointer-events: none; text-align: center;
   font-size: 13px; color: var(--ink); background: rgba(24,16,10,.62); border-radius: 8px; padding: 3px 11px; }
 .hint-line:empty, .wall-name[hidden] { display: none; }
+/* (while a board is held the chip names the plane it is on) */
+.wall-name.is-held { background: rgba(110,78,20,.78); color: #fff3d0; }
 
 .bar { position: absolute; z-index: 8; pointer-events: none; }
 .bar > *, .bar .row > * { pointer-events: auto; }
@@ -127,6 +152,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .stats small { font: 400 12px Smokum, Georgia, serif; letter-spacing: .05em; color: var(--mute); }
 .stats b { font: 700 19px Bitter, Georgia, serif; color: var(--brass-hi); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .stats i { font: italic 11px Bitter, Georgia, serif; color: var(--mute); }
+.stats b .u { font-size: .68em; font-weight: 600; margin: 0 .22em 0 .12em; }
+.stats b .u:last-child { margin-right: 0; }
 .stats i:empty { display: none; }
 .tools { margin-left: auto; }
 .tools .btn { padding: 6px 10px; font-size: 14px; }
@@ -157,6 +184,14 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .stage .gauge { margin-top: 6px; height: 6px; border-radius: 3px; background: rgba(255,255,255,.12); overflow: hidden; }
 .stage .gauge i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #a9d67f, #e2ad4c, #e08566); transition: width .3s; }
 .stage[hidden] { display: none; }
+/* the strain legend under the stage's name: green easy, yellow halfway, red breaking (tower3d.js strainColor) */
+.stage .legend { display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 8px; margin-top: 7px; text-align: left; }
+.stage .legend[hidden] { display: none; }
+.stage .legend small { grid-row: span 2; font: 400 13px Smokum, Georgia, serif; letter-spacing: .05em; color: var(--ink-2); }
+.stage .legend i { display: block; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #38b84a, #f2cf2e 50%, #e0321e); box-shadow: 0 0 0 1px rgba(0,0,0,.25); }
+.stage .legend span { display: flex; justify-content: space-between; font-size: 12px; color: var(--ink-2); }
+.stage .legend em { font-style: normal; }
+.card .pile-note { font-size: 13px; color: var(--paper-ink-2); }
 
 /* ── parchment cards: the question and the result ─────────────────────────────────────────────────────────────────── */
 .card { position: absolute; z-index: 20; left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(440px, calc(100% - 20px)); max-height: calc(100% - 20px); overflow: auto;
@@ -184,6 +219,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .card .sacks svg { width: 34px; height: 34px; flex: none; }
 .card .miller { font-style: italic; color: var(--paper-ink-2); }
 .card .stat { display: flex; gap: 18px; }
+/* (on a phone the result card can fold down to its title and buttons, so the tower shows above it) */
+.card .fold { display: none; }
 .card .stat small { display: block; font: 400 13px Smokum, Georgia, serif; letter-spacing: .05em; color: #8a6a48; }
 .flybonus { position: absolute; z-index: 30; left: 50%; top: 40%; font: 700 28px Bitter, Georgia, serif; color: var(--brass-hi); text-shadow: 0 2px 6px #000; pointer-events: none; }
 .flybonus.go { animation: fly 1.2s ease-in forwards; }
@@ -212,9 +249,11 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .cut { min-width: 0; width: 100%; padding: 6px; font-size: 16px; }
   .pieces { gap: 6px 4px; }
   .piece { min-width: 32px; }
-  .piece .stick { width: 12px; }
+  .piece .pile i { width: 12px; }
   .piece span { font-size: 11px; }
-  .bar.top { left: 6px; right: 6px; top: 6px; gap: 6px; }
+  .bar.top { left: 6px; right: 6px; top: 6px; gap: 6px; flex-wrap: nowrap; }     /* (the tools never drop onto the sky) */
+  .stats { min-width: 0; overflow: hidden; }
+  .tools { flex: none; }
   .stats { gap: 8px; padding: 4px 7px; }
   .stats small { font-size: 11px; }
   .stats b { font-size: 15px; }
@@ -230,7 +269,24 @@ button { font: inherit; color: inherit; cursor: pointer; }
   #view.is-holding .btn.wind { display: none; }
   .nail-it { width: 50px; height: 50px; margin: -25px 0 0 -25px; }
   .card .choices { grid-template-columns: repeat(2, 1fr); }
-  .card.is-side { left: 8px; right: 8px; top: auto; bottom: 8px; transform: none; width: auto; max-height: 62%; }
+  .card.is-side { left: 8px; right: 8px; top: auto; bottom: 8px; transform: none; width: auto; max-height: 60%; padding: 10px 12px; }
+  .card.is-side h2 { font-size: 19px; padding-right: 34px; }
+  .card.is-side .sub { font-size: 13px; line-height: 1.3; }
+  .card.is-side p { margin: 4px 0; }
+  .card.is-side .stat { display: grid; grid-template-columns: repeat(3, auto); gap: 12px; justify-content: start; margin-top: 4px; }
+  .card.is-side .stat small { font-size: 11px; white-space: nowrap; }
+  .card.is-side .big { font-size: 21px; white-space: nowrap; }
+  .card.is-side .sacks { margin: 6px 0; padding: 5px 8px; gap: 8px; font-size: 13px; line-height: 1.25; }
+  .card.is-side .sacks svg { width: 24px; height: 24px; }
+  .card.is-side .miller { font-size: 13.5px; line-height: 1.3; }
+  .card.is-side .pile-note { font-size: 12px; line-height: 1.25; }
+  .card.is-side .row { margin-top: 8px; gap: 6px; flex-wrap: nowrap; }
+  .card.is-side .row .btn { padding: 7px 9px; font-size: 14px; white-space: nowrap; }
+  .card.is-side .fold { display: grid; place-items: center; position: absolute; top: 6px; right: 6px; width: 34px; height: 34px; border-radius: 8px;
+    border: 1px solid rgba(122,85,48,.4); background: rgba(255,250,240,.7); color: #6d4b2b; padding: 0; }
+  .card.is-side .fold svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; transition: transform .2s; }
+  .card.is-side.is-folded .fold svg { transform: rotate(180deg); }
+  .card.is-side.is-folded .sub, .card.is-side.is-folded .stat, .card.is-side.is-folded .sacks, .card.is-side.is-folded .miller, .card.is-side.is-folded .pile-note { display: none; }
   .stage { top: 108px; min-width: 0; width: calc(100% - 20px); }
   .stage b { font-size: 19px; }
 }

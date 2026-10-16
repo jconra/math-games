@@ -3,11 +3,12 @@
 //   angle   the three corners of any triangle add up to 180 degrees: two are shown, find the third
 //   length  a right-angled triangle whose sides are whole feet (3-4-5, 6-8-10, 5-12-13, 8-15-17): two sides are shown,
 //           find the third (most often where the brace lands: how far along the other board)
-// And one about the tower's own size: when a crosspiece closes a bay (posts both sides, the ground or a crosspiece
-// below) whose width and height are the short sides of a whole-number right triangle, how long a brace reaches from
-// corner to corner (the stones set 3 feet apart and a crosspiece 4 feet up make a 5 foot brace).
+// And one about the tower's own size: when a crosspiece closes a bay (posts both sides, the ground, a crosspiece or
+// the beams below) whose width and height are the short sides of a whole-number right triangle, how long a brace
+// reaches from corner to corner (the stones set 3 feet apart and a crosspiece 4 feet up make a 5 foot brace).
+// The triangles are on one plane (any plane: an outer wall or an inside one), from tower.js planeSegments.
 // Pure functions (no page, no three.js) so node can test them.
-import { touch } from './frame.js';
+import { touch } from './touch.js';
 
 export const TRIPLES = [[3, 4, 5], [6, 8, 10], [5, 12, 13], [8, 15, 17]];
 const GROUND = { id: 'ground', ax: -100, ay: 0, bx: 100, by: 0, len: 200, ground: true };
@@ -43,7 +44,7 @@ function angleAt(p, q, r) {   // the corner angle at p, in degrees
 }
 const shuffle = (arr, rnd) => { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
 const whole = (v) => Math.abs(v - Math.round(v)) < 0.04;
-const nameOf = (s) => (s.ground ? 'the ground' : s.post ? 'the corner post' : Math.abs(s.ay - s.by) < 0.05 * s.len ? 'the crosspiece' : Math.abs(s.ax - s.bx) < 0.05 * s.len ? 'the post' : 'the other board');
+const nameOf = (s) => (s.ground ? 'the ground' : s.corner ? 'the corner post' : s.post ? 'the post' : Math.abs(s.ay - s.by) < 0.05 * s.len ? 'the crosspiece' : Math.abs(s.ax - s.bx) < 0.05 * s.len ? 'the post' : 'the other board');
 
 // pick one question for the triangles a new board made, or null. rnd: a 0..1 random function (for tests)
 export function makeQuestion(tris, newSeg, rnd = Math.random) {

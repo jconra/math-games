@@ -115,20 +115,21 @@ export function makeScene({ low = false } = {}) {
   const far = new THREE.Mesh(farGeo, new THREE.MeshLambertMaterial({ color: 0x9a9070, side: THREE.BackSide }));
   far.position.y = -40; scene.add(far);
 
-  // ── the footing stones under the four corners (they move when the builder sets the tower's width) ─────────────────
-  // Flat fieldstones, all about as thick: their size goes with their weight in the tipping check (frame.js stoneLb), so
-  // a wide base sits on big stones (about two and a half feet across at 6 feet apart) and a narrow one on small ones.
+  // ── the footing stones under the four corners (they move when the builder sets the base) ─────────────────────────
+  // Flat fieldstones, all about as thick: their size goes with their weight in the tipping check (frame.js stoneLb, of
+  // the narrower way across), so a wide base sits on big stones (about two and a half feet across at 6 feet apart) and
+  // a narrow one on small ones. setStones(W, D): W across the front (X), D along the sides (Z), feet.
   const stoneMat = new THREE.MeshLambertMaterial({ color: 0x8d877c });
   const stones = [0, 1, 2, 3].map((c) => {
     const s = new THREE.Mesh(new THREE.DodecahedronGeometry(0.2, 0), stoneMat);
     s.rotation.y = c * 1.9 + 0.4; s.castShadow = s.receiveShadow = true; scene.add(s); return s;
   });
   const CORNER = [[-1, 1], [1, 1], [1, -1], [-1, -1]];
-  function setStones(widthFt) {
-    const h = widthFt / 2 * FT, size = 1.9 * Math.sqrt(stoneLb(widthFt) / stoneLb(6));
-    stones.forEach((s, c) => { s.position.set(CORNER[c][0] * h, 0, CORNER[c][1] * h); s.scale.set(size, 0.45 * 1.9 * 0.75, size); });
+  function setStones(W, D = W) {
+    const hx = W / 2 * FT, hz = D / 2 * FT, size = 1.9 * Math.sqrt(stoneLb(Math.min(W, D)) / stoneLb(6));
+    stones.forEach((s, c) => { s.position.set(CORNER[c][0] * hx, 0, CORNER[c][1] * hz); s.scale.set(size, 0.45 * 1.9 * 0.75, size); });
   }
-  setStones(6);
+  setStones(6, 6);
 
   // ── the mill house: a stone ground floor, plank walls above, a shingle roof, a door, flour sacks ───────────────────
   const mill = new THREE.Group(); mill.position.set(MILL_AT[0], 0, MILL_AT[1]); mill.rotation.y = 0.6; mill.userData.crown = 4.2; scene.add(mill);
