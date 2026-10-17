@@ -31,6 +31,15 @@
 // slope of the wall from its ground line (so a point y feet up the slope stands Y = y / √(1 + t²) high). On an upright
 // plane y is just the height. Anything shown as a height uses Y. (A view from the back or the left sees u run to its
 // left: the view flips it, never the data.)
+//
+// TURNED WALLS (v5): besides 'Z' and 'X', a wall may be TURNED about the vertical, by 15 degrees at a time: family
+// 'R15' ... 'R165' (never R0 or R90: those are 'Z' and 'X'), turned that many degrees from the front's direction toward
+// the right side. A family's angle θ: Z = 0, X = 90, Rθ = θ; a family and its +180 are one family (θ kept in [0, 180)).
+// Its normal (the horizontal part, outward-ish) e(θ) = (sin θ, 0, cos θ), the way along it (u) d(θ) = (cos θ, 0, -sin θ)
+// (for Z and X exactly the u = X and u = -Z above). A point's place across the family: p·e(θ); the plane: p·e(θ) =
+// c + t·Y, keyed 'R45:1.414' (or 'R45:1.414~-1.5' leaning) like the others. The Z and X paths below never go through
+// sin and cos: they read p.Z and p.X, exactly as before. A turned board's lower end stands above the ground (the
+// first posts or legs stand on the stones, in the front and side walls); anything above may be turned.
 import { touchesAny } from './touch.js';
 
 export const START_W = 6;           // a new lab starts with the stones 6 feet apart each way
@@ -104,7 +113,7 @@ export const isPost = (b) => Math.abs(b.a.X - b.b.X) < 1e-6 && Math.abs(b.a.Z - 
 // a corner post: a post on a stone
 export const isCornerPost = (t, b) => isPost(b) && Math.abs(Math.abs(b.a.X) - t.W / 2) < 1e-6 && Math.abs(Math.abs(b.a.Z) - t.D / 2) < 1e-6;
 
-// ── planes (PLANES ARE X OR Z FAMILIES, upright or leaning: these few functions are where that is assumed) ───────────
+// ── planes (Z, X and the turned families, upright or leaning: coord, along and these few functions know the families) ──
 // planeKey(axis, c, k): the plane axis = c + (k/12)·Y; k = 0 (or none) is the upright plane, keyed as it always was
 export const planeKey = (axis, off, k = 0) => { const kk = snapK(k); return axis + ':' + r3(off) + (kk ? '~' + kk : ''); };
 // -> { axis, off (c: where it meets the ground), k (inches a foot), t (k / 12) }
@@ -113,8 +122,38 @@ export function parseKey(key) {
   const axis = key.slice(0, i), off = +key.slice(i + 1, j < 0 ? undefined : j), k = j < 0 ? 0 : +key.slice(j + 1);
   return { axis, off, k, t: tOfK(k) };
 }
-const famOf = (b) => (b.n === 'X' ? 'X' : 'Z');
-const coord = (axis, p) => (axis === 'Z' ? p.Z : p.X);
+// ── wall families: Z, X, and the turned ones ─────────────────────────────────────────────────────────────────────────
+export const TURN_STEP = 15;        // degrees: a wall turns by this much at a time
+export const TURN_MIN_Y = 0.25;     // feet: a turned board's lower end stands at least this high (off the ground)
+export const isTurnedFam = (axis) => typeof axis === 'string' && axis[0] === 'R';
+// a family's angle, degrees in [0, 180)
+export const famTheta = (axis) => (axis === 'Z' ? 0 : axis === 'X' ? 90 : +axis.slice(1));
+// the family at an angle (degrees, any), on the 15 degree steps, normalized: 0 -> 'Z', 90 -> 'X', 225 -> 'R45'
+export function famAt(deg) { const d = ((Math.round(deg / TURN_STEP) * TURN_STEP) % 180 + 180) % 180; return d === 0 ? 'Z' : d === 90 ? 'X' : 'R' + d; }
+// sin and cos of a turned family's angle (45: exactly the same number both ways, so a 45 degree square's planes agree)
+const SC = new Map();
+function scOf(axis) {
+  let v = SC.get(axis);
+  if (!v) { const a = famTheta(axis) * Math.PI / 180; v = famTheta(axis) === 45 ? [Math.SQRT1_2, Math.SQRT1_2] : famTheta(axis) === 135 ? [Math.SQRT1_2, -Math.SQRT1_2] : [Math.sin(a), Math.cos(a)]; SC.set(axis, v); }
+  return v;
+}
+// the family's horizontal normal e and its way along d, { X, Y, Z }
+export function famNormal(axis) { if (axis === 'Z') return { X: 0, Y: 0, Z: 1 }; if (axis === 'X') return { X: 1, Y: 0, Z: 0 }; const [s, c] = scOf(axis); return { X: s, Y: 0, Z: c }; }
+export function famAlong(axis) { if (axis === 'Z') return { X: 1, Y: 0, Z: 0 }; if (axis === 'X') return { X: 0, Y: 0, Z: -1 }; const [s, c] = scOf(axis); return { X: c, Y: 0, Z: -s }; }
+// the family at right angles (where a post's or a leg's second wall is): θ + 90
+export const otherFam = (axis) => (axis === 'Z' ? 'X' : axis === 'X' ? 'Z' : famAt(famTheta(axis) + 90));
+// does the other family's coordinate run with this family's u (+1) or against it (-1)? (Z: X = u; X: Z = -u)
+export const otherSign = (axis) => (axis === 'Z' ? 1 : axis === 'X' ? -1 : famTheta(axis) + 90 < 180 ? 1 : -1);
+// a key's (or a family's) family: 'R45:1.414~-1' -> 'R45'
+export const famOfKey = (key) => { const i = key.indexOf(':'); return i < 0 ? key : key.slice(0, i); };
+const famOf = (b) => (b.n === 'X' ? 'X' : isTurnedFam(b.n) ? b.n : 'Z');
+// a point's place across a family, and along it (u)
+export const coord = (axis, p) => { if (axis === 'Z') return p.Z; if (axis === 'X') return p.X; const [s, c] = scOf(axis); return p.X * s + p.Z * c; };
+const along = (axis, p) => { if (axis === 'Z') return p.X; if (axis === 'X') return -p.Z; const [s, c] = scOf(axis); return p.X * c - p.Z * s; };
+// a world vector turned about the vertical by deg degrees, the way a family's angle grows (front toward the right side)
+export function turnVec(v, deg) { const a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a); return { X: v.X * c + v.Z * s, Y: v.Y, Z: -v.X * s + v.Z * c }; }
+// a turned board may not stand on the ground: its lower end at least TURN_MIN_Y up
+export const turnedOnGround = (b) => isTurnedFam(b.n) && Math.min(b.a.Y, b.b.Y) < TURN_MIN_Y;
 // a board's own lean: its stored t (a level board's), else what its own ends say
 export function leanOf(b) {
   const dy = b.b.Y - b.a.Y;
@@ -133,7 +172,7 @@ export function planeKeyOf(b) {
 export function planesOf(b) {
   const own = planeKeyOf(b), dy = b.b.Y - b.a.Y;
   if (Math.abs(dy) < 1e-6) return [own];
-  const ax = famOf(b) === 'X' ? 'Z' : 'X', r = (coord(ax, b.b) - coord(ax, b.a)) / dy;
+  const ax = otherFam(famOf(b)), r = (coord(ax, b.b) - coord(ax, b.a)) / dy;
   if (!onLeanGrid(r)) return [own];
   const k = kOfT(r);
   return [own, planeKey(ax, coord(ax, b.a) - tOfK(k) * b.a.Y, k)];
@@ -143,11 +182,14 @@ export const isLeg = (b) => planesOf(b).length === 2;
 // world <-> a plane's own (u, y) (true lengths: y up the slope)
 export function toPlane(key, p) {
   const { axis, t } = parseKey(key), s = Math.sqrt(1 + t * t);
-  return axis === 'Z' ? { u: p.X, y: p.Y * s } : { u: -p.Z, y: p.Y * s };
+  return axis === 'Z' ? { u: p.X, y: p.Y * s } : axis === 'X' ? { u: -p.Z, y: p.Y * s } : { u: along(axis, p), y: p.Y * s };
 }
 export function fromPlane(key, u, y) {
   const { axis, off, t } = parseKey(key), Y = t ? y / Math.sqrt(1 + t * t) : y;
-  return axis === 'Z' ? { X: u, Y, Z: off + t * Y } : { X: off + t * Y, Y, Z: -u };
+  if (axis === 'Z') return { X: u, Y, Z: off + t * Y };
+  if (axis === 'X') return { X: off + t * Y, Y, Z: -u };
+  const [s, c] = scOf(axis), w = off + t * Y;
+  return { X: u * c + w * s, Y, Z: -u * s + w * c };
 }
 // where the plane stands across its family's axis at height Y (its offset there: c + t·Y)
 export const offsetAt = (key, Y) => { const { off, t } = parseKey(key); return off + t * Y; };
@@ -155,13 +197,20 @@ export const offsetAt = (key, Y) => { const { off, t } = parseKey(key); return o
 // Which side is out is read where the plane stands at height Y (its ground line, unless told).
 export function planeNormal(key, Y = 0) {
   const { axis, t } = parseKey(key), o = offsetAt(key, Y), s = o < -1e-9 ? -1 : 1, l = Math.sqrt(1 + t * t);
-  return axis === 'Z' ? { X: 0, Y: -s * t / l, Z: s / l } : { X: s / l, Y: -s * t / l, Z: 0 };
+  if (axis === 'Z') return { X: 0, Y: -s * t / l, Z: s / l };
+  if (axis === 'X') return { X: s / l, Y: -s * t / l, Z: 0 };
+  const e = famNormal(axis);
+  return { X: s * e.X / l, Y: -s * t / l, Z: s * e.Z / l };
 }
-// how far the footprint reaches along a plane: u from -half to +half
-export const planeHalf = (t, key) => (key[0] === 'Z' ? t.W / 2 : t.D / 2);
+// how far the footprint reaches along a plane: u from -half to +half (a turned plane: the base's corners seen along it)
+export const planeHalf = (t, key) => {
+  if (key[0] === 'Z') return t.W / 2;
+  if (key[0] === 'X') return t.D / 2;
+  const [s, c] = scOf(famOfKey(key)); return Math.abs(c) * t.W / 2 + Math.abs(s) * t.D / 2;
+};
 // the upright plane at right angles to `key` through a world point (the plane the view looks along when it sees `key`
 // end on: an end moves in it when its board is pushed in or out)
-export const crossKey = (key, p) => (key[0] === 'Z' ? planeKey('X', p.X) : planeKey('Z', p.Z));
+export const crossKey = (key, p) => (key[0] === 'Z' ? planeKey('X', p.X) : key[0] === 'X' ? planeKey('Z', p.Z) : planeKey(otherFam(famOfKey(key)), coord(otherFam(famOfKey(key)), p)));
 // the outer plane of face k (upright)
 export function facePlane(t, k) { return [planeKey('Z', t.D / 2), planeKey('X', t.W / 2), planeKey('Z', -t.D / 2), planeKey('X', -t.W / 2)][k]; }
 // which face an outer plane is (a plane standing on the stones' edge, upright or leaning), or -1 for an inner plane. A
@@ -194,7 +243,7 @@ export function leansIn(key, Y = 0) {
 }
 // is a plane over the footprint? (where it stands at height Y within the stones, or as far out as a lean allows)
 export function planeInside(t, key, Y = 0) {
-  const { axis } = parseKey(key), half = (axis === 'Z' ? t.D : t.W) / 2;
+  const { axis } = parseKey(key), half = axis === 'Z' ? t.D / 2 : axis === 'X' ? t.W / 2 : (() => { const [s, c] = scOf(axis); return Math.abs(s) * t.W / 2 + Math.abs(c) * t.D / 2; })();
   return Math.abs(offsetAt(key, Y)) <= half + (parseKey(key).k ? LEAN_MAX / 12 * Y : 0) + 1e-6;
 }
 
@@ -211,6 +260,15 @@ export function planeInside(t, key, Y = 0) {
 export function planeName(t, key, short = false, atY = null) {
   const k = faceOfPlane(t, key, atY), { axis, k: lean } = parseKey(key);
   let words;
+  if (isTurnedFam(axis)) {
+    // a turned wall: by the corner of the tower its outward side faces, and its turn ("the turned wall at the front
+    // right, turned 45°"); one through the middle "through the middle"
+    let Y = Math.min(footOfPlane(t, key), atY ?? Infinity); if (!Number.isFinite(Y)) Y = 0;
+    const o = offsetAt(key, Y), th = famTheta(axis), deg = Math.min(th, 180 - th);
+    const at = Math.abs(o) < 0.02 ? 'through the middle' : 'at the ' + cornerWords(o < 0 ? -1 : 1, axis);
+    words = (short ? 'turned wall ' : 'the turned wall ') + at + `, turned ${deg}°`;
+    return lean ? words + ', ' + leanWords(t, key, Y) : words;
+  }
   if (k >= 0) {
     words = short ? ['front wall', 'right side', 'back wall', 'left side'][k] : ['the front wall', 'the right side', 'the back wall', 'the left side'][k];
     return lean ? words + ', ' + leanWords(t, key, 0) : words;
@@ -239,9 +297,15 @@ export function planeName(t, key, short = false, atY = null) {
 const spoken = (ft) => lenLabel(ft).replace(/^(\d+) in\.$/, (m, n) => `${n} ${n === '1' ? 'inch' : 'inches'}`);
 // the lean of a plane in words: "leaning 2 inches in for every foot up", "leaning ½ inch out for every foot up", for a
 // plane through the middle "leaning 1 inch toward the back for every foot up"
+// which corner of the tower a turned family's normal points to, sg times e(θ): "front right", "back left", ...
+export function cornerWords(sg, axis) {
+  const e = famNormal(axis);
+  return (sg * e.Z > 0 ? 'front' : 'back') + ' ' + (sg * e.X > 0 ? 'right' : 'left');
+}
 export function leanWords(t, key, Y = 0) {
   const { axis, k } = parseKey(key); if (!k) return 'upright';
   const dir = leansIn(key, Y), o = offsetAt(key, Y);
+  if (isTurnedFam(axis) && Math.abs(o) < 1e-3) return `leaning ${leanRate(k, `toward the ${cornerWords(k > 0 ? 1 : -1, axis)}`)}`;
   if (Math.abs(o) < 1e-3) return `leaning ${leanRate(k, `toward the ${axis === 'Z' ? (k > 0 ? 'front' : 'back') : (k > 0 ? 'right side' : 'left side')}`)}`;
   return `leaning ${leanRate(k, dir > 0 ? 'in' : 'out')}`;
 }
@@ -375,8 +439,8 @@ export function floorsAcross(t, key) {
 // up the slope) and len feet long -> { a, b, len, n, t? } in the world (n: the plane's kind, so its wide face lies flat
 // on the plane; t: the plane's lean, only when it leans)
 export function boardOnPlane(key, u, y, ang, len) {
-  const a = roundPt(fromPlane(key, u, y)), b = roundPt(fromPlane(key, u + Math.cos(ang) * len, y + Math.sin(ang) * len)), { t } = parseKey(key);
-  return t ? { a, b, len, n: key[0], t } : { a, b, len, n: key[0] };
+  const a = roundPt(fromPlane(key, u, y)), b = roundPt(fromPlane(key, u + Math.cos(ang) * len, y + Math.sin(ang) * len)), { t, axis } = parseKey(key);
+  return t ? { a, b, len, n: axis, t } : { a, b, len, n: axis };
 }
 // every plane any board lies in
 export function planesInUse(t) { const s = new Set(); for (const b of t.boards) for (const k of planesOf(b)) s.add(k); return [...s]; }
@@ -398,12 +462,18 @@ export function cloneTower(t) { return JSON.parse(JSON.stringify(t)); }
 // with the lean as stored), so a·n - t·a.Y equals b·n - t·b.Y to the millionth; a leg (leg: true) onto its other wall
 // as well. (An upright wall's board is left exactly as given.)
 export function makeBoard(id, a, b, n, len, t = 0, leg = false) {
-  const A = roundPt(a), B = roundPt(b), ax = n === 'X' ? 'X' : 'Z', other = ax === 'X' ? 'Z' : 'X', dy = B.Y - A.Y;
+  const A = roundPt(a), B = roundPt(b), ax = n === 'X' ? 'X' : isTurnedFam(n) ? n : 'Z', other = otherFam(ax), dy = B.Y - A.Y;
   let lean = t ? tOfK(kOfT(t)) : 0;
+  // (squared up onto a wall: its coordinate there set to what it should be. A turned wall's is no single X or Z: the
+  // end moves along that wall's normal, then rounds)
+  const setC = (fam, want) => {
+    if (!isTurnedFam(fam)) { B[fam] = r6(want); return; }
+    const e = famNormal(fam), d = want - coord(fam, B); B.X = r6(B.X + e.X * d); B.Z = r6(B.Z + e.Z * d);
+  };
   if (Math.abs(dy) > 1e-6) {
     const r = (coord(ax, B) - coord(ax, A)) / dy;
-    if (onLeanGrid(r)) { lean = tOfK(kOfT(r)); if (lean) B[ax] = r6(A[ax] + lean * dy); } else lean = r6(r);
-    if (leg) { const r2 = (coord(other, B) - coord(other, A)) / dy; if (onLeanGrid(r2) && kOfT(r2)) B[other] = r6(A[other] + tOfK(kOfT(r2)) * dy); }
+    if (onLeanGrid(r)) { lean = tOfK(kOfT(r)); if (lean) setC(ax, coord(ax, A) + lean * dy); } else lean = r6(r);
+    if (leg) { const r2 = (coord(other, B) - coord(other, A)) / dy; if (onLeanGrid(r2) && kOfT(r2)) setC(other, coord(other, A) + tOfK(kOfT(r2)) * dy); }
   }
   const out = { id, a: A, b: B, len: len ?? Math.hypot(B.X - A.X, B.Y - A.Y, B.Z - A.Z), n };
   if (lean) out.t = lean;
@@ -422,6 +492,10 @@ export function makeBoard(id, a, b, n, len, t = 0, leg = false) {
 //                    tower built from twins is about equally stiff both ways
 // A wall's lean goes with it: the image of a wall leaning in leans in on the opposite wall (a mirror turns a Z-plane's
 // t to -t; the quarter turns carry the lean into the other family).
+//   a board in a TURNED wall (any board: wall boards, posts and legs alike) -> its images under the quarter turns about
+//                    the tower's middle (a quarter, a half, three quarters) on a square base, the half turn alone on an
+//                    oblong one: a turned square inside the level below is matched round by turning it, and the lean
+//                    turns with it (a wall leaning in leans in on every side).
 // An image that leaves the footprint, lands on itself, or touches nothing is not offered.
 // Returns [{ a, b, len, n, t? }], the opposite one first, not yet checked for wood.
 const swapN = (n) => (n === 'X' ? 'Z' : 'X');
@@ -430,7 +504,7 @@ export function twinsOf(t, board, touches = (g) => touchesAny(g, t.boards)) {
   // far as a lean allows: a crosspiece across legs leaning out reaches past them)
   const walls = wallsInUse(t), out = [], square = Math.abs(t.W - t.D) < 1e-6, leg = isCornerLine(t, board, walls), lean = leanOf(board);
   const leans = [...walls].some((k) => parseKey(k).k !== 0);
-  const unit = { X: { X: 1, Y: 0, Z: 0 }, Z: { X: 0, Y: 0, Z: 1 } };
+  const unit = { X: { X: 1, Y: 0, Z: 0 }, Z: { X: 0, Y: 0, Z: 1 } }, turned = isTurnedFam(board.n);
   // the image under f (a linear map of the ground), its n given; its lean: a level board's by where f sends its wall's
   // normal, any other by its own ends
   const img = (f, n) => {
@@ -438,18 +512,26 @@ export function twinsOf(t, board, touches = (g) => touchesAny(g, t.boards)) {
     let tt;
     if (Math.abs(b.Y - a.Y) > 1e-6) { const r = (coord(n, b) - coord(n, a)) / (b.Y - a.Y); tt = onLeanGrid(r) ? tOfK(kOfT(r)) : r6(r); }
     else {
-      const e = f(unit[famOf(board)]); tt = r6(lean * (n === 'X' ? e.X : e.Z));
+      const e = f(turned ? famNormal(board.n) : unit[famOf(board)]);
+      if (!isTurnedFam(n)) tt = r6(lean * (n === 'X' ? e.X : e.Z));
+      else { const q = famNormal(n); tt = r6(lean * (e.X * q.X + e.Z * q.Z)); }
       // (a horizontal twin lying right along a wall of its family that stands there with another lean, at its height,
       // takes that wall's lean, as one slid in by hand would: a beam's quarter-turned twin where a narrower level's
       // leaning front wall stands)
-      const there = [...walls].filter((w) => w[0] === n && Math.abs(offsetAt(w, a.Y) - coord(n, a)) < 1e-3).map((w) => parseKey(w).t);
+      const there = [...walls].filter((w) => famOfKey(w) === n && Math.abs(offsetAt(w, a.Y) - coord(n, a)) < 1e-3).map((w) => parseKey(w).t);
       if (there.length && !there.includes(tt)) tt = there.find((x) => x) ?? tt;
     }
     if (tt) g.t = tt;
     return g;
   };
   const mX = (p) => ({ X: -p.X, Y: p.Y, Z: p.Z }), mZ = (p) => ({ X: p.X, Y: p.Y, Z: -p.Z });
-  if (leg) {
+  if (turned) {
+    // (the quarter turns: (X, Z) -> (Z, -X) is a quarter of the way round, as a family's angle grows by 90)
+    const q1 = (p) => ({ X: p.Z, Y: p.Y, Z: -p.X }), q2 = (p) => mZ(mX(p)), q3 = (p) => ({ X: -p.Z, Y: p.Y, Z: p.X });
+    const th = famTheta(board.n);
+    out.push(img(q2, board.n));
+    if (square) out.push(img(q1, famAt(th + 90)), img(q3, famAt(th + 270)));
+  } else if (leg) {
     out.push(img((p) => mZ(mX(p)), board.n), img(mX, swapN(board.n)), img(mZ, swapN(board.n)));
   } else {
     const R = (p) => ({ X: p.Z, Y: p.Y, Z: -p.X }), Ri = (p) => ({ X: -p.Z, Y: p.Y, Z: p.X }), Rd = (p) => ({ X: -p.Z, Y: p.Y, Z: -p.X });

@@ -15,7 +15,7 @@
 // board nailed over others is pushed out along that same normal. A leg where two walls meet is drawn on its line, as a
 // post is.
 import * as THREE from 'three';
-import { isPost, planesOf, planeKeyOf, planeNormal, parseKey, toPlane, towerHeight, leanOf, wallsInUse, isCornerLine, wallPlanesOf } from './tower.js';
+import { isPost, planesOf, planeKeyOf, planeNormal, parseKey, toPlane, towerHeight, leanOf, wallsInUse, isCornerLine, wallPlanesOf, isTurnedFam, famNormal, famTheta } from './tower.js';
 import { touch, touch3, joints3, pointGap, TOL } from './touch.js';
 import { boardTexture } from './wood.js';
 import { FT } from './scene.js';
@@ -25,8 +25,9 @@ const BW = 3.5 / 12, BT = 1.5 / 12;       // board width and thickness, feet
 // handles and circles there too
 export const HELD_OFF = BW / 2 + BT / 2 + 0.01;
 const V = (p) => new THREE.Vector3(p.X * FT, p.Y * FT, p.Z * FT);
-// which way a board's wide face looks: its wall's normal, e_n tipped back by its lean (PLANES ARE X OR Z FAMILIES)
-const nVec = (n, t = 0) => (n === 'X' ? new THREE.Vector3(1, -t, 0) : new THREE.Vector3(0, -t, 1)).normalize();
+// which way a board's wide face looks: its wall's normal, e_n tipped back by its lean (e_n: X, Z, or a turned wall's
+// e(θ) = (sin θ, 0, cos θ))
+const nVec = (n, t = 0) => (n === 'X' ? new THREE.Vector3(1, -t, 0) : isTurnedFam(n) ? (({ X, Z }) => new THREE.Vector3(X, -t, Z))(famNormal(n)) : new THREE.Vector3(0, -t, 1)).normalize();
 const boardN = (b) => nVec(b.n, leanOf(b));
 const P3 = (n) => new THREE.Vector3(n.X, n.Y, n.Z);
 
@@ -392,8 +393,10 @@ export function makeTowerView(scene) {
     // (seen end on, the sheet is a line through the board: brighter, so you see which plane it is on as it moves)
     sheetMat.opacity = p.endOn ? 0.16 : 0.07; edgeMat.opacity = p.endOn ? 0.75 : 0.35;
     const { axis, off, t } = parseKey(p.key), w = p.half * 2 * FT, h = p.top * Math.sqrt(1 + t * t) * FT;
-    planeGroup.position.set(axis === 'X' ? off * FT : 0, 0, axis === 'Z' ? off * FT : 0);
-    planeGroup.rotation.y = axis === 'X' ? Math.PI / 2 : 0;
+    // (a turned wall: the sheet turned with it about the vertical, standing off along its normal e(θ))
+    const e = famNormal(axis);
+    planeGroup.position.set(e.X * off * FT, 0, e.Z * off * FT);
+    planeGroup.rotation.y = axis === 'X' ? Math.PI / 2 : famTheta(axis) * Math.PI / 180;
     tilt.rotation.x = Math.atan(t);
     sheet.scale.set(w, h, 1); sheet.position.set(0, h / 2, 0);
     sheetEdge.scale.set(w, h, 1); sheetEdge.position.set(0, h / 2, 0);

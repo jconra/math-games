@@ -239,3 +239,30 @@ export function legQuestion(L, k, rnd = Math.random, dir = 'in') {
     helper: { kind: 'legsq', L: len, r, h: A / 12, exact },
   };
 }
+
+// ── a turned level (TURN.md): a square turned inside the square below, its corners on the middles of the sides ──────
+// side: how long each side of the turned square is (Pythagoras: the corner triangle's two short sides are half the
+// square below, so a 4 ft square gives √(2² + 2²) = √8 ≈ 2 ft 10 in., to the inch); corner: how far its corner is from
+// the tower's middle (half the square below: it sits on the middle of a side). S: the square below, feet.
+export function turnedQuestion(S, rnd = Math.random, kind = 'side') {
+  if (!(S >= 1)) return null;
+  const h = S / 2, pts = [{ x: 0, y: 0 }, { x: h, y: 0 }, { x: 0, y: h }];
+  const base = { title: 'A turned square!', unit: '', pts, square: 0, angleLabels: ['', '', ''], turned: true };
+  // ("a 4-foot square": a length before the thing it measures)
+  const sq = lenWords(S).replace(/ (feet|foot)$/, '\u2011foot');
+  if (kind === 'corner') {
+    const A = h, choices = choicesFrom(A, [S, h / 2, S / Math.SQRT2, h + 0.5, h - 0.5, h * Math.SQRT2], rnd, 0.5);
+    return { ...base, kind: 'turned', sideLabels: [ftIn(h), '', ftIn(h)],
+      prompt: `A square turned inside a ${sq} square, its corners on the middles of the sides. How far is each of its corners from the middle of the tower?`,
+      choices, labels: choices.map(ftIn), answer: A,
+      why: `Each corner sits on the middle of a side, and the middle of a side is half of ${lenWords(S)} from the middle of the tower: ${lenWords(h)}.`,
+      helper: { kind: 'turnsq', S, corner: true } };
+  }
+  const A = Math.round(S / Math.SQRT2 * 12), hh = h * h;
+  const choices = choicesFrom(A, [Math.round(S * 12), Math.round(h * 12), Math.round(h * 2 * 12 * 0.75), A + 3, A - 3, Math.round(h * 12) + 6], rnd, 1);
+  return { ...base, kind: 'turned', sideLabels: [ftIn(h), '?', ftIn(h)],
+    prompt: `A square turned inside a ${sq} square, its corners on the middles of the sides. About how long is each side of the turned square (to the inch)?`,
+    choices, labels: choices.map((v) => ftIn(v / 12)), answer: A,
+    why: `Each side is the long side of a right triangle whose short sides are ${lenWords(h)} each: ${halfStr(h)}×${halfStr(h)} + ${halfStr(h)}×${halfStr(h)} = ${halfStr(2 * hh)}. Which number times itself makes ${halfStr(2 * hh)}? ${cap(lenWords(A / 12))} is ${(A / 12).toFixed(2)} feet, and ${(A / 12).toFixed(2)} × ${(A / 12).toFixed(2)} ≈ ${halfStr(2 * hh)}.`,
+    helper: { kind: 'turnsq', S } };
+}

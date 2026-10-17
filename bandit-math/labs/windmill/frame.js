@@ -166,7 +166,30 @@ const now = () => (typeof performance !== 'undefined' ? performance.now() : Date
 // A board's wall: its family ('X': a plane X = c + t·Y, 'Z': Z = c + t·Y; null when n is handed as a direction
 // { X, Y, Z }, which works too) and its lean t (k/12: k inches in a foot; absent or 0: upright). A post stands straight up,
 // so its own wall can't lean: its t is ignored.
-const famOf = (src) => (src.n === 'X' || src.n === 'Z' ? src.n : null);
+const famOf = (src) => (src.n === 'X' || src.n === 'Z' || isTurned(src.n) ? src.n : null);
+// Turned walls (TURN.md): a family 'R15' ... 'R165', a wall turned that many degrees from the front's direction toward
+// the right side, its normal e = (sin θ, 0, cos θ) (tower.js famNormal). Every sum below that reads a family's X or Z
+// goes through famCoord / famE, whose Z and X paths read the X or Z number itself, exactly as before turned walls.
+const isTurned = (n) => typeof n === 'string' && /^R\d+$/.test(n);
+const SCF = new Map();
+const famSC = (fam) => {
+  let v = SCF.get(fam);
+  if (!v) { const th = +fam.slice(1), a = th * Math.PI / 180; v = th === 45 ? [Math.SQRT1_2, Math.SQRT1_2] : th === 135 ? [Math.SQRT1_2, -Math.SQRT1_2] : [Math.sin(a), Math.cos(a)]; SCF.set(fam, v); }
+  return v;
+};
+// a point's place across a family ([X, Y, Z] or { X, Y, Z })
+const famCoord = (fam, P) => {
+  const x = Array.isArray(P) ? P[0] : P.X, z = Array.isArray(P) ? P[2] : P.Z;
+  if (fam === 'X') return x; if (fam === 'Z') return z;
+  const [s, c] = famSC(fam); return x * s + z * c;
+};
+// a family's horizontal normal, [X, Y, Z]
+const famE = (fam) => (fam === 'X' ? [1, 0, 0] : fam === 'Z' ? [0, 0, 1] : (() => { const [s, c] = famSC(fam); return [s, 0, c]; })());
+// the family at right angles: θ + 90, on [0, 180)
+const famOther = (fam) => {
+  if (fam === 'X') return 'Z'; if (fam === 'Z') return 'X';
+  const d = (+fam.slice(1) + 90) % 180; return d === 0 ? 'Z' : d === 90 ? 'X' : 'R' + d;
+};
 // A board's lean, as tower.js reads it: a level board's is its stored t (its ends can't show it); a rising board's is
 // what its own ends say (in an 'X' wall X = c + t·Y, so t = dX/dY along the board, whichever way it runs in the wall),
 // on the half inch a foot when it is within 1e-4 of it.
@@ -175,7 +198,7 @@ const leanOf = (src) => {
   const dy = src.b.Y - src.a.Y;
   let t;
   if (Math.abs(dy) < 1e-6) t = +src.t || 0;
-  else { const r = (fam === 'X' ? src.b.X - src.a.X : src.b.Z - src.a.Z) / dy, g = Math.round(r * 24) / 24; t = Math.abs(r - g) < 1e-4 ? g : r; }
+  else { const r = (fam === 'X' ? src.b.X - src.a.X : fam === 'Z' ? src.b.Z - src.a.Z : famCoord(fam, src.b) - famCoord(fam, src.a)) / dy, g = Math.round(r * 24) / 24; t = Math.abs(r - g) < 1e-4 ? g : r; }
   return Number.isFinite(t) && t ? t : 0;
 };
 const LEAN_MAX = 7 / 12;                // the steepest a wall may lean: 7 inches in a foot (about 30 degrees)
@@ -187,8 +210,8 @@ const wallKey = (fam, coordA, yA, t) => { const k = keyK(t); return fam + ':' + 
 // Which way a board's wide face looks: square to its own wall, normalize(e_n - t·e_Y) (e_n: the X or Z axis). This is
 // the one place that reads n.
 function faceNormal(b, d, t = leanOf(b)) {
-  let n = t ? (b.n === 'X' ? [1, -t, 0] : [0, -t, 1])
-    : b.n === 'X' ? [1, 0, 0] : b.n === 'Z' ? [0, 0, 1] : b.n && typeof b.n === 'object' ? [b.n.X || 0, b.n.Y || 0, b.n.Z || 0] : [0, 0, 1];
+  let n = t ? (b.n === 'X' ? [1, -t, 0] : isTurned(b.n) ? (([x, , z]) => [x, -t, z])(famE(b.n)) : [0, -t, 1])
+    : b.n === 'X' ? [1, 0, 0] : b.n === 'Z' ? [0, 0, 1] : isTurned(b.n) ? famE(b.n) : b.n && typeof b.n === 'object' ? [b.n.X || 0, b.n.Y || 0, b.n.Z || 0] : [0, 0, 1];
   // (square it up against the board's own line, in case it is a hair off)
   const k = dot(n, d); n = [n[0] - k * d[0], n[1] - k * d[1], n[2] - k * d[2]];
   if (norm(n) < 1e-6) n = Math.abs(d[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
@@ -196,14 +219,15 @@ function faceNormal(b, d, t = leanOf(b)) {
 }
 // A wall (a plane): { fam, t, c, n (its unit normal), P0 (a point on it) }; its key, when words need it: keyOfWall
 function wallOf(fam, t, c, P0) {
+  if (isTurned(fam)) { const e = famE(fam); return { fam, t, c, n: t ? unit([e[0], -t, e[2]]) : e, P0 }; }
   const n = t ? (fam === 'X' ? unit([1, -t, 0]) : unit([0, -t, 1])) : fam === 'X' ? [1, 0, 0] : [0, 0, 1];
   return { fam, t, c, n, P0 };
 }
-const keyOfWall = (w) => (w.fam ? wallKey(w.fam, w.fam === 'X' ? w.P0[0] : w.P0[2], w.P0[1], w.t) : null);
+const keyOfWall = (w) => (w.fam ? wallKey(w.fam, w.fam === 'X' ? w.P0[0] : w.fam === 'Z' ? w.P0[2] : famCoord(w.fam, w.P0), w.P0[1], w.t) : null);
 // the key of a board's own wall ('Z:1.5', 'X:-1', 'Z:3~-1.5'; null when n is a direction)
 function planeKeyOf(b) {
   const fam = famOf(b); if (!fam) return null;
-  return wallKey(fam, fam === 'X' ? b.a.X : b.a.Z, b.a.Y, leanOf(b));
+  return wallKey(fam, fam === 'X' ? b.a.X : fam === 'Z' ? b.a.Z : famCoord(fam, b.a), b.a.Y, leanOf(b));
 }
 // Two walls are one when they are the same family, lean the same, and lie within TOL of each other (square across).
 // (A wall handed as a direction: the same as before, square to each other within 8 degrees and within TOL.)
@@ -227,7 +251,7 @@ function prepBoards(t) {
     b.lo = Math.min(A[1], B[1]); b.hi = Math.max(A[1], B[1]);
     // its own wall (where that wall meets the ground: c = its coordinate across the wall less t·Y)
     const fam = famOf(src);
-    b.walls = [fam ? wallOf(fam, lean, (fam === 'X' ? A[0] : A[2]) - lean * A[1], A) : { fam: null, t: 0, c: 0, n, P0: A }];
+    b.walls = [fam ? wallOf(fam, lean, (fam === 'X' ? A[0] : fam === 'Z' ? A[2] : famCoord(fam, A)) - lean * A[1], A) : { fam: null, t: 0, c: 0, n, P0: A }];
     out.push(b);
   }
   out.forEach((b, i) => { b.i = i; });
@@ -241,12 +265,12 @@ function prepBoards(t) {
   for (const b of out) {
     const own = b.walls[0];
     if (!own.fam) continue;
-    const other = own.fam === 'X' ? 'Z' : 'X', ax = other === 'X' ? 0 : 2;
-    if (b.post) { b.walls.push(wallOf(other, 0, b.A[ax], b.A)); continue; }
+    const other = famOther(own.fam), ax = other === 'X' ? 0 : 2, cO = (P) => (isTurned(other) ? famCoord(other, P) : P[ax]);
+    if (b.post) { b.walls.push(wallOf(other, 0, cO(b.A), b.A)); continue; }
     const dy = b.B[1] - b.A[1]; if (Math.abs(dy) < 1e-9) continue;
-    const r = (b.B[ax] - b.A[ax]) / dy;
+    const r = (cO(b.B) - cO(b.A)) / dy;
     if (Math.abs(r) > LEAN_MAX + 1e-6) continue;
-    const wall = wallOf(other, r, b.A[ax] - r * b.A[1], b.A);
+    const wall = wallOf(other, r, cO(b.A) - r * b.A[1], b.A);
     if (owns.some((o) => sameWall(o, wall))) { b.walls.push(wall); b.leg = true; }
   }
   // (plain: an upright wall and no second wall but a post's, so everything about it is worked out as it was before walls
@@ -720,13 +744,47 @@ function shelterFor(boards, v) {
   // higher you go: at height Y it is at a + slope·Y (a wall leaning in on the windward side: its top further downwind).
   const screens = new Map(), wallOfBoard = boards.map(() => null);
   const screenOf = (key, a, slope) => { let S = screens.get(key); if (!S) { S = { a, slope, bands: new Map() }; screens.set(key, S); } return S; };
+  // A TURNED wall (TURN.md) stands at a slant to every one of the four winds. It shelters what is behind it as any wall
+  // does, where it stands at each height and across (its place along the wind changes across it), by how solid it looks
+  // seen along the wind (each bit of board counted by the area it shows the wind: its seen width times its length
+  // square across the flow, which for a wall square to the wind is the tally above, unchanged), and by how squarely it
+  // faces the wind: the shelter it would give square on, times cos of its slant (45 degrees: 0.71 of it; a wall the wind
+  // runs along: none), so nothing jumps at any angle. Its boards and posts (in both its turned walls) count in it, and
+  // they are in no other screen. Two winds from opposite sides see a mirror-image tower the same way.
+  const turnedScreens = new Map();
+  const tally = (S, b, wideOf) => {
+    const [s2, vp] = across(b, v); if (!s2) return;
+    const wide = wideOf(seenWidth(b, vp), s2), m = Math.max(1, Math.ceil(b.L / 0.25)), ds = b.L / m;
+    const ext = ds * Math.abs(b.d[1]) + WOOD.width * Math.abs(b.w[1]) + WOOD.thick * Math.abs(b.n[1]);
+    for (let k = 0; k < m; k++) {
+      const P = ptAt(b, (k + 0.5) * ds), u = dot(P, lat), y0 = Math.max(0, P[1] - ext / 2), y1 = Math.max(y0 + 1e-6, P[1] + ext / 2);
+      for (let j = Math.floor(y0 / BAND); j * BAND < y1; j++) {
+        const part = (Math.min(y1, (j + 1) * BAND) - Math.max(y0, j * BAND)) / (y1 - y0);
+        if (part <= 0) continue;
+        let band = S.bands.get(j); if (!band) { band = { area: 0, lo: Infinity, hi: -Infinity }; S.bands.set(j, band); }
+        band.area += ds * wide * part; band.lo = Math.min(band.lo, u); band.hi = Math.max(band.hi, u);
+      }
+    }
+  };
   for (const b of boards) {
+    if (b.walls[0].fam && isTurned(b.walls[0].fam)) {
+      for (const w of b.walls) {
+        if (!w.fam || !isTurned(w.fam)) continue;
+        const e = famE(w.fam), ev = e[0] * v[0] + e[2] * v[2], le = e[0] * lat[0] + e[2] * lat[2];
+        if (Math.abs(ev) < 1e-6) continue;
+        const key = w.fam + ':' + Math.round(w.c * 1000) + ':' + Math.round(w.t * 2400);
+        let S = turnedScreens.get(key); if (!S) { S = { c: w.c, t: w.t, ev, le, bands: new Map() }; turnedScreens.set(key, S); }
+        tally(S, b, (wide, s2) => wide * Math.sqrt(s2));
+      }
+      continue;
+    }
     let S;
     if (b.plain) {
       if (!b.post && Math.abs(dot(b.n, v)) < 0.99) continue;
       const a = dot(b.A, v); S = screenOf(Math.round(a * 1000), a, 0);
     } else {
-      const wall = b.walls.find((p) => p.fam && Math.abs(v[p.fam === 'X' ? 0 : 2]) > 0.99); if (!wall) continue;
+      // (a turned wall is never square to the four winds: it is no screen, and its boards shelter by their wakes alone)
+      const wall = b.walls.find((p) => p.fam && !isTurned(p.fam) && Math.abs(v[p.fam === 'X' ? 0 : 2]) > 0.99); if (!wall) continue;
       const sg = v[wall.fam === 'X' ? 0 : 2], a = sg * wall.c;
       S = screenOf(wall.t ? wall.fam + Math.round(wall.t * 2400) + ':' + Math.round(a * 1000) : Math.round(a * 1000), a, sg * wall.t);
       if (wall.t) wallOfBoard[b.i] = S;
@@ -746,7 +804,7 @@ function shelterFor(boards, v) {
       }
     }
   }
-  const walls = [...screens.values()];
+  const walls = [...screens.values()], slants = [...turnedScreens.values()];
   // each board's shadow: its line seen along the wind, and half its seen width
   const strips = boards.map((b) => {
     const [s2, vp] = across(b, v), wide = s2 ? seenWidth(b, vp) : WOOD.thick, h = wide / 2 + 0.01;
@@ -775,6 +833,13 @@ function shelterFor(boards, v) {
       const band = windowOf(S, P[1]);
       if (!band || uP <= band.lo + 0.25 || uP >= band.hi - 0.25) continue;
       s = Math.min(s, leeShade(band.area / (2 * SPREAD * (band.hi - band.lo + WOOD.width))));
+    }
+    // behind a turned wall: where it stands along the wind at this point's height and place across (p·e = c + t·Y)
+    for (const S of slants) {
+      if (aP - (S.c + S.t * P[1] - uP * S.le) / S.ev <= 0.3) continue;
+      const band = windowOf(S, P[1]);
+      if (!band || uP <= band.lo + 0.25 || uP >= band.hi - 0.25) continue;
+      s = Math.min(s, 1 - (1 - leeShade(band.area / (2 * SPREAD * (band.hi - band.lo + WOOD.width)))) * Math.abs(S.ev));
     }
     // in a board's wake: the nearest upwind spot of a board whose shadow strip covers this point. A board in front
     // shelters only as much of this one's width as it covers: a 1½ in edge in front of a 3½ in face hides 3/7 of it.
@@ -1140,7 +1205,7 @@ function roleOf(b, W, D, hubs, boards) {
   if (b.L > 4) return 'a brace';
   // (no joints to look at: by its reach, as v2 did: one that spans its wall is a brace. Its wall's family says which
   // way the wall runs, whatever it leans; a board handed with a direction for n: by which way that looks)
-  const fam = b.walls && b.walls[0].fam, span = fam ? (fam === 'X' ? D : W) : Math.abs(b.n[0]) > 0.9 ? D : W, reach = Math.hypot(b.B[0] - b.A[0], b.B[2] - b.A[2]);
+  const fam = b.walls && b.walls[0].fam, span = fam ? (fam === 'X' ? D : fam === 'Z' ? W : (([s, c]) => Math.abs(c) * W + Math.abs(s) * D)(famSC(fam))) : Math.abs(b.n[0]) > 0.9 ? D : W, reach = Math.hypot(b.B[0] - b.A[0], b.B[2] - b.A[2]);
   return reach < span - 0.25 ? 'a knee brace' : 'a brace';
 }
 // a board's name in words, as the test names it ("a corner post", "a beam", "a knee brace"...), from the joints it has in
@@ -1254,6 +1319,11 @@ function giveWay(state, M, chk, w) {
     const fam = Math.abs(w.dir[0]) >= Math.abs(w.dir[1]) ? 'Z' : 'X', wall = b.plain ? null : b.walls.find((x) => x.fam === fam);
     // (a leg or a board in a leaning wall: the wall it leaned in, leaning as it does)
     plane = wall ? keyOfWall(wall) : fam === 'Z' ? 'Z:' + r3(b.A[2]) : 'X:' + r3(b.A[0]);
+    // (a board of a turned level: of its own walls, the one the drift runs most nearly along)
+    if (b.walls[0].fam && isTurned(b.walls[0].fam)) {
+      const alongOf = (x) => { const e = famE(x.fam); return Math.abs(e[2] * w.dir[0] - e[0] * w.dir[1]); };
+      plane = keyOfWall(b.walls.reduce((p, x) => (x.fam && alongOf(x) > alongOf(p) ? x : p)));
+    }
   }
   const at = { X: w.P[0], Y: w.P[1], Z: w.P[2] };
   const ev = { kind, text, at, plane, broke, fell, util: +w.util.toFixed(3) };

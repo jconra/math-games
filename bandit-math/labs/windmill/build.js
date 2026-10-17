@@ -51,11 +51,19 @@
 // and of the handles; a "saw off" label can be tapped as well as the pale end it names.
 // A finger on the cut pieces: straight up and down scrolls the panel; any other way, or onto the view, lifts the piece.
 //
-// (PLANES ARE X OR Z FAMILIES: the held board's plane is a key like 'Z:1.5' or 'Z:3~-1.5'; its own coordinates on it are
-// (x, y) = (u, y) of tower.js, true lengths up a leaning wall. In-plane work is 2D, as v2's walls were; the plane's offset
-// and lean are what is new.)
+//   * TURNING (TURN.md): while a board is held face on, a ring lies flat round its pivot (its lower end; a horizontal
+//     board's end that touches something, else its a end), with a round knob on it. Drag the knob sideways (or round the
+//     ring) and the board turns about the vertical through the pivot, its whole wall with it, by 15 degrees at a time,
+//     the turn shown by it ("turned 45°"); a tap on the knob turns it one step. A turned board's lower end must stand
+//     off the ground (the first posts stand in the front and side walls): one turned on the ground can't be nailed.
+//     Turned back to square it is in the front or side walls again. Everything else works on a turned wall as on any.
+//
+// (The held board's plane is a key like 'Z:1.5', 'Z:3~-1.5' or 'R45:1.414' (a turned wall); its own coordinates on it
+// are (x, y) = (u, y) of tower.js, true lengths up a leaning wall. In-plane work is 2D, as v2's walls were; the plane's
+// family, offset and lean are what is new.)
 import { SNAP, BOARD_FT, MIN_W, MAX_W, LEAN_MAX, LEAN_STEP, planeSegments, planesOf, planeKey, parseKey, toPlane, planeHalf, faceOfPlane, planesInUse, crossings, crossKey, boardOnPlane, planeName, wallSpan, floorsAcross,
-  isPost, offsetAt, wallsInUse, isCornerLine, onLeanGrid, kOfT, tOfK, snapK, leanWords, fromPlane, faceWalls, inFootprint, spotTaken, planeKeyOf, wallPlanesOf, secondWall, lenLabel, lenWords, leanRate } from './tower.js';
+  isPost, offsetAt, wallsInUse, isCornerLine, onLeanGrid, kOfT, tOfK, snapK, leanWords, fromPlane, faceWalls, inFootprint, spotTaken, planeKeyOf, wallPlanesOf, secondWall, lenLabel, lenWords, leanRate,
+  famOfKey, coord, otherFam, otherSign, isTurnedFam, famAt, famTheta, famNormal, turnVec, turnedOnGround, TURN_STEP } from './tower.js';
 import { trianglesOf } from './questions.js';
 import { touch, touch3, findJoints, isKnee, contactsOf as contactsIn3D, pointGap, TOL } from './touch.js';
 import * as sound from './sound.js';
@@ -357,7 +365,7 @@ export function makeBuild(app) {
       if (inside) return lineOf(inside) && !nested ? (nested = true, onLine(inside)) : null;
       if (spotTaken(t, g)) return null;
       const key = keys.find((k) => k[0] === kind) || keys[0], A = toPlane(key, a), B = toPlane(key, b);
-      const h = { key, x: A.u, y: A.y, ang: Math.atan2(B.y - A.y, B.u - A.u), endOn: false, n: n || key[0], leg: false };
+      const h = { key, x: A.u, y: A.y, ang: Math.atan2(B.y - A.y, B.u - A.u), endOn: false, n: n || famOfKey(key), leg: false };
       h.leg = line && Math.abs(Math.cos(h.ang)) > 1e-6;
       return h;
     };
@@ -418,7 +426,7 @@ export function makeBuild(app) {
     const w = boardOnPlane(h.key, h.x, h.y, h.ang, h.len);
     if (h.n && lineLike(h)) {
       w.n = h.n;
-      if (h.n !== h.key[0]) {
+      if (h.n !== famOfKey(h.key)) {
         delete w.t;
         const dy = w.b.Y - w.a.Y, r = Math.abs(dy) > 1e-6 ? (across(h.n, w.b) - across(h.n, w.a)) / dy : 0;
         if (onLeanGrid(r) && kOfT(r)) w.t = tOfK(kOfT(r));
@@ -429,11 +437,12 @@ export function makeBuild(app) {
   };
   // how far out of square the view is from a plane (0: face on, PI/2: end on). (A leaning plane's level direction is
   // its family's, so this holds for it too.)
-  const offSquare = (key) => { const nAz = key[0] === 'Z' ? 0 : Math.PI / 2; return Math.acos(Math.min(1, Math.abs(Math.cos(app.viewAz() - nAz)))); };
-  // the plane's offset, and a world point's coordinate across it (PLANES ARE X OR Z FAMILIES)
+  const offSquare = (key) => { const nAz = key[0] === 'Z' ? 0 : key[0] === 'X' ? Math.PI / 2 : famTheta(famOfKey(key)) * DEG; return Math.acos(Math.min(1, Math.abs(Math.cos(app.viewAz() - nAz)))); };
+  // the plane's offset, and a world point's coordinate across it (key: a plane's key or a family)
   const offOf = (key) => parseKey(key).off;
-  const across = (key, p) => (key[0] === 'Z' ? p.Z : p.X);
-  const axisHalf = (axis) => (axis === 'Z' ? T().D / 2 : T().W / 2);
+  const across = (key, p) => (key[0] === 'Z' ? p.Z : key[0] === 'X' ? p.X : coord(famOfKey(key), p));
+  // how far out across a family the stones reach (a turned family: the base's corners seen across it)
+  const axisHalf = (axis) => (axis === 'Z' ? T().D / 2 : axis === 'X' ? T().W / 2 : (({ X, Z }) => Math.abs(X) * T().W / 2 + Math.abs(Z) * T().D / 2)(famNormal(axis)));
   // the held board's foot (its lower end) and top, in the world
   const footOf = (w) => (w.a.Y <= w.b.Y ? w.a : w.b), topOf = (w) => (w.a.Y <= w.b.Y ? w.b : w.a);
   // is the held board level (a dot seen end on: no top to lean by)?
@@ -632,7 +641,7 @@ export function makeBuild(app) {
         if (pivotEnd === 'a') h.ang = a;
         else { h.x = P.x + Math.cos(a) * h.len; h.y = P.y + Math.sin(a) * h.len; h.ang = a + Math.PI; }
         h.ang = Math.atan2(Math.sin(h.ang), Math.cos(h.ang));
-        if (!h.n) h.n = h.key[0];
+        if (!h.n) h.n = famOfKey(h.key);
         h.leg = !upright(h); h.asLeg = true;
         return;
       }
@@ -653,7 +662,7 @@ export function makeBuild(app) {
   // line where two leaning walls meet). -> the board's angle on its plane, from the pivot to its other end, or null
   // past the steepest lean (then it swings as a brace does).
   function legSwing(h, P, raw) {
-    const { axis, t: tP } = parseKey(h.key), other = axis === 'Z' ? 'X' : 'Z', sg = axis === 'Z' ? 1 : -1, sP = Math.sqrt(1 + tP * tP);
+    const { axis, t: tP } = parseKey(h.key), other = otherFam(axis), sg = otherSign(axis), sP = Math.sqrt(1 + tP * tP);
     const up = Math.sin(raw), side = Math.cos(raw);
     // (past the steepest lean: h.steep, so the builder is told why it stopped leaning and swings as a brace now)
     h.steep = true;
@@ -718,7 +727,7 @@ export function makeBuild(app) {
     const half = axisHalf(axis), t = T();
     let to = snapTo(v), near = 0.25;
     const offs = [-half, 0, half];
-    for (const k of wallsInUse(t)) if (k[0] === axis) offs.push(offOf(k));     // (upright walls only, here)
+    for (const k of wallsInUse(t)) if (famOfKey(k) === axis) offs.push(offOf(k));     // (upright walls only, here)
     for (const o of offs) if (Math.abs(o - v) < near) { near = Math.abs(o - v); to = o; }
     return clamp(to, -half, half);
   }
@@ -729,7 +738,7 @@ export function makeBuild(app) {
   // a quarter foot of it at its height, leaning or not, taking that wall's lean; else it keeps its own. Never past the
   // stones at its foot (on the ground) or past what the steepest lean reaches (higher up). -> the plane's key
   function snapPlane(h, v, Ym) {
-    const axis = h.key[0], { t: t0, k: k0 } = parseKey(h.key), w = worldOf(h), level = Math.abs(w.a.Y - w.b.Y) < 1e-6;
+    const axis = famOfKey(h.key), { t: t0, k: k0 } = parseKey(h.key), w = worldOf(h), level = Math.abs(w.a.Y - w.b.Y) < 1e-6;
     const Yf = Math.min(w.a.Y, w.b.Y) + (Ym - (w.a.Y + w.b.Y) / 2), vf = v + t0 * (Yf - Ym), half = axisHalf(axis);
     const reach = half + (Yf > 0.2 ? LEAN_MAX / 12 * Yf : 0);
     let best = null, near = 0.25;
@@ -743,7 +752,7 @@ export function makeBuild(app) {
     // (the stones' edges and the middle, at the foot; else the half foot. Where this family's outer walls lean, the half
     // foot is counted in from each of them as it stands at that height, and the middle is the middle between them, so
     // the board's wall can be set "1 ft in from the front" of a leaning front wall, as its name then says)
-    const outer = [1, -1].map((sg) => { const f = axis === 'Z' ? (sg > 0 ? 0 : 2) : (sg > 0 ? 1 : 3), ws = faceWallsOf(f); return ws.length ? offsetAt(ws[0], Yf) : sg * half; });
+    const outer = isTurnedFam(axis) ? [half, -half] : [1, -1].map((sg) => { const f = axis === 'Z' ? (sg > 0 ? 0 : 2) : (sg > 0 ? 1 : 3), ws = faceWallsOf(f); return ws.length ? offsetAt(ws[0], Yf) : sg * half; });
     let to, n2 = 0.25;
     if (outer[0] !== half || outer[1] !== -half) {
       // (counted from the nearer one only, so the steps read whole half feet from the wall the name goes by)
@@ -763,12 +772,12 @@ export function makeBuild(app) {
   const faceWallsOf = (f) => faceWalls(T(), f);
   // are there walls of this family that lean, or does the held board's own wall lean? (if not: everything in and out
   // goes as it always did)
-  const leaningAbout = (h) => parseKey(h.key).k !== 0 || [...wallsInUse(T())].some((k) => k[0] === h.key[0] && parseKey(k).k !== 0);
+  const leaningAbout = (h) => parseKey(h.key).k !== 0 || [...wallsInUse(T())].some((k) => famOfKey(k) === famOfKey(h.key) && parseKey(k).k !== 0);
   // move the held board onto the plane `off` of its kind (or the plane key `off`), its a end at in-plane height y (its
   // place along the plane kept): an end that comes near a joint or a board crossing the new plane lands on it, else the
   // half foot
   function snapInOut(h, off, y) {
-    h.key = typeof off === 'string' ? off : planeKey(h.key[0], off);
+    h.key = typeof off === 'string' ? off : planeKey(famOfKey(h.key), off);
     const ctx = context(h.key), dx = Math.cos(h.ang) * h.len, dy = Math.sin(h.ang) * h.len;
     const pts = [...jointsHere(ctx), ...ctx.segs.flatMap((s) => [{ x: s.ax, y: s.ay }, { x: s.bx, y: s.by }])];
     let best = null;
@@ -785,7 +794,7 @@ export function makeBuild(app) {
   // use standing at its foot when within an inch and a quarter of it (the board joins that wall). The foot stays put and
   // the board keeps its place and angle on its wall.
   function leanTo(h, foot, at, Y) {
-    const axis = h.key[0], rise = Y - foot.Y;
+    const axis = famOfKey(h.key), rise = Y - foot.Y;
     if (rise < 0.3) return;
     const r = (at - across(h.key, foot)) / rise, k0 = parseKey(h.key).k;
     // (with a little give: the lean moves on to the next half inch only once the drag is well past the middle between)
@@ -820,12 +829,12 @@ export function makeBuild(app) {
     if (lineLike(h)) {
       if (off > END_ON) {
         const w = worldOf(h);
-        if (isPost(w)) { const mid = w.a; if (!h.n) h.n = h.key[0]; h.key = crossKey(h.key, mid); const p = toPlane(h.key, mid); h.x = p.u; }
+        if (isPost(w)) { const mid = w.a; if (!h.n) h.n = famOfKey(h.key); h.key = crossKey(h.key, mid); const p = toPlane(h.key, mid); h.x = p.u; }
         else {
           // a leg (or a board straight up a leaning wall): over to its other wall, where it leans the way it does
           const other = planesOf(w).find((k) => k !== h.key);
           if (other) {
-            if (!h.n) h.n = h.key[0];
+            if (!h.n) h.n = famOfKey(h.key);
             const A = toPlane(other, w.a), B = toPlane(other, w.b);
             h.key = other; h.x = A.u; h.y = A.y; h.ang = Math.atan2(B.y - A.y, B.u - A.u); h.leg = !upright(h);
           }
@@ -876,7 +885,7 @@ export function makeBuild(app) {
           const top = Math.max(s.ay, s.by); if (top <= p.y + 1.5 && top > base) { base = top; bu = s.ay > s.by ? s.ax : s.bx; }
         }
         mx = near.bx === near.ax ? near.ax : bu; my = base;
-        if (near.bx !== near.ax) { h.leg = true; h.n = h.key[0]; }
+        if (near.bx !== near.ax) { h.leg = true; h.n = famOfKey(h.key); }
       }
       h.endOn = false;
       snapMove(h, mx, my);
@@ -1044,7 +1053,12 @@ export function makeBuild(app) {
     e.preventDefault(); e.stopPropagation(); sound.audioOn();
     updateView(h);
     let g;
-    if (mode === 'move' && h.endOn) {
+    if (mode === 'turn') {
+      // the turn ring's knob: the drag read along the way the knob moves for a turn, at least RING_RAD_PX pixels a radian
+      // (so on a phone a 15 degree step is a finger's width of drag, however flat the ring looks)
+      const ring = ringOf(h), Jl = Math.hypot(ring.J.x, ring.J.y), u = Jl > 1e-6 ? { x: ring.J.x / Jl, y: ring.J.y / Jl } : { x: 1, y: 0 };
+      g = { kind: 'grab', mode: 'turn', base: snapOfHeld(h), end: ring.end, u, scale: Math.max(Jl, RING_RAD_PX), deg: 0 };
+    } else if (mode === 'move' && h.endOn) {
       // seen end on: in and out (across its plane) and up and down, on the plane at right angles through its middle
       const w = worldOf(h), mid = { X: (w.a.X + w.b.X) / 2, Y: (w.a.Y + w.b.Y) / 2, Z: (w.a.Z + w.b.Z) / 2 }, cross = crossKey(h.key, mid);
       const hit = app.toWorld(cross, e.clientX, e.clientY); if (!hit) return;
@@ -1058,8 +1072,8 @@ export function makeBuild(app) {
       const hit = app.toWorld(cross, e.clientX, e.clientY); if (!hit) return;
       // (how far a half inch a foot moves the top on the screen: on a phone, a short board seen from afar moves a few
       // pixels a step, too fine for a finger, so the finger's move counts for less, LEAN_PX pixels a step at least)
-      const step = LEAN_STEP / 12 * Math.max(0.3, top.Y - foot.Y), ax = h.key[0], P0 = app.worldToScreen(top.X, top.Y, top.Z);
-      const P1 = app.worldToScreen(top.X + (ax === 'X' ? step : 0), top.Y, top.Z + (ax === 'Z' ? step : 0));
+      const step = LEAN_STEP / 12 * Math.max(0.3, top.Y - foot.Y), e = famNormal(famOfKey(h.key)), P0 = app.worldToScreen(top.X, top.Y, top.Z);
+      const P1 = app.worldToScreen(top.X + e.X * step, top.Y, top.Z + e.Z * step);
       const px = Math.hypot(P1.x - P0.x, P1.y - P0.y), want = e.pointerType === 'mouse' ? LEAN_PX_MOUSE : LEAN_PX;
       g = { kind: 'grab', mode: 'lean', cross, foot, dA: across(h.key, top) - across(h.key, hit), dY: top.Y - hit.Y, a0: across(h.key, hit), gain: px > 0 && px < want ? px / want : 1 };
     } else {
@@ -1071,7 +1085,7 @@ export function makeBuild(app) {
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     try { el.view.setPointerCapture(e.pointerId); } catch (err) { /* (a synthetic event has nothing to capture) */ }
   }
-  for (const [node, mode] of [[el.gMove, 'move'], [el.gA, 'a'], [el.gB, 'b']]) node.addEventListener('pointerdown', (e) => startGrab(mode, e));
+  for (const [node, mode] of [[el.gMove, 'move'], [el.gA, 'a'], [el.gB, 'b'], [el.gTurn, 'turn']]) if (node) node.addEventListener('pointerdown', (e) => startGrab(mode, e));
   // the footing stones' handles: drag one in or out (across sets W, along the sides sets D). The stone follows the finger
   // where the ground is seen well; where it is seen nearly edge on (the depth, from the front: a foot of it is a few
   // pixels on a phone), the finger moves it at most STONE_PX pixels per foot, so the half foot can be set by hand.
@@ -1085,7 +1099,7 @@ export function makeBuild(app) {
     try { el.view.setPointerCapture(e.pointerId); } catch (err) { /* fine */ }
     node.classList.add('is-active');
   }));
-  el.nailBtn.addEventListener('click', () => { if (app.held && contactsOf(app.held).length && !doubled(T(), worldOf(app.held))) app.nail(); });
+  el.nailBtn.addEventListener('click', () => { if (app.held && contactsOf(app.held).length && !doubled(T(), worldOf(app.held)) && !turnedOnGround(worldOf(app.held))) app.nail(); });
 
   el.view.addEventListener('pointerdown', (e) => {
     if (e.target.closest('button, .gz, .card, .bar, input')) return;
@@ -1125,10 +1139,20 @@ export function makeBuild(app) {
     if (gesture.kind === 'grab') {
       const h = app.held; if (!h) return;
       if (!gesture.moved && Math.hypot(e.clientX - gesture.x, e.clientY - gesture.y) < 6) return;
+      if (gesture.mode === 'turn') {
+        gesture.moved = true;
+        const rad = ((e.clientX - gesture.x) * gesture.u.x + (e.clientY - gesture.y) * gesture.u.y) / gesture.scale;
+        const deg = Math.round(rad / DEG / TURN_STEP) * TURN_STEP;
+        if (deg !== gesture.deg) {
+          restoreHeld(h, gesture.base); turnBy(h, deg, gesture.end); gesture.deg = deg;
+          sound.clatter(h.len * 0.4, 'set', undefined, 0.15);
+        }
+        app.dirty = true; return;
+      }
       if (gesture.mode === 'inout') {
         const hit = app.toWorld(gesture.cross, e.clientX, e.clientY); if (!hit) return;
         gesture.moved = true; h.fresh = false;
-        if (!leaningAbout(h)) snapInOut(h, snapOffset(h.key[0], across(h.key, hit) + gesture.o0), hit.Y + gesture.y0);
+        if (!leaningAbout(h)) snapInOut(h, snapOffset(famOfKey(h.key), across(h.key, hit) + gesture.o0), hit.Y + gesture.y0);
         else {
           const key = snapPlane(h, across(h.key, hit) + gesture.m0, hit.Y + gesture.ym0), { t } = parseKey(key);
           snapInOut(h, key, (hit.Y + gesture.ya0) * Math.sqrt(1 + t * t));
@@ -1186,6 +1210,7 @@ export function makeBuild(app) {
       const endCut = g.mode !== 'move' && g.mode !== 'inout' && heldOverhang().find((o) => o.end === g.mode);
       if (g.cut || endCut) cutHeld(g.cut || endCut);
       else if (g.mode === 'move' || g.mode === 'inout') turnHeld();
+      else if (g.mode === 'turn') { turnBy(app.held, TURN_STEP, g.end); sound.clatter(app.held.len * 0.5, 'set', undefined, 0.3); }
     } else if (g.kind === 'grab' && (g.mode === 'move' || g.mode === 'inout') && e.type === 'pointerup') {
       // carried off the view (onto the lumber panel): back to the pile
       const r = el.view.getBoundingClientRect();
@@ -1248,6 +1273,60 @@ export function makeBuild(app) {
     const mx = h.x + Math.cos(h.ang) * h.len / 2, my = h.y + Math.sin(h.ang) * h.len / 2;
     h.ang = steps[i] * DEG; snapMove(h, mx - Math.cos(h.ang) * h.len / 2, my - Math.sin(h.ang) * h.len / 2); h.fresh = false; app.dirty = true;
     sound.clatter(h.len * 0.6, 'set', undefined, 0.35);
+  }
+
+  // ── turning about the vertical (TURN.md) ───────────────────────────────────────────────────────────────────────────
+  // the end the held board turns about: its lower end; a horizontal board's end that touches something (a), else a
+  function turnPivot(h) {
+    const w = worldOf(h);
+    if (Math.abs(w.a.Y - w.b.Y) > 0.25) return w.a.Y <= w.b.Y ? 'a' : 'b';
+    const cs = contactsOf(h);
+    return !cs.some((c) => c.end === 'a') && cs.some((c) => c.end === 'b') ? 'b' : 'a';
+  }
+  // the held board as it was (a snapshot from snapOfHeld), put back
+  function restoreHeld(h, o) { for (const k of Object.keys(h)) if (!SNAP_SKIP.has(k) && !(k in o)) delete h[k]; Object.assign(h, o); }
+  // Turn the held board by deg degrees (a whole number of 15 degree steps; + toward the right side, as a family's angle
+  // grows) about the vertical through its pivot end: its wall turns with it (Z -> R45 -> X -> R135 -> Z ...), its lean
+  // too (in stays in), its place and its angle on its wall stay as they were. A post turns its wide face.
+  function turnBy(h, deg, pivotEnd = turnPivot(h)) {
+    if (!deg) return;
+    const w = worldOf(h), P = w[pivotEnd];
+    const rot = (p) => { const r = turnVec({ X: p.X - P.X, Y: 0, Z: p.Z - P.Z }, deg); return { X: P.X + r.X, Y: p.Y, Z: P.Z + r.Z }; };
+    const A = rot(w.a), B = rot(w.b), fam = famOfKey(h.key), th = famTheta(fam) + deg, nf = famAt(th);
+    // (past a half turn a family's normal points the other way: the same lean then reads with the other sign)
+    const sg = Math.round(Math.cos((th - famTheta(nf)) * DEG)), k = sg * parseKey(h.key).k;
+    const key = planeKey(nf, coord(nf, A) - tOfK(k) * A.Y, k), qa = toPlane(key, A), qb = toPlane(key, B);
+    if (lineLike(h)) h.n = famAt(famTheta(h.n || fam) + deg);
+    h.key = key; h.x = qa.u; h.y = qa.y; h.ang = Math.atan2(qb.y - qa.y, qb.u - qa.u);
+    h.ghost = false; h.fresh = false; h.endOn = false;
+  }
+  // the held board's turn in words: "turned 45°" (folded: a wall turned 135 degrees is turned 45 the other way), or
+  // "not turned" in a front or side wall
+  const turnWords = (key) => { const th = famTheta(famOfKey(key)); return th % 90 ? `turned ${Math.min(th, 180 - th)}°` : 'not turned'; };
+  // The ring on the screen: round the pivot, flat (level), its knob on the ring's point nearest the view when that
+  // stands well off the pivot and off the board's own line; else (a view from below or level with the pivot: that
+  // point sits on the board, on its other handles) RING_KNOB pixels out beside the board, square to it on the screen,
+  // on the side away from the nail button. J: how far the ring's near point moves on the screen for a turn of one
+  // radian (the drag is read along that). A, B: the board's ends on the screen; avoid: the nail button.
+  // -> { P (world), P0 (its screen spot), pts (screen ring), knob, J, end }
+  const RING_PX = 62, RING_KNOB = 58, RING_RAD_PX = 110;
+  function ringOf(h, A = null, B = null, avoid = null) {
+    const w = worldOf(h), end = turnPivot(h), P = w[end], az = app.viewAz();
+    const P0 = app.worldToScreen(P.X, P.Y, P.Z), P1 = app.worldToScreen(P.X, P.Y + 1, P.Z);
+    const R = clamp(RING_PX / Math.max(1, Math.hypot(P1.x - P0.x, P1.y - P0.y)), 0.4, 4);
+    const f = { X: Math.sin(az), Y: 0, Z: Math.cos(az) }, at = (deg) => { const v = turnVec(f, deg); return app.worldToScreen(P.X + v.X * R, P.Y, P.Z + v.Z * R); };
+    const pts = []; for (let d = 0; d < 360; d += 10) pts.push(at(d));
+    const F = at(0), F1 = at(5), J = { x: (F1.x - F.x) / (5 * DEG), y: (F1.y - F.y) / (5 * DEG) };
+    const fx = F.x - P0.x, fy = F.y - P0.y, fl = Math.hypot(fx, fy);
+    let bx = 0, by = 1;
+    if (A && B && Math.hypot(B.x - A.x, B.y - A.y) > 4) { const l = Math.hypot(B.x - A.x, B.y - A.y); bx = (B.x - A.x) / l; by = (B.y - A.y) / l; }
+    let knob;
+    if (fl >= RING_KNOB && Math.abs(fx * bx + fy * by) < 0.7 * fl) knob = { x: F.x, y: F.y };
+    else {
+      const sides = [{ x: -by, y: bx }, { x: by, y: -bx }].map((n) => ({ x: P0.x + n.x * RING_KNOB, y: P0.y + n.y * RING_KNOB }));
+      knob = avoid ? sides.sort((a, b) => Math.hypot(b.x - avoid.x, b.y - avoid.y) - Math.hypot(a.x - avoid.x, a.y - avoid.y))[0] : sides[0];
+    }
+    return { P, P0, pts, knob, J, end, behind: P0.behind || F.behind };
   }
 
   // a brace (not level, not upright, not a knee brace: on a narrow plane a short brace reaching post to post counts)
@@ -1317,6 +1396,9 @@ export function makeBuild(app) {
     const leanEnd = show && h.endOn && !levelH(h) ? (Math.sin(h.ang) > 0 ? 'b' : 'a') : null;
     el.gMove.hidden = !show; el.gA.hidden = !show || (h.endOn && leanEnd !== 'a'); el.gB.hidden = !show || (h.endOn && leanEnd !== 'b');
     el.gA.classList.toggle('is-lean', leanEnd === 'a'); el.gB.classList.toggle('is-lean', leanEnd === 'b');
+    // (the turn ring: while it is held face on)
+    const turnShow = show && !h.endOn;
+    if (el.gTurn) el.gTurn.hidden = !turnShow;
     el.nailBtn.hidden = !show; el.view.classList.toggle('is-holding', show); el.view.classList.toggle('is-endon', show && h.endOn);
     if (!show) el.view.classList.remove('is-short');
     let out = '', hint = '';
@@ -1370,9 +1452,24 @@ export function makeBuild(app) {
         leanAt = inView({ x: T0.x + (T0.x - F0.x) / sl * push, y: T0.y + (T0.y - F0.y) / sl * push });
       }
       place(el.gMove, moveAt); place(el.gA, leanEnd === 'a' ? leanAt : inView(A)); place(el.gB, leanEnd === 'b' ? leanAt : inView(B));
+      // the turn ring, flat round the pivot, and its knob (on the ring's near side, never on the end handle)
+      const ring = turnShow ? ringOf(h, A, B, nailAt) : null, knobAt = ring ? inView(ring.knob, 26) : null;
+      if (ring && el.gTurn) {
+        place(el.gTurn, knobAt);
+        if (!ring.behind) {
+          out += `<polygon class="turnring${gesture && gesture.mode === 'turn' ? ' is-on' : ''}" points="${ring.pts.map((q) => q.x.toFixed(1) + ',' + q.y.toFixed(1)).join(' ')}"/>`;
+          out += `<line class="turnstem" x1="${ring.P0.x}" y1="${ring.P0.y}" x2="${knobAt.x}" y2="${knobAt.y}"/>`;
+        }
+      }
       // (every label from here on keeps clear of the others, the check and the handles)
-      const tag = tagPlacer(r, [box(nailAt, 54), box(moveAt, 42), ...(h.endOn ? (leanAt ? [box(leanAt, 40)] : []) : [box(inView(A), 34), box(inView(B), 34)])]);
+      const tag = tagPlacer(r, [box(nailAt, 54), box(moveAt, 42), ...(h.endOn ? (leanAt ? [box(leanAt, 40)] : []) : [box(inView(A), 34), box(inView(B), 34)]), ...(knobAt ? [box(knobAt, 50)] : [])]);
       let tags = '', rings = '';
+      // how far it is turned, by the knob (while turning, or once turned)
+      if (knobAt && (famTheta(famOfKey(h.key)) % 90 || (gesture && gesture.mode === 'turn'))) {
+        const words = turnWords(h.key), w = words.length * 7.4 + 24;
+        const tt = tag(w, 24, [[0, 40], [w / 2 + 32, 0], [-w / 2 - 32, 0], [0, -40], [0, 66]].map(([dx, dy]) => ({ x: knobAt.x + dx, y: knobAt.y + dy })));
+        tags += `<g class="planetag is-turn"><rect x="${tt.x - w / 2}" y="${tt.y - 12}" width="${w}" height="24" rx="12"/><text x="${tt.x}" y="${tt.y + 5}">${words}</text></g>`;
+      }
       // the joints it will make: a bold green circle at each, and the angle where it meets a board on its own plane
       // (one angle per joint: where it meets a post and a crosspiece at once, the crosspiece's, as a carpenter reads
       // a brace; and none at all rather than one sitting on a handle)
@@ -1480,9 +1577,11 @@ export function makeBuild(app) {
         }
       }
       out += tags;
-      const dup = cs.length > 0 && doubled(t, wHeld), ok = cs.length > 0 && !dup;
+      const dup = cs.length > 0 && doubled(t, wHeld), ground = turnedOnGround(wHeld), ok = cs.length > 0 && !dup && !ground;
       el.nailBtn.disabled = !ok;
       hint = dup ? 'A board is already right there: slide it off that one first'
+        : ground ? 'A turned board stands up off the ground: put it on the level below, or turn it back square'
+        : gesture && gesture.mode === 'turn' ? 'Turning it about its foot, 15° at a time'
         : h.fresh && h.start && !h.left ? 'It starts where you left off · carry it further to put it somewhere else'
         : h.endOn ? (leanEnd ? (ok ? 'Seen end on: drag it in or out · drag its top to lean the wall · ✓ to nail' : 'Seen end on: drag it in or out, or drag its top to lean the wall')
           : ok ? 'Seen end on: drag it in or out · ✓ to nail it' : 'Seen end on: drag it in or out, onto a board')
@@ -1492,6 +1591,7 @@ export function makeBuild(app) {
         : over.length ? 'Tap ✂ saw off (or the pale end) to cut it at the joint, or ✓ to nail it'
         : h.ghost ? 'Lined up with its twin: ✓ to nail it'
         : h.leg ? 'A leg: swing its top to lean it · turn a quarter to lean it the other way · ✓ to nail it'
+        : isTurnedFam(famOfKey(h.key)) ? 'Tap ✓ to nail it · drag ↻ to turn it more'
         : 'Tap ✓ to nail it · turn a quarter to push it in or out';
       heldInfo = { glowA: cs.some((c) => c.end === 'a'), glowB: cs.some((c) => c.end === 'b'), endOn: h.endOn };
       el.gA.classList.toggle('is-touching', heldInfo.glowA); el.gB.classList.toggle('is-touching', heldInfo.glowB);

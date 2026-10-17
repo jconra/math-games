@@ -47,7 +47,7 @@
 // main.js wires it: makeTestRun(app, hooks) with the view, the fall, the miller's voice, the camera's watching spot,
 // the best record and what the buttons do (see `hooks` below). frame(dt) runs every animation frame.
 import { STAGES, boardRole } from './frame.js';
-import { towerHeight, planeName, planeSegments, planeKey, planeKeyOf, parseKey, planesOf, faceOfPlane, isPost, MAX_W, floorsAcross, wallsInUse, isCornerLine, offsetAt, wallSpan, lenWords, lenLabel, spellUnits } from './tower.js';
+import { towerHeight, planeName, planeSegments, planeKey, planeKeyOf, parseKey, planesOf, faceOfPlane, isPost, MAX_W, floorsAcross, wallsInUse, isCornerLine, offsetAt, wallSpan, lenWords, lenLabel, spellUnits, isTurnedFam, famOfKey } from './tower.js';
 import { pointGap, isKnee } from './touch.js';
 import { trianglesOf } from './questions.js';
 import { wind, FT } from './scene.js';
@@ -797,6 +797,20 @@ export function makeTestRun(app, hooks) {
     const inWind = !g || !g.name ? 'in a big gust' : g.stage === 0 ? 'even in a breeze' : `in a ${g.name.toLowerCase()}`;
     const KNEE = `Knee braces help, but a short brace can't keep a level from folding ${inWind}. A long brace corner to corner holds better.`;
     const P = posts.some((p) => isLegB(before, p, WS)) ? 'leg' : 'post', blows = (ws) => `the wall${ws.length > 1 ? 's' : ''} the wind from the ${g.from} blows along`;
+    // A TURNED level (TURN.md): its posts stand in turned walls, every one of them slanting to the wind, so every one
+    // of them helps hold it square; named "the turned level 8 feet up", its walls by whether they had a brace there.
+    const turnedPosts = posts.filter((p) => isTurnedFam(p.n));
+    if (turnedPosts.length && turnedPosts.length >= posts.length / 2) {
+      const foot2 = Math.min(...turnedPosts.map(lo)), tplace = `the turned level ${upWords(foot2)}`;
+      const tw = [...new Set(turnedPosts.flatMap((p) => planesOf(p).filter((k) => isTurnedFam(famOfKey(k)))))].filter((k) => turnedPosts.filter((p) => planesOf(p).includes(k)).length >= 2);
+      const braced = (k) => planeSegments(before, k).some((sg) => !sg.post && !pl(sg.src) && !isLevelB(sg.src) && lo(sg.src) < y1 - 0.3 && hi(sg.src) > y0 + 0.3 && !isKnee(sg, wallSpan(before, k, sg)));
+      const openT = tw.filter((k) => !braced(k));
+      const tadvice = !tw.length ? `${cap(tplace)} leaned too far and folded over. Brace each of its walls from a post's foot up to the next post.`
+        : openT.length === tw.length ? `${cap(tplace)} had no braces, so it folded over. A turned level needs its own braces, just like the base: one in each of its walls, from a post's foot up to the next post.`
+        : openT.length ? `${cap(tplace)} had no brace in ${openT.length === 1 ? 'one of its walls' : `${openT.length} of its walls`}, so it folded there. With the wind coming at its corner, every wall of a turned level works: brace them all.`
+        : `${cap(tplace)} had its braces, but still leaned too far. A second brace crossing the first, or a shorter level, stiffens it.`;
+      return { call: 'That level\'s folding!', what: `${tplace} racked and folded over${tail}`, advice: tadvice, focus: ev.broke };
+    }
     let advice;
     if (!walls.length) advice = /knee/.test(ev.text) ? KNEE : `${cap(place)} leaned too far and folded over. Brace every wall corner to corner, near 45 degrees.`;
     else if (leaning.length) advice = `The posts of ${place} lean across ${named(leaning)} without standing in ${leaning.length > 1 ? 'them' : 'it'}, so nothing held ${leaning.length > 1 ? 'them' : 'it'} square. Lean ${them(leaning)} to match the posts (look along ${leaning.length > 1 ? 'each' : 'it'} and drag a board's top in or out), or stand the posts straight up, and brace every wall.`;

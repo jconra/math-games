@@ -61,11 +61,12 @@
 import * as THREE from 'three';
 import { START_W, MAX_W, BOARDS, BOARD_FT, newTower, FACE_NORMAL, towerHeight, boardCount, twinsOf, spotTaken, isPost, isCornerPost, planesOf, planeKey, parseKey,
   planeSegments, planeNormal, planeHalf, planeName, facePlane, faceOfPlane, fromPlane, toPlane, makeBoard, planesInUse, wallSpan, floorsAcross,
-  wallsInUse, wallPlanesOf, isCornerLine, faceWalls, offsetAt, leanWords, leansIn, planeKeyOf, kOfT, onLeanGrid, footOfPlane, spellUnits } from './tower.js';
+  wallsInUse, wallPlanesOf, isCornerLine, faceWalls, offsetAt, leanWords, leansIn, planeKeyOf, kOfT, onLeanGrid, footOfPlane, spellUnits,
+  famNormal, famOfKey, famTheta, isTurnedFam } from './tower.js';
 import { isKnee, touch, touchesAny, grounded } from './touch.js';
 import { STAGES } from './frame.js';
 import { makeTestRun, flourFor } from './testrun.js';
-import { trianglesOf, makeQuestion, bayQuestion, slopeQuestion } from './questions.js';
+import { trianglesOf, makeQuestion, bayQuestion, slopeQuestion, turnedQuestion } from './questions.js';
 import { makeScene, makeMiller, wind, FT, groundY } from './scene.js';
 import { makeTowerView, HELD_OFF } from './tower3d.js';
 import { makeFall } from './fall.js';
@@ -81,7 +82,7 @@ const el = {
   view: $('view'), canvas: $('c'), overlay: $('overlay'), hint: $('hint'),
   count: $('count'), countWord: $('count-word'), bench: $('bench'), benchEmpty: $('bench-empty'), benchBoard: $('bench-board'), benchLabel: $('bench-label'),
   tape: $('tape'), saw: $('saw'), sawLabel: $('saw-label'), cutBtn: $('cut'), upNext: $('up-next'), pieces: $('pieces'), piecesEmpty: $('pieces-empty'),
-  gMove: $('g-move'), gA: $('g-a'), gB: $('g-b'), nailBtn: $('nail'), stoneHandles: [0, 1, 2, 3].map((c) => $('stone-' + c)),
+  gMove: $('g-move'), gA: $('g-a'), gB: $('g-b'), gTurn: $('g-turn'), nailBtn: $('nail'), stoneHandles: [0, 1, 2, 3].map((c) => $('stone-' + c)),
   selBar: $('sel-bar'), selHint: $('sel-hint'), panel: $('panel'),
 };
 
@@ -307,7 +308,8 @@ const aim = (cx, cy) => { const r = el.view.getBoundingClientRect(); ndc.set((cx
 app.toWorld = (key, cx, cy) => {
   aim(cx, cy);
   const { axis, off, t } = parseKey(key), l = Math.sqrt(1 + t * t), hit = new THREE.Vector3();
-  const N = axis === 'Z' ? new THREE.Vector3(0, -t / l, 1 / l) : new THREE.Vector3(1 / l, -t / l, 0);
+  const N = axis === 'Z' ? new THREE.Vector3(0, -t / l, 1 / l) : axis === 'X' ? new THREE.Vector3(1 / l, -t / l, 0)
+    : (({ X, Z }) => new THREE.Vector3(X / l, -t / l, Z / l))(famNormal(axis));
   if (!ray.ray.intersectPlane(new THREE.Plane(N, -off * FT / l), hit)) return null;
   return { X: hit.x / FT, Y: hit.y / FT, Z: hit.z / FT };
 };
@@ -329,6 +331,9 @@ app.pickPlane = (cx, cy, len) => {
   const s = kind === 'Z' ? (Math.cos(cam.az) >= 0 ? 1 : -1) : (Math.sin(cam.az) >= 0 ? 1 : -1);
   const offHere = (k) => { if (!parseKey(k).k) return parseKey(k).off; const w = app.toWorld(k, cx, cy); return w ? offsetAt(k, w.Y) : parseKey(k).off; };
   const keys = [...walls].filter((k) => k[0] === kind && offHere(k) * s >= -1e-6).sort((a, b) => offHere(b) * s - offHere(a) * s);
+  // (and the turned walls in use that face the view within 60 degrees: a piece carried onto a turned level's boards
+  // lands in their wall; with none built, nothing here changes)
+  for (const k of walls) if (isTurnedFam(famOfKey(k)) && Math.abs(Math.cos(cam.az - famTheta(famOfKey(k)) * DEG)) > 0.5) keys.push(k);
   aim(cx, cy);
   const under = new Set(); for (const hit of ray.intersectObjects(towerView.meshes(), false)) for (const k of wallPlanesOf(t, hit.object.userData.src, walls)) under.add(k);
   let best = null;
@@ -725,6 +730,17 @@ function afterNail(rec, key, first, heldLeg = false) {
   sinceQuestion++;
   const chance = questionsAsked === 0 ? 0.7 : sinceQuestion >= 5 ? 0.9 : 0.35;
   const askNow = () => forced || (sinceQuestion >= 2 && Math.random() < chance);
+  // the first board of a turned wall: how long is a side of a square turned inside the one below (or, later now and
+  // then, how far its corner is from the middle)
+  if (isTurnedFam(rec.n)) {
+    const firstTurned = t.boards.filter((b) => isTurnedFam(b.n)).length === 1;
+    if (firstTurned || (askNow() && Math.random() < 0.5)) {
+      const own = planesOf(rec)[0], th = famTheta(famOfKey(own)), c = Math.abs(parseKey(own).off);
+      const S = (th === 45 || th === 135) && c > 0.3 ? Math.round(2 * Math.SQRT2 * c * 2) / 2 : Math.min(t.W, t.D);
+      const q = turnedQuestion(S, Math.random, firstTurned || Math.random() < 0.5 ? 'side' : 'corner');
+      if (q) { setTimeout(() => ask(q), 450); sinceQuestion = 0; questionsAsked++; return; }
+    }
+  }
   // a board in a leaning wall (or a leg leaning across two): a question about the lean itself, as a rate
   const leanKeys = post ? [] : wallPlanesOf(t, rec).filter((w) => parseKey(w).k), leg = !post && isCornerLine(t, rec);
   if (leanKeys.length && askNow()) {
@@ -867,7 +883,7 @@ function ask(q) {
   app.phase = 'question'; app.select(null);
   const card = $('question');
   card.innerHTML = `<h2>${q.title || (q.bay ? 'How long a brace?' : 'A triangle!')}</h2><div class="sub">Get it right and the miller adds a board to your stack.</div>
-    ${q.kind === 'slope' ? slopePic(q.pic) : trianglePic(q)}<p>${q.prompt}</p>
+    ${q.kind === 'slope' ? slopePic(q.pic) : q.kind === 'turned' && q.helper.corner ? turnPic(q.helper.S, true, null) : trianglePic(q)}<p>${q.prompt}</p>
     <div class="choices${q.labels ? ' is-words' : ''}">${q.choices.map((c, i) => `<button data-v="${c}">${q.labels ? q.labels[i] : c + q.unit}</button>`).join('')}</div>
     <div class="why" hidden></div><div class="row" hidden><button class="btn go" id="q-ok">Back to building</button></div>`;
   card.hidden = false;
@@ -914,6 +930,24 @@ function trianglePic(q) {
   return out + '</svg>';
 }
 const norm = (x, y) => { const d = Math.hypot(x, y) || 1; return { x: x / d, y: y / d }; };
+// The turned square, from above: the square below (S feet), the turned one inside it with its corners on the middles,
+// one corner's right triangle shaded; corner: the middle of the tower and a dashed line out to a corner, with a "?"
+// when no words are given (the question itself), else the words beside it (the helper, when stuck)
+function turnPic(S, corner, words) {
+  const h = S / 2, z = 100 / S, x0 = 22, y0 = 14, sq = S * z;
+  const mid = [[x0 + sq / 2, y0], [x0 + sq, y0 + sq / 2], [x0 + sq / 2, y0 + sq], [x0, y0 + sq / 2]].map((p) => p.join(',')).join(' ');
+  return `<svg class="pic" viewBox="0 0 320 134"><rect x="${x0}" y="${y0}" width="${sq}" height="${sq}" fill="none" stroke="#6d4b2b" stroke-width="3"/>
+    <polygon points="${x0},${y0} ${x0 + sq / 2},${y0} ${x0},${y0 + sq / 2}" fill="rgba(210,165,113,.55)"/>
+    <polygon points="${mid}" fill="none" stroke="#8a5a32" stroke-width="4"/>
+    ${corner ? `<circle cx="${x0 + sq / 2}" cy="${y0 + sq / 2}" r="4" fill="#b0401f"/><line x1="${x0 + sq / 2}" y1="${y0 + sq / 2}" x2="${x0 + sq}" y2="${y0 + sq / 2}" stroke="#b0401f" stroke-width="2.5" stroke-dasharray="5 4"/>` : ''}
+    ${corner && !words ? `<text x="${x0 + sq * 0.75}" y="${y0 + sq / 2 - 8}" text-anchor="middle" ${PIC_FONT} font-size="18" fill="#b0401f">?</text>` : ''}
+    <text x="${x0 + sq / 4}" y="${y0 - 2}" text-anchor="middle" ${PIC_FONT} font-size="11" fill="#2b2219">${fmt(h)}</text>
+    <text x="${x0 + sq / 2}" y="${y0 + sq + 14}" text-anchor="middle" ${PIC_FONT} font-size="11" fill="#2b2219">${fmt(S)}</text>
+    ${words ? `<text x="${x0 + sq + 30}" y="52" ${PIC_FONT} font-size="14" fill="#2b2219">${words[0]}</text>
+    <text x="${x0 + sq + 30}" y="76" ${PIC_FONT} font-size="14" fill="#2b2219">${words[1]}</text>` : ''}</svg>`;
+}
+// a number for a sum in a picture: whole, or with a half ("1½")
+const num2 = (v) => { const f = Math.floor(v + 1e-9); return Math.abs(v - f - 0.5) < 1e-6 ? (f || '') + '½' : String(Math.round(v * 100) / 100); };
 // A leaning wall seen end on, for a slope question: the stones' line, the wall leaning from its foot (by its lean, drawn
 // a little steeper than true so the lean shows), a plumb line from the foot, the height marked, and the "?" across.
 // pic: { kind: 'lean', k, Y, dir } | { kind: 'taper', k, Y, W, dir } | { kind: 'leg', L, r }
@@ -979,6 +1013,11 @@ function stepsPic(k, Y, label = (n) => `${String(k * n).replace('.5', '½').repl
 function helperPic(q) {
   if (q.helper.kind === 'steps') return stepsPic(q.helper.k, q.helper.Y);
   if (q.helper.kind === 'taper') return stepsPic(q.helper.k, q.helper.Y, (n) => `${String(q.helper.k * n).replace('.5', '½')} in. each side`);
+  if (q.helper.kind === 'turnsq') {
+    const { S, corner } = q.helper, h = S / 2;
+    return turnPic(S, corner, corner ? [`on the middle of a side:`, `half of ${fmt(S)} = ${fmt(h)}`]
+      : [`${num2(h)}×${num2(h)} + ${num2(h)}×${num2(h)} = ${num2(2 * h * h)}`, `${(q.answer / 12).toFixed(2)} × ${(q.answer / 12).toFixed(2)} ≈ ${((q.answer / 12) ** 2).toFixed(1)}`]);
+  }
   if (q.helper.kind === 'legsq') {
     const { L, r, h, exact } = q.helper;
     if (exact) return helperPic({ helper: { kind: 'squares', a: Math.min(r, Math.round(h)), b: Math.max(r, Math.round(h)), c: L } });
@@ -1263,7 +1302,8 @@ window.WM = {
     return { key: h.key, x: h.x, y: h.y, ang: h.ang / DEG, len: h.len, endOn: !!h.endOn, a: w.a, b: w.b, n: w.n, t: w.t || 0, k: parseKey(h.key).k, leg: !!h.leg, planes: planesOf(w),
       plane: planeName(app.tower, h.key, false, Math.min(w.a.Y, w.b.Y)),
       ends: [toPage(app.planeToScreen(h.key, e.ax, e.ay, !post)), toPage(app.planeToScreen(h.key, e.bx, e.by, !post))],
-      mid: toPage(app.planeToScreen(h.key, (e.ax + e.bx) / 2, (e.ay + e.by) / 2, !post)), lean: lean('g-a') || lean('g-b') };
+      mid: toPage(app.planeToScreen(h.key, (e.ax + e.bx) / 2, (e.ay + e.by) / 2, !post)), lean: lean('g-a') || lean('g-b'),
+      knob: (() => { const n = $('g-turn'); if (!n || n.hidden) return null; const r = n.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })() };
   },
   turnTo: (face) => { cam.squareT = azOf(face) + Math.round((cam.az - azOf(face)) / (Math.PI * 2)) * Math.PI * 2; },
   state: () => ({ phase: app.phase, face: app.face, W: app.tower.W, D: app.tower.D, height: towerHeight(app.tower), boards: boardCount(app.tower), az: cam.az, camY: cam.y, zoom: cam.zoom, stonesOpen: stonesOpen(),

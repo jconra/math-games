@@ -123,6 +123,10 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .gz svg { width: 24px; height: 24px; fill: var(--brass-hi); }
 .gz.end { width: 30px; height: 30px; margin: -15px 0 0 -15px; background: var(--brass-hi); border-color: #2a1a08; }
 .gz.end::after { content: ''; position: absolute; inset: -9px; border-radius: 50%; }     /* (bigger target than it looks) */
+/* the turn ring's knob (TURN.md): big for a finger, its target bigger still */
+.gz.turn { width: 44px; height: 44px; margin: -22px 0 0 -22px; background: rgba(30,20,12,.7); border: 3px solid #7fd3ff; cursor: ew-resize; }
+.gz.turn svg { fill: #bfe9ff; width: 26px; height: 26px; }
+.gz.turn::after { content: ''; position: absolute; inset: -8px; border-radius: 50%; }
 .gz[hidden] { display: none; }
 /* a piece short on the screen: its end handles are open rings round its ends (the board shows through them) */
 #view.is-short .gz.end { width: 26px; height: 26px; margin: -13px 0 0 -13px; background: transparent; border: 3px solid var(--brass-hi); box-shadow: 0 0 0 1.5px rgba(0,0,0,.5), inset 0 0 0 1.5px rgba(0,0,0,.5); }
@@ -135,6 +139,12 @@ button { font: inherit; color: inherit; cursor: pointer; }
 #overlay .planetag.is-lean rect { fill: rgba(255,232,196,.97); stroke: #c0661c; }
 #overlay .planetag.is-lean text { fill: #6b2f0c; }
 #overlay .planetag.is-drag text { font-size: 14px; }
+/* the turn ring, flat round the held board's foot, and the turn's tag */
+#overlay .turnring { fill: rgba(127,211,255,.1); stroke: #7fd3ff; stroke-width: 2.5; stroke-dasharray: 7 5; filter: drop-shadow(0 0 2px rgba(0,0,0,.8)); }
+#overlay .turnring.is-on { stroke-width: 3.5; stroke-dasharray: none; fill: rgba(127,211,255,.18); }
+#overlay .turnstem { stroke: #7fd3ff; stroke-width: 2; opacity: .8; }
+#overlay .planetag.is-turn rect { fill: rgba(226,245,255,.97); stroke: #3c8fbf; }
+#overlay .planetag.is-turn text { fill: #123d57; }
 /* a footing stone's handle: a ring round the stone with arrows in and out */
 .gz.stone { width: 46px; height: 46px; margin: -23px 0 0 -23px; background: rgba(30,20,12,.28); border: 2px dashed var(--brass-hi); cursor: move; }
 .gz.stone::before { content: '\2194'; font: 700 20px Bitter, Georgia, serif; color: var(--brass-hi); text-shadow: 0 1px 2px #000; }
