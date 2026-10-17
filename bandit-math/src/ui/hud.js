@@ -12,8 +12,10 @@
 //                              goods: the homestead's goods in the saddlebags, as words ('30 eggs · 6 qt milk to sell')
 //   H.toast(text, kind)        a short note at the bottom for a couple of seconds (kind: 'good' | 'gold' | 'warn')
 //   H.prompt(text | null)      the door prompt ('E' then the words), or null to hide it
-//   H.rule({ main, sub, kind, buttons }) | H.rule(null)   the rule card under the compass ("Rope the 6-herd");
-//                              buttons: [{ label, onClick }] (a "Show me" for the number line); returns the card element
+//   H.rule({ main, sub, kind, buttons, speak }) | H.rule(null)   the rule card under the compass ("Rope the 6-herd");
+//                              buttons: [{ label, onClick }] (a "Show me" for the number line); speak: a function that
+//                              reads the card aloud again (a small speaker button in the card's corner; none without
+//                              it); returns the card element
 //   H.ruleEl                   the rule card element (the times chart keeps it in view)
 //   H.hint({ say, line, skip, also }) | H.hint(null)   the line under the rule card after a wrong pick: skip is the
 //                              trainer's skip-count list, where the wrong number is a string like '(27)'
@@ -60,6 +62,8 @@ export const ICON = {
   job: '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round"><ellipse cx="13.5" cy="8" rx="7.5" ry="4.4" stroke-width="2.2"/><path d="M7.6 11c-1.6 2.2-1.4 4.6.6 5.9 2.1 1.3 2.2 3.4.4 5.6" stroke-width="2.2"/></svg>',
   horse: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 21c0-4 1-7.5 3.5-10L8 7.8 9.6 6l2.6 1.6C14 4.6 17.5 3.5 19 5c.6 3.4-.6 5.6-2.4 6.6l2.6 3.6-1.6 1.6-3.6-2.4c-.6 2-1 4-1 6.6z" fill="currentColor"/><circle cx="15.6" cy="7.2" r="0.9" fill="#1d140c"/></svg>',
   dog: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 9l1.5-5 3 3.2h5L17.5 4 19 9c1 2 1 4.5 0 6.5-1.4 3-4 4.5-7 4.5s-5.6-1.5-7-4.5c-1-2-1-4.5 0-6.5z" fill="currentColor"/><circle cx="9.4" cy="11.5" r="1" fill="#1d140c"/><circle cx="14.6" cy="11.5" r="1" fill="#1d140c"/><ellipse cx="12" cy="15" rx="1.5" ry="1" fill="#1d140c"/></svg>',
+  // a small speaker with two sound waves (the card's "read it again" button)
+  speaker: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.2h3.6L12.4 5v14l-4.8-4.2H4z" fill="currentColor"/><path d="M15.4 9.2a4 4 0 0 1 0 5.6M17.9 6.6a7.6 7.6 0 0 1 0 10.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
   menu: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>',
 };
 // Old Hob's face: the same old-timer as in the lock-box panel (a wide hat, a white beard)
@@ -185,7 +189,7 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
     <div class="bmh-top">
       <div class="bmh-compass" aria-hidden="true"><div class="bmh-ticks"></div><div class="bmh-marks"></div><i class="bmh-notch"></i></div>
       <div class="bmh-job">
-        <div class="bmh-rule" hidden><div class="bmh-rule-main"></div><div class="bmh-rule-sub"></div><div class="bmh-rule-btns"></div></div>
+        <div class="bmh-rule" hidden><button class="bmh-rule-say" type="button" hidden aria-label="Read the card again" title="Read it again">${ICON.speaker}</button><div class="bmh-rule-main"></div><div class="bmh-rule-sub"></div><div class="bmh-rule-btns"></div></div>
         <div class="bmh-hint" hidden role="status"></div>
       </div>
     </div>
@@ -208,6 +212,7 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
   const $ = (q) => el.querySelector(q);
   const goldN = $('.bmh-gold-n'), titleEl = $('.bmh-title'), bountyEl = $('.bmh-bounty'), nextEl = $('.bmh-next');
   const badgesEl = $('.bmh-badges'), bagEl = $('.bmh-bag'), ruleEl = $('.bmh-rule'), hintEl = $('.bmh-hint');
+  const sayEl = $('.bmh-rule-say');
   const promptEl = $('.bmh-prompt'), toastEl = $('.bmh-toast'), hobEl = $('.bmh-hob'), perfEl = $('.bmh-perf');
   const ticksEl = $('.bmh-ticks'), marksEl = $('.bmh-marks'), compassEl = $('.bmh-compass');
   // (buttons let go of keyboard focus at once, so Space or Enter afterwards doesn't press them again)
@@ -294,10 +299,13 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
   narrow.addEventListener('change', () => placeBottom());
 
   // ── THE RULE CARD AND THE LINE UNDER IT ───────────────────────────────────────────────────────────────────────
+  let speakFn = null;
+  tap(sayEl, () => { if (speakFn) speakFn(); });
   function rule(o) {
-    if (!o) { ruleEl.hidden = true; return ruleEl; }
+    if (!o) { ruleEl.hidden = true; speakFn = null; return ruleEl; }
     ruleEl.hidden = false;
-    ruleEl.className = 'bmh-rule' + (o.kind ? ' is-' + o.kind : '');
+    ruleEl.className = 'bmh-rule' + (o.kind ? ' is-' + o.kind : '') + (o.speak ? ' has-say' : '');
+    speakFn = o.speak || null; sayEl.hidden = !speakFn;
     $('.bmh-rule-main').textContent = o.main || '';
     $('.bmh-rule-sub').textContent = o.sub || '';
     const btns = $('.bmh-rule-btns');

@@ -132,8 +132,8 @@ test('a tapered storey: walls in use, corner lines, the width between the legs',
   const top = t.boards[0].b.Y;
   assert.ok(top < 8 && top > 7.8, String(top));
   // the corner leg is named by both its walls
-  assert.equal(T.planeName(t, 'Z:3~-1.5'), 'the front wall, leaning in 1½ in a foot');
-  assert.equal(T.planeName(t, 'X:-3~1.5', true), 'left side, leaning in 1½ in a foot');
+  assert.equal(T.planeName(t, 'Z:3~-1.5'), 'the front wall, leaning 1½ inches in for every foot up');
+  assert.equal(T.planeName(t, 'X:-3~1.5', true), 'left side, leaning 1½ inches in for every foot up');
   assert.equal(T.faceOfPlane(t, 'Z:-3~1.5'), 2);
   assert.deepEqual(T.faceWalls(t, 1), ['X:3~-1.5']);
 });
@@ -141,17 +141,62 @@ test('a tapered storey: walls in use, corner lines, the width between the legs',
 test('names: in and out, upright, inside walls', () => {
   const t = { W: 6, D: 4, boards: [] };
   assert.equal(T.planeName(t, 'Z:2'), 'the front wall');
-  assert.equal(T.planeName(t, 'Z:2~-2'), 'the front wall, leaning in 2 in a foot');
-  assert.equal(T.planeName(t, 'Z:2~1'), 'the front wall, leaning out 1 in a foot');
-  assert.equal(T.planeName(t, 'Z:-2~2'), 'the back wall, leaning in 2 in a foot');
-  assert.equal(T.planeName(t, 'X:3~-0.5'), 'the right side, leaning in ½ in a foot');
-  assert.equal(T.planeName(t, 'X:-3~-7'), 'the left side, leaning out 7 in a foot');
+  assert.equal(T.planeName(t, 'Z:2~-2'), 'the front wall, leaning 2 inches in for every foot up');
+  assert.equal(T.planeName(t, 'Z:2~1'), 'the front wall, leaning 1 inch out for every foot up');
+  assert.equal(T.planeName(t, 'Z:-2~2'), 'the back wall, leaning 2 inches in for every foot up');
+  assert.equal(T.planeName(t, 'X:3~-0.5'), 'the right side, leaning ½ inch in for every foot up');
+  assert.equal(T.planeName(t, 'X:-3~-7'), 'the left side, leaning 7 inches out for every foot up');
   assert.equal(T.planeName(t, 'Z:0.5'), 'the inside wall 1½ ft in from the front');
-  // an inside wall that leans is named where it stands at its foot (a tier's wall on beams 8 ft up)
-  assert.equal(T.planeName(t, 'Z:1.5~-1.5', true, 8), '1½ ft in from the front, leaning in 1½ in a foot');
-  assert.equal(T.leanWords(t, 'Z:0~2'), 'leaning toward the front 2 in a foot');
+  // an inside wall that leans is named where it stands at its foot (a tier's wall on beams 8 ft up), and says which way
+  // it leans (it leans as no outer wall does here)
+  assert.equal(T.planeName(t, 'Z:1.5~-1.5', true, 8), '1½ ft in from the front, leaning 1½ inches toward the back for every foot up');
+  // a distance in inches says "inches" ("9 in in from the front" read badly)
+  assert.equal(T.planeName({ W: 6, D: 6, boards: [] }, 'Z:2.25'), 'the inside wall 9 inches in from the front');
+  assert.equal(T.leanWords(t, 'Z:0~2'), 'leaning 2 inches toward the front for every foot up');
   assert.equal(T.leanWords(t, 'Z:2'), 'upright');
   assert.equal(T.leansIn('Z:2~-2'), 1); assert.equal(T.leansIn('Z:2~2'), -1); assert.equal(T.leansIn('X:-3~1'), 1); assert.equal(T.leansIn('Z:2'), 0);
+});
+
+test('names of inside walls among leaning ones: from the outer wall as it stands there, one name a wall, no flip', () => {
+  // a 6 x 6 base, all four walls leaning in 2 in a foot (corner legs)
+  const k = -2 / 12, L = 8, legs = [];
+  let i = 0;
+  for (const [sx, sz, n] of [[-1, 1, 'Z'], [1, 1, 'X'], [1, -1, 'Z'], [-1, -1, 'X']]) {
+    const dd = [sx * k, 1, sz * k], mm = Math.hypot(...dd);
+    legs.push(T.makeBoard('l' + i++, { X: sx * 3, Y: 0, Z: sz * 3 }, { X: sx * 3 + dd[0] / mm * L, Y: dd[1] / mm * L, Z: sz * 3 + dd[2] / mm * L }, n, L, 0, true));
+  }
+  const t = { W: 6, D: 6, boards: legs };
+  assert.equal(T.planeName(t, 'Z:3~-2'), 'the front wall, leaning 2 inches in for every foot up');
+  // a level board at 5 ft pushed from the front wall toward the back, its lean kept (the front wall's): at 5 ft the
+  // front wall stands at Z 2.17 and the back wall at -2.17
+  const at5 = (o) => T.planeKey('Z', o + 2 / 12 * 5, -2), name = (o) => T.planeName(t, at5(o), true, 5);
+  assert.equal(name(3 - 10 / 12 - 1), '1 ft in from the front, leaning 2 inches in for every foot up', 'parallel to the front wall: its lean in its words');
+  assert.equal(name(0), 'halfway between the front and back, leaning 2 inches toward the back for every foot up');
+  assert.equal(name(-3 + 10 / 12 + 0.5), '½ ft in from the back, leaning 2 inches toward the back for every foot up');
+  // past the back wall as it stands at 5 ft (though still inside the stones): out past it, not "in from the back"
+  assert.equal(name(-2.5), '4 inches out past the back, leaning 2 inches toward the back for every foot up');
+  for (const o of [1, 0.5, 0.02, 0, -0.02, -1, -2]) assert.ok(!/leaning out/.test(name(o)), name(o));
+  // one wall, one name: a tier's leg (foot at 8 ft) and its crosspiece higher up in the same wall are named alike
+  const tierLeg = T.makeBoard('tl', { X: -2, Y: 8, Z: 2 }, { X: -2 + 1.5 / 12 * 7, Y: 15, Z: 2 - 1.5 / 12 * 7 }, 'Z', Math.hypot(1.5 / 12 * 7, 7, 1.5 / 12 * 7), 0, true);
+  const tt = { W: 6, D: 6, boards: [tierLeg] }, wk = T.planeKeyOf(tierLeg);
+  assert.equal(wk, 'Z:3~-1.5');
+  assert.equal(T.planeName(tt, wk, true, 11), T.planeName(tt, wk, true, 8));
+});
+
+test('a tier\'s leaning wall whose plane, carried down, meets the stones\' edge is an inside wall, not the outer one', () => {
+  const tierX = T.makeBoard('x', { X: -2, Y: 8, Z: 2 }, { X: 2, Y: 8, Z: 2 }, 'Z', 4, -0.125);
+  const t = { W: 6, D: 6, boards: [tierX] }, key = T.planeKeyOf(tierX);
+  assert.equal(key, 'Z:3~-1.5');
+  assert.equal(T.faceOfPlane(t, key), -1);
+  assert.equal(T.planeName(t, key), 'the inside wall 1 ft in from the front, leaning 1½ inches toward the back for every foot up');
+  // an empty plane: by the foot of the board about to go in it
+  assert.equal(T.faceOfPlane({ W: 6, D: 6, boards: [] }, key), 0);
+  assert.equal(T.faceOfPlane({ W: 6, D: 6, boards: [] }, key, 0), 0);
+  assert.equal(T.faceOfPlane({ W: 6, D: 6, boards: [] }, key, 8), -1);
+  // the outer wall itself, leaning from the stones, is still the front wall
+  const tp = taper();
+  assert.equal(T.faceOfPlane(tp, 'Z:3~-1.5'), 0);
+  assert.equal(T.planeName(tp, 'Z:3~-1.5'), 'the front wall, leaning 1½ inches in for every foot up');
 });
 
 test('twins carry the lean: a wall leaning in leans in on the opposite wall', () => {
@@ -215,7 +260,7 @@ test('slope questions: rate, width at a height, and a leg by the right triangle'
   for (const k of [0.5, 1, 1.5, 2, 3, 7]) {
     const q = Q.rateQuestion(k, 'in', rnd);
     assert.ok(q, 'k ' + k);
-    const Y = +q.prompt.match(/at (\d+) ft up/)[1];
+    const Y = +q.prompt.match(/at (\d+) feet? up/)[1];
     assert.equal(q.answer, k * Y);
     assert.ok(q.choices.includes(q.answer) && new Set(q.choices).size === q.choices.length && q.choices.length >= 3);
     assert.equal(q.labels.length, q.choices.length);
@@ -225,29 +270,134 @@ test('slope questions: rate, width at a height, and a leg by the right triangle'
   let seen8 = false;
   for (let i = 0; i < 40; i++) {
     const q = Q.widthQuestion(6, 1.5, 'in', seeded(i + 1));
-    const Y = +q.prompt.match(/at (\d+) ft up/)[1];
+    const Y = +q.prompt.match(/at (\d+) feet? up/)[1];
     assert.equal(q.answer, 6 - 2 * 1.5 * Y / 12);
     assert.ok(q.answer >= 1 && Number.isInteger(q.answer * 2));
     if (Y === 8) { seen8 = true; assert.equal(q.answer, 4); assert.ok(q.labels.includes('4 ft')); }
   }
   assert.ok(seen8, 'the 8 ft case comes up');
+  // every width question, any base, lean and way: four different buttons, the right answer on exactly one
+  for (const W of [2, 3, 4, 5, 6, 7, 8]) for (let k = 0.5; k <= 7; k += 0.5) for (const dir of ['in', 'out']) for (let i = 0; i < 30; i++) {
+    const q = Q.widthQuestion(W, k, dir, seeded(i * 7 + W)); if (!q) continue;
+    assert.equal(new Set(q.choices).size, q.choices.length, q.prompt + ' ' + q.labels.join(', '));
+    assert.equal(new Set(q.labels).size, q.labels.length, q.prompt + ' ' + q.labels.join(', '));
+    assert.equal(q.choices.filter((c) => c === q.answer).length, 1, q.prompt);
+    assert.ok(q.choices.length >= 3, q.prompt);
+  }
+  // a tier's width, at its own foot
+  const tq = Q.widthQuestion(4, 1.5, 'in', seeded(9), { atFoot: true });
+  assert.match(tq.prompt, /^4 feet across at its foot, .* How wide is it \d+ feet? above its foot\?$/);
+  // "inch" for ½ and 1, "inches" past that, in the prompt and the why
+  assert.match(Q.rateQuestion(1, 'in', seeded(3)).why, /^1 inch for each foot/);
+  assert.match(Q.rateQuestion(0.5, 'in', seeded(3)).why, /^½ inch for each foot/);
+  assert.match(Q.rateQuestion(2, 'in', seeded(3)).why, /^2 inches for each foot/);
+  // the same question twice running is avoided when another can be asked
+  for (let i = 0; i < 20; i++) {
+    const a = Q.slopeQuestion({ k: 1.5, dir: 'in', base: null }, seeded(i + 40));
+    const b = Q.slopeQuestion({ k: 1.5, dir: 'in', base: null }, seeded(i + 40), { avoid: a.prompt });
+    assert.notEqual(a.prompt, b.prompt);
+  }
   // leaning out gets wider
   const wo = Q.widthQuestion(4, 1, 'out', seeded(5));
   assert.ok(wo.answer > 4);
-  // a leg: a whole-number triple when the leg is that long, else "about" to the inch (8×8 − r×r)
-  const l5 = Q.legQuestion(5, 1.5, seeded(2));
-  assert.equal(l5.answer, 48, 'a 5 ft leg leaning 3 ft reaches 4 ft');
-  assert.ok(l5.labels.includes('4 ft'));
+  // a leg: a whole-number triple when the leg is that long and leans no steeper than a wall may (7 inches for every
+  // foot up), else "about" to the inch (8×8 − r×r); an example ("Say a leg..."), not the leg just nailed
+  const l13 = Q.legQuestion(13, 1.5, seeded(2));
+  assert.equal(l13.answer, 144, 'a 13 ft leg leaning 5 ft reaches 12 ft');
+  assert.ok(l13.labels.includes('12 ft'));
+  // (a 5 ft leg leaning 3 ft would lean 9 inches for every foot up: no wall leans that far, so no 3-4-5 here)
+  for (let i = 0; i < 40; i++) {
+    for (const L of [4, 5, 6, 8, 10]) {
+      const q = Q.legQuestion(L, 1.5, seeded(i + 100)), rr = +q.prompt.match(/stood (\d+) f(?:oo|ee)t in/)[1];
+      assert.ok(rr / Math.sqrt(L * L - rr * rr) <= 7 / 12 + 1e-9, `${L} ft leg, ${rr} ft in: steeper than a wall may lean`);
+      assert.match(q.prompt, /^Say a leg /);
+    }
+  }
   const l8 = Q.legQuestion(8, 1.5, seeded(4));
-  const r = +l8.prompt.match(/stands (\d+) ft in/)[1];
+  const r = +l8.prompt.match(/stood (\d+) f(?:oo|ee)t in/)[1];
   assert.equal(l8.answer, Math.round(Math.sqrt(64 - r * r) * 12));
   assert.ok(l8.answer < 96, 'a leaning leg reaches less high than it is long');
   assert.ok(Q.legQuestion(7.3, 1.5, seeded(4)) === null, 'only a whole-foot leg');
+  // a leg leaning out stands out from its foot, not in
+  assert.match(Q.legQuestion(8, 2, seeded(4), 'out').prompt, /stood \d+ f(?:oo|ee)t out from its foot/);
   // slopeQuestion picks among them; no lean, no question
   assert.equal(Q.slopeQuestion({ k: 0, dir: 'in' }), null);
   const kinds = new Set();
   for (let i = 0; i < 60; i++) kinds.add(Q.slopeQuestion({ k: 1.5, dir: 'in', base: 6, legLen: 8 }, seeded(i + 11)).pic.kind);
   assert.deepEqual([...kinds].sort(), ['lean', 'leg', 'taper']);
   // a leg 8 ft long leaning out 2 ft: 8² − 2² = 60, √60 ≈ 7 ft 9 in
-  assert.equal(Q.ftIn(Math.round(Math.sqrt(60) * 12) / 12), '7 ft 9 in');
+  assert.equal(Q.ftIn(Math.round(Math.sqrt(60) * 12) / 12), '7 ft 9 in.');
+});
+
+// the building side's words (labs/windmill/build.js): lengths on labels and in sentences, a lean as a rate, and where a
+// board's top end is, for the top bar
+test('labels say "in." with the period, sentences spell the units out, the top bar says where a top end is', async () => {
+  const B = await import('../labs/windmill/build.js');
+  assert.equal(B.fmt(4), '4 ft'); assert.equal(B.fmt(4.5), '4½ ft'); assert.equal(B.fmt(0.5), '½ ft');
+  assert.equal(B.fmt(1 + 7 / 12), '1 ft 7 in.'); assert.equal(B.fmt(9 / 12), '9 in.');
+  assert.equal(B.fmtWords(4), '4 feet'); assert.equal(B.fmtWords(1), '1 foot'); assert.equal(B.fmtWords(4.5), '4½ feet');
+  assert.equal(B.fmtWords(0.5), 'half a foot'); assert.equal(B.fmtWords(1 + 7 / 12), '1 foot 7 inches'); assert.equal(B.fmtWords(1 / 12), '1 inch');
+  assert.equal(B.fmtStat(15 + 11 / 12), '15<span class="u">ft</span> 11<span class="u">in.</span>');
+  assert.equal(B.rateWords(2.5, 'in'), '2½ inches in for every foot up');
+  assert.equal(B.rateWords(1, 'out'), '1 inch out for every foot up');
+  assert.equal(B.rateWords(0.5, 'in'), '½ inch in for every foot up');
+  // to the nearest inch, from the middle of the base: the right and front as seen from the front; "0" on the middle
+  // line; a leg and its mirror image read the same numbers with the opposite words
+  const leg = T.makeBoard('L', { X: -3, Y: 0, Z: 3 }, { X: -3 + 1.5 / 12 * 8, Y: 8, Z: 3 - 1.5 / 12 * 8 }, 'Z', 8, 0, true);
+  const top = leg.b.Y > leg.a.Y ? leg.b : leg.a;
+  assert.deepEqual(B.whereWords(top), ['2 ft left', '2 ft front', '8 ft up']);
+  assert.deepEqual(B.whereWords({ X: -top.X, Y: top.Y, Z: -top.Z }), ['2 ft right', '2 ft back', '8 ft up']);
+  assert.deepEqual(B.whereWords({ X: 0.02, Y: 7.76, Z: -1.01 }), ['0', '1 ft back', '7 ft 9 in. up']);
+  // an end on a half inch (a horizontal board 5 ft up on a front wall leaning 1½ inches in for every foot up ends at X =
+  // ±2 ft 4½ in.): both ends, and the mirror image on the back wall, read the same numbers
+  for (const Y of [1, 3, 5, 7]) {
+    const x = 3 - 1.5 / 12 * Y, ws = [[-x, x], [x, x], [-x, -x], [x, -x]].map(([X, Z]) => B.whereWords({ X, Y, Z }));
+    const nums = ws.map((w) => w.map((s) => s.replace(/ (left|right|front|back)$/, '')).join('|'));
+    assert.ok(nums.every((n) => n === nums[0]), `at ${Y} ft: ${nums.join(' / ')}`);
+  }
+  assert.deepEqual(B.whereWords({ X: -2.875, Y: 2, Z: 0 }), ['2 ft 11 in. left', '0', '2 ft up']);
+  assert.deepEqual(B.whereWords({ X: 2.875, Y: 2, Z: 0 }), ['2 ft 11 in. right', '0', '2 ft up']);
+});
+
+// A steep brace from a corner of a lean-out tower, swung along its own leaning wall: its slant happens to be a lean a
+// wall can have, but the front wall already leans OUT at that corner, so it stays a brace in its own wall (no phantom
+// front wall leaning in 6½ inches for every foot up, wall-board twins, n kept); a first lone leg leaning two ways, and a
+// leg leaning in on top of a straight level's corner post, are still legs.
+test('a steep brace at a lean-out corner stays a brace; legs stay legs', () => {
+  const k = 2 / 12, L = 8, Y = L / Math.sqrt(1 + 2 * k * k);
+  const leg = (id, sx, sz, n) => T.makeBoard(id, { X: 3 * sx, Y: 0, Z: 2 * sz }, { X: sx * (3 + k * Y), Y, Z: sz * (2 + k * Y) }, n, L, 0, true);
+  const t = { W: 6, D: 4, boards: [leg('fr', 1, 1, 'X'), leg('bl', -1, -1, 'X'), leg('fl', -1, 1, 'Z'), leg('br', 1, -1, 'Z')] };
+  const yb = 8 / Math.sqrt(1 + k * k + (6.5 / 12) ** 2);
+  const B = T.makeBoard('br1', { X: 3, Y: 0, Z: 2 }, { X: 3 + k * yb, Y: yb, Z: 2 - 6.5 / 12 * yb }, 'X', 8, k);
+  assert.deepEqual(T.planesOf(B), ['X:3~2', 'Z:2~-6.5'], 'it lies in that plane, as geometry goes');
+  assert.equal(T.secondWall(t, B), null, 'but held, it is no leg there');
+  t.boards.push(B);
+  const W = T.wallsInUse(t);
+  assert.ok(!W.has('Z:2~-6.5'), 'no phantom front wall');
+  assert.equal(T.isCornerLine(t, B, W), false);
+  assert.ok(t.boards.slice(0, 4).every((b) => T.isCornerLine(t, b, W)), 'the four corner legs are still legs');
+  const tw = T.twinsOf(t, B, null);
+  assert.ok(tw.length >= 1 && tw.every((g) => g.n === 'X'), 'its twins are braces in the side walls, wide face the same way');
+  // a lone leg leaning two ways founds both its walls
+  const t2 = { W: 6, D: 6, boards: [T.makeBoard('L', { X: -3, Y: 0, Z: 3 }, { X: -3 + 1.5 / 12 * 7.9, Y: 7.9, Z: 3 - 1.5 / 12 * 7.9 }, 'Z', 8, 0, true)] };
+  assert.equal(T.isCornerLine(t2, t2.boards[0], T.wallsInUse(t2)), true);
+  assert.equal(T.twinsOf(t2, t2.boards[0], null).length, 3);
+  // a leg leaning in on top of a straight level's corner post (an upright wall at its foot doesn't stop it)
+  const t3 = { W: 6, D: 6, boards: [T.makeBoard('P', { X: -3, Y: 0, Z: 3 }, { X: -3, Y: 8, Z: 3 }, 'Z', 8), T.makeBoard('L2', { X: -3, Y: 8, Z: 3 }, { X: -3 + 1.5 / 12 * 7.9, Y: 15.9, Z: 3 - 1.5 / 12 * 7.9 }, 'Z', 8, 0, true)] };
+  assert.equal(T.isCornerLine(t3, t3.boards[1], T.wallsInUse(t3)), true);
+  // a next level's leg may lean steeper than the level below's, from its top (that wall only ENDS there)
+  const lo = t2.boards[0], top = lo.b.Y > lo.a.Y ? lo.b : lo.a, k3 = 3 / 12, y3 = 7.5;
+  const t4 = { W: 6, D: 6, boards: [lo, T.makeBoard('U', top, { X: top.X + k3 * y3, Y: top.Y + y3, Z: top.Z - k3 * y3 }, 'Z', null, 0, true)] };
+  assert.deepEqual(T.wallPlanesOf(t4, t4.boards[1]).map((k2) => T.parseKey(k2).k), [-3, 3], 'a leg in two walls leaning 3 inches for every foot up');
+});
+// A horizontal twin that lies right along a leaning wall takes that wall's lean (a narrower level's beam turned a
+// quarter lands in its leaning front wall), as one slid in by hand would.
+test('a horizontal twin along a leaning wall takes its lean', () => {
+  const k = 1.5 / 12, legs = [[-2, 2, 'Z'], [2, 2, 'X'], [2, -2, 'Z'], [-2, -2, 'X']].map(([x, z, n], i) => T.makeBoard('L' + i, { X: x + Math.sign(x) * k * 8, Y: 0, Z: z + Math.sign(z) * k * 8 }, { X: x - Math.sign(x) * k * 2, Y: 10, Z: z - Math.sign(z) * k * 2 }, n, null, 0, true));
+  // (the legs pass X = ±2, Z = ±2 at 8 ft; a beam across at 8 ft in the side wall X = 2 leaning in)
+  const t = { W: 6, D: 6, boards: legs };
+  // (an upright beam, as one laid across the level below is: its twins land on the leaning walls' lines)
+  const beam = T.makeBoard('beam', { X: 2, Y: 8, Z: 2 }, { X: 2, Y: 8, Z: -2 }, 'X', 4);
+  t.boards.push(beam);
+  for (const g of T.twinsOf(t, beam, null)) assert.ok(T.wallsInUse(t).has(T.planeKeyOf(g)), `${T.planeKeyOf(g)} is a wall in use`);
 });

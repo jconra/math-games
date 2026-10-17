@@ -22,7 +22,7 @@
 
 import {
   loadRiders, saveRider, newRider, deleteRider, titleOf, nextTitle, badgesOf, accuracyOf, storageWorks,
-  bucklesOf, buckleProgress, jobWords, BUCKLE_NAMES, TOPICS, MISSIONS, LOOKS, SKINS, HAIRS, MAX_RIDERS,
+  bucklesOf, buckleProgress, jobWords, BUCKLE_NAMES, TOPICS, MISSIONS, LOOKS, SKINS, HAIRS, MAX_RIDERS, READ_TOPICS,
 } from '../save.js';
 import { buckleSVG } from './hud.js';
 import { hatSVG, hatOf, hatColour } from '../hats.js';
@@ -54,6 +54,9 @@ const ICON = {
   info: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 7.2v4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="8" cy="4.8" r="1.1" fill="currentColor"/></svg>',
   // a horse at a run, for the loading bar
   horse: '<svg viewBox="0 0 34 22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7.5 8.6c2.6-1.5 9.4-1.6 13.2-.6l3.6-4.6 1.4.4 4.4 2.6-.8 1.8-3.4-.6-2.1 4.6c-3.6 2-10.6 2-14.2.6z" fill="currentColor"/><path d="M22.2 12.2l3.4 3-1.4 4.6M19.4 12.9l-1 4.2 2.4 2.4M11.4 13.2l-4 2.4-2.8 3M13.2 13.6l-.2 6"/><path d="M7.6 9.2C5 9 3 10.6 1.8 13.6"/></svg>',
+  // a small speaker with sound waves (read-aloud on), or with a cross (off)
+  speaker: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 9.2h3.6L12 5v14l-4.9-4.2H3.5z" fill="currentColor"/><path d="M15.2 9.2a4 4 0 0 1 0 5.6M17.8 6.6a7.6 7.6 0 0 1 0 10.8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
+  speakerOff: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 9.2h3.6L12 5v14l-4.9-4.2H3.5z" fill="currentColor"/><path d="M15.5 9.5l5 5M20.5 9.5l-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
   hat: '<svg viewBox="0 0 24 16" aria-hidden="true" fill="currentColor"><path d="M7 11.5C6.6 6 8 2 10.6 2Q12 3.2 13.4 2C16 2 17.4 6 17 11.5Z"/><path d="M1 10.4C2.6 13.6 7 14.6 12 14.6S21.4 13.6 23 10.4C21.6 11.8 18 12.4 12 12.4S2.4 11.8 1 10.4Z"/></svg>',
   ornStar: '<svg viewBox="0 0 18 18" aria-hidden="true"><polygon points="' + starPoints(9, 9.3, 8, 4.1, 6) + '" fill="currentColor"/><circle cx="9" cy="9.3" r="1.7" fill="#1d140c"/></svg>',
 };
@@ -325,6 +328,11 @@ export function showTitle(root, opts = {}) {
         <small>${m.ready ? esc(m.line) : '<span class="bmt-soon">soon</span>'}</small>
       </button>`;
     }).join('');
+    // read-aloud: shown while a topic whose cards are read is ticked
+    const young = READ_TOPICS.filter((id) => r.topicsOn[id]);
+    const readRow = young.length ? `<div class="bmt-read">
+        <button class="bmt-hat bmt-readsw" role="switch" aria-checked="${r.readAloud !== false}" data-act="read" data-k="read">${r.readAloud !== false ? ICON.speaker : ICON.speakerOff}Read aloud: ${r.readAloud !== false ? 'On' : 'Off'}</button>
+        <small>The ${young.map((id) => TOPICS.find((t) => t.id === id).name).join(', ').replace(/, ([^,]*)$/, ' and $1')} cards are read out loud</small></div>` : '';
     const note = r.mode === 'shoot'
       ? '<b>Shooting</b> adds a target range at the east end of town: bottles and tin cans only. Cattle and bandits are still roped, and deer are photographed. Picked here only: it stays the same for the whole ride.'
       : 'Picked here only: it stays the same for the whole ride.';
@@ -332,7 +340,7 @@ export function showTitle(root, opts = {}) {
       <div class="bmt-head"><h2>Settings for <em>${esc(r.name)}</em></h2><p>${toNext(r)}</p></div>
       <section class="bmt-sec">
         <h3 class="bmt-label">Math <small>pick one or more</small></h3>
-        <div class="bmt-topics" role="group" aria-label="Math topics" data-nav="grid">${topics}</div>
+        <div class="bmt-topics" role="group" aria-label="Math topics" data-nav="grid">${topics}</div>${readRow}
       </section>
       <section class="bmt-sec">
         <h3 class="bmt-label">Mode</h3>
@@ -615,6 +623,12 @@ export function showTitle(root, opts = {}) {
         changed(r);
         return;
       }
+      case 'read':
+        if (!r) return;
+        r.readAloud = r.readAloud === false;
+        keepFocus(renderPanel);
+        changed(r);
+        return;
       case 'mode':
         if (!r || r.mode === data.id) return;
         r.mode = data.id === 'shoot' ? 'shoot' : 'lasso';

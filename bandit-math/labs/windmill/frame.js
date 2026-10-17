@@ -410,7 +410,10 @@ function classify(boards, hubs) {
       // on the stone or the dirt
       if (h.ground && it.ground) {
         it.onStone = !!h.stone;
-        if (it === strapped) { it.kind = 'stone'; it.strap = strapOf(b); }
+        // (a leg, or any board in a leaning wall, rocks on its strap about the two axes square to its own line, and is
+        // held stiffly about that line, as a post's strap holds it about the upright: the strap is round the leg as it
+        // leans. A plain board keeps the strap as it was: level axes soft, the upright stiff.)
+        if (it === strapped) { it.kind = 'stone'; it.strap = strapOf(b); if (!b.plain) it.strapAxes = [b.w, b.n, b.d]; }
         else if (strapped) { it.kind = 'face'; it.soft = [b.n]; it.lapped = !b.post; }
         else it.kind = 'dirt';
         continue;
@@ -474,9 +477,11 @@ function springOf(it) {
   const R = [k.kb, 0, 0, 0, k.kb, 0, 0, 0, k.kb];
   // turning easily about the soft axes: kb + (kr - kb) * (s s^T) for each (a hinge: nails that twisted loose about that
   // axis, kr * HINGE)
-  // (a strap turns easily about the two level axes and hard about the upright one, whatever the board's lean, as it was
-  // before walls could lean: a steep leg's twist about its own line is held partly by the stiff upright axis)
-  const soft = it.kind === 'face' ? it.soft : it.kind === 'stone' ? [[1, 0, 0], [0, 0, 1]] : null;
+  // (a strap turns easily about the two level axes and hard about the upright one, for a plain board as it was before
+  // walls could lean; for a leg, or a board in a leaning wall, easily about the two axes square to its line and hard
+  // about the line itself: it.strapAxes. Measured against a 2D frame of a tapered portal, the level axes made a wall
+  // leaning 7 in a foot about 16% too stiff: the stiff upright spring caught part of its rocking.)
+  const soft = it.kind === 'face' ? it.soft : it.kind === 'stone' ? (it.strapAxes ? it.strapAxes.slice(0, 2) : [[1, 0, 0], [0, 0, 1]]) : null;
   if (soft) {
     for (const s of soft) {
       const kr = it.kind === 'face' && hinged(it, s) ? k.kr * HINGE : k.kr;
@@ -912,8 +917,9 @@ function checkAll(M, sol) {
   // can fold over by itself. (Measured joint to joint, a post turned the thin way in that wall bends 1¾ in over the
   // 2.7 ft above a brace's top in the big gust: the wood is at 0.43 of what it holds, while the storey leans 1/40.)
   // Every board that rises counts here by how upright it stands (uprightOf: a post fully, a post leaning in 10 degrees
-  // 0.97, a brace at 45 degrees half, a level board not at all), so a tapered storey's leaning posts rack like straight
-  // ones, and a board leaning past some angle never stops being checked.
+  // 0.97, a brace at 45 degrees half, a level board not at all), so a board leaning past some angle never stops being
+  // checked. A leg (in two walls, the line where they meet) counts fully, however it leans: a tapered storey racks by
+  // its legs' turn, just as a straight one does by its posts'.
   const hubMove = (hi) => { const h = M.hubs[hi]; if (h.node < 0) return [0, 0, 0]; const d = M.dof(h.node, 0); return [u[d], u[d + 1], u[d + 2]]; };
   // A storey's lean is measured against the floor it stands on. A tier standing on beams tips a little as a whole when
   // the boards under it give (its feet on one side go down a hair, the other side's up: the beams and crosspieces under
@@ -944,7 +950,10 @@ function checkAll(M, sol) {
     return tilt;
   };
   M.boards.forEach((b, bi) => {
-    const up = uprightOf(b);
+    // (a leg counts in full: in a frustum a leg turns about its foot by the sway over the height whatever its lean, so
+    // the storey racks by that, and discounting it by how upright it stands, as a brace's is, let a steep taper rack
+    // up to 40% further than a straight storey before folding. Braces and lone tilted boards go by uprightOf.)
+    const up = uprightOf(b), upRack = b.leg ? 1 : up;
     if (up < 0.02) return;
     const at = [];
     M.hubs.forEach((h, hi) => {
@@ -963,7 +972,7 @@ function checkAll(M, sol) {
       // spot dy above it s * dy toward -X)
       const [sx, sz] = tiltOf(floors[k].y);
       const lean = Math.hypot(m1[0] - m0[0] + sx * dy, m1[2] - m0[2] + sz * dy) / Math.max(1, dy);
-      const util = up * lean / DRIFT_LIMIT;
+      const util = upRack * lean / DRIFT_LIMIT;
       items.push({ type: 'drift', util, b: bi, id: b.id, y0: floors[k].y, y1: floors[k + 1].y, P: ptAt(b, (floors[k].t + floors[k + 1].t) / 2), lean, dir: [m1[0] - m0[0], m1[2] - m0[2]] });
       bump(b.id, util);
     }
@@ -1036,7 +1045,8 @@ function nailUse(b, it, F, Mo, h) {
     const s = it.kind === 'stone' ? Math.max(0.02, it.strap ?? 1) : 1;
     const slide = Math.hypot(f[0], f[2]), lift = Math.max(0, -up), press = Math.max(0, up);
     const holds = it.kind === 'dirt' ? k.holds + k.friction * press : k.holds * s;
-    twist = it.kind === 'stone' ? Math.hypot(Mo[0], Mo[2]) : norm(Mo);
+    // (the strap's rocking: about the level axes for a plain board, about the two square to its line for a leg)
+    twist = it.kind !== 'stone' ? norm(Mo) : it.strapAxes ? Math.hypot(dot(Mo, it.strapAxes[0]), dot(Mo, it.strapAxes[1])) : Math.hypot(Mo[0], Mo[2]);
     const parts = [slide / holds, lift / (k.pull * s), twist / (k.twist * s)];
     return { util: Math.hypot(...parts), force: slide, pull: lift, twist, parts };
   }

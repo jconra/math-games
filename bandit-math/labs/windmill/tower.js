@@ -61,6 +61,41 @@ export function leanIn(k) {
   const a = Math.abs(k), f = Math.floor(a + 1e-9), half = a - f > 0.25;
   return (half ? (f || '') + '½' : String(f)) + ' in';
 }
+// a lean as a rate, the way the player reads it: "1½ inches in for every foot up", "2 inches out for every foot up",
+// "1 inch toward the back for every foot up" (dir: 'in', 'out', or any words for the way it leans). Never "in a foot".
+export function leanRate(k, dir = 'in') {
+  const a = Math.abs(k), n = leanIn(a).replace(/ in$/, '');
+  return `${n} ${a > 1 ? 'inches' : 'inch'} ${dir} for every foot up`;
+}
+
+// ── lengths in words ─────────────────────────────────────────────────────────────────────────────────────────────────
+// In a sentence a length is spelled out ("1 foot 7 inches", "4 feet", "1½ feet", "9 inches"); on a short label or tag
+// it is "1 ft 7 in." (lenLabel), the period saying the "in" is inches.
+export function lenWords(ft) {
+  const inches = Math.round(ft * 12), f = Math.floor(inches / 12), i = inches % 12;
+  const F = (n) => `${n} ${n === 1 ? 'foot' : 'feet'}`, I = (n) => `${n} ${n === 1 ? 'inch' : 'inches'}`;
+  if (i === 0) return F(f);
+  if (i === 6) return f ? `${f}½ feet` : 'half a foot';
+  return f ? `${F(f)} ${I(i)}` : I(i);
+}
+export function lenLabel(ft) {
+  const inches = Math.round(ft * 12), f = Math.floor(inches / 12), i = inches % 12;
+  if (i === 0) return f + ' ft';
+  if (i === 6) return (f || '') + '½ ft';
+  return (f ? f + ' ft ' : '') + i + ' in.';
+}
+// a label's units spelled out for a sentence: "1 ft 7 in." -> "1 foot 7 inches", "1½ ft" -> "1½ feet", "4 ft" -> "4
+// feet", "9 in" -> "9 inches". (Only a number's own unit: "in" as a word, "in from the front", is left alone.)
+export function spellUnits(text) {
+  // (a label's "in." ending a sentence keeps the sentence's full stop: "she stood 15 ft 11 in." -> "...11 inches.")
+  const stop = (str, off) => (/^\s*(?:$|[A-Z"“])/.test(str.slice(off)) ? '.' : '');
+  const I = (n) => `${n} ${n === '1' || n === '½' ? 'inch' : 'inches'}`, F = (n) => (n === '1' ? '1 foot' : n === '½' ? 'half a foot' : n + ' feet');
+  return String(text)
+    .replace(/(\d+(?:½)?|½) ft (\d+) in(\.?)(?![a-z])/g, (m, f, i, dot, off, str) => `${F(f)} ${I(i)}${dot ? stop(str, off + m.length) : ''}`)
+    .replace(/(\d+(?:½)?|½) ft\b/g, (m, f) => F(f))
+    .replace(/(\d+(?:½)?|½) in\.(?![a-z])/g, (m, i, off, str) => I(i) + stop(str, off + m.length))
+    .replace(/(\d+(?:½)?|½) in(?= (?:[A-Z(]|$)|[,;:)]|\.|$)/g, (m, i) => I(i));
+}
 
 export function newTower(W = START_W, D = W) { return { W, D, boards: [] }; }
 
@@ -129,11 +164,25 @@ export const planeHalf = (t, key) => (key[0] === 'Z' ? t.W / 2 : t.D / 2);
 export const crossKey = (key, p) => (key[0] === 'Z' ? planeKey('X', p.X) : planeKey('Z', p.Z));
 // the outer plane of face k (upright)
 export function facePlane(t, k) { return [planeKey('Z', t.D / 2), planeKey('X', t.W / 2), planeKey('Z', -t.D / 2), planeKey('X', -t.W / 2)][k]; }
-// which face an outer plane is (a plane standing on the stones' edge, upright or leaning), or -1 for an inner plane
-export function faceOfPlane(t, key) {
-  const { axis, off } = parseKey(key);
-  for (let k = 0; k < 4; k++) { const f = parseKey(facePlane(t, k)); if (f.axis === axis && r3(f.off) === r3(off)) return k; }
+// which face an outer plane is (a plane standing on the stones' edge, upright or leaning), or -1 for an inner plane. A
+// leaning plane is an outer wall only where it really stands on the stones' line: its boards come down to the ground
+// there (a tier's leaning wall, standing on beams 8 ft up, may meet the stones' line only when carried on down: it is
+// an inside wall). foot: the height of the foot of a board about to go in it (the board in hand), if any.
+export function faceOfPlane(t, key, foot = null) {
+  const { axis, off, k: lean } = parseKey(key);
+  for (let k = 0; k < 4; k++) {
+    const f = parseKey(facePlane(t, k));
+    if (f.axis !== axis || r3(f.off) !== r3(off)) continue;
+    if (lean) { const y = Math.min(footOfPlane(t, key), foot ?? Infinity); if (Number.isFinite(y) && y > 0.5) return -1; }
+    return k;
+  }
   return -1;
+}
+// the height of the lowest board's foot in a plane (Infinity: none in it)
+export function footOfPlane(t, key) {
+  let Y = Infinity;
+  for (const b of t.boards) if (planesOf(b).includes(key)) Y = Math.min(Y, b.a.Y, b.b.Y);
+  return Y;
 }
 // does the plane lean in (toward the tower's middle) as it climbs? +1 in, -1 out, 0 upright. (A plane through the middle
 // leans toward a side: -1 there means toward -Z or -X.) Y: the height where its side of the middle is read.
@@ -150,39 +199,52 @@ export function planeInside(t, key, Y = 0) {
 }
 
 // a plane in words: "the front wall", "the right side", ..., or for an inner plane "the inside wall 1½ ft in from the
-// front" (short: "1½ ft in from the front"); a leaning one says so: "the front wall, leaning in 2 in a foot". An inner
-// plane's place is read where it stands at height atY (by default: at the foot of its lowest board, else the ground).
+// front" (short: "1½ ft in from the front"); a leaning one says so: "the front wall, leaning 2 inches in for every foot
+// up". Lengths in it are a label's ("1 ft 3 in."): a sentence spells them out with spellUnits.
+// An inner plane is named where it stands at its foot (the foot of its lowest board, or of the board given by atY when
+// that is lower: one wall, one name, whichever of its boards is asked about), by how far it stands in from the outer
+// wall nearer it there (that wall as it stands at that height, leaning or not; the stones' edge where none is built),
+// or "out past" it. A leaning inner plane says which way it leans: "leaning 2 inches in for every foot up" when it leans
+// with the outer wall it is named from (the two parallel), else toward which side ("leaning 2 inches toward the back
+// for every foot up"), so
+// the words never flip while its lean stays the same.
 export function planeName(t, key, short = false, atY = null) {
-  const k = faceOfPlane(t, key), lean = parseKey(key).k;
-  let Y = atY;
-  if (Y === null && !lean) Y = 0;
-  if (Y === null) { Y = Infinity; for (const s of planeSegments(t, key)) Y = Math.min(Y, s.src.a.Y, s.src.b.Y); if (!Number.isFinite(Y)) Y = 0; }
+  const k = faceOfPlane(t, key, atY), { axis, k: lean } = parseKey(key);
   let words;
-  if (k >= 0) words = short ? ['front wall', 'right side', 'back wall', 'left side'][k] : ['the front wall', 'the right side', 'the back wall', 'the left side'][k];
-  else {
-    const { axis } = parseKey(key), half = axis === 'Z' ? t.D / 2 : t.W / 2, off = r3(offsetAt(key, Y));
-    const from = axis === 'Z' ? (off >= 0 ? 'front' : 'back') : (off >= 0 ? 'right side' : 'left side');
-    const w = Math.abs(off) < 1e-6 ? `halfway between the ${axis === 'Z' ? 'front and back' : 'two sides'}` : Math.abs(off) > half + 1e-6 ? `${feet(Math.abs(off) - half)} out past the ${from}` : `${feet(half - Math.abs(off))} in from the ${from}`;
-    words = short ? w : 'the inside wall ' + w;
+  if (k >= 0) {
+    words = short ? ['front wall', 'right side', 'back wall', 'left side'][k] : ['the front wall', 'the right side', 'the back wall', 'the left side'][k];
+    return lean ? words + ', ' + leanWords(t, key, 0) : words;
   }
-  return lean ? words + ', ' + leanWords(t, key, Y) : words;
+  let Y = Math.min(footOfPlane(t, key), atY ?? Infinity); if (!Number.isFinite(Y)) Y = 0;
+  const half = axis === 'Z' ? t.D / 2 : t.W / 2, o = offsetAt(key, Y);
+  // (each side: the outer wall there, as it stands at height Y; how far in from it this plane stands)
+  const sides = [1, -1].map((sg) => {
+    const f = axis === 'Z' ? (sg > 0 ? 0 : 2) : (sg > 0 ? 1 : 3), ws = faceWalls(t, f);
+    const there = ws.find((w) => { const lo = footOfPlane(t, w); let hi = -Infinity; for (const sgm of planeSegments(t, w)) hi = Math.max(hi, sgm.ay, sgm.by); return lo <= Y + 0.25 && hi / Math.sqrt(1 + parseKey(w).t ** 2) >= Y - 0.25; }) || ws[0] || null;
+    const at = there ? offsetAt(there, Y) : sg * half;
+    return { sg, wall: there, d: sg * (at - o), name: axis === 'Z' ? (sg > 0 ? 'front' : 'back') : (sg > 0 ? 'right side' : 'left side') };
+  });
+  const mid = Math.abs(sides[0].d - sides[1].d) < 1e-3, side = Math.abs(sides[0].d) <= Math.abs(sides[1].d) ? sides[0] : sides[1];
+  // (standing right on that wall's line there, to a quarter inch: a tier's wall rising from the front crosspiece)
+  const w = mid ? `halfway between the ${axis === 'Z' ? 'front and back' : 'two sides'}` : Math.abs(side.d) < 0.02 && (lean || side.wall) ? `at the ${side.name}`
+    : side.d < -1e-6 ? `${spoken(-side.d)} out past the ${side.name}` : `${spoken(side.d)} in from the ${side.name}`;
+  // (a plane standing out past the outer wall is no inside wall: "the wall 1½ ft out past the front")
+  words = short ? w : (/ out past the /.test(w) ? 'the wall ' : 'the inside wall ') + w;
+  if (!lean) return words;
+  const toward = `leaning ${leanRate(lean, `toward the ${axis === 'Z' ? (lean > 0 ? 'front' : 'back') : (lean > 0 ? 'right side' : 'left side')}`)}`;
+  return words + ', ' + (!mid && side.wall && parseKey(side.wall).k === lean ? leanWords(t, side.wall, 0) : toward);
 }
-// the lean of a plane in words: "leaning in 2 in a foot", "leaning out ½ in a foot", for a plane through the middle
-// "leaning toward the back 1 in a foot"
+// a length in a wall's name, the way a label writes it: "1½ ft", "2 ft", "1 ft 3 in.", and inches alone "9 inches"
+// ("9 in in from the front" reads badly). A sentence spells it all out (spellUnits).
+const spoken = (ft) => lenLabel(ft).replace(/^(\d+) in\.$/, (m, n) => `${n} ${n === '1' ? 'inch' : 'inches'}`);
+// the lean of a plane in words: "leaning 2 inches in for every foot up", "leaning ½ inch out for every foot up", for a
+// plane through the middle "leaning 1 inch toward the back for every foot up"
 export function leanWords(t, key, Y = 0) {
   const { axis, k } = parseKey(key); if (!k) return 'upright';
   const dir = leansIn(key, Y), o = offsetAt(key, Y);
-  if (Math.abs(o) < 1e-6) return `leaning toward the ${axis === 'Z' ? (k > 0 ? 'front' : 'back') : (k > 0 ? 'right side' : 'left side')} ${leanIn(k)} a foot`;
-  return `leaning ${dir > 0 ? 'in' : 'out'} ${leanIn(k)} a foot`;
+  if (Math.abs(o) < 1e-3) return `leaning ${leanRate(k, `toward the ${axis === 'Z' ? (k > 0 ? 'front' : 'back') : (k > 0 ? 'right side' : 'left side')}`)}`;
+  return `leaning ${leanRate(k, dir > 0 ? 'in' : 'out')}`;
 }
-// feet the way a carpenter says them ("1½ ft", "2 ft", "1 ft 3 in")
-function feet(ft) {
-  const inches = Math.round(ft * 12), f = Math.floor(inches / 12), i = inches % 12;
-  if (i === 0) return f + ' ft';
-  if (i === 6) return (f || '') + '½ ft';
-  return (f ? f + ' ft ' : '') + i + ' in';
-}
-
 // every board lying in a plane (posts and legs in it included), in that plane's own coordinates:
 // [{ id, ax, ay, bx, by, len, post, leg, corner, src }]
 export function planeSegments(t, key) {
@@ -198,13 +260,55 @@ export function planeSegments(t, key) {
 // some board's own wall, or the second wall of a leg whose own wall leans (a tapered tower's corner legs). A steep
 // brace in an upright wall that happens to slant by a whole half inch a foot lies in a leaning plane too, but nothing
 // else is built there, so it is no wall: building near it goes on as it always did. -> Set of keys
+// A board in a leaning wall whose slant along that wall happens to be a lean a wall can have lies in a second leaning
+// plane too: it is a corner LEG there only when that plane could be a wall at its foot. Where another LEANING plane of
+// that family, with another lean, already passes through its foot with a board there going on up (a brace swung from a corner of
+// a lean-out tower toward the back, where the front wall leans out), the stronger plane is the wall and the board is a
+// brace in its own wall, not a leg in a wall of its own. Stronger: some board's own wall, then the one more boards lie
+// in, then the more upright. (An upright wall at its foot doesn't count: a leg may lean in on top of a straight
+// level's corner post.)
 export function wallsInUse(t) {
-  const s = new Set();
+  const s = new Set(), str = planeStrength(t);
   for (const b of t.boards) {
     const ps = planesOf(b), ownLeans = parseKey(ps[0]).k !== 0;
-    ps.forEach((k, i) => { if (i === 0 || !parseKey(k).k || ownLeans) s.add(k); });
+    ps.forEach((k, i) => { if (i === 0 || !parseKey(k).k || (ownLeans && !clashAtFoot(t, k, b, str))) s.add(k); });
   }
   return s;
+}
+// how strongly a plane is a wall: 1000 if it is some board's own wall, plus the number of boards lying in it
+function planeStrength(t) {
+  const own = new Set(), all = new Map();
+  for (const o of t.boards) { const ps = planesOf(o); own.add(ps[0]); for (const k of ps) all.set(k, (all.get(k) || 0) + 1); }
+  return (k) => (own.has(k) ? 1000 : 0) + (all.get(k) || 0);
+}
+// does a stronger leaning plane of `key`'s family (another lean) pass through the foot (the lower end) of board b, with
+// a board there going on up past it? (A wall that only ENDS there, the level below's, is no clash: the next level's legs
+// may lean another way, steeper or less, from its top.)
+export function clashAtFoot(t, key, b, str = planeStrength(t)) {
+  const { axis, k } = parseKey(key), f = b.a.Y <= b.b.Y ? b.a : b.b, sk = str(key);
+  for (const o of t.boards) {
+    if (o === b || o.id === b.id || segGap(o, f) > 0.25 || Math.max(o.a.Y, o.b.Y) < f.Y + 0.5) continue;
+    for (const w of planesOf(o)) {
+      const q = parseKey(w);
+      if (w === key || q.axis !== axis || !q.k || q.k === k || Math.abs(offsetAt(w, f.Y) - coord(axis, f)) > 1e-3) continue;
+      const sw = str(w);
+      if (sw > sk || (sw === sk && Math.abs(q.k) < Math.abs(k))) return true;
+    }
+  }
+  return false;
+}
+// how far a point is from a board's centre line (feet)
+function segGap(o, p) {
+  const dx = o.b.X - o.a.X, dy = o.b.Y - o.a.Y, dz = o.b.Z - o.a.Z, L2 = dx * dx + dy * dy + dz * dz;
+  const s = L2 ? Math.max(0, Math.min(1, ((p.X - o.a.X) * dx + (p.Y - o.a.Y) * dy + (p.Z - o.a.Z) * dz) / L2)) : 0;
+  return Math.hypot(o.a.X + dx * s - p.X, o.a.Y + dy * s - p.Y, o.a.Z + dz * s - p.Z);
+}
+// the second wall a board makes it a leg in, or null: its second plane (planesOf) when that is upright (a post), or
+// when its own wall leans and no leaning wall with another lean stands at its foot (as wallsInUse counts it)
+export function secondWall(t, b) {
+  const ps = planesOf(b); if (ps.length < 2) return null;
+  if (!parseKey(ps[1]).k) return ps[1];
+  return parseKey(ps[0]).k && !clashAtFoot(t, ps[1], b) ? ps[1] : null;
 }
 // the planes a board lies in that are walls (its own always)
 export function wallPlanesOf(t, b, walls = wallsInUse(t)) { return planesOf(b).filter((k, i) => i === 0 || walls.has(k)); }
@@ -333,7 +437,14 @@ export function twinsOf(t, board, touches = (g) => touchesAny(g, t.boards)) {
     const a = roundPt(f(board.a)), b = roundPt(f(board.b)), g = { a, b, len: board.len, n };
     let tt;
     if (Math.abs(b.Y - a.Y) > 1e-6) { const r = (coord(n, b) - coord(n, a)) / (b.Y - a.Y); tt = onLeanGrid(r) ? tOfK(kOfT(r)) : r6(r); }
-    else { const e = f(unit[famOf(board)]); tt = r6(lean * (n === 'X' ? e.X : e.Z)); }
+    else {
+      const e = f(unit[famOf(board)]); tt = r6(lean * (n === 'X' ? e.X : e.Z));
+      // (a horizontal twin lying right along a wall of its family that stands there with another lean, at its height,
+      // takes that wall's lean, as one slid in by hand would: a beam's quarter-turned twin where a narrower level's
+      // leaning front wall stands)
+      const there = [...walls].filter((w) => w[0] === n && Math.abs(offsetAt(w, a.Y) - coord(n, a)) < 1e-3).map((w) => parseKey(w).t);
+      if (there.length && !there.includes(tt)) tt = there.find((x) => x) ?? tt;
+    }
     if (tt) g.t = tt;
     return g;
   };

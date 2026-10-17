@@ -52,8 +52,9 @@ import { makeHomestead } from './homestead.js';
 import { makeAudio, volumeRow } from './audio/audio.js';
 import { makeAmbience } from './audio/ambience.js';
 import { makeShouts } from './audio/shouts.js';
+import { makeReadAloud } from './audio/readaloud.js';
 import { openLockbox, TIER_NAME } from './lockbox/index.js';
-import { loadRiders, saveRider, earn, recordLockbox, titleOf, nextTitle, badgesOf, cleanBoxes, BOX_TIERS } from './save.js';
+import { loadRiders, saveRider, earn, recordLockbox, titleOf, nextTitle, badgesOf, cleanBoxes, BOX_TIERS, READ_TOPICS, TOPICS } from './save.js';
 
 export const BUILD = '1 (2026-10-09)';
 const Q = new URLSearchParams(location.search);
@@ -114,6 +115,7 @@ let stage = null;   // the band on the town's stage and its music (src/stage.js)
 let traffic = null;   // wagons travelling the road through the valley now and then (src/traffic.js)
 let AMBI = null;   // the town's sounds: animals, birds, work out back, the creek, the horse's hooves (src/audio/ambience.js)
 let SHOUT = null;   // the player's own voice: hyah, whoa, yeehaw, howdy (src/audio/shouts.js)
+let READ = null;    // the young topics' cards read aloud, and a word after an answer (src/audio/readaloud.js)
 let cabin = null;   // the player's cabin: walk in through its door (src/cabin/cabin.js)
 let farm = null, SH = null;   // the farm north of town (src/farm.js) and its sick-sheep job (src/missions/sheep.js)
 let PG = null;   // the farm's loose-pigs job (src/missions/pigs.js)
@@ -177,7 +179,9 @@ async function ride(r) {
   stage = makeStage({ W, folk, audio: AUD });
   traffic = makeTraffic({ W, animals, folk, audio: AUD, obstacles: trafficThings, camps: () => camps });
   AMBI = makeAmbience({ audio: AUD, W }); BM.ambience = AMBI;
-  SHOUT = makeShouts({ audio: AUD }); BM.shouts = SHOUT;
+  // (one voice at a time: a shout waits while a card is read, and a card waits for a shout to finish)
+  SHOUT = makeShouts({ audio: AUD, hush: () => !!(READ && READ.speaking) }); BM.shouts = SHOUT;
+  READ = makeReadAloud({ audio: AUD, on: () => !!(rider && rider.readAloud !== false), busy: () => !!(SHOUT && SHOUT.speaking) }); BM.read = READ;
   AUD.hold('pause', false); AUD.hold('title', false);
   HS = makeHomestead({ W, animals, rider, hud, hob, refresh });
   shops = makeShops({ W, rider, say: (t, k) => hud.toast(t, k), extra: HS.shop,
@@ -188,7 +192,7 @@ async function ride(r) {
     onBuy: () => refresh(), onLockbox: (box, o) => openBox(box, o) });
   // (the round-up's Hob also hears a whole wave roped: now and then a thank-you calf from the rancher)
   const herdHob = Object.create(hob); herdHob.event = (n, d) => { hob.event(n, d); if (HS && n === 'waveDone') HS.jobDone(n); };
-  RU = makeRoundup({ W, animals, P, I, camera, canvas, rider, hud: roundupHud(), hob: herdHob, refresh });
+  RU = makeRoundup({ W, animals, P, I, camera, canvas, rider, hud: roundupHud(), hob: herdHob, refresh, read: READ });
   farm = makeFarm({ W, animals });
   // (the farm jobs' Hob also hears a whole flock healed or a batch penned: now and then a thank-you lamb or piglet)
   const farmHob = Object.create(hob); farmHob.event = (n, d) => { hob.event(n, d); if (HS && (n === 'flockDone' || n === 'pigsDone')) HS.jobDone(n); };
@@ -286,6 +290,7 @@ function endRide() {
   if (traffic) { traffic.dispose(); traffic = null; }
   if (AMBI) { AMBI.dispose(); AMBI = BM.ambience = null; }
   if (SHOUT) { SHOUT.dispose(); SHOUT = BM.shouts = null; }
+  if (READ) { READ.dispose(); READ = BM.read = null; }
   RU = hob = shops = D = P = stage = SH = PG = SJ = farm = null; door = null;
   AUD.hold('title', true);
   pausedBy.clear(); paused = false;
@@ -377,6 +382,13 @@ function nextJustBox() {
     onDone: () => { state = W ? 'title' : 'loading'; if (W) canvas.classList.add('is-on'); T.show(); } });
 }
 
+// the menu's read-aloud switch, in words
+function readWords() {
+  const on = rider.readAloud !== false;
+  const young = READ_TOPICS.filter((id) => rider.topicsOn[id]).map((id) => (TOPICS.find((t) => t.id === id) || { name: id }).name)
+    .join(', ').replace(/, ([^,]*)$/, ' and $1');
+  return `Read aloud: ${on ? 'On' : 'Off'}<small>${on ? `The ${young} cards are read out loud` : 'The cards are not read out loud'}</small>`;
+}
 // ── THE MENU (Esc) ───────────────────────────────────────────────────────────────────────────────────────────────
 function openMenu() {
   if (state !== 'play' || menu || boxOpen || (shops && shops.isOpen)) return;
@@ -388,6 +400,7 @@ function openMenu() {
       ${boxes ? `<button type="button" data-do="box">Open a lock box<small>${boxes} in your saddlebags</small></button>` : ''}
       ${prints(rider).length ? `<button type="button" data-do="album">Photo album<small>${prints(rider).length} deer photographs</small></button>` : ''}
       ${WJ && WJ.on ? '<button type="button" data-do="wagon">Let the wagon wait<small>Stop riding along for now</small></button>' : ''}
+      ${READ_TOPICS.some((t) => rider.topicsOn[t]) ? `<button type="button" data-do="read" role="switch" aria-checked="${rider.readAloud !== false}">${readWords()}</button>` : ''}
       <button type="button" data-do="home">Go back to town<small>Straight to the town square</small></button>
       <button type="button" data-do="title">Back to the title<small>Your gold is already saved</small></button></div>
     <div class="bms-keys">${I && I.touch
@@ -401,6 +414,12 @@ function openMenu() {
   body.addEventListener('click', (e) => {
     const b = e.target.closest('button[data-do]'); if (!b) return;
     const what = b.dataset.do;
+    if (what === 'read') {   // (the switch flips here and the menu stays open)
+      rider.readAloud = rider.readAloud === false; saveRider(rider);
+      b.setAttribute('aria-checked', String(rider.readAloud)); b.innerHTML = readWords();
+      if (!rider.readAloud && READ) READ.stop();
+      return;
+    }
     if (what === 'wagon') then = () => { if (WJ) WJ.stop(); };
     if (what === 'home') then = () => { if (SJ) SJ.stop(); const s = W.places.spawn; if (cabin && cabin.inside) cabin.leave({ to: s }); else P.teleport(s.x, s.z, s.rot); };
     if (what === 'title') then = () => endRide();
@@ -506,8 +525,9 @@ function titleCam(dt) {
 function townSounds(dt, indoor) {
   if (!AMBI || !P) return;
   const m = WJ && WJ.music ? WJ.music.state() : null;
+  if (READ) READ.update(dt);   // (a card's line waiting on its clips or on a shout)
   if (SHOUT && !indoor) SHOUT.update(dt, { P, I });   // (the player's shouts: a spur, a pull-up, a hello, a job done)
-  AMBI.update(dt, { at: P.position, flock: townLifeNow(), P, D, HS, farm, RU, SH, PG, traffic, indoor, music: m ? Math.min(1, m.action + (m.trail > 0.05 ? 0.4 : 0)) : 0, voice: !!(SHOUT && SHOUT.speaking) });
+  AMBI.update(dt, { at: P.position, flock: townLifeNow(), P, D, HS, farm, RU, SH, PG, traffic, indoor, music: m ? Math.min(1, m.action + (m.trail > 0.05 ? 0.4 : 0)) : 0, voice: !!((SHOUT && SHOUT.speaking) || (READ && READ.speaking)) });
 }
 
 // ── EACH FRAME ───────────────────────────────────────────────────────────────────────────────────────────────────

@@ -625,3 +625,113 @@ test('v4 a tapered tier on beams: its feet toe-nailed to the beams; with no brac
 test('v4 speed: braced leaning towers and a braced pyramid take well under 400 ms', () => {
   for (const t of [LEAN.taper16Braced, LEAN.pyramid, LEAN.leanOut16]) { windTest(t); const a = performance.now(); windTest(t); assert.ok(performance.now() - a < 400); }
 });
+// A 4 x 4 tower 16 ft tall, braced zig-zag post to post (5 ft braces rising 3 ft each), and then more on top to 19 ft,
+// 56 boards in all, with four short posts at the back whose feet hang in the air (nailed only where they cross the
+// horizontal boards): a tower as a player built it. The card blamed those four posts for 0 ft left standing. The base
+// itself went: the whole tower tipped over on its 4 ft stones in the big gust, all 56 boards at once. The four posts
+// come down in that tip (nofoot names them as standing on nothing), but they did not cause it: testrun.js says so.
+function zigzag16() {
+  const C = [[-2, 2], [2, 2], [2, -2], [-2, -2]], out = [], W4 = [['Z', 2], ['Z', -2], ['X', 2], ['X', -2]];
+  const ring = (y, tag) => [B(tag + 'f', [-2, y, 2], [2, y, 2], 'Z'), B(tag + 'b', [-2, y, -2], [2, y, -2], 'Z'), B(tag + 'r', [2, y, 2], [2, y, -2], 'X'), B(tag + 'l', [-2, y, 2], [-2, y, -2], 'X')];
+  C.forEach(([x, z], i) => { const n = i % 2 ? 'X' : 'Z'; out.push(B('post' + i, [x, 0, z], [x, 8, z], n), B('up' + i, [x, 8, z], [x, 16, z], n)); });
+  out.push(...ring(8, 'x8'));
+  for (const [n, off] of W4) {
+    const p = (u, y) => (n === 'Z' ? [u, y, off] : [off, y, u]);
+    for (let k = 0; k < 4; k++) { const u0 = k % 2 ? 2 : -2; out.push(B(`br${n}${off}_${k}`, p(u0, 3 * k), p(-u0, 3 * k + 3), n)); }
+  }
+  return out;
+}
+function zigzagOnTop() {
+  const C = [[-2, 2], [2, 2], [2, -2], [-2, -2]], out = [], W4 = [['Z', 2], ['Z', -2], ['X', 2], ['X', -2]];
+  const ring = (y, tag) => [B(tag + 'f', [-2, y, 2], [2, y, 2], 'Z'), B(tag + 'b', [-2, y, -2], [2, y, -2], 'Z'), B(tag + 'r', [2, y, 2], [2, y, -2], 'X'), B(tag + 'l', [-2, y, 2], [-2, y, -2], 'X')];
+  out.push(...ring(16, 'h16'));
+  for (const [n, off] of W4) { const p = (u, y) => (n === 'Z' ? [u, y, off] : [off, y, u]); out.push(B(`b12${n}${off}`, p(2, 12), p(-2, 15), n)); }
+  C.forEach(([x, z], i) => out.push(B('top' + i, [x, 16, z], [x, 19, z], i % 2 ? 'X' : 'Z')));
+  out.push(...ring(19, 'h19'));
+  for (const [n, off] of W4) {
+    const p = (u, y) => (n === 'Z' ? [u, y, off] : [off, y, u]);
+    if (!(n === 'Z' && off === 2) && !(n === 'Z' && off === -2) && !(n === 'X' && off === 2)) out.push(B(`k${n}${off}a`, p(-2, 16.6), p(0.4, 19), n));
+    out.push(B(`k${n}${off}b`, p(2, 16.6), p(-0.4, 19), n));
+  }
+  for (const [x, z, id] of [[-0.5, -2.125, 'ua'], [0.5, -2.125, 'ub'], [-0.5, -0.542, 'uc'], [0.5, -0.542, 'ud']]) out.push(B(id, [x, 15.5, z], [x, 18.5, z], 'Z'));
+  out.push(B('ue', [-0.5, 18, -2.25], [-0.5, 18, -0.4], 'X'), B('uf', [0.5, 18, -2.25], [0.5, 18, -0.4], 'X'), B('ug', [-2, 17, -0.542], [2, 17, -0.542], 'Z'));
+  return out;
+}
+test('a 4 x 4 zig-zag tower with a heavy top tips over whole in the big gust: the base itself goes, not a narrower level taking it', () => {
+  const base = { W: 4, D: 4, boards: zigzag16() }, rb = windTest(base);
+  assert.ok(rb.stood && rb.height === 16, 'the 16 ft zig-zag tower alone stands');
+  const t = { W: 4, D: 4, boards: [...zigzag16(), ...zigzagOnTop()] };
+  assert.equal(t.boards.length, 56);
+  const r = windTest(t), evs = r.gusts.flatMap((g) => g.events.map((e) => ({ ...e, stage: g.stage })));
+  assert.equal(r.height, 0);
+  assert.equal(evs.length, 1, evs.map((e) => e.kind + ' ' + e.text).join(' / '));
+  const e = evs[0];
+  assert.equal(e.kind, 'tip'); assert.equal(e.stage, 3, 'in the big gust'); assert.equal(e.fell.length, 56, 'all at once');
+  assert.deepEqual([...e.nofoot].sort(), ['ua', 'ub', 'uc', 'ud'], 'the four hanging posts are among what fell, standing on nothing');
+  assert.deepEqual(e.broke, [], 'but nothing of theirs broke: the tip took the whole tower');
+  // and the narrower-level rule still holds: those four posts taken away, the tower tips just the same (they are not
+  // what put her over); a narrower level that folds leaves the levels under it (setbackUnbraced's tier, topHeavy24)
+  const r2 = windTest({ W: 4, D: 4, boards: t.boards.filter((b) => !['ua', 'ub', 'uc', 'ud', 'ue', 'uf', 'ug'].includes(b.id)) });
+  assert.ok(r2.gusts.some((g) => g.events.some((x) => x.kind === 'tip')), 'without them she still tips');
+  assert.equal(R.topHeavy24.height, 16, 'a top level folding leaves the 16 ft under it');
+});
+
+// ── the result card's words (labs/windmill/testrun.js, run in node with its page-only imports stood in for) ─────────
+// A taper whose top level folds, built the way the builder fits horizontal boards between leaning legs (where the legs
+// are the board's length apart, 6 ft up, below the 7 ft 11 in. leg tops): the card names the TOP level, and the outer
+// walls as the front and back walls, not "the bottom level" and "inside walls 9 inches in".
+async function cardOf(tower) {
+  if (!globalThis.__wmHooks) {
+    const { register } = await import('node:module');
+    const stub = (src) => 'data:text/javascript,' + encodeURIComponent(src);
+    register(stub(`const S = ${JSON.stringify({ './scene.js': stub('export const wind = { dir: { set() {}, clone() { return {}; } }, level: 0 }; export const FT = 0.3048;'), './sound.js': stub('export const crack = () => {}, thud = () => {}, snap = () => {}, crash = () => {}, setWind = () => {}, audioOn = () => {}, saw = () => {}, clatter = () => {}, hammer = () => {};') })};
+      export async function resolve(spec, ctx, next) { if (S[spec] && ctx.parentURL && /windmill\\/(testrun|build)\\.js$/.test(ctx.parentURL)) return { url: S[spec], shortCircuit: true }; return next(spec, ctx); }`));
+    const el = () => ({ textContent: '', innerHTML: '', hidden: true, style: {}, classList: { add() {}, remove() {}, toggle() { return false; } }, setAttribute() {}, onclick: null, querySelector: () => null });
+    const els = new Map();
+    globalThis.document = globalThis.document || { getElementById: (id) => els.get(id) || els.set(id, el()).get(id) };
+    globalThis.__wmHooks = true;
+  }
+  const { makeTestRun } = await import('../labs/windmill/testrun.js');
+  const app = { tower: JSON.parse(JSON.stringify(tower)), phase: 'test' };
+  const fall = { running: false, sticks: [], sinceDrop: 9, drop() { return 0; }, update() { return {}; }, settled: () => true, clear() {} };
+  const run = makeTestRun(app, { towerView: { setBend() {}, setStrain() {}, setSpots() {}, nailsFor() {}, drawnNow: () => null }, fall, say() {}, gesture() {}, hideSay() {},
+    viewAz: () => 0, watch() {}, record: (h, W, D) => ({ best: { height: h, W, D }, newBest: true }), showHead() {}, keep() {}, fresh() {} });
+  run.start();
+  for (let i = 0; i < 400 && !run.state(); i++) await new Promise((r) => setTimeout(r, 5));
+  for (let s = 0; app.phase === 'test' && s < 20000; s++) run.frame(0.1);
+  return run.state().card;
+}
+test('the card on a taper whose top level folds names the top level and the front and back walls', async () => {
+  const rows = [['b1', 'Z', -3, 0, 3, -2.015268, 7.877855, 2.015268, 8, -0.125], ['b2', 'Z', 3, 0, -3, 2.015268, 7.877855, -2.015268, 8, 0.125], ['b3', 'X', 3, 0, 3, 2.015268, 7.877855, 2.015268, 8, -0.125], ['b4', 'X', -3, 0, -3, -2.015268, 7.877855, -2.015268, 8, 0.125], ['b5', 'Z', -2.25, 6, 2.25, 2.25, 6, 2.25, 4.5, -0.125], ['b6', 'Z', -2.25, 6, -2.25, 2.25, 6, -2.25, 4.5, 0.125], ['b7', 'X', 2.25, 6, 2.25, 2.25, 6, -2.25, 4.5, -0.125], ['b8', 'X', -2.25, 6, 2.25, -2.25, 6, -2.25, 4.5, 0.125], ['b9', 'Z', -3, 0, 3, 2.244881, 5.994149, 2.250731, 8, -0.125], ['b10', 'Z', -3, 0, -3, 2.244881, 5.994149, -2.250731, 8, 0.125], ['b11', 'X', 3, 0, 3, 2.250731, 5.994149, -2.244881, 8, -0.125], ['b12', 'X', -3, 0, 3, -2.250731, 5.994149, -2.244881, 8, 0.125], ['b13', 'X', 2.015268, 7.877855, 2.015268, 1.030536, 15.75571, 1.030536, 8, -0.125], ['b14', 'Z', -2.015268, 7.877855, 2.015268, -1.030536, 15.75571, 1.030536, 8, -0.125], ['b15', 'X', -2.015268, 7.877855, -2.015268, -1.030536, 15.75571, -1.030536, 8, 0.125], ['b16', 'Z', 2.015268, 7.877855, -2.015268, 1.030536, 15.75571, -1.030536, 8, 0.125], ['b17', 'Z', -1.25, 14, 1.25, 1.25, 14, 1.25, 2.5, -0.125], ['b18', 'Z', -1.25, 14, -1.25, 1.25, 14, -1.25, 2.5, 0.125], ['b19', 'X', 1.25, 14, 1.25, 1.25, 14, -1.25, 2.5, -0.125], ['b20', 'X', -1.25, 14, 1.25, -1.25, 14, -1.25, 2.5, 0.125]];
+  const tower = { W: 6, D: 6, boards: rows.map(([id, n, ax, ay, az, bx, by, bz, len, t]) => ({ id, n, a: { X: ax, Y: ay, Z: az }, b: { X: bx, Y: by, Z: bz }, len, t })) };
+  const c = await cardOf(tower);
+  assert.match(c.story, /Gust: the top level racked/);
+  assert.doesNotMatch(c.story + c.advice, /bottom level|inside wall/);
+  assert.match(c.advice, /the front and back walls/);
+  assert.ok(Math.abs(c.h - 7.877855) < 1e-3, 'the bottom level stands');
+});
+// A pyramid whose legs meet at a point: the card says the long legs bent between horizontal boards, not that legs only
+// hold a wall square where they meet at a point
+test('the card on a pyramid that folds says its legs bent between horizontal boards', async () => {
+  const k = 1.5 / 12, W = 8, top = W / 2 / k, s = Math.sqrt(1 + 2 * k * k), boards = [];
+  // four legs to the point, spliced from 8 ft boards lapped a foot; rings every 6 ft
+  const C = [[-1, 1, 'Z'], [1, 1, 'X'], [1, -1, 'Z'], [-1, -1, 'X']];
+  C.forEach(([sx, sz, n], i) => {
+    let y = 0, j = 0;
+    while (y < top - 1e-6) {
+      const y1 = Math.min(top, y + 8 / s), at = (Y) => ({ X: sx * (W / 2 - k * Y), Y, Z: sz * (W / 2 - k * Y) });
+      boards.push({ id: `leg${i}_${j++}`, n, a: at(y), b: at(y1), len: (y1 - y) * s, t: n === 'Z' ? -sz * k : -sx * k });
+      y = y1 >= top - 1e-6 ? top : y1 - 1 / s;
+    }
+  });
+  for (let Y = 6; Y < top - 2; Y += 6) {
+    const h = W / 2 - k * Y;
+    boards.push({ id: 'rf' + Y, n: 'Z', a: { X: -h, Y, Z: h }, b: { X: h, Y, Z: h }, len: 2 * h, t: -k }, { id: 'rb' + Y, n: 'Z', a: { X: -h, Y, Z: -h }, b: { X: h, Y, Z: -h }, len: 2 * h, t: k },
+      { id: 'rr' + Y, n: 'X', a: { X: h, Y, Z: h }, b: { X: h, Y, Z: -h }, len: 2 * h, t: -k }, { id: 'rl' + Y, n: 'X', a: { X: -h, Y, Z: h }, b: { X: -h, Y, Z: -h }, len: 2 * h, t: k });
+  }
+  const c = await cardOf({ W, D: W, boards });
+  if (c.h >= top - 0.1) return;      // (stood: nothing to word)
+  assert.doesNotMatch(c.advice, /only hold a wall square where they meet at a point/);
+  assert.match(c.advice, /meet at a point at the top/);
+  assert.match(c.advice, /bent between horizontal boards/);
+});

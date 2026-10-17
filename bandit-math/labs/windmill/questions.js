@@ -9,6 +9,7 @@
 // The triangles are on one plane (any plane: an outer wall or an inside one), from tower.js planeSegments.
 // Pure functions (no page, no three.js) so node can test them.
 import { touch } from './touch.js';
+import { lenWords, lenLabel, leanRate, LEAN_MAX } from './tower.js';
 
 export const TRIPLES = [[3, 4, 5], [6, 8, 10], [5, 12, 13], [8, 15, 17]];
 const GROUND = { id: 'ground', ax: -100, ay: 0, bx: 100, by: 0, len: 200, ground: true };
@@ -44,7 +45,7 @@ function angleAt(p, q, r) {   // the corner angle at p, in degrees
 }
 const shuffle = (arr, rnd) => { for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; } return arr; };
 const whole = (v) => Math.abs(v - Math.round(v)) < 0.04;
-const nameOf = (s) => (s.ground ? 'the ground' : s.corner ? 'the corner post' : s.post ? 'the post' : Math.abs(s.ay - s.by) < 0.05 * s.len ? 'the crosspiece' : Math.abs(s.ax - s.bx) < 0.05 * s.len ? 'the post' : 'the other board');
+const nameOf = (s) => (s.ground ? 'the ground' : s.corner ? 'the corner post' : s.post ? 'the post' : Math.abs(s.ay - s.by) < 0.05 * s.len ? 'the horizontal board' : Math.abs(s.ax - s.bx) < 0.05 * s.len ? 'the post' : 'the other board');
 
 // pick one question for the triangles a new board made, or null. rnd: a 0..1 random function (for tests)
 export function makeQuestion(tris, newSeg, rnd = Math.random) {
@@ -69,9 +70,9 @@ export function bayQuestion(w, h, y0, rnd = Math.random, longest = 8) {
   const pts = [{ x: 0, y: y0 }, { x: w, y: y0 + h }, { x: w, y: y0 }];
   return {
     kind: 'length', pts, sideLabels: ['?', Math.round(h) + ' ft', Math.round(w) + ' ft'], angleLabels: ['', '', ''], ask: 0, square: 2,
-    prompt: `This bay is ${Math.round(w)} ft wide and ${Math.round(h)} ft tall. How long a brace reaches from corner to corner?`,
+    prompt: `This opening is ${lenWords(Math.round(w))} wide and ${lenWords(Math.round(h))} tall. How long a brace reaches from corner to corner?`,
     choices, answer: C, unit: ' ft',
-    why: `Square the two short sides and add: ${s[0]}×${s[0]} + ${s[1]}×${s[1]} = ${s[0] * s[0]} + ${s[1] * s[1]} = ${C * C}, and ${C}×${C} = ${C * C}. So the brace is ${C} ft.`,
+    why: `Square the two short sides and add: ${s[0]}×${s[0]} + ${s[1]}×${s[1]} = ${s[0] * s[0]} + ${s[1] * s[1]} = ${C * C}, and ${C}×${C} = ${C * C}. So the brace is ${lenWords(C)} long.`,
     helper: { kind: 'squares', a: s[0], b: s[1], c: C }, bay: true,
   };
 }
@@ -115,8 +116,8 @@ function lengthQuestion(t, newSeg, rnd) {
   const along = [null, t.b, t.a][ask];
   // (when the new board is the long side, the question is where along the other board it lands)
   const prompt = ask === hyp
-    ? `This triangle has a square corner. Its short sides are ${known[0]} ft and ${known[1]} ft. How long is the long side?`
-    : `Your ${s[0]} ft board is the long side, and the other short side is ${known.find((v) => v !== s[0])} ft. How far along ${nameOf(along)} does it land?`;
+    ? `This triangle has a square corner. Its short sides are ${lenWords(known[0])} and ${lenWords(known[1])}. How long is the long side?`
+    : `Your ${s[0]}-foot board is the long side, and the other short side is ${lenWords(known.find((v) => v !== s[0]))}. How far along ${nameOf(along)} does it land?`;
   const a = sorted[0], b = sorted[1], c = sorted[2];
   const wrong = ask === hyp ? [a + b, c + 1, c - 1, a * a + b * b] : [c - known.find((v) => v !== c), c + known.find((v) => v !== c), answer + 1, answer - 1];
   const choices = shuffle([answer, ...shuffle([...new Set(wrong.filter((v) => v > 0 && v !== answer))], rnd).slice(0, 3)], rnd);
@@ -134,80 +135,107 @@ function lengthQuestion(t, newSeg, rnd) {
 // When a board goes up in a wall that leans, the miller may ask about the lean itself, as a rate: so many inches in for
 // every foot up. Three kinds:
 //   rate    "This wall leans in 2 inches for every foot up. How far in is it at 6 ft up?"  (2 × 6 = 12 in, which is 1 ft)
-//   width   "6 ft across at the stones, leaning in 1½ in a foot on each side: how wide at 8 ft?"  (each side comes in
+//   width   "6 feet across at the stones, both walls leaning 1½ inches in for every foot up: how wide at 8 feet up?" (each side comes in
 //           1½ × 8 = 12 in = 1 ft, both sides 2 ft: 4 ft)
 //   leg     (now and then: the harder one) a leg L ft long whose top stands r ft in from its foot: how high does it
 //           reach? By the right triangle, L² − r²: a whole-number triple where there is one (a 5 ft leg leaning 3 ft
 //           reaches 4 ft), else an 8 ft leg leaning 2 ft: 8 × 8 − 2 × 2 = 60, and 7 ft 9 in times itself is about 60.
 // spec: { k (inches a foot, by the half inch), dir ('in' | 'out'), base (the width across at the stones when the
-// opposite wall leans the same way, else null), legLen (the board's length when it is a leg, else null) }.
-// rnd: a 0..1 random function (for tests); hard: how often a leg asks the right-triangle one.
+// opposite wall leans the same way, else null), atFoot (true when that width is a tier's, across at its own foot, not
+// at the stones), legLen (the board's length when it is a leg, else null) }.
+// rnd: a 0..1 random function (for tests); hard: how often a leg asks the right-triangle one; avoid: the prompt of the
+// last slope question asked (a new one asks something else when it can).
 // Every answer is a number (inches for rate and leg, feet for width) with `labels` saying it the carpenter's way.
 const halfStr = (v) => { const a = Math.abs(v), f = Math.floor(a + 1e-9), h = a - f > 0.25; return (v < 0 ? '−' : '') + (h ? (f || '') + '½' : String(f)); };
-// feet and inches the way a carpenter says them: "4 ft", "4½ ft", "7 ft 9 in", "9 in"
-export function ftIn(ft) {
-  const inches = Math.round(ft * 12), f = Math.floor(inches / 12), i = inches % 12;
-  if (i === 0) return f + ' ft';
-  if (i === 6 && f) return f + '½ ft';
-  return (f ? f + ' ft ' : '') + i + ' in';
-}
-const inWords = (inch) => (inch % 12 === 0 && inch >= 12 ? `${inch} in (${inch / 12} ft)` : inch > 12 && inch % 6 === 0 ? `${inch} in (${halfStr(inch / 12)} ft)` : `${halfStr(inch)} in`);
-export function slopeQuestion(spec, rnd = Math.random, { hard = 0.3 } = {}) {
+// "inch" or "inches" after a number of them (½ and 1: "inch")
+const inchWord = (v) => (Math.abs(v) > 1 ? 'inches' : 'inch');
+// feet and inches on a label (a choice button, a drawing): "4 ft", "4½ ft", "7 ft 9 in.", "9 in." (tower.js lenLabel)
+export const ftIn = (ft) => lenLabel(ft);
+// inches on a label: "9 in.", "12 in. (1 ft)", "18 in. (1½ ft)"
+const inWords = (inch) => (inch % 12 === 0 && inch >= 12 ? `${inch} in. (${inch / 12} ft)` : inch > 12 && inch % 6 === 0 ? `${inch} in. (${halfStr(inch / 12)} ft)` : `${halfStr(inch)} in.`);
+// inches in a sentence: "9 inches", "12 inches (1 foot)", "18 inches (1½ feet)", "½ inch"
+const inSaid = (inch) => `${halfStr(inch)} ${inchWord(inch)}` + (inch % 12 === 0 && inch >= 12 ? ` (${lenWords(inch / 12)})` : inch > 12 && inch % 6 === 0 ? ` (${lenWords(inch / 12)})` : '');
+export function slopeQuestion(spec, rnd = Math.random, { hard = 0.3, avoid = null } = {}) {
   const k = Math.abs(spec.k), dir = spec.dir === 'out' ? 'out' : 'in';
   if (!k) return null;
-  if (spec.legLen && rnd() < hard) { const q = legQuestion(spec.legLen, k, rnd); if (q) return q; }
-  if (spec.base && rnd() < 0.5) { const q = widthQuestion(spec.base, k, dir, rnd); if (q) return q; }
-  return rateQuestion(k, dir, rnd);
+  const once = () => {
+    if (spec.legLen && rnd() < hard) { const q = legQuestion(spec.legLen, k, rnd, dir); if (q) return q; }
+    if (spec.base && rnd() < 0.5) { const q = widthQuestion(spec.base, k, dir, rnd, { atFoot: !!spec.atFoot }); if (q) return q; }
+    return rateQuestion(k, dir, rnd);
+  };
+  // (not the very question just asked, when another can be had)
+  let q = once();
+  for (let i = 0; i < 8 && q && avoid && q.prompt === avoid; i++) q = once();
+  return q;
 }
+const cap = (x) => x.charAt(0).toUpperCase() + x.slice(1);
 const pickOf = (arr, rnd) => arr[Math.floor(rnd() * arr.length) % arr.length];
-const choicesFrom = (answer, wrong, rnd) => shuffle([answer, ...shuffle([...new Set(wrong.filter((v) => v > 0 && Math.abs(v - answer) > 1e-6))], rnd).slice(0, 3)], rnd);
+// the right answer and three wrong ones, shuffled. Every wrong one is first put on the steps the answers go by (the
+// half foot, the half inch: `step`), so no two buttons ever show the same thing, and none shows the right answer.
+const choicesFrom = (answer, wrong, rnd, step = 0.5) => {
+  const on = (v) => Math.round(v / step) * step;
+  return shuffle([answer, ...shuffle([...new Set(wrong.map(on).filter((v) => v > 0 && Math.abs(v - answer) > 1e-6))], rnd).slice(0, 3)], rnd);
+};
 export function rateQuestion(k, dir = 'in', rnd = Math.random) {
-  // a height where the answer comes out a whole number of inches, 3 or more (a whole foot or two, when it can)
+  // a height where the answer comes out a whole number of inches, 3 or more (now and then a whole foot or two)
   const ys = [2, 3, 4, 6, 8, 10, 12].filter((y) => Number.isInteger(k * y) && k * y >= 3);
   if (!ys.length) return null;
-  const feetToo = ys.filter((y) => (k * y) % 12 === 0), Y = feetToo.length && rnd() < 0.6 ? pickOf(feetToo, rnd) : pickOf(ys, rnd), A = k * Y;
-  const choices = choicesFrom(A, [k + Y, k * (Y - 1), k * (Y + 1), 2 * A, Y, A + 12], rnd).map((v) => Math.round(v * 2) / 2);
+  const feetToo = ys.filter((y) => (k * y) % 12 === 0), Y = feetToo.length && rnd() < 0.25 ? pickOf(feetToo, rnd) : pickOf(ys, rnd), A = k * Y;
+  const choices = choicesFrom(A, [k + Y, k * (Y - 1), k * (Y + 1), 2 * A, Y, A + 12], rnd);
   return {
-    kind: 'slope', title: 'A leaning wall!', pic: { kind: 'lean', k, Y, dir }, unit: ' in',
-    prompt: `This wall leans ${dir} ${halfStr(k)} ${k > 1 ? 'inches' : 'inch'} for every foot up. How far ${dir} is it at ${Y} ft up?`,
+    kind: 'slope', title: 'A leaning wall!', pic: { kind: 'lean', k, Y, dir }, unit: ' in.',
+    prompt: `This wall leans ${leanRate(k, dir)}. How far ${dir} is it at ${lenWords(Y)} up?`,
     choices, labels: choices.map(inWords), answer: A,
-    why: `${halfStr(k)} inches for each foot it climbs, ${Y} feet up: ${halfStr(k)} × ${Y} = ${halfStr(A)} in${A % 12 === 0 ? `, which is ${A / 12} ft` : A > 12 && A % 6 === 0 ? `, which is ${halfStr(A / 12)} ft` : ''}.`,
+    why: `${halfStr(k)} ${inchWord(k)} for each foot it climbs, ${lenWords(Y)} up: ${halfStr(k)} × ${Y} = ${halfStr(A)} ${inchWord(A)}${A % 12 === 0 ? `, which is ${lenWords(A / 12)}` : A > 12 && A % 6 === 0 ? `, which is ${lenWords(A / 12)}` : ''}.`,
     helper: { kind: 'steps', k, Y },
   };
 }
-export function widthQuestion(W, k, dir = 'in', rnd = Math.random) {
+// atFoot: W is a tier's width across at its own foot (it stands on beams), and the height is counted up from there
+export function widthQuestion(W, k, dir = 'in', rnd = Math.random, { atFoot = false } = {}) {
   // a height where each side has moved a whole number of inches and the width comes out on the half foot, 1 ft or more
   const sg = dir === 'in' ? -1 : 1;
   const ys = [2, 4, 6, 8, 10, 12, 16].filter((y) => { const d = k * y; return Number.isInteger(d) && (2 * d) % 6 === 0 && W + sg * 2 * d / 12 >= 1; });
   if (!ys.length) return null;
   const whole = ys.filter((y) => Number.isInteger(W + sg * 2 * k * y / 12)), Y = whole.length && rnd() < 0.7 ? pickOf(whole, rnd) : pickOf(ys, rnd);
-  const each = k * Y, A = W + sg * 2 * each / 12, one = W + sg * each / 12;
-  const choices = choicesFrom(A, [one, A - sg * 1, A + sg * 1, W, W + sg * 2 * each / 24], rnd).map((v) => Math.round(v * 2) / 2);
+  const each = k * Y, A = W + sg * 2 * each / 12;
+  // (the slips a builder makes: one wall counted, not both; the walls going the wrong way; the width at the foot; a
+  // half foot or a foot off)
+  const choices = choicesFrom(A, [W + sg * each / 12, W - sg * 2 * each / 12, W, A - sg, A + sg, A + sg / 2, A - sg / 2], rnd);
+  const at = atFoot ? 'its foot' : 'the stones', up = atFoot ? `${lenWords(Y)} above its foot` : `at ${lenWords(Y)} up`;
   return {
-    kind: 'slope', title: 'How wide up there?', pic: { kind: 'taper', k, Y, W, dir }, unit: ' ft',
-    prompt: `${ftIn(W)} across at the stones, both walls leaning ${dir} ${halfStr(k)} in a foot. How wide is it at ${Y} ft up?`,
+    kind: 'slope', title: 'How wide up there?', pic: { kind: 'taper', k, Y, W, dir, atFoot }, unit: ' ft',
+    prompt: `${cap(lenWords(W))} across at ${at}, both walls leaning ${leanRate(k, dir)}. How wide is it ${up}?`,
     choices, labels: choices.map(ftIn), answer: A,
-    why: `Each wall comes ${dir} ${halfStr(k)} × ${Y} = ${inWords(each)}. Both walls: ${inWords(2 * each)}. ${ftIn(W)} ${dir === 'in' ? '−' : '+'} ${ftIn(2 * each / 12)} = ${ftIn(A)}.`,
+    why: `Each wall comes ${dir} ${halfStr(k)} × ${Y} = ${inSaid(each)}. Both walls: ${inSaid(2 * each)}. ${cap(lenWords(W))} ${dir === 'in' ? '−' : '+'} ${lenWords(2 * each / 12)} = ${lenWords(A)}.`,
     helper: { kind: 'taper', k, Y, W, dir },
   };
 }
-export function legQuestion(L, k, rnd = Math.random) {
-  // a whole-number triple with the leg as its long side, when the leg is that long; else the leg's own length leaning
-  // 1 to 3 feet, "about" to the inch
-  const len = Math.round(L), tri = TRIPLES.filter((t) => t[2] === len);
+// (a lean a wall can really have: the top's reach across, r feet over h up, at most LEAN_MAX inches for every foot up)
+const canLean = (r, h) => r / h <= LEAN_MAX / 12 + 1e-9;
+export function legQuestion(L, k, rnd = Math.random, dir = 'in') {
+  // An example leg as long as the one just nailed ("Say a leg 8 feet long leaned so..."): it is not that leg, which
+  // leans its own way. A whole-number triple with the leg as its long side, when the leg is that long and the triple
+  // leans no steeper than a wall may (13: 5 across, 12 up); else the leg's own length leaning 1 to 3 feet, as far as a
+  // wall may lean, "about" to the inch
+  const len = Math.round(L), tri = TRIPLES.filter((t) => t[2] === len && canLean(Math.min(t[0], t[1]), Math.max(t[0], t[1])));
   let r, h, exact;
-  if (Math.abs(L - len) < 0.01 && tri.length) { const t = pickOf(tri, rnd); [r, h] = rnd() < 0.5 ? [t[0], t[1]] : [t[1], t[0]]; if (r > h) [r, h] = [h, r]; exact = true; }
-  else { if (Math.abs(L - len) > 0.01 || len < 4) return null; r = 1 + Math.floor(rnd() * 3); h = Math.sqrt(len * len - r * r); exact = false; }
+  if (Math.abs(L - len) < 0.01 && tri.length) { const t = pickOf(tri, rnd); [r, h] = [Math.min(t[0], t[1]), Math.max(t[0], t[1])]; exact = true; }
+  else {
+    if (Math.abs(L - len) > 0.01 || len < 4) return null;
+    const rs = [1, 2, 3].filter((v) => canLean(v, Math.sqrt(len * len - v * v)));
+    if (!rs.length) return null;
+    r = pickOf(rs, rnd); h = Math.sqrt(len * len - r * r); exact = false;
+  }
   const A = Math.round(h * 12), wrong = [len * 12, (len - r) * 12, Math.round(Math.sqrt(len * len + r * r) * 12), A + 3, A - 3];
-  const choices = choicesFrom(A, wrong, rnd);
+  const choices = choicesFrom(A, wrong, rnd, 1);
   const sq = len * len - r * r;
   return {
-    kind: 'slope', title: 'How high does it reach?', pic: { kind: 'leg', L: len, r, k }, unit: '',
-    prompt: `A leg ${len} ft long leans so its top stands ${r} ft in from its foot. ${exact ? 'How high' : 'About how high (to the inch)'} does its top reach?`,
+    kind: 'slope', title: 'How high does it reach?', pic: { kind: 'leg', L: len, r, k, dir }, unit: '',
+    prompt: `Say a leg ${lenWords(len)} long leaned so its top stood ${lenWords(r)} ${dir === 'out' ? 'out' : 'in'} from its foot. ${exact ? 'How high' : 'About how high (to the inch)'} would its top reach?`,
     choices, labels: choices.map((v) => ftIn(v / 12)), answer: A,
     why: exact
-      ? `The leg is the long side of a right triangle: ${len}×${len} − ${r}×${r} = ${len * len} − ${r * r} = ${sq}, and ${h}×${h} = ${h * h}. So it reaches ${h} ft.`
-      : `The leg is the long side of a right triangle: ${len}×${len} − ${r}×${r} = ${len * len} − ${r * r} = ${sq}. Which number times itself makes ${sq}? ${ftIn(A / 12)} is ${(A / 12).toFixed(2)} ft, and ${(A / 12).toFixed(2)} × ${(A / 12).toFixed(2)} ≈ ${sq}. A leaning leg always reaches less high than it is long.`,
+      ? `The leg is the long side of a right triangle: ${len}×${len} − ${r}×${r} = ${len * len} − ${r * r} = ${sq}, and ${h}×${h} = ${h * h}. So it reaches ${lenWords(h)}.`
+      : `The leg is the long side of a right triangle: ${len}×${len} − ${r}×${r} = ${len * len} − ${r * r} = ${sq}. Which number times itself makes ${sq}? ${lenWords(A / 12)} is ${(A / 12).toFixed(2)} feet, and ${(A / 12).toFixed(2)} × ${(A / 12).toFixed(2)} ≈ ${sq}. A leaning leg always reaches less high than it is long.`,
     helper: { kind: 'legsq', L: len, r, h: A / 12, exact },
   };
 }

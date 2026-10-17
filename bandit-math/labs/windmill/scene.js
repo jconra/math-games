@@ -156,7 +156,7 @@ export function makeScene({ low = false } = {}) {
   mill.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
 
   // ── the lumber pile on two sawhorses: one board drawn for every full board left ────────────────────────────────────
-  const pile = new THREE.Group(); pile.position.set(-3.4, 0, -1.2); pile.rotation.y = 1.2; scene.add(pile);
+  const pile = new THREE.Group(); pile.position.set(-3.4, 0, -1.2); pile.rotation.y = 1.2; pile.userData.crown = 1.4; scene.add(pile);
   const horseMat = new THREE.MeshLambertMaterial({ color: 0x5e4630 });
   for (const x of [-0.8, 0.8]) {
     const top = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.7), horseMat); top.position.set(x, 0.62, 0); pile.add(top);
@@ -267,7 +267,8 @@ export function makeScene({ low = false } = {}) {
   // is in the way, so walking round the tower never puts a crown of leaves or a wall over the view
   function clearView(eye) {
     const ex = eye.x, ez = eye.z, L2 = ex * ex + ez * ez || 1;
-    for (const m of [...trees.children, mill]) {
+    // (the lumber pile too: seen from the left it stands right in front of the tower's foot)
+    for (const m of [...trees.children, mill, pile]) {
       const r = m.userData.crown || 3, tx = m.position.x, tz = m.position.z;
       const u = ((tx - ex) * -ex + (tz - ez) * -ez) / L2;            // 0 at the eye, 1 at the tower
       const d = Math.hypot(ex + -ex * Math.max(0, Math.min(1, u)) - tx, ez + -ez * Math.max(0, Math.min(1, u)) - tz);

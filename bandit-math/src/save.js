@@ -16,6 +16,8 @@
 //   bounty,   all the gold ever earned; it never goes down, and the rider's title comes from it
 //   mode:     'lasso' | 'shoot'    (picked on the title screen only, then fixed for the whole ride)
 //   topicsOn: { counting, adding, taking, times, dividing, algebra }   which math topics are ticked (true/false)
+//   readAloud: true | false   Counting, Adding and Taking away cards read out loud (src/audio/readaloud.js); on unless
+//             switched off (the other topics are never read)
 //   topics:   { times: {...}, algebra: {...} }   each math module keeps its own progress object in here
 //   missions: { roundup, wagon, hunt, loot }    which missions are ticked
 //   owned:    { saddle: null|'plain'|'tooled'|'silver', horse: 'bay', dog: null|{ kind, name } }
@@ -71,6 +73,9 @@ export const TOPICS = [
   { id: 'negatives', name: 'Positive & negative', ages: '11-13', ready: true },   // off until ticked; progress in topics.negatives, made when first played
   { id: 'algebra', name: 'Solving for x', ages: '11+', ready: true },
 ];
+
+// The topics whose cards can be read out loud (rider.readAloud; src/audio/readaloud.js READ.topics)
+export const READ_TOPICS = ['counting', 'adding', 'taking'];
 
 // The missions in the order the title screen shows them.
 export const MISSIONS = [
@@ -269,6 +274,7 @@ export function fixRider(r) {
     gold: whole(r.gold),
     bounty: whole(r.bounty),
     mode: r.mode === 'shoot' ? 'shoot' : 'lasso',
+    readAloud: r.readAloud !== false,
     topicsOn: {},
     topics: { ...obj(r.topics) },
     missions: {},

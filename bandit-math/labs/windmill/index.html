@@ -8,7 +8,7 @@
 <!-- the on-screen error box comes first, so a crash shows on screen instead of a blank page -->
 <script src="../../oops.js"></script>
 <link rel="stylesheet" href="../../src/ui/fonts/fonts.css">
-<link rel="stylesheet" href="windmill.css?v=13">
+<link rel="stylesheet" href="windmill.css?v=15">
 <script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/" } }</script>
 </head>
 <body>
@@ -29,6 +29,7 @@
       <div class="bench-empty" id="bench-empty" hidden>No full boards left</div>
     </div>
     <button class="btn cut" id="cut">Cut</button>
+    <button class="btn up-next" id="up-next" hidden title="The board on the bench goes up where you left off">Put it up</button>
     <div class="pieces-head">Cut pieces</div>
     <div class="pieces" id="pieces"></div>
     <div class="pieces-empty" id="pieces-empty">Cut pieces wait here. Drag one onto the tower.</div>
@@ -50,6 +51,7 @@
         <div><small>Height</small><b id="height">0 ft</b></div>
         <div class="st-base"><small>Base</small><b id="base">6 × 6 ft</b></div>
         <div><small>Best</small><b id="best">0 ft</b><i id="best-base"></i></div>
+        <div class="st-top" id="top-at-box" hidden><small id="top-at-label">Top end</small><b id="top-at"></b></div>
       </div>
       <div class="tools">
         <button class="btn" id="undo" title="Take down the last board (Ctrl+Z)">Undo</button>
@@ -74,6 +76,6 @@
   </main>
 </div>
 <div class="loading" id="loading">Climbing the hill…</div>
-<script type="module" src="main.js?v=13"></script>
+<script type="module" src="main.js?v=15"></script>
 </body>
 </html>

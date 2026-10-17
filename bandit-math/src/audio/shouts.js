@@ -32,7 +32,8 @@
 // (the bigger moment first: a job's yeehaw, then the thank-you). Everything goes through the game's master volume, so
 // the Menu's Volume, the title's silence and a pause all hold it (audio.js). No switch of its own: the volume covers it.
 //
-//   const S = makeShouts({ audio, base })   audio: makeAudio(); base: the game's folder URL
+//   const S = makeShouts({ audio, base, hush })   audio: makeAudio(); base: the game's folder URL; hush(): true while
+//                            another voice talks (a card being read aloud, src/audio/readaloud.js): no clip starts
 //   S.update(dt, { P, I })   each frame of play (P: the player, I: the input): watches the horse for a spur or a pull-up,
 //                            and lets out a clip that is due
 //   S.heard(event, data)     a Hob event (src/hob.js): the jobs' ends, a catch, a pig penned, "Done for now", a bandit
@@ -197,7 +198,7 @@ function clipExt() {
   return '.m4a';
 }
 
-export function makeShouts({ audio, base = GAME }) {
+export function makeShouts({ audio, base = GAME, hush = () => false }) {
   const B = makeShoutBrain();
   let ctx = null, bus = null, alive = true, clock = 0, now = null, nowWho = null, panner = null, src = null, me = null;
   const buffers = {}, played = {}; let asked = 0;
@@ -273,7 +274,7 @@ export function makeShouts({ audio, base = GAME }) {
     if (S.speaking) place(where(nowWho));   // (the voice goes with whoever is talking)
     const push = !!(I && I.enabled !== false && I.move && I.move.mag >= 0.08);
     B.ride(clock, { onHorse: !!P.onHorse, speed: P.speed || 0, push, run: !!(I && I.run) });
-    const n = B.next(clock, S.speaking);
+    const n = B.next(clock, S.speaking || !!hush());
     if (n) play(n.name, n.who);
   };
   const ask = (kind, o) => { if (alive && B.ask(kind, clock, o)) asked++; };

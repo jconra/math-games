@@ -31,39 +31,92 @@ const boardN = (b) => nVec(b.n, leanOf(b));
 const P3 = (n) => new THREE.Vector3(n.X, n.Y, n.Z);
 
 // where every board is drawn: Map id -> { a, b (feet, world, the drawn ends), off (feet out from its plane), side (the
-// unit vector it is pushed out along) }
+// unit vector it is pushed out along) }, and on the map itself `spacers`: the little wood blocks filling a gap between a
+// board and something it is nailed to [{ at (feet, world: the block's middle), along, side (unit vectors), l, w, th
+// (feet: along the board, across it, and thick) }]
+// The layers on a wall: the posts and legs on the wall's own line; boards nailed over them (crosspieces, braces) one
+// layer out, their faces on the posts' faces; a board steps a further layer out only where it truly crosses another
+// board's middle with its own middle (the second brace of an X) or lies along one (a lap); boards that only meet at
+// their ends (two braces meeting at a post, a brace's end on a crosspiece) stay side by side in the same layer, the end
+// stopping at the other's face. At most two layers out. Wherever a board still sits off something it is nailed to (a
+// crosspiece over a post turned the other way, the second brace of an X at the posts), a spacer block fills the gap.
+const END_T = 0.3;       // feet: a touch this near a board's end is at its end (it meets there), not across its middle
+const LAYER_CAP = BW / 2 + BT / 2 + BT + 0.006;   // the furthest out a board is drawn: two layers over a turned post
 export function layout(t) {
   const out = new Map(), boards = t.boards, walls = wallsInUse(t), line = new Set(boards.filter((b) => isCornerLine(t, b, walls)));
-  // how far a board reaches out from a plane's centre (its outer face): posts (and legs) by which way they face
+  const order = new Map(boards.map((b, i) => [b, i]));
+  // how far a post (or leg) reaches out from a plane's centre (its outer face): by which way it faces
   const reach = new Map();     // `${id}|${key}` -> feet
   for (const b of line) for (const k of wallPlanesOf(t, b, walls)) reach.set(b.id + '|' + k, (parseKey(k).axis === b.n ? BT : BW) / 2);
+  const reachOf = (o, key) => reach.get(o.id + '|' + key) ?? 0;
   const byPlane = new Map();
   for (const b of boards) for (const k of planesOf(b)) (byPlane.get(k) || byPlane.set(k, []).get(k)).push(b);
+  const mid = (tt, len) => tt > END_T && tt < len - END_T;
+  // (a post standing on this board's middle is on top of it, not under it)
+  const standsOn = (cs, b) => cs.every((c) => c.tj < TOL && c.ti > TOL && c.ti < b.len - TOL);
   for (const b of boards) {
     if (line.has(b)) { out.set(b.id, { a: { ...b.a }, b: { ...b.b }, off: 0, side: boardN(b) }); continue; }
     const key = planeKeyOf(b), mates = byPlane.get(key) || [], me = seg(b, key);
-    let base = -1;
+    let off = -1;
     for (const o of mates) {
       if (o === b) continue;
       const post = line.has(o);
-      if (!post && boards.indexOf(o) > boards.indexOf(b)) continue;      // (only boards nailed before it lie under it)
+      if (!post && order.get(o) > order.get(b)) continue;      // (only boards nailed before it lie under it)
       const cs = touch(me, seg(o, key)); if (!cs.length) continue;
-      // (a post standing on this board's middle is on top of it, not under it)
-      if (post && cs.every((c) => c.tj < TOL && c.ti > TOL && c.ti < b.len - TOL)) continue;
-      base = Math.max(base, reach.get(o.id + '|' + key) ?? 0);
+      if (post) { if (!standsOn(cs, b)) off = Math.max(off, reachOf(o, key) + BT / 2 + 0.002); continue; }
+      const Lo = out.get(o.id);
+      // across its middle, or lying along it: a layer out over it; meeting at an end: beside it, in its layer
+      const over = cs.length >= 2 || cs.some((c) => mid(c.ti, b.len) && mid(c.tj, o.len));
+      off = Math.max(off, over ? Lo.off + BT + 0.002 : Lo.off);
     }
-    const off = base < 0 ? 0 : base + BT / 2 + 0.004;
-    reach.set(b.id + '|' + key, Math.min(off + BT / 2, 0.6));
-    out.set(b.id, { a: { ...b.a }, b: { ...b.b }, off: Math.min(off, 0.55), side: P3(planeNormal(key, (b.a.Y + b.b.Y) / 2)) });
+    out.set(b.id, { a: { ...b.a }, b: { ...b.b }, off: Math.min(Math.max(off, 0), LAYER_CAP), side: P3(planeNormal(key, (b.a.Y + b.b.Y) / 2)) });
   }
-  // ends meeting another board's side: stop at its face
+  // the spacers: every pair nailed together on a wall whose faces stand apart
+  const spacers = [];
+  for (const [key, mates] of byPlane) {
+    for (const b of mates) {
+      if (line.has(b) || planeKeyOf(b) !== key) continue;
+      const Lb = out.get(b.id), me = seg(b, key);
+      for (const o of mates) {
+        if (o === b) continue;
+        const post = line.has(o);
+        if (!post && (planeKeyOf(o) !== key || order.get(o) > order.get(b))) continue;     // (each pair once)
+        const cs = touch(me, seg(o, key)); if (!cs.length) continue;
+        if (post && standsOn(cs, b)) continue;
+        // (the inner board's outer face, and the outer board's inner face, along the wall's normal)
+        let inFace, outFace, outer = b, oT = (c) => c.ti;
+        if (post) { inFace = reachOf(o, key); outFace = Lb.off - BT / 2; }
+        else {
+          const Lo = out.get(o.id), [lo, hi] = Lo.off <= Lb.off ? [Lo, Lb] : [Lb, Lo];
+          if (hi === Lo) { outer = o; oT = (c) => c.tj; }
+          inFace = lo.off + BT / 2; outFace = hi.off - BT / 2;
+        }
+        const gap = outFace - inFace;
+        if (gap < 0.006) continue;
+        const Lout = out.get(outer.id), d = new THREE.Vector3(outer.b.X - outer.a.X, outer.b.Y - outer.a.Y, outer.b.Z - outer.a.Z).normalize();
+        const l = Math.min(BW, outer.len), w = BW * 0.9;
+        for (const c of cs) {
+          // (centred on the joint, kept within the outer board's length)
+          const tt = Math.max(l / 2, Math.min(outer.len - l / 2, oT(c)));
+          const at = new THREE.Vector3(outer.a.X, outer.a.Y, outer.a.Z).addScaledVector(d, tt).addScaledVector(Lout.side, inFace + gap / 2);
+          spacers.push({ at, along: d.clone(), side: Lout.side.clone(), l, w, th: gap, ids: [b.id, o.id] });
+        }
+      }
+    }
+  }
+  out.spacers = spacers;
+  // ends meeting another board's side: stop at its face. (A brace's end stops at a horizontal board or a post, a
+  // horizontal board's at a post, never the other way round; two horizontal boards of different walls meeting end to end
+  // at a corner are each nailed to the post there, and are left as they are.)
+  const rank = (o) => (line.has(o) ? 2 : Math.abs(o.a.Y - o.b.Y) < 0.05 ? 1 : 0);
   for (const b of boards) {
     const L = out.get(b.id);
     for (const o of boards) {
-      if (o === b) continue;
+      if (o === b || rank(o) < rank(b)) continue;
       for (const c of touch3(b, o)) {
         const end = c.ti < TOL ? 'a' : c.ti > b.len - TOL ? 'b' : null;
         if (!end || c.butt) continue;
+        if ((c.tj < END_T || c.tj > o.len - END_T) && planeKeyOf(o) !== planeKeyOf(b) && !line.has(o)) continue;
         const adj = endToFace(b, L, end, o, out.get(o.id));
         if (adj !== null) { const p = L[end], d = dirFrom(b, end); p.X += d.x * adj; p.Y += d.y * adj; p.Z += d.z * adj; }
       }
@@ -114,6 +167,7 @@ export function makeTowerView(scene) {
   nails.count = 0; nails.frustumCulled = false; group.add(nails);
   const nailBase = [];     // { p: world position (m), y (ft), z (which way it looks) }
 
+  const spacerGroup = new THREE.Group(); group.add(spacerGroup);
   const boards = new Map();   // id -> { mesh, a, b (world m, as drawn at rest), z (its face's outward look), y0, y1 (ft), src, len }
   const hash = (s) => { let h = 7; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return h; };
 
@@ -139,7 +193,7 @@ export function makeTowerView(scene) {
     boards.clear();
     for (const m of tinted.values()) m.dispose();
     tinted.clear();
-    const lay = layout(tower); lastLayout = lay;
+    const lay = layout(tower); lastLayout = lay; focus = null;
     for (const b of tower.boards) {
       const L = lay.get(b.id), [a, e] = drawnEnds(L), len = a.distanceTo(e) / FT;
       const mesh = new THREE.Mesh(boxFor(len, BW, BT), mats[hash(b.id) % mats.length]);
@@ -152,6 +206,16 @@ export function makeTowerView(scene) {
     }
     // nail heads: three at every joint, on the outer face of the outermost board there (none where posts only stand on
     // each other, or on the ground)
+    // the spacer blocks, plain wood, under the nails where a board sits out from what it is nailed to
+    for (const m of [...spacerGroup.children]) { spacerGroup.remove(m); m.geometry.dispose(); }
+    for (const sp of lay.spacers || []) {
+      const m = new THREE.Mesh(new THREE.BoxGeometry(sp.l * FT, sp.w * FT, sp.th * FT), mats[3]);
+      m.castShadow = true; m.receiveShadow = true;
+      const x = sp.along.clone(), z = sp.side.clone(); z.addScaledVector(x, -z.dot(x)).normalize();
+      m.quaternion.setFromRotationMatrix(tmpM.makeBasis(x, new THREE.Vector3().crossVectors(z, x), z));
+      m.position.copy(sp.at).multiplyScalar(FT); m.userData = { spacer: true, ids: sp.ids }; m.raycast = () => {};
+      spacerGroup.add(m);
+    }
     nailBase.length = 0;
     const walls = wallsInUse(tower);
     for (const h of joints3(tower.boards)) {
@@ -182,6 +246,8 @@ export function makeTowerView(scene) {
     }
     nails.count = n;
     nails.instanceMatrix.needsUpdate = true;
+    // (a spacer goes with its boards: only where both still stand)
+    for (const m of spacerGroup.children) m.visible = !keep || m.userData.ids.every((id) => keep.has(id));
   }
 
   // ── the wind test ─────────────────────────────────────────────────────────────────────────────────────────────────
@@ -261,7 +327,7 @@ export function makeTowerView(scene) {
     return plan;
   }
   function setSpots(joints, bend, strainOf) {
-    spots.visible = !!joints; nails.visible = !joints;
+    spots.visible = !!joints; nails.visible = !joints; spacerGroup.visible = !joints;
     if (!joints) return;
     const plan = planOf(joints);
     spots.count = Math.min(plan.length, 600);
@@ -369,6 +435,20 @@ export function makeTowerView(scene) {
   // fade: 1 shown, 0 gone (they fade out when ignored)
   function fadeGhosts(f) { ghostFade = f; ghostGroup.visible = f > 0.01; }
 
+  // The boards the result card is talking about glow (a warm pulsing gold over their wood) while the card is open. ids:
+  // a list or Set of board ids, or null for none. Fallen boards lying on the ground glow too.
+  const focusMat = new THREE.MeshLambertMaterial({ map: mats[0].map, emissive: 0xffb020, emissiveIntensity: 0.6 });
+  let focus = null;
+  function setFocus(ids) {
+    const next = ids && [...ids].length ? new Set(ids) : null;
+    const same = (!next && !focus) || (next && focus && next.size === focus.size && [...next].every((id) => focus.has(id)));
+    if (same) return;
+    focus = next;
+    for (const b of boards.values()) {
+      if (focus && focus.has(b.src.id)) b.mesh.material = focusMat;
+      else if (b.mesh.material === focusMat) b.mesh.material = b.mat;
+    }
+  }
   // light up the board that a tap picked
   function highlight(src) { for (const b of boards.values()) b.mesh.material = b.src === src ? pickMat : b.mat; }
 
@@ -409,8 +489,10 @@ export function makeTowerView(scene) {
     const pulse = 0.75 + 0.25 * Math.sin(time * 3.2);
     ghostMat.ok.opacity = 0.62 * (0.8 + 0.2 * pulse) * ghostFade; ghostGlow.opacity = 0.3 * pulse * ghostFade; ghostEdge.ok.opacity = 0.9 * ghostFade;
     ghostMat.grey.opacity = 0.4 * ghostFade; ghostEdge.grey.opacity = 0.6 * ghostFade;
+    if (focus) focusMat.emissiveIntensity = 0.35 + 0.35 * (0.5 + 0.5 * Math.sin(time * 4.5));
   }
 
-  return { group, boards, rebuild, setBend, setStrain, setSpots, drawnNow, strainColor, nailsFor: placeNails, showHeld, showPlane, highlight, showHead, update, setGhosts, fadeGhosts,
+  return { group, boards, rebuild, setBend, setStrain, setSpots, drawnNow, strainColor, nailsFor: placeNails, showHeld, showPlane, highlight, showHead, update, setGhosts, fadeGhosts, setFocus,
+    focused: () => (focus ? [...focus] : []), spacers: () => spacerGroup.children,
     layout: () => lastLayout, meshes: () => [...boards.values()].map((b) => b.mesh), ghostMeshes: () => (ghostGroup.visible ? ghostGroup.children : []), nails };
 }

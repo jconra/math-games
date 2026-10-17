@@ -14,9 +14,13 @@
 // "Show me" on the card), or the card topic's own picture (its `helper`: rows of dots for dividing, src/ui/groups.js, or
 // the times chart's "Peek" for the big division facts; ten-frames and a number line with hops for counting, adding and
 // taking away, src/ui/counthelp.js).
+// With read-aloud on (src/audio/readaloud.js), a Counting, Adding or Taking away card reads itself out when it appears
+// at the herd (a speaker on the card says it again), and a right or wrong pick may get a word ("That's right!",
+// "Not that one.", "Count 'em again." after a wrong count of dots).
 //
-//   const RU = makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob, refresh })
-//     P, I: the player and the input; hud: makeHud's; hob: makeHob's (for its lines); refresh(): redraw the purse
+//   const RU = makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob, refresh, read })
+//     P, I: the player and the input; hud: makeHud's; hob: makeHob's (for its lines); refresh(): redraw the purse;
+//     read: makeReadAloud's (optional)
 //   RU.update(dt)        each frame, after P.update (moves the herd, places the numbers, moves the target ring)
 //   RU.paused = true     a panel is open: help is put away, the ring hidden (the game stops calling update meanwhile)
 //   RU.targets           the herd (steer records: { n, text, good, state, a (the animal), root, label })
@@ -91,7 +95,7 @@ function drawLabel(s, text) {
   tex.needsUpdate = true;
 }
 
-export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob, refresh = () => {} }) {
+export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob, refresh = () => {}, read = null }) {
   const scene = W.scene, PA = W.places.pasture, CO = W.places.corral;
   const R = makeTargetRing({ scene, camera, canvas, W });
   ensureChartCss(); ensureNumberLineStyles();
@@ -303,6 +307,8 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
       const w = T.wave({ count: ROUNDUP.cardSize });
       wave = { topic, T, w, card: w.card, kind: 'card', caught: 0, cards: w.cards.length, cardNo: 1, misses: 0 };
       deal(w.card.targets, w.card.id);
+      // (read-aloud: the wave's clips start loading now, so the first card is ready to be read when it shows)
+      if (read && read.can(topic)) read.preload(w.cards.map((c) => c.say).filter(Boolean), { topic });
     } else {
       const w = T.wave({ count: ROUNDUP.herd });
       if (topic === 'times') mine.add(w.id);
@@ -314,7 +320,12 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
     showCard();
     if (RU.near) startHelp();
   }
+  // read-aloud: a card is read when it first shows at the herd (again after the player has been away), not each time
+  // the card is drawn again
+  let readFor = null;
+  const sayCard = (c, topic) => (read ? read.say(c.say, { topic }) : false);
   function showCard() {
+    if (!wave || !RU.near || wave.done || wave.kind !== 'card') readFor = null;
     if (!wave) { hud.rule(null); return; }
     if (!RU.near) {
       const d = Math.round(Math.hypot(P.position.x - PA.x, P.position.z - PA.z));
@@ -323,9 +334,11 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
     }
     if (wave.done) { hud.rule({ main: 'Wave done!', sub: 'Another bunch is wandering in…' }); return; }
     if (wave.kind === 'card') {
-      const c = wave.card;
+      const c = wave.card, topic = wave.topic, readable = !!(read && c.say && read.can(topic));
       hud.rule({ main: c.rule || `${c.text} = ?`, sub: `${c.sub || 'Rope the answer'} · card ${wave.cardNo} of ${wave.cards}`,
-        buttons: [{ label: 'Show me', onClick: () => showLine(wave.T.help(c), { asked: true }) }] });
+        buttons: [{ label: 'Show me', onClick: () => showLine(wave.T.help(c), { asked: true }) }],
+        speak: readable ? () => sayCard(c, topic) : null });
+      if (readable && readFor !== c.id) { readFor = c.id; sayCard(c, topic); }
     } else if (wave.w.kind === 'missing') {
       hud.rule({ main: wave.w.rule, sub: 'Rope the missing number' });
     } else {
@@ -442,6 +455,7 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
       if (e.newTitle) setTimeout(() => hud.toast(`You're a ${e.newTitle} now!`, 'gold'), 1600);
       if (r && r.moved > 0) setTimeout(() => hud.toast('Up a step!', 'good'), 900);
       hob.event('catch');
+      if (read && w.kind === 'card') read.react('right', { topic: w.topic });
       refresh();
     } else {
       w.misses++;
@@ -458,6 +472,7 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
         chartHelp(s.n);
       }
       hintT = ROUNDUP.hintFor;
+      if (read && w.kind === 'card') read.react(w.card && w.card.shape === 'dots' ? 'recount' : 'wrong', { topic: w.topic });
       hob.event('miss');
       refresh();
     }
