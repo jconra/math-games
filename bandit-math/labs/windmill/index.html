@@ -8,7 +8,7 @@
 <!-- the on-screen error box comes first, so a crash shows on screen instead of a blank page -->
 <script src="../../oops.js"></script>
 <link rel="stylesheet" href="../../src/ui/fonts/fonts.css">
-<link rel="stylesheet" href="windmill.css?v=17">
+<link rel="stylesheet" href="windmill.css?v=18">
 <script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/" } }</script>
 </head>
 <body>
@@ -37,10 +37,12 @@
   <main id="view">
     <canvas id="c" aria-label="The hilltop and the tower"></canvas>
     <svg id="overlay"></svg>
-    <div class="gz move" id="g-move" hidden title="Slide the board"><svg viewBox="0 0 24 24"><path d="M12 2l3 3h-2v6h6V9l3 3-3 3v-2h-6v6h2l-3 3-3-3h2v-6H5v2l-3-3 3-3v2h6V5H9z"/></svg></div>
-    <div class="gz end" id="g-a" hidden title="Swing this end"></div>
-    <div class="gz end" id="g-b" hidden title="Swing this end"></div>
-    <div class="gz turn" id="g-turn" hidden title="Turn the board about its foot"><svg viewBox="0 0 24 24"><path d="M12 4a8 8 0 1 1-7.4 5h2.2A6 6 0 1 0 12 6v3L7.5 5 12 1z"/></svg></div>
+    <div class="gz end sock" id="g-a" hidden title="Drag the foot to another spot"></div>
+    <div class="gz end free" id="g-b" hidden title="Drag the free end onto a board"></div>
+    <div class="gz arrow" id="g-xp" hidden title="Free end half a foot right (+X)"></div>
+    <div class="gz arrow" id="g-xm" hidden title="Free end half a foot left (−X)"></div>
+    <div class="gz arrow" id="g-zp" hidden title="Free end half a foot to the front (+Z)"></div>
+    <div class="gz arrow" id="g-zm" hidden title="Free end half a foot to the back (−Z)"></div>
     <button class="nail-it" id="nail" hidden aria-label="Nail it" title="Nail it (Enter)"><svg viewBox="0 0 24 24"><path d="M4.5 12.5l5 5L19.5 7"/></svg></button>
     <div class="gz stone" id="stone-0" hidden title="Drag the stone in or out"></div>
     <div class="gz stone" id="stone-1" hidden title="Drag the stone in or out"></div>
@@ -59,11 +61,15 @@
         <div class="snd"><button class="btn icon" id="mute" aria-label="Sound on or off" title="Sound on/off"><svg viewBox="0 0 24 24"><path class="spk" d="M4 9h4l5-4v14l-5-4H4z"/><path class="wav" d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/><path class="x" d="M16 9l6 6M22 9l-6 6"/></svg></button><input type="range" id="vol" min="0" max="100" value="80" aria-label="Volume" title="Volume"></div>
       </div>
     </div>
-    <div class="wall-name" id="face-name">Front wall</div>
+    <div class="wall-name" id="face-name">Front</div>
     <div class="hint-line" id="hint"></div>
     <div class="bar sel" id="sel-bar" hidden>
       <div class="hint" id="sel-hint">This board</div>
       <div class="row"><button class="btn" id="pickup">Take it down</button></div>
+    </div>
+    <div class="bar sel trim" id="trim-bar" hidden>
+      <div class="hint" id="trim-hint"></div>
+      <div class="row"><button class="btn" id="trim-saw">✂ Saw off the extra</button><button class="btn" id="trim-keep">Keep it</button></div>
     </div>
     <button class="btn wind" id="wind"><svg viewBox="0 0 24 24"><path d="M3 8h10a3 3 0 1 0-3-3M3 12h15a3 3 0 1 1-3 3M3 16h7"/></svg>Call the wind</button>
 
@@ -77,6 +83,6 @@
   </main>
 </div>
 <div class="loading" id="loading">Climbing the hill…</div>
-<script type="module" src="main.js?v=17"></script>
+<script type="module" src="main.js?v=18"></script>
 </body>
 </html>

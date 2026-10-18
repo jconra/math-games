@@ -3,70 +3,30 @@
 //   * the footing stones (the first step, before any board is nailed): drag one in or out to set the base, half a foot
 //     to 8 feet each way, by the half foot. Its distance across (X) sets the width W, its distance along the sides (Z)
 //     the depth D, so a stone dragged straight out to the side widens the tower and one dragged toward you deepens it
-//   * a piece dragged from the panel onto the tower lies on an upright PLANE: the plane kind facing the view (planes
-//     parallel to the front wall when you look at the front or the back, parallel to the sides from a side), the
-//     nearest such plane to you that already has a board within reach of the piece, else the outer wall facing you.
-//     Looking at its plane face on, slide it (the round handle in its middle), swing it about either end (the handles
-//     at its ends), tap its middle to turn it a step, tap the gold check to nail it, carry it back onto the panel (or
-//     Undo) to put it back on the pile.
-//   * IN AND OUT: walk round until its wall is edge on (so you see the held board end on) and grab it again: now dragging moves its
-//     plane in and out over the stones (and up and down); the swing handles hide. Its plane is drawn faintly, with its
-//     name ("1½ ft in from the front"). A post stands in two planes at once, so seen from the side it simply slides on
-//     its other plane (that is how a post gets set in from a wall). The camera walks round freely, so end on is a
-//     tolerance: within 12 degrees of edge on (78 off square), and it stays end on until 70 (a little give, so it does
-//     not flicker). A post moves over to its other plane past 50 degrees off square, as before.
-//   * LEANING WALLS: seen end on, a board that is not level shows as a line, and a handle sits on its top end: drag that
-//     in or out and its whole wall leans about its foot (the foot stays put), by the half inch for every foot up, 7 at most,
-//     and more readily onto the lean of a wall already standing there (so the next board joins the leaning wall). A
-//     level board seen end on is only a dot: pushed in or out, it lands in the wall of the boards it meets at that
-//     height, leaning or not (a crosspiece slid in between two leaning legs takes their wall's lean). A post (or a leg,
-//     the line where two walls meet) works as a post always has: it is held in whichever of its two walls faces the
-//     view, and its swing handles act there, so swinging its top seen from the side leans it in the front wall's
-//     direction; near upright, the swing goes by the half inch for every foot up, and onto the lean of a wall standing at its
-//     foot (so a corner leg lands on the line where two leaning walls meet). A piece brought to a corner of a leaning
-//     wall lies along that corner's line (continuing the lean from the top of the leg below), and a level piece between
-//     two leaning legs settles at the height where they stand just its length apart (cut it to the width you want).
-//   * while a board is held, every spot where it will be nailed shows a bold GREEN circle (a board in its own plane, a
-//     board crossing its plane, the ground), and its ends glow green where they touch; an end close to a board but not
-//     touching gets an open red ring ("not touching"); a brace end stopping near a corner without sitting on it gets a
-//     red ring too ("not on a corner"). Nailing flashes the joints green. The angles where it meets boards in its plane
-//     are drawn as before. A part sticking out past the last board it meets (an overhang) is drawn pale with a saw line
-//     at the joint: tap it (or its "saw off" label) to saw it off right there. (A post's top above its last crosspiece is
-//     not an overhang: the next crosspiece or post goes there.)
+//   * a piece dragged from the panel onto the view puts its first end in a SOCKET: the socket nearest the finger on the
+//     screen (a point on the half foot on the ground within the stones, or along a board at half-foot steps from either
+//     of its ends: tower.js socketsOf). It stands straight up from there to start with. The socket end has a gold ring:
+//     drag it to another socket (the board keeps how far over its free end stands).
+//   * its FREE END has an open ring: drag it and the board turns about its socket in the plane facing the view, its
+//     length kept, the end on the half foot over the ground from the socket. As soon as the board can reach another
+//     board near where the finger takes the end (its line passing through that board within its length), it CONNECTS:
+//     the ring turns green and the board lies right through that spot (the joint, a green circle). A board too long for
+//     that spot sticks out past the joint (drawn pale, with the saw line) and stays green while the end slides on along
+//     the board it is over; a board too short to reach a board never connects there.
+//   * four ARROWS, drawn lying on the ground's directions in the upper part of the view (so they turn as the view walks
+//     round): the green pair moves the free end half a foot across X (right and left), the blue pair half a foot along Z
+//     (front and back); its height follows from the board's length. An arrow that lands the board on another board
+//     connects it there, as a drag does.
+//   * ✓ (fixed at the bottom right) nails it. A board sticking out past its joint by any amount then offers "Saw off the
+//     extra": the offcut goes back to the pile rounded DOWN to the half foot (under half a foot: kindling). Or keep it.
+//     Carry the board back onto the panel (or Undo) to put it back on the pile.
 //   * anywhere else: drag to walk round the tower (sideways) and climb it (up and down); two fingers or the wheel zoom.
 //     The camera is free whether or not a board is held: nothing here squares or swings the view. A tap picks a glowing
 //     twin (builds it: main.js takes any twin within a fingertip of the tap) or a nailed board (to take it down, or saw
 //     its overhang off).
-//
-// Snapping, so a shaky finger still builds square: positions go to the half foot; an end that comes near a joint (a
-// corner's foot, where a post meets a crosspiece, where a board crosses the plane) lands right on it from furthest off,
-// then one near another board's end, a corner line, the ground or a board's edge; an angle goes to every 5 degrees, or
-// to exactly where the free end lands on a board (in the plane, or crossing it). Before a swing, the end it swings
-// about settles onto a joint if it is near one (from up to 2 feet off when the board is just the length of the slant
-// between two joints). Pushed in or out, a plane snaps to the half foot and onto the planes other boards already stand
-// in, never past the stones, and an end that comes near a board crossing the new plane lands on it. A held board the
-// same length as a glowing twin on its plane snaps onto it.
-//
-// On a narrow screen a long held board can run off the view: once nothing is dragging it, the view backs off until both
-// its ends are in reach. Labels over the view (lengths, angles, saw-offs, why a twin is grey) keep clear of each other
-// and of the handles; a "saw off" label can be tapped as well as the pale end it names.
 // A finger on the cut pieces: straight up and down scrolls the panel; any other way, or onto the view, lifts the piece.
-//
-//   * TURNING (TURN.md): while a board is held face on, a ring lies flat round its pivot (its lower end; a horizontal
-//     board's end that touches something, else its a end), with a round knob on it. Drag the knob sideways (or round the
-//     ring) and the board turns about the vertical through the pivot, its whole wall with it, by 15 degrees at a time,
-//     the turn shown by it ("turned 45°"); a tap on the knob turns it one step. A turned board's lower end must stand
-//     off the ground (the first posts stand in the front and side walls): one turned on the ground can't be nailed.
-//     Turned back to square it is in the front or side walls again. Everything else works on a turned wall as on any.
-//
-// (The held board's plane is a key like 'Z:1.5', 'Z:3~-1.5' or 'R45:1.414' (a turned wall); its own coordinates on it
-// are (x, y) = (u, y) of tower.js, true lengths up a leaning wall. In-plane work is 2D, as v2's walls were; the plane's
-// family, offset and lean are what is new.)
-import { SNAP, BOARD_FT, MIN_W, MAX_W, LEAN_MAX, LEAN_STEP, planeSegments, planesOf, planeKey, parseKey, toPlane, planeHalf, faceOfPlane, planesInUse, crossings, crossKey, boardOnPlane, planeName, wallSpan, floorsAcross,
-  isPost, offsetAt, wallsInUse, isCornerLine, onLeanGrid, kOfT, tOfK, snapK, leanWords, fromPlane, faceWalls, inFootprint, spotTaken, planeKeyOf, wallPlanesOf, secondWall, lenLabel, lenWords, leanRate,
-  famOfKey, coord, otherFam, otherSign, isTurnedFam, famAt, famTheta, famNormal, turnVec, turnedOnGround, TURN_STEP, TURN_MIN_Y } from './tower.js';
-import { trianglesOf } from './questions.js';
-import { touch, touch3, findJoints, isKnee, contactsOf as contactsIn3D, pointGap, TOL } from './touch.js';
+import { SNAP, BOARD_FT, MIN_W, MAX_W, inFootprint, spotTaken, lenLabel, lenWords, leanRate, socketsOf, freeEnd, reachOn, connectTo, connectAlong, offcutOf, along as alongB, isPost } from './tower.js';
+import { touch3, contactsOf as contactsIn3D, pointGap, TOL } from './touch.js';
 import * as sound from './sound.js';
 
 const DEG = Math.PI / 180;
@@ -88,19 +48,14 @@ export function whereWords(p) {
   const r = (v) => Math.sign(v) * Math.round(Math.abs(v) * 12) / 12, side = (v, pos, neg) => (Math.abs(r(v)) < 1e-9 ? '0' : fmt(Math.abs(r(v))) + ' ' + (v > 0 ? pos : neg));
   return [side(p.X, 'right', 'left'), side(p.Z, 'front', 'back'), fmt(Math.max(0, r(p.Y))) + ' up'];
 }
-// a wall's lean in words: "2½ inches in for every foot up" (k: inches a foot, by the half inch; dir 'in' or 'out')
+// a rate in words: "2½ inches in for every foot up" (k: inches a foot; dir: 'in', 'out', ...)
 export const rateWords = leanRate;
-// a lean's words without the "leaning" in front (the tag by the board): "1½ inches in for every foot up", "upright"
-const bareLean = (w) => w.replace(/^leaning /, '');
 // the base in words: "6 ft × 4 ft" (short: "6 × 4 ft")
 const num = (v) => { const f = Math.floor(v + 1e-6); return Math.abs(v - f - 0.5) < 1e-6 ? (f || '') + '½' : String(Math.round(v * 10) / 10); };
 export const fmtBase = (W, D, short = false) => (short ? `${num(W)} × ${num(D)} ft` : `${fmt(W)} × ${fmt(D)}`);
 const SCRAP = 0.5;      // an offcut shorter than this is kindling, not lumber
-// leaning a wall by its top, seen end on: at least this many pixels of finger (or mouse) for each half inch a foot
-const LEAN_PX = 18, LEAN_PX_MOUSE = 10;
-// seen end on within 12 degrees of edge on (78 off square), face on again below 70; a post or leg moves over to its
-// other plane past 50 degrees off square
-const FACE_ON = 70 * DEG, END_ON = 78 * DEG, POST_SWAP = 50 * DEG;
+const CONNECT_PX = 38, KEEP_PX = 56;    // pixels: a free end this near where it would connect connects (stays: KEEP_PX)
+const SOCKET_PX = 60;   // pixels: a socket this near the finger takes the board's first end
 const START_REACH = 160;    // pixels: a piece carried this far onto the view leaves its start spot and follows the finger
 
 export function makeBuild(app) {
@@ -318,77 +273,39 @@ export function makeBuild(app) {
   }
   wireDrag(el.benchBoard, { get len() { return L.bench ? L.bench.len : 0; }, pick: () => L.bench }, true);
 
-  // lift a piece off the panel into the builder's hands (on the outer wall facing the view until the pointer finds its
-  // plane)
+
+  // lift a piece off the panel into the builder's hands: its first end in the socket nearest the finger (or where the
+  // builder left off), straight up
   function takeUp(src, fromBench) {
     const p = src.pick(); if (!p) return null;          // (spent on a twin meanwhile)
     if (app.held) putBack();
     if (fromBench) nextBench();
     else L.pieces = L.pieces.filter((q) => q !== p);
     sound.clatter(p.len, 'pick');
-    app.held = { piece: p, len: p.len, key: app.facingPlane(), x: 0, y: 0, ang: Math.PI / 2, fresh: true, endOn: false };
-    // (where the builder left off: the board starts there, ready to swing and nail, unless carried on further)
     const spot = startSpot(p.len);
-    if (spot) Object.assign(app.held, spot, { start: spot });
+    app.held = { piece: p, len: p.len, A: { X: 0, Y: 0, Z: 0 }, on: null, B: { X: 0, Y: p.len, Z: 0 }, con: null, fresh: true };
+    if (spot) Object.assign(app.held, spot, { start: true });
     renderPanel(); app.select(null); app.dirty = true;
     return p;
   }
   // ── where a new board starts: where the builder left off ────────────────────────────────────────────────────────
-  // Most often the next board builds on the last one nailed by hand (app.lastHand), so a piece taken from the lumber
-  // starts there, its foot on the higher end of that board, in its wall (its lean too):
-  //   * after a post or a leg: standing on its top, going on up along its line (the next level's post or leg)
-  //   * after a brace (any other rising board): straight up its wall from its top end; where that end is nailed partway
-  //     up a post or leg, on up that post's or leg's line from its top
-  //   * after a horizontal board: straight up from one of its ends, the end with nothing standing on it yet first (then
-  //     the end nearer the view); where a post or leg stops at that end, going on up its line
-  // It must not stand off the footprint or inside another board: where a post or leg already goes on up from that spot
-  // (a brace's top end nailed partway up a post), it stands on that post's top instead, on the same line; otherwise
-  // the next choice, and with none, it is carried in from the lumber as always. -> the held board's { key, x, y, ang, n,
-  // leg } or null
+  // The next board most often builds on the last one nailed by hand (app.lastHand): a piece taken from the lumber (or
+  // put up with "Put it up") starts in a socket at that board's top end (a post or a brace: going on up from its top;
+  // a horizontal board: at an end with nothing standing on it yet first, then the end nearer the view), standing
+  // straight up. Not off the footprint, not where a board already stands. -> { A, on, B } or null
   function startSpot(len) {
-    const t = T(), L = app.lastHand;
-    if (!L || !t.boards.includes(L)) return null;
-    const walls = wallsInUse(t), leans = [...walls].some((k) => parseKey(k).k !== 0), kind = app.face % 2 ? 'X' : 'Z';
-    const unit = (a, b) => { const d = { X: b.X - a.X, Y: b.Y - a.Y, Z: b.Z - a.Z }, l = Math.hypot(d.X, d.Y, d.Z) || 1; return { X: d.X / l, Y: d.Y / l, Z: d.Z / l }; };
-    const up = (a, b) => (b.Y >= a.Y ? [a, b] : [b, a]);
-    const lineOf = (o) => isCornerLine(t, o, walls);
-    let nested = false;
-    // a candidate: the board from foot along dir, held in the wall `key` (a line board in whichever of its walls faces
-    // the view, else its own): fine if over the footprint and in no other board's spot
-    const tryOn = (foot, dir, keys, n, line) => {
-      const a = foot, b = { X: foot.X + dir.X * len, Y: foot.Y + dir.Y * len, Z: foot.Z + dir.Z * len }, g = { a, b, len };
-      if (!inFootprint(t, a, leans) || !inFootprint(t, b, leans) || b.Y < a.Y + 0.5) return null;
-      // (inside a post or leg going on up there: on up from that one's top instead, lined up on the same line)
-      const inside = t.boards.find((o) => { const cs = touch3(g, o); return cs.length >= 2 && Math.abs(cs[1].ti - cs[0].ti) > 0.3; });
-      if (inside) return lineOf(inside) && !nested ? (nested = true, onLine(inside)) : null;
-      if (spotTaken(t, g)) return null;
-      const key = keys.find((k) => k[0] === kind) || keys[0], A = toPlane(key, a), B = toPlane(key, b);
-      const h = { key, x: A.u, y: A.y, ang: Math.atan2(B.y - A.y, B.u - A.u), endOn: false, n: n || famOfKey(key), leg: false };
-      h.leg = line && Math.abs(Math.cos(h.ang)) > 1e-6;
-      return h;
-    };
-    // straight up a wall from a point on it (up its slope, in a leaning wall)
-    const upWall = (key, p) => { const q = toPlane(key, p); return unit(fromPlane(key, q.u, q.y), fromPlane(key, q.u, q.y + 1)); };
-    // going on up a post's or leg's line from its top
-    const onLine = (o) => { const [lo, hi] = up(o.a, o.b); return tryOn(hi, unit(lo, hi), wallPlanesOf(t, o, walls), o.n, true); };
-    if (Math.abs(L.a.Y - L.b.Y) > 0.25) {
-      if (lineOf(L)) return onLine(L);
-      const key = planeKeyOf(L), [, hi] = up(L.a, L.b);
-      // (its top end nailed partway up a post or leg: that is the line to go on up, from the post's or leg's top)
-      const host = t.boards.find((o) => o !== L && lineOf(o) && up(o.a, o.b)[1].Y > hi.Y + 0.3 && pointGap(hi, o).d < TOL);
-      if (host) return onLine(host);
-      return tryOn(hi, upWall(key, hi), [key], null, false);
-    }
-    // a horizontal board: its ends, the free one first, then the nearer one
-    const key = planeKeyOf(L), near = (p, q) => Math.hypot(p.X - q.X, p.Y - q.Y, p.Z - q.Z) < 0.35;
-    const standing = (E) => t.boards.some((o) => o !== L && Math.abs(o.a.Y - o.b.Y) > 0.25 && near(up(o.a, o.b)[0], E));
-    const ends = [L.a, L.b].map((E) => ({ E, free: !standing(E), d: app.camDist ? app.camDist(E) : 0 })).sort((p, q) => (q.free - p.free) || (p.d - q.d));
+    const t = T(), Lh = app.lastHand;
+    if (!Lh || !t.boards.includes(Lh)) return null;
+    const ends = [{ E: Lh.a, s: 0 }, { E: Lh.b, s: Lh.len }];
+    const standing = (E) => t.boards.some((o) => o !== Lh && Math.abs(o.a.Y - o.b.Y) > 0.25 && Math.hypot(...['X', 'Y', 'Z'].map((k) => (o.a.Y <= o.b.Y ? o.a : o.b)[k] - E[k])) < 0.35);
+    if (Math.abs(Lh.a.Y - Lh.b.Y) > 0.25) ends.sort((p, q) => q.E.Y - p.E.Y).splice(1);
+    else ends.sort((p, q) => (standing(p.E) - standing(q.E)) || ((app.camDist ? app.camDist(p.E) : 0) - (app.camDist ? app.camDist(q.E) : 0)));
     for (const { E } of ends) {
-      nested = false;
-      // (a post or leg stopping right at that end: on up its line)
-      const below = t.boards.find((o) => o !== L && lineOf(o) && near(up(o.a, o.b)[1], E));
-      const h = below ? onLine(below) : tryOn({ ...E }, upWall(key, E), [key], null, false);
-      if (h) return h;
+      const A = { X: E.X, Y: E.Y, Z: E.Z }, B = { X: E.X, Y: E.Y + len, Z: E.Z }, g = { a: A, b: B, len };
+      if (!inFootprint(t, B) || spotTaken(t, g)) continue;
+      // (inside a post going on up from there: no)
+      if (t.boards.some((o) => { const cs = touch3(g, o); return cs.length >= 2 && Math.abs(cs[1].ti - cs[0].ti) > 0.3; })) continue;
+      return { A, on: Lh, B, con: null };
     }
     return null;
   }
@@ -408,445 +325,112 @@ export function makeBuild(app) {
     renderPanel();
   }
 
-  // ── the held board on its plane ──────────────────────────────────────────────────────────────────────────────────
-  // (h.x, h.y): its a end on the plane h.key; h.ang its angle there; the far end len feet along
-  const endsOf = (h) => ({ ax: h.x, ay: h.y, bx: h.x + Math.cos(h.ang) * h.len, by: h.y + Math.sin(h.ang) * h.len });
-  const segOf = (h) => ({ id: '__held', ...endsOf(h), len: h.len });
-  const upright = (h) => Math.abs(Math.cos(h.ang)) < 1e-6;
-  // a board held like a post: straight up its wall, or a LEG (h.leg: leaning across its wall too, by a lean a wall can
-  // have, so it lies in two walls). It is held in whichever of its two walls faces the view, and keeps its own (h.n).
-  const lineLike = (h) => upright(h) || !!h.leg;
-  // the held board in the world: { id, a, b, len, n, t?, leg? }
-  // (a post keeps the way its wide face looks (h.n) when it moves over to its other plane: the view turning round it
-  // never turns the post itself, which bends easily only its thin way. A leg held in its other wall keeps its own wall's
-  // lean, read from its ends.)
-  const worldOf = (h) => {
-    const w = boardOnPlane(h.key, h.x, h.y, h.ang, h.len);
-    if (h.n && lineLike(h)) {
-      w.n = h.n;
-      if (h.n !== famOfKey(h.key)) {
-        delete w.t;
-        const dy = w.b.Y - w.a.Y, r = Math.abs(dy) > 1e-6 ? (across(h.n, w.b) - across(h.n, w.a)) / dy : 0;
-        if (onLeanGrid(r) && kOfT(r)) w.t = tOfK(kOfT(r));
-      }
-    }
-    if (h.leg) w.leg = true;
-    return { id: '__held', ...w };
-  };
-  // how far out of square the view is from a plane (0: face on, PI/2: end on). (A leaning plane's level direction is
-  // its family's, so this holds for it too.)
-  const offSquare = (key) => { const nAz = key[0] === 'Z' ? 0 : key[0] === 'X' ? Math.PI / 2 : famTheta(famOfKey(key)) * DEG; return Math.acos(Math.min(1, Math.abs(Math.cos(app.viewAz() - nAz)))); };
-  // the plane's offset, and a world point's coordinate across it (key: a plane's key or a family)
-  const offOf = (key) => parseKey(key).off;
-  const across = (key, p) => (key[0] === 'Z' ? p.Z : key[0] === 'X' ? p.X : coord(famOfKey(key), p));
-  // how far out across a family the stones reach (a turned family: the base's corners seen across it)
-  const axisHalf = (axis) => (axis === 'Z' ? T().D / 2 : axis === 'X' ? T().W / 2 : (({ X, Z }) => Math.abs(X) * T().W / 2 + Math.abs(Z) * T().D / 2)(famNormal(axis)));
-  // the held board's foot (its lower end) and top, in the world
-  const footOf = (w) => (w.a.Y <= w.b.Y ? w.a : w.b), topOf = (w) => (w.a.Y <= w.b.Y ? w.b : w.a);
-  // is the held board level (a dot seen end on: no top to lean by)?
-  const levelH = (h) => Math.abs(Math.sin(h.ang)) * h.len < 0.75;
-
-  // everything on the held board's plane: its boards, where boards crossing it pass through, the ground, and (on an
-  // outer wall) the corner lines over the stones
-  function context(key = app.held ? app.held.key : app.facingPlane()) {
-    // (a leaning plane through the stones' edge is an outer wall only where its boards, or the board in hand, come down
-    // to the ground there: a tier's leaning wall on beams is an inside wall, with no stones or corner lines on it)
-    const t = T(), segs = planeSegments(t, key), half = planeHalf(t, key), h = app.held;
-    const outer = faceOfPlane(t, key, h && h.key === key ? footOf(worldOf(h)).Y : null) >= 0;
-    const cross = crossings(t, key).map((c) => ({ x: c.u, y: c.y, src: c.src }));
-    const lines = [{ ax: -60, ay: 0, bx: 60, by: 0, len: 120, ground: true }];
-    if (outer) for (const u of [-half, half]) lines.push(...cornerLines(key, u));
-    return { key, segs, cross, lines, half, outer };
+  // ── the held board: a socket and a free end ─────────────────────────────────────────────────────────────────────
+  // h.A: its socket (world feet), h.on: the board the socket is on (null: the ground), h.B: its free end, h.con: where
+  // the free end has connected ({ o, s, P (the joint), past (how far it sticks out past it), b }) or null.
+  const worldOf = (h) => ({ id: '__held', a: { ...h.A }, b: { ...h.B }, len: h.len });
+  const sub = (p, q) => ({ X: p.X - q.X, Y: p.Y - q.Y, Z: p.Z - q.Z });
+  const d3 = (p, q) => Math.hypot(p.X - q.X, p.Y - q.Y, p.Z - q.Z);
+  // the boards the socket sits on (a free end never connects back onto them right there)
+  const atSocket = (h) => T().boards.filter((o) => pointGap(h.A, o).d < TOL);
+  // the sockets, worked out again only when the tower changes
+  let sockKey = '', socks = [];
+  function sockets() {
+    const t = T(), k = t.W + '|' + t.D + '|' + t.boards.map((b) => b.id + ':' + b.len).join(',');
+    if (k !== sockKey) { sockKey = k; socks = socketsOf(t); }
+    return socks;
   }
-  // The corner lines of an outer wall at u = ±half (in its own coordinates): from the stone up the line where it meets
-  // each wall in use standing on the stones round that corner (an upright side wall: straight up this wall; a leaning
-  // one: slanting in or out with it, the line a corner leg lies on). None in use there: straight up.
-  function cornerLines(key, u) {
-    const t = T(), { axis, t: tP } = parseKey(key), other = axis === 'Z' ? 'X' : 'Z', c = axis === 'Z' ? u : -u, sg = axis === 'Z' ? 1 : -1;
-    const leans = [];
-    for (const k of wallsInUse(t)) { const q = parseKey(k); if (q.axis === other && Math.abs(q.off - c) < 1e-3 && !leans.includes(q.k)) leans.push(q.k); }
-    if (!leans.length) leans.push(0);
-    const sP = Math.sqrt(1 + tP * tP), top = 400 / sP;
-    return leans.map((k2) => {
-      const bx = u + sg * tOfK(k2) * top;
-      return { ax: u, ay: 0, bx, by: 400, len: Math.hypot(bx - u, 400), corner: true, k: k2 };
-    });
-  }
-  function nearestOn(s, px, py) {
-    const dx = s.bx - s.ax, dy = s.by - s.ay, L2 = dx * dx + dy * dy || 1;
-    const t = Math.max(0, Math.min(1, ((px - s.ax) * dx + (py - s.ay) * dy) / L2));
-    return { x: s.ax + dx * t, y: s.ay + dy * t, t };
-  }
-
-  // the joints on a plane where a brace's end wants to sit: the stones (on an outer wall), every spot where boards
-  // already meet in it, and every spot where a board crosses it
-  function jointsHere(ctx = context()) {
-    const out = ctx.outer ? [{ x: -ctx.half, y: 0 }, { x: ctx.half, y: 0 }] : [];
-    const add = (x, y) => { if (!out.some((q) => Math.hypot(q.x - x, q.y - y) < 0.05)) out.push({ x, y }); };
-    for (const j of findJoints(ctx.segs)) add(j.x, j.y);
-    for (const c of ctx.cross) add(c.x, c.y);
-    return out;
-  }
-  const JOINT_SNAP = 0.8;     // feet: an end this close to a joint lands right on it
-  function nearestJoint(x, y, within = JOINT_SNAP, ctx) {
-    let best = null, bd = within;
-    for (const j of jointsHere(ctx)) { const d = Math.hypot(j.x - x, j.y - y); if (d < bd) { bd = d; best = j; } }
-    return best;
-  }
-
-  // slide: the board's end a goes to (x, y), then the best snap for either end shifts the whole board
-  function snapMove(h, x, y) {
-    const ctx = context(h.key), { segs, lines } = ctx;
-    // (heights go to the half foot: on a leaning wall y runs up its slope, so a whole number of feet up it is a little more)
-    const sK = Math.sqrt(1 + parseKey(h.key).t ** 2), snapY = (v) => snapTo(v / sK) * sK;
-    const dx = Math.cos(h.ang) * h.len, dy = Math.sin(h.ang) * h.len;
+  // the socket nearest a screen point (page pixels): within `px` of it (Infinity: the nearest anywhere), a nearer one
+  // to the eye winning a near tie. -> socket or null
+  function socketAt(cx, cy, px = SOCKET_PX) {
+    const r = el.view.getBoundingClientRect(), x = cx - r.left, y = cy - r.top;
     let best = null;
-    const consider = (ox, oy, score, along, e) => { if (!best || score < best.score) best = { ox, oy, score, along, e }; };
-    const tips = [...segs.flatMap((s) => [[s.ax, s.ay], [s.bx, s.by]]), ...ctx.cross.map((c) => [c.x, c.y])];
-    const joints = jointsHere(ctx);
-    // (an upright board's foot that settles on anything within a fifth of a foot of a post's top goes onto the post's
-    // top: a board stood on the top post stands on the post, not on the end of the brace that reaches up beside it a
-    // few inches lower. Only that close: a joint half a foot along, where a beam crosses, is still its own spot)
-    // (and a leg's foot, the same way, onto the top of the leg below it on its line: the lean goes on up)
-    const up = Math.abs(Math.cos(h.ang)) < 1e-6 || !!h.leg, lowEnd = dy >= 0 ? 0 : 1;
-    const walls = up ? wallsInUse(T()) : null, along = (s) => Math.abs((s.bx - s.ax) * dy - (s.by - s.ay) * dx) < 0.02 * s.len * h.len;
-    const postTops = up ? segs.filter((s) => s.post || (s.leg && along(s) && isCornerLine(T(), s.src, walls))).map((s) => (s.ay > s.by ? [s.ax, s.ay] : [s.bx, s.by])) : [];
-    [[x, y], [x + dx, y + dy]].forEach(([ex, ey], e) => {
-      // joints (a corner's foot, a post meeting a crosspiece, a board crossing the plane: strongest, from furthest), the
-      // ends of other boards, then their length, the corner lines and the ground
-      for (const j of joints) { const d = Math.hypot(j.x - ex, j.y - ey); if (d < JOINT_SNAP) consider(j.x - ex, j.y - ey, d * 0.45, null, e); }
-      for (const [px, py] of tips) { const d = Math.hypot(px - ex, py - ey); if (d < 0.55) consider(px - ex, py - ey, d * 0.6, null, e); }
-      for (const s of [...segs, ...lines]) {
-        const c = nearestOn(s, ex, ey), d = Math.hypot(c.x - ex, c.y - ey);
-        if (d < 0.45) consider(c.x - ex, c.y - ey, d + 0.08, s, e);
-      }
-    });
-    let nx = x, ny = y;
+    for (const s of sockets()) {
+      const P = app.worldToScreen(s.X, s.Y, s.Z); if (P.behind) continue;
+      const d = Math.hypot(P.x - x, P.y - y); if (d > px) continue;
+      const depth = app.camDist ? app.camDist(s) : 0;
+      if (!best || d < best.d - 8 || (Math.abs(d - best.d) <= 8 && depth < best.depth - 0.05)) best = { s, d, depth };
+    }
+    return best ? best.s : null;
+  }
+  // how far over its free end stands from its socket, on the half foot (dx across X, dz along Z), and which way it goes
+  // (up: 1, down: -1)
+  const runOf = (h) => ({ dx: snapTo(h.B.X - h.A.X), dz: snapTo(h.B.Z - h.A.Z), up: h.B.Y >= h.A.Y - 1e-6 ? 1 : -1 });
+  // the free end set by its run from the socket (the height from its length); a run too long for it is brought in, by
+  // the half foot, until the board reaches. Then, if the board now passes through another board, it connects there.
+  function setRun(h, dx, dz, up = 1) {
+    let B = null;
+    for (let i = 0; i < 40 && !B; i++) {
+      B = freeEnd(h.A, h.len, dx, dz, up) || (up < 0 ? freeEnd(h.A, h.len, dx, dz, 1) : null);
+      if (!B) { if (Math.abs(dx) >= Math.abs(dz)) dx -= Math.sign(dx) * SNAP; else dz -= Math.sign(dz) * SNAP; }
+    }
+    h.B = B || { X: h.A.X, Y: h.A.Y + h.len, Z: h.A.Z };
+    connectHere(h);
+  }
+  // does the board as it lies pass through another board? Then it connects there (its line squared onto that spot)
+  function connectHere(h) {
+    const c = connectAlong(T(), h.A, h.B, h.len, { skip: atSocket(h) });
+    h.con = c ? { o: c.o, s: c.s, P: c.P, past: c.past, b: c.b } : null;
+    if (c) h.B = c.b;
+  }
+  // its first end into a socket, its free end keeping how far over it stood
+  function placeSocket(h, S) {
+    const { dx, dz, up } = runOf(h);
+    h.A = { X: S.X, Y: S.Y, Z: S.Z }; h.on = S.on || null;
+    setRun(h, dx, dz, up);
+  }
+  // the four arrows: the free end half a foot along X or Z (its height from its length). false when it can't reach.
+  function arrow(ax, sg) {
+    const h = app.held; if (!h || app.phase !== 'build') return false;
+    const before = snapOfHeld(h), { dx, dz, up } = runOf(h), nx = dx + (ax === 'X' ? sg * SNAP : 0), nz = dz + (ax === 'Z' ? sg * SNAP : 0);
+    if (!freeEnd(h.A, h.len, nx, nz, up) && !freeEnd(h.A, h.len, nx, nz, 1)) { sound.clatter(h.len * 0.3, 'set', undefined, 0.12); h.tooFar = now(); app.dirty = true; return false; }
+    setRun(h, nx, nz, up);
+    h.fresh = false; h.start = false; keepHist(before);
+    sound.clatter(h.len * 0.4, 'set', undefined, h.con ? 0.35 : 0.18); app.dirty = true;
+    return true;
+  }
+  // Dragging the free end: the board turns about its socket in the upright plane facing the view, following
+  // the finger. Where the free end would connect to a board near the finger (its line through that board within its
+  // length, the end within CONNECT_PX of the finger on the screen; KEEP_PX to stay on the board it is on), it connects;
+  // else it stands on the half foot over the ground from the socket.
+  function dragFree(h, cx, cy) {
+    const r = el.view.getBoundingClientRect(), fx = cx - r.left, fy = cy - r.top;
+    const skip = atSocket(h);
+    let best = null;
+    for (const o of T().boards) {
+      if (skip.includes(o)) continue;
+      const span = reachOn(h.A, h.len, o); if (!span) continue;
+      const at = (s) => { const c = connectTo(h.A, h.len, o, s); if (!c) return null; const P = app.worldToScreen(c.b.X, c.b.Y, c.b.Z); return P.behind ? null : { s, c, d: Math.hypot(P.x - fx, P.y - fy) }; };
+      let b = null;
+      const n = Math.max(2, Math.ceil((span[1] - span[0]) / 0.25));
+      for (let i = 0; i <= n; i++) { const q = at(span[0] + (span[1] - span[0]) * i / n); if (q && (!b || q.d < b.d)) b = q; }
+      if (!b) continue;
+      for (let k = -6; k <= 6; k++) { const s = Math.min(span[1], Math.max(span[0], b.s + k / 24)), q = at(s); if (q && q.d < b.d) b = q; }
+      const lim = h.con && h.con.o === o ? KEEP_PX : CONNECT_PX;
+      if (b.d < lim && (!best || b.d < best.d)) best = { o, span, ...b };
+    }
     if (best) {
-      nx += best.ox; ny += best.oy;
-      // slid along a level or upright line: the end on it goes to another board's end on that line if one is close (a
-      // joint), else to the half foot along it. (Close: under a third of a foot, so the half foot next to a board's end
-      // can still be had: a setback tier's post stands half a foot in from the wall below.)
-      const s = best.along, ox = best.e ? dx : 0, oy = best.e ? dy : 0;
-      const along = (v, fixed, horiz) => {
-        let to = horiz ? snapTo(v) : snapY(v), near = 0.3;
-        for (const [px, py] of tips) { const on = horiz ? Math.abs(py - fixed) < 0.05 : Math.abs(px - fixed) < 0.05, q = horiz ? px : py; if (on && Math.abs(q - v) < near) { near = Math.abs(q - v); to = q; } }
-        return to;
-      };
-      if (s && Math.abs(s.ay - s.by) < 1e-6) nx = along(nx + ox, s.ay, true) - ox;
-      else if (s && Math.abs(s.ax - s.bx) < 1e-6) ny = along(ny + oy, s.ax, false) - oy;
-    } else { nx = snapTo(nx); ny = snapY(ny); }
-    if (postTops.length) {
-      const fx = nx + (lowEnd ? dx : 0), fy = ny + (lowEnd ? dy : 0);
-      for (const [px, py] of postTops) if (Math.hypot(px - fx, py - fy) < 0.2) { nx += px - fx; ny += py - fy; break; }
+      // where along that board: right where the board just reaches (no overhang), at the board's end, or to the inch
+      let s = Math.round(best.s * 12) / 12;
+      for (const e of [best.span[0], best.span[1], 0, d3(best.o.a, best.o.b)]) if (Math.abs(e - best.s) < 2.5 / 12 && e >= best.span[0] - 1e-9 && e <= best.span[1] + 1e-9) { s = e; break; }
+      const c = connectTo(h.A, h.len, best.o, s) || best.c;
+      const was = h.con && h.con.o === best.o;
+      h.B = c.b; h.con = { o: best.o, s, P: c.P, past: c.past, b: c.b };
+      if (!was) sound.clatter(h.len * 0.5, 'set', undefined, 0.35);
+      return;
     }
-    // a level board between two legs of a tapering (or flaring) wall: it settles at the height where they stand just
-    // its length apart, the middle between them, if that is near where it was put
-    if (Math.abs(dy) < 1e-9) { const f = fitBetween(segs, nx, ny, dx, sK); if (f) { nx = f.x; ny = f.y; } }
-    // never below the ground
-    const low = Math.min(ny, ny + dy); if (low < 0) ny -= low;
-    h.x = nx; h.y = ny;
-    ghostSnap(h);
+    // free: the finger's spot on the upright plane facing the view through the socket, the board pointing there
+    const ray = app.rayAt(cx, cy), f0 = app.viewDir(); if (!ray) return;
+    const fl = Math.hypot(f0.X, f0.Z) || 1, f = { X: f0.X / fl, Y: 0, Z: f0.Z / fl };
+    const den = ray.d.X * f.X + ray.d.Y * f.Y + ray.d.Z * f.Z; if (Math.abs(den) < 1e-6) return;
+    const t = ((h.A.X - ray.O.X) * f.X + (h.A.Y - ray.O.Y) * f.Y + (h.A.Z - ray.O.Z) * f.Z) / den;
+    const Q = { X: ray.O.X + ray.d.X * t, Y: ray.O.Y + ray.d.Y * t, Z: ray.O.Z + ray.d.Z * t }, v = sub(Q, h.A), l = Math.hypot(v.X, v.Y, v.Z) || 1;
+    h.con = null;
+    setRun(h, snapTo(v.X / l * h.len), snapTo(v.Z / l * h.len), v.Y >= -0.05 * l ? 1 : -1);
+    // (a run that lands it right through a board connects it there: setRun; it is not the board near the finger, so
+    // only when it truly passes through)
   }
-  // How far apart the legs of a tapering (or flaring) wall stand at a level board's height, either side of its middle:
-  // feet, or null when no leg there slants in the wall (between upright posts the board's own length says it all).
-  // s: the board on the plane { ax, ay, bx, by }.
-  function legGap(key, s) {
-    const walls = wallsInUse(T()), y = s.ay, m = (s.ax + s.bx) / 2;
-    let L = null, R = null, slant = false;
-    for (const p of planeSegments(T(), key)) {
-      if (!(p.post || (p.leg && isCornerLine(T(), p.src, walls)))) continue;
-      const lo = Math.min(p.ay, p.by), hi = Math.max(p.ay, p.by); if (y < lo - 0.25 || y > hi + 0.25 || hi - lo < 0.5) continue;
-      const u = p.ax + (p.bx - p.ax) * (y - p.ay) / (p.by - p.ay);
-      if (u <= m && (!L || u > L.u)) L = { u, p }; if (u >= m && (!R || u < R.u)) R = { u, p };
-    }
-    if (!L || !R || L.p === R.p) return null;
-    for (const q of [L.p, R.p]) if (Math.abs(q.bx - q.ax) > 1e-3) slant = true;
-    return slant ? R.u - L.u : null;
-  }
-  // A level board (its a end at (x, y), reaching dx along the wall) near two legs of its wall, at least one of them
-  // slanting in the wall (the wall's own corners leaning toward each other, or apart): the place where its ends land on
-  // both, the middle between them, or null. Where the legs stand just its length apart, if that is on them; past their
-  // tops (a piece a hair short for the top of a tapering storey), at their tops, if its ends still touch both there.
-  // (Upright posts stand the same distance apart all the way up, so between two of them nothing moves.)
-  function fitBetween(segs, x, y, dx, sK = 1) {
-    const walls = wallsInUse(T()), legs = segs.filter((s) => s.leg && !s.post && Math.abs(s.by - s.ay) > 0.5 && isCornerLine(T(), s.src, walls));
-    if (!legs.length) return null;
-    const lines = [...legs, ...segs.filter((s) => s.post)];
-    const uAt = (s, yy) => s.ax + (s.bx - s.ax) * (yy - s.ay) / (s.by - s.ay);
-    const lo = Math.min(x, x + dx), hi = Math.max(x, x + dx), len = Math.abs(dx);
-    // (a height a hair off a half inch, from the legs' rounded ends, goes onto it)
-    const halfInch = (yy) => { const Y = yy / sK, r = Math.round(Y * 24) / 24; return Math.abs(Y - r) < 1e-3 ? r * sK : yy; };
-    let best = null;
-    for (const L of lines) for (const R of lines) {
-      if (L === R || (!legs.includes(L) && !legs.includes(R))) continue;
-      const uL = uAt(L, y), uR = uAt(R, y);
-      if (uL >= uR || Math.abs(uL - lo) > 0.6 || Math.abs(uR - hi) > 0.6) continue;
-      // the gap between them changes along y at this rate; where it is len:
-      const g0 = uR - uL, rate = (uAt(R, y + 1) - uAt(L, y + 1)) - g0;
-      if (Math.abs(rate) < 1e-6) continue;
-      const lo2 = Math.max(Math.min(L.ay, L.by), Math.min(R.ay, R.by)), hi2 = Math.min(Math.max(L.ay, L.by), Math.max(R.ay, R.by));
-      const yy = clamp(y + (len - g0) / rate, lo2, hi2);
-      const gap = uAt(R, yy) - uAt(L, yy);
-      if (Math.abs(yy - y) > 0.75 || yy < 0 || Math.abs(gap - len) / 2 > 0.17) continue;
-      const d = Math.abs(yy - y);
-      if (!best || d < best.d) { const mid = (uAt(L, yy) + uAt(R, yy)) / 2; best = { d, x: dx >= 0 ? mid - len / 2 : mid + len / 2, y: halfInch(yy) }; }
-    }
-    return best;
-  }
-  // before a swing: the end it swings about, if it is near a joint, settles right onto it (so a board dropped a little
-  // off the corner still braces corner to corner)
-  // A board just as long as the slant between two joints (a brace cut to reach a bay corner to corner, like the 5 ft
-  // brace in a bay 3 ft wide and 4 ft tall) settles its pivot onto the nearer joint of that pair from further off (2
-  // feet), so dropping it level in the bay and swinging one end up still lands it corner to corner. Only a pair in the
-  // bay the board is in counts: between the floor under its middle and the floor over it (a board lying on a floor is
-  // in the bay above it), so a tier's brace never jumps to a slant in the storey below. An end already sitting right on
-  // a joint stays where it is.
-  function snapPivot(h, pivotEnd) {
-    const e = endsOf(h), P = pivotEnd === 'a' ? { x: e.ax, y: e.ay } : { x: e.bx, y: e.by };
-    const ctx = context(h.key), js = jointsHere(ctx);
-    if (js.some((q) => Math.hypot(q.x - P.x, q.y - P.y) < 0.02)) return;
-    const floors = [0, ...ctx.segs.filter((s) => !s.post && Math.abs(s.ay - s.by) < 0.05).map((s) => s.ay),
-      ...ctx.cross.filter((c) => c.src && Math.abs(c.src.a.Y - c.src.b.Y) < 0.05).map((c) => c.y)];
-    const ymid = (e.ay + e.by) / 2, fb = Math.max(...floors.filter((f) => f <= ymid + 0.1)), above = floors.filter((f) => f > ymid + 0.1);
-    const fa = above.length ? Math.min(...above) : Infinity, inBay = (q) => q.y > fb - 0.05 && q.y < fa + 0.05;
-    let j = null, bd = 2.05;
-    for (const q of js) {
-      const d = Math.hypot(q.x - P.x, q.y - P.y); if (d >= bd || !inBay(q)) continue;
-      if (js.some((o) => inBay(o) && Math.abs(o.x - q.x) > 0.3 && Math.abs(o.y - q.y) > 0.3 && Math.abs(Math.hypot(o.x - q.x, o.y - q.y) - h.len) < 0.12)) { j = q; bd = d; }
-    }
-    j = j || nearestJoint(P.x, P.y, JOINT_SNAP, ctx); if (!j || Math.hypot(j.x - P.x, j.y - P.y) < 0.01) return;
-    h.x += j.x - P.x; h.y += j.y - P.y;
-  }
-  // swing: one end stays put (pivot), the other follows the pointer's direction. leg: the board was a post or a leg when
-  // the swing began: near upright it leans by the half inch a foot (see legSwing)
-  function snapSwing(h, pivotEnd, px, py, leg = false) {
-    const ctx = context(h.key), { segs, lines } = ctx;
-    const e = endsOf(h);
-    const P = pivotEnd === 'a' ? { x: e.ax, y: e.ay } : { x: e.bx, y: e.by };
-    const raw = Math.atan2(py - P.y, px - P.x);
-    // where a circle of the board's length round the pivot crosses other boards, the corner lines and the ground, or
-    // passes through a board crossing the plane. (A post or leg being leaned: a line through the pivot itself, the
-    // corner line it stands on, the post under it or the ground, is no place to swing onto: it would hold it upright.)
-    let best = null;
-    const tryAt = (q) => { const a = Math.atan2(q.y - P.y, q.x - P.x), diff = Math.abs(angDiff(a, raw)); if (diff < 9 * DEG && (!best || diff < best.diff)) best = { a, diff }; };
-    for (const s of [...segs, ...lines]) { if (leg && Math.hypot(nearestOn(s, P.x, P.y).x - P.x, nearestOn(s, P.x, P.y).y - P.y) < 0.05) continue; for (const q of circleHits(P, h.len, s)) tryAt(q); }
-    for (const c of ctx.cross) if (Math.abs(Math.hypot(c.x - P.x, c.y - P.y) - h.len) < 0.25) tryAt(c);
-    // a post or leg near upright, with no board there to swing onto: it leans by the half inch a foot (legSwing)
-    if (leg && !best) {
-      const a = legSwing(h, P, raw);
-      if (a !== null) {
-        if (pivotEnd === 'a') h.ang = a;
-        else { h.x = P.x + Math.cos(a) * h.len; h.y = P.y + Math.sin(a) * h.len; h.ang = a + Math.PI; }
-        h.ang = Math.atan2(Math.sin(h.ang), Math.cos(h.ang));
-        if (!h.n) h.n = famOfKey(h.key);
-        h.leg = !upright(h); h.asLeg = true;
-        return;
-      }
-    }
-    h.asLeg = false;            // (swung as a brace is: see the pivot's settling in the view's pointermove)
-    if (leg) h.leg = false;     // (onto a board, or past the steepest lean: a brace now, swung the usual way)
-    if (best) h.steep = false;
-    let a = best ? best.a : Math.round(raw / (5 * DEG)) * 5 * DEG;
-    if (P.y + Math.sin(a) * h.len < -0.01) { const g = circleHits(P, h.len, lines[0]); if (g.length) { g.sort((u, v) => Math.abs(angDiff(Math.atan2(u.y - P.y, u.x - P.x), raw)) - Math.abs(angDiff(Math.atan2(v.y - P.y, v.x - P.x), raw))); a = Math.atan2(g[0].y - P.y, g[0].x - P.x); } else a = P.x < 0 ? 0 : Math.PI; }
-    if (pivotEnd === 'a') h.ang = a;
-    else { h.x = P.x + Math.cos(a) * h.len; h.y = P.y + Math.sin(a) * h.len; h.ang = a + Math.PI; }
-    h.ang = Math.atan2(Math.sin(h.ang), Math.cos(h.ang));
-  }
-  const angDiff = (a, b) => Math.atan2(Math.sin(a - b), Math.cos(a - b));
-  // A post or leg swung in the wall facing the view leans across the wall seen end on (the other one it lies in): the
-  // pointer's direction from the pivot P, raw, as a lean of that wall, k inches a foot, snapped to the half inch, and
-  // onto the lean of a wall in use standing at its foot when within an inch and a quarter (so a corner leg lands on the
-  // line where two leaning walls meet). -> the board's angle on its plane, from the pivot to its other end, or null
-  // past the steepest lean (then it swings as a brace does).
-  function legSwing(h, P, raw) {
-    const { axis, t: tP } = parseKey(h.key), other = otherFam(axis), sg = otherSign(axis), sP = Math.sqrt(1 + tP * tP);
-    const up = Math.sin(raw), side = Math.cos(raw);
-    // (past the steepest lean: h.steep, so the builder is told why it stopped leaning and swings as a brace now)
-    h.steep = true;
-    if (Math.abs(up) < 0.2) return null;
-    const r = sg * side * sP / up;
-    if (Math.abs(r) > (LEAN_MAX + 0.75) / 12) return null;
-    h.steep = false;
-    let k = snapK(r * 12);
-    // (the walls of the other family standing at the foot: the pivot when it is the low end, else the free end)
-    const Pw = fromPlaneKey(h.key, P.x, P.y), foot = up > 0 ? Pw : fromPlaneKey(h.key, P.x + side * h.len, P.y + up * h.len);
-    let bd = 1.25, there = false;
-    // (a wall going on up from there: a board of it at the foot, reaching higher; the level below's walls only end there)
-    const goesOn = (w) => planeSegments(T(), w).some((sg) => Math.max(sg.src.a.Y, sg.src.b.Y) > foot.Y + 0.5 && pointGap(foot, sg.src).d < 0.25);
-    for (const w of wallsInUse(T())) {
-      const q = parseKey(w); if (q.axis !== other || !q.k) continue;
-      if (Math.abs(offsetAt(w, foot.Y) - across(w, foot)) > 0.1) continue;
-      if (goesOn(w)) there = true;
-      const d = Math.abs(r * 12 - q.k); if (d < bd) { bd = d; k = q.k; }
-    }
-    // (a leaning wall of that family already stands at its foot and this lean is not its lean: the board can only be a
-    // brace in its own wall there (tower.js wallsInUse), so it swings as a brace does)
-    if (there && bd === 1.25) return null;
-    const s = up > 0 ? 1 : -1;
-    return Math.atan2(sP * s, sg * tOfK(k) * s);
-  }
-  const fromPlaneKey = (key, u, y) => fromPlane(key, u, y);
-  function circleHits(C, r, s) {
-    const dx = s.bx - s.ax, dy = s.by - s.ay, fx = s.ax - C.x, fy = s.ay - C.y;
-    const A = dx * dx + dy * dy, B = 2 * (fx * dx + fy * dy), Cc = fx * fx + fy * fy - r * r, D = B * B - 4 * A * Cc;
-    if (D < 0 || !A) return [];
-    const out = [];
-    for (const t of [(-B - Math.sqrt(D)) / (2 * A), (-B + Math.sqrt(D)) / (2 * A)]) if (t >= -0.01 && t <= 1.01) out.push({ x: s.ax + dx * t, y: s.ay + dy * t });
-    return out;
-  }
-  // a held board the same length as a glowing twin on its plane, brought near it, settles right onto it
-  function twinSpots(len, key) {
-    const out = [];
-    for (const g of app.ghostList()) {
-      if (!g.ok || Math.abs(g.len - len) > 0.01 || !planesOf(g).includes(key)) continue;
-      const A = toPlane(key, g.a), B = toPlane(key, g.b); out.push({ ax: A.u, ay: A.y, bx: B.u, by: B.y });
-    }
-    return out;
-  }
-  function ghostSnap(h) {
-    const s = segOf(h);
-    for (const g of twinSpots(h.len, h.key)) {
-      for (const [a, b] of [[[g.ax, g.ay], [g.bx, g.by]], [[g.bx, g.by], [g.ax, g.ay]]]) {
-        if (Math.hypot(a[0] - s.ax, a[1] - s.ay) < 0.7 && Math.hypot(b[0] - s.bx, b[1] - s.by) < 0.7) {
-          h.x = a[0]; h.y = a[1]; h.ang = Math.atan2(b[1] - a[1], b[0] - a[0]); h.ghost = true; return;
-        }
-      }
-    }
-    h.ghost = false;
-  }
-
-  // ── in and out: the held board's plane pushed over the stones (seen end on) ──────────────────────────────────────
-  // where a plane's offset settles: onto a plane other boards already stand in (or the stones' edge, or the middle) if
-  // one is within a quarter foot, else the half foot; never past the stones. (A quarter foot: every half foot then has
-  // the same reach, so the half foot either side of the middle, where a 1 × 1 top's walls stand, is as easy to land
-  // on as the middle itself.)
-  function snapOffset(axis, v) {
-    const half = axisHalf(axis), t = T();
-    let to = snapTo(v), near = 0.25;
-    const offs = [-half, 0, half];
-    for (const k of wallsInUse(t)) if (famOfKey(k) === axis) offs.push(offOf(k));     // (upright walls only, here)
-    for (const o of offs) if (Math.abs(o - v) < near) { near = Math.abs(o - v); to = o; }
-    return clamp(to, -half, half);
-  }
-  // Pushed in or out with walls that lean about (or a board on a leaning wall): where its wall settles. v: where the
-  // board's middle would stand across (feet, its family's axis), Ym: its middle's height. A board that is not level
-  // keeps its wall's lean: the place its foot stands across goes onto a wall in use with that same lean if one is within
-  // a quarter foot there, else the half foot. A level board (a dot seen end on) lands in any wall in use passing within
-  // a quarter foot of it at its height, leaning or not, taking that wall's lean; else it keeps its own. Never past the
-  // stones at its foot (on the ground) or past what the steepest lean reaches (higher up). -> the plane's key
-  function snapPlane(h, v, Ym) {
-    const axis = famOfKey(h.key), { t: t0, k: k0 } = parseKey(h.key), w = worldOf(h), level = Math.abs(w.a.Y - w.b.Y) < 1e-6;
-    const Yf = Math.min(w.a.Y, w.b.Y) + (Ym - (w.a.Y + w.b.Y) / 2), vf = v + t0 * (Yf - Ym), half = axisHalf(axis);
-    const reach = half + (Yf > 0.2 ? LEAN_MAX / 12 * Yf : 0);
-    let best = null, near = 0.25;
-    const offer = (key, at, from) => { const d = Math.abs(at - from); if (d < near && Math.abs(at) <= reach + 1e-6) { near = d; best = key; } };
-    for (const k of wallsInUse(T())) {
-      const q = parseKey(k); if (q.axis !== axis) continue;
-      if (q.k === k0) offer(k, offsetAt(k, Yf), vf);
-      else if (level) offer(k, offsetAt(k, Ym), v);
-    }
-    if (best) return best;
-    // (the stones' edges and the middle, at the foot; else the half foot. Where this family's outer walls lean, the half
-    // foot is counted in from each of them as it stands at that height, and the middle is the middle between them, so
-    // the board's wall can be set "1 ft in from the front" of a leaning front wall, as its name then says)
-    const outer = isTurnedFam(axis) ? [half, -half] : [1, -1].map((sg) => { const f = axis === 'Z' ? (sg > 0 ? 0 : 2) : (sg > 0 ? 1 : 3), ws = faceWallsOf(f); return ws.length ? offsetAt(ws[0], Yf) : sg * half; });
-    let to, n2 = 0.25;
-    if (outer[0] !== half || outer[1] !== -half) {
-      // (counted from the nearer one only, so the steps read whole half feet from the wall the name goes by)
-      const [o, sg] = Math.abs(outer[0] - vf) <= Math.abs(outer[1] - vf) ? [outer[0], 1] : [outer[1], -1];
-      to = o - sg * snapTo((o - vf) * sg);
-      for (const q of [outer[0], (outer[0] + outer[1]) / 2, outer[1]]) if (Math.abs(q - vf) < n2) { n2 = Math.abs(q - vf); to = q; }
-    } else {
-      to = snapTo(vf);
-      for (const o of [-half, 0, half]) if (Math.abs(o - vf) < n2) { n2 = Math.abs(o - vf); to = o; }
-    }
-    to = clamp(to, -reach, reach);
-    // (a horizontal board that lands in no wall stands in an upright one: it can't show a lean of its own, and a lean
-    // kept from the wall it left would name a wall that isn't there)
-    return level ? planeKey(axis, to) : planeKey(axis, to - t0 * Yf, k0);
-  }
-  // the outer walls in use standing on face f's line of stones (tower.js faceWalls: the upright one first)
-  const faceWallsOf = (f) => faceWalls(T(), f);
-  // are there walls of this family that lean, or does the held board's own wall lean? (if not: everything in and out
-  // goes as it always did)
-  const leaningAbout = (h) => parseKey(h.key).k !== 0 || [...wallsInUse(T())].some((k) => famOfKey(k) === famOfKey(h.key) && parseKey(k).k !== 0);
-  // move the held board onto the plane `off` of its kind (or the plane key `off`), its a end at in-plane height y (its
-  // place along the plane kept): an end that comes near a joint or a board crossing the new plane lands on it, else the
-  // half foot
-  function snapInOut(h, off, y) {
-    h.key = typeof off === 'string' ? off : planeKey(famOfKey(h.key), off);
-    const ctx = context(h.key), dx = Math.cos(h.ang) * h.len, dy = Math.sin(h.ang) * h.len;
-    const pts = [...jointsHere(ctx), ...ctx.segs.flatMap((s) => [{ x: s.ax, y: s.ay }, { x: s.bx, y: s.by }])];
-    let best = null;
-    for (const [ex, ey] of [[h.x, y], [h.x + dx, y + dy]]) for (const q of pts) { const d = Math.hypot(q.x - ex, q.y - ey); if (d < 0.45 && (!best || d < best.d)) best = { d, ox: q.x - ex, oy: q.y - ey }; }
-    // (the half foot of height: on a leaning wall, y runs up its slope)
-    const sK = Math.sqrt(1 + parseKey(h.key).t ** 2);
-    let ny = best ? y + best.oy : snapTo(y / sK) * sK;
-    if (best) h.x += best.ox;
-    const low = Math.min(ny, ny + dy); if (low < 0) ny -= low;
-    h.y = ny; h.ghost = false;
-  }
-  // Lean the held board's wall about its foot (seen end on, its top dragged to stand at `at` across and Y high): the
-  // lean the drag asks for, k inches a foot, by the half inch (7 at most, in or out), and onto the lean of a wall in
-  // use standing at its foot when within an inch and a quarter of it (the board joins that wall). The foot stays put and
-  // the board keeps its place and angle on its wall.
-  function leanTo(h, foot, at, Y) {
-    const axis = famOfKey(h.key), rise = Y - foot.Y;
-    if (rise < 0.3) return;
-    const r = (at - across(h.key, foot)) / rise, k0 = parseKey(h.key).k;
-    // (with a little give: the lean moves on to the next half inch only once the drag is well past the middle between)
-    let k = Math.abs(r * 12 - k0) < LEAN_STEP * 0.75 ? k0 : snapK(r * 12), key = null, bd = 1.25;
-    for (const w of wallsInUse(T())) {
-      const q = parseKey(w); if (q.axis !== axis || !q.k) continue;
-      if (Math.abs(offsetAt(w, foot.Y) - across(w, foot)) > 0.1) continue;
-      const d = Math.abs(r * 12 - q.k); if (d < bd) { bd = d; k = q.k; key = w; }
-    }
-    if (!key) {
-      // (the same lean as now: nothing moves)
-      if (k === parseKey(h.key).k) return;
-      key = planeKey(axis, across(h.key, foot) - tOfK(k) * foot.Y, k);
-    }
-    if (key === h.key) return;
-    placeFoot(h, key, foot);
-  }
-  // the held board onto the plane `key`, its foot (lower end) at the world point `foot`, its angle on its wall kept
-  function placeFoot(h, key, foot) {
-    const w = worldOf(h), aIsFoot = w.a.Y <= w.b.Y, F = toPlane(key, foot);
-    h.key = key;
-    if (aIsFoot) { h.x = F.u; h.y = F.y; } else { h.x = F.u - Math.cos(h.ang) * h.len; h.y = F.y - Math.sin(h.ang) * h.len; }
-    h.ghost = false;
-    sound.clatter(h.len * 0.5, 'set', undefined, 0.2);
-  }
-  // which way the held board is seen: face on (slide and swing on its plane) or end on (push it in and out), with a
-  // little give round 45 degrees. A post seen end on from one of its planes is face on in the other: it moves over to
-  // that one (so from the side it slides along the side's plane). Not while a finger is moving it.
-  function updateView(h) {
-    if (!h || (gesture && gesture.kind === 'grab')) return;
-    const off = offSquare(h.key);
-    if (lineLike(h)) {
-      if (off > POST_SWAP) {
-        const w = worldOf(h);
-        if (isPost(w)) { const mid = w.a; if (!h.n) h.n = famOfKey(h.key); h.key = crossKey(h.key, mid); const p = toPlane(h.key, mid); h.x = p.u; }
-        else {
-          // a leg (or a board straight up a leaning wall): over to its other wall, where it leans the way it does
-          const other = planesOf(w).find((k) => k !== h.key);
-          if (other) {
-            if (!h.n) h.n = famOfKey(h.key);
-            const A = toPlane(other, w.a), B = toPlane(other, w.b);
-            h.key = other; h.x = A.u; h.y = A.y; h.ang = Math.atan2(B.y - A.y, B.u - A.u); h.leg = !upright(h);
-          }
-        }
-      }
-      h.endOn = false; return;
-    }
-    h.n = null;     // (a board that isn't upright lies flat in its plane: its face looks across it)
-    if (h.endOn && off < FACE_ON) h.endOn = false;
-    else if (!h.endOn && off > END_ON) h.endOn = true;
-  }
-
-  // a freshly dragged-in board under the pointer: on the plane the pointer finds (main.js pickPlane), upright near a
-  // corner of the stones (on an outer wall: where corner posts go), else level, unless already turned
+  // a freshly dragged-in board under the pointer: its socket the one nearest the finger, standing straight up
   function placeAtPointer(cx, cy, fresh) {
     const h = app.held; if (!h) return;
     if (fresh && h.fresh) {
@@ -856,44 +440,17 @@ export function makeBuild(app) {
         const r = el.view.getBoundingClientRect();
         if (!h.entry) h.entry = { x: cx, y: cy };
         if (Math.hypot(cx - h.entry.x, cy - h.entry.y) < Math.max(70, Math.min(0.3 * r.width, START_REACH))) { app.dirty = true; return; }
-        // (from here on it is a piece carried in as always: nothing of its start spot kept)
-        h.left = true; h.n = undefined; h.leg = false; h.turned = false;
+        h.left = true; h.start = false;
       }
-      h.key = app.pickPlane(cx, cy, h.len);
-      const p = app.toPlane(h.key, cx, cy); if (!p) return;
-      const ctx = context(h.key);
-      // (the corner lines of an outer wall: straight up from the stones, or slanting with the leaning walls round them)
-      const corners = ctx.lines.filter((l) => l.corner);
-      const uOn = (l, y) => l.ax + (l.bx - l.ax) * (y - l.ay) / (l.by - l.ay);
-      // (how near counts: two thirds of the way to the middle of the wall at that height, 1.3 ft at most)
-      const us = corners.map((l) => uOn(l, p.y)), uL = Math.max(-ctx.half, ...us.filter((u, i) => corners[i].ax < 0)), uR = Math.min(ctx.half, ...us.filter((u, i) => corners[i].ax > 0));
-      const hw = corners.length && uR > uL ? (corners.some((l) => l.bx !== l.ax) ? (uR - uL) / 2 : ctx.half) : ctx.half;
-      let near = null, nd = Math.min(1.3, hw * 0.68);
-      for (const l of corners) { const d = Math.abs(p.x - uOn(l, p.y)); if (d < nd) { nd = d; near = l; } }
-      h.ang = near !== null ? Math.atan2(near.by - near.ay, near.bx - near.ax) : 0;
-      // the pointer holds the board's middle (an upright one: a bit below its middle, so it can reach the ground)
-      let mx = p.x - Math.cos(h.ang) * h.len / 2, my = p.y - Math.sin(h.ang) * h.len * (near !== null ? 0.35 : 0.5);
-      h.leg = false;
-      if (near !== null) {
-        // an upright board by a corner settles onto the ground, or onto the top of the post standing there (on a
-        // slanting corner line: along the line, onto the top of the leg below, so the lean goes on up)
-        let base = 0, bu = near.ax;
-        for (const s of ctx.segs) {
-          if (Math.abs(s.ax - uOn(near, s.ay)) >= 0.01 || Math.abs(s.bx - uOn(near, s.by)) >= 0.01) continue;
-          const top = Math.max(s.ay, s.by); if (top <= p.y + 1.5 && top > base) { base = top; bu = s.ay > s.by ? s.ax : s.bx; }
-        }
-        mx = near.bx === near.ax ? near.ax : bu; my = base;
-        if (near.bx !== near.ax) { h.leg = true; h.n = famOfKey(h.key); }
-      }
-      h.endOn = false;
-      snapMove(h, mx, my);
+      const S = socketAt(cx, cy, Infinity);
+      if (S) { h.A = { X: S.X, Y: S.Y, Z: S.Z }; h.on = S.on || null; h.B = { X: S.X, Y: S.Y + h.len, Z: S.Z }; connectHere(h); }
     }
     app.dirty = true;
   }
 
-  // ── near the top or bottom of the view while dragging a board: climb the tower ────────────────────────────────────
-  // (only once the finger has gone on into the band beyond where it pressed: a handle near the top of the view, a tall
-  // board's top or a leg's, is grabbed and swung there without the view climbing away under it)
+  // ── near the top or bottom of the view while dragging: climb the tower ─────────────────────────────────────────────
+  // (only once the finger has gone on into the band beyond where it pressed: a handle near the top of the view is grabbed
+  // and moved there without the view climbing away under it)
   function edgeWatch(cy, top = 0.12, bot = 0.9) {
     const r = el.view.getBoundingClientRect(), fy = (cy - r.top) / r.height, f0 = gesture && gesture.fy0 !== undefined ? gesture.fy0 : 0.5;
     app.autoScroll = fy < top && fy < Math.min(top, f0) - EDGE_GIVE ? 1 : fy > bot && fy > Math.max(bot, f0) + EDGE_GIVE ? -1 : 0;
@@ -901,43 +458,15 @@ export function makeBuild(app) {
   const EDGE_GIVE = 0.03;     // of the view's height: how far past the press (or the band's edge) the finger must go
   function stopEdge() { app.autoScroll = 0; }
 
-  // ── where the held board touches: the green circles ──────────────────────────────────────────────────────────────
-  // [{ x, y (on its plane), X, Y, Z (world), t (feet along it from its a end), end ('a', 'b' or null), other (a board,
-  //    or null for the ground), seg (the other on this plane, when it lies in it: for the angle), angle (degrees 0..90,
-  //    or null across planes) }]
-  function contactsOf(h) {
-    const me = worldOf(h), out = [], ground = { ax: -60, ay: 0, bx: 60, by: 0, len: 120, ground: true };
-    for (const c of contactsIn3D(me, T().boards)) {
-      const q = toPlane(h.key, c);
-      let seg = null;
-      if (!c.other) seg = ground;
-      else if (planesOf(c.other).includes(h.key)) { const A = toPlane(h.key, c.other.a), B = toPlane(h.key, c.other.b); seg = { ax: A.u, ay: A.y, bx: B.u, by: B.y, len: c.other.len }; }
-      let angle = null;
-      if (seg) { angle = Math.abs(angDiff(h.ang, Math.atan2(seg.by - seg.ay, seg.bx - seg.ax))) / DEG; if (angle > 90) angle = 180 - angle; }
-      out.push({ x: q.u, y: q.y, X: c.X, Y: c.Y, Z: c.Z, t: c.t, end: c.end, other: c.other, seg, angle });
-    }
-    return out;
-  }
-  // an end that comes close to a board but doesn't touch it: [{ end, x, y, d }] (a red ring: "not touching"). (A board
-  // it is already nailed to elsewhere doesn't count: an end sticking out past it is an overhang, not a near miss.)
-  function nearMisses(h, cs) {
-    const me = worldOf(h), out = [], mine = new Set(cs.map((c) => c.other));
-    for (const [end, p] of [['a', me.a], ['b', me.b]]) {
-      if (cs.some((c) => c.end === end)) continue;
-      let d = p.Y > TOL && !mine.has(null) ? p.Y : Infinity;
-      for (const o of T().boards) if (!mine.has(o)) d = Math.min(d, pointGap(p, o).d);
-      if (d > TOL && d < 0.75) { const q = toPlane(h.key, p); out.push({ end, x: q.u, y: q.y, d }); }
-    }
-    return out;
-  }
+  // ── where the held board touches ─────────────────────────────────────────────────────────────────────────────────
+  // [{ X, Y, Z, t (feet along it from its socket), end ('a': the socket, 'b': the free end, or null), other }]
+  function contactsOf(h) { return contactsIn3D(worldOf(h), T().boards); }
 
-  // ── overhang: the part of a board past the last board (or the ground) it is nailed to ────────────────────────────
+  // ── overhang: the part of a nailed board past the last board (or the ground) it is nailed to ──────────────────────
   // len: its length; ts: feet along it (from its a end) where it touches others; top: which end is up for an upright
   // board (null otherwise). Returns [{ end: 'a' | 'b', t0, t1 }] (the stretch that sticks out), only when it is nailed
   // at two places or more. The top of a post standing up past its last crosspiece is no overhang: that is where the
-  // next crosspiece (or the next post) goes.
-  // (No overhang is offered where what would be left between the nails is shorter than half a foot: the saw never
-  // makes a piece shorter than that, so no stub of a few inches can be fitted inside a corner of legs.)
+  // next crosspiece (or the next post) goes. (None where what would be left between the nails is under half a foot.)
   function overhangOf(len, ts, top) {
     if (ts.length < 2) return [];
     const lo = Math.max(0, Math.min(...ts)), hi = Math.min(len, Math.max(...ts)), out = [];
@@ -946,35 +475,51 @@ export function makeBuild(app) {
     if (len - hi > 0.12 && top !== 'b') out.push({ end: 'b', t0: hi, t1: len });
     return out;
   }
-  const topEnd = (a, b) => (Math.abs(a.X - b.X) < 0.1 * Math.hypot(a.X - b.X, a.Y - b.Y, a.Z - b.Z) + 1e-9 && Math.abs(a.Z - b.Z) < 0.1 * Math.hypot(a.X - b.X, a.Y - b.Y, a.Z - b.Z) + 1e-9 ? (b.Y > a.Y ? 'b' : 'a') : null);
-  // the held board's overhangs
-  // (a leg's top above its last crosspiece is no overhang either: the next leg goes on up from there)
-  const legTop = (a, b) => (b.Y > a.Y ? 'b' : 'a');
-  function heldOverhang() { const h = app.held; if (!h) return []; const w = worldOf(h); return overhangOf(h.len, contactsOf(h).map((c) => c.t), lineLike(h) && !upright(h) ? legTop(w.a, w.b) : topEnd(w.a, w.b)); }
+  const topEnd = (a, b) => (Math.abs(a.X - b.X) < 0.1 * d3(a, b) + 1e-9 && Math.abs(a.Z - b.Z) < 0.1 * d3(a, b) + 1e-9 ? (b.Y > a.Y ? 'b' : 'a') : null);
   // a nailed board's overhangs: { board, list }
   function nailedOverhang(src) {
     if (!src || !T().boards.includes(src)) return null;
-    const ts = contactsIn3D(src, T().boards).map((c) => c.t), line = !isPost(src) && isCornerLine(T(), src);
-    return { board: src, list: overhangOf(src.len, ts, line ? legTop(src.a, src.b) : topEnd(src.a, src.b)) };
+    const ts = contactsIn3D(src, T().boards).map((c) => c.t);
+    return { board: src, list: overhangOf(src.len, ts, topEnd(src.a, src.b)) };
   }
-  // saw a board off at t (feet from its a end), keeping the part on the far side of `end`
-  function sawOff(len, o, nailed = false) { sound.saw(len, o.t1 - o.t0); const off = o.t1 - o.t0; const kept = addOffcut(off); renderPanel(); app.onSawOff && app.onSawOff(off, kept, nailed); }
-  function cutHeld(o) {
-    const h = app.held; if (!h) return;
-    const s = segOf(h), dx = (s.bx - s.ax) / s.len, dy = (s.by - s.ay) / s.len, before = h.len;
-    if (o.end === 'a') { h.x = s.ax + dx * o.t1; h.y = s.ay + dy * o.t1; h.len -= o.t1; }
-    else h.len = o.t0;
-    h.piece.len = h.len; h.piece.full = false; h.fresh = false; h.hist = []; h.cutNow = true;
-    sawOff(before, o); app.dirty = true;
+  // an offcut back on the pile, rounded down to the half foot (under half a foot: kindling). -> the length kept, or 0
+  function keepOffcut(past) {
+    const k = offcutOf(past);
+    if (k) { const p = newPiece(k); p.fresh = true; L.pieces.push(p); }
+    renderPanel(); return k;
   }
   function cutNailed(src, o) {
     const before = src.len, d = { X: (src.b.X - src.a.X) / src.len, Y: (src.b.Y - src.a.Y) / src.len, Z: (src.b.Z - src.a.Z) / src.len };
     const at = (t) => { const r = (v) => Math.round(v * 1e6) / 1e6 || 0; return { X: r(src.a.X + d.X * t), Y: r(src.a.Y + d.Y * t), Z: r(src.a.Z + d.Z * t) }; };
     if (o.end === 'a') { src.a = at(o.t1); src.len -= o.t1; } else { src.b = at(o.t0); src.len = o.t0; }
-    sawOff(before, o, true); app.onTowerChanged && app.onTowerChanged(src, `Sawed ${fmt(o.t1 - o.t0)} off`);
+    const off = o.t1 - o.t0; sound.saw(before, off); const kept = keepOffcut(off);
+    app.onSawOff && app.onSawOff(off, kept, true);
+    app.onTowerChanged && app.onTowerChanged(src, `Sawed ${fmt(off)} off`);
   }
-  // a point along a board on the screen: the held one a layer out from its plane, as drawn
-  const heldScreen = (h, u, y) => app.planeToScreen(h.key, u, y, !upright(h));
+  // ── after ✓: saw off the extra? ─────────────────────────────────────────────────────────────────────────────────
+  // A board nailed sticking out past the joint at its free end (by any amount): the bar offers to saw it off right at
+  // the joint (one tap), or to keep it. rec: the board just nailed (its b end is the free end), con: where it connected.
+  let trim = null;
+  function offerTrim(rec, con) {
+    trim = con && con.past > 0.01 ? { rec, P: con.P, past: con.past } : null;
+    if (!el.trimBar) return;
+    el.trimBar.hidden = !trim; el.view.classList.toggle('is-trimming', !!trim);
+    if (!trim) return;
+    const k = offcutOf(trim.past);
+    el.trimHint.textContent = `It sticks out ${fmtWords(trim.past)} past the joint. ${k ? `Sawed off, ${fmtWords(k)} goes back on the pile` : 'Sawed off, it is too short to keep: kindling'}${k && Math.abs(k - trim.past) > 0.01 ? ' (the rest is sawdust)' : ''}.`;
+  }
+  function sawTrim() {
+    const tr = trim; if (!tr || !T().boards.includes(tr.rec)) { offerTrim(null); return; }
+    const src = tr.rec, before = src.len, nl = d3(src.a, tr.P);
+    src.b = { ...tr.P }; src.len = Math.round(nl * 1e6) / 1e6;
+    sound.saw(before, tr.past); const kept = keepOffcut(tr.past);
+    offerTrim(null);
+    app.onSawOff && app.onSawOff(tr.past, kept, false);
+    app.onTowerChanged && app.onTowerChanged(src, `Sawed ${fmt(tr.past)} off`);
+  }
+  if (el.trimSaw) el.trimSaw.addEventListener('click', () => { sound.audioOn(); sawTrim(); });
+  if (el.trimKeep) el.trimKeep.addEventListener('click', () => { offerTrim(null); app.dirty = true; });
+
   const boardScreen = (b, t) => { const k = t / b.len; return app.worldToScreen(b.a.X + (b.b.X - b.a.X) * k, b.a.Y + (b.b.Y - b.a.Y) * k, b.a.Z + (b.b.Z - b.a.Z) * k); };
   // which overhang (if any) the screen point is on: the pale part itself, or its "saw off" tag. at(t) -> screen point
   function overhangAt(cx, cy, at, list) {
@@ -987,105 +532,66 @@ export function makeBuild(app) {
     const tag = overTags.find((q) => px > q.x - 6 && px < q.x + q.w + 6 && py > q.y - 6 && py < q.y + q.h + 6);
     return (tag && list.find((o) => o.end === tag.end)) || null;
   }
-  const heldAt = (h) => { const s = segOf(h); return (t) => heldScreen(h, s.ax + (s.bx - s.ax) * t / s.len, s.ay + (s.by - s.ay) * t / s.len); };
   let overTags = [];     // the "saw off" tags drawn last frame (view pixels), so a tap on one saws
   let selectTapAt = 0;   // when a tap last picked out a nailed board
-  // how far (view pixels) a screen point is from the held board as drawn
-  function pxFromHeld(h, cx, cy) {
-    const r = el.view.getBoundingClientRect(), s = segOf(h), A = heldScreen(h, s.ax, s.ay), B = heldScreen(h, s.bx, s.by);
-    return distToSeg({ x: cx - r.left, y: cy - r.top }, A, B);
-  }
   const distToSeg = (p, A, B) => { const vx = B.x - A.x, vy = B.y - A.y, L2 = vx * vx + vy * vy || 1, t = clamp(((p.x - A.x) * vx + (p.y - A.y) * vy) / L2, 0, 1); return Math.hypot(A.x + vx * t - p.x, A.y + vy * t - p.y); };
-  // the end handles stay inside the view (inView): an end up under the top bar, or off the screen, has its handle held
-  // short of it. A press on the board between that handle and the real end means that handle. -> 'a', 'b' or null
-  const HANDLE_TOP = 58;
-  // (a handle is never cut off: at least HANDLE_BOT pixels up from the foot of the view, whatever its margin)
-  const HANDLE_BOT = 32;
+  // the held board as drawn, a layer out from its line (posts on their line): a world point -> the screen
+  const heldOff = (h) => (Math.abs(h.A.X - h.B.X) < 1e-6 && Math.abs(h.A.Z - h.B.Z) < 1e-6 ? null : app.heldOut ? app.heldOut(worldOf(h)) : null);
+  const heldScreen = (h, p) => { const o = heldOff(h); return o ? app.worldToScreen(p.X + o.X, p.Y + o.Y, p.Z + o.Z) : app.worldToScreen(p.X, p.Y, p.Z); };
+  // the handles stay inside the view: an end up under the top bar, or off the screen, has its handle held short of it
+  const HANDLE_TOP = 58, HANDLE_BOT = 32;
   const inViewOf = (r, q, m = 18) => ({ x: clamp(q.x, m, r.width - m), y: clamp(q.y, HANDLE_TOP, r.height - Math.max(m, HANDLE_BOT)) });
-  function handleBeyond(h, cx, cy) {
-    const r = el.view.getBoundingClientRect(), s = segOf(h), p = { x: cx - r.left, y: cy - r.top };
-    const ends = { a: heldScreen(h, s.ax, s.ay), b: heldScreen(h, s.bx, s.by) };
-    const lean = h.endOn && !levelH(h) ? (Math.sin(h.ang) > 0 ? 'b' : 'a') : null;
-    for (const end of ['a', 'b']) {
-      if (h.endOn && end !== lean) continue;
-      const E = ends[end], H = inViewOf(r, E);
-      if (Math.hypot(E.x - H.x, E.y - H.y) < 6) continue;
-      if (distToSeg(p, H, E) < 26 && Math.hypot(p.x - H.x, p.y - H.y) > 16) return end;
-    }
-    return null;
-  }
 
-  // ── the view's pointers: handles, stones, overhangs, walking round, zooming, taps ───────────────────────────────
+  // ── the view's pointers: handles, arrows, stones, overhangs, walking round, zooming, taps ─────────────────────────
   const pointers = new Map();          // every finger or mouse button down on the view: id -> { x, y }
   let gesture = null;                  // what the one pointer that started it is doing
   const now = () => performance.now();
-  const TAP_MS = 300;                  // a press on the held board shorter than this, that hardly moves, is a tap
   // would the held board lie right on top of another one, along its line over most of it (more than half the shorter
-  // one)? Two boards can't fill one spot: it can't be nailed there. (A splice lapping a little along a leg's line is
-  // fine.)
+  // one)? Two boards can't fill one spot: it can't be nailed there.
   function doubled(t, g) {
-    const len = Math.hypot(g.b.X - g.a.X, g.b.Y - g.a.Y, g.b.Z - g.a.Z) || 1, d = { X: (g.b.X - g.a.X) / len, Y: (g.b.Y - g.a.Y) / len, Z: (g.b.Z - g.a.Z) / len };
-    const along = (p) => (p.X - g.a.X) * d.X + (p.Y - g.a.Y) * d.Y + (p.Z - g.a.Z) * d.Z;
-    const off = (p) => { const s = along(p); return Math.hypot(p.X - g.a.X - s * d.X, p.Y - g.a.Y - s * d.Y, p.Z - g.a.Z - s * d.Z); };
+    const len = d3(g.a, g.b) || 1, d = { X: (g.b.X - g.a.X) / len, Y: (g.b.Y - g.a.Y) / len, Z: (g.b.Z - g.a.Z) / len };
+    const alongG = (p) => (p.X - g.a.X) * d.X + (p.Y - g.a.Y) * d.Y + (p.Z - g.a.Z) * d.Z;
+    const off = (p) => { const s = alongG(p); return Math.hypot(p.X - g.a.X - s * d.X, p.Y - g.a.Y - s * d.Y, p.Z - g.a.Z - s * d.Z); };
     return t.boards.some((o) => {
       if (off(o.a) > 0.1 || off(o.b) > 0.1) return false;
-      const s0 = along(o.a), s1 = along(o.b), over = Math.min(len, Math.max(s0, s1)) - Math.max(0, Math.min(s0, s1));
+      const s0 = alongG(o.a), s1 = alongG(o.b), over = Math.min(len, Math.max(s0, s1)) - Math.max(0, Math.min(s0, s1));
       return over > 0.5 * Math.min(len, o.len);
     });
   }
   // ── Undo with a board in hand: its last move ─────────────────────────────────────────────────────────────────────
-  // Every slide, swing, lean or turn of the held board keeps how it was before (h.hist), so Undo takes the last one
-  // back; with none left, Undo puts the board back on the pile. (A saw cut changes the wood itself: it clears them.)
-  const SNAP_SKIP = new Set(['piece', 'hist', 'cutNow']);
-  const snapOfHeld = (h) => { const o = {}; for (const k of Object.keys(h)) if (!SNAP_SKIP.has(k)) o[k] = h[k]; return o; };
-  const sameHeld = (h, o) => ['key', 'x', 'y', 'ang', 'n', 'leg', 'endOn', 'len'].every((k) => (typeof h[k] === 'number' ? Math.abs(h[k] - o[k]) < 1e-9 : h[k] === o[k]));
+  // Every move of the held board (its socket, its free end, an arrow) keeps how it was before (h.hist), so Undo takes the
+  // last one back; with none left, Undo puts the board back on the pile.
+  const snapOfHeld = (h) => ({ A: { ...h.A }, on: h.on, B: { ...h.B }, con: h.con ? { ...h.con } : null });
+  const sameHeld = (h, o) => d3(h.A, o.A) < 1e-9 && d3(h.B, o.B) < 1e-9;
   function keepHist(o) { const h = app.held; if (!h || !o || sameHeld(h, o)) return; (h.hist || (h.hist = [])).push(o); if (h.hist.length > 40) h.hist.shift(); }
   function undoHeld() {
     const h = app.held; if (!h || !h.hist || !h.hist.length) return false;
-    const o = h.hist.pop();
-    for (const k of Object.keys(h)) if (!SNAP_SKIP.has(k) && !(k in o)) delete h[k];
-    Object.assign(h, o); sound.clatter(h.len * 0.6, 'set', undefined, 0.35); app.dirty = true;
+    Object.assign(h, h.hist.pop()); sound.clatter(h.len * 0.6, 'set', undefined, 0.35); app.dirty = true;
     return true;
   }
-  function startGrab(mode, e, extra = {}) {
-    const h = app.held; if (!h) return;
-    extra = { snap: snapOfHeld(h), snapPiece: h.piece, ...extra };
+  function startGrab(mode, e) {
+    const h = app.held; if (!h || app.phase !== 'build') return;
     e.preventDefault(); e.stopPropagation(); sound.audioOn();
-    updateView(h);
-    let g;
-    if (mode === 'turn') {
-      // the turn ring's knob: the drag read along the way the knob moves for a turn, at least RING_RAD_PX pixels a radian
-      // (so on a phone a 15 degree step is a finger's width of drag, however flat the ring looks)
-      const ring = ringOf(h), Jl = Math.hypot(ring.J.x, ring.J.y), u = Jl > 1e-6 ? { x: ring.J.x / Jl, y: ring.J.y / Jl } : { x: 1, y: 0 };
-      g = { kind: 'grab', mode: 'turn', base: snapOfHeld(h), end: ring.end, u, scale: Math.max(Jl, RING_RAD_PX), deg: 0 };
-    } else if (mode === 'move' && h.endOn) {
-      // seen end on: in and out (across its plane) and up and down, on the plane at right angles through its middle
-      const w = worldOf(h), mid = { X: (w.a.X + w.b.X) / 2, Y: (w.a.Y + w.b.Y) / 2, Z: (w.a.Z + w.b.Z) / 2 }, cross = crossKey(h.key, mid);
-      const hit = app.toWorld(cross, e.clientX, e.clientY); if (!hit) return;
-      g = { kind: 'grab', mode: 'inout', cross, o0: offOf(h.key) - across(h.key, hit), y0: h.y - hit.Y,
-        // (on or among leaning walls: where its middle stands across and how high, and its a end's height)
-        m0: offsetAt(h.key, mid.Y) - across(h.key, hit), ym0: mid.Y - hit.Y, ya0: w.a.Y - hit.Y };
-    } else if (mode !== 'move' && h.endOn) {
-      // seen end on, its top's handle: lean its wall about its foot, the top following the finger on the plane at right
-      // angles through the top (so it moves just as far as the finger does, however far behind the foot it stands)
-      const w = worldOf(h), foot = footOf(w), top = topOf(w), cross = crossKey(h.key, top);
-      const hit = app.toWorld(cross, e.clientX, e.clientY); if (!hit) return;
-      // (how far a half inch a foot moves the top on the screen: on a phone, a short board seen from afar moves a few
-      // pixels a step, too fine for a finger, so the finger's move counts for less, LEAN_PX pixels a step at least)
-      const step = LEAN_STEP / 12 * Math.max(0.3, top.Y - foot.Y), en = famNormal(famOfKey(h.key)), P0 = app.worldToScreen(top.X, top.Y, top.Z);
-      const P1 = app.worldToScreen(top.X + en.X * step, top.Y, top.Z + en.Z * step);
-      const px = Math.hypot(P1.x - P0.x, P1.y - P0.y), want = e.pointerType === 'mouse' ? LEAN_PX_MOUSE : LEAN_PX;
-      g = { kind: 'grab', mode: 'lean', cross, foot, dA: across(h.key, top) - across(h.key, hit), dY: top.Y - hit.Y, a0: across(h.key, hit), gain: px > 0 && px < want ? px / want : 1 };
-    } else {
-      const p = app.toPlane(h.key, e.clientX, e.clientY); if (!p) return;
-      g = { kind: 'grab', mode, ox: h.x - p.x, oy: h.y - p.y, legSwing: mode !== 'move' && lineLike(h) };
-    }
     const vr = el.view.getBoundingClientRect();
-    gesture = { ...g, id: e.pointerId, x: e.clientX, y: e.clientY, t0: now(), moved: false, fy0: (e.clientY - vr.top) / vr.height, ...extra };
+    gesture = { kind: 'grab', mode, snap: snapOfHeld(h), snapPiece: h.piece, id: e.pointerId, x: e.clientX, y: e.clientY, t0: now(), moved: false, fy0: (e.clientY - vr.top) / vr.height };
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     try { el.view.setPointerCapture(e.pointerId); } catch (err) { /* (a synthetic event has nothing to capture) */ }
   }
-  for (const [node, mode] of [[el.gMove, 'move'], [el.gA, 'a'], [el.gB, 'b'], [el.gTurn, 'turn']]) if (node) node.addEventListener('pointerdown', (e) => startGrab(mode, e));
+  el.gA.addEventListener('pointerdown', (e) => startGrab('socket', e));
+  el.gB.addEventListener('pointerdown', (e) => startGrab('free', e));
+  // the arrows: a tap moves the free end half a foot (a press held down repeats)
+  const ARROWS = [['X', 1], ['X', -1], ['Z', 1], ['Z', -1]];
+  let arrowRepeat = null;
+  (el.arrows || []).forEach((node, i) => {
+    node.addEventListener('pointerdown', (e) => {
+      e.preventDefault(); e.stopPropagation(); sound.audioOn();
+      const [ax, sg] = ARROWS[i]; arrow(ax, sg);
+      clearInterval(arrowRepeat); clearTimeout(arrowRepeat);
+      arrowRepeat = setTimeout(() => { arrowRepeat = setInterval(() => { if (!app.held || !arrow(ax, sg)) clearInterval(arrowRepeat); }, 160); }, 450);
+    });
+    const stop = () => { clearInterval(arrowRepeat); clearTimeout(arrowRepeat); arrowRepeat = null; };
+    node.addEventListener('pointerup', stop); node.addEventListener('pointercancel', stop); node.addEventListener('pointerleave', stop);
+  });
   // the footing stones' handles: drag one in or out (across sets W, along the sides sets D). The stone follows the finger
   // where the ground is seen well; where it is seen nearly edge on (the depth, from the front: a foot of it is a few
   // pixels on a phone), the finger moves it at most STONE_PX pixels per foot, so the half foot can be set by hand.
@@ -1099,7 +605,13 @@ export function makeBuild(app) {
     try { el.view.setPointerCapture(e.pointerId); } catch (err) { /* fine */ }
     node.classList.add('is-active');
   }));
-  el.nailBtn.addEventListener('click', () => { if (app.held && contactsOf(app.held).length && !doubled(T(), worldOf(app.held)) && !turnedOnGround(worldOf(app.held))) app.nail(); });
+  const canNail = (h) => !!h && contactsOf(h).length > 0 && !doubled(T(), worldOf(h));
+  el.nailBtn.addEventListener('click', () => {
+    const h = app.held; if (!canNail(h)) return;
+    const con = h.con; offerTrim(null);
+    const rec = app.nail();
+    if (rec && con && con.past > 0.01) offerTrim(rec, { ...con, P: { ...con.P } });
+  });
 
   el.view.addEventListener('pointerdown', (e) => {
     if (e.target.closest('button, .gz, .card, .bar, input')) return;
@@ -1118,14 +630,10 @@ export function makeBuild(app) {
     if (pointers.size > 2) return;
     const h = app.held;
     if (h && app.phase === 'build') {
-      // a press on the part of the board beyond a handle held inside the view (its real end is up under the top bar, or
-      // off the screen): that handle, as if pressed right on it
-      const beyond = handleBeyond(h, e.clientX, e.clientY);
-      if (beyond) { startGrab(beyond, e); return; }
-      // on (or near) the held board: slide it, or push it in and out when it is seen end on (a tap on its overhang, or
-      // on the overhang's tag, saws that off instead)
-      const cut = !h.endOn && overhangAt(e.clientX, e.clientY, heldAt(h), heldOverhang());
-      if (cut || pxFromHeld(h, e.clientX, e.clientY) < (h.endOn ? 34 : 26)) { startGrab('move', e, { cut, body: true }); return; }
+      // on (or near) the held board: the end nearer the finger, as if pressed right on its ring
+      const r = el.view.getBoundingClientRect(), p = { x: e.clientX - r.left, y: e.clientY - r.top };
+      const A = inViewOf(r, heldScreen(h, h.A)), B = inViewOf(r, heldScreen(h, h.B));
+      if (distToSeg(p, A, B) < 24) { startGrab(Math.hypot(p.x - A.x, p.y - A.y) < Math.hypot(p.x - B.x, p.y - B.y) * 0.6 ? 'socket' : 'free', e); return; }
     }
     gesture = { kind: 'pending', id: e.pointerId, x: e.clientX, y: e.clientY, t: now(), lx: e.clientX, ly: e.clientY, lt: now(), vx: 0 };
   });
@@ -1139,50 +647,13 @@ export function makeBuild(app) {
     if (gesture.kind === 'grab') {
       const h = app.held; if (!h) return;
       if (!gesture.moved && Math.hypot(e.clientX - gesture.x, e.clientY - gesture.y) < 6) return;
-      if (gesture.mode === 'turn') {
-        gesture.moved = true;
-        const rad = ((e.clientX - gesture.x) * gesture.u.x + (e.clientY - gesture.y) * gesture.u.y) / gesture.scale;
-        const deg = Math.round(rad / DEG / TURN_STEP) * TURN_STEP;
-        if (deg !== gesture.deg) {
-          restoreHeld(h, gesture.base); turnBy(h, deg, gesture.end); gesture.deg = deg;
-          sound.clatter(h.len * 0.4, 'set', undefined, 0.15);
-        }
-        app.dirty = true; return;
-      }
-      if (gesture.mode === 'inout') {
-        const hit = app.toWorld(gesture.cross, e.clientX, e.clientY); if (!hit) return;
-        gesture.moved = true; h.fresh = false;
-        if (!leaningAbout(h)) snapInOut(h, snapOffset(famOfKey(h.key), across(h.key, hit) + gesture.o0), hit.Y + gesture.y0);
-        else {
-          const key = snapPlane(h, across(h.key, hit) + gesture.m0, hit.Y + gesture.ym0), { t } = parseKey(key);
-          snapInOut(h, key, (hit.Y + gesture.ya0) * Math.sqrt(1 + t * t));
-        }
-        edgeWatch(e.clientY); app.dirty = true; return;
-      }
-      if (gesture.mode === 'lean') {
-        const hit = app.toWorld(gesture.cross, e.clientX, e.clientY); if (!hit) return;
-        gesture.moved = true; h.fresh = false;
-        leanTo(h, gesture.foot, gesture.a0 + (across(h.key, hit) - gesture.a0) * gesture.gain + gesture.dA, hit.Y + gesture.dY);
-        app.dirty = true; return;
-      }
-      const p = app.toPlane(h.key, e.clientX, e.clientY); if (!p) return;
-      gesture.moved = true; h.fresh = false;
-      if (gesture.mode !== 'move' && !gesture.pivoted) {
-        // (a post or leg about to be leaned keeps its foot where it rests on a board: settling the pivot onto a joint is
-        // for braces, and a tier's post set in along its beam would jump onto the beam's end. If the swing goes on past
-        // the steepest lean into a brace, the pivot settles then.)
-        const pe = gesture.mode === 'a' ? 'b' : 'a';
-        gesture.pivoted = true; gesture.keepFoot = gesture.legSwing && contactsOf(h).some((c) => c.end === pe && c.other);
-        if (!gesture.keepFoot) snapPivot(h, pe);
-      }
-      if (gesture.mode === 'move') { snapMove(h, p.x + gesture.ox, p.y + gesture.oy); edgeWatch(e.clientY); }
-      else {
-        const pe = gesture.mode === 'a' ? 'b' : 'a';
-        snapSwing(h, pe, p.x, p.y, gesture.legSwing); h.ghost = false;
-        if (gesture.keepFoot && !h.asLeg) { gesture.keepFoot = false; snapPivot(h, pe); snapSwing(h, pe, p.x, p.y, gesture.legSwing); }
-        // (a leg leaning by the half inch: its top only moves sideways, never needs the view to climb)
-        if (gesture.legSwing && h.asLeg) stopEdge(); else edgeWatch(e.clientY, 0.1, 0.92);
-      }
+      gesture.moved = true; h.fresh = false; h.start = false;
+      if (gesture.mode === 'socket') {
+        gesture.at = { x: e.clientX, y: e.clientY };
+        const S = socketAt(e.clientX, e.clientY);
+        if (S && (S.X !== h.A.X || S.Y !== h.A.Y || S.Z !== h.A.Z)) { placeSocket(h, S); sound.clatter(h.len * 0.4, 'set', undefined, 0.15); }
+      } else dragFree(h, e.clientX, e.clientY);
+      edgeWatch(e.clientY);
       app.dirty = true;
     } else if (gesture.kind === 'stone') {
       stoneStep(gesture, e.clientX - gesture.lx, e.clientY - gesture.ly); gesture.lx = e.clientX; gesture.ly = e.clientY;
@@ -1201,28 +672,17 @@ export function makeBuild(app) {
     if (gesture && gesture.kind === 'pinch') { if (pointers.size < 2) gesture = null; return; }
     if (!gesture || e.pointerId !== gesture.id) return;
     const g = gesture; gesture = null; stopEdge();
-    if (app.held) app.held.steep = false;
-    const hist = g.kind === 'grab' && app.held && g.snap && app.held.piece === g.snapPiece ? g.snap : null;
-    if (g.kind === 'grab' && !g.moved && e.type === 'pointerup') {
-      // a tap: on an overhang (or the round handle at its end) saws it off; on the middle turns the board. (Only a quick
-      // one: a press held longer is a small nudge, too small to move the board off its half foot, and does nothing.)
-      if (now() - g.t0 > TAP_MS) { app.dirty = true; return; }
-      const endCut = g.mode !== 'move' && g.mode !== 'inout' && heldOverhang().find((o) => o.end === g.mode);
-      if (g.cut || endCut) cutHeld(g.cut || endCut);
-      else if (g.mode === 'move' || g.mode === 'inout') turnHeld();
-      else if (g.mode === 'turn') { turnBy(app.held, TURN_STEP, g.end); sound.clatter(app.held.len * 0.5, 'set', undefined, 0.3); }
-    } else if (g.kind === 'grab' && (g.mode === 'move' || g.mode === 'inout') && e.type === 'pointerup') {
+    if (g.kind === 'grab' && app.held && app.held.piece === g.snapPiece) {
       // carried off the view (onto the lumber panel): back to the pile
       const r = el.view.getBoundingClientRect();
-      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) putBack();
+      if (g.moved && e.type === 'pointerup' && (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)) putBack();
+      else if (g.moved) keepHist(g.snap);
     } else if (g.kind === 'stone') {
       stoneRest = { W: T().W, D: T().D, w: g.w, d: g.d };
       el.stoneHandles[g.corner].classList.remove('is-active'); app.onStonesSet && app.onStonesSet();
     } else if (g.kind === 'orbit') {
       app.orbitRelease(now() - g.lt < 80 ? g.vx : 0);
     } else if (g.kind === 'pending' && e.type === 'pointerup' && now() - g.t < 700) tapAt(e.clientX, e.clientY);
-    if (hist && app.held && !app.held.cutNow) keepHist(hist);
-    if (app.held) delete app.held.cutNow;
     app.dirty = true;
   };
   el.view.addEventListener('pointerup', endPointer); el.view.addEventListener('pointercancel', endPointer);
@@ -1262,100 +722,14 @@ export function makeBuild(app) {
     if (app.selected && app.selected !== was) selectTapAt = now();
   }
 
-  // turn the held board a step round its middle: upright, 45, level, 135. (The first tap on a piece just brought onto
-  // the tower stands it straight up, whatever way it came: a post for a tier arrives level, away from the stones.)
-  function turnHeld() {
-    const h = app.held; if (!h) return;
-    const steps = [90, 45, 0, 135], cur = ((Math.round(h.ang / DEG) % 180) + 180) % 180;
-    let i = steps.findIndex((s) => Math.abs(s - cur) < 3); i = (i + 1) % steps.length;
-    if (!h.turned && cur !== 90) i = 0;
-    h.turned = true; h.leg = false;
-    const mx = h.x + Math.cos(h.ang) * h.len / 2, my = h.y + Math.sin(h.ang) * h.len / 2;
-    h.ang = steps[i] * DEG; snapMove(h, mx - Math.cos(h.ang) * h.len / 2, my - Math.sin(h.ang) * h.len / 2); h.fresh = false; app.dirty = true;
-    sound.clatter(h.len * 0.6, 'set', undefined, 0.35);
-  }
-
-  // ── turning about the vertical (TURN.md) ───────────────────────────────────────────────────────────────────────────
-  // the end the held board turns about: its lower end; a horizontal board's end that touches something (a), else a
-  function turnPivot(h) {
-    const w = worldOf(h);
-    if (Math.abs(w.a.Y - w.b.Y) > 0.25) return w.a.Y <= w.b.Y ? 'a' : 'b';
-    const cs = contactsOf(h);
-    return !cs.some((c) => c.end === 'a') && cs.some((c) => c.end === 'b') ? 'b' : 'a';
-  }
-  // the held board as it was (a snapshot from snapOfHeld), put back
-  function restoreHeld(h, o) { for (const k of Object.keys(h)) if (!SNAP_SKIP.has(k) && !(k in o)) delete h[k]; Object.assign(h, o); }
-  // Turn the held board by deg degrees (a whole number of 15 degree steps; + toward the right side, as a family's angle
-  // grows) about the vertical through its pivot end: its wall turns with it (Z -> R45 -> X -> R135 -> Z ...), its lean
-  // too (in stays in), its place and its angle on its wall stay as they were. A post turns its wide face.
-  function turnBy(h, deg, pivotEnd = turnPivot(h)) {
-    if (!deg) return;
-    const w = worldOf(h), P = w[pivotEnd];
-    const rot = (p) => { const r = turnVec({ X: p.X - P.X, Y: 0, Z: p.Z - P.Z }, deg); return { X: P.X + r.X, Y: p.Y, Z: P.Z + r.Z }; };
-    const A = rot(w.a), B = rot(w.b), fam = famOfKey(h.key), th = famTheta(fam) + deg, nf = famAt(th);
-    // (past a half turn a family's normal points the other way: the same lean then reads with the other sign)
-    const sg = Math.round(Math.cos((th - famTheta(nf)) * DEG)), k = sg * parseKey(h.key).k;
-    const key = planeKey(nf, coord(nf, A) - tOfK(k) * A.Y, k), qa = toPlane(key, A), qb = toPlane(key, B);
-    if (lineLike(h)) h.n = famAt(famTheta(h.n || fam) + deg);
-    h.key = key; h.x = qa.u; h.y = qa.y; h.ang = Math.atan2(qb.y - qa.y, qb.u - qa.u);
-    h.ghost = false; h.fresh = false; h.endOn = false;
-  }
-  // the held board's turn in words: "turned 45°" (folded: a wall turned 135 degrees is turned 45 the other way), or
-  // "not turned" in a front or side wall
-  const turnWords = (key) => { const th = famTheta(famOfKey(key)); return th % 90 ? `turned ${Math.min(th, 180 - th)}°` : 'not turned'; };
-  // The ring on the screen: round the pivot, flat (level), its knob on the ring's point nearest the view when that
-  // stands well off the pivot and off the board's own line; else (a view from below or level with the pivot: that
-  // point sits on the board, on its other handles) RING_KNOB pixels out beside the board, square to it on the screen,
-  // on the side away from the nail button. J: how far the ring's near point moves on the screen for a turn of one
-  // radian (the drag is read along that). A, B: the board's ends on the screen; avoid: the nail button.
-  // -> { P (world), P0 (its screen spot), pts (screen ring), knob, J, end }
-  const RING_PX = 62, RING_KNOB = 58, RING_RAD_PX = 110;
-  function ringOf(h, A = null, B = null, avoid = null) {
-    const w = worldOf(h), end = turnPivot(h), P = w[end], az = app.viewAz();
-    const P0 = app.worldToScreen(P.X, P.Y, P.Z), P1 = app.worldToScreen(P.X, P.Y + 1, P.Z);
-    const R = clamp(RING_PX / Math.max(1, Math.hypot(P1.x - P0.x, P1.y - P0.y)), 0.4, 4);
-    const f = { X: Math.sin(az), Y: 0, Z: Math.cos(az) }, at = (deg) => { const v = turnVec(f, deg); return app.worldToScreen(P.X + v.X * R, P.Y, P.Z + v.Z * R); };
-    const pts = []; for (let d = 0; d < 360; d += 10) pts.push(at(d));
-    const F = at(0), F1 = at(5), J = { x: (F1.x - F.x) / (5 * DEG), y: (F1.y - F.y) / (5 * DEG) };
-    const fx = F.x - P0.x, fy = F.y - P0.y, fl = Math.hypot(fx, fy);
-    let bx = 0, by = 1;
-    if (A && B && Math.hypot(B.x - A.x, B.y - A.y) > 4) { const l = Math.hypot(B.x - A.x, B.y - A.y); bx = (B.x - A.x) / l; by = (B.y - A.y) / l; }
-    let knob;
-    if (fl >= RING_KNOB && Math.abs(fx * bx + fy * by) < 0.7 * fl) knob = { x: F.x, y: F.y };
-    else {
-      const sides = [{ x: -by, y: bx }, { x: by, y: -bx }].map((n) => ({ x: P0.x + n.x * RING_KNOB, y: P0.y + n.y * RING_KNOB }));
-      knob = avoid ? sides.sort((a, b) => Math.hypot(b.x - avoid.x, b.y - avoid.y) - Math.hypot(a.x - avoid.x, a.y - avoid.y))[0] : sides[0];
-    }
-    return { P, P0, pts, knob, J, end, behind: P0.behind || F.behind };
-  }
-
-  // a brace (not level, not upright, not a knee brace: on a narrow plane a short brace reaching post to post counts)
-  // that closes no triangle on its plane, with an end stopping close to a joint but not on it: [{ x, y }] the contact
-  // at that end (the quick drop that leaves a brace's foot half a foot off the corner, nailed to the post a little way up)
-  function cornerMiss(h, cs) {
-    if (lineLike(h)) return [];     // (a post or a leg is no brace)
-    const s = segOf(h), a = Math.abs(Math.atan2(s.by - s.ay, s.bx - s.ax)) * 180 / Math.PI, lean = Math.min(a, 180 - a);
-    const ctx = context(h.key);
-    if (lean < 5 || lean > 85 || isKnee(s, wallSpan(T(), h.key, s)) || cs.length < 2) return [];
-    if (trianglesOf([...ctx.segs, ...floorsAcross(T(), h.key), s], '__held').length) return [];
-    const dx = (s.bx - s.ax) / s.len, dy = (s.by - s.ay) / s.len, along = (c) => (c.x - s.ax) * dx + (c.y - s.ay) * dy;
-    const sorted = [...cs].sort((p, q) => along(p) - along(q)), joints = jointsHere(ctx), out = [];
-    for (const c of [sorted[0], sorted[sorted.length - 1]]) {
-      let d = Infinity; for (const j of joints) d = Math.min(d, Math.hypot(j.x - c.x, j.y - c.y));
-      if (d > 0.15 && d < 1.25 && !out.includes(c)) out.push(c);
-    }
-    return out;
-  }
-
   // ── the joints just nailed flash green ───────────────────────────────────────────────────────────────────────────
   let flashes = [];      // [{ X, Y, Z, t0 }]
   function flash(points) { const t0 = now(); flashes.push(...points.map((p) => ({ X: p.X, Y: p.Y, Z: p.Z, t0 }))); }
 
-  // ── drawing over the view: handles, the length, the angles, the nails, overhangs, the stones' tape ───────────────
+  // ── drawing over the view: handles, arrows, joints, the overhang, the stones' tape ──────────────────────────────
   const place = (n, p) => { n.style.transform = `translate(${p.x}px, ${p.y}px)`; };
   // labels over the view that keep clear of each other (and of the handles): each tries its spots in turn and takes
   // the first free one, else the first one pulled inside the view (or, for a label that can be spared, none: null).
-  // -> place(w, h, spots, spare) -> the centre used
   function tagPlacer(r, avoid = []) {
     const taken = [...avoid];
     const free = (b) => b.x > 2 && b.x + b.w < r.width - 2 && b.y > 56 && b.y + b.h < r.height - 2
@@ -1364,7 +738,6 @@ export function makeBuild(app) {
       let c = spots.find((q) => free({ x: q.x - w / 2, y: q.y - h / 2, w, h }));
       if (!c && spare) return null;
       if (!c) {
-        // (no free spot: each pulled inside the view, the one overlapping the others least)
         const overlap = (q) => taken.reduce((sum, t) => sum + Math.max(0, Math.min(q.x + w / 2, t.x + t.w) - Math.max(q.x - w / 2, t.x)) * Math.max(0, Math.min(q.y + h / 2, t.y + t.h) - Math.max(q.y - h / 2, t.y)), 0);
         const inside = spots.map((q) => ({ x: clamp(q.x, w / 2 + 4, r.width - w / 2 - 4), y: clamp(q.y, 58 + h / 2, r.height - h / 2 - 4) }));
         c = inside.reduce((best, q) => (overlap(q) < overlap(best) - 1 ? q : best), inside[0]);
@@ -1374,20 +747,6 @@ export function makeBuild(app) {
     };
   }
   const box = (q, size) => ({ x: q.x - size / 2, y: q.y - size / 2, w: size, h: size });
-  // a handle's spot pushed off the others (each at least d pixels away), a few rounds, kept inside the view by fit
-  function clearOf(q, others, d, fit) {
-    for (let k = 0; k < 4; k++) {
-      let moved = false;
-      for (const o of others) {
-        const dx = q.x - o.x, dy = q.y - o.y, l = Math.hypot(dx, dy);
-        if (l >= d) continue;
-        const ux = l > 0.5 ? dx / l : 1, uy = l > 0.5 ? dy / l : 0;
-        q = fit({ x: o.x + ux * d, y: o.y + uy * d }); moved = true;
-      }
-      if (!moved) break;
-    }
-    return q;
-  }
   // an overhang: pale, with the saw line where it comes off, and how much (its label placed by `place`). at(t): a point
   // along the board on the screen
   function drawOverhang(at, list, place) {
@@ -1398,29 +757,53 @@ export function makeBuild(app) {
       const ux = B.x - A.x, uy = B.y - A.y, ul = Math.hypot(ux, uy) || 1, nx = -uy / ul, ny = ux / ul;
       out += `<line class="over" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}"/>`;
       out += `<line class="sawline" x1="${J.x - nx * 15}" y1="${J.y - ny * 15}" x2="${J.x + nx * 15}" y2="${J.y + ny * 15}"/>`;
-      const c = place(96, 24, [-28, 28, -52, 52, -76, 76].map((d) => ({ x: M.x + nx * d, y: M.y + ny * d }))), txt = '✂ saw off ' + fmt(o.t1 - o.t0);
-      out += `<g class="overtag"><rect x="${c.x - 48}" y="${c.y - 12}" width="96" height="24" rx="12"/><text x="${c.x}" y="${c.y + 4}">${txt}</text></g>`;
-      overTags.push({ end: o.end, x: c.x - 48, y: c.y - 12, w: 96, h: 24 });
+      if (o.tag !== false) {
+        const c = place(96, 24, [-28, 28, -52, 52, -76, 76].map((d) => ({ x: M.x + nx * d, y: M.y + ny * d }))), txt = o.words || '✂ saw off ' + fmt(o.t1 - o.t0);
+        out += `<g class="overtag"><rect x="${c.x - 48}" y="${c.y - 12}" width="96" height="24" rx="12"/><text x="${c.x}" y="${c.y + 4}">${txt}</text></g>`;
+        if (!o.words) overTags.push({ end: o.end, x: c.x - 48, y: c.y - 12, w: 96, h: 24 });
+      }
     }
     return out;
   }
-  // the held board's state this frame, for main.js (its ends' green glow, the plane sheet)
+  // The four arrows: lying on the ground's directions as the camera sees them at the middle of the tower, drawn round a
+  // spot in the upper part of the view: the green pair along X (right +, left -), the blue pair along Z (front +, back
+  // -). Each a fat arrow ARROW_FT long in that picture, scaled so the longer pair is ARROW_PX on the screen.
+  // -> { C (the middle, view pixels), tips: [{ x, y } x4] (where each arrow's hit spot goes), svg }
+  const ARROW_PX = 64;
+  function arrowsAt(r) {
+    const look = app.lookAt ? app.lookAt() : { X: 0, Y: 0, Z: 0 };
+    const O = app.worldToScreen(look.X, look.Y, look.Z), PX = app.worldToScreen(look.X + 1, look.Y, look.Z), PZ = app.worldToScreen(look.X, look.Y, look.Z + 1);
+    let ex = { x: PX.x - O.x, y: PX.y - O.y }, ez = { x: PZ.x - O.x, y: PZ.y - O.y };
+    const k = ARROW_PX / Math.max(1e-6, Math.hypot(ex.x, ex.y), Math.hypot(ez.x, ez.y));
+    ex = { x: ex.x * k, y: ex.y * k }; ez = { x: ez.x * k, y: ez.y * k };
+    // (never squashed flatter than a third of its length, so a pair seen nearly edge on can still be hit)
+    const fat = (e) => { const l = Math.hypot(e.x, e.y); return l < ARROW_PX * 0.45 ? { x: e.x / (l || 1) * ARROW_PX * 0.45, y: (e.y / (l || 1)) * ARROW_PX * 0.45 } : e; };
+    ex = fat(ex); ez = fat(ez);
+    const top = el.hint && !el.hint.hidden && el.hint.textContent ? el.hint.getBoundingClientRect().bottom - r.top : 80;
+    const C = { x: r.width / 2, y: clamp(Math.max(top + ARROW_PX + 12, r.height * 0.26), 120, r.height * 0.45) };
+    // an arrow along u (a unit pair in the picture), w the other pair: a shaft from 0.25 to 0.7 and a head to 1.05
+    const shape = (u, w, s) => {
+      const P = (a, b) => ({ x: C.x + s * (u.x * a) + w.x * b, y: C.y + s * (u.y * a) + w.y * b });
+      return [P(0.28, -0.13), P(0.68, -0.13), P(0.68, -0.3), P(1.05, 0), P(0.68, 0.3), P(0.68, 0.13), P(0.28, 0.13)];
+    };
+    const tips = [], svg = [];
+    ARROWS.forEach(([ax, sg]) => {
+      const u = ax === 'X' ? ex : ez, w = ax === 'X' ? ez : ex, pts = shape(u, w, sg);
+      tips.push({ x: C.x + sg * u.x * 0.66, y: C.y + sg * u.y * 0.66 });
+      svg.push(`<polygon class="arrow3d ${ax === 'X' ? 'is-x' : 'is-z'}" points="${pts.map((q) => q.x.toFixed(1) + ',' + q.y.toFixed(1)).join(' ')}"/>`);
+    });
+    return { C, tips, svg: svg.join('') };
+  }
+  // the held board's state this frame, for main.js (its ends' green glow)
   let heldInfo = null;
-  let hintText = '', planeText = '';
+  let hintText = '';
   function frame() {
     const h = app.held, svg = el.overlay, building = app.phase === 'build', t = T();
-    if (h && building) updateView(h);
     const show = !!h && building;
-    // (seen end on, the end handles hide, but a board that is not level keeps one on its top end: drag it to lean the wall)
-    const leanEnd = show && h.endOn && !levelH(h) ? (Math.sin(h.ang) > 0 ? 'b' : 'a') : null;
-    el.gMove.hidden = !show; el.gA.hidden = !show || (h.endOn && leanEnd !== 'a'); el.gB.hidden = !show || (h.endOn && leanEnd !== 'b');
-    el.gA.classList.toggle('is-lean', leanEnd === 'a'); el.gB.classList.toggle('is-lean', leanEnd === 'b');
-    // (the turn ring: while it is held face on, and only once its lower end is up off the ground: a board standing on
-    // the ground can't be turned. One already turned keeps it, so it can be turned back.)
-    const turnShow = show && !h.endOn && (isTurnedFam(famOfKey(h.key)) || (() => { const w = worldOf(h); return Math.min(w.a.Y, w.b.Y) >= TURN_MIN_Y; })());
-    if (el.gTurn) el.gTurn.hidden = !turnShow;
-    el.nailBtn.hidden = !show; el.view.classList.toggle('is-holding', show); el.view.classList.toggle('is-endon', show && h.endOn);
-    if (!show) el.view.classList.remove('is-short');
+    el.gA.hidden = !show; el.gB.hidden = !show;
+    (el.arrows || []).forEach((n) => { n.hidden = !show; });
+    el.nailBtn.hidden = !show; el.view.classList.toggle('is-holding', show);
+    if (trim && (!building || h || app.selected || !T().boards.includes(trim.rec))) offerTrim(null);
     let out = '', hint = '';
     overTags = []; heldInfo = null;
     showUpNext(building);
@@ -1429,7 +812,7 @@ export function makeBuild(app) {
     const corner = (c) => [[-t.W / 2, t.D / 2], [t.W / 2, t.D / 2], [t.W / 2, -t.D / 2], [-t.W / 2, -t.D / 2]][c];
     el.stoneHandles.forEach((n, c) => { n.hidden = !stones; if (stones) { const [X, Z] = corner(c); place(n, app.worldToScreen(X, 0.2, Z)); } });
     if (stones) {
-      // the wall facing you, and the side round the corner nearest the view
+      // the side facing you, and the side round the corner nearest the view
       const k = app.face, az = app.viewAz(), side = Math.sin(az - [0, Math.PI / 2, Math.PI, -Math.PI / 2][k]) > 0 ? (k + 1) % 4 : (k + 3) % 4;
       for (const f of [k, side]) {
         const [X0, Z0] = corner(f), [X1, Z1] = corner((f + 1) % 4), n = [[0, 1], [1, 0], [0, -1], [-1, 0]][f], off = 1.4;
@@ -1444,180 +827,60 @@ export function makeBuild(app) {
       hint = `Base ${fmtBase(t.W, t.D)}. Drag a stone in or out to set it`;
     }
     if (show) {
-      const s = segOf(h), r = el.view.getBoundingClientRect();
-      const A = heldScreen(h, s.ax, s.ay), B = heldScreen(h, s.bx, s.by), M = heldScreen(h, (s.ax + s.bx) / 2, (s.ay + s.by) / 2);
-      // (the camera never moves to fit it: the handles are kept inside the view instead)
-      // the nail button stands still at the edge of the view (windmill.css), out of the way of the board; no handle is put
-      // under it
+      const r = el.view.getBoundingClientRect(), w = worldOf(h);
+      const A = heldScreen(h, h.A), B = heldScreen(h, h.B);
       const nailAt = (() => { const b = el.nailBtn.getBoundingClientRect(); return { x: b.x + b.width / 2 - r.left, y: b.y + b.height / 2 - r.top }; })();
       const inView = (q, m = 18) => { const v = inViewOf(r, q, m); return Math.hypot(v.x - nailAt.x, v.y - nailAt.y) < 52 ? { x: nailAt.x - 52, y: v.y } : v; };
-      const cs = contactsOf(h), over = h.endOn ? [] : heldOverhang(), miss = h.endOn ? [] : cornerMiss(h, cs), loose = nearMisses(h, cs);
-      // (the side of the board with room on the screen: the slide handle of a short piece steps off to the other)
-      const inside = (q) => q.x > 28 && q.x < r.width - 28 && q.y > 70 && q.y < r.height - 28;
-      let nx = -(B.y - A.y), ny = B.x - A.x; const nl = Math.hypot(nx, ny); if (nl < 8) { nx = -1; ny = 0; } else { nx /= nl; ny /= nl; }
-      if (!inside({ x: M.x - nx * 64, y: M.y - ny * 64 }) && inside({ x: M.x + nx * 64, y: M.y + ny * 64 })) { nx = -nx; ny = -ny; }
-      // a short piece on the screen (a 2 ft crosspiece on a phone) would hide under its handles: its end handles become
-      // open rings round its ends, and the slide handle steps off it to the side away from the check
-      const short = !h.endOn && nl < 110;
-      el.view.classList.toggle('is-short', short);
-      const moveAt = inView(short ? { x: M.x + nx * 34, y: M.y + ny * 34 } : M, 22);
-      // (seen end on, the lean handle sits on the top end, or past it along the board when the board is short there)
-      let leanAt = null;
-      if (leanEnd) {
-        const T0 = leanEnd === 'a' ? A : B, F0 = leanEnd === 'a' ? B : A, sl = Math.hypot(T0.x - F0.x, T0.y - F0.y) || 1;
-        const push = Math.max(0, 46 - sl / 2);
-        leanAt = inView({ x: T0.x + (T0.x - F0.x) / sl * push, y: T0.y + (T0.y - F0.y) / sl * push });
+      const Ah = inView(A), Bh = inView(B);
+      place(el.gA, Ah); place(el.gB, Bh);
+      // while the socket end is being moved: the sockets near the finger, as small dots
+      if (gesture && gesture.kind === 'grab' && gesture.mode === 'socket' && gesture.at) {
+        const fx = gesture.at.x - r.left, fy = gesture.at.y - r.top;
+        for (const s of sockets()) { const P = app.worldToScreen(s.X, s.Y, s.Z); if (!P.behind && Math.hypot(P.x - fx, P.y - fy) < 110) out += `<circle class="sock" cx="${P.x.toFixed(1)}" cy="${P.y.toFixed(1)}" r="3.5"/>`; }
       }
-      place(el.gMove, moveAt); place(el.gA, leanEnd === 'a' ? leanAt : inView(A)); place(el.gB, leanEnd === 'b' ? leanAt : inView(B));
-      // the turn ring, flat round the pivot, and its knob (on the ring's near side, never on the end handle)
-      const ring = turnShow ? ringOf(h, A, B, nailAt) : null, knobAt = ring ? clearOf(inView(ring.knob, 26), [inView(A), inView(B), moveAt], 52, (q) => inView(q, 26)) : null;
-      if (ring && el.gTurn) {
-        place(el.gTurn, knobAt);
-        if (!ring.behind) {
-          out += `<polygon class="turnring${gesture && gesture.mode === 'turn' ? ' is-on' : ''}" points="${ring.pts.map((q) => q.x.toFixed(1) + ',' + q.y.toFixed(1)).join(' ')}"/>`;
-          out += `<line class="turnstem" x1="${ring.P0.x}" y1="${ring.P0.y}" x2="${knobAt.x}" y2="${knobAt.y}"/>`;
+      // the arrows, and their hit spots
+      const arr = arrowsAt(r);
+      out += arr.svg;
+      (el.arrows || []).forEach((n, i) => place(n, arr.tips[i]));
+      const cs = contactsOf(h), tag = tagPlacer(r, [box(nailAt, 54), box(Ah, 40), box(Bh, 40), ...arr.tips.map((q) => box(q, 50))]);
+      let rings = '', tags = '';
+      // the joint where the free end connected (a green circle), and the part past it (pale, the saw line)
+      if (h.con) {
+        const P = heldScreen(h, h.con.P);
+        if (h.con.past > 0.01) {
+          const L0 = h.len - h.con.past;
+          out += drawOverhang((tt) => heldScreen(h, alongB(w, tt)), [{ end: 'b', t0: L0, t1: h.len, words: 'past ' + fmt(h.con.past) }], tag);
         }
+        rings += `<circle class="joint" cx="${P.x}" cy="${P.y}" r="13"/>`;
       }
-      // (every label from here on keeps clear of the others, the check and the handles)
-      const tag = tagPlacer(r, [box(nailAt, 54), box(moveAt, 42), ...(h.endOn ? (leanAt ? [box(leanAt, 40)] : []) : [box(inView(A), 34), box(inView(B), 34)]), ...(knobAt ? [box(knobAt, 50)] : [])]);
-      let tags = '', rings = '';
-      // how far it is turned, by the knob (while turning, or once turned)
-      if (knobAt && (famTheta(famOfKey(h.key)) % 90 || (gesture && gesture.mode === 'turn'))) {
-        const words = turnWords(h.key), w = words.length * 7.4 + 24;
-        const tt = tag(w, 24, [[0, 40], [w / 2 + 32, 0], [-w / 2 - 32, 0], [0, -40], [0, 66]].map(([dx, dy]) => ({ x: knobAt.x + dx, y: knobAt.y + dy })));
-        tags += `<g class="planetag is-turn"><rect x="${tt.x - w / 2}" y="${tt.y - 12}" width="${w}" height="24" rx="12"/><text x="${tt.x}" y="${tt.y + 5}">${words}</text></g>`;
-      }
-      // the joints it will make: a bold green circle at each, and the angle where it meets a board on its own plane
-      // (one angle per joint: where it meets a post and a crosspiece at once, the crosspiece's, as a carpenter reads
-      // a brace; and none at all rather than one sitting on a handle)
-      const spots = [];
+      // every other spot where it touches a board along the way (not at its ends): a green circle
       for (const c of cs) {
-        const o = spots.find((q) => Math.hypot(q.x - c.x, q.y - c.y) < 0.35);
-        const level = c.seg && Math.abs(c.seg.ay - c.seg.by) < 0.05 * (c.seg.len || 1);
-        if (!o) spots.push({ ...c, level });
-        else { if (c.end) o.end = c.end; if (c.angle !== null && (o.angle === null || (level && !o.level))) Object.assign(o, { seg: c.seg, angle: c.angle, level }); }
+        if (c.end || (h.con && d3(c, h.con.P) < 0.35)) continue;
+        const P = heldScreen(h, c); rings += `<circle class="joint" cx="${P.x}" cy="${P.y}" r="11"/>`;
       }
-      for (const c of spots) {
-        const P = heldScreen(h, c.x, c.y);
-        if (c.seg && c.angle !== null && !h.endOn) {
-          // the arc between the held board and the other one, on the side the held board actually runs
-          const far = Math.hypot(s.ax - c.x, s.ay - c.y) > Math.hypot(s.bx - c.x, s.by - c.y) ? A : B;
-          const u1 = Math.atan2(far.y - P.y, far.x - P.x);
-          const O1 = heldScreen(h, c.seg.ax, c.seg.ay), O2 = heldScreen(h, c.seg.bx, c.seg.by);
-          let u2 = Math.atan2(O2.y - O1.y, O2.x - O1.x);
-          if (Math.abs(angDiff(u2, u1)) > Math.PI / 2) u2 += Math.PI;
-          const rr = 26, sweep = angDiff(u2, u1) > 0 ? 1 : 0;
-          const x1 = P.x + Math.cos(u1) * rr, y1 = P.y + Math.sin(u1) * rr, x2 = P.x + Math.cos(u2) * rr, y2 = P.y + Math.sin(u2) * rr;
-          const mid = u1 + angDiff(u2, u1) / 2;
-          const square = Math.abs(c.angle - 90) < 0.5;
-          if (square) {
-            const q = 14, ax = Math.cos(u1) * q, ay = Math.sin(u1) * q, bx = Math.cos(u2) * q, by = Math.sin(u2) * q;
-            out += `<path class="arc sq" d="M${P.x + ax} ${P.y + ay} L${P.x + ax + bx} ${P.y + ay + by} L${P.x + bx} ${P.y + by}"/>`;
-          } else if (c.angle > 0.5) out += `<path class="arc" d="M${x1} ${y1} A${rr} ${rr} 0 0 ${sweep} ${x2} ${y2}"/>`;
-          const tt = c.angle > 0.5 && tag(42, 21, [44, 62, 82].map((d) => ({ x: P.x + Math.cos(mid) * d, y: P.y + Math.sin(mid) * d })), true);
-          if (tt) tags += `<g class="ang${square ? ' is-square' : ''}"><rect x="${tt.x - 21}" y="${tt.y - 11}" width="42" height="21" rx="5"/><text x="${tt.x}" y="${tt.y + 4}">${Math.round(c.angle)}°</text></g>`;
-        }
-        // (at an end with its handle on it, the handle itself turns green: one signal, no ring. A ring only where the
-        // board's middle crosses or meets another board, or at an end with no handle, seen end on)
-        if (c.end && (!h.endOn || c.end === leanEnd)) continue;
-        rings += `<circle class="joint" cx="${P.x}" cy="${P.y}" r="12"/>`;
-      }
-      // an end close to a board but not on it: an open red ring, "not touching"
-      for (const m of loose) {
-        const P = heldScreen(h, m.x, m.y);
-        rings += `<circle class="miss" cx="${P.x}" cy="${P.y}" r="15"/>`;
-        const tt = tag(100, 21, [[0, -30], [0, 30], [62, 0], [-62, 0]].map(([dx, dy]) => ({ x: P.x + dx, y: P.y + dy })));
-        tags += `<g class="misstag"><rect x="${tt.x - 50}" y="${tt.y - 11}" width="100" height="21" rx="10"/><text x="${tt.x}" y="${tt.y + 4}">not touching</text></g>`;
-      }
-      // a brace whose end stops near a corner without sitting on it makes no triangle there, so the wall can still
-      // fold: a red ring on that end, its words a little way in along the board
-      for (const m of miss) {
-        const P = heldScreen(h, m.x, m.y);
-        rings += `<circle class="miss" cx="${P.x}" cy="${P.y}" r="15"/>`;
-        let tx = M.x - P.x, ty = M.y - P.y; const tl = Math.hypot(tx, ty) || 1; tx /= tl; ty /= tl;
-        let px = -ty, py = tx; if (py < 0) { px = -px; py = -py; }
-        const spots = [[110, 28], [110, -28], [60, 44], [60, -44], [0, 40], [0, -40]].map(([a, b]) => ({ x: P.x + tx * Math.min(a, tl * 0.8) + px * b, y: P.y + ty * Math.min(a, tl * 0.8) + py * b }));
-        const tt = tag(112, 21, spots);
-        tags += `<g class="misstag"><rect x="${tt.x - 56}" y="${tt.y - 11}" width="112" height="21" rx="10"/><text x="${tt.x}" y="${tt.y + 4}">not on a corner</text></g>`;
-      }
-      // the overhang, pale, with the saw line where it would come off
-      out += drawOverhang(heldAt(h), over, tag);
-      out += rings;
-      // (its length is not drawn by the board, where it would crowd the handles: the hint line says it)
-      {
-        const ul = Math.hypot(B.x - A.x, B.y - A.y) || 1, tx = (B.x - A.x) / ul, ty = (B.y - A.y) / ul;
-        // a level board between two legs of a wall that tapers (or flares): how far apart the legs stand at its height,
-        // so a piece can be cut to fit them ("legs 4 ft apart here")
-        const gap = !h.endOn && Math.abs(s.ay - s.by) < 1e-6 ? legGap(h.key, s) : null;
-        if (gap) {
-          const words = `legs ${fmt(gap)} apart here`, gw = words.length * 7 + 20;
-          const tg = tag(gw, 22, [[40, 90], [40, -90], [100, 0], [-40, 90], [-40, -90], [130, 0]].map(([n, a]) => ({ x: M.x + nx * n + tx * a, y: M.y + ny * n + ty * a })));
-          tags += `<g class="len gap"><rect x="${tg.x - gw / 2}" y="${tg.y - 11}" width="${gw}" height="22" rx="6"/><text x="${tg.x}" y="${tg.y + 4}">${words}</text></g>`;
-        }
-      }
-      // a post or leg swung on past the steepest lean: it swings as a brace from there, and a tag by its moving end says why
-      if (h.steep && gesture && gesture.kind === 'grab' && gesture.legSwing && !h.endOn) {
-        const E = gesture.mode === 'a' ? A : B, words = `steepest: ${LEAN_MAX} inches for every foot up`, w = words.length * 7 + 22;
-        const tt = tag(w, 24, [[0, -40], [0, 40], [w / 2 + 30, 0], [-w / 2 - 30, 0], [0, -70]].map(([dx, dy]) => ({ x: E.x + dx, y: E.y + dy })));
-        tags += `<g class="planetag is-lean"><rect x="${tt.x - w / 2}" y="${tt.y - 12}" width="${w}" height="24" rx="12"/><text x="${tt.x}" y="${tt.y + 5}">${words}</text></g>`;
-      }
-      // seen end on: which plane it is on, right by it ("1½ ft in from the front"; "front wall, leaning 2 inches in for every foot up";
-      // a board that could lean but doesn't: "front wall, upright")
-      const wHeld = worldOf(h), footY = Math.min(wHeld.a.Y, wHeld.b.Y);
-      planeText = planeName(t, h.key, true, footY);
-      // (never over the check or a handle: if there is no free spot by it, the name in the chip at the top says it)
-      // While its top is being dragged to lean the wall, how it leans goes right above the handle, by the finger,
-      // never spared (on a phone the name has no room by the board): "2 inches in for every foot up", "upright".
-      const leaning = h.endOn && leanAt && gesture && gesture.kind === 'grab' && gesture.mode === 'lean';
-      if (leaning) {
-        const comma = planeText.indexOf(', leaning'), words = comma >= 0 ? bareLean(planeText.slice(comma + 2)) : 'upright';
-        const w = Math.max(80, words.length * 7.2 + 22);
-        const tt = tag(w, 26, [[0, -46], [0, -76], [-w / 2 - 34, 0], [w / 2 + 34, 0], [0, 46]].map(([dx, dy]) => ({ x: leanAt.x + dx, y: leanAt.y + dy })));
-        tags += `<g class="planetag is-lean is-drag"><rect x="${tt.x - w / 2}" y="${tt.y - 13}" width="${w}" height="26" rx="13"/><text x="${tt.x}" y="${tt.y + 5}">${words}</text></g>`;
-      } else if (h.endOn) {
-        const words = planeText + (leanEnd && !parseKey(h.key).k ? ', upright' : '');
-        const w = Math.max(96, words.length * 7.4 + 22);
-        const tt = tag(w, 24, [[0, 1], [0, -1], [1, 0], [-1, 0], [0, 1.7], [0, -1.7], [0, 2.4], [0, -2.4]].map(([a, b]) => ({ x: M.x + a * (w / 2 + 30), y: M.y + b * 52 })), true);
-        if (tt) tags += `<g class="planetag${parseKey(h.key).k ? ' is-lean' : ''}"><rect x="${tt.x - w / 2}" y="${tt.y - 12}" width="${w}" height="24" rx="12"/><text x="${tt.x}" y="${tt.y + 5}">${words}</text></g>`;
-      } else if (lineLike(h) && !isPost(wHeld)) {
-        // a leg, face on: how it leans across the wall seen end on ("1½ inches in for every foot up"), by its top
-        // (only where that is a wall it can lean with: tower.js secondWall)
-        const ps = planesOf(wHeld), sw = secondWall(t, wHeld), other = ps[0] === h.key ? sw : sw === h.key ? ps[0] : null, lw = other && parseKey(other).k ? bareLean(leanWords(t, other, footY)) : null;
-        if (lw) {
-          // (by its top's handle as drawn: a top up under the bar has its handle held lower, and the words go by that)
-          const T0 = inView(wHeld.a.Y <= wHeld.b.Y ? B : A), w = Math.max(96, lw.length * 7 + 22);
-          // (never spared: how it leans is what the builder is setting; a narrow phone finds it a place to one side)
-          const tt = tag(w, 24, [[0, -40], [0, 40], [w / 2 + 30, 0], [-w / 2 - 30, 0], [-w / 2 + 20, -40], [w / 2 - 20, -40], [-w / 2 + 20, 40], [w / 2 - 20, 40], [0, -70]].map(([dx, dy]) => ({ x: T0.x + dx, y: T0.y + dy })));
-          if (tt) tags += `<g class="planetag is-lean"><rect x="${tt.x - w / 2}" y="${tt.y - 12}" width="${w}" height="24" rx="12"/><text x="${tt.x}" y="${tt.y + 5}">${lw}</text></g>`;
-        }
-      }
-      out += tags;
-      const dup = cs.length > 0 && doubled(t, wHeld), ground = turnedOnGround(wHeld), ok = cs.length > 0 && !dup && !ground;
+      out += rings + tags;
+      const dup = cs.length > 0 && doubled(t, w), ok = cs.length > 0 && !dup;
       el.nailBtn.disabled = !ok;
-      hint = dup ? 'A board is already right there: slide it off that one first'
-        : ground ? 'A turned board stands up off the ground: put it on the level below, or turn it back square'
-        : gesture && gesture.mode === 'turn' ? 'Turning it about its foot, 15° at a time'
-        : h.fresh && h.start && !h.left ? 'It starts where you left off · carry it further to put it somewhere else'
-        : h.endOn ? (leanEnd ? (ok ? 'Seen end on: drag it in or out · drag its top to lean the wall · ✓ to nail' : 'Seen end on: drag it in or out, or drag its top to lean the wall')
-          : ok ? 'Seen end on: drag it in or out · ✓ to nail it' : 'Seen end on: drag it in or out, onto a board')
-        : h.steep && gesture && gesture.legSwing ? `Past the steepest lean (${LEAN_MAX} inches for every foot up): it swings as a brace now`
-        : !ok ? 'Touch it to a board or the ground to nail it'
-        : miss.length ? 'Slide or swing its end onto the corner, so it makes a triangle'
-        : over.length ? 'Tap ✂ saw off (or the pale end) to cut it at the joint, or ✓ to nail it'
-        : h.ghost ? 'Lined up with its twin: ✓ to nail it'
-        : h.leg ? 'A leg: swing its top to lean it · walk round a quarter to lean it the other way · ✓ to nail it'
-        : isTurnedFam(famOfKey(h.key)) ? 'Tap ✓ to nail it · drag ↻ to turn it more'
-        : offSquare(h.key) > 40 * DEG ? 'Keep walking round until its wall is edge on to push it in or out · ✓ to nail it'
-        : 'Tap ✓ to nail it · walk round until its wall is edge on to push it in or out';
-      hint = `${fmt(h.len)} board · ${hint}`;     // (its length, said here rather than drawn by the board)
-      heldInfo = { glowA: cs.some((c) => c.end === 'a'), glowB: cs.some((c) => c.end === 'b'), endOn: h.endOn };
-      el.gA.classList.toggle('is-touching', heldInfo.glowA); el.gB.classList.toggle('is-touching', heldInfo.glowB);
-      el.gMove.classList.toggle('is-touching', h.endOn && ok);
+      const tooFar = h.tooFar && now() - h.tooFar < 1800;
+      hint = dup ? 'A board is already right there: move it off that one first'
+        : tooFar ? 'Too short to reach any further over that way'
+        : h.start && !h.left && h.fresh ? 'It starts where you left off · carry it further to put it somewhere else'
+        : gesture && gesture.kind === 'grab' && gesture.mode === 'socket' ? 'Moving its foot to a spot on the half foot'
+        : h.con && h.con.past > 0.01 ? `Connected, sticking out ${fmt(h.con.past)} past the joint · ✓ to nail it`
+        : h.con ? 'Connected · ✓ to nail it'
+        : 'Drag its free end onto a board, or tap the arrows · ✓ to nail it';
+      hint = `${fmt(h.len)} board · ${hint}`;
+      heldInfo = { glowA: cs.some((c) => c.end === 'a'), glowB: !!h.con || cs.some((c) => c.end === 'b') };
+      el.gA.classList.toggle('is-touching', false); el.gB.classList.toggle('is-touching', heldInfo.glowB);
     } else if (building && app.selected) {
       const n = nailedOverhang(app.selected);
       if (n && n.list.length) { out += drawOverhang((tt) => boardScreen(n.board, tt), n.list); hint = 'Tap ✂ saw off (or the pale end) to cut it off'; }
     }
-    if (!show) planeText = '';
+    // the board just nailed, offered a trim: its extra drawn pale with the saw line
+    if (building && !h && trim && T().boards.includes(trim.rec)) {
+      const b = trim.rec, L0 = d3(b.a, trim.P);
+      out += drawOverhang((tt) => boardScreen(b, tt), [{ end: 'b', t0: L0, t1: b.len, tag: false }]);
+    }
     // the joints just nailed: a green ring that swells and fades
     if (flashes.length) {
       const tn = now(); flashes = flashes.filter((f) => tn - f.t0 < 900);
@@ -1627,8 +890,7 @@ export function makeBuild(app) {
       }
     }
     // the twins with no wood or no room: say why, small, by their middle (each tag clear of the others). A lit twin seen
-    // end on (only a dot on the screen, sitting on whatever is in front of it) gets a bold gold ring where it is, so it
-    // can be seen and tapped (main.js gives it any tap within a fingertip of it).
+    // end on (only a dot on the screen) gets a bold gold ring where it is, so it can be seen and tapped.
     if (building && !h) {
       const r = el.view.getBoundingClientRect(), tag = tagPlacer(r);
       for (const g of app.ghostList()) {
@@ -1646,12 +908,13 @@ export function makeBuild(app) {
       }
     }
     svg.innerHTML = out;
+    if (!hint && building && trim) hint = 'Saw off the extra, or keep it';
     if (!hint && building) hint = app.idleHint ? app.idleHint() : '';
     if (!hint && building && el.upNext && !el.upNext.hidden && upUsed < 2) hint = 'Put it up: the board on the bench starts where you left off';
     if (hint !== hintText) { hintText = hint; el.hint.textContent = hint; }
   }
 
-  return { freshStack, renderPanel, frame, putBack, undoHeld, returnPiece, contactsOf, cut, takeUp, snapMove, snapSwing, snapInOut, snapOffset, snapPlane, leanTo, lineLike, toBench, turnHeld, payFor, woodFor, addOffcut,
-    heldOverhang, cutHeld, nailedOverhang, cutNailed, fullCount, giveBoard, cornerMiss, jointsHere, context, worldOf, flash, groups,
-    get heldInfo() { return heldInfo; }, get planeText() { return planeText; }, get cutAt() { return cutAt; }, set cutAt(v) { cutAt = v; renderPanel(); } };
+  return { freshStack, renderPanel, frame, putBack, undoHeld, returnPiece, contactsOf, cut, takeUp, toBench, payFor, woodFor, addOffcut, arrow, dragFree, placeSocket, socketAt, sockets, setRun,
+    nailedOverhang, cutNailed, fullCount, giveBoard, worldOf, flash, groups, offerTrim, sawTrim, canNail,
+    get trim() { return trim; }, get heldInfo() { return heldInfo; }, get cutAt() { return cutAt; }, set cutAt(v) { cutAt = v; renderPanel(); } };
 }

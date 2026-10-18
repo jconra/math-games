@@ -4,74 +4,61 @@
 //
 // How a round goes: first set the four footing stones (drag one in or out: the base, half a foot to 8 feet each way,
 // W across the front and D along the sides; it locks when the first board is nailed). Cut boards on the left, drag the
-// pieces up onto the tower, nail them. A piece lies on an upright plane over the stones: the kind facing you (parallel
-// to the front wall from the front or back, to the sides from a side), on the nearest plane that already has a board
-// within its reach, else on the outer wall facing you. Walk round until its wall is edge on (within 12 degrees), so you see the board end on, and
-// grab it again: now it moves in and out over the stones. That is how a tower narrows as it rises: a 6 × 4 base, beams laid
-// across its top, a 2 × 3 tier standing on the beams, a 1 × 1 on top. Walls can LEAN, in or out, each on its own: seen
-// end on, a board's top end has a handle; drag it in and its whole wall leans about its foot, by the half inch in a foot
-// (a post or leg swung near upright, seen from the side, leans the same way), so a tower can narrow as it climbs on
-// corner legs leaning two ways at once, its crosspieces cut to the width between the legs where they go. While a board
-// is held, green circles show every
-// spot it will be nailed (a red ring: an end close to a board but not touching). Each board nailed shows its twins
-// glowing round the tower (the same board mirrored on the opposite wall, and on a square base round the corners too;
-// a post's twins on the other corners of its rectangle): a tap builds one with wood from the stack, a double tap builds
-// them all; tapping a nailed board shows its twins again (their clock stops while a question is open). Drag anywhere
-// else to walk round the tower and up and down it, pinch or roll the wheel to come nearer or back off; the camera always
-// looks at the tower's middle, 25 degrees down, and moves only when you move it. Now and then
-// the miller asks about a triangle you just made, or how long a brace a bay needs; a right answer earns an extra board.
-// Call the wind: a breeze, then growing gusts from every side. A frame calculation of the whole tower in 3D (frame.js)
-// decides what holds: every board tinted green to red by its strain as each wind rises, the frame bending. When
-// something gives, only what it held up falls, and the rest carries on through every gust to the end (testrun.js plays
-// it). The miller pays flour for the height left standing after the big gust; then keep building on what stands (the
-// boards that came down whole go back on the pile) or start fresh (the stones stay where they were set).
+// pieces up onto the tower, nail them. There are no walls: every board is free. A piece dragged onto the view puts its
+// first end in a SOCKET (a spot on the half foot: on the ground within the stones, or along a board at half-foot steps
+// from its ends) and stands straight up; then drag its free end, or tap the four arrows (half a foot across or along
+// the ground, its height following from its length), until it reaches another board: it connects there (its free end
+// turns green). A board too long sticks out past the joint; after ✓ it can be sawn off there (the extra back on the
+// pile, rounded down to the half foot). Each board nailed shows its twins glowing round the tower (the same board
+// mirrored front to back and side to side, and on a square base turned round the corners): a tap builds one with wood
+// from the stack, a double tap builds them all; tapping a nailed board shows its twins again (their clock stops while
+// a question is open). Drag anywhere else to walk round the tower and up and down it, pinch or roll the wheel to come
+// nearer or back off; the camera always looks at the tower's middle, 25 degrees down, and while building moves only
+// when you move it. Now and then the miller asks about a triangle you just made, how long a brace an opening needs, or
+// how high a slanting board reaches; a right answer earns an extra board.
+// Call the wind: the camera frames the whole tower (smoothly, once), then a breeze, then growing gusts from every side.
+// A frame calculation of the whole tower in 3D (frame.js) decides what holds: every board tinted green to red by its
+// strain as each wind rises, the frame bending. When something gives, only what it held up falls, and the rest carries
+// on through every gust to the end (testrun.js plays it). The miller pays flour for the height left standing after the
+// big gust; then keep building on what stands (the boards that came down whole go back on the pile) or start fresh
+// (the stones stay where they were set).
 //
-// Files: tower.js (the tower as data: boards in the world, planes), touch.js (where boards touch), frame.js (the
-// physics: the wind test in 3D), wind-worker.js (runs it off the page's thread), testrun.js (the wind test as shown:
-// the gusts, the strain colours, the falls, the card), questions.js (the math), build.js (the panel, placing, and every
-// touch on the view), tower3d.js (drawing the boards, the held board and its plane, the twins, the strain), fall.js (what
-// falls), scene.js (the hilltop, wind, the stones, the miller), sound.js.
+// Files: tower.js (the tower as data: boards in the world, sockets, the free end, twins, words), touch.js (where boards
+// touch), frame.js (the physics: the wind test in 3D), wind-worker.js (runs it off the page's thread), testrun.js (the
+// wind test as shown: the gusts, the strain colours, the falls, the card), questions.js (the math), build.js (the
+// panel, placing, and every touch on the view), tower3d.js (drawing the boards, the held board, the twins, the strain),
+// fall.js (what falls), scene.js (the hilltop, wind, the stones, the miller), sound.js.
 //
 // ?perf shows frames per second, ?askall asks at every chance.
-// window.WM, a handle for test scripts (feet, the tower's middle at X = Z = 0, the front wall facing +Z):
-//   WM.add(face, x, y, angDeg, len)    nail a board on an outer wall the v2 way (x from that wall's left corner seen from
-//                                      outside), as if dragged there: same questions, same twins
-//   WM.addOn(key, u, y, angDeg, len)   nail a board on any plane ('Z:1.5', 'X:-1'), its a end at (u, y) on it
-//   WM.addWorld(a, b, n, t)            nail a board between two world points (on the plane they share; a post faces n,
-//                                      or the plane kind facing the view). t: its wall's lean (feet across per foot up,
-//                                      k/12 by the half inch k), needed only for a level board in a leaning wall; a
-//                                      board that is not level takes its lean from its ends (and a leg, leaning across
-//                                      its own wall too, lies in both). add, addOn and addWorld take their wood off
-//                                      the pile like a twin (sawn as needed); with none left the board goes up anyway
-//   (addOn takes a leaning plane's key too: 'Z:3~-1.5' is the front wall of a 6 ft base leaning in 1½ in a foot)
+// window.WM, a handle for test scripts (feet, the tower's middle at X = Z = 0, the front facing +Z):
+//   WM.addWorld(a, b, len)             nail a board between two world points (len: its length, else from its ends),
+//                                      as if put up by hand: same questions, same twins; its wood comes off the pile
+//                                      like a twin's (sawn as needed); with none left the board goes up anyway
 //   WM.setBase(W, D), WM.setWidth(w)   the stones (only while nothing is built); WM.footprint() -> { W, D }
-//   WM.boards() -> [{ id, a, b, len, n, t? }], WM.planes() -> [{ key, name, boards }] (the walls in use, leaning ones
-//                                      keyed 'Z:3~-1.5' and named "the front wall, leaning in 1½ in a foot")
-//   WM.ghosts() -> the twins on show [{ a, b, len, n, t (its wall's lean), ok, reason }]; WM.confirm(i), WM.confirmAll()
-//   WM.held() -> the board in hand { key, x, y, ang, len, endOn, a, b, n, t, k (its wall's lean, inches a foot), leg,
-//                planes (every plane it lies in) } and its spots on the screen (page pixels): { ends: [A, B], mid,
-//                plane (its name), lean (the lean handle's spot seen end on, or null) }
-//   WM.planeToScreen(key, u, y), WM.worldToScreen(X, Y, Z), WM.toScreen(face, x, y) (v2 wall coordinates)
-//   WM.turnTo(face), WM.setAz(az), WM.state(), WM.resetAll(W, D), WM.startTest()
+//   WM.boards() -> [{ id, a, b, len }]
+//   WM.ghosts() -> the twins on show [{ a, b, len, ok, reason }]; WM.confirm(i), WM.confirmAll()
+//   WM.held() -> the board in hand { A (its socket), B (its free end), len, con ({ s, P, past } or null), ends: [A, B]
+//                on the screen (page pixels), handles: { socket, free } and arrows: [+X, -X, +Z, -Z] (page pixels of
+//                their hit spots) } or null
+//   WM.sockets() -> every socket [{ X, Y, Z, on }] and WM.socketScreen(p) its spot on the screen
+//   WM.worldToScreen(X, Y, Z), WM.turnTo(face), WM.setAz(az), WM.state(), WM.resetAll(W, D), WM.startTest()
 //   WM.load(tower)                     a whole tower { W, D, boards } put up at once on a fresh yard (its wood paid from
-//                                      the pile, no questions)
+//                                      the pile, no questions; an older tower's n and t are dropped)
 //   WM.test() -> the wind test as it plays: { phase, gust, of, stage, from, breaks: [...], height, ms (the sums),
 //                wallMs (the worker's answer, call to reply), card, shown: [[id, strain now]] } or null
 //   WM.result() -> the wind test's whole answer as the page got it (frame.js windTest, from the worker), or null: a rig
 //                compares it with node's windTest on WM.boards()
 import * as THREE from 'three';
-import { START_W, MAX_W, BOARDS, BOARD_FT, newTower, FACE_NORMAL, towerHeight, boardCount, twinsOf, spotTaken, isPost, isCornerPost, planesOf, planeKey, parseKey,
-  planeSegments, planeNormal, planeHalf, planeName, facePlane, faceOfPlane, fromPlane, toPlane, makeBoard, planesInUse, wallSpan, floorsAcross,
-  wallsInUse, wallPlanesOf, isCornerLine, faceWalls, offsetAt, leanWords, leansIn, planeKeyOf, kOfT, onLeanGrid, footOfPlane, spellUnits,
-  famNormal, famOfKey, famTheta, isTurnedFam } from './tower.js';
-import { isKnee, touch, touchesAny, grounded } from './touch.js';
-import { STAGES } from './frame.js';
+import { START_W, MAX_W, BOARDS, BOARD_FT, newTower, cleanTower, FACE_NORMAL, towerHeight, boardCount, twinsOf, spotTaken, isPost, isCornerPost, makeBoard, spellUnits,
+  placeWords, nounOf, sideOfBoard, atSide, isLevelB, isUprightB } from './tower.js';
+import { touch3, touchesAny, grounded, pointGap, TOL } from './touch.js';
+import { STAGES, boardShapes, faceOf } from './frame.js';
 import { makeTestRun, flourFor } from './testrun.js';
-import { trianglesOf, makeQuestion, bayQuestion, slopeQuestion, turnedQuestion } from './questions.js';
+import { trianglesOf, makeQuestion, bayQuestion, reachQuestion } from './questions.js';
 import { makeScene, makeMiller, wind, FT, groundY } from './scene.js';
 import { makeTowerView, HELD_OFF } from './tower3d.js';
 import { makeFall } from './fall.js';
-import { makeBuild, fmt, fmtWords, fmtBase, fmtStat, whereWords, rateWords } from './build.js';
+import { makeBuild, fmt, fmtWords, fmtBase, fmtStat, whereWords } from './build.js';
 import * as sound from './sound.js';
 
 const DEG = Math.PI / 180;
@@ -83,8 +70,8 @@ const el = {
   view: $('view'), canvas: $('c'), overlay: $('overlay'), hint: $('hint'),
   count: $('count'), countWord: $('count-word'), bench: $('bench'), benchEmpty: $('bench-empty'), benchBoard: $('bench-board'), benchLabel: $('bench-label'),
   tape: $('tape'), saw: $('saw'), sawLabel: $('saw-label'), cutBtn: $('cut'), upNext: $('up-next'), pieces: $('pieces'), piecesEmpty: $('pieces-empty'),
-  gMove: $('g-move'), gA: $('g-a'), gB: $('g-b'), gTurn: $('g-turn'), nailBtn: $('nail'), stoneHandles: [0, 1, 2, 3].map((c) => $('stone-' + c)),
-  selBar: $('sel-bar'), selHint: $('sel-hint'), panel: $('panel'),
+  gA: $('g-a'), gB: $('g-b'), arrows: ['g-xp', 'g-xm', 'g-zp', 'g-zm'].map($), nailBtn: $('nail'), stoneHandles: [0, 1, 2, 3].map((c) => $('stone-' + c)),
+  selBar: $('sel-bar'), selHint: $('sel-hint'), panel: $('panel'), trimBar: $('trim-bar'), trimHint: $('trim-hint'), trimSaw: $('trim-saw'), trimKeep: $('trim-keep'),
 };
 
 // ── the renderer, camera, world ─────────────────────────────────────────────────────────────────────────────────────
@@ -107,10 +94,11 @@ let best = { height: 0, W: 0, D: 0 };
 try { const b = JSON.parse(localStorage.getItem('bm-windmill-best') || '{}'); best = { height: +b.height || 0, W: +(b.W ?? b.width) || 0, D: +(b.D ?? b.width) || 0 }; } catch (e) { /* no storage: no record yet */ }
 
 // ── the camera: always looking at the tower's middle (X = Z = 0), tipped PITCH down ───────────────────────────────────
-// It moves only when the player moves it: a sideways drag walks it round the tower (smoothly, any angle, no settling on
-// a wall), an up and down drag slides what it looks at up and down the tower's middle (from the ground to a little
-// above the top), and a pinch or the mouse wheel sets how far back it stands. Nothing else moves it: not a board taken
-// up, nailed or put up, not the wind test.
+// While building it moves only when the player moves it: a sideways drag walks it round the tower (smoothly, any angle,
+// no settling on a side), an up and down drag slides what it looks at up and down the tower's middle (from the ground
+// to a little above the top), and a pinch or the mouse wheel sets how far back it stands. Nothing else moves it: not a
+// board taken up, nailed or put up. Calling the wind frames the whole tower once, gliding there (frameTower); then it is
+// left alone again.
 // az: the angle round the tower (0 looks at the front wall), y / yT: the height it looks at (feet; yT where it is
 // heading, for the arrow keys and the edge climb while dragging a board), dist / distT: how far back (metres)
 const PITCH = 25 * DEG;
@@ -132,7 +120,7 @@ function resize() {
   build && build.renderPanel(); fitStats(); placeFaceName(); app.dirty = true;
 }
 // the highest the view may look: a little above the top of the tower (or of the board in hand)
-const topY = () => Math.max(towerHeight(app.tower), app.held ? Math.max(app.held.y, app.held.y + Math.sin(app.held.ang) * app.held.len) : 0) + 4;
+const topY = () => Math.max(towerHeight(app.tower), app.held ? Math.max(app.held.A.Y, app.held.B.Y) : 0) + 4;
 // the look height moved by dy feet: never below the ground, never up past topY (but a view left higher than that, the
 // tower having come down since, stays put until dragged down)
 const climb = (y, dy) => { let v = y + dy; if (dy > 0) v = Math.min(v, Math.max(topY(), y)); return Math.max(0, v); };
@@ -141,8 +129,11 @@ function updateCamera(dt) {
   if (app.autoScroll) cam.yT = climb(cam.yT, app.autoScroll * 10 * dt);
   // a flick keeps turning a moment
   if (!orbiting && Math.abs(cam.azV) > 0.01) { cam.az += cam.azV * dt; cam.azV *= Math.exp(-3.2 * dt); } else if (!orbiting) cam.azV = 0;
-  cam.y += (cam.yT - cam.y) * Math.min(1, dt * 8);
-  cam.dist += (cam.distT - cam.dist) * Math.min(1, dt * 12);
+  // (a glide: the wind test framing the tower moves slower, so it reads as the camera stepping back)
+  const glide = cam.glide > 0 ? 2.2 : 0;
+  if (cam.glide > 0) cam.glide -= dt;
+  cam.y += (cam.yT - cam.y) * Math.min(1, dt * (glide || 8));
+  cam.dist += (cam.distT - cam.dist) * Math.min(1, dt * (glide || 12));
   updateFace();
   // (straight from the angle, the height and the distance: walking round never brings it nearer or further)
   const ly = cam.y * FT, D = cam.dist, c = Math.cos(PITCH);
@@ -195,85 +186,50 @@ app.viewAz = () => cam.az;
 // how far a point (feet) is from the camera (metres): the nearer end of a board is the one facing the builder
 app.camDist = (p) => camera.position.distanceTo(v3.set(p.X * FT, p.Y * FT, p.Z * FT));
 
-// planes and the screen: a point on a plane (feet) <-> the screen (pixels inside the view). The held board is drawn a
-// layer out from its plane (HELD_OFF, tower3d.js), so its spots on the screen are too.
+// the world and the screen: a point (feet) -> the screen (pixels inside the view); a screen point -> the ray through it
+// (feet: from the camera, a unit direction); which way the camera looks; what it looks at (feet)
 const v3 = new THREE.Vector3();
 const project = (X, Y, Z) => { v3.set(X * FT, Y * FT, Z * FT).project(camera); const r = el.view.getBoundingClientRect(); return { x: (v3.x + 1) / 2 * r.width, y: (1 - v3.y) / 2 * r.height, behind: v3.z > 1 }; };
 app.worldToScreen = (X, Y, Z) => project(X, Y, Z);
-app.planeToScreen = (key, u, y, lifted = true) => {
-  const p = fromPlane(key, u, y), n = planeNormal(key, p.Y), o = lifted ? HELD_OFF : 0;
-  return project(p.X + n.X * o, p.Y + n.Y * o, p.Z + n.Z * o);
-};
 const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
 const aim = (cx, cy) => { const r = el.view.getBoundingClientRect(); ndc.set((cx - r.left) / r.width * 2 - 1, -((cy - r.top) / r.height) * 2 + 1); ray.setFromCamera(ndc, camera); };
-// the point on a plane under the pointer: in the world (feet), or in the plane's own (x = u, y)
-// (a leaning plane axis = c + t·Y has the normal e_axis - t·e_Y: N·p = c, in metres c·FT, scaled to a unit normal)
-app.toWorld = (key, cx, cy) => {
-  aim(cx, cy);
-  const { axis, off, t } = parseKey(key), l = Math.sqrt(1 + t * t), hit = new THREE.Vector3();
-  const N = axis === 'Z' ? new THREE.Vector3(0, -t / l, 1 / l) : axis === 'X' ? new THREE.Vector3(1 / l, -t / l, 0)
-    : (({ X, Z }) => new THREE.Vector3(X / l, -t / l, Z / l))(famNormal(axis));
-  if (!ray.ray.intersectPlane(new THREE.Plane(N, -off * FT / l), hit)) return null;
-  return { X: hit.x / FT, Y: hit.y / FT, Z: hit.z / FT };
-};
-app.toPlane = (key, cx, cy) => { const w = app.toWorld(key, cx, cy); if (!w) return null; const q = toPlane(key, w); return { x: q.u, y: q.y }; };
-// a point on the ground under the pointer (feet, the tower's middle at 0)
-app.toGround = (cx, cy) => {
-  aim(cx, cy); const hit = new THREE.Vector3();
-  if (!ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hit)) return null;
-  return { X: hit.x / FT, Z: hit.z / FT };
-};
-// the outer wall facing the view, and the plane a piece carried onto the tower lands on: of the kind facing the view
-// (from the outer wall facing you in to the middle), the one whose boards come nearest the pointer (a board right under
-// it: nearest of all; on a near tie, the plane nearer you), so long as one is within the piece's reach from where the
-// pointer holds it; else the outer wall facing you (the leaning one when that wall is built only leaning)
-app.facingPlane = () => facePlane(app.tower, app.face);
-// (walls that lean: where each stands under the pointer, at the height the pointer finds on it)
-app.pickPlane = (cx, cy, len) => {
-  const t = app.tower, kind = app.face % 2 ? 'X' : 'Z', reach = Math.max(1.2, len / 2 + 0.3), walls = wallsInUse(t);
-  const s = kind === 'Z' ? (Math.cos(cam.az) >= 0 ? 1 : -1) : (Math.sin(cam.az) >= 0 ? 1 : -1);
-  const offHere = (k) => { if (!parseKey(k).k) return parseKey(k).off; const w = app.toWorld(k, cx, cy); return w ? offsetAt(k, w.Y) : parseKey(k).off; };
-  const keys = [...walls].filter((k) => k[0] === kind && offHere(k) * s >= -1e-6).sort((a, b) => offHere(b) * s - offHere(a) * s);
-  // (and the turned walls in use that face the view within 60 degrees: a piece carried onto a turned level's boards
-  // lands in their wall; with none built, nothing here changes)
-  for (const k of walls) if (isTurnedFam(famOfKey(k)) && Math.abs(Math.cos(cam.az - famTheta(famOfKey(k)) * DEG)) > 0.5) keys.push(k);
-  aim(cx, cy);
-  const under = new Set(); for (const hit of ray.intersectObjects(towerView.meshes(), false)) for (const k of wallPlanesOf(t, hit.object.userData.src, walls)) under.add(k);
-  let best = null;
-  for (const k of keys) {
-    const p = app.toPlane(k, cx, cy); if (!p) continue;
-    const d = under.has(k) ? 0 : Math.min(...planeSegments(t, k).map((sg) => segDist(p, sg)));
-    if (d <= reach && (!best || d < best.d - 0.3)) best = { k, d };
-  }
-  if (best) return best.k;
-  // (none in reach: the outer wall facing you as it stands, leaning if that is the only way it is built, else upright)
-  const fw = faceWalls(t, app.face);
-  return fw.length && parseKey(fw[0]).k ? fw[0] : facePlane(t, app.face);
-};
-const segDist = (p, s) => { const vx = s.bx - s.ax, vy = s.by - s.ay, L2 = vx * vx + vy * vy || 1, u = Math.max(0, Math.min(1, ((p.x - s.ax) * vx + (p.y - s.ay) * vy) / L2)); return Math.hypot(s.ax + vx * u - p.x, s.ay + vy * u - p.y); };
+app.rayAt = (cx, cy) => { aim(cx, cy); const o = ray.ray.origin, d = ray.ray.direction; return { O: { X: o.x / FT, Y: o.y / FT, Z: o.z / FT }, d: { X: d.x, Y: d.y, Z: d.z } }; };
+app.viewDir = () => { camera.getWorldDirection(v3); return { X: v3.x, Y: v3.y, Z: v3.z }; };
+app.lookAt = () => ({ X: cam.look.x / FT, Y: cam.look.y / FT, Z: cam.look.z / FT });
+// the board in hand is drawn a layer out from its line, away from the tower's middle (tower3d.js HELD_OFF): how far
+app.heldOut = (w) => { const o = faceOf(w, app.tower.W, app.tower.D).out; return { X: o.X * HELD_OFF, Y: o.Y * HELD_OFF, Z: o.Z * HELD_OFF }; };
 
-// ── the walls: names ─────────────────────────────────────────────────────────────────────────────────────────────────
-// (the chip under the stats names the wall facing you; while a board is held, the plane it is on)
-const FACE_NAMES = ['Front wall', 'Right side', 'Back wall', 'Left side'];
+// ── names ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+// (the chip under the stats names the side of the tower facing you; while a board is held, where that board is: "Brace
+// at the front right, 2 ft up")
+const FACE_NAMES = ['Front', 'Right side', 'Back', 'Left side'];
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 let faceText = '';
 function showFaceName() {
-  const txt = app.held && app.phase === 'build' ? cap(build.planeText || planeName(app.tower, app.held.key, true)) : FACE_NAMES[app.face];
+  const txt = app.held && app.phase === 'build' ? cap(placeWords(app.tower, build.worldOf(app.held)).replace(/^the /, '')) : FACE_NAMES[app.face];
   if (txt !== faceText) { faceText = txt; $('face-name').textContent = txt; $('face-name').classList.toggle('is-held', !!app.held); placeFaceName(); }
+}
+// the boards of the tower that are legs (posts that lean: frame.js), worked out again only when the tower changes
+let legKey = '', legSet = new Set();
+function legsOf(t = app.tower) {
+  const k = t.boards.map((b) => b.id).join(',');
+  if (k !== legKey || t !== app.tower) { const sh = boardShapes(t); legSet = new Set(t.boards.filter((b) => sh.get(b.id)?.column && !isPost(b)).map((b) => b.id)); legKey = t === app.tower ? k : ''; }
+  return legSet;
 }
 
 // ── where a board's top end is: in the top bar, while it is in hand or picked out ──────────────────────────────────
 // From the middle of the base, to the nearest inch: "1 ft left · 1 ft front · 7 ft 9 in. up" (the same numbers with the
-// opposite words on the mirror-image leg). It takes the stats' place while it shows. A horizontal board has no top: its
-// end on the right as seen is shown ("Right end").
+// opposite words on the mirror-image leg). It takes the stats' place while it shows. The board in hand: its free end
+// ("Free end"). A horizontal board picked out has no top: its end on the right as seen is shown ("Right end").
 let topAtText = '';
 function showTopAt() {
-  const src = app.phase === 'build' ? (app.held ? build.worldOf(app.held) : app.selected) : null;
+  const held = app.phase === 'build' && app.held, src = app.phase === 'build' ? (held ? build.worldOf(app.held) : app.selected) : null;
   let txt = '', label = 'Top end';
   if (src) {
     let p = src.a.Y >= src.b.Y ? src.a : src.b;
-    if (Math.abs(src.a.Y - src.b.Y) < 0.04) {
-      // (the end further right on the screen)
+    // (a board in hand: where its free end is; a horizontal board picked out: its end on the right as seen)
+    if (held) { p = src.b; label = 'Free end'; }
+    else if (Math.abs(src.a.Y - src.b.Y) < 0.04) {
       const A = app.worldToScreen(src.a.X, src.a.Y, src.a.Z), B = app.worldToScreen(src.b.X, src.b.Y, src.b.Z);
       p = A.x >= B.x ? src.a : src.b; label = 'Right end';
     }
@@ -327,9 +283,9 @@ app.onStonesSet = () => {
 // ── nailing, picking up, undo ────────────────────────────────────────────────────────────────────────────────────────
 let idN = 1;
 let lastDown = null;      // [{ rec, entry }]: what the last "Take it down" brought down, while nothing else was nailed since
-// put a board on the tower: { a, b, len, n, t?, leg? } in the world. Returns the record.
+// put a board on the tower: { a, b, len } in the world. Returns the record.
 function addBoard(spec) {
-  const rec = makeBoard('b' + idN++, spec.a, spec.b, spec.n, spec.len, spec.t || 0, !!spec.leg);
+  const rec = makeBoard('b' + idN++, spec.a, spec.b, spec.len);
   app.tower.boards.push(rec); app.placed.push({ rec }); lastDown = null; return rec;
 }
 // where the builder left off (build.js startSpot) after boards came off (taken down, undone, blown down): the latest
@@ -340,8 +296,8 @@ function lastHandLeft() {
   app.lastHand = p ? p.rec : null;
 }
 app.nail = () => {
-  const h = app.held; if (!h) return;
-  const spec = build.worldOf(h), key = h.key;
+  const h = app.held; if (!h) return null;
+  const spec = build.worldOf(h);
   const first = stonesOpen();
   // a board touching at two places gets two nails (counted before it goes up, or it would find itself)
   const cs = build.contactsOf(h), nails = cs.length >= 2 ? 2 : 1;
@@ -352,7 +308,8 @@ app.nail = () => {
   makeGhosts(rec);
   rebuild();
   // (the view stays where the builder left it; twins hidden behind the board just nailed: the hint says to walk round)
-  afterNail(rec, key, first, !!spec.leg);
+  afterNail(rec, first);
+  return rec;
 };
 // pick out a nailed board (or none): it lights up, its bar offers to take it down, and its twins that aren't built
 // glow again. note: a word on the bar first (after a saw cut: how much came off, flashed so it is seen)
@@ -361,19 +318,11 @@ app.select = (src, note) => {
   app.selected = src; towerView.highlight(src);
   el.selBar.hidden = !src || app.phase !== 'build';
   if (!src) return;
-  const inner = faceOfPlane(app.tower, planesOf(src)[0]) < 0 && !isCornerPost(app.tower, src);
-  // (a leg: how it leans, across the two walls it stands in; a board in a leaning outer wall: that wall's lean)
-  const legNow = !isPost(src) && isCornerLine(app.tower, src), own = planesOf(src)[0];
-  const leans = legNow ? wallPlanesOf(app.tower, src).filter((k) => parseKey(k).k).map((k) => leanWords(app.tower, k, Math.min(src.a.Y, src.b.Y)).replace('leaning ', '')) : [];
-  const leanTxt = leans.length === 2 && leans[0] === leans[1] ? leans[0] + ', both ways' : leans.join(' and ');
-  const flat = Math.abs(src.a.Y - src.b.Y) < 0.05;
-  // (a brace or a horizontal board doesn't lean itself: its WALL does, and the bar says so, "in the front wall, which
-  // leans 1½ inches in for every foot up"; a wall with no other board in it is named without a lean it doesn't show)
-  const alone = planeSegments(app.tower, own).length < 2;
-  const wallTxt = !parseKey(own).k ? (inner ? ', ' + planeName(app.tower, own, true) : '')
-    : ', in ' + (alone ? planeName(app.tower, own).replace(/, leaning .*$/, '') : planeName(app.tower, own).replace(/, leaning /, ', which leans '));
-  const what = (isCornerPost(app.tower, src) ? 'Corner post' : isPost(src) ? 'Post' : legNow ? 'Leg' : flat ? 'Horizontal board' : 'Brace') + ', ' + fmt(src.len)
-    + (legNow ? (leanTxt ? ', leaning ' + leanTxt : '') : wallTxt);
+  build.offerTrim(null);
+  // what it is, how long, and where: "Brace, 8 ft, at the front right, 2 ft up"
+  const noun = isCornerPost(app.tower, src) ? 'corner post' : nounOf(src, legsOf());
+  const where = placeWords(app.tower, src, legsOf()).replace(/^the [a-z ]+?(?=( at | on | in |,|$))/, '');
+  const what = cap(noun) + ', ' + fmt(src.len) + (where ? ',' + where.replace(/^,/, '') : '');
   el.selHint.textContent = note ? `${note} · ${what}` : what; $('say').hidden = true;
   if (note) { el.selHint.classList.remove('is-sawn'); void el.selHint.offsetWidth; el.selHint.classList.add('is-sawn'); }
   if (!again && app.phase === 'build') showTwinsOf(src);
@@ -527,8 +476,7 @@ function placeFaceName() {
 // nothing to nail it to any more or no wood for it (grey, with the reason). They fade away if left alone a while.
 let ghosts = null;     // { src (the board nailed), list, born }
 const GHOST_STAY = 16000, GHOST_FADE = 5000;
-// (a leg's twins are legs too: drawn on their lines, as the leg is)
-function makeGhosts(rec) { const line = !isPost(rec) && isCornerLine(app.tower, rec); ghosts = { src: rec, list: twinsOf(app.tower, rec).map((g) => (line ? { ...g, line: true, leg: true } : g)), born: performance.now() }; }
+function makeGhosts(rec) { ghosts = { src: rec, list: twinsOf(app.tower, rec), born: performance.now() }; }
 function refreshGhosts() {
   if (!ghosts) { towerView.setGhosts([]); return; }
   const t = app.tower;
@@ -586,13 +534,13 @@ function gesture(name, ms = 1700) {
   clearTimeout(gestureTimer); gestureTimer = setTimeout(() => { if (miller && !miller.walking) miller.play('Idle', { fade: 0.4 }); }, ms);
   return ok;
 }
-// "a" or "an" before a length said aloud ("an 8½ ft brace", "an 11 ft board")
-const angDeg = (s) => { let a = Math.abs(Math.atan2(s.by - s.ay, s.bx - s.ax)) / DEG; if (a > 90) a = 180 - a; return a; };
-const isLevel = (s) => angDeg(s) < 3, isUpright = (s) => angDeg(s) > 87;
-// (a leg where two leaning walls meet slants across its wall too, but it is no brace)
-const hasDiagonal = (segs) => segs.some((s) => !s.post && !isLevel(s) && !isUpright(s) && !(s.leg && isCornerLine(app.tower, s.src)));
-// the walls of face f in use (upright or leaning; the upright one even when empty)
-const faceWallsOf = (f) => [...new Set([facePlane(app.tower, f), ...faceWalls(app.tower, f)])];
+// a board's slope from horizontal, degrees (0 horizontal, 90 straight up)
+const slopeDeg = (b) => Math.atan2(Math.abs(b.b.Y - b.a.Y), Math.hypot(b.b.X - b.a.X, b.b.Z - b.a.Z)) / DEG;
+const isLevel = (b) => slopeDeg(b) < 3, isUpright = (b) => slopeDeg(b) > 87;
+// the posts and legs a board is nailed to
+const columnsAt = (rec) => app.tower.boards.filter((o) => o !== rec && (isPost(o) || legsOf().has(o.id)) && touch3(rec, o).length);
+// a brace: slanting, not a leg
+const isBrace = (b) => !isLevel(b) && !isUpright(b) && !legsOf().has(b.id);
 // a bubble of help at the foot of the view when nothing else is going on
 app.idleHint = () => {
   const ok = ghosts ? ghosts.list.filter((g) => g.ok) : [];
@@ -613,160 +561,97 @@ app.idleHint = () => {
 };
 
 let sinceQuestion = 3, questionsAsked = 0, lastSlope = null;
-// after a board is nailed by hand: maybe a question about the plane it went on, maybe a word from the miller
-// (held as a leg: it was swung to lean by the half inch a foot, though no wall leans with it yet)
-function afterNail(rec, key, first, heldLeg = false) {
-  const t = app.tower, post = isPost(rec), segs = planeSegments(t, key), me = segs.find((s) => s.src === rec);
-  const n = app.placed.length, H = towerHeight(t), k = faceOfPlane(t, key);
+// after a board is nailed by hand: maybe a question about it, maybe a word from the miller
+function afterNail(rec, first) {
+  const t = app.tower, post = isPost(rec), leg = legsOf().has(rec.id), level = isLevel(rec), slant = !post && !leg && isBrace(rec);
+  const n = app.placed.length, H = towerHeight(t), side = sideOfBoard(rec, t);
   const forced = params.has('askall');
   sinceQuestion++;
   const chance = questionsAsked === 0 ? 0.7 : sinceQuestion >= 5 ? 0.9 : 0.35;
   const askNow = () => forced || (sinceQuestion >= 2 && Math.random() < chance);
-  // the first board of a turned wall: how long is a side of a square turned inside the one below (or, later now and
-  // then, how far its corner is from the middle)
-  if (isTurnedFam(rec.n)) {
-    const firstTurned = t.boards.filter((b) => isTurnedFam(b.n)).length === 1;
-    if (firstTurned || (askNow() && Math.random() < 0.5)) {
-      const own = planesOf(rec)[0], th = famTheta(famOfKey(own)), c = Math.abs(parseKey(own).off);
-      const S = (th === 45 || th === 135) && c > 0.3 ? Math.round(2 * Math.SQRT2 * c * 2) / 2 : Math.min(t.W, t.D);
-      const q = turnedQuestion(S, Math.random, firstTurned || Math.random() < 0.5 ? 'side' : 'corner');
-      if (q) { setTimeout(() => ask(q), 450); sinceQuestion = 0; questionsAsked++; return; }
-    }
+  const asked = (q) => { setTimeout(() => ask(q), 450); sinceQuestion = 0; questionsAsked++; };
+  // a slanting board (a brace or a leg) whose top stands a half-foot number of feet over from its foot: how high does
+  // it reach? (the arrows set it by the half foot, so this is the very number the builder just set)
+  if ((slant || leg) && askNow()) {
+    const q = reachQuestion(rec.len, Math.hypot(rec.b.X - rec.a.X, rec.b.Z - rec.a.Z));
+    if (q && q.prompt !== lastSlope) { lastSlope = q.prompt; asked(q); return; }
   }
-  // a board in a leaning wall (or a leg leaning across two): a question about the lean itself, as a rate
-  const leanKeys = post ? [] : wallPlanesOf(t, rec).filter((w) => parseKey(w).k), leg = !post && isCornerLine(t, rec);
-  if (leanKeys.length && askNow()) {
-    const q = slopeQuestion(slopeSpec(rec, leanKeys[0], leg), Math.random, { avoid: lastSlope });
-    if (q) { lastSlope = q.prompt; setTimeout(() => ask(q), 450); sinceQuestion = 0; questionsAsked++; return; }
-  }
-  // a crosspiece that closes a bay: how long a brace would reach corner to corner?
-  const bay = me && !post && isLevel(me) ? bayUnder(segs, me) : null;
-  if (bay && askNow()) {
-    const q = bayQuestion(bay.w, bay.h, bay.y0);
-    if (q) { setTimeout(() => ask(q), 450); sinceQuestion = 0; questionsAsked++; return; }
-  }
-  // a question about a triangle this board just made on its plane?
-  if (me && !post) {
-    const tris = trianglesOf(segs, me.id);
-    if (tris.length && askNow()) {
-      const q = makeQuestion(tris, me);
-      if (q) { setTimeout(() => ask(q), 450); sinceQuestion = 0; questionsAsked++; return; }
-    }
-  }
+  // a horizontal board that closes an opening: how long a brace would reach corner to corner?
+  const bay = level ? bayUnder(rec) : null;
+  if (bay && askNow()) { const q = bayQuestion(bay.w, bay.h, bay.y0); if (q) { asked(q); return; } }
+  // a question about a triangle this board just made?
+  const tris = !post ? trianglesOf(t, rec) : [];
+  if (tris.length && askNow()) { const q = makeQuestion(tris, rec); if (q) { asked(q); return; } }
   // otherwise, maybe a word from the miller
-  // (a leg, or a board standing up a leaning wall: a word about leaning, not about plumb posts. A brace in a leaning
-  // wall is a brace: it hears about triangles and corners like any other. Level boards go on as always.)
-  const legNow = leg || (!post && heldLeg && planesOf(rec).length === 2);
-  const leaning = !!me && (legNow || (leanKeys.length > 0 && isUpright(me)));
-  if (first && !leaning) {
+  if (first && !leg) {
     say(post && isCornerPost(t, rec) ? 'Good: a post on the corner, straight up. See the glowing ones? Tap one to put the same post on that corner.' : post ? 'A post, straight up. Corner posts on the stones make the best start.' : 'Start with the corner posts, standing straight up. A post wants to be plumb, 90 degrees.', { force: true, ms: 9000 });
     return;
   }
-  if (!me) return;
-  if (leaning) {
-    const w = leanKeys[0] || planesOf(rec).find((k) => parseKey(k).k), dir = w ? leansIn(w, Math.min(rec.a.Y, rec.b.Y)) : 0, kk = w ? Math.abs(parseKey(w).k) : 0;
-    // (the very first board a leg: it leans on purpose, so the miller says what comes next, not "stand it plumb")
-    if (first && legNow) {
-      const f = rec.a.Y <= rec.b.Y ? rec.a : rec.b, Leg = Math.abs(Math.abs(f.X) - t.W / 2) < 1e-3 && Math.abs(Math.abs(f.Z) - t.D / 2) < 1e-3 ? 'A corner leg' : 'A leg';
+  if (leg) {
+    // a leg (a post that leans): in, toward the middle as it climbs, or out
+    const [f, tp] = rec.a.Y <= rec.b.Y ? [rec.a, rec.b] : [rec.b, rec.a], dir = Math.hypot(tp.X, tp.Z) < Math.hypot(f.X, f.Z) - 0.05 ? 1 : -1;
+    if (first) {
+      const Leg = Math.abs(Math.abs(f.X) - t.W / 2) < 1e-3 && Math.abs(Math.abs(f.Z) - t.D / 2) < 1e-3 ? 'A corner leg' : 'A leg';
       say(dir < 0 ? `${Leg} leaning out: she'll be wider up top than at her stones. See the glowing ones? Tap one to lean the next corner to match.`
         : `${Leg} leaning in. See the glowing ones? Tap one to lean the next corner to match, and she narrows as she climbs.`, { force: true, ms: 9000 });
-    }
-    else if (dir > 0 && kk >= 6) say(`Leaning ${rateWords(kk, 'in')}: steep. She narrows fast, so she won't climb far before her walls meet.`, { key: 'lean-steep', times: 1 });
-    else if (dir > 0) say(legNow ? 'Legs leaning in narrow her as she climbs, so the top catches less wind. They still don\'t hold a wall square: brace every wall corner to corner.' : 'A wall leaning in. Twins lean in to match on the other side.', { key: legNow ? 'lean-leg' : 'lean-in', times: 1 });
-    else if (dir < 0) say('Leaning out: wider up top than at her stones. A gust gets a longer lever on her that way.', { key: 'lean-out', times: 1 });
+    } else if (dir > 0) say('Legs leaning in narrow her as she climbs, so the top catches less wind. They still don\'t hold a side square: brace every side corner to corner.', { key: 'lean-leg', times: 1 });
+    else say('Leaning out: wider up top than at her stones. A gust gets a longer lever on her that way.', { key: 'lean-out', times: 1 });
     return;
   }
-  if (post && k < 0 && !said.innerPost && Math.min(rec.a.Y, rec.b.Y) > 0.5) { said.innerPost = 1; say(`A post standing on ${planeName(t, key)}. Its foot is only toe-nailed: give it a brace or two.`, { key: 'innerpost', times: 1 }); return; }
-  const a = angDeg(me), slant = !post && !isLevel(me) && !isUpright(me);
-  // (a tier's floor is the beams crossing its walls: they close a triangle too)
-  const tris = slant ? trianglesOf([...segs, ...floorsAcross(t, key)], me.id) : [];
-  // a slanting board nailed to two posts, or one closing a triangle, is a brace however steep it is (on a narrow base
-  // the corner-to-corner brace can't be any flatter), not a post that leans
-  // (the corner lines it is nailed to: posts, or legs where two leaning walls meet, each line once)
-  const lineOf = (s) => (s.post ? 'p' + s.ax : 'l' + Math.round((s.ax - (s.bx - s.ax) / (s.by - s.ay) * s.ay) * 100));
-  const posts = new Set(segs.filter((s) => (s.post || (s.leg && isCornerLine(t, s.src))) && touch(me, s).length).map(lineOf));
-  const isBrace = slant && (posts.size >= 2 || tris.length > 0);
-  if (slant && a > 70 && a < 87 && !isBrace && !leanKeys.length) { say('That one leans. A post wants to be plumb, 90 degrees, or the weight pushes it over.', { key: 'plumb' }); return; }
-  if (bay) {
-    const diag = Math.hypot(bay.w, bay.h);
-    if (diag > BOARD_FT + 0.01) { say(`Corner to corner, that square wants a brace ${fmtWords(diag)} long: longer than a board. Brace from a post up to the horizontal board, or make the square shorter.`, { key: 'longbay', times: 2 }); return; }
-  }
+  const lo = Math.min(rec.a.Y, rec.b.Y);
+  if (post && !isCornerPost(t, rec) && !said.innerPost && lo > 0.5) { said.innerPost = 1; say(`A post standing ${fmtWords(Math.round(lo * 2) / 2)} up. Its foot is only toe-nailed: give it a brace or two.`, { key: 'innerpost', times: 1 }); return; }
+  const a = slopeDeg(rec), cols = columnsAt(rec);
   if (slant) {
-    // (the other outer walls with no brace yet, said a moment later)
-    // (the other walls with no brace yet, said a moment later: the other outer walls, or for a brace in a tier, the
-    // other walls of that tier: the planes round the posts standing at the same height as the ones it is nailed to)
+    // a slanting board nailed to two posts, or one closing a triangle, is a brace however steep it is (on a narrow
+    // base the corner-to-corner brace can't be any flatter), not a post that leans
+    const braced = cols.length >= 2 || tris.length > 0;
+    if (a > 70 && !braced) { say('That one leans. A post wants to be plumb, 90 degrees, or the weight pushes it over.', { key: 'plumb' }); return; }
+    // (the other sides with no brace yet, said a moment later)
     const others = () => {
-      let bare;
-      if (k >= 0) bare = [1, 2, 3].map((d) => (k + d) % 4).filter((f) => !faceWallsOf(f).some((w) => hasDiagonal(planeSegments(app.tower, w))));
-      else {
-        // (a tier on legs: its posts are the legs where its leaning walls meet, and its walls the ones they stand in)
-        const line = (p) => isPost(p) || (!isPost(p) && isCornerLine(app.tower, p));
-        const mine = segs.filter((sg) => (sg.post || (sg.leg && isCornerLine(app.tower, sg.src))) && touch(me, sg).length).map((sg) => sg.src), foot = Math.min(...mine.map((p) => Math.min(p.a.Y, p.b.Y)));
-        const tier = app.tower.boards.filter((p) => line(p) && Math.abs(Math.min(p.a.Y, p.b.Y) - foot) < 0.3);
-        if (!mine.length || tier.length < 3) return;
-        const xs = tier.map((p) => p.a.X), zs = tier.map((p) => p.a.Z);
-        const walls = (tier.some((p) => !isPost(p)) ? [...new Set(tier.flatMap((p) => wallPlanesOf(app.tower, p)))]
-          : [planeKey('Z', Math.max(...zs)), planeKey('Z', Math.min(...zs)), planeKey('X', Math.max(...xs)), planeKey('X', Math.min(...xs))]).filter((w, i, all) => w !== key && all.indexOf(w) === i);
-        bare = walls.filter((w) => !hasDiagonal(planeSegments(app.tower, w).filter((sg) => Math.max(sg.ay, sg.by) > foot + 0.3)));
-      }
-      if (bare.length) setTimeout(() => { if (app.phase === 'build') say(k >= 0 ? 'Wind blows from every side. Every wall needs its own brace: tap the glowing twins.' : 'Wind blows from every side. Every wall of a narrower level needs its own brace too: tap the glowing twins.', { key: k >= 0 ? 'other' : 'other-tier' }); }, 5200);
+      const sides = ['front', 'right', 'back', 'left'], mine = side.split(' ');
+      const bare = sides.filter((sd) => !mine.includes(sd) && !t.boards.some((b) => isBrace(b) && sideOfBoard(b, t).split(' ').includes(sd)));
+      if (bare.length) setTimeout(() => { if (app.phase === 'build') say('Wind blows from every side. Every side needs its own brace: tap the glowing twins.', { key: 'other' }); }, 5200);
     };
-    // (the wall it braces: as wide as the posts either side of it at its height, so a tier's wall, not the whole plane)
-    const WW = wallSpan(t, key, me);
-    if (isKnee(me, WW)) { say('A knee brace helps some, but its nails take a beating in a big gust. A long brace corner to corner holds better.', { key: 'knee' }); return; }
+    const run = Math.hypot(rec.b.X - rec.a.X, rec.b.Z - rec.a.Z);
+    if (rec.len <= 4 && cols.length < 2) { say('A knee brace helps some, but its nails take a beating in a big gust. A long brace corner to corner holds better.', { key: 'knee' }); return; }
     if (!tris.length) { say('That brace makes no triangle: an end stops short of the corner, so the square can still fold. Set its ends right on the corners.', { key: 'notri', times: 3, force: true }); return; }
-    if (a > 60 && isBrace && WW < 4) { say('Steep, but on a wall this narrow that\'s as good as a brace gets.', { key: 'steepnarrow', times: 1 }); others(); return; }
+    if (a > 60 && braced && run < 4) { say('Steep, but on a side this narrow that\'s as good as a brace gets.', { key: 'steepnarrow', times: 1 }); others(); return; }
     if (a < 30 || a > 60) { say(`That brace is at ${Math.round(a)} degrees. Brace it nearer 45 and she'll hold.`, { key: 'steep' }); return; }
     say('Brace it at 45 and she\'ll hold. A triangle can\'t fold.', { key: 'good45', times: 1 });
     others();
     return;
   }
-  // a level board laid across the tower on an inner plane: a beam for the tier above
-  if (!post && isLevel(me) && k < 0 && !said.beam) { said.beam = 1; say(`A horizontal board across ${planeName(t, key)}. Stand the next level's posts on boards like that one, and brace them.`, { key: 'beam', times: 1 }); return; }
-  if (isLevel(me) && !hasDiagonal(segs) && segs.filter((s) => s.post || (s.leg && isCornerLine(t, s.src))).length >= 2) { say('A square with no brace folds over like a card table in the wind.', { key: 'card', times: 2 }); return; }
+  if (bay) {
+    const diag = Math.hypot(bay.w, bay.h);
+    if (diag > BOARD_FT + 0.01) { say(`Corner to corner, that square wants a brace ${fmtWords(diag)} long: longer than a board. Brace from a post up to the horizontal board, or make the square shorter.`, { key: 'longbay', times: 2 }); return; }
+  }
+  // a horizontal board laid across the middle of the tower: a beam for the level above
+  if (level && side === 'middle' && !said.beam && lo > 0.5) { said.beam = 1; say(`A horizontal board across the middle, ${fmtWords(Math.round(lo * 2) / 2)} up. Stand the next level's posts on boards like that one, and brace them.`, { key: 'beam', times: 1 }); return; }
+  if (level && cols.length >= 2 && !t.boards.some((b) => isBrace(b) && sideOfBoard(b, t) === side)) { say('A square with no brace folds over like a card table in the wind.', { key: 'card', times: 2 }); return; }
   if (H >= 16 && !said.h16) { said.h16 = 1; say('Sixteen feet! Taller than my mill roof.', { key: 'h16', force: true }); return; }
   if (n >= 3 && !app.orbited) { say('Drag the hillside to walk round the tower, and up and down to climb it.', { key: 'orbit', times: 1 }); return; }
   if (app.lumber.stack === 0 && !app.lumber.bench && app.lumber.pieces.length <= 1) say('That\'s the last of the lumber. Call the wind when you\'re ready.', { key: 'last', times: 1 });
 }
-// the bay a level board closes on its plane: posts at both its ends reaching down from it to a floor (the ground, a
-// level board right across under it, or the beams the posts stand on). -> { y0, h, w } or null
-function bayUnder(segs, me) {
-  const y = (me.ay + me.by) / 2, lo = Math.min(me.ax, me.bx), hi = Math.max(me.ax, me.bx);
-  // how far down a chain of posts at u reaches from y (each standing on the one below)
-  const down = (u) => {
-    let b = y;
-    for (let guard = 0; guard < 20; guard++) {
-      const p = segs.find((s) => s.post && Math.abs(s.ax - u) < 0.05 && Math.min(s.ay, s.by) < b - 0.05 && Math.max(s.ay, s.by) >= b - 0.05);
-      if (!p) break; b = Math.min(p.ay, p.by);
-    }
-    return b;
+// The opening a horizontal board closes: posts under both its ends, reaching down (each standing on the one below) to a
+// floor (the ground, or a horizontal board nailed to both those posts lower down). -> { y0, h, w } or null
+function bayUnder(me) {
+  const t = app.tower, y = (me.a.Y + me.b.Y) / 2;
+  // the post under an end, and how far down a chain of posts reaches from there
+  const postAt = (p, top) => t.boards.find((o) => o !== me && isPost(o) && Math.abs(o.a.X - p.X) < 0.2 && Math.abs(o.a.Z - p.Z) < 0.2 && Math.min(o.a.Y, o.b.Y) < top - 0.05 && Math.max(o.a.Y, o.b.Y) >= top - 0.05);
+  const down = (E) => {
+    let b = y, first = null;
+    for (let guard = 0; guard < 20; guard++) { const o = postAt(E, b); if (!o) break; first = first || o; b = Math.min(o.a.Y, o.b.Y); }
+    return { b, post: first };
   };
-  const bl = down(lo), bh = down(hi);
-  if (bl > y - 0.3 || bh > y - 0.3) return null;
-  let y0 = Math.max(bl, bh);
-  for (const s of segs) if (s !== me && !s.post && isLevel(s) && Math.min(s.ax, s.bx) < lo + 0.05 && Math.max(s.ax, s.bx) > hi - 0.05) { const sy = (s.ay + s.by) / 2; if (sy < y - 0.3 && sy > y0) y0 = sy; }
-  return { y0, h: y - y0, w: hi - lo };
-}
-
-// what the slope question needs about a board's leaning wall: its lean (inches a foot) and which way; the width across
-// at the stones when it is an outer wall and the wall opposite leans the same way (a taper: the width question); a
-// tier's walls (standing on beams, not on the stones), the width across at the tier's own foot instead; its length when
-// it is a leg
-function slopeSpec(rec, w, leg) {
-  const t = app.tower, q = parseKey(w), foot = Math.min(rec.a.Y, rec.b.Y), dir = leansIn(w, foot) > 0 ? 'in' : 'out';
-  const outer = faceOfPlane(t, w) >= 0, wf = footOfPlane(t, w);
-  let base = null, atFoot = false;
-  for (const o of wallsInUse(t)) {
-    const p = parseKey(o);
-    if (p.axis !== q.axis || p.k !== -q.k || Math.abs(p.off + q.off) >= 1e-3 || Math.abs(q.off) <= 0.25) continue;
-    if (outer) { if (faceOfPlane(t, o) >= 0) { base = Math.abs(2 * q.off); break; } continue; }
-    if (wf > 0.5 && Number.isFinite(wf) && Math.abs(footOfPlane(t, o) - wf) < 0.05) {
-      const W0 = Math.abs(2 * offsetAt(w, wf));
-      if (W0 >= 1 && Math.abs(W0 * 2 - Math.round(W0 * 2)) < 1e-3) { base = Math.round(W0 * 2) / 2; atFoot = true; }
-      break;
-    }
+  const L = down(me.a), R = down(me.b);
+  if (!L.post || !R.post || L.b > y - 0.3 || R.b > y - 0.3) return null;
+  let y0 = Math.max(L.b, R.b);
+  for (const s of t.boards) {
+    if (s === me || !isLevel(s)) continue;
+    const sy = (s.a.Y + s.b.Y) / 2;
+    if (sy < y - 0.3 && sy > y0 && touch3(s, L.post).length && touch3(s, R.post).length) y0 = sy;
   }
-  return { k: Math.abs(q.k), dir, base, atFoot, legLen: leg ? rec.len : null };
+  return { y0, h: y - y0, w: Math.hypot(L.post.a.X - R.post.a.X, L.post.a.Z - R.post.a.Z) };
 }
 
 // ── a math question card ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -775,7 +660,7 @@ function ask(q) {
   app.phase = 'question'; app.select(null);
   const card = $('question');
   card.innerHTML = `<h2>${q.title || (q.bay ? 'How long a brace?' : 'A triangle!')}</h2><div class="sub">Get it right and the miller adds a board to your stack.</div>
-    ${q.kind === 'slope' ? slopePic(q.pic) : q.kind === 'turned' && q.helper.corner ? turnPic(q.helper.S, true, null) : trianglePic(q)}<p>${q.prompt}</p>
+    ${q.kind === 'slope' ? slopePic(q.pic) : trianglePic(q)}<p>${q.prompt}</p>
     <div class="choices${q.labels ? ' is-words' : ''}">${q.choices.map((c, i) => `<button data-v="${c}">${q.labels ? q.labels[i] : c + q.unit}</button>`).join('')}</div>
     <div class="why" hidden></div><div class="row" hidden><button class="btn go" id="q-ok">Back to building</button></div>`;
   card.hidden = false;
@@ -822,102 +707,35 @@ function trianglePic(q) {
   return out + '</svg>';
 }
 const norm = (x, y) => { const d = Math.hypot(x, y) || 1; return { x: x / d, y: y / d }; };
-// The turned square, from above: the square below (S feet), the turned one inside it with its corners on the middles,
-// one corner's right triangle shaded; corner: the middle of the tower and a dashed line out to a corner, with a "?"
-// when no words are given (the question itself), else the words beside it (the helper, when stuck)
-function turnPic(S, corner, words) {
-  const h = S / 2, z = 100 / S, x0 = 22, y0 = 14, sq = S * z;
-  const mid = [[x0 + sq / 2, y0], [x0 + sq, y0 + sq / 2], [x0 + sq / 2, y0 + sq], [x0, y0 + sq / 2]].map((p) => p.join(',')).join(' ');
-  return `<svg class="pic" viewBox="0 0 320 134"><rect x="${x0}" y="${y0}" width="${sq}" height="${sq}" fill="none" stroke="#6d4b2b" stroke-width="3"/>
-    <polygon points="${x0},${y0} ${x0 + sq / 2},${y0} ${x0},${y0 + sq / 2}" fill="rgba(210,165,113,.55)"/>
-    <polygon points="${mid}" fill="none" stroke="#8a5a32" stroke-width="4"/>
-    ${corner ? `<circle cx="${x0 + sq / 2}" cy="${y0 + sq / 2}" r="4" fill="#b0401f"/><line x1="${x0 + sq / 2}" y1="${y0 + sq / 2}" x2="${x0 + sq}" y2="${y0 + sq / 2}" stroke="#b0401f" stroke-width="2.5" stroke-dasharray="5 4"/>` : ''}
-    ${corner && !words ? `<text x="${x0 + sq * 0.75}" y="${y0 + sq / 2 - 8}" text-anchor="middle" ${PIC_FONT} font-size="18" fill="#b0401f">?</text>` : ''}
-    <text x="${x0 + sq / 4}" y="${y0 - 2}" text-anchor="middle" ${PIC_FONT} font-size="11" fill="#2b2219">${fmt(h)}</text>
-    <text x="${x0 + sq / 2}" y="${y0 + sq + 14}" text-anchor="middle" ${PIC_FONT} font-size="11" fill="#2b2219">${fmt(S)}</text>
-    ${words ? `<text x="${x0 + sq + 30}" y="52" ${PIC_FONT} font-size="14" fill="#2b2219">${words[0]}</text>
-    <text x="${x0 + sq + 30}" y="76" ${PIC_FONT} font-size="14" fill="#2b2219">${words[1]}</text>` : ''}</svg>`;
-}
 // a number for a sum in a picture: whole, or with a half ("1½")
 const num2 = (v) => { const f = Math.floor(v + 1e-9); return Math.abs(v - f - 0.5) < 1e-6 ? (f || '') + '½' : String(Math.round(v * 100) / 100); };
-// A leaning wall seen end on, for a slope question: the stones' line, the wall leaning from its foot (by its lean, drawn
-// a little steeper than true so the lean shows), a plumb line from the foot, the height marked, and the "?" across.
-// pic: { kind: 'lean', k, Y, dir } | { kind: 'taper', k, Y, W, dir } | { kind: 'leg', L, r }
+// A slanting board for a slope question: a right triangle, the board from its foot, its top r ft over, the plumb line
+// from the top down, and the "?" for its height. pic: { kind: 'leg', L, r }
 const PIC_FONT = 'font-family="Bitter, Georgia, serif" font-weight="700"';
 function slopePic(pic) {
   const ink = '#2b2219', wood = '#8a5a32', red = '#b0401f';
   let out = '<svg class="pic" viewBox="0 0 320 186">';
   out += `<line x1="16" y1="166" x2="304" y2="166" stroke="${ink}" stroke-width="2"/>`;
-  if (pic.kind === 'leg') {
-    // a right triangle: the leg from its foot, its top r ft across; the plumb line from the top down
-    const s = Math.min(130 / pic.L, 22), h = Math.sqrt(pic.L * pic.L - pic.r * pic.r) * s, run = pic.r * s, x0 = 110, x1 = x0 + run;
-    out += `<line x1="${x1}" y1="166" x2="${x1}" y2="${166 - h}" stroke="${ink}" stroke-width="2" stroke-dasharray="6 5"/>`;
-    out += `<line x1="${x0}" y1="166" x2="${x1}" y2="${166 - h}" stroke="${wood}" stroke-width="9" stroke-linecap="round"/>`;
-    out += `<path d="M${x1 - 12} 166 v-12 h12" fill="none" stroke="${ink}" stroke-width="2"/>`;
-    out += `<text x="${(x0 + x1) / 2 - 26}" y="${166 - h / 2}" text-anchor="end" ${PIC_FONT} font-size="18" fill="${ink}">${pic.L} ft</text>`;
-    out += `<text x="${(x0 + x1) / 2}" y="184" text-anchor="middle" ${PIC_FONT} font-size="16" fill="${ink}">${pic.r} ft</text>`;
-    out += `<text x="${x1 + 12}" y="${166 - h / 2 + 6}" ${PIC_FONT} font-size="20" fill="${red}">?</text>`;
-    return out + '</svg>';
-  }
-  const Y = pic.Y, s = 140 / Math.max(Y, 1), lean = Math.min(1.2, pic.k / 12 * 2.2), sg = pic.dir === 'out' ? -1 : 1;
-  const wall = (fx, side) => {
-    const tx = fx + side * sg * lean * Y * s;
-    return { tx, svg: `<line x1="${fx}" y1="166" x2="${tx}" y2="${166 - Y * s}" stroke="${wood}" stroke-width="9" stroke-linecap="round"/>`
-      + `<line x1="${fx}" y1="166" x2="${fx}" y2="${166 - Y * s}" stroke="${ink}" stroke-width="1.5" stroke-dasharray="5 5"/>` };
-  };
-  if (pic.kind === 'taper') {
-    const half = Math.min(110, 40 + pic.W * 12), L = wall(160 - half, 1), R = wall(160 + half, -1), ty = 166 - Y * s;
-    out += L.svg + R.svg;
-    out += `<text x="160" y="184" text-anchor="middle" ${PIC_FONT} font-size="15" fill="${ink}">${pic.W} ft across at ${pic.atFoot ? 'its foot' : 'the stones'}</text>`;
-    out += `<line x1="${L.tx + 8}" y1="${ty}" x2="${R.tx - 8}" y2="${ty}" stroke="${red}" stroke-width="2" stroke-dasharray="4 4"/>`;
-    out += `<text x="160" y="${ty - 8}" text-anchor="middle" ${PIC_FONT} font-size="20" fill="${red}">?</text>`;
-    out += `<text x="${160 + half + 6}" y="${166 - Y * s / 2}" ${PIC_FONT} font-size="14" fill="${ink}">${Y} ft</text>`;
-    return out + '</svg>';
-  }
-  const fx = 120, W0 = wall(fx, 1), ty = 166 - Y * s;
-  out += W0.svg;
-  out += `<line x1="${fx}" y1="${ty}" x2="${W0.tx}" y2="${ty}" stroke="${red}" stroke-width="2.5"/>`;
-  out += `<text x="${(fx + W0.tx) / 2}" y="${ty - 8}" text-anchor="middle" ${PIC_FONT} font-size="20" fill="${red}">?</text>`;
-  out += `<text x="${fx - 10}" y="${166 - Y * s / 2}" text-anchor="end" ${PIC_FONT} font-size="15" fill="${ink}">${Y} ft up</text>`;
-  out += `<text x="${Math.max(fx, W0.tx) + 16}" y="120" ${PIC_FONT} font-size="14" fill="${ink}">${rateWords(pic.k, pic.dir).replace(' for every foot up', '')}</text>`;
-  out += `<text x="${Math.max(fx, W0.tx) + 16}" y="138" ${PIC_FONT} font-size="14" fill="${ink}">for every foot up</text>`;
+  const s = Math.min(130 / pic.L, 22), h = Math.sqrt(pic.L * pic.L - pic.r * pic.r) * s, run = pic.r * s, x0 = 110, x1 = x0 + run;
+  out += `<line x1="${x1}" y1="166" x2="${x1}" y2="${166 - h}" stroke="${ink}" stroke-width="2" stroke-dasharray="6 5"/>`;
+  out += `<line x1="${x0}" y1="166" x2="${x1}" y2="${166 - h}" stroke="${wood}" stroke-width="9" stroke-linecap="round"/>`;
+  out += `<path d="M${x1 - 12} 166 v-12 h12" fill="none" stroke="${ink}" stroke-width="2"/>`;
+  out += `<text x="${(x0 + x1) / 2 - 26}" y="${166 - h / 2}" text-anchor="end" ${PIC_FONT} font-size="18" fill="${ink}">${fmt(pic.L)}</text>`;
+  out += `<text x="${(x0 + x1) / 2}" y="184" text-anchor="middle" ${PIC_FONT} font-size="16" fill="${ink}">${fmt(pic.r)}</text>`;
+  out += `<text x="${x1 + 12}" y="${166 - h / 2 + 6}" ${PIC_FONT} font-size="20" fill="${red}">?</text>`;
   return out + '</svg>';
-}
-// the slope inch by inch: a stair of steps, each one foot up and the lean's inches across, counted as it climbs
-function stepsPic(k, Y, label = (n) => `${String(k * n).replace('.5', '½').replace(/^0½/, '½')} in.`) {
-  // (big steps for a short climb, small ones for a long one; the stair in the middle of the picture)
-  const n = Math.min(Y, 12), sx = Math.min(30, 150 / Math.max(1, k * n)), sy = Math.min(44, 130 / n), y0 = 154, x0 = Math.max(60, 150 - k * n * sx / 2);
-  let d = `M${x0} ${y0}`, marks = '';
-  for (let i = 1; i <= n; i++) {
-    const x = x0 + k * (i - 1) * sx, y = y0 - i * sy;
-    d += ` L${x} ${y} L${x + k * sx} ${y}`;
-    // (every step counted, or every second one on a long stair, evenly)
-    if (i % (n <= 8 ? 1 : 2) === 0) marks += `<text x="${x + k * sx + 6}" y="${y + 5}" ${PIC_FONT} font-size="12" fill="#2b2219">${label(i)}</text>`;
-  }
-  const more = Y > n ? `<text x="${x0}" y="22" ${PIC_FONT} font-size="12" fill="#2b2219">…and on up to ${Y} ft</text>` : '';
-  return `<svg class="pic" viewBox="0 0 320 172"><path d="${d}" fill="none" stroke="#8a5a32" stroke-width="3" stroke-linejoin="round"/>
-    <line x1="${x0}" y1="${y0}" x2="${x0}" y2="${y0 - n * sy}" stroke="#2b2219" stroke-width="1.5" stroke-dasharray="4 4"/>
-    <text x="${x0 - 8}" y="${y0 - n * sy / 2}" text-anchor="end" ${PIC_FONT} font-size="12" fill="#2b2219">${n} ft</text>${marks}${more}
-    <text x="160" y="170" text-anchor="middle" ${PIC_FONT} font-size="12" fill="#2b2219">${rateWords(k, 'across')}</text></svg>`;
 }
 // a small picture that shows WHY: the three corners laid side by side make a straight line (180), or the squares on
 // the sides of a right triangle; for a leaning wall, the slope inch by inch
 function helperPic(q) {
-  if (q.helper.kind === 'steps') return stepsPic(q.helper.k, q.helper.Y);
-  if (q.helper.kind === 'taper') return stepsPic(q.helper.k, q.helper.Y, (n) => `${String(q.helper.k * n).replace('.5', '½')} in. each side`);
-  if (q.helper.kind === 'turnsq') {
-    const { S, corner } = q.helper, h = S / 2;
-    return turnPic(S, corner, corner ? [`on the middle of a side:`, `half of ${fmt(S)} = ${fmt(h)}`]
-      : [`${num2(h)}×${num2(h)} + ${num2(h)}×${num2(h)} = ${num2(2 * h * h)}`, `${(q.answer / 12).toFixed(2)} × ${(q.answer / 12).toFixed(2)} ≈ ${((q.answer / 12) ** 2).toFixed(1)}`]);
-  }
   if (q.helper.kind === 'legsq') {
     const { L, r, h, exact } = q.helper;
     if (exact) return helperPic({ helper: { kind: 'squares', a: Math.min(r, Math.round(h)), b: Math.max(r, Math.round(h)), c: L } });
     // (the last words on two lines: one line ran past a phone's card)
-    return `<svg class="pic" viewBox="0 0 320 128"><text x="160" y="30" text-anchor="middle" ${PIC_FONT} font-size="17" fill="#2b2219">${L}×${L} − ${r}×${r} = ${L * L - r * r}</text>
+    return `<svg class="pic" viewBox="0 0 320 128"><text x="160" y="30" text-anchor="middle" ${PIC_FONT} font-size="17" fill="#2b2219">${num2(L)}×${num2(L)} − ${num2(r)}×${num2(r)} = ${num2(L * L - r * r)}</text>
       <text x="160" y="58" text-anchor="middle" ${PIC_FONT} font-size="17" fill="#2b2219">${h.toFixed(2)} × ${h.toFixed(2)} ≈ ${(h * h).toFixed(1)}</text>
       <text x="160" y="88" text-anchor="middle" ${PIC_FONT} font-size="14" fill="#6d4b2b">so the top is about ${fmtWords(h)} up:</text>
-      <text x="160" y="110" text-anchor="middle" ${PIC_FONT} font-size="14" fill="#6d4b2b">less than the leg is long</text></svg>`;
+      <text x="160" y="110" text-anchor="middle" ${PIC_FONT} font-size="14" fill="#6d4b2b">less than the board is long</text></svg>`;
   }
   if (q.helper.kind === 'angles') {
     const [a, b] = q.helper.shown, c = q.helper.answer, cx = 160, cy = 120, r = 90;
@@ -943,10 +761,23 @@ function startTest() {
   if (!towerHeight(app.tower)) { say('Put some boards up first! Corner posts make a good start.', { force: true, times: 99 }); return; }
   if (app.held) build.putBack();
   app.select(null);
-  app.phase = 'test'; cam.azV = 0; ghosts = null; refreshGhosts();
-  // (the view stays where the builder left it: walking round, climbing and zooming all still work during the test)
+  app.phase = 'test'; cam.azV = 0; ghosts = null; refreshGhosts(); build.offerTrim(null);
+  // (the camera frames the whole tower once, smoothly, from where it stands round it; from then on it is left alone:
+  // walking round, climbing and zooming all still work during the test)
+  frameTower();
   $('say').hidden = true; $('wind').hidden = true; el.selBar.hidden = true;
   testRun.start();
+}
+// The whole tower in view: the camera looks at its middle height and backs off until its height (and its width, as
+// seen from where the camera stands) fits, gliding there over a second or so (updateCamera's glide).
+function frameTower() {
+  const t = app.tower, H = Math.max(6, towerHeight(t));
+  let x0 = -t.W / 2, x1 = t.W / 2, z0 = -t.D / 2, z1 = t.D / 2;
+  for (const b of t.boards) for (const p of [b.a, b.b]) { x0 = Math.min(x0, p.X); x1 = Math.max(x1, p.X); z0 = Math.min(z0, p.Z); z1 = Math.max(z1, p.Z); }
+  const across = Math.abs(Math.cos(cam.az)) * (x1 - x0) + Math.abs(Math.sin(cam.az)) * (z1 - z0) + 2;
+  const tv = Math.tan(camera.fov / 2 * DEG), th = tv * camera.aspect;
+  const need = Math.max((H * 0.62 + 1) * FT / tv, across / 2 * FT / th) + Math.max(x1 - x0, z1 - z0) / 2 * FT;
+  cam.glide = 1.6; cam.yT = H * 0.45; cam.distT = Math.max(DIST[0], Math.min(DIST[1], need));
 }
 const testRun = makeTestRun(app, {
   towerView, fall, say, gesture,
@@ -1066,13 +897,10 @@ function loop() {
   updateMiller(dt);
   towerView.update(dt, wind.level);
   build.frame();
-  // the board in hand (its ends glowing green where they touch) and its plane, drawn faintly over the stones
+  // the board in hand (its ends glowing green where they touch)
   const h = app.held && app.phase === 'build' ? app.held : null, hi = build.heldInfo;
-  if (h) {
-    const w = build.worldOf(h);
-    towerView.showHeld({ ...w, key: h.key, glowA: !!(hi && hi.glowA), glowB: !!(hi && hi.glowB), line: build.lineLike(h) });
-    towerView.showPlane({ key: h.key, half: planeHalf(app.tower, h.key), top: Math.max(towerHeight(app.tower), w.a.Y, w.b.Y) + 1, endOn: !!h.endOn });
-  } else { towerView.showHeld(null); towerView.showPlane(null); }
+  if (h) towerView.showHeld({ ...build.worldOf(h), glowA: !!(hi && hi.glowA), glowB: !!(hi && hi.glowB) });
+  else towerView.showHeld(null);
   showFaceName();
   showTopAt();
   $('face-name').hidden = app.phase !== 'build';
@@ -1093,7 +921,8 @@ addEventListener('keydown', (e) => {
   else if (e.key === 'Escape') { if (app.held) build.putBack(); else app.select(null); }
   else if (e.key === 'Enter' && app.held) el.nailBtn.click();
   else if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey)) $('undo').click();
-  else if (e.key === 'r' || e.key === 'R') build.turnHeld();
+  // (with a board in hand, W A S D move its free end: A and D across, W and S along, as the arrows do)
+  else if (app.held && /^[wasd]$/i.test(e.key)) { const k = e.key.toLowerCase(); build.arrow(k === 'a' || k === 'd' ? 'X' : 'Z', k === 'd' || k === 's' ? 1 : -1); }
 });
 addEventListener('pointerdown', () => sound.audioOn(), { capture: true });
 // the sound control in the top bar: tap the speaker to mute, slide for volume
@@ -1128,47 +957,21 @@ makeMiller(scene).then((m) => {
 
 // ── a handle for test scripts (see the top of this file) ─────────────────────────────────────────────────────────────
 const toPage = (p) => { const r = el.view.getBoundingClientRect(); return { x: p.x + r.left, y: p.y + r.top, behind: p.behind }; };
-// (the wood comes off the pile, sawn as needed, as a twin's does, so Undo puts back only what was taken; with no wood
-// left for it the board is nailed anyway: a rig's board)
-function nailOn(key, u, y, ang, len, legN = null) {
-  build.payFor(len);
-  app.held = { piece: { id: 'dev', len }, len, key, x: u, y, ang, endOn: false }; if (legN) { app.held.leg = true; app.held.n = legN; }
-  app.nail();
-}
 window.WM = {
   app, camera, renderer, scene, wind, cam, test: () => testRun.state(), result: () => testRun.result || null, build, startTest, towerView, fall,
-  // a board on an outer wall in the v2 wall coordinates (x from the wall's left corner seen from outside)
-  add(face, x, y, angDeg, len) {
-    if (app.face !== face) { app.face = face; cam.az = azOf(face) + Math.round((cam.az - azOf(face)) / (Math.PI * 2)) * Math.PI * 2; showFaceName(); }
-    const half = face % 2 ? app.tower.D / 2 : app.tower.W / 2, back = face >= 2;
-    nailOn(facePlane(app.tower, face), back ? half - x : x - half, y, (back ? 180 - angDeg : angDeg) * DEG, len);
-  },
-  addOn: (key, u, y, angDeg, len) => nailOn(key, u, y, angDeg * DEG, len),
-  addWorld(a, b, n, t = 0) {
-    const post = Math.abs(a.X - b.X) < 1e-6 && Math.abs(a.Z - b.Z) < 1e-6, kind = n || (app.face % 2 ? 'X' : 'Z');
-    let key = post ? planeKey(kind, kind === 'X' ? a.X : a.Z) : Math.abs(a.Z - b.Z) < 1e-6 ? planeKey('Z', a.Z) : planeKey('X', a.X);
-    // (a board in a leaning wall: its family n and its lean t, or what its ends say; a board in no upright wall leans
-    // with its own; a leg, leaning across its wall by a lean a wall can have, lies in two walls)
-    const dy = b.Y - a.Y, cN = (f, p) => (f === 'X' ? p.X : p.Z), rOf = (f) => (Math.abs(dy) > 1e-6 ? (cN(f, b) - cN(f, a)) / dy : 0);
-    const inUpright = Math.abs(a.Z - b.Z) < 1e-6 || Math.abs(a.X - b.X) < 1e-6;
-    let fam = null, leg = false;
-    if (!post) {
-      if (t) fam = kind;
-      else if (n && Math.abs(dy) > 1e-6 && onLeanGrid(rOf(n)) && kOfT(rOf(n))) fam = n;
-      else if (!inUpright) fam = n || (onLeanGrid(rOf(kind)) ? kind : kind === 'X' ? 'Z' : 'X');
-    }
-    if (fam) {
-      const k = kOfT(Math.abs(dy) > 1e-6 ? rOf(fam) : t);
-      key = planeKey(fam, cN(fam, a) - (k / 12) * a.Y, k);
-      leg = Math.abs(dy) > 1e-6 && onLeanGrid(rOf(fam === 'X' ? 'Z' : 'X'));
-    }
-    const A = toPlane(key, a), B = toPlane(key, b);
-    nailOn(key, A.u, A.y, Math.atan2(B.y - A.y, B.u - A.u), Math.hypot(B.u - A.u, B.y - A.y), leg ? fam : null);
+  // a board between two world points, nailed as if put up by hand (its wood comes off the pile, sawn as needed, as a
+  // twin's does, so Undo puts back only what was taken; with no wood left for it the board is nailed anyway)
+  addWorld(a, b, len) {
+    const L = len ?? Math.hypot(b.X - a.X, b.Y - a.Y, b.Z - a.Z);
+    build.payFor(L);
+    app.held = { piece: { id: 'dev', len: L }, len: L, A: { ...a }, on: null, B: { ...b }, con: null };
+    return app.nail();
   },
   // a whole tower at once, on a fresh yard: its wood comes off the pile (sawn as needed), no questions, no twins
-  load(t) {
-    resetAll(t.W, t.D ?? t.W);
-    for (const b of t.boards) { build.payFor(b.len); addBoard({ a: b.a, b: b.b, n: b.n, len: b.len, t: b.t || 0 }); }
+  load(t0) {
+    const t = cleanTower(t0);
+    resetAll(t.W, t.D);
+    for (const b of t.boards) { build.payFor(b.len); addBoard(b); }
     rebuild();
     return app.tower.boards.length;
   },
@@ -1176,31 +979,28 @@ window.WM = {
   setWidth: (w) => app.setBase(w, w),
   footprint: () => ({ W: app.tower.W, D: app.tower.D }),
   boards: () => JSON.parse(JSON.stringify(app.tower.boards)),
-  planes: () => [...wallsInUse(app.tower)].map((key) => ({ key, name: planeName(app.tower, key), boards: planeSegments(app.tower, key).length })),
-  ghosts: () => app.ghostList().map((g) => ({ a: g.a, b: g.b, len: g.len, n: g.n, t: g.t || 0, ok: g.ok, reason: g.reason })),
+  ghosts: () => app.ghostList().map((g) => ({ a: g.a, b: g.b, len: g.len, ok: g.ok, reason: g.reason })),
   confirm: (i) => confirmGhost(app.ghostList()[i]),
   confirmAll,
+  sockets: () => build.sockets().map((q) => ({ X: q.X, Y: q.Y, Z: q.Z, on: q.on ? q.on.id : null })),
+  socketScreen: (q) => toPage(app.worldToScreen(q.X, q.Y, q.Z)),
   held: () => {
     const h = app.held; if (!h) return null;
-    const w = build.worldOf(h), e = { ax: h.x, ay: h.y, bx: h.x + Math.cos(h.ang) * h.len, by: h.y + Math.sin(h.ang) * h.len }, post = build.lineLike(h);
-    const lean = (id) => { const n = $(id); if (n.hidden || !n.classList.contains('is-lean')) return null; const r = n.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; };
-    return { key: h.key, x: h.x, y: h.y, ang: h.ang / DEG, len: h.len, endOn: !!h.endOn, a: w.a, b: w.b, n: w.n, t: w.t || 0, k: parseKey(h.key).k, leg: !!h.leg, planes: planesOf(w),
-      plane: planeName(app.tower, h.key, false, Math.min(w.a.Y, w.b.Y)),
-      ends: [toPage(app.planeToScreen(h.key, e.ax, e.ay, !post)), toPage(app.planeToScreen(h.key, e.bx, e.by, !post))],
-      mid: toPage(app.planeToScreen(h.key, (e.ax + e.bx) / 2, (e.ay + e.by) / 2, !post)), lean: lean('g-a') || lean('g-b'),
-      knob: (() => { const n = $('g-turn'); if (!n || n.hidden) return null; const r = n.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; })() };
+    const spot = (n) => { if (!n || n.hidden) return null; const r = n.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; };
+    return { A: { ...h.A }, B: { ...h.B }, len: h.len, con: h.con ? { s: h.con.s, P: h.con.P, past: h.con.past, on: h.con.o.id } : null,
+      ends: [toPage(app.worldToScreen(h.A.X, h.A.Y, h.A.Z)), toPage(app.worldToScreen(h.B.X, h.B.Y, h.B.Z))],
+      handles: { socket: spot(el.gA), free: spot(el.gB) }, arrows: el.arrows.map(spot), canNail: build.canNail(h), place: placeWords(app.tower, build.worldOf(h)) };
   },
-  // (for rigs: stand square on to a wall at once, or at az radians round the tower)
+  trim: () => (build.trim ? { past: build.trim.past, id: build.trim.rec.id } : null),
+  // (for rigs: stand square on to a side at once, or at az radians round the tower)
   turnTo: (face) => { cam.azV = 0; cam.az = azOf(face) + Math.round((cam.az - azOf(face)) / (Math.PI * 2)) * Math.PI * 2; },
   setAz: (az) => { cam.azV = 0; cam.az = az; },
   state: () => ({ phase: app.phase, face: app.face, W: app.tower.W, D: app.tower.D, height: towerHeight(app.tower), boards: boardCount(app.tower), az: cam.az, camY: cam.y, zoom: cam.distT, camDist: camera.position.distanceTo(cam.look), stonesOpen: stonesOpen(),
     full: build.fullCount(), lumber: { stack: app.lumber.stack, bench: app.lumber.bench && app.lumber.bench.len, pieces: app.lumber.pieces.map((p) => +p.len.toFixed(3)) },
     pile: build.groups().map((g) => [g.len, g.list.length]), panel: { bench: el.benchLabel.textContent, groups: [...el.pieces.children].map((d) => d.textContent) },
-    held: app.held && { key: app.held.key, x: app.held.x, y: app.held.y, ang: app.held.ang / DEG, len: app.held.len, endOn: !!app.held.endOn }, plane: build.planeText, ghosts: app.ghostList().length, best, fps,
+    held: app.held && { A: app.held.A, B: app.held.B, len: app.held.len, con: !!app.held.con }, ghosts: app.ghostList().length, best, fps,
     question: !$('question').hidden ? $('question').innerText : null, result: !$('result').hidden ? $('result').innerText : null, falling: fall.sticks.length, hint: el.hint.textContent, nails: app.lastNails, say: $('say').hidden ? null : $('say-text').textContent,
-    faceName: $('face-name').textContent }),
-  toScreen: (k, x, y) => { const half = k % 2 ? app.tower.D / 2 : app.tower.W / 2; return toPage(app.planeToScreen(facePlane(app.tower, k), k >= 2 ? half - x : x - half, y, false)); },
-  planeToScreen: (key, u, y) => toPage(app.planeToScreen(key, u, y, false)),
+    faceName: $('face-name').textContent, trim: !el.trimBar.hidden ? el.trimHint.textContent : null }),
   worldToScreen: (X, Y, Z) => toPage(app.worldToScreen(X, Y, Z)),
   resetAll, flourFor, STAGES,
 };

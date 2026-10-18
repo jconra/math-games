@@ -1,114 +1,91 @@
-// DRAWING THE TOWER: one box per board (a 2x4: 3.5 by 1.5 inches, its wide face looking along its n), nail heads at
-// every joint, the board being placed (and a faint sheet showing the plane it lies in), the glowing twins (where a board
+// DRAWING THE TOWER: one box per board (a 2x4: 3.5 by 1.5 inches, its wide face looking the way frame.js lays it), nail
+// heads at every joint, the board being placed, the glowing twins (where a board
 // just nailed could be matched round the tower: see-through gold boards with bright edges, grey when there is no wood or
 // nothing to nail them to), the wind test (each board tinted by its strain, green easy to red breaking, a coloured spot
 // on every nailed joint, the frame bent by how far each board's ends move, and a red flash on a part that gives), and
 // the prize on top (a windmill head with sails) once the tower stands tall enough.
 // The tower's numbers are in feet (tower.js); here they become metres (FT).
 //
-// Where a board is drawn: its centre line lies in its plane, but boards nailed over others in the same plane sit a layer
-// further out (away from the tower's middle), clear of the posts they are nailed to. A board that only rests on others
-// (a beam across the top of the storey below, with the next tier's posts standing on it) sits right on its plane. Where
-// a board's end meets another board's side and the two would run into each other, the end is drawn stopping at that
-// board's face (a post's foot on top of the beam, a beam's end against the back of the crosspiece).
-// A board in a leaning wall is drawn tilted with it: its thin side faces along the wall's normal (e_n - t·e_Y), and a
-// board nailed over others is pushed out along that same normal. A leg where two walls meet is drawn on its line, as a
-// post is.
+// Where a board is drawn: COLUMNS (posts, and legs: posts that lean, as frame.js finds them) on their own lines; every
+// other board pushed out (away from the tower's middle, along its face's normal: frame.js lays every board's face) just
+// far enough to clear the columns it is nailed to, and a layer further out where it crosses another board through both
+// their middles (the second brace of an X) or lies along one (a lap). Boards that only meet at their ends (two braces
+// meeting at a post, a brace's end on a horizontal board) stay side by side in the same layer, the end stopping at the
+// other's face. Only boards that face the same way and lie in about one plane are layered against each other. At most
+// two layers out. Wherever a board still sits off a column it is nailed to, a spacer block fills the gap. A board that
+// has a column standing on its middle (a beam with a post on it) sits on its own line.
 import * as THREE from 'three';
-import { isPost, planesOf, planeKeyOf, planeNormal, parseKey, toPlane, towerHeight, leanOf, wallsInUse, isCornerLine, wallPlanesOf, isTurnedFam, famNormal, famTheta } from './tower.js';
-import { touch, touch3, joints3, pointGap, TOL } from './touch.js';
+import { isPost, towerHeight } from './tower.js';
+import { touch3, joints3, pointGap, TOL } from './touch.js';
+import { boardShapes, faceOf } from './frame.js';
 import { boardTexture } from './wood.js';
 import { FT } from './scene.js';
 
 const BW = 3.5 / 12, BT = 1.5 / 12;       // board width and thickness, feet
-// the board in hand is drawn this far out from its plane (feet: a layer out, over the posts there), so the page puts its
+// the board in hand is drawn this far out from its line (feet: a layer out, over the posts there), so the page puts its
 // handles and circles there too
 export const HELD_OFF = BW / 2 + BT / 2 + 0.01;
 const V = (p) => new THREE.Vector3(p.X * FT, p.Y * FT, p.Z * FT);
-// which way a board's wide face looks: its wall's normal, e_n tipped back by its lean (e_n: X, Z, or a turned wall's
-// e(θ) = (sin θ, 0, cos θ))
-const nVec = (n, t = 0) => (n === 'X' ? new THREE.Vector3(1, -t, 0) : isTurnedFam(n) ? (({ X, Z }) => new THREE.Vector3(X, -t, Z))(famNormal(n)) : new THREE.Vector3(0, -t, 1)).normalize();
-const boardN = (b) => nVec(b.n, leanOf(b));
 const P3 = (n) => new THREE.Vector3(n.X, n.Y, n.Z);
+// which way a board's wide face looks (its thin side faces along this): from the layout's shapes, else frame.js faceOf
+let shapes = new Map(), base = { W: 6, D: 6 };
+const boardN = (b) => P3((shapes.get(b.id) || faceOf(b, base.W, base.D)).n);
+const outOf = (b) => P3((shapes.get(b.id) || faceOf(b, base.W, base.D)).out);
 
-// where every board is drawn: Map id -> { a, b (feet, world, the drawn ends), off (feet out from its plane), side (the
+// where every board is drawn: Map id -> { a, b (feet, world, the drawn ends), off (feet out from its line), side (the
 // unit vector it is pushed out along) }, and on the map itself `spacers`: the little wood blocks filling a gap between a
-// board and something it is nailed to [{ at (feet, world: the block's middle), along, side (unit vectors), l, w, th
-// (feet: along the board, across it, and thick) }]
-// The layers on a wall: the posts and legs on the wall's own line; boards nailed over them (crosspieces, braces) one
-// layer out, their faces on the posts' faces; a board steps a further layer out only where it truly crosses another
-// board's middle with its own middle (the second brace of an X) or lies along one (a lap); boards that only meet at
-// their ends (two braces meeting at a post, a brace's end on a crosspiece) stay side by side in the same layer, the end
-// stopping at the other's face. At most two layers out. Wherever a board still sits off something it is nailed to (a
-// crosspiece over a post turned the other way, the second brace of an X at the posts), a spacer block fills the gap.
+// board and a column it is nailed to [{ at (feet, world: the block's middle), along, side (unit vectors), l, w, th }]
 const END_T = 0.3;       // feet: a touch this near a board's end is at its end (it meets there), not across its middle
 const LAYER_CAP = BW / 2 + BT / 2 + BT + 0.006;   // the furthest out a board is drawn: two layers over a turned post
 export function layout(t) {
-  const out = new Map(), boards = t.boards, walls = wallsInUse(t), line = new Set(boards.filter((b) => isCornerLine(t, b, walls)));
+  shapes = boardShapes(t); base = { W: t.W, D: t.D ?? t.W };
+  const out = new Map(), boards = t.boards, line = new Set(boards.filter((b) => shapes.get(b.id)?.column));
   const order = new Map(boards.map((b, i) => [b, i]));
-  // how far a post (or leg) reaches out from a plane's centre (its outer face): by which way it faces
-  const reach = new Map();     // `${id}|${key}` -> feet
-  for (const b of line) for (const k of wallPlanesOf(t, b, walls)) reach.set(b.id + '|' + k, (parseKey(k).axis === b.n ? BT : BW) / 2);
-  const reachOf = (o, key) => reach.get(o.id + '|' + key) ?? 0;
-  const byPlane = new Map();
-  for (const b of boards) for (const k of planesOf(b)) (byPlane.get(k) || byPlane.set(k, []).get(k)).push(b);
+  // how far a column reaches out from its line along a direction v (its box's half extent that way)
+  const reachOf = (o, v) => { const ax = axesOf(o); return halfAcross(ax, v) === Infinity ? BW / 2 : halfAcross(ax, v); };
   const mid = (tt, len) => tt > END_T && tt < len - END_T;
-  // (a post standing on this board's middle is on top of it, not under it)
-  const standsOn = (cs, b) => cs.every((c) => c.tj < TOL && c.ti > TOL && c.ti < b.len - TOL);
+  // (a column standing on this board's middle is on top of it, not under it)
+  const standsOn = (cs, b, o) => cs.every((c) => Math.abs(c.tj - (o.a.Y <= o.b.Y ? 0 : o.len)) < TOL && c.ti > TOL && c.ti < b.len - TOL);
+  // (two boards face the same way and lie in about one plane: they are layered against each other)
+  const together = (b, o, side) => Math.abs(outOf(o).dot(side)) > 0.9 && Math.abs(side.dot(new THREE.Vector3((o.a.X + o.b.X) / 2 - (b.a.X + b.b.X) / 2, (o.a.Y + o.b.Y) / 2 - (b.a.Y + b.b.Y) / 2, (o.a.Z + o.b.Z) / 2 - (b.a.Z + b.b.Z) / 2))) < 0.35;
   for (const b of boards) {
-    if (line.has(b)) { out.set(b.id, { a: { ...b.a }, b: { ...b.b }, off: 0, side: boardN(b) }); continue; }
-    const key = planeKeyOf(b), mates = byPlane.get(key) || [], me = seg(b, key);
+    if (line.has(b)) { out.set(b.id, { a: { ...b.a }, b: { ...b.b }, off: 0, side: outOf(b) }); continue; }
+    const side = outOf(b);
     let off = -1;
-    for (const o of mates) {
+    for (const o of boards) {
       if (o === b) continue;
       const post = line.has(o);
-      if (!post && order.get(o) > order.get(b)) continue;      // (only boards nailed before it lie under it)
-      const cs = touch(me, seg(o, key)); if (!cs.length) continue;
-      if (post) { if (!standsOn(cs, b)) off = Math.max(off, reachOf(o, key) + BT / 2 + 0.002); continue; }
+      if (!post && (order.get(o) > order.get(b) || !together(b, o, side))) continue;      // (only boards nailed before it lie under it)
+      const cs = touch3(b, o); if (!cs.length) continue;
+      if (post) { if (!standsOn(cs, b, o)) off = Math.max(off, reachOf(o, side) + BT / 2 + 0.002); continue; }
       const Lo = out.get(o.id);
       // across its middle, or lying along it: a layer out over it; meeting at an end: beside it, in its layer
       const over = cs.length >= 2 || cs.some((c) => mid(c.ti, b.len) && mid(c.tj, o.len));
       off = Math.max(off, over ? Lo.off + BT + 0.002 : Lo.off);
     }
-    out.set(b.id, { a: { ...b.a }, b: { ...b.b }, off: Math.min(Math.max(off, 0), LAYER_CAP), side: P3(planeNormal(key, (b.a.Y + b.b.Y) / 2)) });
+    out.set(b.id, { a: { ...b.a }, b: { ...b.b }, off: Math.min(Math.max(off, 0), LAYER_CAP), side });
   }
-  // the spacers: every pair nailed together on a wall whose faces stand apart
+  // the spacers: a board nailed over a column whose faces stand apart
   const spacers = [];
-  for (const [key, mates] of byPlane) {
-    for (const b of mates) {
-      if (line.has(b) || planeKeyOf(b) !== key) continue;
-      const Lb = out.get(b.id), me = seg(b, key);
-      for (const o of mates) {
-        if (o === b) continue;
-        const post = line.has(o);
-        if (!post && (planeKeyOf(o) !== key || order.get(o) > order.get(b))) continue;     // (each pair once)
-        const cs = touch(me, seg(o, key)); if (!cs.length) continue;
-        if (post && standsOn(cs, b)) continue;
-        // (the inner board's outer face, and the outer board's inner face, along the wall's normal)
-        let inFace, outFace, outer = b, oT = (c) => c.ti;
-        if (post) { inFace = reachOf(o, key); outFace = Lb.off - BT / 2; }
-        else {
-          const Lo = out.get(o.id), [lo, hi] = Lo.off <= Lb.off ? [Lo, Lb] : [Lb, Lo];
-          if (hi === Lo) { outer = o; oT = (c) => c.tj; }
-          inFace = lo.off + BT / 2; outFace = hi.off - BT / 2;
-        }
-        const gap = outFace - inFace;
-        if (gap < 0.006) continue;
-        const Lout = out.get(outer.id), d = new THREE.Vector3(outer.b.X - outer.a.X, outer.b.Y - outer.a.Y, outer.b.Z - outer.a.Z).normalize();
-        const l = Math.min(BW, outer.len), w = BW * 0.9;
-        for (const c of cs) {
-          // (centred on the joint, kept within the outer board's length)
-          const tt = Math.max(l / 2, Math.min(outer.len - l / 2, oT(c)));
-          const at = new THREE.Vector3(outer.a.X, outer.a.Y, outer.a.Z).addScaledVector(d, tt).addScaledVector(Lout.side, inFace + gap / 2);
-          spacers.push({ at, along: d.clone(), side: Lout.side.clone(), l, w, th: gap, ids: [b.id, o.id] });
-        }
+  for (const b of boards) {
+    if (line.has(b)) continue;
+    const Lb = out.get(b.id);
+    for (const o of line) {
+      const cs = touch3(b, o); if (!cs.length || standsOn(cs, b, o)) continue;
+      const gap = Lb.off - BT / 2 - reachOf(o, Lb.side);
+      if (gap < 0.006) continue;
+      const d = new THREE.Vector3(b.b.X - b.a.X, b.b.Y - b.a.Y, b.b.Z - b.a.Z).normalize(), l = Math.min(BW, b.len), w = BW * 0.9;
+      for (const c of cs) {
+        const tt = Math.max(l / 2, Math.min(b.len - l / 2, c.ti));
+        const at = new THREE.Vector3(b.a.X, b.a.Y, b.a.Z).addScaledVector(d, tt).addScaledVector(Lb.side, Lb.off - BT / 2 - gap / 2);
+        spacers.push({ at, along: d.clone(), side: Lb.side.clone(), l, w, th: gap, ids: [b.id, o.id] });
       }
     }
   }
   out.spacers = spacers;
-  // ends meeting another board's side: stop at its face. (A brace's end stops at a horizontal board or a post, a
-  // horizontal board's at a post, never the other way round; two horizontal boards of different walls meeting end to end
-  // at a corner are each nailed to the post there, and are left as they are.)
+  // ends meeting another board's side: stop at its face. (A brace's end stops at a horizontal board or a column, a
+  // horizontal board's at a column, never the other way round; two horizontal boards meeting end to end at a corner
+  // are each nailed to the post there, and are left as they are.)
   const rank = (o) => (line.has(o) ? 2 : Math.abs(o.a.Y - o.b.Y) < 0.05 ? 1 : 0);
   for (const b of boards) {
     const L = out.get(b.id);
@@ -117,7 +94,7 @@ export function layout(t) {
       for (const c of touch3(b, o)) {
         const end = c.ti < TOL ? 'a' : c.ti > b.len - TOL ? 'b' : null;
         if (!end || c.butt) continue;
-        if ((c.tj < END_T || c.tj > o.len - END_T) && planeKeyOf(o) !== planeKeyOf(b) && !line.has(o)) continue;
+        if ((c.tj < END_T || c.tj > o.len - END_T) && !together(b, o, L.side) && !line.has(o)) continue;
         const adj = endToFace(b, L, end, o, out.get(o.id));
         if (adj !== null) { const p = L[end], d = dirFrom(b, end); p.X += d.x * adj; p.Y += d.y * adj; p.Z += d.z * adj; }
       }
@@ -125,7 +102,6 @@ export function layout(t) {
   }
   return out;
 }
-const seg = (b, key) => { const A = toPlane(key, b.a), B = toPlane(key, b.b); return { ax: A.u, ay: A.y, bx: B.u, by: B.y, len: b.len }; };
 // the unit vector out of board b at its end e (pointing away from its middle)
 function dirFrom(b, e) {
   const d = new THREE.Vector3(b.b.X - b.a.X, b.b.Y - b.a.Y, b.b.Z - b.a.Z).normalize();
@@ -218,11 +194,10 @@ export function makeTowerView(scene) {
       spacerGroup.add(m);
     }
     nailBase.length = 0;
-    const walls = wallsInUse(tower);
     for (const h of joints3(tower.boards)) {
       if (h.ground) continue;
       let best = null;
-      for (const it of h.items) { const b = tower.boards[it.i]; if (isCornerLine(tower, b, walls)) continue; const L = lay.get(b.id); if (!best || L.off > best.L.off) best = { b, L, t: it.t }; }
+      for (const it of h.items) { const b = tower.boards[it.i]; if (shapes.get(b.id)?.column) continue; const L = lay.get(b.id); if (!best || L.off > best.L.off) best = { b, L, t: it.t }; }
       if (!best) continue;
       const { b, L } = best, d = new THREE.Vector3(b.b.X - b.a.X, b.b.Y - b.a.Y, b.b.Z - b.a.Z).normalize();
       const out = L.side.clone(), w = new THREE.Vector3().crossVectors(out, d).normalize();
@@ -345,9 +320,8 @@ export function makeTowerView(scene) {
     spots.instanceMatrix.needsUpdate = true; if (spots.instanceColor) spots.instanceColor.needsUpdate = true;
   }
 
-  // the board being placed: { a, b (world feet), n, key (its plane), len, glowA, glowB } or null. Drawn a layer out
-  // from its plane (over the posts there), never further: from the side you see just where it is. An end that touches
-  // a board (or the ground) glows green.
+  // the board being placed: { a, b (world feet), len, glowA, glowB } or null. Drawn a layer out from its line (over the
+  // posts there), never further. An end that touches a board (or the ground) glows green.
   let held = null;
   const glowMat = new THREE.MeshBasicMaterial({ color: 0x3ee05a, transparent: true, opacity: 0.55, depthWrite: false });
   const glowGeo = new THREE.BoxGeometry(0.42 * FT, BW * 1.7 * FT, BT * 2.6 * FT);
@@ -360,9 +334,9 @@ export function makeTowerView(scene) {
       if (held) { group.remove(held); held.geometry.dispose(); }
       held = new THREE.Mesh(boxFor(h.len, BW, BT), heldMat); held.userData = { len: h.len }; held.castShadow = true; group.add(held);
     }
-    // (a post, or a leg (h.line), is drawn on its line; anything else a layer out from its wall, along the wall's normal)
-    const post = (Math.abs(h.a.X - h.b.X) < 1e-6 && Math.abs(h.a.Z - h.b.Z) < 1e-6) || !!h.line, nrm = planeNormal(h.key, (h.a.Y + h.b.Y) / 2);
-    const off = post ? 0 : HELD_OFF, s = P3(nrm).multiplyScalar(off * FT), z = boardN(h);
+    // (a post is drawn on its line; anything else a layer out, away from the tower's middle along its face)
+    const post = Math.abs(h.a.X - h.b.X) < 1e-6 && Math.abs(h.a.Z - h.b.Z) < 1e-6;
+    const off = post ? 0 : HELD_OFF, s = outOf(h).multiplyScalar(off * FT), z = boardN(h);
     tmpA.copy(V(h.a)).add(s); tmpB.copy(V(h.b)).add(s);
     pose(held, tmpA, tmpB, z);
     // (each glow sits over the last few inches of its end)
@@ -374,33 +348,6 @@ export function makeTowerView(scene) {
       const c = p.clone().addScaledVector(tmpD, sg), e = p.clone().addScaledVector(tmpD, sg * 2);
       pose(g, p, e, z); g.position.copy(c);
     });
-  }
-
-  // the plane a held board lies in: a faint sheet over the footprint, from the ground to above the work, and a brighter
-  // line across the stones on the ground. plane: { key, half (feet each side of the middle), top (feet) } or null
-  const sheetMat = new THREE.MeshBasicMaterial({ color: 0xfff2c8, transparent: true, opacity: 0.1, depthWrite: false, side: THREE.DoubleSide });
-  const lineMat = new THREE.MeshBasicMaterial({ color: 0xffd36b, transparent: true, opacity: 0.85, depthWrite: false });
-  const edgeMat = new THREE.LineBasicMaterial({ color: 0xffe7a8, transparent: true, opacity: 0.45, depthWrite: false });
-  const sheet = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), sheetMat); sheet.renderOrder = 3; sheet.raycast = () => {};
-  const groundLine = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), lineMat); groundLine.renderOrder = 3; groundLine.raycast = () => {};
-  const sheetEdge = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(1, 1)), edgeMat); sheetEdge.renderOrder = 3; sheetEdge.raycast = () => {};
-  // (a leaning plane: the sheet tips about its line on the ground, by the wall's lean: an inner group turned about the
-  // plane's level direction, so the sheet's up runs up the wall's slope, e_Y + t·e_n)
-  const tilt = new THREE.Group(); tilt.add(sheet, sheetEdge);
-  const planeGroup = new THREE.Group(); planeGroup.add(tilt, groundLine); planeGroup.visible = false; group.add(planeGroup);
-  function showPlane(p) {
-    planeGroup.visible = !!p; if (!p) return;
-    // (seen end on, the sheet is a line through the board: brighter, so you see which plane it is on as it moves)
-    sheetMat.opacity = p.endOn ? 0.16 : 0.07; edgeMat.opacity = p.endOn ? 0.75 : 0.35;
-    const { axis, off, t } = parseKey(p.key), w = p.half * 2 * FT, h = p.top * Math.sqrt(1 + t * t) * FT;
-    // (a turned wall: the sheet turned with it about the vertical, standing off along its normal e(θ))
-    const e = famNormal(axis);
-    planeGroup.position.set(e.X * off * FT, 0, e.Z * off * FT);
-    planeGroup.rotation.y = axis === 'X' ? Math.PI / 2 : famTheta(axis) * Math.PI / 180;
-    tilt.rotation.x = Math.atan(t);
-    sheet.scale.set(w, h, 1); sheet.position.set(0, h / 2, 0);
-    sheetEdge.scale.set(w, h, 1); sheetEdge.position.set(0, h / 2, 0);
-    groundLine.scale.set(w + 0.25, 0.025, 0.05); groundLine.position.set(0, 0.02, 0);
   }
 
   // the twins: list [{ a, b, len, n, ok (true: gold and tappable, false: grey) }]. Each gets a see-through box with dark
@@ -415,7 +362,7 @@ export function makeTowerView(scene) {
   let ghostFade = 1, ghostKey = '';
   function setGhosts(list) {
     // (rebuilt only when something about them changed)
-    const key = list.map((g) => [g.a.X, g.a.Y, g.a.Z, g.b.X, g.b.Y, g.b.Z, g.n, g.t || 0, g.ok].join(',')).join(';');
+    const key = list.map((g) => [g.a.X, g.a.Y, g.a.Z, g.b.X, g.b.Y, g.b.Z, g.ok].join(',')).join(';');
     if (key === ghostKey) return;
     ghostKey = key;
     for (const m of [...ghostGroup.children]) { ghostGroup.remove(m); m.geometry.dispose(); m.children.forEach((c) => c.geometry.dispose()); }
@@ -428,8 +375,8 @@ export function makeTowerView(scene) {
         const glow = new THREE.Mesh(boxFor(g.len + 0.25, BW * 2.6, BT * 3), ghostGlow);
         glow.renderOrder = 4; glow.raycast = () => {}; mesh.add(glow);
       }
-      const post = (Math.abs(g.a.X - g.b.X) < 1e-6 && Math.abs(g.a.Z - g.b.Z) < 1e-6) || !!g.line;
-      const s = P3(planeNormal(planeKeyOf(g), (g.a.Y + g.b.Y) / 2)).multiplyScalar(post ? 0 : (BW / 2 + BT / 2 + 0.004) * FT);
+      const post = Math.abs(g.a.X - g.b.X) < 1e-6 && Math.abs(g.a.Z - g.b.Z) < 1e-6;
+      const s = outOf(g).multiplyScalar(post ? 0 : (BW / 2 + BT / 2 + 0.004) * FT);
       pose(mesh, V(g.a).add(s), V(g.b).add(s), boardN(g));
       mesh.userData = { ghost: i, ok: g.ok };
       ghostGroup.add(mesh);
@@ -495,7 +442,7 @@ export function makeTowerView(scene) {
     if (focus) focusMat.emissiveIntensity = 0.35 + 0.35 * (0.5 + 0.5 * Math.sin(time * 4.5));
   }
 
-  return { group, boards, rebuild, setBend, setStrain, setSpots, drawnNow, strainColor, nailsFor: placeNails, showHeld, showPlane, highlight, showHead, update, setGhosts, fadeGhosts, setFocus,
+  return { group, boards, rebuild, setBend, setStrain, setSpots, drawnNow, strainColor, nailsFor: placeNails, showHeld, highlight, showHead, update, setGhosts, fadeGhosts, setFocus,
     focused: () => (focus ? [...focus] : []), spacers: () => spacerGroup.children,
     layout: () => lastLayout, meshes: () => [...boards.values()].map((b) => b.mesh), ghostMeshes: () => (ghostGroup.visible ? ghostGroup.children : []), nails };
 }

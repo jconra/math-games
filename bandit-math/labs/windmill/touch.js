@@ -3,79 +3,12 @@
 // numbers, no three.js, so node can load it. (The physics finds its own joints its own way; these only have to agree
 // with it on what touches: centre lines closer than TOL.)
 //
-// Two flavours:
-//   * on one plane, in its own (u, y) coordinates: touch(p, q) and findJoints(segs), for segments
-//     { ax, ay, bx, by, len } (tower.js planeSegments): the v2 rules, unchanged. A leaning wall's coordinates are true
-//     lengths up its slope (tower.js toPlane), so these hold on it just as on an upright one.
-//   * in the world, across planes: touch3(p, q), joints3(boards), contactsOf(board, boards) for boards
-//     { a: { X, Y, Z }, b, len } (a beam's end on the front crosspiece, a post's foot on a beam)
+// Everything is in the world: touch3(p, q), joints3(boards), contactsOf(board, boards) for boards { a: { X, Y, Z }, b, len }
+// (a beam's end on the front crosspiece, a post's foot on a beam, a brace crossing a post anywhere).
 
 export const TOL = 0.2;               // feet: boards whose centre lines come closer than this are touching (a 2x4 is
                                       // 0.29 ft wide)
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-
-// ── on one plane ─────────────────────────────────────────────────────────────────────────────────────────────────────
-// where two boards touch: a list of { x, y, ti, tj, butt } (ti, tj: feet along each board from its a end)
-export function touch(p, q) {
-  const dpx = (p.bx - p.ax) / p.len, dpy = (p.by - p.ay) / p.len, dqx = (q.bx - q.ax) / q.len, dqy = (q.by - q.ay) / q.len;
-  const cross = dpx * dqy - dpy * dqx;
-  if (Math.abs(cross) < 0.05) {
-    // (nearly) parallel: they only touch if they lie along the same line
-    const off = Math.abs((q.ax - p.ax) * dpy - (q.ay - p.ay) * dpx);
-    if (off > TOL) return [];
-    const t0 = (q.ax - p.ax) * dpx + (q.ay - p.ay) * dpy, t1 = (q.bx - p.ax) * dpx + (q.by - p.ay) * dpy;
-    const lo = Math.max(0, Math.min(t0, t1)), hi = Math.min(p.len, Math.max(t0, t1));
-    const same = dpx * dqx + dpy * dqy > 0 ? 1 : -1;
-    const at = (t) => ({ x: p.ax + dpx * t, y: p.ay + dpy * t, ti: t, tj: clamp((t - t0) * same, 0, q.len) });
-    if (hi - lo > TOL) return [{ ...at(lo), butt: false }, { ...at(hi), butt: false }];     // lapped side by side
-    if (hi - lo > -TOL) { const m = (lo + hi) / 2; return [{ ...at(clamp(m, 0, p.len)), butt: true }]; }   // end to end
-    return [];
-  }
-  // crossing lines: where they meet, then the nearest point actually on each board
-  const rx = q.ax - p.ax, ry = q.ay - p.ay;
-  const tp = clamp((rx * dqy - ry * dqx) / cross, 0, p.len), tq = clamp((rx * dpy - ry * dpx) / cross, 0, q.len);
-  const px = p.ax + dpx * tp, py = p.ay + dpy * tp, qx = q.ax + dqx * tq, qy = q.ay + dqy * tq;
-  // (re-project each onto the other once, so an end that stops just short of a board still counts as touching it)
-  const tp2 = clamp((qx - p.ax) * dpx + (qy - p.ay) * dpy, 0, p.len), tq2 = clamp((px - q.ax) * dqx + (py - q.ay) * dqy, 0, q.len);
-  const ax = p.ax + dpx * tp2, ay = p.ay + dpy * tp2, bx = q.ax + dqx * tq2, by = q.ay + dqy * tq2;
-  const gap = Math.min(Math.hypot(px - qx, py - qy), Math.hypot(ax - qx, ay - qy), Math.hypot(px - bx, py - by));
-  if (gap > TOL) return [];
-  return [{ x: (px + qx) / 2, y: (py + qy) / 2, ti: tp, tj: tq, butt: false }];
-}
-
-// the joints on one plane: contacts merged into hubs. Returns [{ x, y, ground, butt, items: [{ s (seg index), t }] }]
-export function findJoints(segs, { ground = true } = {}) {
-  const raw = [];
-  for (let i = 0; i < segs.length; i++) for (let j = i + 1; j < segs.length; j++) for (const c of touch(segs[i], segs[j])) raw.push({ ...c, i, j });
-  const hubs = [];
-  const near = (x, y) => hubs.find((h) => Math.hypot(h.x - x, h.y - y) < TOL * 1.5);
-  const add = (h, s, t) => { const o = h.items.find((it) => it.s === s); if (o) o.t = (o.t + t) / 2; else h.items.push({ s, t }); };
-  for (const c of raw) {
-    let h = near(c.x, c.y);
-    if (!h) { h = { x: c.x, y: c.y, ground: false, butt: true, items: [] }; hubs.push(h); }
-    if (!c.butt) h.butt = false;
-    add(h, c.i, c.ti); add(h, c.j, c.tj);
-  }
-  if (ground) {
-    segs.forEach((s, i) => {
-      for (const [x, y, t] of [[s.ax, s.ay, 0], [s.bx, s.by, s.len]]) {
-        if (y > TOL) continue;
-        let h = hubs.find((q) => Math.hypot(q.x - x, q.y - y) < TOL * 1.5);
-        if (!h) { h = { x, y: 0, ground: true, butt: false, items: [] }; hubs.push(h); }
-        h.ground = true; h.butt = false; h.y = 0; add(h, i, t);
-      }
-    });
-  }
-  return hubs.filter((h) => h.ground || h.items.length > 1);
-}
-
-// a knee brace: a short slanting board (4 ft or less) that props a post against a crosspiece near the corner, so it
-// does not reach across the wall from post to post. On a narrow wall (W feet wide) a brace corner to corner can be that
-// short too, and it is a real brace.
-const angOf = (s) => Math.abs(Math.atan2(s.by - s.ay, s.bx - s.ax) * 180 / Math.PI) % 180;
-export const isLevel = (s) => { const a = angOf(s); return a < 8 || a > 172; };
-export const isUp = (s) => Math.abs(angOf(s) - 90) < 8;
-export const isKnee = (s, W) => !isLevel(s) && !isUp(s) && s.len <= 4 && !(W > 0 && Math.abs(s.bx - s.ax) > W - 0.25);
 
 // ── in the world ─────────────────────────────────────────────────────────────────────────────────────────────────────
 const sub = (p, q) => [p.X - q.X, p.Y - q.Y, p.Z - q.Z];

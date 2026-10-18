@@ -23,12 +23,13 @@
 //     that cost the most height (the wind is a stage, as the story tells it). Then: "Keep building" (what stands stays,
 //     the boards that came down whole go back on the pile, snapped ones are kindling) or "Start fresh"; with nothing
 //     left standing, "Try again".
-//   * Walls that LEAN: the words know a leg from a post (a corner leg leaning with two walls), name a storey by where its
-//     legs stand, and say what a leaning wall the wind blew along was doing when it folded with no brace: its legs
-//     drawing together as they climb (that helps, but legs only hold a wall square where they meet at a point), drawing
-//     apart (leaning out: it folds sooner), or the whole wall tipped over (that braces nothing). A lean-out tower that
-//     tips caught the wind high up on its wide top; a tower on leaning legs just short of 16 ft hears why (a leaning leg
-//     reaches less high than it is long). A tower with nothing leaning is worded as before walls could lean.
+//   * LEGS (posts that lean, as frame.js finds them): the words know a leg from a post, name a storey by where its legs
+//     stand, and say what a side the wind blew along was doing when it folded with no brace: its legs drawing together
+//     as they climb (that helps, but legs only hold a side square where they meet at a point), drawing apart (leaning
+//     out: it folds sooner), or the whole side tipped over (that braces nothing). There are no walls: a level's sides
+//     are found from where its posts stand (sideAt), and the boards lying along them. A lean-out tower that tips caught
+//     the wind high up on its wide top; a tower on leaning legs just short of 16 ft hears why (a leaning leg reaches less
+//     high than it is long). A turned level (a square set corner-on) is judged side by side.
 //   * THE CARD'S OBJECT (CONTRACT with main.js / tower3d.js): when the card opens, testRun.card (also state().card, and
 //     hooks.cardOpen(card) if main.js gives that hook) is
 //       { title, story, advice, focusIds, h, sacks, back, kindling }
@@ -47,8 +48,9 @@
 // main.js wires it: makeTestRun(app, hooks) with the view, the fall, the miller's voice, the camera's watching spot,
 // the best record and what the buttons do (see `hooks` below). frame(dt) runs every animation frame.
 import { STAGES, boardRole } from './frame.js';
-import { towerHeight, planeName, planeSegments, planeKey, planeKeyOf, parseKey, planesOf, faceOfPlane, isPost, MAX_W, floorsAcross, wallsInUse, isCornerLine, offsetAt, wallSpan, lenWords, lenLabel, spellUnits, isTurnedFam, famOfKey } from './tower.js';
-import { pointGap, isKnee } from './touch.js';
+import { boardShapes } from './frame.js';
+import { towerHeight, isPost, MAX_W, lenWords, lenLabel, spellUnits, sideOf, atSide, isLevelB, isUprightB } from './tower.js';
+import { pointGap } from './touch.js';
 import { trianglesOf } from './questions.js';
 import { wind, FT } from './scene.js';
 import { fmt, fmtBase, fmtStat } from './build.js';
@@ -72,19 +74,28 @@ const $ = (id) => document.getElementById(id);
 const smooth = (x) => { const t = Math.max(0, Math.min(1, x)); return t * t * (3 - 2 * t); };
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 const lo = (b) => Math.min(b.a.Y, b.b.Y), hi = (b) => Math.max(b.a.Y, b.b.Y);
-const isLevelB = (b) => Math.abs(b.a.Y - b.b.Y) < 0.14 * (b.len || 1);
-const isUprightB = (b) => isPost(b) || Math.hypot(b.b.X - b.a.X, b.b.Z - b.a.Z) < 0.14 * (b.len || 1);
+// the boards of a tower that are LEGS (posts that lean: frame.js finds them the way the physics does), once a tower
+const LEGS = new WeakMap();
+function legsIn(t) {
+  let s = LEGS.get(t);
+  if (!s) { const sh = boardShapes(t); s = new Set(t.boards.filter((b) => sh.get(b.id)?.column && !isPost(b)).map((b) => b.id)); LEGS.set(t, s); }
+  return s;
+}
 // a board doing a post's job: straight up, or leaning in toward the tower's middle by up to about 20 degrees (a tapered
-// storey's post: its top nearer the middle than its foot, on the same side). A brace that steep, in a narrow wall, runs
-// from one side of its wall to the other instead, so it is not one. Given the tower (and its walls in use), a LEG does
-// a post's job too, however it leans, in or out: the line where two walls meet (a tapered tower's corner leg).
-function postLike(b, tower = null, walls = null) {
+// storey's post: its top nearer the middle than its foot, on the same side). A brace that steep, in a narrow side, runs
+// from one side of it to the other instead, so it is not one. Given the tower, a LEG does a post's job too, however it
+// leans, in or out.
+function postLike(b, tower = null) {
   if (isUprightB(b)) return true;
-  if (tower && walls && isCornerLine(tower, b, walls)) return true;
+  if (tower && legsIn(tower).has(b.id)) return true;
   if (Math.hypot(b.b.X - b.a.X, b.b.Z - b.a.Z) > 0.375 * (b.len || 1)) return false;
   const [f, t] = b.a.Y <= b.b.Y ? [b.a, b.b] : [b.b, b.a];
   return ['X', 'Z'].every((c) => Math.abs(t[c] - f[c]) < 0.01 || ((Math.abs(t[c]) < 0.01 || Math.sign(t[c]) === Math.sign(f[c])) && Math.abs(t[c]) < Math.abs(f[c])));
 }
+// a knee brace: a short slanting board (4 ft or less) that props a post against a horizontal board near the corner, so
+// it does not reach across its side from post to post. On a narrow side (span feet wide) a brace corner to corner can
+// be that short too, and it is a real brace.
+const isKnee = (b, span) => !isLevelB(b) && !isUprightB(b) && (b.len || 0) <= 4 && !(span > 0 && Math.hypot(b.b.X - b.a.X, b.b.Z - b.a.Z) > span - 0.25);
 // where a board is at height y (its X and Z there)
 const atHeight = (b, y) => { const k = Math.abs(b.b.Y - b.a.Y) < 1e-9 ? 0 : Math.max(0, Math.min(1, (y - b.a.Y) / (b.b.Y - b.a.Y))); return { X: b.a.X + (b.b.X - b.a.X) * k, Z: b.a.Z + (b.b.Z - b.a.Z) * k }; };
 const heightOf = (boards) => boards.reduce((h, b) => Math.max(h, b.a.Y, b.b.Y), 0);
@@ -99,15 +110,6 @@ const upWords = (y) => `${lenWords(Math.round(y * 2) / 2)} up`;
 // the frame's names for boards (frame.js boardRole, its event texts), in the words the player knows
 const kidText = (txt) => spellUnits(String(txt).replace(/\b(a|the|that) (?:beam|crosspiece)\b/g, '$1 horizontal board').replace(/\b(beam|crosspiece)s\b/g, 'horizontal boards')
   .replace(/\bno beam\b/g, 'no horizontal board').replace(/\bstoreys?\b/g, (m) => (m.endsWith('s') ? 'levels' : 'level')));
-// Which side of the tower a set of boards stands on, from their middles: "back", "front left", "left", or "middle"
-// (all of them near the middle), or '' (spread across it).
-function sideOf(bs, t) {
-  const mid = bs.map((b) => ({ X: (b.a.X + b.b.X) / 2, Z: (b.a.Z + b.b.Z) / 2 })), all = (f) => mid.length && mid.every(f), e = 0.05;
-  const fb = all((p) => p.Z > e) ? 'front' : all((p) => p.Z < -e) ? 'back' : '', lr = all((p) => p.X > e) ? 'right' : all((p) => p.X < -e) ? 'left' : '';
-  if (fb || lr) return [fb, lr].filter(Boolean).join(' ');
-  return all((p) => Math.abs(p.X) < t.W / 4 + e && Math.abs(p.Z) < t.D / 4 + e) ? 'middle' : '';
-}
-const atSide = (side) => (!side ? '' : side === 'middle' ? ' in the middle' : /^(front|back)/.test(side) ? ` at the ${side}` : ` on the ${side}`);
 // a set of boards named by where they are: { head: "the 4 short posts at the back", up: "15½ feet up" (or '' on the
 // ground), noun: 'post' } -> say(g) "the 4 short posts at the back, 15½ feet up"; mid-sentence, said(g, true) closes it
 // with a comma. legs: the boards that are legs.
@@ -122,21 +124,23 @@ function groupOf(bs, t, legs = () => false) {
 const said = (g, mid = false) => (g.up ? `${g.head}, ${g.up}${mid ? ',' : ''}` : g.head);
 // sides of the tower in a list: "its front and back", "its right and left sides", "its front and right side"
 const sidesList = (names) => (names.length > 1 && names.every((x) => / side$/.test(x)) ? andList(names.map((x) => x.replace(/ side$/, ''))) + ' sides' : andList(names));
-// Walls that LEAN: does the tower have any? A tower with none is worded exactly as before walls could lean (the words
-// below keep that path apart). A leg: a board that is not straight up and lies where two walls meet, leaning with them.
-const anyLeans = (walls) => [...walls].some((k) => parseKey(k).k !== 0);
-const isLegB = (t, b, walls) => !isPost(b) && isCornerLine(t, b, walls);
-// The wall of one family (axis 'Z': walls like the front; 'X': like the sides) that the posts and legs standing at s
-// across that family (at height Y) lie in: the one most of them share (a leaning wall's own key), else the upright
-// wall there. posts: boards doing a post's job.
-function wallAt(posts, axis, s, Y, walls) {
-  const n = new Map();
-  for (const p of posts) {
-    const q = atHeight(p, Y); if (Math.abs((axis === 'Z' ? q.Z : q.X) - s) > 0.1) continue;
-    const k = planesOf(p).find((x) => x[0] === axis && walls.has(x)); if (k) n.set(k, (n.get(k) || 0) + 1);
-  }
-  let best = null; for (const [k, c] of n) if (!best || c > n.get(best)) best = k;
-  return best || planeKey(axis, s);
+// Legs: does the tower have any? A tower with none is worded as a straight one. A leg: a post that leans.
+const anyLeans = (t) => legsIn(t).size > 0;
+const isLegB = (t, b) => legsIn(t).has(b.id);
+// THE SIDES OF A LEVEL, from where its posts (and legs) stand: one side of the tower (axis 'Z': the front or the back,
+// at Z = at; axis 'X': a side, at X = at), read at height yF. Its posts: the ones standing on that line at yF; the
+// side runs up with them (where legs lean, it leans with them). A board lies in it when both its ends are on it.
+// -> { inWall (its posts), on(b) (does b lie in it), across(Y) (where the side stands at height Y), spread(Y) (how far
+// apart its posts stand along it at height Y) }
+function sideAt(posts, axis, at, yF) {
+  const c = (p) => (axis === 'Z' ? p.Z : p.X), u = (p) => (axis === 'Z' ? p.X : p.Z);
+  const inWall = posts.filter((p) => Math.abs(c(atHeight(p, yF)) - at) < 0.15);
+  // (a post's line carried on past its ends: a side runs on up the way its legs lean)
+  const onLine = (p, Y) => { const k = Math.abs(p.b.Y - p.a.Y) < 1e-9 ? 0 : (Y - p.a.Y) / (p.b.Y - p.a.Y); return { X: p.a.X + (p.b.X - p.a.X) * k, Z: p.a.Z + (p.b.Z - p.a.Z) * k }; };
+  const across = (Y) => (inWall.length ? inWall.reduce((s, p) => s + c(onLine(p, Y)), 0) / inWall.length : at);
+  const on = (b) => [b.a, b.b].every((q) => Math.abs(c(q) - across(q.Y)) < 0.3);
+  const spread = (Y) => { const us = inWall.map((p) => u(atHeight(p, Y))); return us.length > 1 ? Math.max(...us) - Math.min(...us) : 0; };
+  return { inWall, on, across, spread };
 }
 
 // hooks: {
@@ -498,8 +502,8 @@ export function makeTestRun(app, hooks) {
     if (!run.log.length) {
       // (a tower on leaning legs just short of the mark: a leg that leans reaches less high than it is long, the math
       // of the slope questions; 8 ft legs leaning 1½ in a foot both ways stand 7 ft 10½ in)
-      const WS = wallsInUse(run.tower), short = Math.round((TARGET_FT - h) * 12);
-      const legs = h < TARGET_FT && short <= 6 && short > 0 && run.tower.boards.some((b) => isLegB(run.tower, b, WS));
+      const short = Math.round((TARGET_FT - h) * 12);
+      const legs = h < TARGET_FT && short <= 6 && short > 0 && anyLeans(run.tower);
       const top = h >= TARGET_FT ? 'Now that\'s a windmill. She\'ll grind flour all summer.'
         : legs ? `Good and stout, and only ${short} inch${short === 1 ? '' : 'es'} short of ${TARGET_FT} feet: a leg that leans reaches a little less high than it is long. Reach ${TARGET_FT} feet and I'll put the sails on her.`
           : `Good and stout. Reach ${TARGET_FT} feet and I'll put the sails on her.`;
@@ -585,13 +589,13 @@ export function makeTestRun(app, hooks) {
       case 'rack': return rackWords(ev, before, g, tail);
       case 'tip': {
         const span = Math.abs(g.dir.X) > 0.5 ? before.W : before.D;
-        // (walls leaning out past the stones: on both sides, her top stood wider than her stones, catching the wind high
+        // (legs leaning out past the stones: on both sides, her top stood wider than her stones, catching the wind high
         // up; on one side only, she leaned over past them)
         let x0 = 0, x1 = 0, z0 = 0, z1 = 0;
         for (const o of before.boards) for (const q of [o.a, o.b]) { x0 = Math.min(x0, q.X); x1 = Math.max(x1, q.X); z0 = Math.min(z0, q.Z); z1 = Math.max(z1, q.Z); }
-        // (only walls that lean reach out past the stones: a board nailed on the outside face of an upright wall sticks out
-        // an inch or three, and that is no lean)
-        const out = anyLeans(wallsInUse(before)) ? 0.3 : Infinity;
+        // (only legs that lean reach out past the stones: a board nailed on the outside face of a post sticks out an inch
+        // or three, and that is no lean)
+        const out = anyLeans(before) ? 0.3 : Infinity;
         const past = [x1 > before.W / 2 + out, x0 < -before.W / 2 - out, z1 > before.D / 2 + out, z0 < -before.D / 2 - out];
         const wider = (past[0] && past[1]) || (past[2] && past[3]), oneSide = !wider && past.some(Boolean);
         const more = span >= MAX_W - 1e-6 ? ', or build her lower' : `, set the stones wider${before.W !== before.D ? ' that way' : ''}, or build her lower`;
@@ -653,22 +657,19 @@ export function makeTestRun(app, hooks) {
   // a little), its footprint there, how high its posts reach, its name by where it is ("the narrower level 8 feet up at
   // the back" when it stands above the ground on less than the stones' footprint, else "that level") and its four walls,
   // each with whether it had a long brace across that level.
-  // (Its posts may be LEGS leaning with walls that lean: its walls are then the leaning walls they stand in, found from
-  // the legs, and its size is read at its foot. Heights are the world's.)
+  // (Its posts may be LEGS: its sides then lean with them. Heights are the world's.)
   function tierAt(before, y) {
-    const WS = wallsInUse(before), leans = anyLeans(WS);
-    const posts = before.boards.filter((b) => postLike(b, before, WS) && Math.abs(lo(b) - y) < 0.1);
+    const posts = before.boards.filter((b) => postLike(b, before) && Math.abs(lo(b) - y) < 0.1);
     let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity, top = Infinity;
     for (const p of posts) { const q = atHeight(p, y); x0 = Math.min(x0, q.X); x1 = Math.max(x1, q.X); z0 = Math.min(z0, q.Z); z1 = Math.max(z1, q.Z); top = Math.min(top, hi(p)); }
     const tier = posts.length > 0 && y > 0.3 && (x1 - x0 < before.W - 0.01 || z1 - z0 < before.D - 0.01);
     const name = !posts.length ? 'that level' : tier ? narrower(posts, before, y) : y > 0.3 ? 'that level' : 'the bottom level';
-    const walls = !posts.length ? [] : [['Z', z1, 'front', x1 - x0], ['Z', z0, 'back', x1 - x0], ['X', x1, 'right side', z1 - z0], ['X', x0, 'left side', z1 - z0]]
+    const walls = !posts.length ? [] : [['Z', z1, 'front'], ['Z', z0, 'back'], ['X', x1, 'right side'], ['X', x0, 'left side']]
       .filter(([ax, off], i, all) => all.findIndex((w) => w[0] === ax && Math.abs(w[1] - off) < 1e-6) === i)
-      .map(([ax, off, wall, wide]) => {
-        const k = leans ? wallAt(posts, ax, off, y, WS) : planeKey(ax, off);
-        const braces = planeSegments(before, k).filter((sg) => !sg.post && !isLevelB(sg.src) && !postLike(sg.src, before, WS) && lo(sg.src) < top - 0.3 && hi(sg.src) > y + 0.3);
-        // (with leaning walls, a knee is judged against the span between the legs at the brace, as in rackWords)
-        return { k, name: wall, braced: braces.some((sg) => !isKnee(sg, leans ? wallSpan(before, k, sg) : wide)) };
+      .map(([ax, off, wall]) => {
+        const sd = sideAt(posts, ax, off, y);
+        const braces = before.boards.filter((b) => sd.on(b) && !isLevelB(b) && !postLike(b, before) && lo(b) < top - 0.3 && hi(b) > y + 0.3);
+        return { name: wall, braced: braces.some((b) => !isKnee(b, sd.spread((lo(b) + hi(b)) / 2) || (ax === 'Z' ? x1 - x0 : z1 - z0))) };
       });
     return { posts, x0, x1, z0, z1, y, top, tier, name, walls };
   }
@@ -676,7 +677,7 @@ export function makeTestRun(app, hooks) {
   // the advice when a post standing on a beam pulled its toe-nails out: about the tier's walls as they really were (a
   // leg standing on a beam, the same)
   function toeAdvice(before, post) {
-    const T = post ? tierAt(before, lo(post)) : null, P = post && isLegB(before, post, wallsInUse(before)) ? 'leg' : 'post';
+    const T = post ? tierAt(before, lo(post)) : null, P = post && isLegB(before, post) ? 'leg' : 'post';
     const base = `A ${P} standing on a horizontal board is only toe-nailed at its foot, and toe-nails pull out easily.`;
     if (!T || !T.walls.length) return `${base} Brace that level corner to corner, so the push goes down the braces instead of prying the foot up.`;
     const open = T.walls.filter((w) => !w.braced);
@@ -685,7 +686,7 @@ export function makeTestRun(app, hooks) {
     // every wall braced: the toe-nails were simply asked too much. A brace's foot nailed down beside a post's foot adds
     // its own toe-nails, so a post with no brace foot at its own foot is the place to start.
     const footOf = (b) => (b.a.Y <= b.b.Y ? b.a : b.b);
-    const WS = wallsInUse(before), bare = T.posts.filter((p) => { const f = footOf(p); return !before.boards.some((o) => o !== p && !isLevelB(o) && !postLike(o, before, WS) && Math.hypot(footOf(o).X - f.X, footOf(o).Y - f.Y, footOf(o).Z - f.Z) < 0.25); });
+    const bare = T.posts.filter((p) => { const f = footOf(p); return !before.boards.some((o) => o !== p && !isLevelB(o) && !postLike(o, before) && Math.hypot(footOf(o).X - f.X, footOf(o).Y - f.Y, footOf(o).Z - f.Z) < 0.25); });
     if (bare.length) return `${cap(T.name)} was braced corner to corner on every side, but the wind still pried a ${P}'s foot up off the board under it: three toe-nails only hold so much. Start a brace at the foot of every ${P} of it, so the brace's nails share the pull, or build her top lower.`;
     return `${cap(T.name)} was braced corner to corner on every side, with a brace at every ${P}'s foot, but the wind still pried a foot up off the board under it: toe-nails only hold so much. Stand its ${P}s nearer the ends of the boards under them, right over the sides of the level below, or build her top lower.`;
   }
@@ -693,8 +694,8 @@ export function makeTestRun(app, hooks) {
   // carpentry ("lay a horizontal board across the top of the level below, right under their feet")
   function nofootWords(ev, before, g) {
     const posts = ev.nofoot.map((id) => before.boards.find((b) => b.id === id) || run.byId.get(id)).filter(Boolean);
-    const src = before.boards.some((b) => posts.includes(b)) ? before : run.tower, WS = wallsInUse(src);
-    const G = groupOf(posts, src, (p) => isLegB(src, p, WS)), one = G.n === 1, P = G.noun === 'horizontal board' ? 'board' : G.noun;
+    const src = before.boards.some((b) => posts.includes(b)) ? before : run.tower;
+    const G = groupOf(posts, src, (p) => isLegB(src, p)), one = G.n === 1, P = G.noun === 'horizontal board' ? 'board' : G.noun;
     const them = one ? 'it' : 'them', their = one ? 'its foot' : 'their feet';
     return { call: one ? `Nothing under that ${P}!` : `Nothing under those ${P}s!`, focus: posts.map((p) => p.id),
       what: `${said(G, true)} stood on nothing, with no horizontal board under ${their}, and ${one ? 'it' : 'they'} ${ev.calm ? `gave way under ${one ? 'its' : 'their'} own weight` : `gave way in the ${g.name.toLowerCase()}`}`,
@@ -705,121 +706,91 @@ export function makeTestRun(app, hooks) {
   function narrower(posts, t, y) { return `the narrower level ${upWords(y)}${atSide(sideOf(posts, t))}`; }
 
   // A storey (or a tier) that racked, in words. The storey: the posts standing where it leaned, between the floor
-  // under that spot and the one over it (the ground, the beams, every level board). A tier: its posts stand above the
-  // ground on a smaller footprint than the stones (a 2 × 3 tier on beams). The walls that had to hold it square are the
-  // ones the wind blows along (from the west or east: the walls facing front and back); each either had a long brace
-  // corner to corner in that storey or it didn't.
-  // The walls checked are the two walls of the storey's footprint (at the racked height) that the wind blows along,
-  // whether or not posts still stand in them: a wall with one post (or none) left is missing a corner post; a wall the
-  // posts lean across without standing in it would have to lean with them. The advice comes from those walls; the
-  // physics' own words (a knee brace...) only when there were no walls to look at.
-  // Walls that LEAN (a tower with any: the rest of it is worded as it always was): the storey's legs stand in leaning
-  // walls, so its walls are the ones its legs lie in, and its size is read at its foot ("the 4 × 4 tier", however narrow
-  // it gets). A wall the wind blows along can lean in three ways that matter: its legs drawing together as they climb
-  // (a taper: that helps, through the joints, but legs only hold a wall square where they meet at a point), drawing apart
-  // (leaning out: it folds even sooner than a square one), or the whole wall tipped over with its legs parallel (that
-  // doesn't brace it at all). With no brace, each folds; the advice says which.
+  // under that spot and the one over it (the ground, every horizontal board). A tier: its posts stand above the ground on
+  // a smaller footprint than the stones (a 2 × 3 tier on beams). The sides that had to hold it square are the ones the
+  // wind blows along (from the west or east: the front and the back); each either had a long brace corner to corner in
+  // that storey or it didn't. A side is found from where the storey's posts stand (sideAt): the posts on that line,
+  // leaning with it where they are legs, and the boards lying along it.
+  // A side whose legs lean can lean three ways that matter: its legs drawing together as they climb (a taper: that
+  // helps, but legs only hold a side square where they meet at a point), drawing apart (leaning out: it folds even
+  // sooner than a square one), or the whole side tipped over with its legs parallel (that doesn't brace it at all).
+  // A TURNED level (its posts on no front-and-back line: a square set corner-on inside the one below): every side of it
+  // slants to the wind, and each is judged by whether it had its brace.
   function rackWords(ev, before, g, tail) {
-    const y = ev.at.Y, top = heightOf(before.boards), WS = wallsInUse(before), leans = anyLeans(WS);
-    const pl = (b) => postLike(b, before, WS);
+    const y = ev.at.Y, top = heightOf(before.boards), leans = anyLeans(before);
+    const pl = (b) => postLike(b, before);
     // the posts of the storey: boards standing straight up or leaning in a little (a tapered storey), or legs, across
     // that height
     const posts = before.boards.filter((b) => pl(b) && lo(b) < y + 0.05 && hi(b) > y - 0.05);
     const floors = [...new Set([0, ...before.boards.filter(isLevelB).map((b) => +((b.a.Y + b.b.Y) / 2).toFixed(2))])].sort((a, c) => a - c);
     const y0 = Math.max(...floors.filter((f) => f <= y + 0.05)), y1 = Math.min(top, ...floors.filter((f) => f > y + 0.3));
-    const yF = leans ? y0 : y;      // (where its footprint is read: at its floor when walls lean; atHeight keeps to a board's own ends)
+    const yF = leans ? y0 : y;      // (where its footprint is read: at its floor when legs lean)
     let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity, foot = Infinity;
     for (const p of posts) { const q = atHeight(p, yF); x0 = Math.min(x0, q.X); x1 = Math.max(x1, q.X); z0 = Math.min(z0, q.Z); z1 = Math.max(z1, q.Z); foot = Math.min(foot, lo(p)); }
-    // (its size, for its name: at its foot when its posts slant, so a storey narrowing as it climbs is named by what it
-    // stands on, "the 4 × 4 tier")
+    // (its size, for whether it is a narrower level: each leg read at its own foot, so a storey narrowing as it climbs is
+    // named by what it stands on)
     let sx = x1 - x0, sz = z1 - z0;
-    // (each leg read at its own foot, the lowest point of it: a tier on leaning legs is named by what it stands on, not
-    // by how narrow it is at the crosspieces over the spot that racked)
     if (posts.some((p) => !isPost(p))) {
       let a0 = Infinity, a1 = -Infinity, c0 = Infinity, c1 = -Infinity;
       for (const p of posts) { const q = p.a.Y <= p.b.Y ? p.a : p.b; a0 = Math.min(a0, q.X); a1 = Math.max(a1, q.X); c0 = Math.min(c0, q.Z); c1 = Math.max(c1, q.Z); }
       sx = a1 - a0; sz = c1 - c0;
     }
-    // (legs standing in leaning walls that reach down to the ground: the tower narrowing as it climbs, one storey on
-    // another, not a tier set in on beams)
-    const reachesGround = (k) => planeSegments(before, k).some((s) => lo(s.src) < 0.3);
-    const climbs = leans && posts.some((p) => isLegB(before, p, WS) && planesOf(p).some((k) => parseKey(k).k && WS.has(k) && reachesGround(k)));
+    // (legs standing on the ground's stones and climbing: the tower narrowing as it climbs, one storey on another, not
+    // a tier set in on beams)
+    const slants = (b) => !isPost(b) && pl(b);
+    const climbs = leans && posts.some(slants) && before.boards.some((b) => isLegB(before, b) && lo(b) < 0.3);
     const tier = !climbs && posts.length && foot > 0.3 && (sx < before.W - 0.01 || sz < before.D - 0.01);
-    // its name: "the 2 × 3 tier", or which storey ("the top storey"), or "the tower" when it is only one storey high
-    // (with walls that lean, a storey starts where its posts or legs start: crosspieces fitted where the legs stand their
-    // length apart often sit below the legs' tops, and the bit of leg above them is no storey)
+    // which storey: a storey starts where its posts or legs start
     const starts = leans ? [...new Set([0, ...before.boards.filter(pl).map(lo).filter((f) => f > 0.3).map((f) => +f.toFixed(2))])].sort((a, c) => a - c) : floors;
-    // (leaning: the level is the one whose legs stand across the height that racked, read where it racked, not at the
-    // horizontal boards under it: those may sit below the legs' tops, in the level underneath)
     const under = starts.filter((f) => f < top - 0.5), i = Math.max(0, under.filter((f) => f <= (leans ? y : y0) + 0.05).length - 1), n = under.length;
     const storey = n < 2 ? 'the tower' : `the ${i === n - 1 ? 'top' : i === 0 ? 'bottom' : n === 3 ? 'middle' : ['second', 'third', 'fourth', 'fifth', 'sixth'][i - 1] || 'middle'} level`;
-    // (a narrower level by where it stands, never by its size; one post left of it, after the rest of it went: what was
-    // left of it)
     const place = tier ? (sx < 0.25 || sz < 0.25 ? 'what was left of the narrower level' : narrower(posts, before, foot)) : storey;
-    // the walls the wind blows along (the two of the footprint), and whether each had a brace there
+    const braceIn = (on) => before.boards.filter((b) => on(b) && !pl(b) && !isLevelB(b) && lo(b) < y1 - 0.3 && hi(b) > y0 + 0.3);
+    // A TURNED level: no two of its posts on one front-and-back line (or side to side), three or more of them
     const along = Math.abs(g.dir.X) > 0.5 ? 'Z' : 'X';
-    const keys = !posts.length ? [] : [...new Set((along === 'Z' ? [z1, z0] : [x1, x0]).map((o) => (leans ? wallAt(posts, along, o, yF, WS) : planeKey(along, o))))];     // (front first, then back; right, then left)
-    // (a side by where it is: "front", "right side"; one inside the tower, "the inside frame 1 foot in from the front")
-    const wallName = (k) => wallName0(k).replace(/^(the )?(front|back) wall\b/, '$1$2').replace(/\bwall\b/g, 'frame');
-    const wallName0 = (k) => {
-      // (a leaning outer wall, standing on the stones' line, is the front wall (or a side) at any height, however far in
-      // it has come by then; its lean is left out: the advice says how it leans)
-      if (leans && !tier && parseKey(k).k && faceOfPlane(before, k) >= 0) return planeName(before, k, true).split(',')[0];
-      // (a leaning wall by where it stands at the storey's foot, without its lean: the advice says how it leans)
-      const off = leans ? offsetAt(k, yF) : +k.slice(2), upright = leans ? planeKey(along, off) : k;
-      if (!tier && faceOfPlane(before, upright) >= 0) return planeName(before, upright).replace(/^the /, '');
-      const side = along === 'Z' ? (Math.abs(off - z1) < 1e-3 ? 'front' : Math.abs(off - z0) < 1e-3 ? 'back' : null) : (Math.abs(off - x1) < 1e-3 ? 'right side' : Math.abs(off - x0) < 1e-3 ? 'left side' : null);
-      return side || planeName(before, upright).replace(/^the /, '');
-    };
-    const walls = keys.map((k) => {
-      // (how wide the wall is that a brace braces: the storey's width; with leaning walls, the span between the legs
-      // either side of the brace at its middle (tower.js wallSpan), as the builder's own knee check reads it: legs
-      // drawing together leave a short leg-to-leg brace in a narrow storey no knee)
-      const segs = planeSegments(before, k), wide = along === 'Z' ? x1 - x0 : z1 - z0, span = (sg) => (leans ? wallSpan(before, k, sg) : wide);
-      const braces = segs.filter((s) => !s.post && !pl(s.src) && !isLevelB(s.src) && lo(s.src) < y1 - 0.3 && hi(s.src) > y0 + 0.3);
-      const long = braces.filter((s) => !isKnee(s, span(s)));
-      // the posts standing in this wall, and the ones that only pass through its line here, leaning across it
-      const inWall = posts.filter((p) => planesOf(p).includes(k));
-      const across = posts.filter((p) => !inWall.includes(p) && Math.abs((along === 'Z' ? atHeight(p, y).Z : atHeight(p, y).X) - offsetAt(k, y)) < 0.1);
-      const withFloors = [...segs, ...floorsAcross(before, k)];
-      // (how its legs stand: how far apart along the wall at the storey's foot and at its top)
-      const uOf = (p, Y) => (along === 'Z' ? atHeight(p, Y).X : atHeight(p, Y).Z);
-      const spread = (Y) => { const us = inWall.map((p) => uOf(p, Y)); return us.length > 1 ? Math.max(...us) - Math.min(...us) : 0; };
-      const yT = Math.min(y1, ...inWall.map(hi)), w0 = leans ? spread(y0) : 0, w1 = leans ? spread(yT) : 0;
-      // (do its legs run on up to meet at a point, a pyramid's? two legs in this wall whose tops stand together)
-      const tops = leans ? segs.filter((s) => s.leg && isCornerLine(before, s.src, WS)).map((s) => (s.ay >= s.by ? { u: s.ax, y: s.ay } : { u: s.bx, y: s.by })) : [];
-      const point = tops.some((p, a) => tops.some((q, c) => c > a && Math.abs(p.y - q.y) < 0.35 && Math.abs(p.u - q.u) < 0.35 && tops.some((r) => Math.abs(r.u - p.u) > 1)));
-      return { k, name: wallName(k), braced: long.length > 0, closes: long.some((s) => trianglesOf(withFloors, s.id).length > 0), knee: braces.length > long.length,
-        leans: across.length > 0 && inWall.length < 2, short: inWall.length < 2 && !across.length,
-        narrows: inWall.length > 1 && w1 < w0 - 0.1, point: point && inWall.length > 1 && w1 < w0 - 0.1, widens: inWall.length > 1 && w1 > w0 + 0.1, tilted: parseKey(k).k !== 0 };
-    });
-    const open = walls.filter((w) => !w.braced), leaning = walls.filter((w) => w.leans), short = walls.filter((w) => w.short);
-    // (inside walls each keep their "the": "the inside wall 1 foot in from the front and the inside wall ...")
-    const named = (ws) => (ws.length > 1 && ws.some((w) => /^inside /.test(w.name)) ? andList(ws.map((w) => 'the ' + w.name))
-      : (tier || ws.length === 1 ? 'its ' : 'the ') + sidesList(ws.map((w) => w.name)));
-    const them = (ws) => (ws.length > 1 ? 'those sides' : 'that side');
-    // (in the wind it really happened in: a knee-braced storey can go in the stiff wind, not only in the big gust)
-    const inWind = !g || !g.name ? 'in a big gust' : g.stage === 0 ? 'even in a breeze' : `in a ${g.name.toLowerCase()}`;
-    const KNEE = `Knee braces help, but a short brace can't keep a level from folding ${inWind}. A long brace corner to corner holds better.`;
-    const P = posts.some((p) => isLegB(before, p, WS)) ? 'leg' : 'post', blows = (ws) => `the side${ws.length > 1 ? 's' : ''} the wind from the ${g.from} blows along`;
-    // A TURNED level (TURN.md): its posts stand in turned walls, every one of them slanting to the wind, so every one
-    // of them helps hold it square; named "the turned level 8 feet up", its walls by whether they had a brace there.
-    const turnedPosts = posts.filter((p) => isTurnedFam(p.n));
-    if (turnedPosts.length && turnedPosts.length >= posts.length / 2) {
-      const foot2 = Math.min(...turnedPosts.map(lo)), tplace = `the turned level ${upWords(foot2)}`;
-      const tw = [...new Set(turnedPosts.flatMap((p) => planesOf(p).filter((k) => isTurnedFam(famOfKey(k)))))].filter((k) => turnedPosts.filter((p) => planesOf(p).includes(k)).length >= 2);
-      const braced = (k) => planeSegments(before, k).some((sg) => !sg.post && !pl(sg.src) && !isLevelB(sg.src) && lo(sg.src) < y1 - 0.3 && hi(sg.src) > y0 + 0.3 && !isKnee(sg, wallSpan(before, k, sg)));
-      const openT = tw.filter((k) => !braced(k));
-      const tadvice = !tw.length ? `${cap(tplace)} leaned too far and folded over. Brace each of its sides from a post's foot up to the next post.`
-        : openT.length === tw.length ? `${cap(tplace)} had no braces, so it folded over. A turned level needs its own braces, just like the base: one on each of its sides, from a post's foot up to the next post.`
+    const lineUp = (ax, at) => sideAt(posts, ax, at, yF).inWall.length >= 2;
+    if (posts.length >= 3 && !lineUp('Z', z1) && !lineUp('Z', z0) && !lineUp('X', x1) && !lineUp('X', x0)) {
+      const tplace = `the turned level ${upWords(foot)}`;
+      // its sides: each pair of posts next to each other round its middle, and the boards lying between them
+      const mx = posts.reduce((s2, p) => s2 + atHeight(p, yF).X, 0) / posts.length, mz = posts.reduce((s2, p) => s2 + atHeight(p, yF).Z, 0) / posts.length;
+      const round = [...posts].sort((p, q) => Math.atan2(atHeight(p, yF).X - mx, atHeight(p, yF).Z - mz) - Math.atan2(atHeight(q, yF).X - mx, atHeight(q, yF).Z - mz));
+      const sides = round.map((p, k) => [p, round[(k + 1) % round.length]]);
+      const between = ([p, q]) => (b) => [b.a, b.b].every((e) => { const P = atHeight(p, e.Y), Q = atHeight(q, e.Y), vx = Q.X - P.X, vz = Q.Z - P.Z, l = Math.hypot(vx, vz) || 1; return Math.abs(((e.X - P.X) * vz - (e.Z - P.Z) * vx) / l) < 0.3; });
+      const openT = sides.filter((sd) => !braceIn(between(sd)).some((b) => !isKnee(b, Math.hypot(atHeight(sd[0], yF).X - atHeight(sd[1], yF).X, atHeight(sd[0], yF).Z - atHeight(sd[1], yF).Z))));
+      const tadvice = openT.length === sides.length ? `${cap(tplace)} had no braces, so it folded over. A turned level needs its own braces, just like the base: one on each of its sides, from a post's foot up to the next post.`
         : openT.length ? `${cap(tplace)} had no brace on ${openT.length === 1 ? 'one of its sides' : `${openT.length} of its sides`}, so it folded there. With the wind coming at its corner, every side of a turned level works: brace them all.`
         : `${cap(tplace)} had its braces, but still leaned too far. A second brace crossing the first, or a shorter level, stiffens it.`;
       return { call: 'That level\'s folding!', what: `${tplace} racked and folded over${tail}`, advice: tadvice, focus: ev.broke };
     }
+    // the sides the wind blows along (the two of the footprint), and whether each had a brace there
+    const lines = !posts.length ? [] : (along === 'Z' ? [[z1, 'front'], [z0, 'back']] : [[x1, 'right side'], [x0, 'left side']]).filter((w, k, all) => all.findIndex((q) => Math.abs(q[0] - w[0]) < 1e-6) === k);
+    const walls = lines.map(([at, name]) => {
+      const sd = sideAt(posts, along, at, yF), wide = along === 'Z' ? x1 - x0 : z1 - z0;
+      const braces = braceIn(sd.on);
+      // (how wide the side is that a brace braces: how far apart its posts stand at the brace's middle height)
+      const long = braces.filter((b) => !isKnee(b, (leans ? sd.spread((lo(b) + hi(b)) / 2) : 0) || wide));
+      const inWall = sd.inWall;
+      // (how its legs stand: how far apart along the side at the storey's foot and at its top)
+      const yT = Math.min(y1, ...inWall.map(hi)), w0 = leans ? sd.spread(y0) : 0, w1 = leans ? sd.spread(yT) : 0;
+      // (do its legs run on up to meet at a point, a pyramid's? two legs on this side whose tops stand together)
+      const legTops = leans ? before.boards.filter((b) => slants(b) && sd.on(b)).map((b) => (b.a.Y >= b.b.Y ? b.a : b.b)) : [];
+      const point = legTops.some((p, a) => legTops.some((q, c) => c > a && Math.abs(p.Y - q.Y) < 0.35 && Math.hypot(p.X - q.X, p.Z - q.Z) < 0.35 && legTops.some((r) => Math.hypot(r.X - p.X, r.Z - p.Z) > 1)));
+      // (the whole side tipped over: its posts all lean across it the same way)
+      const drift = inWall.map((p) => { const A = atHeight(p, y0), B = atHeight(p, yT); return yT - y0 > 0.3 ? ((along === 'Z' ? B.Z - A.Z : B.X - A.X) / (yT - y0)) : 0; });
+      const tilted = drift.length > 0 && drift.every((d) => Math.abs(d) > 1 / 24 && Math.sign(d) === Math.sign(drift[0]));
+      return { name, braced: long.length > 0, closes: long.some((b) => trianglesOf(before, b).length > 0), knee: braces.length > long.length,
+        short: inWall.length < 2, narrows: inWall.length > 1 && w1 < w0 - 0.1, point: point && inWall.length > 1 && w1 < w0 - 0.1, widens: inWall.length > 1 && w1 > w0 + 0.1, tilted };
+    });
+    const open = walls.filter((w) => !w.braced), short = walls.filter((w) => w.short);
+    const named = (ws) => (tier || ws.length === 1 ? 'its ' : 'the ') + sidesList(ws.map((w) => w.name));
+    const them = (ws) => (ws.length > 1 ? 'those sides' : 'that side');
+    // (in the wind it really happened in: a knee-braced storey can go in the stiff wind, not only in the big gust)
+    const inWind = !g || !g.name ? 'in a big gust' : g.stage === 0 ? 'even in a breeze' : `in a ${g.name.toLowerCase()}`;
+    const KNEE = `Knee braces help, but a short brace can't keep a level from folding ${inWind}. A long brace corner to corner holds better.`;
+    const P = posts.some((p) => isLegB(before, p) || (leans && slants(p))) ? 'leg' : 'post', blows = (ws) => `the side${ws.length > 1 ? 's' : ''} the wind from the ${g.from} blows along`;
     let advice;
     if (!walls.length) advice = /knee/.test(ev.text) ? KNEE : `${cap(place)} leaned too far and folded over. Brace every side corner to corner, near 45 degrees.`;
-    else if (leaning.length) advice = `The posts of ${place} lean across ${named(leaning)} without standing in ${leaning.length > 1 ? 'them' : 'it'}, so nothing held ${leaning.length > 1 ? 'them' : 'it'} square. Lean ${them(leaning)} to match the posts (look along ${leaning.length > 1 ? 'each' : 'it'} and drag a board's top in or out), or stand the posts straight up, and brace every side.`;
-    // (legs that run on up to meet at a point hold their walls square, as a pyramid does: what folded was a long stretch
+    // (legs that run on up to meet at a point hold their sides square, as a pyramid does: what folded was a long stretch
     // of leg bending between two horizontal boards, braced or not)
     else if (walls.some((w) => w.point)) { const ws = walls.filter((w) => w.point), gap = y1 - y0;
       advice = `Her legs meet at a point at the top, which holds ${named(ws)} square, but in ${place} the long legs bent between horizontal boards ${lenWords(Math.round(gap * 2) / 2)} apart, and it folded over. Nail more horizontal boards across the legs, closer together, or brace ${them(ws)} higher up.`; }

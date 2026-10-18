@@ -341,3 +341,15 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .snd .is-muted .x { display: inline; stroke: var(--rust); }
 .snd input { width: 64px; accent-color: var(--brass); }
 @media (max-width: 700px) { .snd input { display: none; } }
+
+/* v7 free boards: the socket end (gold ring), the free end (open ring, green once connected), the four 3D arrows */
+.gz.end.sock { border-color: var(--brass-hi); background: rgba(30,20,12,.25); }
+.gz.end.free { width: 38px; height: 38px; margin: -19px 0 0 -19px; }
+.gz.end.free::after { inset: -12px; }
+.gz.arrow { width: 54px; height: 54px; margin: -27px 0 0 -27px; background: transparent; border: none; box-shadow: none; cursor: pointer; }
+#overlay .arrow3d { stroke: rgba(10,8,4,.85); stroke-width: 2.2; stroke-linejoin: round; filter: drop-shadow(0 2px 2px rgba(0,0,0,.55)); }
+#overlay .arrow3d.is-x { fill: #45c95a; }
+#overlay .arrow3d.is-z { fill: #4a8fe0; }
+#overlay .sock { fill: #ffe7a8; stroke: rgba(0,0,0,.6); stroke-width: 1; }
+.bar.trim .btn { white-space: nowrap; }
+#view.is-trimming .say { bottom: 150px; }     /* (the saw-off offer sits at the foot of the view: the miller speaks above it) */

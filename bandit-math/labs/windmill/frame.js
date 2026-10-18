@@ -60,7 +60,8 @@
 //
 // Exports: windTest (the CONTRACT in DESIGN.md), and the numbers the page may want to show or draw by (STAGES, WINDS,
 // WOOD, NAILS, DRIFT_LIMIT, TOL, DRAG, pressure, stoneLb, wakeShade), windOn (the wind's push on each board, for
-// drawing or explaining it), boardRole (a board's name in words). `internals` is for the rigs and tests only.
+// drawing or explaining it), boardRole (a board's name in words), boardShapes and faceOf (how the page draws boards:
+// their faces and which are columns, as laid out here). `internals` is for the rigs and tests only.
 // ── the wood and the nails ──────────────────────────────────────────────────────────────────────────────────────────
 // A 2x4 is 1½ by 3½ inches. It bends on its wide side (in its own plane: the stiff way) or the thin way (out of it).
 export const WOOD = {
@@ -1144,6 +1145,21 @@ export function boardRole(tower, board) {
   if (!me) { const one = prepBoards({ W, D, boards: [board] }); if (one.length) markLegs(one, []); return one.length ? roleOf(one[0], W, D, null) : 'a board'; }
   const hubs = findHubs(bs, W, D, []); classify(bs, hubs);
   return roleOf(me, W, D, hubs, bs);
+}
+// How the page draws and names a tower's boards, worked out just as the physics lays them: for each board, which way its
+// wide face looks (n, a unit { X, Y, Z }; out: the same, turned away from the tower's middle) and whether it is a
+// COLUMN (a post, or a leg: markLegs). -> Map id -> { n, out, column, post }
+export function boardShapes(tower) {
+  const W = tower.W, D = tower.D ?? tower.W, bs = prepBoards({ W, D, boards: tower.boards }), hubs = findHubs(bs, W, D, []);
+  classify(bs, hubs);
+  const v = (a) => ({ X: a[0], Y: a[1], Z: a[2] });
+  return new Map(bs.map((b) => [b.id, { n: v(b.n), out: v(b.nOut), column: b.post || b.leg, post: b.post }]));
+}
+// one board's face, alone (a board in hand, a twin): as boardShapes would lay it. -> { n, out }
+export function faceOf(board, W, D = W) {
+  const one = prepBoards({ W, D, boards: [{ ...board, id: board.id || '__one' }] })[0];
+  if (!one) return { n: { X: 0, Y: 0, Z: 1 }, out: { X: 0, Y: 0, Z: 1 } };
+  return { n: { X: one.n[0], Y: one.n[1], Z: one.n[2] }, out: { X: one.nOut[0], Y: one.nOut[1], Z: one.nOut[2] } };
 }
 // a plain sentence for what gave way
 function describe(M, it) {
