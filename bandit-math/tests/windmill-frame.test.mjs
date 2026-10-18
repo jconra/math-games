@@ -150,15 +150,18 @@ test('only the wind blowing across a board pushes it: upright full, leaning 45 d
   const w = windOn(one([0, 0, 0], [0, L * s, -L * s], { X: 0, Y: s, Z: s }), 2, mph);
   assert.ok(near(w.force[1] / w.force[2], 1));
 });
-test('boards behind others are sheltered; total push on four-wall towers is v2-like (shelter) and honest about post faces', () => {
+test('boards behind others are sheltered by their shadows: the far side\'s crosspiece 6 ft behind the near one gets wake(6 ft)', () => {
   const d = windOn(T.diag16, 0, 50);
-  // the far wall's crosspieces get less than the near wall's
+  // the side crosspieces at the top, face on to a wind from the west: the far one stands 6 ft behind the near one
   const near = T.diag16.boards.filter((b) => b.n === 'X' && b.a.X === -3 && b.b.X === -3 && b.a.Y === 8 && b.b.Y === 8);
   const far = T.diag16.boards.filter((b) => b.n === 'X' && b.a.X === 3 && b.b.X === 3 && b.a.Y === 8 && b.b.Y === 8);
   assert.ok(near.length && far.length);
-  assert.ok(d.per[far[0].id].along < 0.7 * d.per[near[0].id].along, 'behind the near wall');
-  // v2 gave this tower 329.5 lb at 50 mph; edge-on posts (half the corners face the other way) take about a fifth off
-  assert.ok(d.total > 0.7 * 329.5 && d.total < 0.9 * 329.5, `total ${d.total}`);
+  const ratio = d.per[far[0].id].along / d.per[near[0].id].along;
+  // (a hair less than the wake alone: where the corner posts cross its ends, those patches are shared, half each)
+  assert.ok(Math.abs(ratio - F.wakeShade(6)) < 0.03, `far / near ${ratio.toFixed(3)} against wake(6 ft) ${F.wakeShade(6).toFixed(3)}`);
+  // the whole tower: less than its boards alone, by its shadows (about 0.85 of it), and nothing counted twice
+  let alone = 0; for (const b of T.diag16.boards) alone += windOn({ ...T.diag16, boards: [b] }, 0, 50).per[b.id].along;
+  assert.ok(d.total < 0.92 * alone && d.total > 0.75 * alone, `total ${d.total.toFixed(1)} of ${alone.toFixed(1)} alone`);
 });
 
 // ── the collapse carries on ──────────────────────────────────────────────────────────────────────────────────────────
@@ -361,12 +364,59 @@ test('a board touching nothing: the gust it falls in and that event\'s after are
   assert.ok(!('float' in e.after.strain) && !('float' in e.after.move), 'after leaves out the board that fell');
   assert.notEqual(g.strain, e.after.strain);
 });
-test('shelter: a crosspiece shelters about half a foot either side of it, not the whole foot above', () => {
-  const t = { W: 6, D: 4, boards: [...storey([], -3, 3, -2, 2, 0, 8, { tag: 's' }), B('stub1', [0, 8, 0], [0, 9, 0], 'X'), B('stub2', [0, 9, 0], [0, 10, 0], 'X')] };
-  const all = windOn(t, 0, 50), open = (id) => windOn({ ...t, boards: [t.boards.find((b) => b.id === id)] }, 0, 50).per[id].along;
-  const s1 = all.per.stub1.along / open('stub1'), s2 = all.per.stub2.along / open('stub2');
-  assert.ok(s1 > 0.55 && s1 < 0.85, `8 to 9 ft: ${s1}`);
-  assert.ok(s2 > 0.98, `9 to 10 ft: ${s2}`);
+// ── v7: free boards (no walls): hand checks ──────────────────────────────────────────────────────────────────────────
+const post8 = (id, x, z, n = 'X') => ({ id, a: { X: x, Y: 0, Z: z }, b: { X: x, Y: 8, Z: z }, len: 8, n });
+test('v7 hand check: the wind seen along it: a post in another\'s shadow gets the wake, half in it half, edge on 3/7, once', () => {
+  let lone = 0; const n = 20000; for (let i = 0; i < n; i++) lone += pressure(65, (i + 0.5) * 8 / n) * DRAG * WOOD.width * 8 / n;
+  const pushOn = (bs, id) => windOn({ W: 4, D: 4, boards: bs }, 0, 65).per[id].along;
+  const near = (a, b, tol = 0.002) => assert.ok(Math.abs(a / b - 1) < tol, `${a} vs ${b}`);
+  near(pushOn([post8('F', -1, 0)], 'F'), lone);
+  const k2 = F.wakeShade(2);
+  near(pushOn([post8('F', -1, 0), post8('R', 1, 0)], 'R'), lone * k2);                                   // in line, 2 ft behind
+  near(pushOn([post8('F', -1, 0), post8('R', 1, WOOD.width / 2)], 'R'), lone * (k2 / 2 + 1 / 2));       // half in its shadow
+  const ke = F.wakeShade(2, WOOD.thick), c = WOOD.thick / WOOD.width;
+  near(pushOn([post8('F', -1, 0, 'Z'), post8('R', 1, 0)], 'R'), lone * (c * ke + 1 - c));                // an edge in front
+  near(pushOn([post8('F1', -3, 0), post8('F2', -1, 0), post8('R', 1, 0)], 'R'), lone * k2);              // the nearer wake, once
+  // the wake by how many widths behind: 3 widths 0.30, 10 widths 0.61, 20 widths 0.83
+  for (const [w, v] of [[3, 0.30], [10, 0.61], [20, 0.83]]) assert.ok(Math.abs(F.wakeShade(w * WOOD.width) - v) < 0.005, `${w} widths`);
+  // two boards side by side in one frame where they cross: that patch is met once, half each (a post and a crosspiece)
+  const cross = { id: 'C', a: { X: 1, Y: 4, Z: -1 }, b: { X: 1, Y: 4, Z: 1 }, len: 2, n: 'X' };
+  const both = windOn({ W: 4, D: 4, boards: [cross, post8('R', 1, 0)] }, 0, 65), alone = windOn({ W: 4, D: 4, boards: [cross] }, 0, 65).per.C.along + lone;
+  assert.ok(both.total < alone && both.total > alone - 2 * pressure(65, 4) * DRAG * WOOD.width * WOOD.width, 'less than both alone, by under one patch');
+});
+test('v7 hand check: a braced square frame pushed sideways carries it as a truss: the brace 5/3 P, the far post 4/3 P', () => {
+  const frame = [B('Lpost', [-3, 0, 3], [-3, 8, 3], 'Z'), B('Rpost', [3, 0, 3], [3, 8, 3], 'Z'), B('top', [-3, 8, 3], [3, 8, 3], 'Z'), B('brace', [-3, 0, 3], [3, 8, 3], 'Z')];
+  const pushed = (boards) => {
+    const st = { W: 6, D: 6, boards, cuts: [], hinges: [], M: null, models: 0 }, M = I.modelOf(st);
+    const hub = M.hubs.find((h) => Math.abs(h.P[0] + 3) < 0.01 && Math.abs(h.P[1] - 8) < 0.01), Fv = new Float64Array(M.n);
+    Fv[M.dof(hub.node, 0)] = 100;
+    const u = I.solveEnv(M.env, Fv), pull = {};
+    M.elems.forEach((el) => { const g = el.dof; (pull[M.boards[el.b].id] ||= []).push(WOOD.E * WOOD.A / el.L * (el.R[0] * (u[g[6]] - u[g[0]]) + el.R[1] * (u[g[7]] - u[g[1]]) + el.R[2] * (u[g[8]] - u[g[2]]))); });
+    return { sway: u[M.dof(hub.node, 0)], N: (id) => pull[id].reduce((a, v) => a + v, 0) / pull[id].length };
+  };
+  const r = pushed(frame);
+  assert.ok(Math.abs(r.N('brace') - 500 / 3) < 3, `brace ${r.N('brace')}`);
+  assert.ok(Math.abs(r.N('Rpost') + 400 / 3) < 3, `far post ${r.N('Rpost')}`);
+  assert.ok(Math.abs(r.N('top') + 100) < 2, `top ${r.N('top')}`);
+  assert.ok(Math.abs(r.N('Lpost')) < 2, `near post ${r.N('Lpost')}`);
+  // the sway by virtual work: the wood, and every nail group and strap the force passes through (0.063 in)
+  const EA = WOOD.E * WOOD.A, kf = F.NAILS.face.kt, ks = F.NAILS.stone.kt, nb = 5 / 3, np = 4 / 3;
+  const hand = 100 * ((nb * nb * 10 + np * np * 8 + 6) / EA + (2 * nb * nb + 2 + np * np) / kf + (np * np + nb * nb) / ks);
+  assert.ok(Math.abs(r.sway / hand - 1) < 0.05, `sway ${r.sway * 12} in against ${hand * 12} in`);
+  // without its brace the same push racks it a hundred times and more as far
+  assert.ok(pushed(frame.slice(0, 3)).sway > 100 * r.sway);
+});
+test('v7: the face of a board comes from its line; the hints only agree with it, and towers without them come out the same', () => {
+  const bs = I.prepBoards({ W: 6, D: 6, boards: [B('x', [-3, 8, 3], [3, 8, 3]), B('br', [-3, 0, 3], [3, 5.29, 3]), B('p0', [-3, 0, 3], [-3, 8, 3]), B('p1', [3, 0, 3], [3, 8, 3]), B('pe', [0, 0, 3], [0, 8, 3]), B('ps', [3, 0, 0], [3, 8, 0])] });
+  const n = (id) => bs.find((b) => b.id === id).n.map((v) => Math.round(Math.abs(v)));
+  assert.deepEqual(n('x'), [0, 0, 1], 'a crosspiece faces across the way it runs'); assert.deepEqual(n('br'), [0, 0, 1], 'and a brace');
+  assert.deepEqual(n('p0'), [0, 0, 1], 'front left corner post: the front'); assert.deepEqual(n('p1'), [1, 0, 0], 'front right: the side');
+  assert.deepEqual(n('pe'), [0, 0, 1], 'a post on the front edge faces the front'); assert.deepEqual(n('ps'), [1, 0, 0], 'on the side edge, the side');
+  for (const k of ['diag16', 'unbraced16', 'loneBoardOnTop', 'setbackUnbraced']) {
+    const t = k === 'setbackUnbraced' ? setback(false) : T[k], bare = { ...t, boards: t.boards.map(({ n: _n, t: _t, ...b }) => b) };
+    const a = k === 'setbackUnbraced' ? windTest(t) : R[k], b = windTest(bare);
+    assert.equal(b.height, a.height, k); assert.equal(failStage(b), failStage(a), k);
+  }
 });
 
 // ── v4: walls that lean (LEAN.md) ──────────────────────────────────────────────────────────────────────────────────────
@@ -438,55 +488,6 @@ const LEAN = {
   taper16Braced: taperL(6, 6, { F: 1.5, B: 1.5, R: 1.5, L: 1.5 }, { braces: true }), pyramid: pyramidL(6, 1.5),
 };
 
-test('v4 no lean: the reference towers give exactly what they gave before walls could lean (whole results, hashed)', async () => {
-  const crypto = await import('node:crypto');
-  const hash = (r) => { const o = { ...r }; delete o.ms; return crypto.createHash('sha1').update(JSON.stringify(o)).digest('hex').slice(0, 16); };
-  // (made with the frame.js of v3, before leaning walls: rigs/windmill/v4/physics/hashes.mjs)
-  const V3 = { unbraced8: '49f3f19b0f22359c', unbraced16: 'f85e320e7f7e5a41', unbraced24: 'c6e0012074b42a0d', knee16: '5360ec7b763dc593', diag16: '3f729de8a816a84a', diag24: '1650aaaccc00636a', cross16: '7df34192755ff50c', missingUpperFront16: '8772db4249b8bbb8', missingLowerFront16: 'd4c186f0d161a40d', missingLowerRight16: 'a17227b7bbe85e2b', diag16_w2: 'f051c02aeaa9ee1c', diag16_w4: '02142d500bc822dc', diag16_w8: '72c9309e2ce790fb', cross16_w4: 'e8b2449767deccda', topHeavy24: '9ed20faaa05d8d8c', lonePostOnTop: '330bf83531f2bc8d', loneBoardOnTop: 'a44af5afe1c3013b', setback: 'a79b574f0b0a9fb9', setbackOpen: '6099975c00398980' };
-  for (const [k, r] of Object.entries(R)) assert.equal(hash(r), V3[k], k);
-  assert.equal(hash(windTest(setback(true))), V3.setback);
-  assert.equal(hash(windTest(setback(false))), V3.setbackOpen);
-  // t: 0 written on every board changes nothing; nor does a brace leaning 3 in a foot in an upright wall with no leaning
-  // wall round it (the CONTRACT calls it a leg; with no board standing in its second wall, it is a brace as before)
-  const zero = { ...T.diag16, boards: T.diag16.boards.map((b) => ({ ...b, t: 0 })) }, rz = windTest(zero);
-  rz.standing.boards = rz.standing.boards.map(({ t, ...b }) => b);       // (what stands keeps the boards as handed in)
-  assert.equal(hash(rz), V3.diag16);
-  const narrow = { W: 6, D: 2, boards: [...storey([], -3, 3, -1, 1, 0, 8, { braces: false, tag: 'n' }), B('br', [3, 0, 1], [3, 8, -1], 'X')] };
-  const st = { W: 6, D: 2, boards: narrow.boards, cuts: [], hinges: [], M: null, models: 0 };
-  assert.ok(!I.modelOf(st).boards.some((b) => b.leg), 'no leg without a leaning wall round it');
-});
-test('v4 walls: a leg lies in its two walls, keyed as tower.js keys them; a crosspiece across leaning legs shares their wall', () => {
-  const bs = I.prepBoards(LEAN.taper16), legs = bs.filter((b) => b.id.startsWith('leg0'));
-  assert.equal(legs.length, 4);
-  for (const b of legs) assert.ok(b.leg && b.walls.length === 2, b.id + ' in two walls');
-  const fl = bs.find((b) => b.id === 'leg00');
-  assert.deepEqual(fl.walls.map(I.keyOfWall), ['Z:3~-1.5', 'X:-3~1.5'], 'the front wall leaning in 1½, the left side leaning in 1½');
-  assert.ok(I.sharePlane(bs.find((b) => b.id === 'x0front'), fl), 'the front crosspiece and the front-left leg share the front wall');
-  assert.ok(I.sharePlane(bs.find((b) => b.id === 'x0left'), fl), '...and the left crosspiece the left wall');
-  // (the front crosspiece is lapped onto the leg in their wall; the leg, met in its other wall, turns about that wall)
-  const st = { W: 6, D: 6, boards: LEAN.taper16.boards, cuts: [], hinges: [], M: null, models: 0 }, M = I.modelOf(st);
-  const hub = M.hubs.find((h) => h.items.some((it) => M.boards[it.b].id === 'x0front') && h.items.some((it) => M.boards[it.b].id === 'leg01'));
-  const it = hub.items.find((x) => M.boards[x.b].id === 'x0front'), lg = hub.items.find((x) => M.boards[x.b].id === 'leg01');
-  assert.ok(it.lapped, 'the crosspiece is lapped onto the leg');
-  const front = [0, 1.5 / 12, 1].map((x) => x / Math.hypot(1, 1.5 / 12));
-  assert.ok(lg.soft.some((ax) => Math.abs(ax[0] * front[0] + ax[1] * front[1] + ax[2] * front[2]) > 0.99), 'the leg turns about the leaning front wall\'s normal there (and its own wall\'s)');
-});
-test('v4 shelter: boards in one leaning wall do not shade each other; a leaning front wall shelters the back at every height', () => {
-  // a leg rising up a front wall leaning 7 in a foot, a crosspiece across it at 2 ft: the wind from the south meets the
-  // wall; just above the crosspiece the leg stands a hair downwind of it, in the same wall, not behind it
-  // (leaning out, toward the wind, the leg just BELOW the crosspiece is the part downwind of it; leaning in, just above)
-  for (const [k, ys] of [[7, [1.95, 1.9, 1.85]], [-7, [2.05, 2.1, 2.15]]]) {
-    const t = k / 12, s = Math.sqrt(1 + t * t), bs = I.prepBoards({ W: 6, D: 6, boards: [BL('leg', [0, 0, 3], [0, 4 / s, 3 + t * 4 / s], 'Z', t), BL('x', [-2, 2, 3 + 2 * t], [2, 2, 3 + 2 * t], 'Z', t)] });
-    const shade = I.shelterFor(bs, [0, 0, -1]), leg = bs.findIndex((b) => b.id === 'leg');
-    for (const y of ys) assert.equal(shade([0, y, 3 + t * y], leg), 1, `k=${k}, ${y} ft`);
-  }
-  // and behind the wall, at each height, the back crosspieces are sheltered (both storeys)
-  const w = windOn(LEAN.taper16, 3, 50);
-  for (const id of ['x0back', 'x1back']) {
-    const open = windOn({ ...LEAN.taper16, boards: [LEAN.taper16.boards.find((b) => b.id === id)] }, 3, 50).per[id].along;
-    assert.ok(w.per[id].along < 0.6 * open && w.per[id].along > 0.15 * open, `${id}: ${(w.per[id].along / open).toFixed(2)} of the open push`);
-  }
-});
 test('v4 hand check: a board in a leaning wall bends the thin way across the tilted wall (P L^3 / 3 E Iweak), the wide way in it', () => {
   const keep = { ...F.NAILS.stone }, w = WOOD.weight; Object.assign(F.NAILS.stone, { kt: 1e14, kr: 1e14, kb: 1e14 }); WOOD.weight = 0;
   try {
@@ -679,7 +680,7 @@ test('a 4 x 4 zig-zag tower with a heavy top tips over whole in the big gust: th
 // ── the result card's words (labs/windmill/testrun.js, run in node with its page-only imports stood in for) ─────────
 // A taper whose top level folds, built the way the builder fits horizontal boards between leaning legs (where the legs
 // are the board's length apart, 6 ft up, below the 7 ft 11 in. leg tops): the card names the TOP level, and the outer
-// walls as the front and back walls, not "the bottom level" and "inside walls 9 inches in".
+// sides as its front and back, not "the bottom level" and "inside walls 9 inches in".
 async function cardOf(tower) {
   if (!globalThis.__wmHooks) {
     const { register } = await import('node:module');
@@ -701,13 +702,14 @@ async function cardOf(tower) {
   for (let s = 0; app.phase === 'test' && s < 20000; s++) run.frame(0.1);
   return run.state().card;
 }
-test('the card on a taper whose top level folds names the top level and the front and back walls', async () => {
+test('the card on a taper whose top level folds names the top level and its front and back', async () => {
   const rows = [['b1', 'Z', -3, 0, 3, -2.015268, 7.877855, 2.015268, 8, -0.125], ['b2', 'Z', 3, 0, -3, 2.015268, 7.877855, -2.015268, 8, 0.125], ['b3', 'X', 3, 0, 3, 2.015268, 7.877855, 2.015268, 8, -0.125], ['b4', 'X', -3, 0, -3, -2.015268, 7.877855, -2.015268, 8, 0.125], ['b5', 'Z', -2.25, 6, 2.25, 2.25, 6, 2.25, 4.5, -0.125], ['b6', 'Z', -2.25, 6, -2.25, 2.25, 6, -2.25, 4.5, 0.125], ['b7', 'X', 2.25, 6, 2.25, 2.25, 6, -2.25, 4.5, -0.125], ['b8', 'X', -2.25, 6, 2.25, -2.25, 6, -2.25, 4.5, 0.125], ['b9', 'Z', -3, 0, 3, 2.244881, 5.994149, 2.250731, 8, -0.125], ['b10', 'Z', -3, 0, -3, 2.244881, 5.994149, -2.250731, 8, 0.125], ['b11', 'X', 3, 0, 3, 2.250731, 5.994149, -2.244881, 8, -0.125], ['b12', 'X', -3, 0, 3, -2.250731, 5.994149, -2.244881, 8, 0.125], ['b13', 'X', 2.015268, 7.877855, 2.015268, 1.030536, 15.75571, 1.030536, 8, -0.125], ['b14', 'Z', -2.015268, 7.877855, 2.015268, -1.030536, 15.75571, 1.030536, 8, -0.125], ['b15', 'X', -2.015268, 7.877855, -2.015268, -1.030536, 15.75571, -1.030536, 8, 0.125], ['b16', 'Z', 2.015268, 7.877855, -2.015268, 1.030536, 15.75571, -1.030536, 8, 0.125], ['b17', 'Z', -1.25, 14, 1.25, 1.25, 14, 1.25, 2.5, -0.125], ['b18', 'Z', -1.25, 14, -1.25, 1.25, 14, -1.25, 2.5, 0.125], ['b19', 'X', 1.25, 14, 1.25, 1.25, 14, -1.25, 2.5, -0.125], ['b20', 'X', -1.25, 14, 1.25, -1.25, 14, -1.25, 2.5, 0.125]];
   const tower = { W: 6, D: 6, boards: rows.map(([id, n, ax, ay, az, bx, by, bz, len, t]) => ({ id, n, a: { X: ax, Y: ay, Z: az }, b: { X: bx, Y: by, Z: bz }, len, t })) };
   const c = await cardOf(tower);
-  assert.match(c.story, /Gust: the top level racked/);
-  assert.doesNotMatch(c.story + c.advice, /bottom level|inside wall/);
-  assert.match(c.advice, /the front and back walls/);
+  // (with the wind on free boards it goes in the stiff wind, a stage sooner than behind v6's walls)
+  assert.match(c.story, /(Stiff wind|Gust): the top level racked/);
+  assert.doesNotMatch(c.story + c.advice, /bottom level|inside|\bwalls?\b/);
+  assert.match(c.advice, /the front and back\b/);
   assert.ok(Math.abs(c.h - 7.877855) < 1e-3, 'the bottom level stands');
 });
 // A pyramid whose legs meet at a point: the card says the long legs bent between horizontal boards, not that legs only
@@ -731,7 +733,7 @@ test('the card on a pyramid that folds says its legs bent between horizontal boa
   }
   const c = await cardOf({ W, D: W, boards });
   if (c.h >= top - 0.1) return;      // (stood: nothing to word)
-  assert.doesNotMatch(c.advice, /only hold a wall square where they meet at a point/);
+  assert.doesNotMatch(c.advice, /only hold a (wall|side) square where they meet at a point/);
   assert.match(c.advice, /meet at a point at the top/);
   assert.match(c.advice, /bent between horizontal boards/);
 });
