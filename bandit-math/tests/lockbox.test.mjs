@@ -246,7 +246,7 @@ test('vault verdicts: the quick last step agrees with trying every move', () => 
   const all = { goal: VERDICT.goal, goalId: 'verdict-every-move', maxDepth: 5 };
   let n = 0;
   for (let i = 0; i < 150 * SCALE; i++) {
-    const p = generate('R15', { rng, size: 1 + (i % 3) });
+    const p = generate('R15', { rng, size: 1 + (i % 3), verdict: true });
     if (p.kind === 'one') continue;
     let cur = p.start;
     for (let step = 0; step < 3; step++) {
@@ -294,10 +294,12 @@ for (const rung of MOVE_RUNGS.filter((r) => r.id !== 'R15')) {
         const top = bb.slots.slice(0, 2).filter(Boolean), bottom = bb.slots.slice(2).filter(Boolean);
         if (shown.filter((b) => b.move.k === 'add').length <= 2) assert.ok(bottom.every((b) => b.move.k !== 'add'), 'an add on the bottom row');
         if (shown.filter((b) => b.move.k !== 'add').length <= 2) assert.ok(top.every((b) => b.move.k === 'add'), 'a ÷ on the top row');
-        // a row only overflows when the line has nothing left for the other row
+        // a row only overflows when the line has nothing left for the other row, or to show a believable trap
+        // (+12 next to −12) instead of a dull move that would have fitted the other row
         const nonAdd = (b) => b.move.k !== 'add';
-        if (shown.filter((b) => !nonAdd(b)).length > 2) assert.ok(bb.all.filter(nonAdd).every((b) => shown.includes(b)), `adds overflow but a ·/÷ was left out on ${lineText(cur)}`);
-        if (shown.filter(nonAdd).length > 2) assert.ok(bb.all.filter((b) => !nonAdd(b)).every((b) => shown.includes(b)), `·/÷ overflow but an add was left out on ${lineText(cur)}`);
+        const trapIn = (f) => shown.some((b) => f(b) && b.role === 'trap');
+        if (shown.filter((b) => !nonAdd(b)).length > 2) assert.ok(trapIn((b) => !nonAdd(b)) || bb.all.filter(nonAdd).every((b) => shown.includes(b)), `adds overflow but a ·/÷ was left out on ${lineText(cur)}`);
+        if (shown.filter(nonAdd).length > 2) assert.ok(trapIn(nonAdd) || bb.all.filter((b) => !nonAdd(b)).every((b) => shown.includes(b)), `·/÷ overflow but an add was left out on ${lineText(cur)}`);
         // press a random shown button (kids do)
         const pickB = shown[Math.floor(rng.next() * shown.length)];
         cur = applyMove(cur, pickB.move).out;
@@ -313,7 +315,7 @@ test('the right button moves between slots', () => {
   const where = new Set();
   for (let i = 0; i < 60; i++) {
     const bb = buildButtons(l, st, { count: 4, rng });
-    where.add(bb.slots.findIndex((b) => b && b.role === 'good'));
+    where.add(bb.slots.findIndex((b) => b && b.id === 'add:n:6'));
   }
   assert.ok(where.size >= 2, `good slot always ${[...where]}`);
 });
@@ -493,7 +495,7 @@ test('R15 vault boxes: verdicts and the x = 0 box', () => {
   const st = RUNG.R15.stage;
   let all = 0, none = 0, one = 0;
   for (let i = 0; i < 300; i++) {
-    const p = generate('R15', { rng, size: 2 });
+    const p = generate('R15', { rng, size: 2, verdict: i % 3 !== 0 });
     const B = makeBox(p, { stage: st, level: 4, rng });
     let guard = 0;
     while (!B.solved && guard++ < 8) {

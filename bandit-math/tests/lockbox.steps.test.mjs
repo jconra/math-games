@@ -19,7 +19,7 @@ test('the card says what the brief wrote, in its order', () => {
   assert.equal(GOLDEN_RULE, 'Whatever you do to one side, do to the other.');
   assert.deepEqual(STEPS.map((s) => s.n), [1, 2, 3, 4, 5, 6]);
   assert.deepEqual(STEPS.map((s) => s.id), ['brackets', 'division', 'tidy', 'sort', 'free', 'check']);
-  assert.equal(STEPS[0].label, 'Open the brackets');
+  assert.equal(STEPS[0].label, 'Open the brackets (distribute)');
   assert.equal(STEPS[1].label, 'Clear the division');
   assert.equal(STEPS[2].label, 'Tidy each side');
   assert.match(STEPS[3].label, /^x’s on one side, numbers on the other$/);
@@ -149,14 +149,14 @@ test('hint 1 names the step the kid is on', () => {
   const h = B.hint();
   assert.equal(h.level, 1);
   assert.equal(h.step, 1);
-  assert.equal(h.text, 'Step 1: Open the brackets.');
+  assert.equal(h.text, 'Step 1: Open the brackets (distribute).');
 });
 
 test('the card never gives a vault box away: step 5 stays in, and a verdict line says so plainly', () => {
   const rng = makeRng(15);
   const st = RUNG.R15.stage;
   for (let i = 0; i < 200; i++) {
-    const p = generate('R15', { rng, size: 2 });
+    const p = generate('R15', { rng, size: 2, verdict: i % 2 === 0 });
     const B = makeBox(p, { stage: st, level: 4, rng });
     assert.equal(B.plan.applies.free, true, lineText(p.start));
     let guard = 0;
@@ -263,7 +263,7 @@ test('a press that makes no progress is never praised as a shortcut, even where 
   }
 });
 
-test('at 4 buttons a brackets box sometimes offers the shortcut, and pressing it is praised', () => {
+test('at 4 buttons a brackets box offers the shortcut, and pressing it is praised', () => {
   // R10 (3(x + 2) = 18): ÷3 is the shortcut past the card's "open the brackets"; it must reach the tray now and then
   let boxes = 0, offered = 0, praised = 0;
   for (let i = 0; i < 200; i++) {
@@ -283,7 +283,8 @@ test('at 4 buttons a brackets box sometimes offers the shortcut, and pressing it
     assert.equal(H.hintAt(3).move.k, 'dist', `hint 3 on ${lineText(p.start)}`);
     if (B.press(sc.move).shortcut) praised++;
   }
-  assert.ok(offered / boxes > 0.2 && offered / boxes < 0.6, `÷n offered on ${offered} of ${boxes} first lines`);
+  // (with a second right way always shown at 4 buttons, ÷n is there on nearly every box where it works)
+  assert.ok(offered / boxes > 0.6, `÷n offered on ${offered} of ${boxes} first lines`);
   assert.equal(praised, offered, 'every ÷n press is praised as a shortcut');
   // brackets on both sides: dividing first is praised too, though it also brings the card's count down
   const st = RUNG.R14.stage;

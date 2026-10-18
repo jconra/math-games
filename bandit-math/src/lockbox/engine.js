@@ -54,7 +54,8 @@ const NEG1 = F(-1);
 // A term is one of:
 //   { t: 'n', v: Frac }                 a plain number
 //   { t: 'x', v: Frac }                 an x-term; v is the number stuck to x (3 for 3x, 1/4 for x/4)
-//   { t: 'b', p: Frac, in: [terms] }    brackets: p(…), for example 3(x + 2)
+//   { t: 'b', p: Frac, in: [terms] }    brackets: p(…), for example 3(x + 2); with p = 1/2 it is the whole
+//                                       group over a number, (5x − 10)/2 (an "over" term: a fraction bar)
 // A side is an array of terms in the order they are written. A line is { L: side, R: side }.
 
 export const num = (v) => ({ t: 'n', v: F(v) });
@@ -82,6 +83,8 @@ export function termBody(t) {
     return d === 1 ? top : `${top}/${d}`;
   }
   const inner = `(${sideText(t.in)})`;
+  // a whole side over a number, (5x − 10)/2, is a bracket whose number is a fraction (1/2)
+  if (t.p.d > 1) return `${Math.abs(t.p.n) === 1 ? '' : Math.abs(t.p.n)}${inner}/${t.p.d}`;
   return t.p.abs().isOne() ? inner : `${fracBody(t.p)}${inner}`;
 }
 
@@ -276,6 +279,9 @@ function combSide(side, events) {
 }
 
 export function hasBracket(l) { return l.L.some((t) => t.t === 'b') || l.R.some((t) => t.t === 'b'); }
+// A group over a number, (5x − 10)/2: a bracket whose number has a bottom.
+export const isOver = (t) => t.t === 'b' && t.p.d > 1;
+export function hasOver(l) { return l.L.some(isOver) || l.R.some(isOver); }
 function sideHasLike(side) {
   let n = 0, x = 0;
   for (const t of side) { if (t.t === 'n') n++; else if (t.t === 'x') x++; }
@@ -354,7 +360,8 @@ export function keySteps(side, x) {
     if (a.d === 1) return a.isOne() ? k : `${a.n}${TIMES}${xs}`;
     return a.n === 1 ? `${k}/${a.d}` : `${a.n}${TIMES}${xs}/${a.d}`;
   };
-  const front = (t) => (t.p.abs().isOne() ? '' : `${fracBody(t.p)}`);
+  const front = (t) => (t.p.abs().isOne() || t.p.d > 1 ? '' : `${fracBody(t.p)}`);
+  const over = (t, inner) => (t.p.d > 1 ? `(${inner})/${t.p.d}` : `${front(t)}(${inner})`);
   const steps = [];
   const push = (s) => { if (s !== steps[steps.length - 1]) steps.push(s); };
   // 1: x replaced by the key
@@ -363,7 +370,7 @@ export function keySteps(side, x) {
     if (t.t === 'n') return [termNeg(t), termBody(t)];
     if (t.t === 'x') return [termNeg(t), subX(t, i === 0)];
     const inner = join(t.in.map((u, j) => [termNeg(u), u.t === 'x' ? subX(u, j === 0) : termBody(u)]));
-    return [termNeg(t), `${front(t)}(${inner})`];
+    return [termNeg(t), over(t, inner)];
   })));
   // 2: brackets worked out inside: 2(5 + 3) -> 2·8
   if (side.some((t) => t.t === 'b')) {
@@ -373,6 +380,7 @@ export function keySteps(side, x) {
       if (t.t === 'x') return [termNeg(t), subX(t, i === 0)];
       const inside = t.in.reduce((s, u) => s.add(evalTerm(u, x)), F(0));
       const insideText = inside.n < 0 ? `(${fracText(inside)})` : fracText(inside);
+      if (t.p.d > 1) return [termNeg(t), `${insideText}/${t.p.d}`];
       return [termNeg(t), front(t) ? `${front(t)}${TIMES}${insideText}` : insideText];
     })));
   }
@@ -388,12 +396,13 @@ export function keySteps(side, x) {
 //   { id, add, addx, mul, div, flip, dist, comb, sign: 'plus'|'sub'|'any', frac, max, maxTerms }
 //   sign 'plus': no minus anywhere; 'sub': taking away is fine but no number stands alone as negative
 //   frac: x-terms may be fractions like x/4 (plain numbers stay whole either way)
+//   over: a whole group may sit over a number, (5x − 10)/2
 
 export function makeStage(o) {
   const st = { add: true, addx: false, mul: false, div: false, flip: false, dist: false, comb: false,
-    sign: 'any', frac: false, max: 99, maxTerms: 5, ...o };
+    sign: 'any', frac: false, over: false, max: 99, maxTerms: 5, ...o };
   st.id = st.id || ['add', 'addx', 'mul', 'div', 'flip', 'dist', 'comb'].filter((k) => st[k]).join('+')
-    + `|${st.sign}|${st.frac ? 'f' : ''}|${st.max}|${st.maxTerms}`;
+    + `|${st.sign}|${st.frac ? 'f' : ''}${st.over ? 'o' : ''}|${st.max}|${st.maxTerms}`;
   return st;
 }
 
@@ -404,7 +413,11 @@ function fracFits(v, st, kind) {
 }
 
 function termFits(t, st) {
-  if (t.t === 'b') return fracFits(t.p, st, 'p') && t.p.isInt() && t.in.every((u) => termFits(u, st));
+  if (t.t === 'b') {
+    // (a group over a number, (5x − 10)/2, only on the rungs that have it: one over a whole number)
+    const pOk = t.p.isInt() ? fracFits(t.p, st, 'p') : st.over && Math.abs(t.p.n) === 1 && t.p.d <= st.max;
+    return pOk && t.in.every((u) => termFits(u, st));
+  }
   return fracFits(t.v, st, t.t);
 }
 
@@ -442,7 +455,7 @@ export function candidateMoves(l, st) {
   const walk = (t) => {
     if (t.t === 'n') { if (t.v.isInt() && t.v.n) consts.add(Math.abs(t.v.n)); }
     else if (t.t === 'x') { coefs.add(Math.abs(t.v.n)); if (t.v.d > 1) dens.add(t.v.d); }
-    else { bracket = true; if (t.p.isInt()) mults.add(Math.abs(t.p.n)); t.in.forEach(walk); }
+    else { bracket = true; if (t.p.isInt()) mults.add(Math.abs(t.p.n)); else dens.add(t.p.d); t.in.forEach(walk); }
   };
   l.L.forEach(walk); l.R.forEach(walk);
   const moves = [];
@@ -464,6 +477,7 @@ export function candidateMoves(l, st) {
     const s = new Set();
     for (const m of [...coefs, ...mults]) divisorsOver1(m).forEach((k) => s.add(k));
     for (const m of consts) if (m > 1) s.add(m);
+    for (const m of dens) if (bracket) s.add(m);   // ÷2 on (5x − 10)/2: the wrong way to undo it
     for (const m of [...s].sort((a, b) => a - b)) for (const g of signs) moves.push(divBy(g * m));
   }
   if (st.flip) moves.push(FLIP);
@@ -537,7 +551,7 @@ export function usefulMoves(l, st) {
   const coefs = new Set(), dens = new Set();
   const walk = (t) => {
     if (t.t === 'x') { coefs.add(Math.abs(t.v.n)); if (t.v.d > 1) dens.add(t.v.d); }
-    else if (t.t === 'b') { if (t.p.isInt()) coefs.add(Math.abs(t.p.n)); t.in.forEach(walk); }
+    else if (t.t === 'b') { if (t.p.isInt()) coefs.add(Math.abs(t.p.n)); else dens.add(t.p.d); t.in.forEach(walk); }
   };
   l.L.forEach(walk); l.R.forEach(walk);
   const signs = st.sign === 'any' ? [1, -1] : [1];
@@ -701,7 +715,7 @@ export function printedNumbers(l) {
   const walk = (t) => {
     if (t.t === 'n') { out.add(Math.abs(t.v.n)); if (t.v.d > 1) out.add(t.v.d); }
     else if (t.t === 'x') { if (Math.abs(t.v.n) !== 1) out.add(Math.abs(t.v.n)); if (t.v.d > 1) out.add(t.v.d); }
-    else if (t.t === 'b') { if (!t.p.abs().isOne()) out.add(Math.abs(t.p.n)); t.in.forEach(walk); }
+    else if (t.t === 'b') { if (Math.abs(t.p.n) !== 1) out.add(Math.abs(t.p.n)); if (t.p.d > 1) out.add(t.p.d); t.in.forEach(walk); }
   };
   l.L.forEach(walk); l.R.forEach(walk);
   return out;

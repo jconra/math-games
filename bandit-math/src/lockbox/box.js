@@ -47,11 +47,11 @@ export function goldFor(tier, stars) { return Math.round((TIER_GOLD[tier] ?? TIE
 export function makeBox(problem, { stage, level = 4, rng, fav = null, tier = 'iron' } = {}) {
   const pick = problem.mode !== 'moves';
   const start = problem.start;
-  // the vault rung's "every key / no key" boxes are finished by a verdict, not by x = N
+  // the vault rung's "infinitely many / no solution" boxes are finished by a verdict, not by x = N
   const verdictGoal = VERDICT;
   const distOf = (l) => (problem.kind === 'one' ? solve(l, stage) : solve(l, stage, verdictGoal)).d;
   const d0 = pick ? 1 : distOf(start);
-  // the steps card: its goal is x = N, or the verdict on an "every key / no key" box
+  // the steps card: its goal is x = N, or the verdict on an "infinitely many / no solution" box
   const verdictRung = !pick && !!RUNG[problem.rung]?.verdicts;
   const cardGoal = problem.kind === 'one' ? null : (l) => verdictOf(l);
   const cardLeft = (l) => (pick ? 0 : stepsLeft(l, stage, cardGoal));
@@ -64,7 +64,7 @@ export function makeBox(problem, { stage, level = 4, rng, fav = null, tier = 'ir
   const B = {
     problem, stage, tier, par, level,
     moves: 0, hintLevel: 0, notCloser: 0, jammed: false, jamFired: false, solved: false,
-    keyOk: null, keyFailed: false, left: false, wrongPicks: 0,
+    keyOk: null, keyFailed: false, left: false, wrongPicks: 0, productSlips: 0,
     traps: [], tools: [], arith: [], firstCloser: null, buttons: null,
     ledger,
     get index() { return active[active.length - 1]; },
@@ -97,10 +97,10 @@ export function makeBox(problem, { stage, level = 4, rng, fav = null, tier = 'ir
     const steps = stepsMoves(B.line, stage, cardGoal);
     if (problem.kind !== 'one') {
       // vault boxes: closer means the verdict shows sooner (the panel adds the two verdict buttons)
-      B.buttons = buildButtons(B.line, stage, { count: Math.min(level, 3), rng, fav, steps, ...verdictGoal });
+      B.buttons = buildButtons(B.line, stage, { count: 4, rng, fav, steps, ...verdictGoal });
       return B.buttons;
     }
-    B.buttons = buildButtons(B.line, stage, { count: Math.min(level, 4), rng, fav, steps });
+    B.buttons = buildButtons(B.line, stage, { count: 4, rng, fav, steps });
     return B.buttons;
   };
 
@@ -166,7 +166,7 @@ export function makeBox(problem, { stage, level = 4, rng, fav = null, tier = 'ir
     return true;
   };
 
-  // R15: the kid says "every key fits" ('all') or "no key fits" ('none').
+  // R15: the kid says "infinitely many solutions" ('all') or "no solution" ('none').
   // Saying the right verdict once it shows is free; a wrong or early verdict costs a move.
   B.verdict = function (v) {
     const shown = verdictOf(B.line);
@@ -193,8 +193,8 @@ export function makeBox(problem, { stage, level = 4, rng, fav = null, tier = 'ir
   B.hintAt = function (lvl) {
     if (pick) {
       const texts = problem.mode === 'balance'
-        ? ['Both sides weigh the same.', 'Work out the full side first.', `It's ${problem.answer}.`]
-        : ['Try a key in the lock.', 'Which number plus the rest makes the other side?', `Key ${problem.answer} fits.`];
+        ? ['Both sides are equal.', 'Work out the full side first.', `It's ${problem.answer}.`]
+        : ['Try a number for x.', 'Which number plus the rest makes the other side?', `x = ${problem.answer} makes it true.`];
       return { level: lvl, text: texts[lvl - 1], targets: [] };
     }
     const sol = solve(B.line, stage);
@@ -208,7 +208,8 @@ export function makeBox(problem, { stage, level = 4, rng, fav = null, tier = 'ir
     const look = RUNG[problem.rung]?.verdicts ? 'Tidy both sides, then compare them.' : "What's in x's way?";
     // hint 1 points at the step on the card the kid is on (the panel lights that step)
     const now = currentStep(B.steps());
-    const lookText = now ? (now.note || `Step ${now.n}: ${now.label}.`) : look;
+    const lookText = !now ? look : now.id === 'division' && now.note ? `Step ${now.n}: ${now.label}: ${now.note}.`
+      : (now.note || `Step ${now.n}: ${now.label}.`);
     if (lvl === 1) return { level: 1, text: lookText, targets: goods.flatMap((g) => targetsOf(B.line, g)), step: now ? now.n : null };
     if (lvl === 2) return { level: 2, text: ruleText(move, B.line), targets, move, flip: move && move.k === 'add' ? move : null };
     return { level: 3, text: `Try ${move ? moveLabel(move) : 'this one'}.`, targets, move, key: shown?.key };
@@ -235,6 +236,10 @@ export function makeBox(problem, { stage, level = 4, rng, fav = null, tier = 'ir
   };
   B.keyResult = function (ok) { if (!ok) B.keyFailed = true; B.keyOk = B.keyOk === false ? false : ok; };
 
+  // Opening the brackets by hand (products.js): a wrong product costs no move, no star and doesn't spoil a clean box;
+  // it is only counted, so a grown-up can see it.
+  B.productPick = function (right) { if (!right) B.productSlips++; return right; };
+
   // Do the arithmetic (level 5): the kid picked a tidied line. A wrong one is counted by its slip (tidy.js tags);
   // it costs no move, but the box is no longer clean.
   B.tidyPick = function (card) {
@@ -252,7 +257,7 @@ export function makeBox(problem, { stage, level = 4, rng, fav = null, tier = 'ir
     const clean = solved && B.moves <= par + 1 && B.hintLevel <= 1 && !B.keyFailed && !B.jammed && B.wrongPicks === 0;
     return { solved, stars, gold, moves: B.moves, par, rung: problem.rung, clean, hints: B.hintLevel,
       jammed: B.jammed, keyFailed: B.keyFailed, left, traps: [...B.traps], tools: [...B.tools], arith: [...B.arith],
-      wrongPicks: B.wrongPicks };
+      wrongPicks: B.wrongPicks, productSlips: B.productSlips };
   };
 
   B.lineText = () => lineText(B.line);
@@ -268,7 +273,7 @@ export function targetsOf(l, m) {
     each((t) => t.t === m.term.t && t.v.eq(m.term.v.neg()));
     if (!out.length) each((t) => t.t === m.term.t);
   } else if (m.k === 'div') each((t) => (t.t === 'x' && t.v.eq(m.f)) || (t.t === 'b' && t.p.eq(m.f)));
-  else if (m.k === 'mul') each((t) => t.t === 'x' && t.v.d === Math.abs(m.f.n));
+  else if (m.k === 'mul') each((t) => (t.t === 'x' && t.v.d === Math.abs(m.f.n)) || (t.t === 'b' && t.p.d === Math.abs(m.f.n)));
   else if (m.k === 'flip') each((t) => t.t === 'x' && t.v.n < 0);
   else if (m.k === 'dist') each((t) => t.t === 'b');
   else if (m.k === 'comb') {
@@ -289,6 +294,7 @@ function ruleText(m, l) {
   if (m.k === 'add') return 'Its opposite cancels it.';
   if (m.k === 'div' && l && [...l.L, ...l.R].some((t) => t.t === 'b' && t.p.eq(m.f))) return 'The whole bracket is multiplied. Divide to undo it.';
   if (m.k === 'div') return 'x is being multiplied. Divide to undo it.';
+  if (m.k === 'mul' && l && [...l.L, ...l.R].some((t) => t.t === 'b' && t.p.d > 1)) return `The whole top is divided by ${m.f.n}. Multiply both sides by ${m.f.n}.`;
   if (m.k === 'mul') return 'x is being divided. Multiply to undo it.';
   if (m.k === 'flip') return 'That is the opposite of x. Flip every chip.';
   if (m.k === 'dist') return 'Open the brackets first.';

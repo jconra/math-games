@@ -22,14 +22,14 @@
 // opens the brackets (3 moves: open, −6, ÷3) while dividing first takes 2 (÷3, −2). Both are accepted, and the box's
 // par is the card's count, so a kid who follows the rules still earns every star.
 
-import { applyMove, hasBracket, hasLike, isSolved, xSide, lineFits, lineKey, F, DIST, COMB, FLIP, mulBy, divBy } from './engine.js';
+import { applyMove, hasBracket, hasOver, isOver, hasLike, isSolved, xSide, lineFits, lineKey, F, DIST, COMB, FLIP, mulBy, divBy } from './engine.js';
 
 export const GOLDEN_RULE = 'Whatever you do to one side, do to the other.';
 
 // The wording lives here so it is easy to change. skip = what a step that isn't needed says; short = the step's name
 // on the folded "Steps" bar.
 export const STEPS = [
-  { n: 1, id: 'brackets', label: 'Open the brackets', short: 'Open the brackets', skip: 'No brackets' },
+  { n: 1, id: 'brackets', label: 'Open the brackets (distribute)', short: 'Open the brackets', skip: 'No brackets' },
   { n: 2, id: 'division', label: 'Clear the division', short: 'Clear the division', skip: 'No division' },
   { n: 3, id: 'tidy', label: 'Tidy each side', short: 'Tidy each side', skip: 'Already tidy' },
   { n: 4, id: 'sort', label: 'x’s on one side, numbers on the other', short: 'x’s on one side, numbers on the other', skip: 'Already sorted' },
@@ -43,8 +43,10 @@ export const FREED_BY = {
   brackets: 'Opening the brackets frees x', division: 'Clearing the division frees x', tidy: 'Tidying frees x',
   sort: 'Sorting frees x',
 };
+// what step 2 says while a whole group sits over a number: (5x − 10)/2 = 10
+export const overNote = (l) => `multiply both sides by ${lcmOfBottoms(l)}`;
 // what step 5 says on a vault box once x has gone from both sides (or both sides match)
-export const VERDICT_NOTE = 'No x to free? Then every key fits, or none does.';
+export const VERDICT_NOTE = 'No x to free? Then every number is a solution, or there is no solution.';
 
 // The card starts folded on easy boxes and on rungs the kid has stamped; it starts faded (still open, but quiet)
 // once the kid is at this many buttons on the rung (3 clean boxes in a row at each level get there).
@@ -57,18 +59,22 @@ const eachX = (l, fn) => {
   l.L.forEach(walk); l.R.forEach(walk);
 };
 
-// An x-term with a bottom (x/4, 2x/3): "division" in the card's words.
+// An x-term with a bottom (x/4, 2x/3), or a whole group over a number ((5x − 10)/2): "division" in the card's words.
 export function hasDivision(l) {
-  let yes = false;
+  let yes = hasOver(l);
   eachX(l, (t) => { if (t.v.d > 1) yes = true; });
   return yes;
 }
-function lcmOfBottoms(l) {
+export function lcmOfBottoms(l) {
   let m = 1;
   const g = (a, b) => (b ? g(b, a % b) : a);
-  eachX(l, (t) => { if (t.v.d > 1) m = (m * t.v.d) / g(m, t.v.d); });
+  const take = (d) => { if (d > 1) m = (m * d) / g(m, d); };
+  eachX(l, (t) => take(t.v.d));
+  for (const t of [...l.L, ...l.R]) if (isOver(t)) take(t.p.d);
   return m;
 }
+// Brackets to open (step 1): a group over a number is cleared by step 2 instead.
+export function bracketsToOpen(l) { return [...l.L, ...l.R].some((t) => t.t === 'b' && !isOver(t)); }
 
 // Which side x should end up on, and what is in the wrong place for that.
 // A side's misplaced terms are the x-terms on the other side plus the (non-zero) numbers on its own side. The side
@@ -119,7 +125,7 @@ function stageAllows(m, st) {
 // has gone from the line). st: the rung's stage, when known (a rung without x-moving buttons keeps x where it is).
 export function nextStepMove(l, st = null) {
   if (xSide(l) === 'none') return null;
-  if (hasBracket(l)) return { step: 1, move: DIST };
+  if (bracketsToOpen(l)) return { step: 1, move: DIST };
   if (hasDivision(l)) return { step: 2, move: mulBy(lcmOfBottoms(l)) };
   if (hasLike(l)) return { step: 3, move: COMB };
   const si = sortInfo(l, { keepX: !!st && !st.addx });
@@ -179,7 +185,11 @@ export function stepsMoves(l, st, goal = null) {
     out.push(m);
   };
   tryMove(nextStepMove(l, st)?.move);
-  // the same sorting step done another way: cancelling any number or x-term on the line
+  // the rest of the card's own sorting next (the terms in the wrong place for the side x is going to), then the same
+  // step done another way: cancelling any number or x-term on the line
+  if (xSide(l) !== 'none' && !hasBracket(l)) {
+    for (const w of sortInfo(l, { keepX: !st.addx }).misplaced) tryMove({ k: 'add', term: { t: w.term.t, v: w.term.v.neg() } });
+  }
   for (const side of ['L', 'R']) {
     l[side].forEach((t) => {
       if ((t.t === 'n' && !t.v.isZero()) || t.t === 'x') tryMove({ k: 'add', term: { t: t.t, v: t.v.neg() } });
@@ -197,7 +207,7 @@ export function stepsPlan(start, st, { verdict = false } = {}) {
   const applies = { brackets: false, division: false, tidy: false, sort: false, free: true, check: true };
   let l = start, moves = 0;
   const step = (m) => { const r = applyMove(l, m); if (r) { l = r.out; moves++; } };
-  applies.brackets = hasBracket(l);
+  applies.brackets = bracketsToOpen(l);
   if (applies.brackets) step(DIST);
   applies.division = hasDivision(l);
   if (applies.division) step(mulBy(lcmOfBottoms(l)));
@@ -226,7 +236,7 @@ export function stepsPlan(start, st, { verdict = false } = {}) {
 // verdictShown = a vault line whose sides now show the verdict.
 export function stepsStatus(l, plan, { solved = false, checked = false, verdictShown = false } = {}) {
   const past = [];
-  past[0] = !hasBracket(l);
+  past[0] = !bracketsToOpen(l);
   past[1] = past[0] && !hasDivision(l);
   past[2] = past[1] && !hasLike(l);
   past[3] = solved || verdictShown || (past[2] && isSorted(l));
@@ -235,7 +245,7 @@ export function stepsStatus(l, plan, { solved = false, checked = false, verdictS
   // what the line itself needs right now, whatever the plan said at the start
   const sorted = isSorted(l);
   // (x/2 = 6 is sorted but not free; clearing its division is step 2's job, and that frees it: step 5 isn't needed)
-  const own = [hasBracket(l), hasDivision(l), hasLike(l), !(solved || verdictShown || sorted), sorted && !solved && !hasDivision(l), !checked];
+  const own = [bracketsToOpen(l), hasDivision(l), hasLike(l), !(solved || verdictShown || sorted), sorted && !solved && !hasDivision(l), !checked];
   let nowAt = -1;
   return STEPS.map((s, i) => {
     const needed = plan.applies[s.id] || own[i];
@@ -244,7 +254,9 @@ export function stepsStatus(l, plan, { solved = false, checked = false, verdictS
     else if (past[i]) state = 'done';
     else if (nowAt < 0) { state = 'now'; nowAt = i; }
     else state = 'todo';
-    const note = s.id === 'free' && state === 'now' && verdictShown && !solved ? VERDICT_NOTE : '';
+    let note = s.id === 'free' && state === 'now' && verdictShown && !solved ? VERDICT_NOTE : '';
+    // a whole group over a number: the card says how to clear it
+    if (s.id === 'division' && state === 'now' && hasOver(l)) note = overNote(l);
     return { n: s.n, id: s.id, label: s.label, short: s.short, skip: (plan.skips && plan.skips[s.id]) || s.skip, state, note };
   });
 }

@@ -881,3 +881,46 @@
   .lbx-move.tidycard { font-size: 18px; }
 }
 .checking:not(.opened) .lbx-hurry { opacity: 0 !important; }   /* (the check waits for Next: nothing to hurry) */
+
+/* ---- opening the brackets by hand: lines from the outside number to each term, the products written under ---- */
+.brackets-on .lbx-work { padding-bottom: 130px; }
+.lbx-dist { position: absolute; inset: 0; pointer-events: none; z-index: 3; }
+.lbx-dist .dist-arcs { position: absolute; left: 0; top: 0; overflow: visible; }
+.dist-arc { fill: none; stroke: var(--brass-lo); stroke-width: 2.5; stroke-linecap: round; stroke-dasharray: 5 5; transition: stroke 0.2s; }
+.dist-arc.now { stroke: var(--brass-hi); stroke-width: 3; stroke-dasharray: none; }
+.dist-arc.done { stroke: var(--good); stroke-dasharray: none; }
+.dist-head { fill: var(--brass-lo); }
+.dist-lab {
+  position: absolute; transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 3px 9px 4px; border-radius: 8px; white-space: nowrap;
+  font: 600 22px/1.15 Bitter, Georgia, serif; color: #2b2016; background: var(--paper);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.4); border-bottom: 3px solid var(--brass-lo);
+  opacity: 0.75; transition: opacity 0.2s, border-color 0.2s;
+}
+.dist-lab .dist-q { font-size: 0.85em; color: #5d574d; }
+.dist-lab .dist-a { font-size: 1.2em; font-weight: 700; min-width: 1.4em; text-align: center; }
+.dist-lab.now { opacity: 1; border-bottom-color: var(--brass-hi); box-shadow: 0 0 0 2px var(--brass-hi), 0 3px 10px rgba(0, 0, 0, 0.45); }
+.dist-lab.done { opacity: 1; border-bottom-color: var(--good); background: #eef6df; animation: dist-pop 0.35s ease-out; }
+@keyframes dist-pop { 0% { transform: translateX(-50%) scale(1.25); } 100% { transform: translateX(-50%) scale(1); } }
+.dist-lab.done .dist-a { color: #2f5a1c; }
+.lbx-move.prodpick.right { animation: lbx-pop 0.35s ease-out; box-shadow: 0 0 0 3px var(--good), 0 5px 0 #5f3d16, 0 0 18px rgba(156, 201, 122, 0.7); }
+.lbx-move.prodpick.used { opacity: 0.35; text-decoration: line-through; text-decoration-thickness: 2px; }
+@media (max-width: 900px) {
+  .brackets-on .lbx-work { padding-bottom: 86px; }
+  .dist-lab { font-size: 16px; padding: 2px 7px 3px; }
+}
+@media (max-height: 520px) and (orientation: landscape) {
+  .brackets-on .lbx-work { padding-bottom: 72px; }
+  .dist-lab { font-size: 14px; }
+}
+.lbx-verdicts button small { display: block; font-size: 0.68em; font-weight: 500; opacity: 0.8; margin-top: 2px; }
+
+/* ---- a whole group over a number, (5x − 10)/2: the chips sit on a real fraction bar ---------------------------- */
+.chip.brk.over { align-items: center; }
+.over-fr { display: inline-flex; flex-direction: column; align-items: center; }
+.over-top { display: inline-flex; align-items: center; gap: 0.1em; padding: 0 0.12em 0.1em; border-bottom: 0.07em solid var(--ink); }
+.over-bot { font: 700 0.86em/1.1 Bitter, serif; color: var(--ink); padding-top: 0.06em; }
+.mfrac { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; line-height: 1.05; margin: 0 0.1em; }
+.mfrac-t { padding: 0 0.15em; border-bottom: 1.5px solid currentColor; }
+.mfrac-b { font-size: 0.95em; }

@@ -38,13 +38,14 @@
 // rider (save.js recordLockbox does that) in onBox, or after onDone.
 
 import {
-  lineText, sideText, termBody, termNeg, moveLabel, moveNote, fracText, isSolved, F, evalSide, evalTerm, applyMove,
+  lineText, sideText, termText, termBody, termNeg, moveLabel, moveNote, fracText, isSolved, F, evalSide, evalTerm, applyMove,
   MINUS, TIMES,
 } from './engine.js';
 import { RUNG, generate, makeRng, verdictOf } from './generate.js';
 import { makeAlgebra, ARITH_LEVEL } from './algebra.js';
 import { makeBox, TIER_NAME, targetsOf } from './box.js';
 import { tidyChoices, slipLine, sumsOf } from './tidy.js';
+import { bracketProducts, productNudge, productHelp } from './products.js';
 import { GOLDEN_RULE, STEPS, SKIP_WORD, cardMode, currentStep } from './steps.js';
 import { showNumberLine, watchHesitation, layoutNumberLine } from '../ui/numberline.js';
 import { SAFECRACKER_BOXES } from '../save.js';
@@ -138,9 +139,38 @@ function chestSVG() {
   ${[44, 196].map((x) => [98, 162].map((y) => `<circle cx="${x}" cy="${y}" r="3" class="rivet"/>`).join('')).join('')}</svg>`;
 }
 
+// A side written out as HTML, with a real fraction bar under a whole group over a number ((5x − 10)/2).
+const fracBarHTML = (top, bottom) => `<span class="mfrac"><span class="mfrac-t">${top}</span><span class="mfrac-b">${esc(bottom)}</span></span>`;
+function sideHTML(side) {
+  if (!side.length) return '0';
+  return side.map((t, i) => {
+    if (t.t === 'b' && t.p.d > 1) {
+      const neg = termNeg(t);
+      const sign = i === 0 ? (neg ? MINUS : '') : neg ? ` ${MINUS} ` : ' + ';
+      const n = Math.abs(t.p.n);
+      return `${esc(sign)}${n === 1 ? '' : n}${fracBarHTML(mathHTML(sideText(t.in)), t.p.d)}`;
+    }
+    return mathHTML(termText(t, i === 0));
+  }).join('');
+}
+
 // One chip for one term. first = it starts its side (no "+" in front).
 function chipEl(t, first) {
   if (t.t === 'q') { const e = h('span', 'chip coin blank', '?'); return e; }
+  if (t.t === 'b' && t.p.d > 1) {
+    // a whole group over a number: the chips sit on top of a fraction bar
+    const neg = termNeg(t);
+    const e = h('span', 'chip brk over');
+    const sign = neg ? MINUS : first ? '' : '+';
+    if (sign) e.appendChild(h('span', 'brk-p', esc(sign)));
+    const fr = h('span', 'over-fr');
+    const top = h('span', 'over-top');
+    t.in.forEach((u, j) => top.appendChild(chipEl(u, j === 0)));
+    fr.appendChild(top);
+    fr.appendChild(h('span', 'over-bot', esc(String(t.p.d))));
+    e.appendChild(fr);
+    return e;
+  }
   if (t.t === 'b') {
     const neg = termNeg(t);
     const p = t.p.abs();
@@ -199,6 +229,7 @@ function keyInHTML(side, x) {
       return a.n === 1 ? `${val(k)}/${a.d}` : `${a.n}<b class="dot">${TIMES}</b>${val(xs)}/${a.d}`;
     }
     const inner = t.in.map((u, j) => (j === 0 ? (termNeg(u) ? MINUS : '') : termNeg(u) ? ` ${MINUS} ` : ' + ') + part(u, j === 0)).join('');
+    if (t.p.d > 1) return fracBarHTML(inner, t.p.d);
     return `${t.p.abs().isOne() ? '' : esc(String(Math.abs(t.p.n)))}(${inner})`;
   };
   return side.map((t, i) => {
@@ -318,7 +349,7 @@ export function openLockbox(root = document.body, opts = {}) {
       <div class="lbx-grid"></div>
       <button class="lbx-ask lbx-side-btn" type="button"><span>Ask Hob</span><kbd>H</kbd></button>
       <div class="lbx-verdicts" ${verdictMode ? '' : 'hidden'}>
-        <button type="button" data-verdict="all">Every key fits</button><button type="button" data-verdict="none">No key fits</button></div>`;
+        <button type="button" data-verdict="all">Infinitely many solutions<small>every number works</small></button><button type="button" data-verdict="none">No solution<small>no number works</small></button></div>`;
     body.appendChild(tray);
 
     const $ = (s) => body.querySelector(s);
@@ -327,7 +358,7 @@ export function openLockbox(root = document.body, opts = {}) {
     const nlBox = h('div', 'lbx-nl');   // the number line's spot: in the ledger, right under the newest line
     if (rung.pictures) body.classList.add('has-pics');
     const leaveBtn = $('.lbx-leave'), undoBtn = $('.lbx-undo'), askBtn = $('.lbx-ask');
-    $('.lbx-start-l').innerHTML = mathHTML(lineText(problem.start));
+    $('.lbx-start-l').innerHTML = `${sideHTML(problem.start.L)} = ${sideHTML(problem.start.R)}`;
 
     // the top strip shows this box
     top.querySelector('.lbx-tier').textContent = TIER_NAME[tier];
@@ -372,7 +403,7 @@ export function openLockbox(root = document.body, opts = {}) {
       const starsEl = top.querySelector('.lbx-stars');
       starsEl.innerHTML = [1, 2, 3].map((i) => STAR(i <= s)).join('');
       starsEl.setAttribute('aria-label', `${s} stars`);
-      leaveBtn.hidden = !(B.canLeave((performance.now() - openedAt) / 1000) || opts.dev) || !['play', 'tidy'].includes(phase);
+      leaveBtn.hidden = !(B.canLeave((performance.now() - openedAt) / 1000) || opts.dev) || !['play', 'tidy', 'brackets'].includes(phase);
     }
 
     // ----- the steps card -----
@@ -445,7 +476,7 @@ export function openLockbox(root = document.body, opts = {}) {
     function sideCell(side, move, name) {
       const cell = h('span', `lg-side lg-${name}`);
       const box = h('span', 'lg-box');
-      const txt = h('span', 'lg-txt', mathHTML(sideText(side)));
+      const txt = h('span', 'lg-txt', sideHTML(side));
       box.appendChild(txt);
       if (move && (move.k === 'div')) { box.classList.add('lg-div'); box.appendChild(h('span', 'lg-under lg-den', esc(fracText(move.f)))); }
       else if (move && move.k !== 'dist' && move.k !== 'comb') box.appendChild(h('span', 'lg-under', mathHTML(moveLabel(move))));
@@ -614,7 +645,7 @@ export function openLockbox(root = document.body, opts = {}) {
         if (alg.seenTool(kind) || seenThisBox.has(kind)) continue;
         seenThisBox.add(kind);
         const line = { addx: 'New: x-terms can move too.', div: 'New: ÷ splits both sides evenly.', mul: 'New: · multiplies both sides.',
-          flip: 'New: ·(−1) flips every chip over.', dist: 'New: open the brackets.', comb: 'New: like terms can join up.' }[kind];
+          flip: 'New: ·(−1) flips every chip over.', dist: 'New: open the brackets (distribute).', comb: 'New: like terms can join up.' }[kind];
         if (line && B.moves > 0 && !['warn', 'hint', 'good'].includes(say.dataset.mood)) { hob(line); break; }   // (never over a hint or praise)
       }
     }
@@ -724,6 +755,9 @@ export function openLockbox(root = document.body, opts = {}) {
           }
         }
         await wait(560);
+      } else if (m.k === 'dist' && res.asked) {
+        // the kid has worked out every product already: the new terms just settle in
+        await wait(120);
       } else if (m.k === 'dist' || m.k === 'comb') {
         renderLine(res.before, 'mid');
         for (const s of ['L', 'R']) {
@@ -860,6 +894,125 @@ export function openLockbox(root = document.body, opts = {}) {
       });
     }
     let stopTidy = null;
+    let distRedraw = null;   // redraws the bracket arcs when the mat changes size
+
+    // ----- open the brackets by hand -----
+    // A line runs from the number outside the brackets to each term inside, with "5·x" and "5·8" written under them;
+    // the tray asks one product at a time (four answers). A right pick fills the product in; a wrong one shakes, Hob
+    // gives a nudge and the right answer stays to pick. Wrong picks cost no move and no stars. Resolves once every
+    // product is in.
+    function bracketStage(qs) {
+      return new Promise((resolve) => {
+        phase = 'brackets';
+        calcs.innerHTML = '';
+        body.classList.add('brackets-on');
+        renderLine(B.line, '');
+        const wrap = $('.lbx-workwrap');
+        const layer = h('div', 'lbx-dist');
+        wrap.appendChild(layer);
+        const keepH = grid.offsetHeight;
+        grid.style.height = `${keepH}px`;   // the tray keeps its height, so nothing above it moves
+        body.classList.remove('busy');
+        askBtn.disabled = false;
+        undoBtn.disabled = true;
+        // the arcs and the labels under the terms
+        const labels = [];
+        const draw = () => {
+          layer.innerHTML = '';
+          labels.length = 0;
+          const wr = wrap.getBoundingClientRect();
+          const lineEl = work.querySelector('.wline');
+          const lineBottom = lineEl.getBoundingClientRect().bottom - wr.top;
+          const NS = 'http://www.w3.org/2000/svg';
+          const svg = document.createElementNS(NS, 'svg');
+          svg.setAttribute('class', 'dist-arcs');
+          svg.setAttribute('width', String(wr.width));
+          svg.setAttribute('height', String(wr.height));
+          svg.innerHTML = '<defs><marker id="dist-head" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="dist-head"/></marker></defs>';
+          layer.appendChild(svg);
+          const labelY = lineBottom + (wr.width < 600 ? 38 : 64);
+          qs.forEach((q, k) => {
+            const chip = chipAt(q.side, q.index);
+            if (!chip) return;
+            const pEl = chip.querySelector(':scope > .brk-p');
+            const inner = chip.querySelectorAll(':scope > .chip')[q.j];
+            if (!pEl || !inner) return;
+            const pr = pEl.getBoundingClientRect(), ir = inner.getBoundingClientRect();
+            const x0 = (pr.left + pr.right) / 2 - wr.left, y0 = pr.bottom - wr.top + 4;
+            const x1 = (ir.left + ir.right) / 2 - wr.left, y1 = labelY - 2;
+            const path = document.createElementNS(NS, 'path');
+            // drops from the outside number and lands straight down on the label, so the lines fan out
+            const bend = (y1 - y0) * 0.6;
+            path.setAttribute('d', `M${x0.toFixed(1)} ${y0.toFixed(1)} C${x0.toFixed(1)} ${(y0 + bend).toFixed(1)} ${x1.toFixed(1)} ${(y1 - bend).toFixed(1)} ${x1.toFixed(1)} ${y1.toFixed(1)}`);
+            path.setAttribute('class', 'dist-arc');
+            path.setAttribute('marker-end', 'url(#dist-head)');
+            path.dataset.k = k;
+            svg.appendChild(path);
+            const lab = h('span', 'dist-lab', `<span class="dist-q">${mathHTML(q.under)}</span><span class="dist-a">?</span>`);
+            lab.style.left = `${x1}px`;
+            lab.style.top = `${labelY}px`;
+            lab.dataset.k = k;
+            layer.appendChild(lab);
+            labels[k] = { lab, path };
+          });
+        };
+        draw();
+        distRedraw = () => { draw(); mark(); };
+        let k = 0, btns = [];
+        const mark = () => {
+          labels.forEach((L, i) => {
+            if (!L) return;
+            L.lab.classList.toggle('now', i === k);
+            L.path.classList.toggle('now', i === k);
+            if (i < k) { L.lab.classList.add('done'); L.path.classList.add('done'); L.lab.querySelector('.dist-a').innerHTML = mathHTML(qs[i].answer); }
+          });
+        };
+        const ask = () => {
+          const q = qs[k];
+          mark();
+          hob(`${q.prompt} = ?`, 'hint');
+          grid.innerHTML = '';
+          btns = q.choices.map((c, i) => {
+            const b = h('button', 'lbx-move prodpick', `<span class="lbl">${mathHTML(c.text)}</span><kbd>${i + 1}</kbd>`);
+            b.type = 'button';
+            b.dataset.right = c.right ? '1' : '0';
+            b.addEventListener('click', () => pick(c, b));
+            grid.appendChild(b);
+            return b;
+          });
+        };
+        const finish = () => {
+          tidyKey = null; tidyHelp = null; stopTidy = null; distRedraw = null;
+          layer.remove();
+          body.classList.remove('brackets-on');
+          grid.style.height = '';
+          hob('');
+          resolve();
+        };
+        stopTidy = () => { tidyKey = null; tidyHelp = null; distRedraw = null; layer.remove(); resolve(); };
+        function pick(c, b) {
+          if (phase !== 'brackets' || b.disabled) return;
+          lastAction = performance.now();
+          const q = qs[k];
+          if (c.right) {
+            b.classList.add('right');
+            btns.forEach((o) => { o.disabled = true; });
+            k++;
+            mark();
+            if (k < qs.length) { hob('Right.', 'good'); setTimeout(() => { if (!gone) ask(); }, 420 * K); }
+            else { hob(`${sideText(qs.map((x) => x.product))}. Brackets open.`, 'good'); setTimeout(() => { if (!gone) finish(); }, 700 * K); }
+            return;
+          }
+          B.productPick(false);
+          b.classList.add('shake', 'used');
+          b.disabled = true;
+          hob(productNudge(q, c), 'warn');
+        }
+        tidyKey = (i) => { const b = btns[i]; if (b && !b.disabled) b.click(); };
+        tidyHelp = () => { lastAction = performance.now(); hob(productHelp(qs[k]), 'hint'); };
+        ask();
+      });
+    }
 
     // ----- what happens on a press -----
     async function press(i) {
@@ -874,11 +1027,17 @@ export function openLockbox(root = document.body, opts = {}) {
       // the move starts playing at once; the search that judges it (up to a few tenths of a second on the longest
       // rungs) runs while the coins are in the air. On the do-the-arithmetic level it waits until the kid has picked
       // the tidied line.
+      // open the brackets by hand: each product is asked first (the move itself is judged and counted as usual)
+      let asked = false;
+      if (s.move.k === 'dist') {
+        const qs = bracketProducts(B.line, { rng });
+        if (qs.length) { await bracketStage(qs); asked = true; if (gone) return; phase = 'anim'; setTrayEnabled(false); }
+      }
       const shown = applyMove(B.line, s.move, true);
       const tc = level >= ARITH_LEVEL ? tidyChoices(B.line, s.move, { rng, fav: alg.favArith() }) : null;
       let res = null;
       const judge = () => { if (!res) res = B.press(s.move); };
-      const anim = animateMove({ move: s.move, before: B.line, mid: shown.mid || null, out: shown.out, ev: shown.ev }, tc, judge);
+      const anim = animateMove({ move: s.move, before: B.line, mid: shown.mid || null, out: shown.out, ev: shown.ev, asked }, tc, judge);
       if (!tc) { await nextFrame(); await nextFrame(); judge(); }
       await anim;
       judge();
@@ -887,7 +1046,7 @@ export function openLockbox(root = document.body, opts = {}) {
       renderTop();
       renderSteps();
       if (res.solved) {
-        hob(`x = ${fracText(B.keyTest()?.x ?? F(0))}. Check it on the beginning equation.`, 'good');
+        hob(`x = ${fracText(B.keyTest()?.x ?? F(0))}. Check the solution in the beginning equation.`, 'good');
         await sleep(420 * K);
         runCheck();
         return;
@@ -934,7 +1093,8 @@ export function openLockbox(root = document.body, opts = {}) {
       })());
       if (res.tag === 'part') return "Part of it. x isn't alone.";
       if (res.tag === 'undo') return 'That undo doesn’t match.';
-      if (res.tag === 'inside') return 'That number is inside brackets.';
+      if (res.tag === 'inside') return res.before && [...res.before.L, ...res.before.R].some((t) => t.t === 'b' && t.p.d > 1)
+        ? 'That number is stuck over the bar. Clear the division first.' : 'That number is inside brackets.';
       if (grew) return 'That got bigger, not gone.';
       return 'Legal, but not closer.';
     }
@@ -987,7 +1147,7 @@ export function openLockbox(root = document.body, opts = {}) {
       if (!auto) renderTop();
     }
     function askHob() {
-      if (phase === 'tidy') { tidyHelp?.(); return; }
+      if (phase === 'tidy' || phase === 'brackets') { tidyHelp?.(); return; }
       if (phase !== 'play') return;
       lastAction = performance.now();
       askBtn.classList.remove('bounce');
@@ -996,14 +1156,14 @@ export function openLockbox(root = document.body, opts = {}) {
       renderTop();
     }
 
-    // ----- R15: every key / no key -----
+    // ----- R15: infinitely many solutions / no solution -----
     function verdict(v) {
       if (phase !== 'play') return;
       lastAction = performance.now();
       const r = B.verdict(v);
       renderTop();
       if (r.ok) {
-        hob(v === 'all' ? 'Both sides match. Every key fits!' : 'x is gone and the numbers differ. No key fits!', 'good');
+        hob(v === 'all' ? 'Both sides match, so every number works: infinitely many solutions!' : 'x is gone and the numbers differ: no solution!', 'good');
         renderSteps({ checked: true });
         phase = 'anim';
         setTrayEnabled(false);
@@ -1044,7 +1204,7 @@ export function openLockbox(root = document.body, opts = {}) {
       }
       btn.classList.add('shake', 'used');
       work.querySelector('.wline')?.classList.add('tilt');
-      hob(problem.mode === 'key' ? `Key ${v} makes ${fracText(lv)}, not ${fracText(rv)}.` : `That side makes ${fracText(problem.start.L.some((t) => t.t === 'q') ? lv : rv)}, the other ${fracText(problem.start.L.some((t) => t.t === 'q') ? rv : lv)}.`, 'warn');
+      hob(problem.mode === 'key' ? `x = ${v} makes ${fracText(lv)}, not ${fracText(rv)}.` : `That side makes ${fracText(problem.start.L.some((t) => t.t === 'q') ? lv : rv)}, the other ${fracText(problem.start.L.some((t) => t.t === 'q') ? rv : lv)}.`, 'warn');
       await sleep(900 * K);
       if (gone) return;
       calcs.innerHTML = '';
@@ -1076,7 +1236,7 @@ export function openLockbox(root = document.body, opts = {}) {
       const steps = { L: kt.left, R: kt.right };
       work.innerHTML = `<div class="ck">
         <div class="ck-head"><span class="ck-key">${KEY_SVG}<b>${esc(val)}</b></span><span class="ck-title">${mathHTML('x =')} <b class="ck-n">${esc(val)}</b> in the beginning equation</span></div>
-        <div class="ck-line"><div class="ck-side" data-s="L"><span class="ck-txt">${mathHTML(sideText(problem.start.L))}</span></div>${hingeEl().outerHTML}<div class="ck-side" data-s="R"><span class="ck-txt">${mathHTML(sideText(problem.start.R))}</span></div></div>
+        <div class="ck-line"><div class="ck-side" data-s="L"><span class="ck-txt">${sideHTML(problem.start.L)}</span></div>${hingeEl().outerHTML}<div class="ck-side" data-s="R"><span class="ck-txt">${sideHTML(problem.start.R)}</span></div></div>
         <div class="ck-nls"><div class="ck-nl" data-s="L"></div><div class="ck-nl" data-s="R"></div></div>
         <button type="button" class="ck-next" hidden>Next</button></div>`;
       // the first few boxes of a sitting say so right under the check, where the kid is looking (later, and on a
@@ -1197,15 +1357,15 @@ export function openLockbox(root = document.body, opts = {}) {
       finished({ ...result, tier }, ctrl);
     }
     function leave() {
-      if (gone || !['play', 'tidy'].includes(phase)) return;
+      if (gone || !['play', 'tidy', 'brackets'].includes(phase)) return;
       hob('That one goes back in the pile.', 'warn');
       finish({ left: true });
     }
 
     // ----- keys: 1-4 buttons, U undo, H hint, Space/Enter skip ahead during an animation -----
     function onKey(e, k) {
-      if (phase === 'tidy') {
-        if (/^[1-3]$/.test(k)) { e.preventDefault(); tidyKey?.(Number(k) - 1); }
+      if (phase === 'tidy' || phase === 'brackets') {
+        if (/^[1-4]$/.test(k)) { e.preventDefault(); tidyKey?.(Number(k) - 1); }
         else if (k === 'h' || k === '?') askHob();
         return;
       }
@@ -1230,7 +1390,7 @@ export function openLockbox(root = document.body, opts = {}) {
     const refit = () => {
       if (fitQueued) return;
       fitQueued = true;
-      requestAnimationFrame(() => { fitQueued = false; if (gone) return; if (phase === 'check') fitCheck(); else fitLine(); });
+      requestAnimationFrame(() => { fitQueued = false; if (gone) return; if (phase === 'check') fitCheck(); else { fitLine(); distRedraw?.(); } });
     };
     const resizeWatch = typeof ResizeObserver === 'function' ? new ResizeObserver(refit) : null;
     resizeWatch?.observe(work);
@@ -1249,7 +1409,7 @@ export function openLockbox(root = document.body, opts = {}) {
       const idle = (performance.now() - lastAction) / 1000;
       if (phase === 'play' && (idle > 15 || unhelpful >= 2) && B.hintLevel < 3) askBtn.classList.add('bounce');
       else askBtn.classList.remove('bounce');
-      leaveBtn.hidden = !(B.canLeave((performance.now() - openedAt) / 1000) || opts.dev) || !['play', 'tidy'].includes(phase);
+      leaveBtn.hidden = !(B.canLeave((performance.now() - openedAt) / 1000) || opts.dev) || !['play', 'tidy', 'brackets'].includes(phase);
     }, 1000);
 
     const ctrl = {
@@ -1295,12 +1455,12 @@ export function openLockbox(root = document.body, opts = {}) {
     renderTop();
     setTrayEnabled(true);
     const intro = {
-      balance: 'Both sides weigh the same. Which coin fits?',
-      key: 'Which key makes both sides match?',
+      balance: 'Both sides are equal. Which number goes in the gap?',
+      key: 'Which number for x makes both sides equal?',
     }[problem.mode] || ({
       R2: 'Dark coins are negative numbers.', R5: 'Negatives get their own box now.', R8: 'A lone −x is the opposite of x.',
-      R10: 'Brackets hold things together.', R11: 'Only like terms can join.', R12: 'x on both sides this time.',
-      R15: 'Some locks take every key. Some, none.',
+      R9b: 'The whole top is divided. Clear the division first.', R10: 'Brackets hold things together.', R11: 'Only like terms can join.', R12: 'x on both sides this time.',
+      R15: 'Some equations: every number is a solution. Some: no solution.',
     }[problem.rung] || 'Get x alone. Same move on both sides.');
     hob(intro);
     // once the fonts arrive the line may need a new fit

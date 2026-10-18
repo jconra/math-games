@@ -30,7 +30,7 @@
 </svg></div>
 <div id="bar">
   <label>Rung <select id="rung"><option value="">ladder (the kid's next box)</option></select></label>
-  <label>Level <select id="level"><option value="2">2 buttons</option><option value="3">3 buttons</option><option value="4" selected>4 buttons</option><option value="5">5 do the arithmetic</option></select></label>
+  <label>Level <select id="level"><option value="2">level 2</option><option value="3">level 3</option><option value="4" selected>level 4</option><option value="5">5 do the arithmetic</option></select></label>
   <label>Tier <select id="tier"><option>tin</option><option selected>iron</option><option>brass</option><option>vault</option></select></label>
   <label>Numbers <select id="size"><option value="1">small</option><option value="2" selected>middle</option><option value="3">big</option></select></label>
   <button class="go" id="open">Open a box</button>
@@ -42,7 +42,7 @@
 <script type="module">
 // Test page for the lock-box panel on its own.
 //   ?rung=R13          open that rung (default: the next box the ladder picks)
-//   &level=2|3|4|5     how many buttons (default 4); 5 = do the arithmetic (pick the tidied line after each move)
+//   &level=2|3|4|5     the ladder level (default 4); 5 = do the arithmetic (pick the tidied line after each move)
 //   &tier=tin|iron|brass|vault, &size=1|2|3, &seed=N (the same seed gives the same box), &speed=0.8 (seconds a move)
 //   &auto              open a box straight away (the rig uses this)
 //   &dev               show "Skip this box" from the start

@@ -1,7 +1,8 @@
 // The solving-for-x ladder: which lock box comes next, and how a finished box moves the kid along.
 //
 // The rules (from the research brief):
-//   - Each rung has one track of levels: 2, 3 or 4 buttons. 3 clean boxes in a row move up a level; 1 box that is not
+//   - Each rung has one track of levels: 2, 3 or 4 (the tray always shows 4 buttons; the level sets the numbers
+//     and how quiet the steps card is). 3 clean boxes in a row move up a level; 1 box that is not
 //     clean moves down a level, never down a whole rung. (That settles near 79% success.)
 //   - A rung is stamped at 4 of the last 5 clean at level 4, and the next rung opens.
 //   - First visit climbs fast: one box per rung while every box is clean, starting at R1 (so a 16-year-old isn't
@@ -11,6 +12,8 @@
 //     (about two boxes in three), nearest rungs first, so look-alikes sit side by side.
 //   - A box type that was missed comes back 2 to 4 boxes later.
 //   - A session (a gap of 2 hours or more) starts with two easy boxes from stamped rungs.
+//   - On the vault rung, about one box in ten asks "infinitely many solutions or no solution?"; never two in a row,
+//     never the first box after a level-up. The rest are real solve-for-x boxes.
 //   - Level 5, "do the arithmetic": after each move the kid picks the tidied line from 3 cards (the right one, a sign
 //     slip, one side forgotten). It is earned in review: once a rung from R5 up is stamped, some of its review boxes
 //     come at level 5. The wrong cards lean on the slips this kid makes most.
@@ -18,7 +21,7 @@
 //
 // The state object lives inside the rider (rider.topics.algebra) and is plain JSON; it is changed in place.
 
-import { generate, makeRng, RUNG, RUNG_IDS, rungIndex } from './generate.js';
+import { generate, makeRng, RUNG, RUNG_IDS, rungIndex, VERDICT_SHARE } from './generate.js';
 import { TRAP_TAGS } from './buttons.js';
 
 // Tuning (defaults that can be changed here):
@@ -37,7 +40,7 @@ function fill(s) {
   const d = {
     v: 1, rung: 'R1', placing: true, levels: {}, streak: {}, hist: {}, stamped: [], placed: [],
     ownRun: 0, ownNeed: 4, due: [], recent: [], traps: {}, tools: [], slips: 0, arith: {}, lines: 0,
-    boxes: 0, solved: 0, atPar: 0, clean: 0, left: 0, warm: 0, lastAt: 0,
+    boxes: 0, solved: 0, atPar: 0, clean: 0, left: 0, warm: 0, lastAt: 0, lastVerdict: false, justUp: false,
   };
   for (const [k, v] of Object.entries(d)) if (s[k] === undefined) s[k] = v;
   for (const t of TRAP_TAGS) if (typeof s.traps[t] !== 'number') s.traps[t] = 0;
@@ -84,7 +87,13 @@ export function makeAlgebra(state = {}, { rng = makeRng(), now = () => Date.now(
     if (tier === 'brass') size += 1;
     if (tier === 'vault') size += level >= 3 ? 1 : 0;
     size = Math.max(1, Math.min(3, size));
-    const p = generate(rung, { rng, size, recent: s.recent }) || generate(rung, { rng, size });
+    // the vault rung: an "infinitely many / no solution" box is rare (VERDICT_SHARE), never two in a row and never
+    // the first box after a level-up; the rest are real solve-for-x boxes
+    let verdict;
+    if (RUNG[rung].verdicts) verdict = !s.lastVerdict && !s.justUp && rng.chance(VERDICT_SHARE);
+    s.justUp = false;
+    const p = generate(rung, { rng, size, recent: s.recent, verdict }) || generate(rung, { rng, size, verdict });
+    s.lastVerdict = p.kind !== 'one';
     s.recent.push(p.key);
     if (s.recent.length > 20) s.recent.splice(0, s.recent.length - 20);
     return { ...p, level, size, review, tier };
@@ -116,6 +125,7 @@ export function makeAlgebra(state = {}, { rng = makeRng(), now = () => Date.now(
         const nr = nextRung(rung);
         if (nr === rung) s.placing = false;
         s.rung = nr;
+        s.justUp = true;
         s.levels[nr] = s.levels[nr] ?? 3;
       } else if (s.slips < PLACEMENT_SLIPS_FORGIVEN) {
         // a slip is forgiven once: another box of the same rung, still climbing
@@ -141,6 +151,7 @@ export function makeAlgebra(state = {}, { rng = makeRng(), now = () => Date.now(
     if (lvl >= 4 && r.clean && hist.length >= 4 && hist.reduce((a, b) => a + b, 0) >= 4 && !s.stamped.includes(rung)) {
       s.stamped.push(rung);
       const nr = nextRung(rung);
+      s.justUp = true;
       if (nr !== rung) {
         s.rung = nr;
         s.levels[nr] = s.levels[nr] ?? 2;
@@ -152,7 +163,7 @@ export function makeAlgebra(state = {}, { rng = makeRng(), now = () => Date.now(
     }
     if (r.clean) {
       s.streak[rung] = (s.streak[rung] || 0) + 1;
-      if (s.streak[rung] >= 3 && lvl < 4) { s.levels[rung] = lvl + 1; s.streak[rung] = 0; }
+      if (s.streak[rung] >= 3 && lvl < 4) { s.levels[rung] = lvl + 1; s.streak[rung] = 0; s.justUp = true; }
     } else {
       s.streak[rung] = 0;
       s.levels[rung] = Math.max(2, lvl - 1);
@@ -183,9 +194,9 @@ export function makeAlgebra(state = {}, { rng = makeRng(), now = () => Date.now(
     return {
       rung: s.rung, name: rung.name, level: s.placing ? 3 : lv, placing: s.placing, stamped: [...s.stamped],
       slips: { ...s.arith },
-      label: `${rung.name} (${s.rung}) · ${s.placing ? 'first climb' : `${lv} buttons`} · ${s.stamped.length} stamped`,
+      label: `${rung.name} (${s.rung}) · ${s.placing ? 'first climb' : `level ${lv}`} · ${s.stamped.length} stamped`,
       // for the Grown-ups corner: the same, plus the adding slips this kid has made picking tidied lines
-      line: `${rung.name} (${s.rung}) · ${s.placing ? 'first climb' : `${lv} buttons`} · ${s.stamped.length} stamped`
+      line: `${rung.name} (${s.rung}) · ${s.placing ? 'first climb' : `level ${lv}`} · ${s.stamped.length} stamped`
         + (slipCount() ? ` · ${slipCount()} adding slip${slipCount() === 1 ? '' : 's'}${favArith() ? ` (mostly ${SLIP_WORDS[favArith()]})` : ''}` : ''),
     };
   }

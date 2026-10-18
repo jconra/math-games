@@ -55,12 +55,13 @@ export const RUNGS = [
   { id: 'R7', name: 'Two steps with negatives', stage: S({ mul: true, div: true }), maxPar: 2, note: '5x − 4 = −19' },
   { id: 'R8', name: 'The opposite of x', stage: S({ mul: true, div: true, flip: true }), maxPar: 2, note: '5 − x = 12' },
   { id: 'R9', name: 'Divided plus a number', stage: S({ mul: true, div: true, flip: true, frac: true }), maxPar: 2, note: 'x/3 + 4 = 11' },
+  { id: 'R9b', name: 'The whole side divided', stage: S({ mul: true, div: true, flip: true, over: true }), maxPar: 3, note: '(5x − 10)/2 = 10' },
   { id: 'R10', name: 'Brackets', stage: S({ mul: true, div: true, flip: true, dist: true }), maxPar: 3, note: '3(x + 2) = 18' },
   { id: 'R11', name: 'Like terms', stage: S({ mul: true, div: true, flip: true, comb: true }), maxPar: 3, note: '3x + 2 + 2x = 17' },
   { id: 'R12', name: 'x on both sides', stage: S({ addx: true, mul: true, div: true, comb: true, sign: 'sub' }), maxPar: 3, note: '5x + 3 = 2x + 15' },
   { id: 'R13', name: 'Both sides with negatives', stage: S({ addx: true, mul: true, div: true, flip: true, comb: true }), maxPar: 4, note: '4x − 6 = −8x + 18' },
   { id: 'R14', name: 'Brackets on both sides', stage: S({ addx: true, mul: true, div: true, flip: true, dist: true, comb: true }), maxPar: 5, note: '2(x + 3) = 5x − 9' },
-  { id: 'R15', name: 'Legendary vault', stage: S({ addx: true, mul: true, div: true, flip: true, dist: true, comb: true }), maxPar: 5, verdicts: true, note: 'every key, no key' },
+  { id: 'R15', name: 'Legendary vault', stage: S({ addx: true, mul: true, div: true, flip: true, dist: true, comb: true }), maxPar: 5, verdicts: true, note: 'infinitely many solutions, no solution' },
 ];
 export const RUNG = Object.fromEntries(RUNGS.map((r) => [r.id, r]));
 export const RUNG_IDS = RUNGS.map((r) => r.id);
@@ -142,6 +143,16 @@ const RECIPES = {
     const L = rng.chance(0.2) ? [num(b), xt(F(1, a))] : [xt(F(1, a)), num(b)];
     return { ...maybeSwap(rng, L, [num(c)]), x: a * k };
   },
+  // (5x − 10)/2 = 10: the whole group over a number; multiplying both sides by 2 clears it
+  R9b(rng, size) {
+    const d = rng.int(2, S3(size, 3, 4, 5));
+    const a = rng.int(2, S3(size, 5, 6, 8));
+    const x = size >= 2 ? rng.signed(1, S3(size, 8, 9, 10), 0.3) : rng.int(1, 8);
+    const b = rng.signed(1, S3(size, 12, 15, 20), 0.5);
+    const top = a * x + b;
+    if (top === 0 || top % d !== 0) return null;
+    return { ...maybeSwap(rng, [br(F(1, d), [xt(a), num(b)])], [num(top / d)], 0.3), x };
+  },
   R10(rng, size) {
     const p = rng.int(2, S3(size, 4, 6, 8));
     const q = size >= 2 ? rng.signed(1, 9, 0.35) : rng.int(1, 6);
@@ -192,8 +203,8 @@ const RECIPES = {
     if (s === 0) return null;
     return { ...maybeSwap(rng, [br(p, [xt(1), num(q)])], [xt(r), num(s)], 0.3), x };
   },
-  R15(rng, size) {
-    const kind = rng.pick(['all', 'none', 'one']);
+  // kind: 'all' | 'none' | 'one' (the ladder decides; see generate's verdict option)
+  R15(rng, size, kind = rng.pick(['all', 'none'])) {
     const k = rng.int(2, 6), m = rng.signed(1, 9, 0.35);
     if (kind === 'all') {
       if (rng.chance(0.5)) return { ...maybeSwap(rng, [br(k, [xt(1), num(m)])], [xt(k), num(k * m)], 0.5), x: { kind } };
@@ -211,6 +222,8 @@ const RECIPES = {
       if (c === b) c = b + 3;
       return { ...maybeSwap(rng, [xt(a), num(b)], [xt(a), num(c)], 0.5), x: { kind } };
     }
+    // a real solve-for-x box: mostly brackets on one side and x on both (R14's kind), now and then the odd one
+    if (rng.chance(0.85)) return RECIPES.R14(rng, Math.max(2, size));
     // the odd one: x = 0 (4x + 5 = 2x + 5)
     const a = rng.int(3, 9), c = rng.int(1, a - 1), b = rng.signed(1, 15, 0.4);
     return { ...maybeSwap(rng, [xt(a), num(b)], [xt(c), num(b)], 0.5), x: 0 };
@@ -261,7 +274,7 @@ export function checkProblem(rungId, L, R, x) {
   return null;
 }
 
-// What a finished R15 line looks like: "every key fits" when both sides match, "no key fits" when x is gone and the
+// What a finished R15 line looks like: "infinitely many solutions" when both sides match, "no solution" when x is gone and the
 // numbers differ. Used as the goal instead of x = N.
 export function verdictOf(l) {
   const same = (a, b) => a.length === b.length && lineText({ L: a, R: [] }) === lineText({ L: b, R: [] });
@@ -277,9 +290,15 @@ export function verdictOf(l) {
 //     choices? (warm-up rungs), answer? }
 // Returns null only if 400 tries all failed the filters (the tests make sure that never happens).
 
-export function generate(rungId, { rng = makeRng(), size = 2, recent = [] } = {}) {
+// On the vault rung, verdict: true asks for an "infinitely many solutions / no solution" box, false for a real
+// x = N box; left out, one box in VERDICT_SHARE is a verdict box (the ladder in algebra.js decides it itself).
+export const VERDICT_SHARE = 0.1;
+
+export function generate(rungId, { rng = makeRng(), size = 2, recent = [], verdict } = {}) {
   const rung = RUNG[rungId];
   if (!rung) throw new Error(`no rung ${rungId}`);
+  const wantVerdict = rung.verdicts ? (verdict ?? rng.chance(VERDICT_SHARE)) : false;
+  const verdictKind = wantVerdict ? rng.pick(['all', 'none']) : 'one';
   const seen = new Set(recent);
   for (let tries = 0; tries < 400; tries++) {
     if (rung.mode === 'balance' || rung.mode === 'key') {
@@ -293,7 +312,7 @@ export function generate(rungId, { rng = makeRng(), size = 2, recent = [] } = {}
       return { rung: rungId, mode: rung.mode, key, start, x: p.answer, kind: 'one', par: 1, route: [],
         answer: p.answer, choices: rng.shuffle([...p.choices]) };
     }
-    const made = RECIPES[rungId](rng, size);
+    const made = rung.verdicts ? RECIPES[rungId](rng, size, verdictKind) : RECIPES[rungId](rng, size);
     if (!made) continue;
     const why = checkProblem(rungId, made.L, made.R, made.x);
     if (why) continue;

@@ -1,7 +1,7 @@
 // The move buttons under the working line, rebuilt after every move.
 //
-// A set holds (by level: 2, 3 or 4 buttons):
-//   - 1 or 2 productive moves (they bring x = N closer; if two help, both may show and both count);
+// A set holds (4 buttons; fewer only when the line has fewer legal moves):
+//   - 2 productive moves when the line has two (they bring x = N closer; other right ways show and all count);
 //   - 1 classic trap: the same number with the wrong sign (−6 next to +6), the wrong undo (−12 or ·12 on 12x = 24),
 //     part of the number (÷2 on 12x), or a number locked inside brackets (−2 on 3(x + 2) = 18);
 //   - 1 legal but unhelpful move (it plays out honestly, it just doesn't get closer);
@@ -72,12 +72,15 @@ export function buildButtons(l, st, { count = 4, rng, fav = null, goal = null, g
   // tidy, free x), or, while the card is sorting x's from numbers, any of the cancelling moves that do that
   const canon = steps[0] ? applyMove(l, steps[0]) : null;
   const canonKey = canon ? lineKey(canon.out) : null;
+  const stepAt = (b) => { const i = steps.findIndex((m) => moveId(m) === b.id); return i < 0 ? 99 : i; };
   const cardGoods = goods.filter((b) => stepKeys.has(b.key)
     && (steps[0].k === 'add' ? b.move.k === 'add' : b.key === canonKey));
   if (goods.length) {
     const ranked = [...(cardGoods.length ? cardGoods : goods)].sort((a, b) => goodRank(a) - goodRank(b));
     const best = ranked.filter((b) => goodRank(b) === goodRank(ranked[0]));
-    take(pickOne(best));
+    // (the card's own way first among those: −12 rather than −82 when the card keeps x on the left)
+    const firstAt = Math.min(...best.map(stepAt));
+    take(pickOne(best.filter((b) => stepAt(b) === firstAt)));
   }
   const traps = rest.filter((b) => b.role === 'trap');
   const mehs = rest.filter((b) => b.role === 'meh');
@@ -90,31 +93,54 @@ export function buildButtons(l, st, { count = 4, rng, fav = null, goal = null, g
   const secondTiers = () => [goods];
   // Pick from the first kind (then tier) that has a button left. While one row already holds two buttons, a button
   // for the other row is looked for first through every kind, so + and − stay on top and ·, ÷ below whenever the
-  // line has moves of both sorts.
+  // line has moves of both sorts. pickTrap: the row is only preferred within each kind instead, so a believable trap
+  // (+12 next to −12) beats a dull move that would fit the other row; it overflows a row onto the other.
   const rowCount = (r) => chosen.filter((b) => rowOf(b.move) === r).length;
-  const pickFrom = (...kinds) => {
-    const room = rowCount(0) >= 2 ? 1 : rowCount(1) >= 2 ? 0 : null;
-    for (const strict of room === null ? [false] : [true, false]) {
-      for (const tiers of kinds) {
-        for (const tier of tiers) {
-          const left = tier.filter((b) => !chosen.includes(b) && (!strict || rowOf(b.move) === room));
-          if (left.length) return pickOne(left);
-        }
+  const pickIn = (perKind, kinds) => {
+    // (once a row holds more than two it spills over anyway, so the balancing stops)
+    const spilled = rowCount(0) > 2 || rowCount(1) > 2;
+    const room = spilled ? null : rowCount(0) >= 2 ? 1 : rowCount(1) >= 2 ? 0 : null;
+    const stricts = room === null ? [false] : [true, false];
+    const look = (tiers, strict) => {
+      for (const tier of tiers) {
+        const left = tier.filter((b) => !chosen.includes(b) && (!strict || rowOf(b.move) === room));
+        if (left.length) return pickOne(left);
       }
+      return null;
+    };
+    if (perKind) {
+      for (const tiers of kinds) for (const strict of stricts) { const b = look(tiers, strict); if (b) return b; }
+    } else {
+      for (const strict of stricts) for (const tiers of kinds) { const b = look(tiers, strict); if (b) return b; }
     }
     return null;
   };
-  // At 4 buttons a second productive move shows some of the time: often a shortcut past the card's order (÷3 first
-  // on 3(x + 2) = 18). It is placed before the traps, so the row balancing below can't crowd it out (on a brackets
-  // box "Open brackets" and the ÷(−3) trap would otherwise fill the ·/÷ row first).
-  let second = false;
-  if (count >= 4 && goods.some((b) => !chosen.includes(b)) && rand() < 0.4) {
-    take(pickOne(goods.filter((b) => !chosen.includes(b))));
-    second = true;
+  const pickFrom = (...kinds) => pickIn(false, kinds);
+  const pickTrap = (...kinds) => pickIn(true, kinds);
+  // At 4 buttons a second right way shows too (2 productive buttons in all), so two wrong ones are left to
+  // steer past: on 4x + 12 = −3x + 82 both +3x and −12 (and −4x, −82) are good first moves. The card’s own
+  // moves come first, then the plainest. They are placed before the traps, so the row balancing below can't crowd
+  // them out (on a brackets box "Open brackets" and the ÷(−3) trap would otherwise fill the ·/÷ row first).
+  const MAX_GOOD = 2;
+  if (count >= 4) {
+    // (a different sort of move first: after −12, the +3x that moves an x-term, not −82 as well)
+    const sortOf = (b) => (b.move.k === 'add' ? `add${b.move.term.t}` : b.move.k);
+    while (chosen.length < Math.min(MAX_GOOD, count - 1)) {
+      const sorts = new Set(chosen.map(sortOf));
+      const others = goods.filter((b) => !chosen.includes(b)).sort((a, b) => (b.card ? 1 : 0) - (a.card ? 1 : 0)
+        || (sorts.has(sortOf(a)) ? 1 : 0) - (sorts.has(sortOf(b)) ? 1 : 0) || stepAt(a) - stepAt(b) || goodRank(a) - goodRank(b));
+      if (!others.length) break;
+      take(others[0]);
+    }
   }
-  if (count >= 2) take(pickFrom(trapTiers(fav), mehTiers()));
-  if (count >= 3) take(pickFrom(mehTiers(), trapTiers(null), secondTiers()));
-  if (count >= 4 && !second) take(pickFrom(trapTiers(fav), mehTiers(), secondTiers()));
+  // then the wrong ones: this kid's own trap, the classic traps, a legal but unhelpful move; a slot still empty after
+  // that takes another good move rather than staying blank
+  const wrongKinds = [
+    () => pickFrom(trapTiers(fav), mehTiers(), secondTiers()),
+    () => pickTrap(trapTiers(fav)) || pickFrom(mehTiers(), secondTiers()),
+    () => pickFrom(mehTiers(), trapTiers(null), secondTiers()),
+  ];
+  for (let k = 0; count >= 2 && chosen.length < count && k < wrongKinds.length; k++) take(wrongKinds[k]());
   // never fewer than 2 buttons when the line allows it (a lone right answer teaches nothing)
   while (chosen.length < Math.min(2, all.length)) take(pickOne(all.filter((b) => !chosen.includes(b))));
 
