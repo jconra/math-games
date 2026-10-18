@@ -244,8 +244,12 @@ function staticPieces(ground) {
   // THE TROUGHS AND THE HAY
   for (const t of FARM.troughs) {
     const y = ground(t.x, t.z);
-    out.push(piece(box(2.4, 0.55, 0.7), COL.wood, { at: [t.x, y + 0.22, t.z], rot: [t.rot, 0, 0], shade: 0.1 }));
-    out.push(piece(box(2.2, 0.05, 0.52), COL.water, { at: [t.x, y + 0.47, t.z], rot: [t.rot, 0, 0], plain: true }));
+    // (a hollow trough: a floor and four sides, the water a hand below the rim, so the two faces never share a plane)
+    const o = { rot: [t.rot, 0, 0], shade: 0.1 };
+    out.push(piece(box(2.4, 0.2, 0.7), COL.wood, { ...o, at: [t.x, y + 0.05, t.z] }));
+    for (const sz of [-1, 1]) out.push(piece(box(2.4, 0.4, 0.09).translate(0, 0, sz * 0.305), COL.wood, { ...o, at: [t.x, y + 0.35, t.z] }));
+    for (const sx of [-1, 1]) out.push(piece(box(0.1, 0.4, 0.52).translate(sx * 1.15, 0, 0), COL.wood, { ...o, at: [t.x, y + 0.35, t.z] }));
+    out.push(piece(box(2.2, 0.02, 0.52), COL.water, { at: [t.x, y + 0.42, t.z], rot: [t.rot, 0, 0], plain: true }));
   }
   // a bale: four pressed flakes of straw in slightly different golds, a little ragged, with two bands of twine round it
   for (const h of FARM.hay) {

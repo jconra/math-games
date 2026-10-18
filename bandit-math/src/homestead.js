@@ -277,8 +277,11 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
     }
     // a water trough and a bale of hay inside
     const wx = R.x1 - 2.2, wz = R.z1 - 1.2, wy = ground(wx, wz);
-    out.push(piece(box(2.2, 0.55, 0.7), COL.wood, { at: [wx, wy + 0.22, wz], shade: 0.1 }));
-    out.push(piece(box(2.0, 0.05, 0.52), COL.water, { at: [wx, wy + 0.47, wz], plain: true }));
+    // (hollow: a floor and four sides, the water a hand below the rim, so the two faces never share a plane)
+    out.push(piece(box(2.2, 0.2, 0.7), COL.wood, { at: [wx, wy + 0.05, wz], shade: 0.1 }));
+    for (const sz of [-1, 1]) out.push(piece(box(2.2, 0.4, 0.09), COL.wood, { at: [wx, wy + 0.35, wz + sz * 0.305], shade: 0.1 }));
+    for (const sx of [-1, 1]) out.push(piece(box(0.1, 0.4, 0.52), COL.wood, { at: [wx + sx * 1.05, wy + 0.35, wz], shade: 0.1 }));
+    out.push(piece(box(2.0, 0.02, 0.52), COL.water, { at: [wx, wy + 0.42, wz], plain: true }));
     const hx = R.x0 + 1.9, hz = R.z1 - 1.4, hy = ground(hx, hz) + 0.42;
     out.push(piece(box(1.3, 0.85, 0.9), COL.hay, { at: [hx, hy, hz], rot: [0, 0.25, 0], plain: true, shade: 0.2 }));
     for (const bx of [-0.33, 0.33]) out.push(piece(box(0.035, 0.9, 0.95).translate(bx, 0, 0), COL.twine, { at: [hx, hy, hz], rot: [0, 0.25, 0], plain: true }));

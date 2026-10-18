@@ -12,8 +12,8 @@ export const TOWN_ASSETS = {
   // tilt: degrees the model is turned about its own x axis to stand level (a Tripo model can come leaning a little; more
   // tips its front down), its box measured after that; sink: model units its lowest point goes below the ground (when a
   // few posts or steps reach lower than the rest, so the rest isn't left hanging over the ground)
-  cabin: { name: 'Cabin', box: [0.944, 0.897, 1.0], front: '+Z', size: 9.5, category: 'home' },                 // 9 m wide, porch and steps at the front
-  stable: { name: 'Stable & livery', box: [1.0, 0.711, 0.815], front: '+Z', size: 14, category: 'work' },      // big barn doors at the front, a wagon shed on its right
+  cabin: { name: 'Cabin', box: [0.944, 0.897, 1.0], front: '+Z', size: 9.5, category: 'home', sink: 0.006 },                 // 9 m wide, porch and steps at the front
+  stable: { name: 'Stable & livery', box: [1.0, 0.711, 0.815], front: '+Z', size: 14, category: 'work', sink: 0.006 },      // big barn doors at the front, a wagon shed on its right
   // (the store's model came leaning back 2.7 degrees, its porch posts short of the ground by up to 0.6 m: stood upright,
   // its posts end between 0 and 0.022 of a unit up, so it goes down 0.012: the porch and steps rest on the ground)
   generalStore: { name: 'General store', box: [1.0, 0.866, 0.837], front: '+Z', size: 11, category: 'work', tilt: 2.7, sink: 0.012 },
