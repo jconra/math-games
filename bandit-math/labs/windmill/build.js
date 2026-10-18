@@ -379,10 +379,15 @@ export function makeBuild(app) {
     h.A = { X: S.X, Y: S.Y, Z: S.Z }; h.on = S.on || null;
     setRun(h, dx, dz, up);
   }
-  // the four arrows: the free end half a foot along X or Z (its height from its length). false when it can't reach.
+  // the four arrows: the free end to the next half foot along X or Z, counted from the tower's middle (so free ends
+  // stepped by arrows from different sockets meet: 1 ft, 1½ ft, never 11 in. then 1 ft 5 in.); its height from its
+  // length. false when it can't reach.
+  const nextHalf = (x, sg) => (sg > 0 ? Math.floor(x / SNAP + 1e-6) + 1 : Math.ceil(x / SNAP - 1e-6) - 1) * SNAP;
   function arrow(ax, sg) {
     const h = app.held; if (!h || app.phase !== 'build') return false;
-    const before = snapOfHeld(h), { dx, dz, up } = runOf(h), nx = dx + (ax === 'X' ? sg * SNAP : 0), nz = dz + (ax === 'Z' ? sg * SNAP : 0);
+    // (from where the free end really is, the other way left as it is)
+    const before = snapOfHeld(h), { up } = runOf(h), dx = h.B.X - h.A.X, dz = h.B.Z - h.A.Z;
+    const nx = ax === 'X' ? nextHalf(h.B.X, sg) - h.A.X : dx, nz = ax === 'Z' ? nextHalf(h.B.Z, sg) - h.A.Z : dz;
     if (!freeEnd(h.A, h.len, nx, nz, up) && !freeEnd(h.A, h.len, nx, nz, 1)) { sound.clatter(h.len * 0.3, 'set', undefined, 0.12); h.tooFar = now(); app.dirty = true; return false; }
     setRun(h, nx, nz, up);
     h.fresh = false; h.start = false; keepHist(before);
