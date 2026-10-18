@@ -14,8 +14,13 @@
 // from the stack, a double tap builds them all; tapping a nailed board shows its twins again (their clock stops while
 // a question is open). Drag anywhere else to walk round the tower and up and down it, pinch or roll the wheel to come
 // nearer or back off; the camera always looks at the tower's middle, 25 degrees down, and while building moves only
-// when you move it. Now and then the miller asks about a triangle you just made, how long a brace an opening needs, or
-// how high a slanting board reaches; a right answer earns an extra board.
+// when you move it. Now and then the miller asks a geometry question (questions.js: a ladder of steps from naming an
+// angle up to right triangles, climbing after two right in a row, dropping a step after a wrong answer, remembered in
+// localStorage); when the board just nailed fits the step he asks about it instead. He asks at a hand-nailed board
+// once two hand nails and three boards in all (twins too) have gone up since the last question (questionDue: some 8
+// over a whole tower). A right answer earns a spare board, at most BONUS_MAX (6) for a tower, never mentioned on the
+// card: past it a right answer just gets praise. Start fresh resets the count, Keep building and Undo don't. Every
+// card has "Teach me" (teach.js): the idea on a worked example, then "Try it", a fresh one of the same kind.
 // Call the wind: the camera frames the whole tower (smoothly, once), then a breeze, then growing gusts from every side.
 // A frame calculation of the whole tower in 3D (frame.js) decides what holds: every board tinted green to red by its
 // strain as each wind rises, the frame bending. When something gives, only what it held up falls, and the rest carries
@@ -35,7 +40,8 @@
 //                                      as if put up by hand: same questions, same twins; its wood comes off the pile
 //                                      like a twin's (sawn as needed); with none left the board goes up anyway
 //   WM.setBase(W, D), WM.setWidth(w)   the stones (only while nothing is built); WM.footprint() -> { W, D }
-//   WM.boards() -> [{ id, a, b, len }]
+//   WM.boards() -> [{ id, a, b, len }]; WM.question() -> the question on the card { answer, kind, topic, level, choices, teach }
+//                or null; WM.ask(topic) asks a fresh question of a topic (questions.js TOPICS) now
 //   WM.ghosts() -> the twins on show [{ a, b, len, ok, reason }]; WM.confirm(i), WM.confirmAll()
 //   WM.held() -> the board in hand { A (its socket), B (its free end), len, con ({ s, P, past } or null), ends: [A, B]
 //                on the screen (page pixels), handles: { socket, free } and arrows: [+X, -X, +Z, -Z] (page pixels of
@@ -54,7 +60,8 @@ import { START_W, MAX_W, BOARDS, BOARD_FT, newTower, cleanTower, FACE_NORMAL, to
 import { touch3, touchesAny, grounded, pointGap, TOL } from './touch.js';
 import { STAGES, boardShapes, faceOf } from './frame.js';
 import { makeTestRun, flourFor } from './testrun.js';
-import { trianglesOf, makeQuestion, bayQuestion, reachQuestion } from './questions.js';
+import { trianglesOf, makeQuestion, bayQuestion, reachQuestion, ladderQuestion, questionOf, topicOf, questionDue, stepLadder, readLadder, LADDER_KEY, LADDER_TOP, BONUS_MAX, earnsBoard } from './questions.js';
+import { showTeach } from './teach.js';
 import { makeScene, makeMiller, wind, FT, groundY } from './scene.js';
 import { makeTowerView, HELD_OFF } from './tower3d.js';
 import { makeFall } from './fall.js';
@@ -286,7 +293,7 @@ let lastDown = null;      // [{ rec, entry }]: what the last "Take it down" brou
 // put a board on the tower: { a, b, len } in the world. Returns the record.
 function addBoard(spec) {
   const rec = makeBoard('b' + idN++, spec.a, spec.b, spec.len);
-  app.tower.boards.push(rec); app.placed.push({ rec }); lastDown = null; return rec;
+  app.tower.boards.push(rec); app.placed.push({ rec }); lastDown = null; boardsSince++; return rec;
 }
 // where the builder left off (build.js startSpot) after boards came off (taken down, undone, blown down): the latest
 // board nailed by hand that still stands, or none
@@ -406,7 +413,7 @@ app.tapAt = (cx, cy) => {
   const pick = pickAt(cx, cy), gh = pick.g;
   if (gh) {
     if (gh.ok) { if (confirmGhost(gh)) lastTwinTap = { t: performance.now(), x: cx, y: cy, g: gh }; }
-    else say(gh.reason === 'no wood left' ? 'No wood left for that one. A right answer to my questions earns another board.' : 'That one would have nothing to nail to yet. Put up what it hangs on first.', { key: 'grey-' + gh.reason, times: 3, force: true, ms: 5000 });
+    else say(gh.reason === 'no wood left' ? (bonusEarned < BONUS_MAX ? 'No wood left for that one. A right answer to my questions earns another board.' : 'No wood left for that one.') : 'That one would have nothing to nail to yet. Put up what it hangs on first.', { key: 'grey-' + gh.reason, times: 3, force: true, ms: 5000 });
     return;
   }
   if (!app.held) app.select(pick.board || null);
@@ -572,28 +579,36 @@ app.idleHint = () => {
   return '';
 };
 
-let sinceQuestion = 3, questionsAsked = 0, lastSlope = null;
-// after a board is nailed by hand: maybe a question about it, maybe a word from the miller
+// the miller's questions: boards built (by hand or as twins) since the last one, the spare boards earned for this tower
+// (at most BONUS_MAX), and the ladder's step (kept in localStorage; a fresh player starts at step 1)
+let boardsSince = 0, handSince = 0, bonusEarned = 0, lastPrompt = null;
+let ladder = (() => { try { return readLadder(localStorage.getItem(LADDER_KEY)); } catch (e) { return readLadder(null); } })();
+function saveLadder() { try { localStorage.setItem(LADDER_KEY, JSON.stringify(ladder)); } catch (e) { /* private window: the step lasts the visit */ } }
+// a question at the ladder's step; when the board just nailed fits the step (a whole right triangle at 5, a triangle's
+// corners at 4), now and then one about that board instead
+function questionFor(rec, { slant, leg, bay, tris }) {
+  const L = ladder.level;
+  let q = null;
+  if (Math.random() < 0.6) {
+    if (L >= 5) {
+      if (slant || leg) { const r = reachQuestion(rec.len, Math.hypot(rec.b.X - rec.a.X, rec.b.Z - rec.a.Z)); if (r && r.kind === 'slope') q = r; }
+      if (!q && bay) q = bayQuestion(bay.w, bay.h, bay.y0);
+      if (!q && tris.length) q = makeQuestion(tris, rec, Math.random, 'length');
+    } else if (L === 4 && tris.length) q = makeQuestion(tris, rec, Math.random, 'angle');
+    if (q && q.prompt === lastPrompt) q = null;
+  }
+  q = q || ladderQuestion(L);
+  lastPrompt = q.prompt;
+  return { ...q, level: L, topic: topicOf(q) };
+}
+// after a board is nailed by hand: maybe a question, maybe a word from the miller
 function afterNail(rec, first) {
   const t = app.tower, post = isPost(rec), leg = legsOf().has(rec.id), level = isLevel(rec), slant = !post && !leg && isBrace(rec);
   const n = app.placed.length, H = towerHeight(t), side = sideOfBoard(rec, t);
-  const forced = params.has('askall');
-  sinceQuestion++;
-  const chance = questionsAsked === 0 ? 0.7 : sinceQuestion >= 5 ? 0.9 : 0.35;
-  const askNow = () => forced || (sinceQuestion >= 2 && Math.random() < chance);
-  const asked = (q) => { setTimeout(() => ask(q), 450); sinceQuestion = 0; questionsAsked++; };
-  // a slanting board (a brace or a leg) whose top stands a half-foot number of feet over from its foot: how high does
-  // it reach? (the arrows set it by the half foot, so this is the very number the builder just set)
-  if ((slant || leg) && askNow()) {
-    const q = reachQuestion(rec.len, Math.hypot(rec.b.X - rec.a.X, rec.b.Z - rec.a.Z));
-    if (q && q.prompt !== lastSlope) { lastSlope = q.prompt; asked(q); return; }
-  }
-  // a horizontal board that closes an opening: how long a brace would reach corner to corner?
   const bay = level ? bayUnder(rec) : null;
-  if (bay && askNow()) { const q = bayQuestion(bay.w, bay.h, bay.y0); if (q) { asked(q); return; } }
-  // a question about a triangle this board just made?
   const tris = !post ? trianglesOf(t, rec) : [];
-  if (tris.length && askNow()) { const q = makeQuestion(tris, rec); if (q) { asked(q); return; } }
+  handSince++;
+  if (params.has('askall') || questionDue(handSince, boardsSince)) { const q = questionFor(rec, { slant, leg, bay, tris }); setTimeout(() => ask(q), 450); boardsSince = 0; handSince = 0; return; }
   // otherwise, maybe a word from the miller
   if (first && !leg) {
     say(post && isCornerPost(t, rec) ? 'Good: a post on the corner, straight up. See the glowing ones? Tap one to put the same post on that corner.' : post ? 'A post, straight up. Corner posts on the stones make the best start.' : 'Start with the corner posts, standing straight up. A post wants to be plumb, 90 degrees.', { force: true, ms: 9000 });
@@ -667,32 +682,65 @@ function bayUnder(me) {
 }
 
 // ── a math question card ─────────────────────────────────────────────────────────────────────────────────────────────
-function ask(q) {
-  if (app.phase !== 'build') return;
+let curQ = null;   // the question on the card (WM.question)
+const PRAISE = ['Right! Nice work.', 'Right! Sharp eye.', 'Right! Well done.', 'Right! You have it.'];
+// again: a question asked from the card itself (the "Try it" after a lesson), while the card is already up
+function ask(q, again = false) {
+  if (app.phase !== (again ? 'question' : 'build')) return;
+  curQ = q;
   app.phase = 'question'; app.select(null);
   const card = $('question');
-  card.innerHTML = `<h2>${q.title || (q.bay ? 'How long a brace?' : 'A triangle!')}</h2><div class="sub">Get it right and the miller adds a board to your stack.</div>
-    ${q.kind === 'slope' ? slopePic(q.pic) : q.pts ? trianglePic(q) : ''}<p>${q.prompt}</p>
-    <div class="choices${q.labels ? ' is-words' : ''}">${q.choices.map((c, i) => `<button data-v="${c}">${q.labels ? q.labels[i] : c + q.unit}</button>`).join('')}</div>
-    <div class="why" hidden></div><div class="row" hidden><button class="btn go" id="q-ok">Back to building</button></div>`;
-  card.hidden = false;
-  gesture('Interact');
+  // (the stars: the ladder's step)
+  const steps = `<div class="steps" aria-label="question step ${ladder.level} of ${LADDER_TOP}">${'★'.repeat(ladder.level)}${'☆'.repeat(LADDER_TOP - ladder.level)}</div>`;
+  const sub = bonusEarned < BONUS_MAX ? '<div class="sub">Get it right and the miller adds a board to your stack.</div>' : '';
+  card.innerHTML = `${steps}<h2>${q.title || (q.bay ? 'How long a brace?' : 'A triangle!')}</h2>${sub}
+    ${q.svg || (q.kind === 'slope' ? slopePic(q.pic) : q.pts ? trianglePic(q) : '')}<p>${q.prompt}</p>
+    <div class="choices${q.labels ? ' is-words' : ''}" style="grid-template-columns: repeat(${q.labels && q.choices.length === 4 ? 2 : q.choices.length}, 1fr)">${q.choices.map((c, i) => `<button data-v="${c}">${q.labels ? q.labels[i] : c + q.unit}</button>`).join('')}</div>
+    <div class="why" hidden></div><div class="row"><button class="btn" id="q-teach">Teach me</button><button class="btn go" id="q-ok" hidden>Back to building</button></div>`;
+  card.hidden = false; card.scrollTop = 0;
+  if (!again) gesture('Interact');
+  const done = () => { card.hidden = true; app.phase = 'build'; if (ghosts) ghosts.born = performance.now(); };   // (the glowing twins get their full time again)
+  card.querySelector('#q-ok').onclick = done;
+  card.querySelector('#q-teach').onclick = () => teach(q.topic || topicOf(q), done);
   card.querySelectorAll('.choices button').forEach((b) => b.onclick = () => {
-    const v = +b.dataset.v, right = v === q.answer;
-    card.querySelectorAll('.choices button').forEach((x) => { x.disabled = true; if (+x.dataset.v === q.answer) x.classList.add('is-right'); });
+    const right = b.dataset.v === String(q.answer);
+    card.querySelectorAll('.choices button').forEach((x) => { x.disabled = true; if (x.dataset.v === String(q.answer)) x.classList.add('is-right'); });
     const why = card.querySelector('.why'); why.hidden = false;
+    const was = ladder.level; ladder = stepLadder(ladder, right); saveLadder();
     if (right) {
-      sound.chime(); why.innerHTML = `<b>Right!</b> ${q.why} The miller adds a fresh board to your stack.`;
-      build.giveBoard();
-      const f = $('flybonus'); f.hidden = false; f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); setTimeout(() => { f.hidden = true; }, 1300);
+      sound.chime();
+      const up = ladder.level > was ? ' Next one is a step harder.' : '';
+      if (earnsBoard(bonusEarned, right)) {
+        bonusEarned++;
+        why.innerHTML = `<b>Right!</b> ${q.why} The miller adds a fresh board to your stack.${up}`;
+        build.giveBoard();
+        const f = $('flybonus'); f.hidden = false; f.classList.remove('go'); void f.offsetWidth; f.classList.add('go'); setTimeout(() => { f.hidden = true; }, 1300);
+      } else why.innerHTML = `<b>${PRAISE[Math.floor(Math.random() * PRAISE.length)]}</b> ${q.why}${up}`;
+      card.querySelector('#q-teach').hidden = true;
     } else {
       b.classList.add('is-wrong'); sound.soft();
       why.innerHTML = `Not quite. ${q.why}${helperPic(q)}`;
     }
-    card.querySelector('.row').hidden = false;
-    // (back to building: the twins that were glowing get their full time again)
-    card.querySelector('#q-ok').onclick = () => { card.hidden = true; app.phase = 'build'; if (ghosts) ghosts.born = performance.now(); };
+    card.querySelector('#q-ok').hidden = false;
   });
+}
+// "Teach me": the idea behind a kind of question, worked through on a fresh example (teach.js draws the card), then
+// "Try it": a fresh question of the same kind, which counts like any other
+function teach(topic, back) {
+  const ex = questionOf(topic, ladder.level), card = $('question');
+  showTeach(card, { title: 'How it works', rule: ex.rule, picture: lessonPic(ex), example: ex.prompt, steps: ex.steps,
+    answer: ex.labels ? ex.labels[ex.choices.indexOf(ex.answer)] : ex.unit === '°' ? ex.answer + '°' : ex.kind === 'slope' ? fmt(ex.answer / 12) : ex.answer + ex.unit },
+  { onTry: () => ask(questionOf(topic, ladder.level), true), onBack: back });
+}
+// a worked example's picture, its answer filled in
+function lessonPic(q) {
+  if (q.svg) return q.helper && q.helper.kind === 'svg' ? q.helper.svg : q.svg;
+  if (q.pts) {
+    const fill = (l) => (l === '?' ? `${q.answer}${q.unit === '°' ? '°' : ' ft'}` : l);
+    return trianglePic({ ...q, sideLabels: q.sideLabels.map(fill), angleLabels: q.angleLabels.map(fill) });
+  }
+  if (q.kind === 'slope') return slopePic(q.pic) + helperPic(q);
+  return '';
 }
 // the triangle itself, drawn from the wall, with what is known and the "?"
 function trianglePic(q) {
@@ -741,6 +789,7 @@ function slopePic(pic) {
 // the sides of a right triangle; for a leaning wall, the slope inch by inch
 function helperPic(q) {
   if (!q.helper) return '';
+  if (q.helper.kind === 'svg') return q.helper.svg;
   if (q.helper.kind === 'legsq') {
     const { L, r, h, exact } = q.helper;
     if (exact) return helperPic({ helper: { kind: 'squares', a: Math.min(r, Math.round(h)), b: Math.max(r, Math.round(h)), c: L } });
@@ -842,7 +891,7 @@ function resetAll(W = app.tower.W, D = app.tower.D) {
   app.tower = newTower(W, D); app.placed = []; app.held = null; app.selected = null; ghosts = null; app.lastHand = null; lastDown = null;
   world.setStones(W, D);
   build.freshStack(BOARDS);
-  showFaceName(); rebuild(); walkMiller(); sinceQuestion = 3;
+  showFaceName(); rebuild(); walkMiller(); boardsSince = 0; handSince = 0; bonusEarned = 0;
 }
 
 // ── the miller walks round to stand by whichever wall you are building ──────────────────────────────────────────────
@@ -1004,6 +1053,8 @@ window.WM = {
       ends: [toPage(app.worldToScreen(h.A.X, h.A.Y, h.A.Z)), toPage(app.worldToScreen(h.B.X, h.B.Y, h.B.Z))],
       handles: { socket: spot(el.gA), free: spot(el.gB) }, arrows: el.arrows.map(spot), canNail: build.canNail(h), place: placeWords(app.tower, build.worldOf(h)) };
   },
+  ask: (topic) => ask({ ...questionOf(topic, ladder.level), topic }),
+  question: () => (curQ && !$('question').hidden ? { answer: curQ.answer, kind: curQ.kind, topic: curQ.topic, level: curQ.level, choices: curQ.choices, teach: $('question').classList.contains('teach') } : null),
   trim: () => (build.trim ? { past: build.trim.past, id: build.trim.rec.id } : null),
   // (for rigs: stand square on to a side at once, or at az radians round the tower)
   turnTo: (face) => { cam.azV = 0; cam.az = azOf(face) + Math.round((cam.az - azOf(face)) / (Math.PI * 2)) * Math.PI * 2; },
@@ -1013,7 +1064,7 @@ window.WM = {
     pile: build.groups().map((g) => [g.len, g.list.length]), panel: { bench: el.benchLabel.textContent, groups: [...el.pieces.children].map((d) => d.textContent) },
     held: app.held && { A: app.held.A, B: app.held.B, len: app.held.len, con: !!app.held.con }, ghosts: app.ghostList().length, best, fps,
     question: !$('question').hidden ? $('question').innerText : null, result: !$('result').hidden ? $('result').innerText : null, falling: fall.sticks.length, hint: el.hint.textContent, nails: app.lastNails, say: $('say').hidden ? null : $('say-text').textContent,
-    faceName: $('face-name').textContent, trim: !el.trimBar.hidden ? el.trimHint.textContent : null }),
+    faceName: $('face-name').textContent, ladder: { ...ladder }, bonus: bonusEarned, boardsSince, handSince, trim: !el.trimBar.hidden ? el.trimHint.textContent : null }),
   worldToScreen: (X, Y, Z) => toPage(app.worldToScreen(X, Y, Z)),
   resetAll, flourFor, STAGES,
 };

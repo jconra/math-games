@@ -236,6 +236,14 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .card.is-side { left: auto; right: 16px; transform: translateY(-50%); width: min(380px, calc(100% - 20px)); }
 .card h2 { font: 400 23px/1.1 Rye, Georgia, serif; color: #4a2f17; margin-bottom: 6px; }
 .card .sub { color: var(--paper-ink-2); font-size: 14px; }
+/* the teach card (teach.js): the rule, a worked example, its steps coming in one by one */
+.card.teach .rule { font-weight: 700; color: #4a2f17; }
+.card.teach .example { font-size: 15px; }
+.card.teach .steps-list { margin: 6px 0 0 22px; font-size: 15px; }
+.card.teach .step { opacity: 0; animation: stepin .4s ease-out forwards; animation-delay: calc(var(--i) * .9s + .2s); margin: 3px 0; }
+@keyframes stepin { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+/* the question ladder's step, as stars by the title */
+.card .steps { font: 700 14px/1 Bitter, Georgia, serif; color: #a8782f; letter-spacing: 2px; margin-bottom: 4px; }
 .card p { margin: 6px 0; }
 .card svg.pic { display: block; width: 100%; max-height: 190px; margin: 6px 0; }
 .card .choices { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px; }
@@ -248,7 +256,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .card .why { margin-top: 10px; padding: 8px 10px; border-radius: 8px; background: rgba(122,85,48,.12); font-size: 14px; }
 .card .why[hidden] { display: none; }
 .card .row { display: flex; gap: 10px; justify-content: flex-end; margin-top: 12px; flex-wrap: wrap; }
-.card .row[hidden] { display: none; }
+.card .row[hidden], .card .row .btn[hidden] { display: none; }
 .card .big { font: 700 34px Bitter, Georgia, serif; color: #4a2f17; white-space: nowrap; }
 .card .big .u { font-size: .6em; font-weight: 600; margin-right: .24em; }
 .card .big .u:last-child { margin-right: 0; }
