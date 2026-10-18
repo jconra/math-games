@@ -301,7 +301,7 @@ export function openLockbox(root = document.body, opts = {}) {
     body.appendChild(stepsEl);
 
     const paper = h('section', 'lbx-paper');
-    paper.innerHTML = `<div class="lbx-start"><span class="lbx-start-k">Start</span><span class="lbx-start-l"></span></div>
+    paper.innerHTML = `<div class="lbx-start"><span class="lbx-start-k">Beginning</span><span class="lbx-start-l"></span></div>
       <div class="lbx-ledger" aria-label="your working"></div>`;
     body.appendChild(paper);
 
@@ -887,7 +887,7 @@ export function openLockbox(root = document.body, opts = {}) {
       renderTop();
       renderSteps();
       if (res.solved) {
-        hob(`x = ${fracText(B.keyTest()?.x ?? F(0))}. Check it in the start line.`, 'good');
+        hob(`x = ${fracText(B.keyTest()?.x ?? F(0))}. Check it on the beginning equation.`, 'good');
         await sleep(420 * K);
         runCheck();
         return;
@@ -1072,7 +1072,7 @@ export function openLockbox(root = document.body, opts = {}) {
       const val = fracText(kt.x);
       const steps = { L: kt.left, R: kt.right };
       work.innerHTML = `<div class="ck">
-        <div class="ck-head"><span class="ck-key">${KEY_SVG}<b>${esc(val)}</b></span><span class="ck-title">${mathHTML('x =')} <b class="ck-n">${esc(val)}</b> in the start line</span></div>
+        <div class="ck-head"><span class="ck-key">${KEY_SVG}<b>${esc(val)}</b></span><span class="ck-title">${mathHTML('x =')} <b class="ck-n">${esc(val)}</b> in the beginning equation</span></div>
         <div class="ck-line"><div class="ck-side" data-s="L"><span class="ck-txt">${mathHTML(sideText(problem.start.L))}</span></div>${hingeEl().outerHTML}<div class="ck-side" data-s="R"><span class="ck-txt">${mathHTML(sideText(problem.start.R))}</span></div></div>
         <div class="ck-nls"><div class="ck-nl" data-s="L"></div><div class="ck-nl" data-s="R"></div></div>
         <div class="ck-hurry" aria-hidden="true"><span class="lbx-kb"><kbd>Enter</kbd> or click to hurry</span><span class="lbx-tap">Tap to hurry</span></div></div>`;
