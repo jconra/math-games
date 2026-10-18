@@ -142,17 +142,14 @@ test('the miller\'s triangles in 3D: a 3-4-5 brace on any side, and the ground a
   assert.ok(Q.trianglesOf(g, b2).some((tr) => sides(tr).join() === '3,4,5'));
 });
 
-test('how high a slanting board reaches: an 8 ft board 2 ft over (to the inch), a 5 ft board 3 ft over (exactly 4)', () => {
-  const q = Q.reachQuestion(8, 2, seeded(1));
-  assert.equal(q.answer, 93); assert.ok(q.choices.includes(93)); assert.equal(new Set(q.choices).size, q.choices.length);
-  assert.equal(q.labels[q.choices.indexOf(93)], '7 ft 9 in.');
-  assert.match(q.prompt, /^Your board is 8 feet long, and its top end stands 2 feet over from its foot\. About how high/);
-  assert.match(q.why, /8×8 − 2×2 = 64 − 4 = 60/);
-  assert.doesNotMatch(q.prompt + q.why, /\bwall|\d in\b(?!\.)/);
+test('how high a slanting board reaches: a 5 ft board 3 ft over (exactly 4); no triple: an easy question instead', () => {
   const e = Q.reachQuestion(5, 3, seeded(2));
-  assert.equal(e.answer, 48); assert.equal(e.helper.exact, true); assert.match(e.prompt, /How high does/);
+  assert.equal(e.kind, 'slope'); assert.equal(e.answer, 48); assert.equal(e.helper.exact, true); assert.match(e.prompt, /How high does/);
+  assert.match(e.why, /5×5 − 3×3 = 25 − 9 = 16/); assert.doesNotMatch(e.prompt + e.why, /\bwall|\d in\b(?!\.)/);
+  const q = Q.reachQuestion(8, 2, seeded(1));
+  assert.equal(q.kind, 'easy'); assert.equal(q.answer, 4); assert.equal(q.labels[q.choices.indexOf(4)], '4 ft');
   const h = Q.reachQuestion(7.5, 2.5, seeded(4));
-  assert.equal(h.answer, Math.round(Math.sqrt(7.5 ** 2 - 2.5 ** 2) * 12)); assert.match(h.why, /7½×7½ − 2½×2½/);
+  assert.equal(h.kind, 'easy'); assert.equal(h.answer, 15);
   assert.equal(Q.reachQuestion(8, 8), null); assert.equal(Q.reachQuestion(8, 0), null); assert.equal(Q.reachQuestion(8, 2.3), null);
 });
 

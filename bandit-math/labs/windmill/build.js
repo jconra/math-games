@@ -500,8 +500,11 @@ export function makeBuild(app) {
   // A board nailed sticking out past the joint at its free end (by any amount): the bar offers to saw it off right at
   // the joint (one tap), or to keep it. rec: the board just nailed (its b end is the free end), con: where it connected.
   let trim = null;
-  function offerTrim(rec, con) {
+  // how: why an open offer closed ('saw', 'keep', or anything else: undo, a board picked up...), told to app.onTrimClosed
+  function offerTrim(rec, con, how = 'other') {
+    const was = trim;
     trim = con && con.past > 0.01 ? { rec, P: con.P, past: con.past } : null;
+    if (was && was !== trim && app.onTrimClosed) app.onTrimClosed(was.rec, how);
     if (!el.trimBar) return;
     el.trimBar.hidden = !trim; el.view.classList.toggle('is-trimming', !!trim);
     if (!trim) return;
@@ -513,12 +516,12 @@ export function makeBuild(app) {
     const src = tr.rec, before = src.len, nl = d3(src.a, tr.P);
     src.b = { ...tr.P }; src.len = Math.round(nl * 1e6) / 1e6;
     sound.saw(before, tr.past); const kept = keepOffcut(tr.past);
-    offerTrim(null);
+    offerTrim(null, null, 'saw');
     app.onSawOff && app.onSawOff(tr.past, kept, false);
     app.onTowerChanged && app.onTowerChanged(src, `Sawed ${fmt(tr.past)} off`);
   }
   if (el.trimSaw) el.trimSaw.addEventListener('click', () => { sound.audioOn(); sawTrim(); });
-  if (el.trimKeep) el.trimKeep.addEventListener('click', () => { offerTrim(null); app.dirty = true; });
+  if (el.trimKeep) el.trimKeep.addEventListener('click', () => { offerTrim(null, null, 'keep'); app.dirty = true; });
 
   const boardScreen = (b, t) => { const k = t / b.len; return app.worldToScreen(b.a.X + (b.b.X - b.a.X) * k, b.a.Y + (b.b.Y - b.a.Y) * k, b.a.Z + (b.b.Z - b.a.Z) * k); };
   // which overhang (if any) the screen point is on: the pale part itself, or its "saw off" tag. at(t) -> screen point
@@ -803,7 +806,10 @@ export function makeBuild(app) {
     el.gA.hidden = !show; el.gB.hidden = !show;
     (el.arrows || []).forEach((n) => { n.hidden = !show; });
     el.nailBtn.hidden = !show; el.view.classList.toggle('is-holding', show);
-    if (trim && (!building || h || app.selected || !T().boards.includes(trim.rec))) offerTrim(null);
+    // (a question card open never closes it: the bar only hides under the card and comes back after)
+    const asking = app.phase === 'question';
+    if (trim && ((!building && !asking) || h || app.selected || !T().boards.includes(trim.rec))) offerTrim(null);
+    if (el.trimBar && trim) el.trimBar.hidden = asking;
     let out = '', hint = '';
     overTags = []; heldInfo = null;
     showUpNext(building);

@@ -308,8 +308,20 @@ app.nail = () => {
   makeGhosts(rec);
   rebuild();
   // (the view stays where the builder left it; twins hidden behind the board just nailed: the hint says to walk round)
-  afterNail(rec, first);
+  // The miller's question (or word) waits while the bar offers to saw off the extra (build.js opens it right after
+  // this returns): it comes once the builder saws or keeps it, about the board as it then is.
+  pendingNail = { rec, first };
+  setTimeout(() => { if (pendingNail && pendingNail.rec === rec && !(build.trim && build.trim.rec === rec)) runPendingNail(); }, 0);
   return rec;
+};
+let pendingNail = null;
+function runPendingNail() { const p = pendingNail; pendingNail = null; if (p && app.tower.boards.includes(p.rec)) afterNail(p.rec, p.first); }
+// the saw offer closed: sawn or kept, the waiting question comes now. Closed any other way (Undo, another board picked
+// up, a twin built, a board picked out, the wind called), the waiting question is dropped with it.
+app.onTrimClosed = (rec, how) => {
+  if (!pendingNail || pendingNail.rec !== rec) return;
+  // (after the saw cut has been told and the twins worked out again from the shorter board)
+  if (how === 'saw' || how === 'keep') setTimeout(runPendingNail, 0); else pendingNail = null;
 };
 // pick out a nailed board (or none): it lights up, its bar offers to take it down, and its twins that aren't built
 // glow again. note: a word on the bar first (after a saw cut: how much came off, flashed so it is seen)
@@ -660,7 +672,7 @@ function ask(q) {
   app.phase = 'question'; app.select(null);
   const card = $('question');
   card.innerHTML = `<h2>${q.title || (q.bay ? 'How long a brace?' : 'A triangle!')}</h2><div class="sub">Get it right and the miller adds a board to your stack.</div>
-    ${q.kind === 'slope' ? slopePic(q.pic) : trianglePic(q)}<p>${q.prompt}</p>
+    ${q.kind === 'slope' ? slopePic(q.pic) : q.pts ? trianglePic(q) : ''}<p>${q.prompt}</p>
     <div class="choices${q.labels ? ' is-words' : ''}">${q.choices.map((c, i) => `<button data-v="${c}">${q.labels ? q.labels[i] : c + q.unit}</button>`).join('')}</div>
     <div class="why" hidden></div><div class="row" hidden><button class="btn go" id="q-ok">Back to building</button></div>`;
   card.hidden = false;
@@ -728,6 +740,7 @@ function slopePic(pic) {
 // a small picture that shows WHY: the three corners laid side by side make a straight line (180), or the squares on
 // the sides of a right triangle; for a leaning wall, the slope inch by inch
 function helperPic(q) {
+  if (!q.helper) return '';
   if (q.helper.kind === 'legsq') {
     const { L, r, h, exact } = q.helper;
     if (exact) return helperPic({ helper: { kind: 'squares', a: Math.min(r, Math.round(h)), b: Math.max(r, Math.round(h)), c: L } });
