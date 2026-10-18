@@ -1,13 +1,15 @@
 // OLD HOB: the old hand next door, the trail buddy with the hints (the people at each job say what is going on there:
 // src/jobfolk.js). He says a short line now and then (a caption at the bottom left, with a short babble
 // of a voice under it: src/audio/voice.js, when the game gives him one) and
-// lays a trail of glowing hoofprints from the town square out to the job, so a new rider knows where to go.
+// lays a trail of glowing hoofprints from where the player is out to the job the card up top is about, so a rider
+// knows where to go.
 //
 // Each teaching line is said once per rider (remembered in rider.flags.hob, saved with the rider), so a returning
 // rider isn't told the same things again.
 //
-//   const B = makeHob({ W, hud, rider, scene, I, voice })   (I: the input, so a phone player is told to tap, not press F;
-//                         voice: makeHobVoice, his babble, or null for none)
+//   const B = makeHob({ W, hud, rider, scene, I, voice, roads })   (I: the input, so a phone player is told to tap, not press F;
+//                         voice: makeHobVoice, his babble, or null for none; roads(): more ways the trail likes to keep
+//                         to besides the town's dirt trail, as [[[x, z], ...], ...] (the wagon road), or null)
 //   B.event(name, data)   what just happened; Hob decides whether to say something:
 //                         'ride' (riding out; data.mode, data.wagon: the wagon job is on), 'arrive' (at the herd), 'catch', 'miss', 'waveDone' (data.gold),
 //                         'boxWon', 'saddle', 'dog', 'horse', 'title' (data.title), 'near' (data.place: at the saloon's
@@ -40,12 +42,17 @@
 //                         'lootRight' (a right coin: a 'pick again' line still up or waiting is dropped),
 //                         'lootDone' (data.trips), 'lootWord' (data.place: the next cache); 'ride' with data.loot: the job is on
 //   B.say(text)           says a line now (or after the line he is saying)
-//   B.trail(on)           the hoofprints to the pasture on or off (they fade in and out)
-//   B.update(dt, at, { hold })   each frame: at = the player's position (the trail fades away once they reach the herd);
+//   B.trail(on)           the hoofprints on or off (they fade in and out)
+//   B.trailTo(goal | null)   each frame: where the trail leads, { id, x, z, hide: { x, z, r } } (id: which job; hide: a
+//                         circle where the trail is not wanted, as the whole pasture for the round-up), or null for no
+//                         trail (no job card up, or the job is under way)
+//   B.trailState()        for rigs: { id, goal, prints, fade, searching, gone, length, end, pts }
+//   B.update(dt, at, { hold })   each frame: at = the player's position (the trail fades away once they reach the job);
 //                         hold: a job person's speech card is up (on a narrow screen Hob then waits his turn)
 //   B.dispose()
 import * as THREE from 'three';
 import { saveRider } from './save.js';
+import { makePathSearch, nearestAlong } from './trailpath.js';
 
 export const HOB = {
   step: 1.15,          // metres between hoofprints along the trail
@@ -53,7 +60,17 @@ export const HOB = {
   size: [0.5, 0.58],   // a print's width and length (m), glow included: bigger than a real hoof, to be seen from the saddle
   pulse: 9,            // metres a second the glow runs along the trail toward the job
   wave: 14,            // metres between two glows
-  hideNear: 38,        // the trail fades out within this many metres of the pasture's middle
+  hideNear: 38,        // the round-up's trail fades out within this many metres of the pasture's middle
+  goalNear: 15,        // any other job's trail fades out within this many metres of it
+  ahead: 3,            // the trail starts this many metres ahead of the player (the prints behind are gone)
+  stray: 25,           // metres off the trail before it is worked out again from where the player is
+  moved: 20,           // metres a job can move (the wagon rolling on) before the trail is worked out again
+  most: 900,           // prints at most (about a kilometre of trail)
+  cell: 2,             // the way finder's grid squares (m)
+  pad: 40,             // metres of land round the two ends that the way may use
+  steep: 0.6,          // ground steeper than this (rise over run) is no way for the trail
+  road: 0.45,          // the town trail and the wagon road cost this much of open grass, so the way keeps to them
+  budget: 3,           // milliseconds a frame for working out a way
 };
 
 const LINES = {
@@ -169,7 +186,7 @@ const JOB = { arrive: 'roundup', catch: 'roundup', miss: 'roundup', farmArrive: 
 const KEEP_JOB = 5;
 const NEAR_AGAIN = 180;  // seconds before Hob says something about the same place again (walking past again and again doesn't set him off each time)
 
-export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null }) {
+export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null, roads = null }) {
   const touch = () => !!(I && I.touch);
   const flags = () => { rider.flags = rider.flags && typeof rider.flags === 'object' ? rider.flags : {}; const f = rider.flags; f.hob = f.hob || {}; return f.hob; };
   const once = (id) => { const f = flags(); if (f[id]) return false; f[id] = 1; saveRider(rider); return true; };
@@ -323,61 +340,155 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
   }
 
   // ── THE HOOFPRINTS ────────────────────────────────────────────────────────────────────────────────────────────
-  const path = (W.places.trail || []).map(([x, z]) => new THREE.Vector2(x, z));
+  // The trail leads from just ahead of the player to the job the card up top is about (main.js says which, with
+  // B.trailTo). The way is worked out over the land (src/trailpath.js): round buildings, fences, trees, deep water and
+  // steep ground, keeping to the town's dirt trail and the wagon road where that is no longer way round. It is worked out
+  // again when the job changes, when the job moves (the wagon rolls on), and when the player wanders well off it; the
+  // prints the player has passed fade away behind them. The search runs a few milliseconds a frame, never all at once.
   const prints = [];
-  if (path.length > 1) {
-    let along = 0, next = 0, n = 0;
-    for (let i = 1; i < path.length; i++) {
-      const a = path[i - 1], b = path[i], seg = a.distanceTo(b); if (seg < 1e-3) continue;
-      const dx = (b.x - a.x) / seg, dz = (b.y - a.y) / seg;
-      while (next <= along + seg) {
-        const t = next - along, side = n % 2 ? HOB.side : -HOB.side;
-        const x = a.x + dx * t + dz * side, z = a.y + dz * t - dx * side;
-        if (!W.blocked(x, z) && W.waterAt(x, z) < 0.35) prints.push({ x, z, h: Math.atan2(dx, dz), along: next });
-        next += HOB.step; n++;
-      }
-      along += seg;
-    }
-  }
   const tex = printTexture();
   const geo = new THREE.PlaneGeometry(HOB.size[0], HOB.size[1]);
   geo.rotateX(-Math.PI / 2);
-  const alongAttr = new Float32Array(prints.length);
-  prints.forEach((p, i) => { alongAttr[i] = p.along; });
-  geo.setAttribute('aAlong', new THREE.InstancedBufferAttribute(alongAttr, 1));
-  const U = { map: { value: tex }, uTime: { value: 0 }, uFade: { value: 0 }, uLen: { value: prints.length ? prints[prints.length - 1].along : 1 } };
+  const alongAttr = new THREE.InstancedBufferAttribute(new Float32Array(HOB.most), 1);
+  alongAttr.setUsage(THREE.DynamicDrawUsage);
+  geo.setAttribute('aAlong', alongAttr);
+  const U = { map: { value: tex }, uTime: { value: 0 }, uFade: { value: 0 }, uLen: { value: 1 }, uStart: { value: HOB.ahead } };
   const mat = new THREE.ShaderMaterial({
     uniforms: U, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, fog: false,
     polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
     vertexShader: `attribute float aAlong; varying vec2 vUv; varying float vAlong;
       void main() { vUv = uv; vAlong = aAlong; gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0); }`,
-    fragmentShader: `uniform sampler2D map; uniform float uTime, uFade, uLen; varying vec2 vUv; varying float vAlong;
+    // (uStart: the prints behind it, the ones the player has passed, are gone; the next few metres fade in)
+    fragmentShader: `uniform sampler2D map; uniform float uTime, uFade, uLen, uStart; varying vec2 vUv; varying float vAlong;
       void main() {
         float a = texture2D(map, vUv).a;
         float w = fract((vAlong - uTime * ${HOB.pulse.toFixed(1)}) / ${HOB.wave.toFixed(1)});
         float glow = 0.85 + 1.6 * smoothstep(0.7, 0.97, w) * (1.0 - smoothstep(0.97, 1.0, w));
-        float ends = smoothstep(0.0, 4.0, vAlong) * (1.0 - 0.5 * smoothstep(uLen - 8.0, uLen, vAlong));
+        float ends = smoothstep(uStart, uStart + 4.0, vAlong) * (1.0 - 0.5 * smoothstep(uLen - 8.0, uLen, vAlong));
         gl_FragColor = vec4(vec3(1.0, 0.82, 0.45) * glow * a * uFade * ends, 1.0);
       }`,
   });
-  const mesh = new THREE.InstancedMesh(geo, mat, Math.max(1, prints.length));
-  mesh.count = prints.length; mesh.frustumCulled = false; mesh.renderOrder = 2; mesh.name = 'hob-hoofprints';
-  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), pos = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
-  prints.forEach((p, i) => {
-    // lying on the ground, along the slope
-    const e = 0.3, hx = W.heightAt(p.x + e, p.z) - W.heightAt(p.x - e, p.z), hz = W.heightAt(p.x, p.z + e) - W.heightAt(p.x, p.z - e);
-    const nrm = new THREE.Vector3(-hx / (2 * e), 1, -hz / (2 * e)).normalize();
-    // (the picture's top is the toe: turned so the toe points along the way to the job, the open heel behind)
-    q.setFromUnitVectors(up, nrm).multiply(new THREE.Quaternion().setFromAxisAngle(up, p.h + Math.PI));
-    pos.set(p.x, W.heightAt(p.x, p.z) + 0.04, p.z);
-    m4.compose(pos, q, one); mesh.setMatrixAt(i, m4);
-  });
-  mesh.instanceMatrix.needsUpdate = true;
+  const mesh = new THREE.InstancedMesh(geo, mat, HOB.most);
+  mesh.count = 0; mesh.frustumCulled = false; mesh.renderOrder = 2; mesh.name = 'hob-hoofprints';
+  mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   mesh.visible = false;
   scene.add(mesh);
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), q2 = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), pos = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1), nrm = new THREE.Vector3();
+
+  // what the ground costs to cross, for the way finder (remembered to the metre: the land doesn't change)
+  const ROAD_CELL = 2;
+  let roadCells = null, roadsIn = false;
+  const ground = new Map();
+  function roadsNow() {
+    if (roadCells && roadsIn) return;
+    roadCells = new Set();
+    const lines = [W.places.trail || []];
+    const more = roads ? roads() : null;
+    if (more && more.length) { lines.push(...more); roadsIn = true; }
+    for (const L of lines) for (let i = 1; i < L.length; i++) {
+      const [ax, az] = L[i - 1], [bx, bz] = L[i], n = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az)));
+      for (let s = 0; s <= n; s++) {
+        const ci = Math.floor((ax + (bx - ax) * s / n) / ROAD_CELL), cj = Math.floor((az + (bz - az) * s / n) / ROAD_CELL);
+        for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) roadCells.add((ci + di) + ',' + (cj + dj));
+      }
+    }
+    ground.clear();
+  }
+  function cost(x, z) {
+    const k = Math.round(x) + ',' + Math.round(z);
+    let v = ground.get(k);
+    if (v !== undefined) return v;
+    if (W.blocked(x, z)) v = Infinity;
+    else {
+      const e = 1, gx = (W.heightAt(x + e, z) - W.heightAt(x - e, z)) / (2 * e), gz = (W.heightAt(x, z + e) - W.heightAt(x, z - e)) / (2 * e);
+      const slope = Math.hypot(gx, gz);
+      if (slope > HOB.steep) v = Infinity;
+      else {
+        v = 1 + 8 * Math.max(0, slope - 0.12);                   // (a climb costs more the steeper it is)
+        if (W.waterAt(x, z) > 0.3) v += 3;                       // (wading a creek: allowed, but a ford or a bridge is better)
+        if (roadCells.has(Math.floor(x / ROAD_CELL) + ',' + Math.floor(z / ROAD_CELL))) v *= HOB.road;
+      }
+    }
+    if (ground.size > 400000) ground.clear();
+    ground.set(k, v);
+    return v;
+  }
+
+  // lay the prints along a path [[x, z], ...] (alternating left and right of its middle, HOB.step apart)
+  function lay(path) {
+    prints.length = 0;
+    let along = 0, next = 0, n = 0;
+    for (let i = 1; i < path.length && prints.length < HOB.most; i++) {
+      const [ax, az] = path[i - 1], [bx, bz] = path[i], seg = Math.hypot(bx - ax, bz - az); if (seg < 1e-3) continue;
+      const dx = (bx - ax) / seg, dz = (bz - az) / seg;
+      while (next <= along + seg && prints.length < HOB.most) {
+        const t = next - along, side = n % 2 ? HOB.side : -HOB.side;
+        const x = ax + dx * t + dz * side, z = az + dz * t - dx * side;
+        if (!W.blocked(x, z) && W.waterAt(x, z) < 0.35) prints.push({ x, z, h: Math.atan2(dx, dz), along: next });
+        next += HOB.step; n++;
+      }
+      along += seg;
+    }
+    prints.forEach((p, i) => {
+      // lying on the ground, along the slope
+      const e = 0.3, hx = W.heightAt(p.x + e, p.z) - W.heightAt(p.x - e, p.z), hz = W.heightAt(p.x, p.z + e) - W.heightAt(p.x, p.z - e);
+      nrm.set(-hx / (2 * e), 1, -hz / (2 * e)).normalize();
+      // (the picture's top is the toe: turned so the toe points along the way to the job, the open heel behind)
+      q.setFromUnitVectors(up, nrm).multiply(q2.setFromAxisAngle(up, p.h + Math.PI));
+      pos.set(p.x, W.heightAt(p.x, p.z) + 0.04, p.z);
+      m4.compose(pos, q, one); mesh.setMatrixAt(i, m4);
+      alongAttr.array[i] = p.along;
+    });
+    mesh.count = prints.length;
+    mesh.instanceMatrix.needsUpdate = true; alongAttr.needsUpdate = true;
+    U.uLen.value = prints.length ? prints[prints.length - 1].along : 1;
+  }
 
   let want = false, fade = 0, time = 0;
+  let goal = null;            // the job the trail should lead to: { id, x, z, hide } (main.js, each frame)
+  let shown = null;           // the trail laid now: { id, x, z, pts }
+  let search = null;          // a way being worked out: { S, id, x, z }
+  let ready = null;           // a way worked out, waiting for the old trail to fade before it is laid
+  let gone = 0;               // metres along the laid trail the player has got to (the prints behind are gone)
+  let checkT = 0, failed = null, firstSearch = true;
   B.trail = (on) => { want = !!on; };
+  B.trailTo = (g) => { goal = g && Number.isFinite(g.x) && Number.isFinite(g.z) ? g : null; };
+  function trailUpdate(dt, at) {
+    const d = goal && at ? Math.hypot(at.x - goal.x, at.z - goal.z) : Infinity;
+    const there = !goal || !at || d < HOB.goalNear || (goal.hide && Math.hypot(at.x - goal.hide.x, at.z - goal.hide.z) < goal.hide.r);
+    // a new way is wanted: a different job, the job moved off, or the player wandered off the trail
+    if ((checkT -= dt) <= 0 && want && goal && at && !there) {
+      checkT = 0.25;
+      let need = !shown || shown.id !== goal.id || Math.hypot(shown.x - goal.x, shown.z - goal.z) > HOB.moved;
+      if (!need && shown.pts.length > 1) {
+        const r = nearestAlong(shown.pts, at.x, at.z);
+        if (r.off > HOB.stray) need = true;
+        else gone = Math.max(gone, r.along);
+      }
+      const busy = (search && search.id === goal.id && Math.hypot(search.x - goal.x, search.z - goal.z) < HOB.moved) || (ready && ready.id === goal.id && !need);
+      const waitFail = failed && failed.id === goal.id && now - failed.at < 8;
+      if (need && !busy && !waitFail) {
+        roadsNow();
+        search = { S: makePathSearch({ from: { x: at.x, z: at.z }, to: { x: goal.x, z: goal.z }, cost, cell: HOB.cell, pad: HOB.pad }), id: goal.id, x: goal.x, z: goal.z };
+      }
+    }
+    // a few milliseconds a frame on the search (more on the ride's first frame, so the first trail is there at once)
+    if (search) {
+      const t0 = performance.now(), budget = firstSearch ? 60 : HOB.budget;
+      let st = 'running';
+      while (st === 'running' && performance.now() - t0 < budget) st = search.S.step(200);
+      if (st === 'done') { ready = { id: search.id, x: search.x, z: search.z, pts: search.S.path }; search = null; firstSearch = false; }
+      else if (st === 'fail') { failed = { id: search.id, at: now }; search = null; firstSearch = false; }
+    }
+    // a new way is laid once the old trail has faded out (or straight away if none is showing)
+    if (ready && fade < 0.02) {
+      lay(ready.pts); shown = ready; ready = null; gone = 0;
+      if (at) { const r = nearestAlong(shown.pts, at.x, at.z); gone = r.along; }
+    }
+    U.uStart.value = gone + HOB.ahead;
+    const target = want && goal && shown && !ready && shown.id === goal.id && !there ? 1 : 0;
+    fade += Math.sign(target - fade) * Math.min(Math.abs(target - fade), dt / 0.8);
+  }
   B.update = (dt, at, o = {}) => {
     time += dt;
     if (voice) voice.update(dt);
@@ -401,14 +512,14 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
     if (speaking > 0 && !(hold && saying && !saying.urgent) && (speaking -= dt) <= 0) saying = null;
     // (next: a line about a job before a tip, as a job line that waits too long is dropped and a tip can wait)
     if (speaking <= 0 && !hold && queue.length) { const j = queue.findIndex((q) => JOB[q.key]); const q = queue.splice(Math.max(0, j), 1)[0]; key = q.key; B.say(q.text, q.ms); key = null; }
-    const pa = W.places.pasture;
-    const near = at && pa ? Math.hypot(at.x - pa.x, at.z - pa.z) < HOB.hideNear : false;
-    const target = want && !near ? 1 : 0;
-    fade += Math.sign(target - fade) * Math.min(Math.abs(target - fade), dt / 0.8);
+    trailUpdate(dt, at);
     U.uFade.value = fade; U.uTime.value = time;
-    mesh.visible = fade > 0.002;
+    mesh.visible = fade > 0.002 && mesh.count > 0;
   };
-  B.prints = prints.length;
+  Object.defineProperty(B, 'prints', { get: () => prints.length });
+  // (for rigs: the trail laid now, and the job it leads to)
+  B.trailState = () => ({ id: shown && shown.id, goal: goal && goal.id, prints: prints.length, fade, searching: !!search, gone, length: U.uLen.value,
+    end: shown ? shown.pts[shown.pts.length - 1] : null, pts: shown ? shown.pts : null });
   B.dispose = () => { scene.remove(mesh); geo.dispose(); mat.dispose(); tex.dispose(); hud.caption(null); if (voice) voice.stop(); };
   return B;
 }

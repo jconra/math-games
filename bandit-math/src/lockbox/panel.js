@@ -1054,7 +1054,10 @@ export function openLockbox(root = document.body, opts = {}) {
       btn.disabled = true;
     }
 
-    // ----- the check: x drops into the START line and each side works itself out (no buttons) -----
+    // ----- the check: x drops into the BEGINNING equation and each side works itself out, a step at a time: the kid
+    // taps Next (or Enter / Space) to see the next step, so the working and the number-line hops can be read -----
+    let nextGo = null;           // the check's Next: resolves the wait for the next step
+    const goNext = () => { if (nextGo) { const f = nextGo; nextGo = null; f(); } };
     // Both sides run their steps together (4·2 − 6 → 8 − 6 → 2); a side that comes down to a negative and a positive
     // (−16 + 18) flashes the number-line hop under it. Both land on the same number, the hinge locks, the lid opens.
     async function runCheck() {
@@ -1075,7 +1078,7 @@ export function openLockbox(root = document.body, opts = {}) {
         <div class="ck-head"><span class="ck-key">${KEY_SVG}<b>${esc(val)}</b></span><span class="ck-title">${mathHTML('x =')} <b class="ck-n">${esc(val)}</b> in the beginning equation</span></div>
         <div class="ck-line"><div class="ck-side" data-s="L"><span class="ck-txt">${mathHTML(sideText(problem.start.L))}</span></div>${hingeEl().outerHTML}<div class="ck-side" data-s="R"><span class="ck-txt">${mathHTML(sideText(problem.start.R))}</span></div></div>
         <div class="ck-nls"><div class="ck-nl" data-s="L"></div><div class="ck-nl" data-s="R"></div></div>
-        <div class="ck-hurry" aria-hidden="true"><span class="lbx-kb"><kbd>Enter</kbd> or click to hurry</span><span class="lbx-tap">Tap to hurry</span></div></div>`;
+        <button type="button" class="ck-next" hidden>Next</button></div>`;
       // the first few boxes of a sitting say so right under the check, where the kid is looking (later, and on a
       // phone, only the quiet note in the corner)
       body.classList.toggle('hurry-near', session.solved < QUICK_AFTER);
@@ -1086,13 +1089,21 @@ export function openLockbox(root = document.body, opts = {}) {
         old.replaceWith(t);
       };
       fitCheck();
-      const q = session.solved >= QUICK_AFTER ? QUICK : 1;   // (quicker once the kid has seen a few)
-      await wait(520 * q);
+      const q = 1;
+      const nextBtn = work.querySelector('.ck-next');
+      nextBtn.addEventListener('click', (e) => { e.stopPropagation(); goNext(); });
+      // wait for the kid's Next (the button shows, labelled as given)
+      const next = (label = 'Next') => new Promise((res) => {
+        if (gone) { res(); return; }
+        nextBtn.textContent = label; nextBtn.hidden = false; nextBtn.focus({ preventScroll: true });
+        nextGo = () => { nextBtn.hidden = true; res(); };
+      });
+      await wait(520);
       if (gone) return;
       // the key's number drops in for every x
       for (const s of ['L', 'R']) setText(s, keyInHTML(problem.start[s], kt.x), 'in');
       fitCheck();
-      await wait(CHECK_STEP_MS * q);
+      await next();
       // then the working out, a step at a time on both sides together
       const longest = Math.max(steps.L.length, steps.R.length);
       for (let k = 1; k < longest && !gone; k++) {
@@ -1109,12 +1120,12 @@ export function openLockbox(root = document.body, opts = {}) {
           } else setText(s, mathHTML(steps[s][k]), last ? 'in final' : 'in');
         }
         fitCheck();
-        if (!hops.length) { await wait(CHECK_STEP_MS * q); continue; }
+        if (!hops.length) { if (k < longest - 1) await next(); continue; }
         await hopsLanded(hops.map((hp) => hp.line));
         if (gone) break;
         for (const hp of hops) { sideBox(hp.s).classList.remove('hopping'); setText(hp.s, hp.html, 'in final landed'); }
         fitCheck();
-        await wait(CHECK_LAND_MS);
+        if (k < longest - 1) await next();
       }
       if (gone) return;
       // both sides land on the same number: the key fits
@@ -1125,7 +1136,7 @@ export function openLockbox(root = document.body, opts = {}) {
       work.querySelector('.ck-line .hinge')?.classList.add('locked');
       hob(`${a} = ${b}. It checks out!`, 'good');
       renderSteps({ checked: true });
-      await wait(700 * q);
+      await next('Open it');
       paper.querySelector('.lbx-start').classList.remove('lit');
       if (!gone) finish();
     }
@@ -1198,7 +1209,8 @@ export function openLockbox(root = document.body, opts = {}) {
         else if (k === 'h' || k === '?') askHob();
         return;
       }
-      if (phase === 'anim' || phase === 'check') { if (k === ' ' || k === 'enter') { e.preventDefault(); ff = true; } return; }
+      if (phase === 'check') { if (k === ' ' || k === 'enter') { e.preventDefault(); goNext(); } return; }
+      if (phase === 'anim') { if (k === ' ' || k === 'enter') { e.preventDefault(); ff = true; } return; }
       if (phase !== 'play') return;
       if (/^[1-4]$/.test(k)) {
         e.preventDefault();
@@ -1224,7 +1236,7 @@ export function openLockbox(root = document.body, opts = {}) {
     resizeWatch?.observe(work);
 
     // a tap anywhere fast-forwards a move or the check while it plays (it never adds a move)
-    body.addEventListener('pointerdown', () => { if (phase === 'anim' || phase === 'check') ff = true; });
+    body.addEventListener('pointerdown', () => { if (phase === 'anim') ff = true; });
     undoBtn.addEventListener('click', undo);
     askBtn.addEventListener('click', askHob);
     leaveBtn.addEventListener('click', leave);

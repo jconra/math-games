@@ -42,7 +42,7 @@ import { makeDeliveryJob } from './missions/delivery.js';
 import { makeWagonJob } from './missions/wagonjob.js';
 import { makeLootJob } from './missions/loot.js';
 import { makeShops, makePanel, boxTier, PRICES, PAY } from './shop.js';
-import { makeHob } from './hob.js';
+import { makeHob, HOB } from './hob.js';
 import { makeJobFolk } from './jobfolk.js';
 import { makeStage } from './stage.js';
 import { makeTraffic } from './traffic.js';
@@ -174,7 +174,8 @@ async function ride(r) {
   I.enabled = true;
   P = makePlayer({ W, folk, animals, rider, input: I, camera, say: (t) => hud.toast(t) });
   makeDogIfOwned();
-  hob = makeHob({ W, hud, rider, I });   // (no babble voice: the owner found reading works better; src/audio/voice.js is kept for the Sound Lab)
+  cardBy = null;
+  hob = makeHob({ W, hud, rider, I, roads: roadLines });   // (no babble voice: the owner found reading works better; src/audio/voice.js is kept for the Sound Lab)
   { const heard = hob.event; hob.event = (n, d) => { heard(n, d); if (JF) JF.heard(n, d); if (SHOUT) SHOUT.heard(n, d); }; }   // (the job folk hear the jobs too: their thank-yous; and the player's yeehaw at a job's end)
   stage = makeStage({ W, folk, audio: AUD });
   traffic = makeTraffic({ W, animals, folk, audio: AUD, obstacles: trafficThings, camps: () => camps });
@@ -196,33 +197,33 @@ async function ride(r) {
   farm = makeFarm({ W, animals });
   // (the farm jobs' Hob also hears a whole flock healed or a batch penned: now and then a thank-you lamb or piglet)
   const farmHob = Object.create(hob); farmHob.event = (n, d) => { hob.event(n, d); if (HS && (n === 'flockDone' || n === 'pigsDone')) HS.jobDone(n); };
-  SH = makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hud, hob: farmHob, refresh, defer: (at) => !!(PG && PG.wants(at)) });
-  PG = makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, hob: farmHob, refresh });
-  SJ = makeStoreJob({ W, folk, P, I, camera, rider, hud, hob, refresh, pay: PAY, goods: HS, voice: (k, who) => { if (SHOUT) SHOUT.say(k, who); },
+  SH = makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hud: tagHud('sheep'), hob: farmHob, refresh, defer: (at) => !!(PG && PG.wants(at)) });
+  PG = makePigJob({ W, animals, farm, P, camera, canvas, rider, hud: tagHud('pigs'), hob: farmHob, refresh });
+  SJ = makeStoreJob({ W, folk, P, I, camera, rider, hud: tagHud('store'), hob, refresh, pay: PAY, goods: HS, voice: (k, who) => { if (SHOUT) SHOUT.say(k, who); },
     openBox: (problem, after) => !paused && openBox({ tier: problem.tier, from: 'store' }, { problem, after }),   // (false: not now, the store tries again)
     onStart: () => { I.enabled = false; if (RU) RU.paused = true; hud.prompt(null); hud.rule(null); hud.hint(null); },
     onStop: () => { I.enabled = !paused; if (RU) RU.paused = paused; } });
   camps = makeCamps({ W, folk, camera, audio: AUD });
   deer = makeDeer({ W, animals });
-  DJ = rider.missions && rider.missions.hunt ? makeDeerJob({ W, deer, P, I, camera, canvas, rider, hud, hob, audio: AUD, refresh,
+  DJ = rider.missions && rider.missions.hunt ? makeDeerJob({ W, deer, P, I, camera, canvas, rider, hud: tagHud('deer'), hob, audio: AUD, refresh,
     onStart: () => { P.enabled = false; I.enabled = false; if (RU) RU.paused = true; hud.prompt(null); },
     onStop: () => { P.enabled = !paused; I.enabled = !paused; if (RU) RU.paused = paused; },
     busy: () => !!((WJ && (WJ.on || WJ.near)) || (RU && RU.near) || (SH && SH.near) || (PG && PG.near) || (DL && (DL.active || DL.card))) }) : null;   // (another job has the player: the deer card stands aside)
   // Shooting mode: bottles and tin cans at the range, never anything alive (cattle and bandits are still roped)
-  SR = mode === 'shoot' ? makeShootingJob({ W, folk, P, I, camera, canvas, renderer, rider, hud, hob, audio: AUD, refresh,
+  SR = mode === 'shoot' ? makeShootingJob({ W, folk, P, I, camera, canvas, renderer, rider, hud: tagHud('range'), hob, audio: AUD, refresh,
     onStart: () => { P.enabled = false; I.enabled = false; if (RU) RU.paused = true; hud.prompt(null); },
     onStop: () => { P.enabled = !paused; I.enabled = !paused; if (RU) RU.paused = paused; },
     busy: () => !!((WJ && WJ.on) || (DL && DL.active) || (DJ && DJ.active)) }) : null;
-  DL = makeDeliveryJob({ W, camps, P, camera, rider, hud, hob, refresh,
+  DL = makeDeliveryJob({ W, camps, P, camera, rider, hud: tagHud('delivery'), hob, refresh,
     onStart: () => { P.enabled = false; I.enabled = false; if (RU) RU.paused = true; hud.prompt(null); },
     onStop: () => { P.enabled = !paused; I.enabled = !paused; if (RU) RU.paused = paused; },
     quiet: () => !!((RU && RU.near) || (SH && SH.near) || (PG && PG.near) || (SJ && SJ.active) || (WJ && WJ.near)),
     say: (id, t) => !!(JF && JF.say(id, t)) });   // (the foremen's words in the job folk's speech card)
-  WJ = rider.missions && rider.missions.wagon ? makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, audio: AUD, refresh,
+  WJ = rider.missions && rider.missions.wagon ? makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hud: tagHud('wagon'), hob, audio: AUD, refresh,
     times: () => RU && RU.trainer('times'),   // (one times trainer for both jobs)
     wagonLib: () => traffic && traffic.ready,   // (the wagon models the traffic loads, shared)
     quiet: () => !!((RU && RU.near) || (SH && SH.near) || (PG && PG.near) || atCounter() || (DL && DL.card)) }) : null;
-  LJ = rider.missions && rider.missions.loot ? makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, refresh,
+  LJ = rider.missions && rider.missions.loot ? makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud: tagHud('loot'), hob, refresh,
     voice: (k, who) => { if (SHOUT) SHOUT.say(k, who); },   // (a townsman's recorded lines: "Is that my stuff?", a thank-you)
     quiet: () => !!((RU && RU.near) || (SH && SH.near) || (PG && PG.near) || atCounter() || (WJ && WJ.near) || (DL && DL.card) || (DJ && DJ.card)) }) : null;
   JF = makeJobFolk({ W, folk, P, camera, hud,
@@ -305,11 +306,47 @@ function endRide() {
 // The round-up and the farm's sheep job share the HUD's job card and the line under it: at the farm the sheep job has
 // them, so the round-up's own (its travel card, counting the metres to the pasture) is held back there
 function roundupHud() {
-  const h = Object.create(hud);
+  const base = tagHud('roundup'), h = Object.create(base);
   const atFarm = () => !!((SH && SH.near) || (PG && PG.near) || (DL && DL.card && !(RU && RU.near)) || (WJ && (WJ.near || (WJ.on && !(RU && RU.near)))) || (DJ && DJ.card) || (LJ && LJ.card && !(RU && RU.near)));   // (and a delivery's card)   // (the sheep pasture or the pig yard)
-  h.rule = (o) => (atFarm() || atCounter() ? hud.ruleEl : hud.rule(o));   // (nor at the store's counter)
+  h.rule = (o) => (atFarm() || atCounter() ? hud.ruleEl : base.rule(o));   // (nor at the store's counter)
   h.hint = (o) => { if (!atFarm() && !atCounter()) hud.hint(o); };
   return h;
+}
+
+// ── WHICH JOB THE CARD UP TOP IS ABOUT: Old Hob's hoofprints lead there ───────────────────────────────────────────
+// Each job is handed a HUD that marks the rule card it puts up as its own (tagHud), so the trail follows the very job the
+// card names: the round-up's "the herd is in the pasture", or a delivery's, the wagon's or the gang's loot when one of
+// those has the card. A card that is not a travel card means the job is under way right there: no trail then.
+let ruleBy = null, cardBy = null;   // (the job putting a card up just now; the job whose card is up: { id, kind })
+{ const rule = hud.rule; hud.rule = (o) => { cardBy = o ? { id: ruleBy, kind: o.kind || null } : null; return rule(o); }; }
+function tagHud(id) {
+  const h = Object.create(hud);
+  h.rule = (o) => { const was = ruleBy; ruleBy = id; try { return hud.rule(o); } finally { ruleBy = was; } };
+  return h;
+}
+function trailGoal() {
+  if (!cardBy || cardBy.kind !== 'travel') return null;
+  const mark = (ms) => (ms && ms[0] ? { id: cardBy.id + ':' + ms[0].label, x: ms[0].x, z: ms[0].z } : null);
+  switch (cardBy.id) {
+    case 'roundup': {
+      // (as on the first day: out to the corral at the end of the town's dirt trail; none once in the pasture)
+      const pa = W.places.pasture, t = W.places.trail; if (!pa) return null;
+      const e = t && t.length ? t[t.length - 1] : [pa.x, pa.z];
+      return { id: 'roundup', x: e[0], z: e[1], hide: { x: pa.x, z: pa.z, r: HOB.hideNear } };
+    }
+    case 'wagon': { if (!WJ) return null; const w = WJ.where(); return { id: 'wagon', x: w.x, z: w.z }; }
+    case 'delivery': return DL ? mark(DL.marks()) : null;
+    case 'loot': return LJ ? mark(LJ.marks()) : null;
+    case 'deer': return DJ ? mark(DJ.marks()) : null;
+    case 'range': return SR ? mark(SR.marks()) : null;
+    default: return null;
+  }
+}
+// the wagon road, as points, for the trail to keep to (it is no longer way round)
+let roadPts = null;
+function roadLines() {
+  if (!roadPts && traffic && traffic.road) { const c = traffic.road; roadPts = c.getSpacedPoints(Math.max(2, Math.ceil(c.getLength() / 2))).map((v) => [v.x, v.z]); }
+  return roadPts ? [roadPts] : null;
 }
 
 // the purse on the HUD, from the rider
@@ -562,6 +599,7 @@ function step(dt) {
     if (DJ) DJ.update(dt);   // (after the player: it places the camera while the viewfinder is up)
     if (SR) SR.update(dt);   // (after the player: it places the camera while the six-shooter is up)
     if (LJ) LJ.update(dt);
+    hob.trailTo(trailGoal());
     hob.update(dt, P.position, { hold: !!((JF && JF.speaking()) || (SR && SR.speaking())) });   // (on a phone, Hob waits while a job person is talking)
     if (stage) stage.update(dt, P.position);
     if (traffic) { traffic.keepView = SJ && SJ.active && !P.cam.enabled ? camera : null; traffic.update(dt, P.position, camera.position); }   // (no wagon through the store counter's picture)

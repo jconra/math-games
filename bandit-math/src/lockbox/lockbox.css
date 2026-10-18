@@ -493,7 +493,12 @@
 .ck-side.miss { box-shadow: inset 0 0 0 2px var(--rust); }
 .ck-nls { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; width: min(100%, 900px); min-height: 0; }
 .ck-nl { display: flex; justify-content: center; min-width: 0; opacity: 0; }
-.ck-nl.on { animation: lbx-hopflash calc(1.5s * var(--k)) ease-in-out both; }
+.ck-nl.on { opacity: 1; animation: lbx-fade 0.35s ease-out both; }   /* (stays up until the kid taps Next) */
+.ck-next { margin-top: 10px; padding: 10px 28px; border: 0; border-radius: 10px; cursor: pointer;
+  font: 700 20px/1 Bitter, Georgia, serif; color: #2a1a0c; background: linear-gradient(#f3c56b, #e2ad4c);
+  box-shadow: 0 3px 0 #8a5a1c, 0 6px 14px rgba(0, 0, 0, 0.35); animation: lbx-fade 0.3s ease-out both; }
+.ck-next:active { transform: translateY(2px); box-shadow: 0 1px 0 #8a5a1c; }
+.ck-next[hidden] { display: none; }
 .ck-nl[data-s="R"] { grid-column: 2; }
 
 /* ---- the lid opens on the mat, the coins fly into the gold, the next box slides in ------------------------------ */
@@ -875,3 +880,4 @@
   .lbx-body.nl-on .lbx-paper { height: 46vh; }   /* the paper grows while the sketch shows, so all of it fits */
   .lbx-move.tidycard { font-size: 18px; }
 }
+.checking:not(.opened) .lbx-hurry { opacity: 0 !important; }   /* (the check waits for Next: nothing to hurry) */
