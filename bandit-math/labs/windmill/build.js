@@ -905,12 +905,14 @@ export function makeBuild(app) {
         if (A.behind || B.behind || Math.hypot(B.x - A.x, B.y - A.y) > 26) continue;
         out += `<circle class="twinend" cx="${(A.x + B.x) / 2}" cy="${(A.y + B.y) / 2}" r="13"/>`;
       }
+      const saidWhy = new Set();   // (each reason once: one "no wood left" tag, not one per twin)
       for (const g of app.ghostList()) {
-        if (g.ok || !g.reason) continue;
+        if (g.ok || !g.reason || saidWhy.has(g.reason)) continue;
         const P = app.worldToScreen((g.a.X + g.b.X) / 2, (g.a.Y + g.b.Y) / 2, (g.a.Z + g.b.Z) / 2);
         if (P.behind || P.x < 40 || P.x > r.width - 40 || P.y < 60 || P.y > r.height - 10) continue;
         const c = tag(108, 19, [[0, 0], [0, -24], [0, 24], [0, -48], [0, 48], [-70, 0], [70, 0]].map(([dx, dy]) => ({ x: P.x + dx, y: P.y + dy })));
         out += `<g class="ghosttag"><rect x="${c.x - 54}" y="${c.y - 10}" width="108" height="19" rx="9"/><text x="${c.x}" y="${c.y + 4}">${g.reason}</text></g>`;
+        saidWhy.add(g.reason);
       }
     }
     svg.innerHTML = out;

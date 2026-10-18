@@ -51,12 +51,14 @@ export function leanRate(k, dir = 'in') {
 export function lenWords(ft) {
   const inches = Math.round(ft * 12), f = Math.floor(inches / 12), i = inches % 12;
   const F = (n) => `${n} ${n === 1 ? 'foot' : 'feet'}`, I = (n) => `${n} ${n === 1 ? 'inch' : 'inches'}`;
+  if (inches === 0 && ft > 0) return 'less than an inch';
   if (i === 0) return F(f);
   if (i === 6) return f ? `${f}½ feet` : 'half a foot';
   return f ? `${F(f)} ${I(i)}` : I(i);
 }
 export function lenLabel(ft) {
   const inches = Math.round(ft * 12), f = Math.floor(inches / 12), i = inches % 12;
+  if (inches === 0 && ft > 0) return 'under 1 in.';
   if (i === 0) return f + ' ft';
   if (i === 6) return (f || '') + '½ ft';
   return (f ? f + ' ft ' : '') + i + ' in.';
