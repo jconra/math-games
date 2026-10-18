@@ -86,6 +86,13 @@ export const WAGONJOB = {
   hold: 1.1,              // seconds the rope stays on a roped bandit (he is pulled down meanwhile)
   fact: 6,                // seconds the fact card ("24 = 4 × 6") shows over a hogtied bandit
   leaveDown: 70,          // m behind the player a hogtied bandit's sacks are left (put away)
+  // his sacks can be picked up: walk or ride over one (no stopping needed, a gallop does it) and it hops up into the
+  // saddlebags with a clink, counting along over it (6, 12, 18, 24)
+  sackGold: 1,            // gold for each sack picked up
+  sackReach: 1.5,         // m from a sack that picks it up on foot ...
+  sackReachHorse: 0.6,    // ... and this much further on a horse (it is a bigger animal than the rider)
+  sackHop: 0.45,          // seconds a picked-up sack takes to hop up into the saddlebags
+  sackTips: 2,            // times a ride the "he dropped his take" line is said (the first bandits roped)
   // a roped bandit, a while after he is tied, gets up (his hands still tied behind him) and walks to the sheriff's office
   getUp: 8,               // seconds after he is down (the fact card gone, his horse gone)
   rise: 1.2,              // seconds getting to his feet
@@ -209,6 +216,7 @@ const sackMats = new Map();
 // the skip-count rail: metres ahead of the player (tried in turn: nearer only when it must, to sit low enough on a tall
 // phone screen); where its bottom edge sits on the screen at the highest (a share of the screen's height down from the
 // top; lower when the cards at the top reach further down); and how high off the ground it may hang (m)
+let sackTipsSaid = 0;   // (the "he dropped his take" line: said the first WAGONJOB.sackTips times on a visit)
 const RAIL = { ahead: [11, 8, 6, 4.5], screenY: 0.72, low: 0.3, high: 5, see: 0.85 };   // (screenY: where its foot sits, a share of the screen's height down: low, under the riders; see: at most this solid)
 function sackGeometry() {
   if (sackGeo) return sackGeo;
@@ -226,7 +234,8 @@ function sackMaterial(per) {
   c.fillStyle = '#3b2615'; c.font = '700 54px Bitter, Georgia, serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
   for (const x of [64, 192]) c.fillText(String(per), x, 68);
   const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
-  const m = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95 });
+  // (a faint warm glow, pulsed each frame by the job, so they read as something to pick up)
+  const m = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.95, emissive: 0xffc35a, emissiveMap: tex, emissiveIntensity: 0.2 });
   sackMats.set(per, m);
   return m;
 }
@@ -567,6 +576,7 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
     const { sacks, per } = sacksFor(rec.n, w.table, w.kind);
     const k = Math.min(12, sacks), p = rec.r.person.root.position;
     let mesh = null;
+    const bags = [];   // each sack: where it lies { x, y, z, yaw }, and st: 0 lying, 1 hopping up, 2 picked up
     if (k > 0) {
       mesh = new THREE.InstancedMesh(sackGeometry(), sackMaterial(per), k); mesh.castShadow = true; mesh.name = 'sacks';
       // in a row (two rows past six) along his side, clear of him, so they can be counted from the saddle: measured from
@@ -593,15 +603,84 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
       for (let i = 0; i < k; i++) {
         const row = Math.floor(i / perRow), col = i % perRow, along = (col - (perRow - 1) / 2) * 0.5, out = wide + 0.55 + row * 0.55;
         const x = cx + ax * along + lx * side * out, z = cz + az * along + lz * side * out;
-        at.set(x, W.heightAt(x, z), z); q.setFromAxisAngle(_up, heading + Math.PI / 2 * side + (Math.random() - 0.5) * 0.5);
+        const yaw = heading + Math.PI / 2 * side + (Math.random() - 0.5) * 0.5;
+        at.set(x, W.heightAt(x, z), z); q.setFromAxisAngle(_up, yaw);
         mesh.setMatrixAt(i, m.compose(at, q, sc));
+        bags.push({ x, y: at.y, z, yaw, st: 0, t: 0, fx: 0, fy: 0, fz: 0 });
       }
       mesh.instanceMatrix.needsUpdate = true;
       scene.add(mesh);
+      if (sackTipsSaid < WAGONJOB.sackTips && hob.say) { sackTipsSaid++; hob.say(`He dropped his take: ${k} sack${k === 1 ? '' : 's'} of ${per}. Grab them!`, 4500); }
     }
     const fact = makeCard(); scene.add(fact);
     drawCard(fact, rec.fact || String(rec.n), { font: '700 54px Bitter, Georgia, serif' });
-    downs.push({ rec, mesh, fact, factT: WAGONJOB.fact, at: p.clone(), wave: w, t: 0 });
+    downs.push({ rec, mesh, fact, factT: WAGONJOB.fact, at: p.clone(), wave: w, t: 0, bags, per, got: 0, count: null, countT: 0, countAt: new THREE.Vector3() });
+  }
+
+  // ── PICKING UP THE SACKS ─────────────────────────────────────────────────────────────────────────────────────
+  // each frame, for a bandit's sacks near the player: a sack within reach hops up into the saddlebags (toward the
+  // player, shrinking away), pays WAGONJOB.sackGold and clinks, and the count so far floats up over it ("6", "12",
+  // "18", then "4 × 6 = 24" on the last). Lying sacks bob a little so they read as something to pick up.
+  const _sm = new THREE.Matrix4(), _sq = new THREE.Quaternion(), _ss = new THREE.Vector3(), _sp = new THREE.Vector3();
+  function sackStep(d, dt) {
+    if (!d.mesh || !d.mesh.visible) return;
+    const px = P.position.x, pz = P.position.z;
+    if (Math.hypot(d.at.x - px, d.at.z - pz) > 50) return;   // (far off: left lying still, not worth the work)
+    const reach = WAGONJOB.sackReach + (P.onHorse ? WAGONJOB.sackReachHorse : 0), bagY = P.position.y + (P.onHorse ? 1.3 : 0.9);
+    let live = 0;
+    for (let i = 0; i < d.bags.length; i++) {
+      const b = d.bags[i];
+      if (b.st === 0) {
+        live++;
+        if (!WJ.paused && Math.hypot(b.x - px, b.z - pz) < reach) { b.st = 1; b.t = 0; pickSack(d, b); }
+        else {
+          _sp.set(b.x, b.y + 0.04 + 0.04 * Math.sin(time * 2.6 + i * 0.9), b.z); _sq.setFromAxisAngle(_up, b.yaw + 0.15 * Math.sin(time * 1.3 + i)); _ss.set(1, 1, 1);
+          d.mesh.setMatrixAt(i, _sm.compose(_sp, _sq, _ss));
+          continue;
+        }
+      }
+      if (b.st === 1) {
+        live++;
+        b.t += dt;
+        const f = Math.min(1, b.t / WAGONJOB.sackHop), sc = Math.max(0.001, 1 - f * f);
+        // (an arc from where it lay up to the player's saddlebags, wherever the player has got to)
+        _sp.set(b.x + (px - b.x) * f, b.y + (bagY - b.y) * f + 0.9 * Math.sin(Math.PI * f), b.z + (pz - b.z) * f);
+        _sq.setFromAxisAngle(_up, b.yaw + f * 4); _ss.set(sc, sc, sc);
+        d.mesh.setMatrixAt(i, _sm.compose(_sp, _sq, _ss));
+        if (f >= 1) b.st = 2;
+      }
+    }
+    d.mesh.instanceMatrix.needsUpdate = true;
+    if (!live) d.mesh.visible = false;   // (all picked up)
+  }
+  function pickSack(d, b) {
+    d.got++;
+    const k = d.bags.length, total = d.got * d.per;
+    earn(rider, WAGONJOB.sackGold);
+    refresh();
+    clink(d.got === k);
+    if (!d.count) { d.count = makeCard(); scene.add(d.count); }
+    drawCard(d.count, d.got === k ? `${k} × ${d.per} = ${total}` : String(total), { font: '700 60px Bitter, Georgia, serif' });
+    d.countAt.set(b.x, b.y + 0.8, b.z); d.countT = 1.4;
+    if (d.got === k) hud.toast(`His take: ${k} × ${d.per} = ${total}. +${k * WAGONJOB.sackGold} gold`, 'gold');
+  }
+  // a soft clink of coins in the saddlebags: two short metal rings a moment apart (three on the last sack)
+  function clink(last) {
+    if (!audio || !audio.running || !audio.out) return;
+    const ctx = audio.ctx, t0 = ctx.currentTime + 0.12;   // (as the sack lands in the bags)
+    const hits = last ? [0, 0.07, 0.15] : [0, 0.06];
+    for (const dt of hits) {
+      const f = 2300 + Math.random() * 500, g = ctx.createGain();
+      g.gain.setValueAtTime(0, t0 + dt); g.gain.linearRampToValueAtTime(0.07, t0 + dt + 0.003); g.gain.exponentialRampToValueAtTime(0.0005, t0 + dt + 0.18);
+      g.connect(audio.out);
+      for (const r of [1, 2.76]) {
+        const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = f * r;
+        const og = r === 1 ? g : ctx.createGain(); if (og !== g) { og.gain.value = 0.35; og.connect(g); }
+        o.connect(og); o.start(t0 + dt); o.stop(t0 + dt + 0.2);
+        o.onended = () => { o.disconnect(); if (og !== g) og.disconnect(); };
+      }
+      setTimeout(() => { try { g.disconnect(); } catch (e) { /* gone */ } }, (0.12 + dt + 0.3) * 1000);
+    }
   }
   const _up = new THREE.Vector3(0, 1, 0);
   // where a tied rider's head, hands and feet are on the ground
@@ -615,6 +694,7 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
   function removeDown(d) {
     const i = downs.indexOf(d); if (i >= 0) downs.splice(i, 1);
     if (d.mesh) { d.mesh.removeFromParent(); d.mesh.dispose(); }
+    if (d.count) { d.count.removeFromParent(); d.count.material.dispose(); d.count.userData.tex.dispose(); }
     d.fact.removeFromParent(); d.fact.material.dispose(); d.fact.userData.tex.dispose();
     if (d.rec) removeRec(d.rec);   // (one who got up and walked off is the walker's to put away)
   }
@@ -1049,10 +1129,12 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
     const away = dW > WAGONJOB.farOff;
     if (away !== WJ.away) { WJ.away = away; for (const rec of recs) rec.r.show(!away); }
     for (let i = recs.length - 1; i >= 0; i--) { const rec = recs[i]; if (away && !rec.dev) continue; if (rec.r.mode !== 'down' && rec.r.mode !== 'fall') riderStep(rec, dt); else rec.r.update(dt); }
+    if (downs.length) { const g = 0.18 + 0.07 * (1 + Math.sin(time * 3)); for (const m of sackMats.values()) m.emissiveIntensity = g; }   // (the sacks' faint glow, pulsing)
     for (let i = downs.length - 1; i >= 0; i--) {
       const d = downs[i], far = Math.hypot(d.at.x - P.position.x, d.at.z - P.position.z);
       if (d.factT > 0) d.factT -= dt;
       d.t += dt;
+      sackStep(d, dt);
       if (d.rec && d.t >= WAGONJOB.getUp && d.factT <= 0 && d.rec.r.horseGone()) getUp(d);
       if (far > WAGONJOB.leaveDown && (d.wave.done || d.wave !== wave)) removeDown(d);
     }
@@ -1102,6 +1184,12 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
       L.material.opacity = rec.alpha;
     }
     for (const d of downs) {
+      if (d.count) {   // (the count along the sacks picked up: floats up and fades)
+        if (d.countT > 0) d.countT -= dt;
+        const ca = Math.max(0, Math.min(1, d.countT / 0.5));
+        d.count.visible = ca > 0.01;
+        if (d.count.visible) { size(d.count, lp.set(d.countAt.x, d.countAt.y + (1.4 - d.countT) * 0.6, d.countAt.z).clone(), 0.75); d.count.material.opacity = ca; }
+      }
       const a = Math.max(0, Math.min(1, d.factT / 0.6));
       d.fact.visible = a > 0.01; if (!d.fact.visible) continue;
       size(d.fact, lp.set(d.at.x, d.at.y + 1.3, d.at.z).clone(), 0.85); d.fact.material.opacity = a;
@@ -1155,7 +1243,7 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
     wagon: wagon ? { x: +wagon.pos.x.toFixed(1), z: +wagon.pos.z.toFixed(1), real: !wagon.root } : null,
     wave: wave && { n: waveN, table: wave.table, kind: wave.kind, rule: wave.kind === 'missing' ? wave.w.rule : `The ${wave.table}-Gang`, goods: wave.goods, caught: wave.caught, misses: wave.misses, done: !!wave.done },
     riders: recs.map((x) => ({ n: x.n, good: x.good, state: x.state, mode: x.r.mode, x: +x.r.x.toFixed(1), z: +x.r.z.toFixed(1), speed: +x.r.speed.toFixed(2), clip: x.r.horse.clip, label: x.label.visible })),
-    downs: downs.length, walkers: walkers.map((k) => ({ phase: k.phase, x: +k.x.toFixed(1), z: +k.z.toFixed(1), fade: +k.fade.toFixed(2), path: k.path ? k.path.length : 0 })),
+    downs: downs.length, sacks: downs.map((d) => ({ k: d.bags.length, got: d.got, per: d.per, x: +d.at.x.toFixed(1), z: +d.at.z.toFixed(1), at: d.bags.filter((b) => !b.st).map((b) => ({ x: +b.x.toFixed(2), z: +b.z.toFixed(2) })) })), walkers: walkers.map((k) => ({ phase: k.phase, x: +k.x.toFixed(1), z: +k.z.toFixed(1), fade: +k.fade.toFixed(2), path: k.path ? k.path.length : 0 })),
     music: music ? music.state() : null, rail: railT > 0, sound: rumble ? rumble.state() : null,
   });
   WJ.dispose = () => {
