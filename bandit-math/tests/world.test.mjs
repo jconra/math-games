@@ -61,11 +61,12 @@ test("each building's box is its model's own size (the store's measured once sto
   }
 });
 
-test('the general store stands on its posts: turned upright a few degrees and let down a little, the rest as they come', () => {
+test('the general store stands on its posts: turned upright a few degrees and let down a little; the cabin and stable let down a hair; the rest as they come', () => {
   const S = TOWN_ASSETS.generalStore;
   assert.ok(S.tilt > 0 && S.tilt <= 5, 'a few degrees, front down: ' + S.tilt);
   assert.ok(S.sink > 0 && S.sink < 0.03, 'its posts reach the ground (a few centimetres in): ' + S.sink);
-  for (const [k, A] of Object.entries(TOWN_ASSETS)) if (k !== 'generalStore') assert.ok(!A.tilt && !A.sink, k + ' stands as it came');
+  for (const k of ['cabin', 'stable']) assert.ok(!TOWN_ASSETS[k].tilt && TOWN_ASSETS[k].sink > 0 && TOWN_ASSETS[k].sink < 0.01, k + ' let down a few centimetres, no more');
+  for (const [k, A] of Object.entries(TOWN_ASSETS)) if (!['generalStore', 'cabin', 'stable'].includes(k)) assert.ok(!A.tilt && !A.sink, k + ' stands as it came');
 });
 
 test('the buildings face the square and stand round it, not on each other', () => {
