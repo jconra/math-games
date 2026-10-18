@@ -175,7 +175,7 @@ async function ride(r) {
   P = makePlayer({ W, folk, animals, rider, input: I, camera, say: (t) => hud.toast(t) });
   makeDogIfOwned();
   cardBy = null;
-  hob = makeHob({ W, hud, rider, I, roads: roadLines });   // (no babble voice: the owner found reading works better; src/audio/voice.js is kept for the Sound Lab)
+  hob = makeHob({ W, hud, rider, I, roads: roadLines });   // (no babble voice: reading works better; src/audio/voice.js is kept for the Sound Lab)
   { const heard = hob.event; hob.event = (n, d) => { heard(n, d); if (JF) JF.heard(n, d); if (SHOUT) SHOUT.heard(n, d); }; }   // (the job folk hear the jobs too: their thank-yous; and the player's yeehaw at a job's end)
   stage = makeStage({ W, folk, audio: AUD });
   traffic = makeTraffic({ W, animals, folk, audio: AUD, obstacles: trafficThings, camps: () => camps });
