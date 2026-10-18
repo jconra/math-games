@@ -36,7 +36,7 @@ import * as THREE from 'three';
 import { makeBoxCamera } from '../boxcamera.js';
 import { makePhoto, whyNot, balanceFor, numText } from '../math/deermath.js';
 import { makeRng, rungIndex } from '../lockbox/generate.js';
-import { recordAnswer, earn, countJob } from '../save.js';
+import { recordAnswer, earn, countJob, saveRider } from '../save.js';
 import { addPrint, prints } from '../ui/album.js';
 
 export const SNAP = {
@@ -87,8 +87,9 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
   deer.ready.then(() => { if (!disposed && !herd) herd = deer.nearest(P.position); });
 
   // ── THE CAMERA BEHIND THE SADDLE ───────────────────────────────────────────────────────────────────────────────
+  // (only once she has lent it: the first picture set up; before that a new saddle carries nothing)
   function stowPack(on) {
-    const holder = on && P.horse && P.horse.saddle;
+    const holder = on && rider.cameraLent && P.horse && P.horse.saddle;
     if (holder && pack.parent !== holder) { holder.add(pack); pack.position.set(0, 0.16, -0.5); pack.rotation.set(0, 0, 0); }
     pack.visible = !!holder;
   }
@@ -126,6 +127,7 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
   DJ.setUp = () => {
     if (state !== 'travel' || !DJ.prompt || DJ.paused) return false;
     DJ.prompt = null; state = 'setting'; t = 0; waitT = 0;
+    if (!rider.cameraLent) { rider.cameraLent = true; saveRider(rider); }
     if (DJ.card) { DJ.card = false; cardKey = ''; hud.rule(null); }
     hud.prompt(null);
     DJ.active = true;
