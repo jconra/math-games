@@ -176,7 +176,16 @@ export function makeAnimal(lib, kind, { shadows = true, tint = null } = {}) {
 // it, for a second horse). at: a nudge in metres in the animal's own space ([across, up, forward]) if one ever needs it.
 // Returns the holder (animal.saddle); saddleOn(animal, null) takes it off again.
 //   SADDLE.seat: the low point of the seat in the saddle's own space, where a rider sits
-export const SADDLE = { seat: [0, 0.145, -0.03] };
+//
+// THE DRAPE: the saddles were made for a narrower back than these horses have, so on its own a saddle's skirts and
+// fenders (the leather flaps down the sides) would sink into the body. So each saddle is fitted to each kind of animal
+// once (then kept): the body's side is found across a grid of heights and places along the back (as seen from the side,
+// in the saddle's own space, at the pose the animal stands in), each part of the flaps is moved straight out, sideways,
+// as far as the innermost leather there needs to clear the body by `margin`, and the moves are smoothed over the grid so
+// the leather bends rather than tears. Outer and inner faces move together (the leather keeps its thickness); nothing
+// moves near the middle (`mid`: the seat and the horn stay as made), and the moves fade in from `top` (the bars sitting
+// on the back) down to `full`.
+export const SADDLE = { seat: [0, 0.145, -0.03], drape: { margin: 0.018, cell: 0.03, mid: [0.03, 0.08], top: 0.05, full: -0.03, side: 0.35 } };
 const _m = new THREE.Matrix4();
 export function saddleOn(animal, saddle, { at = [0, 0, 0], shadows = true } = {}) {
   if (animal.saddle) { animal.saddle.removeFromParent(); animal.saddle = null; }
@@ -188,7 +197,83 @@ export function saddleOn(animal, saddle, { at = [0, 0, 0], shadows = true } = {}
   _m.makeTranslation(s[0] + at[0], s[1] + at[1], s[2] + at[2]).premultiply(animal.seatRest.clone().invert());
   _m.decompose(holder.position, holder.quaternion, holder.scale);
   animal.bones[animal.info.seat.bone].add(holder);
+  try { drape(animal, saddle); } catch (e) { console.warn('saddle: not fitted', e && e.message); }
   return (animal.saddle = holder);
+}
+const DRAPED = new Map();   // an animal kind -> (a saddle's own geometry -> the geometry fitted to that kind)
+function drape(animal, saddle) {
+  const D = SADDLE.drape, kind = animal.kind;
+  const meshes = []; saddle.traverse((o) => { if (o.isMesh) meshes.push(o); });
+  const fitted = DRAPED.get(kind) || DRAPED.set(kind, new Map()).get(kind);
+  const own = (g) => g.userData.draped || g;   // (a copy of a saddle already fitted: its own geometry)
+  if (meshes.every((m) => fitted.has(own(m.geometry)))) { for (const m of meshes) m.geometry = fitted.get(own(m.geometry)); return; }
+  animal.root.updateMatrixWorld(true);
+  const toSad = saddle.matrixWorld.clone().invert();
+  // the saddle's points in its own space, and how far they reach
+  const pts = meshes.map((m) => {
+    const g = own(m.geometry), rel = toSad.clone().multiply(m.matrixWorld), p = g.attributes.position, a = new Float32Array(p.count * 3), v = new THREE.Vector3();
+    for (let i = 0; i < p.count; i++) { v.fromBufferAttribute(p, i).applyMatrix4(rel); a[i * 3] = v.x; a[i * 3 + 1] = v.y; a[i * 3 + 2] = v.z; }
+    return { m, g, rel, a };
+  });
+  let y0 = Infinity, y1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+  for (const { a } of pts) for (let i = 0; i < a.length; i += 3) { y0 = Math.min(y0, a[i + 1]); y1 = Math.max(y1, a[i + 1]); z0 = Math.min(z0, a[i + 2]); z1 = Math.max(z1, a[i + 2]); }
+  const c = D.cell, ny = Math.ceil((y1 - y0) / c) + 1, nz = Math.ceil((z1 - z0) / c) + 1, at = (j, k) => j * nz + k;
+  // the body as it stands, in the saddle's own space; its side across the grid, as a ray from outside would meet it: each
+  // triangle laid onto the grid cells it covers (seen from the side), keeping the outermost on each side (NaN: no body)
+  const sk = animal.mesh, sp = sk.geometry.attributes.position, bx = new Float32Array(sp.count * 3), v = new THREE.Vector3();
+  const bodyTo = toSad.clone().multiply(sk.matrixWorld);
+  for (let i = 0; i < sp.count; i++) { sk.getVertexPosition(i, v); v.applyMatrix4(bodyTo); bx[i * 3] = v.x; bx[i * 3 + 1] = v.y; bx[i * 3 + 2] = v.z; }
+  const side = [new Float32Array(ny * nz).fill(NaN), new Float32Array(ny * nz).fill(NaN)];
+  const idx = sk.geometry.index, tris = idx ? idx.count / 3 : sp.count / 3;
+  for (let t = 0; t < tris; t++) {
+    const ia = (idx ? idx.getX(t * 3) : t * 3) * 3, ib = (idx ? idx.getX(t * 3 + 1) : t * 3 + 1) * 3, ic = (idx ? idx.getX(t * 3 + 2) : t * 3 + 2) * 3;
+    const ay = bx[ia + 1], az = bx[ia + 2], by = bx[ib + 1], bz = bx[ib + 2], cy = bx[ic + 1], cz = bx[ic + 2];
+    const j0 = Math.max(0, Math.ceil((Math.min(ay, by, cy) - y0) / c)), j1 = Math.min(ny - 1, Math.floor((Math.max(ay, by, cy) - y0) / c));
+    const k0 = Math.max(0, Math.ceil((Math.min(az, bz, cz) - z0) / c)), k1 = Math.min(nz - 1, Math.floor((Math.max(az, bz, cz) - z0) / c));
+    if (j0 > j1 || k0 > k1) continue;
+    const det = (by - ay) * (cz - az) - (cy - ay) * (bz - az); if (Math.abs(det) < 1e-12) continue;
+    for (let j = j0; j <= j1; j++) for (let k = k0; k <= k1; k++) {
+      const py = y0 + j * c - ay, pz = z0 + k * c - az;
+      const u = (py * (cz - az) - (cy - ay) * pz) / det, w = ((by - ay) * pz - py * (bz - az)) / det;
+      if (u < 0 || w < 0 || u + w > 1) continue;
+      const x = bx[ia] + u * (bx[ib] - bx[ia]) + w * (bx[ic] - bx[ia]), q = at(j, k);
+      if (!(side[0][q] >= x)) side[0][q] = x;
+      if (!(side[1][q] >= -x)) side[1][q] = -x;
+    }
+  }
+  // how far out each cell's leather must go: the innermost flap point in it (not the middle of the saddle)
+  const push = [new Float32Array(ny * nz), new Float32Array(ny * nz)];
+  for (const { a } of pts) for (let i = 0; i < a.length; i += 3) {
+    const x = a[i], ax = Math.abs(x), n = x < 0 ? 1 : 0, j = Math.round((a[i + 1] - y0) / c), k = Math.round((a[i + 2] - z0) / c);
+    const h = side[n][at(j, k)]; if (!(h > 0) || ax < D.side * h) continue;
+    const need = h + D.margin - ax; if (need > push[n][at(j, k)]) push[n][at(j, k)] = need;
+  }
+  // smoothed: the most of each cell and its neighbours, then averaged with them (bends, not steps)
+  const smooth = (f) => {
+    const g = new Float32Array(f.length), out = new Float32Array(f.length);
+    for (let j = 0; j < ny; j++) for (let k = 0; k < nz; k++) { let mx = 0; for (let dj = -1; dj <= 1; dj++) for (let dk = -1; dk <= 1; dk++) { const jj = j + dj, kk = k + dk; if (jj >= 0 && jj < ny && kk >= 0 && kk < nz) mx = Math.max(mx, f[at(jj, kk)]); } g[at(j, k)] = mx; }
+    for (let j = 0; j < ny; j++) for (let k = 0; k < nz; k++) { let t = 0, w = 0; for (let dj = -1; dj <= 1; dj++) for (let dk = -1; dk <= 1; dk++) { const jj = j + dj, kk = k + dk; if (jj >= 0 && jj < ny && kk >= 0 && kk < nz) { const q = dj || dk ? 0.5 : 1; t += g[at(jj, kk)] * q; w += q; } } out[at(j, k)] = t / w; }
+    return out;
+  };
+  push[0] = smooth(push[0]); push[1] = smooth(push[1]);
+  const lerp = (f, y, z) => {
+    const fy = Math.max(0, Math.min(ny - 1.001, (y - y0) / c)), fz = Math.max(0, Math.min(nz - 1.001, (z - z0) / c)), j = Math.floor(fy), k = Math.floor(fz), ty = fy - j, tz = fz - k;
+    return (f[at(j, k)] * (1 - tz) + f[at(j, k + 1)] * tz) * (1 - ty) + (f[at(j + 1, k)] * (1 - tz) + f[at(j + 1, k + 1)] * tz) * ty;
+  };
+  const ease = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+  const back = new THREE.Matrix4();
+  for (const { m, g, rel, a } of pts) {
+    const ng = g.clone(), p = ng.attributes.position;
+    back.copy(rel).invert();
+    for (let i = 0; i < p.count; i++) {
+      const x = a[i * 3], y = a[i * 3 + 1], z = a[i * 3 + 2], ax = Math.abs(x);
+      const d = lerp(push[x < 0 ? 1 : 0], y, z) * ease((ax - D.mid[0]) / (D.mid[1] - D.mid[0])) * ease((D.top - y) / (D.top - D.full));
+      if (d <= 0) continue;
+      v.set(x + Math.sign(x) * d, y, z).applyMatrix4(back); p.setXYZ(i, v.x, v.y, v.z);
+    }
+    p.needsUpdate = true; ng.computeBoundingSphere(); ng.computeBoundingBox(); ng.userData.draped = g;
+    fitted.set(g, ng); m.geometry = ng;
+  }
 }
 
 // A RIDER on an animal's back: turns the person to face where the animal faces and moves them so their hips sit over the

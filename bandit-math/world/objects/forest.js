@@ -163,7 +163,15 @@ export class Forest {
       const root = sp.root; root.updateMatrixWorld(true);
       if ((sp.leafScale || sp.leafCopies) && !root.userData.leavesGrown) { fillLeaves(root, sp.leafScale || 1, sp.leafCopies || 0); root.userData.leavesGrown = true; }
       const box = new THREE.Box3().setFromObject(root), size = box.getSize(new THREE.Vector3());
-      sp.unit = sp.height / size.y; sp.box0 = box.min.y; sp.boxH = size.y; sp.baseY = box.min.y + (sp.sink || 0) * size.y; sp.root = root;   // (sink: that share of its height under the ground)
+      // its foot: the lowest point of the trunk and branches. Leaf cards (grown out by fillLeaves) can droop below the trunk's
+      // foot, and a tree stood on those floated (the ash: over half a metre up). A plant all of leaves keeps its box's bottom.
+      // footR: how far out the trunk reaches there (model units), so the ground can be read round it (heightAt's third word)
+      let foot = Infinity; const part = new THREE.Box3(), woody = [];
+      root.traverse(o => { if (o.isMesh && !Array.isArray(o.material) && !(o.material.alphaTest > 0 || o.material.transparent || /lea[fv]/i.test(o.material.name || ''))) { woody.push(o); foot = Math.min(foot, part.setFromObject(o).min.y); } });
+      const low = Number.isFinite(foot) ? Math.max(box.min.y, foot) : box.min.y;
+      sp.footR = 0;
+      if (Number.isFinite(foot)) { const v = new THREE.Vector3(); for (const o of woody) { const P = o.geometry.attributes.position; for (let i = 0; i < P.count; i++) { v.fromBufferAttribute(P, i).applyMatrix4(o.matrixWorld); if (v.y < foot + size.y * 0.01) sp.footR = Math.max(sp.footR, Math.hypot(v.x, v.z)); } } }
+      sp.unit = sp.height / size.y; sp.box0 = low; sp.boxH = size.y; sp.baseY = low + (sp.sink || 0) * size.y; sp.root = root;   // (sink: that share of its height under the ground)
       const shapeKey = sp.shape ? JSON.stringify(sp.shape) : '';          // (a species handed on to a new forest is already shaped)
       if (sp.shape && root.userData.shapedWith !== shapeKey) { sp.shapeInfo = shapeFoliage(root, sp.unit, sp.shape); root.userData.shapedWith = shapeKey; }
       root.traverse(o => { if (o.isMesh && !Array.isArray(o.material)) { o.material.side = THREE.DoubleSide; if (o.material.map) o.material.map.anisotropy = 4; if (o.material.transparent) { o.material.alphaTest = 0.5; o.material.transparent = false; } } });
@@ -214,7 +222,7 @@ export class Forest {
       let pick = r() * total, sp = this.species[0]; for (const s of this.species) { pick -= s.weight; if (pick <= 0) { sp = s; break; } }
       const yaw = r() * Math.PI * 2, scale = 0.7 + r() * 0.6, tint = new THREE.Color().setHSL(0.26 + r() * 0.08, 0.35 + r() * 0.25, 0.62 + r() * 0.18);
       if (this.clear && this.clear(x, z)) continue;
-      out.push({ pos: new THREE.Vector3(x, this.heightAt ? this.heightAt(x, z) : 0, z), yaw, scale, tint, sp });
+      out.push({ pos: new THREE.Vector3(x, this.heightAt ? this.heightAt(x, z, (sp.footR || 0) * scale * sp.unit) : 0, z), yaw, scale, tint, sp });
     }
     return out;
   }
@@ -240,7 +248,8 @@ export class Forest {
   }
   layOne(f, i) {
     const r = rnd(i * 2654435761 + 7), sp = this.species[f.sp];
-    return { pos: new THREE.Vector3(f.x, this.heightAt ? this.heightAt(f.x, f.z) : 0, f.z), yaw: f.yaw ?? r() * Math.PI * 2, scale: f.scale ?? 0.7 + r() * 0.6,
+    const yaw = f.yaw ?? r() * Math.PI * 2, scale = f.scale ?? 0.7 + r() * 0.6;   // (heightAt's third word: how far out the trunk's foot reaches)
+    return { pos: new THREE.Vector3(f.x, this.heightAt ? this.heightAt(f.x, f.z, (sp.footR || 0) * scale * sp.unit) : 0, f.z), yaw, scale,
       tint: f.tint ? f.tint.clone() : sp.tint === false ? new THREE.Color(1, 1, 1).multiplyScalar(0.85 + r() * 0.3) : new THREE.Color().setHSL(0.26 + r() * 0.08, 0.35 + r() * 0.25, 0.62 + r() * 0.18), sp };
   }
   growDraws(cap) {

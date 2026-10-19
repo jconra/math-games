@@ -172,6 +172,8 @@ test('the vault rung: about 1 box in 10 is a verdict box, never two in a row, ne
       // a clean box most of the time, so the level climbs (and drops) now and then
       const clean = rng.chance(0.8);
       alg.record({ rung: 'R15', solved: true, clean, stars: 3, moves: 3, par: 3 });
+      // (the inequalities come after the vault now: stamping it would move this kid on, so they stay on the vault)
+      if (state.rung !== 'R15') { state.rung = 'R15'; state.stamped = state.stamped.filter((r) => r !== 'R15'); }
       if (state.levels.R15 > before) {
         const q = alg.next('iron');
         if (q.rung === 'R15') { assert.equal(q.kind, 'one', 'a verdict box right after a level-up'); n++; prevVerdict = false; }

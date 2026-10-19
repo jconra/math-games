@@ -854,7 +854,10 @@ const U = {
   farOn: { value: 0 }, farFrom: { value: 40 }, grid: { value: 0 },
   // stamps: one object at most in each cell of a world grid, its kind drawn by the weights
   stampOn: { value: 1 }, stampAtlas: { value: null }, stampCell: { value: 1.08 }, stampDensity: { value: 0.96 }, stampSize: { value: 1.85 },
-  stampCum: { value: [0, 0, 0, 0, 0, 0, 0, 0] }, stampBase: { value: [0.13, 0.28, 0.13, 0.16, 0.34, 0.12, 0.26, 0.4] },
+  // each kind's size (times stampSize, 0.7 .. 1.3 of it): leaves, twigs and bark, cones and needles, stones, moss and lichen,
+  // mushrooms, small plants, grass tufts. (Moss and lichen were 0.34, cushions over half a metre across beside the pebbles:
+  // now about half that.)
+  stampCum: { value: [0, 0, 0, 0, 0, 0, 0, 0] }, stampBase: { value: [0.13, 0.28, 0.13, 0.16, 0.18, 0.12, 0.26, 0.4] },
   stampHue: { value: 0.68 }, stampShade: { value: 0.32 }, stampFar: { value: 30 }, stampSpread: { value: 0 }, stampPatch: { value: 0.8 }, stampPatchSize: { value: 5 }, stampClump: { value: 0.6 },
   // mixing by the land: the masks, the layers' pictures, and how they meet
   mixOn: { value: 1 }, maskA: { value: null }, maskB: { value: null },
@@ -1229,6 +1232,16 @@ for (const t of groundTiles) { const m = new THREE.Mesh(t.geo, mat); m.receiveSh
 // THE TREES: the Tree Lab's forest (ez-tree species, meshes near, octahedral imposters beyond, a
 // dithered crossfade between), planted where the canopy map grew them instead of on tiles
 const TREE_SPECIES = FOREST_SPECIES.filter(sp => sp.name !== 'bush');
+// a tree stands on the lowest ground round its trunk's foot (the middle and six points round it, r m out: how far its
+// trunk reaches there, from the forest; TREE_FOOT if it doesn't say), so on a slope the downhill side doesn't float
+// (read off the ground's mesh as it is drawn, its triangles, not the smoother heightAt: in a crag the two differ by a foot)
+const TREE_FOOT = 0.35;
+function meshAt(x, z) {
+  const fx = Math.min(VS - 1.001, Math.max(0, (x - X0) / STEP)), fz = Math.min(VS - 1.001, Math.max(0, (z - X0) / STEP)), i = fx | 0, j = fz | 0, u = fx - i, v = fz - j;
+  const a = HV[j * VS + i], d = HV[j * VS + i + 1], b = HV[(j + 1) * VS + i], c = HV[(j + 1) * VS + i + 1];
+  return u + v <= 1 ? a + (d - a) * u + (b - a) * v : c + (b - c) * (1 - u) + (d - c) * (1 - v);   // (each square's two triangles meet along its b-d diagonal)
+}
+function treeFoot(x, z, r = 0) { const d = r > 0 ? r : TREE_FOOT; let y = meshAt(x, z); for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; y = Math.min(y, meshAt(x + Math.cos(a) * d, z + Math.sin(a) * d)); } return y; }
 // the Tree Lab's settings, now here (Jacob's defaults, 2026-09-23)
 const FOREST = { imposterAt: 150, band: 120, ahead: 0.6, spread: 0.5, grid: 12, cell: 192, detail: 'sparse', rebake: false, lowPine: !!TS.lite };   // lowPine: the ~100-triangle pine (the potato's, to start)
 Object.assign(FOREST, TS.forest);
@@ -1266,7 +1279,7 @@ function placeTrees() {
   const species = treeForest && !FOREST.rebake ? treeForest.species : TREE_SPECIES.map(sp => low(sp) || (shaped(sp)   // keeps the baked atlases unless the atlas settings changed
     ? { ...sp, soften: LEAF.soften, shape: { lump: LEAF.lump, mix: LEAF.mix, dark: LEAF.dark, tip: LEAF.tip, olive: LEAF.olive, branchDark: LEAF.branchDark, under: LEAF.under, glow: LEAF.glow } } : { ...sp }));
   FOREST.rebake = false; freshPicks(species);
-  treeForest = new Forest(renderer, scene, { species, lamps: LAMPU, shadows: SHADOW.on, detail: FOREST.detail, grid: FOREST.grid, cell: FOREST.cell, imposterAt: FOREST.imposterAt, band: FOREST.band, ahead: FOREST.ahead, spread: FOREST.spread, sunDir: SUN_DIR, heightAt, nearCap: 600, shadowEdge: { at: U.shadowAt, range: U.shadowRange, from: U.edgeFrom, to: U.edgeTo, shade: U.edgeShade, jitter: U.edgeJitter },
+  treeForest = new Forest(renderer, scene, { species, lamps: LAMPU, shadows: SHADOW.on, detail: FOREST.detail, grid: FOREST.grid, cell: FOREST.cell, imposterAt: FOREST.imposterAt, band: FOREST.band, ahead: FOREST.ahead, spread: FOREST.spread, sunDir: SUN_DIR, heightAt: treeFoot, nearCap: 600, shadowEdge: { at: U.shadowAt, range: U.shadowRange, from: U.edgeFrom, to: U.edgeTo, shade: U.edgeShade, jitter: U.edgeJitter },
     fixed: [...trees.filter(([x, , z]) => keepWild('tree', x, z)).map(([x, , z, s]) => { const [sp, tint] = pickTree(x, z, species); return { x, z, sp, scale: s, tint: species[sp].tint === false ? undefined : tint }; }), ...townTrees(species), ...plantedTrees(species)] });
   treeForest.group.visible = $('treesOn') ? $('treesOn').checked : true;
   if ($('landInfo')) $('landInfo').textContent = `${trees.length.toLocaleString()} trees`;
@@ -1340,7 +1353,10 @@ function coverGround(x, z) {
 // THE LAWN: short grass tufts on the bare ground near you (src/objects/lawn.js, placed by lawnSpots), the
 // grass's own colour, darkened by the land's shade; laid with the plants
 const LAWN = { ...TS.lawn, count: 0 };
-const lawn = makeLawn({ cap: 90000, shade: { shadeMap: U.shadeMap, landSize: U.landSize, hillShade: U.hillShade, aoShade: U.aoShade, treeShade: U.treeShade }, lamps: LAMPU });
+const LAWN_DARK = 0.82;   // the lawn's colours a little darker than the land's own grass picture (2026-10-18: it read too bright)
+const lawn = makeLawn({ cap: 90000, shade: { shadeMap: U.shadeMap, landSize: U.landSize, hillShade: U.hillShade, aoShade: U.aoShade, treeShade: U.treeShade,
+  shadowAt: U.shadowAt, shadowRange: U.shadowRange, edgeFrom: U.edgeFrom, edgeTo: U.edgeTo }, lamps: LAMPU });
+lawn.mesh.receiveShadow = SHADOW.on;   // (the trees' real shadows on the grass, as on the ground under it)
 scene.add(lawn.mesh);
 // THE COVER MAP (512 x 512 over the land, a pixel 3 m): what grows at each spot as one colour and a thickness,
 // for the ground shader to paint past where the plants end: the winning patch kind's colour (each kind's
@@ -1375,7 +1391,7 @@ function placeLawn() {
   for (const t of spots) t.y = heightAt(t.x, t.z);
   LAWN.count = lawn.set(spots);
   const a = U.layLush.value && U.layLush.value.userData.avg, base = (a ? a.clone() : new THREE.Color(0.25, 0.33, 0.1)).multiply(U.lushTint.value);
-  lawn.colours(base.clone().multiplyScalar(0.8), base.clone().multiply(new THREE.Color(1.15, 1.12, 0.85)));   // darker at the root, lighter and yellower at the tips
+  lawn.colours(base.clone().multiplyScalar(0.8 * LAWN_DARK), base.clone().multiply(new THREE.Color(1.15, 1.12, 0.85)).multiplyScalar(LAWN_DARK));   // darker at the root, lighter and yellower at the tips
 }
 function plantSpecies(parts, material) {
   return parts.map((g, k) => { const root = new THREE.Group(); root.add(new THREE.Mesh(g, material)); return { name: 'ground ' + KIND_INFO[k].name, root, height: KIND_INFO[k].height, weight: 1, grid: 8, cell: 128, upNormals: !KIND_INFO[k].lit, soften: KIND_INFO[k].lit ? LIT_SOFTEN : 0, sway: KIND_INFO[k].lit ? 0.45 : 1, tint: false, sink: KIND_INFO[k].sink * COVER.sink }; });   // big plants sway less

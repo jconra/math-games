@@ -49,13 +49,16 @@ const rowOf = (m) => (m.k === 'add' ? 0 : 1);
 // fav is this kid's most frequent trap tag (or null). rng is a generate.js makeRng().
 // goal/goalId are passed when "closer" means reaching something other than x = N (the vault rung's verdicts).
 // steps: the moves that follow the steps card from this line (steps.js stepsMoves); they count as productive.
-export function buildButtons(l, st, { count = 4, rng, fav = null, goal = null, goalId = null, steps = [] } = {}) {
+// cm and keyOf are for lines that aren't one equation (the inequalities' rooms, ineq.js): cm is that line's own
+// { d, closer, all } (as engine.js closerMoves), keyOf(move) the key of the line the move makes.
+export function buildButtons(l, st, { count = 4, rng, fav = null, goal = null, goalId = null, steps = [], cm = null, keyOf = null } = {}) {
   const rand = rng ? rng.next : Math.random;
   const pickOne = (arr) => arr[Math.floor(rand() * arr.length)];
-  const cm = closerMoves(l, st, goal ? { goal, goalId } : {});
+  if (!cm) cm = closerMoves(l, st, goal ? { goal, goalId } : {});
+  const keyFor = keyOf || ((m) => { const r = applyMove(l, m); return r ? lineKey(r.out) : null; });
   const goodKeys = new Set(cm.closer.map((c) => c.key));
   const stepKeys = new Set();
-  for (const m of steps) { const r = applyMove(l, m); if (r) { stepKeys.add(lineKey(r.out)); goodKeys.add(lineKey(r.out)); } }
+  for (const m of steps) { const k = keyFor(m); if (k) { stepKeys.add(k); goodKeys.add(k); } }
   const sol = { d: cm.d };
   const all = cm.all.map((c) => ({ move: c.move, id: moveId(c.move), label: moveLabel(c.move), key: c.key, dAfter: c.d }));
   const goods = all.filter((b) => goodKeys.has(b.key));
@@ -70,8 +73,7 @@ export function buildButtons(l, st, { count = 4, rng, fav = null, goal = null, g
   const take = (b) => { if (b && !chosen.includes(b)) chosen.push(b); return b; };
   // the first productive button does the step the card is on: its own move (open the brackets, clear the division,
   // tidy, free x), or, while the card is sorting x's from numbers, any of the cancelling moves that do that
-  const canon = steps[0] ? applyMove(l, steps[0]) : null;
-  const canonKey = canon ? lineKey(canon.out) : null;
+  const canonKey = steps[0] ? keyFor(steps[0]) : null;
   const stepAt = (b) => { const i = steps.findIndex((m) => moveId(m) === b.id); return i < 0 ? 99 : i; };
   const cardGoods = goods.filter((b) => stepKeys.has(b.key)
     && (steps[0].k === 'add' ? b.move.k === 'add' : b.key === canonKey));

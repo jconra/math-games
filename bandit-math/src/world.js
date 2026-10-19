@@ -21,7 +21,8 @@
 //   W.waterAt(x, z)    how wet, 0..1 (over 0.3: in a stream or pond)
 //   W.settled()        true once the trees and plants are laid and baked
 //   W.blocked(x, z)    true where a walker can't go: a building (its footprint and half a metre round it), a fence, a tree's
-//                      trunk, ground steeper than ~39 degrees, water deeper than 0.7 m, or off the land's edge
+//                      trunk, ground steeper than ~39 degrees (~58 by a creek or pond: a bank can be scrambled), water
+//                      deeper than 0.9 m, or off the land's edge
 //   W.addBlocker(fn)   fn(x, z) -> true also blocks there (the farm's fences and barn); returns a function that takes it off
 //   W.places     where things are (metres; rot: radians, the way the thing faces: a front facing +z is 0, as three's
 //                rotation.y, so the facing direction is (sin rot, cos rot)):
@@ -52,7 +53,15 @@ import { BASE } from '../world/base.js';
 
 // the buildings by the names the game uses
 const PLACE_OF = { cabin: 'cabin', stable: 'stable', generalStore: 'store', sheriff: 'sheriff', saloon: 'saloon', stage: 'stage' };
-const STEEP = 0.8, DEEP = 0.7, EDGE = 780, FENCE_HALF = 0.35, WALL_PAD = 0.5, TRUNK = 0.4;   // (slope as rise over run; metres; a trunk's radius for a tree of scale 1)
+// DEEP: the creeks' channels are carved 0.8 m deep (the west river's, the creek north of town): wadeable, by horse or on
+// foot, so a creek can be crossed anywhere its banks allow, both ways (at 0.7 they blocked: a creek crossed where it ran
+// shallow was a wall on the way back, and riding in looked like being stuck in the middle). The pond's middle, deeper
+// than this, still stops a walker, at its own edge.
+// BANK: right by a creek or a pond (within BANK_NEAR cells of its water), ground up to this steep can be scrambled down
+// and up: the channels are carved with banks steeper than STEEP, and a creek with a low bank on one side and a steep one
+// on the other let a walker down into it and not up the far side (stuck in the middle).
+const BANK = 1.6, BANK_NEAR = 2;
+const STEEP = 0.8, DEEP = 0.9, EDGE = 780, FENCE_HALF = 0.35, WALL_PAD = 0.5, TRUNK = 0.4;   // (slope as rise over run; metres; a trunk's radius for a tree of scale 1)
 
 export async function makeWorld({ renderer, camera, quality = null, look = 'green', onProgress = () => {}, wait = true, live = false } = {}) {
   const say = (p, text) => { try { onProgress(p, text); } catch (e) { console.warn('world: onProgress threw', e); } };
@@ -115,6 +124,16 @@ export async function makeWorld({ renderer, camera, quality = null, look = 'gree
     for (const t of (f && f.fixed) || []) { const k = Math.floor(t.x / 8) + ',' + Math.floor(t.z / 8); let c = TREES.cells.get(k); if (!c) TREES.cells.set(k, c = []); c.push([t.x, t.z, TRUNK * (t.scale || 1)]); }
     return TREES.cells;
   }
+  // the creeks' and ponds' banks: the cells within BANK_NEAR of water (made the first time it's asked)
+  let banks = null;
+  function bankAt(k) {
+    if (!banks) {
+      const N = V.N, D = V.WDEPTH; banks = new Uint8Array(N * N);
+      for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) if (D[j * N + i] > 0.2)
+        for (let dj = -BANK_NEAR; dj <= BANK_NEAR; dj++) for (let di = -BANK_NEAR; di <= BANK_NEAR; di++) { const a = i + di, b = j + dj; if (a >= 0 && a < N && b >= 0 && b < N) banks[b * N + a] = 1; }
+    }
+    return banks[k] === 1;
+  }
   // more things that block, added by the game after the world is made (the farm's fences and barn): W.addBlocker(fn),
   // fn(x, z) -> true where a walker can't go
   const EXTRA = [];
@@ -126,7 +145,7 @@ export async function makeWorld({ renderer, camera, quality = null, look = 'gree
     for (const b of FOOT) { const dx = x - b.x, dz = z - b.z; if (Math.abs(b.c * dx - b.s * dz) < b.hw && Math.abs(b.s * dx + b.c * dz) < b.hd) return true; }
     for (const [p, q] of V.FENCE.rails || []) if (segNear(x, z, p[0], p[2], q[0], q[2], FENCE_HALF)) return true;
     const i = Math.min(V.N - 1, Math.max(0, Math.floor((x + V.SIZE / 2) / V.TEX))), j = Math.min(V.N - 1, Math.max(0, Math.floor((z + V.SIZE / 2) / V.TEX)));
-    if (V.slopeAt(i, j) > STEEP) return true;
+    { const sl = V.slopeAt(i, j); if (sl > STEEP && (sl > BANK || !bankAt(j * V.N + i))) return true; }
     if (V.WDEPTH[j * V.N + i] > DEEP && V.waterAt(x, z) > 0.3) return true;
     return false;
   }

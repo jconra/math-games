@@ -1,8 +1,8 @@
 // FAIR SHARES AND LEFTOVERS: the math of "Loot the gang" (src/missions/loot.js). The gang's stolen goods have been
 // found; brought back to town, they go home to the folks they were taken from, and the kid works out who gets what:
 //   even      shared out evenly, nothing left over: 24 silver dollars taken from 4 families -> 6 each
-//   rem       shares and a leftover: 23 silver dollars, 4 families -> 5 each, 3 left over (for the church box)
-//   leftover  what to do with the leftover, as the story says: how many go in the church box (the leftover itself),
+//   rem       shares and a leftover: 23 silver dollars, 4 families -> 5 each, 3 left over (for the orphans' home)
+//   leftover  what to do with the leftover, as the story says: how many go to the orphans' home (the leftover itself),
 //             how many trips the mule makes (round up: the last few need a trip too), how many full boxes (round down)
 //   rule      unequal shares by a rule: the gang took 3 times as much from the Pikes as from the Vegas; 24 dollars ->
 //             the Pikes get 18 (3 parts of 4)
@@ -13,7 +13,7 @@
 // really make, each with one plain line why: multiplied instead of sharing (24 x 4 = 96 each: more than was stolen),
 // took away (24 - 4), gave each family the number of families, one round too many or too few, forgot the leftover,
 // stopped dealing while the leftover could still go round, gave the leftover to one family (not fair shares), answered
-// each family's share when the church box was asked, rounded the wrong way, split evenly when the rule says otherwise,
+// each family's share when the orphans' home's part was asked, rounded the wrong way, split evenly when the rule says otherwise,
 // counted the parts wrong. After a wrong coin the slip shows its line and a picture of the sharing (picture() below):
 // the families in a row with the first round dealt and the rest still in the pile, the trips or boxes with the last
 // part-full one marked, the bar cut into each family's parts. The picture never shows the answer.
@@ -29,7 +29,7 @@
 //   const Q = makeShares(rider.topics.loot ||= {}, { rand })
 //   Q.next({ avoid, among, only }) -> a share problem: { id, kind, step, key, story, ask, coins: [{ big, small, label, good, slip,
 //                           why, v }], answer, goods, total, groups, owners: [family], each, left, pic, rightWhy, hand:
-//                           [{ family, gets }], church }   (avoid: family names not to use; among: the trip's own families,
+//                           [{ family, gets }], orphans }   (avoid: family names not to use; among: the trip's own families,
 //                           taken first when there are enough; only: from among and nowhere else, or null)
 //   Q.answer(problem, coin, { helped }) -> { right, first, moved, step, placed }
 //   Q.level()            -> { step, of, label, placing, line }
@@ -52,7 +52,7 @@ export const LADDER = [
   { mix: { even: 1 }, size: 2, coins: 4, label: 'Fair shares with bigger numbers (56 sacks, 7 homesteads)' },
   { mix: { rem: 1.5, even: 0.5 }, size: 1, coins: 4, label: 'Shares and a leftover (23 dollars, 4 families: 5 each, 3 left)' },
   { mix: { rem: 1.3, even: 0.4 }, size: 2, coins: 4, label: 'Shares and a leftover, bigger numbers' },
-  { mix: { leftover: 1.6, rem: 0.7 }, size: 2, coins: 4, label: 'What to do with the leftover (the church box, one more trip)' },
+  { mix: { leftover: 1.6, rem: 0.7 }, size: 2, coins: 4, label: "What to do with the leftover (the orphans' home, one more trip)" },
   { mix: { rule: 1.6, leftover: 0.5, rem: 0.4 }, size: 2, coins: 4, label: 'Shares by a rule (3 times as much for the Pikes)' },
   { mix: { rule3: 1.4, rule: 0.7, leftover: 0.4 }, size: 3, coins: 4, label: 'Shares by a rule among three families' },
 ];
@@ -68,7 +68,8 @@ const REPS = [
   ['the Dunns', 'Dunn', 'Clara Dunn'], ['the Okafors', 'Okafor', 'Mr. Okafor'], ['the Lindqvists', 'Lindqvist', 'Mrs. Lindqvist'],
 ];
 export const FAMILIES = REPS.map(([name, short, rep]) => { const f = FOLK.find((x) => x.name === rep) || FOLK[0]; return { name, short, rep, she: !!f.she, look: f.look }; });
-export const PARSON = (() => { const f = FOLK.find((x) => x.name === 'Pastor Briggs') || FOLK[0]; return { name: 'the church box', short: 'church', rep: f.name, she: false, look: f.look }; })();
+// the orphans' home: what can't go round goes there, and its matron comes to the sheriff's office to take it
+export const MATRON = (() => { const f = FOLK.find((x) => x.name === 'Matron Hale') || FOLK[0]; return { name: "the orphans' home", short: 'orphans', rep: f.name, she: true, look: f.look }; })();
 
 // what the gang took: [many, one, money?, the short word on a coin]
 export const GOODS = [
@@ -133,13 +134,13 @@ const MAKE = {
     ];
     return { key: `even:${total}:${g}`, goods, total, groups: g, owners, each: q, left: 0, story, ask, right, wrong,
       pic: { kind: 'deal', total, groups: g, names: owners.map((f) => f.short), goods: goods[0] },
-      rightWhy: `${total} ÷ ${g} = ${q}: ${q} ${goods[0]} for each family.`, hand: owners.map((f) => ({ family: f, gets: q })), church: 0 };
+      rightWhy: `${total} ÷ ${g} = ${q}: ${q} ${goods[0]} for each family.`, hand: owners.map((f) => ({ family: f, gets: q })), orphans: 0 };
   },
   rem(t, step, size, fam) {
     let { g, q } = sizes(size, t); const r = t.int(1, g - 1);
     if (q === r) q++;
     const total = g * q + r, goods = t.pick(GOODS), owners = fam(g);
-    const story = `${many(total, goods)[0].toUpperCase() + many(total, goods).slice(1)} were taken from ${familiesOf(owners)}. They share them out fair, and whatever's left over goes in the church box.`;
+    const story = `${many(total, goods)[0].toUpperCase() + many(total, goods).slice(1)} were taken from ${familiesOf(owners)}. They share them out fair, and whatever's left over goes to the orphans' home.`;
     const ask = 'How many does each family get, and how many are left over?';
     const each = (n, left) => `each, ${left ? `${left} left` : 'none left'}`;
     const right = coin(`${q}/${r}`, q, each(q, r), `${q} each, ${r} left over`);
@@ -151,26 +152,26 @@ const MAKE = {
       coin(`${total - g}/0`, total - g, each(total - g, 0), `${total - g} each`, 'sub', `${total} − ${g} = ${total - g} just takes ${num(g)} away. Deal the ${total} out among the families instead.`),
     ];
     return { key: `rem:${total}:${g}`, goods, total, groups: g, owners, each: q, left: r, story, ask, right, wrong,
-      pic: { kind: 'deal', total, groups: g, names: owners.map((f) => f.short), goods: goods[0], church: true },
-      rightWhy: `${g} × ${q} = ${g * q}, and ${total} − ${g * q} = ${r}: ${q} each, and ${r} for the church box.`,
-      hand: owners.map((f) => ({ family: f, gets: q })), church: r };
+      pic: { kind: 'deal', total, groups: g, names: owners.map((f) => f.short), goods: goods[0], orphans: true },
+      rightWhy: `${g} × ${q} = ${g * q}, and ${total} − ${g * q} = ${r}: ${q} each, and ${r} for the orphans' home.`,
+      hand: owners.map((f) => ({ family: f, gets: q })), orphans: r };
   },
   leftover(t, step, size, fam) {
-    const way = t.pick(['church', 'trips', 'boxes']);
-    if (way === 'church') {
+    const way = t.pick(['orphans', 'trips', 'boxes']);
+    if (way === 'orphans') {
       const g = t.int(3, 6), q = t.int(2, 7), r = t.int(1, g - 1), total = g * q + r, goods = t.pick(GOODS.filter((x) => !x[2])), owners = fam(g);
-      const story = `${many(total, goods)[0].toUpperCase() + many(total, goods).slice(1)} go back to ${num(g)} homesteads, the same whole number to each. Pastor Briggs gets whatever's left over for the church.`;
-      const ask = `How many ${goods[0]} go to the church?`;
-      const right = coin(r, r, 'to the church', `${r} to the church`);
+      const story = `${many(total, goods)[0].toUpperCase() + many(total, goods).slice(1)} go back to ${num(g)} homesteads, the same whole number to each. Matron Hale takes whatever's left over to the orphans' home.`;
+      const ask = `How many ${goods[0]} go to the orphans' home?`;
+      const right = coin(r, r, 'for the orphans', `${r} for the orphans`);
       const wrong = [
-        coin(q, q, 'to the church', `${q} to the church`, 'each', `${q} is what each homestead gets. The church gets what's left after that: ${total} − ${g} × ${q}.`),
-        coin(0, 0, 'to the church', 'none to the church', 'noRem', `${g} × ${q} = ${g * q}, so ${total - g * q} ${total - g * q === 1 ? 'is' : 'are'} left over for the church.`),
-        coin(r + g, r + g, 'to the church', `${r + g} to the church`, 'short', `${r + g} is enough to give every homestead one more first. The church gets what can't go round.`),
-        coin(total - g, total - g, 'to the church', `${total - g} to the church`, 'sub', `That takes just ${g} away. Each homestead gets ${q}, and the church gets the rest.`),
+        coin(q, q, 'for the orphans', `${q} for the orphans`, 'each', `${q} is what each homestead gets. The orphans' home gets what's left after that: ${total} − ${g} × ${q}.`),
+        coin(0, 0, 'for the orphans', 'none for the orphans', 'noRem', `${g} × ${q} = ${g * q}, so ${total - g * q} ${total - g * q === 1 ? 'is' : 'are'} left over for the orphans' home.`),
+        coin(r + g, r + g, 'for the orphans', `${r + g} for the orphans`, 'short', `${r + g} is enough to give every homestead one more first. The orphans' home gets what can't go round.`),
+        coin(total - g, total - g, 'for the orphans', `${total - g} for the orphans`, 'sub', `That takes just ${g} away. Each homestead gets ${q}, and the orphans' home gets the rest.`),
       ];
-      return { key: `church:${total}:${g}`, goods, total, groups: g, owners, each: q, left: r, story, ask, right, wrong,
-        pic: { kind: 'deal', total, groups: g, names: owners.map((f) => f.short), goods: goods[0], church: true, ask: 'church' },
-        rightWhy: `${g} × ${q} = ${g * q}, and ${total} − ${g * q} = ${r} left over for the church.`, hand: owners.map((f) => ({ family: f, gets: q })), church: r };
+      return { key: `orphans:${total}:${g}`, goods, total, groups: g, owners, each: q, left: r, story, ask, right, wrong,
+        pic: { kind: 'deal', total, groups: g, names: owners.map((f) => f.short), goods: goods[0], orphans: true, ask: 'orphans' },
+        rightWhy: `${g} × ${q} = ${g * q}, and ${total} − ${g * q} = ${r} left over for the orphans' home.`, hand: owners.map((f) => ({ family: f, gets: q })), orphans: r };
     }
     // (the picture draws one full load, a dashed gap for the rest and the last part-full one: 3 boxes. So there are 3
     // full trips at least (4 trips or more) and 4 full boxes at least: counting the boxes drawn never gives the answer)
@@ -190,7 +191,7 @@ const MAKE = {
       ];
       return { key: `trips:${total}:${per}`, goods, total, groups: per, owners: [owner], each: T, left: r, story, ask, right, wrong,
         pic: { kind: 'loads', total, per, unit: 'trip', goods: goods[0], need: true },
-        rightWhy: `${full} full trips carry ${full * per}, and the last ${r === 1 ? 'one needs' : `${r} need`} one more: ${T} trips.`, hand: [{ family: owner, gets: total }], church: 0 };
+        rightWhy: `${full} full trips carry ${full * per}, and the last ${r === 1 ? 'one needs' : `${r} need`} one more: ${T} trips.`, hand: [{ family: owner, gets: total }], orphans: 0 };
     }
     const goods = t.pick(GOODS.filter((x) => !x[2] && /horseshoes|cans|jars/.test(x[0])));
     const story = `${owner.rep} is packing the ${many(total, goods)} the gang took into boxes of ${per} to sell back at the store. Only full boxes go.`;
@@ -204,7 +205,7 @@ const MAKE = {
     ];
     return { key: `boxes:${total}:${per}`, goods, total, groups: per, owners: [owner], each: full, left: r, story, ask, right, wrong,
       pic: { kind: 'loads', total, per, unit: 'box', goods: goods[0], need: false },
-      rightWhy: `${full} boxes of ${per} hold ${full * per}; the ${r} left over ${r === 1 ? "doesn't" : "don't"} fill a box.`, hand: [{ family: owner, gets: total }], church: 0 };
+      rightWhy: `${full} boxes of ${per} hold ${full * per}; the ${r} left over ${r === 1 ? "doesn't" : "don't"} fill a box.`, hand: [{ family: owner, gets: total }], orphans: 0 };
   },
   rule(t, step, size, fam) {
     const [a, b] = t.pick([[3, 1], [2, 1], [4, 1], [3, 2], [5, 1]]), per = t.int(2, size >= 3 ? 9 : 6), parts = a + b, total = parts * per;
@@ -226,7 +227,7 @@ const MAKE = {
     return { key: `rule:${total}:${a}:${b}:${askBig}`, goods, total, groups: parts, owners, each: gets, left: 0, story, ask, right, wrong,
       pic: { kind: 'parts', total, rows: [{ name: A.short, parts: a }, { name: B.short, parts: b }], goods: goods[0], ask: who.short },
       rightWhy: `${a} + ${b} = ${parts} parts, ${total} ÷ ${parts} = ${per} a part, so ${who.name} get ${askBig ? a : b} × ${per} = ${gets}.`,
-      hand: [{ family: A, gets: a * per }, { family: B, gets: b * per }], church: 0 };
+      hand: [{ family: A, gets: a * per }, { family: B, gets: b * per }], orphans: 0 };
   },
   rule3(t, step, size, fam) {
     const shares = t.pick([[1, 2, 3], [1, 1, 2], [2, 3, 1], [1, 2, 2], [3, 1, 2]]), per = t.int(2, 7), parts = shares[0] + shares[1] + shares[2], total = parts * per;
@@ -246,13 +247,13 @@ const MAKE = {
     return { key: `rule3:${total}:${shares.join('-')}:${k}`, goods, total, groups: parts, owners, each: gets, left: 0, story, ask, right, wrong,
       pic: { kind: 'parts', total, rows: owners.map((f, i) => ({ name: f.short, parts: shares[i] })), goods: goods[0], ask: who.short },
       rightWhy: `${shares.join(' + ')} = ${parts} parts, ${total} ÷ ${parts} = ${per} a part, so ${who.name} get ${shares[k]} × ${per} = ${gets}.`,
-      hand: owners.map((f, i) => ({ family: f, gets: shares[i] * per })), church: 0 };
+      hand: owners.map((f, i) => ({ family: f, gets: shares[i] * per })), orphans: 0 };
   },
 };
 
 // A share problem of one kind at a step. avoid: family names not to use; among: the families to take them from first
 // (a trip's own: the ones waiting at the sheriff's office), when there are enough of them. only: take them from among
-// and nowhere else (the church box only when the parson's name is in among too), or make none: -> null. -> see the top
+// and nowhere else (the orphans' home only when its matron's name is in among too), or make none: -> null. -> see the top
 const TOO_FEW = {};   // (thrown when only the families in among may be used and there aren't enough of them)
 export function makeShare(kind, { rand = Math.random, step = 1, avoid = [], among = null, only = false } = {}) {
   const t = tools(rand), row = LADDER[Math.max(1, Math.min(LADDER.length, step)) - 1];
@@ -267,7 +268,7 @@ export function makeShare(kind, { rand = Math.random, step = 1, avoid = [], amon
     let p = null;
     try { p = MAKE[kind](t, step, row.size, fam); } catch (e) { if (e !== TOO_FEW) throw e; }
     if (!p) continue;
-    if (only && p.church > 0 && !(among || []).includes(PARSON.name)) continue;
+    if (only && p.orphans > 0 && !(among || []).includes(MATRON.name)) continue;
     // every coin of a problem has the same small words under its number (but the leftover ones, which say their own
     // leftover), so the words never tell the right coin from the wrong
     if (kind !== 'rem') for (const c of [p.right, ...p.wrong]) { c.small = smallFor(c.big, p.right.small); c.label = `${c.big} ${c.small}`; }
@@ -286,7 +287,7 @@ export function makeShare(kind, { rand = Math.random, step = 1, avoid = [], amon
     return {
       id: Math.floor(rand() * 1e9).toString(36), kind, step, key: p.key, story: p.story, ask: p.ask, coins,
       answer: p.right.label, goods: { many: p.goods[0], one: p.goods[1], money: !!p.goods[2] }, total: p.total, groups: p.groups,
-      owners: p.owners, each: p.each, left: p.left, pic: p.pic, rightWhy: p.rightWhy, hand: p.hand, church: p.church,
+      owners: p.owners, each: p.each, left: p.left, pic: p.pic, rightWhy: p.rightWhy, hand: p.hand, orphans: p.orphans,
     };
   }
   if (only) return null;
@@ -381,10 +382,10 @@ const dot = (x, y, r = 3.6, fill = BRASS) => `<circle cx="${x.toFixed(1)}" cy="$
 const PIC_TITLES = { deal: 'Dealing it out', loads: 'Load by load', parts: 'Cut into parts' };
 
 const DRAW = {
-  // the families side by side, each with the first round dealt (one each), and the rest still in the pile; a church
-  // box at the end when there will be a leftover
+  // the families side by side, each with the first round dealt (one each), and the rest still in the pile; the
+  // orphans' home at the end when there will be a leftover
   deal(p) {
-    const g = p.groups, x0 = 10, x1 = p.church ? W - 62 : W - 10, bw = (x1 - x0) / g;
+    const g = p.groups, x0 = 10, x1 = p.orphans ? W - 62 : W - 10, bw = (x1 - x0) / g;
     // the pile (what's still to deal: a heap of dots, at most 60 drawn), under words that count it the same way
     const pile = p.total - g, shown = Math.min(pile, 60);
     let s = text(10, 14, `${p.total} ${p.goods}: one each dealt, ${pile} still in the pile`, { size: 12, anchor: 'start', fill: SOFT, weight: 700 });
@@ -398,14 +399,14 @@ const DRAW = {
       s += text(cx, y + 36, '?', { size: 15, fill: ASK, weight: 800 });
       s += text(cx, y + 60, p.names[i] || '', { size: g > 6 ? 9 : 11, fill: SOFT });
     }
-    if (p.church) {
-      // a little chapel: what can't go round again goes in its box
+    if (p.orphans) {
+      // a little house (the orphans' home): what can't go round again goes there
       const cx = W - 34;
-      s += `<path d="M${cx - 20} ${y + 46}V${y + 18}L${cx} ${y + 4}L${cx + 20} ${y + 18}V${y + 46}Z" fill="${FILL2}" stroke="${INK}" stroke-width="1.3"/><path d="M${cx} ${y - 6}V${y + 6}M${cx - 4} ${y - 2}H${cx + 4}" stroke="${INK}" stroke-width="1.4"/>`;
-      s += text(cx, y + 36, '?', { size: 15, fill: ASK, weight: 800 }) + text(cx, y + 60, 'church', { size: 11, fill: SOFT });
+      s += `<path d="M${cx - 20} ${y + 46}V${y + 18}L${cx} ${y + 4}L${cx + 20} ${y + 18}V${y + 46}Z" fill="${FILL2}" stroke="${INK}" stroke-width="1.3"/><path d="M${cx - 4} ${y + 46}V${y + 38}H${cx + 4}V${y + 46}" fill="none" stroke="${INK}" stroke-width="1.2"/>`;
+      s += text(cx, y + 36, '?', { size: 15, fill: ASK, weight: 800 }) + text(cx, y + 60, 'orphans', { size: 11, fill: SOFT });
     }
-    const line = p.church
-      ? `Deal the ${p.total} out one at a time to each family, round and round. When there aren't enough to go round again, the rest go in the church box.`
+    const line = p.orphans
+      ? `Deal the ${p.total} out one at a time to each family, round and round. When there aren't enough to go round again, the rest go to the orphans' home.`
       : `Deal the ${p.total} out one at a time to each family, round and round, until the pile is gone. Each family ends up with the same.`;
     return { svg: svg(y + 68, s), line };
   },

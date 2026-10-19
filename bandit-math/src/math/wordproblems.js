@@ -113,8 +113,8 @@ export const FOLK = [
   { name: 'Miss Lottie', she: true, look: { outfit: 'suit_f', palette: 'mustard' } },
   { name: 'Jed Turner', she: false, look: { outfit: 'casual_m', palette: 'rancher' } },
   { name: 'Rosa Vega', she: true, look: { outfit: 'adventurer_f', palette: 'drifter' } },
-  // (a parson's dark brown coat over light trousers: all black or charcoal would read as a bandit)
-  { name: 'Pastor Briggs', she: false, look: { outfit: 'suit_m', palette: ['#4e4034', '#8a7e68', '#2a2420', '#5a4a3a'] } },
+  // (the matron of the orphans' home: Loot the gang's leftovers go to her, src/math/shares.js)
+  { name: 'Matron Hale', she: true, look: { outfit: 'formal_f', palette: 'townsman' } },
   { name: 'Hattie Bell', she: true, look: { outfit: 'casual_f', palette: 'mustard' } },
   { name: 'Cookie', she: false, look: { outfit: 'worker_m', palette: 'homestead' } },
   { name: 'Ike Malone', she: false, look: { outfit: 'casual_m', palette: 'sage' } },
@@ -162,7 +162,7 @@ MAKERS.groups = (t, size, f) => {
   const a = t.int(2, S3(size, 5, 8, 9)), b = t.int(2, S3(size, 5, 9, 12));
   const ctx = t.pick([
     { key: 'pies', item: ['pie', 'pies'], unit: POUND, stuff: 'berries',
-      story: () => `${f.name} is baking ${a} pies for the church social. Each pie needs ${b} pounds of berries.`, ask: () => `How many pounds of berries ${p.does} need?` },
+      story: () => `${f.name} is baking ${a} pies for the town social. Each pie needs ${b} pounds of berries.`, ask: () => `How many pounds of berries ${p.does} need?` },
     { key: 'shoes', item: ['horse', 'horses'], unit: ['nail', 'nails'], stuff: 'nails',
       story: () => `${f.name} is shoeing ${a} horses at the livery. Every horse takes ${b} horseshoe nails.`, ask: () => `How many nails should ${p.they} buy?` },
     { key: 'coffee', item: ['sack', 'sacks'], unit: POUND, stuff: 'coffee',

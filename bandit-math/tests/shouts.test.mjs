@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { SHOUTS, VOICE_CLIPS, makeShoutBrain, pickShout, isMale } from '../src/audio/shouts.js';
+import { SHOUTS, VOICE_CLIPS, JINGLE, makeShoutBrain, pickShout, isMale } from '../src/audio/shouts.js';
 import { JOB_FOLK } from '../src/jobfolkplan.js';
 import { FOLK } from '../src/math/wordproblems.js';
 
@@ -20,7 +20,7 @@ test('every voice clip is in sounds/voice as .ogg and .m4a; every clip but the o
   for (const n of Object.keys(VOICE_CLIPS)) assert.ok(used.has(n) !== SHOUTS.unused.includes(n), n + (used.has(n) ? ' is played' : ' is played somewhere, or listed as kept for later'));
   assert.deepEqual(SHOUTS.unused, []);   // (mystuff_1 is Loot the gang's now)
   assert.ok(SHOUTS.kinds.mystuff.him && SHOUTS.kinds.mystuff.clips[0][0] === 'mystuff_1');
-  assert.equal(SHOUTS.events.lootDone, 'done');
+  assert.ok(SHOUTS.jobEnds.includes('lootDone') && !SHOUTS.events.lootDone, "a job's end is the coins, not a voice");
   for (const f of fs.readdirSync(VOICE).filter((f) => /\.(ogg|m4a)$/.test(f))) assert.ok(VOICE_CLIPS[f.replace(/\.(ogg|m4a)$/, '')], f + ' is listed');
   for (const k of Object.values(SHOUTS.events)) assert.ok(SHOUTS.kinds[k], k);
 });
@@ -68,8 +68,8 @@ test('a whoa: letting go of the keys at a gallop; once per pull-up; not when eas
 
 test('one at a time, a gap between, never the same clip twice running; the bigger moment goes first and the other waits its turn', () => {
   const B = makeShoutBrain(dice(0));
-  assert.ok(B.ask('done', 0));
-  assert.equal(B.next(0.1), null, 'waits for its delay');
+  assert.ok(B.ask('yeehaw', 0));
+  assert.equal(B.next(0.05), null, 'waits for its delay');
   assert.ok(B.next(0.6));
   B.ask('hello', 0.8);
   assert.equal(B.next(1.0, true), null, 'not over one that is playing');
@@ -77,19 +77,52 @@ test('one at a time, a gap between, never the same clip twice running; the bigge
   assert.equal(B.next(3), null, 'a gap after one ends');
   const h = B.next(4.3); assert.ok(h && h.kind === 'hello');
   const D = makeShoutBrain(Math.random); let last = null, t = 0;
-  for (let i = 0; i < 40; i++) { t += 20; D.ask('done', t); const n = D.next(t + 1); assert.ok(n); assert.notEqual(n.name, last); last = n.name; D.ended(t + 2); }
-  // a job's end and its thank-you at once: the yeehaw first, then the man's thanks (it waits its turn)
-  const E = makeShoutBrain(dice(0)); E.ask('thanks', 0, { who: MAN }); E.ask('done', 0.05);
-  assert.deepEqual(kindsOf(E), ['done', 'thanks']);
-  const a = E.next(0.6); assert.equal(a.kind, 'done'); E.ended(2);
-  const b = E.next(5.1); assert.equal(b && b.kind, 'thanks'); assert.equal(b.who, MAN);
+  for (let i = 0; i < 40; i++) { t += 80; D.ask('yeehaw', t, { sure: true }); const n = D.next(t + 1); assert.ok(n); assert.notEqual(n.name, last); last = n.name; D.ended(t + 2); }
+  // two moments at once: the bigger first ("you better sit down"), then a man's "have a nice day" (it waits its turn)
+  const E = makeShoutBrain(dice(0)); E.ask('niceday', 0, { who: MAN, sure: true }); E.ask('sitdown', 0.05, { sure: true });
+  assert.deepEqual(kindsOf(E), ['sitdown', 'niceday']);
+  const a = E.next(1.3); assert.equal(a.kind, 'sitdown'); E.ended(2);
+  const b = E.next(5.1); assert.equal(b && b.kind, 'niceday'); assert.equal(b.who, MAN);
   assert.ok(!E.ask('spur', 6) || E.queue.length <= SHOUTS.most);
 });
 
-test('a job done always gets its yeehaw (unless one just played); a waiting clip is dropped once too late', () => {
-  const B = makeShoutBrain(Math.random);
-  for (let i = 0; i < 20; i++) { const t = i * 30; assert.ok(B.ask('done', t)); const n = B.next(t + 1); assert.ok(/^(yeehaw|whoohee)_/.test(n.name)); B.ended(t + 2); }
+test("a job done is the coins, never a voice; a yeehaw only when a direction and Shift are held a second on a moving horse; a waiting clip is dropped once too late", () => {
+  for (const e of SHOUTS.jobEnds) assert.ok(!SHOUTS.events[e], e + ' is no voice');
+  for (const e of ['waveDone', 'flockDone', 'pigsDone', 'banditsDone', 'deerDone', 'deliveryDone', 'lootDone', 'storeDone']) assert.ok(SHOUTS.jobEnds.includes(e), e);
+  assert.ok(JINGLE.coins >= 3 && JINGLE.ring < 0.3 && JINGLE.level <= 0.1, 'a short, quiet handful of coins');
+  for (const [k, K] of Object.entries(SHOUTS.kinds)) if (k !== 'yeehaw') assert.ok(!K.clips.some(([n]) => /^(yeehaw|whoohee)_/.test(n)), k + ' has no yeehaw');
+  const B = makeShoutBrain(dice(0)), ride = (t, o) => B.ride(t, { onHorse: true, ...o });
+  ride(0, { speed: 0, push: true, run: true });
+  for (let t = 0; t < 0.95; t += 0.05) ride(t, { speed: t * 4.5, push: true, run: true });
+  assert.ok(!kindsOf(B).includes('yeehaw'), 'not before a second');
+  ride(1.05, { speed: 4.7, push: true, run: true });
+  assert.ok(kindsOf(B).includes('yeehaw'), 'held a second, going well');
+  for (let t = 1.1; t < 4; t += 0.05) ride(t, { speed: 12, push: true, run: true });
+  assert.equal(B.moments.yeehaw, 1, 'once a press');
+  // held but going nowhere (against a fence), Shift without a direction, a trot without Shift, on foot: none
+  const S = makeShoutBrain(dice(0)); for (let t = 0; t < 3; t += 0.05) S.ride(t, { onHorse: true, speed: 0.5, push: true, run: true });
+  for (let t = 3; t < 6; t += 0.05) S.ride(t, { onHorse: true, speed: 6, push: true, run: false });
+  for (let t = 6; t < 9; t += 0.05) S.ride(t, { onHorse: true, speed: 6, push: false, run: true });
+  for (let t = 9; t < 12; t += 0.05) S.ride(t, { onHorse: false, speed: 4.6, push: true, run: true });
+  assert.ok(!S.moments.yeehaw, 'no yeehaw');
   const L = makeShoutBrain(dice(0)); L.ask('spur', 0); assert.equal(L.next(5), null); assert.equal(L.queue.length, 0);
+});
+
+test('"easy now": by a moving horse on foot (walking up to it or standing by), or letting the reins go from a trot; never by a standing horse or far off', () => {
+  const B = makeShoutBrain(dice(0));
+  B.horses(0, { d: 5, closing: 1, speed: 1.6 }); assert.deepEqual(kindsOf(B), ['easy'], 'walking up to a moving horse');
+  B.next(0.4); B.ended(1);
+  B.horses(2, { d: 4, closing: 1, speed: 1.6 }); assert.equal(B.moments.easy, 1, 'once a meeting');
+  const C = makeShoutBrain(dice(0));
+  C.horses(0, { d: null, speed: 0 }); C.horses(1, { d: 9, closing: 2, speed: 0 }); C.horses(2, { d: 3, closing: -1, speed: 1.6 });
+  assert.equal(C.queue.length, 0, 'no moving horse; one too far off; one moving away while the player walks off');
+  C.horses(3, { d: 3, closing: -1, speed: 0.2 }); assert.deepEqual(kindsOf(C), ['easy'], 'standing by while it moves');
+  const R = makeShoutBrain(dice(0)); R.horses(0, { onHorse: true, d: 2, closing: 2, speed: 0 }); assert.equal(R.queue.length, 0, 'not from the saddle');
+  const T = makeShoutBrain(dice(0)); T.ride(0, { onHorse: true, speed: 6, push: true, run: false }); T.ride(0.1, { onHorse: true, speed: 5.8, push: false, run: false });
+  assert.deepEqual(kindsOf(T), ['easy'], 'easing off from a trot');
+  const G = makeShoutBrain(dice(0)); G.ride(0, { onHorse: true, speed: 12, push: true, run: true }); G.ride(0.1, { onHorse: true, speed: 11.5, push: false, run: false });
+  assert.deepEqual(kindsOf(G), ['whoa'], 'from a gallop it is a whoa');
+  for (const e of ['sheepDose', 'deerSetup']) assert.ok(!SHOUTS.events[e], e + ' is no "easy now"');
 });
 
 test('the first hello of a ride is sometimes a good morning, the rest are howdies', () => {
@@ -108,7 +141,7 @@ test("other people's lines are the maker's voice: only a man says them, from whe
     assert.equal(B.ask(k, 0, { who: MAN, sure: true }), true, k + ': a man');
   }
   // the player's own kinds need nobody
-  for (const k of ['spur', 'whoa', 'done', 'hello', 'bye', 'along', 'easy', 'sitdown']) assert.ok(!SHOUTS.kinds[k].him, k);
+  for (const k of ['spur', 'whoa', 'yeehaw', 'hello', 'bye', 'along', 'easy', 'sitdown']) assert.ok(!SHOUTS.kinds[k].him, k);
   // who is a man: the folk looks
   assert.equal(isMale({ outfit: 'suit_m' }), true); assert.equal(isMale({ outfit: 'casual_f' }), false); assert.equal(isMale(null), false);
   const byId = Object.fromEntries(JOB_FOLK.map((f) => [f.id, f]));
@@ -136,5 +169,4 @@ test('thanks: nearly always at a job end, about half the time at the store with 
   assert.equal(SHOUTS.kinds.thanks.clips.length, 8);
   const B = makeShoutBrain(dice(0)); B.ask('thanks', 0, { who: MAN }); const a = B.next(0.3); B.ended(1);
   B.ask('thanksStore', 60, { who: MAN }); const b = B.next(60.3); assert.notEqual(a.name, b.name);
-  assert.equal(SHOUTS.events.sheepDose, 'easy'); assert.equal(SHOUTS.events.deerSetup, 'easy');
 });

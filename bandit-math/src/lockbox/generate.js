@@ -1,4 +1,8 @@
-// Lock-box problems, one recipe per rung of the ladder (R0a .. R15).
+// Lock-box problems, one recipe per rung of the ladder (R0a .. R15, then the inequalities I1 .. I4).
+//
+// The inequality rungs come after the equations and open the same way (ineq.js has their recipes):
+//   I1 Less or more (2x + 3 < 11), I2 The flip (−3x ≥ 12), I3 Three rooms (3x − 9 < 6x < 3x + 12),
+//   I4 Either or (x + 2 < 0 or 2x > 8). Their answers are whole numbers within ±20, given on a number line.
 //
 // Every recipe picks x first and builds the equation around it, so the answer is always a whole number.
 // Then the filters throw out anything unfair or dull:
@@ -11,6 +15,7 @@
 import {
   F, num, xt, br, line, makeStage, lineFits, lineText, solve, trueAnswer, printedNumbers, moveLabel, verdictFinishMoves,
 } from './engine.js';
+import { INEQ_RECIPES, makeIneqProblem } from './ineq.js';
 
 // ---------- a small seeded random number source (the same seed gives the same boxes) ----------
 
@@ -62,6 +67,11 @@ export const RUNGS = [
   { id: 'R13', name: 'Both sides with negatives', stage: S({ addx: true, mul: true, div: true, flip: true, comb: true }), maxPar: 4, note: '4x − 6 = −8x + 18' },
   { id: 'R14', name: 'Brackets on both sides', stage: S({ addx: true, mul: true, div: true, flip: true, dist: true, comb: true }), maxPar: 5, note: '2(x + 3) = 5x − 9' },
   { id: 'R15', name: 'Legendary vault', stage: S({ addx: true, mul: true, div: true, flip: true, dist: true, comb: true }), maxPar: 5, verdicts: true, note: 'infinitely many solutions, no solution' },
+  // inequalities (ineq.js): every move is done to every room; the answer is picked on a number line
+  { id: 'I1', name: 'Less or more', ineq: 'one', stage: S({ mul: true, div: true }), maxPar: 2, note: '2x + 3 < 11' },
+  { id: 'I2', name: 'The flip', ineq: 'one', stage: S({ mul: true, div: true, flip: true }), maxPar: 2, note: '−3x ≥ 12' },
+  { id: 'I3', name: 'Three rooms', ineq: 'three', stage: S({ addx: true, mul: true, div: true }), maxPar: 3, note: '3x − 9 < 6x < 3x + 12' },
+  { id: 'I4', name: 'Either or', ineq: 'or', stage: S({ mul: true, div: true, flip: true }), maxPar: 4, note: 'x + 2 < 0 or 2x > 8' },
 ];
 export const RUNG = Object.fromEntries(RUNGS.map((r) => [r.id, r]));
 export const RUNG_IDS = RUNGS.map((r) => r.id);
@@ -288,6 +298,8 @@ export function verdictOf(l) {
 // generate(rungId, { rng, size = 2, recent = [] }) -> a problem:
 //   { rung, mode: 'moves'|'balance'|'key', key, start: line, x, kind: 'one'|'all'|'none', par, route: [labels],
 //     choices? (warm-up rungs), answer? }
+//   an inequality rung: { rung, mode: 'ineq', kind: 'ineq', form, key, start: { form, chains, active }, x: null, par,
+//     route, set } (ineq.js makeIneqProblem)
 // Returns null only if 400 tries all failed the filters (the tests make sure that never happens).
 
 // On the vault rung, verdict: true asks for an "infinitely many solutions / no solution" box, false for a real
@@ -301,6 +313,12 @@ export function generate(rungId, { rng = makeRng(), size = 2, recent = [], verdi
   const verdictKind = wantVerdict ? rng.pick(['all', 'none']) : 'one';
   const seen = new Set(recent);
   for (let tries = 0; tries < 400; tries++) {
+    if (rung.ineq) {
+      const made = INEQ_RECIPES[rungId](rng, size);
+      const p = made ? makeIneqProblem(rungId, made, rung.stage, { maxPar: rung.maxPar }) : null;
+      if (!p || (seen.has(p.key) && tries < 300)) continue;
+      return p;
+    }
     if (rung.mode === 'balance' || rung.mode === 'key') {
       const p = rung.mode === 'balance' ? balanceProblem(rng, size) : keyProblem(rng, size);
       const start = line(p.L, p.R);

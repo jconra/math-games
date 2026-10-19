@@ -19,20 +19,28 @@
 //                   is in rider.lockboxes, then the panel closes by itself.
 //
 // One box, top to bottom: the top strip (box name, one brass tumbler per move of par, the stars, the gold, "Done for
-// now"), the steps card (the six rules, the step being worked lit), the pinned start line and the ledger on ruled
-// paper, the big working line (numbers are round coins, x-terms are cards; "=" is a brass hinge pin), Old Hob's
-// caption, and the button tray (keys 1-4, U undo, H hint).
-// When x stands alone the check plays by itself: x drops into the start line, each side works itself out, both land
-// on the same number, the lid opens, the coins fly into the gold, and the next box slides in. No timer anywhere.
+// now"), the steps card (the six rules, the step being worked lit; open on a wide screen, a compact strip on a
+// phone), the pinned start line and the ledger on ruled paper, the big working line (numbers are round coins,
+// x-terms are cards; "=" is a brass hinge pin), Old Hob's caption, and the button tray (keys 1-4, U undo, H hint).
 //
-// Adding a negative and a positive is where kids slip (−10 + 18 worked as −28), so:
-//   - the first few times a move makes such a sum (one that starts below zero or crosses it: −10 + 18, 5 − 8; plain
-//     taking away like 84 − 12 doesn't count), a number line under the working line shows the hop
-//     (src/ui/numberline.js), and the Rule hint shows it for the sum the hinted move will make;
-//   - the check flashes the hop whenever a side comes down to such a sum (−16 + 18, 5 − 8; not plain 63 − 6);
-//   - on level 5 ("do the arithmetic", review boxes) the kid picks the tidied line from 3 cards after each move:
-//     the right one, a sign slip and one side forgotten (tidy.js). A wrong card shows the number line with the
-//     kid's pick marked; so does waiting about 8 seconds.
+// Every step is worked by the kid (parts.js): after a move is picked, the part it cancels goes by itself (4x − 4x is
+// struck out, 9x ÷ 9 leaves x), and each part left to work out is asked one at a time, big in the middle of the mat
+// (the focus): lines run from the chips it comes from to the sum, "5x − 4x = ?", in the largest type on the screen,
+// with four answers in the tray. A sum of two numbers shows a number line as a picture (where it starts and which
+// way it goes, not where it lands). A wrong answer shakes, Hob gives a one-line nudge, and the right one stays to
+// pick; it costs no move and no star. Opening brackets asks each product the same way (products.js).
+// When x stands alone the check is a review that stays on screen: the beginning equation with the solution put in,
+// each side worked out, the number lines drawn finished, both sides matching. ONE button, "Next problem" (Enter),
+// opens the lid, pays, and the next box slides in. No timer anywhere.
+//
+// Inequalities (the rungs after the equations, ineq.js) play the same way on "rooms" (two sides, or three for
+// 3x − 9 < 6x < 3x + 12; two inequalities joined by "or" are worked one after the other). Multiplying or dividing
+// by a negative turns the sign round: the kid answers which way the sign points after every × or ÷, Hob and the
+// steps card say why. The answer is given on a number line: four pictures, open or closed circles, shaded between
+// or outward.
+//
+// Adding a negative and a positive is where kids slip (−10 + 18 worked as −28): the Rule hint shows the number line
+// for the sum the hinted move will make, and the review draws the hop under a side that comes down to such a sum.
 //
 // It writes nothing to storage itself: it changes rider.topics.algebra in place (the ladder); the caller saves the
 // rider (save.js recordLockbox does that) in onBox, or after onDone.
@@ -42,23 +50,27 @@ import {
   MINUS, TIMES,
 } from './engine.js';
 import { RUNG, generate, makeRng, verdictOf } from './generate.js';
-import { makeAlgebra, ARITH_LEVEL } from './algebra.js';
+import { makeAlgebra } from './algebra.js';
 import { makeBox, TIER_NAME, targetsOf } from './box.js';
-import { tidyChoices, slipLine, sumsOf } from './tidy.js';
+import { sumsOf } from './tidy.js';
 import { bracketProducts, productNudge, productHelp } from './products.js';
+import { partsOf, partNudge, partHelp } from './parts.js';
+import { makeIneqBox } from './ineqbox.js';
+import * as Q from './ineq.js';
+import { setLineSVG } from './setline.js';
 import { GOLDEN_RULE, STEPS, SKIP_WORD, cardMode, currentStep } from './steps.js';
-import { showNumberLine, watchHesitation, layoutNumberLine } from '../ui/numberline.js';
+import { showNumberLine, layoutNumberLine } from '../ui/numberline.js';
 import { SAFECRACKER_BOXES } from '../save.js';
 
-const TIDY_HESITATE_MS = 8000;   // on the do-the-arithmetic level, the number line comes up after this long without a pick
-const CHECK_STEP_MS = 560;       // the check: each side's next working-out step (times the box's speed)
-const CHECK_SUM_MS = 700;        // ...a side's sum (−9 + 16) stays up at least this long while its hop works it out
-const CHECK_LAND_MS = 750;       // ...and once the hop lands, the side's answer and the landing show together this long
-const REWARD_MS = 1900;          // the lid open and the coins flying, before the next box slides in
+const PART_RIGHT_MS = 650;       // a part answered right: the answer sits in its slot this long before the next part
+const AUTO_MS = 750;             // the parts that work themselves out (4x − 4x struck out) show this long first
+const REWARD_MS = 1000;          // after "Next problem": the lid open and the coins flying, before the next box slides in
 const SLIDE_MS = 480;            // the next box sliding in
-const QUICK_AFTER = 3;           // once this many boxes are open in one sitting, the kid has seen how the check goes:
-const QUICK = 0.65;              // ...the check's steps and the coins run at this share of their time (the number-line
-                                 // hop keeps its full time: that one is for learning)
+const QUICK_AFTER = 3;           // once this many boxes are open in one sitting, the kid has seen the coins fly:
+const QUICK = 0.7;               // ...they run at this share of their time
+const WIDE_SCREEN = '(min-width: 901px) and (min-height: 521px)';   // a screen with room for the steps card open
+const ROOM_NAME = { L: 'left side', R: 'right side' };
+const WORKING = ['play', 'parts', 'brackets'];   // the phases where the kid is working the box (Skip shows)
 
 // The sums worth a number line: the number already there is negative (−10 + 18) or the answer crosses zero (5 − 8).
 // Plain taking away (84 − 12, 40 − 4) is adding a negative too, but it isn't the slip the picture is for, and the
@@ -314,11 +326,42 @@ export function openLockbox(root = document.body, opts = {}) {
     const rung = RUNG[problem.rung];
     const stage = rung.stage;
     const level = opts.level ?? problem.level ?? 4;
-    const B = makeBox(problem, { stage, level, rng, fav: alg.fav(), tier });
+    const ineqMode = problem.mode === 'ineq';   // an inequality (ineq.js): rooms, signs, the number-line answer
+    const B = ineqMode ? makeIneqBox(problem, { stage, level, rng, fav: alg.fav(), tier }) : makeBox(problem, { stage, level, rng, fav: alg.fav(), tier });
     const speed = opts.speed ?? alg.speed(problem.rung);   // seconds per move
     const K = speed / 0.8;                                // animation time scale
-    const pickMode = problem.mode !== 'moves';
+    const pickMode = problem.mode !== 'moves' && !ineqMode;
     const verdictMode = !!rung.verdicts;
+    // what the inequality mode adds to the shared flow (null on an equation box)
+    const IB = ineqMode ? {
+      roomName(room) {
+        const ci = 'AB'.indexOf(room[0]), c = B.line.chains[ci] || B.line.chains[0];
+        const name = Q.roomName(c, Number(room.slice(1)));
+        return B.line.chains.length > 1 ? `${name}, ${ci === 0 ? 'first' : 'second'} part` : name;
+      },
+      partsOf: (before, move, r) => Q.chainParts(before, move, { rng: r }),
+      // the sign question answered: the signs on the mat turn round (or stay)
+      setRel(q) {
+        work.querySelectorAll(`.rel[data-r="${q.room}"]`).forEach((e, i) => {
+          if (e.textContent === q.rels[i]) return;
+          e.textContent = q.rels[i];
+          e.classList.remove('turn'); void e.offsetWidth; e.classList.add('turn');
+        });
+      },
+      signNudge: Q.signNudge,
+      signHelp: Q.signHelp,
+      // a sign turned round: the steps card shows the flip rule from now on
+      flipNoted(res) {
+        const fl = stepsEl.querySelector('.st-flip');
+        if (fl) { fl.hidden = false; fl.classList.remove('flash'); void fl.offsetWidth; fl.classList.add('flash'); }
+        hob(`${res.label} is a negative number, so the sign turned round.`, 'good');
+      },
+      solvedChain: () => linePick(),
+      chainDone(res) {
+        const set = Q.chainSet(res.out.chains[res.ci]);
+        hob(`One part done: ${set ? Q.setText(set) : 'x alone'}. Now the other one.`, 'good');
+      },
+    } : null;
 
     // ----- build the page -----
     const body = h('div', `lbx-body lbx-tier-${tier}`);
@@ -337,7 +380,9 @@ export function openLockbox(root = document.body, opts = {}) {
     body.appendChild(paper);
 
     const stageEl = h('section', 'lbx-stage');
-    stageEl.innerHTML = `<div class="lbx-workwrap"><div class="lbx-work"></div><div class="lbx-picwrap"></div><div class="lbx-calcs"></div></div>
+    stageEl.innerHTML = `<div class="lbx-workwrap"><div class="lbx-work"></div>
+        <div class="lbx-focus" hidden aria-live="polite"></div>
+        <div class="lbx-picwrap"></div><div class="lbx-calcs"></div><svg class="lbx-links" aria-hidden="true"></svg></div>
       <div class="lbx-rotate">Turn your phone sideways for bigger numbers</div>
       <div class="lbx-hob"><span class="lbx-hob-face">${HOB_SVG}</span><span class="lbx-hob-say" aria-live="polite"></span></div>
       <button class="lbx-leave" type="button" hidden>Skip this box</button>
@@ -349,16 +394,19 @@ export function openLockbox(root = document.body, opts = {}) {
       <div class="lbx-grid"></div>
       <button class="lbx-ask lbx-side-btn" type="button"><span>Ask Hob</span><kbd>H</kbd></button>
       <div class="lbx-verdicts" ${verdictMode ? '' : 'hidden'}>
-        <button type="button" data-verdict="all">Infinitely many solutions<small>every number works</small></button><button type="button" data-verdict="none">No solution<small>no number works</small></button></div>`;
+        <button type="button" data-verdict="all">Infinitely many solutions<small>every number works</small></button><button type="button" data-verdict="none">No solution<small>no number works</small></button></div>
+      <button class="lbx-nextbtn" type="button" hidden><span class="lbl">Next problem</span><kbd>Enter</kbd></button>`;
     body.appendChild(tray);
 
     const $ = (s) => body.querySelector(s);
     const work = $('.lbx-work'), calcs = $('.lbx-calcs'), ledgerEl = $('.lbx-ledger'), grid = $('.lbx-grid');
+    const focusEl = $('.lbx-focus'), linksEl = $('.lbx-links'), nextBtn = $('.lbx-nextbtn');
     const say = $('.lbx-hob-say'), pics = $('.lbx-picwrap');
     const nlBox = h('div', 'lbx-nl');   // the number line's spot: in the ledger, right under the newest line
     if (rung.pictures) body.classList.add('has-pics');
     const leaveBtn = $('.lbx-leave'), undoBtn = $('.lbx-undo'), askBtn = $('.lbx-ask');
-    $('.lbx-start-l').innerHTML = `${sideHTML(problem.start.L)} = ${sideHTML(problem.start.R)}`;
+    $('.lbx-start-l').innerHTML = ineqMode ? mathHTML(Q.stateText(problem.start)) : `${sideHTML(problem.start.L)} = ${sideHTML(problem.start.R)}`;
+    if (ineqMode) { body.classList.add('ineq'); if (problem.start.chains.length > 1) body.classList.add('ineq-or'); }
 
     // the top strip shows this box
     top.querySelector('.lbx-tier').textContent = TIER_NAME[tier];
@@ -370,7 +418,7 @@ export function openLockbox(root = document.body, opts = {}) {
     top.querySelector('.lbx-tumblers').innerHTML = '';
 
     // ----- state -----
-    let phase = 'play';          // play | anim | tidy | check | open | done
+    let phase = 'play';          // play | anim | parts | brackets | review | open | done
     let ff = false;              // fast-forward the current animation
     let gone = false;            // this box is finished (or the panel closed)
     let recorded = false;        // B.finish has run and the ladder has it
@@ -403,7 +451,7 @@ export function openLockbox(root = document.body, opts = {}) {
       const starsEl = top.querySelector('.lbx-stars');
       starsEl.innerHTML = [1, 2, 3].map((i) => STAR(i <= s)).join('');
       starsEl.setAttribute('aria-label', `${s} stars`);
-      leaveBtn.hidden = !(B.canLeave((performance.now() - openedAt) / 1000) || opts.dev) || !['play', 'tidy', 'brackets'].includes(phase);
+      leaveBtn.hidden = !(B.canLeave((performance.now() - openedAt) / 1000) || opts.dev) || !WORKING.includes(phase);
     }
 
     // ----- the steps card -----
@@ -414,13 +462,18 @@ export function openLockbox(root = document.body, opts = {}) {
     function buildSteps() {
       if (pickMode || !B.plan) { stepsEl.hidden = true; body.classList.add('no-steps'); return; }
       const mode = cardMode({ hard: B.plan.hard, stamped: (algState.stamped || []).includes(problem.rung), level: (algState.levels || {})[problem.rung] ?? 2 });
-      cardShown = session.cardPref || mode;
+      // on a wide screen there is room: the card starts open (quiet near mastery); a phone keeps the compact strip
+      const wide = typeof matchMedia === 'function' && matchMedia(WIDE_SCREEN).matches;
+      cardShown = session.cardPref || (wide && mode === 'folded' ? 'open' : mode);
+      // (an inequality has its own card: ineq.js INEQ_STEPS, with the flip rule showing once a sign has turned)
+      const CARD = B.cardSteps || STEPS;
       stepsEl.innerHTML = `<button class="st-bar" type="button" aria-expanded="false">
-          <span class="st-title">Steps</span><span class="st-mini" aria-hidden="true">${STEPS.map((s) => `<i data-n="${s.n}">${s.n}</i>`).join('')}</span>
+          <span class="st-title">Steps</span><span class="st-mini" aria-hidden="true">${CARD.map((s) => `<i data-n="${s.n}">${s.n}</i>`).join('')}</span>
           <span class="st-nowtxt"></span><span class="st-chev" aria-hidden="true"></span></button>
         <div class="st-card">
-          <p class="st-rule">${esc(GOLDEN_RULE)}</p>
-          <ol class="st-list">${STEPS.map((s) => `<li class="st-row" data-n="${s.n}"><span class="st-n">${s.n}</span>
+          <p class="st-rule">${esc(B.goldenRule || GOLDEN_RULE)}</p>
+          ${ineqMode ? `<p class="st-flip" hidden>${esc(Q.FLIP_RULE)}</p>` : ''}
+          <ol class="st-list">${CARD.map((s) => `<li class="st-row" data-n="${s.n}"><span class="st-n">${s.n}</span>
             <span class="st-txt">${wordsHTML(s.label)}</span><span class="st-note"></span></li>`).join('')}</ol>
         </div>`;
       stepsEl.querySelector('.st-bar').addEventListener('click', () => {
@@ -487,6 +540,7 @@ export function openLockbox(root = document.body, opts = {}) {
     // written as the newest row, with the move under the line before it.
     function renderLedger(pending = null) {
       ledgerEl.innerHTML = '';
+      if (ineqMode) { renderLedgerIneq(); return; }
       const ents = B.ledger.map((e, i) => ({ ...e, i })).filter((e) => !e.undone);
       const rows = [];
       let prev = null;
@@ -520,7 +574,50 @@ export function openLockbox(root = document.body, opts = {}) {
       ledgerEl.scrollTop = ledgerEl.scrollHeight;
     }
 
+    // an inequality's ledger: one row per line (both parts of an "or"), the move written beside it
+    function renderLedgerIneq() {
+      const rows = B.ledger.map((e, i) => ({ ...e, i })).filter((e) => !e.undone);
+      if (rows[rows.length - 1].i !== B.index) rows.push({ ...B.entry, i: B.index, again: true });
+      rows.forEach((e, k) => {
+        const nxt = rows[k + 1];
+        const move = nxt && !nxt.again && nxt.parent === e.i ? nxt.move : null;
+        const row = h('div', 'lg-row lg-ineq');
+        if (e.struck) row.classList.add('struck');
+        if (e.again) row.classList.add('again');
+        if (e.closer === false) row.classList.add('amber');
+        if (k === rows.length - 1 && !e.struck) row.classList.add('now');
+        row.appendChild(h('span', 'lg-dot', e.closer === false ? '•' : ''));
+        row.appendChild(h('span', 'lg-wide', `<span class="lg-txt">${mathHTML(Q.stateText(e.line))}</span>`));
+        const every = e.line.chains[e.line.active].rooms.length === 3 ? 'every room' : 'both sides';
+        const note = e.again ? 'back up to here' : move ? `${mathHTML(move.k === 'flip' ? `·(${MINUS}1)` : moveLabel(move))} ${every}${nxt.flipped ? ', sign turned' : ''}` : '';
+        row.appendChild(h('span', 'lg-note', note));
+        ledgerEl.appendChild(row);
+      });
+      ledgerEl.scrollTop = ledgerEl.scrollHeight;
+    }
+
     // ----- the working line -----
+    const drawLine = (l, cls = '') => (ineqMode ? renderIneq(l, cls) : renderLine(l, cls));
+    // An inequality: its rooms with a brass sign between each two; two inequalities joined by "or" sit one above the
+    // other, the one being worked bright.
+    function renderIneq(state, cls = '') {
+      work.innerHTML = '';
+      const wrap = h('div', `wineq ${cls}`);
+      state.chains.forEach((c, ci) => {
+        if (ci > 0) wrap.appendChild(h('div', 'w-or', 'or'));
+        const line = h('div', `wline ${cls}`);
+        if (state.chains.length > 1) line.classList.add(Q.chainSolved(c) ? 'solved' : ci === state.active ? 'active' : 'idle');
+        c.rooms.forEach((room, i) => {
+          if (i > 0) line.appendChild(h('span', 'rel', esc(c.rels[i - 1])));
+          line.appendChild(sideEl(room, Q.roomId(ci, i)));
+        });
+        line.querySelectorAll('.rel').forEach((r) => { r.dataset.r = Q.relId(ci); });
+        wrap.appendChild(line);
+      });
+      work.appendChild(wrap);
+      fitLine();
+      return wrap;
+    }
     function renderLine(l, cls = '') {
       work.innerHTML = '';
       const line = h('div', `wline ${cls}`);
@@ -534,22 +631,26 @@ export function openLockbox(root = document.body, opts = {}) {
       return line;
     }
     // Shrink the line to fit the width, never below the floor; it never wraps onto two lines.
+    // (the two lines of an "or" share one size)
     function fitLine() {
-      const line = work.querySelector('.wline');
-      if (!line) return;
-      const max = parseFloat(getComputedStyle(el).getPropertyValue('--work-max')) || 44;
-      const floor = 28;
+      const lines = [...work.querySelectorAll('.wline')];
+      if (!lines.length) return;
+      const max = parseFloat(getComputedStyle(body).getPropertyValue('--work-max')) || 44;
+      const floor = ineqMode ? 22 : 28;
       let size = max;
-      line.style.fontSize = `${size}px`;
+      const setSize = (v) => lines.forEach((l) => { l.style.fontSize = `${v}px`; });
+      const widest = () => Math.max(...lines.map((l) => l.scrollWidth));
+      setSize(size);
       const room = work.clientWidth - 8;
-      while (line.scrollWidth > room && size > floor) { size -= 2; line.style.fontSize = `${size}px`; }
+      while (widest() > room && size > floor) { size -= 2; setSize(size); }
       // "tight" (the turn-your-phone note) is only judged on a settled line, not the wider one shown mid-move
-      const mid = line.classList.contains('mid');
-      if (line.scrollWidth > room) {
-        const s = room / line.scrollWidth;
-        line.style.transform = `scale(${s.toFixed(3)})`;
+      const mid = lines[0].classList.contains('mid');
+      const w = widest();
+      if (w > room) {
+        const sc = room / w;
+        lines.forEach((l) => { l.style.transform = `scale(${sc.toFixed(3)})`; });
         if (!mid) body.classList.add('tight');
-      } else { line.style.transform = ''; if (!mid) body.classList.remove('tight'); }
+      } else { lines.forEach((l) => { l.style.transform = ''; }); if (!mid) body.classList.remove('tight'); }
       placePictures();
     }
 
@@ -608,7 +709,7 @@ export function openLockbox(root = document.body, opts = {}) {
     // ----- the tray -----
     function renderTray() {
       grid.innerHTML = '';
-      grid.classList.remove('tidy');
+      grid.classList.remove('tidy', 'partgrid', 'nlgrid');
       grid.style.height = '';
       grid.classList.toggle('picks', pickMode);
       if (pickMode) {
@@ -692,106 +793,40 @@ export function openLockbox(root = document.body, opts = {}) {
       hg.classList.remove('wobble'); void hg.offsetWidth; hg.classList.add('wobble');
     }
 
-    // tc: the tidied-line cards on the do-the-arithmetic level (the kid picks one after the twins land, before any
-    // chips merge); judge: judges the press (B.press), called once the kid has picked, or by press() straight away
-    async function animateMove(res, tc = null, judge = null) {
+    // ----- a move with nothing for the kid to work out (opening brackets, once the products are in): it settles -----
+    async function animateMove(res) {
       ff = false;
       calcs.innerHTML = '';
       const m = res.move;
-      if (m.k === 'add') {
-        // the coin splits into twins that land on both sides at the same moment
-        renderLine(res.mid, 'mid');
-        for (const s of ['L', 'R']) chipAt(s, res.mid[s].length - 1)?.classList.add('twin');
-        await wait(380);
-        if (tc) { await tidyStage(tc, m); ff = false; }
-        if (judge) judge();
-        // the first few times a sum mixes a negative and a positive, the number line shows the hop
-        const mix = mixedSum(res.before, m);
-        if (mix && !nl && alg.numberLineDue()) { showNL(mix.a, mix.b); alg.sawNumberLine(); }
-        for (const s of ['L', 'R']) {
-          for (const ev of res.ev[s]) {
-            const a = ev.a !== undefined ? chipAt(s, ev.a) : null, b = chipAt(s, ev.b);
-            if (ev.kind === 'zero') { a?.classList.add('poof'); b?.classList.add('poof'); calcTag(ev.text, [a, b], 'zero'); }
-            else if (ev.kind === 'merge') {
-              if (a && b) {
-                const dx = a.getBoundingClientRect().left - b.getBoundingClientRect().left;
-                b.style.setProperty('--dx', `${dx}px`);
-                b.classList.add('slide');
-              }
-              calcTag(ev.text, [a, b], 'merge');
-            }
-          }
-        }
-        await wait(520);
-      } else if (m.k === 'div' || m.k === 'mul' || m.k === 'flip') {
-        const line = renderLine(res.before, 'mid');
-        if (m.k === 'div') {
-          for (const s of ['L', 'R']) {
-            const side = line.querySelector(`.wside-${s}`);
-            side.classList.add('over');
-            side.insertAdjacentHTML('beforeend', `<span class="den">${esc(fracText(m.f))}</span>`);
-          }
-          await wait(420);
-          for (const s of ['L', 'R']) {
-            res.ev[s].forEach((ev) => {
-              const a = chipAt(s, ev.a);
-              const before = res.before[s][ev.a], after = res.out[s].slice(ev.to, ev.to + ev.n);
-              if (before && after.length) calcTag(`${termBody(before) === '0' ? '0' : (termNeg(before) ? MINUS : '') + termBody(before)} ÷ ${fracText(m.f).length > 1 && m.f.n < 0 ? `(${fracText(m.f)})` : fracText(m.f)} = ${sideText(after)}`, [a], 'merge');
-            });
-          }
-        } else if (m.k === 'flip') {
-          line.querySelectorAll('.chip').forEach((c) => c.classList.add('flipping'));
-          calcTag(`${TIMES}(${MINUS}1): every chip flips`, [line], 'merge');
-        } else {
-          for (const s of ['L', 'R']) {
-            line.querySelector(`.wside-${s}`).insertAdjacentHTML('beforeend', `<span class="times">${esc(moveLabel(m))}</span>`);
-          }
-          await wait(300);
-          for (const s of ['L', 'R']) {
-            res.ev[s].forEach((ev) => {
-              const before = res.before[s][ev.a], after = res.out[s].slice(ev.to, ev.to + ev.n);
-              if (before && after.length) calcTag(`${(termNeg(before) ? MINUS : '') + termBody(before)} ${TIMES} ${m.f.n < 0 ? `(${fracText(m.f)})` : fracText(m.f)} = ${sideText(after)}`, [chipAt(s, ev.a)], 'merge');
-            });
-          }
-        }
-        await wait(560);
-      } else if (m.k === 'dist' && res.asked) {
-        // the kid has worked out every product already: the new terms just settle in
-        await wait(120);
-      } else if (m.k === 'dist' || m.k === 'comb') {
+      if (m.k === 'dist' && res.asked) await wait(120);   // (the kid has worked out every product already)
+      else if (m.k === 'dist' || m.k === 'comb') {
         renderLine(res.before, 'mid');
         for (const s of ['L', 'R']) {
           for (const ev of res.ev[s]) {
             const els = ev.kind === 'expand' ? [chipAt(s, ev.a)] : [...work.querySelectorAll(`.wside-${s} > .chip`)];
             els.forEach((c) => c?.classList.add('pulse'));
             calcTag(ev.text, els, 'merge');
-            // combining two numbers of opposite signs gets the number line too, the first few times
-            const v = ev.kind === 'join' && ev.t === 'n' && ev.vals;
-            if (v && v.length === 2 && Math.sign(v[0]) !== Math.sign(v[1]) && v[0] + v[1] !== 0 && !nl && alg.numberLineDue()) {
-              showNL(v[0], v[1]);
-              alg.sawNumberLine();
-            }
           }
         }
         await wait(800);
       }
       if (gone) return;
-      // the new line, the hinge wobbles and settles
-      const line = renderLine(res.out, 'settle');
+      await settleLine(res.out);
+    }
+    // the new line, the hinge wobbles and settles
+    async function settleLine(out) {
+      if (gone) return;
+      const line = drawLine(out, 'settle');
       // the new line can come out bigger than the in-between one (fewer chips to fit): keep the printed sums above it
       const lineTop = line.getBoundingClientRect().top - $('.lbx-workwrap').getBoundingClientRect().top;
       calcs.querySelectorAll('.calc').forEach((c) => { if (parseFloat(c.style.top) > lineTop) c.style.top = `${lineTop}px`; });
-      for (const s of ['L', 'R']) for (const ev of res.ev[s] || []) {
-        if (ev.kind === 'merge' && ev.to >= 0) chipAt(s, ev.to)?.classList.add('pop');
-      }
-      if (m.k === 'flip') line.querySelectorAll('.chip').forEach((c) => c.classList.add('unflip'));
       wobble();
-      setTimeout(() => calcs.querySelectorAll('.calc').forEach((c) => c.classList.add('gone')), ff ? 0 : 700 * K);
+      setTimeout(() => calcs.querySelectorAll('.calc').forEach((c) => c.classList.add('gone')), ff ? 0 : 500 * K);
       await wait(260);
       ff = false;
     }
 
-    // ----- the number line, sketched in the ledger right under the newest line -----
+    // ----- the number line, sketched in the ledger right under the newest line (the Rule hint) -----
     // (on the paper rather than the mat, so the working line never moves or gets covered)
     let nl = null;
     function clearNL() {
@@ -826,81 +861,230 @@ export function openLockbox(root = document.body, opts = {}) {
       return got?.sums.find((x) => x.kind === 'n' && weakSpot(x.a, x.b)) || null;
     }
 
-    // ----- do the arithmetic (level 5): the kid picks the tidied line -----
-    // The untidy line stays on the mat and in the ledger; the tray holds three lines laid out the same way. A wrong
-    // card shakes, Hob says which sum went wrong, and the number line shows it with the kid's pick marked. Resolves
-    // once the right card is picked.
-    let tidyKey = null;    // keys 1-3 while the cards are up
-    let tidyHelp = null;   // Ask Hob while the cards are up
-    function tidyStage(tc, move) {
+    // ----- the focus: the part being worked, big in the middle of the mat -----
+    // The caption says where it comes from (the move, the side), lines run from the chips it is made of to the sum,
+    // and the sum is written in the biggest type on the screen with a slot for the answer.
+    let linkPairs = null;   // () -> [[fromEl, toEl]], redrawn when the mat changes size
+    let partKey = null;     // keys 1-4 while a part or a product is asked
+    let partHelpFn = null;  // Ask Hob while a part or a product is asked
+    let stopParts = null;   // ends a part stage early (the box finished, or the panel closed)
+    let partsSeen = 0;      // parts asked on this box (the first gets Hob's "your turn")
+    // autos: the parts that work themselves out, listed instead of a question (4x − 4x = 0 ✓)
+    // lead: a few words before the big ones; eq: what stands between the sum and its slot ('=' / 'turns into'), or null
+    // for no slot at all
+    function showFocus({ cap = '', tokens = [], answer = '?', cls = '', autos = null, lead = '', eq = '=' }) {
+      body.classList.add('focus-on');
+      focusEl.hidden = false;
+      focusEl.className = `lbx-focus ${cls}`;
+      const main = autos
+        ? `<div class="fq-autos">${autos.map((a, i) => `<div class="fq-auto" data-k="${i}">${mathHTML(a.text)}<span class="fq-tick">${a.kind === 'zero' ? 'cancels' : a.kind === 'free' ? 'x on its own' : '✓'}</span></div>`).join('')}</div>`
+        : `${lead ? `<div class="fq-lead">${lead}</div>` : ''}<div class="fq-q"><span class="fq-sum">${tokens.map((t, i) => `<span class="fq-t" data-k="${i}">${mathHTML(t.text)}</span>`).join('')}</span>`
+          + `${eq ? `<span class="fq-eq${eq.length > 1 ? ' fq-words' : ''}">${esc(eq)}</span><span class="fq-slot">${answer}</span>` : ''}</div><div class="fq-nl"></div>`;
+      focusEl.innerHTML = `${cap ? `<div class="fq-cap">${cap}</div>` : ''}${main}`;
+      fitFocus();
+    }
+    function hideFocus() {
+      body.classList.remove('den-on');
+      focusEl.hidden = true;
+      focusEl.innerHTML = '';
+      body.classList.remove('focus-on');
+      linkPairs = null;
+      clearLinks();
+      body.querySelectorAll('.chip.src').forEach((c) => c.classList.remove('src'));
+    }
+    // the sum shrinks to fit the mat's width (never below the floor)
+    function fitFocus() {
+      const q = focusEl.querySelector('.fq-q, .fq-autos');
+      if (!q) return;
+      q.style.fontSize = '';
+      const room = focusEl.clientWidth - 16;
+      let size = parseFloat(getComputedStyle(q).fontSize) || 60;
+      while (q.scrollWidth > room && size > 22) { size -= 2; q.style.fontSize = `${size}px`; }
+    }
+    function clearLinks() { linksEl.innerHTML = ''; }
+    function drawLinks() {
+      clearLinks();
+      const pairs = linkPairs ? linkPairs() : [];
+      if (!pairs.length) return;
+      const wr = $('.lbx-workwrap').getBoundingClientRect();
+      linksEl.setAttribute('width', String(Math.round(wr.width)));
+      linksEl.setAttribute('height', String(Math.round(wr.height)));
+      let html = '<defs><marker id="fq-head" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="fq-head"/></marker></defs>';
+      for (const [a, b] of pairs) {
+        const ar = a.getBoundingClientRect(), br2 = b.getBoundingClientRect();
+        const x0 = (ar.left + ar.right) / 2 - wr.left, y0 = ar.bottom - wr.top + 3;
+        const x1 = (br2.left + br2.right) / 2 - wr.left, y1 = br2.top - wr.top - 3;
+        if (y1 - y0 < 8) continue;
+        const bend = (y1 - y0) * 0.55;
+        html += `<path class="fq-link" marker-end="url(#fq-head)" d="M${x0.toFixed(1)} ${y0.toFixed(1)} C${x0.toFixed(1)} ${(y0 + bend).toFixed(1)} ${x1.toFixed(1)} ${(y1 - bend).toFixed(1)} ${x1.toFixed(1)} ${y1.toFixed(1)}"/>`;
+      }
+      linksEl.innerHTML = html;
+    }
+    // the number line as a picture under the sum: where it starts and which way it goes, not where it lands
+    function showFocusLine(sum) {
+      const box = focusEl.querySelector('.fq-nl');
+      if (!box) return;
+      box.innerHTML = '';
+      try {
+        const wide = typeof matchMedia === 'function' && matchMedia(WIDE_SCREEN).matches;
+        const w = Math.round(Math.max(240, Math.min(wide ? 760 : 420, (focusEl.clientWidth || 400) - 12)));
+        showNumberLine(box, { start: sum.start, change: sum.change, reveal: false, animate: false, theme: 'dark',
+          size: wide ? 'full' : 'compact', width: w, backing: false });
+      } catch (e) { console.error(e); }
+    }
+    // the mark of the move beside a side: the ÷ under it, the · next to it
+    const sideMark = (room, kind) => work.querySelector(`.wside-${room} > .${kind === 'den' ? 'den' : 'times'}`);
+
+    // ----- working out each part of a move (parts.js) -----
+    // The new terms land (or the ÷ goes under each side), the parts that cancel go by themselves, then each part is
+    // asked in the focus with four answers in the tray. Resolves once every part is in (or the box is gone).
+    // shownLine(P) draws the line the parts point into; onShown runs once it is on the mat.
+    async function workParts(P, onShown) {
+      const move = P.move;
+      phase = 'anim';
+      ff = false;
+      calcs.innerHTML = '';
+      const line = drawLine(P.shown, 'mid');
+      if (move.k === 'add') {
+        for (const s of P.rooms) chipAt(s, P.shown[s].length - 1)?.classList.add('twin');
+      } else if (move.k === 'comb') {
+        for (const q of P.qs) q.at.forEach((i) => chipAt(q.room, i)?.classList.add('pulse'));
+      } else {
+        for (const s of P.rooms) {
+          const side = line.querySelector(`.wside-${s}`);
+          if (!side) continue;
+          if (move.k === 'div') {
+            side.classList.add('over');
+            side.insertAdjacentHTML('beforeend', `<span class="den">${esc(fracText(move.f))}</span>`);
+            body.classList.add('den-on');   // (room under the line for the ÷ while the parts are asked)
+          }
+          else side.insertAdjacentHTML('beforeend', `<span class="times">${mathHTML(moveLabel(move))}</span>`);
+        }
+      }
+      // the focus takes the room under the line from the start, so the line stays put while the parts are worked
+      const note = P.note || moveNote(move);
+      if (P.autos.length || P.qs.length) showFocus({ cap: mathHTML(note), autos: P.autos.length ? P.autos : [] });
+      await nextFrame(); await nextFrame();
+      onShown?.();
+      await wait(420);
+      if (gone) return;
+      // the parts that work themselves out: a pair that cancels is struck out, x left on its own appears
+      for (const a of P.autos) playAuto(a, move);
+      if (P.autos.length) {
+        linkPairs = () => P.autos.flatMap((a, k) => {
+          const to = focusEl.querySelector(`.fq-auto[data-k="${k}"]`);
+          return to ? a.at.map((i) => chipAt(a.room, i)).filter(Boolean).map((c) => [c, to]) : [];
+        });
+        drawLinks();
+        await wait(AUTO_MS);
+        ff = false;
+        clearLinks();
+        linkPairs = null;
+      }
+      // the rest, one at a time, big in the middle
+      for (let k = 0; k < P.qs.length && !gone; k++) await askPart(P.qs[k], k, P.qs.length, move, P);
+      if (!gone) hideFocus();
+    }
+    function playAuto(a, move) {
+      const els = a.at.map((i) => chipAt(a.room, i)).filter(Boolean);
+      // (what each one comes to is written in the focus, with a line from its chips)
+      if (a.kind === 'zero') {
+        els.forEach((c) => { c.classList.add('struck'); c.insertAdjacentHTML('beforeend', '<i class="strike" aria-hidden="true"></i>'); });
+        setTimeout(() => { if (!gone) els.forEach((c) => c.classList.add('poof')); }, (AUTO_MS - 150) * K);
+      } else if (a.kind === 'plain' && move.k === 'add') {
+        setTimeout(() => { if (!gone) els[0]?.classList.add('poof'); }, (AUTO_MS - 150) * K);
+      } else {
+        els.forEach((c) => c.classList.add('src'));
+        setTimeout(() => { if (!gone) replaceChip(a.room, a.at[0], a.result); }, (AUTO_MS - 150) * K);
+      }
+    }
+    // a chip on the mat becomes its answer (one chip, or a few for brackets that open by themselves)
+    function replaceChip(room, i, terms) {
+      const old = chipAt(room, i);
+      if (!old) return null;
+      let e;
+      if (terms.length === 1) e = chipEl(terms[0], i === 0);
+      else { e = h('span', 'chip-group'); terms.forEach((t, j) => e.appendChild(chipEl(t, i === 0 && j === 0))); }
+      e.dataset.side = room; e.dataset.i = i;
+      e.classList.add('pop');
+      old.replaceWith(e);
+      return e;
+    }
+    const roomLabel = (room) => (ineqMode ? IB.roomName(room) : ROOM_NAME[room] || '');
+    function askPart(q, k, n, move, P) {
       return new Promise((resolve) => {
-        phase = 'tidy';
-        renderLedger({ move, mid: tc.mid });
+        phase = 'parts';
+        partsSeen++;
+        const srcEls = q.at.map((i) => chipAt(q.room, i)).filter(Boolean);
+        srcEls.forEach((c) => c.classList.add('src'));
+        const where = q.kind === 'sign' ? 'the sign' : roomLabel(q.room);
+        showFocus({ cap: `${mathHTML(P.note || moveNote(move))} · <b>${esc(where)}</b>${n > 1 ? ` <span class="fq-of">${k + 1} of ${n}</span>` : ''}`,
+          tokens: q.tokens, cls: q.kind === 'sign' ? 'fq-signq' : '', eq: q.eq || '=' });
+        linkPairs = () => q.tokens.map((t, j) => {
+          const from = t.from === 'den' || t.from === 'times' ? sideMark(q.room, t.from)
+            : t.from === 'rel' ? work.querySelector(`.rel[data-r="${q.room}"]`) : chipAt(q.room, t.from);
+          const to = focusEl.querySelector(`.fq-t[data-k="${j}"]`);
+          return from && to ? [from, to] : null;
+        }).filter(Boolean);
+        requestAnimationFrame(() => { if (!gone && phase === 'parts') drawLinks(); });
+        if (q.line) showFocusLine(q.line);
+        // the four answers, in the tray (it keeps its height, so nothing above it moves)
         const keepH = grid.offsetHeight;
-        grid.style.height = `${keepH}px`;   // the tray keeps its height, so nothing above it moves
+        grid.style.height = `${keepH}px`;
         grid.innerHTML = '';
-        grid.classList.add('tidy');
+        grid.classList.add('partgrid');
         body.classList.remove('busy');
         askBtn.disabled = false;
-        hob('Tidy it up. Which line is right?', 'hint');
-        // the sum most worth a picture: a negative and a positive first
-        const pictureSum = tc.sums.find((x) => x.kind === 'n' && weakSpot(x.a, x.b)) || tc.sums.find((x) => x.kind === 'n' && x.mixed && x.c !== 0) || tc.sums.find((x) => x.kind === 'n') || null;
-        const hes = watchHesitation({
-          after: TIDY_HESITATE_MS,
-          onShow: () => { if (phase === 'tidy' && pictureSum && !nl) showNL(pictureSum.a, pictureSum.b, { reveal: false }); },
-        });
-        const btns = tc.cards.map((c, i) => {
-          const b = h('button', 'lbx-move tidycard', `<span class="lbl">${mathHTML(c.text)}</span><kbd>${i + 1}</kbd>`);
+        undoBtn.disabled = true;
+        hob(partsSeen === 1 ? 'Your turn: work out each part.' : '', 'hint');
+        const btns = q.choices.map((c, i) => {
+          const b = h('button', 'lbx-move partpick', `<span class="lbl">${mathHTML(c.text)}</span><kbd>${i + 1}</kbd>`);
           b.type = 'button';
           b.dataset.right = c.right ? '1' : '0';
           b.addEventListener('click', () => pick(c, b));
           grid.appendChild(b);
           return b;
         });
-        // (the cards stay, greyed, until the tray is redrawn after the move, so the tray never changes height mid-move)
-        const done = () => {
-          hes.cancel();
-          tidyKey = null; tidyHelp = null;
-          phase = 'anim';
-          body.classList.add('busy');
-          askBtn.disabled = true;
-          resolve();
-        };
-        stopTidy = () => { hes.cancel(); tidyKey = null; tidyHelp = null; resolve(); };
+        const done = () => { partKey = null; partHelpFn = null; stopParts = null; resolve(); };
         function pick(c, b) {
-          if (phase !== 'tidy' || b.disabled) return;
+          if (phase !== 'parts' || b.disabled || gone) return;
           lastAction = performance.now();
-          hes.answered();
-          if (B.tidyPick(c)) {
+          if (B.partPick(c.right, q, c)) {
+            phase = 'anim';
             b.classList.add('right');
             btns.forEach((o) => { o.disabled = true; });
+            const slot = focusEl.querySelector('.fq-slot');
+            if (slot) { slot.innerHTML = mathHTML(q.answer); slot.classList.add('got'); }
             hob('');
-            setTimeout(done, 380 * K);
+            clearLinks();
+            linkPairs = null;
+            srcEls.forEach((x) => x.classList.remove('src'));
+            // the chips on the mat become the answer
+            if (q.kind === 'sign') IB.setRel?.(q);
+            else {
+              replaceChip(q.room, q.at[0], [q.result]);
+              q.at.slice(1).forEach((i) => chipAt(q.room, i)?.classList.add('poof'));
+            }
+            setTimeout(() => { if (!gone) done(); }, PART_RIGHT_MS * Math.max(0.6, K));
             return;
           }
           b.classList.add('shake', 'used');
           b.disabled = true;
-          hob(slipLine(c, move), 'warn');
-          if (c.tag !== 'oneside' && c.sum?.kind === 'n') showNL(c.sum.a, c.sum.b, c.wrongValue !== null ? { picked: c.wrongValue } : {});
-          else if (pictureSum && !nl) showNL(pictureSum.a, pictureSum.b);
-          renderTop();
+          hob(q.kind === 'sign' ? IB.signNudge(q, c) : partNudge(q, c), 'warn');
         }
-        tidyKey = (i) => { const b = btns[i]; if (b && !b.disabled) b.click(); };
-        tidyHelp = () => {
-          lastAction = performance.now();
-          hob('Work out each sum on its own.', 'hint');
-          if (pictureSum) showNL(pictureSum.a, pictureSum.b, { reveal: false });
-        };
+        partKey = (i) => { const b = btns[i]; if (b && !b.disabled) b.click(); };
+        partHelpFn = () => { lastAction = performance.now(); hob(q.kind === 'sign' ? IB.signHelp(q) : partHelp(q), 'hint'); };
+        stopParts = () => { partKey = null; partHelpFn = null; resolve(); };
       });
     }
-    let stopTidy = null;
+
     let distRedraw = null;   // redraws the bracket arcs when the mat changes size
 
     // ----- open the brackets by hand -----
     // A line runs from the number outside the brackets to each term inside, with "5·x" and "5·8" written under them;
-    // the tray asks one product at a time (four answers). A right pick fills the product in; a wrong one shakes, Hob
-    // gives a nudge and the right answer stays to pick. Wrong picks cost no move and no stars. Resolves once every
-    // product is in.
+    // the product being asked is written big in the focus, with four answers in the tray. A right pick fills the
+    // product in; a wrong one shakes, Hob gives a nudge and the right answer stays to pick. Wrong picks cost no move and
+    // no stars. Resolves once every product is in.
     function bracketStage(qs) {
       return new Promise((resolve) => {
         phase = 'brackets';
@@ -912,6 +1096,7 @@ export function openLockbox(root = document.body, opts = {}) {
         wrap.appendChild(layer);
         const keepH = grid.offsetHeight;
         grid.style.height = `${keepH}px`;   // the tray keeps its height, so nothing above it moves
+        grid.classList.add('partgrid');
         body.classList.remove('busy');
         askBtn.disabled = false;
         undoBtn.disabled = true;
@@ -930,7 +1115,7 @@ export function openLockbox(root = document.body, opts = {}) {
           svg.setAttribute('height', String(wr.height));
           svg.innerHTML = '<defs><marker id="dist-head" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="dist-head"/></marker></defs>';
           layer.appendChild(svg);
-          const labelY = lineBottom + (wr.width < 600 ? 38 : 64);
+          const labelY = lineBottom + (wr.width < 600 ? 18 : 46);
           qs.forEach((q, k) => {
             const chip = chipAt(q.side, q.index);
             if (!chip) return;
@@ -956,8 +1141,6 @@ export function openLockbox(root = document.body, opts = {}) {
             labels[k] = { lab, path };
           });
         };
-        draw();
-        distRedraw = () => { draw(); mark(); };
         let k = 0, btns = [];
         const mark = () => {
           labels.forEach((L, i) => {
@@ -967,10 +1150,15 @@ export function openLockbox(root = document.body, opts = {}) {
             if (i < k) { L.lab.classList.add('done'); L.path.classList.add('done'); L.lab.querySelector('.dist-a').innerHTML = mathHTML(qs[i].answer); }
           });
         };
+        distRedraw = () => { draw(); mark(); drawLinks(); };
         const ask = () => {
           const q = qs[k];
           mark();
-          hob(`${q.prompt} = ?`, 'hint');
+          // the product, big in the focus, with a line from its label under the bracket
+          showFocus({ cap: `Open the brackets · ${k + 1} of ${qs.length}`, tokens: [{ text: `${q.prompt}` }] });
+          linkPairs = () => { const L = labels[k]; const to = focusEl.querySelector('.fq-t'); return L && to ? [[L.lab, to]] : []; };
+          requestAnimationFrame(() => { if (!gone && phase === 'brackets') drawLinks(); });
+          hob(k === 0 ? 'Multiply each term inside by the number outside.' : '', 'hint');
           grid.innerHTML = '';
           btns = q.choices.map((c, i) => {
             const b = h('button', 'lbx-move prodpick', `<span class="lbl">${mathHTML(c.text)}</span><kbd>${i + 1}</kbd>`);
@@ -981,15 +1169,17 @@ export function openLockbox(root = document.body, opts = {}) {
             return b;
           });
         };
-        const finish = () => {
-          tidyKey = null; tidyHelp = null; stopTidy = null; distRedraw = null;
+        const end = () => {
+          partKey = null; partHelpFn = null; stopParts = null; distRedraw = null;
           layer.remove();
+          hideFocus();
           body.classList.remove('brackets-on');
           grid.style.height = '';
+          grid.classList.remove('partgrid');
           hob('');
           resolve();
         };
-        stopTidy = () => { tidyKey = null; tidyHelp = null; distRedraw = null; layer.remove(); resolve(); };
+        stopParts = () => { partKey = null; partHelpFn = null; distRedraw = null; layer.remove(); resolve(); };
         function pick(c, b) {
           if (phase !== 'brackets' || b.disabled) return;
           lastAction = performance.now();
@@ -997,10 +1187,13 @@ export function openLockbox(root = document.body, opts = {}) {
           if (c.right) {
             b.classList.add('right');
             btns.forEach((o) => { o.disabled = true; });
+            const slot = focusEl.querySelector('.fq-slot');
+            if (slot) { slot.innerHTML = mathHTML(q.answer); slot.classList.add('got'); }
+            clearLinks();
             k++;
             mark();
-            if (k < qs.length) { hob('Right.', 'good'); setTimeout(() => { if (!gone) ask(); }, 420 * K); }
-            else { hob(`${sideText(qs.map((x) => x.product))}. Brackets open.`, 'good'); setTimeout(() => { if (!gone) finish(); }, 700 * K); }
+            if (k < qs.length) { hob(''); setTimeout(() => { if (!gone) ask(); }, PART_RIGHT_MS * Math.max(0.6, K)); }
+            else { hob(`${sideText(qs.map((x) => x.product))}. Brackets open.`, 'good'); setTimeout(() => { if (!gone) end(); }, 750 * K); }
             return;
           }
           B.productPick(false);
@@ -1008,9 +1201,11 @@ export function openLockbox(root = document.body, opts = {}) {
           b.disabled = true;
           hob(productNudge(q, c), 'warn');
         }
-        tidyKey = (i) => { const b = btns[i]; if (b && !b.disabled) b.click(); };
-        tidyHelp = () => { lastAction = performance.now(); hob(productHelp(qs[k]), 'hint'); };
+        partKey = (i) => { const b = btns[i]; if (b && !b.disabled) b.click(); };
+        partHelpFn = () => { lastAction = performance.now(); hob(productHelp(qs[k]), 'hint'); };
         ask();
+        // (the arcs are drawn once the focus has taken its room, so they start from where the line now sits)
+        requestAnimationFrame(() => { if (!gone && phase === 'brackets') distRedraw?.(); });
       });
     }
 
@@ -1024,34 +1219,43 @@ export function openLockbox(root = document.body, opts = {}) {
       lastAction = performance.now();
       body.querySelectorAll('.glow').forEach((n) => n.classList.remove('glow'));
       clearNL();
-      // the move starts playing at once; the search that judges it (up to a few tenths of a second on the longest
-      // rungs) runs while the coins are in the air. On the do-the-arithmetic level it waits until the kid has picked
-      // the tidied line.
+      const before = B.line;
       // open the brackets by hand: each product is asked first (the move itself is judged and counted as usual)
       let asked = false;
-      if (s.move.k === 'dist') {
-        const qs = bracketProducts(B.line, { rng });
+      if (s.move.k === 'dist' && !ineqMode) {
+        const qs = bracketProducts(before, { rng });
         if (qs.length) { await bracketStage(qs); asked = true; if (gone) return; phase = 'anim'; setTrayEnabled(false); }
       }
-      const shown = applyMove(B.line, s.move, true);
-      const tc = level >= ARITH_LEVEL ? tidyChoices(B.line, s.move, { rng, fav: alg.favArith() }) : null;
+      // the move is judged as soon as it is on the mat (the search takes up to a few tenths of a second on the longest
+      // rungs); then the kid works out each part it changed, and the line settles into the one the move makes
       let res = null;
       const judge = () => { if (!res) res = B.press(s.move); };
-      const anim = animateMove({ move: s.move, before: B.line, mid: shown.mid || null, out: shown.out, ev: shown.ev, asked }, tc, judge);
-      if (!tc) { await nextFrame(); await nextFrame(); judge(); }
-      await anim;
-      judge();
+      const P = ineqMode ? IB.partsOf(before, s.move, rng) : partsOf(before, s.move, { rng });
+      if (P) {
+        if (!ineqMode) P.rooms = ['L', 'R'];
+        await workParts(P, judge);
+        judge();
+        if (gone) return;
+        await settleLine(res.out);
+      } else {
+        const shown = applyMove(before, s.move, true);
+        const anim = animateMove({ move: s.move, before, out: shown.out, ev: shown.ev, asked });
+        await nextFrame(); await nextFrame(); judge();
+        await anim;
+      }
       if (gone) return;
       renderLedger();
       renderTop();
       renderSteps();
+      if (ineqMode && res.flipped) IB.flipNoted(res);
       if (res.solved) {
-        hob(`x = ${fracText(B.keyTest()?.x ?? F(0))}. Check the solution in the beginning equation.`, 'good');
-        await sleep(420 * K);
-        runCheck();
+        if (ineqMode) { IB.solvedChain(res); return; }
+        hob(`x = ${fracText(B.keyTest()?.x ?? F(0))}. Check it in the beginning equation.`, 'good');
+        review();
         return;
       }
-      if (res.closer) { if (res.shortcut) hob('A shortcut! That works too.', 'good'); else hob(''); unhelpful = 0; }
+      if (ineqMode && res.chainDone) IB.chainDone(res);
+      else if (res.closer) { if (res.shortcut) hob('A shortcut! That works too.', 'good'); else if (!res.flipped) hob(''); unhelpful = 0; }
       else {
         unhelpful++;
         if (res.opposite) {
@@ -1068,7 +1272,7 @@ export function openLockbox(root = document.body, opts = {}) {
         if (gone) return;
         calcs.innerHTML = '';
         clearNL();
-        renderLine(B.line, 'settle');
+        drawLine(B.line, 'settle');
         wobble();
         renderLedger();
         renderSteps();
@@ -1086,14 +1290,14 @@ export function openLockbox(root = document.body, opts = {}) {
     }
 
     function notCloserLine(res) {
-      const evs = [...(res.ev.L || []), ...(res.ev.R || [])];
+      const evs = ineqMode ? [] : [...(res.ev.L || []), ...(res.ev.R || [])];
       const grew = evs.some((e) => e.kind === 'merge' && /=\s*[−-]?\d/.test(e.text) && (() => {
         const nums = e.text.match(/\d+/g)?.map(Number) || [];
         return nums.length >= 3 && nums[nums.length - 1] > Math.max(nums[0], nums[1]);
       })());
       if (res.tag === 'part') return "Part of it. x isn't alone.";
       if (res.tag === 'undo') return 'That undo doesn’t match.';
-      if (res.tag === 'inside') return res.before && [...res.before.L, ...res.before.R].some((t) => t.t === 'b' && t.p.d > 1)
+      if (res.tag === 'inside') return !ineqMode && res.before && [...res.before.L, ...res.before.R].some((t) => t.t === 'b' && t.p.d > 1)
         ? 'That number is stuck over the bar. Clear the division first.' : 'That number is inside brackets.';
       if (grew) return 'That got bigger, not gone.';
       return 'Legal, but not closer.';
@@ -1105,7 +1309,7 @@ export function openLockbox(root = document.body, opts = {}) {
       lastAction = performance.now();
       calcs.innerHTML = '';
       clearNL();
-      renderLine(B.line, 'settle');
+      drawLine(B.line, 'settle');
       wobble();
       renderLedger();
       renderSteps();
@@ -1137,7 +1341,7 @@ export function openLockbox(root = document.body, opts = {}) {
           }
         }
         // when that move will add a negative and a positive, the number line shows how the sum works out
-        const mix = hint.move ? mixedSum(B.line, hint.move) : null;
+        const mix = hint.move && !ineqMode ? mixedSum(B.line, hint.move) : null;
         if (mix) showNL(mix.a, mix.b);
       } else if (hint.level === 3) {
         const b = grid.querySelector(`[data-key="${CSS.escape(hint.key || '')}"]`);
@@ -1147,7 +1351,7 @@ export function openLockbox(root = document.body, opts = {}) {
       if (!auto) renderTop();
     }
     function askHob() {
-      if (phase === 'tidy' || phase === 'brackets') { tidyHelp?.(); return; }
+      if (phase === 'parts' || phase === 'brackets' || phase === 'nlpick') { partHelpFn?.(); return; }
       if (phase !== 'play') return;
       lastAction = performance.now();
       askBtn.classList.remove('bounce');
@@ -1165,9 +1369,7 @@ export function openLockbox(root = document.body, opts = {}) {
       if (r.ok) {
         hob(v === 'all' ? 'Both sides match, so every number works: infinitely many solutions!' : 'x is gone and the numbers differ: no solution!', 'good');
         renderSteps({ checked: true });
-        phase = 'anim';
-        setTrayEnabled(false);
-        setTimeout(() => finish(), 700 * K);
+        review({ verdict: v });
         return;
       }
       if (!r.shown) hob('Not clear yet. Keep tidying.', 'warn');
@@ -1198,8 +1400,8 @@ export function openLockbox(root = document.body, opts = {}) {
         wobble();
         line.querySelector('.hinge')?.classList.add('locked');
         hob(`${fracText(lv)} = ${fracText(rv)}. Balanced!`, 'good');
-        await sleep(600 * K);
-        finish();
+        phase = 'review';
+        showNext();
         return;
       }
       btn.classList.add('shake', 'used');
@@ -1214,91 +1416,66 @@ export function openLockbox(root = document.body, opts = {}) {
       btn.disabled = true;
     }
 
-    // ----- the check: x drops into the BEGINNING equation and each side works itself out, a step at a time: the kid
-    // taps Next (or Enter / Space) to see the next step, so the working and the number-line hops can be read -----
-    let nextGo = null;           // the check's Next: resolves the wait for the next step
-    const goNext = () => { if (nextGo) { const f = nextGo; nextGo = null; f(); } };
-    // Both sides run their steps together (4·2 − 6 → 8 − 6 → 2); a side that comes down to a negative and a positive
-    // (−16 + 18) flashes the number-line hop under it. Both land on the same number, the hinge locks, the lid opens.
-    async function runCheck() {
+    // ----- the review: the check stays on screen, with one button to go on -----
+    // x goes into the BEGINNING equation; each side is worked out underneath, step by step, all at once; a side that
+    // comes down to a negative and a positive (−16 + 18) has its number line drawn finished under it; both sides land
+    // on the same number and the hinge locks. Then ONE button: "Next problem" (Enter) opens the lid, pays, moves on.
+    function review({ verdict: v = null } = {}) {
       if (gone) return;
-      const kt = problem.kind === 'all' || problem.kind === 'none' ? null : B.keyTest();
-      if (!kt) { finish(); return; }
-      phase = 'check';
-      ff = false;
+      phase = 'review';
       setTrayEnabled(false);
-      body.classList.add('checking');
       calcs.innerHTML = '';
       clearNL();
+      hideFocus();
       pics.classList.add('off');
-      paper.querySelector('.lbx-start').classList.add('lit');
-      const val = fracText(kt.x);
-      const steps = { L: kt.left, R: kt.right };
-      work.innerHTML = `<div class="ck">
-        <div class="ck-head"><span class="ck-key">${KEY_SVG}<b>${esc(val)}</b></span><span class="ck-title">${mathHTML('x =')} <b class="ck-n">${esc(val)}</b> in the beginning equation</span></div>
-        <div class="ck-line"><div class="ck-side" data-s="L"><span class="ck-txt">${sideHTML(problem.start.L)}</span></div>${hingeEl().outerHTML}<div class="ck-side" data-s="R"><span class="ck-txt">${sideHTML(problem.start.R)}</span></div></div>
-        <div class="ck-nls"><div class="ck-nl" data-s="L"></div><div class="ck-nl" data-s="R"></div></div>
-        <button type="button" class="ck-next" hidden>Next</button></div>`;
-      // the first few boxes of a sitting say so right under the check, where the kid is looking (later, and on a
-      // phone, only the quiet note in the corner)
-      body.classList.toggle('hurry-near', session.solved < QUICK_AFTER);
-      const sideBox = (s) => work.querySelector(`.ck-side[data-s="${s}"]`);
-      const setText = (s, html, cls = '') => {
-        const t = h('span', `ck-txt ${cls}`, html);
-        const old = sideBox(s).querySelector('.ck-txt');
-        old.replaceWith(t);
-      };
-      fitCheck();
-      const q = 1;
-      const nextBtn = work.querySelector('.ck-next');
-      nextBtn.addEventListener('click', (e) => { e.stopPropagation(); goNext(); });
-      // wait for the kid's Next (the button shows, labelled as given)
-      const next = (label = 'Next') => new Promise((res) => {
-        if (gone) { res(); return; }
-        nextBtn.textContent = label; nextBtn.hidden = false; nextBtn.focus({ preventScroll: true });
-        nextGo = () => { nextBtn.hidden = true; res(); };
-      });
-      await wait(520);
-      if (gone) return;
-      // the key's number drops in for every x
-      for (const s of ['L', 'R']) setText(s, keyInHTML(problem.start[s], kt.x), 'in');
-      fitCheck();
-      await next();
-      // then the working out, a step at a time on both sides together
-      const longest = Math.max(steps.L.length, steps.R.length);
-      for (let k = 1; k < longest && !gone; k++) {
-        const hops = [];
+      body.classList.add('reviewing');
+      const kt = !v && problem.kind === 'one' ? B.keyTest() : null;
+      if (kt) {
+        paper.querySelector('.lbx-start').classList.add('lit');
+        const val = fracText(kt.x);
+        const steps = { L: kt.left, R: kt.right };
+        const work1 = Math.max(steps.L.length, steps.R.length) - 1;   // rows of working before the two answers
+        const cell = (s, k) => {
+          const st = steps[s];
+          if (k === 0) return `<div class="rv-c rv-in">${keyInHTML(problem.start[s], kt.x)}</div>`;
+          if (k >= st.length - 1) return '<div class="rv-c"></div>';
+          return `<div class="rv-c">${mathHTML(st[k])}</div>`;
+        };
+        // a number line under a side whose last sum starts below zero or crosses it
+        const hopOf = (s) => { const st = steps[s]; const pair = st.length >= 2 ? twoTerms(st[st.length - 2]) : null; return pair && weakSpot(pair[0], pair[1]) ? pair : null; };
+        const hops = { L: hopOf('L'), R: hopOf('R') };
+        let rows = '';
+        for (let k = 0; k < Math.max(1, work1); k++) rows += `${cell('L', k)}<div class="rv-mid">${k === 0 ? hingeEl().outerHTML : ''}</div>${cell('R', k)}`;
+        if (hops.L || hops.R) rows += `<div class="rv-c rv-nl" data-s="L"></div><div class="rv-mid"></div><div class="rv-c rv-nl" data-s="R"></div>`;
+        const a = steps.L[steps.L.length - 1], b = steps.R[steps.R.length - 1];
+        const same = a === b;
+        B.keyResult(same);
+        const lock = hingeEl();
+        if (same) lock.classList.add('locked');
+        rows += `<div class="rv-c rv-final ${same ? 'match' : 'miss'}">${mathHTML(a)}</div><div class="rv-mid">${lock.outerHTML}</div><div class="rv-c rv-final ${same ? 'match' : 'miss'}">${mathHTML(b)}</div>`;
+        work.innerHTML = `<div class="rv">
+          <div class="rv-head"><span class="ck-key">${KEY_SVG}<b>${esc(val)}</b></span><span class="rv-title">${mathHTML('x =')} <b class="ck-n">${esc(val)}</b> in the beginning equation</span></div>
+          <div class="rv-grid">${rows}</div>
+          <div class="rv-ok">${same ? `Both sides make ${esc(a)}. It checks out!` : 'The sides don’t match.'}</div></div>`;
         for (const s of ['L', 'R']) {
-          if (k >= steps[s].length) continue;
-          const last = k === steps[s].length - 1;
-          // a sum that starts below zero or crosses it (−16 + 18) stays on its side while the hop under it works it
-          // out; the side turns into the answer when the hop lands, so the picture comes before the result
-          const pair = last ? twoTerms(steps[s][k - 1]) : null;
-          if (pair && weakSpot(pair[0], pair[1])) {
-            sideBox(s).classList.add('hopping');
-            hops.push({ s, line: flashHop(s, pair[0], pair[1]), html: mathHTML(steps[s][k]) });
-          } else setText(s, mathHTML(steps[s][k]), last ? 'in final' : 'in');
+          if (!hops[s]) continue;
+          const box = work.querySelector(`.rv-nl[data-s="${s}"]`);
+          try {
+            const w = Math.max(200, Math.min(420, box.clientWidth || 300));
+            showNumberLine(box, { start: hops[s][0], change: hops[s][1], theme: 'dark', size: 'compact', width: w, animate: false, backing: false });
+          } catch (e) { console.error(e); }
         }
-        fitCheck();
-        if (!hops.length) { if (k < longest - 1) await next(); continue; }
-        await hopsLanded(hops.map((hp) => hp.line));
-        if (gone) break;
-        for (const hp of hops) { sideBox(hp.s).classList.remove('hopping'); setText(hp.s, hp.html, 'in final landed'); }
-        fitCheck();
-        if (k < longest - 1) await next();
+        hob(`${a} = ${b}. It checks out!`, 'good');
+        fitReview();
+      } else if (v) {
+        const line = work.querySelector('.wline');
+        line?.querySelector('.hinge')?.classList.add('locked');
+        work.insertAdjacentHTML('beforeend', `<div class="rv-verdict">${v === 'all'
+          ? 'Both sides are the same, whatever <i class="x">x</i> is: <b>infinitely many solutions</b>.'
+          : '<i class="x">x</i> is gone and the numbers don’t match: <b>no solution</b>.'}</div>`);
       }
-      if (gone) return;
-      // both sides land on the same number: the key fits
-      const a = steps.L[steps.L.length - 1], b = steps.R[steps.R.length - 1];
-      const same = a === b;
-      B.keyResult(same);
-      for (const s of ['L', 'R']) sideBox(s).classList.add(same ? 'match' : 'miss');
-      work.querySelector('.ck-line .hinge')?.classList.add('locked');
-      hob(`${a} = ${b}. It checks out!`, 'good');
       renderSteps({ checked: true });
-      await next('Open it');
-      paper.querySelector('.lbx-start').classList.remove('lit');
-      if (!gone) finish();
+      showNext();
     }
     // "−16 + 18" -> [-16, 18]; anything that isn't two whole numbers -> null
     function twoTerms(s) {
@@ -1308,38 +1485,133 @@ export function openLockbox(root = document.body, opts = {}) {
       const b = Number(m[3]) * (m[2] === '+' ? 1 : -1);
       return Number.isFinite(a) && Number.isFinite(b) ? [a, b] : null;
     }
-    // -> the number line's handle (its done promise resolves when the hop lands), or null
-    function flashHop(s, a, b) {
-      const box = work.querySelector(`.ck-nl[data-s="${s}"]`);
-      if (!box) return null;
-      box.innerHTML = '';
-      try {
-        const w = Math.max(200, Math.min(420, box.clientWidth || 300));
-        const line = showNumberLine(box, { start: a, change: b, theme: 'dark', size: 'compact', width: w, animate: K >= 0.7, backing: true });
-        box.classList.remove('on'); void box.offsetWidth; box.classList.add('on');
-        return line;
-      } catch (e) { console.error(e); return null; }
-    }
-    // waits until every hop has landed (Enter or a tap finishes them at once); a hop drawn finished straight away
-    // still leaves its sum up for a moment first
-    async function hopsLanded(lines) {
-      const t0 = performance.now();
-      let landed = false;
-      Promise.all(lines.map((l) => l?.done || null)).then(() => { landed = true; });
-      while (!gone && !landed) {
-        if (ff) { lines.forEach((l) => l?.finish?.()); break; }
-        await sleep(40);
+    // the review shrinks to fit the mat (a phone's mat is short)
+    function fitReview() {
+      const rv = work.querySelector('.rv, .iv');
+      if (!rv) return;
+      rv.style.fontSize = '';
+      const wrap = $('.lbx-workwrap');
+      let size = parseFloat(getComputedStyle(rv).fontSize) || 30;
+      for (let guard = 0; guard < 30 && size > 13 && (rv.scrollWidth > wrap.clientWidth - 8 || rv.offsetHeight > wrap.clientHeight - 6); guard++) {
+        size -= 1.5;
+        rv.style.fontSize = `${size}px`;
       }
-      while (!gone && !ff && performance.now() - t0 < CHECK_SUM_MS * K) await sleep(40);
     }
-    // the check line shrinks to fit like the working line does
-    function fitCheck() {
-      const line = work.querySelector('.ck-line');
-      if (!line) return;
-      line.style.fontSize = '';
-      const room = work.clientWidth - 8;
-      let size = parseFloat(getComputedStyle(line).fontSize) || 36;
-      while (line.scrollWidth > room && size > 16) { size -= 2; line.style.fontSize = `${size}px`; }
+    // ----- an inequality's answer: pick the number line that shows it -----
+    // Four pictures in the tray (open or filled circles, shaded one way or the other, between or outward), all on the
+    // same stretch of the line. A wrong one shakes and Hob says what it shows; the right one leads to the review.
+    function linePick() {
+      if (gone) return;
+      phase = 'nlpick';
+      const set = B.answerSet();
+      const { win, choices } = B.lineChoices();
+      const marks = [...new Set([...choices.flatMap((c) => c.set.flatMap((pc) => [pc.lo, pc.hi])).filter((v) => v !== null), 0, Math.ceil(win.lo), Math.floor(win.hi)])];
+      body.classList.add('nl-picking');   // (a phone hides the working line meanwhile: the question says it)
+      showFocus({ cap: 'The answer on a number line', lead: 'Which number line shows', tokens: [{ text: Q.setText(set) }], eq: null, cls: 'fq-nlq' });
+      grid.style.height = '';
+      grid.innerHTML = '';
+      grid.classList.add('nlgrid');
+      body.classList.remove('busy');
+      askBtn.disabled = false;
+      undoBtn.disabled = true;
+      hob('Filled circle or open? Which way does it go?', 'hint');
+      const wide = typeof matchMedia === 'function' && matchMedia(WIDE_SCREEN).matches;
+      // drawn at the size the button shows it, so the numbers under the line stay readable
+      const cols = getComputedStyle(grid).gridTemplateColumns.split(' ').length || 1;
+      const cellW = Math.max(200, Math.min(640, Math.round((grid.clientWidth - 14 * (cols - 1)) / cols - (wide ? 56 : 20))));
+      const btns = choices.map((c, i) => {
+        const b = h('button', 'lbx-move nlpick', `${setLineSVG(c.set, win, { width: cellW, height: wide ? 62 : 46, marks })}<kbd>${i + 1}</kbd>`);
+        b.type = 'button';
+        b.dataset.right = c.right ? '1' : '0';
+        b.setAttribute('aria-label', `number line ${i + 1}`);
+        b.addEventListener('click', () => pick(c, b));
+        grid.appendChild(b);
+        return b;
+      });
+      function pick(c, b) {
+        if (phase !== 'nlpick' || b.disabled || gone) return;
+        lastAction = performance.now();
+        if (B.pickLine(c)) {
+          phase = 'anim';
+          b.classList.add('right');
+          btns.forEach((o) => { o.disabled = true; });
+          hob('That’s it.', 'good');
+          partKey = null; partHelpFn = null;
+          setTimeout(() => { if (!gone) reviewIneq(); }, 700 * Math.max(0.6, K));
+          return;
+        }
+        b.classList.add('shake', 'used');
+        b.disabled = true;
+        hob(Q.lineNudge(set, c), 'warn');
+        renderTop();
+      }
+      partKey = (i) => { const b = btns[i]; if (b && !b.disabled) b.click(); };
+      partHelpFn = () => { lastAction = performance.now(); hob(Q.LINE_HELP, 'hint'); };
+      renderSteps();
+      renderTop();
+    }
+
+    // The review of an inequality: the answer drawn on its number line, and a number from the shaded part put into the
+    // beginning, each room worked out, the signs holding.
+    function reviewIneq() {
+      if (gone) return;
+      phase = 'review';
+      setTrayEnabled(false);
+      calcs.innerHTML = '';
+      hideFocus();
+      body.classList.remove('nl-picking');
+      body.classList.add('reviewing');
+      paper.querySelector('.lbx-start').classList.add('lit');
+      const kt = B.keyTest();
+      const { win } = B.lineChoices();
+      const wide = typeof matchMedia === 'function' && matchMedia(WIDE_SCREEN).matches;
+      const c = problem.start.chains[kt.ci];
+      const X = F(kt.x);
+      const val = fracText(X);
+      const n = c.rooms.length;
+      const depth = Math.max(...kt.rows.map((r) => r.length));
+      let cells = '';
+      for (let k = 0; k < Math.max(1, depth - 1); k++) {
+        c.rooms.forEach((room, i) => {
+          if (i) cells += `<div class="rv-mid iv-rel">${k === 0 ? esc(c.rels[i - 1]) : ''}</div>`;
+          const st = kt.rows[i];
+          cells += k === 0 ? `<div class="rv-c rv-in">${keyInHTML(room, X)}</div>` : `<div class="rv-c">${k < st.length - 1 ? mathHTML(st[k]) : ''}</div>`;
+        });
+      }
+      c.rooms.forEach((room, i) => {
+        if (i) cells += `<div class="rv-mid iv-rel">${esc(c.rels[i - 1])}</div>`;
+        cells += `<div class="rv-c rv-final ${kt.ok ? 'match' : 'miss'}">${mathHTML(kt.values[i])}</div>`;
+      });
+      const cols = Array.from({ length: n }, () => 'minmax(0, 1fr)').join(' auto ');
+      const truth = kt.values.map((v, i) => (i ? ` ${kt.rels[i - 1]} ${v}` : v)).join('');
+      work.innerHTML = `<div class="iv">
+        <div class="iv-ans"><span class="iv-k">The answer</span><b>${mathHTML(Q.setText(kt.set))}</b></div>
+        <div class="iv-line">${setLineSVG(kt.set, win, { width: wide ? 760 : 360, height: wide ? 86 : 66, theme: 'mat' })}</div>
+        <div class="iv-check">Check a number from the shaded part: <b>${mathHTML(`x = ${val}`)}</b>${problem.start.chains.length > 1 ? ` in ${mathHTML(Q.chainText(c))}` : ''}</div>
+        <div class="rv-grid iv-grid" style="grid-template-columns: ${cols}">${cells}</div>
+        <div class="rv-ok">${kt.ok ? `${esc(truth)} is true. It checks out!` : 'That doesn’t hold.'}</div></div>`;
+      B.keyResult(kt.ok);
+      hob(kt.ok ? `x = ${val} makes it true. It checks out!` : 'Hmm, that number doesn’t work.', kt.ok ? 'good' : 'warn');
+      renderSteps({ checked: true });
+      fitReview();
+      showNext();
+    }
+
+    // the one button at the end
+    function showNext() {
+      body.classList.add('reviewing');
+      nextBtn.hidden = false;
+      const last = own && typeof next !== 'function' && !bag.length;
+      nextBtn.querySelector('.lbl').textContent = last ? 'Finish' : 'Next problem';
+      nextBtn.disabled = false;
+      requestAnimationFrame(() => nextBtn.focus({ preventScroll: true }));
+    }
+    function goOn() {
+      if (phase !== 'review' || gone) return;
+      lastAction = performance.now();
+      nextBtn.disabled = true;
+      paper.querySelector('.lbx-start').classList.remove('lit');
+      finish();
     }
 
     // ----- the box is finished: record it, and hand it to the session (coins, then the next box) -----
@@ -1349,7 +1621,7 @@ export function openLockbox(root = document.body, opts = {}) {
       recorded = true;
       phase = left ? 'done' : 'open';
       clearInterval(tick);
-      stopTidy?.();
+      stopParts?.();
       clearNL();
       const result = B.finish({ left });
       alg.record(result);
@@ -1357,19 +1629,19 @@ export function openLockbox(root = document.body, opts = {}) {
       finished({ ...result, tier }, ctrl);
     }
     function leave() {
-      if (gone || !['play', 'tidy', 'brackets'].includes(phase)) return;
+      if (gone || !WORKING.includes(phase)) return;
       hob('That one goes back in the pile.', 'warn');
       finish({ left: true });
     }
 
-    // ----- keys: 1-4 buttons, U undo, H hint, Space/Enter skip ahead during an animation -----
+    // ----- keys: 1-4 buttons, U undo, H hint, Space/Enter skip ahead during an animation, Enter: next problem -----
     function onKey(e, k) {
-      if (phase === 'tidy' || phase === 'brackets') {
-        if (/^[1-4]$/.test(k)) { e.preventDefault(); tidyKey?.(Number(k) - 1); }
+      if (phase === 'parts' || phase === 'brackets' || phase === 'nlpick') {
+        if (/^[1-4]$/.test(k)) { e.preventDefault(); partKey?.(Number(k) - 1); }
         else if (k === 'h' || k === '?') askHob();
         return;
       }
-      if (phase === 'check') { if (k === ' ' || k === 'enter') { e.preventDefault(); goNext(); } return; }
+      if (phase === 'review') { if (k === ' ' || k === 'enter') { e.preventDefault(); goOn(); } return; }
       if (phase === 'anim') { if (k === ' ' || k === 'enter') { e.preventDefault(); ff = true; } return; }
       if (phase !== 'play') return;
       if (/^[1-4]$/.test(k)) {
@@ -1390,13 +1662,21 @@ export function openLockbox(root = document.body, opts = {}) {
     const refit = () => {
       if (fitQueued) return;
       fitQueued = true;
-      requestAnimationFrame(() => { fitQueued = false; if (gone) return; if (phase === 'check') fitCheck(); else { fitLine(); distRedraw?.(); } });
+      requestAnimationFrame(() => {
+        fitQueued = false;
+        if (gone) return;
+        if (phase === 'review') { fitReview(); return; }
+        fitLine();
+        fitFocus();
+        if (distRedraw) distRedraw(); else if (linkPairs) drawLinks();
+      });
     };
     const resizeWatch = typeof ResizeObserver === 'function' ? new ResizeObserver(refit) : null;
     resizeWatch?.observe(work);
 
-    // a tap anywhere fast-forwards a move or the check while it plays (it never adds a move)
+    // a tap anywhere fast-forwards a move while it plays (it never adds a move)
     body.addEventListener('pointerdown', () => { if (phase === 'anim') ff = true; });
+    nextBtn.addEventListener('click', goOn);
     undoBtn.addEventListener('click', undo);
     askBtn.addEventListener('click', askHob);
     leaveBtn.addEventListener('click', leave);
@@ -1409,7 +1689,7 @@ export function openLockbox(root = document.body, opts = {}) {
       const idle = (performance.now() - lastAction) / 1000;
       if (phase === 'play' && (idle > 15 || unhelpful >= 2) && B.hintLevel < 3) askBtn.classList.add('bounce');
       else askBtn.classList.remove('bounce');
-      leaveBtn.hidden = !(B.canLeave((performance.now() - openedAt) / 1000) || opts.dev) || !['play', 'tidy', 'brackets'].includes(phase);
+      leaveBtn.hidden = !(B.canLeave((performance.now() - openedAt) / 1000) || opts.dev) || !WORKING.includes(phase);
     }, 1000);
 
     const ctrl = {
@@ -1426,7 +1706,7 @@ export function openLockbox(root = document.body, opts = {}) {
       destroy() {
         gone = true;
         clearInterval(tick);
-        stopTidy?.();
+        stopParts?.();
         resizeWatch?.disconnect();
         clearNL();
       },
@@ -1437,7 +1717,7 @@ export function openLockbox(root = document.body, opts = {}) {
         if (gone) return null;
         gone = true;
         clearInterval(tick);
-        stopTidy?.();
+        stopParts?.();
         if (!B.solved || recorded) return null;
         recorded = true;
         const result = B.finish();
@@ -1449,7 +1729,7 @@ export function openLockbox(root = document.body, opts = {}) {
     // ----- first draw -----
     bodies.appendChild(body);
     buildSteps();
-    renderLine(problem.start, 'settle');
+    drawLine(problem.start, 'settle');
     renderLedger();
     renderTray();
     renderTop();
@@ -1461,7 +1741,9 @@ export function openLockbox(root = document.body, opts = {}) {
       R2: 'Dark coins are negative numbers.', R5: 'Negatives get their own box now.', R8: 'A lone −x is the opposite of x.',
       R9b: 'The whole top is divided. Clear the division first.', R10: 'Brackets hold things together.', R11: 'Only like terms can join.', R12: 'x on both sides this time.',
       R15: 'Some equations: every number is a solution. Some: no solution.',
-    }[problem.rung] || 'Get x alone. Same move on both sides.');
+      I1: 'Less than, more than: get x alone, same as always.', I2: 'Watch the sign when you × or ÷ by a negative.',
+      I3: 'Three rooms: whatever you do to one, do to every room.', I4: '“Or”: two inequalities. Solve each one.',
+    }[problem.rung] || (ineqMode ? 'Get x alone, the same move on every side.' : 'Get x alone. Same move on both sides.'));
     hob(intro);
     // once the fonts arrive the line may need a new fit
     if (document.fonts?.ready) document.fonts.ready.then(() => { if (!gone) refit(); });
@@ -1512,8 +1794,8 @@ export function openLockbox(root = document.body, opts = {}) {
     return left === 1 ? 'The one you skipped is still in the saddlebags.' : `The ${left} you skipped are still in the saddlebags.`;
   }
 
-  // The lid opens on the mat, the coins fly from the box into the gold and it counts up; the stars and the
-  // Safecracker count show for a moment. Enter, Space or a tap hurries it.
+  // After "Next problem": the lid opens on the mat, the coins fly from the box into the gold and it counts up; the
+  // stars and the Safecracker count show for a moment (about a second). Enter, Space or a tap hurries it.
   function reward(ctrl, result, { before, after, parBefore, note, last }) {
     return new Promise((resolve) => {
       const stageEl = ctrl.stageEl;
@@ -1555,8 +1837,8 @@ export function openLockbox(root = document.body, opts = {}) {
           // a gentle bow from the chest up to the purse, never above the purse (it sits at the top of the panel)
           const jx = (Math.random() - 0.5) * 90, lift = 40 + Math.random() * 60;
           const mx = (fx + tx) / 2 + jx, my = Math.max(ty + 18, (fy + ty) / 2 - lift);
-          const delay = hurry ? 0 : (420 + i * 70) * q;
-          const dur = hurry ? 200 : 620 * q;
+          const delay = hurry ? 0 : (140 + i * 40) * q;
+          const dur = hurry ? 200 : 460 * q;
           const anim = c.animate([
             { transform: `translate(${fx}px, ${fy}px) scale(0.6)`, opacity: 0 },
             { transform: `translate(${fx + jx * 0.3}px, ${fy - 24}px) scale(1)`, opacity: 1, offset: 0.15 },
@@ -1578,7 +1860,7 @@ export function openLockbox(root = document.body, opts = {}) {
       const tickWait = () => {
         if (closed) { resolve(); return; }
         const el2 = performance.now() - t0;
-        if ((hurry && el2 > 650) || el2 > REWARD_MS * q + (lines.length > 1 ? 500 : 0)) { finishUp(); return; }
+        if ((hurry && el2 > 450) || el2 > REWARD_MS * q + (lines.length > 1 ? 400 : 0)) { finishUp(); return; }
         setTimeout(tickWait, 50);
       };
       setTimeout(tickWait, 50);
@@ -1650,7 +1932,7 @@ export function openLockbox(root = document.body, opts = {}) {
   const handle = {
     el,
     close: () => end('closed'),
-    // for test rigs: the box being worked and its phase (play | anim | tidy | check | open | done)
+    // for test rigs: the box being worked and its phase (play | anim | parts | brackets | nlpick | review | open | done)
     debug: {
       get box() { return cur.B; },
       get problem() { return cur.problem; },

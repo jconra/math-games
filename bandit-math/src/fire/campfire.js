@@ -11,8 +11,11 @@
 // flickers with the flame. The crackle is a loop made sample by sample (fireSamples in src/audio/nature.js, its FIRE
 // settings tuned by ear on the Sound Lab's creek and campfire page): mostly tiny crackles in little bursts, now and then
 // a bigger pop with a woody knock, a log settling once in a while. Positioned at the fire, heard within
-// CAMPFIRE.sound.hear metres; each fire starts the loop at its own place and plays it a touch faster or slower, so two
-// fires never crackle alike. Away from the fire nothing is worked out: the flame isn't sliced or drawn past
+// CAMPFIRE.sound.hear metres, fading out over the last stretch of that (no sudden cut); each fire starts the loop at its
+// own place and plays it a touch faster or slower, so two fires never crackle alike. The ears are the camera, which rides
+// several metres behind the player: so the crackle is at full loudness out to `ref` metres (a player standing at the
+// fire) and falls off past that. (It was 2 m with a third of the level: beside a fire, with the camera behind, it was
+// lost under the wind and the birds.) Away from the fire nothing is worked out: the flame isn't sliced or drawn past
 // CAMPFIRE.near metres or behind the camera, and the sound sleeps.
 //
 //   const F = makeCampfire({ W, scene, camera, x, z, y, width, audio, id })
@@ -35,7 +38,8 @@ export const CAMPFIRE = {
   leanPer: 1.1,          // ... as this many times the camera's angle down onto the fire
   glow: { r: 2.8, strength: 0.42, flicker: 0.22, colour: 0xff8a3a },   // the patch on the ground: reach (m), how bright,
                                                                      // how much it flickers (a share of strength)
-  sound: { hear: 30, level: 0.165, ref: 2.0, rolloff: 1.3 },   // within hear metres; its level at the fire (the loop now peaks at 0.67, so as loud in town as before)
+  sound: { hear: 45, level: 0.34, ref: 6, rolloff: 1.6, edge: 0.6 },   // within hear metres (fading out from edge x hear); its
+                         // level within ref metres of the fire, falling off past that (inverse, rolloff)
   bright: 0.9,           // extra brightness for the valley's daylight (the shader's own "flash" punch held on: 0.9 is
                          // nearly twice as bright as the fire lab's night flames, which read pale against a sunlit meadow)
 };
@@ -108,10 +112,14 @@ export function makeCampfire({ W, scene = W.scene, camera, x, z, y = null, width
     pan.connect(fade).connect(out);
     snd = { ctx, pan, fade, bed: null };
   }
-  function soundOn(on) {
+  // the level for the camera's distance d: full, fading to nothing over the last stretch before `hear`
+  const levelAt = (d) => C.sound.level * (1 - THREE.MathUtils.smoothstep(d, C.sound.hear * C.sound.edge, C.sound.hear));
+  let lastLevel = -1;
+  function soundOn(on, d = 0) {
     if (!snd) return;
     const t = snd.ctx.currentTime;
-    snd.fade.gain.setTargetAtTime(on ? C.sound.level : 0, t, 0.4);
+    lastLevel = on ? levelAt(d) : 0;
+    snd.fade.gain.setTargetAtTime(lastLevel, t, 0.4);
     if (on && !snd.bed) {
       const src = snd.ctx.createBufferSource(), buf = fireLoop(snd.ctx);
       src.buffer = buf; src.loop = true; src.playbackRate.value = rate; src.connect(snd.pan); src.start(t, Math.random() * buf.duration);
@@ -146,7 +154,8 @@ export function makeCampfire({ W, scene = W.scene, camera, x, z, y = null, width
       const hear = d < C.sound.hear;
       if (hear !== hearing) { hearing = hear; audio.need(name, hear); if (!hear) soundOn(false); }
       if (hear && audio.ctx && !snd) makeSound(audio.ctx, audio.out);
-      if (hear && snd && audio.running && !snd.bed) soundOn(true);
+      if (hear && snd && audio.running && !snd.bed) soundOn(true, d);
+      else if (hear && snd && snd.bed && Math.abs(levelAt(d) - lastLevel) > C.sound.level * 0.03) soundOn(true, d);   // (fading near the edge of earshot)
     }
   };
   F.dispose = () => {

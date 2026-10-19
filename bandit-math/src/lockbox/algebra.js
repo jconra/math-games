@@ -14,9 +14,12 @@
 //   - A session (a gap of 2 hours or more) starts with two easy boxes from stamped rungs.
 //   - On the vault rung, about one box in ten asks "infinitely many solutions or no solution?"; never two in a row,
 //     never the first box after a level-up. The rest are real solve-for-x boxes.
-//   - Level 5, "do the arithmetic": after each move the kid picks the tidied line from 3 cards (the right one, a sign
-//     slip, one side forgotten). It is earned in review: once a rung from R5 up is stamped, some of its review boxes
-//     come at level 5. The wrong cards lean on the slips this kid makes most.
+//   - Level 5, "do the arithmetic": earned in review (once a rung from R5 up is stamped, some of its review boxes come
+//     at level 5). Every box now has the kid work out each part of every move (parts.js), so the panel plays a level 5
+//     box like a level 4 one; the level is kept so the ladder's records stay as they were. The adding slips a kid
+//     makes on those parts are still counted here (arith) for the Grown-ups corner.
+//   - After the equations come the inequalities (I1 .. I4, ineq.js): they open and climb exactly like the rungs
+//     before them.
 // "Clean" = solved within par + 1, no hint past the first, the check passed, no jam, no wrong pick.
 //
 // The state object lives inside the rider (rider.topics.algebra) and is plain JSON; it is changed in place.

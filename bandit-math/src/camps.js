@@ -236,7 +236,7 @@ export function makeCamps({ W, folk = null, camera, audio = null, scene = W.scen
     if (h.busy) {
       const b = h.busy, dx = b.to.x - h.x, dz = b.to.z - h.z, d = Math.hypot(dx, dz);
       if (d > 0.08) {
-        if (!b.walking) { b.walking = true; p.play('Walk', { fade: 0.25, speed: 1.4 / (p.stride || 1.2) }); }
+        if (!b.walking) { b.walking = true; p.play('Walk', { fade: 0.25, speed: 1.4 / ((p.stride && p.stride.Walk) || 1.2) }); }   // (stride: m/s per clip, { Walk, Run })
         const st = Math.min(d, 1.4 * dt); h.x += dx / d * st; h.z += dz / d * st;
         turnTo(h, Math.atan2(dx, dz), dt);
       } else {

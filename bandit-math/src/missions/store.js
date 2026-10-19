@@ -108,7 +108,7 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
       return true;
     }
     const pace = c.state === 'go' ? STORE.walk * 1.15 : STORE.walk;
-    if (!c.walking) { c.walking = true; c.p.play('Walk', { fade: 0.25, speed: pace / (c.p.stride || 1.2) }); }
+    if (!c.walking) { c.walking = true; c.p.play('Walk', { fade: 0.25, speed: pace / ((c.p.stride && c.p.stride.Walk) || 1.2) }); }   // (stride: m/s per clip, { Walk, Run })
     const v = Math.min(pace, d * 3), step = Math.min(d, v * dt);
     c.x += dx / d * step; c.z += dz / d * step;
     turn(c, Math.atan2(dx, dz), dt);

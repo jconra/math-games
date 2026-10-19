@@ -6,7 +6,9 @@
 //   the farmer's wife    in the farm's lane by the pig yard: the wind blew the gate open (the loose pigs)
 //   the freight driver   the wagon's own driver: while the wagon waits he gets down and stands beside it, and climbs
 //                        back up when it rolls (Protect the wagon)
-//   the naturalist       a good way off the herd the deer job is after, on the town's side: she lends the camera
+//   the naturalist       a good way off the herd the deer job is after, on the town's side: E by her lends the camera
+//                        (strapped behind the saddle at once); while it is lent she strolls after the player round her
+//                        herd (never far from her own spot), and E by her again gives it back
 //   the sheriff          out in front of his office, to one side of the steps (lock boxes at his desk)
 //   the deputy           the other side of the steps, when "Loot the gang" is ticked: the gang's stash out in the valley;
 //                        carrying the loot back, E by him shares it out (src/missions/loot.js)
@@ -56,6 +58,9 @@ export const STAND = {
   driver: { side: 2.3, ahead: 1.2 },  // beside the waiting wagon: out from its middle, and a little toward the team
   anchor: 0.48,                       // m above the head bone the name tag sits (over the hat)
   trail: 3.5,                         // m a person stands at least from the middle of the trail to the pasture
+  natWalk: { pace: 1.5, start: 16, near: 7, roam: 60 },   // the naturalist with her camera lent: strolls (m/s) after a
+                                      // player more than `start` m off, to `near` m short of them, never more than `roam`
+                                      // m from her own spot
 };
 
 // a person as a voice: where they stand, and whether he is a man (the recorded voices are the game maker's: men only;
@@ -164,15 +169,27 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     if (!naturalist || !DJ) return;
     const H = DJ.herd();
     if (!H) return;
+    const sp = naturalist.spot;
+    // (walked off after the player, who has since gone: back on her spot, out of sight)
+    if (naturalist.placed && Math.hypot(naturalist.x - sp.x, naturalist.z - sp.z) > 1) {
+      const d = Math.hypot(P.position.x - naturalist.x, P.position.z - naturalist.z);
+      if (d > 140 && !inView(naturalist.x, W.heightAt(naturalist.x, naturalist.z), naturalist.z)) {
+        naturalist.x = sp.x; naturalist.z = sp.z; naturalist.walking = false; naturalist.p.play('Idle', { fade: 0 });
+        naturalist.face = naturalist.home; naturalist.p.root.rotation.y = naturalist.face;
+      }
+    }
     // (the same herd: she stays, unless it has run off or wandered out of her band since)
-    const off = naturalist.placed ? Math.hypot(H.mid.x - naturalist.x, H.mid.z - naturalist.z) : 0;
-    const close = naturalist.placed && H.state === 'calm' && H.deer.some((d) => Math.hypot(d.x - naturalist.x, d.z - naturalist.z) < STAND.natBand[0] - 6);
+    const off = naturalist.placed ? Math.hypot(H.mid.x - sp.x, H.mid.z - sp.z) : 0;
+    const close = naturalist.placed && H.state === 'calm' && H.deer.some((d) => Math.hypot(d.x - sp.x, d.z - sp.z) < STAND.natBand[0] - 6);
     if (H === natHerd && !close && off >= STAND.natBand[0] - 2 && off <= STAND.natBand[1] + 2) return;
     // (moved only while out of sight: never popping from one place to another in view)
+    // (and never while the player is anywhere about: a herd that bolts moves its middle at once, and turning the camera
+    // away from her for a moment used to be enough to send her off after it, right after her hello)
     if (naturalist.placed) {
       const d = Math.hypot(P.position.x - naturalist.x, P.position.z - naturalist.z);
-      if (d < 140 && inView(naturalist.x, W.heightAt(naturalist.x, naturalist.z), naturalist.z)) return;
-      if (DJ.active) return;
+      if (d < 140) return;
+      if (d < 220 && inView(naturalist.x, W.heightAt(naturalist.x, naturalist.z), naturalist.z)) return;
+      if (DJ.active || (talking && talking.r === naturalist)) return;
     }
     const sq = W.places.square || W.places.spawn;
     const flat = (x, z) => free(x, z) && Math.abs(W.heightAt(x + 1, z) - W.heightAt(x - 1, z)) < 0.6 && Math.abs(W.heightAt(x, z + 1) - W.heightAt(x, z - 1)) < 0.6;
@@ -182,11 +199,43 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     if (natHerd && fresh) natHerd.keepNear = null;
     natHerd = H; naturalist.placed = true;
     H.keepNear = { x: at.x, z: at.z, min: STAND.natBand[0], max: STAND.natBand[1] };
-    naturalist.x = at.x; naturalist.z = at.z;
+    naturalist.x = at.x; naturalist.z = at.z; naturalist.spot = { x: at.x, z: at.z }; naturalist.walking = false;
     naturalist.home = naturalist.face = Math.atan2(H.mid.x - at.x, H.mid.z - at.z);   // (looking at the herd)
     naturalist.p.root.position.set(at.x, W.heightAt(at.x, at.z), at.z); naturalist.p.root.rotation.y = naturalist.face;
     naturalist.p.root.visible = true;
     if (fresh) naturalist.greet.reset();   // (a new herd, a new hello; following the same one doesn't repeat it)
+  }
+
+  // With her camera lent she strolls after the player round her herd, loosely (a player further than natWalk.start off,
+  // to natWalk.near short of them), never further than natWalk.roam from her spot; she stands while she talks and while
+  // the camera is up (never walking into the picture), and goes back to her spot once it is given back
+  function naturalistWalk(dt) {
+    if (!naturalist || !naturalist.placed || !naturalist.spot) return;
+    const DJ = get('deer'), N = STAND.natWalk, sp = naturalist.spot, at = P.position;
+    const dP = Math.hypot(at.x - naturalist.x, at.z - naturalist.z);
+    let to = sp;
+    if (DJ && DJ.lent() && !(DJ.resting && DJ.resting())) {
+      if (DJ.active || dP > 150) to = null;   // (stays put: the camera is up, or the player has gone off)
+      else if (dP > (naturalist.walking ? N.near : N.start)) {
+        const k = (dP - N.near) / dP;
+        let x = naturalist.x + (at.x - naturalist.x) * k, z = naturalist.z + (at.z - naturalist.z) * k;
+        const ds = Math.hypot(x - sp.x, z - sp.z); if (ds > N.roam) { x = sp.x + (x - sp.x) / ds * N.roam; z = sp.z + (z - sp.z) / ds * N.roam; }
+        to = { x, z };
+      } else to = null;
+    }
+    const busy = naturalist.clipT > 0 || (talking && talking.r === naturalist);   // (waving or talking: she stands)
+    const dx = to ? to.x - naturalist.x : 0, dz = to ? to.z - naturalist.z : 0, dl = Math.hypot(dx, dz);
+    const go = !busy && to && dl > (naturalist.walking ? 0.3 : 2);
+    let stepped = false;
+    if (go) {
+      const st = Math.min(dl, N.pace * dt), x = naturalist.x + dx / dl * st, z = naturalist.z + dz / dl * st;
+      naturalist.block = false;   // (her own standing-room doesn't stop her)
+      if (free(x, z)) { naturalist.x = x; naturalist.z = z; stepped = true; }
+      naturalist.face += wrapA(Math.atan2(dx, dz) - naturalist.face) * Math.min(1, dt * 6);
+    }
+    if (stepped && !naturalist.walking) { naturalist.walking = true; naturalist.p.play('Walk', { fade: 0.25, speed: N.pace / ((naturalist.p.stride && naturalist.p.stride.Walk) || 1.2) }); }
+    else if (!stepped && naturalist.walking) { naturalist.walking = false; naturalist.block = true; naturalist.p.play('Idle', { fade: 0.3 }); naturalist.t = 3 + Math.random() * 4; }
+    if (!naturalist.walking) naturalist.home = Math.hypot(naturalist.x - sp.x, naturalist.z - sp.z) < 1 && natHerd ? Math.atan2(natHerd.mid.x - sp.x, natHerd.mid.z - sp.z) : naturalist.face;
   }
 
   // ── THE FREIGHT DRIVER: down beside his wagon while it waits, up on the seat when it rolls ─────────────────────
@@ -261,14 +310,21 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     if (!best) return;
     const WJ = get('wagon'), DJ = get('deer');
     if (best.id === 'driver' && WJ && (WJ.phase === 'waiting' || WJ.phase === 'stopped') && best.down && bd < TALK.hail) { JF.prompt = `Ride along with ${best.name.split(' ')[0]}`; promptFor = best; }
-    else if (best.id === 'naturalist' && DJ && DJ.prompt && bd < TALK.prompt) { JF.prompt = `Borrow ${best.name.replace(/ Ada/, '')}'s camera`; promptFor = best; }
+    else if (best.id === 'naturalist' && DJ && bd < TALK.prompt && !DJ.active) { const who = best.name.replace(/ Ada/, ''); JF.prompt = DJ.lent() ? `Give ${who} her camera back` : `Borrow ${who}'s camera`; promptFor = best; }
     else if (best.id === 'sheriff' && actions.sheriff && bd < TALK.prompt) { JF.prompt = 'Crack lock boxes for the sheriff'; promptFor = best; }
     else if (best.id === 'deputy' && bd < TALK.prompt) { const LJ = get('loot'); if (LJ && LJ.canShare) { JF.prompt = 'Share out the loot'; promptFor = best; } }
   }
   JF.talk = () => {
     const r = promptFor; if (!r) return false;
     if (r.id === 'driver') { const WJ = get('wagon'); if (WJ) WJ.start(); return true; }   // (his "let's roll" comes with the job's start: heard below)
-    if (r.id === 'naturalist') { const DJ = get('deer'); if (DJ && DJ.setUp()) { talking = null; card.hidden = true; } return true; }
+    if (r.id === 'naturalist') {
+      const DJ = get('deer'); if (!DJ) return false;
+      // (the camera not lent yet: she hands it over, strapped behind the saddle, and says how it goes)
+      if (!DJ.lent()) { DJ.lend(); say(r, r.def.lend || r.def.hello); r.greet.update(0, true, false); if (onTalk) onTalk('hello', r.id); return true; }
+      // (given back: off the saddle, her thanks, and the job rests till the player rides off and comes back)
+      if (DJ.giveBack()) { say(r, r.def.back || r.def.thanks[0]); if (onTalk) onTalk('thanks', r.id, voiceOf(r)); }
+      return true;
+    }
     if (r.id === 'sheriff') { actions.sheriff(); return true; }
     if (r.id === 'deputy') { const LJ = get('loot'); if (LJ) LJ.share(); return true; }
     return false;
@@ -301,7 +357,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
   JF.update = (dt, { hidden = false } = {}) => {
     if (hidden) { if (!hiddenNow) { hiddenNow = true; hideAll(); } JF.prompt = null; return; }
     if (hiddenNow) { hiddenNow = false; if (talking) card.hidden = false; }
-    placeNaturalist(); driverStep(); foremenStep();
+    placeNaturalist(); naturalistWalk(dt); driverStep(); foremenStep();
     const at = P.position;
     // the area jobs: hellos on arriving, the toast on walking away
     for (const a of areas) {
@@ -330,11 +386,14 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
       // idle about, turn to the player when close (the camps turn their own foremen; the driver only on the ground)
       if (r.kind === 'own' || (r.kind === 'driver' && r.down)) {
         if (d < TALK.awake) {
-          const want = d < TALK.face ? Math.atan2(at.x - r.x, at.z - r.z) : r.home;
-          r.face += wrapA(want - r.face) * Math.min(1, dt * 4);
+          // (the naturalist walking after the player: facing the way she goes, the Walk clip on; naturalistWalk)
+          if (!r.walking) {
+            const want = d < TALK.face ? Math.atan2(at.x - r.x, at.z - r.z) : r.home;
+            r.face += wrapA(want - r.face) * Math.min(1, dt * 4);
+            if (r.clipT > 0 && (r.clipT -= dt) <= 0) r.p.play('Idle', { fade: 0.4 });
+            else if (r.clipT <= 0 && (r.t -= dt) <= 0) { r.t = 6 + Math.random() * 9; r.p.play(Math.random() < 0.5 ? 'Idle_Neutral' : 'Idle', { fade: 0.6 }); }
+          }
           r.p.root.rotation.y = r.face;
-          if (r.clipT > 0 && (r.clipT -= dt) <= 0) r.p.play('Idle', { fade: 0.4 });
-          else if (r.clipT <= 0 && (r.t -= dt) <= 0) { r.t = 6 + Math.random() * 9; r.p.play(Math.random() < 0.5 ? 'Idle_Neutral' : 'Idle', { fade: 0.6 }); }
           if (r.kind === 'own') { r.p.root.position.set(r.x, W.heightAt(r.x, r.z), r.z); r.p.update(dt); }
         }
       }

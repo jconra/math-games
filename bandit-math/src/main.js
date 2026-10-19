@@ -318,7 +318,25 @@ function roundupHud() {
 // card names: the round-up's "the herd is in the pasture", or a delivery's, the wagon's or the gang's loot when one of
 // those has the card. A card that is not a travel card means the job is under way right there: no trail then.
 let ruleBy = null, cardBy = null;   // (the job putting a card up just now; the job whose card is up: { id, kind })
-{ const rule = hud.rule; hud.rule = (o) => { cardBy = o ? { id: ruleBy, kind: o.kind || null } : null; return rule(o); }; }
+// Only the nearest job's travel card goes up, and only within NOTICE.near metres of where its trail leads (the whole
+// town is in range of the pasture's); farther off, the card comes down and nothing takes its place. A job already under
+// way (crates or loot on the horse, the deer camera lent) keeps its card at any distance.
+const NOTICE = { near: 220 };
+function noticeGoal(id) { const was = cardBy; cardBy = { id, kind: 'travel' }; try { return trailGoal(); } finally { cardBy = was; } }
+const underWay = (id) => id === 'delivery' || (id === 'loot' && !!LJ && LJ.phase === 'carrying') || (id === 'deer' && !!DJ && DJ.lent());
+function noticeFar(id) {
+  if (!P || !id || underWay(id)) return null;
+  const g = noticeGoal(id); if (!g) return null;
+  return Math.hypot(g.x - P.position.x, g.z - P.position.z);
+}
+{ const rule = hud.rule; hud.rule = (o) => {
+  if (o && o.kind === 'travel' && ruleBy) {
+    const d = noticeFar(ruleBy);
+    if (d != null && d > NOTICE.near) { if (cardBy && cardBy.id === ruleBy) { cardBy = null; return rule(null); } return hud.ruleEl; }   // (too far: its own card comes down)
+    if (d != null && cardBy && cardBy.kind === 'travel' && cardBy.id !== ruleBy) { const e = noticeFar(cardBy.id); if (e != null && e <= NOTICE.near && e < d) return hud.ruleEl; }   // (another job's, nearer, stays up)
+  }
+  cardBy = o ? { id: ruleBy, kind: o.kind || null } : null; return rule(o);
+}; }
 function tagHud(id) {
   const h = Object.create(hud);
   h.rule = (o) => { const was = ruleBy; ruleBy = id; try { return hud.rule(o); } finally { ruleBy = was; } };
@@ -337,7 +355,13 @@ function trailGoal() {
     case 'wagon': { if (!WJ) return null; const w = WJ.where(); return { id: 'wagon', x: w.x, z: w.z }; }
     case 'delivery': return DL ? mark(DL.marks()) : null;
     case 'loot': return LJ ? mark(LJ.marks()) : null;
-    case 'deer': return DJ ? mark(DJ.marks()) : null;
+    case 'deer': {
+      if (!DJ) return null;
+      // (her camera not lent yet: to Miss Wren first, then on to the herd)
+      const n = !DJ.lent() && JF && JF.people.find((r) => r.id === 'naturalist' && r.placed);
+      if (n) return { id: 'deer:naturalist', x: n.x, z: n.z };
+      return mark(DJ.marks());
+    }
     case 'range': return SR ? mark(SR.marks()) : null;
     default: return null;
   }
@@ -517,6 +541,21 @@ function doors() {
 }
 
 // ── THE COMPASS: the cabin, the job and your horse ─────────────────────────────────────────────────────────────────
+// the "call your horse" button (H): while the player's horse is far off, or out of view and not close by; never while
+// riding, before a saddle is bought, while it is already coming, or while a job has the player (src/ui/hud.js)
+const CALL = { far: 25, near: 8, after: 0.5 };   // m: shown past far; never inside near; s it must be wanted first
+const _hp = new THREE.Vector3();
+let callT = 0;
+function horseButton(dt) {
+  let want = false;
+  if (P && P.horse && P.horse.root && P.canRide && !P.onHorse && P.mode === 'foot' && P.enabled !== false && !P.horseComing) {
+    const h = P.horse.root.position, d = Math.hypot(h.x - P.position.x, h.z - P.position.z);
+    if (d > CALL.far) want = true;
+    else if (d > CALL.near) { _hp.set(h.x, h.y + 1, h.z).project(camera); want = _hp.z > 1 || Math.abs(_hp.x) > 1 || Math.abs(_hp.y) > 1; }
+  }
+  callT = want ? callT + dt : 0;
+  hud.callHorse(callT >= CALL.after);
+}
 function compass() {
   const at = P.position, marks = [];
   const add = (id, icon, x, z, label) => marks.push({ id, icon, label, bearing: Math.atan2(x - at.x, z - at.z), dist: Math.hypot(x - at.x, z - at.z) });
@@ -558,12 +597,19 @@ function titleCam(dt) {
   W.camTarget.set(c.x, y0, c.z);
 }
 
+// the traffic's teams on the move, for the player's "easy now" by a moving horse (src/audio/shouts.js)
+const teamsNear = [];
+function teamHorses() {
+  teamsNear.length = 0;
+  if (traffic) for (const t of traffic.wagons) { const h = t.wg && !t.ghost && t.wg.team && t.wg.team[0]; if (h && h.root) teamsNear.push({ x: h.root.position.x, z: h.root.position.z, speed: t.wg.pace || 0 }); }
+  return teamsNear;
+}
 // the town's sounds each frame of play (quieter and muffled inside the cabin; dipped under the action music and Hob)
 function townSounds(dt, indoor) {
   if (!AMBI || !P) return;
   const m = WJ && WJ.music ? WJ.music.state() : null;
   if (READ) READ.update(dt);   // (a card's line waiting on its clips or on a shout)
-  if (SHOUT && !indoor) SHOUT.update(dt, { P, I });   // (the player's shouts: a spur, a pull-up, a hello, a job done)
+  if (SHOUT && !indoor) SHOUT.update(dt, { P, I, horses: teamHorses });   // (the player's shouts: a spur, a pull-up, a hello, a long gallop)
   AMBI.update(dt, { at: P.position, flock: townLifeNow(), P, D, HS, farm, RU, SH, PG, traffic, indoor, music: m ? Math.min(1, m.action + (m.trail > 0.05 ? 0.4 : 0)) : 0, voice: !!((SHOUT && SHOUT.speaking) || (READ && READ.speaking)) });
 }
 
@@ -577,8 +623,8 @@ function step(dt) {
   if (state === 'play') {
     // (a horse picked at the stable stays "just picked" while the stable's panel is open: E after closing it gets on)
     if (paused && P && P.horsePickedAt > performance.now() - 8000) P.horsePickedAt = performance.now();
-    if (paused) { if (needDraw) { needDraw = false; if (home) cabin.render(); else W.render(); } return; }
-    if (home) { door = null; townSounds(dt, true); cabin.update(dt); cabin.render(); return; }   // (no town door while inside: E and the prompt are the cabin's)
+    if (paused) { hud.callHorse(false); if (needDraw) { needDraw = false; if (home) cabin.render(); else W.render(); } return; }
+    if (home) { hud.callHorse(false); door = null; townSounds(dt, true); cabin.update(dt); cabin.render(); return; }   // (no town door while inside: E and the prompt are the cabin's)
     if (atCounter()) hud.prompt(null); else if (!(cabin && cabin.busy)) doors();
     P.update(dt);
     if (D) D.update(dt);
@@ -608,6 +654,7 @@ function step(dt) {
     if (SR) SR.draw();   // (the six-shooter, drawn over the valley)
     AUD.listen(camera);
     compass();
+    horseButton(dt);
     if (I.touch) hud.touch(true);
   } else if (state === 'title') {
     titleCam(dt); W.update(dt); W.render();

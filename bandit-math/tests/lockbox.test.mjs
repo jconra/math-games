@@ -9,12 +9,15 @@ import { buildButtons } from '../src/lockbox/buttons.js';
 import { makeBox, starsFor, goldFor } from '../src/lockbox/box.js';
 import { makeAlgebra, ARITH_LEVEL, NUMBER_LINE_SHOWS } from '../src/lockbox/algebra.js';
 import { tidyChoices, slipLine, sumsOf } from '../src/lockbox/tidy.js';
+import { makeIneqBox } from '../src/lockbox/ineqbox.js';
+import * as Q from '../src/lockbox/ineq.js';
 
 const { F, num, xt, br, line, lineText, applyMove, addNum, addX, divBy, mulBy, FLIP, DIST, COMB, solve, lineKey,
   legalMoves, lineFits, trueAnswer, printedNumbers, allValues, keySteps, evalSide, isSolved, solvedValue } = E;
 
 const SCALE = Number(process.env.LOCKBOX_FUZZ || 1);
-const MOVE_RUNGS = RUNGS.filter((r) => r.stage);
+// the equation rungs (the inequalities after them have their own tests: lockbox.v3.test.mjs)
+const MOVE_RUNGS = RUNGS.filter((r) => r.stage && !r.ineq);
 const HEAVY = new Set(['R13', 'R14', 'R15']);
 const fuzzCount = (id) => Math.round((HEAVY.has(id) ? 1000 : 2000) * SCALE);
 const MINUS = '−';
@@ -665,8 +668,34 @@ function playKid(A, rng, { skill = 0.85, tier = 'iron', boxes = 300 } = {}) {
     const p = A.next(tier);
     const rung = RUNG[p.rung];
     seen.rungs.add(p.rung);
-    const B = makeBox(p, { stage: rung.stage, level: p.level, rng, fav: A.fav(), tier });
     let presses = 0;
+    if (p.mode === 'ineq') {
+      // an inequality (the rungs after the vault): the same pretend kid, then the answer picked on a number line
+      const B = makeIneqBox(p, { stage: rung.stage, level: p.level, rng, fav: A.fav(), tier });
+      while (!B.chainsSolved && presses < 40) {
+        const shown = B.buttons.slots.filter(Boolean);
+        assert.ok(shown.some((b) => b.role === 'good'), `no way forward on ${Q.stateText(B.line)} (${p.rung})`);
+        const pick = rng.next() < skill ? shown.find((b) => b.role === 'good') : shown[Math.floor(rng.next() * shown.length)];
+        const res = B.press(pick.move);
+        presses++;
+        if (res.jam) seen.jams++;
+        if (!B.chainsSolved && rng.next() < 0.05 && B.undo()) seen.undos++;
+        if (!B.chainsSolved) B.makeButtons();
+      }
+      assert.ok(B.chainsSolved, `box never finished: ${Q.stateText(p.start)} (${p.rung})`);
+      const { choices } = B.lineChoices();
+      if (rng.next() > skill) assert.equal(B.pickLine(choices.find((c) => !c.right)), false);
+      assert.ok(B.pickLine(choices.find((c) => c.right)));
+      const kt = B.keyTest();
+      assert.ok(kt.ok, `the check on ${Q.stateText(p.start)}`);
+      B.keyResult(true);
+      const f = B.finish();
+      assert.ok(f.solved && f.stars >= 1 && f.stars <= 3 && f.gold > 0);
+      A.record(f);
+      seen.results.push(f);
+      continue;
+    }
+    const B = makeBox(p, { stage: rung.stage, level: p.level, rng, fav: A.fav(), tier });
     if (p.mode !== 'moves') {
       const wrong = p.choices.find((c) => c !== p.answer);
       if (rng.next() > skill) assert.equal(B.choose(wrong).ok, false);

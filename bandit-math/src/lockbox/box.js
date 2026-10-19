@@ -17,7 +17,8 @@
 //   - Stars: 3 at par, 2 at par + 1 or + 2, 1 for any finish; a finish never earns 0.
 //   - Gold by box tier: tin 10, iron 20, brass 35, vault 60; 3 stars pays in full, 2 stars 80%, 1 star 60%.
 //   - Clean (for the ladder): solved within par + 1, no hint past the first, the check passed, no jam, and no wrong
-//     pick (a warm-up coin, or a tidied line on the do-the-arithmetic level).
+//     pick (a warm-up coin, or a tidied line on the do-the-arithmetic level). Working out the parts of a move
+//     (parts.js) and the products of brackets is gentle: a wrong answer there is counted but costs nothing.
 //   - B.togo: moves still to go on par's scale (the tumblers); B.steps(): the steps card's state on the current line;
 //     a press result's shortcut flag: not one of the card's moves, and fewer moves to go than the card's own route
 //     (dividing first in 3(x + 2) = 18).
@@ -29,6 +30,7 @@ import {
 import { buildButtons, trapTag } from './buttons.js';
 import { verdictOf, RUNG, VERDICT } from './generate.js';
 import { stepsLeft, stepsMoves, stepsPlan, stepsStatus, currentStep } from './steps.js';
+import { ARITH_OF } from './parts.js';
 
 export const TIER_GOLD = { tin: 10, iron: 20, brass: 35, vault: 60 };
 export const TIER_NAME = { tin: 'Tin lockbox', iron: 'Iron strongbox', brass: 'Brass express safe', vault: 'Vault car' };
@@ -64,7 +66,7 @@ export function makeBox(problem, { stage, level = 4, rng, fav = null, tier = 'ir
   const B = {
     problem, stage, tier, par, level,
     moves: 0, hintLevel: 0, notCloser: 0, jammed: false, jamFired: false, solved: false,
-    keyOk: null, keyFailed: false, left: false, wrongPicks: 0, productSlips: 0,
+    keyOk: null, keyFailed: false, left: false, wrongPicks: 0, productSlips: 0, partSlips: 0,
     traps: [], tools: [], arith: [], firstCloser: null, buttons: null,
     ledger,
     get index() { return active[active.length - 1]; },
@@ -240,6 +242,17 @@ export function makeBox(problem, { stage, level = 4, rng, fav = null, tier = 'ir
   // it is only counted, so a grown-up can see it.
   B.productPick = function (right) { if (!right) B.productSlips++; return right; };
 
+  // Working out each part of a move (parts.js), gentle in the same way: a wrong answer costs no move and no star and
+  // keeps the box clean. It is counted (partSlips), and a slip adding two numbers is also counted by its kind for the
+  // ladder (algebra.js ARITH_TAGS: the Grown-ups corner names the adding slip a kid makes most).
+  B.partPick = function (right, q = null, choice = null) {
+    if (right) return true;
+    B.partSlips++;
+    const adding = q && (q.kind === 'sum' || q.kind === 'join') && q.a && q.a.t === 'n';
+    if (adding && choice && ARITH_OF[choice.tag]) B.arith.push(ARITH_OF[choice.tag]);
+    return false;
+  };
+
   // Do the arithmetic (level 5): the kid picked a tidied line. A wrong one is counted by its slip (tidy.js tags);
   // it costs no move, but the box is no longer clean.
   B.tidyPick = function (card) {
@@ -257,7 +270,7 @@ export function makeBox(problem, { stage, level = 4, rng, fav = null, tier = 'ir
     const clean = solved && B.moves <= par + 1 && B.hintLevel <= 1 && !B.keyFailed && !B.jammed && B.wrongPicks === 0;
     return { solved, stars, gold, moves: B.moves, par, rung: problem.rung, clean, hints: B.hintLevel,
       jammed: B.jammed, keyFailed: B.keyFailed, left, traps: [...B.traps], tools: [...B.tools], arith: [...B.arith],
-      wrongPicks: B.wrongPicks, productSlips: B.productSlips };
+      wrongPicks: B.wrongPicks, productSlips: B.productSlips, partSlips: B.partSlips };
   };
 
   B.lineText = () => lineText(B.line);

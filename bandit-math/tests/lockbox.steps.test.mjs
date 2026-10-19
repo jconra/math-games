@@ -11,7 +11,8 @@ import {
 } from '../src/lockbox/steps.js';
 
 const { F, num, xt, br, line, lineText, applyMove, addNum, addX, divBy, DIST, isSolved } = E;
-const MOVE_RUNGS = RUNGS.filter((r) => r.stage);
+// the equation rungs (the inequalities after them have their own card: lockbox.v3.test.mjs)
+const MOVE_RUNGS = RUNGS.filter((r) => r.stage && !r.ineq);
 const ids = (status, state) => status.filter((s) => s.state === state).map((s) => s.n);
 const nowOf = (status) => currentStep(status)?.n ?? null;
 

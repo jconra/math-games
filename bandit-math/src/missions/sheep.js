@@ -254,7 +254,7 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
     });
     document.body.appendChild(el);
     picker = { el, s };
-    hob.event('sheepDose');   // (walked up to her with the bottles: the player's "easy now", now and then: shouts.js)
+    hob.event('sheepDose');   // (walked up to her with the bottles)
     s.state = 'dose'; s.w.goal = null; s.a.play('Idle', { fade: 0.3 });
     return true;
   }

@@ -5,15 +5,15 @@
 // THE PLAYER'S OWN SHOUTS (from the rider's head):
 //   spurring the horse from a walk or a stand into a gallop     Hyah / Giddy-up / Let's go / Come on, let's go / Hup
 //   pulling up from a gallop to a stop                          Whoa
-//   a whole job done (a round-up wave, a healed flock, the pigs penned, a wagon gang beaten, a herd's photographs,
-//   a delivery)                                                 Yeehaw / Whoohee
+//   W (a direction) and Shift held about a second at a gallop   Yeehaw / Whoohee
 //   a job's person says hello                                   Howdy / Howdy partner / How ya do (the first hello of
 //                                                               a ride is sometimes Good morning: the game has no time
 //                                                               of day)
 //   walking away from a job, or "Done for now"                  See ya later / See ya next time
 //   a roped steer or a penned pig heading in (rarely)           Get along
-//   calming an animal (rarely): walking up to a sick sheep      Easy now
-//   with the bottles, setting up the deer camera
+//   near a horse that is moving (rarely): walking up to it, or  Easy now
+//   standing by while it comes or goes; or letting the reins
+//   go from a trot
 //   a bandit roped right (now and then)                         You better sit down (and he answers, below)
 // OTHER PEOPLE (the maker's voice too, so only ever the MEN: never Mrs. Haskell, Miss Wren, Ma Hollis, a woman at the
 // store counter or a woman riding with the wagon; each from where that person is):
@@ -27,17 +27,22 @@
 //   a townsman seeing his stolen goods ride into town           Is that my stuff? (Loot the gang: src/missions/loot.js)
 //   (the gang's guard at the cache roped: his "you got me", as a bandit's on the wagon road)
 //
+// A whole job done (a round-up wave, a healed flock, the pigs penned, a wagon gang beaten, a herd's photographs, a
+// delivery, the loot handed back, the store's counter) is no voice: a short jingle of coins dropping into the purse.
+//
 // Each kind has a chance and a wait before it may come again, any two clips are a few seconds apart (but an answer
 // follows its line closely), the same clip never plays twice running, one at a time, and a few may wait their turn
-// (the bigger moment first: a job's yeehaw, then the thank-you). Everything goes through the game's master volume, so
+// (the bigger moment first: a "you better sit down", then the thank-you). Everything goes through the game's master volume, so
 // the Menu's Volume, the title's silence and a pause all hold it (audio.js). No switch of its own: the volume covers it.
 //
 //   const S = makeShouts({ audio, base, hush })   audio: makeAudio(); base: the game's folder URL; hush(): true while
 //                            another voice talks (a card being read aloud, src/audio/readaloud.js): no clip starts
-//   S.update(dt, { P, I })   each frame of play (P: the player, I: the input): watches the horse for a spur or a pull-up,
+//   S.update(dt, { P, I, horses })   each frame of play (P: the player, I: the input; horses(): other horses about,
+//                            [{ x, z, speed }], for "easy now"): watches the horse for a spur, a long gallop or a pull-up,
 //                            and lets out a clip that is due
-//   S.heard(event, data)     a Hob event (src/hob.js): the jobs' ends, a catch, a pig penned, "Done for now", a bandit
-//                            caught or a rider roped by mistake (data: { at: { x, z }, male }), 'sheepDose', 'deerSetup'
+//   S.heard(event, data)     a Hob event (src/hob.js): the jobs' ends (the coin jingle), a catch, a pig penned, "Done
+//                            for now", a bandit caught or a rider roped by mistake (data: { at: { x, z }, male })
+//   S.jingle()               the coins (a job's end)
 //   S.talk(what, who)        the job folk (src/jobfolk.js): 'hello' (a person greets the player), 'leave' (the toast on
 //                            walking away from a job), 'thanks' (a person's thank-you); who: { at, male }
 //   S.say(kind, who)         another job's people: 'thanksStore', 'niceday', 'whatchagot' (the store counter)
@@ -45,7 +50,7 @@
 //   S.speaking               true while a clip plays (the town's sounds dip a little under it)
 //   S.state()                for rigs: what has played, what is waiting, each kind's moments (said or not)
 //   S.dispose()
-//   Pure, for tests: SHOUTS, VOICE_CLIPS, makeShoutBrain(rand), pickShout(list, avoid, rand), isMale(look)
+//   Pure, for tests: SHOUTS, VOICE_CLIPS, JINGLE, makeShoutBrain(rand), pickShout(list, avoid, rand), isMale(look)
 
 // every clip, with a level for the ones that measured a little quieter after their peaks were held down
 export const VOICE_CLIPS = {
@@ -84,8 +89,13 @@ export const SHOUTS = {
   most: 3,                // clips waiting their turn at most
   // the horse: a gallop is past `gallop` m/s (a trot tops out at 6, the donkey's gallop is 8); a spur is Shift with a
   // direction pressed while the horse is under `slow` m/s; a pull-up is letting go of the keys from a gallop while it
-  // is still going faster than `stopFrom`
-  gallop: 7.5, slow: 4.5, stopFrom: 5,
+  // is still going faster than `stopFrom`; a yeehaw is a direction and Shift held `yeehawAfter` s with the horse past
+  // `slow` m/s (once a press); easing off is letting go of the keys from a trot past `easyFrom` m/s
+  gallop: 7.5, slow: 4.5, stopFrom: 5, yeehawAfter: 1, easyFrom: 4,
+  // "easy now" on foot: a horse moving faster than `moving` m/s within `near` m that the player walks toward (closing
+  // by `closing` m/s) or stands by (slower than `still` m/s); once a meeting: it may come again after no moving horse
+  // has been within `apart` m
+  horse: { near: 6, moving: 0.8, closing: 0.4, still: 0.5, apart: 10 },
   // each kind: who says it (the player, or a man nearby: 'him'), the chance it is said when it may be, the wait (s, at
   // random between) after one before the next of its kind, how much it matters (prio: the bigger waits in front), how
   // long after the moment it starts (delay) and how long it may wait its turn (wait), a group sharing "not the same
@@ -95,7 +105,7 @@ export const SHOUTS = {
       ...W(range('hyah', 8)), ...W(range('hyah_x2', 5), 0.5), ...W(range('giddyup', 6)), ...W(['giddyup_x2_1'], 0.5),
       ...W(range('letsgo', 5)), ...W(['letsgo_x2_1', 'comeon_letsgo_1'], 0.5), ...W(['hup_1'])] },
     whoa:  { chance: 0.7, cool: [12, 20], prio: 2, delay: 0.05, wait: 1.2, clips: [...W(range('whoa', 6)), ...W(range('whoa_x2', 2), 0.5)] },
-    done:  { chance: 1, cool: [10, 10], prio: 3, delay: 0.5, wait: 8, clips: [...W(range('yeehaw', 5)), ...W(['whoohee_1'])] },
+    yeehaw: { chance: 0.6, cool: [35, 70], prio: 2, delay: 0.1, wait: 4, clips: [...W(range('yeehaw', 5)), ...W(['whoohee_1'])] },
     hello: { chance: 0.75, cool: [20, 35], prio: 2, delay: 0.8, wait: 3, clips: W(['howdy_1', 'howdy_2', 'howdy_partner_1', 'howyado_1']) },
     bye:   { chance: 0.7, cool: [25, 40], prio: 2, delay: 0.3, wait: 3, clips: W(['seeya_later_1', 'seeya_nexttime_1']) },
     along: { chance: 0.18, cool: [45, 90], prio: 1, delay: 0.5, wait: 1.5, clips: [...W(['getalong_1', 'getalong_2', 'getalong_3']), ...W(['getalong_x2_1', 'getalong_ho_1'], 0.5)] },
@@ -112,10 +122,9 @@ export const SHOUTS = {
   },
   morning: { chance: 0.5, clips: W(['goodmorning_1', 'goodmorning_2']) },   // the first hello of a ride, sometimes
   // the Hob events that are each kind's moment (banditCatch and banditMiss: below, they need the rider)
-  events: {
-    waveDone: 'done', flockDone: 'done', pigsDone: 'done', banditsDone: 'done', deerDone: 'done', deliveryDone: 'done', lootDone: 'done',
-    catch: 'along', pigPenned: 'along', wagonStop: 'bye', deerStop: 'bye', sheepDose: 'easy', deerSetup: 'easy',
-  },
+  events: { catch: 'along', pigPenned: 'along', wagonStop: 'bye', deerStop: 'bye' },
+  // the Hob events that are a whole job's end: the coin jingle (no voice)
+  jobEnds: ['waveDone', 'flockDone', 'pigsDone', 'banditsDone', 'deerDone', 'deliveryDone', 'lootDone', 'storeDone'],
   unused: [],   // clips recorded for later, in no kind yet (none now)
 };
 
@@ -141,7 +150,8 @@ export function pickShout(list, avoid = [], rand = Math.random) {
 //   B.ended(now)            the clip playing has just ended (its answer, if any, is asked for now)
 //   B.queue, B.last, B.lastOf, B.coolUntil, B.moments (how many times each kind's moment came, said or not)
 export function makeShoutBrain(rand = Math.random, S = SHOUTS) {
-  const B = { queue: [], last: null, lastOf: {}, coolUntil: {}, greeted: false, endedAt: -1e9, wantG: false, galloped: false, moments: {}, follow: null };
+  const B = { queue: [], last: null, lastOf: {}, coolUntil: {}, greeted: false, endedAt: -1e9, wantG: false, galloped: false, moments: {}, follow: null,
+    runFrom: null, whooped: false, pushed: false, met: false, lastD: null };
   B.rand = rand;   // (a rig may set it: dice that always say yes)
   const between = ([a, b]) => a + B.rand() * (b - a);
   B.ask = (kind, now, { who = null, then = null, sure = false, answer = false } = {}) => {
@@ -157,13 +167,27 @@ export function makeShoutBrain(rand = Math.random, S = SHOUTS) {
     return true;
   };
   B.ride = (now, { onHorse = false, speed = 0, push = false, run = false } = {}) => {
-    if (!onHorse) { B.wantG = false; B.galloped = false; return; }
+    if (!onHorse) { B.wantG = false; B.galloped = false; B.runFrom = null; B.whooped = false; B.pushed = false; return; }
     const wantG = push && run;
     if (wantG && !B.wantG && speed < S.slow) B.ask('spur', now);   // (Shift and a direction, from a walk or a stand)
     B.wantG = wantG;
+    // a direction and Shift held a second, going well: the yeehaw (once a press)
+    if (!wantG) { B.runFrom = null; B.whooped = false; }
+    else if (B.runFrom == null) B.runFrom = now;
+    else if (!B.whooped && now - B.runFrom >= S.yeehawAfter && speed >= S.slow) { B.whooped = true; B.ask('yeehaw', now); }
     if (speed >= S.gallop && push) B.galloped = true;   // (galloping because the rider asks: not still slowing from one)
     if (B.galloped && !push && speed > S.stopFrom) { B.galloped = false; B.ask('whoa', now); }   // (let go at a gallop: pulling up)
     else if (B.galloped && speed < S.stopFrom) B.galloped = false;   // (slowed some other way: no whoa)
+    else if (!B.galloped && B.pushed && !push && speed > S.easyFrom) B.ask('easy', now);   // (let the reins go from a trot)
+    B.pushed = push;
+  };
+  // on foot, each frame (or a few times a second): the nearest moving horse (d: m, or null for none; closing: m/s the
+  // player is getting nearer to it) and how fast the player goes. Walking up to it or standing by it: "easy now"
+  B.horses = (now, { onHorse = false, d = null, closing = 0, speed = 0 } = {}) => {
+    const H = S.horse;
+    if (onHorse || d == null || d > H.apart) { B.met = false; return; }
+    if (B.met || d > H.near) return;
+    if (closing >= H.closing || speed < H.still) { B.met = true; B.ask('easy', now); }
   };
   B.next = (now, busy = false) => {
     B.queue = B.queue.filter((q) => now <= q.until);
@@ -197,6 +221,18 @@ function clipExt() {
   try { const el = document.createElement('audio'); if (/^(probably|maybe)$/.test(el.canPlayType('audio/ogg; codecs="vorbis"'))) return '.ogg'; } catch (e) { /* no audio element */ }
   return '.m4a';
 }
+
+// THE COINS at a job's end: a small handful dropping into the purse, each a short bright clink (a tick of noise for the
+// knock, and two quick metal rings that die away fast), a little apart and a little different each time
+export const JINGLE = {
+  level: 0.08,                  // each clink, into the game's master volume (the wagon job's sack clink is 0.07)
+  delay: 0.25,                  // s after the moment (as the gold lands)
+  coins: 5, spread: [0.045, 0.085],   // clinks, and s between one and the next
+  pitch: [2300, 3600],          // Hz: each coin's ring
+  rings: [[1, 1], [2.76, 0.35]], // its rings: [times the pitch, loudness]
+  ring: 0.16,                   // s: how long a ring takes to die away
+  tick: 0.006,                  // s: the knock of noise at its start
+};
 
 export function makeShouts({ audio, base = GAME, hush = () => false }) {
   const B = makeShoutBrain();
@@ -265,7 +301,8 @@ export function makeShouts({ audio, base = GAME, hush = () => false }) {
     return true;
   }
 
-  S.update = (dt, { P = null, I = null } = {}) => {
+  let horseT = 0;
+  S.update = (dt, { P = null, I = null, horses = null } = {}) => {
     if (!alive || !P) return;
     audio.need('shouts', true);
     clock += dt;
@@ -274,6 +311,20 @@ export function makeShouts({ audio, base = GAME, hush = () => false }) {
     if (S.speaking) place(where(nowWho));   // (the voice goes with whoever is talking)
     const push = !!(I && I.enabled !== false && I.move && I.move.mag >= 0.08);
     B.ride(clock, { onHorse: !!P.onHorse, speed: P.speed || 0, push, run: !!(I && I.run) });
+    // on foot: the nearest moving horse (the player's own, and any others the game names), a few times a second
+    if ((horseT -= dt) <= 0) {
+      const step = 0.15 - horseT; horseT = 0.15;
+      let d = null;
+      if (!P.onHorse) {
+        const st = P.state && P.state(), list = [];
+        if (st && st.horse && st.horse.mode !== 'ridden') list.push(st.horse);
+        if (horses) for (const h of horses() || []) list.push(h);
+        for (const h of list) if (h && (h.speed || 0) > SHOUTS.horse.moving) { const e = Math.hypot(h.x - pos.x, h.z - pos.z); if (d == null || e < d) d = e; }
+      }
+      const closing = d != null && B.lastD != null ? (B.lastD - d) / step : 0;
+      B.lastD = d;
+      B.horses(clock, { onHorse: !!P.onHorse, d, closing, speed: P.speed || 0 });
+    }
     const n = B.next(clock, S.speaking || !!hush());
     if (n) play(n.name, n.who);
   };
@@ -282,7 +333,32 @@ export function makeShouts({ audio, base = GAME, hush = () => false }) {
   S.heard = (event, data) => {
     if (event === 'banditCatch' || event === 'lootGuard') { const w = him(data); ask('sitdown', { then: w && w.male ? { kind: 'gotme', who: w, sure: true } : null }); return; }   // (lootGuard: the gang's guard at the cache)
     if (event === 'banditMiss') { ask('huh', { who: him(data) }); return; }
+    if (SHOUTS.jobEnds.includes(event)) { S.jingle(); return; }
     const k = SHOUTS.events[event]; if (k) ask(k);
+  };
+  let jingles = 0;
+  S.jingle = () => {
+    jingles++;
+    if (!alive || !ctx || !audio.running || !audio.out) return;
+    const J = JINGLE, c = ctx;
+    let t = c.currentTime + J.delay;
+    // one short buffer of noise for the knocks (made once)
+    if (!S._tick) { const n = Math.ceil(c.sampleRate * J.tick), b = c.createBuffer(1, n, c.sampleRate), d = b.getChannelData(0); for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n); S._tick = b; }
+    const nodes = [];
+    for (let k = 0; k < J.coins; k++) {
+      const f = rnd(J.pitch[0], J.pitch[1]), lv = J.level * (k === J.coins - 1 ? 1 : rnd(0.55, 0.9));
+      const g = c.createGain(); g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(lv, t + 0.002); g.gain.exponentialRampToValueAtTime(0.0003, t + J.ring);
+      g.connect(audio.out); nodes.push(g);
+      for (const [r, a] of J.rings) {
+        const o = c.createOscillator(); o.type = 'sine'; o.frequency.value = f * r * rnd(0.995, 1.005);
+        const og = c.createGain(); og.gain.value = a; o.connect(og).connect(g); o.start(t); o.stop(t + J.ring + 0.02); nodes.push(o, og);
+      }
+      const nz = c.createBufferSource(); nz.buffer = S._tick;
+      const hp = c.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 4500;
+      const ng = c.createGain(); ng.gain.value = lv * 1.6; nz.connect(hp).connect(ng).connect(audio.out); nz.start(t); nodes.push(nz, hp, ng);
+      t += rnd(J.spread[0], J.spread[1]);
+    }
+    setTimeout(() => { for (const n of nodes) { try { n.disconnect(); } catch (e) { /* gone */ } } }, (t - c.currentTime + J.ring + 0.3) * 1000);
   };
   S.talk = (what, who = null) => {
     const w = him(who);
@@ -297,7 +373,7 @@ export function makeShouts({ audio, base = GAME, hush = () => false }) {
   };
   S.say = (kind, who = null) => { if (SHOUTS.kinds[kind] && SHOUTS.kinds[kind].him) ask(kind, { who: him(who) }); };
   S.brain = B;   // (for rigs)
-  S.state = () => ({ on: !!ctx, loaded: Object.keys(buffers).length, clips: Object.keys(VOICE_CLIPS).length - SHOUTS.unused.length, speaking: S.speaking, now, asked,
+  S.state = () => ({ on: !!ctx, loaded: Object.keys(buffers).length, clips: Object.keys(VOICE_CLIPS).length - SHOUTS.unused.length, speaking: S.speaking, now, asked, jingles,
     queue: B.queue.map((q) => ({ kind: q.kind, at: q.at, until: q.until })), moments: { ...B.moments }, played: { ...played }, clock });
   S.dispose = () => {
     alive = false;

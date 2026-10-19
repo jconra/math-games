@@ -2,7 +2,7 @@
 // Run with:  node --test bandit-math/tests/shares.test.mjs   (SEED_OFFSET=1000 for another seed set)
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makeShares, makeShare, picture, LADDER, KINDS, FAMILIES, GOODS, PARSON, seeded as seededAt,
+import { makeShares, makeShare, picture, LADDER, KINDS, FAMILIES, GOODS, MATRON, seeded as seededAt,
   CLEAN_TO_CLIMB, MISS_DOWN, PLACEMENT_MISSES, PLACE_BELOW } from '../src/math/shares.js';
 
 const OFFSET = Number(process.env.SEED_OFFSET) || 0;
@@ -38,7 +38,7 @@ test('every problem: the sum works, one right coin, wrong coins are named real s
     if (p.kind === 'even') { assert.equal(p.total, p.groups * p.each); assert.equal(p.left, 0); assert.equal(n0(right), p.each); }
     if (p.kind === 'rem') { assert.equal(p.total, p.groups * p.each + p.left); assert.ok(p.left >= 1 && p.left < p.groups); assert.equal(right.v, `${p.each}/${p.left}`); }
     if (p.kind === 'leftover') {
-      if (/church/.test(p.ask)) { assert.equal(n0(right), p.total % p.groups); assert.equal(p.church, p.left); }
+      if (/orphans/.test(p.ask)) { assert.equal(n0(right), p.total % p.groups); assert.equal(p.orphans, p.left); }
       else if (/trips/.test(p.ask)) assert.equal(n0(right), Math.ceil(p.total / p.groups));
       else assert.equal(n0(right), Math.floor(p.total / p.groups));
     }
@@ -47,8 +47,8 @@ test('every problem: the sum works, one right coin, wrong coins are named real s
       assert.equal(got, p.total, 'every one of them goes back');
       assert.ok(p.hand.some((h) => h.gets === n0(right) && p.ask.includes(h.family.name)), 'the right coin is what the family asked about gets');
     }
-    // what goes back adds up: every family's share and the church box
-    if (p.kind === 'even' || p.kind === 'rem' || (p.kind === 'leftover' && /church/.test(p.ask))) assert.equal(p.hand.reduce((a, h) => a + h.gets, 0) + p.church, p.total);
+    // what goes back adds up: every family's share and the orphans' home's
+    if (p.kind === 'even' || p.kind === 'rem' || (p.kind === 'leftover' && /orphans/.test(p.ask))) assert.equal(p.hand.reduce((a, h) => a + h.gets, 0) + p.orphans, p.total);
     for (const c of p.coins) {
       assert.ok(n0(c) >= 0 && Number.isInteger(n0(c)), `${p.kind}: ${c.label}`);
       assert.ok(c.big && c.small && c.label, 'two lines and words');
@@ -125,17 +125,17 @@ test('climbing: 3 right first time up, a miss down, the first visit climbs and f
   assert.ok(kinds.includes(p.kind));
 });
 
-test('a trip dealt again from the folks already waiting: only their names, the church box only with the parson', () => {
+test('a trip dealt again from the folks already waiting: only their names, the orphans\' home only with its matron', () => {
   for (let seed = 1; seed <= 40; seed++) {
     const Q = makeShares({}, { rand: seeded(seed) });
     Q.setStep(1 + (seed % LADDER.length));
     const waiting = FAMILIES.slice(seed % 6, (seed % 6) + 2 + (seed % 4)).map((f) => f.name);
-    const withParson = seed % 2 ? [...waiting, PARSON.name] : waiting;
+    const withMatron = seed % 2 ? [...waiting, MATRON.name] : waiting;
     for (let k = 0; k < 6; k++) {
-      const p = Q.next({ among: withParson, only: true });
+      const p = Q.next({ among: withMatron, only: true });
       if (!p) continue;
       for (const h of p.hand) assert.ok(waiting.includes(h.family.name), `${h.family.name} is not waiting (${waiting})`);
-      if (!withParson.includes(PARSON.name)) assert.equal(p.church, 0, 'no church box without the parson');
+      if (!withMatron.includes(MATRON.name)) assert.equal(p.orphans, 0, "nothing for the orphans' home without its matron");
       assert.equal(p.step, Q.level().step);
     }
   }

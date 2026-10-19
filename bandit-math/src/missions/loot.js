@@ -43,7 +43,7 @@ import { makePerson } from '../actors/folk.js';
 import { loadRiderKit, makeRider } from '../actors/riders.js';
 import { makeTargetRing } from '../targetring.js';
 import { crateParts } from '../camps.js';
-import { makeShares, picture, FAMILIES, PARSON } from '../math/shares.js';
+import { makeShares, picture, FAMILIES, MATRON } from '../math/shares.js';
 import { makeStoreSlip } from '../ui/storeslip.js';
 import { earn, recordAnswer, countJob, saveRider } from '../save.js';
 
@@ -87,7 +87,7 @@ export const LOOT = {
 
 const MEN_THANKS = ['Much obliged, partner!', "That's mine, all right. Thank ya kindly!", 'Thank ya kindly!', 'You found it! Obliged.'];
 const WOMEN_THANKS = ['Bless you! Thank you kindly.', 'Oh, thank you! We thought it was gone for good.', "You're a real life saver.", 'Thank you, partner!'];
-const PARSON_THANKS = ['The church thanks you kindly.', "That'll go a long way at the church. Thank you."];
+const MATRON_THANKS = ['The children thank you kindly.', "That'll go a long way at the orphans' home. Thank you."];
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const way = (from, to) => { const a = Math.atan2(to.x - from.x, to.z - from.z); const k = Math.round(((a % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI) / (Math.PI / 4)) % 8; return ['south', 'south-east', 'east', 'north-east', 'north', 'north-west', 'west', 'south-west'][k]; };
@@ -148,7 +148,7 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
   const out = { x: Math.sin(rot), z: Math.cos(rot) }, side = { x: Math.cos(rot), z: -Math.sin(rot) };
   const free = (x, z) => !W.blocked(x, z) && W.waterAt(x, z) < 0.25;
   const spot = (() => { for (const k of [LOOT.spot, LOOT.spot + 1.5, LOOT.spot - 1, LOOT.spot + 3]) { const x = door.x + out.x * k, z = door.z + out.z * k; if (free(x, z)) return { x, z }; } return { x: door.x + out.x * LOOT.spot, z: door.z + out.z * LOOT.spot }; })();
-  // the folks' places: an arc between the spot and the door, facing the spot (the parson's at the end)
+  // the folks' places: an arc between the spot and the door, facing the spot (the matron's at the end)
   function arcSpots(n) {
     const out2 = [], base = Math.atan2(door.x - spot.x, door.z - spot.z), span = Math.min(1.7, 0.42 * (n - 1));
     for (let i = 0; i < n; i++) {
@@ -364,16 +364,16 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
     const n = first ? LOOT.bundles[0] : LOOT.bundles[1];
     const problems = [];
     for (let i = 0; i < n; i++) problems.push(Q.next({ among: fams }));
-    // who comes to the office: everyone a bundle goes back to, and the parson when there's a church box
+    // who comes to the office: everyone a bundle goes back to, and the orphans' home's matron when there's a leftover for it
     const names = new Set(); for (const p of problems) for (const h of p.hand) names.add(h.family.name);
     const families = FAMILIES.filter((f) => names.has(f.name));
-    if (problems.some((p) => p.church > 0)) families.push(PARSON);
+    if (problems.some((p) => p.orphans > 0)) families.push(MATRON);
     trip = { problems, at: 0, families, clean: true, stuffSaid: false };
     saveRider(rider);
   }
 
   // ── THE TOWNSFOLK WAITING AT THE OFFICE ────────────────────────────────────────────────────────────────────────
-  const people = LJ.people;   // { who (a family or the parson), p, x, z, yaw, home: { x, z, face }, to, state, walking }
+  const people = LJ.people;   // { who (a family or the matron), p, x, z, yaw, home: { x, z, face }, to, state, walking }
   function spawnFolks() {
     if (!trip || people.length) return;
     const places = arcSpots(trip.families.length);
@@ -404,7 +404,7 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
     if (c.wait > 0) { c.wait -= dt; c.p.update(dt); placePerson(c); return; }
     const dx = c.to.x - c.x, dz = c.to.z - c.z, d = Math.hypot(dx, dz);
     if (d > 0.06) {
-      if (!c.walking) { c.walking = true; c.p.play('Walk', { fade: 0.25, speed: LOOT.walk / (c.p.stride || 1.2) }); }
+      if (!c.walking) { c.walking = true; c.p.play('Walk', { fade: 0.25, speed: LOOT.walk / ((c.p.stride && c.p.stride.Walk) || 1.2) }); }   // (stride: m/s per clip, { Walk, Run })
       const st = Math.min(d, Math.min(LOOT.walk, d * 3) * dt);
       c.x += dx / d * st; c.z += dz / d * st;
       c.yaw += wrapA(Math.atan2(dx, dz) - c.yaw) * Math.min(1, dt * 7);
@@ -510,20 +510,20 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
     const names = trip.families.map((f) => f.name);
     for (let k = from; k < trip.problems.length; k++) { const q = Q.next({ among: names, only: true }); if (q) trip.problems[k] = q; }
   }
-  // the families (and the parson, for the church box) step up and take their share, and one or two say thank you
+  // the families (and the matron, for the orphans' home) step up and take their share, and one or two say thank you
   function handOver(p) {
     const takers = p.hand.filter((h) => h.gets > 0).map((h) => byFamily(h.family)).filter(Boolean);
-    if (p.church > 0) { const pc = byFamily(PARSON); if (pc) takers.push(pc); }
+    if (p.orphans > 0) { const pc = byFamily(MATRON); if (pc) takers.push(pc); }
     takers.forEach((c, k) => {
       const a = Math.atan2(c.x - spot.x, c.z - spot.z);
       const near = P.onHorse ? 2.3 : 1.5;   // (up to the rider: clear of the horse's flank when mounted)
       c.state = 'take'; c.to = { x: spot.x + Math.sin(a) * near, z: spot.z + Math.cos(a) * near }; c.walking = false; c.wait = 0.25 + k * 0.35;
     });
-    // a man's thank-you in his own voice, and a woman's in a card (or the parson's)
-    const man = takers.find((c) => !c.who.she && c.who !== PARSON), woman = takers.find((c) => c.who.she);
+    // a man's thank-you in his own voice, and a woman's in a card (the matron's too)
+    const man = takers.find((c) => !c.who.she && c.who !== MATRON), woman = takers.find((c) => c.who.she);
     const n = (trip.thanksN = (trip.thanksN || 0) + 1);
-    const first = woman && (n % 2 === 0 || !man) ? woman : man || (p.church > 0 ? byFamily(PARSON) : null);
-    if (first) setTimeout(() => { if (people.includes(first)) say(first, first.who === PARSON ? PARSON_THANKS[n % PARSON_THANKS.length] : (first.who.she ? WOMEN_THANKS : MEN_THANKS)[n % 4], { clip: 'thanks' }); }, 1300 + takers.indexOf(first) * 350);
+    const first = woman && (n % 2 === 0 || !man) ? woman : man || (p.orphans > 0 ? byFamily(MATRON) : null);
+    if (first) setTimeout(() => { if (people.includes(first)) say(first, first.who === MATRON ? MATRON_THANKS[n % MATRON_THANKS.length] : (first.who.she ? WOMEN_THANKS : MEN_THANKS)[n % 4], { clip: 'thanks' }); }, 1300 + takers.indexOf(first) * 350);
   }
   function finishTrip() {
     if (!trip || LJ.phase !== 'carrying') return;
@@ -631,8 +631,8 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
       // all there, a woman says it in a card)
       if (trip && !trip.stuffSaid && people.length && toSpot < LOOT.stuff + LOOT.arc) {
         const waiting = people.filter((c) => c.state === 'wait');
-        const man = waiting.find((c) => !c.who.she && c.who !== PARSON);
-        const any = man || (waiting.length === people.length || !people.some((c) => !c.who.she && c.who !== PARSON) ? waiting[0] : null);
+        const man = waiting.find((c) => !c.who.she && c.who !== MATRON);
+        const any = man || (waiting.length === people.length || !people.some((c) => !c.who.she && c.who !== MATRON) ? waiting[0] : null);
         if (any) { trip.stuffSaid = true; say(any, man ? 'Is that my stuff?' : 'Are those our things?', { clip: man ? 'mystuff' : null }); }
       }
       if (toSpot > LOOT.again) away = true;

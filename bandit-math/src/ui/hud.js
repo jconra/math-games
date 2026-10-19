@@ -27,6 +27,8 @@
 //                              as three's rotation.y: facing (sin, cos))
 //   H.caption(text, ms) | H.caption(null)   Old Hob's caption (hob.js says what)
 //   H.touch(on)                the round touch buttons
+//   H.callHorse(on)            the "call your horse" button (bottom right, with its key: H), while the horse is far off
+//                              or out of view; with the touch buttons up, their Horse button lights up instead
 //   H.perf(text | null)        the ?perf readout
 //   H.buckle(b, { delay })     a belt buckle just won (save.js countJob / recordLockbox's buckle): a short note with
 //                              the buckle drawn in it, low in the middle, for about three seconds; nothing to click
@@ -203,6 +205,7 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
       <div class="bmh-toast" role="status"></div>
     </div>
     <div class="bmh-hob" hidden><span class="bmh-hob-face">${HOB_FACE}</span><div class="bmh-hob-text"><b>Old Hob</b><span></span></div></div>
+    <button class="bmh-call" type="button" hidden title="Whistle for your horse (H)"><kbd>H</kbd>${ICON.horse}<span>Call your horse</span></button>
     <div class="bmh-touch" hidden>
       <button type="button" data-code="KeyE">On / off</button>
       <button type="button" data-code="KeyH">Horse</button>
@@ -220,6 +223,15 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
   tap($('.bmh-menu'), () => onMenu());
   tap(promptEl, () => onPrompt());
   for (const b of el.querySelectorAll('.bmh-touch button')) tap(b, () => onTouch(b.dataset.code));
+  const callEl = $('.bmh-call'), touchHorse = $('.bmh-touch [data-code="KeyH"]');
+  tap(callEl, () => onTouch('KeyH'));
+  let callOn = false;
+  function callHorse(on) {
+    callOn = !!on;
+    const fingers = !touchHorse.parentElement.hidden, hide = !callOn || fingers;
+    if (callEl.hidden !== hide) callEl.hidden = hide;
+    touchHorse.classList.toggle('is-call', callOn && fingers);
+  }
 
   // ── THE PURSE ─────────────────────────────────────────────────────────────────────────────────────────────────
   let lastGold = null;
@@ -425,7 +437,8 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
     el, ruleEl, hintEl, helpEl, jobEl: $('.bmh-job'),
     show(on) { el.classList.toggle('is-hidden', !on); if (!on) { prompt(null); caption(null); if (quiet()) { buckleQ.length = 0; if (buckleBusy && buckleWatch) endBuckle(); } } },
     purse, toast, prompt, caption, rule, hint, compass, buckle,
-    touch(on) { if (touchEl.hidden === !on) return; touchEl.hidden = !on; if (promptText) { const t = promptText; promptText = null; prompt(t); } placeBottom(); },
+    touch(on) { if (touchEl.hidden === !on) return; touchEl.hidden = !on; if (promptText) { const t = promptText; promptText = null; prompt(t); } placeBottom(); callHorse(callOn); },
+    callHorse,
     perf(text) { perfEl.hidden = !text; if (text) perfEl.textContent = text; },
     dispose() { clearTimeout(toastT); clearTimeout(hobT); clearInterval(buckleWatch); for (const t of buckleTs) clearTimeout(t); el.remove(); buckleEl.remove(); },
   };

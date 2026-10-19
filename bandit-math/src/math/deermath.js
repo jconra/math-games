@@ -31,7 +31,8 @@ export const DEERMATH = {
   withTimes: 'R3',           // ... and 3x = 12 when times tables are ticked
   // a rung the deer can't use as it is: the two warm-up rungs have no x to solve (balance, try a key) and the
   // legendary vault's answer can be "every key" or "none": the nearest real one-answer rung stands in
-  swap: { R0a: 'R1', R0b: 'R1', R15: 'R14' },
+  // (and the inequality rungs, past the vault: a deer number is one value, so the hardest equation rung stands in)
+  swap: { R0a: 'R1', R0b: 'R1', R15: 'R14', I1: 'R14', I2: 'R14', I3: 'R14', I4: 'R14' },
   sizeOf: { 2: 1, 3: 2, 4: 2, 5: 2 },   // the lock boxes' level on a rung -> how big the numbers are (as algebra.js)
   most: 99,                  // no tag bigger than this either way
   recent: 12,                // equations not dealt again within this many

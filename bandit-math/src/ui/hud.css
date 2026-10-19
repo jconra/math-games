@@ -201,12 +201,23 @@
 .bmh-hob-text b { display: block; font: 400 13px Smokum, Georgia, serif; letter-spacing: 0.06em; color: var(--brass); }
 .bmh-hob-text span { font: 500 16px/1.35 Bitter, Georgia, serif; color: var(--ink); }
 
+/* ── the "call your horse" button, bottom right (on a keyboard: the touch buttons have their own Horse) ────── */
+.bmh-call { position: absolute; right: 16px; bottom: 22px; display: flex; align-items: center; gap: 9px; padding: 8px 16px 8px 9px;
+  border-radius: 10px; background: var(--wood); border: 1px solid var(--brass); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  font: 600 17px Bitter, Georgia, serif !important; animation: bmh-in 0.2s ease-out; }
+.bmh-call[hidden] { display: none; }
+.bmh-call:hover { background: rgba(52, 36, 20, 0.9); }
+.bmh-call kbd { display: inline-grid; place-items: center; min-width: 30px; height: 30px; padding: 0 6px; border-radius: 6px;
+  font: 700 17px Bitter, Georgia, serif; color: #1d140c; background: linear-gradient(#f3c56b, #c89236); box-shadow: 0 2px 0 #7a5524; }
+.bmh-call svg { width: 26px; height: 26px; color: var(--brass); }
+
 /* ── touch buttons, bottom right ─────────────────────────────────────────────────────────────────────────── */
 .bmh-touch { position: absolute; right: 16px; bottom: 18px; display: flex; gap: 12px; align-items: flex-end; }
 .bmh-touch[hidden] { display: none; }
 .bmh-touch button { width: 68px; height: 68px; border-radius: 50%; background: rgba(40, 28, 16, 0.78); border: 2px solid rgba(226, 173, 76, 0.6);
   font: 600 13px Bitter, Georgia, serif; touch-action: manipulation; }
 .bmh-touch button.is-big { width: 84px; height: 84px; font-size: 16px; background: rgba(30, 80, 30, 0.72); border-color: #7dff8a; }
+.bmh-touch button.is-call { border-color: #f3c56b; box-shadow: 0 0 0 3px rgba(243, 197, 107, 0.45), 0 0 16px rgba(243, 197, 107, 0.55); }
 
 @media (max-width: 760px), (max-height: 480px) {
   .bmh-purse { left: 8px; top: 8px; min-width: 0; padding: 6px 10px; }
