@@ -6,9 +6,10 @@
 // lengths in words and the free end (tower.js, through bridge.js), touching (touch.js), sounds, wood textures.
 //
 // How a round goes: first set the gap (drag a bank's stone edge in or out: 6 to 24 feet; it locks when the first board
-// is nailed). Cut boards on the left, drag the pieces onto the view, nail them, exactly as the windmill's free boards: a
+// is nailed). Cut boards from the lumber panel, drag the pieces onto the view, nail them, exactly as the windmill's free boards: a
 // piece's first end goes in a SOCKET (a spot on the half foot on a bank's stone top or its stone wall, or along a board),
-// it stands straight up; then drag its free end, or tap the four arrows, until it reaches another board: it connects
+// it stands straight up; then drag its free end, or tap the arrows (the two pairs across the board: green east and
+// west, red up and down, blue south and north), until it reaches another board: it connects
 // there (its free end turns green); ✓ nails it, and a board too long can be sawn off at the joint. Each board nailed shows
 // its twins glowing: the same board on the other side of the bridge (front to back), at the other end (mirrored across
 // the middle of the gap), and both; a tap builds one, a double tap builds them all. Once both sides have horizontal boards
@@ -33,7 +34,7 @@ import { SPAN0, WIDTH, BOARDS, PLANKS, BOARD_FT, newBridge, cleanBridge, boardCo
   placeWords, roleOf, nounOf, deckLine, pointWords, touchesAny, grounded, contactsOf as contactsBr, asTower, lenLabel, lenWords, isLevelB, isUprightB, supportsOf } from './bridge.js';
 import { touch3 } from '../windmill/touch.js';
 import { faceOf } from '../windmill/frame.js';
-import { LOADS } from './frame.js';
+import { LOADS, inTheWay } from './frame.js';
 import { makeCrossing } from './crossing.js';
 import { trianglesOf, makeQuestion, bayQuestion, reachQuestion, ladderQuestion, questionOf, topicOf, questionDue, stepLadder, readLadder, LADDER_KEY, LADDER_TOP, BONUS_MAX, earnsBoard, WINDMILL_KEY } from './questions.js';
 import { showTeach } from '../windmill/teach.js';
@@ -54,7 +55,7 @@ const el = {
   view: $('view'), canvas: $('c'), overlay: $('overlay'), hint: $('hint'),
   count: $('count'), countWord: $('count-word'), bench: $('bench'), benchEmpty: $('bench-empty'), benchBoard: $('bench-board'), benchLabel: $('bench-label'),
   tape: $('tape'), saw: $('saw'), sawLabel: $('saw-label'), cutBtn: $('cut'), upNext: $('up-next'), pieces: $('pieces'), piecesEmpty: $('pieces-empty'),
-  gA: $('g-a'), gB: $('g-b'), arrows: ['g-xp', 'g-xm', 'g-zp', 'g-zm'].map($), nailBtn: $('nail'), bankHandles: [$('bank-w'), $('bank-e')],
+  gA: $('g-a'), gB: $('g-b'), arrows: ['g-xp', 'g-xm', 'g-zp', 'g-zm', 'g-yp', 'g-ym'].map($), nailBtn: $('nail'), bankHandles: [$('bank-w'), $('bank-e')],
   selBar: $('sel-bar'), selHint: $('sel-hint'), panel: $('panel'), trimBar: $('trim-bar'), trimHint: $('trim-hint'), trimSaw: $('trim-saw'), trimKeep: $('trim-keep'),
 };
 
@@ -163,7 +164,8 @@ const faceW = asTower(app.tower).W;
 app.heldOut = (w) => { const o = faceOf(w, faceW, app.tower.D).out; return { X: o.X * HELD_OFF, Y: o.Y * HELD_OFF, Z: o.Z * HELD_OFF }; };
 
 // ── names ─────────────────────────────────────────────────────────────────────────────────────────────────────────
-const FACE_NAMES = ['Front side', 'East end', 'Back side', 'West end'];
+// (which way the view looks, by the compass: the camera starts on the south side, looking north)
+const FACE_NAMES = ['Looking north', 'Looking west', 'Looking south', 'Looking east'];
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 let faceText = '';
 function showFaceName() {
@@ -178,7 +180,8 @@ function showTopAt() {
   if (src) {
     let p = src.a.Y >= src.b.Y ? src.a : src.b;
     if (held) { p = src.b; label = 'Free end'; }
-    else if (Math.abs(src.a.Y - src.b.Y) < 0.04) { const A = app.worldToScreen(src.a.X, src.a.Y, src.a.Z), B = app.worldToScreen(src.b.X, src.b.Y, src.b.Z); p = A.x >= B.x ? src.a : src.b; label = 'Right end'; }
+    // (a horizontal board picked out: its east end, or its south end if it runs across the bridge)
+    else if (Math.abs(src.a.Y - src.b.Y) < 0.04) { const ew = Math.abs(src.b.X - src.a.X) >= Math.abs(src.b.Z - src.a.Z); p = ew ? (src.a.X >= src.b.X ? src.a : src.b) : (src.a.Z >= src.b.Z ? src.a : src.b); label = ew ? 'East end' : 'South end'; }
     txt = label + '|' + pointWords(p).join('|');
   }
   if (txt === topAtText) return;
@@ -229,7 +232,8 @@ let idN = 1;
 let lastDown = null;
 function addBoard(spec) {
   const rec = makeBoard('b' + idN++, spec.a, spec.b, spec.len);
-  app.tower.boards.push(rec); app.placed.push({ rec }); lastDown = null; boardsSince++; return rec;
+  // (Undo now takes down this board, not a deck laid before it)
+  app.tower.boards.push(rec); app.placed.push({ rec }); lastDown = null; deckJustLaid = false; boardsSince++; return rec;
 }
 function lastHandLeft() {
   if (app.lastHand && app.tower.boards.includes(app.lastHand)) return;
@@ -257,7 +261,7 @@ app.onTrimClosed = (rec, how) => {
 };
 app.select = (src, note) => {
   const again = src && src === app.selected;
-  app.selected = src; towerView.highlight(src);
+  app.selected = src; towerView.highlight(src); markRoad();
   el.selBar.hidden = !src || app.phase !== 'build';
   if (!src) return;
   build.offerTrim(null);
@@ -361,7 +365,8 @@ let deckJustLaid = false, deckUpOffered = false;
 function layDeck() {
   const t = app.tower; if (t.deck || app.phase !== 'build') return false;
   const d = deckLine(t);
-  if (!d.planks) { say(d.why + '.', { key: 'nodeck', times: 3, force: true }); return false; }
+  // (not ready: the engineer says what is missing, and ghost lines show where the road-height boards go)
+  if (!d.planks) { app.roadGhost = { until: performance.now() + 9000, missing: d.missing }; say(d.why, { key: 'nodeck', times: 99, force: true, ms: 9000 }); return false; }
   if (d.planks.length > app.planks) { say(`That takes ${d.planks.length} planks and the pile has ${app.planks}.`, { force: true, times: 3, key: 'fewplanks' }); return false; }
   app.planks -= d.planks.length; t.deck = d; deckJustLaid = true; world.setPlankPile(app.planks);
   sound.hammer(2); setTimeout(() => sound.hammer(2), 300); setTimeout(() => sound.hammer(1), 600);
@@ -395,11 +400,33 @@ function rebuild() {
   $('nboards').textContent = String(boardCount(t)); $('plank-count').textContent = String(app.planks);
   showBest();
   refreshGhosts();
-  const can = !t.deck && boardCount(t) > 0 && !!deckLine(t).planks;
-  $('lay-deck').hidden = !can || app.phase !== 'build';
+  // ("Lay the deck" shows as soon as anything is built; it is ready once both sides reach bank to bank at road height)
+  const dl = !t.deck && boardCount(t) > 0 ? deckLine(t) : null;
+  $('lay-deck').hidden = !dl || app.phase !== 'build';
+  $('lay-deck').classList.toggle('is-not-ready', !!dl && !dl.planks);
+  if (dl && dl.planks) app.roadGhost = null;
+  markRoad();
   el.view.classList.toggle('has-deck-btn', !$('lay-deck').hidden);
   if (!deckUpOffered) $('pickup').textContent = 'Take it down';
   app.dirty = true;
+}
+// THE ROAD: with the deck laid, a board passing through the roadway (between the two sides, from the deck up to the
+// tallest load) is in the loads' way: tinted red, with a tag (build.js draws it) and a word from the engineer the first
+// time. The test stops a load on the bank for such a board; this says so sooner.
+const ROADWAY = { wide: Math.max(...LOADS.map((L) => L.wide)), tall: Math.max(...LOADS.map((L) => L.tall)) };
+const roadMats = new Map();
+let roadWas = '';
+function markRoad() {
+  const t = app.tower;
+  app.inRoad = t.deck ? inTheWay(t, ROADWAY) : [];
+  for (const id of app.inRoad) {
+    const b = towerView.boards.get(id); if (!b) continue;
+    let m = roadMats.get(b.mat); if (!m) { m = new THREE.MeshLambertMaterial({ map: b.mat.map, color: 0xff9a8c, emissive: 0x8a1a0c, emissiveIntensity: 0.45 }); roadMats.set(b.mat, m); }
+    b.mesh.material = m;
+  }
+  const key = app.inRoad.join(',');
+  if (key && key !== roadWas && app.phase === 'build') say(`${app.inRoad.length === 1 ? 'That board is' : 'Those boards are'} in the road: the loads would run into ${app.inRoad.length === 1 ? 'it' : 'them'}. A wagon needs the deck clear ${lenWords(ROADWAY.wide)} wide and ${lenWords(ROADWAY.tall)} up.`, { key: 'inroad', times: 3, force: true, ms: 8000 });
+  roadWas = key;
 }
 function showBest() { $('best').textContent = best.rating >= 0 ? LOADS[best.rating].short : '–'; placeFaceName(); }
 function fitStats() {
@@ -481,7 +508,8 @@ app.idleHint = () => {
     if (!seen) return `${ok.length === 1 ? 'Its twin glows' : `${ok.length} twins glow`} round the bridge: drag sideways to walk round and tap them`;
     if ((said.twinsBuilt || 0) < 3) return 'Tap a glowing twin to build it · double-tap builds them all';
   }
-  if (!$('lay-deck').hidden) return 'Both sides reach bank to bank: lay the deck';
+  if (app.inRoad && app.inRoad.length) return 'A board is in the road: the loads would run into it';
+  if (!$('lay-deck').hidden && !$('lay-deck').classList.contains('is-not-ready')) return 'Both sides reach bank to bank at road height: lay the deck';
   if (!app.orbited && boardCount(app.tower) > 0) return 'Drag to walk round the bridge, and up and down';
   return '';
 };
@@ -513,7 +541,7 @@ function afterNail(rec, first) {
   if (params.has('askall') || questionDue(handSince, boardsSince)) { const q = questionFor(rec, { slant, bay, tris }); setTimeout(() => ask(q), 450); boardsSince = 0; handSince = 0; return; }
   const sup = supportsOf(t, rec);
   if (first) {
-    say(sup.length && level ? 'A board resting on the bank. Run horizontal boards from bank to bank on both sides, front and back: the deck rests on those.'
+    say(sup.length && level ? 'A board resting on the bank. Run horizontal boards from bank to bank on both sides, north and south, at road height: the deck rests on those.'
       : sup.some((s) => s.kind === 'face') ? 'A foot set in a notch in the stone wall: it can push hard into the stone, and the stone pushes back.'
         : 'Good start. The deck rests on horizontal boards reaching from bank to bank, on both sides.', { force: true, ms: 9000 });
     return;
@@ -754,10 +782,20 @@ function loop() {
   else towerView.showHeld(null);
   showFaceName();
   showTopAt();
+  turnCompass();
   $('face-name').hidden = app.phase !== 'build';
   world.sun.position.set(cam.look.x - 0.55 * 40, 0.62 * 40, cam.look.z + 0.56 * 40); world.sun.target.position.copy(cam.look); world.sun.target.position.y = 0;
   renderer.render(scene, camera);
   frames++; fpsT += dt; if (fpsT > 0.5) { fps = frames / fpsT; frames = 0; fpsT = 0; if (perf) { $('perf').hidden = false; $('perf').textContent = `${fps.toFixed(0)} fps · ${renderer.info.render.calls} draws`; } }
+}
+
+// ── the compass: its N turned toward north (-Z) as the view shows it ──────────────────────────────────────────────
+const rose = $('compass-rose');
+let roseDeg = null;
+function turnCompass() {
+  const L = cam.look, O = project(L.x / FT, L.y / FT, L.z / FT), N = project(L.x / FT, L.y / FT, L.z / FT - 4);
+  const deg = Math.round(Math.atan2(N.x - O.x, -(N.y - O.y)) * 180 / Math.PI);
+  if (deg !== roseDeg) { roseDeg = deg; rose.setAttribute('transform', `rotate(${deg})`); }
 }
 
 // ── keys ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -770,7 +808,9 @@ addEventListener('keydown', (e) => {
   else if (e.key === 'Escape') { if (app.held) build.putBack(); else app.select(null); }
   else if (e.key === 'Enter' && app.held) el.nailBtn.click();
   else if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey)) $('undo').click();
-  else if (app.held && /^[wasd]$/i.test(e.key)) { const k = e.key.toLowerCase(); build.arrow(k === 'a' || k === 'd' ? 'X' : 'Z', k === 'd' || k === 's' ? 1 : -1); }
+  // (with a board in hand: A and D move its free end west and east, W and S north and south, R and F up and down, as the
+  // arrows do, the ones showing)
+  else if (app.held && /^[wasdrf]$/i.test(e.key)) { const k = e.key.toLowerCase(); build.arrow(k === 'a' || k === 'd' ? 'X' : k === 'r' || k === 'f' ? 'Y' : 'Z', k === 'd' || k === 's' || k === 'r' ? 1 : -1); }
 });
 addEventListener('pointerdown', () => sound.audioOn(), { capture: true });
 {
@@ -799,7 +839,7 @@ makeEngineer(scene).then((m) => {
   setTimeout(() => {
     if (!banksOpen()) return;
     say('Howdy! I\'m the engineer at this crossing. The river\'s 16 feet across here; drag a bank\'s stone edge in or out to change the gap. Then build me a bridge.', { force: true, ms: 10000 });
-    setTimeout(() => { if (banksOpen() && !app.held) say('Cut a board on the left and drag it onto a bank\'s stone. Both sides need boards reaching from bank to bank.', { key: 'start2', times: 1, force: true, ms: 9000 }); }, 10500);
+    setTimeout(() => { if (banksOpen() && !app.held) say('Cut a board from the lumber pile and drag it onto a bank\'s stone. Both sides need boards reaching from bank to bank.', { key: 'start2', times: 1, force: true, ms: 9000 }); }, 10500);
   }, 900);
 });
 
@@ -846,7 +886,7 @@ window.BR = {
     full: build.fullCount(), lumber: { stack: app.lumber.stack, bench: app.lumber.bench && app.lumber.bench.len, pieces: app.lumber.pieces.map((p) => +p.len.toFixed(3)) },
     held: app.held && { A: app.held.A, B: app.held.B, len: app.held.len, con: !!app.held.con }, ghosts: app.ghostList().length, best, fps,
     question: !$('question').hidden ? $('question').innerText : null, result: !$('result').hidden ? $('result').innerText : null, falling: fall.sticks.length, hint: el.hint.textContent,
-    say: $('say').hidden ? null : $('say-text').textContent, faceName: $('face-name').textContent, ladder: { ...ladder }, bonus: bonusEarned, layDeck: !$('lay-deck').hidden,
+    say: $('say').hidden ? null : $('say-text').textContent, faceName: $('face-name').textContent, inRoad: [...(app.inRoad || [])], deckReady: !$('lay-deck').hidden && !$('lay-deck').classList.contains('is-not-ready'), ladder: { ...ladder }, bonus: bonusEarned, layDeck: !$('lay-deck').hidden,
     trim: !el.trimBar.hidden ? el.trimHint.textContent : null }),
   worldToScreen: (X, Y, Z) => toPage(app.worldToScreen(X, Y, Z)),
   resetAll,

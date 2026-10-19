@@ -37,12 +37,12 @@ test('where a board rests: a board across a bank\'s edge bears at the edge, an e
   assert.ok(g.has(br.boards[0]) && !g.has(br.boards[1]));
 });
 
-test('twins: front to back, across the middle of the gap, and both; a lapped board\'s twin too', () => {
+test('twins: north to south, across the middle of the gap, and both; a lapped board\'s twin too', () => {
   const br = B.newBridge(16, 7);
   const west = bd(P(-8.5, 0, 3.5), P(-0.5, 0, 3.5), 'w');
   const tw = B.twinsOf(br, west);
   assert.equal(tw.length, 3);
-  assert.ok(tw.some((g) => near(g.a, P(-8.5, 0, -3.5))), 'the back side');
+  assert.ok(tw.some((g) => near(g.a, P(-8.5, 0, -3.5))), 'the north side');
   assert.ok(tw.some((g) => near(g.a, P(8.5, 0, 3.5))), 'the east end');
   assert.ok(tw.some((g) => near(g.a, P(8.5, 0, -3.5))), 'both');
   // the middle piece lapping the west and east pieces: its twin on the back is offered, and not taken by a lap
@@ -67,9 +67,9 @@ test('the deck: both sides from bank to bank at one height, a plank every 8 inch
   const br = B.newBridge(16, 7);
   const line = (Z, t) => [bd(P(-8.5, 0, Z), P(-0.5, 0, Z), t + 'w'), bd(P(0.5, 0, Z), P(8.5, 0, Z), t + 'e'), bd(P(-4, 0, Z), P(4, 0, Z), t + 'm')];
   br.boards.push(...line(3.5, 'f'));
-  assert.ok(/back side/.test(B.deckLine(br).why), 'one side only: no deck yet');
+  assert.ok(/north side/.test(B.deckLine(br).why), 'one side only: no deck yet');
   br.boards.push(...line(-3.5, 'k').slice(0, 2));
-  assert.ok(B.deckLine(br).why, 'a gap in the back line: no deck');
+  assert.ok(B.deckLine(br).why, 'a gap in the north line: no deck');
   br.boards.push(line(-3.5, 'k')[2]);
   const d = B.deckLine(br);
   assert.equal(d.y, 0); assert.equal(d.planks.length, 24); assert.equal(d.on.length, 6);
@@ -84,10 +84,80 @@ test('words: a board named by what it is and where, its lengths spelled out in a
   br.boards.push(bd(P(-8.5, 0, 3.5), P(-0.5, 0, 3.5), 'w'), bd(P(-8.5, 0, -3.5), P(-0.5, 0, -3.5), 'wb'), bd(P(0.5, 0, 3.5), P(8.5, 0, 3.5), 'e'), bd(P(0.5, 0, -3.5), P(8.5, 0, -3.5), 'eb'),
     bd(P(-4, 0, 3.5), P(4, 0, 3.5), 'm'), bd(P(-4, 0, -3.5), P(4, 0, -3.5), 'mb'));
   br.deck = B.deckLine(br);
-  assert.equal(B.placeWords(br, br.boards[0]), 'the bottom board on the front, 3½ ft out from the west bank');
-  assert.equal(B.spellUnits(B.placeWords(br, bd(P(-8, 0, 3.5), P(-4, -4, 3.5)))), 'the diagonal on the front, 2 feet out from the west bank, reaching 4 feet below the deck');
-  assert.equal(B.placeWords(br, bd(P(-4, 0, 3.5), P(-4, -4, 3.5))), 'the post on the front, 4 ft out from the west bank, reaching 4 ft below the deck');
-  assert.equal(B.placeWords(br, bd(P(-8, -4, 3.5), P(-8, -1, 3.5))), 'the post on the front, on the west bank, 4 ft down the stone wall');
-  assert.deepEqual(B.pointWords(P(-3, -4, 3.5)), ['3 ft west', '3½ ft front', '4 ft down']);
-  assert.deepEqual(B.pointWords(P(3, 4, -3.5)), ['3 ft east', '3½ ft back', '4 ft up']);
+  assert.equal(B.placeWords(br, br.boards[0]), 'the bottom board on the south side, 3½ ft out from the west bank');
+  assert.equal(B.spellUnits(B.placeWords(br, bd(P(-8, 0, 3.5), P(-4, -4, 3.5)))), 'the diagonal on the south side, 2 feet out from the west bank, reaching 4 feet below the deck');
+  assert.equal(B.placeWords(br, bd(P(-4, 0, 3.5), P(-4, -4, 3.5))), 'the post on the south side, 4 ft out from the west bank, reaching 4 ft below the deck');
+  assert.equal(B.placeWords(br, bd(P(-8, -4, 3.5), P(-8, -1, 3.5))), 'the post on the south side, on the west bank, 4 ft down the stone wall');
+  assert.deepEqual(B.pointWords(P(-3, -4, 3.5)), ['3 ft west', '3½ ft south', '4 ft down']);
+  assert.deepEqual(B.pointWords(P(3, 4, -3.5)), ['3 ft east', '3½ ft north', '4 ft up']);
+});
+
+test('the arrows: only the two pairs across the board show', () => {
+  assert.deepEqual(B.arrowAxes(P(-8, 0, 3.5), P(-8, 8, 3.5)).across, ['X', 'Z'], 'a post: green and blue');
+  assert.deepEqual(B.arrowAxes(P(-8, 0, 3.5), P(0, 0, 3.5)).across, ['Y', 'Z'], 'along the span: red and blue');
+  assert.deepEqual(B.arrowAxes(P(0, 0, -3.5), P(0, 0, 3.5)).across, ['X', 'Y'], 'across the bridge: green and red');
+  assert.deepEqual(B.arrowAxes(P(-8, 0, 3.5), P(-2, 4, 3.5)).across, ['Y', 'Z'], 'a flat diagonal along the span: red and blue');
+  assert.deepEqual(B.arrowAxes(P(-8, 0, 3.5), P(-4, 6, 3.5)).across, ['X', 'Z'], 'a steep one: green and blue');
+  assert.equal(B.arrowStep(P(-8, 0, 3.5), P(-8, 8, 3.5), 8, 'Y', -1), null, 'an arrow not showing does nothing');
+});
+
+test('the arrows: a board from a stone-top socket comes down to exactly level, half a foot a press, from any end', () => {
+  // the way a builder lays it: green east while it stands steep, then red down (the windmill's arrows could only reach
+  // level where dx² + dz² = L² on the half-foot grid: never with its end half a foot back, or with a sawn length)
+  for (const [A, len, back] of [[P(-8.5, 0, 3.5), 8, 0], [P(-8, 0, 3.5), 8, 0.5], [P(-8, 0, 3.5), 5.657, 0], [P(-4, -4, 3.5), 7.25, 1]]) {
+    let b = P(A.X, A.Y + len, A.Z);
+    for (let i = 0; i < back * 2; i++) b = B.arrowStep(A, b, len, 'Z', -1);
+    const ys = [];
+    for (let i = 0; i < 60 && Math.abs(b.Y - A.Y) > 1e-9; i++) {
+      const down = B.arrowAxes(A, b).across.includes('Y');
+      b = B.arrowStep(A, b, len, down ? 'Y' : 'X', down ? -1 : 1);
+      assert.ok(b, `a stop every press (len ${len})`);
+      if (down) ys.push(b.Y);
+    }
+    assert.ok(Math.abs(b.Y - A.Y) < 1e-9, `level at last (len ${len}, end ${back} ft back): ${b.Y}`);
+    assert.ok(Math.abs(Math.hypot(b.X - A.X, b.Y - A.Y, b.Z - A.Z) - len) < 1e-5, 'its length kept');
+    assert.ok(ys.every((y) => Number.isInteger(+(y * 2).toFixed(6)) || Math.abs(y - A.Y) < 1e-9), `red stops on the half foot from the bank top, or level: ${ys}`);
+  }
+  // one press below level is half a foot down, not a jump; the sign of its run is kept
+  const A = P(-8, 0, 3.5), lv = P(0, 0, 3.5), below = B.arrowStep(A, lv, 8, 'Y', -1);
+  assert.ok(Math.abs(below.Y + 0.5) < 1e-9 && below.X > A.X, JSON.stringify(below));
+  assert.deepEqual(B.arrowStep(A, below, 8, 'Y', 1), lv);
+});
+
+test('the arrows: a post leans and comes back straight; a board too short says so; never under the water', () => {
+  const A = P(-10, 0, 2.5);
+  let b = B.arrowStep(A, P(-10, 8, 2.5), 8, 'X', 1);
+  assert.ok(Math.abs(b.X + 9.5) < 1e-9 && b.Y < 8);
+  b = B.arrowStep(A, b, 8, 'Z', -1); assert.ok(Math.abs(b.Z - 2) < 1e-9);
+  b = B.arrowStep(A, b, 8, 'X', -1); b = B.arrowStep(A, b, 8, 'Z', 1);
+  assert.deepEqual(b, P(-10, 8, 2.5), 'straight up again: the socket\'s own X and Z are stops');
+  assert.equal(B.arrowStep(P(0, 0, 0), P(4, 0, 0), 4, 'Y', 1) && B.arrowStep(P(0, 0, 0), P(0.0, 4, 0), 4, 'X', 1) !== null, true);
+  let t = P(4, 0, 0); for (let i = 0; i < 20 && t; i++) t = B.arrowStep(P(0, 0, 0), t, 4, 'Z', 1) || null;
+  assert.equal(B.arrowStep(P(0, 0, 0), P(0, 0, 4), 4, 'Z', 1), null, 'too short to reach any further that way');
+  assert.equal(B.arrowStep(P(0, -2, 0), P(4, -2, 0), 4, 'Y', -1).Y, -2.5);
+  let w = P(4, -2, 0); for (let i = 0; i < 10; i++) w = B.arrowStep(P(0, -2, 0), w, 4, 'Y', -1) || w;
+  assert.ok(w.Y >= B.WATER_Y - 1e-9, `never below the water: ${w.Y}`);
+});
+
+test('the deck meets the road: refused on boards below the stone tops, laid at the stone tops\' height on road-height boards', () => {
+  const lines = (y, tag) => [-3.5, 3.5].flatMap((Z) => [bd(P(-8.5, y, Z), P(-0.5, y, Z), tag + Z + 'w'), bd(P(0.5, y, Z), P(8.5, y, Z), tag + Z + 'e'), bd(P(-4, y, Z), P(4, y, Z), tag + Z + 'm')]);
+  // both sides from bank to bank, a foot and a half below the stone tops: no deck there, and the words say why
+  const low = { ...B.newBridge(16, 7) }; low.boards = lines(-1.5, 'lo');
+  const d = B.deckLine(low);
+  assert.equal(d.planks, undefined, 'never a sunk deck');
+  assert.match(d.why, /The deck has to meet the road: put a board on each side from the top of one stone to the other/);
+  assert.match(d.why, /1½ feet below the road/);
+  assert.deepEqual(d.missing, ['south', 'north']);
+  // and a raised line (a side rail 3 ft up) is no deck line either
+  const high = { ...B.newBridge(16, 7) }; high.boards = lines(3, 'hi');
+  assert.equal(B.deckLine(high).planks, undefined, 'never a raised deck');
+  // boards at road height: laid there, the low ones under them left as supports
+  const both = { ...B.newBridge(16, 7) }; both.boards = [...lines(-1.5, 'lo'), ...lines(0, 'rd')];
+  const ok = B.deckLine(both);
+  assert.equal(ok.y, 0); assert.equal(ok.planks.length, 24);
+  assert.ok(ok.on.every((id) => id.startsWith('rd')), 'the planks rest on the road-height boards only');
+  assert.ok(ok.planks.every((p) => Math.abs(p.a.Y - B.DECK_LIFT) < 1e-9), 'the planks at the stone tops\' height (their line just over the boards\' line)');
+  // only one side at road height: says which side still needs one
+  const one = { ...B.newBridge(16, 7) }; one.boards = lines(0, 'rd').filter((b) => b.a.Z > 0);
+  assert.match(B.deckLine(one).why, /the north side needs a board from the top of one stone to the other/);
 });

@@ -9,7 +9,7 @@
 <script src="../../oops.js"></script>
 <link rel="stylesheet" href="../../src/ui/fonts/fonts.css">
 <link rel="stylesheet" href="../windmill/windmill.css?v=23">
-<link rel="stylesheet" href="bridge.css?v=2">
+<link rel="stylesheet" href="bridge.css?v=5">
 <script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/" } }</script>
 </head>
 <body>
@@ -44,8 +44,10 @@
     <div class="gz end free" id="g-b" hidden title="Drag the free end onto a board"></div>
     <div class="gz arrow" id="g-xp" hidden title="Free end half a foot east (+X)"></div>
     <div class="gz arrow" id="g-xm" hidden title="Free end half a foot west (−X)"></div>
-    <div class="gz arrow" id="g-zp" hidden title="Free end half a foot to the front (+Z)"></div>
-    <div class="gz arrow" id="g-zm" hidden title="Free end half a foot to the back (−Z)"></div>
+    <div class="gz arrow" id="g-zp" hidden title="Free end half a foot south (+Z)"></div>
+    <div class="gz arrow" id="g-zm" hidden title="Free end half a foot north (−Z)"></div>
+    <div class="gz arrow" id="g-yp" hidden title="Free end half a foot up (+Y)"></div>
+    <div class="gz arrow" id="g-ym" hidden title="Free end half a foot down (−Y)"></div>
     <button class="nail-it" id="nail" hidden aria-label="Nail it" title="Nail it (Enter)"><svg viewBox="0 0 24 24"><path d="M4.5 12.5l5 5L19.5 7"/></svg></button>
     <div class="gz stone" id="bank-w" hidden title="Drag the bank's edge in or out"></div>
     <div class="gz stone" id="bank-e" hidden title="Drag the bank's edge in or out"></div>
@@ -62,7 +64,8 @@
         <div class="snd"><button class="btn icon" id="mute" aria-label="Sound on or off" title="Sound on/off"><svg viewBox="0 0 24 24"><path class="spk" d="M4 9h4l5-4v14l-5-4H4z"/><path class="wav" d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/><path class="x" d="M16 9l6 6M22 9l-6 6"/></svg></button><input type="range" id="vol" min="0" max="100" value="80" aria-label="Volume" title="Volume"></div>
       </div>
     </div>
-    <div class="wall-name" id="face-name">Front side</div>
+    <div class="wall-name" id="face-name">Looking north</div>
+    <div class="compass" id="compass" aria-label="Compass" title="Which way is north"><svg viewBox="-30 -30 60 60"><circle r="27" class="ring"/><g id="compass-rose"><path d="M0 -21 L5 0 L0 3 L-5 0 Z" class="north"/><path d="M0 21 L5 0 L0 -3 L-5 0 Z" class="south"/><text y="-22" class="n">N</text><text y="27" class="o">S</text><text x="25" y="3" class="o">E</text><text x="-25" y="3" class="o">W</text></g></svg></div>
     <div class="hint-line" id="hint"></div>
     <div class="bar sel" id="sel-bar" hidden>
       <div class="hint" id="sel-hint">This board</div>
@@ -85,6 +88,6 @@
   </main>
 </div>
 <div class="loading" id="loading">Down to the river…</div>
-<script type="module" src="main.js?v=2"></script>
+<script type="module" src="main.js?v=5"></script>
 </body>
 </html>

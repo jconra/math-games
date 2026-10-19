@@ -17,3 +17,22 @@
 /* the engineer's bubble never takes a tap meant for a button under it, and on a phone it stands above "Lay the deck" */
 .say { pointer-events: none; }
 @media (max-width: 700px) { #view.has-deck-btn .say { bottom: 118px; } }
+/* the red arrows: the free end up and down (the green and blue are the windmill's) */
+#overlay .arrow3d.is-y { fill: #e0483c; }
+/* the deck: "Lay the deck" before the road-height boards are there (it says what is missing), the ghost lines at road
+   height, and a board in the road */
+.btn.lay-deck.is-not-ready { background: linear-gradient(#a08a6a, #7d6a4e); color: #2a1a08; opacity: .85; }
+#overlay .roadghost { stroke: #f3c56b; stroke-width: 5; stroke-dasharray: 12 9; stroke-linecap: round; fill: none; opacity: .95; filter: drop-shadow(0 1px 2px rgba(0,0,0,.6)); }
+#overlay .roadtag rect { fill: rgba(176, 40, 24, .92); stroke: rgba(255,255,255,.7); stroke-width: 1; }
+#overlay .roadtag text { fill: #fff; font: 700 12px Bitter, Georgia, serif; text-anchor: middle; }
+#overlay .roadtag.is-ghost rect { fill: rgba(60, 40, 14, .88); stroke: #f3c56b; }
+#overlay .roadtag.is-ghost text { fill: #f3c56b; }
+/* the compass under the tools: its N points north as the view shows it */
+.compass { position: absolute; z-index: 7; right: 12px; top: 66px; width: 58px; height: 58px; pointer-events: none; filter: drop-shadow(0 2px 4px rgba(0,0,0,.6)); }
+.compass svg { width: 100%; height: 100%; display: block; }
+.compass .ring { fill: rgba(30, 20, 12, .78); stroke: var(--brass, #e2ad4c); stroke-width: 2; }
+.compass .north { fill: #e0483c; stroke: rgba(0,0,0,.5); stroke-width: .8; }
+.compass .south { fill: #f4e8cf; stroke: rgba(0,0,0,.5); stroke-width: .8; }
+.compass text { font: 700 9px Bitter, Georgia, serif; text-anchor: middle; fill: #f4e8cf; }
+.compass text.n { fill: #f3c56b; font-size: 10px; }
+@media (max-width: 700px) { .compass { right: 8px; top: 58px; width: 48px; height: 48px; } }

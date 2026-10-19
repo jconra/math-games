@@ -13,13 +13,18 @@
 //     its length kept. As soon as the board can reach another board near where the finger takes the end, it CONNECTS:
 //     the ring turns green and the board lies right through that spot. A board too long for that spot sticks out past
 //     the joint and stays green while the end slides on along the board it is over.
-//   * four ARROWS in the upper part of the view, lying on the ground's directions: the green pair moves the free end
-//     half a foot along X (east and west), the blue pair half a foot along Z (front and back), counted from the middle.
+//   * ARROWS in the upper part of the view, lying along the world's directions (the bridge's own, not the windmill's):
+//     green along X (east and west), red along Y (up and down), blue along Z (south and north). Only the two pairs that
+//     run ACROSS the board show (a board along the span: red and blue; a post: green and blue; a board across the
+//     bridge: green and red), so a press never pushes the board along itself. Each press moves the free end to the next
+//     stop on its axis: the half foot counted from the middle of the gap (X), the bank top (Y), the bridge's centre line
+//     (Z), and the socket's own X, Y or Z (so level, straight up and square across are always stops); the board's other
+//     across axis stays where it is, and the coordinate along the board follows from its length.
 //   * ✓ (fixed at the bottom right) nails it; a board sticking out past its joint then offers "Saw off the extra".
 //   * anywhere else: drag to walk round the bridge and up and down; two fingers or the wheel zoom. A tap picks a glowing
 //     twin (builds it) or a nailed board (to take it down, or saw its overhang off).
 // A finger on the cut pieces: straight up and down scrolls the panel; any other way, or onto the view, lifts the piece.
-import { SNAP, BOARD_FT, SPAN_MIN, SPAN_MAX, inBounds, spotTaken, lenLabel, lenWords, socketsOf, freeEnd, reachOn, connectTo, connectAlong, offcutOf, along as alongB, isPost, contactsOf as contactsBr } from './bridge.js';
+import { SNAP, BOARD_FT, SPAN_MIN, SPAN_MAX, inBounds, spotTaken, lenLabel, lenWords, socketsOf, freeEnd, reachOn, connectTo, connectAlong, offcutOf, along as alongB, isPost, contactsOf as contactsBr, arrowAxes as arrowAxesOf, arrowStep } from './bridge.js';
 import { touch3, pointGap, TOL } from '../windmill/touch.js';
 import * as sound from '../windmill/sound.js';
 const contactsIn3D = (me, boards, br) => contactsBr(br, me, boards);
@@ -355,8 +360,11 @@ export function makeBuild(app) {
     connectHere(h);
   }
   // does the board as it lies pass through another board? Then it connects there (its line squared onto that spot)
+  // (the bridge's: when the free end, squared onto that board, ends up lying on it, as a board laid level along another
+  // one does, its end is the joint and nothing sticks out past it)
   function connectHere(h) {
     const c = connectAlong(T(), h.A, h.B, h.len, { skip: atSocket(h) });
+    if (c) { const g = pointGap(c.b, c.o); if (g.d < TOL) { h.B = { ...c.b }; h.con = { o: c.o, s: g.t, P: { ...c.b }, past: 0, b: { ...c.b } }; return; } }
     h.con = c ? { o: c.o, s: c.s, P: c.P, past: c.past, b: c.b } : null;
     if (c) h.B = c.b;
   }
@@ -366,17 +374,18 @@ export function makeBuild(app) {
     h.A = { X: S.X, Y: S.Y, Z: S.Z }; h.on = S.on || null;
     setRun(h, dx, dz, up);
   }
-  // the four arrows: the free end to the next half foot along X or Z, counted from the tower's middle (so free ends
-  // stepped by arrows from different sockets meet: 1 ft, 1½ ft, never 11 in. then 1 ft 5 in.); its height from its
-  // length. false when it can't reach.
-  const nextHalf = (x, sg) => (sg > 0 ? Math.floor(x / SNAP + 1e-6) + 1 : Math.ceil(x / SNAP - 1e-6) - 1) * SNAP;
+  // THE ARROWS (the bridge's own: bridge.js arrowAxes / arrowStep; the windmill's moved the free end along X or Z with
+  // its height from its length, so a level board needed dx² + dz² = L² on the half-foot grid exactly, and from most
+  // sockets no stop was level). A press moves the free end to the next stop on its axis, across the board; then, as
+  // always, if the board now passes through another board it connects there.
+  const AXES = ['X', 'Y', 'Z'];
+  const arrowAxes = (h) => arrowAxesOf(h.A, h.B);
   function arrow(ax, sg) {
     const h = app.held; if (!h || app.phase !== 'build') return false;
-    // (from where the free end really is, the other way left as it is)
-    const before = snapOfHeld(h), { up } = runOf(h), dx = h.B.X - h.A.X, dz = h.B.Z - h.A.Z;
-    const nx = ax === 'X' ? nextHalf(h.B.X, sg) - h.A.X : dx, nz = ax === 'Z' ? nextHalf(h.B.Z, sg) - h.A.Z : dz;
-    if (!freeEnd(h.A, h.len, nx, nz, up) && !freeEnd(h.A, h.len, nx, nz, 1)) { sound.clatter(h.len * 0.3, 'set', undefined, 0.12); h.tooFar = now(); app.dirty = true; return false; }
-    setRun(h, nx, nz, up);
+    if (!arrowAxes(h).across.includes(ax)) return false;
+    const before = snapOfHeld(h), B = arrowStep(h.A, h.B, h.len, ax, sg);
+    if (!B) { sound.clatter(h.len * 0.3, 'set', undefined, 0.12); h.tooFar = now(); app.dirty = true; return false; }
+    h.B = B; connectHere(h);
     h.fresh = false; h.start = false; keepHist(before);
     sound.clatter(h.len * 0.4, 'set', undefined, h.con ? 0.35 : 0.18); app.dirty = true;
     return true;
@@ -575,7 +584,7 @@ export function makeBuild(app) {
   el.gA.addEventListener('pointerdown', (e) => startGrab('socket', e));
   el.gB.addEventListener('pointerdown', (e) => startGrab('free', e));
   // the arrows: a tap moves the free end half a foot (a press held down repeats)
-  const ARROWS = [['X', 1], ['X', -1], ['Z', 1], ['Z', -1]];
+  const ARROWS = [['X', 1], ['X', -1], ['Z', 1], ['Z', -1], ['Y', 1], ['Y', -1]];
   let arrowRepeat = null;
   (el.arrows || []).forEach((node, i) => {
     node.addEventListener('pointerdown', (e) => {
@@ -758,17 +767,26 @@ export function makeBuild(app) {
   // -). Each a fat arrow ARROW_FT long in that picture, scaled so the longer pair is ARROW_PX on the screen.
   // -> { C (the middle, view pixels), tips: [{ x, y } x4] (where each arrow's hit spot goes), svg }
   const ARROW_PX = 64;
-  function arrowsAt(r) {
+  // (the bridge's: the two pairs running across the board in hand, red along Y with the green and blue)
+  function arrowsAt(r, shown = ['X', 'Z']) {
     const look = app.lookAt ? app.lookAt() : { X: 0, Y: 0, Z: 0 };
-    const O = app.worldToScreen(look.X, look.Y, look.Z), PX = app.worldToScreen(look.X + 1, look.Y, look.Z), PZ = app.worldToScreen(look.X, look.Y, look.Z + 1);
-    let ex = { x: PX.x - O.x, y: PX.y - O.y }, ez = { x: PZ.x - O.x, y: PZ.y - O.y };
-    const k = ARROW_PX / Math.max(1e-6, Math.hypot(ex.x, ex.y), Math.hypot(ez.x, ez.y));
-    ex = { x: ex.x * k, y: ex.y * k }; ez = { x: ez.x * k, y: ez.y * k };
+    const O = app.worldToScreen(look.X, look.Y, look.Z), P = { X: app.worldToScreen(look.X + 1, look.Y, look.Z), Y: app.worldToScreen(look.X, look.Y + 1, look.Z), Z: app.worldToScreen(look.X, look.Y, look.Z + 1) };
+    const e = {}; for (const a of AXES) e[a] = { x: P[a].x - O.x, y: P[a].y - O.y };
+    const k = ARROW_PX / Math.max(1e-6, ...shown.map((a) => Math.hypot(e[a].x, e[a].y)));
+    for (const a of AXES) e[a] = { x: e[a].x * k, y: e[a].y * k };
     // (never squashed flatter than a third of its length, so a pair seen nearly edge on can still be hit)
-    const fat = (e) => { const l = Math.hypot(e.x, e.y); return l < ARROW_PX * 0.45 ? { x: e.x / (l || 1) * ARROW_PX * 0.45, y: (e.y / (l || 1)) * ARROW_PX * 0.45 } : e; };
-    ex = fat(ex); ez = fat(ez);
+    const fat = (v) => { const l = Math.hypot(v.x, v.y); return l < ARROW_PX * 0.45 ? { x: v.x / (l || 1) * ARROW_PX * 0.45, y: (v.y / (l || 1)) * ARROW_PX * 0.45 } : v; };
+    for (const a of AXES) e[a] = fat(e[a]);
+    // (two pairs pointing nearly the same way on the screen, up and toward you seen from the front: each keeps its true
+    // direction, and the two stand side by side instead of on top of each other)
+    const [s0, s1] = shown, n0 = Math.hypot(e[s0].x, e[s0].y) || 1, n1 = Math.hypot(e[s1].x, e[s1].y) || 1;
+    const inLine = Math.abs((e[s0].x * e[s1].x + e[s0].y * e[s1].y) / (n0 * n1)) > 0.92;
+    const perp = (a) => { const l = Math.hypot(e[a].x, e[a].y) || 1; return { x: -e[a].y / l * ARROW_PX * 0.8, y: e[a].x / l * ARROW_PX * 0.8 }; };
     const top = el.hint && !el.hint.hidden && el.hint.textContent ? el.hint.getBoundingClientRect().bottom - r.top : 80;
-    const C = { x: r.width / 2, y: clamp(Math.max(top + ARROW_PX + 12, r.height * 0.26), 120, r.height * 0.45) };
+    const C0 = { x: r.width / 2, y: clamp(Math.max(top + ARROW_PX + 12, r.height * 0.26), 120, r.height * 0.45) };
+    // (where each pair stands: both round the one spot, or side by side when they line up)
+    const side = inLine ? perp(s0) : { x: 0, y: 0 }, at = { [s0]: { x: C0.x - side.x * 0.75, y: C0.y - side.y * 0.75 }, [s1]: { x: C0.x + side.x * 0.75, y: C0.y + side.y * 0.75 } };
+    let C = C0;
     // an arrow along u (a unit pair in the picture), w the other pair: a shaft from 0.25 to 0.7 and a head to 1.05
     const shape = (u, w, s) => {
       const P = (a, b) => ({ x: C.x + s * (u.x * a) + w.x * b, y: C.y + s * (u.y * a) + w.y * b });
@@ -776,11 +794,13 @@ export function makeBuild(app) {
     };
     const tips = [], svg = [];
     ARROWS.forEach(([ax, sg]) => {
-      const u = ax === 'X' ? ex : ez, w = ax === 'X' ? ez : ex, pts = shape(u, w, sg);
+      if (!shown.includes(ax)) { tips.push(null); return; }
+      C = at[ax];
+      const u = e[ax], w = inLine ? perp(ax) : e[shown.find((a) => a !== ax)], pts = shape(u, w, sg);
       tips.push({ x: C.x + sg * u.x * 0.66, y: C.y + sg * u.y * 0.66 });
-      svg.push(`<polygon class="arrow3d ${ax === 'X' ? 'is-x' : 'is-z'}" points="${pts.map((q) => q.x.toFixed(1) + ',' + q.y.toFixed(1)).join(' ')}"/>`);
+      svg.push(`<polygon class="arrow3d is-${ax.toLowerCase()}" points="${pts.map((q) => q.x.toFixed(1) + ',' + q.y.toFixed(1)).join(' ')}"/>`);
     });
-    return { C, tips, svg: svg.join('') };
+    return { C: C0, tips, svg: svg.join('') };
   }
   // the held board's state this frame, for main.js (its ends' green glow)
   let heldInfo = null;
@@ -789,7 +809,8 @@ export function makeBuild(app) {
     const h = app.held, svg = el.overlay, building = app.phase === 'build', t = T();
     const show = !!h && building;
     el.gA.hidden = !show; el.gB.hidden = !show;
-    (el.arrows || []).forEach((n) => { n.hidden = !show; });
+    const shownAx = show ? arrowAxes(h).across : [];
+    (el.arrows || []).forEach((n, i) => { n.hidden = !show || !shownAx.includes(ARROWS[i][0]); });
     el.nailBtn.hidden = !show; el.view.classList.toggle('is-holding', show);
     // (a question card open never closes it: the bar only hides under the card and comes back after)
     const asking = app.phase === 'question';
@@ -826,10 +847,10 @@ export function makeBuild(app) {
         for (const s of sockets()) { const P = app.worldToScreen(s.X, s.Y, s.Z); if (!P.behind && Math.hypot(P.x - fx, P.y - fy) < 110) out += `<circle class="sock" cx="${P.x.toFixed(1)}" cy="${P.y.toFixed(1)}" r="3.5"/>`; }
       }
       // the arrows, and their hit spots
-      const arr = arrowsAt(r);
+      const arr = arrowsAt(r, shownAx);
       out += arr.svg;
-      (el.arrows || []).forEach((n, i) => place(n, arr.tips[i]));
-      const cs = contactsOf(h), tag = tagPlacer(r, [box(nailAt, 54), box(Ah, 40), box(Bh, 40), ...arr.tips.map((q) => box(q, 50))]);
+      (el.arrows || []).forEach((n, i) => { if (arr.tips[i]) place(n, arr.tips[i]); });
+      const cs = contactsOf(h), tag = tagPlacer(r, [box(nailAt, 54), box(Ah, 40), box(Bh, 40), ...arr.tips.filter(Boolean).map((q) => box(q, 50))]);
       let rings = '', tags = '';
       // the joint where the free end connected (a green circle), and the part past it (pale, the saw line)
       if (h.con) {
@@ -862,6 +883,27 @@ export function makeBuild(app) {
     } else if (building && app.selected) {
       const n = nailedOverhang(app.selected);
       if (n && n.list.length) { out += drawOverhang((tt) => boardScreen(n.board, tt), n.list); hint = 'Tap ✂ saw off (or the pale end) to cut it off'; }
+    }
+    // the road height, where the deck's boards go (after "Lay the deck" was tapped too soon): a ghost line along each side
+    // still missing one, from the top of one stone to the other
+    if (building && app.roadGhost && performance.now() < app.roadGhost.until) {
+      for (const sd of app.roadGhost.missing || ['south', 'north']) {
+        const Z = (sd === 'south' ? 1 : -1) * t.D / 2, A = app.worldToScreen(-t.S / 2 - 0.5, 0, Z), B = app.worldToScreen(t.S / 2 + 0.5, 0, Z);
+        if (A.behind || B.behind) continue;
+        out += `<line class="roadghost" x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}"/>`;
+        const M = { x: (A.x + B.x) / 2, y: (A.y + B.y) / 2 - 18 };
+        out += `<g class="roadtag is-ghost"><rect x="${M.x - 58}" y="${M.y - 11}" width="116" height="22" rx="11"/><text x="${M.x}" y="${M.y + 4}">road height</text></g>`;
+      }
+    }
+    // boards in the road (the deck laid): a red tag on each
+    if (building && app.inRoad && app.inRoad.length) {
+      const r = el.view.getBoundingClientRect(), tag = tagPlacer(r);
+      for (const id of app.inRoad) {
+        const b = T().boards.find((q) => q.id === id); if (!b) continue;
+        const M = app.worldToScreen((b.a.X + b.b.X) / 2, (b.a.Y + b.b.Y) / 2, (b.a.Z + b.b.Z) / 2); if (M.behind) continue;
+        const c = tag(96, 22, [[0, -26], [0, 26], [60, 0], [-60, 0]].map(([dx, dy]) => ({ x: M.x + dx, y: M.y + dy })), true); if (!c) continue;
+        out += `<g class="roadtag"><rect x="${c.x - 48}" y="${c.y - 11}" width="96" height="22" rx="11"/><text x="${c.x}" y="${c.y + 4}">in the road</text></g>`;
+      }
     }
     // the board just nailed, offered a trim: its extra drawn pale with the saw line
     if (building && !h && trim && T().boards.includes(trim.rec)) {
@@ -903,7 +945,7 @@ export function makeBuild(app) {
     if (hint !== hintText) { hintText = hint; el.hint.textContent = hint; }
   }
 
-  return { freshStack, renderPanel, frame, putBack, undoHeld, returnPiece, contactsOf, cut, takeUp, toBench, payFor, woodFor, addOffcut, arrow, dragFree, placeSocket, socketAt, sockets, setRun,
+  return { freshStack, renderPanel, frame, putBack, undoHeld, returnPiece, contactsOf, cut, takeUp, toBench, payFor, woodFor, addOffcut, arrow, arrowAxes, dragFree, placeSocket, socketAt, sockets, setRun,
     nailedOverhang, cutNailed, fullCount, giveBoard, worldOf, flash, groups, offerTrim, sawTrim, canNail,
     get trim() { return trim; }, get heldInfo() { return heldInfo; }, get cutAt() { return cutAt; }, set cutAt(v) { cutAt = v; renderPanel(); } };
 }

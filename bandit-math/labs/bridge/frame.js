@@ -32,10 +32,18 @@
 //
 // Exports: crossTest(bridge) (the whole test: every load in turn, as long as the bridge carries them), LOADS, SECTIONS,
 // and for the rigs and tests solveLoads (one set of weights, no giving way) and internals.
-import { WOOD, NAILS, TOE_SHARE, TOL, internals as WI } from '../windmill/frame.js';
+import { WOOD as WOOD_W, NAILS as NAILS_W, TOE_SHARE, TOL, internals as WI } from '../windmill/frame.js';
 import { supportsOf, FACE_W, PLANK, DECK_LIFT, deckLine } from './bridge.js';
 
 const { prepBoards, faceToFace, markLegs, nailUse, rcm, makeEnvelope, factor, solveEnv, toWorld, groundedSet } = WI;
+// The bridge's wood and nails are stronger than the windmill's (its numbers are on the cautious side): clear, dry pine
+// (a 2x4 snaps at about 2,300 pound-feet, not 1,500) and nails at full strength (three 16-penny nails hold about
+// 1,200-1,500 lb, not 750). Only what they hold changes; how stiff they are stays the windmill's.
+const WOOD_STRONG = 1.6, NAIL_STRONG = 1.8;
+const WOOD = { ...WOOD_W, bendHolds: WOOD_W.bendHolds * WOOD_STRONG, bendHoldsWeak: WOOD_W.bendHoldsWeak * WOOD_STRONG,
+  twistHolds: WOOD_W.twistHolds * WOOD_STRONG, pullHolds: WOOD_W.pullHolds * WOOD_STRONG };
+const NAILS = Object.fromEntries(Object.entries(NAILS_W).map(([k, n]) => [k, (k === 'face' || k === 'butt' || k === 'toe')
+  ? { ...n, holds: n.holds * NAIL_STRONG, pull: n.pull * NAIL_STRONG, twist: n.twist * NAIL_STRONG, ...(n.bend ? { bend: n.bend * NAIL_STRONG } : {}) } : n]));
 export { WOOD, NAILS, TOL };
 
 // ── the wood: a 2x4 (the windmill's numbers) and a deck plank (2 by 8, laid flat) ─────────────────────────────────────

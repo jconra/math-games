@@ -7,10 +7,12 @@
 //   deck   = null, or { y, on: [ids of the horizontal boards it rests on], planks: [plank, ...] }
 //   plank  = { id, a, b, len, X, plank: true, n: { X: 0, Y: 1, Z: 0 } }  (a 2 by 8 inch plank laid flat across)
 //
-// Feet. X runs across the river (the west bank at X <= -S/2, the east bank at X >= S/2: S is the gap between the two
-// stone faces), Y up (the top of both abutments at Y = 0, the water below), Z along the river: the bridge's two sides
-// stand at Z = +D/2 (the front, toward the camera at the start) and Z = -D/2 (the back). The middle of the gap is at
-// X = Z = 0.
+// Feet. X runs across the river from west to east (the west bank at X <= -S/2, the east bank at X >= S/2: S is the gap
+// between the two stone faces), Y up (the top of both abutments at Y = 0, the water below), Z along the river from north
+// to south (the windmill's compass: its north wind blows toward +Z): the bridge's two sides stand at Z = +D/2 (the south
+// side, toward the camera at the start) and Z = -D/2 (the north side). The middle of the gap is at X = Z = 0. Every
+// word a player reads uses the compass (west and east banks, north and south sides), never front, back, left or right:
+// the camera walks round, and those would change with it.
 //
 // Where a board can rest (supportsOf): on the top of an abutment (the stone, and the bank behind it), and against the
 // stone face of an abutment, above the water. Nothing else holds a board up but other boards. A board's first end goes
@@ -28,7 +30,7 @@ export const BANK_BACK = 10;          // the flat top of the bank a board can re
 export const FACE_DOWN = 4;           // feet of an abutment's face above the water that sockets go down to
 export const ABUT_HALF = WIDTH / 2 + 2;  // the abutments are this far each way from the middle along the river (Z)
 export const WATER_Y = -4.5, BED_Y = -6.5;
-export const BOARDS = 60;             // full boards in a fresh stack
+export const BOARDS = 30;             // full boards in a fresh stack
 export const PLANKS = 36;             // deck planks on their own pile: enough for the widest gap
 // a deck plank: 2 by 8 inches (1½ by 7¼), laid flat across both sides, one every 8 inches, its ends flush with the
 // outer faces of the boards it rests on. Its line in the data sits DECK_LIFT above theirs (within TOL, so it touches
@@ -53,6 +55,41 @@ export function freeEnd(A, len, dx, dz, up = 1) {
   const h = Math.sqrt(Math.max(0, len * len - run2)), Y = A.Y + (up < 0 ? -h : h);
   if (Y < WATER_Y - 1e-6) return null;
   return roundPt({ X: A.X + dx, Y, Z: A.Z + dz });
+}
+// ── the arrows: the free end moved across the board ──────────────────────────────────────────────────────────────
+// Which arrow pairs show for a board from A to B: the two axes running most across it (the two smallest parts of its
+// direction); the third runs along it. -> { along, across: [two of 'X', 'Y', 'Z'] }
+const AXES = ['X', 'Y', 'Z'];
+export function arrowAxes(A, B) {
+  const d = AXES.map((k) => Math.abs(B[k] - A[k])), i = d.indexOf(Math.max(...d));
+  return { along: AXES[i], across: AXES.filter((k, j) => j !== i) };
+}
+const nextHalf = (x, sg) => (sg > 0 ? Math.floor(x / SNAP + 1e-6) + 1 : Math.ceil(x / SNAP - 1e-6) - 1) * SNAP;
+// the stops on an axis beyond v, nearest first: every half foot from the world's zero (the middle of the gap for X, the
+// bank top for Y, the bridge's centre line for Z), and the socket's own place on that axis (so level, straight up and
+// square across are always stops)
+export function stopsFrom(v, sg, own) {
+  const out = [];
+  for (let k = 0, x = v; k < 60; k++) { x = nextHalf(x, sg); out.push(x); }
+  if ((own - v) * sg > 1e-6) out.push(own);
+  return [...new Set(out.map((x) => Math.round(x * 1e6) / 1e6))].sort((p, q) => (p - q) * sg);
+}
+// One press of an arrow: the free end B of a board len feet long from its socket A moved to the next stop it can reach on
+// axis ax (one of the two across it) in direction sg; the other across axis kept; the axis along the board from its
+// length, on the same side of the socket. A stop out of reach (or under the water) is skipped for the next one that way.
+// -> the new free end, or null (that arrow isn't showing, or the board is too short to reach any stop that way)
+export function arrowStep(A, B, len, ax, sg) {
+  const { along, across } = arrowAxes(A, B);
+  if (!across.includes(ax)) return null;
+  const other = across.find((k) => k !== ax), side = Math.sign(B[along] - A[along]) || 1, keep = B[other] - A[other];
+  for (const c of stopsFrom(B[ax], sg, A[ax])) {
+    const r2 = len * len - (c - A[ax]) ** 2 - keep * keep;
+    if (r2 < -1e-9) continue;
+    const q = { [ax]: c, [other]: B[other], [along]: A[along] + side * Math.sqrt(Math.max(0, r2)) };
+    if (q.Y < WATER_Y - 1e-6) continue;
+    return roundPt(q);
+  }
+  return null;
 }
 export function newBridge(S = SPAN0, D = WIDTH) { return { S, D, boards: [], deck: null }; }
 // the bridge as the windmill's modules want a tower: { W, D, boards } (the deck planks included when asked)
@@ -182,12 +219,17 @@ export function twinsOf(br, board, touches = (g) => touchesAny(br, g)) {
 }
 
 // ── the deck ─────────────────────────────────────────────────────────────────────────────────────────────────────────
-// The deck rests on a horizontal board line on each side: horizontal boards on that side (both ends within 0.15 ft of
-// Z = +D/2, or of -D/2), all at one height, touching each other end to end or lapped, and reaching from the west bank's
-// edge to the east bank's. The same height on both sides; the lowest such height if there are several.
-// -> { y, on: [ids], planks: [...] } or { why } (why not, in words)
+// THE DECK MEETS THE ROAD: it rests on a horizontal board line on each side at road height (the stone tops, Y = 0, within
+// ROAD_TOL: a board lying on the stones), so the planks run on from the road with no step down or up. A side's line: the
+// horizontal boards on that side (both ends within 0.15 ft of Z = +D/2, or of -D/2) at road height, touching each other
+// end to end or lapped, reaching from the west bank's edge to the east bank's. Boards lower down (a truss or supports
+// under the deck) or higher up (a side rail) are fine, but the deck never lies on them: never a sunk or raised deck.
+// -> { y, on: [ids], planks: [...] } or { why (in words), missing: ['front' | 'back'], low (the height of a side line
+//    lower down that reaches bank to bank, if any: what the builder may have meant) }
+export const ROAD_TOL = 0.1;
 export function deckLine(br) {
   const h = br.S / 2, D = br.D;
+  // a side's lines from bank to bank: [{ y, ids }], any height
   const sideLines = (s) => {
     const mine = br.boards.filter((b) => Math.abs(b.a.Y - b.b.Y) < 0.05 && Math.abs(b.a.Z - s * D / 2) < 0.15 && Math.abs(b.b.Z - s * D / 2) < 0.15);
     const ys = [...new Set(mine.map((b) => Math.round(((b.a.Y + b.b.Y) / 2) * 20) / 20))].sort((p, q) => p - q);
@@ -204,18 +246,20 @@ export function deckLine(br) {
     }
     return lines;
   };
-  const F = sideLines(1), B = sideLines(-1);
-  const both = F.filter((f) => B.some((b) => Math.abs(b.y - f.y) < 0.06)).sort((p, q) => p.y - q.y)[0];
-  if (!both) {
-    const what = !F.length && !B.length ? 'Neither side has' : !F.length ? 'The front side has no' : !B.length ? 'The back side has no' : 'The two sides have no';
-    return { why: `${what} ${!F.length && !B.length ? 'a ' : ''}horizontal board${!F.length && !B.length ? 's' : ''} reaching from bank to bank${F.length && B.length ? ' at the same height' : ''} yet, for the deck to rest on` };
+  const F = sideLines(1), B = sideLines(-1), road = (L) => L.find((l) => Math.abs(l.y) <= ROAD_TOL + 1e-9);
+  const f = road(F), bk = road(B);
+  if (!f || !bk) {
+    const missing = [...(f ? [] : ['south']), ...(bk ? [] : ['north'])];
+    const lowF = F.find((l) => l.y < -ROAD_TOL), lowB = B.find((l) => l.y < -ROAD_TOL), low = lowF || lowB ? Math.max(lowF ? lowF.y : -Infinity, lowB ? lowB.y : -Infinity) : null;
+    const where = missing.length === 2 ? 'put a board on each side from the top of one stone to the other' : `the ${missing[0]} side needs a board from the top of one stone to the other`;
+    const lowWords = low !== null ? ` Your boards from bank to bank are ${lenWords(Math.round(-low * 2) / 2)} below the road: they can hold the deck up from underneath, but the planks lie on boards at road height.` : '';
+    return { why: `The deck has to meet the road: ${where}.${lowWords}`, missing, low };
   }
-  const bk = B.find((b) => Math.abs(b.y - both.y) < 0.06);
-  // (and any other horizontal board at that height between the two sides, running along the gap under the planks: a
+  // (and any other horizontal board at road height between the two sides, running along the gap under the planks: a
   // middle board the planks rest on as well)
-  const between = br.boards.filter((b) => !both.ids.includes(b.id) && !bk.ids.includes(b.id) && Math.abs(b.a.Y - both.y) < 0.06 && Math.abs(b.b.Y - both.y) < 0.06
+  const between = br.boards.filter((b) => !f.ids.includes(b.id) && !bk.ids.includes(b.id) && Math.abs(b.a.Y - f.y) < 0.06 && Math.abs(b.b.Y - f.y) < 0.06
     && Math.abs(b.a.Z - b.b.Z) < 0.05 && Math.abs(b.a.Z) < D / 2 - 0.2 && Math.abs(b.b.X - b.a.X) > 0.5).map((b) => b.id);
-  return { y: both.y, on: [...both.ids, ...bk.ids, ...between], planks: planksFor(br, both.y) };
+  return { y: f.y, on: [...f.ids, ...bk.ids, ...between], planks: planksFor(br, f.y) };
 }
 // the deck planks across the gap at height y (the boards' line): one every 8 inches, from the west edge to the east
 export function planksFor(br, y) {
@@ -229,8 +273,8 @@ export function planksFor(br, y) {
 }
 
 // ── where a board is, in words ───────────────────────────────────────────────────────────────────────────────────────
-// post (standing straight up), diagonal (slanting), horizontal board, deck plank. Where: its side ("on the front", "on
-// the back", "across the middle"), and along the gap ("near the west bank", "in the middle", "on the east bank"),
+// post (standing straight up), diagonal (slanting), horizontal board, deck plank. Where: its side ("on the south side",
+// "on the north side", "across the middle"), and along the gap ("near the west bank", "in the middle", "on the east bank"),
 // to the half foot from the nearer bank when it is out over the water ("4 ft out from the west bank").
 export function nounOf(b) {
   if (b.plank) return 'deck plank';
@@ -239,13 +283,13 @@ export function nounOf(b) {
 }
 export function sideOfBoard(b, br) {
   const Z = (b.a.Z + b.b.Z) / 2, X = (b.a.X + b.b.X) / 2, h = br.S / 2, ez = br.D / 4;
-  const side = b.plank ? 'across' : Z > ez ? 'front' : Z < -ez ? 'back' : 'across';
+  const side = b.plank ? 'across' : Z > ez ? 'south' : Z < -ez ? 'north' : 'across';
   const span = X <= -h + 0.05 ? 'west bank' : X >= h - 0.05 ? 'east bank' : Math.abs(X) <= 1 ? 'middle' : X < 0 ? 'west' : 'east';
   return { side, span, out: Math.round((h - Math.abs(X)) * 2) / 2 };
 }
 export function whereWords(b, br) {
   const { side, span, out } = sideOfBoard(b, br);
-  const sd = side === 'front' ? ' on the front' : side === 'back' ? ' on the back' : b.plank ? '' : ' across the middle';
+  const sd = side === 'south' || side === 'north' ? ` on the ${side} side` : b.plank ? '' : ' across the middle';
   const sp = span === 'west bank' || span === 'east bank' ? `, on the ${span}` : span === 'middle' ? ', in the middle of the gap' : out < 0.75 ? `, at the ${span} bank` : `, ${lenLabel(out)} out from the ${span} bank`;
   const lo = Math.min(b.a.Y, b.b.Y), hi = Math.max(b.a.Y, b.b.Y);
   const wall = Math.abs(Math.abs(b.a.X) - br.S / 2) < 0.3 && Math.abs(Math.abs(b.b.X) - br.S / 2) < 0.3;
@@ -269,9 +313,9 @@ export function roleOf(br, b) {
   return n;
 }
 export const placeWords = (br, b) => `the ${roleOf(br, b)}${whereWords(b, br)}`;
-// a point from the middle of the gap, to the nearest inch, for the top bar: "3 ft west · 3 ft 6 in. front · 4 ft up"
+// a point from the middle of the gap, to the nearest inch, for the top bar: "3 ft west · 3 ft 6 in. south · 4 ft up"
 // (the same numbers with the opposite words: the mirror image)
 export function pointWords(p) {
   const r = (v) => Math.round(Math.abs(v) * 12) / 12, side = (v, pos, neg) => (r(v) < 1e-9 ? '0' : lenLabel(r(v)) + ' ' + (v > 0 ? pos : neg));
-  return [side(p.X, 'east', 'west'), side(p.Z, 'front', 'back'), p.Y < -1e-6 && r(p.Y) > 1e-9 ? lenLabel(r(p.Y)) + ' down' : lenLabel(Math.max(0, r(p.Y))) + ' up'];
+  return [side(p.X, 'east', 'west'), side(p.Z, 'south', 'north'), p.Y < -1e-6 && r(p.Y) > 1e-9 ? lenLabel(r(p.Y)) + ' down' : lenLabel(Math.max(0, r(p.Y))) + ' up'];
 }

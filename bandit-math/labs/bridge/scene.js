@@ -135,7 +135,7 @@ export function makeScene({ low = false } = {}) {
     box.castShadow = box.receiveShadow = true; cap.castShadow = cap.receiveShadow = true;
     g.add(box, cap); scene.add(g); return { side, g, box, cap };
   });
-  function setSpan(S) {
+  let setSpan = function (S) {
     span = S;
     const top = 0, bot = (BED_Y - 1) * FT, half = ABUT_HALF * FT;
     for (const a of abuts) {
@@ -148,6 +148,17 @@ export function makeScene({ low = false } = {}) {
       a.cap.scale.set(len + 0.06, 0.12, half * 2 + 0.12); a.cap.position.set(a.side * (x0 * FT + len / 2) - a.side * 0.03, -0.04, 0);
     }
   }
+  // the banks' compass letters, painted on the stone tops in the middle of the road: W on the west, E on the east
+  const letter = (ch) => { const cv = document.createElement('canvas'); cv.width = cv.height = 128; const g = cv.getContext('2d');
+    g.font = '700 96px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = 'rgba(244, 232, 207, 0.85)'; g.strokeStyle = 'rgba(40, 28, 16, 0.6)'; g.lineWidth = 6;
+    g.strokeText(ch, 64, 70); g.fillText(ch, 64, 70); const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t; };
+  const marks = [['W', -1], ['E', 1]].map(([ch, side]) => {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.1), new THREE.MeshBasicMaterial({ map: letter(ch), transparent: true, depthWrite: false }));
+    m.rotation.x = -Math.PI / 2; m.renderOrder = 3; scene.add(m); return { m, side };
+  });
+  const placeMarks = (S) => { for (const { m, side } of marks) m.position.set(side * (S / 2 + 2.2) * FT, 0.02, 0); };
+  const setSpan0 = setSpan;
+  setSpan = (S) => { setSpan0(S); placeMarks(S); };
   setSpan(SPAN0);
 
   // ── the road down to the banks, both sides ────────────────────────────────────────────────────────────────────
@@ -257,7 +268,8 @@ export function makeScene({ low = false } = {}) {
     for (const m of [...trees.children, ...props.children, pile, plankPile]) {
       const r = m.userData.crown || 3, tx = m.position.x - ex, tz = m.position.z - ez;
       const along = tx * ux + tz * uz, off = Math.abs(tx * uz - tz * ux);
-      const inWay = (along > -r && along < L * 0.8 && off < r + Math.max(0, along) * 0.75) || Math.hypot(tx, tz) < r + 1;
+      // (a crown hangs out round its trunk: one whose crown reaches over the eye, trunk behind or not, is in the way)
+      const inWay = (along > -r && along < L * 0.8 && off < r + Math.max(0, along) * 0.75) || Math.hypot(tx, tz) < r * 1.5 + 2;
       m.visible = !inWay;
     }
   }
