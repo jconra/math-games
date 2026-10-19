@@ -19,7 +19,7 @@
 // seconds later the compass marks the next herd. "Done for now" (or Esc) packs the camera away early. Stuck for a while
 // without a pick, the steps card shows by itself (the last line left for the kid).
 //
-// No shooting here: deer are only ever photographed (shooting waits on the title's "Shooting" mode).
+// No shooting here: deer are only ever photographed (the only guns are at the bottle range, on bottles and cans).
 //
 //   const DJ = makeDeerJob({ W, deer, P, I, camera, canvas, rider, hud, hob, audio, refresh, onStart, onStop })
 //     deer: makeDeer's herds; I: the input (a touch screen is told to tap); onStart / onStop: the game hands over the controls while the camera is up, and back
@@ -37,6 +37,10 @@
 import * as THREE from 'three';
 import { makeBoxCamera } from '../boxcamera.js';
 import { makePhoto, whyNot, balanceFor, numText } from '../math/deermath.js';
+import { readAloud } from '../math/skill.js';
+// the skill model's part of a photo's first try (src/math/skill.js): the equations strand, at the photo's own point; a
+// travel job, so no time
+const skillPart = (shot) => (shot && shot.at != null ? { strands: [{ strand: 'eq', at: shot.at }] } : null);
 import { makeRng, rungIndex } from '../lockbox/generate.js';
 import { recordAnswer, earn, countJob, saveRider } from '../save.js';
 import { addPrint, prints } from '../ui/album.js';
@@ -78,7 +82,7 @@ export const SNAP = {
 const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, hob, audio = null, refresh = () => {}, onStart = () => {}, onStop = () => {}, busy = () => false }) {
+export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, hob, audio = null, refresh = () => {}, onStart = () => {}, onStop = () => {}, busy = () => false, read = null }) {
   ensureCss();
   const touch = () => !!(I && I.touch);
   const K = makeBoxCamera({ scene: W.scene }); K.root.visible = false;
@@ -301,7 +305,7 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
     const el = document.createElement('div'); el.className = 'bmd-vf' + (touch() ? ' is-touch' : '');
     el.innerHTML = `
       <div class="bmd-frame"><i class="bmd-grid"></i><i class="bmd-corner"></i></div>
-      <div class="bmd-eq" aria-live="polite"><small>Photograph the deer whose number makes it true</small><b></b></div>
+      <div class="bmd-eq" aria-live="polite"><small>Photograph the deer whose number makes it true</small><b></b><i hidden></i></div>
       <div class="bmd-tags"></div>
       <div class="bmd-help" hidden></div>
       <div class="bmd-bar"><span class="bmd-keys">${keysHint()}</span><span class="bmd-dots"></span><span class="bmd-album"><i></i> in the album</span>
@@ -311,7 +315,7 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
     canvas.after(el);
     document.body.classList.add('bmd-viewing');
     vf.el = el; vf.frameEl = el.querySelector('.bmd-frame'); vf.tagsEl = el.querySelector('.bmd-tags'); vf.helpEl = el.querySelector('.bmd-help');
-    vf.eqEl = el.querySelector('.bmd-eq b'); vf.flashEl = el.querySelector('.bmd-flash');
+    vf.eqEl = el.querySelector('.bmd-eq b'); vf.wordsEl = el.querySelector('.bmd-eq i'); vf.flashEl = el.querySelector('.bmd-flash');
     vf.pics = 0; vf.busy = false; vf.idle = 0; vf.helped = false; vf.hover = -1; vf.ready = false; vf.typed = '';
     el.querySelector('.bmd-done').addEventListener('click', (e) => { e.stopPropagation(); DJ.done(); });
     el.addEventListener('pointerdown', onDown); el.addEventListener('pointermove', onMove); el.addEventListener('pointerup', onUp);
@@ -348,6 +352,9 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
     vf.shot = shot; vf.tried = false; vf.wrong = new Set(); vf.idle = 0; vf.helped = false;
     clearTimeout(vf.typeT); vf.typed = ''; showTyped();
     vf.eqEl.textContent = shot.eq;
+    // the kindergarten boxes' question in words ("2 plus what equals 4?"), read out loud for a rider who doesn't read yet
+    if (vf.wordsEl) { vf.wordsEl.textContent = shot.words || ''; vf.wordsEl.hidden = !shot.words; }
+    if (shot.say && read && readAloud(rider)) read.say(shot.say);
     vf.eqEl.parentElement.classList.remove('is-in'); void vf.eqEl.offsetWidth; vf.eqEl.parentElement.classList.add('is-in');
     // tag i goes on deer i
     vf.tagsEl.innerHTML = shot.values.map((v, i) => `<div class="bmd-tag" data-i="${i}"><b>${esc(numText(v))}</b></div>`).join('');
@@ -480,7 +487,7 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
     if (i !== shot.right) { wrong(i, v); return; }
     vf.busy = true;
     const first = !vf.tried; vf.tried = true;
-    if (first) { const rec = recordAnswer(rider, true); if (rec && rec.badge) hud.toast(`You earned the ${rec.badge} badge!`, 'gold'); }
+    if (first) { const rec = recordAnswer(rider, true, skillPart(shot)); if (rec && rec.badge) hud.toast(`You earned the ${rec.badge} badge!`, 'gold'); }
     const img = capture();
     K.flash(); flashSound();
     vf.flashEl.classList.remove('is-on'); void vf.flashEl.offsetWidth; vf.flashEl.classList.add('is-on');
@@ -506,7 +513,7 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
 
   function wrong(i, v) {
     const shot = vf.shot;
-    if (!vf.tried) { const rec = recordAnswer(rider, false); if (rec && rec.badge) hud.toast(`You earned the ${rec.badge} badge!`, 'gold'); }
+    if (!vf.tried) { const rec = recordAnswer(rider, false, skillPart(shot)); if (rec && rec.badge) hud.toast(`You earned the ${rec.badge} badge!`, 'gold'); }
     vf.tried = true; vf.wrong.add(i);
     const tEl = vf.tagEls[i];
     if (tEl) { tEl.classList.remove('is-shake'); void tEl.offsetWidth; tEl.classList.add('is-shake', 'is-wrong'); }
@@ -736,6 +743,7 @@ body.bmd-viewing .bmh-top, body.bmd-viewing .bmh-touch, body.bmd-viewing .bmh-pr
   background: #f1e6cc; color: #2b1d12; border: 1px solid #8a6a3a; border-radius: 8px; padding: 6px 18px 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.45); max-width: 92vw; }
 .bmd-eq small { display: block; font: 500 13px Bitter, Georgia, serif; color: #6b5236; }
 .bmd-eq b { display: block; font: 700 30px/1.15 Bitter, Georgia, serif; letter-spacing: 0.02em; white-space: nowrap; }
+.bmd-eq i { display: block; font: 600 16px Bitter, Georgia, serif; font-style: normal; color: #4a3826; margin-top: 2px; }
 .bmd-eq.is-in { animation: bmd-in 0.45s cubic-bezier(.2,.8,.3,1.2); }
 @keyframes bmd-in { from { transform: translate(-50%, -14px); opacity: 0; } }
 .bmd-tags { position: absolute; inset: 0; pointer-events: none; }

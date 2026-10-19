@@ -9,8 +9,8 @@
 //   sheriff's desk  open the lock boxes you won, or crack seized boxes for the sheriff's pay (as many as you like)
 //   cabin           your table: open the lock boxes you won
 //
-// Every price and pay amount in the game is in the tables right below, so they can be tuned in one place after
-// watching the kids play.
+// The prices and what is for sale (PRICES, SADDLES, HORSES, DOGS, DOG_NAMES) are in src/catalog.js, plain data that
+// the completion checklist and the tests read too; they are exported from here as well. The pay is in PAY below.
 //
 //   const S = makeShops({ W, rider, onOpen, onClose, onBuy, onLockbox, onStoreJob, say, extra })
 //     extra: more rows for a counter from elsewhere: { store: { html(), click(what, id, body) -> undefined (not its
@@ -30,14 +30,10 @@ import { TIER_NAME, TIER_GOLD } from './lockbox/index.js';
 import { RUNG_IDS, RUNG } from './lockbox/generate.js';
 import { HATS, hatOf, hatIcon } from './hats.js';
 import { PALETTES } from './actors/folk.js';
+import { PRICES, SADDLES, HORSES, DOGS, DOG_NAMES } from './catalog.js';
+export { PRICES, SADDLES, HORSES, DOGS, DOG_NAMES };
 
-// ── PRICES AND PAY (gold) ─────────────────────────────────────────────────────────────────────────────────────────
-export const PRICES = {
-  saddle: { plain: 15, tooled: 60, silver: 150 },   // the first saddle is cheap and quick; fancier ones cost more
-  horse: { donkey: 20, chestnut: 60, palomino: 100, white: 150, midnight: 200 },   // the bay comes free; the donkey is the joke mount
-  hat: { white: 20, straw: 30, bowler: 50, ranger: 80, cattleman: 120, sombrero: 200 },   // the old cowboy hat comes free
-  dog: { shiba: 60, husky: 60, pug: 25 },           // the pug is the cheap joke pick
-};
+// ── PAY (gold; the prices are in src/catalog.js) ──────────────────────────────────────────────────────────────────
 export const PAY = {
   catch: 2,           // each right steer roped
   hardEvery: 8,       // ... plus 1 for every this many steps up the times ladder (the 7s pay more than the 2s)
@@ -53,26 +49,6 @@ export const PAY = {
 // lock-box tiers by the rider's solving-for-x rung: from each rung up (tin 10, iron 20, brass 35, vault 60 at 3 stars)
 export const BOX_TIER = [['R0a', 'tin'], ['R5', 'iron'], ['R10', 'brass'], ['R14', 'vault']];
 export const DOOR_REACH = 3.4;   // metres from a door's spot where its prompt shows
-
-export const SADDLES = [
-  { id: 'plain', name: 'Plain saddle', line: 'Plain brown leather. Any saddle lets you ride.' },
-  { id: 'tooled', name: 'Tooled saddle', line: 'Black leather, tooled by hand.' },
-  { id: 'silver', name: 'Silver saddle', line: 'Tooled, with silver and turquoise conchos.' },
-];
-export const HORSES = [
-  { id: 'bay', name: 'Chester the bay', line: 'Your trusty bay. Gallops fast. Free.' },
-  { id: 'donkey', name: 'Jasper the donkey', line: 'Slow as molasses and twice as stubborn, but he\'ll get you there.' },
-  { id: 'chestnut', name: 'Copper the chestnut', line: 'A steady farm horse with a red-brown coat. Gallops a little slower.' },
-  { id: 'palomino', name: 'Goldie the palomino', line: 'A golden coat that shines in the sun. Gallops fast.' },
-  { id: 'white', name: 'Willow the white horse', line: 'A white horse, the talk of the valley. Gallops fast.' },
-  { id: 'midnight', name: 'Midnight', line: 'A black horse, dark as a moonless night. Gallops fast.' },
-];
-export const DOGS = [
-  { id: 'shiba', name: 'Shiba', line: 'Quick and clever. Keeps up on foot and on the trail.' },
-  { id: 'husky', name: 'Husky', line: 'Strong and tireless. Keeps up with a galloping horse.' },
-  { id: 'pug', name: 'Pug', line: 'He won\'t herd anything, but he\'s loyal.' },
-];
-export const DOG_NAMES = ['Biscuit', 'Dusty', 'Scout', 'Pepper', 'Rusty', 'Bandit', 'Maple', 'Boots'];
 
 // which door is which, and what its prompt says
 export const COUNTERS = {

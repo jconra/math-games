@@ -44,6 +44,11 @@
 //   ?rung=R13          open that rung (default: the next box the ladder picks)
 //   &level=2|3|4|5     the ladder level (default 4); every level works out each part of every move
 //   ?rung=I1 .. I4     the inequalities (less or more, the flip, three rooms, either or)
+//   ?rung=K1 .. K3     the kindergarten boxes (2 + x = 4 with pictures; read aloud while the rider's levels are low)
+//   ?rung=O1 .. O5     the "Work it out" boxes: order of operations; ?rung=P1 .. P5 exponents (workout.js)
+//   ?eq=N&ineq=N       put the test rider's equations (and inequalities) level at N (src/math/skill.js), found; with
+//                      no rung chosen the boxes then come from that level, as in the game
+//   &order=N&pow=N     ...and order of operations, exponents (the "Work it out" boxes then come about one box in four)
 //   &tier=tin|iron|brass|vault, &size=1|2|3, &seed=N (the same seed gives the same box), &speed=0.8 (seconds a move)
 //   &auto              open a box straight away (the rig uses this)
 //   &dev               show "Skip this box" from the start
@@ -54,6 +59,9 @@
 // window.LB.open({...}) opens a box from code; window.__lockbox is the open panel's debug handle.
 try {
   const { openLockbox, makeAlgebra, RUNGS } = await import('../src/lockbox/index.js');
+  const { K_RUNGS } = await import('../src/lockbox/kbox.js');
+  const { WORK_RUNGS } = await import('../src/lockbox/workout.js');
+  const SK = await import('../src/math/skill.js');
   const q = new URLSearchParams(location.search);
   const KEY = 'bm-lockbox-test-rider';
   const $ = (s) => document.querySelector(s);
@@ -63,9 +71,14 @@ try {
   let rider = { id: 'test', name: 'Test Rider', gold: 0, bounty: 0, topics: { algebra: {} }, stats: { parBoxes: 0 }, lockboxes: [] };
   try { const saved = JSON.parse(localStorage.getItem(KEY) || 'null'); if (saved && saved.topics) rider = saved; } catch (e) { /* storage blocked: keep it in memory */ }
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(rider)); } catch (e) { /* storage blocked */ } };
-  const showLevel = () => { const L = makeAlgebra(JSON.parse(JSON.stringify(rider.topics.algebra))).level(); $('#lvl').textContent = `${L.label} · ${rider.gold} gold`; };
+  const showLevel = () => {
+    const L = makeAlgebra(JSON.parse(JSON.stringify(rider.topics.algebra))).level();
+    const st = SK.stats(rider).filter((x) => ['eq', 'ineq', 'order', 'pow'].includes(x.strand)).map((x) => `${x.short} ${x.pct}${x.finding ? ' (finding)' : ''}`).join(' · ');
+    $('#lvl').textContent = `${L.label} · ${st || 'equations not met'} · ${rider.gold} gold`;
+  };
+  for (const [k, strand] of [['eq', 'eq'], ['ineq', 'ineq'], ['order', 'order'], ['pow', 'pow']]) if (q.has(k)) { SK.setLevel(rider, strand, Number(q.get(k))); save(); }
 
-  for (const r of RUNGS) $('#rung').insertAdjacentHTML('beforeend', `<option value="${r.id}">${r.id} ${r.name}</option>`);
+  for (const r of [...K_RUNGS, ...RUNGS, ...WORK_RUNGS]) $('#rung').insertAdjacentHTML('beforeend', `<option value="${r.id}">${r.id} ${r.name}</option>`);
   if (q.get('rung')) $('#rung').value = q.get('rung');
   if (q.get('level')) $('#level').value = q.get('level');
   if (q.get('tier')) $('#tier').value = q.get('tier');
@@ -107,8 +120,8 @@ try {
     return openLockbox($('#root'), { ...opts, ...extra });
   }
   $('#open').addEventListener('click', () => open());
-  $('#reset').addEventListener('click', () => { rider.topics.algebra = {}; rider.gold = 0; rider.bounty = 0; save(); showLevel(); log('ladder forgotten'); });
-  window.LB = { open, rider: () => rider, reset: () => { rider.topics.algebra = {}; save(); } };
+  $('#reset').addEventListener('click', () => { rider.topics.algebra = {}; rider.skill = {}; rider.gold = 0; rider.bounty = 0; save(); showLevel(); log('ladder and levels forgotten'); });
+  window.LB = { open, rider: () => rider, reset: () => { rider.topics.algebra = {}; rider.skill = {}; save(); }, skill: SK };
   showLevel();
   if (q.has('auto')) open();
 } catch (e) { console.error(e); }   // oops.js shows console errors on screen too

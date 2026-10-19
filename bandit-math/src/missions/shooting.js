@@ -1,13 +1,16 @@
-// TARGET SHOOTING: the job for a rider whose mode is Shooting (picked on the title screen). Guns are only ever used on
-// bottles and tin cans, here at the range on the east edge of town (src/range.js); cattle and bandits are still roped
-// and deer still photographed. Miss Opal Tate, who shot in the travelling Wild West shows, keeps the range: walk or ride
+// TARGET SHOOTING: the bottle range, for every rider. Guns are only ever used on bottles and tin cans, here at the range
+// on the east edge of town (src/range.js); cattle and bandits are roped and deer photographed. Miss Opal Tate, who shot in the travelling Wild West shows, keeps the range: walk or ride
 // up and she says what it's about; E by her (or a tap on the prompt) takes up her six-shooter (src/revolver.js).
 //
 // The view goes to the rider's own eyes at the firing line, the revolver in their hand at the bottom right. Bottles or
 // tin cans pop up on the shelf downrange, each wearing a number on a paper tag, and a card up top says which to shoot.
 // The math is the range's own kind: NUMBER SENSE (src/math/numbersense.js): which is biggest, smallest to largest,
 // rounding ("Shoot every can that rounds to 40"), estimating ("Shoot the bottle closest to 19 + 22"), and "between"
-// with negatives; it climbs from small whole numbers to numbers up to 1,000 and then negatives.
+// with negatives; it climbs from small whole numbers to numbers up to 1,000 and then negatives. For the youngest riders
+// the shelf carries counting cards instead (numbersense.js countCard: "Shoot what comes after 7", "How many dots?"),
+// read out loud while their read-aloud is on. Which, and how hard, come from the rider's skill model (src/math/skill.js,
+// asked through src/math/asking.js) card by card; each card goes back to it once (a clean card right, its first wrong
+// shot wrong; a travel job, so no time).
 //   aim: the mouse moves the sights and a click fires (Space or F fires too, R reloads); on a touch screen, a finger
 //        puts the sights down where it touches (drag to adjust) and lifting it fires. A shot near a target counts for
 //        it: the aim is generous, the numbers are the hard part
@@ -18,9 +21,10 @@
 //   stuck: after a while without a shot, the card's number line shows by itself (with no answer marked)
 // Six shots, then a quick reload by itself. Five cards make a string: a bonus, and Miss Opal says a word. Then the
 // next string straight away; "Done for now" (or Esc) puts the gun back. Every right target counts toward the
-// "Targets hit" belt buckle, and the picks are the shooting-mode answers the Sharpshooter badge looks at.
+// "Targets hit" belt buckle, and every pick counts among the rider's answers.
 //
-//   const SR = makeShootingJob({ W, folk, P, I, camera, canvas, renderer, rider, hud, hob, audio, refresh, onStart, onStop })
+//   const SR = makeShootingJob({ W, folk, P, I, camera, canvas, renderer, rider, hud, hob, audio, refresh, onStart, onStop, read })
+//     read: src/audio/readaloud.js's (optional): the counting cards are read out
 //     onStart / onStop: the game hands over the controls while the gun is up, and back
 //   SR.update(dt)     each frame, after the player (it places the camera while the gun is up)
 //   SR.draw()         each frame, after the valley is drawn: the six-shooter over it
@@ -34,7 +38,11 @@ import { makePerson } from '../actors/folk.js';
 import { makeRange, RANGE } from '../range.js';
 import { makeRevolver } from '../revolver.js';
 import { makeRangeSound } from '../audio/rangesound.js';
-import { makeNumberSense, rightNow, isDone, whyNot, lineFor, tipFor, numText, STEPS } from '../math/numbersense.js';
+import { makeNumberSense, rightNow, isDone, whyNot, lineFor, tipFor, numText, countCard } from '../math/numbersense.js';
+import { chooseFor, askFor, travel, newBest } from '../math/asking.js';
+import { showCountHelp } from '../ui/counthelp.js';
+import { readAloud } from '../math/skill.js';
+import { sayLine } from '../audio/sayline.js';
 import { makeRng } from '../lockbox/generate.js';
 import { makeGreeter, sayMs, TALK } from '../jobfolkplan.js';
 import { recordAnswer, earn, countJob, saveRider, JOBS } from '../save.js';
@@ -59,12 +67,16 @@ export const KEEPER = {
   id: 'marksman', name: 'Miss Opal Tate', role: 'sharpshooter', look: { outfit: 'adventurer_f', palette: 'drifter', skin: 2, hair: 9 }, hat: 'cowboy',
   hello: ['I shot in the Wild West shows for twenty years. Now I keep this range.',
     'Bottles and tin cans only, and the card says which. Step up and borrow my six-shooter.'],
-  start: 'Six in the gun. Read the card, then take your shot.',
+  start: 'Six in the gun. Look at the card, then take your shot.',
   // (on a touch screen: the gun bar's "Tap a target to shoot" is hidden on a phone, so her start line says how)
-  startTouch: 'Six in the gun. Read the card, then tap a target to shoot it.',
+  startTouch: 'Six in the gun. Look at the card, then tap a target to shoot it.',
   thanks: ["That's a full string. Fine shooting!", 'You read those numbers like a sharpshooter.', 'Steady hand, steady head. Again?', "I've seen worse in the shows. Much worse!"],
   stand: 'Shoot bottles with Miss Opal',
 };
+
+// the skill model's makers the range deals from (src/math/strands.js): counting cards for the youngest riders, then
+// the range's own number sense
+export const RANGE_MAPS = ['counting', 'range'];
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const whole = (v) => Math.max(0, Math.round(Number(v) || 0));
@@ -72,7 +84,7 @@ const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const smooth = (f) => f * f * (3 - 2 * f);
 
 export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer, rider, hud, hob = null, audio = null, refresh = () => {},
-  onStart = () => {}, onStop = () => {}, busy = () => false, scene = W.scene }) {
+  onStart = () => {}, onStop = () => {}, busy = () => false, scene = W.scene, read = null }) {
   ensureCss();
   const touch = () => !!(I && I.touch) || (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches);
   const R = makeRange({ W, scene });
@@ -287,15 +299,32 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
   function scoreLine() { if (!ui) return; ui.streakEl.textContent = streak; ui.bestEl.textContent = REC.best; ui.el.querySelector('.bsr-streak').classList.toggle('is-hot', streak >= SHOOT.pay.streak); }
 
   // ── A CARD ─────────────────────────────────────────────────────────────────────────────────────────────────────
+  // the next card: the maker that fits the rider now (counting for the youngest, the range's number sense after), at
+  // the rider's level there
+  let lastMap = null;
+  function nextCard() {
+    const map = chooseFor(rider, RANGE_MAPS, { last: lastMap, rand: () => rng.next() }) || 'range';
+    lastMap = map;
+    const q = askFor(rider, map);
+    let c;
+    if (map === 'counting') {
+      const what = (N.state.what = N.state.what === 'can' ? 'bottle' : 'can');
+      for (let k = 0; k < 8; k++) { c = countCard(q.step, { rng, what }); if (!recent.includes(c.key)) break; }
+    } else { N.steer(q.step, { placing: q.placing }); c = N.card({ rng, recent }); }
+    return { ...c, map, q, told: false };
+  }
+  // the skill model's part of this card's answer (once a card: see the notes at the top)
+  const skillOf = (c) => (c && !c.told ? ((c.told = true), travel(c.q, { step: c.step })) : null);
   function newCard() {
-    card = N.card({ rng, recent });
+    card = nextCard();
     recent.push(card.key); if (recent.length > 12) recent.shift();
+    if (card.say && read && readAloud(rider) && read.can('counting')) read.say(card.say, { topic: 'counting' });
     gone = new Set(); tried = new Set(); wrong = 0; idle = 0; helped = false; between = false; held = null;
     R.setCard(card.targets.map(() => ({ kind: card.what })), { narrow: innerWidth < innerHeight * 0.8 });
     if (!ui) return;
     ui.ruleEl.textContent = card.rule;
     ui.subEl.textContent = card.sub;
-    ui.stepEl.textContent = `${KEEPER.name.replace('Miss ', '')}'s card · ${card.review ? 'an easy one' : `step ${card.step + 1} of ${STEPS.length}`}`;
+    ui.stepEl.textContent = `${KEEPER.name.replace('Miss ', '')}'s card${card.q.placing ? ' · finding your level' : card.review ? ' · an easy one' : ''}`;
     ui.cardEl.classList.remove('is-in'); void ui.cardEl.offsetWidth; ui.cardEl.classList.add('is-in');
     ui.tagsEl.innerHTML = card.targets.map((x, i) => `<div class="bsr-tag" data-i="${i}"><b>${esc(numText(x.n))}</b></div>`).join('');
     ui.tagEls = [...ui.tagsEl.children];
@@ -361,7 +390,9 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
     if (T.kind === 'bottle') SND.shatter(at); else SND.clank(at);
     gone.add(i);
     if (ui) for (const k of rightNow(card, gone)) { const t = ui.tagEls[k]; if (t) t.classList.remove('is-wrong'); }   // (the ones to shoot now never look struck out)
-    if (choice) { const rec = recordAnswer(rider, true); if (rec && rec.badge) hud.toast(`You earned the ${rec.badge} badge!`, 'gold'); }
+    // (the card cleared clean, with no number line come up by itself: the card's right answer for the skill model)
+    const sk = isDone(card, gone) && wrong === 0 && !helped ? skillOf(card) : null;
+    if (choice || sk) { const rec = recordAnswer(rider, true, { ...(sk || {}), range: true }); if (rec && rec.badge) hud.toast(`You earned the ${rec.badge} badge!`, 'gold'); }   // (range: the Sharpshooter's answers)
     streak++;
     let gold = SHOOT.pay.target + Math.floor(card.step / SHOOT.pay.every);
     let bonus = 0;
@@ -387,7 +418,7 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
     if (el) { el.classList.remove('is-shake'); void el.offsetWidth; el.classList.add('is-shake'); if (card.kind !== 'order') el.classList.add('is-wrong'); }
     if (!tried.has(i)) {
       tried.add(i); wrong++;
-      const rec = recordAnswer(rider, false); if (rec && rec.badge) hud.toast(`You earned the ${rec.badge} badge!`, 'gold');
+      const rec = recordAnswer(rider, false, { ...(wrong === 1 ? skillOf(card) || {} : {}), range: true }); if (rec && rec.badge) hud.toast(`You earned the ${rec.badge} badge!`, 'gold');
       streak = 0; scoreLine();
     }
     help({ pick: i });
@@ -404,7 +435,9 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
     const res = N.finish(card, wrong, { helped });   // (cleared after the number line came up by itself: paid, but not a clean card)
     between = true;
     inString++; dots();
-    if (res.moved > 0 && res.placed) hud.toast('Nice shooting! Harder numbers next', 'good');   // (the first visit's quick climb says nothing: the card's step shows it)
+    // (the rider's level has brought the next step of material: a word for it, once the level is found)
+    // (harder numbers only past the highest step reached before: asking.js newBest)
+    if (res.clean && !card.q.placing) { const q2 = askFor(rider, card.map); if (newBest(rider, q2)) hud.toast('Nice shooting! Harder numbers next', 'good'); }
     R.clear();
     const stringDone = inString >= SHOOT.string;
     if (stringDone) {
@@ -435,8 +468,13 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
       <p class="bsr-help-p">${esc(why)}</p><div class="bsr-line"></div>${!hint && spec.caption ? `<p class="bsr-help-c">${esc(spec.caption)}</p>` : ''}`;
     el.hidden = false;
     el.classList.remove('is-in'); void el.offsetWidth; el.classList.add('is-in');
+    // (a rider who can't read yet hears the why, in the browser's voice, after the miss's own sound)
+    if (!hint && readAloud(rider)) sayLine(`Not ${numText(card.targets[o.pick].n)}. ${why}`, { now: true, after: 600 });
     const holder = el.querySelector('.bsr-line');
-    holder.innerHTML = lineSvg(spec, Math.max(220, Math.min(420, holder.clientWidth || 300)));
+    // (a young rider's counting card: its own picture, as the round-up's "Show me" draws it: the dots counted in a
+    // ten-frame, or the hop of one on a number line; the answer kept hidden while it is only a hint)
+    if (card.kind === 'pick' && card.pic && (card.pic.frame || card.pic.line)) showCountHelp(holder, { ...card.pic, reveal: !hint, picked: hint ? undefined : card.targets[o.pick].n, width: Math.max(240, Math.min(420, holder.clientWidth || 300)) });
+    else holder.innerHTML = lineSvg(spec, Math.max(220, Math.min(420, holder.clientWidth || 300)));
     if (hint) helped = true;
   }
 
@@ -528,7 +566,7 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
   J.speaking = () => !say.hidden;   // (Miss Opal's speech card is on the screen: Old Hob waits his turn on a phone)
   J.tags = () => (card ? R.targets.map((T, i) => { const s = screenOf(T.top), b = screenOf(T.mid); return { n: card.targets[i].n, x: Math.round(b.x), y: Math.round(b.y), tagX: Math.round(s.x), tagY: Math.round(s.y), alive: T.alive, right: rightNow(card, gone).includes(i) }; }) : []);
   J.pick = (n) => { if (!card) return false; const i = card.targets.findIndex((x, k) => x.n === n && R.targets[k].alive); if (i < 0) return false; const b = screenOf(R.targets[i].mid); return fire(b.x, b.y); };
-  J.state = () => ({ state, card: card ? { kind: card.kind, rule: card.rule, step: card.step, review: card.review, targets: card.targets.map((x) => x.n), right: rightNow(card, gone).map((i) => card.targets[i].n) } : null,
+  J.state = () => ({ state, card: card ? { kind: card.kind, map: card.map, at: card.q ? card.q.at : null, finding: !!(card.q && card.q.placing), rule: card.rule, step: card.step, review: card.review, targets: card.targets.map((x) => x.n), right: rightNow(card, gone).map((i) => card.targets[i].n) } : null,
     rounds: G ? G.rounds : null, reloading: !!(G && G.reloading), streak, best: REC.best, inString, strings: REC.strings, wrong, help: !!(ui && !ui.helpEl.hidden), level: N.level(),
     fov: +camera.fov.toFixed(1), prompt: J.prompt, range: R.state() });
   J.range = R;

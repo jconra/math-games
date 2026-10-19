@@ -89,8 +89,8 @@ test('the saddles and horses a rider can own are on disk', () => {
   assert.ok(Object.keys(mounts).length >= 2 && mounts.bay === 'horse', 'the bay comes free (save.js: owned.horse defaults to bay)');
   for (const kind of Object.values(mounts)) assert.ok(animals[kind], kind + ' in animals.json');
   // every horse the stable sells is one the player knows how to ride, with a price (the bay is free)
-  const shop = source('src/shop.js');
-  const sold = [...shop.match(/export const HORSES = \[([\s\S]*?)\n\];/)[1].matchAll(/id: '(\w+)'/g)].map((m) => m[1]);
+  const shop = source('src/catalog.js');   // (what the stable sells and the prices: src/catalog.js, sold by src/shop.js)
+  const sold =[...shop.match(/export const HORSES = \[([\s\S]*?)\n\];/)[1].matchAll(/id: '(\w+)'/g)].map((m) => m[1]);
   const prices = shop.match(/horse: \{([^}]+)\}/)[1];
   for (const id of sold) {
     assert.ok(mounts[id], `the stable's ${id} is in HORSE_LOOKS`);

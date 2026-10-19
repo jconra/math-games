@@ -246,6 +246,12 @@ export const SELL = {
   every: 3,         // a customer buys goods once in this many orders (the first sale of a ride: any of the first this many)
 };
 const formsFor = (step) => (SALE_FORMS.find((s) => step <= s.upTo) || SALE_FORMS[SALE_FORMS.length - 1]).forms;
+// what else an egg or milk sale counts in (src/math/skill.js), by its form: lots of a dozen at a price is times; the
+// rest is dividing into dozens or gallons (with a leftover from 'leftover' on)
+const SALE_CREDIT = {
+  lots: { strand: 'mul', at: 20, weight: 0.5 }, count: { strand: 'div', at: 37, weight: 0.5 },
+  leftover: { strand: 'div', at: 45, weight: 0.5 }, half: { strand: 'div', at: 45, weight: 0.5 }, unit: { strand: 'div', at: 41, weight: 0.5 },
+};
 const GOLD = ['gold', 'gold'];
 const u = (n, unit) => `${n} ${n === 1 ? unit[0] : unit[1]}`;
 // a count of lots: '3 dozen' (never '3 dozens'), '2 gallons', '1 pound'
@@ -264,27 +270,40 @@ const SALE_GOODS = {
 };
 
 // a sale order for the store counter, from what the rider carries, or null when there's nothing to sell at this step.
-// carried: { eggs, wool, milk }; step: the store's ladder step; who: the townsperson buying ({ name, she })
-// -> an order shaped as the store's (makeOrder in wordproblems.js), with .sale = { goods, sold, gold, left } and
-//    .picture (its own pictures, below)
+// carried: { eggs, wool, milk }; who: the townsperson buying ({ name, she }); step: the store's ladder step, or (on
+// the strands) a plan: { step, sales, salesAt, wool, woolAt } with the form each kind of sale is made in (sales: an
+// id of the map `sales`: lots | count | leftover | unit; wool: an id of the map `wool`: unit | part | priced | two),
+// chosen by src/math/skill.js stepFor; a kind whose form is null isn't sold (the rider isn't up to it yet)
+// -> an order shaped as the store's (makeOrder in wordproblems.js), with .sale = { goods, sold, gold, left, form,
+//    map ('sales' | 'wool'), at (the plan's point for it, or null) }, .credit (what else it counts in) and .picture
+//    (its own pictures, below)
 export function makeSale(carried, { step = 1, who = null, rand = Math.random, coins: count = null } = {}) {
-  const forms = formsFor(step), n = count || (step <= 2 ? 3 : 4);
+  const plan = step && typeof step === 'object' ? step : null;
+  const st = plan ? Math.max(1, Math.round(plan.step) || 1) : step;
+  const forms = plan ? (plan.sales === 'leftover' ? ['leftover', 'leftover', 'half'] : plan.sales ? [plan.sales] : null) : formsFor(st);
+  const wforms = plan ? (plan.wool === 'two' ? ['two', 'two', 'priced'] : plan.wool ? [plan.wool] : null) : woolForms(st);
+  const n = count || (st <= 2 ? 3 : 4);
   const f = who || { name: 'A customer', she: false };
   const pick = (a) => a[Math.floor(rand() * a.length)];
-  const order = [...GOODS_IDS].sort(() => rand() - 0.5);
+  const order = [...GOODS_IDS].sort(() => rand() - 0.5).filter((g) => (g === 'wool' ? wforms : forms));
+  if (!order.length) return null;
   for (let tries = 0; tries < 12; tries++) {
-    const form = pick(forms), wform = pick(woolForms(step));
+    const form = forms ? pick(forms) : null, wform = wforms ? pick(wforms) : null;
     for (const g of order) {
       const core = g === 'wool' ? woolCore(wform, whole(carried && carried[g]), { pick, f })
-        : saleCore(g, form, whole(carried && carried[g]), { rand, pick, step, f });
+        : saleCore(g, form, whole(carried && carried[g]), { rand, pick, step: st, f });
       if (!core) continue;
       const coins = coinsFor(core, n, rand);
       if (!coins) continue;
+      const fm = g === 'wool' ? wform : form;
       return {
-        id: Math.floor(rand() * 1e9).toString(36), type: 'sale', step, key: `sale:${g}:${form}`, who: f,
-        story: core.story, ask: core.ask, coins, answer: coins.find((c) => c.good).label, unit: core.unit || GOLD, cents: false,
+        id: Math.floor(rand() * 1e9).toString(36), type: 'sale', step: st, key: `sale:${g}:${fm}`, who: f,
+        story: core.story, ask: core.ask, read: `${core.story} ${core.ask}`, coins, answer: coins.find((c) => c.good).label, unit: core.unit || GOLD, cents: false,
         pic: core.pic, rightWhy: core.rightWhy, afterWhy: '', equation: null, picture,
-        sale: { goods: g, sold: core.sold, gold: core.gold != null ? core.gold : core.answer, left: whole(carried[g]) - core.sold, form: g === 'wool' ? wform : form },
+        sale: { goods: g, sold: core.sold, gold: core.gold != null ? core.gold : core.answer, left: whole(carried[g]) - core.sold, form: fm,
+          map: g === 'wool' ? 'wool' : 'sales', at: plan ? (g === 'wool' ? plan.woolAt : plan.salesAt) ?? null : null },
+        // (eggs and milk: by the dozen is times, counting out dozens is dividing; wool counts in Fractions itself)
+        credit: g === 'wool' ? [] : [SALE_CREDIT[fm] || SALE_CREDIT.leftover].map((c) => ({ ...c })), size: 1,
       };
     }
   }

@@ -15,8 +15,9 @@
 //   ?look=summer              the drier, golden meadows (the default is 'green', as the Terrain Lab)
 //   ?dev                      shortcut buttons: +100 gold, jump to each place, start the round-up, a lock box, a saddle, a dog
 //   ?perf                     frames a second, draw calls and the tier, top right
-// For rigs: window.BM = { world, player, rider, state, dev: { gold(n), goto(place), mission(name), lockbox(), tier, ... },
-//   roundup, hud, shops, title, input, camera, renderer, fps(s), frameMs(n), screenOf(steer or object), ready }
+// For rigs: window.BM = { world, player, rider, state, dev: { gold(n), goto(place), mission(name), lockbox(), tier,
+//   skill(strand, pct, { placed }), skills(), ... }, skills (the src/math/skill.js module),
+//   roundup, hud, shops, title, input, camera, renderer, fps(s), frameMs(n), screenOf(steer or object), checklist, ready }
 import * as THREE from 'three';
 import { makeWorld } from './world.js';
 import { chooseTier } from '../world/quality.js';
@@ -26,7 +27,8 @@ import { makeInput } from './input.js';
 import { makePlayer, MOVE } from './player.js';
 import { makeDog, dogKind } from './dog.js';
 import { townLife, townLifeNow, preloadChickens } from './townlife.js';
-import { showTitle } from './ui/title.js';
+import { showTitle, faceSVG } from './ui/title.js';
+import { openStats } from './ui/stats.js';
 import { makeHud } from './ui/hud.js';
 import { makeRoundup } from './missions/roundup.js';
 import { makeFarm } from './farm.js';
@@ -53,8 +55,12 @@ import { makeAudio, volumeRow } from './audio/audio.js';
 import { makeAmbience } from './audio/ambience.js';
 import { makeShouts } from './audio/shouts.js';
 import { makeReadAloud } from './audio/readaloud.js';
+import { sayLine, talking, hush as hushVoice } from './audio/sayline.js';
 import { openLockbox, TIER_NAME } from './lockbox/index.js';
-import { loadRiders, saveRider, earn, recordLockbox, titleOf, nextTitle, badgesOf, cleanBoxes, BOX_TIERS, READ_TOPICS, TOPICS } from './save.js';
+import { loadRiders, saveRider, earn, recordLockbox, titleOf, nextTitle, badgesOf, cleanBoxes, BOX_TIERS, jobOn, readMode, nextReadMode, readModeWords } from './save.js';
+import * as SKILLS from './math/skill.js';
+import { makeChecklist, openWhatsLeft } from './ui/completion.js';
+import { completion, goalsOf } from './completion.js';
 
 export const BUILD = '1 (2026-10-09)';
 const Q = new URLSearchParams(location.search);
@@ -110,7 +116,7 @@ const loading = Promise.all([
 // ── THE GAME'S STATE ─────────────────────────────────────────────────────────────────────────────────────────────
 // state: 'loading' | 'title' | 'play' | 'boxes' (just lock boxes, from the title)
 let state = 'loading', paused = false, pausedBy = new Set();
-let rider = null, mode = 'lasso', P = null, D = null, RU = null, hob = null, shops = null, door = null, menu = null, boxOpen = false;
+let rider = null, P = null, D = null, RU = null, hob = null, shops = null, door = null, menu = null, boxOpen = false;
 let stage = null;   // the band on the town's stage and its music (src/stage.js)
 let traffic = null;   // wagons travelling the road through the valley now and then (src/traffic.js)
 let AMBI = null;   // the town's sounds: animals, birds, work out back, the creek, the horse's hooves (src/audio/ambience.js)
@@ -120,15 +126,38 @@ let cabin = null;   // the player's cabin: walk in through its door (src/cabin/c
 let farm = null, SH = null;   // the farm north of town (src/farm.js) and its sick-sheep job (src/missions/sheep.js)
 let PG = null;   // the farm's loose-pigs job (src/missions/pigs.js)
 let SJ = null;   // the general store's counter: word problems on order slips (src/missions/store.js)
-let WJ = null;   // protect the wagon: the gang on the road east of the pasture (src/missions/wagonjob.js), when ticked
+let WJ = null;   // protect the wagon: the gang on the road east of the pasture (src/missions/wagonjob.js), unless a grown-up turned it off
 let HS = null;   // the rider's own farm animals in a yard behind the cabin, and their goods (src/homestead.js)
 let camps = null, DL = null;   // the camps out in the valley (src/camps.js) and their deliveries (src/missions/delivery.js)
 let deer = null;   // the wild deer herds out in the valley (src/deer.js)
-let DJ = null;   // deer photographs with Miss Wren's box camera (src/missions/deerjob.js), when ticked
-let SR = null;   // target shooting at the range on the east edge of town (src/missions/shooting.js), for a rider in Shooting mode
+let DJ = null;   // deer photographs with Miss Wren's box camera (src/missions/deerjob.js), unless a grown-up turned it off
+let SR = null;   // target shooting at the range on the east edge of town (src/missions/shooting.js), for every rider
 let JF = null;   // a person at each job who says what's going on, and thanks you after (src/jobfolk.js)
-let LJ = null;   // loot the gang: the gang's cache out in the valley, handed back at the sheriff's office (src/missions/loot.js), when ticked
+let LJ = null;   // loot the gang: the gang's cache out in the valley, handed back at the sheriff's office (src/missions/loot.js), unless a grown-up turned it off
+let CM = null;   // the checklist: a toast when an item is checked off, the pinned goals in the corner (src/ui/completion.js)
 const atCounter = () => !!(SJ && SJ.active) || !!(DL && DL.active) || !!(DJ && DJ.active) || !!(SR && SR.active);   // (or making up a camp's order on the slip)   // (working the counter: the rider stands still, the store's camera)
+// a question is up (the checklist's toast waits till it's answered): a panel or a lock box, a counter or a slip, the
+// camera or the six-shooter up, the loot's slip, or a wave of a job under way where the player is
+const asking = () => state !== 'play' || paused || boxOpen || atCounter() || !!(cabin && cabin.busy) || !!(LJ && LJ.active)
+  || !!(RU && RU.near && RU.wave && !RU.wave.done) || !!(SH && SH.near && SH.flock && !SH.flock.done)
+  || !!(PG && PG.near && PG.batch && !PG.batch.done) || !!(WJ && WJ.near && WJ.wave && !WJ.wave.done);
+// ...and which job is asking (Old Hob says only that job's lines meanwhile: src/hob.js), or 'panel' for a lock box, a
+// menu or the cabin, or null when nothing is asked
+function askingJob() {
+  if (state !== 'play' || paused || boxOpen || !!(cabin && cabin.busy)) return 'panel';
+  if (SJ && SJ.active) return 'store';
+  if (DL && DL.active) return 'delivery';
+  if (DJ && DJ.active) return 'deer';
+  if (LJ && LJ.active) return 'loot';
+  if (SR && SR.active) return 'range';
+  if (RU && RU.near && RU.wave && !RU.wave.done) return 'roundup';
+  if (SH && SH.near && SH.flock && !SH.flock.done) return 'sheep';
+  if (PG && PG.near && PG.batch && !PG.batch.done) return 'pigs';
+  if (WJ && WJ.near && WJ.wave && !WJ.wave.done) return 'wagon';
+  return null;
+}
+// how near (m) a camp's middle or a gang hideout counts as found for the checklist
+const FOUND_NEAR = { camp: 28, hideout: 30 };
 
 function pause(why) {
   pausedBy.add(why);
@@ -167,7 +196,7 @@ function resume(why) {
 async function ride(r) {
   await loading;
   if (!W) return;
-  rider = r; mode = r.mode === 'shoot' ? 'shoot' : 'lasso';   // (picked on the title; it holds for the whole ride)
+  rider = r;
   state = 'play'; pausedBy.clear(); paused = false;
   T.hide();
   canvas.classList.add('is-on');
@@ -175,20 +204,23 @@ async function ride(r) {
   P = makePlayer({ W, folk, animals, rider, input: I, camera, say: (t) => hud.toast(t) });
   makeDogIfOwned();
   cardBy = null;
-  hob = makeHob({ W, hud, rider, I, roads: roadLines });   // (no babble voice: reading works better; src/audio/voice.js is kept for the Sound Lab)
+  // (no babble voice: reading works better; src/audio/voice.js is kept for the Sound Lab. A rider who can't read yet
+  // hears Hob's lines in the browser's voice, each in turn: src/audio/sayline.js)
+  hob = makeHob({ W, hud, rider, I, roads: roadLines, voice: { speak: (text) => { if (rider && SKILLS.readAloud(rider)) sayLine(text); }, stop: () => {} } });
   { const heard = hob.event; hob.event = (n, d) => { heard(n, d); if (JF) JF.heard(n, d); if (SHOUT) SHOUT.heard(n, d); }; }   // (the job folk hear the jobs too: their thank-yous; and the player's yeehaw at a job's end)
   stage = makeStage({ W, folk, audio: AUD });
   traffic = makeTraffic({ W, animals, folk, audio: AUD, obstacles: trafficThings, camps: () => camps });
   AMBI = makeAmbience({ audio: AUD, W }); BM.ambience = AMBI;
   // (one voice at a time: a shout waits while a card is read, and a card waits for a shout to finish)
   SHOUT = makeShouts({ audio: AUD, hush: () => !!(READ && READ.speaking) }); BM.shouts = SHOUT;
-  READ = makeReadAloud({ audio: AUD, on: () => !!(rider && rider.readAloud !== false), busy: () => !!(SHOUT && SHOUT.speaking) }); BM.read = READ;
+  // (a card's clips wait while the browser's voice says a line: Hob's directions, a why)
+  READ = makeReadAloud({ audio: AUD, on: () => !!(rider && rider.readAloud !== false), busy: () => !!(SHOUT && SHOUT.speaking) || talking() }); BM.read = READ;
   AUD.hold('pause', false); AUD.hold('title', false);
   HS = makeHomestead({ W, animals, rider, hud, hob, refresh });
   shops = makeShops({ W, rider, say: (t, k) => hud.toast(t, k), extra: HS.shop,
     onOpen: () => pause('counter'), onClose: () => resume('counter'),
     onBuy: (what) => { refresh(); if (what === 'saddle' || what === 'horse') P.refreshOwned(); if (what === 'dog') { makeDogIfOwned(); if (cabin) cabin.dogsChanged(); } if (what === 'hat' && P && P.person) { if (!P.person.hat) P.person.hatOn(); P.person.setHat(rider.look.hatStyle); } hob.event(what); },
-    onLockbox: (box, o) => openBox(box, o), onStoreJob: () => { if (SJ) SJ.start(); } });
+    onLockbox: (box, o) => openBox(box, o), onStoreJob: jobOn(rider, 'store') ? () => { if (SJ) SJ.start(); } : null });   // (no "Mind the counter" when a grown-up turned the store job off)
   cabin = makeCabin({ W, renderer, camera, animals, rider, hud, input: I, audio: AUD, player: () => P, follower: () => D,
     onBuy: () => refresh(), onLockbox: (box, o) => openBox(box, o) });
   // (the round-up's Hob also hears a whole wave roped: now and then a thank-you calf from the rancher)
@@ -197,43 +229,51 @@ async function ride(r) {
   farm = makeFarm({ W, animals });
   // (the farm jobs' Hob also hears a whole flock healed or a batch penned: now and then a thank-you lamb or piglet)
   const farmHob = Object.create(hob); farmHob.event = (n, d) => { hob.event(n, d); if (HS && (n === 'flockDone' || n === 'pigsDone')) HS.jobDone(n); };
-  SH = makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hud: tagHud('sheep'), hob: farmHob, refresh, defer: (at) => !!(PG && PG.wants(at)) });
-  PG = makePigJob({ W, animals, farm, P, camera, canvas, rider, hud: tagHud('pigs'), hob: farmHob, refresh });
-  SJ = makeStoreJob({ W, folk, P, I, camera, rider, hud: tagHud('store'), hob, refresh, pay: PAY, goods: HS, voice: (k, who) => { if (SHOUT) SHOUT.say(k, who); },
+  // (every job is on unless a grown-up turned it off on the title: save.js jobOn; the round-up and the lock boxes always are)
+  SH = !jobOn(rider, 'sheep') ? null : makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hud: tagHud('sheep'), hob: farmHob, refresh, defer: (at) => !!(PG && PG.wants(at)) });
+  PG = !jobOn(rider, 'pigs') ? null : makePigJob({ W, animals, farm, P, camera, canvas, rider, hud: tagHud('pigs'), hob: farmHob, refresh });
+  SJ = !jobOn(rider, 'store') ? null : makeStoreJob({ W, folk, P, I, camera, rider, hud: tagHud('store'), hob, refresh, pay: PAY, goods: HS, voice: (k, who) => { if (SHOUT) SHOUT.say(k, who); },
     openBox: (problem, after) => !paused && openBox({ tier: problem.tier, from: 'store' }, { problem, after }),   // (false: not now, the store tries again)
     onStart: () => { I.enabled = false; if (RU) RU.paused = true; hud.prompt(null); hud.rule(null); hud.hint(null); },
     onStop: () => { I.enabled = !paused; if (RU) RU.paused = paused; } });
   camps = makeCamps({ W, folk, camera, audio: AUD });
   deer = makeDeer({ W, animals });
-  DJ = rider.missions && rider.missions.hunt ? makeDeerJob({ W, deer, P, I, camera, canvas, rider, hud: tagHud('deer'), hob, audio: AUD, refresh,
+  DJ = jobOn(rider, 'hunt') ? makeDeerJob({ W, deer, P, I, camera, canvas, rider, hud: tagHud('deer'), hob, audio: AUD, refresh, read: READ,
     onStart: () => { P.enabled = false; I.enabled = false; if (RU) RU.paused = true; hud.prompt(null); },
     onStop: () => { P.enabled = !paused; I.enabled = !paused; if (RU) RU.paused = paused; },
     busy: () => !!((WJ && (WJ.on || WJ.near)) || (RU && RU.near) || (SH && SH.near) || (PG && PG.near) || (DL && (DL.active || DL.card))) }) : null;   // (another job has the player: the deer card stands aside)
-  // Shooting mode: bottles and tin cans at the range, never anything alive (cattle and bandits are still roped)
-  SR = mode === 'shoot' ? makeShootingJob({ W, folk, P, I, camera, canvas, renderer, rider, hud: tagHud('range'), hob, audio: AUD, refresh,
+  // the bottle range, for every rider: bottles and tin cans, never anything alive (cattle and bandits are roped)
+  SR = jobOn(rider, 'range') ? makeShootingJob({ W, folk, P, I, camera, canvas, renderer, rider, hud: tagHud('range'), hob, audio: AUD, refresh, read: READ,
     onStart: () => { P.enabled = false; I.enabled = false; if (RU) RU.paused = true; hud.prompt(null); },
     onStop: () => { P.enabled = !paused; I.enabled = !paused; if (RU) RU.paused = paused; },
     busy: () => !!((WJ && WJ.on) || (DL && DL.active) || (DJ && DJ.active)) }) : null;
-  DL = makeDeliveryJob({ W, camps, P, camera, rider, hud: tagHud('delivery'), hob, refresh,
+  DL = !jobOn(rider, 'deliveries') ? null : makeDeliveryJob({ W, camps, P, camera, rider, hud: tagHud('delivery'), hob, refresh,
     onStart: () => { P.enabled = false; I.enabled = false; if (RU) RU.paused = true; hud.prompt(null); },
     onStop: () => { P.enabled = !paused; I.enabled = !paused; if (RU) RU.paused = paused; },
     quiet: () => !!((RU && RU.near) || (SH && SH.near) || (PG && PG.near) || (SJ && SJ.active) || (WJ && WJ.near)),
     say: (id, t) => !!(JF && JF.say(id, t)) });   // (the foremen's words in the job folk's speech card)
-  WJ = rider.missions && rider.missions.wagon ? makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hud: tagHud('wagon'), hob, audio: AUD, refresh,
+  WJ = jobOn(rider, 'wagon') ? makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hud: tagHud('wagon'), hob, audio: AUD, refresh, read: READ,
     times: () => RU && RU.trainer('times'),   // (one times trainer for both jobs)
     wagonLib: () => traffic && traffic.ready,   // (the wagon models the traffic loads, shared)
     quiet: () => !!((RU && RU.near) || (SH && SH.near) || (PG && PG.near) || atCounter() || (DL && DL.card)) }) : null;
-  LJ = rider.missions && rider.missions.loot ? makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud: tagHud('loot'), hob, refresh,
+  LJ = jobOn(rider, 'loot') ? makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud: tagHud('loot'), hob, refresh,
     voice: (k, who) => { if (SHOUT) SHOUT.say(k, who); },   // (a townsman's recorded lines: "Is that my stuff?", a thank-you)
     quiet: () => !!((RU && RU.near) || (SH && SH.near) || (PG && PG.near) || atCounter() || (WJ && WJ.near) || (DL && DL.card) || (DJ && DJ.card)) }) : null;
   JF = makeJobFolk({ W, folk, P, camera, hud,
     jobs: { roundup: () => RU, sheep: () => SH, pigs: () => PG, wagon: () => WJ, deer: () => DJ, camps: () => camps, farm: () => farm, delivery: () => DL, loot: () => LJ },
-    actions: { sheriff: () => openCounter('sheriff') }, onTalk: (what, id, who) => { if (SHOUT) SHOUT.talk(what, who && { id, ...who }); } });
+    actions: { sheriff: () => openCounter('sheriff') }, onTalk: (what, id, who) => { if (SHOUT) SHOUT.talk(what, who && { id, ...who }); },
+    // (the trail boss, the vet and the others: their speech card read out, in the browser's voice, to a rider who can't read yet)
+    onSay: (name, lines) => { if (rider && SKILLS.readAloud(rider)) sayLine(lines.join(' ')); } });
+  // (made before anything can be bought or done: its first look takes what an old save already has as announced)
+  CM = makeChecklist({ hud, audio: AUD, rider, busy: asking, save: () => saveRider(rider), world: {
+    place: () => { const c = camps && P && camps.near(P.position, FOUND_NEAR.camp); return c ? c.id : null; },
+    hideout: () => { const c = LJ && LJ.cache; return c && P && Math.hypot(c.x - P.position.x, c.z - P.position.z) < FOUND_NEAR.hideout ? c.def.id : null; },
+    home: () => !!(cabin && cabin.inside) } });
   RU.start();
   hob.trail(true);
   hud.show(true); hud.touch(I.touch);
   refresh();
-  hob.event('ride', { mode, wagon: !!WJ, deer: !!DJ, loot: !!LJ });
+  hob.event('ride', { range: !!SR, wagon: !!WJ, deer: !!DJ, loot: !!LJ, sheep: !!SH, pigs: !!PG, deliveries: !!DL, store: !!SJ });   // (a job turned off: Hob doesn't send the rider there)
   P.cam.snap();
   last = performance.now();
 }
@@ -266,6 +306,7 @@ function makeDogIfOwned() {
 }
 function endRide() {
   if (state !== 'play') return;
+  hushVoice();   // (a line still being said in the browser's voice stops with the ride)
   if (menu) { const m = menu; menu = null; m.close(); }
   if (shops) shops.dispose();
   if (cabin) { cabin.dispose(); cabin = null; }
@@ -292,6 +333,7 @@ function endRide() {
   if (AMBI) { AMBI.dispose(); AMBI = BM.ambience = null; }
   if (SHOUT) { SHOUT.dispose(); SHOUT = BM.shouts = null; }
   if (READ) { READ.dispose(); READ = BM.read = null; }
+  if (CM) { CM.dispose(); CM = null; }
   RU = hob = shops = D = P = stage = SH = PG = SJ = farm = null; door = null;
   AUD.hold('title', true);
   pausedBy.clear(); paused = false;
@@ -366,6 +408,15 @@ function trailGoal() {
     default: return null;
   }
 }
+// where Old Hob's last line just sent the rider (the stable, once the first wave's pay buys a saddle), for a while: the
+// trail leads there, so his words and the hoofprints agree; a job under way where the rider is keeps its own trail
+function hobGoal() {
+  const w = hob && hob.wants ? hob.wants() : null;
+  const p = w && W.places[w];
+  if (!p || (cardBy && cardBy.kind === 'travel' && underWay(cardBy.id))) return null;
+  const d = p.door || p;
+  return Number.isFinite(d.x) && Number.isFinite(d.z) ? { id: 'hob:' + w, x: d.x, z: d.z } : null;
+}
 // the wagon road, as points, for the trail to keep to (it is no longer way round)
 let roadPts = null;
 function roadLines() {
@@ -378,6 +429,7 @@ function refresh() {
   if (!rider) return;
   hud.purse({ gold: rider.gold, bounty: rider.bounty, title: titleOf(rider), next: nextTitle(rider), badges: badgesOf(rider), boxes: (rider.lockboxes || []).length, goods: HS ? HS.goodsLine() : '' });
   if (shops && shops.isOpen) shops.redraw();
+  if (CM) CM.check();   // (anything bought or done: a checklist item may be checked off)
 }
 
 // ── LOCK BOXES ───────────────────────────────────────────────────────────────────────────────────────────────────
@@ -410,12 +462,15 @@ function openBox(box, { own = false, after = null, problem = null } = {}) {
     if (!BOX_TIERS.includes(box.tier)) box = { ...box, tier: 'iron' };
   }
   // (problem: one set equation, from the store's word problems; the panel closes after it)
-  openLockbox(document.body, { rider, box, debug: DEV, problem,
+  // (audio: the box's read-aloud follows the game's volume; the parts a box asked count in the skill model at once,
+  // so the rider is saved as the panel closes even when no box was finished)
+  openLockbox(document.body, { rider, box, debug: DEV, problem, audio: AUD,
     next: own ? null : problem ? () => null : () => ({ tier: boxTier(rider), from: 'sheriff' }),   // the sheriff's pile never runs out
     onBox: (res) => payBox(res, own),
     onDone: (res) => {
       boxOpen = false;
       try {
+        saveRider(rider);
         refresh();
         // (a counter the panel closes back onto says it in its own note: no toast on top of it)
         if (JF && res.solved && box.from === 'sheriff') JF.heard('sheriffDone');   // (the sheriff's thank-you, once back in the street)
@@ -437,18 +492,52 @@ async function justBoxes(r) {
   nextJustBox();
 }
 function nextJustBox() {
-  openLockbox(document.body, { rider, box: { tier: boxTier(rider), from: 'practice' }, debug: DEV,
+  openLockbox(document.body, { rider, box: { tier: boxTier(rider), from: 'practice' }, debug: DEV, audio: AUD,
     next: () => ({ tier: boxTier(rider), from: 'practice' }),
     onBox: (res) => payBox(res, false),
-    onDone: () => { state = W ? 'title' : 'loading'; if (W) canvas.classList.add('is-on'); T.show(); } });
+    onDone: () => { saveRider(rider); state = W ? 'title' : 'loading'; if (W) canvas.classList.add('is-on'); T.show(); } });
 }
 
-// the menu's read-aloud switch, in words
+// the menu's read-aloud switch, in words (always in the menu: a tap steps through by itself, always, off; save.js)
 function readWords() {
-  const on = rider.readAloud !== false;
-  const young = READ_TOPICS.filter((id) => rider.topicsOn[id]).map((id) => (TOPICS.find((t) => t.id === id) || { name: id }).name)
-    .join(', ').replace(/, ([^,]*)$/, ' and $1');
-  return `Read aloud: ${on ? 'On' : 'Off'}<small>${on ? `The ${young} cards are read out loud` : 'The cards are not read out loud'}</small>`;
+  const m = readMode(rider);
+  return `Read aloud: ${readModeWords(rider)}<small>${m === 'on' ? 'Every question is read out loud' : m === false ? 'Nothing is read out loud'
+    : 'Read out loud while the math is new (and for an age of 7 and under)'}</small>`;
+}
+// the menu's "What's left" line: the checklist's percent and the first goal's progress
+function leftWords() {
+  const c = completion(rider), g = goalsOf(rider).find((x) => !x.done);
+  return `${c.pct}% of the checklist done${g ? ` · goal: ${g.name}` : ''}`;
+}
+// ── MARK THIS SPOT (the menu): where the player is, as one line to paste in a message ─────────────────────────────
+// x and z in metres (north is −z), the way the view faces (a compass point and degrees, north 0°, east 90°), and how far
+// and which way from the nearest named place. Worked out only when asked: nothing runs per frame.
+const SPOT_NAMES = { cabin: 'your cabin', stable: 'the stable', store: 'the general store', sheriff: "the sheriff's office", saloon: 'the saloon',
+  stage: 'the stage', square: 'the town square', pasture: 'the pasture', corral: 'the corral', farm: 'the farm' };
+const POINT8 = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+const degOf = (dx, dz) => ((Math.atan2(dx, -dz) * 180 / Math.PI) % 360 + 360) % 360;   // (0 north, 90 east)
+function spotNote() {
+  if (!P || !W) return '';
+  const at = P.position, face = ((180 - P.cam.yaw * 180 / Math.PI) % 360 + 360) % 360;
+  const named = [];
+  for (const [k, name] of Object.entries(SPOT_NAMES)) { const q = W.places[k]; if (q && Number.isFinite(q.x) && Number.isFinite(q.z)) named.push({ name, x: q.x, z: q.z }); }
+  if (camps && camps.list) for (const c of camps.list) named.push({ name: c.short, x: c.x, z: c.z });
+  if (SR && SR.layout) named.push({ name: 'the bottle range', x: SR.layout.x, z: SR.layout.z });
+  let near = null, nd = Infinity;
+  for (const n of named) { const d = Math.hypot(n.x - at.x, n.z - at.z); if (d < nd) { nd = d; near = n; } }
+  const from = !near ? '' : nd < 8 ? `, at ${near.name}` : `, ${Math.round(nd)} m ${POINT8[Math.round(degOf(at.x - near.x, at.z - near.z) / 45) % 8]} of ${near.name}`;
+  const how = cabin && cabin.inside ? 'inside the cabin' : P.onHorse ? 'on horseback' : 'on foot';
+  return `Bandit Math spot: x ${at.x.toFixed(1)}, z ${at.z.toFixed(1)}, facing ${POINT8[Math.round(face / 45) % 8]} (${Math.round(face) % 360}°)${from}, ${how}`;
+}
+// copies a line to the clipboard (the clipboard API, else the old select-and-copy); -> true if it was copied
+async function copyLine(text) {
+  try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); return true; } } catch (e) { /* (refused: try the old way) */ }
+  try {
+    const a = document.createElement('textarea');
+    a.value = text; a.setAttribute('readonly', ''); a.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+    document.body.appendChild(a); a.select(); a.setSelectionRange(0, text.length);
+    const ok = document.execCommand('copy'); a.remove(); return !!ok;
+  } catch (e) { return false; }
 }
 // ── THE MENU (Esc) ───────────────────────────────────────────────────────────────────────────────────────────────
 function openMenu() {
@@ -460,9 +549,12 @@ function openMenu() {
       <button type="button" class="is-main" data-do="resume">Keep riding<small>${I && I.touch ? 'Back to the game' : 'Esc'}</small></button>
       ${boxes ? `<button type="button" data-do="box">Open a lock box<small>${boxes} in your saddlebags</small></button>` : ''}
       ${prints(rider).length ? `<button type="button" data-do="album">Photo album<small>${prints(rider).length} deer photographs</small></button>` : ''}
+      <button type="button" data-do="left">What's left<small>${leftWords()}</small></button>
+      <button type="button" data-do="stats">Your stats<small>Each kind of math, and how it's going</small></button>
       ${WJ && WJ.on ? '<button type="button" data-do="wagon">Let the wagon wait<small>Stop riding along for now</small></button>' : ''}
-      ${READ_TOPICS.some((t) => rider.topicsOn[t]) ? `<button type="button" data-do="read" role="switch" aria-checked="${rider.readAloud !== false}">${readWords()}</button>` : ''}
+      <button type="button" data-do="read" aria-pressed="${readMode(rider) !== false}">${readWords()}</button>
       <button type="button" data-do="home">Go back to town<small>Straight to the town square</small></button>
+      <button type="button" data-do="mark">Mark this spot<small>Copies where you are, to paste in a message</small></button>
       <button type="button" data-do="title">Back to the title<small>Your gold is already saved</small></button></div>
     <div class="bms-keys">${I && I.touch
       ? 'thumb stick on the left to move (push it to the edge to gallop) · drag to look · tap a steer or a rider, or press Rope · Horse calls your horse · On / off gets on and off · tap the prompt at a door'
@@ -470,21 +562,37 @@ function openMenu() {
       click a steer (or <kbd>F</kbd>) to rope it · <kbd>H</kbd> call your horse · <kbd>E</kbd> on and off, or talk at a door`}</div>`;
   body.querySelector('.bms-menu').after(volumeRow(AUD));
   let then = null;
-  menu = makePanel({ title: 'Taking a breather', sub: `${rider.name} · ${titleOf(rider)}${mode === 'shoot' ? ' · Shooting: bottles and cans at the range' : ''}`, body,
+  menu = makePanel({ title: 'Taking a breather', sub: `${rider.name} · ${titleOf(rider)}`, body,
     onClose: () => { menu = null; resume('menu'); if (then) then(); } });
   body.addEventListener('click', (e) => {
     const b = e.target.closest('button[data-do]'); if (!b) return;
     const what = b.dataset.do;
     if (what === 'read') {   // (the switch flips here and the menu stays open)
-      rider.readAloud = rider.readAloud === false; saveRider(rider);
-      b.setAttribute('aria-checked', String(rider.readAloud)); b.innerHTML = readWords();
-      if (!rider.readAloud && READ) READ.stop();
+      rider.readAloud = nextReadMode(rider); saveRider(rider);
+      b.setAttribute('aria-pressed', String(readMode(rider) !== false)); b.innerHTML = readWords();
+      if (rider.readAloud === false) { if (READ) READ.stop(); hushVoice(); }
+      return;
+    }
+    if (what === 'mark') {   // (the menu stays open: the line shows on the button, and a "Copied" toast over the menu)
+      const line = spotNote(), m = menu;
+      b.innerHTML = `Mark this spot<small class="bms-spot">${line.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</small>`;
+      copyLine(line).then((ok) => {
+        BM.spot = { line, copied: ok };
+        if (!m || menu !== m) return;
+        const t = document.createElement('div');
+        t.className = 'bms-copied'; t.setAttribute('role', 'status');
+        t.textContent = ok ? 'Copied! Paste it in a message' : 'Copy it from the menu';
+        m.el.appendChild(t); requestAnimationFrame(() => t.classList.add('is-on'));
+        setTimeout(() => { t.classList.remove('is-on'); setTimeout(() => t.remove(), 400); }, 2400);
+      });
       return;
     }
     if (what === 'wagon') then = () => { if (WJ) WJ.stop(); };
     if (what === 'home') then = () => { if (SJ) SJ.stop(); const s = W.places.spawn; if (cabin && cabin.inside) cabin.leave({ to: s }); else P.teleport(s.x, s.z, s.rot); };
     if (what === 'title') then = () => endRide();
     if (what === 'box') then = () => { const bx = rider.lockboxes[0]; if (bx) openBox({ tier: bx.tier, from: 'loot' }, { own: true }); };
+    if (what === 'left') then = () => { pause('left'); openWhatsLeft(document.body, rider, { onClose: () => resume('left') }); };
+    if (what === 'stats') then = () => { pause('stats'); openStats(document.body, rider, { face: faceSVG(rider.look), onClose: () => resume('stats') }); };
     if (what === 'album') then = () => { pause('album'); makePanel({ title: 'Photo album', sub: rider.name, body: albumBody(rider), wide: true, onClose: () => resume('album') }); };
     menu.close();
   });
@@ -577,7 +685,8 @@ function compass() {
 // so the town sits in the left part of the screen (the settings panel covers the right half). It sweeps back and forth
 // over the open side of the town rather than right round: from the other side the view is through the trees.
 export const TITLE_CAM = {
-  r: 58, up: 20,          // metres from the square's middle, and above it
+  r: 58, up: 30,          // metres from the square's middle, and above it (high enough to look over the trees' crowns:
+                          // at 20 a tree stood right in front of the camera through the middle of the sweep)
   aside: 18,              // metres to the right of the square the camera looks
   from: 3.2, to: 4.6,     // the arc it sweeps (radians round the square, as three's rotation.y: 0 is +z); past about
                           // 4.8 the stable's roof and the back of the stage fill the view
@@ -645,8 +754,8 @@ function step(dt) {
     if (DJ) DJ.update(dt);   // (after the player: it places the camera while the viewfinder is up)
     if (SR) SR.update(dt);   // (after the player: it places the camera while the six-shooter is up)
     if (LJ) LJ.update(dt);
-    hob.trailTo(trailGoal());
-    hob.update(dt, P.position, { hold: !!((JF && JF.speaking()) || (SR && SR.speaking())) });   // (on a phone, Hob waits while a job person is talking)
+    hob.trailTo(hobGoal() || trailGoal());
+    hob.update(dt, P.position, { hold: !!((JF && JF.speaking()) || (SR && SR.speaking())), asking: askingJob() });   // (on a phone, Hob waits while a job person is talking; while a question is up, only its job's lines come)
     if (stage) stage.update(dt, P.position);
     if (traffic) { traffic.keepView = SJ && SJ.active && !P.cam.enabled ? camera : null; traffic.update(dt, P.position, camera.position); }   // (no wagon through the store counter's picture)
     townSounds(dt, false);
@@ -709,7 +818,7 @@ for (const k of ['cabin', 'stable', 'store', 'sheriff', 'saloon', 'stage']) {
 for (const id of ['cow', 'hollis', 'survey']) SPOTS['camp-' + id] = () => { const c = camps && camps.byId(id); if (!c) return W.places.spawn; return { x: c.drop.x, z: c.drop.z, rot: Math.atan2(c.x - c.drop.x, c.z - c.drop.z) }; };
 // beside the wagon, facing the way it rolls
 SPOTS.wagon = () => { if (!WJ) return W.places.spawn; const w = WJ.where(), q = WJ.road.at(WJ.state().s); return { x: w.x - q.nx * 5, z: w.z - q.nz * 5, rot: q.h }; };
-// at the target range, a couple of steps behind the firing line, facing downrange (Shooting mode)
+// at the target range, a couple of steps behind the firing line, facing downrange
 SPOTS.range = () => { if (!SR) return W.places.spawn; const L = SR.layout, p = L.at(0.6, -2.4); return { x: p.x, z: p.z, rot: L.rot }; };
 const dev = {
   get tier() { return W ? W.tier : quality.tier; },
@@ -722,6 +831,7 @@ const dev = {
     if (name !== 'roundup' || !RU) return false; dev.goto('pasture'); RU.newWave(); return true;
   },
   lockbox(tier) { if (!rider) return false; if (state === 'play') openBox({ tier: tier || boxTier(rider), from: 'sheriff' }); return true; },
+  spot() { return spotNote(); },   // (the menu's "Mark this spot" line, for rigs)
   saddle(kind = 'plain') { if (!rider) return; const o = rider.owned; o.saddles = [...new Set([...(o.saddles || []), kind])]; o.saddle = kind; saveRider(rider); if (P) P.refreshOwned(); refresh(); },
   // a wagon on the road coming toward the player (from about 70 m up the road)
   wagon(dir, kind, o = {}) { if (!traffic || !P) return null; return traffic.sendNear(P.position, { dir, kind, ...o }); },
@@ -733,7 +843,7 @@ const dev = {
 { const m = dev.mission; dev.mission = (name, ...a) => (name === 'delivery' ? !!(DL && DL.orderFrom(a[0] || 'cow')) : m(name, ...a)); }   // (an order from a camp, without riding out to it)
 { const m = dev.mission; dev.mission = (name, ...a) => { if (name !== 'wagon') return m(name, ...a); if (!WJ) return false; dev.goto('wagon'); WJ.newWave(); return true; }; }   // (a gang at once, beside the wagon)
 { const m = dev.mission; dev.mission = (name, ...a) => { if (name !== 'deer') return m(name, ...a); const H = DJ && DJ.herd(); if (!H) return false; const sq = W.places.square, l = Math.hypot(sq.x - H.mid.x, sq.z - H.mid.z) || 1, x = H.mid.x + (sq.x - H.mid.x) / l * 32, z = H.mid.z + (sq.z - H.mid.z) / l * 32; P.teleport(x, z, Math.atan2(H.mid.x - x, H.mid.z - z)); return true; }; }   // (32 m from the deer job's herd, on the town's side)
-{ const m = dev.mission; dev.mission = (name, ...a) => { if (name !== 'range') return m(name, ...a); if (!SR) return false; dev.goto('range'); setTimeout(() => { if (SR && SR.prompt) SR.start(); }, 400); return true; }; }   // (the six-shooter up at the range, in Shooting mode)
+{ const m = dev.mission; dev.mission = (name, ...a) => { if (name !== 'range') return m(name, ...a); if (!SR) return false; dev.goto('range'); setTimeout(() => { if (SR && SR.prompt) SR.start(); }, 400); return true; }; }   // (the six-shooter up at the range)
 // the homestead behind the cabin: between the cabin's back wall and the animals' homes, looking out at them; an animal
 // of a kind (hen, pig, sheep, cow) or goods in the saddlebags without buying
 SPOTS.yard = () => { if (!HS) return W.places.spawn; const L = HS.layout, p = L.at(0, 5.6); return { x: p.x, z: p.z, rot: L.rot }; };
@@ -743,6 +853,10 @@ SPOTS.cache = () => (LJ && LJ.dev.at()) || W.places.spawn;
 SPOTS['loot-town'] = () => (LJ ? LJ.dev.town() : W.places.spawn);
 { const m = dev.mission; dev.mission = (name, ...a) => { if (name !== 'loot') return m(name, ...a); if (!LJ) return false; return dev.goto('cache'); }; }
 dev.lootLoad = () => !!(LJ && LJ.dev.load());   // (straight to the cache with the horse, to load it)
+// the skill model (src/math/skill.js): put a strand at a level (placed, or placed: false to run its baseline from
+// there), and read the rider's strands back (the stats page's rows)
+dev.skill = (strand, pct, { placed = true } = {}) => { if (!rider) return null; SKILLS.setLevel(rider, strand, pct, { placed }); saveRider(rider); return SKILLS.levelOf(rider, strand); };
+dev.skills = () => (rider ? SKILLS.stats(rider) : []);
 if (DEV) {
   const bar = document.createElement('div');
   bar.style.cssText = 'position:fixed;left:12px;top:50%;transform:translateY(-50%);z-index:26;display:flex;flex-direction:column;gap:4px;max-height:70vh;overflow:auto';
@@ -786,13 +900,14 @@ function screenOf(o) {
 Object.defineProperties(BM, {
   world: { get: () => W }, player: { get: () => P }, rider: { get: () => rider }, state: { get: () => (state === 'play' && paused ? 'paused' : state) },
   roundup: { get: () => RU }, traffic: { get: () => traffic }, sheep: { get: () => SH }, pigs: { get: () => PG }, wagon: { get: () => WJ }, farm: { get: () => farm }, shops: { get: () => shops }, dog: { get: () => D }, input: { get: () => I }, hob: { get: () => hob },
-  door: { get: () => door }, store: { get: () => SJ }, paused: { get: () => paused }, mode: { get: () => mode }, cabin: { get: () => cabin },
+  door: { get: () => door }, store: { get: () => SJ }, paused: { get: () => paused }, cabin: { get: () => cabin },
 });
 Object.defineProperties(BM, { deer: { get: () => deer }, deerjob: { get: () => DJ }, jobfolk: { get: () => JF } });
-Object.defineProperties(BM, { range: { get: () => SR } });   // (the target range, in Shooting mode)
+Object.defineProperties(BM, { range: { get: () => SR } });   // (the target range)
+Object.defineProperties(BM, { checklist: { get: () => CM } });   // (the checklist's toasts and goals corner, while riding)
 Object.defineProperties(BM, { camps: { get: () => camps }, delivery: { get: () => DL }, homestead: { get: () => HS }, loot: { get: () => LJ } });   // (the camps and their deliveries; DL.rob() is the bandits' hook)
 Object.assign(BM, {
-  dev, hud, title: T, camera, renderer, screenOf, prices: PRICES, loading,
+  dev, hud, title: T, camera, renderer, screenOf, prices: PRICES, loading, skills: SKILLS,
   fps: (seconds = 3) => new Promise((res) => { let n = 0; const a = performance.now(); const f = () => { n++; if (performance.now() - a < seconds * 1000) requestAnimationFrame(f); else res(n * 1000 / (performance.now() - a)); }; requestAnimationFrame(f); }),
   // a frame's real cost, not held to the screen's refresh: n frames drawn back to back, each waited for
   frameMs: (n = 60) => { const gl = renderer.getContext(), px = new Uint8Array(4); let worst = 0; const a = performance.now();

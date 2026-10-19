@@ -62,7 +62,7 @@ test('every card: one right answer, the sum is right, the wrong ones are named s
 
 test('the ladder: words first, then each table\'s division facts in the times tables\' order, both ways round, then remainders', () => {
   const at = (step) => { const D = makeDividing({}, { rand: seeded(40 + step) }); D.setStep(step); return D.wave({ count: 5, cards: 6 }).cards.filter((c) => !c.review); };
-  for (const c of at(1)) { assert.equal(c.kind, 'share'); assert.ok(!c.rule.includes(DIV), `words: ${c.rule}`); assert.ok(c.n <= 15); }
+  for (const c of at(1)) { assert.equal(c.kind, 'share'); assert.ok(!c.rule.includes(DIV), `words: ${c.rule}`); assert.ok(c.n <= 20, 'no more than 20 to share'); }
   for (const c of at(3)) { assert.equal(c.kind, 'fact'); assert.match(c.rule, /^\d+ ÷ \d+ = \?$/); assert.ok([2, 10, 5].includes(c.d)); }
   for (const c of at(7)) { assert.equal(c.kind, 'missing'); assert.match(c.rule, /\?/); }
   for (const c of at(8)) { assert.equal(c.kind, 'rem'); assert.match(c.rule, /= \? r \?$/); assert.match(c.label, /^\d+ r \d+$/); assert.ok(c.d <= 5); }
@@ -210,7 +210,9 @@ test('the state saves as plain JSON and a reload mid-wave carries on', () => {
 test('the sick sheep: dividing sums from the kid\'s own step, one cure each, a row off or the leftover dropped', async () => {
   const { makeFlock, flockTopics, levelOf, SHEEP_MATH } = await import('../src/missions/sheepmath.js');
   assert.ok(SHEEP_MATH.topics.includes('dividing'));
-  assert.deepEqual(flockTopics({ topicsOn: { dividing: true } }), ['dividing']);
+  const { setLevel } = await import('../src/math/skill.js');
+  const divRider = {}; setLevel(divRider, 'div', 30); setLevel(divRider, 'mul', 30);
+  assert.ok(flockTopics(divRider).includes('dividing'), 'a rider at dividing gets dividing flocks');
   const rand = seeded(17);
   // what a written answer comes to: '4' -> 4, '3 r 2' -> 302 (the round-up's way)
   let rem = false;

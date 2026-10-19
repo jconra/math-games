@@ -10,7 +10,7 @@ import { PATCH_PRESETS } from '../src/audio/patch.js';
 const source = (path) => fs.readFileSync(new URL(path, import.meta.url)).toString();
 
 test('every hat but the old one has a price at the general store, and a picture', () => {
-  const prices = source('../src/shop.js').match(/hat: \{([^}]+)\}/)[1];
+  const prices = source('../src/catalog.js').match(/hat: \{([^}]+)\}/)[1];   // (the prices: src/catalog.js, sold by src/shop.js)
   assert.equal(HATS[0].id, 'cowboy', 'the old cowboy hat comes first (free)');
   assert.ok(HATS.length >= 5 && HATS.length <= 8, 'four to six hats to buy, and the old one');
   const costs = [];

@@ -154,57 +154,66 @@
 .bmt-head p svg { width: 13px; height: 13px; color: var(--brass); }
 .bmt-sec + .bmt-sec { margin-top: clamp(12px, 2.1vh, 22px); }
 
-/* math topics: the three young topics in a row of three, then the rest two to a row (wider cards, so a long
-   name like "Positive & negative" fits on one line). The grid has six columns; a card spans two or three. */
-.bmt-topics { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; }
-.bmt-topics > .bmt-topic { grid-column: span 2; }
-.bmt-topics > .bmt-topic:nth-child(n+4) { grid-column: span 3; }
-.bmt-topic {
-  position: relative; display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; align-items: center; column-gap: 10px;
-  min-height: 70px; padding: 10px 10px 10px 12px; border-radius: 12px;
-  background: var(--card); border: 1px solid var(--line); transition: background 0.15s, border-color 0.15s;
-}
-.bmt-topic:not([aria-disabled="true"]):hover { background: var(--card-hi); }
-.bmt-glyph { grid-row: 1 / span 2; width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center;
-  font: 600 26px/1 Bitter, Georgia, serif; color: var(--ink-2); background: rgba(0, 0, 0, 0.28); border: 1px solid var(--line); }
-.bmt-glyph.small { font-size: 15px; letter-spacing: -0.02em; }
-.bmt-glyph.x { font-style: italic; font-size: 27px; }
-.bmt-glyph.eq { font-size: 16px; letter-spacing: 0.02em; }
-.bmt-glyph.eq i { font-style: italic; font-size: 1.3em; margin-right: 1px; }
-.bmt-tname { font-weight: 600; font-size: 15.5px; line-height: 1.15; color: var(--ink); align-self: end; }
-.bmt-ages { font-size: 12.5px; color: var(--mute); align-self: start; }
-.bmt-topic[aria-checked="true"] { background: var(--on); border-color: rgba(226, 173, 76, 0.85); }
-.bmt-topic[aria-checked="true"] .bmt-glyph { background: var(--brass); color: #2a1a0c; border-color: var(--brass-hi); }
-/* the tick sits in the card's bottom right corner, beside the short age line, clear of the sign and the name */
-.bmt-topic .bmt-tick { position: absolute; bottom: 8px; right: 8px; width: 19px; height: 19px; border-radius: 50%; display: grid; place-items: center;
-  background: #2a1a0c; color: var(--brass-hi); box-shadow: 0 0 0 1.5px var(--brass); opacity: 0; transform: scale(0.6); transition: opacity 0.15s, transform 0.15s; }
-.bmt-topic .bmt-tick svg { width: 12px; height: 12px; }
-.bmt-topic[aria-checked="true"] .bmt-tick { opacity: 1; transform: none; }
-.bmt-topic[aria-disabled="true"] { background: rgba(0, 0, 0, 0.12); border-style: dashed; border-color: rgba(244, 232, 207, 0.11); }
-.bmt-topic[aria-disabled="true"] .bmt-glyph { color: rgba(220, 202, 165, 0.45); background: transparent; }
-.bmt-topic[aria-disabled="true"] .bmt-tname { color: rgba(244, 232, 207, 0.55); }
-.bmt-soon { font-size: 11px; line-height: 1; letter-spacing: 0.06em; text-transform: uppercase; color: rgba(226, 173, 76, 0.75); }
-.bmt-topic[aria-disabled="true"] { grid-template-rows: auto auto auto; }
-.bmt-topic[aria-disabled="true"] .bmt-glyph { grid-row: 1 / span 3; }
-.bmt-topic .bmt-soon { grid-column: 2; margin-top: 3px; }
-
-/* lasso or shooting: two choices side by side */
-.bmt-modes { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.bmt-mode {
-  display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 12px;
-  padding: 11px 14px 11px 12px; min-height: 62px; border-radius: 12px;
-  background: var(--card); border: 1px solid var(--line); transition: background 0.15s, border-color 0.15s;
-}
-.bmt-mode:hover { background: var(--card-hi); }
-.bmt-mode svg { grid-row: 1 / span 2; width: 34px; height: 34px; color: var(--ink-2); }
-.bmt-mode b { font-weight: 600; font-size: 16px; line-height: 1.15; align-self: end; }
-.bmt-mode small { font-size: 12.5px; line-height: 1.25; color: var(--mute); align-self: start; }
-.bmt-mode[aria-checked="true"] { background: var(--on); border-color: rgba(226, 173, 76, 0.85); }
-.bmt-mode[aria-checked="true"] svg { color: var(--brass); }
 .bmt-note { margin: 7px 2px 0; font-size: 12.5px; color: var(--mute); }
 .bmt-note b { color: var(--brass-hi); font-weight: 600; }
 
-/* missions: tick boxes in two columns */
+/* "No level to pick": the line that the game finds the level by itself, with a compass */
+.bmt-auto { display: flex; gap: 10px; align-items: flex-start; margin: 0; padding: 10px 12px; border-radius: 12px;
+  background: rgba(226, 173, 76, 0.07); border: 1px solid rgba(226, 173, 76, 0.28); font-size: 14px; line-height: 1.35; color: var(--ink-2); }
+.bmt-auto svg { width: 22px; height: 22px; flex: none; color: var(--brass); margin-top: 1px; }
+.bmt-auto b { color: var(--brass-hi); font-weight: 700; }
+.bmt-auto.is-small { background: none; border: 0; padding: 6px 2px 0; font-size: 12.5px; color: var(--mute); gap: 7px; }
+.bmt-auto.is-small svg { width: 16px; height: 16px; margin-top: 0; }
+/* the kinds of math practised lately, each with its level */
+.bmt-skills { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 16px; }
+.bmt-sk { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: auto auto; column-gap: 8px; align-items: baseline;
+  padding: 8px 11px 9px; border-radius: 11px; background: var(--card); border: 1px solid var(--line); }
+.bmt-sk b { font-weight: 600; font-size: 15px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bmt-sk em { font-style: normal; font-weight: 700; font-size: 15px; color: var(--brass-hi); font-variant-numeric: tabular-nums; }
+.bmt-skbar { grid-column: 1 / -1; height: 6px; margin-top: 6px; border-radius: 99px; overflow: hidden; background: rgba(0, 0, 0, 0.4); box-shadow: inset 0 0 0 1px rgba(244, 232, 207, 0.1); }
+.bmt-skbar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--brass-lo), var(--brass-hi)); }
+.bmt-sk.is-finding .bmt-skbar i { background: repeating-linear-gradient(135deg, var(--brass-lo) 0 6px, #c99343 6px 12px); }
+/* a small link-like button at the end of a section's label (Stats) */
+.bmt-label .bmt-link { order: 3; display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px 5px 9px; border-radius: 99px;
+  font: 600 13px/1 Bitter, Georgia, serif; letter-spacing: 0; text-transform: none; color: var(--brass-hi);
+  border: 1px solid rgba(226, 173, 76, 0.55); background: rgba(0, 0, 0, 0.2); }
+.bmt-label .bmt-link:hover { background: rgba(226, 173, 76, 0.14); }
+.bmt-label .bmt-link svg { width: 13px; height: 13px; }
+/* goals: each pinned goal with how far there is to go; then Set a goal and What's left */
+.bmt-goals { display: grid; gap: 6px; }
+.bmt-goal { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 8px; padding: 8px 11px; border-radius: 11px;
+  background: linear-gradient(90deg, rgba(226, 173, 76, 0.13), rgba(226, 173, 76, 0.04)); border: 1px solid rgba(226, 173, 76, 0.45); }
+.bmt-goal svg { width: 15px; height: 15px; color: var(--brass); }
+.bmt-goal b { font-weight: 600; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bmt-goal-n { font-size: 13.5px; font-weight: 600; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.bmt-goal .bmt-bk-bar { grid-column: 1 / -1; margin-top: 6px; }
+.bmt-goal .bmt-bk-bar i { background: linear-gradient(90deg, var(--brass-lo), var(--brass-hi)); }
+.bmt-goal.is-done .bmt-goal-n { color: var(--brass-hi); }
+.bmt-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 9px; }
+.bmt-chip { display: inline-flex; align-items: center; gap: 7px; min-height: 36px; padding: 0 14px 0 11px; border-radius: 99px; font-size: 14px; font-weight: 600;
+  border: 1px solid rgba(226, 173, 76, 0.55); color: var(--brass-hi); background: rgba(0, 0, 0, 0.2); }
+.bmt-chip:hover { background: rgba(226, 173, 76, 0.14); }
+.bmt-chip svg { width: 14px; height: 14px; }
+/* the folded Jobs list (every job on; a grown-up can turn some off) */
+.bmt-jobs { margin-top: clamp(12px, 2.1vh, 22px); border-top: 1px solid var(--line); padding-top: 4px; }
+.bmt-jobs > summary { list-style: none; display: flex; align-items: center; gap: 12px; padding: 8px 2px; cursor: pointer; border-radius: 8px; }
+.bmt-jobs > summary::-webkit-details-marker { display: none; }
+.bmt-jobs > summary .bmt-label { margin: 0; }
+.bmt-jobs > summary .bmt-label::after { display: none; }
+.bmt-jobs > summary small { font-size: 13px; color: var(--ink-2); }
+.bmt-jobs > summary svg { width: 16px; height: 16px; margin-left: auto; color: var(--brass); transition: transform 0.15s; }
+.bmt-jobs[open] > summary svg { transform: rotate(90deg); }
+.bmt-jobs > summary:hover small { color: var(--ink); }
+.bmt-jobs .bmt-note { margin: 0 2px 10px; }
+/* the optional age: a row of round buttons */
+.bmt-agepick { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
+.bmt-agech { min-width: 34px; height: 34px; padding: 0 6px; border-radius: 99px; display: grid; place-items: center; font-weight: 600; font-size: 14.5px;
+  color: var(--ink-2); background: var(--card); border: 1px solid var(--line); font-variant-numeric: tabular-nums; transition: background 0.15s, border-color 0.15s; }
+.bmt-agech:hover { background: var(--card-hi); }
+.bmt-agech.is-skip { padding: 0 14px; font-size: 14px; }
+.bmt-agech[aria-checked="true"] { background: var(--brass); color: #2a1a0c; border-color: var(--brass-hi); }
+
+/* the jobs (in the fold): tick boxes in two columns */
 .bmt-missions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .bmt-mission {
   display: grid; grid-template-columns: auto 1fr; align-items: center; column-gap: 11px;
@@ -292,13 +301,18 @@
 .bmt-dot[aria-checked="true"] { box-shadow: 0 0 0 2px #1a110a, 0 0 0 4px var(--brass); transform: scale(1.06); }
 .bmt-hat { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 13px 0 10px; border-radius: 99px; font-size: 13.5px; font-weight: 600; border: 1px solid var(--line); color: var(--mute); background: rgba(0, 0, 0, 0.2); }
 .bmt-hat svg { width: 22px; height: 15px; }
-/* read-aloud: a small switch under the math topics, and what it reads */
+/* read-aloud: a small switch (shown while the rider's math is young), and what it does */
 .bmt-read { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
 .bmt-read small { font-size: 12.5px; color: var(--mute); line-height: 1.25; }
 .bmt-hat.bmt-readsw { flex: none; }
 .bmt-hat.bmt-readsw svg { width: 18px; height: 18px; }
 .bmt-hat[aria-checked="true"] { color: var(--brass-hi); border-color: rgba(226, 173, 76, 0.75); background: var(--on); }
 .bmt-formbtns { display: flex; justify-content: flex-end; gap: 10px; margin-top: 2px; }
+/* the form is taller than a short screen: its buttons stay in view at the panel's foot while the rest scrolls */
+.bmt-panel { --pad-x: clamp(16px, 1.6vw, 26px); --pad-b: clamp(14px, 2vh, 22px); }
+.bmt-form .bmt-formbtns { position: sticky; bottom: calc(-1 * var(--pad-b)); z-index: 1;
+  margin: 0 calc(-1 * var(--pad-x)) calc(-1 * var(--pad-b)); padding: 14px var(--pad-x) var(--pad-b);
+  background: linear-gradient(rgba(24, 16, 10, 0), rgba(24, 16, 10, 0.94) 38%); border-radius: 0 0 18px 18px; }
 .bmt-btn { padding: 12px 20px; border-radius: 11px; font-weight: 600; font-size: 16px; border: 1px solid var(--line); background: var(--card); color: var(--ink-2); }
 .bmt-btn:hover:not(:disabled) { background: var(--card-hi); }
 .bmt-btn.go { background: linear-gradient(180deg, #f6cd76, #d39a40); color: #2b1a0b; border-color: #f9dc98; font: 400 22px/1 Smokum, Georgia, serif; letter-spacing: 0.1em; padding: 12px 26px; }
@@ -309,7 +323,7 @@
 .bmt-sheet[hidden] { display: none; }
 .bmt-card {
   width: min(820px, 100%); max-height: calc(100% - 8px); overflow-y: auto; scrollbar-width: thin;
-  background: rgba(26, 18, 12, 0.96); border: 1px solid rgba(226, 173, 76, 0.35); border-radius: 18px;
+  background: #1a120c; border: 1px solid rgba(226, 173, 76, 0.35); border-radius: 18px;   /* (opaque: the panel behind never shows through) */
   padding: 22px 24px; box-shadow: var(--shadow); user-select: text; -webkit-user-select: text;
 }
 .bmt-card header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 4px; }
@@ -334,6 +348,13 @@
 .bmt-confirm .bmt-btn.danger { background: #b5533a; color: #fff3e6; border-color: #d9785a; }
 .bmt-cardfoot { margin-top: 14px; font-size: 13px; color: var(--mute); }
 .bmt-empty { padding: 14px; color: var(--mute); }
+.bmt-rowbtns { grid-column: 3; grid-row: 1; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.bmt-rowbtns .bmt-chip { min-height: 32px; font-size: 13px; }
+.bmt-rowbtns .bmt-del { grid-column: auto; grid-row: auto; }
+.bmt-facts dd small { color: var(--mute); }
+.bmt-agesel select { font: 600 14px Bitter, Georgia, serif; color: var(--ink); background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(244, 232, 207, 0.25);
+  border-radius: 8px; padding: 3px 6px; }
+.bmt-agesel select:focus-visible { outline: 2px solid var(--brass-hi); outline-offset: 2px; }
 
 /* ---- smaller screens: a phone held sideways, a small laptop window -------------------------------------------- */
 @media (max-width: 1100px) {
@@ -341,9 +362,7 @@
   .bmt-look .bmt-face { width: 46px; height: 46px; }
 }
 @media (max-height: 820px) and (min-width: 701px) {
-  .bmt-topic { min-height: 60px; padding: 8px 8px 8px 10px; }
-  .bmt-glyph { width: 34px; height: 34px; font-size: 22px; }
-  .bmt-mode, .bmt-mission { min-height: 52px; padding-top: 8px; padding-bottom: 8px; }
+  .bmt-mission { min-height: 52px; padding-top: 8px; padding-bottom: 8px; }
   .bmt-ride, .bmt-boxes { min-height: 60px; }
 }
 @media (max-height: 560px) and (min-width: 600px) {
@@ -372,36 +391,38 @@
   .bmt-minib svg { width: 22px; height: 15px; }
   .bmt-newrider span:last-child { font-size: 15px; }
   .bmt-right { gap: 8px; }
-  .bmt-panel { padding: 10px 12px; border-radius: 14px; }
+  .bmt-panel { padding: 10px 12px; border-radius: 14px; --pad-x: 12px; --pad-b: 10px; }
   .bmt-head { margin-bottom: 8px; }
   .bmt-head h2 { font-size: 22px; }
   .bmt-head p { display: none; }
   .bmt-sec + .bmt-sec { margin-top: 7px; }
-  .bmt-topics, .bmt-modes, .bmt-missions { gap: 5px; }
-  .bmt-topic { min-height: 42px; padding: 5px 6px; column-gap: 7px; border-radius: 10px; }
-  .bmt-glyph { width: 30px; height: 30px; font-size: 19px; border-radius: 8px; }
-  .bmt-glyph.small { font-size: 12px; }
-  .bmt-glyph.x { font-size: 21px; }
-  .bmt-glyph.eq { font-size: 12px; }
-  .bmt-tname { font-size: 13px; }
-  .bmt-ages { font-size: 11px; }
-  .bmt-topic .bmt-tick { width: 15px; height: 15px; bottom: 5px; right: 5px; }
-  .bmt-topic .bmt-tick svg { width: 10px; height: 10px; }
+  .bmt-missions { gap: 5px; }
   .bmt-head { display: none; }
-  .bmt-topic .bmt-soon { display: none; }
-  .bmt-topic[aria-disabled="true"] { grid-template-rows: auto auto; }
-  .bmt-topic[aria-disabled="true"] .bmt-glyph { grid-row: 1 / span 2; }
-  .bmt-topic[aria-disabled="true"] .bmt-ages::after { content: ' \00b7  soon'; color: rgba(226, 173, 76, 0.75); }
+  .bmt-auto { padding: 7px 10px; font-size: 12.5px; gap: 8px; }
+  .bmt-auto svg { width: 18px; height: 18px; }
+  .bmt-auto.is-small { padding-top: 4px; font-size: 11.5px; }
+  .bmt-skills { gap: 5px 8px; }
+  .bmt-sk { padding: 5px 9px 6px; border-radius: 9px; }
+  .bmt-sk b, .bmt-sk em { font-size: 13.5px; }
+  .bmt-skbar { height: 4px; margin-top: 4px; }
+  .bmt-label .bmt-link { padding: 4px 9px 4px 7px; font-size: 12px; }
+  .bmt-goal { padding: 5px 9px; }
+  .bmt-goal b { font-size: 13px; }
+  .bmt-chips { margin-top: 6px; gap: 6px; }
+  .bmt-chip { min-height: 32px; font-size: 12.5px; padding: 0 11px 0 9px; }
+  .bmt-read { margin-top: 6px; }
+  .bmt-read small { font-size: 11.5px; }
+  .bmt-jobs { margin-top: 7px; }
+  .bmt-jobs > summary { padding: 5px 2px; }
+  .bmt-agepick { gap: 4px; margin-bottom: 6px; }
+  .bmt-agech { min-width: 32px; height: 32px; font-size: 13.5px; padding: 0 6px; }
+  .bmt-agech.is-skip { padding: 0 10px; font-size: 13px; }
   .bmt-mission { min-height: 34px; }
-  .bmt-mission .bmt-soon { display: none; }
-  .bmt-mission[aria-disabled="true"] b::after { content: ' \00b7  soon'; font-weight: 400; font-size: 11.5px; color: rgba(226, 173, 76, 0.75); }
   .bmt-mission b { grid-row: 1 / span 2; align-self: center; }
   .bmt-box { width: 20px; height: 20px; }
-  .bmt-mode, .bmt-mission { min-height: 40px; padding: 5px 10px; border-radius: 10px; }
-  .bmt-note { display: none; }
-  .bmt-mode svg { width: 26px; height: 26px; }
-  .bmt-mode b, .bmt-mission b { font-size: 14px; }
-  .bmt-mode small, .bmt-mission small, .bmt-note { font-size: 11.5px; }
+  .bmt-mission { min-height: 40px; padding: 5px 10px; border-radius: 10px; }
+  .bmt-jobs .bmt-note { font-size: 11.5px; margin-bottom: 6px; }
+  .bmt-mission b { font-size: 14px; }
   .bmt-mission small { display: none; }
   .bmt-ride, .bmt-boxes { min-height: 48px; border-radius: 11px; }
   .bmt-ride { font-size: 26px; }
@@ -423,7 +444,7 @@
   .bmt-form { gap: 10px; }
   .bmt-btn.go { font-size: 19px; padding: 10px 20px; }
 }
-/* A phone on its side: the settings panel scrolls (the topic cards take three rows), so a soft fade with a small
+/* A phone on its side: the settings panel scrolls (it holds more than fits), so a soft fade with a small
    arrow at its bottom edge says there is more below. It fades out as the panel reaches its end, so it never
    covers the last row; where the browser can't tie it to the scroll, or nothing is hidden, it isn't shown. */
 @media (max-height: 560px) and (min-width: 600px) {
@@ -447,15 +468,21 @@
   .bmt-name { font-size: clamp(40px, 13vw, 64px); white-space: normal; }
   .bmt-riders { overflow: visible; }
   .bmt-right { margin-top: 16px; }
-  .bmt-topics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .bmt-topics > .bmt-topic, .bmt-topics > .bmt-topic:nth-child(n+4) { grid-column: auto; }
-  .bmt-modes, .bmt-missions { grid-template-columns: 1fr; }
+  .bmt-missions { grid-template-columns: 1fr; }
+  .bmt-row { grid-template-columns: auto minmax(0, 1fr); }
+  .bmt-facts { grid-column: 1 / -1; }
+  .bmt-rowbtns { grid-column: 1 / -1; grid-row: auto; flex-direction: row; justify-content: flex-start; }
   .bmt-head { flex-wrap: wrap; row-gap: 4px; }
   .bmt-head h2 { white-space: normal; }
   .bmt-looks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .bmt-actions { grid-template-columns: 1fr; }
   .bmt-status { grid-column: 1; }
   .bmt-foot { margin-top: 16px; }
+  /* the page scrolls here, not the panel: the panel stops being a scroll box of its own, so the form's Saddle up bar
+     (sticky) stays at the foot of the screen from the first look, under the face and name */
+  .bmt-panel { overflow: visible; }
+  /* the read-aloud switch's line goes under the button (beside it, it was squeezed into a column a word wide) */
+  .bmt-read { flex-direction: column; align-items: flex-start; gap: 6px; }
 }
 /* big screens: the same layout, a little larger (zoom scales everything, text and gaps alike) */
 @media (min-width: 1600px) and (min-height: 900px) { .bmt { zoom: 1.15; } }

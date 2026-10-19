@@ -30,6 +30,7 @@
 //                                      draws it: it carries helper: 'count') with the answer and the pick shown
 //   T.help(card)                    the picture with the answer hidden, for "Show me" or 8 s of thinking
 //   T.hint(card), T.level(), T.report(), T.setStep(n), T.newSession(), T.due() (always [])
+//   T.steer(step, { placing })      the rider's skill model (src/math/skill.js) sets the step from now on (see steer)
 //
 // A card: { id, text ('7 + 1'), rule (the rule card's words: 'Rope what comes after 7'), sub, done (the line for a right
 //   pick: 'After 7 comes 8'), say, answer, parts (the problem), shape, rung, targets: [{ n, good, trap, label }], back,
@@ -347,8 +348,8 @@ export function makeCardTrainer(SPEC, state, opts = {}) {
     S.lastAt = now();
     dealing = 1;
 
-    const warmup = S.warmups > 0 && S.placed;
-    const placing = !S.placed;
+    const warmup = S.warmups > 0 && S.placed && !(steered && steered.placing);
+    const placing = !S.placed || !!(steered && steered.placing);
     const list = [], seen = new Set();
     // never the same problem twice in a wave, and never the same answer twice in a row
     const add = (p, rung, size, extra = {}) => {
@@ -461,7 +462,7 @@ export function makeCardTrainer(SPEC, state, opts = {}) {
     const c = S.cur;
     for (let i = c.at; i < c.cards.length; i++) {
       const x = c.cards[i];
-      if (x.back || x.review) continue;
+      if (x.back || x.review || x.tried) continue;   // (the card on show, already tried, stays as it is)
       const before = i > c.at ? c.cards[i - 1].answer : S.lastAns, next = c.cards[i + 1];
       let p = null;
       for (let tries = 0; tries < 10; tries++) {
@@ -499,8 +500,8 @@ export function makeCardTrainer(SPEC, state, opts = {}) {
         rs.helped++;
       } else if (first) {
         rs.right++;
-        if (c.warmup) {
-          // warm-ups sit below the kid's step; they never move it
+        if (c.warmup || steered) {
+          // warm-ups sit below the kid's step; they never move it (nor does anything, once the skill model steers)
         } else if (!S.placed) {
           S.step = Math.min(TOP, S.step + 1);
           if (S.step === TOP) S.placed = true;   // reached the top: nothing left to find
@@ -525,7 +526,7 @@ export function makeCardTrainer(SPEC, state, opts = {}) {
         S.streak = 0;
         const p = { ...x.parts };
         // a returning card from above the kid's step has been counted once already: missing it again moves nothing
-        const counts = !c.warmup && !(x.back && (x.rung || 1) > S.step);
+        const counts = !steered && !c.warmup && !(x.back && (x.rung || 1) > S.step);
         if (counts) {
           if (!S.placed) {
             S.placeMisses++;
@@ -617,12 +618,28 @@ export function makeCardTrainer(SPEC, state, opts = {}) {
     S.step = clampInt(num(step, 1), 1, TOP);
     S.placed = true; S.streak = 0; S.warmups = 0;
   }
+  // The rider's skill model (src/math/skill.js) picks the step from here on: the job asks it before each wave and after
+  // each answer, and steers the trainer there. The trainer's own climb, first-visit placement and steps down stop; its
+  // cards, slips, comebacks, warm-ups and review cards go on as before. placing: the strand is still finding its level
+  // (no warm-ups or review cards meanwhile: every card asks the step being tried). A new step while a wave is open
+  // deals that wave's cards still to come again at it (not the one on show, once tried; not comebacks or reviews).
+  let steered = null;
+  function steer(step, { placing = false } = {}) {
+    const was = S.step;
+    S.step = clampInt(num(step, 1), 1, TOP);
+    if (!steered) { S.placed = true; S.streak = 0; S.placeMisses = 0; }
+    steered = { placing: !!placing };
+    const c = S.cur;
+    if (c && !c.closed && !c.warmup && S.step !== was) { redealRest(); c.step = S.step; }
+    return S.step;
+  }
 
   if (opts.newSession || !S.lastAt || now() - S.lastAt > SESSION_GAP_MS) newSession();
 
   return {
     topic: SPEC.topic, name: SPEC.name, state: S, mode: 'cards', payEvery: PAY_EVERY,
-    wave, card, answer, explain, help, hint, level, report, setStep, newSession,
+    wave, card, answer, explain, help, hint, level, report, setStep, steer, newSession,
+    get steered() { return !!steered; },
     endWave: closeWave,
     due: () => [],   // missed cards come back inside the wave's own list (see answer()), so there is nothing extra to hand out
   };

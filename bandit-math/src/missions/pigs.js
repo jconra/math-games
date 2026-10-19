@@ -1,7 +1,8 @@
-// THE LOOSE-PIGS JOB: a few farm-pack pigs are loose in the farm's pig yard (src/farm.js), each with a positive &
-// negative sum floating over it ("−3 + 8"), readable from the saddle like the cattle's numbers. Along the yard's back
-// fence stand three pens, a sign over each gate: NEGATIVE / ZERO / POSITIVE on the first steps, then three real numbers
-// (missions/pigmath.js). Herd each pig into the pen with its answer:
+// THE LOOSE-PIGS JOB: a few farm-pack pigs are loose in the farm's pig yard (src/farm.js), each with a sum floating over
+// it ("−3 + 8"), readable from the saddle like the cattle's numbers. Along the yard's back fence stand two pens, a sign
+// over each gate: NEGATIVE / POSITIVE for positive & negative sums, LESS THAN 10 / MORE THAN 10 (or another number) for
+// the youngest riders' adding and taking-away sums (missions/pigmath.js: which, and how hard, come from the rider's skill
+// model). Herd each pig into the pen with its answer:
 //   the pigs run from you (on foot or on the horse): come at a pig from the side away from the pen you want, and it runs
 //   ahead of you; near the back fence it makes for the nearest gate, and in it goes. Pigs jink a little as they run (a
 //   bit more than cattle would), and one that has been chased a long while tires and runs straighter
@@ -12,6 +13,8 @@
 // pens with new sums and the signs change: nothing to click. Each pig penned counts toward the "Pigs penned" belt buckle
 // (stats.jobs.pigs). Herding is the answer, and a running pig can bolt into a pen nobody meant, so a wrong pen isn't
 // counted against the kid's record of right answers (recordAnswer is left alone here).
+// For a rider who can't read yet (skill.js readAloud) the two pens' signs are read out (the browser's voice) on arriving
+// at the yard and with each new batch.
 //
 //   const PG = makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, hob, refresh })
 //   PG.update(dt)       each frame, after P.update
@@ -29,9 +32,14 @@
 import * as THREE from 'three';
 import { makeAnimal } from '../actors/animals.js';
 import { makeCard, drawCard } from './sheep.js';
-import { makePigBatch, judge } from './pigmath.js';
+import { makePigBatch, pigsFor, judge } from './pigmath.js';
 import { showNumberLine, ensureNumberLineStyles, watchHesitation } from '../ui/numberline.js';
+import { showCountHelp } from '../ui/counthelp.js';
+import { picture as addPicture } from '../math/adding.js';
+import { picture as takePicture } from '../math/taking.js';
 import { earn, countJob } from '../save.js';
+import { readAloud } from '../math/skill.js';
+import { speakLine } from '../ui/storeslip.js';
 
 export const PIGS = {
   near: 24,              // the job's card shows within this many metres of the pig yard's middle ...
@@ -171,7 +179,8 @@ export function makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, ho
   // ── A BATCH ────────────────────────────────────────────────────────────────────────────────────────────────────
   function newBatch({ first = false } = {}) {
     endHelp(); hint(null);
-    batch = makePigBatch(rider, { size: pigs.length });
+    const { map, q } = pigsFor(rider, { last: batch ? batch.map : null });
+    batch = makePigBatch(rider, { size: pigs.length, map, step: q.step });
     PG.batch = batch; penned = 0; nextT = -1; batches++;
     paintSigns();
     pigs.forEach((g, i) => {
@@ -187,7 +196,13 @@ export function makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, ho
       card(g);
     });
     showCard();
-    if (PG.near) startHelp();
+    if (PG.near) { startHelp(); if (!first) sayPens(); }
+  }
+  // (a rider who can't read yet, skill.js readAloud: the two pens' signs read out, in the browser's voice, on arriving
+  // at the yard and with each new batch)
+  function sayPens() {
+    if (!batch || !readAloud(rider)) return;
+    speakLine(`Pen each pig by its answer: ${batch.pens.map((pn) => pn.label.toLowerCase()).join(', or ')}.`);
   }
   function nearestPen(at) {
     let bi = 0, bd = Infinity;
@@ -222,7 +237,16 @@ export function makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, ho
   function lineFor(g, picked, reveal) {
     const p = g.item.parts;
     if (nl) nl.remove();
-    nl = showNumberLine(hud.helpEl, { start: p.start, change: p.change, op: p.op, term: p.term, reveal, picked: picked ?? undefined, theme: 'dark' });
+    nl = batch && batch.mode === 'sizes' ? showCountHelp(hud.helpEl, sizesPicture(p, reveal))
+      : showNumberLine(hud.helpEl, { start: p.start, change: p.change, op: p.op, term: p.term, reveal, picked: picked ?? undefined, theme: 'dark' });
+  }
+  // the youngest riders' pigs (LESS THAN / MORE THAN pens): the adding or taking-away picture (ten-frames and the hops
+  // on a number line, src/ui/counthelp.js), with the pens' number named on the line, rather than the positive & negative
+  // line and its "negative" side
+  function sizesPicture(p, reveal) {
+    const add = p.op !== '-', pic = (add ? addPicture : takePicture)({ parts: { shape: add ? 'sum' : 'diff', a: p.start, b: p.term } });
+    const L = pic.line, split = batch.split;
+    return { ...pic, reveal, line: { ...L, lo: Math.max(0, Math.min(L.lo, split - 1)), hi: Math.max(L.hi, split + 1), stops: [...(L.stops || []), split] } };
   }
   function startHelp() {
     if (!batch || batch.done || PG.paused || hes) return;
@@ -259,6 +283,9 @@ export function makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, ho
     const away = { x: gt.out.x - oz * side * 2.5 + ox * 1.5, z: gt.out.z + ox * side * 2.5 + oz * 1.5 };
     g.state = 'back'; g.legs = [{ x: gt.x - ox * 1.2, z: gt.z - oz * 1.2 }, gt.out, loose.contains(away.x, away.z) ? away : gt.out];
     g.noPen = i; g.noPenT = PIGS.noBack;
+    // (a pig that bolts into a pen after the player has ridden off comes back out quietly: no why, no number line
+    // left over on another job's screen)
+    if (!PG.near) return;
     // (the why is Hob's line, said at once; the box under the card just names the pen, the number line shows the hop.
     // On a narrow screen Hob's caption would sit on top of the number line, so the why goes in the box instead)
     const narrow = innerWidth < 700;
@@ -450,7 +477,7 @@ export function makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, ho
     PG.near = PG.wants(P.position);
     if (PG.near !== wasNear) {
       wasNear = PG.near;
-      if (PG.near) { hob.event('pigsArrive'); startHelp(); showCard(); }
+      if (PG.near) { hob.event('pigsArrive'); startHelp(); showCard(); sayPens(); }
       else { endHelp(); hud.hint(null); hintT = 0; }   // (the round-up's or the sheep's card comes back by itself)
     }
     if (hintT > 0 && (hintT -= dt) <= 0) hud.hint(null);

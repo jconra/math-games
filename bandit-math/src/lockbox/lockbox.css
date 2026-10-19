@@ -1029,6 +1029,12 @@
   .lbx-nextbtn { min-height: 76px; font-size: 30px; }
 }
 @media (max-width: 900px) {
+  /* a long nudge on a phone takes three lines: the caption keeps a layer of its own over the mat, so a tall part (the
+     sum and its number line) running under it never mixes its words with the caption's; the number line gives a
+     little height while a part is asked */
+  .lbx-hob { position: relative; z-index: 5; }
+  .lbx-hob-say { background: rgba(31, 21, 13, 0.96); }
+  .fq-nl .bm-nl-svg { max-height: 78px; }
   .focus-on .lbx-work { padding: 34px 2px 4px; }
   .den-on.focus-on .lbx-work { padding-bottom: 30px; }
   .lbx-body.focus-on .lbx-paper { height: 15vh; height: 15dvh; }
@@ -1121,4 +1127,141 @@
 @media (max-height: 520px) and (orientation: landscape) {
   .lbx-grid.nlgrid { grid-template-columns: 1fr 1fr; }
   .iv { font-size: 17px; }
+}
+
+/* ---- the kindergarten boxes (kbox.js): no paper, the line with big pictures under it, three answers to count ------ */
+.lbx-kpics { display: none; }
+.lbx-hear { display: none; }
+.lbx-body.kbox { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; grid-template-areas: "stage" "tray"; }
+.lbx-body.kbox .lbx-paper, .lbx-body.kbox .lbx-steps { display: none; }
+.kbox .lbx-work { padding: 22px 4px 10px; }
+.kbox .lbx-kpics { --kp: 46px; --kp-row: 5; display: flex; justify-content: center; padding: 4px 8px 16px; }
+.kp-row { display: flex; align-items: center; justify-content: center; gap: 18px; max-width: 100%; }
+/* each side's things in a little tray, five to a row */
+.kp-side {
+  display: flex; flex-wrap: wrap; justify-content: center; align-content: center; gap: 4px;
+  max-width: calc(var(--kp) * var(--kp-row) + 4px * (var(--kp-row) - 1) + 24px); min-height: calc(var(--kp) + 20px);
+  padding: 10px 12px; border-radius: 14px;
+  background: rgba(255, 240, 210, 0.06); box-shadow: inset 0 0 0 1px rgba(255, 240, 210, 0.12);
+  transition: box-shadow 0.2s;
+}
+.kp-o { position: relative; display: inline-block; flex: none; width: var(--kp); height: var(--kp); }
+.kp-o svg { display: block; width: 100%; height: 100%; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.35)); }
+.kp-op, .kp-eq { flex: none; font: 700 calc(var(--kp) * 0.9)/1 Bitter, Georgia, serif; color: var(--brass-hi); text-shadow: 0 2px 0 #4a2d14; }
+/* the sack where x is: a "?" on it, or the kid's number; what is in it shows underneath */
+.kp-sack { flex: none; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.kp-bag { position: relative; display: block; width: calc(var(--kp) * 1.7); height: calc(var(--kp) * 1.7); }
+.kp-bag svg { display: block; width: 100%; height: 100%; filter: drop-shadow(0 3px 3px rgba(0, 0, 0, 0.4)); }
+.kp-q { position: absolute; left: 0; right: 0; top: 44%; text-align: center; font: 700 calc(var(--kp) * 0.78)/1 Bitter, Georgia, serif; color: #fff4dc; text-shadow: 0 2px 0 #4a2f17; }
+.kp-sack.open .kp-q { color: var(--brass-hi); animation: lbx-pop 0.3s ease-out; }
+.kp-in { display: flex; flex-wrap: wrap; justify-content: center; gap: 3px; max-width: calc(var(--kp) * 4); min-height: calc(var(--kp) * 0.8); }
+.kp-in .kp-o { width: calc(var(--kp) * 0.8); height: calc(var(--kp) * 0.8); }
+.kp-o.pop { animation: lbx-keydrop 0.35s ease-out both; }
+/* the help: the empty spots the sack has to fill (adding), or the ones taken away crossed out */
+.kp-o.ghost { border-radius: 40%; outline: 2px dashed rgba(243, 197, 107, 0.9); outline-offset: -1px; animation: lbx-pulse 1.4s ease-in-out infinite; }
+.kp-o.ghost svg { opacity: 0.22; filter: grayscale(1) brightness(1.7); }
+.kp-o.cross svg, .kp-o.taken svg { opacity: 0.4; }
+.kp-o.cross::after, .kp-o.taken::after {
+  content: ''; position: absolute; left: 4%; right: 4%; top: 48%; height: 4px; border-radius: 2px;
+  background: var(--rust); transform: rotate(-35deg); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+.kp-o.cross::after { background: repeating-linear-gradient(90deg, var(--brass-hi) 0 6px, transparent 6px 10px); box-shadow: none; }
+.lbx-kpics.match .kp-side { box-shadow: inset 0 0 0 2px var(--good); }
+.lbx-kpics.look .kp-side { animation: lbx-pulse 0.7s ease-in-out 2; }
+/* the answers: the number, and that many little pictures under it to count */
+.lbx-move.kpick { flex-direction: column; gap: 5px; min-height: 100px; padding: 8px 10px 10px; }
+.kp-n { font: 700 42px/1 Bitter, Georgia, serif; }
+.kp-dots { display: flex; flex-wrap: wrap; justify-content: center; gap: 2px; max-width: 100%; }
+.kp-dots .kp-o { width: 20px; height: 20px; }
+.kp-dots .kp-o svg { filter: none; }
+/* "hear it again", beside Hob */
+.lbx-hear:not([hidden]) {
+  display: inline-flex; align-items: center; justify-content: center; flex: none; width: 48px; height: 48px; border-radius: 50%;
+  color: #2b1d10; background: linear-gradient(180deg, #f8ecd0, #e6cc96); box-shadow: 0 0 0 2px #8a5f22, 0 3px 0 #5f3d16;
+}
+.lbx-hear svg { width: 28px; height: 28px; }
+.lbx-hear:active { transform: translateY(2px); box-shadow: 0 0 0 2px #8a5f22, 0 1px 0 #5f3d16; }
+/* a big screen: everything bigger (the mat has the room without the paper) */
+@media (min-width: 901px) and (min-height: 700px) {
+  .lbx-body.kbox { --work-max: 58px; }
+  .kbox .lbx-kpics { --kp: 60px; }
+}
+@media (max-width: 900px) {
+  .lbx-body.kbox { grid-template-rows: minmax(0, 1fr) auto; grid-template-areas: "stage" "tray"; }
+  .kbox .lbx-work { padding: 14px 2px 6px; }
+  .kbox .lbx-kpics { --kp: 30px; --kp-row: 3; padding: 4px 0 8px; }
+  .kp-row { gap: 7px; }
+  .kp-side { gap: 3px; padding: 6px; min-height: calc(var(--kp) + 12px); }
+  .lbx-move.kpick { min-height: 76px; gap: 3px; padding: 6px 4px 8px; }
+  .kp-n { font-size: 32px; }
+  .kp-dots .kp-o { width: 13px; height: 13px; }
+  .lbx-hear:not([hidden]) { width: 40px; height: 40px; }
+  .lbx-hear svg { width: 24px; height: 24px; }
+}
+@media (max-height: 520px) and (orientation: landscape) {
+  .lbx-body.kbox { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); grid-template-areas: "stage tray"; }
+  .kbox .lbx-work { padding: 6px 2px 2px; }
+  .kbox .lbx-kpics { --kp: 26px; --kp-row: 5; padding: 0 0 4px; }
+  .kbox .lbx-grid.picks { grid-template-columns: minmax(0, 1fr); }
+  .lbx-move.kpick { min-height: 0; flex-direction: row; gap: 10px; padding: 6px 10px; }
+  .kp-n { font-size: 28px; }
+  .kp-dots { max-width: 60%; }
+}
+
+/* ---- "Work it out" boxes (workout.js, workpanel.js): one expression, worked a part at a time ------------------- */
+/* (raised by moving it up, not vertical-align: on the mat each piece is a flex item, which vertical-align ignores) */
+.lbx sup.wk-sup { font-size: 0.58em; line-height: 1; vertical-align: baseline; position: relative; top: -0.8em; margin-left: 0.04em; }
+.wk-m { white-space: nowrap; }
+.wk-fr { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; font-size: 0.62em; line-height: 1.02; margin: 0 0.06em; }
+.wk-fr > span:first-child { border-bottom: 0.09em solid currentColor; padding: 0 0.12em 0.04em; }
+.wk-line { display: inline-flex; align-items: baseline; white-space: nowrap; font: 600 var(--work-max)/1.15 Bitter, Georgia, serif; color: var(--ink); }
+.wk .lbx-work { padding: 48px 4px 40px; }
+.wk.focus-on .lbx-work { padding: 34px 4px 10px; }
+.wk-t { display: inline-block; }
+.wk-gap { margin-left: 0.28em; }
+.wk-op { color: var(--brass-hi); }
+.wk-grp { display: inline-flex; align-items: baseline; padding: 0.04em 0.16em 0.08em; margin: -0.04em -0.04em -0.08em; border-radius: 0.2em;
+  transition: background 0.2s, box-shadow 0.2s; }
+.wk-grp.on { background: rgba(243, 197, 107, 0.17); box-shadow: inset 0 0 0 0.055em var(--brass-hi); }
+.wk-grp.no { background: rgba(217, 120, 90, 0.16); box-shadow: inset 0 0 0 0.055em var(--rust); animation: lbx-shake 0.4s ease; }
+.wk-new { color: #eef8e2; animation: lbx-pop 0.35s ease-out; }
+.lbx-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.lbx-move.wkpick .lbl { font-size: 30px; }
+/* the paper: each line as it is worked, with the part worked beside it in red pencil */
+.wk-lg { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 10px; padding-left: 24px; min-width: 0; white-space: nowrap; line-height: 32px; }
+.wk-lg-eq { color: var(--pencil); font-weight: 600; }
+.wk-lg-txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.wk-lg-note { margin-left: auto; padding-left: 8px; font: italic 400 15px/32px Bitter, serif; color: #a2533a; }
+.wk-lg.now .wk-lg-txt, .wk-lg.now .wk-lg-eq { color: var(--pencil-ink); font-weight: 700; }
+.wk-lg:last-child { animation: lbx-write calc(0.35s * var(--k)) ease-out; }
+/* the steps card: a worked example under the order (or the example's lines as the card's rows) */
+.wk-ex { margin: 6px 14px 2px; font: 500 15px/1.5 Bitter, serif; color: var(--ink-2); }
+.wk-ex span { font: 700 12px/1 Bitter, serif; letter-spacing: 0.12em; text-transform: uppercase; color: var(--mute); margin-right: 6px; }
+.wk-ex b { color: var(--brass-hi); font-weight: 600; margin: 0 0.15em; }
+.wk-exlist .st-txt { font-variant-numeric: lining-nums; }
+/* the review: the whole working, line under line */
+.wk-rv { width: 100%; display: flex; flex-direction: column; align-items: center; gap: 0.18em; font: 600 34px/1.25 Bitter, Georgia, serif; }
+.wk-rv-row { display: grid; grid-template-columns: 1.1em auto minmax(0, 1fr); align-items: baseline; gap: 0.35em; width: min(100%, 20em); }
+.wk-rv-eq { color: var(--brass-hi); text-align: right; }
+.wk-rv-txt { white-space: nowrap; }
+.wk-rv-final { color: #fff3d6; padding: 0 0.3em; border-radius: 0.25em; background: rgba(156, 201, 122, 0.15); box-shadow: inset 0 0 0 2px var(--good); }
+.wk-rv-note { font: italic 500 0.46em/1 Bitter, serif; color: var(--mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wk-rv .rv-ok { margin-top: 0.4em; text-align: center; }
+.wk.reviewing .lbx-work { padding: 8px 6px; }
+@media (max-width: 900px) {
+  .wk .lbx-work { padding: 26px 2px 18px; }
+  .wk.reviewing .lbx-work { padding: 8px 6px; }
+  .wk.focus-on .lbx-work { padding: 18px 2px 4px; }
+  .lbx-move.wkpick .lbl { font-size: 24px; }
+  .wk-lg { padding-left: 18px; }
+  .wk-lg-note { display: none; }
+  .wk-rv { font-size: 26px; }
+  .wk-rv-note { display: none; }
+  .wk-rv-row { grid-template-columns: 1.1em auto; width: auto; }
+}
+@media (max-height: 520px) and (orientation: landscape) {
+  .wk .lbx-work { padding: 14px 2px 8px; }
+  .wk.reviewing .lbx-work { padding: 4px 4px; }
+  .wk.focus-on .lbx-work { padding: 8px 2px 2px; }
+  .wk-rv { font-size: 22px; }
 }

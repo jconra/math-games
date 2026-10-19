@@ -1,29 +1,37 @@
 // title.js: the title screen. It floats over the live valley while the world loads behind it.
 //
-//   const T = showTitle(root, { riders, build, onRide(rider), onLockboxes(rider), onChange(rider), levels })
+//   const T = showTitle(root, { riders, build, onRide(rider), onLockboxes(rider), onChange(rider), completion })
 //   T.setProgress(0.4, 'Planting trees')   // the world's loading progress, 0..1 (RIDE OUT waits for 1)
 //   T.hide(); T.show();
 //
 // What is on it: the game's name; a card for each rider (name, title, bounty, face, when they last rode, the belt
-// buckles won; the chosen rider's card also shows each job's buckle with how far to the next one) and "New rider";
-// the chosen rider's settings (math topics, lasso or shooting, missions); RIDE OUT; "Just lock boxes"; a small build
-// number; and a folded Grown-ups corner (each rider's progress and jobs done, delete a rider).
+// buckles won; the chosen rider's card also shows each job's buckle with how far to the next one) and "New rider" (a
+// name, a look, and an optional age); the chosen rider's panel: their math (no level to pick: the game finds each
+// kind of math's level by itself as they play, src/math/skill.js; the panel says so and shows the levels found so
+// far, with the stats page a tap away, src/ui/stats.js), their goals and completion (src/completion.js, when the game
+// has it: a grown-up pins a goal, "Set a goal"), the read-aloud switch while their math is young, and a folded "Jobs"
+// list where a grown-up can turn some jobs off (every job is on by default); RIDE OUT; "Just lock boxes"; a small
+// build number; and a folded Grown-ups corner (each rider's math, age and progress; delete a rider).
+// No math topics or missions to tick and no lasso-or-shooting choice: every rider gets every job, the bottle range
+// included, at their own level.
 //
 // Every change is saved straight away (save.js), so settings stick after a reload. RIDE OUT can be pressed while
 // the valley is still loading: it then reads "Saddling up" and rides out the moment loading reaches 1. If
 // setProgress is never called, the world is taken as ready.
 //
-// `levels` (optional) = { times(state) -> 'label', algebra(state) -> 'label' } for the Grown-ups corner; without it
-// the corner asks the math modules themselves (makeTimes / makeAlgebra) on a copy of the rider's progress.
+// `completion` (optional): the src/completion.js module, for a page that has it already; otherwise it is loaded here,
+// and the goals and completion stay out of sight until it is (or if the game has none).
 //
-// Keyboard: Tab moves between controls, arrow keys move within a group (riders, topics, mode, missions, looks),
-// Space or Enter picks, Escape closes the Grown-ups corner or the new-rider form. RIDE OUT has focus at the start,
+// Keyboard: Tab moves between controls, arrow keys move within a group (riders, ages, jobs, looks), Space or Enter
+// picks, Escape closes the Grown-ups corner or the new-rider form. RIDE OUT has focus at the start,
 // so a returning rider can just press Enter.
 
 import {
-  loadRiders, saveRider, newRider, deleteRider, titleOf, nextTitle, badgesOf, accuracyOf, storageWorks,
-  bucklesOf, buckleProgress, jobWords, BUCKLE_NAMES, TOPICS, MISSIONS, LOOKS, SKINS, HAIRS, MAX_RIDERS, READ_TOPICS,
+  loadRiders, saveRider, newRider, deleteRider, titleOf, nextTitle, badgesOf, accuracyOf, storageWorks, jobOn, readAloudLevel,
+  readMode, nextReadMode, readModeWords, bucklesOf, buckleProgress, jobWords, BUCKLE_NAMES, MISSIONS, LOOKS, SKINS, HAIRS, MAX_RIDERS,
 } from '../save.js';
+import { stats as strandStats, levelOf } from '../math/skill.js';
+import { openStats, statRows } from './stats.js';
 import { buckleSVG } from './hud.js';
 import { hatSVG, hatOf, hatColour } from '../hats.js';
 
@@ -45,10 +53,15 @@ const ICON = {
   plus: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.5v11M2.5 8h11" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
   strongbox: '<svg viewBox="0 0 28 28" aria-hidden="true"><path d="M4 12.2V9.6Q4 6 7.6 6h12.8Q24 6 24 9.6v2.6z" fill="currentColor"/><rect x="4" y="13.4" width="20" height="10.6" rx="1.4" fill="currentColor"/><path d="M8.6 6v18M19.4 6v18" stroke="#1d140c" stroke-width="1.5" opacity=".55"/><rect x="11.4" y="10" width="5.2" height="7.4" rx="1.1" fill="#1d140c"/><circle cx="14" cy="12.9" r="1.15" fill="currentColor"/><path d="M14 13.6v2" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>',
   lock: '<svg viewBox="0 0 28 28" aria-hidden="true"><path d="M8.5 12V9a5.5 5.5 0 0 1 11 0v3" fill="none" stroke="currentColor" stroke-width="2.4"/><rect x="5" y="12" width="18" height="13" rx="2.5" fill="currentColor"/><circle cx="14" cy="17.4" r="2" fill="#1d140c"/><path d="M14 18.6v3" stroke="#1d140c" stroke-width="2" stroke-linecap="round"/></svg>',
-  // a rope loop with its tail
-  lasso: '<svg viewBox="0 0 40 40" aria-hidden="true" fill="none" stroke="currentColor" stroke-linecap="round"><ellipse cx="23" cy="13" rx="13" ry="7.5" stroke-width="2.6"/><ellipse cx="23" cy="13" rx="9.6" ry="4.9" stroke-width="1.1" opacity="0.55"/><path d="M13.2 18.2c-2.6 3.4-2.2 7.2 1 9.2 3.4 2.1 3.6 5.6.6 9.1" stroke-width="2.6"/><circle cx="13.6" cy="18" r="2" fill="currentColor" stroke="none"/></svg>',
-  // a target with a hat flying off it
-  target: '<svg viewBox="0 0 40 40" aria-hidden="true" fill="none" stroke="currentColor"><circle cx="18" cy="22" r="13" stroke-width="2.4"/><circle cx="18" cy="22" r="7.6" stroke-width="2.2"/><circle cx="18" cy="22" r="2.6" fill="currentColor" stroke="none"/><path d="M27.5 9.4c1-3.8 7.4-3.8 8.4 0M25.6 10c3.6 1.4 8.8 1.4 12.2-.6" stroke-width="2" stroke-linecap="round"/></svg>',
+  // a compass: the game finds the level by itself
+  compass: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M15.6 8.4l-2.2 5-5 2.2 2.2-5z" fill="currentColor"/></svg>',
+  // three rising bars: the stats page
+  bars: '<svg viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><rect x="2" y="9" width="3" height="5" rx=".8"/><rect x="6.5" y="5.5" width="3" height="8.5" rx=".8"/><rect x="11" y="2" width="3" height="12" rx=".8"/></svg>',
+  // a pennant on a pole: a goal
+  flag: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 14.5V1.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4.4 2.2h8.4l-2.2 3.2 2.2 3.2H4.4z" fill="currentColor"/></svg>',
+  // a list with ticks: what's left to do
+  list: '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M2 4l1.2 1.2L5.4 3M2 9l1.2 1.2L5.4 8"/><path d="M7.6 4.2h6.4M7.6 9.2h6.4M7.6 13.4h6.4"/><circle cx="3.6" cy="13.4" r="1" fill="currentColor" stroke="none"/></svg>',
+  chevron: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5.5 3.5L10 8l-4.5 4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   close: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
   people: '<svg viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><circle cx="5.6" cy="5" r="2.4"/><path d="M1.2 13.6c.3-3 2.1-4.6 4.4-4.6s4.1 1.6 4.4 4.6z"/><circle cx="11.4" cy="5.8" r="2"/><path d="M10.3 9.4c.4-.1.8-.2 1.1-.2 2 0 3.4 1.4 3.6 4.1h-3.9c-.1-1.6-.4-2.9-.8-3.9z"/></svg>',
   info: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 7.2v4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="8" cy="4.8" r="1.1" fill="currentColor"/></svg>',
@@ -183,9 +196,6 @@ function bucklesSaid(r) {
   return bucklesOf(r).map(b => `${b.name}: ${b.tier ? BUCKLE_NAMES[b.tier] + ' buckle, ' : ''}${buckleProgress(b)}`).join('; ');
 }
 
-// The sign on each topic card. Solving for x shows "x=?" so it never looks like the times sign next to it.
-const GLYPH = { counting: ['123', 'small'], adding: ['+', ''], taking: ['−', ''], times: ['×', ''], dividing: ['÷', ''], negatives: ['±', ''], algebra: ['<span><i>x</i>=?</span>', 'eq'] };
-
 // The stylesheet sits next to this file; it is added once, and the screen stays invisible until it has loaded.
 function ensureStyles(done) {
   const href = new URL('./title.css', import.meta.url).href;
@@ -202,18 +212,33 @@ function ensureStyles(done) {
   setTimeout(once, 2500);   // never stay invisible, even if the load event is missed
 }
 
-// Where the Grown-ups corner finds each topic's level, when the game didn't pass `levels`.
-const LEVEL_SOURCES = {
-  counting: { path: '../math/counting.js', make: 'makeCounting' },
-  adding: { path: '../math/adding.js', make: 'makeAdding' },
-  taking: { path: '../math/taking.js', make: 'makeTaking' },
-  times: { path: '../math/times.js', make: 'makeTimes' },
-  dividing: { path: '../math/dividing.js', make: 'makeDividing' },
-  negatives: { path: '../math/negatives.js', make: 'makeNegatives' },
-  algebra: { path: '../lockbox/algebra.js', make: 'makeAlgebra' },
-  numbersense: { path: '../math/numbersense.js', make: 'makeNumberSense' },   // (the target range's, in Shooting mode)
-  loot: { path: '../math/shares.js', make: 'makeShares' },                    // (Loot the gang's fair shares)
-};
+// The ages the new-rider form offers (optional). An age only gives a modest head start (src/math/skill.js ageStart:
+// nothing at 5 and under, a third-grade start from 15 on); the game finds the real level as the rider plays. 5 stands
+// for "5 or under" and 16 for "16 or older" (it reads "16+").
+const AGES = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16];
+const ageWord = (a) => (a == null ? 'not set' : a >= 16 ? '16+' : String(a));
+
+// The plain line that there is no level to pick (the new-rider form, and a rider who hasn't answered anything yet).
+const AUTO_LINE = 'The game finds your level by itself as you play, for each kind of math. The first few questions may feel too easy or too hard for a minute.';
+
+// A short list of a rider's math for a card: the kinds with the most answers lately first (among those practised in
+// the week up to the rider's last answer), then the most recent. Only kinds with something to go on: answered, placed,
+// or read from the rider's earlier rides (a job that only looked at a kind of math, before any answer, shows nothing
+// yet: it is still the age's head start). -> [{ strand, short, pct, finding }]
+const WEEK = 7 * 86400000;
+function mathSummary(r, n = 4) {
+  const raw = (r && r.skill && r.skill.strands) || {};
+  const last = (x) => Number(raw[x.strand] && raw[x.strand].last) || 0;
+  const kept = (x) => (raw[x.strand] && Array.isArray(raw[x.strand].h) ? raw[x.strand].h.length : 0);   // (up to the last 20)
+  const rows = strandStats(r).filter((x) => x.answered > 0 || x.placed || (raw[x.strand] && raw[x.strand].old));
+  const newest = Math.max(0, ...rows.map(last));
+  const lately = (x) => (newest - last(x) <= WEEK ? kept(x) : 0);
+  return rows.sort((a, b) => lately(b) - lately(a) || last(b) - last(a) || b.answered - a.answered).slice(0, n);
+}
+
+// Names a new rider can start with without typing one (a rider who can't read yet taps Saddle up): one not taken yet.
+const NAMES = ['Dusty', 'Rosie', 'Kit', 'Hank', 'Belle', 'Sam', 'Lou', 'Jo', 'Cody', 'Daisy', 'Buck', 'Pearl'];
+const freeName = (taken) => NAMES.find((n) => !taken.has(n.toLowerCase())) || `Rider ${taken.size + 1}`;
 
 // ---- the screen ------------------------------------------------------------------------------------------------
 
@@ -224,20 +249,20 @@ export function showTitle(root, opts = {}) {
   const onRide = opts.onRide || (() => {});
   const onLockboxes = opts.onLockboxes || (() => {});
   const onChange = opts.onChange || (() => {});
-  const levels = opts.levels || {};
 
   const S = {
     sel: riders[0] ? riders[0].id : null,
     view: riders.length ? 'settings' : 'new',
     draft: null,
-    sheet: false,
+    sheet: false,       // false | 'grown': the Grown-ups corner is open
     confirmDel: null,
     load: { known: false, f: 1, text: '' },
     waiting: false,     // RIDE OUT was pressed before the world finished loading
     riding: false,      // onRide has been called; the screen ignores clicks until show()
     visible: true,
     saveOk: storageWorks(),
-    makers: {},         // topic -> make function, once loaded for the Grown-ups corner
+    comp: opts.completion && typeof opts.completion.completion === 'function' ? opts.completion : null,   // src/completion.js, once loaded
+    jobsOpen: false,    // the folded Jobs list is open
   };
 
   const el = document.createElement('div');
@@ -256,7 +281,7 @@ export function showTitle(root, opts = {}) {
       <div class="bmt-actions"></div>
     </div>
     <div class="bmt-foot"></div>
-    <div class="bmt-sheet" role="dialog" aria-modal="true" aria-label="Grown-ups" hidden></div>`;
+    <div class="bmt-sheet" role="dialog" aria-modal="true" hidden></div>`;
   root.appendChild(el);
   const $ = (q) => el.querySelector(q);
   const ridersEl = $('.bmt-riders'), panelEl = $('.bmt-panel'), actionsEl = $('.bmt-actions'), footEl = $('.bmt-foot'), sheetEl = $('.bmt-sheet');
@@ -302,64 +327,91 @@ export function showTitle(root, opts = {}) {
     if (riders.length && !ridersEl.querySelector('.bmt-rider[tabindex="0"]')) ridersEl.querySelector('.bmt-rider').tabIndex = 0;
   }
 
-  // ---- settings panel / new rider form ----
+  // ---- the chosen rider's panel / new rider form ----
+  // The goals and completion, from src/completion.js (null until it has loaded, or if the game has none)
+  function compOf(r) {
+    if (!S.comp) return null;
+    try {
+      const c = S.comp.completion(r);
+      const goals = typeof S.comp.goalsOf === 'function' ? S.comp.goalsOf(r) : [];
+      return { pct: Math.round(Number(c && c.pct) || 0), goals: Array.isArray(goals) ? goals : [], groups: (c && c.groups) || [] };
+    } catch (e) { console.warn('Bandit Math: completion could not be read', e); return null; }
+  }
+  const pct100 = (v) => Math.max(0, Math.min(100, Number(v) || 0));
+
   function renderSettings(r) {
-    const topics = TOPICS.map(t => {
-      const [g, cls] = GLYPH[t.id] || ['?', ''];
-      const on = t.ready && !!r.topicsOn[t.id];
-      const soon = t.ready ? '' : '<span class="bmt-soon">coming soon</span>';
-      return `<button class="bmt-topic" role="checkbox" aria-checked="${on}" ${t.ready ? '' : 'aria-disabled="true" tabindex="-1"'}
-          data-act="topic" data-id="${t.id}" data-k="topic:${t.id}" aria-label="${esc(t.name)}, ages ${t.ages}${t.ready ? '' : ', coming soon'}">
-        <span class="bmt-glyph ${cls}">${g}</span><span class="bmt-tick">${ICON.check}</span><span class="bmt-tname">${esc(t.name)}</span>
-        <span class="bmt-ages">ages ${t.ages}</span>${soon}
+    // MATH: no level to pick. Until the rider has answered something the panel says how it works; then the kinds of
+    // math practised lately with their levels (the stats page has every one), named short as on their tiles
+    const sum = mathSummary(r, 4);
+    const finding = strandStats(r).filter((x) => x.finding && x.answered > 0);
+    const math = sum.length
+      ? `<div class="bmt-skills">${sum.map((x) => `<span class="bmt-sk${x.finding ? ' is-finding' : ''}"><b>${esc(x.short)}</b><em>${x.pct}%</em>
+            <span class="bmt-skbar"><i style="width:${pct100(x.pct)}%"></i></span></span>`).join('')}</div>
+        <p class="bmt-auto is-small">${ICON.compass}<span>${finding.length ? `Finding your level in ${esc(finding.map((x) => x.short).join(', ').replace(/, ([^,]*)$/, ' and $1'))}: a question may feel too easy or too hard for a minute.`
+          : 'Your level moves with you: about 4 answers in 5 right.'}</span></p>`
+      : `<p class="bmt-auto">${ICON.compass}<span><b>No level to pick.</b> ${AUTO_LINE}</span></p>`;
+    // GOALS and completion (src/completion.js)
+    const c = compOf(r);
+    const goals = c ? `
+      <section class="bmt-sec">
+        <h3 class="bmt-label">Goals <small>${c.pct}% of the game done</small></h3>
+        ${c.goals.length ? `<div class="bmt-goals">${c.goals.map((g) => `
+          <div class="bmt-goal${g.done ? ' is-done' : ''}">${ICON.flag}<b>${esc(g.name)}</b>
+            <span class="bmt-goal-n">${g.done ? 'Done!' : esc(g.line || `${fmt(g.have)} / ${fmt(g.need)}`)}</span>
+            <span class="bmt-bk-bar"><i style="width:${pct100(g.pct)}%"></i></span></div>`).join('')}</div>`
+          : '<p class="bmt-note">A grown-up can pin a goal here, like a silver buckle for cattle corralled.</p>'}
+        <div class="bmt-chips">
+          <button class="bmt-chip" data-act="goals" data-k="goals">${ICON.flag}Set a goal</button>
+          <button class="bmt-chip" data-act="left" data-k="left">${ICON.list}What's left</button>
+        </div>
+      </section>` : '';
+    // READ ALOUD: shown while questions are read by themselves, or once a grown-up has set it (the Grown-ups corner and
+    // the pause menu always have it). Three settings, a tap stepping through them: by itself, always, off
+    const rm = readMode(r);
+    const readRow = readAloudLevel(r) || rm !== true ? `<div class="bmt-read">
+        <button class="bmt-hat bmt-readsw" aria-pressed="${rm !== false}" data-act="read" data-k="read">${rm !== false ? ICON.speaker : ICON.speakerOff}Read aloud: ${esc(readModeWords(r))}</button>
+        <small>${rm === 'on' ? 'Every question is read out loud, whatever the math.' : rm === false ? 'Nothing is read out loud. Tap to have it read by itself again.'
+          : 'Questions are read out loud while the math is new (and for an age of 7 and under). Tap for always, or off.'}</small></div>` : '';
+    // JOBS: every job on; a grown-up can turn some off (folded away)
+    const jobs = MISSIONS.filter((m) => m.ready);
+    const on = jobs.filter((m) => jobOn(r, m.id)).length;
+    const missions = jobs.map((m) => {
+      const isOn = jobOn(r, m.id);
+      return `<button class="bmt-mission" role="checkbox" aria-checked="${isOn}" data-act="mission" data-id="${m.id}" data-k="mission:${m.id}">
+        <span class="bmt-box">${ICON.check}</span><b>${esc(m.name)}</b><small>${esc(m.line)}</small>
       </button>`;
     }).join('');
-    const modes = [
-      ['lasso', 'Lasso only', 'Rope ’em. No guns anywhere.', ICON.lasso],
-      ['shoot', 'Shooting', 'Bottles and cans only, no living targets', ICON.target],
-    ].map(([id, name, line, icon]) => `
-      <button class="bmt-mode" role="radio" aria-checked="${r.mode === id}" tabindex="${r.mode === id ? 0 : -1}"
-          data-act="mode" data-id="${id}" data-k="mode:${id}">${icon}<b>${name}</b><small>${line}</small></button>`).join('');
-    const missions = MISSIONS.map(m => {
-      const on = m.ready && !!r.missions[m.id];
-      return `<button class="bmt-mission" role="checkbox" aria-checked="${on}" ${m.ready ? '' : 'aria-disabled="true" tabindex="-1"'}
-          data-act="mission" data-id="${m.id}" data-k="mission:${m.id}">
-        <span class="bmt-box">${ICON.check}</span><b>${esc(m.name)}</b>
-        <small>${m.ready ? esc(m.line) : '<span class="bmt-soon">soon</span>'}</small>
-      </button>`;
-    }).join('');
-    // read-aloud: shown while a topic whose cards are read is ticked
-    const young = READ_TOPICS.filter((id) => r.topicsOn[id]);
-    const readRow = young.length ? `<div class="bmt-read">
-        <button class="bmt-hat bmt-readsw" role="switch" aria-checked="${r.readAloud !== false}" data-act="read" data-k="read">${r.readAloud !== false ? ICON.speaker : ICON.speakerOff}Read aloud: ${r.readAloud !== false ? 'On' : 'Off'}</button>
-        <small>The ${young.map((id) => TOPICS.find((t) => t.id === id).name).join(', ').replace(/, ([^,]*)$/, ' and $1')} cards are read out loud</small></div>` : '';
-    const note = r.mode === 'shoot'
-      ? '<b>Shooting</b> adds a target range at the east end of town: bottles and tin cans only. Cattle and bandits are still roped, and deer are photographed. Picked here only: it stays the same for the whole ride.'
-      : 'Picked here only: it stays the same for the whole ride.';
     return `
-      <div class="bmt-head"><h2>Settings for <em>${esc(r.name)}</em></h2><p>${toNext(r)}</p></div>
+      <div class="bmt-head"><h2><em>${esc(r.name)}</em></h2><p>${toNext(r)}</p></div>
       <section class="bmt-sec">
-        <h3 class="bmt-label">Math <small>pick one or more</small></h3>
-        <div class="bmt-topics" role="group" aria-label="Math topics" data-nav="grid">${topics}</div>${readRow}
+        <h3 class="bmt-label">Math <button class="bmt-link" data-act="stats" data-k="stats">${ICON.bars}Stats</button></h3>
+        ${math}
       </section>
-      <section class="bmt-sec">
-        <h3 class="bmt-label">Mode</h3>
-        <div class="bmt-modes" role="radiogroup" aria-label="Mode" data-nav="radio">${modes}</div>
-        <p class="bmt-note">${note}</p>
-      </section>
-      <section class="bmt-sec">
-        <h3 class="bmt-label">Missions</h3>
-        <div class="bmt-missions" role="group" aria-label="Missions" data-nav="grid">${missions}</div>
-      </section>`;
+      ${goals}
+      ${readRow}
+      <details class="bmt-jobs"${S.jobsOpen ? ' open' : ''}>
+        <summary data-k="jobs"><span class="bmt-label">Jobs</span><small>${on === jobs.length ? `All ${jobs.length} on` : `${on} of ${jobs.length} on`}</small>${ICON.chevron}</summary>
+        <p class="bmt-note">Every job is on, so there is always something to do. A grown-up can turn some off. The round-up and the lock boxes are always on.</p>
+        <div class="bmt-missions" role="group" aria-label="Jobs" data-nav="grid">${missions}</div>
+      </details>`;
   }
 
   function freshDraft() {
     const look = LOOKS[riders.length % LOOKS.length];
-    return { name: '', look: look.id, skin: SKINS[(2 + riders.length) % SKINS.length], hair: look.hair, hairPicked: false, hat: true };
+    return { name: '', pick: freeName(new Set(riders.map((x) => String(x.name || '').toLowerCase()))), look: look.id,
+      skin: SKINS[(2 + riders.length) % SKINS.length], hair: look.hair, hairPicked: false, hat: true, age: null };
   }
   function draftLook() {
     const d = S.draft, l = LOOKS.find(x => x.id === d.look) || LOOKS[0];
     return { outfit: l.outfit, palette: l.palette, skin: d.skin, hair: d.hair, hat: d.hat };
+  }
+  // the optional age as a row of round buttons ("Skip" first); kind = 'age' on the form
+  function agePick(cur, kind, label) {
+    return `<div class="bmt-agepick" role="radiogroup" aria-label="${label}" data-nav="radio">
+      <button class="bmt-agech is-skip" role="radio" aria-checked="${cur == null}" tabindex="${cur == null ? 0 : -1}" data-act="${kind}" data-v="" data-k="${kind}:-">Skip</button>
+      ${AGES.map((a) => `<button class="bmt-agech" role="radio" aria-checked="${cur === a}" tabindex="${cur === a ? 0 : -1}" aria-label="${a >= 16 ? '16 or older' : a <= 5 ? '5 or under' : a}"
+          data-act="${kind}" data-v="${a}" data-k="${kind}:${a}">${ageWord(a)}</button>`).join('')}
+    </div>`;
   }
 
   function renderForm() {
@@ -381,7 +433,7 @@ export function showTitle(root, opts = {}) {
         <div class="bmt-who">
           <span class="bmt-face bmt-preview">${faceSVG(draftLook())}</span>
           <label class="bmt-field"><span>Name</span>
-            <input class="bmt-input" data-k="name" maxlength="16" autocomplete="off" spellcheck="false" placeholder="Type a name" value="${esc(d.name)}"></label>
+            <input class="bmt-input" data-k="name" maxlength="16" autocomplete="off" spellcheck="false" placeholder="${esc(d.pick || 'Rider')}, or type one" value="${esc(d.name)}"></label>
         </div>
         <section>
           <h3 class="bmt-label">Pick a look</h3>
@@ -389,9 +441,14 @@ export function showTitle(root, opts = {}) {
         </section>
         <div class="bmt-tones">${dots(SKINS, 'skin', d.skin, 'Skin')}${dots(HAIRS, 'hair', d.hairPicked ? d.hair : null, 'Hair')}
           <div class="bmt-tone"><span>Hat</span><button class="bmt-hat" role="switch" aria-checked="${d.hat}" data-act="hat" data-k="hat">${ICON.hat}${d.hat ? 'On' : 'Off'}</button></div></div>
+        <section>
+          <h3 class="bmt-label">Age <small>if you like</small></h3>
+          ${agePick(d.age, 'age', 'Age, if you like')}
+          <p class="bmt-auto">${ICON.compass}<span><b>No level to pick.</b> ${AUTO_LINE} An age only gives a small head start.</span></p>
+        </section>
         <div class="bmt-formbtns">
           ${riders.length ? '<button class="bmt-btn" data-act="cancel" data-k="cancel">Cancel</button>' : ''}
-          <button class="bmt-btn go" data-act="create" data-k="create" ${d.name.trim() ? '' : 'disabled'}>Saddle up</button>
+          <button class="bmt-btn go" data-act="create" data-k="create">Saddle up${d.name.trim() ? '' : ` <small>as ${esc(d.pick || 'Rider')}</small>`}</button>
         </div>
       </div>`;
   }
@@ -404,26 +461,34 @@ export function showTitle(root, opts = {}) {
       const input = panelEl.querySelector('.bmt-input');
       input.addEventListener('input', () => {
         S.draft.name = input.value;
+        // (no name typed: Saddle up uses the picked one, so a rider who can't read can start alone)
         const go = panelEl.querySelector('[data-act="create"]');
-        if (go) go.disabled = !input.value.trim();
+        if (go) go.innerHTML = `Saddle up${input.value.trim() ? '' : ` <small>as ${esc(S.draft.pick || 'Rider')}</small>`}`;
       });
       input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); act('create', {}); }
       });
     } else {
       panelEl.innerHTML = renderSettings(r);
+      const fold = panelEl.querySelector('.bmt-jobs');
+      if (fold) fold.addEventListener('toggle', () => { S.jobsOpen = fold.open; });
     }
   }
 
   // ---- RIDE OUT, Just lock boxes, and the line under them ----
+  // (nothing to tick before riding out: the round-up and the lock boxes are always on, and the math finds its level)
   function whyNot(r) {
-    if (!r) return 'Make a rider first';
-    if (!MISSIONS.some(m => m.ready && r.missions[m.id])) return 'Tick a mission to ride out';
-    if (!TOPICS.some(t => t.ready && r.topicsOn[t.id])) return 'Pick a math topic to ride out';
-    return '';
+    return r ? '' : 'Make a rider first';
   }
   const ready = () => !S.load.known || S.load.f >= 1;
 
+  // "Just lock boxes" in the rider's own words: picture boxes for the youngest (equations under the first rung, R0a at
+  // 10: "2 plus what equals 4?"), solving for x from there
+  function boxWords(r) {
+    let eq = 0;
+    try { eq = levelOf(r, 'eq'); } catch (e) { /* no skill yet */ }
+    return eq < 10 ? '<b>Picture lock boxes</b><small>Count it up, no riding</small>' : '<b>Just lock boxes</b><small>Solve for x, no riding</small>';
+  }
   function renderActions() {
     const r = current();
     if (S.view === 'new' || !r) { actionsEl.innerHTML = ''; actionsEl.hidden = true; return; }
@@ -431,7 +496,7 @@ export function showTitle(root, opts = {}) {
     const why = whyNot(r);
     const label = S.riding ? 'Riding out…' : S.waiting ? 'Saddling up…' : 'RIDE OUT';
     actionsEl.innerHTML = `
-      <button class="bmt-boxes" data-act="boxes" data-k="boxes" ${S.riding ? 'disabled' : ''}>${ICON.strongbox}<b>Just lock boxes</b><small>Solve for x, no riding</small></button>
+      <button class="bmt-boxes" data-act="boxes" data-k="boxes" ${S.riding ? 'disabled' : ''}>${ICON.strongbox}${boxWords(r)}</button>
       <button class="bmt-ride ${S.waiting ? 'is-waiting' : ''}" data-act="ride" data-k="ride" ${why || S.riding ? 'disabled' : ''}
           aria-describedby="bmt-status"><i class="bmt-fill"></i><span>${label}</span></button>
       <div class="bmt-status" id="bmt-status" aria-live="polite">${why
@@ -465,82 +530,65 @@ export function showTitle(root, opts = {}) {
 
   function renderFoot() {
     footEl.innerHTML = `
-      <button class="bmt-grown" data-act="grown" data-k="grown" aria-expanded="${S.sheet}">${ICON.people}Grown-ups</button>
+      <button class="bmt-grown" data-act="grown" data-k="grown" aria-expanded="${S.sheet === 'grown'}">${ICON.people}Grown-ups</button>
       ${build ? `<span class="bmt-build">build ${esc(build)}</span>` : ''}
       ${S.saveOk ? '' : '<span class="bmt-warn">This browser is blocking saves, so progress lasts only until this tab closes.</span>'}`;
   }
 
-  // ---- Grown-ups corner ----
-  function levelText(topic, state) {
-    try {
-      if (typeof levels[topic] === 'function') return levels[topic](state) || '';
-      const make = S.makers[topic];
-      if (make && state && Object.keys(state).length) {
-        const lv = make(JSON.parse(JSON.stringify(state))).level();   // a copy, so looking never changes progress
-        if (lv) return lv.line || lv.label || (lv.step != null ? `step ${lv.step}` : lv.rung != null ? `rung ${lv.rung}` : '');
-      }
-    } catch (e) { /* fall through to the plain reading */ }
-    if (!state || !Object.keys(state).length) return 'not started yet';
-    if (state.label) return String(state.label);
-    if (state.step != null) return `step ${state.step}`;
-    if (state.rung != null) return `rung ${state.rung}`;
-    if (state.level != null) return `level ${state.level}`;
-    return 'started';
-  }
-  let makersAsked = false;
-  function loadMakers() {
-    if (makersAsked) return;
-    makersAsked = true;
-    for (const [topic, src] of Object.entries(LEVEL_SOURCES)) {
-      if (typeof levels[topic] === 'function') continue;
-      import(new URL(src.path, import.meta.url).href)
-        .then(m => { if (typeof m[src.make] === 'function') { S.makers[topic] = m[src.make]; if (S.sheet) keepFocus(renderSheet); } })
-        .catch(() => { /* that module isn't there yet: the plain reading is used */ });
-    }
+  // ---- Grown-ups corner (a sheet over the screen) ----
+  function grownRow(r) {
+    const acc = accuracyOf(r);
+    const accText = acc.pct == null ? 'no answers yet'
+      : `${acc.pct}% right over the last ${acc.of} · ${fmt(r.stats.answered)} answered in all`;
+    const range = accuracyOf(r, 'shoot');
+    const split = range.of > 0 ? ` (bottle range ${range.pct}%)` : '';
+    const badges = badgesOf(r);
+    const boxes = `${fmt(r.stats.boxes)} solved, ${fmt(r.stats.parBoxes)} in the fewest moves` +
+      (r.lockboxes.length ? ` · ${r.lockboxes.length} waiting in the saddlebags` : '');
+    const math = statRows(r);   // (the kinds of math the rider has shown something in, as on the stats page)
+    const mathText = math.length
+      ? math.map((x) => `${esc(x.short)} ${x.pct}%${x.finding ? ' <small>(finding)</small>' : ''}`).join(' · ')
+      : 'nothing answered yet: the game finds each level as they play';
+    const off = MISSIONS.filter((m) => m.ready && !jobOn(r, m.id));
+    const c = compOf(r);
+    const confirm = S.confirmDel === r.id ? `
+      <div class="bmt-confirm" role="alert"><span>Delete <b>${esc(r.name)}</b> for good? Their gold, fame and progress go too. This can't be undone.</span>
+        <button class="bmt-btn" data-act="keep" data-k="keep:${esc(r.id)}">Keep</button>
+        <button class="bmt-btn danger" data-act="delyes" data-id="${esc(r.id)}" data-k="delyes:${esc(r.id)}">Delete</button></div>` : '';
+    return `<div class="bmt-row">
+      <span class="bmt-face">${faceSVG(r.look)}</span>
+      <h3>${esc(r.name)}<small>${titleOf(r)} · ${fmt(r.bounty)} fame · ${fmt(r.gold)} gold to spend</small></h3>
+      <dl class="bmt-facts">
+        <dt>Math</dt><dd>${mathText}</dd>
+        <dt>Accuracy</dt><dd>${accText}${split}</dd>
+        <dt>Age</dt><dd><label class="bmt-agesel"><select data-sel="age" data-id="${esc(r.id)}" data-k="agesel:${esc(r.id)}" aria-label="${esc(r.name)}'s age">
+            <option value=""${r.age == null ? ' selected' : ''}>Not set</option>
+            ${AGES.map((a) => `<option value="${a}"${r.age === a || (a === 16 && r.age != null && r.age > 16) || (a === 5 && r.age != null && r.age < 5) ? ' selected' : ''}>${a <= 5 ? '5 or under' : ageWord(a)}</option>`).join('')}
+          </select></label> <small>a small head start for math not met yet</small></dd>
+        <dt>Read aloud</dt><dd><button class="bmt-chip bmt-readsw" aria-pressed="${readMode(r) !== false}" data-act="read" data-id="${esc(r.id)}" data-k="read:${esc(r.id)}">${readMode(r) !== false ? ICON.speaker : ICON.speakerOff}${esc(readModeWords(r))}</button>
+          <small>tap: by itself, always, off</small></dd>
+        <dt>Jobs</dt><dd>${off.length ? `turned off: ${off.map((m) => esc(m.name)).join(', ')}` : 'every job on'}</dd>
+        ${c ? `<dt>Completion</dt><dd>${c.pct}%${c.goals.length ? ` · goals: ${c.goals.map((g) => esc(g.name)).join(', ')}` : ''}</dd>` : ''}
+        <dt>Lock boxes</dt><dd>${boxes}</dd>
+        <dt>Jobs done</dt><dd>${bucklesOf(r).map(b => `${esc(jobWords(b.job, b.count))}${b.tier ? ` (${BUCKLE_NAMES[b.tier].toLowerCase()} buckle)` : ''}`).join(' · ')}</dd>
+        <dt>Badges</dt><dd>${badges.length ? badges.map(esc).join(', ') : 'none yet'}</dd>
+      </dl>
+      <div class="bmt-rowbtns">
+        <button class="bmt-chip" data-act="stats" data-id="${esc(r.id)}" data-k="stats:${esc(r.id)}">${ICON.bars}Stats</button>
+        ${S.confirmDel === r.id ? '' : `<button class="bmt-del" data-act="del" data-id="${esc(r.id)}" data-k="del:${esc(r.id)}">Delete rider</button>`}
+      </div>
+      ${confirm}
+    </div>`;
   }
 
   function renderSheet() {
     sheetEl.hidden = !S.sheet;
     if (!S.sheet) { sheetEl.innerHTML = ''; return; }
-    const rows = riders.map(r => {
-      const acc = accuracyOf(r);
-      const accText = acc.pct == null ? 'no answers yet'
-        : `${acc.pct}% right over the last ${acc.of} · ${fmt(r.stats.answered)} answered in all`;
-      const modes = ['lasso', 'shoot'].map(m => [m, accuracyOf(r, m)]).filter(([, a]) => a.of > 0);
-      const split = modes.length > 1 ? modes.map(([m, a]) => `${m === 'lasso' ? 'lasso' : 'shooting'} ${a.pct}%`).join(', ') : '';
-      const badges = badgesOf(r);
-      const boxes = `${fmt(r.stats.boxes)} solved, ${fmt(r.stats.parBoxes)} in the fewest moves` +
-        (r.lockboxes.length ? ` · ${r.lockboxes.length} waiting in the saddlebags` : '');
-      const confirm = S.confirmDel === r.id ? `
-        <div class="bmt-confirm" role="alert"><span>Delete <b>${esc(r.name)}</b> for good? Their gold, fame and progress go too. This can't be undone.</span>
-          <button class="bmt-btn" data-act="keep" data-k="keep:${esc(r.id)}">Keep</button>
-          <button class="bmt-btn danger" data-act="delyes" data-id="${esc(r.id)}" data-k="delyes:${esc(r.id)}">Delete</button></div>` : '';
-      return `<div class="bmt-row">
-        <span class="bmt-face">${faceSVG(r.look)}</span>
-        <h3>${esc(r.name)}<small>${titleOf(r)} · ${fmt(r.bounty)} fame · ${fmt(r.gold)} gold to spend</small></h3>
-        <dl class="bmt-facts">
-          <dt>Accuracy</dt><dd>${accText}${split ? ` (${split})` : ''}</dd>
-          <dt>Counting</dt><dd>${esc(levelText('counting', r.topics.counting))}</dd>
-          <dt>Adding</dt><dd>${esc(levelText('adding', r.topics.adding))}</dd>
-          <dt>Taking away</dt><dd>${esc(levelText('taking', r.topics.taking))}</dd>
-          <dt>Times tables</dt><dd>${esc(levelText('times', r.topics.times))}</dd>
-          <dt>Dividing</dt><dd>${esc(levelText('dividing', r.topics.dividing))}</dd>
-          <dt>Positive &amp; negative</dt><dd>${esc(levelText('negatives', r.topics.negatives))}</dd>
-          <dt>Solving for x</dt><dd>${esc(levelText('algebra', r.topics.algebra))}</dd>
-          ${r.mode === 'shoot' || (r.topics.numbersense && Object.keys(r.topics.numbersense).length) ? `<dt>Target range</dt><dd>${esc(levelText('numbersense', r.topics.numbersense))}${r.range && r.range.best ? ` · best streak ${fmt(r.range.best)}` : ''}</dd>` : ''}
-          ${(r.missions && r.missions.loot) || (r.topics.loot && Object.keys(r.topics.loot).length) ? `<dt>Loot the gang</dt><dd>${esc(levelText('loot', r.topics.loot))}</dd>` : ''}
-          <dt>Lock boxes</dt><dd>${boxes}</dd>
-          <dt>Jobs done</dt><dd>${bucklesOf(r).map(b => `${esc(jobWords(b.job, b.count))}${b.tier ? ` (${BUCKLE_NAMES[b.tier].toLowerCase()} buckle)` : ''}`).join(' · ')}</dd>
-          <dt>Badges</dt><dd>${badges.length ? badges.map(esc).join(', ') : 'none yet'}</dd>
-        </dl>
-        ${S.confirmDel === r.id ? '' : `<button class="bmt-del" data-act="del" data-id="${esc(r.id)}" data-k="del:${esc(r.id)}">Delete rider</button>`}
-        ${confirm}
-      </div>`;
-    }).join('');
+    sheetEl.setAttribute('aria-label', 'Grown-ups');
     sheetEl.innerHTML = `<div class="bmt-card">
       <header><h2>Grown-ups</h2><button class="bmt-x" data-act="ungrown" data-k="ungrown" aria-label="Close">${ICON.close}</button></header>
-      <p>How each rider is doing. Everything stays on this device; nothing is sent anywhere.</p>
-      <div class="bmt-ledger">${rows || '<div class="bmt-empty">No riders yet.</div>'}</div>
+      <p>How each rider is doing. The game finds each rider's level in every kind of math by itself and keeps it where about 4 answers in 5 are right. Everything stays on this device; nothing is sent anywhere.</p>
+      <div class="bmt-ledger">${riders.map(grownRow).join('') || '<div class="bmt-empty">No riders yet.</div>'}</div>
       <div class="bmt-cardfoot">${S.saveOk ? 'Progress is saved in this browser.' : 'This browser is blocking saves: progress lasts only until this tab closes.'}${build ? ` · build ${esc(build)}` : ''}</div>
     </div>`;
   }
@@ -602,10 +650,12 @@ export function showTitle(root, opts = {}) {
       case 'skin': S.draft.skin = data.v; keepFocus(renderPanel); return;
       case 'hat': S.draft.hat = !S.draft.hat; keepFocus(renderPanel); return;
       case 'hair': S.draft.hair = data.v; S.draft.hairPicked = true; keepFocus(renderPanel); return;
+      case 'age': S.draft.age = data.v ? Math.round(+data.v) : null; keepFocus(renderPanel); return;
       case 'create': {
-        const name = (S.draft && S.draft.name || '').trim();
+        const name = (S.draft && S.draft.name || '').trim() || (S.draft && S.draft.pick) || '';
         if (!name || !canMakeMore()) { focusKey('name'); return; }
         const nr = newRider(name, draftLook());
+        nr.age = S.draft.age == null ? null : S.draft.age;   // (optional: a modest head start, src/math/skill.js ageStart)
         riders.push(nr);
         saveRider(nr);
         S.saveOk = storageWorks();
@@ -615,33 +665,40 @@ export function showTitle(root, opts = {}) {
         try { onChange(nr); } catch (e) { console.error(e); }
         return;
       }
-      case 'topic': {
-        const t = TOPICS.find(x => x.id === data.id);
-        if (!r || !t || !t.ready) return;
-        r.topicsOn[t.id] = !r.topicsOn[t.id];
-        keepFocus(() => { renderPanel(); renderActions(); });
+      case 'read': {   // the read-aloud switch: by itself -> always -> off -> by itself (the panel, or a Grown-ups row)
+        const who = (data.id && riders.find(x => x.id === data.id)) || r;
+        if (!who) return;
+        who.readAloud = nextReadMode(who);
+        keepFocus(() => { renderPanel(); renderSheet(); });
+        changed(who);
+        return;
+      }
+      case 'mission': {   // a job on or off (the folded Jobs list); its buckle shows or hides on the card with it
+        const m = MISSIONS.find(x => x.id === data.id);
+        if (!r || !m || !m.ready) return;
+        r.missions[m.id] = !jobOn(r, m.id);
+        keepFocus(() => { renderRiders(); renderPanel(); });
         changed(r);
         return;
       }
-      case 'read':
+      case 'stats': {   // the stats page, for the chosen rider (or a rider's row in the Grown-ups corner)
+        const who = (data.id && riders.find(x => x.id === data.id)) || r;
+        if (!who) return;
+        const back = data.id ? `stats:${data.id}` : 'stats';
+        openStats(document.body, who, { face: faceSVG(who.look), completion: S.comp, onClose: () => focusKey(back, false) });
+        return;
+      }
+      case 'goals': case 'left': {
+        // the checklist's "What's left" page (src/ui/completion.js), over the title; "Set a goal" opens it with a Pin
+        // button on every item (a grown-up pins a goal there: two at a time)
         if (!r) return;
-        r.readAloud = r.readAloud === false;
-        keepFocus(renderPanel);
-        changed(r);
-        return;
-      case 'mode':
-        if (!r || r.mode === data.id) return;
-        r.mode = data.id === 'shoot' ? 'shoot' : 'lasso';
-        keepFocus(() => { renderRiders(); renderPanel(); });   // (the rider's card too: Shooting adds the target range's buckle)
-        changed(r);
-        return;
-      case 'mission': {
-        const m = MISSIONS.find(x => x.id === data.id);
-        if (!r || !m || !m.ready) return;
-        r.missions[m.id] = !r.missions[m.id];
-        if (whyNot(r)) S.waiting = false;
-        keepFocus(() => { renderPanel(); renderActions(); });
-        changed(r);
+        const back = what;
+        import('./completion.js').then((m) => {
+          if (typeof m.openWhatsLeft !== 'function') return;
+          m.openWhatsLeft(document.body, r, { pin: what === 'goals',
+            onChange: (x) => { keepFocus(renderPanel); changed(x || r); },
+            onClose: () => { keepFocus(renderPanel); focusKey(back, false); } });
+        }).catch((e) => console.warn('Bandit Math: the what\'s-left page is not there yet', e));
         return;
       }
       case 'ride':
@@ -661,8 +718,7 @@ export function showTitle(root, opts = {}) {
         return;
       }
       case 'grown':
-        S.sheet = !S.sheet; S.confirmDel = null;
-        loadMakers();
+        S.sheet = S.sheet === 'grown' ? false : 'grown'; S.confirmDel = null;
         renderFoot(); renderSheet();
         if (S.sheet) focusKey('ungrown');
         return;
@@ -697,6 +753,16 @@ export function showTitle(root, opts = {}) {
     const b = e.target.closest('[data-act]');
     if (!b || !el.contains(b) || b.disabled || b.getAttribute('aria-disabled') === 'true') return;
     act(b.getAttribute('data-act'), { id: b.getAttribute('data-id'), v: b.getAttribute('data-v') });
+  });
+  // a rider's age, picked in the Grown-ups corner (a small head start for the math they haven't met yet)
+  sheetEl.addEventListener('change', (e) => {
+    const sel = e.target.closest('select[data-sel="age"]');
+    if (!sel) return;
+    const r = riders.find(x => x.id === sel.getAttribute('data-id'));
+    if (!r) return;
+    r.age = sel.value ? Math.round(+sel.value) : null;
+    keepFocus(() => { renderSheet(); renderPanel(); });
+    changed(r);
   });
   // a click on the dark backdrop of the Grown-ups sheet closes it
   sheetEl.addEventListener('click', (e) => { if (e.target === sheetEl) act('ungrown', {}); });
@@ -746,6 +812,14 @@ export function showTitle(root, opts = {}) {
 
   // ---- start ----
   renderAll();
+  // the goals and completion (src/completion.js): drawn in once loaded; left out if the game has none yet
+  if (!S.comp) {
+    import('../completion.js').then((m) => {
+      if (typeof m.completion !== 'function') return;
+      S.comp = m;
+      keepFocus(() => { renderPanel(); if (S.sheet) renderSheet(); });
+    }).catch(() => { /* no completion in this build yet */ });
+  }
   ensureStyles(() => {
     if (!S.visible) return;
     el.classList.remove('is-hidden');

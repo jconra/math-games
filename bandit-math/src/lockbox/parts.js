@@ -10,7 +10,7 @@
 //
 // Nothing here touches the page, so the node tests can check it.
 //
-//   partsOf(line, move, { rng }) -> null for a move that can't be made (or "open the brackets": products.js asks
+//   partsOf(line, move, { rng, positive }) -> null for a move that can't be made (or "open the brackets": products.js asks
 //     those), else { show, shown, out, autos: [...], qs: [...] }
 //     show   'mid' (an add: the line with the new term on both ends) or 'before' (×, ÷, the flip, combining)
 //     shown  that line; every index below points into it
@@ -23,6 +23,9 @@
 //            line: { start, change } | null (the number-line picture), op, a, b, f }
 //            from: an index into the shown side, or 'den' (the ÷ under the side) / 'times' (the · beside it)
 //   roomParts(...)  the same for one side (the inequalities use it room by room)
+//   positive: true for a rider whose adding and taking away haven't reached the negatives yet: a part with no negative
+//     in it (9 + 4, 9 − 4, 12 ÷ 3) offers no negative wrong answers (−13 means nothing to a 6-year-old); a part that
+//     works with negatives keeps its sign slips
 //   partNudge(q, choice) -> Hob's one line after a wrong pick (never the answer itself)
 //   partHelp(q)          -> Ask Hob's line while a part is asked
 //   assemble(parts)      -> the rooms the answers build (the tests check it is exactly the move's line)
@@ -59,7 +62,7 @@ const keyOf = (s) => s.replace(/^\+/, '');
 
 // Four answers: the right one and three slips (fewer only when the numbers can't make three different ones).
 // cands: [{ term, tag }] in the order they are wanted; extra: more terms to fall back on.
-function choicesFor(right, cands, extra, rand) {
+function choicesFor(right, cands, extra, rand, positive = false) {
   const rightText = answerText(right);
   const seen = new Set([keyOf(rightText)]);
   const picked = [];
@@ -67,6 +70,7 @@ function choicesFor(right, cands, extra, rand) {
     if (!term || picked.length >= 3) return;
     const v = valueOf(term);
     if (Math.abs(v.n) > 999 || v.d > 99) return;
+    if (positive && v.n < 0) return;
     const text = answerText(term);
     if (seen.has(keyOf(text))) return;
     seen.add(keyOf(text));
@@ -80,8 +84,10 @@ function choicesFor(right, cands, extra, rand) {
 }
 
 // The slips for a sum a + b (both the same kind of term).
-function sumChoices(A, B, sum, rand, extraTerms = []) {
+function sumChoices(A, B, sum, rand, extraTerms = [], positive = false) {
   const a = valueOf(A), b = valueOf(B), c = valueOf(sum);
+  // (no negative slips when nothing in the part is below zero: it starts at or above zero and lands there)
+  const plain = positive && a.n >= 0 && c.n >= 0;
   const mk = (v) => like(sum, F(v));
   const cands = [{ term: mk(a.sub(b)), tag: 'pm' }];
   if (!c.isZero()) cands.push({ term: mk(c.neg()), tag: 'sign' });
@@ -96,11 +102,12 @@ function sumChoices(A, B, sum, rand, extraTerms = []) {
   const extra = [];
   if (isInt(c)) for (const d of [1, -1, 2, -2, 10, -10]) extra.push({ term: mk(c.add(F(d))), tag: 'off' });
   extraTerms.forEach((t) => extra.push({ term: t, tag: 'one' }));
-  return choicesFor(sum, [...cands, ...fixed, ...rest], extra, rand);
+  if (plain && isInt(c)) for (const d of [3, 4, 5]) extra.push({ term: mk(c.add(F(d))), tag: 'off' });
+  return choicesFor(sum, [...cands, ...fixed, ...rest], extra, rand, plain);
 }
 
 // The slips for a term times f (f = 1/d for ÷d). move: the move pressed (its number is what the kid sees).
-function scaleChoices(T, result, move, rand) {
+function scaleChoices(T, result, move, rand, positive = false) {
   const v = valueOf(T), r = valueOf(result);
   const mk = (x) => like(result, F(x));
   const shown = move.k === 'flip' ? F(-1) : move.f;
@@ -120,9 +127,11 @@ function scaleChoices(T, result, move, rand) {
   if (isInt(r)) more.push({ term: mk(r.add(F(rand() < 0.5 ? 1 : -1))), tag: 'off' });
   if (result.t === 'x') more.push({ term: { t: 'n', v: r }, tag: 'nox' });
   const extra = [];
-  if (isInt(r)) for (const d of [1, -1, 2, -2, 3, -3]) extra.push({ term: mk(r.add(F(d))), tag: 'off' });
+  if (isInt(r)) for (const d of [1, -1, 2, -2, 3, -3, 4, 5]) extra.push({ term: mk(r.add(F(d))), tag: 'off' });
   else extra.push({ term: mk(r.mul(F(2))), tag: 'off' }, { term: mk(r.mul(F(1, 2))), tag: 'off' });
-  return choicesFor(result, [...cands, ...shuffle(more, rand)], extra, rand);
+  const shownF = move.k === 'flip' ? F(-1) : move.f;
+  const plain = positive && v.n >= 0 && r.n >= 0 && shownF.n > 0;
+  return choicesFor(result, [...cands, ...shuffle(more, rand)], extra, rand, plain);
 }
 
 function shuffle(arr, rand) {
@@ -146,7 +155,7 @@ const lineFor = (A, B) => (A.t === 'n' && B.t === 'n' && isInt(A.v) && isInt(B.v
 
 // The parts of one side (room). before: the side as it was; mid/out/ev: what applyMove made of it.
 // room: the side's name ('L', 'R', or an inequality room id). rand: () -> 0..1
-export function roomParts({ room, move, before, mid, out, ev, rand = Math.random }) {
+export function roomParts({ room, move, before, mid, out, ev, rand = Math.random, positive = false }) {
   const autos = [], qs = [];
   if (!ev) return { autos, qs };
   if (move.k === 'add') {
@@ -158,7 +167,7 @@ export function roomParts({ room, move, before, mid, out, ev, rand = Math.random
       if (A.t === 'n' && A.v.isZero()) { autos.push({ room, kind: 'plain', at: [e.a, e.b], result: [clone(B)], text: e.text }); continue; }
       const sum = out[e.to];
       qs.push({ room, kind: 'sum', at: [e.a, e.b], result: clone(sum), prompt: sumPrompt([A, B]), tokens: sumTokens([A, B], [e.a, e.b]),
-        answer: answerText(sum), choices: sumChoices(A, B, sum, rand), line: lineFor(A, B), a: A, b: B, op: '+' });
+        answer: answerText(sum), choices: sumChoices(A, B, sum, rand, [], positive), line: lineFor(A, B), a: A, b: B, op: '+' });
     }
   } else if (move.k === 'div' || move.k === 'mul' || move.k === 'flip') {
     for (const e of ev) {
@@ -174,7 +183,7 @@ export function roomParts({ room, move, before, mid, out, ev, rand = Math.random
       if (res.t === 'x' && res.v.isOne()) { autos.push({ room, kind: 'free', at: [e.a], result: [clone(res)], text }); continue; }
       qs.push({ room, kind: 'scale', at: [e.a], result: clone(res), prompt,
         tokens: [{ text: termText(T, true), from: e.a }, { text: `${sym} ${wrapNeg(f)}`, from: move.k === 'div' ? 'den' : 'times' }],
-        answer: answerText(res), choices: scaleChoices(T, res, move, rand), line: null, a: T, f, op: move.k });
+        answer: answerText(res), choices: scaleChoices(T, res, move, rand, positive), line: null, a: T, f, op: move.k });
     }
   } else if (move.k === 'comb') {
     for (const e of ev) {
@@ -187,8 +196,8 @@ export function roomParts({ room, move, before, mid, out, ev, rand = Math.random
       const sum = { t: e.t, v: total };
       // with three or more, the "one" slip is the sum that left the last one out
       const short = terms.slice(0, -1).reduce((s, t) => s.add(t.v), F(0));
-      const choices = terms.length === 2 ? sumChoices(terms[0], terms[1], sum, rand)
-        : sumChoices({ t: e.t, v: short }, terms[terms.length - 1], sum, rand);
+      const choices = terms.length === 2 ? sumChoices(terms[0], terms[1], sum, rand, [], positive)
+        : sumChoices({ t: e.t, v: short }, terms[terms.length - 1], sum, rand, [], positive);
       qs.push({ room, kind: 'join', at, result: sum, prompt: sumPrompt(terms), tokens: sumTokens(terms, at), answer: answerText(sum),
         choices, line: terms.length === 2 ? lineFor(terms[0], terms[1]) : null, a: terms[0], b: terms[1], terms, op: '+' });
     }
@@ -196,7 +205,7 @@ export function roomParts({ room, move, before, mid, out, ev, rand = Math.random
   return { autos, qs };
 }
 
-export function partsOf(l, move, { rng = null } = {}) {
+export function partsOf(l, move, { rng = null, positive = false } = {}) {
   if (!move || move.k === 'dist') return null;
   const r = applyMove(l, move, true);
   if (!r) return null;
@@ -205,7 +214,7 @@ export function partsOf(l, move, { rng = null } = {}) {
   const shown = show === 'mid' ? r.mid : cloneLine(l);
   const autos = [], qs = [];
   for (const room of ['L', 'R']) {
-    const p = roomParts({ room, move, before: l[room], mid: r.mid ? r.mid[room] : null, out: r.out[room], ev: r.ev[room], rand });
+    const p = roomParts({ room, move, before: l[room], mid: r.mid ? r.mid[room] : null, out: r.out[room], ev: r.ev[room], rand, positive });
     autos.push(...p.autos);
     qs.push(...p.qs);
   }

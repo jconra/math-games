@@ -33,6 +33,7 @@
 //   N.explain(card, picked)            -> { slip, line, numberLine }   after a wrong pick
 //   N.help(card)                       -> number-line options with the answer hidden, for "Show me" / 8 s of thinking
 //   N.hint(card), N.level(), N.report(), N.setStep(n)
+//   N.steer(step, { placing })         the rider's skill model (src/math/skill.js) sets the step from now on (see steer)
 //
 // Every number shown uses the real minus sign (U+2212), and a negative being added or taken away is
 // written in brackets: 5 − (−3), 4 + (−9). Words say "negative six" for a value and "minus" only for taking away.
@@ -100,6 +101,17 @@ export const LADDER = [
   { shapes: ALL, max: 50, label: 'All of them up to 50' },
 ];
 export const CONTRAST_CHANCE = 0.25;   // on steps 1 to 4: the chance a card has the other sign (see above)
+// Which way each shape's sum goes: '+' adds (−3 + 7, 4 + (−9)), '−' takes away (−4 − 5, 5 − (−3)), '±' either. A card
+// counts in the rider's Addition or Subtraction (src/math/skill.js) by its own sign; signsAt says which a step deals.
+export const SHAPE_SIGN = { upPos: '+', upNeg: '+', zero: '+', addNeg: '+', down: '-', cross: '-', short: '-', subNeg: '-', tidy: '±', double: '±' };
+export function signsAt(step) {
+  const row = LADDER[Math.max(1, Math.min(LADDER.length, Math.round(step) || 1)) - 1], out = new Set();
+  for (const sh of [...row.shapes, ...(row.contrast ? [row.contrast] : [])]) {
+    const g = SHAPE_SIGN[sh];
+    if (g === '±') { out.add('+'); out.add('-'); } else if (g) out.add(g);
+  }
+  return [...out];
+}
 // How often each shape comes up on the mixed steps: the equation tidy-up shapes most. A shape that was just
 // dealt is less likely to come straight back (REPEAT_WEIGHT), without ruling it out.
 const MIX_WEIGHT = { tidy: 3, upPos: 1, upNeg: 1, down: 1, cross: 1, subNeg: 1, addNeg: 0.8, zero: 0.3, double: 0.5 };
@@ -535,8 +547,8 @@ export function makeNegatives(state, opts = {}) {
     S.lastAt = now();
     dealing = 1;
 
-    const warmup = S.warmups > 0 && S.placed;
-    const placing = !S.placed;
+    const warmup = S.warmups > 0 && S.placed && !(steered && steered.placing);
+    const placing = !S.placed || !!(steered && steered.placing);
     const list = [];
     const seen = new Set();
     // On the mixed steps, keep the right answers about half positive and half negative, so "it's always
@@ -684,7 +696,7 @@ export function makeNegatives(state, opts = {}) {
     const c = S.cur;
     for (let i = c.at; i < c.cards.length; i++) {
       const x = c.cards[i];
-      if (x.back || x.review) continue;
+      if (x.back || x.review || x.tried) continue;   // (the card on show, already tried, stays as it is)
       // the card after it stays when it is a comeback or a review card: the new one has to fit before it too
       const keep = c.cards[i + 1] && (c.cards[i + 1].back || c.cards[i + 1].review) ? c.cards[i + 1] : null;
       const before = i > c.at ? c.cards[i - 1].answer : S.lastAns;
@@ -731,8 +743,8 @@ export function makeNegatives(state, opts = {}) {
         rs.helped = (rs.helped || 0) + 1;
       } else if (first) {
         rs.right++;
-        if (c.warmup) {
-          // warm-ups sit below the kid's step; they never move it
+        if (c.warmup || steered) {
+          // warm-ups sit below the kid's step; they never move it (nor does anything, once the skill model steers)
         } else if (!S.placed) {
           S.step = Math.min(LADDER.length, S.step + 1);
           if (S.step === LADDER.length) S.placed = true;   // reached the top: nothing left to find
@@ -761,7 +773,7 @@ export function makeNegatives(state, opts = {}) {
         S.streak = 0;
         const p = { s: x.parts.start, op: x.parts.op, t: x.parts.term, rung: x.rung, shape: x.shape };
         // a returning card from above the kid's step has already been counted once: missing it again moves nothing
-        const counts = !c.warmup && !(x.back && (x.rung || 1) > S.step);
+        const counts = !steered && !c.warmup && !(x.back && (x.rung || 1) > S.step);
         if (counts) {
           if (!S.placed) {
             // The climb ends here, PLACE_BELOW (2) steps below where the kid is now. (Not below the missed
@@ -871,12 +883,26 @@ export function makeNegatives(state, opts = {}) {
     S.step = clampInt(num(step, 1), 1, LADDER.length);
     S.placed = true; S.streak = 0; S.warmups = 0;
   }
+  // The rider's skill model (src/math/skill.js) picks the step from here on (as the card trainer's steer in early.js):
+  // the trainer's own climb, first-visit placement and steps down stop; placing: the strand is still finding its level
+  // (no warm-ups, review cards or twins). A new step while a wave is open deals its cards still to come again at it.
+  let steered = null;
+  function steer(step, { placing = false } = {}) {
+    const was = S.step;
+    S.step = clampInt(num(step, 1), 1, LADDER.length);
+    if (!steered) { S.placed = true; S.streak = 0; S.placeMisses = 0; }
+    steered = { placing: !!placing };
+    const c = S.cur;
+    if (c && !c.closed && !c.warmup && S.step !== was) { redealRest(); c.step = S.step; }
+    return S.step;
+  }
 
   if (opts.newSession || !S.lastAt || now() - S.lastAt > SESSION_GAP_MS) newSession();
 
   return {
     topic: 'negatives', name: 'Positive & negative', state: S,
-    wave, card, answer, explain, help, hint, level, report, setStep, newSession,
+    wave, card, answer, explain, help, hint, level, report, setStep, steer, newSession,
+    get steered() { return !!steered; },
     endWave: closeWave,
     due: () => [],   // missed cards come back inside the wave's own list (see answer()), so there is nothing extra to hand out
   };

@@ -22,9 +22,19 @@
 //     before them.
 // "Clean" = solved within par + 1, no hint past the first, the check passed, no jam, no wrong pick.
 //
+// ON THE STRANDS (the game today): makeAlgebra(state, { strand: true }). How hard each box is comes from the skill
+// model's equations and inequalities strands (src/math/skill.js; strand.js turns a level into a rung and a level 2-4,
+// and picks the reviews, warm-ups and comebacks), and the climb above never runs: next(tier, plan) makes the box the
+// plan asks for, record(result) keeps the counts, the traps, the slips and the comebacks, and follow(...) mirrors the
+// strand's verdict into rung / levels / placing / stamped, which the deer, the sheep, the sheriff's box tier and the
+// Grown-ups corner still read. Without { strand: true } (and without a plan) the ladder climbs on its own as above:
+// the old riders' saves were made that way, and the tests keep it honest.
+//
 // The state object lives inside the rider (rider.topics.algebra) and is plain JSON; it is changed in place.
 
 import { generate, makeRng, RUNG, RUNG_IDS, rungIndex, VERDICT_SHARE } from './generate.js';
+import { K_RUNG } from './kbox.js';
+import { WORK_RUNG } from './workout.js';
 import { TRAP_TAGS } from './buttons.js';
 
 // Tuning (defaults that can be changed here):
@@ -56,11 +66,12 @@ const levelOf = (s, rung) => s.levels[rung] ?? 2;
 const nextRung = (id) => RUNG_IDS[Math.min(RUNG_IDS.length - 1, rungIndex(id) + 1)];
 const prevRung = (id) => RUNG_IDS[Math.max(0, rungIndex(id) - 1)];
 
-export function makeAlgebra(state = {}, { rng = makeRng(), now = () => Date.now() } = {}) {
+export function makeAlgebra(state = {}, { rng = makeRng(), now = () => Date.now(), strand = false } = {}) {
   const s = fill(state);
 
-  // a new session starts with two easy boxes from stamped rungs
-  if (s.lastAt && now() - s.lastAt > SESSION_GAP_MS && s.stamped.length) s.warm = 2;
+  // a new session starts with two easy boxes from stamped rungs (on the strands: from rungs well below the level,
+  // when there are any: strand.js planBox)
+  if (s.lastAt && now() - s.lastAt > SESSION_GAP_MS && (s.stamped.length || strand)) s.warm = 2;
 
   function reviewRung() {
     // older stamped rungs, nearest to the frontier first (look-alikes side by side)
@@ -71,11 +82,20 @@ export function makeAlgebra(state = {}, { rng = makeRng(), now = () => Date.now(
     return rng.chance(0.75) ? rng.pick(near) : rng.pick(older);
   }
 
-  // next(tier) -> a problem from generate.js plus { level, size, review, tier }
-  function next(tier = 'iron') {
+  // next(tier, plan) -> a problem from generate.js plus { level, size, review, tier }
+  // plan (on the strands, strand.js planBox): { rung, level (2..5), frac (K boxes: how big the numbers are), review }
+  // A plan for a "Work it out" box (workout.js: O1..O5, P1..P5) gets that box; this ladder has no part in it.
+  function next(tier = 'iron', plan = null) {
+    if (plan && WORK_RUNG[plan.rung]) {
+      const p = generate(plan.rung, { rng, frac: plan.frac, recent: s.recent });
+      s.recent.push(p.key);
+      if (s.recent.length > 20) s.recent.splice(0, s.recent.length - 20);
+      return { ...p, level: plan.level ?? 3, size: 2, review: false, tier };
+    }
     let rung = s.rung, review = false, level = levelOf(s, s.rung);
-    const due = s.due.find((d) => d.at <= s.boxes);
-    if (s.placing) level = 3;
+    const due = plan ? null : s.due.find((d) => d.at <= s.boxes);
+    if (plan && (RUNG[plan.rung] || K_RUNG[plan.rung])) { rung = plan.rung; level = plan.level ?? 3; review = !!plan.review; }
+    else if (s.placing) level = 3;
     else if (s.warm > 0 && s.stamped.length) { rung = reviewRung() || s.stamped[s.stamped.length - 1]; review = true; level = 3; }
     else if (due) { rung = due.rung; review = rung !== s.rung; level = review ? 3 : level; }
     else if (s.stamped.length >= 2 && s.ownRun >= s.ownNeed && tier !== 'vault' && rng.chance(2 / 3)) {
@@ -93,10 +113,11 @@ export function makeAlgebra(state = {}, { rng = makeRng(), now = () => Date.now(
     // the vault rung: an "infinitely many / no solution" box is rare (VERDICT_SHARE), never two in a row and never
     // the first box after a level-up; the rest are real solve-for-x boxes
     let verdict;
-    if (RUNG[rung].verdicts) verdict = !s.lastVerdict && !s.justUp && rng.chance(VERDICT_SHARE);
+    if (RUNG[rung]?.verdicts) verdict = !s.lastVerdict && !s.justUp && rng.chance(VERDICT_SHARE);
     s.justUp = false;
-    const p = generate(rung, { rng, size, recent: s.recent, verdict }) || generate(rung, { rng, size, verdict });
-    s.lastVerdict = p.kind !== 'one';
+    const frac = plan ? plan.frac : undefined;   // (the kindergarten boxes grow their numbers with it)
+    const p = generate(rung, { rng, size, recent: s.recent, verdict, frac }) || generate(rung, { rng, size, verdict, frac });
+    s.lastVerdict = p.kind === 'all' || p.kind === 'none';
     s.recent.push(p.key);
     if (s.recent.length > 20) s.recent.splice(0, s.recent.length - 20);
     return { ...p, level, size, review, tier };
@@ -105,8 +126,9 @@ export function makeAlgebra(state = {}, { rng = makeRng(), now = () => Date.now(
   // record({ rung, clean, solved, stars, moves, par, hints, jammed, keyFailed, left, traps: [tags], tools: [kinds],
   //   arith: [arithmetic slip tags] })
   function record(r) {
-    s.boxes++;
     s.lastAt = now();
+    if (WORK_RUNG[r.rung]) return;   // (a "Work it out" box isn't on this ladder: the skill model has it, strand.js)
+    s.boxes++;
     if (s.warm > 0) s.warm--;
     if (r.solved) s.solved++;
     if (r.solved && r.moves <= r.par) s.atPar++;
@@ -120,6 +142,7 @@ export function makeAlgebra(state = {}, { rng = makeRng(), now = () => Date.now(
     const di = s.due.findIndex((d) => d.rung === rung && d.at <= s.boxes);
     if (di >= 0) s.due.splice(di, 1);
     if (!r.clean && !s.due.some((d) => d.rung === rung)) s.due.push({ rung, at: s.boxes + rng.int(2, 4) });
+    if (strand) return;            // on the strands the skill model moves the level, never this ladder (follow)
     if (rung !== s.rung) return;   // a review box never moves the frontier
 
     if (s.placing) {
@@ -173,6 +196,20 @@ export function makeAlgebra(state = {}, { rng = makeRng(), now = () => Date.now(
     }
   }
 
+  // On the strands: the skill model's verdict after a box, mirrored into the ladder's own fields (strand.js syncLadder).
+  // rung: the equation or inequality rung the level sits on (never a kindergarten one: the deer and the sheep read
+  // it); level: 2..4 within it; placed: the level is found; stamped: the rungs well below the level. A rung (or a
+  // level within it) that went up makes the next box "just after a level-up" (no vault verdict box then).
+  function follow({ rung, level = 2, placed = true, stamped = [] } = {}) {
+    if (!RUNG[rung]) return;
+    const was = s.rung, wasLevel = levelOf(s, s.rung);
+    if (rungIndex(rung) > rungIndex(was) || (rung === was && level > wasLevel)) s.justUp = true;
+    s.rung = rung;
+    s.levels[rung] = Math.max(2, Math.min(4, Math.round(level)));
+    s.placing = !placed;
+    s.stamped = stamped.filter((r) => RUNG[r]);
+  }
+
   // The trap that fools this kid most (at least twice), or null.
   function fav() {
     let best = null, n = 1;
@@ -208,5 +245,5 @@ export function makeAlgebra(state = {}, { rng = makeRng(), now = () => Date.now(
   const speed = (rung) => (s.stamped.includes(rung) ? 0.3 : 0.8);
   const seenTool = (k) => s.tools.includes(k);
 
-  return { next, record, level, fav, favArith, numberLineDue, sawNumberLine, speed, seenTool, state: s };
+  return { next, record, follow, level, fav, favArith, numberLineDue, sawNumberLine, speed, seenTool, state: s };
 }

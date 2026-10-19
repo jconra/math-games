@@ -1,0 +1,241 @@
+// The checklist (src/completion.js): what counts, a fresh rider at 0%, a played one, the first look at an old save,
+// the toasts' items, goals, what the world notices, and the copies of the camps and hideouts against their files.
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {
+  completion, unlocked, goalChoices, goalsOf, setGoal, clearGoal, notice, markFound, found, setWindmill, progressLine,
+  CAMP_PLACES, HIDEOUTS, COMING, MOST_GOALS, PHOTO_STEPS, WINDMILL_FEET, GROUPS,
+} from '../src/completion.js';
+import { newRider, fixRider, JOBS, BUCKLES, KEEPSAKES } from '../src/save.js';
+import { PRICES, SADDLES, HORSES, DOGS } from '../src/catalog.js';
+import { HATS } from '../src/hats.js';
+import { SLOTS } from '../src/cabin/slots.js';
+import { KINDS } from '../src/math/goods.js';
+import { ALBUM } from '../src/ui/album.js';
+
+const source = (path) => fs.readFileSync(new URL(path, import.meta.url)).toString();
+const ids = (c) => c.items.map((i) => i.id);
+// a rider who has done everything there is today
+function everything() {
+  const r = newRider('Ada');
+  r.stats.jobs = Object.fromEntries(JOBS.map((j) => [j.id, j.at[3]]));
+  r.stats.jobs.photos = 30;
+  r.owned = { ...r.owned, saddles: SADDLES.map((s) => s.id), saddle: 'silver', horses: HORSES.map((h) => h.id), hats: HATS.map((h) => h.id).filter((h) => h !== 'cowboy'),
+    dogs: DOGS.map((d) => ({ kind: d.id, name: d.name })), animals: KINDS.map((k) => ({ kind: k, name: k })), cabin: SLOTS.map((s) => s.id) };
+  r.topics.loot = { trips: 7 };
+  r.found = { place: CAMP_PLACES.map((c) => 'camp-' + c.id), keepsake: JOBS.map((j) => j.id) };
+  return r;
+}
+
+test('the items: every job\'s four buckles, everything for sale, the collections and the camps, each id once', () => {
+  const c = completion(newRider('Sam'));
+  const all = ids(c);
+  assert.equal(new Set(all).size, all.length, 'no id twice');
+  for (const id of all) assert.match(id, /^(buckle:[a-z]+:(tin|copper|silver|gold)|buy:[a-z]+:[a-z0-9]+|collect:[a-z]+:[a-z0-9]+|place:[a-z0-9-]+)$/, id);
+  const jobs = JOBS.filter((j) => j.ready);
+  assert.equal(c.items.filter((i) => i.group === 'buckles').length, jobs.length * BUCKLES.length, 'four buckles a job');
+  assert.ok(all.includes('buckle:targets:gold'), 'the target range counts for every rider (no shooting mode)');
+  const buy = all.filter((i) => i.startsWith('buy:'));
+  assert.equal(buy.length, SADDLES.length + (HORSES.length - 1) + (HATS.length - 1) + DOGS.length + KINDS.length + SLOTS.length,
+    'every saddle, every horse but the free bay, every hat but the free one, every dog, one of each farm animal, every piece of furniture');
+  for (const h of HORSES) assert.equal(all.includes(`buy:horse:${h.id}`), h.id !== 'bay', h.id);
+  for (const k of Object.keys(KEEPSAKES)) assert.ok(all.includes(`collect:keepsake:${k}`), k);
+  for (const h of HIDEOUTS) assert.ok(all.includes(`collect:hideout:${h.id}`), h.id);
+  for (const n of PHOTO_STEPS) assert.ok(all.includes(`collect:photos:${n}`), String(n));
+  for (const p of CAMP_PLACES) assert.ok(all.includes(`place:camp-${p.id}`), p.id);
+  assert.deepEqual(c.groups.map((g) => g.id), GROUPS.map((g) => g.id));
+  for (const i of c.items) {
+    assert.ok(i.name && i.hint && i.hint === i.how, `${i.id} has a name and says how`);
+    assert.ok(!/\bundefined\b|NaN|\[object/.test(i.name + i.hint), `${i.id}: ${i.name} / ${i.hint}`);
+    assert.ok(i.need >= 1 && i.have >= 0 && i.have <= i.need, i.id);
+  }
+});
+
+test('a fresh rider is at 0%, and nothing to toast', () => {
+  const r = newRider('Sam');
+  const c = completion(r);
+  assert.equal(c.pct, 0); assert.equal(c.done, 0);
+  assert.ok(c.total >= 80, `total ${c.total}`);
+  for (const g of c.groups) { assert.equal(g.done, 0, g.id); assert.equal(g.pct, 0, g.id); }
+  assert.deepEqual(unlocked(r), [], 'the first look');
+  assert.deepEqual(r.done, [], 'nothing was done');
+  assert.deepEqual(unlocked(r), []);
+});
+
+test('a played rider: what they did is checked off, from the fields the game already keeps', () => {
+  const r = newRider('Tess');
+  r.stats.jobs.cattle = 64; r.stats.jobs.boxes = 25; r.stats.jobs.photos = 7;
+  r.owned.saddles = ['plain']; r.owned.saddle = 'plain';
+  r.owned.horses = ['bay', 'donkey']; r.owned.horse = 'donkey';
+  r.owned.hats = ['straw']; r.look.hatStyle = 'bowler';   // (an old save wearing a hat its list missed)
+  r.owned.dog = { kind: 'pug', name: 'Biscuit' };          // (an old save: one dog, no list)
+  r.owned.animals = [{ kind: 'sheep', name: 'Clover', young: true, age: 3 }];   // (a thank-you lamb counts)
+  r.owned.cabin = ['rug'];
+  r.album = [{ eq: 'x + 1 = 2', x: '1' }];
+  r.topics.loot = { trips: 2 };
+  const c = completion(r), done = new Set(c.items.filter((i) => i.done).map((i) => i.id));
+  const want = ['buckle:cattle:tin', 'buckle:cattle:copper', 'buckle:boxes:tin', 'buckle:boxes:copper', 'buy:saddle:plain', 'buy:horse:donkey',
+    'buy:hat:straw', 'buy:hat:bowler', 'buy:dog:pug', 'buy:animal:sheep', 'buy:furniture:rug', 'collect:photos:1', 'collect:photos:6',
+    'collect:hideout:hollow', 'collect:hideout:timber'];
+  assert.deepEqual([...done].sort(), want.sort());
+  assert.equal(c.done, want.length);
+  assert.equal(c.pct, Math.round((100 * want.length) / c.total));
+  const silver = c.items.find((i) => i.id === 'buckle:cattle:silver');
+  assert.deepEqual([silver.have, silver.need, silver.done], [64, 200, false]);
+  // a keepsake needs its buckle AND a look at it in the cabin
+  assert.equal(c.items.find((i) => i.id === 'collect:keepsake:cattle').done, false);
+  assert.match(c.items.find((i) => i.id === 'collect:keepsake:cattle').hint, /go into your cabin/);
+  assert.equal(notice(r, { home: true }), true);
+  assert.deepEqual(found(r).keepsake, ['cattle', 'boxes'], 'only the keepsakes won so far are seen');
+  assert.equal(completion(r).items.find((i) => i.id === 'collect:keepsake:cattle').done, true);
+  assert.equal(notice(r, { home: true }), false, 'nothing new the second time');
+  // a thing to buy: the gold in hand toward its price
+  r.gold = 45;
+  const tooled = completion(r).items.find((i) => i.id === 'buy:saddle:tooled');
+  assert.deepEqual([tooled.have, tooled.need], [45, PRICES.saddle.tooled]);
+});
+
+test('an old save\'s first look takes what is done as announced; then each new item comes back once', () => {
+  const r = newRider('Old');
+  r.stats.jobs.cattle = 12; r.owned.hats = ['white'];
+  delete r.done;
+  assert.deepEqual(unlocked(r), [], 'no flood of toasts for the old save');
+  assert.deepEqual([...r.done].sort(), ['buckle:cattle:tin', 'buy:hat:white']);
+  r.owned.hats.push('straw', 'bowler'); r.stats.jobs.cattle = 50;
+  const fresh = unlocked(r).map((i) => i.id).sort();
+  assert.deepEqual(fresh, ['buckle:cattle:copper', 'buy:hat:bowler', 'buy:hat:straw']);
+  assert.deepEqual(unlocked(r), [], 'once only');
+  assert.ok(r.done.includes('buy:hat:bowler'));
+  // the save keeps them (fixRider tidies rider.done and keeps rider.found as it is)
+  r.found = { place: ['camp-cow'] };
+  const back = fixRider(JSON.parse(JSON.stringify(r)));
+  assert.deepEqual(back.done, r.done);
+  assert.deepEqual(back.found, { place: ['camp-cow'] });
+  assert.deepEqual(unlocked(back).map((i) => i.id), ['place:camp-cow'], 'only what is new since the last look');
+});
+
+test('100% only when every item is done; COMING entries are not counted until switched on', () => {
+  const r = everything();
+  const c = completion(r);
+  assert.equal(c.pct, 100, JSON.stringify(c.items.filter((i) => !i.done).map((i) => i.id)));
+  assert.equal(c.done, c.total);
+  r.owned.hats = r.owned.hats.slice(1);
+  assert.equal(completion(r).pct, 99, 'one item short is not 100');
+  // the windmill waits in COMING: not shown, not counted, named in "more to come"
+  assert.ok(!ids(completion(r)).includes('place:windmill'));
+  assert.ok(completion(r).coming.some((n) => /windmill/i.test(n)));
+  assert.ok(!completion(r).coming.some((n) => /cabin/i.test(n)), 'the cabin is every rider\'s already: not promised as to come');
+  assert.ok(ids(completion(r, { all: true })).includes('place:windmill'));
+  const was = COMING.windmill;
+  try {
+    COMING.windmill = true;
+    const before = completion(r).total;
+    assert.ok(ids(completion(r)).includes('place:windmill'));
+    assert.equal(completion(r).items.find((i) => i.id === 'place:windmill').done, false);
+    assert.equal(setWindmill(r, 12), true);
+    assert.deepEqual(['have', 'need', 'done'].map((k) => completion(r).items.find((i) => i.id === 'place:windmill')[k]), [12, WINDMILL_FEET, false]);
+    assert.equal(setWindmill(r, 9), false, 'the tallest one is kept');
+    setWindmill(r, WINDMILL_FEET);
+    assert.equal(completion(r).items.find((i) => i.id === 'place:windmill').done, true, 'an 18 ft tower standing is done');
+    assert.equal(completion(r).total, before);
+  } finally { COMING.windmill = was; }
+});
+
+test('goals: pin up to two, progress, reached ones make room, finished or unknown ones refused', () => {
+  const r = newRider('Kit');
+  r.stats.jobs.cattle = 37;
+  assert.equal(setGoal(r, 'nope'), false);
+  assert.equal(setGoal(r, 'buckle:cattle:silver'), true);
+  assert.equal(setGoal(r, 'buckle:cattle:silver'), true, 'pinning it again is fine');
+  assert.equal(r.goals.length, 1);
+  assert.equal(setGoal(r, 'buy:horse:midnight'), true);
+  assert.equal(setGoal(r, 'buy:hat:straw'), false, `${MOST_GOALS} at most`);
+  assert.equal(setGoal(r, 'buckle:cattle:tin'), false, 'a done item is not a goal');
+  const g = goalsOf(r);
+  assert.deepEqual(g.map((x) => [x.id, x.have, x.need, x.pct, x.done]), [['buckle:cattle:silver', 37, 200, 19, false], ['buy:horse:midnight', 0, 200, 0, false]]);
+  // the progress in words, for the rider card and the corner: a thing not bought yet never reads "200 / 200"
+  assert.deepEqual(g.map((x) => x.line), ['37 / 200', '0 / 200 gold']);
+  r.gold = 250;
+  assert.equal(goalsOf(r)[1].line, 'You have the gold!');
+  assert.equal(goalsOf(r)[1].done, false);
+  r.gold = 0;
+  assert.equal(progressLine({ group: 'places', have: 0, need: 1, done: false }), 'Not yet');
+  assert.equal(progressLine({ group: 'buckles', have: 1200, need: 1500, done: false }), '1,200 / 1,500');
+  assert.equal(progressLine({ group: 'buy', have: 9, need: 9, done: true }), 'Done');
+  assert.ok(!goalChoices(r).some((x) => x.id === 'buckle:cattle:tin'), 'the picker offers only what is not done');
+  assert.ok(goalChoices(r).some((x) => x.id === 'buy:hat:straw'));
+  // reaching a goal: unlocked flags it, stamps it, and it makes room for a new one
+  unlocked(r);
+  r.owned.horses = ['bay', 'midnight'];
+  const fresh = unlocked(r);
+  assert.deepEqual(fresh.map((i) => [i.id, !!i.goal]), [['buy:horse:midnight', true]]);
+  assert.ok(r.goals.find((x) => x.id === 'buy:horse:midnight').doneAt > 0);
+  assert.equal(goalsOf(r)[1].done, true);
+  assert.equal(setGoal(r, 'buy:hat:straw'), true, 'the reached goal made room');
+  assert.deepEqual(r.goals.map((x) => x.id), ['buckle:cattle:silver', 'buy:hat:straw']);
+  assert.equal(clearGoal(r, 'buy:hat:straw'), true);
+  assert.equal(clearGoal(r, 'buy:hat:straw'), false);
+  assert.deepEqual(r.goals.map((x) => x.id), ['buckle:cattle:silver']);
+});
+
+test('what the world notices: camps ridden up to, hideouts reached; a damaged save reads as empty', () => {
+  const r = newRider('Lu');
+  assert.equal(notice(r, { place: 'cow' }), true);
+  assert.equal(notice(r, { place: 'cow' }), false);
+  assert.equal(notice(r, { place: 'nowhere', hideout: 'nowhere' }), false, 'unknown places are ignored');
+  assert.equal(notice(r, { hideout: 'pines' }), true);
+  const c = completion(r);
+  assert.ok(c.items.find((i) => i.id === 'place:camp-cow').done);
+  assert.ok(c.items.find((i) => i.id === 'collect:hideout:pines').done, 'a hideout reached counts, whatever the trips');
+  assert.ok(!c.items.find((i) => i.id === 'collect:hideout:hollow').done);
+  assert.equal(markFound(r, 'gold', 'x'), false);
+  for (const bad of [null, 'x', 7, { place: 'x', hideout: [3, null, 'meadow'] }]) {
+    const d = newRider('Bad'); d.found = bad; d.done = 'x'; d.goals = { id: 1 }; d.owned.hats = 'all'; d.owned.dogs = [null, 7]; d.album = 'x';
+    assert.doesNotThrow(() => { completion(d); unlocked(d); goalsOf(d); goalChoices(d); notice(d, { place: 'cow', home: true }); }, JSON.stringify(bad));
+  }
+  const d = newRider('Bad'); d.found = { hideout: [3, null, 'meadow'] };
+  assert.ok(completion(d).items.find((i) => i.id === 'collect:hideout:meadow').done);
+});
+
+test('the copies of the camps and hideouts match the files that draw them; the album step matches the album', () => {
+  const camps = source('../src/camps.js'), loot = source('../src/missions/loot.js');
+  const campList = [...camps.match(/export const CAMPS = \[([\s\S]*?)\n\];/)[1].matchAll(/\{ id: '(\w+)', kind: '\w+', name: '((?:[^'\\]|\\.)*)'/g)].map((m) => [m[1], m[2].replace(/\\'/g, '\'')]);
+  assert.deepEqual(CAMP_PLACES.map((c) => [c.id, c.name]), campList);
+  const caches = [...loot.match(/export const CACHES = \[([\s\S]*?)\n\];/)[1].matchAll(/\{ id: '(\w+)', x: -?\d+, z: -?\d+, name: '([^']*)'/g)].map((m) => [m[1], m[2]]);
+  assert.deepEqual(HIDEOUTS.map((h) => [h.id, h.name.charAt(0).toLowerCase() + h.name.slice(1)]), caches);
+  assert.equal(PHOTO_STEPS[PHOTO_STEPS.length - 1], ALBUM.max, 'the last photo step is a full album');
+});
+
+test('the shop sells what the catalog lists (shop.js takes its tables from src/catalog.js)', () => {
+  const shop = source('../src/shop.js');
+  assert.match(shop, /import \{ PRICES, SADDLES, HORSES, DOGS, DOG_NAMES \} from '\.\/catalog\.js';/);
+  assert.match(shop, /export \{ PRICES, SADDLES, HORSES, DOGS, DOG_NAMES \};/);
+  assert.ok(!/export const (PRICES|SADDLES|HORSES|DOGS) =/.test(shop), 'one copy of each table');
+  for (const s of SADDLES) assert.ok(PRICES.saddle[s.id] > 0, s.id);
+});
+
+test('a job a grown-up turned off leaves the list (what is done stays), so 100% stays in reach', () => {
+  const r = newRider('Bo');
+  const full = completion(r).total;
+  r.missions = { ...r.missions, range: false, hunt: false, pigs: false };
+  const c = completion(r), have = new Set(ids(c));
+  for (const t of BUCKLES) assert.ok(!have.has(`buckle:targets:${t}`), 'the bottle range off: no targets buckles');
+  assert.ok(!have.has('collect:keepsake:targets') && !have.has('collect:photos:1') && !have.has('buy:animal:pig'));
+  assert.ok(have.has('buckle:pigs:tin') === false && have.has('buy:animal:sheep') && have.has('buckle:cattle:tin'));
+  assert.equal(c.total, full - (4 + 1) - (4 + 1) - PHOTO_STEPS.length - 1, 'targets 4 + its keepsake, pigs 4 + its keepsake, the photos, the pig');
+  // a pig already unlocked at the store stays buyable with its job off; something already done stays on the list
+  r.owned.farm = { unlocked: ['pig'], jobs: {} };
+  r.stats.jobs.targets = 20;
+  const d = new Set(ids(completion(r)));
+  assert.ok(d.has('buy:animal:pig'), 'pigs unlocked: still for sale');
+  assert.ok(d.has('buckle:targets:tin') && !d.has('buckle:targets:copper'), 'the tin already won stays; the rest are off');
+  assert.ok(ids(completion(r, { all: true })).includes('buckle:targets:gold'), 'all: everything');
+  // everything that is on, done: 100%
+  const e = everything(); e.missions = { range: false, wagon: false, loot: false }; e.stats.jobs.targets = 0; e.stats.jobs.bandits = 0;
+  e.topics.loot = {}; e.found.keepsake = e.found.keepsake.filter((k) => !['targets', 'bandits', 'loot'].includes(k));
+  e.stats.jobs.loot = 0;
+  assert.equal(completion(e).pct, 100, JSON.stringify(completion(e).items.filter((i) => !i.done).map((i) => i.id)));
+  // goals: only what's on the list can be pinned
+  assert.equal(setGoal(r, 'buckle:targets:gold'), false);
+});

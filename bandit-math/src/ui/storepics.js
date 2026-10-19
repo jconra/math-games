@@ -6,6 +6,9 @@
 //   picture(pic) -> { svg, title, line }   pic = an order's .pic; svg = an <svg> string (scales to its box, ink colours
 //                                          for the parchment), title = the kind's name, line = one plain sentence for it
 // Plain strings, no page needed (tests/wordproblems.test.mjs draws every kind).
+// Two pictures are different: 'things' (the youngest riders' picture stories) draws the apples or eggs themselves, to
+// count: counting them IS the skill there, so it shows from the start; 'lots' (a big order) draws a few of the lots and
+// says the sum to work out on paper.
 
 const INK = '#2b2219', SOFT = '#8a7558', FILL = '#ead9b2', FILL2 = '#d9bf8a', BRASS = '#b47f2c', ASK = '#b5523a', GREEN = '#5d7a3a';
 const W = 360;
@@ -68,7 +71,7 @@ const DRAW = {
       const mid0 = x0 + shown * per * scale, lastX = x1 - left * scale;
       if (full > shown) s += `<rect x="${mid0.toFixed(1)}" y="62" width="${(lastX - mid0 - 2).toFixed(1)}" height="30" rx="3" fill="none" stroke="${INK}" stroke-width="1.4" stroke-dasharray="4 3"/>` + text((mid0 + lastX) / 2, 82, `more ${p.box[1]} of ${per}…`, { size: 12, fill: SOFT });
       s += bar(lastX, x1, 62, 30, null, { fill: '#f3c9b4', stroke: ASK });
-      s += text(x1 - 2, 112, `the last ${left}: they need a ${p.box[0]} too`, { size: 12, anchor: 'end', fill: ASK, weight: 700 });
+      s += text(x1 - 2, 112, left === 1 ? `the last one: it needs a ${p.box[0]} too` : `the last ${left}: they need a ${p.box[0]} too`, { size: 12, anchor: 'end', fill: ASK, weight: 700 });
       return { svg: svg(122, s), line: `${total} split into ${p.box[1]} of ${per}. Every ${p.box[0]} holds ${per}; the few left over still need one. How many ${p.box[1]}?` };
     }
     const g = p.groups, x0 = 10, x1 = W - 10, bw = (x1 - x0) / g;
@@ -196,7 +199,70 @@ const DRAW = {
   },
 };
 
+// one of the things to count, drawn at (x, y) about 26 px across (apples, eggs, carrots, loaves, cans, horseshoes)
+const THING = {
+  apple: (x, y) => `<circle cx="${x}" cy="${y + 2}" r="11" fill="#c8483a" stroke="${INK}" stroke-width="1.2"/><path d="M${x} ${y - 9}q1 -5 4 -7" stroke="${INK}" stroke-width="1.6" fill="none"/><path d="M${x + 2} ${y - 11}q6 -3 9 1q-5 3 -9 -1z" fill="${GREEN}"/>`,
+  egg: (x, y) => `<ellipse cx="${x}" cy="${y + 1}" rx="9" ry="12" fill="#f6efe0" stroke="${INK}" stroke-width="1.2"/>`,
+  carrot: (x, y) => `<path d="M${x - 6} ${y - 6}L${x + 6} ${y - 6}L${x} ${y + 14}Z" fill="#e0822f" stroke="${INK}" stroke-width="1.1"/><path d="M${x} ${y - 6}l-5 -8M${x} ${y - 6}l0 -9M${x} ${y - 6}l5 -8" stroke="${GREEN}" stroke-width="2"/>`,
+  loaf: (x, y) => `<path d="M${x - 13} ${y + 8}v-6q0 -10 13 -10q13 0 13 10v6z" fill="#c98a45" stroke="${INK}" stroke-width="1.2"/><path d="M${x - 6} ${y - 4}l3 5M${x} ${y - 6}l3 5M${x + 6} ${y - 4}l3 5" stroke="#8a5a26" stroke-width="1.4"/>`,
+  can: (x, y) => `<rect x="${x - 9}" y="${y - 11}" width="18" height="24" rx="3" fill="#b9b4a8" stroke="${INK}" stroke-width="1.2"/><rect x="${x - 9}" y="${y - 4}" width="18" height="10" fill="#b5523a"/>`,
+  shoe: (x, y) => `<path d="M${x - 9} ${y + 11}V${y}a9 9 0 0 1 18 0V${y + 11}" fill="none" stroke="#6b6358" stroke-width="5" stroke-linecap="round"/>`,
+};
+// a row of n things from x0, spaced dx, at y; the ones from `cross` on crossed out (sold, eaten)
+function things(shape, n, x0, y, dx, cross = Infinity) {
+  let s = '';
+  for (let i = 0; i < n; i++) {
+    const x = x0 + i * dx;
+    s += `<g${i >= cross ? ' opacity="0.45"' : ''}>${(THING[shape] || THING.egg)(x.toFixed(1), y)}</g>`;
+    if (i >= cross) s += `<path d="M${(x - 11).toFixed(1)} ${y - 11}l22 22M${(x + 11).toFixed(1)} ${y - 11}l-22 22" stroke="${ASK}" stroke-width="2.4" stroke-linecap="round"/>`;
+  }
+  return s;
+}
+Object.assign(DRAW, {
+  // the youngest riders' stories: the things themselves (2 apples and 1 more; 7 eggs with 3 crossed out; 3 baskets of 2)
+  things(p) {
+    const U = p.unit;
+    if (p.mode === 'more') {
+      const n = p.a + p.b, dx = Math.min(30, (W - 60) / Math.max(1, n));
+      let s = things(p.shape, p.a, 20, 34, dx);
+      const px = 20 + p.a * dx + 2;
+      s += text(px, 40, '+', { size: 22, fill: BRASS, weight: 800 });
+      s += things(p.shape, p.b, px + 22, 34, dx);
+      s += text(W / 2, 84, `${u(p.a, U)} and ${p.b} more: how many in all?`, { size: 14, fill: ASK, weight: 800 });
+      return { svg: svg(96, s), line: `Count them all: the ${p.a} first, then keep counting the ${p.b} new ${p.b === 1 ? 'one' : 'ones'}.` };
+    }
+    if (p.mode === 'left') {
+      const dx = Math.min(30, (W - 40) / p.a);
+      let s = things(p.shape, p.a, 22, 34, dx, p.a - p.b);
+      s += text(W / 2, 84, `${p.b} crossed out: how many are left?`, { size: 14, fill: ASK, weight: 800 });
+      return { svg: svg(96, s), line: `${u(p.a, U)} at first. Cover the ${p.b} crossed out and count the ones still here.` };
+    }
+    // baskets
+    const bw = (W - 20) / p.g;
+    let s = '';
+    for (let i = 0; i < p.g; i++) {
+      const x0 = 10 + i * bw;
+      // (the things first, sitting down in the basket; then the basket's front over their lower half)
+      s += things(p.shape, p.e, x0 + bw / 2 - (p.e - 1) * 11, 36, 22);
+      s += `<path d="M${(x0 + 6).toFixed(1)} 40h${(bw - 14).toFixed(1)}l-8 32h${(-(bw - 30)).toFixed(1)}z" fill="${FILL2}" stroke="${INK}" stroke-width="1.3"/>`;
+    }
+    s += text(W / 2, 92, `${p.g} baskets of ${p.e}: how many in all?`, { size: 14, fill: ASK, weight: 800 });
+    return { svg: svg(102, s), line: `Count every one in every basket: ${p.g} baskets, ${p.e} in each.` };
+  },
+  // a big order: a few of the lots drawn, the rest dashed, and the sum to work out on paper (never its answer)
+  lots(p) {
+    const n = p.lots, a = p.each, shown = Math.min(3, n), x0 = 10, x1 = W - 10, bw = (x1 - x0) / (shown + (n > shown ? 2 : 0));
+    let s = '';
+    for (let i = 0; i < shown; i++) s += bar(x0 + i * bw, x0 + (i + 1) * bw - 3, 34, 30, String(a));
+    if (n > shown) s += `<rect x="${(x0 + shown * bw).toFixed(1)}" y="34" width="${(2 * bw - 3).toFixed(1)}" height="30" rx="3" fill="none" stroke="${INK}" stroke-width="1.4" stroke-dasharray="4 3"/>` + text(x0 + (shown + 1) * bw, 54, `${n - shown} more…`, { size: 12, fill: SOFT });
+    s += brace(x0, x1, 28, '', { ask: true });
+    s += text(W / 2, 90, `${n} ${p.count} of ${a}: ${a} × ${n} = ?`, { size: 14, fill: ASK, weight: 800 });
+    return { svg: svg(100, s), line: `${n} ${p.count}, ${a} in each: that's ${a} × ${n}. Work it out on paper.` };
+  },
+});
+
 export const PIC_TITLES = {
+  things: 'Count them', lots: 'Lots of the same',
   groups: 'Equal groups', share: 'Sharing it out', parts: 'The whole and its parts', compare: 'Side by side', road: 'The road there',
   ratio: 'Scaling the recipe', percent: 'Cut into equal parts', twostep: 'Two steps', equation: 'The story as boxes',
 };

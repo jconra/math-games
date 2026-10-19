@@ -8,10 +8,13 @@
 // rider isn't told the same things again.
 //
 //   const B = makeHob({ W, hud, rider, scene, I, voice, roads })   (I: the input, so a phone player is told to tap, not press F;
-//                         voice: makeHobVoice, his babble, or null for none; roads(): more ways the trail likes to keep
+//                         voice: { speak(text, { key }), stop(), update?(dt), babble? }: what says his lines (the game
+//                         gives the browser's voice for a rider who can't read yet: src/audio/sayline.js; his old
+//                         babble, makeHobVoice, would go in with babble: true) or null for none; roads(): more ways the trail likes to keep
 //                         to besides the town's dirt trail, as [[[x, z], ...], ...] (the wagon road), or null)
 //   B.event(name, data)   what just happened; Hob decides whether to say something:
-//                         'ride' (riding out; data.mode, data.wagon: the wagon job is on), 'arrive' (at the herd), 'catch', 'miss', 'waveDone' (data.gold),
+//                         'ride' (riding out; data.range, data.wagon, data.sheep, data.pigs, data.deliveries, data.store ...:
+//                         which jobs are on, false for one a grown-up turned off: its tips aren't said), 'arrive' (at the herd), 'catch', 'miss', 'waveDone' (data.gold),
 //                         'boxWon', 'saddle', 'dog', 'horse', 'title' (data.title), 'near' (data.place: at the saloon's
 //                         doors, nothing behind them yet, or the front of the stage, where the town band plays; said
 //                         again only after NEAR_AGAIN)
@@ -81,7 +84,7 @@ const LINES = {
   arrive: 'Each steer carries a number. Rope the ones the card up top asks for: point at one and click, or press F.',
   arriveTouch: 'Each steer carries a number. Rope the ones the card up top asks for: tap one, or the Rope button.',
   catch: "Nice throw! It'll gallop itself over to the corral.",
-  miss: 'No harm done. Read why it wasn\'t that one, then try another.',
+  miss: 'No harm done. The help shows why it wasn\'t that one. Then try another.',
   waveSaddle: "That's a day's wages! Enough for a saddle. The stable's back in town.",
   wave: 'Good work. Another bunch is wandering in.',
   boxWon: "There's a lock box in your saddlebags. Crack it at the sheriff's desk, or at your cabin table.",
@@ -93,10 +96,12 @@ const LINES = {
   hat: ['Now that is a fine hat.', 'Suits you, partner.', 'Look at you! A proper hat for a proper rider.'],
   // the farm north of town: the sick-sheep job
   farmTip: "There's a farm north of town, behind your cabin. The vet out there could use a hand with the sheep, and the pigs got loose.",
+  farmTipSheep: "There's a farm north of town, behind your cabin. The vet out there could use a hand with the sheep.",
+  farmTipPigs: "There's a farm north of town, behind your cabin. The pigs got loose out there, and they need penning.",
   farmArrive: 'Point at a sheep with a wrong sum, press F, and pick the medicine that fixes it.',
   farmArriveTouch: 'Tap a sheep with a wrong sum, then tap the medicine that fixes it.',
   sheepHealed: "That's the cure. She'll be right as rain.",
-  sheepWrong: 'Not that bottle. Read why, then try another. No harm done.',
+  sheepWrong: 'Not that bottle. The help shows why. Then try another. No harm done.',
   sheepFine: ["She's fine, partner. Nothing wrong with that sum.", 'That one\'s healthy. Save the medicine.', 'Fit as a fiddle, that one. Check the others.'],
   flockDone: ["Whole flock's on its feet.", "That's the flock seen to. More sums for you to check.", 'Good doctoring.'],
   // the farm's pig yard: the loose-pigs job
@@ -122,10 +127,11 @@ const LINES = {
   deliveryNoSaddle: "Crates need a saddled horse to carry 'em. The stable sells saddles.",
   deliveryRobbed: "The gang got the crates! Don't fret: ride back to the store and they'll make it up again.",
   // protect the wagon: the gang wears its numbers; the townsfolk riding along look just the same
-  wagonArrive: "Every bandit wears a number from the gang's table. Townsfolk ride along too, looking just like the gang: only the number tells. Point at a rider and click, or press F.",
-  wagonArriveTouch: "Every bandit wears a number from the gang's table. Townsfolk ride along too, looking just like the gang: only the number tells. Tap a rider, or the Rope button.",
+  wagonArrive: "Every bandit wears a number: the card up top says which. Townsfolk ride along too, looking just like the gang: only the number tells. Point at a rider and click, or press F.",
+  wagonArriveTouch: "Every bandit wears a number: the card up top says which. Townsfolk ride along too, looking just like the gang: only the number tells. Tap a rider, or the Rope button.",
   banditCatch: "Got him! Once he's caught his breath, he'll walk himself to the sheriff.",
   banditMiss: "That's an honest townsman. No harm done: check the count on the rail, then pick again.",
+  banditMissCard: "That's an honest townsman. No harm done: look at the picture, then pick again.",   // (a gang of cards: no rail)
   banditLoop: "One's galloped on ahead. Don't fret: they always come back round the bend.",
   banditsDone: ['The wagon rolls on safe. More road ahead, and likely more trouble.', "That's the gang seen to. Keep alongside, partner.", 'Fine riding. Eyes on the road.'],
   wagonStop: "The wagon will wait. Come back any time.",
@@ -153,6 +159,7 @@ const LINES = {
   animalUnlock: { pig: 'And the store will sell you pigs now.', sheep: 'And the store will sell you sheep now.', cow: 'And the store will sell you milk cows now.' },
   animalGrew: '{name} is all grown up now.',
   goodsCollected: "Those go in your saddlebags. The townsfolk at the general store will buy them: mind the counter.",
+  goodsKept: "Those go in your saddlebags.",   // (the store's counter job is turned off: nobody to sell them to)
   goodsSold: "Sold! That's how a homestead pays its way: a little figuring at the counter.",
   // deer photographs: the naturalist's box camera, the herds out in the valley
   deerTip: "There's a naturalist out by the deer, making a book of the valley's animals. She'll lend you her camera: follow the compass to the herd.",
@@ -177,13 +184,14 @@ const LINES = {
 };
 // which job each line belongs to. A line still waiting its turn is dropped once the player is at another job, or once it
 // has waited longer than KEEP_JOB seconds: said late it would be about a moment that has passed.
-const JOB = { arrive: 'roundup', catch: 'roundup', miss: 'roundup', farmArrive: 'sheep', sheepHealed: 'sheep', sheepWrong: 'sheep',
+const JOB = { arrive: 'roundup', catch: 'roundup', miss: 'roundup', waveDone: 'roundup', farmArrive: 'sheep', sheepHealed: 'sheep', sheepWrong: 'sheep',
   sheepFine: 'sheep', flockDone: 'sheep', pigsArrive: 'pigs', pigPenned: 'pigs', pigWrong: 'pigs', pigsDone: 'pigs', storeStart: 'store',
   storeMiss: 'store', storeEquation: 'store', storeDone: 'store', deliveryWork: 'delivery', deliveryMiss: 'delivery', deliveryRight: 'delivery',
   deliveryRoundUp: 'delivery', animal: 'home', goodsCollected: 'home', goodsSold: 'store', wagonArrive: 'wagon', banditCatch: 'wagon', banditMiss: 'wagon', banditLoop: 'wagon', banditsDone: 'wagon',
   deerArrive: 'deer', deerSpooked: 'deer', deerSetup: 'deer', deerFlip: 'deer', deerRight: 'deer', deerWrong: 'deer', deerDone: 'deer',
   lootShare: 'loot', lootMiss: 'loot', lootRight: 'loot', lootGuard: 'loot', lootFled: 'loot' };
 const KEEP_JOB = 5;
+const WANT_FOR = 120;    // seconds the trail leads where his line just sent the rider (the stable, after the first wave's pay)
 const NEAR_AGAIN = 180;  // seconds before Hob says something about the same place again (walking past again and again doesn't set him off each time)
 
 export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null, roads = null }) {
@@ -202,18 +210,27 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
   let lootN = 0;                  // ('lootDone': which line said last)
   const nearAt = {}, nearN = {};   // ('near': when each place was last remarked on, and which line it said)
   let speaking = 0, now = 0;
+  let on = {};                     // the jobs on for this ride ('ride' data: a job a grown-up turned off is false)
   let saying = null;               // the line on screen: { text, ms, key, urgent } (key = the event it came from)
   let hold = false;                // (a narrow screen with a job person's speech card up: Hob waits his turn, see B.update)
+  let asking = null;               // (the job whose question is up where the player is, or 'panel': see B.update)
+  let sentTo = null;               // (a place his line just sent the rider to: { place, until }; the trail leads there, B.wants)
   let key = null;                  // (the event being handled, so the line it says remembers where it came from)
   const B = {};
   // (urgent: the why of a pick just made, said even while Hob is waiting his turn)
   B.say = (text, ms, { urgent = false } = {}) => {
     if (!text) return;
-    if (speaking > 0 || (hold && !urgent)) { if (!queue.some((q) => q.text === text)) queue.push({ text, ms, key, at: now }); return; }
+    // (what a wave just earned goes ahead of the tips waiting: it is said next, before the next bunch)
+    if (speaking > 0 || (hold && !urgent) || held(key, urgent)) { if (!queue.some((q) => q.text === text)) queue[key === 'waveDone' ? 'unshift' : 'push']({ text, ms, key, at: now }); return; }
     const t = ms || Math.max(4500, 1800 + text.length * 55);
     hud.caption(text, t); speaking = t / 1000 + 0.4; saying = { text, ms, key, urgent };
     if (voice) voice.speak(text, { key });
+    // (the saddle line sends the rider to the stable: the trail goes there for a while, once it is really said)
+    if (text === LINES.waveSaddle) sentTo = { place: 'stable', until: now + WANT_FOR };
   };
+  // while a question is up where the player is (B.update's asking: the job asking, or 'panel'), only lines about that
+  // job are said (and the why of a pick: urgent); his tips and other jobs' lines wait their turn
+  const held = (k, urgent = false) => !urgent && !!asking && JOB[k] !== asking;
   // a moment has passed: drop those lines, whether waiting or on screen
   const drop = (...keys) => {
     for (let i = queue.length - 1; i >= 0; i--) if (keys.includes(queue[i].key)) queue.splice(i, 1);
@@ -229,13 +246,14 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
   function said(name, data) {
     switch (name) {
       case 'ride': {
+        on = { ...data };
         const first = !flags().firstDay;
         if (first) { once('firstDay'); B.say(LINES.firstDay, 7000); }
         else B.say(LINES.back[Math.floor(Math.random() * LINES.back.length)]);
-        if (data.mode === 'shoot' && once('rangeTip')) B.say(LINES.shoot, 7000);   // (where the target range is: told once)
-        if (data.wagon && once('wagonWaits')) B.say(LINES.wagonWaits, 6500);   // (the first ride with "Protect the wagon" ticked)
-        if (data.deer && once('deerTip')) B.say(LINES.deerTip, 6500);   // (the first ride with "Deer photographs" ticked)
-        if (data.loot && once('lootTip')) B.say(LINES.lootTip, 7000);   // (the first ride with "Loot the gang" ticked)
+        if (data.range && once('rangeTip')) B.say(LINES.shoot, 7000);   // (where the target range is: told once)
+        if (data.wagon && once('wagonWaits')) B.say(LINES.wagonWaits, 6500);   // (the first ride with "Protect the wagon" on)
+        if (data.deer && once('deerTip')) B.say(LINES.deerTip, 6500);   // (the first ride with "Deer photographs" on)
+        if (data.loot && once('lootTip')) B.say(LINES.lootTip, 7000);   // (the first ride with "Loot the gang" on)
         break;
       }
       case 'arrive': if (once('arrive')) B.say(touch() ? LINES.arriveTouch : LINES.arrive, 7000); break;
@@ -243,13 +261,14 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
       case 'miss': if (once('miss')) B.say(LINES.miss); break;
       case 'waveDone':
         drop('miss');
+        // (the saddle line: the trail goes to the stable for a while, so what he says and where the hoofprints lead agree)
         if (!(rider.owned && rider.owned.saddle) && rider.gold >= (data.saddle || 15) && once('waveSaddle')) B.say(LINES.waveSaddle, 6500);
         else if (once('wave')) B.say(LINES.wave);
-        else if (once('farmTip')) B.say(LINES.farmTip, 6500);
-        else if (rider.owned && rider.owned.saddle && once('campTip')) B.say(LINES.campTip, 8000);
+        else if ((on.sheep !== false || on.pigs !== false) && once('farmTip')) B.say(on.pigs === false ? LINES.farmTipSheep : on.sheep === false ? LINES.farmTipPigs : LINES.farmTip, 6500);
+        else if (on.deliveries !== false && rider.owned && rider.owned.saddle && once('campTip')) B.say(LINES.campTip, 8000);
         break;
       case 'boxWon': if (once('boxWon')) B.say(LINES.boxWon, 6500); break;
-      case 'saddle': if (once('saddle')) B.say(LINES.saddle, 6500); break;
+      case 'saddle': if (sentTo && sentTo.place === 'stable') sentTo = null; if (once('saddle')) B.say(LINES.saddle, 6500); break;
       case 'dog': {
         // (the pug can't keep up with a galloping horse, so he gets his own line)
         const pug = rider.owned && rider.owned.dog && rider.owned.dog.kind === 'pug';
@@ -286,7 +305,7 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
       case 'deliveryRobbed': B.say(LINES.deliveryRobbed, 6000); break;
       case 'wagonArrive': if (once('wagonArrive')) B.say(touch() ? LINES.wagonArriveTouch : LINES.wagonArrive, 9000); break;
       case 'banditCatch': drop('banditMiss'); if (once('banditCatch')) B.say(LINES.banditCatch); break;
-      case 'banditMiss': if (once('banditMiss')) B.say(LINES.banditMiss, 6000); break;
+      case 'banditMiss': if (once(data.card ? 'banditMissCard' : 'banditMiss')) B.say(data.card ? LINES.banditMissCard : LINES.banditMiss, 6000); break;
       case 'banditLoop': if (once('banditLoop')) B.say(LINES.banditLoop); break;
       case 'banditsDone': drop('banditMiss', 'banditCatch', 'banditLoop'); B.say(LINES.banditsDone[(wagonN++) % LINES.banditsDone.length], 3500); break;
       case 'wagonStop': if (once('wagonStop')) B.say(LINES.wagonStop, 3000); break;
@@ -314,7 +333,7 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
         break;
       }
       case 'animalGrew': B.say(LINES.animalGrew.replace('{name}', data.name || 'Your little one'), 3500); break;
-      case 'goodsCollected': if (once('goodsCollected')) B.say(LINES.goodsCollected, 6500); break;
+      case 'goodsCollected': if (once('goodsCollected')) B.say(on.store === false ? LINES.goodsKept : LINES.goodsCollected, 6500); break;
       case 'goodsSold': if (once('goodsSold')) B.say(LINES.goodsSold, 4500); break;
       // deer photographs (missions/deerjob.js)
       case 'deerArrive': if (once('deerArrive')) B.say(LINES.deerArrive, 7000); break;
@@ -491,13 +510,17 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
   }
   B.update = (dt, at, o = {}) => {
     time += dt;
-    if (voice) voice.update(dt);
+    if (voice && voice.update) voice.update(dt);
     now += dt;
     // On a narrow screen, while a job person's speech card is up (the trail boss's hello on arriving), Hob waits his
     // turn so the phone isn't all talk: his line goes away and comes back with the time it had left once they're done,
     // and what's waiting keeps its place (the time held doesn't count toward a job line going stale). If a line about
     // the job came up meanwhile, it goes first and the one from before (a tip, the ride's hello) waits its turn again.
-    const wait = !!o.hold && (innerWidth <= 760 || innerHeight <= 480) && !voice;
+    // And while a question is up where the player is (o.asking: the job asking, 'roundup' for a card or a wave at the
+    // herd, 'store' at the counter...; 'panel' for a lock box or a menu), only that job's lines come: his tips and the
+    // other jobs' lines wait (held), so a question and its why aren't talked over, in captions or in the read-aloud voice.
+    asking = o.asking || null;
+    const wait = !!o.hold && (innerWidth <= 760 || innerHeight <= 480) && !(voice && voice.babble);
     if (wait !== hold) {
       hold = wait;
       if (saying && !saying.urgent && speaking > 0) {
@@ -508,14 +531,21 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
     }
     if (hold) for (const q of queue) q.at += dt;
     // (a job line that waited too long is dropped, not said late)
-    for (let i = queue.length - 1; i >= 0; i--) if (JOB[queue[i].key] && now - queue[i].at > KEEP_JOB) queue.splice(i, 1);
+    for (let i = queue.length - 1; i >= 0; i--) if (JOB[queue[i].key] && queue[i].key !== 'waveDone' && now - queue[i].at > KEEP_JOB) queue.splice(i, 1);
     if (speaking > 0 && !(hold && saying && !saying.urgent) && (speaking -= dt) <= 0) saying = null;
     // (next: a line about a job before a tip, as a job line that waits too long is dropped and a tip can wait)
-    if (speaking <= 0 && !hold && queue.length) { const j = queue.findIndex((q) => JOB[q.key]); const q = queue.splice(Math.max(0, j), 1)[0]; key = q.key; B.say(q.text, q.ms); key = null; }
+    if (speaking <= 0 && !hold && queue.length) {
+      const j = queue.findIndex((q) => JOB[q.key] && !held(q.key));
+      const i = j >= 0 ? j : queue.findIndex((q) => !held(q.key));
+      if (i >= 0) { const q = queue.splice(i, 1)[0]; key = q.key; B.say(q.text, q.ms); key = null; }
+    }
+    if (sentTo && now > sentTo.until) sentTo = null;
     trailUpdate(dt, at);
     U.uFade.value = fade; U.uTime.value = time;
     mesh.visible = fade > 0.002 && mesh.count > 0;
   };
+  // the place his last line sent the rider to, while it holds (main.js leads the trail there instead): 'stable' | null
+  B.wants = () => (sentTo && now <= sentTo.until && !(sentTo.place === 'stable' && rider.owned && rider.owned.saddle) ? sentTo.place : null);
   Object.defineProperty(B, 'prints', { get: () => prints.length });
   // (for rigs: the trail laid now, and the job it leads to)
   B.trailState = () => ({ id: shown && shown.id, goal: goal && goal.id, prints: prints.length, fade, searching: !!search, gone, length: U.uLen.value,

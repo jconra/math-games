@@ -10,6 +10,27 @@
 // Started from the general store's counter (shop.js: "Mind the counter"). Each filled order counts toward the "orders
 // filled" belt buckle (save.js JOBS).
 //
+// ON THE STRANDS (src/math/skill.js): each customer's order is as hard as the rider's Word problems level says: the
+// store asks stepFor on the map store (or storeK, the youngest riders' picture stories, which chooseMap picks while
+// the level is low) and the order is made at that step. Its first pick (or the worked area, below) is recorded through
+// save.js recordAnswer: Word problems at the point asked, plus what else the order counts in (order.credit: groups in
+// Multiplication at half weight, money in Money, discounts in Percent...), timed as a sit-down answer
+// (src/ui/answertimer.js; a fast right one counts double). A sale of the rider's goods counts in Word problems (eggs
+// and milk, the map sales) or Fractions (wool, the map wool), its form chosen the same way.
+// A sum too big for the head (a big order, 16 × 24 sacks, 112 cans in crates of 5) opens THE WORKED AREA
+// (src/ui/longwork.js) by itself a moment after the slip comes up, unless the rider's Long work level is well past it
+// (then "Work it out" on the slip opens it): "What do we work out?", then the sum worked a step at a time, then (for a
+// division) the word answer. Each tap counts lightly in that fact's own strand, the whole sum in Long work, and the
+// order's answer in Word problems as usual; then the right coin glows and the order is filled as if it were picked.
+// A rider who can't read yet (skill.js readAloud) hears each order read out (the browser's voice), with "Read it to
+// me" on the slip to hear it again; the youngest riders' picture stories show the things to count from the start.
+// THE COUNTER'S OTHER QUESTIONS (src/math/counter.js): about 2 customers in 5, once any fits the rider, ask something
+// else the store is the place for: money (counting coins, change, dollars and cents, tax and tips), the time by the
+// store's grandfather clock and how long things take, decimals, percent, ratios. Each is its own strand at its own
+// level (counterChoice / stepFor), recorded the same way (that strand at the point asked, timed), with its own pictures
+// (src/ui/counterpics.js): the lead (the clock to read, the coins to count) above the coins, the help after a miss.
+// While a strand is still finding its level the slip's corner says so, quietly.
+//
 //   const J = makeStoreJob({ W, folk, P, I, camera, rider, hud, hob, refresh, openBox, onStart, onStop, pay, goods })
 //     goods: the homestead (src/homestead.js), or null: now and then a customer buys the rider's own eggs, wool or milk
 //     instead of bringing an order (goods.saleOrder: a sale slip, levelled by this job's ladder step; it pays the gold
@@ -24,9 +45,16 @@
 //   J.active, J.state() (for rigs), J.people (the customers about, live: each has x, z), J.dispose()
 import * as THREE from 'three';
 import { makePerson } from '../actors/folk.js';
-import { makeWordProblems, lockboxProblem, FOLK } from '../math/wordproblems.js';
+import { makeWordProblems, makeOrder, lockboxProblem, FOLK } from '../math/wordproblems.js';
 import { picture } from '../ui/storepics.js';
-import { makeStoreSlip } from '../ui/storeslip.js';
+import { makeStoreSlip, speakLine } from '../ui/storeslip.js';
+import { openLongWork } from '../ui/longwork.js';
+import { workMul, workDiv, LONG } from '../math/longwork.js';
+import { homestead } from '../math/goods.js';
+import { counterOrder, counterChoice } from '../math/counter.js';
+import { counterPicture } from '../ui/counterpics.js';
+import { stepFor, stepAt, pctAt, chooseMap, fits, levelOf, readAloud, record, isPlaced } from '../math/skill.js';
+import { answerTimer } from '../ui/answertimer.js';
 import { earn, recordAnswer, countJob, saveRider } from '../save.js';
 
 export const STORE = {
@@ -48,6 +76,8 @@ export const STORE = {
   // a phone held upright (the slip is a sheet along the bottom): further back, the pair high in the picture
   camPhone: { out: 1.6, side: 6.5, up: 2.6, lookOut: 1.6, lookSide: -1.4, lookUp: -1.2 },
   phoneWidth: 760,     // narrower than this (the slip's own phone layout), the phone framing
+  longOpen: 1.1,       // seconds after the slip comes up when the worked area opens by itself (the story read first)
+  longMost: 4,         // a non-bulk order's numbers may need a long sum up to this many points past the rider's Long work
 };
 
 export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, refresh = () => {}, openBox = null,
@@ -66,10 +96,11 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
   const at = (o, s = 0) => ({ x: door.x + out.x * o + side.x * s, z: door.z + out.y * o + side.y * s });
   const clerkAt = at(STORE.clerk), frontAt = at(STORE.front), queueAt = at(STORE.queue[0], STORE.queue[1]);
 
-  const U = makeStoreSlip(document.body, { onPick: (i) => pick(i), onDone: () => J.stop(), onDraw: () => draw() });
+  const U = makeStoreSlip(document.body, { onPick: (i) => pick(i), onDone: () => J.stop(), onDraw: () => draw(), onWork: () => openLong() });
   const J = { active: false };
   let phase = 'off';         // off | dismount | open
   let order = null, missed = false, helped = false, thinkT = 0, filled = 0, earned = 0, eqPending = false;
+  let lastMap = null, lastCounter = null, timer = null, longPanel = null, longT = null, forced = null;
   const news = [];       // a badge or a new title won with the order at the counter, told on the slip with the tip
   const people = [];         // the customers about: { p, x, z, yaw, state: 'come'|'queue'|'front'|'serve'|'go', who, to }
 
@@ -149,32 +180,110 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
     if (!inQueue()) { const c = spawn(queueAt); if (c) c.state = 'come'; }
   }
 
+  // the point an order really sits at: the rider's pick, but never under its step's own point (a level a few points
+  // under a maker's first step still gets that first step, which is harder than the level)
+  const realAt = (map, q) => Math.max(q.at, pctAt(map, q.step));
   // ── AN ORDER AT THE COUNTER ──────────────────────────────────────────────────────────────────────────────────────
+  // one of the counter's other questions (money, time, decimals, percent, ratios) at the rider's level on its strand
+  function counterDeal(map, who, step = null) {
+    const q = stepFor(rider, map);
+    const o = counterOrder(map, { step: step || q.step, frac: step ? 0 : q.frac, who });
+    o.map = map; o.at = step ? pctAt(map, step) : realAt(map, q);
+    o.picture = counterPicture;
+    o.payStep = Math.max(1, stepAt('store', o.at).step);   // (the tip goes by the store's step at that point)
+    return o;
+  }
+  // the next order, as hard as the strands say (see ON THE STRANDS above)
+  function deal(who) {
+    if (forced) {   // (rigs: J.dev.next({ type, sum, longStep, map, step }), or { counter: 'time', step: 2 })
+      const f = forced; forced = null;
+      if (f.counter) return counterDeal(f.counter, who, f.step || null);
+      const map = f.map || 'store', q = stepFor(rider, map);
+      const ls = f.type === 'bulk' ? stepFor(rider, 'long') : null;
+      const o = makeOrder(f.type, { who, step: f.step || q.step, ladder: map === 'storeK' ? 'K' : 'main', longStep: f.longStep || (ls && ls.step), longOp: f.longOp || null, sum: f.sum || null });
+      Object.assign(o, { fixed: true, map, at: f.step ? pctAt(map, f.step) : realAt(map, q), longAt: ls ? ls.at : null });
+      return o;
+    }
+    // now and then a customer buys the rider's own goods: eggs and milk on the map sales (Word problems), wool on the
+    // map wool (Fractions); a kind the rider isn't up to yet isn't bought
+    if (goods) {
+      const carried = homestead(rider).goods, plan = { step: 1, sales: null, wool: null };
+      if ((carried.eggs || carried.milk) && fits(rider, 'sales')) { const q = stepFor(rider, 'sales'); Object.assign(plan, { sales: q.id, salesAt: realAt('sales', q) }); }
+      if (carried.wool && fits(rider, 'wool')) { const q = stepFor(rider, 'wool'); Object.assign(plan, { wool: q.id, woolAt: realAt('wool', q) }); }
+      plan.step = stepFor(rider, 'store').step;   // (the tip goes by the store's step)
+      const sale = (plan.sales || plan.wool) ? goods.saleOrder({ step: plan, who }) : null;
+      if (sale) return sale;
+    }
+    // now and then a question about money, the time, decimals, percent or ratios instead of a word problem
+    const cmap = counterChoice(rider, { last: lastCounter });
+    if (cmap) { lastCounter = cmap; return counterDeal(cmap, who); }
+    const map = chooseMap(rider, ['storeK', 'store'], { last: lastMap }) || 'store';
+    lastMap = map;
+    const q = stepFor(rider, map);
+    let longQ = null;
+    const o = Q.next({ who, step: q.step, ladder: map === 'storeK' ? 'K' : 'main',
+      longStep: () => (longQ = longQ || stepFor(rider, 'long')).step,   // (asked only if a big order is made)
+      longMost: levelOf(rider, 'long') + STORE.longMost });
+    o.map = map; o.at = realAt(map, q); o.longAt = longQ && o.type === 'bulk' ? longQ.at : null;
+    return o;
+  }
   function serve(c) {
     c.state = 'serve';
-    order = (goods && goods.saleOrder({ step: Q.level().step, who: c.who })) || Q.next({ who: c.who });
+    order = deal(c.who);
     missed = false; helped = false; thinkT = 0; eqPending = false;
     U.purse(rider.gold);   // (in step with the gold, the lock box's pay included)
-    U.show(order, { filled });
+    const young = readAloud(rider);
+    const own = ownOf(order);
+    U.show(order, { filled, pic: order.picFirst ? (order.picture || picture)(order.pic) : null, read: young,
+      lead: order.lead ? counterPicture(order.lead) : null, note: own && own.at != null && !isPlaced(rider, own.strand) ? 'finding your level' : '' });
+    if (young && order.read) setTimeout(() => { if (order && order.read && J.active && !U.busy) speakLine(order.read); }, 500);
+    if (timer) timer.cancel();
+    timer = answerTimer();
+    // a sum too big for the head: the worked area opens by itself, unless the rider's Long work is well past it
+    clearTimeout(longT);
+    if (order.long && levelOf(rider, 'long') < order.long.point + LONG.COMFORT) { const o = order; longT = setTimeout(() => { if (order === o) openLong(); }, STORE.longOpen * 1000); }
     if (order.sale) speak('whatchagot', c);   // (come to buy the rider's own goods)
     if (c.walking) c.hand = true; else handOver(c);
+  }
+  // the strand an order is about, at the point it was asked: Word problems, or the sale's (Word problems or
+  // Fractions), or the counter question's own (money, time, dec, pct, ratio)
+  function ownOf(o) {
+    if (o.sale) return o.sale.at != null ? { strand: o.sale.map === 'wool' ? 'frac' : 'words', at: o.sale.at } : null;
+    return { strand: o.counter ? o.strand : 'words', at: o.at != null ? o.at : null };
+  }
+  // what an answer to this order counts in: its own strand at the point asked, and the order's extra strands (a
+  // Long work credit is left out when the worked area ran: it counted the sum itself)
+  function strandsOf(o, { worked = false } = {}) {
+    const own = ownOf(o);
+    return [own, ...(o.credit || []).filter((c) => !(worked && c.long)).map((c) => ({ strand: c.strand, at: c.at, weight: c.weight }))]
+      .filter((x) => x && x.at != null);
+  }
+  // records the order's first answer (once): the old last-50 tally and badges, and the skill model
+  function answered(o, right, { worked = false, t = null } = {}) {
+    if (o.recorded) return;
+    o.recorded = true;
+    const tm = t || (timer ? timer.stop() : {});
+    const rec = recordAnswer(rider, right, { strands: strandsOf(o, { worked }), sitDown: true, size: o.size || 1, ms: tm.ms, hidden: tm.hidden, idle: tm.idle });
+    if (rec && rec.badge) news.push(`You earned the ${rec.badge} badge!`);
   }
   // the customer holds out the slip (once they've stopped walking)
   function handOver(c) {
     c.hand = false;
     if (c.p.play('Interact', { fade: 0.2, once: true })) setTimeout(() => { if (c.state === 'serve' && !c.walking) c.p.play('Idle', { fade: 0.4 }); }, 1400);
   }
-  const tip = () => pay.order + Math.floor((order.step - 1) / pay.orderEvery);
-  async function pick(i) {
+  const tip = () => pay.order + Math.floor(((order.payStep || order.step) - 1) / pay.orderEvery);
+  async function pick(i, { worked = false } = {}) {
     if (!order || U.busy || eqPending) return;
+    if (longPanel && !worked) return;   // (the worked area is up: its answers count)
     const o = order, c = o.coins[i]; if (!c) return;
-    const res = o.sale ? { first: !o.picked } : Q.answer(o, c, { helped });   // (a sale of your goods doesn't move the ladder)
+    const res = o.sale || o.counter ? { first: !o.picked } : Q.answer(o, c, { helped });   // (a sale, or a counter question: not this ladder's)
     o.picked = true;
+    clearTimeout(longT);
     // (a badge won by this first pick is told on the slip with the tip)
-    if (res.first) { const rec = recordAnswer(rider, c.good); if (rec && rec.badge) news.push(`You earned the ${rec.badge} badge!`); }
+    if (res.first && !worked) answered(o, c.good);
     if (!c.good) {
       missed = true;
-      U.wrong(i, { why: c.why, pic: (o.picture || picture)(o.pic) });
+      U.wrong(i, { why: c.why, pic: (o.picture || picture)(o.pic), inLead: sameLead(o) });
       if (hob) hob.event('storeMiss');
       saveRider(rider);
       return;
@@ -230,10 +339,50 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
     const next = atFront();
     if (next) U.waiting(`Here comes ${next.who.name}…`);
   }
+  // the help is the question's own picture with more on it (the clock with its minutes, the coins with their values):
+  // it takes that picture's place on the slip
+  const sameLead = (o) => !!(o.lead && o.pic && o.lead.kind === o.pic.kind);
   function draw() {
     if (!order || U.busy) return;
     helped = true;
-    U.drawn((order.picture || picture)(order.pic));
+    U.drawn((order.picture || picture)(order.pic), { inLead: sameLead(order) });
+  }
+
+  // ── THE WORKED AREA ──────────────────────────────────────────────────────────────────────────────────────────
+  // The sum worked on paper (src/ui/longwork.js). Each first tap counts lightly in its own fact's strand; when it's
+  // done, the whole sum counts in Long work (a big order: at the point the strand asked; a sum that came with the
+  // story's numbers: at its own point), the order's answer in Word problems (what to work out, and the word answer,
+  // both right first time), and the order is filled as though its coin was picked. Closing it ("Back to the slip")
+  // counts nothing: the coins are still there.
+  function openLong() {
+    const o = order;
+    if (!o || !o.long || longPanel || U.busy || !J.active) return;
+    const already = !!o.recorded;   // (opened after a coin was picked: it helps, but the order's answer is already counted)
+    clearTimeout(longT);
+    const L = o.long, work = L.op === 'mul' ? workMul(L.a, L.b, L.lead ? { lead: L.lead } : {}) : workDiv(L.n, L.d);
+    let firstRight = true;
+    longPanel = openLongWork(document.body, {
+      work, setup: L.setup, final: L.final, ask: o.ask, speak: readAloud(rider) ? speakLine : null,
+      onTap: (tp) => {
+        if (!tp.first || tp.helped) return;   // (a tap after the helper strip showed the answer: nothing to count)
+        if (tp.part !== 'work') { if (!tp.right) firstRight = false; return; }
+        if (tp.fact) { try { record(rider, [{ strand: tp.fact.strand, at: tp.fact.at, weight: 0.5 }], { right: tp.right, sitDown: true, size: 1, ...tp.timed }); } catch (e) { console.warn(e); } }
+      },
+      onDone: (r) => {
+        if (order !== o || !J.active) return;
+        if (!already) {
+          try { record(rider, [{ strand: 'long', at: o.longAt != null ? o.longAt : L.point }], { right: r.clean, sitDown: true, ms: r.ms, size: work.steps.length, hidden: r.hidden, idle: r.idle }); } catch (e) { console.warn(e); }
+          const t = timer ? timer.stop() : {};
+          answered(o, firstRight, { worked: true, t });
+        }
+        saveRider(rider);
+        // the panel goes by itself after its last line; then the right coin glows. (The tip's "right first time" goes by
+        // the story's part: what to work out and the word answer; a slip in the digits is what the paper is for.)
+        if (!firstRight) missed = true;
+        setTimeout(() => { longPanel = null; if (order === o && J.active) pick(o.coins.findIndex((c) => c.good), { worked: true }); }, 1700);
+      },
+      onClose: () => { longPanel = null; saveRider(rider); },
+    });
   }
 
   // ── STARTING AND STOPPING ────────────────────────────────────────────────────────────────────────────────────
@@ -257,6 +406,10 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
   J.stop = () => {
     if (!J.active) return;
     J.active = false; phase = 'off'; order = null; eqPending = false;
+    clearTimeout(longT);
+    if (longPanel) { longPanel.close(); longPanel = null; }
+    if (timer) { timer.cancel(); timer = null; }
+    try { if (globalThis.speechSynthesis) speechSynthesis.cancel(); } catch (e) { /* (no voice) */ }
     U.hide();
     for (const c of [...people]) if (c.state !== 'go') leave(c);
     P.cam.enabled = true; P.cam.snap();
@@ -285,7 +438,7 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
     }
     if (!J.active || phase !== 'open') return;
     // the "Draw it for me" button after a long think (a wrong pick shows the picture by itself)
-    if (order && !missed && !helped && !U.busy && (thinkT += dt) > STORE.think) { U.offerDraw(true); thinkT = -1e9; }
+    if (order && !missed && !helped && !U.busy && !longPanel && (thinkT += dt) > STORE.think) { U.offerDraw(true); thinkT = -1e9; }
     // the camera: from the street, the rider and the customer side by side
     const K = innerWidth < STORE.phoneWidth ? STORE.camPhone : STORE.cam, y0 = W.heightAt(clerkAt.x, clerkAt.z);
     const cp = at(STORE.clerk + K.out, K.side), lp = at(K.lookOut, K.lookSide);
@@ -296,15 +449,21 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
   // Esc is "Done for now" while working the counter (unless a panel or the lock box over it wants it)
   const onKey = (e) => {
     if (e.key !== 'Escape' || !J.active || e.defaultPrevented || e.repeat) return;
-    if (document.querySelector('.bms, .lbx')) return;
+    if (document.querySelector('.bms, .lbx, .bml')) return;   // (a panel, or the worked area: its own Esc goes back to the slip)
     e.preventDefault(); J.stop();
   };
   addEventListener('keydown', onKey, true);
 
-  J.state = () => ({ active: J.active, phase, filled, earned, order: order ? { type: order.type, step: order.step, key: order.key, coins: order.coins.map((c) => ({ label: c.label, good: c.good })), equation: order.equation, sale: order.sale || null } : null,
+  J.state = () => ({ active: J.active, phase, filled, earned, order: order ? { type: order.type, step: order.step, map: order.map || null, at: order.at ?? null, key: order.key, story: order.story, ask: order.ask,
+    counter: order.counter || null, lead: order.lead ? order.lead.kind : null, pic: order.pic ? order.pic.kind : null,
+    coins: order.coins.map((c) => ({ label: c.label, good: c.good })), equation: order.equation, sale: order.sale || null, credit: order.credit || [], long: order.long ? { op: order.long.op, point: order.long.point, a: order.long.a, b: order.long.b, n: order.long.n, d: order.long.d } : null } : null,
+    longOpen: !!longPanel, long: longPanel ? longPanel.state() : null,
     people: people.map((c) => ({ who: c.who.name, state: c.state, x: +c.x.toFixed(2), z: +c.z.toFixed(2) })), level: Q.level(), busy: U.busy });
   J.people = people;    // (read each frame by the wagons, which stop for customers: no copies made)
   J.trainer = Q;
+  // (rigs: the next customer brings this order: { type, map, step, sum: { op: 'div', n: 112, d: 5 }, longStep, longOp },
+  // or a counter question: { counter: 'time', step: 2 })
+  J.dev = { next: (spec) => { forced = spec || null; }, openLong: () => openLong() };
   J.dispose = () => { removeEventListener('keydown', onKey, true); if (J.active) J.stop(); for (const c of [...people]) removePerson(c); U.dispose(); };
   return J;
 }

@@ -11,8 +11,12 @@
 //     itself (no one-choice button), for less gold
 //   a bottle for a healthy sheep: Old Hob says she's fine and why her sum is right. No penalty, nothing taken off
 // When every sick sheep is healed the flock is paid (like a round-up wave), and after a few seconds the same flock shows
-// a new set of sums: nothing to click. Topics take turns flock by flock (the ticked ones this job knows: times tables,
-// positive & negative, solving for x, dividing, and counting, adding and taking away). Each sheep healed counts toward the "Sheep healed" belt buckle (stats.jobs.sheep).
+// a new set of sums: nothing to click. Each flock's kind of math and how hard come from the rider's skill model
+// (sheepmath.js flockFor: counting, adding and taking away for a young rider; times tables, dividing, positive & negative
+// and solving for x for an older one), and the first bottle given to each sick sheep goes back to it (a travel job: no
+// time). Each sheep healed counts toward the "Sheep healed" belt buckle (stats.jobs.sheep).
+// For a rider who can't read yet (skill.js readAloud) a sheep's sum is read out (the browser's voice) as her bottles
+// come up: "5 plus 1 equals 6. Is that right?"
 //
 //   const SH = makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hud, hob, refresh, defer })
 //     defer(at): true while another farm job has the player (the pig yard, say): the sheep job's card and help step aside
@@ -31,11 +35,14 @@
 import * as THREE from 'three';
 import { makeAnimal } from '../actors/animals.js';
 import { makeTargetRing } from '../targetring.js';
-import { makeFlock, flockTopics } from './sheepmath.js';
+import { makeFlock, flockFor, flockStep } from './sheepmath.js';
+import { travel } from '../math/asking.js';
 import { offerChart, closeChart, ensureChartCss } from '../ui/timeschart.js';
 import { showNumberLine, ensureNumberLineStyles, watchHesitation } from '../ui/numberline.js';
 import { showCountHelp } from '../ui/counthelp.js';
 import { recordAnswer, earn, countJob } from '../save.js';
+import { readAloud } from '../math/skill.js';
+import { speakLine } from '../ui/storeslip.js';
 
 export const SHEEP = {
   near: 44,              // the job's card shows within this many metres of the sheep pasture's middle
@@ -166,10 +173,10 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
   // ── A FLOCK'S SUMS ─────────────────────────────────────────────────────────────────────────────────────────────
   function newFlock({ sick = null } = {}) {
     closePicker(); endHelp(); hint(null);
-    const topics = flockTopics(rider), topic = topics[flockN % topics.length];
+    const { topic, q } = flockFor(rider, { last: cur ? cur.topic : null });
     flockN++;
-    cur = makeFlock(rider, topic, { size: flock.length, sick });
-    cur.healed = 0; cur.done = false;
+    cur = makeFlock(rider, topic, { size: flock.length, sick, step: flockStep(topic, q) });
+    cur.healed = 0; cur.done = false; cur.q = q;
     SH.flock = cur;
     flock.forEach((s, i) => { s.item = cur.sheep[i]; s.healed = false; s.tried = false; s.crossed = new Set(); s.showT = 0; s.state = 'graze'; card(s); });
     nextT = -1;
@@ -227,6 +234,13 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
     if (nl) { nl.remove(); nl = null; }
   }
 
+  // a sheep's sum as it is said out loud: "7 minus 2 equals 5. Is that right?"; a dots card is not counted for the
+  // rider (that is the question): "Count the dots. Are there 4?"
+  function sayItem(it) {
+    const dots = /^\s*●[●\s]*\sis\s+(\S+)\s*$/.exec(it.shown);   // (dotsText groups them in fives: "●●●●● ●● is 7")
+    if (dots) return `Count the dots. Are there ${dots[1]}?`;
+    return `${it.top ? `${it.top}. ` : ''}${it.shown.replace(/\+/g, ' plus ').replace(/=/g, ' equals ')}. Is that right?`;
+  }
   // ── THE BOTTLES ────────────────────────────────────────────────────────────────────────────────────────────────
   function openPicker(s) {
     if (!s || !s.item || s.healed || SH.paused || !cur || cur.done) return false;
@@ -254,6 +268,8 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
     });
     document.body.appendChild(el);
     picker = { el, s };
+    // (a rider who can't read yet, skill.js readAloud: her sum is read out, in the browser's voice, as the bottles come up)
+    if (readAloud(rider)) speakLine(sayItem(s.item));
     hob.event('sheepDose');   // (walked up to her with the bottles)
     s.state = 'dose'; s.w.goal = null; s.a.play('Idle', { fade: 0.3 });
     return true;
@@ -288,7 +304,12 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
       return;
     }
     const first = !s.tried; s.tried = true;
-    if (first) { const rec = recordAnswer(rider, b.right); if (rec && rec.badge) hud.toast(`You earned the ${rec.badge} badge!`, 'gold'); }
+    if (first) {
+      // the flock was dealt from one answer of the skill model: each sheep's first bottle carries its point (a positive &
+      // negative sum counts in Addition or Subtraction by its own sign)
+      const sk = cur.q ? travel(cur.q, { strand: it.op ? (it.op === '-' ? 'sub' : 'add') : null }) : null;
+      const rec = recordAnswer(rider, b.right, sk); if (rec && rec.badge) hud.toast(`You earned the ${rec.badge} badge!`, 'gold');
+    }
     if (b.right) { closePicker(); heal(s, first ? SHEEP.pay.heal : SHEEP.pay.helped); return; }
     // a wrong bottle: crossed out, the why, the helper; with one bottle left the cure goes in by itself
     s.crossed.add(i);
@@ -507,7 +528,7 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
   SH.give = (i) => give(i);
   SH.newFlock = (o) => newFlock(o);   // (o.sick: how many sick, for a rig)
   SH.state = () => ({
-    near: SH.near, topic: cur && cur.topic, level: cur && cur.level, done: !!(cur && cur.done), healed: cur ? cur.healed : 0, sickLeft: sickLeft(),
+    near: SH.near, topic: cur && cur.topic, level: cur && cur.level, at: cur && cur.q ? cur.q.at : null, done: !!(cur && cur.done), healed: cur ? cur.healed : 0, sickLeft: sickLeft(),
     picker: picker ? { sheep: picker.s.id, crossed: [...picker.s.crossed] } : null,
     sheep: flock.map((s) => ({ id: s.id, x: +s.root.position.x.toFixed(2), z: +s.root.position.z.toFixed(2), sick: !!(s.item && s.item.sick), healed: s.healed,
       shown: s.item && s.item.shown, top: s.item && s.item.top, right: s.item ? s.item.bottles.findIndex((b) => b.right) : -1, clip: s.a.clip, label: s.label.visible })),

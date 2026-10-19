@@ -31,6 +31,7 @@
 // JSON with the rider. Nothing is kept anywhere else, and a reload mid-wave carries on where it was.
 //
 // The same small shape fits every topic (see topic.js): wave(), answer(), explain(), hint(), level().
+// steer(step, { placing }): the rider's skill model (src/math/skill.js) sets the step from then on (see steer below).
 
 // ---- the dials (defaults; change them here) ---------------------------------------------------
 
@@ -398,7 +399,8 @@ export function makeTimes(state, opts = {}) {
     const open = tablesAt(S.step);
 
     // Two easy warm-ups at the start of a session, from well below the kid's step.
-    if (S.warmups > 0 && S.placed) {
+    const finding = !S.placed || !!(steered && steered.placing);
+    if (S.warmups > 0 && !finding) {
       S.warmups--;
       const ws = Math.max(1, S.step - 3);
       const pool = tablesAt(ws);
@@ -406,8 +408,9 @@ export function makeTimes(state, opts = {}) {
       return { kind: 'rule', table: t, reach: Math.max(5, reachAt(t, ws)), warmup: true, stage: 'easy' };
     }
 
-    // First visit: always the step's own material, so each climb is tested on the new step.
-    if (!S.placed) return focusPlan({ placing: true });
+    // First visit (or the skill model still finding the level): always the step's own material, so each climb is
+    // tested on the new step.
+    if (finding) return focusPlan({ placing: true });
 
     // After that the tables take turns: two waves on the step's own material, then one on another
     // open table. Mixed practice is what sticks (in a classroom trial, 61% against 38% on a test a
@@ -716,7 +719,9 @@ export function makeTimes(state, opts = {}) {
     }
 
     const before = S.step;
-    if (c && (c.warmup || c.review)) {
+    if (steered) {
+      // the skill model (src/math/skill.js) moves the level: the job steers the step before each wave
+    } else if (c && (c.warmup || c.review)) {
       // Warm-ups and the other tables' turns sit below the kid's step; they never move it. The
       // ladder is judged on the step's own material only, so that material settles near 80% right
       // (with the reviews counted in, about 84 to 87%). A slip on an older table brings that table
@@ -880,10 +885,23 @@ export function makeTimes(state, opts = {}) {
     S.placed = true; S.streak = 0; S.warmups = 0;
   }
 
+  // The rider's skill model (src/math/skill.js) picks the step from here on: the job asks it before each wave and
+  // steers the trainer there. The trainer's own climb, first-visit placement and steps down stop; the tables taking
+  // turns, the designed strays, the comebacks and the warm-ups go on as before. placing: the strand is still finding
+  // its level (every wave is then the step's own material: no warm-ups, no other table's turn).
+  let steered = null;
+  function steer(step, { placing = false } = {}) {
+    S.step = clampInt(num(step, 1), 1, LADDER.length);
+    if (!steered) { S.placed = true; S.streak = 0; S.placeMisses = 0; }
+    steered = { placing: !!placing };
+    return S.step;
+  }
+
   if (opts.newSession || !S.lastAt || now() - S.lastAt > SESSION_GAP_MS) newSession();
 
   return {
     topic: 'times', name: 'Times tables', state: S,
-    wave, answer, due, endWave: closeWave, explain, hint, level, fact, report, setStep, newSession,
+    wave, answer, due, endWave: closeWave, explain, hint, level, fact, report, setStep, steer, newSession,
+    get steered() { return !!steered; },
   };
 }

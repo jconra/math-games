@@ -48,6 +48,7 @@
 //   D.explain(card, picked)            -> { slip, line, picture }   after a wrong pick (picture: groups or chart)
 //   D.help(card)                       -> the picture with the answer hidden, for "Show me" / 8 s of thinking
 //   D.hint(card), D.level(), D.report(), D.setStep(n)
+//   D.steer(step, { placing })         the rider's skill model (src/math/skill.js) sets the step from now on (see steer)
 //   D.shape === 'cards'                (the round-up deals these one card at a time, as the positive & negative ones)
 // A card: { id, kind: 'share'|'fact'|'missing'|'rem', text ('24 ÷ 6', for "24 ÷ 6 = 4"), rule (the card's own words),
 //   answer (the right target's n), label, parts: { total, groups, each, left, ask }, rung, targets: [{ n, good, trap,
@@ -86,7 +87,7 @@ const DIV = '÷', TIMES = '×', MINUS = '−';
 // by, the step's own first (older: the earlier ones, now and then); most: the biggest answer (how many each).
 const ORDER = [2, 10, 5, 3, 4, 9, 11, 6, 8, 7, 12];   // (the times tables' own order: src/math/times.js)
 export const LADDER = [
-  { kind: 'share', tables: [2, 3], most: 5, label: 'Sharing out evenly (8 apples, 2 horses)' },
+  { kind: 'share', tables: [2, 3], most: 10, cap: 20, label: 'Sharing out evenly (8 apples, 2 horses)' },   // (cap: no more than 20 to share)
   { kind: 'share', tables: [4, 5], older: [2, 3], most: 6, label: 'Sharing among 4 and 5 (20 into 5 even groups)' },
   { kind: 'fact', tables: [2, 10, 5], most: 10, label: `Dividing by 2, 10 and 5 (35 ${DIV} 5)` },
   { kind: 'fact', tables: [3, 4], older: [2, 10, 5], most: 10, label: `Dividing by 3 and 4 (28 ${DIV} 4)` },
@@ -254,12 +255,12 @@ export function explainPick(c, picked) {
   if (c.kind === 'rem') {
     const pq = Math.floor(picked / 100), pr = picked % 100;
     const lines = {
-      noRem: `${d} ${TIMES} ${q} = ${d * q}, so ${n - d * q} ${n - d * q === 1 ? 'is' : 'are'} left over: ${n} ${DIV} ${d} = ${q} r ${r}. Don't drop the leftover.`,
+      noRem: `${d} ${TIMES} ${q} = ${d * q}, so ${n - d * q} ${n - d * q === 1 ? 'is' : 'are'} left over: ${n} ${DIV} ${d} = ${q} r ${r}. Don't drop the remainder.`,
       short: `${pr} left over is enough for another round of ${d}. Keep dealing until fewer than ${d} are left.`,
       over: `${pq} ${TIMES} ${d} = ${pq * d}: that needs more than ${n}. Only ${q} whole rounds fit, with some left over.`,
-      swap: `That's swapped round: ${n} ${DIV} ${d} gives ${q} each, and the ones left over come after the r.`,
+      swap: `That's swapped round: ${n} ${DIV} ${d} gives ${q} each, and the remainder (what's left over) comes after the r.`,
       nearRem: pq !== q ? `${pq} ${TIMES} ${d} = ${pq * d}${pq * d > n ? `, more than ${n}` : `, and ${n} ${MINUS} ${pq * d} = ${n - pq * d} is still enough for another round`}.`
-        : `${q} ${TIMES} ${d} = ${q * d}, and ${n} ${MINUS} ${q * d} = ${r} left over, not ${pr}.`,
+        : `${q} ${TIMES} ${d} = ${q * d}, and ${n} ${MINUS} ${q * d} = ${r} left over: the remainder is ${r}, not ${pr}.`,
     };
     return { slip, line: lines[slip] || `${lab} isn't it: deal ${n} out into ${d} rows, one round at a time.` };
   }
@@ -299,13 +300,13 @@ export function explainPick(c, picked) {
 // what a right pick shows: the fact family
 function rightLine(c) {
   const { n, d, q, r } = c;
-  if (c.kind === 'rem') return `${n} ${DIV} ${d} = ${q} r ${r}: ${q} ${TIMES} ${d} = ${q * d}, and ${r} left over.`;
+  if (c.kind === 'rem') return `${n} ${DIV} ${d} = ${q} r ${r}: ${q} ${TIMES} ${d} = ${q * d}, and the remainder is ${r}.`;
   return `${n} ${DIV} ${d} = ${q}, because ${q} ${TIMES} ${d} = ${n}.`;
 }
 // the nudge for a kid who is stuck (the help picture's caption: it never says the answer)
 export function nudge(c) {
   const { n, d } = c;
-  if (c.kind === 'rem') return `Deal ${n} out into ${d} rows, one round at a time. When fewer than ${d} are left, they're the leftover: the number after the r.`;
+  if (c.kind === 'rem') return `Deal ${n} out into ${d} rows, one round at a time. When fewer than ${d} are left, they're the remainder: the number after the r.`;
   if (c.kind === 'missing' && c.ask === 'n') return `${c.q} in each of ${d} rows: how many is that in all? Think ${d} ${TIMES} ${c.q}.`;
   if (c.kind === 'missing') return `Which number times ${c.q} makes ${n}? Count by ${c.q}s up to ${n}.`;
   return `Deal ${n} out into ${d} rows, one round at a time, until none are left. How many in each row?`;
@@ -396,7 +397,7 @@ export function makeDividing(state, opts = {}) {
         continue;
       }
       // how many each: 2 and up mostly (1 each is a dull card), never the same as the rows on a word card
-      const q = row.kind !== 'share' && R() < 0.06 ? 1 : int(2, row.most);
+      const q = row.kind !== 'share' && R() < 0.06 ? 1 : int(2, row.cap ? Math.min(row.most, Math.floor(row.cap / d)) : row.most);
       if (row.kind === 'share' && q === d) continue;
       const p = { kind: row.kind, n: d * q, d, rung };
       if (row.kind === 'missing') p.ask = R() < 0.5 ? 'n' : 'd';
@@ -429,7 +430,7 @@ export function makeDividing(state, opts = {}) {
     if (S.lastAt && now() - S.lastAt > SESSION_GAP_MS) newSession();
     S.lastAt = now();
     dealing = 1;
-    const warmup = S.warmups > 0 && S.placed, placing = !S.placed;
+    const warmup = S.warmups > 0 && S.placed && !(steered && steered.placing), placing = !S.placed || !!(steered && steered.placing);
     const list = [], seen = new Set();
     const add = (p, rung, size, extra = {}) => {
       if (seen.has(keyOf(p))) return false;
@@ -526,7 +527,7 @@ export function makeDividing(state, opts = {}) {
       if (first && x.helped) rs.helped++;   // (right after the help came up: well done and paid, but not a clean card)
       else if (first) {
         rs.right++;
-        if (c.warmup) { /* warm-ups never move the step */ }
+        if (c.warmup || steered) { /* warm-ups never move the step (nor does anything, once the skill model steers) */ }
         else if (!S.placed) {
           S.step = Math.min(LADDER.length, S.step + 1);
           if (S.step === LADDER.length) S.placed = true;
@@ -550,7 +551,7 @@ export function makeDividing(state, opts = {}) {
       if (first) {
         rs.wrong++;
         S.streak = 0;
-        const counts = !c.warmup && !(x.back && (x.rung || 1) > S.step);
+        const counts = !steered && !c.warmup && !(x.back && (x.rung || 1) > S.step);
         if (counts) {
           if (!S.placed) {
             S.placeMisses++;
@@ -613,12 +614,29 @@ export function makeDividing(state, opts = {}) {
     };
   }
   function setStep(step) { S.step = clampInt(num(step, 1), 1, LADDER.length); S.placed = true; S.streak = 0; S.warmups = 0; }
+  // The rider's skill model (src/math/skill.js) picks the step from here on (as the card trainer's steer in early.js):
+  // the trainer's own climb, first-visit placement and steps down stop; placing: the strand is still finding its level
+  // (no warm-ups or review cards). A new step while a wave is open deals its cards still to come again at it.
+  let steered = null;
+  function steer(step, { placing = false } = {}) {
+    const was = S.step;
+    S.step = clampInt(num(step, 1), 1, LADDER.length);
+    if (!steered) { S.placed = true; S.streak = 0; S.placeMisses = 0; }
+    steered = { placing: !!placing };
+    const c = S.cur;
+    if (c && !c.closed && !c.warmup && S.step !== was) {
+      for (let i = c.at; i < c.cards.length; i++) { const x = c.cards[i]; if (!x.back && !x.review && !x.tried) c.cards[i] = cardFor(problem(S.step), S.step, x.targets.length, { into: c }); }
+      c.step = S.step;
+    }
+    return S.step;
+  }
 
   if (opts.newSession || !S.lastAt || now() - S.lastAt > SESSION_GAP_MS) newSession();
 
   return {
     topic: 'dividing', name: 'Dividing', state: S, shape: 'cards', mode: 'cards', payEvery: PAY_EVERY,
-    wave, card, answer, explain, help, hint, level, report, setStep, newSession,
+    wave, card, answer, explain, help, hint, level, report, setStep, steer, newSession,
+    get steered() { return !!steered; },
     endWave: closeWave,
     due: () => [],   // (missed cards come back inside the wave's own list)
   };

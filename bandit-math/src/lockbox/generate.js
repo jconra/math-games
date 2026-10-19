@@ -1,4 +1,7 @@
 // Lock-box problems, one recipe per rung of the ladder (R0a .. R15, then the inequalities I1 .. I4).
+// Below R0a sit the kindergarten boxes K1 .. K3 (kbox.js: "2 + x = 4" with pictures, read aloud); generate() makes
+// those too, and the "Work it out" boxes O1 .. O5, P1 .. P5 (workout.js), but they are not in RUNGS (the deer and the
+// sheep read this ladder by its index).
 //
 // The inequality rungs come after the equations and open the same way (ineq.js has their recipes):
 //   I1 Less or more (2x + 3 < 11), I2 The flip (−3x ≥ 12), I3 Three rooms (3x − 9 < 6x < 3x + 12),
@@ -16,6 +19,8 @@ import {
   F, num, xt, br, line, makeStage, lineFits, lineText, solve, trueAnswer, printedNumbers, moveLabel, verdictFinishMoves,
 } from './engine.js';
 import { INEQ_RECIPES, makeIneqProblem } from './ineq.js';
+import { K_RUNG, kProblem } from './kbox.js';
+import { WORK_RUNG, workProblem } from './workout.js';
 
 // ---------- a small seeded random number source (the same seed gives the same boxes) ----------
 
@@ -243,25 +248,28 @@ const RECIPES = {
 // ---------- the two warm-up rungs (no x moves) ----------
 
 function balanceProblem(rng, size) {
-  const top = S3(size, 9, 12, 15);
+  const top = S3(size, 5, 12, 15);   // (the small numbers keep both sides within 10: it follows the kindergarten boxes)
   const a = rng.int(2, top), b = rng.int(2, top);
   const form = rng.int(0, 2);
+  // say: the line read out loud from the clips (readaloud.js), for a rider who doesn't read yet
   if (form === 2) {   // 15 = 9 + ?
     const t = a + b;
     const answer = b;
     const choices = [answer, t, t + a];
-    return { L: [num(t)], R: [num(a), { t: 'q' }], answer, choices };
+    return { L: [num(t)], R: [num(a), { t: 'q' }], answer, choices, say: `${a} and what make ${t}` };
   }
   const c = rng.int(1, a + b - 1);
   const answer = a + b - c;
   const choices = [answer, a + b, a + b + c];
   const left = [num(a), num(b)], right = [{ t: 'q' }, num(c)];
-  return form === 0 ? { L: left, R: right, answer, choices } : { L: right, R: left, answer, choices };
+  const say = `${c} and what make ${a} plus ${b}`;   // (? + 2 = 4 + 3)
+  return form === 0 ? { L: left, R: right, answer, choices, say } : { L: right, R: left, answer, choices, say };
 }
 
 function keyProblem(rng, size) {
   const x = rng.int(2, S3(size, 9, 12, 15)), a = rng.int(1, S3(size, 9, 12, 15));
-  return { L: [xt(1), num(a)], R: [num(x + a)], answer: x, choices: [x - 1, x, x + 1], x };
+  // say: the line read out loud from the clips (readaloud.js), for a rider who doesn't read yet
+  return { L: [xt(1), num(a)], R: [num(x + a)], answer: x, choices: [x - 1, x, x + 1], x, say: `${a} and what make ${x + a}` };
 }
 
 // ---------- the filters ----------
@@ -295,7 +303,7 @@ export function verdictOf(l) {
 }
 
 // ---------- the public maker ----------
-// generate(rungId, { rng, size = 2, recent = [] }) -> a problem:
+// generate(rungId, { rng, size = 2, recent = [], frac }) -> a problem (K1 .. K3: kbox.js kProblem, sized by frac):
 //   { rung, mode: 'moves'|'balance'|'key', key, start: line, x, kind: 'one'|'all'|'none', par, route: [labels],
 //     choices? (warm-up rungs), answer? }
 //   an inequality rung: { rung, mode: 'ineq', kind: 'ineq', form, key, start: { form, chains, active }, x: null, par,
@@ -306,7 +314,11 @@ export function verdictOf(l) {
 // x = N box; left out, one box in VERDICT_SHARE is a verdict box (the ladder in algebra.js decides it itself).
 export const VERDICT_SHARE = 0.1;
 
-export function generate(rungId, { rng = makeRng(), size = 2, recent = [], verdict } = {}) {
+export function generate(rungId, { rng = makeRng(), size = 2, recent = [], verdict, frac } = {}) {
+  // the kindergarten boxes (kbox.js): their numbers grow with frac (or with size, 1 .. 3, when no frac is given)
+  if (K_RUNG[rungId]) return kProblem(rungId, { rng, frac: frac ?? (Math.max(1, Math.min(3, size)) - 1) / 2, recent });
+  // the "Work it out" boxes (workout.js: order of operations O1..O5, exponents P1..P5), sized the same way
+  if (WORK_RUNG[rungId]) return workProblem(rungId, { rng, frac: frac ?? (Math.max(1, Math.min(3, size)) - 1) / 2, recent });
   const rung = RUNG[rungId];
   if (!rung) throw new Error(`no rung ${rungId}`);
   const wantVerdict = rung.verdicts ? (verdict ?? rng.chance(VERDICT_SHARE)) : false;
@@ -328,7 +340,7 @@ export function generate(rungId, { rng = makeRng(), size = 2, recent = [], verdi
       // the answer must not be sitting in the line already (6 + 7 = ? + 7 gives itself away)
       if (printedNumbers(start).has(p.answer) && tries < 300) continue;
       return { rung: rungId, mode: rung.mode, key, start, x: p.answer, kind: 'one', par: 1, route: [],
-        answer: p.answer, choices: rng.shuffle([...p.choices]) };
+        answer: p.answer, choices: rng.shuffle([...p.choices]), ...(p.say ? { say: p.say } : {}) };
     }
     const made = rung.verdicts ? RECIPES[rungId](rng, size, verdictKind) : RECIPES[rungId](rng, size);
     if (!made) continue;
@@ -349,7 +361,14 @@ export function generate(rungId, { rng = makeRng(), size = 2, recent = [], verdi
       if (!Number.isFinite(s.d) || s.d > rung.maxPar || s.approx) continue;
       par = s.d; route = s.path.map(moveLabel);
     }
-    return { rung: rungId, mode: 'moves', key, start, x: kind === 'one' ? made.x : null, kind, par, route };
+    // (x + 4 = 9 is read out loud for a rider who doesn't read yet, from the clips: "4 and what make 9")
+    let say = null;
+    if (rungId === 'R1') {
+      const withX = made.L.some((t) => t.t === 'x') ? made.L : made.R, other = withX === made.L ? made.R : made.L;
+      const a = withX.find((t) => t.t === 'n'), b = other.length === 1 && other[0].t === 'n' ? other[0] : null;
+      if (a && b) say = `${a.v.n} and what make ${b.v.n}`;
+    }
+    return { rung: rungId, mode: 'moves', key, start, x: kind === 'one' ? made.x : null, kind, par, route, ...(say ? { say } : {}) };
   }
   return null;
 }

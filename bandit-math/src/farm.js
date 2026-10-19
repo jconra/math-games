@@ -4,7 +4,7 @@
 // up to the barn doors:
 //   the sheep pasture (left of the lane, as you ride in): the flock grazes here; the sick-sheep job (missions/sheep.js)
 //   the paddock (right, at the front): a few farm-pack cows and a horse, idling and pottering about
-//   the pig yard (right, at the back, beside the barn): a yard with three small pens along its back fence, each with a
+//   the pig yard (right, at the back, beside the barn): a yard with two pens along its back fence, each with a
 //     gap for a gate in its front. The pens are left EMPTY: they are for the loose-pigs job
 // Everything is laid out in the farm's own frame (metres; x across the front, z toward the town, so the lane runs along
 // +z) and turned into the world by the farm's place; farmLayout(place) gives every spot in world coordinates without
@@ -33,7 +33,7 @@
 //   windmill                 { x, z }
 //   sheep, paddock, yard     the fenced spots: { x, z, rot, w, d, gate: { x, z, rot, width, in, out } } (gate.rot: the way
 //                            out, as three's rotation.y; in / out: 3 m inside and outside the gap)
-//   pens                     [ { x, z, rot, w, d, gate } x 3 ]   inside the pig yard, along its back fence; their gates
+//   pens                     [ { x, z, rot, w, d, gate } x 2 ]   inside the pig yard, along its back fence; their gates
 //                            open into the yard (gate.out is in the yard, gate.in inside the pen)
 //   area(spot, inset)        a helper for one of those: { contains(x, z), random(rand) -> { x, z } }, inset metres in
 //                            from the fence
@@ -47,7 +47,7 @@ export const FARM = {
   sheep: { x0: -27, x1: -5, z0: -6, z1: 22, gate: { side: '+z', at: -11, width: 4.5 } },
   paddock: { x0: 8, x1: 27, z0: 1, z1: 22, gate: { side: '-x', at: 11.5, width: 4.5 } },
   yard: { x0: 8, x1: 27, z0: -22, z1: -4, gate: { side: '+z', at: 11.5, width: 3.5 } },
-  pens: { n: 3, depth: 6, gate: 2.2 },        // along the yard's back fence: how many, how deep (m), each one's gap (m)
+  pens: { n: 2, depth: 6, gate: 2.2 },        // along the yard's back fence: how many (two: the pig job sorts by a side), how deep (m), each one's gap (m)
   barn: { x: 0, z: -15, w: 12, d: 9, wall: 4.4, ridge: 7.4, rot: 0 },   // its big doors face the lane (+z)
   windmill: { x: -15, z: -14, tall: 9.5, wheel: 2.3 },
   troughs: [{ x: -23.5, z: -2.5, rot: 0 }, { x: 23.5, z: 18.5, rot: 0 }],

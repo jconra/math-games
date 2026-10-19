@@ -70,7 +70,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const HATS = { boss: 'cattleman', vet: 'bowler', wife: 'straw', naturalist: 'ranger', sheriff: 'white', deputy: 'cowboy' };
 
-export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, scene = W.scene, onTalk = null }) {
+export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, scene = W.scene, onTalk = null, onSay = null }) {
   const get = (k) => { try { return jobs[k] ? jobs[k]() : null; } catch (e) { return null; } };
   const shadows = !!(W.V && W.V.SHADOW ? W.V.SHADOW.on : true);
   const people = [];
@@ -117,14 +117,14 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
       || standSpot({ x: g.x, z: g.z, toward: want, dist: 7, tries: 11, step: 0.25, ok: (x, z) => free(x, z) && offTrail(x, z) > STAND.trail }) || want;
     addPerson(FOLK_BY_ID.boss, at, g.rot);
   }
-  // the vet and the farmer's wife, at the farm
+  // the vet and the farmer's wife, at the farm (each only while her job is on: a grown-up may turn one off)
   const farm = get('farm'), L = farm && farm.layout;
-  if (L && L.sheep) {
+  if (L && L.sheep && get('sheep')) {
     const g = L.sheep.gate, o = { x: Math.sin(g.rot), z: Math.cos(g.rot) }, s = { x: Math.cos(g.rot), z: -Math.sin(g.rot) };
     const want = { x: g.x + o.x * STAND.vet.out + s.x * STAND.vet.side, z: g.z + o.z * STAND.vet.out + s.z * STAND.vet.side };
     addPerson(FOLK_BY_ID.vet, free(want.x, want.z) ? want : g.out, g.rot);
   }
-  if (L && L.yard) {
+  if (L && L.yard && get('pigs')) {
     const at = L.at(STAND.wife.x, STAND.wife.z);
     addPerson(FOLK_BY_ID.wife, at, L.rot - Math.PI / 4);   // (half facing the lane, half the way into the farm)
   }
@@ -264,7 +264,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
   // ── THE CAMP FOREMEN (name tags and hellos only: the camps move them) ──────────────────────────────────────────
   function foremenStep() {
     const C = get('camps');
-    if (!C || foremen.length) return;
+    if (!C || foremen.length || !get('delivery')) return;   // (no orders to offer while deliveries are turned off)
     for (const c of C.list) {
       const h = c.foreman.person;
       if (!h) continue;
@@ -286,6 +286,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     talking = { r, lines: L, pin, hello, t: (ms || sayMs(L.join(' '))) / 1000 };
     card.innerHTML = `<b>${esc(r.name)}</b>${L.map((l) => `<p>${esc(l)}</p>`).join('')}`;
     card.hidden = false; card.classList.remove('is-out'); card.style.opacity = '';
+    if (onSay) { try { onSay(r.name, L); } catch (e) { console.error(e); } }   // (main.js: read out to a rider who can't read yet)
     // (a wave the first time, a nod of the head after)
     if (r.kind !== 'driver' || r.down) {
       const clip = r.greet.said && r.waved ? 'Interact' : 'Wave';

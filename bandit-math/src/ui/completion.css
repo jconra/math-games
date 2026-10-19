@@ -1,0 +1,170 @@
+/* The checklist on screen (src/ui/completion.js): the "What's left" page, the toast when an item is checked off, and the
+   pinned goals in the HUD's top right corner. The same wood, brass and parchment as the counters (src/ui/shop.css).
+   z-index: the page 33 (over the title 20 and the counters 32), the toast 34 (under the times chart 35), the goals 13. */
+.bmk, .bmk-toast, .bmk-corner {
+  --ink: #f4e8cf; --ink-2: #dccaa5; --mute: #a8957a; --brass: #e2ad4c; --brass-hi: #f3c56b; --good: #a9d67f;
+  --wood: rgba(30, 20, 12, 0.84); --wood-edge: rgba(226, 173, 76, 0.35);
+}
+.bmk { position: fixed; inset: 0; z-index: 33; display: grid; place-items: center; padding: 16px;
+  font: 500 16px/1.4 Bitter, Georgia, serif; color: var(--ink); }
+.bmk-dim { position: absolute; inset: 0; background: rgba(12, 8, 5, 0.6); opacity: 0; transition: opacity 0.2s; }
+.bmk-card {
+  position: relative; width: min(720px, 100%); max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px);
+  overflow-y: auto; overscroll-behavior: contain; padding: 20px 24px 24px; border-radius: 12px;
+  background: linear-gradient(180deg, rgb(58, 40, 24), rgb(36, 24, 14));
+  border: 1px solid rgba(226, 173, 76, 0.5); box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 230, 180, 0.12);
+  opacity: 0; transform: translateY(10px) scale(0.98); transition: opacity 0.2s, transform 0.2s;
+}
+.bmk.is-in .bmk-dim, .bmk.is-in .bmk-card { opacity: 1; transform: none; }
+.bmk.is-out .bmk-dim, .bmk.is-out .bmk-card { opacity: 0; transform: translateY(6px); }
+.bmk button { font: inherit; color: inherit; }
+.bmk svg { display: block; }
+.bmk-x { position: sticky; top: -8px; float: right; margin: -8px -12px 0 8px; z-index: 2; width: 34px; height: 34px; display: grid; place-items: center;
+  border-radius: 8px; background: rgba(30, 20, 12, 0.92); border: 1px solid rgba(226, 173, 76, 0.3); cursor: pointer; }
+.bmk-x svg { width: 16px; height: 16px; }
+.bmk-x:hover { border-color: var(--brass); }
+.bmk-x:focus-visible, .bmk-btn:focus-visible { outline: 2px solid var(--brass-hi); outline-offset: 2px; }
+
+/* the head: the percent, big */
+.bmk-title { font: 400 30px/1.1 Rye, Georgia, serif; letter-spacing: 0.02em; margin: 0; padding-right: 40px; }
+.bmk-subtitle { font: 400 15px Smokum, Georgia, serif; letter-spacing: 0.05em; color: var(--brass); margin-top: 3px; }
+.bmk-total { display: flex; align-items: center; gap: 12px; margin: 12px 0 4px; }
+.bmk-total > b { font: 700 34px/1 Bitter, Georgia, serif; color: var(--brass-hi); font-variant-numeric: tabular-nums; min-width: 2.6em; }
+.bmk-total .bmk-bar { flex: 1; height: 12px; }
+.bmk-total > span { font-size: 14px; color: var(--ink-2); white-space: nowrap; }
+.bmk-bar { position: relative; display: block; height: 7px; border-radius: 999px; background: rgba(0, 0, 0, 0.38); overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5); }
+.bmk-bar i { position: absolute; left: 0; top: 0; bottom: 0; border-radius: inherit; background: linear-gradient(90deg, #b47f2c, #f3c56b); }
+
+/* a group, its count and bar */
+.bmk-h { display: flex; align-items: center; gap: 10px; margin: 18px 0 4px; padding-bottom: 4px; border-bottom: 1px solid rgba(226, 173, 76, 0.22);
+  font: 400 16px Smokum, Georgia, serif; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brass-hi); }
+.bmk-h em { font: 600 13px Bitter, Georgia, serif; font-style: normal; letter-spacing: 0; text-transform: none; color: var(--ink-2); }
+.bmk-h .bmk-bar { flex: 1; max-width: 160px; margin-left: auto; height: 6px; }
+.bmk-sub h4 { margin: 10px 0 0; font: 700 13px Bitter, Georgia, serif; letter-spacing: 0.06em; text-transform: uppercase; color: var(--mute); }
+.bmk-all { color: var(--good); text-transform: none; letter-spacing: 0; font-weight: 600; }
+.bmk-subhow { margin: 2px 0 2px; font-size: 14px; color: var(--ink-2); }
+
+/* an item still to do: its picture, its name, how to get it, how far along */
+.bmk-row, .bmk-goal { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-bottom: 1px dashed rgba(226, 173, 76, 0.14); }
+.bmk-sub .bmk-row:last-of-type { border-bottom: 0; }
+/* (a mid-brown tile, so a black horse and a white one both show on it) */
+.bmk-pic { flex: none; width: 40px; height: 40px; display: grid; place-items: center; border-radius: 9px; color: #ead9b4;
+  background: #6a4f33; border: 1px solid rgba(226, 173, 76, 0.3); box-shadow: inset 0 1px 0 rgba(255, 230, 180, 0.15); }
+.bmk-pic svg { width: 26px; height: 26px; }
+.bmk-pic.is-hat svg { width: 40px; height: 20px; }
+.bmk-pic.is-buckle { background: none; border: 0; box-shadow: none; }
+.bmk-pic.is-buckle svg { width: 40px; height: 28px; }
+/* a goal's buckle not won yet: its own metal, dimmed (the one being aimed at) */
+.bmk-pic.is-aim svg { opacity: 0.5; filter: saturate(0.55); }
+.bmk-pic.is-tooled { color: #2e2420; }
+.bmk-pic.is-silver { color: #d6dde2; }
+.bmk-pic.is-plain { color: #a8693c; }
+.bmk-what { flex: 1; min-width: 0; }
+.bmk-what b { display: block; font: 700 17px/1.25 Bitter, Georgia, serif; }
+.bmk-what small { display: block; font-size: 14px; line-height: 1.35; color: var(--ink-2); }
+.bmk-prog { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.bmk-prog .bmk-bar { flex: 1; max-width: 200px; }
+/* (Bitter's space is thin at this size: "64 / 200 to silver" read as "tosilver" without the extra word spacing) */
+.bmk-prog em { font: 600 13px Bitter, Georgia, serif; font-style: normal; color: var(--ink-2); white-space: nowrap; font-variant-numeric: tabular-nums; word-spacing: 0.16em; }
+/* a job's row: its four buckles, won ones in their metal */
+.bmk-bks { flex: none; display: flex; gap: 2px; }
+.bmk-bk { width: 34px; height: 24px; opacity: 0.85; }
+.bmk-bk svg { width: 100%; height: 100%; }
+.bmk-bk.is-won { opacity: 1; }
+.bmk-row.is-all .bmk-what small { color: var(--good); }
+/* the pin (grown-ups only) */
+.bmk-btn { flex: none; display: inline-flex; align-items: center; gap: 5px; padding: 6px 11px; border-radius: 8px; cursor: pointer; font-weight: 700 !important; font-size: 14px !important;
+  background: linear-gradient(#7a5530, #5a3d22); border: 1px solid #2b1d12; box-shadow: inset 0 1px 0 rgba(255, 220, 160, 0.25); white-space: nowrap; }
+.bmk-btn svg { width: 13px; height: 13px; }
+.bmk-btn:hover:not([disabled]) { background: linear-gradient(#8c6239, #684629); }
+.bmk-btn.is-on { background: linear-gradient(#e2ad4c, #b47f2c); color: #1d140c; border-color: #7a5524; }
+.bmk-btn[disabled] { opacity: 0.45; cursor: default; }
+/* the done ones: small ticks */
+.bmk-done { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 0 4px; }
+.bmk-done span { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--good); padding: 2px 9px 2px 6px; border-radius: 999px;
+  background: rgba(169, 214, 127, 0.1); border: 1px solid rgba(169, 214, 127, 0.3); }
+.bmk-done svg { width: 13px; height: 13px; }
+/* the goals pinned */
+.bmk-goals .bmk-goal { border-bottom: 0; padding: 9px 12px; margin-top: 6px; border-radius: 10px; background: rgba(226, 173, 76, 0.09); border: 1px solid rgba(226, 173, 76, 0.35); }
+.bmk-goal.is-done { background: rgba(169, 214, 127, 0.1); border-color: rgba(169, 214, 127, 0.4); }
+.bmk-goal.is-done small { color: var(--good); font-weight: 700; }
+.bmk-note, .bmk-coming { margin: 14px 0 0; font-size: 14px; color: var(--ink-2); }
+.bmk-coming { font-style: italic; color: var(--mute); }
+
+@media (max-width: 520px) {
+  .bmk { padding: 8px; }
+  .bmk-card { padding: 16px 14px 18px; max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); }
+  .bmk-title { font-size: 25px; }
+  .bmk-total > b { font-size: 28px; }
+  .bmk-row, .bmk-goal { flex-wrap: wrap; gap: 6px 10px; }
+  .bmk-row.is-job { align-items: flex-start; }
+  .bmk-row.is-job .bmk-bks { order: 2; width: 100%; padding-left: 2px; }
+  .bmk-bk { width: 30px; height: 21px; }
+  .bmk-row .bmk-btn, .bmk-goal .bmk-btn { margin-left: auto; }
+  .bmk-h .bmk-bar { max-width: 90px; }
+}
+
+/* ── THE TOAST: small, at the top middle, dropping in over the compass ─────────────────────────────────────────── */
+.bmk-toast {
+  position: fixed; left: 50%; top: 8px; z-index: 34; pointer-events: none; visibility: hidden;
+  display: flex; align-items: center; gap: 10px; max-width: min(540px, calc(100vw - 20px)); padding: 6px 14px 6px 8px;
+  border-radius: 12px; background: rgba(30, 20, 12, 0.92); border: 1px solid rgba(226, 173, 76, 0.55);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45); color: var(--ink); font: 500 15px/1.25 Bitter, Georgia, serif;
+  transform: translate(-50%, -130%); opacity: 0; transition: transform 0.38s cubic-bezier(.2, .9, .3, 1.2), opacity 0.3s, visibility 0s linear 0.4s;
+}
+.bmk-toast.is-on { visibility: visible; transform: translate(-50%, 0); opacity: 1; transition: transform 0.38s cubic-bezier(.2, .9, .3, 1.2), opacity 0.2s, visibility 0s; }
+.bmk-toast .bmk-pic { width: 36px; height: 36px; color: #ead9b4; background: #6a4f33; border: 1px solid rgba(226, 173, 76, 0.3); border-radius: 9px;
+  display: grid; place-items: center; flex: none; }
+.bmk-toast .bmk-pic svg { width: 24px; height: 24px; display: block; }
+.bmk-toast .bmk-pic.is-hat svg { width: 34px; height: 17px; }
+.bmk-toast .bmk-pic.is-buckle { background: none; border: 0; }
+.bmk-toast .bmk-pic.is-buckle svg { width: 38px; height: 26px; }
+.bmk-toast-text { display: flex; flex-direction: column; min-width: 0; }
+.bmk-toast-text small { white-space: nowrap; font: 400 13px Smokum, Georgia, serif; letter-spacing: 0.08em; text-transform: uppercase; color: var(--good); }
+.bmk-toast-text b { font: 700 16px/1.2 Bitter, Georgia, serif; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.bmk-toast-pct { display: flex; flex-direction: column; align-items: center; padding-left: 10px; margin-left: 2px; border-left: 1px solid rgba(226, 173, 76, 0.3); }
+.bmk-toast-pct b { font: 700 19px/1 Bitter, Georgia, serif; color: var(--brass-hi); font-variant-numeric: tabular-nums; }
+.bmk-toast-pct small { font-size: 11px; color: var(--mute); }
+.bmk-toast.is-goal { border-color: var(--brass-hi); box-shadow: 0 0 0 2px rgba(243, 197, 107, 0.35), 0 6px 22px rgba(0, 0, 0, 0.45); }
+.bmk-toast.is-goal .bmk-toast-text small { color: var(--brass-hi); }
+@media (prefers-reduced-motion: reduce) { .bmk-toast, .bmk-toast.is-on { transition: opacity 0.2s, visibility 0s linear 0.2s; transform: translate(-50%, 0); } }
+@media (prefers-reduced-motion: reduce) and (max-width: 480px) { .bmk-toast, .bmk-toast.is-on { transform: none; } }
+
+/* ── THE GOALS: top right, under the Menu button ──────────────────────────────────────────────────────────────── */
+.bmk-corner { position: fixed; right: 14px; top: 62px; z-index: 13; pointer-events: none; width: 232px;
+  padding: 7px 10px 8px; border-radius: 10px; background: var(--wood); border: 1px solid var(--wood-edge);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35); color: var(--ink); font: 500 14px/1.25 Bitter, Georgia, serif; }
+.bmk-corner[hidden] { display: none; }
+.bmk-corner-h { font: 400 13px Smokum, Georgia, serif; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brass); margin-bottom: 2px; }
+.bmk-cg { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.bmk-cg + .bmk-cg { border-top: 1px dashed rgba(226, 173, 76, 0.16); }
+.bmk-cg .bmk-pic { width: 30px; height: 30px; flex: none; display: grid; place-items: center; border-radius: 7px; color: #ead9b4;
+  background: #6a4f33; border: 1px solid rgba(226, 173, 76, 0.3); }
+.bmk-cg .bmk-pic svg { width: 20px; height: 20px; display: block; }
+.bmk-cg .bmk-pic.is-hat svg { width: 28px; height: 14px; }
+.bmk-cg .bmk-pic.is-buckle { background: none; border: 0; }
+.bmk-cg .bmk-pic.is-buckle svg { width: 32px; height: 22px; }
+.bmk-cg-what { flex: 1; min-width: 0; }
+.bmk-cg-what b { display: block; font: 700 13.5px/1.2 Bitter, Georgia, serif; }
+.bmk-cg .bmk-prog { margin-top: 3px; gap: 6px; }
+.bmk-cg .bmk-bar { flex: 1; height: 6px; }
+.bmk-cg .bmk-prog em { font-size: 12px; }
+.bmk-cg.is-done .bmk-prog em { color: var(--good); }
+/* a phone: smaller, and the goals wait while the job's card is up (no room beside it) */
+@media (max-width: 760px), (max-height: 480px) {
+  .bmk-corner { right: 8px; top: 52px; width: 190px; padding: 5px 8px 6px; }
+  .bmk-cg-what b { font-size: 12.5px; }
+}
+/* a phone held upright: the goals as small pictures with a bar and a count; the toast a banner across the top */
+.bmk-corner.is-small { width: auto; min-width: 0; padding: 4px 7px 5px; }
+.bmk-corner.is-small .bmk-corner-h, .bmk-corner.is-small .bmk-cg-what b { display: none; }
+.bmk-corner.is-small .bmk-cg { gap: 6px; padding: 2px 0; }
+.bmk-corner.is-small .bmk-cg-what { width: 92px; flex: none; }
+.bmk-corner.is-small .bmk-prog { margin-top: 0; }
+@media (max-width: 480px) {
+  .bmk-toast { left: 6px; right: 6px; top: 4px; max-width: none; transform: translate(0, -130%); }
+  .bmk-toast.is-on { transform: translate(0, 0); }
+  .bmk-toast-text { flex: 1; }
+  .bmk-toast-text b { font-size: 15px; }
+}

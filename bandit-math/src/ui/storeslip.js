@@ -4,10 +4,20 @@
 // kid picks again. A right coin glows, the coins fly from it into the slip's purse and it counts up, and the slip slides
 // away for the next customer's. No buttons between orders; "Done for now" (or Esc) stops.
 //
-//   const U = makeStoreSlip(root, { onPick(i), onDone(), onDraw() })
-//   U.show(order, { filled })     a new slip slides in (filled: orders filled this sitting, for the corner)
-//   U.wrong(i, { why, pic })      coin i was wrong: shake it, dull it, show the reason and the picture ({ svg, title, line })
-//   U.drawn(pic)                  the picture without a reason (the kid asked for it: "Draw it")
+//   const U = makeStoreSlip(root, { onPick(i), onDone(), onDraw(), onWork() })
+//   U.show(order, { filled, pic, read, lead, note })   a new slip slides in (filled: orders filled this sitting, for the
+//                                 corner; pic: a picture to show from the start ({ svg, title, line }: the youngest riders'
+//                                 picture stories); read: show "Read it to me" (the browser's voice reads order.read);
+//                                 lead: a picture that is part of the question, above the coins (the grandfather clock
+//                                 to read, the coins to count: src/ui/counterpics.js); note: a quiet word in the corner,
+//                                 e.g. "finding your level").
+//                                 An order with a sum too big for the head (order.long) shows "Work it out" (onWork:
+//                                 the job opens the worked area, src/ui/longwork.js). order.wide: word coins, two a row)
+//   U.speak(text)                 read a line out loud in the browser's voice (read-aloud for riders who can't read yet)
+//   U.wrong(i, { why, pic, inLead })   coin i was wrong: shake it, dull it, show the reason and the picture ({ svg,
+//                                 title, line }); inLead: the picture takes the lead picture's place (the clock with
+//                                 its minutes written in, where the clock was), and only its words go below
+//   U.drawn(pic, { inLead })      the picture without a reason (the kid asked for it: "Draw it")
 //   U.offerDraw(on)               the "Draw it" button, offered after a long think
 //   U.right(i, { line, gold, from, to, note, news, paid }) -> Promise   coin i was right: glow, the line, coins fly, count up
 //                                 (paid: the words for the gold instead of '+3 gold tip', e.g. '+6 gold for your eggs')
@@ -31,6 +41,32 @@ function ensureCss() {
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const COIN = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#e2ad4c"/><circle cx="12" cy="12" r="7.4" fill="none" stroke="#a8742a" stroke-width="1.6"/></svg>';
+const PENCIL = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1.2-4.6L15.6 5a2 2 0 0 1 2.8 0l.6.6a2 2 0 0 1 0 2.8L8.6 18.8z" fill="#e2ad4c" stroke="#3b260c" stroke-width="1.5" stroke-linejoin="round"/><path d="M5.2 15.4l3.4 3.4" stroke="#3b260c" stroke-width="1.5"/></svg>';
+const SPEAKER = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="#3b260c"/><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="#3b260c" stroke-width="1.7" stroke-linecap="round"/></svg>';
+
+// A line as it should be said out loud: '$3.45' -> '3 dollars and 45 cents', '35¢' -> '35 cents', '2 h 30 min' ->
+// '2 hours 30 minutes', × ÷ − as words.
+export function sayable(text) {
+  return String(text || '')
+    .replace(/\$(\d+)\.(\d\d)\b/g, (m, d, c) => (Number(d) === 0 ? `${Number(c)} cents` : Number(c) === 0 ? `${d} dollars` : `${d} dollars and ${Number(c)} cents`))
+    .replace(/\$(\d+)/g, '$1 dollars').replace(/(\d+)¢/g, '$1 cents').replace(/\b1 dollars\b/g, '1 dollar').replace(/\b1 cents\b/g, '1 cent')
+    .replace(/(\d+) h (\d+) min\b/g, '$1 hours $2 minutes').replace(/(\d+) min\b/g, '$1 minutes').replace(/\b1 hours\b/g, '1 hour')
+    .replace(/×/g, ' times ').replace(/÷/g, ' divided by ').replace(/−/g, ' minus ');
+}
+// The browser's own voice, for reading a story out loud to a rider who can't read yet (the maker's recorded voice,
+// src/audio/readaloud.js, says counting cards; a whole story needs the browser's). Returns false when there's none.
+export function speakLine(text) {
+  try {
+    const S = globalThis.speechSynthesis, Utt = globalThis.SpeechSynthesisUtterance;
+    if (!S || !Utt || !text) return false;
+    S.cancel();
+    const u = new Utt(sayable(text));
+    u.rate = 0.92; u.lang = 'en-US';
+    S.speak(u);
+    return true;
+  } catch (e) { return false; }
+}
+export const canSpeak = () => { try { return !!(globalThis.speechSynthesis && globalThis.SpeechSynthesisUtterance); } catch (e) { return false; } };
 
 export const SLIP = {
   flyMs: 650,        // a coin's flight from the picked coin to the purse
@@ -40,7 +76,7 @@ export const SLIP = {
   picLeast: 84,      // px: the shortest a wrong pick's picture is shrunk to, to fit the slip on a short screen
 };
 
-export function makeStoreSlip(root = document.body, { onPick = () => {}, onDone = () => {}, onDraw = () => {} } = {}) {
+export function makeStoreSlip(root = document.body, { onPick = () => {}, onDone = () => {}, onDraw = () => {}, onWork = () => {} } = {}) {
   ensureCss();
   const el = document.createElement('div');
   el.className = 'bmo';
@@ -53,6 +89,8 @@ export function makeStoreSlip(root = document.body, { onPick = () => {}, onDone 
       </header>
       <p class="bmo-story"></p>
       <p class="bmo-ask"></p>
+      <figure class="bmo-lead" hidden><div class="bmo-leadsvg"></div></figure>
+      <div class="bmo-tools"><button type="button" class="bmo-work" hidden>${PENCIL}<span>Work it out</span></button><button type="button" class="bmo-read" hidden>${SPEAKER}<span>Read it to me</span></button></div>
       <div class="bmo-coins" role="group" aria-label="Pick the answer"></div>
       <div class="bmo-help" hidden><p class="bmo-why"></p><figure class="bmo-pic"><figcaption></figcaption><div class="bmo-svg"></div><p class="bmo-picline"></p></figure></div>
       <button type="button" class="bmo-draw" hidden>Draw it for me</button>
@@ -68,13 +106,16 @@ export function makeStoreSlip(root = document.body, { onPick = () => {}, onDone 
 
   $('.bmo-done').addEventListener('click', () => onDone());
   drawBtn.addEventListener('click', () => onDraw());
+  const workBtn = $('.bmo-work'), readBtn = $('.bmo-read');
+  workBtn.addEventListener('click', () => { if (!busy) onWork(); });
+  readBtn.addEventListener('click', () => { if (order) speakLine(order.read || `${order.story} ${order.ask}`); });
   coinsEl.addEventListener('click', (e) => {
     const b = e.target.closest('.bmo-coin'); if (!b || b.disabled || busy) return;
     onPick(Number(b.dataset.i));
   });
   const onKey = (e) => {
     if (!order || busy || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
-    if (!el.classList.contains('is-on') || document.querySelector('.bms, .lbx')) return;   // (a panel is over it)
+    if (!el.classList.contains('is-on') || document.querySelector('.bms, .lbx, .bml')) return;   // (a panel, or the worked area, is over it)
     const k = /^Digit([1-4])$/.exec(e.code) || /^Numpad([1-4])$/.exec(e.code);
     if (!k) return;
     const b = coinsEl.querySelector(`[data-i="${Number(k[1]) - 1}"]`);
@@ -86,32 +127,47 @@ export function makeStoreSlip(root = document.body, { onPick = () => {}, onDone 
   U.purse = (n) => { shown = n; purseN.textContent = String(n); };
   U.waiting = (text) => { waitEl.textContent = text || ''; waitEl.classList.toggle('is-on', !!text); };
 
-  U.show = (o, { filled = 0 } = {}) => {
-    order = o; busy = false;
+  let reading = false;   // (a rider who can't read yet: the why of a wrong pick is said out loud too)
+  U.show = (o, { filled = 0, pic = null, read = false, lead = null, note = '' } = {}) => {
+    order = o; busy = false; reading = !!read;
     el.classList.add('is-on');
     U.waiting('');
     $('.bmo-from b').textContent = o.who.name;
     $('.bmo-story').textContent = o.story;
     $('.bmo-ask').textContent = o.ask;
-    slip.classList.toggle('is-eq', !!o.equation);
-    coinsEl.classList.toggle('is-eq', !!o.equation);
-    coinsEl.innerHTML = o.coins.map((c, i) => `<button type="button" class="bmo-coin${o.equation ? ' is-eq' : ''}" data-i="${i}" aria-label="${esc(c.label)}">
-        <span class="bmo-face"><b>${esc(c.big)}</b>${c.small ? `<small>${esc(c.small)}</small>` : ''}</span><kbd>${i + 1}</kbd></button>`).join('');
+    const wide = !!(o.equation || o.wide);
+    slip.classList.toggle('is-eq', wide);
+    coinsEl.classList.toggle('is-eq', wide);
+    workBtn.hidden = !o.long;
+    readBtn.hidden = !(read && canSpeak());
+    coinsEl.innerHTML = o.coins.map((c, i) => `<button type="button" class="bmo-coin${wide ? ' is-eq' : ''}" data-i="${i}" aria-label="${esc(c.label)}">
+        <span class="bmo-face"><b${!wide && String(c.big).length > 5 ? ' class="is-long"' : ''}>${esc(c.big)}</b>${c.small ? `<small>${esc(c.small)}</small>` : ''}</span><kbd>${i + 1}</kbd></button>`).join('');
+    // a picture that is part of the question (the clock to read, the coins to count), above the coins
+    const leadEl = $('.bmo-lead');
+    leadEl.hidden = !(lead && lead.svg);
+    $('.bmo-leadsvg').innerHTML = lead && lead.svg ? lead.svg : '';
+    slip.classList.toggle('has-lead', !!(lead && lead.svg));
     help.hidden = true; drawBtn.hidden = true; thanks.hidden = true;
     slip.classList.remove('has-help');
     $('.bmo-keys').textContent = `keys 1 to ${o.coins.length} pick a coin`;
     slip.scrollTop = 0;   // (a slip scrolled down to the last one's picture would open with its header cut off)
-    $('.bmo-filled').textContent = filled ? `${filled} order${filled === 1 ? '' : 's'} filled` : 'First order of the day';
+    $('.bmo-filled').textContent = (filled ? `${filled} order${filled === 1 ? '' : 's'} filled` : 'First order of the day') + (note ? ` · ${note}` : '');
     slip.classList.remove('is-out', 'is-in');
     void slip.offsetWidth;
     slip.classList.add('is-in');
+    // (the youngest riders' picture stories: the things to count show from the start, no reason line)
+    slip.classList.toggle('is-picfirst', !!pic);
+    if (pic) showPic(pic, '');
   };
+  U.speak = (text) => speakLine(text);
 
-  function showPic(pic, why) {
+  function showPic(pic, why, { inLead = false } = {}) {
     $('.bmo-why').textContent = why || '';
     $('.bmo-why').hidden = !why;
     $('.bmo-pic figcaption').textContent = pic.title || '';
-    $('.bmo-svg').innerHTML = pic.svg || '';
+    const lead = inLead && !$('.bmo-lead').hidden;
+    if (lead) $('.bmo-leadsvg').innerHTML = pic.svg || '';
+    $('.bmo-svg').innerHTML = lead ? '' : pic.svg || '';
     $('.bmo-picline').textContent = pic.line || '';
     help.hidden = false;
     drawBtn.hidden = true;
@@ -142,12 +198,13 @@ export function makeStoreSlip(root = document.body, { onPick = () => {}, onDone 
       if (by > 0) slip.scrollBy({ top: by, behavior: 'smooth' });
     });
   }
-  U.wrong = (i, { why, pic }) => {
+  U.wrong = (i, { why, pic, inLead = false }) => {
     const b = coinsEl.querySelector(`[data-i="${i}"]`);
     if (b) { b.classList.remove('is-shake'); void b.offsetWidth; b.classList.add('is-shake', 'is-wrong'); b.disabled = true; }
-    showPic(pic, why);
+    showPic(pic, why, { inLead });
+    if (reading && why) speakLine(why);
   };
-  U.drawn = (pic) => showPic(pic, '');
+  U.drawn = (pic, { inLead = false } = {}) => showPic(pic, '', { inLead });
   U.offerDraw = (on) => { drawBtn.hidden = !on || !help.hidden; };
 
   // the coins fly from the picked coin to the purse, which counts up from `from` to `to`
@@ -183,7 +240,7 @@ export function makeStoreSlip(root = document.body, { onPick = () => {}, onDone 
     const b = coinsEl.querySelector(`[data-i="${i}"]`);
     for (const x of coinsEl.querySelectorAll('.bmo-coin')) { x.disabled = true; if (x !== b) x.classList.add('is-fade'); }
     if (b) b.classList.add('is-right');
-    drawBtn.hidden = true;
+    drawBtn.hidden = true; workBtn.hidden = true; readBtn.hidden = true;
     thanks.innerHTML = `<b>${esc(line || '')}</b>${gold ? `<span class="bmo-tip">${paid ? esc(paid) : `+${gold} gold tip`}${note ? ` · ${esc(note)}` : ''}</span>` : ''}`
       + news.map((t) => `<span class="bmo-news">${esc(t)}</span>`).join('');
     // the working and the tip are what matter now: the wrong pick's picture folds away so they show on a short screen

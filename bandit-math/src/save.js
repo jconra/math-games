@@ -14,28 +14,41 @@
 //             (outfit = a people model file; the fields match the actors' makePerson options)
 //   gold,     spending money
 //   bounty,   all the gold ever earned; it never goes down, and the rider's title comes from it
-//   mode:     'lasso' | 'shoot'    (picked on the title screen only, then fixed for the whole ride)
-//   topicsOn: { counting, adding, taking, times, dividing, algebra }   which math topics are ticked (true/false)
-//   readAloud: true | false   Counting, Adding and Taking away cards read out loud (src/audio/readaloud.js); on unless
-//             switched off (the other topics are never read)
+//   mode:     'lasso' | 'shoot'    from the days of the title's lasso-or-shooting choice; kept in saves, read by nothing
+//             new (the bottle range is for every rider now)
+//   topicsOn: { counting, adding, taking, times, dividing, algebra }   the old title's math topic ticks; kept in saves,
+//             no longer shown (the skill model below picks the math)
+//   readAloud: true | 'on' | false   the grown-ups' switch for questions read out loud (src/audio/readaloud.js):
+//             true (the default) = by itself: on while the rider's math is young, or for an age of 7 and under
+//             (skill.js readAloud, readAloudLevel); 'on' = always; false = off
 //   topics:   { times: {...}, algebra: {...} }   each math module keeps its own progress object in here
-//   missions: { roundup, wagon, hunt, loot }    which missions are ticked
+//   missions: { store, deliveries, sheep, pigs, wagon, loot, hunt, range, ... }   which jobs are on (MISSIONS): every
+//             one on by default; a grown-up can turn some off on the title (jobOn)
+//   missionsV: 2   the jobs were all switched on once (riders from before every job was on by default)
 //   owned:    { saddle: null|'plain'|'tooled'|'silver', horse: 'bay', dog: null|{ kind, name } }
 //             (+ cabin: ['rug', 'bed', ...] the furnishings bought for the cabin, once any are: src/cabin/slots.js)
 //             (+ animals: [{ kind, name, young?, age? }], goods: { eggs, wool, milk } in the saddlebags, yard: { eggs, wool,
 //               milk } waiting behind the cabin: the homestead's farm animals, once there are any: src/math/goods.js)
 //   lockboxes: [{ tier }, ...]   unopened boxes in the saddlebags
 //   stats:    { answered, right, recent: [1,0,...],          every answer, recent = the last 50 (1 right, 0 wrong)
-//               byMode: { lasso: {answered, right, recent}, shoot: {...} },   the same, split by mode (for the badges)
+//               byMode: { lasso: {...}, shoot: {...} },      the same, split: shoot = the bottle range's answers, lasso =
+//                                                            every other job's (the Sharpshooter and Top Hand badges)
 //               boxes, parBoxes,                             lock boxes solved, and solved in the fewest moves
 //               jobs: { cattle, boxes, sheep, orders, pigs, bandits, deliveries } }   how much of each job was done (the
 //                                                            belt buckles come from these; see JOBS below)
 //   badges:   ['Top Hand', ...]   badges once earned stay earned
 //   album:    [{ eq, x, img, at, rung }]   the deer photographs taken (src/ui/album.js), once there are any
 //   made, last   when the rider was made and last rode out (ms since 1970; last is 0 until the first ride)
+//   skill:    { v, migrated, strands: { add: {...}, mul: {...}, ... } }   what the rider can do in each strand of math
+//             and how hard their next question should be (src/math/skill.js keeps it; fixRider fills it in and, the
+//             first time, reads the old topics' progress into it)
+//   age:      null | a whole number   optional; gives the skill model a modest head start (skill.js ageStart)
+//   goals:    [{ id, ... }]   goals a grown-up pinned on the rider (src/completion.js says what they are)
+//   done:     ['buckle:cattle:tin', ...]   completion items already announced with a toast (src/completion.js)
 // }
 
 import { cleanAnimals, cleanGoods } from './math/goods.js';
+import { migrate as migrateSkill, record as recordSkill, readAloud as readsNow } from './math/skill.js';
 
 const VERSION = 1;
 let KEY = 'bandit-math.riders';
@@ -63,7 +76,9 @@ export const TITLES = [
   [1500, 'Sheriff'], [3000, 'Marshal'], [6000, 'Legend'],
 ];
 
-// The math topics in the order the title screen shows them. `ready` = playable in this build.
+// The math topics of the old title screen (its ticks are gone: the skill model, src/math/skill.js, picks the math for
+// each rider now). Kept for old saves (fixRider still tidies rider.topicsOn, which nothing reads now) and the migration's
+// tests. `ready` = playable.
 export const TOPICS = [
   { id: 'counting', name: 'Counting', ages: '4-6', ready: true },      // off until ticked; progress in topics.counting (src/math/counting.js), made when first played
   { id: 'adding', name: 'Adding', ages: '5-8', ready: true },          // ... topics.adding (src/math/adding.js)
@@ -77,13 +92,41 @@ export const TOPICS = [
 // The topics whose cards can be read out loud (rider.readAloud; src/audio/readaloud.js READ.topics)
 export const READ_TOPICS = ['counting', 'adding', 'taking'];
 
-// The missions in the order the title screen shows them.
+// The jobs a grown-up can turn off, in the order the title's folded "Jobs" list shows them. Every one is ON by default
+// (rider.missions[id], jobOn); the round-up and the lock boxes are always on, so they aren't listed. `where` says where
+// the job is, in a few words. The ids are the saved keys (deer photographs keep 'hunt', so older saves keep their
+// choice); a job added later is one entry here and is on for every rider until a grown-up turns it off.
 export const MISSIONS = [
-  { id: 'roundup', name: 'Round-up', line: 'Rope the right numbers', ready: true },
-  { id: 'wagon', name: 'Protect the wagon', line: 'Ride shotgun and keep the cargo safe', ready: true },
-  { id: 'hunt', name: 'Deer photographs', line: 'Snap the deer with the answer', ready: true },   // (the id stays 'hunt': older saves keep their tick)
-  { id: 'loot', name: 'Loot the gang', line: 'Take back what the gang stole', ready: true },   // (src/missions/loot.js; its ladder in topics.loot)
+  { id: 'store', name: 'Mind the store', line: 'Fill the townsfolk’s orders', where: 'general store', ready: true },
+  { id: 'deliveries', name: 'Deliveries', line: 'Carry orders out to the camps', where: 'general store', ready: true },
+  { id: 'sheep', name: 'Sick sheep', line: 'Heal the farm’s flock', where: 'the farm', ready: true },
+  { id: 'pigs', name: 'Loose pigs', line: 'Pen the farm’s pigs', where: 'the farm', ready: true },
+  { id: 'wagon', name: 'Protect the wagon', line: 'Rope the bandits on the road', where: 'the road', ready: true },
+  { id: 'loot', name: 'Loot the gang', line: 'Take back what the gang stole', where: 'the valley', ready: true },   // (src/missions/loot.js; its ladder in topics.loot)
+  { id: 'hunt', name: 'Deer photographs', line: 'Snap the deer with the answer', where: 'the valley', ready: true },
+  { id: 'range', name: 'Bottle range', line: 'Shoot bottles and tin cans', where: 'east end of town', ready: true },
 ];
+// Is this job on for the rider? (every job is, unless a grown-up turned it off on the title)
+export function jobOn(rider, id) {
+  return !(rider && rider.missions && typeof rider.missions === 'object' && rider.missions[id] === false);
+}
+// Would questions be read out loud by themselves for this rider (src/math/skill.js readAloud, the switch left on "by
+// itself")? The rider panel shows the switch then (and whenever a grown-up has set it); the Grown-ups corner and the
+// pause menu always show it.
+export function readAloudLevel(rider) {
+  return !!rider && readsNow({ ...rider, readAloud: true });
+}
+// The read-aloud switch's three settings, in the order a tap steps through them: by itself, always, off.
+export const READ_MODES = [true, 'on', false];
+export function readMode(rider) { return rider && rider.readAloud === 'on' ? 'on' : rider && rider.readAloud === false ? false : true; }
+export function nextReadMode(rider) { const i = READ_MODES.indexOf(readMode(rider)); return READ_MODES[(i + 1) % READ_MODES.length]; }
+// The switch's words: 'By itself (on now)', 'Always on', 'Off'
+export function readModeWords(rider) {
+  const m = readMode(rider);
+  if (m === 'on') return 'Always on';
+  if (m === false) return 'Off';
+  return readsNow({ ...rider, readAloud: true }) ? 'By itself (on now)' : 'By itself (off now)';
+}
 
 // ---- jobs and belt buckles -----------------------------------------------------------------------------------
 // Each job a rider can do is counted in rider.stats.jobs: the work finished (a steer roped and sent to the corral, a
@@ -107,23 +150,25 @@ export const MISSIONS = [
 //     minutes, so tin (3) comes in a first sitting and copper (10) after a few; a first guess until it's been played.
 //   loot: a bundle of the gang's loot handed back (one sharing problem); a trip is 2 or 3 bundles and a ride out and
 //     back (three or four minutes), so tin (5) comes on the second trip; a first guess until it's been played.
-//   targets: a bottle or tin can shot down at the target range (Shooting mode only: mode 'shoot', so a lasso rider's card
-//     doesn't show it unless they have some); a string of five cards is ten to fifteen right targets in two or three
-//     minutes, so tin (15) comes with the first string or two and copper (60) after a few sittings; a first guess.
+//   targets: a bottle or tin can shot down at the bottle range (every rider's, since the lasso-or-shooting choice went);
+//     a string of five cards is ten to fifteen right targets in two or three minutes, so tin (15) comes with the first
+//     string or two and copper (60) after a few sittings; a first guess.
 //   bandits: a gang's wave on the wagon road has 3 to 5 bandits and takes a couple of minutes, so tin (3) comes with
 //     the first wave and copper (15) after four or five; still a first guess until it's been played for real.
 export const BUCKLES = ['tin', 'copper', 'silver', 'gold'];
 export const BUCKLE_NAMES = { tin: 'Tin', copper: 'Copper', silver: 'Silver', gold: 'Gold' };
+// `by`: the jobs on the title's list (MISSIONS) that do this work; with all of them turned off (and none done yet) the
+// buckle is left off the rider's card (buckleShown). No `by`: always on (the round-up, the lock boxes).
 export const JOBS = [
   { id: 'cattle', name: 'Cattle corralled', words: ['steer corralled', 'cattle corralled'], at: [10, 50, 200, 500], ready: true },
   { id: 'boxes', name: 'Lock boxes cracked', words: ['lock box cracked', 'lock boxes cracked'], at: [5, 25, 100, 250], ready: true },
-  { id: 'sheep', name: 'Sheep healed', words: ['sheep healed', 'sheep healed'], at: [5, 20, 75, 200], ready: true },
-  { id: 'orders', name: 'Orders filled', words: ['order filled', 'orders filled'], at: [10, 40, 150, 400], ready: true },
-  { id: 'pigs', name: 'Pigs penned', words: ['pig penned', 'pigs penned'], at: [10, 50, 200, 500], ready: true },
-  { id: 'bandits', name: 'Bandits brought in', words: ['bandit brought in', 'bandits brought in'], at: [3, 15, 50, 150], ready: true },
-  { id: 'deliveries', name: 'Deliveries made', words: ['delivery made', 'deliveries made'], at: [3, 10, 30, 100], ready: true },
-  { id: 'loot', name: 'Loot returned', words: ['bundle of loot returned', 'bundles of loot returned'], at: [5, 20, 60, 150], ready: true },
-  { id: 'targets', name: 'Targets hit', words: ['target hit', 'targets hit'], at: [15, 60, 250, 600], ready: true, mode: 'shoot' },
+  { id: 'sheep', name: 'Sheep healed', words: ['sheep healed', 'sheep healed'], at: [5, 20, 75, 200], ready: true, by: ['sheep'] },
+  { id: 'orders', name: 'Orders filled', words: ['order filled', 'orders filled'], at: [10, 40, 150, 400], ready: true, by: ['store'] },
+  { id: 'pigs', name: 'Pigs penned', words: ['pig penned', 'pigs penned'], at: [10, 50, 200, 500], ready: true, by: ['pigs'] },
+  { id: 'bandits', name: 'Bandits brought in', words: ['bandit brought in', 'bandits brought in'], at: [3, 15, 50, 150], ready: true, by: ['wagon', 'loot'] },
+  { id: 'deliveries', name: 'Deliveries made', words: ['delivery made', 'deliveries made'], at: [3, 10, 30, 100], ready: true, by: ['deliveries'] },
+  { id: 'loot', name: 'Loot returned', words: ['bundle of loot returned', 'bundles of loot returned'], at: [5, 20, 60, 150], ready: true, by: ['loot'] },
+  { id: 'targets', name: 'Targets hit', words: ['target hit', 'targets hit'], at: [15, 60, 250, 600], ready: true, by: ['range'] },
 ];
 
 // The keepsake each job puts in the rider's cabin (src/cabin/: slots.js has its spot, pieces.js its shape). `from` =
@@ -227,6 +272,15 @@ function whole(v) { return Math.max(0, Math.round(num(v))); }
 function obj(v) { return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; }
 function bits(list) { return (Array.isArray(list) ? list : []).map(b => (b ? 1 : 0)).slice(-RECENT); }
 function tally(t) { t = obj(t); return { answered: whole(t.answered), right: whole(t.right), recent: bits(t.recent) }; }
+// The lasso / bottle range split. A rider from before every job was on (missionsV under 2) kept the old Shooting
+// mode's answers under shoot: those were roping and everything else, not the bottle range (which the range alone
+// feeds now), so they are folded into lasso once.
+function modesFor(byMode, old) {
+  const lasso = tally(byMode.lasso), shoot = tally(byMode.shoot);
+  if (!old || !shoot.answered) return { lasso, shoot };
+  const recent = [...lasso.recent, ...shoot.recent].slice(-RECENT);
+  return { lasso: { answered: lasso.answered + shoot.answered, right: lasso.right + shoot.right, recent }, shoot: tally(null) };
+}
 
 // The job counts from a saved stats object, every one a whole number (a missing one is 0; jobs a newer build added
 // are kept). A save from before the counts existed gets credit for the work it already holds: every right answer
@@ -274,7 +328,7 @@ export function fixRider(r) {
     gold: whole(r.gold),
     bounty: whole(r.bounty),
     mode: r.mode === 'shoot' ? 'shoot' : 'lasso',
-    readAloud: r.readAloud !== false,
+    readAloud: r.readAloud === 'on' ? 'on' : r.readAloud !== false,
     topicsOn: {},
     topics: { ...obj(r.topics) },
     missions: {},
@@ -294,7 +348,7 @@ export function fixRider(r) {
     stats: {
       ...stats,
       ...tally(stats),
-      byMode: { ...byMode, lasso: tally(byMode.lasso), shoot: tally(byMode.shoot) },
+      byMode: { ...byMode, ...modesFor(byMode, r.missionsV !== 2) },
       boxes: whole(stats.boxes),
       parBoxes: whole(stats.parBoxes),
       jobs: jobsFor(stats),
@@ -308,10 +362,22 @@ export function fixRider(r) {
   out.topics.times = obj(out.topics.times);
   out.topics.algebra = obj(out.topics.algebra);
   for (const t of TOPICS) out.topicsOn[t.id] = t.id in topicsOn ? !!topicsOn[t.id] : (t.id === 'times' || t.id === 'algebra');
-  for (const m of MISSIONS) out.missions[m.id] = m.id in missions ? !!missions[m.id] : m.id === 'roundup';
-  // Keep any extra topic or mission flags a newer build added.
+  // Every job is on unless a grown-up turned it off. A rider from before (missions ticked one by one, most of them off
+  // by default) gets every job switched on once (missionsV 2), and keeps the grown-ups' choices from then on.
+  const allOn = r.missionsV !== 2;
+  for (const m of MISSIONS) out.missions[m.id] = allOn || !(m.id in missions) ? true : !!missions[m.id];
+  out.missionsV = 2;
+  // Keep any extra topic or mission flags a newer build added (or an old one left: 'roundup' is always on now).
   for (const k in topicsOn) if (!(k in out.topicsOn)) out.topicsOn[k] = !!topicsOn[k];
   for (const k in missions) if (!(k in out.missions)) out.missions[k] = !!missions[k];
+  // the optional age, the pinned goals and the completion items already announced (each only when the rider has it)
+  const age = Math.round(num(r.age, NaN));
+  out.age = age >= 3 && age <= 99 ? age : null;
+  if (r.goals !== undefined) out.goals = (Array.isArray(r.goals) ? r.goals : []).filter(g => g && typeof g === 'object' && typeof g.id === 'string');
+  if (r.done !== undefined) out.done = [...new Set((Array.isArray(r.done) ? r.done : []).filter(d => typeof d === 'string'))];
+  // the skill model (src/math/skill.js): filled in, and the first time read from the old topics' progress (the
+  // topics themselves are left as they are)
+  try { migrateSkill(out); } catch (e) { console.warn('Bandit Math: could not read the skill levels', e); out.skill = { v: 1, migrated: 1, strands: {} }; }
   return out;
 }
 
@@ -376,7 +442,7 @@ export function nextTitle(rider) {
   return null;
 }
 
-// How often the rider has been right lately.  mode = 'lasso' | 'shoot' | undefined (all answers).
+// How often the rider has been right lately.  mode = 'lasso' (every job but the bottle range) | 'shoot' (the range) | undefined (all answers).
 // -> { right, of, pct }  (pct is 0..100, or null before any answers)
 export function accuracyOf(rider, mode) {
   const st = rider && rider.stats ? rider.stats : {};
@@ -455,10 +521,17 @@ export function buckleOf(rider, id) {
   };
 }
 
+// Does a job's buckle belong on the rider's card? Yes for every job this build has, unless a grown-up turned off all
+// the jobs that do that work (and none of it is done yet: a buckle won stays in view).
+export function buckleShown(rider, id) {
+  const j = JOBS.find(x => x.id === id);
+  if (!j || !j.ready) return false;
+  return !j.by || j.by.some(m => jobOn(rider, m)) || jobCount(rider, id) > 0;
+}
+
 // The buckles for every job this build has, in the rider card's order.
 export function bucklesOf(rider) {
-  // (a job only one mode has, the target range's in Shooting mode, shows for a rider in that mode, or once they have some)
-  return JOBS.filter(j => j.ready && (!j.mode || (rider && rider.mode) === j.mode || jobCount(rider, j.id) > 0)).map(j => buckleOf(rider, j.id));
+  return JOBS.filter(j => buckleShown(rider, j.id)).map(j => buckleOf(rider, j.id));
 }
 
 // The progress line under a buckle: '37 / 50 to copper', or '512 · Gold buckle' at the top.
@@ -521,20 +594,30 @@ function pushTally(t, right) {
   if (t.recent.length > RECENT) t.recent.splice(0, t.recent.length - RECENT);
 }
 
-// Records one math answer (right = true/false) in the rider's all-time count, their last-50 list, and the list
-// for the mode they are riding in (lasso or shoot, which the two accuracy badges use). Saves.
-// -> { pct, badge }   pct = last-50 accuracy 0..100; badge = a badge earned by this very answer, or null
-export function recordAnswer(rider, right) {
+// Records one math answer (right = true/false) in the rider's all-time count, their last-50 list, and one of two
+// lists the accuracy badges use: the bottle range's answers (Sharpshooter) or every other job's (Top Hand). Saves.
+// skill (optional): the answer for the skill model too (src/math/skill.js record), every job's one call:
+//   recordAnswer(rider, right, { strands: [{ strand: 'mul', at }], sitDown, ms, size, hidden, idle, weight, range })
+//   strands: 'mul' | ['mul', 'words'] | [{ strand, at, weight }]; at = the point the question was made at (stepFor's
+//   at); sitDown, ms, size, hidden, idle: the answer's time (src/ui/answertimer.js), for sit-down questions only.
+//   range: true for an answer at the bottle range (it counts toward Sharpshooter, not Top Hand).
+// -> { pct, badge, skill }   pct = last-50 accuracy 0..100; badge = a badge earned by this very answer, or null;
+//    skill = record's result ({ mul: { level, moved, placed, justPlaced, fast, ... } }), or null without `skill`
+export function recordAnswer(rider, right, skill = null) {
   if (!rider.stats || typeof rider.stats !== 'object') rider.stats = fixRider(rider).stats;
   const st = rider.stats;
   pushTally(st, right);
   if (!st.byMode || typeof st.byMode !== 'object') st.byMode = {};
-  const mode = rider.mode === 'shoot' ? 'shoot' : 'lasso';
+  const mode = skill && skill.range ? 'shoot' : 'lasso';
   if (!st.byMode[mode]) st.byMode[mode] = tally(null);
   pushTally(st.byMode[mode], right);
+  let sk = null;
+  if (skill && skill.strands) {
+    try { sk = recordSkill(rider, skill.strands, { ...skill, right: !!right }); } catch (e) { console.warn('Bandit Math: could not record the skill answer', e); }
+  }
   const fresh = stampBadges(rider);
   saveRider(rider);
-  return { pct: accuracyOf(rider).pct, badge: fresh[0] || null };
+  return { pct: accuracyOf(rider).pct, badge: fresh[0] || null, skill: sk };
 }
 
 // Records a finished lock box. result = the lock-box panel's onDone result: { solved, stars, moves, par }.

@@ -31,7 +31,7 @@ test('the worked example works out: 6 hands x 3 meals x a fortnight = 252 cans, 
 
 test('every order: the numbers add up, one right coin a step, wrong coins never equal the answer or repeat', () => {
   for (const o of everyOrder()) {
-    assert.equal(o.total, o.hands * o.rate * o.days);
+    assert.equal(o.total, o.hands * o.rate * (o.noDays ? 1 : o.days));
     assert.equal(o.crates, Math.ceil(o.total / o.per));
     assert.ok(o.crates >= 2 && o.crates <= 30, `${o.crates} crates`);
     assert.equal(o.exact, o.total % o.per === 0);
@@ -104,4 +104,82 @@ test('peeking at the picture is free: paid the same, just not counted toward the
   const st = { step: 2, placing: false }, S = makeSupplies(st, { rand: seeded(5) });
   for (let n = 0; n < CLEAN_TO_CLIMB + 1; n++) { const o = S.next({}); o.parts.forEach((p, k) => S.answer(o, k, p.coins.findIndex((c) => c.good), { helped: true })); }
   assert.equal(st.step, 2);
+});
+
+// ---- on the strands (the adaptive game) -------------------------------------------------------------------------------
+import { GOODS } from '../src/math/supplies.js';
+import { STRAND } from '../src/math/strands.js';
+import { needsLong, longPoint, workMul, workDiv } from '../src/math/longwork.js';
+
+test('each part counts in its own strand; a part too big for the head carries the worked area, which works out to the part\'s answer', () => {
+  let longs = 0, leads = 0, finals = 0;
+  for (const o of everyOrder(40)) {
+    for (const p of o.parts) {
+      if (p.credit) assert.ok(STRAND[p.credit.strand] && p.credit.at >= 0 && p.credit.at <= 100, `${p.key}: ${JSON.stringify(p.credit)}`);
+      else assert.equal(p.word, 'dozen', 'only the dozen counts nowhere (it is just a word)');
+      if (p.key === 'vocab' && p.word !== 'dozen') assert.equal(p.credit.strand, 'time');
+      if (p.key === 'cost') assert.equal(p.credit.strand, 'money');
+      if (p.key === 'total') assert.ok(['mul', 'long'].includes(p.credit.strand));
+      if (p.key === 'crates') assert.ok(['div', 'long'].includes(p.credit.strand));
+      if (!p.long) { if (p.credit) assert.notEqual(p.credit.strand, 'long'); continue; }
+      longs++;
+      const L = p.long, [x, y] = L.op === 'mul' ? [L.a, L.b] : [L.n, L.d];
+      assert.ok(needsLong(L.op, x, y));
+      assert.equal(L.point, longPoint(L.op, x, y)); assert.equal(p.credit.strand, 'long'); assert.equal(p.credit.at, L.point);
+      assert.equal(L.setup.choices.filter((c) => c.good).length, 1, 'one right sum to work out');
+      const w = L.op === 'mul' ? workMul(x, y, L.lead ? { lead: L.lead } : {}) : workDiv(x, y);
+      if (L.op === 'mul') {
+        assert.equal(p.key, 'total');
+        assert.equal(w.answer, o.total, 'the worked sum is the total');
+        if (L.lead) { leads++; assert.equal(L.lead.a * L.lead.b * L.b, o.total); assert.equal(w.steps[0].kind, 'lead'); }
+      } else {
+        assert.equal(p.key, 'crates'); finals++;
+        assert.deepEqual(w.answer, { q: Math.floor(o.total / o.per), r: o.total % o.per });
+        assert.deepEqual(L.final.choices.map((c) => c.label), p.coins.map((c) => c.label), 'the word answer is the slip\'s own coins');
+      }
+    }
+  }
+  assert.ok(longs > 100 && leads > 20 && finals > 20, `${longs} long, ${leads} with one day first, ${finals} divisions`);
+});
+
+test('the strands choose the step: the order is made there and the ladder stays; the youngest get a small order', () => {
+  const S = makeSupplies({}, { rand: seeded(41) });
+  const before = S.state.step;
+  for (let i = 0; i < 8; i++) {
+    const o = S.next({ step: 5, camp: { id: 'cow', short: 'the cow camp' }, who: 'Dusty' });
+    assert.equal(o.step, 5); assert.ok(o.fixed);
+    o.parts.forEach((p, k) => S.answer(o, k, p.coins.findIndex((c) => (i % 2 ? c.good : !c.good))));
+  }
+  assert.equal(S.state.step, before, 'answers on fixed orders never move the old ladder');
+  for (let i = 0; i < 50; i++) {
+    const o = makeSupplyOrder({ rand: seeded(500 + i), step: 1, small: true });
+    assert.ok(o.hands <= 3 && o.total <= 12 && o.per <= 4 && o.exact, `${o.story}`);
+    assert.ok(o.parts.every((p) => !p.long && p.coins.length === 3));
+  }
+});
+
+test('longMost keeps the sums inside what the rider can do on paper (when the numbers allow)', () => {
+  for (const most of [36, 44, 50]) {
+    let over = 0;
+    for (let i = 0; i < 200; i++) {
+      const o = makeSupplyOrder({ rand: seeded(900 + i), step: 5, longMost: most });
+      if (o.parts.some((p) => p.long && p.long.point > most)) over++;
+    }
+    assert.ok(over <= 4, `longMost ${most}: ${over} of 200 over`);
+  }
+});
+
+test('more goods: bread, vegetables, matches for the lanterns and canteens (so many each, no days) join beans, coffee, oats and flour', () => {
+  const seen = new Set();
+  for (const o of everyOrder(30)) {
+    seen.add(o.goods);
+    if (o.goods === 'canteens') {
+      assert.ok(o.noDays && o.days === null && /canteens?/.test(o.story) && !/to last/.test(o.story), o.story);
+      assert.equal(o.total, o.hands * o.rate);
+      assert.ok(!o.parts.some((p) => p.key === 'vocab' && p.word !== 'dozen'), 'no time words for canteens');
+    }
+    if (o.goods === 'matches') assert.match(o.story, /lanterns?/);
+    assert.match(o.story, /(Beans|Oats|Vegetables|Matches|Canteens) come |(Coffee|Flour|Bread) comes /);
+  }
+  for (const g of Object.keys(GOODS)) assert.ok(seen.has(g), `${g} turns up`);
 });

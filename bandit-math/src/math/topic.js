@@ -1,4 +1,4 @@
-// The shape every herd math topic gives the game, so a mission can run any ticked topic the same way.
+// The shape every herd math topic gives the game, so a mission can run any topic the same way.
 //
 //   const T = makeTopic('times', rider.topics.times)   // the state object is filled in and changed in place
 //   T.topic, T.name                 'times', 'Times tables'
@@ -27,6 +27,8 @@
 // exactly one right target per card; answer(n, good, cardId) -> { right, card (the card to show now), waveDone, stale };
 // explain(card, n) -> { line, numberLine } and help(card), the picture (its `helper` says which drawing: 'count' is
 // src/ui/counthelp.js); T.payEvery: the steps per extra gold a steer.
+// T.steer(step, { placing }): the rider's skill model (src/math/skill.js, asked through src/math/asking.js) sets the
+// step from then on; the trainer's own climb and first-visit placement stop (see early.js).
 // Solving for x lives in the lock boxes (src/lockbox/) and has its own shape there.
 
 import { makeTimes } from './times.js';

@@ -18,7 +18,10 @@ const { line, num, xt, evalSide, F, solvedValue } = await import('../src/lockbox
 const S = await import('../src/save.js');
 const A = await import('../src/ui/album.js');
 
-const riderAt = (rung, o = {}) => ({ topicsOn: { algebra: true, ...(o.on || {}) }, topics: { algebra: { rung, levels: o.levels || {}, placing: !!o.placing } } });
+const K = await import('../src/math/skill.js');
+// a rider whose equations level (the skill model) sits on that rung of the lock box ladder, frac of the way to the next
+const riderAt = (rung, frac = 0, o = {}) => { const r = {}; K.setLevel(r, 'eq', K.pctAt('lockbox', rung, frac), o); return r; };
+const riderEq = (pct, o = {}) => { const r = {}; K.setLevel(r, 'eq', pct, o); return r; };
 const makesTrue = (shot, v) => evalSide(shot.start.L, F(v)).eq(evalSide(shot.start.R, F(v)));
 
 test('every rung of the ladder gives one equation with exactly one right tag', () => {
@@ -37,26 +40,39 @@ test('every rung of the ladder gives one equation with exactly one right tag', (
   }
 });
 
-test('the warm-up rungs and the vault are swapped for real one-answer rungs', () => {
-  assert.equal(M.rungFor(riderAt('R0a')).rung, 'R1');
+test('the warm-up rungs and the vault are swapped for real one-answer rungs, at their own points', () => {
+  // (at R0a's 10 the kindergarten boxes still fit too: either way a box with one x to find)
+  assert.ok(['R1', 'K3'].includes(M.rungFor(riderAt('R0a')).rung));
   assert.equal(M.rungFor(riderAt('R0b')).rung, 'R1');
   assert.equal(M.rungFor(riderAt('R15')).rung, 'R14');
   assert.equal(M.rungFor(riderAt('R7')).rung, 'R7');
-  // the kid's level on the rung sets the numbers' size, as the lock boxes do (the first climb plays at level 3)
-  assert.equal(M.rungFor(riderAt('R6', { levels: { R6: 2 } })).size, 1);
-  assert.equal(M.rungFor(riderAt('R6', { levels: { R6: 4 } })).size, 2);
-  assert.equal(M.rungFor(riderAt('R6', { placing: true })).size, 2);
+  // a swapped rung is asked, and recorded, at its own point: harder than the warm-up's, easier than the vault's
+  assert.equal(M.rungFor(riderAt('R0b')).at, K.pctAt('lockbox', 'R1'));
+  assert.equal(M.rungFor(riderAt('R15')).at, K.pctAt('lockbox', 'R14'));
+  // how far along the rung the level is sets the numbers' size, as the lock boxes' level does (2, then 3 and 4)
+  assert.equal(M.rungFor(riderAt('R6', 0)).size, 1);
+  assert.equal(M.rungFor(riderAt('R6', 0.7)).size, 2);
+  assert.equal(M.rungFor(riderAt('R6', 0.4)).size, 2);
+  // a level still being found asks at the baseline's point (the deer start it the first time)
+  const fresh = riderEq(56, { placed: false });
+  assert.equal(M.rungFor(fresh).rung, 'R6');
 });
 
-test('without "Solving for x" ticked the deer ask the simplest one-step equations', () => {
-  const rng = makeRng(3), seen = new Set();
-  for (let k = 0; k < 60; k++) seen.add(M.rungFor({ topicsOn: { times: false } }, rng).rung);
-  assert.deepEqual([...seen].sort(), ['R1', 'R2']);
-  const withTimes = new Set();
-  for (let k = 0; k < 60; k++) withTimes.add(M.rungFor({ topicsOn: { times: true } }, rng).rung);
-  assert.deepEqual([...withTimes].sort(), ['R1', 'R2', 'R3']);
-  // ticked but never played: the first rung
-  assert.equal(M.rungFor({ topicsOn: { algebra: true }, topics: { algebra: {} } }).rung, 'R1');
+test('the youngest riders get the kindergarten boxes ("2 plus what equals 4?"), the older ones the ladder', () => {
+  const rng = makeRng(3);
+  for (const [pct, want] of [[0, ['K1']], [5, ['K2']], [8, ['K3']], [25, ['R1']], [50, ['R5']], [90, ['R13']]]) {
+    for (let k = 0; k < 12; k++) {
+      const shot = M.makePhoto(riderEq(pct), { n: 4, rng });
+      assert.ok(want.includes(shot.rung), `eq ${pct}: ${shot.rung} ${shot.eq}`);
+      if (/^K/.test(shot.rung)) {
+        assert.match(shot.words, /^\d+ (plus|take away) what (equals|leaves) \d+\?$/, shot.words);
+        assert.ok(shot.say && shot.say.length > 5, 'read aloud from the clips');
+        assert.ok(shot.values.every((v) => v > 0 && v <= 20), `counting numbers on the tags: ${shot.values}`);
+      } else assert.equal(shot.words, null);
+    }
+  }
+  // a rider never seen before starts at the bottom (no age): the kindergarten boxes
+  assert.equal(M.rungFor({}).rung, 'K1');
 });
 
 test('rungs without negatives never put a negative or zero on a tag', () => {
@@ -101,7 +117,7 @@ test('a wrong deer gets the check a teacher would write', () => {
 test('equations are not dealt again straight away', () => {
   const rng = makeRng(21), recent = [];
   for (let k = 0; k < 8; k++) {
-    const shot = M.makePhoto({ topicsOn: {} }, { n: 4, rng, recent });
+    const shot = M.makePhoto(riderAt('R3'), { n: 4, rng, recent });
     assert.ok(!recent.includes(shot.key), `${shot.key} repeated`);
     recent.push(shot.key);
   }

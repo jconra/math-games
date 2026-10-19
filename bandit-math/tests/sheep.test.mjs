@@ -88,9 +88,34 @@ test('solving for x: early rungs only add and take away; a step done to one side
   assert.ok(two > 20, `two-step sums on the later rungs: ${two}`);
 });
 
-test('topics and levels from the rider', () => {
-  assert.deepEqual(flockTopics({ topicsOn: {} }), ['times']);
-  assert.deepEqual(flockTopics({ topicsOn: { negatives: true, algebra: true } }), ['negatives', 'algebra']);
+test('the flock fits the rider: the skill model chooses the kind of math and the step', async () => {
+  const { setLevel, pctAt, levelOf: skillLevel } = await import('../src/math/skill.js');
+  const { flockFor, flockStep } = await import('../src/missions/sheepmath.js');
+  // a young rider (never seen before, so every strand starts at 0): counting, adding and taking away
+  assert.deepEqual(flockTopics({}), ['counting', 'adding', 'taking']);
+  // an older one: times, dividing, positive & negative and solving for x, and no counting dots
+  const older = {};
+  for (const [s, v] of [['number', 80], ['add', 70], ['sub', 70], ['mul', 40], ['div', 40], ['eq', 56]]) setLevel(older, s, v);
+  const t = flockTopics(older);
+  for (const id of ['times', 'dividing', 'negatives', 'algebra']) assert.ok(t.includes(id), `${id} fits: ${t}`);
+  assert.ok(!t.includes('counting'), t);
+  // the next flock: one of those, at the rider's step there; the lock box's rung by its place in the ladder
+  const seen = new Set();
+  for (let k = 0; k < 40; k++) {
+    const f = flockFor(older, { rand: () => k / 40 });
+    seen.add(f.topic);
+    assert.ok(t.includes(f.topic), f.topic);
+    if (f.topic === 'algebra') { assert.equal(f.q.id, 'R6'); assert.equal(flockStep('algebra', f.q), RUNG_IDS.indexOf('R6') + 1); }
+    if (f.topic === 'times') assert.equal(flockStep('times', f.q), f.q.step);
+  }
+  assert.ok(seen.size >= 3, `the topics take turns: ${[...seen]}`);
+  // a strand met for the first time starts its baseline there (the flock's first bottles place it)
+  const fresh = {}; setLevel(fresh, 'mul', 30);
+  const f = flockFor(fresh, { rand: () => 0.99 });
+  assert.ok(f.q.at >= 0 && skillLevel(fresh, f.q.strand) >= 0);
+  assert.equal(flockStep('algebra', { id: 'K1' }), 1, 'a rung the sheep do not know: the first');
+  assert.equal(pctAt('lockbox', 'R6'), 56);
+  // an old rider's topic steps still read (makeFlock without a step)
   assert.equal(levelOf({}, 'times'), 1);
   assert.equal(levelOf({ topics: { negatives: { step: 99 } } }, 'negatives'), NEG_LADDER.length);
   assert.equal(levelOf({ topics: { algebra: { rung: 'R6' } } }, 'algebra'), RUNG_IDS.indexOf('R6') + 1);
@@ -126,4 +151,18 @@ test('every sum over a sheep: the slip and the bottles are the number after =, a
     }
     if (topic !== 'counting') assert.ok(sums > 100, `${topic}: sums were checked (${sums})`);
   }
+});
+
+test('a positive & negative sheep says its sign, so its bottle counts in Addition or Subtraction', () => {
+  const rand = seeded(41);
+  let plus = 0, minus = 0;
+  for (let step = 1; step <= NEG_LADDER.length; step++) for (let k = 0; k < 10; k++) {
+    for (const s of makeFlock({}, 'negatives', { rand, step }).sheep) {
+      assert.ok(s.op === '+' || s.op === '-', s.shown);
+      const [lhs] = s.fixed.split(' = ');
+      assert.equal(/ − /.test(lhs) ? '-' : '+', s.op, `${s.fixed}: its sign`);
+      if (s.op === '+') plus++; else minus++;
+    }
+  }
+  assert.ok(plus > 50 && minus > 50, `both signs come up: ${plus} + / ${minus} −`);
 });

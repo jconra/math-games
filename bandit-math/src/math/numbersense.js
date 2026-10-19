@@ -33,11 +33,21 @@
 //                                shots; helped: its number line came up by itself before it was cleared)
 //   N.newString()             a new string of cards begins (a step down can come once a string)
 //   N.level()                 -> { step, of, label, line }
+//   N.steer(step, { placing }) the rider's skill model (src/math/skill.js) sets the step (counted from 0) from then on:
+//                                the ladder's own climb, first-visit placement and steps down stop (finish moves
+//                                nothing); placing: the strand is still finding its level (no easier review cards)
 //   numText(n)                -> '−3', '450', '1,050' (the real minus sign)
+//   countCard(step, { rng, what, avoid })   -> a card for the youngest riders, from the counting ladder (src/math/
+//                                counting.js, step 1 to 8): kind 'pick', one right ("Shoot what comes after 7", "How
+//                                many dots?"), with the counting cards' own slips and lines. rightNow, isDone, whyNot,
+//                                tipFor and lineFor take it like the others; it carries say (the read-aloud line)
+//                                and pic (the counting card's own picture for src/ui/counthelp.js: the dots in a
+//                                ten-frame, or the hop on a number line)
 //
 // Nothing here touches the page, so the node tests load it as it is (tests/numbersense.test.mjs).
 
 import { makeRng } from '../lockbox/generate.js';
+import { LADDER as COUNT_LADDER, problem as countProblem, card as countCardOf, whyNot as countWhyNot, nudge as countNudge, key as countKey, picture as countPicture } from './counting.js';
 
 export const NS = {
   CLEAN_TO_CLIMB: 3,       // clean cards in a row (no wrong shot) to go up a step
@@ -272,6 +282,7 @@ const hundredsText = (v) => `${hundreds(v)} hundred${hundreds(v) === 1 ? '' : 's
 
 export function whyNot(card, i, gone = new Set()) {
   const v = card.targets[i].n, A = card.ask;
+  if (card.kind === 'pick') return (A.why && A.why[i]) || `Not ${t(v)}.`;
   if (card.kind === 'compare') {
     const vals = card.targets.map((x) => x.n), m = A.want === 'big' ? Math.max(...vals) : Math.min(...vals);
     if (A.want === 'big') {
@@ -322,6 +333,7 @@ export function estimateOf(a, op, b) {
 // a rule of thumb for the card (the number line's caption, and the "stuck" help)
 export function tipFor(card) {
   const A = card.ask;
+  if (card.kind === 'pick') return A.tip || 'Count carefully, one at a time.';
   if (card.kind === 'round') return `Halfway is ${t(A.ten - A.to / 2)} and ${t(A.ten + A.to / 2)}. Halfway rounds up.`;
   if (card.kind === 'estimate') {
     const ra = roundTo(A.a, 10), rb = A.op === '×' ? A.b : roundTo(A.b, 10), est = estimateOf(A.a, A.op, A.b);
@@ -370,6 +382,29 @@ export function lineFor(card, { pick = null, gone = new Set(), hint = false } = 
     dots, arrow: null, caption: tipFor(card) };
 }
 
+// ── THE YOUNGEST RIDERS' CARDS: counting, on the shelf ───────────────────────────────────────────────────────────
+// The counting ladder's cards (src/math/counting.js), made at its step and set on the shelf as a 'pick' card: one right
+// target, the others the counting cards' own slips, each with its one plain line. The rule says "Shoot" where the
+// round-up says "Rope". step: 1 to 8 (the counting ladder's own steps).
+export function countCard(step, { rng = makeRng(), what = 'can', avoid = null } = {}) {
+  const k = Math.max(1, Math.min(COUNT_LADDER.length, Math.round(step) || 1)), row = COUNT_LADDER[k - 1];
+  const rand = () => rng.next();
+  const ws = row.weights || {};
+  let sum = 0; for (const sh of row.shapes) sum += ws[sh] ?? 1;
+  let r = rand() * sum, shape = row.shapes[row.shapes.length - 1];
+  for (const sh of row.shapes) { r -= ws[sh] ?? 1; if (r < 0) { shape = sh; break; } }
+  const p = countProblem(shape, row, rand);
+  const c = countCardOf(p, { size: 4, rand, avoid });
+  const full = { ...c, parts: { ...p }, shape: p.shape };
+  const shoot = (x) => String(x || '').replace(/^Rope /, 'Shoot ').replace(/, rope that many$/, ', shoot that many').replace(/: rope what comes next$/, ': shoot what comes next');
+  const targets = c.targets.map((x) => ({ n: x.n, good: !!x.good, slip: x.trap || 'other' }));
+  return {
+    kind: 'pick', from: 'counting', rule: shoot(c.rule), sub: shoot(c.sub), what, targets, review: false, step: k, id: 'count' + k,
+    key: 'count:' + countKey(p), say: c.say || '', done: c.done || '', pic: countPicture(full),
+    ask: { text: c.text, answer: c.answer, tip: countNudge(full), why: c.targets.map((x) => (x.good ? '' : countWhyNot(full, x.n).line)) },
+  };
+}
+
 // ── THE LADDER ───────────────────────────────────────────────────────────────────────────────────────────────────
 export function makeNumberSense(state = {}) {
   const S = state;
@@ -382,7 +417,7 @@ export function makeNumberSense(state = {}) {
     S.cards++;
     S.what = S.what === 'can' ? 'bottle' : 'can';   // (cans and bottles in turn)
     let stepI = S.step, review = false;
-    if (S.placed && S.step >= 2 && S.cards % NS.REVIEW_EVERY === 0) {
+    if (S.placed && !(steered && steered.placing) && S.step >= 2 && S.cards % NS.REVIEW_EVERY === 0) {
       // an easier kind from lower down, for variety (not the kind this step deals, when there is another)
       const lower = STEPS.slice(0, S.step).map((s, i) => i).filter((i) => STEPS[i].kind !== STEPS[S.step].kind);
       if (lower.length) { stepI = rng.pick(lower); review = true; }
@@ -400,7 +435,7 @@ export function makeNumberSense(state = {}) {
   N.finish = (card, wrong = 0, { helped = false } = {}) => {
     const clean = wrong === 0 && !helped;
     let moved = 0;
-    if (card.review) return { clean, moved, step: S.step, placed: S.placed };
+    if (card.review || steered || card.kind === 'pick') return { clean, moved, step: S.step, placed: S.placed };
     // cleared with no wrong shot, but after the number line had shown where the numbers sit: well shot and paid, but
     // not a clean card, so it neither climbs nor counts as a slip (the clean run waits)
     if (helped && wrong === 0) return { clean, moved, step: S.step, placed: S.placed };
@@ -421,6 +456,14 @@ export function makeNumberSense(state = {}) {
   };
 
   N.newString = () => { S.down = false; };
+  // the rider's skill model picks the step from here on (see the notes at the top)
+  let steered = null;
+  N.steer = (step, { placing = false } = {}) => {
+    S.step = Math.max(0, Math.min(STEPS.length - 1, Math.round(step) || 0));
+    if (!steered) { S.placed = true; S.clean = 0; S.misses = 0; }
+    steered = { placing: !!placing };
+    return S.step;
+  };
   N.level = () => ({ step: S.step + 1, of: STEPS.length, label: STEPS[S.step].label, line: `Step ${S.step + 1} of ${STEPS.length}: ${STEPS[S.step].label}` });
   N.state = S;
   return N;

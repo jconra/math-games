@@ -17,12 +17,18 @@
 // stretch of road brings the next gang. Nothing to click. Riding well away from the wagon stops it (as "Let the wagon
 // wait" in the pause menu does); the wagon waits.
 //
-// The math is the times-table trainer the round-up uses (src/math/times.js, the same trainer and the kid's own step,
-// shared through `times`). Two separate dials, never raised together: the math step (the trainer's own climb), and the
-// wagon's speed (WAGONJOB.speeds): up a notch after a clean wave that didn't move the math, down after a rough one, and
-// back to a walk whenever a new table opens.
+// The math is the times-table trainer the round-up uses (src/math/times.js, the same trainer, shared through `times`),
+// at the rider's own level in multiplication (the skill model, src/math/skill.js, asked through src/math/asking.js
+// before each gang; every rope goes back to it: a travel job, no time). A rider who isn't up to the times tables yet
+// meets a gang of cards instead (WAGON_MAPS: counting, adding, taking away; the job's own card trainers, as the
+// round-up's): the card says what the bandit wears ("Rope what comes after 7"), one rider in the bunch wears it and
+// the townsfolk wear the slips; rope him and the next card's numbers go round the bunch. The help is the card's own
+// picture (src/ui/counthelp.js), and the card is read out loud while the rider's read-aloud is on. Two separate dials, never raised together: the
+// math (the rider's level), and the wagon's speed (WAGONJOB.speeds): up a notch after a clean wave that didn't move the
+// math, down after a rough one, and back to a walk whenever a new table opens.
 //
-//   const WJ = makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, audio, refresh, times, wagonLib, quiet })
+//   const WJ = makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, audio, refresh, times, wagonLib, quiet, read })
+//     read: src/audio/readaloud.js's (optional): the card gangs' cards are read out
 //     times(): the round-up's times trainer (RU.trainer('times')), so both jobs share one; left out, one is made here
 //     audio: src/audio/audio.js's (the action music plays while the job runs; see src/audio/actionmusic.js; the wagon
 //     rumbles, creaks and clops as the traffic's wagons do: src/audio/wagonsound.js)
@@ -50,7 +56,13 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeAnimal, gaitFor } from '../actors/animals.js';
 import { loadRiderKit, makeRider, makeCard, drawCard, RIDERS, TIE, tiePose } from '../actors/riders.js';
-import { makeTimes } from '../math/times.js';
+import { makeTimes, tablesAt } from '../math/times.js';
+import { askFor, steer, travel, chooseFor } from '../math/asking.js';
+import { makeTopic } from '../math/topic.js';
+import { readAloud } from '../math/skill.js';
+import { sayLine } from '../audio/sayline.js';
+import { showCountHelp } from '../ui/counthelp.js';
+import { showNumberLine, ensureNumberLineStyles, watchHesitation as watchLine } from '../ui/numberline.js';
 import { makeTargetRing } from '../targetring.js';
 import { offerChart, closeChart, chartOptions, watchHesitation as watchChart, ensureChartCss } from '../ui/timeschart.js';
 import { recordAnswer, earn, saveRider, countJob } from '../save.js';
@@ -110,6 +122,10 @@ export const WAGONJOB = {
   farOff: 180,            // m from the wagon past which the riders wait out of sight (not drawn, not moved)
   pay: { bandit: 3, wave: 6 },   // gold for each bandit roped (+ a little for harder tables, as the round-up), and a wave
 };
+
+// the skill model's makers a gang can be dealt from: the times tables (the gang wears a table's multiples), or, for a
+// rider not up to them yet, cards of counting, adding and taking away (one bandit a card)
+export const WAGON_MAPS = ['times', 'counting', 'adding', 'taking'];
 
 const rand = (a, b) => a + Math.random() * (b - a);
 
@@ -252,8 +268,15 @@ function ensureWagonCss() {
 .bmh-rule.is-gang .bmh-rule-main { font-size: 22px; white-space: nowrap; }
 .bmh-rule.is-gang .bmh-rule-sub { margin-top: 0; }
 .bmh-rule.is-gang .bmh-rule-btns { margin: 0 0 0 auto; flex: none; }
+/* (a card gang's card read aloud: its speaker at the row's right end, clear of the "Show me" button) */
+.bmh-rule.is-gang.has-say { padding-right: 50px; }
+.bmh-rule.is-gang .bmh-rule-say { top: 50%; transform: translateY(-50%); }
+@media (pointer: coarse) { .bmh-rule.is-gang.has-say { padding-right: 56px; } }
 @media (max-width: 480px) {
-  .bmh-rule.is-gang { gap: 8px; padding: 4px 6px 4px 10px; }
+  /* (on a narrow phone the line goes on a row of its own under the card's question and "Show me": with a long question,
+     "How many dots? ●●●●", it was squeezed into a column a word wide, and "Show me" was pushed under the speaker) */
+  .bmh-rule.is-gang { gap: 2px 8px; padding: 4px 6px 4px 10px; flex-wrap: wrap; }
+  .bmh-rule.is-gang .bmh-rule-sub { order: 3; flex: 1 0 100%; }
   .bmh-rule.is-gang .bmh-rule-main { font-size: 16px; }
   .bmh-rule.is-gang .bmh-rule-sub { font-size: 11.5px; line-height: 1.2; }
   .bmh-rule.is-gang .bmh-rule-btns button { font-size: 12px; padding: 3px 8px; }
@@ -299,10 +322,10 @@ function makeRail() {
   return { sprite: s, draw, dispose() { s.removeFromParent(); mat.dispose(); tex.dispose(); } };
 }
 
-export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, audio = null, refresh = () => {}, times = null, quiet = () => false, wagonLib = null }) {
+export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, audio = null, refresh = () => {}, times = null, quiet = () => false, wagonLib = null, read = null }) {
   const scene = W.scene, road = makeRoad(ROAD_POINTS);
   const R = makeTargetRing({ scene, camera, canvas, W });
-  ensureChartCss();
+  ensureChartCss(); ensureNumberLineStyles();
   const fontReady = (document.fonts && document.fonts.load) ? document.fonts.load('700 84px Bitter').catch(() => null) : Promise.resolve();
   const WJ = { near: false, on: false, away: false, targets: [], tookTrainer: false, music: null };
   const recs = WJ.targets, downs = [];
@@ -315,6 +338,12 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
   let ownT = null;
   const trainer = () => (times && times()) || ownT || (ownT = makeTimes(rider.topics.times || (rider.topics.times = {})));
   const dial = () => { rider.topics = rider.topics || {}; const d = rider.topics.wagon = rider.topics.wagon && typeof rider.topics.wagon === 'object' ? rider.topics.wagon : {}; d.speed = Math.max(0, Math.min(WAGONJOB.speeds.length - 1, d.speed | 0)); return d; };
+  // the card gangs' trainers: the job's own (their missed cards kept in rider.topics.wagon.cards), so a card wave here
+  // never closes the round-up's
+  const cardTrainers = {};
+  const cardTrainer = (id) => { if (cardTrainers[id]) return cardTrainers[id]; const d = dial(); d.cards = d.cards && typeof d.cards === 'object' ? d.cards : {}; return (cardTrainers[id] = makeTopic(id, d.cards[id] && typeof d.cards[id] === 'object' ? d.cards[id] : (d.cards[id] = {}))); };
+  let lastMap = null;
+  const canRead = (topic) => !!(read && readAloud(rider) && read.can(topic));
 
   const wagons = Promise.resolve((wagonLib && wagonLib()) || loadWagons({ animals, folk })).catch((e) => { console.warn('wagon job: no wagon models, a stand-in rolls instead', e); return null; });
   Promise.all([loadRiderKit({ animals }), wagons]).then(([k, lib]) => {
@@ -357,7 +386,7 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
     const i = recs.indexOf(rec); if (i >= 0) recs.splice(i, 1);
     rec.r.dispose();
   }
-  const ropeable = (rec) => (rec.state === 'ride' || rec.state === 'arrive') && rec.n != null && !!wave && !wave.done && rec.wave === wave;
+  const ropeable = (rec) => (rec.state === 'ride' || rec.state === 'arrive') && rec.n != null && !!wave && !wave.done && rec.wave === wave && (wave.kind !== 'card' || rec.cardId === wave.card.id);
   // riding free (not roped, not falling, not tied on the ground): these are the ones that ride on when a wave ends
   const free = (rec) => rec.r.mode === 'ride' && (rec.state === 'ride' || rec.state === 'arrive' || rec.state === 'tangled' || rec.state === 'away');
 
@@ -440,10 +469,15 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
     for (const rec of recs) if (free(rec)) { rec.state = 'leave'; setNumber(rec, null); }
     if (wave && !wave.done) bankCaught(wave);   // (a gang cut short: its roped bandits still count)
     waveN++;
-    const T = trainer(), before = T.level();
+    const map = chooseFor(rider, WAGON_MAPS, { last: lastMap }) || 'times';
+    lastMap = map;
+    if (map !== 'times') { newCardWave(map); return; }
+    const T = trainer(), q = askFor(rider, 'times');
+    steer(T, q);
+    const before = T.level();
     const w = T.wave({ count: WAGONJOB.riders });
     WJ.tookTrainer = true;
-    wave = { T, w, id: w.id, kind: w.kind, table: w.table, goods: w.targets.filter((t) => t.good).length, caught: 0, misses: 0,
+    wave = { T, w, q, id: w.id, kind: w.kind, table: w.table, goods: w.targets.filter((t) => t.good).length, caught: 0, misses: 0,
       stepBefore: before.step, tablesBefore: before.tables.length, down: [] };
     WJ.wave = wave;
     w.targets.forEach((t, i) => { const rec = addRider(t, { behind: WAGONJOB.spawnBehind + i * 4.5 }); rec.wave = wave; });
@@ -451,6 +485,31 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
     showCard();
     if (WJ.near) startHelp();
     if (music) music.action(true);
+  }
+  // a gang of cards: one bandit a card, the bunch wearing that card's answers (more ride in when there are too few)
+  function newCardWave(map) {
+    const T = cardTrainer(map), q = askFor(rider, map);
+    steer(T, q);
+    const w = T.wave({ count: 4, cards: 3 });
+    wave = { T, w, q, map, id: w.id, kind: 'card', card: w.card, cardNo: 1, cards: w.cards.length, goods: w.cards.length, caught: 0, misses: 0,
+      stepBefore: q.step, tablesBefore: 0, down: [] };
+    WJ.wave = wave;
+    dealCard(w.card);
+    if (canRead(map)) read.preload(w.cards.map((c) => c.say).filter(Boolean), { topic: map });
+    nextWaveT = -1;
+    showCard();
+    if (WJ.near) startHelp();
+    if (music) music.action(true);
+  }
+  function dealCard(card) {
+    const pool = recs.filter((x) => x.wave === wave && free(x));
+    card.targets.forEach((t, i) => {
+      let rec = pool.shift();
+      if (!rec) { rec = addRider(t, { behind: WAGONJOB.spawnBehind + i * 4.5 }); rec.wave = wave; }
+      else { if (rec.state === 'tangled') rec.state = 'ride'; rec.say = 0; setNumber(rec, t); }
+      rec.cardId = card.id;
+    });
+    for (const rec of pool) { setNumber(rec, null); rec.cardId = null; }
   }
   // the trainer's wave is still this job's (the round-up deals its own when the player goes back to the herd)
   const ownsTrainer = () => { const c = wave && wave.T.state && wave.T.state.cur; return !!(c && c.id === wave.id && !c.closed); };
@@ -468,18 +527,35 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
     if (state !== 'on') { hud.rule({ main: 'Protect the wagon', sub: state === 'stopped' ? 'The wagon waits here. Ride along with the driver when you\'re ready' : 'Ride up to the wagon to set off' }); return; }
     if (!wave) { hud.rule({ main: 'Protect the wagon', sub: 'Keep alongside. The gang rides in soon…' }); return; }
     if (wave.done) { hud.rule({ main: 'The wagon rolls on safe!', sub: 'More road ahead…' }); return; }
+    const finding = wave.q && wave.q.placing ? ' · finding your level' : '';
+    if (wave.kind === 'card') {
+      const c = wave.card, readable = !!(c.say && canRead(wave.map));
+      hud.rule({ kind: 'gang', main: c.rule || `${c.text} = ?`, sub: `${c.sub || 'Rope the answer'} · bandit ${wave.cardNo} of ${wave.cards}${finding}`,
+        buttons: [{ label: 'Show me', onClick: () => showLine(wave.T.help(c)) }], speak: readable ? () => read.say(c.say, { topic: wave.map }) : null });
+      if (readable && readFor !== c.id) { readFor = c.id; read.say(c.say, { topic: wave.map }); }
+      return;
+    }
     const left = wave.goods - wave.caught;
     if (wave.kind === 'missing') hud.rule({ kind: 'gang', main: wave.w.rule, sub: 'Rope the rider wearing the missing number' });
     else hud.rule({ kind: 'gang', main: `The ${wave.table}-Gang`, sub: `Every bandit wears a multiple of ${wave.table} · ${wave.caught ? `${wave.caught} roped · ${left} to go` : `${left} to rope`}` });
   }
 
-  // ── HELP WHEN STUCK: the times chart's Peek (as in the round-up) ───────────────────────────────────────────────
+  // ── HELP WHEN STUCK: the times chart's Peek (as in the round-up); a card gang's own picture ─────────────────────
+  let nl = null, readFor = null;
   function startHelp() {
     if (!wave || wave.done || WJ.paused || hes) return;
-    hes = watchChart({ after: WAGONJOB.helpAfter, onShow: () => chartHelp() });
+    if (wave.kind === 'card') hes = watchLine({ after: WAGONJOB.helpAfter, onShow: () => { if (wave && wave.card) showLine(wave.T.help(wave.card)); } });
+    else hes = watchChart({ after: WAGONJOB.helpAfter, onShow: () => chartHelp() });
   }
+  // a card's picture (ten-frames, or a number line with hops: src/ui/counthelp.js), under the job card
+  function showLine(opts) {
+    if (!opts) return;
+    if (nl) nl.remove();
+    nl = opts.helper === 'count' ? showCountHelp(hud.helpEl, opts) : showNumberLine(hud.helpEl, { ...opts, theme: 'dark' });
+  }
+  function hideLine() { if (nl) { nl.remove(); nl = null; } }
   function chartHelp(missed) {
-    if (!wave) return;
+    if (!wave || wave.kind === 'card') return;
     const o = { ...chartOptions(wave.w, missed), anchor: hud.jobEl, avoid: hud.hintEl, side: 'right' };
     if (offer) offer.update(o); else offer = offerChart(document.body, o);
     placeOffer();
@@ -489,6 +565,7 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
     if (hes) { hes.cancel(); hes = null; }
     closeChart();
     if (offer) { offer.remove(); offer = null; }
+    hideLine();
   }
   let offerT = 0;
   function placeOffer() {
@@ -530,8 +607,9 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
     if (!ownsTrainer()) { rec.state = 'ride'; curTarget = null; setTimeout(() => P.cancelLasso(), 0); return; }   // (the rope just reels in)
     closeChart();
     if (hes) hes.answered();
+    if (w.kind === 'card') { landedCard(rec, w, good); return; }
     const T = w.T, r = T.answer(rec.n, good), right = r.right;
-    const ra = recordAnswer(rider, right);
+    const ra = recordAnswer(rider, right, travel(w.q, { step: w.w.hard || w.q.step }));   // (a warm-up gang sits lower: its own point)
     if (ra && ra.badge) hud.toast(`You earned the ${ra.badge} badge!`, 'gold');
     if (right) {
       rec.state = 'caught'; w.caught++; rec.label.visible = false;
@@ -542,7 +620,6 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
       hint(null); hideRail();   // (the last miss's line and rail go: this catch is the news now)
       hud.toast(`Roped the ${rec.text}! ${rec.fact}`, 'good');
       if (e.newTitle) setTimeout(() => hud.toast(`You're a ${e.newTitle} now!`, 'gold'), 1600);
-      if (r.moved > 0) setTimeout(() => hud.toast('Up a step!', 'good'), 900);
       hob.event('banditCatch', { at: () => ({ x: rec.r.x, z: rec.r.z }), male: /_m$/.test((rec.r.look && rec.r.look.outfit) || '') });   // (who he is and where: his "you got me", shouts.js)
       if (music) music.hit();
       refresh();
@@ -570,6 +647,52 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
     showCard();
   }
 
+  // a card gang's rope: the card's answer (only the first try at a card goes to the skill model, as the round-up's)
+  function landedCard(rec, w, good) {
+    const T = w.T, card = w.card, picked = rec.n;
+    const r = T.answer(picked, good, rec.cardId);
+    if (r.stale) { rec.state = 'ride'; return; }
+    const ra = recordAnswer(rider, r.right, r.first && !r.helped ? travel(w.q, { card }) : null);
+    if (ra && ra.badge) hud.toast(`You earned the ${ra.badge} badge!`, 'gold');
+    if (!r.waveDone) { w.q = askFor(rider, w.map); steer(T, w.q); }   // (the cards still to come at the model's new step)
+    if (r.right) {
+      rec.state = 'caught'; w.caught++; rec.label.visible = false;
+      const pay = WAGONJOB.pay.bandit + Math.floor(((card.rung || 1) - 1) / (T.payEvery || PAY.hardEvery));
+      const e = earn(rider, pay);
+      rec.fact = card.done || `${card.text} = ${rec.text}`;
+      hint(null); hideLine();
+      hud.toast(`Roped the ${rec.text}! ${rec.fact}`, 'good');
+      if (e.newTitle) setTimeout(() => hud.toast(`You're a ${e.newTitle} now!`, 'gold'), 1600);
+      hob.event('banditCatch', { at: () => ({ x: rec.r.x, z: rec.r.z }), male: /_m$/.test((rec.r.look && rec.r.look.outfit) || '') });
+      if (music) music.hit();
+      if (canRead(w.map)) read.react('right', { topic: w.map });
+      refresh();
+    } else {
+      w.misses++;
+      rec.state = 'tangled';
+      rec.r.tipHat();
+      rec.n = null; rec.cardId = null;   // (his number is put away: the card's answer is still out there)
+      rec.say = 2.6; drawCard(rec.label, 'Not me, partner', { font: '700 40px Bitter, Georgia, serif' });
+      // (the reason is written once, under the picture: it is the picture's own caption; without one, the line says it)
+      const ex = T.explain(card, picked);
+      hint({ say: 'Not me, partner', line: ex && ex.numberLine && ex.numberLine.reason ? '' : (ex ? ex.line : '') });
+      // (a rider who can't read yet hears the reason, in the browser's voice)
+      if (ex && readAloud(rider)) sayLine((ex.numberLine && ex.numberLine.reason) || ex.line, { now: true, after: 900 });
+      if (ex) showLine(ex.numberLine);
+      hintT = WAGONJOB.hintFor;
+      if (canRead(w.map)) read.react(card.shape === 'dots' ? 'recount' : 'wrong', { topic: w.map });
+      hob.event('banditMiss', { card: true, at: () => ({ x: rec.r.x, z: rec.r.z }), male: /_m$/.test((rec.r.look && rec.r.look.outfit) || '') });
+      refresh();
+    }
+    const next = r.waveDone ? null : T.card();
+    if (!next) waveDone();
+    else if (next.id !== card.id) {
+      w.card = next; w.cardNo++;
+      if (w.cardNo > w.cards) w.cards = w.cardNo;
+      setTimeout(() => { if (wave === w && !w.done) { dealCard(next); showCard(); if (hes) hes.restart(); } }, 900);
+    } else if (hes) hes.restart();
+    showCard();
+  }
   // the bandit is down and tied: his sacks by him, and the fact over him for a few seconds
   function downed(rec, w) {
     rec.state = 'down';
@@ -916,7 +1039,8 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
     const w = wave; if (!w || w.done) return;
     w.done = true;
     endHelp(); hint(null); hideRail();
-    const T = w.T, lv = T.level();
+    // (the math's move this wave: the rider's level now, as the next gang will be dealt)
+    const q2 = askFor(rider, w.map || 'times'), lv = { step: q2.step, tables: w.kind === 'card' ? [] : tablesAt(q2.step) };
     // the bandits are brought in (each roped one walks himself to the sheriff's office: see OFF TO THE SHERIFF)
     bankCaught(w, 2600);
     rider.lockboxes = rider.lockboxes || [];
@@ -1241,8 +1365,9 @@ export function makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hu
   WJ.state = () => ({
     state, on: WJ.on, near: WJ.near, loaded: !!kit, s: +s.toFixed(1), speed: +v.toFixed(2), notch: dial().speed,
     wagon: wagon ? { x: +wagon.pos.x.toFixed(1), z: +wagon.pos.z.toFixed(1), real: !wagon.root } : null,
-    wave: wave && { n: waveN, table: wave.table, kind: wave.kind, rule: wave.kind === 'missing' ? wave.w.rule : `The ${wave.table}-Gang`, goods: wave.goods, caught: wave.caught, misses: wave.misses, done: !!wave.done },
-    riders: recs.map((x) => ({ n: x.n, good: x.good, state: x.state, mode: x.r.mode, x: +x.r.x.toFixed(1), z: +x.r.z.toFixed(1), speed: +x.r.speed.toFixed(2), clip: x.r.horse.clip, label: x.label.visible })),
+    wave: wave && { n: waveN, table: wave.table, kind: wave.kind, map: wave.map || 'times', at: wave.q ? wave.q.at : null,
+      rule: wave.kind === 'card' ? wave.card && wave.card.rule : wave.kind === 'missing' ? wave.w.rule : `The ${wave.table}-Gang`, goods: wave.goods, caught: wave.caught, misses: wave.misses, done: !!wave.done },
+    riders: recs.map((x) => ({ n: x.n, good: x.good, card: x.cardId || null, state: x.state, mode: x.r.mode, x: +x.r.x.toFixed(1), z: +x.r.z.toFixed(1), speed: +x.r.speed.toFixed(2), clip: x.r.horse.clip, label: x.label.visible })),
     downs: downs.length, sacks: downs.map((d) => ({ k: d.bags.length, got: d.got, per: d.per, x: +d.at.x.toFixed(1), z: +d.at.z.toFixed(1), at: d.bags.filter((b) => !b.st).map((b) => ({ x: +b.x.toFixed(2), z: +b.z.toFixed(2) })) })), walkers: walkers.map((k) => ({ phase: k.phase, x: +k.x.toFixed(1), z: +k.z.toFixed(1), fade: +k.fade.toFixed(2), path: k.path ? k.path.length : 0 })),
     music: music ? music.state() : null, rail: railT > 0, sound: rumble ? rumble.state() : null,
   });

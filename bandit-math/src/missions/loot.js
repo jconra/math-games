@@ -11,7 +11,8 @@
 // to the sheriff's office, where the folks it was taken from come out to wait; as you ride in one of them sees his
 // goods ("Is that my stuff?", the game maker's own recording, src/audio/shouts.js). Pulling up in front of them brings up the
 // store's parchment slip (src/ui/storeslip.js) with the first bundle's sharing problem (src/math/shares.js): fair
-// shares and leftovers, its own kind of problem. Pick a coin. A wrong coin shakes, one plain line says what that slip
+// shares and leftovers, its own kind of problem, at the rider's own level in division (the skill model; read out loud,
+// with "Read it to me" on the slip, for a rider who can't read yet). Pick a coin. A wrong coin shakes, one plain line says what that slip
 // was, and the slip draws the sharing (dealt out round and round, the trips and boxes, the parts): never the answer.
 // A right coin: each family's one steps up and takes their share, someone says thank you (the men in the game maker's
 // recorded voice; the women in a speech card only), gold from the deputy flies into the purse, and the next bundle's
@@ -44,8 +45,18 @@ import { loadRiderKit, makeRider } from '../actors/riders.js';
 import { makeTargetRing } from '../targetring.js';
 import { crateParts } from '../camps.js';
 import { makeShares, picture, FAMILIES, MATRON } from '../math/shares.js';
-import { makeStoreSlip } from '../ui/storeslip.js';
+import { makeStoreSlip, speakLine } from '../ui/storeslip.js';
 import { earn, recordAnswer, countJob, saveRider } from '../save.js';
+import { askFor, atFor, lightly as lightOf, newBest } from '../math/asking.js';
+import { pctAt, readAloud } from '../math/skill.js';
+import { answerTimer } from '../ui/answertimer.js';
+
+// THE SKILL MODEL'S PART (src/math/skill.js): each share's first pick counts in Division at the share's own point (the
+// ladder's step is the rider's level there: asked before each trip and after each answer), and in Word problems at
+// half weight at the story's point on that scale; the shares by a rule count in Ratios too, at half weight. A sit-down
+// slip: its time counts (src/ui/answertimer.js). A right pick after the picture was asked for says nothing new.
+export const LOOT_WORDS = { even: 26, rem: 40, leftover: 55, rule: 48, rule3: 55 };   // words points by kind (strands.js)
+export const LOOT_RATIO = { rule: 65, rule3: 65 };                                      // ratio points for the rule kinds
 
 // The gang's hideouts, taken in turn (picked from a survey of the land: ~/pw/bandit-math/rigs/loot/survey.cjs: dry,
 // gentle ground at a woods edge where it can, well clear of the town, the farm, the pasture, the camps, the deer, the
@@ -363,12 +374,13 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
     const first = !(S.trips > 0);
     const n = first ? LOOT.bundles[0] : LOOT.bundles[1];
     const problems = [];
+    const q = askFor(rider, 'shares'); Q.setStep(q.step);   // (the rider's level in division: the ladder's step for this trip)
     for (let i = 0; i < n; i++) problems.push(Q.next({ among: fams }));
     // who comes to the office: everyone a bundle goes back to, and the orphans' home's matron when there's a leftover for it
     const names = new Set(); for (const p of problems) for (const h of p.hand) names.add(h.family.name);
     const families = FAMILIES.filter((f) => names.has(f.name));
     if (problems.some((p) => p.orphans > 0)) families.push(MATRON);
-    trip = { problems, at: 0, families, clean: true, stuffSaid: false };
+    trip = { problems, at: 0, families, clean: true, stuffSaid: false, q };
     saveRider(rider);
   }
 
@@ -448,13 +460,19 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
   const U = makeStoreSlip(document.body, { onPick: (i) => pick(i), onDone: () => stopShare(), onDraw: () => draw() });
   let missed = false, helped = false, thinkT = 0, away = true, earned = 0;
   const from = () => U.el.querySelector('.bmo-from small'), foot = () => U.el.querySelector('.bmo-filled');
+  let timer = null;
   function showProblem() {
     const p = trip.problems[trip.at];
     missed = false; helped = false; thinkT = 0;
+    if (timer) timer.cancel();
+    timer = answerTimer();
     // (the slip's header: the family, the two, or how many)
     const who = p.owners.length === 1 ? p.owners[0].name : p.owners.length === 2 ? `${p.owners[0].short} & ${p.owners[1].short}` : `${p.owners.length} families`;
     U.purse(rider.gold);
-    U.show({ who: { name: who }, story: p.story, ask: p.ask, coins: p.coins, equation: null }, { filled: 0 });
+    // (a rider who can't read yet, skill.js readAloud: "Read it to me" on the slip, and the story read out as it comes)
+    const young = readAloud(rider), slip = { who: { name: who }, story: p.story, ask: p.ask, coins: p.coins, equation: null, read: `${p.story} ${p.ask}` };
+    U.show(slip, { filled: 0, read: young });
+    if (young) setTimeout(() => { if (LJ.active && trip && trip.problems[trip.at] === p && !U.busy) speakLine(slip.read); }, 500);
     const f = from(); if (f) f.textContent = 'Taken from';
     const ft = foot(); if (ft) ft.textContent = `Bundle ${trip.at + 1} of ${trip.problems.length}`;
   }
@@ -469,16 +487,28 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
   function stopShare({ walked = false } = {}) {
     if (!LJ.active) return;
     LJ.active = false; U.hide();
+    if (timer) { timer.cancel(); timer = null; }
     if (walked) hud.toast('The folks will wait for you');
   }
   async function pick(i) {
     if (!LJ.active || !trip || U.busy) return;
     const p = trip.problems[trip.at], c = p.coins[i]; if (!c) return;
     const res = Q.answer(p, c, { helped });
-    if (res.first) { const rec = recordAnswer(rider, c.good); if (rec && rec.badge) hud.toast(`You earned the ${rec.badge} badge!`, 'gold'); }
+    let moved = 0;
+    if (res.first) {
+      const t = timer ? timer.stop() : {}; timer = null;
+      const sk = helped && c.good ? null : skillPart(p, t);
+      const rec = recordAnswer(rider, c.good, sk); if (rec && rec.badge) hud.toast(`You earned the ${rec.badge} badge!`, 'gold');
+      // the model's level now: the bundles still to come are dealt again at a new step (from the same folks)
+      const q = askFor(rider, 'shares');
+      moved = Math.sign(q.step - trip.q.step); trip.q = q;
+      Q.setStep(q.step);   // (the ladder's own climb is overruled: the model's level decides)
+      if (moved) redealRest(trip.at + 1);   // (the share on show stays as it is)
+      const best = newBest(rider, q);
+      if (moved > 0 && !best) moved = 0;   // ("Up a step!" once the level is found, past the best step yet)
+    }
     if (!c.good) {
       missed = true; trip.clean = false;
-      if (res.first && res.moved) redealRest(trip.at + 1);
       U.wrong(i, { why: c.why, pic: picture(p.pic) });
       if (hob) hob.event('lootMiss');
       saveRider(rider);
@@ -493,9 +523,8 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
     if (hob) hob.event('lootRight');   // (his "pick again" from the last coin is done with)
     handOver(p);
     trip.at++;
-    if (res.first && res.moved) redealRest(trip.at);
     showBundles(trip.problems.length - trip.at);
-    if (res.moved > 0) setTimeout(() => hud.toast('Up a step!', 'good'), 900);
+    if (moved > 0) setTimeout(() => hud.toast('Up a step!', 'good'), 900);
     const news = e && e.newTitle ? [`You're a ${e.newTitle} now!`] : [];
     await U.right(i, { line: p.rightWhy, gold, from: before, to: rider.gold, note: missed ? '' : 'right first time', news, paid: `+${gold} gold from the deputy` });
     if (!LJ.active) { if (trip.at >= trip.problems.length) finishTrip(); return; }
@@ -504,6 +533,22 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
     if (trip.at >= trip.problems.length) finishTrip(); else showProblem();
   }
   function draw() { if (!LJ.active || !trip || U.busy) return; helped = true; U.drawn(picture(trip.problems[trip.at].pic)); }
+  // the share's answer for the skill model (see LOOT_WORDS at the top)
+  function skillPart(p, t) {
+    // (the point the story really sits at: the rider's pick, but never under the step's own point; a young rider's
+    // division, still under the first step's 22, is not asked about at 3)
+    // A story far above where the strand's questions are asked now (more than NEAR above the level, or above the point a
+    // baseline is trying: the sharing stories start at 22, well above a kindergartner) is a stretch that says little:
+    // it counts lightly there (0.25), so lucky guesses at it don't move a level, and a placed one hardly (simulated
+    // guessers: Division stays where it was, instead of climbing to ~11; rigs/adaptive/integrate/lootyoung.mjs). A story
+    // AT the point being tried counts in full, so a Division baseline still climbs on loot alone (asking.js lightly)
+    const lightly = (strand, pt, w) => lightOf(rider, strand, pt, w);
+    const q = trip.q, at = q && p.step === q.step ? atFor(q, p.step, 'div') : pctAt('shares', p.step);
+    const strands = [{ strand: 'div', at, weight: lightly('div', at, 1) }];
+    if (LOOT_WORDS[p.kind] != null) strands.push({ strand: 'words', at: LOOT_WORDS[p.kind], weight: lightly('words', LOOT_WORDS[p.kind], 0.5) });
+    if (LOOT_RATIO[p.kind] != null) strands.push({ strand: 'ratio', at: LOOT_RATIO[p.kind], weight: lightly('ratio', LOOT_RATIO[p.kind], 0.5) });
+    return { strands, sitDown: true, size: 1, ...(t || {}) };
+  }
   // When an answer moves the ladder, the bundles still to come are dealt again at the new step, from the same folks
   // waiting at the office, so every answer on a trip counts (not just the first). One that can't be made from them stays.
   function redealRest(from) {

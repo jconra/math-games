@@ -11,6 +11,7 @@ import * as Ad from '../src/math/adding.js';
 import * as Tk from '../src/math/taking.js';
 import { makeTopic, hasTopic, HERD_TOPICS } from '../src/math/topic.js';
 import { flockTopics, levelOf, makeFlock } from '../src/missions/sheepmath.js';
+import { setLevel } from '../src/math/skill.js';
 import { TOPICS } from '../src/save.js';
 import { layoutCountHelp } from '../src/ui/counthelp.js';
 
@@ -425,10 +426,13 @@ test('the topics plug into the herd, the sheep and the title', () => {
     const lv = T.level();
     assert.match(lv.line, /^Step 1 of 8: .+, still finding the starting step$/);
     assert.ok(TOPICS.find((x) => x.id === id).ready, `${id} is tickable on the title`);
-    assert.deepEqual(flockTopics({ topicsOn: { [id]: true } }), [id], `${id} alone runs the sheep`);
     assert.equal(levelOf({ topics: { [id]: { step: 99 } } }, id), 8);
   }
-  assert.deepEqual(flockTopics({ topicsOn: { counting: true, times: true } }), ['counting', 'times']);
+  // the sheep deal the early topics to a young rider (the skill model: a rider never seen before starts at 0), and not
+  // to an older one
+  assert.deepEqual(flockTopics({}), ['counting', 'adding', 'taking']);
+  const older = {}; for (const [s, v] of [['number', 80], ['add', 70], ['sub', 70], ['mul', 40], ['div', 40], ['eq', 50]]) setLevel(older, s, v);
+  for (const id of ['counting', 'adding', 'taking']) assert.ok(!flockTopics(older).includes(id), `${id}: not for a rider well past it`);
 });
 
 test('sick sheep: one real slip in a sick sum, a right sum on a healthy one, bottles that never give it away', () => {

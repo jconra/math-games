@@ -7,9 +7,12 @@
 // There is no game over and no timer.
 //
 // The math comes from the topic trainers (src/math/times.js, src/math/negatives.js, and the others in src/math/topic.js
-// such as dividing): they deal the numbers, judge the answers and climb or ease off. Topics take turns wave by wave when
-// more than one is ticked, never mid-wave. A card topic (positive & negative, dividing: the trainer's mode is 'cards')
-// deals one card at a time, each with its own small herd of answers. When the kid is stuck (8 s without a pick) or right
+// such as dividing): they deal the numbers, judge the answers and explain the slips. HOW HARD is the rider's own skill
+// model (src/math/skill.js, asked through src/math/asking.js): each wave goes to the maker that fits the rider now
+// (counting and adding for a young rider, times tables, dividing and positive & negative for an older one; makers take
+// turns, never mid-wave), at the rider's level in that kind of math, and every answer goes back to it (a travel job:
+// no time). A card topic (counting, adding, taking away, dividing, positive & negative: the trainer's mode is 'cards')
+// deals one card at a time, each with its own small herd of answers, and asks the model again after each card. When the kid is stuck (8 s without a pick) or right
 // after a miss, help appears: the times chart's "Peek" button, the number line for positive & negative cards (with a
 // "Show me" on the card), or the card topic's own picture (its `helper`: rows of dots for dividing, src/ui/groups.js, or
 // the times chart's "Peek" for the big division facts; ten-frames and a number line with hops for counting, adding and
@@ -25,7 +28,7 @@
 //   RU.paused = true     a panel is open: help is put away, the ring hidden (the game stops calling update meanwhile)
 //   RU.targets           the herd (steer records: { n, text, good, state, a (the animal), root, label })
 //   RU.throwAt(steer)    rope this one (as a click on it does)
-//   RU.newWave()         deal a new wave now (dev)
+//   RU.newWave(topic)    deal a new wave now (dev; topic: that maker's, 'times' say, else the one that fits the rider)
 //   RU.near              true while the player is at the herd
 //   RU.wave              the wave showing: { topic, rule, sub, goods, caught }
 //   RU.ring              the target ring (src/targetring.js)
@@ -34,7 +37,10 @@ import * as THREE from 'three';
 import { makeAnimal, COATS } from '../actors/animals.js';
 import { makeTimes } from '../math/times.js';
 import { makeNegatives } from '../math/negatives.js';
-import { makeTopic, hasTopic, HERD_TOPICS } from '../math/topic.js';
+import { makeTopic, hasTopic } from '../math/topic.js';
+import { HERD_MAPS, chooseFor, askFor, steer, travel, newBest } from '../math/asking.js';
+import { readAloud, record } from '../math/skill.js';
+import { sayLine } from '../audio/sayline.js';
 import { showGroups } from '../ui/groups.js';
 import { showCountHelp } from '../ui/counthelp.js';
 import { makeTargetRing } from '../targetring.js';
@@ -46,6 +52,8 @@ import { TIER_NAME } from '../lockbox/index.js';
 
 export const ROUNDUP = {
   herd: 11,              // cattle in a times-table wave (the trainer deals this many numbers: 10 to 12)
+  herdRight: 0.8,        // while a level is being found, a herd wave counts as ONE answer: right when this share of its
+                         // picks were (each rope still counts as practice, lightly: see landed)
   cardSize: 5,           // answers on a positive & negative card
   bulls: 0.25,           // this share of the herd are bulls
   spread: 0.82,          // the herd grazes within this share of the pasture's radius
@@ -111,13 +119,9 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
     else topics[id] = makeTimes(rider.topics.times || (rider.topics.times = {}));
     return topics[id];
   }
-  // which topics run the herd: the ticked herd topics, taking turns wave by wave (times tables if none is ticked:
-  // Solving for x lives in the lock boxes)
-  const herdTopics = () => {
-    const on = rider.topicsOn || {};
-    const list = ['times', ...HERD_TOPICS.filter((t) => t !== 'times'), 'negatives'].filter((t) => on[t]);
-    return list.length ? list : ['times'];
-  };
+  // which maker runs the next wave: the one that fits the rider now (src/math/asking.js); a maker's map id is its topic id
+  let lastMap = null;
+  const lastStep = {};   // (each maker's step at its last wave or card: "Up a step!" when the material moves up)
 
   const herd = [];               // every steer out here: in the pasture, led, running to the corral, or penned
   const RU = { targets: herd, ring: R, near: false, wave: null };
@@ -299,20 +303,24 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
     return !!(c && !c.closed && !mine.has(c.id));
   }
   // ── THE WAVE ───────────────────────────────────────────────────────────────────────────────────────────────────
-  function newWave() {
+  function newWave(want = null) {
     endHelp();
     waveN++;
-    const list = herdTopics(), topic = list[(waveN - 1) % list.length], T = trainer(topic);
+    const topic = (want && HERD_MAPS.includes(want) ? want : chooseFor(rider, HERD_MAPS, { last: lastMap })) || 'times', T = trainer(topic);
+    lastMap = topic;
+    const q = askFor(rider, topic);
+    steer(T, q);
+    upStep(topic, T, q);
     if (topic === 'negatives' || T.mode === 'cards') {
       const w = T.wave({ count: ROUNDUP.cardSize });
-      wave = { topic, T, w, card: w.card, kind: 'card', caught: 0, cards: w.cards.length, cardNo: 1, misses: 0 };
+      wave = { topic, T, w, q, card: w.card, kind: 'card', caught: 0, cards: w.cards.length, cardNo: 1, misses: 0 };
       deal(w.card.targets, w.card.id);
       // (read-aloud: the wave's clips start loading now, so the first card is ready to be read when it shows)
-      if (read && read.can(topic)) read.preload(w.cards.map((c) => c.say).filter(Boolean), { topic });
+      if (canRead(topic)) read.preload(w.cards.map((c) => c.say).filter(Boolean), { topic });
     } else {
       const w = T.wave({ count: ROUNDUP.herd });
       if (topic === 'times') mine.add(w.id);
-      wave = { topic, T, w, kind: 'herd', goods: w.targets.filter((t) => t.good).length, caught: 0, misses: 0 };
+      wave = { topic, T, w, q, kind: 'herd', goods: w.targets.filter((t) => t.good).length, caught: 0, misses: 0 };
       deal(w.targets);
     }
     RU.wave = wave;
@@ -321,8 +329,20 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
     if (RU.near) startHelp();
   }
   // read-aloud: a card is read when it first shows at the herd (again after the player has been away), not each time
-  // the card is drawn again
+  // the card is drawn again. Only while the rider's math is young enough (skill.js readAloud) and read-aloud is on.
   let readFor = null;
+  const canRead = (topic) => !!(read && readAloud(rider) && read.can(topic));
+  // "Up a step!" once the rider's level brings a maker's step of material past the highest reached before (placed
+  // riders only: a level still being found climbs and falls by itself; asking.js newBest), not on each up and down of
+  // the 80% staircase around the same steps
+  function upStep(topic, T, q) {
+    lastStep[topic] = q.step;
+    if (newBest(rider, q)) {
+      const lv = T.level ? T.level() : null;
+      setTimeout(() => hud.toast(lv && lv.label ? `Up a step! ${lv.label}` : 'Up a step!', 'good'), 900);
+    }
+  }
+  const finding = () => (wave && wave.q && wave.q.placing ? ' · finding your level' : '');
   const sayCard = (c, topic) => (read ? read.say(c.say, { topic }) : false);
   function showCard() {
     if (!wave || !RU.near || wave.done || wave.kind !== 'card') readFor = null;
@@ -334,16 +354,16 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
     }
     if (wave.done) { hud.rule({ main: 'Wave done!', sub: 'Another bunch is wandering in…' }); return; }
     if (wave.kind === 'card') {
-      const c = wave.card, topic = wave.topic, readable = !!(read && c.say && read.can(topic));
-      hud.rule({ main: c.rule || `${c.text} = ?`, sub: `${c.sub || 'Rope the answer'} · card ${wave.cardNo} of ${wave.cards}`,
+      const c = wave.card, topic = wave.topic, readable = !!(c.say && canRead(topic));
+      hud.rule({ main: c.rule || `${c.text} = ?`, sub: `${c.sub || 'Rope the answer'} · card ${wave.cardNo} of ${wave.cards}${finding()}`,
         buttons: [{ label: 'Show me', onClick: () => showLine(wave.T.help(c), { asked: true }) }],
         speak: readable ? () => sayCard(c, topic) : null });
       if (readable && readFor !== c.id) { readFor = c.id; sayCard(c, topic); }
     } else if (wave.w.kind === 'missing') {
-      hud.rule({ main: wave.w.rule, sub: 'Rope the missing number' });
+      hud.rule({ main: wave.w.rule, sub: `Rope the missing number${finding()}` });
     } else {
       const left = wave.goods - wave.caught;
-      hud.rule({ main: wave.w.rule, sub: left === wave.goods ? `${left} to rope` : `${wave.caught} roped · ${left} to go` });
+      hud.rule({ main: wave.w.rule, sub: (left === wave.goods ? `${left} to rope` : `${wave.caught} roped · ${left} to go`) + finding() });
     }
   }
 
@@ -429,13 +449,28 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
     closeChart();
     if (hes) hes.answered();
     const T = w.T;
-    let right = good, r = null;
+    let right = good, r = null, sk = null;
     if (w.kind === 'card') {
+      const card = w.card;
       r = T.answer(s.n, good, s.cardId);
       if (r.stale) { s.state = 'graze'; return; }
       right = r.right;
-    } else r = T.answer(s.n, good);
-    const rec = recordAnswer(rider, right);
+      // the skill model hears the first try at each card (a card answered after the help came up says nothing new)
+      if (r.first && !r.helped) sk = travel(w.q, { card });
+    } else {
+      r = T.answer(s.n, good);
+      sk = travel(w.q, { step: w.w.hard || w.q.step });   // (a warm-up or another table's turn sits lower: its own point)
+      // While the level is still being found, the whole wave is ONE answer for the baseline (it is dealt at one point:
+      // its ropes say the same thing over and over, and the baseline's checks must come from new waves, not from the
+      // same herd). Each rope counts as practice, lightly (it moves no baseline); the wave counts at its end (waveDone)
+      if (w.q && w.q.placing && sk) {
+        if (!w.sk) w.sk = sk;
+        sk = { ...sk, strands: sk.strands.map((x) => ({ ...x, weight: 0.4 })) };
+      }
+    }
+    const rec = recordAnswer(rider, right, sk);
+    // a card topic asks the model again after each card: the cards still to come are dealt at the new step
+    if (w.kind === 'card' && !r.waveDone) { w.q = askFor(rider, w.topic); steer(T, w.q); upStep(w.topic, T, w.q); }
     if (rec && rec.badge) hud.toast(`You earned the ${rec.badge} badge!`, 'gold');
 
     if (right) {
@@ -453,9 +488,8 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
         hud.toast(`Roped the ${s.text}!${ex && ex.line ? '  ' + ex.line : ''}`, 'good');
       }
       if (e.newTitle) setTimeout(() => hud.toast(`You're a ${e.newTitle} now!`, 'gold'), 1600);
-      if (r && r.moved > 0) setTimeout(() => hud.toast('Up a step!', 'good'), 900);
       hob.event('catch');
-      if (read && w.kind === 'card') read.react('right', { topic: w.topic });
+      if (w.kind === 'card' && canRead(w.topic)) read.react('right', { topic: w.topic });
       refresh();
     } else {
       w.misses++;
@@ -466,22 +500,26 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
         const ex = T.explain(w.card, s.n), pic = ex.numberLine && ex.numberLine.reason;
         hint({ say: 'Not me, partner', line: pic ? '' : ex.line });
         showLine({ ...ex.numberLine });
+        // (a rider who can't read yet hears the reason, in the browser's voice, after the "not that one" clip)
+        if (readAloud(rider)) sayLine(pic || ex.line, { now: true, after: 900 });
       } else {
         const ex = T.explain(s.n);
         hint({ say: 'Not me, partner', line: ex.line, skip: ex.skip, anchor: ex.anchor, also: ex.also });
         chartHelp(s.n);
+        if (readAloud(rider) && ex.line) sayLine(ex.line, { now: true, after: 300 });
       }
       hintT = ROUNDUP.hintFor;
-      if (read && w.kind === 'card') read.react(w.card && w.card.shape === 'dots' ? 'recount' : 'wrong', { topic: w.topic });
+      if (w.kind === 'card' && canRead(w.topic)) read.react(w.card && w.card.shape === 'dots' ? 'recount' : 'wrong', { topic: w.topic });
       hob.event('miss');
       refresh();
     }
 
     // what's next
     if (w.kind === 'card') {
-      if (r.waveDone) waveDone();
-      else if (r.card && r.card.id !== w.card.id) {
-        w.card = r.card; w.cardNo++;
+      const next = r.waveDone ? null : T.card();   // (after the model's new step: maybe dealt again)
+      if (r.waveDone || !next) waveDone();
+      else if (next.id !== w.card.id) {
+        w.card = next; w.cardNo++;
         if (w.cardNo > w.cards) w.cards = w.cardNo;
         // the caught one is off to the corral; the others get the new card's answers (more wander in if needed)
         setTimeout(() => { if (wave === w && !w.done) { deal(w.card.targets, w.card.id); showCard(); if (hes) hes.restart(); } }, 900);
@@ -502,6 +540,11 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
   function waveDone() {
     const w = wave; if (!w || w.done) return;
     w.done = true;
+    // (a herd wave dealt while the level was being found: its one baseline answer, see landed)
+    if (w.kind === 'herd' && w.sk) {
+      const picks = w.caught + w.misses;
+      try { record(rider, w.sk.strands, { right: picks > 0 && w.caught / picks >= ROUNDUP.herdRight, tally: false }); } catch (e) { console.warn(e); }
+    }
     endHelp();
     hint(null);
     const first = !(rider.flags && rider.flags.firstWave);
@@ -646,11 +689,12 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
     },
   });
 
-  RU.newWave = () => { for (const s of herd) if (free(s)) s.state = 'graze'; newWave(); };
+  RU.newWave = (topic = null) => { for (const s of herd) if (free(s)) s.state = 'graze'; newWave(topic); };   // (topic: that maker's wave, for dev and rigs)
   RU.start = () => { stock(); newWave(); };
   RU.trainer = (id) => trainer(id);   // a topic's trainer (dev and rigs: RU.trainer('times').setStep(23))
   RU.state = () => ({
     near: RU.near, topic: wave && wave.topic, rule: wave && (wave.kind === 'card' ? wave.card && wave.card.text : wave.w.rule),
+    at: wave && wave.q ? wave.q.at : null, step: wave && wave.q ? wave.q.step : null, finding: !!(wave && wave.q && wave.q.placing),
     goods: wave && wave.goods, caught: wave && wave.caught, done: !!(wave && wave.done), herd: herd.length,
     numbers: herd.filter((s) => s.n != null && (s.state === 'graze' || s.state === 'arrive')).map((s) => ({ n: s.n, good: s.good })),
   });

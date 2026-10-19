@@ -26,7 +26,10 @@ test('a new rider has every default and is not saved until asked', () => {
   assert.equal(r.name, 'Ada');
   assert.equal(r.gold, 0); assert.equal(r.bounty, 0);
   assert.equal(r.mode, 'lasso');
-  assert.deepEqual(r.missions, { roundup: true, wagon: false, hunt: false, loot: false });
+  // every job on by default (a grown-up can turn some off on the title); no lasso-or-shooting choice any more
+  assert.deepEqual(r.missions, { store: true, deliveries: true, sheep: true, pigs: true, wagon: true, loot: true, hunt: true, range: true });
+  assert.equal(r.missionsV, 2);
+  assert.ok(S.MISSIONS.every((m) => S.jobOn(r, m.id)));
   assert.equal(r.topicsOn.times, true); assert.equal(r.topicsOn.algebra, true); assert.equal(r.topicsOn.adding, false);
   assert.deepEqual(r.owned, { saddle: null, horse: 'bay', dog: null });
   assert.equal(r.look.outfit, 'adventurer_f'); assert.equal(typeof r.look.skin, 'string');
@@ -48,11 +51,12 @@ test('long names are cut and empty names get a stand-in', () => {
 test('settings and module state survive a save and load', () => {
   fresh();
   const r = S.newRider('Bo');
-  r.mode = 'shoot'; r.missions.roundup = false; r.missions.wagon = true; r.topicsOn.algebra = false;
+  r.mode = 'shoot'; r.missions.pigs = false; r.missions.wagon = true; r.topicsOn.algebra = false;
   r.topics.times = { step: 4, seen: { 6: [1, 0] } };
   S.saveRider(r);
   const [b] = S.loadRiders();
-  assert.equal(b.mode, 'shoot'); assert.equal(b.missions.roundup, false); assert.equal(b.missions.wagon, true);
+  assert.equal(b.mode, 'shoot'); assert.equal(b.missions.pigs, false); assert.equal(b.missions.wagon, true);
+  assert.equal(S.jobOn(b, 'pigs'), false); assert.equal(S.jobOn(b, 'wagon'), true);
   assert.equal(b.topicsOn.algebra, false); assert.deepEqual(b.topics.times, { step: 4, seen: { 6: [1, 0] } });
 });
 
@@ -107,13 +111,16 @@ test('accuracy keeps the last 50 answers and Top Hand needs 30 answers at 90%', 
   assert.deepEqual(S.loadRiders()[0].badges, ['Top Hand']);
 });
 
-test('Sharpshooter counts only shooting-mode answers, below 90% earns nothing', () => {
+test('Sharpshooter counts only the bottle range\'s answers, below 90% earns nothing', () => {
   fresh();
-  const r = S.newRider('Eli'); r.mode = 'shoot';
-  for (let i = 0; i < 40; i++) S.recordAnswer(r, i % 10 !== 0);   // exactly 90%
-  assert.deepEqual(S.badgesOf(r), ['Sharpshooter']);
-  const q = S.newRider('Flo'); q.mode = 'shoot';
-  for (let i = 0; i < 50; i++) S.recordAnswer(q, i % 5 !== 0);    // 80%
+  const r = S.newRider('Eli'); r.mode = 'shoot';   // (an old Shooting-mode rider: the mode no longer decides anything)
+  for (let i = 0; i < 40; i++) S.recordAnswer(r, i % 10 !== 0);   // exactly 90%, but none of them at the range
+  assert.deepEqual(S.badgesOf(r), ['Top Hand']);
+  const e = S.newRider('Eve');
+  for (let i = 0; i < 40; i++) S.recordAnswer(e, i % 10 !== 0, { range: true });   // exactly 90% at the range
+  assert.deepEqual(S.badgesOf(e), ['Sharpshooter']);
+  const q = S.newRider('Flo');
+  for (let i = 0; i < 50; i++) S.recordAnswer(q, i % 5 !== 0, { range: true });    // 80%
   assert.deepEqual(S.badgesOf(q), []);
   assert.equal(S.accuracyOf(q, 'shoot').pct, 80);
   assert.equal(S.accuracyOf(q, 'lasso').pct, null);
@@ -176,7 +183,7 @@ test('a hand-edited or partial rider is repaired, unknown fields kept', () => {
   assert.equal(r.gold, 0); assert.equal(r.bounty, 3); assert.equal(r.mode, 'lasso');
   assert.deepEqual(r.stats.recent, [1, 1, 0, 1]);
   assert.deepEqual(r.future, { a: 1 });
-  assert.equal(r.missions.roundup, true);
+  assert.ok(S.MISSIONS.every((m) => r.missions[m.id] === true), 'every job on');
   assert.equal(r.look.outfit, 'farmer_m');
 });
 
@@ -197,8 +204,8 @@ test('a new rider starts every job at 0, with no buckle yet and the tin one to a
   const r = S.newRider('Lou');
   assert.deepEqual(r.stats.jobs, { cattle: 0, boxes: 0, sheep: 0, orders: 0, pigs: 0, bandits: 0, deliveries: 0, loot: 0, targets: 0 });
   const list = S.bucklesOf(r);
-  assert.deepEqual(list.map(b => b.job), ['cattle', 'boxes', 'sheep', 'orders', 'pigs', 'bandits', 'deliveries', 'loot'], 'only the jobs this build has are shown');
-  assert.deepEqual(list.map(b => b.tier), [null, null, null, null, null, null, null, null]);
+  assert.deepEqual(list.map(b => b.job), ['cattle', 'boxes', 'sheep', 'orders', 'pigs', 'bandits', 'deliveries', 'loot', 'targets'], 'every job this build has is shown');
+  assert.deepEqual(list.map(b => b.tier), [null, null, null, null, null, null, null, null, null]);
   assert.deepEqual(S.buckleOf(r, 'cattle').next, { tier: 'tin', at: 10, toGo: 10 });
   assert.equal(S.buckleProgress(S.buckleOf(r, 'cattle')), '0 / 10 to tin');
   assert.equal(S.buckleProgress(S.buckleOf(r, 'boxes')), '0 / 5 to tin');
@@ -263,7 +270,7 @@ test('an old save without job counts loads safely and keeps the work it already 
   const rs = S.loadRiders(), by = (id) => rs.find(r => r.id === id);
   // every right answer before the counts existed was a steer roped; stats.boxes is the boxes solved
   assert.deepEqual(by('o1').stats.jobs, { cattle: 23, boxes: 7, sheep: 0, orders: 0, pigs: 0, bandits: 0, deliveries: 0, loot: 0, targets: 0 });
-  assert.deepEqual(S.bucklesOf(by('o1')).map(b => b.tier), ['tin', 'tin', null, null, null, null, null, null]);
+  assert.deepEqual(S.bucklesOf(by('o1')).map(b => b.tier), ['tin', 'tin', null, null, null, null, null, null, null]);
   assert.equal(by('o1').stats.parBoxes, 3, 'the old counts are untouched');
   assert.deepEqual(by('o2').stats.jobs, { cattle: 0, boxes: 0, sheep: 0, orders: 0, pigs: 0, bandits: 0, deliveries: 0, loot: 0, targets: 0 });
   // a save that has counts is read as it is (cleaned up), never topped up from the answers again; extra jobs kept
@@ -291,14 +298,49 @@ test('a rider object with no stats at all can still be counted, and counting wor
   assert.equal(S.countJob(bare, 'sheep').count, 1);
 });
 
-// The target range's count (Shooting mode): its buckle shows for a rider in Shooting mode, or once there are some
-test('the targets-hit buckle shows for a shooting rider, not for a lasso rider with none', () => {
-  const lasso = S.newRider('Lasso'), shoot = S.newRider('Shoot'); shoot.mode = 'shoot';
-  assert.ok(!S.bucklesOf(lasso).some(b => b.job === 'targets'), 'a lasso rider: no Targets hit buckle');
-  assert.ok(S.bucklesOf(shoot).some(b => b.job === 'targets'), 'a shooting rider: the Targets hit buckle');
-  const r = S.countJob(shoot, 'targets', 15);
+// The bottle range's count: the range is every rider's now, so its buckle shows for everyone, unless a grown-up turned
+// the range off (and nothing was hit yet)
+test('the targets-hit buckle shows for every rider; a job turned off hides its buckle until some of it is done', () => {
+  const a = S.newRider('Any'), old = S.newRider('Old'); old.mode = 'lasso';
+  assert.ok(S.bucklesOf(a).some(b => b.job === 'targets'), 'every rider: the Targets hit buckle');
+  assert.ok(S.bucklesOf(old).some(b => b.job === 'targets'), 'an old lasso rider too');
+  a.missions.range = false;
+  assert.ok(!S.bucklesOf(a).some(b => b.job === 'targets'), 'the range turned off: no buckle');
+  const r = S.countJob(a, 'targets', 15);
   assert.equal(r.count, 15); assert.equal(r.buckle && r.buckle.tier, 'tin');
-  shoot.mode = 'lasso';
-  assert.ok(S.bucklesOf(shoot).some(b => b.job === 'targets'), 'switched to lasso with some targets hit: still shown');
+  assert.ok(S.bucklesOf(a).some(b => b.job === 'targets'), 'turned off with some targets hit: still shown');
+  // bandits come from two jobs: hidden only when both are off
+  a.missions.wagon = false;
+  assert.ok(S.buckleShown(a, 'bandits'), 'Loot the gang still brings bandits in');
+  a.missions.loot = false;
+  assert.ok(!S.buckleShown(a, 'bandits'));
+  assert.ok(S.buckleShown(a, 'cattle') && S.buckleShown(a, 'boxes'), 'the round-up and the lock boxes are always on');
   assert.equal(S.jobWords('targets', 1), '1 target hit');
+});
+
+test('every job is switched on once for a rider from before; the grown-ups\' choices are kept from then on', () => {
+  fresh();
+  fake.data.set('bandit-math.riders.nodetest', JSON.stringify({ version: 1, riders: [
+    { id: 'm1', name: 'Old', mode: 'shoot', missions: { roundup: true, wagon: false, hunt: false, loot: false } },
+  ] }));
+  const [r] = S.loadRiders();
+  assert.ok(S.MISSIONS.every((m) => r.missions[m.id] === true), JSON.stringify(r.missions));
+  assert.equal(r.missions.roundup, true, 'an old flag is kept as it was');
+  r.missions.hunt = false;
+  S.saveRider(r);
+  const [b] = S.loadRiders();
+  assert.equal(b.missions.hunt, false, 'turned off after the switch-over: stays off');
+  assert.equal(b.missions.wagon, true);
+  // a job a later build adds is on for everyone (not in the save yet)
+  delete b.missions.range;
+  assert.equal(S.fixRider(b).missions.range, true);
+});
+
+test('read aloud: only while the rider\'s math is young, and the grown-ups\' switch still turns it off', () => {
+  const kid = S.newRider('Kid'), teen = S.newRider('Teen');
+  teen.age = 15;
+  assert.equal(S.readAloudLevel(kid), true, 'nothing known, no age: read');
+  assert.equal(S.readAloudLevel(teen), false, 'a teen: not read');
+  kid.readAloud = false;
+  assert.equal(S.readAloudLevel(kid), true, 'the level says read; the switch is the grown-ups\' (skill.js readAloud reads it)');
 });

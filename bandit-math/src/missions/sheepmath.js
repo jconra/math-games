@@ -17,13 +17,22 @@
 // others are other real slips; on a healthy sheep all of them would "fix" a right sum, so the bottles never give away
 // which sheep is sick. The math is the only tell.
 //
-// How hard follows the kid's own level in that topic (read, never changed here: the round-up's trainers and the lock
-// boxes move the levels): the times tables open at the kid's step and how far up they go, the positive & negative
-// step's shapes and sizes, the solving-for-x rung.
+// Which kind of math, and how hard, come from the rider's skill model (src/math/skill.js, asked through
+// src/math/asking.js): each flock goes to a maker that fits the rider now (counting or adding sums for a young rider,
+// times facts, division, positive & negative or a step of solving for x for an older one), at the rider's level in
+// that kind of math, and the first bottle given to each sick sheep goes back to it (sheep.js; a travel job: no time).
+// The step of each maker: the times tables open at it and how far up they go, the positive & negative step's shapes
+// and sizes, the solving-for-x rung (the lock boxes' own ladder).
 //
-//   flockTopics(rider)                    the ticked topics this job can deal, in turn order (times if none)
-//   levelOf(rider, topic)                 the kid's level there (a step or rung number, from 1)
-//   makeFlock(rider, topic, { size, sick, rand }) -> { topic, level, sheep: [item, ...] }
+//   SHEEP_MATH.maps, MAP_TOPIC            the makers this job deals from (skill.js map ids) and the topic each one is
+//   flockTopics(rider)                    the topics whose makers fit the rider now, in SHEEP_MATH.topics order
+//   flockFor(rider, { last, rand })       -> { topic, map, q } the next flock's topic and the model's answer (q: asking.js
+//                                         askFor: q.at, q.step; it starts a strand's baseline the first time: save after)
+//   flockStep(topic, q)                   the maker's step for makeFlock from q (the lock box's rung as its place in
+//                                         the ladder)
+//   levelOf(rider, topic)                 the kid's old topic step there (rider.topics.*: tests and old riders only)
+//   makeFlock(rider, topic, { size, sick, rand, step }) -> { topic, level, sheep: [item, ...] }   (step: the maker's
+//                                         step to deal at; left out, levelOf)
 //     item = { kind, sick, top, shown, fixed, answer, slip, bottles: [{ label, value, right, why }], fine, healed, help }
 //       top     the line before, for an algebra step ('x + 5 = 12'), else null
 //       shown   the sum as written over the sheep ('7 × 8 = 63', 'x = 17'); fixed: the same, made right
@@ -34,6 +43,7 @@
 //       healed  the line shown when the cure is given
 //       help    the picture that helps: { kind: 'chart', table, missed } | { kind: 'line', start, change, op, term }
 //               | { kind: 'rule', line } | { kind: 'count', frame, line } (src/ui/counthelp.js's picture)
+//       op      positive & negative only: '+' or '-', the sum's sign (it counts in Addition or Subtraction)
 //   SHEEP_MATH                            the dials
 import { slipsFor, explainPick, problemText, numText, LADDER as NEG_LADDER, CONTRAST_CHANCE } from '../math/negatives.js';
 import { tablesAt, reachAt } from '../math/times.js';
@@ -42,6 +52,9 @@ import { LADDER as DIV_LADDER, remCode, remLabel } from '../math/dividing.js';
 import { LADDER as COUNT_LADDER, sheepItem as countItem } from '../math/counting.js';
 import { LADDER as ADD_LADDER, sheepItem as addItem } from '../math/adding.js';
 import { LADDER as TAKE_LADDER, sheepItem as takeItem } from '../math/taking.js';
+import { fits } from '../math/skill.js';
+import { chooseFor, askFor } from '../math/asking.js';
+import { youngMost } from '../lockbox/strand.js';
 const EARLY = { counting: { ladder: COUNT_LADDER, item: countItem }, adding: { ladder: ADD_LADDER, item: addItem }, taking: { ladder: TAKE_LADDER, item: takeItem } };
 
 export const SHEEP_MATH = {
@@ -49,7 +62,9 @@ export const SHEEP_MATH = {
   sick: [1, 2],          // how many are sick (each count as likely)
   bottles: 3,            // medicine bottles to pick from (2 when a sum has too few real slips to fill 3)
   topics: ['counting', 'adding', 'taking', 'times', 'dividing', 'negatives', 'algebra'],
+  maps: ['counting', 'adding', 'taking', 'times', 'dividing', 'negatives', 'lockbox'],   // (the skill model's makers, same order)
 };
+export const MAP_TOPIC = { counting: 'counting', adding: 'adding', taking: 'taking', times: 'times', dividing: 'dividing', negatives: 'negatives', lockbox: 'algebra' };
 
 const MINUS = '−', TIMES = '×';
 const signed = (n) => numText(n);
@@ -58,9 +73,17 @@ const int = (lo, hi, rand) => (hi < lo ? lo : lo + Math.floor(rand() * (hi - lo 
 function shuffle(a, rand) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
 export function flockTopics(rider) {
-  const on = (rider && rider.topicsOn) || {};
-  const list = SHEEP_MATH.topics.filter((t) => on[t]);
-  return list.length ? list : ['times'];
+  const list = SHEEP_MATH.maps.filter((m) => fits(rider, m, SHEEP_MATH.maps)).map((m) => MAP_TOPIC[m]);
+  return list.length ? list : [MAP_TOPIC[chooseFor(rider, SHEEP_MATH.maps)]];
+}
+export function flockFor(rider, { last = null, rand = Math.random } = {}) {
+  const lastMap = last ? SHEEP_MATH.maps.find((m) => MAP_TOPIC[m] === last) : null;
+  const map = chooseFor(rider, SHEEP_MATH.maps, { last: lastMap, rand }) || 'times';
+  return { topic: MAP_TOPIC[map], map, q: askFor(rider, map, map === 'lockbox' ? { most: youngMost(rider) } : {}) };   // (read aloud: the lock box's hold)
+}
+export function flockStep(topic, q) {
+  if (topic === 'algebra') { const i = RUNG_IDS.indexOf(q && q.id); return i >= 0 ? i + 1 : 1; }   // (a rung the sheep don't know: the first)
+  return Math.max(1, Math.round((q && q.step) || 1));
 }
 
 export function levelOf(rider, topic) {
@@ -170,7 +193,7 @@ function negItem(step, sick, rand, used) {
   const how = explainPick(card, r).line;     // '−10 + 18 = 8: 10 steps to zero, 8 more.'
   const said = { way: 'went the wrong way along the line', sign: 'landed on the wrong side of zero', drop: 'dropped the signs' };
   return {
-    kind: 'negatives', sick, top: null, shown: `${text} = ${signed(shown)}`, fixed: `${text} = ${signed(r)}`, answer: r, slip: sick ? slipK.slip : null,
+    kind: 'negatives', op: p.op, sick, top: null, shown: `${text} = ${signed(shown)}`, fixed: `${text} = ${signed(r)}`, answer: r, slip: sick ? slipK.slip : null,
     bottles, fine: `She's fine: ${how}`, healed: sick ? `${how} Her sum ${said[slipK.slip] || 'slipped'}.` : how,
     help: { kind: 'line', start: p.s, change: c, op: p.op, term: p.t },
   };
@@ -302,8 +325,8 @@ function divItem(step, sick, rand, used) {
 }
 
 // ── A FLOCK ──────────────────────────────────────────────────────────────────────────────────────────────────────
-export function makeFlock(rider, topic = 'times', { size = SHEEP_MATH.size, sick = null, rand = Math.random } = {}) {
-  const level = levelOf(rider, topic);
+export function makeFlock(rider, topic = 'times', { size = SHEEP_MATH.size, sick = null, rand = Math.random, step = null } = {}) {
+  const level = step != null ? Math.max(1, Math.round(step)) : levelOf(rider, topic);
   const nSick = Math.max(1, Math.min(size - 1, sick != null ? sick : pick(SHEEP_MATH.sick, rand)));
   const which = new Set(shuffle([...Array(size).keys()], rand).slice(0, nSick));
   const used = new Set(), sheep = [];

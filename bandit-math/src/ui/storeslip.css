@@ -45,6 +45,23 @@
 
 .bmo-story { margin: 12px 2px 4px; font-size: 21px; line-height: 1.45; color: var(--ink); }
 .bmo-ask { margin: 6px 2px 12px; font: 700 21px/1.4 Bitter, Georgia, serif; color: var(--ink); }
+/* "Work it out" (the worked area for a sum too big for the head) and "Read it to me" (the browser's voice) */
+.bmo-tools { display: flex; flex-wrap: wrap; gap: 8px; margin: -4px 0 12px; }
+.bmo-tools:not(:has(button:not([hidden]))) { display: none; }
+.bmo-work, .bmo-read { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 9px; cursor: pointer; font-size: 15px !important; font-weight: 700 !important;
+  background: rgba(226, 173, 76, 0.22); border: 1.5px solid rgba(122, 85, 48, 0.65); }
+.bmo-work:hover, .bmo-read:hover { background: rgba(226, 173, 76, 0.38); }
+.bmo-work svg, .bmo-read svg { width: 20px; height: 20px; flex: none; }
+.bmo-work[hidden], .bmo-read[hidden] { display: none; }
+/* the youngest riders' picture stories: the picture right under the coins, bigger */
+.bmo-slip.is-picfirst .bmo-svg svg { max-height: 150px; }
+/* a picture that is part of the question (the store's grandfather clock to read, the coins to count, the timetable),
+   between the question and the coins */
+.bmo-lead { margin: -2px 0 12px; }
+.bmo-lead[hidden] { display: none; }
+.bmo-leadsvg { display: flex; justify-content: center; }
+.bmo-leadsvg svg { display: block; width: 100%; height: auto; max-height: 190px; }
+.bmo-leadsvg svg.bmp-clock { width: auto; height: 210px; max-height: none; }
 
 /* the coins */
 .bmo-coins { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 10px; }
@@ -62,6 +79,7 @@
 .bmo-face b { font: 800 30px/1 Bitter, Georgia, serif; letter-spacing: -0.01em; }
 .bmo-coin.is-eq .bmo-face b { font-size: 24px; white-space: nowrap; }
 .bmo-face small { font: 700 13px/1.1 Bitter, Georgia, serif; margin-top: 4px; max-width: 9ch; text-align: center; }
+.bmo-face b.is-long { font-size: 23px; }   /* ($12.25, 0.045: six characters still fit the coin) */
 .bmo-coin kbd { position: absolute; left: 50%; bottom: -9px; transform: translateX(-50%); font: 700 11px ui-monospace, monospace; padding: 0 5px; border-radius: 4px;
   background: var(--paper); border: 1px solid rgba(122, 85, 48, 0.6); color: var(--ink-2); }
 .bmo-coin.is-wrong { filter: grayscale(0.85) brightness(0.85); opacity: 0.55; cursor: default; }
@@ -120,9 +138,13 @@
   .bmo-coins.is-eq { grid-template-columns: repeat(2, 1fr); }
   .bmo-coin { min-height: 0; padding: 4px; }
   .bmo-face b { font-size: 22px; }
+  .bmo-face b.is-long { font-size: 16px; }
   .bmo-face small { font-size: 11px; }
   .bmo-coin.is-eq .bmo-face b { font-size: 19px; }
   .bmo-keys { display: none; }
+  .bmo-lead { margin-bottom: 8px; }
+  .bmo-leadsvg svg { max-height: 140px; }
+  .bmo-leadsvg svg.bmp-clock { height: 150px; }
   .bmo-wait { right: 10px; left: 10px; top: auto; bottom: 14px; text-align: center; }
   .bmo-done kbd { display: none; }
 }
@@ -143,7 +165,11 @@
   .bmo-coin { min-height: 0; padding: 3px; }
   .bmo-coin.is-eq { min-height: 48px; }
   .bmo-face b { font-size: 21px; }
+  .bmo-face b.is-long { font-size: 15px; }
   .bmo-face small { font-size: 10.5px; margin-top: 2px; }
+  .bmo-lead { margin: -2px 0 6px; }
+  .bmo-leadsvg svg { max-height: 110px; }
+  .bmo-leadsvg svg.bmp-clock { height: 120px; }
   .bmo-coin.is-eq .bmo-face b { font-size: 18px; }
   .bmo-help { margin-top: 10px; padding: 6px 10px; }
   .bmo-why { font-size: 15px; margin-bottom: 2px; }

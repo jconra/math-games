@@ -8,7 +8,13 @@
      order of each kind, and every picture (src/ui/storepics.js) on one sheet.
        store.html                    the slip: pick coins; the buttons along the top deal another order of a kind
        store.html?sheet              every kind's picture, three of each
-       store.html?type=rate&step=5   start on that kind and step; &wrong=1 shows a wrong pick at once -->
+       store.html?type=rate&step=5   start on that kind and step; &wrong=1 shows a wrong pick at once
+       store.html?type=kmore&step=2  a picture story (the youngest riders: kmore, kleft, kgroups), the picture first
+       store.html?type=bulk&long=4   a big order at that Long work step: "Work it out" opens the worked area
+       store.html?counter=time&step=2   one of the counter's other questions (money, time, dec, pct, ratio) at a step;
+                                     &frac=0.9 late in the step; the clock or the coins show above the coins
+       store.html?sheet=counter      every counter question's pictures (the lead and the help), a step at a time
+       &read                         the "Read it to me" button (the browser's voice) -->
 <style>
   body { margin: 0; min-height: 100vh; background: linear-gradient(160deg, #6d7f5a, #3b4a33 60%, #2a2219); font: 14px Bitter, Georgia, serif; color: #f4e8cf; }
   .bar { position: fixed; left: 10px; top: 10px; display: flex; flex-wrap: wrap; gap: 4px; max-width: 48vw; z-index: 40; }
@@ -20,15 +26,30 @@
 </head>
 <body>
 <script type="module">
-import { makeOrder, TYPES, seeded } from '../src/math/wordproblems.js';
+import { makeOrder, TYPES, K_TYPES, seeded } from '../src/math/wordproblems.js';
 import { picture } from '../src/ui/storepics.js';
 import { makeStoreSlip } from '../src/ui/storeslip.js';
+import { openLongWork } from '../src/ui/longwork.js';
+import { workMul, workDiv } from '../src/math/longwork.js';
+import { counterOrder, COUNTER, COUNTER_MAPS } from '../src/math/counter.js';
+import { counterPicture } from '../src/ui/counterpics.js';
 const Q = new URLSearchParams(location.search);
 const rand = seeded(Number(Q.get('seed')) || 1);
-if (Q.has('sheet')) {
+if (Q.get('sheet') === 'counter') {
   const sheet = document.createElement('div'); sheet.className = 'sheet'; document.body.appendChild(sheet);
-  for (const type of TYPES) for (const step of [3, 6, 9]) {
-    const o = makeOrder(type, { rand, step });
+  for (const map of COUNTER_MAPS) for (let step = 1; step <= COUNTER[map].STEPS.length; step++) {
+    const o = counterOrder(map, { rand, step, frac: Number(Q.get('frac')) || 0 });
+    const f = document.createElement('figure');
+    const lead = o.lead ? counterPicture(o.lead) : null, help = counterPicture(o.pic);
+    f.innerHTML = `<figcaption>${map} ${step} · ${COUNTER[map].STEPS[step - 1].label}</figcaption><small>${o.story} ${o.ask}</small>`
+      + (lead ? `<p><b>lead</b></p>${lead.svg}` : '') + `<p><b>help · ${help.title}</b></p>${help.svg}<p>${help.line}</p><small>answer: ${o.answer} · coins: ${o.coins.map((c) => c.label).join(' / ')}</small>`;
+    sheet.appendChild(f);
+  }
+  window.READY = true;
+} else if (Q.has('sheet')) {
+  const sheet = document.createElement('div'); sheet.className = 'sheet'; document.body.appendChild(sheet);
+  for (const type of [...TYPES, ...K_TYPES]) for (const step of [3, 6, 9]) {
+    const o = makeOrder(type, { rand, step: K_TYPES.includes(type) ? Math.min(4, step - 1) : step, longStep: step - 1 });
     const p = picture(o.pic);
     const f = document.createElement('figure');
     f.innerHTML = `<figcaption>${type} · ${p.title}</figcaption><small>${o.story} ${o.ask}</small>${p.svg}<p>${p.line}</p><small>answer: ${o.answer}</small>`;
@@ -36,24 +57,46 @@ if (Q.has('sheet')) {
   }
   window.READY = true;
 } else {
-  let order = null, gold = 40, filled = 0;
-  const U = makeStoreSlip(document.body, {
+  let order = null, gold = 40, filled = 0, panel = null;
+  const openLong = () => {
+    if (!order || !order.long || panel) return;
+    const L = order.long, work = L.op === 'mul' ? workMul(L.a, L.b, L.lead ? { lead: L.lead } : {}) : workDiv(L.n, L.d);
+    panel = window.L = openLongWork(document.body, { work, setup: L.setup, final: L.final, ask: order.ask,
+      onDone: () => { setTimeout(() => { panel = null; U.onPickRight && U.onPickRight(); }, 1700); }, onClose: () => { panel = null; } });
+  };
+  const pic = (o) => (o.picture || picture)(o.pic);
+  const U = makeStoreSlip(document.body, { onWork: () => openLong(),
     onPick: async (i) => {
       const c = order.coins[i];
-      if (!c.good) { U.wrong(i, { why: c.why, pic: picture(order.pic) }); return; }
+      if (!c.good) { U.wrong(i, { why: c.why, pic: pic(order), inLead: !!(order.lead && order.lead.kind === order.pic.kind) }); return; }
       if (order.equation) { U.equation(i, { line: order.rightWhy }); return; }
       await U.right(i, { line: order.rightWhy, gold: 4, from: gold, to: gold + 4 }); gold += 4; filled++;
-      await U.leave(); deal(order.type);
+      await U.leave(); if (order.counter) dealCounter(order.counter); else deal(order.type);
     },
-    onDone: () => U.hide(), onDraw: () => U.drawn(picture(order.pic)),
+    onDone: () => U.hide(), onDraw: () => U.drawn(pic(order)),
   });
   U.purse(gold);
-  const deal = (type) => { order = makeOrder(type, { rand, step: Number(Q.get('step')) || 5 }); U.show(order, { filled }); window.ORDER = order; };
+  const deal = (type) => {
+    const K = K_TYPES.includes(type);
+    order = makeOrder(type, { rand, step: Number(Q.get('step')) || (K ? 2 : 5), longStep: Number(Q.get('long')) || 4 });
+    U.show(order, { filled, pic: order.picFirst ? picture(order.pic) : null, read: Q.has('read') });
+    window.ORDER = order;
+  };
+  const dealCounter = (map, step = Number(Q.get('step')) || null) => {
+    const st = step || 1 + Math.floor(rand() * COUNTER[map].STEPS.length);
+    order = counterOrder(map, { rand, step: st, frac: Number(Q.get('frac')) || 0 });
+    order.picture = counterPicture;
+    U.show(order, { filled, lead: order.lead ? counterPicture(order.lead) : null, read: Q.has('read'), note: Q.has('finding') ? 'finding your level' : '' });
+    window.ORDER = order;
+  };
+  window.dealCounter = dealCounter;
+  U.onPickRight = () => { if (order) U.right(order.coins.findIndex((c) => c.good), { line: order.rightWhy }); };
   const bar = document.createElement('div'); bar.className = 'bar'; document.body.appendChild(bar);
-  for (const t of TYPES) { const b = document.createElement('button'); b.textContent = t; b.onclick = () => deal(t); bar.appendChild(b); }
+  for (const t of [...TYPES, ...K_TYPES]) { const b = document.createElement('button'); b.textContent = t; b.onclick = () => deal(t); bar.appendChild(b); }
+  for (const m of COUNTER_MAPS) { const b = document.createElement('button'); b.textContent = m; b.style.borderColor = '#c9a24a'; b.onclick = () => dealCounter(m, null); bar.appendChild(b); }
   const d = document.createElement('button'); d.textContent = 'draw offer'; d.onclick = () => U.offerDraw(true); bar.appendChild(d);
-  deal(Q.get('type') || 'groups');
-  if (Q.has('wrong')) { const i = order.coins.findIndex((c) => !c.good); U.wrong(i, { why: order.coins[i].why, pic: picture(order.pic) }); }
+  if (Q.get('counter')) dealCounter(Q.get('counter')); else deal(Q.get('type') || 'groups');
+  if (Q.has('wrong')) { const i = order.coins.findIndex((c) => !c.good); U.wrong(i, { why: order.coins[i].why, pic: pic(order) }); }
   window.U = U; window.READY = true;
 }
 </script>
