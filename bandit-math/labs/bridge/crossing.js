@@ -91,12 +91,13 @@ export function makeCrossing(app, hooks) {
         if (run.calm.events.length) { run.evs = batched(run.calm.events); run.ev = 0; run.evT = 0; run.evStep = 'flash'; run.started = false; run.phase = 'calm'; aim(run.calm); stage('Her own weight', 'before anything crosses', 0); }
         else { aim(run.calm); next(); }
         break;
-      case 'calm': if (playBreaks(dt, true)) { aim(run.calm); next(); } break;
+      case 'calm': if (playBreaks(dt, true)) { aim(run.calm); if (run.calm.down) { run.phase = 'end'; run.t = 0; } else next(); } break;
       case 'sums':
         if (run.crossings[run.i]) begin();
         else if (run.t > 0.6) stage('The engineer works out the sums', `for the ${LOADS[run.i].short}`, run.i / LOADS.length);
         break;
       case 'go': {
+        if (!cr || !cr.steps.length) { run.phase = 'end'; run.t = 0; break; }
         const L = LOADS[run.i], last = cr.steps[cr.steps.length - 1];
         run.x += SPEED[L.key] * dt;
         // the steps passed: one with breaks in it stops the load there while they play
@@ -145,11 +146,14 @@ export function makeCrossing(app, hooks) {
   // the next load: the stage, its figure on the bank (or, with no room for it, a word from the engineer)
   function next() {
     run.i++; run.t = 0; run.k = -1;
+    if (run.calm && run.calm.down) { run.phase = 'end'; return; }
     if (run.i >= LOADS.length || (run.i > 0 && run.crossings[run.i - 1] && !run.crossings[run.i - 1].made)) { run.phase = 'end'; return; }
     if (run.crossings[run.i]) begin(); else run.phase = 'sums';
   }
   function begin() {
     const cr = run.crossings[run.i], L = LOADS[run.i];
+    // (nothing to cross on, or no way across worked out: no load starts, and the card says what happened)
+    if (!cr || !L || (!cr.blocked && !cr.nodeck && !(cr.steps && cr.steps.length))) { run.phase = 'end'; run.t = 0; return; }
     stage(`${L.name} · ${lb(L.lb)}`, `rating ${run.i + 1} of ${LOADS.length}`, (run.i + 1) / LOADS.length);
     if (cr.blocked || cr.nodeck) {
       run.phase = 'blocked'; run.t = 0;

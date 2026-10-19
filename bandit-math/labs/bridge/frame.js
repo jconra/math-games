@@ -645,6 +645,22 @@ function checkAll(M, sol, live, { buckle = true, start = null } = {}) {
       }
     }
   }
+  // (running away with boards only butted end to end somewhere: that joint is the hinge it folds on, not a bow. Two
+  // boards meeting end to end with nothing lapped over them hold almost nothing, deck planks or not)
+  if (sol.unstable) {
+    // (two boards whose ends only meet, in one line, with nothing lapped over the joint: however it was nailed, that
+    // joint is a hinge)
+    const over = Math.max(1.6, ...items.filter((x) => x.type === 'bow').map((x) => x.util + 0.01)), seenB = new Set();
+    const same = (p, q) => Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]) < 0.05, meets = (P, b) => same(P, b.A) || same(P, ptAt(b, b.L));
+    const through = (P, o) => { const t = dot([P[0] - o.A[0], P[1] - o.A[1], P[2] - o.A[2]], o.d); return t > -0.05 && t < o.L + 0.05 && same(P, ptAt(o, Math.max(0, Math.min(o.L, t)))); };
+    for (const sp of M.springs) {
+      const b = M.boards[sp.it.b], P = M.hubs[sp.hub].P; if (b.plank || seenB.has(sp.it.b) || !meets(P, b)) continue;
+      const others = M.boards.filter((o) => o !== b && !o.plank && through(P, o));
+      if (others.length !== 1 || !meets(P, others[0]) || Math.abs(dot(b.d, others[0].d)) < 0.99) continue;
+      seenB.add(sp.it.b);
+      items.push({ type: 'joint', util: over, b: sp.it.b, id: b.id, hub: sp.hub, P, kind: 'butt', unstable: true }); bump(b.id, over);
+    }
+  }
   if (sol.unstable && !items.some((it) => it.type === 'bow' || it.type === 'loose')) {
     // (running away with nothing squeezed to blame: the board thrown furthest is folding)
     let w = null, far = 0;
@@ -784,8 +800,16 @@ export function crossTest(bridge, { loads = LOADS, step = 0.5, buckle = true, on
   const calm = { events: [...(lost0.length ? [{ kind: 'loose', at: { X: 0, Y: 0, Z: 0 }, broke: lost0, fell: lost0, util: 1 }] : []), ...first.events], ...pick(first.chk) };
   const crossings = [];
   let rating = -1, any = calm.events.length > 0;
+  // (fallen under her own weight, with nothing left to cross on: no load starts. calm.down says so, and there are no
+  // crossings at all; a bridge built with no deck still sends each load its "no deck" crossing below)
+  const deckLeft = state.deck && state.boards.some((b) => !b.plank) && state.deck.planks.some((p) => state.boards.some((b) => b.id === p.id));
+  if (any && !deckLeft) calm.down = true;
   // (each part handed on as soon as it is worked out, so the page can play the first load while the rest is summed)
   if (onPart) onPart({ part: 'calm', calm });
+  if (calm.down) {
+    const standing = { S: br.S, D: br.D, boards: state.boards.filter((b) => !b.plank), deck: null };
+    return { calm, crossings, rating, standing, stood: false, down: true, ms: Math.round((now() - t0) * 10) / 10, solves: opts.solves, models: state.models };
+  }
   for (let li = 0; li < loads.length; li++) {
     const load = loads[li];
     const cr = { key: load.key, name: load.name, lb: load.lb, made: true, steps: [], events: [], stopAt: null, sag: 0, peak: { util: 0, kind: null, id: null } };

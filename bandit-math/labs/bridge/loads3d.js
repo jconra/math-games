@@ -19,10 +19,12 @@ import { FT } from './scene.js';
 const GAME = new URL('../../', import.meta.url).href;
 const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 const byKey = Object.fromEntries(LOADS.map((l) => [l.key, l]));
-// (the farm wagons' wheels, metres in the wagon's own space, as models/wagons/wagons.json measured them)
-const WHEELS = {
-  covered: [[0.84, 0.54, 0.98], [-0.84, 0.54, 0.98], [0.83, 0.6, -0.98], [-0.83, 0.6, -0.98]],
-  freight: [[0.71, 0.49, 1.03], [-0.82, 0.5, 1.01], [0.78, 0.6, -1.0], [-0.76, 0.6, -1.03]],
+// (the farm wagons' wheels come from models/wagons/wagons.json, as the game's src/wagon.js reads them: each wheel's hub
+// (x, y, z) and radius r in metres in the wagon's own space; wheel.glb is one wheel of radius 1, scaled by r. The
+// numbers below stand in only if the file can't load.)
+let WHEELS = {
+  covered: [[0.836, 0.5401, 0.9755, 0.5401], [-0.836, 0.5401, 0.9755, 0.5401], [0.8349, 0.6142, -0.9755, 0.6], [-0.8349, 0.6142, -0.9755, 0.6]],
+  freight: [[0.7079, 0.5042, 1.0285, 0.4949], [-0.8226, 0.5042, 1.0055, 0.4954], [0.78, 0.6036, -1.0011, 0.6036], [-0.7592, 0.6036, -1.0329, 0.5964]],
 };
 
 export function makeLoads(scene) {
@@ -39,6 +41,10 @@ export function makeLoads(scene) {
       folk = { F, lib: await F.loadFolk(GAME) };
       try { seatRider = (await import('../../src/actors/seat.js')).seatRider; } catch (e) { seatRider = null; }
     } catch (e) { console.warn('bridge lab: the people did not load; plain shapes stand in', e); }
+    try {
+      const info = await (await fetch(GAME + 'models/wagons/wagons.json')).json();
+      for (const k of ['covered', 'freight']) WHEELS[k] = ['FL', 'FR', 'BL', 'BR'].map((id) => { const w = info.kinds[k].wheels[id]; return [w.x, w.y, w.z, w.r]; });
+    } catch (e) { /* (the numbers above) */ }
     try { wheelScene = (await loader.loadAsync(GAME + 'models/wagons/wheel.glb')).scene; } catch (e) { wheelScene = null; }
     for (const k of ['covered', 'freight']) { try { wagons[k] = (await loader.loadAsync(GAME + `models/wagons/${k}.glb`)).scene; } catch (e) { wagons[k] = null; } }
   })();
@@ -57,11 +63,12 @@ export function makeLoads(scene) {
     const g = new THREE.Group(), wheels = [];
     if (wagons[kind]) g.add(shadow(wagons[kind].clone()));
     else { const bed = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.5, 3.2), new THREE.MeshLambertMaterial({ color: 0x7a5a3a })); bed.position.y = 0.9; g.add(shadow(bed)); }
-    for (const [x, r, z] of WHEELS[kind]) {
+    // (each wheel on its hub, its size the game's: wheel.glb is radius 1, scaled by the wheel's own radius)
+    for (const [x, y, z, r] of WHEELS[kind]) {
       let w;
-      if (wheelScene) { w = wheelScene.clone(); w.scale.setScalar(r / 0.6); if (x < 0) w.rotation.y = Math.PI; }
+      if (wheelScene) { w = wheelScene.clone(); w.scale.setScalar(r); if (x < 0) w.rotation.y = Math.PI; }
       else { w = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.08, 16).rotateZ(Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0x4a3626 })); }
-      const hub = new THREE.Group(); hub.position.set(x, r, z); hub.add(w); g.add(hub); wheels.push({ hub, r });
+      const hub = new THREE.Group(); hub.position.set(x, y, z); hub.add(w); g.add(hub); wheels.push({ hub, r });
       shadow(w);
     }
     return { root: g, wheels };
