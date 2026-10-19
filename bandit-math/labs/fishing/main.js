@@ -48,7 +48,9 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, phone ? 1.5 : 2));
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
-const camera = new THREE.PerspectiveCamera(42, 1, 0.05, 2000);
+// (near 0.1 m: nothing comes closer to the lens, even held up to look at; far 1500 m: past the far hills, the sky is
+// drawn at the far plane anyway. A tight range keeps the depth sorting sharp for small things on the dock.)
+const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 1500);
 const lake = makeLake({ low: phone });
 const { scene } = lake;
 let angler = null;
@@ -248,7 +250,7 @@ const PRAISE = ['Right!', 'Right! Nice work.', 'Right! Sharp eye.', 'Right! You 
 const ACTION = { keep: 'Into the creel', throw: 'Throw it back' };
 function stars() {
   const n = ladder.level;
-  return `<div class="steps" title="Step ${n} of ${LADDER_TOP}: ${STEP_NAMES[n]}">${'★'.repeat(n)}${'☆'.repeat(LADDER_TOP - n)}<span>${STEP_NAMES[n]}</span></div>`;
+  return `<div class="steps" title="Level ${n} of ${LADDER_TOP}: ${STEP_NAMES[n]}">${'★'.repeat(n)}${'☆'.repeat(LADDER_TOP - n)}<span class="lvl">Level ${n} of ${LADDER_TOP}</span><span class="nm">${STEP_NAMES[n]}</span></div>`;
 }
 function openCard(q) {
   C.catchQ = q; C.q = q; C.answered = null; C.practice = false; C.catchAnswered = false;
@@ -263,7 +265,7 @@ function renderCard() {
   const rows = q.topic === 'keep' || q.topic === 'order';
   card.classList.remove('teach'); card.classList.toggle('is-answered', !!a);
   card.innerHTML = `${stars()}${head}${q.svg || ''}<p class="prompt">${fracHTML(q.prompt)}</p>
-    <div class="choices${rows ? ' is-rows' : ''}">${q.choices.map((c, i) => `<button data-i="${i}"><span class="key">${i + 1}</span>${fracHTML(q.labels[i])}</button>`).join('')}</div>
+    <div class="choices${rows ? ' is-rows' : ''}">${q.choices.map((c, i) => `<button data-i="${i}">${fracHTML(q.labels[i])}</button>`).join('')}</div>
     <div class="why" hidden></div>
     <div class="row"><button class="btn" id="q-teach">Teach me</button><button class="btn go" id="q-go" hidden></button></div>`;
   card.hidden = false; card.scrollTop = 0;
@@ -438,6 +440,7 @@ function drawLine(to, sag, then = null) {
 
 // ── the loop ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 const perf = params.has('perf');
+let viewOverride = null;          // FI.view: a fixed camera for test shots
 let last = performance.now(), frames = 0, fpsT = 0, fps = 0;
 const tmpV = new THREE.Vector3();
 function loop(now) {
@@ -456,7 +459,8 @@ function loop(now) {
   // the camera glides to where it wants to be
   const k = 1 - Math.exp(-dt * 3);
   cam.pos.lerp(cam.wantPos, k); cam.look.lerp(cam.wantLook, k);
-  camera.position.copy(cam.pos); camera.lookAt(cam.look);
+  if (viewOverride) { camera.position.copy(viewOverride[0]); camera.lookAt(viewOverride[1]); }
+  else { camera.position.copy(cam.pos); camera.lookAt(cam.look); }
   renderer.render(scene, camera);
   frames++; fpsT += dt; if (fpsT > 0.5) { fps = frames / fpsT; frames = 0; fpsT = 0; if (perf) { $('perf').hidden = false; $('perf').textContent = `${fps.toFixed(0)} fps · ${renderer.info.render.calls} draws · ${renderer.info.render.triangles} tris`; } }
 }
@@ -480,7 +484,7 @@ function step(dt) {
       angler.root.rotation.y = Math.PI + R.yaw * 0.6;
       if (!S.launched && t >= 0.42) {
         S.launched = true; S.castFrom.copy(angler.tip); S.castT0 = t; const d = S.castFrom.distanceTo(S.castTo); S.castDur = 0.55 + d * 0.03; S.apex = 1.2 + d * 0.13;
-        sound.whoosh(); bobber.visible = true;
+        bobber.visible = true;
       }
       if (S.launched) {
         const u = clamp((t - S.castT0) / S.castDur, 0, 1);
@@ -634,5 +638,8 @@ window.FI = {
   toScreen, waterSpot: (x, z) => toScreen(x, 0, z), bobber: () => toScreen(S.bob.x, S.bob.y, S.bob.z),
   fps: () => fps, setStep: (n) => { ladder = { level: clamp(n, 1, LADDER_TOP), streak: 0, placing: false, slips: 0 }; saveLadder(); },
   topics: () => TOPICS_AT,
+  // a fixed camera for close test shots: FI.view([x, y, z], [tx, ty, tz]); FI.view(null) gives it back
+  view: (from, to) => { viewOverride = from ? [new THREE.Vector3(...from), new THREE.Vector3(...to)] : null; },
+  near: () => [camera.near, camera.far],
   renderInfo: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, geometries: renderer.info.memory.geometries, textures: renderer.info.memory.textures }),
 };

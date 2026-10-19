@@ -1,5 +1,5 @@
 // SOUNDS at the lake, all made on the spot with Web Audio (no sound files): water lapping at the dock, now and then a
-// bird or a frog, the whoosh of a cast, the bobber's plop, the nibble and the bite, the reel's ratchet, the drag
+// bird or a frog, the bobber's plop (a cast is silent until it lands), the nibble and the bite, the reel's ratchet, the drag
 // buzzing when a fish runs, splashes, a friendly chime for a right answer and a soft note for a wrong one. Splashes,
 // clicks and plops are shaped noise (they ring like glass when made from tones); only the chime, the soft note and the
 // birds are tones. Nothing plays until the first tap or click (browsers keep sound off until then).
@@ -82,7 +82,6 @@ function critters() {
 }
 
 // ── fishing ──────────────────────────────────────────────────────────────────────────────────────────────────────────
-export function whoosh() { if (!ok()) return; const t = A.ctx.currentTime; noise(t, 0.32, { freq: 600, freqTo: 2600, q: 0.8, gain: 0.16, attack: 0.08 }); noise(t + 0.25, 0.5, { freq: 3800, freqTo: 1800, q: 2, gain: 0.03, attack: 0.05 }); }
 // the bobber landing: a low "plup" (a fast falling band of noise) and a few drops
 export function plop(size = 1) {
   if (!ok()) return; const t = A.ctx.currentTime;

@@ -84,6 +84,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .card h2 { font: 400 24px/1.1 Rye, Georgia, serif; color: #4a2f17; margin-bottom: 6px; }
 .card .steps { font: 700 14px/1 Bitter, Georgia, serif; color: #a8782f; letter-spacing: 2px; margin-bottom: 4px; }
 .card .steps span { letter-spacing: 0; font: 600 12px Bitter, Georgia, serif; color: #8a6a48; margin-left: 6px; }
+.card .steps .lvl { font-weight: 700; font-size: 13px; color: #6d4a17; }
+.card .steps .nm::before { content: '· '; }
 .card .measure { display: flex; gap: 18px; margin: 2px 0 6px; padding: 6px 10px; border-radius: 8px; background: rgba(122,85,48,.12); }
 .card .measure small { display: block; font: 400 13px Smokum, Georgia, serif; letter-spacing: .05em; color: #8a6a48; }
 .card .measure b { font: 700 22px Bitter, Georgia, serif; color: #4a2f17; }
@@ -98,7 +100,6 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .card .choices button.is-right { background: #cfe8b4; border-color: #4f7a2a; }
 .card .choices button.is-wrong { background: #f3d0c4; border-color: #a2492d; }
 .card .choices button:disabled { cursor: default; }
-.card .choices button .key { font: 600 12px Bitter, Georgia, serif; color: #a08060; margin-right: 8px; vertical-align: middle; }
 .card .why { margin-top: 10px; padding: 8px 10px; border-radius: 8px; background: rgba(122,85,48,.12); font-size: 15px; line-height: 1.45; }
 .card .why[hidden] { display: none; }
 .card .why.is-right { background: rgba(79,122,42,.16); }
@@ -160,6 +161,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .card .measure { padding: 4px 8px; margin: 0 0 4px; }
   .card.is-answered .row, .card.teach .row { bottom: -12px; margin: 8px -14px -12px; padding: 8px 14px 12px; }
   .card .row { margin-top: 8px; }
+  .card .steps .nm { display: none; }          /* (on a phone the stars and "Level 3 of 8" are enough) */
   .card .measure { gap: 14px; }
   .card .measure > div { display: flex; align-items: baseline; gap: 6px; }
   .card .measure small { font-size: 12px; }
@@ -170,7 +172,6 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .card .choices { grid-template-columns: repeat(2, 1fr); gap: 7px; }
   .card .choices.is-rows button { font-size: 17px; padding: 8px 12px; }
   .card .choices button { min-height: 46px; font-size: 19px; }
-  .card .choices button .key { display: none; }
   .card svg.pic { max-height: 128px; margin: 2px 0; }
   .card .why svg.pic { max-height: 150px; }
   .card .prompt { line-height: 1.38; margin: 4px 0; }

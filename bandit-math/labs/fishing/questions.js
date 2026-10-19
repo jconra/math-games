@@ -12,7 +12,7 @@
 //   3  line them up, add weights with the same bottom number             4  the same length, other numbers (equivalents)
 //   5  different bottom numbers (unlike denominators)                     6  mixed numbers, improper fractions, inches
 //   7  ratios                                                             8  a mix of 3 to 7
-// A fresh angler starts on step 1, PLACING: each right answer climbs a step straight away until the second miss (the
+// A fresh angler starts on step 1, PLACING: each right answer climbs PLACE_JUMP steps straight away until the second miss (the
 // first slip is forgiven), so an older kid gets to their level in a few fish. After that, CLEAN_TO_CLIMB right in a row
 // climbs a step and a wrong answer drops one (never below 1). Kept in localStorage by the page (LADDER_KEY).
 // Every question: tap-to-answer `choices` (keys) with `labels` (the buttons), one right `answer`, wrong ones made from
@@ -31,6 +31,9 @@ export const LADDER_TOP = 8;
 export const CLEAN_TO_CLIMB = 3;
 // while placing, the second miss ends the fast climb (one step down from there)
 export const PLACING_SLIPS = 2;
+// while placing, a right answer climbs this many steps (1, 3, 5, 7, 8: a strong kid is at mixed numbers by the fourth
+// fish and at ratios by the fifth; one step at a time took seven fish, about three minutes of fishing)
+export const PLACE_JUMP = 2;
 export const LADDER_KEY = 'bandit-math.fishing.ladder';
 export const RECENT = 10;            // how many recent questions' numbers to steer clear of
 export const STEP_NAMES = {
@@ -39,14 +42,17 @@ export const STEP_NAMES = {
 };
 
 // ── the fish ─────────────────────────────────────────────────────────────────────────────────────────────────────────
-// min..max: lengths it comes in (feet); small: under this it's a little one, trophy: this long or more (the fish book);
-// k: pounds for a fish 1 foot long (weight grows with length × length × length)
+// Real sizes. min..max: the lengths it comes in (feet; none under half a foot); limLo..limHi: the keeper limits posted
+// for it (never under half a foot: perch 6 to 9 inches, the others 8 to 15); small: under this it's a little one,
+// trophy: this long or more (the fish book); k: pounds for a fish 1 foot long (weight grows with length cubed)
 export const KINDS = {
-  perch: { one: 'perch', name: 'yellow perch', min: fr(1, 4), max: fr(5, 4), small: fr(1, 2), trophy: fr(1), k: 0.6, colour: '#d2a93a' },
-  trout: { one: 'trout', name: 'brook trout', min: fr(1, 3), max: fr(2), small: fr(2, 3), trophy: fr(3, 2), k: 0.55, colour: '#7d8a4e' },
-  bass: { one: 'bass', name: 'largemouth bass', min: fr(1, 2), max: fr(2), small: fr(3, 4), trophy: fr(3, 2), k: 0.9, colour: '#5f7d3a' },
-  catfish: { one: 'catfish', name: 'channel catfish', min: fr(3, 4), max: fr(3), small: fr(1), trophy: fr(2), k: 0.7, colour: '#7a7268' },
+  perch: { one: 'perch', name: 'yellow perch', min: fr(1, 2), max: fr(5, 4), limLo: fr(1, 2), limHi: fr(3, 4), small: fr(2, 3), trophy: fr(1), k: 0.75, colour: '#d2a93a' },
+  trout: { one: 'trout', name: 'brook trout', min: fr(1, 2), max: fr(2), limLo: fr(2, 3), limHi: fr(5, 4), small: fr(2, 3), trophy: fr(3, 2), k: 0.7, colour: '#7d8a4e' },
+  bass: { one: 'bass', name: 'largemouth bass', min: fr(1, 2), max: fr(2), limLo: fr(2, 3), limHi: fr(5, 4), small: fr(3, 4), trophy: fr(3, 2), k: 0.9, colour: '#5f7d3a' },
+  catfish: { one: 'catfish', name: 'channel catfish', min: fr(2, 3), max: fr(3), limLo: fr(2, 3), limHi: fr(5, 4), small: fr(1), trophy: fr(2), k: 0.7, colour: '#7a7268' },
 };
+export const MIN_LIMIT = fr(1, 2);          // no keeper limit under half a foot
+export const MIN_LENGTH = fr(1, 2);         // no fish under half a foot
 export const KIND_LIST = ['perch', 'trout', 'bass', 'catfish'];
 export const SIZES = ['small', 'keeper', 'trophy'];
 
@@ -55,19 +61,28 @@ const shuffle = (arr, rnd) => { for (let i = arr.length - 1; i > 0; i--) { const
 const wpick = (pairs, rnd) => { const t = pairs.reduce((s, p) => s + p[1], 0); let r = rnd() * t; for (const p of pairs) { r -= p[1]; if (r < 0) return p[0]; } return pairs[pairs.length - 1][0]; };
 const int = (a, b, rnd) => a + Math.floor(rnd() * (b - a + 1));
 const inRange = (kind, ft) => value(ft) >= value(KINDS[kind].min) - 1e-9 && value(ft) <= value(KINDS[kind].max) + 1e-9;
+export const lengthFits = inRange;      // (a length in feet this kind comes in)
 const ft = (f, form = 'mixed') => measure(f, 'ft', form);
 const T = (f, form = 'mixed') => fracText(f, form);
 
-// a kind of fish that comes this long (feet), the kinds caught least so far more likely
-export function kindFor(lenFt, rnd = Math.random, counts = {}) {
-  let c = KIND_LIST.filter((k) => inRange(k, lenFt));
-  if (!c.length) c = [value(lenFt) < 0.5 ? 'perch' : 'catfish'];
-  return wpick(c.map((k) => [k, 1 / (1 + (counts[k] || 0))]), rnd);
+// is this a limit that gets posted for this kind?
+export const limitFits = (kind, limFt) => value(limFt) >= value(KINDS[kind].limLo) - 1e-9 && value(limFt) <= value(KINDS[kind].limHi) + 1e-9;
+// a kind of fish that comes this long (feet) and, when a limit is given, has that limit posted for it; the kinds
+// caught least so far more likely. null when no kind fits (the caller makes other numbers)
+export function kindFor(lenFt, rnd = Math.random, counts = {}, limFt = null) {
+  const c = KIND_LIST.filter((k) => inRange(k, lenFt) && (!limFt || limitFits(k, limFt)));
+  return c.length ? wpick(c.map((k) => [k, 1 / (1 + (counts[k] || 0))]), rnd) : null;
 }
-// about what a fish of this kind and length weighs: to the nearest eighth of a pound, at least an eighth
+// about what a fish of this kind and length weighs: to the nearest eighth of a pound; anything half a foot or longer
+// at least a quarter of a pound
 export function weightFor(kind, lenFt) {
   const L = value(lenFt), w = KINDS[kind].k * L * L * L;
-  return measure(simplest(fr(Math.max(1, Math.round(w * 8)), 8)), 'lb');
+  return measure(simplest(fr(Math.max(L >= 0.5 - 1e-9 ? 2 : 1, Math.round(w * 8)), 8)), 'lb');
+}
+// does a weight suit a fish of this kind and length? (near what weightFor gives: rounding, and a fat or thin fish)
+export function weightFits(kind, lenFt, w) {
+  const want = value(weightFor(kind, lenFt)), v = value(w);
+  return v >= (value(lenFt) >= 0.5 - 1e-9 ? 0.25 : 0.125) - 1e-9 && v <= want * 1.6 + 0.13 && v >= want / 1.6 - 0.13;
 }
 // 'small' | 'keeper' | 'trophy' for its kind
 export function sizeOf(fish) {
@@ -137,31 +152,33 @@ const VERDICT = {
 const verdictOf = (c) => (c < 0 ? 'shorter' : c === 0 ? 'same' : 'longer');
 const simplestList = (dens, max = 1) => { const out = []; for (const d of dens) for (let n = 1; n <= d * max; n++) if (gcd(n, d) === 1) out.push(fr(n, d)); return out; };
 
-// the fish's length and the limit for a step. -> { fish: measure, limit: measure, how }
+// the fish's length and the limit for a step. -> { fish: measure, limit: measure, how }. Every limit and every length
+// at least half a foot (keepQ then finds a kind of fish they both suit, or asks for other numbers).
+const atLeastHalf = (f) => value(f) >= 0.5 - 1e-9;
 function keepPair(level, rnd) {
   if (level <= 1) {
-    const limit = pick([fr(1, 4), fr(1, 2), fr(3, 4)], rnd);
-    const fish = rnd() < 0.15 ? limit : pick([fr(1, 4), fr(1, 2), fr(3, 4), fr(1)].filter((f) => !same(f, limit)), rnd);
+    // halves and quarters up to a foot: limits 1/2, 3/4, 1; fish 1/2, 3/4, 1
+    const limit = pick([fr(1, 2), fr(3, 4), fr(1)], rnd);
+    const fish = rnd() < 0.15 ? limit : pick([fr(1, 2), fr(3, 4), fr(1)].filter((f) => !same(f, limit)), rnd);
     return { fish: ft(fish), limit: ft(limit), how: 'ruler' };
   }
   if (level === 2) {
-    if (rnd() < 0.15) { const limit = pick([fr(1, 2), fr(1, 4), fr(3, 4)], rnd); return { fish: ft(over(limit, 8), 'frac'), limit: ft(limit), how: 'ruler' }; }
-    const pool = simplestList([2, 4, 8]).filter((f) => value(f) <= 1 && value(f) >= 0.25);
+    if (rnd() < 0.15) { const limit = pick([fr(1, 2), fr(3, 4)], rnd); return { fish: ft(over(limit, 8), 'frac'), limit: ft(limit), how: 'ruler' }; }
+    const pool = simplestList([2, 4, 8]).filter((f) => value(f) <= 1 && atLeastHalf(f));
     for (;;) {
       const a = pick(pool, rnd), b = pick(pool, rnd);
       if (same(a, b) || Math.abs(value(a) - value(b)) > 3 / 8 + 1e-9) continue;
       if (a.d !== 8 && b.d !== 8) continue;              // (one of them in eighths: the step's new idea)
-      if (value(b) >= 1) continue;                       // (a limit of a whole foot reads oddly at this step)
       return { fish: ft(a), limit: ft(b), how: 'ruler' };
     }
   }
   if (level === 4) {
-    const bases = [fr(1, 2), fr(1, 3), fr(2, 3), fr(1, 4), fr(3, 4), fr(2, 5), fr(3, 5), fr(4, 5), fr(5, 6)];
+    const bases = [fr(1, 2), fr(2, 3), fr(3, 4), fr(3, 5), fr(4, 5), fr(5, 6)], near = rnd() >= 0.3;
     for (;;) {
       const b = pick(bases, rnd), k = pick([2, 3, 4], rnd);
       if (b.d * k > 12 || b.d * k === 9) continue;
       let big = over(b, b.d * k);
-      if (rnd() >= 0.3) { const nn = big.n + pick([-1, 1], rnd); if (nn <= 0 || nn >= big.d) continue; big = fr(nn, big.d); }
+      if (near) { const nn = big.n + pick([-1, 1], rnd); if (nn >= big.d || nn * 2 < big.d) continue; big = fr(nn, big.d); }
       const [fish, limit] = rnd() < 0.5 ? [ft(big, 'frac'), ft(b)] : [ft(b), ft(big, 'frac')];
       return { fish, limit, how: 'equiv' };
     }
@@ -172,23 +189,23 @@ function keepPair(level, rnd) {
       const d1 = pick(dens, rnd), d2 = pick(dens, rnd); if (d1 === d2) continue;
       const related = d1 % d2 === 0 || d2 % d1 === 0; if (related && rnd() < 0.6) continue;
       if (lcm(d1, d2) > 24) continue;
-      const a = fr(int(1, d1 - 1, rnd), d1), b = fr(int(1, d2 - 1, rnd), d2);
-      if (!isSimplest(a) || !isSimplest(b) || same(a, b) || Math.abs(value(a) - value(b)) > 0.25 || value(b) < 0.25) continue;
+      const a = fr(int(Math.ceil(d1 / 2), d1 - 1, rnd), d1), b = fr(int(Math.ceil(d2 / 2), d2 - 1, rnd), d2);
+      if (!isSimplest(a) || !isSimplest(b) || same(a, b) || Math.abs(value(a) - value(b)) > 0.25) continue;
       return { fish: ft(a), limit: ft(b), how: 'unlike' };
     }
   }
   // step 6: mixed numbers and improper fractions, inches, feet against inches
   const sub = pick(['mixed', 'inches', 'units'], rnd);
   if (sub === 'mixed') {
+    // limits a little over a foot (1 1/8, 1 1/6, 1 1/4: what the bigger fish have posted), the fish near them, one of
+    // the two written as a mixed number and the other as a fraction
     const eq = rnd() < 0.3;
     for (;;) {
-      const d = pick([2, 3, 4, 8], rnd), p = int(1, d - 1, rnd); if (gcd(p, d) !== 1) continue;
-      const lim = fr(d + p, d);
+      const lim = pick([fr(9, 8), fr(7, 6), fr(5, 4)], rnd);
       let other;
       if (eq) other = lim;
-      else { const d2 = pick([d, d * 2 <= 8 ? d * 2 : d], rnd), base = over(lim, d2), nn = base.n + pick([-2, -1, 1, 2], rnd); if (nn <= d2 || nn >= 2 * d2) continue; other = fr(nn, d2); }
-      const mixedLimit = rnd() < 0.5;
-      return mixedLimit ? { fish: ft(other, 'frac'), limit: ft(lim), how: 'mixed' } : { fish: ft(lim), limit: ft(other, 'frac'), how: 'mixed' };
+      else { const d2 = pick([lim.d, lim.d * 2 <= 12 ? lim.d * 2 : lim.d], rnd), base = over(lim, d2), nn = base.n + pick([-2, -1, 1, 2, 3], rnd); if (nn <= d2 || nn >= 2 * d2) continue; other = fr(nn, d2); }
+      return rnd() < 0.5 ? { fish: ft(other, 'frac'), limit: ft(lim), how: 'mixed' } : { fish: ft(lim), limit: ft(other, 'frac'), how: 'mixed' };
     }
   }
   if (sub === 'inches') {
@@ -202,15 +219,19 @@ function keepPair(level, rnd) {
         const b2 = pick([2, 4, 8], rnd), wf = rnd() < 0.25 ? w + pick([-1, 1], rnd) : w, a2 = int(1, b2 - 1, rnd);
         if (gcd(a2, b2) !== 1) continue;
         fish = fr(wf * b2 + a2, b2);
-        if (same(fish, lim)) continue;
+        if (same(fish, lim) || value(fish) < 6) continue;
       }
       return { fish: measure(fish, 'in'), limit: measure(lim, 'in'), how: 'inches' };
     }
   }
-  // feet against inches: the limit a fraction of a foot that is a whole number of inches
-  const lim = pick([fr(1, 2), fr(1, 3), fr(2, 3), fr(3, 4), fr(5, 6), fr(5, 4), fr(3, 2), fr(4, 3)], rnd), X = value(lim) * 12;
-  const off = rnd() < 0.2 ? 0 : pick([-3, -2, -1, 1, 2, 3], rnd);   // half inches
-  return { fish: measure(simplest(fr(X * 2 + off, 2)), 'in'), limit: ft(lim), how: 'units' };
+  // feet against inches: the limit a fraction of a foot that is a whole number of inches, the fish in half inches
+  for (;;) {
+    const lim = pick([fr(1, 2), fr(2, 3), fr(3, 4), fr(5, 6), fr(1), fr(7, 6), fr(5, 4)], rnd), X = value(lim) * 12;
+    const off = rnd() < 0.2 ? 0 : pick([-3, -2, -1, 1, 2, 3], rnd);   // half inches
+    const fish = simplest(fr(X * 2 + off, 2));
+    if (value(fish) < 6) continue;
+    return { fish: measure(fish, 'in'), limit: ft(lim), how: 'units' };
+  }
 }
 
 const KEEP_RULE = {
@@ -245,9 +266,15 @@ function keepPic(fishM, limitM, kind, how, showAnswer = true) {
     { f: B, label: 'limit', colour: '#c98a5a', note: note(B) || label(limitM).replace(' ft', '') }],
   { whole, common: D <= 24 && D !== A.d && D !== B.d ? D : null, unitLabel: 'ft' });
 }
+// the picture shown WITH a question is only ever a tool, never the answer: on steps 1 and 2 a plain foot ruler
+// (marked in quarters, or eighths) with no fish laid on it and no limit line, so the kid finds both numbers on it.
+// The fish against the limit is the explanation's picture (helper), shown after a pick.
+const blankRuler = (level) => rulerPic({ unit: 'ft', to: 1, parts: level <= 1 ? 4 : 8, marks: [] });
 function keepQ(level, rnd, ctx) {
-  const { fish: len, limit, how } = keepPair(level, rnd);
-  const kind = kindFor(feet(len), rnd, ctx.counts), K = KINDS[kind];
+  // numbers a real fish could have: a kind that comes that long and has that limit posted (else other numbers)
+  let len, limit, how, kind;
+  for (;;) { ({ fish: len, limit, how } = keepPair(level, rnd)); kind = kindFor(feet(len), rnd, ctx.counts, feet(limit)); if (kind) break; }
+  const K = KINDS[kind];
   const work = compareWork(len, limit), answer = verdictOf(work.c);
   const yours = ctx.practice ? `Say you catch one ${words(len)} long.` : `Yours is ${words(len)} long.`;
   const helper = keepPic(len, limit, kind, how);
@@ -255,7 +282,7 @@ function keepQ(level, rnd, ctx) {
     topic: 'keep', key: `keep:${label(len)}|${label(limit)}`, fish: fishOf(kind, len), limit,
     prompt: `The keeper limit for ${K.one} is ${words(limit)}: keep one at least that long. ${yours} How does it measure up?`,
     choices: KEEP_CHOICES, labels: KEEP_CHOICES.map((c) => KEEP_LABELS[c]), answer, action: answer === 'shorter' ? 'throw' : 'keep',
-    why: `${work.lines.join(' ')} ${VERDICT[answer]}`, helper, svg: level <= 1 ? helper : '', lessonPic: helper,
+    why: `${work.lines.join(' ')} ${VERDICT[answer]}`, helper, svg: (ctx.from ?? level) <= 2 ? blankRuler(level) : '', lessonPic: helper,
     rule: KEEP_RULE[how], steps: [...work.lines, VERDICT[answer]], answerLabel: KEEP_LABELS[answer],
     check: { kind: 'keep', a: len, b: limit },
   };
@@ -278,8 +305,9 @@ function orderQ(level, rnd, ctx) {
       : simplestList([2, 3, 4, 8], 2).filter((f) => value(f) > 1 && value(f) < 2);
   const ok = cands.filter((f) => two.every((g) => !same(f, feet(g.len))) && lcm(lcm(f.d, two[0].len.d), two[1].len.d) <= 24);
   if (!ok.length) return null;
-  const c = pick(ok, rnd), form = level === 6 && rnd() < 0.5 ? 'frac' : 'mixed';
-  const catchFish = fishOf(kindFor(c, rnd, ctx.counts), ft(c, form));
+  const c = pick(ok, rnd), form = level === 6 && rnd() < 0.5 ? 'frac' : 'mixed', ck = kindFor(c, rnd, ctx.counts);
+  if (!ck) return null;
+  const catchFish = fishOf(ck, ft(c, form));
   const list = shuffle([{ f: two[0], who: 'creel' }, { f: two[1], who: 'creel' }, { f: catchFish, who: 'new' }], rnd);
   const right = [0, 1, 2].sort((i, j) => compareM(list[j].f.len, list[i].f.len));
   const keyOf = (p) => p.join(''), lab = (p) => p.map((i) => label(list[i].f.len)).join(' > ');
@@ -341,7 +369,7 @@ function addQ(level, rnd, ctx) {
   const A = creel[Math.floor(rnd() * Math.min(3, creel.length))], a = simplest(A.lb);
   // the new fish's weight
   const cands = [];
-  if (level === 3) { for (let n = 1; n < a.d; n++) { const b = fr(n, a.d); if (value(a) + value(b) <= 1 + 1e-9) cands.push(b); } }
+  if (level === 3) { for (let n = 1; n < a.d; n++) { const b = fr(n, a.d); if (gcd(n, a.d) === 1 && value(a) + value(b) <= 1 + 1e-9) cands.push(b); } }
   else if (level === 5) {
     for (const e of [2, 3, 4, 6, 8, 12]) {
       if (e === a.d || !(e % a.d === 0 || a.d % e === 0) || lcm(e, a.d) > 12) continue;
@@ -350,7 +378,8 @@ function addQ(level, rnd, ctx) {
   } else {
     for (const e of [2, 3, 4, 8]) { if (!(e % a.d === 0 || a.d % e === 0 || a.d === 1)) continue; for (let n = e + 1; n < 3 * e; n++) if (gcd(n, e) === 1) cands.push(fr(n, e)); }
   }
-  const usable = shuffle(cands, rnd).map((b) => ({ b, kind: kindForWeight(b, rnd, ctx.counts || {}) })).filter((x) => x.kind);
+  const usable = shuffle(cands.filter((b) => value(b) >= 0.25 - 1e-9), rnd).map((b) => ({ b, kind: kindForWeight(b, rnd, ctx.counts || {}) }))
+    .filter((x) => x.kind && weightFits(x.kind, feet(lengthForWeight(x.kind, x.b)), x.b));
   if (!usable.length) return null;
   const { b, kind } = usable[0];
   const catchFish = fishOf(kind, lengthForWeight(kind, b), measure(b, 'lb'));
@@ -399,8 +428,8 @@ function addQ(level, rnd, ctx) {
 // ── THE SAME LENGTH, OTHER NUMBERS ───────────────────────────────────────────────────────────────────────────────────
 function sameQ(level, rnd, ctx) {
   for (;;) {
-    const base = pick([fr(1, 2), fr(1, 3), fr(2, 3), fr(1, 4), fr(3, 4), fr(1, 6), fr(5, 6)], rnd), k = pick([2, 3, 4], rnd), D = base.d * k;
-    if (D > 12) continue;
+    const base = pick([fr(1, 2), fr(2, 3), fr(3, 4), fr(5, 6), fr(3, 5), fr(4, 5)], rnd), k = pick([2, 3, 4], rnd), D = base.d * k;
+    if (D > 12 || D === 9) continue;
     const big = over(base, D), finer = rnd() < 0.5;
     const answer = finer ? big : base, given = finer ? base : big;
     const wrong = [];
@@ -409,7 +438,8 @@ function sameQ(level, rnd, ctx) {
     else { push(fr(big.n / k, D)); push(fr(big.n, base.d)); push(fr(big.n - (D - base.d), base.d)); push(fr(big.n - 1, D - 1)); push(fr(base.n + 1, base.d)); push(fr(base.n, base.d + 1)); }
     if (wrong.length < 3) continue;
     const opts = shuffle([answer, ...shuffle(wrong, rnd).slice(0, 3)], rnd);
-    const kind = kindFor(answer, rnd, ctx.counts), K = KINDS[kind];
+    const kind = kindFor(answer, rnd, ctx.counts, finer ? base : null); if (!kind) continue;
+    const K = KINDS[kind];
     const len = ft(given, 'frac');
     const say = ctx.practice ? `Say your ${K.one}` : `Your ${K.one}`;
     const prompt = finer
@@ -529,21 +559,22 @@ const PLAN = {
 const KEEP_AT = { 1: 1, 2: 2, 3: 2, 4: 4, 5: 5, 6: 6, 7: 5 };
 // the topics each step can ask (Teach me, tests)
 export const TOPICS_AT = Object.fromEntries(Object.entries(PLAN).map(([k, v]) => [k, v.map((p) => p[0])]));
-const makeAt = (topic, from, rnd, ctx) => (topic === 'keep' ? keepQ(KEEP_AT[from], rnd, ctx) : MAKERS[topic](from, rnd, ctx));
+const makeAt = (topic, from, rnd, ctx) => (topic === 'keep' ? keepQ(KEEP_AT[from], rnd, { ...ctx, from }) : MAKERS[topic](from, rnd, ctx));
 
 // the question for a fish caught on this step. ctx: { creel: [fish kept, oldest first], counts: { kind: caught },
 // practice }; recent: keys of the last questions (none of them is asked again while another will do)
 export function ladderQuestion(level, rnd = Math.random, ctx = {}, recent = []) {
   level = Math.min(LADDER_TOP, Math.max(1, Math.round(level) || 1));
   ctx = { counts: {}, creel: [], ...ctx };
-  let best = null;
+  let best = null, bestAt = Infinity;
   for (let t = 0; t < 40; t++) {
     const from = level === LADDER_TOP ? pick([3, 4, 5, 5, 6, 6, 7, 7], rnd) : level;
     const q = makeAt(wpick(PLAN[from], rnd), from, rnd, ctx);
     if (!q) continue;
-    const out = { ...q, level, from };
-    if (!recent.includes(q.key)) return out;
-    best = best || out;
+    const out = { ...q, level, from }, at = recent.lastIndexOf(q.key);
+    if (at < 0) return out;
+    // (all asked lately: the one asked longest ago)
+    if (at < bestAt) { best = out; bestAt = at; }
   }
   return best || { ...keepQ(KEEP_AT[Math.min(level, 7)], rnd, ctx), level, from: Math.min(level, 7) };
 }
@@ -553,8 +584,8 @@ function practiceCreel(from, rnd) {
   const out = [];
   for (let t = 0; out.length < 3 && t < 60; t++) {
     const len = from === 6 ? pick(simplestList([2, 4, 8], 2).filter((f) => value(f) > 1 && value(f) < 2), rnd) : pick(simplestList(dens).filter((f) => value(f) >= 0.5 && value(f) <= 1), rnd);
-    const kind = kindFor(len, rnd), fish = fishOf(kind, ft(len));
-    if (from <= 3) fish.lb = measure(pick(simplestList([4, 8]).filter((f) => value(f) < 1), rnd), 'lb');
+    const kind = kindFor(len, rnd); if (!kind) continue;
+    const fish = fishOf(kind, ft(len));
     if (!out.some((f) => same(feet(f.len), len))) out.push(fish);
   }
   return out;
@@ -572,7 +603,7 @@ export const freshLadder = () => ({ level: 1, streak: 0, placing: true, slips: 0
 export function stepLadder(s, right) {
   const level = Math.min(LADDER_TOP, Math.max(1, Math.round(+s?.level || 1)));
   if (s?.placing) {
-    if (right) { const up = Math.min(LADDER_TOP, level + 1); return { level: up, streak: 0, placing: up < LADDER_TOP, slips: s.slips || 0 }; }
+    if (right) { const up = Math.min(LADDER_TOP, level + PLACE_JUMP); return { level: up, streak: 0, placing: up < LADDER_TOP, slips: s.slips || 0 }; }
     const slips = (s.slips || 0) + 1;
     return slips >= PLACING_SLIPS ? { level: Math.max(1, level - 1), streak: 0, placing: false, slips } : { level, streak: 0, placing: true, slips };
   }

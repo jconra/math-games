@@ -242,7 +242,7 @@ export function makeLake({ low = false } = {}) {
   for (let t = 0; t < 3000 && padSpots.length < 80; t++) { const x = -35 + rr() * 100, z = -100 + rr() * 115, s = lakeSDF(x, z); if (s > -2.5 || s < -8 || (x > -6 && x < 8 && z > -26 && z < 2)) continue; padSpots.push([x, z]); for (let k = 0; k < 4; k++) padSpots.push([x + (rr() - 0.5) * 3, z + (rr() - 0.5) * 3]); }
   const pads = new THREE.InstancedMesh(padGeo, new THREE.MeshLambertMaterial({ color: 0xffffff }), padSpots.length);
   const pc = new THREE.Color();
-  padSpots.forEach(([x, z], i) => { e.set(0, rr() * 6.3, 0); q.setFromEuler(e); const s = 0.6 + rr() * 0.8; sv.set(s, 1, s); pv.set(x, 0.012 + i * 0.0001, z); m4.compose(pv, q, sv); pads.setMatrixAt(i, m4); pads.setColorAt(i, pc.setHSL(0.24 + rr() * 0.05, 0.45, 0.24 + rr() * 0.08)); });
+  padSpots.forEach(([x, z], i) => { e.set(0, rr() * 6.3, 0); q.setFromEuler(e); const s = 0.6 + rr() * 0.8; sv.set(s, 1, s); pv.set(x, 0.012 + (i % 6) * 0.004, z); m4.compose(pv, q, sv); pads.setMatrixAt(i, m4); pads.setColorAt(i, pc.setHSL(0.24 + rr() * 0.05, 0.45, 0.24 + rr() * 0.08)); });
   pads.receiveShadow = true; pads.renderOrder = 3; scene.add(pads);
 
   // ── the dock: pilings, two beams, planks across, a wider platform at the end ───────────────────────────────────────
@@ -293,13 +293,22 @@ export function makeLake({ low = false } = {}) {
   const basket = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.3, 0.26), new THREE.MeshLambertMaterial({ map: wickerTex })); basket.position.y = 0.15; basket.castShadow = true; creel.add(basket);
   const lid = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.04, 0.28), new THREE.MeshLambertMaterial({ map: wickerTex, color: 0xd8c8a8 })); lid.position.y = 0.32; lid.castShadow = true; creel.add(lid);
   const strap = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.012, 4, 16, Math.PI), new THREE.MeshLambertMaterial({ color: 0x4a3020 })); strap.position.y = 0.33; creel.add(strap);
-  const can = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.12, 12), new THREE.MeshLambertMaterial({ color: 0x8e8a80 })); can.position.set(1.0, DECK + 0.06, 1.3); can.castShadow = true; dock.add(can);
-  const dirt = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.055, 0.01, 12), new THREE.MeshLambertMaterial({ color: 0x3a2a1a })); dirt.position.set(1.0, DECK + 0.115, 1.3); dock.add(dirt);
+  // the bait can: an open tin standing a centimetre down into its plank (no face level with the plank's top), a rolled
+  // rim, the dirt well inside it (2.5 cm below the rim, so no two faces share a height) and two worms on the dirt
+  const tinMat = new THREE.MeshLambertMaterial({ color: 0xb4b0a6, side: THREE.DoubleSide });
+  const can = new THREE.Group(); can.position.set(1.0, DECK, 1.3); dock.add(can);
+  const wall = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.13, 18, 1, true), tinMat); wall.position.y = 0.055; wall.castShadow = true; can.add(wall);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.004, 5, 24), tinMat); rim.rotation.x = Math.PI / 2; rim.position.y = 0.12; can.add(rim);
+  const dirt = new THREE.Mesh(new THREE.CircleGeometry(0.057, 18).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0x3a2a1a })); dirt.position.y = 0.095; can.add(dirt);
+  const wormMat = new THREE.MeshLambertMaterial({ color: 0xc07a72 });
+  for (const [x, z, a] of [[-0.015, 0.01, 0.4], [0.02, -0.015, 2.2]]) { const w = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.0035, 5, 10, Math.PI * 1.2), wormMat); w.rotation.set(Math.PI / 2, 0, a); w.position.set(x, 0.1, z); can.add(w); }
   // the stringer's rope, from the corner post's top down into the water (the kept fish hang on it)
   const ropeMat = new THREE.LineBasicMaterial({ color: 0x8a7a5a });
   const rope = new THREE.Line(new THREE.BufferGeometry().setFromPoints([STRINGER.clone(), new THREE.Vector3(STRINGER.x + 0.15, -0.4, STRINGER.z - 0.25)]), ropeMat);
   dock.add(rope);
   dock.traverse((o) => { if (o.isMesh) o.receiveShadow = true; });
+  // (the can's open, two-sided tin would shadow itself all over: it takes no shadows, it only casts one)
+  can.traverse((o) => { if (o.isMesh) o.receiveShadow = false; });
 
   // ── trees round the far shores (the game's own), darker forest behind them ─────────────────────────────────────────
   const tr = rng(61), treeSpots = [];

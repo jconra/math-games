@@ -38,6 +38,32 @@ function checkWords(q) {
   assert.doesNotMatch(sentences, /(?<![\d/] ?)\b1 (?:feet|inches|pounds)\b|\b(?:[02-9]|\d\d+) (?:foot|inch|pound)\b/, `one/many: ${sentences}`);
   for (const l of q.labels) { assert.doesNotMatch(l, /undefined|NaN|feet|inches|pounds/, l); assert.doesNotMatch(l, /\d in(?!\.)\b/, l); }
 }
+// real sizes: every fish at least half a foot and a length its kind comes in, a weight that suits it, every keeper
+// limit at least half a foot and one that kind has posted; the creel's fish in a line-up too
+function realSizes(q) {
+  const f = q.fish, L = F.feet(f.len);
+  assert.ok(F.value(L) >= 0.5 - 1e-9, `${q.topic}: a ${f.kind} ${F.label(f.len)} long`);
+  assert.ok(Q.lengthFits(f.kind, L), `${q.topic}: a ${f.kind} doesn't come ${F.label(f.len)} long`);
+  assert.ok(Q.weightFits(f.kind, L, f.lb), `${q.topic}: a ${F.label(f.len)} ${f.kind} weighing ${F.label(f.lb)}`);
+  if (q.topic === 'keep') {
+    assert.ok(F.value(F.feet(q.limit)) >= 0.5 - 1e-9, `a limit of ${F.label(q.limit)}`);
+    assert.ok(Q.limitFits(f.kind, F.feet(q.limit)), `a ${f.kind} limit of ${F.label(q.limit)}`);
+  }
+  if (q.topic === 'order') for (const m of q.check.list) assert.ok(F.value(F.feet(m)) >= 0.5 - 1e-9, `a ${F.label(m)} fish in a line-up`);
+  if (q.topic === 'add') for (const w of [q.check.a, q.check.b]) assert.ok(F.value(w) >= 0.25 - 1e-9, `a ${F.label(F.measure(w, 'lb'))} fish in the creel`);
+}
+// a picture shown WITH the question is a tool only: no fish laid on it, no limit (or any marked) line, no shading, and
+// none of the answer's own words or numbers in it
+function noGiveAway(q) {
+  if (!q.svg) return;
+  assert.doesNotMatch(q.svg, /<path/, `${q.topic}: a fish (or another shape) drawn in the question's picture`);
+  assert.doesNotMatch(q.svg, /stroke-dasharray/, `${q.topic}: a marked line in the question's picture`);
+  assert.doesNotMatch(q.svg, /opacity="0\.85"|rgba\(79,122,42/, `${q.topic}: something shaded in the question's picture`);
+  assert.doesNotMatch(q.svg, /limit|Longer|Shorter|same/i, `${q.topic}: words of the answer in the question's picture`);
+  // the ruler's numbers are the only numbers in it (no fish length, no limit)
+  const texts = [...q.svg.matchAll(/>([^<]+)</g)].map((m) => m[1].trim()).filter(Boolean);
+  for (const t of texts) assert.match(t, /^(\d+|ft|in\.)$/, `${q.topic}: "${t}" written in the question's picture`);
+}
 function checkPictures(q) {
   for (const s of [q.helper, q.lessonPic, q.svg].filter(Boolean)) {
     assert.match(s, /^<svg class="pic" viewBox="0 0 320 \d+(\.\d+)?">/);
@@ -106,7 +132,9 @@ test('every step, hundreds of catches: right answers, real wrong ones, the words
       assert.ok(q.rule && q.steps.length >= 1 && q.answerLabel, `${q.topic}: no lesson`);
       assert.ok(Q.KINDS[q.fish.kind], 'a fish of a known kind');
       assert.ok(q.fish.lb && q.fish.lb.n > 0, 'it has a weight');
-      if (level === 1) assert.ok(q.svg, 'step 1 shows the ruler with the question');
+      if (q.from <= 2 && q.topic === 'keep') assert.ok(q.svg, 'steps 1 and 2 show a ruler with the question');
+      noGiveAway(q);
+      realSizes(q);
     }
   }
   // each step asks what it says it asks
@@ -162,13 +190,16 @@ test('Teach me / Try it: a fresh practice question of every topic, said as a "sa
 test('the ladder: placing climbs fast, then three right in a row climbs, a wrong one drops', () => {
   let s = Q.freshLadder();
   assert.deepEqual(s, { level: 1, streak: 0, placing: true, slips: 0 });
-  s = Q.stepLadder(s, true); s = Q.stepLadder(s, true); s = Q.stepLadder(s, true);
-  assert.equal(s.level, 4, 'placing: a step for each right answer');
+  assert.equal(Q.PLACE_JUMP, 2);
+  s = Q.stepLadder(s, true); s = Q.stepLadder(s, true);
+  assert.equal(s.level, 5, 'placing: two steps for each right answer');
   s = Q.stepLadder(s, false);
-  assert.equal(s.level, 4, 'the first slip is forgiven'); assert.equal(s.placing, true);
-  s = Q.stepLadder(s, true); assert.equal(s.level, 5);
+  assert.equal(s.level, 5, 'the first slip is forgiven'); assert.equal(s.placing, true);
+  s = Q.stepLadder(s, true); assert.equal(s.level, 7);
   s = Q.stepLadder(s, false);
-  assert.equal(s.level, 4, 'the second slip ends placing a step down'); assert.equal(s.placing, false);
+  assert.equal(s.level, 6, 'the second slip ends placing a step down'); assert.equal(s.placing, false);
+  s = Q.stepLadder(s, false); assert.equal(s.level, 5);
+  s = Q.stepLadder(s, false); assert.equal(s.level, 4);
   assert.equal(Q.CLEAN_TO_CLIMB, 3);
   s = Q.stepLadder(s, true); s = Q.stepLadder(s, true); assert.equal(s.level, 4);
   s = Q.stepLadder(s, true); assert.equal(s.level, 5, 'three right in a row');
@@ -204,7 +235,13 @@ test('the ladder moves with the kid: simulated anglers settle where they get abo
   }
   // an always-right kid reaches the top in a handful of fish; an always-wrong one stays on step 1
   let s = Q.freshLadder(), n = 0; while (s.level < Q.LADDER_TOP) { s = Q.stepLadder(s, true); n++; }
-  assert.ok(n <= 8, `${n} fish to the top`);
+  assert.equal(n, 4, `${n} fish to the top`);
+  // how many fish a fresh kid who knows steps up to k well takes to be working on step k or above (placing only)
+  for (const knows of [3, 5, 7]) {
+    let t = Q.freshLadder(), fish = 0;
+    while (t.level < Math.min(knows, Q.LADDER_TOP) && fish < 20) { t = Q.stepLadder(t, t.level <= knows); fish++; }
+    assert.ok(fish <= Math.ceil((knows - 1) / 2) + 1, `knows ${knows}: ${fish} fish to reach it`);
+  }
   s = Q.freshLadder(); for (let i = 0; i < 20; i++) s = Q.stepLadder(s, false); assert.equal(s.level, 1);
 });
 
@@ -220,12 +257,18 @@ test('fractions, measures and words', () => {
 
 test('the fish: kinds that come that long, weights, sizes, the record and the book', () => {
   const rnd = seeded(3);
-  for (let q = 1; q <= 12; q++) {
+  for (let q = 2; q <= 12; q++) {
     const L = F.fr(q, 4), k = Q.kindFor(L, rnd);
-    if (q >= 2) assert.ok(F.value(L) >= F.value(Q.KINDS[k].min) && F.value(L) <= F.value(Q.KINDS[k].max), `${k} at ${F.fracText(L)} ft`);
-    const w = Q.weightFor(k, L); assert.ok(w.n > 0 && [1, 2, 4, 8].includes(w.d), F.label(w));
+    assert.ok(F.value(L) >= F.value(Q.KINDS[k].min) && F.value(L) <= F.value(Q.KINDS[k].max), `${k} at ${F.fracText(L)} ft`);
+    const w = Q.weightFor(k, L); assert.ok(w.n > 0 && [1, 2, 4, 8].includes(w.d) && F.value(w) >= 0.25, F.label(w));
   }
+  assert.equal(Q.kindFor(F.fr(1, 3), rnd), null, 'no fish a third of a foot long');
+  assert.equal(Q.kindFor(F.fr(3, 4), rnd, {}, F.fr(1, 6)), null, 'no limit of a sixth of a foot');
+  assert.equal(Q.kindFor(F.fr(3, 4), rnd, {}, F.fr(1, 2)), 'perch', 'only perch have a 6 inch limit');
+  for (const k of Q.KIND_LIST) { const K = Q.KINDS[k]; assert.ok(F.value(K.limLo) >= 0.5 && F.value(K.min) >= 0.5, k); if (k !== 'perch') assert.ok(F.value(K.limLo) >= 2 / 3 - 1e-9 && F.value(K.limHi) <= 1.25, k); }
   assert.equal(F.label(Q.weightFor('bass', F.fr(5, 4))), '1 3/4 lb', 'a 15 inch bass is about 1 3/4 pounds');
+  assert.equal(F.label(Q.weightFor('perch', F.fr(1, 2))), '1/4 lb', 'a fish half a foot long weighs at least a quarter pound');
+  assert.ok(!Q.weightFits('trout', F.fr(1), F.M(1, 8, 'lb')), 'a 1 ft trout is no eighth of a pound');
   assert.equal(Q.sizeOf({ kind: 'trout', len: F.M(1, 2, 'ft') }), 'small');
   assert.equal(Q.sizeOf({ kind: 'trout', len: F.M(1, 1, 'ft') }), 'keeper');
   assert.equal(Q.sizeOf({ kind: 'trout', len: F.M(18, 1, 'in') }), 'trophy');
