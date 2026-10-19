@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Fishing Lab</title>
+<meta name="description" content="A Bandit Math prototype: fish off the dock, keep the big ones and throw back the small ones, with fractions and ratios.">
+<!-- the on-screen error box comes first, so a crash shows on screen instead of a blank page -->
+<script src="../../oops.js"></script>
+<link rel="stylesheet" href="../../src/ui/fonts/fonts.css">
+<link rel="stylesheet" href="fishing.css?v=4">
+<script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/" } }</script>
+</head>
+<body>
+<div id="app">
+  <canvas id="c" aria-label="The lake, the dock and the angler"></canvas>
+
+  <div class="bar top">
+    <div class="stats">
+      <div><small>Kept</small><b id="kept">0</b></div>
+      <div><small>Back</small><b id="back">0</b></div>
+      <div class="st-best"><small>Biggest</small><b id="best">none yet</b></div>
+    </div>
+    <div class="tools">
+      <button class="btn" id="book-btn" title="The fish book: every kind in three sizes">Fish book <span id="book-n">0/12</span></button>
+      <div class="snd"><button class="btn icon" id="mute" aria-label="Sound on or off" title="Sound on/off"><svg viewBox="0 0 24 24"><path class="spk" d="M4 9h4l5-4v14l-5-4H4z"/><path class="wav" d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/><path class="x" d="M16 9l6 6M22 9l-6 6"/></svg></button><input type="range" id="vol" min="0" max="100" value="80" aria-label="Volume" title="Volume"></div>
+    </div>
+  </div>
+
+  <div class="hint-line" id="hint"></div>
+  <div class="reel" id="reel" hidden>
+    <div class="gauges">
+      <div class="gauge tension"><small>Line</small><div class="track"><i id="tension"></i></div></div>
+      <div class="gauge reeled"><small>Reeled in</small><div class="track"><i id="reeled"></i></div></div>
+    </div>
+    <button class="btn go reel-btn" id="reel-btn">Hold to reel</button>
+  </div>
+
+  <div class="card" id="card" hidden></div>
+  <div class="card book" id="book" hidden></div>
+  <div class="toast" id="toast" hidden></div>
+  <div class="perf" id="perf" hidden></div>
+</div>
+<div class="loading" id="loading">Walking down to the lake…</div>
+<script type="module" src="main.js?v=3"></script>
+</body>
+</html>
