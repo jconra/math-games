@@ -1,4 +1,4 @@
-// THE WAGON: one of the owner's four Tripo wagons (models/wagons/, made game-ready by
+// THE WAGON: one of four Tripo wagons (models/wagons/, made game-ready by
 // ~/pw/bandit-math/rigs/wagons/build_wagons.mjs), pulled by a team of two horses with a driver on the seat, rolling
 // along a path at a steady pace: the body pitching and rolling with the ground under its four wheels, each wheel turning
 // exactly as far as it rolls, the front wheels and the tongue swinging to follow the team round the bends, the horses'

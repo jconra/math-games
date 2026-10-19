@@ -272,7 +272,7 @@ test('numbers print with the real minus sign and commas', () => {
 });
 
 // A simulated kid, right on each pick with a chance that falls as the cards get harder than their skill, settles near
-// their skill and is right on about four picks in five (the owner's aim for the other topics: about 80%).
+// their skill and is right on about four picks in five (the aim for the other topics: about 80%).
 test('a simulated kid settles near their own step, right about four times in five', () => {
   for (const skill of [3, 6]) {
     for (const seed of [11, 22, 33]) {

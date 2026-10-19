@@ -1,6 +1,6 @@
 // THE TARGET RANGE'S SOUNDS (src/missions/shooting.js), made in the browser as Sound Lab patches (RANGE_PATCHES below,
 // the same in the Sound Lab's RANGE group, ~/sound-lab/patch.js: tune one there by ear, then paste it back here). Every
-// one is noise through filters, never a ringing tone (the owner's rule for hits and knocks):
+// one is noise through filters, never a ringing tone (the rule for hits and knocks):
 //   SHOT     the six-shooter: a sharp crack of bright noise, a short bark in the middle, and a low thump of dark noise,
 //            with a little of the open air after it (kept well under the music and the town: it is heard a lot)
 //   CLANK    a bullet knocking a tin can off the plank: a hard tick and two short bands of tinny noise

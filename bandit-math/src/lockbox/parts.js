@@ -90,7 +90,7 @@ function sumChoices(A, B, sum, rand, extraTerms = []) {
   if (a.sign() * b.sign() < 0) more.push({ term: mk(a.abs().add(b.abs())), tag: 'drop' });
   if (isInt(c)) more.push({ term: mk(c.add(F(rand() < 0.5 ? 1 : -1))), tag: 'off' });
   more.push({ term: clone(A), tag: 'one' });
-  // the x answer always offers the dropped x (the owner's 5x − 4x: x, 9x, 1, −x); the rest come in a random order
+  // the x answer always offers the dropped x (5x − 4x: x, 9x, 1, −x); the rest come in a random order
   const fixed = sum.t === 'x' ? more.filter((m) => m.tag === 'nox') : [];
   const rest = shuffle(more.filter((m) => !fixed.includes(m)), rand);
   const extra = [];

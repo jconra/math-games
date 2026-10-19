@@ -15,13 +15,13 @@ const bright = (d) => { let a = 0, b = 0; for (let i = 1; i < d.length; i++) { a
 // the step across the seam is no bigger than an ordinary step inside the loop (no click where it wraps)
 const seamOK = (d) => { const steps = []; for (let i = 1; i < d.length; i++) steps.push(Math.abs(d[i] - d[i - 1])); steps.sort((x, y) => x - y); return Math.abs(d[0] - d[d.length - 1]) <= steps[Math.floor(steps.length * 0.99)]; };
 
-test("one settings block each: the sliders' names, the owner's creek", () => {
+test("one settings block each: the sliders' names, the tuned creek", () => {
   assert.deepEqual(Object.keys(BROOK).sort(), ['bubbleHigh', 'bubbleLen', 'bubbleLow', 'bubbles', 'fizz', 'fizzTop', 'gurglePitch', 'gurgles', 'level', 'lowpass', 'passes', 'rise', 'seconds']);
   assert.deepEqual({ seconds: BROOK.seconds, bubbles: BROOK.bubbles, low: BROOK.bubbleLow, high: BROOK.bubbleHigh, lowpass: BROOK.lowpass, passes: BROOK.passes, level: BROOK.level },
-    { seconds: 9, bubbles: 57, low: 650, high: 2977, lowpass: 406, passes: 3, level: 0.47 }, "the defaults are the owner's creek from the Sound Lab");
+    { seconds: 9, bubbles: 57, low: 650, high: 2977, lowpass: 406, passes: 3, level: 0.47 }, "the defaults are the creek tuned in the Sound Lab");
   for (const k of ['crackles', 'cluster', 'clusterLen', 'crackleShort', 'crackleLong', 'bright', 'spread', 'pops', 'knock', 'settles', 'breath', 'lowpass', 'seconds', 'level']) assert.ok(k in FIRE, 'FIRE.' + k);
   assert.ok(FIRE.crackles > 20 * FIRE.pops, 'mostly crackles, fewer pops');
-  assert.ok(FIRE.crackleShort >= 0.1 && FIRE.crackleLong <= 15, 'crackles are short clicks (the owner tuned 1.1 to 12 ms)');
+  assert.ok(FIRE.crackleShort >= 0.1 && FIRE.crackleLong <= 15, 'crackles are short clicks (tuned to 1.1 to 12 ms)');
   assert.ok(FIRE.breath <= 0.1, 'a breath of flame, not a roar');
   assert.equal(ambience.brookSamples, brookSamples, 'the town plays the shared creek');
 });

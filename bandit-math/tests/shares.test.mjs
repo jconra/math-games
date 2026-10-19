@@ -70,14 +70,14 @@ test('every problem: the sum works, one right coin, wrong coins are named real s
   assert.ok(n > 2500);
 });
 
-test('the slips the owner named are there: multiplied, the leftover forgotten, the leftover given to the wrong place', () => {
+test('the slips named are there: multiplied, the leftover forgotten, the leftover given to the wrong place', () => {
   const seen = {};
   for (const p of everyShare(60, 7)) for (const c of p.coins) if (!c.good) (seen[p.kind] ||= new Set()).add(c.slip);
   for (const s of ['mult', 'over', 'under']) assert.ok(seen.even.has(s), `even: ${s}`);
   for (const s of ['noRem', 'short', 'over']) assert.ok(seen.rem.has(s), `rem: ${s}`);
   for (const s of ['each', 'noRem', 'roundDown', 'roundUp']) assert.ok(seen.leftover.has(s), `leftover: ${s}`);
   for (const s of ['even', 'onePart']) assert.ok(seen.rule.has(s) && seen.rule3.has(s), `rule: ${s}`);
-  // the owner's example: 23 silver dollars, 4 families
+  // an example: 23 silver dollars, 4 families
   let ex = null;
   const r = seeded(2);
   for (let i = 0; i < 20000 && !ex; i++) { const p = makeShare('rem', { rand: r, step: 3 }); if (p.total === 23 && p.groups === 4) ex = p; }

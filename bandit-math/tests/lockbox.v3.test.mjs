@@ -68,7 +68,7 @@ function checkParts(l, m, where) {
   return P;
 }
 
-// ---------- the owner's examples ----------
+// ---------- worked examples ----------
 
 test('5x = 4x + 27, −4x: the 4x − 4x cancels by itself; "5x − 4x = ?" asks x, 9x, 1, −x', () => {
   const P = partsOf(line([xt(5)], [xt(4), num(27)]), addX(-4), { rng: makeRng(1) });

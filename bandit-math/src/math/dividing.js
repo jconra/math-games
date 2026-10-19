@@ -61,7 +61,7 @@ export const CLEAN_TO_CLIMB = 3;        // clean cards in a row to move up a ste
 export const MAX_DOWN_PER_WAVE = 1;     // a rough wave can drop the kid this many steps at most
 export const PLACEMENT_MISSES = 2;      // the first-visit climb ends at this many misses (one slip is forgiven)
 export const PLACE_BELOW = 2;           // the climb ends this many steps below the step the kid had reached (as times
-                                        // tables and positive & negative; a default, not the owner's ruling)
+                                        // tables and positive & negative; a default, not a final ruling)
 export const REVIEWS_COUNT_UP = false;  // review cards (from an earlier step) and comebacks don't count toward the climb
 export const WARMUP_WAVES = 2;          // easy waves at the start of each session
 export const WARMUP_BELOW = 2;          // how many steps below the kid's step the warm-ups come from

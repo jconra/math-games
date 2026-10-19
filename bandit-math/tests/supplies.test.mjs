@@ -16,7 +16,7 @@ function* everyOrder(per = 60) {
   }
 }
 
-test('the owner\'s example works out: 6 hands x 3 meals x a fortnight = 252 cans, crates of 12 -> 21; 250 cans still need 21', () => {
+test('the worked example works out: 6 hands x 3 meals x a fortnight = 252 cans, crates of 12 -> 21; 250 cans still need 21', () => {
   // (found among the step-3 orders: a fortnight, exact crates)
   let found = null;
   const r = seeded(7);

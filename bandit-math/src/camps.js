@@ -1,7 +1,7 @@
 // THE CAMPS: three camps out in the valley, away from the town, on flat open ground (picked from a survey of the land:
 // the height within about half a metre over the camp, dry, no trees, clear of the trail, the creek, the farm, the
-// pasture and the corral; ~/pw/bandit-math/rigs/camps/survey.cjs). Each one is a Tripo model of the owner's
-// (models/camps/campN.glb, built from his camp1-3 by ~/pw/bandit-math/rigs/camps/build_camps.mjs: every part baked into
+// pasture and the corral; ~/pw/bandit-math/rigs/camps/survey.cjs). Each one is a Tripo model of the game maker's
+// (models/camps/campN.glb, built from the camp1-3 models by ~/pw/bandit-math/rigs/camps/build_camps.mjs: every part baked into
 // one mesh, so a camp is one draw; real size; a 1024 picture for the normal and potato tiers in models/camps/lo/), turned
 // to face the town, with a few people about it and, at the two that have a ring of stones, a campfire burning in it
 // (src/fire/campfire.js). The camps order supplies from the general store: the delivery job (src/missions/delivery.js).

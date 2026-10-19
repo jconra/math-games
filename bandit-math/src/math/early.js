@@ -53,7 +53,7 @@ export const PLACE_BELOW = 2;           // ... this many steps below where the k
 // Simulated kids (the negatives tests' kid model, 40 kids a set, 3 seed sets; ~/pw/bandit-math/rigs/early/settle.mjs)
 // settle near 81% right on their own step's cards on all three topics (80.5 to 81.9%). With 2 below, first-visit kids
 // land on average 0.4 to 1.0 steps above where they settle; with 1 below, 1.3 to 1.7 above. The times tables and
-// positive & negative use 2 as well (a math-lane default, not yet the owner's call: set 1 here to go back).
+// positive & negative use 2 as well (a math-lane default, not yet a final call: set 1 here to go back).
 export const REVIEWS_COUNT_UP = false;  // review cards and comebacks don't count toward the 3 in a row (as negatives)
 export const WARMUP_WAVES = 2;          // easy waves at the start of each session
 export const WARMUP_BELOW = 2;          // how many steps below the kid's step the warm-ups come from

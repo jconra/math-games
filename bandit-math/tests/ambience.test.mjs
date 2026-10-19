@@ -19,7 +19,7 @@ test('every clip the game plays is in sounds/ as .ogg and .m4a, with a credit; n
   for (const f of files) assert.ok(CLIPS[f.replace(/\.(ogg|m4a)$/, '')], f + ' is played by the game');
 });
 
-test("the owner's picks by ear: one moo for every cow, no whine, the pug's woof, the grating bark rare", () => {
+test("picks by ear: one moo for every cow, no whine, the pug's woof, the grating bark rare", () => {
   const cows = Object.keys(CLIPS).filter((n) => n.startsWith('cow_'));
   assert.deepEqual(cows.sort(), ['cow_herd_distant', 'cow_moo_1']);
   assert.deepEqual(SOURCES.cows.clips.map(([n]) => n), ['cow_moo_1']);

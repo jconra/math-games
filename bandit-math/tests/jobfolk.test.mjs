@@ -28,7 +28,7 @@ test('the hello is two short lines: the problem, then what to do', () => {
       assert.ok(!/\b(press|click)\b/i.test(l), `${f.id}: no keys named (the prompt shows them, and phones tap)`);
     }
   }
-  // the problems the owner asked for
+  // the problems asked for
   assert.match(FOLK_BY_ID.boss.hello[0], /mixed in with the big herd/);
   assert.match(FOLK_BY_ID.vet.hello[0], /sickness/);
   assert.match(FOLK_BY_ID.wife.hello[0], /gate/);

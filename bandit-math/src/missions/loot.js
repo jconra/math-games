@@ -9,11 +9,11 @@
 // Riding up to the cache loads the loot on the horse (it shows on her back, in panniers and a strongbox on top). The
 // loot is heavy: it needs a saddled horse (the deputy and Old Hob say where to buy one). The compass then points back
 // to the sheriff's office, where the folks it was taken from come out to wait; as you ride in one of them sees his
-// goods ("Is that my stuff?", the owner's own recording, src/audio/shouts.js). Pulling up in front of them brings up the
+// goods ("Is that my stuff?", the game maker's own recording, src/audio/shouts.js). Pulling up in front of them brings up the
 // store's parchment slip (src/ui/storeslip.js) with the first bundle's sharing problem (src/math/shares.js): fair
 // shares and leftovers, its own kind of problem. Pick a coin. A wrong coin shakes, one plain line says what that slip
 // was, and the slip draws the sharing (dealt out round and round, the trips and boxes, the parts): never the answer.
-// A right coin: each family's one steps up and takes their share, someone says thank you (the men in the owner's
+// A right coin: each family's one steps up and takes their share, someone says thank you (the men in the game maker's
 // recorded voice; the women in a speech card only), gold from the deputy flies into the purse, and the next bundle's
 // problem slides in. When the last bundle is handed back the trip pays a bonus, it counts toward the "loot returned"
 // belt buckle (save.js JOBS), the deputy thanks you, and before long there's word of another stash elsewhere.
