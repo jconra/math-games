@@ -149,14 +149,16 @@ export function makeScene({ low = false } = {}) {
     }
   }
   // the banks' compass letters, painted on the stone tops in the middle of the road: W on the west, E on the east
+  // (1 cm above the stone cap, whose top is at 0.02 m, and drawn with a polygon offset: they used to sit exactly in the
+  // cap's top face and flicker)
   const letter = (ch) => { const cv = document.createElement('canvas'); cv.width = cv.height = 128; const g = cv.getContext('2d');
     g.font = '700 96px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = 'rgba(244, 232, 207, 0.85)'; g.strokeStyle = 'rgba(40, 28, 16, 0.6)'; g.lineWidth = 6;
     g.strokeText(ch, 64, 70); g.fillText(ch, 64, 70); const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t; };
   const marks = [['W', -1], ['E', 1]].map(([ch, side]) => {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.1), new THREE.MeshBasicMaterial({ map: letter(ch), transparent: true, depthWrite: false }));
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 1.1), new THREE.MeshBasicMaterial({ map: letter(ch), transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
     m.rotation.x = -Math.PI / 2; m.renderOrder = 3; scene.add(m); return { m, side };
   });
-  const placeMarks = (S) => { for (const { m, side } of marks) m.position.set(side * (S / 2 + 2.2) * FT, 0.02, 0); };
+  const placeMarks = (S) => { for (const { m, side } of marks) m.position.set(side * (S / 2 + 2.2) * FT, 0.03, 0); };
   const setSpan0 = setSpan;
   setSpan = (S) => { setSpan0(S); placeMarks(S); };
   setSpan(SPAN0);

@@ -64,7 +64,7 @@ const renderer = new THREE.WebGLRenderer({ canvas: el.canvas, antialias: true })
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, phone ? 1.5 : 2));
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
-const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 2000);
+const camera = new THREE.PerspectiveCamera(30, 1, 0.3, 1000);   // (near 0.3, far just past the sky dome: depth to spare for the painted letters)
 const world = makeScene({ low: phone });
 const { scene } = world;
 const towerView = makeTowerView(scene);
