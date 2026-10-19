@@ -288,6 +288,15 @@ function specOnScreen(g) {
 }
 const distToSeg = (p, A, B) => { const vx = B.x - A.x, vy = B.y - A.y, L2 = vx * vx + vy * vy || 1, t = Math.max(0, Math.min(1, ((p.x - A.x) * vx + (p.y - A.y) * vy) / L2)); return Math.hypot(A.x + vx * t - p.x, A.y + vy * t - p.y); };
 const TWIN_REACH = 22;
+// the nailed board under the pointer (not a deck plank): straight under it, else within `slop` pixels round it (a finger
+// covers more than a pixel). -> { b (the board's record), P (the spot hit, feet) } or null
+app.boardUnder = (cx, cy, slop = 0) => {
+  const ms = towerView.meshes();
+  const at = (x, y) => { aim(x, y); const h = ray.intersectObjects(ms, false).find((q) => app.tower.boards.includes(q.object.userData.src)); return h ? { b: h.object.userData.src, P: { X: h.point.x / FT, Y: h.point.y / FT, Z: h.point.z / FT } } : null; };
+  let b = at(cx, cy); if (b || !slop) return b;
+  for (const f of [0.5, 1]) for (let k = 0; k < 8; k++) { const a = k * Math.PI / 4; b = at(cx + Math.cos(a) * slop * f, cy + Math.sin(a) * slop * f); if (b) return b; }
+  return null;
+};
 // the twin a tap means (the windmill's rule), or a nailed board under it (deck planks count: a tap on one offers to
 // take up the deck)
 function pickAt(cx, cy) {

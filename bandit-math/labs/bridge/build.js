@@ -397,9 +397,13 @@ export function makeBuild(app) {
   function dragFree(h, cx, cy, plane = null) {
     const r = el.view.getBoundingClientRect(), fx = cx - r.left, fy = cy - r.top;
     const skip = atSocket(h);
-    let best = null;
-    for (const o of T().boards) {
-      if (skip.includes(o)) continue;
+    // (the board right under the pointer wins, if the free end can reach it; else it says so, and the nearest one does)
+    const under = app.boardUnder ? app.boardUnder(cx, cy, gesture && gesture.touch ? 14 : 0) : null;
+    const want = under && !skip.includes(under.b) && T().boards.includes(under.b) ? under.b : null;
+    let best = null, wanted = false;
+    for (const o of want ? [want, ...T().boards] : T().boards) {
+      if (skip.includes(o) || (wanted && o === want)) continue;
+      const mine = o === want && !wanted; if (mine) wanted = true;
       const span = reachOn(h.A, h.len, o); if (!span) continue;
       const at = (s) => { const c = connectTo(h.A, h.len, o, s); if (!c) return null; const P = app.worldToScreen(c.b.X, c.b.Y, c.b.Z); return P.behind ? null : { s, c, d: Math.hypot(P.x - fx, P.y - fy) }; };
       let b = null;
@@ -407,9 +411,16 @@ export function makeBuild(app) {
       for (let i = 0; i <= n; i++) { const q = at(span[0] + (span[1] - span[0]) * i / n); if (q && (!b || q.d < b.d)) b = q; }
       if (!b) continue;
       for (let k = -6; k <= 6; k++) { const s = Math.min(span[1], Math.max(span[0], b.s + k / 24)), q = at(s); if (q && q.d < b.d) b = q; }
+      if (mine) {
+        // (the joint right where the pointer is on it, if the free end reaches that spot; else the nearest spot it does)
+        const ab = sub(o.b, o.a), lo = Math.hypot(ab.X, ab.Y, ab.Z) || 1, pa = sub(under.P, o.a);
+        const s0 = Math.min(span[1], Math.max(span[0], (pa.X * ab.X + pa.Y * ab.Y + pa.Z * ab.Z) / lo)), c = connectTo(h.A, h.len, o, s0);
+        best = { o, span, ...b, ...(c ? { s: s0, c } : {}) }; break;
+      }
       const lim = h.con && h.con.o === o ? KEEP_PX : CONNECT_PX;
       if (b.d < lim && (!best || b.d < best.d)) best = { o, span, ...b };
     }
+    h.cantReach = want && !(best && best.o === want) ? now() : 0;
     if (best) {
       // where along that board: right where the board just reaches (no overhang), at the board's end, or to the inch
       let s = Math.round(best.s * 12) / 12;
@@ -580,7 +591,7 @@ export function makeBuild(app) {
     const h = app.held; if (!h || app.phase !== 'build') return;
     e.preventDefault(); e.stopPropagation(); sound.audioOn();
     const vr = el.view.getBoundingClientRect();
-    gesture = { kind: 'grab', mode, snap: snapOfHeld(h), snapPiece: h.piece, id: e.pointerId, x: e.clientX, y: e.clientY, t0: now(), moved: false, fy0: (e.clientY - vr.top) / vr.height };
+    gesture = { kind: 'grab', mode, snap: snapOfHeld(h), snapPiece: h.piece, id: e.pointerId, x: e.clientX, y: e.clientY, t0: now(), moved: false, fy0: (e.clientY - vr.top) / vr.height, touch: e.pointerType === 'touch' };
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     try { el.view.setPointerCapture(e.pointerId); } catch (err) { /* (a synthetic event has nothing to capture) */ }
   }
@@ -872,8 +883,10 @@ export function makeBuild(app) {
       out += rings + tags;
       const dup = cs.length > 0 && doubled(t, w), ok = cs.length > 0 && !dup;
       el.nailBtn.disabled = !ok;
-      const tooFar = h.tooFar && now() - h.tooFar < 1800;
-      hint = dup ? 'A board is already right there: move it off that one first'
+      const tooFar = h.tooFar && now() - h.tooFar < 1800, cant = h.cantReach && now() - h.cantReach < 1200;
+      if (cant) { const B = heldScreen(h, h.B), c = tag(150, 24, [{ x: B.x, y: B.y - 34 }, { x: B.x, y: B.y + 34 }, { x: B.x + 90, y: B.y }]);
+        out += `<g class="overtag"><rect x="${c.x - 75}" y="${c.y - 12}" width="150" height="24" rx="12"/><text x="${c.x}" y="${c.y + 4}">can't reach that board</text></g>`; }
+      hint = cant ? 'It can\'t reach the board under the pointer from where its foot is' : dup ? 'A board is already right there: move it off that one first'
         : tooFar ? 'Too short to reach any further over that way'
         : h.start && !h.left && h.fresh ? 'It starts where you left off · carry it further to put it somewhere else'
         : gesture && gesture.kind === 'grab' && gesture.mode === 'socket' ? 'Moving its foot to a spot on the half foot'
