@@ -1,0 +1,19 @@
+/* The bridge lab: the windmill lab's look (windmill.css, linked before this), and what the bridge adds: the deck plank
+   count, the "Lay the deck" button, the ratings on the result card. */
+.planks-head { font: 400 14px Smokum, Georgia, serif; letter-spacing: 0.05em; color: var(--ink-2); border-top: 1px solid rgba(226,173,76,.2); padding-top: 8px; margin-top: auto; }
+.planks-head b { font: 700 18px Bitter, Georgia, serif; color: var(--ink); letter-spacing: 0; margin-left: 4px; }
+.planks-note { color: var(--mute); font-size: 12px; font-style: italic; }
+.btn.lay-deck { position: absolute; z-index: 8; right: 12px; bottom: 72px; padding: 10px 16px; font: 400 18px Smokum, Georgia, serif; letter-spacing: .06em; }
+.btn.lay-deck[hidden] { display: none; }
+#view.is-holding .btn.lay-deck { display: none; }
+.card .ratings { display: flex; flex-wrap: wrap; gap: 5px; margin: 2px 0 6px; }
+.card .ratings .rt { font: 600 12px Bitter, Georgia, serif; padding: 2px 7px; border-radius: 10px; background: rgba(122,85,48,.12); color: var(--paper-ink-2); }
+.card .ratings .rt.is-made { background: #cfe8b4; color: #2f4d18; }
+.card .ratings .rt.is-failed { background: #f3d0c4; color: #7a2e17; }
+@media (max-width: 700px) {
+  .planks-head, .planks-note { display: none; }
+  .btn.lay-deck { bottom: 64px; right: 8px; padding: 8px 12px; font-size: 16px; }
+}
+/* the engineer's bubble never takes a tap meant for a button under it, and on a phone it stands above "Lay the deck" */
+.say { pointer-events: none; }
+@media (max-width: 700px) { #view.has-deck-btn .say { bottom: 118px; } }
