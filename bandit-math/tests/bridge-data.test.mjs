@@ -161,3 +161,29 @@ test('the deck meets the road: refused on boards below the stone tops, laid at t
   const one = { ...B.newBridge(16, 7) }; one.boards = lines(0, 'rd').filter((b) => b.a.Z > 0);
   assert.match(B.deckLine(one).why, /the north side needs a board from the top of one stone to the other/);
 });
+
+test('dragging the free end swings it smoothly in one upright plane, with level a strong stop', async () => {
+  const { swingEnd, planeFor } = await import('../labs/bridge/bridge.js');
+  const A = { X: -8, Y: 0, Z: 3.5 }, L = 8;
+  assert.equal(planeFor({ X: 0.1, Y: -0.3, Z: -0.9 }), 'X');   // looking north: the east-west plane
+  assert.equal(planeFor({ X: 0.9, Y: -0.3, Z: 0.2 }), 'Z');    // looking east: the north-south plane
+  // finger a little above level, east of the socket: snaps to exactly level, Z untouched
+  let B = swingEnd(A, L, 'X', { X: -2, Y: 0.3, Z: 3.5 });
+  assert.deepEqual(B, { X: 0, Y: 0, Z: 3.5 });
+  // and a little below
+  B = swingEnd(A, L, 'X', { X: -1, Y: -0.4, Z: 3.5 });
+  assert.equal(B.Y, 0); assert.equal(B.X, 0);
+  // in between: smooth, rise to the whole inch, length kept, no north-south drift
+  for (const y of [1, 2.2, 3.7, 5.1]) {
+    B = swingEnd(A, L, 'X', { X: -3, Y: y, Z: 3.5 });
+    assert.equal(B.Z, 3.5);
+    assert.ok(Math.abs(B.Y * 12 - Math.round(B.Y * 12)) < 1e-4);
+    assert.ok(Math.abs(Math.hypot(B.X - A.X, B.Y - A.Y) - L) < 1e-4);
+  }
+  // nearly straight up snaps straight up; never below the water
+  assert.deepEqual(swingEnd(A, L, 'X', { X: -7.8, Y: 5, Z: 3.5 }), { X: -8, Y: 8, Z: 3.5 });
+  assert.ok(swingEnd(A, L, 'X', { X: -7.5, Y: -9, Z: 3.5 }).Y >= -4.5);
+  // looking west: the north-south plane, X stays the socket's
+  B = swingEnd(A, L, 'Z', { X: -8, Y: 0.2, Z: -3 });
+  assert.deepEqual(B, { X: -8, Y: 0, Z: -4.5 });
+});

@@ -56,6 +56,31 @@ export function freeEnd(A, len, dx, dz, up = 1) {
   if (Y < WATER_Y - 1e-6) return null;
   return roundPt({ X: A.X + dx, Y, Z: A.Z + dz });
 }
+// ── dragging the free end: the board swings about its socket in one upright plane ───────────────────────────────
+// The plane is the one facing the camera, picked once when the drag starts: looking north or south it runs east-west
+// through the socket (Z stays the socket's own), looking west or east it runs north-south (X stays the socket's own).
+export const planeFor = (view) => (Math.abs(view.X) > Math.abs(view.Z) ? 'Z' : 'X');
+export const LEVEL_SNAP = 4 * Math.PI / 180;   // within this of level (or straight up / down) the board snaps there
+// Where the free end of a board len feet long from socket A lies when the finger's spot on the plane is Q; `ax` is
+// the plane's flat axis ('X' or 'Z'). Smooth, following the finger, except: within LEVEL_SNAP of level or straight
+// up/down it snaps there, otherwise its rise is to the whole inch. Never below the water. -> point
+export function swingEnd(A, len, ax, Q) {
+  const h = Q[ax] - A[ax], v = Q.Y - A.Y;
+  let th = Math.atan2(v, Math.abs(h) < 1e-9 && Math.abs(v) < 1e-9 ? 0 : h);
+  const sd = h < 0 ? -1 : 1;            // which way along the flat axis
+  const lev = Math.min(Math.abs(th), Math.abs(Math.PI - Math.abs(th))), upr = Math.abs(Math.PI / 2 - Math.abs(th));
+  let rise, run;
+  if (lev < LEVEL_SNAP) { rise = 0; run = sd * len; }
+  else if (upr < LEVEL_SNAP) { rise = th > 0 ? len : -len; run = 0; }
+  else {
+    rise = Math.round(len * Math.sin(th) * 12) / 12;
+    if (Math.abs(rise) > len) rise = Math.sign(rise) * len;
+    run = sd * Math.sqrt(Math.max(0, len * len - rise * rise));
+  }
+  if (A.Y + rise < WATER_Y) { rise = Math.ceil((WATER_Y - A.Y) * 12 - 1e-9) / 12; run = sd * Math.sqrt(Math.max(0, len * len - rise * rise)); }
+  const B = { X: A.X, Y: A.Y + rise, Z: A.Z }; B[ax] += run;
+  return roundPt(B);
+}
 // ── the arrows: the free end moved across the board ──────────────────────────────────────────────────────────────
 // Which arrow pairs show for a board from A to B: the two axes running most across it (the two smallest parts of its
 // direction); the third runs along it. -> { along, across: [two of 'X', 'Y', 'Z'] }

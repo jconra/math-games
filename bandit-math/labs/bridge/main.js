@@ -182,7 +182,10 @@ function showTopAt() {
     if (held) { p = src.b; label = 'Free end'; }
     // (a horizontal board picked out: its east end, or its south end if it runs across the bridge)
     else if (Math.abs(src.a.Y - src.b.Y) < 0.04) { const ew = Math.abs(src.b.X - src.a.X) >= Math.abs(src.b.Z - src.a.Z); p = ew ? (src.a.X >= src.b.X ? src.a : src.b) : (src.a.Z >= src.b.Z ? src.a : src.b); label = ew ? 'East end' : 'South end'; }
-    txt = label + '|' + pointWords(p).join('|');
+    const w = pointWords(p);
+    // (the board in hand lying level: said plainly, in place of its height when that is the road's)
+    if (held && Math.abs(src.a.Y - src.b.Y) < 1e-6) { if (Math.abs(p.Y) < 1e-6) w[2] = 'level'; else w.push('level'); }
+    txt = label + '|' + w.join('|');
   }
   if (txt === topAtText) return;
   topAtText = txt;

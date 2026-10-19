@@ -24,7 +24,7 @@
 //   * anywhere else: drag to walk round the bridge and up and down; two fingers or the wheel zoom. A tap picks a glowing
 //     twin (builds it) or a nailed board (to take it down, or saw its overhang off).
 // A finger on the cut pieces: straight up and down scrolls the panel; any other way, or onto the view, lifts the piece.
-import { SNAP, BOARD_FT, SPAN_MIN, SPAN_MAX, inBounds, spotTaken, lenLabel, lenWords, socketsOf, freeEnd, reachOn, connectTo, connectAlong, offcutOf, along as alongB, isPost, contactsOf as contactsBr, arrowAxes as arrowAxesOf, arrowStep } from './bridge.js';
+import { SNAP, BOARD_FT, SPAN_MIN, SPAN_MAX, inBounds, spotTaken, lenLabel, lenWords, socketsOf, freeEnd, reachOn, connectTo, connectAlong, offcutOf, along as alongB, isPost, contactsOf as contactsBr, arrowAxes as arrowAxesOf, arrowStep, planeFor, swingEnd } from './bridge.js';
 import { touch3, pointGap, TOL } from '../windmill/touch.js';
 import * as sound from '../windmill/sound.js';
 const contactsIn3D = (me, boards, br) => contactsBr(br, me, boards);
@@ -394,7 +394,7 @@ export function makeBuild(app) {
   // the finger. Where the free end would connect to a board near the finger (its line through that board within its
   // length, the end within CONNECT_PX of the finger on the screen; KEEP_PX to stay on the board it is on), it connects;
   // else it stands on the half foot over the ground from the socket.
-  function dragFree(h, cx, cy) {
+  function dragFree(h, cx, cy, plane = null) {
     const r = el.view.getBoundingClientRect(), fx = cx - r.left, fy = cy - r.top;
     const skip = atSocket(h);
     let best = null;
@@ -420,14 +420,17 @@ export function makeBuild(app) {
       if (!was) sound.clatter(h.len * 0.5, 'set', undefined, 0.35);
       return;
     }
-    // free: the finger's spot on the upright plane facing the view through the socket, the board pointing there
-    const ray = app.rayAt(cx, cy), f0 = app.viewDir(); if (!ray) return;
-    const fl = Math.hypot(f0.X, f0.Z) || 1, f = { X: f0.X / fl, Y: 0, Z: f0.Z / fl };
-    const den = ray.d.X * f.X + ray.d.Y * f.Y + ray.d.Z * f.Z; if (Math.abs(den) < 1e-6) return;
-    const t = ((h.A.X - ray.O.X) * f.X + (h.A.Y - ray.O.Y) * f.Y + (h.A.Z - ray.O.Z) * f.Z) / den;
-    const Q = { X: ray.O.X + ray.d.X * t, Y: ray.O.Y + ray.d.Y * t, Z: ray.O.Z + ray.d.Z * t }, v = sub(Q, h.A), l = Math.hypot(v.X, v.Y, v.Z) || 1;
-    h.con = null;
-    setRun(h, snapTo(v.X / l * h.len), snapTo(v.Z / l * h.len), v.Y >= -0.05 * l ? 1 : -1);
+    // free: the finger's spot on the upright plane through the socket facing the view (east-west looking north or south,
+    // north-south looking west or east; picked when the drag starts and kept for the whole drag), the board swinging
+    // about its socket in that plane, smoothly, snapping only to level, straight up and whole inches of rise
+    const ray = app.rayAt(cx, cy); if (!ray) return;
+    const ax = plane || planeFor(app.viewDir()), n = ax === 'X' ? 'Z' : 'X';
+    if (Math.abs(ray.d[n]) < 1e-6) return;
+    const t = (h.A[n] - ray.O[n]) / ray.d[n]; if (t <= 0) return;
+    const Q = { X: ray.O.X + ray.d.X * t, Y: ray.O.Y + ray.d.Y * t, Z: ray.O.Z + ray.d.Z * t };
+    const wasLevel = Math.abs(h.B.Y - h.A.Y) < 1e-6;
+    h.con = null; h.B = swingEnd(h.A, h.len, ax, Q); connectHere(h);
+    if (!h.con && !wasLevel && Math.abs(h.B.Y - h.A.Y) < 1e-6) sound.clatter(h.len * 0.4, 'set', undefined, 0.2);
     // (a run that lands it right through a board connects it there: setRun; it is not the board near the finger, so
     // only when it truly passes through)
   }
@@ -656,7 +659,7 @@ export function makeBuild(app) {
         gesture.at = { x: e.clientX, y: e.clientY };
         const S = socketAt(e.clientX, e.clientY);
         if (S && (S.X !== h.A.X || S.Y !== h.A.Y || S.Z !== h.A.Z)) { placeSocket(h, S); sound.clatter(h.len * 0.4, 'set', undefined, 0.15); }
-      } else dragFree(h, e.clientX, e.clientY);
+      } else dragFree(h, e.clientX, e.clientY, gesture.plane || (gesture.plane = planeFor(app.viewDir())));
       edgeWatch(e.clientY);
       app.dirty = true;
     } else if (gesture.kind === 'bank') {
