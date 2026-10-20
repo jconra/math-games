@@ -184,7 +184,7 @@ function findHubs(br, boards, { cuts = [], gone = [], lifted = [], slips = [], d
       if (off(gone, b.id, P) || off(lifted, b.id, P)) continue;
       const h = hubAt(P); h.ground = true;
       if (!h.support) h.support = { n: s.n, bank: s.bank, kind: s.kind, slip: false };
-      if (off(slips, b.id, P)) h.support.slip = true;
+      { const sl = slips.find((x) => x.id === b.id && dist(x.P, P) < MERGE); if (sl) { h.support.slip = true; h.support.slipDir = sl.dir || null; } }
       add(h, i, Math.max(0, Math.min(b.L, s.t)), true);
     }
   });
@@ -353,8 +353,10 @@ function buildModel(br, boards, hubs) {
     const n = h.support.n, Kt = [];
     // (a foot that has slid a hair is held only square into the stone: it slides along it freely. A foot in a notch in the
     // stone face is held up by the notch's floor as well as by the face: stiffly both ways, sliding only along the river)
-    const kT = h.support.slip ? 0 : BANK.kT, seat = h.support.kind === 'face';
-    for (let a = 0; a < 3; a++) for (let c = 0; c < 3; c++) Kt.push((BANK.kN - kT) * (n[a] * n[c] + (seat && a === 1 && c === 1 ? 1 : 0)) + (a === c ? kT : 0));
+    // (a foot that slid a hair one way comes to rest again: it still grips across the way it slid, so only that way is
+    // free. With no way known, every way along the stone is)
+    const kT = h.support.slip && !h.support.slipDir ? 0 : BANK.kT, seat = h.support.kind === 'face', sd = h.support.slip ? h.support.slipDir : null;
+    for (let a = 0; a < 3; a++) for (let c = 0; c < 3; c++) Kt.push((BANK.kN - kT) * (n[a] * n[c] + (seat && a === 1 && c === 1 ? 1 : 0)) + (a === c ? kT : 0) - (sd ? kT * sd[a] * sd[c] : 0));
     // (br.roller: a bank whose top lets boards slide along X freely, as the textbook sums take one end; rigs only)
     if (br.roller && h.support.bank === br.roller && h.support.kind === 'top') Kt[0] = 0;
     supports.push({ hub: hi, node: h.node, Kt, n });
@@ -611,10 +613,12 @@ function checkAll(M, sol, live, { buckle = true, start = null } = {}) {
     const along = seat ? Math.abs(Fv[2]) : norm([Fv[0] - press * s.n[0], Fv[1] - press * s.n[1], Fv[2] - press * s.n[2]]);
     const pull = Math.min(press, seat ? up : Infinity);
     if (pull < -5 && (!lift || pull < lift.press)) lift = { hub: s.hub, press: pull, P: h.P };
-    const util = h.support.slip ? 0 : along / (BANK.mu * Math.max(0, press) + BANK.grip);
+    const util = h.support.slip && !h.support.slipDir ? 0 : along / (BANK.mu * Math.max(0, press) + BANK.grip);
     const rest = h.items.filter((it) => it.ground).map((it) => M.boards[it.b]);
     const who = rest.reduce((a, o) => (!a || Math.abs(o.d[1]) > Math.abs(a.d[1]) ? o : a), null);
-    items.push({ type: 'slide', util, hub: s.hub, P: h.P, press, along, b: who ? who.i : undefined, id: who ? who.id : null, kind: h.support.kind, bank: h.support.bank, slip: h.support.slip });
+    // (the way it would slide: along the stone, the push it is not pressed by)
+    const tv = seat ? [0, 0, Fv[2]] : [Fv[0] - press * s.n[0], Fv[1] - press * s.n[1], Fv[2] - press * s.n[2]], tl = norm(tv) || 1;
+    items.push({ type: 'slide', util, hub: s.hub, P: h.P, press, along, dir: tv.map((v) => v / tl), b: who ? who.i : undefined, id: who ? who.id : null, kind: h.support.kind, bank: h.support.bank, slip: h.support.slip });
     if (who) bump(who.id, util);
     hubUtil[s.hub] = Math.max(hubUtil[s.hub], util);
   }
@@ -690,7 +694,7 @@ const KIND = { board: (it) => (it.buckle ? 'buckle' : 'snap'), joint: (it) => (i
 // (models are kept by which supports have let go, so a load moving on doesn't make them again; state.M = null says the
 // bridge changed, and every model made before is stale)
 function modelOf(state, lifted = [], slips = []) {
-  const key = lifted.map((l) => l.id + '@' + l.P.map(r3).join(',')).join(';') + '|' + slips.map((l) => l.id + '@' + l.P.map(r3).join(',')).join(';');
+  const key = lifted.map((l) => l.id + '@' + l.P.map(r3).join(',')).join(';') + '|' + slips.map((l) => l.id + '@' + l.P.map(r3).join(',') + (l.dir ? '>' + l.dir.map((v) => Math.round(v * 20)).join(',') : '')).join(';');
   if (!state.M) state.cache = new Map();
   const hit = state.cache.get(key);
   if (hit) { state.M = hit; return hit; }
@@ -740,6 +744,12 @@ function giveWay(state, M, chk, w) {
   return ev;
 }
 
+// (a foot sliding: the way it slid; sliding again another way, it is free every way along the stone)
+function addSlip(list, id, P, dir) {
+  const was = list.find((x) => x.id === id && dist(x.P, P) < MERGE);
+  if (was) { was.dir = null; return; }
+  list.push({ id, P: [...P], dir: dir || null });
+}
 // One load at one spot, with whatever gives giving way (and the rest solved again, at that same spot), until what is
 // left holds or nothing is left. -> { chk (the last sums), events, lost (pounds left with no plank under them), on }
 function standAt(state, parts, opts) {
@@ -747,33 +757,42 @@ function standAt(state, parts, opts) {
   let guard = 0, chk = null, live = null, info = null;
   for (;;) {
     if (!state.boards.length) return { chk: null, events, lost: parts.reduce((s, p) => s + p.lb, 0), on: 0 };
-    let lifted = [], slips = [], M, sol;
+    let lifted = [], slips = state.slid.map((x) => ({ ...x })), M, sol;
     // A support pulling away lets go, and one pushed along the stone harder than friction holds slides a hair (it is
     // held only square into the stone from then on): both only at this spot, since further on they may bear again.
-    // One at a time, the worst first, and the sums done again.
-    for (let k = 0; k < 8; k++) {
+    // One at a time, the worst first, and the sums done again. (A foot sliding a hair is no break: the board still
+    // rests on the stone, and the rest of the frame takes up what the rubbing held. Only what gives after that is.)
+    for (let k = 0; k < 40; k++) {
       M = modelOf(state, lifted, slips);
       info = deckLoads(M, parts, state.deck);
       live = loadVector(M, info.loads);
       sol = solve(M, live.F); opts.solves++;
       chk = checkAll(M, sol, live, { buckle: opts.buckle, start: opts.mode && opts.mode.length === M.n ? opts.mode : null });
-      const slide = chk.items.filter((it) => it.type === 'slide' && it.util > 1).sort((p, q) => q.util - p.util)[0];
-      const at = chk.lift ? chk.lift.hub : slide ? slide.hub : null;
-      if (at === null) break;
-      const h = M.hubs[at], list = chk.lift ? lifted : slips;
-      for (const it of h.items) if (it.ground) list.push({ id: M.boards[it.b].id, P: [...h.P] });
+      // (a support pulling away lets go first, one at a time; feet sliding all slide together, which takes far fewer
+      // rounds than one at a time when a whole row of stringer ends slides at once)
+      const slides = chk.items.filter((it) => it.type === 'slide' && it.util > 1);
+      if (!chk.lift && !slides.length) break;
+      if (chk.lift) { const h = M.hubs[chk.lift.hub]; for (const it of h.items) if (it.ground) lifted.push({ id: M.boards[it.b].id, P: [...h.P] }); continue; }
+      for (const sl of slides) { const h = M.hubs[sl.hub]; for (const it of h.items) if (it.ground) addSlip(slips, M.boards[it.b].id, h.P, sl.dir); }
     }
     chk.slips = slips;
     if (chk.mode) opts.mode = chk.mode;
     if (!chk.worst || chk.worst.util <= 1 || guard++ > 120) break;
+    // (still sliding after all that: it slides, and stays slid, still resting on the stone; no break)
+    if (chk.worst.type === 'slide') {
+      const h = M.hubs[chk.worst.hub];
+      for (const it of h.items) if (it.ground) addSlip(state.slid, M.boards[it.b].id, h.P, chk.worst.dir);
+      state.M = null; continue;
+    }
     // (a collapse: past the first ten breaks at one spot, every board more than twice past its limit goes at once)
     if (events.length >= 10) {
       const many = [...new Set(chk.items.filter((it) => it.type === 'board' && it.util > 2).map((it) => it.id))];
       if (many.length > 1) { remove(state, many); const fell = [...many, ...settle(state)]; events.push({ kind: 'collapse', at: { X: 0, Y: 0, Z: 0 }, broke: many, fell, util: r3(chk.worst.util), id: many[0] }); state.M = null; continue; }
     }
     const ev = giveWay(state, M, chk, chk.worst);
-    // (boards that came loose after a foot slid along the stone: that foot sliding is what let them go)
-    if (ev.kind === 'loose' && slips.length) { ev.kind = 'slide'; ev.slid = slips.map((s) => s.id); ev.at = { X: r3(slips[0].P[0]), Y: r3(slips[0].P[1]), Z: r3(slips[0].P[2]) }; }
+    // (boards that came loose after a foot slid along the stone, with nothing else given way first at this spot: that
+    // foot sliding is what let them go)
+    if (ev.kind === 'loose' && slips.length && !events.length) { ev.kind = 'slide'; ev.slid = slips.map((s) => s.id); ev.at = { X: r3(slips[0].P[0]), Y: r3(slips[0].P[1]), Z: r3(slips[0].P[2]) }; ev.bank = Math.sign(slips[0].P[0]) || -1; ev.face = slips[0].P[1] < -0.05; }
     events.push(ev);
     state.M = null;
   }
@@ -792,7 +811,7 @@ function standAt(state, parts, opts) {
 export function crossTest(bridge, { loads = LOADS, step = 0.5, buckle = true, onPart = null } = {}) {
   const t0 = now(), br = { S: bridge.S, D: bridge.D, boards: bridge.boards, deck: bridge.deck };
   const planks = bridge.deck ? bridge.deck.planks.map((p) => ({ ...p, a: { ...p.a }, b: { ...p.b } })) : [];
-  const state = { br, boards: [...bridge.boards.map((b) => ({ ...b, a: { ...b.a }, b: { ...b.b } })), ...planks], deck: bridge.deck, cuts: [], hinges: [], gone: [], M: null, Mkey: '', models: 0 };
+  const state = { br, boards: [...bridge.boards.map((b) => ({ ...b, a: { ...b.a }, b: { ...b.b } })), ...planks], deck: bridge.deck, cuts: [], hinges: [], gone: [], slid: [], M: null, Mkey: '', models: 0 };
   const opts = { solves: 0, buckle, mode: null };
   const lost0 = settle(state);
   const first = standAt(state, [], opts);
@@ -849,7 +868,7 @@ export function crossTest(bridge, { loads = LOADS, step = 0.5, buckle = true, on
 export function solveLoads(bridge, { parts = [], pushes = [], buckle = true, selfWeight = true } = {}) {
   const br = { S: bridge.S, D: bridge.D, boards: bridge.boards, deck: bridge.deck, roller: bridge.roller, pins: bridge.pins };
   const planks = bridge.deck ? bridge.deck.planks : [];
-  const state = { br, boards: [...bridge.boards, ...planks], deck: bridge.deck, cuts: [], hinges: [], gone: [], M: null, Mkey: '', models: 0 };
+  const state = { br, boards: [...bridge.boards, ...planks], deck: bridge.deck, cuts: [], hinges: [], gone: [], slid: [], M: null, Mkey: '', models: 0 };
   const M = modelOf(state);
   if (!selfWeight) { M.Fg.fill(0); for (const e of M.elems) e.fg.fill(0); }
   const info = deckLoads(M, parts, bridge.deck);

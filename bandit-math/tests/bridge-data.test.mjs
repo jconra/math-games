@@ -187,3 +187,34 @@ test('dragging the free end swings it smoothly in one upright plane, with level 
   B = swingEnd(A, L, 'Z', { X: -8, Y: 0.2, Z: -3 });
   assert.deepEqual(B, { X: -8, Y: 0, Z: -4.5 });
 });
+
+test('a bridge copied as a code comes back exactly (the result card\'s "Copy this bridge", ?bridge=)', () => {
+  const br = { S: 16, D: 7, deck: { y: 0 }, boards: [
+    { id: 'x1', a: { X: -8.5, Y: 0, Z: 3.5 }, b: { X: -0.5, Y: 0, Z: 3.5 }, len: 8 },
+    { id: 'x2', a: { X: -8, Y: -3, Z: 1.9444 }, b: { X: -0.5838, Y: 0, Z: 1.9444 }, len: 8 },
+  ] };
+  const code = B.encodeBridge(br);
+  assert.match(code, /^[A-Za-z0-9_-]+$/);
+  const back = B.decodeBridge(code);
+  assert.equal(back.S, 16); assert.equal(back.D, 7); assert.equal(back.deck, true);
+  assert.deepEqual(back.boards.map((b) => [b.a, b.b, b.len]), br.boards.map((b) => [b.a, b.b, b.len]));
+  assert.equal(B.decodeBridge('not a code!'), null);
+});
+
+test('twins across the width: a strut under one of five stringers is offered under all five, at both ends', () => {
+  const br = { S: 16, D: 7, boards: [] }; let n = 0;
+  for (const z of [3.5, 1.75, 0, -1.75, -3.5]) for (const [x0, x1] of [[-8.5, -0.5], [-1.5, 6.5], [5.5, 8.5]]) br.boards.push({ id: 'r' + ++n, a: { X: x0, Y: 0, Z: z }, b: { X: x1, Y: 0, Z: z }, len: x1 - x0 });
+  const strut = { id: 'st', a: { X: -8, Y: -3, Z: 1.75 }, b: { X: -8 + Math.sqrt(55), Y: 0, Z: 1.75 }, len: 8 };
+  br.boards.push(strut);
+  const tw = B.twinsOf(br, strut);
+  const key = (g) => `${Math.sign(g.a.X + g.b.X)}:${((g.a.Z + g.b.Z) / 2).toFixed(2)}`;
+  const got = new Set(tw.map(key));
+  for (const z of [3.5, 1.75, 0, -1.75, -3.5]) for (const s of [-1, 1]) if (!(s === -1 && z === 1.75)) assert.ok(got.has(`${s}:${z.toFixed(2)}`), `a twin under the stringer at Z ${z}, ${s < 0 ? 'west' : 'east'} end`);
+  assert.equal(tw.length, 9);
+  // nearest first
+  const d = (g) => Math.hypot((g.a.X + g.b.X) / 2 - (strut.a.X + strut.b.X) / 2, (g.a.Z + g.b.Z) / 2 - 1.75);
+  for (let i = 1; i < tw.length; i++) assert.ok(d(tw[i]) >= d(tw[i - 1]) - 1e-9);
+  // one already built is not offered again
+  br.boards.push({ id: 'st2', ...tw[0] });
+  assert.equal(B.twinsOf(br, strut).length, 8);
+});

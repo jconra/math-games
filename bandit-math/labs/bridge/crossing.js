@@ -19,7 +19,7 @@
 // hooks: { towerView, deckView, loads, fall, say(text, opts), gesture(name, ms), record(rating, S) -> { best, newBest },
 //   keep({ keep: Set of ids, back: [lengths], planksBack, kindling }), fresh(line), view(): the fall's view of boards }
 import { LOADS } from './frame.js';
-import { lenWords, lenLabel, spellUnits, placeWords, roleOf, PLANK, crossesMid } from './bridge.js';
+import { lenWords, lenLabel, spellUnits, placeWords, roleOf, PLANK, crossesMid, encodeBridge } from './bridge.js';
 import * as sound from '../windmill/sound.js';
 
 const $ = (id) => document.getElementById(id);
@@ -286,10 +286,18 @@ export function makeCrossing(app, hooks) {
       <div class="sacks">${COIN}<div><b>${gold ? `The engineer pays ${gold} gold` : 'No pay this time'}</b><br><small>${gold ? `for carrying the ${L.short}${newBest ? ': a new best!' : ''}` : 'Get a person across for the first pay'}</small></div></div>
       <p class="miller" data-focus="${focusIds.join(' ')}">"${advice}"</p>
       ${fellIds.length && run.up.size ? `<p class="pile-note">${pileNote(back.length, kindling, planksBack)}</p>` : ''}
+      <p class="copy-row"><button class="btn small" id="r-copy" title="Copies a code for this bridge, to send it to someone">Copy this bridge</button> <small id="r-copied"></small></p>
       <div class="row">${!run.up.size ? '<button class="btn go" id="r-again">Try again</button>' : '<button class="btn" id="r-fresh">Start fresh</button><button class="btn go" id="r-keep">Keep building</button>'}</div>`;
     card.hidden = false;
     const again = $('r-again'), keep = $('r-keep'), fresh = $('r-fresh');
     $('r-fold').onclick = () => { const f = card.classList.toggle('is-folded'); $('r-fold').setAttribute('aria-label', f ? 'Open the card' : 'Fold the card down'); };
+    const code = encodeBridge(br), link = (typeof location !== 'undefined' ? location.origin + location.pathname : '') + '?bridge=' + code;
+    $('r-copy').onclick = async () => {
+      let ok = false;
+      try { await navigator.clipboard.writeText(link); ok = true; } catch (e) { /* (no clipboard here: shown to copy by hand) */ }
+      if (!ok) window.prompt('Copy this link:', link);
+      $('r-copied').textContent = ok ? 'Copied: paste it in a message' : '';
+    };
     const keepIds = new Set([...run.up]);
     if (again) again.onclick = () => { card.hidden = true; end(); hooks.fresh(advice); };
     if (fresh) fresh.onclick = () => { card.hidden = true; end(); hooks.fresh('Fresh lumber\'s stacked by the bank.'); };
@@ -371,7 +379,14 @@ export function makeCrossing(app, hooks) {
           advice: `${cap(placeMid)} bent until it snapped: something pushed on its middle. Nail its ends right where other boards meet, so it pushes or pulls straight along itself.` };
       case 'buckle': return { call: `The ${role} buckled!`, what: `${placeMid} buckled under the squeeze`, focus,
         advice: `${cap(placeMid)} was squeezed end to end until it bowed out and buckled: a long board being squeezed bends out sideways, and the longer it is, the sooner. Shorten it: nail a post or a diagonal to its middle, or put a second board alongside to share the squeeze.` };
-      case 'bow': return { call: 'She\'s bowing out sideways!', what: `the bridge bowed out sideways${under}`, focus: ev.ids && ev.ids.length ? ev.ids : focus,
+      case 'bow':
+        // (what bows is the slanted boards pushing up from the banks: each a long board squeezed end to end)
+        if (b && Math.abs(b.a.Y - b.b.Y) > 0.5) {
+          const n = (ev.ids || []).length;
+          return { call: 'The struts are bowing!', what: `${n > 1 ? `${placeMid} and the struts beside it` : placeMid} bowed out sideways under the squeeze${under}`, focus: ev.ids && ev.ids.length ? ev.ids : focus,
+            advice: `${cap(placeMid)} pushes up from the bank, squeezed end to end. A long board squeezed that hard bows out sideways in the middle, the way a ruler does when you push its ends together. Nail a board across the struts halfway along, so each one is only half as long to bow, and they hold far more.` };
+        }
+        return { call: 'She\'s bowing out sideways!', what: `the bridge bowed out sideways${under}`, focus: ev.ids && ev.ids.length ? ev.ids : focus,
         advice: 'The squeezed boards bowed out sideways, and the bridge leaned over like a card table folding. Nothing held the two sides square across the bridge. Brace across it: a diagonal from one side to the other, under the deck or overhead out of the way, so the sides make triangles that way too.' };
       case 'nails': {
         // (a board already crossed by another through both middles: its panel has its X, so more of them, closer)
@@ -389,8 +404,13 @@ export function makeCrossing(app, hooks) {
         advice: 'Two boards butted end to end pulled apart: an end only touching an end hardly holds. Lap them side by side a foot or more and nail them together.' };
       case 'hinge': return { call: 'A joint twisted loose!', what: `the nails holding ${placeMid} twisted loose, and it turns on them now`, focus,
         advice: 'The nails at a corner twisted loose, and the boards turned like a gate on its hinges: a square with no diagonal folds. A diagonal corner to corner makes two triangles, and a triangle can\'t fold.' };
-      case 'slide': return { call: 'Her foot slid!', what: `the foot of ${placeMid} slid on the bank`, focus: ev.slid || focus,
-        advice: `The foot of ${place} slid along the bank: on the flat top only rubbing holds it. Set a pushing board's foot in a notch in the stone wall, below the top, so it pushes into the stone.` };
+      case 'slide': {
+        // (where it rests on the stone, said as that: "the end of the bottom board ... resting on the west stone's top")
+        const stone = `the ${ev.bank > 0 ? 'east' : 'west'} stone's ${ev.face ? 'wall' : 'top'}`;
+        return { call: 'Her foot slid!', what: `the end of ${placeMid} resting on ${stone} slid along it, and what it held came loose`, focus: ev.slid || focus,
+          advice: ev.face ? `The end of ${place} slid along ${stone}: it only pressed on the wall sideways. Set a pushing board's end square into the wall, so it pushes straight into the stone.`
+            : `The end of ${place} slid along ${stone}: on the flat top only rubbing holds it. Set a pushing board's foot in a notch in the stone wall, below the top, so it pushes into the stone, or tie the two banks' boards together across the middle so they hold each other.` };
+      }
       case 'loose': return { call: 'That wasn\'t held by anything!', what: 'some boards were not held by anything that reaches a bank, and fell', focus,
         advice: 'Every board has to be nailed to something that reaches a bank. One held by nothing just falls.' };
       case 'collapse': return { call: 'She\'s coming down!', what: 'the rest gave way', focus, advice: 'Down she came. Triangles spread the load, so no one board takes it all.' };

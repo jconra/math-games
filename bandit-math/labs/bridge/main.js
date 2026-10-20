@@ -31,7 +31,7 @@
 //   state()), BR.result(), BR.startTest(), BR.worldToScreen(X, Y, Z)
 import * as THREE from 'three';
 import { SPAN0, WIDTH, BOARDS, PLANKS, BOARD_FT, newBridge, cleanBridge, boardCount, bridgeHeight, twinsOf, spotTaken, isPost, makeBoard, spellUnits,
-  placeWords, roleOf, nounOf, deckLine, pointWords, touchesAny, grounded, contactsOf as contactsBr, asTower, lenLabel, lenWords, isLevelB, isUprightB, supportsOf } from './bridge.js';
+  placeWords, roleOf, nounOf, deckLine, pointWords, encodeBridge, decodeBridge, touchesAny, grounded, contactsOf as contactsBr, asTower, lenLabel, lenWords, isLevelB, isUprightB, supportsOf } from './bridge.js';
 import { touch3 } from '../windmill/touch.js';
 import { faceOf } from '../windmill/frame.js';
 import { LOADS, inTheWay } from './frame.js';
@@ -395,7 +395,8 @@ function takeUpDeck(why = '') {
 function offerDeckUp() {
   deckUpOffered = true; el.selBar.hidden = false; el.selHint.textContent = `The deck: ${app.tower.deck.planks.length} planks`; $('pickup').textContent = 'Take up the deck';
 }
-$('lay-deck').onclick = () => { sound.audioOn(); layDeck(); };
+// (the one button: "Lay the deck" with no deck down, "Take up the deck" with one: every plank back on its pile, the boards as they were)
+$('lay-deck').onclick = () => { sound.audioOn(); if (app.tower.deck) takeUpDeck(); else layDeck(); };
 function deckFollows() {
   const t = app.tower; if (!t.deck) return;
   const d = deckLine(t);
@@ -414,7 +415,8 @@ function rebuild() {
   refreshGhosts();
   // ("Lay the deck" shows as soon as anything is built; it is ready once both sides reach bank to bank at road height)
   const dl = !t.deck && boardCount(t) > 0 ? deckLine(t) : null;
-  $('lay-deck').hidden = !dl || app.phase !== 'build';
+  $('lay-deck').hidden = (!dl && !t.deck) || app.phase !== 'build';
+  $('lay-deck').textContent = t.deck ? 'Take up the deck' : 'Lay the deck';
   $('lay-deck').classList.toggle('is-not-ready', !!dl && !dl.planks);
   if (dl && dl.planks) app.roadGhost = null;
   markRoad();
@@ -461,7 +463,12 @@ function placeFaceName() {
 // ── the twins: the same board on the other side, at the other end, and both ──────────────────────────────────────
 let ghosts = null;
 const GHOST_STAY = 16000, GHOST_FADE = 5000;
-function makeGhosts(rec) { ghosts = { src: rec, list: twinsOf(app.tower, rec), born: performance.now() }; }
+function makeGhosts(rec) {
+  ghosts = { src: rec, list: twinsOf(app.tower, rec), born: performance.now() };
+  // (more twins than wood: say how many there are and how many boards are left; building them all builds the nearest)
+  const n = ghosts.list.length, left = build.boardsLeft ? build.boardsLeft(rec.len) : n;
+  if (n > 3 && left < n) say(`${n} twins, ${left} board${left === 1 ? '' : 's'} left: building them all builds the ${left} nearest.`, { key: 'twins-wood', times: 3, force: true, ms: 6000 });
+}
 function refreshGhosts() {
   if (!ghosts) { towerView.setGhosts([]); return; }
   const t = app.tower;
@@ -488,7 +495,7 @@ function confirmGhost(g, delay = 0) {
 }
 function confirmAll() {
   let n = 0;
-  for (let guard = 0; guard < 8 && ghosts; guard++) { const g = ghosts.list.find((q) => q.ok); if (!g) break; confirmGhost(g, n * 450); n++; }
+  for (let guard = 0; guard < 60 && ghosts; guard++) { const g = ghosts.list.find((q) => q.ok); if (!g) break; confirmGhost(g, Math.min(n, 8) * 450); n++; }
   return n;
 }
 
@@ -521,7 +528,7 @@ app.idleHint = () => {
     if ((said.twinsBuilt || 0) < 3) return 'Tap a glowing twin to build it · double-tap builds them all';
   }
   if (app.inRoad && app.inRoad.length) return 'A board is in the road: the loads would run into it';
-  if (!$('lay-deck').hidden && !$('lay-deck').classList.contains('is-not-ready')) return 'Both sides reach bank to bank at road height: lay the deck';
+  if (!app.tower.deck && !$('lay-deck').hidden && !$('lay-deck').classList.contains('is-not-ready')) return 'Both sides reach bank to bank at road height: lay the deck';
   if (!app.orbited && boardCount(app.tower) > 0) return 'Drag to walk round the bridge, and up and down';
   return '';
 };
@@ -898,8 +905,13 @@ window.BR = {
     full: build.fullCount(), lumber: { stack: app.lumber.stack, bench: app.lumber.bench && app.lumber.bench.len, pieces: app.lumber.pieces.map((p) => +p.len.toFixed(3)) },
     held: app.held && { A: app.held.A, B: app.held.B, len: app.held.len, con: !!app.held.con }, ghosts: app.ghostList().length, best, fps,
     question: !$('question').hidden ? $('question').innerText : null, result: !$('result').hidden ? $('result').innerText : null, falling: fall.sticks.length, hint: el.hint.textContent,
-    say: $('say').hidden ? null : $('say-text').textContent, faceName: $('face-name').textContent, inRoad: [...(app.inRoad || [])], deckReady: !$('lay-deck').hidden && !$('lay-deck').classList.contains('is-not-ready'), ladder: { ...ladder }, bonus: bonusEarned, layDeck: !$('lay-deck').hidden,
+    say: $('say').hidden ? null : $('say-text').textContent, faceName: $('face-name').textContent, inRoad: [...(app.inRoad || [])], deckReady: !app.tower.deck && !$('lay-deck').hidden && !$('lay-deck').classList.contains('is-not-ready'), ladder: { ...ladder }, bonus: bonusEarned, layDeck: !$('lay-deck').hidden,
     trim: !el.trimBar.hidden ? el.trimHint.textContent : null }),
   worldToScreen: (X, Y, Z) => toPage(app.worldToScreen(X, Y, Z)),
   resetAll,
 };
+// ?bridge=<code> (from a result card's "Copy this bridge"): that bridge put up, its deck laid if it had one
+{
+  const code = params.get('bridge'), want = code ? decodeBridge(code) : null;
+  if (want) setTimeout(() => { try { window.BR.load({ S: want.S, D: want.D, boards: want.boards }); if (want.deck) layDeck(); } catch (e) { console.warn('bridge lab: that bridge code did not load', e); } }, 300);
+}

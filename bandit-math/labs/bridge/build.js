@@ -189,6 +189,12 @@ export function makeBuild(app) {
     }
     return null;
   }
+  // how many boards `len` feet long the wood left makes: the cut pieces long enough, and each full board sawn into as
+  // many as it gives (the twins' count)
+  function boardsLeft(len) {
+    const per = Math.max(1, Math.floor((BOARD_FT + 1e-6) / Math.max(0.5, len)));
+    return L.pieces.filter((p) => p.len > len - 0.01).length + fullCount() * per + (L.bench && !L.bench.full && L.bench.len > len - 0.01 ? 1 : 0);
+  }
   // take it, sawing what has to be sawn: { cut (it was sawn), from (what it was cut from) }, or null with no wood
   function payFor(len) {
     const w = woodFor(len); if (!w) return null;
@@ -961,7 +967,7 @@ export function makeBuild(app) {
     if (hint !== hintText) { hintText = hint; el.hint.textContent = hint; }
   }
 
-  return { freshStack, renderPanel, frame, putBack, undoHeld, returnPiece, contactsOf, cut, takeUp, toBench, payFor, woodFor, addOffcut, arrow, arrowAxes, dragFree, placeSocket, socketAt, sockets, setRun,
+  return { freshStack, renderPanel, frame, putBack, undoHeld, returnPiece, contactsOf, cut, takeUp, toBench, payFor, woodFor, boardsLeft, addOffcut, arrow, arrowAxes, dragFree, placeSocket, socketAt, sockets, setRun,
     nailedOverhang, cutNailed, fullCount, giveBoard, worldOf, flash, groups, offerTrim, sawTrim, canNail,
     get trim() { return trim; }, get heldInfo() { return heldInfo; }, get cutAt() { return cutAt; }, set cutAt(v) { cutAt = v; renderPanel(); } };
 }

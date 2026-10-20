@@ -232,15 +232,43 @@ export function twinsOf(br, board, touches = (g) => touchesAny(br, g)) {
   const maps = [(p) => ({ X: p.X, Y: p.Y, Z: -p.Z }), (p) => ({ X: -p.X, Y: p.Y, Z: p.Z }), (p) => ({ X: -p.X, Y: p.Y, Z: -p.Z })];
   const same = (g, b) => (near(g.a, b.a) && near(g.b, b.b)) || (near(g.a, b.b) && near(g.b, b.a));
   const kept = [];
-  for (const f of maps) {
-    const g = { a: roundPt(f(board.a)), b: roundPt(f(board.b)), len: board.len };
-    if (same(g, board) || kept.some((k) => same(k, g))) continue;
-    if ([board, ...kept].some((o) => crossesMid(g, o))) continue;
-    if (!inBounds(br, g.a) || !inBounds(br, g.b)) continue;
-    if (touches && !touches(g)) continue;
-    kept.push(g);
+  // (the copies across the width first: the same board at every parallel stringer of the ones it is nailed to, then
+  // each of those and the board itself mirrored across the middle and end to end)
+  const bases = [board, ...acrossCopies(br, board)];
+  for (const base of bases) {
+    for (const f of [null, ...maps]) {
+      const g = f ? { a: roundPt(f(base.a)), b: roundPt(f(base.b)), len: board.len } : base;
+      if (g === board || same(g, board) || kept.some((k) => same(k, g))) continue;
+      if ([board, ...kept].some((o) => crossesMid(g, o))) continue;
+      if (!inBounds(br, g.a) || !inBounds(br, g.b)) continue;
+      if (spotTaken(br, g)) continue;
+      if (touches && !touches(g)) continue;
+      kept.push(g);
+    }
   }
-  return kept;
+  // (nearest the board first: building them all with too little wood builds the nearest)
+  const mid = (q) => ({ X: (q.a.X + q.b.X) / 2, Y: (q.a.Y + q.b.Y) / 2, Z: (q.a.Z + q.b.Z) / 2 }), m0 = mid(board);
+  return kept.sort((p, q) => d3(mid(p), m0) - d3(mid(q), m0));
+}
+// The stringers a board is nailed to (level boards running along the gap, X), and the board moved across the width onto
+// each other stringer at the same height running the same way that reaches the same spot: [{ a, b, len }]
+const runsX = (b) => Math.abs(b.a.Y - b.b.Y) < 0.05 && Math.abs(b.a.Z - b.b.Z) < 0.05 && Math.abs(b.a.X - b.b.X) > 0.5;
+function acrossCopies(br, board) {
+  const out = [], lo = (b) => Math.min(b.a.X, b.b.X), hi = (b) => Math.max(b.a.X, b.b.X);
+  if (runsX(board)) return out;   // (a stringer itself: its twins are the mirrors)
+  const on = br.boards.filter((o) => o !== board && o.id !== board.id && runsX(o) && touch3(board, o).length);
+  if (!on.length) return out;
+  const t = on[0], y = t.a.Y, z0 = t.a.Z;
+  // where along the stringer the board meets it
+  const P = touch3(board, t)[0], px = P ? (P.X ?? P.P?.[0] ?? (lo(t) + hi(t)) / 2) : (lo(t) + hi(t)) / 2;
+  const zs = new Set();
+  for (const o of br.boards) {
+    if (o === t || !runsX(o) || Math.abs(o.a.Y - y) > 0.06 || Math.abs(o.a.Z - z0) < 0.2) continue;
+    if (px < lo(o) - 1e-6 || px > hi(o) + 1e-6) continue;
+    zs.add(Math.round((o.a.Z - z0) * 1e4) / 1e4);
+  }
+  for (const dz of zs) out.push({ a: roundPt({ ...board.a, Z: board.a.Z + dz }), b: roundPt({ ...board.b, Z: board.b.Z + dz }), len: board.len });
+  return out;
 }
 
 // ── the deck ─────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -343,4 +371,20 @@ export const placeWords = (br, b) => `the ${roleOf(br, b)}${whereWords(b, br)}`;
 export function pointWords(p) {
   const r = (v) => Math.round(Math.abs(v) * 12) / 12, side = (v, pos, neg) => (r(v) < 1e-9 ? '0' : lenLabel(r(v)) + ' ' + (v > 0 ? pos : neg));
   return [side(p.X, 'east', 'west'), side(p.Z, 'south', 'north'), p.Y < -1e-6 && r(p.Y) > 1e-9 ? lenLabel(r(p.Y)) + ' down' : lenLabel(Math.max(0, r(p.Y))) + ' up'];
+}
+
+// ── a bridge as a short code (the result card's "Copy this bridge"; ?bridge=<code> in the address puts it up) ─────────
+// The gap, the width, every board's two ends and length (to the ten-thousandth of a foot), and whether the deck was
+// laid: JSON, then base64 made safe for an address. -> string; decodeBridge -> { S, D, boards, deck: bool } or null
+export function encodeBridge(br) {
+  const r = (v) => Math.round(v * 1e4) / 1e4;
+  const o = { v: 1, S: br.S, D: br.D, deck: !!br.deck, b: br.boards.map((b) => [r(b.a.X), r(b.a.Y), r(b.a.Z), r(b.b.X), r(b.b.Y), r(b.b.Z), r(b.len)]) };
+  return btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+export function decodeBridge(code) {
+  try {
+    const s = String(code).trim().replace(/-/g, '+').replace(/_/g, '/'), o = JSON.parse(atob(s + '='.repeat((4 - (s.length % 4)) % 4)));
+    if (!o || !Array.isArray(o.b) || !(o.S > 0)) return null;
+    return { S: o.S, D: o.D || WIDTH, deck: !!o.deck, boards: o.b.map((q, i) => ({ id: 'c' + (i + 1), a: { X: q[0], Y: q[1], Z: q[2] }, b: { X: q[3], Y: q[4], Z: q[5] }, len: q[6] })) };
+  } catch (e) { return null; }
 }
