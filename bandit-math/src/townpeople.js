@@ -1,7 +1,7 @@
 // THE TOWN'S PEOPLE: the townsfolk going about the town. Each has a home (src/townpeopleplan.js): the homes behind the
 // main row, the rooms over the saloon or the store, or a place up the road. They come out of doors, walk the town's paths
 // to the places people gather (the saloon's porch, the store's, the stable yard, the square, the crowd in front of the
-// stage while the band plays, the lake shore, the homes' lane and yards), stand about a while (talking, when someone else
+// stage while the band plays, the lake shore down the path behind the saloon, the homes' lane and yards), stand about a while (talking, when someone else
 // is there), and go in again: home, or into the store or the saloon. Most go home at night (W.night, from the world's
 // day and night; none of it if the world has no night), and their windows light up.
 //
@@ -41,7 +41,8 @@
 //                        out in the others; TP.update does it each frame; TP.lit(id) how lit now
 //   TP.log               [{ t, name, ev: 'appear' | 'vanish', how: 'door' | 'road' | 'start' | 'fade', seen, x, z }]
 //   TP.state()           for rigs: everyone's state, place, fade and whether they are drawn
-//   TP.laneSpot()        the middle of the homes' lane (a dev spot)
+//   TP.laneSpot()        the middle of the homes' lane (a dev spot); TP.dockSpot() the shore spot at the dock path's end
+//   TP.way(from, to)     for rigs: the way a townsperson would walk between two spots ([{ x, z }, ...]; [] if none)
 //   TP.dispose()
 import * as THREE from 'three';
 import { makePerson } from './actors/folk.js';
@@ -117,6 +118,14 @@ export function makeTownPeople({ W, folk, camera, player = () => null, jobs = {}
       if (W.waterAt(x, z) > 0.3) { const bx = mid.x + Math.sin(away) * (d - 4), bz = mid.z + Math.cos(away) * (d - 4); spot('lake', 'lake', bx, bz, away, 2); break; }
     }
   }
+  // the path to the lake behind the saloon (the planting's 'dockpath', down to where the fishing dock is to go): a spot on
+  // the shore at its end, a step to one side so the dock's own spot stays clear, facing out over the water
+  { const st = ((W.V && W.V.PLANTING_FIRST && W.V.PLANTING_FIRST.strokes) || []).find((q) => q.id === 'dockpath'), p = st && st.pts;
+    if (p && p.length > 1) {
+      const [ex, ez] = p[p.length - 1], [qx, qz] = p[p.length - 2], l = Math.hypot(ex - qx, ez - qz) || 1, ux = (ex - qx) / l, uz = (ez - qz) / l;
+      let made = null;
+      for (let back = 0; back <= 5 && !made; back++) for (const k of [2.8, -2.8]) if (!made) made = spot('dock', 'lake', ex - ux * back + uz * k, ez - uz * back - ux * k, Math.atan2(ux, uz), 2);
+    } }
   // the roads' ends: where people come into town from up the road and go off up it (only ever out of sight)
   const roadEnd = (id, x, z, dir) => { if (free(x, z)) TP.edges.push({ id, kind: 'edge', x, z, dir }); };
   { const sq = P.square || P.spawn, y = sq.z; roadEnd('west', sq.x - 75, y + 2, { x: -1, z: 0.04 }); roadEnd('east', sq.x + 58, y + 1, { x: 1, z: 0.02 }); }
@@ -557,6 +566,8 @@ export function makeTownPeople({ W, folk, camera, player = () => null, jobs = {}
   };
   TP.walkers = [];
   TP.laneSpot = () => (TP.lane ? { x: TP.lane.x, z: TP.lane.z, rot: Math.PI } : null);
+  TP.way = (from, to) => viaPoints(from, to);   // (rigs: the way a townsperson would walk from one spot to another, [{ x, z }, ...])
+  TP.dockSpot = () => { const d = TP.spots.find((q) => q.id === 'dock'); return d ? { x: d.x, z: d.z, rot: d.face } : null; };
   TP.state = () => ({ grid: !!G, gridMs: TP.gridMs || null, routes: routes.size, shut: shutBy.size, shutCells: G && G.base ? G.base.size : 0, cap: outCap(tier, night()), night: night(), out: outCount(),
     expecting: [...TP.expecting].map(([k, e]) => ({ key: k, names: [...e.names] })),
     people: TP.people.map((r) => ({ name: r.name, home: r.home, state: r.state, out: r.out, lent: r.lent, in: r.out ? null : r.in, x: +r.x.toFixed(2), z: +r.z.toFixed(2), y: +r.y.toFixed(2),

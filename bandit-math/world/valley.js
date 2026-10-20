@@ -13,6 +13,10 @@
 //     ground function says where the dirt's rim is, `fringe`); the town's mown yards 5 m, not 14 (objects/village.js
 //     blockGrid); the pads flat 4.4 m past the walls, close neighbours on one height (objects/townAssets.js levelPads); a
 //     leaning model stood upright (TOWN_ASSETS tilt, sink)
+//   - (2026-10-20) the landforms (objects/landforms.js: the mill hill, the bridge crossing's shelf and ravine, its ford and
+//     the engineer's camp's room) laid over the land as made, before the town's pads (townLand, shapeLand); the ground
+//     drawn finer where their banks are too steep for the land's grid (FINE, buildFine), heightAt and meshAt reading it;
+//     nothing grows or lies on its steep banks (fineDrop); no leaves and twigs painted on a cliff
 // The land's own code (every function landKey and pathKey read, below) is left exactly as it was: the land's bake
 // (models/town/land) is keyed by its text, so a change there and the land is worked out again at every load (slowly).
 //
@@ -52,6 +56,7 @@ import { Village, levelPads, blockGrid, paintRoads, footprintOf, loadModel, leve
 import { PROP_KINDS, makeProp } from './objects/townProps.js';
 import { savedLayout as savedTown, forgetLayout as forgetTown } from './objects/villageEditor.js';
 import { textHash } from './objects/changes.js';
+import { makeLandforms } from './objects/landforms.js';
 import { makeLampUniforms, buildLampMap, lampStandard } from './objects/lampLight.js';
 import { makeNightLights } from './objects/nightLights.js';
 import { IMPOSTER_CLOCK, IMPOSTER_RISE } from './objects/imposter.js';
@@ -192,6 +197,8 @@ const PATHROAD = new Uint8Array(2048 * 2048 * 4);              // the paths-and-
 // the buildings, props, rocks, plants and the lawn where each pixel stands; built in lampsFrame (again when a lamp moves)
 const LAMPU = makeLampUniforms();
 const TOWN = { layout: normaliseTown((lab && savedTown()) || TOWN_DEFAULT), Hpre: null, block: null, road: null, canvas: document.createElement('canvas'), village: null };
+// (Bandit Math) THE GROUND DRAWN FINER where the landforms need it (buildFine, by the ground's mesh): h, the heights on its own grid
+const FINE = { h: null, dirty: false, geo: null, mesh: null, cut: '', x0: 0, x1: 0, z0: 0, z1: 0, nx: 0, nz: 0, sx: 1, sz: 1, i0: 0, i1: 0, j0: 0, j1: 0 };
 // THE TOWN'S PAVING (src/objects/stones.js, tuned in the Stone Lab): irregular stones, one per scattered point, so
 // nothing repeats and a road's edge is a ragged row of whole stones. Painted in the ground's shader everywhere, and
 // near the camera real low 3D stones on top (TIER_SET paving3D), which sink into the ground past `lod` metres where
@@ -606,12 +613,30 @@ function buildHeights() {
   findWater(Hg);
   townLand();
 }
-// the land as made is kept (Hpre); the town's pads are laid on a copy of it, so moving a building puts the old ground back
-function townLand() { TOWN.Hpre = Float32Array.from(Hg); levelPads(Hg, TOWN.Hpre, TOWN.village ? TOWN.village.layout : TOWN.layout, N, SIZE, TEX); }
-function heightAt(x, z) {
+// the land as made is kept (Hland: what the bake saves); the landforms are laid over it (shapeLand), and that is kept
+// too (Hpre); the town's pads are laid on a copy of it, so moving a building puts the old ground back
+function townLand() { TOWN.Hland = Float32Array.from(Hg); shapeLand(); TOWN.Hpre = Float32Array.from(Hg); levelPads(Hg, TOWN.Hpre, TOWN.village ? TOWN.village.layout : TOWN.layout, N, SIZE, TEX); }
+// (Bandit Math) THE LANDFORMS (objects/landforms.js): the mill hill, the bridge crossing's level shelf and its ravine, the
+// ford beside the road and the engineer's camp's room, laid over the land's grid. Where the ravine's banks are steeper
+// than the grid's 3 m can draw, the ground is drawn finer there (FINE, below), and heightAt reads that
+let LANDF = null;
+function shapeLand() {
+  const L0 = TOWN.Hland; LANDF = makeLandforms((x, z) => gridAt(L0, x, z));
+  for (const b of LANDF.boxes) {
+    const i0 = Math.max(0, Math.floor((b.x0 + SIZE / 2) / TEX)), i1 = Math.min(N - 1, Math.ceil((b.x1 + SIZE / 2) / TEX)), j0 = Math.max(0, Math.floor((b.z0 + SIZE / 2) / TEX)), j1 = Math.min(N - 1, Math.ceil((b.z1 + SIZE / 2) / TEX));
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const k = j * N + i; Hg[k] = LANDF.at(cellX(i), cellX(j), L0[k]); }
+  }
+  FINE.dirty = true;
+}
+// a height grid's height at (x, z), between its cells' middles
+function gridAt(H, x, z) {
   const fx = Math.min(N - 1.001, Math.max(0, (x + SIZE / 2) / TEX - 0.5)), fz = Math.min(N - 1.001, Math.max(0, (z + SIZE / 2) / TEX - 0.5));
   const i = fx | 0, j = fz | 0, u = fx - i, v = fz - j, k = j * N + i;
-  return (Hg[k] * (1 - u) + Hg[k + 1] * u) * (1 - v) + (Hg[k + N] * (1 - u) + Hg[k + N + 1] * u) * v;
+  return (H[k] * (1 - u) + H[k + 1] * u) * (1 - v) + (H[k + N] * (1 - u) + H[k + N + 1] * u) * v;
+}
+function heightAt(x, z) {
+  if (FINE.h && x > FINE.x0 && x < FINE.x1 && z > FINE.z0 && z < FINE.z1) return fineAt(x, z);
+  return gridAt(Hg, x, z);
 }
 // the bake's keys: the land's settings and the source of everything that shapes it; the footpaths' strokes and their drawing
 const landKey = () => textHash(JSON.stringify([N, SIZE, VALLEY, SHAPE, WATER, LAND.treeline]) + [hash, vnoise, ridged, baseHeight, cellX, terrace, erode, erodeSteps, flood, findPools, carveOutlets, floodGrid, blurGrid, cutRavines, findWater, paintWater, baseGrid, smoothErosion, addCrags, buildHeights, blur, erosionBytes].map(String).join('\n'));
@@ -655,8 +680,77 @@ for (let tj = 0; tj < TILES; tj++) for (let ti = 0; ti < TILES; ti++) {
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(w * h * 3), 3)); g.setIndex(idx);
   groundTiles.push({ i0, j0, w, h, geo: g });
 }
+// (Bandit Math) THE GROUND DRAWN FINER: a patch of ground a vertex every FINE_STEP m over the landforms' `fine` box (the
+// bridge crossing's ravine, whose banks are steeper and narrower than the land's 3 m grid can draw, and the ford's lane),
+// drawn with the ground's own material. Its edge runs along the ground mesh's own grid lines and takes the mesh's own
+// triangles' heights there, blending into the landforms' shape over one grid square in, so there's no seam; the ground
+// mesh's own squares under it are left out of its tiles (cutForFine), so nothing there is drawn twice. heightAt and meshAt read it there, so everything that
+// stands on the ground (the trees, plants, rocks, people, horses) stands on what is drawn.
+const FINE_STEP = TS.lite ? 1 : 0.5;
+function fineAt(x, z) {
+  const fx = Math.min(FINE.nx - 0.001, Math.max(0, (x - FINE.x0) / FINE.sx)), fz = Math.min(FINE.nz - 0.001, Math.max(0, (z - FINE.z0) / FINE.sz)), i = fx | 0, j = fz | 0, u = fx - i, v = fz - j, W1 = FINE.nx + 1, k = j * W1 + i, H = FINE.h;
+  return (H[k] * (1 - u) + H[k + 1] * u) * (1 - v) + (H[k + W1] * (1 - u) + H[k + W1 + 1] * u) * v;
+}
+// how far the finer patch's ground falls or rises within r m round a spot, as a slope (0 outside it): its steep banks and
+// the ravine's edge, where no tree, plant or rock should stand (they would hang over the drop or stand on the bank)
+function fineDrop(x, z, r = 0.8) {
+  if (!FINE.h || !(x > FINE.x0 && x < FINE.x1 && z > FINE.z0 && z < FINE.z1)) return 0;
+  const h = fineAt(x, z); let most = 0;
+  for (let a = 0; a < 8; a++) most = Math.max(most, Math.abs(heightAt(x + Math.cos(a * 0.785) * r, z + Math.sin(a * 0.785) * r) - h));
+  return most / r;
+}
+function buildFine() {
+  FINE.dirty = false; const f = LANDF && LANDF.fine; if (!f || !TOWN.Hland) { FINE.h = null; return; }
+  const i0 = Math.max(1, Math.floor((f.x0 - X0) / STEP)), i1 = Math.min(SEG - 1, Math.ceil((f.x1 - X0) / STEP)), j0 = Math.max(1, Math.floor((f.z0 - X0) / STEP)), j1 = Math.min(SEG - 1, Math.ceil((f.z1 - X0) / STEP));
+  const x0 = X0 + i0 * STEP, x1 = X0 + i1 * STEP, z0 = X0 + j0 * STEP, z1 = X0 + j1 * STEP, nx = Math.round((x1 - x0) / FINE_STEP), nz = Math.round((z1 - z0) / FINE_STEP), sx = (x1 - x0) / nx, sz = (z1 - z0) / nz, W1 = nx + 1;
+  // the ground mesh's own surface (its triangles, from the heights at its vertices), as meshAt reads it
+  const vtx = (i, j) => gridAt(Hg, X0 + i * STEP, X0 + j * STEP);
+  const coarse = (x, z) => { const fx = (x - X0) / STEP, fz = (z - X0) / STEP, i = Math.min(SEG - 1, Math.floor(fx)), j = Math.min(SEG - 1, Math.floor(fz)), u = fx - i, v = fz - j, a = vtx(i, j), d = vtx(i + 1, j), b = vtx(i, j + 1), c = vtx(i + 1, j + 1);
+    return u + v <= 1 ? a + (d - a) * u + (b - a) * v : c + (b - c) * (1 - u) + (d - c) * (1 - v); };
+  const h = new Float32Array(W1 * (nz + 1));
+  for (let j = 0; j <= nz; j++) for (let i = 0; i <= nx; i++) {
+    const x = x0 + i * sx, z = z0 + j * sz, edge = Math.min(x - x0, x1 - x, z - z0, z1 - z), w = edge <= 0 ? 0 : edge >= STEP ? 1 : (edge / STEP) ** 2 * (3 - 2 * edge / STEP);
+    const want = LANDF.at(x, z, gridAt(TOWN.Hland, x, z)), c = w < 1 ? coarse(x, z) : want;
+    h[j * W1 + i] = c + (want - c) * w;
+  }
+  Object.assign(FINE, { h, x0, x1, z0, z1, nx, nz, sx, sz, i0, i1, j0, j1 });
+  // its mesh: the heights, and normals across the grid (as the ground's)
+  if (!FINE.geo || FINE.geo.attributes.position.count !== W1 * (nz + 1)) {
+    const g = new THREE.BufferGeometry(), pos = new Float32Array(W1 * (nz + 1) * 3), idx = [];
+    for (let j = 0; j <= nz; j++) for (let i = 0; i <= nx; i++) { const q = (j * W1 + i) * 3; pos[q] = x0 + i * sx; pos[q + 2] = z0 + j * sz; }
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(pos.length), 3)); g.setIndex(new THREE.BufferAttribute(new Uint32Array(nx * nz * 6), 1));
+    if (FINE.geo) FINE.geo.dispose(); FINE.geo = g; if (FINE.mesh) FINE.mesh.geometry = g;
+  }
+  // each square's two triangles meet along whichever diagonal joins the nearer heights, so a bank's top and foot run
+  // along the triangles' edges rather than zigzagging across them
+  { const ix = FINE.geo.index.array; let o = 0;
+    for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) { const a = j * W1 + i, b = a + W1, c = b + 1, d = a + 1;
+      if (Math.abs(h[a] - h[c]) < Math.abs(h[b] - h[d])) { ix[o++] = a; ix[o++] = b; ix[o++] = c; ix[o++] = a; ix[o++] = c; ix[o++] = d; }
+      else { ix[o++] = a; ix[o++] = b; ix[o++] = d; ix[o++] = b; ix[o++] = c; ix[o++] = d; } }
+    FINE.geo.index.needsUpdate = true; }
+  const p = FINE.geo.attributes.position.array, n = FINE.geo.attributes.normal.array, at = (i, j) => h[Math.min(nz, Math.max(0, j)) * W1 + Math.min(nx, Math.max(0, i))];
+  for (let j = 0; j <= nz; j++) for (let i = 0; i <= nx; i++) {
+    const q = j * W1 + i, gx = (at(i + 1, j) - at(i - 1, j)) / ((Math.min(nx, i + 1) - Math.max(0, i - 1)) * sx), gz = (at(i, j + 1) - at(i, j - 1)) / ((Math.min(nz, j + 1) - Math.max(0, j - 1)) * sz), l = Math.hypot(gx, 1, gz);
+    p[q * 3 + 1] = h[q]; n[q * 3] = -gx / l; n[q * 3 + 1] = 1 / l; n[q * 3 + 2] = -gz / l;
+  }
+  FINE.geo.attributes.position.needsUpdate = true; FINE.geo.attributes.normal.needsUpdate = true; FINE.geo.computeBoundingSphere(); FINE.geo.computeBoundingBox();
+}
+// the ground mesh's squares under the finer patch left out of its tiles (so nothing is drawn twice there); again only
+// when the patch moves
+function cutForFine() {
+  const key = FINE.h ? [FINE.i0, FINE.i1, FINE.j0, FINE.j1].join() : '';
+  if (FINE.cut === key) return; FINE.cut = key;
+  for (const t of groundTiles) {
+    const under = (ix, iy) => !!key && t.i0 + ix >= FINE.i0 && t.i0 + ix + 1 <= FINE.i1 && t.j0 + iy >= FINE.j0 && t.j0 + iy + 1 <= FINE.j1;
+    if (!t.cut && !(key && t.i0 < FINE.i1 && t.i0 + t.w - 1 > FINE.i0 && t.j0 < FINE.j1 && t.j0 + t.h - 1 > FINE.j0)) continue;   // (a tile the patch doesn't touch, never cut)
+    const idx = [];
+    for (let iy = 0; iy < t.h - 1; iy++) for (let ix = 0; ix < t.w - 1; ix++) { if (under(ix, iy)) continue; const a = ix + t.w * iy, b = ix + t.w * (iy + 1), c = ix + 1 + t.w * (iy + 1), d = ix + 1 + t.w * iy; idx.push(a, b, d, b, c, d); }
+    t.geo.setIndex(idx); t.cut = !!key;
+  }
+}
 // the heights into the tiles, and the normals over the whole grid: `vertex(i, j)` the height at a grid point
 function meshFrom(vertex) {
+  buildFine();
   for (let j = 0; j < VS; j++) for (let i = 0; i < VS; i++) HV[j * VS + i] = vertex(i, j);
   NV.fill(0);
   const add = (k, x, y, z) => { NV[k * 3] += x; NV[k * 3 + 1] += y; NV[k * 3 + 2] += z; };
@@ -666,6 +760,7 @@ function meshFrom(vertex) {
     const nx = cby * abz - cbz * aby, ny = cbz * abx - cbx * abz, nz = cbx * aby - cby * abx; add(A, nx, ny, nz); add(B, nx, ny, nz); add(C, nx, ny, nz); };
   for (let iy = 0; iy < SEG; iy++) for (let ix = 0; ix < SEG; ix++) { const a = ix + VS * iy, b = ix + VS * (iy + 1), c = ix + 1 + VS * (iy + 1), d = ix + 1 + VS * iy; face(a, b, d); face(b, c, d); }
   for (let k = 0; k < VS * VS; k++) { const x = NV[k * 3], y = NV[k * 3 + 1], z = NV[k * 3 + 2], l = Math.hypot(x, y, z) || 1; NV[k * 3] = x / l; NV[k * 3 + 1] = y / l; NV[k * 3 + 2] = z / l; }
+  cutForFine();
   for (const t of groundTiles) {
     const p = t.geo.attributes.position, n = t.geo.attributes.normal;
     for (let iy = 0; iy < t.h; iy++) for (let ix = 0; ix < t.w; ix++) { const q = ix + t.w * iy, k = (t.j0 + iy) * VS + t.i0 + ix; p.array[q * 3 + 1] = HV[k]; n.array[q * 3] = NV[k * 3]; n.array[q * 3 + 1] = NV[k * 3 + 1]; n.array[q * 3 + 2] = NV[k * 3 + 2]; }
@@ -1204,7 +1299,7 @@ mat.onBeforeCompile = (sh) => {
           g *= mix(1.0, clamp(v, 0.6, 1.5), k * 0.65); }
       }
       if (stampOn > 0.5) {
-        float stD = length(vW - cameraPosition), fade = stD < stampFar ? 1.0 - gRoad : 0.0;   // (no leaves and twigs on the roads; each fades out by itself, in stamps)
+        float stD = length(vW - cameraPosition), fade = stD < stampFar ? (1.0 - gRoad) * (1.0 - smoothstep(0.3, 0.45, 1.0 - normalize(vWN).y)) : 0.0;   // (no leaves and twigs on the roads, nor on a cliff, where they'd be drawn down its face in streaks; each fades out by itself, in stamps)
         if (fade > 0.001) g = mix(g, stamps(g, vW.xz, stD), fade);
       }
       if (macroOn > 0.5) {
@@ -1278,6 +1373,7 @@ mat.customProgramCacheKey = () => 'terrain-lab-29-lamps-wfog' + (GL2 ? 'g' : '')
 if (!GL2) mat.extensions = { derivatives: true };
 const ground = new THREE.Group(); ground.name = 'ground'; scene.add(ground);
 for (const t of groundTiles) { const m = new THREE.Mesh(t.geo, mat); m.receiveShadow = SHADOW.on; ground.add(m); }
+if (FINE.geo) { FINE.mesh = new THREE.Mesh(FINE.geo, mat); FINE.mesh.name = 'ground-fine'; FINE.mesh.receiveShadow = SHADOW.on; ground.add(FINE.mesh); }   // (the finer patch: buildFine)
 // THE TREES: the Tree Lab's forest (ez-tree species, meshes near, octahedral imposters beyond, a
 // dithered crossfade between), planted where the canopy map grew them instead of on tiles
 const TREE_SPECIES = FOREST_SPECIES.filter(sp => sp.name !== 'bush');
@@ -1286,6 +1382,7 @@ const TREE_SPECIES = FOREST_SPECIES.filter(sp => sp.name !== 'bush');
 // (read off the ground's mesh as it is drawn, its triangles, not the smoother heightAt: in a crag the two differ by a foot)
 const TREE_FOOT = 0.35;
 function meshAt(x, z) {
+  if (FINE.h && x > FINE.x0 && x < FINE.x1 && z > FINE.z0 && z < FINE.z1) return fineAt(x, z);   // (the finer patch drawn there)
   const fx = Math.min(VS - 1.001, Math.max(0, (x - X0) / STEP)), fz = Math.min(VS - 1.001, Math.max(0, (z - X0) / STEP)), i = fx | 0, j = fz | 0, u = fx - i, v = fz - j;
   const a = HV[j * VS + i], d = HV[j * VS + i + 1], b = HV[(j + 1) * VS + i], c = HV[(j + 1) * VS + i + 1];
   return u + v <= 1 ? a + (d - a) * u + (b - a) * v : c + (b - c) * (1 - u) + (d - c) * (1 - v);   // (each square's two triangles meet along its b-d diagonal)
@@ -1310,6 +1407,8 @@ function treeCleared(x, z, s = 1) {
     }
     // (and the game's own strips: [{ ax, az, bx, bz, half }], e.g. the way into each back-woods camp, makeValley's treeClear)
     for (const q of treeClear || []) if ([q.ax, q.az, q.bx, q.bz, q.half].every(Number.isFinite)) treeClearSegs.push([q.ax, q.az, q.bx, q.bz, q.half]);
+    // (and the landforms' own: the ford's lane, the engineer's camp's room)
+    for (const q of (LANDF && LANDF.clear) || []) treeClearSegs.push(q);
   }
   for (const [ax, az, bx, bz, half] of treeClearSegs) {
     const r = half + CROWN_M * s; if (x < Math.min(ax, bx) - r || x > Math.max(ax, bx) + r || z < Math.min(az, bz) - r || z > Math.max(az, bz) + r) continue;
@@ -1318,7 +1417,7 @@ function treeCleared(x, z, s = 1) {
   }
   return false;
 }
-const keepTree = (x, z, s) => keepWild('tree', x, z) && !treeCleared(x, z, s);
+const keepTree = (x, z, s) => keepWild('tree', x, z) && !treeCleared(x, z, s) && !(fineDrop(x, z, 2.2) > 0.45);   // (none on the finer patch's banks, its trunk's foot hanging)
 // the Tree Lab's settings, now here (Jacob's defaults, 2026-09-23)
 const FOREST = { imposterAt: 150, band: 120, ahead: 0.6, spread: 0.5, grid: 12, cell: 192, detail: 'sparse', rebake: false, lowPine: !!TS.lite };   // lowPine: the ~100-triangle pine (the potato's, to start)
 Object.assign(FOREST, TS.forest);
@@ -1416,16 +1515,17 @@ function coverGround(x, z) {
   // short grass tufts line the edge so the dirt doesn't stop at a hard line (see lawnSpots)
   const pR = MAPS.path[(pj * MAPS.P + pi) * 4] / 255, fringe = (1 - THREE.MathUtils.smoothstep(pR, 0.3, 0.55)) * THREE.MathUtils.smoothstep(MAPS.path[(pj * MAPS.P + pi) * 4 + 1] / 255, 0.72, 0.93);
   const canopy = MAPS.canopy[k], shade = Math.min(1, Math.max(0, MAPS.wide[k] * 2.2 - canopy * 0.8)), open = 1 - Math.min(1, canopy + shade);
-  const wIn = waterAt(x, z), yard = TOWN.yard ? TOWN.yard[k] : 0, hard = path + MAPS.steep[k] * 1.5 + wIn * 4 + (TOWN.block ? TOWN.block[k] * 2 : 0) + yard, shore = MAPS.shore ? Math.min(1, MAPS.shore[k] * 2.5) : 0;   // (nothing in the town's buildings and roads; mown yards round them: lawn, no meadow)
+  const steep = Math.max(MAPS.steep[k], THREE.MathUtils.smoothstep(fineDrop(x, z, 0.7), 0.45, 0.85));   // (Bandit Math: and the finer patch's own banks)
+  const wIn = waterAt(x, z), yard = TOWN.yard ? TOWN.yard[k] : 0, hard = path + steep * 1.5 + wIn * 4 + (TOWN.block ? TOWN.block[k] * 2 : 0) + yard, shore = MAPS.shore ? Math.min(1, MAPS.shore[k] * 2.5) : 0;   // (nothing in the town's buildings and roads; mown yards round them: lawn, no meadow)
   const blocked = hard + Math.max(0, MAPS.wet[k] - 0.6) * 2 + shore * 1.2;
   // right at the water's edge (the waterside kinds, cattails): the stony shore's band, or a pond's shallows along its rim
   // (the first cell or two out from the shore, less the deeper it is, none by 0.8 m), where the water doesn't keep them
   // out (hardWater); never out in a river, nor across a pond that is shallow a long way out
   const shallow = POND[k] && WDEPTH[k] < 0.8 ? (1 - WDEPTH[k] / 0.8) * (MAPS.rim ? MAPS.rim[k] : 0) : 0, inPond = wIn > 0.3 && shallow > 0;
-  const waterside = (wIn > 0.3 ? shallow : THREE.MathUtils.smoothstep(shore, 0.45, 0.9)) * (1 - MAPS.steep[k]), hardWater = inPond ? hard - wIn * 4 : hard;
-  return { hard, yard, blocked, waterside, hardWater, fringe: fringe * (1 - Math.min(1, wIn * 3 + MAPS.steep[k])), shade: Math.min(1, shade + 0.6 * canopy), wet: Math.max(shore, MAPS.wet[k]) * (1 - MAPS.steep[k]),
-    dry: MAPS.steep[k] > 0.4 ? 0 : MAPS.dry[k] * open, grass: (0.55 * open + 1.0 * shade + 0.15 * canopy) * (1 - MAPS.dry[k] * 0.4), shrub: 0.08 * open + 0.9 * shade + 0.35 * canopy,
-    long: MAPS.steep[k] > 0.4 ? 0 : (0.35 + 0.65 * MAPS.dry[k]) * (1 - Math.min(1, canopy * 1.5 + MAPS.wide[k])) * (1 - Math.min(1, path + MAPS.steep[k] + MAPS.wet[k])) };
+  const waterside = (wIn > 0.3 ? shallow : THREE.MathUtils.smoothstep(shore, 0.45, 0.9)) * (1 - steep), hardWater = inPond ? hard - wIn * 4 : hard;
+  return { hard, yard, blocked, waterside, hardWater, fringe: fringe * (1 - Math.min(1, wIn * 3 + steep)), shade: Math.min(1, shade + 0.6 * canopy), wet: Math.max(shore, MAPS.wet[k]) * (1 - steep),
+    dry: steep > 0.4 ? 0 : MAPS.dry[k] * open, grass: (0.55 * open + 1.0 * shade + 0.15 * canopy) * (1 - MAPS.dry[k] * 0.4), shrub: 0.08 * open + 0.9 * shade + 0.35 * canopy,
+    long: steep > 0.4 ? 0 : (0.35 + 0.65 * MAPS.dry[k]) * (1 - Math.min(1, canopy * 1.5 + MAPS.wide[k])) * (1 - Math.min(1, path + steep + MAPS.wet[k])) };
 }
 // THE LAWN: short grass tufts on the bare ground near you (src/objects/lawn.js, placed by lawnSpots), the
 // grass's own colour, darkened by the land's shade; laid with the plants
@@ -1816,6 +1916,7 @@ function* placeStonesSteps() {
       if (!keepWild('rock', x, z)) continue;
       const pi = Math.floor((x + SIZE / 2) / SIZE * MAPS.P), pj = Math.floor((z + SIZE / 2) / SIZE * MAPS.P); if (MAPS.path[(pj * MAPS.P + pi) * 4] > 60) continue;
       const u = r(ci * 3.3 + m, cj * 2.9 + 1.7), size = STONES.size * (0.18 + 1.1 * u * u * u);
+      if (fineDrop(x, z, size * 0.7 + 0.3) > 0.6) continue;   // (none on the finer patch's steep banks or hanging off its edge)
       per[Math.floor(r(ci + m * 5.1, cj * 0.7) * 4) % 4].push([x, heightAt(x, z) - size * 0.3, z, size, r(ci * 1.9 + m, cj) * 6.283, r(ci, cj * 1.3 + m)]); placed++;
     }
   }
@@ -1835,6 +1936,7 @@ function* placeStonesSteps() {
     const vis = Math.min(1, (1 - MAPS.canopy[k]) * 0.7 + MAPS.path[(pj * MAPS.P + pi) * 4 + 1] / 255 * 0.45 + creek * 0.6 + MAPS.dry[k] * 0.5);   // (how open and looked at the spot is)
     if (r(t, 47.1) > want * (1 - STONES.seen * (0.9 - 0.9 * vis))) continue;
     const u = r(t, 49.9), size = STONES.size * (0.22 + 1.7 * u * u * u) * (1 + 0.6 * Math.max(0, scree[k] - MAPS.steep[k])) * (1 + STONES.seen * 0.7 * (vis - 0.4));
+    if (fineDrop(x, z, size * 0.7 + 0.3) > 0.6) continue;   // (none on the finer patch's steep banks or hanging off its edge)
     per[Math.floor(r(t, 51.7) * 4) % 4].push([x, heightAt(x, z) - size * 0.22, z, size, r(t, 53.3) * 6.283, r(t, 57.1)]);
     placed++;
   }
@@ -2461,7 +2563,7 @@ function bakeData() {
   const gully = MAPS.gullyB, fan = MAPS.fanB;                          // (as landSteps worked them out, and wrote them into maskB)
   const rgb = (rgba) => { const out = new Uint8Array(rgba.length / 4 * 3); for (let i = 0, j = 0; i < rgba.length; i += 4) { out[j++] = rgba[i]; out[j++] = rgba[i + 1]; out[j++] = rgba[i + 2]; } return out; };
   const waterRgba = Uint8Array.from(MAPS.water); for (let i = 3; i < waterRgba.length; i += 4) waterRgba[i] = 255;   // (opaque: its soft edge's alpha isn't read)
-  const hpre = TOWN.Hpre, pond = Uint8Array.from(POND), wd = Float32Array.from(WDEPTH);
+  const hpre = TOWN.Hland, pond = Uint8Array.from(POND), wd = Float32Array.from(WDEPTH);   // (the land as made: the landforms are laid over it at every load)
   return { from: 'live', N, SIZE, P: MAPS.P, key: landKey(), pathKey: pathKey(), outlets: OUTLETS.map((o) => [...o]),
     hpre: b64(hpre), wdepth: b64(wd), pond: b64(pond), gully: b64(gully), fan: b64(fan), water: b64(rgb(waterRgba)), paths: b64(rgb(MAPS.path)),
     hashes: { heights: fnvBytes([hpre]), cells: fnvBytes([wd, pond, gully, fan]), water: fnvBytes([waterRgba], 61), paths: fnvBytes([MAPS.path], 61) } };
@@ -2469,6 +2571,7 @@ function bakeData() {
 return {
   scene, sky, sun, hemi, ground, mat, lawn, LAWN_SKIP, U, MAPS, TOWN, PLANT, COVER, GROW, PLANT_KINDS, FAMILY, FOREST, LEAF, LAND, VALLEY, SHAPE, WATER, PAVE, DAY, DL, SHADE, NIGHT, NIGHT_GRADE, NIGHT_LIGHTS, STONES, LAWN, LAWN_GO, CALM, FOLK, SHOW, BEAMS, RAIN, FENCE, FOG_EDGE: FOG_DIR.edge,
   TS, QUAL, TEXTURES, LAYERS, TREE_SPECIES, TOWN_DEFAULT, PLANTING_FIRST, weights, FLOW, SETTLE, WDEPTH, ACC, POND, OUTLETS, Hg, N, SIZE, TEX, SEG, groundTiles, SUN_NOW, FOG_DIR, LAMPU,
+  FINE, get LANDF() { return LANDF; }, inFine: (x, z) => !!FINE.h && x > FINE.x0 && x < FINE.x1 && z > FINE.z0 && z < FINE.z1,
   BAKE, bakeData, update, render, settled, heightAt, groundAt, slopeAt, waterAt, coverGround, buildLand, buildHeights, shapeMesh, fastMesh, baseGrid, erodeSteps, smoothErosion, cutRavines, addCrags, findWater, townLand, paintWater,
   placeCover, placeTrees, placeStones, placeLawn, calmCover, buildPaving, applyPave, paveLater, composePathRoad, tex, setAverages, applyWeights, drawPaths, followShadow, followCover, townRebuildNow, beamsReady,
   get treeForest() { return treeForest; }, get coverForest() { return coverForest; }, get trees() { return trees; }, get pathCanvas() { return pathCanvas; },

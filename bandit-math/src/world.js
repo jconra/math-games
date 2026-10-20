@@ -192,7 +192,10 @@ export async function makeWorld({ renderer, camera, quality = null, look = 'gree
     for (const b of FOOT) { const dx = x - b.x, dz = z - b.z; if (Math.abs(b.c * dx - b.s * dz) < b.hw && Math.abs(b.s * dx + b.c * dz) < b.hd) return true; }
     for (const [p, q] of V.FENCE.rails || []) if (segNear(x, z, p[0], p[2], q[0], q[2], FENCE_HALF)) return true;
     const i = Math.min(V.N - 1, Math.max(0, Math.floor((x + V.SIZE / 2) / V.TEX))), j = Math.min(V.N - 1, Math.max(0, Math.floor((z + V.SIZE / 2) / V.TEX)));
-    { const sl = V.slopeAt(i, j); if (sl > STEEP && (sl > BANK || !bankAt(j * V.N + i))) return true; }
+    if (V.inFine && V.inFine(x, z)) {   // (where the ground is drawn finer than its grid, the bridge crossing's ravine and ford: its own slope, and no scrambling down a bank there)
+      const e = 0.6, gx = V.heightAt(x + e, z) - V.heightAt(x - e, z), gz = V.heightAt(x, z + e) - V.heightAt(x, z - e);
+      if (Math.hypot(gx, gz) / (2 * e) > STEEP) return true;
+    } else { const sl = V.slopeAt(i, j); if (sl > STEEP && (sl > BANK || !bankAt(j * V.N + i))) return true; }
     if (V.WDEPTH[j * V.N + i] > DEEP && V.waterAt(x, z) > 0.3) return true;
     return false;
   }
