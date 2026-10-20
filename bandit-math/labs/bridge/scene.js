@@ -117,40 +117,87 @@ export function makeScene({ low = false } = {}) {
   const water = new THREE.Mesh(new THREE.PlaneGeometry((BANK * 2 + 2) * FT, 600), new THREE.MeshLambertMaterial({ map: waterTex, color: 0x9fc4c4, transparent: true, opacity: 0.86, depthWrite: false }));
   water.rotation.x = -Math.PI / 2; water.position.y = WATER_Y * FT; water.renderOrder = 2; scene.add(water);
 
-  // ── the abutments: stone, from the gap's edge back into the bank, from the river's floor to the top ───────────────
-  const stoneTex = tl.load(GAME + 'textures/rock/granite.jpg'); stoneTex.colorSpace = THREE.SRGBColorSpace; stoneTex.wrapS = stoneTex.wrapT = THREE.RepeatWrapping;
-  const stoneMat = new THREE.MeshLambertMaterial({ map: stoneTex, color: 0xc9bfae });
-  // (the stone is laid in courses: a canvas of joints over the granite)
-  const jcv = document.createElement('canvas'); jcv.width = 256; jcv.height = 256;
-  { const g = jcv.getContext('2d'), r = rng(13); g.fillStyle = '#fff'; g.fillRect(0, 0, 256, 256); g.strokeStyle = 'rgba(70,58,46,0.75)'; g.lineWidth = 3;
-    for (let row = 0; row < 4; row++) { const y = row * 64; g.beginPath(); g.moveTo(0, y); g.lineTo(256, y); g.stroke(); let x = (row % 2) * 40 + r() * 20; while (x < 256) { g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + 64); g.stroke(); x += 60 + r() * 50; } } }
-  const jointTex = new THREE.CanvasTexture(jcv); jointTex.wrapS = jointTex.wrapT = THREE.RepeatWrapping;
-  const wallMat = new THREE.MeshLambertMaterial({ map: stoneTex, color: 0xd2c8b6, aoMap: null });
-  wallMat.onBeforeCompile = (sh) => {
-    sh.uniforms.jMap = { value: jointTex };
-    sh.fragmentShader = 'uniform sampler2D jMap;\n' + sh.fragmentShader.replace('#include <map_fragment>', '#include <map_fragment>\n  diffuseColor.rgb *= texture2D(jMap, vMapUv * 0.5).rgb;');
-  };
+  // ── the abutments: plain frontier stonework, from the gap's edge back into the bank, from the river's floor to the top
+  // Rough grey split stones stacked in uneven courses, their edges chipped off, over a dark core that shows in the
+  // joints: one merged mesh per abutment (a block is a box with its corners and edges pulled in, each its own grey),
+  // a small canvas of speckle for the stone's grain. The shape is the same box as ever (the physics never sees this):
+  // the top is flat at the stone top (Y = 0), so boards and the deck sit on it as before.
+  const gcv = document.createElement('canvas'); gcv.width = gcv.height = 128;
+  { const g = gcv.getContext('2d'), r = rng(17); g.fillStyle = '#9a9a95'; g.fillRect(0, 0, 128, 128);
+    for (let k = 0; k < 1400; k++) { const v = 110 + r() * 80 | 0; g.fillStyle = `rgba(${v},${v},${v - 4},${0.25 + r() * 0.35})`; g.fillRect(r() * 128, r() * 128, 1 + r() * 2.5, 1 + r() * 2.5); }
+    for (let k = 0; k < 220; k++) { const v = 60 + r() * 30 | 0; g.fillStyle = `rgba(${v},${v},${v},0.35)`; g.fillRect(r() * 128, r() * 128, 1 + r() * 2, 1); } }
+  const grainTex = new THREE.CanvasTexture(gcv); grainTex.colorSpace = THREE.SRGBColorSpace; grainTex.wrapS = grainTex.wrapT = THREE.RepeatWrapping;
+  const stoneMat = new THREE.MeshLambertMaterial({ map: grainTex, vertexColors: true });
+  const coreMat = new THREE.MeshLambertMaterial({ color: 0x3e3d3a });
+  // one block's shape: a box (unit, two segments each way) with its corners pulled in further than its edges: chipped
+  const blockGeo = (() => {
+    const b = new THREE.BoxGeometry(1, 1, 1, 2, 2, 2).toNonIndexed(), P = b.attributes.position;
+    for (let i = 0; i < P.count; i++) {
+      const x = P.getX(i), y = P.getY(i), z = P.getZ(i), n = (Math.abs(x) > 0.49) + (Math.abs(y) > 0.49) + (Math.abs(z) > 0.49);
+      const k = n === 3 ? 0.78 : n === 2 ? 0.9 : 1;
+      P.setXYZ(i, x * (n === 3 || (n === 2 && Math.abs(x) > 0.49) ? k : 1), y * (n === 3 || (n === 2 && Math.abs(y) > 0.49) ? k : 1), z * (n === 3 || (n === 2 && Math.abs(z) > 0.49) ? k : 1));
+    }
+    b.computeVertexNormals(); return b;
+  })();
+  // the stones of one abutment (metres): the gap face, the two faces along the river, and the top, course by course
+  function stonework(side, x0, x1, top, bot, half) {
+    const r = rng(side > 0 ? 41 : 43), pos = [], nor = [], uv = [], col = [];
+    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), at = new THREE.Vector3(), nm = new THREE.Matrix3();
+    const P = blockGeo.attributes.position, N = blockGeo.attributes.normal, U = blockGeo.attributes.uv, v = new THREE.Vector3();
+    const stone = (cx, cy, cz, sx, sy, sz) => {
+      e.set((r() - 0.5) * 0.05, (r() - 0.5) * 0.06, (r() - 0.5) * 0.05); q.setFromEuler(e);
+      m.compose(at.set(cx, cy, cz), q, sc.set(sx, sy, sz)); nm.getNormalMatrix(m);
+      const g = 0.62 + r() * 0.3, warm = (r() - 0.5) * 0.04, ou = r() * 4, ov = r() * 4;
+      for (let i = 0; i < P.count; i++) {
+        v.fromBufferAttribute(P, i).applyMatrix4(m); pos.push(v.x, v.y, v.z);
+        v.fromBufferAttribute(N, i).applyMatrix3(nm).normalize(); nor.push(v.x, v.y, v.z);
+        uv.push(U.getX(i) * Math.max(sx, sz) * 1.3 + ou, U.getY(i) * sy * 1.3 + ov); col.push(g + warm, g, g - warm);
+      }
+    };
+    // courses up the faces: rows of uneven height, stones of uneven length, each row's joints staggered
+    const course = (from, to, along, place) => {
+      let y = bot;
+      while (y < top - 0.05) {
+        const h = Math.min(top - y, 0.3 + r() * 0.22), mid = y + h / 2;
+        let a = from - r() * 0.35;
+        while (a < to) { const l = 0.45 + r() * 0.5, c = Math.min(to, a + l); place((a + c) / 2, mid, c - a, h); a = c; }
+        y += h;
+      }
+    };
+    const xs = side * x0, xe = side * x1, lo = Math.min(xs, xe), hi = Math.max(xs, xe), d = 0.16;
+    // the face to the gap (its stones sticking out a hair either way)
+    course(-half, half, 'z', (z, y, l, h) => stone(xs - side * (d / 2 - (r() - 0.5) * 0.03), y, z, d, h * 0.97, l * 0.97));
+    // the faces up and down the river
+    for (const zs of [-1, 1]) course(lo, hi, 'x', (x, y, l, h) => stone(x, y, zs * (half - d / 2 + (r() - 0.5) * 0.03), l * 0.97, h * 0.97, d));
+    // the top: flat stones, their tops at the stone top, never above it
+    for (let z = -half; z < half - 0.05;) {
+      const w = Math.min(half - z, 0.45 + r() * 0.35);
+      let x = lo; while (x < hi) { const l = 0.5 + r() * 0.5, c = Math.min(hi, x + l), t = 0.12; stone((x + c) / 2, top - t / 2 - r() * 0.012, z + w / 2, (c - x) * 0.97, t, w * 0.97); x = c; }
+      z += w;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.Float32BufferAttribute(nor, 3));
+    geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2)); geo.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+    geo.computeBoundingSphere();
+    return geo;
+  }
   const abuts = [-1, 1].map((side) => {
-    const g = new THREE.Group(), box = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), wallMat), cap = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), stoneMat);
-    box.castShadow = box.receiveShadow = true; cap.castShadow = cap.receiveShadow = true;
-    g.add(box, cap); scene.add(g); return { side, g, box, cap };
+    const g = new THREE.Group(), box = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), coreMat), stones = new THREE.Mesh(new THREE.BufferGeometry(), stoneMat);
+    box.receiveShadow = true; stones.castShadow = stones.receiveShadow = true;
+    g.add(box, stones); scene.add(g); return { side, g, box, stones };
   });
   let setSpan = function (S) {
     span = S;
     const top = 0, bot = (BED_Y - 1) * FT, half = ABUT_HALF * FT;
     for (const a of abuts) {
       const x0 = S / 2, x1 = BANK + 2.5, len = (x1 - x0) * FT;
-      a.box.scale.set(len, top - bot, half * 2); a.box.position.set(a.side * (x0 * FT + len / 2), (top + bot) / 2 - 0.02, 0);
-      // (the stone's courses at their true size: each face's texture spread over its own metres, 1.2 m a repeat)
-      a.box.geometry.dispose(); a.box.geometry = new THREE.BoxGeometry(1, 1, 1);
-      const u = a.box.geometry.attributes.uv, size = [[half * 2, top - bot], [half * 2, top - bot], [len, half * 2], [len, half * 2], [len, top - bot], [len, top - bot]];
-      for (let i = 0; i < u.count; i++) { const [su, sv] = size[Math.floor(i / 4)]; u.setXY(i, u.getX(i) * su / 1.2, u.getY(i) * sv / 1.2); }
-      a.cap.scale.set(len + 0.06, 0.12, half * 2 + 0.12); a.cap.position.set(a.side * (x0 * FT + len / 2) - a.side * 0.03, -0.04, 0);
+      // (the dark core, a little inside the stones: what shows in the joints between them)
+      a.box.scale.set(len - 0.1, top - bot - 0.06, half * 2 - 0.1); a.box.position.set(a.side * (x0 * FT + len / 2), (top + bot) / 2 - 0.03, 0);
+      a.stones.geometry.dispose(); a.stones.geometry = stonework(a.side, x0 * FT, x1 * FT, top, bot, half);
     }
   }
   // the banks' compass letters, painted on the stone tops in the middle of the road: W on the west, E on the east
-  // (1 cm above the stone cap, whose top is at 0.02 m, and drawn with a polygon offset: they used to sit exactly in the
-  // cap's top face and flicker)
+  // (3 cm above the stone top, which the top stones never rise past, and drawn with a polygon offset: no flicker)
   const letter = (ch) => { const cv = document.createElement('canvas'); cv.width = cv.height = 128; const g = cv.getContext('2d');
     g.font = '700 96px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = 'rgba(244, 232, 207, 0.85)'; g.strokeStyle = 'rgba(40, 28, 16, 0.6)'; g.lineWidth = 6;
     g.strokeText(ch, 64, 70); g.fillText(ch, 64, 70); const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t; };
