@@ -1,8 +1,8 @@
 // THE LOADS, drawn: a person walking, a horse and rider, the covered wagon with its horse, the freight wagon with its
 // team, and the cattle drive, each crossing from the west bank to the east along the middle of the deck (frame.js LOADS
 // says where every foot, hoof and wheel is, and how much it weighs; this only draws them there). The game's own people,
-// animals and wagons (src/actors/folk.js, animals.js, seat.js; models/wagons/), each falling back to plain shapes if
-// they can't load.
+// animals and wagons (src/actors/folk.js, animals.js, seat.js; src/wagon.js for the wagons with their team and harness),
+// each falling back to plain shapes if they can't load.
 //   const L = makeLoads(scene)
 //   L.ready                 a promise: the models are in (or have failed and the plain shapes stand in)
 //   L.show(key)             puts that load's figure on the bank, ready to go (and hides any other)
@@ -30,7 +30,11 @@ let WHEELS = {
 export function makeLoads(scene) {
   const root = new THREE.Group(); scene.add(root);
   const figs = {};            // key -> { group, parts: [{ obj, dx (feet behind the front, to its middle), z, kind }], clips: [...] }
-  let lib = null, folk = null, seatRider = null, wheelScene = null, wagons = {};
+  let lib = null, folk = null, seatRider = null, wheelScene = null, wagons = {}, gameWagons = null;
+  // (the deck's height for the game's wagons: its world asks the ground's height, and the deck is that ground)
+  let groundAt = () => 0;
+  const deckWorld = { heightAt: (x, z) => groundAt(x / FT) * FT };
+  const along = new THREE.LineCurve3(new THREE.Vector3(-90, 0, 0), new THREE.Vector3(90, 0, 0));   // (east: +X)
   const ready = (async () => {
     try {
       const A = await import('../../src/actors/animals.js');
@@ -47,6 +51,11 @@ export function makeLoads(scene) {
     } catch (e) { /* (the numbers above) */ }
     try { wheelScene = (await loader.loadAsync(GAME + 'models/wagons/wheel.glb')).scene; } catch (e) { wheelScene = null; }
     for (const k of ['covered', 'freight']) { try { wagons[k] = (await loader.loadAsync(GAME + `models/wagons/${k}.glb`)).scene; } catch (e) { wagons[k] = null; } }
+    // the game's own wagon and team (src/wagon.js: the body, wheels, tongue up at the neck yoke, the harness, the team
+    // and the driver), when the animals and the people loaded; the plain wagon below stands in if not
+    try {
+      if (lib && folk) { const W = await import('../../src/wagon.js'); gameWagons = { W, lib: await W.loadWagons({ base: GAME, animals: lib.animals, folk: folk.lib, kinds: ['covered', 'freight'] }) }; }
+    } catch (e) { console.warn('bridge lab: the game\'s wagons did not load; the plain ones stand in', e); gameWagons = null; }
   })();
 
   const shadow = (o) => { o.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.frustumCulled = false; } }); return o; };
@@ -82,6 +91,13 @@ export function makeLoads(scene) {
     else if (key === 'horse') {
       const h = animal('horse'); add(h, -2.15, 0, 'horse');
       const p = person('drifter', 'farmer_m'); g.add(p.root); p.play('Ride', { fade: 0 }) || p.play('Idle', { fade: 0 }); clips.push(p); parts.push({ obj: p, rider: h, kind: 'rider' });
+    } else if (L.model && gameWagons) {
+      // the game's wagon: its axles where the load's wheels bear (frame.js LOADS), the team ahead of it as the game
+      // puts it; the whole thing moved along a straight line east over the deck
+      const wg = gameWagons.W.makeWagon(gameWagons.lib, { kind: L.model, W: deckWorld, team: true, driver: true });
+      const wb = L.parts.filter((p) => p.wheel), mid = (Math.max(...wb.map((p) => p.dx)) + Math.min(...wb.map((p) => p.dx))) / 2;
+      wg.setPath(along, { at: 0.5, dir: 1 }); wg.speed = 0;
+      g.add(wg.root); parts.push({ obj: { root: wg.root }, kind: 'game', wg, mid });
     } else if (L.model) {
       const n = L.horses || 1, zs = n === 2 ? [-1.3, 1.3] : [0];
       for (const z of zs) add(animal(z < 0 ? 'horse' : 'horseWhite'), -2.15, z, 'horse');
@@ -102,8 +118,10 @@ export function makeLoads(scene) {
   const v3 = new THREE.Vector3();
   function place(key, x, yAt) {
     const f = figs[key]; if (!f) return; f.x = x;
+    groundAt = yAt;
     for (const p of f.parts) {
       if (p.kind === 'rider') continue;
+      if (p.kind === 'game') { p.at = 90 + (x + p.mid) * FT; if (!p.started) { p.wg.u = p.at; p.wg.update(0); p.started = true; } continue; }
       if (p.kind === 'pole') {
         const xa = x + p.from, xb = x + p.to, ya = yAt(xa) * FT + 0.55, yb = yAt(xb) * FT + 0.75;
         p.obj.root.position.set((xa + xb) / 2 * FT, (ya + yb) / 2, 0); p.obj.root.scale.z = Math.abs(xb - xa) * FT;
@@ -122,6 +140,9 @@ export function makeLoads(scene) {
     if (!shown) return;
     const f = figs[shown];
     for (const p of f.parts) {
+      // (the game's wagon goes at the load's pace, landing where the load is: its own update turns the wheels, swings
+      // the tongue, walks the team and sets the harness)
+      if (p.kind === 'game') { const w = p.wg; w.pace = w.speed = v * FT; w.u = (p.at ?? w.u) - w.pace * dt; w.ended = false; w.update(dt); continue; }
       if (p.kind === 'wagon') for (const w of p.wheels) w.hub.rotation.x += v * FT * dt / w.r;
       const o = p.obj;
       if (o.play && p.kind !== 'rider') {
