@@ -14,6 +14,7 @@
 //   C.yaw, C.pitch     where it looks from (yaw as heading: yaw = heading is straight behind); pitch: radians down
 //   C.zoom             the wheel's zoom (1: the usual distance)
 //   C.snap()           behind the player at once (after a jump to another place; off to the side if a building is behind)
+//   C.shift(dx, dy, dz)   moved with the player as it stands (the way round at the valley's ends: nothing jumps)
 //   C.enabled          false: the game moves the camera itself (a close-up); update() then only keeps W.camTarget
 import * as THREE from 'three';
 
@@ -57,6 +58,8 @@ export function makeCamera({ camera, W, input = null }) {
   let lastDragAt = -1e9, lastHeading = 0;
   const lastAim = new THREE.Vector3();                               // (where the focus was making for last frame)
   C.snap = () => { C.started = false; };
+  // moved with the player, as it stands (the way round at the valley's ends): every point it keeps, by the same
+  C.shift = (dx, dy, dz) => { for (const v of [focus, want, pos, lastAim]) { v.x += dx; v.y += dy; v.z += dz; } camera.position.x += dx; camera.position.y += dy; camera.position.z += dz; camera.updateMatrixWorld(); };
   // how much of the way back the view would get at this yaw before a building's wall (1: all of it)
   function clearFor(yaw) {
     const d = C.dist * C.zoom, cp = Math.cos(C.pitch), sp = Math.sin(C.pitch);

@@ -168,10 +168,11 @@ export class Village {
     for (const [id, o] of this.objs) if (!ids.has(id)) { this.group.remove(o.group); this.objs.delete(id); }
     for (const it of this.layout.items) { let o = this.objs.get(it.id); if (!o || o.kind !== it.kind) { if (o) this.group.remove(o.group); o = this.build(it); } o.it = it; this.place(o); }
   }
+  // (a model's file is its kind's, or the one its kind borrows: TOWN_ASSETS file; the homes are the town cabin)
   build(it) {
     const group = new THREE.Group(), pick = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), this.pickMat); pick.userData.id = it.id; group.add(pick);
     const o = { group, pick, it, kind: it.kind, inner: null };
-    if (it.type === 'model') loadModel(it.kind, this.lo).then(m => { if (this.objs.get(it.id) !== o) return;
+    if (it.type === 'model') loadModel((TOWN_ASSETS[it.kind] && TOWN_ASSETS[it.kind].file) || it.kind, this.lo).then(m => { if (this.objs.get(it.id) !== o) return;
       const A = TOWN_ASSETS[it.kind], inner = new THREE.Group(), body = m.scene.clone(true), st = standOf(m, A);
       body.position.copy(st.at); body.rotation.x = st.tilt; inner.add(body); inner.rotation.y = FRONT_YAW[A.front] || 0; o.inner = inner; group.add(inner); this.place(o); this.onLoaded && this.onLoaded(); });
     else if (it.type === 'prop') { o.inner = makeProp(it.kind); group.add(o.inner); }

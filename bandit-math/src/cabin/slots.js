@@ -9,7 +9,7 @@
 // replaces a stand-in by changing `file` and nothing else.
 //
 // The prices make a ladder from a cheap rug to a costly stove, so there is always a next thing to save for. The prices
-// are all here, to be tuned in one place after watching a few rides.
+// are in src/catalog.js (PRICES.furniture), with every other price, to be tuned in one place after watching a few rides.
 //
 //   SLOTS                 the slots, cheapest first: { id, name, line, price, file | made, at, rot, fit, fitH, box, looks }
 //                         at: [x, y, z] (y null: on the floor); rot: degrees about y (0: the piece's front faces +z, the
@@ -21,26 +21,28 @@
 //   homeDogs(rider)       -> the rider's dogs as { kind, name, following }: the one following you and the ones at home
 //   buyPiece(rider, id, spend)  -> 'bought' | 'owned' | 'short' | 'unknown'   (spend: save.js spend; saves on a buy)
 
+import { PRICES } from '../catalog.js';
+
 export const SLOTS = [
-  { id: 'rug', name: 'Rag rug', price: 15, made: 'rug', line: 'A braided rag rug for the middle of the floor. Warm on the feet.',
+  { id: 'rug', name: 'Rag rug', price: PRICES.furniture.rug, made: 'rug', line: 'A braided rag rug for the middle of the floor. Warm on the feet.',
     at: [0.35, null, -1.2], rot: 0, size: [2.1, 1.4], box: null, looks: [[0.35, 0.82, -1.2]] },
-  { id: 'lanterns', name: 'Two lanterns', price: 30, made: 'lanterns', file: 'lantern', line: 'Two oil lanterns hung from the beams. The room glows at night.',
+  { id: 'lanterns', name: 'Two lanterns', price: PRICES.furniture.lanterns, made: 'lanterns', file: 'lantern', line: 'Two oil lanterns hung from the beams. The room glows at night.',
     at: [0, 0, 0], rot: 0, box: null, looks: [[-0.69, 2.84, -1.75], [1.44, 2.84, -1.0]] },
-  { id: 'picture', name: 'A painting', price: 40, file: 'picture', line: 'A painting of a farm by a river, in a gilt frame, over the bed.',
+  { id: 'picture', name: 'A painting', price: PRICES.furniture.picture, file: 'picture', line: 'A painting of a farm by a river, in a gilt frame, over the bed.',
     at: [-1.35, 2.35, -2.9], wall: [0, 0, -1], rot: 0, fit: 0.75, box: null, looks: [[-1.35, 2.35, -2.75]] },
-  { id: 'dogbeds', name: 'Dog beds', price: 45, made: 'dogbeds', line: 'A soft bed for every dog you own. Dogs at home sleep inside on them.',
+  { id: 'dogbeds', name: 'Dog beds', price: PRICES.furniture.dogbeds, made: 'dogbeds', line: 'A soft bed for every dog you own. Dogs at home sleep inside on them.',
     at: [-1.9, null, -0.3], rot: 0, box: null, looks: [[-1.9, 0.9, -0.3], [-1.9, 0.9, -1.25], [-0.98, 0.9, -0.42]] },   // (a bed is 0.86 m across: the spots stay over 0.9 m apart)
-  { id: 'table', name: 'Table and chairs', price: 60, file: 'table', line: 'A plain pine table and two chairs. Open your lock boxes here.',
+  { id: 'table', name: 'Table and chairs', price: PRICES.furniture.table, file: 'table', line: 'A plain pine table and two chairs. Open your lock boxes here.',
     at: [2.3, null, -0.95], rot: 90, fit: 1.13, box: [0.8, 1.2], looks: [[2.3, 1.6, -0.95]],
     extra: [{ file: 'chair', at: [1.62, null, -0.62], rot: 90, fitH: 0.96, box: [0.5, 0.5] }, { file: 'chair', at: [1.62, null, -1.3], rot: 75, fitH: 0.96, box: [0.5, 0.5] }] },
-  { id: 'porch', name: 'Porch rockers', price: 80, file: 'porch_chair', line: 'Two rocking chairs out on the porch, to watch the sun go down.',
+  { id: 'porch', name: 'Porch rockers', price: PRICES.furniture.porch, file: 'porch_chair', line: 'Two rocking chairs out on the porch, to watch the sun go down.',
     at: [-1.45, null, 1.55], rot: 200, fit: 0.83, box: null, looks: [[-1.4, 1.9, 0.62]],
     extra: [{ file: 'porch_chair', at: [1.95, null, 1.55], rot: 160, fit: 0.83, box: null }] },
-  { id: 'bed', name: 'Quilted bed', price: 100, file: 'bed', line: 'A log bed with a patchwork quilt, under the painting.',
+  { id: 'bed', name: 'Quilted bed', price: PRICES.furniture.bed, file: 'bed', line: 'A log bed with a patchwork quilt, under the painting.',
     at: [-1.38, null, -2.25], rot: 90, fit: 1.9, box: [1.06, 1.9], looks: [[-1.35, 1.3, -2.25]] },   // (head to the left wall)
-  { id: 'rifles', name: 'Rifle rack', price: 120, made: 'rifles', line: 'A rack on the wall with two rifles, like any ranch house.',
+  { id: 'rifles', name: 'Rifle rack', price: PRICES.furniture.rifles, made: 'rifles', line: 'A rack on the wall with two rifles, like any ranch house.',
     at: [-2.4, 2.0, -0.45], wall: [-1, 0, 0], rot: 90, box: null, looks: [[-2.25, 2.0, -0.45]] },
-  { id: 'stove', name: 'Iron stove', price: 220, file: 'stove', also: 'stovefire', fitH: 1.05, line: 'A cast-iron wood stove with a fire in it. The heart of a home.',
+  { id: 'stove', name: 'Iron stove', price: PRICES.furniture.stove, file: 'stove', also: 'stovefire', fitH: 1.05, line: 'A cast-iron wood stove with a fire in it. The heart of a home.',
     at: [2.45, null, -2.3], rot: -45, box: [0.85, 0.85], looks: [[2.45, 1.4, -2.3]] },
 ];
 export const SLOT = Object.fromEntries(SLOTS.map((s) => [s.id, s]));
@@ -88,7 +90,8 @@ export function homeDogs(rider) {
 // the cabin for each job's keepsake. A farm job's later animals (a coop, a pen, a little corral) belong outside the
 // cabin, beside the porch: see FARM_SPOTS.
 export const KEEPSAKE_SPOTS = {
-  cattle: { at: [0.24, 3.05, 0.62], wall: [0, 0, 1] },        // the steer horns, over the door (inside)
+  cattle: { at: [1.6, 2.5, -2.85], wall: [0, 0, -1] },       // the steer horns, on the back wall over the safe door, clear of
+                                                              // the beams (over the door a ceiling beam ran through them)
   boxes: { at: [1.75, null, -2.62], rot: -10 },               // the cracked safe door, leaning on the back wall by the stove
   sheep: { at: [1.12, 2.35, 0.62], wall: [0, 0, 1] },         // the sheep bell, hanging by the door
   pigs: { at: [2.95, 1.95, -1.9], wall: [1, 0, 0] },          // the carved pig, on a little shelf on the right-hand wall

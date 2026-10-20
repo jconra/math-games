@@ -41,12 +41,34 @@
 //                  farm:    { x, z, rot, r, w, d }              open, nearly flat ground north of the town (behind the
 //                           cabin), where src/farm.js lays out the barn, the pens and the sheep pasture (its rot as
 //                           the buildings': the farm's front, and its lane in, face the town)
+//   THE TIME OF DAY (the Terrain Lab's sun, moving: a whole day in DAY_MIN minutes of play; nights bright, by a full moon):
+//   W.hour       the clock, 0..24 (local sun time: 12 is noon; the sun is up from about 5:00 to 19:00, and it is fully
+//                night from about 19:50 to 4:10, so about a third of the day is night: 8 minutes of play)
+//   W.night      0 by day .. 1 at night, gradually through the dusk and the dawn (the sun from 3° up to 8° below the
+//                horizon: about a minute of play): the lamps, the windows, the townsfolk going home all follow it
+//   W.timeRuns   true: the clock goes on as the frames go by (W.update); false: it stands still (the title shows the morning)
+//   W.setHour(h) the clock set to h at once (the land's light follows within a second or so)
+//   W.dayStart   the hour each ride starts at (DAY_START, or ?hour=21 in the address)
+//   W.lights.set(id, v), .get(id)   how lit a building's windows are at night, by its layout id ('saloon', 'home2',
+//                'cabin'), 0..1 (eased over a second): the shops and homes 1, the player's cabin 0 (src/cabin lights it)
+//   THE VALLEY'S ENDS: a bank of mist across each end (thin from W.ends.west.a / east.a metres out along x, full by .b);
+//   riding on into it, at .wrap, the rider comes out of the other end's mist, riding back toward the town:
+//   W.wrap(position, cameraAt)   null, or { x, z, dx, dy, dz, from } where a rider past a wrap line comes out (the game moves the
+//                      rider, the horse, the camera and the dog by dx, dy, dz: src/main.js)
+//   W.fogAt(x, z)      how thick the mist is there, 0..1 (things to fade into it, or keep out of it: camps, wagons)
+//   W.roadEnds         set by the game: () -> { west: {x, z, dx, dz}, east: {...} } the road's two ends (dx, dz: the way
+//                      out along it there), or null; a rider wrapping near one comes out by the other (on its line)
+//   W.ends             { west, east: { a, b, wrap, floor, lo, hi (the band of walkable ground across the end) }, ... }
+//   W.warmFor(root)   the shaders of things not in the scene yet built in the background, for the valley's lights
+//   W.warm()     the scene's shaders not built yet built ahead, a couple a frame: done by itself a few seconds into the
+//                ride, later, and in the mist before the way round; call it after adding new kinds of things
 //   W.tier       'potato' | 'normal' | 'gaming'
 //   W.camTarget  a THREE.Vector3 the game keeps on the player: the plants' and trees' circles and the sun's shadows
 //                follow it (the valley reads it as its "controls target")
 //   W.V          the valley itself (advanced use only: its tunings, maps and forests)
 import * as THREE from 'three';
 import { makeValley, TIER_SET } from '../world/valley.js';
+import { BACKWOODS } from './missions/backwoods.js';
 import { chooseTier, TIERS } from '../world/quality.js';
 import { footprintOf } from '../world/objects/village.js';
 import { BASE } from '../world/base.js';
@@ -62,6 +84,31 @@ const PLACE_OF = { cabin: 'cabin', stable: 'stable', generalStore: 'store', sher
 // on the other let a walker down into it and not up the far side (stuck in the middle).
 const BANK = 1.6, BANK_NEAR = 2;
 const STEEP = 0.8, DEEP = 0.9, EDGE = 780, FENCE_HALF = 0.35, WALL_PAD = 0.5, TRUNK = 0.4;   // (slope as rise over run; metres; a trunk's radius for a tree of scale 1)
+// THE VALLEY'S ENDS: the mist banks across them (the valley's FOG_DIR.bank0/1: thin from `a` metres out along x, full by
+// `b`; topping out `top` metres over each end's floor) and the line in the full mist where a rider comes out of the
+// other end's (`wrap`, inside the land's edge at EDGE). West -x, east +x (the valley's floor runs out west and south-east)
+// m either side of the road's end (along z) within which a rider wrapping comes out by the other end of the road (W.wrap)
+const WRAP_ROAD = 45;
+const ENDS = { west: { a: 500, b: 680, wrap: 720 }, east: { a: 540, b: 700, wrap: 740 }, thick: 0.22, top: 70 };
+// where a rider comes out of the mist: clear of the trees' crowns (CROWN m round a tree of scale 1) over them and the
+// camera, WRAP_CLEAR m behind (W.wrap)
+const CROWN = 5, WRAP_CLEAR = 12;
+// THE DAY: minutes of play a whole day takes, and the hour a ride starts at (mid-morning, as the Terrain Lab opens)
+const DAY_MIN = 24, DAY_START = 9 + 40 / 60;
+const nightOf = (elev) => THREE.MathUtils.smoothstep(-elev, -3, 8);   // (0 with the sun 3° up or higher, 1 once it is 8° down)
+
+// THE WAY INTO EACH BACK-WOODS CAMP: a strip kept clear of trees from just in front of each camp spot (its open side
+// faces the town square: src/missions/loot.js) out CAMP_WAY.len m toward the square, so a rider riding up to one from
+// the town's side, and the camera trailing behind, isn't in the leaves (crowns reaching within CAMP_WAY.half m of its
+// line are left out, as along the east road's end: world/valley.js TREE_CLEAR)
+const CAMP_WAY = { from: 3, len: 28, half: 1.5 };
+function campWays(game) {
+  const sq = game && (game.square || game.spawn); if (!sq || !Number.isFinite(+sq.x) || !Number.isFinite(+sq.z)) return [];
+  return BACKWOODS.map((b) => {
+    const dx = +sq.x - b.x, dz = +sq.z - b.z, l = Math.hypot(dx, dz) || 1, ux = dx / l, uz = dz / l;
+    return { ax: b.x + ux * CAMP_WAY.from, az: b.z + uz * CAMP_WAY.from, bx: b.x + ux * CAMP_WAY.len, bz: b.z + uz * CAMP_WAY.len, half: CAMP_WAY.half };
+  });
+}
 
 export async function makeWorld({ renderer, camera, quality = null, look = 'green', onProgress = () => {}, wait = true, live = false } = {}) {
   const say = (p, text) => { try { onProgress(p, text); } catch (e) { console.warn('world: onProgress threw', e); } };
@@ -81,8 +128,8 @@ export async function makeWorld({ renderer, camera, quality = null, look = 'gree
   const layoutP = getJSON(BASE + 'models/town/layout.json');
   say(0.02, 'Riding into the valley');
   const t0 = performance.now();
-  const V = await makeValley({ renderer, camera, controls, quality: QUAL, look, live, slice: true, showcase: false, folk: false });
   const GAME = ((await layoutP) || {}).game || {};
+  const V = await makeValley({ renderer, camera, controls, quality: QUAL, look, live, slice: true, showcase: false, folk: false, treeClear: campWays(GAME) });
   say(0.45, 'The land is laid');
 
   // ── THE PLACES ─────────────────────────────────────────────────────────────────────────────────────────
@@ -154,10 +201,159 @@ export async function makeWorld({ renderer, camera, quality = null, look = 'gree
     scene: V.scene, V, tier: QUAL.tier, quality: QUAL, look, camTarget, places, blocked,
     addBlocker: (fn) => { EXTRA.push(fn); return () => { const i = EXTRA.indexOf(fn); if (i >= 0) EXTRA.splice(i, 1); }; },
     heightAt: V.heightAt, waterAt: V.waterAt, settled: V.settled,
-    update: (dt) => V.update(Math.min(dt, 0.1)),                       // (a long pause, a tab come back, counts as a tenth of a second)
+    update: (dt) => { V.update(Math.min(dt, 0.1)); warmLater(dt); },   // (a long pause, a tab come back, counts as a tenth of a second)
     render: () => V.render(),
     loadedIn: 0,                                                         // (seconds to settled, for the record)
+    dayStart: (() => { const q = new URLSearchParams(location.search), h = parseFloat(q.get('hour')); return Number.isFinite(h) ? ((h % 24) + 24) % 24 : DAY_START; })(),   // (?hour=21 in the address: start there, to see the night)
+    // the town's lit windows at night (world/objects/nightLights.js): how lit a building is, by its layout id ('saloon',
+    // 'home2', 'cabin'), 0..1, eased over a second; the shops and the homes 1, the player's cabin 0 until it is lit
+    lights: { set: (id, v) => V.NIGHT_LIGHTS.set(id, v), get: (id) => V.NIGHT_LIGHTS.get(id) },
+    setHour: (h) => { const D = V.DAY; h = ((+h % 24) + 24) % 24; if (!Number.isFinite(h)) return; D.hour = D.t = h; D.dirty = true; D.reshade = true; },
   };
+  // ── THE VALLEY'S ENDS: the mist and the way round ──────────────────────────────────────────────────────
+  // each end's floor (the lowest ground across it, near the wrap line) and the band of ground a rider can be on there
+  // (the run of walkable ground round the floor), so a rider coming out of the other end's mist comes out at the same
+  // share of the way across it
+  for (const [k, E] of Object.entries(ENDS)) {
+    if (k === 'thick' || k === 'top') continue;
+    const sx = k === 'west' ? -1 : 1, x = sx * (E.wrap - 3);
+    let low = null; for (let z = -760; z <= 760; z += 4) { const h = V.heightAt(x, z); if (!low || h < low.h) low = { z, h }; }
+    const ok = (z) => !blocked(x, z) && V.heightAt(x, z) < low.h + 60;
+    let lo = low.z, hi = low.z; while (lo - 2 > -770 && ok(lo - 2)) lo -= 2; while (hi + 2 < 770 && ok(hi + 2)) hi += 2;
+    Object.assign(E, { side: sx, floor: low.h, floorZ: low.z, lo, hi });
+  }
+  { const B = V.FOG_DIR.bank0, B1 = V.FOG_DIR.bank1;
+    B.x = ENDS.west.a; B.y = ENDS.west.b; B.z = ENDS.east.a; B.w = ENDS.east.b;
+    B1.x = ENDS.thick; B1.y = ENDS.west.floor + ENDS.top; B1.z = ENDS.east.floor + ENDS.top; B1.w = 1; }
+  // how thick the mist is at a spot, 0 (none) .. 1 (full): for things that should fade into it, or keep out of it
+  W.fogAt = (x, z = 0) => { const E = x < 0 ? ENDS.west : ENDS.east, u = Math.abs(x); return Math.min(1, Math.max(0, (u - E.a) / (E.b - E.a))); };
+  W.ends = ENDS;
+  // how clear of the trees' crowns a spot is (m to spare, below 0: under one), along the stretch from it WRAP_CLEAR m
+  // out toward the land's edge (sx: that way along x), where the camera follows a rider riding in
+  // (sz: that way along z too, for a stretch on a slant: out along the road past its end)
+  function crownClear(x, z, sx, sz = 0) {
+    const cells = trunks(); let worst = Infinity;
+    const l = Math.hypot(sx, sz) || 1, ux = sx / l, uz = sz / l;
+    for (let u = 0; u <= WRAP_CLEAR; u += 3) {
+      const px = x + ux * u, pz = z + uz * u, ci = Math.floor(px / 8), cj = Math.floor(pz / 8);
+      for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) { const c = cells.get((ci + di) + ',' + (cj + dj)); if (c) for (const [tx, tz, r] of c) worst = Math.min(worst, Math.hypot(px - tx, pz - tz) - CROWN * r / TRUNK - 1.5); }
+    }
+    return worst;
+  }
+  // THE WAY ROUND: a spot past an end's wrap line -> where it comes out at the other end, just inside that end's line
+  // (deep in its mist too, so nothing seen changes), the same share of the way across the valley there, on ground a
+  // walker can stand on: { x, z, dx, dy, dz } (dy: the ground's change), or null where it doesn't
+  W.crownClear = crownClear;   // (rigs: how clear of the crowns a spot and the stretch behind it are)
+  W.wrap = (p, cam = null) => {   // (cam: where the camera is now: the stretch kept clear is the way it trails the rider)
+    const x = p.x, z = p.z, from = x <= -ENDS.west.wrap ? ENDS.west : x >= ENDS.east.wrap ? ENDS.east : null; if (!from) return null;
+    const to = from === ENDS.west ? ENDS.east : ENDS.west, past = Math.abs(x) - from.wrap;
+    let nx = to.side * (to.wrap - 0.5 - past);
+    const t = Math.min(1, Math.max(0, (z - from.lo) / Math.max(1, from.hi - from.lo)));
+    let want = to.lo + t * (to.hi - to.lo), back = [to.side, 0], road = null;   // (back: the way the camera trails the rider; road: spots by the other road end)
+    // (riding on along the road through the valley, past its end in the mist: out by the other end of the road, as far
+    // to the side of it as before, so the rider comes out on the road and rides it back to town. The road can run out
+    // of the band of ground the share is worked across: the west road ends north of it)
+    const R = typeof W.roadEnds === 'function' ? W.roadEnds() : null;
+    if (R && R.west && R.east) {
+      // (each road end's line carried on out the way the road was going: how far the rider is to the side of it, at
+      // the same x, is kept)
+      const fr = from === ENDS.west ? R.west : R.east, tr = from === ENDS.west ? R.east : R.west;
+      const lineZ = (e, atX) => e.z + (Math.abs(e.dx) > 0.2 ? (e.dz / e.dx) * (atX - e.x) : 0);
+      const side = z - lineZ(fr, x);
+      if (Math.abs(side) < WRAP_ROAD) {
+        // (by the other end of the road, where the mist is still about full: just past its end, else a little way in
+        // along it, where the trees are cleared for the road and the camera trailing behind comes out of no leaves)
+        road = [3, -4, -10, -16].map((k) => tr.x + to.side * k).filter((rx) => W.fogAt(rx) >= 0.9 && Math.abs(rx) < to.wrap - 1)
+          .map((rx) => ({ x: rx, z: lineZ(tr, rx) + side }));
+        if (road.length) { nx = road[0].x; want = road[0].z; }
+        back = [tr.dx, tr.dz];
+      }
+    }
+    if (cam) { const bx = cam.x - x, bz = cam.z - z, bl = Math.hypot(bx, bz); if (bl > 0.5) back = [bx / bl, bz / bl]; }
+    // out on either side of that, the nearest spot with ground to stand on and no tree's crown over the rider or over
+    // the camera behind them (a stretch WRAP_CLEAR m back toward the land's edge): else the view comes out in leaves
+    const search = (sx, sz, reach) => {
+      let best = null;
+      for (let k = 0; k <= reach; k++) {
+        const z1 = sz + (k % 2 ? 1 : -1) * 2 * Math.ceil(k / 2);
+        if (blocked(sx, z1)) continue;
+        const c = crownClear(sx, z1, back[0], back[1]); if (c >= 0) return { z: z1, clear: true };
+        if (!best || c > best.c) best = { z: z1, c };
+      }
+      return best || { z: sz };
+    };
+    let nz = want, got = null;
+    // (by the road: within 8 m of its line at each spot along it in turn where that is clear of the crowns)
+    if (road) for (const r of road) { const f = search(r.x, r.z, 8); if (f.clear) { nx = r.x; nz = f.z; got = f; break; } }
+    // (else on the road's line itself, under whatever the road itself runs under: the east end's last 120 m run through
+    // the woods' crowns, and every rider on it rides there)
+    if (road && !got) for (let k = 0; k <= 4 && !got; k++) { const z1 = road[0].z + (k % 2 ? 1 : -1) * Math.ceil(k / 2); if (!blocked(road[0].x, z1)) { nx = road[0].x; nz = z1; got = true; } }
+    if (!got) nz = search(nx, want, 80).z;
+    const y0 = V.heightAt(x, z), y1 = V.heightAt(nx, nz);
+    return { x: nx, z: nz, dx: nx - x, dy: y1 - y0, dz: nz - z, from: from === ENDS.west ? 'west' : 'east' };
+  };
+  Object.defineProperties(W, {
+    hour: { get: () => V.DAY.hour, enumerable: true },
+    night: { get: () => nightOf(V.DAY.elev), enumerable: true },
+    timeRuns: { get: () => V.DAY.auto, set: (on) => { V.DAY.auto = !!on; }, enumerable: true },
+  });
+  V.DAY.dayMin = DAY_MIN;
+  W.setHour(W.dayStart);
+
+  // ── THE SHADERS, WARMED AGAIN LATER ──────────────────────────────────────────────────────────────────────
+  // what the game adds after loading (the homes, the cabin's pieces, camps) is first drawn when it first comes into
+  // view, and a material never drawn has its shader built then, stalling that frame (riding out of the far end's mist
+  // and looking back down the valley the first time: ~250 ms). So the shaders of everything in the scene not built yet
+  // are built ahead, a few seconds into the ride, again later, and each time the rider is deep in an end's mist (where
+  // nothing shows) before the way round. A FEW A FRAME (WARM.per new ones at most): the graphics card links each one
+  // while it draws, and fifteen handed over in one frame held the next one up ~130 ms.
+  const WARM = { t: 0, at: [4, 15, 45], next: 0, mistAt: -1e9, n: 0, tex: null, queue: null, per: 2, built: 0 };
+  // and the pictures: three sends a material's textures to the graphics card the first time it is drawn (a big tree
+  // bark or a roof, ~90 ms in one frame); each one in the scene not sent yet is sent here, a few a frame (warmLater)
+  const SENT = new WeakSet(), ready = (im) => !!im && !Array.isArray(im) && (!!im.data || (im.width > 0 && im.complete !== false));
+  function texturesOf(root) {
+    const out = new Set(), add = (v) => { if (v && v.isTexture && !v.isRenderTargetTexture && !SENT.has(v) && v.version > 0 && ready(v.image)) out.add(v); };   // (a picture still loading is left for a later warm)
+    root.traverseVisible((o) => { for (const m of [].concat(o.material || [])) { if (!m) continue; for (const k in m) add(m[k]); if (m.uniforms) for (const k in m.uniforms) { const u = m.uniforms[k]; if (u) add(u.value); } } });
+    return [...out];
+  }
+  // the things in the scene with a material whose shader isn't built yet (each material once)
+  const unbuilt = (m) => !!m && !(renderer.properties && renderer.properties.get(m).currentProgram);
+  function toBuild(root) {
+    const out = [], seen = new Set();
+    root.traverse((o) => { for (const m of [].concat(o.material || [])) { if (!m || seen.has(m)) continue; seen.add(m); if (unbuilt(m)) { out.push(o); break; } } });
+    return out;
+  }
+  W.warm = () => {
+    if (WARM.queue && WARM.queue.length) return false;
+    WARM.n++; WARM.tex = texturesOf(V.scene); WARM.queue = toBuild(V.scene);
+    return true;
+  };
+  function buildSome() {   // (a few shaders a frame, for the valley's lights: three's compile, an object at a time)
+    const Q = WARM.queue; if (!Q || !Q.length) return;
+    const progs = () => (renderer.info.programs || []).length, p0 = progs(), t0 = performance.now();
+    while (Q.length && progs() - p0 < WARM.per && performance.now() - t0 < 4) {
+      const o = Q.pop();
+      if (![].concat(o.material || []).some(unbuilt)) continue;   // (built since: drawn, or shares a material built just now)
+      try { renderer.compile(o, camera, V.scene); } catch (e) { console.warn('world: shader warm-up', e); }
+    }
+    WARM.built += progs() - p0;
+  }
+  // things not in the scene yet (a road rider's kit, a wagon of each kind: made and let go again at once) built for the
+  // valley's lights in the background, so the first one to come into range draws without stalling a frame
+  W.warmFor = (root) => {
+    try { return renderer.compileAsync ? renderer.compileAsync(root, camera, V.scene).catch((e) => console.warn('world: shader warm-up', e)) : (renderer.compile(root, camera, V.scene), Promise.resolve()); }
+    catch (e) { console.warn('world: shader warm-up', e); return Promise.resolve(); }
+  };
+  function sendSome() {   // (a few pictures a frame, not all at once)
+    const t0 = performance.now();
+    while (WARM.tex && WARM.tex.length && performance.now() - t0 < 2) { const t = WARM.tex.pop(); if (SENT.has(t)) continue; SENT.add(t); try { renderer.initTexture(t); } catch (e) { /* (a picture still loading: sent when drawn) */ } }
+  }
+  function warmLater(dt) {
+    WARM.t += Math.min(dt, 0.1); sendSome(); buildSome();
+    if (WARM.next < WARM.at.length && WARM.t >= WARM.at[WARM.next]) { WARM.next++; W.warm(); }
+    const c = camTarget; if (c && W.fogAt && W.fogAt(c.x) > 0.6 && WARM.t - WARM.mistAt > 20) { WARM.mistAt = WARM.t; W.warm(); }
+  }
+  W.warmState = () => ({ t: WARM.t, n: WARM.n, busy: !!(WARM.queue && WARM.queue.length), left: WARM.tex ? WARM.tex.length : 0, toBuild: WARM.queue ? WARM.queue.length : 0, built: WARM.built });
 
   // ── WAITING FOR THE TREES AND PLANTS (off stage: nothing drawn but a pixel) ────────────────────────────────
   // the camera put where the game starts, so the plants are laid and the shaders built for that view
@@ -176,6 +372,7 @@ export async function makeWorld({ renderer, camera, quality = null, look = 'gree
     }
     say(0.92, 'Saddling up');
     try { if (renderer.compileAsync) await renderer.compileAsync(V.scene, camera); else renderer.compile(V.scene, camera); } catch (e) { console.warn('world: shader warm-up', e); }
+    for (const t of texturesOf(V.scene)) { SENT.add(t); try { renderer.initTexture(t); } catch (e) { /* (still loading) */ } }   // (every picture sent now, off stage)
     // one real draw through a single pixel: what the compile can't do (pictures and shapes sent to the graphics card)
     const sc = renderer.getScissorTest(), px = 1 / renderer.getPixelRatio();
     V.update(1 / 60, null, true); renderer.setScissorTest(true); renderer.setScissor(0, 0, px, px); V.render(); renderer.setScissorTest(sc);

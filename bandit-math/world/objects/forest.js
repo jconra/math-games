@@ -254,7 +254,7 @@ export class Forest {
   }
   growDraws(cap) {
     for (const b of this.built) { const g = b.imposter.geometry;
-      for (const [name, size] of [['iPos', 3], ['iYaw', 1], ['iScale', 1], ['iTint', 3], ['iFade', 1]]) { const a = new THREE.InstancedBufferAttribute(new Float32Array(cap * size), size); a.setUsage(THREE.DynamicDrawUsage); g.setAttribute(name, a); }
+      for (const [name, size] of [['iPos', 3], ['iYaw', 1], ['iScale', 1], ['iTint', 3], ['iFade', 1], ['iBorn', 1]]) { const a = new THREE.InstancedBufferAttribute(new Float32Array(cap * size), size); a.setUsage(THREE.DynamicDrawUsage); g.setAttribute(name, a); }
       delete g._maxInstanceCount;                                       // (three fixes the most instances it will draw at a geometry's first draw and never raises it: without this, plants past the old room were never drawn)
       g.instanceCount = 0; }
     this.cap = cap;
@@ -268,7 +268,7 @@ export class Forest {
       const geo = new THREE.InstancedBufferGeometry();
       const quad = new THREE.PlaneGeometry(1, 1); geo.index = quad.index; geo.setAttribute('position', quad.attributes.position); geo.setAttribute('uv', quad.attributes.uv);
       const n = cap;
-      for (const [name, size] of [['iPos', 3], ['iYaw', 1], ['iScale', 1], ['iTint', 3], ['iFade', 1]]) { const a = new THREE.InstancedBufferAttribute(new Float32Array(n * size), size); a.setUsage(THREE.DynamicDrawUsage); geo.setAttribute(name, a); }
+      for (const [name, size] of [['iPos', 3], ['iYaw', 1], ['iScale', 1], ['iTint', 3], ['iFade', 1], ['iBorn', 1]]) { const a = new THREE.InstancedBufferAttribute(new Float32Array(n * size), size); a.setUsage(THREE.DynamicDrawUsage); geo.setAttribute(name, a); }
       geo.instanceCount = 0;
       let glow = 0, sheen = 0; sp.root.traverse((o) => { if (!o.isMesh) return; for (const m of [].concat(o.material)) { if (m.lightMap) glow = Math.max(glow, m.lightMapIntensity); if (m.isMeshStandardMaterial) sheen = Math.max(sheen, (1 - m.metalness) * (sp.upNormals ? 0.25 : 1)); } });      // (a tree with its own even light, as the low-poly pines have: its far versions get it too; drawn with MeshStandardMaterial: its far versions get the same faint sheen)
       const mat = imposterMaterial(sp.bake, { sunDir: this.sunDir, blend: true, depth: !this.light, shadows: this.shadows, soften: sp.soften || 0, wind: this.wind ? (sp.sway ?? 1) : 0, glow, sheen, lamps: this.lamps });
@@ -433,13 +433,13 @@ export class Forest {
     const bySp = new Map(this.built.map(b => [b.sp, b]));
     for (const list of this.tilesLaid.values()) for (const t of list) bySp.get(t.sp).trees.push(t);
     for (const b of this.built) {
-      const { sp, imposter, trees } = b, g = imposter.geometry, aPos = g.attributes.iPos.array, aYaw = g.attributes.iYaw.array, aScl = g.attributes.iScale.array, aTint = g.attributes.iTint.array, aFade = g.attributes.iFade.array;
+      const { sp, imposter, trees } = b, g = imposter.geometry, aPos = g.attributes.iPos.array, aYaw = g.attributes.iYaw.array, aScl = g.attributes.iScale.array, aTint = g.attributes.iTint.array, aFade = g.attributes.iFade.array, aBorn = g.attributes.iBorn.array;
       const n = Math.min(trees.length, aYaw.length);
       for (let k = 0; k < n; k++) { const t = trees[k];
         aPos[k * 3] = t.pos.x; aPos[k * 3 + 1] = t.pos.y - sp.baseY * t.scale * sp.unit; aPos[k * 3 + 2] = t.pos.z;
-        aYaw[k] = t.yaw; aScl[k] = t.scale * sp.unit; aTint[k * 3] = t.tint.r; aTint[k * 3 + 1] = t.tint.g; aTint[k * 3 + 2] = t.tint.b; aFade[k] = 1; }
+        aYaw[k] = t.yaw; aScl[k] = t.scale * sp.unit; aTint[k * 3] = t.tint.r; aTint[k * 3 + 1] = t.tint.g; aTint[k * 3 + 2] = t.tint.b; aFade[k] = 1; aBorn[k] = t.born || 0; }   // (born: rising in, imposter.js IMPOSTER_CLOCK)
       g.instanceCount = n;
-      if (n) for (const a of ['iPos', 'iYaw', 'iScale', 'iTint', 'iFade']) sendPart(g.attributes[a], 0, n - 1);   // (this species' own plants: its arrays have room for the whole list)
+      if (n) for (const a of ['iPos', 'iYaw', 'iScale', 'iTint', 'iFade', 'iBorn']) sendPart(g.attributes[a], 0, n - 1);   // (this species' own plants: its arrays have room for the whole list)
     }
     this.assignDirty = true;
   }

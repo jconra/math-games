@@ -39,7 +39,7 @@ export function makeHomeDog({ animals, kind, name, scene, spot, mode = 'bed', fl
     const a = H.dog = makeAnimal(animals, kind, { tint: lit ? '#ffffff' : null });   // (a tint gives it its own coat to light)
     if (lit) lit(a.mesh.material);
     scene.add(a.root);
-    a.root.updateMatrixWorld(true); headUp = a.tall - a.bones.Head.getWorldPosition(head).y;
+    a.root.updateMatrixWorld(true); headUp = a.tall - a.root.worldToLocal(a.bones.Head.getWorldPosition(head)).y;   // (in its own frame: the scene may be the cabin's, turned and raised in the valley)
     if (mode === 'follow') { pose = 'stand'; a.play('Idle', { fade: 0 }); } else { pose = 'lie'; a.play(a.actions.Lie ? 'Lie' : 'Idle', { fade: 0 }); }
   }).catch((e) => console.warn('home dog: no', kind, e));
 
@@ -122,7 +122,7 @@ export function makeHomeDog({ animals, kind, name, scene, spot, mode = 'bed', fl
     a.root.rotation.set(0, heading, 0);
     a.update(dt);
     a.root.updateMatrixWorld(true);
-    a.bones.Head.getWorldPosition(head);
+    scene.worldToLocal(a.bones.Head.getWorldPosition(head));   // (the tag hangs in the same scene as the dog: the cabin's frame or the valley's)
     tag.position.set(head.x, head.y + headUp + C.tagUp, head.z); tag.visible = true;
   };
   H.state = () => ({ kind, name, mode, task, pose, x: +H.x.toFixed(2), z: +H.z.toFixed(2), loaded: !!H.dog });

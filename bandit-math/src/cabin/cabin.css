@@ -1,10 +1,6 @@
-/* The cabin's own bits over the view: the fade in and out, a small dot in the middle of the view (what E picks is
-   what the dot is on), and the card that shows a piece's name and price. z-index under the HUD's 35 (the times chart's
-   button) and the lock box's 60; the fade sits over the HUD's notes (30) so the change of scene is clean. */
-.bmc-fade { position: fixed; inset: 0; z-index: 33; background: #120c07; opacity: 0; pointer-events: none;
-  transition: opacity 0.28s ease; display: grid; place-items: center; }
-.bmc-fade.is-on { opacity: 1; }
-.bmc-fade span { font: 600 20px Bitter, Georgia, serif; color: #e9cf96; letter-spacing: 0.04em; }
+/* The cabin's own bits over the view: a small dot in the middle of the view inside (what E picks is what the dot is on),
+   and the card that shows a piece's name and price (and, at the door of a cabin still for sale, what it costs and how
+   much more gold is needed). z-index under the HUD's 35 (the times chart's button) and the lock box's 60. */
 .bmc-dot { position: fixed; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; z-index: 26;
   background: rgba(255, 240, 210, 0.75); box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35); pointer-events: none; }
 .bmc-dot[hidden], .bmc-card[hidden] { display: none; }

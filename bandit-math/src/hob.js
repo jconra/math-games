@@ -43,7 +43,9 @@
 //                         Loot the gang (missions/loot.js): 'lootGuard' (the cache's guard roped), 'lootFled' (he ran),
 //                         'lootLoaded', 'lootNoSaddle', 'lootShare' (the slip at the sheriff's office), 'lootMiss',
 //                         'lootRight' (a right coin: a 'pick again' line still up or waiting is dropped),
-//                         'lootDone' (data.trips), 'lootWord' (data.place: the next cache); 'ride' with data.loot: the job is on
+//                         'lootDone' (data.trips), 'lootWord' (data.place: the next cache); 'ride' with data.loot: the job is on;
+//                         'lootWoodsTip' (after a trip: the back woods have gang camps too, said once), 'lootCamp' (a
+//                         back-woods camp found, said once)
 //   B.say(text)           says a line now (or after the line he is saying)
 //   B.trail(on)           the hoofprints on or off (they fade in and out)
 //   B.trailTo(goal | null)   each frame: where the trail leads, { id, x, z, hide: { x, z, r } } (id: which job; hide: a
@@ -140,7 +142,7 @@ const LINES = {
   saloon: ["Saloon's shut till sundown, partner. Lock boxes are next door at the sheriff's.",
     "Doors stay shut till evening. The band out front keeps folks company meanwhile."],
   stage: ["That's the town band. The Professor on the piano, Josie on the harmonica.",
-    "Stand a spell and listen, if you like. They play from sunup to sundown.",
+    "They know a few tunes. Walk up front and ask 'em for another: Josie's got a quick one.",
     "Josie learned that harmonica on a cattle drive. The Professor plays it all by ear."],
   // the homestead behind your cabin: the first of each kind bought, the thank-yous, the goods
   animal: {
@@ -169,7 +171,7 @@ const LINES = {
   deerSetupTouch: "Each deer's wearing a number tag, and only one number makes that equation true. Work it out, then tap that deer.",
   deerFlip: "Ground glass shows the world upside down! There's a little mirror in this one to turn it the right way up.",
   deerRight: "Hold still... there! That's one for the album.",
-  deerDone: ["That's a fine roll of pictures. They've had enough: the compass knows where the next herd is.", 'Three for the album. Pack her up and find another herd.', "Those'll look fine in her book."],
+  deerDone: ["That's a fine roll of pictures. Let 'em settle a spell, then set up again whenever you like.", "Three for the album. They'll stand for more once they've settled.", "Those'll look fine in her book. There's always room for more."],
   deerStop: "The deer will keep. Set the camera up again whenever you like.",
   // loot the gang: the gang's cache out in the valley, handed back at the sheriff's office
   lootTip: "The deputy says the gang stashed what they stole out in the valley. It's on your compass: bring it back and share it out fair.",
@@ -181,6 +183,10 @@ const LINES = {
   lootMiss: "Not that one. The picture shows the sharing: deal it out round and round. Pick again, no charge.",
   lootDone: ['Every family got their goods back. That\'s good work.', 'The town owes you one, partner.', 'Fair shares all round.'],
   lootWord: "Word is the gang hid more loot out at {place}. It's on your compass.",
+  // the gang's camps in the back woods (missions/loot.js): found by riding near, looted like the hideout
+  boardTip: "There's a jobs board in the square, with every job in town pinned up on it. Pick one and my hoofprints show the way.",
+  lootWoodsTip: "The gang's got camps all over the back woods too: out west past the cow camp, south-west of town, and out east past the wagon road. Keep an eye out for their fires.",
+  lootCamp: "A gang camp! Rope the guard if he's about, or ride straight in and load their loot. It's on your compass now.",
 };
 // which job each line belongs to. A line still waiting its turn is dropped once the player is at another job, or once it
 // has waited longer than KEEP_JOB seconds: said late it would be about a moment that has passed.
@@ -189,7 +195,7 @@ const JOB = { arrive: 'roundup', catch: 'roundup', miss: 'roundup', waveDone: 'r
   storeMiss: 'store', storeEquation: 'store', storeDone: 'store', deliveryWork: 'delivery', deliveryMiss: 'delivery', deliveryRight: 'delivery',
   deliveryRoundUp: 'delivery', animal: 'home', goodsCollected: 'home', goodsSold: 'store', wagonArrive: 'wagon', banditCatch: 'wagon', banditMiss: 'wagon', banditLoop: 'wagon', banditsDone: 'wagon',
   deerArrive: 'deer', deerSpooked: 'deer', deerSetup: 'deer', deerFlip: 'deer', deerRight: 'deer', deerWrong: 'deer', deerDone: 'deer',
-  lootShare: 'loot', lootMiss: 'loot', lootRight: 'loot', lootGuard: 'loot', lootFled: 'loot' };
+  lootShare: 'loot', lootMiss: 'loot', lootRight: 'loot', lootGuard: 'loot', lootFled: 'loot', lootCamp: 'loot' };
 const KEEP_JOB = 5;
 const WANT_FOR = 120;    // seconds the trail leads where his line just sent the rider (the stable, after the first wave's pay)
 const NEAR_AGAIN = 180;  // seconds before Hob says something about the same place again (walking past again and again doesn't set him off each time)
@@ -254,6 +260,7 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
         if (data.wagon && once('wagonWaits')) B.say(LINES.wagonWaits, 6500);   // (the first ride with "Protect the wagon" on)
         if (data.deer && once('deerTip')) B.say(LINES.deerTip, 6500);   // (the first ride with "Deer photographs" on)
         if (data.loot && once('lootTip')) B.say(LINES.lootTip, 7000);   // (the first ride with "Loot the gang" on)
+        if (!first && once('boardTip')) B.say(LINES.boardTip, 7000);   // (the jobs board, told once: on a rider's first day, after the first wave)
         break;
       }
       case 'arrive': if (once('arrive')) B.say(touch() ? LINES.arriveTouch : LINES.arrive, 7000); break;
@@ -264,6 +271,7 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
         // (the saddle line: the trail goes to the stable for a while, so what he says and where the hoofprints lead agree)
         if (!(rider.owned && rider.owned.saddle) && rider.gold >= (data.saddle || 15) && once('waveSaddle')) B.say(LINES.waveSaddle, 6500);
         else if (once('wave')) B.say(LINES.wave);
+        else if (once('boardTip')) B.say(LINES.boardTip, 7000);
         else if ((on.sheep !== false || on.pigs !== false) && once('farmTip')) B.say(on.pigs === false ? LINES.farmTipSheep : on.sheep === false ? LINES.farmTipPigs : LINES.farmTip, 6500);
         else if (on.deliveries !== false && rider.owned && rider.owned.saddle && once('campTip')) B.say(LINES.campTip, 8000);
         break;
@@ -354,6 +362,8 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
       case 'lootRight': drop('lootMiss'); break;
       case 'lootDone': drop('lootMiss', 'lootShare'); B.say(LINES.lootDone[(lootN++) % LINES.lootDone.length], 3500); break;
       case 'lootWord': B.say(LINES.lootWord.replace('{place}', data.place || 'another spot'), 6000); break;
+      case 'lootWoodsTip': if (once('lootWoodsTip')) B.say(LINES.lootWoodsTip, 8000); break;
+      case 'lootCamp': if (once('lootCamp')) B.say(LINES.lootCamp, 6500); break;
       default: break;
     }
   }
@@ -372,19 +382,31 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
   alongAttr.setUsage(THREE.DynamicDrawUsage);
   geo.setAttribute('aAlong', alongAttr);
   const U = { map: { value: tex }, uTime: { value: 0 }, uFade: { value: 0 }, uLen: { value: 1 }, uStart: { value: HOB.ahead } };
+  // (in the haze and the valley's end mist the prints fade out as the land does: they add light, so they are dimmed by
+  // the mist rather than mixed toward its colour; with fog off a line of glowing prints showed through full mist)
   const mat = new THREE.ShaderMaterial({
-    uniforms: U, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false, fog: false,
+    uniforms: { ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog), ...U }, fog: true,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false,
     polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4,
     vertexShader: `attribute float aAlong; varying vec2 vUv; varying float vAlong;
-      void main() { vUv = uv; vAlong = aAlong; gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0); }`,
+      #include <fog_pars_vertex>
+      void main() { vUv = uv; vAlong = aAlong; vec4 mvPosition = modelViewMatrix * instanceMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mvPosition;
+        #include <fog_vertex>
+      }`,
     // (uStart: the prints behind it, the ones the player has passed, are gone; the next few metres fade in)
     fragmentShader: `uniform sampler2D map; uniform float uTime, uFade, uLen, uStart; varying vec2 vUv; varying float vAlong;
+      #include <fog_pars_fragment>
       void main() {
         float a = texture2D(map, vUv).a;
         float w = fract((vAlong - uTime * ${HOB.pulse.toFixed(1)}) / ${HOB.wave.toFixed(1)});
         float glow = 0.85 + 1.6 * smoothstep(0.7, 0.97, w) * (1.0 - smoothstep(0.97, 1.0, w));
         float ends = smoothstep(uStart, uStart + 4.0, vAlong) * (1.0 - 0.5 * smoothstep(uLen - 8.0, uLen, vAlong));
-        gl_FragColor = vec4(vec3(1.0, 0.82, 0.45) * glow * a * uFade * ends, 1.0);
+        vec3 col = vec3(1.0, 0.82, 0.45) * glow * a * uFade * ends;
+        gl_FragColor = vec4(col, 1.0);
+        #include <fog_fragment>
+        #ifdef USE_FOG
+        gl_FragColor.rgb = col * (1.0 - fogFactor);
+        #endif
       }`,
   });
   const mesh = new THREE.InstancedMesh(geo, mat, HOB.most);

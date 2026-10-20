@@ -42,6 +42,12 @@ export const DEER = {
     { id: 'north', x: 72, z: 56, does: 4 },      // a woods edge north, across the creek
     { id: 'west', x: -336, z: -196, does: 3 },   // beyond the cow camp, at the foot of the western woods
     { id: 'east', x: 276, z: 32, does: 3 },      // the open meadow north-east
+    // the back woods (~/pw/bandit-math/rigs/town/E/survey.cjs: a clearing at a woods edge 330 to 510 m out, reachable,
+    // clear of the roads and trails, the camps, the western river where the bridge is to go, and 50 m or more from the
+    // gang's back-woods camp spots (src/missions/loot.js BACKWOODS))
+    { id: 'backwest', x: -410, z: -315, does: 4 },   // deep in the woods out west, north of the road
+    { id: 'southwest', x: -360, z: 155, does: 3 },   // the woods south-west of town, past the lake's river
+    { id: 'backeast', x: 495, z: -245, does: 3 },    // the woods' edge out east, beyond the wagon road's loop
   ],
   spread: 6,             // m: how far from the herd's middle a deer grazes
   roam: 20,              // m: the herd's middle wanders this far round where it settled

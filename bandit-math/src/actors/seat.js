@@ -11,6 +11,7 @@
 //   const S = makeSeat(person)                person: from makePerson (folk.js)
 //   S.mount(horse, { time, onDone })          the hop up from where the person stands now (about half a second)
 //   S.dismount(to, { time, onDone })          the hop down to `to` (a Vector3 on the ground beside the horse)
+//   S.shift(dx, dy, dz)                       a hop under way moved along with the rider and the horse
 //   S.update(dt)                              every frame, AFTER the horse and the person have been updated (it reads the
 //                                             bones as they are now)
 //   S.horse      the horse being ridden (or got on or off), else null
@@ -89,6 +90,8 @@ export function makeSeat(person) {
     person.root.updateWorldMatrix(true, false);
     hop = { up: false, t: 0, time, from: person.root.position.clone(), fromQ: person.root.quaternion.clone(), to: to.clone(), onDone };
   };
+  // a hop under way moved by (dx, dy, dz), with the rider and the horse (the valley's wrap, src/player.js P.shift)
+  S.shift = (dx, dy, dz) => { if (!hop) return; hop.from.x += dx; hop.from.y += dy; hop.from.z += dz; if (hop.to) { hop.to.x += dx; hop.to.y += dy; hop.to.z += dz; } };
   S.update = (dt) => {
     const horse = S.horse; if (!horse) return;
     if (S.handPosed) { S.sit = hop ? (hop.up ? Math.min(1, hop.t / hop.time) : 1 - Math.min(1, hop.t / hop.time)) : (S.riding ? 1 : 0); poseSit(person, S.sit); }

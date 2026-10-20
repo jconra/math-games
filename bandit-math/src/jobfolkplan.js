@@ -2,9 +2,10 @@
 // here (the people themselves are made in src/jobfolk.js), so the tests can run it as it is.
 //
 //   JOB_FOLK            one entry a person: { id, job, name, role, look, hello: [line, line], start, thanks: [...],
-//                       leave } (look: a folk.js look; hello: what is going on and what to do; start: said as the job
-//                       gets going, if the job starts from a talk; thanks: one is said after a job's batch is done, in
-//                       turn; leave: the toast when the player walks away from the job, for the jobs that end that way)
+//                       leave, law } (look: a folk.js look; hello: what is going on and what to do; start: said as the
+//                       job gets going, if the job starts from a talk; thanks: one is said after a job's batch is done,
+//                       in turn; leave: the toast when the player walks away from the job, for the jobs that end that
+//                       way; law: the sheriff and his deputy wear the gold star and a holstered six-shooter)
 //   FOREMAN_HELLO       a camp foreman's two lines while no order is under way (by camp id; the delivery job has the rest)
 //   TALK                distances and times: how close a person greets the player, offers E, shows a name tag ...
 //   sayMs(text)         how long a line stays up (ms): longer lines stay longer
@@ -65,15 +66,19 @@ export const JOB_FOLK = [
     lend: ["Here you are: it's strapped behind your saddle. Do take care of it!",
       'Follow the hoofprints to the herd. Set it up a good way off, and photograph the deer whose tag makes the equation true.'],
     back: ['Thank you kindly! Your pictures go straight in my book.', 'Come and borrow it again any time.'],
-    thanks: ['Lovely pictures! They go straight in my book.', 'What a fine roll of pictures. Thank you!', 'Splendid! The next herd is on your compass.'] },
-  { id: 'sheriff', job: 'boxes', name: 'Sheriff Boone', role: 'sheriff', look: { outfit: 'suit_m', palette: 'mustard', skin: 4, hair: 1 },
+    thanks: ['Lovely pictures! They go straight in my book.', 'What a fine roll of pictures. Thank you!', 'Splendid! Let them settle, and take some more.'] },
+  { id: 'sheriff', job: 'boxes', name: 'Sheriff Boone', role: 'sheriff', law: true, look: { outfit: 'suit_m', palette: 'mustard', skin: 4, hair: 1 },
     hello: ['Seized lock boxes keep piling up on my desk.', "Crack 'em open and I'll pay you for every one. Step inside."],
     thanks: ['Fine work on those boxes. Come back any time.', "That's a few less on my desk. Obliged!", 'Good safecracking, partner.'] },
   // (out front of the sheriff's office too, the other side of the steps: only when "Loot the gang" is ticked)
-  { id: 'deputy', job: 'loot', name: 'Deputy Mills', role: 'deputy', look: { outfit: 'adventurer_m', palette: 'rancher', skin: 2, hair: 3 },
+  { id: 'deputy', job: 'loot', name: 'Deputy Mills', role: 'deputy', law: true, look: { outfit: 'adventurer_m', palette: 'rancher', skin: 2, hair: 3 },
     hello: ['The gang that hits the freight wagons stashed what they stole out in the valley.',
       "Find their cache on your compass, haul it back here, and help me share it out fair."],
     thanks: ['Every family got back what was theirs. Obliged, partner!', "That's one stash cleaned out. Word is there's more.", 'Folks in this town owe you. Thank you kindly.'] },
+  // (beside the stable's big doors: the one who sells the saddles and horses; E by him opens the stable's counter)
+  { id: 'keeper', job: 'stable', name: 'Hank Dawson', role: 'stable keeper', look: { outfit: 'worker_m', palette: 'drifter', skin: 3, hair: 4 },
+    hello: ['Welcome to the stable! I look after the horses round here.', 'Need a saddle or a new horse? Come and see what I have.'],
+    thanks: ['She suits you, partner. Ride safe!', 'Treat that horse kindly, now.', 'Come back any time.'] },
 ];
 export const FOLK_BY_ID = Object.fromEntries(JOB_FOLK.map((f) => [f.id, f]));
 
@@ -85,7 +90,8 @@ export const FOREMAN_HELLO = {
 };
 
 // which person thanks the player for which job event (the game's Hob events: src/hob.js)
-const THANKS = { waveDone: 'boss', flockDone: 'vet', pigsDone: 'wife', banditsDone: 'driver', deerDone: 'naturalist', sheriffDone: 'sheriff', lootDone: 'deputy' };
+const THANKS = { waveDone: 'boss', flockDone: 'vet', pigsDone: 'wife', banditsDone: 'driver', deerDone: 'naturalist', sheriffDone: 'sheriff', lootDone: 'deputy',
+  saddle: 'keeper', horse: 'keeper' };   // (a saddle or a horse bought at the stable: the keeper's thank-you once its counter closes)
 export const thanksFor = (event) => THANKS[event] || null;
 // the job events that count as working at an area job (a pick, right or wrong), by the area's person
 export const WORK = { catch: 'boss', miss: 'boss', waveDone: 'boss', sheepHealed: 'vet', sheepWrong: 'vet', sheepFine: 'vet', flockDone: 'vet',

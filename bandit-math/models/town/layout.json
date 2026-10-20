@@ -58,7 +58,47 @@
    "x": 4.97,
    "z": -221.97,
    "rot": 285,
-   "size": 9.5,
+   "size": 6.6,
+   "level": true
+  },
+  {
+   "id": "home1",
+   "type": "model",
+   "kind": "home",
+   "x": -33.0,
+   "z": -151.0,
+   "rot": 90,
+   "size": 8.6,
+   "level": true
+  },
+  {
+   "id": "home2",
+   "type": "model",
+   "kind": "home",
+   "x": -11.5,
+   "z": -142.0,
+   "rot": 270,
+   "size": 8.6,
+   "level": true
+  },
+  {
+   "id": "home3",
+   "type": "model",
+   "kind": "home",
+   "x": -34.0,
+   "z": -127.0,
+   "rot": 90,
+   "size": 8.2,
+   "level": true
+  },
+  {
+   "id": "home4",
+   "type": "model",
+   "kind": "home",
+   "x": -12.5,
+   "z": -118.0,
+   "rot": 270,
+   "size": 8.2,
    "level": true
   },
   {

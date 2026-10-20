@@ -27,23 +27,32 @@ export function sunDirection(hour, { lat = 45, season = 0.64, turn = 0 } = {}, o
 }
 export const elevationOf = (dir) => Math.asin(Math.max(-1, Math.min(1, dir.y))) / DEG;
 
-// the moon: opposite the sun, lifted and swung a little so it doesn't rise exactly as the sun sets
+// the moon: opposite the sun, lifted and swung a little so it doesn't rise exactly as the sun sets (Bandit Math: lifted
+// further, so by dusk it already stands about 18° up, over most of the valley's hills, and lights the valley all night;
+// about 45° up at midnight)
 export function moonDirection(sun, out = new THREE.Vector3()) {
-  return out.set(-sun.x * 0.92 + 0.25, -sun.y * 0.85 + 0.12, -sun.z * 0.92 + 0.18).normalize();
+  return out.set(-sun.x * 0.92 + 0.25, -sun.y * 0.85 + 0.3, -sun.z * 0.92 + 0.18).normalize();
 }
 
 
 // the stops, by the sun's height in degrees (colours as hex, sRGB). sunI: the sun's strength; hemiI: the sky light's;
 // glow: the brightness of the haze round the sun (and the clouds' gold edge near it); stars 0..1; exposure: the camera's,
-// a little higher as it gets dark, the way an eye adjusts; moonI: the moon's light
-const STOPS = [
-  { e: -90, sun: 0xff5a28, sunI: 0, hemiSky: 0x34447a, hemiGround: 0x18181c, hemiI: 0.65, zenith: 0x03060f, horizon: 0x0a0f26, toward: 0x0a0f26, cloud: 0x0a0c18, glow: 0, stars: 1, exposure: 2.4, moonI: 0.5 },
-  { e: -18, sun: 0xff5a28, sunI: 0, hemiSky: 0x3c4c80, hemiGround: 0x1a1a1e, hemiI: 0.65, zenith: 0x050a1c, horizon: 0x0c1230, toward: 0x0d1332, cloud: 0x0c0e1c, glow: 0, stars: 1, exposure: 2.4, moonI: 0.5 },
-  { e: -10, sun: 0xff5a28, sunI: 0, hemiSky: 0x52649a, hemiGround: 0x222024, hemiI: 0.64, zenith: 0x0e1a3c, horizon: 0x1e2850, toward: 0x2a2442, cloud: 0x1c1c34, cloudAway: 0x18182c, glow: 0.05, stars: 0.7, exposure: 2.25, moonI: 0.34 },
-  { e: -6, sun: 0xff5a28, sunI: 0, hemiSky: 0x6a7cb0, hemiGround: 0x2a2826, hemiI: 0.62, zenith: 0x182c5c, horizon: 0x3c4470, toward: 0x6a3c58, cloud: 0x5a3a5c, cloudAway: 0x3a3a56, glow: 0.18, stars: 0.2, exposure: 2.0, moonI: 0.12 },
-  { e: -4, sun: 0xff5a28, sunI: 0, hemiSky: 0x6c74a4, hemiGround: 0x2e2a26, hemiI: 0.64, zenith: 0x223a70, horizon: 0x5a5a84, toward: 0xa84c50, cloud: 0xa65a6a, cloudAway: 0x5e5672, glow: 0.38, stars: 0, exposure: 1.85, moonI: 0 },
-  { e: -2, sun: 0xff5a28, sunI: 0, hemiSky: 0x8a88b4, hemiGround: 0x3a3430, hemiI: 0.7, zenith: 0x2c4680, horizon: 0x7a7098, toward: 0xdc6446, cloud: 0xe07a5e, cloudAway: 0x8a7892, glow: 0.62, stars: 0, exposure: 1.7, moonI: 0 },
-  { e: 0, sun: 0xff7436, sunI: 0.55, hemiSky: 0x9c98c0, hemiGround: 0x44403a, hemiI: 0.76, zenith: 0x34548f, horizon: 0x8f84a8, toward: 0xf6834c, cloud: 0xf29276, cloudAway: 0xb8a0aa, glow: 0.9, stars: 0, exposure: 1.55, moonI: 0 },
+// a little higher as it gets dark, the way an eye adjusts; moonI: the moon's light.
+// (Bandit Math, 2026-10-19: bright nights by a full moon. From the sun 3° down the moon's light comes up (it is already
+// well up, across the sky from the sun), so the dusk never goes darker than the night; the night's sky light bluer and
+// stronger, the moon's light over five times what it was, the night sky a deep blue; the colours fade at night in the
+// valley's NIGHT grade. At 3° down both lights are at nothing: the valley swaps the sun's for the moon's there.
+// Raised a step later the same day: nights measured at about half the day's brightness, so the sky light and the
+// moon's are both stronger, most of all from 10° down on.)
+export const STOPS = [
+  { e: -90, sun: 0xff5a28, sunI: 0, hemiSky: 0x4a62b4, hemiGround: 0x22242e, hemiI: 1.2, zenith: 0x0a1838, horizon: 0x223660, toward: 0x223660, cloud: 0x2a3352, cloudAway: 0x222a46, glow: 0, stars: 1, exposure: 2.2, moonI: 1.9 },
+  { e: -18, sun: 0xff5a28, sunI: 0, hemiSky: 0x4a62b4, hemiGround: 0x22242e, hemiI: 1.2, zenith: 0x0a1838, horizon: 0x223660, toward: 0x223660, cloud: 0x2a3352, cloudAway: 0x222a46, glow: 0, stars: 1, exposure: 2.2, moonI: 1.9 },
+  { e: -10, sun: 0xff5a28, sunI: 0, hemiSky: 0x5266a8, hemiGround: 0x262428, hemiI: 1.2, zenith: 0x13224a, horizon: 0x2a3a66, toward: 0x34345a, cloud: 0x262a44, cloudAway: 0x1e2238, glow: 0.05, stars: 0.7, exposure: 2.2, moonI: 1.7 },
+  { e: -6, sun: 0xff5a28, sunI: 0, hemiSky: 0x6a7cb0, hemiGround: 0x2a2826, hemiI: 1.2, zenith: 0x182c5c, horizon: 0x3c4470, toward: 0x6a3c58, cloud: 0x5a3a5c, cloudAway: 0x3a3a56, glow: 0.18, stars: 0.2, exposure: 2.1, moonI: 1.1 },
+  { e: -4, sun: 0xff5a28, sunI: 0, hemiSky: 0x6c74a4, hemiGround: 0x2e2a26, hemiI: 1.1, zenith: 0x223a70, horizon: 0x5a5a84, toward: 0xa84c50, cloud: 0xa65a6a, cloudAway: 0x5e5672, glow: 0.38, stars: 0, exposure: 2.0, moonI: 0.5 },
+  { e: -3, sun: 0xff5a28, sunI: 0, hemiSky: 0x7b7eac, hemiGround: 0x34302b, hemiI: 1.15, zenith: 0x274078, horizon: 0x6a658e, toward: 0xc2584b, cloud: 0xc36a64, cloudAway: 0x746782, glow: 0.5, stars: 0, exposure: 1.95, moonI: 0 },
+  { e: -2, sun: 0xff5a28, sunI: 0, hemiSky: 0x8a88b4, hemiGround: 0x3a3430, hemiI: 1.05, zenith: 0x2c4680, horizon: 0x7a7098, toward: 0xdc6446, cloud: 0xe07a5e, cloudAway: 0x8a7892, glow: 0.62, stars: 0, exposure: 1.85, moonI: 0 },
+  { e: 0, sun: 0xff7436, sunI: 0.55, hemiSky: 0x9c98c0, hemiGround: 0x44403a, hemiI: 0.85, zenith: 0x34548f, horizon: 0x8f84a8, toward: 0xf6834c, cloud: 0xf29276, cloudAway: 0xb8a0aa, glow: 0.9, stars: 0, exposure: 1.55, moonI: 0 },
   { e: 2, sun: 0xff9450, sunI: 1.15, hemiSky: 0xa4a8cc, hemiGround: 0x4c4a40, hemiI: 0.82, zenith: 0x3a5c9c, horizon: 0x968fb0, toward: 0xffa060, cloud: 0xffa878, cloudAway: 0xd6c4c4, glow: 0.8, stars: 0, exposure: 1.42, moonI: 0 },
   { e: 5, sun: 0xffb070, sunI: 1.6, hemiSky: 0xb0bcdc, hemiGround: 0x5a4c3e, hemiI: 0.86, zenith: 0x3f68a8, horizon: 0x9eacc8, toward: 0xf6b884, cloud: 0xffcfa0, cloudAway: 0xe8dcd6, glow: 0.6, stars: 0, exposure: 1.28, moonI: 0 },
   { e: 10, sun: 0xffd29a, sunI: 2.0, hemiSky: 0xbfd0ec, hemiGround: 0x635240, hemiI: 0.88, zenith: 0x4676b6, horizon: 0xa6bcd8, toward: 0xe8d2b0, cloud: 0xffe6c8, glow: 0.42, stars: 0, exposure: 1.12, moonI: 0 },
@@ -55,8 +64,11 @@ const COLOURS = ['sun', 'hemiSky', 'hemiGround', 'zenith', 'horizon', 'toward', 
 // every value as a list along the stops (colours per channel, in the working, linear colour space), with the slope at each
 // stop for a smooth curve through them all (Fritsch-Carlson: never overshoots between stops, and keeps changing at an even
 // pace through a stop, where easing each step on its own stalled at every stop and rushed between: the light pulsed)
-const KEYS = STOPS.map((s) => s.e);
+let KEYS = [];
 const CURVES = [];
+// (worked out from STOPS at load; again after a page changes STOPS in place, by calling restop(): a rig trying looks)
+export function restop() {
+KEYS = STOPS.map((s) => s.e); CURVES.length = 0;
 for (const k of COLOURS) for (const ch of ['r', 'g', 'b']) CURVES.push({ k, ch, v: STOPS.map((s) => new THREE.Color(s[k] ?? s.cloud)[ch]) });
 for (const k of NUMBERS) CURVES.push({ k, v: STOPS.map((s) => s[k]) });
 for (const c of CURVES) {
@@ -68,6 +80,8 @@ for (const c of CURVES) {
     if (h > 9) { const t = 3 / Math.sqrt(h); m[i] = t * a * d[i]; m[i + 1] = t * b * d[i]; } }
   c.m = m;
 }
+}
+restop();
 
 export function newDaylight() { return { ...Object.fromEntries(COLOURS.map((k) => [k, new THREE.Color()])), ...Object.fromEntries(NUMBERS.map((k) => [k, 0])), elev: 0 }; }
 export function daylightAt(elev, out = newDaylight()) {

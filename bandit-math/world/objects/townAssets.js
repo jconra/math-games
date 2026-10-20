@@ -2,7 +2,8 @@
 // check them (tests/world.test.mjs). objects/village.js places the models and hands these on (the valley imports them
 // from there, as the Terrain Lab's copy has them).
 
-// THE BUILDINGS: file (models/town/<file>.glb, 2K pictures; models/town/lo/ 1K), box: the model's bounding box in its own
+// THE BUILDINGS (the model is models/town/<kind>.glb, 2K pictures, and models/town/lo/ 1K; or <file>.glb when a kind
+// borrows another's model), box: the model's bounding box in its own
 // units, front: which of its sides has the entrance (turned to face +z), size: its longest side in metres, level: flatten
 // the ground under it. Fronts and sizes from rendering each from all sides and judging doors, windows and steps
 // (sizes a little up from those estimates where a building reads small among the others).
@@ -20,6 +21,10 @@ export const TOWN_ASSETS = {
   sheriff: { name: "Sheriff's office", box: [0.852, 0.807, 1.0], front: '+Z', size: 11.7, category: 'work' },  // 10 m wide
   saloon: { name: 'Saloon', box: [0.883, 0.865, 1.0], front: '+Z', size: 13.5, category: 'work' },             // two storeys and a balcony: 11.9 m wide, 11.7 m to the top of its sign, batwing doors in a 3 m doorway
   stage: { name: 'Stage', box: [1.0, 0.803, 0.776], front: '+Z', size: 7, category: 'work' },                  // an open-air stage: curtains, a piano and a stool, steps up at its front left; its floor 1.1 m up
+  // THE TOWNSFOLK'S HOMES: the town cabin's shell again (file: its model, models/town/cabin.glb, shared with the
+  // player's cabin, so it loads once), a little smaller, as other people's homes behind the main row toward the lake
+  // (src/townpeople.js knows their doors: people go in and out of them, and their windows light up at night)
+  home: { name: 'Home', file: 'cabin', box: [0.944, 0.897, 1.0], front: '+Z', size: 8.6, category: 'home', sink: 0.006 },
 };
 // a building's footprint (width along its own x, depth along its own z, metres) and height, from its kind and size
 export function modelFootprint(it) {

@@ -308,6 +308,10 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
     hobEl.classList.toggle('is-tucked', vh - bottom - hobEl.offsetHeight < vh * 0.14);
   }
   new ResizeObserver(() => placeBottom()).observe(helpEl);
+  // (a note sliding in is measured where it is mid-slide, lower than where it stops: Hob's line is placed again once it
+  // has settled, or grown to two lines, so a pay note arriving with his line never covers it)
+  { const ro = new ResizeObserver(() => placeBottom()); ro.observe(toastEl); ro.observe(promptEl); }
+  toastEl.addEventListener('transitionend', () => placeBottom());
   narrow.addEventListener('change', () => placeBottom());
 
   // ── THE RULE CARD AND THE LINE UNDER IT ───────────────────────────────────────────────────────────────────────

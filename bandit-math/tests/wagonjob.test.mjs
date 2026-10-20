@@ -115,3 +115,91 @@ test('the job module wires the plan, the riders and the music together', () => {
   assert.match(save, /id: 'bandits'[^\n]*ready: true/);
   assert.match(save, /id: 'wagon'[^\n]*ready: true/);
 });
+
+// ── the trip (A to B), the open road and the hold-ups on the long roads ──────────────────────────────────────────
+import { TRIP, tripLeft, makeOpenRoad, AMBUSH, gangSize, cardCount, outOnRoad, ambushPick } from '../src/missions/wagonplan.js';
+
+test('a trip runs from one end of the loop to the other, never shorter than its least', () => {
+  const L = road.length;
+  // from where the wagon first waits (the west end, 0): on to the east end, half way round
+  assert.ok(Math.abs(tripLeft(0, L) - L / 2) < 1e-6, `${tripLeft(0, L)}`);
+  // from the east end: back round to the west end
+  assert.ok(Math.abs(tripLeft(L / 2, L) - L / 2) < 1e-6);
+  // a little short of a mark: that mark is too near, so the next one
+  assert.ok(Math.abs(tripLeft(L / 2 - 20, L) - (L / 2 + 20)) < 1e-6);
+  // s past the loop's length (the job's wagon keeps counting): the same as wrapped round
+  assert.ok(Math.abs(tripLeft(L + 30, L) - tripLeft(30, L)) < 1e-6);
+  for (let s0 = 0; s0 < L * 2; s0 += 7) { const d = tripLeft(s0, L); assert.ok(d >= TRIP.least && d <= L / 2 + TRIP.least + 1e-6, `${s0}: ${d}`); }
+  assert.ok(TRIP.quiet < TRIP.least && TRIP.pay > 0);
+});
+
+test('an open road follows its points, runs straight on past its ends, and does not wrap', () => {
+  // a quarter circle of radius 50, then straight on: points a metre apart
+  const pts = [];
+  for (let a = 0; a <= Math.PI / 2; a += 1 / 50) pts.push([50 - 50 * Math.cos(a), 50 * Math.sin(a)]);
+  const r = makeOpenRoad(pts);
+  assert.ok(Math.abs(r.length - Math.PI * 25) < 1.5, `${r.length}`);
+  const a = r.at(0), b = r.at(r.length);
+  assert.ok(Math.hypot(a.x - pts[0][0], a.z - pts[0][1]) < 1e-6);
+  assert.ok(Math.hypot(b.x - pts[pts.length - 1][0], b.z - pts[pts.length - 1][1]) < 0.5);
+  // past the start: straight back along the first heading (facing +z there)
+  const c = r.at(-10); assert.ok(Math.abs(c.x - a.x) < 0.5 && Math.abs(c.z - (a.z - 10)) < 0.5, JSON.stringify(c));
+  assert.equal(r.gap(30, 10), -20);
+  assert.equal(r.gap(10, 30), 20);
+  // the side is to the left of the heading, a metre long
+  for (const s0 of [5, 30, 60]) { const q = r.at(s0); assert.ok(Math.abs(Math.hypot(q.nx, q.nz) - 1) < 1e-9); assert.ok(Math.abs(q.nx * Math.sin(q.h) + q.nz * Math.cos(q.h)) < 1e-9); }
+  // tracking a rider 8 m out to the side finds its place along the road
+  for (const s0 of [4, 33, 70]) { const q = r.at(s0), t = r.track(q.x + q.nx * 8, q.z + q.nz * 8, s0 + 10); assert.ok(Math.abs(t - s0) < 1.5, `${s0} -> ${t}`); }
+  assert.ok(Math.abs(r.nearest(r.at(42).x, r.at(42).z) - 42) < 1.1);
+});
+
+test('a hold-up only out on the long roads, on a travelling wagon near enough to see, with room round it', () => {
+  const square = 500;
+  assert.equal(outOnRoad({ pu: square + 20, off: 3, square }), false, 'in town');
+  assert.equal(outOnRoad({ pu: square - AMBUSH.player - 5, off: 10, square }), true, 'out on the west road');
+  assert.equal(outOnRoad({ pu: square + 300, off: AMBUSH.roadNear + 5, square }), false, 'well off the road');
+  const base = { made: true, onRoad: true, held: false, ended: false, plan: false, seen: true, open: 1 };
+  const far = { ...base, u: square - 300, dist: 100 };
+  assert.equal(ambushPick([far], { square }), far);
+  assert.equal(ambushPick([{ ...far, u: square - 60 }], { square }), null, 'in town');
+  assert.equal(ambushPick([{ ...far, dist: AMBUSH.from - 5 }], { square }), null, 'on top of the player');
+  assert.equal(ambushPick([{ ...far, dist: AMBUSH.to + 5 }], { square }), null, 'too far to see');
+  assert.equal(ambushPick([{ ...far, made: false }], { square }), null, 'not drawn');
+  assert.equal(ambushPick([{ ...far, onRoad: false }], { square }), null, 'pulling off or standing at a spot');
+  assert.equal(ambushPick([{ ...far, held: true }], { square }), null, 'already held up');
+  assert.equal(ambushPick([{ ...far, open: 0.3 }], { square }), null, 'thick trees round it');
+  assert.equal(ambushPick([{ ...far, mist: 0.5 }], { square }), null, 'in the mist at the valley\'s end');
+  assert.equal(ambushPick([{ ...far, mist: 0 }], { square }).u, far.u, 'clear air');
+  assert.equal(ambushPick([{ ...far, atJob: true }], { square }), null, 'by the pasture or the corral (the round-up asks there)');
+  // one in view first, then the one nearest a middling distance
+  const unseen = { ...far, seen: false, dist: 100 }, seen = { ...far, seen: true, dist: 160 };
+  assert.equal(ambushPick([unseen, seen], { square }), seen);
+  const a = { ...far, dist: 60 }, b = { ...far, dist: 105 };
+  assert.equal(ambushPick([a, b], { square }), b);
+});
+
+test('a hold-up asks 3 to 5 questions: the bunch and the cards', () => {
+  for (const r of [0, 0.3, 0.6, 0.99]) {
+    const n = gangSize(() => r), goods = Math.round(n / 2);   // (the times trainer: about half the bunch is the gang)
+    assert.ok(n >= AMBUSH.riders[0] && n <= AMBUSH.riders[1], `${n}`);
+    assert.ok(goods >= 3 && goods <= 5, `${n} riders: ${goods} bandits`);
+    const c = cardCount(() => r); assert.ok(c >= 3 && c <= 5, `${c} cards`);
+  }
+  assert.ok(AMBUSH.most >= 3 && AMBUSH.most <= 5);
+  // the driver's shout, and a place for a recorded one
+  assert.equal(AMBUSH.words.help, 'Help!');
+  assert.ok(Array.isArray(AMBUSH.helpClips));
+  assert.ok(AMBUSH.words.thanks.length >= 2 && AMBUSH.bonus > 0);
+});
+
+test('the job holds up the traffic\'s wagons and lets them go, and thanks the player at the end of a trip', () => {
+  const src = fs.readFileSync(new URL('../src/missions/wagonjob.js', import.meta.url), 'utf8');
+  for (const name of ['T.holdUp(t)', 'A.T.letGo(A.t)', 'ambushPick(', 'makeOpenRoad(', "howdy(d, AMBUSH.words.help", 'tripLeft(', 'function arrive()']) assert.ok(src.includes(name), name);
+  // the driver's thank-you ('banditsDone', heard by the job folk) comes at the end of a trip, not after every gang
+  const arrive = src.slice(src.indexOf('function arrive()'), src.indexOf('function giveUp()'));
+  assert.ok(arrive.includes("hob.event('banditsDone'"));
+  const done = src.slice(src.indexOf('function waveDone()'), src.indexOf('function arrive()'));
+  assert.ok(!/hob\.event\('banditsDone', \{ n: w\.caught \}\)/.test(done.split('if (ambush)')[0]), 'not before the hold-up branch');
+  const traffic = fs.readFileSync(new URL('../src/traffic.js', import.meta.url), 'utf8');
+  for (const name of ['T.holdUp = ', 'T.letGo = ', "t.why = 'held up'", 'makeRoadFolk(', 'howdy(t.wg.driver']) assert.ok(traffic.includes(name), name);
+});

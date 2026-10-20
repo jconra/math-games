@@ -49,17 +49,20 @@
 //
 // Pure: no page, no three.js. tests/homestead.test.mjs checks it.
 
+import { PRICES } from '../catalog.js';
+
 // ---- the animals ---------------------------------------------------------------------------------------------------
-// price: gold (a ladder: a hen is cheap, a milk cow dear); most: how many fit in their home (the yard stays tidy);
-// home: which pen they live in; goods: what they lay up, one unit every `every` seconds of play (grown ones only)
+// price: gold (src/catalog.js PRICES.animal: a ladder, a hen is cheap, a milk cow dear); most: how many fit in their
+// home (the yard stays tidy); home: which pen they live in; goods: what they lay up, one unit every `every` seconds
+// of play (grown ones only)
 export const ANIMALS = {
-  hen: { id: 'hen', name: 'Hen', many: 'hens', price: 15, most: 6, home: 'coop', goods: 'eggs', every: 100,
+  hen: { id: 'hen', name: 'Hen', many: 'hens', price: PRICES.animal.hen, most: 6, home: 'coop', goods: 'eggs', every: 100,
     line: 'Lays an egg every so often. Lives in a coop behind your cabin.' },
-  pig: { id: 'pig', name: 'Pig', many: 'pigs', price: 35, most: 3, home: 'pen', goods: null,
+  pig: { id: 'pig', name: 'Pig', many: 'pigs', price: PRICES.animal.pig, most: 3, home: 'pen', goods: null,
     line: 'Lays nothing at all, but grunts happily in the mud. Pure company.' },
-  sheep: { id: 'sheep', name: 'Sheep', many: 'sheep', price: 50, most: 3, home: 'corral', goods: 'wool', every: 260,
+  sheep: { id: 'sheep', name: 'Sheep', many: 'sheep', price: PRICES.animal.sheep, most: 3, home: 'corral', goods: 'wool', every: 260,
     line: 'Grows wool. Townsfolk buy a share of it: a half, a third, three quarters. Lives in a little corral.' },
-  cow: { id: 'cow', name: 'Milk cow', many: 'milk cows', price: 120, most: 2, home: 'corral', goods: 'milk', every: 80,
+  cow: { id: 'cow', name: 'Milk cow', many: 'milk cows', price: PRICES.animal.cow, most: 2, home: 'corral', goods: 'milk', every: 80,
     line: 'Gives milk by the quart. Shares the corral with the sheep.' },
 };
 export const KINDS = ['hen', 'pig', 'sheep', 'cow'];

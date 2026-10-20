@@ -72,7 +72,7 @@ export const HIDEOUTS = [
 
 // Entries for things the game doesn't have yet. Turn one on the day its thing ships (and set the rider field it reads).
 export const COMING = {
-  cabin: false,      // buying the cabin itself (today it is yours from the start): done at rider.owned.home === 'cabin'
+  cabin: true,       // buying the cabin itself (src/catalog.js PRICES.cabin): done at rider.owned.home === 'cabin'
   windmill: false,   // the windmill (still a lab: labs/windmill/): done at an 18 ft tower standing (setWindmill)
   bridge: false,     // the bridge over the west creek: done at markFound(rider, 'place', 'bridge')
   fishing: false,    // the fishing hole: done at markFound(rider, 'place', 'fishing')
@@ -103,7 +103,7 @@ const JOB_HOW = {
 };
 // where each keepsake hangs (save.js KEEPSAKES has its name and the buckle that brings it)
 const KEEP_WHERE = {
-  cattle: 'over your cabin door', boxes: 'by the stove', sheep: 'by the door', orders: 'on the table',
+  cattle: 'on the back wall', boxes: 'by the stove', sheep: 'by the door', orders: 'on the table',
   pigs: 'on a shelf', bandits: 'on the wall', deliveries: 'high on the front wall', loot: 'by the back wall',
   targets: 'on a shelf over the table',
 };
@@ -176,7 +176,7 @@ function allItems(rider) {
   }
 
   // the cabin (once it can be bought), and everything for sale
-  buy('Your cabin', 'cabin', 'home', 'Your own cabin', 300, 'Buy the cabin in town.', own.home, COMING.cabin);
+  buy('Your cabin', 'cabin', 'home', 'Your own cabin', PRICES.cabin, `The cabin in town is for sale: ${PRICES.cabin} gold. Walk up to its door.`, own.home, COMING.cabin);
   for (const s of SADDLES) buy('Saddles', 'saddle', s.id, s.name, PRICES.saddle[s.id], `The stable sells it for ${PRICES.saddle[s.id]} gold.`, own.saddles.has(s.id));
   for (const h of HORSES) {
     if (PRICES.horse[h.id] == null) continue;   // (the bay comes free)
@@ -241,8 +241,8 @@ export function completion(rider, { all = false } = {}) {
     return { id: g.id, name: g.name, pct: pctOf(done, list.length), done, total: list.length, items: list };
   }).filter((g) => g.total > 0);
   const done = items.filter((i) => i.done).length;
-  // (buying the cabin is a switch, not a promise: every rider has the cabin from the start today, so "more to come"
-  // doesn't name it)
+  // (buying the cabin is a switch: on now, it is a thing to buy like the others; switched off it would be left out of
+  // "more to come", as it was while every rider had the cabin from the start)
   const coming = every.filter((i) => !i.live && i.id !== 'buy:cabin:home').map((i) => i.name);
   return { pct: pctOf(done, items.length), done, total: items.length, groups, items, coming };
 }

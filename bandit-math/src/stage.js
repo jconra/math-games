@@ -10,16 +10,28 @@
 //
 // The players are only made, drawn and moved near the town (STAGE.show); out on the trail they cost nothing.
 //
-//   const S = makeStage({ W, folk, audio, scene })   folk: the people (src/actors/folk.js); audio: src/audio/audio.js's
+// The band knows a few songs (src/audio/stagemusic.js SONGS: an easy one, a quick one, a waltz, a slow lonesome one).
+// Walk (or ride) up to the front of the stage and the prompt says "Ask the band for another song": E (or a tap on the
+// prompt) asks, the harmonica player says which one they'll play in a speech bubble (src/ui/howdy.js; read out for a
+// rider who can't read yet), the notes already sounding ring out, and after a breath the band strikes up the next song,
+// harmonica and all. Each ask moves on to the next song, round and round.
+//
+//   const S = makeStage({ W, folk, audio, scene, speak })   folk: the people (src/actors/folk.js); audio: src/audio/audio.js's;
+//                           speak(text): says a line out loud for a rider who can't read yet (or null)
 //   S.update(dt, at)        each frame while riding: at = the player's position
+//   S.prompt                'Ask the band for another song' when the player is at the front of the stage, else null
+//   S.ask()                 asks the band for another song (as E does there): -> the song asked for ({ id, name, ... })
+//   S.song                  the song the band plays (or will play when the music next starts): one of SONGS
 //   S.music                 the stage music while it plays (or null)
-//   S.state()               for rigs: { near, made, playing, gain, distance, clips }
+//   S.state()               for rigs: { near, made, playing, gain, distance, clips, song, asked }
+//   S.analyser()            for rigs: an AnalyserNode on the band's sound as it goes into the game's mix (or null)
 //   S.dispose()
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { makePerson } from './actors/folk.js';
-import { makeStageMusic, makeRoom, BEAT } from './audio/stagemusic.js';
+import { makeStageMusic, makeRoom, SONGS } from './audio/stagemusic.js';
+import { howdy } from './ui/howdy.js';
 
 export const STAGE = {
   // where the players are, in the stage model's own frame as the town stands it (metres: x across its front, y up from
@@ -44,12 +56,16 @@ export const STAGE = {
   // the harmonica in her hands (metres: long, tall, deep; how far it sits behind the middle of her hands, toward her, and
   // above it: at the lips while she plays)
   harp: { long: 0.105, tall: 0.026, deep: 0.028, back: 0.035, up: 0.022 },
+  ask: 6.5,               // metres from the front of the stage (or inside the crowd's patch) where the band can be asked
+  between: 1.4,           // s from asking to the next song's first beat (what was sounding rings out meanwhile)
+  askAgain: 2.5,          // s after an ask before the prompt comes back (a double tap doesn't skip a song)
+  say: 4200,              // ms the harmonica player's answer stays up
 };
 const GAME = new URL('../', import.meta.url).href;
 const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 const CLIPS = { m: 'clips_stage_m.glb', f: 'clips_stage_f.glb' };
 
-export function makeStage({ W, folk, audio, scene = W.scene }) {
+export function makeStage({ W, folk, audio, scene = W.scene, speak = null }) {
   const place = W.places.stage;
   // the stage model's frame in the world (the village's own object for it when there is one; else from the places)
   const frame = new THREE.Matrix4();
@@ -116,13 +132,14 @@ export function makeStage({ W, folk, audio, scene = W.scene }) {
     m.makeBasis(x, y, z); harmonica.quaternion.setFromRotationMatrix(m);
     harmonica.position.copy(mid).addScaledVector(z, -STAGE.harp.back).addScaledVector(y, STAGE.harp.up);
   }
-  // keep a clip on the music's beat: its time set from the beat (the clips are four beats long)
-  function onBeat(p, beat) {
+  // keep a clip on the music's beat: its time set from the beat (the clips are four beats long, made for the first
+  // song's beat: a quicker song plays them quicker, a slower one slower)
+  function onBeat(p, beat, beatLen) {
     const a = p.person && p.person.cur; if (!a) return;
-    const d = a.getClip().duration, want = ((beat * BEAT) % d + d) % d;
+    const d = a.getClip().duration, want = (((beat % 4) + 4) % 4) / 4 * d, base = d / (4 * beatLen);
     let diff = want - a.time; if (diff > d / 2) diff -= d; if (diff < -d / 2) diff += d;
-    if (Math.abs(diff) > 0.08) a.time = want;                 // far off (a start, a pause): jump to it
-    else a.setEffectiveTimeScale(1 + Math.max(-0.2, Math.min(0.2, diff * 2)));   // near: ease into step
+    if (Math.abs(diff) > 0.08 * base) a.time = want;          // far off (a start, a pause, a new song): jump to it
+    else a.setEffectiveTimeScale(base * (1 + Math.max(-0.2, Math.min(0.2, diff * 2 / base))));   // near: ease into step
   }
 
   // ── THE SOUND ────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -152,17 +169,35 @@ export function makeStage({ W, folk, audio, scene = W.scene }) {
     bus.onState = () => { if (ctx.state !== 'running') stopMusic(true); if (bus) bus.sent = null; };
     ctx.addEventListener('statechange', bus.onState);
   }
-  function startMusic() {
+  let songI = 0, intro = true, asked = 0, askT = 0;   // (which of SONGS; a song asked for starts without the piano's intro line)
+  function startMusic(at = null) {
     if (music || !bus) return;
-    music = makeStageMusic(bus.ctx, { harp: bus.harpIn, piano: bus.pianoIn, room: bus.roomIn, seed: 1 + Math.floor(Math.random() * 1e6) });
-    music.start(bus.ctx.currentTime + 0.2);
+    music = makeStageMusic(bus.ctx, { harp: bus.harpIn, piano: bus.pianoIn, room: bus.roomIn, seed: 1 + Math.floor(Math.random() * 1e6), song: SONGS[songI].id, intro });
+    music.start(at != null ? at : bus.ctx.currentTime + 0.2);
   }
   function stopMusic(now = false) { if (music) { music.stop({ now }); music = null; } }
 
-  const S = {};
+  const S = { prompt: null };
+  // asking the band for another song: the next one round, said by the harmonica player; the notes sounding ring out
+  // and the new song starts after a breath (or, with the music asleep, when it next starts)
+  const front = place && (place.crowd || place.door);
+  S.ask = () => {
+    if (disposed) return null;
+    songI = (songI + 1) % SONGS.length; intro = false; asked++; askT = STAGE.askAgain;
+    const song = SONGS[songI];
+    if (made && made.harpist) howdy(made.harpist, song.ask, { ms: STAGE.say, key: 'band' });
+    if (speak) try { speak(song.ask); } catch (e) { /* (no voice) */ }
+    if (music && bus) { const t = bus.ctx.currentTime; music.stop({ from: t + 0.05 }); music = null; startMusic(t + STAGE.between); }
+    S.prompt = null;
+    return song;
+  };
   S.update = (dt, pos) => {
     if (disposed || !pos) return;
     distance = Math.hypot(pos.x - middle.x, pos.z - middle.z);
+    // the prompt: at the front of the stage (the crowd's patch, or by the steps), the band there to ask
+    if (askT > 0) askT -= dt;
+    const atFront = !!front && (Math.hypot(pos.x - front.x, pos.z - front.z) < (place.crowd ? place.crowd.r + 1.5 : STAGE.ask) || Math.hypot(pos.x - place.door.x, pos.z - place.door.z) < STAGE.ask);
+    S.prompt = atFront && made && visible && askT <= 0 ? 'Ask the band for another song' : null;
     // the players: near the town only
     const show = distance < STAGE.show;
     if (show && !making) makePlayers();
@@ -192,13 +227,13 @@ export function makeStage({ W, folk, audio, scene = W.scene }) {
     }
     if (!made || !visible) return;
     // the players' clips: on the music's beat while it plays (as heard: the output's own delay taken off)
-    const beat = music && bus ? music.beat() - (bus.ctx.outputLatency || 0) / BEAT : null;
+    const beat = music && bus ? music.beat() - (bus.ctx.outputLatency || 0) / music.beatLen : null;
     const t = bus ? bus.ctx.currentTime : 0;
     if (made.harpist) {
       const playing = music && (music.harmonicaAt(t + STAGE.lift) || music.harmonicaAt(t) || music.harmonicaAt(t - STAGE.lift * 0.5));
       made.harpist.play(playing ? 'Play_Harmonica' : 'Harmonica_Rest', { fade: 0.45 });
     }
-    for (const p of players) { if (beat != null) onBeat(p, beat); p.update(dt); }
+    for (const p of players) { if (beat != null) onBeat(p, beat, music.beatLen); p.update(dt); }
     if (harmonica && made.harpist) { made.harpist.root.updateMatrixWorld(true); placeHarmonica(made.harpist); }
   };
   // for rigs: a steady tone in place of the band (the music muted meanwhile), through the harmonica's positioned sound and
@@ -213,7 +248,10 @@ export function makeStage({ W, folk, audio, scene = W.scene }) {
     return true;
   };
   S.state = () => ({ near: visible, made: !!made, playing: !!music, gain, distance, clips: players.map((p) => p.clip), notes: music ? music.played : 0,
-    context: audio && audio.ctx ? audio.ctx.state : 'none' });
+    context: audio && audio.ctx ? audio.ctx.state : 'none', song: SONGS[songI].id, asked, prompt: S.prompt, beatLen: music ? music.beatLen : null });
+  Object.defineProperty(S, 'song', { get: () => SONGS[songI] });
+  // (rigs) an analyser on the band's own sound, after its distance fade (what reaches the game's mix from the stage)
+  S.analyser = () => { if (!bus) return null; if (!bus.an) { bus.an = bus.ctx.createAnalyser(); bus.an.fftSize = 4096; bus.muffle.connect(bus.an); bus.nodes.push(bus.an); } return bus.an; };
   S.spots = spots;
   Object.defineProperty(S, 'music', { get: () => music });
   Object.defineProperty(S, 'players', { get: () => made });

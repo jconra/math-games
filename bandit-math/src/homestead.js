@@ -42,7 +42,7 @@ import {
 } from './math/goods.js';
 
 export const YARD = {
-  // the homes, in the cabin's own frame (metres): z out of the cabin's back wall (the back wall is about 4.8 m from the
+  // the homes, in the cabin's own frame (metres): z out of the cabin's back wall (the back wall is about 2.9 m from the
   // cabin's middle), x across it (+x toward the picnic table, -x toward the wagon road). x0..x1 across, z0..z1 out
   coop: { x0: 3.2, x1: 9.6, z0: 7.6, z1: 12.4, house: { x: 7.4, z: 11.0, w: 1.7, d: 1.3 } },
   pen: { x0: -10.4, x1: -4.4, z0: 7.6, z1: 12.8 },

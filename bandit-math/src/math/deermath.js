@@ -1,23 +1,30 @@
 // THE DEER PHOTOGRAPHS' MATH: one equation, one right deer. Each deer in the herd wears a number tag; exactly one of
 // those numbers makes the equation true. The kid photographs that one (src/missions/deerjob.js).
 //
-// The equation comes from the lock boxes' own recipes (src/lockbox/generate.js), at the rider's own level in equations
-// (the skill model, src/math/skill.js, asked through src/math/asking.js): the kindergarten boxes' "2 + x = 4" (2 plus
-// what equals 4?) for the youngest, then the lock box ladder's rungs, so a photo is about as hard as the rider's lock
-// boxes. Each first try at a photo goes back to the model (a travel job: no time).
-//
+// The equation comes from the lock boxes' own recipes (src/lockbox/generate.js), but a photo is a quick pick made in
+// the head with no solver (the lock box has its moves to work with), so it is asked WELL BELOW the rider's level in
+// equations (the skill model, src/math/skill.js, asked through src/math/asking.js): DEERMATH.below points under it,
+// never past DEERMATH.top (two steps at their smallest, "2x + 5 = 17"), a roll's first picture, and every one after a
+// miss in that roll, never past one step (DEERMATH.firstTop, "x/4 = 3"), no negative numbers (a one-step rung with negatives is swapped for one without), and
+// never under the add-on rung for a rider above it. The
+// kindergarten boxes' "2 + x = 4" (2 plus what equals 4?) stay for the youngest. A missed photo makes the next ones
+// easier still (`ease`, kept by the job: DEERMATH.ease). Each first try at a photo goes back to the model at the point
+// it was really made at (a travel job: no time).
+
 // The wrong tags are the numbers kids really land on: adding where they should take away, forgetting to divide,
 // multiplying instead, the sign of the answer flipped, one off. A wrong pick gets one plain line, checked the way a
 // teacher checks a key: "That one's 7: check, 7 + 7 is 14, not 12." The helper shows the two sides as a balance (14
 // against 12, tipped) and the steps that solve it, one move per line ("−7 both sides").
 //
-//   rungFor(rider, rng)           -> { rung, size, frac, from: 'skill', q, at, map } (q: asking.js askFor's answer; at:
-//                                    the point the equation really sits at, a swapped rung's own)
-//   makePhoto(rider, { n, rng, recent })   -> a shot:
+//   rungFor(rider, rng, { ease, oneStep })  -> { rung, size, frac, from: 'skill', q, at, map } (q: asking.js askFor's answer; at:
+//                                    the point the equation really sits at: lowered, capped, a swapped rung's own)
+//   makePhoto(rider, { n, rng, recent, ease, oneStep, rung })   -> a shot (oneStep: one step at
+//                                    most (DEERMATH.firstTop); rung: deal that rung as it is, for the tests):
 //     { rung, size, eq: '3x − 4 = 11', x: 5, values: [numbers, one per deer], right: index of x in values,
 //       start (the line, for the engine), steps: [{ text, note }] (the first is the equation, the last is x = 5),
 //       key: a short id (not repeated within `recent`), at (the point for the skill model), words, say (the
-//       kindergarten boxes' question written out, "2 plus what equals 4?", and as it is read aloud; else null) }
+//       kindergarten boxes' question written out, "2 plus what equals 4?", and as it is read aloud; else null);
+//       a kindergarten box's also young: true, eq written with a box to fill ("4 + ? = 5") and solved ("4 + 1 = 5") }
 //   whyNot(shot, v)               -> the one line for a wrong pick
 //   balanceFor(shot, v)           -> { left, right, leftText, rightText, tip: -1 | 0 | 1 } the two sides with v put in
 //   numText(v)                    -> '5', '−5' (the real minus sign)
@@ -26,7 +33,7 @@
 
 import { generate, makeRng, RUNG } from '../lockbox/generate.js';
 import { K_RUNG } from '../lockbox/kbox.js';
-import { MAPS, pctAt, fits, readAloud } from './skill.js';
+import { MAPS, pctAt, stepAt, fits, readAloud } from './skill.js';
 import { chooseFor, askFor } from './asking.js';
 import { youngMost } from '../lockbox/strand.js';
 import { lineText, keySteps, linearForm, solve, applyMove, moveNote, evalSide, xSide, MINUS, F } from '../lockbox/engine.js';
@@ -36,8 +43,14 @@ export const DEERMATH = {
   // a rung the deer can't use as it is: the two warm-up rungs have no x to solve (balance, try a key) and the
   // legendary vault's answer can be "every key" or "none": the nearest real one-answer rung stands in
   // (and the inequality rungs, past the vault: a deer number is one value, so the hardest equation rung stands in)
-  swap: { R0a: 'R1', R0b: 'R1', R15: 'R14', I1: 'R14', I2: 'R14', I3: 'R14', I4: 'R14' },
+  // (and "one step with negatives": a photo keeps to counting numbers below two steps, so the one-step "x/4 = 3" stands in)
+  swap: { R0a: 'R1', R0b: 'R1', R5: 'R4', R15: 'R14', I1: 'R14', I2: 'R14', I3: 'R14', I4: 'R14' },
   sizeOf: { 2: 1, 3: 2, 4: 2, 5: 2 },   // the lock boxes' level on a rung -> how big the numbers are (as algebra.js)
+  below: 20,                 // points under the rider's equations level a photo is asked at (a quick pick, no solver)
+  top: 'R6', topFrac: 0,     // ... and never harder than this rung, at its smallest numbers (two steps: 2x + 5 = 17)
+  firstTop: 'R4', firstFrac: 0.67,   // a roll's first picture (and the rest of a roll with a miss in it): one step at most
+                                     // ("x/4 = 3", "3x = 12"); two steps only after a clean one
+  ease: { miss: 8, right: 3, most: 24 },   // points easier after a missed photo (first try), back by `right` a clean one
   most: 99,                  // no tag bigger than this either way
   recent: 12,                // equations not dealt again within this many
 };
@@ -47,7 +60,7 @@ export const numText = (v) => (v < 0 ? MINUS + Math.abs(v) : String(v));
 // which rung the deer use for this rider now, and how big the numbers are: the skill model's step (a rung of the lock
 // box ladder, or a kindergarten box), with the rungs the deer can't use swapped (DEERMATH.swap). Within a rung the
 // numbers grow as the lock boxes' do: a third of the way to the next rung is the box's level 3, two thirds level 4.
-export function rungFor(rider, rng = makeRng()) {
+export function rungFor(rider, rng = makeRng(), { ease = 0, oneStep = false } = {}) {
   // (the picture boxes only for a rider who is read to, unless the ladder doesn't fit yet)
   const maps = DEERMATH.maps.filter((m) => MAPS[m] && (m !== 'lockboxK' || readAloud(rider) || !fits(rider, 'lockbox', DEERMATH.maps)));
   let map = chooseFor(rider, maps.length ? maps : ['lockbox'], { rand: () => rng.next() }) || 'lockbox';
@@ -57,10 +70,20 @@ export function rungFor(rider, rng = makeRng()) {
   const most = youngMost(rider);
   if (map === 'lockbox' && maps.includes('lockboxK') && fits(rider, 'lockboxK', maps) && DEERMATH.swap[askFor(rider, 'lockbox', { most }).id] === 'R1') map = 'lockboxK';
   const q = askFor(rider, map, { most });
-  const id = q.id || 'R1';
+  // the point the photo is made at: well below the level, eased after misses, held under the top rung; never under
+  // the add-on rung for a rider at or above it (the warm-up rungs below have no x), the kindergarten boxes' own floor
+  const e = Math.max(0, Math.min(DEERMATH.ease.most, Number(ease) || 0));
+  let pt;
+  if (map === 'lockbox') {
+    const floor = Math.min(q.at, pctAt('lockbox', 'R1'));
+    const cap = oneStep ? pctAt('lockbox', DEERMATH.firstTop, DEERMATH.firstFrac) : pctAt('lockbox', DEERMATH.top, DEERMATH.topFrac);
+    pt = Math.max(floor, Math.min(cap, q.at - DEERMATH.below - e));
+  } else pt = Math.max(MAPS[map].anchors[0], q.at - e);
+  const st = stepAt(map, pt);
+  const id = st.id || 'R1';
   const rung = DEERMATH.swap[id] || (RUNG[id] || K_RUNG[id] ? id : 'R1');
-  const frac = q.frac || 0, level = 2 + Math.min(2, Math.floor(frac * 3));
-  const at = rung === id ? q.at : pctAt('lockbox', rung);
+  const frac = st.frac || 0, level = 2 + Math.min(2, Math.floor(frac * 3));
+  const at = rung === id ? Math.round(pt * 10) / 10 : pctAt('lockbox', rung);
   return { rung, size: rung === id ? DEERMATH.sizeOf[level] || 2 : 1, frac, from: 'skill', q, at, map };
 }
 
@@ -121,9 +144,9 @@ function stepsFor(start, rung, x, p = {}) {
   return steps;
 }
 
-export function makePhoto(rider, { n = 4, rng = makeRng(), recent = [] } = {}) {
+export function makePhoto(rider, { n = 4, rng = makeRng(), recent = [], ease = 0, oneStep = false, rung: only = null } = {}) {
   n = Math.max(2, Math.min(6, Math.round(n)));
-  const { rung, size, from, frac, at } = rungFor(rider, rng);
+  const { rung, size, from, frac, at } = only ? { rung: DEERMATH.swap[only] || only, size: 2, from: 'test', frac: 0, at: pctAt(RUNG[only] ? 'lockbox' : 'lockboxK', DEERMATH.swap[only] || only) } : rungFor(rider, rng, { ease, oneStep });
   let p = null;
   for (let i = 0; i < 6 && !p; i++) {
     const g = generate(rung, { rng, size, recent, frac });
@@ -135,6 +158,15 @@ export function makePhoto(rider, { n = 4, rng = makeRng(), recent = [] } = {}) {
   shot.values = tagValues(shot, n, rng);
   shot.right = shot.values.indexOf(shot.x);
   shot.steps = stepsFor(p.start, p.rung, p.x, p);
+  // (the kindergarten boxes' own way of writing it: a box to fill, "4 + ? = 5", not a letter; and the print shows it
+  // filled in, "4 + 1 = 5")
+  if (K_RUNG[shot.rung]) {
+    shot.young = true;
+    const box = (t) => t.replace(/x/g, '?');
+    shot.eq = box(shot.eq);
+    shot.steps = shot.steps.map((st) => ({ ...st, text: box(st.text) }));
+    shot.solved = shot.eq.replace('?', numText(shot.x));
+  }
   return shot;
 }
 

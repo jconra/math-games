@@ -26,6 +26,8 @@
 //             one on by default; a grown-up can turn some off on the title (jobOn)
 //   missionsV: 2   the jobs were all switched on once (riders from before every job was on by default)
 //   owned:    { saddle: null|'plain'|'tooled'|'silver', horse: 'bay', dog: null|{ kind, name } }
+//             (+ home: 'cabin' once the cabin itself is bought (src/catalog.js PRICES.cabin); a rider with any furniture
+//               from before the cabin was for sale has it as bought (fixRider))
 //             (+ cabin: ['rug', 'bed', ...] the furnishings bought for the cabin, once any are: src/cabin/slots.js)
 //             (+ animals: [{ kind, name, young?, age? }], goods: { eggs, wool, milk } in the saddlebags, yard: { eggs, wool,
 //               milk } waiting behind the cabin: the homestead's farm animals, once there are any: src/math/goods.js)
@@ -48,6 +50,7 @@
 // }
 
 import { cleanAnimals, cleanGoods } from './math/goods.js';
+import { PRICES } from './catalog.js';
 import { migrate as migrateSkill, record as recordSkill, readAloud as readsNow } from './math/skill.js';
 
 const VERSION = 1;
@@ -132,18 +135,21 @@ export function readModeWords(rider) {
 // Each job a rider can do is counted in rider.stats.jobs: the work finished (a steer roped and sent to the corral, a
 // lock box cracked). How often a rider is right stays with the Top Hand / Sharpshooter / Safecracker badges. Every job has a western belt buckle in four
 // metals, earned at the counts in `at`: [tin, copper, silver, gold]. The first comes in a kid's first sitting and gold
-// is a long way off. ready = the job exists in this build; the others are counted the day they arrive but stay off
-// the rider card until then. `words` = how one and many read ("1 steer corralled", "50 cattle corralled").
+// is a long way off. 2026-10-19: the silver and gold counts were brought in (tin and copper, the early wins, stayed),
+// so every gold buckle, and with them the whole checklist (src/completion.js), takes about 17 hours of play, not 38
+// (an estimate from each job's minutes a piece, below, not a measure of real kids). A count lowered never takes a
+// buckle away: buckles come from the counts kept in rider.stats.jobs. ready = the job exists in this build; the
+// others are counted the day they arrive but stay off the rider card until then. `words` = how one and many read ("1 steer corralled", "50 cattle corralled").
 //   cattle: a wave of the round-up has 4 to 6 right steers and takes a minute or two, so tin (10) comes after two or
-//     three waves on the first ride, copper (50) after about ten waves, silver (200) after weeks of rides, gold (500)
-//     is the long goal (about a hundred waves).
+//     three waves on the first ride, copper (50) after about ten waves, silver (120) after a couple of weeks of rides,
+//     gold (250) is the long goal (about fifty waves).
 //   boxes: a lock box is a whole equation (half a minute to a few minutes), one comes with every wave and the sheriff
-//     always has more, so the steps are about half the cattle's: tin after five boxes, gold after 250.
+//     always has more, so the steps are about half the cattle's: tin after five boxes, gold after 100 (2 minutes or so each).
 //   sheep: a flock has one or two sick sheep and takes a few minutes, so tin (5) comes after three or four flocks on a
 //     first visit to the farm; still a first guess until the job has been played for real.
 //   orders: an order at the general store counter is one word problem (about half a minute with the reading), so a
 //     sitting of ten to fifteen minutes fills fifteen to twenty-five: tin (10) in the first sitting, copper (40) after
-//     three or four, silver (150) and gold (400) the long goals. A first guess, like sheep's, until it's been played.
+//     three or four, silver (100) and gold (200) the long goals. A first guess, like sheep's, until it's been played.
 //   pigs: a batch is five pigs and takes a few minutes of herding, so tin (10) comes after two batches on a first
 //     visit; still a first guess until the job has been played for real.
 //   deliveries: a delivery is an order worked out at the store and two rides (out to a camp and back), two or three
@@ -160,15 +166,15 @@ export const BUCKLE_NAMES = { tin: 'Tin', copper: 'Copper', silver: 'Silver', go
 // `by`: the jobs on the title's list (MISSIONS) that do this work; with all of them turned off (and none done yet) the
 // buckle is left off the rider's card (buckleShown). No `by`: always on (the round-up, the lock boxes).
 export const JOBS = [
-  { id: 'cattle', name: 'Cattle corralled', words: ['steer corralled', 'cattle corralled'], at: [10, 50, 200, 500], ready: true },
-  { id: 'boxes', name: 'Lock boxes cracked', words: ['lock box cracked', 'lock boxes cracked'], at: [5, 25, 100, 250], ready: true },
-  { id: 'sheep', name: 'Sheep healed', words: ['sheep healed', 'sheep healed'], at: [5, 20, 75, 200], ready: true, by: ['sheep'] },
-  { id: 'orders', name: 'Orders filled', words: ['order filled', 'orders filled'], at: [10, 40, 150, 400], ready: true, by: ['store'] },
-  { id: 'pigs', name: 'Pigs penned', words: ['pig penned', 'pigs penned'], at: [10, 50, 200, 500], ready: true, by: ['pigs'] },
-  { id: 'bandits', name: 'Bandits brought in', words: ['bandit brought in', 'bandits brought in'], at: [3, 15, 50, 150], ready: true, by: ['wagon', 'loot'] },
-  { id: 'deliveries', name: 'Deliveries made', words: ['delivery made', 'deliveries made'], at: [3, 10, 30, 100], ready: true, by: ['deliveries'] },
-  { id: 'loot', name: 'Loot returned', words: ['bundle of loot returned', 'bundles of loot returned'], at: [5, 20, 60, 150], ready: true, by: ['loot'] },
-  { id: 'targets', name: 'Targets hit', words: ['target hit', 'targets hit'], at: [15, 60, 250, 600], ready: true, by: ['range'] },
+  { id: 'cattle', name: 'Cattle corralled', words: ['steer corralled', 'cattle corralled'], at: [10, 50, 120, 250], ready: true },
+  { id: 'boxes', name: 'Lock boxes cracked', words: ['lock box cracked', 'lock boxes cracked'], at: [5, 25, 50, 100], ready: true },
+  { id: 'sheep', name: 'Sheep healed', words: ['sheep healed', 'sheep healed'], at: [5, 20, 40, 80], ready: true, by: ['sheep'] },
+  { id: 'orders', name: 'Orders filled', words: ['order filled', 'orders filled'], at: [10, 40, 100, 200], ready: true, by: ['store'] },
+  { id: 'pigs', name: 'Pigs penned', words: ['pig penned', 'pigs penned'], at: [10, 50, 100, 200], ready: true, by: ['pigs'] },
+  { id: 'bandits', name: 'Bandits brought in', words: ['bandit brought in', 'bandits brought in'], at: [3, 15, 40, 80], ready: true, by: ['wagon', 'loot'] },
+  { id: 'deliveries', name: 'Deliveries made', words: ['delivery made', 'deliveries made'], at: [3, 10, 25, 40], ready: true, by: ['deliveries'] },
+  { id: 'loot', name: 'Loot returned', words: ['bundle of loot returned', 'bundles of loot returned'], at: [5, 20, 40, 80], ready: true, by: ['loot'] },
+  { id: 'targets', name: 'Targets hit', words: ['target hit', 'targets hit'], at: [15, 60, 150, 300], ready: true, by: ['range'] },
 ];
 
 // The keepsake each job puts in the rider's cabin (src/cabin/: slots.js has its spot, pieces.js its shape). `from` =
@@ -177,7 +183,7 @@ export const JOBS = [
 // The steer horns, safe door, sheep bell and wanted posters were asked for; the pig and the delivery ones are
 // stand-ins until someone picks.
 export const KEEPSAKES = {
-  cattle: { name: 'Steer horns', where: 'over the cabin door', from: 'tin' },
+  cattle: { name: 'Steer horns', where: 'on the back wall, over the safe door', from: 'tin' },
   boxes: { name: 'A cracked safe door', where: 'leaning by the hearth', from: 'tin' },
   sheep: { name: 'A sheep bell', where: 'hanging by the door', from: 'tin' },
   orders: { name: 'A brass counter bell', where: 'on the table', from: 'tin', standIn: true },
@@ -357,6 +363,13 @@ export function fixRider(r) {
     made: num(r.made, Date.now()),
     last: num(r.last, 0),
   };
+  // The cabin itself (owned.home = 'cabin' once bought: src/catalog.js PRICES.cabin; until then the rider camps by the
+  // creek). A rider from before the cabin was for sale who bought any furniture for it has it as bought. Another home's
+  // name (from a newer build) is kept as it is, as unknown fields are; anything that isn't a name is dropped.
+  const otherHome = typeof owned.home === 'string' && owned.home.trim() !== '' && owned.home !== 'cabin';
+  if (owned.home === 'cabin' || (!otherHome && Array.isArray(owned.cabin) && owned.cabin.some(c => typeof c === 'string' && PRICES.furniture[c] != null))) out.owned.home = 'cabin';
+  else if (otherHome) out.owned.home = owned.home;
+  else delete out.owned.home;
   // Bounty is every coin ever earned, so it can never be less than the gold in hand.
   if (out.bounty < out.gold) out.bounty = out.gold;
   out.topics.times = obj(out.topics.times);

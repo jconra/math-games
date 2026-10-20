@@ -37,6 +37,7 @@
 //                       instead of onCaught / onMissed. The rest: see lasso.js
 //   P.lassoBusy, P.cancelLasso()
 //   P.teleport(x, z, rot)   to another place at once (the horse comes along if being ridden)
+//   P.shift({ dx, dy, dz })  moved as it stands, the horse and the camera with it (the way round at the valley's ends)
 //   P.refreshOwned()    looks at rider.owned again now (it is also checked a few times a second): a saddle bought puts
 //                       it on the horse; another horse swaps it
 //   P.setLook(look)     a new look for the rider (a new person, same place)
@@ -188,7 +189,7 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
 
   // ── THE HORSE ───────────────────────────────────────────────────────────────────────────────────────────────
   // H: { a: the animal, x, z, heading, speed, yawRate, pitch, roll, mode: 'stand' | 'come' | 'ridden', ... }
-  let H = null, horseId = null, saddleKind = null, pendingMount = false, pendingDismount = false;
+  let H = null, horseId = null, saddleKind = null, pendingMount = false, pendingDismount = false, dismountSpot = null;
   let disposed = false;   // set by P.dispose: a horse or saddle still loading then is never added to the scene
   function homeSpot() {
     if (horseAt) return { x: horseAt.x, z: horseAt.z, rot: horseAt.rot || 0 };
@@ -354,6 +355,7 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
     if (!spot) spot = new THREE.Vector3(H.x - Math.sin(H.heading) * 2, 0, H.z - Math.cos(H.heading) * 2);
     spot.y = W.heightAt(spot.x, spot.z);
     P.mode = 'dismounting'; H.mode = 'stand'; H.speed = 0; H.yawRate = 0; H.idleT = 3;
+    dismountSpot = spot;   // (the valley's wrap moves it along: P.shift)
     seat.dismount(spot, { onDone: () => { P.mode = 'foot'; P.downAt = performance.now(); pos.copy(spot); P.heading = H.heading; P.speed = 0; person.root.rotation.set(0, P.heading, 0); person.play('Idle', { fade: 0.25 }); } });
     return true;
   };
@@ -362,6 +364,18 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
     if (P.onHorse && H) { H.x = x; H.z = z; H.heading = rot; H.speed = 0; H.yawRate = 0; placeHorse(0); }
     else { pos.set(x, y, z); P.speed = 0; person.root.position.copy(pos); person.root.rotation.set(0, rot, 0); }
     P.heading = rot; cam.snap(); pendingMount = false; P.cancelLasso();
+  };
+  // moved as it stands, by (dx, dy, dz), the horse and the camera with it (out of the mist at one end of the valley and
+  // into the other's: src/world.js W.wrap): nothing about the view or the gait changes, so nothing jumps. The horse
+  // comes too only with the rider on it (or getting on or off): a horse left standing in town stays where it was left
+  P.shift = ({ dx = 0, dy = 0, dz = 0 }) => {
+    pos.x += dx; pos.y += dy; pos.z += dz;
+    const withHorse = P.mode === 'horse' || P.mode === 'mounting' || P.mode === 'dismounting';
+    if (withHorse && dismountSpot && P.mode === 'dismounting') { dismountSpot.x += dx; dismountSpot.y += dy; dismountSpot.z += dz; }
+    if (withHorse) seat.shift(dx, dy, dz);
+    if (H && withHorse) { H.x += dx; H.z += dz; H.a.root.position.x += dx; H.a.root.position.y += dy; H.a.root.position.z += dz; }
+    person.root.position.x += dx; person.root.position.y += dy; person.root.position.z += dz;
+    cam.shift(dx, dy, dz); P.cancelLasso();
   };
   P.setLook = (look) => {
     const riding = P.mode === 'horse'; if (riding) P.mode = 'foot';

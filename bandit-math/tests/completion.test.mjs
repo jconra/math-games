@@ -22,7 +22,7 @@ function everything() {
   r.stats.jobs = Object.fromEntries(JOBS.map((j) => [j.id, j.at[3]]));
   r.stats.jobs.photos = 30;
   r.owned = { ...r.owned, saddles: SADDLES.map((s) => s.id), saddle: 'silver', horses: HORSES.map((h) => h.id), hats: HATS.map((h) => h.id).filter((h) => h !== 'cowboy'),
-    dogs: DOGS.map((d) => ({ kind: d.id, name: d.name })), animals: KINDS.map((k) => ({ kind: k, name: k })), cabin: SLOTS.map((s) => s.id) };
+    dogs: DOGS.map((d) => ({ kind: d.id, name: d.name })), animals: KINDS.map((k) => ({ kind: k, name: k })), cabin: SLOTS.map((s) => s.id), home: 'cabin' };
   r.topics.loot = { trips: 7 };
   r.found = { place: CAMP_PLACES.map((c) => 'camp-' + c.id), keepsake: JOBS.map((j) => j.id) };
   return r;
@@ -37,8 +37,9 @@ test('the items: every job\'s four buckles, everything for sale, the collections
   assert.equal(c.items.filter((i) => i.group === 'buckles').length, jobs.length * BUCKLES.length, 'four buckles a job');
   assert.ok(all.includes('buckle:targets:gold'), 'the target range counts for every rider (no shooting mode)');
   const buy = all.filter((i) => i.startsWith('buy:'));
-  assert.equal(buy.length, SADDLES.length + (HORSES.length - 1) + (HATS.length - 1) + DOGS.length + KINDS.length + SLOTS.length,
-    'every saddle, every horse but the free bay, every hat but the free one, every dog, one of each farm animal, every piece of furniture');
+  assert.equal(buy.length, 1 + SADDLES.length + (HORSES.length - 1) + (HATS.length - 1) + DOGS.length + KINDS.length + SLOTS.length,
+    'the cabin, every saddle, every horse but the free bay, every hat but the free one, every dog, one of each farm animal, every piece of furniture');
+  assert.equal(c.items.find((i) => i.id === 'buy:cabin:home').need, PRICES.cabin, 'the cabin is for sale');
   for (const h of HORSES) assert.equal(all.includes(`buy:horse:${h.id}`), h.id !== 'bay', h.id);
   for (const k of Object.keys(KEEPSAKES)) assert.ok(all.includes(`collect:keepsake:${k}`), k);
   for (const h of HIDEOUTS) assert.ok(all.includes(`collect:hideout:${h.id}`), h.id);
@@ -82,7 +83,7 @@ test('a played rider: what they did is checked off, from the fields the game alr
   assert.equal(c.done, want.length);
   assert.equal(c.pct, Math.round((100 * want.length) / c.total));
   const silver = c.items.find((i) => i.id === 'buckle:cattle:silver');
-  assert.deepEqual([silver.have, silver.need, silver.done], [64, 200, false]);
+  assert.deepEqual([silver.have, silver.need, silver.done], [64, JOBS.find((j) => j.id === 'cattle').at[2], false]);
   // a keepsake needs its buckle AND a look at it in the cabin
   assert.equal(c.items.find((i) => i.id === 'collect:keepsake:cattle').done, false);
   assert.match(c.items.find((i) => i.id === 'collect:keepsake:cattle').hint, /go into your cabin/);
@@ -125,7 +126,7 @@ test('100% only when every item is done; COMING entries are not counted until sw
   // the windmill waits in COMING: not shown, not counted, named in "more to come"
   assert.ok(!ids(completion(r)).includes('place:windmill'));
   assert.ok(completion(r).coming.some((n) => /windmill/i.test(n)));
-  assert.ok(!completion(r).coming.some((n) => /cabin/i.test(n)), 'the cabin is every rider\'s already: not promised as to come');
+  assert.ok(!completion(r).coming.some((n) => /cabin/i.test(n)), 'the cabin is for sale now: never "to come"');
   assert.ok(ids(completion(r, { all: true })).includes('place:windmill'));
   const was = COMING.windmill;
   try {
@@ -152,11 +153,11 @@ test('goals: pin up to two, progress, reached ones make room, finished or unknow
   assert.equal(setGoal(r, 'buy:horse:midnight'), true);
   assert.equal(setGoal(r, 'buy:hat:straw'), false, `${MOST_GOALS} at most`);
   assert.equal(setGoal(r, 'buckle:cattle:tin'), false, 'a done item is not a goal');
-  const g = goalsOf(r);
-  assert.deepEqual(g.map((x) => [x.id, x.have, x.need, x.pct, x.done]), [['buckle:cattle:silver', 37, 200, 19, false], ['buy:horse:midnight', 0, 200, 0, false]]);
-  // the progress in words, for the rider card and the corner: a thing not bought yet never reads "200 / 200"
-  assert.deepEqual(g.map((x) => x.line), ['37 / 200', '0 / 200 gold']);
-  r.gold = 250;
+  const g = goalsOf(r), silverAt = JOBS.find((j) => j.id === 'cattle').at[2], midnight = PRICES.horse.midnight;
+  assert.deepEqual(g.map((x) => [x.id, x.have, x.need, x.pct, x.done]), [['buckle:cattle:silver', 37, silverAt, Math.round((100 * 37) / silverAt), false], ['buy:horse:midnight', 0, midnight, 0, false]]);
+  // the progress in words, for the rider card and the corner: a thing not bought yet never reads "400 / 400"
+  assert.deepEqual(g.map((x) => x.line), [`37 / ${silverAt}`, `0 / ${midnight} gold`]);
+  r.gold = midnight + 50;
   assert.equal(goalsOf(r)[1].line, 'You have the gold!');
   assert.equal(goalsOf(r)[1].done, false);
   r.gold = 0;

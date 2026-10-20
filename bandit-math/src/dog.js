@@ -9,7 +9,7 @@
 //   const D = makeDog({ W, scene, animals, kind: 'shiba' | 'husky' | 'pug', name, follow: () => P.position })
 //     follow(): where the one it follows is (a Vector3 on the ground). animals: the loaded library (the kind is loaded
 //     here if it isn't yet: D.ready is a promise)
-//   D.update(dt)       every frame
+//   D.update(dt)       every frame;  D.shift({ dx, dz }): moved with the player as it stands (the valley's ends)
 //   D.setName(name)    a new name on the tag;  D.tagOn = false hides the tag (D.tag: the sprite; it fades out far off)
 //   D.dog              the animal (from makeAnimal; null until loaded);  D.position: where it is
 //   D.state()          what it is doing, for a HUD or a test: { x, z, speed, gait, pose: 'stand'|'sit'|'lie', sit, ... }
@@ -162,6 +162,8 @@ export function makeDog({ W, scene, animals, kind = 'shiba', name = 'Dog', follo
     const camD = W.camTarget ? tag.position.distanceTo(W.camTarget) : 0;
     tag.material.opacity = camD > 40 ? Math.max(0, 1 - (camD - 40) / 15) : 1; tag.visible = tag.material.opacity > 0.02 && D.tagOn;
   };
+  // moved with the player as it stands (the way round at the valley's ends: src/world.js W.wrap)
+  D.shift = ({ dx = 0, dz = 0 }) => { x += dx; z += dz; last.x += dx; last.z += dz; if (D.dog) { D.dog.root.position.x += dx; D.dog.root.position.z += dz; D.dog.root.position.y = W.heightAt(x, z); } };
   D.state = () => ({ x: +x.toFixed(2), z: +z.toFixed(2), speed: +speed.toFixed(2), gait: D.dog ? D.dog.clip : 'Idle', pose,
     sit: pose === 'stand' ? 0 : 1, name: D.name, kind, loaded: !!D.dog });
   D.dispose = () => { disposed = true; if (D.dog) D.dog.dispose(); tag.removeFromParent(); tag.material.map.dispose(); tag.material.dispose(); };

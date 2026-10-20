@@ -22,9 +22,22 @@
 // Walking or riding off is "done for now": nothing is lost. The slip goes away when you walk off (or with "Done for
 // now" / Esc); the loot stays on the horse, the folks wait, and pulling up again brings the slip back.
 //
+// THE BACK WOODS: besides the hideout the deputy sends you to, the gang keeps WOODS.camps more camps out in the back
+// woods (the woods out west past the cow camp, the woods south-west of town, the woods out east past the wagon road), at
+// spots picked at random each ride from BACKWOODS (a survey of the land: a clearing at a woods edge, flat and dry, that a
+// horse can reach, well clear of the town, the roads, the other camps, the deer and the western river where the bridge
+// is to go). Each looks like the hideout (a tent or a lean-to over crates, sacks and a strongbox), and often a guard sits
+// his horse there by his fire (rope him, or ride straight in and he lights out). They aren't on the compass until found
+// (ridden within WOODS.found metres); then they are, till looted. Riding in with a saddled horse loads the loot as at the
+// hideout, and it is shared out at the sheriff's office the same way (WOODS trips are counted on their own, so the
+// checklist's hideouts still mean the deputy's). A camp emptied is struck once nobody's looking, and a new one is pitched
+// somewhere else in the back woods a few minutes later: never in sight, never near the player.
+//
 //   const LJ = makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, refresh, voice, quiet })
 //     voice(kind, who): a recorded line from a townsman ('mystuff', 'thanks': src/audio/shouts.js S.say; who: { at,
-//     male, id }); quiet(): true while another job has the HUD's card (this job's card stays down then)
+//     male, id }); quiet(): true while another job has the HUD's card (this job's card stays down then); town(): the
+//     town's people (src/townpeople.js) or null: the folks are townsfolk borrowed from it (already walking over, or out
+//     of the nearest door) and given back to walk home
 //   LJ.update(dt)       each frame after the player
 //   LJ.phase            'out' (the cache waits) | 'carrying' (the loot is on the horse) | 'rest' (word of the next cache
 //                       is coming)
@@ -35,15 +48,23 @@
 //   LJ.marks()          [{ id, icon, x, z, label }] for the compass: the cache, or the sheriff's office with the loot
 //   LJ.people           the townsfolk waiting at the sheriff's office (live records with x, z: the town's wagons stop
 //                       for them)
+//   LJ.wanted()         while the loot is on its way and they aren't out yet: { names (their townsfolk), at (the spot) }
 //   LJ.paused           a panel is open over the game
-//   LJ.cache, LJ.trainer, LJ.state() (for rigs), LJ.dev { at(), load(), town(), guard(), cache(i) }, LJ.dispose()
-//   CACHES, LOOT        the hideouts and the dials
+//   LJ.cache, LJ.trainer, LJ.state() (for rigs), LJ.dev { at(), load(), town(), guard(), cache(i), woods(i), pitch(n) },
+//   LJ.dispose()
+//   LJ.woods            the back woods' camps now: [{ id, x, z, area, found, loot (still there), guard (state or null) }]
+//   LJ.nearestLoot(at)  the nearest gang camp with loot still in it (the hideout or a back-woods camp): { x, z, id, name }
+//                       or null (the jobs board's tracks)
+//   CACHES, LOOT        the hideouts and the dials;  BACKWOODS, WOODS, AREAS   the back woods' spots and dials
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makePerson } from '../actors/folk.js';
 import { loadRiderKit, makeRider } from '../actors/riders.js';
 import { makeTargetRing } from '../targetring.js';
 import { crateParts } from '../camps.js';
+import { makeCampfire } from '../fire/campfire.js';
+import { BACKWOODS, AREAS, WOODS, pickSpot } from './backwoods.js';
+export { BACKWOODS, AREAS, WOODS, pickSpot };   // (the back woods' spots and dials: src/missions/backwoods.js)
 import { makeShares, picture, FAMILIES, MATRON } from '../math/shares.js';
 import { makeStoreSlip, speakLine } from '../ui/storeslip.js';
 import { earn, recordAnswer, countJob, saveRider } from '../save.js';
@@ -116,6 +137,15 @@ function canvasCloth() {
   const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4;
   return t;
 }
+// The meadow's plants are remembered tile by tile (world/objects/growth.js: cache.tiles, each { level, list: [plants
+// with x, z] }); the tiles round (x, z) are forgotten, so they're laid again from the ground as it is now (a camp's mown
+// patch). A tile is known by where its plants are, so this keeps working whatever size the tiles are; an empty tile has
+// nothing to mow. A cache of another shape is forgotten whole.
+export function forgetPlants(V, x, z, r) {
+  const c = V && V.COVER && V.COVER.cache; if (!c || !c.tiles) return;
+  if (!(c.tiles instanceof Map)) { if (typeof c.tiles.clear === 'function') c.tiles.clear(); return; }
+  for (const [k, e] of [...c.tiles]) { const p = e && e.list && e.list[0]; if (p && Math.hypot(p.x - x, p.z - z) < r + 45) c.tiles.delete(k); }
+}
 // ── THE LOOT'S SHAPES (made once, shared) ──────────────────────────────────────────────────────────────────────────
 let PARTS = null;
 function lootParts() {
@@ -145,7 +175,7 @@ function lootParts() {
   return PARTS;
 }
 
-export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud, hob = null, refresh = () => {}, voice = null, quiet = () => false, scene = W.scene }) {
+export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud, hob = null, refresh = () => {}, voice = null, quiet = () => false, scene = W.scene, audio = null, town = null }) {
   if (!rider.topics || typeof rider.topics !== 'object') rider.topics = {};
   if (!rider.topics.loot || typeof rider.topics.loot !== 'object') rider.topics.loot = {};
   const Q = makeShares(rider.topics.loot);
@@ -171,10 +201,13 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
     return out2;
   }
 
-  // ── THE CACHE ──────────────────────────────────────────────────────────────────────────────────────────────────
+  // ── THE GANG'S CAMPS: the deputy's hideout and the back woods' camps ─────────────────────────────────────────────
+  // Every camp with loot in it is a "stash": { kind: 'hideout' | 'woods', def: { id, x, z, name }, x, z, y, rot, root,
+  // loot: [meshes that go when loaded], offBlock, unmow, at(lx, lz), guard, wantGuard, fire, found, emptied, area }
   let cacheN = Number.isInteger(S.cache) ? S.cache % CACHES.length : 0;
-  let cache = null;   // { def, x, z, y, rot, root, loot: [meshes that go when loaded], offBlock, unmow }
-  function buildCache(def) {
+  let cache = null;          // the hideout the deputy sent the rider to (a stash), or null while word of the next is coming
+  const stashes = [];        // every camp standing: the hideout and the back woods' camps
+  function buildCache(def, { style = 'tent', kind = 'hideout', fire = false } = {}) {
     const L = lootParts(), C = crateParts();
     const sq = W.places.square || W.places.spawn;
     const r0 = Math.atan2(sq.x - def.x, sq.z - def.z);   // (its open side toward the town)
@@ -186,42 +219,57 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
     const put = (geo, lx, lz, { y = 0, ry = 0, rx = 0, rz = 0, k = 1, ground = true } = {}) =>
       geo.clone().applyMatrix4(m.compose(v.set(lx, (ground ? lift(lx, lz) : 0) + y, lz), q.setFromEuler(e.set(rx, ry, rz)), sc.set(k, k, k)));
     const lists = { crate: [], sack: [], box: [], bands: [], lock: [], canvas: [], pole: [], stone: [], char: [] };
-    // a canvas tent, open toward the town: a ridge pole running back from the front on two A-frames, the canvas down
-    // to the ground either side, a canvas back (so it's dark inside), the crates stacked in it and the sacks at its mouth
-    const T = { half: 1.6, front: -0.7, back: -3.3, high: 1.75 };
-    const ridgeY = Math.max(lift(0, T.front), lift(0, T.back)) + T.high;
     const quad = (a, b, c, d, uv = [[0, 0], [1, 0], [1, 1], [0, 1]]) => {
       const g = new THREE.BufferGeometry();
       g.setAttribute('position', new THREE.Float32BufferAttribute([...a, ...b, ...c, ...a, ...c, ...d], 3));
       g.setAttribute('uv', new THREE.Float32BufferAttribute([...uv[0], ...uv[1], ...uv[2], ...uv[0], ...uv[2], ...uv[3]], 2));
       g.computeVertexNormals(); return g;
     };
-    for (const sx of [-1, 1]) {
-      const x = sx * T.half, f = [x, lift(x, T.front) + 0.02, T.front], b = [x, lift(x, T.back) + 0.02, T.back];
-      lists.canvas.push(quad(f, [0, ridgeY, T.front], [0, ridgeY, T.back], b, [[0, 0], [0, 1], [1, 1], [1, 0]]));
-    }
-    { const g = new THREE.BufferGeometry(); const l = [-T.half, lift(-T.half, T.back) + 0.02, T.back - 0.02], r = [T.half, lift(T.half, T.back) + 0.02, T.back - 0.02], t = [0, ridgeY, T.back - 0.02];
-      g.setAttribute('position', new THREE.Float32BufferAttribute([...l, ...r, ...t], 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 0.5, 1], 2)); g.computeVertexNormals(); lists.canvas.push(g); }
-    // the poles: an A-frame at the front and the back, and the ridge pole between
     const pole = (a, b, r = 0.045) => {
       const A = new THREE.Vector3(...a), B = new THREE.Vector3(...b), len = A.distanceTo(B);
       const g = new THREE.CylinderGeometry(r, r * 1.15, len, 6).translate(0, len / 2, 0);
       g.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), B.clone().sub(A).normalize())); g.translate(A.x, A.y, A.z);
       return g;
     };
-    for (const z of [T.front + 0.04, T.back - 0.06]) for (const sx of [-1, 1]) lists.pole.push(pole([sx * (T.half - 0.05), lift(sx * T.half, z), z], [sx * -0.06, ridgeY + 0.12, z]));
-    lists.pole.push(pole([0, ridgeY + 0.04, T.front - 0.25], [0, ridgeY + 0.04, T.back + 0.1], 0.04));
+    const T = { half: 1.6, front: -0.7, back: -3.3, high: 1.75 };
+    if (style === 'leanto') {
+      // a lean-to: a canvas sheet from a pole across the front (on two posts) down to the ground at the back, open
+      // toward the town, with a canvas end each side
+      const front = -0.8, back = -3.4, half = 1.75, high = 1.9;
+      const topY = Math.max(lift(-half, front), lift(half, front)) + high;
+      lists.canvas.push(quad([-half, topY, front], [half, topY, front], [half, lift(half, back) + 0.03, back], [-half, lift(-half, back) + 0.03, back], [[0, 1], [1, 1], [1, 0], [0, 0]]));
+      for (const sx of [-1, 1]) {   // (the ends: a triangle from the top of the post down to the back corner)
+        const g = new THREE.BufferGeometry(), x = sx * (half - 0.02);
+        g.setAttribute('position', new THREE.Float32BufferAttribute([x, topY - 0.02, front, x, lift(x, back) + 0.03, back, x, lift(x, front) + 0.02, front], 3));
+        g.setAttribute('uv', new THREE.Float32BufferAttribute([0, 1, 1, 0, 0, 0], 2)); g.computeVertexNormals(); lists.canvas.push(g);
+      }
+      for (const sx of [-1, 1]) lists.pole.push(pole([sx * half, lift(sx * half, front), front], [sx * half, topY + 0.08, front], 0.05));
+      lists.pole.push(pole([-half - 0.25, topY + 0.03, front], [half + 0.25, topY + 0.03, front], 0.045));
+    } else {
+      // a canvas tent, open toward the town: a ridge pole running back from the front on two A-frames, the canvas down
+      // to the ground either side, a canvas back (so it's dark inside), the crates stacked in it and the sacks at its mouth
+      const ridgeY = Math.max(lift(0, T.front), lift(0, T.back)) + T.high;
+      for (const sx of [-1, 1]) {
+        const x = sx * T.half, f = [x, lift(x, T.front) + 0.02, T.front], b = [x, lift(x, T.back) + 0.02, T.back];
+        lists.canvas.push(quad(f, [0, ridgeY, T.front], [0, ridgeY, T.back], b, [[0, 0], [0, 1], [1, 1], [1, 0]]));
+      }
+      { const g = new THREE.BufferGeometry(); const l = [-T.half, lift(-T.half, T.back) + 0.02, T.back - 0.02], r = [T.half, lift(T.half, T.back) + 0.02, T.back - 0.02], t = [0, ridgeY, T.back - 0.02];
+        g.setAttribute('position', new THREE.Float32BufferAttribute([...l, ...r, ...t], 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute([0, 0, 1, 0, 0.5, 1], 2)); g.computeVertexNormals(); lists.canvas.push(g); }
+      // the poles: an A-frame at the front and the back, and the ridge pole between
+      for (const z of [T.front + 0.04, T.back - 0.06]) for (const sx of [-1, 1]) lists.pole.push(pole([sx * (T.half - 0.05), lift(sx * T.half, z), z], [sx * -0.06, ridgeY + 0.12, z]));
+      lists.pole.push(pole([0, ridgeY + 0.04, T.front - 0.25], [0, ridgeY + 0.04, T.back + 0.1], 0.04));
+    }
     // the crates inside: two side by side, one on top, one more by the door
     lists.crate.push(put(C.geometry, -0.6, -2.5, { ry: 0.08 }), put(C.geometry, 0.15, -2.6, { ry: -0.05 }), put(C.geometry, -0.25, -2.55, { y: C.size[1], ry: 0.3 }), put(C.geometry, 0.75, -1.5, { ry: 1.2 }));
     // the sacks, slumped together at the tent's mouth
     for (const [x, z, ry, k] of [[0.95, -0.35, 0.3, 1], [1.35, -0.05, 1.1, 0.92], [0.55, -0.85, 2.0, 1.05], [-1.15, -0.25, 0.6, 0.95], [-0.75, -1.3, 2.6, 0.88]]) lists.sack.push(put(L.sack, x, z, { ry, k, rz: (Math.random() - 0.5) * 0.15 }));
     // the strongbox, out in front where it was set down
     lists.box.push(put(L.box, -0.15, 0.25, { ry: 0.35 })); lists.bands.push(put(L.bands, -0.15, 0.25, { ry: 0.35 })); lists.lock.push(put(L.lock, -0.15, 0.25, { ry: 0.35 }));
-    // a cold fire ring off to the side: stones round charred logs
+    // a fire ring off to the side: stones round charred logs (a guard's fire burns in it: see below)
     for (let i = 0; i < 9; i++) { const a = i / 9 * Math.PI * 2; lists.stone.push(put(new THREE.DodecahedronGeometry(0.13, 0), 2.4 + Math.cos(a) * 0.5, 1.5 + Math.sin(a) * 0.5, { y: 0.05, ry: a * 1.7, k: 0.8 + ((i * 37) % 10) / 25 })); }
     for (const [ry, dx] of [[0.5, -0.05], [-0.6, 0.05]]) lists.char.push(put(new THREE.CylinderGeometry(0.06, 0.07, 0.75, 6).rotateZ(Math.PI / 2), 2.4 + dx, 1.5, { y: 0.07, ry }));
     lists.char.push(put(new THREE.CircleGeometry(0.42, 10).rotateX(-Math.PI / 2), 2.4, 1.5, { y: 0.025 }));
-    const root = new THREE.Group(); root.name = 'gang-cache';
+    const root = new THREE.Group(); root.name = kind === 'woods' ? 'gang-camp-' + def.id : 'gang-cache';
     root.position.set(def.x, y0, def.z); root.rotation.y = r0;
     const mats = { crate: C.material, sack: L.burlap, box: L.wood, bands: L.iron, lock: L.brass, canvas: L.canvas, pole: L.pole, stone: L.stone, char: L.char };
     const loot = [];
@@ -235,12 +283,19 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
       if (['crate', 'sack', 'box', 'bands', 'lock'].includes(k)) loot.push(mesh);
     }
     scene.add(root);
-    // the crates and the lean-to block walkers (the loot is loaded from out front)
+    // the crates and the tent or lean-to block walkers (the loot is loaded from out front)
     const inside = (x, z) => { const dx = x - def.x, dz = z - def.z, lx = dx * c - dz * s, lz = dx * s + dz * c; return lx > -1.8 && lx < 1.8 && lz > -3.5 && lz < -0.5; };
     const offBlock = W.addBlocker ? W.addBlocker(inside) : () => {};
-    return { def, x: def.x, z: def.z, y: y0, rot: r0, root, loot, offBlock, unmow: mow(def), at: world };
+    // a guard's fire, burning in the ring (src/fire/campfire.js: drawn only near, no light added)
+    let fl = null;
+    if (fire) { const f = world(2.4, 1.5); try { fl = makeCampfire({ W, scene, camera, x: f.x, z: f.z, y: y0 + lift(2.4, 1.5) + 0.06, width: 0.7, audio, id: 'gangfire-' + def.id }); } catch (err) { console.warn('loot: the camp fire could not be lit', err); } }
+    const st = { kind, def, x: def.x, z: def.z, y: y0, rot: r0, root, loot, offBlock, unmow: mow(def), at: world, guard: null, wantGuard: false, fire: fl, found: false, emptied: false, area: def.area || null, style, shown: true };
+    stashes.push(st);
+    return st;
   }
-  // the meadow round the cache mown, as round the camps (src/camps.js): the old values come back when it goes
+  // the meadow round a camp mown, as round the camps (src/camps.js): the old values come back when it goes. The plants
+  // the meadow remembered there are forgotten, so they are laid again from the mown ground (only round the camp: the
+  // rest of the valley's remembered plants stay as they are)
   function mow(def) {
     const V = W.V, T = V && V.TOWN;
     if (!T || !T.yard || !V.N || !V.TEX) return () => {};
@@ -251,40 +306,48 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
         const t = Math.min(1, Math.max(0, (d - LOOT.mow) / LOOT.mowFade)), v = 1 - t * t * (3 - 2 * t);
         const k = j * N + i; if (v > T.yard[k]) { if (!old.has(k)) old.set(k, T.yard[k]); T.yard[k] = v; }
       }
-    const forget = () => { const c = V.COVER && V.COVER.cache; if (c && c.tiles) c.tiles.clear(); };
+    const forget = () => forgetPlants(V, def.x, def.z, R);
     forget();
     return () => { for (const [k, v] of old) T.yard[k] = v; forget(); };
   }
-  function dropCache() {
-    if (!cache) return;
-    cache.offBlock(); cache.unmow();
-    cache.root.removeFromParent();
-    cache.root.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
-    cache = null;
+  function dropStash(st) {
+    if (!st) return;
+    dropGuard(st);
+    if (st.fire) { try { st.fire.dispose(); } catch (e) { /* (gone) */ } st.fire = null; }
+    st.offBlock(); st.unmow();
+    st.root.removeFromParent();
+    st.root.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
+    const i = stashes.indexOf(st); if (i >= 0) stashes.splice(i, 1);
+    if (st === cache) cache = null;
   }
+  function dropCache() { if (cache) dropStash(cache); }
+  const hasLoot = (st) => !!st && !st.emptied;
+  const stashName = (st) => (st.kind === 'woods' ? `a gang camp in ${AREAS[st.area] || 'the back woods'}` : st.def.name);
 
   // ── THE GUARD ──────────────────────────────────────────────────────────────────────────────────────────────────
-  let kit = null, guard = null;   // { r, state: 'stand' | 'flee' | 'throw' | 'caught' | 'down', tgt, home, t }
+  // Each camp has its own guard (st.guard): { r, state: 'stand' | 'flee' | 'throw' | 'caught' | 'down', tgt, home, t, st }
+  let kit = null;
   loadRiderKit({ animals }).then((k) => { kit = k; }).catch((e) => console.warn('loot: the guard\'s horse could not load', e));
-  function placeGuard() {
-    if (!kit || !cache || guard) return false;
+  const guards = () => stashes.map((st) => st.guard).filter(Boolean);
+  function placeGuard(st = cache) {
+    if (!kit || !st || st.guard) return false;
     let r;
     try { r = makeRider(kit, { W, folk, scene, shadows }); } catch (e) { console.warn('loot: no guard', e); return false; }
-    const p = cache.at(-3.4, 1.0);
-    r.place(p.x, p.z, cache.rot);
-    guard = { r, state: 'stand', person: r.person, also: [r.horse.root], ring: r.ring, home: p, t: 0,
+    const p = st.at(-3.4, 1.0);
+    r.place(p.x, p.z, st.rot);
+    st.guard = { r, st, state: 'stand', person: r.person, also: [r.horse.root], ring: r.ring, home: p, t: 0,
       tgt: { root: r.person.root, neck: (o) => r.neck(o), neckRadius: 0.13, height: 2.4 } };
     return true;
   }
-  function dropGuard() {
-    if (!guard) return;
-    try { guard.r.dispose(); } catch (e) { /* (gone) */ }
-    guard = null; tagEl.hidden = true;
+  function dropGuard(st = cache) {
+    if (!st || !st.guard) return;
+    try { st.guard.r.dispose(); } catch (e) { /* (gone) */ }
+    st.guard = null; tagEl.hidden = true;
   }
   const R = makeTargetRing({ scene, camera, canvas, W });
   let curTarget = null;
   function throwAt(g) {
-    if (!g || g !== guard || g.state !== 'stand' || LJ.paused) return false;
+    if (!g || !g.st || g.st.guard !== g || g.state !== 'stand' || LJ.paused) return false;
     const ok = P.throwLasso(g.tgt, {
       good: true, hold: 1.1, lead: false,
       onLand: () => { curTarget = null; },
@@ -306,17 +369,17 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
     return ok;
   }
   const offPick = I.onPick((p) => {
-    if (LJ.paused || !guard || guard.state !== 'stand' || !LJ.near) return;
+    if (LJ.paused || !nearS || !nearS.guard || nearS.guard.state !== 'stand' || !LJ.near) return;
     const t = p.touch ? R.pick(p.x, p.y) : R.click(p.x, p.y);
     if (t) throwAt(t);
   });
-  function guardStep(dt) {
-    const g = guard; if (!g) return;
-    const r = g.r, d = Math.hypot(P.position.x - r.x, P.position.z - r.z);
+  function guardStep(g, dt) {
+    if (!g) return;
+    const st = g.st, r = g.r, d = Math.hypot(P.position.x - r.x, P.position.z - r.z);
     if (g.state === 'stand' || g.state === 'throw') {
       // he sits his horse by the loot, turning to keep an eye on whoever rides up
-      r.steer(d < 60 ? P.position.x : g.home.x + Math.sin(cache.rot) * 5, d < 60 ? P.position.z : g.home.z + Math.cos(cache.rot) * 5, 0, dt);
-      const toLoot = cache ? Math.hypot(P.position.x - cache.x, P.position.z - cache.z) : 99;
+      r.steer(d < 60 ? P.position.x : g.home.x + Math.sin(st.rot) * 5, d < 60 ? P.position.z : g.home.z + Math.cos(st.rot) * 5, 0, dt);
+      const toLoot = Math.hypot(P.position.x - st.x, P.position.z - st.z);
       if (g.state === 'stand' && (d < LOOT.flee || toLoot < LOOT.load + 1)) {
         // ridden straight in: he lights out for the hills (no harm done)
         g.state = 'flee'; g.t = 0;
@@ -328,14 +391,17 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
     } else if (g.state === 'flee') {
       g.t += dt;
       r.steer(g.away.x, g.away.z, 11, dt);
-      if (g.t > 12 && d > 80) { dropGuard(); return; }
-    } else if (g.state === 'down' && d > LOOT.guardGone && !inView(r.x, r.z)) { dropGuard(); return; }   // (taken away while no one's looking)
+      if (g.t > 12 && d > 80) { dropGuard(st); return; }
+    } else if (g.state === 'down' && d > LOOT.guardGone && !inView(r.x, r.z)) { dropGuard(st); return; }   // (taken away while no one's looking)
     r.update(dt);
   }
-  const _v = new THREE.Vector3(), _f = new THREE.Frustum(), _pm = new THREE.Matrix4();
-  function inView(x, z) {
+  const _v = new THREE.Vector3(), _f = new THREE.Frustum(), _pm = new THREE.Matrix4(), _sph = new THREE.Sphere();
+  // (r: how far round the spot the thing reaches, so one half in at the edge of the view counts as in it: a guard,
+  // or a whole camp)
+  function inView(x, z, r = 1.4) {
     _pm.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse); _f.setFromProjectionMatrix(_pm);
-    return _f.containsPoint(_v.set(x, W.heightAt(x, z) + 1, z));
+    _sph.center.set(x, W.heightAt(x, z) + 1, z); _sph.radius = r;
+    return _f.intersectsSphere(_sph);
   }
 
   // ── THE LOOT ON THE HORSE ────────────────────────────────────────────────────────────────────────────────────────
@@ -368,10 +434,10 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
   function showBundles(n) { bundles.forEach((m, i) => { m.visible = i < Math.min(n, bundles.length); }); }
 
   // ── THE TRIP: which families, which bundles ──────────────────────────────────────────────────────────────────────
-  let trip = null;   // { problems: [share], at, families: [family], clean }
-  function dealTrip() {
+  let trip = null;   // { problems: [share], at, families: [family], clean, from (the camp it came from), loaded }
+  function dealTrip(from = cache) {
     const fams = [...FAMILIES].sort(() => Math.random() - 0.5).slice(0, LOOT.families).map((f) => f.name);
-    const first = !(S.trips > 0);
+    const first = !((S.trips || 0) + (S.woods || 0) > 0);
     const n = first ? LOOT.bundles[0] : LOOT.bundles[1];
     const problems = [];
     const q = askFor(rider, 'shares'); Q.setStep(q.step);   // (the rider's level in division: the ladder's step for this trip)
@@ -380,7 +446,7 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
     const names = new Set(); for (const p of problems) for (const h of p.hand) names.add(h.family.name);
     const families = FAMILIES.filter((f) => names.has(f.name));
     if (problems.some((p) => p.orphans > 0)) families.push(MATRON);
-    trip = { problems, at: 0, families, clean: true, stuffSaid: false, q };
+    trip = { problems, at: 0, families, clean: true, stuffSaid: false, q, from, loaded: false };
     saveRider(rider);
   }
 
@@ -391,6 +457,10 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
     const places = arcSpots(trip.families.length);
     const sq = W.places.square || W.places.spawn;
     trip.families.forEach((f, i) => {
+      // (the family's one is a townsperson, src/townpeople.js: already walking over when the loot was seen coming, else out
+      // of the nearest door; given back when they go home)
+      const T = town ? town() : null, got = T ? T.lend({ to: places[i], names: [f.rep] }) : null;
+      if (got) { people.push({ who: f, p: got.p, x: got.x, z: got.z, yaw: got.yaw, home: places[i], to: places[i], state: 'come', walking: false, wait: 0, via: got.via, lent: got }); return; }
       let p;
       try { p = makePerson(folk, { ...f.look, skin: Math.floor(Math.random() * 8), hair: Math.floor(Math.random() * 11), shadows }); } catch (e) { console.warn('loot: a townsperson could not be made', e); return; }
       // in from the square, a few steps apart
@@ -405,16 +475,21 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
   }
   function sendHome() {
     const sq = W.places.square || W.places.spawn;
-    for (const c of people) { c.state = 'go'; c.to = { x: sq.x + (Math.random() - 0.5) * 16, z: sq.z + (Math.random() - 0.5) * 16 }; c.walking = false; c.wait = Math.random() * 0.6; }
+    for (const c of [...people]) { if (c.lent && town && town()) { removePerson(c); continue; } c.state = 'go'; c.to = { x: sq.x + (Math.random() - 0.5) * 16, z: sq.z + (Math.random() - 0.5) * 16 }; c.walking = false; c.wait = Math.random() * 0.6; }
   }
   function removePerson(c) {
-    c.p.root.removeFromParent(); try { c.p.dispose(); } catch (e) { /* (gone) */ }
+    // (a townsperson walks on about the town from where they stand: never removed)
+    if (c.lent && town && town()) { c.lent.x = c.x; c.lent.z = c.z; c.lent.yaw = c.yaw; town().giveBack(c.lent); }
+    else { c.p.root.removeFromParent(); try { c.p.dispose(); } catch (e) { /* (gone) */ } }
     const i = people.indexOf(c); if (i >= 0) people.splice(i, 1);
     if (bubble && bubble.c === c) hideBubble();
   }
   function personStep(c, dt) {
     if (c.wait > 0) { c.wait -= dt; c.p.update(dt); placePerson(c); return; }
-    const dx = c.to.x - c.x, dz = c.to.z - c.z, d = Math.hypot(dx, dz);
+    // (a townsperson's way here first: the points of the town's paths, then their place)
+    while (c.via && c.via.length && Math.hypot(c.via[0].x - c.x, c.via[0].z - c.z) < 0.5) c.via.shift();
+    const tg = c.via && c.via.length && c.state === 'come' ? c.via[0] : c.to;
+    const dx = tg.x - c.x, dz = tg.z - c.z, d = Math.hypot(dx, dz);
     if (d > 0.06) {
       if (!c.walking) { c.walking = true; c.p.play('Walk', { fade: 0.25, speed: LOOT.walk / ((c.p.stride && c.p.stride.Walk) || 1.2) }); }   // (stride: m/s per clip, { Walk, Run })
       const st = Math.min(d, Math.min(LOOT.walk, d * 3) * dt);
@@ -452,8 +527,24 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
   function overHead(obj, y, el) {
     head.copy(obj).setY(y); head.project(camera);
     if (head.z > 1 || Math.abs(head.x) > 1.05 || Math.abs(head.y) > 1.05) return false;
-    el.style.left = `${((head.x + 1) / 2 * innerWidth).toFixed(0)}px`; el.style.top = `${((1 - head.y) / 2 * innerHeight).toFixed(0)}px`;
+    const x = (head.x + 1) / 2 * innerWidth; let sy = (1 - head.y) / 2 * innerHeight;
+    // (never up under the HUD's top band: the purse and the cards up top, on an upright phone above all; the tag stands
+    // on its bottom edge, so it goes down to just under them)
+    const floor = hudFloor(x, el.offsetWidth || 150), h = el.offsetHeight || 40;
+    if (floor && sy - h < floor) sy = floor + h;
+    el.style.left = `${x.toFixed(0)}px`; el.style.top = `${sy.toFixed(0)}px`;
     return true;
+  }
+  let purseEl = null;
+  function hudFloor(x, w) {
+    if (!purseEl || !purseEl.isConnected) purseEl = document.querySelector('.bmh-purse');
+    let f = 0;
+    for (const e of [purseEl, hud && hud.ruleEl, hud && hud.hintEl]) {
+      if (!e || e.hidden || !e.offsetParent) continue;
+      const q = e.getBoundingClientRect();
+      if (q.height && q.top < innerHeight * 0.5 && q.right > x - w / 2 - 6 && q.left < x + w / 2 + 6) f = Math.max(f, q.bottom + 6);
+    }
+    return f;
   }
 
   // ── THE SLIP: SHARING IT OUT ───────────────────────────────────────────────────────────────────────────────────
@@ -572,43 +663,83 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
   }
   function finishTrip() {
     if (!trip || LJ.phase !== 'carrying') return;
+    const from = trip.from, woods = !!(from && from.kind === 'woods');
     const bonus = LOOT.pay.trip + (trip.clean ? LOOT.pay.clean : 0);
     const e = earn(rider, bonus); earned += bonus;
-    S.trips = (S.trips || 0) + 1;
-    S.cache = cacheN = (cacheN + 1) % CACHES.length;
+    // (a back-woods camp's trip is counted on its own: the checklist's hideouts are the deputy's, counted by S.trips)
+    if (woods) S.woods = (S.woods || 0) + 1;
+    else { S.trips = (S.trips || 0) + 1; S.cache = cacheN = (cacheN + 1) % CACHES.length; }
     saveRider(rider);
     stopShare();
     hud.toast(`Every family got back what was theirs! +${bonus} gold${trip.clean ? ' · all right first time' : ''}`, 'gold');
     if (e && e.newTitle) setTimeout(() => hud.toast(`You're a ${e.newTitle} now!`, 'gold'), 2200);
-    if (hob) hob.event('lootDone', { trips: S.trips });
+    if (hob) { hob.event('lootDone', { trips: S.trips, woods }); hob.event('lootWoodsTip'); }
     refresh();
     showBundles(0);
-    setTimeout(() => { if (LJ.phase === 'rest') sendHome(); }, 3500);
-    trip = null; LJ.phase = 'rest'; restT = LOOT.rest; away = true;
+    setTimeout(() => { if (LJ.phase !== 'carrying') sendHome(); }, 3500);
+    trip = null; away = true;
+    // (the deputy's hideout handed back: word of the next one comes after a rest)
+    if (!woods) { resting = true; restT = LOOT.rest; }
+    setPhase();
   }
-  let restT = 0;
+  let restT = 0, resting = false;
+  // what the job is doing: the loot on the horse, else the deputy's hideout waiting, else word of the next one coming
+  function setPhase() { LJ.phase = trip && trip.loaded ? 'carrying' : resting || !cache ? 'rest' : 'out'; }
   function nextCache() {
-    dropCache(); dropGuard();
+    dropCache();
     cache = buildCache(CACHES[cacheN]);
-    LJ.phase = 'out'; cardKey = '';
-    wantGuard = !(S.trips > 0) || Math.random() < LOOT.guardChance;   // (the first trip always has one: it's in the deputy's story)
+    cache.wantGuard = !(S.trips > 0) || Math.random() < LOOT.guardChance;   // (the first trip always has one: it's in the deputy's story)
+    resting = false; cardKey = '';
+    setPhase();
   }
-  let wantGuard = false;
 
-  // ── LOADING THE LOOT AT THE CACHE ──────────────────────────────────────────────────────────────────────────────
-  let toldNoSaddle = false, toldWhistle = false;
+  // ── THE BACK WOODS' CAMPS ──────────────────────────────────────────────────────────────────────────────────────
+  let woodsT = 0, woodsN = 0, strikeT = 0;
+  const recent = [];   // (the spots used lately: a new camp goes somewhere else)
+  const camDist = (x, z) => Math.hypot(camera.position.x - x, camera.position.z - z);
+  const unseen = (x, z) => camDist(x, z) > WOODS.far || !inView(x, z, 9);   // (a camp spreads some 8 m round its middle)
+  // a new camp in the back woods: in the woods with the fewest camps, at a spot at random among those clear of the
+  // other camps, well away from the player and out of sight
+  function pitchWoods() {
+    if (stashes.filter((st) => st.kind === 'woods' && !st.emptied).length >= WOODS.camps) return null;
+    const b = pickSpot({ camps: stashes.map((st) => ({ x: st.x, z: st.z, area: st.kind === 'woods' ? st.area : null })), player: P.position, recent, unseen });
+    if (!b) return null;
+    const guarded = Math.random() < WOODS.guardChance;
+    const st = buildCache({ id: 'w' + (++woodsN), x: b.x, z: b.z, area: b.area, name: AREAS[b.area] }, { kind: 'woods', style: Math.random() < WOODS.leanto ? 'leanto' : 'tent', fire: guarded });
+    st.wantGuard = guarded; st.spot = b;
+    recent.push(b); if (recent.length > 5) recent.shift();
+    return st;
+  }
+  function woodsStep(dt) {
+    // a camp emptied is struck once the player is well away and it's out of sight (its trip's loot is on the horse)
+    if ((strikeT -= dt) <= 0) {
+      strikeT = 1;
+      for (const st of [...stashes]) if (st.kind === 'woods' && st.emptied && distTo(st) > WOODS.strike && unseen(st.x, st.z)) dropStash(st);
+    }
+    // and a new one is pitched elsewhere a while after (tried again each second until a spot is out of sight)
+    if (woodsT > 0) woodsT -= dt;
+    else if (stashes.filter((st) => st.kind === 'woods' && !st.emptied).length < WOODS.camps) { if (!pitchWoods()) woodsT = 1; }
+  }
+
+  // ── LOADING THE LOOT AT A CAMP ─────────────────────────────────────────────────────────────────────────────────
+  let toldNoSaddle = false, toldWhistle = false, toldFull = false;
   function tryLoad() {
-    if (!cache || LJ.phase !== 'out') return false;
-    const at = P.position, d = Math.hypot(at.x - cache.x, at.z - cache.z);
-    if (d > LOOT.load) { if (d > LOOT.load + 8) { toldNoSaddle = false; toldWhistle = false; } return false; }
-    if (guard && (guard.state === 'stand' || guard.state === 'throw')) return false;   // (he runs as you come in: next frame)
+    const st = nearS, d = st ? distTo(st) : Infinity;
+    if (d > LOOT.load + 8) { toldNoSaddle = false; toldWhistle = false; toldFull = false; }
+    if (!st || d > LOOT.load) return false;
+    const g = st.guard;
+    if (g && (g.state === 'stand' || g.state === 'throw')) return false;   // (he runs as you come in: next frame)
+    if (LJ.phase === 'carrying') { if (!toldFull) { toldFull = true; hud.toast("Your horse is loaded already: take this loot to the sheriff's office first, then come back for this"); } return false; }
     if (!P.canRide) { if (!toldNoSaddle) { toldNoSaddle = true; hud.toast("That's too much to carry by hand: you'll need a saddled horse", 'warn'); if (hob) hob.event('lootNoSaddle'); } return false; }
     const h = P.horse && P.horse.root.position;
-    if (!h || Math.hypot(h.x - cache.x, h.z - cache.z) > LOOT.horseNear || !hangLoad()) { if (!toldWhistle) { toldWhistle = true; hud.toast('Whistle your horse over (H) to load the loot'); } return false; }
-    for (const m of cache.loot) m.visible = false;
-    dealTrip();
+    if (!h || Math.hypot(h.x - st.x, h.z - st.z) > LOOT.horseNear || !hangLoad()) { if (!toldWhistle) { toldWhistle = true; hud.toast('Whistle your horse over (H) to load the loot'); } return false; }
+    for (const m of st.loot) m.visible = false;
+    st.emptied = true;
+    if (st.kind === 'woods') woodsT = WOODS.again[0] + Math.random() * (WOODS.again[1] - WOODS.again[0]);
+    dealTrip(st);
+    trip.loaded = true;
     showBundles(trip.problems.length);
-    LJ.phase = 'carrying'; away = true; cardKey = '';
+    setPhase(); away = true; cardKey = ''; cardT = 0;   // (the card says so at once)
     hud.toast(`The gang's loot is on your horse: ${trip.problems.length} bundles to take back to town`, 'good');
     if (hob) hob.event('lootLoaded');
     return true;
@@ -623,9 +754,10 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
       const d = distTo(spot);
       return { main: `The gang's loot: ${trip.problems.length - trip.at} bundle${trip.problems.length - trip.at === 1 ? '' : 's'} to hand back`, sub: d > 12 ? `Ride it to the sheriff's office: ${roundTo(d)} m ${way(P.position, spot)}` : 'Pull up in front of the folks waiting' };
     }
-    if (LJ.phase === 'out' && cache && LJ.near) {
-      const g = guard && (guard.state === 'stand' || guard.state === 'throw');
-      return { main: `The gang's cache: ${cache.def.name}`, sub: g ? 'A guard sits his horse by it: rope him, or ride straight in' : 'Ride in close to load the loot on your horse' };
+    if (nearS) {
+      const g = nearS.guard && (nearS.guard.state === 'stand' || nearS.guard.state === 'throw');
+      const main = nearS.kind === 'woods' ? `A gang camp in ${AREAS[nearS.area] || 'the back woods'}` : `The gang's cache: ${nearS.def.name}`;
+      return { main, sub: g ? 'A guard sits his horse by it: rope him, or ride straight in' : 'Ride in close to load the loot on your horse' };
     }
     return null;
   }
@@ -641,28 +773,62 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
     hud.rule({ kind: 'travel', main: c.main, sub: c.sub });
   }
   LJ.card = false;
+  // the compass: the sheriff's office with the loot on; else the camp the player is at, the deputy's hideout, and the
+  // back woods' camps found and not yet looted (the first of them is where the trail leads)
+  const markOf = (st) => ({ id: st === cache ? 'loot' : 'loot-' + st.def.id, icon: 'job', x: st.x, z: st.z, label: st.kind === 'woods' ? `A gang camp in ${AREAS[st.area] || 'the back woods'}` : "The gang's cache" });
+  // the folks this trip's loot is for (their townsperson's names) and where they wait, while it is on its way: the town
+  // sends them over as the loot is seen coming (src/townpeople.js expect)
+  LJ.wanted = () => (LJ.phase === 'carrying' && trip && !people.length ? { names: trip.families.map((f) => f.rep), at: spot } : null);
   LJ.marks = () => {
     if (LJ.phase === 'carrying') return [{ id: 'loot', icon: 'job', x: spot.x, z: spot.z, label: "The sheriff's office: hand back the loot" }];
-    if (LJ.phase === 'out' && cache) return [{ id: 'loot', icon: 'job', x: cache.x, z: cache.z, label: "The gang's cache" }];
-    return [];
+    const out = [];
+    if (nearS) out.push(markOf(nearS));
+    if (cache && hasLoot(cache) && !resting && cache !== nearS) out.push(markOf(cache));
+    for (const st of stashes) if (st.kind === 'woods' && st.found && hasLoot(st) && st !== nearS) out.push(markOf(st));
+    return out;
   };
+  // the nearest camp with loot still in it, found or not (the jobs board's tracks lead there)
+  LJ.nearestLoot = (at = P.position) => {
+    let best = null, bd = Infinity;
+    for (const st of stashes) { if (!hasLoot(st) || (st === cache && resting)) continue; const d = Math.hypot(at.x - st.x, at.z - st.z); if (d < bd) { bd = d; best = st; } }
+    return best ? { x: best.x, z: best.z, id: st0id(best), name: stashName(best) } : null;
+  };
+  const st0id = (st) => (st === cache ? 'loot' : 'loot-' + st.def.id);
 
   // ── EACH FRAME ─────────────────────────────────────────────────────────────────────────────────────────────────
+  let nearS = null;   // the camp with loot the player is at (within LOOT.near), or null
   LJ.update = (dt) => {
-    if (LJ.phase === 'rest' && (restT -= dt) <= 0) {
+    if (resting && (restT -= dt) <= 0) {
       nextCache();
       if (hob) hob.event('lootWord', { place: cache.def.name });
     }
-    LJ.near = !!cache && LJ.phase === 'out' && distTo(cache) < LOOT.near;
-    // the guard: placed once the riders' kit is in (the first time the player comes near this cache)
-    if (wantGuard && !guard && kit && cache && LJ.phase === 'out' && distTo(cache) < 180) { wantGuard = false; placeGuard(); }
-    guardStep(dt);
-    if (guard && guard.state === 'stand' && LJ.near && I.enabled && P.enabled && (I.tap('KeyF') || (!P.onHorse && I.tap('Space')))) throwAt(R.target);
-    const ringOn = !!(guard && (guard.state === 'stand' || guard.state === 'throw') && LJ.near && distTo(guard.r) < LOOT.ropeNear);
-    R.update(dt, { targets: ringOn ? [guard] : [], player: P, can: (t) => t.state === 'stand', hold: P.lassoBusy, busy: P.lasso.busy });
+    woodsStep(dt);
+    fireT += dt;
+    // the nearest camp with loot in it, within reach of its card
+    nearS = null; { let bd = LOOT.near; for (const st of stashes) { if (!hasLoot(st)) continue; const d = distTo(st); if (d < bd) { bd = d; nearS = st; } } }
+    LJ.near = !!nearS && LJ.phase !== 'carrying';
+    for (const st of stashes) {
+      const d = distTo(st), cd = camDist(st.x, st.z);
+      // (far off a camp isn't drawn, nor its guard: a speck in the haze among the trees)
+      const show = cd < WOODS.far;
+      if (show !== st.shown) { st.shown = show; st.root.visible = show; if (st.guard && st.guard.r.show) st.guard.r.show(show); }
+      // a back-woods camp is found when the player rides near it: on the compass from then on, till it's looted
+      if (st.kind === 'woods' && !st.found && d < WOODS.found) { st.found = true; if (hob) hob.event('lootCamp', { place: AREAS[st.area] }); }
+      // the guard: placed once the riders' kit is in, when the player comes near; a back-woods guard still on watch
+      // is put away again when the player is far off and he's out of sight (he's there again on the way back)
+      const near = st.kind === 'woods' ? WOODS.guardNear : 180;
+      if (st.wantGuard && !st.guard && kit && !st.emptied && d < near) { st.wantGuard = false; placeGuard(st); if (st.guard && st.guard.r.show) st.guard.r.show(st.shown); }
+      else if (st.kind === 'woods' && st.guard && st.guard.state === 'stand' && d > WOODS.guardGone && unseen(st.guard.r.x, st.guard.r.z)) { dropGuard(st); st.wantGuard = true; }
+      if (st.fire) st.fire.update(dt, fireT);
+    }
+    for (const g of guards()) guardStep(g, dt);
+    const ng = nearS && nearS.guard;
+    if (ng && ng.state === 'stand' && I.enabled && P.enabled && (I.tap('KeyF') || (!P.onHorse && I.tap('Space')))) throwAt(R.target);
+    const ringOn = !!(ng && (ng.state === 'stand' || ng.state === 'throw') && distTo(ng.r) < LOOT.ropeNear);
+    R.update(dt, { targets: ringOn ? [ng] : [], player: P, can: (t) => t.state === 'stand', hold: P.lassoBusy, busy: P.lasso.busy });
     // the guard's tag over his hat while he's there to be roped
-    if (ringOn && overHead(guard.r.person.root.position, guard.r.top() + 0.35, tagEl)) tagEl.hidden = false; else tagEl.hidden = true;
-    if (LJ.phase === 'out') tryLoad();
+    if (ringOn && overHead(ng.r.person.root.position, ng.r.top() + 0.35, tagEl)) tagEl.hidden = false; else tagEl.hidden = true;
+    tryLoad();
     // keep the load on the horse (a horse bought or swapped on the way carries it on)
     if (LJ.phase === 'carrying' && P.horse && loadOn !== P.horse) { hangLoad(); showBundles(trip.problems.length - trip.at); }
     // the folks at the sheriff's office: out to wait when the loot comes to town, home when it goes off again
@@ -696,6 +862,7 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
     }
     if ((cardT -= dt) <= 0 || !shownCard) { cardT = 0.5; showCard(); }
   };
+  let fireT = 0;
   Object.defineProperty(LJ, 'paused', {
     get() { return paused; },
     set(on) { paused = !!on; R.visible = !paused; if (paused) { tagEl.hidden = true; card.hidden = true; } },
@@ -711,23 +878,31 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
   addEventListener('keydown', onKey, true);
 
   // ── FOR RIGS ───────────────────────────────────────────────────────────────────────────────────────────────────
+  const guardOf = (g) => (g ? { state: g.state, x: +g.r.x.toFixed(1), z: +g.r.z.toFixed(1), ringed: R.target === g } : null);
+  const woodsList = () => stashes.filter((st) => st.kind === 'woods').map((st) => ({ id: st.def.id, x: st.x, z: st.z, area: st.area, style: st.style, found: st.found, loot: !st.emptied, shown: st.shown, guard: guardOf(st.guard), wantGuard: st.wantGuard, fire: !!st.fire, burning: !!(st.fire && st.fire.burning) }));
+  Object.defineProperty(LJ, 'woods', { get: woodsList });
   LJ.state = () => ({
     phase: LJ.phase, active: LJ.active, near: LJ.near, card: LJ.card, cache: cache ? { id: cache.def.id, x: cache.x, z: cache.z, name: cache.def.name, loot: cache.loot.some((m) => m.visible) } : null,
-    guard: guard ? { state: guard.state, x: +guard.r.x.toFixed(1), z: +guard.r.z.toFixed(1), ringed: R.target === guard } : null, wantGuard,
+    guard: guardOf(cache && cache.guard), wantGuard: !!(cache && cache.wantGuard), at: nearS ? st0id(nearS) : null, woods: woodsList(), from: trip && trip.from ? st0id(trip.from) : null,
     trip: trip ? { at: trip.at, of: trip.problems.length, clean: trip.clean, problem: trip.problems[trip.at] ? { kind: trip.problems[trip.at].kind, step: trip.problems[trip.at].step, story: trip.problems[trip.at].story, ask: trip.problems[trip.at].ask, coins: trip.problems[trip.at].coins.map((c) => ({ label: c.label, good: c.good, slip: c.slip })) } : null } : null,
     spot: { x: +spot.x.toFixed(2), z: +spot.z.toFixed(2) }, people: people.map((c) => ({ who: c.who.rep, state: c.state, x: +c.x.toFixed(1), z: +c.z.toFixed(1) })),
-    bundles: bundles.filter((m) => m.visible).length, onHorse: !!load.parent, level: Q.level(), trips: S.trips || 0, busy: U.busy, earned,
+    bundles: bundles.filter((m) => m.visible).length, onHorse: !!load.parent, level: Q.level(), trips: S.trips || 0, woodsTrips: S.woods || 0, busy: U.busy, earned,
     talking: bubble ? { who: bubble.c.who.rep, text: card.textContent } : null,
   });
+  const facing = (st) => { const p = st.at(0, 16); return { x: p.x, z: p.z, rot: st.rot + Math.PI }; };
   LJ.dev = {
     // beside the cache, facing it (on the town's side)
-    at: () => { if (!cache) return null; const p = cache.at(0, 16); return { x: p.x, z: p.z, rot: cache.rot + Math.PI }; },
+    at: () => (cache ? facing(cache) : null),
     // the hand-back spot, facing the waiting folks
     town: () => ({ x: spot.x + out.x * 5, z: spot.z + out.z * 5, rot: rot + Math.PI }),
-    load: () => { if (LJ.phase !== 'out' || !cache) return false; if (guard && guard.state === 'stand') { guard.state = 'flee'; guard.t = 12; guard.away = { x: guard.r.x + 300, z: guard.r.z }; } const h = P.horse; if (h && P.canRide) { const p = cache.at(0, 3); P.teleport(p.x, p.z, cache.rot + Math.PI); } return true; },
-    guard: () => { if (!cache || guard) return false; wantGuard = false; return placeGuard(); },
+    load: () => { if (LJ.phase === 'carrying' || !cache || cache.emptied) return false; const g = cache.guard; if (g && g.state === 'stand') { g.state = 'flee'; g.t = 12; g.away = { x: g.r.x + 300, z: g.r.z }; } const h = P.horse; if (h && P.canRide) { const p = cache.at(0, 3); P.teleport(p.x, p.z, cache.rot + Math.PI); } return true; },
+    guard: () => { if (!cache || cache.guard) return false; cache.wantGuard = false; return placeGuard(cache); },
     // (rigs) the cache moved to hideout i, as if the trips had come round to it
-    cache: (i) => { if (LJ.phase !== 'out') return false; cacheN = ((i % CACHES.length) + CACHES.length) % CACHES.length; nextCache(); return true; },
+    cache: (i) => { if (LJ.phase === 'carrying') return false; cacheN = ((i % CACHES.length) + CACHES.length) % CACHES.length; nextCache(); return true; },
+    // (rigs) 16 m in front of back-woods camp i (of those standing), facing it
+    woods: (i = 0) => { const w = stashes.filter((st) => st.kind === 'woods'); const st = w[((i % w.length) + w.length) % w.length]; return st ? facing(st) : null; },
+    // (rigs) pitch up to n more camps now (out of sight, away from the player), as if their time had come
+    pitch: (n = 1) => { let k = 0; for (let i = 0; i < n; i++) { const save = WOODS.camps; WOODS.camps = Math.max(save, stashes.filter((st) => st.kind === 'woods' && !st.emptied).length + 1); if (pitchWoods()) k++; WOODS.camps = save; } return k; },
   };
   Object.defineProperty(LJ, 'cache', { get: () => cache });
 
@@ -735,15 +910,17 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
     stopShare();
     removeEventListener('keydown', onKey, true);
     offPick(); R.dispose();
-    dropGuard(); dropCache();
+    for (const st of [...stashes]) dropStash(st);
     for (const c of [...people]) removePerson(c);
     load.removeFromParent();
     U.dispose(); box.remove();
     if (shownCard) hud.rule(null);
   };
 
-  // the first cache (or the one a ride left off at): a trip's loot already handed back moves on to the next
+  // the first cache (or the one a ride left off at): a trip's loot already handed back moves on to the next; and the
+  // back woods' camps, pitched while the ride starts (the player is in town, far from them all)
   nextCache();
+  for (let i = 0; i < WOODS.camps; i++) pitchWoods();
   return LJ;
 }
 

@@ -10,14 +10,18 @@
 // resting over the others. Nothing in it is taken from any recording: only the SOUND of the two instruments was measured
 // (overtones, swell and fade times, wobble rates, breath; see ~/pw/bandit-math/sound/REPORT.md).
 //
-//   const M = makeStageMusic(ctx, { harp, piano, room, seed })   harp / piano: where each instrument's notes go (an
-//                          AudioNode: the game puts each through its own positioned panner); room: where their echo goes
+//   const M = makeStageMusic(ctx, { harp, piano, room, seed, song })   harp / piano: where each instrument's notes go (an
+//                          AudioNode: the game puts each through its own positioned panner); room: where their echo goes;
+//                          song: which of SONGS ('easy', 'boots', 'waltz', 'lonesome'; see MORE SONGS below)
 //   M.start(at)            starts the tune at ctx time `at` (the first beat); in an OfflineAudioContext it writes the
 //                          whole render at once
 //   M.stop()               stops making notes (the ones already sounding ring out)
 //   M.stop({ now: true })  also silences every note already made, sounding or still to come (for when the sound goes
 //                          to sleep: the notes would be cut off by their own timers meanwhile, so they are let go cleanly)
+//   M.stop({ from: t })    lets go the notes made to start at ctx time t or later; the ones sounding ring out (a change
+//                          of song: the band finishes what it is playing, then stops)
 //   M.beat()               the beat the music is on now (counted from the first one; fractions between), or null
+//   M.beatLen, M.bar       the song's seconds a beat and beats a bar;  M.song, M.name   which song
 //   M.harmonicaAt(t)       true while the harmonica is playing (a phrase sounding at ctx time t)
 //   M.events               what has been scheduled (for testing): [{ at, what, midi, len, ... }]; in the game only the
 //                          last EVENTS_KEPT are kept (the band can play for hours), an offline render keeps them all
@@ -25,7 +29,7 @@
 //   notePatch(patch, opts) the note as patch data (exported for the render rig)
 import { playPatch, voicePatch, PATCH_PRESETS } from './patch.js';
 
-export const BEAT = 0.75;                 // seconds a beat (80 a minute); the performers' clips are four beats long
+export const BEAT = 0.75;                 // seconds a beat in the first song (80 a minute); the performers' clips are four beats long
 export const HARMONICA = 'STAGE — HARMONICA', PIANO = 'STAGE — PIANO';
 const HARP_ROOT = 67, PIANO_ROOT = 43;    // the patches are written at G4 and G2 (MIDI note numbers)
 const EVENTS_KEPT = 256;                  // the notes listed in M.events while playing live (only rigs read them)
@@ -70,11 +74,12 @@ const HARP_KEEP = ['wob', 'wander-f', 'br-hp', 'br-lp', 'air-hp', 'air-lp', 'ton
 const hz = (m) => 440 * Math.pow(2, (m - 69) / 12);
 
 // one harmonica note: { midi, len (s), level, bend (cents flat at the start, 0 = none), fresh (a new breath, else it runs
-// on from the note before), last (the phrase's last note: the long fade), style, rate }
+// on from the note before), last (the phrase's last note: the long fade), style, rate, attack?, release? (s: the
+// swell and the fade, where a song wants them quicker than the breath's own) }
 export function harmonicaNote(n, patch = PATCH_PRESETS[HARMONICA]) {
   const W = WOBBLE[n.style] || WOBBLE.pulse, f = hz(n.midi), node = (id) => patch.nodes.find((x) => x.id === id);
   const set = {
-    amp: { attack: n.fresh ? 0.55 : 0.09, release: n.last ? W.fade : 0.22 },
+    amp: { attack: n.attack ?? (n.fresh ? 0.55 : 0.09), release: n.release ?? (n.last ? W.fade : 0.22) },   // (a quick song's notes speak and stop sooner)
     bend: { peak: (n.bend || 0) / 100, decay: Math.min(0.6, Math.max(0.22, 0.25 + ((n.bend || 0) - 60) / 60 * 0.35)) },
     wob: { freq: n.rate || (W.rate[0] + W.rate[1]) / 2, ...(W.soft ? { wave: 'custom', harm: SOFT_SQUARE } : {}) },
     grow: { delay: n.fresh ? W.delay : 0.05 },
@@ -131,7 +136,7 @@ const PASSING = [36, 38, 40, 42, 43, 45, 47, 48, 50];
 const near = (list, m) => list.reduce((b, x) => (Math.abs(x - m) < Math.abs(b - m) ? x : b), list[0]);
 
 // The plan, a line at a time. Times are in beats from the first beat; lengths of notes in beats.
-export function makeTune(seed = 1) {
+export function makeTune(seed = 1, { intro = true } = {}) {
   const rnd = makeRandom(seed);
   let line = 0, lastHarp = 71, harpRun = 0, restRun = 0;
   return function nextLine() {
@@ -152,7 +157,7 @@ export function makeTune(seed = 1) {
     });
     // the harmonica: plays over most lines, rests over some (never more than three in a row either way)
     let play;
-    if (line === 0) play = false;                 // (the first line: the piano alone, as an opening)
+    if (line === 0 && intro) play = false;        // (the first line: the piano alone, as an opening)
     else if (restRun >= 2) play = true;
     else if (harpRun >= 3) play = false;
     else play = rnd.chance(restRun >= 1 ? 0.8 : 0.6);
@@ -198,20 +203,195 @@ export function makeTune(seed = 1) {
   };
 }
 
+// ── MORE SONGS ───────────────────────────────────────────────────────────────────────────────────────────────────────
+// The band knows four songs, each made up as it plays by the same kind of seeded dice (nothing from any recording):
+//   easy      "Easy Afternoon"  the tune above: 80 beats a minute in G, the piano's bass and the harmonica's phrases
+//   boots     "Dusty Boots"     the quick one: 138 a minute in G, the piano's boom-chick (the bass on one and three, a
+//                               short chord on two and four), the harmonica's riffs: a bar's rhythm played, then answered
+//   waltz     "Prairie Waltz"   three beats a bar at 100 a minute in D: the bass on one, soft chords on two and three, the
+//                               harmonica's long notes swinging over them
+//   lonesome  "Lonesome Trail"  slow, 64 a minute in E minor: a long bass note a bar, the harmonica's long bent notes and
+//                               rests between
+// A song: { id, name, beat (seconds a beat), bar (beats a bar), tune(seed, { intro }) -> nextLine (four bars a line, as
+// makeTune; intro: the first line is the piano's alone), ask (what the harmonica player says when asked for it: short,
+// to fit one speech bubble's line), upbeat }. Piano notes' len is in seconds (as the first tune's always were); the
+// harmonica's lenBeats in the song's own beats.
+const PENT_G = [62, 64, 67, 69, 71, 74, 76];
+// a melody walking a scale a step or two at a time, from `cur`, ending (last) on one of `tones`
+function walk(rnd, scale, cur, steps = [[-1, 0.34], [1, 0.34], [-2, 0.13], [2, 0.13], [0, 0.06]]) {
+  let i = scale.indexOf(cur); if (i < 0) i = Math.max(0, scale.findIndex((m) => m > cur) - 1);
+  return scale[Math.max(0, Math.min(scale.length - 1, i + rnd.weighted(steps)))];
+}
+
+// "Dusty Boots": the quick one. Each line a riff: one bar's rhythm, played over the first bar, answered (the same
+// rhythm, the notes moved) over the second, played again over the third, and a long note home over the last.
+const BOOTS_LINES = [['I', 'I', 'IV', 'I'], ['I', 'IV', 'I', 'V'], ['IV', 'IV', 'I', 'I'], ['I', 'V', 'I', 'V'], ['IV', 'I', 'V', 'I'], ['I', 'I', 'V', 'I']];
+const RIFFS = [[1, 0.5, 0.5, 1, 1], [0.5, 0.5, 0.5, 0.5, 1, 1], [1.5, 0.5, 1, 1], [0.5, 0.5, 1, 0.5, 0.5, 1], [1, 1, 0.5, 0.5, 1], [0.5, 0.5, 1, 1, 1]];
+export function makeBoots(seed = 1, { intro = true } = {}) {
+  const rnd = makeRandom(seed), B = 60 / 138;
+  let line = 0, last = 71, restRun = 0;
+  return function nextLine() {
+    const chords = line === 0 ? ['I', 'I', 'IV', 'V'] : rnd.pick(BOOTS_LINES), t0 = line * 16, ev = [];
+    chords.forEach((c, b) => {
+      const C = CHORDS[c], bar = t0 + b * 4, next = CHORDS[chords[b + 1] || 'I'];
+      // boom on one (the root) and three (the fifth), chick on two and four (a short soft chord)
+      ev.push({ beat: bar, what: 'piano', midi: C.root, len: 0.75 * B * 1.6, vel: rnd.range(0.64, 0.74) });
+      ev.push({ beat: bar + 2, what: 'piano', midi: C.fifth, len: 0.75 * B * 1.5, vel: rnd.range(0.56, 0.66) });
+      for (const k of [1, 3]) ev.push({ beat: bar + k, what: 'piano', midi: C.voicing[(b + (k === 3 ? 1 : 0)) % 2].slice(1), len: B * 0.42, vel: rnd.range(0.3, 0.38) });   // (two notes: lighter, and fewer voices at once)
+      // a step up (or down) into the next bar's root, now and then, on the "and" of four
+      if (b < 3 && rnd.chance(0.3)) ev.push({ beat: bar + 3.5, what: 'piano', midi: near(PASSING, next.root + rnd.pick([-2, -1, 2])), len: B * 0.4, vel: rnd.range(0.45, 0.52) });
+    });
+    // the harmonica: in after the first line, resting a line now and then (never two in a row)
+    const play = (line > 0 || !intro) && (restRun >= 1 || rnd.chance(0.82));
+    if (play) {
+      restRun = 0;
+      const riff = rnd.pick(RIFFS), level = rnd.range(0.88, 1), style = rnd.weighted([['plain', 0.6], ['pulse', 0.4]]);
+      const rate = rnd.range(...WOBBLE[style].rate);
+      let firstBar = null;
+      for (let b = 0; b < 4; b++) {
+        const bar = t0 + b * 4, tones = CHORDS[chords[b]].tones;
+        if (b === 3) {   // home: a long note on a chord tone, sometimes with its third under it
+          const m = near(tones, last);
+          ev.push({ beat: bar, what: 'harp', midi: m, lenBeats: 3, fresh: true, last: true, bend: rnd.chance(0.4) ? Math.round(rnd.range(40, 80)) : 0, style, rate, level, attack: 0.05, release: 0.6 });
+          if (rnd.chance(0.3)) { const pair = rnd.pick(HARP_PAIRS[chords[b]]); ev.push({ beat: bar, what: 'harp', midi: pair[0] === m ? pair[1] : pair[0], lenBeats: 3, fresh: true, last: true, bend: 0, style: 'plain', rate, level: level * 0.6, attack: 0.05, release: 0.6 }); }
+          last = m;
+          continue;
+        }
+        // the riff's notes: made fresh on the first bar, moved for the answer (bar 2), the first bar's again on bar 3
+        let notes;
+        if (b === 2 && firstBar) notes = firstBar;
+        else {
+          let cur = b === 0 ? near(tones, last + rnd.range(-3, 3)) : walk(rnd, PENT_G, firstBar ? firstBar[firstBar.length - 1] : last, [[-2, 0.3], [2, 0.3], [-1, 0.2], [1, 0.2]]);
+          notes = riff.map((_, i) => { if (i > 0) cur = walk(rnd, PENT_G, cur); return cur; });
+          notes[notes.length - 1] = near(tones, notes[notes.length - 1]);
+          if (b === 0) firstBar = notes;
+        }
+        let beat = bar;
+        riff.forEach((len, i) => {
+          // (short, picked-out notes: a breath between each, quick to sound)
+          ev.push({ beat, what: 'harp', midi: notes[i], lenBeats: Math.max(0.3, len - 0.12), fresh: i === 0, last: false, bend: i === 0 && rnd.chance(0.3) ? 35 : 0, style, rate, level: level * (i === 0 ? 1 : 0.92), attack: i === 0 ? 0.04 : 0.025, release: 0.09 });
+          beat += len;
+        });
+        last = notes[notes.length - 1];
+      }
+    } else restRun++;
+    line++;
+    return ev.sort((a, b) => a.beat - b.beat);
+  };
+}
+
+// "Prairie Waltz": three beats a bar, in D
+const WALTZ_CHORDS = {
+  I:  { root: 38, fifth: 45, tones: [62, 66, 69, 74], voicing: [[54, 57, 62], [57, 62, 66]] },   // D
+  IV: { root: 43, fifth: 38, tones: [62, 67, 71, 74], voicing: [[55, 59, 62], [59, 62, 67]] },   // G
+  V:  { root: 45, fifth: 40, tones: [64, 69, 73, 76], voicing: [[52, 57, 61], [57, 61, 64]] },   // A
+};
+const WALTZ_LINES = [['I', 'I', 'IV', 'I'], ['I', 'V', 'V', 'I'], ['IV', 'I', 'V', 'I'], ['I', 'IV', 'V', 'I'], ['I', 'I', 'V', 'V']];
+const PENT_D = [62, 64, 66, 69, 71, 74, 76];
+const WALTZ_BARS = [[3], [2, 1], [1, 1, 1], [1.5, 0.5, 1], [2, 1]];   // a bar's rhythm for the harmonica (beats)
+export function makeWaltz(seed = 1, { intro = true } = {}) {
+  const rnd = makeRandom(seed), B = 0.6;
+  let line = 0, last = 69, harpRun = 0;
+  return function nextLine() {
+    const chords = line === 0 ? ['I', 'IV', 'V', 'I'] : rnd.pick(WALTZ_LINES), t0 = line * 12, ev = [];
+    chords.forEach((c, b) => {
+      const C = WALTZ_CHORDS[c], bar = t0 + b * 3;
+      ev.push({ beat: bar, what: 'piano', midi: b % 2 ? C.fifth : C.root, len: B * 1.1, vel: rnd.range(0.6, 0.7) });   // oom...
+      for (const k of [1, 2]) ev.push({ beat: bar + k, what: 'piano', midi: C.voicing[k - 1].slice(1), len: B * 0.55, vel: rnd.range(0.28, 0.36) });   // ...pah-pah (two notes each)
+    });
+    const play = (line > 0 || !intro) && (harpRun < 3 ? rnd.chance(line === 0 ? 1 : 0.8) : false);
+    if (play) {
+      harpRun++;
+      const level = rnd.range(0.85, 1), style = rnd.weighted([['pulse', 0.6], ['rock', 0.25], ['plain', 0.15]]), rate = rnd.range(...WOBBLE[style].rate);
+      let cur = near(WALTZ_CHORDS[chords[0]].tones, last + rnd.range(-2, 2));
+      chords.forEach((c, b) => {
+        const bar = t0 + b * 3, tones = WALTZ_CHORDS[c].tones, lastBar = b === 3;
+        const rhythm = lastBar ? [3] : rnd.pick(WALTZ_BARS);
+        let beat = bar;
+        rhythm.forEach((len, i) => {
+          if (b > 0 || i > 0) cur = walk(rnd, PENT_D, cur);
+          if (i === 0) cur = near(tones, cur);   // (each bar starts on its chord)
+          const end = lastBar;
+          ev.push({ beat, what: 'harp', midi: cur, lenBeats: end ? 2.6 : len, fresh: (b === 0 && i === 0) || rnd.chance(0.2), last: end, bend: i === 0 && rnd.chance(0.35) ? Math.round(rnd.range(50, 100)) : 0, style, rate, level, attack: b === 0 && i === 0 ? 0.3 : undefined });
+          beat += len;
+        });
+      });
+      last = cur;
+    } else harpRun = 0;
+    line++;
+    return ev.sort((a, b) => a.beat - b.beat);
+  };
+}
+
+// "Lonesome Trail": slow, in E minor
+const LONE_CHORDS = {
+  i:   { root: 40, fifth: 47, tones: [64, 67, 71, 76], voicing: [[55, 59, 64], [52, 55, 59]] },   // E minor
+  iv:  { root: 45, fifth: 40, tones: [64, 69, 72, 76], voicing: [[57, 60, 64], [52, 57, 60]] },   // A minor
+  VII: { root: 38, fifth: 45, tones: [62, 66, 69, 74], voicing: [[54, 57, 62], [57, 62, 66]] },   // D
+  VI:  { root: 48, fifth: 43, tones: [64, 67, 72, 76], voicing: [[55, 60, 64], [52, 55, 60]] },   // C
+};
+const LONE_LINES = [['i', 'i', 'iv', 'i'], ['i', 'VII', 'VI', 'i'], ['i', 'iv', 'VII', 'i'], ['VI', 'VII', 'i', 'i'], ['i', 'VI', 'iv', 'i']];
+const PENT_E = [62, 64, 67, 69, 71, 74, 76];
+export function makeLonesome(seed = 1, { intro = true } = {}) {
+  const rnd = makeRandom(seed), B = 60 / 64;
+  let line = 0, last = 71, harpRun = 0, restRun = 0;
+  return function nextLine() {
+    const chords = line === 0 ? ['i', 'i', 'iv', 'i'] : rnd.pick(LONE_LINES), t0 = line * 16, ev = [];
+    chords.forEach((c, b) => {
+      const C = LONE_CHORDS[c], bar = t0 + b * 4;
+      ev.push({ beat: bar, what: 'piano', midi: C.root, len: B * rnd.range(2.6, 3.4), vel: rnd.range(0.5, 0.6) });
+      if (rnd.chance(0.5)) ev.push({ beat: bar + 2, what: 'piano', midi: rnd.pick(C.voicing), len: B * rnd.range(1.2, 1.8), vel: rnd.range(0.24, 0.32) });
+    });
+    let play;
+    if (line === 0) play = !intro; else if (restRun >= 1) play = true; else if (harpRun >= 2) play = false; else play = rnd.chance(0.7);
+    if (play) {
+      harpRun++; restRun = 0;
+      const level = rnd.range(0.82, 0.96), style = rnd.weighted([['rock', 0.55], ['pulse', 0.45]]), rate = rnd.range(...WOBBLE[style].rate);
+      // one long phrase over the line: three to five notes of two to four beats, the last held long
+      const n = rnd.weighted([[3, 0.35], [4, 0.4], [5, 0.25]]);
+      let beat = t0 + rnd.pick([0, 0.5, 1]), cur = near(LONE_CHORDS[chords[0]].tones, last + rnd.range(-3, 3));
+      for (let i = 0; i < n; i++) {
+        if (i > 0) cur = walk(rnd, PENT_E, cur, [[-1, 0.4], [1, 0.3], [-2, 0.15], [2, 0.15]]);
+        const lastOne = i === n - 1, at = Math.floor((beat - t0) / 4), tones = LONE_CHORDS[chords[Math.min(3, at)]].tones;
+        if (lastOne) cur = near(tones, cur);
+        let len = lastOne ? 4 : rnd.pick([2, 2, 3, 1.5]);
+        if (beat + len > t0 + 15.5) len = Math.max(1, t0 + 15.5 - beat);
+        ev.push({ beat, what: 'harp', midi: cur, lenBeats: len, fresh: i === 0 || rnd.chance(0.35), last: lastOne, bend: rnd.chance(i === 0 ? 0.8 : 0.4) ? Math.round(rnd.range(70, 140)) : 0, style, rate, level });
+        beat += len + (rnd.chance(0.3) ? 0.5 : 0);
+        if (beat >= t0 + 15) break;
+      }
+      last = cur;
+    } else { restRun++; harpRun = 0; }
+    line++;
+    return ev.sort((a, b) => a.beat - b.beat);
+  };
+}
+
+export const SONGS = [
+  { id: 'easy', name: 'Easy Afternoon', beat: BEAT, bar: 4, tune: makeTune, ask: 'Easy Afternoon it is!' },
+  { id: 'boots', name: 'Dusty Boots', beat: 60 / 138, bar: 4, tune: makeBoots, upbeat: true, ask: 'Dusty Boots: a quick one!' },
+  { id: 'waltz', name: 'Prairie Waltz', beat: 0.6, bar: 3, tune: makeWaltz, ask: 'A waltz: Prairie Waltz!' },
+  { id: 'lonesome', name: 'Lonesome Trail', beat: 60 / 64, bar: 4, tune: makeLonesome, ask: 'A slow one: Lonesome Trail.' },
+];
+export const songOf = (id) => SONGS.find((s) => s.id === id) || SONGS[0];
+
 // ── PLAYING IT ───────────────────────────────────────────────────────────────────────────────────────────────────────
-export function makeStageMusic(ctx, { harp, piano, room = null, seed = 1, patches = PATCH_PRESETS } = {}) {
-  const tune = makeTune(seed), queue = [], events = [], harpSpans = [], voices = [];
+// song: one of SONGS' ids ('easy' when left out: the first tune, as it always was); intro: false starts the harmonica in
+// the first line (a song asked for: the band strikes it up at once) instead of the piano's line alone
+export function makeStageMusic(ctx, { harp, piano, room = null, seed = 1, patches = PATCH_PRESETS, song = 'easy', intro = true } = {}) {
+  const S = songOf(song), BL = S.beat, LINE = S.bar * 4;   // (seconds a beat; beats a line of four bars)
+  const tune = S.tune(seed, { intro }), queue = [], events = [], harpSpans = [], voices = [];
   let origin = null, made = 0, timer = null, running = false;
   const offline = typeof ctx.startRendering === 'function';
-  const secs = (beat) => origin + beat * BEAT;
+  const secs = (beat) => origin + beat * BL;
   function play(ev) {
     const at = secs(ev.beat);
     if (ev.what === 'piano') {
-      for (const p of pianoNotes({ midi: ev.midi, len: ev.len, vel: ev.vel }, patches[PIANO])) keep(playPatch(ctx, null, piano, room, p, null, { at }), at + ev.len * BEAT);
+      for (const p of pianoNotes({ midi: ev.midi, len: ev.len, vel: ev.vel }, patches[PIANO])) keep(playPatch(ctx, null, piano, room, p, null, { at }), at, at + ev.len);
       events.push({ at, what: 'piano', midi: ev.midi, len: ev.len, vel: ev.vel });
     } else {
-      const len = ev.lenBeats * BEAT;
-      keep(playPatch(ctx, null, harp, room, harmonicaNote({ ...ev, len }, patches[HARMONICA]), null, { at }), at + len);
+      const len = ev.lenBeats * BL;
+      keep(playPatch(ctx, null, harp, room, harmonicaNote({ ...ev, len }, patches[HARMONICA]), null, { at }), at, at + len);
       events.push({ at, what: 'harp', midi: ev.midi, len, bend: ev.bend, style: ev.style, fresh: ev.fresh });
       harpSpans.push([at, at + len]);
       while (harpSpans.length > 64) harpSpans.shift();
@@ -219,17 +399,18 @@ export function makeStageMusic(ctx, { harp, piano, room = null, seed = 1, patche
     M.played++;
     if (!offline && events.length > EVENTS_KEPT) events.splice(0, events.length - EVENTS_KEPT);
   }
-  // the notes made so far that may still sound (each with the time its key or breath ends), so a hard stop can reach them
-  function keep(h, end) {
+  // the notes made so far that may still sound (each with when it starts and when its key or breath ends), so a stop
+  // can reach them
+  function keep(h, start, end) {
     if (offline || !h) return;
-    voices.push({ h, end: end + 3 });                         // (+ a few seconds for the fade and the echo)
+    voices.push({ h, start, end: end + 3 });                  // (+ a few seconds for the fade and the echo)
     const now = ctx.currentTime;
     while (voices.length && voices[0].end < now) voices.shift();
   }
   function pump() {
     if (!running) return;
-    const until = (ctx.currentTime - origin) / BEAT + LOOKAHEAD / BEAT;
-    while (made * 16 <= until + 16) { queue.push(...tune()); made++; }
+    const until = (ctx.currentTime - origin) / BL + LOOKAHEAD / BL;
+    while (made * LINE <= until + LINE) { queue.push(...tune()); made++; }
     queue.sort((a, b) => a.beat - b.beat);
     while (queue.length && queue[0].beat <= until) {
       const ev = queue.shift();
@@ -238,25 +419,31 @@ export function makeStageMusic(ctx, { harp, piano, room = null, seed = 1, patche
     }
   }
   const M = {
-    events, played: 0,
+    events, played: 0, song: S.id, name: S.name, beatLen: BL, bar: S.bar,
     start(at = ctx.currentTime + 0.1) {
       if (running) return;
       running = true; queue.length = 0;
       // (after a stop, the tune carries on from where its dice are, at the new start)
-      origin = at - made * 16 * BEAT;
+      origin = at - made * LINE * BL;
       if (offline) {
-        const end = (ctx.length / ctx.sampleRate - origin) / BEAT;
-        while (made * 16 <= end) { queue.push(...tune()); made++; }
+        const end = (ctx.length / ctx.sampleRate - origin) / BL;
+        while (made * LINE <= end) { queue.push(...tune()); made++; }
         for (const ev of queue.sort((a, b) => a.beat - b.beat)) if (secs(ev.beat) >= at - 1e-6 && ev.beat <= end) play(ev);
         queue.length = 0;
       } else { pump(); timer = setInterval(pump, 200); }
     },
-    stop({ now = false } = {}) {
+    // stop making notes; now: also silence every note already made; from (a ctx time): the notes made to start at or
+    // after it are let go unheard, and the ones sounding ring out (a song asked to change finishes its notes)
+    stop({ now = false, from = null } = {}) {
       running = false; if (timer) clearInterval(timer); timer = null; queue.length = 0;
       if (now) { for (const v of voices.splice(0)) try { v.h.stop(0.02); } catch (e) { /* already gone */ } harpSpans.length = 0; }
+      else if (from != null) {
+        for (let i = voices.length - 1; i >= 0; i--) if (voices[i].start >= from) { try { voices[i].h.stop(0.01); } catch (e) { /* already gone */ } voices.splice(i, 1); }
+        for (let i = harpSpans.length - 1; i >= 0; i--) if (harpSpans[i][0] >= from) harpSpans.splice(i, 1);
+      }
     },
     get running() { return running; },
-    beat() { return origin == null ? null : (ctx.currentTime - origin) / BEAT; },
+    beat() { return origin == null ? null : (ctx.currentTime - origin) / BL; },
     harmonicaAt(t = ctx.currentTime) { for (const [a, b] of harpSpans) if (t >= a && t < b) return true; return false; },
     // the next time the harmonica starts after t (or null): the player lifts it to the mouth a moment before
     nextHarmonica(t = ctx.currentTime) { let best = null; for (const [a] of harpSpans) if (a >= t && (best == null || a < best)) best = a; return best; },

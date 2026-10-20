@@ -243,34 +243,52 @@ export function* growPlantsSteps({ ground, at, radius, count, size = 1, kinds, g
 // THE LAWN: short grass tufts (src/objects/lawn.js) on the bare ground, `density` tufts a square metre, within
 // `radius` m of `at`; tiled like the plants, so tufts that stay in range keep their spots as `at` moves.
 // grow.lawn (0..1): how much of the bare ground they cover. Returns [{ x, z, turn, size, yellow, light }].
+// cache (optional, Bandit Math): an object the 10 m tiles' tufts are remembered in (by the ground and the settings: it
+// starts again by itself when they change; empty it, cache.tiles = null, when the land changes), so as the circle moves
+// only the tiles new to it are worked out. thin (optional): (x, z) -> the share of the tufts kept there (0..1), each tuft
+// by its own draw, so the lawn thins out gradually with distance and a tuft comes and goes one at a time
 export function lawnSpots(opts) { const it = lawnSpotsSteps(opts); let n; while (!(n = it.next()).done); return n.value; }
-export function* lawnSpotsSteps({ ground, at, radius, density, grow, budget = Infinity, spread = 0 }) {   // spread: each tuft keeps to its own radius, radius * (1 - spread / 2 .. 1), so the lawn thins out toward its edge instead of stopping at a circle
+export function* lawnSpotsSteps({ ground, at, radius, density, grow, budget = Infinity, spread = 0, cache = null, thin = null }) {   // spread: each tuft keeps to its own radius, radius * (1 - spread / 2 .. 1), so the lawn thins out toward its edge instead of stopping at a circle
   const out = [], G = grow; let t0 = performance.now(); if (!(G.lawn > 0) || !(density > 0)) return out;
   const TILE = 10, C = at, R = radius, per = Math.round(density * TILE * TILE);
-  for (let tz = Math.floor((C.z - R) / TILE); tz <= Math.floor((C.z + R) / TILE); tz++) for (let tx = Math.floor((C.x - R) / TILE); tx <= Math.floor((C.x + R) / TILE); tx++) {
-    if (Math.hypot((tx + 0.5) * TILE - C.x, (tz + 0.5) * TILE - C.z) > R + TILE) continue;
-    const ts = ((tx + 5000) * 10007 + tz + 5000) * 13;
+  if (cache) { const sig = JSON.stringify([G, density]); if (cache.sig !== sig || !cache.tiles) { cache.tiles = new Map(); cache.sig = sig; } cache.used = new Set(); }
+  // one tile's tufts, every one the ground allows (before the circle): [x, z, turn, size, yellow, light, edge draw, thin draw]
+  function tileTufts(tx, tz) {
+    const list = [], ts = ((tx + 5000) * 10007 + tz + 5000) * 13;
     for (let t = 0; t < per; t++) {
       const x = (tx + r(ts + t, 301.1)) * TILE, z = (tz + r(ts + t, 302.3)) * TILE;
-      if (Math.hypot(x - C.x, z - C.z) > R * (1 - spread * 0.5 * r(ts + t, 308.3))) continue;
       const g = ground(x, z), y = g.yard || 0, f = (g.fringe || 0) * (G.fringe ?? 0), b = bareAt(G, x, z);   // (yard: a town's mown ground; fringe: the dirt's rim; from the ground function, if it has them)
       const m = (G.meadowLawn ?? 0) * (1 - b) * Math.max(0, 1 - g.hard * 2) * (1 - Math.min(1, (g.shade || 0) * 1.5)) * (1 - y);   // (the meadow: not the open ground, the paths, the trees' shade or a yard)
       if (r(ts + t, 303.7) > Math.max(b * G.lawn, y, f, m)) continue;
       if (g.hard - y - f * 0.4 >= 0.5) continue;                     // (the rim's tufts lean out over the dirt's soft edge a little)
       const tall = (1 + 0.5 * f) * (1 + 1.1 * m * (0.6 + 0.8 * r(ts + t, 309.7))) * (1 + 0.8 * wildAt(G, g, x, z) * (1 - y));   // (the rim's and the meadow's tufts taller than the mown ground's; taller still in a wild stand)
-      out.push({ x, z, turn: r(ts + t, 304.9) * 6.283, size: (0.7 + 0.7 * r(ts + t, 305.3)) * tall, yellow: r(ts + t, 306.1) < 0.2 + 0.15 * m ? 0.35 : 0, light: (r(ts + t, 307.9) - 0.5) * 0.25 });
+      list.push([x, z, r(ts + t, 304.9) * 6.283, (0.7 + 0.7 * r(ts + t, 305.3)) * tall, r(ts + t, 306.1) < 0.2 + 0.15 * m ? 0.35 : 0, (r(ts + t, 307.9) - 0.5) * 0.25, r(ts + t, 308.3), r(ts + t, 310.7)]);
     }
     // THE WILD STANDS, thick (Bandit Math): wildLawn times as many tufts again, kept by how deep in a stand they are (and
     // the meadow there), person-tall at the heart: the meadow's own tall grasses are too few to make a stand by themselves
     for (let t = 0, n = Math.round(per * (G.wildLawn ?? 0)); t < n; t++) {
       const u = ts + 7919 + t, x = (tx + r(u, 311.3)) * TILE, z = (tz + r(u, 312.7)) * TILE;
-      if (Math.hypot(x - C.x, z - C.z) > R * (1 - spread * 0.5 * r(u, 318.1)) || !wildMaybe(G, x, z)) continue;
+      if (!wildMaybe(G, x, z)) continue;
       const g = ground(x, z); if (g.hard >= 0.3 || (g.yard || 0) > 0.05 || (g.shade || 0) > 0.3) continue;
       const w = wildAt(G, g, x, z); if (r(u, 313.9) > w) continue;
-      out.push({ x, z, turn: r(u, 314.3) * 6.283, size: (0.9 + 0.6 * r(u, 315.1)) * (1.6 + 2.6 * w), yellow: r(u, 316.9) < 0.4 ? 0.35 : 0, light: (r(u, 317.3) - 0.5) * 0.3 });
+      list.push([x, z, r(u, 314.3) * 6.283, (0.9 + 0.6 * r(u, 315.1)) * (1.6 + 2.6 * w), r(u, 316.9) < 0.4 ? 0.35 : 0, (r(u, 317.3) - 0.5) * 0.3, r(u, 318.1), r(u, 319.9)]);
+    }
+    return list;
+  }
+  for (let tz = Math.floor((C.z - R) / TILE); tz <= Math.floor((C.z + R) / TILE); tz++) for (let tx = Math.floor((C.x - R) / TILE); tx <= Math.floor((C.x + R) / TILE); tx++) {
+    if (Math.hypot((tx + 0.5) * TILE - C.x, (tz + 0.5) * TILE - C.z) > R + TILE) continue;
+    let list;
+    if (cache) { const k = tx * 100003 + tz; list = cache.tiles.get(k); if (!list) { list = tileTufts(tx, tz); cache.tiles.set(k, list); } cache.used.add(k); }
+    else list = tileTufts(tx, tz);
+    for (const q of list) {
+      const x = q[0], z = q[1];
+      if (Math.hypot(x - C.x, z - C.z) > R * (1 - spread * 0.5 * q[6])) continue;
+      if (thin && q[7] > thin(x, z)) continue;
+      out.push({ x, z, turn: q[2], size: q[3], yellow: q[4], light: q[5] });
     }
     if (performance.now() - t0 > budget) { yield; t0 = performance.now(); }
   }
+  if (cache && cache.tiles.size > cache.used.size * 3) for (const k of [...cache.tiles.keys()]) if (!cache.used.has(k)) cache.tiles.delete(k);   // (tiles long out of range let go)
   return out;
 }
 

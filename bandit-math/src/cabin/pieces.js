@@ -3,7 +3,7 @@
 // pig, wanted posters, a freight sign). Plain shapes with a few pictures drawn on canvases, so they cost nothing to
 // download. Each stands on y = 0 (or hangs from its own middle, for a wall piece), its front facing +z, real size.
 //
-//   makePiece(kind, opts) -> THREE.Group, with .tick(dt, t) when it moves or flickers, .lights (its PointLights)
+//   makePiece(kind, opts) -> THREE.Group, with .tick(dt, t) when it moves or flickers, .lights (its lamps: see lampOf)
 //   makeKeepsake(job, tier) -> THREE.Group      tier: 'tin' | 'copper' | 'silver' | 'gold' (a later buckle dresses it up)
 //   disposeTree(object)     frees the shapes, materials and pictures of a group made here (or any group)
 import * as THREE from 'three';
@@ -17,6 +17,16 @@ function canvasTex(w, h, draw, { srgb = true, repeat = null } = {}) {
   return t;
 }
 const mesh = (g, m, x = 0, y = 0, z = 0) => { const o = new THREE.Mesh(g, m); o.position.set(x, y, z); o.castShadow = o.receiveShadow = true; return o; };
+
+// A LAMP: where a warm light is and how strong (color, intensity, distance, decay, as a THREE.PointLight's). Not a real
+// light: the cabin stands in the valley, and a PointLight added there would make every lit thing in the valley costlier
+// (and every one of their shaders be built again). The cabin's own inside surfaces work these lamps' light out
+// themselves (interior.js, its `lit` patch), so they light the room and nothing else.
+export function lampOf(color, intensity, distance, decay) {
+  const o = new THREE.Object3D(); o.name = 'lamp';
+  o.userData.lamp = true; o.color = new THREE.Color(color); o.intensity = intensity; o.distance = distance; o.decay = decay;
+  return o;
+}
 
 // a soft round glow (bright in the middle, fading to nothing), for a flame
 let glowTex = null;
@@ -71,7 +81,7 @@ const MAKERS = {
     m.position.y = 0.012; m.receiveShadow = true;
     const grp = new THREE.Group(); grp.add(m); return grp;
   },
-  // two hanging oil lanterns with a warm light each (as the walk-in test's): where SLOT.lanterns.looks says. With
+  // two hanging oil lanterns with a warm lamp each (as the walk-in test's): where SLOT.lanterns.looks says. With
   // body false only the light, the flame's glow and the cord are made (the lantern itself is a model: interior.js)
   lanterns({ at = [[-0.69, 2.84, -1.75], [1.44, 2.84, -1.0]], power = 3.2, body = true } = {}) {
     const grp = new THREE.Group(); grp.lights = []; const flames = [];
@@ -82,7 +92,7 @@ const MAKERS = {
     const G = { body: new THREE.CylinderGeometry(0.055, 0.065, 0.16, 12), flame: new THREE.SphereGeometry(1, 10, 8), bar: new THREE.BoxGeometry(0.008, 0.18, 0.008),
       cap: new THREE.ConeGeometry(0.085, 0.07, 12), base: new THREE.CylinderGeometry(0.075, 0.075, 0.025, 12), cord: new THREE.CylinderGeometry(0.005, 0.005, 0.2, 4) };
     for (const p of at) {
-      const lamp = new THREE.PointLight(0xffc488, power, 9, 1.4); lamp.position.set(p[0], p[1], p[2]); grp.add(lamp); grp.lights.push(lamp);
+      const lamp = lampOf(0xffc488, power, 9, 1.4); lamp.position.set(p[0], p[1], p[2]); grp.add(lamp); grp.lights.push(lamp);
       const g = new THREE.Group(); g.position.set(p[0], p[1], p[2]);
       const flame = new THREE.Mesh(G.flame, flameM); flame.scale.set(0.014, 0.032, 0.014); flame.position.y = -0.02; g.add(flame); flames.push(flame);
       const glow = new THREE.Sprite(glowM); glow.scale.set(0.42, 0.42, 1); glow.position.y = -0.02; g.add(glow);
@@ -148,7 +158,7 @@ const MAKERS = {
     const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowPicture(), color: 0xff7a30, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.6 }));
     glow.scale.set(0.45 * k, 0.32 * k, 1); glow.position.set(0, 0.4 * k, 0.3 * k); grp.add(glow);
     grp.add(mesh(new THREE.CylinderGeometry(0.064 * k, 0.064 * k, 4.4, 14), std(0x232120, { roughness: 0.55, metalness: 0.55 }), -0.075 * k, 0.99 * k + 2.2, -0.044 * k));
-    const light = new THREE.PointLight(0xff8a3c, power, 6, 1.6); light.position.set(0, 0.42 * k, 0.5 * k); grp.add(light); grp.lights.push(light);
+    const light = lampOf(0xff8a3c, power, 6, 1.6); light.position.set(0, 0.42 * k, 0.5 * k); grp.add(light); grp.lights.push(light);
     grp.tick = (dt, t) => { const f = 1 + 0.12 * Math.sin(t * 9.1) + 0.07 * Math.sin(t * 23.7) + 0.05 * Math.sin(t * 3.3); light.intensity = power * f; glow.material.opacity = 0.5 + 0.1 * f; };
     return grp;
   },

@@ -75,7 +75,9 @@ export function makeCampfire({ W, scene = W.scene, camera, x, z, y = null, width
   // THE FLAME: box units scaled so the box is `width` across
   const s = width / C.box[0];
   const fire = new VolumetricFire(C.box[0], C.box[1], C.box[2], C.slice, camera);
-  fire.mesh.material = fire.mesh.material.clone();   // (its own clock; the pictures stay shared)
+  { const orig = fire.mesh.material; fire.mesh.material = orig.clone();   // (its own clock; the pictures stay shared)
+    // (three's clone copies texture uniforms too, still-loading ones with no image: point them back at the originals)
+    for (const k in orig.uniforms) { const v = orig.uniforms[k].value; if (v && v.isTexture) fire.mesh.material.uniforms[k].value = v; } }
   fire.mesh.material.uniforms.flash.value = C.bright;
   fire.mesh.name = name;
   fire.mesh.renderOrder = 20;              // (added light: drawn after the solid world)

@@ -435,8 +435,10 @@ export function makeRider(kit, { W, folk, scene = W.scene, look = null, horse = 
   R.dispose = () => {
     R.mode = 'gone';
     label.removeFromParent(); label.material.dispose(); label.userData.tex.dispose();
-    bag.removeFromParent(); bag.material.dispose(); bagTex.dispose();
-    kc.removeFromParent(); kmat.dispose();
+    // (the bag's and the kerchief's materials are let go, not disposed: the shader programs they share with every other
+    // rider stay built, so the next rider that comes into range draws without building them again in one frame)
+    bag.removeFromParent(); bagTex.dispose();
+    kc.removeFromParent();
     if (rope) { rope.removeFromParent(); rope.geometry.dispose(); rope.material.dispose(); }
     a.dispose(); person.dispose();
   };

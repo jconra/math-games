@@ -49,7 +49,7 @@ export function albumBody(rider) {
   el.innerHTML = `<p class="bma-count">${list.length} print${list.length === 1 ? '' : 's'}${list.length >= ALBUM.max ? ` (the album holds ${ALBUM.max}: a new one lets the oldest go)` : ''}</p>
     <div class="bma-grid">${list.map((p) => `<figure class="bma-print">
       ${p.img ? `<img src="${p.img}" alt="A photograph of a deer">` : '<div class="bma-blank">faded</div>'}
-      <figcaption><span class="bma-eq">${esc(p.eq)}</span><span class="bma-x">x = ${esc(p.x)}</span></figcaption></figure>`).join('')}</div>`;
+      <figcaption><span class="bma-eq">${esc(p.eq)}</span>${p.x ? `<span class="bma-x">x = ${esc(p.x)}</span>` : ''}</figcaption></figure>`).join('')}</div>`;
   return el;
 }
 

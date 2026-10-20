@@ -31,7 +31,9 @@
 // (src/ui/counterpics.js): the lead (the clock to read, the coins to count) above the coins, the help after a miss.
 // While a strand is still finding its level the slip's corner says so, quietly.
 //
-//   const J = makeStoreJob({ W, folk, P, I, camera, rider, hud, hob, refresh, openBox, onStart, onStop, pay, goods })
+//   const J = makeStoreJob({ W, folk, P, I, camera, rider, hud, hob, refresh, openBox, onStart, onStop, pay, goods, town })
+//     town(): the town's people (src/townpeople.js), or null: the customers are townsfolk borrowed from it (already about,
+//     or out of the nearest door, walking the town's paths; given back when they go), else made here as before
 //     goods: the homestead (src/homestead.js), or null: now and then a customer buys the rider's own eggs, wool or milk
 //     instead of bringing an order (goods.saleOrder: a sale slip, levelled by this job's ladder step; it pays the gold
 //     the answer comes to, and doesn't move the ladder); goods.sold(order) takes them out of the saddlebags
@@ -64,6 +66,7 @@ export const STORE = {
   from: 7,             // customers walk in from about this far out in the square...
   spread: 6,           // ...and up to this far to either side
   walk: 1.5,           // m/s, a brisk stroll
+  jog: 2.4,            // m/s, a townsperson still a way off while the counter is open (src/townpeople.js lends them)
   handOver: 1.4,       // metres from the counter when the customer's slip comes up (they finish stepping up as you read)
   think: 12,           // seconds without a pick before the "Draw it for me" button is offered
   eqWait: 1.3,         // seconds the picked equation shows before the lock box opens
@@ -81,7 +84,7 @@ export const STORE = {
 };
 
 export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, refresh = () => {}, openBox = null,
-  onStart = () => {}, onStop = () => {}, pay = { order: 3, orderEvery: 3, orderFirst: 1 }, scene = W.scene, goods = null, voice = null }) {
+  onStart = () => {}, onStop = () => {}, pay = { order: 3, orderEvery: 3, orderFirst: 1 }, scene = W.scene, goods = null, voice = null, town = null }) {
   // a customer's recorded line (src/audio/shouts.js: the men only; it knows by `male`), from where they stand
   const speak = (kind, c) => { if (voice && c) voice(kind, { at: () => ({ x: c.x, z: c.z }), male: !c.who.she }); };
   const place = W.places.store;
@@ -112,6 +115,18 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
     return list[Math.floor(Math.random() * list.length)] || FOLK[0];
   }
   function spawn(dest, near = false) {
+    // a townsperson (src/townpeople.js): whoever is best placed, already about or out of the nearest door (never the
+    // store's own), walking the town's paths to the counter; given back when they leave
+    const T = town ? town() : null;
+    if (T) {
+      const busy = new Set([...people.map((c) => c.who.name), ...Q.state.lastWho]), names = FOLK.map((f) => f.name).filter((n) => !busy.has(n));
+      const got = T.lend({ to: dest, names: names.length ? names : null, notDoor: 'store' });
+      if (got) {
+        const c = { p: got.p, who: FOLK.find((f) => f.name === got.name) || got.who, x: got.x, z: got.z, yaw: got.yaw, state: 'come', to: dest, walking: false, via: got.via, lent: got };
+        people.push(c);
+        return c;
+      }
+    }
     const who = pickWho();
     let p;
     try { p = makePerson(folk, { ...who.look, skin: Math.floor(Math.random() * 8), hair: Math.floor(Math.random() * 11) }); } catch (e) { console.error(e); return null; }
@@ -133,13 +148,18 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
   const faceRider = rot + Math.PI;   // (a customer at the counter faces back toward the store)
   // walks c toward c.to; true once there
   function walk(c, dt) {
-    const dx = c.to.x - c.x, dz = c.to.z - c.z, d = Math.hypot(dx, dz);
+    // (a townsperson's way here first: the points of the town's paths, then the spot itself)
+    while (c.via && c.via.length && Math.hypot(c.via[0].x - c.x, c.via[0].z - c.z) < 0.5) c.via.shift();
+    const tg = c.via && c.via.length && c.state !== 'go' ? c.via[0] : c.to;
+    const dx = tg.x - c.x, dz = tg.z - c.z, d = Math.hypot(dx, dz);
     if (d < 0.06) {
-      if (c.walking) { c.walking = false; c.p.play('Idle', { fade: 0.3 }); }
+      if (c.walking) { c.walking = false; c.clip = 'Idle'; c.p.play('Idle', { fade: 0.3 }); }
       return true;
     }
-    const pace = c.state === 'go' ? STORE.walk * 1.15 : STORE.walk;
-    if (!c.walking) { c.walking = true; c.p.play('Walk', { fade: 0.25, speed: pace / ((c.p.stride && c.p.stride.Walk) || 1.2) }); }   // (stride: m/s per clip, { Walk, Run })
+    // (a townsperson still a way off while the counter is open hurries along, so the player doesn't wait)
+    const hurry = J.active && c.state !== 'go' && c.via && c.via.length > 4, clip = hurry ? 'Run' : 'Walk';
+    const pace = hurry ? STORE.jog : c.state === 'go' ? STORE.walk * 1.15 : STORE.walk;
+    if (!c.walking || c.clip !== clip) { c.walking = true; c.clip = clip; c.p.play(clip, { fade: 0.25, speed: pace / ((c.p.stride && c.p.stride[clip]) || 1.2) }); }   // (stride: m/s per clip, { Walk, Run })
     const v = Math.min(pace, d * 3), step = Math.min(d, v * dt);
     c.x += dx / d * step; c.z += dz / d * step;
     turn(c, Math.atan2(dx, dz), dt);
@@ -156,6 +176,8 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
   }
   let leaveN = 0;
   function leave(c) {
+    // (a townsperson walks on about the town: home, or wherever they were going)
+    if (c.lent && town && town()) { c.state = 'go'; syncBack(c); town().giveBack(c.lent); const i = people.indexOf(c); if (i >= 0) people.splice(i, 1); return; }
     c.state = 'go';
     const s = -(STORE.spread + 4) * (0.7 + Math.random() * 0.3);   // (off the far way, away from the camera)
     // (one leaves along the near side of the street, the next along the far side, so two walking off never cross)
@@ -163,9 +185,12 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
     c.walking = false;
   }
   function removePerson(c) {
-    scene.remove(c.p.root); try { c.p.dispose(); } catch (e) { /* (already gone) */ }
-    people.splice(people.indexOf(c), 1);
+    if (c.lent && town && town()) { syncBack(c); town().giveBack(c.lent); }
+    else { scene.remove(c.p.root); try { c.p.dispose(); } catch (e) { /* (already gone) */ } }
+    const i = people.indexOf(c); if (i >= 0) people.splice(i, 1);
   }
+  // (where a borrowed townsperson stands now, for the town to take them on from there)
+  function syncBack(c) { c.lent.x = c.x; c.lent.z = c.z; c.lent.yaw = c.yaw; }
   const atFront = () => people.find((c) => c.state === 'front' || c.state === 'serve');
   const inQueue = () => people.find((c) => c.state === 'queue' || (c.state === 'come' && c.to === queueAt));
 
@@ -460,6 +485,7 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
     longOpen: !!longPanel, long: longPanel ? longPanel.state() : null,
     people: people.map((c) => ({ who: c.who.name, state: c.state, x: +c.x.toFixed(2), z: +c.z.toFixed(2) })), level: Q.level(), busy: U.busy });
   J.people = people;    // (read each frame by the wagons, which stop for customers: no copies made)
+  J.busyNames = () => [...people.map((c) => c.who.name), ...Q.state.lastWho];   // (the town doesn't send these over: src/townpeople.js)
   J.trainer = Q;
   // (rigs: the next customer brings this order: { type, map, step, sum: { op: 'div', n: 112, d: 5 }, longStep, longOp },
   // or a counter question: { counter: 'time', step: 2 })

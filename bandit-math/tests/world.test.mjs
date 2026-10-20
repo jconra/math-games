@@ -29,11 +29,11 @@ const frame = (b) => { const { w, d } = modelFootprint(b), a = b.rot * Math.PI /
   const at = (lx, lz) => [b.x + c * lx + s * lz, b.z - s * lx + c * lz], local = ([x, z]) => [c * (x - b.x) - s * (z - b.z), s * (x - b.x) + c * (z - b.z)];
   return { w, d, at, local, face: [s, c], inside: (p, pad = 0) => { const [lx, lz] = local(p); return Math.abs(lx) < w / 2 + pad && Math.abs(lz) < d / 2 + pad; } }; };
 
-test('the town is the western one: the six buildings, once each, and nothing of the old town', () => {
-  const models = B.map((i) => i.kind).sort();
+test('the town is the western one: the six buildings, once each, the townsfolk\'s homes, and nothing of the old town', () => {
+  const models = B.filter((i) => i.kind !== 'home').map((i) => i.kind).sort();
   assert.deepEqual(models, SIX);
-  assert.deepEqual(Object.keys(TOWN_ASSETS).sort(), SIX, 'TOWN_ASSETS lists only the western buildings');
-  for (const k of models) assert.ok(existsSync(join(GAME, `models/town/${k}.glb`)) && existsSync(join(GAME, `models/town/lo/${k}.glb`)), k + ': both sizes of model');
+  assert.deepEqual(Object.keys(TOWN_ASSETS).sort(), [...SIX, 'home'].sort(), 'TOWN_ASSETS lists only the western buildings and the homes');
+  for (const k of new Set(B.map((i) => i.kind))) { const f = TOWN_ASSETS[k].file || k; assert.ok(existsSync(join(GAME, `models/town/${f}.glb`)) && existsSync(join(GAME, `models/town/lo/${f}.glb`)), k + ': both sizes of model'); }
   const props = layout.items.filter((i) => i.type === 'prop').map((i) => i.kind);
   for (const no of ['lamp', 'valehexGlobe', 'stateMap', 'obelisk', 'easel']) assert.ok(!props.includes(no), 'no ' + no);
   assert.equal((layout.roads || []).length, 0, 'no paved roads');
@@ -51,7 +51,7 @@ function glbBounds(file) {
 }
 
 test("each building's box is its model's own size (the store's measured once stood upright)", () => {
-  for (const [k, A] of Object.entries(TOWN_ASSETS)) for (const f of [`models/town/${k}.glb`, `models/town/lo/${k}.glb`]) {
+  for (const [k, A] of Object.entries(TOWN_ASSETS)) for (const f of [`models/town/${A.file || k}.glb`, `models/town/lo/${A.file || k}.glb`]) {
     const s = glbBounds(f);
     if (!A.tilt) { for (let i = 0; i < 3; i++) assert.ok(Math.abs(s[i] - A.box[i]) < 0.004, `${f}: box ${A.box} against its own ${s.map((v) => v.toFixed(3))}`); continue; }
     // turned upright about x: the width is the same; leaning, it was taller and deeper than it stands
@@ -66,12 +66,13 @@ test('the general store stands on its posts: turned upright a few degrees and le
   assert.ok(S.tilt > 0 && S.tilt <= 5, 'a few degrees, front down: ' + S.tilt);
   assert.ok(S.sink > 0 && S.sink < 0.03, 'its posts reach the ground (a few centimetres in): ' + S.sink);
   for (const k of ['cabin', 'stable']) assert.ok(!TOWN_ASSETS[k].tilt && TOWN_ASSETS[k].sink > 0 && TOWN_ASSETS[k].sink < 0.01, k + ' let down a few centimetres, no more');
-  for (const [k, A] of Object.entries(TOWN_ASSETS)) if (!['generalStore', 'cabin', 'stable'].includes(k)) assert.ok(!A.tilt && !A.sink, k + ' stands as it came');
+  for (const [k, A] of Object.entries(TOWN_ASSETS)) if (!['generalStore', 'cabin', 'stable', 'home'].includes(k)) assert.ok(!A.tilt && !A.sink, k + ' stands as it came');
+  assert.deepEqual([TOWN_ASSETS.home.file, TOWN_ASSETS.home.box, TOWN_ASSETS.home.front, TOWN_ASSETS.home.sink], ['cabin', TOWN_ASSETS.cabin.box, TOWN_ASSETS.cabin.front, TOWN_ASSETS.cabin.sink], 'a home is the town cabin, standing as it does');
 });
 
 test('the buildings face the square and stand round it, not on each other', () => {
-  const sq = [G.square.x, G.square.z], B = layout.items.filter((i) => i.type === 'model');
-  for (const b of B) {
+  const sq = [G.square.x, G.square.z], B = layout.items.filter((i) => i.type === 'model'), SQ = B.filter((i) => i.kind !== 'home');   // (the homes stand behind the row: their own test)
+  for (const b of SQ) {
     const r = b.rot * Math.PI / 180, face = [Math.sin(r), Math.cos(r)], to = [sq[0] - b.x, sq[1] - b.z], L = Math.hypot(...to);
     assert.ok(L > G.square.r * 0.8 && L < 45, `${b.kind} ${L.toFixed(1)} m from the square's middle`);
     assert.ok((face[0] * to[0] + face[1] * to[1]) / L > 0.5, `${b.kind} faces the square`);
@@ -99,6 +100,22 @@ test('the saloon stands in the row with the sheriff and the store; the stage bes
   for (const b of B) assert.ok(!frame(b).inside([C.x, C.z], C.r * 0.5), 'the crowd patch is clear of the ' + b.kind);
   const dirt = planting.strokes.find((s) => s.id === 'crowd');
   assert.ok(dirt && dirt.kind === 25 && dist(dirt.pts[0], [C.x, C.z]) < 0.01 && Math.abs(dirt.r * 0.55 - C.r) < 0.05, 'a patch of footpath dirt C.r round');
+});
+
+test("the townsfolk's homes: a few, behind the main row toward the lake, clear of the player's cabin, facing a lane", () => {
+  const H = B.filter((i) => i.kind === 'home'), by = Object.fromEntries(B.map((b) => [b.id, b])), F = frame(by.sheriff);
+  assert.ok(H.length >= 3 && H.length <= 6, H.length + ' homes');
+  const sq = [G.square.x, G.square.z], ahead = (p) => (p[0] - by.sheriff.x) * F.face[0] + (p[1] - by.sheriff.z) * F.face[1];
+  for (const h of H) {
+    assert.ok(ahead([h.x, h.z]) < ahead(sq) - 15, `${h.id} stands behind the row (the square is in front of it)`);
+    assert.ok(h.z > by.saloon.z + 8, `${h.id} is past the saloon toward the lake`);
+    assert.ok(dist([h.x, h.z], [by.cabin.x, by.cabin.z]) > 40, `${h.id} is well clear of the player's cabin`);
+    assert.ok(h.size >= 7.5 && h.size <= 9.5, `${h.id} a cabin's size`);
+    assert.equal(h.level, true);
+  }
+  // the lane: every home's door faces the line between them (west ones east, east ones west), a few metres of lane between
+  const mid = H.reduce((s, h) => s + h.x, 0) / H.length;
+  for (const h of H) { const f = frame(h), door = f.at(0, f.d / 2 + 1.5); assert.ok(Math.abs(door[0] - mid) < Math.abs(h.x - mid), `${h.id}'s door faces the lane`); }
 });
 
 test('every door is clear: out of every other building, off the fences, and the trail runs clear of them all', () => {
@@ -193,6 +210,28 @@ test('grass tufts: a fringe along the dirt\'s edge, a carpet over the meadow nea
   const mown = run(() => ({ ...base, yard: 1 }), G0), mean = (a) => a.reduce((s, t) => s + t.size, 0) / a.length;
   assert.ok(mean(meadow) > mean(mown) * 1.3, `meadow tufts taller than a yard's (${mean(meadow).toFixed(2)} against ${mean(mown).toFixed(2)})`);
   assert.equal(run(() => ({ ...base, shade: 0.9 }), G0).length, 0, 'none under the trees');
+});
+
+test('the lawn following the camera: remembered tiles lay the same tufts, and it thins out gradually far off', () => {
+  const G0 = { ...GROW_DEFAULTS, bare: 0, wild: 0 }, base = { hard: 0, yard: 0, fringe: 0, shade: 0, wet: 0.2, dry: 0.3 };
+  const key = (t) => `${t.x.toFixed(3)},${t.z.toFixed(3)}`;
+  const plain = lawnSpots({ ground: () => base, at: { x: 0, z: 0 }, radius: 40, density: 1, grow: G0, spread: 0.6 });
+  const cache = {};
+  const first = lawnSpots({ ground: () => base, at: { x: 0, z: 0 }, radius: 40, density: 1, grow: G0, spread: 0.6, cache });
+  assert.deepEqual(first.map(key), plain.map(key), 'the same tufts with the tiles remembered');
+  let calls = 0; const counted = () => { calls++; return base; };
+  const moved = lawnSpots({ ground: counted, at: { x: 6, z: 0 }, radius: 40, density: 1, grow: G0, spread: 0.6, cache });
+  const fresh = lawnSpots({ ground: () => base, at: { x: 6, z: 0 }, radius: 40, density: 1, grow: G0, spread: 0.6 });
+  assert.deepEqual(moved.map(key), fresh.map(key), 'moved: as if laid afresh');
+  assert.ok(calls < plain.length * 0.3, `moved 6 m: only the new tiles worked out (${calls} ground looks for ${plain.length} tufts)`);
+  // thinned: all of them near, fewer and fewer out toward the rim, and a tuft kept at one thinning is kept at any thicker
+  const thin = (x, z) => Math.max(0.3, 1 - Math.max(0, Math.hypot(x, z) - 15) / 25);
+  const thinned = lawnSpots({ ground: () => base, at: { x: 0, z: 0 }, radius: 40, density: 1, grow: G0, spread: 0.6, cache, thin });
+  const ring = (a, lo, hi) => a.filter((t) => { const d = Math.hypot(t.x, t.z); return d >= lo && d < hi; }).length;
+  assert.equal(ring(thinned, 0, 14), ring(plain, 0, 14), 'near: every tuft');
+  const far = ring(thinned, 30, 40) / ring(plain, 30, 40);
+  assert.ok(far > 0.25 && far < 0.6, `out toward the rim about a third to a half kept (${far.toFixed(2)})`);
+  const all = new Set(plain.map(key)); assert.ok(thinned.every((t) => all.has(key(t))), 'only tufts the lawn has anyway');
 });
 
 test('a dirt trail runs from the square to the pasture, 120-200 m out on open meadow', () => {

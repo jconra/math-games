@@ -42,10 +42,14 @@
 //     .climbDown(x, z, face) / .climbUp()   the driver gets down and stands at (x, z), or back up on the seat;
 //                     .driverDown
 //     .restTongue()   a wagon with no team: its tongue let down to the ground (after it is placed)
+//     .fade(a)        see-through by a (0 gone .. 1 solid): coming or going in sight at the road's ends (fadeAll)
 //     .dispose()
 //   standWagon(lib, { kind, W, x, z, heading, team, driver, shadows })   a wagon standing still at (x, z) (its middle),
 //                     facing `heading`: made, placed and returned (add .root to the scene); one with a team: .update(dt)
 //                     keeps the horses moving
+//   fadeAll(roots, a, mem)   everything under the roots see-through by a (0 gone .. 1 solid); mem: a { } the caller
+//                         keeps for the thing (its own copies of shared materials live there); unfade(mem) puts the
+//                         first materials back and lets the copies go (before the thing is disposed)
 //   WAGONS_OUT            every wagon made and not yet put away (a Set)
 //   pushFromWagons(x, z, r, W)   a walker r metres round at (x, z) inside a wagon or its team: where to put it just
 //                         outside (never into a wall or another wagon), or null (src/player.js: on foot and the horse)
@@ -174,13 +178,16 @@ function thin(pts, every = 8) {
 }
 export const ROAD = {
   // the road through the valley, in order (each a stroke of the planting, reversed where marked, only the points `keep`
-  // says yes to): in from the west where the land's west path comes down out of the hills (about 650 m out of town;
-  // further west it climbs through the trees to the land's edge), along the town's west trail, across the square, out
-  // along the trail to where the land's north-east path leaves it (past the corral's north side and the pasture's), and
-  // up that path toward the north-east hills. (It keeps clear of the open land south-east of the pasture, where the
-  // "Protect the wagon" job has its own road.) Surveyed with ~/pw/bandit-math/rigs/wagons/road_survey.cjs.
-  through: [['landpath4', { reverse: true, keep: (x) => x > -645 }], ['westtrail'], ['trail', { keep: (x) => x <= 94 }],
-    ['landpath2'], ['landpath1', { keep: (x) => x < 420 }]],
+  // says yes to): in from the west out of the mist at the valley's west end (src/world.js W.ends: the land's west path,
+  // about 700 m out of town, deep in the bank; further west it turns south through the trees to the land's edge),
+  // along the town's west trail, across the square, out along the trail to where the land's north-east path leaves it
+  // (past the corral's north side and the pasture's), and up that path toward the north-east hills, on into the mist
+  // at the east end (to x 705, where it is full; the wrap line is at 740). So the travellers and the wagons come in
+  // out of the mist and go off into it, and a rider coming round the valley's ends comes out near the road. (It keeps
+  // clear of the open land south-east of the pasture, where the "Protect the wagon" job has its own road.) Surveyed
+  // with ~/pw/bandit-math/rigs/wagons/road_survey.cjs and rigs/town/roads/probe_east.cjs.
+  through: [['landpath4', { reverse: true, keep: (x) => x > -700 }], ['westtrail'], ['trail', { keep: (x) => x <= 94 }],
+    ['landpath2'], ['landpath1', { keep: (x) => x < 705 }]],
   every: 8,                 // m between the points the curve passes through
   half: 1.2,                // m either side of the middle a wagon needs clear
   aside: 6,                 // m the road may step aside round something at its edge (the thicket on the land's west path,
@@ -337,6 +344,54 @@ function makeRoad(W, which) {
 // horses' noses. A box: { x, z (its middle), s, c (the sine and cosine of the way it faces), hw, hl (half its width and
 // half its length) }.
 export const WAGONS_OUT = new Set();
+
+// ── FADING IN AND OUT (the road's ends, and anything made or put away in sight) ────────────────────────────────────
+// The same dissolve as a person's (src/actors/folk.js fkFade): between solid and gone, a 4 x 4 pattern of the screen's
+// pixels is left out, more of it the lower `a` is: no see-through sorting, and nothing to rebuild as it changes. Each
+// shared material (a wagon kind's body, the wheel, a saddle, a team's horses) is copied the first time with the
+// dissolve added, so only this one fades; the people given (`people`: folk.js persons) fade by their own `fade`.
+// Below half faded nothing casts a shadow.
+const FADE_FS = `
+  uniform float bmFade;
+  float bmBayer(vec2 p) { ivec2 q = ivec2(mod(p, 4.0)); int i = q.x + q.y * 4;
+    float m[16] = float[16](0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);
+    return (m[i] + 0.5) / 16.0; }
+`;
+function dissolving(m, u) {
+  const c = m.clone();
+  c.onBeforeCompile = (sh) => {
+    sh.uniforms.bmFade = u;
+    sh.fragmentShader = FADE_FS + sh.fragmentShader.replace('#include <clipping_planes_fragment>',
+      '#include <clipping_planes_fragment>\n  if (bmFade < 0.999 && bmBayer(gl_FragCoord.xy) >= bmFade) discard;');
+  };
+  c.customProgramCacheKey = () => 'bm-fade-1';
+  return c;
+}
+export function fadeAll(roots, a, mem, people = []) {
+  a = Math.max(0, Math.min(1, a));
+  if (!mem.meshes) {
+    mem.u = { value: 1 }; mem.meshes = []; mem.copies = new Map();
+    for (const root of [].concat(roots)) root.traverse((o) => {
+      if (!o.isMesh || !o.material || Array.isArray(o.material)) return;
+      const m = o.material;
+      if (Object.prototype.hasOwnProperty.call(m, 'onBeforeCompile')) return;   // (a person's own: faded by the person)
+      let c = mem.copies.get(m); if (!c) { c = dissolving(m, mem.u); mem.copies.set(m, c); }
+      mem.meshes.push([o, m, o.castShadow]); o.material = c;
+    });
+  }
+  mem.u.value = a;
+  for (const [o, , cast] of mem.meshes) o.castShadow = cast && a > 0.5;
+  for (const p of people) if (p && 'fade' in p) p.fade = a;
+}
+export function unfade(mem) {
+  if (!mem || !mem.meshes) return;
+  for (const [o, m, cast] of mem.meshes) { o.material = m; o.castShadow = cast; }
+  // (the copies are let go, not disposed: disposing the last material drawn with a shader program throws the program
+  // away, and the next traveller or wagon to come along builds it again, a 90-145 ms frame each time. Left undisposed,
+  // every copy made later shares the program already built; a material holds nothing else on the graphics card)
+  mem.meshes = null; mem.copies = null; mem.u = null;
+}
+
 const inBox = (b, x, z, r) => { const dx = x - b.x, dz = z - b.z, lx = dx * b.c - dz * b.s, lz = dx * b.s + dz * b.c; return Math.abs(lx) < b.hw + r && Math.abs(lz) < b.hl + r; };
 // true where a walker r metres round at (x, z) would be inside a wagon or its team
 export function inWagons(x, z, r = 0) {
@@ -673,7 +728,10 @@ export function makeWagon(lib, { kind = 'covered', W = null, team = true, driver
     const drop = Y.y - ground(tx, tz) - 0.06;
     pole.rotation.x = Math.asin(Math.max(-0.9, Math.min(0.9, drop / info.tongue.tip))) + tilt.pitch;
   };
+  const faded = {};
+  G.fade = (a) => fadeAll(root, a, faded, person ? [person] : []);
   G.dispose = () => {
+    unfade(faded);
     WAGONS_OUT.delete(G);
     for (const h of horses) h.dispose();
     if (person) person.dispose && person.dispose();

@@ -53,6 +53,8 @@ import { PROP_KINDS, makeProp } from './objects/townProps.js';
 import { savedLayout as savedTown, forgetLayout as forgetTown } from './objects/villageEditor.js';
 import { textHash } from './objects/changes.js';
 import { makeLampUniforms, buildLampMap, lampStandard } from './objects/lampLight.js';
+import { makeNightLights } from './objects/nightLights.js';
+import { IMPOSTER_CLOCK, IMPOSTER_RISE } from './objects/imposter.js';
 import { sunDirection, moonDirection, elevationOf, daylightAt, newDaylight } from './objects/daylight.js';
 import { Sunbeams } from './objects/sunbeams.js';
 import { loadPeople } from './objects/people.js';
@@ -76,10 +78,30 @@ import { KIND_INFO, LIT_SOFTEN, GROW_DEFAULTS, FAMILY_DEFAULTS, COVER_DEFAULTS, 
 // fogEdge (the film's, off in the lab): the land's own edges lost in thick haze, so nobody flies off the world: past x
 // metres from the middle (along either axis) everything fades into the fog, wholly by y; z how much; w on. Each pixel's place
 // is found from its depth and its direction (fogView), so no geometry stands in the way
-const FOG_DIR = { view: { x: 0, y: 0, z: 1, w: 1 }, sun: { x: 0, y: 0, z: -1 }, col: { x: 0, y: 0, z: 0 }, sun3: { x: 0, y: 1, z: 0 }, glow: { x: 0, y: 0, z: 0 }, edge: { x: 650, y: 790, z: 1, w: 0 }, zen: { x: 0, y: 0, z: 0 } };
-{ const add = (u) => { u.fogView = { value: FOG_DIR.view }; u.fogSunV = { value: FOG_DIR.sun }; u.fogSunCol = { value: FOG_DIR.col }; u.fogSun3 = { value: FOG_DIR.sun3 }; u.fogGlow = { value: FOG_DIR.glow }; u.fogEdge = { value: FOG_DIR.edge }; u.fogZen = { value: FOG_DIR.zen }; };
+// fogBank0, fogBank1, fogBankCol (Bandit Math): THE FOG AT THE VALLEY'S ENDS (BANK below), a bank of mist across each end:
+// its thickness rises from nothing at `a` metres out from the middle (along x: the west end below -a, the east above +a)
+// to full at `b`, and it thins out over 110 m above a height over each end's floor; how much hides a pixel is the mist's
+// thickness added up along the way from the camera to it (worked out exactly along x, the heights taken at both ends), so
+// standing in it the near ground fades in metres and from the town it is a soft wall far off. fogBank0: west a, b, east
+// a, b; fogBank1: thickness at full (per metre), the west and east tops (m), on; fogBankCol: its colour (the haze's,
+// as shown). The sky dome takes the same mist (cloudSky.js skyBank)
+const FOG_DIR = { view: { x: 0, y: 0, z: 1, w: 1 }, sun: { x: 0, y: 0, z: -1 }, col: { x: 0, y: 0, z: 0 }, sun3: { x: 0, y: 1, z: 0 }, glow: { x: 0, y: 0, z: 0 }, edge: { x: 650, y: 790, z: 1, w: 0 }, zen: { x: 0, y: 0, z: 0 },
+  bank0: { x: 500, y: 680, z: 540, w: 700 }, bank1: { x: 0.22, y: 30, z: 96, w: 0 }, bankCol: { x: 0.7, y: 0.78, z: 0.85 } };
+const FOG_BANK_GLSL = `
+  float fogBankG(float x) { float u = abs(x), a = x < 0.0 ? fogBank0.x : fogBank0.z, b = x < 0.0 ? fogBank0.y : fogBank0.w;
+    float F = u < a ? 0.0 : u < b ? (u - a) * (u - a) / (2.0 * (b - a)) : (b - a) * 0.5 + (u - b); return x < 0.0 ? -F : F; }
+  float fogBankRho(float x) { return x < 0.0 ? clamp((-x - fogBank0.x) / (fogBank0.y - fogBank0.x), 0.0, 1.0) : clamp((x - fogBank0.z) / (fogBank0.w - fogBank0.z), 0.0, 1.0); }
+  float fogBankH(float y, float x) { float top = x < 0.0 ? fogBank1.y : fogBank1.z; return 1.0 - smoothstep(top, top + 110.0, y); }
+  float fogBankDepth(vec3 c, vec3 p) {
+    if (fogBank1.w <= 0.0 || (c.x > -fogBank0.x && c.x < fogBank0.z && p.x > -fogBank0.x && p.x < fogBank0.z)) return 0.0;
+    float L = length(p - c), dx = p.x - c.x, side = abs(p.x) > abs(c.x) ? p.x : c.x;
+    float m = abs(dx) > 0.01 ? (fogBankG(p.x) - fogBankG(c.x)) / dx : fogBankRho(c.x);
+    return fogBank1.x * m * L * 0.5 * (fogBankH(c.y, side) + fogBankH(p.y, side)) * fogBank1.w; }
+`;
+{ const add = (u) => { u.fogView = { value: FOG_DIR.view }; u.fogSunV = { value: FOG_DIR.sun }; u.fogSunCol = { value: FOG_DIR.col }; u.fogSun3 = { value: FOG_DIR.sun3 }; u.fogGlow = { value: FOG_DIR.glow }; u.fogEdge = { value: FOG_DIR.edge }; u.fogZen = { value: FOG_DIR.zen };
+    u.fogBank0 = { value: FOG_DIR.bank0 }; u.fogBank1 = { value: FOG_DIR.bank1 }; u.fogBankCol = { value: FOG_DIR.bankCol }; };
   add(THREE.UniformsLib.fog); for (const k of Object.keys(THREE.ShaderLib)) if (THREE.ShaderLib[k].uniforms && THREE.ShaderLib[k].uniforms.fogColor) add(THREE.ShaderLib[k].uniforms);
-  THREE.ShaderChunk.fog_pars_fragment += '\n#ifdef USE_FOG\nuniform vec4 fogView, fogEdge; uniform vec3 fogSunV, fogSunCol, fogSun3, fogGlow, fogZen;\n#endif\n';
+  THREE.ShaderChunk.fog_pars_fragment += '\n#ifdef USE_FOG\nuniform vec4 fogView, fogEdge, fogBank0, fogBank1; uniform vec3 fogSunV, fogSunCol, fogSun3, fogGlow, fogZen, fogBankCol;\n' + FOG_BANK_GLSL + '#endif\n';
   const was = 'gl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor, fogFactor );';
   if (!THREE.ShaderChunk.fog_fragment.includes(was)) console.warn('valley: no fog line found; the haze stays one colour');
   THREE.ShaderChunk.fog_fragment = THREE.ShaderChunk.fog_fragment.replace(was, `if (fogEdge.w > 0.0 && fogView.z > 0.0) { vec3 fogV = vec3((gl_FragCoord.xy * fogView.xy * 2.0 - 1.0) * fogView.zw, -1.0) * vFogDepth;
@@ -90,7 +112,22 @@ const FOG_DIR = { view: { x: 0, y: 0, z: 1, w: 1 }, sun: { x: 0, y: 0, z: -1 }, 
 		fogC = mix(fogColor, fogSunCol, pow(clamp(dot(fd, fogSunV) * 0.5 + 0.5, 0.0, 1.0), 3.0)) + fogGlow * (pow(sd, 5.0) * 0.333 + pow(sd, 48.0) * 0.667); }
 	if (fogEdge.w > 0.0 && fogZen.x + fogZen.y + fogZen.z > 0.0) { vec3 fogU = normalize((vec4(vec3((gl_FragCoord.xy * fogView.xy * 2.0 - 1.0) * fogView.zw, -1.0), 0.0) * viewMatrix).xyz);
 		fogC = mix(fogC, fogZen, pow(clamp(fogU.y, 0.0, 1.0), 0.55)); }   // (the edge fog's: land lost in it above the horizon takes the sky's colour there, as the dome rises to its zenith)
+	if (fogBank1.w > 0.0 && fogView.z > 0.0) { vec3 bankV = vec3((gl_FragCoord.xy * fogView.xy * 2.0 - 1.0) * fogView.zw, -1.0) * vFogDepth;
+		float bankF = 1.0 - exp(-fogBankDepth(cameraPosition, cameraPosition + (vec4(bankV, 0.0) * viewMatrix).xyz));   // (the valley's ends: the mist along the way)
+		if (bankF > 0.0) { fogC = mix(fogC, fogBankCol, bankF); fogFactor = 1.0 - (1.0 - fogFactor) * (1.0 - bankF); } }
 	gl_FragColor.rgb = mix( gl_FragColor.rgb, fogC, fogFactor );`); }
+// THE NIGHT'S LOOK (Bandit Math): by moonlight colours fade, as an eye sees them at night: every lit material's own light
+// (three's lights_fragment_end, before its glow and the street lamps' warm light are added, so those keep their colour)
+// is drawn toward its own brightness in a cool tint, by NIGHT_GRADE.w (0 by day; up to NIGHT.grade at night, set with the
+// time of day in applyDay). Patched once, when this module is first loaded, with a uniform shared by every material as
+// the haze's are (a plain object, which three shares instead of copying). The lawn and the far trees (their own shaders:
+// lawn.js, imposter.js) take it too.
+const NIGHT_GRADE = { x: 1, y: 1, z: 1, w: 0 };
+{ const add = (u) => { u.nightGrade = { value: NIGHT_GRADE }; };
+  add(THREE.UniformsLib.lights); for (const k of Object.keys(THREE.ShaderLib)) if (THREE.ShaderLib[k].uniforms && THREE.ShaderLib[k].uniforms.ambientLightColor) add(THREE.ShaderLib[k].uniforms);
+  THREE.ShaderChunk.lights_pars_begin = '#define BM_NIGHT\nuniform vec4 nightGrade;\nvec3 bmNight(vec3 c) { return nightGrade.w > 0.0 ? mix(c, vec3(dot(c, vec3(0.2126, 0.7152, 0.0722))) * nightGrade.rgb, nightGrade.w) : c; }\n' + THREE.ShaderChunk.lights_pars_begin;
+  THREE.ShaderChunk.lights_fragment_end += '\nreflectedLight.directDiffuse = bmNight(reflectedLight.directDiffuse); reflectedLight.indirectDiffuse = bmNight(reflectedLight.indirectDiffuse);'
+    + ' reflectedLight.directSpecular = bmNight(reflectedLight.directSpecular); reflectedLight.indirectSpecular = bmNight(reflectedLight.indirectSpecular);\n'; }
 // QUALITY: what each tier means here. `forest`, `cover` and `u` seed the defaults before anything is
 // built; `controls` are the panel's own controls, set (and fired) when the tier changes while running.
 // `lawn`: the short lawn grass on the bare ground, out to `radius` m, `density` tufts a square metre (off on potato)
@@ -113,13 +150,17 @@ export const TIER_SET = {
             u: { wWaveOn: 1, stampFar: 73 }, checks: { stampOn: true, hexOn: true, farOn: true, wWaveOn: true, cloudsOn: true, beamsOn: true } },
 };
 
-export async function makeValley({ renderer, camera, controls, quality, lab = false, live = false, slice = false, showEnabled = null, showcase = false, folk = false, look = 'green' }) {
+export async function makeValley({ renderer, camera, controls, quality, lab = false, live = false, slice = false, showEnabled = null, showcase = false, folk = false, look = 'green', treeClear = [] }) {
 // THE TIME OF DAY's state (the rest is by the frame loop, see dayFrame): hour, local solar time; turn: the sun's whole
 // path turned round. 192: the sun rises and sets through the valley's two open ends (the hills there 3-4° high from the
 // town and the meadow; everywhere else 20-40°, so a sun setting there left the valley in shadow by mid-afternoon), and
 // at 9:40 it stands as high as the lab's old fixed sun, 12° further round, so the default look is all but the same.
 // season -1 midwinter .. 1 midsummer (0.64: a noon sun 60° up); dayMin: minutes a whole day takes when it goes by itself
-const DAY = { hour: 9 + 40 / 60, auto: false, dayMin: 12, season: 0.64, turn: 192, lat: 45, bake: null, baked: null, dirty: true, stamp: 0, glow: 1, elev: 48 };
+// t (Bandit Math): the hours gone by on the clock, counted on past midnight (the land's shade is worked out ahead by it: SHADE)
+const DAY = { hour: 9 + 40 / 60, t: 9 + 40 / 60, auto: false, dayMin: 12, season: 0.64, turn: 192, lat: 45, bake: null, baked: null, dirty: true, stamp: 0, glow: 1, elev: 48 };
+// (Bandit Math) the lawn following the camera: see lawnFrame (made here, before anything can lay the lawn)
+const LAWN_GO = { ahead: 0.2, wide: 1.3, near: 0.45, edge: 0.3, step: 0.08, job: null, at: new THREE.Vector3(1e9, 0, 0), cam: new THREE.Vector3(1e9, 0, 0), cache: {}, born: new Map(), lays: 0, ms: 0 };
+const lawnKey = (x, z) => Math.round(x * 16) * 65536 + Math.round(z * 16);
 // THE TOWN's layout: in the lab the one saved in this browser, else the first town (models/town/layout.json); likewise the
 // Build bar's hand planting, the one saved in this browser, else models/town/planting.json. Anywhere else, the shipped ones
 const getJSON = (url) => fetch(url).then(r => r.ok ? r.json() : null).catch(() => null);
@@ -169,6 +210,7 @@ const scene = new THREE.Scene();
 const SKY = new THREE.Color(0xa9c8e4); scene.background = SKY; scene.fog = new THREE.Fog(SKY, 150, 1400);   // the haze does its share of hiding the repeat far off
 // the sky: blue deepening overhead, clouds drifting; the water reflects the same sky (potato: plain colour)
 const sky = makeCloudSky({ horizon: SKY }); scene.add(sky.mesh);
+sky.uniforms.skyBank0.value = FOG_DIR.bank0; sky.uniforms.skyBank1.value = FOG_DIR.bank1; sky.uniforms.skyBankCol.value = FOG_DIR.bankCol;   // (the mist at the valley's ends, on the dome too)
 sky.uniforms.cloudCover.value = 0.64; sky.uniforms.cloudSoft.value = 0.39; sky.uniforms.cloudScale.value = 850; sky.uniforms.cloudSpeed.value = 0.064;   // (Jacob's sky)
 const hemi = new THREE.HemisphereLight(0xcfe3ff, 0x6b5a44, 0.9); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff1dc, 2.4); sun.position.set(-300, 400, -200); scene.add(sun);
@@ -312,7 +354,7 @@ function drawPaths(after = true) {
   g2.filter = 'none'; g2.globalCompositeOperation = 'source-over';
   if (!after) return;
   MAPS.path = g2.getImageData(0, 0, P, P).data; MAPS.P = P; nearFromCore(MAPS.path, P);
-  composePathRoad(); buildPaving(); placeStones(); COVER.cache = {};   // (the plants keep off paths: their remembered tiles go, they're laid again by the planting's change)
+  composePathRoad(); buildPaving(); placeStones(); COVER.cache = {}; LAWN_GO.cache = {};   // (the plants keep off paths: their remembered tiles go, they're laid again by the planting's change)
 }
 // HOW NEAR A PATH (the path picture's G): 255 on the dirt (R over half) falling evenly to 0 by NEAR_REACH metres out, by a
 // two-pass distance over the finished picture: overlapping runs don't add up (once they did: shared trails got a wide dense
@@ -659,7 +701,7 @@ const slopeAt = (i, j) => { const a = Hg[j * N + Math.min(N - 1, i + 1)] - Hg[j 
 // ravines and hollows come out low); B, the shade the trees throw (the canopy, moved away from the sun)
 let shadeTex = null;
 function bakeShade(canopy, wide) {
-  DAY.bake = null; DAY.baked = SUN_DIR.clone();                         // (baked toward the light as it is now: a re-bake for the time of day in flight is stale)
+  DAY.bake = null; DAY.baked = SUN_DIR.clone(); DAY.reshade = true;     // (baked toward the light as it is now: a re-bake for the time of day in flight is stale; and the running clock's blend starts again from it, SHADE)
   const S = SUN_DIR.clone(); if (S.y < 0.026) { S.y = 0.026; S.normalize(); }   // (a degree and a half up at least, as sunShadeSteps: the shadows are as long as the land by then)
   const flat = Math.hypot(S.x, S.z) || 1e-6, dx = S.x / flat, dz = S.z / flat, rise = S.y / flat * TEX;   // per cell toward the sun
   const out = new Uint8Array(N * N * 4), H = Hg;
@@ -691,7 +733,7 @@ function bakeShade(canopy, wide) {
 // has moved (the time of day), a few milliseconds a frame, then swapped in whole; the hollows (G) don't depend on it.
 // dir: the light's way (the sun, or the moon after dark); kept a degree and a half up at least, where the shadows are
 // already as long as the land; the trees' shade at most ~190 m long, so a setting sun doesn't stall it
-function* sunShadeSteps(dir, budget = 3) {
+function* sunShadeSteps(dir, budget = 3, into = null) {   // (into: the picture to write, another than shadeTex: the time of day's next one, SHADE)
   if (!shadeTex || !MAPS.canopy) return;
   const D = dir.clone(); if (D.y < 0.026) { D.y = 0.026; D.normalize(); }
   const flat = Math.hypot(D.x, D.z) || 1e-6, dx = D.x / flat, dz = D.z / flat, rise = D.y / flat * TEX, H = Hg, canopy = MAPS.canopy;
@@ -712,8 +754,8 @@ function* sunShadeSteps(dir, budget = 3) {
     }
     if (performance.now() - t0 > budget) { yield; t0 = performance.now(); }
   }
-  const d = shadeTex.image.data; for (let k = 0; k < N * N; k++) { d[k * 4] = R[k]; d[k * 4 + 2] = B[k]; }
-  shadeTex.needsUpdate = true;
+  const tex = into || shadeTex, d = tex.image.data; for (let k = 0; k < N * N; k++) { d[k * 4] = R[k]; d[k * 4 + 2] = B[k]; }
+  tex.needsUpdate = true;
 }
 // light (a town thing moved, added, taken away or resized; see townRebuildNow): only what stands on the town's cleared
 // ground is redone (trees, stones, plants, the trees' shade a little each frame), not the paths, paving or roads, nor
@@ -815,10 +857,10 @@ function* landSteps({ light = false, pads = true } = {}) {
     else { MAPS.path = pathCanvas.getContext('2d').getImageData(0, 0, P, P).data; nearFromCore(MAPS.path, P); }
     MAPS.P = P; composePathRoad(); PAVE.job = null; yield* buildPavingSteps(); }   // (the paving in steps too: laid all at once by buildLand)
   yield;
-  COVER.cache = {};                                   // the land changed: the remembered tiles are stale
+  COVER.cache = {}; LAWN_GO.cache = {};               // the land changed: the remembered tiles are stale
   placeTrees(); yield; yield* placeStonesSteps(); yield;
   if (COVER.parts) { if (light && COVER.at && coverForest && coverForest.ready) COVER.job = moveCover(COVER.at.clone()); else placeCover(); }   // (light: laid again a few ms a frame, the old plants up meanwhile)
-  if (same && shadeTex) { DAY.baked = SUN_DIR.clone(); DAY.bake = sunShadeSteps(SUN_DIR, 0.4); }   // (after the slices above, not alongside them)
+  if (same && shadeTex) { DAY.baked = SUN_DIR.clone(); DAY.bake = sunShadeSteps(SUN_DIR, 0.4); DAY.reshade = true; }   // (after the slices above, not alongside them)
   TOWN.sig = townSigs(layout);
   MAPS.gen = (MAPS.gen || 0) + 1;                                       // (the land made again: the townsfolk's walking grid follows)
   if (TOWN.village) { TOWN.village.sync(); if (TOWN.editor) TOWN.editor.markSel(); }   // the town stands on the land as it now is
@@ -1220,12 +1262,19 @@ mat.onBeforeCompile = (sh) => {
       skyDiscK = gSun;                                                                   // (no sun in the mirror where the sun doesn't reach the water)
       vec3 refl = skyAt(vW, vec3(R.x, max(R.y, 0.02), R.z)) * fres * wReflect;          // the sky and its clouds, mirrored
       float glint = pow(max(dot(R, normalize(sunDirW)), 0.0), 600.0) * wSpec * 3.0 * (1.0 - gFoam) * smoothstep(400.0, 30.0, length(cameraPosition - vW)) * gSun;   // fine sparkle, fading with distance (none where the sun doesn't reach)
-      gl_FragColor.rgb = mix(gl_FragColor.rgb, gl_FragColor.rgb * (1.0 - fres * wReflect) + refl + sunGlint * glint, gWater);   // (sunGlint: the sun's colour and strength against noon's)
+      #ifdef USE_FOG
+      float wClear = 1.0 - fogFactor;                                                    // (Bandit Math: the mirror and sparkle come after the haze, so lost in it as the water is: a creek deep in the valley's end mist showed through it)
+      #else
+      float wClear = 1.0;
+      #endif
+      gl_FragColor.rgb = mix(gl_FragColor.rgb, gl_FragColor.rgb * (1.0 - fres * wReflect) + refl + min(sunGlint * glint, vec3(1.5)), gWater * wClear);   // (the sparkle capped: it lands after the tone mapping, so uncapped a glint of 20 still showed white through mist at 0.97)   // (sunGlint: the sun's colour and strength against noon's)
     }
     #include <dithering_fragment>
   `);
 };
-mat.customProgramCacheKey = () => 'terrain-lab-29' + (GL2 ? 'g' : '');
+// (Bandit Math) the lanterns' and the lit windows' warm light on the ground round them (the lamps' picture, lampLight.js)
+{ const own = mat.onBeforeCompile; mat.onBeforeCompile = (sh, r) => { own(sh, r); Object.assign(sh.uniforms, LAMPU); sh.fragmentShader = lampStandard(sh.fragmentShader); }; }
+mat.customProgramCacheKey = () => 'terrain-lab-29-lamps-wfog' + (GL2 ? 'g' : '');
 if (!GL2) mat.extensions = { derivatives: true };
 const ground = new THREE.Group(); ground.name = 'ground'; scene.add(ground);
 for (const t of groundTiles) { const m = new THREE.Mesh(t.geo, mat); m.receiveShadow = SHADOW.on; ground.add(m); }
@@ -1242,6 +1291,34 @@ function meshAt(x, z) {
   return u + v <= 1 ? a + (d - a) * u + (b - a) * v : c + (b - c) * (1 - u) + (d - c) * (1 - v);   // (each square's two triangles meet along its b-d diagonal)
 }
 function treeFoot(x, z, r = 0) { const d = r > 0 ? r : TREE_FOOT; let y = meshAt(x, z); for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; y = Math.min(y, meshAt(x + Math.cos(a) * d, z + Math.sin(a) * d)); } return y; }
+// STRIPS KEPT CLEAR OF TREES: along a land path stroke where x > `from` (each tree whose crown, CROWN_M a metre of its
+// scale, would reach within `half` m of the path's line is left out). Bandit Math's road runs out along landpath1 into
+// the east end's mist and on to the way round (src/wagon.js ROAD.through, src/world.js W.wrap): its last stretch ran under
+// the woods' crowns, and a rider coming out of the mist there came out with the camera in the leaves
+// (makeValley's treeClear adds the game's own strips, as plain lines)
+const TREE_CLEAR = [{ stroke: 'landpath1', from: 580, half: 4 }];
+const CROWN_M = 5;
+let treeClearSegs = null;
+function treeCleared(x, z, s = 1) {
+  if (!treeClearSegs) {
+    treeClearSegs = [];
+    const list = (PLANTING_FIRST && PLANTING_FIRST.strokes) || [];
+    for (const c of TREE_CLEAR) {
+      const st = list.find((q) => q.id === c.stroke); if (!st || !st.pts) continue;
+      const pts = st.pts.filter((q) => q[0] > c.from);
+      for (let i = 1; i < pts.length; i++) treeClearSegs.push([pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], c.half]);
+    }
+    // (and the game's own strips: [{ ax, az, bx, bz, half }], e.g. the way into each back-woods camp, makeValley's treeClear)
+    for (const q of treeClear || []) if ([q.ax, q.az, q.bx, q.bz, q.half].every(Number.isFinite)) treeClearSegs.push([q.ax, q.az, q.bx, q.bz, q.half]);
+  }
+  for (const [ax, az, bx, bz, half] of treeClearSegs) {
+    const r = half + CROWN_M * s; if (x < Math.min(ax, bx) - r || x > Math.max(ax, bx) + r || z < Math.min(az, bz) - r || z > Math.max(az, bz) + r) continue;
+    const vx = bx - ax, vz = bz - az, L2 = vx * vx + vz * vz || 1e-9, t = Math.max(0, Math.min(1, ((x - ax) * vx + (z - az) * vz) / L2));
+    if (Math.hypot(ax + vx * t - x, az + vz * t - z) < r) return true;
+  }
+  return false;
+}
+const keepTree = (x, z, s) => keepWild('tree', x, z) && !treeCleared(x, z, s);
 // the Tree Lab's settings, now here (Jacob's defaults, 2026-09-23)
 const FOREST = { imposterAt: 150, band: 120, ahead: 0.6, spread: 0.5, grid: 12, cell: 192, detail: 'sparse', rebake: false, lowPine: !!TS.lite };   // lowPine: the ~100-triangle pine (the potato's, to start)
 Object.assign(FOREST, TS.forest);
@@ -1280,7 +1357,7 @@ function placeTrees() {
     ? { ...sp, soften: LEAF.soften, shape: { lump: LEAF.lump, mix: LEAF.mix, dark: LEAF.dark, tip: LEAF.tip, olive: LEAF.olive, branchDark: LEAF.branchDark, under: LEAF.under, glow: LEAF.glow } } : { ...sp }));
   FOREST.rebake = false; freshPicks(species);
   treeForest = new Forest(renderer, scene, { species, lamps: LAMPU, shadows: SHADOW.on, detail: FOREST.detail, grid: FOREST.grid, cell: FOREST.cell, imposterAt: FOREST.imposterAt, band: FOREST.band, ahead: FOREST.ahead, spread: FOREST.spread, sunDir: SUN_DIR, heightAt: treeFoot, nearCap: 600, shadowEdge: { at: U.shadowAt, range: U.shadowRange, from: U.edgeFrom, to: U.edgeTo, shade: U.edgeShade, jitter: U.edgeJitter },
-    fixed: [...trees.filter(([x, , z]) => keepWild('tree', x, z)).map(([x, , z, s]) => { const [sp, tint] = pickTree(x, z, species); return { x, z, sp, scale: s, tint: species[sp].tint === false ? undefined : tint }; }), ...townTrees(species), ...plantedTrees(species)] });
+    fixed: [...trees.filter(([x, , z, s]) => keepTree(x, z, s)).map(([x, , z, s]) => { const [sp, tint] = pickTree(x, z, species); return { x, z, sp, scale: s, tint: species[sp].tint === false ? undefined : tint }; }), ...townTrees(species), ...plantedTrees(species)] });
   treeForest.group.visible = $('treesOn') ? $('treesOn').checked : true;
   if ($('landInfo')) $('landInfo').textContent = `${trees.length.toLocaleString()} trees`;
 }
@@ -1387,8 +1464,10 @@ function bakeCoverMap() {
   coverTex.needsUpdate = true;
 }
 function placeLawn() {
-  const spots = withLawnPlanting(LAWN.radius > 0 ? lawnSpots({ ground: coverGround, at: lawnCentre(), radius: LAWN.radius, density: LAWN.density, grow: GROW, spread: FOREST.spread }) : []);
-  for (const t of spots) t.y = heightAt(t.x, t.z);
+  const at = lawnCentre(), cam = camera.position, R = lawnRadius(), thin = lawnThin(cam, R);   // (laid at once, grown: Bandit Math's LAWN_GO)
+  const spots = withLawnPlanting(LAWN.radius > 0 ? lawnSpots({ ground: coverGround, at, radius: R, density: LAWN.density, grow: GROW, spread: FOREST.spread, cache: LAWN_GO.cache, thin }) : [], at, R, thin);
+  LAWN_GO.job = null; LAWN_GO.at.copy(at); LAWN_GO.cam.set(cam.x, 0, cam.z); LAWN_GO.born = new Map();
+  for (const t of spots) { t.y = heightAt(t.x, t.z); t.born = -1e6; LAWN_GO.born.set(lawnKey(t.x, t.z), -1e6); }
   LAWN.count = lawn.set(spots);
   const a = U.layLush.value && U.layLush.value.userData.avg, base = (a ? a.clone() : new THREE.Color(0.25, 0.33, 0.1)).multiply(U.lushTint.value);
   lawn.colours(base.clone().multiplyScalar(0.8 * LAWN_DARK), base.clone().multiply(new THREE.Color(1.15, 1.12, 0.85)).multiplyScalar(LAWN_DARK));   // darker at the root, lighter and yellower at the tips
@@ -1459,24 +1538,60 @@ function withPlanting(list, at) {
   for (const p of painted) if (p.sp < PLANT.LAWN_KIND && paintable(p)) kept.push(p);
   return kept;
 }
-// the lawn's circle (the land's and the painted): ahead of the camera like the plants' circle, but by its own radius
-// (round the plants' centre, 84 m ahead on normal, the whole 40 m of lawn lay past your feet: none near you)
+// the lawn's circle (the land's and the painted): by its own radius, a little ahead of the camera (round the plants'
+// centre, 84 m ahead on normal, the whole 40 m of lawn lay past your feet: none near you).
+// (Bandit Math) LAWN_GO: the lawn follows the camera by itself (lawnFrame), not with the plants. Its circle is `wide`
+// times the tier's radius and only `ahead` of that in front of the camera, so it reaches about as far ahead as before
+// and as far round to the sides and behind: turning the camera brings no new ground into view (the old circle, 0.6 of
+// its radius ahead, left the ground behind bare, and turning laid whole fields in at once). Past `near` of the way to
+// its edge it thins out gradually, to `edge` of the tufts at the rim, each tuft by its own draw (so riding on, the far
+// lawn fills in a tuft at a time); laid again once the camera has gone `step` of the radius; a tuft new to a lay rises
+// out of the ground (lawn.js RISE). cache: the 10 m tiles' tufts remembered (lawnSpotsSteps)
+const lawnRadius = () => LAWN.radius * LAWN_GO.wide;
 function lawnCentre() {
   const fwd = new THREE.Vector3().subVectors(controls.target, camera.position).setY(0);
-  const c = camera.position.clone().addScaledVector(fwd.lengthSq() > 1e-6 ? fwd.normalize() : fwd, LAWN.radius * COVER.ahead); c.y = 0;
+  const c = camera.position.clone().addScaledVector(fwd.lengthSq() > 1e-6 ? fwd.normalize() : fwd, lawnRadius() * LAWN_GO.ahead); c.y = 0;
   return c;
+}
+// how much of the lawn is kept at (x, z), seen from `cam` (radius R): all of it near, thinning out toward the rim
+function lawnThin(cam, R) {
+  const a = R * LAWN_GO.near, w = R * (1 - LAWN_GO.near), lose = 1 - LAWN_GO.edge;
+  return (x, z) => { const d = Math.hypot(x - cam.x, z - cam.z); return d <= a ? 1 : 1 - lose * Math.min(1, (d - a) / w); };
+}
+// laid again round where the camera is now, a slice a frame (lawnFrame runs it); tufts in the last lay keep their age,
+// new ones rise from the moment they go in
+function* lawnSteps(at, cam) {
+  const R = lawnRadius(), t0 = performance.now();
+  const spots = withLawnPlanting(yield* lawnSpotsSteps({ ground: coverGround, at, radius: R, density: LAWN.density, grow: GROW, budget: 1, spread: FOREST.spread, cache: LAWN_GO.cache, thin: lawnThin(cam, R) }), at, R, lawnThin(cam, R));
+  const old = LAWN_GO.born, born = new Map(), fresh = [];
+  for (let i = 0; i < spots.length; i++) { const t = spots[i], k = lawnKey(t.x, t.z), b = old.get(k);
+    t.y = heightAt(t.x, t.z); if (b === undefined) fresh.push(t); else { t.born = b; born.set(k, b); }
+    if ((i & 1023) === 0) yield; }
+  yield;
+  const now = lawn.uniforms.lawnTime.value; for (const t of fresh) { t.born = now; born.set(lawnKey(t.x, t.z), now); }
+  LAWN_GO.born = born; LAWN.count = lawn.set(spots); LAWN_GO.lays++; LAWN_GO.ms = performance.now() - t0;
+}
+function lawnFrame(dt) {
+  lawn.uniforms.lawnTime.value += Math.min(dt, 0.1); IMPOSTER_CLOCK.value += Math.min(dt, 0.1);   // (the clocks the lawn and the plants rise in by)
+  if (!(LAWN.radius > 0) || !coverForest) return;
+  if (LAWN_GO.job) { const t0 = performance.now(), budget = Math.min(2.5, Math.max(0.8, dt * 1000 * 0.12)); while (performance.now() - t0 < budget) if (LAWN_GO.job.next().done) { LAWN_GO.job = null; break; } return; }
+  const at = lawnCentre(), cam = camera.position, step = lawnRadius() * LAWN_GO.step;
+  if (Math.hypot(at.x - LAWN_GO.at.x, at.z - LAWN_GO.at.z) > step || Math.hypot(cam.x - LAWN_GO.cam.x, cam.z - LAWN_GO.cam.z) > step) {
+    LAWN_GO.at.copy(at); LAWN_GO.cam.set(cam.x, 0, cam.z); LAWN_GO.job = lawnSteps(at.clone(), LAWN_GO.cam.clone());
+  }
 }
 // (Bandit Math) places the game keeps clear of lawn tufts: tests (x, z) -> true for no tufts there (a pig pen's floor,
 // so a small piglet isn't lost in the grass); the game adds and removes them, the tufts follow on the lawn's next move
 const LAWN_SKIP = [];
 const lawnSkip = (p) => { for (const f of LAWN_SKIP) if (f(p.x, p.z)) return true; return false; };
-function withLawnPlanting(spots) {
+function withLawnPlanting(spots, at = lawnCentre(), R = lawnRadius(), thin = null) {
   const t = plantNow();
-  const kept = spots.filter((p) => keepWild('plant', p.x, p.z) && !(LAWN_SKIP.length && lawnSkip(p))), R2 = LAWN.radius * LAWN.radius, at = lawnCentre();
-  const painted = paintedPlants(paintedOnly(t, true), null, { at, radius: LAWN.radius, far: 1, sizeOf: () => 1 });
+  const kept = spots.filter((p) => keepWild('plant', p.x, p.z) && !(LAWN_SKIP.length && lawnSkip(p))), R2 = R * R;
+  const painted = paintedPlants(paintedOnly(t, true), null, { at, radius: R, far: 1, sizeOf: () => 1 });
   const own = (p) => { const e = Math.sin(p.x * 39.346 + p.z * 11.135) * 24634.6345; return (1 - FOREST.spread * 0.5 * (e - Math.floor(e))) ** 2; };   // (each tuft's own edge, as the land's lawn)
   for (const p of painted) if (p.sp === PLANT.LAWN_KIND && (p.x - at.x) ** 2 + (p.z - at.z) ** 2 < R2 * own(p) && paintable(p) && !(LAWN_SKIP.length && lawnSkip(p))) {
     const h = Math.sin(p.x * 12.9898 + p.z * 78.233) * 43758.5453, r = h - Math.floor(h);
+    if (thin && ((h * 7.31) % 1 + 1) % 1 > thin(p.x, p.z)) continue;
     kept.push({ x: p.x, z: p.z, turn: p.yaw, size: 0.7 + 0.7 * Math.min(1, p.scale / 1.25), yellow: r < 0.2 ? 0.35 : 0, light: (r - 0.5) * 0.25 });
   }
   return kept;
@@ -1758,19 +1873,25 @@ function followCover() {
   if (COVER.job) { COVER.job.next(); return; }
   if (at.distanceTo(COVER.at) > COVER.radius * 0.25 && coverForest.ready) { COVER.at.copy(at); COVER.job = moveCover(COVER.at.clone()); }
 }
-// moving the plants, a few milliseconds a frame: where they go, then their drawing data, then the lawn's tufts;
-// then two quick frames to hand them over (plants, then lawn)
+// moving the plants, a few milliseconds a frame: where they go, then their drawing data; then a quick frame to hand
+// them over
 function* moveCover(at) {
   const B = 6;
   const list = withPlanting(yield* growPlantsSteps({ ground: coverGround, cache: COVER.cache, at, radius: COVER.radius, far: COVER.farX, count: COVER.on ? COVER.count : 0, size: COVER.size, kinds: PLANT_KINDS, grow: GROW, budget: B }), at);
   const laid = yield* coverForest.layFixedSteps(list, B);
-  const spots = withLawnPlanting(LAWN.radius > 0 ? yield* lawnSpotsSteps({ ground: coverGround, at: lawnCentre(), radius: LAWN.radius, density: LAWN.density, grow: GROW, budget: B, spread: FOREST.spread }) : []);
-  for (let i = 0; i < spots.length; i++) { spots[i].y = heightAt(spots[i].x, spots[i].z); if ((i & 2047) === 0) yield; }
+  // (Bandit Math) a plant new to this lay rises out of the ground (imposter.js IMPOSTER_CLOCK): the far fields fill in
+  // gradually as the circle moves instead of appearing; one in the last lay keeps its age
+  const old = COVER.born || new Map(), born = new Map(), fresh = [];
+  for (let i = 0; i < list.length; i++) { const k = lawnKey(list[i].x, list[i].z), b = old.get(k);
+    if (b === undefined) fresh.push(i); else { laid[i].born = b; born.set(k, b); }
+    if ((i & 2047) === 0) yield; }
   yield;
+  const now = IMPOSTER_CLOCK.value;
+  for (const i of fresh) { laid[i].born = now; born.set(lawnKey(list[i].x, list[i].z), now); }
+  for (const t of laid) if (t.born && now - t.born > IMPOSTER_RISE) t.born = 0;   // (grown)
+  COVER.born = born;
   coverForest.setFixed(list, laid); U.coverR.value = COVER.radius * COVER.farX; U.coverAt.value.copy(at);
-  yield;
-  LAWN.count = lawn.set(spots);
-  COVER.job = null;
+  COVER.job = null;   // (the lawn follows the camera by itself: lawnFrame)
 }
 // `ready` (optional): the plants, already worked out (by the spread-over-frames job in followCover)
 function placeCover(ready = null) {
@@ -1788,6 +1909,7 @@ function placeCover(ready = null) {
   if (coverForest && coverForest.ready && coverForest.imposterAt === COVER.near) {
     coverForest.band = COVER.near * COVER.fade;     // (the fade's width is read each move: no rebuild for it)
     coverForest.setFixed(fixed); calmCover(); placeLawn(); bakeCoverMap();
+    COVER.born = new Map(fixed.map((p) => [lawnKey(p.x, p.z), 0]));   // (laid at once: all grown)
     if ($('coverInfo')) $('coverInfo').textContent = `${placed.toLocaleString()} plants of 16 kinds: meshes to ${COVER.near} m, imposters beyond` + (LAWN.count ? ` · ${LAWN.count.toLocaleString()} lawn tufts (${(LAWN.count * lawn.trisPerTuft / 1e6).toFixed(2)} M triangles) out to ${LAWN.radius} m` : '');
     return;
   }
@@ -1796,6 +1918,7 @@ function placeCover(ready = null) {
   coverForest = new Forest(renderer, scene, { species, lamps: LAMPU, shadows: SHADOW.on && TS.shadow.cover, fixed, heightAt, imposterAt: COVER.near, band: COVER.near * COVER.fade, ahead: 0.5, spread: FOREST.spread, sunDir: SUN_DIR, nearCap: 12000, wind: true,
     shadowEdge: { at: U.shadowAt, range: U.shadowRange, from: U.edgeFrom, to: U.edgeTo, shade: U.plantShade, jitter: U.edgeJitter } });   // (the plants ease their shadows at the square's edge too: their own even shade, 0.8: what three meadows' real shadows came to, 0.76-0.87)   // (Jacob's thickness puts ~7,000 within 60 m)
   calmCover(); placeLawn(); bakeCoverMap();
+  COVER.born = new Map(fixed.map((p) => [lawnKey(p.x, p.z), 0]));
   if ($('coverInfo')) $('coverInfo').textContent = `${placed.toLocaleString()} plants of 16 kinds: meshes to ${COVER.near} m, imposters beyond (atlases bake over the first seconds)` + (LAWN.count ? ` · ${LAWN.count.toLocaleString()} lawn tufts (${(LAWN.count * lawn.trisPerTuft / 1e6).toFixed(2)} M triangles) out to ${LAWN.radius} m` : '');
 }
 // THE PAVING: the stones laid where the town's road picture says (stones.js), their grid over just the roads' bounds;
@@ -1898,6 +2021,10 @@ LAND_READY.done = true; for (const f of LAND_READY.then.splice(0)) f();
 // THE TOWN: the buildings, props and the editor. Potato and normal (phones) get the 1K pictures, gaming the 2K
 TOWN.village = new Village({ scene, lo: QUAL.tier !== 'gaming', heightAt, size: SIZE });
 TOWN.village.setLayout(TOWN.layout);
+// (Bandit Math) THE TOWN'S WINDOWS AND LANTERNS at night (objects/nightLights.js): fitted to each building as it loads,
+// lit with the lamps (lampsFrame), their light in the lamps' picture
+const NIGHT_LIGHTS = makeNightLights({ village: TOWN.village, shade: (sh) => FOLK_SHADE(sh), heightAt });
+scene.add(NIGHT_LIGHTS.halo);
 // the land under the pointer: a ray marched over the heights (cheaper than hitting the 520,000-triangle ground mesh)
 const townRay = new THREE.Raycaster();
 function groundAt(cx, cy) {
@@ -1965,7 +2092,7 @@ function walkWalls(L, x0, z0, x1, z1) {
     if (SORT.tree(it.kind)) walls.push({ disc: { x: it.x, z: it.z, r: 0.6 } });
     else if (SORT.rock(it.kind)) walls.push({ disc: { x: it.x, z: it.z, r: 0.45 * Math.max(it.sx || 1, it.sz || 1) } });
   }
-  for (const t of trees) if (t[0] > x0 && t[0] < x1 && t[2] > z0 && t[2] < z1 && keepWild('tree', t[0], t[2])) walls.push({ disc: { x: t[0], z: t[2], r: 0.5 * t[3] } });   // (the trees as drawn: placeTrees)
+  for (const t of trees) if (t[0] > x0 && t[0] < x1 && t[2] > z0 && t[2] < z1 && keepTree(t[0], t[2], t[3])) walls.push({ disc: { x: t[0], z: t[2], r: 0.5 * t[3] } });   // (the trees as drawn: placeTrees)
   for (const q of paintedPlants(paintedOnly(plantNow(), 'trees'), null, { sizeOf: () => 1 })) if (SORT.tree(q.sp) && q.x > x0 && q.x < x1 && q.z > z0 && q.z < z1 && paintable(q)) walls.push({ disc: { x: q.x, z: q.z, r: 0.5 * q.scale } });
   return walls;
 }
@@ -2125,6 +2252,9 @@ function fastMesh() { if (SEG !== N - 1) shapeMesh(); else meshFrom((i, j) => Hg
 // (FOG_DIR), the camera's exposure, the lawn's tints, the water's sparkle, the forests' copy of the light's way. Each
 // frame: the haze's look directions for this camera, and once the light has moved over 0.6° the land's sun shade is
 // worked out again (sunShadeSteps), a few milliseconds a frame.
+// THE NIGHT (Bandit Math): grade, how far the colours fade at full night (NIGHT_GRADE, above), and toward what tint (made to
+// keep a colour's brightness); from the sun a degree up to ten down
+const NIGHT = { grade: 0.55, tint: [0.86, 0.98, 1.3] };
 const DL = newDaylight(), SUN_NOW = new THREE.Vector3(), MOON_NOW = new THREE.Vector3(), LIGHT_NOW = new THREE.Vector3(), DAY_V2 = new THREE.Vector2(), DAY_F = new THREE.Vector3();
 const NOON_SUN = new THREE.Color(0xfff1dc).multiplyScalar(2.4), NOON_SKY = new THREE.Color(0xcfe3ff).multiplyScalar(0.9), MOON_COL = new THREE.Color(0x9fb2e0);
 const lightRatio = (out, c, k, ref) => out.setRGB(c.r * k / ref.r, c.g * k / ref.g, c.b * k / ref.b);
@@ -2162,10 +2292,76 @@ function applyDay() {
   lightRatio(U.sunGlint.value, sun.color, sun.intensity, NOON_SUN);
   lightRatio(lawn.uniforms.sunTint.value, sun.color, sun.intensity, NOON_SUN); lightRatio(lawn.uniforms.skyTint.value, hemi.color, hemi.intensity, NOON_SKY);
   DAY.glow = Math.min(1, DL.hemiI / 0.9); DAY.elev = e; DAY.stamp++;
+  { const [r, g, b] = NIGHT.tint, l = 0.2126 * r + 0.7152 * g + 0.0722 * b || 1; NIGHT_GRADE.x = r / l; NIGHT_GRADE.y = g / l; NIGHT_GRADE.z = b / l; NIGHT_GRADE.w = NIGHT.grade * THREE.MathUtils.smoothstep(-e, -1, 10); }
   aimLight(LIGHT_NOW);
 }
+// THE LAND'S SHADE THROUGH THE DAY (Bandit Math): while the clock runs, the land's sun shade (the hills' shadows, R, and
+// the trees' long ones, B) is worked out ahead of the light, for where it will stand SHADE.step hours on, a slice a frame
+// (as before: about a sixth of a frame); the land shows a blend of the last two by how far the clock has got between
+// them, drawn into one picture on the graphics card (SHADE.pass.rt, which every shader reads as its shadeMap: one small
+// draw), so a long evening shadow creeps across the land instead of jumping. (Swapped in whole, as the lab does it, each
+// 0.6° step moved a hill's shadow at a low sun by tens of metres at once.) After dark the light is the moon's: the
+// blend runs from the sun's last shade to the moon's first while both are too faint to see. The clock stopped (the
+// lab's slider, the title): the lab's way, worked out again once the light has moved and swapped in whole.
+//   SHADE.step: hours of the clock between two (0.05: 3 minutes of the clock, 3 s at a 24-minute day, ≤ 0.75° of the
+//   sun's way); SHADE.ms, SHADE.bakes: the last one's time and how many (for the rigs)
+const SHADE = { step: 0.05, live: false, S: [null, null], t: [0, 0], pool: [], f: 0, shown: -1, job: null, jobT: 0, jobTex: null, jobMs: 0, ms: 0, bakes: 0, pass: null, busy: false };
+const SHADE_V = new THREE.Vector3();
+function lightAt(t, out) { sunDirection(((t % 24) + 24) % 24, DAY, out); if (elevationOf(out) <= -3) moonDirection(out, out); return out; }   // (the way the light comes from at clock time t: as applyDay)
+function shadePass() {
+  if (SHADE.pass) return SHADE.pass;
+  const rt = new THREE.WebGLRenderTarget(N, N, { depthBuffer: false, stencilBuffer: false, generateMipmaps: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+  const m = new THREE.ShaderMaterial({ uniforms: { a: { value: null }, b: { value: null }, f: { value: 0 } }, depthTest: false, depthWrite: false,
+    vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+    fragmentShader: 'uniform sampler2D a, b; uniform float f; varying vec2 vUv; void main() { vec4 p = texture2D(a, vUv), q = texture2D(b, vUv); gl_FragColor = vec4(mix(p.r, q.r, f), p.g, mix(p.b, q.b, f), 1.0); }' });
+  const sc = new THREE.Scene(), cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), q = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), m); q.frustumCulled = false; sc.add(q);
+  return (SHADE.pass = { rt, m, sc, cam });
+}
+function shadeCopy() { const t = new THREE.DataTexture(Uint8Array.from(shadeTex.image.data), N, N, THREE.RGBAFormat); t.magFilter = t.minFilter = THREE.LinearFilter; t.generateMipmaps = false; t.needsUpdate = true; return t; }
+function shadeFrame(dt) {
+  if (!shadeTex) return;
+  const budget = Math.min(3, Math.max(0.8, dt * 1000 * 0.18));          // (about a sixth of the frame: 3 ms at 60 Hz, 1.2 ms at 144)
+  if (!DAY.auto || !MAPS.canopy) {                                      // the clock stopped: the lab's way
+    if (SHADE.live) { SHADE.live = false; SHADE.job = null; SHADE.jobTex = null; U.shadeMap.value = shadeTex; DAY.baked = null; }
+    if (!DAY.baked) DAY.baked = new THREE.Vector3(0, -1, 0);
+    if (!DAY.bake && DAY.baked.angleTo(SUN_DIR) > 0.6 * Math.PI / 180) { DAY.baked.copy(SUN_DIR); DAY.bake = sunShadeSteps(SUN_DIR, 0.4); }   // (it hands back control often; the frame's budget below decides how long it runs)
+    if (DAY.bake) { const t0 = performance.now(); while (performance.now() - t0 < budget) if (DAY.bake.next().done) { DAY.bake = null; break; } }
+    SHADE.busy = !!DAY.bake; return;
+  }
+  if (DAY.bake) { const t0 = performance.now(); while (performance.now() - t0 < budget) if (DAY.bake.next().done) { DAY.bake = null; break; } if (DAY.bake) return; }   // (a lab-way one in flight, as when the clock was set: finished first, then the blend starts from it)
+  const now = DAY.t;
+  if (DAY.reshade) { DAY.reshade = false; SHADE.live = false; SHADE.job = null; SHADE.jobTex = null; }
+  if (!SHADE.live) {                                                    // the clock (re)started: both ends the shade as it is now
+    if (DAY.baked && DAY.baked.angleTo(lightAt(now, SHADE_V)) > 0.6 * Math.PI / 180) { DAY.baked.copy(SHADE_V); DAY.bake = sunShadeSteps(SHADE_V, 0.4); return; }
+    while (SHADE.pool.length < 3) SHADE.pool.push(shadeCopy());
+    for (const t of SHADE.pool) { t.image.data.set(shadeTex.image.data); t.needsUpdate = true; }
+    SHADE.S = [SHADE.pool[0], SHADE.pool[0]]; SHADE.t = [now, now]; SHADE.job = null; SHADE.shown = -1; SHADE.live = true;
+  }
+  // the next one: worked out a slice a frame into a picture not on show, for SHADE.step past the later of the two
+  if (!SHADE.job && !SHADE.jobTex) {
+    const t2 = Math.max(SHADE.t[1], now) + SHADE.step;
+    SHADE.jobTex = SHADE.pool.find((t) => t !== SHADE.S[0] && t !== SHADE.S[1]); SHADE.jobAt = t2; SHADE.jobMs = 0;
+    SHADE.job = sunShadeSteps(lightAt(t2, SHADE_V).clone(), 0.4, SHADE.jobTex);
+  }
+  if (SHADE.job) { const t0 = performance.now(); while (performance.now() - t0 < budget) if (SHADE.job.next().done) { SHADE.job = null; break; } SHADE.jobMs += performance.now() - t0;
+    if (!SHADE.job) { SHADE.ms = SHADE.jobMs; SHADE.bakes++; } }
+  // once the clock has reached the later one and the next is ready: the later becomes the earlier, from now (so nothing jumps)
+  if (!SHADE.job && SHADE.jobTex && now >= SHADE.t[1]) {
+    SHADE.S = [SHADE.S[1], SHADE.jobTex]; SHADE.t = [now, Math.max(now + 1e-6, SHADE.jobAt)]; SHADE.jobTex = null; SHADE.shown = -1;
+  }
+  SHADE.busy = !!SHADE.job;
+  // the blend, drawn when it has moved on enough to see (on potato, by the CPU, less often)
+  const f = Math.min(1, Math.max(0, (now - SHADE.t[0]) / (SHADE.t[1] - SHADE.t[0] || 1)));
+  if (SHADE.shown < 0 || Math.abs(f - SHADE.shown) > (TS.lite ? 1 / 24 : 1 / 400)) {
+    const P = shadePass(), prev = renderer.getRenderTarget();
+    P.m.uniforms.a.value = SHADE.S[0]; P.m.uniforms.b.value = SHADE.S[1]; P.m.uniforms.f.value = f;
+    renderer.setRenderTarget(P.rt); renderer.render(P.sc, P.cam); renderer.setRenderTarget(prev);
+    SHADE.shown = f; U.shadeMap.value = P.rt.texture;
+  }
+  SHADE.f = f;
+}
 function dayFrame(dt, quiet = false) {
-  if (DAY.auto) { DAY.hour = (DAY.hour + dt * 24 / (DAY.dayMin * 60)) % 24; DAY.dirty = true; }
+  if (DAY.auto) { const h = dt * 24 / (DAY.dayMin * 60); DAY.hour = (DAY.hour + h) % 24; DAY.t += h; DAY.dirty = true; }
   if (DAY.dirty) { DAY.dirty = false; applyDay(); if (DAY.show) DAY.show(); }
   for (const f of [treeForest, coverForest]) if (f && f.ready && f.dayStamp !== DAY.stamp) { f.dayStamp = DAY.stamp; f.setSun(SUN_DIR, DAY.glow); }
   SUNSHADE_U.sunShadeK.value = shadeTex ? U.hillShade.value : 0;
@@ -2176,14 +2372,16 @@ function dayFrame(dt, quiet = false) {
   const dome = sky.mesh.visible ? 1 : 0;                                 // (no dome, as on potato or with the clouds off: the background is one colour, so the haze is too)
   FOG_DIR.col.x = SHOWN.toward.x * dome; FOG_DIR.col.y = SHOWN.toward.y * dome; FOG_DIR.col.z = SHOWN.toward.z * dome;
   FOG_DIR.zen.x = SHOWN.zen.x * dome; FOG_DIR.zen.y = SHOWN.zen.y * dome; FOG_DIR.zen.z = SHOWN.zen.z * dome;
+  { const A = SHOWN.away, l = 0.2126 * A.x + 0.7152 * A.y + 0.0722 * A.z, k = 0.65 * NIGHT_GRADE.w / (NIGHT.grade || 1);   // (the mist at the valley's ends: the haze's own colour, away from the sun; by night greyed, as the night fades colours, or it glows deep blue)
+    FOG_DIR.bankCol.x = A.x + (l * 0.92 - A.x) * k; FOG_DIR.bankCol.y = A.y + (l * 0.98 - A.y) * k; FOG_DIR.bankCol.z = A.z + (l * 1.12 - A.z) * k; }
   FOG_DIR.glow.x = Math.max(0, SHOWN.glowAt.x - SHOWN.toward.x) * dome; FOG_DIR.glow.y = Math.max(0, SHOWN.glowAt.y - SHOWN.toward.y) * dome; FOG_DIR.glow.z = Math.max(0, SHOWN.glowAt.z - SHOWN.toward.z) * dome;
   DAY_F.copy(SUN_NOW).transformDirection(camera.matrixWorldInverse); FOG_DIR.sun3.x = DAY_F.x; FOG_DIR.sun3.y = DAY_F.y; FOG_DIR.sun3.z = DAY_F.z;
   renderer.getDrawingBufferSize(DAY_V2); const th = Math.tan(camera.fov * Math.PI / 360) / camera.zoom;
   FOG_DIR.view.x = 1 / DAY_V2.x; FOG_DIR.view.y = 1 / DAY_V2.y; FOG_DIR.view.z = th * camera.aspect; FOG_DIR.view.w = th;
-  // the land's sun shade, again when the light has moved
-  if (!DAY.bake && DAY.baked && shadeTex && DAY.baked.angleTo(SUN_DIR) > 0.6 * Math.PI / 180) { DAY.baked.copy(SUN_DIR); DAY.bake = sunShadeSteps(SUN_DIR, 0.4); }   // (it hands back control often; the frame's budget below decides how long it runs)
-  if (DAY.bake) { const t0 = performance.now(), budget = Math.min(3, Math.max(0.8, dt * 1000 * 0.18)); while (performance.now() - t0 < budget) if (DAY.bake.next().done) { DAY.bake = null; break; } }   // (about a sixth of the frame: 3 ms at 60 Hz, 1.2 ms at 144)
+  // the land's sun shade, again as the light moves (SHADE above)
+  shadeFrame(dt);
   lampsFrame();
+  NIGHT_LIGHTS.update(dt, LAMPU.lampOn.value);                          // (the windows and lanterns, with the lamps)
   folkFrame(dt, quiet);
 }
 // THE STREET LAMPS come on as the sun goes: the lantern glass brightens, a soft halo round it, and a warm pool on the
@@ -2204,7 +2402,8 @@ function lampsFrame() {
   // reaches as far as its pool on the ground, 4.5 of its size
   if (TOWN.village && ((LAMP.tick = (LAMP.tick || 0) + 1) % 10 === 1)) {
     const lamps = TOWN.village.layout.items.filter((i) => i.type === 'prop' && i.kind === 'lamp').map((i) => ({ x: i.x, z: i.z, y: heightAt(i.x, i.z) + (i.y || 0) + 3.17 * i.size, reach: 4.5 * i.size, strength: 1 }));
-    const sig = lamps.map((l) => `${l.x},${l.z},${l.y.toFixed(2)},${l.reach}`).join('|');   // (the light's own height in it: the land reshaped or levelled under a lamp moves its light too)
+    lamps.push(...NIGHT_LIGHTS.lamps());                                 // (Bandit Math: the lanterns and the lit windows)
+    const sig = lamps.map((l) => `${l.x},${l.z},${l.y.toFixed(2)},${l.reach}`).join('|') + NIGHT_LIGHTS.sig;   // (the light's own height in it: the land reshaped or levelled under a lamp moves its light too)
     if (sig !== LAMP.mapSig) { LAMP.mapSig = sig; buildLampMap(LAMPU, lamps); }
   }
   LAMPU.lampOn.value = on;
@@ -2240,7 +2439,7 @@ renderer.getDrawingBufferSize(U.res.value);
 function update(dt, afterShow = null, quiet = false) {
   if (TOWN.job) { const t0 = performance.now(), budget = Math.min(6, Math.max(2, dt * 1000 * 0.25)); while (performance.now() - t0 < budget) if (TOWN.job.next().done) { TOWN.job = null; break; } }   // (a light town rebuild, a slice a frame: townRebuildNow)
   if (PAVE.job) { const t0 = performance.now(), budget = Math.min(6, Math.max(2, dt * 1000 * 0.25)); while (performance.now() - t0 < budget) if (PAVE.job.next().done) { PAVE.job = null; break; } }   // (the paving laid again after a road edit: paveLater)
-  if (!quiet) { if (SHOW.sc) SHOW.sc.update(dt); tickGlobes(dt); } if (afterShow) afterShow(); followCover(); U.time.value += dt; sky.update(camera, dt); if (WIND.on) tickWind(dt); dayFrame(dt, quiet); followShadow();
+  if (!quiet) { if (SHOW.sc) SHOW.sc.update(dt); tickGlobes(dt); } if (afterShow) afterShow(); followCover(); lawnFrame(dt); U.time.value += dt; sky.update(camera, dt); if (WIND.on) tickWind(dt); dayFrame(dt, quiet); followShadow();
   for (const f of [treeForest, coverForest]) if (f) {
     f.landU.landShade.value = U.shadeMap.value; f.landU.landShadeK.value.set(U.hillShade.value, U.aoShade.value, U.treeShade.value * 0.6, U.shadeMap.value ? 1 : 0);   // the land's baked shade, on the plants too
     f.update(camera, controls.target, camera.position, dt);
@@ -2268,7 +2467,7 @@ function bakeData() {
     hashes: { heights: fnvBytes([hpre]), cells: fnvBytes([wd, pond, gully, fan]), water: fnvBytes([waterRgba], 61), paths: fnvBytes([MAPS.path], 61) } };
 }
 return {
-  scene, sky, sun, hemi, ground, mat, lawn, LAWN_SKIP, U, MAPS, TOWN, PLANT, COVER, GROW, PLANT_KINDS, FAMILY, FOREST, LEAF, LAND, VALLEY, SHAPE, WATER, PAVE, DAY, DL, STONES, LAWN, CALM, FOLK, SHOW, BEAMS, RAIN, FENCE, FOG_EDGE: FOG_DIR.edge,
+  scene, sky, sun, hemi, ground, mat, lawn, LAWN_SKIP, U, MAPS, TOWN, PLANT, COVER, GROW, PLANT_KINDS, FAMILY, FOREST, LEAF, LAND, VALLEY, SHAPE, WATER, PAVE, DAY, DL, SHADE, NIGHT, NIGHT_GRADE, NIGHT_LIGHTS, STONES, LAWN, LAWN_GO, CALM, FOLK, SHOW, BEAMS, RAIN, FENCE, FOG_EDGE: FOG_DIR.edge,
   TS, QUAL, TEXTURES, LAYERS, TREE_SPECIES, TOWN_DEFAULT, PLANTING_FIRST, weights, FLOW, SETTLE, WDEPTH, ACC, POND, OUTLETS, Hg, N, SIZE, TEX, SEG, groundTiles, SUN_NOW, FOG_DIR, LAMPU,
   BAKE, bakeData, update, render, settled, heightAt, groundAt, slopeAt, waterAt, coverGround, buildLand, buildHeights, shapeMesh, fastMesh, baseGrid, erodeSteps, smoothErosion, cutRavines, addCrags, findWater, townLand, paintWater,
   placeCover, placeTrees, placeStones, placeLawn, calmCover, buildPaving, applyPave, paveLater, composePathRoad, tex, setAverages, applyWeights, drawPaths, followShadow, followCover, townRebuildNow, beamsReady,

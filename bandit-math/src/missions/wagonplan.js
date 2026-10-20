@@ -96,3 +96,109 @@ export function nextSpeed(level, { misses = 0, stepUp = false, newTable = false,
   if (misses === 0 && !stepUp) return Math.min(top, level + 1);
   return level;
 }
+
+// ── THE TRIP: the job's wagon goes from one end of its road to the other ────────────────────────────────────────────
+// The job's wagon drives from one end of the loop to the other (A to B), the gangs riding in along the way. Once it is
+// safely past the far end's mark, with no gang about, it pulls up there, the driver thanks the player and pays a
+// little, and the job rests (a word with the driver, or riding off and back, starts the next trip, on round to the
+// other end). A gang still riding with it at the mark: it rolls on until they're seen off, then pulls up.
+export const TRIP = {
+  marks: [0, 0.5],    // the ends (shares of the way round from where the road starts): the west end, nearest the
+                      // pasture, where the wagon first waits, and the east end
+  least: 90,          // m: a trip is at least this long (a mark nearer than this ahead is passed for the next one)
+  quiet: 45,          // m: no new gang rides in this close to the trip's end
+  pay: 8,             // gold the driver pays at the end of a trip, on top of each gang's pay
+  ease: 0.6,          // m/s each second the wagon slows at, pulling up at the mark
+};
+// metres from s (along the loop, going forward) to the trip's end: the next mark at least `least` ahead
+export function tripLeft(s, length, { marks = TRIP.marks, least = TRIP.least } = {}) {
+  let best = Infinity;
+  for (const m of marks) {
+    let d = (((m * length - s) % length) + length) % length;
+    while (d < least) d += length;
+    best = Math.min(best, d);
+  }
+  return best;
+}
+
+// ── AN OPEN ROAD: a stretch of the road through the valley, the way a wagon goes along it ──────────────────────────
+// The same shape as makeRoad's, for a road that doesn't loop: points [[x, z], ...] evenly spaced along it (about a
+// metre apart), in the order the wagon goes. at(s) works for any s (past either end, straight on from the end); gap(a,
+// b) is just b - a; track and nearest as makeRoad's.
+export function makeOpenRoad(points) {
+  const n = points.length, X = new Float64Array(n), Z = new Float64Array(n), H = new Float64Array(n);
+  for (let i = 0; i < n; i++) { X[i] = points[i][0]; Z[i] = points[i][1]; }
+  let length = 0; for (let i = 1; i < n; i++) length += Math.hypot(X[i] - X[i - 1], Z[i] - Z[i - 1]);
+  const seg = length / Math.max(1, n - 1);
+  for (let i = 0; i < n; i++) { const j = Math.min(n - 1, i + 1), k = Math.max(0, i - 1); H[i] = Math.atan2(X[j] - X[k], Z[j] - Z[k]); }
+  const road = { length, points, n, open: true };
+  road.at = (s, out = {}) => {
+    let x, z, h;
+    if (s <= 0) { h = H[0]; x = X[0] + Math.sin(h) * s; z = Z[0] + Math.cos(h) * s; }
+    else if (s >= length) { h = H[n - 1]; x = X[n - 1] + Math.sin(h) * (s - length); z = Z[n - 1] + Math.cos(h) * (s - length); }
+    else {
+      const u = s / seg, i = Math.min(n - 2, Math.floor(u)), f = u - i, dh = Math.atan2(Math.sin(H[i + 1] - H[i]), Math.cos(H[i + 1] - H[i]));
+      x = X[i] + (X[i + 1] - X[i]) * f; z = Z[i] + (Z[i + 1] - Z[i]) * f; h = H[i] + dh * f;
+    }
+    out.x = x; out.z = z; out.h = h; out.nx = Math.cos(h); out.nz = -Math.sin(h);
+    return out;
+  };
+  road.nearest = (x, z) => { let best = 0, bd = Infinity; for (let i = 0; i < n; i++) { const d = (X[i] - x) ** 2 + (Z[i] - z) ** 2; if (d < bd) { bd = d; best = i; } } return best * seg; };
+  road.track = (x, z, s, win = 30) => {
+    const i0 = Math.round(s / seg), w = Math.ceil(win / seg); let best = s, bd = Infinity;
+    for (let k = -w; k <= w; k++) { const i = Math.max(0, Math.min(n - 1, i0 + k)), d = (X[i] - x) ** 2 + (Z[i] - z) ** 2; if (d < bd) { bd = d; best = i * seg; } }
+    return best;
+  };
+  road.gap = (a, b) => b - a;
+  return road;
+}
+
+// ── HOLD-UPS: a gang jumps a wagon travelling the long roads ───────────────────────────────────────────────────────
+// Out on the road through the valley, well away from the town, now and then a gang rides up on a travelling wagon: it
+// pulls up, the driver shouts "Help!", and the player rides over and ropes the bandits (the wagon job's gang: the same
+// numbers, at the rider's own level). With 3 to 5 roped the rest ride off; the driver thanks the player, pays a little
+// and drives on the way it was going. "Protect the wagon" turned off for the rider: no hold-ups.
+export const AMBUSH = {
+  out: 170,           // m along the road from the town square: a wagon further out than this is on the long roads
+  player: 130,        // m: the player too must be out this far along the road ...
+  roadNear: 45,       // ... and no further than this from its middle
+  from: 45, to: 175,  // m from the player to the wagon: near enough to see, not right on top of them
+  first: 45,          // s out on the long roads before the first hold-up of a ride
+  every: [110, 220],  // s out on the long roads between one hold-up and the next
+  riders: [6, 9],     // riders in the bunch for a gang wearing a table's multiples (about half are the gang: 3 to 5)
+  cards: [3, 5],      // a gang of cards: this many cards, one bandit a card
+  most: 5,            // bandits roped that see the gang off (any more ride off with the rest)
+  bonus: 10,          // gold the driver pays the player on top of the gang's usual pay
+  wait: 150,          // s the gang holds a wagon up for a player who doesn't come; then the driver makes a run for it
+  far: 240,           // m: the player further than this from the hold-up: the driver makes a run for it
+  helpEvery: 3.5,     // s between the driver's shouts of "Help!" ...
+  helpNear: 20,       // ... till the player is this close (m)
+  // the driver's recorded "Help!" (sounds/voice/<name>.ogg and .m4a, as the other voice clips), played with the
+  // bubble: none recorded yet, so the bubble shows alone. Add each clip's name here once it is in sounds/voice/
+  helpClips: [],
+  spawn: [70, 190],   // m along the road from the wagon the gang rides in from (the nearest out of the player's sight)
+  hold: 26,           // m: wagons and travellers coming up behind (or toward) a held-up wagon wait this far short of it
+  open: 0.65,         // the share of the ground round the wagon that must be clear for the riders (no thick trees)
+  jobs: 70,           // m: none held up this near the round-up's pasture or the corral (two jobs' questions at once there)
+  mist: 0.1,          // the most mist at the wagon (W.fogAt, the banks at the valley's ends): none held up in it, unseen
+  // the driver's words (a bubble over his head): his shout, and his thanks once the gang is seen off
+  words: { help: 'Help!', thanks: ['Much obliged, partner!', 'Thank you kindly!', "You're a real life saver!", 'Bless you, partner!'] },
+};
+// how many riders ride up for a gang (a table's), and how many cards (a gang of cards)
+export const gangSize = (rand = Math.random) => AMBUSH.riders[0] + Math.floor(rand() * (AMBUSH.riders[1] - AMBUSH.riders[0] + 1));
+export const cardCount = (rand = Math.random) => AMBUSH.cards[0] + Math.floor(rand() * (AMBUSH.cards[1] - AMBUSH.cards[0] + 1));
+// the player is out on the long roads: pu metres along the road (the nearest point), off metres from its middle,
+// square: where the town square is along it
+export const outOnRoad = ({ pu, off, square }) => Math.abs(pu - square) >= AMBUSH.player && off <= AMBUSH.roadNear;
+// which travelling wagon a gang jumps, or null. Each candidate: { u (m along the road), dist (m from the player), made
+// (drawn), onRoad (on its way, not pulling off or standing at a spot), held, ended, plan (it means to pull off in
+// town), seen (in the player's view), open (the share of the ground round it that is clear), mist (W.fogAt there), atJob (within AMBUSH.jobs of the pasture or the corral) }. Out on the long roads,
+// near enough to see and not on top of the player, with room round it for the riders; one in view first, then the
+// one nearest a middling distance.
+export function ambushPick(list, { square }) {
+  const ok = list.filter((t) => t.made && t.onRoad && !t.held && !t.ended && !t.plan && Math.abs(t.u - square) >= AMBUSH.out
+    && t.dist >= AMBUSH.from && t.dist <= AMBUSH.to && (t.open ?? 1) >= AMBUSH.open && (t.mist ?? 0) <= AMBUSH.mist && !t.atJob);
+  if (!ok.length) return null;
+  ok.sort((a, b) => (b.seen ? 1 : 0) - (a.seen ? 1 : 0) || Math.abs(a.dist - 100) - Math.abs(b.dist - 100));
+  return ok[0];
+}

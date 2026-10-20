@@ -4,20 +4,26 @@
 // down, the tripod's legs swing out, and the view goes under the focusing cloth: the ground glass, pointed at the herd's
 // middle. Dragging the view (or A / D, the arrow keys; W / S tilt it) turns the camera on its tripod.
 // Done with the job, E by Miss Wren gives the camera back: it comes off the saddle and the job rests (no card, no
-// trail) until the player has ridden well away from the herd and comes back.
+// trail) until the player has ridden well away from the herd and comes back; walking up to a herd still offers the
+// camera all the same (setting it up borrows it again).
+// The job is never over for good: whatever ended it ("Done for now", a full roll, the camera given back), the camera
+// can be set up again by the job's herd, and a player who finds another herd on their own (one settled within
+// SNAP.near) has that one for the job's herd instead.
 //
 // The herd stands side-on for its picture, each deer wearing a small number tag, and one equation sits over the frame
-// ("3x − 4 = 11"), as hard as the rider's lock boxes are now (src/math/deermath.js). Exactly one deer's number makes it
-// true. Point at that deer and click (or tap it, or type the number on its tag):
+// ("2x + 5 = 17"): a quick pick made in the head, so asked well below the rider's lock boxes (src/math/deermath.js), and
+// easier again after a miss. Exactly one deer's number makes it true. Point at that deer and click (or tap it, or type the number on its tag):
 //   right: the flash powder goes off (a white flash and a puff of smoke), the picture comes out as a sepia print with
 //          the equation written under it, gold, and the print slides into the rider's photo album (src/ui/album.js);
 //          the next equation slides in, the herd still standing
 //   wrong: the deer poses on, Old Hob says one plain line why ("That one's 7: check, 7 + 7 is 14, not 12"), and a card
 //          shows the two sides as a balance (14 against 12, tipped) and the steps that solve it; pick again, nothing
-//          taken off
-// After SNAP.per pictures the herd has had enough and drifts off; the camera folds back onto the horse, and a few
-// seconds later the compass marks the next herd. "Done for now" (or Esc) packs the camera away early. Stuck for a while
-// without a pick, the steps card shows by itself (the last line left for the kid).
+//          taken off. A miss never ends anything: the photographer stays and tries again, and the next equation is
+//          easier (DEERMATH.ease)
+// After SNAP.per pictures the herd has had enough and drifts a little way off; the camera folds back onto the horse,
+// and once the herd settles the camera can be set up again (the compass and the card lead to it). "Done for now" (or Esc) packs the camera away early. Stuck for a while
+// without a pick, the steps card shows by itself (the last line left for the kid), sooner for a two-step equation. A roll
+// opens on a one-step equation, and stays on one step after a miss (src/math/deermath.js DEERMATH.firstTop).
 //
 // No shooting here: deer are only ever photographed (the only guns are at the bottle range, on bottles and cans).
 //
@@ -36,7 +42,7 @@
 //   DJ.state()        for rigs;  DJ.dispose()
 import * as THREE from 'three';
 import { makeBoxCamera } from '../boxcamera.js';
-import { makePhoto, whyNot, balanceFor, numText } from '../math/deermath.js';
+import { makePhoto, whyNot, balanceFor, numText, DEERMATH } from '../math/deermath.js';
 import { readAloud } from '../math/skill.js';
 // the skill model's part of a photo's first try (src/math/skill.js): the equations strand, at the photo's own point; a
 // travel job, so no time
@@ -73,7 +79,8 @@ export const SNAP = {
   dragRate: 0.0045,      // radians a pixel of drag turns it
   rest: 150,             // m from the herd: the camera given back, the job's card comes back past this
   helpAfter: 14,         // s without a pick before the steps card shows by itself
-  nextHerd: 5,           // s after an outing before the compass marks the next herd
+  helpAfterTwo: 6,       // ... sooner for a two-step equation (worked in the head, with no solver to move things)
+  nextHerd: 5,           // s after the job is made before it picks a herd, if the deer weren't ready yet
   printShow: 1.9,        // s the print shows before it slides into the album
   thumb: [240, 160],     // the print's picture, pixels (3 by 2)
   crop: 0.5,             // the print shows this share of the ground glass across, round the deer in the picture
@@ -90,7 +97,9 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
   const rng = makeRng();
   const recent = [];
   const DJ = { prompt: null, near: false, card: false, active: false, paused: false };
-  let herd = null, last = null, state = 'travel', t = 0, waitT = 0, disposed = false;
+  let herd = null, state = 'travel', t = 0, waitT = 0, disposed = false;
+  let ease = 0;           // points easier the photos are asked after misses (src/math/deermath.js DEERMATH.ease)
+  let lookT = 0;          // s till the next look for a nearer herd the player has found
   let vf = null;          // the viewfinder: its page elements and what it is showing
   let spooked = false, cardKey = '';
   const eye = new THREE.Vector3(), look = new THREE.Vector3(), _v = new THREE.Vector3();
@@ -115,7 +124,14 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
   // ── TRAVEL: the card and the prompt near the herd ─────────────────────────────────────────────────────────────
   function travel(dt) {
     const c = where(), d = Math.hypot(P.position.x - c.x, P.position.z - c.z);
-    if (resting) { if (d > SNAP.rest) resting = false; else { DJ.prompt = null; DJ.near = false; return; } }
+    if (resting && d > SNAP.rest) resting = false;
+    if (resting) {
+      // (the camera given back: no card and no trail, but walking up to the herd still offers it: setting it up
+      // borrows it again)
+      const calm = herd.state === 'calm' || herd.state === 'alert';
+      DJ.prompt = !busy() && calm && d >= SNAP.setMin && d <= SNAP.setMax && (P.mode === 'foot' || P.mode === 'horse') ? 'Set up the camera' : null;
+      DJ.near = false; return;
+    }
     const near = d < SNAP.near;
     if (near && !DJ.near) hob.event('deerArrive');
     DJ.near = near;
@@ -132,6 +148,7 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
       const lend = !rider.cameraLent && !ok;
       const kind = lend || d > SNAP.setMax ? 'travel' : 'job';
       const sub = lend ? 'First borrow Miss Wren\'s camera: follow the hoofprints to her'
+        : herd.state === 'leave' ? 'They\'re moving on a little way: let them settle, then set up again'
         : !settled ? 'They bolted! Let them settle, then try again from further off'
         : d > SNAP.setMax ? `${Math.round(d)} m to the herd: get within ${SNAP.setMax} m`
         : d < SNAP.setMin ? 'Too close: they\'ll bolt. Back off a few steps'
@@ -167,6 +184,7 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
     if (state !== 'travel' || !DJ.prompt || DJ.paused) return false;
     DJ.prompt = null; state = 'setting'; t = 0; waitT = 0;
     if (!rider.cameraLent) { rider.cameraLent = true; saveRider(rider); }
+    resting = false;
     if (DJ.card) { DJ.card = false; cardKey = ''; hud.rule(null); }
     hud.prompt(null);
     DJ.active = true;
@@ -316,7 +334,7 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
     document.body.classList.add('bmd-viewing');
     vf.el = el; vf.frameEl = el.querySelector('.bmd-frame'); vf.tagsEl = el.querySelector('.bmd-tags'); vf.helpEl = el.querySelector('.bmd-help');
     vf.eqEl = el.querySelector('.bmd-eq b'); vf.wordsEl = el.querySelector('.bmd-eq i'); vf.flashEl = el.querySelector('.bmd-flash');
-    vf.pics = 0; vf.busy = false; vf.idle = 0; vf.helped = false; vf.hover = -1; vf.ready = false; vf.typed = '';
+    vf.pics = 0; vf.missed = false; vf.busy = false; vf.idle = 0; vf.helped = false; vf.hover = -1; vf.ready = false; vf.typed = '';
     el.querySelector('.bmd-done').addEventListener('click', (e) => { e.stopPropagation(); DJ.done(); });
     el.addEventListener('pointerdown', onDown); el.addEventListener('pointermove', onMove); el.addEventListener('pointerup', onUp);
     addEventListener('keydown', onKey, true);
@@ -347,7 +365,7 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
 
   // a new equation; the herd keeps its spots, the tags get new numbers
   function newShot() {
-    const shot = makePhoto(rider, { n: herd.deer.length, rng, recent });
+    const shot = makePhoto(rider, { n: herd.deer.length, rng, recent, ease, oneStep: !vf.pics || vf.missed });   // (a roll opens on one step, and keeps to one step after a miss)
     recent.push(shot.key); if (recent.length > 12) recent.shift();
     vf.shot = shot; vf.tried = false; vf.wrong = new Set(); vf.idle = 0; vf.helped = false;
     clearTimeout(vf.typeT); vf.typed = ''; showTyped();
@@ -487,6 +505,7 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
     if (i !== shot.right) { wrong(i, v); return; }
     vf.busy = true;
     const first = !vf.tried; vf.tried = true;
+    if (first) ease = Math.max(0, ease - DEERMATH.ease.right);
     if (first) { const rec = recordAnswer(rider, true, skillPart(shot)); if (rec && rec.badge) hud.toast(`You earned the ${rec.badge} badge!`, 'gold'); }
     const img = capture();
     K.flash(); flashSound();
@@ -494,7 +513,7 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
     const gold = SNAP.pay.photo + Math.floor(Math.max(0, rungIndex(shot.rung) - 2) / SNAP.pay.rungEvery);
     const e = earn(rider, gold);
     countJob(rider, 'photos');   // (counted for a belt buckle to come: there's no photographs buckle yet)
-    addPrint(rider, { eq: shot.eq, x: numText(shot.x), img, rung: shot.rung });
+    addPrint(rider, { eq: shot.young ? shot.solved : shot.eq, x: shot.young ? '' : numText(shot.x), img, rung: shot.rung });   // (a kindergarten box's print: filled in, "4 + 1 = 5")
     refresh();
     if (e.newTitle) setTimeout(() => hud.toast(`You're a ${e.newTitle} now!`, 'gold'), 2200);
     hob.event('deerRight');
@@ -513,8 +532,11 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
 
   function wrong(i, v) {
     const shot = vf.shot;
-    if (!vf.tried) { const rec = recordAnswer(rider, false, skillPart(shot)); if (rec && rec.badge) hud.toast(`You earned the ${rec.badge} badge!`, 'gold'); }
-    vf.tried = true; vf.wrong.add(i);
+    if (!vf.tried) {
+      const rec = recordAnswer(rider, false, skillPart(shot)); if (rec && rec.badge) hud.toast(`You earned the ${rec.badge} badge!`, 'gold');
+      ease = Math.min(DEERMATH.ease.most, ease + DEERMATH.ease.miss);   // (the next photo is easier; this one stays: try again)
+    }
+    vf.tried = true; vf.missed = true; vf.wrong.add(i);
     const tEl = vf.tagEls[i];
     if (tEl) { tEl.classList.remove('is-shake'); void tEl.offsetWidth; tEl.classList.add('is-shake', 'is-wrong'); }
     hob.event('deerWrong', { line: whyNot(shot, v) });
@@ -538,15 +560,13 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
     packUp(false);
   };
 
-  // the camera folds away; the herd goes back to grazing (or, with its pictures taken, walks off)
+  // the camera folds away; the herd goes back to grazing (or, with its pictures taken, walks a little way off and
+  // settles: it stays the job's herd, so the camera can be set up again once it has)
   function packUp(leave) {
     closeView();
     state = 'packing'; t = 0;
-    if (leave) {
-      herd.leave(vf.at.x, vf.at.z);
-      last = herd; herd = null; waitT = SNAP.nextHerd;
-      setTimeout(() => { if (last && last !== herd) last.shy = null; }, 15000);
-    } else herd.release();
+    if (leave) herd.leave(vf.at.x, vf.at.z);
+    else herd.release();
   }
 
   // ── THE PRINT, AND THE PICTURE ON IT ──────────────────────────────────────────────────────────────────────────
@@ -582,7 +602,7 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
   function showPrint(img, shot, gold) {
     const el = document.createElement('div'); el.className = 'bmd-print';
     el.innerHTML = `${img ? `<img src="${img}" alt="">` : '<div class="bmd-print-blank"></div>'}
-      <div class="bmd-print-eq">${esc(shot.eq)}</div><div class="bmd-print-x">x = ${esc(numText(shot.x))}</div><div class="bmd-print-gold">+${gold} gold</div>`;
+      <div class="bmd-print-eq">${esc(shot.young ? shot.solved : shot.eq)}</div>${shot.young ? '' : `<div class="bmd-print-x">x = ${esc(numText(shot.x))}</div>`}<div class="bmd-print-gold">+${gold} gold</div>`;
     vf.el.appendChild(el);
     requestAnimationFrame(() => el.classList.add('is-in'));
     setTimeout(() => {
@@ -604,10 +624,14 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
     let top = '';
     if (o.v != null) {
       const b = balanceFor(shot, o.v);
-      top = `<div class="bmd-help-h">Try ${esc(numText(o.v))} in it</div>${balanceSvg(b)}
+      // (a kindergarten box, said as its own words go: "Is it 2? 4 + 2 makes 6, not 5", with no talk of sides)
+      top = shot.young
+        ? `<div class="bmd-help-h">Is it ${esc(numText(o.v))}?</div>${balanceSvg(b)}
+        <p class="bmd-help-p">${esc(b.leftText)} makes ${esc(b.leftValue)}, not ${esc(b.rightValue)}.</p>`
+        : `<div class="bmd-help-h">Try ${esc(numText(o.v))} in it</div>${balanceSvg(b)}
         <p class="bmd-help-p">${esc(b.leftValue)} and ${esc(b.rightValue)} don't balance, so ${esc(numText(o.v))} isn't it.</p>`;
     } else top = '<div class="bmd-help-h">Here\'s how it goes</div>';
-    el.innerHTML = `${top}<div class="bmd-steps"><div class="bmd-steps-h">Whatever you do to one side, do to the other</div>
+    el.innerHTML = `${top}<div class="bmd-steps">${shot.young ? '' : '<div class="bmd-steps-h">Whatever you do to one side, do to the other</div>'}
       ${steps.map((s, k) => `<div class="bmd-step${k === steps.length - 1 ? ' is-last' : ''}">${s.note ? `<small>${esc(s.note)}</small>` : ''}<span>${k === steps.length - 1 ? '<i class="bmd-hide">' + esc(s.text) + '</i>' : esc(s.text)}</span></div>`).join('')}</div>`;
     el.hidden = false;
     // (after a wrong pick the last line shows a moment later; stuck with no pick, it is left for the kid to work out)
@@ -622,13 +646,13 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
       DJ.prompt = null; DJ.near = false;
       if (DJ.card) { DJ.card = false; cardKey = ''; hud.rule(null); }
       if (state === 'packing') packing(dt);
-      if (state === 'travel' && deer.herds.length && (waitT -= dt) <= 0) { herd = deer.nearest(P.position, { except: last }); }
+      if (state === 'travel' && deer.herds.length && (waitT -= dt) <= 0) herd = deer.nearest(P.position);
       stowPack(state === 'travel');
       return;
     }
     herd.shy = SNAP.shy;
     if (DJ.paused) return;
-    if (state === 'travel') { stowPack(true); travel(dt); return; }
+    if (state === 'travel') { stowPack(true); nearer(dt); travel(dt); return; }
     if (state === 'setting') {
       if (!vf) { if (P.mode !== 'foot') { if ((waitT += dt) > 6) { state = 'travel'; DJ.active = false; onStop(); } return; } standCamera(); t = 0; }
       // (moved off by the menu's "back to town" while the legs swing out: the camera folds away, no view opened)
@@ -654,9 +678,21 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
       camera.updateMatrixWorld();
       K.root.visible = false;   // (seen from inside it: the box would fill the view)
       placeTags();
-      if (vf.ready && !vf.busy && !vf.helped && vf.helpEl.hidden && (vf.idle += dt) > SNAP.helpAfter) { vf.helped = true; help({}); }
+      if (vf.ready && !vf.busy && !vf.helped && vf.helpEl.hidden && (vf.idle += dt) > (vf.shot && vf.shot.steps.length > 2 ? SNAP.helpAfterTwo : SNAP.helpAfter)) { vf.helped = true; help({}); }
     }
   };
+  // a herd the player has found on their own: one settled within SNAP.near, clearly nearer than the job's own, becomes
+  // the job's herd (the camera goes up for whichever herd the player is by)
+  function nearer(dt) {
+    if ((lookT -= dt) > 0) return;
+    lookT = 1;
+    const at = P.position, n = deer.nearest(at);
+    if (!n || n === herd || !(n.state === 'calm' || n.state === 'alert') || !n.deer.length) return;
+    const c = where(), dn = Math.hypot(at.x - n.mid.x, at.z - n.mid.z), dh = Math.hypot(at.x - c.x, at.z - c.z);
+    if (dn > SNAP.near || dn > dh - 15) return;
+    herd.shy = null; herd = n;
+    if (DJ.card) { DJ.card = false; cardKey = ''; hud.rule(null); }
+  }
   function packing(dt) {
     t += dt;
     K.root.visible = true;
@@ -676,13 +712,13 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
   DJ.flash = () => K.flash();   // (for rigs: the flash and smoke seen from outside)
   DJ.state = () => ({ state, herd: herd && herd.id, herdState: herd && herd.state, near: DJ.near, prompt: DJ.prompt, active: DJ.active,
     shot: vf && vf.shot ? { eq: vf.shot.eq, x: vf.shot.x, values: vf.shot.values, rung: vf.shot.rung } : null, pics: vf ? vf.pics : 0,
-    ready: !!(vf && vf.ready), busy: !!(vf && vf.busy), album: prints(rider).length, fov: +camera.fov.toFixed(1), turn: vf && vf.turn != null ? +vf.turn.toFixed(3) : null, tilt: vf && vf.tilt != null ? +vf.tilt.toFixed(3) : null, resting, lent: !!rider.cameraLent });
+    ready: !!(vf && vf.ready), busy: !!(vf && vf.busy), album: prints(rider).length, fov: +camera.fov.toFixed(1), turn: vf && vf.turn != null ? +vf.turn.toFixed(3) : null, tilt: vf && vf.tilt != null ? +vf.tilt.toFixed(3) : null, resting, lent: !!rider.cameraLent, ease });
   DJ.camera = K;
   DJ.dispose = () => {
     disposed = true;
     if (state === 'view') closeView();
     if (DJ.card) hud.rule(null);
-    if (herd) herd.shy = null; if (last) last.shy = null;
+    if (herd) herd.shy = null;
     pack.removeFromParent(); K.dispose();
   };
 

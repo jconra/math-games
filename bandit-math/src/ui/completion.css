@@ -163,8 +163,11 @@
 .bmk-corner.is-small .bmk-cg-what { width: 92px; flex: none; }
 .bmk-corner.is-small .bmk-prog { margin-top: 0; }
 @media (max-width: 480px) {
-  .bmk-toast { left: 6px; right: 6px; top: 4px; max-width: none; transform: translate(0, -130%); }
+  /* beside the purse (over the compass), never over the gold or the rank */
+  .bmk-toast { left: 184px; right: 6px; top: 6px; max-width: none; gap: 6px; padding: 5px 8px 5px 6px; transform: translate(0, -130%); }
   .bmk-toast.is-on { transform: translate(0, 0); }
   .bmk-toast-text { flex: 1; }
-  .bmk-toast-text b { font-size: 15px; }
+  .bmk-toast .bmk-pic { width: 28px; height: 28px; } .bmk-toast .bmk-pic.is-buckle svg { width: 30px; height: 21px; }
+  .bmk-toast-text small { font-size: 11px; } .bmk-toast-text b { font-size: 13px; }
+  .bmk-toast-pct { padding-left: 6px; } .bmk-toast-pct b { font-size: 15px; } .bmk-toast-pct small { font-size: 10px; }
 }

@@ -114,6 +114,10 @@ export function* bakeImposterSteps(renderer, object, { grid = 12, cell = 128, he
 // The vertex stage shared by the drawing and the shadow-casting materials: the quad turned to
 // the viewer (the camera, or the light when `useOverride` is set), and the atlas cell for the
 // viewer's direction in the tree's own frame.
+// (Bandit Math) RISING IN: a card with an `iBorn` above 0 (s, on IMPOSTER_CLOCK's clock) grows up out of the ground
+// over IMPOSTER_RISE seconds from then (a plant newly laid in a far field comes in gradually instead of appearing); 0
+// (and a geometry without the attribute): grown. The clock is shared by every imposter material: the page advances it
+export const IMPOSTER_CLOCK = { value: 1 }, IMPOSTER_RISE = 1.2;
 const VERTEX = `
       #include <common>
       #ifdef WIND
@@ -123,7 +127,8 @@ const VERTEX = `
       #include <logdepthbuf_pars_vertex>
       #include <shadowmap_pars_vertex>
       #include <fog_pars_vertex>
-      attribute vec3 iPos; attribute float iYaw; attribute float iScale; attribute vec3 iTint; attribute float iFade;
+      attribute vec3 iPos; attribute float iYaw; attribute float iScale; attribute vec3 iTint; attribute float iFade; attribute float iBorn;
+      uniform float bornClock;
       uniform float radius; uniform float halfW; uniform float halfH; uniform vec3 centre; uniform float grid; uniform float hemi;
       uniform vec3 viewDirOverride; uniform float useOverride; uniform float blendDist; uniform float blend; uniform float parallax;
       varying vec2 vC0; varying vec2 vC1; varying vec2 vC2; varying vec3 vW; varying vec2 vP0; varying vec2 vP1; varying vec2 vP2;
@@ -152,8 +157,9 @@ const VERTEX = `
         return vec2(x * 0.5 + 0.5, z * 0.5 + 0.5);
       }
       void main() {
+        float iScaleR = iScale * (iBorn > 0.0 ? smoothstep(0.0, 1.0, clamp((bornClock - iBorn) / ${IMPOSTER_RISE.toFixed(2)}, 0.0, 1.0)) : 1.0);   // (rising in: see IMPOSTER_CLOCK)
         float c = cos(iYaw), s = sin(iYaw);
-        vec3 localCentre = iPos + vec3(0.0, centre.y * iScale, 0.0) + vec3(c * centre.x + s * centre.z, 0.0, -s * centre.x + c * centre.z) * iScale;
+        vec3 localCentre = iPos + vec3(0.0, centre.y * iScaleR, 0.0) + vec3(c * centre.x + s * centre.z, 0.0, -s * centre.x + c * centre.z) * iScaleR;
         vec3 worldCentre = (modelMatrix * vec4(localCentre, 1.0)).xyz;     // the cards live in their group's frame (a forest set off at a distance)
         vec3 toCam = useOverride > 0.5 ? normalize(viewDirOverride) : normalize(cameraPosition - worldCentre);
         // the view direction in the tree's own frame: the instance's spin undone
@@ -162,9 +168,9 @@ const VERTEX = `
         // the card faces the viewer. (Locking it to its view cell was tried: the card then jumps at
         // every cell boundary, trunk and all, and the trees look as if they are walking.)
         vec3 right = normalize(cross(vec3(0.0, 1.0, 0.0), toCam)); vec3 up = cross(toCam, right);
-        vec3 world = worldCentre + (right * position.x * halfW * 2.0 + up * position.y * halfH * 2.0) * iScale;
+        vec3 world = worldCentre + (right * position.x * halfW * 2.0 + up * position.y * halfH * 2.0) * iScaleR;
         #ifdef WIND
-        { float top = (centre.y + halfH) * iScale, above = world.y - (modelMatrix * vec4(iPos, 1.0)).y, k = clamp(above / max(top, 0.001), 0.0, 1.0);   // the card bends like the plant: its top in the breeze, its foot still
+        { float top = (centre.y + halfH) * iScaleR, above = world.y - (modelMatrix * vec4(iPos, 1.0)).y, k = clamp(above / max(top, 0.001), 0.0, 1.0);   // the card bends like the plant: its top in the breeze, its foot still
           world.xz += windAt(iPos.xz) * k * k * top * windSway; }
         #endif
         // Which atlas cells this card shows, and their weights: the three cells of the triangle the
@@ -184,7 +190,7 @@ const VERTEX = `
         vec3 upTree = vec3(c * up.x - s * up.z, up.y, s * up.x + c * up.z);
         vP0 = vP1 = vP2 = vec2(0.0);
         if (parallax > 0.5 && useOverride < 0.5) { vP0 = parallaxOf(vC0, dn, rightTree, upTree); vP1 = parallaxOf(vC1, dn, rightTree, upTree); vP2 = parallaxOf(vC2, dn, rightTree, upTree); }
-        vQuad = uv; vTint = iTint; vFade = iFade; vYaw = iYaw; vRadius = radius * iScale; vLand = iPos.xz;
+        vQuad = uv; vTint = iTint; vFade = iFade; vYaw = iYaw; vRadius = radius * iScaleR; vLand = iPos.xz;
         vec4 mv = viewMatrix * vec4(world, 1.0); vViewPos = mv.xyz; vToCamView = (viewMatrix * vec4(toCam, 0.0)).xyz;
         gl_Position = projectionMatrix * mv;
         #include <logdepthbuf_vertex>
@@ -250,7 +256,7 @@ export function imposterMaterial(bake, { sunDir = new THREE.Vector3(0.5, 1, 0.3)
     landShade: { value: null }, landShadeSize: { value: 1600 }, landShadeK: { value: new THREE.Vector4() },
     shadowAt: { value: new THREE.Vector3() }, shadowRange: { value: 0 }, edgeFrom: { value: 0.55 }, edgeTo: { value: 0.97 }, edgeShade: { value: 0.55 }, edgeJitter: { value: 0.12 },   // (the shadow edge: see Forest)
   }]);
-  uniforms.atlas.value = bake.colour; uniforms.atlasN.value = bake.normal;
+  uniforms.atlas.value = bake.colour; uniforms.atlasN.value = bake.normal; uniforms.bornClock = IMPOSTER_CLOCK;
   const mat = new THREE.ShaderMaterial({
     uniforms, transparent: false, side: THREE.DoubleSide, lights: true, fog: true, extensions: { fragDepth: true },
     vertexShader: VERTEX,
@@ -261,6 +267,9 @@ export function imposterMaterial(bake, { sunDir = new THREE.Vector3(0.5, 1, 0.3)
       #include <shadowmap_pars_fragment>
       #include <lights_pars_begin>
       #include <fog_pars_fragment>
+      #ifndef BM_NIGHT
+      vec3 bmNight(vec3 c) { return c; }
+      #endif
       uniform vec3 sunDir; uniform float ambient; uniform float useShadow; uniform float soften; uniform float glowLight; uniform float sheen; uniform float shadowNudge; uniform float lowSun, lowSunK;
       uniform vec3 calmCol; uniform float calmFrom, calmTo, calmAmt;
       uniform sampler2D landShade; uniform float landShadeSize; uniform vec4 landShadeK;
@@ -336,7 +345,7 @@ export function imposterMaterial(bake, { sunDir = new THREE.Vector3(0.5, 1, 0.3)
         irradiance += vec3(glowLight);                                     // (as a light map adds it to the mesh)
         vec3 albedo = mix(col.rgb / max(col.a, 0.001) * vTint, calmCol, calm);
         albedo *= landAll;
-        gl_FragColor = vec4(albedo * irradiance * RECIPROCAL_PI + sheenLight, 1.0);
+        gl_FragColor = vec4(bmNight(albedo * irradiance * RECIPROCAL_PI + sheenLight), 1.0);   // (bmNight: the night's faded colours, in three's lights_pars_begin as the valley patches it; without the patch, as it is)
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
         #include <fog_fragment>
@@ -374,6 +383,6 @@ export function imposterMaterial(bake, { sunDir = new THREE.Vector3(0.5, 1, 0.3)
         gl_FragColor = packDepthToRGBA(z);
       }`,
   });
-  mat.userData.depthMaterial.uniforms.atlas.value = bake.colour; mat.userData.depthMaterial.uniforms.atlasN.value = bake.normal;
+  mat.userData.depthMaterial.uniforms.atlas.value = bake.colour; mat.userData.depthMaterial.uniforms.atlasN.value = bake.normal; mat.userData.depthMaterial.uniforms.bornClock = IMPOSTER_CLOCK;
   return mat;
 }

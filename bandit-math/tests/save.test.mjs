@@ -220,7 +220,12 @@ test('the job table: four rising milestones a job, a keepsake for each, cattle, 
     assert.ok(S.BUCKLES.includes(S.KEEPSAKES[j.id].from));
   }
   assert.deepEqual(S.JOBS.filter(j => j.ready).map(j => j.id), ['cattle', 'boxes', 'sheep', 'orders', 'pigs', 'bandits', 'deliveries', 'loot', 'targets']);
-  assert.deepEqual(S.JOBS.find(j => j.id === 'cattle').at, [10, 50, 200, 500]);
+  // (the counts as decided 2026-10-19: tin and copper as before, silver and gold brought in so the whole checklist
+  // takes about 17 hours of play, not 38)
+  assert.deepEqual(Object.fromEntries(S.JOBS.map(j => [j.id, j.at])), {
+    cattle: [10, 50, 120, 250], boxes: [5, 25, 50, 100], sheep: [5, 20, 40, 80], orders: [10, 40, 100, 200], pigs: [10, 50, 100, 200],
+    bandits: [3, 15, 40, 80], deliveries: [3, 10, 25, 40], loot: [5, 20, 40, 80], targets: [15, 60, 150, 300],
+  });
   assert.equal(S.jobWords('cattle', 1), '1 steer corralled');
   assert.equal(S.jobWords('cattle', 1200), '1,200 cattle corralled');
   assert.equal(S.jobWords('boxes', 1), '1 lock box cracked');
@@ -230,19 +235,22 @@ test('counting a job saves at once and hands back a buckle exactly at each miles
   fresh();
   const r = S.newRider('Max'); S.saveRider(r);
   const won = [];
-  for (let i = 1; i <= 520; i++) {
+  for (let i = 1; i <= 260; i++) {
     const res = S.countJob(r, 'cattle');
     assert.equal(res.count, i);
     if (res.buckle) won.push([i, res.buckle.tier]);
   }
-  assert.deepEqual(won, [[10, 'tin'], [50, 'copper'], [200, 'silver'], [500, 'gold']]);
-  assert.equal(S.loadRiders()[0].stats.jobs.cattle, 520, 'saved');
+  assert.deepEqual(won, [[10, 'tin'], [50, 'copper'], [120, 'silver'], [250, 'gold']]);
+  assert.equal(S.loadRiders()[0].stats.jobs.cattle, 260, 'saved');
   const b = S.buckleOf(r, 'cattle');
   assert.equal(b.tier, 'gold'); assert.equal(b.next, null);
-  assert.equal(S.buckleProgress(b), '520 · Gold buckle');
+  assert.equal(S.buckleProgress(b), '260 · Gold buckle');
   const mid = S.buckleOf({ stats: { jobs: { cattle: 37 } } }, 'cattle');
   assert.equal(mid.tier, 'tin'); assert.equal(S.buckleProgress(mid), '37 / 50 to copper');
-  assert.equal(S.buckleProgress(S.buckleOf({ stats: { jobs: { cattle: 120 } } }, 'cattle')), '120 / 200 to silver');
+  assert.equal(S.buckleProgress(S.buckleOf({ stats: { jobs: { cattle: 100 } } }, 'cattle')), '100 / 120 to silver');
+  // a rider from before the counts came down keeps every buckle, and one past the new silver count has it at once
+  assert.equal(S.buckleOf({ stats: { jobs: { cattle: 180 } } }, 'cattle').tier, 'silver');
+  assert.equal(S.buckleOf({ stats: { jobs: { cattle: 500 } } }, 'cattle').tier, 'gold');
   // a jump past two milestones at once wins the higher one
   const q = S.newRider('Ned');
   assert.equal(S.countJob(q, 'cattle', 60).buckle.tier, 'copper');

@@ -51,7 +51,12 @@ export const SKY_GLSL = `
         vec3 s = normalize(cell + 0.25 + fract(h.yzx * 13.7) * 0.5);   // (its spot: kept off its square's edges)
         float d = length(dir - s) * 300.0, b = 0.22 + 1.5 * pow(fract(h.y * 7.31 + h.z * 3.17), 3.0);
         col += mix(vec3(0.74, 0.82, 1.0), vec3(1.0, 0.88, 0.74), h.z) * b * exp(-d * d * 14.0) * starAmt * smoothstep(0.0, 0.15, dir.y); } }
-    if (moonAmt > 0.0) { float md = dot(dir, moonDir); col += vec3(0.82, 0.86, 0.95) * moonAmt * (smoothstep(0.99985, 0.99992, md) * 3.0 + pow(max(md, 0.0), 64.0) * 0.12); }
+    // the moon (Bandit Math: a full moon, about a degree across, its darker seas a soft noise over the disc, a halo round it)
+    if (moonAmt > 0.0) { float md = dot(dir, moonDir);
+      vec3 mu = normalize(cross(moonDir, vec3(0.0, 1.0, 0.0)) + vec3(1e-4, 0.0, 0.0)), mv = cross(mu, moonDir);
+      vec2 mq = vec2(dot(dir, mu), dot(dir, mv)) / 0.019;                    // (on the disc: -1..1 across it)
+      float seas = 0.78 + 0.22 * smoothstep(0.35, 0.7, skyF(mq * 1.6 + 4.3));
+      col += vec3(0.86, 0.88, 0.93) * moonAmt * (smoothstep(0.99978, 0.99984, md) * 1.1 * seas + pow(max(md, 0.0), 900.0) * 0.35 + pow(max(md, 0.0), 40.0) * 0.07); }
     #endif
     vec2 c = skyCloud(from, dir);
     vec3 cl = mix(cloudLitAway, cloudLit, skyTowardSun(dir)) * c.y * 1.15 + glowCol * pow(sd, 4.0) * 0.55;   // clouds: lit by the sun's colour (cloudLit toward it, cloudLitAway away), gold near it
@@ -71,15 +76,30 @@ export function makeCloudSky({ horizon = 0xa9c8e4, zenith = 0x4f86c6, radius = 4
     sunDirSky: { value: new THREE.Vector3(0, 1, 0) }, skyToward: { value: new THREE.Color(horizon) }, glowCol: { value: new THREE.Color(0, 0, 0) },
     sunDisc: { value: new THREE.Color(0, 0, 0) }, cloudLit: { value: new THREE.Color(1.0, 0.99, 0.97) }, cloudLitAway: { value: new THREE.Color(1.0, 0.99, 0.97) }, starAmt: { value: 0 },
     moonDir: { value: new THREE.Vector3(0, -1, 0) }, moonAmt: { value: 0 },
+    // (Bandit Math) the mist at the valley's ends (the valley's FOG_DIR bank0, bank1, bankCol: off unless it hands them on)
+    skyBank0: { value: { x: 500, y: 680, z: 540, w: 700 } }, skyBank1: { value: { x: 0, y: 0, z: 0, w: 0 } }, skyBankCol: { value: { x: 0.7, y: 0.78, z: 0.85 } },
   };
   const material = new THREE.ShaderMaterial({
     uniforms, side: THREE.BackSide, depthWrite: false, fog: false,
     vertexShader: `varying vec3 vDir; void main() { vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
     fragmentShader: SKY_GLSL + `
       varying vec3 vDir;
-      void main() { gl_FragColor = vec4(skyAt(cameraPosition, normalize(vDir)), 1.0);
+      uniform vec4 skyBank0, skyBank1; uniform vec3 skyBankCol;
+      // (Bandit Math) the mist at the valley's ends along the way to the sky: added up at 12 points over 2.5 km (nearer
+      // ones closer together), each by how far out it is and how high (as the valley's fogBankDepth)
+      float skyBank(vec3 from, vec3 dir) {
+        if (skyBank1.w <= 0.0) return 0.0;
+        float sum = 0.0;
+        for (int i = 0; i < 12; i++) { float u = (float(i) + 0.5) / 12.0, t = u * u * 2500.0, dt = 2.0 * u * 2500.0 / 12.0; vec3 q = from + dir * t;
+          float rho = q.x < 0.0 ? clamp((-q.x - skyBank0.x) / (skyBank0.y - skyBank0.x), 0.0, 1.0) : clamp((q.x - skyBank0.z) / (skyBank0.w - skyBank0.z), 0.0, 1.0);
+          float top = q.x < 0.0 ? skyBank1.y : skyBank1.z;
+          sum += rho * (1.0 - smoothstep(top, top + 110.0, q.y)) * dt; }
+        return 1.0 - exp(-sum * skyBank1.x * skyBank1.w);
+      }
+      void main() { vec3 dir = normalize(vDir); gl_FragColor = vec4(skyAt(cameraPosition, dir), 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
+        float mist = skyBank(cameraPosition, dir); if (mist > 0.0) gl_FragColor.rgb = mix(gl_FragColor.rgb, skyBankCol, mist);
       }`,
   });
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 32, 16), material);

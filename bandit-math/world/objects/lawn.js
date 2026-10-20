@@ -4,7 +4,8 @@
 // (the midrib) and darker toward each edge (RIB).
 //
 //   makeLawn({ cap, shade }) -> { mesh, set(spots), colours(root, tip) }
-//   spots: [{ x, y, z, turn, size }];  shade (optional): { shadeMap, landSize, hillShade, aoShade, treeShade } uniforms,
+//   spots: [{ x, y, z, turn, size, born }];  born (optional, s on uniforms.lawnTime's clock): the tuft rises out of the
+//   ground over RISE seconds from then (a tuft newly laid near the view grows in instead of appearing); none: grown;  shade (optional): { shadeMap, landSize, hillShade, aoShade, treeShade } uniforms,
 //   to darken the blades with the land's baked shade like everything else on it, and { shadowAt, shadowRange, edgeFrom,
 //   edgeTo } (the real shadows' square and where it hands over to the baked shade, as the ground has them)
 //
@@ -39,12 +40,14 @@ function tuftGeometry({ blades = 7, height = 0.32, width = 0.022, segs = 3, spre
 
 // the midrib: how much lighter the middle line is, how wide (a share of the half-width), and how much darker the edges
 export const RIB = { line: 0.2, width: 0.3, edge: 0.3 };
+// how long a newly laid tuft takes to rise out of the ground (s)
+export const RISE = 0.9;
 
 export function makeLawn({ cap = 60000, shade = null, lamps = null } = {}) {   // lamps: lampLight.js's uniforms, shared
   const geo = tuftGeometry({});
-  const iPos = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3), iTurn = new THREE.InstancedBufferAttribute(new Float32Array(cap * 2), 2), iVary = new THREE.InstancedBufferAttribute(new Float32Array(cap * 2), 2);
+  const iPos = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3), iTurn = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3), iVary = new THREE.InstancedBufferAttribute(new Float32Array(cap * 2), 2);
   for (const a of [iPos, iTurn, iVary]) a.setUsage(THREE.DynamicDrawUsage);
-  geo.setAttribute('iPos', iPos); geo.setAttribute('iTurn', iTurn); geo.setAttribute('iVary', iVary); geo.instanceCount = 0;
+  geo.setAttribute('iPos', iPos); geo.setAttribute('iTurn', iTurn); geo.setAttribute('iVary', iVary); geo.instanceCount = 0;   // (iTurn: turn, size, born)
   const uniforms = THREE.UniformsUtils.merge([THREE.UniformsLib.fog, THREE.UniformsLib.lights, {
     root: { value: new THREE.Color(0.25, 0.36, 0.1) }, tip: { value: new THREE.Color(0.45, 0.55, 0.18) }, sunDir: { value: new THREE.Vector3(-0.5, 0.7, -0.4).normalize() },
     // the light's colour against the noon it was tuned in (white: as tuned): skyTint for the even part, sunTint for the
@@ -52,7 +55,7 @@ export function makeLawn({ cap = 60000, shade = null, lamps = null } = {}) {   /
     skyTint: { value: new THREE.Color(1, 1, 1) }, sunTint: { value: new THREE.Color(1, 1, 1) },
     shadeMap: { value: null }, landSize: { value: 1600 }, hillShade: { value: 0 }, aoShade: { value: 0 }, treeShade: { value: 0 },
     shadowAt: { value: new THREE.Vector3() }, shadowRange: { value: 0 }, edgeFrom: { value: 0.55 }, edgeTo: { value: 0.97 },
-    rib: { value: new THREE.Vector3(RIB.line, RIB.width, RIB.edge) } }]);
+    rib: { value: new THREE.Vector3(RIB.line, RIB.width, RIB.edge) }, lawnTime: { value: 0 }, lawnRise: { value: RISE } }]);
   Object.assign(uniforms, WIND.uniforms);
   if (shade) Object.assign(uniforms, shade);                          // shared objects: the land's shade, live
   const mat = new THREE.ShaderMaterial({
@@ -61,7 +64,7 @@ export function makeLawn({ cap = 60000, shade = null, lamps = null } = {}) {   /
       #include <fog_pars_vertex>
       #include <logdepthbuf_pars_vertex>
       #include <packing>
-      attribute float aH; attribute float aS; attribute vec3 iPos; attribute vec2 iTurn; attribute vec2 iVary;
+      attribute float aH; attribute float aS; attribute vec3 iPos; attribute vec3 iTurn; attribute vec2 iVary; uniform float lawnTime, lawnRise;
       varying float vH; varying vec2 vVary; varying vec3 vN; varying vec2 vLand; varying float vS; varying float vSun;
       #if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
       uniform mat4 directionalShadowMatrix[ NUM_DIR_LIGHT_SHADOWS ];
@@ -85,7 +88,8 @@ export function makeLawn({ cap = 60000, shade = null, lamps = null } = {}) {   /
       #endif
       void main() {
         float c = cos(iTurn.x), s = sin(iTurn.x);
-        vec3 p = position * iTurn.y; p = vec3(c * p.x + s * p.z, p.y, -s * p.x + c * p.z);
+        float grow = smoothstep(0.0, 1.0, clamp((lawnTime - iTurn.z) / lawnRise, 0.0, 1.0));   // (rising out of the ground: newly laid)
+        vec3 p = position * iTurn.y * vec3(0.4 + 0.6 * grow, grow, 0.4 + 0.6 * grow); p = vec3(c * p.x + s * p.z, p.y, -s * p.x + c * p.z);
         vec3 world = iPos + p;
         world.xz += windAt(iPos.xz) * aH * aH * p.y * 2.5;                // the blades are short and soft: they bend further than the plants
         vH = aH; vVary = iVary; vLand = iPos.xz; vN = normalize(vec3(s, 0.6, c)); vS = aS; vSun = sunAt(iPos);
@@ -107,6 +111,8 @@ export function makeLawn({ cap = 60000, shade = null, lamps = null } = {}) {   /
       #include <logdepthbuf_pars_fragment>
       uniform vec3 root, tip, sunDir, skyTint, sunTint, rib; uniform sampler2D shadeMap; uniform float landSize, hillShade, aoShade, treeShade;
       uniform vec3 shadowAt; uniform float shadowRange, edgeFrom, edgeTo;
+      uniform vec4 nightGrade;   // (the night's faded colours: the valley's, shared by every lit material; zero, none, without it)
+      vec3 lawnNight(vec3 c) { return nightGrade.w > 0.0 ? mix(c, vec3(dot(c, vec3(0.2126, 0.7152, 0.0722))) * nightGrade.rgb, nightGrade.w) : c; }
       varying float vH; varying vec2 vVary; varying vec3 vN; varying vec2 vLand; varying float vS; varying float vSun;
       void main() {
         #include <logdepthbuf_fragment>
@@ -122,7 +128,7 @@ export function makeLawn({ cap = 60000, shade = null, lamps = null } = {}) {   /
           sunPart *= mix(1.0, sd.r, hillShade) * mix(vSun, 1.0 - treeShade * sd.b, baked);
           ao = mix(1.0, 0.3 + 0.7 * sd.g, aoShade) * (1.0 - treeShade * sd.b * mix(0.35, 0.8, baked)); }
         else sunPart *= mix(vSun, 1.0, baked);
-        gl_FragColor = vec4(col * (skyTint * 0.28 + sunTint * sunPart) * ao, 1.0);
+        gl_FragColor = vec4(lawnNight(col * (skyTint * 0.28 + sunTint * sunPart) * ao), 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
         #include <fog_fragment>
@@ -130,14 +136,14 @@ export function makeLawn({ cap = 60000, shade = null, lamps = null } = {}) {   /
   });
   if (lamps) {                                                         // street lamps lighting the tufts round them (lit evenly all round)
     mat.vertexShader = 'varying vec3 vWorldL;\n' + mat.vertexShader.replace('vH = aH; vVary = iVary;', 'vWorldL = world; vH = aH; vVary = iVary;');
-    mat.fragmentShader = 'varying vec3 vWorldL;\n' + LAMP_GLSL + mat.fragmentShader.replace('gl_FragColor = vec4(col * (skyTint * 0.28 + sunTint * sunPart) * ao, 1.0);',
-      'gl_FragColor = vec4(col * ((skyTint * 0.28 + sunTint * sunPart) * ao + lampLight(vWorldL, vec3(0.0)) * 0.318), 1.0);');
+    mat.fragmentShader = 'varying vec3 vWorldL;\n' + LAMP_GLSL + mat.fragmentShader.replace('gl_FragColor = vec4(lawnNight(col * (skyTint * 0.28 + sunTint * sunPart) * ao), 1.0);',
+      'gl_FragColor = vec4(lawnNight(col * (skyTint * 0.28 + sunTint * sunPart) * ao) + col * lampLight(vWorldL, vec3(0.0)) * 0.318, 1.0);');   // (the lamps' warm light after the night's fading: it keeps its colour)
     Object.assign(mat.uniforms, lamps);
   }
   const mesh = new THREE.Mesh(geo, mat); mesh.frustumCulled = false;
   function set(spots) {
     const n = Math.min(cap, spots.length);
-    for (let k = 0; k < n; k++) { const t = spots[k]; iPos.setXYZ(k, t.x, t.y, t.z); iTurn.setXY(k, t.turn, t.size); iVary.setXY(k, t.yellow, t.light); }
+    for (let k = 0; k < n; k++) { const t = spots[k]; iPos.setXYZ(k, t.x, t.y, t.z); iTurn.setXYZ(k, t.turn, t.size, t.born ?? -1e6); iVary.setXY(k, t.yellow, t.light); }
     geo.instanceCount = n; if (n) for (const a of [iPos, iTurn, iVary]) { a.updateRange.offset = 0; a.updateRange.count = n * a.itemSize; a.needsUpdate = true; }   // (only the tufts in use are sent)
     return n;
   }
