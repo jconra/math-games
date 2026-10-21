@@ -5,7 +5,8 @@
 // one, already waiting in line, steps up with their slip. A wrong coin shows one plain line about that slip and a picture
 // of that kind of problem, and the kid picks again: no penalty, the customer just waits. "Done for now" (or Esc) ends it.
 // On the top step the story is told backwards: the kid picks the equation that tells it, and the lock-box panel opens on
-// that equation to solve it (the lock box pays as the sheriff's does).
+// that equation to solve it at the rider's own lock-box level (a find-x box below x on both sides, else with moves; the
+// lock box pays as the sheriff's does).
 //
 // Started from the general store's counter (shop.js: "Mind the counter"). Each filled order counts toward the "orders
 // filled" belt buckle (save.js JOBS).
@@ -63,7 +64,8 @@ import { homestead } from '../math/goods.js';
 import { counterPicture } from '../ui/counterpics.js';
 import { readAloud, record } from '../math/skill.js';
 import { MAPS } from '../math/strands.js';
-import { levelFor } from '../levels/model.js';
+import { levelFor, stateOf } from '../levels/model.js';
+import { isAlgebra } from '../lockbox/levelplan.js';
 import { storeOrder, pickAsk, askAt } from '../levels/place/store.js';
 import { answerTimer } from '../ui/answertimer.js';
 import { earn, recordAnswer, countJob, saveRider } from '../save.js';
@@ -329,7 +331,9 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
       U.equation(i, { line: o.rightWhy });
       if (hob) hob.event('storeEquation');
       saveRider(rider);
-      const problem = lockboxProblem(o.equation);
+      // (the rider's own lock-box level: below x on both sides it is a find-x box, from there the moves)
+      const lb = stateOf(rider, 'lockbox');
+      const problem = lockboxProblem(o.equation, { find: !(lb && isAlgebra(lb.id)) });
       // (if the game is paused or another box is open just then, openBox says no and it tries again a moment later)
       const toBox = () => {
         if (!J.active || order !== o) return;

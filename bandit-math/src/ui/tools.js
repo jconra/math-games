@@ -7,7 +7,7 @@
 //                 their worked area always has), or the sum is read off the job's card ("7 × 8 = ?", "83 − 33"). On a
 //                 story (the store's word problems) it first asks "What do we work out?", so reading the story is still
 //                 the kid's. A question with no sum on it (a clock to read, a series to finish) says so on the button.
-//   THE TIMES CHART   12 x 12, every fact the rider has answered anywhere coloured: green answered right, red missed
+//   THE TIMES CHART   12 x 12, every fact the rider has answered anywhere coloured: red missed, yellow right once since, green known
 //                 (src/math/facts.js chart: red ones come back soon); src/ui/timeschart.js draws it.
 // Work it out from a field job's card is help only: nothing is counted (the job's own answer still is). The game waits
 // while a tool is open (onOpen / onClose: main.js pauses), and Esc or the close button puts it away.
@@ -110,7 +110,7 @@ export function makeTools({ hud, rider = () => null, sum = () => null, own = () 
       <button type="button" class="bmtl-item" data-tool="work" role="menuitem"${s ? '' : ' disabled'}>
         <span class="bmtl-ic">${SVG_WORK}</span><span class="bmtl-t"><b>Work it out</b><small>${esc(sumLabel(s))}</small></span><kbd>1</kbd></button>
       <button type="button" class="bmtl-item" data-tool="chart" role="menuitem">
-        <span class="bmtl-ic">${SVG_CHART}</span><span class="bmtl-t"><b>Times chart</b><small>${n.green || n.red ? `${n.green} green · ${n.red} red` : 'Your facts turn green and red'}</small></span><kbd>2</kbd></button>`;
+        <span class="bmtl-ic">${SVG_CHART}</span><span class="bmtl-t"><b>Times chart</b><small>${n.green || n.yellow || n.red ? `${n.green} green · ${n.yellow} yellow · ${n.red} red` : 'Your facts turn red, yellow, green'}</small></span><kbd>2</kbd></button>`;
     document.body.appendChild(menu);
     const b = at.getBoundingClientRect();
     menu.style.top = `${Math.round(b.bottom + 8)}px`;

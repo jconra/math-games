@@ -67,7 +67,8 @@
 // Pure: no page, no three.js. tests/wordproblems.test.mjs checks it.
 
 import { line, num, xt, lineText, solve, moveLabel } from '../lockbox/engine.js';
-import { RUNG, checkProblem } from '../lockbox/generate.js';
+import { RUNG, checkProblem, makeRng } from '../lockbox/generate.js';
+import { findProblemFor } from '../lockbox/findx.js';
 import { makeLong, needsLong, longPoint, pointOf, mulAt, addAt, subAt, noCarry, digitsOf } from './longwork.js';
 
 // ---- the dials (defaults; change them here) --------------------------------------------------------------------
@@ -992,10 +993,16 @@ export function makeWordProblems(state = {}, { rand = Math.random } = {}) {
 }
 
 // ---- the hand-off to the lock box ----------------------------------------------------------------------------------------
-// The equation the kid picked, as a lock-box problem on the two-steps rung (2x + 5 = 17), with 3 buttons to choose from.
+// The equation the kid picked, as a lock-box problem. find: true (a rider whose lock-box level is below x on both
+// sides, where the moves and the rules start) -> the find-x box their own ladder deals for two steps (tap the key that
+// fits: findx.js); otherwise the two-steps rung worked with moves (2x + 5 = 17), with 3 buttons to choose from.
 export const EQ_RUNG = 'R6';
-export function lockboxProblem(eq, { level = 3, tier = 'iron' } = {}) {
+export function lockboxProblem(eq, { level = 3, tier = 'iron', find = false, rng = null } = {}) {
   if (!eq) return null;
+  if (find) {
+    const p = findProblemFor(eq, { rng: rng || makeRng(), keys: 4 });
+    return p ? { ...p, level, size: 2, review: false, tier } : null;
+  }
   const L = [xt(eq.a), num(eq.b)], R = [num(eq.c)];
   if (checkProblem(EQ_RUNG, L, R, eq.x)) return null;
   const rung = RUNG[EQ_RUNG], start = line(L, R);

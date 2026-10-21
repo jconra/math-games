@@ -52,3 +52,15 @@ test("the Sound Lab's copy of the voice code is the game's", () => {
   assert.equal(fs.readFileSync(lab, 'utf8'), fs.readFileSync(new URL('../src/audio/voice.js', import.meta.url), 'utf8'),
     'copy bandit-math/src/audio/voice.js to ~/sound-lab/hobvoice.js');
 });
+
+test('voice clip slots: "Rope the evens", "Rope the odds" and "Help! Bandits" each have a named file, quiet until recorded', async () => {
+  const { CLIP_SLOTS, slotFiles, playSlot } = await import('../src/audio/clipslots.js');
+  const { AMBUSH } = await import('../src/missions/wagonplan.js');
+  const want = { ropeEvens: 'rope_the_evens', ropeOdds: 'rope_the_odds', helpBandits: 'help_bandits' };
+  for (const [id, file] of Object.entries(want)) {
+    assert.equal(CLIP_SLOTS[id].file, file);
+    assert.deepEqual(slotFiles(id), CLIP_SLOTS[id].recorded ? [file] : []);
+    assert.equal(playSlot(null, id), false, 'no sound: the caller falls back');
+  }
+  assert.deepEqual(AMBUSH.helpClips, slotFiles('helpBandits'));
+});

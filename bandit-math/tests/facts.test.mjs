@@ -21,7 +21,7 @@ test('the tiers: 1 & 2, 3 5 10, 4 9, 6 7 8, 11 12; a fact is kept once, smaller 
   assert.equal(recordFact(r, 13, 2, true), null, 'past 12 x 12 is not kept');
 });
 
-test('green for a fact answered right, red for one missed, until it is right twice running', () => {
+test('green for a fact answered right; a missed one red, yellow after one right, green after the next', () => {
   const r = fresh();
   assert.equal(colourOf(r, 7, 2), null);
   recordFact(r, 7, 2, true);
@@ -29,7 +29,12 @@ test('green for a fact answered right, red for one missed, until it is right twi
   recordFact(r, 7, 8, false);
   assert.equal(colourOf(r, 8, 7), 'red');
   recordFact(r, 7, 8, true);
-  assert.equal(colourOf(r, 7, 8), 'red', 'one right after a miss: still red');
+  assert.equal(colourOf(r, 7, 8), 'yellow', 'one right after a miss: yellow');
+  recordFact(r, 7, 8, false);
+  assert.equal(colourOf(r, 7, 8), 'red', 'missed again: red again');
+  recordFact(r, 7, 8, true);
+  assert.equal(colourOf(r, 7, 8), 'yellow');
+  assert.ok(factOf(r, 7, 8).due != null, 'a yellow fact still comes back soon');
   recordFact(r, 7, 8, true);
   assert.equal(colourOf(r, 7, 8), 'green');
   const c = chart(r);

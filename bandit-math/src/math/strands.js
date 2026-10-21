@@ -130,12 +130,12 @@ export const MAPS = {
   // src/math/numbersense.js STEPS (11, counted from 0): the target range
   range: { strand: 'number', file: 'src/math/numbersense.js', base: 0, anchors: [14, 22, 30, 34, 38, 44, 50, 62, 68, 76, 86] },
   // labs/windmill/questions.js ladder (7 levels): the miller's questions, in the game at the mill hill since the builders
-  // wave (src/windmilljob.js through src/buildsite.js skillAsker; the lab page keeps its own ladder)
+  // wave (the stats strand only: the jobs ask through the levels place 'building', src/buildasker.js levelAsker)
   windmill: { strand: 'geo', file: 'labs/windmill/questions.js', anchors: [40, 46, 58, 72, 78, 86, 92] },
   // ---- bridge lane ----
   // labs/bridge/questions.js ladder (8 levels): the windmill's seven, then the bridge's own step at the top (a panel's
-  // diagonal: 6 ft by 8 ft makes 10 ft); the engineer's questions at the ravine on the western river (src/bridgejob.js
-  // through src/buildsite.js skillAsker; the lab page keeps its own ladder)
+  // diagonal: 6 ft by 8 ft makes 10 ft); the engineer's questions at the ravine on the western river (src/bridgejob.js;
+  // the stats strand only: the job asks through the levels place 'building', src/buildasker.js levelAsker)
   bridge: { strand: 'geo', file: 'labs/bridge/questions.js', anchors: [40, 46, 58, 72, 78, 86, 92, 94] },
 
   // ---- lock box lane ----

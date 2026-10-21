@@ -1,6 +1,7 @@
 // facts.js: THE TIMES FACTS, one at a time. Every place that asks a times fact (the round-up's series and herds, the
 // wagon's gangs, the deer's "? × 4 = 28", a sheep's sum, the lock box's 3x = 12 ...) tells this module how the rider
-// did on that fact, and the TIMES CHART (12 x 12) colours it: green for a fact answered right, red for one missed.
+// did on that fact, and the TIMES CHART (12 x 12) colours it: red for one missed, yellow once it is answered right
+// after that, green for a fact answered right (red -> yellow -> green as the kid gets it).
 // A red fact comes back soon, and the tables the rider misses come up more often ("great at times tables 1-6,
 // but needs work on 7 & 8, so it focuses on those more"), starting from the design's difficulty tiers before there's anything
 // to go on: 1 & 2 super easy; 3, 5 & 10 easy; 4 & 9 normal; 6, 7 & 8 hard; 11 & 12 expert.
@@ -11,14 +12,16 @@
 //            since the last miss), at (ms of the last answer), due (n when a red fact should come back, or null) }
 //   A fact is kept once, smaller number first: 8 x 7 and 7 x 8 are the same fact '7x8' (the chart colours both).
 //
-// RED AND GREEN. A missed fact is red until it is answered right RED_CLEAR times running (once soon after, once more
-// later), then green. A fact never missed and answered right is green. Not asked yet: no colour.
-// SOON. A red fact is due again SOON (2 to 4) fact answers later; the picker brings due facts back first.
+// RED, YELLOW AND GREEN. A missed fact is red; one right answer after the miss turns it yellow; RED_CLEAR right
+// answers running (once soon after, once more later) turn it green. Another miss turns it red again. A fact never
+// missed and answered right is green. Not asked yet: no colour.
+// SOON. A red or yellow fact (not green yet) is due again SOON (2 to 4) fact answers later; the picker brings due
+// facts back first.
 //
 // THE API (pure, over the rider object; save.js saves)
 //   recordFact(rider, a, b, right, { now })       -> the fact (made the first time)
-//   factOf(rider, a, b) -> Fact | null;  colourOf(rider, a, b) -> 'green' | 'red' | null
-//   chart(rider, size = 12) -> rows: chart[a - 1][b - 1] = 'green' | 'red' | null   (for the TIMES CHART)
+//   factOf(rider, a, b) -> Fact | null;  colourOf(rider, a, b) -> 'green' | 'yellow' | 'red' | null
+//   chart(rider, size = 12) -> rows: chart[a - 1][b - 1] = 'green' | 'yellow' | 'red' | null   (for the TIMES CHART)
 //   tableMiss(rider, t) -> 0..1 how often the rider misses the t-table (the tiers' guess, then the rider's own answers)
 //   pickTable(rider, tables, { rand, last })       -> a table, weak ones more often (for "Rope the 7s", the 7-Gang)
 //   pickFact(rider, { tables, upTo, rand, last })  -> { a (the table), b, why: 'due' | 'weak' }   a red fact that is
@@ -28,7 +31,7 @@
 //   FACTS (the dials), TIERS, TIER_NAMES
 
 export const FACTS = {
-  RED_CLEAR: 2,          // right this many times running after a miss turns a fact green again
+  RED_CLEAR: 2,          // right this many times running after a miss turns a fact green again (fewer: yellow)
   SOON: [2, 4],          // a missed fact is due again this many fact answers later (from the first to the second)
   HIST: 4,               // answers kept per fact for how weak its table is now
   PRIOR: 4,              // the tier's guess counts as this many answers in a table's miss rate
@@ -72,7 +75,7 @@ const isRed = (e) => !!e && e.m > 0 && e.run < FACTS.RED_CLEAR;
 export function colourOf(rider, a, b) {
   const e = factOf(rider, a, b);
   if (!e || !(e.r + e.m)) return null;
-  return isRed(e) ? 'red' : e.r > 0 ? 'green' : null;
+  return isRed(e) ? (e.run > 0 ? 'yellow' : 'red') : e.r > 0 ? 'green' : null;
 }
 
 // One answer on the fact a x b (either way round; a fact past 12 x 12 is not kept).

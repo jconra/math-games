@@ -98,17 +98,19 @@ test('"What do we work out?" on a story: the right sum and the same numbers with
   assert.match(sumLabel(null), /Nothing to work out/);
 });
 
-test('the times chart from the tools: 12 x 12, each fact green or red either way round, counted once', () => {
+test('the times chart from the tools: 12 x 12, each fact green, yellow or red either way round, counted once', () => {
   const rider = {};
   recordFact(rider, 7, 8, false);
   recordFact(rider, 3, 4, true);
   recordFact(rider, 9, 2, true);
+  recordFact(rider, 6, 7, false); recordFact(rider, 7, 6, true);
   const m = chart(rider);
   assert.equal(chartSize({ marks: m }), 12);
-  assert.deepEqual(markCount(m), { green: 2, red: 1 });
+  assert.deepEqual(markCount(m), { green: 2, yellow: 1, red: 1 });
   const w = chartWords({ marks: m });
   assert.equal(w.title, 'Your times tables');
   assert.match(w.line, /Green: 2 facts/);
+  assert.match(w.line, /Yellow: 1/);
   assert.match(w.line, /Red: 1 missed/);
-  assert.match(chartWords({ marks: chart({}) }).line, /turn green/);
+  assert.match(chartWords({ marks: chart({}) }).line, /turns yellow/);
 });

@@ -114,7 +114,11 @@ export function findProblem(g, { rng, into = 0, count = 5, recent = [], fact = n
     if (!seen.has(key) || tries > 120) break;
   }
   if (!best) return null;
-  const { m, start, key, shape } = best;
+  return keyBox(best, g, rng, keys);
+}
+
+// The keys and the read-out for a made box (findProblem above, findProblemFor below)
+function keyBox({ m, start, key, shape }, g, rng, keys) {
   // the keys: the answer, then the real slips, then near ones (no repeats; no negatives where the level has none)
   const ok = (v) => Number.isInteger(v) && v !== m.x && v !== 0 && (g.neg || v > 0) && Math.abs(v) <= 199;
   const out = [m.x];
@@ -132,6 +136,18 @@ export function findProblem(g, { rng, into = 0, count = 5, recent = [], fact = n
   if (shape === 'a-x=b' && a.v.n <= 109) say = `${a.v.n} take away what leaves ${b.v.n}`;
   return { rung: 'R0b', mode: 'key', find: shape, key, start, x: m.x, kind: 'one', par: 1, route: [], answer: m.x,
     choices: rng.shuffle(out), say, fact: m.fact || null };
+}
+
+// A find-x box for a two-step equation given from outside (the store's story told backwards: 3x + 5 = 29), for a rider
+// still below x on both sides. eq = { a, b, c, x } for ax + b = c (b < 0: ax − |b| = c). The keys are the same slips.
+export function findProblemFor(eq, { rng, keys = 4 } = {}) {
+  const { a, b, c, x } = eq || {};
+  if (![a, b, c, x].every(Number.isInteger) || !a || !b) return null;
+  const plus = b > 0, shape = plus ? 'ax+b=c' : 'ax-b=c', bb = Math.abs(b);
+  const back = plus ? c - bb : c + bb;
+  const m = { L: [xt(a), num(b)], R: [num(c)], x, slips: [plus ? c + bb : c - bb, back, plus ? (c + bb) / a : (c - bb) / a, -x] };
+  const start = line(m.L, m.R);
+  return keyBox({ m, start, key: `F:${lineText(start)}`, shape }, { neg: x < 0 }, rng, Math.max(3, Math.min(4, keys)));
 }
 
 // ---------- what a key does, written out ----------

@@ -5,6 +5,7 @@
 import { pickFact, pickTable } from '../math/facts.js';
 import { TABLE_ORDER } from '../math/series.js';
 import { isOn } from '../levels/model.js';
+import { slotFiles } from '../audio/clipslots.js';
 
 // ── WHICH GANG RIDES NEXT ────────────────────────────────────────────────────────────────────────────────────────────
 // From the rider's level here (q: src/levels/model.js levelFor 'wagon'): odds and evens, a table's gang, or a
@@ -204,9 +205,9 @@ export const AMBUSH = {
   far: 240,           // m: the player further than this from the hold-up: the driver makes a run for it
   helpEvery: 3.5,     // s between the driver's shouts of "Help!" ...
   helpNear: 20,       // ... till the player is this close (m)
-  // the driver's recorded "Help!" (sounds/voice/<name>.ogg and .m4a, as the other voice clips), played with the
-  // bubble: none recorded yet, so the bubble shows alone. Add each clip's name here once it is in sounds/voice/
-  helpClips: [],
+  // the driver's recorded "Help! Bandits" (src/audio/clipslots.js, slot helpBandits: sounds/voice/help_bandits.ogg and
+  // .m4a), played with the bubble once the slot is marked recorded; until then the bubble shows alone
+  helpClips: slotFiles('helpBandits'),
   spawn: [70, 190],   // m along the road from the wagon the gang rides in from (the nearest out of the player's sight)
   hold: 26,           // m: wagons and travellers coming up behind (or toward) a held-up wagon wait this far short of it
   open: 0.65,         // the share of the ground round the wagon that must be clear for the riders (no thick trees)

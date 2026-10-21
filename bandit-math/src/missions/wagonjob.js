@@ -86,6 +86,7 @@ import { PLACE } from '../levels/places.js';
 import { recordFact } from '../math/facts.js';
 import { readAloud } from '../math/skill.js';
 import { sayLine } from '../audio/sayline.js';
+import { playSlot } from '../audio/clipslots.js';
 import { showGroups } from '../ui/groups.js';
 import { watchHesitation as watchLine } from '../ui/numberline.js';
 import { makeTargetRing } from '../targetring.js';
@@ -602,8 +603,9 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
     showCard();
     if (WJ.near) startHelp();
     if (music) music.action(true);
-    // (a rider who can't read yet hears an odds-and-evens card, in the browser's voice)
-    if (w.kind === 'parity' && readAloud(rider)) sayLine(`Rope the ${w.want} numbers`, { now: true, after: 600 });
+    // (a rider who can't read yet hears an odds-and-evens card: the recorded "Rope the evens" / "Rope the odds" once
+    // their slots are recorded, src/audio/clipslots.js; else the browser's voice)
+    if (w.kind === 'parity' && readAloud(rider) && !playSlot(audio, w.want === 'even' ? 'ropeEvens' : 'ropeOdds', { after: 600 })) sayLine(`Rope the ${w.want} numbers`, { now: true, after: 600 });
   }
   // the trainer's wave is still this job's (the round-up deals its own when the player goes back to the herd)
   const ownsTrainer = () => { const c = wave && wave.T.state && wave.T.state.cur; return !!(c && c.id === wave.id && !c.closed); };

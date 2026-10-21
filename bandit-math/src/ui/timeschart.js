@@ -26,7 +26,7 @@
 //   avoid   other elements to keep in view if the chart can (one element or a list): the hint line under the herd, say.
 //           They give way before the rule card does, and never shrink the squares below KEEP_HINT_MIN (36 on a phone).
 //   marks   the rider's own facts, coloured (src/math/facts.js chart(rider)): marks[r - 1][c - 1] = 'green' (answered
-//           right), 'red' (missed: it comes back soon) or null (not asked yet). With marks the chart shows 12 x 12 and
+//           right), 'yellow' (right once since a miss), 'red' (missed; red and yellow come back soon) or null (not asked yet). With marks the chart shows 12 x 12 and
 //           a key (THE TIMES CHART from the tools button, src/ui/tools.js); a square's readout says how it went.
 //   onOpen(chart), onClose()   called when the chart opens and closes (offerChart passes them through)
 //
@@ -144,8 +144,8 @@ export function chartWords(opts = {}) {
     if (Array.isArray(opts.marks)) {
       const n = markCount(opts.marks);
       out.title = 'Your times tables';
-      out.line = n.green || n.red ? `Green: ${n.green} fact${n.green === 1 ? '' : 's'} you got right. Red: ${n.red} missed, and they come back soon.`
-        : 'Facts you answer turn green when right and red when missed. Missed ones come back soon.';
+      out.line = n.green || n.red || n.yellow ? `Green: ${n.green} fact${n.green === 1 ? '' : 's'} you know. Yellow: ${n.yellow} getting there. Red: ${n.red} missed. Red and yellow ones come back soon.`
+        : 'A missed fact turns red. Get it right once and it turns yellow, right again and it turns green. Red and yellow ones come back soon.';
       out.note = 'Find the row on the left and the column on top. Where they meet is the answer.';
     }
     return withOverride(out, opts);
@@ -305,7 +305,7 @@ export function showChart(container, opts = {}) {
         if (place && place.kind === 'in' && r === t && c === place.col) cls.push('found');
         if (wrongCol && r === t && c === wrongCol) cls.push('wrong');
         const mk = markAt(o.marks, r, c);
-        if (mk) cls.push(mk === 'green' ? 'is-green' : 'is-red');
+        if (mk) cls.push(`is-${mk}`);
         cells.push(`<span class="${cls.join(' ')}" role="cell" data-r="${r}" data-c="${c}">${r * c}</span>`);
       }
       cells.push('</div>');
@@ -344,7 +344,7 @@ export function showChart(container, opts = {}) {
           ${words.note ? `<p class="tch-note">${esc(words.note)}</p>` : ''}
           <div class="tch-foot">
             <p class="tch-read" aria-live="polite">${idleRead()}</p>
-            ${Array.isArray(o.marks) ? '<p class="tch-key tch-key-marks"><i class="tch-sw is-green" aria-hidden="true"></i><span>right</span><i class="tch-sw is-red" aria-hidden="true"></i><span>missed</span></p>'
+            ${Array.isArray(o.marks) ? '<p class="tch-key tch-key-marks"><i class="tch-sw is-green" aria-hidden="true"></i><span>know it</span><i class="tch-sw is-yellow" aria-hidden="true"></i><span>getting there</span><i class="tch-sw is-red" aria-hidden="true"></i><span>missed</span></p>'
               : '<p class="tch-key"><i class="tch-sw" aria-hidden="true"></i><span>a number times itself</span></p>'}
           </div>
         </div>
@@ -500,7 +500,7 @@ export function showChart(container, opts = {}) {
     if (top) top.classList.add('hot');
     if (left) left.classList.add('hot');
     const mk = markAt(o.marks, r, c);
-    read.innerHTML = `<b>${r}</b> ${TIMES} <b>${c}</b> = <b>${r * c}</b>${mk === 'green' ? ' <span class="tch-said is-green">right</span>' : mk === 'red' ? ' <span class="tch-said is-red">missed: it comes back soon</span>' : ''}`;
+    read.innerHTML = `<b>${r}</b> ${TIMES} <b>${c}</b> = <b>${r * c}</b>${mk === 'green' ? ' <span class="tch-said is-green">right</span>' : mk === 'yellow' ? ' <span class="tch-said is-yellow">right once: one more and it turns green</span>' : mk === 'red' ? ' <span class="tch-said is-red">missed: it comes back soon</span>' : ''}`;
   }
   root.addEventListener('pointerover', (e) => {
     const cell = e.target.closest && e.target.closest('.tch-c');
@@ -681,11 +681,11 @@ function isNum(x) { return typeof x === 'number' && Number.isFinite(x); }
 function markAt(marks, r, c) {
   if (!Array.isArray(marks)) return null;
   const m = (marks[r - 1] && marks[r - 1][c - 1]) || (marks[c - 1] && marks[c - 1][r - 1]) || null;
-  return m === 'green' || m === 'red' ? m : null;
+  return m === 'green' || m === 'yellow' || m === 'red' ? m : null;
 }
-// how many facts are green and red (each fact once: 7 x 8 and 8 x 7 together)
+// how many facts are green, yellow and red (each fact once: 7 x 8 and 8 x 7 together)
 export function markCount(marks) {
-  const out = { green: 0, red: 0 };
+  const out = { green: 0, yellow: 0, red: 0 };
   if (!Array.isArray(marks)) return out;
   for (let r = 1; r <= 12; r++) for (let c = r; c <= 12; c++) { const m = markAt(marks, r, c); if (m) out[m]++; }
   return out;

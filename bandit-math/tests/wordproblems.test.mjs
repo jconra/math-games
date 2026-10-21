@@ -144,6 +144,23 @@ test('no keyword tricks: "each", "left", "more" and "in all" each turn up in mor
   assert.ok(where.more.has('compare') && where.more.has('parts'), [...where.more].join());
 });
 
+test('the top step below x on both sides: a find-x box on the same equation, its keys the real slips', () => {
+  const r = seeded(7);
+  for (let i = 0; i < 300; i++) {
+    const o = makeOrder('equation', { rand: r, step: 9 });
+    const { x, text } = o.equation;
+    const p = lockboxProblem(o.equation, { find: true });
+    assert.ok(p, `${text} makes a find-x box`);
+    assert.equal(p.mode, 'key');
+    assert.equal(p.rung, 'R0b');
+    assert.equal(p.answer, x);
+    assert.equal(lineText(p.start).replace(/\s/g, ''), text.replace(/\s/g, ''), 'the box shows the same equation');
+    assert.equal(p.choices.length, 4);
+    assert.equal(new Set(p.choices).size, 4);
+    assert.ok(p.choices.includes(x));
+  }
+});
+
 test('the top step: the equation fits the lock box (two steps), and the wrong equations are the real slips', () => {
   const r = seeded(4);
   for (let i = 0; i < 300; i++) {
