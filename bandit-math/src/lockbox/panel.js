@@ -212,7 +212,12 @@ function sideHTML(side) {
 
 // One chip for one term. first = it starts its side (no "+" in front).
 function chipEl(t, first) {
-  if (t.t === 'q') { const e = h('span', 'chip coin blank', '?'); return e; }
+  if (t.t === 'q') {
+    const e = h('span', 'chip coin blank', '?');
+    if (first) return e;
+    // (after another coin: a plain "+" in front, so 7 = 3 + ? reads as a sum, not "3 ?")
+    const w = h('span', 'chip q-plus'); w.appendChild(h('span', 'brk-p', '+')); w.appendChild(e); return w;
+  }
   if (t.t === 'b' && t.p.d > 1) {
     // a whole group over a number: the chips sit on top of a fraction bar
     const neg = termNeg(t);

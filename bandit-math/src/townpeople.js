@@ -282,7 +282,7 @@ export function makeTownPeople({ W, folk, camera, player = () => null, jobs = {}
     shutT = 0.5;
     let opened = false;
     for (const [w, sh] of shutBy) {
-      const gone = !w.boxes || !w.pos || !wagonAt(w.pos.x, w.pos.z, 0.5) || Math.hypot(w.pos.x - sh.x, w.pos.z - sh.z) > 1 || (w.pace > 0.15 && !w.standing);
+      const gone = !w.boxes || !w.pos || !wagonAt(w.pos.x, w.pos.z, 0.5) || Math.hypot(w.pos.x - sh.x, w.pos.z - sh.z) > 1 || (w.pace > 0.15 && !w.standing) || (!w.standing && !w.parked);
       if (!gone) continue;
       reopenSome(G, sh.keys); shutBy.delete(w); opened = true;
     }
@@ -301,7 +301,10 @@ export function makeTownPeople({ W, folk, camera, player = () => null, jobs = {}
     }
     for (const o of TP.people) { if (o === r || !o.out) continue; const dx = o.x - x, dz = o.z - z, d = Math.hypot(dx, dz); if (d < TOWN.wait.person && (dx * fx + dz * fz) > 0.5 * d && !(o.state === 'walk' && o.yaw !== undefined && Math.cos(o.yaw - r.yaw) > 0.5 && o.s > r.s)) return 'person'; }
     const G2 = wagonAt(x + fx * 1.2, z + fz * 1.2, 0.4);
-    if (G2) return G2.pace > 0.15 && !G2.standing ? 'wagon' : 'stand';
+    // (a wagon parked at its spot: walked round; one rolling: waited for; one only stopped in the road, which is
+    // waiting for whoever is in its way, often this walker: treated as someone in the way, stepped aside from after a
+    // moment. Walking round a stopped one re-planned for ever from inside the ground shut round it, both stuck for good)
+    if (G2) return G2.standing || G2.parked ? 'stand' : G2.pace > 0.15 ? 'wagon' : 'stopped';
     return null;
   }
   function walk(r, dt) {

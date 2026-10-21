@@ -205,6 +205,7 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
   // ── HELP ───────────────────────────────────────────────────────────────────────────────────────────────────────
   function hint(o) { hud.hint(o); hintT = o ? 14 : 0; }
   function lineFor(item, picked, reveal = true, reason = '') {
+    if (!SH.near) return;   // (no helper away from the flock: it stayed up in town)
     const h = item.help; if (!h || (h.kind !== 'line' && h.kind !== 'count')) return;
     if (nl) nl.remove();
     // (the early topics' picture: ten-frames and a number line with hops, src/ui/counthelp.js)
@@ -212,6 +213,7 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
     nl = showNumberLine(hud.helpEl, { start: h.start, change: h.change, op: h.op, term: h.term, reveal, picked: picked ?? undefined, reason, theme: 'dark' });
   }
   function chartFor(item, missed) {
+    if (!SH.near) return;
     const h = item && item.help; if (!h || h.kind !== 'chart') return;
     const o = { table: h.table, find: h.find, rule: h.rule, missed: missed ?? undefined, anchor: hud.jobEl, avoid: hud.hintEl, side: 'right' };   // (find, rule: a division fact, read the times chart's way round)
     if (offer) offer.update(o); else offer = offerChart(document.body, o);
@@ -381,7 +383,9 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
     if (SH.near !== wasNear) {
       wasNear = SH.near;
       if (SH.near) { hob.event('farmArrive'); startHelp(); showCard(); }
-      else { endHelp(); closePicker(); hud.hint(null); hintT = 0; }   // (the round-up's card comes back within a second)
+      // (its own card comes down too: 'point at a sheep, press F' and its Show me mean nothing away from the flock; the
+      // card that follows is the chosen job's plain where-it-is one, or the round-up's, within a second)
+      else { endHelp(); closePicker(); hud.rule(null); hud.hint(null); hintT = 0; }
     }
     if (hintT > 0 && (hintT -= dt) <= 0) hud.hint(null);
     if (nextT > 0 && (nextT -= dt) <= 0) newFlock();

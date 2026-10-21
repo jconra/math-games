@@ -92,7 +92,8 @@ export const TRAFFIC = {
   // seconds stopped for it the driver steers the team round it, on whichever side is open, keeping `clear` metres from
   // it (at most `most` metres off its lane; over the road's middle only with nobody coming the other way within `oncoming`),
   // the turn out taking at least `ease` metres and the turn back `back` metres, `past` metres beyond it
-  around: { after: 3, clear: 2.6, most: 5, ease: 3.5, back: 8, past: 2.5, oncoming: 60 },
+  around: { after: 3, clear: 2.6, most: 5, ease: 3.5, back: 8, past: 2.5, oncoming: 60, squeeze: 20 },   // squeeze: s held up before it goes round past
+                         // others standing close (townsfolk step aside themselves): no wagon waits in the square for good
 };
 // where a wagon pulls off to stand a while: the middle of the wagon when it stands there (x, z: metres), facing along
 // the road the way it came, always on its own right-hand side of the road (so it never crosses the other lane); look:
@@ -374,10 +375,10 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
       const w = t.way;
       if (t.du >= w.park - 0.4 && !t.left) {
         if (!t.until) t.until = now + rnd(...TRAFFIC.park.time);
-        if (now < t.until) { t.why = 'standing at ' + w.S.name; return 0; }
+        if (now < t.until) { t.why = 'standing at ' + w.S.name; if (t.wg) t.wg.parked = true; return 0; }
         for (const o of T.wagons) if (o !== t && o.dir === t.dir && !offRoad(o) && ((w.uOut - o.u) * t.dir) > -10 && ((w.uOut - o.u) * t.dir) < TRAFFIC.park.clear) { t.why = 'waiting to pull out'; return 0; }
         if (view && !t.ghost && ((t.dir > 0 ? view.b : view.a) - w.uOut) * t.dir > 0) { t.why = 'waiting: the store counter'; return 0; }
-        t.left = true; t.until = 0;
+        t.left = true; t.until = 0; if (t.wg) t.wg.parked = false;
       }
       if (!t.left) { const left = Math.max(0, w.park - t.du); v = Math.min(v, Math.max(0.35, Math.sqrt(2 * 0.6 * left))); }
     } else if (t.stop != null && (t.dir > 0 ? t.u >= t.stop - 0.5 : t.u <= t.stop + 0.5)) {
@@ -472,7 +473,7 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
           if (W.blocked(px, pz)) { ok = false; no = 'blocked ground'; break; }
           if (x > noseX + 0.5) { const G = wagonAt(px, pz, 0.3); if (G && G !== wg) { ok = false; no = 'a wagon'; break; } }
         }
-        if (ok) for (const q of things) {
+        if (ok && !(t.heldBy > A.after + A.squeeze)) for (const q of things) {
           const qp = q.isVector3 ? q : q.position || q; if (qp.x === undefined || group.includes(qp)) continue;
           if (Math.abs(qp.x - _g.x) < A.clear && Math.abs(qp.z - _g.z) < A.clear && Math.hypot(qp.x - _g.x, qp.z - _g.z) < A.clear - 0.2) { ok = false; no = 'something else'; break; }
         }

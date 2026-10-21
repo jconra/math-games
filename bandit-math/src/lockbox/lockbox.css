@@ -1265,3 +1265,6 @@
   .wk.focus-on .lbx-work { padding: 8px 2px 2px; }
   .wk-rv { font-size: 22px; }
 }
+/* the blank coin after another coin: a "+" in front of it (7 = 3 + ?) */
+.chip.q-plus { display: inline-flex; align-items: center; gap: 0.3em; background: none; border: 0; box-shadow: none; padding: 0; }
+.chip.q-plus .brk-p { font: 700 1.6em/1 Bitter, serif; color: var(--gold, #e8c370); }

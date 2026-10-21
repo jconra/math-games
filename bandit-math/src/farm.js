@@ -393,7 +393,12 @@ export function makeFarm({ W, animals = null, scene = W.scene }) {
         const out = Math.hypot(Math.max(0, Math.abs(p.x) - hw), Math.max(0, Math.abs(p.z) - hd)), t = Math.min(1, out / fade), y = 1 - t * t * (3 - 2 * t);
         const k = j * N + i; if (y > T.yard[k]) { old.set(k, T.yard[k]); T.yard[k] = y; }
       }
-    const forget = () => { const c = V.COVER && V.COVER.cache; if (c && c.tiles) c.tiles.clear(); };
+    // (the plants' and the lawn's remembered tiles both go, and the lawn is laid again at once: a lawn tile remembered
+    // from before the mowing kept its meadow tufts, a wild stand's person-tall ones too, standing in the pens)
+    const forget = () => {
+      const c = V.COVER && V.COVER.cache; if (c && c.tiles) c.tiles.clear();
+      const g = V.LAWN_GO; if (g && g.cache && g.cache.tiles) { g.cache.tiles.clear(); if (g.at) g.at.set(1e9, 0, 0); }
+    };
     forget();
     return () => { for (const [k, v] of old) T.yard[k] = v; forget(); };
   }

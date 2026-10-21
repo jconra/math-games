@@ -370,7 +370,12 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
         const out = Math.hypot(Math.max(0, x0 - p.x, p.x - x1), Math.max(0, z0 - p.z, p.z - z1)), t = Math.min(1, out / fade), y = 1 - t * t * (3 - 2 * t);
         const k = j * N + i; if (y > T.yard[k]) { old.set(k, T.yard[k]); T.yard[k] = y; }
       }
-    const forget = () => { const c = V.COVER && V.COVER.cache; if (c && c.tiles) c.tiles.clear(); };
+    // (the plants' and the lawn's remembered tiles both go, and the lawn is laid again at once: a lawn tile remembered
+    // from before the mowing kept its meadow tufts, a wild stand's person-tall ones too, standing in the pens)
+    const forget = () => {
+      const c = V.COVER && V.COVER.cache; if (c && c.tiles) c.tiles.clear();
+      const g = V.LAWN_GO; if (g && g.cache && g.cache.tiles) { g.cache.tiles.clear(); if (g.at) g.at.set(1e9, 0, 0); }
+    };
     forget();
     // the pen's floor: no lawn tufts at all (trodden bare by the pigs), so a young piglet isn't lost in the grass
     const R = YARD.pen, bare = ks.includes('pen') && V.LAWN_SKIP ? (x, z) => { const p = L.local(x, z); return p.x > R.x0 && p.x < R.x1 && p.z > R.z0 && p.z < R.z1; } : null;

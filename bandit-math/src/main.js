@@ -631,7 +631,21 @@ function spotNote() {
   for (const n of named) { const d = Math.hypot(n.x - at.x, n.z - at.z); if (d < nd) { nd = d; near = n; } }
   const from = !near ? '' : nd < 8 ? `, at ${near.name}` : `, ${Math.round(nd)} m ${POINT8[Math.round(degOf(at.x - near.x, at.z - near.z) / 45) % 8]} of ${near.name}`;
   const how = cabin && cabin.inside ? 'inside the cabin' : P.onHorse ? 'on horseback' : 'on foot';
-  return `Bandit Math spot: x ${at.x.toFixed(1)}, z ${at.z.toFixed(1)}, facing ${POINT8[Math.round(face / 45) % 8]} (${Math.round(face) % 360}°)${from}, ${how}`;
+  return `Bandit Math spot: x ${at.x.toFixed(1)}, z ${at.z.toFixed(1)}, facing ${POINT8[Math.round(face / 45) % 8]} (${Math.round(face) % 360}°)${from}, ${how}` + townReport(at);
+}
+// (Mark this spot, for a bug report: who is about within 30 m, what each is doing and how faded, the store's customers
+// and the wagons near, with why one is stopped: a stuck townsperson, a ghost or a jam can be read from the pasted line)
+function townReport(at) {
+  const near = (x, z, r = 30) => Math.hypot(x - at.x, z - at.z) < r, f = (v) => (+v).toFixed(1), out = [];
+  try {
+    const tp = TP && TP.state ? TP.state().people.filter((r) => r.out && near(r.x, r.z)) : [];
+    if (tp.length) out.push('folk: ' + tp.map((r) => `${r.name} ${r.state}${r.lent ? ' lent' : ''}${r.fade < 1 ? ` fade ${r.fade}` : ''}${r.drawn ? '' : ' hidden'} @${f(r.x)},${f(r.z)}${r.clip ? ' ' + r.clip : ''}`).join('; '));
+    const cs = SJ && SJ.people ? SJ.people.filter((c) => near(c.x, c.z)) : [];
+    if (cs.length) out.push('store: ' + cs.map((c) => `${c.who && c.who.name} ${c.state}${c.walking ? ' walking' : ''}${c.p && c.p.fade != null && c.p.fade < 1 ? ` fade ${c.p.fade.toFixed(2)}` : ''} @${f(c.x)},${f(c.z)}`).join('; '));
+    const ws = traffic && traffic.state ? traffic.state().wagons.filter((w) => w.made && w.dist != null && w.dist < 45) : [];
+    if (ws.length) out.push('wagons: ' + ws.map((w) => `${w.kind} ${w.pace} ${w.why || 'rolling'}${w.noRound ? ` (no way round: ${w.noRound})` : ''}`).join('; '));
+  } catch (e) { out.push('report: ' + e.message); }
+  return out.length ? '\n' + out.join('\n') : '';
 }
 // copies a line to the clipboard (the clipboard API, else the old select-and-copy); -> true if it was copied
 async function copyLine(text) {

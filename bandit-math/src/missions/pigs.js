@@ -478,7 +478,7 @@ export function makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, ho
     if (PG.near !== wasNear) {
       wasNear = PG.near;
       if (PG.near) { hob.event('pigsArrive'); startHelp(); showCard(); sayPens(); }
-      else { endHelp(); hud.hint(null); hintT = 0; }   // (the round-up's or the sheep's card comes back by itself)
+      else { endHelp(); hud.rule(null); hud.hint(null); hintT = 0; }   // (its own card down: the chosen job's where-it-is card, or the round-up's or the sheep's, comes back by itself)
     }
     if (hintT > 0 && (hintT -= dt) <= 0) hud.hint(null);
     if (nextT > 0 && (nextT -= dt) <= 0) newBatch();
