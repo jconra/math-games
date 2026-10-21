@@ -205,7 +205,7 @@ export async function makeWorld({ renderer, camera, quality = null, look = 'gree
     addBlocker: (fn) => { EXTRA.push(fn); return () => { const i = EXTRA.indexOf(fn); if (i >= 0) EXTRA.splice(i, 1); }; },
     heightAt: V.heightAt, waterAt: V.waterAt, settled: V.settled,
     update: (dt) => { V.update(Math.min(dt, 0.1)); warmLater(dt); },   // (a long pause, a tab come back, counts as a tenth of a second)
-    render: () => V.render(),
+    render: (afterScene) => V.render(afterScene),   // (afterScene: src/fx/dof.js puts its picture on screen there)
     loadedIn: 0,                                                         // (seconds to settled, for the record)
     dayStart: (() => { const q = new URLSearchParams(location.search), h = parseFloat(q.get('hour')); return Number.isFinite(h) ? ((h % 24) + 24) % 24 : DAY_START; })(),   // (?hour=21 in the address: start there, to see the night)
     // the town's lit windows at night (world/objects/nightLights.js): how lit a building is, by its layout id ('saloon',

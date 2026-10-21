@@ -2550,10 +2550,13 @@ function update(dt, afterShow = null, quiet = false) {
 // all laid and baked, nothing still being worked out a slice at a time (off stage, a page can stop updating it)
 const settled = () => !!(treeForest && treeForest.ready && coverForest && coverForest.ready && !COVER.job && !TOWN.job && !PAVE.job
   && (!FOLK.on || FOLK.failed || (FOLK.lib && FOLK.town && !FOLK.job && !FOLK.due)));   // (the townsfolk too: their grid made and the people placed)
-function render() {
+// (afterScene, optional: called right after the scene is drawn, before the sunbeams read the screen: a page drawing the
+// scene into a target of its own puts it on screen there, Bandit Math's depth of field)
+function render(afterScene = null) {
   renderer.toneMappingExposure = DL.exposure;                         // (the time of day's: set when drawn, so it never changes another scene's)
   U.eyePos.value.copy(camera.position);                              // (the paving's 3D stones sink past PAVE.lod from here)
   renderer.render(scene, camera);
+  if (afterScene) afterScene();
   if (BEAMS.on && DAY.elev > -1 && BEAMS.fx) { BEAMS.fx.render(camera, SUN_NOW, { ...BEAMS.opts, strength: BEAMS.strength * beamsAmount(DAY.elev), color: DL.sun }); }
 }
 // for the bake rig (~/pw/_bakeland.cjs), on a land worked out live: everything it saves, as base64, with the keys and hashes

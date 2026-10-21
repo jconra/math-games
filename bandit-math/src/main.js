@@ -15,6 +15,7 @@
 //   ?look=summer              the drier, golden meadows (the default is 'green', as the Terrain Lab)
 //   ?dev                      shortcut buttons: +100 gold, jump to each place, start the round-up, a lock box, a saddle, a dog
 //   ?perf                     frames a second, draw calls and the tier, top right
+//   ?dof                      depth of field in the close-ups (a builder up, the dock, the cabin), gaming tier only: src/fx/dof.js
 // For rigs: window.BM = { world, player, rider, state, dev: { gold(n), goto(place), mission(name), lockbox(), tier,
 //   skill(strand, pct, { placed }), skills(), level(place, id, { placed }), levels(), ... }, skills (the src/math/skill.js
 //   module), levels (src/levels/model.js), facts (src/math/facts.js), feedback (src/feedback.js),
@@ -75,7 +76,8 @@ import { makeChecklist, openWhatsLeft } from './ui/completion.js';
 import { makeBuildSites } from './buildsite.js';
 import { makeWindmillJob } from './windmilljob.js';
 import { makeBridgeJob } from './bridgejob.js';
-import { makeFishingJob } from './fishingjob.js';
+import { makeFishingJob, DOCK } from './fishingjob.js';
+import { makeDof } from './fx/dof.js';
 import { completion, goalsOf } from './completion.js';
 
 export const BUILD = '1 (2026-10-09)';
@@ -972,6 +974,28 @@ function townSounds(dt, indoor) {
   AMBI.update(dt, { at: P.position, flock: townLifeNow(), P, D, HS, farm, RU, SH, PG, traffic, indoor, music: m ? Math.min(1, m.action + (m.trail > 0.05 ? 0.4 : 0)) : 0, voice: !!((SHOUT && SHOUT.speaking) || (READ && READ.speaking)) });
 }
 
+// ── DEPTH OF FIELD in the close-ups (src/fx/dof.js): ?dof or BM.dev.dof(true), gaming tier only ───────────────────────
+// What each close-up keeps sharp: a builder's site (the tower, the bridge), the end of the dock (the angler) or the fish
+// held up for its card, the cabin's room in first person (the view out of its windows goes soft). Riding: nothing (the
+// pass is skipped altogether once its blur has eased out)
+let DOFX = Q.has('dof') ? makeDof({ renderer, camera, on: true }) : null;
+const DOF_CABIN = { dist: 2.5, sharp: 3.5, ramp: 10 }, _dofAt = new THREE.Vector3();
+function dofWant() {
+  if (!W || W.tier !== 'gaming' || state !== 'play') return null;
+  if (cabin && cabin.inside) return DOF_CABIN;
+  const s = BS && BS.active; if (!s) return null;
+  if (s.id === 'fishing') {
+    const B = FJ && FJ.builder, ph = B && B.handle ? B.handle.state().phase : '';
+    const v = /^(lift|card|stash|release)$/.test(ph) && B.cardView ? B.cardView() : null;   // (a fish held up: on the fish)
+    if (v) { _dofAt.copy(v.look); return { at: _dofAt, sharp: 1.2, ramp: 8 }; }
+    const z = DOCK.foot + DOCK.len; _dofAt.set(DOCK.x, W.heightAt(DOCK.x, z) + DOCK.deck + 1, z);   // (the angler at the end of the dock)
+    return { at: _dofAt, sharp: 5, ramp: 30 };
+  }
+  _dofAt.copy(s.origin); _dofAt.y += 3;   // (the middle of what is built, a little up)
+  const d = camera.position.distanceTo(_dofAt);
+  return { at: _dofAt, sharp: 3 + d * 0.3, ramp: 8 + d * 0.9 };
+}
+
 // ── EACH FRAME ───────────────────────────────────────────────────────────────────────────────────────────────────
 let last = performance.now(), frames = 0, fpsT = last, fpsNow = 0, needDraw = false, drawn = { calls: 0, triangles: 0 };
 function step(dt) {
@@ -1020,7 +1044,8 @@ function step(dt) {
     if (stage) stage.update(dt, P.position);
     if (traffic) { traffic.keepView = SJ && SJ.active && !P.cam.enabled ? camera : null; traffic.update(dt, P.position, camera.position); }   // (no wagon through the store counter's picture)
     townSounds(dt, !!(cabin && cabin.indoor));   // (muffled inside the cabin with its door shut)
-    W.update(dt); W.render();
+    W.update(dt);
+    if (DOFX && DOFX.frame(dt, dofWant())) { DOFX.begin(); W.render(DOFX.end); } else W.render();   // (the close-ups' depth of field, when switched on: below)
     if (SR) SR.draw();   // (the six-shooter, drawn over the valley)
     AUD.listen(camera);
     compass();
@@ -1091,6 +1116,7 @@ const dev = {
     if (name === 'pigs') { if (!PG) return false; dev.goto('pigs'); PG.newBatch(); return true; }
     if (name !== 'roundup' || !RU) return false; dev.goto('pasture'); RU.newWave(); return true;
   },
+  dof(on = true) { if (!DOFX) DOFX = makeDof({ renderer, camera }); DOFX.on = !!on; return DOFX.state(); },   // (the close-ups' depth of field: src/fx/dof.js)
   lockbox(tier) { if (!rider) return false; if (state === 'play') openBox({ tier: tier || boxTier(rider), from: 'sheriff' }); return true; },
   spot() { return spotNote(); },   // (the menu's "Mark this spot" line, for rigs)
   saddle(kind = 'plain') { if (!rider) return; const o = rider.owned; o.saddles = [...new Set([...(o.saddles || []), kind])]; o.saddle = kind; saveRider(rider); if (P) P.refreshOwned(); refresh(); },
