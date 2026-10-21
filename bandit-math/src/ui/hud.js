@@ -80,9 +80,10 @@ export const HOB_FACE = `<svg viewBox="0 0 48 48" aria-hidden="true"><circle cx=
 // A western trophy buckle for a job (save.js JOBS): an oval plate with a rope edge, a sunk middle with a little
 // engraving, the job's sign raised in the middle (a longhorn for cattle, a sprung padlock for lock boxes, a bell for
 // sheep, a flour sack for store orders, a pig, a star for bandits, a wagon wheel for deliveries, a strongbox for the
-// loot). The metal says the tier; the better buckles carry more: rivets on tin and copper, turquoise stones on silver,
-// turquoise and tiny stars on gold. tier = null draws the buckle still to win, as a faint outline. The title screen's
-// rider card and the toast below both use it.
+// loot, a windmill for the tower, a truss bridge for the loads carried across, a leaping fish for the fish landed). The
+// metal says the tier; the better buckles carry more: rivets on tin and copper, turquoise stones on silver, turquoise
+// and tiny stars on gold. tier = null draws the buckle still to win, as a faint outline. The title screen's rider card
+// and the toast below both use it.
 const METAL = {
   tin: { hi: '#c4cacd', mid: '#7c858a', lo: '#3f464b', ink: '#262b2f' },   // dull pewter, so it never passes for silver
   copper: { hi: '#f7c4a0', mid: '#c26d3c', lo: '#6a3214', ink: '#3f1d0a' },
@@ -129,6 +130,28 @@ const SIGN = {
       <circle cx="32" cy="22" r="8.2" fill="none" stroke="${ink}" stroke-width="3.2"/><circle cx="32" cy="22" r="8.2" fill="none" stroke="${f}" stroke-width="2"/>
       <circle cx="32" cy="22" r="2.4" fill="${f}" stroke="${ink}" stroke-width="0.8"/>`;
   },
+  // a windmill, for the feet of tower that stood: a tower narrowing as it rises, its four sails turned a little
+  tower: (f, ink) => {
+    const sails = [];
+    for (let i = 0; i < 4; i++) {
+      const a = 0.4 + (i * Math.PI) / 2, c = Math.cos(a), s = Math.sin(a), px = (d, w) => `${(32 + d * c - w * s).toFixed(2)},${(17 + d * s + w * c).toFixed(2)}`;
+      sails.push(`<polygon points="${px(1.6, 0)} ${px(9, 0)} ${px(9, 2.8)} ${px(2.6, 2.4)}" fill="${f}" stroke="${ink}" stroke-width="0.7" stroke-linejoin="round"/>`);
+    }
+    return `<path d="M27.6 31.6L30.4 17.4H33.6L36.4 31.6Z" fill="${f}" stroke="${ink}" stroke-width="0.8" stroke-linejoin="round"/>
+      <path d="M28.8 25.4H35.2M29.4 22H34.6" stroke="${ink}" stroke-width="0.7" opacity="0.7"/>${sails.join('')}<circle cx="32" cy="17" r="1.5" fill="${f}" stroke="${ink}" stroke-width="0.8"/>`;
+  },
+  // a little truss bridge on its two stone abutments, for the loads carried across the engineer's bridge
+  loads: (f, ink) => {
+    const truss = 'M24.6 25.2L28 19H36L39.4 25.2M28 19V25.2M32 19V25.2M36 19V25.2M28 19L32 25.2M36 19L32 25.2';
+    return `<rect x="21.8" y="26.4" width="4" height="5.2" rx="0.5" fill="${f}" stroke="${ink}" stroke-width="0.8"/><rect x="38.2" y="26.4" width="4" height="5.2" rx="0.5" fill="${f}" stroke="${ink}" stroke-width="0.8"/>
+      <path d="${truss}" fill="none" stroke="${ink}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><path d="${truss}" fill="none" stroke="${f}" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="23.2" y="24.8" width="17.6" height="2" rx="0.4" fill="${f}" stroke="${ink}" stroke-width="0.8"/>`;
+  },
+  // a fish leaping, for the fish landed off the dock
+  fish: (f, ink) => `<path d="M24.6 22L20.4 17.4 21.6 22 20.4 26.6Z" fill="${f}" stroke="${ink}" stroke-width="0.8" stroke-linejoin="round"/>
+    <path d="M24 22Q30 15.2 37.4 19.4Q40.6 21.2 41.4 22Q40.6 22.8 37.4 24.6Q30 28.8 24 22Z" fill="${f}" stroke="${ink}" stroke-width="0.8" stroke-linejoin="round"/>
+    <path d="M29.6 18.4L31.6 15.4 33.8 18M30.4 25.8L31.8 27.8 33 25.8" fill="${f}" stroke="${ink}" stroke-width="0.7" stroke-linejoin="round"/>
+    <path d="M34.8 19.6Q33.6 22 34.8 24.4" fill="none" stroke="${ink}" stroke-width="0.7" opacity="0.7"/><circle cx="37.8" cy="21.3" r="0.85" fill="${ink}"/>`,
   // a strongbox, its lid domed, two iron bands and a lock, for the gang's loot handed back
   loot: (f, ink) => `<path d="M24.2 18.6Q24.2 14 32 14Q39.8 14 39.8 18.6Z" fill="${f}" stroke="${ink}" stroke-width="0.8" stroke-linejoin="round"/>
     <rect x="24.2" y="18.6" width="15.6" height="10.8" rx="1" fill="${f}" stroke="${ink}" stroke-width="0.8"/>

@@ -37,12 +37,16 @@
 //     steps 7-9  two       two buyers' shares of one bale: how many pounds in all, how many more one takes, how many are
 //                          left (halves with quarters, thirds with sixths: the picture cuts the bale into the smaller parts)
 //                          (and now and then a priced share again)
+//   flour (the miller's, from the windmill job: flourCore) is sold by the sack: sacks at a price (lots), and from the
+//     unit-price steps a price for 2 or 3 sacks, the same for every sack (unit). A flour sale made in an easier form than
+//     the store's step asks for is not counted on the Word problems strand (its `at` is null)
 //   Every answer is a whole number.
 //
 // Everything is kept on the rider (saved with it, save.js keeps it tidy):
 //   rider.owned.animals  [{ kind: 'hen'|'pig'|'sheep'|'cow', name, young?, age? }]   young: a piglet, a lamb or a calf
 //                        given as a thank-you (smaller; it grows up after GROW seconds of play, counted in age)
-//   rider.owned.goods    { eggs, wool, milk }   whole numbers in the saddlebags (eggs; pounds of wool; quarts of milk)
+//   rider.owned.goods    { eggs, wool, milk, flour }   whole numbers in the saddlebags (eggs; pounds of wool; quarts of
+//                        milk; sacks of flour, from the mill on the mill hill)
 //   rider.owned.yard     { eggs, wool, milk }   laid up at the yard, waiting to be collected (parts of one included)
 //   rider.owned.farm     { unlocked: ['pig', ...], jobs: { pig, sheep, cow } }   the kinds the store sells this rider
 //                        (besides hens), and how many whole jobs of each kind were done while that kind was still locked
@@ -83,8 +87,11 @@ export const GOODS = {
   eggs: { id: 'eggs', unit: ['egg', 'eggs'], yard: 30, bag: 144, short: (n) => `${n} egg${n === 1 ? '' : 's'}` },
   wool: { id: 'wool', unit: ['pound of wool', 'pounds of wool'], yard: 10, bag: 40, short: (n) => `${n} lb wool` },
   milk: { id: 'milk', unit: ['quart of milk', 'quarts of milk'], yard: 16, bag: 48, short: (n) => `${n} qt milk` },
+  // (the miller's flour: ground at the mill on the mill hill, picked up from his porch, src/windmilljob.js; never laid
+  // up at the yard, so yard 0)
+  flour: { id: 'flour', unit: ['sack of flour', 'sacks of flour'], yard: 0, bag: 40, short: (n) => `${n} sack${n === 1 ? '' : 's'} of flour` },
 };
-export const GOODS_IDS = ['eggs', 'wool', 'milk'];
+export const GOODS_IDS = ['eggs', 'wool', 'milk', 'flour'];
 export const GROW = 900;       // seconds of play a thank-you lamb or piglet takes to grow up (about a quarter of an hour)
 
 // the thank-yous: finishing a whole job now and then (not every time) brings a young one, if there's room for it. The
@@ -267,6 +274,9 @@ const SALE_GOODS = {
   eggs: { item: ['egg', 'eggs'], lot: ['dozen', 'dozens'], per: 12, price: [1, 2, 2, 3], most: 60, shape: 'egg', what: 'eggs',
     half: { lot: ['half-dozen', 'half-dozens'], per: 6, price: [1, 1, 2], wrong: { per: 12, why: 'That counts whole dozens. A half-dozen is 6 eggs, half of 12.' } },
     wrong: { per: 10, why: 'A dozen is 12 eggs, not 10.' }, tell: 'A dozen is 12.' },
+  // (flour is sold by the sack: no lots to count out, so its sales are 'lots' (sacks at a price) and 'unit' (a price for
+  // two or three sacks, the same for every sack): flourCore below)
+  flour: { item: ['sack', 'sacks'], lot: ['sack', 'sacks'], per: 1, price: [3, 4, 5, 6], most: 12, shape: 'sack', what: 'flour' },
   milk: { item: ['quart', 'quarts'], lot: ['gallon', 'gallons'], per: 4, price: [2, 3, 4], most: 30, shape: 'jar', what: 'milk',
     half: { lot: ['half-gallon', 'half-gallons'], per: 2, price: [1, 2], wrong: { per: 4, why: 'Four quarts make a whole gallon. A half-gallon is 2 quarts.' } },
     wrong: { per: 2, why: 'Two quarts is only half a gallon. A gallon is 4 quarts.' }, tell: '4 quarts make a gallon.' },
@@ -293,18 +303,21 @@ export function makeSale(carried, { step = 1, who = null, rand = Math.random, co
   for (let tries = 0; tries < 12; tries++) {
     const form = forms ? pick(forms) : null, wform = wforms ? pick(wforms) : null;
     for (const g of order) {
+      // (flour: sacks at a price, or a price for a few sacks once the rider is up to unit prices)
+      const flourForm = g === 'flour' ? (form === 'unit' ? 'unit' : 'lots') : null;
       const core = g === 'wool' ? woolCore(wform, whole(carried && carried[g]), { pick, f })
-        : saleCore(g, form, whole(carried && carried[g]), { rand, pick, step: st, f });
+        : g === 'flour' ? flourCore(flourForm, whole(carried && carried[g]), { pick, f })
+          : saleCore(g, form, whole(carried && carried[g]), { rand, pick, step: st, f });
       if (!core) continue;
       const coins = coinsFor(core, n, rand);
       if (!coins) continue;
-      const fm = g === 'wool' ? wform : form;
+      const fm = g === 'wool' ? wform : g === 'flour' ? flourForm : form;
       return {
         id: Math.floor(rand() * 1e9).toString(36), type: 'sale', step: st, key: `sale:${g}:${fm}`, who: f,
         story: core.story, ask: core.ask, read: `${core.story} ${core.ask}`, coins, answer: coins.find((c) => c.good).label, unit: core.unit || GOLD, cents: false,
         pic: core.pic, rightWhy: core.rightWhy, afterWhy: '', equation: null, picture,
         sale: { goods: g, sold: core.sold, gold: core.gold != null ? core.gold : core.answer, left: whole(carried[g]) - core.sold, form: fm,
-          map: g === 'wool' ? 'wool' : 'sales', at: plan ? (g === 'wool' ? plan.woolAt : plan.salesAt) ?? null : null },
+          map: g === 'wool' ? 'wool' : 'sales', at: plan ? (g === 'wool' ? plan.woolAt : g === 'flour' && flourForm !== plan.sales ? null : plan.salesAt) ?? null : null },
         // (eggs and milk: by the dozen is times, counting out dozens is dividing; wool counts in Fractions itself)
         credit: g === 'wool' ? [] : [SALE_CREDIT[fm] || SALE_CREDIT.leftover].map((c) => ({ ...c })), size: 1,
       };
@@ -406,6 +419,44 @@ function leftoverCore(g, c, { pick, f, G, half = false, tell = true }) {
     rightWhy: left > 0
       ? `${u(n, G.item)} make ${lotN(k, lot)} with ${left} left over: ${k} × ${price} = ${ans} gold. The ${u(left, G.item)} left over ${left === 1 ? 'stays' : 'stay'} in your saddlebags.`
       : `${u(n, G.item)} make ${lotN(k, lot)} exactly: ${k} × ${price} = ${ans} gold`,
+  };
+}
+
+// flour, sold by the sack. lots: "You bring 4 sacks of flour. He pays 5 gold a sack." (equal groups); unit: "He pays 8
+// gold for 2 sacks, the same for every sack. You bring 5 sacks." (the price of one sack first). At most G.most sacks
+// to one buyer; the rest stay in the saddlebags.
+function flourCore(form, c, { pick, f }) {
+  const G = SALE_GOODS.flour, They = f.she ? 'She' : 'He', n = Math.min(c, G.most);
+  if (n < 2) return null;   // (one sack is just the price: nothing to work out)
+  const buys = `${f.name} wants to buy your flour.`, ask = 'How much gold do you get?';
+  if (form === 'unit') {
+    const m = pick([2, 3]), q = pick([2, 3, 4, 5]), P = m * q;
+    if (n === m) return null;   // (the price given is already the answer)
+    const ans = n * q;
+    return {
+      story: `${buys} ${They} pays ${P} gold for ${m} sacks, the same for every sack. You bring ${n} sacks of flour.`, ask, answer: ans, sold: n,
+      slips: [
+        { v: n * P, slip: 'bigLot', why: `${P} gold is for ${m} sacks, not for each one. One sack fetches ${P} ÷ ${m}.` },
+        { v: P, slip: 'oneLot', why: `${P} gold is what ${m} sacks fetch. You bring ${n}.` },
+        { v: n + q, slip: 'added', why: `That adds the sacks to the price. Each of the ${n} sacks fetches ${P} ÷ ${m} = ${q} gold.` },
+        { v: (n - 1) * q, slip: 'off', why: `That pays for ${n - 1} sacks. You bring ${n}.` },
+        { v: q, slip: 'lotsOnly', why: `${q} gold is one sack's price. You bring ${n}.` },
+      ],
+      pic: { kind: 'lots', n, per: 1, price: null, priceText: `${P} ÷ ${m}`, item: G.item, lot: G.lot, shape: 'sack', given: 'items' },
+      rightWhy: `${P} gold ÷ ${m} = ${q} gold a sack, and ${n} × ${q} = ${ans} gold`,
+    };
+  }
+  const price = pick(G.price), k = Math.min(n, 6), ans = k * price;
+  return {
+    story: `${buys} You bring ${k} sacks of flour. ${They} pays ${price} gold a sack.`, ask, answer: ans, sold: k,
+    slips: [
+      { v: k + price, slip: 'added', why: `${k} + ${price} adds the sacks to the gold. It's ${k} sacks at ${price} gold each: ${k} groups of ${price}.` },
+      { v: price, slip: 'one', why: `${price} gold is for just 1 sack. You bring ${k}.` },
+      { v: (k + 1) * price, slip: 'off', why: `That's ${k + 1} lots of ${price}. Count again: you bring ${k}.` },
+      { v: (k - 1) * price, slip: 'off', why: `That's only ${k - 1} lots of ${price}. You bring ${k}.` },
+    ],
+    pic: { kind: 'lots', n: k, per: 1, price, item: G.item, lot: G.lot, shape: 'sack', given: 'lots' },
+    rightWhy: `${k} sacks × ${price} gold = ${ans} gold`,
   };
 }
 
@@ -577,7 +628,7 @@ function twoBuyers(most, { pick, f }) {
 //   lots      the goods packed into their lots (cartons of a dozen eggs, gallon jugs of quarts), each lot labelled with
 //             what it pays, the ones left over beside them ("stay in your bags")
 //   fraction  the wool as a bale cut into equal parts, the parts each buyer buys shaded, a "?" in every part
-const INK = '#2b2219', SOFT = '#8a7558', FILL = '#ead9b2', FILL2 = '#d9bf8a', ASK = '#b5523a', EGG = '#f4ead4', MILK = '#f7f4ec', FLEECE = '#efe8da', WOOLA = '#d6a85c', WOOLB = '#9fbf9a';
+const INK = '#2b2219', SOFT = '#8a7558', FILL = '#ead9b2', FILL2 = '#d9bf8a', ASK = '#b5523a', EGG = '#f4ead4', MILK = '#f7f4ec', FLEECE = '#efe8da', WOOLA = '#d6a85c', WOOLB = '#9fbf9a', FLOUR = '#f3ecdc';
 const PW = 360;
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const text = (x, y, s, { size = 13, fill = INK, anchor = 'middle', weight = 600 } = {}) =>
@@ -586,6 +637,7 @@ const svgOf = (h, body) => `<svg viewBox="0 0 ${PW} ${h}" xmlns="http://www.w3.o
 // one of the goods, drawn small at (x, y)
 function thing(shape, x, y, s = 1) {
   if (shape === 'egg') return `<ellipse cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" rx="${(3.6 * s).toFixed(1)}" ry="${(4.6 * s).toFixed(1)}" fill="${EGG}" stroke="${INK}" stroke-width="0.9"/>`;
+  if (shape === 'sack') return `<path d="M${(x - 3.6 * s).toFixed(1)} ${(y - 3 * s).toFixed(1)}Q${(x - 5 * s).toFixed(1)} ${(y + 5.6 * s).toFixed(1)} ${x.toFixed(1)} ${(y + 5.8 * s).toFixed(1)}Q${(x + 5 * s).toFixed(1)} ${(y + 5.6 * s).toFixed(1)} ${(x + 3.6 * s).toFixed(1)} ${(y - 3 * s).toFixed(1)}L${(x + 2 * s).toFixed(1)} ${(y - 6 * s).toFixed(1)}H${(x - 2 * s).toFixed(1)}Z" fill="${FLOUR}" stroke="${INK}" stroke-width="0.9" stroke-linejoin="round"/><path d="M${(x - 2.6 * s).toFixed(1)} ${(y - 3.4 * s).toFixed(1)}H${(x + 2.6 * s).toFixed(1)}" stroke="${INK}" stroke-width="0.9"/>`;
   if (shape === 'jar') return `<rect x="${(x - 4 * s).toFixed(1)}" y="${(y - 6 * s).toFixed(1)}" width="${(8 * s).toFixed(1)}" height="${(12 * s).toFixed(1)}" rx="2" fill="${MILK}" stroke="${INK}" stroke-width="0.9"/><rect x="${(x - 2.4 * s).toFixed(1)}" y="${(y - 8 * s).toFixed(1)}" width="${(4.8 * s).toFixed(1)}" height="${(2.4 * s).toFixed(1)}" fill="${SOFT}"/>`;
   return `<circle cx="${(x - 3 * s).toFixed(1)}" cy="${y.toFixed(1)}" r="${(4 * s).toFixed(1)}" fill="${FLEECE}" stroke="${INK}" stroke-width="0.8"/><circle cx="${(x + 3 * s).toFixed(1)}" cy="${y.toFixed(1)}" r="${(4 * s).toFixed(1)}" fill="${FLEECE}" stroke="${INK}" stroke-width="0.8"/><circle cx="${x.toFixed(1)}" cy="${(y - 3 * s).toFixed(1)}" r="${(4 * s).toFixed(1)}" fill="${FLEECE}" stroke="${INK}" stroke-width="0.8"/>`;
 }
@@ -593,7 +645,8 @@ const PICS = {
   lots(p) {
     const k = Math.floor(p.n / p.per), left = p.n - k * p.per, lotOne = p.lot[0];
     const pays = p.price != null ? `${p.price} gold` : `${p.priceText} gold`;
-    const line = p.given === 'lots'
+    // (goods sold one by one, as the miller's sacks of flour, are told as so many, so much each: nothing is packed)
+    const line = p.given === 'lots' || p.per === 1
       ? `${lotN(k, p.lot)}, ${pays} for each: ${Array(Math.min(k, 6)).fill(p.price != null ? p.price : '…').join(' + ')}${k > 6 ? ' + …' : ''} = ? gold`
       : `${u(p.n, p.item)} packed ${p.per === 1 ? 'one by one' : `${p.per} to a ${lotOne}`}: every full ${lotOne} pays ${pays}${left ? `; the ${left} left over ${left === 1 ? 'stays' : 'stay'} in your saddlebags` : ''}. How much gold?`;
     // the lots as boxes of goods, drawn one by one while they fit (shrunk a little if need be), else a bar cut into lots
@@ -684,5 +737,5 @@ export function picture(pic) {
   const d = PICS[pic && pic.kind];
   if (!d) return { svg: '', title: '', line: '' };
   const { svg, line } = d(pic);
-  return { svg, title: PIC_TITLES[pic.kind], line };
+  return { svg, title: pic.kind === 'lots' && pic.per === 1 ? 'So much each' : PIC_TITLES[pic.kind], line };   // (sacks sold one by one aren't packed)
 }

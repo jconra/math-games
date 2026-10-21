@@ -34,6 +34,8 @@
 //   const J = makeStoreJob({ W, folk, P, I, camera, rider, hud, hob, refresh, openBox, onStart, onStop, pay, goods, town })
 //     town(): the town's people (src/townpeople.js), or null: the customers are townsfolk borrowed from it (already about,
 //     or out of the nearest door, walking the town's paths; given back when they go), else made here as before
+//     fish(): the fishing job (src/fishingjob.js), or null: a customer buys the fish kept at the dock (its saleOrder:
+//     src/math/fishsale.js, a sale slip in Fractions, Ratios or Word problems; sold(order) takes them out of the saddlebags)
 //     goods: the homestead (src/homestead.js), or null: now and then a customer buys the rider's own eggs, wool or milk
 //     instead of bringing an order (goods.saleOrder: a sale slip, levelled by this job's ladder step; it pays the gold
 //     the answer comes to, and doesn't move the ladder); goods.sold(order) takes them out of the saddlebags
@@ -84,7 +86,7 @@ export const STORE = {
 };
 
 export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, refresh = () => {}, openBox = null,
-  onStart = () => {}, onStop = () => {}, pay = { order: 3, orderEvery: 3, orderFirst: 1 }, scene = W.scene, goods = null, voice = null, town = null }) {
+  onStart = () => {}, onStop = () => {}, pay = { order: 3, orderEvery: 3, orderFirst: 1 }, scene = W.scene, goods = null, fish = null, voice = null, town = null }) {
   // a customer's recorded line (src/audio/shouts.js: the men only; it knows by `male`), from where they stand
   const speak = (kind, c) => { if (voice && c) voice(kind, { at: () => ({ x: c.x, z: c.z }), male: !c.who.she }); };
   const place = W.places.store;
@@ -229,11 +231,13 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
       Object.assign(o, { fixed: true, map, at: f.step ? pctAt(map, f.step) : realAt(map, q), longAt: ls ? ls.at : null });
       return o;
     }
-    // now and then a customer buys the rider's own goods: eggs and milk on the map sales (Word problems), wool on the
+    // the fish kept at the dock: the first customer after a catch buys some, then one in a few (src/fishingjob.js)
+    { const FJ = fish && fish(), s = FJ && FJ.saleOrder ? FJ.saleOrder({ who }) : null; if (s) return s; }
+    // now and then a customer buys the rider's own goods: eggs, milk and flour on the map sales (Word problems), wool on the
     // map wool (Fractions); a kind the rider isn't up to yet isn't bought
     if (goods) {
       const carried = homestead(rider).goods, plan = { step: 1, sales: null, wool: null };
-      if ((carried.eggs || carried.milk) && fits(rider, 'sales')) { const q = stepFor(rider, 'sales'); Object.assign(plan, { sales: q.id, salesAt: realAt('sales', q) }); }
+      if ((carried.eggs || carried.milk || carried.flour) && fits(rider, 'sales')) { const q = stepFor(rider, 'sales'); Object.assign(plan, { sales: q.id, salesAt: realAt('sales', q) }); }
       if (carried.wool && fits(rider, 'wool')) { const q = stepFor(rider, 'wool'); Object.assign(plan, { wool: q.id, woolAt: realAt('wool', q) }); }
       plan.step = stepFor(rider, 'store').step;   // (the tip goes by the store's step)
       const sale = (plan.sales || plan.wool) ? goods.saleOrder({ step: plan, who }) : null;
@@ -273,7 +277,7 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
   // the strand an order is about, at the point it was asked: Word problems, or the sale's (Word problems or
   // Fractions), or the counter question's own (money, time, dec, pct, ratio)
   function ownOf(o) {
-    if (o.sale) return o.sale.at != null ? { strand: o.sale.map === 'wool' ? 'frac' : 'words', at: o.sale.at } : null;
+    if (o.sale) return o.sale.at != null ? { strand: o.sale.strand || (o.sale.map === 'wool' ? 'frac' : 'words'), at: o.sale.at } : null;   // (a fish sale says its own strand)
     return { strand: o.counter ? o.strand : 'words', at: o.at != null ? o.at : null };
   }
   // what an answer to this order counts in: its own strand at the point asked, and the order's extra strands (a
@@ -337,7 +341,7 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
       return;
     }
     if (o.sale) {   // (your goods sold: the gold the answer comes to)
-      if (goods) goods.sold(o);
+      if (o.sale.goods === 'fish') { const FJ = fish && fish(); if (FJ) FJ.sold(o); } else if (goods) goods.sold(o);
       await finishOrder(o, front, { line: o.rightWhy, gold: o.sale.gold, first: !missed, paid: `+${o.sale.gold} gold for your ${o.sale.goods}` });
       return;
     }

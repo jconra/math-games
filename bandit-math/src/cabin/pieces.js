@@ -7,6 +7,7 @@
 //   makeKeepsake(job, tier) -> THREE.Group      tier: 'tin' | 'copper' | 'silver' | 'gold' (a later buckle dresses it up)
 //   disposeTree(object)     frees the shapes, materials and pictures of a group made here (or any group)
 import * as THREE from 'three';
+import { makeFish } from '../../labs/fishing/fish.js';   // (the mounted fish: the fishing lab's own fish maker)
 
 const TIER_COL = { tin: 0xa9aba6, copper: 0xb8713f, silver: 0xd5d7dc, gold: 0xd9a830 };
 const std = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.8, ...o });
@@ -269,6 +270,63 @@ const KEEP = {
       for (const [y, a] of [[0.06, 0.3], [0.035, -0.5]]) can.add(mesh(new THREE.SphereGeometry(0.007, 6, 4).scale(1, 1, 0.4), hole, Math.sin(a) * 0.035, y, Math.cos(a) * 0.035));
       if (down) { can.rotation.set(0, 0.5, Math.PI / 2); can.position.set(x, 0.05, 0.085); can.scale.set(1, 0.92, 1); }
       grp.add(can);
+    }
+    grp.add(mesh(new THREE.BoxGeometry(0.07, 0.022, 0.004), std(TIER_COL[tier] || TIER_COL.tin, { metalness: 0.8, roughness: 0.3 }), 0, 0, 0.162));
+    return grp;
+  },
+  // a little model truss bridge on a wall shelf (the bridge job): two sides of a Pratt truss (top and bottom boards, posts
+  // and diagonals) on two stone blocks, plank deck across; a small plate on the shelf's edge in the buckle's metal
+  loads(tier) {
+    const grp = new THREE.Group(), dark = std(0x5a3a22), wood = std(0xb58a5a, { roughness: 0.6 }), stone = std(0x8d877c, { roughness: 0.95 });
+    grp.add(mesh(new THREE.BoxGeometry(0.42, 0.03, 0.16), dark, 0, 0, 0.08));
+    const b = new THREE.Group(); b.position.set(0, 0.015, 0.085); grp.add(b);
+    const L = 0.3, H = 0.07, y0 = 0.035, n = 4, step = L / n;
+    for (const x of [-L / 2 - 0.02, L / 2 + 0.02]) b.add(mesh(new THREE.BoxGeometry(0.05, y0, 0.09), stone, x, y0 / 2, 0));
+    const stick = (ax, ay, bx, by, z) => { const dx = bx - ax, dy = by - ay, l = Math.hypot(dx, dy); const m = mesh(new THREE.BoxGeometry(l, 0.008, 0.008), wood, (ax + bx) / 2, (ay + by) / 2, z); m.rotation.z = Math.atan2(dy, dx); b.add(m); };
+    for (const z of [-0.035, 0.035]) {
+      stick(-L / 2, y0, L / 2, y0, z); stick(-L / 2 + step, y0 + H, L / 2 - step, y0 + H, z);
+      stick(-L / 2, y0, -L / 2 + step, y0 + H, z); stick(L / 2, y0, L / 2 - step, y0 + H, z);
+      for (let i = 1; i < n; i++) { const x = -L / 2 + i * step; stick(x, y0, x, y0 + H, z); }
+      stick(-L / 2 + step, y0 + H, 0, y0, z); stick(L / 2 - step, y0 + H, 0, y0, z);
+    }
+    for (let i = 0; i < 11; i++) b.add(mesh(new THREE.BoxGeometry(0.02, 0.005, 0.085), wood, -L / 2 + 0.01 + i * (L - 0.02) / 10, y0 + 0.007, 0));
+    grp.add(mesh(new THREE.BoxGeometry(0.07, 0.022, 0.004), std(TIER_COL[tier] || TIER_COL.tin, { metalness: 0.8, roughness: 0.3 }), 0, 0, 0.162));
+    return grp;
+  },
+  // a mounted fish on an oval wooden plaque (the fishing job): a largemouth bass, its side to the room, curved a little as
+  // if it were swimming, made by the fishing lab's own fish maker; a small plate under it in the buckle's metal
+  fish(tier) {
+    const grp = new THREE.Group(), dark = std(0x4a3020, { roughness: 0.6 }), rim = std(0x6b4a2a, { roughness: 0.55 });
+    const plaque = mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.025, 28).rotateX(Math.PI / 2).scale(1.45, 0.75, 1), dark, 0, 0, 0.0125); grp.add(plaque);
+    grp.add(mesh(new THREE.TorusGeometry(0.2, 0.008, 6, 36).scale(1.45, 0.75, 1), rim, 0, 0, 0.025));
+    const L = 0.42, f = makeFish('bass', L), body = new THREE.Mesh(f.mesh.geometry.clone(), new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.45, metalness: 0.05, side: THREE.DoubleSide }));
+    f.mesh.material.dispose();
+    // (its nose to the left, its length along +x, its side facing the room; a little bend from the tail's tilt)
+    body.rotation.set(0, -Math.PI / 2, 0.12); body.position.set(-L / 2, 0.01, 0.075); body.castShadow = body.receiveShadow = true; grp.add(body);
+    grp.add(mesh(new THREE.BoxGeometry(0.1, 0.026, 0.004), std(TIER_COL[tier] || TIER_COL.tin, { metalness: 0.8, roughness: 0.3 }), 0, -0.115, 0.03));
+    return grp;
+  },
+  // a little carved windmill on a wall shelf (the windmill job): a four-legged tower narrowing as it rises, a horizontal
+  // board round it halfway up, a cap and four cloth sails facing into the room; a small plate in the buckle's metal
+  tower(tier) {
+    const grp = new THREE.Group(), dark = std(0x5a3a22), wood = std(0xb58a5a, { roughness: 0.6 }), cloth = std(0xefe6d0, { roughness: 0.9, side: THREE.DoubleSide });
+    grp.add(mesh(new THREE.BoxGeometry(0.3, 0.03, 0.16), dark, 0, 0, 0.08));
+    const t = new THREE.Group(); t.position.set(0, 0.015, 0.085); grp.add(t);
+    const H = 0.24, b0 = 0.055, b1 = 0.03;   // (its height, and half its width at the foot and at the top)
+    for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      const a = new THREE.Vector3(sx * b0, 0, sz * b0), b = new THREE.Vector3(sx * b1, H, sz * b1), L = a.distanceTo(b);
+      const leg = mesh(new THREE.BoxGeometry(0.012, L, 0.012), wood, (a.x + b.x) / 2, H / 2, (a.z + b.z) / 2);
+      leg.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), b.clone().sub(a).normalize()); t.add(leg);
+    }
+    const mid = (b0 + b1) / 2;
+    for (const [w, d, z, x] of [[mid * 2, 0.01, mid, 0], [mid * 2, 0.01, -mid, 0], [0.01, mid * 2, 0, mid], [0.01, mid * 2, 0, -mid]]) t.add(mesh(new THREE.BoxGeometry(w, 0.01, d), wood, x, H / 2, z));
+    t.add(mesh(new THREE.BoxGeometry(0.075, 0.008, 0.075), wood, 0, H, 0));
+    t.add(mesh(new THREE.CylinderGeometry(0.022, 0.03, 0.045, 8), dark, 0, H + 0.026, 0));
+    const hub = new THREE.Group(); hub.position.set(0, H + 0.03, 0.04); hub.rotation.z = 0.35; t.add(hub);
+    for (let i = 0; i < 4; i++) {
+      const arm = new THREE.Group(); arm.rotation.z = i * Math.PI / 2; hub.add(arm);
+      arm.add(mesh(new THREE.BoxGeometry(0.006, 0.13, 0.005), wood, 0, 0.065, 0));
+      arm.add(mesh(new THREE.PlaneGeometry(0.03, 0.09), cloth, 0.018, 0.075, 0.003));
     }
     grp.add(mesh(new THREE.BoxGeometry(0.07, 0.022, 0.004), std(TIER_COL[tier] || TIER_COL.tin, { metalness: 0.8, roughness: 0.3 }), 0, 0, 0.162));
     return grp;

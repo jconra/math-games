@@ -129,8 +129,14 @@ export const MAPS = {
   dividing: { strand: 'div', file: 'src/math/dividing.js', anchors: [16, 20, 25, 29, 33, 37, 41, 45, 50] },
   // src/math/numbersense.js STEPS (11, counted from 0): the target range
   range: { strand: 'number', file: 'src/math/numbersense.js', base: 0, anchors: [14, 22, 30, 34, 38, 44, 50, 62, 68, 76, 86] },
-  // labs/windmill/questions.js ladder (7 levels): the windmill lab, not in the game yet
-  windmill: { strand: 'geo', file: 'labs/windmill/questions.js', inGame: false, anchors: [40, 46, 58, 72, 78, 86, 92] },
+  // labs/windmill/questions.js ladder (7 levels): the miller's questions, in the game at the mill hill since the builders
+  // wave (src/windmilljob.js through src/buildsite.js skillAsker; the lab page keeps its own ladder)
+  windmill: { strand: 'geo', file: 'labs/windmill/questions.js', anchors: [40, 46, 58, 72, 78, 86, 92] },
+  // ---- bridge lane ----
+  // labs/bridge/questions.js ladder (8 levels): the windmill's seven, then the bridge's own step at the top (a panel's
+  // diagonal: 6 ft by 8 ft makes 10 ft); the engineer's questions at the ravine on the western river (src/bridgejob.js
+  // through src/buildsite.js skillAsker; the lab page keeps its own ladder)
+  bridge: { strand: 'geo', file: 'labs/bridge/questions.js', anchors: [40, 46, 58, 72, 78, 86, 92, 94] },
 
   // ---- lock box lane ----
   // src/lockbox/kbox.js K1..K3: the kindergarten boxes below R0a, the same lock box with pictures and read aloud:
@@ -187,6 +193,21 @@ export const MAPS = {
   pct: { strand: 'pct', file: 'src/math/percent.js', anchors: [58, 62, 66, 72, 76], grows: true },
   // src/math/ratios.js (5): speed (the store's rate stories), recipes, ratio tables, shares by a ratio, proportions
   ratio: { strand: 'ratio', file: 'src/math/ratios.js', anchors: [38, 55, 60, 65, 72], grows: true },
+
+  // ---- fishing lane ----
+  // labs/fishing/questions.js ladder, steps 1 to 6: the fish off the dock at the lake (src/fishingjob.js): halves and
+  // quarters on a ruler (keep it or throw it back), eighths, line-ups and adding weights with the same bottom number,
+  // the same length in other numbers (equivalents), different bottom numbers, mixed numbers and inches
+  fishing: { strand: 'frac', file: 'labs/fishing/questions.js', anchors: [30, 34, 40, 44, 50, 54] },
+  // ...and its step 7, the ratios, one kind a step here: keep 1 in every few (dividing into groups), bait by the fish (a
+  // rate: how many for one first), a ratio as a fraction, the cook's ratio (shares by a ratio)
+  fishingRatio: { strand: 'ratio', file: 'labs/fishing/questions.js', ids: ['rule', 'bait', 'part', 'cook'], anchors: [50, 56, 62, 65] },
+  // src/math/fishsale.js: the fish sold at the general store's counter. By the fish for the youngest (Word problems:
+  // equal groups), by the pound (Fractions: one fish, a fraction of the price; two fish, their weights added; three,
+  // with mixed numbers), and by a rate (Ratios: so much gold for every 2 or 3 fish)
+  fishSaleK: { strand: 'words', file: 'src/math/fishsale.js', ids: ['count'], anchors: [16] },
+  fishSale: { strand: 'frac', file: 'src/math/fishsale.js', ids: ['pound', 'pair', 'three'], anchors: [36, 46, 54] },
+  fishRate: { strand: 'ratio', file: 'src/math/fishsale.js', ids: ['rate'], anchors: [58] },
 
   // ---- completion lane, menu lane: no makers ----
 };

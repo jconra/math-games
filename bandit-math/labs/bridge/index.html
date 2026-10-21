@@ -8,86 +8,14 @@
 <!-- the on-screen error box comes first, so a crash shows on screen instead of a blank page -->
 <script src="../../oops.js"></script>
 <link rel="stylesheet" href="../../src/ui/fonts/fonts.css">
-<link rel="stylesheet" href="../windmill/windmill.css?v=23">
-<link rel="stylesheet" href="bridge.css?v=13">
+<link rel="stylesheet" href="../windmill/windmill.css?v=26">
+<link rel="stylesheet" href="bridge.css?v=15">
 <script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/" } }</script>
 </head>
 <body>
-<div id="app">
-  <aside id="panel" aria-label="Lumber">
-    <header class="pn-head">
-      <h1>Lumber</h1>
-      <div class="pn-count"><b id="count">60</b> <span id="count-word">full boards left</span></div>
-    </header>
-    <div class="bench-wrap">
-      <div class="bench-label" id="bench-label">8 ft board ×60</div>
-      <div class="bench" id="bench">
-        <div class="tape" id="tape"></div>
-        <div class="board-v" id="bench-board" title="Drag the whole board onto the bridge, or pick a spot and cut it">
-          <div class="saw" id="saw"><i></i><span id="saw-label">4 ft | 4 ft</span></div>
-        </div>
-      </div>
-      <div class="bench-empty" id="bench-empty" hidden>No full boards left</div>
-    </div>
-    <button class="btn cut" id="cut">Cut</button>
-    <button class="btn up-next" id="up-next" hidden title="The board on the bench goes up where you left off">Put it up</button>
-    <div class="pieces-head">Cut pieces</div>
-    <div class="pieces" id="pieces"></div>
-    <div class="pieces-empty" id="pieces-empty">Cut pieces wait here. Drag one onto the bridge.</div>
-    <div class="planks-head">Deck planks <b id="plank-count">36</b></div>
-    <div class="planks-note">2 by 8 inch planks, laid across when both sides reach from bank to bank.</div>
-  </aside>
-  <main id="view">
-    <canvas id="c" aria-label="The river crossing and the bridge"></canvas>
-    <svg id="overlay"></svg>
-    <div class="gz end sock" id="g-a" hidden title="Drag the foot to another spot"></div>
-    <div class="gz end free" id="g-b" hidden title="Drag the free end onto a board"></div>
-    <div class="gz arrow" id="g-xp" hidden title="Free end half a foot east (+X)"></div>
-    <div class="gz arrow" id="g-xm" hidden title="Free end half a foot west (−X)"></div>
-    <div class="gz arrow" id="g-zp" hidden title="Free end half a foot south (+Z)"></div>
-    <div class="gz arrow" id="g-zm" hidden title="Free end half a foot north (−Z)"></div>
-    <div class="gz arrow" id="g-yp" hidden title="Free end half a foot up (+Y)"></div>
-    <div class="gz arrow" id="g-ym" hidden title="Free end half a foot down (−Y)"></div>
-    <button class="nail-it" id="nail" hidden aria-label="Nail it" title="Nail it (Enter)"><svg viewBox="0 0 24 24"><path d="M4.5 12.5l5 5L19.5 7"/></svg></button>
-    <div class="gz stone" id="bank-w" hidden title="Drag the bank's edge in or out"></div>
-    <div class="gz stone" id="bank-e" hidden title="Drag the bank's edge in or out"></div>
-
-    <div class="bar top">
-      <div class="stats">
-        <div><small>Gap</small><b id="span">16 ft</b></div>
-        <div class="st-base"><small>Boards</small><b id="nboards">0</b></div>
-        <div><small>Best</small><b id="best">–</b></div>
-        <div class="st-top" id="top-at-box" hidden><small id="top-at-label">Top end</small><b id="top-at"></b></div>
-      </div>
-      <div class="tools">
-        <button class="btn" id="undo" title="Take down the last board (Ctrl+Z)">Undo</button>
-        <div class="snd"><button class="btn icon" id="mute" aria-label="Sound on or off" title="Sound on/off"><svg viewBox="0 0 24 24"><path class="spk" d="M4 9h4l5-4v14l-5-4H4z"/><path class="wav" d="M16 9a4 4 0 0 1 0 6M18.5 6.5a7.5 7.5 0 0 1 0 11"/><path class="x" d="M16 9l6 6M22 9l-6 6"/></svg></button><input type="range" id="vol" min="0" max="100" value="80" aria-label="Volume" title="Volume"></div>
-      </div>
-    </div>
-    <div class="wall-name" id="face-name">Looking north</div>
-    <div class="compass" id="compass" aria-label="Compass" title="Which way is north"><svg viewBox="-30 -30 60 60"><circle r="27" class="ring"/><g id="compass-rose"><path d="M0 -21 L5 0 L0 3 L-5 0 Z" class="north"/><path d="M0 21 L5 0 L0 -3 L-5 0 Z" class="south"/><text y="-22" class="n">N</text><text y="27" class="o">S</text><text x="25" y="3" class="o">E</text><text x="-25" y="3" class="o">W</text></g></svg></div>
-    <div class="hint-line" id="hint"></div>
-    <div class="bar sel" id="sel-bar" hidden>
-      <div class="hint" id="sel-hint">This board</div>
-      <div class="row"><button class="btn" id="pickup">Take it down</button></div>
-    </div>
-    <div class="bar sel trim" id="trim-bar" hidden>
-      <div class="hint" id="trim-hint"></div>
-      <div class="row"><button class="btn" id="trim-saw">✂ Saw off the extra</button><button class="btn" id="trim-keep">Keep it</button></div>
-    </div>
-    <button class="btn go lay-deck" id="lay-deck" hidden>Lay the deck</button>
-    <button class="btn wind cross" id="cross"><svg viewBox="0 0 24 24"><path d="M3 15h18M5 15l3-6h8l3 6M8 9V6M16 9V6"/></svg>Send it across</button>
-
-    <div class="say" id="say" hidden><div class="who">The engineer</div><div id="say-text"></div></div>
-    <div class="stage" id="stage" hidden><b id="stage-name"></b><span id="stage-sub"></span><div class="gauge"><i id="stage-bar"></i></div>
-      <div class="legend" id="legend" hidden><small>Strain</small><i></i><span><em>green easy</em><em>red breaking</em></span></div></div>
-    <div class="card" id="question" hidden></div>
-    <div class="card" id="result" hidden></div>
-    <div class="flybonus" id="flybonus" hidden>+1 board</div>
-    <div class="perf" id="perf" hidden></div>
-  </main>
-</div>
+<!-- the lumber panel and the view: builder.js MARKUP, put in by main.js -->
+<div id="app"></div>
 <div class="loading" id="loading">Down to the river…</div>
-<script type="module" src="main.js?v=13"></script>
+<script type="module" src="main.js?v=16"></script>
 </body>
 </html>

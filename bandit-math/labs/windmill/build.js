@@ -56,6 +56,7 @@ export const fmtBase = (W, D, short = false) => (short ? `${num(W)} × ${num(D)}
 const SCRAP = 0.5;      // an offcut shorter than this is kindling, not lumber
 const CONNECT_PX = 38, KEEP_PX = 56;    // pixels: a free end this near where it would connect connects (stays: KEEP_PX)
 const SOCKET_PX = 60;   // pixels: a socket this near the finger takes the board's first end
+const STONE_PULL = 0.35; // feet: a footing stone's spot counts this much nearer the finger than it is (socketAt)
 const START_REACH = 160;    // pixels: a piece carried this far onto the view leaves its start spot and follows the finger
 
 export function makeBuild(app) {
@@ -342,14 +343,24 @@ export function makeBuild(app) {
   }
   // the socket nearest a screen point (page pixels): within `px` of it (Infinity: the nearest anywhere), a nearer one
   // to the eye winning a near tie. -> socket or null
+  // A footing stone's own spot (the ground socket at a corner) pulls: the stone is drawn well over a foot across, so a
+  // board dropped on it means the stone, not the dirt half a foot in front of its middle. The corner counts nearer by
+  // the size of STONE_PULL feet on the screen there, and wins a near tie with the ground sockets round it (on a phone
+  // the half-foot sockets are only a few pixels apart, and the one nearer the eye used to win the tie).
   function socketAt(cx, cy, px = SOCKET_PX) {
-    const r = el.view.getBoundingClientRect(), x = cx - r.left, y = cy - r.top;
+    const r = el.view.getBoundingClientRect(), x = cx - r.left, y = cy - r.top, t = T();
+    const corner = (s) => !s.on && Math.abs(s.Y) < 1e-6 && Math.abs(Math.abs(s.X) - t.W / 2) < 1e-6 && Math.abs(Math.abs(s.Z) - t.D / 2) < 1e-6;
     let best = null;
     for (const s of sockets()) {
       const P = app.worldToScreen(s.X, s.Y, s.Z); if (P.behind) continue;
-      const d = Math.hypot(P.x - x, P.y - y); if (d > px) continue;
+      let d = Math.hypot(P.x - x, P.y - y);
+      const stone = corner(s);
+      if (stone) { const Q = app.worldToScreen(s.X + STONE_PULL, s.Y, s.Z), Q2 = app.worldToScreen(s.X, s.Y, s.Z + STONE_PULL); d = Math.max(0, d - Math.max(Math.hypot(Q.x - P.x, Q.y - P.y), Math.hypot(Q2.x - P.x, Q2.y - P.y))); }
+      if (d > px) continue;
       const depth = app.camDist ? app.camDist(s) : 0;
-      if (!best || d < best.d - 8 || (Math.abs(d - best.d) <= 8 && depth < best.depth - 0.05)) best = { s, d, depth };
+      const tie = best && Math.abs(d - best.d) <= 8;
+      const wins = !best || d < best.d - 8 || (tie && (stone && !best.s.on ? true : best.stone && !s.on ? false : depth < best.depth - 0.05));
+      if (wins) best = { s, d, depth, stone };
     }
     return best ? best.s : null;
   }

@@ -27,7 +27,7 @@ test('a new rider has every default and is not saved until asked', () => {
   assert.equal(r.gold, 0); assert.equal(r.bounty, 0);
   assert.equal(r.mode, 'lasso');
   // every job on by default (a grown-up can turn some off on the title); no lasso-or-shooting choice any more
-  assert.deepEqual(r.missions, { store: true, deliveries: true, sheep: true, pigs: true, wagon: true, loot: true, hunt: true, range: true });
+  assert.deepEqual(r.missions, { store: true, deliveries: true, sheep: true, pigs: true, wagon: true, loot: true, hunt: true, range: true, windmill: true, bridge: true, fishing: true });
   assert.equal(r.missionsV, 2);
   assert.ok(S.MISSIONS.every((m) => S.jobOn(r, m.id)));
   assert.equal(r.topicsOn.times, true); assert.equal(r.topicsOn.algebra, true); assert.equal(r.topicsOn.adding, false);
@@ -202,10 +202,10 @@ test('a saved lock box of a tier the game does not know is read as an iron one',
 test('a new rider starts every job at 0, with no buckle yet and the tin one to aim for', () => {
   fresh();
   const r = S.newRider('Lou');
-  assert.deepEqual(r.stats.jobs, { cattle: 0, boxes: 0, sheep: 0, orders: 0, pigs: 0, bandits: 0, deliveries: 0, loot: 0, targets: 0 });
+  assert.deepEqual(r.stats.jobs, { cattle: 0, boxes: 0, sheep: 0, orders: 0, pigs: 0, bandits: 0, deliveries: 0, loot: 0, targets: 0, tower: 0, loads: 0, fish: 0 });
   const list = S.bucklesOf(r);
-  assert.deepEqual(list.map(b => b.job), ['cattle', 'boxes', 'sheep', 'orders', 'pigs', 'bandits', 'deliveries', 'loot', 'targets'], 'every job this build has is shown');
-  assert.deepEqual(list.map(b => b.tier), [null, null, null, null, null, null, null, null, null]);
+  assert.deepEqual(list.map(b => b.job), ['cattle', 'boxes', 'sheep', 'orders', 'pigs', 'bandits', 'deliveries', 'loot', 'targets', 'tower', 'loads', 'fish'], 'every job this build has is shown');
+  assert.deepEqual(list.map(b => b.tier), [null, null, null, null, null, null, null, null, null, null, null, null]);
   assert.deepEqual(S.buckleOf(r, 'cattle').next, { tier: 'tin', at: 10, toGo: 10 });
   assert.equal(S.buckleProgress(S.buckleOf(r, 'cattle')), '0 / 10 to tin');
   assert.equal(S.buckleProgress(S.buckleOf(r, 'boxes')), '0 / 5 to tin');
@@ -219,12 +219,15 @@ test('the job table: four rising milestones a job, a keepsake for each, cattle, 
     assert.ok(S.KEEPSAKES[j.id] && S.KEEPSAKES[j.id].name, `${j.id} has a keepsake`);
     assert.ok(S.BUCKLES.includes(S.KEEPSAKES[j.id].from));
   }
-  assert.deepEqual(S.JOBS.filter(j => j.ready).map(j => j.id), ['cattle', 'boxes', 'sheep', 'orders', 'pigs', 'bandits', 'deliveries', 'loot', 'targets']);
+  assert.deepEqual(S.JOBS.filter(j => j.ready).map(j => j.id), ['cattle', 'boxes', 'sheep', 'orders', 'pigs', 'bandits', 'deliveries', 'loot', 'targets', 'tower', 'loads', 'fish']);
   // (the counts as decided 2026-10-19: tin and copper as before, silver and gold brought in so the whole checklist
   // takes about 17 hours of play, not 38)
   assert.deepEqual(Object.fromEntries(S.JOBS.map(j => [j.id, j.at])), {
     cattle: [10, 50, 120, 250], boxes: [5, 25, 50, 100], sheep: [5, 20, 40, 80], orders: [10, 40, 100, 200], pigs: [10, 50, 100, 200],
     bandits: [3, 15, 40, 80], deliveries: [3, 10, 25, 40], loot: [5, 20, 40, 80], targets: [15, 60, 150, 300],
+    tower: [4, 10, 16, 18],   // (feet of windmill tower stood: gold at the 18 ft the checklist counts as done)
+    loads: [3, 15, 40, 80],   // (loads carried across the bridge in its tests: one to five a test)
+    fish: [5, 25, 60, 120],   // (fish landed off the dock: about half a minute a fish)
   });
   assert.equal(S.jobWords('cattle', 1), '1 steer corralled');
   assert.equal(S.jobWords('cattle', 1200), '1,200 cattle corralled');
@@ -277,12 +280,12 @@ test('an old save without job counts loads safely and keeps the work it already 
   ] }));
   const rs = S.loadRiders(), by = (id) => rs.find(r => r.id === id);
   // every right answer before the counts existed was a steer roped; stats.boxes is the boxes solved
-  assert.deepEqual(by('o1').stats.jobs, { cattle: 23, boxes: 7, sheep: 0, orders: 0, pigs: 0, bandits: 0, deliveries: 0, loot: 0, targets: 0 });
-  assert.deepEqual(S.bucklesOf(by('o1')).map(b => b.tier), ['tin', 'tin', null, null, null, null, null, null, null]);
+  assert.deepEqual(by('o1').stats.jobs, { cattle: 23, boxes: 7, sheep: 0, orders: 0, pigs: 0, bandits: 0, deliveries: 0, loot: 0, targets: 0, tower: 0, loads: 0, fish: 0 });
+  assert.deepEqual(S.bucklesOf(by('o1')).map(b => b.tier), ['tin', 'tin', null, null, null, null, null, null, null, null, null, null]);
   assert.equal(by('o1').stats.parBoxes, 3, 'the old counts are untouched');
-  assert.deepEqual(by('o2').stats.jobs, { cattle: 0, boxes: 0, sheep: 0, orders: 0, pigs: 0, bandits: 0, deliveries: 0, loot: 0, targets: 0 });
+  assert.deepEqual(by('o2').stats.jobs, { cattle: 0, boxes: 0, sheep: 0, orders: 0, pigs: 0, bandits: 0, deliveries: 0, loot: 0, targets: 0, tower: 0, loads: 0, fish: 0 });
   // a save that has counts is read as it is (cleaned up), never topped up from the answers again; extra jobs kept
-  assert.deepEqual(by('o3').stats.jobs, { cattle: 0, boxes: 2, sheep: 0, orders: 0, pigs: 3, bandits: 0, deliveries: 0, loot: 0, targets: 0, lassoed: 9 });
+  assert.deepEqual(by('o3').stats.jobs, { cattle: 0, boxes: 2, sheep: 0, orders: 0, pigs: 3, bandits: 0, deliveries: 0, loot: 0, targets: 0, tower: 0, loads: 0, fish: 0, lassoed: 9 });
   // the next lock box on the old save counts once, not twice
   const o = by('o1');
   S.recordLockbox(o, { solved: true, moves: 1, par: 1 });

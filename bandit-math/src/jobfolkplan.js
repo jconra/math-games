@@ -75,6 +75,39 @@ export const JOB_FOLK = [
     hello: ['The gang that hits the freight wagons stashed what they stole out in the valley.',
       "Find their cache on your compass, haul it back here, and help me share it out fair."],
     thanks: ['Every family got back what was theirs. Obliged, partner!', "That's one stash cleaned out. Word is there's more.", 'Folks in this town owe you. Thank you kindly.'] },
+  // (on the mill hill: the windmill job's own person (src/windmilljob.js makes him, dusted with flour, and lends him here
+  // for his name tag and hello; his prompt is the build site's). His hello goes with how far the tower has come: `hellos`
+  // (start: no tower yet; building: a tower short of the sails; sails: the sails up, short of 18 ft; done: 18 ft stood))
+  { id: 'miller', job: 'windmill', name: 'Otto Hale', role: 'miller', look: { outfit: 'casual_m', palette: 'homestead', skin: 3, hair: 8 },
+    hello: ["A storm blew my old windmill tower down, and the mill can't grind.",
+      "Build me a new tower that stands in the wind, and I'll pay you in flour."],
+    hellos: {
+      building: ["She's coming along! Sixteen feet and she'll carry the sails.", 'Call the wind when you think she can stand it.'],
+      sails: ['Hear those sails? The mill is grinding again.', 'Get her to stand eighteen feet tall and she will be the best in the valley.'],
+      done: ['Finest windmill in the valley, thanks to you.', 'Your flour waits on my porch. Build her taller any time.'],
+    },
+    thanks: ['She stood! I knew she would.', 'Good building, partner.'] },
+  // (on the north abutment of the ravine where the road crosses the west river: the bridge job's own person
+  // (src/bridgejob.js makes him in the bridge's frame and lends him here for his name tag and hello; his prompt is the
+  // build site's, "Help the engineer build his bridge"). His hello goes with how far the bridge has come, as the miller's:
+  // `hellos` (start: nothing built; building: boards up, not yet carrying horse and rider; riders: walkers and riders
+  // cross on it; wagons: the wagons too; done: it carried the cattle drive)
+  { id: 'engineer', job: 'bridge', name: 'Amos Kendrick', role: 'engineer', look: { outfit: 'worker_m', palette: 'drifter', skin: 2, hair: 3 },
+    hello: ['The road wants a bridge over this ravine: sixteen feet, stone wall to stone wall.',
+      'Build her strong and I pay by the heaviest load she carries across.'],
+    hellos: {
+      building: ["She's taking shape. Once she carries horse and rider, folks will cross on her.", 'Send it across when you think she will hold.'],
+      riders: ['Riders and walkers cross dry now, thanks to you.', 'Make her strong enough for a covered wagon and the wagons will use her too.'],
+      wagons: ['The wagons roll right over her now. Fine work!', 'Try her with a heavier load any time: I pay for every better rating.'],
+      done: ['She carried the whole cattle drive. Finest crossing on the west river.', 'Folks and wagons cross dry every day now. Obliged, partner.'],
+    },
+    thanks: ['Now that is a bridge!', 'Fine work, partner. The road thanks you.'] },
+  // (at the foot of the dock on the lake south of town: the fishing job's own person (src/fishingjob.js makes him and lends
+  // him here for his name tag and hello; his prompt is the build site's, "Fish off the dock")
+  { id: 'fisherman', job: 'fishing', name: 'Walt Pickett', role: 'old fisherman', look: { outfit: 'worker_m', palette: 'sage', skin: 4, hair: 10 },
+    hello: ['The fish are biting off the end of my dock. Help yourself to a rod.',
+      'Keep the big ones, throw the little ones back. The general store buys what you keep.'],
+    thanks: ['Now that is a fine fish!', 'You have a knack for this, partner.'] },
   // (beside the stable's big doors: the one who sells the saddles and horses; E by him opens the stable's counter)
   { id: 'keeper', job: 'stable', name: 'Hank Dawson', role: 'stable keeper', look: { outfit: 'worker_m', palette: 'drifter', skin: 3, hair: 4 },
     hello: ['Welcome to the stable! I look after the horses round here.', 'Need a saddle or a new horse? Come and see what I have.'],

@@ -35,11 +35,11 @@ export const HILL = { x: -93.3, z: -171.9, rise: 3.4, top: 8.5, foot: 40, footRo
 // over the river's natural bed; lower: how much the bed is dug down at the crossing; gap: the banks' brinks (where they
 // fall away steeper than 45 degrees) apart at the road (16 ft, the bridge lab's span); wall: how far each bank runs out at
 // the road from where it starts to round over to the bed (m), steep below and rounding over at the top (round: the curve's
-// power); wide / wallWide: the brinks apart and the banks' run, up and down stream (from `near` m along the river out to
+// power; half a metre: a sheer wall at the road, where the bridge's stone abutments stand against it, src/bridgejob.js); wide / wallWide: the brinks apart and the banks' run, up and down stream (from `near` m along the river out to
 // `far`), the brink wandering a little in and out (wander, m) as a worn bank does; core / blend: the shelf, flat out to `core` m from the river and back to the land by `core + blend`; along:
 // the stretch of river shaped [west, east] m from the road (full), and `alongBlend` m more each way back to the land
 export const CROSSING = {
-  x: -339.2, z: -42.25, lift: 4.7, lower: 0.6, gap: 4.9, wall: 2.0, round: 2.4, wide: 11.8, wallWide: 3.4, near: 3, far: 28, wander: 0.35,
+  x: -339.2, z: -42.25, lift: 4.7, lower: 0.6, gap: 4.9, wall: 0.5, round: 2.4, wide: 11.8, wallWide: 3.4, near: 3, far: 28, wander: 0.35,
   core: 14, blend: 18, along: [-36, 18], alongBlend: 26,
   river: [[-460, -54.75], [-448, -54.2], [-440, -49.8], [-432, -45.6], [-424, -43.2], [-416, -42.4], [-408, -43.2], [-400, -44.9],
     [-392, -45.25], [-384, -45.25], [-376, -45.1], [-368, -43.75], [-360, -42.4], [-352, -42.25], [-344, -42.25], [-338, -42.25],

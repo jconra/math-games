@@ -53,6 +53,53 @@ function bendable(mat, { h1 = 1, amount = 0.6, flutter = 0 } = {}) {
   return mat;
 }
 
+// THE YARD: the four footing stones and the lumber pile on its sawhorses, added to `parent` (metres, the tower's middle
+// at 0, 0; ground(x, z): the ground's height there). makeScene puts it on the hilltop; the game puts it at the mill hill.
+//   const Y = makeYard(parent, { ground })  ->  { setStones(W, D), setPile(n), stones, pile, update(dt), dispose() }
+export function makeYard(parent, { ground = groundY } = {}) {
+  const scene = parent;
+  // ── the footing stones under the four corners (they move when the builder sets the base) ─────────────────────────
+  // Flat fieldstones, all about as thick: their size goes with their weight in the tipping check (frame.js stoneLb, of
+  // the narrower way across), so a wide base sits on big stones (about two and a half feet across at 6 feet apart) and
+  // a narrow one on small ones. setStones(W, D): W across the front (X), D along the sides (Z), feet.
+  const stoneMat = new THREE.MeshLambertMaterial({ color: 0x8d877c });
+  const stones = [0, 1, 2, 3].map((c) => {
+    const s = new THREE.Mesh(new THREE.DodecahedronGeometry(0.2, 0), stoneMat);
+    s.rotation.y = c * 1.9 + 0.4; s.castShadow = s.receiveShadow = true; scene.add(s); return s;
+  });
+  const CORNER = [[-1, 1], [1, 1], [1, -1], [-1, -1]];
+  function setStones(W, D = W) {
+    const hx = W / 2 * FT, hz = D / 2 * FT, size = 1.9 * Math.sqrt(stoneLb(Math.min(W, D)) / stoneLb(6));
+    stones.forEach((s, c) => { const x = CORNER[c][0] * hx, z = CORNER[c][1] * hz; s.position.set(x, ground(x, z), z); s.scale.set(size, 0.45 * 1.9 * 0.75, size); });
+  }
+  setStones(6, 6);
+
+  // ── the lumber pile on two sawhorses: one board drawn for every full board left ────────────────────────────────────
+  const pile = new THREE.Group(); pile.position.set(-3.4, ground(-3.4, -1.2), -1.2); pile.rotation.y = 1.2; pile.userData.crown = 1.4; scene.add(pile);
+  const horseMat = new THREE.MeshLambertMaterial({ color: 0x5e4630 });
+  for (const x of [-0.8, 0.8]) {
+    const top = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.7), horseMat); top.position.set(x, 0.62, 0); pile.add(top);
+    for (const s of [-1, 1]) for (const z of [-0.28, 0.28]) { const leg = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.68, 0.05), horseMat); leg.position.set(x + s * 0.09, 0.31, z); leg.rotation.z = s * 0.25; pile.add(leg); }
+  }
+  const pileTex = boardTexture(41, [182, 136, 88]); pileTex.repeat.set(1, 1);
+  const pileMat = new THREE.MeshLambertMaterial({ map: pileTex });
+  const pileBoards = [];
+  const pileGeo = new THREE.BoxGeometry(8 * FT, 1.5 / 12 * FT, 3.5 / 12 * FT);   // (one shape for every board on the pile)
+  function setPile(n) {
+    for (const b of pileBoards) pile.remove(b); pileBoards.length = 0;
+    for (let i = 0; i < Math.min(n, 30); i++) {
+      const b = new THREE.Mesh(pileGeo, pileMat);
+      const row = Math.floor(i / 6), col = i % 6;
+      b.position.set((row % 2 ? 0.03 : -0.03), 0.68 + row * 0.04, -0.25 + col * 0.095); b.castShadow = true; b.receiveShadow = true;
+      pile.add(b); pileBoards.push(b);
+    }
+  }
+  // (the wind's own clock, for anything that sways: the hilltop scene keeps it itself)
+  const update = (dt) => { wind.time += dt; };
+  function dispose() { for (const s of stones) { parent.remove(s); s.geometry.dispose(); } parent.remove(pile); pile.traverse((o) => { if (o.geometry) o.geometry.dispose(); }); }
+  return { setStones, setPile, stones, pile, update, dispose };
+}
+
 export function makeScene({ low = false } = {}) {
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(0xd8c8a6, 70, 520);
@@ -115,21 +162,8 @@ export function makeScene({ low = false } = {}) {
   const far = new THREE.Mesh(farGeo, new THREE.MeshLambertMaterial({ color: 0x9a9070, side: THREE.BackSide }));
   far.position.y = -40; scene.add(far);
 
-  // ── the footing stones under the four corners (they move when the builder sets the base) ─────────────────────────
-  // Flat fieldstones, all about as thick: their size goes with their weight in the tipping check (frame.js stoneLb, of
-  // the narrower way across), so a wide base sits on big stones (about two and a half feet across at 6 feet apart) and
-  // a narrow one on small ones. setStones(W, D): W across the front (X), D along the sides (Z), feet.
-  const stoneMat = new THREE.MeshLambertMaterial({ color: 0x8d877c });
-  const stones = [0, 1, 2, 3].map((c) => {
-    const s = new THREE.Mesh(new THREE.DodecahedronGeometry(0.2, 0), stoneMat);
-    s.rotation.y = c * 1.9 + 0.4; s.castShadow = s.receiveShadow = true; scene.add(s); return s;
-  });
-  const CORNER = [[-1, 1], [1, 1], [1, -1], [-1, -1]];
-  function setStones(W, D = W) {
-    const hx = W / 2 * FT, hz = D / 2 * FT, size = 1.9 * Math.sqrt(stoneLb(Math.min(W, D)) / stoneLb(6));
-    stones.forEach((s, c) => { s.position.set(CORNER[c][0] * hx, 0, CORNER[c][1] * hz); s.scale.set(size, 0.45 * 1.9 * 0.75, size); });
-  }
-  setStones(6, 6);
+  // ── the footing stones and the lumber pile (makeYard) ──────────────────────────────────────────────────────────
+  const theYard = makeYard(scene), { stones, setStones, setPile, pile } = theYard;
 
   // ── the mill house: a stone ground floor, plank walls above, a shingle roof, a door, flour sacks ───────────────────
   const mill = new THREE.Group(); mill.position.set(MILL_AT[0], 0, MILL_AT[1]); mill.rotation.y = 0.6; mill.userData.crown = 4.2; scene.add(mill);
@@ -154,26 +188,6 @@ export function makeScene({ low = false } = {}) {
   }
   const millstone = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 0.25, 20), stone); millstone.position.set(-2.4, 0.7, 2.75); millstone.rotation.x = Math.PI / 2 - 0.25; mill.add(millstone);
   mill.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-
-  // ── the lumber pile on two sawhorses: one board drawn for every full board left ────────────────────────────────────
-  const pile = new THREE.Group(); pile.position.set(-3.4, 0, -1.2); pile.rotation.y = 1.2; pile.userData.crown = 1.4; scene.add(pile);
-  const horseMat = new THREE.MeshLambertMaterial({ color: 0x5e4630 });
-  for (const x of [-0.8, 0.8]) {
-    const top = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.7), horseMat); top.position.set(x, 0.62, 0); pile.add(top);
-    for (const s of [-1, 1]) for (const z of [-0.28, 0.28]) { const leg = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.68, 0.05), horseMat); leg.position.set(x + s * 0.09, 0.31, z); leg.rotation.z = s * 0.25; pile.add(leg); }
-  }
-  const pileTex = boardTexture(41, [182, 136, 88]); pileTex.repeat.set(1, 1);
-  const pileMat = new THREE.MeshLambertMaterial({ map: pileTex });
-  const pileBoards = [];
-  function setPile(n) {
-    for (const b of pileBoards) pile.remove(b); pileBoards.length = 0;
-    for (let i = 0; i < Math.min(n, 30); i++) {
-      const b = new THREE.Mesh(new THREE.BoxGeometry(8 * FT, 1.5 / 12 * FT, 3.5 / 12 * FT), pileMat);
-      const row = Math.floor(i / 6), col = i % 6;
-      b.position.set((row % 2 ? 0.03 : -0.03), 0.68 + row * 0.04, -0.25 + col * 0.095); b.castShadow = true; b.receiveShadow = true;
-      pile.add(b); pileBoards.push(b);
-    }
-  }
 
   // ── trees nearby (the game's own, bent by the wind in their shader) ────────────────────────────────────────────────
   const treeSpots = [

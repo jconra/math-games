@@ -342,6 +342,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 }
 /* the sound control: a speaker button (tap to mute) and a small volume slider */
 .snd { display: flex; align-items: center; gap: 4px; }
+.wm-hosted .snd { display: none; }   /* (in the game: the game's own volume, in its menu) */
 .snd svg { width: 18px; height: 18px; fill: none; stroke: var(--ink); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; display: block; }
 .snd .spk { fill: var(--ink); stroke: none; }
 .snd .x { display: none; }
@@ -361,3 +362,5 @@ button { font: inherit; color: inherit; cursor: pointer; }
 #overlay .sock { fill: #ffe7a8; stroke: rgba(0,0,0,.6); stroke-width: 1; }
 .bar.trim .btn { white-space: nowrap; }
 #view.is-trimming .say { bottom: 150px; }     /* (the saw-off offer sits at the foot of the view: the miller speaks above it) */
+/* a finger's tap: the top bar's buttons (Undo, the sound) at least 34 px tall on a touch screen */
+@media (pointer: coarse) { .tools .btn { min-height: 34px; } }

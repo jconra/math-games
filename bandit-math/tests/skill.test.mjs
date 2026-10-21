@@ -87,7 +87,7 @@ test('stepAt and pctAt: the step at or below a point, and back again', () => {
 test('a strand can rise only a little past the hardest material the game has for it', () => {
   assert.equal(K.maxOf('mul'), 54 + SKILL.TOP_MARGIN);
   assert.equal(K.maxOf('eq'), 100);
-  assert.equal(K.maxOf('geo'), 100);   // (the windmill lab isn't in the game yet)
+  assert.equal(K.maxOf('geo'), 94 + SKILL.TOP_MARGIN);   // (the engineer's questions at the ravine: the bridge's panel diagonal, above the miller's top step)
   const r = fresh();
   setLevel(r, 'mul', 95);
   assert.equal(levelOf(r, 'mul'), K.maxOf('mul'));

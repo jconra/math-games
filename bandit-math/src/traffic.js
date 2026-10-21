@@ -119,6 +119,7 @@ export const STANDING = [
   { kind: 'chuck', camp: 'cow', lx: -6.5, lz: -3, turn: Math.PI / 2 },
   { kind: 'covered', camp: 'hollis', lx: 7, lz: -2, turn: -Math.PI / 2, team: true },
   { kind: 'freight', camp: 'survey', lx: -6.5, lz: -1, turn: Math.PI / 2 },
+  { kind: 'covered', x: -355, z: -67.1, heading: 2.86 },         // the bridge engineer's, at his camp on the west river's north bank (src/bridgejob.js), beside his tent
 ];
 const rnd = (a, b) => a + Math.random() * (b - a);
 const NOWHERE = { x: 1e6, y: 0, z: 1e6 };   // (ears too far off to hear a wagon)

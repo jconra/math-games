@@ -41,3 +41,18 @@
 .copy-row { margin: 6px 0 2px; display: flex; align-items: center; gap: 8px; }
 .copy-row .btn.small { font-size: 13px; padding: 4px 10px; min-height: 0; }
 .copy-row small { opacity: 0.75; }
+/* the chip naming where the board in hand goes stops short of the compass (a long one wraps under it, not behind it) */
+.wall-name { max-width: calc(100% - 96px); }
+@media (max-width: 700px) {
+  .wall-name { max-width: calc(100% - 74px); }
+  /* the test's card on a phone: its buttons ("Copy this bridge" too) pinned to its foot, so "Keep building" always
+     shows; the story and the engineer's advice scroll above them, and the card leaves the upper half of the view to
+     the bridge */
+  #result.card.is-side { max-height: 50%; padding-bottom: 0; }
+  #result.card.is-side .foot { position: sticky; bottom: 0; z-index: 1; margin: 6px -12px 0; padding: 6px 12px 10px;
+    background: var(--paper-2); box-shadow: 0 -8px 10px -8px rgba(74,47,23,.45); border-radius: 0 0 12px 12px; }
+  #result.card.is-side .foot .row { justify-content: flex-end; margin-top: 6px; }
+  #result.card.is-side .copy-row { margin: 0; }
+  /* the hint banner stops short of the compass at the view's top right, as the chip does */
+  .hint-line { right: 62px; }
+}

@@ -3,30 +3,55 @@
 // buzzing when a fish runs, splashes, a friendly chime for a right answer and a soft note for a wrong one. Splashes,
 // clicks and plops are shaped noise (they ring like glass when made from tones); only the chime, the soft note and the
 // birds are tones. Nothing plays until the first tap or click (browsers keep sound off until then).
+// The lab page has its own sound (audioOn: its own context, its own volume in the top bar). The game lends its own
+// instead (attach(ctx, out): the game's context and volume; detach() gives it back), and has its own sounds of the
+// valley round the lake (setBed(false): no lapping, birds or frogs from here).
 
-let A = null;            // { ctx, master, sfx, amb, noise }
-let volume = 0.8, muted = false;
+let A = null;            // { ctx, master, sfx, amb, noise, shared }
+let volume = 0.8, muted = false, bed = true, bedOn = 0;   // (bedOn: the bed's sounds were started for this A)
 const KEY = 'bm-fishing-vol';
 try { const v = JSON.parse(localStorage.getItem(KEY)); if (v) { volume = Math.max(0, Math.min(1, +v.volume || 0)); muted = !!v.muted; } } catch (e) { /* no storage: defaults */ }
 const rnd = (a, b) => a + Math.random() * (b - a);
 
-export function audioOn() {
-  if (A) { if (A.ctx.state === 'suspended') A.ctx.resume(); return; }
-  const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
-  const ctx = new AC();
-  const lim = ctx.createDynamicsCompressor(); lim.threshold.value = -8; lim.ratio.value = 12; lim.attack.value = 0.002; lim.release.value = 0.15; lim.connect(ctx.destination);
-  const master = ctx.createGain(); master.gain.value = muted ? 0 : volume; master.connect(lim);
+function build(ctx, out, gain, shared) {
+  const master = ctx.createGain(); master.gain.value = gain; master.connect(out);
   const sfx = ctx.createGain(); sfx.connect(master);
   const amb = ctx.createGain(); amb.gain.value = 0.9; amb.connect(master);
   // two seconds of white noise, shared by every noisy sound
   const noise = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate), d = noise.getChannelData(0);
   for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
-  A = { ctx, master, sfx, amb, noise };
-  lapping(); setTimeout(critters, 3000);
+  A = { ctx, master, sfx, amb, noise, shared };
+  startBed();
 }
+function startBed() {
+  if (!A || !bed || bedOn) return;
+  bedOn = 1; const mine = A;
+  lapping(mine); setTimeout(() => critters(mine), 3000);
+}
+export function audioOn() {
+  if (A) { if (!A.shared && A.ctx.state === 'suspended') A.ctx.resume(); return; }
+  const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+  const ctx = new AC();
+  const lim = ctx.createDynamicsCompressor(); lim.threshold.value = -8; lim.ratio.value = 12; lim.attack.value = 0.002; lim.release.value = 0.15; lim.connect(ctx.destination);
+  build(ctx, lim, muted ? 0 : volume, false);
+}
+// the game's sound instead of the lab's own: its context, and where its sounds go (its master volume)
+export function attach(ctx, out) {
+  if (A && A.ctx === ctx) return;
+  detach();
+  if (ctx && out) build(ctx, out, 0.8, true);
+}
+export function detach() {
+  if (!A) return;
+  try { A.master.disconnect(); } catch (e) { /* already off */ }
+  if (!A.shared) A.ctx.close().catch(() => {});
+  A = null; bedOn = 0;
+}
+// the lake's own bed of sounds (lapping, birds, frogs): on for the lab's lake, off in the game's valley
+export function setBed(on) { bed = !!on; if (A) A.amb.gain.value = bed ? 0.9 : 0; if (bed) startBed(); }
 export function setVolume(v, mute = muted) {
   volume = Math.max(0, Math.min(1, v)); muted = !!mute;
-  if (A) A.master.gain.setTargetAtTime(muted ? 0 : volume, A.ctx.currentTime, 0.05);
+  if (A && !A.shared) A.master.gain.setTargetAtTime(muted ? 0 : volume, A.ctx.currentTime, 0.05);
   try { localStorage.setItem(KEY, JSON.stringify({ volume, muted })); } catch (e) { /* no storage */ }
 }
 export const getVolume = () => ({ volume, muted });
@@ -50,13 +75,13 @@ function tone(t, dur, { freq = 440, freqTo = null, type = 'sine', gain = 0.2, at
 
 // ── the lake around you ──────────────────────────────────────────────────────────────────────────────────────────────
 // water lapping at the posts: soft low noise swelling and falling, a slow wave every couple of seconds
-function lapping() {
-  const { ctx } = A, src = ctx.createBufferSource(); src.buffer = A.noise; src.loop = true;
+function lapping(mine) {
+  const { ctx } = mine, src = ctx.createBufferSource(); src.buffer = mine.noise; src.loop = true;
   const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 520; f.Q.value = 0.6;
   const g = ctx.createGain(); g.gain.value = 0.0;
-  src.connect(f); f.connect(g); g.connect(A.amb); src.start();
+  src.connect(f); f.connect(g); g.connect(mine.amb); src.start();
   const swell = () => {
-    if (!A) return; const t = ctx.currentTime, p = rnd(1.6, 3.2);
+    if (A !== mine) { try { src.stop(); } catch (e) { /* stopped */ } return; } const t = ctx.currentTime, p = rnd(1.6, 3.2);
     g.gain.cancelScheduledValues(t); g.gain.setTargetAtTime(rnd(0.05, 0.09), t, p * 0.25); g.gain.setTargetAtTime(0.015, t + p * 0.45, p * 0.2);
     f.frequency.setTargetAtTime(rnd(380, 700), t, 0.4);
     // a little slap against a post now and then
@@ -66,9 +91,9 @@ function lapping() {
   swell();
 }
 // a songbird's quick chirps, or a frog's croak (noise through a low, ringing filter, pulsed), now and then
-function critters() {
-  if (!A) return;
-  if (ok()) {
+function critters(mine) {
+  if (A !== mine) return;
+  if (ok() && bed) {
     const t = A.ctx.currentTime + 0.05;
     if (Math.random() < 0.6) {
       const base = rnd(2400, 3600), n = 2 + Math.floor(Math.random() * 4);
@@ -78,7 +103,7 @@ function critters() {
       for (let i = 0; i < n; i++) noise(t + i * 0.13, 0.09, { freq: f, q: 9, gain: 0.08, attack: 0.012, dest: A.amb });
     }
   }
-  setTimeout(critters, rnd(3500, 9000));
+  setTimeout(() => critters(mine), rnd(3500, 9000));
 }
 
 // ── fishing ──────────────────────────────────────────────────────────────────────────────────────────────────────────

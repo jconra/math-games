@@ -132,6 +132,43 @@ function endToFace(b, Lb, e, o, Lo) {
   return Math.abs(adj) < 0.5 ? adj : null;
 }
 
+// every geometry under `obj` let go on the graphics card (an instanced mesh's own instance buffer too); materials kept.
+// later: a few each frame instead of all at once (a builder put away with a 69-board bridge let go of some 400 buffers
+// in one go, and the graphics card stalled one frame of about 90 ms a second later while it freed them)
+const LATER = [];
+let draining = false;
+function drain() {
+  for (let i = 0; i < 6 && LATER.length; i++) { try { LATER.shift().dispose(); } catch (e) { /* gone */ } }
+  if (LATER.length) setTimeout(drain, 16); else draining = false;
+}
+export function freeShapes(obj, later = false) {
+  const list = [];
+  obj.traverse((o) => { if (o.geometry) list.push(o.geometry); if (o.isInstancedMesh) list.push(o); });
+  if (!later) { for (const x of list) x.dispose(); return; }
+  freeLater(list);
+}
+// geometries (or anything with a dispose) let go a few each frame
+export function freeLater(list) {
+  LATER.push(...list);
+  if (LATER.length && !draining) { draining = true; setTimeout(drain, 16); }
+}
+// THE SHAPES OF BOARDS, shared by length: every board of one length (to the hundredth of an inch) is drawn with the
+// same box, so putting the boards up again after a change (a test's "Keep building", the deck laid again, a board
+// nailed) makes no new shapes for lengths already standing. Making and freeing a shape per board each time cost the
+// graphics card one frame of 100 to 190 ms after a bridge test, longer every test. Shapes no longer used by any board
+// are let go a few a frame (freeLater).
+//   const S = shapeShelf(make)   S.get(len, ...key) -> the shared geometry; S.keep(usedSet) lets go of the rest;
+//   S.all() every shape on the shelf
+export function shapeShelf(make) {
+  const shelf = new Map();
+  const keyOf = (len, rest) => [len, ...rest].map((v) => Math.round(v * 1e4)).join('|');
+  return {
+    get(len, ...rest) { const k = keyOf(len, rest); let g = shelf.get(k); if (!g) { g = make(len, ...rest); shelf.set(k, g); } return g; },
+    keep(used) { const out = []; for (const [k, g] of shelf) if (!used.has(g)) { shelf.delete(k); out.push(g); } freeLater(out); },
+    all: () => [...shelf.values()],
+    clear() { const out = [...shelf.values()]; shelf.clear(); return out; },
+  };
+}
 export function makeTowerView(scene) {
   const group = new THREE.Group(); scene.add(group);
   // a few timbers so neighbouring boards don't all look the same
@@ -153,6 +190,9 @@ export function makeTowerView(scene) {
     const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * len / 8);   // grain at its true size
     return g;
   }
+  // (the boards standing: their shapes shared by length, see shapeShelf; the held board and the twins make their own)
+  const shelf = shapeShelf((len) => boxFor(len, BW, BT));
+  const blocks = shapeShelf((l, w, th) => new THREE.BoxGeometry(l * FT, w * FT, th * FT));   // (the spacer blocks)
   // place a box between two world points (metres), its thin side facing along z
   const tmpX = new THREE.Vector3(), tmpY = new THREE.Vector3(), tmpZ = new THREE.Vector3(), tmpM = new THREE.Matrix4();
   function pose(mesh, a, b, z) {
@@ -166,14 +206,14 @@ export function makeTowerView(scene) {
 
   let lastLayout = new Map();
   function rebuild(tower) {
-    for (const b of boards.values()) { group.remove(b.mesh); b.mesh.geometry.dispose(); }
+    for (const b of boards.values()) group.remove(b.mesh);
     boards.clear();
     for (const m of tinted.values()) m.dispose();
     tinted.clear();
     const lay = layout(tower); lastLayout = lay; focus = null;
     for (const b of tower.boards) {
       const L = lay.get(b.id), [a, e] = drawnEnds(L), len = a.distanceTo(e) / FT;
-      const mesh = new THREE.Mesh(boxFor(len, BW, BT), mats[hash(b.id) % mats.length]);
+      const mesh = new THREE.Mesh(shelf.get(len), mats[hash(b.id) % mats.length]);
       mesh.castShadow = true; mesh.receiveShadow = true;
       const z = boardN(b);
       pose(mesh, a, e, z);
@@ -184,15 +224,18 @@ export function makeTowerView(scene) {
     // nail heads: three at every joint, on the outer face of the outermost board there (none where posts only stand on
     // each other, or on the ground)
     // the spacer blocks, plain wood, under the nails where a board sits out from what it is nailed to
-    for (const m of [...spacerGroup.children]) { spacerGroup.remove(m); m.geometry.dispose(); }
+    for (const m of [...spacerGroup.children]) spacerGroup.remove(m);
     for (const sp of lay.spacers || []) {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(sp.l * FT, sp.w * FT, sp.th * FT), mats[3]);
+      const m = new THREE.Mesh(blocks.get(sp.l, sp.w, sp.th), mats[3]);
       m.castShadow = true; m.receiveShadow = true;
       const x = sp.along.clone(), z = sp.side.clone(); z.addScaledVector(x, -z.dot(x)).normalize();
       m.quaternion.setFromRotationMatrix(tmpM.makeBasis(x, new THREE.Vector3().crossVectors(z, x), z));
       m.position.copy(sp.at).multiplyScalar(FT); m.userData = { spacer: true, ids: sp.ids }; m.raycast = () => {};
       spacerGroup.add(m);
     }
+    // (the shapes of lengths no board stands at any more: let go a few a frame)
+    shelf.keep(new Set([...boards.values()].map((b) => b.mesh.geometry)));
+    blocks.keep(new Set(spacerGroup.children.map((m) => m.geometry)));
     nailBase.length = 0;
     for (const h of joints3(tower.boards)) {
       if (h.ground) continue;
@@ -418,6 +461,8 @@ export function makeTowerView(scene) {
       const sail = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 1.6), cloth); sail.position.set(0.3, 1.3, 0.02); sail.rotation.y = 0.15; arm.add(sail);
     }
     head.userData.hub = hub;
+    // the shaft from the cap out to the hub (its length set as the head is placed: the sails clear of a wide top)
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 1, 8).rotateX(Math.PI / 2).translate(0, 0, 0.5), iron); shaft.position.set(0, 0.45, 0.2); head.add(shaft); head.userData.shaft = shaft;
     head.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   }
   // the head on the top of the tower: sized to the boards up there (a setback tower's narrow top gets a small deck)
@@ -429,6 +474,13 @@ export function makeTowerView(scene) {
     for (const b of up) for (const p of [b.a, b.b]) { x0 = Math.min(x0, p.X); x1 = Math.max(x1, p.X); z0 = Math.min(z0, p.Z); z1 = Math.max(z1, p.Z); }
     head.position.set((x0 + x1) / 2 * FT, top * FT + 0.04, (z0 + z1) / 2 * FT); head.rotation.y = faceAz;
     head.userData.deck.scale.set((x1 - x0 + 0.8) * FT, 1, (z1 - z0 + 0.8) * FT);
+    // the sails turn just clear of the tower's face toward them (every board within their sweep, 2.2 m down from the
+    // hub: a wide top would have them cutting through its side boards)
+    const fx = Math.sin(faceAz), fz = Math.cos(faceAz), cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, sweep = 2.4 / FT;
+    let reach = 0;
+    for (const b of tower.boards) for (const p of [b.a, b.b]) if (p.Y > top - sweep) reach = Math.max(reach, (p.X - cx) * fx + (p.Z - cz) * fz);
+    head.userData.hub.position.z = Math.max(0.62, reach * FT + 0.3);
+    head.userData.shaft.scale.set(1, 1, head.userData.hub.position.z - 0.2);
   }
 
   let time = 0;
@@ -442,7 +494,11 @@ export function makeTowerView(scene) {
     if (focus) focusMat.emissiveIntensity = 0.35 + 0.35 * (0.5 + 0.5 * Math.sin(time * 4.5));
   }
 
-  return { group, boards, rebuild, setBend, setStrain, setSpots, drawnNow, strainColor, nailsFor: placeNails, showHeld, highlight, showHead, update, setGhosts, fadeGhosts, setFocus,
+  // out of the scene, every shape it made let go (the boards, nails, spots, twins, the held board and the sails); the
+  // materials stay: they are cheap, and keeping them keeps their shader programs, so the next builder opened builds none
+  function dispose() { group.removeFromParent(); freeShapes(group, true); freeLater([...shelf.clear(), ...blocks.clear()]); for (const m of tinted.values()) m.dispose(); tinted.clear(); boards.clear(); }
+
+  return { group, boards, rebuild, setBend, setStrain, setSpots, drawnNow, strainColor, nailsFor: placeNails, showHeld, highlight, showHead, update, setGhosts, fadeGhosts, setFocus, dispose,
     focused: () => (focus ? [...focus] : []), spacers: () => spacerGroup.children,
     layout: () => lastLayout, meshes: () => [...boards.values()].map((b) => b.mesh), ghostMeshes: () => (ghostGroup.visible ? ghostGroup.children : []), nails };
 }

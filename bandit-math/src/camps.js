@@ -113,7 +113,7 @@ export function crateParts() {
 }
 
 const loads = {};
-function loadCamp(file, lo) {
+export function loadCamp(file, lo) {   // (also the bridge engineer's camp: src/bridgejob.js)
   const url = `${GAME}models/camps/${lo ? 'lo/' : ''}${file}.glb`;
   // (the model as loaded: its one mesh keeps the node's own scale and offset, which the squeezed (quantized) points
   // need to come out in metres)

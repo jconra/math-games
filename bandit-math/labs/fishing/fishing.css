@@ -11,7 +11,12 @@ html, body { height: 100%; overflow: hidden; background: #1d140c; color: var(--i
   -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; touch-action: none; }
 button { font: inherit; color: inherit; cursor: pointer; }
 #app { position: fixed; inset: 0; }
-#c { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
+#c { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+/* the water: where taps and clicks cast and reel (over the lab's canvas; over the game's canvas in the game) */
+.fi-view { position: absolute; inset: 0; z-index: 1; touch-action: none; cursor: crosshair; }
+/* in the game: its own volume (the menu's), and "Done for now" in the top bar */
+.fi-hosted .snd { display: none; }
+.fi-hosted .tools .bsite-done { margin: 0; align-self: center; padding: 6px 12px; font-size: 14px; white-space: nowrap; }
 
 /* ── buttons ───────────────────────────────────────────────────────────────────────────────────────────────────────── */
 .btn { border: 1px solid #3b2a1e; border-radius: 8px; padding: 7px 14px; background: linear-gradient(#7a5533, #5e3f24); color: var(--ink);
@@ -86,6 +91,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .card .steps span { letter-spacing: 0; font: 600 12px Bitter, Georgia, serif; color: #8a6a48; margin-left: 6px; }
 .card .steps .lvl { font-weight: 700; font-size: 13px; color: #6d4a17; }
 .card .steps .nm::before { content: '· '; }
+.card .steps .nt { font-style: italic; color: #8a6a48; }
+.card .steps .nm + .nt::before, .card .steps .lvl + .nt::before { content: '· '; }
 .card .measure { display: flex; gap: 18px; margin: 2px 0 6px; padding: 6px 10px; border-radius: 8px; background: rgba(122,85,48,.12); }
 .card .measure small { display: block; font: 400 13px Smokum, Georgia, serif; letter-spacing: .05em; color: #8a6a48; }
 .card .measure b { font: 700 22px Bitter, Georgia, serif; color: #4a2f17; }
@@ -178,3 +185,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
   .book-grid { grid-template-columns: 78px repeat(3, 1fr); }
 }
 @media (max-width: 380px) { .stats .st-best { display: none; } }
+/* in the game on a phone: "Done for now" joins the tools, so the biggest fish (it shows on its own card when caught)
+   gives way below 460 px and the button slims down, keeping the whole top bar on the screen */
+@media (max-width: 700px) { .fi-hosted .tools .bsite-done { padding: 5px 8px; font-size: 13px; } }
+@media (max-width: 460px) { .fi-hosted .stats .st-best { display: none; } }
+/* a finger's tap: the top bar's buttons (the fish book, "Done for now") at least 36 px tall on a touch screen */
+@media (pointer: coarse) { .tools .btn, .fi-hosted .tools .bsite-done { min-height: 36px; } }

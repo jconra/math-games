@@ -40,7 +40,7 @@
 //                        once a second): place = a camp's id ridden up to ('cow'), hideout = a gang hideout's id reached,
 //                        home = inside the cabin (the keepsakes earned so far are seen). -> true when something changed
 //   markFound(rider, kind, id), found(rider)   the rider.found lists ('place' | 'hideout' | 'keepsake')
-//   setWindmill(rider, feet)   the tallest tower the rider has standing (for the windmill, once it is in the game)
+//   setWindmill(rider, feet)   the tallest tower the rider has had standing through the wind test (src/windmilljob.js)
 //   CAMP_PLACES, HIDEOUTS, COMING, MOST_GOALS, GROUPS
 //
 // Rider fields (save.js keeps unknown fields as they are; everything here is read defensively):
@@ -73,9 +73,9 @@ export const HIDEOUTS = [
 // Entries for things the game doesn't have yet. Turn one on the day its thing ships (and set the rider field it reads).
 export const COMING = {
   cabin: true,       // buying the cabin itself (src/catalog.js PRICES.cabin): done at rider.owned.home === 'cabin'
-  windmill: false,   // the windmill (still a lab: labs/windmill/): done at an 18 ft tower standing (setWindmill)
-  bridge: false,     // the bridge over the west creek: done at markFound(rider, 'place', 'bridge')
-  fishing: false,    // the fishing hole: done at markFound(rider, 'place', 'fishing')
+  windmill: true,    // the windmill on the mill hill (src/windmilljob.js): done at an 18 ft tower standing (setWindmill)
+  bridge: true,      // the bridge over the west river (src/bridgejob.js): done at markFound(rider, 'place', 'bridge'), a bridge that carries horse and rider
+  fishing: true,     // the dock on the lake south of town (src/fishingjob.js): done at markFound(rider, 'place', 'fishing'), the first fish landed
 };
 export const WINDMILL_FEET = 18;   // the windmill's tower counts as done at this height standing (a good, tall tower)
 export const MOST_GOALS = 2;       // goals a grown-up can pin on a rider at once
@@ -100,12 +100,16 @@ const JOB_HOW = {
   deliveries: 'Take an order from a camp\'s foreman, make it up at the store and ride the crates out.',
   loot: 'Loot the gang: the deputy outside the sheriff\'s office says where the stash is.',
   targets: 'Shoot bottles and tin cans at the target range on the east edge of town.',
+  tower: 'Build the miller a windmill tower on the mill hill that stands in the wind: every foot it stands counts.',
+  loads: 'Build the engineer\'s bridge over the west river and send loads across it.',
+  fish: 'Fish off the dock at the lake south of town: every fish landed counts.',
 };
 // where each keepsake hangs (save.js KEEPSAKES has its name and the buckle that brings it)
 const KEEP_WHERE = {
   cattle: 'on the back wall', boxes: 'by the stove', sheep: 'by the door', orders: 'on the table',
   pigs: 'on a shelf', bandits: 'on the wall', deliveries: 'high on the front wall', loot: 'by the back wall',
-  targets: 'on a shelf over the table',
+  targets: 'on a shelf over the table', tower: 'on the windowsill over the table', loads: 'on a shelf by the front corner',
+  fish: 'on the back wall',
 };
 const FARM_HOW = {
   hen: (p) => `The general store sells hens for ${p} gold.`,
@@ -224,9 +228,9 @@ function allItems(rider) {
     add('places', 'Camps', `place:camp-${c.id}`, c.name, `Ride out to it: ${c.where}.`, done ? 1 : 0, 1, done);
   }
   add('places', 'The windmill', 'place:windmill', `The windmill: an ${WINDMILL_FEET} ft tower standing`,
-    `Build the windmill's tower and keep it standing in the wind: ${WINDMILL_FEET} feet tall.`, F.windmill, WINDMILL_FEET, F.windmill >= WINDMILL_FEET, COMING.windmill);
-  add('places', 'Still to come', 'place:bridge', 'The bridge over the west creek', 'Help build the bridge over the west creek.', 0, 1, F.place.includes('bridge'), COMING.bridge);
-  add('places', 'Still to come', 'place:fishing', 'The fishing hole', 'Find the fishing hole and land a fish.', 0, 1, F.place.includes('fishing'), COMING.fishing);
+    `Build the windmill's tower and keep it standing in the wind: ${WINDMILL_FEET} feet tall.`, F.windmill, WINDMILL_FEET, F.windmill >= WINDMILL_FEET, COMING.windmill, ['windmill']);
+  add('places', 'The bridge', 'place:bridge', 'The bridge over the west river', 'Build the engineer a bridge over the west river that carries horse and rider.', F.place.includes('bridge') ? 1 : 0, 1, F.place.includes('bridge'), COMING.bridge, ['bridge']);
+  add('places', 'The fishing dock', 'place:fishing', 'The fishing dock', 'Fish off the dock at the lake south of town (the path past the saloon) and land a fish.', F.place.includes('fishing') ? 1 : 0, 1, F.place.includes('fishing'), COMING.fishing, ['fishing']);
   return out;
 }
 

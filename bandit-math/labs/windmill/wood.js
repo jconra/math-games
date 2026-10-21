@@ -5,8 +5,15 @@ import * as THREE from 'three';
 // a small repeatable random number maker, so the same seed always paints the same board
 export function rng(seed) { let s = seed >>> 0 || 1; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }
 
-// one board's grain, long side along x. tint: the timber's colour [r, g, b] 0..255
+// one board's grain, long side along x. tint: the timber's colour [r, g, b] 0..255. Painted once for each seed and tint
+// and shared after that (a builder opened again in the game paints nothing new): don't change one's repeat or offset
+const BOARDS = new Map();
 export function boardTexture(seed = 1, tint = [176, 128, 82]) {
+  const key = seed + ':' + tint.join(',');
+  if (!BOARDS.has(key)) BOARDS.set(key, paintBoard(seed, tint));
+  return BOARDS.get(key);
+}
+function paintBoard(seed, tint) {
   const w = 512, h = 64, cv = document.createElement('canvas'); cv.width = w; cv.height = h;
   const g = cv.getContext('2d'), r = rng(seed);
   g.fillStyle = `rgb(${tint[0]},${tint[1]},${tint[2]})`; g.fillRect(0, 0, w, h);
@@ -53,7 +60,13 @@ export function plankTexture(seed = 7, tint = [122, 88, 58]) {
 }
 
 // a soft round dot (dust puffs, leaves' fallback)
+// (one for each size, made once for the page and shared: never disposed by its users)
+const DOTS = new Map();
 export function softDot(size = 64) {
+  if (!DOTS.has(size)) DOTS.set(size, paintDot(size));
+  return DOTS.get(size);
+}
+function paintDot(size) {
   const cv = document.createElement('canvas'); cv.width = cv.height = size;
   const g = cv.getContext('2d'), gr = g.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
   gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.4, 'rgba(255,255,255,0.55)'); gr.addColorStop(1, 'rgba(255,255,255,0)');

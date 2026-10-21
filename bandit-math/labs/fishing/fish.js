@@ -7,7 +7,13 @@
 //   catfish  grey-brown, a wide flat head with whiskers, a forked tail, no scales, a few dark specks
 // makeFish(kind, length) -> F: F.root (the nose at its origin, the body along -Z, back up +Y), F.wiggle (0 still ..
 // 1 thrashing: how far the back half swings side to side), F.speed (swings a second), F.update(dt), F.length,
-// F.dispose(). Metres: a fish 3/4 of a foot long is made 0.229 m long.
+// F.setLift(v) (a little light of its own: a fish held up against the light still shows its colours), F.dispose().
+// Metres: a fish 3/4 of a foot long is made 0.229 m long.
+// makeFish(kind, length, { under }): under = { surface: { value: y }, colour: THREE.Color } for water that is drawn
+// solid (the game's lake: its ground painted as water, nothing under it to see): a fish below the surface is drawn as
+// if it lay on the surface (its depth sorted there, so the water never hides it, while the dock, the reeds and the
+// angler in front of it still do) and tinted toward the water's colour the deeper it is, so it reads as under water.
+// The lab's see-through lake needs none of it.
 import * as THREE from 'three';
 
 const C = (hex) => new THREE.Color(hex);
@@ -117,32 +123,61 @@ function fishGeometry(kind, L) {
 }
 
 // one material a fish, so each wiggles on its own: the back half swings side to side, more toward the tail
-function wiggleMaterial(L) {
-  const u = { uTime: { value: Math.random() * 10 }, uAmp: { value: 0.15 }, uFreq: { value: 7 }, uLen: { value: L } };
+function wiggleMaterial(L, under = null) {
+  const u = { uTime: { value: Math.random() * 10 }, uAmp: { value: 0.15 }, uFreq: { value: 7 }, uLen: { value: L }, uLift: { value: 0 } };
+  if (under) Object.assign(u, { uSurf: under.surface, uWater: { value: under.colour } });
   const m = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true, side: THREE.DoubleSide });
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u);
-    sh.vertexShader = 'uniform float uTime, uAmp, uFreq, uLen;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+    sh.vertexShader = 'uniform float uTime, uAmp, uFreq, uLen;\n' + (under ? 'uniform float uSurf; varying float vBelow;\n' : '') + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
       float tt = clamp(-position.z / uLen, 0.0, 1.2);
       float sway = sin(uTime * uFreq - tt * 5.5) * uAmp * uLen * 0.25 * (0.08 + tt * tt);
       transformed.x += sway;`);
+    // (lifted: a little light of its own, so a fish held up with the sun behind it still shows its colours)
+    sh.fragmentShader = 'uniform float uLift;\n' + sh.fragmentShader.replace('#include <opaque_fragment>', `#include <opaque_fragment>
+      gl_FragColor.rgb += diffuseColor.rgb * uLift;`);
+    if (under) {
+      // (where it is on the screen stays; how near it is goes by the point on the surface above it)
+      sh.vertexShader = sh.vertexShader.replace('#include <fog_vertex>', `#include <fog_vertex>
+      { vec4 wp = modelMatrix * vec4(transformed, 1.0); vBelow = max(0.0, uSurf - wp.y);
+        vec4 up = wp; up.y = max(wp.y, uSurf + 0.015);
+        vec4 cs = projectionMatrix * viewMatrix * up;
+        gl_Position = vec4(gl_Position.xy / gl_Position.w * cs.w, cs.z, cs.w); }`);
+      sh.fragmentShader = 'uniform vec3 uWater; varying float vBelow;\n' + sh.fragmentShader.replace('#include <opaque_fragment>', `#include <opaque_fragment>
+      gl_FragColor.rgb = mix(gl_FragColor.rgb, uWater, clamp(0.25 + vBelow * 1.1, 0.0, 0.8) * step(0.003, vBelow));`);
+    }
   };
-  m.customProgramCacheKey = () => 'fish-wiggle';
+  m.customProgramCacheKey = () => (under ? 'fish-wiggle-under' : 'fish-wiggle');
   m.userData.u = u;
   return m;
 }
 
-const cache = new Map();   // (one geometry per kind and length, shared)
-export function makeFish(kind, length) {
+// (one geometry per kind and length, shared by the fish made of it; the last of them disposed lets it go: the swimmers
+// come in random lengths, so a cache kept forever grew by a few shapes every time the rod came out)
+const cache = new Map();   // key -> { geo, n (fish using it) }
+// (shapes let go one a frame, not all at once as the rod goes down: freeing many buffers in one frame stalls the
+// graphics card a moment later)
+const freeing = [];
+const freeNext = () => { const g = freeing.shift(); if (g) g.dispose(); if (freeing.length) setTimeout(freeNext, 16); };
+const freeSoon = (g) => { freeing.push(g); if (freeing.length === 1) setTimeout(freeNext, 16); };
+export function makeFish(kind, length, { under = null } = {}) {
   const key = kind + ':' + length.toFixed(4);
-  if (!cache.has(key)) cache.set(key, fishGeometry(kind, length));
-  const geo = cache.get(key), mat = wiggleMaterial(length);
+  if (!cache.has(key)) cache.set(key, { geo: fishGeometry(kind, length), n: 0 });
+  const held = cache.get(key); held.n++;
+  const geo = held.geo, mat = wiggleMaterial(length, under);
+  let gone = false;
   const mesh = new THREE.Mesh(geo, mat); mesh.castShadow = true; mesh.receiveShadow = false;
   const root = new THREE.Group(); root.add(mesh);
   const F = {
     root, mesh, kind, length, wiggle: 0.15, speed: 7,
+    // a little light of its own (0 none): the game lifts a fish held up to look at, so it reads whatever the sun does
+    setLift(v) { mat.userData.u.uLift.value = v; },
     update(dt) { const u = mat.userData.u; u.uTime.value += dt; u.uAmp.value += (F.wiggle - u.uAmp.value) * Math.min(1, dt * 6); u.uFreq.value = F.speed; },
-    dispose() { mat.dispose(); root.removeFromParent(); },
+    dispose() {
+      mat.dispose(); root.removeFromParent();
+      if (gone) return; gone = true;
+      if (--held.n <= 0 && cache.get(key) === held) { cache.delete(key); freeSoon(geo); }
+    },
   };
   return F;
 }

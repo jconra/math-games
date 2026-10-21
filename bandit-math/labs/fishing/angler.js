@@ -1,7 +1,10 @@
 // THE ANGLER and the tackle: one of the game's people (the farmer, cowboy hat and all) at the end of the dock, a cane
 // rod in the right hand that bends as a fish pulls, the reel under it with its handle turning while you reel, the
 // line, and a red-and-white bobber. If the game's people can't load, a plain figure stands in.
-//   makeAngler(scene) -> A (after the person has loaded):
+//   makeAngler(scene, { person, at }) -> A (after the person has loaded). scene: what it all goes in (the lab: its scene;
+//     the game: the dock's frame, turned to face its lake: everything here is in that frame). person: one of the game's
+//     people already made (the game: the rider's own look), else the lab's angler is made; at: where they stand
+//     (default ANGLER, the lab's dock)
 //     A.root            the person (place and turn it)
 //     A.play(clip, opts)   the person's clip ('Idle', 'Lasso_Throw' once, 'Lasso_Pull' ...)
 //     A.update(dt, { yaw, pitch, bend, pull, spin })   the rod: yaw (radians, 0 = straight out, -Z), pitch (up from
@@ -16,9 +19,8 @@ const GAME = new URL('../../', import.meta.url).href;
 export const ROD_LEN = 2.5;
 export const HOLD = 'Idle';                   // the clip played while waiting (the rod is held at the hip)
 
-export async function makeAngler(scene) {
-  let person = null;
-  try {
+export async function makeAngler(scene, { person = null, at = ANGLER } = {}) {
+  if (!person) try {
     const { loadFolk, makePerson } = await import('../../src/actors/folk.js');
     const lib = await loadFolk(GAME);
     person = makePerson(lib, { outfit: 'farmer_m', palette: 'drifter', skin: 3, hair: 2, hat: true });
@@ -31,7 +33,7 @@ export async function makeAngler(scene) {
     person = { root: g, bones: {}, play() { return false; }, update() {} };
   }
   person.root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
-  person.root.position.copy(ANGLER); person.root.rotation.y = Math.PI;      // (people face +Z; the lake is -Z)
+  person.root.position.copy(at); person.root.rotation.y = Math.PI;      // (people face +Z; the lake is -Z)
   scene.add(person.root);
 
   // ── the rod: a tapered cane drawn along a curve, rebuilt in place each frame ──────────────────────────────────────
@@ -69,11 +71,12 @@ export async function makeAngler(scene) {
 
   // where the right hand holds: the middle of the fist (as the game's lasso does)
   const hand = new THREE.Vector3(), tmp = new THREE.Vector3();
+  // (the bones' world places, into the scene's own frame: in the game the dock's frame is turned to its lake)
   function handPoint(v) {
     const b = person.bones || {}, w = b.WristR, m = b.Middle1R;
     if (!w) return v.copy(person.root.position).add(new THREE.Vector3(0.25, 0.95, -0.2));
-    w.getWorldPosition(v); if (!m) return v;
-    m.getWorldPosition(tmp); tmp.sub(v); const len = tmp.length();
+    w.getWorldPosition(v); scene.worldToLocal(v); if (!m) return v;
+    m.getWorldPosition(tmp); scene.worldToLocal(tmp); tmp.sub(v); const len = tmp.length();
     return v.addScaledVector(tmp, 0.5 + (len > 1e-4 ? 0.03 / len : 0));
   }
   const dir = new THREE.Vector3(), p0 = new THREE.Vector3(), p1 = new THREE.Vector3(), p2 = new THREE.Vector3(), pt = new THREE.Vector3(), tan = new THREE.Vector3(), nrm = new THREE.Vector3(), bin = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
@@ -119,6 +122,20 @@ export async function makeAngler(scene) {
       reel.position.copy(p0).addScaledVector(dir, 0.36).addScaledVector(bin, -0.045);
       reel.lookAt(reel.position.clone().add(dir)); reel.rotateX(Math.PI / 2);
       spinA += spin * dt * Math.PI * 2; crank.rotation.x = spinA;
+    },
+    // fading in or out (0 gone .. 1 there): the person (the game's people fade by a screen pattern), the rod, the reel,
+    // the line and the bobber (see-through). The game fades its angler in as the camera comes to the dock, and out as
+    // it goes back to the rider
+    setFade(f) {
+      f = Math.max(0, Math.min(1, f));
+      if ('fade' in person) person.fade = f; else person.root.visible = f > 0.5;
+      for (const o of [rod, reel, line, bobber]) o.traverse((m) => { if (!m.material) return; if (m.material.userData.op == null) m.material.userData.op = m.material.opacity; m.material.transparent = f < 1 || m === line; m.material.opacity = m.material.userData.op * f; m.visible = f > 0.01 && (m !== line || line.visible); });
+      for (const o of [rod, reel]) o.visible = f > 0.01;
+    },
+    // everything taken out of the scene (the person too, unless keepPerson: the host lent it)
+    dispose({ keepPerson = false } = {}) {
+      for (const o of [rod, reel, line, bobber]) { o.removeFromParent(); o.traverse((m) => { if (m.geometry) m.geometry.dispose(); if (m.material) m.material.dispose(); }); }
+      if (!keepPerson) { person.root.removeFromParent(); if (person.dispose) person.dispose(); }
     },
   };
   return A;

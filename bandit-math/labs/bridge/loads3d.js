@@ -9,7 +9,7 @@
 //   L.place(key, x, yAt)    its front at X = x feet; yAt(X) -> the deck's (or the bank's) height there, feet
 //   L.back(key, k)          k 0..1: retreating to the west bank and fading (after the deck gave way under it)
 //   L.update(dt, v)         the clips, at v feet a second along
-//   L.hide()
+//   L.hide(), L.dispose() (out of the scene, every figure it made let go; the models stay loaded for the next time)
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
@@ -27,39 +27,77 @@ let WHEELS = {
   freight: [[0.7079, 0.5042, 1.0285, 0.4949], [-0.8226, 0.5042, 1.0055, 0.4954], [0.78, 0.6036, -1.0011, 0.6036], [-0.7592, 0.6036, -1.0329, 0.5964]],
 };
 
-export function makeLoads(scene) {
-  const root = new THREE.Group(); scene.add(root);
-  const figs = {};            // key -> { group, parts: [{ obj, dx (feet behind the front, to its middle), z, kind }], clips: [...] }
-  let lib = null, folk = null, seatRider = null, wheelScene = null, wagons = {}, gameWagons = null;
-  // (the deck's height for the game's wagons: its world asks the ground's height, and the deck is that ground)
-  let groundAt = () => 0;
-  const deckWorld = { heightAt: (x, z) => groundAt(x / FT) * FT };
-  const along = new THREE.LineCurve3(new THREE.Vector3(-90, 0, 0), new THREE.Vector3(90, 0, 0));   // (east: +X)
-  const ready = (async () => {
+// the game's people, animals and wagons, loaded once for the page and kept (a builder opened again in the game loads
+// nothing new); each piece left null if it can't load (the plain shapes stand in)
+// libs: the host's own, already loaded ({ animals, folk, wagons }: the game's actors/animals.js and folk.js libraries
+// and src/wagon.js's wagons; the few kinds missing are asked for): nothing is loaded twice, and the loads are the
+// game's own people, horses, cattle and wagons
+let LIBS = null;
+const HOSTED = new WeakMap();
+function hostedLibs(libs) {
+  if (HOSTED.has(libs.animals)) return HOSTED.get(libs.animals);
+  const p = (async () => {
+    const L = { lib: null, folk: null, seatRider: null, wheelScene: null, wagons: {}, gameWagons: null };
+    try { const A = await import('../../src/actors/animals.js'); await Promise.all(['horse', 'horseWhite', 'cow', 'bull'].map((k) => libs.animals.need(k))); L.lib = { A, animals: libs.animals }; } catch (e) { console.warn('bridge: the animals for the loads', e); }
+    try { const F = await import('../../src/actors/folk.js'); L.folk = { F, lib: libs.folk }; L.seatRider = (await import('../../src/actors/seat.js')).seatRider; } catch (e) { console.warn('bridge: the people for the loads', e); }
+    try { if (libs.wagons && L.lib && L.folk) { await Promise.all(['covered', 'freight'].map((k) => libs.wagons.need(k))); L.gameWagons = { W: await import('../../src/wagon.js'), lib: libs.wagons }; } } catch (e) { console.warn('bridge: the wagons for the loads', e); }
+    return L;
+  })();
+  HOSTED.set(libs.animals, p);
+  return p;
+}
+function loadLibs(libs = null) {
+  if (libs && libs.animals && libs.folk) return hostedLibs(libs);
+  if (LIBS) return LIBS;
+  LIBS = (async () => {
+    const L = { lib: null, folk: null, seatRider: null, wheelScene: null, wagons: {}, gameWagons: null };
     try {
       const A = await import('../../src/actors/animals.js');
-      lib = { A, animals: await A.loadAnimals(GAME, { kinds: ['horse', 'horseWhite', 'cow', 'bull'] }) };
+      L.lib = { A, animals: await A.loadAnimals(GAME, { kinds: ['horse', 'horseWhite', 'cow', 'bull'] }) };
     } catch (e) { console.warn('bridge lab: the animals did not load; plain shapes stand in', e); }
     try {
       const F = await import('../../src/actors/folk.js');
-      folk = { F, lib: await F.loadFolk(GAME) };
-      try { seatRider = (await import('../../src/actors/seat.js')).seatRider; } catch (e) { seatRider = null; }
+      L.folk = { F, lib: await F.loadFolk(GAME) };
+      try { L.seatRider = (await import('../../src/actors/seat.js')).seatRider; } catch (e) { L.seatRider = null; }
     } catch (e) { console.warn('bridge lab: the people did not load; plain shapes stand in', e); }
     try {
       const info = await (await fetch(GAME + 'models/wagons/wagons.json')).json();
       for (const k of ['covered', 'freight']) WHEELS[k] = ['FL', 'FR', 'BL', 'BR'].map((id) => { const w = info.kinds[k].wheels[id]; return [w.x, w.y, w.z, w.r]; });
     } catch (e) { /* (the numbers above) */ }
-    try { wheelScene = (await loader.loadAsync(GAME + 'models/wagons/wheel.glb')).scene; } catch (e) { wheelScene = null; }
-    for (const k of ['covered', 'freight']) { try { wagons[k] = (await loader.loadAsync(GAME + `models/wagons/${k}.glb`)).scene; } catch (e) { wagons[k] = null; } }
+    try { L.wheelScene = (await loader.loadAsync(GAME + 'models/wagons/wheel.glb')).scene; } catch (e) { L.wheelScene = null; }
+    for (const k of ['covered', 'freight']) { try { L.wagons[k] = (await loader.loadAsync(GAME + `models/wagons/${k}.glb`)).scene; } catch (e) { L.wagons[k] = null; } }
     // the game's own wagon and team (src/wagon.js: the body, wheels, tongue up at the neck yoke, the harness, the team
     // and the driver), when the animals and the people loaded; the plain wagon below stands in if not
     try {
-      if (lib && folk) { const W = await import('../../src/wagon.js'); gameWagons = { W, lib: await W.loadWagons({ base: GAME, animals: lib.animals, folk: folk.lib, kinds: ['covered', 'freight'] }) }; }
-    } catch (e) { console.warn('bridge lab: the game\'s wagons did not load; the plain ones stand in', e); gameWagons = null; }
+      if (L.lib && L.folk) { const W = await import('../../src/wagon.js'); L.gameWagons = { W, lib: await W.loadWagons({ base: GAME, animals: L.lib.animals, folk: L.folk.lib, kinds: ['covered', 'freight'] }) }; }
+    } catch (e) { console.warn('bridge lab: the game\'s wagons did not load; the plain ones stand in', e); L.gameWagons = null; }
+    return L;
   })();
+  return LIBS;
+}
 
+// wait: ms before the models start loading (the game: after the camera's glide to the site, so the loading doesn't
+// stutter it); figures made before they are in are plain, and made again once they are. libs: the host's own
+// (above), or nothing for the lab's own loading. The loads fade with copies of their materials (src/wagon.js fadeAll),
+// never the shared ones: a load fading back to the bank leaves every townsman and horse that shares them as it was
+export function makeLoads(scene, { wait = 0, libs = null } = {}) {
+  const root = new THREE.Group(); scene.add(root);
+  const figs = {};            // key -> { group, parts: [{ obj, dx (feet behind the front, to its middle), z, kind }], clips: [...] }
+  let lib = null, folk = null, seatRider = null, wheelScene = null, wagons = {}, gameWagons = null, dead = false;
+  // (the deck's height for the game's wagons: its world asks the ground's height, and the deck is that ground)
+  let groundAt = () => 0;
+  const deckWorld = { heightAt: (x, z) => groundAt(x / FT) * FT };
+  const along = new THREE.LineCurve3(new THREE.Vector3(-90, 0, 0), new THREE.Vector3(90, 0, 0));   // (east: +X)
+  let fadeAll = null, unfade = null;
+  import('../../src/wagon.js').then((m) => { fadeAll = m.fadeAll; unfade = m.unfade; }).catch(() => null);
+  const ready = new Promise((res) => setTimeout(res, wait)).then(() => (dead ? null : loadLibs(libs))).then((L) => {
+    if (!L || dead) return;
+    ({ lib, folk, seatRider, wheelScene, wagons, gameWagons } = L);
+    // (plain figures made while waiting: made again with the models, unless one is on show just now)
+    for (const k of Object.keys(figs)) if (k !== shown) { freeFig(figs[k]); delete figs[k]; }
+  });
   const shadow = (o) => { o.traverse((m) => { if (m.isMesh) { m.castShadow = true; m.frustumCulled = false; } }); return o; };
-  const plainBody = (w, h, l, col) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, l), new THREE.MeshLambertMaterial({ color: col })); m.position.y = h / 2 + 0.4; const g = new THREE.Group(); g.add(m); return shadow(g); };
+  const plainBody = (w, h, l, col) => { const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, l), new THREE.MeshLambertMaterial({ color: col })); m.userData.plain = true; m.position.y = h / 2 + 0.4; const g = new THREE.Group(); g.add(m); return shadow(g); };
   function person(palette = 'rancher', outfit = 'casual_m') {
     if (folk) { try { const p = folk.F.makePerson(folk.lib, { outfit, palette, skin: 2, hair: 4, hat: true }); p.play('Walk', { fade: 0 }); shadow(p.root); return p; } catch (e) { /* plain */ } }
     const g = plainBody(0.45, 1.3, 0.3, 0x8a6a4a); return { root: g, play() {}, update() {}, stride: 1.2 };
@@ -71,12 +109,12 @@ export function makeLoads(scene) {
   function wagon(kind) {
     const g = new THREE.Group(), wheels = [];
     if (wagons[kind]) g.add(shadow(wagons[kind].clone()));
-    else { const bed = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.5, 3.2), new THREE.MeshLambertMaterial({ color: 0x7a5a3a })); bed.position.y = 0.9; g.add(shadow(bed)); }
+    else { const bed = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.5, 3.2), new THREE.MeshLambertMaterial({ color: 0x7a5a3a })); bed.userData.plain = true; bed.position.y = 0.9; g.add(shadow(bed)); }
     // (each wheel on its hub, its size the game's: wheel.glb is radius 1, scaled by the wheel's own radius)
     for (const [x, y, z, r] of WHEELS[kind]) {
       let w;
       if (wheelScene) { w = wheelScene.clone(); w.scale.setScalar(r); if (x < 0) w.rotation.y = Math.PI; }
-      else { w = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.08, 16).rotateZ(Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0x4a3626 })); }
+      else { w = new THREE.Mesh(new THREE.CylinderGeometry(r, r, 0.08, 16).rotateZ(Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0x4a3626 })); w.userData.plain = true; }
       const hub = new THREE.Group(); hub.position.set(x, y, z); hub.add(w); g.add(hub); wheels.push({ hub, r });
       shadow(w);
     }
@@ -95,6 +133,9 @@ export function makeLoads(scene) {
       // the game's wagon: its axles where the load's wheels bear (frame.js LOADS), the team ahead of it as the game
       // puts it; the whole thing moved along a straight line east over the deck
       const wg = gameWagons.W.makeWagon(gameWagons.lib, { kind: L.model, W: deckWorld, team: true, driver: true });
+      // (not one of the valley's wagons: its boxes are in the bridge's own frame, so it is taken out of the set the
+      // valley's walkers keep clear of (src/wagon.js WAGONS_OUT) at once)
+      if (gameWagons.W.WAGONS_OUT) gameWagons.W.WAGONS_OUT.delete(wg);
       const wb = L.parts.filter((p) => p.wheel), mid = (Math.max(...wb.map((p) => p.dx)) + Math.min(...wb.map((p) => p.dx))) / 2;
       wg.setPath(along, { at: 0.5, dir: 1 }); wg.speed = 0;
       g.add(wg.root); parts.push({ obj: { root: wg.root }, kind: 'game', wg, mid });
@@ -104,7 +145,7 @@ export function makeLoads(scene) {
       const w = wagon(L.model), wb = L.parts.filter((p) => p.wheel), front = Math.max(...wb.map((p) => p.dx)), back = Math.min(...wb.map((p) => p.dx));
       add(w, (front + back) / 2, 0, 'wagon', { wheels: w.wheels });
       // the tongue: a pole from the wagon's front to between the horses
-      const pole = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 1), new THREE.MeshLambertMaterial({ color: 0x5a4030 })); g.add(pole);
+      const pole = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.07, 1), new THREE.MeshLambertMaterial({ color: 0x5a4030 })); pole.userData.plain = true; g.add(pole);
       parts.push({ obj: { root: pole }, kind: 'pole', from: front + 0.6, to: -3.4 });
     } else if (key === 'cattle') {
       for (let r = 0; r < L.head / 2; r++) for (const z of [-1.4, 1.4]) add(animal((r + (z > 0 ? 1 : 0)) % 3 === 0 ? 'bull' : 'cow', 0x6a4a32), -r * L.rowGap - 2.2, z, 'steer', { phase: Math.random() });
@@ -113,7 +154,9 @@ export function makeLoads(scene) {
     return (figs[key] = { group: g, parts, clips, x: -100 });
   }
   let shown = null;
-  function show(key) { hide(); const f = figs[key] || build(key); f.group.visible = true; shown = key; for (const p of f.parts) if (p.obj.root.traverse) p.obj.root.traverse((m) => { if (m.material) { m.material.transparent = false; m.material.opacity = 1; } }); return f; }
+  // (the people in a figure: a game person fades itself, by its own .fade)
+  const folkOf = (f) => f.parts.map((q) => q.obj).filter((o) => o && typeof o === 'object' && 'fade' in o);
+  function show(key) { hide(); const f = figs[key] || build(key); f.group.visible = true; shown = key; if (f.mem && unfade) { unfade(f.mem); f.mem = null; for (const o of folkOf(f)) o.fade = 1; } return f; }
   function hide() { for (const f of Object.values(figs)) f.group.visible = false; shown = null; }
   const v3 = new THREE.Vector3();
   function place(key, x, yAt) {
@@ -159,8 +202,31 @@ export function makeLoads(scene) {
   function back(key, k) {
     const f = figs[key]; if (!f) return;
     const o = 1 - Math.max(0, (k - 0.5) * 2);
-    f.group.traverse((m) => { if (m.material && !Array.isArray(m.material)) { m.material.transparent = o < 1; m.material.opacity = o; } });
+    if (fadeAll) { if (!f.mem) f.mem = {}; fadeAll(f.group, o, f.mem, folkOf(f)); }
     if (o <= 0.01) f.group.visible = false;
   }
-  return { ready, show, hide, place, update, back, get shown() { return shown; }, figs };
+  // everything this made let go: each figure's own skeletons (their bone textures) and instanced straps, the plain
+  // shapes' geometry and colours, the figure out of the scene. The game's people, animals and wagons share their
+  // shapes with the loaded models, and their materials are left to the garbage collector, never disposed: disposing
+  // the last material drawn with a shader program throws the program away, and the next traveller to come along would
+  // build it again (a 90 ms frame; src/wagon.js says the same of its fade copies)
+  function freeFig(f) {
+    if (f.mem && unfade) { unfade(f.mem); f.mem = null; }
+    for (const p of f.parts) {
+      const o = p.kind === 'game' ? p.wg : p.obj;
+      try {
+        if (p.kind === 'game' && gameWagons && gameWagons.W.WAGONS_OUT) gameWagons.W.WAGONS_OUT.delete(p.wg);
+        const r = o && o.root; if (!r) continue;
+        r.traverse((m) => {
+          if (m.isSkinnedMesh && m.skeleton) m.skeleton.dispose();
+          else if (m.isInstancedMesh) m.dispose();
+          else if (m.isMesh && m.userData.plain) { m.geometry.dispose(); m.material.dispose(); }
+        });
+        r.removeFromParent();
+      } catch (e) { /* let go as it is */ }
+    }
+    root.remove(f.group);
+  }
+  function dispose() { dead = true; hide(); for (const k of Object.keys(figs)) { freeFig(figs[k]); delete figs[k]; } scene.remove(root); }
+  return { ready, show, hide, place, update, back, dispose, root, get shown() { return shown; }, figs };
 }

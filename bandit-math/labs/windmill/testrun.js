@@ -46,7 +46,10 @@
 //     themselves or the break was up where they stand (nofootCause).
 //
 // main.js wires it: makeTestRun(app, hooks) with the view, the fall, the miller's voice, the camera's watching spot,
-// the best record and what the buttons do (see `hooks` below). frame(dt) runs every animation frame.
+// the best record and what the buttons do (see `hooks` below). frame(dt) runs every animation frame. Optional hooks:
+// pay(h, { W, D, standing, newBest }) -> { sacks, line } (a host paying its own way: the game's miller pays only for new
+// height), reset() (a fresh yard at once, for settle). settle(): the card's own button, done quietly (the builder put
+// away with the card up); dispose(): the worker let go.
 import { STAGES, boardRole } from './frame.js';
 import { boardShapes } from './frame.js';
 import { towerHeight, isPost, MAX_W, lenWords, lenLabel, spellUnits, sideOf, atSide, isLevelB, isUprightB } from './tower.js';
@@ -401,7 +404,11 @@ export function makeTestRun(app, hooks) {
     // (the bar's Height says what still stands, as the card does)
     if ($('height')) $('height').innerHTML = fmtStat(h);
     if (h >= TARGET_FT) hooks.showHead(standing);
-    const sacks = flourFor(h), story = spellUnits(storyOf()), told = adviceOf(), advice = spellUnits(told.advice), focusIds = told.focus || [];
+    // the flour: the lab pays a sack for every foot left standing (flourFor); a host may pay its own way (the game: only
+    // for the feet higher than the tower it has paid for before) -> { sacks, line }
+    const paid = hooks.pay ? hooks.pay(h, { W, D, standing, newBest }) : null;
+    const sacks = paid ? paid.sacks : flourFor(h), story = spellUnits(storyOf()), told = adviceOf(), advice = spellUnits(told.advice), focusIds = told.focus || [];
+    const sackLine = paid ? paid.line : newBest && h > 0 ? `A new best height, with the stones ${fmtBase(W, D)}!` : 'A sack for every foot left standing' + (h >= TARGET_FT ? ', and five more for the sails' : '');
     // (something gave but she still stands to her full height: "She stood, but something gave"; only a tower where
     // nothing at all gave is "She stood!")
     const whole = !nothing && h >= run.h0 - 0.01, sails = h >= TARGET_FT ? ' Sails up!' : '';
@@ -416,7 +423,7 @@ export function makeTestRun(app, hooks) {
     card.innerHTML = `<button class="fold" id="r-fold" aria-label="Fold the card down" title="Fold the card down"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
       <h2>${title}</h2><p class="sub" data-focus="${focusIds.join(' ')}">${story}</p>
       <div class="stat"><div><small>Left standing</small><div class="big">${units(fmt(h))}</div></div><div><small>Base</small><div class="big">${units(fmtBase(W, D, true))}</div></div><div><small>Best</small><div class="big">${units(fmt(best.height))}</div></div></div>
-      <div class="sacks">${SACK}<div><b>The miller pays ${sacks} sack${sacks === 1 ? '' : 's'} of flour</b><br><small>${newBest && h > 0 ? `A new best height, with the stones ${fmtBase(W, D)}!` : 'A sack for every foot left standing' + (h >= TARGET_FT ? ', and five more for the sails' : '')}</small></div></div>
+      <div class="sacks">${SACK}<div><b>${sacks || !paid ? `The miller pays ${sacks} sack${sacks === 1 ? '' : 's'} of flour` : 'No new flour this time'}</b><br><small>${sackLine}</small></div></div>
       <p class="miller" data-focus="${focusIds.join(' ')}">"${advice}"</p>
       ${!nothing && fellIds.length ? `<p class="pile-note">${pileNote(back.length, kindling)}</p>` : ''}
       <div class="row">${nothing ? '<button class="btn go" id="r-again">Try again</button>' : '<button class="btn" id="r-fresh">Start fresh</button><button class="btn go" id="r-keep">Keep building</button>'}</div>`;
@@ -426,6 +433,8 @@ export function makeTestRun(app, hooks) {
     // (on a phone: fold the card down to its title and buttons, to see the tower, and open it again)
     $('r-fold').onclick = () => { const f = card.classList.toggle('is-folded'); $('r-fold').setAttribute('aria-label', f ? 'Open the card' : 'Fold the card down'); };
     const keepIds = new Set(standing.boards.map((b) => b.id));
+    // (what the card's own button does, for settle() below: put away with the card up, the builder does that much)
+    run.ends = nothing ? { fresh: true } : { keep: keepIds, back, kindling };
     if (again) again.onclick = () => { card.hidden = true; end(); hooks.fresh(advice); };
     if (fresh) fresh.onclick = () => { card.hidden = true; end(); hooks.fresh('Fresh lumber\'s on the sawhorses.'); };
     if (keep) keep.onclick = () => { card.hidden = true; end(); hooks.keep({ keep: keepIds, back, kindling }); };
@@ -867,7 +876,20 @@ export function makeTestRun(app, hooks) {
       shown: [...run.up].slice(0, 400).map((id) => [id, +(run.disp.get(id)?.s ?? 0).toFixed(3)]) };
   }
 
-  return { start, frame, framing, state, get running() { return !!run && !run.done; }, get result() { return run && run.result; }, get card() { return (run && run.card) || null; } };
+  // The card is up and the builder is being put away (the game: "Done for now" or walking off): what its button would
+  // do, done now and quietly: what stood stays (the boards that came down whole back on the pile), or with nothing
+  // standing a fresh yard (hooks.reset, at once). -> true when there was a card to settle
+  function settle() {
+    if (!run || !run.done || !run.ends) return false;
+    const ends = run.ends;
+    $('result').hidden = true; end();
+    if (ends.fresh) { if (hooks.reset) hooks.reset(); }
+    else hooks.keep({ keep: ends.keep, back: ends.back, kindling: ends.kindling, quiet: true });
+    return true;
+  }
+  // the worker that does the sums, let go (the builder is taken off the page)
+  function dispose() { try { if (worker) worker.terminate(); } catch (e) { /* gone already */ } worker = null; waiting.clear(); run = null; }
+  return { start, frame, framing, state, settle, dispose, get running() { return !!run && !run.done; }, get result() { return run && run.result; }, get card() { return (run && run.card) || null; } };
 }
 
 const SACK = '<svg viewBox="0 0 32 32"><path d="M9 6c2 2 12 2 14 0l-1 4c4 3 6 9 5 15-1 4-5 5-11 5S6 29 5 25c-1-6 1-12 5-15z" fill="#efe6d0" stroke="#7a5530" stroke-width="1.5"/><path d="M10 10c3 1 9 1 12 0" stroke="#7a5530" stroke-width="1.5" fill="none"/><text x="16" y="23" text-anchor="middle" font-size="7" font-family="Smokum, Georgia, serif" fill="#7a5530">FLOUR</text></svg>';

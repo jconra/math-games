@@ -108,6 +108,9 @@ export const MISSIONS = [
   { id: 'loot', name: 'Loot the gang', line: 'Take back what the gang stole', where: 'the valley', ready: true },   // (src/missions/loot.js; its ladder in topics.loot)
   { id: 'hunt', name: 'Deer photographs', line: 'Snap the deer with the answer', where: 'the valley', ready: true },
   { id: 'range', name: 'Bottle range', line: 'Shoot bottles and tin cans', where: 'east end of town', ready: true },
+  { id: 'windmill', name: 'The windmill', line: 'Build the miller a tower that stands', where: 'the mill hill', ready: true },   // (src/windmilljob.js; off: the miller has no prompt, what was built still stands)
+  { id: 'bridge', name: 'The bridge', line: 'Build the engineer a bridge over the west river', where: 'the west river', ready: true },   // (src/bridgejob.js; off: the engineer has no prompt, what was built still stands)
+  { id: 'fishing', name: 'Fishing', line: 'Catch fish off the dock and sell them', where: 'the lake south of town', ready: true },   // (src/fishingjob.js; off: the fisherman has no prompt, the dock still stands)
 ];
 // Is this job on for the rider? (every job is, unless a grown-up turned it off on the title)
 export function jobOn(rider, id) {
@@ -159,8 +162,15 @@ export function readModeWords(rider) {
 //   targets: a bottle or tin can shot down at the bottle range (every rider's, since the lasso-or-shooting choice went);
 //     a string of five cards is ten to fifteen right targets in two or three minutes, so tin (15) comes with the first
 //     string or two and copper (60) after a few sittings; a first guess.
+//   tower: the windmill's tower, counted as the tallest it has stood through the wind test, in whole feet (it is a
+//     count of feet, not of towers: src/windmilljob.js adds the feet above the best so far). Tin (4) is a first post or
+//     two that stood, copper (10) a braced level and a bit, silver (16) the sails going up, gold (18) the tower the
+//     checklist counts as done (completion.js WINDMILL_FEET). It is a goal reached once, not a count that keeps growing.
 //   bandits: a gang's wave on the wagon road has 3 to 5 bandits and takes a couple of minutes, so tin (3) comes with
 //     the first wave and copper (15) after four or five; still a first guess until it's been played for real.
+//   loads: the bridge's crossing test (src/bridgejob.js): each load that gets across counts (a person, horse and rider,
+//     the two wagons, the cattle drive: one to five a test, a test every few minutes of building), so tin (3) comes with
+//     the first good bridge or two and copper (15) after a few sittings; a first guess until it's been played.
 export const BUCKLES = ['tin', 'copper', 'silver', 'gold'];
 export const BUCKLE_NAMES = { tin: 'Tin', copper: 'Copper', silver: 'Silver', gold: 'Gold' };
 // `by`: the jobs on the title's list (MISSIONS) that do this work; with all of them turned off (and none done yet) the
@@ -175,6 +185,11 @@ export const JOBS = [
   { id: 'deliveries', name: 'Deliveries made', words: ['delivery made', 'deliveries made'], at: [3, 10, 25, 40], ready: true, by: ['deliveries'] },
   { id: 'loot', name: 'Loot returned', words: ['bundle of loot returned', 'bundles of loot returned'], at: [5, 20, 40, 80], ready: true, by: ['loot'] },
   { id: 'targets', name: 'Targets hit', words: ['target hit', 'targets hit'], at: [15, 60, 150, 300], ready: true, by: ['range'] },
+  { id: 'tower', name: 'Windmill tower', words: ['foot of tower stood', 'feet of tower stood'], at: [4, 10, 16, 18], ready: true, by: ['windmill'] },
+  { id: 'loads', name: 'Loads carried across', words: ['load carried across', 'loads carried across'], at: [3, 15, 40, 80], ready: true, by: ['bridge'] },
+  // fish: every fish landed off the dock (kept or thrown back: each one asked its question), about half a minute a fish
+  // with the cast, the wait and the reel, so tin (5) comes in the first sitting and gold (120) in about an hour of fishing
+  { id: 'fish', name: 'Fish landed', words: ['fish landed', 'fish landed'], at: [5, 25, 60, 120], ready: true, by: ['fishing'] },
 ];
 
 // The keepsake each job puts in the rider's cabin (src/cabin/: slots.js has its spot, pieces.js its shape). `from` =
@@ -192,6 +207,9 @@ export const KEEPSAKES = {
   deliveries: { name: 'A freight company sign', where: 'on the porch', from: 'tin', standIn: true },
   loot: { name: 'A recovered strongbox', where: 'on the floor against the back wall', from: 'tin', standIn: true },
   targets: { name: 'A row of shot-up tin cans', where: 'on a shelf over the table', from: 'tin', standIn: true },
+  tower: { name: 'A little carved windmill', where: 'on the windowsill over the table, looking out at the valley', from: 'tin', standIn: true },
+  loads: { name: 'A little model truss bridge', where: 'on a shelf on the right-hand wall, by the front corner', from: 'tin', standIn: true },
+  fish: { name: 'A mounted fish', where: 'on a plaque on the back wall, between the painting and the window', from: 'tin', standIn: true },
 };
 
 // The period looks a new rider can pick from: a people model, one of the clothes palettes (the same names as the

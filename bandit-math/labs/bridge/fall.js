@@ -18,7 +18,10 @@ import { supportAt } from './bridge.js';
 
 const G = 9.8;
 
-export function makeFall(scene) {
+// const F = makeFall(scene, { ground, water })   ground(x, z): the ground's height (metres) in the scene's frame (the
+//   lab's river crossing by default: scene.js groundY); water: the river's surface there (metres; scene.js waterY)
+// F.dispose(): the puffs out of the scene
+export function makeFall(scene, { ground = groundY, water = waterY } = {}) {
   const sticks = [], pins = [];
   let time = 0, running = false, events = { pops: 0, hits: 0, bigHit: 0 };
   // dust puffs, reused
@@ -29,7 +32,7 @@ export function makeFall(scene) {
   for (let i = 0; i < 16; i++) { const s = new THREE.Sprite(splashMat.clone()); s.visible = false; scene.add(s); puffs.push({ s, age: 9, life: 1, splash: true }); }
   let splashNext = 0;
   function splash(p, size = 1) {
-    const list = puffs.filter((q) => q.splash), P = list[splashNext++ % list.length]; P.s.position.copy(p); P.s.position.y = waterY + 0.1; P.age = 0; P.life = 0.8 + Math.random() * 0.5; P.size = size * 1.4; P.s.visible = true;
+    const list = puffs.filter((q) => q.splash), P = list[splashNext++ % list.length]; P.s.position.copy(p); P.s.position.y = water + 0.1; P.age = 0; P.life = 0.8 + Math.random() * 0.5; P.size = size * 1.4; P.s.visible = true;
     P.drift = new THREE.Vector3((Math.random() - 0.5) * 0.4, 0.9, (Math.random() - 0.5) * 0.4);
   }
   function puff(p, size = 1) {
@@ -94,8 +97,8 @@ export function makeFall(scene) {
       for (let i = 0; i < 2; i++) {
         const p = st.p[i], q = st.q[i];
         // (velocity: a little air drag; in the water, a lot, and a splash where it goes in)
-        const wet = p.y < waterY;
-        if (wet && q.y >= waterY && !st.splashed) { st.splashed = true; splash(p, 0.6 + Math.min(1, Math.abs(p.y - q.y) / dt / 6)); events.splash = (events.splash || 0) + 1; }
+        const wet = p.y < water;
+        if (wet && q.y >= water && !st.splashed) { st.splashed = true; splash(p, 0.6 + Math.min(1, Math.abs(p.y - q.y) / dt / 6)); events.splash = (events.splash || 0) + 1; }
         tmp.subVectors(p, q).multiplyScalar(wet ? 0.93 : 0.995);
         q.copy(p);
         p.add(tmp); p.y -= G * dt * dt * (wet ? 0.35 : 1);
@@ -125,7 +128,7 @@ export function makeFall(scene) {
       }
       // the ground
       for (const st of sticks) for (let i = 0; i < 2; i++) {
-        const p = st.p[i], q = st.q[i], gy = groundY(p.x, p.z) + 0.03;
+        const p = st.p[i], q = st.q[i], gy = ground(p.x, p.z) + 0.03;
         if (p.y < gy) {
           const vy = (p.y - q.y) / dt;
           if (it === 0 && vy < -2.2) {
@@ -180,5 +183,6 @@ export function makeFall(scene) {
     for (const st of sticks) st.b.falling = false;
     sticks.length = 0; pins.length = 0; running = false; time = 0; lastDrop = 0;
   }
-  return { drop, update, settled, clear, get time() { return time; }, get sinceDrop() { return time - lastDrop; }, get running() { return running; }, sticks };
+  function dispose() { for (const P of puffs) { scene.remove(P.s); P.s.material.dispose(); } puffs.length = 0; }
+  return { drop, update, settled, clear, dispose, get time() { return time; }, get sinceDrop() { return time - lastDrop; }, get running() { return running; }, sticks };
 }

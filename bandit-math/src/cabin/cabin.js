@@ -18,9 +18,10 @@
 // rockers, a bed, a rifle rack, a stove), cheap to costly. Look at an empty slot: a see-through look at the piece shows
 // in its place, with its name, its price and what it is in a small card; E (or a tap on the prompt) buys it, and it
 // grows into place. Bought pieces are saved with the rider (rider.owned.cabin). At the table you open your lock boxes.
-// The belt-buckle keepsakes (save.js KEEPSAKES) hang in their spots once earned. The dogs at home (homedogs.js) are on
-// their beds inside once there are dog beds, else on the porch (or by the camp's fire before the cabin is bought). The
-// dog that follows you waits by the porch steps while you're inside (main.js reads C.dogWait).
+// The belt-buckle keepsakes (save.js KEEPSAKES) hang in their spots once earned (one won out on this ride is hung as you
+// walk in). The dogs at home (homedogs.js) are on their beds inside once there are dog beds, else on the porch (or by
+// the camp's fire before the cabin is bought). The dog that follows you waits by the porch steps while you're inside
+// (main.js reads C.dogWait).
 //
 //   const C = makeCabin({ W, renderer, camera, animals, rider, hud, input, audio, player, follower, onBuy, onLockbox })
 //     player(): the player (P, from player.js); follower(): the dog following you (D, from dog.js) or null
@@ -331,6 +332,7 @@ export function makeCabin({ W, renderer, camera, animals, rider, hud, input: I, 
       dogsDirty = true;
     }
     cardEl.hidden = true; cardShown = '';
+    R.keepsakes(keepsakesOf(rider));   // (a keepsake won out in the valley on this ride is hung before the door opens)
     const L = R.toLocal(P.position.x, 0, P.position.z), dx = FP.doorX, foot = R.porch.foot;
     const pts = [{ x: L.x, z: L.z }];
     if (Math.hypot(L.x - dx, L.z - (foot + 0.55)) > 0.3) pts.push({ x: dx, z: foot + 0.55 });
@@ -412,7 +414,8 @@ export function makeCabin({ W, renderer, camera, animals, rider, hud, input: I, 
     for (const k of keepsakesOf(rider)) if (KEEP_LOOK[k.job] && !(k.job === 'orders' && have.includes('table'))) consider('keepsake', k.job, KEEP_LOOK[k.job], 3.6);
     return best;
   }
-  const KEEP_LOOK = { cattle: [1.6, 2.5, -2.7], boxes: [1.75, 1.15, -2.55], sheep: [1.12, 2.3, 0.55], pigs: [2.85, 2.05, -1.9], bandits: [-2.3, 2.35, -1.75], deliveries: [-1.55, 3.0, 0.55], orders: [2.3, 1.65, -0.62] };
+  const KEEP_LOOK = { cattle: [1.6, 2.5, -2.7], boxes: [1.75, 1.15, -2.55], sheep: [1.12, 2.3, 0.55], pigs: [2.85, 2.05, -1.9], bandits: [-2.3, 2.35, -1.75], deliveries: [-1.55, 3.0, 0.55], orders: [2.3, 1.65, -0.62], tower: [2.85, 1.75, -0.45], loads: [2.85, 1.75, 0.25], fish: [-0.62, 2.0, -2.75],
+    targets: [2.85, 1.75, -1.22], loot: [0.55, 0.35, -2.4] };   // (where each keepsake is looked at: its card shows)
   // (the card and the prompt are drawn again only when what you look at changes, or the gold does)
   function showFocus(f, force = false) {
     const k = f ? f.kind + ':' + f.id : null, was = focus ? focus.kind + ':' + focus.id : null;

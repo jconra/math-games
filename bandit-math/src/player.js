@@ -37,6 +37,7 @@
 //                       instead of onCaught / onMissed. The rest: see lasso.js
 //   P.lassoBusy, P.cancelLasso()
 //   P.teleport(x, z, rot)   to another place at once (the horse comes along if being ridden)
+//   P.moveHorse(x, z)   the horse left standing (not ridden) moved there at once (false: none, or being ridden)
 //   P.shift({ dx, dy, dz })  moved as it stands, the horse and the camera with it (the way round at the valley's ends)
 //   P.refreshOwned()    looks at rider.owned again now (it is also checked a few times a second): a saddle bought puts
 //                       it on the horse; another horse swaps it
@@ -359,6 +360,8 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
     seat.dismount(spot, { onDone: () => { P.mode = 'foot'; P.downAt = performance.now(); pos.copy(spot); P.heading = H.heading; P.speed = 0; person.root.rotation.set(0, P.heading, 0); person.play('Idle', { fade: 0.25 }); } });
     return true;
   };
+  // the horse left standing (not ridden) moved to (x, z) at once, as it stands
+  P.moveHorse = (x, z) => { if (!H || P.mode === 'horse' || P.mode === 'mounting' || P.mode === 'dismounting') return false; H.x = x; H.z = z; H.speed = 0; H.yawRate = 0; placeHorse(0); return true; };
   P.teleport = (x, z, rot = P.heading) => {
     const y = W.heightAt(x, z);
     if (P.onHorse && H) { H.x = x; H.z = z; H.heading = rot; H.speed = 0; H.yawRate = 0; placeHorse(0); }

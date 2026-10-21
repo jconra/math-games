@@ -5,9 +5,14 @@
 //
 // Every sound takes an optional start time `at` (seconds on the audio clock), so a whole scene can be laid out ahead
 // of time and rendered offline: renderOffline(seconds, (S) => { S.saw(8, 3, 0.5); ... }) gives back an AudioBuffer.
+//
+// The lab pages have their own sound (audioOn: their own context, their own volume in the top bar). A page that lends
+// its own sound instead (the game: lend(true), then attach(ctx, out) once its context is awake, detach() to give it
+// back) gets the builder's sounds through its context and its master volume, and no second context is ever made.
 
-let A = null;            // the live audio: { ctx, master, sfx, amb, duck, far, noise, wind, offline }
+let A = null;            // the live audio: { ctx, master, sfx, amb, duck, far, noise, wind, offline, shared }
 let live = null;         // (kept while an offline render borrows A)
+let lent = false;        // (the page lends its own sound: audioOn makes no context of its own, attach brings it)
 let volume = 0.8, muted = false;
 try { const v = JSON.parse(localStorage.getItem('bm-windmill-vol')); if (v) { volume = +v.volume || 0; muted = !!v.muted; } } catch (e) { /* no storage: defaults */ }
 
@@ -16,16 +21,20 @@ const pick = (arr) => arr[(Math.random() * arr.length) | 0];
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 // the mixing desk: sounds -> sfx -> master -> a gentle limiter -> speakers; the yard bed -> amb -> duck -> master;
-// far-off work -> far (muffled, with a little echo off the hills) -> amb
-function makeDesk(ctx, offline) {
-  const D = { ctx, offline, wind: null };
-  const lim = ctx.createDynamicsCompressor();
-  lim.threshold.value = -8; lim.knee.value = 6; lim.ratio.value = 12; lim.attack.value = 0.002; lim.release.value = 0.12;
-  lim.connect(ctx.destination);
-  D.master = ctx.createGain(); D.master.gain.value = offline ? 0.7 : (muted ? 0 : volume * 0.7 / 0.8); D.master.connect(lim);
+// far-off work -> far (muffled, with a little echo off the hills) -> amb. out: a lent master to go into instead of the
+// limiter and the speakers (the page's own volume and limiter rule then)
+function makeDesk(ctx, offline, out = null) {
+  const D = { ctx, offline, wind: null, shared: !!out };
+  D.master = ctx.createGain();
+  if (out) { D.master.gain.value = 0.7; D.master.connect(out); } else {
+    const lim = ctx.createDynamicsCompressor();
+    lim.threshold.value = -8; lim.knee.value = 6; lim.ratio.value = 12; lim.attack.value = 0.002; lim.release.value = 0.12;
+    lim.connect(ctx.destination);
+    D.master.gain.value = offline ? 0.7 : (muted ? 0 : volume * 0.7 / 0.8); D.master.connect(lim);
+  }
   D.sfx = ctx.createGain(); D.sfx.connect(D.master);
   D.duck = ctx.createGain(); D.duck.connect(D.master);
-  D.amb = ctx.createGain(); D.amb.gain.value = 1.3; D.amb.connect(D.duck);
+  D.amb = ctx.createGain(); D.amb.gain.value = bed || offline ? 1.3 : 0; D.amb.connect(D.duck);
   // far away: lowpassed and quieter, with a slap of echo
   D.far = ctx.createBiquadFilter(); D.far.type = 'lowpass'; D.far.frequency.value = 1800; D.far.Q.value = 0.5;
   const farG = ctx.createGain(); farG.gain.value = 0.32; D.far.connect(farG); farG.connect(D.amb);
@@ -40,10 +49,30 @@ function makeDesk(ctx, offline) {
 }
 
 export function audioOn() {
-  if (A && !A.offline) { if (A.ctx.state === 'suspended') A.ctx.resume(); return; }
+  if (A && !A.offline) { if (!A.shared && A.ctx.state === 'suspended') A.ctx.resume(); return; }
+  if (lent) return;   // (the page's own sound is on its way: attach)
   const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
   A = live = makeDesk(new AC(), false);
   startYard();
+}
+// the page's own sound instead of a context of the lab's: lend(true) first (nothing of the lab's own is made), then
+// attach(ctx, out) once its context is awake (out: where its sounds go, its master volume); detach() gives it back
+export function lend(on) { lent = !!on; }
+export function attach(ctx, out) {
+  if (live && live.ctx === ctx) return;
+  detach();
+  lent = true;
+  A = live = makeDesk(ctx, false, out);
+  startYard();
+}
+export function detach() {
+  if (!live) return;
+  const D = live;
+  if (A === D) A = null;
+  live = null;
+  if (D.wind) { try { D.wind.src.stop(); } catch (e) { /* not started */ } }
+  try { D.master.disconnect(); } catch (e) { /* already off */ }
+  if (!D.shared) D.ctx.close().catch(() => {});
 }
 const ok = () => !!A && (A.offline || A.ctx.state === 'running');
 const now = (at) => (at === undefined || at === null ? A.ctx.currentTime : at);
@@ -52,9 +81,13 @@ const now = (at) => (at === undefined || at === null ? A.ctx.currentTime : at);
 export function setVolume(v, mute = muted) {
   volume = clamp(v, 0, 1); muted = !!mute;
   try { localStorage.setItem('bm-windmill-vol', JSON.stringify({ volume, muted })); } catch (e) { /* fine */ }
-  if (live) live.master.gain.setTargetAtTime(muted ? 0 : volume * 0.7 / 0.8, live.ctx.currentTime, 0.03);
+  if (live && !live.shared) live.master.gain.setTargetAtTime(muted ? 0 : volume * 0.7 / 0.8, live.ctx.currentTime, 0.03);
 }
 export const getVolume = () => ({ volume, muted });
+// the building yard's own bed of sounds (birds, the mill, work down the hill) on or off: off where the page around it
+// has its own (the game's valley); the saw, the hammer, the wind and the rest still play
+let bed = true;
+export function setBed(on) { bed = !!on; if (A && A.amb) A.amb.gain.value = bed ? 1.3 : 0; }
 
 // ── building blocks ──────────────────────────────────────────────────────────────────────────────────────────────
 function noise(t0, dur, { type = 'bandpass', freq = 1000, q = 1, gain = 0.5, attack = 0.005, freqTo = null, dest } = {}) {
@@ -252,7 +285,7 @@ export function setWind(level, at) {
     const bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 700; bp.Q.value = 2.5;
     const g = c.createGain(); g.gain.value = 0; const g2 = c.createGain(); g2.gain.value = 0;
     src.connect(lo); lo.connect(g); g.connect(A.sfx); src.connect(bp); bp.connect(g2); g2.connect(A.sfx); src.start(now(at));
-    A.wind = { lo, bp, g, g2 };
+    A.wind = { src, lo, bp, g, g2 };
   }
   const t = now(at), l = Math.max(0, Math.min(1.2, level)), w = A.wind;
   w.g.gain.setTargetAtTime(l * 0.55, t, 0.15);

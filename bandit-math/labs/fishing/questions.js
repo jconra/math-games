@@ -578,6 +578,22 @@ export function ladderQuestion(level, rnd = Math.random, ctx = {}, recent = []) 
   }
   return best || { ...keepQ(KEEP_AT[Math.min(level, 7)], rnd, ctx), level, from: Math.min(level, 7) };
 }
+// the question for a fish caught at a step (1 to 7, the ladder's own steps) of one topic, or of any topic the step asks
+// (topic null): the game's skill model picks the step and, for the ratio steps, the topic (src/fishingjob.js). ctx and
+// recent as ladderQuestion's; level: the number the card's stars show (default the step)
+export function questionFor(from, topic = null, rnd = Math.random, ctx = {}, recent = [], level = from) {
+  from = Math.min(7, Math.max(1, Math.round(from) || 1));
+  ctx = { counts: {}, creel: [], ...ctx };
+  let best = null, bestAt = Infinity;
+  for (let t = 0; t < 40; t++) {
+    const tp = topic || wpick(PLAN[from], rnd), q = makeAt(tp, from, rnd, ctx);
+    if (!q) continue;
+    const out = { ...q, level, from }, at = recent.lastIndexOf(q.key);
+    if (at < 0) return out;
+    if (at < bestAt) { best = out; bestAt = at; }
+  }
+  return best || { ...keepQ(KEEP_AT[from], rnd, { ...ctx, from }), level, from };
+}
 // some made-up fish in a creel, for a practice question that needs one (the right step's lengths and weights)
 function practiceCreel(from, rnd) {
   const dens = from <= 3 ? [2, 4, 8] : from === 5 ? [3, 4, 6, 8, 12] : [2, 4, 8];

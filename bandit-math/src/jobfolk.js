@@ -17,6 +17,13 @@
 //                        after something is bought there he thanks the player
 //   the camp foremen     already at the camps (src/camps.js): here they get a name tag, a hello and the speech card for
 //                        what the delivery job has them say
+//   the miller           on the mill hill, the windmill job's own (src/windmilljob.js): here he gets his name tag, his
+//                        hello (it goes with how far the tower has come: J.helloKey()) and turns to face the player;
+//                        his prompt is the build site's ("Help the miller build his tower")
+//   the old fisherman    at the foot of the dock on the lake south of town, the fishing job's own (src/fishingjob.js):
+//                        here he gets his name tag and his hello; his prompt is the build site's ("Fish off the dock")
+//   the engineer         on the north abutment of the ravine on the west river, the bridge job's own (src/bridgejob.js,
+//                        standing in the bridge's turned frame): his name tag and hello; his prompt is the build site's
 // Each stands with the idle clips, shows a name tag when the player is near, and turns to face the player close by.
 //
 // Talking: walking or riding up, the person says their two lines in a speech card over their head (no button). At an
@@ -97,7 +104,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
   const card = document.createElement('div'); card.className = 'bjf-say'; card.hidden = true; box.appendChild(card);
 
   // ── THE PEOPLE ─────────────────────────────────────────────────────────────────────────────────────────────────
-  function addPerson(def, spot, face, { person = null, kind = 'own' } = {}) {
+  function addPerson(def, spot, face, { person = null, kind = 'own', here = null, turn = 0 } = {}) {
     let p = person;
     if (!p) {
       try { p = makePerson(folk, { ...def.look, hatStyle: HATS[def.id] || null, shadows, badge: !!def.law, holster: !!def.law }); } catch (e) { console.warn('job folk: a person could not be made', def.id, e); return null; }
@@ -108,7 +115,8 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     tag.innerHTML = `<b>${esc(def.name)}</b><small>${esc(def.role)}</small>`;
     box.appendChild(tag);
     const rec = { id: def.id, def, name: def.name, role: def.role, p, kind, x: spot ? spot.x : 0, z: spot ? spot.z : 0, face, home: face,
-      tag, greet: makeGreeter({ again: ['boss', 'vet', 'wife'].includes(def.id) ? TALK.againArea : TALK.again }), t: 3 + Math.random() * 6, clipT: 0, visible: true, block: kind === 'own' };
+      tag, greet: makeGreeter({ again: ['boss', 'vet', 'wife'].includes(def.id) ? TALK.againArea : TALK.again }), t: 3 + Math.random() * 6, clipT: 0, visible: true, block: kind === 'own',
+      here, turn };   // (a lent person: here() says he stands at his spot now (else lent on to a builder); turn: his parent's yaw in the world)
     people.push(rec);
     return rec;
   }
@@ -164,6 +172,41 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
   let driver = null;
   // the camp foremen: the camps' own people
   const foremen = [];
+  // the miller: the windmill job's own person, lent for his tag and hello (kind 'lent': the job moves and animates him)
+  let millerRec = null;
+  function millerStep() {
+    if (millerRec) return;
+    const J = get('windmill'); if (!J || !J.miller) return;
+    const p = J.miller.root.position, base = FOLK_BY_ID.miller;
+    // (his hello as the tower stands now)
+    const def = Object.create(base);
+    Object.defineProperty(def, 'hello', { get: () => { const k = J.helloKey ? J.helloKey() : 'start'; return (base.hellos && base.hellos[k]) || base.hello; } });
+    millerRec = addPerson(def, { x: p.x, z: p.z }, J.miller.root.rotation.y, { person: J.miller, kind: 'lent' });
+    if (millerRec) millerRec.job = J;
+  }
+  // the old fisherman at the foot of the dock: the fishing job's own person, lent for his tag and hello as the miller is
+  // (src/fishingjob.js; his prompt is the build site's, "Fish off the dock")
+  let fisherRec = null;
+  function fisherStep() {
+    if (fisherRec) return;
+    const J = get('fishing'); if (!J || !J.keeper) return;
+    const p = J.keeper.root.position;
+    fisherRec = addPerson(FOLK_BY_ID.fisherman, { x: p.x, z: p.z }, J.keeper.root.rotation.y, { person: J.keeper, kind: 'lent' });
+  }
+  // the engineer at the ravine: the bridge job's own person, lent for his tag and hello as the miller is. He stands in
+  // the bridge's frame (turned a quarter in the world), so his spot is read from the world and his facing given back in
+  // that frame; while the builder is up he is the builder's (no tag, no turning)
+  let engineerRec = null;
+  function engineerStep() {
+    if (engineerRec) return;
+    const J = get('bridge'); if (!J || !J.engineer || !J.engineer.root.parent) return;
+    const e = J.engineer.root, w = e.getWorldPosition(new THREE.Vector3()), q = e.parent.getWorldQuaternion(new THREE.Quaternion());
+    const turn = new THREE.Euler().setFromQuaternion(q, 'YXZ').y;
+    // (his hello as the bridge stands now, as the miller's)
+    const base = FOLK_BY_ID.engineer, def = Object.create(base);
+    Object.defineProperty(def, 'hello', { get: () => { const k = J.helloKey ? J.helloKey() : 'start'; return (base.hellos && base.hellos[k]) || base.hello; } });
+    engineerRec = addPerson(def, { x: w.x, z: w.z }, e.rotation.y + turn, { person: J.engineer, kind: 'lent', here: () => !J.builder, turn });
+  }
 
   // walkers don't go through a person standing still (the wagon's driver only while he stands down beside it)
   const offBlock = W.addBlocker ? W.addBlocker((x, z) => {
@@ -322,7 +365,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     if (P.mode !== 'foot' && P.mode !== 'horse') return;
     let best = null, bd = Infinity;
     for (const r of people) {
-      if (!r.p.root.visible || r.kind === 'foreman') continue;   // (a foreman's prompt is the delivery job's own)
+      if (!r.p.root.visible || r.kind === 'foreman' || r.kind === 'lent') continue;   // (a foreman's prompt is the delivery job's own; the miller's, the build site's)
       const d = Math.hypot(P.position.x - r.x, P.position.z - r.z) - (P.onHorse ? 1.2 : 0);
       if (d < bd) { bd = d; best = r; }
     }
@@ -378,7 +421,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
   JF.update = (dt, { hidden = false } = {}) => {
     if (hidden) { if (!hiddenNow) { hiddenNow = true; hideAll(); } JF.prompt = null; return; }
     if (hiddenNow) { hiddenNow = false; if (talking) card.hidden = false; }
-    placeNaturalist(); naturalistWalk(dt); driverStep(); foremenStep();
+    placeNaturalist(); naturalistWalk(dt); driverStep(); foremenStep(); millerStep(); fisherStep(); engineerStep();
     const at = P.position;
     // the area jobs: hellos on arriving, the toast on walking away
     for (const a of areas) {
@@ -391,6 +434,10 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
       const d = Math.hypot(at.x - r.x, at.z - r.z);
       // (the foremen and the driver are placed by their camps and their wagon: follow them)
       if (r.kind === 'foreman') { r.x = r.h.x; r.z = r.h.z; }
+      if (r.kind === 'lent') {   // (lent on to the builder: not here)
+        if (r.here ? !r.here() : r.p.root.parent !== scene) { r.tag.hidden = true; continue; }
+        if (r.p.root.parent === scene) { r.x = r.p.root.position.x; r.z = r.p.root.position.z; } else { r.p.root.getWorldPosition(head); r.x = head.x; r.z = head.z; }
+      }
       if (r.kind === 'driver' && !r.down) { const G = get('wagon') && get('wagon').rig; if (G) { r.x = G.pos.x; r.z = G.pos.z; } }
       // (drawn within TALK.show, but shown or hidden only while out of the camera's view: never popping in or out in sight)
       if (r.kind === 'own') { const want = d < TALK.show && (r !== naturalist || naturalist.placed); if (want !== r.p.root.visible && !inView(r.x, W.heightAt(r.x, r.z), r.z)) r.p.root.visible = want; }
@@ -407,7 +454,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
       const away = d > TALK.away && !(area && area.near) && !(r.id === 'driver' && d < TALK.hail);
       if (r.greet.update(dt, near, away)) { say(r, r.def.hello, { pin: !!(area && area.near), hello: true }); if (onTalk) onTalk('hello', r.id); }   // (over anybody else's: the newest one met is the one in front of you; arriving at the job from where the person is out of sight, in a card of its own)
       // idle about, turn to the player when close (the camps turn their own foremen; the driver only on the ground)
-      if (r.kind === 'own' || (r.kind === 'driver' && r.down)) {
+      if (r.kind === 'own' || r.kind === 'lent' || (r.kind === 'driver' && r.down)) {
         if (d < TALK.awake) {
           // (the naturalist walking after the player: facing the way she goes, the Walk clip on; naturalistWalk)
           if (!r.walking) {
@@ -416,7 +463,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
             if (r.clipT > 0 && (r.clipT -= dt) <= 0) r.p.play('Idle', { fade: 0.4 });
             else if (r.clipT <= 0 && (r.t -= dt) <= 0) { r.t = 6 + Math.random() * 9; r.p.play(Math.random() < 0.5 ? 'Idle_Neutral' : 'Idle', { fade: 0.6 }); }
           }
-          r.p.root.rotation.y = r.face;
+          r.p.root.rotation.y = r.face - (r.turn || 0);   // (a lent person in a turned frame: the frame's turn taken off)
           if (r.kind === 'own') { r.p.root.position.set(r.x, W.heightAt(r.x, r.z), r.z); r.p.update(dt); }
         }
       }
@@ -439,7 +486,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
         card.hidden = false;   // (shown before it is measured)
         if (d > far) { talking = null; card.hidden = true; }
         else if (d < TALK.thanksNear && (card.classList.remove('is-pinned'), place(r, card, 1))) { /* over the speaker's head */ }
-        else if (talking.pin) pinCard();
+        else if (talking.pin || talking.hello) pinCard();   // (a hello always shows: on a phone's narrow view the person met is often just off its edge)
         else card.hidden = true;   // (just out of view: back when the speaker is)
       }
     }
@@ -481,7 +528,14 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     head.project(camera);
     if (head.z > 1 || Math.abs(head.x) > 1.05 || Math.abs(head.y) > 1.05) return false;
     const x = (head.x + 1) / 2 * innerWidth, y = (1 - head.y) / 2 * innerHeight;
-    if (lift === 0) { el.style.left = `${x}px`; el.style.top = `${y}px`; return true; }
+    // (the tag kept on the screen with an 8 px gutter: a person at the edge of a phone's narrow view still shows whose
+    // tag it is. Its width is measured once, the first frame it is shown (its words never change), so placing the tags
+    // never makes the page lay itself out again every frame)
+    if (lift === 0) {
+      if (!el._half && !el.hidden) el._half = el.offsetWidth / 2;
+      const half = el._half || 0;
+      el.style.left = `${Math.max(8 + half, Math.min(innerWidth - 8 - half, x))}px`; el.style.top = `${y}px`; return true;
+    }
     // (the card above the tag, kept on the screen with a 12 px gutter; its tail points down at the speaker)
     el.style.left = '0px'; el.style.top = '0px';
     const w = el.offsetWidth, h = el.offsetHeight;

@@ -175,14 +175,14 @@ test('saves: animals, goods and the yard come back; old saves load fine; damaged
   // an old save without any of it loads, and gets the homestead only when asked
   const old = S.fixRider({ id: 'old1', name: 'Old', owned: { saddle: 'plain', horse: 'bay', dog: null } });
   assert.equal(old.owned.animals, undefined);
-  assert.deepEqual(G.animalsOf(old), []); assert.deepEqual(G.homestead(old).goods, { eggs: 0, wool: 0, milk: 0 });
+  assert.deepEqual(G.animalsOf(old), []); assert.deepEqual(G.homestead(old).goods, { eggs: 0, wool: 0, milk: 0, flour: 0 });
   // a hand-edited one: unknown kinds, too many, bad numbers
   const bad = S.fixRider({ id: 'bad1', name: 'Bad', owned: { animals: [{ kind: 'dragon', name: 'x' }, ...Array(9).fill(0).map(() => ({ kind: 'cow', name: 'Moo' })), 'junk', { kind: 'pig' }],
     goods: { eggs: -4, wool: 'lots', milk: 1e9 }, yard: { eggs: 2.5 } } });
   assert.equal(bad.owned.animals.filter((a) => a.kind === 'cow').length, G.ANIMALS.cow.most);
   assert.ok(!bad.owned.animals.some((a) => a.kind === 'dragon'));
   assert.ok(bad.owned.animals.find((a) => a.kind === 'pig').name.length > 0, 'a pig with no name gets one');
-  assert.deepEqual(bad.owned.goods, { eggs: 0, wool: 0, milk: G.GOODS.milk.bag });
+  assert.deepEqual(bad.owned.goods, { eggs: 0, wool: 0, milk: G.GOODS.milk.bag, flour: 0 });
   assert.equal(bad.owned.yard.eggs, 2.5);
   // the kinds unlocked and the jobs counted come back too
   const u = rich(); G.thankYou(u, 'pigsDone', () => 0.99); G.thankYou(u, 'flockDone', () => 0); S.saveRider(u);

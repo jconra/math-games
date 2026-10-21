@@ -4,6 +4,7 @@
 // boards; fall.js drops planks as it drops boards (the same { boards, drawnNow } a falling board is read from).
 import * as THREE from 'three';
 import { boardTexture } from '../windmill/wood.js';
+import { freeShapes, freeLater, shapeShelf } from '../windmill/tower3d.js';
 import { PLANK, DECK_LIFT } from './bridge.js';
 import { FT } from './scene.js';
 
@@ -14,19 +15,24 @@ export function makeDeckView(scene, strainColor) {
   const mats = [0, 1, 2].map((i) => new THREE.MeshLambertMaterial({ map: boardTexture(201 + i * 13, [176 - i * 8, 132 - i * 6, 86 - i * 4]) }));
   const boards = new Map();      // id -> { mesh, a, b (metres, at rest), z (its face's look: up), len, src, mat, falling }
   const lift = TOP + PLANK.t / 2 - DECK_LIFT;     // (how much higher a plank is drawn than its line)
+  // (the planks' shapes shared by length, as the boards' are: windmill/tower3d.js shapeShelf; laying the deck again
+  // after a test makes no new shapes)
+  const shelf = shapeShelf((len) => {
+    const g = new THREE.BoxGeometry(len * FT, PLANK.t * FT, PLANK.w * FT), uv = g.attributes.uv;
+    for (let k = 0; k < uv.count; k++) uv.setX(k, uv.getX(k) * len / 8);
+    return g;
+  });
   function rebuild(deck) {
-    for (const b of boards.values()) { group.remove(b.mesh); b.mesh.geometry.dispose(); if (b.tint) b.tint.dispose(); }
+    for (const b of boards.values()) { group.remove(b.mesh); if (b.tint) b.tint.dispose(); }
     boards.clear();
-    if (!deck) return;
-    deck.planks.forEach((p, i) => {
-      const g = new THREE.BoxGeometry(p.len * FT, PLANK.t * FT, PLANK.w * FT), uv = g.attributes.uv;
-      for (let k = 0; k < uv.count; k++) uv.setX(k, uv.getX(k) * p.len / 8);
-      const mesh = new THREE.Mesh(g, mats[i % 3]); mesh.castShadow = true; mesh.receiveShadow = true;
+    if (deck) deck.planks.forEach((p, i) => {
+      const mesh = new THREE.Mesh(shelf.get(p.len), mats[i % 3]); mesh.castShadow = true; mesh.receiveShadow = true;
       const a = new THREE.Vector3(p.a.X, p.a.Y + lift, p.a.Z).multiplyScalar(FT), b = new THREE.Vector3(p.b.X, p.b.Y + lift, p.b.Z).multiplyScalar(FT);
       pose(mesh, a, b); mesh.userData = { key: p.id, src: p, plank: true };
       group.add(mesh);
       boards.set(p.id, { mesh, a, b, z: new THREE.Vector3(0, 1, 0), len: p.len, src: p, mat: mesh.material, falling: false });
     });
+    shelf.keep(new Set([...boards.values()].map((b) => b.mesh.geometry)));
   }
   // a plank's box between two points (metres), its wide face up
   const tx = new THREE.Vector3(), ty = new THREE.Vector3(), tz = new THREE.Vector3(), tm = new THREE.Matrix4();
@@ -63,5 +69,7 @@ export function makeDeckView(scene, strainColor) {
     return [b.mesh.position.clone().sub(ux), b.mesh.position.clone().add(ux)];
   }
   // the deck's top at X (feet), at rest: where the loads walk (the bank's top past the edges)
-  return { group, boards, rebuild, setBend, setStrain, drawnNow, meshes: () => [...boards.values()].map((b) => b.mesh), lift };
+  // out of the scene, the planks' shapes and tints let go (the wood itself is kept for the next deck)
+  function dispose() { group.removeFromParent(); freeShapes(group, true); freeLater(shelf.clear()); for (const b of boards.values()) if (b.tint) b.tint.dispose(); boards.clear(); }   // (the shapes a few a frame: tower3d.js freeShapes)
+  return { group, boards, rebuild, setBend, setStrain, drawnNow, dispose, meshes: () => [...boards.values()].map((b) => b.mesh), lift };
 }

@@ -17,7 +17,10 @@
 //     fallen deck planks go back on the plank pile) or "Start fresh".
 //   * THE CARD'S OBJECT (for main.js and rigs): { title, story, advice, focusIds, rating, gold, sag, back, kindling }
 // hooks: { towerView, deckView, loads, fall, say(text, opts), gesture(name, ms), record(rating, S) -> { best, newBest },
-//   keep({ keep: Set of ids, back: [lengths], planksBack, kindling }), fresh(line), view(): the fall's view of boards }
+//   keep({ keep: Set of ids, back: [lengths], planksBack, kindling }), fresh(line), view(): the fall's view of boards,
+//   words(text) (optional: the ways named as the host's world has them), pay(rating) (optional: what the engineer
+//   pays: { gold, line, sub }; else frame.js LOADS gold), done(card) (optional: the card is up) }
+// C.dispose(): the worker let go (the builder put away)
 import { LOADS } from './frame.js';
 import { lenWords, lenLabel, spellUnits, placeWords, roleOf, PLANK, crossesMid, encodeBridge } from './bridge.js';
 import * as sound from '../windmill/sound.js';
@@ -263,11 +266,13 @@ export function makeCrossing(app, hooks) {
     loads.hide();
     const br = run.bridge, rating = run.rating, L = rating >= 0 ? LOADS[rating] : null;
     const { best, newBest } = hooks.record(rating, br.S);
-    const gold = L ? L.gold : 0;
+    const paid = hooks.pay ? hooks.pay(rating) : null;
+    const gold = paid ? paid.gold : L ? L.gold : 0;
+    const cw = hooks.words || ((s) => s);
     const crs = run.crossings.filter(Boolean), last = crs[crs.length - 1];
     const sag = L ? crs[rating].sag : 0;
     const told = adviceOf();
-    const story = spellUnits(storyOf()), advice = spellUnits(told.advice), focusIds = told.focus || [];
+    const story = cw(spellUnits(storyOf())), advice = cw(spellUnits(told.advice)), focusIds = told.focus || [];
     const all = rating === LOADS.length - 1;
     const anyFell = [...run.byId.keys()].some((id) => !run.up.has(id));
     const title = all ? 'She carried every load!' : L ? `She carried the ${L.short}!` : anyFell ? 'Down she came!' : last && last.blocked ? 'No room to cross!' : 'Nothing crossed.';
@@ -283,15 +288,16 @@ export function makeCrossing(app, hooks) {
     card.innerHTML = `<button class="fold" id="r-fold" aria-label="Fold the card down" title="Fold the card down"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
       <h2>${title}</h2><div class="ratings">${badges}</div><p class="sub" data-focus="${focusIds.join(' ')}">${story}</p>
       <div class="stat"><div><small>Carried</small><div class="big">${L ? lb(L.lb) : '0 lb'}</div></div><div><small>Gap</small><div class="big">${units(lenLabel(br.S))}</div></div><div><small>Sag</small><div class="big">${L ? units(sagLabel(sag)) : '–'}</div></div></div>
-      <div class="sacks">${COIN}<div><b>${gold ? `The engineer pays ${gold} gold` : 'No pay this time'}</b><br><small>${gold ? `for carrying the ${L.short}${newBest ? ': a new best!' : ''}` : 'Get a person across for the first pay'}</small></div></div>
+      <div class="sacks">${COIN}<div><b>${paid ? paid.line : gold ? `The engineer pays ${gold} gold` : 'No pay this time'}</b><br><small>${paid ? paid.sub : gold ? `for carrying the ${L.short}${newBest ? ': a new best!' : ''}` : 'Get a person across for the first pay'}</small></div></div>
       <p class="miller" data-focus="${focusIds.join(' ')}">"${advice}"</p>
       ${fellIds.length && run.up.size ? `<p class="pile-note">${pileNote(back.length, kindling, planksBack)}</p>` : ''}
-      <p class="copy-row"><button class="btn small" id="r-copy" title="Copies a code for this bridge, to send it to someone">Copy this bridge</button> <small id="r-copied"></small></p>
-      <div class="row">${!run.up.size ? '<button class="btn go" id="r-again">Try again</button>' : '<button class="btn" id="r-fresh">Start fresh</button><button class="btn go" id="r-keep">Keep building</button>'}</div>`;
+      <div class="foot"><p class="copy-row"><button class="btn small" id="r-copy" title="Copies a code for this bridge, to send it to someone">Copy this bridge</button> <small id="r-copied"></small></p>
+      <div class="row">${!run.up.size ? '<button class="btn go" id="r-again">Try again</button>' : '<button class="btn" id="r-fresh">Start fresh</button><button class="btn go" id="r-keep">Keep building</button>'}</div></div>`;
     card.hidden = false;
     const again = $('r-again'), keep = $('r-keep'), fresh = $('r-fresh');
     $('r-fold').onclick = () => { const f = card.classList.toggle('is-folded'); $('r-fold').setAttribute('aria-label', f ? 'Open the card' : 'Fold the card down'); };
-    const code = encodeBridge(br), link = (typeof location !== 'undefined' ? location.origin + location.pathname : '') + '?bridge=' + code;
+    // (the link opens the bridge lab with this bridge put up, wherever the builder is: the lab page or the game)
+    const code = encodeBridge(br), link = new URL('./index.html', import.meta.url).href + '?bridge=' + code;
     $('r-copy').onclick = async () => {
       let ok = false;
       try { await navigator.clipboard.writeText(link); ok = true; } catch (e) { /* (no clipboard here: shown to copy by hand) */ }
@@ -302,6 +308,8 @@ export function makeCrossing(app, hooks) {
     if (again) again.onclick = () => { card.hidden = true; end(); hooks.fresh(advice); };
     if (fresh) fresh.onclick = () => { card.hidden = true; end(); hooks.fresh('Fresh lumber\'s stacked by the bank.'); };
     if (keep) keep.onclick = () => { card.hidden = true; end(); hooks.keep({ keep: keepIds, back, planksBack, kindling }); };
+    run.after = run.up.size ? { keep: { keep: keepIds, back, planksBack, kindling } } : { fresh: true };
+    if (hooks.done) hooks.done(run.card);
   }
   const sagLabel = (ft) => { const inch = ft * 12; return inch < 0.1 ? 'under ⅛ in.' : inch < 1 ? `${(Math.round(inch * 8) / 8).toString().replace(/^0\./, '.')} in.`.replace('.125', '⅛').replace('.25', '¼').replace('.375', '⅜').replace('.5', '½').replace('.625', '⅝').replace('.75', '¾').replace('.875', '⅞') : lenLabel(ft); };
   const units = (txt) => txt.replace(/ ?(ft|in\.?)(?![a-z])/g, '<span class="u"> $1</span>');
@@ -426,7 +434,14 @@ export function makeCrossing(app, hooks) {
       breaks: run.log.filter((Lg) => Lg.ev).map((Lg) => ({ i: Lg.i, kind: Lg.ev.kind, broke: Lg.ev.broke, fell: Lg.ev.fell.length, call: Lg.words.call, x: Lg.x })),
       shown: [...run.up].slice(0, 300).map((id) => [id, +(run.disp.get(id)?.s ?? 0).toFixed(3)]), steps: cr ? cr.steps.length : 0 };
   }
-  return { start, frame, state, get running() { return !!run && !run.done; }, get card() { return (run && run.card) || null; }, get result() { return run ? { calm: run.calm, crossings: run.crossings, rating: run.rating } : null; } };
+  // the card's choice made without a tap (the builder put away with the card up): what its main button does, as plain
+  // data for the builder to carry out -> { keep: {...} } (what fell taken away) or { fresh: true }, or null (no card)
+  function settle() {
+    if (!run || !run.done || !run.after) return null;
+    const a = run.after; $('result').hidden = true; end(); return a;
+  }
+  function dispose() { run = null; current = null; try { if (worker) worker.terminate(); } catch (e) { /* gone */ } worker = null; }
+  return { start, frame, state, settle, dispose, get running() { return !!run && !run.done; }, get card() { return (run && run.card) || null; }, get result() { return run ? { calm: run.calm, crossings: run.crossings, rating: run.rating } : null; } };
 }
 
 const COIN = '<svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="12" fill="#f0c24a" stroke="#8a6414" stroke-width="2"/><circle cx="16" cy="16" r="8.5" fill="none" stroke="#b8891f" stroke-width="1.5"/><text x="16" y="20.5" text-anchor="middle" font-size="11" font-family="Smokum, Georgia, serif" fill="#7a5410">G</text></svg>';

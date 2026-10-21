@@ -7,6 +7,9 @@
 // boards that stay standing right away (the falling part tears free of them), the footings on the windward side (they
 // lift), the rest when they are stretched hard or when their board hits the ground. Dust puffs where things land.
 // Boards only hit the ground, not each other (simple and plenty for a fall).
+//   const F = makeFall(scene, { ground })   scene: where the puffs go (the boards stay the tower view's); ground(x, z):
+//     the ground's height in metres in that scene's frame (the hilltop's own by default: scene.js groundY)
+//   F.drop(...), F.update(dt, windDir), F.settled(), F.clear(), F.dispose() (the puffs out of the scene)
 import * as THREE from 'three';
 import { joints3 } from './touch.js';
 import { FT, groundY } from './scene.js';
@@ -14,7 +17,7 @@ import { softDot } from './wood.js';
 
 const G = 9.8;
 
-export function makeFall(scene) {
+export function makeFall(scene, { ground = groundY } = {}) {
   const sticks = [], pins = [];
   let time = 0, running = false, events = { pops: 0, hits: 0, bigHit: 0 };
   // dust puffs, reused
@@ -109,7 +112,7 @@ export function makeFall(scene) {
       }
       // the ground
       for (const st of sticks) for (let i = 0; i < 2; i++) {
-        const p = st.p[i], q = st.q[i], gy = groundY(p.x, p.z) + 0.03;
+        const p = st.p[i], q = st.q[i], gy = ground(p.x, p.z) + 0.03;
         if (p.y < gy) {
           const vy = (p.y - q.y) / dt;
           if (it === 0 && vy < -2.2) {
@@ -164,5 +167,6 @@ export function makeFall(scene) {
     for (const st of sticks) st.b.falling = false;
     sticks.length = 0; pins.length = 0; running = false; time = 0; lastDrop = 0;
   }
-  return { drop, update, settled, clear, get time() { return time; }, get sinceDrop() { return time - lastDrop; }, get running() { return running; }, sticks };
+  function dispose() { for (const P of puffs) { scene.remove(P.s); P.s.material.dispose(); } puffs.length = 0; }
+  return { drop, update, settled, clear, dispose, get time() { return time; }, get sinceDrop() { return time - lastDrop; }, get running() { return running; }, sticks };
 }

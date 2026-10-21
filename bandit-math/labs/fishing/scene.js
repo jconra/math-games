@@ -4,6 +4,8 @@
 // glinting, small waves always moving, rings spreading where the bobber lands or a fish splashes, see-through enough
 // to show a fish just under it and green-brown in the shallows. Metres, y up, the water at y = 0; the angler stands at
 // the end of the dock near the origin, facing -Z (out over the lake).
+// The lab page's own (makeLake). Shared with the game, which fishes off the same dock at its own lake
+// (src/fishingjob.js): makeDock (the dock and its things) and makeRipples (the rings on the water), below.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
@@ -129,7 +131,7 @@ export function makeLake({ low = false } = {}) {
   far.position.y = -40; scene.add(far);
 
   // ── the water ──────────────────────────────────────────────────────────────────────────────────────────────────────
-  const RINGS = 8, rings = Array.from({ length: RINGS }, () => new THREE.Vector4(0, 0, 0, 0));
+  const rings = Array.from({ length: RINGS }, () => new THREE.Vector4(0, 0, 0, 0));
   const waterU = { uTime: { value: 0 }, uSun: { value: sunDir }, uRing: { value: rings }, uFog: { value: FOG }, uFogNear: { value: 90 }, uFogFar: { value: 620 } };
   const water = new THREE.Mesh(new THREE.PlaneGeometry(1400, 1400, 1, 1).rotateX(-Math.PI / 2), new THREE.ShaderMaterial({
     transparent: true, uniforms: waterU,
@@ -168,22 +170,9 @@ export function makeLake({ low = false } = {}) {
       }`,
   }));
   water.renderOrder = 2; scene.add(water);
-  // rings drawn on top too (pale, soft), so a plop far off is easy to see
-  const ringTex = (() => {
-    const cv = document.createElement('canvas'); cv.width = cv.height = 128; const g = cv.getContext('2d');
-    const gr = g.createRadialGradient(64, 64, 40, 64, 64, 62); gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(0.55, 'rgba(255,255,255,0.9)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
-    g.fillStyle = gr; g.fillRect(0, 0, 128, 128); const t = new THREE.CanvasTexture(cv); return t;
-  })();
-  const ringMeshes = Array.from({ length: RINGS }, () => {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ map: ringTex, transparent: true, depthWrite: false, opacity: 0, fog: true }));
-    m.position.y = 0.02; m.renderOrder = 3; m.visible = false; scene.add(m); return m;
-  });
-  let ringNext = 0;
-  // a ring spreading from x, z (strength 0..1.5)
-  function ripple(x, z, strength = 1) {
-    const i = ringNext++ % RINGS; rings[i].set(x, z, 0, strength);
-    const m = ringMeshes[i]; m.position.x = x; m.position.z = z; m.visible = true; m.userData.s = strength;
-  }
+  // rings drawn on top too (pale, soft), so a plop far off is easy to see (makeRipples below: the game's lake has them)
+  const R = makeRipples(scene, { rings });
+  const ripple = R.ripple;
 
   // ── reeds and cattails in the shallows, swaying ────────────────────────────────────────────────────────────────────
   const reedGeo = (() => {
@@ -245,70 +234,9 @@ export function makeLake({ low = false } = {}) {
   padSpots.forEach(([x, z], i) => { e.set(0, rr() * 6.3, 0); q.setFromEuler(e); const s = 0.6 + rr() * 0.8; sv.set(s, 1, s); pv.set(x, 0.012 + (i % 6) * 0.004, z); m4.compose(pv, q, sv); pads.setMatrixAt(i, m4); pads.setColorAt(i, pc.setHSL(0.24 + rr() * 0.05, 0.45, 0.24 + rr() * 0.08)); });
   pads.receiveShadow = true; pads.renderOrder = 3; scene.add(pads);
 
-  // ── the dock: pilings, two beams, planks across, a wider platform at the end ───────────────────────────────────────
-  const dock = new THREE.Group(); scene.add(dock);
-  const postMat = new THREE.MeshLambertMaterial({ color: 0x5d4a38 });
-  const post = (x, z, top) => {
-    const bottom = groundY(x, z) - 0.3, h = top - bottom;
-    const m = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, h, 8), postMat); m.position.set(x, bottom + h / 2, z); m.castShadow = true; m.receiveShadow = true; dock.add(m);
-    // a dark wet band where the water laps it
-    const wet = new THREE.Mesh(new THREE.CylinderGeometry(0.125, 0.125, 0.3, 8), new THREE.MeshLambertMaterial({ color: 0x2f2a20 })); wet.position.set(x, 0.05, z); dock.add(wet);
-  };
-  for (let z = 2.4; z <= DOCK_LEN; z += 2.9) { post(-1.0, z, DECK - 0.05); post(1.0, z, DECK - 0.05); }
-  post(-1.86, -0.02, DECK + 0.42); post(1.86, -0.02, DECK + 0.42); post(-1.86, 2.4, DECK - 0.05); post(1.86, 2.4, DECK - 0.05); post(-0.2, -0.02, DECK - 0.05);
-  const beamMat = new THREE.MeshLambertMaterial({ color: 0x4f3d2c });
-  for (const x of [-0.9, 0.9]) { const b = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.2, DOCK_LEN + 0.5), beamMat); b.position.set(x, DECK - 0.15, DOCK_LEN / 2); b.castShadow = true; dock.add(b); }
-  for (const z of [0.05, 2.35]) { const b = new THREE.Mesh(new THREE.BoxGeometry(3.9, 0.2, 0.12), beamMat); b.position.set(0, DECK - 0.15, z); b.castShadow = true; dock.add(b); }
-  const plankTex = boardTexture(23, [150, 126, 98]); plankTex.repeat.set(1, 1);
-  const planks = [], pr = rng(9);
-  for (let z = -0.15; z < DOCK_LEN; z += 0.215) planks.push([z, z < 2.45 ? 3.9 : 2.2]);
-  const plankMesh = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 0.05, 0.195), new THREE.MeshLambertMaterial({ map: plankTex }), planks.length);
-  planks.forEach(([z, w], i) => { e.set((pr() - 0.5) * 0.01, (pr() - 0.5) * 0.015, (pr() - 0.5) * 0.008); q.setFromEuler(e); sv.set(w + (pr() - 0.5) * 0.06, 1, 1); pv.set((pr() - 0.5) * 0.04, DECK - 0.025 + (pr() - 0.5) * 0.008, z); m4.compose(pv, q, sv); plankMesh.setMatrixAt(i, m4); });
-  plankMesh.castShadow = true; plankMesh.receiveShadow = true; dock.add(plankMesh);
-
-  // the keeper-limit board on the left corner post, written on by the page (setSign)
-  const signCv = document.createElement('canvas'); signCv.width = 256; signCv.height = 160;
-  const signTex = new THREE.CanvasTexture(signCv); signTex.colorSpace = THREE.SRGBColorSpace;
-  const sign = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.4, 0.03), [postMat, postMat, postMat, postMat, new THREE.MeshLambertMaterial({ map: signTex }), postMat]);
-  sign.position.set(-1.86, DECK + 0.62, 0.08); sign.rotation.y = 0.35; sign.castShadow = true; dock.add(sign);
-  const signPost = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.3, 0.05), postMat); signPost.position.set(-1.86, DECK + 0.36, 0.03); dock.add(signPost);
-  function setSign(top, big) {
-    const g = signCv.getContext('2d');
-    g.fillStyle = '#2d3a2e'; g.fillRect(0, 0, 256, 160);                 // a slate in a wooden frame
-    g.strokeStyle = '#7a5a38'; g.lineWidth = 12; g.strokeRect(6, 6, 244, 148);
-    g.fillStyle = '#e9e4d4'; g.textAlign = 'center';
-    g.font = '700 26px Bitter, Georgia, serif'; g.fillText(top, 128, 52);
-    g.font = '700 46px Bitter, Georgia, serif'; g.fillText(big, 128, 114);
-    signTex.needsUpdate = true;
-  }
-  setSign('KEEPER LIMIT', '?');
-  // the creel (a wicker basket with a lid and a strap) and the bait can
-  const wickerTex = (() => {
-    const cv = document.createElement('canvas'); cv.width = cv.height = 64; const g = cv.getContext('2d');
-    g.fillStyle = '#a07a44'; g.fillRect(0, 0, 64, 64);
-    for (let y = 0; y < 64; y += 8) for (let x = 0; x < 64; x += 8) { g.fillStyle = ((x + y) / 8) % 2 ? '#c49a5a' : '#8a6634'; g.fillRect(x + 1, y + 1, 6, 6); }
-    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(4, 2); return t;
-  })();
-  const creel = new THREE.Group(); creel.position.set(-1.3, DECK, 1.5); creel.rotation.y = 0.5; dock.add(creel);
-  const basket = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.3, 0.26), new THREE.MeshLambertMaterial({ map: wickerTex })); basket.position.y = 0.15; basket.castShadow = true; creel.add(basket);
-  const lid = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.04, 0.28), new THREE.MeshLambertMaterial({ map: wickerTex, color: 0xd8c8a8 })); lid.position.y = 0.32; lid.castShadow = true; creel.add(lid);
-  const strap = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.012, 4, 16, Math.PI), new THREE.MeshLambertMaterial({ color: 0x4a3020 })); strap.position.y = 0.33; creel.add(strap);
-  // the bait can: an open tin standing a centimetre down into its plank (no face level with the plank's top), a rolled
-  // rim, the dirt well inside it (2.5 cm below the rim, so no two faces share a height) and two worms on the dirt
-  const tinMat = new THREE.MeshLambertMaterial({ color: 0xb4b0a6, side: THREE.DoubleSide });
-  const can = new THREE.Group(); can.position.set(1.0, DECK, 1.3); dock.add(can);
-  const wall = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.13, 18, 1, true), tinMat); wall.position.y = 0.055; wall.castShadow = true; can.add(wall);
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.004, 5, 24), tinMat); rim.rotation.x = Math.PI / 2; rim.position.y = 0.12; can.add(rim);
-  const dirt = new THREE.Mesh(new THREE.CircleGeometry(0.057, 18).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0x3a2a1a })); dirt.position.y = 0.095; can.add(dirt);
-  const wormMat = new THREE.MeshLambertMaterial({ color: 0xc07a72 });
-  for (const [x, z, a] of [[-0.015, 0.01, 0.4], [0.02, -0.015, 2.2]]) { const w = new THREE.Mesh(new THREE.TorusGeometry(0.018, 0.0035, 5, 10, Math.PI * 1.2), wormMat); w.rotation.set(Math.PI / 2, 0, a); w.position.set(x, 0.1, z); can.add(w); }
-  // the stringer's rope, from the corner post's top down into the water (the kept fish hang on it)
-  const ropeMat = new THREE.LineBasicMaterial({ color: 0x8a7a5a });
-  const rope = new THREE.Line(new THREE.BufferGeometry().setFromPoints([STRINGER.clone(), new THREE.Vector3(STRINGER.x + 0.15, -0.4, STRINGER.z - 0.25)]), ropeMat);
-  dock.add(rope);
-  dock.traverse((o) => { if (o.isMesh) o.receiveShadow = true; });
-  // (the can's open, two-sided tin would shadow itself all over: it takes no shadows, it only casts one)
-  can.traverse((o) => { if (o.isMesh) o.receiveShadow = false; });
+  // ── the dock (makeDock below: the game builds the same one at its lake) ───────────────────────────────────────────
+  const D = makeDock(scene, { groundY });
+  const { group: dock, setSign, creel } = D;
 
   // ── trees round the far shores (the game's own), darker forest behind them ─────────────────────────────────────────
   const tr = rng(61), treeSpots = [];
@@ -363,12 +291,148 @@ export function makeLake({ low = false } = {}) {
   // ── each frame ─────────────────────────────────────────────────────────────────────────────────────────────────────
   function update(dt) {
     swayU.uTime.value += dt; waterU.uTime.value += dt;
-    for (let i = 0; i < RINGS; i++) {
-      const r = rings[i]; if (r.w <= 0) continue;
-      r.z += dt; const m = ringMeshes[i], rad = 0.05 + r.z * 0.85;
-      m.scale.set(rad * 2.3, 1, rad * 2.3); m.material.opacity = Math.max(0, 0.5 * m.userData.s * Math.exp(-r.z * 1.3));
-      if (r.z > 4) { r.w = 0; m.visible = false; }
-    }
+    R.update(dt);
   }
-  return { scene, sun, sunDir, update, ripple, setSign, groundY, lakeSDF, isWater, treeLoad, cabinLoad, dock, creel, water };
+  return { scene, sun, sunDir, update, ripple, setSign, groundY, lakeSDF, isWater, treeLoad, cabinLoad, dock, creel, water, kit: D };
+}
+
+// ── THE RINGS on the water ──────────────────────────────────────────────────────────────────────────────────────────
+// Rings spreading where the bobber lands or a fish splashes: pale soft rings drawn just over the water (easy to see far
+// off), and (rings: the lake shader's own list, the lab) the same rings bending its waves. In the parent's frame, the
+// water at y = 0.  -> { ripple(x, z, strength 0..1.5), update(dt), dispose() }
+export const RINGS = 8;
+let ringTex = null;
+export function makeRipples(parent, { rings = null, y = 0.02 } = {}) {
+  if (!ringTex) {
+    const cv = document.createElement('canvas'); cv.width = cv.height = 128; const g = cv.getContext('2d');
+    const gr = g.createRadialGradient(64, 64, 40, 64, 64, 62); gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(0.55, 'rgba(255,255,255,0.9)'); gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 128, 128); ringTex = new THREE.CanvasTexture(cv);
+  }
+  const R = rings || Array.from({ length: RINGS }, () => new THREE.Vector4(0, 0, 0, 0));
+  const geo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+  const meshes = Array.from({ length: RINGS }, () => {
+    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ map: ringTex, transparent: true, depthWrite: false, opacity: 0, fog: true }));
+    m.position.y = y; m.renderOrder = 3; m.visible = false; parent.add(m); return m;
+  });
+  let next = 0;
+  return {
+    ripple(x, z, strength = 1) {
+      const i = next++ % RINGS; R[i].set(x, z, 0, strength);
+      const m = meshes[i]; m.position.x = x; m.position.z = z; m.visible = true; m.userData.s = strength;
+    },
+    update(dt) {
+      for (let i = 0; i < RINGS; i++) {
+        const r = R[i]; if (r.w <= 0) continue;
+        r.z += dt; const m = meshes[i], rad = 0.05 + r.z * 0.85;
+        m.scale.set(rad * 2.3, 1, rad * 2.3); m.material.opacity = Math.max(0, 0.5 * m.userData.s * Math.exp(-r.z * 1.3));
+        if (r.z > 4) { r.w = 0; m.visible = false; }
+      }
+    },
+    dispose() { for (const m of meshes) { m.removeFromParent(); m.material.dispose(); } geo.dispose(); },
+  };
+}
+
+// ── THE DOCK ────────────────────────────────────────────────────────────────────────────────────────────────────────
+// Pilings, two beams, planks across, a wider platform at the end, the keeper-limit sign on the left corner post, the
+// creel and the bait can on the planks, the stringer's rope from the right corner post into the water. In the parent's
+// frame: the end of the dock at z = 0, running back to the shore along +Z (len metres), the water at y = 0, the deck
+// `deck` metres over it. groundY(x, z): the bottom under a post (the lake bed, or the bank). step: a plank step down to
+// the ground at the shore end (a low bank). low: fewer shadows.
+// Cheap to draw: every plain-coloured part (posts, beams, the sign's back, the strap, the tin, the dirt, the worms) is
+// one material with its colours on the shapes, the planks one instanced mesh, the creel one textured material; so once
+// merged (the game: src/buildsite.js mergeStatic) the whole dock is five draws: plain, planks, wicker, the sign's face,
+// the rope.
+//   -> { group, deck, len, ANGLER (where the angler stands), STRINGER (the top of the post the kept fish hang from),
+//        setSign(top, big), creel, can, sign, footprint: [x0, z0, x1, z1] (in the parent's frame), dispose() }
+export function makeDock(parent, { deck = DECK, len = DOCK_LEN, groundY: bed = null, step = false, low = false } = {}) {
+  const dock = new THREE.Group(); dock.name = 'dock'; parent.add(dock);
+  const bottom = (x, z) => (bed ? bed(x, z) : -1.2);
+  const mats = [], geos = [];
+  const keep = (m) => { if (m.isMaterial) mats.push(m); else geos.push(m); return m; };
+  // one material for every plain-coloured part: its colour painted on the shape
+  const plain = keep(new THREE.MeshLambertMaterial({ vertexColors: true }));
+  const col = new THREE.Color();
+  const painted = (geo, hex) => { const g = keep(geo); col.set(hex); const n = g.attributes.position.count, c = new Float32Array(n * 3); for (let i = 0; i < n; i++) c.set([col.r, col.g, col.b], i * 3); g.setAttribute('color', new THREE.BufferAttribute(c, 3)); return g; };
+  const part = (geo, hex, at, holder = dock, cast = true) => { const m = new THREE.Mesh(painted(geo, hex), plain); m.position.copy(at); m.castShadow = cast; m.receiveShadow = true; holder.add(m); return m; };
+  const POST = 0x5d4a38, WET = 0x2f2a20, BEAM = 0x4f3d2c, V = (x, y, z) => new THREE.Vector3(x, y, z);
+  const post = (x, z, top) => {
+    const b = bottom(x, z) - 0.3, h = top - b;
+    part(new THREE.CylinderGeometry(0.1, 0.12, h, 8), POST, V(x, b + h / 2, z));
+    // a dark wet band where the water laps it (none on dry ground)
+    if (bottom(x, z) < 0.02) part(new THREE.CylinderGeometry(0.125, 0.125, 0.3, 8), WET, V(x, 0.05, z), dock, false);
+  };
+  for (let z = 2.4; z <= len; z += 2.9) { post(-1.0, z, deck - 0.05); post(1.0, z, deck - 0.05); }
+  const STR = new THREE.Vector3(1.86, deck + 0.42, -0.02);
+  post(-1.86, -0.02, deck + 0.42); post(1.86, -0.02, deck + 0.42); post(-1.86, 2.4, deck - 0.05); post(1.86, 2.4, deck - 0.05); post(-0.2, -0.02, deck - 0.05);
+  for (const x of [-0.9, 0.9]) part(new THREE.BoxGeometry(0.12, 0.2, len + 0.5), BEAM, V(x, deck - 0.15, len / 2));
+  for (const z of [0.05, 2.35]) part(new THREE.BoxGeometry(3.9, 0.2, 0.12), BEAM, V(0, deck - 0.15, z));
+  // the planks, one instanced mesh (the step's plank too)
+  const plankTex = boardTexture(23, [150, 126, 98]);   // (shared with the windmill's boards: never changed, never disposed here)
+  const planks = [], pr = rng(9);
+  for (let z = -0.15; z < len; z += 0.215) planks.push([z, z < 2.45 ? 3.9 : 2.2, deck - 0.025]);
+  // a step down at the shore end, onto the bank: a plank across two short posts
+  if (step) {
+    const g = bottom(0, len + 0.45), top = (deck + g) / 2;
+    planks.push([len + 0.4, 1.5, top - 0.025, 1.85]);
+    for (const x of [-0.6, 0.6]) { const h = Math.max(0.05, top - 0.05 - g + 0.15); part(new THREE.BoxGeometry(0.1, h, 0.1), BEAM, V(x, g - 0.15 + h / 2, len + 0.4)); }
+  }
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sv = new THREE.Vector3(), pv = new THREE.Vector3();
+  const plankMesh = new THREE.InstancedMesh(keep(new THREE.BoxGeometry(1, 0.05, 0.195)), keep(new THREE.MeshLambertMaterial({ map: plankTex })), planks.length);
+  planks.forEach(([z, w, y, d = 1], i) => { e.set((pr() - 0.5) * 0.01, (pr() - 0.5) * 0.015, (pr() - 0.5) * 0.008); q.setFromEuler(e); sv.set(w + (pr() - 0.5) * 0.06, 1, d); pv.set((pr() - 0.5) * 0.04, y + (pr() - 0.5) * 0.008, z); m4.compose(pv, q, sv); plankMesh.setMatrixAt(i, m4); });
+  plankMesh.castShadow = true; plankMesh.receiveShadow = true; dock.add(plankMesh);
+
+  // the keeper-limit board on the left corner post, written on by the page (setSign): its back and edges plain wood, its
+  // front a slate face just proud of it
+  const signCv = document.createElement('canvas'); signCv.width = 256; signCv.height = 160;
+  const signTex = new THREE.CanvasTexture(signCv); signTex.colorSpace = THREE.SRGBColorSpace;
+  const sign = new THREE.Group(); sign.position.set(-1.86, deck + 0.62, 0.08); sign.rotation.y = 0.35; dock.add(sign);
+  part(new THREE.BoxGeometry(0.62, 0.4, 0.03), POST, V(0, 0, 0), sign, !low);
+  const face = new THREE.Mesh(keep(new THREE.PlaneGeometry(0.62, 0.4)), keep(new THREE.MeshLambertMaterial({ map: signTex }))); face.position.z = 0.0155; face.receiveShadow = true; sign.add(face);
+  part(new THREE.BoxGeometry(0.06, 0.3, 0.05), POST, V(-1.86, deck + 0.36, 0.03), dock, false);
+  let signWas = '';
+  function setSign(top, big) {
+    if (signWas === top + '|' + big) return; signWas = top + '|' + big;
+    const g = signCv.getContext('2d');
+    g.fillStyle = '#2d3a2e'; g.fillRect(0, 0, 256, 160);                 // a slate in a wooden frame
+    g.strokeStyle = '#7a5a38'; g.lineWidth = 12; g.strokeRect(6, 6, 244, 148);
+    g.fillStyle = '#e9e4d4'; g.textAlign = 'center';
+    g.font = '700 26px Bitter, Georgia, serif'; g.fillText(top, 128, 52);
+    g.font = '700 46px Bitter, Georgia, serif'; g.fillText(big, 128, 114);
+    signTex.needsUpdate = true;
+  }
+  setSign('KEEPER LIMIT', '?');
+  // the creel (a wicker basket with a lid, one material: the lid paler, and a leather strap) and the bait can
+  const wickerTex = (() => {
+    const cv = document.createElement('canvas'); cv.width = cv.height = 64; const g = cv.getContext('2d');
+    g.fillStyle = '#a07a44'; g.fillRect(0, 0, 64, 64);
+    for (let y = 0; y < 64; y += 8) for (let x = 0; x < 64; x += 8) { g.fillStyle = ((x + y) / 8) % 2 ? '#c49a5a' : '#8a6634'; g.fillRect(x + 1, y + 1, 6, 6); }
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(4, 2); return t;
+  })();
+  const wicker = keep(new THREE.MeshLambertMaterial({ map: wickerTex, vertexColors: true }));
+  const creel = new THREE.Group(); creel.position.set(-1.3, deck, 1.5); creel.rotation.y = 0.5; dock.add(creel);
+  const basket = new THREE.Mesh(painted(new THREE.BoxGeometry(0.42, 0.3, 0.26), 0xffffff), wicker); basket.position.y = 0.15; basket.castShadow = !low; creel.add(basket);
+  const lid = new THREE.Mesh(painted(new THREE.BoxGeometry(0.44, 0.04, 0.28), 0xd8c8a8), wicker); lid.position.y = 0.32; lid.castShadow = !low; creel.add(lid);
+  part(new THREE.TorusGeometry(0.17, 0.012, 4, 16, Math.PI), 0x4a3020, V(0, 0.33, 0), creel, false);
+  // the bait can: an open tin standing a centimetre down into its plank (no face level with the plank's top), a rolled
+  // rim, the dirt well inside it (2.5 cm below the rim, so no two faces share a height) and two worms on the dirt. Its
+  // wall is two: the outside, and the inside facing in (so the open tin needs no two-sided material of its own)
+  const can = new THREE.Group(); can.position.set(1.0, deck, 1.3); dock.add(can);
+  part(new THREE.CylinderGeometry(0.06, 0.06, 0.13, 18, 1, true), 0xb4b0a6, V(0, 0.055, 0), can, !low);
+  const inner = new THREE.CylinderGeometry(0.0592, 0.0592, 0.13, 18, 1, true), ix = inner.index.array;
+  for (let i = 0; i < ix.length; i += 3) { const t = ix[i + 1]; ix[i + 1] = ix[i + 2]; ix[i + 2] = t; }
+  const nrm = inner.attributes.normal; for (let i = 0; i < nrm.count; i++) nrm.setXYZ(i, -nrm.getX(i), -nrm.getY(i), -nrm.getZ(i));
+  part(inner, 0x9c988e, V(0, 0.055, 0), can, false);
+  part(new THREE.TorusGeometry(0.06, 0.004, 5, 24).rotateX(Math.PI / 2), 0xb4b0a6, V(0, 0.12, 0), can, false);
+  part(new THREE.CircleGeometry(0.057, 18).rotateX(-Math.PI / 2), 0x3a2a1a, V(0, 0.095, 0), can, false);
+  for (const [x, z, a] of [[-0.015, 0.01, 0.4], [0.02, -0.015, 2.2]]) { const w = part(new THREE.TorusGeometry(0.018, 0.0035, 5, 10, Math.PI * 1.2), 0xc07a72, V(x, 0.1, z), can, false); w.rotation.set(Math.PI / 2, 0, a); }
+  // the stringer's rope, from the corner post's top down into the water (the kept fish hang on it)
+  const rope = new THREE.Line(keep(new THREE.BufferGeometry().setFromPoints([STR.clone(), new THREE.Vector3(STR.x + 0.15, -0.4, STR.z - 0.25)])), keep(new THREE.LineBasicMaterial({ color: 0x8a7a5a })));
+  dock.add(rope);
+  if (low) dock.traverse((o) => { if (o.isMesh && o !== plankMesh) o.castShadow = false; });
+  return {
+    group: dock, deck, len, setSign, creel, can, sign, rope,
+    ANGLER: new THREE.Vector3(0.25, deck, 0.75), STRINGER: STR,
+    footprint: [-2.05, -0.2, 2.05, len + (step ? 0.7 : 0.1)],
+    dispose() { dock.removeFromParent(); for (const m of mats) m.dispose(); for (const g of geos) g.dispose(); signTex.dispose(); wickerTex.dispose(); },
+  };
 }

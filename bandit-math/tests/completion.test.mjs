@@ -24,7 +24,7 @@ function everything() {
   r.owned = { ...r.owned, saddles: SADDLES.map((s) => s.id), saddle: 'silver', horses: HORSES.map((h) => h.id), hats: HATS.map((h) => h.id).filter((h) => h !== 'cowboy'),
     dogs: DOGS.map((d) => ({ kind: d.id, name: d.name })), animals: KINDS.map((k) => ({ kind: k, name: k })), cabin: SLOTS.map((s) => s.id), home: 'cabin' };
   r.topics.loot = { trips: 7 };
-  r.found = { place: CAMP_PLACES.map((c) => 'camp-' + c.id), keepsake: JOBS.map((j) => j.id) };
+  r.found = { place: [...CAMP_PLACES.map((c) => 'camp-' + c.id), 'bridge', 'fishing'], keepsake: JOBS.map((j) => j.id), windmill: WINDMILL_FEET };
   return r;
 }
 
@@ -123,24 +123,26 @@ test('100% only when every item is done; COMING entries are not counted until sw
   assert.equal(c.done, c.total);
   r.owned.hats = r.owned.hats.slice(1);
   assert.equal(completion(r).pct, 99, 'one item short is not 100');
-  // the windmill waits in COMING: not shown, not counted, named in "more to come"
-  assert.ok(!ids(completion(r)).includes('place:windmill'));
-  assert.ok(completion(r).coming.some((n) => /windmill/i.test(n)));
+  // a place still waiting in COMING (the bridge, the fishing hole, while they are): not shown, not counted, named in
+  // "more to come"
   assert.ok(!completion(r).coming.some((n) => /cabin/i.test(n)), 'the cabin is for sale now: never "to come"');
-  assert.ok(ids(completion(r, { all: true })).includes('place:windmill'));
-  const was = COMING.windmill;
-  try {
-    COMING.windmill = true;
-    const before = completion(r).total;
-    assert.ok(ids(completion(r)).includes('place:windmill'));
-    assert.equal(completion(r).items.find((i) => i.id === 'place:windmill').done, false);
-    assert.equal(setWindmill(r, 12), true);
-    assert.deepEqual(['have', 'need', 'done'].map((k) => completion(r).items.find((i) => i.id === 'place:windmill')[k]), [12, WINDMILL_FEET, false]);
-    assert.equal(setWindmill(r, 9), false, 'the tallest one is kept');
-    setWindmill(r, WINDMILL_FEET);
-    assert.equal(completion(r).items.find((i) => i.id === 'place:windmill').done, true, 'an 18 ft tower standing is done');
-    assert.equal(completion(r).total, before);
-  } finally { COMING.windmill = was; }
+  for (const k of ['bridge', 'fishing'].filter((k) => !COMING[k])) {
+    assert.ok(!ids(completion(r)).includes('place:' + k), k);
+    assert.ok(ids(completion(r, { all: true })).includes('place:' + k), k);
+  }
+  assert.equal(completion(r).coming.length, ['bridge', 'fishing'].filter((k) => !COMING[k]).length);
+  // the windmill is in the game (src/windmilljob.js): on the list, done at an 18 ft tower standing
+  assert.equal(COMING.windmill, true);
+  const w = newRider('Wyn'), wi = () => completion(w).items.find((i) => i.id === 'place:windmill');
+  const before = completion(w).total;
+  assert.ok(ids(completion(w)).includes('place:windmill'));
+  assert.equal(wi().done, false);
+  assert.equal(setWindmill(w, 12), true);
+  assert.deepEqual(['have', 'need', 'done'].map((k) => wi()[k]), [12, WINDMILL_FEET, false]);
+  assert.equal(setWindmill(w, 9), false, 'the tallest one is kept');
+  setWindmill(w, WINDMILL_FEET);
+  assert.equal(wi().done, true, 'an 18 ft tower standing is done');
+  assert.equal(completion(w).total, before);
 });
 
 test('goals: pin up to two, progress, reached ones make room, finished or unknown ones refused', () => {
@@ -239,4 +241,27 @@ test('a job a grown-up turned off leaves the list (what is done stays), so 100% 
   assert.equal(completion(e).pct, 100, JSON.stringify(completion(e).items.filter((i) => !i.done).map((i) => i.id)));
   // goals: only what's on the list can be pinned
   assert.equal(setGoal(r, 'buckle:targets:gold'), false);
+});
+
+test('every job has its own sign on its buckle, and every keepsake a spot in the cabin to be looked at', () => {
+  const hud = source('../src/ui/hud.js'), cabin = source('../src/cabin/cabin.js');
+  const signs = hud.slice(hud.indexOf('const SIGN = {'), hud.indexOf('const signAt'));
+  const look = cabin.slice(cabin.indexOf('const KEEP_LOOK = {'), cabin.indexOf('};', cabin.indexOf('const KEEP_LOOK = {')));
+  for (const j of JOBS) assert.match(signs, new RegExp(`\\n  ${j.id}: \\(f, ink\\)`), `a buckle sign for ${j.id} (else it shows the longhorn)`);
+  for (const id of Object.keys(KEEPSAKES)) assert.match(look, new RegExp(`\\b${id}: \\[`), `a look spot for the ${id} keepsake`);
+});
+
+test('the windmill, the bridge and fishing turned off: their places, buckles and keepsakes leave the list (what is done stays)', () => {
+  const r = newRider('Lu');
+  r.missions = { ...r.missions, windmill: false, bridge: false, fishing: false };
+  const have = new Set(ids(completion(r)));
+  for (const id of ['place:windmill', 'place:bridge', 'place:fishing', 'buckle:tower:tin', 'buckle:loads:gold', 'buckle:fish:tin', 'collect:keepsake:tower', 'collect:keepsake:loads', 'collect:keepsake:fish']) assert.ok(!have.has(id), id);
+  // a tower that stood and a bridge that carries the horse, built before the switches went off, stay checked off
+  r.found = { place: ['bridge'], windmill: 18 };
+  const d = completion(r), done = new Set(d.items.filter((i) => i.done).map((i) => i.id));
+  assert.ok(done.has('place:windmill') && done.has('place:bridge') && !ids(d).includes('place:fishing'));
+  // and the how-to lines say what to do for the tower's buckle and where its keepsake waits
+  const all = completion(newRider('Mo'), { all: true }).items;
+  assert.match(all.find((i) => i.id === 'buckle:tower:tin').how, /miller/);
+  assert.match(all.find((i) => i.id === 'collect:keepsake:tower').how, /windowsill/);
 });

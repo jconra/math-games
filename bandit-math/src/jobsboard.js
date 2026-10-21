@@ -47,6 +47,9 @@ export const BOARD_JOBS = [
   { id: 'deer', name: 'Deer photos', pic: 'deer', what: "Take the deer's pictures for Miss Wren" },
   { id: 'range', name: 'Bottle range', pic: 'bottles', what: "Shoot bottles at Miss Opal's range" },
   { id: 'loot', name: 'Loot the gang', pic: 'chest', what: 'Bring back what the gang stole', saddle: true },
+  { id: 'windmill', name: 'The windmill', pic: 'windmill', what: "Build the miller's tower to stand in the wind" },   // (src/windmilljob.js: where it is from J.where())
+  { id: 'bridge', name: 'The bridge', pic: 'bridge', what: "Build the engineer's bridge over the west river" },   // (src/bridgejob.js: where it is from J.where())
+  { id: 'fishing', name: 'Fishing', pic: 'fish', what: 'Catch fish off the dock by the lake, sell them at the store' },   // (src/fishingjob.js: where it is from J.where())
   { id: 'boxes', name: 'Lock boxes', pic: 'lock', what: "Crack the sheriff's seized boxes" },
 ];
 
@@ -168,6 +171,50 @@ export function drawPic(ctx, kind, x, y, size) {
       c.save(); c.translate(78, 30); fill('#e2b33c', () => { for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + k * Math.PI / 5, r = k % 2 ? 7 : 16; k ? c.lineTo(Math.cos(a) * r, Math.sin(a) * r) : c.moveTo(Math.cos(a) * r, Math.sin(a) * r); } c.closePath(); }); c.restore();
       break;
     }
+    case 'bridge': {   // a wooden truss bridge over a river between two banks, a covered wagon's wheel on the deck
+      fill('#9cc06a', () => { c.moveTo(2, 64); c.lineTo(22, 64); c.lineTo(28, 94); c.lineTo(2, 94); c.closePath(); });
+      fill('#9cc06a', () => { c.moveTo(98, 64); c.lineTo(78, 64); c.lineTo(72, 94); c.lineTo(98, 94); c.closePath(); });
+      fill('#5f9fb0', () => { c.moveTo(28, 94); c.quadraticCurveTo(50, 84, 72, 94); c.closePath(); });
+      line([[33, 89], [44, 87]], 2, '#d9eef0'); line([[54, 89], [66, 88]], 2, '#d9eef0');
+      fill('#8d877c', rect(14, 60, 12, 10, 1)); fill('#8d877c', rect(74, 60, 12, 10, 1));
+      const wd = '#8a5532';
+      line([[16, 60], [84, 60]], 5, wd); line([[28, 38], [72, 38]], 4.4, wd);
+      line([[16, 60], [28, 38]], 4, wd); line([[84, 60], [72, 38]], 4, wd);
+      for (const x of [39, 50, 61]) line([[x, 60], [x, 38]], 3, wd);
+      line([[28, 38], [39, 60]], 2.6, '#a06a3c'); line([[39, 38], [50, 60]], 2.6, '#a06a3c'); line([[72, 38], [61, 60]], 2.6, '#a06a3c'); line([[61, 38], [50, 60]], 2.6, '#a06a3c');
+      fill('#c9a46a', rect(14, 56, 72, 4, 1));
+      break;
+    }
+    case 'windmill': {   // a wooden windmill tower on a hill, its four sails turning, a flour sack at its foot
+      fill('#9cc06a', () => { c.moveTo(4, 92); c.quadraticCurveTo(50, 70, 96, 92); c.closePath(); });
+      for (const [x0, x1] of [[34, 44], [66, 56]]) line([[x0, 86], [x1, 34]], 5, '#8a5532');
+      line([[38, 66], [62, 66]], 3.6, '#8a5532'); line([[36, 78], [64, 78]], 3.6, '#8a5532'); line([[36, 78], [60, 48]], 3, '#a06a3c');
+      line([[42, 48], [58, 48]], 3.6, '#8a5532');
+      fill('#6e4a2c', rect(41, 24, 18, 12, 2)); fill('#5a3a22', () => { c.moveTo(38, 25); c.lineTo(50, 15); c.lineTo(62, 25); c.closePath(); });
+      for (let k = 0; k < 4; k++) {
+        c.save(); c.translate(50, 30); c.rotate(0.35 + k * Math.PI / 2);
+        line([[0, 0], [0, -27]], 2.6, '#5a3a22');
+        fill('#f2ead6', () => { c.moveTo(1.5, -7); c.lineTo(9, -8); c.lineTo(9, -26); c.lineTo(1.5, -27); c.closePath(); });
+        c.restore();
+      }
+      dot(50, 30, 3.2);
+      fill('#efe5cc', () => { c.moveTo(74, 88); c.quadraticCurveTo(70, 74, 76, 68); c.lineTo(86, 68); c.quadraticCurveTo(92, 74, 88, 88); c.closePath(); });
+      line([[75, 71], [87, 71]], 2);
+      break;
+    }
+    case 'fish': {   // a fish leaping from the water on a line, a bobber floating, the end of a dock
+      fill('#5f9fb0', () => { c.moveTo(2, 76); c.quadraticCurveTo(50, 70, 98, 76); c.lineTo(98, 96); c.lineTo(2, 96); c.closePath(); });
+      line([[10, 82], [26, 81]], 2, '#d9eef0'); line([[58, 86], [74, 85]], 2, '#d9eef0');
+      fill('#8a5532', rect(70, 66, 30, 6, 1)); for (const x of [74, 94]) line([[x, 72], [x, 94]], 4, '#6a4428');
+      line([[96, 66], [60, 8]], 3, '#8a5a32');                                   // the rod, from the dock
+      line([[60, 8], [36, 34]], 1.2, '#efe9d6');                                 // the line down to the fish
+      c.save(); c.translate(38, 46); c.rotate(-0.55);
+      fill('#7d9a54', () => { c.moveTo(-22, 0); c.quadraticCurveTo(-6, -14, 14, -6); c.lineTo(24, -14); c.lineTo(22, 0); c.lineTo(24, 14); c.lineTo(14, 6); c.quadraticCurveTo(-6, 14, -22, 0); });
+      line([[-10, -2], [8, -3]], 2, '#4e6a33'); dot(-14, -2, 2.2); c.restore();
+      fill('#d8321e', ell(22, 74, 5, 4)); fill('#f2efe6', ell(22, 77, 5, 2.4));
+      for (const [x, y] of [[30, 66], [44, 70], [24, 62]]) dot(x, y, 1.6, '#d9eef0');
+      break;
+    }
     case 'saddle': {   // a small saddle (the "needs a saddle" badge)
       fill('#8a5532', () => { c.moveTo(14, 52); c.quadraticCurveTo(30, 34, 50, 44); c.quadraticCurveTo(70, 34, 86, 42); c.quadraticCurveTo(80, 60, 50, 62); c.quadraticCurveTo(22, 64, 14, 52); });
       fill('#6a3e22', ell(76, 36, 5, 7, 0.4)); line([[50, 60], [50, 80]], 3); fill('#7a7672', rect(44, 78, 12, 6, 2));
@@ -240,7 +287,8 @@ export function makeJobsBoard({ W, camera, I = null, hud = null, rider = null, p
   // lock boxes always
   const on = { roundup: () => !!get('roundup'), sheep: () => !!get('sheep'), pigs: () => !!get('pigs'), store: () => !!get('store'), delivery: () => !!get('delivery'),
     wagon: () => !!get('wagon'), deer: () => !!get('deer'), range: () => !!get('range'), loot: () => !!get('loot'), boxes: () => true };
-  const list = BOARD_JOBS.filter((j) => on[j.id]());
+  // (a job with no line here, a builders' job: on while main.js hands the board the job, as `jobs[id]`)
+  const list = BOARD_JOBS.filter((j) => (on[j.id] ? on[j.id]() : !!get(j.id)));
   const B = boardSpot(W), c = Math.cos(B.rot), s = Math.sin(B.rot);
   const at = (lx, lz) => ({ x: B.x + c * lx + s * lz, z: B.z - s * lx + c * lz });   // (the board's own frame: x along it, z out of its face)
   const yL = at(-1.75, 0), yR = at(1.75, 0), y0 = Math.min(W.heightAt(yL.x, yL.z), W.heightAt(yR.x, yR.z));   // (the lower post's foot: the other sinks a little)
@@ -336,7 +384,8 @@ export function makeJobsBoard({ W, camera, I = null, hud = null, rider = null, p
         if (LJ.phase === 'carrying') return first(LJ.marks());
         return (LJ.nearestLoot && pos && LJ.nearestLoot(pos)) || first(LJ.marks());
       }
-      default: return null;
+      // (a job that says where it is itself: J.where() -> { x, z, hide? } (the builders' jobs: src/windmilljob.js))
+      default: { const J = get(id); return J && typeof J.where === 'function' ? J.where() : null; }
     }
   }
 

@@ -9,7 +9,7 @@ import { JOB_FOLK, FOLK_BY_ID, FOREMAN_HELLO, TALK, sayMs, standSpot, makeGreete
 
 test('a person at every outdoor job, the sheriff and the stable keeper, each with a name, a role and a look', () => {
   const jobs = JOB_FOLK.map((f) => f.job).sort();
-  assert.deepEqual(jobs, ['boxes', 'deer', 'loot', 'pigs', 'roundup', 'sheep', 'stable', 'wagon'].sort());
+  assert.deepEqual(jobs, ['boxes', 'bridge', 'deer', 'fishing', 'loot', 'pigs', 'roundup', 'sheep', 'stable', 'wagon', 'windmill'].sort());
   assert.deepEqual(JOB_FOLK.filter((f) => f.law).map((f) => f.id).sort(), ['deputy', 'sheriff'], 'the lawmen wear the star and the gun');
   assert.equal(new Set(JOB_FOLK.map((f) => f.id)).size, JOB_FOLK.length, 'ids are different');
   assert.equal(new Set(JOB_FOLK.map((f) => f.name)).size, JOB_FOLK.length, 'names are different');
@@ -21,7 +21,8 @@ test('a person at every outdoor job, the sheriff and the stable keeper, each wit
 });
 
 test('the hello is two short lines: the problem, then what to do', () => {
-  for (const f of [...JOB_FOLK, ...Object.entries(FOREMAN_HELLO).map(([id, hello]) => ({ id, hello }))]) {
+  for (const f of [...JOB_FOLK, ...Object.entries(FOREMAN_HELLO).map(([id, hello]) => ({ id, hello })), ...Object.entries(FOLK_BY_ID.miller.hellos).map(([k, hello]) => ({ id: 'miller:' + k, hello })),
+    ...Object.entries(FOLK_BY_ID.engineer.hellos).map(([k, hello]) => ({ id: 'engineer:' + k, hello }))]) {
     assert.equal(f.hello.length, 2, f.id);
     for (const l of f.hello) {
       assert.ok(l.length >= 20 && l.length <= 120, `${f.id}: "${l}" is short (${l.length})`);
