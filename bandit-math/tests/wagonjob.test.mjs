@@ -117,7 +117,7 @@ test('the job module wires the plan, the riders and the music together', () => {
 });
 
 // ── the trip (A to B), the open road and the hold-ups on the long roads ──────────────────────────────────────────
-import { TRIP, tripLeft, makeOpenRoad, AMBUSH, gangSize, cardCount, outOnRoad, ambushPick } from '../src/missions/wagonplan.js';
+import { TRIP, tripLeft, makeOpenRoad, AMBUSH, gangSize, outOnRoad, ambushPick } from '../src/missions/wagonplan.js';
 
 test('a trip runs from one end of the loop to the other, never shorter than its least', () => {
   const L = road.length;
@@ -178,12 +178,11 @@ test('a hold-up only out on the long roads, on a travelling wagon near enough to
   assert.equal(ambushPick([a, b], { square }), b);
 });
 
-test('a hold-up asks 3 to 5 questions: the bunch and the cards', () => {
+test('a hold-up asks 3 to 5 questions: the bunch', () => {
   for (const r of [0, 0.3, 0.6, 0.99]) {
     const n = gangSize(() => r), goods = Math.round(n / 2);   // (the times trainer: about half the bunch is the gang)
     assert.ok(n >= AMBUSH.riders[0] && n <= AMBUSH.riders[1], `${n}`);
     assert.ok(goods >= 3 && goods <= 5, `${n} riders: ${goods} bandits`);
-    const c = cardCount(() => r); assert.ok(c >= 3 && c <= 5, `${c} cards`);
   }
   assert.ok(AMBUSH.most >= 3 && AMBUSH.most <= 5);
   // the driver's shout, and a place for a recorded one

@@ -16,7 +16,8 @@
 //   ?dev                      shortcut buttons: +100 gold, jump to each place, start the round-up, a lock box, a saddle, a dog
 //   ?perf                     frames a second, draw calls and the tier, top right
 // For rigs: window.BM = { world, player, rider, state, dev: { gold(n), goto(place), mission(name), lockbox(), tier,
-//   skill(strand, pct, { placed }), skills(), ... }, skills (the src/math/skill.js module), feedback (src/feedback.js),
+//   skill(strand, pct, { placed }), skills(), level(place, id, { placed }), levels(), ... }, skills (the src/math/skill.js
+//   module), levels (src/levels/model.js), facts (src/math/facts.js), feedback (src/feedback.js),
 //   roundup, hud, shops, title, input, camera, renderer, fps(s), frameMs(n), screenOf(steer or object), checklist, ready }
 import * as THREE from 'three';
 import { FB } from './feedback.js';
@@ -32,7 +33,10 @@ import { makeDog, dogKind } from './dog.js';
 import { townLife, townLifeNow, preloadChickens } from './townlife.js';
 import { showTitle, faceSVG } from './ui/title.js';
 import { openStats } from './ui/stats.js';
+import { openLevels, placeOfJob } from './ui/levels.js';
 import { makeHud } from './ui/hud.js';
+import { makeTools } from './ui/tools.js';
+import { sumFrom } from './math/longwork.js';
 import { makeRoundup } from './missions/roundup.js';
 import { makeFarm } from './farm.js';
 import { makeSheepJob } from './missions/sheep.js';
@@ -65,6 +69,8 @@ import { sayLine, talking, hush as hushVoice } from './audio/sayline.js';
 import { openLockbox, TIER_NAME } from './lockbox/index.js';
 import { loadRiders, saveRider, earn, recordLockbox, titleOf, nextTitle, badgesOf, cleanBoxes, BOX_TIERS, jobOn, readMode, nextReadMode, readModeWords } from './save.js';
 import * as SKILLS from './math/skill.js';
+import * as LEVELS from './levels/model.js';
+import * as FACTS from './math/facts.js';
 import { makeChecklist, openWhatsLeft } from './ui/completion.js';
 import { makeBuildSites } from './buildsite.js';
 import { makeWindmillJob } from './windmilljob.js';
@@ -105,6 +111,17 @@ const hud = makeHud($('hud-root'), {
 // "Confusing?" on the field jobs' question card (the round-up, the farm jobs, the wagon's gang): only while a question
 // is up there (not on a travel card, nor on "Wave done!")
 flagCard(hud.ruleEl, () => fieldQuestion(), { show: () => !hud.ruleEl.hidden && !/\bis-(travel|job)\b/.test(hud.ruleEl.className) && !!askingJob() && askingJob() !== 'panel' });
+// THE TOOLS (src/ui/tools.js): one button by Menu, from any job: Work it out (the question's sum in columns: the store's
+// and the deliveries' own order sum, else the sum on the job's card) and the times chart (the rider's facts, green and
+// red). The game waits while one is open.
+const workJob = () => (SJ && SJ.active ? 'store' : DL && DL.active ? 'delivery' : askingJob());
+const TOOLS = makeTools({ hud, rider: () => rider,
+  sum: () => { const j = workJob(); if (j === 'store') return SJ.workSum(); if (j === 'delivery') return DL.workSum(); if (!j || j === 'panel' || j === 'build') return null; return sumFrom(fieldQuestion().text); },
+  own: () => { if (SJ && SJ.active) { SJ.openLong(); return true; } if (DL && DL.active) { DL.openLong(); return true; } return false; },
+  canOpen: () => state === 'play' && !boxOpen && [...pausedBy].every((w) => w === 'tools'),
+  speak: (text) => { if (rider && SKILLS.readAloud(rider)) sayLine(text); },
+  onOpen: () => pause('tools'), onClose: () => resume('tools') });
+BM.tools = TOOLS;
 
 // ── LOADING: the world, the people and the cattle, all at once ─────────────────────────────────────────────────────
 let W = null, folk = null, animals = null, I = null;
@@ -760,9 +777,12 @@ function tellReport() {
   return { levels, place: placeNow(), job: theJob || jobNow(), tier: W ? W.tier : quality.tier, fps: Math.round(fpsNow), device: deviceType(), w: innerWidth, h: innerHeight, spot: spotNote() };
 }
 
+// the levels page reads a place's name and line out when its tab is picked, for a rider who is read to
+const levelsSpeak = (text) => { if (rider && SKILLS.readAloud(rider)) sayLine(text); };
 // ── THE MENU (Esc) ───────────────────────────────────────────────────────────────────────────────────────────────
 function openMenu() {
   if (state !== 'play' || menu || boxOpen || (shops && shops.isOpen) || (BS && BS.active)) return;   // (a builder's own Esc puts it away)
+  let jobWas = null; try { jobWas = placeOfJob(jobNow()); } catch (e) { /* */ }   // (the levels page opens on the job being played)
   pause('menu');
   const boxes = (rider.lockboxes || []).length;
   const body = document.createElement('div');
@@ -771,7 +791,8 @@ function openMenu() {
       ${boxes ? `<button type="button" data-do="box">Open a lock box<small>${boxes} in your saddlebags</small></button>` : ''}
       ${prints(rider).length ? `<button type="button" data-do="album">Photo album<small>${prints(rider).length} deer photographs</small></button>` : ''}
       <button type="button" data-do="left">What's left<small>${leftWords()}</small></button>
-      <button type="button" data-do="stats">Your stats<small>Each kind of math, and how it's going</small></button>
+      <button type="button" data-do="levels">Levels<small>Each place's levels, and where you are</small></button>
+      <button type="button" data-do="stats">Your stats<small>Each place and kind of math, and how it's going</small></button>
       ${WJ && WJ.on ? '<button type="button" data-do="wagon">Let the wagon wait<small>Stop riding along for now</small></button>' : ''}
       <button type="button" data-do="read" aria-pressed="${readMode(rider) !== false}">${readWords()}</button>
       <button type="button" data-do="home">Go back to town<small>Straight to the town square</small></button>
@@ -814,7 +835,8 @@ function openMenu() {
     if (what === 'title') then = () => endRide();
     if (what === 'box') then = () => { const bx = rider.lockboxes[0]; if (bx) openBox({ tier: bx.tier, from: 'loot' }, { own: true }); };
     if (what === 'left') then = () => { pause('left'); openWhatsLeft(document.body, rider, { onClose: () => resume('left') }); };
-    if (what === 'stats') then = () => { pause('stats'); openStats(document.body, rider, { face: faceSVG(rider.look), onClose: () => resume('stats') }); };
+    if (what === 'stats') then = () => { pause('stats'); openStats(document.body, rider, { face: faceSVG(rider.look), speak: levelsSpeak, onClose: () => resume('stats') }); };
+    if (what === 'levels') then = () => { pause('levels'); openLevels(document.body, rider, { place: jobWas, speak: levelsSpeak, onClose: () => resume('levels') }); };
     if (what === 'album') then = () => { pause('album'); makePanel({ title: 'Photo album', sub: rider.name, body: albumBody(rider), wide: true, onClose: () => resume('album') }); };
     menu.close();
   });
@@ -971,8 +993,9 @@ function step(dt) {
     if (D) D.update(dt);
     if (cabin) cabin.town(dt);
     // (the wagon's gang took the shared times trainer's wave: back at the herd, the round-up deals its own afresh, but
-    // never while the gang's wave is still open beside the wagon, or the two jobs take the trainer from each other)
-    if (WJ && WJ.tookTrainer && RU.near && !(WJ.near && WJ.wave && !WJ.wave.done)) { WJ.tookTrainer = false; RU.newWave(); }
+    // never while the gang's wave is still open beside the wagon, or the two jobs take the trainer from each other; only
+    // a herd uses the trainer: a series card wave carries on)
+    if (WJ && WJ.tookTrainer && RU.near && !(WJ.near && WJ.wave && !WJ.wave.done)) { WJ.tookTrainer = false; if (!RU.wave || RU.wave.topic === 'times') RU.newWave(); }
     RU.update(dt);
     if (farm) farm.update(dt, P.position);
     if (HS) HS.update(dt, P.position);   // (the farm animals behind the cabin; their goods are laid up over play time)
@@ -1099,6 +1122,10 @@ dev.lootLoad = () => !!(LJ && LJ.dev.load());   // (straight to the cache with t
 // there), and read the rider's strands back (the stats page's rows)
 dev.skill = (strand, pct, { placed = true } = {}) => { if (!rider) return null; SKILLS.setLevel(rider, strand, pct, { placed }); saveRider(rider); return SKILLS.levelOf(rider, strand); };
 dev.skills = () => (rider ? SKILLS.stats(rider) : []);
+// the levels (src/levels/model.js): put the rider on a place's level (placed, or placed: false to run its placement
+// from there), and read every place's level back
+dev.level = (place, id, { placed = true, into = 0 } = {}) => { if (!rider) return null; LEVELS.setLevelAt(rider, place, id, { placed, into }); saveRider(rider); return LEVELS.levelFor(rider, place); };
+dev.levels = () => (rider ? LEVELS.placeStats(rider) : []);
 if (DEV) {
   const bar = document.createElement('div');
   bar.style.cssText = 'position:fixed;left:12px;top:50%;transform:translateY(-50%);z-index:26;display:flex;flex-direction:column;gap:4px;max-height:70vh;overflow:auto';
@@ -1155,6 +1182,7 @@ Object.defineProperties(BM, { checklist: { get: () => CM } });   // (the checkli
 Object.defineProperties(BM, { camps: { get: () => camps }, delivery: { get: () => DL }, homestead: { get: () => HS }, loot: { get: () => LJ } });   // (the camps and their deliveries; DL.rob() is the bandits' hook)
 Object.assign(BM, {
   dev, hud, title: T, camera, renderer, screenOf, prices: PRICES, loading, skills: SKILLS,
+  levels: LEVELS, facts: FACTS,   // (src/levels/model.js: each place's ladder and the rider's level there; src/math/facts.js: the times facts)
   feedback: FB,   // (src/feedback.js: FB.state() says the device id, the switch and what was sent)
   fps: (seconds = 3) => new Promise((res) => { let n = 0; const a = performance.now(); const f = () => { n++; if (performance.now() - a < seconds * 1000) requestAnimationFrame(f); else res(n * 1000 / (performance.now() - a)); }; requestAnimationFrame(f); }),
   // a frame's real cost, not held to the screen's refresh: n frames drawn back to back, each waited for

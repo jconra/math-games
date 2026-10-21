@@ -17,11 +17,11 @@ function* everyOrder(per = 60) {
 }
 
 test('the worked example works out: 6 hands x 3 meals x a fortnight = 252 cans, crates of 12 -> 21; 250 cans still need 21', () => {
-  // (found among the step-3 orders: a fortnight, exact crates)
+  // (found among the step-4 orders: a fortnight, exact crates)
   let found = null;
   const r = seeded(7);
   for (let i = 0; i < 5000 && !found; i++) {
-    const o = makeSupplyOrder({ rand: r, step: 3, vocab: {} });
+    const o = makeSupplyOrder({ rand: r, step: 4, vocab: {} });
     if (o.goods === 'beans' && o.hands === 6 && o.rate === 3 && o.days === 14 && o.per === 12) found = o;
   }
   assert.ok(found, 'the example comes up');
@@ -53,13 +53,15 @@ test('every order: the numbers add up, one right coin a step, wrong coins never 
   }
 });
 
-test('the ladder: two numbers, then three, then a week and a fortnight, then rounding up, then the cost', () => {
+test('the ladder: two numbers, then three, then a week, then a fortnight, then rounding up, then the cost', () => {
   const kinds = (step) => { const r = seeded(100 + step); const o = makeSupplyOrder({ rand: r, step, vocab: ALL_NEW }); return o; };
   assert.equal(kinds(1).rate, 1);
   assert.ok(kinds(2).rate >= 2);
-  const r3 = seeded(33); for (let i = 0; i < 50; i++) { const o = makeSupplyOrder({ rand: r3, step: 3, vocab: ALL_NEW }); assert.ok(o.exact); assert.ok(o.period.word !== 'days'); assert.equal(o.parts[0].key, 'vocab'); }
-  const r4 = seeded(44); for (let i = 0; i < 50; i++) { const o = makeSupplyOrder({ rand: r4, step: 4, vocab: {} }); assert.ok(!o.exact, 'step 4 rounds up'); assert.ok(o.parts.every((p) => p.key !== 'cost')); }
-  const r5 = seeded(55); for (let i = 0; i < 50; i++) { const o = makeSupplyOrder({ rand: r5, step: 5, vocab: {} }); assert.equal(o.parts[o.parts.length - 1].key, 'cost'); }
+  // (a week on its own first, its numbers small; then a fortnight, also on its own: one new word a step)
+  const r3 = seeded(33); for (let i = 0; i < 50; i++) { const o = makeSupplyOrder({ rand: r3, step: 3, vocab: ALL_NEW }); assert.ok(o.exact); assert.equal(o.period.word, 'week'); assert.equal(o.parts[0].key, 'vocab'); }
+  const r3b = seeded(34); for (let i = 0; i < 50; i++) { const o = makeSupplyOrder({ rand: r3b, step: 4, vocab: ALL_NEW }); assert.ok(o.exact); assert.equal(o.period.word, 'fortnight'); assert.equal(o.parts[0].key, 'vocab'); }
+  const r4 = seeded(44); for (let i = 0; i < 50; i++) { const o = makeSupplyOrder({ rand: r4, step: 5, vocab: {} }); assert.ok(!o.exact, 'step 5 rounds up'); assert.ok(o.parts.every((p) => p.key !== 'cost')); }
+  const r5 = seeded(55); for (let i = 0; i < 50; i++) { const o = makeSupplyOrder({ rand: r5, step: 6, vocab: {} }); assert.equal(o.parts[o.parts.length - 1].key, 'cost'); }
 });
 
 test('the named slips are there: forgot to round up, 7 days for a fortnight, only two of the three numbers', () => {
@@ -72,7 +74,7 @@ test('the named slips are there: forgot to round up, 7 days for a fortnight, onl
   assert.ok(roundDown > 50 && week7 > 20 && twoOnly > 50, `${roundDown} ${week7} ${twoOnly}`);
   // every rounding-up order offers the rounded-down coin
   const r = seeded(9);
-  for (let i = 0; i < 100; i++) { const o = makeSupplyOrder({ rand: r, step: 4, vocab: {} }); const p = o.parts.find((q) => q.key === 'crates'); assert.ok(p.coins.some((c) => c.slip === 'roundDown')); }
+  for (let i = 0; i < 100; i++) { const o = makeSupplyOrder({ rand: r, step: 5, vocab: {} }); const p = o.parts.find((q) => q.key === 'crates'); assert.ok(p.coins.some((c) => c.slip === 'roundDown')); }
 });
 
 test('a word is asked while it is new, and left out once known', () => {

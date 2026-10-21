@@ -42,22 +42,29 @@
 // Adding a negative and a positive is where kids slip (−10 + 18 worked as −28): the Rule hint shows the number line
 // for the sum the hinted move will make, and the review draws the hop under a side that comes down to such a sum.
 //
-// ON THE STRANDS (src/math/skill.js; strand.js). Each box comes from the rider's equations or inequalities level (or,
-// under about 10, a kindergarten box: kbox.js): strand.js planBox picks the rung, the level within it, and the
-// reviews. As each part of a move is answered, a part with only numbers in it ("27 ÷ 9", "−10 + 18") is recorded in
-// its own strand (division, addition ...) at its point; a part with x in it counts in the box. As the box finishes it
-// is recorded in its strand: right when clean and every x part was right the first time. Each is timed
+// ON THE LEVELS (src/levels/model.js; levelplan.js). With a rider, each box comes from the rider's level on the lock
+// boxes' ladder (src/levels/place/lockbox.js), made by that level's maker (levelbox.js), and is recorded there once as
+// it finishes (levelplan.js recordPlan: right when clean and every x part was right the first time; the level's strand
+// at its grade comes with it). Below x on both sides a box is FOUND: the picture boxes ("3 plus what equals 8?",
+// kbox.js) and the find-x boxes (findx.js: tap the key that makes both sides the same; the key's number goes in for x
+// and both sides are worked out). From x on both sides the moves start: the first such box opens with "You've reached
+// algebra!" once per rider (rules.js; rider.topics.algebra.metAlgebra), and every box worked with moves has "The rules"
+// in the top strip, the step being worked in big type over the equation, and on a computer (a wide screen and a mouse)
+// an arrow from that step on the open steps card to the question (the equation, or the part being asked). Without a
+// rider (a test page) strand.js planBox picks the box on the strands as before; a set problem (the store's equation)
+// is recorded on the strands only. As each part of a move is answered, a part with only numbers in it ("27 ÷ 9",
+// "−10 + 18") is recorded in its own strand (division, addition ...) at its point. Each is timed
 // (src/ui/answertimer.js): the parts on their own, the box until it is solved.
 // The kindergarten boxes: the line, big pictures under it (the things on each side, a sack for x), three answers to
 // count, read out loud from the maker's clips (boxvoice.js) for a rider whose questions are read (skill.js readAloud),
-// with a button to hear it again. The balance, "Which key fits" and the add-on boxes (x + 4 = 9) are read out too.
-// Now and then (strand.js WORK) a "Work it out" box: order of operations or exponents (workout.js), one expression
-// worked a part at a time on a page of its own (workpanel.js), in the same session.
+// with a button to hear it again. The find-x boxes the clips can say (x + 4 = 9, 9 − x = 4) are read out too.
+// "Work it out" boxes (workout.js: the exponents level) are worked a part at a time on a page of their own
+// (workpanel.js), in the same session.
 //   opts.audio (optional): the game's sound (src/audio/audio.js); the read-aloud follows its volume.
-//   opts.readAloud: false turns the box's read-aloud off.
+//   opts.readAloud: false turns the box's read-aloud off.  opts.levels: false keeps a rider's boxes on the strands.
 //
-// It writes nothing to storage itself: it changes rider.topics.algebra (the ladder's bookkeeping) and rider.skill (the
-// skill model) in place; the caller saves the rider (save.js recordLockbox does that) in onBox, or after onDone.
+// It writes nothing to storage itself: it changes rider.topics.algebra (the ladder's bookkeeping), rider.levels,
+// rider.skill and rider.facts in place; the caller saves the rider (save.js recordLockbox does that) in onBox, or after onDone.
 
 import { flagCard } from '../ui/flag.js';
 import {
@@ -69,7 +76,10 @@ import { makeAlgebra } from './algebra.js';
 import { K_RUNG, THING_SVG, SACK_SVG, kNudge } from './kbox.js';
 import { WORK_RUNG } from './workout.js';
 import { mountWorkBox } from './workpanel.js';
-import { planBox, planOf, partCredit, productCredit, recordBox, recordPart, syncLadder, boxSay, partSay, hasNegative } from './strand.js';
+import { planBox, planOf, partCredit, productCredit, recordPart, syncLadder, boxSay, partSay, hasNegative } from './strand.js';
+import { planLevelBox, recordPlan } from './levelplan.js';
+import { termSub, subText } from './findx.js';
+import { rulesHTML, RULES_TITLE, ALGEBRA_TITLE, GO_WORD } from './rules.js';
 import { makeBoxVoice } from './boxvoice.js';
 import { sayLine as speakLine } from '../audio/sayline.js';
 import { answerTimer } from '../ui/answertimer.js';
@@ -112,6 +122,17 @@ export function moveBoxLine(problem, intro) {
     if (a) return `${eq}. Get x alone: which move takes the ${fracText(a.v)} away? Do the same to both sides.`;
   }
   return `${eq}. ${spokenMath(intro)}`;
+}
+
+// What Hob says as a find-x box comes up: the first box of "Meet x" says what x is; x/4 and 3x say what they mean
+export function findIntro(problem, plan) {
+  const id = plan && plan.id;
+  if (id === 'x10') return 'x is a number we are looking for. Which key makes both sides the same?';
+  const xs = [...problem.start.L, ...problem.start.R].find((t) => t.t === 'x');
+  if (problem.find === 'ax=b' && xs) return `A number stuck to x means times: ${Math.abs(xs.v.n)}x is ${Math.abs(xs.v.n)} times x. Which key fits?`;
+  if (problem.find === 'x/a=b' && xs) return `x/${xs.v.d} means x divided by ${xs.v.d}. Which key fits?`;
+  if (problem.find === 'ax+b=c' || problem.find === 'ax-b=c') return 'Two steps: which key makes both sides the same?';
+  return 'Which number for x makes both sides the same?';
 }
 
 // The sums worth a number line: the number already there is negative (−10 + 18) or the answer crosses zero (5 − 8).
@@ -175,6 +196,7 @@ const SPEAKER_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5
 
 const STAR = (on) => `<svg viewBox="0 0 24 24" class="${on ? 'on' : ''}" aria-hidden="true"><path d="M12 2.2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 17.1l-6 3.5 1.5-6.8L2.3 9.2l6.9-.7z"/></svg>`;
 
+const TOOLS_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 17.8 15.6 5.7l2.7 2.7L6.2 20.5H3.5z" fill="currentColor"/><path d="m16.6 4.7 1.5-1.5a1.3 1.3 0 0 1 1.8 0l.9.9a1.3 1.3 0 0 1 0 1.8l-1.5 1.5z" fill="currentColor" opacity="0.75"/><path d="M13 21h8M17 18.5V21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
 const COIN_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10.5" fill="#e2ad4c" stroke="#8a5f22" stroke-width="1.6"/>
 <circle cx="12" cy="12" r="7" fill="none" stroke="#a8742a" stroke-width="1.1"/><path d="M9.5 9.5h5M9.5 14.5h5M12 7.5v9" stroke="#7a5524" stroke-width="1.4" stroke-linecap="round"/></svg>`;
 
@@ -366,6 +388,8 @@ export function openLockbox(root = document.body, opts = {}) {
     <div class="lbx-lock" title="One tumbler per move of par"><div class="lbx-tumblers"></div><div class="lbx-par"></div></div>
     <div class="lbx-right"><div class="lbx-stars" aria-label="stars"></div>
       <div class="lbx-purse" title="Your gold"><span class="lbx-purse-coin">${COIN_SVG}</span><b class="lbx-purse-n">0</b></div>
+      <button class="lbx-rules" type="button" hidden>The rules</button>
+      <button class="lbx-tools" type="button" title="Tools: the times chart" hidden>${TOOLS_SVG}<span>Tools</span></button>
       <button class="lbx-done" type="button">Done for now<kbd>Esc</kbd></button></div>`;
   panel.appendChild(top);
   const bodies = h('div', 'lbx-bodies');
@@ -374,6 +398,48 @@ export function openLockbox(root = document.body, opts = {}) {
   el.appendChild(flyLayer);
   const purseEl = top.querySelector('.lbx-purse'), purseN = top.querySelector('.lbx-purse-n');
   const doneBtn = top.querySelector('.lbx-done');
+  const rulesBtn = top.querySelector('.lbx-rules');
+  // THE TOOLS (src/ui/tools.js, the game's): the same Tools as from every other job, here in the box's own top strip
+  // (the HUD is under the box). opts.tools(button) opens their menu; opts.toolsOpen() says one is up, and while it is
+  // the box hears no keys (Esc closes the tool, not the box)
+  const toolsBtn = top.querySelector('.lbx-tools');
+  if (typeof opts.tools === 'function') {
+    toolsBtn.hidden = false;
+    toolsBtn.addEventListener('click', (e) => { e.currentTarget.blur(); try { opts.tools(toolsBtn); } catch (err) { console.error(err); } });
+  }
+  const toolUp = () => { try { return typeof opts.toolsOpen === 'function' && !!opts.toolsOpen(); } catch (e) { return false; } };
+
+  // ----- "You've reached algebra!" (once per rider) and "The rules" (rules.js): a card over the box -----
+  // opts: { first, flip (the inequalities' flip rule), steps (the box's steps card rows) }. While it is open the box
+  // waits under it; Enter, Space, Esc or the button closes it. -> a promise that settles when it closes
+  let rulesCard = null;
+  function showRules({ first = false, flip = null, steps } = {}) {
+    if (rulesCard) return rulesCard.done;
+    const card = h('div', 'lbx-rulescard');
+    card.setAttribute('role', 'dialog');
+    card.setAttribute('aria-label', first ? ALGEBRA_TITLE : RULES_TITLE);
+    card.innerHTML = `<div class="rl-box${first ? ' rl-first' : ''}"><h2 class="rl-title">${esc(first ? ALGEBRA_TITLE : RULES_TITLE)}</h2>
+      ${rulesHTML({ first, flip, ...(steps ? { steps } : {}) })}
+      <button class="rl-go" type="button">${esc(first ? GO_WORD.first : GO_WORD.again)}<kbd>Enter</kbd></button></div>`;
+    el.appendChild(card);
+    requestAnimationFrame(() => card.classList.add('in'));
+    let close;
+    const done = new Promise((res) => { close = res; });
+    rulesCard = { el: card, done, close: () => {
+      if (!rulesCard || rulesCard.el !== card) return;
+      rulesCard = null;
+      card.classList.remove('in');
+      setTimeout(() => card.remove(), 220);
+      el.focus({ preventScroll: true });
+      close();
+    } };
+    const shut = rulesCard.close;
+    card.querySelector('.rl-go').addEventListener('click', shut);
+    card.addEventListener('pointerdown', (e) => { if (e.target === card) shut(); });
+    requestAnimationFrame(() => card.querySelector('.rl-go').focus({ preventScroll: true }));
+    return done;
+  }
+  rulesBtn.addEventListener('click', () => { const c = cur && cur.rulesInfo ? cur.rulesInfo() : {}; showRules({ ...c, first: false }); });
   purseN.textContent = String(purseNow());
 
   root.appendChild(el);
@@ -402,6 +468,9 @@ export function openLockbox(root = document.body, opts = {}) {
       if (p && algState.recent) { algState.recent.push(p.key); if (algState.recent.length > 20) algState.recent.splice(0, algState.recent.length - 20); }
       problem = p ? { ...p, level: opts.level ?? 4, size: opts.size ?? 2, review: false, tier } : alg.next(tier);
       plan = planOf(problem, { frac: K_RUNG[problem.rung] || WORK_RUNG[problem.rung] ? (Math.max(1, Math.min(3, opts.size ?? 2)) - 1) / 2 : null });
+    } else if (rider && opts.levels !== false) {
+      // the levels (levelplan.js): the rider's level on the lock boxes' ladder makes the box
+      ({ plan, problem } = planLevelBox(skillRider, alg, { rng, tier }));
     } else {
       plan = planBox(skillRider, alg, { rng });
       problem = alg.next(tier, plan);   // (a "Work it out" plan gets its box from workout.js)
@@ -414,6 +483,7 @@ export function openLockbox(root = document.body, opts = {}) {
       const skippedNow = session.results.filter((r) => !r.solved).length;
       const more = info.from === 'loot' && typeof next !== 'function'
         ? (bag.length ? ` · ${bag.length} more` : skippedNow ? ` · last one · ${skippedNow} skipped` : ' · the last one') : '';
+      rulesBtn.hidden = true;
       return mountWorkBox({ HOB_SVG, STAR }, { info, tier, problem, plan, top, bodies, opts, session, skillRider, finished,
         where: where + more, nextLabel: () => (own && typeof next !== 'function' && !bag.length ? 'Finish' : 'Next problem') });
     }
@@ -480,7 +550,7 @@ export function openLockbox(root = document.body, opts = {}) {
     body.appendChild(paper);
 
     const stageEl = h('section', 'lbx-stage');
-    stageEl.innerHTML = `<div class="lbx-workwrap"><div class="lbx-work"></div>
+    stageEl.innerHTML = `<div class="lbx-now" hidden aria-live="polite"></div><div class="lbx-workwrap"><div class="lbx-work"></div>
         <div class="lbx-kpics" aria-hidden="true"></div>
         <div class="lbx-focus" hidden aria-live="polite"></div>
         <div class="lbx-picwrap"></div><div class="lbx-calcs"></div><svg class="lbx-links" aria-hidden="true"></svg></div>
@@ -504,6 +574,12 @@ export function openLockbox(root = document.body, opts = {}) {
     const work = $('.lbx-work'), calcs = $('.lbx-calcs'), ledgerEl = $('.lbx-ledger'), grid = $('.lbx-grid');
     const focusEl = $('.lbx-focus'), linksEl = $('.lbx-links'), nextBtn = $('.lbx-nextbtn');
     const say = $('.lbx-hob-say'), pics = $('.lbx-picwrap');
+    const nowEl = $('.lbx-now');
+    // the arrow from the step being worked (on the steps card) to the question, on a computer with the card open
+    const arrowEl = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    arrowEl.setAttribute('class', 'lbx-arrow');
+    arrowEl.setAttribute('aria-hidden', 'true');
+    body.appendChild(arrowEl);
     const nlBox = h('div', 'lbx-nl');   // the number line's spot: in the ledger, right under the newest line
     if (rung.pictures) body.classList.add('has-pics');
     const leaveBtn = $('.lbx-leave'), undoBtn = $('.lbx-undo'), askBtn = $('.lbx-ask');
@@ -518,7 +594,7 @@ export function openLockbox(root = document.body, opts = {}) {
     const skippedNow = session.results.filter((r) => !r.solved).length;   // (skipped boxes stay in the bags)
     const more = info.from === 'loot' && typeof next !== 'function'
       ? (bag.length ? ` · ${bag.length} more` : skippedNow ? ` · last one · ${skippedNow} skipped` : ' · the last one') : '';
-    top.querySelector('.lbx-rung').innerHTML = `${esc(where + more)} · ${esc(rung.name)}${opts.dev || opts.debug ? ` <small>${esc(problem.rung)}</small>` : ''}`;
+    top.querySelector('.lbx-rung').innerHTML = `${esc(where + more)} · ${esc(plan && plan.title ? plan.title : rung.name)}${opts.dev || opts.debug ? ` <small>${esc(plan && plan.id ? plan.id : problem.rung)}</small>` : ''}`;
     top.querySelector('.lbx-tumblers').innerHTML = '';
 
     // ----- state -----
@@ -598,7 +674,7 @@ export function openLockbox(root = document.body, opts = {}) {
       stepsEl.classList.toggle('faded', cardShown === 'faded');
       if (!open) stepsEl.classList.remove('all');
       stepsEl.querySelector('.st-bar').setAttribute('aria-expanded', String(open));
-      requestAnimationFrame(() => { if (!gone) fitLine(); });
+      requestAnimationFrame(() => { if (!gone) { fitLine(); drawArrow(); } });
     }
     function renderSteps({ checked = false } = {}) {
       if (pickMode || !B.plan) return;
@@ -617,6 +693,37 @@ export function openLockbox(root = document.body, opts = {}) {
       const now = currentStep(st);
       stepsEl.querySelector('.st-nowtxt').innerHTML = now ? `<b>${now.n}</b> ${wordsHTML(now.short)}` : '';
       stepsEl.classList.toggle('alldone', !now);
+      // the step being worked, in big type over the equation (the rule to follow now)
+      const key = now ? `${now.n}|${now.label}|${now.note || ''}` : '';
+      if (nowEl.dataset.key !== key) {
+        nowEl.dataset.key = key;
+        nowEl.hidden = !now;
+        nowEl.innerHTML = now ? `<span class="ln-n">Step ${now.n}</span><span class="ln-t">${wordsHTML(now.label)}${now.note ? `<small>${wordsHTML(now.note)}</small>` : ''}</span>` : '';
+        if (now) { nowEl.classList.remove('fresh'); void nowEl.offsetWidth; nowEl.classList.add('fresh'); }
+      }
+      drawArrow();
+    }
+    // The arrow: from the step's row on the open card to the question (the equation, or the part being asked), only
+    // on a wide screen worked with a mouse (a phone has the big type alone)
+    const ARROW_SCREEN = `${WIDE_SCREEN} and (hover: hover) and (pointer: fine)`;
+    function drawArrow() {
+      if (gone) return;
+      const row = stepsEl.querySelector('.st-row[data-state="now"]');
+      const target = !focusEl.hidden ? (focusEl.querySelector('.fq-q') || focusEl) : work.querySelector('.wline');
+      const on = !!row && !!target && cardShown !== 'folded' && phase !== 'review' && phase !== 'open'
+        && typeof matchMedia === 'function' && matchMedia(ARROW_SCREEN).matches && !pickMode;
+      if (!on) { arrowEl.innerHTML = ''; arrowEl.classList.remove('on'); return; }
+      const b = body.getBoundingClientRect(), r = row.getBoundingClientRect(), t = target.getBoundingClientRect();
+      if (!r.width || !t.width) { arrowEl.innerHTML = ''; return; }
+      const x1 = r.right - b.left + 4, y1 = r.top + r.height / 2 - b.top;
+      const x2 = t.left - b.left - 16, y2 = t.top + t.height / 2 - b.top;
+      if (x2 - x1 < 30) { arrowEl.innerHTML = ''; return; }
+      const mx = (x1 + x2) / 2;
+      arrowEl.setAttribute('viewBox', `0 0 ${Math.round(b.width)} ${Math.round(b.height)}`);
+      arrowEl.innerHTML = `<defs><marker id="lbx-ah" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M0 0L10 5L0 10z" class="ah"/></marker></defs>
+        <path d="M${x1.toFixed(1)} ${y1.toFixed(1)} C${mx.toFixed(1)} ${y1.toFixed(1)}, ${mx.toFixed(1)} ${y2.toFixed(1)}, ${x2.toFixed(1)} ${y2.toFixed(1)}" class="shaft" marker-end="url(#lbx-ah)"/>`;
+      arrowEl.classList.add('on');
     }
     // hint 1 lights the step being worked (and opens the card if it was folded)
     function lightStep(n) {
@@ -730,6 +837,7 @@ export function openLockbox(root = document.body, opts = {}) {
       line.appendChild(sideEl(l.R, 'R'));
       work.appendChild(line);
       fitLine();
+      requestAnimationFrame(drawArrow);
       if (cls === 'mid') pics.classList.add('moving');
       else { pics.classList.remove('moving'); renderPictures(l); }
       return line;
@@ -833,12 +941,13 @@ export function openLockbox(root = document.body, opts = {}) {
       grid.classList.remove('tidy', 'partgrid', 'nlgrid');
       grid.style.height = '';
       grid.classList.toggle('picks', pickMode);
+      grid.classList.toggle('four', pickMode && problem.choices.length === 4);
       if (pickMode) {
         problem.choices.forEach((v, i) => {
           const b = h('button', `lbx-move pick ${problem.mode === 'key' ? 'keypick' : kMode ? 'kpick' : ''}`);
           b.type = 'button';
           // (a kindergarten answer: the number, and that many little pictures under it to count)
-          b.innerHTML = problem.mode === 'key' ? `<span class="keyicon">${KEY_SVG}</span><span class="lbl">${v}</span><kbd>${i + 1}</kbd>`
+          b.innerHTML = problem.mode === 'key' ? `<span class="keyicon">${KEY_SVG}</span><span class="lbl">${v < 0 ? MINUS + -v : v}</span><kbd>${i + 1}</kbd>`
             : kMode ? `<span class="kp-n">${v}</span><span class="kp-dots">${kThings(v, 'mini')}</span><kbd>${i + 1}</kbd>`
             : `<span class="chip coin pos"><span class="face">${v}</span></span><kbd>${i + 1}</kbd>`;
           if (kMode) b.setAttribute('aria-label', String(v));
@@ -1006,6 +1115,7 @@ export function openLockbox(root = document.body, opts = {}) {
           + `${eq ? `<span class="fq-eq${eq.length > 1 ? ' fq-words' : ''}">${esc(eq)}</span><span class="fq-slot">${answer}</span>` : ''}</div><div class="fq-nl"></div>`;
       focusEl.innerHTML = `${cap ? `<div class="fq-cap">${cap}</div>` : ''}${main}`;
       fitFocus();
+      requestAnimationFrame(drawArrow);
     }
     function hideFocus() {
       body.classList.remove('den-on');
@@ -1015,6 +1125,7 @@ export function openLockbox(root = document.body, opts = {}) {
       linkPairs = null;
       clearLinks();
       body.querySelectorAll('.chip.src').forEach((c) => c.classList.remove('src'));
+      requestAnimationFrame(drawArrow);
     }
     // the sum shrinks to fit the mat's width (never below the floor)
     function fitFocus() {
@@ -1551,6 +1662,7 @@ export function openLockbox(root = document.body, opts = {}) {
       lastAction = performance.now();
       const r = B.choose(v);
       const L = problem.start.L, R = problem.start.R;
+      if (problem.find) { await tryKey(v, btn, r); return; }
       const tryLine = problem.mode === 'key'
         ? { L: L.map((t) => (t.t === 'x' ? { t: 'q' } : t)), R }
         : problem.start;
@@ -1577,6 +1689,59 @@ export function openLockbox(root = document.body, opts = {}) {
       btn.classList.add('shake', 'used');
       work.querySelector('.wline')?.classList.add('tilt');
       const why = problem.mode === 'key' ? `x = ${v} makes ${fracText(lv)}, not ${fracText(rv)}.` : `That side makes ${fracText(problem.start.L.some((t) => t.t === 'q') ? lv : rv)}, the other ${fracText(problem.start.L.some((t) => t.t === 'q') ? rv : lv)}.`;
+      hob(why, 'warn'); tell(spokenMath(why), { after: 700 });
+      await sleep(900 * K);
+      if (gone) return;
+      calcs.innerHTML = '';
+      renderLine(problem.start);
+      phase = 'play';
+      setTrayEnabled(true);
+      btn.disabled = true;
+    }
+
+    // a find-x box (findx.js): the key's number goes in for every x, each side is worked out, and they match or not
+    async function tryKey(v, btn, r) {
+      const L = problem.start.L, R = problem.start.R, val = F(v);
+      const line = renderLine(problem.start, 'mid');
+      line.querySelectorAll('.chip.card').forEach((c) => {
+        const t = problem.start[c.dataset.side]?.[Number(c.dataset.i)];
+        const f = c.querySelector('.face');
+        if (!t || !f) return;
+        const first = Number(c.dataset.i) === 0, body = termSub(t, v, true);
+        f.textContent = !first && !termNeg(t) ? `+${body}` : body;
+        c.classList.add('twin', 'keyed');
+      });
+      fitLine();
+      await sleep(380 * K);
+      if (gone) return;
+      const lv = evalSide(L, val), rv = evalSide(R, val);
+      const worked = (side) => side.length > 1 || side.some((t) => t.t !== 'n');
+      // (a sharing that doesn't come out even is said the way it is taught: 72 ÷ 10 = 7 r 2, not 36/5)
+      const shown = (side, f) => {
+        const t = side.length === 1 ? side[0] : null;
+        if (f.isInt() || !t || t.t !== 'x' || Math.abs(t.v.n) !== 1 || t.v.d === 1) return fracText(f);
+        const d = t.v.d, q = Math.trunc(v / d);
+        return `${q} r ${Math.abs(v - q * d)}`;
+      };
+      if (worked(L)) calcTag(`${subText(L, v)} = ${shown(L, lv)}`, [line.querySelector('.wside-L')], 'merge');
+      if (worked(R)) calcTag(`${subText(R, v)} = ${shown(R, rv)}`, [line.querySelector('.wside-R')], 'merge');
+      await sleep(700 * K);
+      if (gone) return;
+      renderTop();
+      if (r.ok) {
+        solvedNow();
+        wobble();
+        line.querySelector('.hinge')?.classList.add('locked');
+        hob(`${fracText(lv)} = ${fracText(rv)}. Both sides the same: x = ${fracText(val)}!`, 'good');
+        react('right');
+        phase = 'review';
+        showNext();
+        return;
+      }
+      react('wrong');
+      btn.classList.add('shake', 'used');
+      work.querySelector('.wline')?.classList.add('tilt');
+      const why = `x = ${fracText(val)} makes ${worked(L) ? shown(L, lv) : shown(R, rv)}, not ${fracText(worked(L) ? rv : lv)}.`;
       hob(why, 'warn'); tell(spokenMath(why), { after: 700 });
       await sleep(900 * K);
       if (gone) return;
@@ -1842,13 +2007,13 @@ export function openLockbox(root = document.body, opts = {}) {
       try {
         const t = boxTime || boxClock.stop();
         const trapped = Array.isArray(result.traps) && result.traps.length > 0;
-        const finding = !!plan && !isPlaced(skillRider, plan.strand);
+        const finding = !!plan && (plan.place ? !!plan.placing : !isPlaced(skillRider, plan.strand));
         let right = !!(result.solved && result.clean && xSlips === 0 && !trapped && !(finding && negSlips > 0));
         // (a plain slip leaves the box out once; a second box slipped at the same point is no chance: a miss)
         let skip = finding && right && numSlips > 0;
         if (skip && algState && Number.isFinite(algState.slipAt) && Math.abs(algState.slipAt - plan.at) < 0.05) { skip = false; right = false; }
         if (algState) algState.slipAt = skip ? plan.at : null;
-        if (!skip) recordBox(skillRider, plan, problem, { right, size: pickMode ? 1 : B.moves + partsAsked, ...t });
+        if (!skip) recordPlan(skillRider, plan, problem, { right, size: pickMode ? 1 : B.moves + partsAsked, ...t });
         syncLadder(skillRider, alg);
       } catch (e) { console.error(e); }
     }
@@ -1909,6 +2074,7 @@ export function openLockbox(root = document.body, opts = {}) {
         fitLine();
         fitFocus();
         if (distRedraw) distRedraw(); else if (linkPairs) drawLinks();
+        drawArrow();
       });
     };
     const resizeWatch = typeof ResizeObserver === 'function' ? new ResizeObserver(refit) : null;
@@ -1977,11 +2143,12 @@ export function openLockbox(root = document.body, opts = {}) {
     renderTray();
     renderTop();
     setTrayEnabled(true);
-    const intro = {
+    const intro = (problem.find && findIntro(problem, plan)) || {
       balance: 'Both sides are equal. Which number goes in the gap?',
       key: 'Which number for x makes both sides equal?',
       count: problem.words,
     }[problem.mode] || ({
+      B1: 'x on both sides: take an x away from both sides first.', B3: 'Clear the division first: multiply both sides.',
       R2: 'Dark coins are negative numbers.', R5: 'Negatives get their own box now.', R8: 'A lone −x is the opposite of x.',
       R9b: 'The whole top is divided. Clear the division first.', R10: 'Brackets hold things together.', R11: 'Only like terms can join.', R12: 'x on both sides this time.',
       R15: 'Some equations: every number is a solution. Some: no solution.',
@@ -1989,6 +2156,14 @@ export function openLockbox(root = document.body, opts = {}) {
       I3: 'Three rooms: whatever you do to one, do to every room.', I4: '“Or”: two inequalities. Solve each one.',
     }[problem.rung] || (ineqMode ? 'Get x alone, the same move on every side.' : 'Get x alone. Same move on both sides.'));
     hob(intro);
+    // "The rules" on every box worked with moves; the first one past finding x opens with "You've reached algebra!"
+    // (once per rider: rider.topics.algebra.metAlgebra)
+    rulesBtn.hidden = pickMode;
+    ctrl.rulesInfo = () => ({ flip: ineqMode ? Q.FLIP_RULE : null, steps: B.cardSteps || STEPS });
+    if (!pickMode && plan && plan.algebra && !algState.metAlgebra) {
+      algState.metAlgebra = Date.now();
+      showRules({ first: true, ...ctrl.rulesInfo() });
+    }
     // read out loud for a rider who doesn't read yet (the maker's clips: strand.js boxSay), with a button to hear it
     // again. A box worked by moves is asked in the browser's voice, in the words of its buttons: the line, then what to
     // do ("x plus 4 equals 9. Get x alone: which move takes the 4 away? Do the same to both sides."), not "4 and what
@@ -2167,10 +2342,11 @@ export function openLockbox(root = document.body, opts = {}) {
   // presses while this is open; key releases still reach it, so a key held down when the box opened doesn't stay
   // stuck down. -----
   function onKey(e) {
-    if (closed) return;
+    if (closed || toolUp()) return;
     e.stopPropagation();
     if (e.repeat) return;
     const k = e.key.toLowerCase();
+    if (rulesCard) { if (k === 'escape' || k === 'enter' || k === ' ') { e.preventDefault(); rulesCard.close(); } return; }
     if (k === 'escape') { e.preventDefault(); end('done'); return; }
     if (cur && cur.phase() === 'open') { if (k === 'enter' || k === ' ') { e.preventDefault(); cur.hurry?.(); } return; }
     cur?.onKey(e, k);

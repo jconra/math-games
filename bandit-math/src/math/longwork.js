@@ -30,7 +30,7 @@
 //   workDiv(n, d)             -> Work
 //   Work = { op, a, b | n, d, answer (product, or { q, r }), point, line ('16 × 7 = 112'), steps: [Step], board,
 //            first (the index of the first step the board shows from) }
-//   Step = { kind: 'lead' | 'mul' | 'carry' | 'zero' | 'sum' | 'div', ask, answer, choices: [{ v, label, good, why }],
+//   Step = { kind: 'lead' | 'mul' | 'carry' | 'zero' | 'sum' | 'div' | 'add' | 'sub', ask, answer, choices: [{ v, label, good, why }],
 //            intro (a line said as the step comes up, or ''), done (a line said once it's answered), fact: { strand, at }
 //            (where this one tap sits, for the skill model), slot: { r, c, w } (where the answer goes on the board, or
 //            null), focus: [[r, c]...] (the digits it uses) }
@@ -40,6 +40,12 @@
 //            (written by the board), 'carry' (small), 'down' (a digit brought down), 'from' (where it came from: a mark,
 //            no digit), 'sign'; a rule is a line under row r (kind 'bar'), or the division bracket
 //            ('bracket': over row r from c0 to c1, with its curve left of c0)
+//   workAdd(a, b), workSub(a, b) -> Work (or null)   the columns for adding and taking away (Work it out, any job):
+//            Step kinds 'add' and 'sub'; the carrying and the borrowing are written by the board itself (kinds 'carry'
+//            and 'borrow', the digit borrowed from faded), every column's sum is asked with 4 choices
+//   sumFrom(text) -> { op: 'add' | 'sub' | 'mul' | 'div', a, b } | null   the first whole-number sum in a question
+//   factFrom(text) -> { a, b } | null   the times fact in a question's working (both up to 12), for the times chart
+//   workOf(sum) -> Work for any of the four
 //   LADDER, makeLong(step, { rand, op }) -> { op, a, b } | { op, n, d }   a sum at a step of the `long` map (op: the
 //            nearest step of that kind at or below)
 //   mulAt, divAt, addAt, subAt, longPoint, pointOf, needsLong, noCarry, digitsOf, seeded
@@ -380,6 +386,155 @@ export function workDiv(n, d) {
   return { op: 'div', n, d, answer: { q, r }, point: longPoint('div', n, d), line: `${n} ${DIV} ${d} = ${q}${r ? ` r ${r}` : ''}`, steps, board: done(B), first };
 }
 
+// ---- adding and taking away in columns (Work it out, src/ui/tools.js) ------------------------------------------------
+// The school way, a column at a time, the ones first. Adding: "6 + 7 = ?" (with "plus the 1 carried" when there is one);
+// the board writes the 3 and carries the 1 by itself (small, over the next column). Taking away: when the top digit is
+// smaller, the board borrows by itself first (the 3 becomes 13, the 5 next to it is crossed out and a small 4 written
+// over it: through zeros too, 400 − 7), and asks "13 − 7 = ?". A column with nothing to work (a digit with nothing
+// under it and nothing carried) comes straight down by itself. The slips: the carry forgotten, the smaller digit taken
+// from the bigger instead of borrowing, one off.
+function addChoices(x, y, carry) {
+  const right = x + y + carry, plus = carry ? `, plus the ${carry} carried` : '';
+  const slips = [];
+  if (carry) slips.push({ v: x + y, slip: 'carryLost', why: `${x} + ${y} = ${x + y}. Don't forget the ${carry} carried: ${x + y} + ${carry}.` });
+  if (carry) slips.push({ v: x + y + 2 * carry, slip: 'carryTwice', why: `That adds the ${carry} twice. Add the two digits, then the ${carry} carried just once.` });
+  if (x > 1 && y > 1 && x * y !== right) slips.push({ v: x * y + carry, slip: 'times', why: `That's ${x} × ${y}. This sum adds: ${x} + ${y}${plus}.` });
+  slips.push({ v: right + 1, slip: 'off', why: `Count on from ${x}: ${y} more${plus}.` });
+  if (right > 0) slips.push({ v: right - 1, slip: 'off', why: `Count on from ${x}: ${y} more${plus}.` });
+  return choicesOf(right, slips, { near: () => `Count on from ${x}: ${y} more${plus}.` });
+}
+function subChoices(top, bot, borrowed) {
+  const right = top - bot;
+  const slips = [];
+  if (borrowed) slips.push({ v: bot - (top - 10), slip: 'smallFromBig', why: `That takes the ${top - 10} from the ${bot}. The top number is ${top} now (the ten borrowed): ${top} − ${bot}.` });
+  slips.push({ v: right + 1, slip: 'off', why: `Count back ${bot} from ${top}.` });
+  if (right > 0) slips.push({ v: right - 1, slip: 'off', why: `Count back ${bot} from ${top}.` });
+  slips.push({ v: top + bot, slip: 'added', why: `That adds them. This sum takes ${bot} away from ${top}.` });
+  return choicesOf(right, slips, { lo: 0, near: () => `Count back ${bot} from ${top}.` });
+}
+export function workAdd(a, b) {
+  const [top, bot] = a >= b ? [a, b] : [b, a];
+  const T = digitsOf(top).reverse(), Bd = digitsOf(bot).reverse(), sum = top + bot;
+  const W = Math.max(len(sum), len(top), len(bot) + 1) + 1;
+  const rC = 0, rA = 1, rB = 2, rS = 3;
+  const B = board(4, W);
+  const col = (place) => W - 1 - place;
+  B.num(rA, col(0), top, 'given', 0);
+  B.num(rB, col(0), bot, 'given', 0);
+  B.put(rB, col(Math.max(len(top), len(bot))), '+', 'sign', 0);
+  B.rule(rB, col(Math.max(len(sum), len(top), len(bot)) - 1), col(0), 0);
+  const steps = [];
+  let carry = 0;
+  for (let i = 0; i < T.length; i++) {
+    const x = T[i], y = i < Bd.length ? Bd[i] : null, last = i === T.length - 1, s = steps.length;
+    if (y == null && !carry) {   // (nothing under it, nothing carried: it comes straight down)
+      B.put(rS, col(i), x, 'work', s);
+      if (s) steps[s - 1].done += ` The ${x} comes straight down.`;
+      continue;
+    }
+    const v = x + (y ?? 0) + carry, w = last ? len(v) : 1;
+    const focus = [[rA, col(i)]];
+    if (y != null) focus.push([rB, col(i)]);
+    if (carry) focus.push([rC, col(i)]);
+    const ask = y == null ? `${x}, plus the ${carry} carried = ?` : carry ? `${x} + ${y}, plus the ${carry} carried = ?` : `${x} + ${y} = ?`;
+    const doneLine = last ? `Write ${v}.` : v >= 10 ? `Write the ${v % 10}, carry the 1.` : `Write the ${v}.`;
+    steps.push({ kind: 'add', ask, answer: v, choices: addChoices(x, y ?? 0, carry), intro: i === 0 ? 'The ones column first.' : '', done: doneLine,
+      fact: pointOf('add', x, (y ?? 0) + carry), slot: { r: rS, c: col(i) - (w - 1), w }, focus });
+    B.num(rS, col(i), last ? v : v % 10, 'kid', s + 1);
+    carry = last ? 0 : Math.floor(v / 10);
+    if (carry) B.put(rC, col(i + 1), carry, 'carry', s + 1);
+  }
+  if (!steps.length) return null;
+  steps[steps.length - 1].done += ` ${top} + ${bot} = ${sum}.`;
+  return { op: 'add', a: top, b: bot, answer: sum, point: addAt(top, bot), line: `${top} + ${bot} = ${sum}`, steps, board: done(B), first: 0 };
+}
+export function workSub(a, b) {
+  if (!(a >= b) || b < 0) return null;
+  const T = digitsOf(a).reverse(), Bd = digitsOf(b).reverse(), diff = a - b;
+  const W = Math.max(len(a), len(b) + 1) + 1;
+  const rC = 0, rA = 1, rB = 2, rS = 3;
+  const B = board(4, W);
+  const col = (place) => W - 1 - place;
+  B.num(rA, col(0), a, 'given', 0);
+  B.num(rB, col(0), b, 'given', 0);
+  B.put(rB, col(Math.max(len(a), len(b))), MINUS, 'sign', 0);
+  B.rule(rB, col(len(a) - 1), col(0), 0);
+  const steps = [];
+  const now = [...T];                          // (the top digits as they stand after any borrowing)
+  const givenAt = (i) => B.cells.find((c) => c.r === rA && c.c === col(i) && c.kind === 'given');
+  const smallAt = new Map();                   // (the small digit written over a column, the latest one)
+  const writeSmall = (i, v, from) => {
+    const old = smallAt.get(i); if (old) old.off = from;
+    const g = givenAt(i); if (g && g.off == null) g.off = from;
+    B.put(rC, col(i), v, 'borrow', from);
+    smallAt.set(i, B.cells[B.cells.length - 1]);
+  };
+  const dLen = len(diff);
+  for (let i = 0; i < T.length; i++) {
+    const y = i < Bd.length ? Bd[i] : null, s = steps.length;
+    let borrowed = false, intro = i === 0 ? 'The ones column first.' : '';
+    if (y != null && now[i] < y) {
+      // borrow a ten by itself: from the next column that has something, through any zeros
+      let k = i + 1; while (now[k] === 0) k++;
+      const was = now[i];
+      now[k] -= 1; writeSmall(k, now[k], s);
+      for (let j = k - 1; j > i; j--) { now[j] = 9; writeSmall(j, 9, s); }
+      now[i] += 10; writeSmall(i, now[i], s);
+      borrowed = true;
+      intro = `${was} is less than ${y}: borrow a ten${k > i + 1 ? ' (through the 0s)' : ''}. ${was} becomes ${now[i]}.`;
+    }
+    const x = now[i];
+    const leading = i >= dLen;   // (a 0 in front of the answer is never written)
+    if (y == null) {             // (nothing under it: it comes straight down, unless it's a 0 in front)
+      if (!leading) B.put(rS, col(i), x, 'work', s);
+      if (s && !leading) steps[s - 1].done += ` The ${x} comes straight down.`;
+      continue;
+    }
+    const v = x - y;
+    const focus = [[rA, col(i)], [rB, col(i)]];
+    if (smallAt.has(i)) focus.push([rC, col(i)]);
+    steps.push({ kind: 'sub', ask: `${x} ${MINUS} ${y} = ?`, answer: v, choices: subChoices(x, y, borrowed), intro,
+      done: leading ? `${v}: nothing to write in front.` : `Write the ${v}.`, fact: pointOf('sub', x, y), slot: { r: rS, c: col(i), w: 1 }, focus });
+    if (!leading) B.put(rS, col(i), v, 'kid', s + 1);
+  }
+  if (!steps.length) return null;
+  steps[steps.length - 1].done += ` ${a} ${MINUS} ${b} = ${diff}.`;
+  return { op: 'sub', a, b, answer: diff, point: subAt(a, b), line: `${a} ${MINUS} ${b} = ${diff}`, steps, board: done(B), first: 0 };
+}
+
+// ---- a sum read from a question --------------------------------------------------------------------------------------
+// The first "a op b" in a question's words or its working, for Work it out: "7 × 8 = ?", "83 − 33", "4 pies × 3 pounds
+// = 12 pounds", "112 ÷ 5", "45 miles ÷ 9 hours". Whole numbers only (a decimal or dollars and cents: null, the columns
+// here don't do points), and a question with a blank (? or "what") in the sum isn't a sum to work.
+const OPS = { '×': 'mul', 'x': 'mul', '*': 'mul', '÷': 'div', '/': 'div', '+': 'add', '−': 'sub', '-': 'sub' };
+export function sumFrom(text) {
+  const s = String(text || '').replace(/(\d),(\d{3})/g, '$1$2');
+  const re = /(\d+(?:\.\d+)?)(?:\s+[A-Za-z][A-Za-z' ]{0,24}?)?\s*([×x*÷+−-])\s*[$]?(\d+(?:\.\d+)?)(?!\s*\/)/g;
+  let m;
+  while ((m = re.exec(s))) {
+    const pre = s.slice(Math.max(0, m.index - 1), m.index), [, A, op, Bn] = m;
+    if (/[.$\d/]/.test(pre) || /\./.test(A + Bn)) continue;
+    if (op === 'x' && !/\d\s*x\s*\d/.test(m[0])) continue;   // ("x" is times only between two numbers: 7 x 8)
+    const a = Number(A), b = Number(Bn), o = OPS[op];
+    if (!Number.isFinite(a) || !Number.isFinite(b) || !o) continue;
+    if (o === 'div' && (b === 0 || a % 1)) continue;
+    if (o === 'sub' && a < b) continue;
+    return { op: o, a, b };
+  }
+  return null;
+}
+
+// the times fact a question's working asks, for the times chart (src/math/facts.js recordFact): "4 pies × 3 pounds"
+// is 4 × 3; "24 ÷ 4 = 6" is 4 × 6; both numbers up to 12, else null (a long sum is not a times fact)
+export function factFrom(text) {
+  const s = sumFrom(text);
+  if (!s) return null;
+  const ok = (n) => Number.isInteger(n) && n >= 1 && n <= 12;
+  if (s.op === 'mul' && ok(s.a) && ok(s.b)) return { a: s.a, b: s.b };
+  if (s.op === 'div' && s.b && s.a % s.b === 0 && ok(s.b) && ok(s.a / s.b)) return { a: s.b, b: s.a / s.b };
+  return null;
+}
+
 // ---- a sum at a step of the Long work ladder (the map `long`) ------------------------------------------------------
 // make(t) -> [a, b] (times) or [n, d] (divided by); every sum made needs the worked area (needsLong) and sits at its
 // step's point (longPoint), which tests/longwork.test.mjs checks across the whole ladder.
@@ -427,5 +582,10 @@ export function makeLong(step = 1, { rand = Math.random, op = null } = {}) {
   }
   throw new Error('makeLong: nothing made at step ' + (i + 1));
 }
-// the worked area for a sum: { op: 'mul', a, b } or { op: 'div', n, d }
-export function workOf(sum, o = {}) { return sum.op === 'div' ? workDiv(sum.n, sum.d) : workMul(sum.a, sum.b, o); }
+// the worked area for a sum: { op: 'mul', a, b }, { op: 'div', n, d } (or a, b), { op: 'add' | 'sub', a, b }
+export function workOf(sum, o = {}) {
+  if (sum.op === 'add') return workAdd(sum.a, sum.b);
+  if (sum.op === 'sub') return workSub(sum.a, sum.b);
+  if (sum.op === 'div') return workDiv(sum.n ?? sum.a, sum.d ?? sum.b);
+  return workMul(sum.a, sum.b, o);
+}

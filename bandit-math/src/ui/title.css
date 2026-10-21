@@ -173,12 +173,15 @@
 .bmt-skbar { grid-column: 1 / -1; height: 6px; margin-top: 6px; border-radius: 99px; overflow: hidden; background: rgba(0, 0, 0, 0.4); box-shadow: inset 0 0 0 1px rgba(244, 232, 207, 0.1); }
 .bmt-skbar i { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--brass-lo), var(--brass-hi)); }
 .bmt-sk.is-finding .bmt-skbar i { background: repeating-linear-gradient(135deg, var(--brass-lo) 0 6px, #c99343 6px 12px); }
-/* a small link-like button at the end of a section's label (Stats) */
+/* small link-like buttons at the end of a section's label (Levels, Stats) */
+.bmt-label .bmt-links { order: 3; display: inline-flex; gap: 6px; }
 .bmt-label .bmt-link { order: 3; display: inline-flex; align-items: center; gap: 6px; padding: 5px 11px 5px 9px; border-radius: 99px;
   font: 600 13px/1 Bitter, Georgia, serif; letter-spacing: 0; text-transform: none; color: var(--brass-hi);
   border: 1px solid rgba(226, 173, 76, 0.55); background: rgba(0, 0, 0, 0.2); }
 .bmt-label .bmt-link:hover { background: rgba(226, 173, 76, 0.14); }
 .bmt-label .bmt-link svg { width: 13px; height: 13px; }
+/* the levels a grown-up set by hand, under the math (src/ui/levels.js gridWords) */
+.bmt-auto.bmt-set { color: var(--ink-2); padding-top: 4px; }
 /* goals: each pinned goal with how far there is to go; then Set a goal and What's left */
 .bmt-goals { display: grid; gap: 6px; }
 .bmt-goal { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 8px; padding: 8px 11px; border-radius: 11px;

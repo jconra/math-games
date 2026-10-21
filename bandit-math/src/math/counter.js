@@ -54,6 +54,7 @@ export function counterOrder(map, { step = 1, frac = 0, rand = Math.random, who 
     for (const s of core.slips || []) {
       if (!s || wrong.length >= coins - 1) continue;
       if (s.v == null || seen.has(keyOf(s.v)) || labels.has(s.label) || !s.big) continue;
+      if (typeof s.v === 'number' && s.v < 0) continue;   // (a coin that says less than nothing, "−5¢" change: no one would believe it)
       if (/NaN|undefined|Infinity/.test(`${s.big} ${s.label}`)) continue;
       seen.add(keyOf(s.v)); labels.add(s.label);
       wrong.push({ v: s.v, big: s.big, small: s.small || '', label: s.label, good: false, slip: s.slip || null, why: s.why || '' });

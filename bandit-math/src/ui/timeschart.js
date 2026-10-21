@@ -12,7 +12,7 @@
 //                                in the 6s"). On a missing-number card (7 x ? = 56) only the row is lit, and the line
 //                                tells the kid how to read the answer off the chart rather than circling it.
 //
-// opts (both): { table, missed, size, find, rule, line, side, anchor, avoid, onOpen, onClose }
+// opts (both): { table, missed, size, find, rule, line, side, anchor, avoid, marks, onOpen, onClose }
 //   table   the times table on the card (2 to 12)
 //   missed  after a wrong pick: the number on the target the kid roped. On a missing-number card this is the number
 //           they tried in place of the ? (they roped 9 for 7 x ? = 56).
@@ -25,6 +25,9 @@
 //           (below it or beside it) unless that would leave the numbers too small to read.
 //   avoid   other elements to keep in view if the chart can (one element or a list): the hint line under the herd, say.
 //           They give way before the rule card does, and never shrink the squares below KEEP_HINT_MIN (36 on a phone).
+//   marks   the rider's own facts, coloured (src/math/facts.js chart(rider)): marks[r - 1][c - 1] = 'green' (answered
+//           right), 'red' (missed: it comes back soon) or null (not asked yet). With marks the chart shows 12 x 12 and
+//           a key (THE TIMES CHART from the tools button, src/ui/tools.js); a square's readout says how it went.
 //   onOpen(chart), onClose()   called when the chart opens and closes (offerChart passes them through)
 //
 // update(opts) on the button or the chart only redraws an open chart when something it shows has changed. Options left
@@ -72,8 +75,9 @@ export function chartGrid(size = 10) {
 // How big the chart should be: 12 when the 11s or 12s are on the card, when the trainer has the kid going up to x12,
 // or when the number to find, the missed number or the answer the kid tried only shows up past x10 in this table.
 // Otherwise 10, the chart the brief asks for. A size the caller passes (10 or 12) wins.
-export function chartSize({ table, size, reach, find, missed } = {}) {
+export function chartSize({ table, size, reach, find, missed, marks } = {}) {
   if (size === 10 || size === 12) return size;
+  if (Array.isArray(marks)) return 12;
   const t = toTable(table);
   if (t >= 11) return 12;
   if (reach >= 11) return 12;
@@ -137,6 +141,13 @@ export function chartWords(opts = {}) {
   const out = { kicker: 'Times table chart', title: t ? `The ${t}s` : 'Times tables', line: '', note: '', tag: null };
   if (!t) {
     out.line = 'Find the row on the left and the column on top. Where they meet is the answer.';
+    if (Array.isArray(opts.marks)) {
+      const n = markCount(opts.marks);
+      out.title = 'Your times tables';
+      out.line = n.green || n.red ? `Green: ${n.green} fact${n.green === 1 ? '' : 's'} you got right. Red: ${n.red} missed, and they come back soon.`
+        : 'Facts you answer turn green when right and red when missed. Missed ones come back soon.';
+      out.note = 'Find the row on the left and the column on top. Where they meet is the answer.';
+    }
     return withOverride(out, opts);
   }
   if (isNum(opts.find)) {
@@ -293,6 +304,8 @@ export function showChart(container, opts = {}) {
         if (place && place.kind === 'past' && r === t && c === size) cls.push('side');
         if (place && place.kind === 'in' && r === t && c === place.col) cls.push('found');
         if (wrongCol && r === t && c === wrongCol) cls.push('wrong');
+        const mk = markAt(o.marks, r, c);
+        if (mk) cls.push(mk === 'green' ? 'is-green' : 'is-red');
         cells.push(`<span class="${cls.join(' ')}" role="cell" data-r="${r}" data-c="${c}">${r * c}</span>`);
       }
       cells.push('</div>');
@@ -331,7 +344,8 @@ export function showChart(container, opts = {}) {
           ${words.note ? `<p class="tch-note">${esc(words.note)}</p>` : ''}
           <div class="tch-foot">
             <p class="tch-read" aria-live="polite">${idleRead()}</p>
-            <p class="tch-key"><i class="tch-sw" aria-hidden="true"></i><span>a number times itself</span></p>
+            ${Array.isArray(o.marks) ? '<p class="tch-key tch-key-marks"><i class="tch-sw is-green" aria-hidden="true"></i><span>right</span><i class="tch-sw is-red" aria-hidden="true"></i><span>missed</span></p>'
+              : '<p class="tch-key"><i class="tch-sw" aria-hidden="true"></i><span>a number times itself</span></p>'}
           </div>
         </div>
       </div>`;
@@ -455,7 +469,8 @@ export function showChart(container, opts = {}) {
   // tag's drop-in and can change the size while the kid is reading.
   function looks(x) {
     return JSON.stringify([toTable(x.table), isNum(x.missed) ? Math.round(x.missed) : null, isNum(x.find) ? x.find : null,
-      x.rule ? String(x.rule) : '', typeof x.line === 'string' ? x.line : '', x.side === 'right' ? 'right' : 'left', chartSize(x)]);
+      x.rule ? String(x.rule) : '', typeof x.line === 'string' ? x.line : '', x.side === 'right' ? 'right' : 'left', chartSize(x),
+      Array.isArray(x.marks) ? x.marks : null]);
   }
 
   // New options. Redraws only if something on the chart changes; a new rule card or hint line to keep clear of only
@@ -484,7 +499,8 @@ export function showChart(container, opts = {}) {
     const top = root.querySelector(`.tch-top[data-c="${c}"]`), left = root.querySelector(`.tch-left[data-r="${r}"]`);
     if (top) top.classList.add('hot');
     if (left) left.classList.add('hot');
-    read.innerHTML = `<b>${r}</b> ${TIMES} <b>${c}</b> = <b>${r * c}</b>`;
+    const mk = markAt(o.marks, r, c);
+    read.innerHTML = `<b>${r}</b> ${TIMES} <b>${c}</b> = <b>${r * c}</b>${mk === 'green' ? ' <span class="tch-said is-green">right</span>' : mk === 'red' ? ' <span class="tch-said is-red">missed: it comes back soon</span>' : ''}`;
   }
   root.addEventListener('pointerover', (e) => {
     const cell = e.target.closest && e.target.closest('.tch-c');
@@ -661,6 +677,19 @@ export function offerChart(container, opts = {}) {
 // Small helpers
 
 function isNum(x) { return typeof x === 'number' && Number.isFinite(x); }
+// a fact's colour on the rider's own chart (either way round: 7 x 8 is 8 x 7), or null
+function markAt(marks, r, c) {
+  if (!Array.isArray(marks)) return null;
+  const m = (marks[r - 1] && marks[r - 1][c - 1]) || (marks[c - 1] && marks[c - 1][r - 1]) || null;
+  return m === 'green' || m === 'red' ? m : null;
+}
+// how many facts are green and red (each fact once: 7 x 8 and 8 x 7 together)
+export function markCount(marks) {
+  const out = { green: 0, red: 0 };
+  if (!Array.isArray(marks)) return out;
+  for (let r = 1; r <= 12; r++) for (let c = r; c <= 12; c++) { const m = markAt(marks, r, c); if (m) out[m]++; }
+  return out;
+}
 function toTable(t) { const n = Math.round(Number(t)); return n >= 1 && n <= 12 ? n : 0; }
 function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 function tidyRule(rule) { return String(rule).replace(/\s*[x*]\s*/g, ` ${TIMES} `).replace(/\s+/g, ' ').trim(); }

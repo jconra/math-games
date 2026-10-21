@@ -161,8 +161,8 @@ export const MAPS = {
   // src/math/wordproblems.js LADDER (9): groups, sharing, how many more, rates, money, two steps, recipes and crates,
   // discounts and tax, stories told backwards
   store: { strand: 'words', file: 'src/math/wordproblems.js', anchors: [20, 26, 30, 38, 42, 48, 55, 66, 75] },
-  // src/math/supplies.js LADDER (6): the delivery orders worked out on the slip
-  supplies: { strand: 'words', file: 'src/math/supplies.js', anchors: [30, 38, 44, 50, 56, 64] },
+  // src/math/supplies.js LADDER (7): the delivery orders worked out on the slip (a week, then a fortnight: 2026-10-21)
+  supplies: { strand: 'words', file: 'src/math/supplies.js', anchors: [30, 38, 42, 44, 50, 56, 64] },
   // src/math/shares.js LADDER (7): Loot the gang's fair shares (division; its answers count in words too, at 0.5)
   shares: { strand: 'div', file: 'src/math/shares.js', anchors: [22, 32, 45, 50, 55, 65, 72] },
   // src/math/goods.js WOOL.forms (unit, part, priced, two): selling wool by the fraction

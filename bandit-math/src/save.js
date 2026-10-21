@@ -47,11 +47,17 @@
 //   age:      null | a whole number   optional; gives the skill model a modest head start (skill.js ageStart)
 //   goals:    [{ id, ... }]   goals a grown-up pinned on the rider (src/completion.js says what they are)
 //   done:     ['buckle:cattle:tin', ...]   completion items already announced with a toast (src/completion.js)
+//   levels:   { v, migrated, places: { roundup: {...}, lockbox: {...}, ... } }   the rider's level in each place's ladder
+//             (src/levels/model.js keeps it; fixRider moves an old save onto the ladders once, from the strands)
+//   facts:    { v, migrated, n, f: { '7x8': {...}, ... } }   every times fact answered, right or missed (the times
+//             chart's green and red; src/math/facts.js keeps it; fixRider reads the old times trainer's misses once)
 // }
 
 import { cleanAnimals, cleanGoods } from './math/goods.js';
 import { PRICES } from './catalog.js';
 import { migrate as migrateSkill, record as recordSkill, readAloud as readsNow } from './math/skill.js';
+import { migrate as migrateLevels, recordLevel, PLACE } from './levels/model.js';
+import { migrate as migrateFacts } from './math/facts.js';
 
 const VERSION = 1;
 let KEY = 'bandit-math.riders';
@@ -409,6 +415,10 @@ export function fixRider(r) {
   // the skill model (src/math/skill.js): filled in, and the first time read from the old topics' progress (the
   // topics themselves are left as they are)
   try { migrateSkill(out); } catch (e) { console.warn('Bandit Math: could not read the skill levels', e); out.skill = { v: 1, migrated: 1, strands: {} }; }
+  // the places' levels (src/levels/model.js) and the times facts (src/math/facts.js): filled in, and the first time
+  // moved onto the ladders from the strands (the levels near the same school year) and the old times trainer
+  try { migrateLevels(out); } catch (e) { console.warn('Bandit Math: could not read the levels', e); out.levels = { v: 1, migrated: 1, places: {} }; }
+  try { migrateFacts(out); } catch (e) { console.warn('Bandit Math: could not read the times facts', e); out.facts = { v: 1, migrated: 1, n: 0, f: {} }; }
   return out;
 }
 
@@ -632,8 +642,12 @@ function pushTally(t, right) {
 //   strands: 'mul' | ['mul', 'words'] | [{ strand, at, weight }]; at = the point the question was made at (stepFor's
 //   at); sitDown, ms, size, hidden, idle: the answer's time (src/ui/answertimer.js), for sit-down questions only.
 //   range: true for an answer at the bottle range (it counts toward Sharpshooter, not Top Hand).
-// -> { pct, badge, skill }   pct = last-50 accuracy 0..100; badge = a badge earned by this very answer, or null;
-//    skill = record's result ({ mul: { level, moved, placed, justPlaced, fast, ... } }), or null without `skill`
+//   place, level: the place and the level id the question was asked at (src/levels/model.js levelFor's place and id):
+//   the answer moves the rider's level there (recordLevel), and, unless `strands` is given, it is also recorded in the
+//   level's strand at its grade (and its `also` strands), so the stats' kinds of math keep counting.
+// -> { pct, badge, skill, level }   pct = last-50 accuracy 0..100; badge = a badge earned by this very answer, or null;
+//    skill = record's result ({ mul: { level, moved, placed, justPlaced, fast, ... } }), or null without `skill`;
+//    level = recordLevel's result ({ id, moved, into, placed, justPlaced, fast, pct }), or null without `place`
 export function recordAnswer(rider, right, skill = null) {
   if (!rider.stats || typeof rider.stats !== 'object') rider.stats = fixRider(rider).stats;
   const st = rider.stats;
@@ -642,13 +656,21 @@ export function recordAnswer(rider, right, skill = null) {
   const mode = skill && skill.range ? 'shoot' : 'lasso';
   if (!st.byMode[mode]) st.byMode[mode] = tally(null);
   pushTally(st.byMode[mode], right);
-  let sk = null;
-  if (skill && skill.strands) {
-    try { sk = recordSkill(rider, skill.strands, { ...skill, right: !!right }); } catch (e) { console.warn('Bandit Math: could not record the skill answer', e); }
+  let sk = null, lv = null;
+  let strands = skill && skill.strands;
+  if (skill && skill.place && PLACE[skill.place]) {
+    const P = PLACE[skill.place];
+    const L = P.levels.find((x) => x.id === skill.level) || null;
+    try { lv = recordLevel(rider, skill.place, { ...skill, level: L ? L.id : undefined, right: !!right }); } catch (e) { console.warn('Bandit Math: could not record the level answer', e); }
+    const at = L || (lv && P.levels.find((x) => x.id === lv.before));
+    if (!strands && at) strands = [{ strand: at.strand, at: at.grade }, ...(at.also || []).map((a) => ({ strand: a.strand, at: a.grade, weight: a.weight ?? 0.5 }))];
+  }
+  if (strands) {
+    try { sk = recordSkill(rider, strands, { ...skill, right: !!right }); } catch (e) { console.warn('Bandit Math: could not record the skill answer', e); }
   }
   const fresh = stampBadges(rider);
   saveRider(rider);
-  return { pct: accuracyOf(rider).pct, badge: fresh[0] || null, skill: sk };
+  return { pct: accuracyOf(rider).pct, badge: fresh[0] || null, skill: sk, level: lv };
 }
 
 // Records a finished lock box. result = the lock-box panel's onDone result: { solved, stars, moves, par }.

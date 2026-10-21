@@ -1,7 +1,7 @@
 // THE WINDMILL JOB: the miller on the mill hill west of the stable, his mill, and the tower the rider builds him there.
 // Meeting him and pressing E (or tapping the prompt) opens the windmill lab's builder right there on the hill (the
 // build-site frame: src/buildsite.js; the builder: labs/windmill/builder.js): the lumber panel, the board in hand and its
-// arrows, the twins, his questions (through the skill model's geometry strand: src/buildsite.js skillAsker), the wind
+// arrows, the twins, his questions (the levels place 'building', up to level 7: src/buildasker.js levelAsker), the wind
 // test. What is built is kept per rider (rider.builds.windmill: the tower, the lumber left, the boards earned) and
 // stands on the hill while the builder is put away, drawn in a few draw calls.
 //
@@ -41,7 +41,7 @@ import { shownOnce } from './showme.js';
 import { setWindmill } from './completion.js';
 import { homestead, GOODS } from './math/goods.js';
 import { testPay, grind, sailsUp, stackSpots, payLine, feetOf, FLOUR, DONE_FT } from './mill.js';
-import { skillAsker, mergeStatic, mowSite } from './buildsite.js';
+import { levelAsker, mergeStatic, mowSite } from './buildsite.js';
 import { flagAsker } from './ui/flag.js';
 import { mountWindmill } from '../labs/windmill/builder.js';
 import { makeYard } from '../labs/windmill/scene.js';
@@ -253,7 +253,8 @@ export function makeWindmillJob({ W, folk, rider, sites, player = () => null, hu
       // (the yard's own frame step, and the mill fading out of the way of the camera: eye and look in the site's frame)
       yard: { ...yard, update: (dt, look, eyeAt) => { yard.update(dt); millInWay(eyeAt, look); } },
       groundY: site.groundY, low: W.tier === 'potato',
-      asker: flagAsker(skillAsker(rider, 'windmill'), 'windmill'),   // ("Confusing?" on its question card: src/ui/flag.js)
+      asker: flagAsker(levelAsker(rider, { most: 'g7' }), 'windmill'),   // (the levels' 'building' place; the windmill's builder asks up to level 7)
+      // ("Confusing?" on its question card: src/ui/flag.js)
       best: { read: () => ({ height: 0, W: 0, D: 0, ...((b && b.best) || {}) }), write: () => { saveT = 0.01; } },
       start: b ? { tower: b.tower, lumber: b.lumber, bonus: b.bonus } : null,
       // (the builder's camera starts on the side the rider came from, so the glide doesn't swing round the hill)

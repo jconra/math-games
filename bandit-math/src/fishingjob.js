@@ -3,10 +3,12 @@
 // fishing lab's builder right there (labs/fishing/builder.js, through the build-site frame: src/buildsite.js): the
 // camera glides from behind the rider out to the end of the dock, the rider fades away from the bank as their double
 // fades in at the end of the dock with the rod (same look, same hat), and the lab's cast / bite / reel / question loop
-// is played on the game's own lake, the valley drawn all round and its sounds going on. The questions go through the
-// skill model (src/math/skill.js): Fractions (the keep-or-throw-back calls, the line-ups, the weights added, the same
-// length in other numbers, mixed numbers and inches: MAPS fishing) and Ratios (the cook's ratio, bait by the fish,
-// keep 1 in every few, a ratio as a fraction: MAPS fishingRatio), read out to a rider who can't read yet.
+// is played on the game's own lake, the valley drawn all round and its sounds going on. Every question is FRACTIONS,
+// at the rider's level on the dock's ladder (src/levels/place/fishing.js, kept by src/levels/model.js): Pam's pie pan
+// and its slices for the youngest, a fraction of your fish for a friend, what's left of a pie, then the keep-or-throw
+// calls, line-ups, weights added, equal fractions, unlike bottom numbers, mixed numbers, taking away, multiplying and
+// dividing fractions (labs/fishing/pies.js questionAt), read out to a rider who can't read yet. Each answer (and each
+// "Try it") is one answer at the level its question was made at.
 // "Done for now", Esc or walking away puts the rod down: the double fades out at the end of the dock as the rider
 // fades back in on the bank, and the camera glides back.
 //
@@ -27,21 +29,24 @@
 //   J.site, J.keeper (his person), J.builder (the open builder, or null: its .handle is the lab's FI handle)
 //   J.where()           { x, z } of the fisherman (the jobs board, the trail)
 //   J.creel()           the fish in the saddlebags;  J.fishLine() '3 fish' (the HUD) or ''
-//   J.saleOrder({ who })   a fish sale for the store's counter now and then (null: not this customer, or no fish)
+//   J.saleOrder({ who, grade })   a fish sale for the store's counter now and then (null: not this customer, or no fish)
 //   J.sold(order)       a sale's right coin: those fish out of the saddlebags
 //   J.state(), J.dispose()
 import * as THREE from 'three';
 import { makePerson } from './actors/folk.js';
 import { saveRider, recordAnswer, countJob } from './save.js';
 import { flagAsker } from './ui/flag.js';
-import { stepFor, chooseMap, pctAt, isPlaced, readAloud, MAPS } from './math/skill.js';
+import { stepFor, pctAt, readAloud } from './math/skill.js';
+import { levelFor, pctOf } from './levels/model.js';
+import { recordFact } from './math/facts.js';
 import { answerTimer } from './ui/answertimer.js';
 import { markFound } from './completion.js';
 import { mergeStatic } from './buildsite.js';
 import { mountFishing, stringerAt, stringerYaw } from '../labs/fishing/builder.js';
 import { makeDock, makeRipples } from '../labs/fishing/scene.js';
 import { makeFish } from '../labs/fishing/fish.js';
-import { questionFor, questionOf, readRecord, readBook, STEP_NAMES, KINDS } from '../labs/fishing/questions.js';
+import { readRecord, readBook, KINDS } from '../labs/fishing/questions.js';
+import { questionAt, lessonAt } from '../labs/fishing/pies.js';
 import { value, feet } from '../labs/fishing/frac.js';
 import { makeFishSale, formsBelow, SALE_FORMS } from './math/fishsale.js';
 import { fishingOf, keepFish, sayable, saleMap, CREEL } from './fishrecords.js';
@@ -57,9 +62,6 @@ export const DOCK = {
   saveAfter: 1.5,            // s after a fish is landed before the rider is saved (and always as the rod goes down)
   water: new THREE.Color('#2f6f78'),   // the lake's colour, the fish under its surface tinted toward it
 };
-// the ratio steps' kinds, in order (strands.js MAPS fishingRatio ids)
-const RATIO_TOPICS = ['rule', 'bait', 'part', 'cook'];
-const RATIO_NAMES = { rule: 'Keep 1 in every few', bait: 'Bait by the fish', part: 'A ratio as a fraction', cook: "The cook's ratio" };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const ease = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 
@@ -127,38 +129,39 @@ export function makeFishingJob({ W, folk, rider, sites, player = () => null, aud
   J.keeper = keeper;
   const offKeeper = keeper && W.addBlocker ? W.addBlocker((x, z) => Math.hypot(x - DOCK.keeper.x, z - DOCK.keeper.z) < 0.42) : () => {};
 
-  // ── the questions through the skill model ──────────────────────────────────────────────────────────────────
-  let lastMap = null, timer = null, now = null;   // now: { map, step } the catch's question was made at
-  const top = (map) => MAPS[map].anchors.length;
+  // ── the questions: the rider's level on the fishing ladder (src/levels/place/fishing.js, kept by
+  // src/levels/model.js), made by the ladder's own maker (labs/fishing/pies.js questionAt) ─────────────────────────
+  let timer = null, now = null;   // now: the levelFor answer the catch's question was made at
   const asker = {
     question(ctx, recent) {
-      const map = chooseMap(rider, ['fishing', 'fishingRatio'], { last: lastMap }) || 'fishing';
-      lastMap = map;
-      const step = clamp(stepFor(rider, map).step || 1, 1, top(map));
-      now = { map, step };
-      const q = map === 'fishing' ? questionFor(step, null, Math.random, ctx, recent, step) : questionFor(7, RATIO_TOPICS[step - 1], Math.random, ctx, recent, step);
-      return Object.assign(q, { map, step });
+      now = levelFor(rider, 'fishing'); saveT = DOCK.saveAfter;   // (the first fish meets the place: saved soon)
+      const q = questionAt(now.level.gen, Math.random, ctx, recent);
+      return Object.assign(q, { levelId: now.id });
     },
-    practice(topic, from, ctx) { const q = questionOf(topic, from, Math.random, ctx); return Object.assign(q, { map: now ? now.map : 'fishing', step: now ? now.step : 1 }); },
+    practice(topic, from, ctx, catchQ) {
+      const gen = (catchQ && catchQ.gen) || (now && now.level.gen) || { kind: 'fish', from: 1, topic: 'keep' };
+      return Object.assign(lessonAt(gen, Math.random, ctx, topic), { levelId: (catchQ && catchQ.levelId) || (now && now.id) });
+    },
+    lesson(q, ctx) { return lessonAt(q.gen || (now && now.level.gen) || { kind: 'fish', from: 1 }, Math.random, ctx, q.topic); },
     asked(q) {
       if (timer) timer.cancel(); timer = answerTimer();
       if (speak && readAloud(rider)) speak(sayable(q.prompt));
     },
     answered(q, right) {
-      const map = q.map || 'fishing', step = clamp(q.step || 1, 1, top(map)), strand = MAPS[map].strand;
       const t = timer ? timer.stop() : {}; timer = null;
-      const before = stepFor(rider, map).step;
-      recordAnswer(rider, right, { strands: [{ strand, at: pctAt(map, step) }], sitDown: true, size: 1, ...t });
-      const after = stepFor(rider, map).step;
+      const rec = recordAnswer(rider, right, { place: 'fishing', level: q.levelId, sitDown: true, size: 1, ...t });
+      // a fraction of your fish ("a third of your 12 fish") shares them out first: 12 ÷ 3 is the times fact 3 × 4, and
+      // it goes on the times chart like every sharing asked anywhere (src/math/facts.js)
+      { const m = /^group:\d+\/(\d+):(\d+)$/.exec(q.key || ''); if (m) { const d = +m[1], each = +m[2] / d; if (Number.isInteger(each) && d <= 12 && each >= 1 && each <= 12) { try { recordFact(rider, d, each, !!right); } catch (e) { console.warn(e); } } } }
       saveT = DOCK.saveAfter;
-      return { up: after > before, down: after < before };
+      const lv = rec && rec.level;
+      return { up: !!(lv && lv.moved > 0 && !lv.justPlaced && lv.placed), down: !!(lv && lv.moved < 0) };
     },
     stars() {
-      const map = now ? now.map : 'fishing', step = now ? now.step : 1, strand = MAPS[map].strand;
-      const name = map === 'fishing' ? STEP_NAMES[step] : RATIO_NAMES[RATIO_TOPICS[step - 1]];
-      return { n: step, of: top(map), name: `${map === 'fishing' ? 'Fractions' : 'Ratios'}: ${name}`, note: isPlaced(rider, strand) ? '' : 'Finding your level' };
+      const q = now || levelFor(rider, 'fishing');
+      return { n: q.i + 1, of: q.n, name: q.level.title, note: q.placing ? 'Finding your level' : '' };
     },
-    state: () => ({ now, lastMap, frac: stepFor(rider, 'fishing'), ratio: stepFor(rider, 'fishingRatio') }),
+    state: () => ({ now: now ? { id: now.id, i: now.i, placing: now.placing } : null, pct: pctOf(rider, 'fishing') }),
   };
   flagAsker(asker, 'fishing');   // ("Confusing?" on the catch's question card: src/ui/flag.js)
 
@@ -307,11 +310,22 @@ export function makeFishingJob({ W, folk, rider, sites, player = () => null, aud
   let sinceSale = 0;
   J.creel = () => F().creel;
   J.fishLine = () => { const n = F().creel.length; return n ? `${n} fish` : ''; };
-  J.saleOrder = ({ who = null } = {}) => {
+  J.saleOrder = ({ who = null, grade = null } = {}) => {
     const f = F(); if (!f.creel.length) return null;
     if (!(f.fresh && CREEL.sellFirst) && ++sinceSale < CREEL.every) return null;
-    const { map, most } = saleMap(rider), q = stepFor(rider, map, { most });
-    const form0 = SALE_FORMS[map][clamp(q.step || 1, 1, SALE_FORMS[map].length) - 1];
+    // the form of sale: with the store's level (grade: its school year, as the eggs' and the wool's sales go), the
+    // hardest form at or under it, and none under the easiest (a kindergartner isn't asked 3 gold a fish times 4);
+    // without it (old callers), the skill model's way
+    let map, q, form0;
+    if (grade != null) {
+      const forms = Object.entries(SALE_FORMS).flatMap(([m, list]) => list.map((form, i) => ({ form, m, at: pctAt(m, i + 1) }))).sort((a, b) => a.at - b.at);
+      const fit = forms.filter((x) => x.at <= grade).pop();
+      if (!fit) return null;
+      map = fit.m; form0 = fit.form; q = { at: fit.at };
+    } else {
+      const sm = saleMap(rider); map = sm.map; q = stepFor(rider, map, { most: sm.most });
+      form0 = SALE_FORMS[map][clamp(q.step || 1, 1, SALE_FORMS[map].length) - 1];
+    }
     for (const form of formsBelow(form0)) {
       const m = Object.keys(SALE_FORMS).find((k) => SALE_FORMS[k].includes(form)), step = SALE_FORMS[m].indexOf(form) + 1;
       const at = m === map ? Math.max(q.at, pctAt(m, step)) : pctAt(m, step);

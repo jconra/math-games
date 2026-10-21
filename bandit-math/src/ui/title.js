@@ -8,7 +8,7 @@
 // buckles won; the chosen rider's card also shows each job's buckle with how far to the next one) and "New rider" (a
 // name, a look, and an optional age); the chosen rider's panel: their math (no level to pick: the game finds each
 // kind of math's level by itself as they play, src/math/skill.js; the panel says so and shows the levels found so
-// far, with the stats page a tap away, src/ui/stats.js), their goals and completion (src/completion.js, when the game
+// far, with the levels page, src/ui/levels.js, and the stats page, src/ui/stats.js, a tap away), their goals and completion (src/completion.js, when the game
 // has it: a grown-up pins a goal, "Set a goal"), the read-aloud switch while their math is young, and a folded "Jobs"
 // list where a grown-up can turn some jobs off (every job is on by default); RIDE OUT; "Just lock boxes"; a small
 // build number; and a folded Grown-ups corner (each rider's math, age and progress; delete a rider).
@@ -32,6 +32,8 @@ import {
 } from '../save.js';
 import { stats as strandStats, levelOf } from '../math/skill.js';
 import { openStats, statRows } from './stats.js';
+import { openLevels, gridWords } from './levels.js';
+import { placeStats, stateOf } from '../levels/model.js';
 import { buckleSVG } from './hud.js';
 import { hatSVG, hatOf, hatColour } from '../hats.js';
 
@@ -57,6 +59,8 @@ const ICON = {
   compass: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 2.8v2.4M12 18.8v2.4M2.8 12h2.4M18.8 12h2.4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M15.6 8.4l-2.2 5-5 2.2 2.2-5z" fill="currentColor"/></svg>',
   // three rising bars: the stats page
   bars: '<svg viewBox="0 0 16 16" aria-hidden="true" fill="currentColor"><rect x="2" y="9" width="3" height="5" rx=".8"/><rect x="6.5" y="5.5" width="3" height="8.5" rx=".8"/><rect x="11" y="2" width="3" height="12" rx=".8"/></svg>',
+  // a ladder: the levels page
+  ladder: '<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M4.5 1.5v13M11.5 1.5v13M4.5 4.5h7M4.5 8h7M4.5 11.5h7"/></svg>',
   // a pennant on a pole: a goal
   flag: '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 14.5V1.8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4.4 2.2h8.4l-2.2 3.2 2.2 3.2H4.4z" fill="currentColor"/></svg>',
   // a list with ticks: what's left to do
@@ -236,6 +240,15 @@ function mathSummary(r, n = 4) {
   return rows.sort((a, b) => lately(b) - lately(a) || last(b) - last(a) || b.answered - a.answered).slice(0, n);
 }
 
+// The same for the places (src/levels/model.js: one kind of math and one ladder each): the places played lately
+// first. Only places with something to go on (answered, or moved from an earlier ride's save).
+// -> [{ place, short, pct, finding }]
+function placeSummary(r, n = 4) {
+  const rows = placeStats(r).filter((x) => x.answered > 0 || (stateOf(r, x.place) || {}).old);
+  const last = (x) => Number((stateOf(r, x.place) || {}).last) || 0;
+  return rows.sort((a, b) => last(b) - last(a) || b.answered - a.answered).slice(0, n);
+}
+
 // Names a new rider can start with without typing one (a rider who can't read yet taps Saddle up): one not taken yet.
 const NAMES = ['Dusty', 'Rosie', 'Kit', 'Hank', 'Belle', 'Sam', 'Lou', 'Jo', 'Cody', 'Daisy', 'Buck', 'Pearl'];
 const freeName = (taken) => NAMES.find((n) => !taken.has(n.toLowerCase())) || `Rider ${taken.size + 1}`;
@@ -340,16 +353,21 @@ export function showTitle(root, opts = {}) {
   const pct100 = (v) => Math.max(0, Math.min(100, Number(v) || 0));
 
   function renderSettings(r) {
-    // MATH: no level to pick. Until the rider has answered something the panel says how it works; then the kinds of
-    // math practised lately with their levels (the stats page has every one), named short as on their tiles
-    const sum = mathSummary(r, 4);
-    const finding = strandStats(r).filter((x) => x.finding && x.answered > 0);
+    // MATH: no level to pick. Until the rider has answered something the panel says how it works; then the places
+    // played lately with their % up each place's ladder (the levels page and the stats page have every one), or, for a
+    // rider whose answers so far came from jobs not on the ladders yet, the kinds of math practised lately; and any
+    // levels a grown-up set by hand, in plain words
+    const places = placeSummary(r, 4);
+    const sum = places.length ? places : mathSummary(r, 4);
+    const finding = places.length ? places.filter((x) => x.finding) : strandStats(r).filter((x) => x.finding && x.answered > 0);
+    const set = gridWords(r);
     const math = sum.length
       ? `<div class="bmt-skills">${sum.map((x) => `<span class="bmt-sk${x.finding ? ' is-finding' : ''}"><b>${esc(x.short)}</b><em>${x.pct}%</em>
             <span class="bmt-skbar"><i style="width:${pct100(x.pct)}%"></i></span></span>`).join('')}</div>
         <p class="bmt-auto is-small">${ICON.compass}<span>${finding.length ? `Finding your level in ${esc(finding.map((x) => x.short).join(', ').replace(/, ([^,]*)$/, ' and $1'))}: a question may feel too easy or too hard for a minute.`
           : 'Your level moves with you: about 4 answers in 5 right.'}</span></p>`
       : `<p class="bmt-auto">${ICON.compass}<span><b>No level to pick.</b> ${AUTO_LINE}</span></p>`;
+    const setLine = set ? `<p class="bmt-auto is-small bmt-set">${ICON.ladder}<span><b>Set by hand:</b> ${esc(set)}</span></p>` : '';
     // GOALS and completion (src/completion.js)
     const c = compOf(r);
     const goals = c ? `
@@ -384,8 +402,8 @@ export function showTitle(root, opts = {}) {
     return `
       <div class="bmt-head"><h2><em>${esc(r.name)}</em></h2><p>${toNext(r)}</p></div>
       <section class="bmt-sec">
-        <h3 class="bmt-label">Math <button class="bmt-link" data-act="stats" data-k="stats">${ICON.bars}Stats</button></h3>
-        ${math}
+        <h3 class="bmt-label">Math <span class="bmt-links"><button class="bmt-link" data-act="levels" data-k="levels">${ICON.ladder}Levels</button><button class="bmt-link" data-act="stats" data-k="stats">${ICON.bars}Stats</button></span></h3>
+        ${math}${setLine}
       </section>
       ${goals}
       ${readRow}
@@ -567,6 +585,7 @@ export function showTitle(root, opts = {}) {
           </select></label> <small>a small head start for math not met yet</small></dd>
         <dt>Read aloud</dt><dd><button class="bmt-chip bmt-readsw" aria-pressed="${readMode(r) !== false}" data-act="read" data-id="${esc(r.id)}" data-k="read:${esc(r.id)}">${readMode(r) !== false ? ICON.speaker : ICON.speakerOff}${esc(readModeWords(r))}</button>
           <small>tap: by itself, always, off</small></dd>
+        <dt>Levels</dt><dd>${esc(gridWords(r) || 'every level on in every place: the game finds each one')}</dd>
         <dt>Jobs</dt><dd>${off.length ? `turned off: ${off.map((m) => esc(m.name)).join(', ')}` : 'every job on'}</dd>
         ${c ? `<dt>Completion</dt><dd>${c.pct}%${c.goals.length ? ` · goals: ${c.goals.map((g) => esc(g.name)).join(', ')}` : ''}</dd>` : ''}
         <dt>Lock boxes</dt><dd>${boxes}</dd>
@@ -574,6 +593,7 @@ export function showTitle(root, opts = {}) {
         <dt>Badges</dt><dd>${badges.length ? badges.map(esc).join(', ') : 'none yet'}</dd>
       </dl>
       <div class="bmt-rowbtns">
+        <button class="bmt-chip" data-act="levels" data-id="${esc(r.id)}" data-k="levels:${esc(r.id)}">${ICON.ladder}Levels</button>
         <button class="bmt-chip" data-act="stats" data-id="${esc(r.id)}" data-k="stats:${esc(r.id)}">${ICON.bars}Stats</button>
         ${S.confirmDel === r.id ? '' : `<button class="bmt-del" data-act="del" data-id="${esc(r.id)}" data-k="del:${esc(r.id)}">Delete rider</button>`}
       </div>
@@ -686,6 +706,15 @@ export function showTitle(root, opts = {}) {
         if (!who) return;
         const back = data.id ? `stats:${data.id}` : 'stats';
         openStats(document.body, who, { face: faceSVG(who.look), completion: S.comp, onClose: () => focusKey(back, false) });
+        return;
+      }
+      case 'levels': {   // the levels page (src/ui/levels.js), for the chosen rider (or a rider's row in the Grown-ups corner)
+        const who = (data.id && riders.find(x => x.id === data.id)) || r;
+        if (!who) return;
+        const back = data.id ? `levels:${data.id}` : 'levels';
+        openLevels(document.body, who, {
+          onChange: (x) => { keepFocus(() => { renderPanel(); renderSheet(); }); try { onChange(x || who); } catch (e) { console.error(e); } },
+          onClose: () => focusKey(back, false) });
         return;
       }
       case 'goals': case 'left': {

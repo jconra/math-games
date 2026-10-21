@@ -1,6 +1,36 @@
 // THE WAGON JOB'S PLAN, in plain numbers (no three.js, so the tests can load it): the road the wagon rolls round, where
-// the riders ride round it, and the job's small rules. Used by src/missions/wagonjob.js; tested in
-// tests/wagonjob.test.mjs.
+// the riders ride round it, which gang rides next, and the job's small rules. Used by src/missions/wagonjob.js; tested
+// in tests/wagonjob.test.mjs (and the gangs by tests/series.test.mjs and the levels rigs).
+
+import { pickFact, pickTable } from '../math/facts.js';
+import { TABLE_ORDER } from '../math/series.js';
+import { isOn } from '../levels/model.js';
+
+// ── WHICH GANG RIDES NEXT ────────────────────────────────────────────────────────────────────────────────────────────
+// From the rider's level here (q: src/levels/model.js levelFor 'wagon'): odds and evens, a table's gang, or a
+// missing-number card. A gang level's own table, but once placed every third gang (n: gangs dealt this ride, counting
+// this one) is an earlier table the rider has met on the way (the weak ones more: src/math/facts.js pickTable),
+// recorded at that table's own level; the any-table level picks every gang that way. A table's first two gangs reach
+// up to x10 (met: the times trainer's gangs of it so far), then x12.
+//   chooseGang(rider, q, { n, lastTable, lastFact, met }) -> { kind: 'parity', want, top, level, count }
+//     | { kind: 'rule', table, reach, level, count } | { kind: 'missing', fact: { t, a, upTo }, key, level, count }
+export const GANG = { riders: 8, reviewEvery: 3 };   // riders in a gang (about half of them the gang); a review every 3rd
+export function chooseGang(rider, q, { n = 1, lastTable = null, lastFact = null, met = () => 0, rand = Math.random } = {}) {
+  const g = q.level.gen, count = GANG.riders;
+  if (g.kind === 'parity') return { kind: 'parity', want: g.want, top: g.top, level: q.id, count };
+  if (g.kind === 'missing') {
+    const f = pickFact(rider, { tables: TABLE_ORDER.filter((t) => t <= g.upTo), upTo: g.upTo, from: 2, last: lastFact, rand });
+    return { kind: 'missing', fact: { t: f ? f.a : 7, a: f ? f.b : 8, upTo: g.upTo }, key: f ? f.key : null, level: q.id, count };
+  }
+  let t = g.table, level = q.id;
+  if (!t) t = pickTable(rider, g.open, { last: lastTable, rand }) || g.open[0];
+  else if (!q.placing && n % GANG.reviewEvery === 0 && g.open.length > 1) {
+    // (an earlier table whose gang level a grown-up switched off on the levels page isn't reviewed either)
+    const r = pickTable(rider, g.open.filter((x) => x !== t && isOn(rider, 'wagon', `g${x}`)), { last: lastTable, rand });
+    if (r) { t = r; level = `g${r}`; }
+  }
+  return { kind: 'rule', table: t, reach: met(t) < 2 ? 10 : 12, level, count };
+}
 
 // The road: a closed loop over the open, nearly level land east of the pasture (checked on the real land with
 // ~/pw/bandit-math/rigs/bandits/road_check.cjs: nothing blocks it or 12 m to either side, no water, gentle slopes; it
@@ -79,10 +109,12 @@ export const SLOTS = [[1, 6, 5], [-1, 6.5, 3], [1, 9, -3], [-1, 9.5, -5], [1, 6,
 export const gangLine = (line) => String(line || '').replace(/(\d+)-herd/g, '$1-Gang');
 
 // the sacks a roped bandit drops for his number: 24 in the 6-Gang drops 4 sacks of 6 (on a missing-number card the
-// number IS how many sacks of the table)
+// number IS how many sacks of the table); an odds-and-evens bandit drops his number in pairs (8: 4 sacks of 2; 7: 3,
+// the odd one kept), none past 24 (too many to lay out)
 export function sacksFor(n, table, kind = 'rule') {
   if (!table) return { sacks: 0, per: 0 };
   if (kind === 'missing') return { sacks: n, per: table };
+  if (kind === 'parity') return { sacks: n <= 24 ? Math.floor(n / 2) : 0, per: 2 };
   return n % table === 0 ? { sacks: n / table, per: table } : { sacks: 0, per: table };
 }
 
@@ -166,7 +198,6 @@ export const AMBUSH = {
   first: 45,          // s out on the long roads before the first hold-up of a ride
   every: [110, 220],  // s out on the long roads between one hold-up and the next
   riders: [6, 9],     // riders in the bunch for a gang wearing a table's multiples (about half are the gang: 3 to 5)
-  cards: [3, 5],      // a gang of cards: this many cards, one bandit a card
   most: 5,            // bandits roped that see the gang off (any more ride off with the rest)
   bonus: 10,          // gold the driver pays the player on top of the gang's usual pay
   wait: 150,          // s the gang holds a wagon up for a player who doesn't come; then the driver makes a run for it
@@ -184,9 +215,8 @@ export const AMBUSH = {
   // the driver's words (a bubble over his head): his shout, and his thanks once the gang is seen off
   words: { help: 'Help!', thanks: ['Much obliged, partner!', 'Thank you kindly!', "You're a real life saver!", 'Bless you, partner!'] },
 };
-// how many riders ride up for a gang (a table's), and how many cards (a gang of cards)
+// how many riders ride up for a gang
 export const gangSize = (rand = Math.random) => AMBUSH.riders[0] + Math.floor(rand() * (AMBUSH.riders[1] - AMBUSH.riders[0] + 1));
-export const cardCount = (rand = Math.random) => AMBUSH.cards[0] + Math.floor(rand() * (AMBUSH.cards[1] - AMBUSH.cards[0] + 1));
 // the player is out on the long roads: pu metres along the road (the nearest point), off metres from its middle,
 // square: where the town square is along it
 export const outOnRoad = ({ pu, off, square }) => Math.abs(pu - square) >= AMBUSH.player && off <= AMBUSH.roadNear;

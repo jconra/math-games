@@ -1268,3 +1268,111 @@
 /* the blank coin after another coin: a "+" in front of it (7 = 3 + ?) */
 .chip.q-plus { display: inline-flex; align-items: center; gap: 0.3em; background: none; border: 0; box-shadow: none; padding: 0; }
 .chip.q-plus .brk-p { font: 700 1.6em/1 Bitter, serif; color: var(--gold, #e8c370); }
+
+/* ---- the levels: "The rules" button, the step being worked in big type, the arrow to it, the rules card -------- */
+.lbx-rules {
+  display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 10px; white-space: nowrap;
+  font: 600 16px/1.1 Bitter, serif; color: var(--brass-hi);
+  background: rgba(226, 173, 76, 0.12); box-shadow: inset 0 0 0 1px rgba(226, 173, 76, 0.55);
+}
+.lbx-rules[hidden] { display: none; }
+.lbx-rules:hover { background: rgba(226, 173, 76, 0.22); box-shadow: inset 0 0 0 1px var(--brass-hi); }
+/* the step being worked, big, over the equation: the rule to follow now */
+.lbx-now {
+  flex: none; display: flex; align-items: baseline; justify-content: center; gap: 0.5em; flex-wrap: wrap;
+  margin: 2px 6px 0; padding: 6px 14px 7px; border-radius: 10px; text-align: center;
+  background: rgba(226, 173, 76, 0.14); box-shadow: inset 0 0 0 1.5px rgba(226, 173, 76, 0.5);
+  color: #fff3d6; font: 700 27px/1.2 Bitter, Georgia, serif;
+}
+.lbx-now[hidden] { display: none; }
+.lbx-now .ln-n { font: 400 0.8em/1.2 Rye, Georgia, serif; color: var(--brass-hi); white-space: nowrap; }
+.lbx-now .ln-t small { display: block; font: italic 500 0.62em/1.25 Bitter, serif; color: var(--brass-hi); }
+.lbx-now.fresh { animation: lbx-nowin 0.45s cubic-bezier(.2, .9, .3, 1.2); }
+@keyframes lbx-nowin { from { transform: scale(0.94); opacity: 0.3; } to { transform: none; opacity: 1; } }
+.reviewing .lbx-now, .opened .lbx-now { display: none; }
+.lbx-arrow { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 6; overflow: visible; opacity: 0; transition: opacity 0.25s; }
+.lbx-arrow.on { opacity: 1; }
+.lbx-arrow .shaft { fill: none; stroke: var(--brass-hi); stroke-width: 3.5; stroke-linecap: round; stroke-dasharray: 9 7; animation: lbx-march 1.2s linear infinite; filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.6)); }
+.lbx-arrow .ah { fill: var(--brass-hi); }
+@keyframes lbx-march { to { stroke-dashoffset: -32; } }
+/* a find-x box: the key's number in the x card */
+.chip.card.keyed .face { font-size: 0.82em; white-space: nowrap; }
+.lbx-grid.picks.four { grid-template-columns: 1fr 1fr; }
+/* while a part is asked big in the middle of the mat, the step's line steps aside to give it the room */
+.focus-on .lbx-now { display: none; }
+
+/* the rules card ("You've reached algebra!" once, then "The rules") */
+.lbx-rulescard {
+  position: absolute; inset: 0; z-index: 20; display: grid; place-items: center; padding: 16px;
+  background: rgba(10, 6, 3, 0.66); opacity: 0; transition: opacity 0.2s;
+}
+.lbx-rulescard.in { opacity: 1; }
+.rl-box {
+  width: min(640px, 100%); max-height: 100%; overflow: auto; padding: 18px 22px 16px; border-radius: 16px;
+  background: linear-gradient(180deg, #4a3220, #33221a); color: var(--ink);
+  box-shadow: inset 0 0 0 2px rgba(226, 173, 76, 0.55), 0 20px 60px rgba(0, 0, 0, 0.6);
+  transform: translateY(14px) scale(0.98); transition: transform 0.25s cubic-bezier(.2, .8, .25, 1);
+}
+.lbx-rulescard.in .rl-box { transform: none; }
+.rl-title { margin: 0 0 8px; text-align: center; font: 400 32px/1.1 Rye, Georgia, serif; color: var(--brass-hi); text-shadow: 0 2px 0 #4a2d14; }
+.rl-first .rl-title { font-size: 36px; }
+.rl-lead { margin: 0 0 10px; text-align: center; font: 500 19px/1.35 Bitter, serif; }
+.rl-gold {
+  margin: 0 0 10px; padding: 10px 14px; border-radius: 10px; text-align: center;
+  font: italic 700 24px/1.25 Bitter, serif; color: #fff3d6;
+  background: rgba(226, 173, 76, 0.16); box-shadow: inset 0 0 0 1.5px var(--brass);
+}
+.rl-p { margin: 0 0 10px; font: 400 17px/1.35 Bitter, serif; text-align: center; }
+.rl-flip { color: var(--brass-hi); font-weight: 600; }
+.rl-h { font: 400 16px/1.2 Rye, Georgia, serif; color: var(--brass-hi); margin: 0 0 4px; }
+.rl-ex, .rl-steps { margin: 0 0 10px; padding: 8px 12px; border-radius: 10px; background: rgba(0, 0, 0, 0.18); }
+.rl-exl { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.rl-exl li { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: baseline; gap: 12px; }
+.rl-move { grid-column: 1; text-align: right; font: italic 500 15px/1.2 Bitter, serif; color: var(--brass-hi); }
+.rl-line { grid-column: 2; font: 700 24px/1.3 Bitter, Georgia, serif; color: #fff3d6; white-space: nowrap; }
+.rl-check { margin: 4px 0 0; text-align: center; font: 500 15px/1.3 Bitter, serif; color: var(--good); }
+.rl-stl { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; font: 500 16px/1.25 Bitter, serif; }
+.rl-stl b { display: inline-grid; place-items: center; width: 22px; height: 22px; margin-right: 8px; border-radius: 50%; background: var(--brass-hi); color: #2b1d10; font: 700 12.5px/1 Bitter, serif; }
+.rl-small { margin: 6px 0 0; font: italic 400 14px/1.3 Bitter, serif; color: var(--mute); }
+.rl-box .x, .lbx-now .x { font-family: Georgia, 'Times New Roman', serif; font-style: italic; }
+.rl-go {
+  display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 54px; margin-top: 4px;
+  border-radius: 12px; font: 700 21px/1 Bitter, serif; color: #2b1d10;
+  background: linear-gradient(180deg, var(--brass-hi), var(--brass)); box-shadow: 0 3px 0 var(--brass-lo);
+}
+.rl-go kbd { font-size: 12px; padding: 2px 6px; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(43, 29, 16, 0.5); }
+@media (max-width: 900px) {
+  .lbx-top { grid-template-areas: "name stars purse" "lock rules done"; }
+  .lbx-rules { grid-area: rules; justify-self: end; padding: 5px 11px; font-size: 14px; }
+  .lbx-now { font-size: 19px; padding: 4px 10px 5px; margin: 0 2px; }
+  .rl-box { padding: 14px 14px 12px; }
+  .rl-title { font-size: 26px; } .rl-first .rl-title { font-size: 28px; }
+  .rl-lead { font-size: 16px; } .rl-gold { font-size: 19px; padding: 8px 10px; } .rl-p { font-size: 15px; }
+  .rl-line { font-size: 20px; } .rl-move { font-size: 13px; } .rl-stl { font-size: 14.5px; } .rl-go kbd { display: none; }
+}
+@media (max-height: 520px) and (orientation: landscape) {
+  .lbx-top { grid-template-columns: minmax(0, 1fr) auto auto auto auto auto; grid-template-areas: "name lock stars purse rules done"; }
+  .lbx-rules { grid-area: rules; padding: 4px 10px; font-size: 13px; }
+  .lbx-now { font-size: 17px; padding: 3px 10px 4px; }
+  .rl-box { width: min(760px, 100%); }
+  .rl-title { font-size: 24px; } .rl-gold { font-size: 18px; } .rl-line { font-size: 18px; }
+}
+
+/* ---- the Tools button (the game's tools: the times chart, Work it out), by "The rules" ------------------------- */
+.lbx-tools {
+  display: inline-flex; align-items: center; gap: 7px; padding: 8px 13px; border-radius: 10px; white-space: nowrap;
+  font: 600 16px/1.1 Bitter, serif; color: var(--brass-hi);
+  background: rgba(226, 173, 76, 0.12); box-shadow: inset 0 0 0 1px rgba(226, 173, 76, 0.55);
+}
+.lbx-tools[hidden] { display: none; }
+.lbx-tools svg { width: 18px; height: 18px; flex: none; }
+.lbx-tools:hover { background: rgba(226, 173, 76, 0.22); box-shadow: inset 0 0 0 1px var(--brass-hi); }
+@media (max-width: 900px) {
+  .lbx-top { grid-template-columns: minmax(0, 1fr) auto auto auto; grid-template-areas: "name name stars purse" "lock rules tools done"; }
+  .lbx-tools { grid-area: tools; justify-self: end; padding: 5px 9px; font-size: 14px; }
+  .lbx-tools span { display: none; }
+}
+@media (max-height: 520px) and (orientation: landscape) {
+  .lbx-top { grid-template-columns: minmax(0, 1fr) auto auto auto auto auto auto; grid-template-areas: "name lock stars purse rules tools done"; }
+  .lbx-tools { grid-area: tools; padding: 4px 9px; font-size: 13px; }
+}

@@ -53,11 +53,12 @@
 // rider. Nothing is kept anywhere else.
 //
 //   const Q = makeWordProblems(rider.topics.store ||= {}, { rand })
-//   Q.next({ who, step, ladder, longStep, longMost })  -> an order (see makeOrder for its shape); who: a FOLK entry
+//   Q.next({ who, step, ladder, longStep, longMost, types })  -> an order (see makeOrder for its shape); who: a FOLK entry
 //                           bringing it (optional); step: the step to make it at (the strands' choice: then the ladder
 //                           below doesn't move); ladder: 'main' (LADDER) or 'K' (K_LADDER); longStep: the rider's step
 //                           on the Long work ladder (src/math/longwork.js) for a bulk order; longMost: the hardest long
-//                           sum (a point on that strand) the other kinds may ask
+//                           sum (a point on that strand) the other kinds may ask; types: only these kinds (the
+//                           store's levels, src/levels/place/store.js), or null for the step's own mix
 //   Q.answer(order, coin, { helped })   coin = the coin picked (or its index) -> { right, first, moved, step, placed }
 //   Q.level()               -> { step, of, label, placing, line }
 //   Q.state
@@ -360,22 +361,24 @@ MAKERS.compare = (t, size, f) => {
   };
 };
 
-// distance = speed x time, and the two ways back: 45 miles in 9 hours -> 5 miles an hour
+// distance = speed x time, and the two ways back: 12 miles in 4 hours -> 3 miles an hour.
+// THE SPEEDS ARE THE OLD WEST'S: an ox or freight wagon makes 2 to 4 miles an hour (10 to 15 miles a day), a cattle
+// drive 2 or 3 miles an hour (10 to 15 a day), a rider 3 to 8, the stagecoach 5 to 9 (SPEEDS below). The wrong coins
+// stay believable too: a slip whose answer no wagon could make (63 miles in 7 hours "is 441 miles an hour") is left
+// off, and the hours taken for the speed, or a speed one or two off, take its place. A slip that would be a believable
+// speed (or a believable number of hours) stays: those are the ones that teach.
+export const SPEEDS = {
+  wagon: { hour: [2, 4], day: [10, 15] },
+  herd: { hour: [2, 3], day: [10, 15] },
+  stage: { hour: [5, 9], day: null },
+  rider: { hour: [3, 8], day: null },
+};
+// the most a wrong coin may say and still be believable: miles an hour (or a day) for this mover, hours (or days)
+const speedCap = (R) => R[1] + 3;
+const TIME_CAP = { hour: 14, day: 30 };
 MAKERS.rate = (t, size, f, opts = {}) => {
   const p = pro(f);
   const form = t.pick(opts.rate || ['distance', 'speed']);
-  const days = t.chance(0.35);
-  let sp = days ? t.int(8, S3(size, 12, 15, 20)) : t.int(2, S3(size, 6, 9, 9));
-  const tm = t.int(2, S3(size, 6, 9, 9));
-  // a speed past 12 makes a long sum (17 miles a day for 8 days = 136 miles): kept in the tables unless the rider's
-  // Long work is up to it (opts.longMost); a long one gets the worked area
-  const sumOf = (v) => (form === 'distance' ? { op: 'mul', a: v, b: tm } : form === 'speed' ? { op: 'div', n: v * tm, d: tm } : { op: 'div', n: v * tm, d: v });
-  const longAt = (v) => { const x = sumOf(v), [a, b] = x.op === 'mul' ? [x.a, x.b] : [x.n, x.d]; return needsLong(x.op, a, b) ? longPoint(x.op, a, b) : 0; };
-  if (opts.longMost != null && longAt(sp) > opts.longMost) sp = t.int(8, 12);
-  const d = sp * tm;
-  const credit = [{ strand: 'ratio', at: 38, weight: 0.5 }];
-  const long = longAt(sp) ? sumOf(sp) : null;
-  const SPD = days ? MPD : MPH, TM = days ? DAY : HOUR;
   // (the trade wagon always comes from Yuma to this town, as in the store's first story; the others go all over)
   let town = t.pick(['Yuma', 'Tucson', 'Fort Bowie', 'Silver City', 'Prescott', 'Tombstone']);
   const what = t.pick([
@@ -384,38 +387,57 @@ MAKERS.rate = (t, size, f, opts = {}) => {
     { key: 'herd', who: 'The cattle drive', go: 'moves' },
     { key: 'rider', who: `${f.name}`, go: 'rides' },
   ]);
+  const SP = SPEEDS[what.key];
+  const days = !!SP.day && t.chance(0.45);
+  const R = days ? SP.day : SP.hour;
+  const tm = t.int(2, S3(size, 6, 9, 9));
+  // a speed past 12 makes a long sum (15 miles a day for 8 days = 120 miles): kept in the tables unless the rider's
+  // Long work is up to it (opts.longMost); a long one gets the worked area
+  const sumOf = (v) => (form === 'distance' ? { op: 'mul', a: v, b: tm } : form === 'speed' ? { op: 'div', n: v * tm, d: tm } : { op: 'div', n: v * tm, d: v });
+  const longAt = (v) => { const x = sumOf(v), [a, b] = x.op === 'mul' ? [x.a, x.b] : [x.n, x.d]; return needsLong(x.op, a, b) ? longPoint(x.op, a, b) : 0; };
+  let sp = t.int(R[0], R[1]);
+  if (opts.longMost != null && longAt(sp) > opts.longMost) sp = t.int(R[0], Math.min(R[1], 12));
+  const d = sp * tm;
+  const credit = [{ strand: 'ratio', at: 38, weight: 0.5 }];
+  const long = longAt(sp) ? sumOf(sp) : null;
+  const SPD = days ? MPD : MPH, TM = days ? DAY : HOUR;
   const wagon = what.key === 'wagon';
   if (wagon) town = 'Yuma';
   const per = days ? 'a day' : 'an hour';
   const rider = what.key === 'rider', it = rider ? p.they : 'it';
+  const capV = speedCap(R), capT = TIME_CAP[days ? 'day' : 'hour'];
+  // near misses, one or two off either way, in a random order (so the right one isn't always the middle coin)
+  const near = (v, lo, mk) => t.shuffle([v + 1, v - 1, v + 2, v - 2]).filter((x) => x >= lo).map(mk);
   if (form === 'speed') {
     const story = what.key === 'wagon' && !days
       ? `A trade wagon is bringing our next shipment from ${town}, which is ${d} miles away. It needs to get here in ${tm} hours.`
       : `${what.who} has ${d} miles to cover ${wagon ? 'from Yuma to town' : `to ${town}`} and ${tm} ${TM[1]} to do it.`;
+    const slips = [
+      { v: d - tm, slip: 'subtracted', why: `${d} − ${tm} takes ${TM[1]} from miles. Split the ${d} miles into ${tm} equal ${TM[0]} stretches.` },
+      { v: d + tm, slip: 'added', why: `${d} + ${tm} adds miles and ${TM[1]}. Each ${TM[0]} covers an equal part of the ${d} miles.` },
+      { v: d * tm, slip: 'multiplied', why: `${d} × ${tm} = ${d * tm} would be ${d * tm} miles ${per}. Share the ${d} miles out over the ${tm} ${TM[1]}.` },
+    ].filter((s) => s.v >= 1 && s.v <= capV);
+    if (tm !== sp && tm <= capV) slips.push({ v: tm, slip: 'swapped', why: `${tm} is how many ${TM[1]} it has. The speed is the miles it covers in each ${TM[0]}: share the ${d} miles over ${tm} ${TM[1]}.` });
+    slips.push(...near(sp, 1, (v) => ({ v, slip: 'off', why: v > sp ? `At ${v} miles ${per}, ${tm} ${TM[1]} cover ${v * tm} miles, more than ${d}.` : `At ${v} miles ${per}, ${tm} ${TM[1]} cover only ${v * tm} miles, not ${d}.` })));
     return {
-      key: `rate:speed:${what.key}`, story, ask: `How fast must ${it} go, in miles ${per}?`, answer: sp, unit: SPD,
-      slips: [
-        { v: d * tm, slip: 'multiplied', why: `${d} × ${tm} = ${d * tm} would be ${d * tm} miles ${per}. Share the ${d} miles out over the ${tm} ${TM[1]}.` },
-        { v: d - tm, slip: 'subtracted', why: `${d} − ${tm} takes ${TM[1]} from miles. Split the ${d} miles into ${tm} equal ${TM[0]} stretches.` },
-        { v: sp + 1, slip: 'off', why: `At ${sp + 1} miles ${per}, ${tm} ${TM[1]} cover ${(sp + 1) * tm} miles, not ${d}.` },
-        { v: d + tm, slip: 'added', why: `${d} + ${tm} adds miles and ${TM[1]}. Each ${TM[0]} covers an equal part of the ${d} miles.` },
-      ],
+      key: `rate:speed:${what.key}`, story, ask: `How fast must ${it} go, in miles ${per}?`, answer: sp, unit: SPD, slips,
       pic: { kind: 'road', miles: d, steps: tm, step: TM, speed: null, total: d },
       rightWhy: `${d} miles ÷ ${tm} ${TM[1]} = ${u(sp, SPD)}`,
       credit, long: long && { ...long, setup: setupOf('div', d, tm, { mul: `Times makes it bigger. Share the ${d} miles out over the ${tm} ${TM[1]}: divide.`, sub: `That takes away just ${tm}. Share the ${d} miles out over ${tm} ${TM[1]}: divide.`, flip: `The other way round: it's the ${d} miles shared over the ${tm} ${TM[1]}.` }) },
     };
   }
   if (form === 'time') {
+    const slips = [
+      { v: d - sp, slip: 'subtracted', why: `${d} − ${sp} is the miles left after one ${TM[0]}. Keep going ${sp} at a time until all ${d} are done.` },
+      { v: d + sp, slip: 'added', why: `${d} + ${sp} adds miles and speed. Count the ${TM[1]} it takes, ${sp} miles each.` },
+      { v: d * sp, slip: 'multiplied', why: `${d} × ${sp} multiplies. Count how many ${sp}-mile ${TM[0]}s fit into ${d} miles.` },
+    ].filter((s) => s.v >= 1 && s.v <= capT);
+    if (sp !== tm && sp <= capT) slips.push({ v: sp, slip: 'swapped', why: `${sp} is its speed, miles ${per}. How many ${sp}-mile ${TM[1]} fit into ${d} miles?` });
+    slips.push(...near(tm, 1, (v) => ({ v, slip: 'off', why: v > tm ? `${v} ${TM[1]} at ${sp} would be ${v * sp} miles, past ${wagon ? 'town' : town}.` : `${v} ${TM[1]} at ${sp} is only ${v * sp} miles, short of ${wagon ? 'town' : town}.` })));
     return {
       key: `rate:time:${what.key}`,
       story: wagon ? `The trade wagon ${what.go} ${u(sp, SPD)} toward town, and it has just left Yuma, ${d} miles off.` : `${what.who} ${what.go} ${u(sp, SPD)}, and ${town} is ${d} miles off.`,
-      ask: `How many ${TM[1]} until ${it} gets ${wagon ? 'here' : 'there'}?`, answer: tm, unit: TM,
-      slips: [
-        { v: d * sp, slip: 'multiplied', why: `${d} × ${sp} multiplies. Count how many ${sp}-mile ${TM[0]}s fit into ${d} miles.` },
-        { v: d - sp, slip: 'subtracted', why: `${d} − ${sp} is the miles left after one ${TM[0]}. Keep going ${sp} at a time until all ${d} are done.` },
-        { v: tm + 1, slip: 'off', why: `${tm + 1} ${TM[1]} at ${sp} would be ${(tm + 1) * sp} miles, past ${wagon ? 'town' : town}.` },
-        { v: d + sp, slip: 'added', why: `${d} + ${sp} adds miles and speed. Count the ${TM[1]} it takes, ${sp} miles each.` },
-      ],
+      ask: `How many ${TM[1]} until ${it} gets ${wagon ? 'here' : 'there'}?`, answer: tm, unit: TM, slips,
       pic: { kind: 'road', miles: d, steps: null, step: TM, speed: sp, total: d },
       rightWhy: `${d} miles ÷ ${sp} ${SPD[1]} = ${u(tm, TM)}`,
       credit, long: long && { ...long, setup: setupOf('div', d, sp, { mul: `Times makes it bigger. Count how many ${sp}-mile ${TM[1]} fit into ${d} miles: divide.`, sub: `That's just one ${TM[0]}'s ride. How many ${sp}-mile ${TM[1]} fit into ${d}? Divide.`, flip: `The other way round: it's the ${d} miles split into ${sp}-mile ${TM[1]}.` }) },
@@ -875,14 +897,16 @@ export function makeWordProblems(state = {}, { rand = Math.random } = {}) {
 
   // the kind of problem for the next order: a missed kind of this ladder that is due back, else one from the step's mix
   // (a kind already dealt twice in a row is left out)
-  function pickType(LAD = LADDER, step = s.step) {
-    const kind = (ty) => (K_TYPES.includes(ty) ? LAD === K_LADDER : LAD === LADDER);
+  // types: only these kinds (the store's levels name the kinds each customer may bring), or null for the step's mix
+  function pickType(LAD = LADDER, step = s.step, types = null) {
+    const kind = (ty) => (K_TYPES.includes(ty) ? LAD === K_LADDER : LAD === LADDER) && (!types || types.includes(ty));
     const di = s.due.findIndex((d) => d.at <= s.n && kind(d.type));
     if (di >= 0) {
       const d = s.due.splice(di, 1)[0];
       return { type: d.type, back: true };
     }
-    const mix = LAD[step - 1].mix;
+    const all = LAD[step - 1].mix, only = types ? Object.fromEntries(Object.entries(all).filter(([k]) => types.includes(k))) : null;
+    const mix = only && Object.keys(only).length ? only : types ? Object.fromEntries(types.map((k) => [k, 1])) : all;
     const run = s.kinds.slice(-SAME_KIND_RUN);
     // (a step of one kind only, the first picture stories, can't hold one back)
     const blocked = run.length === SAME_KIND_RUN && run.every((k) => k === run[0]) && Object.keys(mix).length > 1 ? run[0] : null;
@@ -894,11 +918,11 @@ export function makeWordProblems(state = {}, { rand = Math.random } = {}) {
 
   // who: the townsperson bringing it (the store picks them as they walk up); else one not seen in the last few orders.
   // step: the step the strands chose (the order is `fixed`: answering it never moves this ladder); ladder: 'main' | 'K'
-  function next({ who: from = null, step = null, ladder = 'main', longStep = null, longMost = null } = {}) {
+  function next({ who: from = null, step = null, ladder = 'main', longStep = null, longMost = null, types = null } = {}) {
     const fixed = step != null && Number.isFinite(Number(step));
     const LAD = ladder === 'K' ? K_LADDER : LADDER;
     const st = fixed ? Math.max(1, Math.min(LAD.length, Math.round(Number(step)))) : s.step;
-    const { type, back } = pickType(LAD, st);
+    const { type, back } = pickType(LAD, st, types && types.length ? types : null);
     let o = null;
     const lastKey = s.recent[s.recent.length - 1];
     for (let tries = 0; tries < 30; tries++) {

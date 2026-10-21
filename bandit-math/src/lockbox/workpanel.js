@@ -23,7 +23,8 @@
 //     kit: { HOB_SVG, STAR, STAR_PAY? }  the panel's drawings
 //     ctx: { info, tier, problem, plan, top, bodies, opts, session, skillRider, finished, nextLabel(), where, K }
 
-import { workCredit, recordBox, recordPart } from './strand.js';
+import { workCredit, recordPart } from './strand.js';
+import { recordPlan } from './levelplan.js';
 import { ORDER_RULES, toText } from './workout.js';
 import { TIER_NAME, starsFor, goldFor } from './box.js';
 import { answerTimer } from '../ui/answertimer.js';
@@ -82,7 +83,7 @@ export function mountWorkBox(kit, ctx) {
 
   // the top strip shows this box
   top.querySelector('.lbx-tier').textContent = TIER_NAME[tier];
-  top.querySelector('.lbx-rung').innerHTML = `${esc(ctx.where)} · Work it out · ${esc(problem.name || '')}${opts.dev || opts.debug ? ` <small>${esc(problem.rung)}</small>` : ''}`;
+  top.querySelector('.lbx-rung').innerHTML = `${esc(ctx.where)} · ${esc(plan && plan.title ? `${plan.title} · ${problem.name || ''}` : `Work it out · ${problem.name || ''}`)}${opts.dev || opts.debug ? ` <small>${esc(problem.rung)}</small>` : ''}`;
 
   // ----- state -----
   let phase = 'anim', gone = false, recorded = false, solved = false;
@@ -425,7 +426,7 @@ export function mountWorkBox(kit, ctx) {
     credited = true;
     try {
       const t = boxTime || boxClock.stop();
-      recordBox(skillRider, plan, problem, { right: !!(res.solved && res.clean), size: steps.length, ...t });
+      recordPlan(skillRider, plan, problem, { right: !!(res.solved && res.clean), size: steps.length, ...t });
     } catch (e) { console.error(e); }
   }
   function finish({ left = false } = {}) {

@@ -10,26 +10,30 @@
 // Started from the general store's counter (shop.js: "Mind the counter"). Each filled order counts toward the "orders
 // filled" belt buckle (save.js JOBS).
 //
-// ON THE STRANDS (src/math/skill.js): each customer's order is as hard as the rider's Word problems level says: the
-// store asks stepFor on the map store (or storeK, the youngest riders' picture stories, which chooseMap picks while
-// the level is low) and the order is made at that step. Its first pick (or the worked area, below) is recorded through
-// save.js recordAnswer: Word problems at the point asked, plus what else the order counts in (order.credit: groups in
-// Multiplication at half weight, money in Money, discounts in Percent...), timed as a sit-down answer
-// (src/ui/answertimer.js; a fast right one counts double). A sale of the rider's goods counts in Word problems (eggs
-// and milk, the map sales) or Fractions (wool, the map wool), its form chosen the same way.
-// A sum too big for the head (a big order, 16 × 24 sacks, 112 cans in crates of 5) opens THE WORKED AREA
-// (src/ui/longwork.js) by itself a moment after the slip comes up, unless the rider's Long work level is well past it
-// (then "Work it out" on the slip opens it): "What do we work out?", then the sum worked a step at a time, then (for a
-// division) the word answer. Each tap counts lightly in that fact's own strand, the whole sum in Long work, and the
-// order's answer in Word problems as usual; then the right coin glows and the order is filled as if it were picked.
+// THE STORE'S LEVELS (src/levels/place/store.js, the mixed place): each customer asks the levels model which level the
+// rider is on here (levelFor(rider, 'store')), picks one kind of question from that level's mix (a picture story, a
+// word problem of the level's kinds, coins, the grandfather clock, decimals, percent, ratios) and makes it with that
+// kind's own maker (storeOrder: the same function the levels page's examples come from). Its first pick (or the worked
+// area, below) is recorded once through save.js recordAnswer: it moves the store's level (place 'store', the level it
+// was made at), and counts in its own kind's strand at that maker step's point (order.own), plus what else the order
+// counts in (order.credit: groups in Multiplication at half weight ...), timed as a sit-down answer
+// (src/ui/answertimer.js; a fast right one counts double from the level the ladder names, dollars and cents). While the
+// levels model is still finding the rider's level here, the slip's corner says so, quietly.
+// A sale of the rider's goods counts only in its own strand (Word problems for eggs and milk, Fractions for wool), at
+// the form that fits the store's level; it never moves the level.
+// A sum too big for the head (16 × 7 hands-days, 13 tins at $6) opens THE WORKED AREA (src/ui/longwork.js) by itself a
+// moment after the slip comes up, unless the store's level is well past it (then Work it out, from the tools button,
+// src/ui/tools.js, or the slip's own button, opens it): "What do we work out?", then the sum worked a step at a time,
+// then (for a division) the word answer. Each tap counts lightly in that fact's own strand, the whole sum in Long work,
+// and the order's answer as usual; then the right coin glows and the order is filled as if it were picked.
+// J.workSum() tells the tools button what this order's sum is (the worked area's own, counted as above, or the sum
+// read from the order's working, as plain help that counts nothing: the kid still picks the coin).
 // A rider who can't read yet (skill.js readAloud) hears each order read out (the browser's voice), with "Read it to
 // me" on the slip to hear it again; the youngest riders' picture stories show the things to count from the start.
-// THE COUNTER'S OTHER QUESTIONS (src/math/counter.js): about 2 customers in 5, once any fits the rider, ask something
-// else the store is the place for: money (counting coins, change, dollars and cents, tax and tips), the time by the
-// store's grandfather clock and how long things take, decimals, percent, ratios. Each is its own strand at its own
-// level (counterChoice / stepFor), recorded the same way (that strand at the point asked, timed), with its own pictures
-// (src/ui/counterpics.js): the lead (the clock to read, the coins to count) above the coins, the help after a miss.
-// While a strand is still finding its level the slip's corner says so, quietly.
+// THE COUNTER'S OTHER QUESTIONS (src/math/counter.js): money (counting coins, change, dollars and cents, tax and tips),
+// the time by the store's grandfather clock and how long things take, decimals, percent, ratios, as the level's mix
+// says, with their own pictures (src/ui/counterpics.js): the lead (the clock to read, the coins to count) above the
+// coins, the help after a miss.
 //
 //   const J = makeStoreJob({ W, folk, P, I, camera, rider, hud, hob, refresh, openBox, onStart, onStop, pay, goods, town })
 //     town(): the town's people (src/townpeople.js), or null: the customers are townsfolk borrowed from it (already about,
@@ -53,11 +57,14 @@ import { makeWordProblems, makeOrder, lockboxProblem, FOLK } from '../math/wordp
 import { picture } from '../ui/storepics.js';
 import { makeStoreSlip, speakLine } from '../ui/storeslip.js';
 import { openLongWork } from '../ui/longwork.js';
-import { workMul, workDiv, LONG } from '../math/longwork.js';
+import { workMul, workDiv, LONG, sumFrom, factFrom } from '../math/longwork.js';
+import { recordFact } from '../math/facts.js';
 import { homestead } from '../math/goods.js';
-import { counterOrder, counterChoice } from '../math/counter.js';
 import { counterPicture } from '../ui/counterpics.js';
-import { stepFor, stepAt, pctAt, chooseMap, fits, levelOf, readAloud, record, isPlaced } from '../math/skill.js';
+import { readAloud, record } from '../math/skill.js';
+import { MAPS } from '../math/strands.js';
+import { levelFor } from '../levels/model.js';
+import { storeOrder, pickAsk, askAt } from '../levels/place/store.js';
 import { answerTimer } from '../ui/answertimer.js';
 import { earn, recordAnswer, countJob, saveRider } from '../save.js';
 
@@ -85,6 +92,11 @@ export const STORE = {
   longMost: 4,         // a non-bulk order's numbers may need a long sum up to this many points past the rider's Long work
 };
 
+// the forms a sale of the rider's own goods comes in, with their points (src/math/strands.js MAPS sales and wool): the
+// highest form at or under the store level's school year is the one a customer asks for
+const formsOf = (map) => (MAPS[map] ? MAPS[map].ids.map((id, i) => [id, MAPS[map].anchors[i]]) : []);
+const SALE_FORMS = { sales: formsOf('sales'), wool: formsOf('wool') };
+
 export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, refresh = () => {}, openBox = null,
   onStart = () => {}, onStop = () => {}, pay = { order: 3, orderEvery: 3, orderFirst: 1 }, scene = W.scene, goods = null, fish = null, voice = null, town = null }) {
   // a customer's recorded line (src/audio/shouts.js: the men only; it knows by `male`), from where they stand
@@ -105,7 +117,7 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
   const J = { active: false };
   let phase = 'off';         // off | dismount | open
   let order = null, missed = false, helped = false, thinkT = 0, filled = 0, earned = 0, eqPending = false;
-  let lastMap = null, lastCounter = null, timer = null, longPanel = null, longT = null, forced = null;
+  let lastAsk = null, timer = null, longPanel = null, longT = null, forced = null;
   const news = [];       // a badge or a new title won with the order at the counter, told on the slip with the tip
   const people = [];         // the customers about: { p, x, z, yaw, state: 'come'|'queue'|'front'|'serve'|'go', who, to }
 
@@ -207,54 +219,41 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
     if (!inQueue()) { const c = spawn(queueAt); if (c) c.state = 'come'; }
   }
 
-  // the point an order really sits at: the rider's pick, but never under its step's own point (a level a few points
-  // under a maker's first step still gets that first step, which is harder than the level)
-  const realAt = (map, q) => Math.max(q.at, pctAt(map, q.step));
+  // the tip goes by how far up the store's ladder the order was made (1 at the bottom .. 9 at the top, as the old steps)
+  const payOf = (q) => 1 + Math.round(8 * q.i / Math.max(1, q.n - 1));
   // ── AN ORDER AT THE COUNTER ──────────────────────────────────────────────────────────────────────────────────────
-  // one of the counter's other questions (money, time, decimals, percent, ratios) at the rider's level on its strand
-  function counterDeal(map, who, step = null) {
-    const q = stepFor(rider, map);
-    const o = counterOrder(map, { step: step || q.step, frac: step ? 0 : q.frac, who });
-    o.map = map; o.at = step ? pctAt(map, step) : realAt(map, q);
-    o.picture = counterPicture;
-    o.payStep = Math.max(1, stepAt('store', o.at).step);   // (the tip goes by the store's step at that point)
-    return o;
-  }
-  // the next order, as hard as the strands say (see ON THE STRANDS above)
+  // the next order: the store's level, one kind from its mix (see THE STORE'S LEVELS above)
   function deal(who) {
-    if (forced) {   // (rigs: J.dev.next({ type, sum, longStep, map, step }), or { counter: 'time', step: 2 })
+    const q = levelFor(rider, 'store');
+    saveRider(rider);   // (the first time: the store has just been met)
+    const mark = (o, extra = {}) => Object.assign(o, { levelId: q.id, placing: !!q.placing, grade: q.level.grade, payStep: payOf(q),
+      picture: o.counter ? counterPicture : (o.picture || null) }, extra);
+    if (forced) {   // (rigs: J.dev.next({ type, step, sum, longStep, longOp, ladder: 'K' }), or { counter: 'time', step: 2 })
       const f = forced; forced = null;
-      if (f.counter) return counterDeal(f.counter, who, f.step || null);
-      const map = f.map || 'store', q = stepFor(rider, map);
-      const ls = f.type === 'bulk' ? stepFor(rider, 'long') : null;
-      const o = makeOrder(f.type, { who, step: f.step || q.step, ladder: map === 'storeK' ? 'K' : 'main', longStep: f.longStep || (ls && ls.step), longOp: f.longOp || null, sum: f.sum || null });
-      Object.assign(o, { fixed: true, map, at: f.step ? pctAt(map, f.step) : realAt(map, q), longAt: ls ? ls.at : null });
-      return o;
+      if (f.counter) return mark(storeOrder({ maker: f.counter, step: f.step || 1 }, { who }), { fixed: true });
+      const K = f.ladder === 'K' || f.map === 'storeK', step = f.step || 1;
+      const o = makeOrder(f.type, { who, step, ladder: K ? 'K' : 'main', longStep: f.longStep || 4, longOp: f.longOp || null, sum: f.sum || null });
+      o.own = { strand: 'words', at: askAt({ maker: K ? 'wordsK' : 'words', step }) };
+      return mark(o, { fixed: true, longAt: o.long ? o.long.point : null });
     }
-    // the fish kept at the dock: the first customer after a catch buys some, then one in a few (src/fishingjob.js)
-    { const FJ = fish && fish(), s = FJ && FJ.saleOrder ? FJ.saleOrder({ who }) : null; if (s) return s; }
-    // now and then a customer buys the rider's own goods: eggs, milk and flour on the map sales (Word problems), wool on the
-    // map wool (Fractions); a kind the rider isn't up to yet isn't bought
+    // the fish kept at the dock: the first customer after a catch buys some, then one in a few (src/fishingjob.js), in
+    // the form that fits the store's level (none under its easiest)
+    { const FJ = fish && fish(), s = FJ && FJ.saleOrder ? FJ.saleOrder({ who, grade: q.level.grade }) : null; if (s) return s; }
+    // now and then a customer buys the rider's own goods: eggs, milk and flour (Word problems), wool (Fractions), at the
+    // form that fits the store's level (a form past it isn't bought)
     if (goods) {
-      const carried = homestead(rider).goods, plan = { step: 1, sales: null, wool: null };
-      if ((carried.eggs || carried.milk || carried.flour) && fits(rider, 'sales')) { const q = stepFor(rider, 'sales'); Object.assign(plan, { sales: q.id, salesAt: realAt('sales', q) }); }
-      if (carried.wool && fits(rider, 'wool')) { const q = stepFor(rider, 'wool'); Object.assign(plan, { wool: q.id, woolAt: realAt('wool', q) }); }
-      plan.step = stepFor(rider, 'store').step;   // (the tip goes by the store's step)
+      const carried = homestead(rider).goods, g = q.level.grade, plan = { step: payOf(q), sales: null, wool: null };
+      const formAt = (map) => { let id = null, at = null; for (const [k, p] of SALE_FORMS[map]) if (p <= g) { id = k; at = p; } return id ? { id, at } : null; };
+      const sf = (carried.eggs || carried.milk || carried.flour) ? formAt('sales') : null, wf = carried.wool ? formAt('wool') : null;
+      if (sf) Object.assign(plan, { sales: sf.id, salesAt: sf.at });
+      if (wf) Object.assign(plan, { wool: wf.id, woolAt: wf.at });
       const sale = (plan.sales || plan.wool) ? goods.saleOrder({ step: plan, who }) : null;
       if (sale) return sale;
     }
-    // now and then a question about money, the time, decimals, percent or ratios instead of a word problem
-    const cmap = counterChoice(rider, { last: lastCounter });
-    if (cmap) { lastCounter = cmap; return counterDeal(cmap, who); }
-    const map = chooseMap(rider, ['storeK', 'store'], { last: lastMap }) || 'store';
-    lastMap = map;
-    const q = stepFor(rider, map);
-    let longQ = null;
-    const o = Q.next({ who, step: q.step, ladder: map === 'storeK' ? 'K' : 'main',
-      longStep: () => (longQ = longQ || stepFor(rider, 'long')).step,   // (asked only if a big order is made)
-      longMost: levelOf(rider, 'long') + STORE.longMost });
-    o.map = map; o.at = realAt(map, q); o.longAt = longQ && o.type === 'bulk' ? longQ.at : null;
-    return o;
+    const ask = pickAsk(q.level.gen.mix, Math.random, lastAsk);
+    lastAsk = ask;
+    // (a word problem's numbers stay inside the level's school year: no long sum past it)
+    return mark(storeOrder(ask, { who, trainer: Q, longMost: q.level.grade, frac: q.count ? q.into / q.count : 0 }));
   }
   function serve(c) {
     c.state = 'serve';
@@ -264,13 +263,13 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
     const young = readAloud(rider);
     const own = ownOf(order);
     U.show(order, { filled, pic: order.picFirst ? (order.picture || picture)(order.pic) : null, read: young,
-      lead: order.lead ? counterPicture(order.lead) : null, note: own && own.at != null && !isPlaced(rider, own.strand) ? 'finding your level' : '' });
+      lead: order.lead ? counterPicture(order.lead) : null, note: order.placing ? 'finding your level' : '' });
     if (young && order.read) setTimeout(() => { if (order && order.read && J.active && !U.busy) speakLine(order.read); }, 500);
     if (timer) timer.cancel();
     timer = answerTimer();
-    // a sum too big for the head: the worked area opens by itself, unless the rider's Long work is well past it
+    // a sum too big for the head: the worked area opens by itself, unless the store's level is well past it
     clearTimeout(longT);
-    if (order.long && levelOf(rider, 'long') < order.long.point + LONG.COMFORT) { const o = order; longT = setTimeout(() => { if (order === o) openLong(); }, STORE.longOpen * 1000); }
+    if (order.long && (order.grade ?? 0) < order.long.point + LONG.COMFORT) { const o = order; longT = setTimeout(() => { if (order === o) openLong(); }, STORE.longOpen * 1000); }
     if (order.sale) speak('whatchagot', c);   // (come to buy the rider's own goods)
     if (c.walking) c.hand = true; else handOver(c);
   }
@@ -278,7 +277,7 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
   // Fractions), or the counter question's own (money, time, dec, pct, ratio)
   function ownOf(o) {
     if (o.sale) return o.sale.at != null ? { strand: o.sale.strand || (o.sale.map === 'wool' ? 'frac' : 'words'), at: o.sale.at } : null;   // (a fish sale says its own strand)
-    return { strand: o.counter ? o.strand : 'words', at: o.at != null ? o.at : null };
+    return o.own || null;
   }
   // what an answer to this order counts in: its own strand at the point asked, and the order's extra strands (a
   // Long work credit is left out when the worked area ran: it counted the sum itself)
@@ -292,7 +291,12 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
     if (o.recorded) return;
     o.recorded = true;
     const tm = t || (timer ? timer.stop() : {});
-    const rec = recordAnswer(rider, right, { strands: strandsOf(o, { worked }), sitDown: true, size: o.size || 1, ms: tm.ms, hidden: tm.hidden, idle: tm.idle });
+    // (an order made at a store level moves that level once; a sale counts only in its own strand)
+    const lv = o.levelId && !o.sale ? { place: 'store', level: o.levelId } : {};
+    // (a times fact in the order's working, 4 pies × 3 pounds or 24 nails ÷ 4 kegs, goes on the times chart too)
+    const fact = o.equation || o.sale ? null : factFrom(o.rightWhy || '');
+    if (fact) { try { recordFact(rider, fact.a, fact.b, right); } catch (e) { console.warn(e); } }
+    const rec = recordAnswer(rider, right, { ...lv, strands: strandsOf(o, { worked }), sitDown: true, size: o.size || 1, ms: tm.ms, hidden: tm.hidden, idle: tm.idle });
     if (rec && rec.badge) news.push(`You earned the ${rec.badge} badge!`);
   }
   // the customer holds out the slip (once they've stopped walking)
@@ -478,22 +482,33 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
   // Esc is "Done for now" while working the counter (unless a panel or the lock box over it wants it)
   const onKey = (e) => {
     if (e.key !== 'Escape' || !J.active || e.defaultPrevented || e.repeat) return;
-    if (document.querySelector('.bms, .lbx, .bml')) return;   // (a panel, or the worked area: its own Esc goes back to the slip)
+    if (document.querySelector('.bms, .lbx, .bml:not(.is-out), .tch:not(.out), .bmtl-menu')) return;   // (a panel, or the worked area: its own Esc goes back to the slip)
     e.preventDefault(); J.stop();
   };
   addEventListener('keydown', onKey, true);
 
-  J.state = () => ({ active: J.active, phase, filled, earned, order: order ? { type: order.type, step: order.step, map: order.map || null, at: order.at ?? null, key: order.key, story: order.story, ask: order.ask,
+  J.state = () => ({ active: J.active, phase, filled, earned, order: order ? { type: order.type, step: order.step, level: order.levelId || null, placing: !!order.placing, own: order.own || null, kind: order.ask_ || null, key: order.key, story: order.story, ask: order.ask,
     counter: order.counter || null, lead: order.lead ? order.lead.kind : null, pic: order.pic ? order.pic.kind : null,
     coins: order.coins.map((c) => ({ label: c.label, good: c.good })), equation: order.equation, sale: order.sale || null, credit: order.credit || [], long: order.long ? { op: order.long.op, point: order.long.point, a: order.long.a, b: order.long.b, n: order.long.n, d: order.long.d } : null } : null,
     longOpen: !!longPanel, long: longPanel ? longPanel.state() : null,
-    people: people.map((c) => ({ who: c.who.name, state: c.state, x: +c.x.toFixed(2), z: +c.z.toFixed(2) })), level: Q.level(), busy: U.busy });
+    people: people.map((c) => ({ who: c.who.name, state: c.state, x: +c.x.toFixed(2), z: +c.z.toFixed(2) })), busy: U.busy });
   J.people = people;    // (read each frame by the wagons, which stop for customers: no copies made)
   J.busyNames = () => [...people.map((c) => c.who.name), ...Q.state.lastWho];   // (the town doesn't send these over: src/townpeople.js)
   J.trainer = Q;
-  // (rigs: the next customer brings this order: { type, map, step, sum: { op: 'div', n: 112, d: 5 }, longStep, longOp },
-  // or a counter question: { counter: 'time', step: 2 })
+  // (rigs: the next customer brings this order: { type, ladder: 'K', step, sum: { op: 'div', n: 112, d: 5 }, longStep,
+  // longOp }, or a counter question: { counter: 'time', step: 2 })
   J.dev = { next: (spec) => { forced = spec || null; }, openLong: () => openLong() };
+  // the sum on the order at the counter, for the tools' Work it out (src/ui/tools.js): the worked area's own (it counts,
+  // as above: open it with J.openLong), else the sum read from the order's working (plain help: nothing counts and the
+  // kid still picks the coin), or null (nothing to work out on paper: a clock to read, coins to count)
+  J.workSum = () => {
+    if (!J.active || !order || U.busy || eqPending) return null;
+    const L = order.long;
+    if (L) return { own: true, op: L.op, a: L.op === 'div' ? L.n : L.a, b: L.op === 'div' ? L.d : L.b, ask: order.ask };
+    const s = order.equation ? null : sumFrom(order.rightWhy || '');
+    return s ? { ...s, ask: order.ask, setup: true } : null;
+  };
+  J.openLong = () => openLong();
   J.dispose = () => { removeEventListener('keydown', onKey, true); if (J.active) J.stop(); for (const c of [...people]) removePerson(c); U.dispose(); };
   return J;
 }

@@ -15,16 +15,17 @@
 // The crates ride on the horse, so a delivery needs a saddle (the foreman says so, and where to buy one). If the horse
 // isn't at the store when the order is made up, the crates wait until it comes (H whistles it over).
 //
-// ON THE STRANDS (src/math/skill.js): the order is as hard as the rider's Word problems level says (stepFor on the map
-// supplies; below its first step, a small order: two or three hands, crates of 2 to 4). Each part's first pick counts
-// in that part's own strand (part.credit: the time word in Time, the total in Multiplication or Long work, the crates
-// in Division or Long work, the cost in Money), timed as a sit-down answer; the whole order counts once in Word
-// problems at the end (right when every part was right first time). Numbers are chosen to stay inside the rider's Long
-// work level where they can (longMost). A part whose sum is too big for the head (8 hands × 2 meals × 7 days = 16 × 7;
-// 112 cans in crates of 5) opens THE WORKED AREA (src/ui/longwork.js) by itself, unless the rider's Long work is well
-// past it ("Work it out" on the slip opens it then): what to work out, the sum a step at a time (each tap counts
-// lightly in its fact's strand), and for the crates the word answer (the slip's own coins); the whole sum counts in
-// Long work, and the part moves on as if its coin was picked.
+// THE DELIVERIES' LEVELS (src/levels/place/deliveries.js): the order is made at the rider's level here
+// (levelFor(rider, 'deliveries'): a small order, then a row of the supplies ladder). Each part's first pick counts in
+// that part's own strand (part.credit: the time word in Time, the total in Multiplication or Long work, the crates in
+// Division or Long work, the cost in Money), timed as a sit-down answer, without moving the level; the whole order is
+// ONE answer at its level at the end (right when every part was right first time: recordAnswer with place
+// 'deliveries'). Numbers are chosen to stay inside the level's school year where they can (longMost). A part whose sum
+// is too big for the head (8 hands × 2 meals × 7 days = 16 × 7; 112 cans in crates of 5) opens THE WORKED AREA
+// (src/ui/longwork.js) by itself, unless the level is well past it (then Work it out, on the slip or from the tools
+// button, src/ui/tools.js, opens it): what to work out, the sum a step at a time (each tap counts lightly in its
+// fact's strand), and for the crates the word answer (the slip's own coins); the whole sum counts in Long work, and
+// the part moves on as if its coin was picked. DL.workSum() tells the tools button the part's sum.
 //
 // FOR THE BANDITS (a later job): DL.carrying says what is on the horse; DL.rob() takes it (the crates fall away, the
 // card says so, and the store makes the order up again for free: the kid rides back for it); DL.on(fn) hears every
@@ -49,7 +50,10 @@ import { makeSupplies, makeSupplyOrder, picture } from '../math/supplies.js';
 import { makeStoreSlip, speakLine } from '../ui/storeslip.js';
 import { openLongWork } from '../ui/longwork.js';
 import { workMul, workDiv, LONG } from '../math/longwork.js';
-import { stepFor, levelOf, readAloud, record } from '../math/skill.js';
+import { readAloud, record } from '../math/skill.js';
+import { levelFor } from '../levels/model.js';
+import { sumFrom, factFrom } from '../math/longwork.js';
+import { recordFact } from '../math/facts.js';
 import { answerTimer } from '../ui/answertimer.js';
 import { crateParts } from '../camps.js';
 import { earn, recordAnswer, countJob, saveRider } from '../save.js';
@@ -65,8 +69,6 @@ export const DELIVERY = {
   storeAgain: 11,       // after "Done for now" the slip comes up again only once you've ridden this far off and back
   horseNear: 16,        // metres from the store's door the horse must be for the crates to go on it
   dropNear: 11,         // the horse with the crates within this of a camp's middle: unloaded
-  smallAt: 18,          // where a small order sits on Word problems (2 or 3 hands for a few days, crates of 2 to 4: small
-                        // equal groups and sharing, about second grade; strands.js words 16 to 20)
   pay: { base: 6, perStep: 2, clean: 3 },   // gold for a delivery: base + perStep x the order's step, + clean if every
                                             // step of the order was right first time
   unloadEach: 0.45,     // seconds between crates coming off the horse
@@ -77,7 +79,7 @@ export const DELIVERY = {
   cam: { at: 0.35, out: 7.5, side: 3.0, up: 3.2, lookUp: 1.2, hold: 2.5 },
   camPhone: { at: 0.35, out: 9.0, side: 2.0, up: 3.6, lookUp: -0.4, hold: 2.5 },   // (a phone: the slip is a sheet along the bottom)
   longOpen: 1.1,        // seconds after a part comes up when its worked area opens by itself (the question read first)
-  longMost: 4,          // an order's sums may need long work up to this many points past the rider's Long work level
+  longMost: 4,          // an order's sums may need long work up to this many points past the level's school year
 };
 
 export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, refresh = () => {}, onStart = () => {}, onStop = () => {}, quiet = () => false, say = null }) {
@@ -116,7 +118,7 @@ export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, r
     timer = answerTimer();
     // a sum too big for the head: the worked area opens by itself, unless the rider's Long work is well past it
     clearTimeout(longT);
-    if (p.long && levelOf(rider, 'long') < p.long.point + LONG.COMFORT) longT = setTimeout(() => { if (DL.active && order && order.parts[part] === p) openLong(); }, DELIVERY.longOpen * 1000);
+    if (p.long && (order.grade ?? 0) < p.long.point + LONG.COMFORT) longT = setTimeout(() => { if (DL.active && order && order.parts[part] === p) openLong(); }, DELIVERY.longOpen * 1000);
   }
   // the worked area for this part's sum (see ON THE STRANDS above)
   function openLong() {
@@ -185,6 +187,10 @@ export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, r
       const t = timer ? timer.stop() : {};
       orderMs += t.ms || 0; orderOut = orderOut || !!(t.hidden || t.idle);
       recordAnswer(rider, c.good, p.credit ? { strands: [{ strand: p.credit.strand, at: p.credit.at }], sitDown: true, size: 1, ms: t.ms, hidden: t.hidden, idle: t.idle } : null);
+      // (a part that is one times fact, 6 hands × 4 days or 24 cans ÷ 6 a crate, goes on the times chart too; three
+      // numbers multiplied are not one fact)
+      const fact = p.key === 'vocab' || (p.rightWhy.match(/×/g) || []).length > 1 ? null : factFrom(p.rightWhy || '');
+      if (fact) { try { recordFact(rider, fact.a, fact.b, c.good); } catch (e) { console.warn(e); } }
       if (!c.good) storyClean = false;
     }
     if (!c.good) {
@@ -202,12 +208,12 @@ export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, r
     await U.leave();
     if (!DL.active) return;
     if (!lastPart) { part++; showPart(); return; }
-    // the order is made up: it counts once in Word problems (right when every part was right first time), then the slip
+    // the order is made up: it is one answer at its level (right when every part was right first time), then the slip
     // goes and the crates go on the horse (when it's here)
-    if (order.at != null && !order.wordsCounted) {
+    if (order.levelId && !order.wordsCounted) {
       order.wordsCounted = true;
-      try { record(rider, [{ strand: 'words', at: order.at }], { right: storyClean, sitDown: true, ms: orderMs, size: order.parts.length, hidden: orderOut }); } catch (e) { console.warn(e); }   // (a part timed with the tab hidden or an idle spell: the whole order's time is left out)
-      saveRider(rider);
+      // (a part timed with the tab hidden or an idle spell: the whole order's time is left out)
+      try { recordAnswer(rider, storyClean, { place: 'deliveries', level: order.levelId, sitDown: true, ms: orderMs, size: order.parts.length, hidden: orderOut }); } catch (e) { console.warn(e); }
     }
     DL.active = false; U.hide(); onStop();
     phase = 'waitHorse';
@@ -300,13 +306,12 @@ export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, r
   };
   function newOrder(c) {
     camp = c; lastCamp = c;
-    // as hard as the strands say: the map supplies on Word problems (a small order below its first step)
-    const q = stepFor(rider, 'supplies');
-    const at = { camp: { id: c.id, short: c.short }, who: c.foreman.name, step: q.step, small: q.below, longMost: levelOf(rider, 'long') + DELIVERY.longMost };
+    // the rider's level here (src/levels/place/deliveries.js): a small order, or a row of the supplies ladder
+    const q = levelFor(rider, 'deliveries'), g = q.level.gen || {};
+    saveRider(rider);   // (the first time: the deliveries have just been met)
+    const at = { camp: { id: c.id, short: c.short }, who: c.foreman.name, step: g.small ? 1 : g.step || 1, small: !!g.small, longMost: q.level.grade + DELIVERY.longMost };
     order = forced ? forcedOrder(at) : S.next(at);
-    // (recorded where the order really sits: a small order's equal groups and sharing at its own point, never at a
-    // young rider's lower one; contract rule 2)
-    order.at = q.below ? Math.max(q.at, DELIVERY.smallAt) : q.at;
+    Object.assign(order, { levelId: q.id, placing: !!q.placing, grade: q.level.grade });
     part = 0; clean = true; away = true; storyClean = true; orderMs = 0; orderOut = false;
     phase = 'ordered';
     if (c.foreman.person) { c.foreman.person.p.play('Interact', { fade: 0.2, once: true }); setTimeout(() => { const h = c.foreman.person; if (h && !h.busy) h.p.play('Idle', { fade: 0.4 }); }, 1500); }
@@ -448,14 +453,14 @@ export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, r
   };
 
   DL.state = () => ({ phase, active: DL.active, camp: camp ? camp.id : null, lastCamp: lastCamp ? lastCamp.id : null, part, prompt: DL.prompt,
-    order: order ? { story: order.story, step: order.step, at: order.at ?? null, crates: order.crates, total: order.total, per: order.per, hands: order.hands, rate: order.rate, days: order.days,
+    order: order ? { story: order.story, step: order.step, level: order.levelId || null, placing: !!order.placing, crates: order.crates, total: order.total, per: order.per, hands: order.hands, rate: order.rate, days: order.days,
       parts: order.parts.map((p) => ({ key: p.key, ask: p.ask, credit: p.credit, long: p.long ? { op: p.long.op, point: p.long.point } : null, coins: p.coins.map((c) => ({ label: c.label, good: c.good, slip: c.slip })) })) } : null,
     longOpen: !!longPanel, long: longPanel ? longPanel.state() : null,
     level: S.level(), delivered: S.state.delivered, cratesOnHorse: crates.filter((m) => m.visible).length, busy: U.busy });
   // Esc is "Done for now" while the slip is open (unless a panel over it wants it)
   const onKey = (e) => {
     if (e.key !== 'Escape' || !DL.active || e.defaultPrevented || e.repeat) return;
-    if (document.querySelector('.bms, .lbx, .bml')) return;   // (a panel, or the worked area: its own Esc goes back to the slip)
+    if (document.querySelector('.bms, .lbx, .bml:not(.is-out), .tch:not(.out), .bmtl-menu')) return;   // (a panel, the worked area or a tool: its own Esc first)
     e.preventDefault(); stopWork();
   };
   addEventListener('keydown', onKey, true);
@@ -473,6 +478,17 @@ export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, r
     return S.next(at);
   }
   DL.dev = { next: (spec) => { forced = spec || null; }, openLong: () => openLong() };
+  // the sum on the part at the slip, for the tools' Work it out (src/ui/tools.js): the part's own worked area (it
+  // counts: open it with DL.openLong), else the sum read from the part's working (plain help), or null
+  DL.workSum = () => {
+    const p = DL.active && order ? order.parts[part] : null;
+    if (!p || U.busy) return null;
+    const L = p.long;
+    if (L) return { own: true, op: L.op, a: L.op === 'div' ? L.n : L.a, b: L.op === 'div' ? L.d : L.b, ask: p.ask };
+    const s = p.key === 'vocab' ? null : sumFrom(p.rightWhy || '');
+    return s ? { ...s, ask: p.ask, setup: true } : null;
+  };
+  DL.openLong = () => openLong();
   DL.dispose = () => {
     if (DL.active) stopWork();
     slipCam(false);

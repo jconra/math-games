@@ -33,8 +33,13 @@
 //                           taken first when there are enough; only: from among and nowhere else, or null)
 //   Q.answer(problem, coin, { helped }) -> { right, first, moved, step, placed }
 //   Q.level()            -> { step, of, label, placing, line }
-//   picture(pic)         -> { svg, title, line }   the slip's drawing of the sharing (never the answer)
-//   FAMILIES, GOODS, LADDER, seeded(seed)
+//   Q.nextAt(gen, { avoid, among, only }) -> a problem at a level of the loot ladder (src/levels/place/loot.js, the
+//                           one the game uses now; the step-ladder above stays for the old tests and saves)
+//   shareAt(gen, { rand, avoid, among, only }) -> one problem at a ladder level's gen (the levels page's examples too)
+//   picture(pic)         -> { svg, title, line }   the slip's drawing of the sharing (never the answer); a problem's
+//                           lead (the youngest levels) is a picture too: the goods drawn and the families waiting
+//   shareFact(problem)   -> { a, b } the times fact a fair share works backwards (families x each), or null (the times chart)
+//   FAMILIES, GOODS, YOUNG_GOODS, LADDER, seeded(seed)
 // Pure: no page, no three.js (tests/shares.test.mjs).
 
 import { FOLK } from './wordproblems.js';
@@ -78,6 +83,12 @@ export const GOODS = [
   ['sacks of oats', 'sack of oats', false, 'sacks'], ['horseshoes', 'horseshoe', false, 'shoes'], ['bolts of cloth', 'bolt of cloth', false, 'bolts'],
 ];
 
+// the youngest levels' goods: things a kindergartner can picture and count (drawn on the slip as they are)
+export const YOUNG_GOODS = [
+  ['apples', 'apple', false, 'apples'], ['eggs', 'egg', false, 'eggs'], ['horseshoes', 'horseshoe', false, 'shoes'],
+  ['carrots', 'carrot', false, 'carrots'], ['pies', 'pie', false, 'pies'],
+];
+
 export function seeded(seed = 1) {
   let a = seed >>> 0;
   return function rand() {
@@ -110,18 +121,20 @@ const coin = (v, big, small, label, slip = null, why = '') => ({ v: String(v), b
 const ONE = { 'full boxes': 'full box', trips: 'trip', dollars: 'dollar', sacks: 'sack', blankets: 'blanket', cans: 'can', jars: 'jar', shoes: 'shoe', bolts: 'bolt' };
 const smallFor = (big, small) => (String(big) === '1' && ONE[small] ? ONE[small] : small);
 
-function sizes(size, t) {
+function sizes(size, t, range = null) {
   // (families, and how many each): small numbers first
   // (at most 6 families: each sends someone to the sheriff's office for their goods)
+  // range: a level's own { g: [lo, hi], q: [lo, hi] } (the youngest levels' small shares: src/levels/place/loot.js)
+  if (range) return { g: t.int(range.g[0], range.g[1]), q: t.int(range.q[0], range.q[1]) };
   if (size === 1) return { g: t.int(2, 5), q: t.int(2, 6) };
   if (size === 2) return { g: t.int(3, 6), q: t.int(3, 9) };
   return { g: t.int(4, 6), q: t.int(4, 12) };
 }
 
 const MAKE = {
-  even(t, step, size, fam) {
-    let { g, q } = sizes(size, t); if (q === g) q++;
-    const total = g * q, goods = t.pick(GOODS), owners = fam(g);
+  even(t, step, size, fam, opt = {}) {
+    let { g, q } = sizes(size, t, opt.range); if (q === g && !opt.young) q++;
+    const total = g * q, goods = t.pick(opt.young ? YOUNG_GOODS : GOODS), owners = fam(g);
     const story = `The gang took ${many(total, goods)} from ${familiesOf(owners)}. Each family lost the same.`;
     const ask = `How many ${goods[0]} does each family get back?`;
     const right = coin(q, q, 'each', `${q} each`);
@@ -131,15 +144,17 @@ const MAKE = {
       coin(g, g, 'each', `${g} each`, 'groups', `${g} is how many families there are. How many ${goods[0]} go to each one?`),
       coin(q + 1, q + 1, 'each', `${q + 1} each`, 'over', `${q + 1} each for ${g} families is ${(q + 1) * g}: more than the ${total} there are.`),
       coin(q - 1, q - 1, 'each', `${q - 1} each`, 'under', `${q - 1} each for ${g} families is only ${(q - 1) * g}: ${total - (q - 1) * g} would still be in the sack.`),
+      ...(opt.young ? [coin(total, total, 'each', `${total} each`, 'all', `${total} is all of them. Shared out, each family gets fewer than that.`)] : []),
     ];
+    if (opt.young) { wrong.splice(0, 3); if (q === g) wrong.push(coin(q + 2, q + 2, 'each', `${q + 2} each`, 'over', `${q + 2} each for ${g} families is ${(q + 2) * g}: more than the ${total} there are.`)); }
     return { key: `even:${total}:${g}`, goods, total, groups: g, owners, each: q, left: 0, story, ask, right, wrong,
       pic: { kind: 'deal', total, groups: g, names: owners.map((f) => f.short), goods: goods[0] },
       rightWhy: `${total} ÷ ${g} = ${q}: ${q} ${goods[0]} for each family.`, hand: owners.map((f) => ({ family: f, gets: q })), orphans: 0 };
   },
-  rem(t, step, size, fam) {
-    let { g, q } = sizes(size, t); const r = t.int(1, g - 1);
+  rem(t, step, size, fam, opt = {}) {
+    let { g, q } = sizes(size, t, opt.range); const r = t.int(1, g - 1);
     if (q === r) q++;
-    const total = g * q + r, goods = t.pick(GOODS), owners = fam(g);
+    const total = g * q + r, goods = t.pick(opt.young ? YOUNG_GOODS : GOODS), owners = fam(g);
     const story = `${many(total, goods)[0].toUpperCase() + many(total, goods).slice(1)} were taken from ${familiesOf(owners)}. They share them out fair, and whatever's left over goes to the orphans' home.`;
     const ask = 'How many does each family get, and how many are left over?';
     const each = (n, left) => `each, ${left ? `${left} left` : 'none left'}`;
@@ -255,8 +270,10 @@ const MAKE = {
 // (a trip's own: the ones waiting at the sheriff's office), when there are enough of them. only: take them from among
 // and nowhere else (the orphans' home only when its matron's name is in among too), or make none: -> null. -> see the top
 const TOO_FEW = {};   // (thrown when only the families in among may be used and there aren't enough of them)
-export function makeShare(kind, { rand = Math.random, step = 1, avoid = [], among = null, only = false } = {}) {
-  const t = tools(rand), row = LADDER[Math.max(1, Math.min(LADDER.length, step)) - 1];
+export function makeShare(kind, { rand = Math.random, step = 1, avoid = [], among = null, only = false, row = null } = {}) {
+  const t = tools(rand);
+  row = row || LADDER[Math.max(1, Math.min(LADDER.length, step)) - 1];
+  const opt = { range: row.range || null, young: !!row.young };
   const fam = (n) => {
     const mine = among ? FAMILIES.filter((f) => among.includes(f.name) && !avoid.includes(f.name)) : [];
     if (mine.length >= n) return t.shuffle(mine).slice(0, n);
@@ -266,7 +283,7 @@ export function makeShare(kind, { rand = Math.random, step = 1, avoid = [], amon
   };
   for (let tries = 0; tries < 30; tries++) {
     let p = null;
-    try { p = MAKE[kind](t, step, row.size, fam); } catch (e) { if (e !== TOO_FEW) throw e; }
+    try { p = MAKE[kind](t, step, row.size, fam, opt); } catch (e) { if (e !== TOO_FEW) throw e; }
     if (!p) continue;
     if (only && p.orphans > 0 && !(among || []).includes(MATRON.name)) continue;
     // every coin of a problem has the same small words under its number (but the leftover ones, which say their own
@@ -280,7 +297,7 @@ export function makeShare(kind, { rand = Math.random, step = 1, avoid = [], amon
       vals.add(c.v); return true;
     }));
     // the slips this kind is most about come first (the leftover forgotten, a round off, multiplied)
-    const MAIN = { even: ['mult', 'over', 'under'], rem: ['noRem', 'short'], leftover: ['each', 'roundDown', 'roundUp', 'noRem'], rule: ['even', 'onePart'], rule3: ['even', 'onePart', 'parts'] }[kind];
+    const MAIN = opt.young ? { even: ['over', 'under', 'all'], rem: ['noRem', 'short'] }[kind] : { even: ['mult', 'over', 'under'], rem: ['noRem', 'short'], leftover: ['each', 'roundDown', 'roundUp', 'noRem'], rule: ['even', 'onePart'], rule3: ['even', 'onePart', 'parts'] }[kind];
     wrong.sort((a, b) => (MAIN.includes(b.slip) ? 1 : 0) - (MAIN.includes(a.slip) ? 1 : 0));
     const coins = t.shuffle([{ ...p.right }, ...wrong.slice(0, row.coins - 1)]);
     if (coins.length < Math.min(3, row.coins) || (coins.length < row.coins && tries < 25)) continue;   // (two slips came out the same: new numbers)
@@ -288,6 +305,8 @@ export function makeShare(kind, { rand = Math.random, step = 1, avoid = [], amon
       id: Math.floor(rand() * 1e9).toString(36), kind, step, key: p.key, story: p.story, ask: p.ask, coins,
       answer: p.right.label, goods: { many: p.goods[0], one: p.goods[1], money: !!p.goods[2] }, total: p.total, groups: p.groups,
       owners: p.owners, each: p.each, left: p.left, pic: p.pic, rightWhy: p.rightWhy, hand: p.hand, orphans: p.orphans,
+      // the youngest levels: the goods drawn from the start, the families waiting (never the answer: src/levels/place/loot.js)
+      lead: row.drawn ? { kind: 'pile', total: p.total, groups: p.groups, names: p.owners.map((f) => f.short), goods: p.goods[0], orphans: p.orphans > 0 } : null,
     };
   }
   if (only) return null;
@@ -364,8 +383,34 @@ export function makeShares(state = {}, { rand = Math.random } = {}) {
       line: `Step ${s.step} of ${LADDER.length}: ${L.label}${s.placing ? ' (still finding the right step)' : ''}` };
   }
   function setStep(n) { s.step = Math.max(1, Math.min(LADDER.length, Math.round(n) || 1)); s.placing = false; s.streak = 0; }
-  return { next, answer, level, setStep, state: s };
+  // a problem at a level of the loot ladder (shareAt), not a repeat of the last few; the levels decide, so the trainer's
+  // own step and climb don't move (src/levels/model.js keeps the rider's level)
+  function nextAt(gen, { avoid = [], among = null, only = false } = {}) {
+    let p = null;
+    for (let tries = 0; tries < 12; tries++) { const q = shareAt(gen, { rand: t.rand, avoid, among, only }); if (!q) break; p = q; if (!s.recent.includes(q.key)) break; }
+    if (!p) return null;
+    s.recent.push(p.key); if (s.recent.length > 10) s.recent.splice(0, s.recent.length - 10);
+    s.n++;
+    return p;
+  }
+  return { next, nextAt, answer, level, setStep, state: s };
 }
+// A share problem at a LEVEL of the loot ladder (src/levels/place/loot.js: its gen is { kind, size, coins, range?,
+// young?, drawn? }): the job and the levels page's examples both come here (one source). The kind is the level's own.
+//   shareAt(gen, { rand, avoid, among, only }) -> a problem (as makeShare), or null (only, and none could be made)
+export function shareAt(gen, opts = {}) {
+  const row = { mix: { [gen.kind]: 1 }, size: gen.size || 1, coins: gen.coins || 3, range: gen.range || null, young: !!gen.young, drawn: !!gen.drawn };
+  return makeShare(gen.kind, { ...opts, row, step: gen.step || 1 });
+}
+
+// the times fact in a share: the families (or groups) times what each gets, when the goods are dealt out fairly (with or
+// without some left over) and both are in the times tables; a trip count, a full box or a rule has none
+export function shareFact(p) {
+  if (!p || !/^(even|rem|orphans):/.test(p.key || '')) return null;
+  const a = p.groups, b = p.each;
+  return Number.isInteger(a) && Number.isInteger(b) && a >= 1 && b >= 1 && a <= 12 && b <= 12 ? { a, b } : null;
+}
+
 // the store's word-problem trainer goes by makeWordProblems; this one by makeShares (and makeLoot for the title's lookup)
 export { makeShares as makeLoot };
 
@@ -379,9 +424,42 @@ const svg = (h, body) => `<svg viewBox="0 0 ${W} ${h}" xmlns="http://www.w3.org/
 const box = (x0, x1, y, h, { fill = FILL, stroke = INK, dash = false } = {}) =>
   `<rect x="${x0.toFixed(1)}" y="${y}" width="${Math.max(2, x1 - x0).toFixed(1)}" height="${h}" rx="4" fill="${fill}" stroke="${stroke}" stroke-width="1.4"${dash ? ' stroke-dasharray="4 3"' : ''}/>`;
 const dot = (x, y, r = 3.6, fill = BRASS) => `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}" fill="${fill}"/>`;
-const PIC_TITLES = { deal: 'Dealing it out', loads: 'Load by load', parts: 'Cut into parts' };
+const PIC_TITLES = { deal: 'Dealing it out', loads: 'Load by load', parts: 'Cut into parts', pile: 'Share them out' };
+// one of the youngest levels' goods, drawn small at (x, y)
+function thing(goods, x, y) {
+  if (/apple/.test(goods)) return `<circle cx="${x.toFixed(1)}" cy="${(y + 1).toFixed(1)}" r="6.4" fill="#c23b2a" stroke="${INK}" stroke-width="0.9"/><path d="M${x.toFixed(1)} ${(y - 5).toFixed(1)}l1.4 -3.4" stroke="${INK}" stroke-width="1.3"/>`;
+  if (/egg/.test(goods)) return `<ellipse cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" rx="5.2" ry="6.8" fill="#fbf3e0" stroke="${INK}" stroke-width="0.9"/>`;
+  if (/horseshoe/.test(goods)) return `<path d="M${(x - 5).toFixed(1)} ${(y + 6).toFixed(1)}V${(y - 1).toFixed(1)}a5 5 0 0 1 10 0V${(y + 6).toFixed(1)}" fill="none" stroke="#6b6f74" stroke-width="3"/>`;
+  if (/carrot/.test(goods)) return `<path d="M${(x - 4).toFixed(1)} ${(y - 4).toFixed(1)}L${(x + 4).toFixed(1)} ${(y - 4).toFixed(1)}L${x.toFixed(1)} ${(y + 8).toFixed(1)}Z" fill="#e07b24" stroke="${INK}" stroke-width="0.9"/><path d="M${x.toFixed(1)} ${(y - 4).toFixed(1)}l-2 -4M${x.toFixed(1)} ${(y - 4).toFixed(1)}l2 -4" stroke="#3f7d2c" stroke-width="1.4"/>`;
+  return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="7" fill="#d9a05b" stroke="${INK}" stroke-width="0.9"/><path d="M${(x - 4).toFixed(1)} ${y.toFixed(1)}h8M${x.toFixed(1)} ${(y - 4).toFixed(1)}v8" stroke="#8a5a2b" stroke-width="1"/>`;
+}
 
 const DRAW = {
+  // the youngest levels: every one of the goods drawn in a row to count, and the families waiting with empty hands
+  // (and the orphans' home when some can't go round). The kid shares them out by counting: nothing dealt yet
+  pile(p) {
+    // (few goods drawn bigger, all of them in a row or two, the row centred)
+    const g = p.groups, per = Math.min(p.total <= 10 ? 10 : 13, p.total), rows = Math.ceil(p.total / per), k1 = p.total <= 10 ? 1.7 : 1.3;
+    const gap = Math.min(16 * k1 + 6, (W - 20) / per), rowH = 18 * k1, left = (W - gap * per) / 2;
+    let s = '';
+    for (let k = 0; k < p.total; k++) {
+      const x = left + gap / 2 + (k % per) * gap, yy = 12 * k1 + Math.floor(k / per) * rowH;
+      s += `<g transform="translate(${x.toFixed(1)} ${yy.toFixed(1)}) scale(${k1})">${thing(p.goods, 0, 0)}</g>`;
+    }
+    const y = 4 + rows * rowH + 6 * k1, x0 = 10, x1 = p.orphans ? W - 62 : W - 10, bw = (x1 - x0) / g;
+    for (let i = 0; i < g; i++) {
+      const cx = x0 + bw * (i + 0.5);
+      s += box(x0 + bw * i + 3, x0 + bw * (i + 1) - 3, y, 34) + text(cx, y + 23, '?', { size: 15, fill: ASK, weight: 800 });
+      s += text(cx, y + 48, p.names[i] || '', { size: g > 4 ? 10 : 12, fill: SOFT });
+    }
+    if (p.orphans) {
+      const cx = W - 34;
+      s += `<path d="M${cx - 20} ${y + 34}V${y + 14}L${cx} ${y}L${cx + 20} ${y + 14}V${y + 34}Z" fill="${FILL2}" stroke="${INK}" stroke-width="1.3"/>`;
+      s += text(cx, y + 28, '?', { size: 14, fill: ASK, weight: 800 }) + text(cx, y + 48, 'orphans', { size: 11, fill: SOFT });
+    }
+    const line = p.orphans ? `Give one to each family, round and round. What can't go round goes to the orphans' home.` : `Give one to each family, round and round, until they're all given out.`;
+    return { svg: svg(y + 56, s), line };
+  },
   // the families side by side, each with the first round dealt (one each), and the rest still in the pile; the
   // orphans' home at the end when there will be a leftover
   deal(p) {

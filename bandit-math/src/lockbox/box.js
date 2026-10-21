@@ -32,6 +32,7 @@ import { verdictOf, RUNG, VERDICT } from './generate.js';
 import { stepsLeft, stepsMoves, stepsPlan, stepsStatus, currentStep } from './steps.js';
 import { ARITH_OF } from './parts.js';
 import { kHint } from './kbox.js';
+import { findHint } from './findx.js';
 
 export const TIER_GOLD = { tin: 10, iron: 20, brass: 35, vault: 60 };
 export const TIER_NAME = { tin: 'Tin lockbox', iron: 'Iron strongbox', brass: 'Brass express safe', vault: 'Vault car' };
@@ -195,6 +196,7 @@ export function makeBox(problem, { stage, level = 4, rng, fav = null, tier = 'ir
   };
   B.hintAt = function (lvl) {
     if (pick && problem.mode === 'count') return { level: lvl, text: kHint(problem, lvl), targets: [] };   // (kbox.js)
+    if (pick && problem.find) return { level: lvl, text: findHint(problem, lvl), targets: [] };   // (findx.js)
     if (pick) {
       const texts = problem.mode === 'balance'
         ? ['Both sides are equal.', 'Work out the full side first.', `It's ${problem.answer}.`]

@@ -20,6 +20,10 @@
 //     pen = { label (what the sign says: 'NEGATIVE', 'LESS THAN 10'), sub (a small line under it: 'below zero'), value
 //             (the side: -1 below the split, 1 above it) }
 //     pig = { text ('−3 + 8', '3 + 4'), say, parts: { start, change, op, term }, answer, pen (the index of its pen) }
+//   batchAt(gen, { size, rand })               THE GAME'S BATCHES NOW: a batch at a level of the pigs' ladder (src/levels/
+//                                              place/pigs.js: more or less than, even or odd, less or more than a half,
+//                                              negative or positive); mode 'sizes' | 'parity' | 'half' | 'signs'; each
+//                                              pig also has done (where it goes and why) and help (a line for the stuck)
 //   penFor(batch, answer)                      the index of the pen an answer belongs in
 //   judge(batch, pig, penIndex) -> { right, line, picked }
 //     line: one plain line: why the pig doesn't go there (the hop, and where it really lands), or why it does
@@ -132,12 +136,12 @@ const SIZE_PENS = (n) => [
   { label: `MORE THAN ${n}`, sub: '', value: 1 },
 ];
 
-export function makePigBatch(rider, { size = PIG_MATH.size, rand = Math.random, level = null, map = 'negatives', step = null } = {}) {
+export function makePigBatch(rider, { size = PIG_MATH.size, rand = Math.random, level = null, map = 'negatives', step = null, split: at = null } = {}) {
   size = Math.max(2, Math.round(size));
   if (map === 'adding' || map === 'taking') {
     const L = map === 'taking' ? TAKE_LADDER : ADD_LADDER;
     const lv = Math.max(1, Math.min(L.length, Math.round(step ?? level ?? 1)));
-    const split = splitFor(map, lv, rand), used = new Set();
+    const split = at ?? splitFor(map, lv, rand), used = new Set();   // (at: a level's own number on the signs)
     const want = [0, 1];
     while (want.length < size) want.push(rand() < 0.5 ? 0 : 1);
     const pigs = shuffle(want, rand).map((pen) => {
@@ -178,7 +182,94 @@ export function makePigBatch(rider, { size = PIG_MATH.size, rand = Math.random, 
   return { level: lv, map: 'negatives', mode: 'signs', split: 0, pens: SIGN_PENS.map((x) => ({ ...x })), pigs };
 }
 
+// ── A BATCH AT A LEVEL OF THE PIGS' LADDER (src/levels/place/pigs.js: the ONE maker for the job and its examples) ──
+// Sorting, every level two pens:
+//   { pens: 'less-more', nums: [lo, hi], mid }      plain numbers: LESS THAN mid / MORE THAN mid (never mid itself)
+//   { pens: 'less-more', map: 'adding' | 'taking', step }   the early sums at their step (makePigBatch above)
+//   { pens: 'even-odd', top, sums? }                 EVEN / ODD: numbers up to top, or sums ('+') up to top
+//   { pens: 'half', den: [...] }                     LESS THAN 1/2 / MORE THAN 1/2 (never a half itself)
+//   { pens: 'neg-pos', top }                         plain numbers: NEGATIVE / POSITIVE (never 0)
+//   { pens: 'neg-pos', step }                        positive & negative sums at negatives.js's step (makePigBatch)
+// Each pig: { text, say, parts (a sum's, for the number line; null for a plain number or a fraction), answer (a number
+// to sort: a fraction's value), pen, done (one line: where it goes and why), help (one plain line for the stuck) }
+const PARITY_PENS = [
+  { label: 'EVEN', sub: '2, 4, 6, 8, 10 …', value: 0 },
+  { label: 'ODD', sub: '1, 3, 5, 7, 9 …', value: 1 },
+];
+const HALF_PENS = [
+  { label: 'LESS THAN ½', sub: 'smaller than a half', value: -1 },
+  { label: 'MORE THAN ½', sub: 'bigger than a half', value: 1 },
+];
+const halfWord = (d) => (d % 2 === 0 ? `${d / 2}/${d}` : `${d / 2} out of ${d}`);
+function sidesOf(size, rand) { const want = [0, 1]; while (want.length < size) want.push(rand() < 0.5 ? 0 : 1); return shuffle(want, rand); }
+const plainPig = (v, pen, done, help) => ({ text: numText(v), say: numText(v).replace('−', 'minus '), parts: null, answer: v, pen, done, help });
+
+export function batchAt(gen, { size = PIG_MATH.size, rand = Math.random } = {}) {
+  size = Math.max(2, Math.round(size));
+  if (gen.pens === 'less-more' && gen.map) {
+    const b = makePigBatch(null, { size, rand, map: gen.map, step: gen.step, split: gen.mid ?? null });
+    for (const p of b.pigs) { p.done = `${p.text} = ${numText(p.answer)}: ${p.answer < b.split ? 'less' : 'more'} than ${b.split}.`; p.help = `Work out ${p.text} first, then see if it is less or more than ${b.split}.`; }
+    return b;
+  }
+  const used = new Set();
+  if (gen.pens === 'less-more') {
+    const mid = gen.mid, pigs = sidesOf(size, rand).map((pen) => {
+      let v = mid;
+      for (let k = 0; k < 40 && (v === mid || used.has(v)); k++) v = pen === 0 ? int(gen.nums[0], mid - 1, rand) : int(mid + 1, gen.nums[1], rand);
+      used.add(v);
+      return plainPig(v, pen, `${v} is ${pen === 0 ? 'less' : 'more'} than ${mid}.`, `Count up from 1: does ${v} come before ${mid} or after it?`);
+    });
+    return { level: 1, map: 'numbers', mode: 'sizes', split: mid, pens: SIZE_PENS(mid), pigs };
+  }
+  if (gen.pens === 'even-odd') {
+    const pigs = sidesOf(size, rand).map((pen) => {
+      let v = 0, a = 0, b = 0, text = '';
+      for (let k = 0; k < 60; k++) {
+        if (gen.sums) { a = int(1, Math.floor(gen.top / 2), rand); b = int(1, gen.top - a, rand); v = a + b; text = `${a} + ${b}`; }
+        else { v = int(1, gen.top, rand); text = String(v); }
+        if (v % 2 === pen && !used.has(text)) break;
+      }
+      used.add(text);
+      const word = pen === 0 ? 'even' : 'odd', last = v % 10;
+      const done = gen.sums ? `${text} = ${v}, and ${v} is ${word}.` : v >= 10 ? `${v} ends in ${last}, so it is ${word}.` : `${v} is ${word}.`;
+      const help = v >= 10 || gen.sums ? 'Look at the last digit: 0, 2, 4, 6 or 8 is even; 1, 3, 5, 7 or 9 is odd.' : 'Even numbers make pairs with none left over: 2, 4, 6, 8, 10.';
+      return { text, say: text.replace('+', 'plus'), parts: gen.sums ? { start: a, change: b, op: '+', term: b } : null, answer: v, pen, done, help };
+    });
+    return { level: 1, map: 'parity', mode: 'parity', split: null, pens: PARITY_PENS.map((x) => ({ ...x })), pigs };
+  }
+  if (gen.pens === 'half') {
+    const pigs = sidesOf(size, rand).map((pen) => {
+      let d = 4, n = 1;
+      for (let k = 0; k < 60; k++) {
+        d = pick(gen.den, rand); n = int(1, d - 1, rand);
+        if (2 * n !== d && (2 * n < d ? 0 : 1) === pen && !used.has(`${n}/${d}`)) break;
+      }
+      used.add(`${n}/${d}`);
+      const less = 2 * n < d, h = halfWord(d);
+      const done = d % 2 === 0 ? `Half of ${d} is ${d / 2}: ${n}/${d} is ${less ? 'less' : 'more'} than ${h}.` : `Half of ${d} is ${d / 2}: ${n} out of ${d} is ${less ? 'less' : 'more'} than half.`;
+      return { text: `${n}/${d}`, say: `${n} over ${d}`, parts: null, answer: n / d, pen, done, help: `Half of the bottom number is half of it all. Half of ${d} is ${d / 2}: is ${n} less or more?` };
+    });
+    return { level: 1, map: 'half', mode: 'half', split: 0.5, pens: HALF_PENS.map((x) => ({ ...x })), pigs };
+  }
+  if (gen.pens === 'neg-pos' && gen.top) {
+    const pigs = sidesOf(size, rand).map((pen) => {
+      let v = 0;
+      for (let k = 0; k < 40 && (v === 0 || used.has(v)); k++) v = (pen === 0 ? -1 : 1) * int(1, gen.top, rand);
+      used.add(v);
+      return plainPig(v, pen, v < 0 ? `${numText(v)} has a minus sign: below zero, NEGATIVE.` : `${v} has no minus sign: above zero, POSITIVE.`, 'A minus sign in front means below zero.');
+    });
+    return { level: 1, map: 'signs', mode: 'signs', split: 0, pens: SIGN_PENS.map((x) => ({ ...x })), pigs };
+  }
+  if (gen.pens === 'neg-pos') {
+    const b = makePigBatch(null, { size, rand, map: 'negatives', step: gen.step });
+    for (const p of b.pigs) { p.done = `${p.text} = ${numText(p.answer)}: ${p.answer < 0 ? 'below zero' : 'above zero'}.`; p.help = 'Start at the first number on the line, then hop: plus goes right, minus goes left.'; }
+    return b;
+  }
+  throw new Error('pigs: no batch for ' + JSON.stringify(gen));
+}
+
 export function penFor(batch, answer) {
+  if (batch.mode === 'parity') return Math.abs(answer) % 2;
   return answer < (batch.split || 0) ? 0 : 1;
 }
 
@@ -187,6 +278,11 @@ const SIDE = (r) => (r < 0 ? 'Below zero, so it goes in NEGATIVE.' : 'Above zero
 export function judge(batch, pig, penIndex) {
   const right = penFor(batch, pig.answer) === penIndex;
   const pen = batch.pens[penIndex];
+  if ((batch.mode === 'parity' || batch.mode === 'half' || !pig.parts) && pig.done) {
+    const home = batch.pens[penFor(batch, pig.answer)];
+    const how = `${pig.done} It goes in ${home.label}.`;
+    return { right, line: right ? how : `Not ${pen ? pen.label : 'that pen'}. ${how}`, picked: null };
+  }
   if (batch.mode === 'sizes') {
     const n = batch.split, home = batch.pens[penFor(batch, pig.answer)];
     const how = `${pig.text} = ${numText(pig.answer)}, and ${numText(pig.answer)} is ${pig.answer < n ? 'less' : 'more'} than ${n}: it goes in ${home.label}.`;

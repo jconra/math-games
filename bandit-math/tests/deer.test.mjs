@@ -13,151 +13,137 @@ const fake = {
 Object.defineProperty(globalThis, 'localStorage', { configurable: true, get() { return fake; } });
 
 const M = await import('../src/math/deermath.js');
-const { makeRng, RUNG_IDS } = await import('../src/lockbox/generate.js');
-const { line, num, xt, evalSide, F, solvedValue } = await import('../src/lockbox/engine.js');
+const { makeRng } = await import('../src/lockbox/generate.js');
+const { evalSide, F } = await import('../src/lockbox/engine.js');
 const S = await import('../src/save.js');
 const A = await import('../src/ui/album.js');
+const { PLACE } = await import('../src/levels/places.js');
+const LV = await import('../src/levels/model.js');
 
-const K = await import('../src/math/skill.js');
-// a rider whose equations level (the skill model) sits on that rung of the lock box ladder, frac of the way to the next
-const riderAt = (rung, frac = 0, o = {}) => { const r = {}; K.setLevel(r, 'eq', K.pctAt('lockbox', rung, frac), o); return r; };
-const riderEq = (pct, o = {}) => { const r = {}; K.setLevel(r, 'eq', pct, o); return r; };
-const makesTrue = (shot, v) => evalSide(shot.start.L, F(v)).eq(evalSide(shot.start.R, F(v)));
+const LADDER = PLACE.deer.levels;
+const L = (id) => LADDER.find((x) => x.id === id);
+const shotAt = (id, o = {}) => M.makePhoto({}, { n: 4, rng: o.rng || makeRng(o.seed ?? 3), level: L(id), into: o.into ?? 2, count: L(id).count, recent: o.recent || [], fact: o.fact || null });
+// does v fill the blank? (read back from the question itself, not from the maker's answer)
+function fills(shot, v) {
+  if (!shot.young) return evalSide(shot.start.L, F(v)).eq(evalSide(shot.start.R, F(v)));
+  const e = shot.eq.replace(/−/g, '-').replace(/×/g, '*').replace(/÷/g, '/');
+  let m;
+  if ((m = /^(\d+) (more|less) than (\d+) is \?$/.exec(e))) return v === (m[2] === 'more' ? +m[3] + +m[1] : +m[3] - +m[1]);
+  if ((m = /^(\d+) \/ (\d+) = (\d+), \? left over$/.exec(e))) return v >= 0 && v < +m[2] && +m[3] * +m[2] + v === +m[1];
+  const [lhs, rhs] = e.split('=').map((t) => t.trim());
+  return Function(`return (${lhs.replace('?', `(${v})`)}) === (${rhs})`)();
+}
 
-test('every rung of the ladder gives one equation with exactly one right tag', () => {
+test('every level gives one question with exactly one right tag, a counting number', () => {
   const rng = makeRng(11);
-  for (const rung of RUNG_IDS) {
-    for (let k = 0; k < 25; k++) {
-      const n = 3 + (k % 3);
-      const shot = M.makePhoto({}, { n, rng, rung });
-      assert.equal(shot.values.length, n, `${rung}: ${n} tags`);
-      assert.equal(new Set(shot.values).size, n, `${rung}: no repeated tags ${shot.values}`);
-      const right = shot.values.filter((v) => makesTrue(shot, v));
-      assert.deepEqual(right, [shot.x], `${rung} ${shot.eq}: only x makes it true (${shot.values})`);
+  for (const lv of LADDER) {
+    for (let k = 0; k < 40; k++) {
+      const n = 3 + (k % 4);
+      const shot = M.makePhoto({}, { n, rng, level: lv, into: k % lv.count, count: lv.count });
+      assert.equal(shot.level, lv.id);
+      assert.equal(shot.values.length, n, `${lv.id}: ${n} tags`);
+      assert.equal(new Set(shot.values).size, n, `${lv.id}: no repeated tags ${shot.values}`);
+      const right = shot.values.filter((v) => fills(shot, v));
+      assert.deepEqual(right, [shot.x], `${lv.id} ${shot.eq}: only ${shot.x} fills it (${shot.values})`);
       assert.equal(shot.values[shot.right], shot.x);
-      assert.ok(shot.values.every((v) => Number.isInteger(v) && Math.abs(v) <= M.DEERMATH.most), `${rung}: whole tags within range`);
+      assert.ok(shot.values.every((v) => Number.isInteger(v) && v > 0 && v <= M.DEERMATH.most), `${lv.id}: counting-number tags ${shot.values}`);
     }
   }
 });
 
-test('a photo is a quick pick: asked well below the level, never past two steps, never a warm-up rung', () => {
-  const B = M.DEERMATH.below, at = (r) => K.pctAt('lockbox', r);
-  // (at R0a's 10 the kindergarten boxes still fit too: either way a box with one x to find)
-  assert.ok(['R1', 'K3'].includes(M.rungFor(riderAt('R0a')).rung));
-  assert.equal(M.rungFor(riderAt('R0b')).rung, 'R1');
-  assert.equal(M.rungFor(riderAt('R0b')).at, at('R1'));   // (a swapped rung is recorded at its own point)
-  // a rider just above the add-on rung stays on it (nothing lower has an x to find)
-  assert.equal(M.rungFor(riderAt('R2')).rung, 'R1');
-  // well below the level: a rider on "two steps with negatives" (62) gets about 42, "x/4 = 3" (R4)
-  assert.equal(M.rungFor(riderAt('R7')).rung, 'R4');
-  assert.equal(M.rungFor(riderAt('R7')).at, at('R7') - B);
-  // the hardest riders: never past two steps ("2x + 5 = 17"), its numbers at most the lock box's level 4
-  for (const r of ['R12', 'R13', 'R14', 'R15', 'I2']) {
-    const g = M.rungFor(riderEq(r[0] === 'I' ? 99 : at(r)));
-    assert.equal(g.rung, M.DEERMATH.top, r);
-    assert.ok(g.at <= K.pctAt('lockbox', M.DEERMATH.top, M.DEERMATH.topFrac) + 0.05, `${r}: at ${g.at}`);
-  }
-  // a level still being found is asked below its baseline's point too
-  // (its point lands on "one step with negatives", which a photo swaps for "x/4 = 3": no negatives below two steps)
-  const fresh = riderEq(70, { placed: false });
-  assert.equal(M.rungFor(fresh).rung, 'R4');
-});
-
-test('a roll opens on one step (and keeps to it after a miss): never past "x/4 = 3", two steps only after; no negatives', () => {
-  const rng = makeRng(11);
-  for (const r of ['R7', 'R9', 'R12', 'R14']) {
-    const rider = riderEq(K.pctAt('lockbox', r));
-    for (let k = 0; k < 20; k++) {
-      const first = M.makePhoto(rider, { n: 4, rng, oneStep: true }), later = M.makePhoto(rider, { n: 4, rng });
-      assert.ok(['R1', 'R2', 'R3', 'R4'].includes(first.rung), `${r} first: ${first.rung} ${first.eq}`);
-      assert.ok(['R4', 'R6'].includes(later.rung), `${r} later: ${later.rung} ${later.eq}`);
-      for (const s of [first, later]) assert.ok(s.x > 0 && s.values.every((v) => v > 0), `${r}: counting numbers ${s.eq} ${s.values}`);
-    }
-  }
-  // missed ones ease below it, never onto the negatives' rung
-  const g = M.rungFor(riderEq(K.pctAt('lockbox', 'R12')), makeRng(2), { ease: 8 });
-  assert.notEqual(g.rung, 'R5');
-});
-
-test('a missed photo makes the next ones easier, down to the add-on rung', () => {
-  const r = riderEq(K.pctAt('lockbox', 'R12'));
-  const rungs = [0, 8, 16, 24, 99].map((ease) => M.rungFor(r, makeRng(1), { ease }));
-  const ix = (g) => RUNG_IDS.indexOf(g.rung);
-  for (let k = 1; k < rungs.length; k++) assert.ok(ix(rungs[k]) <= ix(rungs[k - 1]), rungs.map((g) => g.rung).join(' '));
-  assert.ok(rungs[3].at < rungs[0].at - 15, `eased: ${rungs.map((g) => g.at)}`);
-  assert.deepEqual(rungs[4], M.rungFor(r, makeRng(1), { ease: M.DEERMATH.ease.most }), 'eased at most DEERMATH.ease.most');
-  // a young rider on the add-on rung eases no lower than it
-  assert.equal(M.rungFor(riderAt('R1'), makeRng(2), { ease: 24 }).rung, 'R1');
-});
-
-test('the youngest riders get the kindergarten boxes ("2 plus what equals 4?"), the older ones the ladder', () => {
-  const rng = makeRng(3);
-  for (const [pct, want] of [[0, ['K1']], [5, ['K2']], [8, ['K3']], [25, ['R1']], [50, ['R2']], [90, ['R6']]]) {
-    for (let k = 0; k < 12; k++) {
-      const shot = M.makePhoto(riderEq(pct), { n: 4, rng });
-      assert.ok(want.includes(shot.rung), `eq ${pct}: ${shot.rung} ${shot.eq}`);
-      if (/^K/.test(shot.rung)) {
-        assert.match(shot.words, /^\d+ (plus|take away) what (equals|leaves) \d+\?$/, shot.words);
-        assert.ok(shot.say && shot.say.length > 5, 'read aloud from the clips');
-        assert.ok(shot.values.every((v) => v > 0 && v <= 20), `counting numbers on the tags: ${shot.values}`);
-        // written with a box to fill, never a letter; the print shows it filled in
-        assert.ok(shot.young, 'young');
-        assert.match(shot.eq, /^\d+ [+−] \? = \d+$|^\d+ = \d+ [+−] \?$/, shot.eq);
-        assert.ok(!/x/.test(shot.eq) && shot.steps.every((st) => !/x/.test(st.text)), `no x: ${shot.eq}`);
-        assert.equal(shot.solved, shot.eq.replace('?', String(shot.x)));
-      } else { assert.equal(shot.words, null); assert.ok(!shot.young && /x/.test(shot.eq), shot.eq); }
-    }
-  }
-  // a rider never seen before starts at the bottom (no age): the kindergarten boxes
-  assert.equal(M.rungFor({}).rung, 'K1');
-});
-
-test('rungs without negatives never put a negative or zero on a tag', () => {
+test('each level asks its own kind: a blank below simple x, x from there; the numbers stay in the level', () => {
   const rng = makeRng(5);
-  for (const rung of ['R1', 'R2', 'R3', 'R4', 'R6', 'R12']) for (let k = 0; k < 40; k++) {
-    const shot = M.makePhoto({}, { n: 5, rng, rung });
-    assert.ok(shot.values.every((v) => v > 0), `${rung} ${shot.eq}: ${shot.values}`);
+  for (const lv of LADDER) {
+    for (let k = 0; k < 30; k++) {
+      const s = M.makePhoto({}, { n: 4, rng, level: lv, into: k % lv.count, count: lv.count });
+      if (lv.gen.kind === 'x') { assert.ok(!s.young && /x/.test(s.eq) && !/\?/.test(s.eq), s.eq); continue; }
+      assert.ok(s.young && /\?/.test(s.eq) && !/x/.test(s.eq), `${lv.id}: ${s.eq}`);
+      const nums = s.eq.match(/\d+/g).map(Number);
+      if (lv.id === 'more1') assert.ok(Math.max(...nums, s.x) <= 10 && /^1 (more|less)/.test(s.eq), s.eq);
+      if (lv.id === 'add10') assert.ok(Math.max(...nums) <= 10 && /\+/.test(s.eq), s.eq);
+      if (lv.id === 'add20') assert.ok(Math.max(...nums) > 10 && Math.max(...nums) <= 20, s.eq);
+      if (lv.id === 'sub20') assert.ok(/−/.test(s.eq) && Math.max(...nums) <= 20, s.eq);
+      if (lv.id === 'ten') assert.ok(/^10 (more|less)/.test(s.eq) && s.x <= 99, s.eq);
+      if (lv.id === 'mul') assert.ok(/×/.test(s.eq) && s.x <= 10, s.eq);
+      if (lv.id === 'div') assert.ok(/÷/.test(s.eq) && s.x <= 100, s.eq);
+      if (lv.id === 'left') assert.ok(/left over/.test(s.eq) && s.x >= 1, s.eq);
+    }
   }
 });
 
-test('the steps solve the equation, one move a line, and end on x', () => {
-  const rng = makeRng(9);
-  for (const rung of RUNG_IDS) {
-    const shot = M.makePhoto({}, { n: 4, rng, rung });
-    assert.equal(shot.steps[0].text, shot.eq);
-    assert.ok(shot.steps.length >= 2, `${rung}: at least one move`);
-    assert.ok(shot.steps.slice(1).every((s) => s.note), `${rung}: every move says what it did`);
-    const last = shot.steps[shot.steps.length - 1].text;
-    assert.match(last, new RegExp(`^(x = ${M.numText(shot.x)}|${M.numText(shot.x)} = x)$`), `${rung} ${shot.eq}: ends ${last}`);
+test('the numbers grow across a level, never past its top: a sum up to 20 opens near 10', () => {
+  const first = [], last = [];
+  for (let k = 0; k < 60; k++) {
+    first.push(Math.max(...shotAt('add20', { seed: k, into: 0 }).eq.match(/\d+/g).map(Number)));
+    last.push(Math.max(...shotAt('add20', { seed: k, into: 4 }).eq.match(/\d+/g).map(Number)));
+  }
+  assert.ok(Math.max(...first) <= 12, `first photo of "8 + ? = 15": sums to ${Math.max(...first)}`);
+  assert.ok(Math.max(...last) === 20 && Math.min(...first, ...last) > 10, 'and up to 20 by the end, every sum past 10');
+});
+
+test('a times fact picked for the rider is the one asked, and is handed back for the times chart', () => {
+  const s = shotAt('mul', { fact: { a: 7, b: 4 } });
+  assert.equal(s.eq, '? × 4 = 28'); assert.deepEqual(s.fact, { a: 7, b: 4 });
+  const d = shotAt('div', { fact: { a: 3, b: 6 } });
+  assert.equal(d.eq, '? ÷ 3 = 6'); assert.equal(d.x, 18);
+  const x = shotAt('xMul', { fact: { a: 3, b: 7 } });
+  assert.equal(x.eq.replace(/^21 = 3x$/, '3x = 21'), '3x = 21'); assert.deepEqual(x.fact, { a: 3, b: 7 });
+  const l = shotAt('left'); assert.equal(l.fact.a * l.fact.b + l.x, Number(l.eq.match(/^\d+/)[0]), 'a leftover asks its groups as a fact');
+});
+
+test('the youngest levels come in words and are read aloud from the clips; the ladder\'s example is the same maker', () => {
+  const s = M.makePhoto({}, { n: 4, rng: makeRng(2), level: L('add10'), into: 1, count: 5 });
+  assert.ok(s.words && /what/i.test(s.words), s.words);
+  assert.match(s.say, /^\d+ and what make \d+$/);
+  const m = M.makePhoto({}, { n: 4, rng: makeRng(2), level: L('more1') });
+  assert.match(m.say, /^one (more|less) than \d+$/);
+  const t = M.makePhoto({}, { n: 4, rng: makeRng(4), level: L('mul') });
+  assert.equal(t.say, null, 'a level not marked read: true is not read');
+  const ex = PLACE.deer.example(L('sub20'), () => 0.4);
+  assert.match(ex.q, /^\d+ − \? = \d+$/); assert.match(ex.a, /^\d+$/);
+  assert.match(PLACE.deer.example(L('xTwo'), () => 0.4).a, /^x = \d+$/);
+});
+
+test('a wrong deer gets a check that doesn\'t give the answer away; the steps end on it', () => {
+  for (const lv of LADDER) {
+    for (let k = 0; k < 15; k++) {
+      const s = shotAt(lv.id, { seed: 100 + k, into: k % 5 });
+      for (const v of s.values) {
+        if (v === s.x) continue;
+        const why = M.whyNot(s, v);
+        assert.ok(why.startsWith(`That one's ${v}:`), why);
+        const b = M.balanceFor(s, v);
+        assert.notEqual(b.tip, 0, `${s.eq} with ${v}: the pans don't balance`);
+        // (the side the wrong number is checked against is never the answer itself, unless the question prints it)
+        if (s.young && !s.eq.match(/\d+/g).map(Number).includes(s.x)) assert.notEqual(b.rightValue, String(s.x), `${s.eq} with ${v}: the balance shows the answer: ${JSON.stringify(b)}`);
+      }
+      const last = s.steps[s.steps.length - 1].text;
+      assert.ok(new RegExp(`(^|\\D)${s.x}$`).test(last), `${s.eq}: the steps end on ${s.x} (${last})`);
+    }
+  }
+  const m = shotAt('more1', { seed: 7 });
+  const v = m.values.find((x) => x !== m.x);
+  assert.match(M.whyNot(m, v), /is (\d+ (more|less) than \d+|\d+ itself), not 1 (more|less)\.$/);
+});
+
+test('questions are not dealt again straight away', () => {
+  const rng = makeRng(9), recent = [];
+  for (let k = 0; k < 10; k++) {
+    const s = M.makePhoto({}, { n: 4, rng, recent, level: L('add20'), into: 4, count: 5 });
+    assert.ok(!recent.includes(s.key), `${s.eq} dealt twice in ten`);
+    recent.push(s.key);
   }
 });
 
-test('a wrong deer gets the check a teacher would write', () => {
-  const shot = { start: line([xt(1), num(7)], [num(12)]), x: 5 };
-  assert.equal(M.whyNot(shot, 7), "That one's 7: check, 7 + 7 is 14, not 12.");
-  // x written on the right: still checked x side first
-  const swapped = { start: line([num(12)], [xt(1), num(7)]), x: 5 };
-  assert.equal(M.whyNot(swapped, 7), "That one's 7: check, 7 + 7 is 14, not 12.");
-  // 3x − 4 = 11
-  const two = { start: line([xt(3), num(-4)], [num(11)]), x: 5 };
-  assert.equal(M.whyNot(two, 4), "That one's 4: check, 3·4 − 4 is 8, not 11.");
-  // negatives in brackets, real minus signs
-  assert.equal(M.whyNot(two, -2), "That one's −2: check, 3·(−2) − 4 is −10, not 11.");
-  // x on both sides
-  const both = { start: line([xt(5), num(3)], [xt(2), num(15)]), x: 4 };
-  assert.equal(M.whyNot(both, 2), "That one's 2: 5·2 + 3 makes 13, but 2·2 + 15 makes 19.");
-  const b = M.balanceFor(two, 4);
-  assert.deepEqual([b.left, b.right, b.tip, b.leftText, b.rightText], [8, 11, 1, '3·4 − 4', '11']);
-  assert.equal(M.balanceFor(two, 5).tip, 0);
-});
-
-test('equations are not dealt again straight away', () => {
-  const rng = makeRng(21), recent = [];
-  for (let k = 0; k < 8; k++) {
-    const shot = M.makePhoto(riderAt('R6'), { n: 4, rng, recent });
-    assert.ok(!recent.includes(shot.key), `${shot.key} repeated`);
-    recent.push(shot.key);
-  }
+test('on the levels: a photo\'s first try moves the rider one level in placement, and lands in its strand', () => {
+  fake.data.clear(); S.useSaveKey('bandit-math.riders.deertest');
+  const r = S.newRider('Cy');
+  const q = LV.levelFor(r, 'deer');
+  assert.equal(q.id, 'more1', 'a new rider starts at one more, one less');
+  const s = M.makePhoto(r, { n: 4, rng: makeRng(1), level: q.level, into: q.into, count: q.count });
+  const out = S.recordAnswer(r, true, { place: 'deer', level: s.level });
+  assert.equal(out.level.moved, 1);
+  assert.equal(LV.levelFor(r, 'deer').id, 'add10');
 });
 
 test('the album keeps the newest prints and survives a bad save', () => {

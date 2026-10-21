@@ -30,7 +30,8 @@
 //     water           { isWater(x, z) (open water a bobber can land in), ripple(x, z, strength), update(dt) }
 //     asker           the questions: { question(ctx, recent) -> q (questions.js; ctx: { creel, counts }), practice(topic,
 //                     from, ctx) -> q (a "Try it"), asked(q) (a card is up), answered(q, right) -> { up, down },
-//                     stars() -> { n, of, name } or { note } (the card's corner), state() (for rigs) }.
+//                     stars() -> { n, of, name } or { note } (the card's corner), state() (for rigs), and optionally
+//                     lesson(q, ctx) -> the worked example for "Teach me" (the game: a fresh one at q's level) }.
 //                     ladderAsker() below is the lab's own (localStorage); the game passes the skill model's
 //     records         { read() -> { record, book }, write({ record, book }), creel() -> [fish kept, oldest first] (the
 //                     line-ups and sums take theirs), keep(fish) -> a word for the toast or null (a fish kept),
@@ -361,7 +362,9 @@ export function mountFishing(host) {
   function stars() {
     const s = asker.stars();
     if (!s || !s.n) return s && s.note ? `<div class="steps"><span class="lvl">${s.note}</span></div>` : '';
-    return `<div class="steps" title="Level ${s.n} of ${s.of}${s.name ? ': ' + s.name : ''}">${'★'.repeat(s.n)}${'☆'.repeat(Math.max(0, s.of - s.n))}<span class="lvl">Level ${s.n} of ${s.of}</span>${s.name ? `<span class="nm">${s.name}</span>` : ''}${s.note ? `<span class="nt">${s.note}</span>` : ''}</div>`;
+    // (a long ladder, the game's 17 levels: a thin bar instead of a star a level, so the corner stays one line)
+    const marks = s.of > 10 ? `<i class="bar"><i style="width:${Math.round((100 * s.n) / s.of)}%"></i></i>` : `${'★'.repeat(s.n)}${'☆'.repeat(Math.max(0, s.of - s.n))}`;
+    return `<div class="steps" title="Level ${s.n} of ${s.of}${s.name ? ': ' + s.name : ''}">${marks}<span class="lvl">Level ${s.n} of ${s.of}</span>${s.name ? `<span class="nm">${s.name}</span>` : ''}${s.note ? `<span class="nt">${s.note}</span>` : ''}</div>`;
   }
   function openCard(q) {
     C.catchQ = q; C.q = q; C.answered = null; C.practice = false; C.catchAnswered = false;
@@ -416,11 +419,11 @@ export function mountFishing(host) {
   listen(card, 'click', (e) => { if (C.answered && C.answered.right && !card.classList.contains('teach') && !e.target.closest('button')) finishCatch(); });
   // "Teach me": the idea worked through on a fresh example of the same kind (teach.js), then "Try it"
   function teach() {
-    const ex = questionOf(C.q.topic, C.q.from, Math.random, { counts });
+    const ex = asker.lesson ? asker.lesson(C.q, { counts }) : questionOf(C.q.topic, C.q.from, Math.random, { counts });
     showTeach(card, { title: 'How it works', rule: fracHTML(ex.rule), picture: ex.lessonPic, example: fracHTML(ex.prompt), steps: ex.steps.map(fracHTML), answer: fracHTML(ex.answerLabel) }, {
       onTry: () => {
         if (!C.catchAnswered) { C.q = C.catchQ; C.answered = null; C.practice = false; }
-        else { C.q = asker.practice(C.catchQ.topic, C.catchQ.from, { counts }); C.answered = null; C.practice = true; }
+        else { C.q = asker.practice(C.catchQ.topic, C.catchQ.from, { counts }, C.catchQ); C.answered = null; C.practice = true; }
         renderCard();
         asker.asked(C.q);
       },

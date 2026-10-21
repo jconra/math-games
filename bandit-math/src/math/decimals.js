@@ -189,10 +189,11 @@ function tens(t, f, frac) {
   }
   // one sack weighs 2.5 pounds: 10 sacks; one nail 0.03 pounds: 100 nails
   const by = form === 'hundred' ? 100 : 10, places = by === 100 ? 2 : 1;
-  const one = by === 100 ? t.pick([3, 5, 2, 4, 6, 8, 12, 15, 25]) : t.int(11, 49);   // hundredths (0.03) or tenths (2.5)
+  let one = by === 100 ? t.pick([3, 5, 2, 4, 6, 8, 12, 15, 25]) : t.int(11, 49);   // hundredths (0.03) or tenths (2.5)
+  if (by === 10 && one % 10 === 0) one += t.int(1, 9);   // (never "3.0 pounds": a tenth that is there)
   const x = one / 10 ** places, ans = x * by;
   const thing = by === 100 ? t.pick([['nail', 'nails'], ['button', 'buttons'], ['horseshoe nail', 'horseshoe nails']])
-    : t.pick([['sack of feed', 'sacks of feed'], ['bar of soap', 'bars of soap'], ['bolt of cloth', 'bolts of cloth']]);
+    : t.pick([['side of bacon', 'sides of bacon'], ['wheel of cheese', 'wheels of cheese'], ['bolt of cloth', 'bolts of cloth']]);
   const P = (n, pl) => N(n, pl, { trim: true, unit: 'pounds' });
   const moved = by === 100 ? 'two places' : 'one place';
   return {

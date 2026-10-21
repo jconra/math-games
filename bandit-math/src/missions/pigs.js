@@ -1,8 +1,8 @@
 // THE LOOSE-PIGS JOB: a few farm-pack pigs are loose in the farm's pig yard (src/farm.js), each with a sum floating over
 // it ("−3 + 8"), readable from the saddle like the cattle's numbers. Along the yard's back fence stand two pens, a sign
 // over each gate: NEGATIVE / POSITIVE for positive & negative sums, LESS THAN 10 / MORE THAN 10 (or another number) for
-// the youngest riders' adding and taking-away sums (missions/pigmath.js: which, and how hard, come from the rider's skill
-// model). Herd each pig into the pen with its answer:
+// the youngest riders' numbers and sums, EVEN / ODD, LESS THAN ½ / MORE THAN ½ (missions/pigmath.js batchAt: each batch
+// is made at the rider's level on the pigs' SORTING ladder, src/levels/place/pigs.js). Herd each pig into its pen:
 //   the pigs run from you (on foot or on the horse): come at a pig from the side away from the pen you want, and it runs
 //   ahead of you; near the back fence it makes for the nearest gate, and in it goes. Pigs jink a little as they run (a
 //   bit more than cattle would), and one that has been chased a long while tires and runs straighter
@@ -11,8 +11,8 @@
 //     penalty: nothing is taken off, and the pig can be herded again (it won't go back in that pen for a few seconds)
 // When every pig is penned the batch is paid (like a round-up wave) and, a few seconds later, the pigs trot out of their
 // pens with new sums and the signs change: nothing to click. Each pig penned counts toward the "Pigs penned" belt buckle
-// (stats.jobs.pigs). Herding is the answer, and a running pig can bolt into a pen nobody meant, so a wrong pen isn't
-// counted against the kid's record of right answers (recordAnswer is left alone here).
+// (stats.jobs.pigs). Each pig's first pen is one answer at the batch's level (src/levels/model.js); a running pig can
+// bolt into a pen nobody meant, so a wrong pen counts only while the rider is herding it (PIGS.herded).
 // For a rider who can't read yet (skill.js readAloud) the two pens' signs are read out (the browser's voice) on arriving
 // at the yard and with each new batch.
 //
@@ -32,12 +32,13 @@
 import * as THREE from 'three';
 import { makeAnimal } from '../actors/animals.js';
 import { makeCard, drawCard } from './sheep.js';
-import { makePigBatch, pigsFor, judge } from './pigmath.js';
+import { batchAt, judge } from './pigmath.js';
+import { levelFor } from '../levels/model.js';
 import { showNumberLine, ensureNumberLineStyles, watchHesitation } from '../ui/numberline.js';
 import { showCountHelp } from '../ui/counthelp.js';
 import { picture as addPicture } from '../math/adding.js';
 import { picture as takePicture } from '../math/taking.js';
-import { earn, countJob } from '../save.js';
+import { earn, countJob, recordAnswer, saveRider } from '../save.js';
 import { readAloud } from '../math/skill.js';
 import { speakLine } from '../ui/storeslip.js';
 
@@ -53,6 +54,7 @@ export const PIGS = {
                          // clip at up to 2x: its feet keep to the ground)
   jink: 0.32,            // radians a running pig weaves either side of straight away (cattle don't weave at all) ...
   jinkSpeed: 2.3,        // ... this fast
+  herded: 1,             // seconds a pig was chased before a wrong pen counts as the kid's answer (else it bolted in)
   tire: 25,              // seconds of being chased after which a pig runs straight and a third slower (it never gets wilder)
   funnel: 5,             // within this many metres of the pens' fence a running pig bends toward the gate it is driven at ...
   mouth: 1.5,            // ... and goes in when it is this close to a gate's middle, sideways, and 1.6 m in front of it
@@ -60,6 +62,8 @@ export const PIGS = {
   noBack: 6,             // seconds a pig that came back out of the wrong pen won't go in that pen again
   pay: { pen: 2, batch: 6 },   // gold: each pig penned right, the whole batch
   next: 4,               // seconds after a batch is penned before the pigs come out with new sums
+  renew: 2.4,            // ...and after a pen that moved the level (a new batch at the new level, new signs)
+  renewWrong: 5,         // ...after a wrong pen that moved it (time to read why first)
   show: 2.8,             // seconds a penned pig's sum shows big and green
   big: 1.35,             // ... this much bigger
   labelPx: [40, 58],     // a sum card's height on screen (pixels): about 5.5% of the screen, kept in this range (as the sheep's)
@@ -179,12 +183,14 @@ export function makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, ho
   // ── A BATCH ────────────────────────────────────────────────────────────────────────────────────────────────────
   function newBatch({ first = false } = {}) {
     endHelp(); hint(null);
-    const { map, q } = pigsFor(rider, { last: batch ? batch.map : null });
-    batch = makePigBatch(rider, { size: pigs.length, map, step: q.step });
+    // (the rider's level on the pigs' ladder, src/levels/place/pigs.js: the whole batch is made at it)
+    const q = levelFor(rider, 'pigs'); saveRider(rider);
+    batch = batchAt(q.level.gen, { size: pigs.length });
+    batch.q = q;
     PG.batch = batch; penned = 0; nextT = -1; batches++;
     paintSigns();
     pigs.forEach((g, i) => {
-      g.item = batch.pigs[i]; g.right = false; g.showT = 0; g.chased = 0; g.noPen = -1;
+      g.item = batch.pigs[i]; g.right = false; g.showT = 0; g.chased = 0; g.noPen = -1; g.told = false;
       // pigs in a pen (or on their way in or out of one) trot out into the yard, one after another through each gate;
       // loose ones just get new sums
       const at = g.root.position;
@@ -236,7 +242,9 @@ export function makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, ho
   function hint(o) { hud.hint(o); hintT = o ? PIGS.hintFor : 0; }
   function lineFor(g, picked, reveal) {
     const p = g.item.parts;
-    if (nl) nl.remove();
+    if (nl) { nl.remove(); nl = null; }
+    // (a plain number, an even-or-odd or a fraction pig: its one line of help instead of a number line)
+    if (!p || batch.mode === 'parity' || batch.mode === 'half') { if (!reveal && g.item.help) hint({ say: 'Take your time', line: g.item.help }); return; }
     nl = batch && batch.mode === 'sizes' ? showCountHelp(hud.helpEl, sizesPicture(p, reveal))
       : showNumberLine(hud.helpEl, { start: p.start, change: p.change, op: p.op, term: p.term, reveal, picked: picked ?? undefined, theme: 'dark' });
   }
@@ -261,19 +269,32 @@ export function makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, ho
   // the pig has come through pen i's gate
   function arrive(g, i) {
     const j = judge(batch, g.item, i);
+    // ONE ANSWER A PIG: its first pen. A right pen always counts; a wrong one only while the rider is at the yard herding
+    // it (chased a moment at least): a pig that bolts into a pen on its own says nothing about the kid
+    if (!g.told && batch.q && (j.right || (PG.near && g.chased >= PIGS.herded))) {
+      g.told = true;
+      const rec = recordAnswer(rider, j.right, { place: 'pigs', level: batch.q.id });
+      if (rec && rec.badge) hud.toast(`You earned the ${rec.badge} badge!`, 'gold');
+      // A batch whose level just moved comes out again at the new one (new sums, new signs): the other pigs, made at
+      // the old level, would say little there (a level below: rights don't count; a level above: misses don't), and
+      // the yard settled near 76% (keeping the batch) or 68% (renewing only on a move up) instead of 80% right in
+      // ~/pw/bandit-math/rigs/levels/fishing-sheep-pigs-range-loot/sim.mjs. Placement climbs one level per right pig.
+      if (rec && rec.level && rec.level.id !== batch.q.id) batch.renew = true;
+    }
     if (j.right) {
       g.right = true; g.showT = PIGS.show;
       penned++;
       card(g);
       const e = earn(rider, PIGS.pay.pen);
       hud.buckle(countJob(rider, 'pigs').buckle, { delay: 800 });
-      hud.toast(`Penned! ${g.item.text} = ${g.item.answer < 0 ? '−' + -g.item.answer : g.item.answer}  +${PIGS.pay.pen} gold`, 'good');
+      hud.toast(`Penned! ${g.item.parts ? `${g.item.text} = ${g.item.answer < 0 ? '−' + -g.item.answer : g.item.answer}` : g.item.text}  +${PIGS.pay.pen} gold`, 'good');
       hint(null);
       if (nl) { nl.remove(); nl = null; }
       if (e.newTitle) setTimeout(() => hud.toast(`You're a ${e.newTitle} now!`, 'gold'), 1600);
       hob.event('pigPenned');
       refresh();
       if (!left()) batchDone();
+      else if (batch.renew) { batch.done = true; endHelp(); nextT = PIGS.renew; if (PG.near) hud.rule({ main: batch.q.placing ? 'Finding your level' : 'A new batch', sub: 'New signs coming up…' }); }
       else { showCard(); if (hes) hes.restart(); }
       return;
     }
@@ -283,6 +304,8 @@ export function makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, ho
     const away = { x: gt.out.x - oz * side * 2.5 + ox * 1.5, z: gt.out.z + ox * side * 2.5 + oz * 1.5 };
     g.state = 'back'; g.legs = [{ x: gt.x - ox * 1.2, z: gt.z - oz * 1.2 }, gt.out, loose.contains(away.x, away.z) ? away : gt.out];
     g.noPen = i; g.noPenT = PIGS.noBack;
+    // (a wrong pen that moved the level: the batch comes out again at the new level once the why has been read)
+    if (batch.renew && !batch.done) { batch.done = true; nextT = PIGS.renewWrong; }
     // (a pig that bolts into a pen after the player has ridden off comes back out quietly: no why, no number line
     // left over on another job's screen)
     if (!PG.near) return;
@@ -576,7 +599,7 @@ export function makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, ho
   PG.newBatch = () => newBatch();
   PG.drive = (g, i) => { if (g && g.state === 'loose' && pens[i]) { const gt = pens[i].gate; g.root.position.set(gt.out.x, W.heightAt(gt.out.x, gt.out.z), gt.out.z); into(g, i); return true; } return false; };
   PG.state = () => ({
-    near: PG.near, mode: batch && batch.mode, level: batch && batch.level, done: !!(batch && batch.done), penned, left: batch ? left() : 0,
+    near: PG.near, mode: batch && batch.mode, level: batch && batch.q ? batch.q.id : null, placing: !!(batch && batch.q && batch.q.placing), done: !!(batch && batch.done), penned, left: batch ? left() : 0,
     pens: batch ? batch.pens.map((p, i) => ({ label: p.label, value: p.value, gate: { x: +pens[i].gate.x.toFixed(2), z: +pens[i].gate.z.toFixed(2) }, out: pens[i].gate.out })) : [],
     pigs: pigs.map((g) => {
       const act = g.a.actions[g.a.clip];

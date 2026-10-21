@@ -1,4 +1,7 @@
-// stats.js: a rider's stats page. Each kind of math (a strand, src/math/strands.js) with its level as a bar, what the
+// stats.js: a rider's stats page. First THE PLACES (src/levels/model.js: each place in the game has one kind of math and
+// one ladder of levels): how far up its ladder the rider is, the level they're on, how many of the last answers were
+// right and a small line day by day, with the levels page (src/ui/levels.js) a tap away from each. Then THE KINDS OF
+// MATH, by school year: each kind (a strand, src/math/strands.js) with its level as a bar, what the
 // rider is working on there, how many of the last answers were right, the average time an answer takes (sit-down
 // questions only: lock boxes, the store's slips) and a small line of the level day by day; the rider's completion
 // (src/completion.js, when the game has it); and a few totals.
@@ -15,9 +18,13 @@
 //   Esc, the close button or a click on the dark backdrop closes it (onClose is called once).
 //
 // The numbers come from src/math/skill.js (stats, meaning) and the rider's saved strands; nothing here changes the
-// rider. Pure helpers for the tests: statRows(rider), overview(rider), fmtTime(ms), spark(history, w, h), lately(s).
+// rider (the levels page it opens can: ticks and "Start here"). Pure helpers for the tests: placeRows(rider),
+// statRows(rider), overview(rider), fmtTime(ms), spark(history, w, h), lately(s).
 
 import { stats as strandStats, meaning, STRANDS } from '../math/skill.js';
+import { placeStats, stateOf } from '../levels/model.js';
+import { PLACE } from '../levels/places.js';
+import { openLevels, picSVG } from './levels.js';
 
 const DAY = 86400000;
 const isObj = (v) => v != null && typeof v === 'object' && !Array.isArray(v);
@@ -91,6 +98,31 @@ export function statRows(rider) {
   });
 }
 
+// One row a place the rider has played (or brought from an earlier ride's save), in the levels page's order: how far
+// up its ladder (pct), the level on (its number and title), placement still running, the last answers, the change
+// over the days kept, and what a grown-up set (levels skipped, "Start here"). -> rows, and `unplayed`: the other places
+export function placeRows(rider) {
+  const all = placeStats(rider, { all: true });
+  const rows = all.filter((x) => x.pct != null && (x.answered > 0 || (stateOf(rider, x.place) || {}).old)).map((x) => {
+    const P = PLACE[x.place], s = stateOf(rider, x.place) || {};
+    const k = P.levels.findIndex((L) => L.id === x.id);
+    const h = x.history || [], first = h[0], last = h[h.length - 1];
+    const set = [];
+    if (x.off.length) set.push(`${x.off.length} level${x.off.length === 1 ? '' : 's'} skipped`);
+    if (x.start) { const j = P.levels.findIndex((L) => L.id === x.start); if (j >= 0) set.push(`started at level ${j + 1}`); }
+    return {
+      ...x, line: P.line, n: k + 1, of: P.levels.length,
+      lately: { right: (s.h || []).reduce((a, y) => a + (y && y[0] ? 1 : 0), 0), of: (s.h || []).length },
+      time: x.avgMs ? fmtTime(x.avgMs) : '',
+      change: first && last && h.length > 1 ? { by: last.pct - first.pct, since: first.day } : null,
+      old: s.old === true && !x.answered, set,
+    };
+  });
+  const seen = new Set(rows.map((x) => x.place));
+  rows.unplayed = all.filter((x) => !seen.has(x.place)).map((x) => ({ place: x.place, name: x.name, short: x.short }));
+  return rows;
+}
+
 // The totals across every strand: answers on the jobs (the rider's all-time count; save.js recordAnswer), right in the
 // last 50 of them, the lock boxes solved (each one answer, counted apart: save.js recordLockbox), the average time of a
 // sit-down answer, the days played, and the strands not tried yet.
@@ -159,6 +191,29 @@ function rowHTML(x) {
     </li>`;
 }
 
+function placeHTML(x) {
+  const sp = spark(x.history, 116, 26);
+  const line = sp.points
+    ? `<svg class="bmst-spark" viewBox="0 0 116 26" aria-hidden="true"><polyline points="${sp.points}" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>${sp.last ? `<circle cx="${sp.last[0]}" cy="${sp.last[1]}" r="2.6" fill="currentColor"/>` : ''}</svg>`
+    : '';
+  const ch = x.change;
+  const chText = ch ? (ch.by > 0 ? `up ${ch.by} since ${shortDate(ch.since)}` : ch.by < 0 ? `down ${-ch.by} since ${shortDate(ch.since)}` : `steady since ${shortDate(ch.since)}`)
+    : x.history.length === 1 ? 'first day' : '';
+  const facts = [];
+  if (x.lately.of) facts.push(`${x.lately.right} of ${x.lately.of} right lately`);
+  else facts.push(x.old ? 'from earlier rides' : 'no answers yet');
+  if (x.time) facts.push(`${x.time} an answer`);
+  const tag = x.finding ? 'Finding the level' : '';
+  const said = `${x.name}, ${x.math}: ${x.pct}%${tag ? `, ${tag.toLowerCase()}` : ''}. Level ${x.n} of ${x.of}, ${x.title}. ${facts.join(', ')}. ${x.set.join(', ')}. ${chText}`;
+  return `<li class="bmst-row bmst-placerow${x.finding ? ' is-finding' : ''}" aria-label="${esc(said)}">
+      <div class="bmst-top"><span class="bmst-pic" aria-hidden="true">${picSVG(x.pic)}</span><b class="bmst-name">${esc(x.short)}</b><span class="bmst-kind">${esc(x.math)}</span>${tag ? `<span class="bmst-tag">${COMPASS}${tag}</span>` : ''}<span class="bmst-pct">${x.pct}%</span></div>
+      <div class="bmst-bar" aria-hidden="true"><i style="width:${pctOf(x.pct)}%"></i></div>
+      <div class="bmst-work">Level ${x.n} of ${x.of}: ${esc(x.title)}${x.set.length ? ` <span class="bmst-set">(${esc(x.set.join(', '))})</span>` : ''}</div>
+      <div class="bmst-meta"><span class="bmst-facts">${facts.map(esc).join(' · ')}<button type="button" class="bmst-lv" data-do="levels" data-place="${esc(x.place)}">Levels</button></span>
+        <span class="bmst-trend">${line}<small>${esc(chText)}</small></span></div>
+    </li>`;
+}
+
 function completionHTML(c) {
   if (!c) return '';
   const groups = (Array.isArray(c.groups) ? c.groups : []).map((g) => `
@@ -186,7 +241,7 @@ export function openStats(root, rider, opts = {}) {
   root.appendChild(el);
 
   function draw() {
-    const rows = statRows(rider), ov = overview(rider);
+    const rows = statRows(rider), ov = overview(rider), places = placeRows(rider);
     let c = null;
     try { c = comp && typeof comp.completion === 'function' ? comp.completion(rider) : null; } catch (e) { console.warn('Bandit Math: completion could not be read', e); }
     const tiles = `
@@ -201,20 +256,26 @@ export function openStats(root, rider, opts = {}) {
     const list = rows.length
       ? `<ul class="bmst-rows">${rows.map(rowHTML).join('')}</ul>`
       : `<p class="bmst-empty">${COMPASS}<span>Nothing answered yet. The game finds the level of each kind of math by itself the first time it comes up, so the first few questions may feel too easy or too hard for a minute.</span></p>`;
+    const placeList = places.length
+      ? `<ul class="bmst-rows">${places.map(placeHTML).join('')}</ul>${places.unplayed.length ? `<p class="bmst-unmet"><b>Not played yet:</b> ${places.unplayed.map((u) => esc(u.short)).join(' · ')}</p>` : ''}`
+      : `<p class="bmst-empty">${COMPASS}<span>No place played yet. Each place finds your level on its own ladder the first time you play there: one level up for every right answer.</span></p>`;
     const unmet = ov.unmet.length && rows.length
       ? `<p class="bmst-unmet"><b>Not tried yet:</b> ${ov.unmet.map((u) => esc(u.name)).join(' · ')}</p>` : '';
     el.innerHTML = `<div class="bmst-card">
       <header class="bmst-head">
         ${opts.face ? `<span class="bmst-face">${opts.face}</span>` : ''}
         <div><h2>${esc(rider && rider.name ? rider.name : 'Rider')}<span>’s stats</span></h2>
-          <p>Every kind of math has its own level, from 0% (starting kindergarten) to 100% (the end of algebra 1).</p></div>
+          <p>Each place’s % is how far up its own ladder of levels you are. The kinds of math below go by school year: 0% is starting kindergarten, 100% the end of algebra 1.</p></div>
+        <button type="button" class="bmst-btn bmst-levels" data-do="levels">Levels</button>
         <button type="button" class="bmst-x" data-do="close" aria-label="Close">${X_ICON}</button>
       </header>
       <div class="bmst-tiles">${tiles}</div>
-      <h3 class="bmst-h">Math</h3>
+      <h3 class="bmst-h">Places</h3>
+      ${placeList}
+      <h3 class="bmst-h bmst-h2">Kinds of math</h3>
       ${list}
       ${unmet}
-      <p class="bmst-how">The game keeps each level where about 4 answers in 5 are right: a right answer moves it up a little, a miss moves it down a bit more. So a level dipping after a few misses is the game finding the right questions, not a step back. Quick answers at lock boxes and the store count double.</p>
+      <p class="bmst-how">The game keeps each level where about 4 answers in 5 are right: a right answer moves it up a little, a miss moves it down a bit more. So a level dipping after a few misses is the game finding the right questions, not a step back. Quick answers count double only from x on both sides at the lock boxes and from dollars and cents at the store.</p>
     </div>`;
   }
 
@@ -238,7 +299,7 @@ export function openStats(root, rider, opts = {}) {
   }
   // Esc closes this page only (the title's and the game's own Esc handlers never see it)
   function onKey(e) {
-    if (e.key !== 'Escape') return;
+    if (e.key !== 'Escape' || document.querySelector('.bmlv')) return;   // (the levels page open over this one: its Esc)
     e.preventDefault(); e.stopPropagation();
     close();
   }
@@ -249,6 +310,11 @@ export function openStats(root, rider, opts = {}) {
     if (!b) return;
     if (b.dataset.do === 'close') close();
     else if (b.dataset.do === 'left') whatsLeft();
+    else if (b.dataset.do === 'levels') {
+      // the levels page over this one (z 52); this page draws again with any change when it closes
+      openLevels(root, rider, { place: b.dataset.place || undefined, speak: opts.speak, onChange: opts.onChange,
+        onClose: () => { if (closed) return; draw(); const f = el.querySelector(b.dataset.place ? `[data-do="levels"][data-place="${b.dataset.place}"]` : '.bmst-levels'); if (f) f.focus({ preventScroll: true }); } });
+    }
   });
 
   draw();

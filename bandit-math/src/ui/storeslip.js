@@ -121,7 +121,7 @@ export function makeStoreSlip(root = document.body, { onPick = () => {}, onDone 
   });
   const onKey = (e) => {
     if (!order || busy || e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
-    if (!el.classList.contains('is-on') || document.querySelector('.bms, .lbx, .bml')) return;   // (a panel, or the worked area, is over it)
+    if (!el.classList.contains('is-on') || document.querySelector('.bms, .lbx, .bml:not(.is-out), .tch:not(.out), .bmtl-menu')) return;   // (a panel, the worked area, the times chart or the tools' menu is over it)
     const k = /^Digit([1-4])$/.exec(e.code) || /^Numpad([1-4])$/.exec(e.code);
     if (!k) return;
     const b = coinsEl.querySelector(`[data-i="${Number(k[1]) - 1}"]`);

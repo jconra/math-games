@@ -10,20 +10,24 @@
 // can be set up again by the job's herd, and a player who finds another herd on their own (one settled within
 // SNAP.near) has that one for the job's herd instead.
 //
-// The herd stands side-on for its picture, each deer wearing a small number tag, and one equation sits over the frame
-// ("2x + 5 = 17"): a quick pick made in the head, so asked well below the rider's lock boxes (src/math/deermath.js), and
-// easier again after a miss. Exactly one deer's number makes it true. Point at that deer and click (or tap it, or type the number on its tag):
+// The herd stands side-on for its picture, each deer wearing a small number tag, and one question with a blank sits over
+// the frame ("3 + ? = 5", "10 more than 47 is ?", "? × 4 = 28", "17 ÷ 5 = 3, ? left over", then "x + 7 = 12"): the deer's
+// own ladder of MISSING NUMBERS AND LEFTOVERS (src/levels/place/deer.js; the rider's level there, src/levels/model.js,
+// asked for every photo; the maker is src/math/deermath.js). Exactly one deer's number fills the blank. Point at that
+// deer and click (or tap it, or type the number on its tag):
 //   right: the flash powder goes off (a white flash and a puff of smoke), the picture comes out as a sepia print with
-//          the equation written under it, gold, and the print slides into the rider's photo album (src/ui/album.js);
-//          the next equation slides in, the herd still standing
-//   wrong: the deer poses on, Old Hob says one plain line why ("That one's 7: check, 7 + 7 is 14, not 12"), and a card
-//          shows the two sides as a balance (14 against 12, tipped) and the steps that solve it; pick again, nothing
-//          taken off. A miss never ends anything: the photographer stays and tries again, and the next equation is
-//          easier (DEERMATH.ease)
+//          the question filled in under it, gold, and the print slides into the rider's photo album (src/ui/album.js);
+//          the next question slides in, the herd still standing
+//   wrong: the deer poses on, Old Hob says one plain line why ("That one's 8: 8 is 2 more than 6, not 1"), and a card
+//          shows the two sides as a balance (the wrong number put in, tipped) and the steps to the answer; pick again,
+//          nothing taken off. A miss never ends anything: the photographer stays and tries again, and the next
+//          question comes from the level below (once; a right one there doesn't move the rider up)
+// Each photo's first try is one answer at its level (save.js recordAnswer with the place and level: a travel job, no
+// time); a times fact in it ("? × 4 = 28", "3x = 21", a leftover's groups) goes to the times chart (src/math/facts.js),
+// and the facts asked are picked for the rider, easy tables first across a level (levelbox.js factTables).
 // After SNAP.per pictures the herd has had enough and drifts a little way off; the camera folds back onto the horse,
 // and once the herd settles the camera can be set up again (the compass and the card lead to it). "Done for now" (or Esc) packs the camera away early. Stuck for a while
-// without a pick, the steps card shows by itself (the last line left for the kid), sooner for a two-step equation. A roll
-// opens on a one-step equation, and stays on one step after a miss (src/math/deermath.js DEERMATH.firstTop).
+// without a pick, the steps card shows by itself (the last line left for the kid), sooner for a two-step equation.
 //
 // No shooting here: deer are only ever photographed (the only guns are at the bottle range, on bottles and cans).
 //
@@ -42,19 +46,23 @@
 //   DJ.state()        for rigs;  DJ.dispose()
 import * as THREE from 'three';
 import { makeBoxCamera } from '../boxcamera.js';
-import { makePhoto, whyNot, balanceFor, numText, DEERMATH } from '../math/deermath.js';
+import { makePhoto, whyNot, balanceFor, numText } from '../math/deermath.js';
 import { readAloud } from '../math/skill.js';
-// the skill model's part of a photo's first try (src/math/skill.js): the equations strand, at the photo's own point; a
-// travel job, so no time
-const skillPart = (shot) => (shot && shot.at != null ? { strands: [{ strand: 'eq', at: shot.at }] } : null);
-import { makeRng, rungIndex } from '../lockbox/generate.js';
+import { levelFor, onIds, isMet } from '../levels/model.js';
+import { PLACE } from '../levels/places.js';
+import { pickFact, recordFact } from '../math/facts.js';
+import { factTables } from '../lockbox/levelbox.js';
+// a photo's first try on the levels (src/levels/model.js through save.js recordAnswer): one answer at the level it was
+// made at (its strand at that level's grade comes with it); a travel job, so no time
+const levelPart = (shot) => (shot && shot.level ? { place: 'deer', level: shot.level } : null);
+import { makeRng } from '../lockbox/generate.js';
 import { recordAnswer, earn, countJob, saveRider } from '../save.js';
 import { flagCard } from '../ui/flag.js';
 import { addPrint, prints } from '../ui/album.js';
 
 export const SNAP = {
   per: 3,                // pictures of one herd before it drifts off
-  pay: { photo: 3, rungEvery: 4, outing: 5 },   // gold: each picture (+1 for every 4 rungs up the solving-for-x ladder), a
+  pay: { photo: 3, levelEvery: 3, outing: 5 },  // gold: each picture (+1 for every 3 levels up the deer's ladder), a
                                                 // whole outing; the same whether or not a wrong deer was tried first
   near: 75,              // m from the job's herd where its card shows
   setMin: 12, setMax: 50,   // m from the herd's middle where the camera can be set up
@@ -99,7 +107,7 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
   const recent = [];
   const DJ = { prompt: null, near: false, card: false, active: false, paused: false };
   let herd = null, state = 'travel', t = 0, waitT = 0, disposed = false;
-  let ease = 0;           // points easier the photos are asked after misses (src/math/deermath.js DEERMATH.ease)
+  let easier = false;     // the next photo comes from the level below (once): a first try just missed
   let lookT = 0;          // s till the next look for a nearer herd the player has found
   let vf = null;          // the viewfinder: its page elements and what it is showing
   let spooked = false, cardKey = '';
@@ -367,11 +375,27 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
 
   // a new equation; the herd keeps its spots, the tags get new numbers
   function newShot() {
-    const shot = makePhoto(rider, { n: herd.deer.length, rng, recent, ease, oneStep: !vf.pics || vf.missed });   // (a roll opens on one step, and keeps to one step after a miss)
+    // the rider's level at the deer (asked for every photo; the first time meets the place, so the rider is saved), or
+    // after a missed first try the level below it once (a right one there doesn't move them up)
+    const met = isMet(rider, 'deer');
+    const q = levelFor(rider, 'deer');
+    if (!met) saveRider(rider);
+    const ladder = PLACE.deer.levels;
+    let L = q.level, into = q.into, count = q.count;
+    if (easier && !q.placing) {
+      const below = onIds(rider, 'deer').map((id) => ladder.findIndex((x) => x.id === id)).filter((j) => j >= 0 && j < q.i);
+      if (below.length) { L = ladder[below[below.length - 1]]; count = L.count || 5; into = count - 1; }
+    }
+    easier = false;
+    const fact = L.gen.facts ? pickFact(rider, { tables: factTables(into, count), upTo: 10, from: 2, rand: rng.next }) : null;
+    const shot = makePhoto(rider, { n: herd.deer.length, rng, recent, level: L, into, count, fact });
+    shot.li = ladder.indexOf(L); shot.placing = q.placing;
     recent.push(shot.key); if (recent.length > 12) recent.shift();
     vf.shot = shot; vf.tried = false; vf.wrong = new Set(); vf.idle = 0; vf.helped = false;
     clearTimeout(vf.typeT); vf.typed = ''; showTyped();
     vf.eqEl.textContent = shot.eq;
+    const lead = vf.eqEl.parentElement.querySelector('small');
+    if (lead) lead.textContent = shot.young ? 'Photograph the deer whose number fills the blank' : 'Photograph the deer whose number makes it true';
     // the kindergarten boxes' question in words ("2 plus what equals 4?"), read out loud for a rider who doesn't read yet
     if (vf.wordsEl) { vf.wordsEl.textContent = shot.words || ''; vf.wordsEl.hidden = !shot.words; }
     if (shot.say && read && readAloud(rider)) read.say(shot.say);
@@ -507,15 +531,14 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
     if (i !== shot.right) { wrong(i, v); return; }
     vf.busy = true;
     const first = !vf.tried; vf.tried = true;
-    if (first) ease = Math.max(0, ease - DEERMATH.ease.right);
-    if (first) { const rec = recordAnswer(rider, true, skillPart(shot)); if (rec && rec.badge) hud.toast(`You earned the ${rec.badge} badge!`, 'gold'); }
+    if (first) { if (shot.fact) recordFact(rider, shot.fact.a, shot.fact.b, true); const rec = recordAnswer(rider, true, levelPart(shot)); if (rec && rec.badge) hud.toast(`You earned the ${rec.badge} badge!`, 'gold'); }
     const img = capture();
     K.flash(); flashSound();
     vf.flashEl.classList.remove('is-on'); void vf.flashEl.offsetWidth; vf.flashEl.classList.add('is-on');
-    const gold = SNAP.pay.photo + Math.floor(Math.max(0, rungIndex(shot.rung) - 2) / SNAP.pay.rungEvery);
+    const gold = SNAP.pay.photo + Math.floor(Math.max(0, shot.li || 0) / SNAP.pay.levelEvery);
     const e = earn(rider, gold);
     countJob(rider, 'photos');   // (counted for a belt buckle to come: there's no photographs buckle yet)
-    addPrint(rider, { eq: shot.young ? shot.solved : shot.eq, x: shot.young ? '' : numText(shot.x), img, rung: shot.rung });   // (a kindergarten box's print: filled in, "4 + 1 = 5")
+    addPrint(rider, { eq: shot.young ? shot.solved : shot.eq, x: shot.young ? '' : numText(shot.x), img, rung: shot.level });   // (a kindergarten box's print: filled in, "4 + 1 = 5")
     refresh();
     if (e.newTitle) setTimeout(() => hud.toast(`You're a ${e.newTitle} now!`, 'gold'), 2200);
     hob.event('deerRight');
@@ -535,8 +558,9 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
   function wrong(i, v) {
     const shot = vf.shot;
     if (!vf.tried) {
-      const rec = recordAnswer(rider, false, skillPart(shot)); if (rec && rec.badge) hud.toast(`You earned the ${rec.badge} badge!`, 'gold');
-      ease = Math.min(DEERMATH.ease.most, ease + DEERMATH.ease.miss);   // (the next photo is easier; this one stays: try again)
+      if (shot.fact) recordFact(rider, shot.fact.a, shot.fact.b, false);
+      const rec = recordAnswer(rider, false, levelPart(shot)); if (rec && rec.badge) hud.toast(`You earned the ${rec.badge} badge!`, 'gold');
+      easier = true;   // (the next photo is easier; this one stays: try again)
     }
     vf.tried = true; vf.missed = true; vf.wrong.add(i);
     const tEl = vf.tagEls[i];
@@ -629,7 +653,7 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
       // (a kindergarten box, said as its own words go: "Is it 2? 4 + 2 makes 6, not 5", with no talk of sides)
       top = shot.young
         ? `<div class="bmd-help-h">Is it ${esc(numText(o.v))}?</div>${balanceSvg(b)}
-        <p class="bmd-help-p">${esc(b.leftText)} makes ${esc(b.leftValue)}, not ${esc(b.rightValue)}.</p>`
+        <p class="bmd-help-p">${esc(shot.q && shot.q.check ? shot.q.check(o.v).why : `${b.leftText} makes ${b.leftValue}, not ${b.rightValue}.`)}</p>`
         : `<div class="bmd-help-h">Try ${esc(numText(o.v))} in it</div>${balanceSvg(b)}
         <p class="bmd-help-p">${esc(b.leftValue)} and ${esc(b.rightValue)} don't balance, so ${esc(numText(o.v))} isn't it.</p>`;
     } else top = '<div class="bmd-help-h">Here\'s how it goes</div>';
@@ -680,7 +704,7 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
       camera.updateMatrixWorld();
       K.root.visible = false;   // (seen from inside it: the box would fill the view)
       placeTags();
-      if (vf.ready && !vf.busy && !vf.helped && vf.helpEl.hidden && (vf.idle += dt) > (vf.shot && vf.shot.steps.length > 2 ? SNAP.helpAfterTwo : SNAP.helpAfter)) { vf.helped = true; help({}); }
+      if (vf.ready && !vf.busy && !vf.helped && vf.helpEl.hidden && (vf.idle += dt) > (vf.shot && !vf.shot.young && vf.shot.steps.length > 2 ? SNAP.helpAfterTwo : SNAP.helpAfter)) { vf.helped = true; help({}); }
     }
   };
   // a herd the player has found on their own: one settled within SNAP.near, clearly nearer than the job's own, becomes
@@ -713,8 +737,8 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
   DJ.herd = () => herd;   // (the herd the job is after now, or null between herds)
   DJ.flash = () => K.flash();   // (for rigs: the flash and smoke seen from outside)
   DJ.state = () => ({ state, herd: herd && herd.id, herdState: herd && herd.state, near: DJ.near, prompt: DJ.prompt, active: DJ.active,
-    shot: vf && vf.shot ? { eq: vf.shot.eq, x: vf.shot.x, values: vf.shot.values, rung: vf.shot.rung } : null, pics: vf ? vf.pics : 0,
-    ready: !!(vf && vf.ready), busy: !!(vf && vf.busy), album: prints(rider).length, fov: +camera.fov.toFixed(1), turn: vf && vf.turn != null ? +vf.turn.toFixed(3) : null, tilt: vf && vf.tilt != null ? +vf.tilt.toFixed(3) : null, resting, lent: !!rider.cameraLent, ease });
+    shot: vf && vf.shot ? { eq: vf.shot.eq, x: vf.shot.x, values: vf.shot.values, level: vf.shot.level, kind: vf.shot.kind, placing: vf.shot.placing } : null, pics: vf ? vf.pics : 0,
+    ready: !!(vf && vf.ready), busy: !!(vf && vf.busy), album: prints(rider).length, fov: +camera.fov.toFixed(1), turn: vf && vf.turn != null ? +vf.turn.toFixed(3) : null, tilt: vf && vf.tilt != null ? +vf.tilt.toFixed(3) : null, resting, lent: !!rider.cameraLent, easier });
   DJ.camera = K;
   DJ.dispose = () => {
     disposed = true;

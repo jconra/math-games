@@ -20,7 +20,7 @@
 //
 // Nothing here touches the page, so the node tests can check it.
 //   K_RUNGS, K_RUNG, K_IDS
-//   kProblem(rungId, { rng, frac, recent }) -> { rung, mode: 'count', key, start (the line), x, kind: 'one', par: 1,
+//   kProblem(rungId, { rng, frac, recent, only }) -> { rung, mode: 'count', key, start (the line), x, kind: 'one', par: 1,
 //     answer, choices (3 numbers), op: '+' | '−', a, b, thing, words (written), say (read out) }
 //   THINGS, THING_NAME (one, many), THING_SVG, SACK_SVG   the pictures
 //   kHint(problem, level) -> Ask Hob's line (1 look, 2 the picture help, 3 the answer)
@@ -55,9 +55,9 @@ const SHAPES = {
     if (a + x < 5) return null;
     return { op: '+', a, x, b: a + x };
   },
-  K3(rng, f) {   // a − x = b within 6 .. 10; sometimes a + x = b up to 10
+  K3(rng, f, only = null) {   // a − x = b within 6 .. 10; sometimes a + x = b up to 10 (only '−': never)
     const top = 6 + Math.round(f * 4);
-    if (rng.chance(1 - K.minusShare)) return SHAPES.K2(rng, Math.max(0.5, f));
+    if (only !== '−' && rng.chance(1 - K.minusShare)) return SHAPES.K2(rng, Math.max(0.5, f));
     const a = rng.int(3, top), x = rng.int(1, a - 1);
     return { op: '−', a, x, b: a - x };
   },
@@ -85,13 +85,14 @@ export function kSay(op, a, b) {
   return op === '+' ? `${a} and what make ${b}` : `${a} take away what leaves ${b}`;
 }
 
-export function kProblem(rungId, { rng, frac = 0, recent = [] } = {}) {
+// only: '−' keeps K3 to taking away (the levels' "7 − what = 5": src/levels/place/lockbox.js)
+export function kProblem(rungId, { rng, frac = 0, recent = [], only = null } = {}) {
   if (!K_RUNG[rungId]) throw new Error(`no kindergarten rung ${rungId}`);
   const f = Math.max(0, Math.min(1, Number(frac) || 0));
   const seen = new Set(recent);
   let best = null;
   for (let tries = 0; tries < 300; tries++) {
-    const s = SHAPES[rungId](rng, f);
+    const s = SHAPES[rungId](rng, f, only);
     if (!s) continue;
     // the answer is never already printed in the line (2 + x = 4 with x = 2 gives itself away to a kid who taps the
     // number they see; so does 6 − x = 3)

@@ -26,7 +26,8 @@
 }
 
 /* the header: face, name, what the levels mean, the close button */
-.bmst-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 14px; margin-bottom: 16px; }
+.bmst-head { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 14px; margin-bottom: 16px; }
+.bmst-head .bmst-levels { align-self: start; margin-top: 4px; }
 .bmst-face { width: 58px; height: 58px; border-radius: 50%; overflow: hidden; display: block; box-shadow: 0 0 0 2px var(--brass), 0 3px 10px rgba(0, 0, 0, 0.35); }
 .bmst-face svg { width: 100%; height: 100%; display: block; }
 .bmst-head h2 { margin: 0; font: 400 clamp(26px, 2.6vw, 34px)/1.05 Smokum, Georgia, serif; letter-spacing: 0.03em; color: var(--brass);
@@ -81,6 +82,15 @@
 .bmst-trend small { font-size: 11px; color: var(--mute); white-space: nowrap; }
 .bmst-spark { width: 116px; height: 26px; display: block; }
 
+.bmst-h2 { margin-top: 20px; }
+/* a place's row: its picture and kind of math before the %, what a grown-up set, and the way to its levels */
+.bmst-pic { width: 24px; height: 24px; flex: none; align-self: center; color: var(--brass); }
+.bmst-pic svg { width: 100%; height: 100%; display: block; }
+.bmst-placerow .bmst-name { flex: none; }
+.bmst-kind { flex: 1 1 0; font-size: 12px; color: var(--mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.bmst-set { color: var(--brass-hi); }
+.bmst-lv { margin-left: 8px; padding: 2px 10px; border-radius: 99px; font-size: 12px; font-weight: 600; border: 1px solid rgba(226, 173, 76, 0.55); color: var(--brass-hi); }
+.bmst-lv:hover { background: rgba(226, 173, 76, 0.14); }
 .bmst-empty { display: flex; gap: 10px; align-items: flex-start; margin: 0; padding: 14px; border-radius: 12px; background: var(--card); border: 1px dashed rgba(226, 173, 76, 0.4); color: var(--ink-2); }
 .bmst-empty svg { width: 22px; height: 22px; flex: none; color: var(--brass); margin-top: 1px; }
 .bmst-unmet { margin: 12px 2px 0; font-size: 13px; color: var(--mute); line-height: 1.5; }
@@ -94,6 +104,8 @@
   .bmst-head { gap: 10px; }
   .bmst-face { width: 46px; height: 46px; }
   .bmst-head p { font-size: 12.5px; }
+  .bmst-head { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .bmst-head .bmst-levels { grid-column: 2; grid-row: 2; justify-self: start; margin-top: 0; }
   .bmst-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   .bmst-comp { grid-column: 1 / -1; }
   .bmst-tile { padding: 10px; }

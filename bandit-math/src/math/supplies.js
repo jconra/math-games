@@ -50,7 +50,8 @@ export const VOCAB_KNOWN = 2;        // a word answered right first time this ma
 export const LADDER = [
   { label: 'Hands times days (a can each a day)', two: true, period: ['days'], exact: true, cost: false, goods: ['beans', 'bread', 'canteens'], size: 1 },
   { label: 'Three numbers: hands, meals and days', two: false, period: ['days'], exact: true, cost: false, goods: ['beans', 'coffee', 'bread', 'vegetables'], size: 1 },
-  { label: 'A week and a fortnight', two: false, period: ['week', 'fortnight', 'fortnight'], exact: true, cost: false, goods: ['beans', 'coffee', 'bread', 'vegetables'], size: 2 },
+  { label: 'A week (7 days)', two: false, period: ['week'], exact: true, cost: false, goods: ['beans', 'coffee', 'bread', 'vegetables'], size: 1 },
+  { label: 'A fortnight (14 days), worked on paper', two: false, period: ['fortnight'], exact: true, cost: false, goods: ['beans', 'coffee', 'bread', 'vegetables'], size: 1 },
   { label: 'Rounding up to whole crates', two: false, period: ['days', 'week', 'fortnight'], exact: false, cost: false, goods: ['beans', 'coffee', 'oats', 'matches', 'canteens'], size: 2 },
   { label: 'What the order costs', two: false, period: ['days', 'week', 'fortnight'], exact: false, cost: true, goods: ['beans', 'coffee', 'oats', 'vegetables', 'matches', 'canteens'], size: 2 },
   { label: 'Big orders: dozens, sacks and tins', two: false, period: ['week', 'fortnight', 'days'], exact: false, cost: true, goods: ['beans', 'coffee', 'oats', 'flour', 'bread', 'matches'], size: 3 },
@@ -183,7 +184,9 @@ export function makeSupplyOrder({ rand = Math.random, step = 1, camp = { id: 'co
     {
       const H = hands, R = rate, D = days, who1 = G.who[0], whoN = G.who[1], unit = G.unit;
       const what = unit[1];
-      const ask = noDays ? `How many ${what} is that in all?` : `How many ${what} of ${G.name} is that for ${time === `${days} days` ? `all ${days} days` : `the ${word}`}?`;
+      // (the goods named after the unit when they differ: "cups of coffee", but "matches", never "matches of matches")
+      const of = what === G.name ? what : `${what} of ${G.name}`;
+      const ask = noDays ? `How many ${what} is that in all?` : `How many ${of} is that for ${time === `${days} days` ? `all ${days} days` : `the ${word}`}?`;
       const slips = [];
       if (word === 'fortnight') slips.push({ v: H * R * 7, slip: 'week7', why: `That's 7 days' worth. A fortnight is 14 days, two weeks: ${H} × ${R} × 14.` });
       if (noDays) {

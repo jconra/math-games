@@ -42,13 +42,10 @@
 //
 // Also here: mergeStatic(roots, into), what stands at a site drawn in a few draw calls while no builder is up (one mesh
 // for each material), and mowSite(W, x, z, { r, fade }) (above, S.add's `mow`).
-// And skillAsker(rider, map), the questions of a builder through the skill model (src/math/skill.js) for a lab
-// whose builder asks through an `asker` (labs/windmill/builder.js): the step to ask at, timing, the answer recorded.
+// And levelAsker(rider, { most }) (from src/buildasker.js), the questions of a builder through the levels
+// (src/levels/model.js, the place 'building') for a lab whose builder asks through an `asker` (labs/windmill/builder.js).
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { stepFor, pctAt, isPlaced, MAPS } from './math/skill.js';
-import { recordAnswer, saveRider } from './save.js';
-import { answerTimer } from './ui/answertimer.js';
 
 export const SITE = {
   meet: 3.2,          // m from the site's person where E opens the builder
@@ -326,32 +323,6 @@ function ensureCss() {
   document.head.appendChild(st);
 }
 
-// The questions of a builder through the skill model: the step of `map` (strands.js MAPS: 'windmill' is the geometry
-// strand's ladder) to ask at now, each answer timed (a sit-down question) and recorded at the point of the step it was
-// asked at. The builder's own climbing stops: the strand decides. -> an asker for labs/windmill/builder.js
-//   level()            the step (1-based) skill.js stepFor gives now (asked afresh for every question)
-//   asked(q)           a card is up: its timer starts (a "Try it" after a lesson starts it again)
-//   answered(q, right) recorded (q.level: the step it was made at) and saved; -> the step to ask at next
-//   state()            for rigs: { level, at, placed, strand }
-export function skillAsker(rider, map = 'windmill', { save = () => saveRider(rider) } = {}) {
-  let timer = null, tried = null;
-  const strand = MAPS[map] ? MAPS[map].strand : 'geo';
-  const last = () => (MAPS[map] ? MAPS[map].anchors.length : 1);
-  const step = () => { const q = stepFor(rider, map); return Math.max(1, Math.min(last(), q.step || 1)); };
-  return {
-    level: step,
-    asked() { if (timer) timer.cancel(); timer = answerTimer(); const q = stepFor(rider, map); tried = { step: q.step, at: q.at }; },
-    answered(q, right) {
-      const t = timer ? timer.stop() : {}; timer = null;
-      const lv = Math.max(1, Math.min(last(), q && q.level ? q.level : step()));
-      // recorded at the point being tried when the card was its step (as the round-up does), so finding the level climbs;
-      // a card from another step (a board-just-nailed question) at its own step's point
-      const at = tried && tried.step === lv && tried.at != null ? Math.max(tried.at, pctAt(map, lv)) : pctAt(map, lv);
-      tried = null;
-      recordAnswer(rider, right, { strands: [{ strand, at }], sitDown: true, size: 1, ...t });
-      save();
-      return step();
-    },
-    state: () => { const q = stepFor(rider, map); return { level: step(), at: q.at, placed: isPlaced(rider, strand), strand }; },
-  };
-}
+// The questions of a builder: src/buildasker.js levelAsker (the windmill and the bridge are one place on the levels
+// ladder, 'building'), re-exported here for the jobs.
+export { levelAsker } from './buildasker.js';

@@ -36,6 +36,11 @@
 //   N.steer(step, { placing }) the rider's skill model (src/math/skill.js) sets the step (counted from 0) from then on:
 //                                the ladder's own climb, first-visit placement and steps down stop (finish moves
 //                                nothing); placing: the strand is still finding its level (no easier review cards)
+//   cardAt(gen, { rng, what, recent })   -> a card at a level of the range's ladder (src/levels/place/range.js; gen
+//                                is { step: a STEPS id } or a spec of its own): the ONE maker the job and the levels page
+//                                use. Two more kinds there: place ("a 4 in the tens place": ask { d, k, place, digits })
+//                                and dot (a number line drawn on the card with a dot: ask { v, lo, hi }; card.pic is the
+//                                line to draw, lineFor's shape). sayCard(card): its rule as read out
 //   numText(n)                -> '−3', '450', '1,050' (the real minus sign)
 //   countCard(step, { rng, what, avoid })   -> a card for the youngest riders, from the counting ladder (src/math/
 //                                counting.js, step 1 to 8): kind 'pick', one right ("Shoot what comes after 7", "How
@@ -111,8 +116,8 @@ function compareCard(S, rng, what) {
     rng.shuffle(list);
     return {
       kind: 'compare', ask: { want },
-      rule: `Shoot the ${what} with the ${want === 'big' ? 'biggest' : 'smallest'} number`,
-      sub: S.neg ? 'Below zero, the bigger the number after the minus sign, the smaller it is' : `Just one ${what} is right`,
+      rule: S.n === 2 ? `Shoot the ${what} with the ${want === 'big' ? 'bigger' : 'smaller'} number` : `Shoot the ${what} with the ${want === 'big' ? 'biggest' : 'smallest'} number`,
+      sub: S.neg ? 'Below zero, the bigger the number after the minus sign, the smaller it is' : S.n === 2 ? `Which number is ${want === 'big' ? 'more' : 'less'}?` : `Just one ${what} is right`,
       targets: list.map((n) => ({ n, good: n === ans, slip: n === ans ? null : slips[n] || 'other' })),
     };
   }
@@ -259,7 +264,82 @@ function betweenCard(S, rng, what) {
   throw new Error('numbersense: no between card');
 }
 
-const MAKE = { compare: compareCard, order: orderCard, round: roundCard, estimate: estimateCard, between: betweenCard };
+// PLACE VALUE: "Shoot the number with a 4 in the tens place". One right; the others have the same digit in another
+// place (the slip: which place is which), or not at all. digits: 2 (tens and ones) or 3 (hundreds too)
+const PLACES = ['ones', 'tens', 'hundreds'];
+const digitAt = (n, k) => Math.floor(Math.abs(n) / 10 ** k) % 10;
+function placeCard(S, rng, what) {
+  const digits = S.digits || 3;
+  for (let tries = 0; tries < 300; tries++) {
+    const d = rng.int(1, 9), k = rng.int(digits === 2 ? 0 : 1, digits - 1);   // (3 digits: tens or hundreds asked)
+    const lo = 10 ** (digits - 1), hi = 10 ** digits - 1;
+    const vals = new Map();
+    // the right one: d in place k, and d nowhere else in it
+    const make = (want) => { for (let j = 0; j < 60; j++) { const n = rng.int(lo, hi); const at = [...Array(digits).keys()].filter((i) => digitAt(n, i) === d); if (want(at)) return n; } return null; };
+    const good = make((at) => at.length === 1 && at[0] === k); if (good == null) continue;
+    vals.set(good, null);
+    // the slips: d in another place (twice when there is room), then a number with no d at all
+    for (let j = 0; j < 2 && vals.size < S.n; j++) { const n = make((at) => at.length === 1 && at[0] !== k); if (n != null && !vals.has(n)) vals.set(n, 'place'); }
+    while (vals.size < S.n) { const n = make((at) => at.length === 0); if (n == null) break; if (!vals.has(n)) vals.set(n, 'other'); }
+    if (vals.size < S.n) continue;
+    const list = rng.shuffle([...vals.keys()]);
+    return {
+      kind: 'place', ask: { d, k, place: PLACES[k], digits },
+      rule: `Shoot the ${what} with ${d === 8 ? 'an' : 'a'} ${d} in the ${PLACES[k]} place`,
+      sub: digits === 2 ? 'Tens on the left, ones on the right' : 'Hundreds, then tens, then ones',
+      targets: list.map((n) => ({ n, good: vals.get(n) === null, slip: vals.get(n) })),
+    };
+  }
+  throw new Error('numbersense: no place card');
+}
+
+// THE NUMBER LINE ON THE CARD: a dot sits on a number line drawn on the card; shoot the bottle wearing its number.
+// lo..hi: the line's ends (from 0 to 20 for the youngest, −10 to 10 once below zero comes in: then the dot sits below
+// zero mostly). The slips: one off (a tick miscounted), its opposite (the minus sign lost), counted from the wrong end.
+function dotCard(S, rng, what) {
+  for (let tries = 0; tries < 300; tries++) {
+    const v = S.neg ? (rng.chance(0.8) ? -rng.int(1, -S.lo) : rng.int(1, S.hi)) : rng.int(S.lo + 1, S.hi - 1);
+    if (v % 5 === 0) continue;   // (a numbered tick would give it away: the card's line numbers every 5)
+    const vals = new Map([[v, null]]);
+    const slips = rng.shuffle([['close', v + 1], ['close', v - 1], ...(S.neg ? [['mirror', -v]] : [['close', v + 2], ['close', v - 2]])]);
+    if (S.neg) slips.unshift(['mirror', -v]);
+    for (const [slip, n] of slips) if (vals.size < S.n && !vals.has(n) && n >= S.lo && n <= S.hi && n !== 0) vals.set(n, slip);
+    if (vals.size < S.n) continue;
+    const list = rng.shuffle([...vals.keys()]);
+    return {
+      kind: 'dot', ask: { v, lo: S.lo, hi: S.hi },
+      rule: `Shoot the ${what} with the dot's number`,
+      sub: S.neg ? 'Count the ticks from zero: left of zero is below zero' : 'Count the ticks from the nearest number',
+      // the card's own picture: the number line with the dot and a "?" (shooting.js draws it with lineSvg)
+      pic: { from: S.lo, to: S.hi, major: 1, minor: 0, half: [], shade: null, dots: [{ v, kind: 'mark', label: '?' }], arrow: null, caption: '', labels: 5 },
+      targets: list.map((n) => ({ n, good: n === v, slip: vals.get(n) })),
+    };
+  }
+  throw new Error('numbersense: no dot card');
+}
+
+const MAKE = { compare: compareCard, order: orderCard, round: roundCard, estimate: estimateCard, between: betweenCard, place: placeCard, dot: dotCard };
+
+// THE RANGE'S LEVELS (src/levels/place/range.js): a card at a level's own spec, the ONE maker for the job and the
+// levels page's examples. gen: { step: an id in STEPS } or a spec of its own ({ kind, lo, hi, n, ... } as STEPS').
+export function specOf(gen) {
+  if (gen && gen.step) { const st = STEPS.find((x) => x.id === gen.step); if (!st) throw new Error('numbersense: no step ' + gen.step); return st; }
+  return gen;
+}
+export function cardAt(gen, { rng = makeRng(), what = 'can', recent = [] } = {}) {
+  const spec = specOf(gen);
+  let card = null;
+  for (let k = 0; k < 8; k++) {
+    card = MAKE[spec.kind](spec, rng, what);
+    card.key = card.kind + ':' + card.targets.map((x) => x.n).sort((a, b) => a - b).join(',') + (card.ask.ten ?? card.ask.exact ?? card.ask.lo ?? card.ask.d ?? '');
+    if (!recent.includes(card.key)) break;
+  }
+  return { ...card, what, review: false, step: STEPS.findIndex((x) => x === spec), id: spec.id || spec.kind };
+}
+// the words a card's rule is read out with (the youngest levels are read to a rider who is read to)
+export function sayCard(card) {
+  return String(card.rule || '').replace(/−/g, 'minus ');
+}
 
 // ── RIGHT AND WRONG ──────────────────────────────────────────────────────────────────────────────────────────────
 // the targets still standing
@@ -314,6 +394,15 @@ export function whyNot(card, i, gone = new Set()) {
     const { a, op, b, exact, near } = A;
     return `${a} ${op} ${b} = ${exact}. ${t(v)} is ${Math.abs(v - exact)} away from it, but ${t(near)} is only ${Math.abs(near - exact)} away.`;
   }
+  if (card.kind === 'place') {
+    const at = [0, 1, 2].filter((k) => k < A.digits && digitAt(v, k) === A.d);
+    if (at.length) return `${t(v)} has its ${A.d} in the ${PLACES[at[0]]} place, not the ${A.place} place.`;
+    return `${t(v)} has no ${A.d} in it. Look for ${A.d === 8 ? 'an' : 'a'} ${A.d} in the ${A.place} place.`;
+  }
+  if (card.kind === 'dot') {
+    if (v === -A.v) return `The dot is ${A.v < 0 ? 'left' : 'right'} of zero, so it's ${t(A.v)}, not ${t(v)}.`;
+    return `Count the ticks again: the dot is ${Math.abs(v - A.v)} ${Math.abs(v - A.v) === 1 ? 'tick' : 'ticks'} ${v > A.v ? 'left' : 'right'} of ${t(v)}.`;
+  }
   if (card.kind === 'between') {
     const { lo, hi } = A;
     if (card.targets[i].slip === 'mirror' && v < lo) return `${t(v)} isn't ${t(-v)}: it's below zero, left of ${t(lo)}, so it's outside.`;
@@ -340,6 +429,8 @@ export function tipFor(card) {
     return `Round first: ${A.a} is about ${ra}${A.op === '×' ? '' : `, ${A.b} is about ${rb}`}, and ${ra} ${A.op} ${rb} = ${est}.`;
   }
   if (card.kind === 'between') return `Between ${t(A.lo)} and ${t(A.hi)}: right of ${t(A.lo)} and left of ${t(A.hi)}.`;
+  if (card.kind === 'place') return A.digits === 2 ? 'In 47, the 4 is in the tens place and the 7 in the ones place.' : 'In 482, the 4 is in the hundreds place, the 8 in the tens, the 2 in the ones.';
+  if (card.kind === 'dot') return 'Find the nearest number written on the line, then count the ticks to the dot.';
   if (card.kind === 'order') return A.dir === 'up' ? 'Smaller numbers sit further left on the number line.' : 'Bigger numbers sit further right on the number line.';
   return A.want === 'big' ? 'The biggest sits furthest right on the number line.' : 'The smallest sits furthest left on the number line.';
 }
@@ -371,7 +462,12 @@ export function lineFor(card, { pick = null, gone = new Set(), hint = false } = 
     return { from, to, major: niceStep(to - from), minor: niceStep(to - from) >= 10 ? 5 : 1, half: [], shade: null, dots,
       arrow: !hint ? { from: A.exact, to: A.near, label: '' } : null, caption: tipFor(card) };
   }
-  // compare, order, between: the numbers on the shelf, on a line wide enough for all of them (and zero, and the card's ends)
+  if (card.kind === 'dot') {
+    const dots = [{ v: A.v, kind: hint ? 'mark' : 'right', label: hint ? '?' : t(A.v) }];
+    if (pick != null && card.targets[pick].n !== A.v) dots.push({ v: card.targets[pick].n, kind: 'pick', label: t(card.targets[pick].n) });
+    return { ...card.pic, dots, caption: tipFor(card) };
+  }
+  // compare, order, between, place: the numbers on the shelf, on a line wide enough for all of them (and zero, and the card's ends)
   const ends = card.kind === 'between' ? [A.lo, A.hi] : [];
   const lo = Math.min(...vals, ...ends, vals.some((n) => n < 0) ? 0 : Infinity), hi = Math.max(...vals, ...ends, vals.some((n) => n < 0) ? 0 : -Infinity);
   const span = Math.max(4, hi - lo), major = niceStep(span * 1.2), pad = Math.max(1, Math.round(span * 0.08));

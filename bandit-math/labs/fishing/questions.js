@@ -91,6 +91,8 @@ export function sizeOf(fish) {
 }
 const fishOf = (kind, len, lb = null) => ({ kind, len, lb: lb || weightFor(kind, feet(len)) });
 // a keeper of some kind for questions that don't ask about its length: a quarter-foot length within its range
+// (pies.js's questions about pies and shares hang on a caught fish too: keeperFish)
+export function keeperFish(rnd, counts = {}) { return anyKeeper(rnd, counts); }
 function anyKeeper(rnd, counts) {
   const kind = wpick(KIND_LIST.map((k) => [k, 1 / (1 + (counts[k] || 0))]), rnd), K = KINDS[kind];
   const lo = Math.ceil(value(K.small) * 4), hi = Math.floor(value(K.max) * 4);
@@ -595,7 +597,7 @@ export function questionFor(from, topic = null, rnd = Math.random, ctx = {}, rec
   return best || { ...keepQ(KEEP_AT[from], rnd, { ...ctx, from }), level, from };
 }
 // some made-up fish in a creel, for a practice question that needs one (the right step's lengths and weights)
-function practiceCreel(from, rnd) {
+export function practiceCreel(from, rnd) {
   const dens = from <= 3 ? [2, 4, 8] : from === 5 ? [3, 4, 6, 8, 12] : [2, 4, 8];
   const out = [];
   for (let t = 0; out.length < 3 && t < 60; t++) {

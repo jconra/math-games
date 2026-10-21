@@ -1,5 +1,8 @@
 // strand.js: the lock box on the strands. Which box comes next for this rider, and what each answer in it says about
 // their math (the skill model, src/math/skill.js).
+// (Since the levels, a rider's boxes come from levelplan.js: the lock boxes' own ladder. planBox below still picks for a
+// test page with no rider; the parts' credits, missingCredit, syncLadder and recordBox for a set problem are used as
+// they are.)
 //
 // WHICH BOX. The lock box asks the skill model like every job does: chooseMap over its three makers (the kindergarten
 // boxes K1..K3, the equations R0a..R15, the inequalities I1..I4: src/math/strands.js MAPS lockboxK, lockbox,
@@ -300,8 +303,23 @@ export function workCredit(step) {
 
 // The missing-number boxes count in addition or subtraction too (half weight): the kindergarten boxes and
 // "Which key fits" (x + 4 = 9).
-function missingCredit(problem) {
+// A find-x box of the levels (findx.js: x + 3 = 8, 9 − x = 4, 3x = 12, x/4 = 3) counts the same way, in the arithmetic
+// it really is; a two-step one in none.
+export function missingCredit(problem) {
   if (!problem) return null;
+  if (problem.mode === 'key' && problem.find) {
+    const L = problem.start.L, x = problem.x;
+    const n = L.find((t) => t.t === 'n'), xs = L.find((t) => t.t === 'x');
+    const a = n ? intOf(n.v) : NaN;
+    switch (problem.find) {
+      case 'x+a=b': case 'a+x=b': return sumCredit(x, a);
+      case 'x-a=b': return sumCredit(x, a);
+      case 'a-x=b': return sumCredit(a, -x);
+      case 'ax=b': return xs ? timesCredit(Math.abs(xs.v.n), x) : null;
+      case 'x/a=b': return xs ? quotientCredit(x, xs.v.d) : null;
+      default: return null;
+    }
+  }
   if (problem.mode === 'count') {
     return problem.op === '+' ? { strand: 'add', at: problem.b <= 5 ? 5 : 9 } : { strand: 'sub', at: problem.a <= 5 ? 5 : 12 };
   }

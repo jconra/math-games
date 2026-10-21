@@ -54,6 +54,11 @@
 .bml-cell.is-divisor { color: var(--ink); transform: translateX(55%); }   /* (snug against the bracket, across the gap column) */
 .bml-cell.is-carry { font-size: 0.5em; color: var(--rust); place-items: end center; padding-bottom: 6%; }
 .bml-cell.is-carry.is-off { opacity: 0; }   /* (a row's carries are done with when the next row starts: the next row's go in their place) */
+/* taking away: the borrowed digits written small over a column (rust, like a carry), the digit borrowed from crossed out */
+.bml-cell.is-borrow { font-size: 0.5em; color: var(--rust); place-items: end center; padding-bottom: 6%; }
+.bml-cell.is-borrow.is-off { opacity: 0.35; text-decoration: line-through; }
+.bml-cell.is-given.is-off { opacity: 0.4; }
+.bml-cell.is-given.is-off::after { content: ''; position: absolute; left: 18%; right: 18%; top: 50%; height: 2px; background: var(--rust); transform: rotate(-24deg); border-radius: 2px; }
 /* (a digit brought down: a small tick under it where it came from) */
 .bml-cell.is-from.is-on::after { content: ''; position: absolute; left: 30%; right: 30%; bottom: 4%; height: 2px; background: var(--brass); border-radius: 2px; }
 .bml-cell.is-focus { background: var(--lit); box-shadow: 0 0 0 2px rgba(180, 127, 44, 0.45) inset; }
@@ -135,6 +140,14 @@
   .bml-choice b { font-size: 22px; }
   .bml-line { font-size: 14px; min-height: 2.4em; margin-top: 8px; }
   .bml-foot { display: none; }
+}
+/* opened from the tools in a job with no slip beside it (src/ui/tools.js): the sheet takes the middle of the screen,
+   over a light shade (the game waits meanwhile) */
+@media (min-width: 761px) {
+  .bml.is-free { left: 0; right: 0; top: 0; bottom: 0; padding: 70px 22px 22px; background: rgba(12, 8, 4, 0.35); pointer-events: auto; }
+}
+@media (max-height: 480px) and (min-width: 761px) {
+  .bml.is-free { padding: 8px 10px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .bml, .bml-cell.is-new, .bml-rule.is-new, .bml-choice.is-shake, .bml-slot { animation-duration: 0.01s !important; transition-duration: 0.01s !important; }

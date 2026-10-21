@@ -161,6 +161,13 @@
 .tch-c.wrong { box-shadow: inset 0 0 0 3px rgba(180, 73, 47, 0.95); color: #7d2f1d; }
 
 /* pointing at a number: it and its two headers light up, so the eye learns where the facts come from */
+/* the rider's own chart (the tools' times chart): a fact answered right is green, one missed is red */
+.tch-c.is-green { background-color: rgba(98, 150, 64, 0.42); color: #1d3a10; }
+.tch-c.is-red { background-color: rgba(196, 82, 56, 0.45); color: #5a1a0c; }
+.tch-sw.is-green { background: rgba(98, 150, 64, 0.75); }
+.tch-sw.is-red { background: rgba(196, 82, 56, 0.8); margin-left: 6px; }
+.tch-said.is-green { color: #9fd27a; font-weight: 700; }
+.tch-said.is-red { color: var(--rust); font-weight: 700; }
 .tch-c.hot { box-shadow: inset 0 0 0 2px #7a5220; background-image: linear-gradient(rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.45)); }
 .tch-c.row.hot { background-image: linear-gradient(rgba(243, 197, 107, 0.85), rgba(243, 197, 107, 0.85)); }
 .tch-h.hot:not(.lit) { background: linear-gradient(180deg, #6b4a2c, #4f3520); color: #fff3d6; }

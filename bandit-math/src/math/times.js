@@ -32,6 +32,8 @@
 //
 // The same small shape fits every topic (see topic.js): wave(), answer(), explain(), hint(), level().
 // steer(step, { placing }): the rider's skill model (src/math/skill.js) sets the step from then on (see steer below).
+// wave({ table, reach }) / wave({ fact: { t, a, upTo } }): the job says what the wave is (the round-up's herds and the
+// wagon's gangs, at the rider's level from src/levels/model.js); then the step, the warm-ups and the turns stay out of it.
 
 // ---- the dials (defaults; change them here) ---------------------------------------------------
 
@@ -321,6 +323,7 @@ function fill(S) {
   if (!(isObj(S.cur) && Array.isArray(S.cur.targets) && typeof S.cur.table === 'number')) S.cur = null;
   if (S.cur) {
     S.cur.downs = clampInt(num(S.cur.downs, 0), 0, 99);   // steps this wave has already moved the kid down
+    S.cur.forced = S.cur.forced === true;                 // the job said what this wave is (see wave)
     S.cur.held = S.cur.held === true;                     // first visit: a slip in this wave stopped its climb
   }
   return S;
@@ -435,14 +438,23 @@ export function makeTimes(state, opts = {}) {
 
   // ----- building a wave
 
-  function wave({ count = 10 } = {}) {
+  // table / fact: the job says what this wave is (the levels, src/levels/model.js, choose it now): a herd of that
+  // table's multiples up to `reach` (12 unless said), or the missing-number card for that fact ({ t, a, upTo }). The
+  // trainer's own plan (warm-ups, the tables taking turns) and its step stay out of it; the designed strays and the
+  // comebacks go on as before. A table's first waves get the clearly-wrong strays (its gentle start).
+  function wave({ count = 10, table = null, reach = 12, fact = null, placing = false } = {}) {
     closeWave();
     count = clampInt(num(count, 10), 2, 40);
     // A long break with the game left open (or the trainer kept from an earlier ride) starts a new
     // session too: warm-ups, and last session's misses.
     if (S.lastAt && now() - S.lastAt > SESSION_GAP_MS) newSession();
     S.lastAt = now();
-    const p = plan();
+    let p;
+    if (fact && fact.t >= 1 && fact.a >= 1) p = { kind: 'missing', upTo: fact.upTo || 12, fact, forced: true, placing };
+    else if (table >= 1 && table <= 12) {
+      const r = clampInt(num(reach, 12), 2, 12), tb = tab(table);
+      p = { kind: 'rule', table, reach: r, forced: true, placing, newRange: false, ...(tb.waves < (EASY_WAVES[table] || 2) ? { stage: 'easy' } : {}) };
+    } else p = plan();
     const w = p.kind === 'missing' ? missingWave(p, count) : ruleWave(p, count);
     S.waves++;
     return w;
@@ -575,7 +587,7 @@ export function makeTimes(state, opts = {}) {
     const hard = stepOf(t, reach);
     S.cur = {
       id: S.waves + 1, kind: 'rule', table: t, reach, step: S.step, hard, stage, main,
-      warmup: !!p.warmup, review: !!p.review, placing: !!p.placing, closed: false, downs: 0,
+      warmup: !!p.warmup, review: !!p.review, placing: !!p.placing, forced: !!p.forced, closed: false, downs: 0,
       targets: targets.map(x => ({ n: x.n, good: x.good, trap: x.trap, back: x.back, done: 0 })),
     };
     return {
@@ -629,10 +641,11 @@ export function makeTimes(state, opts = {}) {
   function missingWave(p, count) {
     const upTo = p.upTo || 10;
     let card = null;
-    const bi = S.soon.findIndex(x => x.kind === 'missing');
+    const bi = p.fact ? -1 : S.soon.findIndex(x => x.kind === 'missing');
     if (bi >= 0) { card = S.soon[bi]; S.soon.splice(bi, 1); }
     let t, a;
-    if (card && card.a) { t = card.t; a = card.a; }
+    if (p.fact) { t = p.fact.t; a = p.fact.a; }
+    else if (card && card.a) { t = card.t; a = card.a; }
     else {
       for (let tries = 0; tries < 4; tries++) {
         t = pickW(ORDER, x => HARD_TABLES[x] || 1);
@@ -663,7 +676,7 @@ export function makeTimes(state, opts = {}) {
     S.lastTable = t;
     S.cur = {
       id: S.waves + 1, kind: 'missing', table: t, a, prod, rule, reach: upTo, step: S.step, hard: S.step,
-      stage: 'designed', main: 'near', warmup: false, review: false, placing: !!p.placing, closed: false, downs: 0,
+      stage: 'designed', main: 'near', warmup: false, review: false, placing: !!p.placing, forced: !!p.forced, closed: false, downs: 0,
       targets: targets.map(x => ({ n: x.n, good: x.good, trap: x.trap, back: x.back, done: 0 })),
     };
     return {
@@ -719,7 +732,7 @@ export function makeTimes(state, opts = {}) {
     }
 
     const before = S.step;
-    if (steered) {
+    if (steered || (c && c.forced)) {
       // the skill model (src/math/skill.js) moves the level: the job steers the step before each wave
     } else if (c && (c.warmup || c.review)) {
       // Warm-ups and the other tables' turns sit below the kid's step; they never move it. The

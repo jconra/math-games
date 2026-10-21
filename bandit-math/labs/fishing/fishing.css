@@ -92,6 +92,10 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .card .steps .lvl { font-weight: 700; font-size: 13px; color: #6d4a17; }
 .card .steps .nm::before { content: '· '; }
 .card .steps .nt { font-style: italic; color: #8a6a48; }
+/* (a long ladder: a thin bar for how far up, the stars' place; room on the right for the game's "Confusing?" flag) */
+.card .steps .bar { display: inline-block; width: 64px; height: 7px; border-radius: 4px; background: #e6d3ad; vertical-align: middle; overflow: hidden; margin-right: 2px; }
+.card .steps .bar i { display: block; height: 100%; background: #a8782f; border-radius: 4px; }
+.card .steps { padding-right: 92px; line-height: 1.35; }
 .card .steps .nm + .nt::before, .card .steps .lvl + .nt::before { content: '· '; }
 .card .measure { display: flex; gap: 18px; margin: 2px 0 6px; padding: 6px 10px; border-radius: 8px; background: rgba(122,85,48,.12); }
 .card .measure small { display: block; font: 400 13px Smokum, Georgia, serif; letter-spacing: .05em; color: #8a6a48; }

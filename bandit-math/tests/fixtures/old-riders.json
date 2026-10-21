@@ -1,0 +1,1424 @@
+{
+"note": "Two riders saved by builds from before the skill model (2026-10-18), as the game stored them: old topics only. tests/levels.test.mjs moves them onto the ladders.",
+"riders": [
+{
+"id": "rold1",
+"name": "Oldtimer",
+"look": {
+"outfit": "adventurer_f",
+"palette": "mustard",
+"skin": "#c68d62",
+"hair": "#7b4524",
+"hat": true
+},
+"gold": 85,
+"bounty": 460,
+"mode": "shoot",
+"readAloud": true,
+"topicsOn": {
+"counting": false,
+"adding": true,
+"taking": false,
+"times": true,
+"dividing": false,
+"negatives": true,
+"algebra": true
+},
+"topics": {
+"times": {
+"v": 1,
+"step": 12,
+"placed": true,
+"streak": 1,
+"placeMisses": 0,
+"clock": 1,
+"waves": 1,
+"session": 1,
+"warmups": 0,
+"sinceReview": 1,
+"lastMain": "near",
+"lastTable": 9,
+"lastCard": null,
+"lastAt": 1792375813674,
+"tables": {
+"9": {
+"waves": 1,
+"right": 1,
+"wrong": 0,
+"upTo": 10,
+"lastMain": "near"
+}
+},
+"traps": {
+"neighbour": {
+"seen": 0,
+"fooled": 0
+},
+"near": {
+"seen": 0,
+"fooled": 0
+},
+"shared": {
+"seen": 0,
+"fooled": 0
+},
+"lookalike": {
+"seen": 0,
+"fooled": 0
+}
+},
+"soon": [],
+"review": [],
+"cur": {
+"id": 1,
+"kind": "rule",
+"table": 9,
+"reach": 10,
+"step": 12,
+"hard": 12,
+"stage": "designed",
+"main": "near",
+"warmup": false,
+"review": false,
+"placing": false,
+"closed": false,
+"downs": 0,
+"targets": [
+{
+"n": 64,
+"good": false,
+"trap": "near",
+"back": false,
+"done": 0
+},
+{
+"n": 63,
+"good": true,
+"trap": null,
+"back": false,
+"done": 1
+},
+{
+"n": 79,
+"good": false,
+"trap": "near",
+"back": false,
+"done": 0
+},
+{
+"n": 13,
+"good": false,
+"trap": "lookalike",
+"back": false,
+"done": 0
+},
+{
+"n": 24,
+"good": false,
+"trap": "shared",
+"back": false,
+"done": 0
+},
+{
+"n": 9,
+"good": true,
+"trap": null,
+"back": false,
+"done": 0
+},
+{
+"n": 92,
+"good": false,
+"trap": "near",
+"back": false,
+"done": 0
+},
+{
+"n": 90,
+"good": true,
+"trap": null,
+"back": false,
+"done": 0
+},
+{
+"n": 72,
+"good": true,
+"trap": null,
+"back": false,
+"done": 0
+},
+{
+"n": 81,
+"good": true,
+"trap": null,
+"back": false,
+"done": 0
+}
+]
+}
+},
+"adding": {
+"v": 1,
+"step": 8,
+"placed": true,
+"placeMisses": 0,
+"streak": 0,
+"clock": 3,
+"waves": 3,
+"session": 1,
+"warmups": 0,
+"sinceReview": 0,
+"lastAt": 1792375813676,
+"lastShape": "sum",
+"lastAns": 99,
+"rungs": {
+"1": {
+"cards": 0,
+"right": 0,
+"wrong": 0,
+"helped": 0
+},
+"2": {
+"cards": 0,
+"right": 0,
+"wrong": 0,
+"helped": 0
+},
+"3": {
+"cards": 0,
+"right": 0,
+"wrong": 0,
+"helped": 0
+},
+"4": {
+"cards": 0,
+"right": 0,
+"wrong": 0,
+"helped": 0
+},
+"5": {
+"cards": 0,
+"right": 0,
+"wrong": 0,
+"helped": 0
+},
+"6": {
+"cards": 0,
+"right": 0,
+"wrong": 0,
+"helped": 0
+},
+"7": {
+"cards": 0,
+"right": 0,
+"wrong": 0,
+"helped": 0
+},
+"8": {
+"cards": 3,
+"right": 3,
+"wrong": 0,
+"helped": 0
+}
+},
+"slips": {
+"countStart": {
+"seen": 2,
+"fooled": 0
+},
+"half": {
+"seen": 2,
+"fooled": 0
+},
+"tenOff": {
+"seen": 3,
+"fooled": 0
+},
+"over": {
+"seen": 2,
+"fooled": 0
+}
+},
+"soon": [],
+"review": [],
+"cur": {
+"id": 3,
+"at": 1,
+"step": 8,
+"warmup": false,
+"placing": false,
+"closed": false,
+"downs": 0,
+"cards": [
+{
+"id": "3.1",
+"text": "66 + 33",
+"rule": "66 + 33 = ?",
+"sub": "Rope the answer",
+"done": "66 + 33 = 99",
+"say": "66 plus 33",
+"answer": 99,
+"targets": [
+{
+"n": 89,
+"good": false,
+"trap": "tenOff",
+"label": "89"
+},
+{
+"n": 99,
+"good": true,
+"trap": null,
+"label": "99"
+},
+{
+"n": 96,
+"good": false,
+"trap": "half",
+"label": "96"
+},
+{
+"n": 100,
+"good": false,
+"trap": "over",
+"label": "100"
+}
+],
+"parts": {
+"shape": "sum",
+"a": 66,
+"b": 33
+},
+"shape": "sum",
+"rung": 8,
+"back": false,
+"review": false,
+"tried": true,
+"got": 1,
+"misses": 0
+},
+{
+"id": "3.2",
+"text": "18 + 43",
+"rule": "18 + 43 = ?",
+"sub": "Rope the answer",
+"done": "18 + 43 = 61",
+"say": "18 plus 43",
+"answer": 61,
+"targets": [
+{
+"n": 53,
+"good": false,
+"trap": "half",
+"label": "53"
+},
+{
+"n": 71,
+"good": false,
+"trap": "tenOff",
+"label": "71"
+},
+{
+"n": 61,
+"good": true,
+"trap": null,
+"label": "61"
+},
+{
+"n": 51,
+"good": false,
+"trap": "noCarry",
+"label": "51"
+}
+],
+"parts": {
+"shape": "sum",
+"a": 18,
+"b": 43
+},
+"shape": "sum",
+"rung": 8,
+"back": false,
+"review": false,
+"tried": false,
+"got": 0,
+"misses": 0
+},
+{
+"id": "3.3",
+"text": "9 + 3",
+"rule": "9 + 3 = ?",
+"sub": "Rope the answer",
+"done": "9 + 3 = 12",
+"say": "9 plus 3",
+"answer": 12,
+"targets": [
+{
+"n": 15,
+"good": false,
+"trap": "other",
+"label": "15"
+},
+{
+"n": 12,
+"good": true,
+"trap": null,
+"label": "12"
+},
+{
+"n": 14,
+"good": false,
+"trap": "other",
+"label": "14"
+},
+{
+"n": 13,
+"good": false,
+"trap": "over",
+"label": "13"
+},
+{
+"n": 6,
+"good": false,
+"trap": "takeAway",
+"label": "6"
+}
+],
+"parts": {
+"shape": "sum",
+"a": 9,
+"b": 3
+},
+"shape": "sum",
+"rung": 5,
+"back": false,
+"review": true,
+"tried": false,
+"got": 0,
+"misses": 0
+}
+],
+"nextId": 4
+}
+},
+"negatives": {
+"v": 1,
+"step": 3,
+"placed": true,
+"placeMisses": 0,
+"streak": 2,
+"clock": 2,
+"waves": 2,
+"session": 1,
+"warmups": 0,
+"sinceReview": 0,
+"lastAt": 1792375813678,
+"lastShape": "upNeg",
+"balance": -1.77497,
+"rungs": {
+"1": {
+"cards": 0,
+"right": 0,
+"wrong": 0,
+"helped": 0
+},
+"2": {
+"cards": 0,
+"right": 0,
+"wrong": 0,
+"helped": 0
+},
+"3": {
+"cards": 2,
+"right": 2,
+"wrong": 0,
+"helped": 0
+}
+},
+"slips": {
+"sign": {
+"seen": 2,
+"fooled": 0
+},
+"way": {
+"seen": 2,
+"fooled": 0
+},
+"start": {
+"seen": 2,
+"fooled": 0
+}
+},
+"lastAns": -13,
+"soon": [],
+"review": [],
+"cur": {
+"id": 2,
+"at": 1,
+"step": 3,
+"warmup": false,
+"placing": false,
+"closed": false,
+"downs": 0,
+"cards": [
+{
+"id": "2.1",
+"text": "\u22127 \u2212 6",
+"say": "negative seven minus six",
+"answer": -13,
+"parts": {
+"start": -7,
+"change": -6,
+"op": "-",
+"term": 6
+},
+"shape": "down",
+"rung": 3,
+"targets": [
+{
+"n": 1,
+"good": false,
+"trap": "start",
+"label": "1"
+},
+{
+"n": -13,
+"good": true,
+"trap": null,
+"label": "\u221213"
+},
+{
+"n": -1,
+"good": false,
+"trap": "way",
+"label": "\u22121"
+},
+{
+"n": 13,
+"good": false,
+"trap": "sign",
+"label": "13"
+}
+],
+"back": false,
+"review": false,
+"tried": true,
+"done": 1,
+"misses": 0
+},
+{
+"id": "2.2",
+"text": "\u22128 \u2212 3",
+"say": "negative eight minus three",
+"answer": -11,
+"parts": {
+"start": -8,
+"change": -3,
+"op": "-",
+"term": 3
+},
+"shape": "down",
+"rung": 3,
+"targets": [
+{
+"n": -11,
+"good": true,
+"trap": null,
+"label": "\u221211"
+},
+{
+"n": 11,
+"good": false,
+"trap": "sign",
+"label": "11"
+},
+{
+"n": 5,
+"good": false,
+"trap": "start",
+"label": "5"
+},
+{
+"n": -5,
+"good": false,
+"trap": "way",
+"label": "\u22125"
+}
+],
+"back": false,
+"review": false,
+"tried": false,
+"done": 0,
+"misses": 0
+},
+{
+"id": "2.3",
+"text": "\u22126 + 4",
+"say": "negative six plus four",
+"answer": -2,
+"parts": {
+"start": -6,
+"change": 4,
+"op": "+",
+"term": 4
+},
+"shape": "upNeg",
+"rung": 2,
+"targets": [
+{
+"n": -2,
+"good": true,
+"trap": null,
+"label": "\u22122"
+},
+{
+"n": -10,
+"good": false,
+"trap": "way",
+"label": "\u221210"
+},
+{
+"n": -9,
+"good": false,
+"trap": "wayNear",
+"label": "\u22129"
+},
+{
+"n": 10,
+"good": false,
+"trap": "drop",
+"label": "10"
+},
+{
+"n": 2,
+"good": false,
+"trap": "sign",
+"label": "2"
+}
+],
+"back": false,
+"review": true,
+"tried": false,
+"done": 0,
+"misses": 0
+}
+],
+"nextId": 4
+}
+},
+"algebra": {
+"v": 1,
+"rung": "R6",
+"placing": false,
+"levels": {
+"R2": 3,
+"R3": 3,
+"R4": 3,
+"R5": 3,
+"R6": 4,
+"R7": 3
+},
+"streak": {
+"R6": 0
+},
+"hist": {
+"R6": [
+1,
+1,
+1
+]
+},
+"stamped": [
+"R1",
+"R2",
+"R3",
+"R4",
+"R5"
+],
+"placed": [
+"R1",
+"R2",
+"R3",
+"R4",
+"R5"
+],
+"ownRun": 3,
+"ownNeed": 5,
+"due": [
+{
+"rung": "R7",
+"at": 11
+}
+],
+"recent": [
+"R1:4 = x + 1",
+"R2:x \u2212 1 = 5",
+"R3:4x = 12",
+"R4:3 = x/6",
+"R5:\u22128x = 72",
+"R6:19 = 6x + 7",
+"R7:2x \u2212 15 = \u221235",
+"R7:4x + 2 = \u221218",
+"R6:38 = 8x + 6",
+"R6:2x + 6 = 24",
+"R6:9x + 1 = 46"
+],
+"traps": {
+"sign": 0,
+"undo": 0,
+"part": 0,
+"inside": 0
+},
+"tools": [],
+"slips": 1,
+"arith": {
+"sign": 0,
+"flip": 0,
+"drop": 0,
+"oneside": 0
+},
+"lines": 0,
+"boxes": 11,
+"solved": 11,
+"atPar": 11,
+"clean": 9,
+"left": 0,
+"warm": 0,
+"lastAt": 1792375813683,
+"lastVerdict": false,
+"justUp": true
+},
+"numbersense": {
+"step": 4,
+"clean": 0,
+"placed": false,
+"misses": 0,
+"cards": 4,
+"down": false,
+"what": "can"
+},
+"store": {
+"v": 1,
+"step": 5,
+"placing": true,
+"misses": 0,
+"streak": 0,
+"n": 4,
+"firsts": 4,
+"recent": [
+"parts:oilLeft",
+"share:flour",
+"groups:lamps",
+"parts:miles"
+],
+"kinds": [
+"parts",
+"share",
+"groups",
+"parts"
+],
+"due": [],
+"byType": {
+"parts": {
+"n": 2,
+"right": 2
+},
+"share": {
+"n": 1,
+"right": 1
+},
+"groups": {
+"n": 1,
+"right": 1
+}
+},
+"lastWho": [
+"Mrs. Lindqvist",
+"Ike Malone",
+"Cookie",
+"Clara Dunn"
+]
+}
+},
+"missions": {
+"roundup": true,
+"wagon": false,
+"hunt": false,
+"loot": false
+},
+"owned": {
+"saddle": "plain",
+"saddles": [
+"plain"
+],
+"horse": "bay",
+"dog": null
+},
+"lockboxes": [
+{
+"tier": "iron"
+}
+],
+"stats": {
+"answered": 180,
+"right": 150,
+"recent": [
+0,
+1,
+1,
+1,
+1,
+1,
+0,
+1,
+1,
+1,
+1,
+1,
+0,
+1,
+1,
+1,
+1,
+1,
+0,
+1,
+1,
+1,
+1,
+1,
+0,
+1,
+1,
+1,
+1,
+1,
+0,
+1,
+1,
+1,
+1,
+1,
+0,
+1,
+1,
+1,
+1,
+1,
+0,
+1,
+1,
+1,
+1,
+1,
+0,
+1
+],
+"byMode": {
+"lasso": {
+"answered": 120,
+"right": 100,
+"recent": []
+},
+"shoot": {
+"answered": 60,
+"right": 50,
+"recent": []
+}
+},
+"boxes": 12,
+"parBoxes": 6,
+"jobs": {
+"cattle": 64,
+"boxes": 12,
+"sheep": 3,
+"orders": 9,
+"pigs": 0,
+"bandits": 0,
+"deliveries": 1,
+"loot": 0,
+"targets": 22
+}
+},
+"badges": [],
+"made": 1790647813693,
+"last": 1792203013693
+},
+{
+"id": "rold2",
+"name": "Returner",
+"look": {
+"outfit": "farmer_m",
+"palette": "drifter",
+"skin": "#c68d62",
+"hair": "#3f2a1b",
+"hat": true
+},
+"made": 1792412804007,
+"last": 1792412858038,
+"gold": 141,
+"bounty": 156,
+"mode": "shoot",
+"readAloud": true,
+"topicsOn": {
+"counting": false,
+"adding": false,
+"taking": false,
+"times": true,
+"dividing": false,
+"negatives": true,
+"algebra": true
+},
+"topics": {
+"times": {
+"v": 1,
+"step": 1,
+"placed": false,
+"streak": 0,
+"placeMisses": 0,
+"clock": 0,
+"waves": 1,
+"session": 1,
+"warmups": 0,
+"sinceReview": 0,
+"lastMain": null,
+"lastTable": 2,
+"lastCard": null,
+"lastAt": 1792412858165,
+"tables": {
+"2": {
+"waves": 1,
+"right": 0,
+"wrong": 0,
+"upTo": 5,
+"lastMain": null
+}
+},
+"traps": {},
+"soon": [],
+"review": [],
+"cur": {
+"id": 1,
+"kind": "rule",
+"table": 2,
+"reach": 5,
+"step": 1,
+"hard": 1,
+"stage": "easy",
+"main": null,
+"warmup": false,
+"review": false,
+"placing": true,
+"closed": false,
+"downs": 0,
+"targets": [
+{
+"n": 3,
+"good": false,
+"trap": "far",
+"back": false,
+"done": 0
+},
+{
+"n": 4,
+"good": true,
+"trap": null,
+"back": false,
+"done": 0
+},
+{
+"n": 13,
+"good": false,
+"trap": "far",
+"back": false,
+"done": 0
+},
+{
+"n": 2,
+"good": true,
+"trap": null,
+"back": false,
+"done": 0
+},
+{
+"n": 6,
+"good": true,
+"trap": null,
+"back": false,
+"done": 0
+},
+{
+"n": 8,
+"good": true,
+"trap": null,
+"back": false,
+"done": 0
+},
+{
+"n": 11,
+"good": false,
+"trap": "far",
+"back": false,
+"done": 0
+},
+{
+"n": 9,
+"good": false,
+"trap": "far",
+"back": false,
+"done": 0
+},
+{
+"n": 1,
+"good": false,
+"trap": "far",
+"back": false,
+"done": 0
+},
+{
+"n": 5,
+"good": false,
+"trap": "far",
+"back": false,
+"done": 0
+},
+{
+"n": 7,
+"good": false,
+"trap": "far",
+"back": false,
+"done": 0
+}
+]
+}
+},
+"algebra": {
+"v": 1,
+"rung": "R9b",
+"placing": true,
+"levels": {
+"R2": 3,
+"R3": 3,
+"R4": 3,
+"R5": 3,
+"R6": 3,
+"R7": 3,
+"R8": 3,
+"R9": 3,
+"R9b": 3
+},
+"streak": {},
+"hist": {},
+"stamped": [
+"R1",
+"R2",
+"R3",
+"R4",
+"R5",
+"R6",
+"R7",
+"R8",
+"R9"
+],
+"placed": [
+"R1",
+"R2",
+"R3",
+"R4",
+"R5",
+"R6",
+"R7",
+"R8",
+"R9"
+],
+"ownRun": 0,
+"ownNeed": 4,
+"due": [
+{
+"rung": "R3",
+"at": 6
+}
+],
+"recent": [
+"R1:6 = x + 2",
+"R2:x \u2212 3 = 7",
+"R3:5x = 10",
+"R3:2x = 12",
+"R4:4 = x/2",
+"R5:\u22125x = 5",
+"R6:2x + 13 = 21",
+"R7:\u22128 + 4x = \u221236",
+"R8:\u22127 = \u2212x + 4",
+"R9:6 = 2 + x/2",
+"R9b:3 = (2x + 8)/2"
+],
+"traps": {
+"sign": 0,
+"undo": 1,
+"part": 0,
+"inside": 0
+},
+"tools": [
+"addn",
+"div",
+"mul",
+"flip"
+],
+"slips": 1,
+"arith": {
+"sign": 0,
+"flip": 0,
+"drop": 0,
+"oneside": 0
+},
+"lines": 0,
+"boxes": 10,
+"solved": 10,
+"atPar": 9,
+"clean": 9,
+"left": 0,
+"warm": 0,
+"lastAt": 1792412855838,
+"lastVerdict": false,
+"justUp": false
+},
+"store": {
+"v": 1,
+"step": 1,
+"placing": true,
+"misses": 0,
+"streak": 0,
+"n": 0,
+"firsts": 0,
+"recent": [],
+"kinds": [],
+"due": [],
+"byType": {},
+"lastWho": []
+},
+"numbersense": {
+"step": 1,
+"clean": 0,
+"placed": false,
+"misses": 0,
+"cards": 2,
+"down": false,
+"what": "can"
+},
+"delivery": {
+"v": 1,
+"step": 1,
+"placing": true,
+"misses": 0,
+"streak": 0,
+"n": 0,
+"clean": 0,
+"vocab": {},
+"byPart": {},
+"delivered": 0
+},
+"loot": {
+"v": 1,
+"step": 1,
+"placing": true,
+"misses": 0,
+"streak": 0,
+"n": 0,
+"firsts": 0,
+"recent": [],
+"kinds": [],
+"due": [],
+"byKind": {},
+"trips": 0
+},
+"negatives": {
+"v": 1,
+"step": 2,
+"placed": false,
+"placeMisses": 0,
+"streak": 0,
+"clock": 2,
+"waves": 1,
+"session": 1,
+"warmups": 0,
+"sinceReview": 3,
+"lastAt": 1792412882565,
+"lastShape": "upPos",
+"balance": -0.18999999999999995,
+"rungs": {
+"1": {
+"cards": 1,
+"right": 1,
+"wrong": 0,
+"helped": 0
+},
+"2": {
+"cards": 1,
+"right": 0,
+"wrong": 0,
+"helped": 1
+}
+},
+"slips": {
+"sign": {
+"seen": 2,
+"fooled": 0
+},
+"way": {
+"seen": 2,
+"fooled": 0
+},
+"drop": {
+"seen": 2,
+"fooled": 0
+}
+},
+"lastAns": -3,
+"soon": [],
+"review": [],
+"cur": {
+"id": 1,
+"at": 2,
+"step": 1,
+"warmup": false,
+"placing": true,
+"closed": false,
+"downs": 0,
+"cards": [
+{
+"id": "1.1",
+"text": "\u22126 + 4",
+"say": "negative six plus four",
+"answer": -2,
+"parts": {
+"start": -6,
+"change": 4,
+"op": "+",
+"term": 4
+},
+"shape": "upNeg",
+"rung": 1,
+"targets": [
+{
+"n": 2,
+"good": false,
+"trap": "sign",
+"label": "2"
+},
+{
+"n": -10,
+"good": false,
+"trap": "way",
+"label": "\u221210"
+},
+{
+"n": 10,
+"good": false,
+"trap": "drop",
+"label": "10"
+},
+{
+"n": -2,
+"good": true,
+"trap": null,
+"label": "\u22122"
+}
+],
+"back": false,
+"review": false,
+"tried": true,
+"done": 1,
+"misses": 0
+},
+{
+"id": "1.4",
+"text": "\u22126 + 3",
+"say": "negative six plus three",
+"answer": -3,
+"parts": {
+"start": -6,
+"change": 3,
+"op": "+",
+"term": 3
+},
+"shape": "upNeg",
+"rung": 2,
+"targets": [
+{
+"n": 9,
+"good": false,
+"trap": "drop",
+"label": "9"
+},
+{
+"n": -3,
+"good": true,
+"trap": null,
+"label": "\u22123"
+},
+{
+"n": -9,
+"good": false,
+"trap": "way",
+"label": "\u22129"
+},
+{
+"n": 3,
+"good": false,
+"trap": "sign",
+"label": "3"
+}
+],
+"back": false,
+"review": false,
+"tried": true,
+"done": 1,
+"misses": 0,
+"helped": true
+},
+{
+"id": "1.5",
+"text": "\u22123 + 4",
+"say": "negative three plus four",
+"answer": 1,
+"parts": {
+"start": -3,
+"change": 4,
+"op": "+",
+"term": 4
+},
+"shape": "upPos",
+"rung": 2,
+"targets": [
+{
+"n": 7,
+"good": false,
+"trap": "drop",
+"label": "7"
+},
+{
+"n": 1,
+"good": true,
+"trap": null,
+"label": "1"
+},
+{
+"n": -1,
+"good": false,
+"trap": "sign",
+"label": "\u22121"
+},
+{
+"n": -7,
+"good": false,
+"trap": "way",
+"label": "\u22127"
+}
+],
+"back": false,
+"review": false,
+"tried": false,
+"done": 0,
+"misses": 0,
+"helped": true
+}
+],
+"nextId": 6
+}
+}
+},
+"missions": {
+"roundup": true,
+"wagon": true,
+"hunt": false,
+"loot": true
+},
+"owned": {
+"saddle": "plain",
+"horse": "bay",
+"dog": null,
+"animals": [],
+"goods": {
+"eggs": 0,
+"wool": 0,
+"milk": 0
+},
+"yard": {
+"eggs": 0,
+"wool": 0,
+"milk": 0
+},
+"farm": {
+"unlocked": [],
+"jobs": {
+"pig": 0,
+"sheep": 0,
+"cow": 0
+}
+},
+"saddles": [
+"plain"
+]
+},
+"lockboxes": [],
+"stats": {
+"answered": 5,
+"right": 5,
+"recent": [
+1,
+1,
+1,
+1,
+1
+],
+"byMode": {
+"lasso": {
+"answered": 0,
+"right": 0,
+"recent": []
+},
+"shoot": {
+"answered": 5,
+"right": 5,
+"recent": [
+1,
+1,
+1,
+1,
+1
+]
+}
+},
+"boxes": 10,
+"parBoxes": 9,
+"jobs": {
+"cattle": 2,
+"boxes": 10,
+"sheep": 0,
+"orders": 0,
+"pigs": 0,
+"bandits": 0,
+"deliveries": 0,
+"loot": 0,
+"targets": 4
+}
+},
+"badges": [],
+"range": {
+"best": 4,
+"strings": 0
+},
+"flags": {
+"hob": {
+"firstDay": 1,
+"rangeTip": 1,
+"wagonWaits": 1,
+"lootTip": 1,
+"arrive": 1,
+"catch": 1,
+"saddle": 1
+}
+}
+}
+]
+}

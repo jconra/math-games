@@ -11,10 +11,10 @@
 //     itself (no one-choice button), for less gold
 //   a bottle for a healthy sheep: Old Hob says she's fine and why her sum is right. No penalty, nothing taken off
 // When every sick sheep is healed the flock is paid (like a round-up wave), and after a few seconds the same flock shows
-// a new set of sums: nothing to click. Each flock's kind of math and how hard come from the rider's skill model
-// (sheepmath.js flockFor: counting, adding and taking away for a young rider; times tables, dividing, positive & negative
-// and solving for x for an older one), and the first bottle given to each sick sheep goes back to it (a travel job: no
-// time). Each sheep healed counts toward the "Sheep healed" belt buckle (stats.jobs.sheep).
+// a new set of sums: nothing to click. The sheep are all ADDING AND TAKING AWAY: each flock is made at the rider's
+// level on the sheep's own ladder (src/levels/place/sheep.js, kept by src/levels/model.js; sheepmath.js flockAt: from
+// 3 + 1 through column sums, prices and change to positive & negative), and the first bottle given to each sick sheep
+// is one answer there (a travel job: no time). Each sheep healed counts toward the "Sheep healed" belt buckle (stats.jobs.sheep).
 // For a rider who can't read yet (skill.js readAloud) a sheep's sum is read out (the browser's voice) as her bottles
 // come up: "5 plus 1 equals 6. Is that right?"
 //
@@ -35,12 +35,12 @@
 import * as THREE from 'three';
 import { makeAnimal } from '../actors/animals.js';
 import { makeTargetRing } from '../targetring.js';
-import { makeFlock, flockFor, flockStep } from './sheepmath.js';
-import { travel } from '../math/asking.js';
+import { flockAt } from './sheepmath.js';
+import { levelFor } from '../levels/model.js';
 import { offerChart, closeChart, ensureChartCss } from '../ui/timeschart.js';
 import { showNumberLine, ensureNumberLineStyles, watchHesitation } from '../ui/numberline.js';
 import { showCountHelp } from '../ui/counthelp.js';
-import { recordAnswer, earn, countJob } from '../save.js';
+import { recordAnswer, earn, countJob, saveRider } from '../save.js';
 import { flagCard } from '../ui/flag.js';
 import { readAloud } from '../math/skill.js';
 import { speakLine } from '../ui/storeslip.js';
@@ -59,6 +59,7 @@ export const SHEEP = {
   big: 1.55,             // the cured sum shows this much bigger ...
   show: 2.8,             // ... for this many seconds, then fades away (a cured sheep has nothing left to check)
   nextFlock: 4,          // seconds after a flock is done before its new sums show
+  renew: 2.2,            // ...and after a cure that moved the level while it is being found (the flock is made again)
   wrongShow: 3.5,        // seconds the last wrong bottle's line shows before the cure goes in by itself (long enough
                          // to read why that bottle was wrong: on a two-bottle sheep it is the kid's only pick)
   tapGuard: 0.35,        // seconds after the bottles come up during which a click on them is ignored (on a touch screen
@@ -174,9 +175,10 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
   // ── A FLOCK'S SUMS ─────────────────────────────────────────────────────────────────────────────────────────────
   function newFlock({ sick = null } = {}) {
     closePicker(); endHelp(); hint(null);
-    const { topic, q } = flockFor(rider, { last: cur ? cur.topic : null });
+    // (the rider's level on the sheep's ladder, src/levels/place/sheep.js: the whole flock is made at it)
+    const q = levelFor(rider, 'sheep'); saveRider(rider);
     flockN++;
-    cur = makeFlock(rider, topic, { size: flock.length, sick, step: flockStep(topic, q) });
+    cur = flockAt(q.level.gen, { size: flock.length, sick });
     cur.healed = 0; cur.done = false; cur.q = q;
     SH.flock = cur;
     flock.forEach((s, i) => { s.item = cur.sheep[i]; s.healed = false; s.tried = false; s.crossed = new Set(); s.showT = 0; s.state = 'graze'; card(s); });
@@ -198,6 +200,7 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
   // the help on the card: the number line for the ringed sheep's sum (answer hidden), or the golden rule of solving
   function helpButton() {
     if (!cur) return null;
+    if (cur.topic === 'columns') return { label: 'Show me', onClick: () => { const s = R.target || flock.find((x) => !x.healed); if (s && s.item && s.item.help) hint({ say: 'Work it in columns', line: s.item.help.line }); } };
     if (cur.topic === 'negatives' || cur.topic === 'counting' || cur.topic === 'adding' || cur.topic === 'taking') return { label: 'Show me', onClick: () => { const s = R.target || flock.find((x) => !x.healed); if (s && s.item) lineFor(s.item, null, false); } };
     if (cur.topic === 'algebra') return { label: 'The rule', onClick: () => hint({ say: 'Check her step', line: 'Whatever you do to one side, do to the other. To undo + 5, take 5 from both sides; to undo × 3, divide both sides by 3.' }) };
     return null;   // (times tables: the Peek button comes up under the card when the kid is stuck)
@@ -309,10 +312,14 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
     }
     const first = !s.tried; s.tried = true;
     if (first) {
-      // the flock was dealt from one answer of the skill model: each sheep's first bottle carries its point (a positive &
-      // negative sum counts in Addition or Subtraction by its own sign)
-      const sk = cur.q ? travel(cur.q, { strand: it.op ? (it.op === '-' ? 'sub' : 'add') : null }) : null;
+      // the flock was made at one level: each sick sheep's first bottle is one answer there (a positive & negative sum
+      // counts in Addition or Subtraction by its own sign)
+      const L = cur.q.level, sk = { place: 'sheep', level: cur.q.id };
+      if (cur.topic === 'negatives' && it.op) sk.strands = [{ strand: it.op === '-' ? 'sub' : 'add', at: L.grade }];
       const rec = recordAnswer(rider, b.right, sk); if (rec && rec.badge) hud.toast(`You earned the ${rec.badge} badge!`, 'gold');
+      // (while the level is being found, a flock whose level just moved is made again at the new one once this sheep
+      // is cured: placement climbs one level per right answer, and a second sick sheep at the old level would not count)
+      if (cur.q.placing && rec && rec.level && rec.level.id !== cur.q.id) cur.renew = true;
     }
     if (b.right) { closePicker(); heal(s, first ? SHEEP.pay.heal : SHEEP.pay.helped); return; }
     // a wrong bottle: crossed out, the why, the helper; with one bottle left the cure goes in by itself
@@ -351,6 +358,7 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
     hob.event('sheepHealed');
     refresh();
     if (!sickLeft()) flockDone();
+    else if (cur.renew) { cur.done = true; endHelp(); nextT = SHEEP.renew; hud.rule({ main: 'Finding your level', sub: 'New sums coming up…' }); }
     else { showCard(); if (hes) hes.restart(); }
   }
 
@@ -534,7 +542,7 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
   SH.give = (i) => give(i);
   SH.newFlock = (o) => newFlock(o);   // (o.sick: how many sick, for a rig)
   SH.state = () => ({
-    near: SH.near, topic: cur && cur.topic, level: cur && cur.level, at: cur && cur.q ? cur.q.at : null, done: !!(cur && cur.done), healed: cur ? cur.healed : 0, sickLeft: sickLeft(),
+    near: SH.near, topic: cur && cur.topic, level: cur && cur.q ? cur.q.id : null, placing: !!(cur && cur.q && cur.q.placing), at: cur && cur.q ? cur.q.pct : null, done: !!(cur && cur.done), healed: cur ? cur.healed : 0, sickLeft: sickLeft(),
     picker: picker ? { sheep: picker.s.id, crossed: [...picker.s.crossed] } : null,
     sheep: flock.map((s) => ({ id: s.id, x: +s.root.position.x.toFixed(2), z: +s.root.position.z.toFixed(2), sick: !!(s.item && s.item.sick), healed: s.healed,
       shown: s.item && s.item.shown, top: s.item && s.item.top, right: s.item ? s.item.bottles.findIndex((b) => b.right) : -1, clip: s.a.clip, label: s.label.visible })),

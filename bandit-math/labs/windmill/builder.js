@@ -751,17 +751,18 @@ app.idleHint = () => {
 // game: the skill model's geometry strand)
 let boardsSince = 0, handSince = 0, bonusEarned = 0, lastPrompt = null;
 const stepNow = () => Math.max(1, Math.min(LADDER_TOP, Math.round(asker.level()) || 1));
-// a question at the ladder's step; when the board just nailed fits the step (a whole right triangle at 5, a triangle's
-// corners at 4), now and then one about that board instead
+// a question at the ladder's step; when the board just nailed fits the step (a right triangle's sides from 6, a
+// triangle's corners at 5: the ladder's numbering since "crossing boards" went in at 4, as the bridge's builder), now and
+// then one about that board instead
 function questionFor(rec, { slant, leg, bay, tris }) {
   const L = stepNow();
   let q = null;
   if (Math.random() < 0.6) {
-    if (L >= 5) {
+    if (L >= 6) {
       if (slant || leg) { const r = reachQuestion(rec.len, Math.hypot(rec.b.X - rec.a.X, rec.b.Z - rec.a.Z)); if (r && r.kind === 'slope') q = r; }
       if (!q && bay) q = bayQuestion(bay.w, bay.h, bay.y0);
       if (!q && tris.length) q = makeQuestion(tris, rec, Math.random, 'length');
-    } else if (L === 4 && tris.length) q = makeQuestion(tris, rec, Math.random, 'angle');
+    } else if (L === 5 && tris.length) q = makeQuestion(tris, rec, Math.random, 'angle');
     if (q && q.prompt === lastPrompt) q = null;
   }
   q = q || ladderQuestion(L);

@@ -44,6 +44,10 @@
 //       help    the picture that helps: { kind: 'chart', table, missed } | { kind: 'line', start, change, op, term }
 //               | { kind: 'rule', line } | { kind: 'count', frame, line } (src/ui/counthelp.js's picture)
 //       op      positive & negative only: '+' or '-', the sum's sign (it counts in Addition or Subtraction)
+//   flockAt(gen, { size, sick, rand })    THE GAME'S FLOCKS NOW: a flock at a level of the sheep ladder (src/levels/
+//                                         place/sheep.js: adding and taking away from 3 + 1 to column sums, money
+//                                         and negatives); itemAt(gen, sick, rand, used) one sheep (the levels page's
+//                                         examples). (flockFor, makeFlock and the rest stay for the old tests.)
 //   SHEEP_MATH                            the dials
 import { slipsFor, explainPick, problemText, numText, LADDER as NEG_LADDER, CONTRAST_CHANCE } from '../math/negatives.js';
 import { tablesAt, reachAt } from '../math/times.js';
@@ -322,6 +326,153 @@ function divItem(step, sick, rand, used) {
     bottles, fine: `She's fine: ${how}`, healed: sick ? `${how} ${said[slipK.slip] || ''}`.trim() : how,
     help: { kind: 'chart', table: d, find: n, rule: `${d} ${TIMES} ? = ${n}` },
   };
+}
+
+// ── COLUMN SUMS: two-, three- and four-digit adding and taking away (the sheep ladder's middle) ─────────────────────
+// A sum worked in columns, ones first. The slips are the column slips kids really make: a carry forgotten (348 + 275 =
+// 513: the ones' ten never carried), a carry where there was none, a column added wrong (a ten or a hundred off), the
+// smaller digit taken from the bigger in a column that needed a borrow (503 − 168 = 465), a borrow made but never taken
+// from the next column (a ten too many). gen: { op: '+' | '-', digits: 2 | 3 | 4, regroup: true | false }
+const PLACE_NAMES = ['ones', 'tens', 'hundreds', 'thousands'];
+const big = (n) => (n < 0 ? MINUS : '') + Math.abs(n).toLocaleString('en-US');   // (4,586: four digits with a comma)
+const digitsOf = (n, k) => Array.from({ length: k }, (_, i) => Math.floor(n / 10 ** i) % 10);
+function columnSum(op, digits, regroup, rand) {
+  const lo = 10 ** (digits - 1), hi = 10 ** digits - 1;
+  for (let tries = 0; tries < 400; tries++) {
+    let a = int(lo, hi, rand), b = int(op === '+' ? lo : Math.max(10, Math.floor(lo / (rand() < 0.5 ? 1 : 10))), hi, rand);
+    if (op === '-' && b >= a) [a, b] = [b, a];
+    if (op === '-' && (b === a || a - b < 10)) continue;
+    if (op === '+' && a + b > 10 ** digits - 1) continue;   // (the answer stays the same size: 3 digits to 999)
+    const da = digitsOf(a, digits), db = digitsOf(b, digits);
+    const cols = da.map((x, i) => (op === '+' ? x + db[i] >= 10 : x < db[i]));
+    const n = cols.filter(Boolean).length;
+    if (!regroup && n) continue;
+    if (regroup && !n) continue;
+    if (regroup && digits >= 3 && n < 1) continue;
+    if (a % 10 === 0 || b % 10 === 0) continue;   // (both have ones to work)
+    return { a, b, cols };
+  }
+  return op === '+' ? { a: 348, b: 275, cols: [true, true, false] } : { a: 503, b: 168, cols: [true, true, false] };
+}
+// how a column sum is worked, ones first, in one line ("Ones 8 + 5 = 13: write 3, carry 1. Tens 4 + 7 + 1 = 12 ...")
+function columnsHow(a, b, op, digits) {
+  const da = digitsOf(a, digits + 1), db = digitsOf(b, digits + 1), out = [];
+  let carry = 0;
+  for (let i = 0; i < digits; i++) {
+    if (op === '+') {
+      const t = da[i] + db[i] + carry, more = carry ? ` + ${carry}` : '';
+      out.push(t >= 10 && i < digits - 1 ? `${PLACE_NAMES[i]} ${da[i]} + ${db[i]}${more} = ${t}: write ${t - 10}, carry 1` : `${PLACE_NAMES[i]} ${da[i]} + ${db[i]}${more} = ${t}`);
+      carry = t >= 10 ? 1 : 0;
+    } else {
+      const top = da[i] - carry, was = carry ? `${da[i]} lent 1, so ` : '';
+      if (top < 0) { out.push(`${PLACE_NAMES[i]}: the 0 lent 1, so it borrows from the next column: 9 ${MINUS} ${db[i]} = ${9 - db[i]}`); carry = 1; }
+      else if (top < db[i]) { out.push(`${PLACE_NAMES[i]}: ${was}${top} is less than ${db[i]}: borrow a ten, ${top + 10} ${MINUS} ${db[i]} = ${top + 10 - db[i]}`); carry = 1; }
+      else { if (i < digits - 1 || top || db[i]) out.push(`${PLACE_NAMES[i]}: ${was}${top} ${MINUS} ${db[i]} = ${top - db[i]}`); carry = 0; }
+    }
+  }
+  const r = op === '+' ? a + b : a - b;
+  const line = out.map((x) => x[0].toUpperCase() + x.slice(1)).join('. ');
+  return `${line}. So ${big(a)} ${op === '+' ? '+' : MINUS} ${big(b)} = ${big(r)}.`;
+}
+function columnItem(g, sick, rand, used) {
+  let p = null;
+  for (let k = 0; k < 30; k++) { p = columnSum(g.op, g.digits, g.regroup, rand); if (!used.has(`${p.a}${g.op}${p.b}`)) break; }
+  used.add(`${p.a}${g.op}${p.b}`);
+  const { a, b, cols } = p, r = g.op === '+' ? a + b : a - b, sign = g.op === '+' ? '+' : MINUS;
+  const sum = `${big(a)} ${sign} ${big(b)}`, how = columnsHow(a, b, g.op, g.digits);
+  const slips = [];
+  const ci = cols.map((x, i) => (x ? i : -1)).filter((i) => i >= 0);
+  if (g.op === '+') {
+    for (const i of ci) slips.push({ slip: 'carry', value: r - 10 ** (i + 1), w: 3, why: `The ${PLACE_NAMES[i]} made ${digitsOf(a, 4)[i] + digitsOf(b, 4)[i]} or more: a ${PLACE_NAMES[i + 1].replace(/s$/, '')} carries to the next column. ${how}` });
+    for (let i = 0; i < g.digits - 1; i++) if (!cols[i]) slips.push({ slip: 'extra', value: r + 10 ** (i + 1), w: 1, why: `Nothing carries from the ${PLACE_NAMES[i]}: ${digitsOf(a, 4)[i]} + ${digitsOf(b, 4)[i]} is less than 10. ${how}` });
+  } else {
+    const da = digitsOf(a, g.digits), db = digitsOf(b, g.digits);
+    const flip = da.reduce((acc, x, i) => acc + Math.abs(x - db[i]) * 10 ** i, 0);
+    if (ci.length) slips.push({ slip: 'smallBig', value: flip, w: 3, why: `In the ${PLACE_NAMES[ci[0]]}, ${da[ci[0]]} take away ${db[ci[0]]} needs a borrow: you can't just take the smaller from the bigger. ${how}` });
+    for (const i of ci) slips.push({ slip: 'borrow', value: r + 10 ** (i + 1), w: 2, why: `A ten was borrowed for the ${PLACE_NAMES[i]}, so the next column has one less. ${how}` });
+  }
+  for (let i = 1; i < g.digits; i++) for (const d of [1, -1]) slips.push({ slip: 'col', value: r + d * 10 ** i, w: 0.6, why: `Check the ${PLACE_NAMES[i]} again. ${how}` });
+  slips.push({ slip: 'near', value: r + 1, w: 0.4, why: `Just one off: check the ones. ${how}` }, { slip: 'near', value: r - 1, w: 0.4, why: `Just one off: check the ones. ${how}` });
+  const ok = slips.filter((k) => k.value > 0 && k.value !== r);
+  let slipK = null;
+  if (sick) {
+    const main = ok.filter((k) => k.w >= 1.5);
+    const from = main.length ? main : ok.filter((k) => k.slip === 'col');
+    slipK = pick(from, rand);
+  }
+  const shown = sick ? slipK.value : r;
+  const others = dedupe(shuffle(ok.filter((k) => k !== slipK), rand).sort((x, y) => y.w - x.w), r, shown).slice(0, sick ? SHEEP_MATH.bottles - 1 : SHEEP_MATH.bottles);
+  const bottles = shuffle([...(sick ? [{ value: r, right: true, why: null }] : []), ...others.map((k) => ({ value: k.value, right: false, why: k.why }))], rand)
+    .map((x) => ({ ...x, label: `should be ${big(x.value)}` }));
+  const said = { carry: 'Her sum forgot a carry.', extra: 'Her sum carried when nothing carries.', smallBig: 'Her sum took the smaller digit from the bigger.', borrow: 'Her sum borrowed but never took it from the next column.', col: 'Her sum slipped in a column.' };
+  return {
+    kind: 'columns', op: g.op, sick, top: null, shown: `${sum} = ${big(shown)}`, fixed: `${sum} = ${big(r)}`, answer: r, slip: sick ? slipK.slip : null,
+    bottles, fine: `She's fine: ${how}`, healed: sick ? `${how} ${said[slipK.slip] || ''}`.trim() : how,
+    help: { kind: 'rule', line: g.op === '+' ? 'Work in columns, ones first. Ten or more in a column: write the ones and carry 1 to the next column.' : "Work in columns, ones first. When the top digit is smaller, borrow a ten from the next column (and that column has one less)." },
+  };
+}
+
+// ── MONEY SUMS: adding prices, and the change ───────────────────────────────────────────────────────────────────
+// Dollars and cents (kept in cents). Adding: the cents pass a dollar and the dollar is forgotten, a dime off, a dollar
+// off. Change: from a bill, the borrowed dollar never taken off, the smaller digit taken from the bigger.
+// gen: { op: '+' | '-' }
+export const money = (c) => `$${Math.floor(Math.abs(c) / 100)}.${String(Math.abs(c) % 100).padStart(2, '0')}`;
+function moneyItem(g, sick, rand, used) {
+  let a, b;
+  for (let k = 0; k < 60; k++) {
+    if (g.op === '+') { a = int(1, 7, rand) * 100 + int(1, 19, rand) * 5; b = int(1, 5, rand) * 100 + int(1, 19, rand) * 5; if ((a % 100) + (b % 100) < 100 && rand() < 0.75) continue; }
+    else { a = pick([500, 1000, 2000], rand); b = int(1, a / 100 - 1, rand) * 100 + int(1, 19, rand) * 5; }
+    if (!used.has(`${a}${g.op}${b}`)) break;
+  }
+  used.add(`${a}${g.op}${b}`);
+  const r = g.op === '+' ? a + b : a - b, sign = g.op === '+' ? '+' : MINUS, sum = `${money(a)} ${sign} ${money(b)}`;
+  let how;
+  if (g.op === '+') {
+    const c = (a % 100) + (b % 100), d = Math.floor(a / 100) + Math.floor(b / 100);
+    how = c >= 100 ? `Cents ${a % 100} + ${b % 100} = ${c}: that's a dollar and ${c - 100} cents. Dollars ${Math.floor(a / 100)} + ${Math.floor(b / 100)} + 1 = ${d + 1}. So ${money(r)}.` : `Cents ${a % 100} + ${b % 100} = ${c}, dollars ${Math.floor(a / 100)} + ${Math.floor(b / 100)} = ${d}. So ${money(r)}.`;
+  } else how = `Count up from ${money(b)}: to the next dollar is ${(100 - (b % 100)) % 100} cents, then to ${money(a)} is ${Math.floor((a - b - ((100 - (b % 100)) % 100)) / 100)} dollars. So ${money(r)}.`;
+  const slips = [];
+  if (g.op === '+') {
+    if ((a % 100) + (b % 100) >= 100) slips.push({ slip: 'dollar', value: r - 100, w: 3, why: `The cents made more than a dollar: that dollar goes with the dollars. ${how}` });
+    slips.push({ slip: 'dime', value: r + 10, w: 1, why: `A dime too much. ${how}` }, { slip: 'dime', value: r - 10, w: 1, why: `A dime short. ${how}` });
+    slips.push({ slip: 'dollarOff', value: r + 100, w: 0.6, why: `A dollar too much. ${how}` });
+  } else {
+    slips.push({ slip: 'borrow', value: r + 100, w: 3, why: `Breaking a dollar into cents leaves one dollar less. ${how}` });
+    const cents = 100 - (b % 100); if (cents !== (r % 100)) slips.push({ slip: 'cents', value: Math.floor(r / 100) * 100 + (b % 100), w: 2, why: `${money(b)}'s cents were copied, not taken away. ${how}` });
+    slips.push({ slip: 'dime', value: r + 10, w: 1, why: `A dime too much. ${how}` }, { slip: 'dime', value: r - 10, w: 1, why: `A dime short. ${how}` });
+  }
+  const ok = slips.filter((k) => k.value > 0 && k.value !== r);
+  const slipK = sick ? pick(ok.filter((k) => k.w >= 1).sort((x, y) => y.w - x.w).slice(0, 2), rand) : null;
+  const shown = sick ? slipK.value : r;
+  const others = dedupe(ok.filter((k) => k !== slipK).sort((x, y) => y.w - x.w), r, shown).slice(0, sick ? SHEEP_MATH.bottles - 1 : SHEEP_MATH.bottles);
+  const bottles = shuffle([...(sick ? [{ value: r, right: true, why: null }] : []), ...others.map((k) => ({ value: k.value, right: false, why: k.why }))], rand)
+    .map((x) => ({ ...x, label: `should be ${money(x.value)}` }));
+  return {
+    kind: 'money', op: g.op, sick, top: null, shown: `${sum} = ${money(shown)}`, fixed: `${sum} = ${money(r)}`, answer: r, slip: sick ? slipK.slip : null,
+    bottles, fine: `She's fine: ${how}`, healed: how,
+    help: { kind: 'rule', line: g.op === '+' ? 'Add the cents, then the dollars. 100 cents make a dollar.' : 'Count up from the price to the bill: first to the next dollar, then the dollars.' },
+  };
+}
+
+// ── A FLOCK AT A LEVEL OF THE SHEEP LADDER (src/levels/place/sheep.js: the ONE maker for the job and its examples) ──
+// gen: { maker: 'adding' | 'taking', step }   the early topics' own sheep (adding.js, taking.js), at their step
+//      { maker: 'columns', op, digits, regroup }   column sums (above)
+//      { maker: 'money', op }                 money sums (above)
+//      { maker: 'neg', step }                 positive & negative, at its ladder's step (src/math/negatives.js)
+export const GEN_TOPIC = { adding: 'adding', taking: 'taking', columns: 'columns', money: 'columns', neg: 'negatives' };
+export function itemAt(gen, sick, rand = Math.random, used = new Set()) {
+  if (gen.maker === 'adding' || gen.maker === 'taking') return EARLY[gen.maker].item(gen.step, sick, rand, used);
+  if (gen.maker === 'columns') return columnItem(gen, sick, rand, used);
+  if (gen.maker === 'money') return moneyItem(gen, sick, rand, used);
+  if (gen.maker === 'neg') return negItem(gen.step, sick, rand, used);
+  throw new Error('sheep: no maker ' + gen.maker);
+}
+export function flockAt(gen, { size = SHEEP_MATH.size, sick = null, rand = Math.random } = {}) {
+  const nSick = Math.max(1, Math.min(size - 1, sick != null ? sick : pick(SHEEP_MATH.sick, rand)));
+  const which = new Set(shuffle([...Array(size).keys()], rand).slice(0, nSick));
+  const used = new Set(), sheep = [];
+  for (let i = 0; i < size; i++) sheep.push(itemAt(gen, which.has(i), rand, used));
+  return { topic: GEN_TOPIC[gen.maker], level: gen.step || 1, sick: nSick, sheep };
 }
 
 // ── A FLOCK ──────────────────────────────────────────────────────────────────────────────────────────────────────

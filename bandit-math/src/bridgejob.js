@@ -1,8 +1,8 @@
 // THE BRIDGE JOB (from the build-site frame: src/buildsite.js): the engineer at the ravine where the road south-west of
 // town crosses the western river, his camp and wagon on the north (town) bank, and the bridge the rider builds there.
 // Meeting him and pressing E opens the bridge lab's builder right there over the ravine (labs/bridge/builder.js): the
-// lumber panel, the board in hand and its arrows, the twins, the deck, his questions (through the skill model's
-// geometry strand: src/buildsite.js skillAsker, map 'bridge'), and "Send it across" (a person, horse and rider, the
+// lumber panel, the board in hand and its arrows, the twins, the deck, his questions (the levels place
+// 'building', all 8 levels: src/buildasker.js levelAsker), and "Send it across" (a person, horse and rider, the
 // covered wagon, the freight wagon and the cattle drive, the lab's own loads and frame calculation). He pays gold by the
 // heaviest load the bridge carries (BRIDGE.pay: each heavier rating pays the difference, so a bridge that carries the
 // cattle drive has earned the whole of the top rating). What is built is kept per rider (rider.builds.bridge) and
@@ -49,7 +49,7 @@ import { makePerson } from './actors/folk.js';
 import { saveRider, earn, countJob, jobOn } from './save.js';
 import { shownOnce } from './showme.js';
 import { markFound } from './completion.js';
-import { skillAsker, mergeStatic, mowSite } from './buildsite.js';
+import { levelAsker, mergeStatic, mowSite } from './buildsite.js';
 import { flagAsker } from './ui/flag.js';
 import { loadCamp, CAMP_KINDS } from './camps.js';
 import { makeCampfire } from './fire/campfire.js';
@@ -253,7 +253,8 @@ export function makeBridgeJob({ W, folk, rider, sites, refresh = () => {}, hud =
       root: ctx.root, scene: frame, origin, turn: C.turn, camera: ctx.camera, fit: ctx.fit, canvasRect: ctx.canvasRect,
       yard, groundY, waterY, low: W.tier === 'potato', span: S, words: wordsHere, engineerSide: C.side, zoom: innerWidth < innerHeight ? 1.2 : 1.75, loadsWait: 800,   // (a phone held upright: its lens is wide already)
       libs: animals && traffic && traffic.lib ? { animals, folk, wagons: traffic.lib } : null,
-      asker: flagAsker(skillAsker(rider, 'bridge'), 'bridge'),   // ("Confusing?" on its question card: src/ui/flag.js)
+      asker: flagAsker(levelAsker(rider), 'bridge'),   // (the levels' 'building' place, all 8 levels)
+      // ("Confusing?" on its question card: src/ui/flag.js)
       best: { read: () => ({ rating: -1, S, ...((b && b.best) || {}) }), write: () => { saveT = 0.01; } },
       pay: (rating) => pay(rating),
       tested: (card) => tested(card),

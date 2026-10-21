@@ -6,11 +6,11 @@
 // tin cans pop up on the shelf downrange, each wearing a number on a paper tag, and a card up top says which to shoot.
 // The math is the range's own kind: NUMBER SENSE (src/math/numbersense.js): which is biggest, smallest to largest,
 // rounding ("Shoot every can that rounds to 40"), estimating ("Shoot the bottle closest to 19 + 22"), and "between"
-// with negatives; it climbs from small whole numbers to numbers up to 1,000 and then negatives. For the youngest riders
-// the shelf carries counting cards instead (numbersense.js countCard: "Shoot what comes after 7", "How many dots?"),
-// read out loud while their read-aloud is on. Which, and how hard, come from the rider's skill model (src/math/skill.js,
-// asked through src/math/asking.js) card by card; each card goes back to it once (a clean card right, its first wrong
-// shot wrong; a travel job, so no time).
+// with negatives; it climbs from "the bigger of two numbers" up to numbers up to 1,000 and then negatives, one level at
+// a time on the range's own ladder (src/levels/place/range.js, kept by src/levels/model.js; the cards are made by
+// numbersense.js cardAt at the level's gen; a dot card draws its number line on the card). The youngest levels' cards
+// are read out loud while the rider's read-aloud is on. Each card is one answer at the level it was made at (a clean
+// card right, its first wrong shot wrong; a travel job, so no time).
 //   aim: the mouse moves the sights and a click fires (Space or F fires too, R reloads); on a touch screen, a finger
 //        puts the sights down where it touches (drag to adjust) and lifting it fires. A shot near a target counts for
 //        it: the aim is generous, the numbers are the hard part
@@ -38,8 +38,8 @@ import { makePerson } from '../actors/folk.js';
 import { makeRange, RANGE } from '../range.js';
 import { makeRevolver } from '../revolver.js';
 import { makeRangeSound } from '../audio/rangesound.js';
-import { makeNumberSense, rightNow, isDone, whyNot, lineFor, tipFor, numText, countCard } from '../math/numbersense.js';
-import { chooseFor, askFor, travel, newBest } from '../math/asking.js';
+import { makeNumberSense, rightNow, isDone, whyNot, lineFor, tipFor, numText, cardAt, sayCard } from '../math/numbersense.js';
+import { levelFor } from '../levels/model.js';
 import { showCountHelp } from '../ui/counthelp.js';
 import { readAloud } from '../math/skill.js';
 import { sayLine } from '../audio/sayline.js';
@@ -50,7 +50,7 @@ import { flagCard } from '../ui/flag.js';
 
 export const SHOOT = {
   string: 5,               // cards in a string
-  pay: { target: 1, every: 4, streak: 5, streakBonus: 2, string: 4 },   // gold: each right target (+1 for every 4 steps up
+  pay: { from: 2, target: 1, every: 4, streak: 5, streakBonus: 2, string: 4 },   // gold: each right target (+1 for every 4 steps up
                            // the ladder), a bonus every 5 right in a row, and a whole string
   helpAfter: 12,           // s on a card without a shot before its number line shows by itself
   nextCard: 0.85,          // s between a card cleared and the next one's targets popping up
@@ -261,7 +261,7 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
   function openUi() {
     const el = document.createElement('div'); el.className = 'bsr' + (touch() ? ' is-touch' : '');
     el.innerHTML = `
-      <div class="bsr-card"><small class="bsr-step"></small><b class="bsr-rule"></b><span class="bsr-sub"></span><em class="bsr-say" hidden></em></div>
+      <div class="bsr-card"><small class="bsr-step"></small><b class="bsr-rule"></b><span class="bsr-sub"></span><div class="bsr-cardpic" hidden></div><em class="bsr-say" hidden></em></div>
       <div class="bsr-tags"></div>
       <div class="bsr-cross" hidden><i></i></div>
       <div class="bsr-help" hidden></div>
@@ -273,7 +273,7 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
     canvas.after(el);   // (just after the valley's canvas: the HUD's purse, its Menu button and the toasts stay on top)
     document.body.classList.add('bsr-aiming');
     const q = (s) => el.querySelector(s);
-    ui = { el, cardEl: q('.bsr-card'), ruleEl: q('.bsr-rule'), subEl: q('.bsr-sub'), stepEl: q('.bsr-step'), sayEl: q('.bsr-say'), tagsEl: q('.bsr-tags'), crossEl: q('.bsr-cross'),
+    ui = { el, cardEl: q('.bsr-card'), picEl: q('.bsr-cardpic'), ruleEl: q('.bsr-rule'), subEl: q('.bsr-sub'), stepEl: q('.bsr-step'), sayEl: q('.bsr-say'), tagsEl: q('.bsr-tags'), crossEl: q('.bsr-cross'),
       helpEl: q('.bsr-help'), barEl: q('.bsr-bar'), cylEl: q('.bsr-cyl'), gunWords: q('.bsr-gunwords'), streakEl: q('.bsr-streak b'), bestEl: q('.bsr-best b'), dotsEl: q('.bsr-dots'), tagEls: [], sayT: 0 };
     q('.bsr-done').addEventListener('click', (e) => { e.stopPropagation(); J.done(); });
     flagCard(ui.cardEl, () => (card ? { choices: card.targets.map((x) => String(x.n)), right: rightNow(card, gone).map((i) => String(card.targets[i].n)).join(', ') } : {}));   // ("Confusing?": src/ui/flag.js)
@@ -301,32 +301,31 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
   function scoreLine() { if (!ui) return; ui.streakEl.textContent = streak; ui.bestEl.textContent = REC.best; ui.el.querySelector('.bsr-streak').classList.toggle('is-hot', streak >= SHOOT.pay.streak); }
 
   // ── A CARD ─────────────────────────────────────────────────────────────────────────────────────────────────────
-  // the next card: the maker that fits the rider now (counting for the youngest, the range's number sense after), at
-  // the rider's level there
-  let lastMap = null;
+  // the next card: at the rider's level on the range's ladder (src/levels/place/range.js, kept by src/levels/model.js),
+  // made by the ladder's own maker (numbersense.js cardAt)
   function nextCard() {
-    const map = chooseFor(rider, RANGE_MAPS, { last: lastMap, rand: () => rng.next() }) || 'range';
-    lastMap = map;
-    const q = askFor(rider, map);
-    let c;
-    if (map === 'counting') {
-      const what = (N.state.what = N.state.what === 'can' ? 'bottle' : 'can');
-      for (let k = 0; k < 8; k++) { c = countCard(q.step, { rng, what }); if (!recent.includes(c.key)) break; }
-    } else { N.steer(q.step, { placing: q.placing }); c = N.card({ rng, recent }); }
-    return { ...c, map, q, told: false };
+    const q = levelFor(rider, 'range');
+    const what = (N.state.what = N.state.what === 'can' ? 'bottle' : 'can');
+    const c = cardAt(q.level.gen, { rng, what, recent });
+    return { ...c, step: q.i, map: 'range', q, told: false };
   }
-  // the skill model's part of this card's answer (once a card: see the notes at the top)
-  const skillOf = (c) => (c && !c.told ? ((c.told = true), travel(c.q, { step: c.step })) : null);
+  // the levels' part of this card's answer (once a card: see the notes at the top): the level it was made at
+  const skillOf = (c) => (c && !c.told ? ((c.told = true), { place: 'range', level: c.q.id }) : null);
   function newCard() {
     card = nextCard();
+    saveRider(rider);   // (the first card meets the place)
     recent.push(card.key); if (recent.length > 12) recent.shift();
-    if (card.say && read && readAloud(rider) && read.can('counting')) read.say(card.say, { topic: 'counting' });
+    // (a level made to be read out: the card's rule in the browser's voice, for a rider who is read to)
+    if (card.q.level.read && readAloud(rider)) sayLine(sayCard(card), { now: true });
     gone = new Set(); tried = new Set(); wrong = 0; idle = 0; helped = false; between = false; held = null;
     R.setCard(card.targets.map(() => ({ kind: card.what })), { narrow: innerWidth < innerHeight * 0.8 });
     if (!ui) return;
     ui.ruleEl.textContent = card.rule;
     ui.subEl.textContent = card.sub;
-    ui.stepEl.textContent = `${KEEPER.name.replace('Miss ', '')}'s card${card.q.placing ? ' · finding your level' : card.review ? ' · an easy one' : ''}`;
+    ui.stepEl.textContent = `${KEEPER.name.replace('Miss ', '')}'s card${card.q.placing ? ' · finding your level' : ''}`;
+    // (a dot card's number line, drawn on the card itself)
+    ui.picEl.hidden = !card.pic;
+    ui.picEl.innerHTML = card.pic ? lineSvg(card.pic, Math.max(220, Math.min(380, ui.cardEl.clientWidth - 24 || 300))) : '';
     ui.cardEl.classList.remove('is-in'); void ui.cardEl.offsetWidth; ui.cardEl.classList.add('is-in');
     ui.tagsEl.innerHTML = card.targets.map((x, i) => `<div class="bsr-tag" data-i="${i}"><b>${esc(numText(x.n))}</b></div>`).join('');
     ui.tagEls = [...ui.tagsEl.children];
@@ -396,7 +395,7 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
     const sk = isDone(card, gone) && wrong === 0 && !helped ? skillOf(card) : null;
     if (choice || sk) { const rec = recordAnswer(rider, true, { ...(sk || {}), range: true }); if (rec && rec.badge) hud.toast(`You earned the ${rec.badge} badge!`, 'gold'); }   // (range: the Sharpshooter's answers)
     streak++;
-    let gold = SHOOT.pay.target + Math.floor(card.step / SHOOT.pay.every);
+    let gold = SHOOT.pay.target + Math.floor(Math.max(0, card.step - SHOOT.pay.from) / SHOOT.pay.every);
     let bonus = 0;
     if (streak % SHOOT.pay.streak === 0) bonus = SHOOT.pay.streakBonus;
     const e = earn(rider, gold + bonus);
@@ -434,12 +433,10 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
   }
   function cardDone() {
     held = null;   // (the shelf glides back to the middle while the next targets are on their way)
-    const res = N.finish(card, wrong, { helped });   // (cleared after the number line came up by itself: paid, but not a clean card)
     between = true;
     inString++; dots();
-    // (the rider's level has brought the next step of material: a word for it, once the level is found)
-    // (harder numbers only past the highest step reached before: asking.js newBest)
-    if (res.clean && !card.q.placing) { const q2 = askFor(rider, card.map); if (newBest(rider, q2)) hud.toast('Nice shooting! Harder numbers next', 'good'); }
+    // (the rider's level has brought the next level's cards: a word for it, once the level is found)
+    if (wrong === 0 && !helped && !card.q.placing) { const q2 = levelFor(rider, 'range'); if (q2.i > card.q.i && !q2.placing) hud.toast('Nice shooting! Harder numbers next', 'good'); }
     R.clear();
     const stringDone = inString >= SHOOT.string;
     if (stringDone) {
@@ -569,7 +566,7 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
   J.tags = () => (card ? R.targets.map((T, i) => { const s = screenOf(T.top), b = screenOf(T.mid); return { n: card.targets[i].n, x: Math.round(b.x), y: Math.round(b.y), tagX: Math.round(s.x), tagY: Math.round(s.y), alive: T.alive, right: rightNow(card, gone).includes(i) }; }) : []);
   J.pick = (n) => { if (!card) return false; const i = card.targets.findIndex((x, k) => x.n === n && R.targets[k].alive); if (i < 0) return false; const b = screenOf(R.targets[i].mid); return fire(b.x, b.y); };
   J.state = () => ({ state, card: card ? { kind: card.kind, map: card.map, at: card.q ? card.q.at : null, finding: !!(card.q && card.q.placing), rule: card.rule, step: card.step, review: card.review, targets: card.targets.map((x) => x.n), right: rightNow(card, gone).map((i) => card.targets[i].n) } : null,
-    rounds: G ? G.rounds : null, reloading: !!(G && G.reloading), streak, best: REC.best, inString, strings: REC.strings, wrong, help: !!(ui && !ui.helpEl.hidden), level: N.level(),
+    rounds: G ? G.rounds : null, reloading: !!(G && G.reloading), streak, best: REC.best, inString, strings: REC.strings, wrong, help: !!(ui && !ui.helpEl.hidden), level: card && card.q ? { id: card.q.id, i: card.q.i, placing: card.q.placing } : null,
     fov: +camera.fov.toFixed(1), prompt: J.prompt, range: R.state() });
   J.range = R;
   J.layout = R.layout;
@@ -613,7 +610,9 @@ export function lineSvg(L, width = 320) {
   const nearKey = (v) => keys.some((k) => Math.abs(X(k) - X(v)) < labW);
   // (numbered every tick, or every few when they would crowd: at round steps, 100 200 300 rather than 100 250 400)
   const every = Math.max(1, Math.ceil(labW / Math.max(1, X(L.major) - X(0))));
-  const labelStep = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000].find((n) => n % L.major === 0 && n >= L.major * every) || L.major * every;
+  // (L.labels: numbered every so many and no closer, whatever the width: a dot card's line, where the ticks between are
+  // what the kid counts)
+  const labelStep = L.labels || [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000].find((n) => n % L.major === 0 && n >= L.major * every) || L.major * every;
   for (let v = Math.ceil(L.from / L.major) * L.major; v <= L.to + 1e-9; v += L.major) {
     const x = X(v).toFixed(1), zero = v === 0;
     out.push(`<line x1="${x}" y1="${y0 - (zero ? 11 : 7)}" x2="${x}" y2="${y0 + (zero ? 11 : 7)}" class="${zero ? 'nl-zero' : 'nl-major'}"/>`);
@@ -721,6 +720,8 @@ body.bsr-aiming .bmh-top, body.bsr-aiming .bmh-touch, body.bsr-aiming .bmh-promp
 .bsr-help-p { font: 500 15px/1.35 Bitter, Georgia, serif; margin: 3px 0 4px; }
 .bsr-help-c { font: italic 500 13px/1.3 Bitter, Georgia, serif; color: #6b5236; margin: 2px 0 0; }
 .bsr-line { width: 100%; }
+.bsr-cardpic { margin: 4px auto 0; width: min(360px, 78vw); } .bsr-cardpic[hidden] { display: none; } .bsr-cardpic svg { display: block; margin: 0 auto; }
+.bsr-nl .nl-dot.is-mark { fill: #a83a1e; stroke: #f1e6cc; stroke-width: 1.5; } .bsr-nl .nl-dott.is-mark { fill: #a83a1e; font-weight: 800; }
 .bsr-nl { display: block; }
 .bsr-nl .nl-axis { stroke: #3b2a1a; stroke-width: 2.5; } .bsr-nl .nl-end { fill: #3b2a1a; }
 .bsr-nl .nl-minor { stroke: #8a7458; stroke-width: 1; } .bsr-nl .nl-major { stroke: #3b2a1a; stroke-width: 1.6; } .bsr-nl .nl-zero { stroke: #2b1d12; stroke-width: 2.6; }

@@ -102,6 +102,8 @@ function proportion(t, f, frac) {
   for (let tries = 0; tries < 60; tries++) {
     const d = t.pick([3, 4, 5, 8, 10]), n = t.int(1, d - 1), k = t.int(3, frac < 0.5 ? 6 : 12), D = d * k, ans = n * k;
     if (n === 1 && d === 2) continue;
+    const gcd = (x, y) => (y ? gcd(y, x % y) : x);
+    if (gcd(n, d) > 1) continue;   // (in lowest terms: "2 of every 4" is said "1 of every 2")
     const ctx = t.pick([
       { key: 'steers', s: `${n} of every ${d} steers in the Bar T herd ${n === 1 ? 'is' : 'are'} brown. The herd has ${D} steers.`, ask: 'How many are brown?', unit: ['steer', 'steers'], what: 'brown' },
       { key: 'eggs', s: `${n} of every ${d} eggs from ${f.name}'s hens ${n === 1 ? 'is' : 'are'} brown. ${f.she ? 'She' : 'He'} brought in ${D} eggs.`, ask: 'How many of them are brown?', unit: ['egg', 'eggs'], what: 'brown' },

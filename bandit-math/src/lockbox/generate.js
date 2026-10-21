@@ -78,7 +78,15 @@ export const RUNGS = [
   { id: 'I3', name: 'Three rooms', ineq: 'three', stage: S({ addx: true, mul: true, div: true }), maxPar: 3, note: '3x − 9 < 6x < 3x + 12' },
   { id: 'I4', name: 'Either or', ineq: 'or', stage: S({ mul: true, div: true, flip: true }), maxPar: 4, note: 'x + 2 < 0 or 2x > 8' },
 ];
-export const RUNG = Object.fromEntries(RUNGS.map((r) => [r.id, r]));
+// Two more equation rungs the levels' ladder asks (src/levels/place/lockbox.js), kept out of RUNGS so the old ladder's
+// order (which the sheep and the saved riders read by index) stays as it was:
+//   B1 x on both sides, + and − only: the x's differ by one, so moving them leaves x free (x + 5 = 2x + 1)
+//   B3 x on both sides, with division: x/2 + 4 = x − 1 (clear the division, sort, free x)
+export const LEVEL_RUNGS = [
+  { id: 'B1', name: 'x on both sides', stage: S({ addx: true, comb: true, sign: 'sub' }), maxPar: 2, note: 'x + 5 = 2x + 1' },
+  { id: 'B3', name: 'Both sides, with division', stage: S({ addx: true, mul: true, div: true, comb: true, frac: true, sign: 'sub' }), maxPar: 4, note: 'x/2 + 4 = x − 1' },
+];
+export const RUNG = Object.fromEntries([...RUNGS, ...LEVEL_RUNGS].map((r) => [r.id, r]));
 export const RUNG_IDS = RUNGS.map((r) => r.id);
 export const rungIndex = (id) => RUNG_IDS.indexOf(id);
 
@@ -217,6 +225,27 @@ const RECIPES = {
     const s = p * (x + q) - r * x;
     if (s === 0) return null;
     return { ...maybeSwap(rng, [br(p, [xt(1), num(q)])], [xt(r), num(s)], 0.3), x };
+  },
+  // x + 5 = 2x + 1: the two x's differ by one, so one x move leaves x on its own (then one number move)
+  B1(rng, size) {
+    const a = rng.int(1, S3(size, 1, 2, 3)), c = a + 1;   // (the side with one x more, either way round below)
+    const x = rng.int(1, S3(size, 8, 12, 15));
+    const d = rng.int(size >= 2 && rng.chance(0.4) ? -Math.min(9, x - 1) : 1, S3(size, 9, 12, 15));
+    if (d === 0) return null;
+    const b = x + d;   // a·x + b = (a + 1)·x + d
+    const L = [xt(a), num(b)], R = [xt(c), num(d)];
+    if (size === 1 && rng.chance(0.3)) return { ...maybeSwap(rng, [xt(c)], [xt(a), num(x)], 0.5), x };   // 2x = x + 6
+    return { ...maybeSwap(rng, L, R, 0.5), x };
+  },
+  // x/2 + 4 = x − 1: clear the division (×2), sort, then free x
+  B3(rng, size) {
+    const a = size >= 3 && rng.chance(0.5) ? 3 : 2;
+    const b = rng.int(1, S3(size, 6, 9, 12)), c = rng.int(1, S3(size, 6, 9, 12));
+    if (((b + c) * a) % (a - 1) !== 0) return null;
+    const x = (a * (b + c)) / (a - 1);   // x − x/a = b + c
+    if (x > 60) return null;
+    const L = rng.chance(0.25) ? [num(b), xt(F(1, a))] : [xt(F(1, a)), num(b)];
+    return { ...maybeSwap(rng, L, [xt(1), num(-c)], 0.4), x };
   },
   // kind: 'all' | 'none' | 'one' (the ladder decides; see generate's verdict option)
   R15(rng, size, kind = rng.pick(['all', 'none'])) {

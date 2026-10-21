@@ -1,6 +1,8 @@
 // THE WORKED AREA: long multiplication and long division worked out a step at a time on a sheet of paper, opened from a
-// store order or a supply slip whose sum is too big to do in your head (16 × 7 hands-days, 112 ÷ 5 crates). The math
-// and the slips are src/math/longwork.js; this is the panel.
+// store order or a supply slip whose sum is too big to do in your head (16 × 7 hands-days, 112 ÷ 5 crates), and from
+// the tools button in any job (src/ui/tools.js: Work it out), which also works adding and taking away in columns (the
+// carrying and borrowing written by the board itself). The math and the slips are src/math/longwork.js; this is the
+// panel.
 //
 // One sheet, top to bottom: "Work it out" with the order's question in small, the board (the sum laid out as on paper:
 // the division bracket with the divisor outside, or the two numbers with × and the bar), the step's question in the
@@ -15,8 +17,10 @@
 // the word answer from the story ("23 crates"), when the job asks it (final). Then the finished sum stays a moment
 // and the sheet goes by itself.
 //
-//   const L = openLongWork(root, { work, setup, final, title, ask, speak, onTap, onDone, onClose })
-//     work      src/math/longwork.js workMul / workDiv
+//   const L = openLongWork(root, { work, setup, final, title, ask, speak, closeLabel, onTap, onDone, onClose })
+//     work      src/math/longwork.js workMul / workDiv / workAdd / workSub (workOf)
+//     closeLabel   the close button's words ('Back to the slip'; the tools say 'Close')
+//     free      true: no slip beside it (the tools in a field job): the sheet takes the middle of the screen
 //     setup     { ask, choices: [{ label, good, why }] } or null    final: { ask, choices, line } or null
 //     ask       the order's question, small at the top; title: the sheet's name ('Work it out')
 //     speak     (text) => void, or null: each question is said out loud (read-aloud for the youngest riders)
@@ -49,7 +53,7 @@ export const LONGWORK = {
 };
 
 export function openLongWork(root = document.body, { work, setup = null, final = null, title = 'Work it out', ask = '', speak = null,
-  onTap = () => {}, onDone = () => {}, onClose = () => {} } = {}) {
+  closeLabel = 'Back to the slip', free = false, onTap = () => {}, onDone = () => {}, onClose = () => {} } = {}) {
   ensureCss();
   // the parts in order: the setup (optional), the board's steps, the word answer (optional)
   const parts = [];
@@ -58,12 +62,12 @@ export function openLongWork(root = document.body, { work, setup = null, final =
   if (final) parts.push({ part: 'final', i: 0, ask: final.ask, choices: final.choices, wide: true, line: final.line });
 
   const el = document.createElement('div');
-  el.className = 'bml';
+  el.className = free ? 'bml is-free' : 'bml';
   el.setAttribute('role', 'dialog');
   el.setAttribute('aria-label', title);
   el.innerHTML = `<section class="bml-sheet">
       <header class="bml-top"><div class="bml-title"><b>${esc(title)}</b><small>${esc(ask)}</small></div>
-        <button type="button" class="bml-x">Back to the slip<kbd>Esc</kbd></button></header>
+        <button type="button" class="bml-x">${esc(closeLabel)}<kbd>Esc</kbd></button></header>
       <div class="bml-boardwrap"><div class="bml-board" aria-hidden="true"></div><p class="bml-setupnote"></p></div>
       <p class="bml-ask" aria-live="polite"></p>
       <div class="bml-choices" role="group" aria-label="Pick the answer"></div>
@@ -176,6 +180,14 @@ export function openLongWork(root = document.body, { work, setup = null, final =
       return { title: `Counting up in ${b}s`, items: Array.from({ length: Math.max(1, Math.min(9, a)) }, (_, j) => ({ top: `${j + 1}`, v: b * (j + 1), mark: false })), note: st.kind === 'carry' ? 'Then add the number you carried.' : `${a} of them: the last one is ${b} × ${a}.` };
     }
     if (st.kind === 'sum') return { title: 'Adding the rows', items: [], note: 'Add the ones column first, then the tens, then the hundreds. When a column passes 9, carry the 1 to the next column.' };
+    if (st.kind === 'add') {   // (counting on from the top digit: the strip shows the numbers after it)
+      const m = /^(\d+)(?: \+ (\d+))?/.exec(st.ask), x = m ? +m[1] : 0, add = st.answer - x;
+      return { title: `Counting on from ${x}`, items: Array.from({ length: Math.max(1, Math.min(10, add)) }, (_, j) => ({ top: `+${j + 1}`, v: x + j + 1, mark: false })), note: `${add} more after ${x}: the last one is the answer.` };
+    }
+    if (st.kind === 'sub') {   // (counting back from the top digit)
+      const m = /^(\d+) − (\d+)/.exec(st.ask), x = m ? +m[1] : 0, y = m ? +m[2] : 0;
+      return { title: `Counting back from ${x}`, items: Array.from({ length: Math.max(1, Math.min(10, y)) }, (_, j) => ({ top: `−${j + 1}`, v: x - j - 1, mark: false })), note: `${y} back from ${x}: the last one is the answer.` };
+    }
     return null;
   }
   function showHelp(p, why) {

@@ -107,20 +107,19 @@ test('the right answer is right: worked out again from the numbers in the story'
   }
 });
 
-test('the classic slips are there: 4 + 3 for groups, 45 × 9 = 405 for a rate, the dropped leftover for whole crates', () => {
+test('the classic slips are there: 4 + 3 for groups, the hours taken for the speed, the dropped leftover for whole crates', () => {
   const find = (type, step, test) => { const r = seeded(9); for (let i = 0; i < 400; i++) { const o = makeOrder(type, { rand: r, step }); if (test(o)) return o; } return null; };
   const g = find('groups', 1, () => true);
   const [a, b] = g.story.match(/\d+/g).map(Number);
   assert.ok(g.coins.some((c) => c.slip === 'added' && c.v === a + b), 'added instead of multiplied');
-  const rate = find('rate', 5, (o) => o.key.startsWith('rate:speed'));
+  const rate = find('rate', 5, (o) => o.key.startsWith('rate:speed') && o.coins.some((c) => c.slip === 'swapped'));
   const [d, t] = rate.story.match(/\d+/g).map(Number);
-  assert.ok(rate.coins.some((c) => c.slip === 'multiplied' && c.v === d * t), `the rate slip ${d} × ${t}`);
-  // the brief's example: the wagon from Yuma, 45 miles in 9 hours
+  assert.ok(rate.coins.some((c) => c.slip === 'swapped' && c.v === t), `the hours (${t}) taken for the speed: ${d} miles in ${t}`);
+  // the wagon from Yuma: an Old West wagon's speed (2 to 4 miles an hour), with believable wrong ones
   const r = seeded(1); let yuma = null;
-  for (let i = 0; i < 20000 && !yuma; i++) { const o = makeOrder('rate', { rand: r, step: 5 }); if (/Yuma, which is 45 miles away/.test(o.story) && /9 hours/.test(o.story)) yuma = o; }
+  for (let i = 0; i < 20000 && !yuma; i++) { const o = makeOrder('rate', { rand: r, step: 5 }); if (/Yuma, which is \d+ miles away/.test(o.story) && /in \d+ hours/.test(o.story)) yuma = o; }
   assert.ok(yuma, 'the Yuma wagon story turns up');
-  assert.equal(yuma.answer, '5 miles an hour');
-  assert.ok(yuma.coins.some((c) => c.v === 405 && /405 miles an hour/.test(c.label)) || yuma.coins.length === 4, 'the 405 slip on it');
+  assert.match(yuma.answer, /^[234] miles an hour$/);
   const crates = find('share', 7, (o) => /crate|wagon|box/.test(o.ask) && /enough|everyone|every jar/.test(o.ask));
   assert.ok(crates, 'whole-crates orders come up from step 7');
   assert.ok(crates.coins.some((c) => c.slip === 'leftover' && c.v === crates.coins.find((x) => x.good).v - 1), 'the dropped leftover is one short');
@@ -472,6 +471,19 @@ test('what else each order counts in: every kind\'s credit names a real strand, 
   const m = makeOrder('money', { rand: seeded(3), step: 5 });
   assert.equal(m.credit[0].strand, 'money'); assert.equal(m.credit[0].weight, 1, 'money counts fully in Money');
   assert.equal(SIZE.twostep, 2);
+});
+
+test('speeds are the Old West\'s, right and wrong: no wagon at 441 miles an hour (every mover, every step, both ways round)', () => {
+  const cap = { wagon: { hour: 7, day: 18 }, herd: { hour: 6, day: 18 }, stage: { hour: 12 }, rider: { hour: 11 } };
+  for (let sd = 1; sd <= 3000; sd++) {
+    const o = makeOrder('rate', { rand: seeded(sd), step: 4 + (sd % 6) });
+    const who = o.key.split(':')[2], per = /a day/.test(o.story + o.ask) ? 'day' : 'hour';
+    for (const c of o.coins) {
+      if (/miles? (an hour|a day)$/.test(c.label)) assert.ok(c.v >= 1 && c.v <= cap[who][per], `${o.story} ${o.ask}: ${c.label}`);
+      if (/^(\d+) (hours?|days?)$/.test(c.label)) assert.ok(c.v >= 1 && c.v <= (per === 'day' ? 30 : 14), `${o.story} ${o.ask}: ${c.label}`);
+    }
+    assert.ok(o.coins.length >= 3, o.story);
+  }
 });
 
 test('a speed in miles a day stays in the tables unless the rider\'s Long work is up to it; a long one gets the worked area', () => {
