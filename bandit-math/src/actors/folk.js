@@ -160,9 +160,9 @@ const FOLK_VS = `
 // fkFade 1 is solid, 0 gone; between, a 4 x 4 pattern of the screen's pixels is left out, more of it the lower it is
 const FOLK_FS = `
   uniform float fkFade;
-  float fkBayer(vec2 p) { ivec2 q = ivec2(mod(p, 4.0)); int i = q.x + q.y * 4;
-    float m[16] = float[16](0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);
-    return (m[i] + 0.5) / 16.0; }
+  // (a 4 x 4 ordered dither made by arithmetic, no arrays, so it compiles on WebGL1 too)
+  float fkBayer2(vec2 a) { a = floor(a); return fract(dot(a, vec2(0.5, a.y * 0.75))); }
+  float fkBayer(vec2 p) { return fkBayer2(p * 0.5) * 0.25 + fkBayer2(p) + 0.5 / 16.0; }
 `;
 function folkMaterial(u, shade, key) {
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88, metalness: 0 });

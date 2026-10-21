@@ -78,10 +78,10 @@ export function makeLawn({ cap = 60000, shade = null, lamps = null } = {}) {   /
         sc.xyz /= sc.w; sc.z += directionalLightShadows[ 0 ].shadowBias;
         if (sc.x < 0.0 || sc.x > 1.0 || sc.y < 0.0 || sc.y > 1.0 || sc.z > 1.0) return 1.0;
         vec2 t = 0.5 / directionalLightShadows[ 0 ].shadowMapSize;
-        return 0.25 * (step(sc.z, unpackRGBAToDepth(texture(directionalShadowMap[ 0 ], sc.xy + vec2(-t.x, -t.y))))
-                     + step(sc.z, unpackRGBAToDepth(texture(directionalShadowMap[ 0 ], sc.xy + vec2(t.x, -t.y))))
-                     + step(sc.z, unpackRGBAToDepth(texture(directionalShadowMap[ 0 ], sc.xy + vec2(-t.x, t.y))))
-                     + step(sc.z, unpackRGBAToDepth(texture(directionalShadowMap[ 0 ], sc.xy + vec2(t.x, t.y)))));
+        return 0.25 * (step(sc.z, unpackRGBAToDepth(texture2D(directionalShadowMap[ 0 ], sc.xy + vec2(-t.x, -t.y))))
+                     + step(sc.z, unpackRGBAToDepth(texture2D(directionalShadowMap[ 0 ], sc.xy + vec2(t.x, -t.y))))
+                     + step(sc.z, unpackRGBAToDepth(texture2D(directionalShadowMap[ 0 ], sc.xy + vec2(-t.x, t.y))))
+                     + step(sc.z, unpackRGBAToDepth(texture2D(directionalShadowMap[ 0 ], sc.xy + vec2(t.x, t.y)))));
       }
       #else
       float sunAt(vec3 p) { return 1.0; }

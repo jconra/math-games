@@ -29,11 +29,19 @@
 //                        The first call for a rider with no rider.done takes everything already done as announced and
 //                        returns [] (an old save gets no flood of toasts); the caller saves then too. An item that is
 //                        one of the rider's goals comes back with goal: true (and the goal is stamped doneAt).
-//   goalChoices(rider) -> [{ id, name, group, sub, hint }]   the items not done yet, for the grown-ups' goal picker
-//   goalsOf(rider)     -> [{ id, name, have, need, done, pct, hint, group, sub, line }]   rider.goals with their progress
-//                         now; line = progressLine: the progress in words, to show beside the bar
+//   goalChoices(rider) -> [Goal]   the grown-ups' goal picker: a short list, not every item. One row per job's buckles
+//                         ('goal:buckles:<job>': it aims at the next buckle not won yet, and moves on to the next one when
+//                         it is won; tiers: the four buckles, each { tier, id, done, need }, so one exact buckle can be
+//                         pinned by its 'buckle:<job>:<tier>' id), one for everything to buy ('goal:buy': 12 / 30 bought),
+//                         one per collection ('goal:collect:<photos|keepsake|hideout>') and one for every place
+//                         ('goal:places'). Only goals not reached yet; the jobs under way first.
+//   goalsOf(rider)     -> [Goal]   rider.goals with their progress now (old goals on an item the picker no longer offers
+//                         read as the goal that holds it: save.js upgradeGoals)
+//                         Goal = { id, name, have, need, done, pct, hint, group, sub, line, of, tiers? }
+//                         line = progressLine: the progress in words, to show beside the bar; of = the item id it is
+//                         aimed at now, for its picture (a buckle's next tier, or 'buy:all', 'collect:photos', 'place:all')
 //   progressLine(item) -> "37 / 50" | "45 / 60 gold" | "You have the gold!" (not bought yet: never "60 / 60") | "Not yet" | "Done"
-//   setGoal(rider, id) -> true when it is pinned (MOST_GOALS at most; a goal already reached makes room for a new
+//   setGoal(rider, id) -> true when it is pinned (a goal's id, or a buckle's; another item's id pins the goal holding it) (MOST_GOALS at most; a goal already reached makes room for a new
 //                         one); false for an unknown or finished item, or with MOST_GOALS unfinished goals pinned
 //   clearGoal(rider, id) -> true when it was pinned
 //   notice(rider, { place, hideout, home })   what the world sees the rider do (src/ui/completion.js calls it about
@@ -45,11 +53,11 @@
 //
 // Rider fields (save.js keeps unknown fields as they are; everything here is read defensively):
 //   rider.done    ['buckle:cattle:tin', ...]   the items already announced
-//   rider.goals   [{ id, at, doneAt? }]        the goals pinned (at: when, ms since 1970)
+//   rider.goals   [{ id, at, doneAt? }]        the goals pinned (at: when, ms since 1970): 'goal:...' or 'buckle:...' ids
 //   rider.found   { place: ['camp-cow'], hideout: ['hollow'], keepsake: ['cattle'], windmill: feet }
 // Item ids never change once shipped (goals and rider.done keep them): 'buckle:<job>:<tier>', 'buy:<kind>:<id>'
 // (saddle, horse, hat, dog, animal, furniture, cabin), 'collect:<kind>:<id>' (photos, keepsake, hideout), 'place:<id>'.
-import { JOBS, BUCKLES, BUCKLE_NAMES, KEEPSAKES, jobCount, jobOn } from './save.js';
+import { JOBS, BUCKLES, BUCKLE_NAMES, KEEPSAKES, jobCount, jobOn, goalIdOf, upgradeGoals } from './save.js';
 import { PRICES, SADDLES, HORSES, DOGS } from './catalog.js';
 import { HATS } from './hats.js';
 import { SLOTS } from './cabin/slots.js';
@@ -251,9 +259,63 @@ export function completion(rider, { all = false } = {}) {
   return { pct: pctOf(done, items.length), done, total: items.length, groups, items, coming };
 }
 
-// the pinned goals (only well-formed ones)
+// the pinned goals (only well-formed ones, on today's ids: an old goal on an item the picker no longer offers is moved,
+// in rider.goals too, to the goal that holds it: save.js upgradeGoals)
 function goalList(rider) {
-  return (Array.isArray(rider && rider.goals) ? rider.goals : []).filter((g) => g && typeof g === 'object' && typeof g.id === 'string');
+  if (!rider || !Array.isArray(rider.goals)) return [];
+  const up = upgradeGoals(rider.goals);
+  if (up.length !== rider.goals.length || up.some((g, k) => g !== rider.goals[k])) rider.goals = up;
+  return up;
+}
+
+// ── THE GOALS A GROWN-UP CAN PIN ─────────────────────────────────────────────────────────────────────────────────
+const COLLECT_GOALS = [
+  { kind: 'photos', name: 'Deer photographs', line: 'A full album of deer photographs' },
+  { kind: 'keepsake', name: 'Keepsakes', line: 'Every keepsake in the cabin', hint: 'Win a job\'s first buckle, then go into your cabin to see its keepsake.' },
+  { kind: 'hideout', name: 'Gang hideouts', line: 'Every gang hideout' },
+];
+// every goal the picker has, each with the checklist items it holds (buckles: every tier, a job turned off included,
+// so a goal pinned on it still reads; the rest: what is on the list now)
+function goalSets(rider) {
+  const every = allItems(rider), on = every.filter((i) => i.live && !i.off), out = [];
+  for (const j of JOBS) {
+    const items = every.filter((i) => i.group === 'buckles' && i.id.startsWith(`buckle:${j.id}:`));
+    if (items.length === BUCKLES.length) out.push({ id: `goal:buckles:${j.id}`, kind: 'buckles', job: j, items, on: items.some((i) => !i.off) });
+  }
+  const buy = on.filter((i) => i.group === 'buy');
+  if (buy.length) out.push({ id: 'goal:buy', kind: 'count', name: 'Buy everything', group: 'buy', sub: 'Things to buy', of: 'buy:all', items: buy,
+    hint: 'Everything for sale: saddles and horses at the stable, hats, dogs and farm animals at the store, and the cabin and its furniture.' });
+  for (const c of COLLECT_GOALS) {
+    const items = on.filter((i) => i.id.startsWith(`collect:${c.kind}:`));
+    if (items.length) out.push({ id: `goal:collect:${c.kind}`, kind: c.kind === 'photos' ? 'last' : 'count', name: c.line, group: 'collect', sub: c.name, of: `collect:${c.kind}`, items, hint: c.hint || items[0].hint });
+  }
+  const places = on.filter((i) => i.group === 'places');
+  if (places.length) out.push({ id: 'goal:places', kind: 'count', name: 'Visit every place', group: 'places', sub: 'Places', of: 'place:all', items: places,
+    hint: 'Ride out to every camp, stand the windmill, build the bridge and land a fish at the dock.' });
+  return out;
+}
+// a goal from goalSets, with its progress now
+function goalView(set) {
+  if (set.kind === 'buckles') {
+    const j = set.job, next = set.items.find((i) => !i.done), last = set.items[set.items.length - 1];
+    const tiers = set.items.map((i) => ({ tier: i.id.split(':')[2], id: i.id, done: i.done, need: i.need }));
+    const at = next || last;
+    return { id: set.id, name: next ? at.name : `Every buckle: ${lower(j.name)}`, group: 'buckles', sub: j.name, job: j.id,
+      have: at.have, need: at.need, done: !next, pct: next ? pctOf(at.have, at.need) : 100, hint: at.hint, line: progressLine(at), of: at.id, tiers };
+  }
+  let have, need;
+  if (set.kind === 'last') { const l = set.items[set.items.length - 1]; have = l.have; need = l.need; }
+  else { have = set.items.filter((i) => i.done).length; need = set.items.length; }
+  const done = set.items.every((i) => i.done);
+  return { id: set.id, name: set.name, group: set.group, sub: set.sub, have, need, done, pct: done ? 100 : pctOf(have, need), hint: set.hint,
+    line: done ? 'Done' : `${have.toLocaleString('en-US')} / ${need.toLocaleString('en-US')}`, of: set.of };
+}
+// one pinned goal's progress: a goal's id or a buckle's (null for an id the game doesn't have)
+function viewOf(rider, id, sets = goalSets(rider), every = null) {
+  if (id.startsWith('goal:')) { const s = sets.find((x) => x.id === id); return s ? goalView(s) : null; }
+  const i = (every || allItems(rider)).find((x) => x.id === id);
+  return i ? { id: i.id, name: i.name, have: i.have, need: i.need, done: i.done, pct: i.done ? 100 : pctOf(i.have, i.need), hint: i.hint,
+    group: i.group, sub: i.sub, line: progressLine(i), of: i.id } : null;
 }
 
 export function unlocked(rider) {
@@ -265,15 +327,31 @@ export function unlocked(rider) {
   if (!fresh.length) return [];
   rider.done = [...had, ...fresh.map((i) => i.id)];
   const goals = goalList(rider);
-  for (const i of fresh) {
-    const g = goals.find((x) => x.id === i.id);
-    if (g) { i.goal = true; if (!g.doneAt) g.doneAt = Date.now(); }
+  const sets = goals.some((g) => g.id.startsWith('goal:')) ? goalSets(rider) : [];
+  for (const g of goals) {
+    if (g.doneAt) continue;
+    const set = sets.find((s) => s.id === g.id);
+    if (!set) {
+      const i = fresh.find((x) => x.id === g.id);
+      if (i) { i.goal = true; g.doneAt = Date.now(); }
+      continue;
+    }
+    // a goal holding several items: a job's buckles is reached at each buckle won (and then aims at the next one), the
+    // rest when the last of their items is done
+    const mine = fresh.filter((x) => set.items.some((s) => s.id === x.id)), v = goalView(set);
+    if (!mine.length) continue;
+    if (set.kind === 'buckles') mine[0].goal = true;
+    else if (v.done) mine[mine.length - 1].goal = true;
+    if (v.done) g.doneAt = Date.now();
   }
   return fresh;
 }
 
 export function goalChoices(rider) {
-  return completion(rider).items.filter((i) => !i.done).map(({ id, name, group, sub, hint }) => ({ id, name, group, sub, hint }));
+  const list = goalSets(rider).filter((s) => s.kind !== 'buckles' || s.on).map(goalView).filter((g) => !g.done);
+  // (the jobs under way first, then the ones not started; the other goals after the buckles, as the checklist has them)
+  const rank = (g) => (g.group !== 'buckles' ? 2 : g.tiers.some((t) => t.done) || g.have > 0 ? 0 : 1);
+  return list.map((g, k) => [g, k]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map((x) => x[0]);
 }
 
 // how far along an item is, in words: "37 / 50", "45 / 60 gold", "You have the gold!" (a thing to buy, the gold in
@@ -289,17 +367,17 @@ export function progressLine(item) {
 
 export function goalsOf(rider) {
   const list = goalList(rider); if (!list.length) return [];
-  const by = new Map(allItems(rider).map((i) => [i.id, i]));
-  return list.map((g) => by.get(g.id)).filter(Boolean).map((i) => ({
-    id: i.id, name: i.name, have: i.have, need: i.need, done: i.done, pct: i.done ? 100 : pctOf(i.have, i.need), hint: i.hint, group: i.group, sub: i.sub,
-    line: progressLine(i),
-  }));
+  const sets = goalSets(rider), every = allItems(rider);
+  return list.map((g) => viewOf(rider, g.id, sets, every)).filter(Boolean);
 }
 
 export function setGoal(rider, id) {
-  if (!rider) return false;
-  const item = completion(rider).items.find((i) => i.id === id);
-  if (!item || item.done) return false;
+  if (!rider || typeof id !== 'string') return false;
+  id = goalIdOf(id);
+  // (a goal from the picker, or one exact buckle on the list now)
+  const ok = id.startsWith('goal:') ? goalChoices(rider).find((g) => g.id === id)
+    : id.startsWith('buckle:') ? completion(rider).items.find((i) => i.id === id && !i.done) : null;
+  if (!ok) return false;
   let list = goalList(rider);
   if (list.some((g) => g.id === id)) return true;
   if (list.length >= MOST_GOALS) {
@@ -314,6 +392,8 @@ export function setGoal(rider, id) {
 }
 
 export function clearGoal(rider, id) {
+  if (typeof id !== 'string') return false;
+  id = goalIdOf(id);
   const list = goalList(rider);
   if (!list.some((g) => g.id === id)) return false;
   rider.goals = list.filter((g) => g.id !== id);

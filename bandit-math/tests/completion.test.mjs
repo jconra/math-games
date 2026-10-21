@@ -7,7 +7,7 @@ import {
   completion, unlocked, goalChoices, goalsOf, setGoal, clearGoal, notice, markFound, found, setWindmill, progressLine,
   CAMP_PLACES, HIDEOUTS, COMING, MOST_GOALS, PHOTO_STEPS, WINDMILL_FEET, GROUPS,
 } from '../src/completion.js';
-import { newRider, fixRider, JOBS, BUCKLES, KEEPSAKES } from '../src/save.js';
+import { newRider, fixRider, upgradeGoals, JOBS, BUCKLES, KEEPSAKES } from '../src/save.js';
 import { PRICES, SADDLES, HORSES, DOGS } from '../src/catalog.js';
 import { HATS } from '../src/hats.js';
 import { SLOTS } from '../src/cabin/slots.js';
@@ -152,34 +152,89 @@ test('goals: pin up to two, progress, reached ones make room, finished or unknow
   assert.equal(setGoal(r, 'buckle:cattle:silver'), true);
   assert.equal(setGoal(r, 'buckle:cattle:silver'), true, 'pinning it again is fine');
   assert.equal(r.goals.length, 1);
-  assert.equal(setGoal(r, 'buy:horse:midnight'), true);
-  assert.equal(setGoal(r, 'buy:hat:straw'), false, `${MOST_GOALS} at most`);
+  assert.equal(setGoal(r, 'goal:buy'), true);
+  assert.equal(setGoal(r, 'goal:places'), false, `${MOST_GOALS} at most`);
   assert.equal(setGoal(r, 'buckle:cattle:tin'), false, 'a done item is not a goal');
-  const g = goalsOf(r), silverAt = JOBS.find((j) => j.id === 'cattle').at[2], midnight = PRICES.horse.midnight;
-  assert.deepEqual(g.map((x) => [x.id, x.have, x.need, x.pct, x.done]), [['buckle:cattle:silver', 37, silverAt, Math.round((100 * 37) / silverAt), false], ['buy:horse:midnight', 0, midnight, 0, false]]);
-  // the progress in words, for the rider card and the corner: a thing not bought yet never reads "400 / 400"
-  assert.deepEqual(g.map((x) => x.line), [`37 / ${silverAt}`, `0 / ${midnight} gold`]);
-  r.gold = midnight + 50;
-  assert.equal(goalsOf(r)[1].line, 'You have the gold!');
-  assert.equal(goalsOf(r)[1].done, false);
-  r.gold = 0;
+  const g = goalsOf(r), silverAt = JOBS.find((j) => j.id === 'cattle').at[2], buyAll = completion(r).items.filter((i) => i.group === 'buy').length;
+  assert.deepEqual(g.map((x) => [x.id, x.have, x.need, x.pct, x.done]), [['buckle:cattle:silver', 37, silverAt, Math.round((100 * 37) / silverAt), false], ['goal:buy', 0, buyAll, 0, false]]);
+  // the progress in words, for the rider card and the corner
+  assert.deepEqual(g.map((x) => x.line), [`37 / ${silverAt}`, `0 / ${buyAll}`]);
+  assert.equal(g[1].name, 'Buy everything');
   assert.equal(progressLine({ group: 'places', have: 0, need: 1, done: false }), 'Not yet');
   assert.equal(progressLine({ group: 'buckles', have: 1200, need: 1500, done: false }), '1,200 / 1,500');
   assert.equal(progressLine({ group: 'buy', have: 9, need: 9, done: true }), 'Done');
-  assert.ok(!goalChoices(r).some((x) => x.id === 'buckle:cattle:tin'), 'the picker offers only what is not done');
-  assert.ok(goalChoices(r).some((x) => x.id === 'buy:hat:straw'));
-  // reaching a goal: unlocked flags it, stamps it, and it makes room for a new one
+  assert.equal(progressLine({ group: 'buy', have: 60, need: 60, done: false }), 'You have the gold!');
+  // buying one thing moves the count; buying the lot reaches the goal (flagged, stamped) and makes room
   unlocked(r);
   r.owned.horses = ['bay', 'midnight'];
+  assert.deepEqual(unlocked(r).map((i) => [i.id, !!i.goal]), [['buy:horse:midnight', false]]);
+  assert.equal(goalsOf(r)[1].line, `1 / ${buyAll}`);
+  const all = everything();
+  r.owned = all.owned;
   const fresh = unlocked(r);
-  assert.deepEqual(fresh.map((i) => [i.id, !!i.goal]), [['buy:horse:midnight', true]]);
-  assert.ok(r.goals.find((x) => x.id === 'buy:horse:midnight').doneAt > 0);
+  assert.equal(fresh.filter((i) => i.goal).length, 1, 'one toast says the goal is reached');
+  assert.ok(r.goals.find((x) => x.id === 'goal:buy').doneAt > 0);
   assert.equal(goalsOf(r)[1].done, true);
-  assert.equal(setGoal(r, 'buy:hat:straw'), true, 'the reached goal made room');
-  assert.deepEqual(r.goals.map((x) => x.id), ['buckle:cattle:silver', 'buy:hat:straw']);
-  assert.equal(clearGoal(r, 'buy:hat:straw'), true);
-  assert.equal(clearGoal(r, 'buy:hat:straw'), false);
+  assert.equal(setGoal(r, 'goal:places'), true, 'the reached goal made room');
+  assert.deepEqual(r.goals.map((x) => x.id), ['buckle:cattle:silver', 'goal:places']);
+  assert.equal(clearGoal(r, 'goal:places'), true);
+  assert.equal(clearGoal(r, 'goal:places'), false);
   assert.deepEqual(r.goals.map((x) => x.id), ['buckle:cattle:silver']);
+});
+
+test('the goal picker: a row per job with its four buckles, one to buy everything, one per collection, every place', () => {
+  const r = newRider('Mo');
+  r.stats.jobs.boxes = 3;
+  const list = goalChoices(r), jobs = JOBS.filter((j) => j.ready);
+  assert.equal(new Set(list.map((g) => g.id)).size, list.length, 'no goal twice');
+  const rows = list.filter((g) => g.tiers);
+  assert.equal(rows.length, jobs.length, 'one row a job');
+  for (const g of rows) assert.deepEqual(g.tiers.map((t) => t.tier), BUCKLES);
+  assert.equal(rows[0].id, 'goal:buckles:boxes', 'a job under way comes first');
+  assert.deepEqual(list.filter((g) => !g.tiers).map((g) => g.id), ['goal:buy', 'goal:collect:photos', 'goal:collect:keepsake', 'goal:collect:hideout', 'goal:places']);
+  assert.ok(!list.some((g) => /^(buy|collect|place):/.test(g.id)), 'no single hat, horse, photo or camp to pin');
+  assert.ok(list.length <= jobs.length + 5, 'short enough for a phone');
+  const photos = list.find((g) => g.id === 'goal:collect:photos');
+  assert.deepEqual([photos.have, photos.need], [0, PHOTO_STEPS[PHOTO_STEPS.length - 1]], 'the photos count up to a full album');
+  // a job's row aims at the next buckle and moves on when it is won; a chip pins one exact buckle
+  const tinAt = JOBS.find((j) => j.id === 'cattle').at[0];
+  assert.equal(setGoal(r, 'goal:buckles:cattle'), true);
+  assert.equal(setGoal(r, 'buckle:boxes:gold'), true);
+  assert.deepEqual(goalsOf(r).map((g) => [g.id, g.of, g.done]), [['goal:buckles:cattle', 'buckle:cattle:tin', false], ['buckle:boxes:gold', 'buckle:boxes:gold', false]]);
+  unlocked(r);
+  r.stats.jobs.cattle = tinAt;
+  const fresh = unlocked(r);
+  assert.deepEqual(fresh.filter((i) => i.goal).map((i) => i.id), ['buckle:cattle:tin'], 'each buckle won on the row says so');
+  const now = goalsOf(r)[0];
+  assert.deepEqual([now.of, now.done, now.name], ['buckle:cattle:copper', false, 'Copper buckle: cattle corralled']);
+  assert.ok(!r.goals[0].doneAt, 'the row goes on to the next buckle');
+  r.stats.jobs.cattle = JOBS.find((j) => j.id === 'cattle').at[3];
+  unlocked(r);
+  assert.equal(goalsOf(r)[0].done, true);
+  assert.ok(r.goals[0].doneAt > 0, 'every buckle won: reached');
+  assert.ok(!goalChoices(r).some((g) => g.id === 'goal:buckles:cattle'), 'a job with every buckle won leaves the picker');
+  assert.equal(goalChoices(everything()).length, 0, 'everything done: nothing to pin');
+});
+
+test('old goals on an item the picker no longer offers move to the goal that holds it (save.js upgradeGoals)', () => {
+  const old = [{ id: 'buy:hat:straw', at: 5, doneAt: 9 }, { id: 'buy:horse:midnight', at: 6 }, { id: 'collect:photos:12', at: 7 },
+    { id: 'place:camp-cow', at: 8 }, { id: 'buckle:cattle:silver', at: 4 }, { id: 'collect:keepsake:boxes', at: 3 }, { id: 'collect:hideout:pines', at: 2 }];
+  assert.deepEqual(upgradeGoals(old).map((g) => g.id), ['goal:buy', 'goal:collect:photos', 'goal:places', 'buckle:cattle:silver', 'goal:collect:keepsake', 'goal:collect:hideout']);
+  assert.deepEqual(upgradeGoals(old)[0], { id: 'goal:buy', at: 5 }, 'the first kept, its doneAt worked out afresh');
+  assert.deepEqual(fixRider({ goals: [{ id: 'buy:dog:pug', at: 1 }, null, 'x'] }).goals, [{ id: 'goal:buy', at: 1 }]);
+  // a rider still holding old ids (not loaded through save.js): read as the new goals, and rider.goals moved over
+  const r = newRider('Jo');
+  r.goals = [{ id: 'buy:hat:straw', at: 1 }, { id: 'place:camp-cow', at: 2 }];
+  assert.deepEqual(goalsOf(r).map((g) => g.id), ['goal:buy', 'goal:places']);
+  assert.deepEqual(r.goals.map((g) => g.id), ['goal:buy', 'goal:places']);
+  assert.equal(setGoal(r, 'buy:saddle:silver'), true, 'an old item id pins the goal holding it');
+  assert.equal(r.goals.length, 2);
+  assert.equal(clearGoal(r, 'place:camp-hollis'), true);
+  assert.deepEqual(r.goals.map((g) => g.id), ['goal:buy']);
+  // a goal an old build pinned on something gone: kept, not shown, nothing throws
+  r.goals = [{ id: 'buckle:nojob:gold', at: 1 }, { id: 'goal:collect:nothing', at: 2 }];
+  assert.doesNotThrow(() => { goalsOf(r); unlocked(r); goalChoices(r); });
+  assert.deepEqual(goalsOf(r), []);
 });
 
 test('what the world notices: camps ridden up to, hideouts reached; a damaged save reads as empty', () => {

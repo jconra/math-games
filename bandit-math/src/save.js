@@ -344,6 +344,35 @@ function lookFor(look) {
   };
 }
 
+// The pinned goals (src/completion.js), well-formed and on today's ids. The goal picker once offered every item on the
+// checklist; it now offers one goal per job's buckles (or one exact buckle), one for everything to buy, one per
+// collection and one for every place. A goal pinned on an item the picker no longer offers moves to the goal that holds
+// it (two that land on the same goal become one, the first kept), so nothing pinned is lost:
+//   'buy:<kind>:<id>' -> 'goal:buy'   'collect:<kind>:<id>' -> 'goal:collect:<kind>'   'place:<id>' -> 'goal:places'
+// ('buckle:<job>:<tier>' and the 'goal:' ids stay as they are.) A goal moved this way loses its doneAt (the new goal's
+// progress is worked out afresh).
+export function goalIdOf(id) {
+  if (typeof id !== 'string') return null;
+  const [kind, a] = id.split(':');
+  if (kind === 'buy') return 'goal:buy';
+  if (kind === 'collect' && a) return `goal:collect:${a}`;
+  if (kind === 'place') return 'goal:places';
+  return id;
+}
+export function upgradeGoals(goals) {
+  const out = [], seen = new Set();
+  for (const g of Array.isArray(goals) ? goals : []) {
+    if (!g || typeof g !== 'object' || typeof g.id !== 'string') continue;
+    const id = goalIdOf(g.id);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    if (id === g.id) { out.push(g); continue; }
+    const { doneAt, ...rest } = g;   // eslint-disable-line no-unused-vars
+    out.push({ ...rest, id });
+  }
+  return out;
+}
+
 // Fills in anything a rider is missing (an older save, a hand-edited one) without throwing away what is there.
 // Unknown fields are kept as they are, so a newer build's data survives a trip through an older one.
 export function fixRider(r) {
@@ -410,7 +439,7 @@ export function fixRider(r) {
   // the optional age, the pinned goals and the completion items already announced (each only when the rider has it)
   const age = Math.round(num(r.age, NaN));
   out.age = age >= 3 && age <= 99 ? age : null;
-  if (r.goals !== undefined) out.goals = (Array.isArray(r.goals) ? r.goals : []).filter(g => g && typeof g === 'object' && typeof g.id === 'string');
+  if (r.goals !== undefined) out.goals = upgradeGoals(r.goals);
   if (r.done !== undefined) out.done = [...new Set((Array.isArray(r.done) ? r.done : []).filter(d => typeof d === 'string'))];
   // the skill model (src/math/skill.js): filled in, and the first time read from the old topics' progress (the
   // topics themselves are left as they are)

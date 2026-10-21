@@ -92,7 +92,32 @@
 .bmk-note, .bmk-coming { margin: 14px 0 0; font-size: 14px; color: var(--ink-2); }
 .bmk-coming { font-style: italic; color: var(--mute); }
 
+/* the goal picker: one short row per goal (a job: its name, the way to its next buckle, its four buckles as chips) */
+.bmk-pick .bmk-h em { margin-left: auto; font-weight: 500; font-size: 12px; color: var(--mute); }
+.bmk-choice { display: flex; align-items: center; gap: 10px; padding: 5px 0; border-bottom: 1px dashed rgba(226, 173, 76, 0.14); }
+.bmk-choice .bmk-pic { width: 34px; height: 34px; }
+.bmk-choice .bmk-pic svg { width: 22px; height: 22px; }
+.bmk-choice .bmk-what b { font-size: 16px; }
+.bmk-choice .bmk-what > em { display: block; font: 600 12px Bitter, Georgia, serif; font-style: normal; color: var(--ink-2); word-spacing: 0.16em; font-variant-numeric: tabular-nums; }
+.bmk-choice .bmk-prog { margin-top: 2px; }
+.bmk-chips { flex: none; display: flex; gap: 3px; }
+.bmk-chip { width: 36px; height: 28px; padding: 2px; display: grid; place-items: center; border-radius: 7px; cursor: pointer;
+  background: rgba(0, 0, 0, 0.22); border: 1px solid rgba(226, 173, 76, 0.22); }
+.bmk-chip svg { width: 100%; height: 100%; }
+button.bmk-chip svg { opacity: 0.5; filter: saturate(0.55); }
+button.bmk-chip:hover:not([disabled]) { border-color: var(--brass); }
+button.bmk-chip:hover:not([disabled]) svg, button.bmk-chip.is-on svg { opacity: 1; filter: none; }
+.bmk-chip.is-on { background: rgba(226, 173, 76, 0.3); border-color: var(--brass-hi); }
+.bmk-chip.is-won { cursor: default; background: none; border-color: transparent; }
+.bmk-chip[disabled] { cursor: default; }
+.bmk-chip:focus-visible { outline: 2px solid var(--brass-hi); outline-offset: 1px; }
+
 @media (max-width: 520px) {
+  .bmk-choice { gap: 6px; }
+  .bmk-chips { gap: 1px; }
+  .bmk-chip { width: 31px; height: 25px; }
+  .bmk-choice .bmk-btn { padding: 6px 8px; }
+  .bmk-pick .bmk-h em { display: none; }
   .bmk { padding: 8px; }
   .bmk-card { padding: 16px 14px 18px; max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); }
   .bmk-title { font-size: 25px; }
