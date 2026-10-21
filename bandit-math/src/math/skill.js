@@ -482,9 +482,15 @@ export function record(rider, strands, opts = {}) {
   if (opts.tally !== false) sk.n = (sk.n || 0) + 1;
   // (only the answer's own strand, the first in the list, is timed: a word problem's time says nothing about how fast
   // its times-table part was)
-  listOf(strands, opts).forEach((x, i) => { out[x.strand] = recordOne(rider, x, i === 0 ? opts : { ...opts, sitDown: false, ms: null }, now); });
+  const list = listOf(strands, opts);
+  list.forEach((x, i) => { out[x.strand] = recordOne(rider, x, i === 0 ? opts : { ...opts, sitDown: false, ms: null }, now); });
+  if (watchers.length && opts.tally !== false) for (const fn of watchers) { try { fn(list, out, opts); } catch (e) { /* (a watcher never stops an answer) */ } }
   return out;
 }
+// Something that wants to hear of every answer as it is recorded (the play events, src/feedback.js): fn(list, out,
+// opts), list = [{ strand, at, weight }] (the answer's own strand first), out = record's result. -> a function to stop
+const watchers = [];
+export function onRecord(fn) { watchers.push(fn); return () => { const i = watchers.indexOf(fn); if (i >= 0) watchers.splice(i, 1); }; }
 
 function recordOne(rider, { strand, at, weight }, o, now) {
   const s = ensure(rider, strand, now);

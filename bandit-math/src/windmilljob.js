@@ -37,10 +37,12 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { HILL } from '../world/objects/landforms.js';
 import { makePerson } from './actors/folk.js';
 import { saveRider, countJob, jobCount } from './save.js';
+import { shownOnce } from './showme.js';
 import { setWindmill } from './completion.js';
 import { homestead, GOODS } from './math/goods.js';
 import { testPay, grind, sailsUp, stackSpots, payLine, feetOf, FLOUR, DONE_FT } from './mill.js';
 import { skillAsker, mergeStatic, mowSite } from './buildsite.js';
+import { flagAsker } from './ui/flag.js';
 import { mountWindmill } from '../labs/windmill/builder.js';
 import { makeYard } from '../labs/windmill/scene.js';
 import { makeTowerView } from '../labs/windmill/tower3d.js';
@@ -251,7 +253,7 @@ export function makeWindmillJob({ W, folk, rider, sites, player = () => null, hu
       // (the yard's own frame step, and the mill fading out of the way of the camera: eye and look in the site's frame)
       yard: { ...yard, update: (dt, look, eyeAt) => { yard.update(dt); millInWay(eyeAt, look); } },
       groundY: site.groundY, low: W.tier === 'potato',
-      asker: skillAsker(rider, 'windmill'),
+      asker: flagAsker(skillAsker(rider, 'windmill'), 'windmill'),   // ("Confusing?" on its question card: src/ui/flag.js)
       best: { read: () => ({ height: 0, W: 0, D: 0, ...((b && b.best) || {}) }), write: () => { saveT = 0.01; } },
       start: b ? { tower: b.tower, lumber: b.lumber, bonus: b.bonus } : null,
       // (the builder's camera starts on the side the rider came from, so the glide doesn't swing round the hill)
@@ -260,6 +262,8 @@ export function makeWindmillJob({ W, folk, rider, sites, player = () => null, hu
       // (a board nailed or taken down: the miller takes the sails down while she is built on, below)
       changed: (what) => { saveT = MILL.saveAfter; if (what === 'tower' && headUp) { headUp = false; B.towerView.showHead(false); } },
       pay, speak,
+      // (Show me plays by itself the first time this rider opens the builder: src/showme.js)
+      showMe: shownOnce(builds, 'windmill', () => saveRider(rider)),
       // (the saw, the hammer and the wind through the game's own sound and volume: no second sound of the lab's own)
       sound: audio && audio.ready ? { ready: (fn) => audio.ready(fn) } : null,
       // (the miller standing on the hill is the one in the builder: he walks round the tower from where he is)

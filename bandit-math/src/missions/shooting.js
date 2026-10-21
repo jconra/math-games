@@ -46,6 +46,7 @@ import { sayLine } from '../audio/sayline.js';
 import { makeRng } from '../lockbox/generate.js';
 import { makeGreeter, sayMs, TALK } from '../jobfolkplan.js';
 import { recordAnswer, earn, countJob, saveRider, JOBS } from '../save.js';
+import { flagCard } from '../ui/flag.js';
 
 export const SHOOT = {
   string: 5,               // cards in a string
@@ -275,6 +276,7 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
     ui = { el, cardEl: q('.bsr-card'), ruleEl: q('.bsr-rule'), subEl: q('.bsr-sub'), stepEl: q('.bsr-step'), sayEl: q('.bsr-say'), tagsEl: q('.bsr-tags'), crossEl: q('.bsr-cross'),
       helpEl: q('.bsr-help'), barEl: q('.bsr-bar'), cylEl: q('.bsr-cyl'), gunWords: q('.bsr-gunwords'), streakEl: q('.bsr-streak b'), bestEl: q('.bsr-best b'), dotsEl: q('.bsr-dots'), tagEls: [], sayT: 0 };
     q('.bsr-done').addEventListener('click', (e) => { e.stopPropagation(); J.done(); });
+    flagCard(ui.cardEl, () => (card ? { choices: card.targets.map((x) => String(x.n)), right: rightNow(card, gone).map((i) => String(card.targets[i].n)).join(', ') } : {}));   // ("Confusing?": src/ui/flag.js)
     el.addEventListener('pointerdown', onDown); el.addEventListener('pointermove', onMove); el.addEventListener('pointerup', onUp); el.addEventListener('pointercancel', () => { down = null; });
     addEventListener('keydown', onKey, true);
     gunWords(); dots();

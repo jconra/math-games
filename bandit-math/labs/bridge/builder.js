@@ -71,12 +71,17 @@
 //                     side, as on the lab page; +1 the south); a question's words read out (a rider who can't read yet)
 //     sound           optional: { ready(fn) } the host's own sound (as the windmill's: no context of the lab's own)
 //     low             a phone or a low tier: fewer specks
+//     showMe          optional { get(), set() }: whether this player has seen the Show me demonstration (the game: on
+//                     the rider, src/showme.js shownOnce; else the page's own record in localStorage). Show me
+//                     (src/showme.js): the first time, and from the "Show me" button, a ghost hand lays a board level
+//                     onto a strut through the builder's own controls, in a sandbox (demoBegin / demoEnd below)
 //   B.frame(dt)       each frame, before the host draws: the camera, the test, the engineer, the board in hand
 //   B.resize(), B.dispose() (everything off the page and out of the scene), B.snapshot() -> what to save,
 //   B.busy() (a question, the test or a board in hand), B.cam (az, y, dist, look, pos: the bridge's frame, metres),
 //   B.handle (window.BR on the lab page)
 //
-// ?perf shows frames per second, ?askall asks at every chance.
+// ?perf shows frames per second, ?askall asks at every chance, ?noshow never plays Show me by itself (?showme: it may,
+// in a browser driven by a test script).
 // B.handle (window.BR on the lab page), for test scripts (feet, in the bridge's frame):
 //   BR.addWorld(a, b, len)   nail a board between two points as if put up by hand (same questions, same twins)
 //   BR.load(bridge)          a whole bridge { S, D, boards } put up at once on a fresh yard (no questions)
@@ -100,6 +105,7 @@ import { makeLoads } from './loads3d.js';
 import { makeFall } from './fall.js';
 import { makeBuild, fmt, fmtWords, fmtStat } from './build.js';
 import * as sound from '../windmill/sound.js';
+import { makeShowMe } from '../../src/showme.js';
 
 
 // the builder's page: the lumber panel on the left, the view on the right (its canvas is the lab's own; in the game
@@ -215,7 +221,7 @@ let alive = true;
 // (an element of the page by its id; once the builder is taken off the page, a loose stand-in, so a timer still
 // running then changes nothing)
 const $ = (id) => (alive && document.getElementById(id)) || document.createElement('div');
-const changed = (what) => { if (alive && host.changed) host.changed(what); };
+const changed = (what) => { if (alive && host.changed && !app.demo) host.changed(what); };   // (nothing is saved while Show me plays)
 const offs = [];   // (every listener put on the window or the document, taken off again by dispose)
 const listen = (target, type, fn, opt) => { target.addEventListener(type, fn, opt); offs.push(() => target.removeEventListener(type, fn, opt)); };
 // the sound: the lab's own (woken by the first tap, its volume in the top bar), or the host's lent (the game's context
@@ -429,6 +435,8 @@ app.nail = () => {
   const rec = addBoard(spec); app.placed[app.placed.length - 1].hand = true;
   app.held = null; sound.hammer(nails); app.lastNails = nails; app.lastHand = rec;
   build.flash(cs);
+  // (Show me's board: no twins, no question, no word from the engineer)
+  if (app.demo) { ghosts = null; rebuild(); return rec; }
   makeGhosts(rec);
   rebuild();
   pendingNail = { rec, first };
@@ -683,6 +691,7 @@ function confirmAll() {
 // ── the engineer's word: friendly, now and then, never twice in a row the same ──────────────────────────────────────
 const said = {}; let sayTimer = null, lastSay = 0;
 function say(text, { key = text, times = 2, force = false, ms = 7000 } = {}) {
+  if (app.demo) return false;
   const now = performance.now();
   if ((said[key] || 0) >= times || (!force && now - lastSay < 5000)) return false;
   said[key] = (said[key] || 0) + 1; lastSay = now;
@@ -1074,12 +1083,67 @@ sound.setWind(0.06);
   if (!m) return;
   if (!alive) { if (host.dropEngineer) host.dropEngineer(m); else scene.remove(m.root); return; }
   engineer = m; placeEngineer();
-  later(() => {
-    if (!banksOpen()) return;
-    say(host.span ? `Howdy! I'm the engineer at this crossing. The river's ${lenWords(app.tower.S)} across here, stone wall to stone wall. Build me a bridge.`
-      : 'Howdy! I\'m the engineer at this crossing. The river\'s 16 feet across here; drag a bank\'s stone edge in or out to change the gap. Then build me a bridge.', { force: true, ms: 10000 });
-    later(() => { if (banksOpen() && !app.held) say('Cut a board from the lumber pile and drag it onto a bank\'s stone. Both sides need boards reaching from bank to bank.', { key: 'start2', times: 1, force: true, ms: 9000 }); }, 10500);
-  }, 900);
+  later(welcome, 900);
+});
+// the engineer's hello on a fresh yard (while Show me plays, after it)
+let welcomeDue = false;
+function welcome() {
+  if (app.demo) { welcomeDue = true; return; }
+  welcomeDue = false;
+  if (!banksOpen()) return;
+  say(host.span ? `Howdy! I'm the engineer at this crossing. The river's ${lenWords(app.tower.S)} across here, stone wall to stone wall. Build me a bridge.`
+    : 'Howdy! I\'m the engineer at this crossing. The river\'s 16 feet across here; drag a bank\'s stone edge in or out to change the gap. Then build me a bridge.', { force: true, ms: 10000 });
+  later(() => { if (banksOpen() && !app.held) say('Cut a board from the lumber pile and drag it onto a bank\'s stone. Both sides need boards reaching from bank to bank.', { key: 'start2', times: 1, force: true, ms: 9000 }); }, 10500);
+}
+
+// ── Show me (src/showme.js): a ghost hand lays a board level onto a strut, in a sandbox ──────────────────────────────
+// demoBegin: the bridge and the lumber put aside (the gap and the planks stay), a clean crossing with one strut on the
+// side away from the engineer (so he never stands in front of it), from the west wall's lowest notch up into the gap,
+// the camera eased round to look at it from that side, the west bank nearer; -> the plan: a
+// board's foot in the west stone's top socket at the edge, its free end dragged onto the strut a little high, then the
+// down arrow twice: level, resting on the strut. No question, no twins, no word from the engineer, nothing saved.
+// demoEnd puts it all back.
+let demo = null;
+function demoBegin() {
+  if (!alive || demo || app.phase !== 'build') return null;
+  if (app.held) build.putBack();
+  app.select(null); build.offerTrim(null); $('say').hidden = true;
+  const L = app.lumber;
+  demo = { tower: app.tower, placed: app.placed, ghosts, lastHand: app.lastHand, lastDown, boardsSince, handSince, pendingNail, deckJustLaid, deckUpOffered,
+    lumber: { stack: L.stack, bench: L.bench, pieces: L.pieces.slice() }, cutAt: build.cutAt, cam: { az: cam.az, yT: cam.yT, distT: cam.distT } };
+  app.demo = true; pendingNail = null; deckJustLaid = false; deckUpOffered = false;
+  const S = app.tower.S, x0 = -S / 2, zs = (host.engineerSide || -1) > 0 ? -1 : 1, z = zs * WIDTH / 2, rise = 6, run = Math.sqrt(BOARD_FT * BOARD_FT - rise * rise);
+  app.tower = newBridge(S, WIDTH); app.placed = []; ghosts = null; app.lastHand = null; lastDown = null;
+  if (!(L.bench && L.bench.full)) build.freshStack(BOARDS);
+  addBoard({ a: { X: x0, Y: -4, Z: z }, b: { X: x0 + run, Y: -4 + rise, Z: z }, len: BOARD_FT });
+  rebuild();
+  // (the free end: the board through the strut 0.35 ft over the stone tops, so two taps of the down arrow lay it level)
+  const k = (0.35 + 4) / rise, P = { X: x0 + run * k, Y: 0.35 }, d = Math.hypot(P.X - x0, P.Y) || 1;
+  const plan = { socket: { X: x0, Y: 0, Z: z }, free: { X: x0 + (P.X - x0) / d * BOARD_FT, Y: P.Y / d * BOARD_FT, Z: z }, arrow: 5, taps: 2 };
+  const tall = viewAspect() < 0.7;
+  const a = tall ? 0.8 : 0.42; cam.azT = zs > 0 ? -a : Math.PI + a; cam.glide = 0.9; cam.azV = 0; cam.yT = tall ? -0.5 : 0.5; cam.distT = Math.min(DIST[1], fitDistance() * (tall ? 0.78 : 1.2));
+  return plan;
+}
+function demoEnd() {
+  if (!demo) return;
+  const d = demo; demo = null;
+  app.held = null; build.offerTrim(null);
+  app.tower = d.tower; app.placed = d.placed; ghosts = d.ghosts; app.lastHand = d.lastHand; lastDown = d.lastDown;
+  boardsSince = d.boardsSince; handSince = d.handSince; pendingNail = d.pendingNail; deckJustLaid = d.deckJustLaid; deckUpOffered = d.deckUpOffered;
+  const L = app.lumber; L.stack = d.lumber.stack; L.bench = d.lumber.bench; L.pieces = d.lumber.pieces;
+  build.cutAt = d.cutAt;   // (the panel drawn again)
+  app.select(null); rebuild(); refreshGhosts();
+  app.demo = false;
+  cam.azT = d.cam.az; cam.glide = 0.9; cam.azV = 0; cam.yT = d.cam.yT; cam.distT = d.cam.distT;
+  if (welcomeDue) later(welcome, 400);
+}
+const showMe = makeShowMe({
+  root, kind: 'bridge', seen: host.showMe || null, speak: host.speak || null,
+  ready: () => app.phase === 'build' && !app.held && !demo && $('question').hidden && $('result').hidden,
+  begin: demoBegin, end: demoEnd,
+  screen: (p) => toPage(app.worldToScreen(p.X, p.Y, p.Z)),
+  held: () => handle.held(),
+  click: () => sound.clatter(3, 'set', undefined, 0.3),
 });
 
 // ── a handle for test scripts (see the top of this file) ─────────────────────────────────────────────────────────────
@@ -1128,6 +1192,7 @@ const handle = {
     say: $('say').hidden ? null : $('say-text').textContent, faceName: $('face-name').textContent, inRoad: [...(app.inRoad || [])], deckReady: !app.tower.deck && !$('lay-deck').hidden && !$('lay-deck').classList.contains('is-not-ready'), ladder: asker.state ? asker.state() : { level: stepNow() }, bonus: bonusEarned, layDeck: !$('lay-deck').hidden,
     trim: !el.trimBar.hidden ? el.trimHint.textContent : null }),
   worldToScreen: (X, Y, Z) => toPage(app.worldToScreen(X, Y, Z)),
+  showMe: () => showMe.state(),   // (Show me: { playing, step, of, caption, seen })
   resetAll,
 };
 
@@ -1135,6 +1200,7 @@ const handle = {
 // the bridge (its boards; the deck by how many planks it took, laid again on the same boards when it comes back), the
 // lumber left (a board in hand goes back on the pile in the saved copy), the planks left, the boards earned, the best
 function snapshot() {
+  showMe.stop();   // (Show me's sandbox put back first: what is saved is the rider's own)
   const pieces = app.lumber.pieces.map((q) => +q.len.toFixed(4));
   if (app.held && app.held.len) { if (app.held.len >= BOARD_FT - 1e-6) pieces.push(BOARD_FT); else pieces.push(+app.held.len.toFixed(4)); }
   const full = build.fullCount() + pieces.filter((l) => l >= BOARD_FT - 1e-6).length;
@@ -1146,6 +1212,7 @@ function snapshot() {
 // everything off the page and out of the scene; the host's own things (its scene, camera, canvas) stay
 function dispose() {
   if (!alive) return;
+  showMe.dispose();
   if (app.held) build.putBack();
   alive = false;
   for (const off of offs.splice(0)) off();
@@ -1160,16 +1227,17 @@ function dispose() {
   if (host.sound) { sound.detach(); sound.lend(false); root.classList.remove('wm-hosted'); }
   root.innerHTML = '';
 }
-const busy = () => app.phase !== 'build' || !!app.held;
+const busy = () => app.phase !== 'build' || !!app.held || showMe.playing;
 // put away with a test's card up: as its main button would (keep building on what stands, or a fresh start when
 // nothing does), so what is saved is what stands
 function settle() {
+  showMe.stop();
   if (app.phase !== 'result') return;
   const a = crossing.settle(); if (!a) return;
   if (a.keep) keepBuilding(a.keep);
   else { fall.clear(); resetAll(); backToBuild(); }
 }
-return { frame, resize, dispose, snapshot, settle, busy, handle, app, cam, towerView, deckView, get phase() { return app.phase; }, startTest, ask: handle.ask };
+return { frame, resize, dispose, snapshot, settle, busy, handle, app, cam, towerView, deckView, get phase() { return app.phase; }, startTest, ask: handle.ask, showMe };
 }
 
 // where the engineer stands: on the west abutment's stone, toward the back (side -1: the north side, as on the lab

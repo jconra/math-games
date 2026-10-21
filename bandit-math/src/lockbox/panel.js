@@ -59,6 +59,7 @@
 // It writes nothing to storage itself: it changes rider.topics.algebra (the ladder's bookkeeping) and rider.skill (the
 // skill model) in place; the caller saves the rider (save.js recordLockbox does that) in onBox, or after onDone.
 
+import { flagCard } from '../ui/flag.js';
 import {
   lineText, sideText, termText, termBody, termNeg, moveLabel, moveNote, fracText, isSolved, F, evalSide, evalTerm, applyMove,
   MINUS, TIMES,
@@ -376,6 +377,10 @@ export function openLockbox(root = document.body, opts = {}) {
   purseN.textContent = String(purseNow());
 
   root.appendChild(el);
+  // "Confusing?" on the box (src/ui/flag.js): the beginning line, the part asked now, its answers, and x
+  flagCard(panel, () => (cur ? { job: 'boxes', strand: cur.plan && cur.plan.strand, pct: cur.plan && cur.plan.at, right: cur.problem && cur.problem.x != null ? cur.problem.x : null,
+    text: [...cur.body.querySelectorAll('.lbx-start-l, .lbx-focus:not([hidden])')].map((e) => e.innerText).join(' · '),
+    choices: [...cur.body.querySelectorAll('.lbx-grid button')].map((b) => { const c = b.cloneNode(true); c.querySelectorAll('kbd').forEach((k) => k.remove()); return c.textContent.replace(/\s+/g, ' ').trim(); }) } : null), { style: 'right:auto;left:12px;bottom:auto;top:58px;transform:none' });
   requestAnimationFrame(() => el.classList.add('in'));
   el.focus({ preventScroll: true });
 

@@ -74,8 +74,13 @@
 //     to be put away: a result card's own button done quietly, so the saved tower is what stood), B.phase
 //   host.pay(h, { W, D, standing, newBest }) -> { sacks, line }   optional: the host pays the flour its own way (the
 //     game's miller pays only for new height; the card says what was paid); else a sack for every foot left standing
+//   host.showMe       optional { get(), set() }: whether this player has seen the Show me demonstration (the game: kept
+//     on the rider, src/showme.js shownOnce); else the page's own record in localStorage. Show me (src/showme.js): the
+//     first time, and from the "Show me" button in the top bar, a ghost hand puts a brace up against a post through the
+//     builder's own controls in a sandbox (demoBegin / demoEnd below): nothing built, spent, saved or asked
 //
-// ?perf shows frames per second, ?askall asks at every chance.
+// ?perf shows frames per second, ?askall asks at every chance, ?noshow never plays Show me by itself (?showme: it may,
+// in a browser driven by a test script).
 // B.handle (window.WM on the lab page), a handle for test scripts (feet, the tower's middle at X = Z = 0, the front
 // facing +Z):
 //   WM.addWorld(a, b, len)             nail a board between two world points (len: its length, else from its ends),
@@ -109,6 +114,7 @@ import { makeTowerView, HELD_OFF } from './tower3d.js';
 import { makeFall } from './fall.js';
 import { makeBuild, fmt, fmtWords, fmtBase, fmtStat, whereWords } from './build.js';
 import * as sound from './sound.js';
+import { makeShowMe } from '../../src/showme.js';
 
 // the builder's page: the lumber panel on the left, the view on the right (its canvas is the lab's own; in the game
 // the canvas is hidden and the game's own shows through the view)
@@ -216,7 +222,7 @@ let alive = true;
 // (an element of the page by its id; once the builder is taken off the page, a loose stand-in, so a timer still
 // running then changes nothing)
 const $ = (id) => (alive && document.getElementById(id)) || document.createElement('div');
-const changed = (what) => { if (alive && host.changed) host.changed(what); };
+const changed = (what) => { if (alive && host.changed && !app.demo) host.changed(what); };   // (nothing is saved while Show me plays)
 const offs = [];   // (every listener put on the window or the document, taken off again by dispose)
 const listen = (target, type, fn, opt) => { target.addEventListener(type, fn, opt); offs.push(() => target.removeEventListener(type, fn, opt)); };
 // the sound: the lab's own (woken by the first tap, its volume in the top bar), or the host's lent (the game's context
@@ -286,7 +292,9 @@ function updateCamera(dt) {
   if (!orbiting && Math.abs(cam.azV) > 0.01) { cam.az += cam.azV * dt; cam.azV *= Math.exp(-3.2 * dt); } else if (!orbiting) cam.azV = 0;
   // (a glide: the wind test framing the tower moves slower, so it reads as the camera stepping back)
   const glide = cam.glide > 0 ? 2.2 : 0;
-  if (cam.glide > 0) cam.glide -= dt;
+  // (a glide may swing the camera round too: to azT, Show me's view and back)
+  if (cam.glide > 0 && cam.azT !== undefined) cam.az += angDiff(cam.azT, cam.az) * Math.min(1, dt * 2.6);
+  if (cam.glide > 0) cam.glide -= dt; else cam.azT = undefined;
   cam.y += (cam.yT - cam.y) * Math.min(1, dt * (glide || 8));
   cam.dist += (cam.distT - cam.dist) * Math.min(1, dt * (glide || 12));
   updateFace();
@@ -467,6 +475,8 @@ app.nail = () => {
   app.held = null; sound.hammer(nails); app.lastNails = nails; app.lastHand = rec;
   build.flash(cs);
   // its twins round the tower, glowing, a tap away
+  // (Show me's board: no twins, no question, no word from the miller)
+  if (app.demo) { ghosts = null; rebuild(); return rec; }
   makeGhosts(rec);
   rebuild();
   // (the view stays where the builder left it; twins hidden behind the board just nailed: the hint says to walk round)
@@ -691,6 +701,7 @@ function confirmAll() {
 // ── the miller's advice: friendly, now and then, never twice in a row the same ───────────────────────────────────
 const said = {}; let sayTimer = null, lastSay = 0;
 function say(text, { key = text, times = 2, force = false, ms = 7000 } = {}) {
+  if (app.demo) return false;
   // (each line at most `times` times; force: say it now, even if the miller spoke a moment ago)
   const now = performance.now();
   if ((said[key] || 0) >= times || (!force && now - lastSay < 5000)) return false;
@@ -1184,11 +1195,63 @@ if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { if
   if (!m) return;
   if (!alive) { if (host.dropMiller) host.dropMiller(m); else scene.remove(m.root); return; }
   miller = m; if (!host.miller) miller.root.position.copy(millerSpot(0)); walkMiller();
-  setTimeout(() => {
-    if (!alive || !stonesOpen()) return;
-    say('Howdy! First, the footing stones: drag one in or out, either way. A wide base stands steadier once she\'s braced, but every horizontal board and brace costs more wood.', { force: true, ms: 10000 });
-    setTimeout(() => { if (stonesOpen() && !app.held) say('When the stones suit you, cut a board on the left and drag it up onto a corner.', { key: 'start2', times: 1, force: true, ms: 9000 }); }, 10500);
-  }, 900);
+  setTimeout(welcome, 900);
+});
+// the miller's hello on a fresh yard (while Show me plays, after it)
+let welcomeDue = false;
+function welcome() {
+  if (!alive) return;
+  if (app.demo) { welcomeDue = true; return; }
+  welcomeDue = false;
+  if (!stonesOpen()) return;
+  say('Howdy! First, the footing stones: drag one in or out, either way. A wide base stands steadier once she\'s braced, but every horizontal board and brace costs more wood.', { force: true, ms: 10000 });
+  setTimeout(() => { if (alive && stonesOpen() && !app.held) say('When the stones suit you, cut a board on the left and drag it up onto a corner.', { key: 'start2', times: 1, force: true, ms: 9000 }); }, 10500);
+}
+
+// ── Show me (src/showme.js): a ghost hand puts a brace up against a post, in a sandbox ───────────────────────────────
+// demoBegin: the tower and the lumber put aside (the stones stay), a clean yard with a post on the front left stone,
+// the camera eased round to the front; -> the plan: the brace's foot on the front right stone (or 6 ft along on a
+// wide base), its free end dragged onto the post a little past it, then the +X arrow twice: its end right on the post
+// (on the half foot). No question, no twins, no word from the miller, nothing saved. demoEnd puts it all back.
+let demo = null;
+function demoBegin() {
+  if (!alive || demo || app.phase !== 'build') return null;
+  if (app.held) build.putBack();
+  app.select(null); build.offerTrim(null); $('say').hidden = true;
+  const L = app.lumber;
+  demo = { tower: app.tower, placed: app.placed, ghosts, lastHand: app.lastHand, lastDown, boardsSince, handSince, pendingNail,
+    lumber: { stack: L.stack, bench: L.bench, pieces: L.pieces.slice() }, cutAt: build.cutAt, cam: { az: cam.az, yT: cam.yT, distT: cam.distT } };
+  app.demo = true; pendingNail = null;
+  const { W, D } = app.tower, x0 = -W / 2, z0 = D / 2;
+  app.tower = newTower(W, D); app.placed = []; ghosts = null; app.lastHand = null; lastDown = null;
+  if (!(L.bench && L.bench.full)) build.freshStack(BOARDS);
+  addBoard({ a: { X: x0, Y: 0, Z: z0 }, b: { X: x0, Y: BOARD_FT, Z: z0 }, len: BOARD_FT });
+  rebuild();
+  const sx = W <= 7 ? W / 2 : x0 + 6, s2 = Math.floor(x0 / 0.5 + 1e-9) * 0.5, tx = s2 - 0.75, run = sx - tx;
+  const plan = { socket: { X: sx, Y: 0, Z: z0 }, free: { X: tx, Y: Math.sqrt(Math.max(0, BOARD_FT * BOARD_FT - run * run)), Z: z0 }, arrow: 0, taps: 2 };
+  cam.azT = 0.32; cam.glide = 0.9; cam.azV = 0; cam.yT = 2.6; cam.distT = Math.min(DIST[1], fitDistance() * (viewAspect() < 0.7 ? 1.12 : 1.02));
+  return plan;
+}
+function demoEnd() {
+  if (!demo) return;
+  const d = demo; demo = null;
+  app.held = null; build.offerTrim(null);
+  app.tower = d.tower; app.placed = d.placed; ghosts = d.ghosts; app.lastHand = d.lastHand; lastDown = d.lastDown;
+  boardsSince = d.boardsSince; handSince = d.handSince; pendingNail = d.pendingNail;
+  const L = app.lumber; L.stack = d.lumber.stack; L.bench = d.lumber.bench; L.pieces = d.lumber.pieces;
+  build.cutAt = d.cutAt;   // (the panel drawn again)
+  app.select(null); rebuild(); refreshGhosts();
+  app.demo = false;
+  cam.azT = d.cam.az; cam.glide = 0.9; cam.azV = 0; cam.yT = d.cam.yT; cam.distT = d.cam.distT;
+  if (welcomeDue) setTimeout(welcome, 400);
+}
+const showMe = makeShowMe({
+  root, kind: 'windmill', seen: host.showMe || null, speak: host.speak || null,
+  ready: () => app.phase === 'build' && !app.held && !demo && $('question').hidden && $('result').hidden,
+  begin: demoBegin, end: demoEnd,
+  screen: (p) => toPage(app.worldToScreen(p.X, p.Y, p.Z)),
+  held: () => handle.held(),
+  click: () => sound.clatter(3, 'set', undefined, 0.3),
 });
 
 // ── a handle for test scripts (see the top of this file) ─────────────────────────────────────────────────────────────
@@ -1240,12 +1303,14 @@ const handle = {
     question: !$('question').hidden ? $('question').innerText : null, result: !$('result').hidden ? $('result').innerText : null, falling: fall.sticks.length, hint: el.hint.textContent, nails: app.lastNails, say: $('say').hidden ? null : $('say-text').textContent,
     faceName: $('face-name').textContent, ladder: asker.state ? asker.state() : { level: stepNow() }, bonus: bonusEarned, boardsSince, handSince, trim: !el.trimBar.hidden ? el.trimHint.textContent : null }),
   worldToScreen: (X, Y, Z) => toPage(app.worldToScreen(X, Y, Z)),
+  showMe: () => showMe.state(),   // (Show me: { playing, step, of, caption, seen })
   resetAll, flourFor, STAGES,
 };
 
 // ── what the host keeps ──────────────────────────────────────────────────────────────────────────────────────────────
 // the tower and the lumber as they stand now, to save (a board in hand goes back on the pile in the saved copy)
 function snapshot() {
+  showMe.stop();   // (Show me's sandbox put back first: what is saved is the rider's own)
   const pieces = app.lumber.pieces.map((q) => +q.len.toFixed(4));
   if (app.held && app.held.len) { if (app.held.len >= BOARD_FT - 1e-6) pieces.push(BOARD_FT); else pieces.push(+app.held.len.toFixed(4)); }
   const full = build.fullCount() + pieces.filter((l) => l >= BOARD_FT - 1e-6).length;
@@ -1256,6 +1321,7 @@ function snapshot() {
 // card's button would leave is done now (what stood stays; nothing standing: a fresh yard); in the middle of the wind
 // test the tower stays as it was before the wind. -> true when anything changed
 function settle() {
+  showMe.stop();
   let did = false;
   if (app.phase === 'result') did = testRun.settle();
   if (resetDue) { resetDue = false; fall.clear(); resetAll(); did = true; }
@@ -1264,6 +1330,7 @@ function settle() {
 // everything off the page and out of the scene; the host's own things (its scene, camera, canvas) stay
 function dispose() {
   if (!alive) return;
+  showMe.dispose();
   alive = false;
   for (const off of offs.splice(0)) off();
   statsWatch.disconnect();
@@ -1277,6 +1344,6 @@ function dispose() {
   if (host.sound) { sound.detach(); sound.lend(false); root.classList.remove('wm-hosted'); }
   root.innerHTML = '';
 }
-const busy = () => app.phase !== 'build' || !!app.held;
-return { frame, resize, dispose, snapshot, settle, busy, handle, app, cam, towerView, get phase() { return app.phase; }, startTest, ask: handle.ask };
+const busy = () => app.phase !== 'build' || !!app.held || showMe.playing;
+return { frame, resize, dispose, snapshot, settle, busy, handle, app, cam, towerView, get phase() { return app.phase; }, startTest, ask: handle.ask, showMe };
 }

@@ -49,6 +49,7 @@ import { readAloud } from '../math/skill.js';
 const skillPart = (shot) => (shot && shot.at != null ? { strands: [{ strand: 'eq', at: shot.at }] } : null);
 import { makeRng, rungIndex } from '../lockbox/generate.js';
 import { recordAnswer, earn, countJob, saveRider } from '../save.js';
+import { flagCard } from '../ui/flag.js';
 import { addPrint, prints } from '../ui/album.js';
 
 export const SNAP = {
@@ -334,6 +335,7 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
     document.body.classList.add('bmd-viewing');
     vf.el = el; vf.frameEl = el.querySelector('.bmd-frame'); vf.tagsEl = el.querySelector('.bmd-tags'); vf.helpEl = el.querySelector('.bmd-help');
     vf.eqEl = el.querySelector('.bmd-eq b'); vf.wordsEl = el.querySelector('.bmd-eq i'); vf.flashEl = el.querySelector('.bmd-flash');
+    flagCard(el.querySelector('.bmd-eq'), () => (vf && vf.shot ? { choices: vf.shot.values.map(numText), right: numText(vf.shot.values[vf.shot.right]) } : {}));   // ("Confusing?": src/ui/flag.js)
     vf.pics = 0; vf.missed = false; vf.busy = false; vf.idle = 0; vf.helped = false; vf.hover = -1; vf.ready = false; vf.typed = '';
     el.querySelector('.bmd-done').addEventListener('click', (e) => { e.stopPropagation(); DJ.done(); });
     el.addEventListener('pointerdown', onDown); el.addEventListener('pointermove', onMove); el.addEventListener('pointerup', onUp);

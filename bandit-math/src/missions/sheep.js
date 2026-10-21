@@ -41,6 +41,7 @@ import { offerChart, closeChart, ensureChartCss } from '../ui/timeschart.js';
 import { showNumberLine, ensureNumberLineStyles, watchHesitation } from '../ui/numberline.js';
 import { showCountHelp } from '../ui/counthelp.js';
 import { recordAnswer, earn, countJob } from '../save.js';
+import { flagCard } from '../ui/flag.js';
 import { readAloud } from '../math/skill.js';
 import { speakLine } from '../ui/storeslip.js';
 
@@ -270,6 +271,7 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
     });
     document.body.appendChild(el);
     picker = { el, s };
+    flagCard(el, () => ({ text: `${s.item.top ? `${s.item.top} → ` : ''}${s.item.shown}`, choices: s.item.bottles.map((b) => b.label), right: (s.item.bottles.find((b) => b.right) || { label: 'none: she was fine' }).label, picked: [...s.crossed].map((i) => (s.item.bottles[i] || {}).label) }));   // ("Confusing?": src/ui/flag.js)
     // (a rider who can't read yet, skill.js readAloud: her sum is read out, in the browser's voice, as the bottles come up)
     if (readAloud(rider)) speakLine(sayItem(s.item));
     hob.event('sheepDose');   // (walked up to her with the bottles)

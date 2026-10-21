@@ -16,9 +16,11 @@
 //   ?dev                      shortcut buttons: +100 gold, jump to each place, start the round-up, a lock box, a saddle, a dog
 //   ?perf                     frames a second, draw calls and the tier, top right
 // For rigs: window.BM = { world, player, rider, state, dev: { gold(n), goto(place), mission(name), lockbox(), tier,
-//   skill(strand, pct, { placed }), skills(), ... }, skills (the src/math/skill.js module),
+//   skill(strand, pct, { placed }), skills(), ... }, skills (the src/math/skill.js module), feedback (src/feedback.js),
 //   roundup, hud, shops, title, input, camera, renderer, fps(s), frameMs(n), screenOf(steer or object), checklist, ready }
 import * as THREE from 'three';
+import { FB } from './feedback.js';
+import { flagCard, rateJob, menuRows } from './ui/flag.js';   // (first: its key guard for the note boxes goes on before any of the game's key listeners)
 import './curvetangent.js';   // (the roads' per-frame curve sums without the garbage)
 import { makeWorld } from './world.js';
 import { chooseTier } from '../world/quality.js';
@@ -100,6 +102,9 @@ const hud = makeHud($('hud-root'), {
   onPrompt: () => { if (paused) return; if (door) openCounter(door.id); else if (I) I.press('KeyE'); },
   onTouch: (code) => { if (I) I.press(code); },
 });
+// "Confusing?" on the field jobs' question card (the round-up, the farm jobs, the wagon's gang): only while a question
+// is up there (not on a travel card, nor on "Wave done!")
+flagCard(hud.ruleEl, () => fieldQuestion(), { show: () => !hud.ruleEl.hidden && !/\bis-(travel|job)\b/.test(hud.ruleEl.className) && !!askingJob() && askingJob() !== 'panel' });
 
 // ── LOADING: the world, the people and the cattle, all at once ─────────────────────────────────────────────────────
 let W = null, folk = null, animals = null, I = null;
@@ -225,7 +230,7 @@ async function ride(r) {
   // (no babble voice: reading works better; src/audio/voice.js is kept for the Sound Lab. A rider who can't read yet
   // hears Hob's lines in the browser's voice, each in turn: src/audio/sayline.js)
   hob = makeHob({ W, hud, rider, I, roads: roadLines, voice: { speak: (text) => { if (rider && SKILLS.readAloud(rider)) sayLine(text); }, stop: () => {} } });
-  { const heard = hob.event; hob.event = (n, d) => { heard(n, d); if (JF) JF.heard(n, d); if (SHOUT) SHOUT.heard(n, d); if (JB) JB.heard(n); jobHeard(n, d); }; }   // (the job folk hear the jobs too: their thank-yous; and the player's yeehaw at a job's end; the jobs board: at work at a job, its tracks give way)
+  { const heard = hob.event; hob.event = (n, d) => { heard(n, d); if (JF) JF.heard(n, d); if (SHOUT) SHOUT.heard(n, d); if (JB) JB.heard(n); jobHeard(n, d); if (JOB_ENDS[n]) jobOver(JOB_ENDS[n]); }; }   // (the job folk hear the jobs too: their thank-yous; and the player's yeehaw at a job's end; the jobs board: at work at a job, its tracks give way)
   stage = makeStage({ W, folk, audio: AUD, speak: (text) => { if (rider && SKILLS.readAloud(rider)) sayLine(text); } });   // (speak: the band's answer read out to a rider who can't read yet)
   traffic = makeTraffic({ W, animals, folk, audio: AUD, obstacles: trafficThings, camps: () => camps, camera, riding: () => !!(P && P.onHorse) });   // (camera: wagons and travellers dissolve in and out of sight)
   { let ends = null; W.roadEnds = () => {   // (the road's two ends: riding on past one into the mist comes out by the other, src/world.js W.wrap)
@@ -265,10 +270,11 @@ async function ride(r) {
   camps = makeCamps({ W, folk, camera, audio: AUD });
   // the build sites: a lab's builder opened right there in the valley (the windmill's at the mill hill); while one is up
   // the rider stands by, the keys and the HUD are the builder's, and the valley goes on round it
+  let siteJob = null;   // (the build site open: its job, for the thumbs up or down as it is put away)
   BS = makeBuildSites({ W, camera, canvas, player: () => P,
     obstacles: () => [P && P.person && !(BS && BS.active && BS.active.id === 'fishing') && P.person.root, P && P.horse && P.horse.root, D && D.dog && D.dog.root],   // (at the dock the rider fades away by itself: src/fishingjob.js)
-    onStart: () => { P.enabled = false; I.enabled = false; if (RU) RU.paused = true; hud.prompt(null); hud.rule(null); hud.hint(null); hud.show(false); },
-    onStop: () => { P.enabled = !paused; I.enabled = !paused; if (RU) RU.paused = paused; hud.show(true); } });
+    onStart: () => { siteJob = BS && BS.active ? BS.active.id : null; P.enabled = false; I.enabled = false; if (RU) RU.paused = true; hud.prompt(null); hud.rule(null); hud.hint(null); hud.show(false); },
+    onStop: () => { P.enabled = !paused; I.enabled = !paused; if (RU) RU.paused = paused; hud.show(true); jobOver(siteJob, { sat: true }); } });
   WMJ = makeWindmillJob({ W, folk, rider, sites: BS, player: () => P, hud, refresh, audio: AUD, on: jobOn(rider, 'windmill'),   // (off: the miller has no prompt; what was built still stands)
     speak: (text) => { if (rider && SKILLS.readAloud(rider)) sayLine(text); } });   // (the miller's questions read out to a rider who can't read yet)
   BRJ = makeBridgeJob({ W, folk, rider, sites: BS, hud, refresh, camera, audio: AUD, traffic, animals, obstacles: () => [P && P.position, P && P.horse && P.horse.root, D && D.dog && D.dog.root], player: () => P, dog: () => D, speak: (text) => { if (rider && SKILLS.readAloud(rider)) sayLine(text); } });   // (off: the engineer has no prompt; what was built still stands and is used)
@@ -281,7 +287,7 @@ async function ride(r) {
   // the bottle range, for every rider: bottles and tin cans, never anything alive (cattle and bandits are roped)
   SR = jobOn(rider, 'range') ? makeShootingJob({ W, folk, P, I, camera, canvas, renderer, rider, hud: tagHud('range'), hob, audio: AUD, refresh, read: READ,
     onStart: () => { P.enabled = false; I.enabled = false; if (RU) RU.paused = true; hud.prompt(null); },
-    onStop: () => { P.enabled = !paused; I.enabled = !paused; if (RU) RU.paused = paused; },
+    onStop: () => { P.enabled = !paused; I.enabled = !paused; if (RU) RU.paused = paused; jobOver('range', { sat: true }); },
     busy: () => !!((WJ && WJ.on) || (DL && DL.active) || (DJ && DJ.active)) }) : null;
   DL = !jobOn(rider, 'deliveries') ? null : makeDeliveryJob({ W, camps, P, camera, rider, hud: tagHud('delivery'), hob, refresh,
     onStart: () => { P.enabled = false; I.enabled = false; if (RU) RU.paused = true; hud.prompt(null); },
@@ -349,6 +355,7 @@ function makeDogIfOwned() {
 function endRide() {
   if (state !== 'play') return;
   hushVoice();   // (a line still being said in the browser's voice stops with the ride)
+  FB.jobEnd(undefined, 'left'); FB.flush();
   if (menu) { const m = menu; menu = null; m.close(); }
   if (shops) shops.dispose();
   if (cabin) { cabin.dispose(); cabin = null; }
@@ -602,6 +609,7 @@ function openBox(box, { own = false, after = null, problem = null } = {}) {
     onBox: (res) => payBox(res, own),
     onDone: (res) => {
       boxOpen = false;
+      if (box.from === 'store') FB.jobEnd('boxes', 'back to the counter'); else jobOver('boxes', { sat: true });   // (the store's own equation: no thumbs chip for it)
       try {
         saveRider(rider);
         refresh();
@@ -628,7 +636,7 @@ function nextJustBox() {
   openLockbox(document.body, { rider, box: { tier: boxTier(rider), from: 'practice' }, debug: DEV, audio: AUD,
     next: () => ({ tier: boxTier(rider), from: 'practice' }),
     onBox: (res) => payBox(res, false),
-    onDone: () => { saveRider(rider); state = W ? 'title' : 'loading'; if (W) canvas.classList.add('is-on'); T.show(); } });
+    onDone: () => { jobOver('boxes', { sat: true }); saveRider(rider); state = W ? 'title' : 'loading'; if (W) canvas.classList.add('is-on'); T.show(); } });
 }
 
 // the menu's read-aloud switch, in words (always in the menu: a tap steps through by itself, always, off; save.js)
@@ -686,6 +694,72 @@ async function copyLine(text) {
     const ok = document.execCommand('copy'); a.remove(); return !!ok;
   } catch (e) { return false; }
 }
+// ── FEEDBACK (src/feedback.js; the pieces on screen: src/ui/flag.js) ─────────────────────────────────────────────
+// which job the rider is at just now: the play events, a flagged question and the thumbs up or down say it
+function jobNow() {
+  if (state === 'boxes' || boxOpen) return 'boxes';
+  if (state !== 'play') return null;
+  if (BS && BS.active) return BS.active.id;
+  const a = askingJob();
+  return a && a !== 'panel' && a !== 'build' ? a : theJob || null;
+}
+// riders go by their number on the title, never by name (worked out once a ride)
+let riderNoOf = null, riderNoIs = null;
+function riderNo() {
+  if (!rider) return null;
+  if (riderNoOf !== rider.id) { riderNoOf = rider.id; try { const i = loadRiders().findIndex((r) => r.id === rider.id); riderNoIs = i >= 0 ? i + 1 : null; } catch (e) { riderNoIs = null; } }
+  return riderNoIs;
+}
+// the nearest named place, in words (no coordinates: the Tell us report has the whole Mark-this-spot line for those)
+function placeNow() {
+  if (state === 'boxes') return 'lock boxes from the title';
+  if (!P || !W) return null;
+  if (cabin && cabin.inside) return 'inside the cabin';
+  let best = null, bd = Infinity;
+  for (const [k, name] of Object.entries(SPOT_NAMES)) { const q = W.places[k]; if (q && Number.isFinite(q.x) && Number.isFinite(q.z)) { const d = Math.hypot(q.x - P.position.x, q.z - P.position.z); if (d < bd) { bd = d; best = name; } } }
+  return !best ? null : bd < 25 ? best : `${Math.round(bd / 5) * 5} m from ${best}`;
+}
+const deviceType = () => { try { const m = Math.min(screen.width, screen.height); return matchMedia('(pointer: coarse)').matches ? (m < 600 ? 'phone' : 'tablet') : 'computer'; } catch (e) { return 'unknown'; } };
+FB.context = () => ({ job: jobNow(), rider: riderNo(), tier: W ? W.tier : quality.tier, place: placeNow(), state });
+// every answer as the skill model records it (src/math/skill.js onRecord: the one place all the jobs' answers land)
+SKILLS.onRecord((list, out, opts) => {
+  list.forEach((x, i) => { const r = out[x.strand] || {}; FB.answered({ strand: x.strand, at: x.at ?? r.before, right: !!opts.right, ms: i === 0 && opts.sitDown ? opts.ms : null,
+    level: r.level, before: r.before, placed: r.placed, justPlaced: r.justPlaced, also: i > 0 }); });
+});
+FB.event('session', { device: deviceType(), tier: quality.tier, w: innerWidth, h: innerHeight, maker: FB.maker() });
+// the frame rate once a minute while riding (the paused menu's frames say nothing about the game)
+setInterval(() => { if (state === 'play' && !paused && !document.hidden && fpsNow) FB.event('fps', { fps: Math.round(fpsNow), tier: W ? W.tier : quality.tier, job: jobNow() }); }, 60000);
+// a job finished: the events hear it, and a thumbs up or down chip comes up for a moment. sat: a sit-down job (the
+// range, a builder, the lock boxes), rated only when something was answered in it
+const JOB_ENDS = { waveDone: 'roundup', flockDone: 'sheep', pigsDone: 'pigs', banditsDone: 'wagon', gangDone: 'wagon', deerDone: 'deer',
+  deliveryDone: 'delivery', lootDone: 'loot', storeDone: 'store' };
+function jobOver(id, { sat = false } = {}) {
+  if (!id) return;
+  try { const r = FB.jobEnd(id); if (sat ? r && r.answers > 0 : !r || r.answers > 0) rateJob(id); } catch (e) { /* (feedback never gets in the way) */ }
+}
+// the field jobs' question card: its job, the herd's numbers and which are right (the round-up, the wagon's gang),
+// and the line under it after a wrong pick
+function fieldQuestion() {
+  const id = (cardBy && cardBy.id) || jobNow();
+  const line = (q) => { const e = hud.ruleEl.querySelector(q); return e ? e.textContent : ''; };
+  const out = { job: id, text: [line('.bmh-rule-main'), line('.bmh-rule-sub')].filter(Boolean).join(' · '), hint: hud.hintEl && !hud.hintEl.hidden ? hud.hintEl.innerText : null };
+  const J = id === 'roundup' ? RU : id === 'wagon' ? WJ : null;
+  const herd = J && Array.isArray(J.targets) ? J.targets.filter((t) => t.n != null) : [];
+  if (herd.length) {
+    const say = (t) => String(t.text ?? t.n);
+    out.choices = herd.map(say);
+    const card = J.wave && J.wave.card;
+    out.right = card && card.answer != null ? String(card.answer) : herd.filter((t) => t.good).map(say).join(', ');
+  }
+  return out;
+}
+// the Tell us report: the rider's levels by strand, where, the job, the tier, the frame rate, and the Mark-this-spot line
+function tellReport() {
+  const levels = {};
+  try { for (const s of SKILLS.stats(rider)) levels[s.strand] = { pct: s.pct, placed: s.placed, answered: s.answered }; } catch (e) { /* */ }
+  return { levels, place: placeNow(), job: theJob || jobNow(), tier: W ? W.tier : quality.tier, fps: Math.round(fpsNow), device: deviceType(), w: innerWidth, h: innerHeight, spot: spotNote() };
+}
+
 // ── THE MENU (Esc) ───────────────────────────────────────────────────────────────────────────────────────────────
 function openMenu() {
   if (state !== 'play' || menu || boxOpen || (shops && shops.isOpen) || (BS && BS.active)) return;   // (a builder's own Esc puts it away)
@@ -708,6 +782,7 @@ function openMenu() {
       : `<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · drag to look · <kbd>Shift</kbd> run or gallop ·
       click a steer (or <kbd>F</kbd>) to rope it · <kbd>H</kbd> call your horse · <kbd>E</kbd> on and off, or talk at a door`}</div>`;
   body.querySelector('.bms-menu').after(volumeRow(AUD));
+  { const m = body.querySelector('.bms-menu'), last = m.querySelector('[data-do="title"]'); for (const x of menuRows({ report: tellReport })) m.insertBefore(x, last); }   // (Tell us, and the share switch)
   let then = null;
   menu = makePanel({ title: 'Taking a breather', sub: `${rider.name} · ${titleOf(rider)}`, body,
     onClose: () => { menu = null; resume('menu'); if (then) then(); } });
@@ -1080,6 +1155,7 @@ Object.defineProperties(BM, { checklist: { get: () => CM } });   // (the checkli
 Object.defineProperties(BM, { camps: { get: () => camps }, delivery: { get: () => DL }, homestead: { get: () => HS }, loot: { get: () => LJ } });   // (the camps and their deliveries; DL.rob() is the bandits' hook)
 Object.assign(BM, {
   dev, hud, title: T, camera, renderer, screenOf, prices: PRICES, loading, skills: SKILLS,
+  feedback: FB,   // (src/feedback.js: FB.state() says the device id, the switch and what was sent)
   fps: (seconds = 3) => new Promise((res) => { let n = 0; const a = performance.now(); const f = () => { n++; if (performance.now() - a < seconds * 1000) requestAnimationFrame(f); else res(n * 1000 / (performance.now() - a)); }; requestAnimationFrame(f); }),
   // a frame's real cost, not held to the screen's refresh: n frames drawn back to back, each waited for
   frameMs: (n = 60) => { const gl = renderer.getContext(), px = new Uint8Array(4); let worst = 0; const a = performance.now();

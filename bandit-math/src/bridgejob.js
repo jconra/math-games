@@ -47,8 +47,10 @@ import * as THREE from 'three';
 import { CROSSING, CAMP } from '../world/objects/landforms.js';
 import { makePerson } from './actors/folk.js';
 import { saveRider, earn, countJob, jobOn } from './save.js';
+import { shownOnce } from './showme.js';
 import { markFound } from './completion.js';
 import { skillAsker, mergeStatic, mowSite } from './buildsite.js';
+import { flagAsker } from './ui/flag.js';
 import { loadCamp, CAMP_KINDS } from './camps.js';
 import { makeCampfire } from './fire/campfire.js';
 import { makeCrossingTraffic } from './bridgetraffic.js';
@@ -251,7 +253,7 @@ export function makeBridgeJob({ W, folk, rider, sites, refresh = () => {}, hud =
       root: ctx.root, scene: frame, origin, turn: C.turn, camera: ctx.camera, fit: ctx.fit, canvasRect: ctx.canvasRect,
       yard, groundY, waterY, low: W.tier === 'potato', span: S, words: wordsHere, engineerSide: C.side, zoom: innerWidth < innerHeight ? 1.2 : 1.75, loadsWait: 800,   // (a phone held upright: its lens is wide already)
       libs: animals && traffic && traffic.lib ? { animals, folk, wagons: traffic.lib } : null,
-      asker: skillAsker(rider, 'bridge'),
+      asker: flagAsker(skillAsker(rider, 'bridge'), 'bridge'),   // ("Confusing?" on its question card: src/ui/flag.js)
       best: { read: () => ({ rating: -1, S, ...((b && b.best) || {}) }), write: () => { saveT = 0.01; } },
       pay: (rating) => pay(rating),
       tested: (card) => tested(card),
@@ -264,6 +266,8 @@ export function makeBridgeJob({ W, folk, rider, sites, refresh = () => {}, hud =
       // (the saw, the hammer and the wind through the game's own sound and volume: no second sound of the lab's own)
       sound: audio && audio.ready ? { ready: (fn) => audio.ready(fn) } : null,
       speak: speak ? (text) => speak(text) : null,
+      // (Show me plays by itself the first time this rider opens the builder: src/showme.js)
+      showMe: shownOnce(builds, 'bridge', () => saveRider(rider)),
       // (the engineer standing at the ravine is the one in the builder: he is in its frame already, at his spot)
       engineer: engineer ? () => engineer : null,
       dropEngineer: () => {},

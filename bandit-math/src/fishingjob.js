@@ -33,6 +33,7 @@
 import * as THREE from 'three';
 import { makePerson } from './actors/folk.js';
 import { saveRider, recordAnswer, countJob } from './save.js';
+import { flagAsker } from './ui/flag.js';
 import { stepFor, chooseMap, pctAt, isPlaced, readAloud, MAPS } from './math/skill.js';
 import { answerTimer } from './ui/answertimer.js';
 import { markFound } from './completion.js';
@@ -159,6 +160,7 @@ export function makeFishingJob({ W, folk, rider, sites, player = () => null, aud
     },
     state: () => ({ now, lastMap, frac: stepFor(rider, 'fishing'), ratio: stepFor(rider, 'fishingRatio') }),
   };
+  flagAsker(asker, 'fishing');   // ("Confusing?" on the catch's question card: src/ui/flag.js)
 
   // ── the records the builder keeps: the saddlebags, the biggest fish, the fish book ─────────────────────────────
   const buckles = [];
