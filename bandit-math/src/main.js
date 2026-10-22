@@ -425,7 +425,9 @@ function endRide() {
 function roundupHud() {
   const base = tagHud('roundup'), h = Object.create(base);
   const atFarm = () => !!((SH && SH.near) || (PG && PG.near) || (DL && DL.card && !(RU && RU.near)) || (WJ && (WJ.near || (WJ.on && !(RU && RU.near)))) || (DJ && DJ.card) || (LJ && LJ.card && !(RU && RU.near)));   // (and a delivery's card)   // (the sheep pasture or the pig yard)
-  h.rule = (o) => (atFarm() || atCounter() ? hud.ruleEl : base.rule(o));   // (nor at the store's counter)
+  // (nor at the store's counter; a card held back is still its latest, for THE JOB to put up: arriving at the herd
+  // straight from the range, the six-shooter is put away only later that frame)
+  h.rule = (o) => { if (!atFarm() && !atCounter()) return base.rule(o); lastCard.roundup = o || null; return hud.ruleEl; };
   h.hint = (o) => { if (!atFarm() && !atCounter()) hud.hint(o); };
   return h;
 }
@@ -532,20 +534,24 @@ function jobHeard(name, data) {
   chooseJob(id);
 }
 function jobStep() {
-  if (JB && JB.picked) chooseJob(JB.picked);
+  // (a question up where the rider is (a sit-down job begun, a wave of the herd or the flock come up to): that job is THE
+  // job, over one picked on the jobs board and over the one left behind, so its card comes up and the other's goes)
+  const a = askingJob(), atWork = !!a && a !== 'panel' && a !== 'build';
+  if (JB && JB.picked && !atWork) chooseJob(JB.picked);
   // (a hold-up's card left up after the hold-up has gone: taken down, so it can't hold the card for good)
   if (cardBy && cardBy.urgent && cardBy.id === 'wagon' && !(WJ && WJ.ambush)) { const was = ruleBy; ruleBy = 'wagon'; try { hud.rule(null); } finally { ruleBy = was; } }
-  const a = askingJob(); if (a === 'store' || a === 'delivery' || a === 'deer' || a === 'loot' || a === 'range') chooseJob(a);   // (a sit-down job begun)
+  if (atWork && !(a === 'wagon' && WJ && WJ.ambush)) chooseJob(a);
   if (a === 'build' && BS && BS.active) chooseJob(BS.active.id);   // (a builder opened at its site: that site's job)
   if (!theJob) return;
   if (!JOB_NOW[theJob]() || (theJob === 'deer' && DJ && DJ.resting && DJ.resting())) { theJob = null; return; }   // (turned off; or Miss Wren has her camera back)
   // (the plain where-it-is card this function put up is not 'its own card': it goes on below, so its distance and
   // direction follow the rider)
   const plainUp = !!jobCardObj && shownCard === jobCardObj && !!cardBy && cardBy.id === theJob;
-  if (cardBy && !plainUp && (cardBy.id === theJob || cardBy.urgent || (cardBy.id === 'wagon' && WJ && WJ.ambush))) return;   // (its own card is up, or a call for help and its end)
+  const own = lastCard[theJob], ownUp = !!cardBy && cardBy.id === theJob && (!own || shownCard === own);   // (its own latest card: not an older one of its own, its travel card left up while the wave's was held back)
+  if (cardBy && !plainUp && (ownUp || cardBy.urgent || (cardBy.id === 'wagon' && WJ && WJ.ambush))) return;   // (its own card is up, or a call for help and its end)
   if (atCounter() || (cabin && cabin.inside)) return;
-  const now = askingJob(); if (now === 'panel' || now === theJob) return;   // (a question of its own is up: the camera, a wave)
-  const own = lastCard[theJob];
+  const now = askingJob(); if (now === 'panel') return;
+  if (now === theJob && !own) return;   // (a question of its own is up, the camera's: its card is its own to put up)
   if (own) { const was = ruleBy; ruleBy = theJob; try { hud.rule(own); } finally { ruleBy = was; } return; }   // (its own card, put back up)
   // its own card isn't up: a plain one, where it is and which way
   const g = JB && JB.where ? JB.where(theJob) : null, name = JB && JB.nameOf ? JB.nameOf(theJob) : null;
