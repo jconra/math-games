@@ -58,8 +58,10 @@ export const MILL = {
   // the mill house: its middle (m from the tower's middle: north-west, on the hill's top, clear of the lumber pile and
   // the stones), turned so its porch (the model's +Z) looks at the tower; its ground the lowest under its corners, sunk
   // a little (its stone footing takes up the slope)
-  house: { x: -6.0, z: -4.3, half: [2.45, 1.95], sink: 0.06, mow: 4.2, block: 0.25 },
-  pickup: { x: 0.3, z: 2.7 },          // in the mill's own frame: in front of the porch, where the sacks are picked up
+  // (scale: the model as made was a little small for a person (its door reached a rider's shoulder): drawn 1.5 times
+  // its size, set back from the tower to keep the same room in front of its porch)
+  house: { x: -7.2, z: -5.2, half: [3.7, 2.9], sink: 0.09, mow: 6.0, block: 0.25, scale: 1.5 },
+  pickup: { x: 0.45, z: 4.0 },          // in the mill's own frame: in front of the porch, where the sacks are picked up
   clear: 3.6,                          // m: the mill fades out while it stands this near the line from the builder's
                                        // camera to the tower (or the camera is inside it), and back when it doesn't
   fade: 3,                             // how quickly it fades (a whole fade in a third of a second)
@@ -151,6 +153,7 @@ export function makeWindmillJob({ W, folk, rider, sites, player = () => null, hu
   loadMill(W.tier !== 'gaming').then((scn) => {
     if (disposed) return;
     const m = scn.clone(); m.name = 'mill-model';
+    m.scale.setScalar(H.scale || 1);
     m.traverse((o) => {
       if (!o.isMesh) return;
       o.castShadow = o.receiveShadow = shadows;
