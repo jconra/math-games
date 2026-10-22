@@ -228,8 +228,8 @@ export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, r
   const CR = crateParts();
   const load = new THREE.Group(); load.name = 'delivery-load';
   const SLOTS = [   // in the saddle's frame: x across, y up from the saddle's seat on the back, z forward (the horn)
-    { at: [0.3, -0.2, -0.6], turn: Math.PI / 2, tilt: -0.1 }, { at: [-0.3, -0.2, -0.6], turn: Math.PI / 2, tilt: 0.1 },
-    { at: [0, 0.1, -0.62], turn: 0, tilt: 0 },
+    { at: [0.33, -0.2, -0.6], turn: Math.PI / 2, tilt: -0.1 }, { at: [-0.33, -0.2, -0.6], turn: Math.PI / 2, tilt: 0.1 },
+    { at: [0, 0.16, -0.62], turn: 0, tilt: 0 },   // (the top crate sits clear of the panniers' tops: touching faces flickered)
   ];
   const crates = SLOTS.map((sl) => {
     const m = new THREE.Mesh(CR.geometry, CR.material);

@@ -36,8 +36,11 @@ export const SLOTS = [
     at: [2.3, null, -0.95], rot: 90, fit: 1.13, box: [0.8, 1.2], looks: [[2.3, 1.6, -0.95]],
     extra: [{ file: 'chair', at: [1.62, null, -0.62], rot: 90, fitH: 0.96, box: [0.5, 0.5] }, { file: 'chair', at: [1.62, null, -1.3], rot: 75, fitH: 0.96, box: [0.5, 0.5] }] },
   { id: 'porch', name: 'Porch rockers', price: PRICES.furniture.porch, file: 'porch_chair', line: 'Two rocking chairs out on the porch, to watch the sun go down.',
-    at: [-1.45, null, 1.55], rot: 200, fit: 0.83, box: null, looks: [[-1.4, 1.9, 0.62]],
-    extra: [{ file: 'porch_chair', at: [1.95, null, 1.55], rot: 160, fit: 0.83, box: null }] },
+    at: [-0.95, null, 1.75], rot: 8, fit: 0.83, box: null, looks: [[-0.95, 1.3, 1.75], [1.32, 1.3, 1.45]],
+    extra: [{ file: 'porch_chair', at: [1.32, null, 1.45], rot: -8, fit: 0.83, box: null }] },
+  // (the porch: the steps and the door on x -0.4 .. 1.0; the model's own barrel and crate stand at its left back corner
+  // (x -1.85 .. -1.0, z up to 1.6) and its own rocker and log pile on the right (x 1.75 .. 3.0): the two bought rockers
+  // stand in the clear floor between, on either side of the way in, facing out to the yard (the chair's front is +z))
   { id: 'bed', name: 'Quilted bed', price: PRICES.furniture.bed, file: 'bed', line: 'A log bed with a patchwork quilt, under the painting.',
     at: [-1.38, null, -2.25], rot: 90, fit: 1.9, box: [1.06, 1.9], looks: [[-1.35, 1.3, -2.25]] },   // (head to the left wall)
   { id: 'rifles', name: 'Rifle rack', price: PRICES.furniture.rifles, made: 'rifles', line: 'A rack on the wall with two rifles, like any ranch house.',

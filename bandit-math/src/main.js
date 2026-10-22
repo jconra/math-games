@@ -245,7 +245,7 @@ async function ride(r) {
   I.enabled = true;
   P = makePlayer({ W, folk, animals, rider, input: I, camera, say: (t) => hud.toast(t) });
   makeDogIfOwned();
-  cardBy = null; theJob = null; shownCard = null; jobCardObj = null; jobCardKey = ''; for (const k in lastCard) delete lastCard[k];
+  cardBy = null; theJob = null; shownCard = null; jobCardObj = null; jobCardKey = ''; worked = false; for (const k in lastCard) delete lastCard[k];
   // (no babble voice: reading works better; src/audio/voice.js is kept for the Sound Lab. A rider who can't read yet
   // hears Hob's lines in the browser's voice, each in turn: src/audio/sayline.js)
   hob = makeHob({ W, hud, rider, I, roads: roadLines, voice: { speak: (text) => { if (rider && SKILLS.readAloud(rider)) sayLine(text); }, stop: () => {} } });
@@ -462,6 +462,9 @@ function noticeFar(id) {
     return hud.ruleEl;
   }
   if (o && o.kind === 'travel' && ruleBy && ruleBy !== theJob) {
+    // (once a job has been worked this ride, the screen stays clear between jobs: a travel card only for the job picked
+    // on the jobs board (THE JOB then), a job under way, or a call for help; before that, the nearest job's leads the way)
+    if (worked && !o.urgent && !underWay(ruleBy)) { if (cardBy && cardBy.id === ruleBy) { cardBy = null; shownCard = null; return rule(null); } return hud.ruleEl; }
     const d = noticeFar(ruleBy);
     if (d != null && d > NOTICE.near) { if (cardBy && cardBy.id === ruleBy) { cardBy = null; return rule(null); } return hud.ruleEl; }   // (too far: its own card comes down)
     if (cardBy && cardBy.urgent && cardBy.id !== ruleBy) return hud.ruleEl;   // (a call for help, a hold-up on the road: no other job's travel card over it)
@@ -509,7 +512,9 @@ function trailGoal() {
 // the round-up's card stays down; roping a steer there chooses the round-up), though a call for help on the road still
 // comes up over it. While the chosen job has no card of its own up (its people are far off), a plain one says where it
 // is. With no job chosen, the nearest job's card is up, as before.
-let theJob = null, jobCardNow = false, jobCardKey = '', jobCardObj = null;
+let theJob = null, jobCardNow = false, jobCardKey = '', jobCardObj = null, worked = false;
+// how far (m) from where a job is (the jobs board's place for it) the rider has left it: its card comes down
+const JOB_LEAVE = 60;
 const lastCard = {};
 // what the jobs tell Old Hob that means the rider is at work at one (the hold-ups on the road are not chosen: theirs is
 // a call for help on the way)
@@ -526,7 +531,13 @@ const JOB_OF_EVENT = {
 const JOB_NOW = { roundup: () => RU, sheep: () => SH, pigs: () => PG, store: () => SJ, delivery: () => DL, wagon: () => WJ, deer: () => DJ, range: () => SR, loot: () => LJ, boxes: () => true, windmill: () => !!(WMJ && WMJ.on), bridge: () => !!(BRJ && jobOn(rider, 'bridge')), fishing: () => !!(FJ && FJ.on) };
 function chooseJob(id) {
   if (!id || id === theJob || !JOB_NOW[id] || !JOB_NOW[id]()) return;
-  theJob = id; jobCardKey = '';
+  theJob = id; jobCardKey = ''; worked = true;
+}
+// the rider has left the chosen job's place: its own latest card is a travel card, or the rider is JOB_LEAVE off
+function leftJob(id) {
+  const own = lastCard[id]; if (own && own.kind === 'travel') return true;
+  const g = JB && JB.where ? JB.where(id) : null;
+  return !!(g && P && Math.hypot(g.x - P.position.x, g.z - P.position.z) > JOB_LEAVE);
 }
 function jobHeard(name, data) {
   const id = JOB_OF_EVENT[name];
@@ -544,6 +555,13 @@ function jobStep() {
   if (a === 'build' && BS && BS.active) chooseJob(BS.active.id);   // (a builder opened at its site: that site's job)
   if (!theJob) return;
   if (!JOB_NOW[theJob]() || (theJob === 'deer' && DJ && DJ.resting && DJ.resting())) { theJob = null; return; }   // (turned off; or Miss Wren has her camera back)
+  // (left behind, unless it is the jobs board's pick or under way (crates on the horse, the camera lent): no longer the
+  // job, and its card comes down; it is THE job again on coming back to it)
+  if (theJob !== (JB && JB.picked) && !underWay(theJob) && a !== theJob && leftJob(theJob)) {
+    const id = theJob; theJob = null; jobCardKey = '';
+    if (cardBy && cardBy.id === id && !cardBy.urgent) { const was = ruleBy; ruleBy = id; jobCardNow = true; try { hud.rule(null); } finally { ruleBy = was; jobCardNow = false; } }
+    return;
+  }
   // (the plain where-it-is card this function put up is not 'its own card': it goes on below, so its distance and
   // direction follow the rider)
   const plainUp = !!jobCardObj && shownCard === jobCardObj && !!cardBy && cardBy.id === theJob;
