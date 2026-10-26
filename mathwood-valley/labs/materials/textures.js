@@ -1,10 +1,12 @@
 // THE LAB'S TEXTURES, DRAWN IN CODE AT LOAD (nothing is downloaded): small canvases turned into three.js textures.
 //
-//  wood     512 x 512  a TRIM SHEET: 12 board strips (32 px tall each, the full width, so they tile along their length)
-//                      with grain, knots, a nail every repeat and a bevelled edge, then 4 end-grain squares at the bottom.
+//  wood     512 x 1024 a TRIM SHEET: 12 board strips (64 px tall each, the full width, so they tile along their length)
+//                      with grain, knots, a nail every repeat and a bevelled edge, then 8 end-grain squares at the bottom.
 //                      Every board, post, rail and shingle in the cabin points its UVs at one strip of this one picture.
-//  woodN    512 x 512  its normal map (the bevels, grain grooves, nail heads, end-grain rings), worked out from a height map
-//  stone    256 x 256  tiling rock, and stoneN its normal map
+//                      Four looks (WOOD_LOOKS): rustic planks, knotty, cathedral grain, and the first straight-grain one.
+//  woodN    512 x 1024 its normal map (the bevels, grain, knots, checks, nail heads, end-grain rings), from a height map
+//  stone    256 x 256  tiling rock, and stoneN its normal map. Five looks (STONE_LOOKS): fieldstone, granite, sandstone,
+//                      river rock, and the first veined one.
 //  ground   256 x 256  tiling grass
 //  noise    256 x 256  four kinds of tiling noise in R G B A, read by the weathering shader (weather.js) in world space
 //  decals              small stamps (sign, horseshoe, stain, poster), transparent round the edges
@@ -67,43 +69,99 @@ function tex(canvas, { srgb = true, repeat = true, repeatT = repeat } = {}) {
   return t;
 }
 
+// ── more helpers: a smooth step, cellular noise ───────────────────────────────────────────────────────────────────────
+const sstep = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+const mix = (a, b, t) => a + (b - a) * t;
+// cellular noise: one jittered point per cell of an n x n grid that wraps (so the picture tiles). f1, f2 are the distances
+// (in cells) to the nearest and second-nearest point, id a number 0..1 that belongs to the nearest point's cell
+const CELL = { f1: 0, f2: 0, id: 0 };
+function cells(u, v, n, seed, jit = 0.9) {
+  const x = u * n, y = v * n, ix = Math.floor(x), iy = Math.floor(y);
+  let f1 = 9, f2 = 9, id = 0;
+  for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
+    const cx = ix + i, cy = iy + j, wx = ((cx % n) + n) % n, wy = ((cy % n) + n) % n;
+    const dx = x - cx - 0.5 - (hash(wx, wy, seed) - 0.5) * jit, dy = y - cy - 0.5 - (hash(wx, wy, seed + 1) - 0.5) * jit;
+    const d = Math.sqrt(dx * dx + dy * dy);
+    if (d < f1) { f2 = f1; f1 = d; id = hash(wx, wy, seed + 2); } else if (d < f2) f2 = d;
+  }
+  CELL.f1 = f1; CELL.f2 = f2; CELL.id = id;
+  return CELL;
+}
+
+// soft round blotches: one disc per cell of an n x n grid (wrapping), each its own size, shade (s, -1..1) and warmth (w)
+const BLOB = { s: 0, w: 0 };
+function blobs(u, v, n, seed) {
+  const x = u * n, y = v * n, ix = Math.floor(x), iy = Math.floor(y);
+  let s = 0, w = 0;
+  for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) {
+    const cx = ix + i, cy = iy + j, wx = ((cx % n) + n) % n, wy = ((cy % n) + n) % n;
+    const d = Math.hypot(x - cx - 0.5 - (hash(wx, wy, seed) - 0.5) * 0.8, y - cy - 0.5 - (hash(wx, wy, seed + 1) - 0.5) * 0.8);
+    const rad = 0.3 + 0.45 * hash(wx, wy, seed + 2), k = 1 - sstep(rad * 0.45, rad, d);
+    if (k > 0) { s += k * (hash(wx, wy, seed + 3) * 2 - 1); w += k * (hash(wx, wy, seed + 4) - 0.5); }
+  }
+  BLOB.s = s; BLOB.w = w;
+  return BLOB;
+}
+
 // ── the wood trim sheet ───────────────────────────────────────────────────────────────────────────────────────────────
-export const WOOD = { size: 512, strip: 32, strips: 12, endRow: 384, endTile: 128, repeatM: 1.2 };
+// 12 strips of 64 px (a board's width) by 512 px (1.2 m of its length), then two rows of four end-grain squares.
+// A strip is 64 px across whatever the board's width, so on a 28 cm log a pixel across it is about twice as long as a
+// pixel along it (ASP): anything meant to look round on a log is drawn twice as wide as it is tall.
+export const WOOD = { w: 512, h: 1024, strip: 64, strips: 12, endRow: 768, endTile: 128, ends: 8, repeatM: 1.2 };
+const ASP = 2;
+// the looks the panel offers. The first is the default.
+export const WOOD_LOOKS = {
+  rustic: { label: 'Rustic planks', note: 'wavy grain, small dark knots ringed by the grain, checks, scorched edges' },
+  knotty: { label: 'Knotty', note: 'knots of every size, some with rings round them, a knot hole or two, checks' },
+  cathedral: { label: 'Cathedral grain', note: 'the nested arches a flat-sawn board shows, a few knots' },
+  straight: { label: 'Straight grain (first look)', note: 'wavy stripes, the odd tiny knot' },
+};
 // strip colours: weathered pine and fir, a couple greyed by the sun, two rough-sawn (strips 10, 11)
 const STRIP_COL = [[166, 136, 104], [150, 122, 94], [176, 144, 108], [142, 120, 98], [160, 136, 110], [136, 112, 88],
   [170, 138, 102], [150, 132, 114], [158, 126, 96], [144, 126, 110], [148, 120, 92], [138, 114, 90]];
+// the new looks: warmer, browner boards, each its own shade (still pale enough for the cabins' tints to grey and darken)
+const STRIP_WARM = [[170, 132, 98], [152, 116, 86], [178, 140, 102], [146, 114, 88], [164, 130, 98], [140, 106, 80],
+  [174, 136, 98], [154, 124, 100], [162, 124, 90], [148, 120, 98], [152, 116, 86], [142, 110, 84]];
+// how each new look sets up its strips: knots per strip (min, max), the share of strips cut near the heart of the log
+// (cathedral arches), ring spacing across the board (px), how much scorched staining, sun-bleaching, checks
+const WOOD_STYLE = {
+  rustic: { knots: [3, 5], kSize: [1.6, 5.5], kRing: 1, holes: 0.05, cat: 0.45, ring: [3.8, 6.5], fine: 0.5, stain: 1, bleach: 0.7, checks: [2, 4], warm: true },
+  knotty: { knots: [4, 7], kSize: [1.6, 8.5], kRing: 1.2, holes: 0.18, cat: 0.25, ring: [4.5, 7.5], fine: 0.35, stain: 0.35, bleach: 0.4, checks: [1, 3], warm: false },
+  cathedral: { knots: [0, 2], kSize: [1.6, 4], kRing: 0.8, holes: 0, cat: 0.9, ring: [4.2, 7], fine: 0.35, stain: 0.3, bleach: 0.45, checks: [0, 2], warm: true },
+};
 
-function drawWood() {
-  const S = WOOD.size, col = new Uint8ClampedArray(S * S * 4), H = new Float32Array(S * S), R = rng(7);
-  const put = (x, y, r, g, b, h) => { const i = y * S + x; col[i * 4] = r; col[i * 4 + 1] = g; col[i * 4 + 2] = b; col[i * 4 + 3] = 255; H[i] = h; };
+// the first look: grain lines from warped stripes, the odd tiny knot. Drawn in the old 32-row units (Y) at twice the rows.
+function drawStraight(put) {
+  const S = WOOD.w, SH = WOOD.strip, k2 = SH / 32, R = rng(7);
   for (let s = 0; s < WOOD.strips; s++) {
-    const y0 = s * WOOD.strip, base = STRIP_COL[s], rough = s >= 10, seed = 100 + s * 31;
+    const y0 = s * SH, base = STRIP_COL[s], rough = s >= 10, seed = 100 + s * 31;
     const lines = 5 + R() * 5, warpAmt = 0.5 + R() * 0.9;
     const knots = []; const nk = Math.floor(R() * 2.4);
     for (let k = 0; k < nk; k++) knots.push({ x: 40 + R() * 160 + (k ? 256 : 0), y: 7 + R() * 18, r: 2.5 + R() * 3.5 });
-    for (let yy = 0; yy < WOOD.strip; yy++) {
-      const t = yy / WOOD.strip;
+    // (its slow wobble on a coarse grid, read back in between: the same picture, worked out at a sixth of the points)
+    const wob = coarse(S, SH, 4, 2, (u, tt) => { const t = ((tt * SH + 0.5) / k2 - 0.5) / 32; return fbm(u, t * 0.3, 3, 1, 3, seed) * warpAmt + fbm(u, t, 9, 2, 2, seed + 5) * 0.15; });
+    for (let yy = 0; yy < SH; yy++) {
+      const Y = (yy + 0.5) / k2 - 0.5, t = Y / 32;
       for (let x = 0; x < S; x++) {
         const u = x / S;
-        // the grain: lines running along the board, wavy (the warp), wrapping so the strip tiles along its length
-        let warp = fbm(u, t * 0.3, 3, 1, 3, seed) * warpAmt + fbm(u, t, 9, 2, 2, seed + 5) * 0.15;
+        let warp = wob(x, yy);
         let dk = 0;
         for (const k of knots) {   // a knot pushes the grain round it and is dark at its heart
           let dx = x - k.x; if (dx > S / 2) dx -= S; if (dx < -S / 2) dx += S;
-          const d = Math.hypot(dx / 2.2, yy - k.y); warp += Math.max(0, 1 - d / (k.r * 4)) * 0.6 * Math.sign(yy - k.y || 1);
+          const d = Math.hypot(dx / 2.2, Y - k.y); warp += Math.max(0, 1 - d / (k.r * 4)) * 0.6 * Math.sign(Y - k.y || 1);
           dk = Math.max(dk, clamp01(1.4 - d / k.r));
         }
         const g = t * lines + warp, ring = g - Math.floor(g), late = Math.pow(Math.sin(ring * Math.PI), 6);   // the dark late-wood lines
         const streak = fbm(u, t, 48, 4, 2, seed + 9);                 // fine streaks along the board
         let v = 0.86 + 0.14 * streak - 0.17 * late - 0.5 * dk * dk;
-        if (rough) v *= 0.93 + 0.07 * Math.sin((x + Math.sin(yy * 0.4) * 3) * 0.9);   // saw marks across a rough board
+        if (rough) v *= 0.93 + 0.07 * Math.sin((x + Math.sin(Y * 0.4) * 3) * 0.9);   // saw marks across a rough board
         let h = 0.6 - 0.18 * late + 0.06 * streak - 0.25 * dk;
         // the bevelled edges: the strip's top and bottom rows fall away (dark gap below, a lit lip above)
-        const e = Math.min(yy, WOOD.strip - 1 - yy);
-        if (e < 3) { const f = e / 3; h *= 0.3 + 0.7 * f; v *= e === 0 ? 0.55 : 0.8 + 0.2 * f; }
+        const e = Math.min(yy, SH - 1 - yy) / k2;
+        if (e < 3) { const f = e / 3; h *= 0.3 + 0.7 * f; v *= e < 0.75 ? 0.55 : 0.8 + 0.2 * f; }
         let r = base[0] * v, gg = base[1] * v, b = base[2] * v;
         // a nail where the board crosses a stud (u = 0.5 of every repeat), its rust run down the board
-        const nx = x - 256, ny = yy - 22, nd = Math.hypot(nx, ny);
+        const nx = x - 256, ny = Y - 22, nd = Math.hypot(nx, ny);
         if (nd < 3.2) { const f = nd / 3.2; r = 70 - 30 * f; gg = 66 - 30 * f; b = 62 - 30 * f; h = 0.95 - 0.3 * f * f; }
         else if (nd < 6 || (Math.abs(nx) < 2.5 && ny > 0 && ny < 9)) { const f = 0.75; r *= f + 0.06; gg *= f; b *= f * 0.85; }
         put(x, y0 + yy, r, gg, b, h);
@@ -111,34 +169,333 @@ function drawWood() {
     }
   }
   // the end grain: rings round an off-centre heart, a radial crack or two
-  for (let k = 0; k < 4; k++) {
+  for (let k = 0; k < WOOD.ends; k++) {
     const cx = 64 + (R() - 0.5) * 70, cy = 64 + (R() - 0.5) * 70, ringW = 3.5 + R() * 2.5, seed = 900 + k;
-    const cracks = [R() * Math.PI * 2, R() * Math.PI * 2];
+    const cracks = [R() * Math.PI * 2, R() * Math.PI * 2], ox = (k % 4) * 128, oy = WOOD.endRow + Math.floor(k / 4) * 128;
     for (let yy = 0; yy < 128; yy++) for (let xx = 0; xx < 128; xx++) {
       const dx = xx - cx, dy = yy - cy, d = Math.hypot(dx, dy), a = Math.atan2(dy, dx);
       const g = (d + fbm(xx / 128, yy / 128, 4, 4, 2, seed) * 6) / ringW, ring = Math.pow(Math.sin((g - Math.floor(g)) * Math.PI), 8);
-      let crack = 0; for (const c of cracks) { let da = Math.abs(a - c); da = Math.min(da, Math.PI * 2 - da); if (d > 8 && da * d < 1.3) crack = 1; }
+      let crack = 0; for (const c of cracks) if (d > 8 && angDiff(a, c) * d < 1.3) crack = 1;
       const v = (0.78 - 0.16 * ring - 0.1 * (d / 90)) * (1 - 0.55 * crack);
       const e = Math.min(xx, yy, 127 - xx, 127 - yy), lip = e < 3 ? 0.75 + 0.08 * e : 1;
-      put(k * 128 + xx, WOOD.endRow + yy, 150 * v * lip, 112 * v * lip, 76 * v * lip, 0.6 - 0.1 * ring - 0.4 * crack);
+      put(ox + xx, oy + yy, 150 * v * lip, 112 * v * lip, 76 * v * lip, 0.6 - 0.1 * ring - 0.4 * crack);
     }
   }
+}
+
+// a smooth noise worked out on a coarse grid (every sx by sy px, wrapping along x) and read back in between: the slow
+// noises don't need working out at every pixel
+function coarse(S, SH, sx, sy, f) {
+  const nx = S / sx, ny = Math.ceil(SH / sy) + 1, A = new Float32Array(nx * ny);
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) A[j * nx + i] = f(i * sx / S, j * sy / SH);
+  return (x, y) => {
+    const fx = x / sx, fy = y / sy, i0 = Math.floor(fx), j0 = Math.min(ny - 2, Math.floor(fy)), tx = fx - i0, ty = fy - j0, i1 = (i0 + 1) % nx;
+    const a = A[j0 * nx + i0], b = A[j0 * nx + i1], c = A[(j0 + 1) * nx + i0], d = A[(j0 + 1) * nx + i1];
+    return a + (b - a) * tx + (c - a) * ty + (a - b - c + d) * tx * ty;
+  };
+}
+// the angle between two directions, 0..PI
+const angDiff = (a, b) => { const d = (((a - b) % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2); return d > Math.PI ? Math.PI * 2 - d : d; };
+
+// the new looks. A flat-sawn board is a slice through a log's growth rings (cylinders round the heart). Across the
+// board the rings sit at distance r = sqrt((y - heart)^2 + depth^2) from the heart; where the slice dips closer to the
+// heart along the board (depth shrinks), each ring closes into an arch, and between two such dips they close into eyes.
+// A knot is a branch through the rings: it adds a peak to the ring count around it, so the lines nearby bend into
+// closed loops hugging it, then flow on past.
+function drawBoards(put, look) {
+  const st = WOOD_STYLE[look], S = WOOD.w, SH = WOOD.strip, G = new Float32Array(S * SH), lk = { rustic: 0, knotty: 1, cathedral: 2 }[look];
+  const FIB = new Float32Array(S * 128);
+  for (let y = 0; y < 128; y++) for (let x = 0; x < S; x++) FIB[y * S + x] = fbm(x / S, y / 128, 64, 12, 2, 2900 + lk);
+  for (let s = 0; s < WOOD.strips; s++) {
+    const R = rng(4000 + s * 131 + lk * 7919), y0 = s * SH, rough = s >= 10, seed = 2000 + s * 37 + lk * 1000;
+    const base = (st.warm ? STRIP_WARM : STRIP_COL)[s];
+    const cat = R() < st.cat, ring = mix(st.ring[0], st.ring[1], R());
+    // the heart's line: inside the board (arches) or off one side (wavy, gently curving lines)
+    const yc = cat ? SH * (0.3 + 0.4 * R()) : SH * 0.5 + (R() < 0.5 ? -1 : 1) * SH * (1.1 + 1.4 * R());
+    const d0 = cat ? ring * (2.5 + 2 * R()) : ring * (2 + 3 * R()), dA = cat ? ring * (4 + 3 * R()) : ring * (1.5 + 2.5 * R());
+    const nd = cat ? 1 + Math.floor(R() * 2) : 1 + Math.floor(R() * 3), wav = cat ? 1.5 + R() * 2.5 : 3 + R() * 5, nw = 2 + Math.floor(R() * 4), ph = R();
+    const depth = new Float32Array(S), yh = new Float32Array(S), edgeN = new Float32Array(S), JIT = new Float32Array(256);
+    for (let i = 0; i < 256; i++) JIT[i] = hash(i, 0, seed + 21);      // each year's ring a little wider or narrower
+    for (let x = 0; x < S; x++) {
+      const u = x / S;
+      if (cat) {
+        const p = (u * nd + ph) % 1, w = p < 0.78 ? p / 0.78 : (1 - p) / 0.22;
+        depth[x] = Math.abs(d0 * 0.3 + dA * 1.6 * w * w * (3 - 2 * w) + dA * (fbm(u, 0.5, 4, 1, 2, seed + 1) - 0.5) * 0.8);
+      } else depth[x] = Math.abs(d0 + dA * (fbm(u, 0.5, nd, 1, 3, seed + 1) - 0.5) * 2.6);
+      yh[x] = yc + wav * (fbm(u, 0.5, nw, 1, 2, seed + 2) - 0.5) * 2;
+      edgeN[x] = (fbm(u, 0.5, 30, 1, 1, seed + 19) - 0.5) * 1.5;
+    }
+    // the slow noises, on coarse grids: the wobble of the lines, their unevenness, the stains, the bleached patches
+    const wob = coarse(S, SH, 4, 4, (u, t) => fbm(u, t * 0.5, 5, 2, 2, seed + 3));
+    const unev = coarse(S, SH, 2, 2, (u, t) => fbm(u, t, 12, 3, 2, seed + 4));
+    const fineW = coarse(S, SH, 2, 2, (u, t) => fbm(u, t, 24, 4, 2, seed + 6));
+    const stainN = coarse(S, SH, 4, 4, (u, t) => fbm(u, t * 0.6, 6, 2, 3, seed + 11) + (fbm(u, t, 20, 4, 2, seed + 12) - 0.5) * 0.15);
+    const bleachN = coarse(S, SH, 8, 4, (u, t) => fbm(u, t * 0.5, 4, 2, 3, seed + 13));
+    // the knots: across-radius ra in px, stretched along the grain, a ring-count peak A of reach Rr round it
+    // (the roof's shakes use strips 0, 2 and 6, and the strip after each when a shake is wide: split along the grain,
+    // not sawn, they show fewer knots)
+    const shake = [0, 1, 2, 3, 6, 7].includes(s) ? 0.45 : 1;
+    const knots = [], nk = Math.round((st.knots[0] + Math.floor(R() * (st.knots[1] - st.knots[0] + 1))) * shake);
+    for (let k = 0; k < nk; k++) {
+      const big = R(), ra = big < 0.5 ? mix(st.kSize[0], st.kSize[0] + 1.4, R()) : mix(st.kSize[0] + 1.2, st.kSize[1], R());
+      const kn = { x: (k + 0.15 + R() * 0.7) * S / nk, y: 10 + R() * (SH - 20), ra, str: 1 + R() * 0.65, hole: R() < st.holes, dead: R() < 0.45 };
+      kn.A = (2 + ra * 0.4) * st.kRing * (R() < 0.5 ? 1 : -1); kn.Rr = ra * (2.1 + R() * 0.8); kn.reach = kn.Rr * 4.5 * ASP * kn.str * 1.4;
+      knots.push(kn);
+    }
+    // checks (thin cracks along the grain): most of them run out of a knot
+    const checks = [], nc = st.checks[0] + Math.floor(R() * (st.checks[1] - st.checks[0] + 1));
+    for (let c = 0; c < nc; c++) {
+      const kn = knots.length && R() < 0.75 ? knots[Math.floor(R() * knots.length)] : null, dir = R() < 0.5 ? -1 : 1;
+      const L = 12 + R() * 40, x0 = kn ? kn.x + dir * kn.ra * ASP * kn.str * 0.7 : R() * S, y = kn ? kn.y + (R() - 0.5) * kn.ra * 0.8 : 8 + R() * (SH - 16);
+      const wob2 = new Float32Array(Math.ceil(L) + 2), xs = dir > 0 ? x0 : x0 - L;
+      for (let i = 0; i < wob2.length; i++) { const uu = (((xs + i) / S) % 1 + 1) % 1; wob2[i] = (fbm(uu, y / SH, 24, 2, 3, seed + 17 + c) - 0.5) * 3.2; }
+      checks.push({ xa: xs, L, y, slope: (R() - 0.5) * 0.06, w: 0.6 + R() * 0.6, wob2, dir });
+    }
+    // pass 1: the ring count everywhere on the strip
+    for (let yy = 0; yy < SH; yy++) {
+      for (let x = 0; x < S; x++) {
+        const dy = yy - yh[x] + (wob(x, yy) - 0.5) * 5;
+        let g = Math.sqrt(dy * dy + depth[x] * depth[x]) / ring + (unev(x, yy) - 0.5) * 0.5;
+        for (let ki = 0; ki < knots.length; ki++) {
+          const kn = knots[ki];
+          let dx = x - kn.x; if (dx > S / 2) dx -= S; else if (dx < -S / 2) dx += S;
+          if (dx > kn.reach || dx < -kn.reach) continue;
+          const ex = dx / (ASP * kn.str * 1.4), ey = yy - kn.y, de = Math.sqrt(ex * ex + ey * ey) / kn.Rr;
+          if (de < 4.5) { const wdw = 1 - (de / 4.5) * (de / 4.5); g += kn.A * Math.exp(-de) * (1 + de) * wdw * wdw; }   // faded to nothing at its reach
+        }
+        G[yy * S + x] = g;
+      }
+    }
+    // pass 2: colour and height
+    for (let yy = 0; yy < SH; yy++) {
+      const t = yy / SH, e = Math.min(yy, SH - 1 - yy), edgeK = 1 - sstep(0, 0.32, e / SH);
+      for (let x = 0; x < S; x++) {
+        const u = x / S, g = G[yy * S + x];
+        // how far apart the lines are here: where they crowd closer than ~3 px, fade them to their average (no shimmer)
+        const gx = (G[yy * S + ((x + 1) % S)] - G[yy * S + ((x + S - 1) % S)]) * 0.5;
+        const gy = (G[Math.min(SH - 1, yy + 1) * S + x] - G[Math.max(0, yy - 1) * S + x]) * 0.5, grad = Math.sqrt(gx * gx + gy * gy);
+        // a ring: pale early wood darkening into the late wood, then a sharp step to the next ring's early wood
+        const jx = g * 0.7 + 64, ji = Math.floor(jx), jf = jx - ji, ja = JIT[ji & 255], jt = jf * jf * (3 - 2 * jf);
+        const gj = g + 0.6 * (ja + (JIT[(ji + 1) & 255] - ja) * jt - 0.5), f = gj - Math.floor(gj);   // uneven years
+        // (the sharp step is spread over at least a pixel's worth of ring, so a line at a slant doesn't come out in steps)
+        const late = mix(sstep(0.5, 0.92, f) * (1 - sstep(1 - Math.max(0.05, grad * 1.3), 1, f)), 0.3, sstep(0.3, 0.62, grad));
+        // a fainter line between two rings (only where the rings are wide apart: nothing finer than ~4 px, or it shimmers)
+        const g2 = g * 2 + 0.5 + (fineW(x, yy) - 0.5) * 0.8, c2 = 0.5 - 0.5 * Math.cos((g2 - Math.floor(g2)) * Math.PI * 2);
+        const fine = mix(c2 * c2, 0.37, sstep(0.07, 0.13, grad));
+        const streak = FIB[((yy + s * 23) % 128) * S + ((x + s * 97) % S)];      // fibres along the board (one field, each strip its own window)
+        // scorched, stained patches, more of them along the board's edges; sun-bleached grey patches elsewhere
+        const sn = stainN(x, yy) + 0.3 * edgeK * st.stain;
+        const stain = sstep(0.56, 0.8, sn) * st.stain, burn = sstep(0.82, 0.97, sn) * st.stain;
+        let v = 1.04 - (0.28 + 0.12 * stain) * late - 0.08 * st.fine * fine + 0.12 * (streak - 0.5);
+        let h = 0.55 + 0.12 * late + 0.04 * fine + 0.05 * streak;               // weathered: the soft early wood wears back
+        let cr = 1, cb = 1;                                                     // a colour shift (the scorch, the bleach)
+        v *= 1 - 0.3 * stain - 0.25 * burn; cr *= 1 + 0.05 * stain; cb *= 1 - 0.16 * stain - 0.2 * burn;
+        const bl = sstep(0.58, 0.76, bleachN(x, yy)) * st.bleach * (1 - stain);
+        v *= 1 + 0.12 * bl; cr *= 1 - 0.06 * bl; cb *= 1 + 0.1 * bl;
+        // knots: a dark heart with rings of its own, a darker rim (the bark of a dead knot), a resin halo round it
+        for (let ki = 0; ki < knots.length; ki++) {
+          const kn = knots[ki];
+          let dx = x - kn.x; if (dx > S / 2) dx -= S; else if (dx < -S / 2) dx += S;
+          const rx = kn.ra * ASP * kn.str; if (dx > rx * 2.4 || dx < -rx * 2.4) continue;
+          const ex = dx / (ASP * kn.str), ey = yy - kn.y, de = Math.sqrt(ex * ex + ey * ey) + (hash(x, yy, seed + 15) - 0.5) * 0.15, q = de / kn.ra;
+          if (q > 2.4) continue;
+          v *= 1 - 0.2 * (1 - sstep(1, 2.3, q));                                // the resin halo
+          const inK = 1 - sstep(0.9, 1.05 + 0.4 / kn.ra, q);
+          if (inK <= 0) continue;
+          const kr = Math.pow(Math.sin((q * (1.6 + kn.ra * 0.3) % 1) * Math.PI), 4);
+          let kv = (kn.dead ? 0.38 : 0.56) - 0.16 * kr + (kn.dead ? 0 : 0.1 * (1 - sstep(0.15, 0.5, q)));
+          kv *= 1 - 0.45 * sstep(0.78, 0.95, q) * (kn.dead ? 1 : 0.5);          // its dark rim (bark round a dead knot)
+          let kh = 0.66 - 0.06 * kr;                                            // knots are hard: they stand proud as the wood wears
+          if (kn.hole && q < 0.75) { kv = 0.1 + 0.12 * q; kh = 0.1 + 0.3 * q; } // a knot hole
+          v = mix(v, kv, inK); h = mix(h, kh, inK);
+          cb *= 1 - 0.14 * inK; cr *= 1 + 0.04 * inK;
+        }
+        // checks: thin dark cracks along the grain, widest near where they start
+        for (let ci = 0; ci < checks.length; ci++) {
+          const c = checks[ci];
+          let dx = x - c.xa; if (dx < 0) dx += S;
+          if (dx > c.L) continue;
+          const a = c.dir > 0 ? dx / c.L : 1 - dx / c.L, w = c.w * Math.pow(Math.sin(Math.PI * Math.min(1, a * 1.3)), 0.6) + 0.1;
+          const yc2 = c.y + c.slope * dx + c.wob2[Math.floor(dx)], ad = Math.abs(yy - yc2);
+          const k = 1 - sstep(w * 0.4, w + 0.6, ad), lip = (1 - sstep(w + 0.4, w + 2.2, ad)) * (1 - k);   // the crack, a browner lip
+          v *= (1 - 0.72 * k) * (1 - 0.15 * lip); h -= 0.35 * k;
+        }
+        if (rough) {   // saw marks across a rough board, in patches (gentle: finer or stronger, they shimmer)
+          const saw = Math.sin((x + Math.sin(yy * 0.15) * 4) * 0.55) * sstep(0.45, 0.7, bleachN(x * 3 % S, yy));
+          v *= 0.975 + 0.025 * saw; h += 0.012 * saw;
+        }
+        // the bevelled edges: the strip's top and bottom rows fall away (dark gap, then a lip), a little uneven
+        const eb = e + edgeN[x];
+        if (eb < 6) { const k = clamp01(eb / 6); h *= 0.3 + 0.7 * k; v *= eb < 1.2 ? 0.5 : 0.78 + 0.22 * k; }
+        let r = base[0] * v * cr, gg = base[1] * v, b = base[2] * v * cb;
+        // a nail where the board crosses a stud (u = 0.5 of every repeat), its rust run down the board (toward row 0)
+        const nx = x - 256, ny = (yy - 20) * 1.4, nd = Math.sqrt(nx * nx + ny * ny);
+        if (nd < 3.4) { const f = nd / 3.4; r = 70 - 30 * f; gg = 64 - 30 * f; b = 60 - 30 * f; h = 0.95 - 0.3 * f * f; }
+        else if (nd < 6.5 || (Math.abs(nx) < 2.5 && ny < 0 && ny > -14)) { r *= 0.8; gg *= 0.74; b *= 0.62; }
+        put(x, y0 + yy, r, gg, b, h);
+      }
+    }
+  }
+  drawEnds(put);
+}
+
+// the end grain (8 squares): growth rings, their spacing changing year to year, round a heart that sits inside the
+// square (a log or post) or off its edge (a board cut from beside the heart: the rings are arcs). Dark heartwood, a paler
+// band of sapwood, a V-shaped check or two opening out from the heart, faint rays, saw marks, a worn dark lip.
+function drawEnds(put) {
+  const R = rng(77);
+  for (let k = 0; k < WOOD.ends; k++) {
+    const ox = (k % 4) * 128, oy = WOOD.endRow + Math.floor(k / 4) * 128, seed = 950 + k * 13;
+    const inside = k < 5, ang = R() * Math.PI * 2;
+    const cx = inside ? 64 + (R() - 0.5) * 50 : 64 + Math.cos(ang) * (95 + R() * 70), cy = inside ? 64 + (R() - 0.5) * 50 : 64 + Math.sin(ang) * (95 + R() * 70);
+    const ringW = 3.2 + R() * 2.2, heart = inside ? 30 + R() * 25 : 0, sap = inside ? heart + 18 + R() * 14 : 999;
+    const cracks = []; const ncr = inside ? 1 + Math.floor(R() * 2.6) : Math.floor(R() * 1.6);
+    for (let c = 0; c < ncr; c++) cracks.push({ a: R() * Math.PI * 2, w: 0.012 + R() * 0.022, from: inside ? 3 + R() * 14 : 0 });
+    const sawA = R() * Math.PI, base = [150, 112, 76], wob = coarse(128, 128, 2, 2, (u, v) => fbm(u, v, 4, 4, 3, seed));
+    for (let yy = 0; yy < 128; yy++) for (let xx = 0; xx < 128; xx++) {
+      const dx = xx - cx, dy = yy - cy, d = Math.sqrt(dx * dx + dy * dy), a = Math.atan2(dy, dx);
+      const dw = d + (wob(xx, yy) - 0.5) * 9 + Math.sin(a * 3 + k) * d * 0.03;
+      // ring count, the years uneven (some rings wide, some narrow)
+      const g0 = dw / ringW, g = g0 + 0.45 * Math.sin(g0 * 0.9 + k) + 0.3 * (vnoise(g0 * 0.6, 0.5, 64, 1, seed + 1) - 0.5);
+      const f = g - Math.floor(g), late = sstep(0.6, 0.92, f) * (1 - sstep(0.95, 1, f));
+      let v = 0.86 - 0.3 * late;
+      let r = base[0], gg = base[1], b = base[2];
+      if (inside) {   // heartwood darker and redder, the sapwood paler, a dark pith
+        const hw = 1 - sstep(heart - 3, heart + 3, dw);
+        v *= 1 - 0.18 * hw; r *= 1 + 0.05 * hw; b *= 1 - 0.1 * hw;
+        v *= 1 + 0.1 * sstep(sap - 4, sap + 4, dw);
+        v *= 1 - 0.55 * (1 - sstep(1.5, 3.5, d));
+      }
+      const ray = Math.pow(hash(Math.floor((a + Math.PI) * 60), 0, seed + 2), 6) * 0.08;   // the faint rays
+      v *= 1 + ray;
+      v *= 1 - 0.07 * (d / 128);
+      v *= 0.97 + 0.03 * Math.sin((xx * Math.cos(sawA) + yy * Math.sin(sawA)) * 0.7);       // saw marks
+      v *= 0.93 + 0.07 * hash(xx, yy, seed + 3);
+      let h = 0.6 - 0.08 * late;
+      for (const c of cracks) {      // a check: a wedge from near the heart, wider the further out it runs
+        if (d < c.from) continue;
+        const da = angDiff(a, c.a);
+        const half = (0.6 + (d - c.from) * c.w) / Math.max(d, 1), kk = 1 - sstep(half * 0.6, half * 1.2 + 0.6 / Math.max(d, 1), da);
+        v *= 1 - 0.68 * kk; h -= 0.4 * kk;
+      }
+      const e = Math.min(xx, yy, 127 - xx, 127 - yy) + (hash(xx >> 2, yy >> 2, seed + 4) - 0.5) * 2;
+      if (e < 5) { const kk = clamp01(e / 5); v *= 0.62 + 0.38 * kk; h *= 0.5 + 0.5 * kk; }
+      put(ox + xx, oy + yy, r * v, gg * v, b * v, h);
+    }
+  }
+}
+
+function drawWood(look = 'rustic') {
+  const W = WOOD.w, Hh = WOOD.h, col = new Uint8ClampedArray(W * Hh * 4), H = new Float32Array(W * Hh);
+  const put = (x, y, r, g, b, h) => { const i = y * W + x; col[i * 4] = r; col[i * 4 + 1] = g; col[i * 4 + 2] = b; col[i * 4 + 3] = 255; H[i] = h; };
+  if (look === 'straight' || !WOOD_STYLE[look]) drawStraight(put); else drawBoards(put, look);
   return { col, H };
 }
 
-// ── stone: mottled grey-brown rock with pits and veins (tiles both ways) ──────────────────────────────────────────────
-function drawStone() {
-  const S = 256, col = new Uint8ClampedArray(S * S * 4), H = new Float32Array(S * S);
-  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
-    const u = x / S, v = y / S, i = y * S + x;
+// ── stone: tiling rock (0.7 m to a repeat, each stone its own window on it), five looks ──────────────────────────────
+// Every look keeps its features small next to the 0.7 m tile, so the windows on neighbouring stones don't show a repeat.
+// nrm: how steep its normal map is; rough: its roughness (river rock is polished by the water)
+export const STONE_LOOKS = {
+  fieldstone: { label: 'Fieldstone', note: 'mottled grey-brown, lichen flecks, soft lumps', nrm: 5, rough: 0.93 },
+  granite: { label: 'Granite', note: 'salt-and-pepper grains', nrm: 3, rough: 0.8 },
+  sandstone: { label: 'Sandstone', note: 'warm tan, faint bedding layers, gritty', nrm: 4, rough: 0.96 },
+  river: { label: 'River rock', note: 'smooth, soft rounded blotches', nrm: 2.2, rough: 0.72 },
+  veined: { label: 'Veined (first look)', note: 'mottled rock with ridged noise lines', nrm: 5, rough: 0.92 },
+};
+// the first look's average colour (0..1): chinking and mortar use the stone texture too, and are re-tinted against
+// this so they stay the same colour whichever rock is chosen
+export const STONE_REF = [0.389, 0.363, 0.316];
+
+const STONE_PAINT = {
+  // grey-brown, mottled at two sizes, crusts of lichen in clusters (pale grey-green, the odd yellow or black), pits
+  fieldstone(x, y, u, v, o) {
+    const wu = u + (fbm(u, v, 5, 5, 2, 301) - 0.5) * 0.08, wv = v + (fbm(u, v, 5, 5, 2, 303) - 0.5) * 0.08;
+    const big = fbm(wu, wv, 4, 4, 4, 311), mid = fbm(wu, wv, 14, 14, 3, 321), hue = fbm(wu, wv, 3, 3, 3, 331);
+    const grit = hash(x, y, 341), sand = vnoise(u * 96, v * 96, 96, 96, 343);
+    const br = sstep(0.38, 0.64, hue);
+    const l = 0.84 + 0.55 * (big - 0.5) + 0.32 * (mid - 0.5) + 0.12 * (grit - 0.5) + 0.08 * (sand - 0.5);
+    let r = (120 + 18 * br) * l, g = (117 + 4 * br) * l, b = (112 - 12 * br) * l;
+    const pit = sstep(0.84, 0.92, vnoise(u * 64, v * 64, 64, 64, 345)) * sstep(0.55, 0.65, mid);
+    r *= 1 - 0.4 * pit; g *= 1 - 0.4 * pit; b *= 1 - 0.4 * pit;
+    let lich = 0;
+    const gather = (fbm(u, v, 3, 3, 2, 371) - 0.5) * 1.9;                   // lichen gathers in some parts of a stone
+    for (const [n, sd, dens, sz] of [[16, 351, 0.06, 0.42], [40, 361, 0.1, 0.34]]) {
+      const here = gather + dens;
+      if (here <= 0) continue;
+      const C = cells(u + (fbm(u, v, 24, 24, 2, sd + 5) - 0.5) * 0.02, v + (fbm(u, v, 24, 24, 2, sd + 7) - 0.5) * 0.02, n, sd);
+      if (C.id > here) continue;
+      const rr = sz * (0.4 + 0.6 * ((C.id * 7.31) % 1)), k = 1 - sstep(rr - 0.05, rr + 0.05, C.f1);
+      if (k <= 0) continue;
+      const kind = (C.id * 13.7) % 1;
+      const lc = kind < 0.72 ? [164, 170, 150] : kind < 0.84 ? [176, 150, 88] : [62, 62, 58];
+      const fl = 0.86 + 0.24 * grit - 0.12 * sstep(rr * 0.6, rr, C.f1);   // speckled crust, a darker edge
+      r = mix(r, lc[0] * fl, k * 0.8); g = mix(g, lc[1] * fl, k * 0.8); b = mix(b, lc[2] * fl, k * 0.8);
+      lich = Math.max(lich, k);
+    }
+    o.r = r; o.g = g; o.b = b; o.h = 0.52 * big + 0.3 * mid + 0.05 * grit + 0.03 * sand + 0.04 * lich - 0.2 * pit;
+  },
+  // grains a few millimetres across: white and faintly pink feldspar, grey glassy quartz, black mica; split-faced lumps
+  granite(x, y, u, v, o) {
+    const C = cells(u, v, 72, 401, 1), id = C.id, edge = sstep(0, 0.16, C.f2 - C.f1);
+    const big = fbm(u, v, 4, 4, 4, 411), mid = fbm(u, v, 12, 12, 3, 421), tone = fbm(u, v, 3, 3, 2, 431);
+    let c;
+    if (id < 0.1) c = [48, 46, 46];
+    else if (id < 0.38) c = [140 + 30 * ((id * 9.1) % 1), 140 + 30 * ((id * 9.1) % 1), 145 + 30 * ((id * 9.1) % 1)];
+    else if (id < 0.8) c = [200, 196, 190];
+    else c = [204, 182, 168];
+    const sp = cells(u, v, 170, 441), speck = sp.id < 0.07 ? 1 - sstep(0.2, 0.36, sp.f1) : 0;   // fine black specks
+    const l = (0.86 + 0.12 * edge) * (0.92 + 0.3 * (big - 0.5) + 0.12 * (tone - 0.5)) * (0.94 + 0.12 * hash(x, y, 451)) * (1 - 0.6 * speck);
+    o.r = c[0] * l; o.g = c[1] * l; o.b = c[2] * l;
+    o.h = 0.55 * big + 0.25 * mid + (id < 0.1 ? -0.03 : id < 0.38 ? 0.04 : 0) - 0.03 * (1 - edge);
+  },
+  // tan layers of laid-down sand, each its own shade and hardness (the hard ones stand out), fine laminae, rusty iron
+  // stains, grit
+  sandstone(x, y, u, v, o) {
+    const NB = 5, warp = (fbm(u, v, 2, 2, 3, 501) - 0.5) * 0.45 + (fbm(u, v, 8, 8, 2, 503) - 0.5) * 0.1;
+    const b = v * NB + warp, bi = Math.floor(b), bf = b - bi, m = (k) => ((k % NB) + NB) % NB;
+    const t0 = hash(m(bi), 0, 511), t1 = hash(m(bi + 1), 0, 511), blend = sstep(0.65, 1, bf), tone = mix(t0, t1, blend);
+    const hd = mix(hash(m(bi), 1, 513), hash(m(bi + 1), 1, 513), blend);
+    const lam = Math.sin((b * 3 + (fbm(u, v, 6, 6, 2, 515) - 0.5) * 0.8) * Math.PI * 2);
+    const big = fbm(u, v, 5, 5, 4, 521), mid = fbm(u, v, 16, 16, 2, 523), grit = hash(x, y, 531), sand = vnoise(u * 128, v * 128, 128, 128, 533);
+    const iron = sstep(0.6, 0.85, fbm(u + (fbm(u, v, 6, 6, 2, 543) - 0.5) * 0.1, v, 4, 4, 4, 541));
+    const l = (0.84 + 0.13 * (tone - 0.5) + 0.015 * lam + 0.2 * (big - 0.5) + 0.1 * (mid - 0.5)) * (0.86 + 0.18 * grit + 0.08 * sand) * (grit > 0.98 ? 0.58 : 1);
+    const warm = (hash(m(bi), 2, 517) - 0.5) * 0.07;
+    let r = 186 * l * (1 + warm), g = 158 * l * (1 + warm * 0.4), bb = 122 * l;
+    r = mix(r, 170 * l, iron * 0.4); g = mix(g, 118 * l, iron * 0.4); bb = mix(bb, 80 * l, iron * 0.4);
+    const groove = 1 - sstep(0, 0.05, Math.min(bf, 1 - bf));
+    o.r = r; o.g = g; o.b = bb; o.h = 0.15 * hd + 0.4 * big + 0.18 * mid + 0.1 * grit + 0.05 * sand - 0.05 * groove;
+  },
+  // worn smooth by water: soft round patches of a lighter or darker shade, almost no fine detail
+  river(x, y, u, v, o) {
+    const wu = u + (fbm(u, v, 4, 4, 2, 601) - 0.5) * 0.1, wv = v + (fbm(u, v, 4, 4, 2, 603) - 0.5) * 0.1;
+    let l = 0.9 + 0.12 * (fbm(u, v, 3, 3, 3, 605) - 0.5), warm = 0;
+    for (const [n, sd, amt] of [[5, 611, 0.15], [11, 621, 0.09]]) {
+      const B = blobs(wu, wv, n, sd); l += amt * B.s; warm += 0.08 * B.w;
+    }
+    const fleck = cells(u, v, 60, 631), lf = fleck.id < 0.03 ? 1 - sstep(0.15, 0.3, fleck.f1) : 0;
+    l *= 1 + 0.25 * lf; l *= 0.985 + 0.03 * hash(x, y, 641);
+    o.r = 124 * l * (1 + warm); o.g = 126 * l; o.b = 128 * l * (1 - warm);
+    o.h = 0.7 * fbm(u, v, 3, 3, 3, 651) + 0.15 * fbm(u, v, 8, 8, 2, 653);
+  },
+  // the first look: mottled grey-brown rock with pits and ridged noise "veins"
+  veined(x, y, u, v, o) {
     const big = fbm(u, v, 4, 4, 4, 51), mid = fbm(u, v, 16, 16, 3, 61), fine = hash(x, y, 71);
     const vein = Math.pow(1 - Math.abs(fbm(u, v, 6, 6, 3, 81) - 0.5) * 2, 24);
     const warm = fbm(u, v, 3, 3, 2, 91);
     const l = 0.55 + 0.25 * big + 0.12 * mid + 0.1 * (fine - 0.5) - 0.18 * vein;
-    col[i * 4] = 255 * l * (0.5 + 0.08 * warm); col[i * 4 + 1] = 255 * l * (0.49 + 0.03 * warm); col[i * 4 + 2] = 255 * l * (0.46 - 0.04 * warm); col[i * 4 + 3] = 255;
-    H[i] = 0.5 * big + 0.3 * mid + 0.08 * fine - 0.25 * vein;
+    o.r = 255 * l * (0.5 + 0.08 * warm); o.g = 255 * l * (0.49 + 0.03 * warm); o.b = 255 * l * (0.46 - 0.04 * warm);
+    o.h = 0.5 * big + 0.3 * mid + 0.08 * fine - 0.25 * vein;
+  },
+};
+function drawStone(look = 'fieldstone') {
+  const S = 256, col = new Uint8ClampedArray(S * S * 4), H = new Float32Array(S * S), paint = STONE_PAINT[look] || STONE_PAINT.fieldstone;
+  const o = { r: 0, g: 0, b: 0, h: 0 }, mean = [0, 0, 0];
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
+    const i = y * S + x; paint(x, y, x / S, y / S, o);
+    col[i * 4] = o.r; col[i * 4 + 1] = o.g; col[i * 4 + 2] = o.b; col[i * 4 + 3] = 255; H[i] = o.h;
+    mean[0] += col[i * 4]; mean[1] += col[i * 4 + 1]; mean[2] += col[i * 4 + 2];
   }
-  return { col, H };
+  return { col, H, mean: mean.map((m) => m / (S * S * 255)) };
 }
 
 // ── ground: short grass over soil (tiles both ways) ───────────────────────────────────────────────────────────────────
@@ -242,13 +599,45 @@ function drawDecals() {
 // ── all of them, with what each costs ────────────────────────────────────────────────────────────────────────────────
 export const gpuBytes = (w, h, mips = true) => w * h * 4 * (mips ? 4 / 3 : 1);
 
-export async function makeTextures() {
+// the stone and the wood are each one look (one of STONE_LOOKS, WOOD_LOOKS) and can be painted again in place
+// (setStone, setWood): the same canvases and textures, so every material using them just picks up the new picture
+export const DEFAULT_STONE = 'fieldstone', DEFAULT_WOOD = 'rustic';
+function paintInto(canvas, px) { const g = canvas.getContext('2d'), img = g.createImageData(canvas.width, canvas.height); img.data.set(px); g.putImageData(img, 0, 0); }
+function woodPixels(look) {
+  const t0 = performance.now(), W = drawWood(look);
+  return { col: W.col, nrm: normalsFrom(W.H, WOOD.w, WOOD.h, 6, false), ms: performance.now() - t0 };
+}
+function stonePixels(look) {
+  const t0 = performance.now(), S = drawStone(look);
+  return { col: S.col, nrm: normalsFrom(S.H, 256, 256, STONE_LOOKS[look].nrm, true), mean: S.mean, ms: performance.now() - t0 };
+}
+// paint a new look onto the textures T already has; returns how long it took (ms), drawing and upload together
+export function setWood(T, look) {
+  if (!WOOD_LOOKS[look]) look = DEFAULT_WOOD;
+  const t0 = performance.now(), P = woodPixels(look);
+  paintInto(T.wood.image, P.col); paintInto(T.woodN.image, P.nrm);
+  T.wood.needsUpdate = T.woodN.needsUpdate = true;
+  T.woodLook = look; T.msWood = performance.now() - t0;
+  T.list[0].note = WOOD_LOOKS[look].label + ': 12 board strips + 8 end-grain squares';
+  return T.msWood;
+}
+export function setStone(T, look) {
+  if (!STONE_LOOKS[look]) look = DEFAULT_STONE;
+  const t0 = performance.now(), P = stonePixels(look);
+  paintInto(T.stone.image, P.col); paintInto(T.stoneN.image, P.nrm);
+  T.stone.needsUpdate = T.stoneN.needsUpdate = true;
+  T.stoneLook = look; T.stoneMean = P.mean; T.msStone = performance.now() - t0;
+  T.list[2].note = STONE_LOOKS[look].label + ': tiling rock';
+  return T.msStone;
+}
+
+export async function makeTextures(o = {}) {
   try { await Promise.all([document.fonts.load('64px Rye'), document.fonts.load('15px Bitter')]); } catch (e) { /* fonts are optional */ }
   const t0 = performance.now();
-  const W = drawWood(), S = drawStone(), N = drawNoise();
-  const wood = tex(canvasOf(512, 512, W.col), { repeat: true, repeatT: false });
-  const woodN = tex(canvasOf(512, 512, normalsFrom(W.H, 512, 512, 6, false)), { srgb: false, repeat: true, repeatT: false });
-  const stone = tex(canvasOf(256, 256, S.col)), stoneN = tex(canvasOf(256, 256, normalsFrom(S.H, 256, 256, 5, true)), { srgb: false });
+  const N = drawNoise();
+  const wood = tex(canvasOf(WOOD.w, WOOD.h), { repeat: true, repeatT: false });
+  const woodN = tex(canvasOf(WOOD.w, WOOD.h), { srgb: false, repeat: true, repeatT: false });
+  const stone = tex(canvasOf(256, 256)), stoneN = tex(canvasOf(256, 256), { srgb: false });
   const ground = tex(drawGround());
   // the noise is raw numbers (four channels, alpha too), so it goes up as data, not through a canvas (a canvas would
   // spoil the colour of see-through pixels)
@@ -258,14 +647,17 @@ export async function makeTextures() {
   const noiseCanvas = canvasOf(256, 256, (() => { const p = new Uint8ClampedArray(N.length); for (let i = 0; i < N.length; i += 4) { p[i] = N[i]; p[i + 1] = N[i + 1]; p[i + 2] = N[i + 3]; p[i + 3] = 255; } return p; })());
   const decals = drawDecals();
   const list = [
-    { name: 'Wood trim sheet', note: '12 board strips + 4 end-grain squares', canvas: wood.image, tex: wood },
-    { name: 'Wood normals', note: 'bevels, grain, nail heads', canvas: woodN.image, tex: woodN },
-    { name: 'Stone', note: 'tiling rock', canvas: stone.image, tex: stone },
+    { name: 'Wood trim sheet', note: '', canvas: wood.image, tex: wood },
+    { name: 'Wood normals', note: 'bevels, grain, knots, nail heads', canvas: woodN.image, tex: woodN },
+    { name: 'Stone', note: '', canvas: stone.image, tex: stone },
     { name: 'Stone normals', note: '', canvas: stoneN.image, tex: stoneN },
     { name: 'Grass', note: 'tiling ground', canvas: ground.image, tex: ground },
     { name: 'Weathering noise', note: 'R patches, G blotches, A moss clumps (shown as blue)', canvas: noiseCanvas, tex: noise },
     ...Object.values(decals).map((D) => ({ name: 'Decal: ' + D.label, note: '', canvas: D.canvas, tex: D.tex })),
   ];
   for (const L of list) { L.w = L.canvas.width; L.h = L.canvas.height; L.bytes = gpuBytes(L.w, L.h); }
-  return { wood, woodN, stone, stoneN, ground, noise, decals, list, ms: performance.now() - t0, totalBytes: list.reduce((s, L) => s + L.bytes, 0) };
+  const T = { wood, woodN, stone, stoneN, ground, noise, decals, list, totalBytes: list.reduce((s, L) => s + L.bytes, 0) };
+  setWood(T, o.wood || DEFAULT_WOOD); setStone(T, o.stone || DEFAULT_STONE);
+  T.ms = performance.now() - t0;
+  return T;
 }

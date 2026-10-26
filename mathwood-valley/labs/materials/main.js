@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { makeTextures } from './textures.js';
+import { makeTextures, setStone, setWood, STONE_LOOKS, WOOD_LOOKS, STONE_REF, DEFAULT_STONE, DEFAULT_WOOD } from './textures.js';
 import { buildCabin, CABIN, topAt } from './cabin.js';
 import { buildFrontier, LOOK as FRONTIER_LOOK } from './frontier.js';
 import { U, MASKS, weather } from './weather.js';
@@ -18,6 +18,10 @@ const CODE_FILES = ['cabin.js', 'frontier.js', 'textures.js', 'weather.js', 'dec
 const $ = (s, el = document) => el.querySelector(s);
 const kb = (b) => (b >= 1048576 ? (b / 1048576).toFixed(2) + ' MB' : Math.round(b / 1024) + ' KB');
 const num = (n) => Math.round(n).toLocaleString('en-US');
+// the stone and wood looks are remembered per viewer (in this browser only); storage can be missing or blocked
+const PREF = 'mathwood.materials.';
+function loadPref(k, ok, d) { try { const v = localStorage.getItem(PREF + k); return v && ok[v] ? v : d; } catch (e) { return d; } }
+function savePref(k, v) { try { localStorage.setItem(PREF + k, v); } catch (e) { /* not remembered then */ } }
 
 // ── renderer, scene, camera ───────────────────────────────────────────────────────────────────────────────────────────
 const canvas = $('#c');
@@ -42,6 +46,7 @@ const state = {
   grimeAmt: 0.85, streaks: 5, grimeSharp: 0.6, edgeAmt: 0.7, edgeCm: 1.2,
   view: 'built', tripoWeather: false, decalSize: 1,
   mask: 'off', cabin: 'frontier',
+  stone: loadPref('stone', STONE_LOOKS, DEFAULT_STONE), wood: loadPref('wood', WOOD_LOOKS, DEFAULT_WOOD),
 };
 // each built cabin starts with its own weathering: the neat one with the lab's first settings (all off), the frontier
 // one with everything on and turned up (frontier.js). Switching cabins puts that cabin's settings back.
@@ -95,18 +100,45 @@ function getCabin(kind) {
   if (!built[kind]) {
     const c = BUILDERS[kind](); c.meshes = {};
     for (const g in c.geos) { const m = new THREE.Mesh(c.geos[g], mats[g]); m.name = g; m.castShadow = g !== 'glass'; m.receiveShadow = true; c.meshes[g] = m; }
-    built[kind] = c;
+    built[kind] = c; fixMortar(c);
   }
   return built[kind];
+}
+// chinking and mortar are drawn with the stone texture: keep them the colour they were tinted for whatever the rock, by
+// dividing their tint by how much lighter or darker, redder or greyer the chosen rock is than the first (veined) one
+function fixMortar(c) {
+  const geo = c.geos.stone, M = geo && geo.userData.mortar; if (!M || !T) return;
+  const A = geo.attributes.aTintPaint; if (!geo.userData.tint0) geo.userData.tint0 = A.array.slice();
+  const t0 = geo.userData.tint0, k = STONE_REF.map((r, i) => r / T.stoneMean[i]);
+  for (let v = 0; v < M.length; v++) if (M[v]) for (let i = 0; i < 3; i++) A.array[v * 4 + i] = t0[v * 4 + i] * k[i];
+  A.needsUpdate = true;
+}
+// a new stone or wood look: paint it into the same textures, live (and the rock's roughness, the mortar's tint)
+function applyStone() {
+  const ms = setStone(T, state.stone); state.stone = T.stoneLook;
+  mats.stone.roughness = STONE_LOOKS[T.stoneLook].rough;
+  for (const k in built) fixMortar(built[k]);
+  savePref('stone', state.stone); surfaceNote(); fillTextures();
+  return ms;
+}
+function applyWood() {
+  const ms = setWood(T, state.wood); state.wood = T.woodLook;
+  savePref('wood', state.wood); surfaceNote(); fillTextures();
+  return ms;
+}
+function surfaceNote() {
+  const el = $('#surfNote'); if (!el || !T) return;
+  const S = STONE_LOOKS[T.stoneLook], W = WOOD_LOOKS[T.woodLook];
+  el.textContent = `${S.label}: ${S.note}. ${W.label}: ${W.note}. Drawn in ${Math.round(T.msStone)} ms (stone) and ${Math.round(T.msWood)} ms (wood).`;
 }
 const tripoInfo = { bytes: 0, loBytes: 0, tex: 0, tris: 0, meshes: 0 }, codeInfo = { bytes: 0, gz: 0 };
 const bench = {};
 
 async function build() {
-  T = await makeTextures();
+  T = await makeTextures({ stone: state.stone, wood: state.wood });
   U.uNoise.value = T.noise;
-  mats.wood = weather(new THREE.MeshStandardMaterial({ map: T.wood, normalMap: T.woodN, normalScale: new THREE.Vector2(0.9, 0.9), roughness: 0.86 }), { box: true, ao: true });
-  mats.stone = weather(new THREE.MeshStandardMaterial({ map: T.stone, normalMap: T.stoneN, roughness: 0.92 }), { box: true, ao: true });
+  mats.wood = weather(new THREE.MeshStandardMaterial({ map: T.wood, normalMap: T.woodN, normalScale: new THREE.Vector2(0.9, 0.9), roughness: 0.86 }), { box: true, ao: true, bevel: true });
+  mats.stone = weather(new THREE.MeshStandardMaterial({ map: T.stone, normalMap: T.stoneN, roughness: STONE_LOOKS[T.stoneLook].rough }), { box: true, ao: true, bevel: true });
   mats.iron = weather(new THREE.MeshStandardMaterial({ color: 0x3a332e, roughness: 0.55, metalness: 0.65 }), { box: true, ao: true });
   mats.glass = weather(new THREE.MeshStandardMaterial({ color: 0x0d1418, roughness: 0.06, metalness: 0.1 }), { box: true, ao: true });
   cabin = getCabin(state.cabin);
@@ -272,6 +304,7 @@ const MASK_INFO = {
   dirt: ['Grime: corner dirt', 'dirt settled where the air is still (low ambient occlusion)'],
   wear: ['Edge wear', 'worn wood and chipped paint at board edges'],
   edgeDist: ['Distance to the nearest edge', 'what edge wear starts from: 1 on an edge, 0 four "widths" in'],
+  rim: ['Edge darkening', 'how much each face darkens toward its edges: 1 at an edge, 0 past the edge width'],
   ao: ['Ambient occlusion', 'how much sky each spot sees: dark = tucked in, bright = open'],
 };
 
@@ -281,6 +314,14 @@ const SECTIONS = [
 <p><b>Neat</b>: lap siding, small shingles, painted trim. <b>Frontier</b>: an 1880s homestead. Hewn logs with pale chinking in the gaps, their ends crossing at the corners at ragged lengths; big split shakes, each its own width, a little crooked, the odd gap or missing one, every course resting on the one below so its butt lifts and throws a dark line; a ridge sagged in the middle; dark weathered wood instead of white trim; board shutters (one hanging off a hinge); a pole rail; a fieldstone chimney.</p>
 <p>The frontier cabin costs about as many triangles as the Tripo model: fewer, bigger parts, and faces nobody can ever see left out (a shake's underside and the end hidden under the next course, a shutter's back). Its wood is tinted corner by corner: bleached grey up high, darker and dirtier low down.</p>
 <p>Switching puts that cabin's own weathering settings back (the frontier starts with it all on and turned up).</p>` },
+  { id: 'surface', title: 'Stone, wood and edges', open: true, rows: [
+      S('Stone', 'stone', Object.entries(STONE_LOOKS).map(([k, L]) => [k, L.label])), S('Wood', 'wood', Object.entries(WOOD_LOOKS).map(([k, L]) => [k, L.label])), { t: 'note', id: 'surfNote' },
+      R('Edge darkening', 'uEdgeDark', 0, 1, 0.01), R('Edge width', 'uEdgeDarkW', 0.005, 0.12, 0.0025, (v) => (v * 100).toFixed(1) + ' cm'), R('Bevel light', 'uBevel', 0, 1, 0.01),
+      M([['rim', 'Edge darkening']])],
+    how: `<p>Each look is a few rules painted into the same small textures, so switching takes a moment and downloads nothing.</p>
+<p><b>Stone</b> tiles every 0.7 m and each stone shows its own window on it, so the rules keep everything small next to the tile: no big feature that would repeat stone to stone. <b>Fieldstone</b>: grey and brown mottling at two sizes, crusts of lichen gathered in patches. <b>Granite</b>: a cell per grain, each one feldspar (white or pink), quartz (glassy grey) or mica (black). <b>Sandstone</b>: level beds, each its own shade and hardness (the hard ones stand proud), with rusty iron stains. <b>River rock</b>: soft round blotches and almost nothing else, and a little shinier. <b>Veined</b>, the first look, draws "veins" where a noise crosses its middle value, which makes the squiggly lines. The mortar and chinking use the stone texture too, read three times finer (so it comes out as sand) and with their tint evened out against each rock, so they stay the same colour.</p>
+<p><b>Wood</b>: a flat-sawn board is a slice through a log's growth rings. Across the board a ring sits at <code>r = &radic;((y - heart)&sup2; + depth&sup2;)</code> from the heart, and where the slice dips toward the heart along the board each ring closes into an arch (cathedral grain), or between two dips into an eye. A knot is a branch through the rings: it raises the ring count round it, so the lines nearby close into loops hugging it. Then checks (cracks along the grain, mostly out of a knot), scorched stains along the edges, sun-bleached patches, and a nail every 1.2 m. The strips are 64 px across a board, twice the first look's, so the rings round a knot have room to show.</p>
+<p><b>Edges</b>: each face knows how far each pixel is from its box's edges (the numbers edge wear uses). Within the edge width (never more than 0.6 of the face's narrower half, so a thin board gets a thin band) it darkens, curving in, darkest at the corners. <b>Bevel light</b> treats the same band as a dip and tilts the normal over it, so the light catches the edges as if they were rounded off. No extra triangles.</p>` },
   { id: 'light', title: 'Light', open: true, rows: [R('Sun direction', 'az', 0, 359, 1, fmtAz), R('Time of day', 'hour', 5.5, 19.5, 0.25, fmtHour), K('Shadows', 'shadows')],
     how: `<p>The sun is a <b>directional light</b> (parallel rays, like a sun that is very far away) with a <b>shadow map</b>: the scene is drawn once from the sun's side into a depth picture, and each pixel checks it to see whether something is between it and the sun.</p>
 <p>The sky is a <b>hemisphere light</b>: blue from above, earth-brown from below. Time of day lowers the sun and warms its colour; the sky dims and goes orange with it.</p>` },
@@ -360,6 +401,8 @@ function setV(key, v) {
   if (key[0] === 'u' && U[key]) { if (U[key].value.isColor) U[key].value.set(v); else U[key].value = v; } else state[key] = v;
   if (key === 'decalSize' && decals) decals.scale = v;
   if (key === 'tripoWeather') applyTripoWeather();
+  if (key === 'stone' && T) applyStone();
+  if (key === 'wood' && T) applyWood();
   applyWeather();
 }
 function control(r, sec) {
@@ -396,6 +439,8 @@ function control(r, sec) {
   } else if (r.t === 'cabins') {
     el.className = 'btnrow';
     el.innerHTML = [['neat', 'Neat'], ['frontier', 'Frontier']].map(([k, l]) => `<button class="btn${k === state.cabin ? ' on' : ''}" data-cabin="${k}">${l}</button>`).join('');
+  } else if (r.t === 'note') {
+    el.className = ''; el.innerHTML = `<p class="note" id="${r.id}"></p>`;
   } else if (r.t === 'cabininfo') {
     el.className = ''; el.innerHTML = '<p class="note" id="cabinInfo"></p>';
   } else if (r.t === 'compare') {
@@ -407,6 +452,7 @@ function control(r, sec) {
   }
   return el;
 }
+function syncSelects() { for (const k of ['stone', 'wood']) { const s = $('#s-surface' + k); if (s) s.value = state[k]; } }
 function syncPanel() {
   panel.querySelectorAll('summary .en').forEach((cb) => { cb.checked = !!state[cb.dataset.key]; });
   panel.querySelectorAll('.row[data-key]').forEach((row) => {
@@ -516,7 +562,7 @@ function loop() {
   try {
     buildPanel();
     await build();
-    resize(); fillStamps(); fillTextures(); syncPanel(); applyView(); applyWeather();
+    resize(); fillStamps(); fillTextures(); surfaceNote(); syncPanel(); applyView(); applyWeather();
     renderer.compile(scene, camera);
     $('#loading').classList.add('gone');
     loop();
@@ -532,6 +578,10 @@ window.ML = {
   mask(name) { state.mask = name; syncPanel(); applyWeather(); },
   view(v) { state.view = v; applyView(); },
   cabin(kind) { useCabin(kind); },
+  // switch the stone or wood look (returns how long it took, ms)
+  stone(look) { state.stone = look; const ms = applyStone(); syncSelects(); return ms; },
+  wood(look) { state.wood = look; const ms = applyWood(); syncSelects(); return ms; },
+  get textures() { return T && { stone: T.stoneLook, wood: T.woodLook, msStone: T.msStone, msWood: T.msWood, ms: T.ms, bytes: T.totalBytes, list: T.list.map((L) => [L.name, L.w, L.h, L.bytes]) }; },
   cam(pos, tgt) { camera.position.set(...pos); controls.target.set(...tgt); controls.update(); },
   get renderer() { return renderer; }, get bench() { return bench; }, get cabin() { return cabin; }, get info() { return { cabin: cabin && { kind: state.cabin, parts: cabin.parts, counts: cabin.counts, tris: cabinTris(), msBuild: cabin.msBuild, msAO: cabin.msAO }, tex: T && T.totalBytes, texMs: T && T.ms, tripo: tripoInfo, code: codeInfo }; },
 };

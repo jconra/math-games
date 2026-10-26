@@ -163,7 +163,7 @@ function walls(k) {
         for (const o of opens) if (i >= o.c0 - 1 && i <= o.c1) cs = cs.flatMap(([s, f]) => (o.a1 <= s || o.a0 >= f ? [[s, f]] : [[s, o.a0 + 0.02], [o.a1 - 0.02, f]].filter(([p, q]) => q - p > 0.05)));
         for (const [s, f] of cs) {
           const len = f - s, mid = (s + f) / 2;
-          k.box('stone', [len, y1 - y0, 0.06], null, null, { m: wallM(w, mid, (y0 + y1) / 2, -0.028 - 0.03, [k.r(-0.02, 0.02), 0, 0]), tint: CHINK.map((c) => c * k.r(0.92, 1.06)), skip: '-z+y-y+x-x', cuts: cutsFor(len, [], 2.2), long: 0, contactSide: 0.55, pairAO: true });
+          k.box('stone', [len, y1 - y0, 0.06], null, null, { m: wallM(w, mid, (y0 + y1) / 2, -0.028 - 0.03, [k.r(-0.02, 0.02), 0, 0]), tint: CHINK.map((c) => c * k.r(0.92, 1.06)), mortar: true, skip: '-z+y-y+x-x', cuts: cutsFor(len, [], 2.2), long: 0, contactSide: 0.55, pairAO: true });
         }
       }
     }
@@ -405,7 +405,7 @@ function pier(k, x, z, top) {
 function footing(k) {
   // piers under the corners and the middle of the eave walls; the crawl space between them in deep shadow
   for (const sx of [-1, 0, 1]) for (const sz of [-1, 1]) pier(k, sx * (W / 2 - 0.12), sz * (D / 2 - 0.12), PIER - 0.01);
-  k.box('stone', [W - 0.5, PIER - 0.04, D - 0.5], [0, (PIER - 0.04) / 2, 0], null, { tint: [0.42, 0.4, 0.38], skip: '-y' });
+  k.box('stone', [W - 0.5, PIER - 0.04, D - 0.5], [0, (PIER - 0.04) / 2, 0], null, { tint: [0.42, 0.4, 0.38], mortar: true, skip: '-y' });
   k.solid([W - 0.3, PIER, D - 0.3], [0, PIER / 2, 0]);
 }
 
@@ -456,7 +456,7 @@ function chimney(k) {
   const mortar = [1.15, 1.1, 1.0], IN = 0.03;
   for (const q of courses) {
     const xa = q.x0 + IN, xb = q.backFace ? q.x1 - IN : q.x1 - 0.01, zr = q.z1 - IN;
-    k.box('stone', [xb - xa, q.h, 2 * zr], [(xa + xb) / 2, q.y + q.h / 2, 0], null, { tint: mortar, skip: q.backFace ? '-y' : '-y+x' });
+    k.box('stone', [xb - xa, q.h, 2 * zr], [(xa + xb) / 2, q.y + q.h / 2, 0], null, { tint: mortar, mortar: true, skip: q.backFace ? '-y' : '-y+x' });
   }
   // a flat cap stone and the flue's dark mouth
   k.box('stone', [CH.sx1 - CH.sx0 + 0.06, 0.08, 2 * CH.sz + 0.06], [(CH.sx0 + CH.sx1) / 2, y + 0.03, 0], [0, 0.04, k.r(-0.02, 0.02)], { tint: [0.95, 0.93, 0.9] });

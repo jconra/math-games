@@ -7,9 +7,10 @@
 // onBeforeCompile hands us that shader's source text before it is compiled, and we splice our own lines in after the
 // chunks we care about:
 //   vertex:    after <project_vertex>       pass the world position (and the baked AO, the box numbers) to the pixels
-//   fragment:  after <map_fragment>         the colour: board tint or paint, edge wear, grime, moss
+//   fragment:  after <map_fragment>         the colour: board tint or paint, edge wear, grime, moss, darker bevelled edges
 //              after <roughnessmap_fragment> moss is matte, paint is satin, worn edges are polished
-//              after <normal_fragment_maps> the moss gets a lumpy surface (a bump from its clump height)
+//              after <normal_fragment_maps> the moss gets a lumpy surface (a bump from its clump height), and the
+//                                           bevelled edges a rounded-off one
 //              after <aomap_fragment>       ambient occlusion darkens only the sky light, not the sun
 //              after <dithering_fragment>   "show mask": replace the colour with one mask in false colour
 // Everything stays WebGL1-safe (GLSL ES 1.0: texture2D, no arrays, no integer tricks).
@@ -33,6 +34,10 @@ export const U = {
   uEdgeAmt: { value: 0 }, uEdgeWidth: { value: 0.018 }, uEdgeBreak: { value: 0.6 }, uPaintChip: { value: 0.35 },
   // ambient occlusion: strength (above 1 it darkens harder: ao^strength), and how much it darkens the sunlight too
   uAOAmt: { value: 1 }, uAOSun: { value: 0 },
+  // bevelled edges (boards and stones): how much darker a face gets toward its edges, over how wide a band (metres, but
+  // never more than 0.6 of the face's narrower half, so a thin board and a big stone both look right), and how far the
+  // light is bent there as if the edge were rounded off
+  uEdgeDark: { value: 0.5 }, uEdgeDarkW: { value: 0.04 }, uBevel: { value: 0.6 },
 };
 
 // mask codes for uMask (the "show mask" menus)
@@ -40,7 +45,7 @@ export const MASKS = {
   off: 0,
   moss: 1, mossUp: 2, mossLow: 3, mossShade: 4, mossTuck: 5, mossNoise: 6, mossRain: 7,
   grime: 11, streaks: 12, splash: 13, dirt: 14,
-  wear: 21, edgeDist: 22,
+  wear: 21, edgeDist: 22, rim: 23,
   ao: 31,
 };
 
@@ -83,6 +88,7 @@ uniform vec3 uMossColor, uShadeDir;
 uniform float uGrimeAmt, uStreakLen, uStreakScale, uSplashH, uCornerDirt, uGrimeSoft;
 uniform vec3 uGrimeColor, uMudColor;
 uniform float uEdgeAmt, uEdgeWidth, uEdgeBreak, uPaintChip;
+uniform float uEdgeDark, uEdgeDarkW, uBevel;
 uniform float uAOAmt, uAOSun, uFixedTop;
 varying vec4 vWPosAO;
 #ifdef W_BOX
@@ -109,7 +115,7 @@ vec4 wBig = wTri(wP * uPatchScale, wTw);    // big soft patches (R), blotches (G
 vec4 wFine = wTri(wP * 0.9, wTw);           // moss cushions (A), grit (B): 1.1 m to a repeat
 float wLum = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
 float wMoss = 0.0, wMossH = 0.0, wStreak = 0.0, wSplash = 0.0, wDirt = 0.0, wWear = 0.0, wBare = 0.0, wPaintVis = 0.0, wShow = -1.0;
-float mUp = 0.0, mLow = 0.0, mShade = 0.0, mTuck = 0.0, mRain = 1.0, wEdge = 1.0;
+float mUp = 0.0, mLow = 0.0, mShade = 0.0, mTuck = 0.0, mRain = 1.0, wEdge = 1.0, wRim = 0.0, wRimH = 0.0;
 
 #ifdef W_GROUND
   // the ground: grass, worn to dirt where people walk and under the eaves (aTintPaint.r says how worn)
@@ -128,6 +134,23 @@ float mUp = 0.0, mLow = 0.0, mShade = 0.0, mTuck = 0.0, mRain = 1.0, wEdge = 1.0
     float wMn = min(wD.x, min(wD.y, wD.z)), wMx = max(wD.x, max(wD.y, wD.z));
     wEdge = wD.x + wD.y + wD.z - wMn - wMx;
     float wTop = vLocalTop.w;
+    #ifdef W_BEVEL
+    {
+      // BEVELLED EDGES: the face's own two directions (drop the one it looks along: its distance is ~0), how far this
+      // pixel is from the edges along each, and a band that darkens toward them, curving in (brighter middle, darker
+      // rim, darkest in the corners). The same band is a height that drops toward the edge (wRimH, metres): the normal
+      // tilts over it, so the light catches a rounded edge without a single extra triangle.
+      vec2 wF, wFH;
+      if (wD.x <= wD.y && wD.x <= wD.z) { wF = wD.yz; wFH = vHalf.yz; }
+      else if (wD.y <= wD.z) { wF = wD.xz; wFH = vHalf.xz; }
+      else { wF = wD.xy; wFH = vHalf.xy; }
+      float wW = max(min(uEdgeDarkW, 0.6 * min(wFH.x, wFH.y)), 0.0005);
+      vec2 wQ = clamp(1.0 - wF / wW, 0.0, 1.0);
+      vec2 wQ2 = wQ * wQ;
+      wRim = 1.0 - (1.0 - wQ2.x) * (1.0 - wQ2.y);
+      wRimH = -0.5 * uBevel * wW * (wQ2.x + wQ2.y);
+    }
+    #endif
   #else
     float wTop = uFixedTop;
   #endif
@@ -140,7 +163,7 @@ float mUp = 0.0, mLow = 0.0, mShade = 0.0, mTuck = 0.0, mRain = 1.0, wEdge = 1.0
     float wChipT = 1.0 - wEdge / max(uEdgeWidth * 0.8, 0.0005) + (wFine.b - 0.5) * 3.0 * uEdgeBreak;
     float wChip = clamp(smoothstep(0.45, 0.6, wChipT) * uEdgeAmt + smoothstep(1.04 - uPaintChip * 0.4, 1.08 - uPaintChip * 0.4, wFine.b * 0.55 + wBig.g * 0.55) * step(0.001, uEdgeAmt), 0.0, 1.0);
     vec3 wWood = diffuseColor.rgb * mix(vTintPaint.rgb, vec3(0.9, 0.82, 0.74), wPainted);
-    vec3 wPaint = vTintPaint.rgb * (0.78 + 0.9 * wLum);                  // the grain shows a little through the paint
+    vec3 wPaint = vTintPaint.rgb * (0.9 + 0.45 * wLum);                  // the grain shows a little through the paint
     wPaintVis = wPainted * (1.0 - wChip);
     diffuseColor.rgb = mix(wWood, wPaint, wPaintVis);
   #else
@@ -196,6 +219,8 @@ float mUp = 0.0, mLow = 0.0, mShade = 0.0, mTuck = 0.0, mRain = 1.0, wEdge = 1.0
   // a thin green-black film of algae round the patches, before the moss itself
   diffuseColor.rgb *= mix(vec3(1.0), wMc * 1.1 + vec3(0.3, 0.3, 0.25), smoothstep(0.0, 0.6, mCov) * 0.55);
   diffuseColor.rgb = mix(diffuseColor.rgb, wMossCol, wMoss);
+  // the bevelled edges darken whatever is on top (as a real rounded edge would, turned away from the light)
+  diffuseColor.rgb *= 1.0 - uEdgeDark * wRim;
 
   // what "show mask" shows
   if (uMask < 1.5) wShow = wMoss;
@@ -211,6 +236,7 @@ float mUp = 0.0, mLow = 0.0, mShade = 0.0, mTuck = 0.0, mRain = 1.0, wEdge = 1.0
   else if (uMask < 14.5) wShow = wDirt;
   else if (uMask < 21.5) wShow = max(wWear, wPainted * (1.0 - wPaintVis));
   else if (uMask < 22.5) wShow = 1.0 - clamp(wEdge / max(uEdgeWidth * 4.0, 0.001), 0.0, 1.0);
+  else if (uMask < 23.5) wShow = wRim;
   else wShow = wAO;
 #endif
 `;
@@ -224,9 +250,11 @@ roughnessFactor = mix(roughnessFactor, 1.0, wMoss);              // moss: fully 
 // the moss bump: a height (the cushions) turned into a tilt of the normal, using how the height changes from one pixel
 // to the next on screen (dFdx/dFdy), the same maths three.js uses for bump maps
 const FRAG_NORMAL = /* glsl */`
+// paint fills the grain: where it hasn't chipped, most of the normal map's relief goes
+normal = normalize(mix(normal, nonPerturbedNormal, wPaintVis * 0.7));
 {
   vec3 wdx = dFdx(-vViewPosition), wdy = dFdy(-vViewPosition);
-  float wh = wMossH * uMossBump * 0.012;
+  float wh = wMossH * uMossBump * 0.012 + wRimH;
   float whx = dFdx(wh), why = dFdy(wh);
   vec3 wr1 = cross(wdy, normal), wr2 = cross(normal, wdx);
   float wdet = dot(wdx, wr1);
@@ -255,11 +283,12 @@ if (uMask > 0.5) {
 }
 `;
 
-// patch a material. o: box (has the per-box attributes: edge wear), tint (aTintPaint), ao (aAO), ground, top (the drip
-// edge height for a model without per-vertex tops)
+// patch a material. o: box (has the per-box attributes: edge wear), bevel (with box: darker, rounded-looking edges),
+// tint (aTintPaint), ao (aAO), ground, top (the drip edge height for a model without per-vertex tops)
 export function weather(mat, o = {}) {
   const defs = {};
   if (o.box) defs.W_BOX = ''; if (o.tint || o.box) defs.W_TINT = ''; if (o.ao) defs.W_AO = ''; if (o.ground) defs.W_GROUND = '';
+  if (o.box && o.bevel) defs.W_BEVEL = '';
   mat.defines = { ...(mat.defines || {}), ...defs };
   const top = { value: o.top ?? 3.5 };
   mat.userData.top = top;

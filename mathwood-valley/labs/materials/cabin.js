@@ -49,6 +49,7 @@ export class Kit {
   //    slope the top face sheared along local x, rising k metres per metre (a gable board cut to the roof line)
   //    warp  a name handed to the build's warp function, which bends the finished corners (a sagging roof)
   //    span  how many trim sheet strips run across the board (2 on a wide shake: the bevel between them reads as a split)
+  //    mortar  (stone) mortar or chinking: its tint is evened out against whichever rock texture is chosen
   box(group, size, pos, rot = null, o = {}) {
     const m = o.m ? o.m.clone() : new THREE.Matrix4().compose(new THREE.Vector3(...pos), new THREE.Quaternion().setFromEuler(new THREE.Euler(...(rot || [0, 0, 0]), 'YXZ')), new THREE.Vector3(1, 1, 1));
     if (o.m && pos) m.multiplyMatrices(new THREE.Matrix4().makeTranslation(...pos), m);
@@ -375,7 +376,7 @@ export function buildGeometry(parts, group, R, opts = {}) {
   for (const P of parts) { const [a, b] = countPart(P); n += a; nIdx += b; }
   const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), uv = new Float32Array(n * 2);
   const lt = new Float32Array(n * 4), hf = new Float32Array(n * 4), tp = new Float32Array(n * 4), ao = new Float32Array(n);
-  const partOf = new Int32Array(n);
+  const partOf = new Int32Array(n), mortar = new Uint8Array(n);
   const idx = new Uint32Array(nIdx);
   const nm = new THREE.Matrix3(), axis = new THREE.Vector3(), centre = new THREE.Vector3();
   let v = 0, ii = 0;
@@ -384,8 +385,10 @@ export function buildGeometry(parts, group, R, opts = {}) {
     const long = longAxis(P);
     nm.getNormalMatrix(m); centre.setFromMatrixPosition(m);
     axis.set(0, 0, 0).setComponent(long, 1).transformDirection(m);
-    const u0 = centre.dot(axis) + (o.uShift || 0), strip = o.strip ?? 0, endTile = Math.floor(R() * 4);
-    const stOff = [R() * 4, R() * 4];
+    const u0 = centre.dot(axis) + (o.uShift || 0), strip = o.strip ?? 0, endTile = Math.floor(R() * WOOD.ends);
+    // the rock repeats every 0.7 m; mortar and chinking read it three times finer, so whatever the rock, they come out
+    // fine-grained (a granite's black grains become sand in the mortar)
+    const stOff = [R() * 4, R() * 4], stM = o.mortar ? 0.7 / 3 : 0.7;
     const tint0 = o.paint || o.tint || [1, 1, 1], painted = o.paint ? 1 : 0;
     // one corner: (lx, ly, lz) where it is drawn in the part's frame; el, eh the numbers edge wear works from
     const put = (lx, ly, lz, U, V, el, eh) => {
@@ -398,11 +401,13 @@ export function buildGeometry(parts, group, R, opts = {}) {
       hf[v * 4] = eh[0]; hf[v * 4 + 1] = eh[1]; hf[v * 4 + 2] = eh[2]; hf[v * 4 + 3] = 1;
       const t = tintAt ? tintAt(_v.x, _v.y, _v.z, tint0, o) : tint0;
       tp[v * 4] = t[0]; tp[v * 4 + 1] = t[1]; tp[v * 4 + 2] = t[2]; tp[v * 4 + 3] = painted;
-      partOf[v] = pi;
+      partOf[v] = pi; mortar[v] = o.mortar ? 1 : 0;
       return v++;
     };
-    const endUV = (fb, fc) => [(endTile * WOOD.endTile + 6 + fb * (WOOD.endTile - 12)) / WOOD.size, 1 - (WOOD.endRow + 6 + fc * (WOOD.endTile - 12)) / WOOD.size];
-    const stripV = (f) => 1 - (strip * WOOD.strip + 0.5 + f * (WOOD.strip * (o.span || 1) - 1)) / WOOD.size;
+    // the end-grain squares sit in rows of four under the strips
+    const perRow = WOOD.w / WOOD.endTile, ex = (endTile % perRow) * WOOD.endTile, ey = WOOD.endRow + Math.floor(endTile / perRow) * WOOD.endTile;
+    const endUV = (fb, fc) => [(ex + 6 + fb * (WOOD.endTile - 12)) / WOOD.w, 1 - (ey + 6 + fc * (WOOD.endTile - 12)) / WOOD.h];
+    const stripV = (f) => 1 - (strip * WOOD.strip + 0.5 + f * (WOOD.strip * (o.span || 1) - 1)) / WOOD.h;
 
     if (o.poly) {
       // ── a prism: its sides (each its own little face for edge wear, unless smooth: then only the ends are edges), and
@@ -422,7 +427,7 @@ export function buildGeometry(parts, group, R, opts = {}) {
           _n.applyMatrix3(nm).normalize();
           let U = 0, V = 0;
           if (group === 'wood') { U = (u0 + ly) / WOOD.repeatM; V = stripV(o.smooth ? (cum[q] + t * fw) / perim : t); }
-          else if (group === 'stone') { U = t * fw / 0.7 + stOff[0]; V = ly / 0.7 + stOff[1]; }
+          else if (group === 'stone') { U = t * fw / stM + stOff[0]; V = ly / stM + stOff[1]; }
           put(lx, ly, lz, U, V, o.smooth ? [0, ly, 0] : [t * fw - fw / 2, ly, 0], o.smooth ? [1, hL, 0] : [fw / 2, hL, 0]);
         }
         // wound so the face looks out: the cross of its two sides must point along its outward normal
@@ -436,7 +441,7 @@ export function buildGeometry(parts, group, R, opts = {}) {
         for (const [lx, lz] of poly) {
           let U = 0, V = 0;
           if (group === 'wood') [U, V] = endUV((lx - bx) / (size[0] || 1), (lz - bz) / (size[2] || 1));
-          else if (group === 'stone') { U = lx / 0.7 + stOff[0]; V = lz / 0.7 + stOff[1]; }
+          else if (group === 'stone') { U = lx / stM + stOff[0]; V = lz / stM + stOff[1]; }
           put(lx, sy * hL, lz, U, V, [0, sy * hL, 0], [1, hL, 1]);
         }
         const [ax, az] = poly[0], [bx1, bz1] = poly[1], [cx1, cz1] = poly[2];
@@ -464,7 +469,9 @@ export function buildGeometry(parts, group, R, opts = {}) {
             V = stripV(local[across] / size[across] + 0.5);
           }
         } else if (group === 'stone') {   // rock: the face's own two sides, 0.7 m to a repeat, each stone its own patch
-          U = local[F.b] / 0.7 + stOff[0]; V = local[F.c] / 0.7 + stOff[1];
+          // (v runs up every side face, so a layered rock's beds lie level all round a stone)
+          const su = F.a === 0 ? F.c : F.b, sv = F.a === 0 ? F.b : F.c;
+          U = local[su] / stM + stOff[0]; V = local[sv] / stM + stOff[1];
         }
         // a sloped top (a gable board cut to the roof line): the top corners move up or down, and the edge numbers move
         // with them, so the worn edge still runs along the cut
@@ -486,6 +493,7 @@ export function buildGeometry(parts, group, R, opts = {}) {
   g.setAttribute('aAO', new THREE.BufferAttribute(ao, 1)); g.setIndex(new THREE.BufferAttribute(idx, 1));
   g.computeBoundingSphere(); g.computeBoundingBox();
   g.userData.partOf = partOf;   // which part each corner belongs to (the frontier cabin's contact shadows skip a part's own box)
+  g.userData.mortar = mortar;   // 1 on corners of mortar and chinking (re-tinted when the rock changes, so they keep their colour)
   return g;
 }
 
