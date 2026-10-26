@@ -37,6 +37,12 @@ export const TOWN = {
   routesPerFrame: 2,   // routes worked out a frame at most
   wait: { player: 1.1, person: 0.8, wagon: 3 },   // m ahead in which someone stops for the player, a person, a wagon
   expect: 45,          // s a person sent toward a job's place waits there before going about their day again
+  road: 4.5,           // m from the middle of the wagons' road that the places people stand about keep (its lanes, a
+                       // wagon's width, and the step to one side a second person takes at a spot): a spot in the street
+                       // had wagons waiting the best part of a minute behind two people talking there
+  wagonWait: 1.5,      // s someone standing about lets a wagon wait on them, stopped close in front of its team, before
+                       // they move on out of its way
+  aside: [2.8, 3.6, 4.5],   // m straight out to one side of a waiting wagon's way that they step (the first with room)
   lootNear: 420,       // m: carrying the gang's loot this near the sheriff's office, the folks it's for gather there
   lootFar: 650,        // ... or this near and riding toward it (a gallop covers ~400 m in the ~40 s a walk across town takes)
 };

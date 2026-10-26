@@ -49,7 +49,7 @@ import { makePerson } from './actors/folk.js';
 import { gridSteps, route as findRoute, along, cellAt, openAt, shut, reopen, reopenSome, makeRoute, COST } from './townpaths.js';
 import { TOWN, residents, nextFor, STAY, outCap, lendCost } from './townpeopleplan.js';
 import { howdy, makeHowdyWatch } from './ui/howdy.js';
-import { wagonAt } from './wagon.js';
+import { wagonAt, roadCurve, WAGONS_OUT } from './wagon.js';
 import { modelFootprint } from '../world/objects/townAssets.js';
 
 const rnd = (a, b) => a + Math.random() * (b - a);
@@ -81,6 +81,12 @@ export function makeTownPeople({ W, folk, camera, player = () => null, jobs = {}
 
   // ── THE NODES ────────────────────────────────────────────────────────────────────────────────────────────────────
   const free = (x, z) => !W.blocked(x, z) && W.waterAt(x, z) < 0.25;
+  // the wagons' road through the valley (src/wagon.js roadCurve): its middle every metre, so the places people stand
+  // about keep clear of it (TOWN.road)
+  const roadPts = [];
+  try { const rc = roadCurve(W, 'through'), L = rc.getLength(), q = new THREE.Vector3(); for (let s = 0; s <= L; s += 1) { rc.getPointAt(s / L, q); roadPts.push(q.x, q.z); } } catch (e) { /* (no road: nothing to keep clear of) */ }
+  const roadGap = (x, z) => { let best = Infinity; for (let i = 0; i < roadPts.length; i += 2) { const dx = x - roadPts[i], dz = z - roadPts[i + 1], d = dx * dx + dz * dz; if (d < best) best = d; } return Math.sqrt(best); };
+  const clearOfRoad = (x, z) => roadGap(x, z) >= TOWN.road;
   const frame = (b) => ({ o: { x: Math.sin(b.rot), z: Math.cos(b.rot) }, s: { x: Math.cos(b.rot), z: -Math.sin(b.rot) } });
   // doors: in front of the steps, and the foot of the steps (a metre in) where the dissolve starts
   for (const [id, b] of [['store', P.store], ['saloon', P.saloon], ['sheriff', P.sheriff], ['stable', P.stable], ...homes.map((h) => [h.id, h])]) {
@@ -92,13 +98,14 @@ export function makeTownPeople({ W, folk, camera, player = () => null, jobs = {}
   const nearDoor = (x, z, d) => TP.doors.some((q) => Math.hypot(q.x - x, q.z - z) < d);
   // the places people gather
   const spot = (id, kind, x, z, face, cap, extra = {}) => {
-    if (!free(x, z) || nearDoor(x, z, 2.2)) return null;
+    if (!free(x, z) || nearDoor(x, z, 2.2) || !clearOfRoad(x, z)) return null;
     const s = { id, kind, x, z, face, cap, used: 0, taken: [], crowd: 0, ...extra }; TP.spots.push(s); return s;
   };
   if (P.saloon) { const { o, s } = frame(P.saloon); for (const k of [1, -1]) spot('saloon-porch-' + (k > 0 ? 'a' : 'b'), 'porch', P.saloon.door.x + o.x * 1.6 + s.x * 3.4 * k, P.saloon.door.z + o.z * 1.6 + s.z * 3.4 * k, P.saloon.rot, 2); }
-  if (P.store) {   // (the side away from the counter's customers: they queue on the store's other side)
+  if (P.store) {   // (the side away from the counter's customers: they queue on the store's other side, STORE.queue's -1;
+                   // the street bends in close to the store's front at that end, and the spot was made out in the road there)
     const { o, s } = frame(P.store); let made = null;
-    for (const k of [-1, 1]) if (!made) made = spot('store-porch', 'porch', P.store.door.x + o.x * 2 + s.x * 4.6 * k, P.store.door.z + o.z * 2 + s.z * 4.6 * k, P.store.rot, 2);
+    for (const k of [1, -1]) for (const out of [1, 2, 0]) if (!made) made = spot('store-porch', 'porch', P.store.door.x + o.x * out + s.x * 4.6 * k, P.store.door.z + o.z * out + s.z * 4.6 * k, P.store.rot, 2);
   }
   if (P.stable) { const { o, s } = frame(P.stable); spot('stable-yard', 'yard', P.stable.door.x + o.x * 6 + s.x * 1.5, P.stable.door.z + o.z * 6 + s.z * 1.5, P.stable.rot + Math.PI, 3); }
   if (P.square) {
@@ -262,6 +269,7 @@ export function makeTownPeople({ W, folk, camera, player = () => null, jobs = {}
     if (g.kind === 'door') { r.state = 'enter'; r.t = 0; r.door = g.door; play(r, 'Walk', { fade: 0.2, speed: walkSpeed(r, 'Walk') }); return; }
     if (g.kind === 'road') { r.state = 'away'; r.t = 0; r.edge = g.edge; return; }
     if (g.kind === 'wait') { r.state = 'stay'; r.until = 2; play(r, 'Idle', { fade: 0.3 }); return; }   // (an expected person: waits for the job)
+    if (g.kind === 'aside') { r.goal = null; r.state = 'stay'; r.until = rnd(1.5, 4); play(r, 'Idle', { fade: 0.3 }); return; }   // (stepped out of a wagon's way)
     const s = g.spot, [clip, lo, hi] = STAY[s.kind] || ['Idle', 10, 30];
     r.state = 'stay'; r.until = rnd(lo, hi); r.want = s.face;
     // someone already there: the two face each other and talk a while; the one arriving waves
@@ -287,6 +295,30 @@ export function makeTownPeople({ W, folk, camera, player = () => null, jobs = {}
       reopenSome(G, sh.keys); shutBy.delete(w); opened = true;
     }
     if (opened) routes.clear();
+  }
+
+  // a wagon on the road stopped with its team's noses just short of r (not one standing at a spot or for good): it is
+  // waiting on them. The wagon, or null
+  function wagonWaiting(r) {
+    for (const G of WAGONS_OUT) {
+      if (G.standing || G.parked || !(G.pace < 0.05) || !G.front || !G.team || !G.team.length) continue;
+      const dx = r.x - G.front.x, dz = r.z - G.front.z; if (Math.abs(dx) > 6 || Math.abs(dz) > 6) continue;
+      const s = Math.sin(G.heading), c = Math.cos(G.heading), ahead = dx * s + dz * c, side = Math.abs(dx * c - dz * s);
+      if (ahead > -0.5 && ahead < 5 && side < 2.2) return G;
+    }
+    return null;
+  }
+  // out of the way of the wagon G waiting on r: a few steps straight out to the side of its way they stand on (or the
+  // other), then they stand a moment and go about their day. False: no room either side
+  function stepAside(r, wg) {
+    const s = Math.sin(wg.heading), c = Math.cos(wg.heading), k0 = ((r.x - wg.front.x) * c - (r.z - wg.front.z) * s) >= 0 ? 1 : -1;
+    for (const k of [k0, -k0]) for (const d of TOWN.aside) {
+      const x = r.x + c * k * d, z = r.z - s * k * d;
+      if (!free(x, z) || wagonAt(x, z, 0.5) || (G && !openAt(G, x, z))) continue;
+      release(r); r.goal = { kind: 'aside' }; startRoute(r, makeRoute(Float32Array.from([r.x, r.z, x, z])));
+      return true;
+    }
+    return false;
   }
 
   // ── WALKING ──────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -406,8 +438,18 @@ export function makeTownPeople({ W, folk, camera, player = () => null, jobs = {}
   // walk to a place a couple of steps from `to` and wait there (an expected person)
   function sendTo(r, to, key) {
     release(r); r.expectKey = key;
+    // (asked for while half through a door, stepping out or going in: they turn and go, dissolving back in from as
+    // faded as they were. Left as it was, the fade stayed there and they walked about see-through)
+    if (r.fade < 1) r.fadeIn = true;
     const e = TP.expecting.get(key), i = e ? [...e.names].indexOf(r.name) : 0, a = i * 1.9 + 0.6;
     let x = to.x + Math.sin(a) * 2.6, z = to.z + Math.cos(a) * 2.6; if (!free(x, z)) { x = to.x; z = to.z; }
+    // (never waiting out in the road: the store's place is in the street in front of its door. The nearest place round
+    // it a little further off that is clear of the road, if there is one)
+    if (!clearOfRoad(x, z)) {
+      let got = null;
+      for (const rr of [2.6, 4, 5.5, 7]) for (let k = 0; k < 12 && !got; k++) { const b = a + k * Math.PI / 6, px = to.x + Math.sin(b) * rr, pz = to.z + Math.cos(b) * rr; if (free(px, pz) && clearOfRoad(px, pz)) got = { x: px, z: pz }; }
+      if (got) { x = got.x; z = got.z; }
+    }
     r.goal = { kind: 'wait', to: { x, z } }; r.state = 'plan';
     const g = r.goal; ask({ x: r.x, z: r.z }, { x, z }, (rt) => { if (r.state === 'plan' && r.goal === g) startRoute(r, rt, Math.hypot(x - r.x, z - r.z) > 25); });
   }
@@ -484,6 +526,11 @@ export function makeTownPeople({ W, folk, camera, player = () => null, jobs = {}
     let out = outCount();
     for (const r of TP.people) {
       if (r.lent) { if (r.p && r.fade < 1) { r.fade = Math.min(1, r.fade + dt / TOWN.door); r.p.fade = r.fade; } continue; }
+      // (someone out and about, not in a door's dissolve, is always solid: anyone found part-faded is faded back in,
+      // and it is said in the console, as it should never happen)
+      if (r.out && r.p && r.fade < 1 && !r.fadeIn && r.state !== 'appear' && r.state !== 'enter' && r.state !== 'fadeout') {
+        r.fadeIn = true; console.info(`town people: ${r.name} was out part-faded (${r.fade.toFixed(2)}, ${r.state}): fading back in`);
+      }
       if (r.fadeIn) { if (r.p && r.fade < 1) { r.fade = Math.min(1, r.fade + dt / TOWN.door); r.p.fade = r.fade; } else r.fadeIn = false; }
       switch (r.state) {
         case 'inside': {
@@ -540,6 +587,10 @@ export function makeTownPeople({ W, folk, camera, player = () => null, jobs = {}
             const step = Math.min(TOWN.apart - d, dt * 0.6), nx = r.x + ux * step, nz = r.z + uz * step;
             if (!G || openAt(G, nx, nz)) { r.x = nx; r.z = nz; }
           }
+          // (a wagon stopped close in front of them, waiting on them: after a moment they move on out of its way, as
+          // a walker steps aside. Not one expected at a job: they wait off the road already)
+          const WG = r.state === 'stay' && !(r.goal && r.goal.kind === 'wait') ? wagonWaiting(r) : null;
+          if (WG) { if ((r.wagonT = (r.wagonT || 0) + dt) > TOWN.wagonWait) { r.wagonT = 0; if (!stepAside(r, WG)) think(r); break; } } else r.wagonT = 0;
           // (the player close by: turn to look at them)
           if (pl && pl.position && Math.hypot(pl.position.x - r.x, pl.position.z - r.z) < 4) r.yaw = turnTo(r.yaw, Math.atan2(pl.position.x - r.x, pl.position.z - r.z), dt * 3);
           break;

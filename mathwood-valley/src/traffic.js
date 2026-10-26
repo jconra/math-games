@@ -3,7 +3,7 @@
 // minute), often another standing in town, and more on their way in from both ends of the valley. A wagon drives in
 // along the road on its right-hand side; many pull off and stand a while at a spot (beside the general store or across
 // the street from it, in front of the stable, across from the stage, out by the cow camp) with the team shifting about
-// and the driver down on the ground; then they drive on out the other way and are gone.
+// and the driver down seeing to the load and the horses; then they drive on out the other way and are gone.
 // A few more wagons stand about for good, with no driver (beside the stable, behind the store and the saloon, at the
 // camps): see STANDING below.
 // They keep a safe distance: each driver looks along the way ahead of the team, and slows and stops for the player (on
@@ -14,6 +14,9 @@
 // metres of the player, the nearest few at most (TRAFFIC.made); beyond that it is just a number moving along the road.
 // One made or put away in the player's sight dissolves in or out (wagon.fade), and one that reaches the road's end with
 // the player right there dissolves into the haze there, rather than popping.
+// A stop at a spot is short (about 20 s) and plainly for something: the driver gets down, sees to the load at the back
+// and to the team, climbs back up and drives on (CHORES). A wagon coming up the road behind is waited for with the
+// driver still down, so the one on the seat is never seen sitting still for nothing.
 // Out on the long roads a gang now and then holds a wagon up (src/missions/wagonjob.js: T.holdUp): it pulls up and
 // stands, its team shifting about; a wagon coming up behind waits well back from it (AMBUSH.hold), one coming the other
 // way passes; once the gang is seen off (T.letGo) it drives on the way it was going.
@@ -76,10 +79,12 @@ export const TRAFFIC = {
   // (none now: a wagon standing in the middle of the square was in the way of every walk between the buildings; the
   // SPOTS below are where they stand a while instead)
   stop: { chance: 0, time: [15, 35], at: { 1: -8, '-1': 14 } },
-  // pulling off to stand a while at one of the SPOTS: how often (when one on its way is free), how long it stands (s);
-  // the swing off the road and back on takes `pull` metres of road each way (more for a spot further off it), along
-  // `run` metres of its lane before and after (so the team is on its lane when it turns off and when it is back)
-  park: { chance: 0.6, time: [40, 100], pull: 16, run: 14, clear: 45 },
+  // pulling off to stand a while at one of the SPOTS: how often (when one on its way is free), how long it stands (s:
+  // at least; it stands until the driver's chores are done, CHORES below); the swing off the road and back on takes
+  // `pull` metres of road each way (more for a spot further off it), along `run` metres of its lane before and after (so
+  // the team is on its lane when it turns off and when it is back). (It stood 40-100 s, with the driver just standing
+  // beside it: from the square that looked like a wagon stuck for a minute, waiting for nothing)
+  park: { chance: 0.6, time: [12, 20], pull: 16, run: 14, clear: 45 },
   choose: 120,              // m before the square a wagon picks where it stops (a spot free then, or the square)
   // the store counter's picture (T.keepView): the stretch of road its camera sees nearer than `far` metres, or that
   // passes within `near` metres of it, and `pad` metres more each end (a wagon's half length and a little)
@@ -95,6 +100,11 @@ export const TRAFFIC = {
   around: { after: 3, clear: 2.6, most: 5, ease: 3.5, back: 8, past: 2.5, oncoming: 60, squeeze: 20 },   // squeeze: s held up before it goes round past
                          // others standing close (townsfolk step aside themselves): no wagon waits in the square for good
 };
+// the driver's chores while his wagon stands at a spot, so the stop is plainly for something: down from the seat, round
+// to the back of the wagon to see to the load (reaching into the bed), up to the near lead horse's head (a hand on the
+// bridle, a moment with the horse), back to the seat and up, and on. Each place is on the wagon's side away from the
+// road, `out` metres out from the wagon's side; a place on blocked ground is left out. walk: m/s; hold: s at each place.
+export const CHORES = { walk: 1.25, out: 0.55, horseOut: 0.95, hold: { load: 1.8, horse: 2.6 } };
 // where a wagon pulls off to stand a while: the middle of the wagon when it stands there (x, z: metres), facing along
 // the road the way it came, always on its own right-hand side of the road (so it never crosses the other lane); look:
 // where the driver, down on the ground, faces (a door). Each was picked off a map of the town (blocked ground, doors,
@@ -122,6 +132,7 @@ export const STANDING = [
   { kind: 'covered', x: -355, z: -67.1, heading: 2.86 },         // the bridge engineer's, at his camp on the west river's north bank (src/bridgejob.js), beside his tent
 ];
 const rnd = (a, b) => a + Math.random() * (b - a);
+const turnTo = (a, b, most) => a + Math.max(-most, Math.min(most, Math.atan2(Math.sin(b - a), Math.cos(b - a))));
 const NOWHERE = { x: 1e6, y: 0, z: 1e6 };   // (ears too far off to hear a wagon)
 
 export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, obstacles = () => [], camps = () => null, camera = null, riding = () => false }) {
@@ -249,6 +260,7 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
     if (view && inStretch(t)) { t.ghost = true; wg.root.visible = false; }   // (made inside the counter's picture: unseen there)
     // (made in the player's sight: it comes in out of the haze; else it is simply there)
     if (!t.ghost && inSight(wg.pos.x, wg.pos.z)) { t.fade = 0; t.fadeTo = 1; t.fadeRate = 1 / TRAFFIC.fade.in; wg.fade(0); } else { t.fade = 1; t.fadeTo = 1; }
+    t.chores = null;
     if (t.way && !t.left && t.du >= t.way.park - 0.4) t.stoodAt = -1e9;   // (made standing: the driver is down already)
     t.sound = audio ? makeWagonSound(audio, wg) : null;
   }
@@ -323,7 +335,7 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
     first.speed = 1.8; first.pace = 1.8;
     if (Math.random() < 0.75) {
       const d = -d0, list = spots.filter((S) => !S.by && !S.camp).map((S) => wayTo(S, d)).filter(Boolean);
-      if (list.length) standAt(list[Math.floor(Math.random() * list.length)], rnd(12, 45));
+      if (list.length) standAt(list[Math.floor(Math.random() * list.length)], rnd(6, 16));
     }
     // the rest spaced out along the road, as if they had set off one after another: some coming in (one about every
     // minute to the square, from either side in turn), some on their way out
@@ -359,6 +371,12 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
   }
   // off the road at a spot (pulling in, standing, pulling out): the wagons on the road don't wait behind it
   const offRoad = (t) => !!t.way && t.du > t.way.off && t.du < t.way.on;
+  // standing at a spot: a wagon on the road coming up behind, near enough that pulling out now would cut in front of it
+  function pullOutBlocked(t) {
+    const w = t.way;
+    for (const o of T.wagons) if (o !== t && o.dir === t.dir && !offRoad(o) && ((w.uOut - o.u) * t.dir) > -10 && ((w.uOut - o.u) * t.dir) < TRAFFIC.park.clear) return true;
+    return false;
+  }
   // where the way ahead of a wagon is, s metres along whatever it is driving (the road at its lane, or a spot's way)
   function ahead(t, s, out) {
     if (!t.way) return spot(s, t.dir, out, t.wg && t.wg.bend ? t.wg.offsetAt(s) : 0);
@@ -376,8 +394,11 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
       const w = t.way;
       if (t.du >= w.park - 0.4 && !t.left) {
         if (!t.until) t.until = now + rnd(...TRAFFIC.park.time);
+        // (it stands on while the driver is about his chores, and while a wagon is coming up the road behind: he waits
+        // for it down on the ground, then climbs up; driverAt has him up a little before it moves off)
+        if (t.until - now < 3 && t.wg && t.wg.driverDown && ((t.chores && !t.chores.done) || pullOutBlocked(t))) t.until = now + 3;
         if (now < t.until) { t.why = 'standing at ' + w.S.name; if (t.wg) t.wg.parked = true; return 0; }
-        for (const o of T.wagons) if (o !== t && o.dir === t.dir && !offRoad(o) && ((w.uOut - o.u) * t.dir) > -10 && ((w.uOut - o.u) * t.dir) < TRAFFIC.park.clear) { t.why = 'waiting to pull out'; return 0; }
+        if (pullOutBlocked(t)) { t.why = 'waiting to pull out'; return 0; }
         if (view && !t.ghost && ((t.dir > 0 ? view.b : view.a) - w.uOut) * t.dir > 0) { t.why = 'waiting: the store counter'; return 0; }
         t.left = true; t.until = 0; if (t.wg) t.wg.parked = false;
       }
@@ -467,7 +488,10 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
       for (let x = 0; x <= all && ok; x += 0.5) {
         const s = s0 + dir * x, o = wg.offsetAt(s);
         spot(s, dir, _g, o);
-        if (laneAt(s, dir) + o < 0.6) crosses = true;
+        // (over the road's middle only stepping toward it: where its lane is squeezed in to the middle (in front of the
+        // store) a step out to the right counted as crossing, and the wagon waited behind the player for everyone
+        // coming the other way)
+        if (o < 0 && laneAt(s, dir) + o < 0.6) crosses = true;
         const nx = -_t.z * dir, nz = _t.x * dir;
         for (const w of [-1.25, 0, 1.25]) {
           const px = _g.x + nx * w, pz = _g.z + nz * w;
@@ -503,7 +527,7 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
   // the driver of a standing wagon gets down (beside the front wheel on the side away from the road, facing the spot's
   // door), and back up a little before it moves off
   const _dp = new THREE.Vector3();
-  function driverAt(t, now) {
+  function driverAt(t, now, dt) {
     const wg = t.wg, w = t.way;
     const standing = w && !t.left && t.du >= w.park - 0.4 && wg.pace < 0.05 && t.until && t.until - now > 2.5;
     wg.idle = !!(standing || t.held || (t.why === 'stopped in town'));
@@ -514,9 +538,52 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
       const out = wg.width / 2 + 0.8, x = wg.pos.x + (sideX / n) * out + s * 1.6, z = wg.pos.z + (sideZ / n) * out + c * 1.6;
       const lk = w.S.look === 'camp' ? (camps && camps() && camps().byId(w.S.camp)) : W.places[w.S.look];
       const face = lk ? Math.atan2(lk.x - x, lk.z - z) : wg.heading;
-      if (!W.blocked(x, z)) wg.climbDown(x, z, face);
+      if (!W.blocked(x, z) && wg.climbDown(x, z, face)) t.chores = choresFor(t, sideX / n, sideZ / n, { x, z, face });
     }
-    if (!standing) { t.stoodAt = 0; if (wg.driverDown) wg.climbUp(); }
+    if (standing && wg.driverDown && t.chores && !t.chores.done) doChores(t, wg.driver, dt);
+    if (!standing) { t.stoodAt = 0; t.chores = null; if (wg.driverDown) wg.climbUp(); }
+  }
+  // the places the driver goes while his wagon stands (CHORES): the back of the wagon, the near lead horse's head, and
+  // back to where he got down. (sx, sz): the way out from the wagon's side, away from the road
+  function choresFor(t, sx, sz, start) {
+    const wg = t.wg, C = CHORES, s = Math.sin(wg.heading), c = Math.cos(wg.heading), half = wg.width / 2;
+    const at = (fwd, out) => ({ x: wg.pos.x + s * fwd + sx * out, z: wg.pos.z + c * fwd + sz * out });
+    const legs = [];
+    const back = at(-(wg.tail - 0.6), half + C.out);
+    legs.push({ ...back, face: Math.atan2(-sx, -sz), clip: 'Interact', hold: C.hold.load });   // (facing the wagon's side)
+    if (wg.team && wg.team.length) {
+      // (beside the near horse's head: the team's middles teamAhead m ahead, the horses WAGON.gap apart side to side)
+      const hd = at(wg.teamAhead + 0.9, 0.58 + C.horseOut), head = at(wg.teamAhead + 1.3, 0.58);
+      legs.push({ ...hd, face: Math.atan2(head.x - hd.x, head.z - hd.z), clip: 'Interact', hold: C.hold.horse });
+    }
+    legs.push({ x: start.x, z: start.z, face: start.face, clip: null, hold: 0.4 });
+    // (only places on open ground, reached in a straight line over open ground)
+    const ok = [];
+    let from = start;
+    for (const L of legs) {
+      let clear = !W.blocked(L.x, L.z);
+      const d = Math.hypot(L.x - from.x, L.z - from.z);
+      for (let k = 0.5; clear && k < d; k += 0.5) { const q = k / d; if (W.blocked(from.x + (L.x - from.x) * q, from.z + (L.z - from.z) * q)) clear = false; }
+      if (clear || L === legs[legs.length - 1]) { ok.push(L); from = L; }
+    }
+    return { legs: ok, i: 0, held: 0, walking: false, done: ok.length <= 1 };
+  }
+  // a step of the chores: walk to the next place, face the job there, reach in (Interact), and on to the next
+  function doChores(t, person, dt) {
+    const K = t.chores, L = K.legs[K.i], p = person.root.position;
+    const dx = L.x - p.x, dz = L.z - p.z, d = Math.hypot(dx, dz);
+    if (d > 0.12) {
+      if (!K.walking) { K.walking = true; person.play('Walk', { fade: 0.25, speed: CHORES.walk / ((person.stride && person.stride.Walk) || 1.2) }); }
+      const step = Math.min(d, CHORES.walk * dt), nx = p.x + (dx / d) * step, nz = p.z + (dz / d) * step;
+      p.set(nx, W.heightAt(nx, nz), nz);
+      person.root.rotation.y = turnTo(person.root.rotation.y, Math.atan2(dx, dz), dt * 7);
+      return;
+    }
+    if (K.walking) { K.walking = false; K.held = 0; if (!(L.clip && person.play(L.clip, { fade: 0.2, once: true }))) person.play('Idle', { fade: 0.3 }); }
+    person.root.rotation.y = turnTo(person.root.rotation.y, L.face, dt * 5);
+    K.held += dt;
+    if (L.clip && K.held > L.hold * 0.65 && person.clip === L.clip) person.play('Idle', { fade: 0.4 });
+    if (K.held >= L.hold) { K.i++; K.held = 0; if (K.i >= K.legs.length) { K.done = true; person.play(Math.random() < 0.5 ? 'Idle' : 'Idle_Neutral', { fade: 0.3 }); } }
   }
 
   // ── THE STANDING WAGONS ─────────────────────────────────────────────────────────────────────────────────────────
@@ -628,7 +695,7 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
         t.wg.speed = v; t.wg.update(dt); t.pace = t.wg.pace;
         if (t.way) t.du = t.wg.u; else t.u = t.wg.u;
         if (t.wg.bend && (t.wg.u - t.dir * t.wg.tail - t.bendEnd) * t.dir > 0) t.wg.bend = null;   // (round it and back on its lane)
-        driverAt(t, clock);
+        driverAt(t, clock, dt);
         if (t.sound) t.sound.update(dt, t.ghost ? NOWHERE : ears);   // (a hidden one makes no sound either)
         if (!t.way && t.wg.ended) t.ended = true;
         // its driver says hello as the player comes close (not one held up: he is shouting for help)
@@ -665,7 +732,7 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
   };
   T.state = () => ({ loaded: !!T.lib, length: L, square, timer, most, madeMost, view: view ? { a: +view.a.toFixed(1), b: +view.b.toFixed(1) } : null,
     folk: T.folk ? T.folk.state() : null,
-    wagons: T.wagons.map((t) => ({ kind: t.kind, dir: t.dir, u: +t.u.toFixed(1), pace: +t.pace.toFixed(2), n: t.number, made: !!t.wg, why: t.why, held: !!t.held, fade: t.fade != null ? +t.fade.toFixed(2) : 1, round: !!(t.wg && t.wg.bend), noRound: t.noRound || '', ghost: !!t.ghost, dist: t.dist != null ? +t.dist.toFixed(1) : null, stop: t.stop, park: t.park ? t.park.S.name : null, off: offRoad(t), down: !!(t.wg && t.wg.driverDown), x: t.wg ? +t.wg.pos.x.toFixed(1) : null, z: t.wg ? +t.wg.pos.z.toFixed(1) : null })),
+    wagons: T.wagons.map((t) => ({ kind: t.kind, dir: t.dir, u: +t.u.toFixed(1), pace: +t.pace.toFixed(2), n: t.number, made: !!t.wg, why: t.why, held: !!t.held, fade: t.fade != null ? +t.fade.toFixed(2) : 1, round: !!(t.wg && t.wg.bend), noRound: t.noRound || '', ghost: !!t.ghost, dist: t.dist != null ? +t.dist.toFixed(1) : null, stop: t.stop, park: t.park ? t.park.S.name : null, off: offRoad(t), down: !!(t.wg && t.wg.driverDown), chores: t.chores ? (t.chores.done ? 'done' : `${t.chores.i}/${t.chores.legs.length}`) : null, until: t.until ? +(t.until - clock).toFixed(1) : null, x: t.wg ? +t.wg.pos.x.toFixed(1) : null, z: t.wg ? +t.wg.pos.z.toFixed(1) : null })),
     spots: spots.map((S) => ({ name: S.name, x: +(+S.x || 0).toFixed(1), z: +(+S.z || 0).toFixed(1), by: S.by ? S.by.number : null, ways: S.ways ? Object.fromEntries(Object.entries(S.ways).map(([d, w]) => [d, !!w])) : null })),
     standing: T.standing.map((S) => ({ kind: S.kind, at: S.at, fit: S.fit, x: S.x != null ? +S.x.toFixed(1) : null, z: S.z != null ? +S.z.toFixed(1) : null, heading: S.heading != null ? +S.heading.toFixed(2) : null, team: !!S.team })) });
   T.dispose = () => {

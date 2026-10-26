@@ -239,7 +239,9 @@ export function makePerson(lib, { outfit = 'farmer_m', palette = 'drifter', skin
     // how solid (1) or gone (0) the person is: a door's dissolve (src/townpeople.js); no shadow while mostly gone
     get fade() { return u.fkFade.value; },
     set fade(f) {
-      f = Math.max(0, Math.min(1, f)); u.fkFade.value = f;
+      f = Math.max(0, Math.min(1, f));
+      if (f !== u.fkFade.value) person.fadeAt = performance.now();   // (when it last changed: checkFades below)
+      u.fkFade.value = f;
       const cast = shadows && f > 0.5; p.mesh.castShadow = cast; if (hatMesh) hatMesh.userData.mesh.castShadow = cast;
       for (const g of gear) g.castShadow = cast;
     },
@@ -271,6 +273,7 @@ export function makePerson(lib, { outfit = 'farmer_m', palette = 'drifter', skin
       bones.Head.add(hatMesh); person.hat = hatMesh; p.mesh.geometry = hatReady(kind);
     },
     dispose() {
+      LIVE.delete(person);
       p.dispose(); if (hatMesh) { hatMesh.userData.mesh.material.dispose(); hatMesh.removeFromParent(); }
       for (const g of gear) g.removeFromParent();   // (their shapes and materials are shared: kept)
       if (p.mesh.skeleton) p.mesh.skeleton.dispose();   // (this person's own skeleton copy and its bone texture)
@@ -280,7 +283,36 @@ export function makePerson(lib, { outfit = 'farmer_m', palette = 'drifter', skin
   person.hatStyle = piece ? piece.id : null;
   person.setPalette(palette); person.setSkin(skin); person.setHair(hair);
   p.play('Idle', { fade: 0 }); p.update(Math.random() * 2);       // (a crowd shouldn't breathe in step)
+  LIVE.add(person);
   return person;
+}
+
+// ── A STUCK DISSOLVE ────────────────────────────────────────────────────────────────────────────────────────────────
+// Every dissolve in the game (a door, a road's end in the haze, a wagon made in sight, the dock) runs in a second or two.
+// A person drawn in the scene whose fade has sat part-way for FADE_CHECK.hold seconds while they walked FADE_CHECK.moved
+// metres is a see-through person walking about: something stopped their dissolve half-way. checkFades(scene) (the game
+// calls it about once a second) snaps each one found solid and says so in the console, with who it was and where.
+const LIVE = new Set();   // (every person made and not yet let go)
+export const FADE_CHECK = { hold: 4, moved: 2 };
+const _fw = new THREE.Vector3();
+export function checkFades(scene) {
+  const now = performance.now(), fixed = [];
+  for (const p of LIVE) {
+    const f = p.fade;
+    if (f <= 0.02 || f >= 0.98 || now - (p.fadeAt || 0) < FADE_CHECK.hold * 1000) { p.fadeStuck = null; continue; }
+    // (drawn: in the scene, it and everything above it shown)
+    let o = p.root, shown = true;
+    for (; o.parent; o = o.parent) if (!o.visible) { shown = false; break; }
+    if (!shown || o !== scene || !scene.visible) { p.fadeStuck = null; continue; }
+    p.root.getWorldPosition(_fw);
+    if (!p.fadeStuck) { p.fadeStuck = { x: _fw.x, z: _fw.z, f }; continue; }
+    if (Math.hypot(_fw.x - p.fadeStuck.x, _fw.z - p.fadeStuck.z) < FADE_CHECK.moved) continue;
+    p.fade = 1; p.fadeStuck = null;
+    const at = { outfit: p.outfit, fade: +f.toFixed(2), x: +_fw.x.toFixed(1), z: +_fw.z.toFixed(1) };
+    fixed.push(at);
+    console.info(`folk: a ${at.outfit} walking about part-faded (${at.fade}) at ${at.x}, ${at.z}: made solid`);
+  }
+  return fixed;
 }
 
 // ── THE LAWMAN'S GEAR (the sheriff and the deputy: makePerson's badge and holster) ──────────────────────────────────

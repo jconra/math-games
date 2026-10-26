@@ -26,7 +26,7 @@ import { flagCard, rateJob, menuRows } from './ui/flag.js';   // (first: its key
 import './curvetangent.js';   // (the roads' per-frame curve sums without the garbage)
 import { makeWorld } from './world.js';
 import { chooseTier } from '../world/quality.js';
-import { loadFolk } from './actors/folk.js';
+import { loadFolk, checkFades } from './actors/folk.js';
 import { loadAnimals } from './actors/animals.js';
 import { makeInput } from './input.js';
 import { makePlayer, MOVE } from './player.js';
@@ -1032,7 +1032,7 @@ function dofWant() {
 
 // ── EACH FRAME ───────────────────────────────────────────────────────────────────────────────────────────────────
 let last = performance.now(), frames = 0, fpsT = last, fpsNow = 0, needDraw = false, drawn = { calls: 0, triangles: 0 };
-let toolsT = 0;
+let toolsT = 0, fadesT = 1;
 function step(dt) {
   if (!W) return;
   // (the cabin has the player: walking in or out, or inside. It stands in the valley, so the valley goes on round it:
@@ -1075,6 +1075,7 @@ function step(dt) {
     if (JB) JB.update(dt, P.position, { busy: askingJob() });   // (a job picked on the jobs board: its tracks lead first, till the rider is there or busy at a job)
     jobStep();   // (the job the rider chose keeps the card: THE JOB)
     if ((toolsT -= dt) <= 0) { toolsT = 0.25; TOOLS.update(); }   // (the tools strip: the sum on Work it out, the place's level)
+    if ((fadesT -= dt) <= 0) { fadesT = 1; checkFades(W.scene); }   // (anyone left part-faded walking about made solid: src/actors/folk.js)
     hob.trailTo((JB && JB.goal()) || hobGoal() || trailGoal());
     hob.update(dt, P.position, { hold: !!((JF && JF.speaking()) || (SR && SR.speaking()) || home), asking: askingJob() });   // (on a phone, Hob waits while a job person is talking or you're in the cabin; while a question is up, only its job's lines come)
     if (stage) stage.update(dt, P.position);
