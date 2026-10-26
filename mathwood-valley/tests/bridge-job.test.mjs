@@ -1,13 +1,14 @@
 // The bridge job in the game, in plain numbers (src/bridgeplan.js): the engineer's pay by rating, the bridge's
-// fingerprint, the ways named as the valley has them, where the builder's camera starts, and the two ways across the
-// western river (over the bridge, through the ford). How it plays (the builder at the ravine, the test, the bridge
+// fingerprint, the ways named as the valley has them, where the builder's camera starts, and the travellers' two ways
+// across the western river (over the bridge; upriver, by the road that wades it there: no ford beside the ravine). How it plays (the builder at the ravine, the test, the bridge
 // standing and walked on, the travellers crossing) is checked in the game by real input:
 // ~/pw/bandit-math/rigs/builders/bridge/play.cjs desk|phone.
 //   node --test tests/*.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { PAY, payFor, bridgeSig, wordsHere, sideView, ROUTES } from '../src/bridgeplan.js';
-import { CROSSING, FORD } from '../world/objects/landforms.js';
+import { readFileSync } from 'node:fs';
+import { PAY, payFor, bridgeSig, wordsHere, sideView, ROUTES, CROSS_AT, wayFor, BRIDGE_SHARE } from '../src/bridgeplan.js';
+import { CROSSING } from '../world/objects/landforms.js';
 import { LOADS } from '../labs/bridge/frame.js';
 
 test('the pay: one rising amount for each rating, each heavier one paying the difference, 200 in all', () => {
@@ -56,24 +57,40 @@ test('the builder\'s camera starts on the bridge\'s east side (the engineer stan
   }
 });
 
-test('the two ways across: the same ends; one over the middle of the gap on the road\'s line, the other through the ford', () => {
-  const B = ROUTES.bridge, F = ROUTES.ford;
-  assert.deepEqual(B[0], F[0], 'they start together on the north bank');
-  assert.deepEqual(B[B.length - 1], F[F.length - 1], 'and end together on the south');
-  for (const r of [B, F]) for (let i = 1; i < r.length; i++) {
+test('the two ways across: over the middle of the gap on the road\'s line, or upriver on the land\'s own road, far from the ravine', () => {
+  const B = ROUTES.bridge, U = ROUTES.upriver;
+  assert.deepEqual(Object.keys(ROUTES).sort(), ['bridge', 'upriver'], 'no other way (no ford)');
+  for (const r of [B, U]) for (let i = 1; i < r.length; i++) {
     const d = Math.hypot(r[i][0] - r[i - 1][0], r[i][1] - r[i - 1][1]);
     assert.ok(d > 0.5 && d < 12, `points ${d.toFixed(1)} m apart`);
-    assert.ok(r[i][1] > r[i - 1][1] - 0.01, 'north to south, never turning back');
   }
-  // over the bridge: straight along the deck's middle line across the gap (x of the crossing)
+  // over the bridge: north to south, never turning back, straight along the deck's middle line across the gap, and
+  // nowhere else near the water
+  for (let i = 1; i < B.length; i++) assert.ok(B[i][1] > B[i - 1][1] - 0.01, 'north to south, never turning back');
   const over = B.filter(([, z]) => Math.abs(z - CROSSING.z) < 4);
   assert.ok(over.length >= 2 && over.every(([x]) => Math.abs(x - CROSSING.x) < 0.01), 'on the deck\'s middle line over the gap');
-  // the ford: through the lane's own points where it crosses the river (its middle a dozen metres west of the road)
-  const mid = F.filter(([, z]) => Math.abs(z - CROSSING.z) < 6);
-  assert.ok(mid.length >= 2, 'it crosses the river');
-  for (const [x, z] of mid) {
-    const dl = Math.min(...FORD.pts.map(([fx, fz]) => Math.hypot(fx - x, fz - z)));
-    assert.ok(dl < 1, `on the ford's lane (${dl.toFixed(2)} m)`);
-    assert.ok(x < CROSSING.x - 10, 'well west of the road');
+  for (const [x, z] of B) assert.ok(Math.abs(x - CROSSING.x) < 22, `beside the ravine at ${x}, ${z}`);
+  assert.deepEqual(CROSS_AT.bridge, [CROSSING.x, CROSSING.z], 'the bridge way crosses at the gap');
+  // upriver: on the land's own roads all the way (the road off the west road, the crossing, the road on west), starting
+  // off the west road itself (so it never shares it with the valley's wagons), crossing the river once where the road
+  // wades it, and never within 150 m of the ravine
+  const planting = JSON.parse(readFileSync(new URL('../models/town/planting.json', import.meta.url), 'utf8'));
+  const line = (id) => planting.strokes.find((st) => st.id === id).pts;
+  const offLine = (pts, x, z) => { let best = Infinity; for (let i = 1; i < pts.length; i++) { const [ax, az] = pts[i - 1], [bx, bz] = pts[i], vx = bx - ax, vz = bz - az, t = Math.max(0, Math.min(1, ((x - ax) * vx + (z - az) * vz) / (vx * vx + vz * vz || 1))); best = Math.min(best, Math.hypot(ax + vx * t - x, az + vz * t - z)); } return best; };
+  const roads = ['landpath13', 'landpath14', 'landpath15'].map(line), west = line('landpath4');
+  for (const [x, z] of U) {
+    assert.ok(Math.min(...roads.map((r) => offLine(r, x, z))) < 0.5, `off the road at ${x}, ${z}`);
+    assert.ok(Math.hypot(x - CROSSING.x, z - CROSSING.z) > 150, `near the ravine at ${x}, ${z}`);
   }
+  assert.ok(offLine(west, ...U[0]) > 10, 'it starts off the west road (well clear of its wagons\' lane)');
+  const at = CROSS_AT.upriver; assert.ok(offLine(U, at[0], at[1]) < 1.5, 'it passes over where it crosses the river');
+  assert.ok(U[0][1] < at[1] - 40 && U[U.length - 1][0] < at[0] - 40, 'from the town\'s side of the river to the far side');
+});
+
+test('which way a traveller takes: upriver unless the bridge carries its kind, then over the bridge about half the time', () => {
+  let seed = 7; const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < 200; i++) assert.equal(wayFor(false, rand), 'upriver', 'a kind the bridge can\'t carry always goes upriver');
+  let over = 0; for (let i = 0; i < 2000; i++) if (wayFor(true, rand) === 'bridge') over++;
+  assert.ok(BRIDGE_SHARE > 0 && BRIDGE_SHARE < 1, 'the road upriver keeps some of them');
+  assert.ok(Math.abs(over / 2000 - BRIDGE_SHARE) < 0.05, `over the bridge ${(over / 20).toFixed(0)}% of the time`);
 });

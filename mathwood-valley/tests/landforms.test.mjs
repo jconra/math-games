@@ -1,13 +1,13 @@
-// Tests for the landforms (world/objects/landforms.js): the mill hill, the bridge crossing's level shelf and ravine, the
-// ford beside the road and the engineer's camp's room, on a made-up land shaped like the real one there; and the paths
-// that go with them in the planting (the dock path behind the saloon, the ford's lane, the road up to the banks' edges).
+// Tests for the landforms (world/objects/landforms.js): the mill hill, the bridge crossing's level shelf and ravine (no
+// ford beside it) and the engineer's camp's room, on a made-up land shaped like the real one there; and the paths that
+// go with them in the planting (the dock path behind the saloon, the road up to the banks' edges).
 // Run with:  node --test mathwood-valley/tests/*.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
-import { makeLandforms, HILL, CROSSING, FORD, CAMP } from '../world/objects/landforms.js';
+import { makeLandforms, HILL, CROSSING, CAMP } from '../world/objects/landforms.js';
 import { modelFootprint } from '../world/objects/townAssets.js';
 import { BACKWOODS } from '../src/missions/backwoods.js';
 
@@ -82,36 +82,32 @@ test('the bridge crossing: the road level across, the river in a ravine 16 ft wi
   assert.ok(brink(C.x - 25) > brink(C.x) + 1.5 && brink(C.x + 25) > brink(C.x) + 1.5, 'wider up and down stream');
 });
 
-test('the ford beside the road: down to the river and up the far bank, gentle enough for a horse and a wagon', () => {
-  const F = L.crossing.ford, pts = F.pts, C = CROSSING;
-  let prev = null, low = Infinity, lowAt = null;
-  for (let i = 0; i < pts.length; i++) {
-    const [x, z] = pts[i], h = at(x, z); if (h < low) { low = h; lowAt = [x, z]; }
-    if (prev) assert.ok(Math.abs(h - prev[2]) / Math.hypot(x - prev[0], z - prev[1]) < 0.33, `a ramp too steep at ${x.toFixed(1)}, ${z.toFixed(1)}`);
-    prev = [x, z, h];
-    // its floor wide enough for a wagon: level across ±2 m
-    if (i > 2 && i < pts.length - 3 && Math.abs(z - zRiver(x)) > 4) {   // (in the river itself the ford is a sill across its bed)
-      const [nx, nz] = pts[i + 1], dx = nx - x, dz = nz - z, l = Math.hypot(dx, dz) || 1;
-      for (const k of [-2, 2]) { const hs = at(x - dz / l * k, z + dx / l * k); assert.ok(Math.abs(hs - h) < 0.35, `the lane's floor tilts ${(hs - h).toFixed(2)} across at ${x.toFixed(1)}, ${z.toFixed(1)}`); } }
+test('no ford beside the road: the banks fall steeply all along the ravine there, so only a bridge crosses it', () => {
+  const C = CROSSING, bed = L.crossing.bed;
+  // walking up out of the water anywhere near the road, on either bank, there is a stretch steeper than a walker can
+  // climb (src/world.js STEEP 0.8): no lane cut down to the water
+  for (let x = C.x - 24; x <= C.x + 14; x += 1) for (const side of [-1, 1]) {
+    const z0 = zRiver(x); let most = 0;
+    for (let d = 0; d <= 14; d += 0.25) most = Math.max(most, Math.abs(at(x, z0 + side * (d + 0.25)) - at(x, z0 + side * d)) / 0.25);
+    assert.ok(most > 1, `a way down at x ${x}, ${side < 0 ? 'north' : 'south'} bank: steepest ${most.toFixed(2)}`);
   }
-  assert.ok(Math.abs(lowAt[1] - zRiver(lowAt[0])) < 3.5, 'lowest where it crosses the river');
-  assert.ok(low < L.crossing.bed + 0.6, 'down at the water');
-  // it starts and ends on the ground round it (no step up or down onto it), on the road's side of the river each way
-  for (const [x, z] of [pts[0], pts[pts.length - 1]]) assert.ok(Math.abs(at(x, z) - at(x + 6, z)) < 1.2, `its end meets the land at ${x}, ${z}`);
-  assert.ok(pts[0][1] < zRiver(pts[0][0]) - 10 && pts[pts.length - 1][1] > zRiver(pts[pts.length - 1][0]) + 10, 'from one bank to the other');
-  // beside the road: its crossing within 25 m of the road's, and clear of the bridge's banks (6 m+)
-  const dx = Math.abs(lowAt[0] - C.x); assert.ok(dx > 8 && dx < 25, `the ford ${dx.toFixed(1)} m from the road`);
+  // where a ford's lane ran beside the road (west of it, on both banks) the land is the shelf: well above the water and
+  // level across, not cut down
+  for (const [x, z] of [[-343, -59.6], [-348, -56.8], [-351.6, -52.4], [-352.4, -31.6], [-351, -26], [-349.2, -20.6]]) {
+    assert.ok(at(x, z) - bed > 3.5, `only ${(at(x, z) - bed).toFixed(2)} m over the bed at ${x}, ${z}`);
+    for (const dx of [-4, 4]) assert.ok(Math.abs(at(x + dx, z) - at(x, z)) < 0.5, `a cut beside ${x}, ${z}`);
+  }
+  assert.ok(!('ford' in L.crossing), 'no ford in the crossing');
 });
 
-test("the engineer's camp's room: flat, beside the road on the town's bank, clear of the ford", () => {
+test("the engineer's camp's room: flat, beside the road on the town's bank", () => {
   const h0 = at(CAMP.x, CAMP.z);
   for (let a = 0; a < 16; a++) for (const r of [2, 4, 6]) assert.ok(Math.abs(at(CAMP.x + Math.cos(a * 0.39) * r, CAMP.z + Math.sin(a * 0.39) * r) - h0) < 0.3, 'flat');
   assert.ok(CAMP.z < zRiver(CAMP.x) - 15, "on the town's (north) bank");
   assert.ok(Math.abs(CAMP.x - CROSSING.x) < 20, 'beside the road');
-  for (const [x, z] of L.crossing.ford.pts) assert.ok(Math.hypot(x - CAMP.x, z - CAMP.z) > CAMP.r + 2, 'the ford keeps out of it');
 });
 
-test('the planting: the dock path behind the saloon down to the shore; the ford lane; the road up to the banks, the gap left bare', () => {
+test('the planting: the dock path behind the saloon down to the shore; the road up to the banks, the gap left bare, no lane to a ford', () => {
   const dock = stroke('dockpath'); assert.ok(dock && dock.kind === 25 && dock.mode === 'paint', 'a dirt path');
   const end = dock.pts[dock.pts.length - 1]; assert.ok(Math.hypot(end[0] + 4.4, end[1] + 93.3) < 5, 'ends at the dock spot on the shore');
   const saloon = layout.items.find((i) => i.kind === 'saloon'), sheriff = layout.items.find((i) => i.kind === 'sheriff');
@@ -123,7 +119,7 @@ test('the planting: the dock path behind the saloon down to the shore; the ford 
     for (const [x, z] of dock.pts) { const lx = c * (x - b.x) - s * (z - b.z), lz = s * (x - b.x) + c * (z - b.z); assert.ok(!(Math.abs(lx) < w / 2 + 1 && Math.abs(lz) < d / 2 + 1), `the path runs into ${b.id}`); }
   }
   void sheriff;
-  assert.ok(stroke('fordlane') && stroke('fordlane').kind === 25, 'the ford lane is dirt');
+  assert.ok(!stroke('fordlane'), 'no ford lane');
   const ids = planting.strokes.map((s) => s.id), gap = stroke('bridgegap');
   assert.equal(gap.kind, 26, 'the gap a no-path stroke');
   for (const id of ['landpath7', 'landpath8', 'landpath9', 'landpath10', 'bridgeroad']) assert.ok(ids.indexOf(id) < ids.indexOf('bridgegap'), id + ' drawn before the gap is rubbed out');
@@ -140,5 +136,4 @@ test('nothing built on the mill hill, at the bridge crossing or on the dock spot
     assert.ok(Math.hypot(b.x - CAMP.x, b.z - CAMP.z) > 40 && Math.hypot(b.x - CROSSING.x, b.z - CROSSING.z) > 40, 'a gang camp spot by the crossing');
     assert.ok(Math.hypot(b.x - HILL.x, b.z - HILL.z) > 60, 'a gang camp spot on the hill');
   }
-  void FORD;
 });

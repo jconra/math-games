@@ -5,7 +5,8 @@
 // itself from close by, and Old Hob's golden hoofprints lead to that job (src/hob.js; main.js gives the trail JB.goal()
 // first). Picking a job never stops anything: every job still starts wherever the rider finds it. The tracks give way
 // once the rider gets to the job picked, or is at work at any job (a steer roped, a slip up...), and the trail goes back to
-// what it was.
+// what it was. The deer photographs lead to Miss Wren, always, and give way there once her camera is lent (the job's own
+// trail then leads on to her herd).
 // A job that needs a saddled horse (deliveries, the gang's loot) leads by the stable first while the rider has none.
 //
 // The board: two posts, a shingled roof, a plank backboard with a painted "JOBS" header and the notices pinned on it
@@ -388,6 +389,18 @@ export function makeJobsBoard({ W, camera, I = null, hud = null, rider = null, p
       default: { const J = get(id); return J && typeof J.where === 'function' ? J.where() : null; }
     }
   }
+  // where the tracks lead for a job picked here: the job's own place, but for the deer photographs Miss Wren, always
+  // (her camera not borrowed yet, or already lent on an earlier ride): she stands by the herd, so arriving at her has the
+  // deer in view. met(): the job has started there (her camera lent), and only then do the tracks give way to the job's
+  // own, on to the herd
+  function goalPlace(id) {
+    if (id === 'deer') {
+      const DJ = get('deer'), JF = get('jobfolk');
+      const n = DJ && JF && JF.people && JF.people.find((r) => r.id === 'naturalist' && r.placed);
+      if (n) return { x: n.x, z: n.z, met: () => DJ.lent() };
+    }
+    return jobPlace(id);
+  }
 
   // ── PICKING A JOB ──────────────────────────────────────────────────────────────────────────────────────────────
   let picked = null, panel = null;   // picked: { id, t }
@@ -406,16 +419,17 @@ export function makeJobsBoard({ W, camera, I = null, hud = null, rider = null, p
     if (!picked) return null;
     const j = list.find((q) => q.id === picked.id); if (!j) return null;
     if (needsSaddle(j)) { const d = door('stable'); return d ? { id: 'board:' + j.id + ':stable', x: d.x, z: d.z } : null; }
-    const g = jobPlace(j.id); if (!g || !Number.isFinite(g.x) || !Number.isFinite(g.z)) return null;
+    const g = goalPlace(j.id); if (!g || !Number.isFinite(g.x) || !Number.isFinite(g.z)) return null;
     return { id: 'board:' + j.id, x: g.x, z: g.z, hide: g.hide };
   };
   Object.defineProperty(JB, 'picked', { get: () => (picked ? picked.id : null) });
-  // where a job is (by the stable first while it needs a saddle the rider hasn't got), its name, and which way it lies
-  // from a spot: for main.js's card of the job the rider chose, while that job has no card of its own up
+  // where a job is (by the stable first while it needs a saddle the rider hasn't got; while it is the job picked here,
+  // where its tracks lead), its name, and which way it lies from a spot: for main.js's card of the job the rider chose,
+  // while that job has no card of its own up
   JB.where = (id) => {
     const j = list.find((q) => q.id === id); if (!j) return null;
     if (needsSaddle(j)) { const d = door('stable'); return d ? { x: d.x, z: d.z, stable: true } : null; }
-    const g = jobPlace(id); return g && Number.isFinite(g.x) && Number.isFinite(g.z) ? g : null;
+    const g = picked && picked.id === id ? goalPlace(id) : jobPlace(id); return g && Number.isFinite(g.x) && Number.isFinite(g.z) ? g : null;
   };
   JB.nameOf = (id) => { const j = list.find((q) => q.id === id); return j ? j.name : null; };
   JB.whatOf = (id) => { const j = list.find((q) => q.id === id); return j ? j.what : null; };
@@ -428,7 +442,7 @@ export function makeJobsBoard({ W, camera, I = null, hud = null, rider = null, p
     const pos = P() && P().position;
     const body = document.createElement('div'); body.className = 'bjb-grid';
     body.innerHTML = list.map((j) => {
-      const g = jobPlace(j.id), d = g && pos ? Math.hypot(g.x - pos.x, g.z - pos.z) : null;
+      const g = goalPlace(j.id), d = g && pos ? Math.hypot(g.x - pos.x, g.z - pos.z) : null;   // (how far the tracks would lead)
       const far = d == null ? '' : d < 25 ? 'right here' : `${d > 100 ? Math.round(d / 10) * 10 : Math.round(d)} m ${wayTo(pos, g)}`;
       const saddle = needsSaddle(j);
       return `<button type="button" class="bjb-job${picked && picked.id === j.id ? ' is-on' : ''}" data-id="${j.id}" aria-label="${esc(j.name)}">
@@ -469,11 +483,12 @@ export function makeJobsBoard({ W, camera, I = null, hud = null, rider = null, p
     JB.prompt = Math.hypot(pos.x - front.x, pos.z - front.z) < BOARD.near && !panel ? 'Read the jobs board' : null;
     if (picked) {
       picked.t += dt;
-      const j = list.find((q) => q.id === picked.id), g = j && !needsSaddle(j) ? jobPlace(j.id) : null;
+      const j = list.find((q) => q.id === picked.id), g = j && !needsSaddle(j) ? goalPlace(j.id) : null;
       // at work at a job (a slip or the camera up where the player is): the tracks give way, whichever job it is
       if (busy && SITDOWN.has(busy)) picked = null;
-      // at the job picked: its own card and trail take over
-      else if (g && (Math.hypot(pos.x - g.x, pos.z - g.z) < BOARD.arrive || (g.hide && Math.hypot(pos.x - g.hide.x, pos.z - g.hide.z) < g.hide.r))) picked = null;
+      // at the job picked: its own card and trail take over (at the person met first, once the job has started there:
+      // Miss Wren's camera lent)
+      else if (g && (!g.met || g.met()) && (Math.hypot(pos.x - g.x, pos.z - g.z) < BOARD.arrive || (g.hide && Math.hypot(pos.x - g.hide.x, pos.z - g.hide.z) < g.hide.r))) picked = null;
     }
     const night = Number.isFinite(W.night) ? W.night : 0;
     lampMat.emissiveIntensity = 0.15 + 2.2 * night;

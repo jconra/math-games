@@ -13,8 +13,8 @@
 //     ground function says where the dirt's rim is, `fringe`); the town's mown yards 5 m, not 14 (objects/village.js
 //     blockGrid); the pads flat 4.4 m past the walls, close neighbours on one height (objects/townAssets.js levelPads); a
 //     leaning model stood upright (TOWN_ASSETS tilt, sink)
-//   - (2026-10-20) the landforms (objects/landforms.js: the mill hill, the bridge crossing's shelf and ravine, its ford and
-//     the engineer's camp's room) laid over the land as made, before the town's pads (townLand, shapeLand); the ground
+//   - (2026-10-20) the landforms (objects/landforms.js: the mill hill, the bridge crossing's shelf and ravine, its ford (taken
+//     out 2026-10-26: only a bridge crosses there) and the engineer's camp's room) laid over the land as made, before the town's pads (townLand, shapeLand); the ground
 //     drawn finer where their banks are too steep for the land's grid (FINE, buildFine), heightAt and meshAt reading it;
 //     nothing grows or lies on its steep banks (fineDrop); no leaves and twigs painted on a cliff
 // The land's own code (every function landKey and pathKey read, below) is left exactly as it was: the land's bake
@@ -620,8 +620,8 @@ function buildHeights() {
 // the land as made is kept (Hland: what the bake saves); the landforms are laid over it (shapeLand), and that is kept
 // too (Hpre); the town's pads are laid on a copy of it, so moving a building puts the old ground back
 function townLand() { TOWN.Hland = Float32Array.from(Hg); shapeLand(); TOWN.Hpre = Float32Array.from(Hg); levelPads(Hg, TOWN.Hpre, TOWN.village ? TOWN.village.layout : TOWN.layout, N, SIZE, TEX); }
-// (Mathwood Valley) THE LANDFORMS (objects/landforms.js): the mill hill, the bridge crossing's level shelf and its ravine, the
-// ford beside the road and the engineer's camp's room, laid over the land's grid. Where the ravine's banks are steeper
+// (Mathwood Valley) THE LANDFORMS (objects/landforms.js): the mill hill, the bridge crossing's level shelf and its ravine, and
+// the engineer's camp's room, laid over the land's grid. Where the ravine's banks are steeper
 // than the grid's 3 m can draw, the ground is drawn finer there (FINE, below), and heightAt reads that
 let LANDF = null;
 function shapeLand() {
@@ -685,7 +685,7 @@ for (let tj = 0; tj < TILES; tj++) for (let ti = 0; ti < TILES; ti++) {
   groundTiles.push({ i0, j0, w, h, geo: g });
 }
 // (Mathwood Valley) THE GROUND DRAWN FINER: a patch of ground a vertex every FINE_STEP m over the landforms' `fine` box (the
-// bridge crossing's ravine, whose banks are steeper and narrower than the land's 3 m grid can draw, and the ford's lane),
+// bridge crossing's ravine, whose banks are steeper and narrower than the land's 3 m grid can draw),
 // drawn with the ground's own material. Its edge runs along the ground mesh's own grid lines and takes the mesh's own
 // triangles' heights there, blending into the landforms' shape over one grid square in, so there's no seam; the ground
 // mesh's own squares under it are left out of its tiles (cutForFine), so nothing there is drawn twice. heightAt and meshAt read it there, so everything that
@@ -1411,7 +1411,7 @@ function treeCleared(x, z, s = 1) {
     }
     // (and the game's own strips: [{ ax, az, bx, bz, half }], e.g. the way into each back-woods camp, makeValley's treeClear)
     for (const q of treeClear || []) if ([q.ax, q.az, q.bx, q.bz, q.half].every(Number.isFinite)) treeClearSegs.push([q.ax, q.az, q.bx, q.bz, q.half]);
-    // (and the landforms' own: the ford's lane, the engineer's camp's room)
+    // (and the landforms' own: the engineer's camp's room)
     for (const q of (LANDF && LANDF.clear) || []) treeClearSegs.push(q);
   }
   for (const [ax, az, bx, bz, half] of treeClearSegs) {

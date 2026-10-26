@@ -7,19 +7,20 @@
 //             tower and a mill building, its side toward the road long and easy enough for a cart track to wind up
 //   CROSSING  where the north-south road crosses the western river south-west of the cow camp: the land round it made
 //             flatter (a level shelf on both banks, the road level across it) and the river in a deeper ravine with
-//             steep banks, narrowest at the road (`gap` m apart there, ready for a bridge), wider up and down stream
-//   FORD      until a bridge stands there: a sunken lane beside the road, down to a shallow ford and up the far side,
-//             gentle enough for a horse or a wagon
+//             steep banks, narrowest at the road (`gap` m apart there, ready for a bridge), wider up and down stream.
+//             There is no way down to the water beside it: only a bridge crosses here (until one stands that carries
+//             them, the road's travellers go by the crossing upriver: src/bridgetraffic.js)
 //   CAMP      flat room beside the road on the town's bank for an engineer's camp and its wagon
 //
 //   const L = makeLandforms(base)    base(x, z): the land's height before the landforms (m)
 //     L.at(x, z, h0)    the shaped height at (x, z), h0 = base(x, z) (passed in: the caller usually has it)
 //     L.boxes           [{ x0, z0, x1, z1 }] the boxes the landforms change anything in (outside them L.at returns h0)
 //     L.fine            { x0, z0, x1, z1 } where the ground needs drawing finer than the land's 3 m grid (the ravine's
-//                       steep banks and the ford's lane): world/valley.js draws a finer patch of ground there
-//     L.crossing        { x, z, deck, bed, gap, ford: { pts, bed } } (for the rigs and the tests)
+//                       steep banks): world/valley.js draws a finer patch of ground there
+//     L.clear           strips kept clear of trees ([ax, az, bx, bz, half]): the camp's room
+//     L.crossing        { x, z, deck, bed, gap, halfTop, riverAt, camp } (for the rigs and the tests)
 //     L.hill            { x, z, top, level }
-//   HILL, CROSSING, FORD, CAMP: the numbers
+//   HILL, CROSSING, CAMP: the numbers
 
 const smooth = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const coss = (a, b, x) => (x <= a ? 1 : x >= b ? 0 : 0.5 + 0.5 * Math.cos(Math.PI * (x - a) / (b - a)));   // 1 inside a, falling softly to 0 by b
@@ -46,18 +47,8 @@ export const CROSSING = {
     [-334, -41.6], [-331, -40.2], [-328, -37.4], [-325, -34.4], [-321, -33.0], [-316, -32.6], [-310, -30.9], [-304, -29.9],
     [-296, -29.75], [-280, -29.75], [-260, -29.75], [-240, -29.75]],
 };
-// THE FORD beside the road, west of it: its lane's middle line from the road on the town's (north) bank, down to the
-// river and up the far bank to the road's far side; half: the lane's flat floor either side of its middle (m); slope: its
-// ramps (rise over run); flat: the ford's level stretch either side of the river's middle (m); side: the lane's cut sides
-// (rise over run, steep enough that a rider keeps to the lane), their tops rounded over `lip` m; above: the ford's floor
-// over the river's bed (m: shallow)
-export const FORD = {
-  pts: [[-338.6, -61], [-343, -59.6], [-348, -56.8], [-351.6, -52.4], [-353.1, -47.4], [-353.4, -42.3], [-353.2, -37.2], [-352.4, -31.6],
-    [-351, -26], [-349.2, -20.6], [-347.2, -16.4]],
-  half: 2.6, slope: 0.27, flat: 3.2, side: 1.3, lip: 1.4, above: 0.1,
-};
-// THE ENGINEER'S CAMP's room: flat ground beside the road on the town's bank, north of the ford's lane (x, z: its middle;
-// r: flat out to here; blend: back to the land over this much more), at the land's own height there
+// THE ENGINEER'S CAMP's room: flat ground beside the road on the town's bank, west of it (x, z: its middle; r: flat out
+// to here; blend: back to the land over this much more), at the land's own height there
 export const CAMP = { x: -352, z: -72, r: 7.5, blend: 8 };
 
 // a polyline's points every `step` m along a centripetal-ish Catmull-Rom through them (so its bends are round)
@@ -138,35 +129,29 @@ export function makeLandforms(base) {
     else { hc = shelf + 0.02 * (ad - top); w = wa * coss(C.core, C.core + C.blend, ad); }
     return h0 + (hc - h0) * w;
   }
-  // ── THE FORD: a lane cut down to the river and up again (it only ever digs) ──
-  const F = FORD, FD = densify(F.pts, 0.5), FC = lengths(FD);
-  let fordI = 0; { let best = Infinity; for (let i = 0; i < FD.length; i++) { const dd = Math.abs(FD[i][1] - zc(FD[i][0])); if (dd < best) { best = dd; fordI = i; } } }   // (where the lane crosses the river's middle)
-  const fordU = FC[fordI], fordAt0 = FD[fordI], fordBed = bedAt(fordAt0[0]) - C.lower * alongW(sOf(fordAt0[0])) + F.above;
-  function fordAt(x, z, h) {
-    const n = nearest(FD, FC, x, z), reach = F.half + 8 / F.side + F.lip; if (n.d >= reach) return h;
-    const half = F.half + 0.3 * Math.sin(n.u * 0.45 + 1) + 0.15 * Math.sin(n.u * 1.3), floor = fordBed + F.slope * Math.max(0, Math.abs(n.u - fordU) - F.flat), cut = floor + F.side * Math.max(0, n.d - half);
-    const k = F.lip, q = Math.max(0, k - Math.abs(h - cut)) / k * smooth(half, half + 0.6, n.d);
-    return Math.min(h, cut) - q * q * k / 4;   // (a smooth minimum: the cut's top edge rounded over; the floor left flat)
-  }
   // ── THE CAMP's room: flat at the land's own height round its middle ──
   const P = CAMP, campLevel = (() => { let s = 0, n = 0; for (let a = 0; a < 8; a++) for (const r of [0, P.r * 0.5, P.r]) { s += crossingAt(P.x + Math.cos(a) * r, P.z + Math.sin(a) * r, base(P.x + Math.cos(a) * r, P.z + Math.sin(a) * r)); n++; } return s / n; })();
   function campAt(x, z, h) { const r = Math.hypot(x - P.x, z - P.z), k = coss(P.r, P.r + P.blend, r); return k > 0 ? h + (campLevel - h) * k : h; }
 
-  const zs = F.pts.map((p) => p[1]);
-  const crossBox = { x0: C.x + C.along[0] - C.alongBlend - 2, x1: C.x + C.along[1] + C.alongBlend + 2, z0: Math.min(C.z - C.core - C.blend - 14, ...zs) - 12, z1: Math.max(C.z + C.core + C.blend + 14, ...zs) + 12 };
-  // (drawn finer: the ravine where its banks are steep, out to where it is nearly the land's own again, and the ford's lane)
-  const fine = { x0: C.x + C.along[0] - C.alongBlend * 0.8, x1: C.x + C.along[1] + C.alongBlend * 0.8, z0: Math.min(...zs) - 7, z1: Math.max(...zs) + 4 };
+  // (the box: the shelf's reach either side of the road's line, with room for the river wandering off that line and for
+  // the camp's room)
+  const crossBox = { x0: C.x + C.along[0] - C.alongBlend - 2, x1: C.x + C.along[1] + C.alongBlend + 2, z0: C.z - C.core - C.blend - 26, z1: C.z + C.core + C.blend + 26 };
+  // (drawn finer: the ravine where its banks are steep, out to where it is nearly the land's own again: either side of
+  // the river's middle, its widest brink and bank's run, its wander, and two of the land's grid squares to blend back in)
+  const fx0 = C.x + C.along[0] - C.alongBlend * 0.8, fx1 = C.x + C.along[1] + C.alongBlend * 0.8;
+  const rz = RD.filter(([x]) => x >= fx0 && x <= fx1).map((p) => p[1]), fineReach = C.wide / 2 + C.wallWide + 1 + 6;
+  const fine = { x0: fx0, x1: fx1, z0: Math.min(...rz) - fineReach, z1: Math.max(...rz) + fineReach };
   function at(x, z, h0) {
     let h = h0;
     if (x > hillBox.x0 && x < hillBox.x1 && z > hillBox.z0 && z < hillBox.z1) h = hillAt(x, z, h);
-    if (x > crossBox.x0 && x < crossBox.x1 && z > crossBox.z0 && z < crossBox.z1) { h = crossingAt(x, z, h); h = campAt(x, z, h); h = fordAt(x, z, h); }
+    if (x > crossBox.x0 && x < crossBox.x1 && z > crossBox.z0 && z < crossBox.z1) { h = crossingAt(x, z, h); h = campAt(x, z, h); }
     return h;
   }
   return {
     at, boxes: [hillBox, crossBox], fine,
-    // strips kept clear of trees ([ax, az, bx, bz, half]): the ford's lane and the camp's room
-    clear: [...F.pts.slice(1).map((q, i) => [F.pts[i][0], F.pts[i][1], q[0], q[1], F.half + 1.5]), [P.x, P.z, P.x, P.z, P.r + P.blend * 0.5]],
+    // strips kept clear of trees ([ax, az, bx, bz, half]): the camp's room
+    clear: [[P.x, P.z, P.x, P.z, P.r + P.blend * 0.5]],
     hill: { x: H.x, z: H.z, top: H.top, level: hillLevel },
-    crossing: { x: C.x, z: C.z, deck: bedRoad + C.lift, bed: bedRoad - C.lower, gap: C.gap, halfTop, riverAt, ford: { pts: FD, u: fordU, bed: fordBed }, camp: { x: P.x, z: P.z, r: P.r, level: campLevel } },
+    crossing: { x: C.x, z: C.z, deck: bedRoad + C.lift, bed: bedRoad - C.lower, gap: C.gap, halfTop, riverAt, camp: { x: P.x, z: P.z, r: P.r, level: campLevel } },
   };
 }

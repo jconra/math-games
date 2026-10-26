@@ -2,7 +2,8 @@
 // here (the people themselves are made in src/jobfolk.js), so the tests can run it as it is.
 //
 //   JOB_FOLK            one entry a person: { id, job, name, role, look, hello: [line, line], start, thanks: [...],
-//                       leave, law } (look: a folk.js look; hello: what is going on and what to do; start: said as the
+//                       leave, law } (the naturalist also lend, lendHere and back: lending the camera and having it back)
+//                       (look: a folk.js look; hello: what is going on and what to do; start: said as the
 //                       job gets going, if the job starts from a talk; thanks: one is said after a job's batch is done,
 //                       in turn; leave: the toast when the player walks away from the job, for the jobs that end that
 //                       way; law: the sheriff and his deputy wear the gold star and a holstered six-shooter)
@@ -65,6 +66,8 @@ export const JOB_FOLK = [
       'Borrow my camera! Set it up a good way off, and photograph the deer whose tag makes the equation true.'],
     lend: ["Here you are: it's strapped behind your saddle. Do take care of it!",
       'Follow the hoofprints to the herd. Set it up a good way off, and photograph the deer whose tag makes the equation true.'],
+    // (in place of lend's last line when the herd is already in the camera's reach from where the player stands)
+    lendHere: "There's the herd, right over there! Set the camera up from here, and photograph the deer whose tag makes the equation true.",
     back: ['Thank you kindly! Your pictures go straight in my book.', 'Come and borrow it again any time.'],
     thanks: ['Lovely pictures! They go straight in my book.', 'What a fine roll of pictures. Thank you!', 'Splendid! Let them settle, and take some more.'] },
   { id: 'sheriff', job: 'boxes', name: 'Sheriff Boone', role: 'sheriff', law: true, look: { outfit: 'suit_m', palette: 'mustard', skin: 4, hair: 1 },

@@ -198,7 +198,7 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
     fitNow.fov = null; fitNow.dx = fitNow.dy = 0;
     state = 'in';
     SND.on(true);
-    if (!G) G = makeRevolver({ look: rider.look || {} });
+    if (!G) G = makeRevolver({ look: rider.look || {}, folk });   // (the hand round it: the rider's own, from the people already loaded)
     G.show(false); G.reloading = false; G.rounds = 6;   // (handed over loaded: "six in the gun")
     openUi();
     keeperSay(touch() ? KEEPER.startTouch : KEEPER.start, { ms: touch() ? 4600 : 3800 });

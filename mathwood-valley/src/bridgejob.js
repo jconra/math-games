@@ -14,9 +14,11 @@
 // on what stands (labs/bridge/cross-worker.js, frame.js crossTest, off the page's thread: a second or two). A bridge
 // that carries at least horse and rider (BRIDGE.stands) is USED: the deck is the ground there for everyone (W.heightAt
 // and W.blocked answer for it: the player on foot or riding, the dog, the travellers on the crossing road,
-// src/bridgetraffic.js); wagons drive over it once it carries the covered wagon (BRIDGE.wagons). Otherwise everyone
-// fords the river beside it. Done for the checklist (completion.js 'place:bridge') at the first bridge that carries
-// the horse; the belt buckle counts the loads carried across in the tests (save.js JOBS 'loads').
+// src/bridgetraffic.js: once it carries them, about half of the travellers come over it, the rest still by their usual
+// way, the crossing upriver); wagons drive over it once it carries the covered wagon (BRIDGE.wagons). Otherwise nothing
+// crosses here (there is no ford beside it), and a player on horseback finds a shallow place up or down the river.
+// Done for the checklist (completion.js 'place:bridge') at the first bridge that carries the horse; the belt buckle
+// counts the loads carried across in the tests (save.js JOBS 'loads').
 //
 // The bridge's own frame (the lab's: feet, the middle of the gap at 0, 0, the stone tops at 0, X from the lab's west bank
 // to its east) is turned here so the lab's west bank is the north (town) bank: the lab's east runs south. Every word the
@@ -231,7 +233,7 @@ export function makeBridgeJob({ W, folk, rider, sites, refresh = () => {}, hud =
   };
   const unblockCamp = W.addBlocker ? W.addBlocker(campBlock) : () => {};
   let time = 0;
-  // the travellers on the crossing road: over the bridge when it carries them, else by the ford
+  // the travellers across the river: by the crossing upriver, and over the bridge too once it carries them
   const road = J.road = makeCrossingTraffic({ W, folk, job: J, traffic, obstacles, camera });
 
   // ── the builder, mounted at the site ─────────────────────────────────────────────────────────────────────────
@@ -241,8 +243,8 @@ export function makeBridgeJob({ W, folk, rider, sites, refresh = () => {}, hud =
     labSound.setBed(false);   // (the lab's own bed of birds and far-off work: the valley has its own sounds)
     if (merged) { merged.undo(); merged = null; }
     shown.group.visible = false; deckShown.group.visible = false;
-    // (while it is being built the bridge isn't walked on: the travellers go by the ford; one on its way over the bridge
-    // just now is put away)
+    // (while it is being built the bridge isn't walked on: the travellers go by the crossing upriver; one on its way over
+    // the bridge just now is put away)
     // (the player, the horse or the dog standing on the deck just now keep it under their feet: THE DECK HELD, below)
     if (deckTop !== null && standers().some((t) => onFoot(t.at.x, t.at.z))) holdTop = deckTop;
     deckTop = null; road.off('bridge');
@@ -341,11 +343,11 @@ export function makeBridgeJob({ W, folk, rider, sites, refresh = () => {}, hud =
   W.heightAt = heightAt; W.blocked = blocked;
 
   // THE DECK HELD: the player, the horse or the dog standing on the deck when the builder opens (the engineer is in
-  // reach from the deck's north end) stand on it still while the builder is up, though the travellers go by the ford
-  // meanwhile (the ground under them never falls away). Put away: a deck still used is theirs again as anyone's; deck
-  // planks still there but no longer carrying horse and rider (or not worked out yet) bear them until they have all
-  // stepped off onto a bank; no deck at all, and whoever stood on it is set on the nearer bank, on the road, so no one
-  // is ever left in the ravine.
+  // reach from the deck's north end) stand on it still while the builder is up, though the travellers go by the
+  // crossing upriver meanwhile (the ground under them never falls away). Put away: a deck still used is theirs again as
+  // anyone's; deck planks still there but no longer carrying horse and rider (or not worked out yet) bear them until
+  // they have all stepped off onto a bank; no deck at all, and whoever stood on it is set on the nearer bank, on the
+  // road, so no one is ever left in the ravine.
   const _sp = new THREE.Vector3();
   function standers() {
     const out = [], P = player(), Dg = dog();

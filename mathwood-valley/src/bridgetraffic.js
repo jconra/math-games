@@ -1,33 +1,42 @@
-// THE CROSSING ROAD: now and then a traveller goes over the western river on the road south-west of town (the land's
-// paths landpath10 and landpath8, which meet at the ravine where the bridge job is: src/bridgejob.js): a rider, a walker,
-// or a wagon with its team. Each one crosses ON THE BRIDGE when the bridge standing there carries it (the job says:
-// J.uses(kind): horse and rider for the walkers and the riders, the covered wagon for the wagons), and otherwise goes
-// round by the ford beside it (landforms.js FORD: down the sunken lane, through the shallow water and up the far side).
-// The bridge's deck is the ground there while it is used (bridgejob.js answers W.heightAt), so a wagon's wheels and a
-// horse's hooves roll over its planks.
-// They cost nothing far away: one sets off only while the player is within CROSSING.near metres of the ravine, at an
-// end of the road out of the player's way, dissolving in there (src/wagon.js fadeAll) and dissolving out at the other
-// end; one or two at a time. They stop for the player, the horse and the dog standing in their way, and go on once
-// it is clear.
+// THE TRAVELLERS ACROSS THE WESTERN RIVER: now and then a rider, a walker or a wagon with its team goes over the river
+// on one of the two roads that cross it west of town (src/bridgeplan.js ROUTES):
+//   UPRIVER, their usual way: the road that wades the river about 190 m west-north-west of the bridge and goes on west
+//     toward the misty west end. Every kind goes this way while there is no bridge, and the kinds the bridge can't
+//     carry always do.
+//   THE BRIDGE: the road south-west of town (the land's paths landpath10 and landpath8, which meet at the ravine where
+//     the bridge job is: src/bridgejob.js). Nothing else crosses at the ravine, so until a bridge carries them that road
+//     has no travellers; then about half of each kind it carries (the job says: J.uses(kind): horse and rider for the
+//     walkers and the riders, the covered wagon for the wagons) come over it (bridgeplan.js wayFor, BRIDGE_SHARE), the
+//     rest still upriver. The bridge's deck is the ground there while it is used (bridgejob.js answers W.heightAt), so a
+//     wagon's wheels and a horse's hooves roll over its planks.
+// They cost nothing far away: one sets off only while the player is within CROSSING.near metres of where its road
+// crosses the river (src/bridgeplan.js CROSS_AT), at an end of its road out of the player's way, dissolving in there
+// (src/wagon.js fadeAll) and dissolving out at the other end; one or two at a time. Two on one road go the same way
+// (they never meet head-on), and one stops short of the one ahead of it. They stop for the player, the horse and the
+// dog standing in their way, and go on once it is clear.
 //
 //   const X = makeCrossingTraffic({ W, folk, job, traffic, obstacles, camera })
 //     job: the bridge job (J.uses(kind)); traffic: src/traffic.js's (its wagons' models T.lib, its riders' kit
 //     T.folk.kit, loaded once a ride); obstacles(): what to stop for (Vector3s or objects with a .position)
 //   X.update(dt, at)    each frame while riding (at: the player's position)
-//   X.send(kind, from)  (dev and rigs) one now: kind 'rider' | 'walker' | 'wagon', from 'north' | 'south'
+//   X.send(kind, from, way)  (dev and rigs) one now: kind 'rider' | 'walker' | 'wagon', from 'north' (the town's side of
+//                       the river) | 'south' (the far side); way 'bridge' | 'upriver' (left out: the bridge if it
+//                       carries that kind, else upriver: no coin tossed, so a rig knows which)
+//   X.cfg               the settings (CROSSING), for rigs
 //   X.hold = true       no new ones set off (rigs)
-//   X.off(way)          every traveller on that way ('bridge' | 'ford') put away (held still, dissolving where it stands)
+//   X.off(way)          every traveller on that way ('bridge' | 'upriver') put away (held still, dissolving where it stands)
 //   X.list, X.state(), X.dispose()
-//   (the two ways across, as [x, z] points north to south: src/bridgeplan.js ROUTES)
+//   (the two ways across, as [x, z] points from the town's side to the far side: src/bridgeplan.js ROUTES)
 import * as THREE from 'three';
 import { makePerson } from './actors/folk.js';
 import { makeRider } from './actors/riders.js';
 import { makeWagon, fadeAll, unfade } from './wagon.js';
 import { TRAVELLER_LOOKS } from './roadfolkplan.js';
-import { ROUTES } from './bridgeplan.js';
+import { ROUTES, CROSS_AT, wayFor } from './bridgeplan.js';
 
 export const CROSSING = {
-  near: 150,                // m from the ravine: travellers come and go only while the player is this near
+  near: 150,                // m from where a way crosses the river: its travellers come and go only while the
+                            // player is this near
   every: [22, 50],          // s between one setting off and the next
   most: 2,                  // at once
   kinds: [['rider', 0.45], ['walker', 0.3], ['wagon', 0.25]],
@@ -37,15 +46,18 @@ export const CROSSING = {
   clear: 26,                // m: an end this near the player isn't where one appears (it would pop up beside them)
   stop: { gap: 2.4, wide: 1.4, wait: 0.8 },   // m ahead it stops for something in its way, m either side, s clear before going on
   edge: { rider: 0.55, walker: 0.75, wagon: 0 },   // m right of the road's middle it keeps to (on the bridge: half of it)
+  reach: { rider: 1.3, walker: 0.3 },   // m from a rider's or a walker's middle to its front and its back (a wagon says its own)
 };
 const rnd = (a, b) => a + Math.random() * (b - a);
 const pick = (l) => l[Math.floor(Math.random() * l.length)];
 const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
 export function makeCrossingTraffic({ W, folk, job, traffic = null, obstacles = () => [], camera = null, scene = W.scene }) {
-  const X = { list: [] };
+  const X = { list: [], cfg: CROSSING };
   const shadows = !!(W.V && W.V.SHADOW ? W.V.SHADOW.on : true);
-  const mid = { x: -339.2, z: -42.25 };
+  // how far the player is from where a way crosses the river; whether the bridge carries a kind of traveller now
+  const away = (way, at) => Math.hypot(at.x - CROSS_AT[way][0], at.z - CROSS_AT[way][1]);
+  const carried = (kind) => !!(job && job.uses && job.uses(kind));
   // the routes as flat curves (x, z: the ground's height is asked as they go, so the deck counts once it is used)
   const curves = {};
   for (const [k, pts] of Object.entries(ROUTES)) { const c = new THREE.CatmullRomCurve3(pts.map(([x, z]) => new THREE.Vector3(x, 0, z)), false, 'centripetal'); c.arcLengthDivisions = 400; curves[k] = { c, L: c.getLength() }; }
@@ -58,9 +70,9 @@ export function makeCrossingTraffic({ W, folk, job, traffic = null, obstacles = 
   let timer = rnd(4, 10), seq = 0;
   const _p = new THREE.Vector3(), _t = new THREE.Vector3();
 
-  function send(kind, from = Math.random() < 0.5 ? 'north' : 'south') {
-    const onBridge = !!(job && job.uses && job.uses(kind));
-    const way = onBridge ? 'bridge' : 'ford', dir = from === 'north' ? 1 : -1, L = curves[way].L;
+  function send(kind, from = Math.random() < 0.5 ? 'north' : 'south', way = carried(kind) ? 'bridge' : 'upriver') {
+    if (!curves[way]) return null;
+    const dir = from === 'north' ? 1 : -1, L = curves[way].L;
     const t = { id: ++seq, kind, way, dir, u: dir > 0 ? 0 : L, L, pace: CROSSING.pace[kind] * rnd(0.9, 1.1), speed: 0, fade: 0, made: null, mem: {}, clear: 0, ending: false, gone: false };
     try {
       if (kind === 'rider') {
@@ -114,9 +126,13 @@ export function makeCrossingTraffic({ W, folk, job, traffic = null, obstacles = 
     if (t.kind === 'wagon') t.made.root.removeFromParent();
     t.made = null; t.gone = true;
   }
-  // something standing in its way, close ahead: the player, the horse, the dog
+  // something standing in its way, close ahead: another traveller ahead of it on its way going the same way (it keeps
+  // CROSSING.stop.gap behind that one's back; one coming the other way, only ever sent by a rig, is never waited for:
+  // the two would wait for each other for good), the player, the horse, the dog
   const _a = new THREE.Vector3();
+  const nose = (t) => (t.kind === 'wagon' ? t.made.nose : CROSSING.reach[t.kind]), back = (t) => (t.kind === 'wagon' ? t.made.tail : CROSSING.reach[t.kind]);
   function blockedAhead(t) {
+    for (const o of X.list) if (o !== t && o.made && o.way === t.way && o.dir === t.dir && (o.u - t.u) * t.dir > 0 && (o.u - t.u) * t.dir - nose(t) - back(o) < CROSSING.stop.gap) return true;
     const h = t.kind === 'wagon' ? t.made.heading : (t.h || 0), at = t.kind === 'wagon' ? t.made.front : spot(t, _a) !== null && _a;
     const fx = Math.sin(h), fz = Math.cos(h);
     for (const o of obstacles()) {
@@ -128,20 +144,27 @@ export function makeCrossingTraffic({ W, folk, job, traffic = null, obstacles = 
   }
 
   X.update = (dt, at) => {
-    const near = at && Math.hypot(at.x - mid.x, at.z - mid.z) < CROSSING.near;
-    // setting off: now and then, at an end of the road away from the player
-    if (near && !X.hold && (timer -= dt) <= 0) {
+    if (!at) return;
+    const near = Object.keys(ROUTES).filter((way) => away(way, at) < CROSSING.near);
+    // setting off: now and then a traveller of some kind, by its way (upriver, or over a bridge that carries it about
+    // half the time: wayFor); only if the player is near that way, at an end of its road away from the player, the
+    // same end as any already on that way (none meet head-on), and not while one of them is still close to it
+    if (near.length && !X.hold && (timer -= dt) <= 0) {
       timer = rnd(...CROSSING.every);
       if (X.list.length < CROSSING.most) {
         let r = Math.random(), kind = 'walker'; for (const [k, p] of CROSSING.kinds) { if ((r -= p) <= 0) { kind = k; break; } }
-        const ends = ['north', 'south'].filter((e) => { const q = e === 'north' ? ROUTES.ford[0] : ROUTES.ford[ROUTES.ford.length - 1]; return Math.hypot(q[0] - at.x, q[1] - at.z) > CROSSING.clear; });
-        if (ends.length) send(kind, pick(ends));
+        const way = wayFor(carried(kind)), R = ROUTES[way], on = X.list.filter((t) => t.way === way);
+        const ends = !near.includes(way) ? [] : ['north', 'south'].filter((e) => {
+          const q = e === 'north' ? R[0] : R[R.length - 1], d = e === 'north' ? 1 : -1;
+          return Math.hypot(q[0] - at.x, q[1] - at.z) > CROSSING.clear && on.every((t) => t.dir === d && Math.abs(t.u - (d > 0 ? 0 : t.L)) > 14);
+        });
+        if (ends.length) send(kind, pick(ends), way);
       }
     }
     for (const t of X.list) {
       if (!t.made) continue;
       // away from the player now: gone at once (out of sight that far off)
-      if (!near && Math.hypot(at.x - mid.x, at.z - mid.z) > CROSSING.near + 40) { unmake(t); continue; }
+      if (away(t.way, at) > CROSSING.near + 40) { unmake(t); continue; }
       // put away where it stands (X.off): held still there, dissolving (never moved again: the ground under it may
       // no longer be the deck)
       if (t.vanish) { if (t.kind === 'wagon') t.made.speed = 0; see(t, Math.max(0, t.fade - dt / CROSSING.vanish)); if (t.fade <= 0) unmake(t); continue; }

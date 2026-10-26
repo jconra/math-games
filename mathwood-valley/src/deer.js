@@ -10,8 +10,9 @@
 // bones); past DEER.mid its clips step every third frame; only a herd inside DEER.shadow casts shadows. The legs keep to
 // the ground with the animals' own gaits (animal.pace in src/actors/animals.js: Walk, sped up for a trot, and Gallop).
 //
-// The deer photographs job (src/missions/deerjob.js) borrows a herd: it makes it less shy while the kid creeps up with
-// the camera, poses it side-on for the pictures, and sends it off when the pictures are taken.
+// The deer photographs job (src/missions/deerjob.js) has one herd for its own (the creek herd, the nearest to town, with
+// Miss Wren standing by it): it makes it less shy while the kid creeps up with the camera, poses it side-on for the
+// pictures, and sends it off when the pictures are taken. The other herds are only wildlife, to come across exploring.
 //
 //   const D = makeDeer({ W, animals, scene })     animals: the loaded animal library (the deer and stag are loaded here)
 //   D.ready             a promise: the herds are in
@@ -26,7 +27,8 @@
 //                       a gallop further off, nor from the slow creep the usual herds run from; it never drifts toward
 //                       the player either
 //   herd.keepNear = { x, z, min, max } | null    while grazing, the herd only drifts to where its middle stays between
-//                       min and max metres of this spot (the naturalist's: her herd stays in reach but never on top of her)
+//                       min and max metres of this spot (the naturalist's: her herd stays in reach but never on top of her);
+//                       out of that band (walked off after its pictures, or bolted) it drifts back into it
 //   herd.pose(spots)    each deer walks to its spot { x, z, h } and stands there (grazing, looking about) till released
 //   herd.release()      back to grazing where they stand
 //   herd.leave(x, z)    the herd walks off away from (x, z) and settles further on
@@ -235,10 +237,26 @@ export function makeDeer({ W, animals, scene = W.scene }) {
         for (const d of H.deer) calmDeer(H, d, dt);
         if ((H.moveT -= dt) <= 0) {   // (now and then the whole herd drifts on a little)
           H.moveT = rand(25, 50);
-          const a = rand(-Math.PI, Math.PI), r = rand(4, DEER.roam), x = H.mid.x + Math.sin(a) * r, z = H.mid.z + Math.cos(a) * r;
-          const kn = H.keepNear, kd = kn ? Math.hypot(x - kn.x, z - kn.z) : 0;
-          const towardPlayer = shy.calm && at && Math.hypot(x - at.x, z - at.z) < Math.max(dist, alertR + DEER.spread);
-          if (free(x, z) && Math.hypot(x - sq.x, z - sq.z) > DEER.keepFrom && !busy(x, z) && (!kn || (kd >= kn.min && kd <= kn.max)) && !towardPlayer) H.mid = { x, z };
+          const kn = H.keepNear, out = kn ? Math.hypot(H.mid.x - kn.x, H.mid.z - kn.z) : 0;
+          const back = kn && (out < kn.min - 2 || out > kn.max + 2);
+          let x, z;
+          if (back) {
+            // (out of its band round the spot (walked off after its pictures, or bolted): back toward it, a stretch at a
+            // time and sooner than a drift, to the side of the spot its home is on)
+            const hx = H.home.x - kn.x, hz = H.home.z - kn.z, hl = Math.hypot(hx, hz) || 1, rr = Math.min(kn.max, Math.max(kn.min, hl));
+            const tx = kn.x + hx / hl * rr, tz = kn.z + hz / hl * rr, tl = Math.hypot(tx - H.mid.x, tz - H.mid.z) || 1, st = Math.min(tl, DEER.roam);
+            x = H.mid.x + (tx - H.mid.x) / tl * st; z = H.mid.z + (tz - H.mid.z) / tl * st;
+            H.moveT = rand(8, 14);
+          } else {
+            const a = rand(-Math.PI, Math.PI), r = rand(4, DEER.roam);
+            x = H.mid.x + Math.sin(a) * r; z = H.mid.z + Math.cos(a) * r;
+          }
+          const kd = kn ? Math.hypot(x - kn.x, z - kn.z) : 0;
+          // (a calm herd never drifts toward the player; but on its way back to its band it may, so long as it stays
+          // well clear of them: the player is often standing by the spot it is coming back to)
+          const pd = at ? Math.hypot(x - at.x, z - at.z) : Infinity;
+          const towardPlayer = shy.calm && at && (back ? pd < alertR + DEER.spread + 6 : pd < Math.max(dist, alertR + DEER.spread));
+          if (free(x, z) && Math.hypot(x - sq.x, z - sq.z) > DEER.keepFrom && !busy(x, z) && (!kn || back || (kd >= kn.min && kd <= kn.max)) && !towardPlayer) H.mid = { x, z };
         }
         if (at && (shy.calm ? near < fleeR && moving : near < fleeR || (o.speed > DEER.gallop && near < alertR))) run(H, at.x, at.z, true);
         else if (at && near < alertR) { H.state = 'alert'; H.t = 0; H.alertFrom = near; }

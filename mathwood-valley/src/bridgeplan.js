@@ -1,7 +1,7 @@
 // THE BRIDGE JOB IN PLAIN NUMBERS (no three.js, so the tests run it as it is): what the engineer pays, the bridge's
 // fingerprint (a rating holds for the bridge it was worked out for), the ways named as the valley has them, where the
-// builder's camera starts, and the two ways across the western river at the crossing (over the bridge; through the
-// ford). src/bridgejob.js is the job, src/bridgetraffic.js the travellers on the crossing road.
+// builder's camera starts, and the travellers' two ways across the western river (over the bridge; by the crossing
+// upriver, for those the bridge doesn't carry). src/bridgejob.js is the job, src/bridgetraffic.js the travellers.
 
 // gold for each rating (labs/bridge/frame.js LOADS: person, horse and rider, covered wagon, freight wagon, cattle drive),
 // each heavier one paying the difference: the whole top rating is 200 (the doubled economy: a long build, a few sittings)
@@ -32,13 +32,25 @@ export function sideView(az) {
   return best;
 }
 
-// north to south. The road up from the town's west trail (landpath10), to the north abutment, over the bridge's deck
-// (its middle line, x -339.2), down the far bank's road (landpath8) to the south; the ford: from the road on the north
-// bank down the ford's lane (landforms.js FORD), through the water and up, back to the road on the far side
+// Each from its town side to its far side, as [x, z] points. THE BRIDGE: the road up from the town's west trail
+// (landpath10), to the north abutment, over the bridge's deck (its middle line, x -339.2), down the far bank's road
+// (landpath8) to the south. Nothing else crosses at the ravine (there is no ford beside it). UPRIVER, the travellers'
+// usual way across: the road that leaves the valley's west road about 100 m west of the bridge road's turn
+// (landpath13) and wades the river where it comes down from the north-west (landpath14, about 190 m west-north-west of
+// the bridge), then on west along the far bank toward the misty west end (landpath15). That way starts a little down
+// its road from the west road (a wagon dissolving in there is clear of the valley's own wagons on it: src/traffic.js).
 const NORTH = [[-337.5, -81.3], [-337.5, -72], [-337.5, -63]];
 const SOUTH = [[-348.1, -15.6], [-350.6, -12.5], [-353.4, -9.4], [-356.4, -6.3], [-359.4, -3.1]];
 export const ROUTES = {
   bridge: [...NORTH, [-337.7, -53], [-338.6, -48.6], [-339.2, -46.2], [-339.2, -42.25], [-339.2, -38.3], [-339.9, -36.5], [-341.9, -34.4], [-343.3, -28.1], [-344.7, -21.9], ...SOUTH],
-  ford: [...NORTH, [-338.6, -61], [-343, -59.6], [-348, -56.8], [-351.6, -52.4], [-353.1, -47.4], [-353.4, -42.3], [-353.2, -37.2], [-352.4, -31.6], [-351, -26], [-349.2, -20.6], [-347.6, -17.2], ...SOUTH.slice(1)],
+  upriver: [[-453.1, -140], [-459.4, -134.3], [-465.6, -128.1], [-471.9, -121.9], [-478.1, -115.6], [-484.4, -109.4], [-490.6, -103.1], [-496.9, -96.9],
+    [-503.1, -90.9], [-509.4, -85.7], [-515.6, -80.7], [-525, -73.9], [-528.1, -72.4], [-531.3, -71.1], [-534.4, -70.2], [-543.8, -68.9], [-553.1, -68.8],
+    [-562.5, -68.8], [-571.9, -68.8], [-581.3, -68.8], [-590.6, -68.8], [-600, -68.8]],
 };
-export const routeOf = (onBridge) => (onBridge ? ROUTES.bridge : ROUTES.ford);
+// where each way crosses the river (the middle of the ravine's gap; the shallows upriver): its travellers come and go
+// while the player is near there
+export const CROSS_AT = { bridge: [-339.2, -42.25], upriver: [-524, -74.5] };
+// which way a traveller takes: upriver, unless the bridge carries its kind, and then over the bridge about half the
+// time (BRIDGE_SHARE), so the road upriver keeps its own travellers once there is a bridge
+export const BRIDGE_SHARE = 0.5;
+export const wayFor = (carried, rand = Math.random) => (carried && rand() < BRIDGE_SHARE ? 'bridge' : 'upriver');

@@ -4,11 +4,12 @@
 // down, the tripod's legs swing out, and the view goes under the focusing cloth: the ground glass, pointed at the herd's
 // middle. Dragging the view (or A / D, the arrow keys; W / S tilt it) turns the camera on its tripod.
 // Done with the job, E by Miss Wren gives the camera back: it comes off the saddle and the job rests (no card, no
-// trail) until the player has ridden well away from the herd and comes back; walking up to a herd still offers the
+// trail) until the player has ridden well away from the herd and comes back; walking up to the herd still offers the
 // camera all the same (setting it up borrows it again).
 // The job is never over for good: whatever ended it ("Done for now", a full roll, the camera given back), the camera
-// can be set up again by the job's herd, and a player who finds another herd on their own (one settled within
-// SNAP.near) has that one for the job's herd instead.
+// can be set up again by the job's herd. It has one herd for good (SNAP.herd, the nearest to town, with Miss Wren
+// standing by it): the valley's other herds are wildlife to come across while exploring, never the job's (no card, no
+// prompt, no trail to them).
 //
 // The herd stands side-on for its picture, each deer wearing a small number tag, and one question with a blank sits over
 // the frame ("3 + ? = 5", "10 more than 47 is ?", "? × 4 = 28", "17 ÷ 5 = 3, ? left over", then "x + 7 = 12"): the deer's
@@ -42,7 +43,8 @@
 //   DJ.paused         a panel is open over the game
 //   DJ.tags()         for rigs: the tags on screen [{ value, x, y, key, right }] (page pixels)
 //   DJ.pick(value)    for rigs: photograph the deer wearing this number;  DJ.done() as "Done for now"
-//   DJ.herd()         the herd the job is after now (null between herds)
+//   DJ.herd()         the job's herd (null till the deer are in)
+//   DJ.inReach()      the camera could be set up from where the player stands (the herd settled, SNAP.setMin to setMax off)
 //   DJ.workSum()      the photo's sum for the tools' Work it out ("9 + ? = 12": 12 − 9, the kid picks it), or null
 //   DJ.state()        for rigs;  DJ.dispose()
 import * as THREE from 'three';
@@ -66,6 +68,7 @@ export const SNAP = {
   per: 3,                // pictures of one herd before it drifts off
   pay: { photo: 3, levelEvery: 3, outing: 5 },  // gold: each picture (+1 for every 3 levels up the deer's ladder), a
                                                 // whole outing; the same whether or not a wrong deer was tried first
+  herd: 'creek',         // the job's one herd (src/deer.js DEER.herds: south of the pasture, the nearest to town)
   near: 75,              // m from the job's herd where its card shows
   setMin: 12, setMax: 50,   // m from the herd's middle where the camera can be set up
   shy: { alert: 18, flee: 11, calm: true },   // the job's herd keeps still for a photographer creeping up (on foot; a
@@ -110,13 +113,14 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
   const DJ = { prompt: null, near: false, card: false, active: false, paused: false };
   let herd = null, state = 'travel', t = 0, waitT = 0, disposed = false;
   let easier = false;     // the next photo comes from the level below (once): a first try just missed
-  let lookT = 0;          // s till the next look for a nearer herd the player has found
   let vf = null;          // the viewfinder: its page elements and what it is showing
   let spooked = false, cardKey = '';
   const eye = new THREE.Vector3(), look = new THREE.Vector3(), _v = new THREE.Vector3();
   const FOV0 = camera.fov, NEAR0 = camera.near;
 
-  deer.ready.then(() => { if (!disposed && !herd) herd = deer.nearest(P.position); });
+  // the job's herd: its own one (the nearest to the town square, should the list ever lose it)
+  const jobHerd = () => deer.herd(SNAP.herd) || deer.nearest(W.places.square || W.places.spawn);
+  deer.ready.then(() => { if (!disposed && !herd) herd = jobHerd(); });
 
   // ── THE CAMERA BEHIND THE SADDLE ───────────────────────────────────────────────────────────────────────────────
   // (only once she has lent it: talking to her, or the first picture set up; before that a new saddle carries nothing)
@@ -675,13 +679,13 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
       DJ.prompt = null; DJ.near = false;
       if (DJ.card) { DJ.card = false; cardKey = ''; hud.rule(null); }
       if (state === 'packing') packing(dt);
-      if (state === 'travel' && deer.herds.length && (waitT -= dt) <= 0) herd = deer.nearest(P.position);
+      if (state === 'travel' && deer.herds.length && (waitT -= dt) <= 0) herd = jobHerd();
       stowPack(state === 'travel');
       return;
     }
     herd.shy = SNAP.shy;
     if (DJ.paused) return;
-    if (state === 'travel') { stowPack(true); nearer(dt); travel(dt); return; }
+    if (state === 'travel') { stowPack(true); travel(dt); return; }
     if (state === 'setting') {
       if (!vf) { if (P.mode !== 'foot') { if ((waitT += dt) > 6) { state = 'travel'; DJ.active = false; onStop(); } return; } standCamera(); t = 0; }
       // (moved off by the menu's "back to town" while the legs swing out: the camera folds away, no view opened)
@@ -710,18 +714,6 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
       if (vf.ready && !vf.busy && !vf.helped && vf.helpEl.hidden && (vf.idle += dt) > (vf.shot && !vf.shot.young && vf.shot.steps.length > 2 ? SNAP.helpAfterTwo : SNAP.helpAfter)) { vf.helped = true; help({}); }
     }
   };
-  // a herd the player has found on their own: one settled within SNAP.near, clearly nearer than the job's own, becomes
-  // the job's herd (the camera goes up for whichever herd the player is by)
-  function nearer(dt) {
-    if ((lookT -= dt) > 0) return;
-    lookT = 1;
-    const at = P.position, n = deer.nearest(at);
-    if (!n || n === herd || !(n.state === 'calm' || n.state === 'alert') || !n.deer.length) return;
-    const c = where(), dn = Math.hypot(at.x - n.mid.x, at.z - n.mid.z), dh = Math.hypot(at.x - c.x, at.z - c.z);
-    if (dn > SNAP.near || dn > dh - 15) return;
-    herd.shy = null; herd = n;
-    if (DJ.card) { DJ.card = false; cardKey = ''; hud.rule(null); }
-  }
   function packing(dt) {
     t += dt;
     K.root.visible = true;
@@ -738,7 +730,13 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
   DJ.tags = () => (vf && vf.items ? vf.items.map((it) => ({ value: vf.shot.values[it.i], x: Math.round(it.x), y: Math.round(it.y), key: String(vf.shot.values[it.i]), on: it.on && vf.ready, right: it.i === vf.shot.right })) : []);
   DJ.pick = (value) => { if (!vf || !vf.shot) return false; const i = vf.shot.values.indexOf(value); if (i < 0) return false; shoot(i); return true; };
   DJ.workSum = () => (DJ.active && vf && vf.shot ? deerSum(vf.shot) : null);   // (the tools' Work it out: src/math/jobsums.js)
-  DJ.herd = () => herd;   // (the herd the job is after now, or null between herds)
+  DJ.herd = () => herd;   // (the job's herd, or null till the deer are in)
+  // (the camera could go up from where the player stands: Miss Wren's words when she lends it, src/jobfolk.js)
+  DJ.inReach = () => {
+    if (!herd || state !== 'travel' || !herd.deer.length || !(herd.state === 'calm' || herd.state === 'alert')) return false;
+    const c = where(), d = Math.hypot(P.position.x - c.x, P.position.z - c.z);
+    return d >= SNAP.setMin && d <= SNAP.setMax;
+  };
   DJ.flash = () => K.flash();   // (for rigs: the flash and smoke seen from outside)
   DJ.state = () => ({ state, herd: herd && herd.id, herdState: herd && herd.state, near: DJ.near, prompt: DJ.prompt, active: DJ.active,
     shot: vf && vf.shot ? { eq: vf.shot.eq, x: vf.shot.x, values: vf.shot.values, level: vf.shot.level, kind: vf.shot.kind, placing: vf.shot.placing } : null, pics: vf ? vf.pics : 0,

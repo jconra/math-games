@@ -89,7 +89,8 @@ const STEEP = 0.8, DEEP = 0.9, EDGE = 780, FENCE_HALF = 0.35, WALL_PAD = 0.5, TR
 // other end's (`wrap`, inside the land's edge at EDGE). West -x, east +x (the valley's floor runs out west and south-east)
 // m either side of the road's end (along z) within which a rider wrapping comes out by the other end of the road (W.wrap)
 const WRAP_ROAD = 45;
-const ENDS = { west: { a: 500, b: 680, wrap: 720 }, east: { a: 540, b: 700, wrap: 740 }, thick: 0.22, top: 70 };
+const ENDS = { west: { a: 580, b: 680, wrap: 720 },   // (west a: past the upriver crossing at x -525, so its water and road are clear)
+   east: { a: 540, b: 700, wrap: 740 }, thick: 0.22, top: 70 };
 // where a rider comes out of the mist: clear of the trees' crowns (CROWN m round a tree of scale 1) over them and the
 // camera, WRAP_CLEAR m behind (W.wrap)
 const CROWN = 5, WRAP_CLEAR = 12;
@@ -192,7 +193,7 @@ export async function makeWorld({ renderer, camera, quality = null, look = 'gree
     for (const b of FOOT) { const dx = x - b.x, dz = z - b.z; if (Math.abs(b.c * dx - b.s * dz) < b.hw && Math.abs(b.s * dx + b.c * dz) < b.hd) return true; }
     for (const [p, q] of V.FENCE.rails || []) if (segNear(x, z, p[0], p[2], q[0], q[2], FENCE_HALF)) return true;
     const i = Math.min(V.N - 1, Math.max(0, Math.floor((x + V.SIZE / 2) / V.TEX))), j = Math.min(V.N - 1, Math.max(0, Math.floor((z + V.SIZE / 2) / V.TEX)));
-    if (V.inFine && V.inFine(x, z)) {   // (where the ground is drawn finer than its grid, the bridge crossing's ravine and ford: its own slope, and no scrambling down a bank there)
+    if (V.inFine && V.inFine(x, z)) {   // (where the ground is drawn finer than its grid, the bridge crossing's ravine: its own slope, and no scrambling down a bank there)
       const e = 0.6, gx = V.heightAt(x + e, z) - V.heightAt(x - e, z), gz = V.heightAt(x, z + e) - V.heightAt(x, z - e);
       if (Math.hypot(gx, gz) / (2 * e) > STEEP) return true;
     } else { const sl = V.slopeAt(i, j); if (sl > STEEP && (sl > BANK || !bankAt(j * V.N + i))) return true; }
