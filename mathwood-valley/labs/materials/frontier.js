@@ -527,7 +527,8 @@ function chimney(k) {
   // the courses first (so a tall stone knows the course above it)
   const courses = [];
   for (let y = 0, c = 0; y < CH.top - 0.06; c++) {
-    const h = k.r(0.2, 0.3), stack = y > CH.sh + 0.2, shoulder = !stack && y > CH.sh;
+    const h = k.r(0.08, 0.16), stack = y > CH.sh + 0.2,   // (thin stacked slabs, as a real fieldstone chimney is laid)
+    shoulder = !stack && y > CH.sh;
     courses.push({
       y, h, c, x0: stack ? CH.sx0 : shoulder ? (CH.x0 + CH.sx0) / 2 : CH.x0, x1: stack ? CH.sx1 : CH.x1,
       z1: stack ? CH.sz : shoulder ? (CH.z1 + CH.sz) / 2 : CH.z1, backFace: y > RIDGE - 0.5,   // the stack's face toward the cabin, once it clears the roof
@@ -545,14 +546,14 @@ function chimney(k) {
     };
     for (let p = a; p < b - 0.06;) {
       const bl = (blocked[key] || []).find(([s, f]) => p > s - 0.03 && p < f); if (bl) { p = bl[1]; continue; }
-      // 20 to 45 cm long; never a sliver: a short bit left at the end of the run goes to this stone
-      let L = Math.min(k.r(0.2, 0.45), b - p); if (b - p - L < 0.14) L = b - p;
+      // 25 to 60 cm long and thin; never a sliver: a short bit left at the end of the run goes to this stone
+      let L = Math.min(k.r(0.25, 0.6), b - p); if (b - p - L < 0.14) L = b - p;
       const dpt = k.r(0.18, 0.26), mid = p + L / 2, j = k.r(0.018, 0.028);
-      if (same(q, next) && L > 0.18 && k.R() < 0.3) {            // tall: up through the next course too
+      if (same(q, next) && L > 0.18 && k.R() < 0.12) {            // tall: up through the next course too
         put(L - j, q.h + next.h - j, q.y + (q.h + next.h) / 2, dpt, mid); block.push([p, p + L]);
       } else {
         // a little shorter than the course, sitting high or low in it (so the joints wander); the mortar shows round it
-        const hh = Math.max(0.12, q.h * k.r(0.78, 1.0) - j), lo = (q.h - j - hh) * k.R();
+        const hh = Math.max(0.06, q.h * k.r(0.78, 1.0) - j), lo = (q.h - j - hh) * k.R();
         put(L - j, hh, q.y + j / 2 + lo + hh / 2, dpt, mid);
       }
       p += L;
