@@ -38,6 +38,14 @@ export const U = {
   // never more than 0.6 of the face's narrower half, so a thin board and a big stone both look right), and how far the
   // light is bent there as if the edge were rounded off
   uEdgeDark: { value: 0.5 }, uEdgeDarkW: { value: 0.04 }, uBevel: { value: 0.6 },
+  // logs shaded round (how far the light rolls round them), the band of shade under an eave (strength), how much moss
+  // likes the cracks between boards and shakes
+  uLogRound: { value: 0.9 }, uEaveDark: { value: 0 }, uMossCrack: { value: 0.7 },
+  // silver-grey sun-bleached streaks along the logs (amount), and the dirt band along the bottom of everything
+  uBleach: { value: 0 }, uDirtBand: { value: 0 },
+  // how much of the sky's blue the fill light keeps on the cabin (0: all of it; 1: the same light, grey). Old wood's
+  // tops tilt up to the sky, and a strong blue fill reads as a sheen on them
+  uSkyGrey: { value: 0 },
 };
 
 // mask codes for uMask (the "show mask" menus)
@@ -88,7 +96,7 @@ uniform vec3 uMossColor, uShadeDir;
 uniform float uGrimeAmt, uStreakLen, uStreakScale, uSplashH, uCornerDirt, uGrimeSoft;
 uniform vec3 uGrimeColor, uMudColor;
 uniform float uEdgeAmt, uEdgeWidth, uEdgeBreak, uPaintChip;
-uniform float uEdgeDark, uEdgeDarkW, uBevel;
+uniform float uEdgeDark, uEdgeDarkW, uBevel, uLogRound, uEaveDark, uMossCrack, uBleach, uDirtBand, uSkyGrey;
 uniform float uAOAmt, uAOSun, uFixedTop;
 varying vec4 vWPosAO;
 #ifdef W_BOX
@@ -116,6 +124,14 @@ vec4 wFine = wTri(wP * 0.9, wTw);           // moss cushions (A), grit (B): 1.1 
 float wLum = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
 float wMoss = 0.0, wMossH = 0.0, wStreak = 0.0, wSplash = 0.0, wDirt = 0.0, wWear = 0.0, wBare = 0.0, wPaintVis = 0.0, wShow = -1.0;
 float mUp = 0.0, mLow = 0.0, mShade = 0.0, mTuck = 0.0, mRain = 1.0, wEdge = 1.0, wRim = 0.0, wRimH = 0.0;
+// what kind of part this is, from the tint's fourth number: painted (1), a round log (2), mortar or chinking (3), a
+// stone laid in a wall (4), a roof shake (below 0: minus how much of it shows below the next course, metres)
+float wKind = 0.0;
+#ifdef W_TINT
+  wKind = vTintPaint.a;
+#endif
+float wIsPaint = step(0.5, wKind) * step(wKind, 1.5), wIsLog = step(1.5, wKind) * step(wKind, 2.5), wIsMortar = step(2.5, wKind) * step(wKind, 3.5), wIsLaid = step(3.5, wKind);
+float wShakeE = max(-wKind, 0.0), wSetBack = 0.0;
 
 #ifdef W_GROUND
   // the ground: grass, worn to dirt where people walk and under the eaves (aTintPaint.r says how worn)
@@ -140,26 +156,52 @@ float mUp = 0.0, mLow = 0.0, mShade = 0.0, mTuck = 0.0, mRain = 1.0, wEdge = 1.0
       // pixel is from the edges along each, and a band that darkens toward them, curving in (brighter middle, darker
       // rim, darkest in the corners). The same band is a height that drops toward the edge (wRimH, metres): the normal
       // tilts over it, so the light catches a rounded edge without a single extra triangle.
-      vec2 wF, wFH;
-      if (wD.x <= wD.y && wD.x <= wD.z) { wF = wD.yz; wFH = vHalf.yz; }
-      else if (wD.y <= wD.z) { wF = wD.xz; wFH = vHalf.xz; }
-      else { wF = wD.xy; wFH = vHalf.xy; }
-      float wW = max(min(uEdgeDarkW, 0.6 * min(wFH.x, wFH.y)), 0.0005);
-      vec2 wQ = clamp(1.0 - wF / wW, 0.0, 1.0);
-      vec2 wQ2 = wQ * wQ;
-      wRim = 1.0 - (1.0 - wQ2.x) * (1.0 - wQ2.y);
-      wRimH = -0.5 * uBevel * wW * (wQ2.x + wQ2.y);
+      // The band's inner line wanders a little (ragged), and it is measured from a rectangle with rounded corners, so
+      // the corners darken round, as on a worn stone or board.
+      vec2 wF, wFH, wFP;
+      if (wD.x <= wD.y && wD.x <= wD.z) { wF = wD.yz; wFH = vHalf.yz; wFP = vLocalTop.yz; }
+      else if (wD.y <= wD.z) { wF = wD.xz; wFH = vHalf.xz; wFP = vLocalTop.xz; }
+      else { wF = wD.xy; wFH = vHalf.xy; wFP = vLocalTop.xy; }
+      float wW = max(min(uEdgeDarkW, 0.6 * min(wFH.x, wFH.y)), 0.0005) * (0.8 + 0.4 * wFine.b);
+      if (wShakeE > 0.0) wW *= 0.5;                   // a shake: only a thin dark line along its sides (the gap)
+      float wQ = min(length(max(wW - wF, 0.0)) / wW, 1.0);
+      wRim = wQ * wQ;
+      wRimH = -0.5 * uBevel * wW * wRim;
+      // A LOG: round about its long axis (the longer of the face's two directions). Across it, the top and bottom
+      // quarter darken, and the normal tilts as if over a cylinder, so the light rolls round it. (Its ends are the round
+      // end-grain pictures.)
+      if (wIsLog > 0.5 && min(wFH.x, wFH.y) * 2.5 < max(wFH.x, wFH.y)) {
+        float wA = step(wFH.y, wFH.x);                 // 1: the face's second direction is the one round the log
+        float wHa = mix(wFH.x, wFH.y, wA), wPa = mix(wFP.x, wFP.y, wA) / max(wHa, 0.001);
+        wRim = max(wRim, 0.7 * smoothstep(0.76, 1.0, abs(wPa)));     // only the top and bottom eighth, softly
+        wRimH = -0.5 * uLogRound * wHa * wPa * wPa;
+      }
+      // MORTAR AND CHINKING: set back between the stones or logs, so no lit lip: a shadow line along its top under the
+      // stone or log over it, and otherwise its own light colour (from a distance a light web between the stones)
+      if (wIsMortar > 0.5) {
+        wRim = 0.0; wRimH = 0.0;
+        wSetBack = 0.06 + 0.5 * (1.0 - smoothstep(0.0, 0.03, vHalf.y - vLocalTop.y));
+      }
+      // A STONE LAID IN A WALL: its top is seen only down in the joint, under the stone above: shaded, never a lit ledge
+      if (wIsLaid > 0.5 && wD.y <= min(wD.x, wD.z) && vLocalTop.y > 0.0) wSetBack = 0.55;
+      // A LOG's top and bottom are seen only down in the gap to the next log: in shadow, never a lit sliver
+      if (wIsLog > 0.5 && wD.y <= min(wD.x, wD.z)) wSetBack = 0.7;
     }
     #endif
   #else
     float wTop = uFixedTop;
+  #endif
+  // a roof shake is open to the rain all over (the baked rain test is per corner, and would give each shake its own)
+  float wShakeButt = 0.0;
+  #ifdef W_BOX
+  if (wShakeE > 0.0) { mRain = 1.0; wShakeButt = 1.0 - smoothstep(0.0, wShakeE * 0.9, vHalf.z - vLocalTop.z); }
   #endif
   float wWearT = 1.0 - wEdge / max(uEdgeWidth, 0.0005) + (wFine.g - 0.5) * 2.6 * uEdgeBreak;
   wWear = smoothstep(0.35, 0.65, wWearT) * uEdgeAmt;
 
   #ifdef W_TINT
     // paint chips off a wider band than bare wood wears, and in random flecks where the noise is high
-    float wPainted = vTintPaint.a;
+    float wPainted = wIsPaint;
     float wChipT = 1.0 - wEdge / max(uEdgeWidth * 0.8, 0.0005) + (wFine.b - 0.5) * 3.0 * uEdgeBreak;
     float wChip = clamp(smoothstep(0.45, 0.6, wChipT) * uEdgeAmt + smoothstep(1.04 - uPaintChip * 0.4, 1.08 - uPaintChip * 0.4, wFine.b * 0.55 + wBig.g * 0.55) * step(0.001, uEdgeAmt), 0.0, 1.0);
     vec3 wWood = diffuseColor.rgb * mix(vTintPaint.rgb, vec3(0.9, 0.82, 0.74), wPainted);
@@ -172,6 +214,17 @@ float mUp = 0.0, mLow = 0.0, mShade = 0.0, mTuck = 0.0, mRain = 1.0, wEdge = 1.0
   // worn bare edges: the grey, sun-baked surface rubbed through to lighter, fresher fibres
   wBare = wWear * (1.0 - wPaintVis);
   diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * 1.4 + vec3(0.02, 0.014, 0.006), wBare);
+  // SUN-BLEACH on the logs: silver-grey streaks running along each log (noise stretched 8 to 1 along the wall), more of
+  // them on the upper courses and on the walls facing the sun
+  float wBl = 0.0;
+  if (wIsLog > 0.5 && uBleach > 0.0) {
+    float wAl = dot(wP.xz, vec2(-wN.z, wN.x));
+    float wBn = texture2D(uNoise, vec2(wAl * 0.18, wP.y * 1.45)).g * 0.7 + texture2D(uNoise, vec2(wAl * 0.5, wP.y * 4.0)).b * 0.3;
+    float wSunny = clamp(dot(wN, -uShadeDir) * 0.5 + 0.5, 0.0, 1.0);
+    wBl = smoothstep(0.56, 0.7, wBn + 0.1 * smoothstep(0.8, 3.0, wP.y) + 0.06 * wSunny) * uBleach;
+    float wL = dot(diffuseColor.rgb, vec3(0.3, 0.59, 0.11));
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(wL) * vec3(1.08, 0.99, 0.86) * 1.4 + vec3(0.02, 0.016, 0.01), wBl);
+  }
 
   // ── GRIME ─ rain runs off the roof edge and down the wall (streaks), splashes mud up from the ground (splash), and
   // dirt gathers where the air is still (the tucked-in corners: low AO)
@@ -189,6 +242,13 @@ float mUp = 0.0, mLow = 0.0, mShade = 0.0, mTuck = 0.0, mRain = 1.0, wEdge = 1.0
   wDirt = clamp(uCornerDirt * smoothstep(0.12, 0.6, 1.0 - wAO) * (0.45 + wBig.b) * step(0.001, uGrimeAmt), 0.0, 1.0);
   diffuseColor.rgb *= mix(vec3(1.0), uGrimeColor * 2.2, clamp(wStreak + wDirt * 0.8, 0.0, 1.0));
   diffuseColor.rgb = mix(diffuseColor.rgb, uMudColor * (0.55 + 1.6 * wLum), wSplash * 0.85);
+  // the shade under an eave: the top 40-odd cm of a wall below the roof edge over it (a noisy lower line)
+  float wEave = (1.0 - smoothstep(0.0, 0.6 + 0.15 * wFine.g, wBelow)) * step(-0.03, wBelow) * wVert * wVert;
+  diffuseColor.rgb *= 1.0 - uEaveDark * wEave;
+  // the dirt band: the bottom 40-odd cm of everything standing on the ground (walls, piers, posts, barrels) darker and
+  // browner from splashed mud and damp, fading upward through noise
+  float wLowD = (1.0 - smoothstep(0.2, 0.85 + 0.4 * (wFine.g - 0.5), wP.y)) * (1.0 - 0.6 * max(wN.y, 0.0));
+  diffuseColor.rgb *= mix(vec3(1.0), vec3(0.5, 0.44, 0.37), wLowD * uDirtBand);
 
   // ── MOSS ─ four "moss likes it here" scores, each 0..1, mixed by their sliders:
   mUp = smoothstep(0.0, 0.85, wN.y) * smoothstep(0.1, 0.8, mRain);        // faces the sky AND the rain reaches it
@@ -197,8 +257,10 @@ float mUp = 0.0, mLow = 0.0, mShade = 0.0, mTuck = 0.0, mRain = 1.0, wEdge = 1.0
   mTuck = smoothstep(0.08, 0.55, 1.0 - wAO);                               // tucked in (low AO): sheltered, still air
   float wSum = uMossUp + uMossLow + uMossShade + uMossTuck + 0.0001;
   float mCrack = 1.0 - smoothstep(0.004, 0.035, wEdge);                   // the cracks between boards and shingles
-  float mBase = (uMossUp * mUp + uMossLow * mLow + uMossShade * mShade + uMossTuck * max(mTuck, mCrack * 0.7)) / wSum;
-  mBase *= 0.45 + 0.55 * max(mRain, mLow * 0.7);                          // moss needs water: rain, or the damp near the ground
+  float mBase = (uMossUp * mUp + uMossLow * mLow + uMossShade * mShade + uMossTuck * max(mTuck, mCrack * uMossCrack)) / wSum;
+  // moss needs water: rain, or the damp near the ground; a floor or a roof facing up needs the rain itself (the porch
+  // floor under its roof stays bare, whatever the damp)
+  mBase *= mix(0.45 + 0.55 * max(mRain, mLow * 0.7), smoothstep(0.15, 0.7, mRain), smoothstep(0.45, 0.85, wN.y));
   mBase *= smoothstep(-0.55, -0.05, wN.y);                                 // never on a ceiling
   // break the even score into patches with big world-space noise, then a soft threshold that "amount" slides
   float mCov = smoothstep(1.0 - uMossAmt - uMossSoft, 1.0 - uMossAmt + uMossSoft, mBase + (wBig.r - 0.5) * 1.1 * uMossBreak);
@@ -217,10 +279,23 @@ float mUp = 0.0, mLow = 0.0, mShade = 0.0, mTuck = 0.0, mRain = 1.0, wEdge = 1.0
   wMossCol = mix(wMossCol, wMossCol * vec3(1.15, 0.95, 0.5), (1.0 - mShade) * 0.55);                  // on the sunny side: drier, browner
   wMossCol *= 0.8 + 0.4 * wFine.b;
   // a thin green-black film of algae round the patches, before the moss itself
-  diffuseColor.rgb *= mix(vec3(1.0), wMc * 1.1 + vec3(0.3, 0.3, 0.25), smoothstep(0.0, 0.6, mCov) * 0.55);
+  diffuseColor.rgb *= mix(vec3(1.0), wMc * 1.1 + vec3(0.3, 0.3, 0.25), smoothstep(0.25, 0.7, mCov) * 0.5);
   diffuseColor.rgb = mix(diffuseColor.rgb, wMossCol, wMoss);
   // the bevelled edges darken whatever is on top (as a real rounded edge would, turned away from the light)
   diffuseColor.rgb *= 1.0 - uEdgeDark * wRim;
+  diffuseColor.rgb *= 1.0 - wSetBack;
+  #ifdef W_BOX
+  if (wShakeE > 0.0) {
+    // A ROOF SHAKE: the next course up lies over it from wShakeE above its butt; just below that line, the course's
+    // shadow, dark at the line and fading out over 9 cm (the dark band that makes a roof read as rows); and at the butt
+    // a ragged dark lip
+    float wFromButt = vHalf.z - vLocalTop.z;
+    // (higher up, under the course, seen only through a gap, it eases off: a gap shows shadow, not a black hole)
+    float wRow = smoothstep(wShakeE - 0.09, wShakeE - 0.005, wFromButt) * (1.0 - 0.45 * smoothstep(wShakeE + 0.03, wShakeE + 0.15, wFromButt));
+    float wLip = 1.0 - smoothstep(0.0, 0.01 + 0.025 * wFine.b, wFromButt);
+    diffuseColor.rgb *= (1.0 - 0.7 * wRow) * (1.0 - 0.4 * wLip);
+  }
+  #endif
 
   // what "show mask" shows
   if (uMask < 1.5) wShow = wMoss;
@@ -268,6 +343,9 @@ const FRAG_AO = /* glsl */`
   float wk = uAOAmt <= 1.0 ? mix(1.0, wAO, uAOAmt) : pow(clamp(wAO, 0.0, 1.0), uAOAmt);
   float wm = mix(1.0, 0.5 + 0.5 * wFine.a, wMoss);         // nor into the gaps between moss cushions
   reflectedLight.indirectDiffuse *= wk * wm;
+  #ifndef W_GROUND
+  reflectedLight.indirectDiffuse = mix(reflectedLight.indirectDiffuse, vec3(dot(reflectedLight.indirectDiffuse, vec3(0.3, 0.59, 0.11))), uSkyGrey);
+  #endif
   reflectedLight.indirectSpecular *= wk;
   reflectedLight.directDiffuse *= mix(1.0, 0.75 + 0.25 * wFine.a, wMoss);
   // a scanned model has its shadows painted into its colour, so they stay dark in full sun: this does the same with the

@@ -49,7 +49,16 @@ export class Kit {
   //    slope the top face sheared along local x, rising k metres per metre (a gable board cut to the roof line)
   //    warp  a name handed to the build's warp function, which bends the finished corners (a sagging roof)
   //    span  how many trim sheet strips run across the board (2 on a wide shake: the bevel between them reads as a split)
-  //    mortar  (stone) mortar or chinking: its tint is evened out against whichever rock texture is chosen
+  //    mortar  (stone) mortar or chinking: its tint is evened out against whichever rock texture is chosen, and the
+  //          shader treats it as set back (darker, a shadow line along its top)
+  //    round   a log: the shader shades it round about its long axis (and its ends get the round end-grain squares)
+  //    ends    'log': its ends use the round end-grain squares (logs, beams, rafter ends); otherwise the boards' ones
+  //    shakeE  a roof shake: how much of it shows below the next course (m); the shader draws that course's shadow
+  //    laid    (stone) a stone laid in a wall: its top, seen only in the joint over it, is shaded
+  //    taper   (a prism) how much narrower its top end is (0.1: a tenth)
+  //    lumJit  (board) vary the tint's brightness only, not its hue
+  //    shape   (x, y, z) => [x, y, z]: bends the box's corners in its own frame before it is placed (a bowed barrel
+  //          stave: give it cuts along its length so it has corners to bend)
   box(group, size, pos, rot = null, o = {}) {
     const m = o.m ? o.m.clone() : new THREE.Matrix4().compose(new THREE.Vector3(...pos), new THREE.Quaternion().setFromEuler(new THREE.Euler(...(rot || [0, 0, 0]), 'YXZ')), new THREE.Vector3(1, 1, 1));
     if (o.m && pos) m.multiplyMatrices(new THREE.Matrix4().makeTranslation(...pos), m);
@@ -69,8 +78,9 @@ export class Kit {
     this.occ.push({ size, m });
   }
   board(size, pos, rot, o = {}) {
-    const R = this.R, t = o.tint || [1, 1, 1], j = 0.12;
-    const tint = [t[0] * (1 + (R() - 0.5) * j), t[1] * (1 + (R() - 0.5) * j), t[2] * (1 + (R() - 0.5) * j * 1.3)];
+    // each board its own shade: a little lighter or darker (±6%), its hue only a touch warmer or cooler (±1.5%)
+    const R = this.R, t = o.tint || [1, 1, 1], l = 1 + (R() - 0.5) * 0.12, hr = (R() - 0.5) * 0.03, hb = (R() - 0.5) * 0.03;
+    const tint = o.lumJit ? t.map((c) => c * l) : [t[0] * l * (1 + hr), t[1] * l, t[2] * l * (1 + hb)];
     return this.box('wood', size, pos, rot, { strip: Math.floor(R() * 10), ...o, tint });
   }
 }
@@ -368,7 +378,7 @@ function countPart(P) {
 }
 const longAxis = ({ size, o }) => o.long ?? (size[0] >= size[1] && size[0] >= size[2] ? 0 : size[1] >= size[2] ? 1 : 2);
 
-// opts (all optional): topAt(x, z) the drip edge above a spot (default: this cabin's), tintAt(x, y, z, tint) a corner's
+// opts (all optional): topAt(x, z, y) the drip edge above a spot (default: this cabin's), tintAt(x, y, z, tint) a corner's
 // own tint (wood greyer up high, dirtier low down), warp(v, name) bends a finished corner (parts with o.warp)
 export function buildGeometry(parts, group, R, opts = {}) {
   const top = opts.topAt || topAt, warp = opts.warp, tintAt = opts.tintAt;
@@ -385,29 +395,42 @@ export function buildGeometry(parts, group, R, opts = {}) {
     const long = longAxis(P);
     nm.getNormalMatrix(m); centre.setFromMatrixPosition(m);
     axis.set(0, 0, 0).setComponent(long, 1).transformDirection(m);
-    const u0 = centre.dot(axis) + (o.uShift || 0), strip = o.strip ?? 0, endTile = Math.floor(R() * WOOD.ends);
+    // (logs and beams take the round end-grain squares, everything else the boards' ones)
+    const u0 = centre.dot(axis) + (o.uShift || 0), strip = o.strip ?? 0, et = Math.floor(R() * WOOD.ends.length);
+    const endTile = o.ends === 'log' ? et % WOOD.logEnds : WOOD.logEnds + et % (WOOD.ends.length - WOOD.logEnds);
     // the rock repeats every 0.7 m; mortar and chinking read it three times finer, so whatever the rock, they come out
     // fine-grained (a granite's black grains become sand in the mortar)
     const stOff = [R() * 4, R() * 4], stM = o.mortar ? 0.7 / 3 : 0.7;
-    const tint0 = o.paint || o.tint || [1, 1, 1], painted = o.paint ? 1 : 0;
+    // the tint's fourth number tells the shader what kind of part this is: 1 painted, 2 a round log, 3 mortar or
+    // chinking, 4 a stone laid in a wall, below 0 a roof shake (minus how much of it shows)
+    const tint0 = o.paint || o.tint || [1, 1, 1], painted = o.paint ? 1 : o.round ? 2 : o.mortar ? 3 : o.laid ? 4 : o.shakeE ? -o.shakeE : 0;
     // one corner: (lx, ly, lz) where it is drawn in the part's frame; el, eh the numbers edge wear works from
     const put = (lx, ly, lz, U, V, el, eh) => {
+      // (a part with o.shape is bent in its own frame first: a barrel stave bowed out at the middle. The edge numbers
+      // stay the unbent box's, so its darker edges and wear follow the board, not the bend)
+      if (o.shape) { const q = o.shape(lx, ly, lz); _v.set(q[0], q[1], q[2]).applyMatrix4(m); } else
       _v.set(lx, ly, lz).applyMatrix4(m);
       if (o.warp && warp) warp(_v, o.warp);
       pos[v * 3] = _v.x; pos[v * 3 + 1] = _v.y; pos[v * 3 + 2] = _v.z;
       nor[v * 3] = _n.x; nor[v * 3 + 1] = _n.y; nor[v * 3 + 2] = _n.z;
       uv[v * 2] = U; uv[v * 2 + 1] = V;
-      lt[v * 4] = el[0]; lt[v * 4 + 1] = el[1]; lt[v * 4 + 2] = el[2]; lt[v * 4 + 3] = o.top ?? top(_v.x, _v.z);
+      lt[v * 4] = el[0]; lt[v * 4 + 1] = el[1]; lt[v * 4 + 2] = el[2]; lt[v * 4 + 3] = o.top ?? top(_v.x, _v.z, _v.y);
       hf[v * 4] = eh[0]; hf[v * 4 + 1] = eh[1]; hf[v * 4 + 2] = eh[2]; hf[v * 4 + 3] = 1;
       const t = tintAt ? tintAt(_v.x, _v.y, _v.z, tint0, o) : tint0;
       tp[v * 4] = t[0]; tp[v * 4 + 1] = t[1]; tp[v * 4 + 2] = t[2]; tp[v * 4 + 3] = painted;
       partOf[v] = pi; mortar[v] = o.mortar ? 1 : 0;
       return v++;
     };
-    // the end-grain squares sit in rows of four under the strips
-    const perRow = WOOD.w / WOOD.endTile, ex = (endTile % perRow) * WOOD.endTile, ey = WOOD.endRow + Math.floor(endTile / perRow) * WOOD.endTile;
-    const endUV = (fb, fc) => [(ex + 6 + fb * (WOOD.endTile - 12)) / WOOD.w, 1 - (ey + 6 + fc * (WOOD.endTile - 12)) / WOOD.h];
-    const stripV = (f) => 1 - (strip * WOOD.strip + 0.5 + f * (WOOD.strip * (o.span || 1) - 1)) / WOOD.h;
+    // an end-grain square (inset a little, so the smaller copies far away don't bleed in the next one), and a strip's
+    // rows (a wide board can span two strips: they lie one under the other)
+    const [ex, ey, esz] = WOOD.ends[endTile], ein = esz * 0.047, [rowY, rowH] = WOOD.rows[strip];
+    // (each end turned or flipped its own way, so the same few squares don't look stamped)
+    const eTurn = Math.floor(R() * 8);
+    const endUV = (fb0, fc0) => {
+      let fb = eTurn & 1 ? 1 - fb0 : fb0, fc = eTurn & 2 ? 1 - fc0 : fc0; if (eTurn & 4) [fb, fc] = [fc, fb];
+      return [(ex + ein + fb * (esz - 2 * ein)) / WOOD.w, 1 - (ey + ein + fc * (esz - 2 * ein)) / WOOD.h];
+    };
+    const stripV = (f) => 1 - (rowY + 0.5 + f * (rowH * (o.span || 1) - 1)) / WOOD.h;
 
     if (o.poly) {
       // ── a prism: its sides (each its own little face for edge wear, unless smooth: then only the ends are edges), and
@@ -422,11 +445,15 @@ export function buildGeometry(parts, group, R, opts = {}) {
         if (fx * ((x0 + x1) / 2 - cx) + fz * ((z0 + z1) / 2 - cz) < 0) { fx = -fx; fz = -fz; }
         const b0 = v;
         for (const [t, sy] of [[0, -1], [1, -1], [1, 1], [0, 1]]) {
-          const lx = x0 + (x1 - x0) * t, lz = z0 + (z1 - z0) * t, ly = sy * hL;
+          const tp = o.taper && sy > 0 ? 1 - o.taper : 1;   // a tapered pole: its top end narrower
+          const lx = (x0 + (x1 - x0) * t) * tp, lz = (z0 + (z1 - z0) * t) * tp, ly = sy * hL;
           if (o.smooth) { const rx = lx - cx, rz = lz - cz, rl = Math.hypot(rx, rz) || 1; _n.set(rx / rl, 0, rz / rl); } else _n.set(fx, 0, fz);
           _n.applyMatrix3(nm).normalize();
           let U = 0, V = 0;
-          if (group === 'wood') { U = (u0 + ly) / WOOD.repeatM; V = stripV(o.smooth ? (cum[q] + t * fw) / perim : t); }
+          // (round, it wraps the middle of its strip twice round itself: the strip's dark edges would draw a seam down
+          // it, and once round, the grain is stretched into steps)
+          // (a side in the second half of the way round takes the second wrap whole, so no side spans the jump)
+          if (group === 'wood') { U = (u0 + ly) / WOOD.repeatM; const c = 2 * (cum[q] + t * fw) / perim - ((cum[q] + fw / 2) * 2 >= perim ? 1 : 0); V = stripV(o.smooth ? 0.2 + 0.6 * c : t); }
           else if (group === 'stone') { U = t * fw / stM + stOff[0]; V = ly / stM + stOff[1]; }
           put(lx, ly, lz, U, V, o.smooth ? [0, ly, 0] : [t * fw - fw / 2, ly, 0], o.smooth ? [1, hL, 0] : [fw / 2, hL, 0]);
         }
@@ -438,7 +465,9 @@ export function buildGeometry(parts, group, R, opts = {}) {
         if (skip.includes(sy > 0 ? '+y' : '-y')) continue;
         _n.set(0, sy, 0).applyMatrix3(nm).normalize();
         const b0 = v;
-        for (const [lx, lz] of poly) {
+        const tp = o.taper && sy > 0 ? 1 - o.taper : 1;
+        for (const [px, pz] of poly) {
+          const lx = px * tp, lz = pz * tp;
           let U = 0, V = 0;
           if (group === 'wood') [U, V] = endUV((lx - bx) / (size[0] || 1), (lz - bz) / (size[2] || 1));
           else if (group === 'stone') { U = lx / stM + stOff[0]; V = lz / stM + stOff[1]; }

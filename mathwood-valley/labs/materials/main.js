@@ -8,13 +8,13 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { makeTextures, setStone, setWood, STONE_LOOKS, WOOD_LOOKS, STONE_REF, DEFAULT_STONE, DEFAULT_WOOD } from './textures.js';
 import { buildCabin, CABIN, topAt } from './cabin.js';
-import { buildFrontier, LOOK as FRONTIER_LOOK } from './frontier.js';
+import { buildFrontier, LOOK as FRONTIER_LOOK, FRONTIER as FRONTIER_DIMS } from './frontier.js';
 import { U, MASKS, weather } from './weather.js';
 import { Decals } from './decals.js';
 
 const TRIPO_X = 12.5;                         // where the Tripo cabin stands (east of the built one)
 const TRIPO_URL = '../../models/town/cabin.glb', TRIPO_LO_URL = '../../models/town/lo/cabin.glb';
-const CODE_FILES = ['cabin.js', 'frontier.js', 'textures.js', 'weather.js', 'decals.js'];
+const CODE_FILES = ['cabin.js', 'frontier.js', 'barrel.js', 'textures.js', 'weather.js', 'decals.js'];
 const $ = (s, el = document) => el.querySelector(s);
 const kb = (b) => (b >= 1048576 ? (b / 1048576).toFixed(2) + ' MB' : Math.round(b / 1024) + ' KB');
 const num = (n) => Math.round(n).toLocaleString('en-US');
@@ -45,7 +45,7 @@ const state = {
   mossAmt: 0.5, patch: 1.4, mossSharp: 0.6, shadeMode: 'north',
   grimeAmt: 0.85, streaks: 5, grimeSharp: 0.6, edgeAmt: 0.7, edgeCm: 1.2,
   view: 'built', tripoWeather: false, decalSize: 1,
-  mask: 'off', cabin: 'frontier',
+  mask: 'off', cabin: 'frontier', tripoSize: 'matched',
   stone: loadPref('stone', STONE_LOOKS, DEFAULT_STONE), wood: loadPref('wood', WOOD_LOOKS, DEFAULT_WOOD),
 };
 // each built cabin starts with its own weathering: the neat one with the lab's first settings (all off), the frontier
@@ -131,16 +131,19 @@ function surfaceNote() {
   const S = STONE_LOOKS[T.stoneLook], W = WOOD_LOOKS[T.woodLook];
   el.textContent = `${S.label}: ${S.note}. ${W.label}: ${W.note}. Drawn in ${Math.round(T.msStone)} ms (stone) and ${Math.round(T.msWood)} ms (wood).`;
 }
+const tripoModel = {};   // the loaded model, its bounding box and size (for the size switch)
 const tripoInfo = { bytes: 0, loBytes: 0, tex: 0, tris: 0, meshes: 0 }, codeInfo = { bytes: 0, gz: 0 };
 const bench = {};
 
 async function build() {
   T = await makeTextures({ stone: state.stone, wood: state.wood });
   U.uNoise.value = T.noise;
-  mats.wood = weather(new THREE.MeshStandardMaterial({ map: T.wood, normalMap: T.woodN, normalScale: new THREE.Vector2(0.9, 0.9), roughness: 0.86 }), { box: true, ao: true, bevel: true });
+  // (old wood is matte: rougher than that, the sky glints off the shakes on the shady slope)
+  mats.wood = weather(new THREE.MeshStandardMaterial({ map: T.wood, normalMap: T.woodN, normalScale: new THREE.Vector2(0.9, 0.9), roughness: 0.94 }), { box: true, ao: true, bevel: true });
   mats.stone = weather(new THREE.MeshStandardMaterial({ map: T.stone, normalMap: T.stoneN, roughness: STONE_LOOKS[T.stoneLook].rough }), { box: true, ao: true, bevel: true });
   mats.iron = weather(new THREE.MeshStandardMaterial({ color: 0x3a332e, roughness: 0.55, metalness: 0.65 }), { box: true, ao: true });
-  mats.glass = weather(new THREE.MeshStandardMaterial({ color: 0x0d1418, roughness: 0.06, metalness: 0.1 }), { box: true, ao: true });
+  // (old glass, near black with a faint warm glow from inside, so a window in the shade is a window, not a hole)
+  mats.glass = weather(new THREE.MeshStandardMaterial({ color: 0x161a17, emissive: 0x1c1a16, roughness: 0.35, metalness: 0.1 }), { box: true, ao: true });
   cabin = getCabin(state.cabin);
   cabinGroup = new THREE.Group(); cabinGroup.name = 'built cabin';
   scene.add(cabinGroup);
@@ -207,9 +210,7 @@ async function loadTripo() {
     fetch(TRIPO_LO_URL, { method: 'HEAD' }).then((r) => { tripoInfo.loBytes = +r.headers.get('content-length') || 0; fillCompare(); }).catch(() => {});
     const gltf = await new Promise((res, rej) => new GLTFLoader().parse(buf, '../../models/town/', res, rej));
     const root = gltf.scene, box = new THREE.Box3().setFromObject(root), size = box.getSize(new THREE.Vector3());
-    const s = 9.5 / Math.max(size.x, size.z);   // the game's size for it: 9.5 m along its longest side
-    root.scale.setScalar(s);
-    root.position.set(TRIPO_X - (box.min.x + box.max.x) / 2 * s, -box.min.y * s - 0.006 * s, -(box.min.z + box.max.z) / 2 * s);
+    tripoModel.root = root; tripoModel.box = box; tripoModel.size = size;
     tripo = new THREE.Group(); tripo.name = 'tripo cabin'; tripo.add(root);
     root.traverse((o) => {
       if (!o.isMesh) return;
@@ -218,11 +219,24 @@ async function loadTripo() {
       const m = o.material, img = m.map && m.map.image;
       if (img) tripoInfo.tex += img.width * img.height * 4 * 4 / 3, tripoInfo.texSize = img.width + ' x ' + img.height;
       o.userData.plain = m;
-      o.userData.weathered = weather(m.clone(), { top: size.y * s * 0.55 });
+      o.userData.weathered = weather(m.clone(), { top: size.y * 0.55 });
     });
     scene.add(tripo);
-    applyView(false); applyTripoWeather(); fillCompare();
+    applyTripoSize(); applyView(false); applyTripoWeather(); fillCompare();
   } catch (e) { console.warn('Tripo cabin did not load', e); }
+}
+// the Tripo cabin's size. "Game size": as the game's town uses it, 9.5 m along its longest side (which makes it much
+// taller than the built cabins). "Matched": as wide across its front as the frontier cabin's building, log ends and roof
+// and all (not its chimney or woodpile), so the two compare fairly side by side.
+function applyTripoSize() {
+  if (!tripo) return;
+  const { root, box, size } = tripoModel;
+  const s = state.tripoSize === 'game' ? 9.5 / Math.max(size.x, size.z) : FRONTIER_DIMS.SPAN / size.x;
+  root.scale.setScalar(s);
+  root.position.set(TRIPO_X - (box.min.x + box.max.x) / 2 * s, -box.min.y * s - 0.006 * s, -(box.min.z + box.max.z) / 2 * s);
+  root.traverse((o) => { if (o.isMesh) o.userData.weathered.userData.top.value = size.y * s * 0.55; });
+  tripoInfo.scale = s; tripoInfo.height = size.y * s; tripoInfo.width = size.x * s;
+  fillCompare();
 }
 function applyTripoWeather() {
   if (!tripo) return;
@@ -316,7 +330,7 @@ const SECTIONS = [
 <p>Switching puts that cabin's own weathering settings back (the frontier starts with it all on and turned up).</p>` },
   { id: 'surface', title: 'Stone, wood and edges', open: true, rows: [
       S('Stone', 'stone', Object.entries(STONE_LOOKS).map(([k, L]) => [k, L.label])), S('Wood', 'wood', Object.entries(WOOD_LOOKS).map(([k, L]) => [k, L.label])), { t: 'note', id: 'surfNote' },
-      R('Edge darkening', 'uEdgeDark', 0, 1, 0.01), R('Edge width', 'uEdgeDarkW', 0.005, 0.12, 0.0025, (v) => (v * 100).toFixed(1) + ' cm'), R('Bevel light', 'uBevel', 0, 1, 0.01),
+      R('Sun-bleach (logs)', 'uBleach', 0, 1, 0.01), R('Edge darkening', 'uEdgeDark', 0, 1, 0.01), R('Edge width', 'uEdgeDarkW', 0.005, 0.12, 0.0025, (v) => (v * 100).toFixed(1) + ' cm'), R('Bevel light', 'uBevel', 0, 1, 0.01),
       M([['rim', 'Edge darkening']])],
     how: `<p>Each look is a few rules painted into the same small textures, so switching takes a moment and downloads nothing.</p>
 <p><b>Stone</b> tiles every 0.7 m and each stone shows its own window on it, so the rules keep everything small next to the tile: no big feature that would repeat stone to stone. <b>Fieldstone</b>: grey and brown mottling at two sizes, crusts of lichen gathered in patches. <b>Granite</b>: a cell per grain, each one feldspar (white or pink), quartz (glassy grey) or mica (black). <b>Sandstone</b>: level beds, each its own shade and hardness (the hard ones stand proud), with rusty iron stains. <b>River rock</b>: soft round blotches and almost nothing else, and a little shinier. <b>Veined</b>, the first look, draws "veins" where a noise crosses its middle value, which makes the squiggly lines. The mortar and chinking use the stone texture too, read three times finer (so it comes out as sand) and with their tint evened out against each rock, so they stay the same colour.</p>
@@ -339,7 +353,7 @@ moss  = clamp((cover*1.35 - (1.0-cushion)) * 3.5, 0.0, 1.0)</pre>
 <p>The noise is read in <b>world space</b> (triplanar: three reads, along x, y and z, blended by facing), so it needs no UVs and runs straight across every board. Tick "Weather the Tripo cabin too" below: the same code puts moss on a model it has never seen.</p>` },
   { id: 'grime', title: 'Grime', enable: 'grime', rows: [
       R('Amount', 'grimeAmt', 0, 1, 0.01), R('Streak length', 'uStreakLen', 0.2, 3, 0.05, m), R('Streaks per m', 'streaks', 1, 14, 0.5, (v) => (+v).toFixed(1)), R('Splash height', 'uSplashH', 0, 1.4, 0.01, m),
-      R('Corner dirt', 'uCornerDirt', 0, 1, 0.01), R('Sharpness', 'grimeSharp', 0, 1, 0.01), C('Streak colour', 'uGrimeColor'), C('Mud colour', 'uMudColor'),
+      R('Corner dirt', 'uCornerDirt', 0, 1, 0.01), R('Dirt band', 'uDirtBand', 0, 1, 0.01), R('Sharpness', 'grimeSharp', 0, 1, 0.01), C('Streak colour', 'uGrimeColor'), C('Mud colour', 'uMudColor'),
       M([['grime', 'All grime'], ['streaks', 'Streaks'], ['splash', 'Splash'], ['dirt', 'Corner dirt']])],
     how: `<p><b>Streaks:</b> every corner of every board knows the height of the drip edge above it: the roof edge, or a window sill (the boards under a window are cut at the sill's ends so they can carry it; worked out when the cabin is built and stored with the corner). How far a pixel is below that edge fades the streak out; a noise read stretched twenty times taller than it is wide turns the fade into columns, and a second read gives each column its own length.</p>
 <pre>below = roofEdge - height
@@ -362,9 +376,10 @@ wear = smoothstep(.35, .65, 1 - edge/width + noise)</pre>
     how: `<p>Drag a stamp onto a wall (or tap it, then tap a wall). Drag a decal to move it; drag it off the cabin to throw it away.</p>
 <p>A decal is a picture stamped onto a surface that's already there. three.js's <b>DecalGeometry</b> takes a box (where, which way, how big), cuts out the triangles of the wall that fall inside it, clips them to the box's sides and gives them new UVs across the box. The result is a thin new mesh that hugs the boards exactly, into the laps between them, drawn a hair in front (polygon offset).</p>
 <p>The decals use the weathering shader too: switch on grime and watch the poster under the porch roof get dirty along with the wall. One decal is one more draw call.</p>` },
-  { id: 'compare', title: 'Against the Tripo cabin', open: true, rows: [{ t: 'views' }, K('Weather the Tripo cabin too', 'tripoWeather'), { t: 'buttons', items: [['Measure again', () => measure()]] }, { t: 'compare' }],
+  { id: 'compare', title: 'Against the Tripo cabin', open: true, rows: [{ t: 'views' }, S('Tripo size', 'tripoSize', [['matched', 'Matched'], ['game', 'Game size']]), K('Weather the Tripo cabin too', 'tripoWeather'), { t: 'buttons', items: [['Measure again', () => measure()]] }, { t: 'compare' }],
     how: `<p>The game's cabin is a <b>Tripo</b> model: one mesh and one 2048 x 2048 picture with all its colour, and any dirt, painted in. The built cabin is thousands of boxes merged into <b>four meshes</b> (one per material), with small tiling textures drawn in code, and its weathering worked out live.</p>
-<p><b>ms per frame</b>: each cabin alone, drawn 30 times, waiting for the graphics card after each (a one-pixel readPixels), so it counts the card's work and isn't capped at the screen's 60 fps. Draw calls are the main pass (the shadow pass adds its own). Download: the Tripo file vs the code that builds the cabin and draws its textures (three.js itself is shared).</p>` },
+<p><b>ms per frame</b>: each cabin alone, drawn 30 times, waiting for the graphics card after each (a one-pixel readPixels), so it counts the card's work and isn't capped at the screen's 60 fps. Draw calls are the main pass (the shadow pass adds its own). Download: the Tripo file vs the code that builds the cabin and draws its textures (three.js itself is shared).</p>
+<p><b>Tripo size</b>: the game's town uses it 9.5 m along its longest side, which makes it far taller than the built cabins. <b>Matched</b> scales it to the frontier cabin's width across the front (barge board to barge board, past the log ends), so heights compare fairly.</p>` },
   { id: 'textures', title: 'Textures', open: false, rows: [{ t: 'texlist' }],
     how: `<p>A <b>trim sheet</b> is one picture holding many strips that each tile along their length. Every board points its UVs at one strip: <code>u</code> runs along the board in metres (1.2 m to a repeat, so the nails line up on the same "studs" row after row), <code>v</code> stays inside the strip, and its bevelled edges are painted into the strip's normal map. Board ends point at the end-grain squares.</p>
 <p>Twelve strips and a <b>tint per board</b> (a colour stored with its corners) make thousands of parts look different with one texture and one draw call. The same idea makes spaceship hulls: a sheet of panel strips, seams and bolts, with grime and decals on top.</p>
@@ -401,6 +416,7 @@ function setV(key, v) {
   if (key[0] === 'u' && U[key]) { if (U[key].value.isColor) U[key].value.set(v); else U[key].value = v; } else state[key] = v;
   if (key === 'decalSize' && decals) decals.scale = v;
   if (key === 'tripoWeather') applyTripoWeather();
+  if (key === 'tripoSize') applyTripoSize();
   if (key === 'stone' && T) applyStone();
   if (key === 'wood' && T) applyWood();
   applyWeather();
@@ -514,7 +530,8 @@ function fillCompare() {
     ${row('ms per frame', b ? b.ms.toFixed(2) : '…', q ? q.ms.toFixed(2) : '…')}
     ${row('&nbsp; as fps', b ? num(1000 / b.ms) : '…', q ? num(1000 / q.ms) : '…')}
     </tbody>`;
-  $('#cmpNote').textContent = b ? `Measured at ${renderer.domElement.width} x ${renderer.domElement.height} px, each cabin alone, shadows ${state.shadows ? 'on' : 'off'}, weathering as set now.` : '';
+  const sz = tripoInfo.scale ? ` The Tripo cabin is shown ${state.tripoSize === 'game' ? 'at the game\'s size' : 'as wide as the frontier cabin'}: x${tripoInfo.scale.toFixed(2)}, ${tripoInfo.width.toFixed(1)} m wide, ${tripoInfo.height.toFixed(1)} m tall (the frontier cabin's ridge: ${FRONTIER_DIMS.RIDGE.toFixed(1)} m).` : '';
+  $('#cmpNote').textContent = (b ? `Measured at ${renderer.domElement.width} x ${renderer.domElement.height} px, each cabin alone, shadows ${state.shadows ? 'on' : 'off'}, weathering as set now.` : '') + sz;
 }
 function showLegend() {
   const L = $('#legend'), info = MASK_INFO[state.mask];
