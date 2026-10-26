@@ -32,6 +32,9 @@
 //   SR.active         the gun is up (or the view is going to or from the firing line);  SR.paused: a panel is open
 //   SR.marks()        the compass mark for the range
 //   SR.tags()         for rigs: the targets on the screen [{ n, x, y, right, alive }];  SR.pick(n) shoots the one with n
+//   SR.workSum()      the card's sum for the tools' Work it out (an estimating card's exact sum: the estimate stays
+//                     the kid's), else null
+//   SR.dealUntil(test) for rigs: deal the first card made at the rider's level that passes test(card)
 //   SR.done()         as "Done for now";  SR.state() for rigs;  SR.dispose()
 import * as THREE from 'three';
 import { makePerson } from '../actors/folk.js';
@@ -47,6 +50,7 @@ import { makeRng } from '../lockbox/generate.js';
 import { makeGreeter, sayMs, TALK } from '../jobfolkplan.js';
 import { recordAnswer, earn, countJob, saveRider, JOBS } from '../save.js';
 import { flagCard } from '../ui/flag.js';
+import { rangeSum } from '../math/jobsums.js';
 
 export const SHOOT = {
   string: 5,               // cards in a string
@@ -311,8 +315,8 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
   }
   // the levels' part of this card's answer (once a card: see the notes at the top): the level it was made at
   const skillOf = (c) => (c && !c.told ? ((c.told = true), { place: 'range', level: c.q.id }) : null);
-  function newCard() {
-    card = nextCard();
+  function newCard(made = null) {
+    card = made || nextCard();
     saveRider(rider);   // (the first card meets the place)
     recent.push(card.key); if (recent.length > 12) recent.shift();
     // (a level made to be read out: the card's rule in the browser's voice, for a rider who is read to)
@@ -497,6 +501,7 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
     fire(e.clientX, e.clientY);
   }
   function onKey(e) {
+    if (document.querySelector('.bml:not(.is-out), .tch:not(.out)')) return;   // (a tool is up over the range, Work it out or the times chart: its keys, its Esc)
     if (e.key === 'Escape') { if (document.querySelector('.bms')) return; e.preventDefault(); e.stopPropagation(); J.done(); return; }
     if (state !== 'aim' || J.paused) return;
     if ((e.code === 'Space' || e.code === 'KeyF') && !e.repeat) { e.preventDefault(); e.stopPropagation(); fire(cross.x, cross.y); }
@@ -565,6 +570,14 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
   J.speaking = () => !say.hidden;   // (Miss Opal's speech card is on the screen: Old Hob waits his turn on a phone)
   J.tags = () => (card ? R.targets.map((T, i) => { const s = screenOf(T.top), b = screenOf(T.mid); return { n: card.targets[i].n, x: Math.round(b.x), y: Math.round(b.y), tagX: Math.round(s.x), tagY: Math.round(s.y), alive: T.alive, right: rightNow(card, gone).includes(i) }; }) : []);
   J.pick = (n) => { if (!card) return false; const i = card.targets.findIndex((x, k) => x.n === n && R.targets[k].alive); if (i < 0) return false; const b = screenOf(R.targets[i].mid); return fire(b.x, b.y); };
+  // the card's sum for the tools' Work it out (src/math/jobsums.js): an estimating card's exact sum, else none
+  J.workSum = () => (state === 'aim' && card ? rangeSum(card) : null);
+  // (for rigs: cards at the rider's level are made, unseen, until one passes test(card), and that one is dealt)
+  J.dealUntil = (test, tries = 200000) => {
+    if (state !== 'aim') return false;
+    for (let k = 0; k < tries; k++) { const c = nextCard(); if (test(c)) { newCard(c); return true; } }
+    return false;
+  };
   J.state = () => ({ state, card: card ? { kind: card.kind, map: card.map, at: card.q ? card.q.at : null, finding: !!(card.q && card.q.placing), rule: card.rule, step: card.step, review: card.review, targets: card.targets.map((x) => x.n), right: rightNow(card, gone).map((i) => card.targets[i].n) } : null,
     rounds: G ? G.rounds : null, reloading: !!(G && G.reloading), streak, best: REC.best, inString, strings: REC.strings, wrong, help: !!(ui && !ui.helpEl.hidden), level: card && card.q ? { id: card.q.id, i: card.q.i, placing: card.q.placing } : null,
     fov: +camera.fov.toFixed(1), prompt: J.prompt, range: R.state() });

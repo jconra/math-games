@@ -49,7 +49,7 @@ test('the same seed gives the same examples; another seed, others', () => {
   assert.notDeepEqual(a, c);
 });
 
-test('the settings in plain words: levels skipped as runs, "Start here", a job switched off', () => {
+test('the settings in plain words: levels skipped as runs, a level picked by hand, a job switched off', () => {
   assert.equal(V.runs([1, 2, 3, 7]), '1–3 and 7');
   assert.equal(V.runs([4]), '4');
   assert.equal(V.runs([2, 3]), '2, 3');
@@ -59,8 +59,8 @@ test('the settings in plain words: levels skipped as runs, "Start here", a job s
   for (const k of [0, 1, 2, 6]) M.setOn(r, 'roundup', L[k].id, false, { now: T0 });
   assert.equal(V.settingsWords(r, 'roundup'), `${L.length - 4} of ${L.length} levels on: levels 1–3 and 7 skipped.`);
   M.startHere(r, 'roundup', L[9].id, { now: T0 });
-  assert.match(V.settingsWords(r, 'roundup'), /Started at level 10 with “Start here”\.$/);
-  assert.equal(V.gridWords(r), 'Round-up: levels 1–3 and 7 skipped, started at level 10');
+  assert.match(V.settingsWords(r, 'roundup'), /Level 10 picked by hand with the level tool\.$/);
+  assert.equal(V.gridWords(r), 'Round-up: levels 1–3 and 7 skipped, level 10 picked by hand');
   r.missions.windmill = false;
   assert.match(V.settingsWords(r, 'building'), /The windmill is switched off in the Jobs list\.$/);
   r.missions.bridge = false;

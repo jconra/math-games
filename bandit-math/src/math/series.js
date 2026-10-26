@@ -34,8 +34,10 @@
 //   seriesExample(gen, rand) -> { q, a } for the levels page (the same maker)
 //   makeSeriesDeck({ ask, rand, pickFact, pickTable }) -> the round-up's card topic (see below)
 //   TABLE_ORDER   the times tables in the design's difficulty order (the round-up's series and the wagon's gangs)
+//   RANGE, reviewFor({ levels, rider, isOn, rand }) -> review(q), herdReview({ levels, q, isOn, rand }): THE RANGE (below)
 
 import { int, pick, shuffle, numText, frac, fracText, decText, MINUS, TIMES } from '../levels/kit.js';
+import { colourOf } from './facts.js';
 
 // The times tables, easiest first: the design's tiers (1 & 2; 3, 5, 10; 4, 9; 6, 7, 8; 11, 12), and inside a tier the
 // one a kid has nearly met already first (the 10s and 5s straight after counting by 10s and 5s; the 6s next to the 5s,
@@ -201,7 +203,7 @@ function slipsOf(c, g) {
     add(a + unit, D === 1 ? 'near' : 'part', 1.2); add(a - unit, D === 1 ? 'near' : 'part', 1.2);
   }
   if (D === 1 && blank === 0 && step > 2) add(step, 'step', 1.4);
-  if (c.fact) {
+  if (c.fact && c.fact.a >= 2) {
     // the next-door tables' number for the same fact (54 for 6 x 9 among the 7s' 63)
     for (const t2 of [c.fact.a - 1, c.fact.a + 1]) if (t2 >= 2 && t2 <= 12) add(t2 * c.fact.b, 'neighbour', 1.3);
   }
@@ -292,7 +294,7 @@ function wordsOf(c, read) {
   const texts = c.terms.map(T);
   const text = texts.map((t, i) => (i === c.blank ? '?' : t)).join(', ');
   const all = texts.join(', ');
-  const factLine = c.fact ? ` · ${c.fact.a} ${TIMES} ${c.fact.b} = ${c.fact.a * c.fact.b}` : '';
+  const factLine = c.fact && c.fact.a >= 2 ? ` · ${c.fact.a} ${TIMES} ${c.fact.b} = ${c.fact.a * c.fact.b}` : '';
   const done = `${all}: ${stepWords(c)}${factLine}`;
   let sub = 'Rope the missing number';
   if (c.by === 1 && c.D === 1) sub = c.blank === c.terms.length - 1 ? 'Count on: rope what comes next' : 'Count on by 1: rope the missing number';
@@ -313,9 +315,10 @@ function wordsOf(c, read) {
 export function seriesCard(g, rand, { read = false, pickFact = null, pickTable = null, size = null, avoid = null } = {}) {
   const s = makeSeries(g, rand, { pickFact, pickTable });
   const c = { kind: g.kind, D: s.D, terms: s.terms, blank: s.blank, ans: s.terms[s.blank], by: s.by, ruleKind: s.rule || null, fact: null };
-  // the blank is a times fact when the series is a table's (3, 6, ?, 12 is 3 x 3; counting by 5s too)
+  // the blank is a times fact when the series is a table's (3, 6, ?, 12 is 3 x 3; counting by 5s too; counting on by 1s
+  // to 12 is the 1s: 5, 6, ?, 8 is 1 x 7, for the times chart only, never shown or used for a slip)
   const t = c.D === 1 && c.by != null ? Math.abs(c.by) : 0;
-  if (t >= 2 && t <= 12 && c.terms.every((v) => v > 0 && v % t === 0) && c.ans / t >= 1 && c.ans / t <= 12) c.fact = { a: t, b: c.ans / t };
+  if (t >= 1 && t <= 12 && c.terms.every((v) => v > 0 && v % t === 0) && c.ans / t >= 1 && c.ans / t <= 12) c.fact = { a: t, b: c.ans / t };
   Object.assign(c, wordsOf(c, read));
   const min = c.terms.some((v) => v < 0) || g.neg ? -1e9 : 0;
   c.targets = targetsOf(c, slipsOf(c, g), size || (read ? SERIES.easySize : SERIES.size), rand, { min, avoid });
@@ -391,14 +394,71 @@ export function picture(c, { reveal = false, picked = null, reason = null } = {}
   return { helper: 'count', line, reveal, picked: pv, reason: reason || (reveal ? null : nudge(c)) };
 }
 
+// ---- the range: earlier levels mixed in ---------------------------------------------------------------------------------
+// The rider works in a RANGE of levels that moves up with them, not one level: most cards are at the rider's level, one
+// card in most waves comes from below it (the levels just below, and the earlier times tables the times chart shows red or
+// yellow, or with facts never asked yet), and now and then a whole wave is a herd from a herd level just below. So the
+// whole times tables keep coming back after their own levels are passed. A card from below goes back with ITS level
+// (src/levels/model.js: a right there doesn't move the rider up, a miss one level down counts in full, further down
+// less), so the 80% staircase still reads the rider's own level. Nothing from below while the level is being found
+// (placement climbs one level per right answer at the rider's own level), or at a level a grown-up dealt (dev).
+export const RANGE = {
+  back: 6,          // the range: the rider's level and this many levels below it
+  cards: 1,         // cards a wave takes from below (never its first: a wave opens at the rider's own level)...
+  chance: 0.75,     // ...in this share of the waves (the rest all at the rider's level)
+  herd: 0.08,       // share of waves at a card level that are a herd from a herd level in the range below (its 6
+                    //   ropes all from below: more would make the range mostly review)
+  near: 1,          // a level in the range below: its weight
+  red: 2,           // a times table's level below the rider (any distance): this for each red or yellow fact of it...
+  gap: 0.12,        // ...and this for each fact of it never asked yet (the chart's gaps get filled in)
+};
+const tablesOf = (L) => (L.gen.table ? [L.gen.table] : L.gen.kind === 'series' && L.gen.by === 1 && !L.gen.cross && L.gen.from && L.gen.from[1] <= 9 ? [1] : []);
+function weighted(list, rand) {
+  let sum = 0; for (const [, w] of list) sum += w;
+  if (!(sum > 0)) return null;
+  let r = rand() * sum;
+  for (const [x, w] of list) { r -= w; if (r < 0) return x; }
+  return list[list.length - 1][0];
+}
+// (q: what levelFor gave for the rider's own level) -> a q for a level below it, or null (stay at the rider's level)
+export function reviewFor({ levels, rider, isOn = () => true, rand = Math.random } = {}) {
+  return (q) => {
+    if (!q || q.placing || q.dev || !levels) return null;
+    const list = [];
+    for (let j = 0; j < q.i; j++) {
+      const L = levels[j];
+      if (!SERIES_KINDS.includes(L.gen.kind) || !isOn(L.id)) continue;
+      let w = q.i - j <= RANGE.back ? RANGE.near : 0;
+      for (const t of tablesOf(L)) {
+        for (let b = 1; b <= 12; b++) {
+          const c = colourOf(rider, t, b);
+          if (c === 'red' || c === 'yellow') w += RANGE.red; else if (!c) w += RANGE.gap;
+        }
+      }
+      if (w > 0) list.push([j, w]);
+    }
+    const j = weighted(list, rand);
+    return j == null ? null : { ...q, level: levels[j], id: levels[j].id, i: j, review: true, own: q.id, ownI: q.i };
+  };
+}
+// a whole wave from a herd level in the range below (RANGE.herd of the waves at a card level), or null
+export function herdReview({ levels, q, isOn = () => true, rand = Math.random } = {}) {
+  if (!q || q.placing || q.dev || !levels || q.level.gen.kind === 'herd' || rand() >= RANGE.herd) return null;
+  const list = [];
+  for (let j = Math.max(0, q.i - RANGE.back); j < q.i; j++) if (levels[j].gen.kind === 'herd' && isOn(levels[j].id)) list.push([j, 1]);
+  const j = weighted(list, rand);
+  return j == null ? null : { ...q, level: levels[j], id: levels[j].id, i: j, review: true, own: q.id, ownI: q.i };
+}
+
 // ---- the round-up's card topic ---------------------------------------------------------------------------------------
 // A wave is a few cards, one after another (the round-up shows one at a time, its own small herd of answers, one right).
-// Each card is made at the rider's level asked just before it (ask(): src/levels/model.js levelFor), so the level a
-// card was made at goes back with its answer. Only the first try at a card is an answer (a miss leaves the card up:
+// Each card is made at the rider's level asked just before it (ask(): src/levels/model.js levelFor), or for one card a
+// wave (RANGE.cards, never the first) at a level below it that review(q) picks (reviewFor above), so the level a card
+// was made at goes back with its answer. Only the first try at a card is an answer (a miss leaves the card up:
 // rope the right one after, with the line and the picture to help); a card answered after the help came up (8 s of
 // thinking, or "Show me") is practice, not an answer. A level that has moved on to a herd ends the wave there (the job
 // deals the herd next). Nothing here is saved: a reload deals a new wave.
-//   const D = makeSeriesDeck({ ask, rand, pickFact, pickTable })
+//   const D = makeSeriesDeck({ ask, rand, pickFact, pickTable, review })
 //   D.mode 'cards'; D.topic 'series'
 //   D.wave({ cards }) -> { kind: 'card', card, cards, rule } (null at a herd's level)   D.card() the card up now (null
 //                                                                                        when the wave is done)
@@ -407,15 +467,18 @@ export function picture(c, { reveal = false, picked = null, reason = null } = {}
 //   D.explain(card, n) -> { slip, line, numberLine (the picture, shown) }   D.help(card) -> the picture, hidden
 //   D.due() -> []   (the herd's comebacks: a series card's miss stays up instead)
 const SERIES_KINDS = ['series', 'down', 'step', 'rule', 'frac', 'dec', 'neg'];
-export function makeSeriesDeck({ ask, rand = Math.random, pickFact = null, pickTable = null } = {}) {
+export function makeSeriesDeck({ ask, rand = Math.random, pickFact = null, pickTable = null, review = null } = {}) {
   let cur = null, waveN = 0, lastAns = null;
   function make() {
-    const q = ask();
+    const own = ask();
+    if (!SERIES_KINDS.includes(own.level.gen.kind)) return null;   // (the level has moved on to a herd: this wave ends here)
+    const no = cur ? cur.made + 1 : 1;
+    let q = own;
+    if (review && cur && cur.review.includes(no)) { const r = review(own); if (r && SERIES_KINDS.includes(r.level.gen.kind)) q = r; }
     const L = q.level;
-    if (!SERIES_KINDS.includes(L.gen.kind)) return null;   // (the level has moved on to a herd: this wave ends here)
     const c = seriesCard(L.gen, rand, { read: !!L.read, pickFact, pickTable, avoid: lastAns });
-    c.id = `${waveN}.${cur ? cur.made + 1 : 1}`;
-    c.level = q.id; c.placing = !!q.placing; c.read = !!L.read; c.rung = q.i + 1;
+    c.id = `${waveN}.${no}`;
+    c.level = q.id; c.placing = !!q.placing; c.read = !!L.read; c.rung = own.i + 1; c.review = q !== own;
     c.tried = false; c.helped = false; c.misses = 0;
     if (cur) cur.made++;
     return c;
@@ -424,7 +487,10 @@ export function makeSeriesDeck({ ask, rand = Math.random, pickFact = null, pickT
     mode: 'cards', topic: 'series', payEvery: 6,
     wave({ cards = SERIES.cards } = {}) {
       waveN++;
-      cur = { made: 0, cards: Math.max(1, cards), at: 1, card: null, done: false };
+      cur = { made: 0, cards: Math.max(1, cards), at: 1, card: null, done: false, review: [] };
+      // which cards come from below (not the first): RANGE.cards of the 2nd .. last
+      const slots = shuffle(Array.from({ length: cur.cards - 1 }, (_, k) => k + 2), rand);
+      cur.review = rand() < RANGE.chance ? slots.slice(0, RANGE.cards) : [];
       cur.card = make();
       if (!cur.card) { cur.done = true; return null; }   // (the rider's level is a herd's: the job deals that instead)
       return { kind: 'card', card: cur.card, cards: cur.cards, rule: cur.card.rule };

@@ -37,7 +37,7 @@ import { openStats } from './ui/stats.js';
 import { openLevels, placeOfJob } from './ui/levels.js';
 import { makeHud } from './ui/hud.js';
 import { makeTools } from './ui/tools.js';
-import { sumFrom } from './math/longwork.js';
+import { waveSum } from './math/jobsums.js';
 import { makeRoundup } from './missions/roundup.js';
 import { makeFarm } from './farm.js';
 import { makeSheepJob } from './missions/sheep.js';
@@ -113,12 +113,22 @@ const hud = makeHud($('hud-root'), {
 // "Confusing?" on the field jobs' question card (the round-up, the farm jobs, the wagon's gang): only while a question
 // is up there (not on a travel card, nor on "Wave done!")
 flagCard(hud.ruleEl, () => fieldQuestion(), { show: () => !hud.ruleEl.hidden && !/\bis-(travel|job)\b/.test(hud.ruleEl.className) && !!askingJob() && askingJob() !== 'panel' });
-// THE TOOLS (src/ui/tools.js): one button by Menu, from any job: Work it out (the question's sum in columns: the store's
-// and the deliveries' own order sum, else the sum on the job's card) and the times chart (the rider's facts, green and
-// red). The game waits while one is open.
+// THE TOOLS (src/ui/tools.js): a strip along the bottom, from any job: Work it out (the question's sum in columns: each
+// job hands over its own question's sum, src/math/jobsums.js; the store's and the deliveries' own order sum), the times
+// chart (the rider's facts, green and red) and the level tool for the place the rider is at (its arrows step the level
+// by hand, unless the rider was made with "Let the rider pick levels" off). The game waits while a tool is open.
 const workJob = () => (SJ && SJ.active ? 'store' : DL && DL.active ? 'delivery' : askingJob());
+// (the round-up's sum is worked out here from its wave, as the wagon's own is: src/missions/roundup.js is left as it is)
+const JOB_SUM = { store: () => SJ && SJ.workSum(), delivery: () => DL && DL.workSum(), range: () => SR && SR.workSum(),
+  roundup: () => RU && RU.near ? waveSum(RU.wave) : null, sheep: () => SH && SH.workSum(), pigs: () => PG && PG.workSum(),
+  deer: () => DJ && DJ.workSum(), wagon: () => WJ && WJ.workSum(), loot: () => LJ && LJ.workSum(),
+  build: () => (FJ && FJ.builder ? FJ.workSum() : null) };   // (a builder up: the fishing's card; the windmill's and the bridge's ask on their own sheets)
+// the levels place the rider is at, for the level tool: the job asking (or the one the rider chose), the lock boxes' place
+const toolsPlace = () => { const j = jobNow(); return j === 'boxes' ? 'lockbox' : placeOfJob(j); };
 const TOOLS = makeTools({ hud, rider: () => rider,
-  sum: () => { const j = workJob(); if (j === 'store') return SJ.workSum(); if (j === 'delivery') return DL.workSum(); if (!j || j === 'panel' || j === 'build') return null; return sumFrom(fieldQuestion().text); },
+  sum: () => { const f = JOB_SUM[workJob()]; return f ? f() || null : null; },
+  place: () => (state === 'play' ? toolsPlace() : null),
+  onLevel: () => { if (rider) saveRider(rider); },
   own: () => { if (SJ && SJ.active) { SJ.openLong(); return true; } if (DL && DL.active) { DL.openLong(); return true; } return false; },
   canOpen: () => state === 'play' && !boxOpen && [...pausedBy].every((w) => w === 'tools'),
   speak: (text) => { if (rider && SKILLS.readAloud(rider)) sayLine(text); },
@@ -1022,6 +1032,7 @@ function dofWant() {
 
 // ── EACH FRAME ───────────────────────────────────────────────────────────────────────────────────────────────────
 let last = performance.now(), frames = 0, fpsT = last, fpsNow = 0, needDraw = false, drawn = { calls: 0, triangles: 0 };
+let toolsT = 0;
 function step(dt) {
   if (!W) return;
   // (the cabin has the player: walking in or out, or inside. It stands in the valley, so the valley goes on round it:
@@ -1063,6 +1074,7 @@ function step(dt) {
     if (BS) BS.update(dt);   // (after the player: it places the camera while a builder is up)
     if (JB) JB.update(dt, P.position, { busy: askingJob() });   // (a job picked on the jobs board: its tracks lead first, till the rider is there or busy at a job)
     jobStep();   // (the job the rider chose keeps the card: THE JOB)
+    if ((toolsT -= dt) <= 0) { toolsT = 0.25; TOOLS.update(); }   // (the tools strip: the sum on Work it out, the place's level)
     hob.trailTo((JB && JB.goal()) || hobGoal() || trailGoal());
     hob.update(dt, P.position, { hold: !!((JF && JF.speaking()) || (SR && SR.speaking()) || home), asking: askingJob() });   // (on a phone, Hob waits while a job person is talking or you're in the cabin; while a question is up, only its job's lines come)
     if (stage) stage.update(dt, P.position);

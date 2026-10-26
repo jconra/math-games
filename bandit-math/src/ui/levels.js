@@ -5,11 +5,12 @@
 //   - a tab for every place, each with a picture (for riders who can't read yet), its short name and the rider's %
 //   - the place: its picture, name, kind of math, one line about it, the rider's % up its ladder and where they are
 //     ("Finding your level", "Not played yet: you'd start at level 3"), and THE SETTINGS IN PLAIN WORDS (all levels
-//     on, or which are skipped; a level picked with "Start here"; the job switched off in the Jobs list)
+//     on, or which are skipped; a level picked by hand with the level tool; the job switched off in the Jobs list)
 //   - its levels going down, easiest first: each with what's asked, 2 or 3 real examples made by the place's own
-//     question maker (fresh each time the page opens; "New examples" makes more), a tick, and "Start here"
+//     question maker (fresh each time the page opens; "New examples" makes more) and a tick
 //   - every tick on (the start) = the game moves the rider up and down by itself; untick a level to skip it (the last
-//     one on stays on); "Start here" puts the rider straight on a level, with an Undo for a slip of the finger.
+//     one on stays on). Stepping onto a level by hand is the level tool's, by each job (src/ui/tools.js, leveltool.js:
+//     its arrows, unless the rider was made with "Let the rider pick levels" off); this page has no "Start here".
 // No grown-up lock: the page always shows the settings as they are, so a grown-up who looks can see them.
 // Every change is saved straight away (save.js saveRider) and takes effect on the next question asked: each job asks
 // src/levels/model.js levelFor for every question.
@@ -17,7 +18,7 @@
 //   const page = openLevels(root, rider, { place, onClose, onChange(rider), speak(text) })
 //   page.show(placeId); page.close()
 //     place     the tab to open on (a place id); else the place the rider played last, else the first
-//     onChange  called after every change (a tick, Start here, Undo, all on)
+//     onChange  called after every change (a tick, all on)
 //     speak     optional: reads a place's name and line when its tab is picked (the game passes it for a rider who
 //               is read to: skill.js readAloud)
 //   Esc, the close button or a click on the dark backdrop closes it. z-index 52: over the stats page (50), which can
@@ -27,10 +28,10 @@
 // statusWords, gridWords (the settings of every place in one line), placeOfJob(jobId), PIC (the pictures), picSVG(key).
 //
 // The page reads only what the levels contract names: PLACES, examplesOf, pctOf, stateOf, isOn, onIds, setOn,
-// setAllOn, startHere, seedLevel, then saveRider.
+// setAllOn, seedLevel, then saveRider.
 
 import { PLACES, PLACE, examplesOf } from '../levels/places.js';
-import { stateOf, pctOf, isOn, onIds, setOn, setAllOn, startHere, seedLevel, levelPct } from '../levels/model.js';
+import { stateOf, pctOf, isOn, onIds, setOn, setAllOn, seedLevel, levelPct } from '../levels/model.js';
 import { saveRider, jobOn, MISSIONS } from '../save.js';
 
 // ---- the pictures: one small drawing for each place's `pic` key, in the text colour (details in the card's ink) ----
@@ -118,7 +119,7 @@ export function settingsWords(rider, placeId) {
     : `All ${n} levels on: the game moves you up and down by itself.`];
   if (s && s.start) {
     const k = P.levels.findIndex((L) => L.id === s.start);
-    if (k >= 0) parts.push(`Started at level ${k + 1} with “Start here”.`);
+    if (k >= 0) parts.push(`Level ${k + 1} picked by hand with the level tool.`);
   }
   const offJobs = jobsOf(P).filter((j) => !jobOn(rider, j));
   if (offJobs.length) parts.push(`${and(offJobs.map((j, k) => (k ? jobName(j).replace(/^The /, 'the ') : jobName(j))))} ${offJobs.length === 1 ? 'is' : 'are'} switched off in the Jobs list.`);
@@ -151,7 +152,7 @@ export function gridWords(rider) {
     const bits = [];
     const nums = s.off.map((id) => P.levels.findIndex((L) => L.id === id) + 1).filter((k) => k > 0);
     if (nums.length) bits.push(`level${nums.length === 1 ? '' : 's'} ${runs(nums)} skipped`);
-    if (s.start) { const k = P.levels.findIndex((L) => L.id === s.start); if (k >= 0) bits.push(`started at level ${k + 1}`); }
+    if (s.start) { const k = P.levels.findIndex((L) => L.id === s.start); if (k >= 0) bits.push(`level ${k + 1} picked by hand`); }
     if (bits.length) out.push(`${P.short}: ${bits.join(', ')}`);
   }
   return out.join(' · ');
@@ -214,7 +215,7 @@ export function openLevels(root, rider, opts = {}) {
   const S = {
     place: PLACE[opts.place] ? opts.place : PLACE[placeOfJob(opts.place)] ? placeOfJob(opts.place) : lastPlace(rider),
     seed: 1 + Math.floor(Math.random() * 100000),   // (fresh examples every time the page opens)
-    note: null,       // { place, text, undo: snapshot } a line under the settings after a change (with Undo for Start here)
+    note: null,       // { place, text } a line under the settings after a change
     open: new Set(),  // examples opened out in full (long word problems are cut to three lines)
   };
   let closed = false;
@@ -245,18 +246,15 @@ export function openLevels(root, rider, opts = {}) {
       ? `<span class="bmlv-here">${ICON.pin}${v.met ? (v.placing ? 'Finding your level here' : 'You are here') : 'You’d start here'}</span>` : '';
     const prog = x.here && v.met && !v.placing
       ? `<span class="bmlv-prog" aria-label="${Math.floor(v.into)} of ${v.count} right toward the next level">${Array.from({ length: v.count }, (_, k) => `<i class="${k < Math.floor(v.into) ? 'on' : ''}"></i>`).join('')}</span>` : '';
-    const startBtn = x.here && v.met && !v.placing ? ''
-      : `<button type="button" class="bmlv-start" data-do="start" data-id="${x.id}" aria-label="Start here: level ${x.n}, ${esc(x.title)}">${ICON.flag}Start here</button>`;
     return `<li class="bmlv-row${x.here ? ' is-here' : ''}${x.on ? '' : ' is-off'}" id="bmlv-row-${v.id}-${x.id}">
       <button type="button" class="bmlv-tick" role="checkbox" aria-checked="${x.on}" data-do="tick" data-id="${x.id}"
         aria-label="Level ${x.n}, ${esc(x.title)}: ${x.on ? 'on' : 'skipped'}">${ICON.check}</button>
       <div class="bmlv-info">
-        <div class="bmlv-title"><span class="bmlv-n">${x.n}</span><b>${esc(x.title)}</b>${x.on ? '' : '<em class="bmlv-skip">skipped</em>'}${x.start ? '<em class="bmlv-started">started here</em>' : ''}</div>
+        <div class="bmlv-title"><span class="bmlv-n">${x.n}</span><b>${esc(x.title)}</b>${x.on ? '' : '<em class="bmlv-skip">skipped</em>'}${x.start ? '<em class="bmlv-started">picked by hand</em>' : ''}</div>
         <div class="bmlv-line">${esc(x.line)}</div>
         ${hereTag || prog ? `<div class="bmlv-herebox">${hereTag}${prog}</div>` : ''}
       </div>
       <ul class="bmlv-exs" aria-label="Examples">${ex}</ul>
-      ${startBtn}
     </li>`;
   }
 
@@ -266,7 +264,7 @@ export function openLevels(root, rider, opts = {}) {
     const prev = PLACES[(i - 1 + PLACES.length) % PLACES.length], next = PLACES[(i + 1) % PLACES.length];
     const pct = v.pct == null ? null : v.pct;
     const note = S.note && S.note.place === v.id
-      ? `<p class="bmlv-note" role="status">${esc(S.note.text)}${S.note.undo !== undefined ? ' <button type="button" class="bmlv-undo" data-do="undo">Undo</button>' : ''}</p>` : '';
+      ? `<p class="bmlv-note" role="status">${esc(S.note.text)}</p>` : '';
     return `
       <div class="bmlv-phead">
         <button type="button" class="bmlv-arrow" data-do="tab" data-dir="prev" data-id="${prev.id}" aria-label="Before: ${esc(prev.name)}">${ICON.prev}</button>
@@ -289,7 +287,7 @@ export function openLevels(root, rider, opts = {}) {
         </div>
         ${note}
       </div>
-      <p class="bmlv-how">Every tick on: the game moves you up a level after ${v.counts} right answers and back a little after a miss, so about 4 answers in 5 are right. Untick a level to skip it. “Start here” puts you straight on a level.</p>
+      <p class="bmlv-how">Every tick on: the game moves you up a level after ${v.counts} right answers and back a little after a miss, so about 4 answers in 5 are right. Untick a level to skip it. The level tool at the bottom of the screen, by a job, steps you down or up a level by hand.</p>
       <ol class="bmlv-rows" aria-label="${esc(v.name)} levels, easiest first">${v.rows.map((x) => rowHTML(v, x)).join('')}</ol>`;
   }
 
@@ -326,13 +324,11 @@ export function openLevels(root, rider, opts = {}) {
     c.scrollTo({ top: Math.max(0, top), behavior: smooth ? 'smooth' : 'auto' });
   }
 
-  function changed(text, undo) {
+  function changed(text) {
     saveRider(rider);
-    S.note = { place: S.place, text, undo };
+    S.note = { place: S.place, text };
     try { onChange(rider); } catch (e) { console.error(e); }
   }
-  // a copy of the place's saved state (or undefined: not met), for Undo
-  const snap = () => { const s = stateOf(rider, S.place); return s ? JSON.parse(JSON.stringify(s)) : null; };
 
   function act(what, b) {
     const id = b && b.dataset.id;
@@ -362,25 +358,6 @@ export function openLevels(root, rider, opts = {}) {
       }
       case 'allon': {
         if (setAllOn(rider, S.place)) changed('Every level is on: the game moves you up and down by itself.');
-        draw({ focus: '[data-do="here"]' });
-        return;
-      }
-      case 'start': {
-        const L = P.levels.find((x) => x.id === id);
-        if (!L) return;
-        const before = snap();
-        if (!startHere(rider, S.place, id)) return;
-        changed(`Now on level ${P.levels.indexOf(L) + 1}: ${L.title}.`, before);
-        draw({ focus: '.bmlv-undo' });
-        return;
-      }
-      case 'undo': {
-        if (!S.note || S.note.undo === undefined) return;
-        const before = S.note.undo;
-        const places = rider.levels && rider.levels.places;
-        if (places) { if (before) places[S.place] = before; else delete places[S.place]; }
-        changed('Back where you were.');
-        S.note.undo = undefined;
         draw({ focus: '[data-do="here"]' });
         return;
       }

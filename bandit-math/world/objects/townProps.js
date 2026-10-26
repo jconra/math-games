@@ -31,6 +31,13 @@ export const PROP_KINDS = [
   { kind: 'stateMap', name: 'Montana (its outline)', footprint: [4, 2.3] },   // (its own module: the state's shape, unseen; its border is planted in flowers)
   { kind: 'dock', name: 'Wooden dock', footprint: [1.7, 6.2] },
   { kind: 'obelisk', name: 'Hex obelisk', footprint: [0.9, 0.9] },          // (its own module: shaders of its own, and a message in its cells)
+  // (Bandit Math) the western town's yard things, for the Town Lab's decor (labs/town, models/town/decor.json)
+  { kind: 'barrel', name: 'Barrel', footprint: [0.66, 0.66] },
+  { kind: 'crate', name: 'Crate', footprint: [0.72, 0.72] },
+  { kind: 'hitchingPost', name: 'Hitching post', footprint: [2.5, 0.3] },
+  { kind: 'trough', name: 'Water trough', footprint: [1.9, 0.7] },
+  { kind: 'lantern', name: 'Lantern post', footprint: [0.75, 0.3] },
+  { kind: 'garden', name: 'Garden patch', footprint: [2.6, 1.7] },
 ];
 
 // ── palette ─────────────────────────────────────────────────────────────────
@@ -512,7 +519,77 @@ function dock(k) {
   k.add('matte', place(new THREE.CylinderGeometry(0.11, 0.12, 1.1, 8).translate(0, 0.55, 0), [0.55, Y, L / 2 - 0.25]), k.tone(C.woodDark));   // (the mooring post)
   k.add('matte', place(new THREE.TorusGeometry(0.16, 0.035, 5, 12).rotateX(Math.PI / 2), [0.55, Y + 0.06, L / 2 - 0.6]), C.canvas);            // (a coil of rope)
 }
-const BUILDERS = { bench, easel, lamp, planter, picnicTable, stall, signpost, flowerBed, dock };
+// (Bandit Math) THE WESTERN YARD THINGS: a barrel, a crate, a hitching post, a water trough, a lantern on a post and a
+// little vegetable garden, plain and chunky like the rest, in the same warm wood and dark iron.
+// Barrel: staves bulging out to the middle (a turned profile), three iron hoops and a lid.
+function barrel(k) {
+  const H = 0.9, R0 = 0.27, R1 = 0.32, pts = [];
+  for (let i = 0; i <= 8; i++) { const t = i / 8; pts.push(new THREE.Vector2(R0 + (R1 - R0) * Math.sin(Math.PI * t), t * H)); }
+  k.add('matte', new THREE.LatheGeometry(pts, 14), (x, y, z) => new THREE.Color(C.wood).multiplyScalar(0.86 + 0.18 * ((Math.floor((Math.atan2(x, z) / Math.PI + 1) * 7) % 2))));   // (the staves, every other one lighter)
+  for (const t of [0.1, 0.5, 0.9]) { const r = R0 + (R1 - R0) * Math.sin(Math.PI * t) + 0.008; k.add('iron', place(cyl(r, r, 0.045, 14, true), [0, t * H, 0]), k.tone(C.ironDark, 0.03)); }
+  k.add('matte', place(cyl(R0 - 0.01, R0 - 0.01, 0.02, 14), [0, H - 0.015, 0]), C.woodDark);
+}
+// Crate: a box of boards with a frame round each face and a brace across the front and back.
+function crate(k) {
+  const S = 0.7, T = 0.05;
+  k.add('matte', place(chamferBox(S - 0.02, S - 0.02, S - 0.02, 0.01), [0, S / 2, 0]), k.tone(C.woodLight, 0.05));
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.add('matte', place(chamferBox(T, S, T, 0.008), [sx * (S / 2 - T / 2), S / 2, sz * (S / 2 - T / 2)]), k.tone(C.wood, 0.05));
+  for (const y of [T / 2, S - T / 2]) for (const s of [-1, 1]) {
+    k.add('matte', place(chamferBox(S, T, T, 0.008), [0, y, s * (S / 2 - T / 2)]), k.tone(C.wood, 0.05));
+    k.add('matte', place(chamferBox(T, T, S, 0.008), [s * (S / 2 - T / 2), y, 0]), k.tone(C.wood, 0.05));
+  }
+  for (const s of [-1, 1]) k.add('matte', beam([-S / 2 + T, T, s * (S / 2 + 0.004)], [S / 2 - T, S - T, s * (S / 2 + 0.004)], T, 0.02, 0.006), k.tone(C.woodDark, 0.05));
+}
+// Hitching post: two stout posts and a rail across their tops, an iron ring on the rail to tie a horse to.
+function hitchingPost(k) {
+  const W = 2.4, H = 1.05;
+  for (const s of [-1, 1]) k.add('matte', place(chamferBox(0.14, H, 0.14, 0.02), [s * W / 2, H / 2, 0]), k.tone(C.woodDark, 0.06));
+  k.add('matte', place(chamferBox(W + 0.3, 0.12, 0.12, 0.02), [0, H + 0.04, 0]), k.tone(C.wood, 0.05));
+  for (const x of [-0.5, 0.5]) k.add('iron', place(new THREE.TorusGeometry(0.06, 0.012, 4, 10), [x, H - 0.06, 0.07]), C.ironDark);
+}
+// Water trough: a long box of planks on two skids, dark water standing in it.
+function trough(k) {
+  const L = 1.8, D = 0.6, H = 0.5;
+  for (const x of [-0.6, 0.6]) k.add('matte', place(chamferBox(0.12, 0.1, D + 0.1, 0.015), [x, 0.05, 0]), k.tone(C.woodDark, 0.05));
+  for (let i = 0; i < 3; i++) for (const s of [-1, 1]) {
+    k.add('matte', place(chamferBox(L, 0.13, 0.05, 0.01), [0, 0.17 + i * 0.13, s * (D / 2 - 0.025)]), k.tone(C.wood, 0.08));
+    k.add('matte', place(chamferBox(0.05, 0.13, D, 0.01), [s * (L / 2 - 0.025), 0.17 + i * 0.13, 0]), k.tone(C.wood, 0.08));
+  }
+  k.add('matte', place(chamferBox(L - 0.06, 0.04, D - 0.06, 0.005), [0, 0.12, 0]), C.woodDark);
+  k.add('iron', place(new THREE.BoxGeometry(L - 0.1, 0.01, D - 0.1), [0, H - 0.06, 0]), 0x34505a, { shade: false });   // (the water)
+}
+// Lantern post: a post with an arm out over the path and a lantern hanging from it, its glass glowing.
+function lantern(k) {
+  const H = 2.2;
+  k.add('matte', place(chamferBox(0.12, H, 0.12, 0.018), [0, H / 2, 0]), k.tone(C.woodDark, 0.05));
+  k.add('matte', place(chamferBox(0.62, 0.08, 0.08, 0.012), [0.27, H - 0.12, 0]), k.tone(C.woodDark, 0.05));
+  k.add('matte', beam([0.04, H - 0.45, 0], [0.32, H - 0.15, 0], 0.06, 0.06, 0.01), k.tone(C.woodDark, 0.05));
+  const X = 0.5, Y = H - 0.52;
+  k.add('iron', place(cyl(0.004, 0.004, 0.2, 4), [X, Y + 0.3, 0]), C.ironDark);
+  k.add('iron', place(cyl(0.09, 0.08, 0.04, 6), [X, Y + 0.02, 0]), C.ironDark);
+  k.add('glow', place(cyl(0.075, 0.07, 0.17, 6), [X, Y + 0.125, 0]), 0xffffff, { shade: false });
+  k.add('iron', place(new THREE.ConeGeometry(0.11, 0.1, 6), [X, Y + 0.26, 0]), C.iron);
+  k.add('iron', place(new THREE.TorusGeometry(0.03, 0.006, 4, 8), [X, Y + 0.33, 0]), C.ironDark);
+}
+// Garden patch: a little vegetable bed edged with boards, three rows of leafy heads, and stakes with beans at the back.
+function garden(k) {
+  const L = 2.5, D = 1.6;
+  k.add('matte', place(chamferBox(L - 0.08, 0.12, D - 0.08, 0.02), [0, 0.06, 0]), C.soil, { shade: false });
+  for (const s of [-1, 1]) {
+    k.add('matte', place(chamferBox(L, 0.16, 0.05, 0.01), [0, 0.08, s * (D / 2 - 0.025)]), k.tone(C.wood, 0.08));
+    k.add('matte', place(chamferBox(0.05, 0.16, D, 0.01), [s * (L / 2 - 0.025), 0.08, 0]), k.tone(C.wood, 0.08));
+  }
+  for (let row = 0; row < 3; row++) for (let i = 0; i < 6; i++) {
+    const x = -0.95 + i * 0.38 + (k.r() - 0.5) * 0.06, z = 0.45 - row * 0.36;
+    k.add('matte', place(blob(0.1 + k.r() * 0.04), [x, 0.17, z], [k.r() * 3, k.r() * 3, 0], [1.1, 0.7, 1.1]), k.tone(row === 1 ? C.leafLight : C.leaf, 0.08), { shade: false });
+  }
+  for (let i = 0; i < 5; i++) {
+    const x = -0.9 + i * 0.45;
+    k.add('matte', place(cyl(0.012, 0.016, 0.9, 4), [x, 0.5, -0.6]), C.woodDark);
+    k.add('matte', place(blob(0.09), [x, 0.45, -0.6], [k.r() * 3, k.r() * 3, 0], [0.8, 2.6, 0.8]), k.tone(C.leafDark, 0.08), { shade: false });
+  }
+}
+const BUILDERS = { bench, easel, lamp, planter, picnicTable, stall, signpost, flowerBed, dock, barrel, crate, hitchingPost, trough, lantern, garden };
 const CACHE = new Map();
 
 // A new Group for the prop: meshes sharing the cached geometry and materials.

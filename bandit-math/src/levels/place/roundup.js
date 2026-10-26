@@ -2,9 +2,11 @@
 // carry numbers, a card shows a number pattern with a blank, and the steer wearing the missing number is the one to
 // rope. Counting by 1s (to 10, to 20, over a ten), then by 10s, 5s and 2s; every times table to 12 as a series, in the
 // difficulty order (src/math/series.js TABLE_ORDER: 2; 10, 5, 3; 4, 9; 6, 8, 7; 11, 12), each fact a blank is on fed
-// to the times chart; then the multiples herds ("Rope the 7-herd": every multiple in the herd); then the tables going
-// down, odd steps up and down, growing and doubling rules; then below zero, halves, thirds, quarters, decimals,
-// fractions below zero. Every level a small step from the one before; every wave a series (one kind of math here).
+// to the times chart, and after each tier its multiples herd ("Rope the 7-herd": every multiple in the herd), then the
+// herd of any table; then the tables going down, odd steps up and down, growing and doubling rules; then below zero,
+// halves, thirds, quarters, decimals, fractions below zero. Every level a small step from the one before; every wave a
+// series (one kind of math here). A wave mixes in a card (now and then a herd) from the levels just below the rider's,
+// and the earlier tables with red or yellow facts on the times chart (src/math/series.js RANGE, reviewFor).
 //
 // gen (what the maker reads: src/math/series.js seriesCard, and the times trainer for a herd):
 //   { kind: 'series', by, from: [lo, hi] (the first number), terms (4), blank: 'end' | 'any', cross?: [lo, hi] (counting
@@ -55,12 +57,17 @@ export const PLACE = {
       gen: { kind: 'series', by: 5, from: [5, 35], terms: 4, blank: 'any' } },
     { id: 'by2', title: 'Count by 2s', line: '6, 8, ?, 12', grade: 19, strand: 'number', count: 5, read: true,
       gen: { kind: 'series', by: 2, from: [2, 12], terms: 4, blank: 'any' } },
-    ...TABLE_ORDER.map(T),
-    H('herdA', [2, 10, 5, 3], 45),
-    H('herdB', [4, 9], 46),
-    H('herdC', [6, 8, 7], 48),
-    H('herdD', [11, 12], 49),
-    H('herdE', TABLE_ORDER, 50),
+    // each tier's tables as series, then that tier's herd, then the next tier (not every series first and every herd
+    // after: from the 12s back to "rope all the 2s" was a big step down)
+    T(2), T(10), T(5), T(3),
+    H('herdA', [2, 10, 5, 3], 24),
+    T(4), T(9),
+    H('herdB', [4, 9], 32),
+    T(6), T(8), T(7),
+    H('herdC', [6, 8, 7], 41),
+    T(11), T(12),
+    H('herdD', [11, 12], 45),
+    H('herdE', TABLE_ORDER, 47),
     { id: 'downA', title: 'Going down', line: '40, 35, ?, 25: the 2s, 3s, 4s, 5s and 10s counted backwards', grade: 51, strand: 'mul', count: 5,
       gen: { kind: 'down', tables: [2, 3, 4, 5, 10] } },
     { id: 'down', title: 'Going down, the harder tables', line: '48, 42, ?, 30: the 6s to 12s counted backwards', grade: 52, strand: 'mul', count: 5,

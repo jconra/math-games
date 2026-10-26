@@ -15,7 +15,9 @@
 // from the times trainer (src/math/times.js, told the table: the weak tables come up more, src/math/facts.js). Every
 // answer goes back with the level it was asked at (save.js recordAnswer: a travel job, no time): the first try at each
 // card (a card answered after its help came up is practice), and each rope of a herd. Each times fact answered (a
-// series blank on a table, a multiple roped) goes to the times chart (facts.js recordFact).
+// series blank on a table, a multiple roped) goes to the times chart (facts.js recordFact). The rider works in a RANGE
+// of levels (series.js RANGE): one card a wave, and now and then a whole herd, comes from below the rider's level (the
+// levels just below, the earlier tables with red or yellow facts), recorded at the level it was made at.
 // When the kid is stuck (8 s without a pick) or right after a miss, help appears: the series' number line with a hop
 // for each step (src/ui/counthelp.js; a fraction, decimal or growing rule gets its plain line instead), or the times
 // chart's "Peek" button for a herd.
@@ -39,8 +41,8 @@
 import * as THREE from 'three';
 import { makeAnimal, COATS } from '../actors/animals.js';
 import { makeTimes } from '../math/times.js';
-import { makeSeriesDeck, SERIES } from '../math/series.js';
-import { levelFor, stateOf } from '../levels/model.js';
+import { makeSeriesDeck, SERIES, reviewFor, herdReview } from '../math/series.js';
+import { levelFor, stateOf, isOn } from '../levels/model.js';
 import { PLACE } from '../levels/places.js';
 import { recordFact, pickFact, pickTable } from '../math/facts.js';
 import { readAloud } from '../math/skill.js';
@@ -133,6 +135,9 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
     ask,
     pickFact: (tables) => { const f = pickFact(rider, { tables, upTo: 12, from: 1, last: lastFact }); if (f) lastFact = f.key; return f; },
     pickTable: (tables) => pickTable(rider, tables, { last: lastTable }),
+    // one card a wave from the range below the rider's level (series.js RANGE: the levels just below, and the earlier
+    // tables the times chart shows red or yellow)
+    review: reviewFor({ levels: LEVELS, rider, isOn: (id) => isOn(rider, 'roundup', id) }),
   });
 
   const herd = [];               // every steer out here: in the pasture, led, running to the corral, or penned
@@ -320,14 +325,16 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
     endHelp();
     waveN++;
     devAt = at === 'times' ? 'herdE' : at && LEVELS.some((L) => L.id === at) ? at : null;
-    const q = ask();
+    const own = ask();
+    // now and then (series.js RANGE.herd) a herd from a herd level just below the rider's: a review, its ropes at ITS level
+    const q = herdReview({ levels: LEVELS, q: own, isOn: (id) => isOn(rider, 'roundup', id) }) || own;
     if (q.level.gen.kind === 'herd') {
       // a herd: every multiple of one table (the weak tables more), each rope an answer at this level
       const T = trainer(), table = pickTable(rider, q.level.gen.tables, { last: lastTable }) || q.level.gen.tables[0];
       lastTable = table;
       const w = T.wave({ count: ROUNDUP.herd, table, reach: 12, placing: q.placing });
       mine.add(w.id);
-      wave = { topic: 'times', T, w, q, level: q.id, startAt: q.id, hard: q.i + 1, kind: 'herd', goods: w.targets.filter((t) => t.good).length, caught: 0, misses: 0 };
+      wave = { topic: 'times', T, w, q, level: q.id, startAt: own.id, hard: own.i + 1, review: q !== own, kind: 'herd', goods: w.targets.filter((t) => t.good).length, caught: 0, misses: 0 };
       deal(w.targets);
     } else {
       const w = deck.wave({ cards: ROUNDUP.cards });

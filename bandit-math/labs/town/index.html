@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Town Lab</title>
+<meta name="description" content="A Bandit Math lab: decorate the town (move buildings, put down fences, barrels and gardens, paint flowers) and save it for the game.">
+<!-- the on-screen error box comes first, so a crash shows on screen instead of a blank page -->
+<script src="../../oops.js"></script>
+<link rel="stylesheet" href="../../src/ui/fonts/fonts.css">
+<script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/" } }</script>
+<style>
+  :root { --bg: #1e140c; --panel: rgba(36, 24, 14, 0.92); --edge: rgba(226, 173, 76, 0.4); --brass: #e2ad4c; --brass-hi: #f3c56b; --text: #f2e6d0; --dim: #c9b79a; --warn: #f0a35a; --ok: #9fd27a; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font: 400 14px/1.4 Bitter, Georgia, serif; }
+  canvas { display: block; touch-action: none; }
+  .tl-panel { position: fixed; left: 12px; top: 12px; z-index: 7; width: min(330px, calc(100vw - 24px)); max-height: calc(100vh - 24px - var(--bar-room, 0px)); overflow: auto;
+    background: var(--panel); border: 1px solid var(--edge); border-radius: 12px; padding: 10px 12px 12px; }
+  .tl-panel h1 { font: 400 22px/1.1 Rye, Georgia, serif; color: var(--brass-hi); margin: 0; letter-spacing: 0.02em; }
+  .tl-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .tl-head a { color: var(--dim); font-size: 13px; }
+  .tl-panel h2 { font: 600 12px/1.2 Bitter, Georgia, serif; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); margin: 10px 0 5px; }
+  .tl-row { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+  .tl-panel button, .tl-panel select { font: inherit; font-size: 13px; color: var(--text); background: #3a2716; border: 1px solid var(--edge); border-radius: 8px; padding: 4px 8px; cursor: pointer; }
+  .tl-panel button:hover, .tl-panel button:focus-visible { border-color: var(--brass-hi); outline: none; }
+  .tl-panel button.on { background: #5b3d1c; border-color: var(--brass-hi); }
+  .tl-panel button.save { background: #6b4a16; border-color: var(--brass-hi); font-weight: 600; }
+  .tl-panel label { display: inline-flex; gap: 6px; align-items: center; color: var(--dim); }
+  .tl-status { margin: 8px 0 0; color: var(--dim); min-height: 1.4em; }
+  .tl-status.unsaved { color: var(--warn); }
+  .tl-status.saved { color: var(--ok); }
+  .tl-help { color: var(--dim); font-size: 13px; margin: 6px 0 0; }
+  .tl-fold { display: none; }
+  .tl-hud { position: fixed; right: 12px; top: 12px; z-index: 5; color: var(--dim); background: rgba(30, 20, 12, 0.7); border-radius: 8px; padding: 4px 8px; font-size: 12px; pointer-events: none; }
+  .tl-loading { position: fixed; inset: 0; display: grid; place-items: center; z-index: 9; background: var(--bg); color: var(--brass-hi); font: 400 24px Rye, Georgia, serif; text-align: center; padding: 16px; }
+  .tl-loading[hidden] { display: none; }
+  @media (max-width: 640px) {
+    .tl-panel { padding: 8px 10px; }
+    .tl-panel.folded .tl-body { display: none; }
+    .tl-fold { display: inline-block; }
+    .tl-hud { top: auto; bottom: 12px; }
+  }
+</style>
+</head>
+<body>
+<div class="tl-panel" id="tlPanel">
+  <div class="tl-head"><h1>Town Lab</h1><span><button type="button" class="tl-fold" id="tlFold" aria-expanded="true">Hide</button> <a href="../">Labs</a></span></div>
+  <div class="tl-body">
+    <p class="tl-status" id="tlStatus" aria-live="polite">Loading the valley…</p>
+    <div class="tl-row">
+      <button type="button" class="save" id="tlSave" title="Save the decor for the game (Ctrl+S)">Save</button>
+      <button type="button" id="tlDownload" title="Download decor.json to hand over">Download</button>
+      <button type="button" id="tlLoad" title="Open a decor.json file">Open…</button>
+      <button type="button" id="tlRevert" title="Throw away the changes since the last save">Back to saved</button>
+      <input type="file" id="tlFile" accept=".json,application/json" hidden>
+    </div>
+    <h2>Move</h2>
+    <div class="tl-row">
+      <button type="button" data-pick="move">Move things</button>
+      <button type="button" data-pick="turn">Turn things</button>
+      <label><input type="checkbox" id="tlSnap" checked> Snap to half metres and 15°</label>
+    </div>
+    <h2>Put down</h2>
+    <div class="tl-row" id="tlProps"></div>
+    <h2>Fences</h2>
+    <div class="tl-row">
+      <button type="button" data-pick="fence">Fence run</button>
+      <button type="button" data-pick="unfence">Take fence down</button>
+      <label><input type="checkbox" id="tlStraight" checked> Straight runs</label>
+    </div>
+    <h2>Flowers and plants</h2>
+    <div class="tl-row">
+      <select id="tlFlower" aria-label="Which flower"></select>
+      <button type="button" data-pick="flowers">Paint</button>
+      <button type="button" data-pick="erase">Erase plants</button>
+    </div>
+    <h2>Look at</h2>
+    <div class="tl-row" id="tlViews"></div>
+    <p class="tl-help">Drag the ground to turn the view, right-drag (or two fingers) to slide it, wheel or pinch to zoom. The bar along the bottom has every kind of thing, Undo and Redo (Ctrl+Z, Ctrl+Y); Delete takes the chosen thing away.</p>
+  </div>
+</div>
+<div class="tl-hud" id="tlHud"></div>
+<div class="tl-loading" id="tlLoading">Riding into the valley…</div>
+<script type="module" src="main.js?v=1"></script>
+</body>
+</html>

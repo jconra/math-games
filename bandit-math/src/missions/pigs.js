@@ -26,6 +26,7 @@
 //   PG.batch            the batch showing (pigmath's: { mode, pens, pigs })
 //   PG.ready            a promise: the pigs are in
 //   PG.newBatch()       new sums now (dev)
+//   PG.workSum()        the nearest loose pig's sum for the tools' Work it out (src/math/jobsums.js), or null
 //   PG.drive(pig, pen)  the pig trots into that pen as if herded there (dev and rigs)
 //   PG.state()          for rigs
 //   PG.dispose()
@@ -41,6 +42,7 @@ import { picture as takePicture } from '../math/taking.js';
 import { earn, countJob, recordAnswer, saveRider } from '../save.js';
 import { readAloud } from '../math/skill.js';
 import { speakLine } from '../ui/storeslip.js';
+import { pigSum } from '../math/jobsums.js';
 
 export const PIGS = {
   near: 24,              // the job's card shows within this many metres of the pig yard's middle ...
@@ -597,6 +599,8 @@ export function makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, ho
     set(on) { paused = !!on; if (paused) endHelp(); else if (PG.near) startHelp(); },
   });
   PG.newBatch = () => newBatch();
+  // the sum for the tools' Work it out (src/math/jobsums.js): the nearest loose pig's (which pen stays the kid's)
+  PG.workSum = () => { if (!PG.near || !batch || batch.done) return null; const g = nearestLoose(); return g ? pigSum(g.item) : null; };
   PG.drive = (g, i) => { if (g && g.state === 'loose' && pens[i]) { const gt = pens[i].gate; g.root.position.set(gt.out.x, W.heightAt(gt.out.x, gt.out.z), gt.out.z); into(g, i); return true; } return false; };
   PG.state = () => ({
     near: PG.near, mode: batch && batch.mode, level: batch && batch.q ? batch.q.id : null, placing: !!(batch && batch.q && batch.q.placing), done: !!(batch && batch.done), penned, left: batch ? left() : 0,

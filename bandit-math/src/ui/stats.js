@@ -18,7 +18,7 @@
 //   Esc, the close button or a click on the dark backdrop closes it (onClose is called once).
 //
 // The numbers come from src/math/skill.js (stats, meaning) and the rider's saved strands; nothing here changes the
-// rider (the levels page it opens can: ticks and "Start here"). Pure helpers for the tests: placeRows(rider),
+// rider (the levels page it opens can: its ticks). Pure helpers for the tests: placeRows(rider),
 // statRows(rider), overview(rider), fmtTime(ms), spark(history, w, h), lately(s).
 
 import { stats as strandStats, meaning, STRANDS } from '../math/skill.js';
@@ -100,7 +100,7 @@ export function statRows(rider) {
 
 // One row a place the rider has played (or brought from an earlier ride's save), in the levels page's order: how far
 // up its ladder (pct), the level on (its number and title), placement still running, the last answers, the change
-// over the days kept, and what a grown-up set (levels skipped, "Start here"). -> rows, and `unplayed`: the other places
+// over the days kept, and what a grown-up set (levels skipped, a level picked by hand). -> rows, and `unplayed`: the other places
 export function placeRows(rider) {
   const all = placeStats(rider, { all: true });
   const rows = all.filter((x) => x.pct != null && (x.answered > 0 || (stateOf(rider, x.place) || {}).old)).map((x) => {
@@ -109,7 +109,7 @@ export function placeRows(rider) {
     const h = x.history || [], first = h[0], last = h[h.length - 1];
     const set = [];
     if (x.off.length) set.push(`${x.off.length} level${x.off.length === 1 ? '' : 's'} skipped`);
-    if (x.start) { const j = P.levels.findIndex((L) => L.id === x.start); if (j >= 0) set.push(`started at level ${j + 1}`); }
+    if (x.start) { const j = P.levels.findIndex((L) => L.id === x.start); if (j >= 0) set.push(`level ${j + 1} picked by hand`); }
     return {
       ...x, line: P.line, n: k + 1, of: P.levels.length,
       lately: { right: (s.h || []).reduce((a, y) => a + (y && y[0] ? 1 : 0), 0), of: (s.h || []).length },

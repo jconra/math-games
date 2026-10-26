@@ -28,6 +28,7 @@
 //   J.update(dt)        each frame while riding (and, the first time the rod is out, the first card's view drawn ahead)
 //   J.site, J.keeper (his person), J.builder (the open builder, or null: its .handle is the lab's FI handle)
 //   J.where()           { x, z } of the fisherman (the jobs board, the trail)
+//   J.workSum()         the question card's sum for the tools' Work it out, or null
 //   J.creel()           the fish in the saddlebags;  J.fishLine() '3 fish' (the HUD) or ''
 //   J.saleOrder({ who, grade })   a fish sale for the store's counter now and then (null: not this customer, or no fish)
 //   J.sold(order)       a sale's right coin: those fish out of the saddlebags
@@ -50,6 +51,7 @@ import { questionAt, lessonAt } from '../labs/fishing/pies.js';
 import { value, feet } from '../labs/fishing/frac.js';
 import { makeFishSale, formsBelow, SALE_FORMS } from './math/fishsale.js';
 import { fishingOf, keepFish, sayable, saleMap, CREEL } from './fishrecords.js';
+import { fishSum } from './math/jobsums.js';
 
 export const DOCK = {
   x: -4.4, foot: -95.3,      // the dock's shore end (world, metres): where the town's dirt path meets the water
@@ -342,6 +344,8 @@ export function makeFishingJob({ W, folk, rider, sites, player = () => null, aud
     if (!J.builder && !fadeOut) hangStill();   // (out of view: the player is at the store)
   };
 
+  // the card's sum for the tools' Work it out (src/math/jobsums.js fishSum): a fraction of the fish caught, else none
+  J.workSum = () => { const B = J.builder, q = B && B.handle && B.handle.question ? B.handle.question() : null; return q && !q.answered ? fishSum(q) : null; };
   J.where = () => { const p = keeper ? keeper.root.position : { x: DOCK.x, z: DOCK.foot }; return { x: p.x, z: p.z }; };
   J.state = () => ({ open: !!J.builder, creel: F().creel.length, landed: F().landed, record: F().record, draws: merged.draws + (still ? still.merged.draws : 0), still: still ? still.merged.count : 0,
     fade: { in: !!fadeIn, out: !!fadeOut }, cardWarm: cardWarm === true ? 'done' : cardWarm ? cardWarm.i : 'not yet', keeper: keeper && { x: keeper.root.position.x, z: keeper.root.position.z }, surf, end: { x: DOCK.x, z: endZ }, asker: asker.state() });

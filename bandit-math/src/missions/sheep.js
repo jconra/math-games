@@ -29,6 +29,7 @@
 //   SH.open(sheep)      bring up the bottles for this sheep (as F does on the ringed one)
 //   SH.give(i)          give bottle i of the open picker (as a click or the 1-3 keys do)
 //   SH.newFlock({ sick })   a new set of sums now (dev; sick: how many are sick, else 1 or 2)
+//   SH.workSum()        the sum for the tools' Work it out: the sheep picked or ringed (src/math/jobsums.js), or null
 //   SH.state()          for rigs
 //   SH.dispose()
 //   makeCard(), drawCard(sprite, { top, main, cured })   the sum card over an animal (for another job's own sums)
@@ -42,6 +43,7 @@ import { showNumberLine, ensureNumberLineStyles, watchHesitation } from '../ui/n
 import { showCountHelp } from '../ui/counthelp.js';
 import { recordAnswer, earn, countJob, saveRider } from '../save.js';
 import { flagCard } from '../ui/flag.js';
+import { sheepSum } from '../math/jobsums.js';
 import { readAloud } from '../math/skill.js';
 import { speakLine } from '../ui/storeslip.js';
 
@@ -541,6 +543,13 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
   SH.open = (s) => openPicker(s);
   SH.give = (i) => give(i);
   SH.newFlock = (o) => newFlock(o);   // (o.sick: how many sick, for a rig)
+  // the sum for the tools' Work it out (src/math/jobsums.js): the sheep with its bottles up, else the ringed one, else
+  // the first not healed yet (the sum as written; which sheep is wrong stays the kid's)
+  SH.workSum = () => {
+    if (!SH.near || !cur || cur.done) return null;
+    const s = (picker && picker.s) || (R.target && !R.target.healed && R.target) || flock.find((x) => x.item && !x.healed);
+    return s ? sheepSum(s.item) : null;
+  };
   SH.state = () => ({
     near: SH.near, topic: cur && cur.topic, level: cur && cur.q ? cur.q.id : null, placing: !!(cur && cur.q && cur.q.placing), at: cur && cur.q ? cur.q.pct : null, done: !!(cur && cur.done), healed: cur ? cur.healed : 0, sickLeft: sickLeft(),
     picker: picker ? { sheep: picker.s.id, crossed: [...picker.s.crossed] } : null,

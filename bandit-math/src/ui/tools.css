@@ -1,40 +1,61 @@
-/* The tools button and its little menu (src/ui/tools.js). The button sits in the HUD's top-right corner, to the left
-   of Menu, in the HUD's wood and brass; on a phone held upright it goes under Menu, as an icon. The menu is its own
-   layer (z-index 34: over the order slip 30 and the worked area 31, under the times chart 35/40). */
-.bmtl-btn { position: absolute; right: calc(100% + 8px); top: 0; display: flex; align-items: center; gap: 6px; padding: 7px 12px 7px 9px;
-  border-radius: 8px; background: var(--wood, rgba(30, 20, 12, 0.8)); border: 1px solid var(--wood-edge, rgba(226, 173, 76, 0.35));
-  color: var(--ink, #f4e8cf); font: 400 15px Smokum, Georgia, serif !important; letter-spacing: 0.05em; pointer-events: auto; cursor: pointer; white-space: nowrap; }
-.bmtl-btn svg { width: 20px; height: 20px; color: var(--brass, #e2ad4c); }
-.bmtl-btn:hover, .bmtl-btn.is-on { border-color: var(--brass, #e2ad4c); }
-.bmtl-btn.is-loose { position: fixed; right: 110px; top: 14px; z-index: 12; }
-/* a phone held upright: under Menu, an icon only, as small as Menu's own (it keeps to the corner of the job card) */
-@media (max-width: 480px) {
-  .bmtl-btn { right: 0; top: calc(100% + 4px); padding: 6px 8px; }
-  .bmtl-btn svg { width: 18px; height: 18px; }
-  .bmtl-btn span { display: none; }
+/* The tools strip (src/ui/tools.js): Work it out, the times chart and the level tool, along the bottom while riding,
+   in the HUD's wood and brass. Inside the HUD (z-index 12: under the order slip 30, the worked area 31, the times chart
+   35/40 and the lock box 60). A computer: low in the middle (the notes and the door prompt sit above it, hud.css). A
+   phone or a small window: just above the touch buttons, at the right, clear of the thumb stick's corner and the job
+   card at the top. */
+.bmtl-bar { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); display: flex; align-items: stretch; gap: 8px;
+  pointer-events: none; max-width: calc(100vw - 20px); }
+.bmtl-bar > * { pointer-events: auto; }
+.bmtl-pair { display: flex; gap: 6px; }
+.bmtl-b, .bmtl-level { display: flex; align-items: center; border-radius: 8px; background: var(--wood, rgba(30, 20, 12, 0.8));
+  border: 1px solid var(--wood-edge, rgba(226, 173, 76, 0.35)); color: var(--ink, #f4e8cf); }
+.bmtl-b { gap: 7px; min-height: 40px; padding: 4px 11px 4px 7px; cursor: pointer; text-align: left; font: inherit; touch-action: manipulation; }
+.bmtl-b:hover { border-color: var(--brass, #e2ad4c); }
+.bmtl-b svg { flex: none; width: 26px; height: 26px; }
+.bmtl-t { display: grid; line-height: 1.1; }
+.bmtl-t b { font: 700 14px Bitter, Georgia, serif; color: var(--brass-hi, #f3c56b); white-space: nowrap; }
+.bmtl-t small { font: 500 12px Bitter, Georgia, serif; color: #dccaa5; white-space: nowrap; }
+.bmtl-t small:empty { display: none; }
+/* (no sum on the question in front of the kid: dimmed; a tap says so in a note) */
+.bmtl-b.is-none { opacity: 0.55; }
+.bmtl-b.is-none:hover { border-color: var(--wood-edge, rgba(226, 173, 76, 0.35)); }
+
+/* the level tool: ‹ 27: Odd steps going down ›, a thin bar under the title */
+.bmtl-level { gap: 2px; padding: 3px 4px; min-height: 40px; }
+.bmtl-level[hidden] { display: none; }
+.bmtl-step { flex: none; display: grid; place-items: center; width: 34px; height: 34px; border-radius: 6px; padding: 0; cursor: pointer;
+  background: rgba(246, 237, 214, 0.08); border: 1px solid rgba(226, 173, 76, 0.3); color: var(--brass-hi, #f3c56b); touch-action: manipulation; }
+.bmtl-step svg { width: 18px; height: 18px; }
+.bmtl-step:hover:not([disabled]) { background: rgba(246, 237, 214, 0.18); border-color: var(--brass, #e2ad4c); }
+.bmtl-step[disabled] { opacity: 0.3; cursor: default; }
+.bmtl-step[hidden] { display: none; }
+.bmtl-lv { display: grid; gap: 4px; min-width: 0; padding: 0 8px; }
+.bmtl-lvt { font: 600 14px Bitter, Georgia, serif; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 300px; }
+.bmtl-lvbar { position: relative; display: block; height: 5px; border-radius: 3px; background: rgba(246, 237, 214, 0.16); overflow: hidden; }
+.bmtl-lvbar i { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 3px; background: linear-gradient(90deg, #8dbb5c, #b9dc79);
+  transition: width 0.4s ease-out; }
+/* (finding the level: the bar shimmers, nothing to fill yet) */
+.bmtl-level.is-placing .bmtl-lvbar { background: repeating-linear-gradient(90deg, rgba(246, 237, 214, 0.1) 0 8px, rgba(226, 173, 76, 0.32) 8px 16px);
+  background-size: 32px 100%; animation: bmtl-find 1.6s linear infinite; }
+@keyframes bmtl-find { to { background-position: 32px 0; } }
+.bmtl-level.is-fixed .bmtl-lv { padding: 0 10px; }
+.bmtl-level.is-moved .bmtl-lvt { animation: bmtl-moved 0.35s ease-out; }
+@keyframes bmtl-moved { from { color: var(--brass-hi, #f3c56b); transform: translateY(-3px); } }
+
+/* at the range and in the deer camera's viewfinder their own strip is along the bottom (the streak, the album, Done for
+   now): the tools go just above it */
+body.bsr-aiming .bmtl-bar, body.bmd-viewing .bmtl-bar { bottom: 66px; }
+
+/* a phone or a small window: above the touch buttons, at the right; icons only on the two tools */
+@media (max-width: 760px), (max-height: 480px) {
+  .bmtl-bar { left: auto; right: 8px; transform: none; bottom: 110px; gap: 6px; max-width: calc(100vw - 16px); }
+  .bmtl-b { padding: 4px 7px; min-height: 40px; }
+  .bmtl-b .bmtl-t { display: none; }
+  .bmtl-b svg { width: 28px; height: 28px; }
+  .bmtl-level { min-width: 0; }
+  .bmtl-lvt { font-size: 13px; max-width: 46vw; }
 }
-
-.bmtl-menu { position: fixed; z-index: 34; width: min(300px, calc(100vw - 16px)); padding: 10px; border-radius: 10px;
-  background: rgba(30, 20, 12, 0.94); border: 1px solid rgba(226, 173, 76, 0.5); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-  color: #f4e8cf; font: 500 15px/1.3 Bitter, Georgia, serif; display: grid; gap: 8px; animation: bmtl-in 0.18s ease-out; }
-@keyframes bmtl-in { from { opacity: 0; transform: translateY(-6px); } }
-.bmtl-head { font: 400 14px Smokum, Georgia, serif; letter-spacing: 0.1em; text-transform: uppercase; color: #a8957a; padding: 0 4px; }
-.bmtl-item { position: relative; display: flex; align-items: center; gap: 10px; min-height: 58px; padding: 8px 34px 8px 8px; border-radius: 8px; cursor: pointer;
-  text-align: left; font: inherit; color: inherit; background: rgba(246, 237, 214, 0.08); border: 1px solid rgba(226, 173, 76, 0.3); }
-.bmtl-item:hover:not([disabled]) { background: rgba(246, 237, 214, 0.16); border-color: #e2ad4c; }
-.bmtl-item[disabled] { opacity: 0.5; cursor: default; }
-.bmtl-ic { flex: none; width: 40px; height: 40px; }
-.bmtl-ic svg { width: 100%; height: 100%; }
-.bmtl-t { display: grid; min-width: 0; }
-.bmtl-t b { font: 700 17px Bitter, Georgia, serif; color: #f3c56b; }
-.bmtl-t small { font-size: 13.5px; color: #dccaa5; }
-.bmtl-item kbd { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); font: 600 11px ui-monospace, monospace; padding: 1px 5px;
-  border-radius: 4px; border: 1px solid rgba(226, 173, 76, 0.45); color: #a8957a; }
-@media (hover: none) { .bmtl-item kbd { display: none; } }
-@media (prefers-reduced-motion: reduce) { .bmtl-menu { animation: none; } }
-
-/* opened from the lock box's own Tools button: the menu, the Work it out sheet and the times chart go over the box
-   (the lock box is 60) */
-.bmtl-over .bmtl-menu { z-index: 64; }
-.bmtl-over .bml { z-index: 65; }
-.bmtl-over .tch { z-index: 66; }
+@media (prefers-reduced-motion: reduce) {
+  .bmtl-lvbar i { transition: none; }
+  .bmtl-level.is-placing .bmtl-lvbar, .bmtl-level.is-moved .bmtl-lvt { animation: none; }
+}

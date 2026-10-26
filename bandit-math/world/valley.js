@@ -56,6 +56,7 @@ import { Village, levelPads, blockGrid, paintRoads, footprintOf, loadModel, leve
 import { PROP_KINDS, makeProp } from './objects/townProps.js';
 import { savedLayout as savedTown, forgetLayout as forgetTown } from './objects/villageEditor.js';
 import { textHash } from './objects/changes.js';
+import { applyDecor, drawDecor } from './objects/decor.js';
 import { makeLandforms } from './objects/landforms.js';
 import { makeLampUniforms, buildLampMap, lampStandard } from './objects/lampLight.js';
 import { makeNightLights } from './objects/nightLights.js';
@@ -190,7 +191,10 @@ let bakeP = live ? null : getJSON(BASE + 'models/town/land/land.json').then(asyn
   const at = (f) => `${BASE}models/town/land/${m.files[f]}`, [h, c, w, pa] = await Promise.all(['heights', 'cells', 'water', 'paths'].map((f) => pngData(at(f))));
   return { m, heights: streamOf(h.data, m.bytes.heights), cells: streamOf(c.data, m.bytes.cells), water: w, paths: pa };
 }).catch((e) => { console.warn('valley: the land\'s bake could not be read', e); return null; });
-const [TOWN_FIRST, PLANTING_FIRST] = await Promise.all(['layout', 'planting'].map((f) => getJSON(`${BASE}models/town/${f}.json`)));
+// (Bandit Math) THE TOWN'S DECOR (objects/decor.js, made in labs/town): models/town/decor.json laid over the shipped layout and
+// planting (buildings moved, props put down, flowers and fences painted); none, or an empty one, and the town is as shipped
+const [TOWN_SHIPPED, PLANTING_SHIPPED, DECOR_FILE] = await Promise.all(['layout', 'planting', 'decor'].map((f) => getJSON(`${BASE}models/town/${f}.json`)));
+const DECOR = applyDecor(TOWN_SHIPPED, PLANTING_SHIPPED, DECOR_FILE), TOWN_FIRST = DECOR.layout, PLANTING_FIRST = DECOR.planting;
 const TOWN_DEFAULT = normaliseTown(TOWN_FIRST);
 const PATHROAD = new Uint8Array(2048 * 2048 * 4);              // the paths-and-roads picture's pixels (see composePathRoad)
 // THE STREET LAMPS' LIGHT (src/objects/lampLight.js): every lamp's light in one picture of the ground round them, read by
@@ -1774,7 +1778,8 @@ function makePlantTool() {
   // the default, fresh from the server (not the copy fetched at load: it may have changed since), for Load default and Export
   const defaults = async () => { try {
     const [a, b] = await Promise.all(['layout', 'planting'].map((f) => fetch(`${BASE}models/town/${f}.json`, { cache: 'no-cache' }).then((r) => (r.ok ? r.text() : Promise.reject(new Error(r.status))))));
-    return { town: normaliseTown(JSON.parse(a)), planting: JSON.parse(b), base: textHash(a + '\n' + b) }; } catch (e) { return null; } };
+    const dec = await fetch(`${BASE}models/town/decor.json`, { cache: 'no-cache' }).then((r) => (r.ok ? r.json() : null)).catch(() => null), D = applyDecor(JSON.parse(a), JSON.parse(b), dec);   // (with the decor: the town as the game shows it)
+    return { town: normaliseTown(D.layout), planting: D.planting, base: textHash(a + '\n' + b + '\n' + JSON.stringify(dec)) }; } catch (e) { return null; } };
   PLANT.tool = new PlantTool({ renderer, scene, camera, controls, dom: renderer.domElement, heightAt, groundAt, shadows: SHADOW.on, title: 'Build', town, planting: PLANT.base.planting, defaults, wild: pickWildRock,
     unitOf, surfaces: () => TOWN.village ? [TOWN.village.group] : [], parts, materials: mats, kinds, sizeOf, sinkOf,
     changed: (p) => { U.coverFar.value = p.procedural && (!$('coverFar') || $('coverFar').checked) ? 1 : 0;   // (a blank palette: no far ground painted with the land's plants either)
@@ -1788,7 +1793,7 @@ function makePlantTool() {
     opened: (on) => { document.body.classList.toggle('planting', on); if (TOWN.village) { TOWN.village.showTreePicks = on; TOWN.village.sync(); } } });   // (the town's own trees pickable while the bar is open, as the old town editor did)
   treeIcons();
   // the buildings' and props' icons, from the models (loaded as the town loads them) and the props as made
-  Object.keys(TOWN_ASSETS).forEach((key, i) => loadModel(key, QUAL.tier !== 'gaming').then((m) => PLANT.tool.iconFrom(PLANT.BUILD0 + i, m.scene.clone())).catch(() => {}));
+  Object.keys(TOWN_ASSETS).forEach((key, i) => loadModel(TOWN_ASSETS[key].file || key, QUAL.tier !== 'gaming').then((m) => PLANT.tool.iconFrom(PLANT.BUILD0 + i, m.scene.clone())).catch(() => {}));
   { const g = new THREE.Group(); [[0, 0, 0, 1], [1.1, 0, 0.3, 0.75], [0.4, 0, 1.0, 0.85], [-0.6, 0, 0.8, 0.6]].forEach(([x, y, z, sc], i) => { const m = new THREE.Mesh(parts[PLANT.ROCK0 + i], mats[PLANT.ROCK0 + i]); m.position.set(x, y, z); m.scale.setScalar(sc); m.rotation.y = i * 1.3; g.add(m); });
     PLANT.tool.iconFrom(PLANT.ROCKS, g); }   // (the mixed rocks' icon: the four of them together)
   PROP_KINDS.forEach((P, i) => { try { PLANT.tool.iconFrom(PLANT.PROP0 + i, makeProp(P.kind)); } catch (e) { /* no icon then */ } });
@@ -2122,7 +2127,8 @@ else buildLand();
 LAND_READY.done = true; for (const f of LAND_READY.then.splice(0)) f();
 // THE TOWN: the buildings, props and the editor. Potato and normal (phones) get the 1K pictures, gaming the 2K
 TOWN.village = new Village({ scene, lo: QUAL.tier !== 'gaming', heightAt, size: SIZE });
-TOWN.village.setLayout(TOWN.layout);
+TOWN.village.setLayout(lab || !DECOR.merged.size ? TOWN.layout : { ...TOWN.layout, items: TOWN.layout.items.filter((it) => !DECOR.merged.has(it.id)) });
+if (!lab && DECOR.merged.size) drawDecor({ items: TOWN.layout.items.filter((it) => DECOR.merged.has(it.id)), parent: TOWN.village.group, heightAt, THREE, makeProp });   // (the decor's props: one draw a kind; in the lab each is its own, to move)
 // (Bandit Math) THE TOWN'S WINDOWS AND LANTERNS at night (objects/nightLights.js): fitted to each building as it loads,
 // lit with the lamps (lampsFrame), their light in the lamps' picture
 const NIGHT_LIGHTS = makeNightLights({ village: TOWN.village, shade: (sh) => FOLK_SHADE(sh), heightAt });

@@ -43,6 +43,7 @@
 //   DJ.tags()         for rigs: the tags on screen [{ value, x, y, key, right }] (page pixels)
 //   DJ.pick(value)    for rigs: photograph the deer wearing this number;  DJ.done() as "Done for now"
 //   DJ.herd()         the herd the job is after now (null between herds)
+//   DJ.workSum()      the photo's sum for the tools' Work it out ("9 + ? = 12": 12 − 9, the kid picks it), or null
 //   DJ.state()        for rigs;  DJ.dispose()
 import * as THREE from 'three';
 import { makeBoxCamera } from '../boxcamera.js';
@@ -59,6 +60,7 @@ import { makeRng } from '../lockbox/generate.js';
 import { recordAnswer, earn, countJob, saveRider } from '../save.js';
 import { flagCard } from '../ui/flag.js';
 import { addPrint, prints } from '../ui/album.js';
+import { deerSum } from '../math/jobsums.js';
 
 export const SNAP = {
   per: 3,                // pictures of one herd before it drifts off
@@ -485,6 +487,7 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
   function onKeyUp(e) { if (vf && vf.keys) vf.keys.delete(e.code); }
   function onBlur() { if (vf && vf.keys) vf.keys.clear(); }
   function onKey(e) {
+    if (document.querySelector('.bml:not(.is-out), .tch:not(.out)')) return;   // (a tool is up over the viewfinder, Work it out or the times chart: its keys, its Esc)
     if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); DJ.done(); return; }
     if (vf && vf.keys && AIM_KEYS.includes(e.code)) { e.preventDefault(); e.stopPropagation(); vf.keys.add(e.code); return; }
     if (!vf || !vf.items || !vf.shot) return;
@@ -734,6 +737,7 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
   DJ.marks = () => { if (!herd || state !== 'travel' || !herd.deer.length || resting) return []; const c = where(); return [{ id: 'deer', icon: 'job', x: c.x, z: c.z, label: 'Deer photographs' }]; };
   DJ.tags = () => (vf && vf.items ? vf.items.map((it) => ({ value: vf.shot.values[it.i], x: Math.round(it.x), y: Math.round(it.y), key: String(vf.shot.values[it.i]), on: it.on && vf.ready, right: it.i === vf.shot.right })) : []);
   DJ.pick = (value) => { if (!vf || !vf.shot) return false; const i = vf.shot.values.indexOf(value); if (i < 0) return false; shoot(i); return true; };
+  DJ.workSum = () => (DJ.active && vf && vf.shot ? deerSum(vf.shot) : null);   // (the tools' Work it out: src/math/jobsums.js)
   DJ.herd = () => herd;   // (the herd the job is after now, or null between herds)
   DJ.flash = () => K.flash();   // (for rigs: the flash and smoke seen from outside)
   DJ.state = () => ({ state, herd: herd && herd.id, herdState: herd && herd.state, near: DJ.near, prompt: DJ.prompt, active: DJ.active,

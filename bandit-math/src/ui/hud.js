@@ -321,7 +321,8 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
     helpEl.style.bottom = '';
     if (low.length) helpEl.style.bottom = `${vh - Math.min(...low.map((e) => e.getBoundingClientRect().top)) + 8}px`;
     let top = vh;
-    for (const e of [...helpEl.children, ...low, ...touchEl.children]) {
+    const tools = el.querySelector('.bmtl-bar');   // (the tools strip above the touch buttons: src/ui/tools.js)
+    for (const e of [...helpEl.children, ...low, ...touchEl.children, ...(tools ? tools.children : [])]) {
       if (!shown(e)) continue;
       const r = e.getBoundingClientRect();
       if (r.width > 2 && r.height > 2) top = Math.min(top, r.top);

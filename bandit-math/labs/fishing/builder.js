@@ -57,7 +57,7 @@
 //   B.cardView(L)     world { pos, look } of the camera for a question card (a host readies that view ahead)
 //
 // B.handle (window.FI on the lab page), a handle for test scripts: FI.state(), FI.question() -> { answer, choices,
-//   labels, topic, level, from, action, answered } or null, FI.toScreen(x, y, z) -> page pixels, FI.waterSpot(x, z) ->
+//   labels, topic, key, level, from, action, answered } or null, FI.toScreen(x, y, z) -> page pixels, FI.waterSpot(x, z) ->
 //   page pixels of a spot on the water, FI.bobber(), FI.view([x, y, z], [tx, ty, tz]) a fixed camera for test shots,
 //   FI.renderInfo() (the lab), FI.fps() and FI.setStep(n) (the lab's, through its asker).
 import * as THREE from 'three';
@@ -767,7 +767,7 @@ export function mountFishing(host) {
   const toScreen = (x, y, z) => { scene.updateMatrixWorld(); const v = scene.localToWorld(new THREE.Vector3(x, y, z)).project(camera), r = host.canvasRect(); return { x: r.left + (v.x + 1) / 2 * r.width, y: r.top + (1 - v.y) / 2 * r.height, behind: v.z > 1 }; };
   const handle = {
     state: () => ({ phase: S.phase, ladder: asker.state ? asker.state() : null, kept, back, creel: records.creel().length, stringer: stringer.length, record, book: bookCount(book), card: !card.hidden, teach: card.classList.contains('teach'), practice: C.practice, hint: $('hint').textContent, reel: S.reel ? { p: S.reel.p, T: S.reel.T, gave: S.reel.gave } : null, ready: !!angler && !walking }),
-    question: () => (!card.hidden && C.q ? { answer: C.q.answer, answerIndex: C.q.choices.indexOf(C.q.answer), choices: C.q.choices, labels: C.q.labels, topic: C.q.topic, level: C.q.level, from: C.q.from, action: C.catchQ.action, answered: C.answered, practice: C.practice } : null),
+    question: () => (!card.hidden && C.q ? { answer: C.q.answer, answerIndex: C.q.choices.indexOf(C.q.answer), choices: C.q.choices, labels: C.q.labels, topic: C.q.topic, key: C.q.key, level: C.q.level, from: C.q.from, action: C.catchQ.action, answered: C.answered, practice: C.practice } : null),
     toScreen, waterSpot: (x, z) => toScreen(x, 0, z), bobber: () => toScreen(S.bob.x, S.bob.y, S.bob.z),
     setStep: (n) => { if (asker.setStep) asker.setStep(n); },
     topics: () => TOPICS_AT,

@@ -291,7 +291,7 @@ test('old riders (saved before the skill model) are moved onto the ladders near 
   const lv = (p) => a.levels.places[p] && [a.levels.places[p].id, a.levels.places[p].placed];
   assert.equal(a.levels.migrated, 1);
   assert.deepEqual(lv('lockbox'), ['two', true], 'two steps, as the old R6');
-  assert.deepEqual(lv('roundup'), ['x9', true], 'times 33: the series through the 9s (31), not the 6s (34)');
+  assert.deepEqual(lv('roundup'), ['herdB', true], 'times 33: the series through the 9s (31) and their tier\'s herd (32), not the 6s (34)');
   assert.deepEqual(lv('wagon'), ['g9', true]);
   assert.deepEqual(lv('sheep'), ['negDown', true], 'adding and taking away placed in the negatives');
   assert.equal(lv('fishing'), undefined, 'no fractions shown: met fresh later');

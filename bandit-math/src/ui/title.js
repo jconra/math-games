@@ -417,7 +417,7 @@ export function showTitle(root, opts = {}) {
   function freshDraft() {
     const look = LOOKS[riders.length % LOOKS.length];
     return { name: '', pick: freeName(new Set(riders.map((x) => String(x.name || '').toLowerCase()))), look: look.id,
-      skin: SKINS[(2 + riders.length) % SKINS.length], hair: look.hair, hairPicked: false, hat: true, age: null };
+      skin: SKINS[(2 + riders.length) % SKINS.length], hair: look.hair, hairPicked: false, hat: true, age: null, pick: true };
   }
   function draftLook() {
     const d = S.draft, l = LOOKS.find(x => x.id === d.look) || LOOKS[0];
@@ -462,7 +462,9 @@ export function showTitle(root, opts = {}) {
         <section>
           <h3 class="bmt-label">Age <small>if you like</small></h3>
           ${agePick(d.age, 'age', 'Age, if you like')}
-          <p class="bmt-auto">${ICON.compass}<span><b>No level to pick.</b> ${AUTO_LINE} An age only gives a small head start.</span></p>
+          <p class="bmt-auto">${ICON.compass}<span><b>No level to set.</b> ${AUTO_LINE} An age only gives a small head start.</span></p>
+          <div class="bmt-read"><button class="bmt-hat" role="switch" aria-checked="${d.pick !== false}" data-act="picklv" data-k="picklv">${ICON.ladder}Let the rider pick levels: ${d.pick !== false ? 'On' : 'Off'}</button>
+            <small>${d.pick !== false ? 'Arrows by the level at the bottom of the screen step it down or up by hand.' : 'Only the game moves the level: the arrows by it are hidden.'}</small></div>
         </section>
         <div class="bmt-formbtns">
           ${riders.length ? '<button class="bmt-btn" data-act="cancel" data-k="cancel">Cancel</button>' : ''}
@@ -586,6 +588,8 @@ export function showTitle(root, opts = {}) {
         <dt>Read aloud</dt><dd><button class="bmt-chip bmt-readsw" aria-pressed="${readMode(r) !== false}" data-act="read" data-id="${esc(r.id)}" data-k="read:${esc(r.id)}">${readMode(r) !== false ? ICON.speaker : ICON.speakerOff}${esc(readModeWords(r))}</button>
           <small>tap: by itself, always, off</small></dd>
         <dt>Levels</dt><dd>${esc(gridWords(r) || 'every level on in every place: the game finds each one')}</dd>
+        <dt>Pick levels</dt><dd><button class="bmt-chip" aria-pressed="${r.pickLevels !== false}" data-act="picklv" data-id="${esc(r.id)}" data-k="picklv:${esc(r.id)}">${ICON.ladder}${r.pickLevels !== false ? 'On' : 'Off'}</button>
+          <small>the arrows by the level at the bottom of the screen</small></dd>
         <dt>Jobs</dt><dd>${off.length ? `turned off: ${off.map((m) => esc(m.name)).join(', ')}` : 'every job on'}</dd>
         ${c ? `<dt>Completion</dt><dd>${c.pct}%${c.goals.length ? ` · goals: ${c.goals.map((g) => esc(g.name)).join(', ')}` : ''}</dd>` : ''}
         <dt>Lock boxes</dt><dd>${boxes}</dd>
@@ -671,11 +675,17 @@ export function showTitle(root, opts = {}) {
       case 'hat': S.draft.hat = !S.draft.hat; keepFocus(renderPanel); return;
       case 'hair': S.draft.hair = data.v; S.draft.hairPicked = true; keepFocus(renderPanel); return;
       case 'age': S.draft.age = data.v ? Math.round(+data.v) : null; keepFocus(renderPanel); return;
+      case 'picklv': {   // "Let the rider pick levels": on the new-rider form, or a rider's row in the Grown-ups corner
+        const who = data.id ? riders.find(x => x.id === data.id) : null;
+        if (who) { who.pickLevels = who.pickLevels === false; keepFocus(() => { renderPanel(); renderSheet(); }); changed(who); return; }
+        S.draft.pick = S.draft.pick === false; keepFocus(renderPanel); return;
+      }
       case 'create': {
         const name = (S.draft && S.draft.name || '').trim() || (S.draft && S.draft.pick) || '';
         if (!name || !canMakeMore()) { focusKey('name'); return; }
         const nr = newRider(name, draftLook());
         nr.age = S.draft.age == null ? null : S.draft.age;   // (optional: a modest head start, src/math/skill.js ageStart)
+        nr.pickLevels = S.draft.pick !== false;   // (the level tool's arrows: src/ui/leveltool.js)
         riders.push(nr);
         saveRider(nr);
         S.saveOk = storageWorks();

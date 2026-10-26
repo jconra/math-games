@@ -66,6 +66,7 @@
 //   WJ.tieAt(x, z)    (dev and rigs) a bandit pulled down and tied there now: he gets up and walks off to the sheriff's
 //   WJ.walkers        the roped bandits walking off ({ x, z }: the town's wagons stop for them)
 //   WJ.tookTrainer    true once a wave here has taken the shared trainer's current wave (the round-up deals afresh)
+//   WJ.workSum()      the card's sum for the tools' Work it out (a missing number: 56 ÷ 7, the kid picks it), or null
 //   WJ.state()        for rigs: { on, near, wave, riders, wagon, speed, music, sound, trip }
 //   WJ.music          the action music (or null)
 //   WJ.dispose()
@@ -99,6 +100,7 @@ import { loadWagons, makeWagon, inWagons, wagonAt, fadeAll, unfade } from '../wa
 import { makeWagonSound } from '../audio/wagonsound.js';
 import { clipExt } from '../audio/ambience.js';
 import { howdy } from '../ui/howdy.js';
+import { waveSum } from '../math/jobsums.js';
 import { ROAD_POINTS, makeRoad, SLOTS, gangLine, sacksFor, nextSpeed, TRIP, tripLeft, makeOpenRoad, AMBUSH, gangSize, chooseGang, outOnRoad, ambushPick } from './wagonplan.js';
 export { ROAD_POINTS, makeRoad, SLOTS, gangLine, sacksFor, nextSpeed };
 
@@ -1705,6 +1707,8 @@ export function makeWagonJob(opts) {
   // (the trail and the compass lead to a wagon calling for help; else to the job's wagon)
   WJ.where = () => (A && A.G.on && !A.G.near ? A.G.where() : job.where());
   WJ.update = (dt) => { job.update(dt); ambushes(dt); };
+  // the gang's sum for the tools' Work it out (src/math/jobsums.js): a missing-number card ("7 × ? = 56"), else none
+  WJ.workSum = () => (WJ.near ? waveSum(WJ.wave) : null);
   WJ.state = () => ({ ...job.state(), ambush: A ? A.G.state() : null, ambushes: { cool: +M.cool.toFixed(1), out: M.out, why: M.why, n: M.n, hold: M.hold } });
   WJ.ambushes = {
     state: () => ({ cool: +M.cool.toFixed(1), out: M.out, why: M.why, n: M.n, hold: M.hold, on: !!A, wagon: A ? A.t.number : null }),

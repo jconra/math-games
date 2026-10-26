@@ -89,13 +89,11 @@
 .bmlv-chip:hover { background: rgba(226, 173, 76, 0.14); }
 .bmlv-chip svg { width: 14px; height: 14px; }
 .bmlv-note { margin-top: 8px !important; color: var(--ink) !important; font-weight: 600; }
-.bmlv-undo { margin-left: 6px; padding: 3px 12px; border-radius: 99px; border: 1px solid var(--brass); color: var(--brass-hi); font-weight: 700; font-size: 13px; }
-.bmlv-undo:hover { background: rgba(226, 173, 76, 0.14); }
 .bmlv-how { margin: 10px 2px 12px; font-size: 12.5px; color: var(--mute); line-height: 1.45; }
 
 /* the levels, easiest first: a tick, what's asked, the examples, Start here */
 .bmlv-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; counter-reset: none; }
-.bmlv-row { display: grid; grid-template-columns: 40px minmax(0, 1fr) minmax(0, 1.3fr) 108px; align-items: start; gap: 12px;
+.bmlv-row { display: grid; grid-template-columns: 40px minmax(0, 1fr) minmax(0, 1.3fr); align-items: start; gap: 12px;
   padding: 10px 12px 10px 10px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); }
 .bmlv-row.is-here { border-color: var(--brass); background: rgba(226, 173, 76, 0.12); box-shadow: inset 0 0 0 1px rgba(226, 173, 76, 0.35); }
 .bmlv-row.is-off { opacity: 0.55; }
@@ -126,16 +124,11 @@
 .bmlv-q { color: var(--ink); }
 .bmlv-a { color: var(--brass-hi); font-weight: 700; }
 .bmlv-a::before { content: ' → '; color: var(--mute); font-weight: 400; }
-.bmlv-start { justify-self: end; display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 0 12px 0 10px; border-radius: 99px; font-size: 13px; font-weight: 600;
-  white-space: nowrap; border: 1px solid rgba(226, 173, 76, 0.5); color: var(--ink-2); }
-.bmlv-start:hover { background: rgba(226, 173, 76, 0.14); color: var(--brass-hi); }
-.bmlv-start svg { width: 13px; height: 13px; color: var(--brass); }
 
 /* a middling window: the tabs in three rows of four */
 @media (max-width: 900px) {
   .bmlv-tabs { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .bmlv-row { grid-template-columns: 40px minmax(0, 1fr) minmax(0, 1.2fr); }
-  .bmlv-start { grid-column: 2 / -1; }
 }
 /* a phone held upright: the whole screen; the tabs one strip that scrolls sideways; examples under each title */
 @media (max-width: 700px) {
@@ -156,9 +149,8 @@
   .bmlv-pct b { font-size: 24px; }
   .bmlv-row { grid-template-columns: 36px minmax(0, 1fr); gap: 8px 10px; padding: 9px 10px 10px 8px; }
   .bmlv-tick { width: 32px; height: 32px; }
-  .bmlv-exs, .bmlv-start { grid-column: 2; }
+  .bmlv-exs { grid-column: 2; }
   .bmlv-ex:nth-child(n + 3) { display: none; }   /* (two examples a level on a phone) */
-  .bmlv-start { justify-self: start; }
 }
 /* a phone on its side: short, so tighter */
 @media (max-height: 560px) and (min-width: 600px) {
@@ -173,5 +165,5 @@
   .bmlv-bigpic { width: 44px; height: 44px; padding: 6px; }
   .bmlv-where, .bmlv-settings { padding: 8px 12px; }
 }
-@media (pointer: coarse) { .bmlv-x { width: 46px; height: 46px; } .bmlv-start, .bmlv-chip { min-height: 40px; } }
+@media (pointer: coarse) { .bmlv-x { width: 46px; height: 46px; } .bmlv-chip { min-height: 40px; } }
 @media (prefers-reduced-motion: reduce) { .bmlv-card { scroll-behavior: auto; } }

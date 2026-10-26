@@ -4,7 +4,7 @@
 //   node --test tests/*.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { seriesCard, whyNot, picture, makeSeriesDeck, TABLE_ORDER, textOf } from '../src/math/series.js';
+import { seriesCard, whyNot, picture, makeSeriesDeck, TABLE_ORDER, textOf, reviewFor, herdReview, RANGE } from '../src/math/series.js';
 import { makeParity } from '../src/math/parity.js';
 import { makeTimes } from '../src/math/times.js';
 import { chooseGang, sacksFor, GANG } from '../src/missions/wagonplan.js';
@@ -51,8 +51,16 @@ test('the series ladder climbs in small steps: counting, then the tables in the 
   assert.deepEqual(ids.slice(0, 7), ['c1end', 'by1', 'by1b', 'tens1', 'by10', 'by5', 'by2']);
   assert.deepEqual(RU.levels.filter((L) => L.gen.table).map((L) => L.gen.table), TABLE_ORDER);
   assert.deepEqual(TABLE_ORDER, [2, 10, 5, 3, 4, 9, 6, 8, 7, 11, 12], 'the tiers: 2; 10, 5, 3; 4, 9; 6, 8, 7; 11, 12');
+  // each tier's series, then that tier's herd ("rope all"), then the next tier; the any-table herd after the 12s
   const herds = RU.levels.filter((L) => L.gen.kind === 'herd');
-  assert.ok(herds.length === 5 && ids.indexOf(herds[0].id) === ids.indexOf('x12') + 1, 'the herds come straight after the 12s');
+  assert.equal(herds.length, 5);
+  assert.deepEqual(ids.slice(7, 23), ['x2', 'x10', 'x5', 'x3', 'herdA', 'x4', 'x9', 'herdB', 'x6', 'x8', 'x7', 'herdC', 'x11', 'x12', 'herdD', 'herdE']);
+  assert.equal(ids.indexOf('herdA') + 1, 12, 'rope all the 2s, 10s, 5s or 3s is level 12, straight after their series');
+  for (const H of herds.slice(0, 4)) {
+    const before = RU.levels.slice(0, ids.indexOf(H.id)).filter((L) => L.gen.table).map((L) => L.gen.table);
+    assert.deepEqual(before.slice(-H.gen.tables.length), H.gen.tables, `${H.id}: straight after its own tables' series`);
+  }
+  assert.equal(ids[23], 'downA', 'the rest of the ladder after, as it was');
   // the first level: blank at the end, numbers up to 10, read aloud
   const rand = seeded(2);
   for (let k = 0; k < 50; k++) {
@@ -133,9 +141,9 @@ test('the deck: a card at a time from the rider\'s level, the first try is the a
   assert.equal(deck.answer(c2.targets.find((x) => x.good).n, true, c2.id).helped, true);
   const c3 = deck.card();
   assert.equal(deck.answer(c3.targets.find((x) => x.good).n, true, c3.id).waveDone, true, 'three cards a wave');
-  // the next card comes from the level the last answer left: set the rider just under the herds
+  // the next card comes from the level the last answer left: set the rider just under a herd
   const s = { skill: { v: 1, migrated: 1, strands: {} } };
-  M.setLevelAt(s, 'roundup', 'x12', { into: 4, now: T0 });
+  M.setLevelAt(s, 'roundup', 'x3', { into: 4, now: T0 });
   const d2 = makeSeriesDeck({ ask: () => M.levelFor(s, 'roundup', { now: T0 }), rand: seeded(1) });
   d2.wave({ cards: 3 });
   const k = d2.card(), r2 = d2.answer(k.targets.find((x) => x.good).n, true, k.id);
@@ -246,4 +254,70 @@ test('fractions and decimals are written the game\'s way', () => {
   assert.equal(textOf(125, 100), '1.25');
   assert.equal(textOf(100, 100), '1');
   assert.equal(textOf(-12, 1), '−12');
+});
+
+test('the range: one card in most waves from below the rider\'s level (never the first, never while placing), steered by the times chart', () => {
+  const ix = (id) => RU.levels.findIndex((L) => L.id === id);
+  const r = { skill: { v: 1, migrated: 1, strands: {} } };
+  M.setLevelAt(r, 'roundup', 'x7', { now: T0 });
+  const rand = seeded(5);
+  const review = reviewFor({ levels: RU.levels, rider: r, rand });
+  const q = M.levelFor(r, 'roundup', { now: T0 });
+  const got = {};
+  for (let k = 0; k < 600; k++) { const x = review(q); assert.ok(x && x.i < q.i && x.level.gen.kind !== 'herd', 'below, a card level'); got[x.id] = (got[x.id] || 0) + 1; }
+  for (const id of ['x6', 'x8', 'x9', 'x4']) assert.ok(got[id] > 20, `${id} in the range below (${got[id]})`);
+  assert.ok(!got.x11 && !got.x12, 'nothing above the rider');
+  // red facts on an earlier table bring that table back, from well below the range
+  for (let b = 1; b <= 6; b++) recordFact(r, 3, b, false, { now: T0 });
+  const red = {};
+  for (let k = 0; k < 600; k++) { const x = review(q); red[x.id] = (red[x.id] || 0) + 1; }
+  assert.ok(ix('x3') < q.i - RANGE.back && red.x3 > 150 && red.x3 > 3 * (got.x3 || 0), `the 3s, red on the chart, come back (${red.x3} of 600)`);
+  // not while the level is being found, nor at a level a grown-up dealt
+  const p = { skill: { v: 1, migrated: 1, strands: {} } };
+  const qp = M.levelFor(p, 'roundup', { now: T0 });
+  assert.equal(qp.placing, true); assert.equal(reviewFor({ levels: RU.levels, rider: p })(qp), null);
+  assert.equal(review({ ...q, dev: true }), null);
+  // the deck: the first card is the rider's own, then one card of the wave from below, at ITS level
+  const d = makeSeriesDeck({ ask: () => M.levelFor(r, 'roundup', { now: T0 }), rand, review });
+  let withReview = 0;
+  for (let w = 0; w < 60; w++) {
+    d.wave({ cards: 3 });
+    const lv = [];
+    for (let c = d.card(); c; c = d.card()) { lv.push([c.level, c.review]); d.answer(c.targets.find((x) => x.good).n, true, c.id); }
+    assert.equal(lv.length, 3);
+    assert.deepEqual(lv[0], ['x7', false], 'a wave opens at the rider\'s level');
+    assert.ok(lv.filter((x) => x[1]).length <= RANGE.cards, 'at most one card from below');
+    if (lv.some((x) => x[1])) withReview++;
+    for (const [id, rv] of lv) assert.ok(rv ? ix(id) < ix('x7') : id === 'x7');
+  }
+  assert.ok(withReview > 30 && withReview < 56, `most waves have one (${withReview} of 60)`);
+  // a review right doesn't move the rider; the 80% staircase reads their own level
+  const before = M.stateOf(r, 'roundup').into;
+  M.recordLevel(r, 'roundup', { right: true, level: 'x3', now: T0 });
+  assert.equal(M.stateOf(r, 'roundup').into, before);
+  // now and then a herd from a herd level in the range below (herdB and herdC are within 6 levels of the 11s)
+  M.setLevelAt(r, 'roundup', 'x11', { now: T0 });
+  const q2 = M.levelFor(r, 'roundup', { now: T0 });
+  let herds = 0;
+  for (let k = 0; k < 1000; k++) { const h = herdReview({ levels: RU.levels, q: q2, rand }); if (h) { herds++; assert.ok(['herdB', 'herdC'].includes(h.id), h.id); assert.equal(h.own, 'x11'); } }
+  assert.ok(herds > 40 && herds < 130, `about ${RANGE.herd * 100}% of the waves (${herds / 10}%)`);
+  assert.equal(herdReview({ levels: RU.levels, q: { ...q2, placing: true }, rand: () => 0 }), null);
+});
+
+test('counting on by 1s feeds the 1s to the times chart, without a times line or a 2s slip on the card', () => {
+  const rand = seeded(9);
+  for (let k = 0; k < 200; k++) {
+    const c = seriesCard(RU.levels[1].gen, rand, { read: true });
+    assert.ok(c.fact && c.fact.a === 1 && c.fact.b === c.ans);
+    assert.ok(!/×/.test(c.done)); assert.ok(!c.targets.some((x) => x.trap === 'neighbour'));
+  }
+});
+
+test('saved round-up levels keep their place by id in the new order (same tier, the same table)', () => {
+  for (const L of RU.levels) {
+    const r = { skill: { v: 1, migrated: 1, strands: {} }, levels: { v: 1, migrated: 1, places: { roundup: { id: L.id, into: 2, placed: true, g: 0, s: 'mul' } } } };
+    M.levelsOf(r);
+    assert.equal(r.levels.places.roundup.id, L.id);
+    assert.equal(r.levels.places.roundup.into, Math.min(2, L.count));
+  }
 });

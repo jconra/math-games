@@ -46,6 +46,7 @@
 //   LJ.active           the slip is up (sharing out at the sheriff's office)
 //   LJ.card             true while this job has the HUD's card (near the cache, or carrying the loot)
 //   LJ.near             at the cache (its guard about)
+//   LJ.workSum()        the slip's sum for the tools' Work it out (src/math/jobsums.js lootSum), or null
 //   LJ.canShare         carrying loot by the sheriff's office (the deputy's E shares it out: LJ.share())
 //   LJ.marks()          [{ id, icon, x, z, label }] for the compass: the cache, or the sheriff's office with the loot
 //   LJ.people           the townsfolk waiting at the sheriff's office (live records with x, z: the town's wagons stop
@@ -74,6 +75,7 @@ import { readAloud } from '../math/skill.js';
 import { levelFor } from '../levels/model.js';
 import { recordFact } from '../math/facts.js';
 import { answerTimer } from '../ui/answertimer.js';
+import { lootSum } from '../math/jobsums.js';
 
 
 // THE SKILL MODEL'S PART (src/math/skill.js): each share's first pick counts in Division at the share's own point (the
@@ -777,6 +779,9 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
   const markOf = (st) => ({ id: st === cache ? 'loot' : 'loot-' + st.def.id, icon: 'job', x: st.x, z: st.z, label: st.kind === 'woods' ? `A gang camp in ${AREAS[st.area] || 'the back woods'}` : "The gang's cache" });
   // the folks this trip's loot is for (their townsperson's names) and where they wait, while it is on its way: the town
   // sends them over as the loot is seen coming (src/townpeople.js expect)
+  // the slip's sum for the tools' Work it out (src/math/jobsums.js): the bundle's share, picked from "What do we work
+  // out?" (a share by a rule: none)
+  LJ.workSum = () => (LJ.active && trip && trip.problems[trip.at] ? lootSum(trip.problems[trip.at]) : null);
   LJ.wanted = () => (LJ.phase === 'carrying' && trip && !people.length ? { names: trip.families.map((f) => f.rep), at: spot } : null);
   LJ.marks = () => {
     if (LJ.phase === 'carrying') return [{ id: 'loot', icon: 'job', x: spot.x, z: spot.z, label: "The sheriff's office: hand back the loot" }];
@@ -871,7 +876,7 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
   // Esc is "Done for now" while the slip is up (unless a panel over it wants it)
   const onKey = (e) => {
     if (e.key !== 'Escape' || !LJ.active || e.defaultPrevented || e.repeat) return;
-    if (document.querySelector('.bms, .lbx')) return;
+    if (document.querySelector('.bms, .lbx, .bml:not(.is-out), .tch:not(.out)')) return;   // (a panel, or a tool: Work it out, the times chart)
     e.preventDefault(); stopShare();
   };
   addEventListener('keydown', onKey, true);
