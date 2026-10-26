@@ -418,20 +418,22 @@ function chimney(k) {
   // each stone its own height inside the course, pushed in or out, and turned in the face (the joints wander): fieldstone,
   // not cut blocks. `face` is the axis the stone's face looks along ('x' or 'z'; a corner stone has two)
   const stone = (size, x, y, z, skip, face) => {
-    const sh = k.r(0, 0.08), tw = k.r(-0.2, 0.2);
-    const rot = face === 'x' ? [tw, k.r(-0.08, 0.08), k.r(-0.05, 0.05)] : face === 'z' ? [k.r(-0.05, 0.05), k.r(-0.08, 0.08), tw] : [k.r(-0.06, 0.06), k.r(-0.15, 0.15), k.r(-0.06, 0.06)];
-    k.box('stone', [size[0], size[1] - sh, size[2]], [x + k.r(-0.03, 0.03), y + k.r(-0.5, 0.5) * sh, z + k.r(-0.03, 0.03)], rot, { tint: pal[Math.floor(k.R() * pal.length)].map((c) => c * k.r(0.82, 1.12)), skip: skip + '-y' });
+    // (kept small: a bigger twist or shrink opens wedge-shaped gaps the mortar can't fill and the stones look too small)
+    const sh = k.r(0, 0.025), tw = k.r(-0.06, 0.06);
+    const rot = face === 'x' ? [tw, k.r(-0.04, 0.04), k.r(-0.025, 0.025)] : face === 'z' ? [k.r(-0.025, 0.025), k.r(-0.04, 0.04), tw] : [k.r(-0.025, 0.025), k.r(-0.05, 0.05), k.r(-0.025, 0.025)];
+    k.box('stone', [size[0], size[1] - sh, size[2]], [x + k.r(-0.012, 0.012), y + k.r(-0.5, 0.5) * sh, z + k.r(-0.012, 0.012)], rot, { tint: pal[Math.floor(k.R() * pal.length)].map((c) => c * k.r(0.82, 1.12)), skip: skip + '-y' });
   };
   // stones along one face: from a to b along `along` ('x' or 'z'), the face at `at`, sticking in by a depth
   const run = (along, a, b, at, outSign, y, h) => {
     for (let p = a; p < b - 0.06;) {
-      const L = Math.min(k.r(0.24, 0.56), b - p), dpt = k.r(0.18, 0.26), mid = p + L / 2, c = at - outSign * dpt / 2, j = k.r(0.025, 0.05);
+      const L = Math.min(k.r(0.24, 0.56), b - p), dpt = k.r(0.18, 0.26), mid = p + L / 2, c = at - outSign * dpt / 2, j = k.r(0.018, 0.03);
       if (along === 'z') stone([dpt, h - j, L - j], c, y, mid, outSign > 0 ? '-x' : '+x', 'x');
       else stone([L - j, h - j, dpt], mid, y, c, outSign > 0 ? '-z' : '+z', 'z');
       p += L;
     }
   };
   let y = 0, c = 0;
+  const courses = [];
   while (y < CH.top - 0.06) {
     const h = k.r(0.26, 0.4), stack = y > CH.sh + 0.2, shoulder = !stack && y > CH.sh;
     const x0 = stack ? CH.sx0 : shoulder ? (CH.x0 + CH.sx0) / 2 : CH.x0, x1 = stack ? CH.sx1 : CH.x1;
@@ -442,17 +444,20 @@ function chimney(k) {
     const cx = c % 2 ? k.r(0.32, 0.42) : k.r(0.22, 0.3), cz = c % 2 ? k.r(0.22, 0.3) : k.r(0.32, 0.42);
     const corners = [[x0, z0, 1, 1], [x0, z1, 1, -1]];
     if (backFace) corners.push([x1, z0, -1, 1], [x1, z1, -1, -1]);
-    for (const [px, pz, ix, iz] of corners) stone([cx - 0.02, h - 0.025, cz - 0.02], px + ix * cx / 2, yc, pz + iz * cz / 2, (ix > 0 ? '+x' : '-x') + (iz > 0 ? '+z' : '-z'));
+    for (const [px, pz, ix, iz] of corners) stone([cx - 0.02, h - 0.022, cz - 0.02], px + ix * cx / 2, yc, pz + iz * cz / 2, (ix > 0 ? '+x' : '-x') + (iz > 0 ? '+z' : '-z'));
     run('z', z0 + cz, z1 - cz, x0, -1, yc, h);                                 // the outside (west) face
     run('x', x0 + cx, backFace ? x1 - cx : x1, z0, -1, yc, h);                 // north face
     run('x', x0 + cx, backFace ? x1 - cx : x1, z1, 1, yc, h);                  // south face
     if (backFace) run('z', z0 + cz, z1 - cz, x1, 1, yc, h);
+    courses.push({ y, h, x0, x1, z1, backFace });
     y += h; c++;
   }
-  // the mortar core, set back behind the stones' faces, showing in the joints
-  const mortar = [1.45, 1.36, 1.2];
-  k.box('stone', [CH.x1 - CH.x0 - 0.08, CH.sh + 0.2, 2 * CH.z1 - 0.12], [(CH.x0 + CH.x1) / 2 + 0.04, (CH.sh + 0.2) / 2, 0], null, { tint: mortar, skip: '-y+x' });
-  k.box('stone', [CH.sx1 - CH.sx0 - 0.12, y - CH.sh, 2 * CH.sz - 0.12], [(CH.sx0 + CH.sx1) / 2, (y + CH.sh) / 2, 0], null, { tint: mortar, skip: '-y' });
+  // the mortar, course by course just behind the stones' faces (3 cm in), so every joint shows grey grout, not a hole
+  const mortar = [1.15, 1.1, 1.0], IN = 0.03;
+  for (const q of courses) {
+    const xa = q.x0 + IN, xb = q.backFace ? q.x1 - IN : q.x1 - 0.01, zr = q.z1 - IN;
+    k.box('stone', [xb - xa, q.h, 2 * zr], [(xa + xb) / 2, q.y + q.h / 2, 0], null, { tint: mortar, skip: q.backFace ? '-y' : '-y+x' });
+  }
   // a flat cap stone and the flue's dark mouth
   k.box('stone', [CH.sx1 - CH.sx0 + 0.06, 0.08, 2 * CH.sz + 0.06], [(CH.sx0 + CH.sx1) / 2, y + 0.03, 0], [0, 0.04, k.r(-0.02, 0.02)], { tint: [0.95, 0.93, 0.9] });
   k.box('iron', [0.3, 0.02, 0.32], [(CH.sx0 + CH.sx1) / 2, y + 0.075, 0], [0, 0.04, 0]);
