@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mathwood Valley: lock box test</title>
+<script src="../oops.js"></script>
+<style>
+  /* Stand-in for the paused valley behind the panel (the real game shows the 3D world here). */
+  html, body { margin: 0; height: 100%; background: #1b140f; overflow: hidden; font: 14px/1.4 Bitter, Georgia, serif; color: #f4e8cf; }
+  #sky { position: fixed; inset: 0; background: linear-gradient(180deg, #8fb5d9 0%, #cfe0ea 40%, #d8cfae 55%, #7f8f52 68%, #55663a 100%); }
+  #sky svg { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 55%; }
+  #bar {
+    position: fixed; left: 12px; top: 12px; z-index: 10; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+    max-width: calc(100vw - 24px); padding: 10px 12px; border-radius: 10px; background: rgba(24, 16, 10, 0.85);
+  }
+  #bar label { display: inline-flex; gap: 4px; align-items: center; }
+  #bar select, #bar button { font: inherit; padding: 4px 8px; border-radius: 6px; border: 1px solid #a8742a; background: #f4e8cf; color: #2b1d10; }
+  #bar button.go { background: #e2ad4c; font-weight: 700; }
+  #out { position: fixed; left: 12px; bottom: 12px; z-index: 10; max-width: calc(100vw - 24px); max-height: 40vh; overflow: auto;
+    padding: 8px 12px; border-radius: 10px; background: rgba(24, 16, 10, 0.85); font: 12px/1.45 ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; }
+  #out:empty { display: none; }
+</style>
+</head>
+<body>
+<div id="sky"><svg viewBox="0 0 1600 500" preserveAspectRatio="none" aria-hidden="true">
+  <path d="M0 210 C180 120 320 160 470 110 C620 60 760 140 900 120 C1080 95 1200 30 1350 70 C1460 100 1540 90 1600 80 V500 H0Z" fill="#6c7a63" opacity="0.8"/>
+  <path d="M0 300 C200 240 360 270 520 230 C700 190 860 260 1020 240 C1200 215 1380 170 1600 200 V500 H0Z" fill="#4c5a33"/>
+  <path d="M0 380 C240 340 460 370 700 350 C960 330 1220 380 1600 340 V500 H0Z" fill="#3b4826"/>
+</svg></div>
+<div id="bar">
+  <label>Rung <select id="rung"><option value="">ladder (the kid's next box)</option></select></label>
+  <label>Level <select id="level"><option value="2">level 2</option><option value="3">level 3</option><option value="4" selected>level 4</option><option value="5">level 5</option></select></label>
+  <label>Tier <select id="tier"><option>tin</option><option selected>iron</option><option>brass</option><option>vault</option></select></label>
+  <label>Numbers <select id="size"><option value="1">small</option><option value="2" selected>middle</option><option value="3">big</option></select></label>
+  <button class="go" id="open">Open a box</button>
+  <button id="reset">Forget the ladder</button>
+  <span id="lvl"></span>
+</div>
+<div id="out"></div>
+<div id="root"></div>
+<script type="module">
+// Test page for the lock-box panel on its own.
+//   ?rung=R13          open that rung (default: the next box the ladder picks)
+//   &level=2|3|4|5     the ladder level (default 4); every level works out each part of every move
+//   ?rung=I1 .. I4     the inequalities (less or more, the flip, three rooms, either or)
+//   ?rung=K1 .. K3     the kindergarten boxes (2 + x = 4 with pictures; read aloud while the rider's levels are low)
+//   ?rung=O1 .. O5     the "Work it out" boxes: order of operations; ?rung=P1 .. P5 exponents (workout.js)
+//   ?eq=N&ineq=N       put the test rider's equations (and inequalities) level at N (src/math/skill.js), found; with
+//                      no rung chosen the boxes then come from that level, as in the game
+//   &order=N&pow=N     ...and order of operations, exponents (the "Work it out" boxes then come about one box in four)
+//   &tier=tin|iron|brass|vault, &size=1|2|3, &seed=N (the same seed gives the same box), &speed=0.8 (seconds a move)
+//   &auto              open a box straight away (the rig uses this)
+//   &dev               show "Skip this box" from the start
+//   &bags=N            open N boxes from the saddlebags (from 'loot') instead of the sheriff's endless pile
+//   &nopay             leave onBox out, so the totals are paid in onDone (the old way a caller worked)
+// Boxes come one after another, as in the game; "Done for now" (or Esc) ends the run and onDone gets the totals.
+// The ladder state is kept under its own storage key here, so this page never touches a real rider.
+// window.LB.open({...}) opens a box from code; window.__lockbox is the open panel's debug handle.
+try {
+  const { openLockbox, makeAlgebra, RUNGS } = await import('../src/lockbox/index.js');
+  const { K_RUNGS } = await import('../src/lockbox/kbox.js');
+  const { WORK_RUNGS } = await import('../src/lockbox/workout.js');
+  const SK = await import('../src/math/skill.js');
+  const q = new URLSearchParams(location.search);
+  const KEY = 'bm-lockbox-test-rider';
+  const $ = (s) => document.querySelector(s);
+  const out = $('#out');
+  const log = (s) => { out.textContent = `${s}\n${out.textContent}`.slice(0, 4000); };
+
+  let rider = { id: 'test', name: 'Test Rider', gold: 0, bounty: 0, topics: { algebra: {} }, stats: { parBoxes: 0 }, lockboxes: [] };
+  try { const saved = JSON.parse(localStorage.getItem(KEY) || 'null'); if (saved && saved.topics) rider = saved; } catch (e) { /* storage blocked: keep it in memory */ }
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(rider)); } catch (e) { /* storage blocked */ } };
+  const showLevel = () => {
+    const L = makeAlgebra(JSON.parse(JSON.stringify(rider.topics.algebra))).level();
+    const st = SK.stats(rider).filter((x) => ['eq', 'ineq', 'order', 'pow'].includes(x.strand)).map((x) => `${x.short} ${x.pct}${x.finding ? ' (finding)' : ''}`).join(' · ');
+    $('#lvl').textContent = `${L.label} · ${st || 'equations not met'} · ${rider.gold} gold`;
+  };
+  for (const [k, strand] of [['eq', 'eq'], ['ineq', 'ineq'], ['order', 'order'], ['pow', 'pow']]) if (q.has(k)) { SK.setLevel(rider, strand, Number(q.get(k))); save(); }
+
+  for (const r of [...K_RUNGS, ...RUNGS, ...WORK_RUNGS]) $('#rung').insertAdjacentHTML('beforeend', `<option value="${r.id}">${r.id} ${r.name}</option>`);
+  if (q.get('rung')) $('#rung').value = q.get('rung');
+  if (q.get('level')) $('#level').value = q.get('level');
+  if (q.get('tier')) $('#tier').value = q.get('tier');
+  if (q.get('size')) $('#size').value = q.get('size');
+
+  let seed = q.has('seed') ? Number(q.get('seed')) : null;
+  function open(extra = {}) {
+    if (window.__lockbox && document.querySelector('.lbx')) return window.__lockbox;
+    const rung = $('#rung').value || undefined;
+    const bags = Number(q.get('bags')) || 0;
+    rider.stats = rider.stats || { parBoxes: 0 };
+    rider.lockboxes = Array.from({ length: bags }, () => ({ tier: $('#tier').value }));
+    window.__boxes = [];
+    const opts = {
+      rider, box: { tier: $('#tier').value, from: bags ? 'loot' : 'sheriff' }, debug: true, dev: q.has('dev'),
+      // each box as it finishes: pay it and count it, the way main.js does (save.js earn + recordLockbox)
+      onBox: q.has('nopay') ? null : (r) => {
+        const note = {};
+        if (r.solved && r.gold) { rider.gold += r.gold; rider.bounty += r.gold; }
+        if (r.solved && r.moves <= r.par) { rider.stats.parBoxes = (rider.stats.parBoxes || 0) + 1; if (rider.stats.parBoxes === 10) note.badge = 'Safecracker'; }
+        if (r.solved && bags) { const i = rider.lockboxes.findIndex((b) => b.tier === r.tier); if (i >= 0) rider.lockboxes.splice(i, 1); }
+        save();
+        window.__boxes.push(r);
+        log(`onBox ${JSON.stringify(r)}`);
+        return note;
+      },
+      onDone(r) {
+        window.__doneCount = (window.__doneCount || 0) + 1;
+        if (q.has('nopay') && r.gold) { rider.gold += r.gold; rider.bounty += r.gold; }
+        save();
+        log(`onDone ${JSON.stringify({ ...r, results: r.results.length })}`);
+        showLevel();
+        window.__lastResult = r;
+      },
+    };
+    if (rung) { opts.rung = rung; opts.level = Number($('#level').value); opts.size = Number($('#size').value); }
+    if (seed !== null) { opts.seed = seed; seed += 1; }
+    if (q.has('speed')) opts.speed = Number(q.get('speed'));
+    return openLockbox($('#root'), { ...opts, ...extra });
+  }
+  $('#open').addEventListener('click', () => open());
+  $('#reset').addEventListener('click', () => { rider.topics.algebra = {}; rider.skill = {}; rider.gold = 0; rider.bounty = 0; save(); showLevel(); log('ladder and levels forgotten'); });
+  window.LB = { open, rider: () => rider, reset: () => { rider.topics.algebra = {}; rider.skill = {}; save(); }, skill: SK };
+  showLevel();
+  if (q.has('auto')) open();
+} catch (e) { console.error(e); }   // oops.js shows console errors on screen too
+</script>
+</body>
+</html>

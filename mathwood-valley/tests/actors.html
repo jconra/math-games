@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mathwood Valley: animals and people</title>
+<script src="../oops.js"></script>
+<style>
+  html, body { margin: 0; height: 100%; background: #b9a888; overflow: hidden; font: 13px/1.35 system-ui, sans-serif; }
+  canvas { display: block; }
+  #bar { position: fixed; left: 8px; top: 8px; z-index: 5; display: flex; flex-wrap: wrap; gap: 4px; max-width: calc(100vw - 16px); }
+  #bar button { font: inherit; padding: 4px 9px; border-radius: 5px; border: 1px solid #5b4630; background: #f3ead6; color: #3b2a1e; cursor: pointer; }
+  #bar button.on { background: #5b4630; color: #f3ead6; }
+  #bar .gap { width: 10px; }
+  .tag { color: #2a1d12; background: rgba(243, 234, 214, 0.85); border-radius: 4px; padding: 1px 6px; font: 600 12px/1.3 system-ui, sans-serif; white-space: nowrap; text-align: center; }
+  .tag small { display: block; font-weight: 400; font-size: 11px; }
+  body.shot #bar { display: none; }
+</style>
+<script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/" } }</script>
+</head>
+<body>
+<div id="bar"></div>
+<script type="module">
+// A test page for the actors (src/actors/): every animal at its real size next to a 1.8 m farmer, in front of a height
+// board marked every 25 cm, walking or galloping; every outfit in its period colours; and a close look at the hats.
+//   ?view=animals | ride | herd | folk | heads    ?clip=Idle | Walk | Gallop (animals) or Idle | Walk | Run ... (people)
+//   ?pals=drifter,outlaw  (folk: one row a palette)    ?focus=<kind>  (animals: the camera on one)    ?shot (no buttons)
+//   ?view=ride&focus=<0..5>&cam=side|front|top|back  (one of the ridden or saddled animals, close)
+// window.T: { ready, measured, seatGap, view(name), clip(name) } for the rigs. seatGap: for each rider, how far the low
+// point between their legs is above the seat (min and max over the frames so far, metres; under 0 means sunk in).
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { loadAnimals, makeAnimal, sitOn, saddleOn, seatOf, KINDS, COATS } from '../src/actors/animals.js';
+import { loadFolk, makePerson, PALETTES, OUTFITS } from '../src/actors/folk.js';
+
+const Q = new URLSearchParams(location.search);
+if (Q.has('shot')) document.body.classList.add('shot');
+const T = window.T = { ready: false, measured: {} };
+const R = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+R.setPixelRatio(Math.min(devicePixelRatio, 2)); R.setSize(innerWidth, innerHeight);
+R.outputColorSpace = THREE.SRGBColorSpace; R.toneMapping = THREE.ACESFilmicToneMapping; R.toneMappingExposure = 1.0;
+R.shadowMap.enabled = true; R.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(R.domElement);
+const labels = new CSS2DRenderer(); labels.setSize(innerWidth, innerHeight);
+Object.assign(labels.domElement.style, { position: 'fixed', left: '0', top: '0', pointerEvents: 'none' });
+document.body.appendChild(labels.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0xb9c4cc); scene.fog = new THREE.Fog(0xb9c4cc, 60, 140);
+scene.add(new THREE.HemisphereLight(0xfff1dc, 0x6b5a44, 1.4));
+const sun = new THREE.DirectionalLight(0xfff0d8, 2.6); sun.position.set(-8, 14, 12); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -20, right: 20, top: 20, bottom: -20, near: 1, far: 60 }); sun.shadow.bias = -0.0005;
+scene.add(sun, sun.target);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({ color: 0x9c8460, roughness: 1 }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+// a camera with perspective for the people, and one without for the animals' lineup (sizes read straight off the board)
+const pcam = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.05, 300);
+const ocam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.05, 300);
+let cam = pcam, orbit = null, span = 10;   // (span: metres across the lineup's view)
+function fitOrtho() { const a = innerWidth / innerHeight; ocam.left = -span / 2; ocam.right = span / 2; ocam.top = span / a / 2; ocam.bottom = -span / a / 2; ocam.updateProjectionMatrix(); }
+function useCamera(c) { cam = c; if (orbit) orbit.dispose(); orbit = new OrbitControls(cam, labels.domElement); labels.domElement.style.pointerEvents = 'auto'; }
+addEventListener('resize', () => { R.setSize(innerWidth, innerHeight); labels.setSize(innerWidth, innerHeight); pcam.aspect = innerWidth / innerHeight; pcam.updateProjectionMatrix(); fitOrtho(); });
+
+const tag = (html) => { const d = document.createElement('div'); d.className = 'tag'; d.innerHTML = html; return new CSS2DObject(d); };
+// a height board: a pale wall with a line every 25 cm (heavier every metre) and its height written on
+function board(w, h = 2.5) {
+  const px = 64, c = document.createElement('canvas'); c.width = Math.ceil(w * px); c.height = Math.ceil(h * px);
+  const g = c.getContext('2d'); g.fillStyle = '#e9dfc8'; g.fillRect(0, 0, c.width, c.height);
+  for (let y = 0; y <= h + 1e-6; y += 0.25) {
+    const yy = c.height - y * px, metre = Math.abs(y - Math.round(y)) < 1e-6, half = Math.abs(y * 2 - Math.round(y * 2)) < 1e-6;
+    g.fillStyle = metre ? '#3b2a1e' : half ? '#7a6a55' : '#b5a68c'; g.fillRect(0, yy - (metre ? 2 : 1), c.width, metre ? 4 : 2);
+    if (half && y > 0) { g.font = '600 15px system-ui'; g.fillStyle = '#3b2a1e'; g.fillText(y.toFixed(1) + ' m', c.width - 54, yy - 4); }
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: t })); m.position.y = h / 2; return m;
+}
+// the height of a posed skinned model, from its vertices as drawn this frame (every 3rd: plenty for a box)
+function measure(obj) {
+  obj.updateMatrixWorld(true); const box = new THREE.Box3(), v = new THREE.Vector3();
+  obj.traverse((o) => { if (!o.isMesh) return; const pos = o.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i += 3) { if (o.isSkinnedMesh) o.getVertexPosition(i, v); else v.fromBufferAttribute(pos, i); box.expandByPoint(v.applyMatrix4(o.matrixWorld)); } });
+  return box;
+}
+
+const saddleFile = (n) => new GLTFLoader().loadAsync(`../models/saddles/${n}.glb`).then((g) => g.scene);
+const [animals, folk, ...saddles] = await Promise.all([loadAnimals(), loadFolk(), ...['basic', 'battle', 'fancy'].map(saddleFile)]);
+const actors = [];   // everything with update(dt) and play()
+const views = {};
+const ORDER = ['horse', 'horseWhite', 'donkey', 'bull', 'cow', 'stag', 'deer', 'wolf', 'husky', 'shiba'];
+
+// THE ANIMALS: each one side-on in front of its own height board, with the farmer beside it. Two rows (big, then small),
+// laid end to end apart, each seen square-on by a camera without perspective (?row=0 or 1), so the board reads true
+{
+  const g = new THREE.Group(); views.animals = { group: g, spots: {}, rows: [] }; let x = 0, row0 = 0;
+  for (const [i, kind] of ORDER.entries()) {
+    const row = i < 5 ? 0 : 1, a = makeAnimal(animals, kind), w = Math.max(a.length, 0.9) + 1.1;
+    if (i === 5) { views.animals.rows.push([0, x]); x = row0 = x + 12; }
+    const cx = x + w / 2;
+    a.root.position.set(cx + 0.3, 0, 0); a.root.rotation.y = Math.PI / 2; g.add(a.root); actors.push(a);
+    const f = makePerson(folk, { outfit: 'farmer_m', palette: 'drifter' }); f.root.position.set(x + 0.35, 0, 0.5); f.root.rotation.y = 0.5; g.add(f.root); actors.push(f);
+    const b = board(w, 2.5); b.position.set(cx, 1.25, -1.2); g.add(b);
+    const t = tag(`${kind}<small>${a.height} m at the shoulder · ${a.tall} m tall</small>`); t.position.set(cx, 2.7, -1.2); g.add(t);
+    views.animals.spots[kind] = { x: cx, w, a, f };
+    x += w + 0.25;
+  }
+  views.animals.rows.push([row0, x]);
+}
+// THE RIDE: riders sat on a saddled horse and a bare-backed donkey (sitOn, every frame), a saddled horse nobody is on,
+// and a cow and a bull. A red ball where the saddle sits on the back, a ring the size of the neck where a rope goes
+const riders = [], marks = [];
+{
+  const g = new THREE.Group(); views.ride = { group: g, spots: [] };
+  const ball = new THREE.SphereGeometry(0.04, 12, 8), redM = new THREE.MeshBasicMaterial({ color: 0xff2020, depthTest: false });
+  const ringM = new THREE.MeshBasicMaterial({ color: 0x2060ff, depthTest: false });
+  const LINE = [
+    { kind: 'horse', saddle: 0, rider: { outfit: 'farmer_m', palette: 'drifter' } },
+    { kind: 'horseWhite', saddle: 1, rider: { outfit: 'adventurer_m', palette: 'outlaw' } },
+    { kind: 'horse', saddle: 2 },
+    { kind: 'donkey', rider: { outfit: 'casual_f', palette: 'prairie' } },
+    { kind: 'cow' }, { kind: 'bull' },
+  ];
+  LINE.forEach(({ kind, saddle, rider }, i) => {
+    const a = makeAnimal(animals, kind); a.root.position.set(i * 3.2, 0, 0); a.root.rotation.y = Math.PI / 2; g.add(a.root); actors.push(a);
+    if (saddle !== undefined) saddleOn(a, saddles[saddle].clone());
+    const seat = new THREE.Mesh(ball, redM); seat.renderOrder = 9; g.add(seat);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(a.neckRadius, 0.018, 6, 24), ringM); ring.renderOrder = 9; g.add(ring);
+    marks.push({ a, seat, ring });
+    const spot = [a.root, seat, ring];
+    if (rider) { const f = makePerson(folk, rider); g.add(f.root); actors.push(f); riders.push({ a, f, gap: [1e9, -1e9] }); spot.push(f.root); }
+    const t = tag(kind + (saddle !== undefined ? '<small>' + ['plain', 'tooled', 'silver'][saddle] + ' saddle</small>' : '')); t.position.set(i * 3.2, 2.6, 0); g.add(t); spot.push(t);
+    views.ride.spots.push(i * 3.2); views.ride.parts = views.ride.parts || []; views.ride.parts.push(spot);
+  });
+}
+// how far the low point between a rider's legs is above where they sit (both in the rider's own space)
+const _v = new THREE.Vector3(), _s = new THREE.Vector3(), _inv = new THREE.Matrix4();
+function seatGap({ a, f }) {
+  f.root.updateMatrixWorld(true); _inv.copy(f.root.matrixWorld).invert();
+  const m = f.mesh, pos = m.geometry.attributes.position; let low = 1e9;
+  for (let i = 0; i < pos.count; i++) {
+    m.getVertexPosition(i, _v); _v.applyMatrix4(m.matrixWorld).applyMatrix4(_inv);
+    if (Math.abs(_v.x) < 0.04 && _v.y > 0.3 && _v.y < 1.3 && Math.abs(_v.z) < 0.25 && _v.y < low) low = _v.y;
+  }
+  return low - seatOf(a, _s).applyMatrix4(_inv).y;
+}
+// THE HERD: cattle the way the pasture has them, each with a coat tint from COATS (the first plain), grazing and walking
+{
+  const g = new THREE.Group(); views.herd = { group: g };
+  const R = (() => { let x = 7; return () => ((x = (x * 16807) % 2147483647) / 2147483647); })();
+  for (let i = 0; i < 12; i++) {
+    const kind = i % 6 === 5 ? 'bull' : 'cow', coat = COATS[i % COATS.length];
+    const a = makeAnimal(animals, kind, { tint: coat }); a.root.position.set((i % 4) * 3.4 + (R() - 0.5) * 1.2, 0, Math.floor(i / 4) * -3.2 + (R() - 0.5));
+    a.root.rotation.y = R() * 6.28; g.add(a.root); actors.push(a);
+    const t = tag(`${kind}<small>${coat}</small>`); t.position.set(a.root.position.x, 1.9, a.root.position.z); g.add(t);
+  }
+}
+// THE FOLK: one row a palette, one column an outfit
+{
+  const g = new THREE.Group(); views.folk = { group: g };
+  const pals = (Q.get('pals') || 'drifter,outlaw').split(',').filter((p) => PALETTES[p]);
+  const hat = Q.has('hat') ? Q.get('hat') !== '0' : undefined;
+  pals.forEach((pal, r) => OUTFITS.forEach((outfit, c) => {
+    const p = makePerson(folk, { outfit, palette: pal, skin: (c + r * 3) % 6, hair: (c * 2 + r) % 9, hat });
+    p.root.position.set((c - (OUTFITS.length - 1) / 2) * 0.9, 0, -r * 2.2); p.root.rotation.y = -0.2; g.add(p.root); actors.push(p);
+    if (r === 0) { const t = tag(outfit); t.position.set(p.root.position.x, 2.05, 0.3); g.add(t); }
+    if (c === 0) { const t = tag(pal); t.position.set(p.root.position.x - 0.75, 1.0, -r * 2.2); g.add(t); }
+  }));
+  const b = board(OUTFITS.length * 0.9 + 0.6, 2.5); b.position.set(0, 1.25, -pals.length * 2.2 + 0.8); g.add(b);
+  views.folk.rows = pals.length;
+}
+// THE HATS: every outfit's head close up (five at a time: ?part=0 or 1), turned by ?turn (radians: 0 facing, 1.57 side)
+{
+  const g = new THREE.Group(); views.heads = { group: g };
+  const part = +(Q.get('part') || 0), turn = +(Q.get('turn') || 0), hat = Q.has('hat') ? Q.get('hat') !== '0' : undefined;
+  const pal = (Q.get('pals') || 'drifter').split(',')[0];
+  OUTFITS.slice(part * 5, part * 5 + 5).forEach((outfit, c) => {
+    const p = makePerson(folk, { outfit, palette: pal, skin: c % 6, hair: (c * 3) % 11, hat });
+    p.root.position.set((c - 2) * 0.62, 0, 0); p.root.rotation.y = turn; g.add(p.root); actors.push(p);
+    const t = tag(outfit + (p.mesh.geometry.userData.hairMoved ? `<small>${p.mesh.geometry.userData.hairMoved} hair points tucked in</small>` : '')); t.position.set(p.root.position.x, 2.12, 0); g.add(t);
+  });
+}
+
+function view(name) {
+  for (const [k, v] of Object.entries(views)) if (v.group) v.group.visible = false;
+  const v = views[name] || views.animals; v.group.visible = true; T.viewName = name;
+  if (!v.group.parent) scene.add(v.group);
+  if (name === 'folk') { useCamera(pcam); pcam.fov = 30; pcam.updateProjectionMatrix(); const d = 4.5 + v.rows * 2.6; cam.position.set(0, 1.4 + v.rows * 0.9, d); orbit.target.set(0, 0.9, -(v.rows - 1) * 1.1); }
+  else if (name === 'ride') {
+    useCamera(pcam); pcam.fov = 30; pcam.updateProjectionMatrix();
+    const f = Q.get('focus'), x = f !== null ? v.spots[+f] : null, c = Q.get('cam') || 'side';
+    // (close up, only that one shows: the next one along would stand in front of the camera)
+    if (f !== null) v.parts.forEach((objs, i) => { for (const o of objs) o.visible = i === +f; });
+    if (x === null || x === undefined) { cam.position.set(8, 2.6, 23); orbit.target.set(8, 1.1, 0); }
+    else if (c === 'front') { cam.position.set(x + 5, 2.0, 1.2); orbit.target.set(x, 1.3, 0); }
+    else if (c === 'back') { cam.position.set(x - 6, 2.2, -0.6); orbit.target.set(x, 1.3, 0); }
+    else if (c === 'top') { cam.position.set(x, 8, 0.01); orbit.target.set(x, 1, 0); }
+    else { cam.position.set(x, 1.6, 6.2); orbit.target.set(x, 1.25, 0); }
+  }
+  else if (name === 'herd') { useCamera(pcam); pcam.fov = 35; pcam.updateProjectionMatrix(); cam.position.set(5, 5.5, 11); orbit.target.set(5, 0.6, -3); }
+  else if (name === 'heads') { useCamera(pcam); pcam.fov = 20; pcam.updateProjectionMatrix(); cam.position.set(0, 1.8, 6.4); orbit.target.set(0, 1.6, 0); }
+  else {
+    useCamera(ocam);
+    const f = Q.get('focus'), s = f && views.animals.spots[f], [x0, x1] = views.animals.rows[+(Q.get('row') || 0)] || views.animals.rows[0];
+    const cx = s ? s.x : (x0 + x1) / 2; span = s ? s.w + 1.2 : x1 - x0 + 0.6; fitOrtho();
+    ocam.position.set(cx, 1.3, 30); orbit.target.set(cx, 1.3, 0); ocam.zoom = 1; ocam.updateProjectionMatrix();
+  }
+  orbit.update();
+}
+function clip(name) {
+  T.clipName = name;
+  for (const a of actors) {
+    if (a.info) a.play(name, { fade: 0.2 });                                     // an animal
+    else if (T.viewName === 'ride' && riders.some((r) => r.f === a)) a.play(a.clips.includes('Ride') ? (name === 'Gallop' ? 'Ride_Gallop' : 'Ride') : 'Idle', { fade: 0.2 });
+    else if (T.viewName === 'animals') a.play(name === 'Gallop' ? 'Run' : name, { fade: 0.2 });   // the farmer keeps up
+    else a.play(name, { fade: 0.2 });
+  }
+}
+T.view = view; T.clip = clip;
+// a run through everything the game calls, off screen: each animal (tinted and not) through each of its clips, a saddle
+// on and off, each outfit through each of its clips and palettes, its hat off and back on, a rider sat on without dt.
+// -> a list of what went wrong (empty when all is well)
+T.selfCheck = () => {
+  const bad = [], g = new THREE.Group(), v = new THREE.Vector3(); scene.add(g);
+  const finite = (o, what) => { o.updateMatrixWorld(true); o.getWorldPosition(v); if (!Number.isFinite(v.x + v.y + v.z)) bad.push(what + ': not a number'); };
+  for (const kind of KINDS) {
+    for (const tint of [null, '#d8c8b8']) {
+      const a = makeAnimal(animals, kind, { tint }); g.add(a.root);
+      if (!(a.height > 0) || a.kind !== kind) bad.push(kind + ': height/kind');
+      for (const c of a.clips) { if (!a.play(c, { fade: 0.1, speed: 1.3 })) bad.push(kind + ' ' + c); a.update(0.05); }
+      if (a.play('NoSuchClip')) bad.push(kind + ': played a clip it has not got');
+      a.update(0.3); finite(a.root, kind); a.seat(v); if (!Number.isFinite(v.y)) bad.push(kind + ': seat'); a.neck(v); if (!Number.isFinite(v.y)) bad.push(kind + ': neck');
+      if (kind === 'horse') {
+        const h = saddleOn(a, saddles[0].clone()); if (!h || a.saddle !== h || h.parent !== a.bones[a.info.seat.bone]) bad.push('saddleOn');
+        seatOf(a, v); if (!Number.isFinite(v.y) || v.y < a.height * 0.8) bad.push('seatOf with a saddle: ' + v.y);
+        saddleOn(a, null); if (a.saddle || h.parent) bad.push('saddle off');
+      }
+      let shared = null; animals.kinds[kind].scene.traverse((o) => { if (o.isSkinnedMesh) shared = o.material; });
+      if (tint ? a.mesh.material === shared : a.mesh.material !== shared) bad.push(kind + (tint ? ': a tinted one shares the kind\'s material' : ': an untinted one has its own material'));
+      if (tint && a.mesh.material.color.getHexString() !== 'd8c8b8' && a.mesh.material.color.getHex() === 0xffffff) bad.push(kind + ': tint not set');
+      a.dispose(); if (a.root.parent) bad.push(kind + ': dispose');
+    }
+  }
+  for (const outfit of OUTFITS) {
+    const p = makePerson(folk, { outfit, palette: 'outlaw', skin: '#a96c43', hair: 3 }); g.add(p.root);
+    for (const c of p.clips) { if (!p.play(c, { fade: 0.1 })) bad.push(outfit + ' ' + c); p.update(0.05); }
+    for (const want of ['Idle', 'Walk', 'Run', 'Ride', 'Ride_Gallop', 'Lasso_Throw']) if (!p.clips.includes(want)) bad.push(outfit + ' lacks ' + want);
+    for (const pal of Object.keys(PALETTES)) p.setPalette(pal);
+    p.setPalette(['#112233', '#445566', '#778899', '#aabbcc']); p.setSkin(0); p.setHair('#ffffff');
+    if (p.hat) { const h = p.hatOff(); if (!h || p.hat || h.parent) bad.push(outfit + ': hatOff'); else { g.add(h); finite(h, outfit + ' hat'); p.hatOn(); if (p.hat !== h || h.parent !== p.bones.Head) bad.push(outfit + ': hatOn'); } }
+    finite(p.root, outfit); p.dispose(); if (p.root.parent) bad.push(outfit + ': dispose');
+  }
+  { const a = makeAnimal(animals, 'horse'), p = makePerson(folk, {}); g.add(a.root, p.root); a.update(0.1); p.play('Ride'); p.update(0.1);
+    sitOn(a, p); const hy = p.bones.Hips.getWorldPosition(v).y, sy = a.seat(new THREE.Vector3()).y;
+    if (Math.abs(hy - sy - 0.08) > 0.005) bad.push('sitOn pinned: hips ' + hy.toFixed(3) + ' over seat ' + sy.toFixed(3)); a.dispose(); p.dispose(); }
+  scene.remove(g);
+  return bad;
+};
+// buttons
+const bar = document.getElementById('bar');
+const btn = (label, fn, group) => { const b = document.createElement('button'); b.textContent = label; b.dataset.group = group; b.onclick = () => { fn(); for (const o of bar.querySelectorAll(`[data-group="${group}"]`)) o.classList.toggle('on', o === b); }; bar.appendChild(b); return b; };
+for (const v of ['animals', 'ride', 'herd', 'folk', 'heads']) btn(v, () => view(v), 'view');
+bar.appendChild(Object.assign(document.createElement('span'), { className: 'gap' }));
+for (const c of ['Idle', 'Walk', 'Gallop', 'Run', 'Eating', 'Wave', 'Idle_Gun_Pointing', 'Death']) btn(c, () => clip(c), 'clip');
+
+view(Q.get('view') || 'animals'); clip(Q.get('clip') || 'Idle');
+// the sizes as drawn, standing idle (the rig reads these)
+for (const a of actors) a.update(0);
+for (const [kind, s] of Object.entries(views.animals.spots)) { const b = measure(s.a.root); T.measured[kind] = { top: +b.max.y.toFixed(3), bottom: +b.min.y.toFixed(3), length: +(b.max.x - b.min.x).toFixed(3) }; }
+{ const f = views.animals.spots.horse.f, b = measure(f.root); T.measured.farmer = { top: +b.max.y.toFixed(3), bottom: +b.min.y.toFixed(3) }; }
+const clock = new THREE.Clock(); let frames = 0;
+R.setAnimationLoop(() => {
+  const dt = Math.min(clock.getDelta(), 0.05); for (const a of actors) a.update(dt);
+  if (T.viewName === 'ride') {
+    for (const r of riders) { sitOn(r.a, r.f, { dt }); if (frames > 30) { const d = seatGap(r); r.gap[0] = Math.min(r.gap[0], d); r.gap[1] = Math.max(r.gap[1], d); } }
+    T.seatGap = riders.map((r) => ({ animal: r.a.kind, outfit: r.f.outfit, clip: r.f.clip, saddle: !!r.a.saddle, min: +r.gap[0].toFixed(3), max: +r.gap[1].toFixed(3) }));
+    for (const m of marks) { m.a.seat(m.seat.position); m.a.neck(m.ring.position); m.a.bones[m.a.info.lasso.bone].getWorldQuaternion(m.ring.quaternion); m.ring.rotateX(Math.PI / 2); }
+  }
+  orbit.update(); R.render(scene, cam); labels.render(scene, cam);
+  if (++frames === 3) T.ready = true;
+});
+</script>
+</body>
+</html>

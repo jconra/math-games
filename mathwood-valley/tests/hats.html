@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mathwood Valley: hats and horses</title>
+<script src="../oops.js"></script>
+<style>
+  html, body { margin: 0; height: 100%; background: #b9a888; overflow: hidden; font: 13px/1.35 system-ui, sans-serif; }
+  canvas { display: block; }
+  .tag { color: #2a1d12; background: rgba(243, 234, 214, 0.85); border-radius: 4px; padding: 1px 6px; font: 600 12px/1.3 system-ui, sans-serif; white-space: nowrap; }
+</style>
+<script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/" } }</script>
+</head>
+<body>
+<script type="module">
+// A test page for the hats (src/hats.js, src/actors/hatshapes.js) and the stable's mounts (player.js HORSE_LOOKS).
+//   ?view=hats (default): a man and a woman in each hat, side by side    ?cam=front|side|back|top|low
+//   ?view=heads: the same, close on the heads
+//   ?view=horses&gait=Idle|Walk|Gallop: every mount, saddled, with a rider seated as the game seats them, playing the
+//     gait at clip speed 1 (the rider's clip kept in step the game's way)
+// window.T: { ready, hats, horses } for the rigs
+import * as THREE from 'three';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { loadAnimals, makeAnimal, saddleOn } from '../src/actors/animals.js';
+import { loadFolk, makePerson } from '../src/actors/folk.js';
+import { seatRider } from '../src/actors/seat.js';
+import { HATS } from '../src/hats.js';
+import { HORSE_LOOKS } from '../src/player.js';
+
+const Q = new URLSearchParams(location.search), VIEW = Q.get('view') || 'hats', CAM = Q.get('cam') || 'front';
+const T = window.T = { ready: false };
+const R = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+R.setPixelRatio(Math.min(devicePixelRatio, 2)); R.setSize(innerWidth, innerHeight);
+R.outputColorSpace = THREE.SRGBColorSpace; R.toneMapping = THREE.ACESFilmicToneMapping;
+R.shadowMap.enabled = true; R.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(R.domElement);
+const labels = new CSS2DRenderer(); labels.setSize(innerWidth, innerHeight);
+Object.assign(labels.domElement.style, { position: 'fixed', left: '0', top: '0', pointerEvents: 'none' });
+document.body.appendChild(labels.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0xb9c4cc);
+scene.add(new THREE.HemisphereLight(0xfff1dc, 0x6b5a44, 1.4));
+const sun = new THREE.DirectionalLight(0xfff0d8, 2.6); sun.position.set(-8, 14, 12); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -20, right: 20, top: 20, bottom: -20, near: 1, far: 60 }); sun.shadow.bias = -0.0005;
+scene.add(sun, sun.target);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({ color: 0x9c8460, roughness: 1 }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+const cam = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.05, 300);
+const tag = (text) => { const d = document.createElement('div'); d.className = 'tag'; d.textContent = text; return new CSS2DObject(d); };
+
+const [animals, folk] = await Promise.all([loadAnimals(undefined, { kinds: [...new Set(Object.values(HORSE_LOOKS).map((h) => h.kind))] }), loadFolk()]);
+const actors = [];
+let span = 0, mid = new THREE.Vector3(), lookY = 1;
+
+if (VIEW === 'hats' || VIEW === 'heads') {
+  T.hats = [];
+  const only = Q.get('only') ? Q.get('only').split(',') : null, list = HATS.filter((h) => !only || only.includes(h.id));
+  list.forEach((h, i) => {
+    const x = (i - (list.length - 1) / 2) * 1.4;
+    const m = makePerson(folk, { outfit: 'farmer_m', palette: 'drifter', hatStyle: h.id }); m.root.position.set(x - 0.3, 0, 0); scene.add(m.root); actors.push(m);
+    const f = makePerson(folk, { outfit: 'adventurer_f', palette: 'prairie', hatStyle: h.id }); f.root.position.set(x + 0.3, 0, 0); scene.add(f.root); actors.push(f);
+    const t = tag(h.name); t.position.set(x, VIEW === 'heads' ? 2.15 : 2.3, 0); scene.add(t);
+    T.hats.push({ id: h.id, man: m.hatStyle, woman: f.hatStyle });
+  });
+  span = list.length * 1.4; lookY = VIEW === 'heads' ? 1.68 : 1;
+} else {
+  T.horses = [];
+  const gait = Q.get('gait') || 'Walk';
+  const saddle = (await new GLTFLoader().setMeshoptDecoder((await import('three/addons/libs/meshopt_decoder.module.js')).MeshoptDecoder).loadAsync('../models/saddles/basic.glb')).scene;
+  const only = Q.get('only') ? Q.get('only').split(',') : null, ids = Object.keys(HORSE_LOOKS).filter((id) => !only || only.includes(id));
+  ids.forEach((id, i) => {
+    const look = HORSE_LOOKS[id], x = (i - (ids.length - 1) / 2) * 3.2;
+    const a = makeAnimal(animals, look.kind, look.tint ? { tint: look.tint } : {}); a.root.position.set(x, 0, 0); a.root.rotation.y = Math.PI / 2; scene.add(a.root);
+    saddleOn(a, saddle.clone());
+    const p = makePerson(folk, { outfit: 'farmer_m', palette: 'drifter', hatStyle: HATS[i % HATS.length].id }); scene.add(p.root);
+    a.play(gait, { fade: 0 });
+    const ride = gait === 'Gallop' ? 'Ride_Gallop' : 'Ride';
+    const ratio = gait === 'Idle' ? 1 : p.person.actions[ride].getClip().duration / a.actions[gait].getClip().duration;
+    p.play(gait === 'Idle' ? 'Ride' : ride, { fade: 0, speed: gait === 'Idle' ? 0.2 : ratio });
+    actors.push({ update(dt) { a.update(dt); p.update(dt);
+      const ha = a.actions[gait], ra = p.person.cur; if (gait !== 'Idle' && ha && ra) ra.time = (ha.time % ha.getClip().duration) / ha.getClip().duration * ra.getClip().duration;
+      a.root.updateMatrixWorld(true); seatRider(a, p); } });
+    const t = tag(`${id} (${look.kind})`); t.position.set(x, 2.6, 0); scene.add(t);
+    // how far the seat the rider is put on (seat()) is from the saddle's own origin (the point on the back), metres
+    a.root.updateMatrixWorld(true);
+    const s1 = a.seat(new THREE.Vector3()), s2 = a.saddle.localToWorld(new THREE.Vector3());
+    T.horses.push({ id, kind: look.kind, seatToSaddle: s1.clone().sub(s2).toArray().map((v) => +v.toFixed(3)) });
+  });
+  span = ids.length * 3.2; lookY = 1.1;
+}
+// the camera
+const dist = VIEW === 'heads' ? span * 1.25 : VIEW === 'horses' ? Math.max(5, span * 1.25) : span * 1.6;
+const at = { front: [0, lookY + 0.2, dist], side: [dist, lookY + 0.3, 0.01], back: [0, lookY + 0.2, -dist], top: [0, dist, 0.01], low: [0, 0.6, dist * 0.8] }[CAM] || [0, lookY, dist];
+if (VIEW === 'horses' && CAM === 'front') at[2] = dist * 0.9;
+cam.position.set(...at); cam.lookAt(mid.set(0, lookY, 0));
+cam.aspect = innerWidth / innerHeight; cam.updateProjectionMatrix();
+let last = performance.now(), frames = 0;
+R.setAnimationLoop(() => {
+  const now = performance.now(), dt = Math.min(0.05, (now - last) / 1000); last = now;
+  for (const a of actors) a.update(dt);
+  R.render(scene, cam); labels.render(scene, cam);
+  if (++frames === 10) T.ready = true;
+});
+</script>
+</body>
+</html>

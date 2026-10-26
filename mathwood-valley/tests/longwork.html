@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mathwood Valley: the worked area</title>
+<!-- A dev page for the worked area (src/ui/longwork.js): long division and long multiplication worked a step at a
+     time, over a plain backdrop, with an order slip beside it as in the game.
+       longwork.html?div=112,5             112 ÷ 5, with the store's setup and word answer (crates, rounded up)
+       longwork.html?mul=16,7&lead=8,2     8 × 2 first, then 16 × 7
+       longwork.html?step=6                a sum from the Long work ladder's step 6 (16 × 24)
+       &bare                               no setup and no word answer, the board only -->
+<style>
+  body { margin: 0; min-height: 100vh; background: linear-gradient(160deg, #6d7f5a, #3b4a33 60%, #2a2219); font: 14px Bitter, Georgia, serif; color: #f4e8cf; }
+  .log { position: fixed; left: 8px; bottom: 6px; font: 11px ui-monospace, monospace; opacity: 0.8; max-width: 40vw; }
+</style>
+</head>
+<body>
+<div class="log"></div>
+<script type="module">
+import { workMul, workDiv, makeLong, seeded } from '../src/math/longwork.js';
+import { openLongWork } from '../src/ui/longwork.js';
+import { makeStoreSlip } from '../src/ui/storeslip.js';
+const Q = new URLSearchParams(location.search);
+const nums = (k) => (Q.get(k) || '').split(',').map(Number);
+let sum;
+if (Q.get('div')) { const [n, d] = nums('div'); sum = { op: 'div', n, d }; }
+else if (Q.get('mul')) { const [a, b] = nums('mul'); sum = { op: 'mul', a, b }; }
+else sum = makeLong(Number(Q.get('step')) || 4, { rand: seeded(Number(Q.get('seed')) || 1) });
+const lead = Q.get('lead') ? nums('lead') : null;
+const work = sum.op === 'div' ? workDiv(sum.n, sum.d) : workMul(sum.a, sum.b, lead ? { lead: { a: lead[0], b: lead[1], ask: 'One day first' } } : {});
+const bare = Q.has('bare');
+const log = (t) => { document.querySelector('.log').textContent = t; };
+// the slip beside it, as at the store
+const U = makeStoreSlip(document.body, { onPick: () => {}, onDone: () => {}, onDraw: () => {} });
+const q = sum.op === 'div' ? Math.floor(sum.n / sum.d) : 0, r = sum.op === 'div' ? sum.n % sum.d : 0;
+const story = sum.op === 'div' ? `Cookie needs ${sum.n} cans of beans for the trail crew. Beans come in crates of ${sum.d} cans.` : `The fort orders ${sum.b} sacks of flour, ${sum.a} pounds in each sack.`;
+const askLine = sum.op === 'div' ? 'How many crates should he buy so there\'s enough?' : 'How many pounds of flour is that?';
+const coinsOf = sum.op === 'div'
+  ? [{ label: `${q} crates`, good: !r, why: r ? `${q} crates hold only ${q * sum.d} cans. The last ${r} need a crate too.` : '' }, { label: `${q + 1} crates`, good: !!r, why: r ? '' : `${q} crates already hold all ${sum.n}.` }, { label: `${q + 2} crates`, good: false, why: 'One crate too many: count the full ones, then one more for the leftover cans.' }, { label: `${Math.max(1, q - 1)} crates`, good: false, why: 'Too few: the crates must hold every can.' }]
+  : null;
+const coins = (coinsOf || [{ label: String(sum.a * sum.b), good: true }, { label: String(sum.a + sum.b), good: false }]).map((c) => ({ ...c, big: c.label, small: '' }));
+U.show({ who: { name: 'Cookie' }, story, ask: askLine, coins, equation: null }, { filled: 2 });
+const setup = bare ? null : sum.op === 'div'
+  ? { ask: 'What do we work out?', choices: [{ label: `${sum.n} ÷ ${sum.d}`, good: true }, { label: `${sum.n} × ${sum.d}`, good: false, why: 'Times makes it bigger. The cans are packed into crates of ' + sum.d + ': divide.' }, { label: `${sum.n} − ${sum.d}`, good: false, why: 'That takes one crate away. Count how many crates of ' + sum.d + ' there are: divide.' }, { label: `${sum.d} ÷ ${sum.n}`, good: false, why: 'The other way round: the cans go into the crates, so it is the cans divided by the crate size.' }] }
+  : { ask: 'What do we work out?', choices: [{ label: `${work.a} × ${work.b}`, good: true }, { label: `${work.a} + ${work.b}`, good: false, why: 'Adding counts the two numbers once. There are ' + work.b + ' sacks of ' + work.a + ': times.' }, { label: `${work.a} − ${work.b}`, good: false, why: 'Nothing is taken away here.' }, { label: `${work.a} ÷ ${work.b}`, good: false, why: 'Nothing is shared out: every sack is full.' }] };
+const final = bare || sum.op !== 'div' ? null : { ask: askLine, choices: coins.map((c) => ({ label: c.label, good: c.good, why: c.why })), line: r ? `${q} full crates hold ${q * sum.d}; the last ${r} cans need a crate too: ${q + 1} crates.` : `${q} crates hold all ${sum.n} cans.` };
+const taps = [];
+window.L = openLongWork(document.body, { work, setup, final, ask: askLine, onTap: (t) => { taps.push(t); log(JSON.stringify(t)); }, onDone: (d) => { window.DONE = d; log('done ' + JSON.stringify(d)); }, onClose: () => log('closed') });
+window.WORK = work; window.TAPS = taps; window.READY = true;
+</script>
+</body>
+</html>
