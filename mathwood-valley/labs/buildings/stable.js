@@ -29,7 +29,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Kit, buildGeometry, Occlusion } from '../materials/cabin.js';
 import { rng, WOOD, WOOD_LOOKS } from '../materials/textures.js';
 import { buildStoneWall, SHAPES, PALETTES } from '../stone/stonewall.js';
-import { T, RX, RY, RZ, mul, vary, smooth01, ngon, wallOf, wallM, boardAndBatten, casing, roofSlope, doorLeaf, harness, lantern, glowGeometry, Light, GLOW } from './parts.js';
+import { T, RX, RY, RZ, mul, vary, smooth01, ngon, wallOf, wallM, boardAndBatten, casing, roofSlope, doorLeaf, harness, lantern, glowGeometry, Light, GLOW, ropeCoil, ropeGeometry } from './parts.js';
 import { BOARDS, boardUV } from './art.js';
 
 // ── the recipe ───────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -43,16 +43,21 @@ export const PAINTS = {
 };
 // the horses for sale and the bay, in stall order: right front, right middle, right back, left front, left middle, left back
 export const STALL_IDS = ['R1', 'R2', 'R3', 'L1', 'L2', 'L3'];
-export const RECIPE_DEFAULTS = { kind: 'stable', paint: 'red', wear: 0.42, wood: 'straight', stone: 'grey', seed: 7, horses: ['chestnut', 'white', 'donkey', 'palomino', 'midnight', 'bay'], eating: 'bay' };
+export const RECIPE_DEFAULTS = { kind: 'stable', paint: 'red', wear: 0.42, wood: 'straight', stone: 'grey', seed: 7, horses: ['chestnut', 'white', 'donkey', 'palomino', 'midnight', 'bay'],
+  poses: ['door', 'rack', 'look', 'look', 'side', 'eat'] };
+// each stall's pose (in stall order): look (out over the gate), door (out over the gate, turned toward the doorway), rack
+// (head down at a hay rack inside the gate), side (standing back in its stall, turned side-on to the aisle), eat (head
+// down at a heap of hay on the floor)
+export const POSES = ['look', 'door', 'rack', 'side', 'eat'];
 export function stableRecipe(r = {}) {
-  const o = { ...RECIPE_DEFAULTS, horses: [...RECIPE_DEFAULTS.horses] };
+  const o = { ...RECIPE_DEFAULTS, horses: [...RECIPE_DEFAULTS.horses], poses: [...RECIPE_DEFAULTS.poses] };
   if (PAINTS[r.paint]) o.paint = r.paint;
   if (Number.isFinite(+r.wear)) o.wear = Math.min(1, Math.max(0, +r.wear));
   if (WOOD_LOOKS[r.wood]) o.wood = r.wood;
   if (PALETTES[r.stone]) o.stone = r.stone;
   if (Number.isFinite(+r.seed)) o.seed = Math.max(1, Math.round(+r.seed));
   if (Array.isArray(r.horses) && r.horses.length === 6) o.horses = r.horses.map(String);
-  if (r.eating === null || o.horses.includes(r.eating)) o.eating = r.eating;   // (the horse with its head down at its hay)
+  if (Array.isArray(r.poses) && r.poses.length === 6) o.poses = r.poses.map((p) => (POSES.includes(p) ? p : 'look'));
   return o;
 }
 
@@ -303,13 +308,23 @@ function stalls(k, r) {
     into(k, mul(T(sx * (SF + 0.02), 0.06, hz), RY(-sx * Math.PI / 2)), (t) => doorLeaf(t, { w: 1.1, h: gateH, side: 1, tint: STALLW, rails: [0.2, gateH - 0.2], strap: STRAP }), r.seed * 31 + i + (sx > 0 ? 0 : 7));
     k.box('iron', [0.03, 0.03, 0.16], [sx * (SF - 0.06), gateH - 0.28, zc + sx * 0.5], null, { tint: IRON });
     // the horse eating: a heap of hay on the floor just inside its gate
-    if (horse === r.eating) for (const [dx, dz, w, hh, d, a] of [[0.42, 0.05, 0.75, 0.13, 0.55, 0.2], [0.62, -0.25, 0.45, 0.09, 0.4, -0.5]]) k.parts.hay.push({ size: [w, hh, d], m: mul(T(sx * (SF + dx), hh / 2 - 0.01, zc + dz), RY(a)), o: { tint: [1.05, 1.0, 0.88], inside: true } });
+    const pose = r.poses[STALL_IDS.indexOf(id)];
+    if (pose === 'eat') for (const [dx, dz, w, hh, d, a] of [[0.42, 0.05, 0.75, 0.13, 0.55, 0.2], [0.62, -0.25, 0.45, 0.09, 0.4, -0.5]]) k.parts.hay.push({ size: [w, hh, d], m: mul(T(sx * (SF + dx), hh / 2 - 0.01, zc + dz), RY(a)), o: { tint: [1.05, 1.0, 0.88], inside: true } });
     // a manger in the back corner by the wall: a plank box on a ledge, hay in it
     const mx = sx * (W / 2 - 0.5), mz = zf - 0.3;
     for (const [sz, pos] of [[[0.6, 0.32, 0.03], [mx, 1.06, mz - 0.25]], [[0.03, 0.32, 0.5], [mx - sx * 0.3, 1.06, mz]]]) k.board(sz, pos, null, { long: sz[0] > 0.1 ? 0 : 2, tint: vary(k, STALLW, 0.8, 0.95), inside: true });
     k.board([0.6, 0.03, 0.5], [mx, 0.91, mz], null, { long: 0, tint: vary(k, STALLW, 0.8, 0.95), inside: true });
     k.parts.hay.push({ size: [0.56, 0.18, 0.46], m: T(mx, 1.02, mz), o: { tint: [1, 0.95, 0.85], inside: true } });
-    list.push({ id, side: sx, z: zc, frontX: sx * SF, face: -sx * Math.PI / 2, doorTop: rail + 0.04, stallBack: sx * (W / 2 - 0.15), pose: horse === r.eating ? 'eat' : 'look' });
+    // the horse at its rack: a slatted V-rack of hay on the inside of the gate, low down, its head in it
+    if (pose === 'rack') {
+      // (hung at the height of the gate's top, so its hay shows over the gate where the horse has its head in it)
+      const rx = sx * (SF + 0.2), ry = 1.05;
+      k.board([0.04, 0.42, 1.0], [sx * (SF + 0.1), ry, zc], null, { long: 2, tint: vary(k, STALLW, 0.8, 0.95), inside: true });
+      for (let q = 0; q < 6; q++) k.board([0.025, 0.46, 0.03], [rx + sx * 0.05, ry + 0.02, zc - 0.45 + q * 0.18], [0, 0, sx * 0.45], { long: 1, tint: vary(k, STALLW, 0.85, 1.0), inside: true });
+      k.board([0.05, 0.05, 1.04], [rx + sx * 0.14, ry + 0.22, zc], null, { long: 2, tint: vary(k, STALLW, 0.85, 1.0), inside: true });
+      k.parts.hay.push({ size: [0.22, 0.38, 0.92], m: mul(T(rx, ry + 0.11, zc), RZ(sx * 0.25)), o: { tint: [1.05, 1.0, 0.88], inside: true } });
+    }
+    list.push({ id, side: sx, z: zc, zb, zf, frontX: sx * SF, face: -sx * Math.PI / 2, doorTop: rail + 0.04, stallBack: sx * (W / 2 - 0.15), pose });
   }
   return list;
 }
@@ -419,13 +434,7 @@ function front(k, r) {
   k.box('iron', [0.02, 0.12, 0.05], [0, 5.5, bz1 - 0.08], null, { tint: IRON });
   rope([0, by - 0.4, bz1 - 0.22], [0.95, 5.95, z + 0.1]);
   k.board([0.24, 0.04, 0.05], [0.95, 5.92, z + 0.06], null, { long: 0, tint: FRAME });     // the cleat
-  const n = 10, cr = 0.17, cy = 5.62;
-  for (let i = 0; i < n; i++) {
-    const a = (i + 0.5) / n * Math.PI * 2, a2 = (i + 1.5) / n * Math.PI * 2;
-    rope([0.95 + Math.cos(a) * cr, cy + Math.sin(a) * cr * 1.4, z + 0.09], [0.95 + Math.cos(a2) * cr, cy + Math.sin(a2) * cr * 1.4, z + 0.09], { tint: ROPE.map((c) => c * 0.92) });
-  }
-  rope([0.92, 5.9, z + 0.1], [0.9, cy - cr * 1.4 - 0.25, z + 0.11]);
-  rope([1.0, 5.9, z + 0.1], [1.03, cy - cr * 1.4 - 0.18, z + 0.11]);
+  ropeCoil(k.parts.rope, [0.95, 5.9, z + 0.06], [0, 0, 1], { r: 0.16, loops: 3 });
 }
 
 // a gooseneck lamp over the sign: an iron arm out of the wall, bent down, a shade with the lamp under it; its light
@@ -437,7 +446,8 @@ function gooseneck(k, x, z) {
   for (let i = 0; i < pts.length - 1; i++) rod(pts[i], pts[i + 1]);
   k.prism('iron', ngon(10, 0.13), 0.1, [x, y0 + 0.0, z + 0.58], null, { tint: IRON, taper: 0.7, smooth: true });
   k.parts.glow.push({ size: [0.07, 0.04, 0.07], m: T(x, y0 - 0.05, z + 0.58), kind: GLOW.flame, col: [6, 3.4, 1.2] });
-  return { p: [x, y0 - 0.12, z + 0.6], reach: 6.5, strength: 1.5, glow: [x, y0 - 0.07, z + 0.58] };
+  const p = [x, y0 - 0.07, z + 0.58], aim = new THREE.Vector3(0, -0.82, -0.57).normalize();
+  return { p, reach: 6.5, strength: 2.2, dir: aim.toArray(), glow: [x, y0 - 0.06, z + 0.58] };
 }
 
 // ── odds and ends inside: the ladder to the loft, a feed bin, tack hung on the posts ─────────────────────────────────
@@ -466,11 +476,7 @@ const faceRot = (n, rz = 0) => [0, Math.atan2(n[0], n[2]), rz];
 function coil(k, c, n) {
   const P = onFace(c, n), rot = faceRot(n);
   k.board([0.04, 0.04, 0.1], P(0, 0.2, 0.05), rot, { long: 2, tint: FRAME });
-  const nn = 10;
-  for (const [dn, r, dy] of [[0.025, 0.15, 0], [0.045, 0.135, -0.03]]) for (let i = 0; i < nn; i++) {
-    const a = (i + 0.5) / nn * Math.PI * 2, L = 2 * r * Math.sin(Math.PI / nn) + 0.012;
-    k.board([L, 0.022, 0.022], P(Math.cos(a) * r, Math.sin(a) * r * 1.25 - 0.05 + dy, dn), faceRot(n, a + Math.PI / 2), { long: 0, tint: ROPE.map((x) => x * (dn > 0.03 ? 0.88 : 1)), strip: WOOD.shake, skip: '-z', inside: true });
-  }
+  ropeCoil(k.parts.rope, P(0, 0.2, 0), n, { r: 0.15, loops: 2 });
 }
 // a bridle: a strap loop down from a peg, a browband, the iron bit, the reins hanging below
 function bridle(k, c, n) {
@@ -490,7 +496,8 @@ function plane(w, d, nx, nz, uvScale) {
 }
 function floors() {
   const fl = plane(W - 0.06, D - 0.06, 16, 18, 1.7); fl.translate(0, 0.012, 0);
-  const sp = [[0, D / 2 + 1.0, 3.6, 2.4], [0, -D / 2 - 0.9, 3.4, 2.0], [0.1, 2.9, 2.6, 2.6], [-0.3, -0.6, 2.4, 2.4], [0.2, -3.7, 2.6, 2.4], [-6.4, 3.6, 2.6, 2.4]].map(([x, z, w, d], i) => { const g = plane(w, d, 6, 6); g.translate(x, 0.02 + i * 0.002, z); return g; });
+  const sp = [[0, D / 2 + 1.0, 3.6, 2.4], [0, -D / 2 - 0.9, 3.4, 2.0], [0.1, 2.9, 2.6, 2.6], [-0.3, -0.6, 2.4, 2.4], [0.2, -3.7, 2.6, 2.4], [-6.4, 3.6, 2.6, 2.4],
+    ...[1, -1].flatMap((sx) => [1.3, -1.3, -3.9].map((z, i) => [sx * (SF + 1.55 + 0.1 * i), z + 0.1 * sx, 2.9, 2.4]))].map(([x, z, w, d], i) => { const g = plane(w, d, 6, 6); g.translate(x, 0.02 + i * 0.002, z); return g; });
   return { floor: fl, spill: mergeGeometries(sp) };
 }
 // a picture plane facing `n` (+z or along x), from the boards picture's region
@@ -522,7 +529,7 @@ function boardAttr(geo, parts, seed) {
 // ── build it all ─────────────────────────────────────────────────────────────────────────────────────────────────────
 export function buildStable(recipeIn = {}, env = {}) {
   const t0 = performance.now(), r = stableRecipe(recipeIn), paint = PAINTS[r.paint].c;
-  const k = new Kit(r.seed); k.parts.glow = []; k.parts.hay = [];
+  const k = new Kit(r.seed); k.parts.glow = []; k.parts.hay = []; k.parts.rope = [];
   SILLS.length = 0;
   const lamps = [];
   const marks = [], mark = (name) => marks.push([name, k.parts.wood.length, k.parts.iron.length]);
@@ -545,10 +552,10 @@ export function buildStable(recipeIn = {}, env = {}) {
   // the front doors' leaves, each its own kit (the open ones block light: solids for the bake)
   const leaves = [];
   for (const [hg, side, ang, harnessed] of [[hingeL, 1, -OPEN, false], [hingeR, -1, OPEN, true]]) {
-    const lk = new Kit(r.seed * 19 + side); lk.parts.glow = [];
+    const lk = new Kit(r.seed * 19 + side); lk.parts.glow = []; lk.parts.rope = [];
     doorLeaf(lk, { ...LEAF, side, harness: harnessed ? {} : null, handle: true });
     const g = buildGeometry(lk.parts.wood, 'wood', rng(r.seed * 23 + side), { topAt: () => DH + 0.3, tintAt: (x, y, z, t, o) => tintAt(x, y, z, t, { ...o, outside: true }) });
-    leaves.push({ geo: g, hinge: hg, open: ang, closed: 0, parts: lk.parts.wood.length });
+    leaves.push({ geo: g, hinge: hg, open: ang, closed: 0, parts: lk.parts.wood.length, rope: ropeGeometry(lk.parts.rope) });
     k.solid([DW / 2, DH, 0.1], null, null, mul(T(...hg), RY(ang), T(side * DW / 4, DH / 2, 0)));
   }
 
@@ -570,6 +577,7 @@ export function buildStable(recipeIn = {}, env = {}) {
   boardAttr(geos.wood, k.parts.wood, r.seed);
   geos.hay = buildGeometry(k.parts.hay, 'stone', R, {});
   geos.glow = glowGeometry(k.parts.glow);
+  geos.rope = ropeGeometry(k.parts.rope);
   geos.stone = footing(r, env);
   Object.assign(geos, floors());
   geos.boards = mergeGeometries(bf); for (const g of bf) g.dispose();
@@ -587,14 +595,23 @@ export function buildStable(recipeIn = {}, env = {}) {
       opening([sx * W / 2, 1.95, (SIDE_WIN.z0 + SIDE_WIN.z1) / 2], [0, 0, 0.5], [0, 0.55, 0], [sx, 0, 0], false, sx < 0 ? 0.6 : 1)]),
   ];
   const insideP = (x, y, z) => Math.abs(x) < W / 2 - 0.01 && Math.abs(z) < D / 2 - 0.01 && y > -0.5 && y < roofUnder(x) - 0.01;
-  const light = new Light(occ, { inside: insideP, openings, lamps, base: 0.2, gain: 3.2 });
-  for (const g of ['wood', 'iron', 'hay', 'stone', 'floor', 'spill', 'boards']) light.bake(geos[g]);
+  // THE STALLS' FILL: lantern light that has found its way into a stall and bounced about in it (no direction, no
+  // shadow), so a stall is a dim warm room and not a black box: on what is in a stall or faces into one (the point a
+  // few cm in front of a face is inside a stall), most on what faces the stall's middle, a little less high up
+  const stallOf = (x, y, z) => { if (Math.abs(x) < SF + 0.03 || Math.abs(x) > W / 2 - 0.03 || y > 3.0) return null; for (let i = 0; i < 3; i++) if (z < STALLZ[i] && z > STALLZ[i + 1]) return [Math.sign(x), (STALLZ[i] + STALLZ[i + 1]) / 2]; return null; };
+  const fill = (x, y, z, nx, ny, nz) => {
+    const s = stallOf(x + nx * 0.08, y + ny * 0.08, z + nz * 0.08); if (!s) return 0;
+    const cx = s[0] * 3.1, cy = 1.4, cz = s[1], dx = cx - x, dy = cy - y, dz = cz - z, d = Math.hypot(dx, dy, dz) || 1;
+    return 0.16 * (0.55 + 0.45 * Math.max(0, (dx * nx + dy * ny + dz * nz) / d)) * (1 - 0.35 * smooth01(y, 1.5, 3.0));
+  };
+  const light = new Light(occ, { inside: insideP, fill, openings, lamps, base: 0.2, gain: 3.2 });
+  for (const g of ['wood', 'iron', 'hay', 'stone', 'floor', 'spill', 'boards', 'rope']) light.bake(geos[g]);
   for (const L of leaves) {
     light.bake(L.geo, mul(T(...L.hinge), RY(L.open)), 'open');
     light.bake(L.geo, T(...L.hinge), 'closed');
   }
   light.setDoors = (open) => {
-    for (const g of ['wood', 'iron', 'hay', 'stone', 'floor', 'spill', 'boards']) light.apply(geos[g], open);
+    for (const g of ['wood', 'iron', 'hay', 'stone', 'floor', 'spill', 'boards', 'rope']) light.apply(geos[g], open);
     for (const L of leaves) light.apply(L.geo, open, open ? 'open' : 'closed');
   };
   light.setDoors(true);
@@ -605,8 +622,9 @@ export function buildStable(recipeIn = {}, env = {}) {
   for (const g in geos) geos[g].translate(OX, 0, 0);
   for (const L of leaves) L.hinge = [L.hinge[0] + OX, L.hinge[1], L.hinge[2]];
   for (const S of stallList) { S.z = S.z; S.frontX += OX; S.stallBack += OX; S.x = S.side * 2.6 + OX; S.board.at[0] += OX; }
-  for (const L of lamps) L.p = [L.p[0] + OX, L.p[1], L.p[2]];
+  for (const L of lamps) { L.p = [L.p[0] + OX, L.p[1], L.p[2]]; if (L.glow) L.glow = [L.glow[0] + OX, L.glow[1], L.glow[2]]; }
   // the sky light inside at a point (for an animal standing there: parts.js animalLamps' shade)
+  light.fillAt = (x, y, z) => fill(x - OX, y, z, 0, 0, 0) || (stallOf(x - OX, y, z) ? 0.16 : 0);
   light.skyAt = (x, y, z) => { const b = light.at(x - OX, y, z, 0, 1, 0); return b[1] ? light.base + (1 - light.base) * Math.min(1, light.gain * (b[2] + b[3])) : 1; };
   light.offset = OX;
 
@@ -630,7 +648,8 @@ function propList(OX) {
     { type: 'trough', x: -3.35, z: D / 2 + 0.75, rot: 0 },
     { type: 'barrel', x: -2.15, z: D / 2 + 0.55 }, { type: 'barrel', x: 2.4, z: D / 2 + 0.6 }, { type: 'barrel', x: 2.95, z: D / 2 + 0.95, h: 0.78 },
     { type: 'barrel', x: -4.15, z: D / 2 - 0.55 },
-    { type: 'bucket', x: -2.45, z: D / 2 + 1.05 }, { type: 'bucket', x: 1.28, z: 0.75 }, { type: 'bucket', x: -1.3, z: -1.9 },
+    { type: 'bucket', x: -2.45, z: D / 2 + 1.05 }, { type: 'bucket', x: -1.3, z: -1.9 },
+    ...[1, -1].flatMap((sx) => [0, 1, 2].map((i) => ({ type: 'bucket', x: sx * (W / 2 - 0.38), z: STALLZ[i + 1] + 0.38, inStall: true }))),
     { type: 'crate', x: -5.45, z: D / 2 - 0.45, rot: 0.2 }, { type: 'crate', x: -5.4, z: D / 2 - 0.5, y: 0.6, rot: -0.15, size: 0.5 }, { type: 'crate', x: 4.05, z: 3.4, rot: 0.1 },
     { type: 'bale', x: -2.2, z: D / 2 + 1.35, rot: 0.35 }, { type: 'bale', x: -2.35, z: 4.55, rot: 0.08 }, { type: 'bale', x: -2.55, z: 3.35, rot: 0.1 }, { type: 'bale', x: -2.5, z: 3.4, y: 0.4, rot: -0.05 },
     { type: 'bale', x: -5.5, z: -3.6, rot: 0.05 }, { type: 'bale', x: -5.5, z: -2.6, rot: -0.05 }, { type: 'bale', x: -5.45, z: -3.1, y: 0.4, rot: 0.1 },

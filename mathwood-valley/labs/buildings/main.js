@@ -16,7 +16,7 @@ import { buildStable, stableRecipe, PAINTS, RECIPE_DEFAULTS, STABLE } from './st
 import { buildProps } from './props.js';
 import { makeArt } from './art.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { LU, lit, boardWear, glowMaterial, animalLamps, setLamps, lanternGlow } from './parts.js';
+import { LU, lit, boardWear, glowMaterial, animalLamps, setLamps, lanternGlow, ropeTexture } from './parts.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const num = (n) => Math.round(n).toLocaleString('en-US');
@@ -106,6 +106,7 @@ function makeMaterials() {
   mats.spill = lit(new THREE.MeshStandardMaterial({ map: ART.spill, roughness: 1, alphaTest: 0.5 }), { ao: true });
   mats.boards = lit(new THREE.MeshStandardMaterial({ map: ART.boards, roughness: 0.82 }), { ao: true });
   mats.glow = glowMaterial();
+  mats.rope = lit(new THREE.MeshStandardMaterial({ map: ropeTexture(), roughness: 0.92 }), { ao: true, tint: true });
   T.ground.repeat.set(15, 15);
   mats.ground = lit(weather(new THREE.MeshStandardMaterial({ map: T.ground, roughness: 0.97 }), { ground: true, tint: true, ao: true }));
 }
@@ -133,7 +134,7 @@ function rebuild() {
   for (const m of [...propGroup.children]) { propGroup.remove(m); m.geometry.dispose(); }
   const t0 = performance.now();
   B = buildStable(stableRecipe(state), { texMean: RT.mean });
-  for (const g of ['wood', 'iron', 'stone', 'hay', 'floor', 'spill', 'boards', 'glow']) {
+  for (const g of ['wood', 'iron', 'stone', 'hay', 'floor', 'spill', 'boards', 'glow', 'rope']) {
     const geo = B.geos[g]; if (!geo) continue;
     const m = new THREE.Mesh(geo, mats[g]); m.name = g; m.castShadow = !['glow', 'spill', 'floor', 'boards'].includes(g); m.receiveShadow = g !== 'glow';
     group.add(m);
@@ -141,7 +142,10 @@ function rebuild() {
   // the front doors: each its own mesh, turned on its hinge
   B.doorMeshes = B.doors.map((L, i) => {
     const m = new THREE.Mesh(L.geo, mats.wood); m.name = 'door ' + (i ? 'right' : 'left'); m.castShadow = m.receiveShadow = true;
-    m.position.set(...L.hinge); group.add(m); return m;
+    m.position.set(...L.hinge); group.add(m);
+    // (its harness collar: a leather tube, swinging with the door; lit evenly)
+    if (L.rope) { const n = L.rope.attributes.position.count; L.rope.setAttribute('aAO', new THREE.BufferAttribute(new Float32Array(n).fill(0.8), 1)); L.rope.setAttribute('aLamp', new THREE.BufferAttribute(Float32Array.from({ length: n * 2 }, (_, i) => (i % 2 ? 0 : 0.6)), 2)); const c = new THREE.Mesh(L.rope, mats.rope); c.castShadow = true; c.name = 'collar'; m.add(c); }
+    return m;
   });
   // the props, baked in the building's light
   const off = B.offset;
@@ -171,12 +175,12 @@ function makeGround() {
   const G = groundGeo = new THREE.PlaneGeometry(70, 70, 140, 140); G.rotateX(-Math.PI / 2);
   G.setAttribute('aAO', new THREE.BufferAttribute(new Float32Array(G.attributes.position.count).fill(1), 1));
   G.setAttribute('aTintPaint', new THREE.BufferAttribute(new Float32Array(G.attributes.position.count * 4), 4));
-  G.setAttribute('aLamp', new THREE.BufferAttribute(new Float32Array(G.attributes.position.count), 1));
+  G.setAttribute('aLamp', new THREE.BufferAttribute(new Float32Array(G.attributes.position.count * 2), 2));
   ground = new THREE.Mesh(G, mats.ground); ground.receiveShadow = true; ground.name = 'ground'; scene.add(ground);
   // (and plain grass out to the horizon, a hair under it)
   const O = new THREE.PlaneGeometry(400, 400, 4, 4); O.rotateX(-Math.PI / 2); O.translate(0, -0.03, 0);
   const n = O.attributes.position.count;
-  O.setAttribute('aAO', new THREE.BufferAttribute(new Float32Array(n).fill(1), 1)); O.setAttribute('aTintPaint', new THREE.BufferAttribute(new Float32Array(n * 4), 4)); O.setAttribute('aLamp', new THREE.BufferAttribute(new Float32Array(n), 1));
+  O.setAttribute('aAO', new THREE.BufferAttribute(new Float32Array(n).fill(1), 1)); O.setAttribute('aTintPaint', new THREE.BufferAttribute(new Float32Array(n * 4), 4)); O.setAttribute('aLamp', new THREE.BufferAttribute(new Float32Array(n * 2), 2));
   const far = new THREE.Mesh(O, mats.ground); far.receiveShadow = true; far.name = 'far ground'; scene.add(far);
 }
 function bakeGround() {
@@ -189,7 +193,7 @@ function bakeGround() {
     A.array[i * 4] = Math.max(1 - THREE.MathUtils.smoothstep(dB, 0, 1.6), 0.9 * (1 - THREE.MathUtils.smoothstep(dYard, 0, 1.8)) * (1 - THREE.MathUtils.smoothstep(z, F.d / 2 + 6, F.d / 2 + 11)));
     // (the ground's shade where it meets the walls, and the lanterns' light on it: the building's bake, at the ground)
     const near = Math.abs(x) < 12 && Math.abs(z) < 11, b = near ? B.light.at(x - B.offset, 0.01, z, 0, 1, 0) : null;
-    O.array[i] = b ? 0.45 + 0.55 * b[0] : 1; Lm.array[i] = b ? b[4] : 0;
+    O.array[i] = b ? 0.45 + 0.55 * b[0] : 1; Lm.array[i * 2] = b ? b[6] : 1; Lm.array[i * 2 + 1] = 0;
   }
   A.needsUpdate = O.needsUpdate = Lm.needsUpdate = true;
 }
@@ -251,7 +255,8 @@ function halterFor(a) {
     const s0 = q(S, 0.02), s1 = q(S, 0.98), u0 = q(Uu, 0.02), u1 = q(Uu, topQ);
     return { c: P0.clone().addScaledVector(axis, t * len).addScaledVector(side, (s0 + s1) / 2).addScaledVector(up, (u0 + u1) / 2), a: (s1 - s0) / 2 + 0.012, b: (u1 - u0) / 2 + 0.012 };
   };
-  const nose = section(0.7, 0.06), crown = section(0.16, 0.07, 0.7); if (!nose || !crown) return null;
+  // (the crown strap goes round just behind the ears: low on the head's own corners there, the ears left out)
+  const nose = section(0.7, 0.06), crown = section(0.04, 0.06, 0.45); if (!nose || !crown) return null;
   const parts = [], LEATHER = [0.075, 0.032, 0.016], BRASS = [0.55, 0.33, 0.08];   // (linear colours: dark oiled leather, brass)
   const strap = (A, B, w, t, col, normal) => {   // a strap from A to B, w wide, t thick, lying flat on `normal`
     const X = B.clone().sub(A), L = X.length(); X.normalize();
@@ -272,8 +277,11 @@ function halterFor(a) {
   head.updateMatrixWorld(true); geo.applyMatrix4(head.matrixWorld.clone().invert());
   return { geo, bone: head.name };
 }
-// each stall's pose: how far its head is turned (radians, about the upright) and its place in the clip, by stall
-const TURN = { R1: 0.22, R2: -0.2, R3: 0.16, L1: -0.24, L2: 0.18, L3: -0.1 };
+// EACH STALL'S POSE (stable.js POSES, from the recipe): look (out over the gate, its head a little to one side), door (the
+// same, turned toward the doorway), rack (standing back, its head down in the hay rack inside the gate), side (standing
+// back in its stall at an angle, its side to the aisle), eat (its head down at the hay on the floor). A pose whose clip a
+// kind hasn't got (the farm horse has only Idle) falls back to look.
+const LOOK_TURN = { R1: 0.12, R2: -0.1, R3: 0.16, L1: -0.14, L2: 0.1, L3: -0.12 };
 function placeHorses() {
   for (const h of horses) { if (h.halter) h.halter.removeFromParent(); h.a.dispose(); }
   horses.length = 0;
@@ -281,18 +289,25 @@ function placeHorses() {
   for (const S of B.stalls) {
     const id = S.horse, look = LOOKS[id] || LOOKS.bay;
     const a = makeAnimal(lib, look.kind, { tint: look.tint || '#ffffff' });
-    const sh = measure(a), eat = S.pose === 'eat' && a.clips.includes('Eating');
-    // facing the aisle; its chest 14 cm inside the stall's front (the one eating, further in, its head down at the hay)
-    const x = S.frontX + S.side * ((eat ? 0.9 : 0.14) + sh.chest);
-    a.root.position.set(x, 0.015, S.z); a.root.rotation.y = S.face;
-    animalLamps(a.mesh.material, B.light.skyAt(x, 1.5, S.z) * 1.15);
+    const sh = measure(a);
+    let pose = S.pose;
+    if ((pose === 'eat' && !a.clips.includes('Eating')) || (pose === 'rack' && !a.clips.includes('Idle_Headlow'))) pose = 'look';
+    let x = S.frontX + S.side * ({ look: 0.14, door: 0.14, rack: 1.0, eat: 0.9 }[pose] + sh.chest), z = S.z, face = S.face;
+    if (pose === 'side') {
+      // (turned 60 degrees toward the barn's front; its middle in the middle of the stall)
+      face = S.face + S.side * 1.05; const dx = Math.sin(face), dz = Math.cos(face);
+      x = S.frontX + S.side * 1.55 - dx * 0.3; z = S.z - dz * 0.3;
+    }
+    a.root.position.set(x, 0.015, z); a.root.rotation.y = face;
+    animalLamps(a.mesh.material, B.light.skyAt(x, 1.5, z) * 1.15, B.light.fillAt(x, 1.3, z) * 1.3);
     a.mesh.material.needsUpdate = true;
     const speed = 0.82 + 0.36 * ((S.z * 7.3 + S.side * 3.1) % 1 + 1) % 1;
-    a.play(eat ? 'Eating' : 'Idle', { fade: 0, speed }); a.update(Math.abs(S.z * 1.7 + S.side) % 3);
+    a.play({ eat: 'Eating', rack: 'Idle_Headlow' }[pose] || 'Idle', { fade: 0, speed }); a.update(Math.abs(S.z * 1.7 + S.side) % 3);
     let halter = null;
     if (sh.halter) { halter = new THREE.Mesh(sh.halter.geo, HALTER); halter.castShadow = true; a.bones[sh.halter.bone].add(halter); }
     horseGroup.add(a.root);
-    horses.push({ a, id, stall: S.id, next: 4 + Math.random() * 8, shape: sh, eat, speed, halter, turn: eat ? 0 : TURN[S.id] || 0, head: a.bones.Head || a.bones[a.info.head] });
+    const turn = pose === 'door' ? S.side * 0.4 : pose === 'look' ? LOOK_TURN[S.id] || 0 : pose === 'side' ? -S.side * 0.25 : 0;
+    horses.push({ a, id, stall: S.id, next: 4 + Math.random() * 8, shape: sh, pose, still: pose !== 'look' && pose !== 'door', speed, halter, turn, head: a.bones.Head || a.bones[a.info.head] });
   }
   horseGroup.visible = state.showHorses;
 }
@@ -303,7 +318,7 @@ function tickHorses(dt) {
   for (const h of horses) {
     h.a.update(dt);
     h.next -= dt;
-    if (h.next < 0 && !h.eat) {
+    if (h.next < 0 && !h.still) {
       const pick = h.a.clip === 'Idle' && h.a.clips.includes('Idle_2') ? 'Idle_2' : 'Idle';
       h.a.play(pick, { fade: 0.6, speed: h.speed }); h.next = pick === 'Idle' ? 6 + Math.random() * 10 : 3.3;
     }
@@ -355,7 +370,7 @@ function buildPanel() {
     <p><b>Parts</b>: every board, batten, post, rafter and shake is a box from the Material Lab's parts kit, merged into one mesh per material (wood, iron), so the whole barn is a handful of draw calls. The walls are <b>board and batten</b>: upright boards 22 to 32 cm wide with a narrow batten over each joint, cut round the doors and windows. Each board is two skins: the outside one painted, the inside one bare (barns are painted outside only).</p>
     <p><b>Paint</b> is a colour in the recipe. The weathering shader chips it at the edges, and this lab wears it away in streaks down the boards and big soft patches, more of it low down, on the sunny side, by the corners and the doorways, less under the eaves, and board by board; the slider says how much has gone. Small nail heads sit where each board crosses a girt inside.</p>
     <p><b>Inside light</b> is baked once: for every corner indoors, how much of the outdoors it sees through the doorways and windows (each opening's share of its view, with a few rays through a grid of the solid parts so a partition shades the stall behind it), kept in two parts so shutting the front doors darkens it. The lanterns' warm light is worked out per pixel (round pools on the floor and the gates, falling off with the distance squared), times the bake's share of it that gets past the walls. A soft glow sprite hangs round each lantern; two gooseneck lamps light the sign.</p>
-    <p><b>Horses</b> are the game's own (src/actors/animals.js), each in its stall with its chest just behind the gate so its head comes over it (the donkey's gate is a plank lower). Each has its own head turn, clip speed and place in the clip; one eats from the hay inside its gate; each wears a halter fitted to its head and hung on its head bone. The lanterns light them the same way, per pixel.</p>
+    <p><b>Horses</b> are the game's own (src/actors/animals.js), each in its stall with its chest just behind the gate so its head comes over it (the donkey's gate is a plank lower). Each stall has its own pose (looking out, turned toward the doorway, head down at a hay rack, standing back side-on, eating from the floor), its own clip speed and place in the clip; each wears a halter fitted to its head and hung on its head bone. The lanterns light them the same way, per pixel, and each stall has a warm baked fill so it isn't a black box.</p>
     <p><b>Props</b> (barrels, the trough, crates, bales, buckets, the wagon) are separate pieces the building lists with their places, for the Town Lab to move.</p>
   </div></div></details>`;
   panel.addEventListener('click', (e) => {
@@ -454,7 +469,7 @@ function loop() {
 const BL = window.BL = {
   ready: false, state, U, LU,
   get info() { return info(); },
-  get stable() { return B; }, get horses() { return horses.map((h) => ({ id: h.id, stall: h.stall, at: h.a.root.position.toArray().map((x) => +x.toFixed(2)), chest: +h.shape.chest.toFixed(2), halter: !!h.halter, clip: h.a.clip })); },
+  get stable() { return B; }, get horses() { return horses.map((h) => ({ id: h.id, stall: h.stall, at: h.a.root.position.toArray().map((x) => +x.toFixed(2)), chest: +h.shape.chest.toFixed(2), halter: !!h.halter, clip: h.a.clip, pose: h.pose })); },
   cam(pos, tgt) { camera.position.set(...pos); controls.target.set(...tgt); controls.update(); },
   view, time(t) { state.time = t; applyLight(); syncPanel(); }, doors(o) { setDoors(o); syncPanel(); }, lamps(o) { state.lamps = o; applyLight(); syncPanel(); },
   owned(id, v) { state.owned[id] = v; drawBoards(); syncPanel(); },

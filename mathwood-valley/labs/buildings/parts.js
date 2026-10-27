@@ -218,8 +218,12 @@ export function doorLeaf(k, o) {
 export function harness(k, x, y, z, face, o = {}) {
   const leather = o.leather || [0.24, 0.13, 0.07], brass = [0.62, 0.45, 0.18], f = face;
   k.board([0.05, 0.05, 0.12], [x, y + 0.06, z - f * 0.03], null, { long: 2, tint: [0.9, 0.85, 0.8] });   // the peg
+  // the collar: a padded leather ring, taller than wide (a tube, when the kit has a rope list; else short pieces)
   const n = 12, rx = 0.2, ry = 0.29;
-  for (let i = 0; i < n; i++) {
+  if (k.parts.rope) {
+    const pts = []; for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2; pts.push(new THREE.Vector3(x + Math.cos(a) * rx, y - ry + Math.sin(a) * ry, z + f * 0.045)); }
+    k.parts.rope.push({ pts, closed: true, rad: 0.04, sides: 8, tint: [0.42, 0.24, 0.16] });
+  } else for (let i = 0; i < n; i++) {
     const a = (i + 0.5) / n * Math.PI * 2, a2 = (i + 1.5) / n * Math.PI * 2;
     const px = x + Math.cos(a) * rx, py = y - ry + Math.sin(a) * ry, qx = x + Math.cos(a2) * rx, qy = y - ry + Math.sin(a2) * ry;
     const L = Math.hypot(qx - px, qy - py) + 0.03, ang = Math.atan2(qy - py, qx - px);
@@ -271,6 +275,53 @@ export function glowGeometry(parts) {
   return mergeGeometries(list);
 }
 
+// ── rope ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// Rope as real tubes (8 sides) along curves, the twist drawn into its own small picture (ropeTexture), so a coil reads
+// as rope and not as a ring of sticks. ropeCoil adds a hung coil's curves to a list (loops a little apart and askew, a
+// tail hanging below); ropeGeometry turns a list into one mesh: per corner u along the rope (one twist every 5 cm), the
+// part's tint in aTintPaint (rope or leather)
+export function ropeCoil(list, c, n, o = {}) {
+  const up = new THREE.Vector3(0, 1, 0), N = new THREE.Vector3(...n).normalize(), U = new THREE.Vector3().crossVectors(up, N).normalize(), C = new THREE.Vector3(...c);
+  const r = o.r ?? 0.15, loops = o.loops ?? 3, tint = o.tint || [1, 1, 1], rad = o.rad ?? 0.011;
+  for (let k = 0; k < loops; k++) {
+    const pts = [], dx = (k - (loops - 1) / 2) * 0.025, dn = 0.02 + k * 0.022, rr = r * (1 - 0.06 * k), tilt = (k - 1) * 0.12;
+    for (let i = 0; i < 16; i++) {
+      const a = i / 16 * Math.PI * 2, x = Math.cos(a) * rr + dx + Math.sin(a) * tilt * 0.1, y = Math.sin(a) * rr * 1.25 - rr * 1.2;   // (hanging from the peg at its top)
+      pts.push(C.clone().addScaledVector(U, x).addScaledVector(up, y).addScaledVector(N, dn + 0.01 * Math.sin(a * 2 + k)));
+    }
+    list.push({ pts, closed: true, rad, tint });
+  }
+  // the end, hanging down out of the bottom of the coil
+  const b = C.clone().addScaledVector(up, -r * 2.4).addScaledVector(U, r * 0.35).addScaledVector(N, 0.04);
+  list.push({ pts: [b.clone().addScaledVector(up, 0.12), b, b.clone().addScaledVector(up, -0.16).addScaledVector(U, 0.03), b.clone().addScaledVector(up, -0.3).addScaledVector(U, 0.02)], closed: false, rad, tint });
+}
+export function ropeGeometry(list) {
+  if (!list.length) return null;
+  const geos = list.map((R) => {
+    const curve = new THREE.CatmullRomCurve3(R.pts, R.closed, 'centripetal'), L = curve.getLength();
+    const g = new THREE.TubeGeometry(curve, R.closed ? 14 : 6, R.rad, R.sides ?? 6, R.closed);
+    const uv = g.attributes.uv, tp = new Float32Array(uv.count * 4);
+    for (let i = 0; i < uv.count; i++) { uv.setX(i, uv.getX(i) * L / 0.05); tp.set([...R.tint, 0], i * 4); }
+    g.setAttribute('aTintPaint', new THREE.BufferAttribute(tp, 4));
+    return g;
+  });
+  const out = mergeGeometries(geos); for (const g of geos) g.dispose();
+  return out;
+}
+export function ropeTexture() {
+  const W = 64, H = 32, c = document.createElement('canvas'); c.width = W; c.height = H;
+  const g = c.getContext('2d'), img = g.createImageData(W, H);
+  // three strands twisted round: stripes at a slant (u along the rope, v round it), dark in the grooves between them
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const t = (x / W + y / H * 3) % 1, f = (t * 3) % 1, ridge = Math.sin(f * Math.PI), fib = 0.92 + 0.08 * Math.sin(x * 2.1 + y * 5.3);
+    const l = (0.38 + 0.62 * Math.pow(ridge, 0.6)) * fib, i = (y * W + x) * 4;
+    img.data[i] = 196 * l; img.data[i + 1] = 166 * l; img.data[i + 2] = 118 * l; img.data[i + 3] = 255;
+  }
+  g.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4;
+  return t;
+}
+
 // ── the baked light ──────────────────────────────────────────────────────────────────────────────────────────────────
 // For every corner, three numbers, worked out once when the building is built:
 //   near    how much of the sky it sees close by (the Material Lab's voxel bake: corners, under eaves, behind things)
@@ -280,13 +331,15 @@ export function glowGeometry(parts) {
 //           kept as two parts, through the front doors and through everything else, so the doors can shut
 //   lamp    how much each lantern lights it: facing it, closer is brighter (falling off with the distance squared and
 //           gone by the lantern's reach), nothing behind a wall (rays through the voxels again)
-// apply(geo, doorsOpen) turns them into aAO (sky light, darkened) and aLamp (the share of the lanterns' light that
-// isn't blocked: the shader works the light itself out per pixel, so each lantern throws a round pool).
+// And, if the building gives one, a warm FILL: lantern light that has bounced about inside a stall, no direction, no
+// shadows (o.fill(x, y, z, nx, ny, nz) -> how much), so a stall isn't a black box.
+// apply(geo, doorsOpen) turns them into aAO (sky light, darkened) and aLamp (x: the share of the lanterns' light that
+// isn't blocked: the shader works the light itself out per pixel, so each lantern throws a round pool; y: the fill).
 export class Light {
   // occ: an Occlusion (cabin.js) with the building's solids; o: inside(x, y, z) -> is this point indoors; openings
   // [{ c, u, v, n, front }] (middle, half-width and half-height vectors, the outward normal); lamps [{ p, reach, strength }]
   constructor(occ, o) {
-    Object.assign(this, { occ, inside: o.inside, openings: o.openings || [], lamps: o.lamps || [], base: o.base ?? 0.1, gain: o.gain ?? 2.6, out: o.out ?? [0.35, 0.65], bounce: o.bounce ?? 0.15, floor: o.floor ?? 0.1 });
+    Object.assign(this, { occ, inside: o.inside, fill: o.fill || null, openings: o.openings || [], lamps: o.lamps || [], base: o.base ?? 0.1, gain: o.gain ?? 2.6, out: o.out ?? [0.35, 0.65], bounce: o.bounce ?? 0.15, floor: o.floor ?? 0.1 });
     // each opening's sample points (3 x 3 over its inner part) and their share of its area
     for (const op of this.openings) {
       op.pts = []; const A = 4 * Math.hypot(...op.u) * Math.hypot(...op.v);
@@ -327,27 +380,27 @@ export class Light {
       if (d2 > L.reach * L.reach) continue;
       const d = Math.sqrt(d2), ndl = (dx * nx + dy * ny + dz * nz) / d;
       if (ndl < -0.1) continue;
-      const fall = L.strength * lampFall(d2) * Math.max(0.02, (ndl + 0.1) / 1.1);
+      const fall = L.strength * lampFall(d2) * Math.max(0.02, (ndl + 0.1) / 1.1) * spotOf(L, -dx / d, -dy / d, -dz / d);
       const vis = this.clear(ox, oy, oz, L.p[0], L.p[1], L.p[2], 0.22) ? 1 : 0.1;
       lamp += fall * vis; seen += fall;
     }
     // (a surface facing down indoors sees the floor: some of the light that comes in bounces up to it)
     if (ins && ny < 0) fB += this.floor * -ny * (fA + fB + 0.02) * 4 + 0.13 * -ny;
-    return [near, ins ? 1 : 0, fA, fB, Math.min(4, lamp), occ.rain(px, py, pz, nx, ny, nz), seen > 1e-4 ? lamp / seen : 1];
+    return [near, ins ? 1 : 0, fA, fB, Math.min(4, lamp), occ.rain(px, py, pz, nx, ny, nz), seen > 1e-4 ? lamp / seen : 1, this.fill ? this.fill(px, py, pz, nx, ny, nz) : 0];
   }
   // bake one geometry (m: its corners to the building's frame, for a door leaf; key: a name to keep that bake under)
   bake(geo, m = null, key = 'main') {
     const t0 = performance.now();
     const P = geo.attributes.position, N = geo.attributes.normal, n = P.count, v = new THREE.Vector3(), w = new THREE.Vector3(), nm = m ? new THREE.Matrix3().getNormalMatrix(m) : null;
-    const B = { near: new Float32Array(n), ins: new Uint8Array(n), fA: new Float32Array(n), fB: new Float32Array(n), lamp: new Float32Array(n), rain: new Float32Array(n), vis: new Float32Array(n) };
+    const B = { near: new Float32Array(n), ins: new Uint8Array(n), fA: new Float32Array(n), fB: new Float32Array(n), lamp: new Float32Array(n), rain: new Float32Array(n), vis: new Float32Array(n), fill: new Float32Array(n) };
     for (let i = 0; i < n; i++) {
       v.fromBufferAttribute(P, i); w.fromBufferAttribute(N, i);
       if (m) { v.applyMatrix4(m); w.applyMatrix3(nm).normalize(); }
       const r = this.at(v.x, v.y, v.z, w.x, w.y, w.z);
-      B.near[i] = r[0]; B.ins[i] = r[1]; B.fA[i] = r[2]; B.fB[i] = r[3]; B.lamp[i] = r[4]; B.rain[i] = r[5]; B.vis[i] = r[6];
+      B.near[i] = r[0]; B.ins[i] = r[1]; B.fA[i] = r[2]; B.fB[i] = r[3]; B.lamp[i] = r[4]; B.rain[i] = r[5]; B.vis[i] = r[6]; B.fill[i] = r[7];
     }
     if (!geo.attributes.aAO) geo.setAttribute('aAO', new THREE.BufferAttribute(new Float32Array(n).fill(1), 1));
-    if (!geo.attributes.aLamp) geo.setAttribute('aLamp', new THREE.BufferAttribute(new Float32Array(n), 1));
+    if (!geo.attributes.aLamp) geo.setAttribute('aLamp', new THREE.BufferAttribute(new Float32Array(n * 2), 2));
     // (a stone wall comes with its own shading in aAO, joints and all: that is kept, and this goes on top)
     if (geo.userData.ownAO && !geo.userData.ao0) geo.userData.ao0 = geo.attributes.aAO.array.slice();
     (geo.userData.bakes || (geo.userData.bakes = {}))[key] = B;
@@ -363,7 +416,7 @@ export class Light {
       if (B.ins[i]) ao = (0.5 + 0.5 * B.near[i]) * (this.base + (1 - this.base) * Math.min(1, this.gain * (B.fB[i] + (open ? B.fA[i] : 0)) + this.bounce * Math.min(1, B.lamp[i])));
       else ao = this.out[0] + this.out[1] * B.near[i];
       A[i] = a0 ? a0[i] * ao : ao;
-      Lm[i] = B.vis[i];
+      Lm[i * 2] = B.vis[i]; Lm[i * 2 + 1] = B.fill[i];
       if (H) H.array[i * 4 + 3] = B.rain[i];
     }
     geo.attributes.aAO.needsUpdate = true; geo.attributes.aLamp.needsUpdate = true; if (H) H.needsUpdate = true;
@@ -375,14 +428,23 @@ export class Light {
 // in the shaders, so the bake's "how much gets past the walls" matches what the shader draws
 export const LAMP_MAX = 10, LAMP_REACH = 6.5;
 export const lampFall = (d2) => Math.max(0, 1 - d2 / (LAMP_REACH * LAMP_REACH)) ** 2 / (1 + d2 * 1.1);
+// a lamp with a shade (L.dir: the way it points) lights only a cone under it: full within cosI of its axis, none past
+// cosO (so a gooseneck lights the sign below it, not the wall above); (dx, dy, dz): the way from the lamp to the point
+const SPOT = { cosI: 0.75, cosO: 0.5 };
+export function spotOf(L, dx, dy, dz) {
+  if (!L.dir) return 1;
+  const c = dx * L.dir[0] + dy * L.dir[1] + dz * L.dir[2], t = Math.min(1, Math.max(0, (c - SPOT.cosO) / (SPOT.cosI - SPOT.cosO)));
+  return t * t * (3 - 2 * t);
+}
 const LAMP_GLSL = `
-uniform vec3 uLampP[${LAMP_MAX}]; uniform float uLampS[${LAMP_MAX}]; uniform float uLamp, uLampGain; uniform vec3 uLampCol;
+uniform vec3 uLampP[${LAMP_MAX}]; uniform float uLampS[${LAMP_MAX}]; uniform vec4 uLampD[${LAMP_MAX}]; uniform float uLamp, uLampGain; uniform vec3 uLampCol;
 vec3 lampLight(vec3 p, vec3 n) {
   float sum = 0.0;
   for (int i = 0; i < ${LAMP_MAX}; i++) {
     vec3 L = uLampP[i] - p; float d2 = dot(L, L), d = sqrt(d2) + 1e-4;
     float f = max(0.0, 1.0 - d2 / ${(LAMP_REACH * LAMP_REACH).toFixed(2)}); f *= f;
-    sum += uLampS[i] * f / (1.0 + d2 * 1.1) * max(0.02, (dot(n, L / d) + 0.1) / 1.1);
+    float spot = mix(1.0, smoothstep(${SPOT.cosO.toFixed(3)}, ${SPOT.cosI.toFixed(3)}, dot(-L / d, uLampD[i].xyz)), uLampD[i].w);
+    sum += uLampS[i] * f / (1.0 + d2 * 1.1) * max(0.02, (dot(n, L / d) + 0.1) / 1.1) * spot;
   }
   return uLampCol * (sum * uLamp * uLampGain);
 }`;
@@ -393,11 +455,15 @@ export const LU = {
   uLampGain: { value: 1.1 },
   uLampP: { value: Array.from({ length: LAMP_MAX }, () => new THREE.Vector3(0, -99, 0)) },   // where they are
   uLampS: { value: new Array(LAMP_MAX).fill(0) },          // how strong each is
+  uLampD: { value: Array.from({ length: LAMP_MAX }, () => new THREE.Vector4(0, -1, 0, 0)) },   // a shaded lamp's way down (w 1)
   uNight: { value: 0 },                                    // 0 day .. 1 night (the window panes glow with the lamps inside)
   uPaintWear: { value: 0.5 },                              // how much of the paint has gone (0..1)
 };
 export function setLamps(lamps) {
-  for (let i = 0; i < LAMP_MAX; i++) { const L = lamps[i]; LU.uLampP.value[i].set(...(L ? L.p : [0, -99, 0])); LU.uLampS.value[i] = L ? L.strength : 0; }
+  for (let i = 0; i < LAMP_MAX; i++) {
+    const L = lamps[i]; LU.uLampP.value[i].set(...(L ? L.p : [0, -99, 0])); LU.uLampS.value[i] = L ? L.strength : 0;
+    if (L && L.dir) LU.uLampD.value[i].set(...L.dir, 1); else LU.uLampD.value[i].set(0, -1, 0, 0);
+  }
 }
 // chain a patch after whatever the material already has (the Material Lab's weathering, the Stone Lab's edges)
 function chain(mat, key, fn) {
@@ -413,14 +479,14 @@ const DIFFUSE = 'vec3 totalDiffuse = reflectedLight.directDiffuse';
 export function lit(mat, o = {}) {
   return chain(mat, 'lit' + (o.ao ? 'ao' : '') + (o.tint ? 'tint' : ''), (sh) => {
     sh.vertexShader = sh.vertexShader.replace('#include <common>', `#include <common>
-attribute float aLamp; varying float vLamp; varying vec3 vLW;${o.ao ? '\nattribute float aAO; varying float vAOb;' : ''}${o.tint ? '\nattribute vec4 aTintPaint; varying vec3 vTintB;' : ''}`)
+attribute vec2 aLamp; varying vec2 vLamp; varying vec3 vLW;${o.ao ? '\nattribute float aAO; varying float vAOb;' : ''}${o.tint ? '\nattribute vec4 aTintPaint; varying vec3 vTintB;' : ''}`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
 vLamp = aLamp; vLW = (modelMatrix * vec4(position, 1.0)).xyz;${o.ao ? ' vAOb = aAO;' : ''}${o.tint ? ' vTintB = aTintPaint.rgb;' : ''}`);
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
 ${LAMP_GLSL}
-varying float vLamp; varying vec3 vLW;${o.ao ? ' varying float vAOb;' : ''}${o.tint ? ' varying vec3 vTintB;' : ''}`)
+varying vec2 vLamp; varying vec3 vLW;${o.ao ? ' varying float vAOb;' : ''}${o.tint ? ' varying vec3 vTintB;' : ''}`)
       .replace('#include <map_fragment>', '#include <map_fragment>' + (o.tint ? '\ndiffuseColor.rgb *= vTintB;' : ''))
-      .replace(DIFFUSE, `${o.ao ? 'reflectedLight.indirectDiffuse *= vAOb; reflectedLight.indirectSpecular *= vAOb;\n' : ''}reflectedLight.directDiffuse += diffuseColor.rgb * lampLight(vLW, inverseTransformDirection(normal, viewMatrix)) * vLamp;
+      .replace(DIFFUSE, `${o.ao ? 'reflectedLight.indirectDiffuse *= vAOb; reflectedLight.indirectSpecular *= vAOb;\n' : ''}reflectedLight.directDiffuse += diffuseColor.rgb * (lampLight(vLW, inverseTransformDirection(normal, viewMatrix)) * vLamp.x + uLampCol * (vLamp.y * uLamp * uLampGain));
 ${DIFFUSE}`);
   });
 }
@@ -496,17 +562,17 @@ export function lanternGlow(lamps, o = {}) {
 }
 // lantern light on an animal (it has no baked numbers: it moves): the same per-pixel light as the building, and the
 // sky light dimmed indoors (uShade, one number per animal, from the bake at the spot it stands)
-export function animalLamps(mat, shade) {
-  const own = { uShade: { value: shade } };
+export function animalLamps(mat, shade, fill = 0) {
+  const own = { uShade: { value: shade }, uFill: { value: fill } };
   mat.userData.lampU = own;
   return chain(mat, 'animalLamps', (sh) => {
     Object.assign(sh.uniforms, own);
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying vec3 vHW;').replace('#include <project_vertex>', '#include <project_vertex>\nvHW = (modelMatrix * vec4(transformed, 1.0)).xyz;');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', `#include <common>
 ${LAMP_GLSL}
-uniform float uShade; varying vec3 vHW;`)
+uniform float uShade, uFill; varying vec3 vHW;`)
       .replace(DIFFUSE, `reflectedLight.indirectDiffuse *= uShade; reflectedLight.indirectSpecular *= uShade;
-reflectedLight.directDiffuse += diffuseColor.rgb * lampLight(vHW, inverseTransformDirection(normal, viewMatrix)) * 0.85;
+reflectedLight.directDiffuse += diffuseColor.rgb * (lampLight(vHW, inverseTransformDirection(normal, viewMatrix)) * 0.85 + uLampCol * (uFill * uLamp * uLampGain));
 ${DIFFUSE}`);
   });
 }
