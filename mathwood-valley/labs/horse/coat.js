@@ -175,6 +175,37 @@ export function prepareHorse(scene, scale) {
     if (t > 0) along[i] = Math.max(along[i] * (1 - t), THREE.MathUtils.clamp((tailTop - y) / Math.max(0.05, tailTop - tailLow), 0, 1) * t * (sculptedHair ? 1 : 0.2));
   }
 
+  // THE DOCK: the short tube the tail grows from, continuing the croup's top line (found by its place: behind the croup,
+  // above the buttock, near the middle). Its middle line, thickness and end are measured here for the tail's cards; the
+  // part where hair grows (its end and its underside) is marked for the hair's colour, the top keeps the coat's.
+  let dock = null;
+  if (!sculptedHair) {
+    const zS = B.Tail1.z - 0.07, yMin = (B.Tail3 || B.Tail2).y - 0.06, idx = [];
+    for (let i = 0; i < n; i++) if (rest[i * 3 + 2] < zS && rest[i * 3 + 1] > yMin && Math.abs(rest[i * 3] - midX) < 0.1 && W.legs[i] < 0.2) idx.push(i);
+    if (idx.length > 8) {
+      let zE = 0; for (const i of idx) zE = Math.min(zE, rest[i * 3 + 2]);
+      const slice = (z) => {   // the dock's top and bottom near the middle at z, and its middle
+        let top = -9, bot = 9;
+        for (const i of idx) if (Math.abs(rest[i * 3 + 2] - z) < 0.02 && Math.abs(rest[i * 3] - midX) < 0.05) { top = Math.max(top, rest[i * 3 + 1]); bot = Math.min(bot, rest[i * 3 + 1]); }
+        return top > bot + 0.03 ? { top, bot, mid: V(midX, (top + bot) / 2, z) } : null;
+      };
+      // (its first full cross-section from the croup end, and its last before the end cap)
+      let a0 = null, a1 = null;
+      for (let z = zS - 0.015; z > zE + 0.02 && !a0; z -= 0.01) a0 = slice(z);
+      for (let z = zE + 0.02; z < zS && !a1; z += 0.01) a1 = slice(z);
+      if (a0 && a1) {
+        const r = Math.max(0.03, ((a0.top - a0.bot) + (a1.top - a1.bot)) / 4);
+        dock = { start: a0.mid, end: a1.mid, top: V(midX, a0.top, a0.mid.z), zStart: zS, zEnd: zE, r };
+        const len = zS - zE;
+        for (const i of idx) {
+          const u = THREE.MathUtils.clamp((zS - rest[i * 3 + 2]) / len, 0, 1), under = sstep(-nrm[i * 3 + 1], 0.1, 0.5);
+          const grow = Math.max(sstep(u, 0.55, 0.9), under * sstep(u, 0.15, 0.4));
+          tailH[i] = Math.max(tailH[i], grow); along[i] = 0;
+        }
+      }
+    }
+  }
+
   // into three small attributes (bytes, so the three of them cost 12 bytes a corner)
   const aRegion = new Uint8Array(n * 4), aMark = new Uint8Array(n * 4), aFlow = new Int8Array(n * 4), f = new THREE.Vector3();
   for (let i = 0; i < n; i++) {
@@ -192,6 +223,12 @@ export function prepareHorse(scene, scale) {
   // the grooves down the cannons): how far a corner's neighbours rise above the plane it faces, smoothed once
   const cav = cavity(rest, nrm, g.index ? g.index.array : null, n);
   for (let i = 0; i < n; i++) ao[i] *= 1 - 0.55 * cav[i];
+  // (round the dock the tail's hair fills the crease under it: no black hole showing past the hair there)
+  if (dock) for (let i = 0; i < n; i++) {
+    const d = Math.hypot(rest[i * 3] - midX, rest[i * 3 + 1] - dock.end.y, rest[i * 3 + 2] - dock.end.z);
+    const k = 1 - sstep(d, 0.05, 0.13);
+    if (k > 0) ao[i] += (1 - ao[i]) * 0.75 * k;
+  }
   for (let i = 0; i < n; i++) aFlow[i * 4 + 3] = Math.round(127 * ao[i]);
   const msAO = performance.now() - tAO;
   g.setAttribute('aRegion', new THREE.BufferAttribute(aRegion, 4, true));
@@ -201,7 +238,7 @@ export function prepareHorse(scene, scale) {
   const shape = {
     body, eye, M, poll, nose, faceA, faceF, faceL, eyeL: eyeC[0], eyeR: eyeC[1], eyeR0: eyeC.r, midX, mid0, mid1,
     knee, hock, fetlock, hoofTop, legSplit, neckO, neckA, neckL, up, AX, verts: n, tris: (g.index ? g.index.count : n) / 3,
-    attrBytes: n * 12, msAO, sculptedHair, crestAt, withersT,
+    attrBytes: n * 12, msAO, sculptedHair, crestAt, withersT, dock,
     // (for the hair cards: the body at rest, its parts and its bones)
     rest, nrm, W, bones: B, boneNames: names, skinIndex: SI, skinWeight: SW,
   };
@@ -600,8 +637,9 @@ float cEyeRing = ( 1.0 - smoothstep( 1.0, 2.2, cEa ) ) * smoothstep( 0.4, 0.8, c
 float cLid = smoothstep( 0.75, 0.95, cEa ) * ( 1.0 - smoothstep( 1.15, 1.45, cEa ) ) * smoothstep( 0.4, 0.8, cHead );
 col = mix( col, uSkinCol * ( 0.85 + 0.3 * cLow ), cMuz * uCoat.w );
 col = mix( col, uSkinCol, cEyeRing * 0.3 );
-// the crest: hair-coloured roots under the mane (the tail's dock keeps the coat's colour: the tail's strips grow from
-// inside it)
+// the crest: hair-coloured roots under the mane; the dock: hair colour where the tail's hair grows (its end and its
+// underside; its top keeps the coat's colour, under the strands that lie over it)
+if ( cTail > 0.01 && cMane < 0.01 ) col = mix( col, uManeCol * ( 1.0 + uHair.z * ( sMed - 0.5 ) ) * ( 1.0 - uHair.x * 0.5 ), cTail );
 if ( cMane > 0.01 ) {
   vec3 hc = uManeCol * ( 1.0 + uHair.z * ( sMed - 0.5 ) ) * mix( 1.0 - uHair.x, 1.0 + uHair.y, smoothstep( 0.05, 0.95, cAlong ) );
   col = mix( col, hc, cMane );

@@ -23,7 +23,7 @@ export const HAIR = {
   forelock: { cards: 3, rows: 4, length: 0.12, width: [0.04, 0.022] },                       // short, off the face, fading out
   // the tail: a bundle of cards crossed round its middle line (full from every angle) and a light fan round it, held off
   // the rump, narrow at the dock and fanning a little toward the end, which reaches the middle of the hind cannons
-  tail: { crossed: 4, fan: 8, rows: 9, end: 0.36, radius: [0.035, 0.085, 0.115], off: 0.06 },
+  tail: { crossed: 4, fan: 12, rows: 10, end: 0.36, radius: [0.035, 0.085, 0.115], off: 0.06 },
 };
 const KIND = { mane: 0, forelock: 1, tail: 2, crest: 3, tailFan: 2.25 };   // (the fan: a tail card, drawn lighter)
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -178,15 +178,14 @@ export function buildHair(shape) {
     card(rows, 'forelock', skinBody);
   }
 
-  // THE TAIL: a bundle down the tail's chain of bones and on below its last bone to the middle of the hind cannons. Its
-  // middle line is held behind the rump (the buttock's back, measured from the mesh at each height, plus a gap), narrow
-  // at the dock and fanning a little toward the end. Cards crossed round the middle line make it full from every angle; a
-  // light fan of cards round the outside softens its outline. Skinned along the chain.
+  // THE TAIL: a bundle that follows the croup's top line along the dock, turns down past the dock's end and hangs to the
+  // middle of the hind cannons, its middle line held behind the rump (the buttock's back, measured from the mesh at each
+  // height, plus a gap). Cards crossed round the middle line, rooted inside the end of the dock, make it full from every
+  // angle; a fan of cards round the outside covers the dock: the ones on top start right on the croup line and lie over
+  // it, the sides and the underside a little further along. Each row is skinned to the tail's bones round it.
   const B = shape.bones, chainNames = ['Tail1', 'Tail2', 'Tail3', 'Tail4', 'Tail5', 'Tail6', 'Tail7'].filter((nm) => B[nm]);
   const chain = chainNames.map((nm) => B[nm].clone()), last = chain[chain.length - 1];
   const T = HAIR.tail, X = V(1, 0, 0);
-  const end = V(last.x, Math.min(T.end, last.y - 0.1), last.z - 0.04);
-  // the back of the rump at a height: the backmost body corner near the middle (not the tail's own), over the hindquarters
   const rumpAt = (y) => {
     let zmin = Infinity;
     for (let v = 0; v < n; v++) {
@@ -195,40 +194,66 @@ export function buildHair(shape) {
     }
     return zmin;
   };
-  const rad = (a) => (a < 0.5 ? T.radius[0] + (T.radius[1] - T.radius[0]) * THREE.MathUtils.smoothstep(a, 0, 0.5) : T.radius[1] + (T.radius[2] - T.radius[1]) * (a - 0.5) * 2);
-  const pts = [...chain, end].map((p, i, arr) => {
-    const a = i / (arr.length - 1), q = p.clone(), rz = rumpAt(q.y);
-    if (Number.isFinite(rz)) q.z = Math.min(q.z, q.z + (rz - T.off - rad(a) * 0.7 - q.z) * THREE.MathUtils.smoothstep(a, 0.12, 0.35));
-    return q;
-  });
-  const cum = [0];
-  for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + pts[i].distanceTo(pts[i - 1]));
-  const total = cum[cum.length - 1];
-  const at = (s) => {   // a place along the (held off) chain, 0..1: point, direction, and the bones round it
-    const d = s * total; let j = 0; while (j < pts.length - 2 && cum[j + 1] < d) j++;
-    const f = Math.min(1, Math.max(0, (d - cum[j]) / (cum[j + 1] - cum[j])));
-    const p = pts[j].clone().lerp(pts[j + 1], f), dir = pts[j + 1].clone().sub(pts[j]).normalize();
-    const bi = (k) => names.indexOf(chainNames[Math.min(k, chainNames.length - 1)]);
-    const sk = j + 1 < chainNames.length ? { i: [bi(j), bi(j + 1), 0, 0], w: [1 - f, f, 0, 0] } : { i: [bi(chainNames.length - 1), 0, 0, 0], w: [1, 0, 0, 0] };
-    return { p, dir, sk };
+  // the middle line's key points
+  const D = shape.dock;
+  let keys, dockLen = 0, dockR = T.radius[0];
+  if (D) {
+    dockR = D.r;
+    const dir = D.end.clone().sub(D.start).normalize();
+    const B0 = D.start.clone().addScaledVector(dir, (D.start.z - D.zEnd) / Math.max(0.2, -dir.z) * 0.92);   // (just short of the end cap)
+    const down = V(0, -Math.sin(0.84), -Math.cos(0.84));                                                         // (48 degrees down, back)
+    const C1 = B0.clone().addScaledVector(dir.clone().add(down).normalize(), 0.06), C2 = C1.clone().addScaledVector(down, 0.07);
+    keys = [D.start.clone(), B0, C1, C2];
+    dockLen = D.start.distanceTo(B0);
+  } else {
+    keys = chain.slice(0, 3);
+  }
+  // then down, held behind the rump, to the end
+  const yEnd = Math.min(T.end, last.y - 0.1), lastK = keys[keys.length - 1];
+  for (let k = 1; k <= 4; k++) {
+    const y = lastK.y + (yEnd - lastK.y) * k / 4, rz = rumpAt(y), rr = T.radius[1] + (T.radius[2] - T.radius[1]) * k / 4;
+    const z = Math.min(lastK.z - 0.02 * k, Number.isFinite(rz) ? rz - T.off - rr * 0.7 : lastK.z);
+    keys.push(V(midX, y, z));
+  }
+  // a smooth curve through them (Catmull-Rom), and its length along the way
+  const curve = new THREE.CatmullRomCurve3(keys, false, 'centripetal');
+  const total = curve.getLength(), sDock = D ? dockLen / total : 0.05;
+  // the bones round a point: the nearest stretch of the tail's chain, shared between its two ends
+  const skinAt = (p) => {
+    let best = 0, bd = Infinity, bf = 0;
+    for (let j = 0; j < chain.length - 1; j++) {
+      const a = chain[j], ab = chain[j + 1].clone().sub(a), f = Math.min(1, Math.max(0, p.clone().sub(a).dot(ab) / ab.lengthSq()));
+      const d = p.distanceTo(a.clone().addScaledVector(ab, f)); if (d < bd) { bd = d; best = j; bf = f; }
+    }
+    const bi = (k) => names.indexOf(chainNames[k]);
+    return { i: [bi(best), bi(best + 1), 0, 0], w: [1 - bf, bf, 0, 0] };
   };
+  const rad = (s) => (s <= sDock ? dockR + 0.004 : s < 0.5 ? dockR + (T.radius[1] - dockR) * THREE.MathUtils.smoothstep(s, sDock, 0.5) : T.radius[1] + (T.radius[2] - T.radius[1]) * (s - 0.5) * 2);
   const tailCard = (phi, s0, crossed, endJit, wJit) => {
     const rows = [], N = T.rows;
     for (let k = 0; k < N; k++) {
-      const a = k / (N - 1), s = s0 + (1 - s0) * a * endJit, P = at(s);
-      let b1 = new THREE.Vector3().crossVectors(P.dir, X).normalize(); if (b1.z > 0) b1.negate();   // (pointing away from the rump)
+      // (rows closer together near the root, where the curve turns over the end of the dock)
+      const a = Math.pow(k / (N - 1), 1.5), s = Math.min(1, s0 + (1 - s0) * a * endJit);
+      const p = curve.getPointAt(s), dir = curve.getTangentAt(s);
+      const b1 = new THREE.Vector3().crossVectors(X, dir).normalize();   // (on top along the dock, behind where it hangs)
       const radial = b1.clone().multiplyScalar(Math.cos(phi)).addScaledVector(X, Math.sin(phi));
       const r = rad(s);
-      // a crossed card lies through the middle, as wide as the bundle; a fan card lies round its outside
-      const c = crossed ? P.p.clone() : P.p.clone().addScaledVector(radial, r * 0.85);
-      const across = crossed ? radial.clone() : new THREE.Vector3().crossVectors(radial, P.dir).normalize();
-      const w = crossed ? r * 2 : r * 1.1 * wJit;
-      rows.push({ c, n: crossed ? b1 : radial, across, w, sk: P.sk, axis: P.p.clone() });
+      // a crossed card lies through the middle, as wide as the bundle; a fan card lies round its outside (on the dock's
+      // own surface along the dock)
+      const c = crossed ? p.clone() : p.clone().addScaledVector(radial, s <= sDock ? r : r * 0.85);
+      const across = crossed ? radial.clone() : new THREE.Vector3().crossVectors(radial, dir).normalize();
+      const w = crossed ? r * 2 : r * (s <= sDock ? 1.6 : 1.1) * wJit;   // (wider along the dock, so they wrap it)
+      rows.push({ c, n: crossed ? b1 : radial, across, w, sk: skinAt(p), axis: p.clone() });
     }
     card(rows, crossed ? 'tail' : 'tailFan', (r) => r.sk);
   };
-  for (let i = 0; i < T.crossed; i++) tailCard(i * Math.PI / T.crossed + 0.2, 0.0, true, 0.96 + 0.04 * R(), 1);
-  for (let i = 0; i < T.fan; i++) tailCard(-Math.PI + 2 * Math.PI * (i + 0.5 + 0.3 * (R() - 0.5)) / T.fan, 0.05 + 0.1 * R(), false, 0.85 + 0.15 * R(), 0.85 + 0.3 * R());
+  for (let i = 0; i < T.crossed; i++) tailCard(i * Math.PI / T.crossed + 0.2, sDock * 0.6, true, 0.96 + 0.04 * R(), 1);
+  for (let i = 0; i < T.fan; i++) {
+    const phi = -Math.PI + 2 * Math.PI * (i + 0.5 + 0.25 * (R() - 0.5)) / T.fan, side = Math.abs(phi);
+    // the top ones start right on the croup line, the sides a third of the way along the dock, the underside halfway
+    const s0 = side < 0.9 ? 0.0 : side < 2.2 ? sDock * 0.1 : sDock * 0.2;
+    tailCard(phi, s0, false, 0.85 + 0.15 * R(), 0.85 + 0.3 * R());
+  }
 
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(out.pos, 3));
