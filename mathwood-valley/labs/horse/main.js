@@ -265,8 +265,8 @@ const C = (label, key) => ({ t: 'color', label, key });
 const S = (label, key, opts) => ({ t: 'select', label, key, opts });
 const K = (label, key) => ({ t: 'check', label, key });
 const pct = (v) => Math.round(v * 100) + '%';
-const MASKS = [['off', 'Off'], ['parts', 'Parts (legs, neck, head, hindquarters)'], ['hair', 'Crest and dock (root to tip)'], ['white', 'White'], ['flow', 'Way the hair lies'], ['streaks', 'Streaks'], ['heights', 'Heights (10 cm lines)'], ['albedo', 'Colour only (no light)'], ['shade', 'Baked shade']];
-const MASK_CODE = { off: 0, parts: 1, hair: 2, white: 3, flow: 4, streaks: 5, heights: 6, albedo: 7, shade: 8 };
+const MASKS = [['off', 'Off'], ['parts', 'Parts (legs, neck, head, hindquarters)'], ['hair', 'Crest and dock (root to tip)'], ['white', 'White'], ['flow', 'Way the hair lies'], ['streaks', 'Streaks'], ['heights', 'Heights (10 cm lines)'], ['albedo', 'Colour only (no light)'], ['shade', 'Baked shade'], ['hard', 'Hard lines (ridges, creases)']];
+const MASK_CODE = { off: 0, parts: 1, hair: 2, white: 3, flow: 4, streaks: 5, heights: 6, albedo: 7, shade: 8, hard: 9 };
 const SECTIONS = [
   { id: 'coat', title: 'Coat', open: true, rows: [
       C('Body colour', 'base'), S('Points', 'points', [['none', 'None'], ['black', 'Black legs and ear tips']]),
@@ -422,7 +422,7 @@ function usePreset(p) {
 function applyMask() {
   for (const h of horses) h.mat.coat.uniforms.uMask.value = MASK_CODE[state.mask] || 0;
   const L = $('#legend');
-  const text = { parts: 'red: legs · green: neck and head · blue: hindquarters (mane, tail mixed in)', white: 'white hair', flow: 'the way the hair lies, as a colour (x, y, z)', streaks: 'the hair streaks', heights: 'a line every 10 cm up from the ground; red: hoof, green: points', albedo: 'the coat\'s colour with no light on it', shade: 'how much sky each spot sees (baked at load)', hair: 'red: mane roots · green: tail dock · blue: root to tip' }[state.mask];
+  const text = { parts: 'red: legs · green: neck and head · blue: hindquarters (mane, tail mixed in)', white: 'white hair', flow: 'the way the hair lies, as a colour (x, y, z)', streaks: 'the hair streaks', heights: 'a line every 10 cm up from the ground; red: hoof, green: points', albedo: 'the coat\'s colour with no light on it', shade: 'how much sky each spot sees (baked at load)', hair: 'red: mane roots · green: tail dock · blue: root to tip', hard: 'the skin\'s curvature, baked at load: red ridges, blue-green creases' }[state.mask];
   if (text) { L.hidden = false; L.innerHTML = `<b>Showing:</b> ${text}`; } else L.hidden = true;
 }
 
@@ -562,4 +562,5 @@ window.HL = {
   get horses() { return horses; },
   get info() { const I = renderer.info.render; return { webgl2: renderer.capabilities.isWebGL2, calls: I.calls, tris: I.triangles, timing, shape: shape && { dock: shape.dock && { start: shape.dock.start.toArray().map((x) => +x.toFixed(3)), end: shape.dock.end.toArray().map((x) => +x.toFixed(3)), r: +shape.dock.r.toFixed(3) }, mid: [shape.midX, shape.mid0, shape.mid1], msAO: shape.msAO, tris: shape.tris, verts: shape.verts, attrBytes: shape.attrBytes, hoofTop: shape.hoofTop, knee: shape.knee, hock: shape.hock, fetlock: shape.fetlock, poll: shape.poll.toArray(), nose: shape.nose.toArray(), eyeL: shape.eyeL.toArray(), legSplit: shape.legSplit }, bench, programs: renderer.info.programs.length }; },
   get renderer() { return renderer; },
+  get camera() { return camera; },
 };

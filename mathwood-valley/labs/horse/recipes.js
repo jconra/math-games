@@ -20,12 +20,12 @@ export const LEGS = [['none', 'None'], ['coronet', 'Coronet'], ['pastern', 'Past
 export const PINTOS = [['none', 'None'], ['tobiano', 'Tobiano'], ['overo', 'Overo'], ['sabino', 'Sabino']];
 const NO_LEGS = { FL: 'none', FR: 'none', HL: 'none', HR: 'none' };
 
-const BASE = { mane: '#16110e', points: 'none', belly: 0.6, sooty: 0.25, bloom: 0, muzzle: 0.7, grey: 0, dapples: 0, dappleSize: 0.1, greyLegs: 0.6,
+const BASE = { mane: '#16110e', points: 'none', belly: 0.6, sooty: 0.25, bloom: 0, muzzle: 0.82, grey: 0, dapples: 0, dappleSize: 0.1, greyLegs: 0.6,
   face: 'none', faceSize: 1, ragged: 0.5, star: false, legs: NO_LEGS, pinto: 'none', white: 0.5, roan: 0.6, seed: 1,
   bump: 1, streakColor: 1, sheen: 1, shine: 1, roots: 0.35, tips: 0.3, strands: 0.5, maneShine: 0.6, maneLength: 0.85, tailLength: 0.9 };
 
 export const PRESETS = {
-  bay: { label: 'Bay', game: 'bay', base: '#7a3f20', points: 'black', mane: '#15100d', face: 'star', faceSize: 0.7, sooty: 0.35, bloom: 0.6, seed: 3 },
+  bay: { label: 'Bay', game: 'bay', base: '#7a3f20', points: 'black', mane: '#15100d', face: 'star', faceSize: 1.0, sooty: 0.35, bloom: 0.6, seed: 3 },
   chestnut: { label: 'Chestnut', game: 'chestnut', base: '#a65a2a', mane: '#d6b47a', bloom: 0.5, face: 'blaze', legs: { FL: 'none', FR: 'none', HL: 'sock', HR: 'sock' },
     muzzle: 0.45, roots: 0.25, tips: 0.45, sooty: 0.12, seed: 11 },
   palomino: { label: 'Palomino', game: 'palomino', base: '#c99a52', mane: '#eee2c4', face: 'snip', muzzle: 0.75, belly: 0.35, sooty: 0.1, roots: 0.2, tips: 0.25, seed: 5 },

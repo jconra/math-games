@@ -20,7 +20,9 @@ export const HAIR = {
   // most of it down the near (left) side, some over to the far side. Narrow at the root, widest a third of the way down
   mane: { cards: 34, rows: 6, length: 0.42, width: [0.115, 0.085], lift: [-0.015, 0.028], farShare: 0.1 },
   crest: { cards: 10, rows: 3, length: 0.08, width: [0.09, 0.08], lift: [-0.012, 0.01] },   // a short fringe on the far side
-  forelock: { cards: 3, rows: 4, length: 0.12, width: [0.04, 0.022] },                       // short, off the face, fading out
+  // the forelock: a parted tuft from between the ears to about the eyes' level (reach: a share of the way to the eyes);
+  // 12 long locks and 6 shorter ones under them, about 290 triangles
+  forelock: { width: [0.036, 0.012], part: 0.003, layers: [{ cards: 12, rows: 10, reach: 1.68, lift: 0.12, spread: 0.0058 }, { cards: 6, rows: 7, reach: 1.1, lift: 0.06, spread: 0.008 }] },
   // the tail: a bundle of cards crossed round its middle line (full from every angle) and a light fan round it, held off
   // the rump, narrow at the dock and fanning a little toward the end, which reaches the middle of the hind cannons
   tail: { crossed: 4, fan: 12, rows: 10, end: 0.36, radius: [0.035, 0.085, 0.115], off: 0.06 },
@@ -137,8 +139,14 @@ export function buildHair(shape) {
     neckV.push([v, t, d.dot(up)]);
   }
   const crestPoint = (t) => { let best = -1, bh = -9; for (const [v, tv, h] of neckV) if (Math.abs(tv - t) < 0.02 && h > bh) { bh = h; best = v; } return best; };
-  const raw = [];
-  for (let t = withersT - 0.05; t <= neckL; t += 0.01) { const v = crestPoint(t); if (v >= 0) raw.push([t, S.pos(v)]); }
+  let raw = [];
+  for (let t = withersT - 0.05; t <= neckL; t += 0.01) { const v = crestPoint(t); if (v >= 0) raw.push([t, S.pos(v), S.pos(v).sub(neckO).dot(up)]); }
+  // (where the middle line has no vertex on the very top of the neck, the highest one there is lower down its side: a dip
+  //  in the line that roots a clump of cards low and hides the ones beside it; such points are dropped, the line spans them)
+  raw = raw.filter(([, , h], i) => {
+    const near = raw.slice(Math.max(0, i - 4), i + 5).map((r) => r[2]).sort((a, b) => a - b);
+    return h > near[Math.floor(near.length / 2)] - 0.01;
+  });
   const line = raw.map(([t], i) => {
     const near = raw.slice(Math.max(0, i - 3), i + 4), p = near.reduce((acc, [, q]) => acc.add(q), V(0, 0, 0)).divideScalar(near.length);
     p.x = midX; return [t, p];
@@ -161,21 +169,41 @@ export function buildHair(shape) {
     const t = tPoll - 0.04 + (tWith + 0.12 - tPoll + 0.04) * (i + 0.5) / HAIR.crest.cards;
     card(drape(crestAt(t), HAIR.crest, { side: -1, push: 1.0, back: 0.1 }), 'crest', skinBody);
   }
-  // THE FORELOCK: two or three short locks from between the ears, angled off the face (not lying on it), down the
-  // forehead, fanning a little apart and fading out at their tips, short of the star
+  // THE FORELOCK: a tuft from between the ears falling over the forehead to about the eyes' level, parted in the middle
+  // (so a star or a blaze shows through), its locks a little off the face, fanning apart and thinning out at their tips:
+  // a top layer of long locks and a shorter one under it, for fullness
   const head = (v) => shape.W.head[v] > 0.5 && shape.W.ear[v] < 0.15;
   const F = HAIR.forelock, fa = shape.faceA, ff = shape.faceF;
-  for (let i = 0; i < F.cards; i++) {
-    const k = i - (F.cards - 1) / 2, v = S.nearest(V(shape.mid0 + k * 0.014, shape.poll.y + 0.03, shape.poll.z + 0.04), head); if (v < 0) continue;
-    const root = S.pos(v).addScaledVector(S.nor(v), -0.008);
-    const dir = fa.clone().multiplyScalar(Math.cos(0.42)).addScaledVector(ff, Math.sin(0.42)).addScaledVector(V(1, 0, 0), k * 0.18).normalize();
-    const across = new THREE.Vector3().crossVectors(ff, dir).normalize(), L = F.length * (0.85 + 0.3 * R()), rows = [];
-    for (let j = 0; j < F.rows; j++) {
-      const s2 = j / (F.rows - 1);
-      const c = root.clone().addScaledVector(dir, L * s2).addScaledVector(V(0, -1, 0), 0.025 * s2 * s2);
-      rows.push({ c, n: ff.clone(), across, v, w: F.width[0] + (F.width[1] - F.width[0]) * s2 });
+  // (rooted on the top of the head between the ears: the highest skin on the middle line within 6 cm of the poll bone)
+  let topY = shape.poll.y;
+  for (let v = 0; v < n; v++) if (head(v) && Math.abs(rest[v * 3] - midX) < 0.03 && Math.abs(rest[v * 3 + 2] - shape.poll.z) < 0.06) topY = Math.max(topY, rest[v * 3 + 1]);
+  const eyeT = shape.eyeL.clone().sub(shape.poll).dot(fa);              // (how far down the face the eyes are)
+  for (const layer of F.layers) {
+    for (let i = 0; i < layer.cards; i++) {
+      const half = layer.cards / 2, j = i < half ? i : i - half, sgn = i < half ? -1 : 1;
+      const off = sgn * (F.part + j * layer.spread), kk = off / (F.part + (half - 1) * layer.spread);
+      const v = S.nearest(V(shape.mid0 + off, topY, shape.poll.z + 0.02 - j * 0.006), head); if (v < 0) continue;
+      const root = S.pos(v).addScaledVector(S.nor(v), -0.008);
+      // (down the face, a little off it, each half fanning out to its own side)
+      const dir = fa.clone().multiplyScalar(Math.cos(layer.lift)).addScaledVector(ff, Math.sin(layer.lift)).addScaledVector(V(1, 0, 0), kk * 0.22).normalize();
+      const flat = new THREE.Vector3().crossVectors(ff, dir).normalize(), across = flat.clone().multiplyScalar(Math.cos(kk * 0.5)).addScaledVector(ff, Math.sin(kk * 0.5)).normalize();
+      const Lk = eyeT * layer.reach * (1.0 - 0.18 * Math.abs(kk)) * (0.85 + 0.3 * R()), rows = [];
+      const sway = (R() - 0.5) * 0.014, ph = R() * 3.0;                    // (each lock bends a little its own way)
+      for (let r = 0; r < layer.rows; r++) {
+        const s2 = r / (layer.rows - 1);
+        let c = root.clone().addScaledVector(dir, Lk * s2).addScaledVector(V(0, -1, 0), 0.02 * s2 * s2).addScaledVector(flat, sway * Math.sin(s2 * 2.2 + ph) * s2);
+        // (laid on the skin, which bulges between the poll and the eyes: each row put back just off the surface, a little
+        // further off toward the tip, never under it)
+        let vv = v;
+        if (r > 0) {
+          vv = S.nearest(c, head); if (vv < 0) vv = v;
+          const sp = S.pos(vv), sn = S.nor(vv), off = 0.004 + layer.lift * 0.05 * s2;
+          c.addScaledVector(sn, off - c.clone().sub(sp).dot(sn));
+        }
+        rows.push({ c, n: ff.clone(), across, v: vv, w: F.width[0] + (F.width[1] - F.width[0]) * s2 });
+      }
+      card(rows, 'forelock', skinBody);
     }
-    card(rows, 'forelock', skinBody);
   }
 
   // THE TAIL: a bundle that follows the croup's top line along the dock, turns down past the dock's end and hangs to the
@@ -393,7 +421,7 @@ varying vec3 vStrandV;
 const HAIR_FRAG_COLOR = /* glsl */`
 float hAlong = vHairV.x;
 float hTail = step( 1.5, vHairV.w ) * step( vHairV.w, 2.5 );
-float hLen = clamp( mix( uHairLen.x, uHairLen.y, hTail ), 0.2, 1.0 );
+float hLen = mix( clamp( mix( uHairLen.x, uHairLen.y, hTail ), 0.2, 1.0 ), 1.0, step( 0.5, vHairV.w ) * step( vHairV.w, 1.5 ) );   // (the forelock: its own full length)
 float hv = hAlong / hLen;                                   // (a shorter mane: the picture's strands end sooner)
 // (the picture's strands thin out toward its bottom: a tail uses its fuller top part, so it stays full to its end,
 // which the strip's own length and a ragged cut decide)
@@ -404,7 +432,7 @@ float hFan = step( 2.1, vHairV.w ) * step( vHairV.w, 2.4 );
 float hPx = length( vViewPosition ) * uPx;
 float hA = tx.a * mix( 1.0, hEdge, 0.9 + 0.1 * hAlong ) * ( 1.0 - smoothstep( 0.8 + 0.17 * tx.r, 1.0, hv ) );
 hA *= smoothstep( 0.0, mix( 0.16, 0.05, hTail ), hAlong );                 // (and fade in from the root: no straight top edge)
-hA *= 1.0 - hFore * smoothstep( 0.35, 1.0, hAlong );                      // (the forelock fades out toward its tips)
+hA *= 1.0 - hFore * smoothstep( 0.72, 1.0, hAlong );                      // (the forelock thins out at its tips)
 hA *= 1.0 - 0.35 * hFan;                                                   // (the tail's outer fan: lighter)
 hA = clamp( hA * ( 1.0 + 2.0 * smoothstep( 0.002, 0.02, hPx ) ), 0.0, 1.0 );   // (far off, the picture's smaller copies thin the hair out: thicken it back)
 // a smooth ramp, not a hard cut: alpha to coverage turns it into a dithered, soft edge

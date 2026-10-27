@@ -6,8 +6,9 @@
 //
 //   prepareHorse(scene, scale) -> shape     once per loaded model: finds the body and the eyes, the landmarks (the poll,
 //                                           the nose, the eyes, the knees and hocks, the hoof tops), bakes how much sky
-//                                           each corner sees, and stores three small numbers per corner on the body
-//                                           (which part it is, the mane's crest and the tail's dock, the hair's lie)
+//                                           each corner sees, and stores four small numbers per corner on the body
+//                                           (which part it is, the mane's crest and the tail's dock, the hair's lie,
+//                                           the skin's ridges and creases)
 //   coatMaterial(shape, recipe) -> material a MeshStandardMaterial with the coat added (one per horse; the program is
 //                                           shared, so a whole stable costs one shader compile)
 //   material.coat.set(recipe)               a new coat, live (just uniforms: nothing recompiles)
@@ -86,7 +87,8 @@ export function prepareHorse(scene, scale) {
   const eyeC = [];
   if (eye) {
     const EP = eye.geometry.attributes.position, L = [], R = [];
-    for (let i = 0; i < EP.count; i++) { v.fromBufferAttribute(EP, i).applyMatrix4(M); (v.x > 0 ? L : R).push(v.clone()); }
+    const EC = eye.geometry.attributes.color;      // (the lashes, black in the eye's vertex colours, are not the eyeball)
+    for (let i = 0; i < EP.count; i++) { if (EC && EC.getX(i) + EC.getY(i) + EC.getZ(i) < 0.01) continue; v.fromBufferAttribute(EP, i).applyMatrix4(M); (v.x > 0 ? L : R).push(v.clone()); }
     for (const A of [L, R]) eyeC.push(A.reduce((s, p) => s.add(p), V(0, 0, 0)).divideScalar(Math.max(1, A.length)));
     eyeC.r = Math.max(...L.map((p) => p.distanceTo(eyeC[0])), 0.02);
   }
@@ -154,7 +156,7 @@ export function prepareHorse(scene, scale) {
     const band = BAND * side * sstep(t, withersT - 0.06, withersT + 0.22) * (1 - (sculptedHair ? 0.35 : 0.2) * sstep(t, neckL - 0.25, neckL)) * (sculptedHair ? 1 : 1 - sstep(t, neckL - 0.05, neckL - 0.01));
     if (band < 0.005) continue;
     const c = crestAt(t), d = c - h;                 // how far below the crest
-    const m = 1 - sstep(d, band - 0.015, band + 0.015);
+    const m = (1 - sstep(d, band - 0.015, band + 0.015)) * (sculptedHair ? 1 : 1 - sstep(W.head[i], 0.3, 0.7));   // (not on the head's own skin behind the ears)
     if (m > mane[i]) { mane[i] = m; along[i] = THREE.MathUtils.clamp(d / band, 0, 1); }
   }
   // the forelock's roots: on the head, in front of the poll, between the ears (only where the hair is sculpted: hair
@@ -230,15 +232,20 @@ export function prepareHorse(scene, scale) {
     if (k > 0) ao[i] += (1 - ao[i]) * 0.75 * k;
   }
   for (let i = 0; i < n; i++) aFlow[i * 4 + 3] = Math.round(127 * ao[i]);
+  // THE HARD LINES: each corner's signed curvature (+: a ridge, bone under thin skin; -: a crease or a groove), fine and
+  // broad, for the shading (curvature() below)
+  const curv = curvature(rest, nrm, g.index ? g.index.array : null, n), aShape = new Int8Array(n * 4);
+  for (let i = 0; i < n; i++) { aShape[i * 4] = Math.round(127 * curv.fine[i]); aShape[i * 4 + 1] = Math.round(127 * curv.broad[i]); }
   const msAO = performance.now() - tAO;
   g.setAttribute('aRegion', new THREE.BufferAttribute(aRegion, 4, true));
   g.setAttribute('aMark', new THREE.BufferAttribute(aMark, 4, true));
   g.setAttribute('aFlow', new THREE.BufferAttribute(aFlow, 4, true));
+  g.setAttribute('aShape', new THREE.BufferAttribute(aShape, 4, true));
 
   const shape = {
     body, eye, M, poll, nose, faceA, faceF, faceL, eyeL: eyeC[0], eyeR: eyeC[1], eyeR0: eyeC.r, midX, mid0, mid1,
     knee, hock, fetlock, hoofTop, legSplit, neckO, neckA, neckL, up, AX, verts: n, tris: (g.index ? g.index.count : n) / 3,
-    attrBytes: n * 12, msAO, sculptedHair, crestAt, withersT, dock,
+    attrBytes: n * 16, msAO, sculptedHair, crestAt, withersT, dock,
     // (for the hair cards: the body at rest, its parts and its bones)
     rest, nrm, W, bones: B, boneNames: names, skinIndex: SI, skinWeight: SW,
   };
@@ -286,12 +293,14 @@ const VERT_PARS = /* glsl */`
 attribute vec4 aRegion;   // legs, neck, head, hindquarters (the body is what's left)
 attribute vec4 aMark;     // tail hair, mane hair, root-to-tip along the long hair, ears
 attribute vec4 aFlow;     // the way the hair lies, at rest; (w) how much sky the corner sees
+attribute vec4 aShape;    // the skin's curvature: (x) fine, (y) broad; + a ridge, - a crease
 uniform mat4 uRestM;
 varying vec3 vRest;
 varying vec4 vRestN;     // the rest normal, and (w) how much sky the spot sees
 varying vec3 vFlowV;
 varying vec4 vRegion;
 varying vec4 vMark;
+varying vec2 vShape;
 `;
 const VERT_MAIN = /* glsl */`
 {
@@ -304,6 +313,7 @@ const VERT_MAIN = /* glsl */`
   vRestN = vec4( normalize( ( uRestM * vec4( normal, 0.0 ) ).xyz ), aFlow.w );
   vRegion = aRegion;
   vMark = aMark;
+  vShape = aShape.xy;
 }
 `;
 
@@ -330,6 +340,7 @@ uniform vec4 uHair;        // dark roots, light tips, strand variation, mane shi
 uniform float uPx;         // metres across one pixel, one metre away
 uniform float uMask;       // a debug view (0: the coat)
 uniform float uAO;         // how strongly the baked shade darkens
+uniform float uHard;       // how strongly the skin's ridges and creases show in the shading (1: as made, 0: off)
 // (set in main, read by the light function below)
 vec3 furT = vec3( 0.0, 1.0, 0.0 );
 float furSheen = 0.0;
@@ -403,24 +414,32 @@ float faceWhite( vec3 p, vec3 n ) {
   float s = abs( p.x - ( MID0 + MID1 * t ) );     // across the face from its middle (m)
   float front = max( dot( n, FACE_F ), dot( n, FACE_A ) * smoothstep( 0.72, 0.95, t ) );   // facing out of the front of the face
   float rag = ( vnoise( p * 36.0 + uSeed * 3.1 ) - 0.5 ) * uFace.z;   // (soft, low ragged edges: no islands)
-  float hairy = ( furHairN - 0.5 ) * 0.012;                             // (and hair by hair along the coat)
+  float hairy = ( furHairN - 0.5 ) * 0.016 + ( vnoiseB( p * 150.0 + uSeed ) - 0.5 ) * 0.005;   // (and hair by hair along the coat)
   float sz = uFace.y;
   float facing = smoothstep( -0.05, 0.3, front );
   // the star: a round or diamond spot on the forehead, about level with the eyes
   float star = 0.0;
   if ( uFace.w > 0.5 || ( uFace.x > 0.5 && uFace.x < 2.5 ) ) {
-    vec2 q = vec2( s, ( t - 0.4 ) * FACE_L ) / ( 0.04 * sz );
-    float r = mix( length( q ), ( abs( q.x ) + abs( q.y ) ) * 0.82, 0.45 );
-    star = ( 1.0 - smoothstep( 0.72, 1.02, r + rag * 0.45 + hairy * 0.35 / ( 0.04 * sz ) ) ) * facing;   // (a solid centre, a soft, slightly ragged edge)
+    // (a soft, uneven diamond-to-oval, a little taller than wide, its outline wandering gently, its edge soft and broken
+    //  hair by hair)
+    float sx = p.x - ( MID0 + MID1 * t );
+    vec2 q = vec2( sx, ( t - 0.39 ) * FACE_L * 0.85 ) / ( 0.04 * sz );
+    float a = atan( q.y, q.x );
+    float r = mix( length( q ), ( abs( q.x ) + abs( q.y ) ) * 0.8, 0.5 );
+    float R = 0.8 + 0.22 * ( vnoise( vec3( cos( a ) * 1.2 + uSeed.x, sin( a ) * 1.2 + uSeed.y, 3.0 ) ) - 0.5 );
+    star = ( 1.0 - smoothstep( R - 0.14, R + 0.05, r + hairy * 0.45 / ( 0.04 * sz ) + rag * 0.04 ) ) * facing;
   }
   float w = 0.0, t0 = 0.0, t1 = 0.0, edge = 0.008;
   if ( uFace.x > 1.5 && uFace.x < 2.5 ) { w = 0.015 * sz; t0 = 0.42; t1 = 0.84; edge = 0.005; }       // stripe
-  else if ( uFace.x > 2.5 && uFace.x < 3.5 ) { w = sz * mix( mix( 0.04, 0.026, smoothstep( 0.25, 0.55, t ) ), 0.04, smoothstep( 0.72, 0.92, t ) ); t0 = 0.2; t1 = 1.12; }   // blaze
+  else if ( uFace.x > 2.5 && uFace.x < 3.5 ) { w = sz * mix( mix( 0.04, 0.026, smoothstep( 0.25, 0.55, t ) ), 0.04, smoothstep( 0.72, 0.92, t ) ); t0 = 0.2; t1 = 1.12; edge = 0.004; }   // blaze
   else if ( uFace.x > 3.5 && uFace.x < 4.5 ) {   // bald face: out past the eyes, and the whole muzzle (no islands of colour round the nostrils)
     w = sz * mix( 0.15, 0.115, smoothstep( 0.3, 0.9, t ) ); t0 = 0.05; t1 = 1.2;
     facing = mix( smoothstep( -0.55, -0.4, front ), 1.0, smoothstep( 0.76, 0.86, t ) ); edge = 0.008; rag *= 0.6;   // (the muzzle all round, nostrils and chin too; dents in the face too)
   }
-  else if ( uFace.x > 4.5 ) { w = 0.018 * sz; t0 = 0.88; t1 = 1.0; edge = 0.006; }                    // snip
+  else if ( uFace.x > 4.5 ) {   // snip: a teardrop between the nostrils, pointed up, a little off the middle, uneven
+    w = 0.019 * sz * smoothstep( 0.85, 0.97, t ) * ( 1.0 + 0.6 * ( vnoise( vec3( t * 18.0, uSeed.x, 1.0 ) ) - 0.5 ) ); t0 = 0.86; t1 = 1.02; edge = 0.004;
+    s = abs( p.x - ( MID0 + MID1 * t ) - 0.004 * sz * ( vnoise( vec3( t * 9.0, uSeed.y, 2.0 ) ) - 0.5 ) * 2.0 );
+  }
   float band = 0.0;
   if ( w > 0.0 ) {
     float small = clamp( w / 0.04, 0.3, 1.0 );                              // (a narrow stripe or a snip: less raggedness, so it stays whole)
@@ -572,7 +591,7 @@ if ( medFade > 0.0 ) {
 }
 float sFine = mix( 0.5, S.x, fineFade ), sMed = mix( 0.5, S.z, medFade );
 // the bump across the hairs (a slope, in metres per metre); the coarse lie a little lumpy, as hair lies in tufts
-furSlope = ( ( S.y - S.x ) * 0.00033 * fineFade * ( 0.6 + 0.8 * S.z ) + ( S.w - S.z ) * 0.0005 * medFade ) / cE * uFur.x * ( 1.0 - 0.55 * cHead );
+furSlope = ( ( S.y - S.x ) * 0.00033 * fineFade * ( 0.6 + 0.8 * S.z ) + ( S.w - S.z ) * 0.0005 * medFade ) / cE * uFur.x * ( 1.0 - 0.55 * cHead ) * ( 1.0 - 0.8 * smoothstep( 0.70, 0.88, dot( cP - POLL, FACE_A ) / FACE_L ) * cHead );
 
 // ── the colour
 vec3 col = uBase * ( 0.9 + 0.2 * cLow );
@@ -624,19 +643,21 @@ col = mix( col, uPointsCol * ( 0.85 + 0.3 * cLow ), cPoints * uCoat.x );
 // the ears: darker inside the cup on their front face, with pale hairs growing out of it
 float cEarIn = smoothstep( 0.45, 0.8, cEar ) * smoothstep( 0.15, 0.55, cN.z + 0.25 * abs( cN.x ) ) * smoothstep( POLL.y + 0.02, POLL.y + 0.08, cP.y );
 if ( cEarIn > 0.001 ) {
-  float tufts = smoothstep( 0.55, 0.8, vnoise( vec3( cP.x * 260.0, cP.y * 40.0, cP.z * 260.0 ) ) );
+  float tufts = smoothstep( 0.6, 0.85, vnoise( vec3( cP.x * 160.0, cP.y * 30.0, cP.z * 160.0 ) ) ) * smoothstep( 0.25, 0.7, cEarIn );
   col = mix( col, uSkinCol * 0.55, cEarIn * 0.75 );
-  col = mix( col, vec3( 0.62, 0.57, 0.5 ), cEarIn * tufts * 0.55 );
+  col = mix( col, mix( col, vec3( 0.55, 0.5, 0.44 ), 0.5 ), cEarIn * tufts * 0.3 );
 }
 // the face: a darker muzzle (bare skin under thin hair); dark skin round the eyes, an almond-shaped dark lid
 float cT = dot( cP - POLL, FACE_A ) / FACE_L;
-float cMuz = smoothstep( 0.74, 0.92, cT ) * smoothstep( 0.4, 0.8, cHead );
+float cMuz = smoothstep( 0.72, 0.86, cT + ( cLow - 0.5 ) * 0.06 ) * smoothstep( 0.4, 0.8, cHead );
 vec3 cEd = cP - ( cP.x > MIDX ? EYE_L : EYE_R );
-float cEa = length( vec2( cEd.z / 1.5, cEd.y / ( 0.95 - 0.35 * smoothstep( 0.0, 1.5 * EYE_R0, abs( cEd.z ) ) ) ) ) / EYE_R0;
-float cEyeRing = ( 1.0 - smoothstep( 1.0, 2.2, cEa ) ) * smoothstep( 0.4, 0.8, cHead );
+float cEa = length( vec2( cEd.z / 1.1, cEd.y / 0.95 ) ) / EYE_R0;
+float cEyeRing = ( 1.0 - smoothstep( 1.0, 2.0, cEa ) ) * smoothstep( 0.4, 0.8, cHead );
 float cLid = smoothstep( 0.75, 0.95, cEa ) * ( 1.0 - smoothstep( 1.15, 1.45, cEa ) ) * smoothstep( 0.4, 0.8, cHead );
 col = mix( col, uSkinCol * ( 0.85 + 0.3 * cLow ), cMuz * uCoat.w );
-col = mix( col, uSkinCol, cEyeRing * 0.3 );
+// (the muzzle's bare skin: faint wrinkles round the nostrils and lips)
+col *= 1.0 - 0.16 * cMuz * uCoat.w * smoothstep( 0.6, 0.8, vnoise( vec3( cP.x * 150.0, cP.y * 26.0 + cP.z * 34.0, cP.z * 70.0 ) ) );
+col = mix( col, uSkinCol, cEyeRing * 0.38 );
 // the crest: hair-coloured roots under the mane; the dock: hair colour where the tail's hair grows (its end and its
 // underside; its top keeps the coat's colour, under the strands that lie over it)
 if ( cTail > 0.01 && cMane < 0.01 ) col = mix( col, uManeCol * ( 1.0 + uHair.z * ( sMed - 0.5 ) ) * ( 1.0 - uHair.x * 0.5 ), cTail );
@@ -650,8 +671,8 @@ furHairN = mix( 0.5, S.x * 0.7 + S.z * 0.3, fineFade );
 float cW = whiteAt( cP, cN, cTail, cHead, mix( S.z, S.x * 0.75 + S.z * 0.25, fineFade ), cMane );
 vec3 cWhite = uWhiteCol * ( 0.94 + 0.08 * cLow );
 col = mix( col, cWhite, cW );
-col = mix( col, uPinkCol, cW * smoothstep( 0.8, 0.97, cT ) * smoothstep( 0.4, 0.8, cHead ) * 0.4 );
-col = mix( col, uSkinCol * 0.7, cLid * 0.3 );
+col = mix( col, uPinkCol, cW * smoothstep( 0.82, 0.98, cT ) * smoothstep( 0.4, 0.8, cHead ) * 0.55 );   // (thin white hair over pink skin on the nose)
+col = mix( col, uSkinCol * 0.7, cLid * 0.28 );
 // the hooves: matte dark horn, or pale under a white leg, with faint vertical growth stripes
 float cHoof = 1.0 - smoothstep( HOOF_Y - 0.006, HOOF_Y + 0.006, cP.y - 0.022 * cN.z );
 if ( cHoof > 0.0 ) {
@@ -660,8 +681,19 @@ if ( cHoof > 0.0 ) {
   vec3 hoof = mix( uHoofDark, uHoofPale, smoothstep( 0.3, 0.7, pale + ( lines - 0.5 ) * 0.5 * pale * ( 1.0 - pale ) * 4.0 ) );
   col = mix( col, hoof * ( 0.9 + 0.2 * lines ), cHoof );
 }
-// the hair-by-hair colour: lighter and darker hairs, a slightly uneven lie
-col *= 1.0 + uFur.y * ( ( sFine - 0.5 ) * 0.22 + ( sMed - 0.5 ) * 0.16 ) * ( 1.0 - cHoof );
+// the hair-by-hair colour: lighter and darker hairs, a slightly uneven lie (hardly any on the muzzle's bare skin)
+col *= 1.0 + uFur.y * ( ( sFine - 0.5 ) * 0.22 + ( sMed - 0.5 ) * 0.16 ) * ( 1.0 - cHoof ) * ( 1.0 - 0.75 * cMuz );
+// THE HARD LINES: bony ridges a touch lighter (the hair lies thin and flat over them), creases and grooves darker (the
+// cheek's rim, under the facial crest, round the eye, the nostrils' insides); strongest on the head, faint on the body,
+// whose triangles are bigger
+float cRidge = ( max( vShape.x, 0.0 ) * 0.35 + max( vShape.y, 0.0 ) * 0.9 ) * ( 1.0 - 0.85 * cEyeRing );   // (not the lids: no pale ring round the eye)
+float cCrease = clamp( smoothstep( 0.08, 0.6, max( -vShape.x, 0.0 ) ) * 0.7 + max( -vShape.y, 0.0 ) * 1.2, 0.0, 1.0 );   // (the fine lines only where they're clear: no grime)
+float cHL = mix( 0.3, 1.0, smoothstep( 0.3, 0.7, cHead ) ) * uHard * ( 1.0 - cHoof );
+// (the lips meet: the line between them only a faint crease, not a dark gap)
+cCrease *= 1.0 - 0.75 * cMuz * ( 1.0 - smoothstep( -0.085, -0.06, dot( cP - POLL, FACE_F ) ) );
+col *= ( 1.0 + 0.10 * cRidge * cHL ) * ( 1.0 - 0.34 * cCrease * cHL );
+// (the nostrils: the bare skin in them nearly black)
+col = mix( col, vec3( 0.040, 0.022, 0.014 ), clamp( cCrease * 2.0, 0.0, 1.0 ) * cMuz * smoothstep( 0.84, 0.93, cT ) * smoothstep( 0.012, 0.026, abs( cP.x - ( MID0 + MID1 * cT ) ) ) * 0.8 * uHard );   // (dark brown skin, not a black hole)   // (each side's, not the groove between)
 diffuseColor.rgb = col;
 coatAlbedo = col;
 float cLum = dot( col, vec3( 0.2126, 0.7152, 0.0722 ) );
@@ -669,15 +701,15 @@ float cDark = 1.0 - smoothstep( 0.02, 0.1, cLum );
 furCool = vec3( 0.05, 0.062, 0.085 ) * cDark;
 // roughness: the barrel's short coat a little glossier than the legs; moist muzzle; matte hooves
 furRough = mix( 0.52, 0.66, cLegs ) + 0.05 * cHead;
-furRough = mix( furRough, 0.45, cMuz * 0.6 );
+furRough = mix( furRough, 0.64, cMuz * 0.85 );   // (the muzzle's skin: low shine)
 furRough = mix( furRough, 0.8, cHoof );
 furRough = clamp( furRough + ( sFine - 0.5 ) * 0.1 + 0.05 * cW, 0.05, 1.0 );
-furSpec = mix( 0.16, 1.0, max( cHoof * 0.6, cMuz * 0.5 ) );
-furSheen = 0.6 * uFur.z * ( 1.0 - cHoof ) * ( 1.0 - 0.6 * cMuz );
-furShine = uFur.w * 0.36 * ( 1.0 - cHoof ) * ( 1.0 - cMuz * 0.7 ) * ( 0.7 + 0.6 * sFine );
+furSpec = mix( 0.16, 1.0, max( cHoof * 0.6, cMuz * 0.25 ) );
+furSheen = 0.6 * uFur.z * ( 1.0 - cHoof ) * ( 1.0 - 0.6 * cMuz ) * ( 1.0 - 0.8 * cEyeRing );   // (round the eye: thin hair over skin, little sheen)
+furShine = uFur.w * 0.36 * ( 1.0 - cHoof ) * ( 1.0 - cMuz * 0.7 ) * ( 1.0 - 0.85 * cEyeRing ) * ( 1.0 - 0.8 * cEarIn ) * ( 0.7 + 0.6 * sFine ) * ( 1.0 + 0.6 * cRidge * cHL );
 furShinePow = 40.0;
 furEdge = 1.0;
-furBroad = uFur.w * 0.11 * ( 1.0 - cHoof ) * ( 1.0 - cMuz * 0.6 ) * ( 0.8 + 0.4 * sMed );
+furBroad = uFur.w * 0.11 * ( 1.0 - cHoof ) * ( 1.0 - cMuz * 0.6 ) * ( 1.0 - 0.85 * cEyeRing ) * ( 1.0 - 0.8 * cEarIn ) * ( 0.8 + 0.4 * sMed ) * ( 1.0 + 1.3 * cRidge * cHL );
 vec4 cDebug = vec4( 0.0 );
 if ( uMask > 0.5 ) {
   if ( uMask < 1.5 ) cDebug = vec4( cLegs + cHair * 0.8, cNeck + cHead + cTail * 0.6, cHQ + cMane * 0.9 + cHead, 1.0 );
@@ -687,7 +719,8 @@ if ( uMask > 0.5 ) {
   else if ( uMask < 5.5 ) cDebug = vec4( vec3( sFine * 0.5 + sMed * 0.5 ), 1.0 );
   else if ( uMask < 6.5 ) cDebug = vec4( vec3( fract( cP.y * 10.0 ) < 0.08 ? 1.0 : 0.25 ), 1.0 ) + vec4( cHoof, cPoints * 0.5, 0.0, 0.0 );
   else if ( uMask < 7.5 ) cDebug = vec4( col * 1.25, 1.0 );   // the colour alone, no light
-  else cDebug = vec4( vec3( vRestN.w ), 1.0 );                 // the baked shade
+  else if ( uMask < 8.5 ) cDebug = vec4( vec3( vRestN.w ), 1.0 );   // the baked shade
+  else cDebug = vec4( 0.5 + 0.5 * max( vShape.x, 0.0 ) + 0.5 * max( vShape.y, 0.0 ), 0.5 - 0.5 * max( -vShape.x, 0.0 ), 0.5 - 0.5 * max( -vShape.y, 0.0 ) - 0.3 * max( vShape.y, 0.0 ), 1.0 );   // the ridges (red) and creases (blue-green)
 }
 `;
 
@@ -740,6 +773,38 @@ function cavity(rest, nrm, index, n) {
   for (let i = 0; i < n; i++) raw[i] = cnt[i] ? Math.min(1, Math.max(0, (sum[i] / cnt[i]) / (len[i] / cnt[i]) * 2.2)) : 0;
   for (let i = 0; i < n; i++) { let s = raw[i] * 2, c = 2; for (const j of nb[i]) { s += raw[j]; c++; } out[i] = s / c; }
   return out;
+}
+
+// THE HARD LINES: for each corner, how far it stands off the middle of its neighbours along its facing, over its edges'
+// mean length (+: a ridge, the bone under thin skin; -: a crease or a groove), on the welded surface (corners split at a
+// seam share one value), smoothed once ('fine'), and again over two more rings ('broad': the cheek's rim, the facial
+// crest, the edges of the nasal bone); each less the shape's overall roundness round about, scaled, clamped to -1..1.
+function curvature(rest, nrm, index, n) {
+  const key = new Map(), id = new Int32Array(n); let m = 0;
+  for (let i = 0; i < n; i++) {
+    const k = Math.round(rest[i * 3] * 2e4) + ',' + Math.round(rest[i * 3 + 1] * 2e4) + ',' + Math.round(rest[i * 3 + 2] * 2e4);
+    let j = key.get(k); if (j === undefined) { j = m++; key.set(k, j); } id[i] = j;
+  }
+  const P = new Float32Array(m * 3), N = new Float32Array(m * 3), nb = Array.from({ length: m }, () => new Set());
+  for (let i = 0; i < n; i++) { const j = id[i]; for (let c = 0; c < 3; c++) { P[j * 3 + c] = rest[i * 3 + c]; N[j * 3 + c] += nrm[i * 3 + c]; } }
+  for (let j = 0; j < m; j++) { const l = Math.hypot(N[j * 3], N[j * 3 + 1], N[j * 3 + 2]) || 1; N[j * 3] /= l; N[j * 3 + 1] /= l; N[j * 3 + 2] /= l; }
+  const tri = index ? index.length / 3 : n / 3, vi = (t, c) => id[index ? index[t * 3 + c] : t * 3 + c];
+  for (let t = 0; t < tri; t++) { const a = vi(t, 0), b = vi(t, 1), c = vi(t, 2); nb[a].add(b).add(c); nb[b].add(a).add(c); nb[c].add(a).add(b); }
+  const raw = new Float32Array(m);
+  for (let j = 0; j < m; j++) {
+    let mx = 0, my = 0, mz = 0, el = 0, k = 0;
+    for (const o of nb[j]) { mx += P[o * 3]; my += P[o * 3 + 1]; mz += P[o * 3 + 2]; el += Math.hypot(P[o * 3] - P[j * 3], P[o * 3 + 1] - P[j * 3 + 1], P[o * 3 + 2] - P[j * 3 + 2]); k++; }
+    if (!k) continue;
+    const d = (mx / k - P[j * 3]) * N[j * 3] + (my / k - P[j * 3 + 1]) * N[j * 3 + 1] + (mz / k - P[j * 3 + 2]) * N[j * 3 + 2];
+    raw[j] = -d / (el / k);
+  }
+  const smooth = (x, w) => { const o = new Float32Array(m); for (let j = 0; j < m; j++) { let s = x[j] * w, c = w; for (const q of nb[j]) { s += x[q]; c++; } o[j] = s / c; } return o; };
+  const f1 = smooth(raw, 2); let f2 = smooth(f1, 1); f2 = smooth(f2, 1);
+  // (less the shape's overall roundness round about: six rings more of the same; only the lines are left)
+  let base = f2; for (let r = 0; r < 6; r++) base = smooth(base, 1);
+  const fine = new Float32Array(n), broad = new Float32Array(n), clamp = (x) => Math.max(-1, Math.min(1, x));
+  for (let i = 0; i < n; i++) { const j = id[i]; fine[i] = clamp((f1[j] - base[j]) * 6.0); broad[i] = clamp((f2[j] - base[j]) * 8.0); }
+  return { fine, broad };
 }
 
 // HOW MUCH SKY each corner sees (ambient occlusion), baked once at load from the horse at rest: the body's surface is
@@ -798,7 +863,7 @@ export function coatUniforms(shape, px) {
     uCoat: { value: new THREE.Vector4() }, uGrey: { value: new THREE.Vector4() }, uFace: { value: new THREE.Vector4() },
     uLegs: { value: new THREE.Vector4() }, uPinto: { value: new THREE.Vector4() }, uSeed: { value: new THREE.Vector3() },
     uFur: { value: new THREE.Vector4(1, 1, 1, 1) }, uHair: { value: new THREE.Vector4() },
-    uPx: px || { value: 0.001 }, uMask: { value: 0 }, uAO: { value: 1 },
+    uPx: px || { value: 0.001 }, uMask: { value: 0 }, uAO: { value: 1 }, uHard: { value: 1 },
     uHairLen: { value: new THREE.Vector2(1, 1) },
   };
 }
@@ -826,21 +891,24 @@ export function coatMaterial(shape, recipe, { px = null } = {}) {
   return m;
 }
 
-// ── the eyes: the model's own glossy material, its own colours if it has them, or else a deep brown iris and a dark,
-// wider-than-tall pupil looking out to the side and a little forward ──────────────────────────────────────────────────
+// ── the eyes: the model's own glossy material with a dark brown iris (fine streaks round it, a darker rim), a near-black
+// pupil wider than tall, looking out to the side and a little forward; the lashes on the upper lid (black in the eye's
+// vertex colours) near-black and matte ───────────────────────────────────────────────────────────────────────────────
 export function eyeMaterial(shape, base) {
   const m = base.clone();
-  m.name = 'eye';
-  // (a model whose eyes carry their own colours, a darker pupil in a deep brown eyeball: those, as made)
-  if (shape.eye && shape.eye.geometry.attributes.color) { m.vertexColors = true; return m; }
+  m.name = 'eye'; m.vertexColors = false;
+  const g = shape.eye && shape.eye.geometry;
+  if (g && g.attributes.color && !g.attributes.eyeLash) g.setAttribute('eyeLash', g.attributes.color);
+  const lash = !!(g && g.attributes.eyeLash);
   const u = { uRestM: { value: shape.M.clone() } };
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u);
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nuniform mat4 uRestM;\nvarying vec3 vEyeRest;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvEyeRest = ( uRestM * vec4( position, 1.0 ) ).xyz;');
+      .replace('#include <common>', '#include <common>\nuniform mat4 uRestM;\nvarying vec3 vEyeRest;\nvarying float vLash;\n' + (lash ? 'attribute vec4 eyeLash;\n' : ''))
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvEyeRest = ( uRestM * vec4( position, 1.0 ) ).xyz;\n' + (lash ? 'vLash = 1.0 - step( 0.01, eyeLash.r + eyeLash.g + eyeLash.b );' : 'vLash = 0.0;'));
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vEyeRest;\n' + shape.glsl)
+      .replace('#include <common>', '#include <common>\nvarying vec3 vEyeRest;\nvarying float vLash;\n' + shape.glsl)
+      .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = mix( roughnessFactor, 0.85, vLash );')
       .replace('#include <color_fragment>', `#include <color_fragment>
 {
   float side = vEyeRest.x > MIDX ? 1.0 : -1.0;
@@ -848,16 +916,21 @@ export function eyeMaterial(shape, base) {
   vec3 look = normalize( vec3( side, 0.06, 0.5 ) );
   float c = dot( d, look );
   float upc = d.y - look.y * c;
-  float iris = smoothstep( 0.5, 0.62, c );
-  float ring = smoothstep( 0.62, 0.8, c );
-  float pupil = smoothstep( 0.76, 0.81, c - upc * upc * 2.0 );
-  vec3 col = mix( vec3( 0.01, 0.007, 0.005 ), vec3( 0.03, 0.012, 0.005 ), iris );
-  col = mix( col, vec3( 0.045, 0.02, 0.007 ), ring * ( 1.0 - pupil ) * 0.6 );
-  col = mix( col, vec3( 0.004, 0.003, 0.003 ), pupil );
+  vec3 e1 = normalize( cross( look, vec3( 0.0, 1.0, 0.0 ) ) ), e2 = cross( e1, look );
+  float ang = atan( dot( d, e2 ), dot( d, e1 ) );
+  float streak = 0.5 + 0.5 * sin( ang * 23.0 + 3.0 * sin( ang * 7.0 ) );
+  float iris = smoothstep( 0.40, 0.48, c );
+  float rim = 1.0 - smoothstep( 0.48, 0.60, c );
+  float pupil = smoothstep( 0.74, 0.79, c - upc * upc * 3.0 );   // (wider than tall)
+  vec3 col = vec3( 0.006, 0.005, 0.004 );                                         // (a horse shows little white)
+  col = mix( col, vec3( 0.050, 0.025, 0.010 ) * ( 0.7 + 0.6 * streak ), iris );   // the dark brown iris
+  col = mix( col, col * 0.35, iris * rim );                                          // its darker rim
+  col = mix( col, vec3( 0.003 ), pupil );
+  col = mix( col, vec3( 0.010, 0.008, 0.007 ), vLash );
   diffuseColor.rgb = col;
 }`);
   };
-  m.customProgramCacheKey = () => 'horseeye:' + shape.key;
+  m.customProgramCacheKey = () => 'horseeye2:' + shape.key + (lash ? ':lash' : '');
   return m;
 }
 
@@ -872,7 +945,7 @@ export function applyRecipe(u, r) {
   u.uPointsCol.value.set(r.pointsColor || '#141110');
   u.uManeCol.value.set(r.mane);
   u.uWhiteCol.value.set(r.whiteColor || '#dcd6cc');
-  u.uSkinCol.value.set(r.skin || '#2c2523');
+  u.uSkinCol.value.set(r.skin || '#2e2c2b');   // (dark grey bare skin: the muzzle, round the eyes)
   u.uPinkCol.value.set('#b8948a');
   u.uHoofDark.value.set('#3a3430'); u.uHoofPale.value.set('#b5a283');
   u.uCoat.value.set(r.points === 'black' ? 1 : 0, r.belly ?? 0.5, r.sooty ?? 0.2, r.muzzle ?? 0.7);
