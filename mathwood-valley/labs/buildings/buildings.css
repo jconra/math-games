@@ -1,0 +1,4 @@
+/* The building lab: the Material Lab's and Stone Lab's look, plus buttons for buildings still to come. */
+.btn:disabled { opacity: .45; cursor: default; box-shadow: none; }
+.btn:disabled:hover { background: linear-gradient(#7a5533, #5e3f24); }
+@media (max-width: 760px) { .stats { max-width: calc(100% - 130px); } }
