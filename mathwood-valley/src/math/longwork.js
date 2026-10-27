@@ -505,10 +505,15 @@ export function workSub(a, b) {
 // ---- a sum read from a question --------------------------------------------------------------------------------------
 // The first "a op b" in a question's words or its working, for Work it out: "7 × 8 = ?", "83 − 33", "4 pies × 3 pounds
 // = 12 pounds", "112 ÷ 5", "45 miles ÷ 9 hours". Whole numbers only (a decimal or dollars and cents: null, the columns
-// here don't do points), and a question with a blank (? or "what") in the sum isn't a sum to work.
+// here don't do points), and a question with a blank (? or "what") in the sum isn't a sum to work. Money in whole cents
+// or whole dollars is plain numbers to the columns: "50¢ − 15¢" is 50 − 15, "$20 − $7" is 20 − 7, and beside cents a
+// whole dollar written "$1.00" is 100 ("$1.00 − 35¢": 100 − 35); with no cents about, "$2.00" is 2.
 const OPS = { '×': 'mul', 'x': 'mul', '*': 'mul', '÷': 'div', '/': 'div', '+': 'add', '−': 'sub', '-': 'sub' };
 export function sumFrom(text) {
-  const s = String(text || '').replace(/(\d),(\d{3})/g, '$1$2');
+  let s = String(text || '').replace(/(\d),(\d{3})/g, '$1$2');
+  if (/¢/.test(s)) s = s.replace(/\$(\d+)\.(\d\d)(?!\d)/g, (m, d, c) => String(Number(d) * 100 + Number(c)));
+  else s = s.replace(/\$(\d+)\.00(?!\d)/g, '$$$1');   // ("$2.00" with no cents about is $2: whole dollars)
+  s = s.replace(/(\d)\s*¢/g, '$1').replace(/\$(\d)/g, '$1');
   const re = /(\d+(?:\.\d+)?)(?:\s+[A-Za-z][A-Za-z' ]{0,24}?)?\s*([×x*÷+−-])\s*[$]?(\d+(?:\.\d+)?)(?!\s*\/)/g;
   let m;
   while ((m = re.exec(s))) {

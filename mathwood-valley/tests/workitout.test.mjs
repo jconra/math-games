@@ -82,6 +82,11 @@ test('the sum on a question: read off its words or working; whole numbers only; 
   assert.deepEqual(sumFrom('24 miles ÷ 8 hours = 3 miles an hour'), { op: 'div', a: 24, b: 8 });
   assert.deepEqual(sumFrom('1,250 + 375'), { op: 'add', a: 1250, b: 375 });
   assert.deepEqual(sumFrom('Rope 7 x 8'), { op: 'mul', a: 7, b: 8 });
+  // money in whole cents or dollars: the store's change working ("15¢ and 35¢ change make 50¢: 50¢ − 15¢ = 35¢")
+  assert.deepEqual(sumFrom('15¢ and 35¢ change make 50¢: 50¢ − 15¢ = 35¢'), { op: 'sub', a: 50, b: 15 });
+  assert.deepEqual(sumFrom('50¢ − 15¢ = 35¢ change'), { op: 'sub', a: 50, b: 15 });
+  assert.deepEqual(sumFrom('$20 − $7 = $13'), { op: 'sub', a: 20, b: 7 });
+  assert.deepEqual(sumFrom('65¢ and 35¢ change make $1.00: $1.00 − 65¢ = 35¢'), { op: 'sub', a: 100, b: 65 });
   for (const t of ['$3.45 + $2.80', 'What + 3 = 8', '3, 6, 9, ?', '3/4 + 1/4', '2x + 5 = 17', '15 − 20', '', null]) assert.equal(sumFrom(t), null, String(t));
 });
 
