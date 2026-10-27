@@ -230,66 +230,77 @@ function raggedEdge(x, y, w, h, seed, depth, rough) {
   const d = Math.min(x, y, w - 1 - x, h - 1 - y), n = fbm(x / 64, y / 64, 8, 8, 3, seed) - 0.5;
   return clamp01((d - depth * (0.5 + n * rough * 2)) / 2.5);
 }
-function drawSheriffSign(g, [x0, y0, w, h]) {
-  const L = canvasOf(w, h), lg = L.getContext('2d');
-  // 1. the older sign under it: "ASSAY OFFICE" in big faded brick-red letters, painted on the bare wall, mostly worn;
-  // they show faintly round the newer sign and plainly where its panel has peeled
-  const G = canvasOf(w, h), gg = G.getContext('2d');
-  gg.textAlign = 'center'; gg.textBaseline = 'middle'; gg.fillStyle = 'rgba(132,58,40,1)';
-  let gs = 150; gg.font = `400 ${gs}px Rye, Georgia, serif`;
-  while (gg.measureText('ASSAY OFFICE').width > w * 0.9 && gs > 60) { gs -= 4; gg.font = `400 ${gs}px Rye, Georgia, serif`; }
-  gg.fillText('ASSAY OFFICE', w / 2 + 10, h * 0.5 + 4);
-  wear(gg, [0, 0, w, h], 0.3, 1231, 2.2);
-  // 2. the newer sign's panel: cream paint with hard, ragged edges and a dark border line just inside them, flaking
-  // off in crisp patches along the boards (where it has gone, the old letters show)
-  const P = canvasOf(w, h), pg = P.getContext('2d'), img = pg.createImageData(w, h), d = img.data;
-  const mx = 34, my = 22;
-  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-    const u = x / w, v = y / h, i = (y * w + x) * 4;
-    const edge = Math.min(x - mx, w - mx - x, y - my, h - my - y) + (fbm(u * 3, v * 2, 12, 6, 3, 1203) - 0.5) * 14;
-    if (edge < 0) continue;
-    const flake = fbm(u * 1.4, v * 5.5, 7, 9, 4, 1213) * 0.7 + fbm(u * 6, v * 9, 13, 11, 2, 1219) * 0.3;
-    if (flake < 0.36 + 0.08 * (1 - Math.min(1, edge / 30))) continue;                    // peeled (crisp)
-    const border = edge > 5 && edge < 9 ? 1 : 0, n = 0.94 + 0.08 * (fbm(u, v, 20, 6, 2, 1223) - 0.5);
-    d[i] = border ? 70 : 226 * n; d[i + 1] = border ? 50 : 214 * n; d[i + 2] = border ? 36 : 184 * n; d[i + 3] = 255;
-  }
-  pg.putImageData(img, 0, 0);
-  // (the old letters: faint on the bare wall round the panel, ghosting through its thin cream coat, plain where the
-  // coat has peeled)
-  lg.globalAlpha = 0.34; lg.drawImage(G, 0, 0); lg.globalAlpha = 1;
-  lg.drawImage(P, 0, 0);
-  const Gin = canvasOf(w, h), gig = Gin.getContext('2d');
-  gig.drawImage(G, 0, 0); gig.globalCompositeOperation = 'destination-in'; gig.drawImage(P, 0, 0);
-  lg.globalAlpha = 0.22; lg.drawImage(Gin, 0, 0); lg.globalAlpha = 1;
-  const Gs = canvasOf(w, h), gsg = Gs.getContext('2d');
-  gsg.drawImage(G, 0, 0); gsg.globalCompositeOperation = 'destination-out'; gsg.drawImage(P, 0, 0);
-  lg.globalAlpha = 0.5; lg.drawImage(Gs, 0, 0); lg.globalAlpha = 1;
-  // 3. the letters: chunky dark slab capitals, a dot between the words, the paint worn back with noise
-  const T = canvasOf(w, h), tg = T.getContext('2d');
-  tg.textBaseline = 'middle'; tg.textAlign = 'left';
-  const words = ['SHERIFF', 'JAIL'], gap = 120;
-  let size = 176, widths;
-  const font = (sz) => `900 ${sz}px Bitter, Georgia, serif`;
-  const track = (t, sz) => [...t].reduce((s, c) => s + tg.measureText(c).width, 0) + (t.length - 1) * sz * 0.07;
-  for (;;) { tg.font = font(size); widths = words.map((t) => track(t, size)); if (widths[0] + widths[1] + gap < w * 0.84 || size < 80) break; size -= 4; }
-  let x = (w - (widths[0] + widths[1] + gap)) / 2; const y = h / 2 + 8;
-  tg.font = font(size); tg.lineJoin = 'round';
-  words.forEach((t, wi) => {
-    for (const c of t) {
-      tg.strokeStyle = '#140d08'; tg.lineWidth = 6; tg.strokeText(c, x, y + (Math.sin(x * 0.07) * 2)); tg.fillStyle = '#2b1e15'; tg.fillText(c, x, y + (Math.sin(x * 0.07) * 2));
-      x += tg.measureText(c).width + size * 0.07;
-    }
-    x -= size * 0.07;
-    if (wi === 0) { tg.fillStyle = '#2b1e15'; tg.beginPath(); tg.arc(x + gap / 2, y + 4, size * 0.085, 0, 7); tg.fill(); x += gap; }
+// THE SIGN, PAINTED STRAIGHT ON THE BOARDS (the board shader lays it on the false front's lap siding, parts.js
+// boardWear: so the boards' seams, laps, wear and light run through it). 1024 x 256 for 5.6 x 1.4 m of wall. Three
+// coats, oldest first:
+//   the old sign  "ASSAY OFFICE" in faded brick red, a decorative face, offset up and left of the new one; faint where it
+//                 lies on the wall, a little stronger where the cream over it has flaked
+//   the cream     the new sign's ground, brushed on without a frame: it feathers out unevenly into the wall's ochre,
+//                 thins in streaks along the boards and has flaked off in patches
+//   the letters   "SHERIFF · JAIL": chunky dark slab capitals, worn back, a few drips
+// Returned as raw pixels (rgb the paint's colour everywhere, cream where there is none, so its edges blend clean; a how
+// much paint), not through a canvas, which would lose the colour where there is no paint.
+export const SIGN_PAINT = { w: 1024, h: 256, m: [5.6, 1.4] };
+function signMask(draw) { const c = canvasOf(SIGN_PAINT.w, SIGN_PAINT.h), g = c.getContext('2d', { willReadFrequently: true }); draw(g); const d = g.getImageData(0, 0, SIGN_PAINT.w, SIGN_PAINT.h).data, a = new Float32Array(SIGN_PAINT.w * SIGN_PAINT.h); for (let i = 0; i < a.length; i++) a[i] = d[i * 4 + 3] / 255; return a; }
+function paintedSign() {
+  const { w, h } = SIGN_PAINT, ppm = w / SIGN_PAINT.m[0], cy = h / 2 + 5;
+  // the old sign's letters
+  const ghost = signMask((gg) => {
+    gg.textAlign = 'center'; gg.textBaseline = 'middle'; gg.fillStyle = '#000';
+    // (bigger than the new letters and higher: its tops stand clear of the cream, on the bare ochre)
+    let gs = 150; gg.font = `400 ${gs}px Rye, Georgia, serif`;
+    while (gg.measureText('ASSAY OFFICE').width > w * 0.9 && gs > 50) { gs -= 4; gg.font = `400 ${gs}px Rye, Georgia, serif`; }
+    gg.fillText('ASSAY OFFICE', w / 2 - 0.3 * ppm, cy - 0.27 * ppm);
+    wear(gg, [0, 0, w, h], 0.26, 1231, 2.4);
   });
-  wear(tg, [0, 0, w, h], 0.17, 1241, 1.7);
-  // (and drips: a few runs of paint down from the letters' feet)
-  const R = rng(1251);
-  for (let k = 0; k < 9; k++) { const dx = w * (0.12 + 0.76 * R()), dy = y + size * 0.36; tg.fillStyle = 'rgba(43,30,21,0.8)'; tg.fillRect(dx, dy, 2.5, 6 + R() * 18); }
-  lg.drawImage(T, 0, 0);
-  g.clearRect(x0, y0, w, h);
-  g.drawImage(L, x0, y0);
+  // the new letters
+  const letters = signMask((tg) => {
+    tg.textBaseline = 'middle'; tg.textAlign = 'left'; tg.fillStyle = '#000'; tg.strokeStyle = '#000'; tg.lineJoin = 'round';
+    const words = ['SHERIFF', 'JAIL'], gap = 110, font = (sz) => `900 ${sz}px Bitter, Georgia, serif`;
+    const track = (t, sz) => [...t].reduce((a, c) => a + tg.measureText(c).width, 0) + (t.length - 1) * sz * 0.07;
+    let size = 168, widths;
+    for (;;) { tg.font = font(size); widths = words.map((t) => track(t, size)); if (widths[0] + widths[1] + gap < w * 0.76 || size < 70) break; size -= 4; }
+    let x = (w - (widths[0] + widths[1] + gap)) / 2;
+    words.forEach((t, wi) => {
+      for (const c of t) { const yy = cy + Math.sin(x * 0.07) * 2; tg.lineWidth = 5; tg.strokeText(c, x, yy); tg.fillText(c, x, yy); x += tg.measureText(c).width + size * 0.07; }
+      x -= size * 0.07;
+      if (wi === 0) { tg.beginPath(); tg.arc(x + gap / 2, cy + 3, size * 0.085, 0, 7); tg.fill(); x += gap; }
+    });
+    wear(tg, [0, 0, w, h], 0.16, 1241, 1.7);
+    const R = rng(1251);
+    for (let k = 0; k < 9; k++) tg.fillRect(w * (0.14 + 0.72 * R()), cy + size * 0.34, 2.5, 6 + R() * 16);
+  });
+  const CREAM = [228, 216, 186], RED = [122, 54, 38], INK = [40, 28, 20];
+  const data = new Uint8Array(w * h * 4);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const u = x / w, v = y / h, i = y * w + x;
+    // the cream: a soft-edged patch round the lettering (its half-size 2.5 x 0.5 m), its edge wandering 10 to 40 cm in
+    // and out, then thinned in long streaks along the boards and flaked off in patches
+    const dx = Math.max(0, Math.abs(x - w / 2) - 2.45 * ppm), dy = Math.max(0, Math.abs(y - cy) - 0.42 * ppm);
+    const wob = (fbm(u * 2, v * 1.5, 5, 3, 4, 1203) - 0.5) * 0.5 * ppm + (fbm(u * 6, v * 4, 9, 5, 2, 1207) - 0.5) * 0.12 * ppm;
+    const d = Math.hypot(dx, dy * 1.6) - wob;
+    let cream = 1 - smoothstepJS(0, 0.16 * ppm, d);
+    const streak = fbm(u * 1.0, v * 7.0, 4, 9, 4, 1213), flake = fbm(u * 2.2, v * 6.5, 9, 11, 3, 1219) * 0.75 + hash(x >> 1, y >> 1, 1221) * 0.25;
+    cream *= 0.62 + 0.38 * smoothstepJS(0.3, 0.6, streak);
+    if (flake < 0.34) cream *= 0.08;                                   // flaked off (crisp-edged)
+    else if (flake < 0.38) cream *= 0.5;
+    const gA = 0.42 * ghost[i] * (1 - 0.5 * cream), lA = letters[i] * (0.35 + 0.65 * smoothstepJS(0.2, 0.6, cream + 0.4));
+    // over: the old letters, the cream (the old letters bleeding faintly through it), the new letters
+    let A = gA, Cr = RED[0] * gA, Cg = RED[1] * gA, Cb = RED[2] * gA;
+    const bleed = 0.24 * ghost[i], cc = [CREAM[0] + (RED[0] - CREAM[0]) * bleed, CREAM[1] + (RED[1] - CREAM[1]) * bleed, CREAM[2] + (RED[2] - CREAM[2]) * bleed], cn = 0.94 + 0.1 * (fbm(u, v, 18, 5, 2, 1223) - 0.5);
+    const ca = cream * 0.94;
+    Cr = cc[0] * cn * ca + Cr * (1 - ca); Cg = cc[1] * cn * ca + Cg * (1 - ca); Cb = cc[2] * cn * ca + Cb * (1 - ca); A = ca + A * (1 - ca);
+    Cr = INK[0] * lA + Cr * (1 - lA); Cg = INK[1] * lA + Cg * (1 - lA); Cb = INK[2] * lA + Cb * (1 - lA); A = lA + A * (1 - lA);
+    // (rows go in bottom first: v runs up the wall)
+    const o = ((h - 1 - y) * w + x) * 4;
+    if (A > 0.004) { data[o] = Cr / A; data[o + 1] = Cg / A; data[o + 2] = Cb / A; } else { data[o] = CREAM[0]; data[o + 1] = CREAM[1]; data[o + 2] = CREAM[2]; }
+    data[o + 3] = Math.round(255 * Math.min(1, A));
+  }
+  const t = new THREE.DataTexture(data, w, h, THREE.RGBAFormat);
+  t.generateMipmaps = true; t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter; t.anisotropy = 8; t.needsUpdate = true;
+  return t;
 }
+function smoothstepJS(a, b, x) { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); }
 // aged paper: cream going yellow-brown at the edges, stains, a fold line or two; its outline torn
 function paper(g, [x0, y0, w, h], seed, o = {}) {
   const img = g.createImageData(w, h), d = img.data, R = rng(seed);
@@ -454,14 +465,14 @@ function blanket(g, [x0, y0, w, h]) {
 export async function makeSheriffArt() {
   try { await Promise.all([document.fonts.load('64px Rye'), document.fonts.load('900 64px Bitter'), document.fonts.load('800 40px Bitter'), document.fonts.load('700 16px Bitter')]); } catch (e) { /* the fonts are optional */ }
   const t0 = performance.now(), A = SHERIFF_ART, c = canvasOf(A.w, A.h), g = c.getContext('2d', { willReadFrequently: true });
-  drawSheriffSign(g, A.sign);
   const names = [['DUSTY PETE', '$500'], ['ONE-EYED JACK', '$300'], ['THE KID', '$200']];
   A.posters.forEach((r, i) => wantedPoster(g, r, { seed: 1401 + i * 17, name: names[i][0], reward: names[i][1], tear: i === 2 ? 0.55 : null }));
   [['NOTICE', null, null], ['REWARD', '$50', [236, 226, 196]], ['LOST HORSE', null, [214, 200, 168]], ['NOTICE', null, [226, 214, 184]]].forEach(([t, big, base], i) => notice(g, A.notices[i], { seed: 1501 + i * 13, title: t, big, base }));
   A.holes.forEach((r, i) => bulletHole(g, r, 1601 + i));
   valleyMap(g, A.map); calendar(g, A.calendar); jailRules(g, A.rules); rug(g, A.rug); blanket(g, A.blanket);
   const t = tex(c, { repeat: false, aniso: 8 });
-  return { sheriff: t, bytes: gpuBytes(A.w, A.h), ms: performance.now() - t0 };
+  const signPaint = paintedSign();
+  return { sheriff: t, signPaint, bytes: gpuBytes(A.w, A.h) + gpuBytes(SIGN_PAINT.w, SIGN_PAINT.h), ms: performance.now() - t0 };
 }
 
 // all of the lab's own pictures. boards.slotFor(i, { name, price, owned }) draws slot i again (and sends it up)

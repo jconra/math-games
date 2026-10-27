@@ -195,6 +195,10 @@ function rebuild() {
   const t0 = performance.now(), sheriff = state.building === 'sheriff';
   B = sheriff ? buildSheriff(sheriffRecipe(state.sh), { texMean: RT.mean }) : buildStable(stableRecipe(state), { texMean: RT.mean });
   LU.uPaintWear.value = cur().wear; LU.uPaintShelter.value = BLD().shelter || 0; mats.wood.normalScale.setScalar(BLD().woodBump ?? 0.9); applyLight();
+  // (a sign painted straight onto the boards: the board shader lays it on, from its picture and its place on the wall)
+  const SP = B.anchors.signPaint;
+  LU.uSignOn.value = SP ? 1 : 0; LU.uSignMap.value = SART.signPaint;
+  if (SP) { LU.uSignRect.value.set(SP.x0, SP.y0, 1 / SP.w, 1 / SP.h); LU.uSignZ.value = SP.z; }
   for (const g of ['wood', 'iron', 'stone', 'plaster', 'hay', 'floor', 'spill', 'boards', 'decal', 'glow', 'glass', 'pane', 'rope']) {
     const geo = B.geos[g]; if (!geo) continue;
     const m = new THREE.Mesh(geo, mats[g]); m.name = g; m.castShadow = !['glow', 'glass', 'spill', 'floor', 'boards', 'decal', 'pane'].includes(g); m.receiveShadow = g !== 'glow' && g !== 'glass' && g !== 'pane';

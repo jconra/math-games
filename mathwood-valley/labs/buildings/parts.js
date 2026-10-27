@@ -141,7 +141,8 @@ export function lapSiding(k, w, o) {
           const len = ce - cs, ac = (cs + ce) / 2, yc = yb + h / 2;
           if (len > 0.02) {
             const patch = (o.patch || []).some((p) => p.a > cs && p.a < ce && p.y > yb && p.y < yb + h);
-            const bare = patch || (o.paint && k.R() < (o.bare ?? 0.04));
+            // (keepPaint(a, y): a stretch of wall whose boards are all the old painted ones, under a painted sign)
+            const bare = patch || (o.paint && k.R() < (o.bare ?? 0.04) && !(o.keepPaint && o.keepPaint(ac, yb + h / 2)));
             const paint = o.paint && !bare ? vary(k, o.paint, 0.9, 1.08) : null;
             const tint = patch ? [1.25, 1.12, 0.95] : vary(k, bare ? o.tint.map((c) => c * 1.1) : o.tint, 0.84, 1.14);
             // (half of them turned upside down: the strip's picture mirrored across the board, so neighbours don't show
@@ -612,6 +613,10 @@ export const LU = {
   uPaintWear: { value: 0.5 },                              // how much of the paint has gone (0..1)
   uPaintShelter: { value: 0 },                             // how much less paint goes where no rain reaches (under a porch)
   uOutLamp: { value: 1 },                                  // outdoor lanterns (lantern o.outdoor): 1 lit with the rest, 0 out
+  // a sign painted straight onto a wall's lap siding (the board shader paints it, so the boards' seams, wear and light
+  // are its own): its picture (rgb the paint, linear-ish sRGB decoded in the shader; a how much paint), where it is on
+  // the wall (x0, y0, 1/width, 1/height, world metres), the wall's face (z), on or off
+  uSignMap: { value: null }, uSignRect: { value: new THREE.Vector4(0, 0, 1, 1) }, uSignZ: { value: 0 }, uSignOn: { value: 0 },
 };
 export function setLamps(lamps) {
   for (let i = 0; i < LAMP_MAX; i++) {
@@ -654,7 +659,7 @@ export const NAIL_LINES = [0.6, 1.3, 2.35, 3.75, 5.0, 6.2, 7.2];
 export function boardWear(mat) {
   return chain(mat, 'boardwear', (sh) => {
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec3 aBoard; varying vec3 vBoard;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvBoard = aBoard;');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uPaintWear, uPaintShelter; varying vec3 vBoard;')
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uPaintWear, uPaintShelter, uSignZ, uSignOn; uniform sampler2D uSignMap; uniform vec4 uSignRect; varying vec3 vBoard;')
       .replace('wPaintVis = wPainted * (1.0 - wChip);', `{
       float pAl = dot(wP.xz, vec2(-wN.z, wN.x));
       // (on upright boards the paint goes in streaks down them; on horizontal ones, lap siding, in long flakes along them)
@@ -674,6 +679,21 @@ export function boardWear(mat) {
       // (on horizontal boards the edge chips are few: along every lap they drew a dotted pale line)
       wPaintVis = wPainted * (1.0 - max(wChip * (vBoard.x > 1.5 ? 0.2 : 1.0), pOff * step(0.01, vBoard.x + vBoard.z)));
     }`)
+      .replace('diffuseColor.rgb = mix(wWood, wPaint, wPaintVis);', `diffuseColor.rgb = mix(wWood, wPaint, wPaintVis);
+    #ifdef W_BOX
+    // THE PAINTED SIGN, on the lap siding's outer faces inside its rectangle: its paint over the wall's, worn back along
+    // each board's edges (a band 0.5 to 4 cm, ragged) and gone with the wall's own paint where that has peeled
+    if (uSignOn > 0.5 && vBoard.x > 1.5 && vBoard.x < 3.5 && wN.z > 0.6 && abs(wP.z - uSignZ) < 0.06) {
+      vec2 sUV = vec2((wP.x - uSignRect.x) * uSignRect.z, (wP.y - uSignRect.y) * uSignRect.w);
+      if (sUV.x > 0.0 && sUV.x < 1.0 && sUV.y > 0.0 && sUV.y < 1.0) {
+        vec4 sg = texture2D(uSignMap, sUV);
+        float sAcross = vHalf.y - abs(vLocalTop.y);
+        float sEdge = 1.0 - smoothstep(0.002, 0.004 + 0.028 * smoothstep(0.42, 0.85, wFine.b * 0.6 + wBig.g * 0.6), sAcross);
+        float sA = sg.a * (1.0 - 0.92 * sEdge) * mix(0.25, 1.0, wPaintVis);
+        diffuseColor.rgb = mix(diffuseColor.rgb, pow(sg.rgb, vec3(2.2)) * (0.86 + 0.4 * wLum), sA);
+      }
+    }
+    #endif`)
       .replace('wBare = wWear * (1.0 - wPaintVis);', `#ifdef W_BOX
     if (vBoard.x > 0.25) {
       vec2 nV;
@@ -702,6 +722,9 @@ export function boardWear(mat) {
     if (vBoard.x > 1.5 && vBoard.x < 3.5) {
       float lY = vBoard.x < 2.5 ? vLocalTop.y : -vLocalTop.y, lZ = vBoard.x < 2.5 ? vLocalTop.z : -vLocalTop.z;
       diffuseColor.rgb *= 1.0 - 0.42 * smoothstep(vHalf.y - 0.055, vHalf.y - 0.028, lY) * step(0.0, lZ);
+      // (the lap's underside, 2 cm deep: the whole strip's picture squeezed into it drew a dotted line along every board;
+      // it is one solid shade of the board, in shadow)
+      if (vHalf.y - abs(vLocalTop.y) < 0.0015) diffuseColor.rgb = (wIsPaint > 0.5 ? vTintPaint.rgb * 0.55 : vTintPaint.rgb * 0.16) * 0.7;
     }
     #endif
     // (no paler rubbed edges on bare wood: they drew a bright line down every rafter and board; the paint still chips)
