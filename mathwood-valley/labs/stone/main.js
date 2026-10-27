@@ -7,9 +7,9 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeTextures, setStone, STONE_LOOKS } from '../materials/textures.js';
-import { makeRubbleTexture } from './stonetex.js';
+import { makeRubbleTexture } from './stonetex.js?v=2';
 import { U, weather } from '../materials/weather.js';
-import { buildStoneWall, stoneEdges, stoneRecipe, RECIPE_DEFAULTS, SHAPES, STYLES, PALETTES, MORTARS } from './stonewall.js';
+import { buildStoneWall, stoneEdges, stoneRecipe, RECIPE_DEFAULTS, SHAPES, STYLES, PALETTES, MORTARS } from './stonewall.js?v=2';
 
 const $ = (s, el = document) => el.querySelector(s);
 const num = (n) => Math.round(n).toLocaleString('en-US');
@@ -25,7 +25,7 @@ const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 400);
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.495; controls.minDistance = 0.6; controls.maxDistance = 60;
 const sun = new THREE.DirectionalLight(0xffffff, 3);
-sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
+sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.012;
 const hemi = new THREE.HemisphereLight(0xbfd6ff, 0x5a4a34, 1.0);
 scene.add(sun, sun.target, hemi);
 
@@ -200,9 +200,9 @@ function buildPanel() {
     <p class="note">Everything that makes this stonework its own, small enough for the town to keep one per building.</p>
     <details class="how"><summary>How it works</summary>
       <p>Each block of wall is <b>unrolled</b> into one long strip, all the way round its footprint, the stones are laid out flat on the strip, and the strip is folded back round the corners. A stone that crosses a corner folds with it: that is a corner stone.</p>
-      <p><b>Mortared</b>: odd-shaped stones laid flat in rough rows that keep breaking, the way rubble walls were built. Rows are every height (0.6 to 1.4 times the average) and their beds tilt up and down. About a third of the stones stand two rows tall, some are split into two smaller ones, and now and then a little wedge stone sits where a joint meets the bed below. Every stone has two or three corners knocked off, each at its own angle, and joints are kept away from the joints in the row below. Each stone bulges out 15 to 20% of its height and sticks out by its own amount. The corner stones are the same stones, long and short in turn on each face; so are the stones beside a door or window. A lintel goes over each opening and a sill under a window, fitted to the rows.</p>
+      <p><b>Mortared</b>: odd-shaped stones laid flat in rough rows that keep breaking, the way rubble walls were built. Rows are every height (0.6 to 1.4 times the average) and their beds tilt up and down. About a third of the stones stand two rows tall, some are split into two smaller ones, and now and then a little wedge stone sits where a joint meets the bed below. Every stone has two or three corners knocked off, each at its own angle, and joints are kept away from the joints in the row below. Each stone bulges out 15 to 20% of its height and sticks out by its own amount. The corner stones are the same stones, long and short in turn on each face, folding round the corner (both halves share the fold exactly); so are the stones beside a door or window. In an inside corner the two faces take turns course by course: one face's stone runs into the corner and the other's butts against it. A lintel goes over each opening and a sill under a window, fitted to the rows. The coping is closed slabs: their undersides all sit on the wall top, their sides are drawn where they meet, and a chip never reaches past the wall line.</p>
       <p><b>Mortar</b>: one family for every mortared building: light lime, grey (the usual) or dark, set back 3.5 cm, with a shadow band under each stone. The dry styles have no mortar: their gaps show a deep warm grey-brown, set well back.</p>
-      <p><b>Dry-stacked</b>: the way a person builds with stones they found. The wall keeps a lumpy top line. At its lowest dip, stones from a pile of forty flat field stones are tried there, laid on their beds or tipped a little; the one that leaves the least empty space under it is kept, and the top line moves up over it. Where nothing fits, a small stone is knocked to fit the gap. No mortar: the gaps are dark.</p>
+      <p><b>Dry-stacked</b>: the way a person builds with stones they found. The wall keeps a lumpy top line. At its lowest dip, stones from a pile of forty flat field stones are tried there, laid on their beds or tipped a little; the one that leaves the least empty space under it is kept, and the top line moves up over it. Where nothing fits, a small stone is knocked to fit the gap. One over two: a stone whose end would sit right over the end of the stone under it counts as a poor fit, so no joint runs straight up the wall. No mortar: the gaps show the backing in the mortar's colour, set well back.</p>
       <p><b>Ledgestone</b>: the same stacking with thin slabs, 20 cm to over a metre long, thicker at one end than the other, their ends broken off, a thick one now and then.</p>
       <p><b>Colours</b>: one palette per building (a base colour, a second, a darker grey and a rust-tan), drifting slowly across the wall so like stones gather; each stone lighter or darker by one number for all three channels.</p>
       <p>A stone's face is a <b>fan</b> of triangles round its centre, and the centre is pushed out (the bulge): a six-sided stone is six triangles. Its sides are only drawn where they show: in an opening, round a sill, along the edge of the top stones. Every corner knows how far it is from the stone's outline, so the shader darkens and rounds the edges with no extra triangles.</p>
@@ -289,6 +289,10 @@ function loop() {
     // the sky's light on the stone kept mostly grey: a blue fill turned the shady sides navy
     U.uSkyGrey.value = 0.75;
     mats.stone = stoneEdges(weather(new THREE.MeshStandardMaterial({ map: RT.map, normalMap: RT.normalMap, roughness: 0.93 }), { tint: true, ao: true }));
+    // the walls cast their shadows from the faces that face the sun (the default is the faces turned away): where a wall
+    // meets the ground, or another wall in an inside corner, the two surfaces touch, and a shadow drawn from the far face
+    // lets a thin line of light leak along the join
+    mats.stone.shadowSide = THREE.FrontSide;
     useLook(state.stone);
     mats.wood = new THREE.MeshStandardMaterial({ color: 0xa88a6a, roughness: 0.9, side: THREE.DoubleSide });   // the plain building
     mats.door = new THREE.MeshStandardMaterial({ color: 0x5a4330, roughness: 0.9 });                            // the jail door's planks

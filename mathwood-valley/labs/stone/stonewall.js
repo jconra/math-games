@@ -90,7 +90,7 @@ const G = -0.12;                               // walls start 12 cm under the gr
 // than the next
 export const STYLES = {
   mortared: { label: 'Mortared', recess: 0.035, rim: [0.002, 0.012], tilt: 0.07, bulge: [0.15, 0.2], stick: 0.03, ring: null, joint: 1, maxN: 7, coreAO: 0.8, rimAO: 0.85, value: 0.16, shadow: true, fill: 1 },
-  drystack: { label: 'Dry-stacked', recess: 0.09, rim: [0, 0.003], tilt: 0.07, bulgeK: 0.35, ring: { k: 0.24, max: 0.03, faceK: 0.5, faceAdd: [0.05, 0.11] }, joint: 0.45, maxN: 6, fill: 0.88, coreAO: 0.82, rimAO: 0.7, value: 0.14 },
+  drystack: { label: 'Dry-stacked', recess: 0.09, rim: [0, 0.003], tilt: 0.07, bulgeK: 0.35, ring: { k: 0.24, max: 0.03, faceK: 0.5, faceAdd: [0.05, 0.11] }, joint: 0.45, maxN: 5, fill: 0.88, coreAO: 0.82, rimAO: 0.7, value: 0.14 },
   ledgestone: { label: 'Ledgestone', recess: 0.05, rim: [0, 0.002], tilt: 0.035, bulgeK: 0.06, ring: { k: 0.4, max: 0.01, faceK: 0, faceAdd: [0.03, 0.07] }, joint: 0.6, jointVar: true, maxN: 6, fill: 0.88, coreAO: 0.82, rimAO: 0.75, value: 0.1 },
 };
 
@@ -100,9 +100,9 @@ export const STYLES = {
 // patches), and made lighter or darker by ONE number for all three channels: one number each would change its hue, and an
 // earlier version did that and some stones came out purple.
 export const PALETTES = {
-  grey: { label: 'Grey', base: [0.62, 0.61, 0.58], second: [0.56, 0.55, 0.52], dark: [0.36, 0.355, 0.34], rust: [0.61, 0.53, 0.43] },
-  buff: { label: 'Buff', base: [0.64, 0.595, 0.51], second: [0.58, 0.55, 0.48], dark: [0.37, 0.35, 0.31], rust: [0.62, 0.52, 0.4] },
-  ochre: { label: 'Ochre and grey', base: [0.6, 0.585, 0.55], second: [0.65, 0.56, 0.42], dark: [0.36, 0.35, 0.33], rust: [0.6, 0.48, 0.37] },
+  grey: { label: 'Grey', base: [0.62, 0.61, 0.58], second: [0.56, 0.55, 0.52], dark: [0.41, 0.405, 0.39], rust: [0.61, 0.53, 0.43] },
+  buff: { label: 'Buff', base: [0.64, 0.595, 0.51], second: [0.58, 0.55, 0.48], dark: [0.42, 0.4, 0.36], rust: [0.62, 0.52, 0.4] },
+  ochre: { label: 'Ochre and grey', base: [0.6, 0.585, 0.55], second: [0.65, 0.56, 0.42], dark: [0.4, 0.39, 0.37], rust: [0.6, 0.48, 0.37] },
   basalt: { label: 'Dark basalt', base: [0.36, 0.355, 0.35], second: [0.42, 0.41, 0.39], dark: [0.25, 0.245, 0.24], rust: [0.44, 0.38, 0.32] },
   brown: { label: 'Grey-brown', base: [0.53, 0.5, 0.46], second: [0.57, 0.525, 0.44], dark: [0.34, 0.32, 0.29], rust: [0.55, 0.47, 0.38] },
 };
@@ -113,7 +113,8 @@ export const PALETTES = {
 // corner. A through opening goes right through the wall (and shows on the face opposite); otherwise it is a recess.
 const rect = (W, D, cx = 0, cz = 0) => [[cx - W / 2, cz + D / 2], [cx + W / 2, cz + D / 2], [cx + W / 2, cz - D / 2], [cx - W / 2, cz - D / 2]];
 // the top of a block: a rectangle (plus overhang) with which of its sides are on the outside (a lip is drawn there)
-const topRect = (x0, x1, z0, z1, over, open = { x0: 1, x1: 1, z0: 1, z1: 1 }) => ({ x0: x0 - (open.x0 ? over : 0), x1: x1 + (open.x1 ? over : 0), z0: z0 - (open.z0 ? over : 0), z1: z1 + (open.z1 ? over : 0), open });
+const topRect = (x0, x1, z0, z1, over, open = { x0: 1, x1: 1, z0: 1, z1: 1 }) => ({ x0: x0 - (open.x0 ? over : 0), x1: x1 + (open.x1 ? over : 0), z0: z0 - (open.z0 ? over : 0), z1: z1 + (open.z1 ? over : 0), open,
+  ov: { x0: open.x0 ? over : 0, x1: open.x1 ? over : 0, z0: open.z0 ? over : 0, z1: open.z1 ? over : 0 } });
 
 export const SHAPES = {
   wall: { label: 'Wall', note: 'a straight wall with a door and a window', make() {
@@ -127,11 +128,14 @@ export const SHAPES = {
     const A = 3.6, B = 2.8, t = 0.45, H = 2.3, ct = 0.17, o = 0.12, x = 1.2, z = 1.0;   // (the corner a little off the middle)
     const loop = [[-A, 0], [0, 0], [0, -B], [-t, -B], [-t, -t], [-A, -t]].map(([a, b]) => [a + x, b + z]);
     return { H, sections: [{ loop0: loop, loop1: loop, y0: G, y1: H - ct }], openings: [],
+      // (three pieces of top that meet edge to edge: the arm going left, the corner, the arm going back; the outside
+      // faces overhung, the inside faces flush, so the two arms' copings meet cleanly in the inside corner)
       top: { y: H, t: ct, over: o, rects: [
-        topRect(x - A, x, z - t, z, o, { x0: 1, x1: 1, z0: 1, z1: 1 }),          // the arm going left, with the corner
-        topRect(x - t, x, z - B, z - t, o, { x0: 1, x1: 1, z0: 1, z1: 0 })] } };  // the arm going back
+        topRect(x - A, x - t, z - t, z, o, { x0: 1, x1: 0, z0: 0, z1: 1 }),
+        topRect(x - t, x, z - t, z, o, { x0: 0, x1: 1, z0: 0, z1: 1 }),
+        topRect(x - t, x, z - B, z - t, o, { x0: 0, x1: 1, z0: 1, z1: 0 })] } };
   } },
-  chimney: { label: 'Chimney', note: 'a wide base, a sloped shoulder, a narrower stack', make(o) {
+  chimney: { label: 'Chimney', note: 'a wide base, a shoulder stepped in three times, a narrower stack', make(o) {
     const W = 1.7, D = 0.95, w = 1.0, d = 0.72, H = 5.4, ct = 0.14, ov = 0.08;
     if (o.style === 'drystack') {
       // a dry chimney leans in steadily all the way up (about 1 in 10 on its front), rough capstones, a stovepipe
@@ -140,10 +144,16 @@ export const SHAPES = {
         top: { y: Hd, t: 0.1, over: -0.01, rough: true, rects: [topRect(-tw / 2, tw / 2, -td / 2, td / 2, -0.01)], holes: [[-0.11, 0.11, -0.11, 0.11]] },
         pipe: { x: 0, z: 0, r: 0.085, h: 0.45 } };
     }
-    // the shoulder: one slope, about 45 degrees on the front (the same stones, laid on it, their tops shedding the rain)
-    const yS = 1.7, yT = 2.12;
-    const sections = [{ loop0: rect(W, D), loop1: rect(W, D), y0: G, y1: yS }, { loop0: rect(W, D), loop1: rect(w, d), y0: yS, y1: yT },
-      { loop0: rect(w, d), loop1: rect(w, d), y0: yT, y1: H - ct }];
+    // the shoulder: three steps in, each a row of the same stones laid on a slope (about 50 degrees on the front, their
+    // tops shedding the rain) with a level row on it
+    const yS = 1.6, nS = 3, slope = 0.14, level = 0.2, at = (i) => rect(W - (W - w) * i / nS, D - (D - d) * i / nS);
+    const sections = [{ loop0: rect(W, D), loop1: rect(W, D), y0: G, y1: yS }];
+    let y = yS;
+    for (let i = 1; i <= nS; i++) {
+      sections.push({ loop0: at(i - 1), loop1: at(i), y0: y, y1: y + slope }); y += slope;
+      if (i < nS) { sections.push({ loop0: at(i), loop1: at(i), y0: y, y1: y + level }); y += level; }
+    }
+    sections.push({ loop0: rect(w, d), loop1: rect(w, d), y0: y, y1: H - ct });
     return { H, sections, openings: [], top: { y: H, t: ct, over: ov, rects: [topRect(-w / 2, w / 2, -d / 2, d / 2, ov)], holes: [[-0.16, 0.16, -0.12, 0.12]] } };
   } },
   jail: { label: 'Jail', note: 'a stone block: four walls, a door and small windows, a flat top', palette: 'buff', stones: { size: 0.75, round: true }, make() {
@@ -178,6 +188,7 @@ const J = { inset: 1 };                                   // a joint between two
 const JJ = { inset: 2 };                                  // a joint the other stone doesn't shrink back from (twice as far)
 const OUT = { inset: 0 };                                 // the outline, left as it is
 const FOLD = { inset: 0, fold: true };                    // where a stone folds round a corner
+const TIGHT = { inset: 1, tight: true };                  // a joint at an inside corner: straight, never chipped
 const skirtIn = (depth) => ({ inset: 0, skirt: depth, dir: 'in' });
 const skirtDown = (depth, soffit = 0) => ({ inset: 0, skirt: depth, dir: 'down', soffit });
 
@@ -264,7 +275,14 @@ function makeSection(S, isBottom, isTop) {
     return d1[0] * d2[1] - d1[1] * d2[0] < 0;
   });
   const prism = S.loop0.every((p, i) => p[0] === S.loop1[i][0] && p[1] === S.loop1[i][1]);
-  return { ...S, n, C, P: C[n], convex, prism, isBottom, isTop };
+  // how much longer each face is up its slope than it is tall (1 on a plumb face): the texture is laid by that, so it
+  // isn't stretched on a sloped face
+  const fv = S.loop0.map((a, k) => {
+    const b = S.loop0[(k + 1) % n], c = S.loop1[k], L = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+    const inset = Math.abs((c[0] - a[0]) * (b[1] - a[1]) - (c[1] - a[1]) * (b[0] - a[0])) / L;
+    return Math.sqrt(1 + (inset / (S.y1 - S.y0)) ** 2);
+  });
+  return { ...S, n, C, P: C[n], convex, prism, isBottom, isTop, fv };
 }
 function faceAt(sec, u) {
   const P = sec.P, uu = ((u % P) + P) % P;
@@ -306,6 +324,12 @@ function courses(sec, ops, o, R) {
     const K = Math.max(2, Math.round(P / (0.35 + 0.3 * R()))), vals = Array.from({ length: K }, () => R() * 2 - 1), L = new Float64Array(N);
     for (let j = 0; j < N; j++) { const t = j / N * K, i0 = Math.floor(t), f = t - i0, a = vals[i0 % K], b = vals[(i0 + 1) % K]; L[j] = base + amp * (a + (b - a) * (1 - Math.cos(f * Math.PI)) / 2); }
     lines.push(L);
+  }
+  // EACH FACE ITS OWN: every bed line lifted or dropped up to 22% of a row in the middle of each face, fading out toward
+  // its corners (where the corner stones need one bed for both faces), so the rows break at different heights face by face
+  for (let i = 1; i < lines.length; i++) {
+    const offs = Array.from({ length: sec.n }, () => (R() * 2 - 1) * 0.22 * (hMin + hMax) / 2), L = lines[i];
+    for (let j = 0; j < N; j++) { const u = j * dx, k = faceAt(sec, u), dc = Math.min(u - sec.C[k], sec.C[k + 1] - u); L[j] += offs[k] * smooth(dc, 0.12, 0.4); }
   }
   lines.push(new Float64Array(N).fill(sec.y1));
   const nl = lines.length, at = (L, u) => { const t = (((u / dx) % N) + N) % N, j = Math.floor(t), f = t - j; return L[j % N] + (L[(j + 1) % N] - L[j % N]) * f; };
@@ -375,7 +399,7 @@ function layoutCoursed(sec, ops, o, R) {
     const h = Math.min(TL[1] - BL[1], TR[1] - BR[1]), ci = [], forced = [], n0 = q.p.length;
     [[BL, 1, 1, 'BL'], [BR, -1, 1, 'BR'], [TR, -1, -1, 'TR'], [TL, 1, -1, 'TL']].forEach(([C0, su, sv, nm]) => {
       const i = q.p.indexOf(C0), prev = q.f[(i - 1 + n0) % n0], next = q.f[i];
-      if (prev.skirt || next.skirt) return;
+      if (prev.skirt || next.skirt || prev.tight || next.tight) return;
       if (force[nm]) { forced.push([i, nm]); return; }
       q.p[i] = [C0[0] + su * h * 0.06 * R() * chipK, C0[1] + sv * h * 0.05 * R() * chipK];
       ci.push(i);
@@ -420,7 +444,7 @@ function layoutCoursed(sec, ops, o, R) {
       if (b >= X.ivb && b < X.ilt) E.push({ u0: X.la, u1: X.lb, kind: 'lintel', X, jl: X.ljl, jr: X.ljr });
       if (!X.door && b >= X.isb && b < X.iva) E.push({ u0: X.sa, u1: X.sb, kind: 'sill', X, jl: X.sjl, jr: X.sjr });
     }
-    for (let k = 0; k < n; k++) if (!sec.convex[k]) E.push({ u0: C[k], u1: C[k], kind: 'cut', jl: { u: C[k], s: 0, y: 0 }, jr: { u: C[k], s: 0, y: 0 } });
+    for (let k = 0; k < n; k++) if (!sec.convex[k]) E.push({ u0: C[k], u1: C[k], kind: 'cut', k, jl: { u: C[k], s: 0, y: 0 }, jr: { u: C[k], s: 0, y: 0 } });
     return E;
   };
   const overlaps = (a0, a1, b0, b1) => [-P, 0, P].some((sh) => a0 < b1 + sh - 1e-6 && a1 > b0 + sh + 1e-6);
@@ -442,6 +466,9 @@ function layoutCoursed(sec, ops, o, R) {
   }
 
   const blocked = Array.from({ length: nb + 1 }, () => []);   // stones two courses tall, reaching up into course b
+  // whose turn it is at each inside corner, course by course ('L': the face before the corner, 'R': the one after)
+  const cutSide = {}, cutTurn = (k, b) => cutSide[k + ':' + b] ?? (cutSide[k + ':' + b] = (b + k) % 2 === 0 ? 'L' : 'R');
+  const REACH = 0.03;                                          // how far past the corner line the turn's stone runs
   let below = [];                                             // where the joints of the course below fall
   const jit = (x) => x * (0.85 + 0.3 * R());
   for (let b = 0; b < nb; b++) {
@@ -556,20 +583,32 @@ function layoutCoursed(sec, ops, o, R) {
       const onSill = S.some((X) => !X.door && X.iva === b && overlaps(st.jl.u, st.jr.u, X.sa, X.sb));
       const underLintel = S.some((X) => X.ivb === st.top && overlaps(st.jl.u, st.jr.u, X.la, X.lb));
       const fB = b === 0 && sec.isBottom ? OUT : onSill ? JJ : J, fT = underLintel ? JJ : J;
-      const fL = st.A && st.A.kind === 'hole' ? skirtIn(st.A.X.op.reveal) : J, fR = st.B && st.B.kind === 'hole' ? skirtIn(st.B.X.op.reveal) : J;
-      const K = st.kind === 'quoin' ? 0.5 : 1, mid = (st.jl.u + st.jr.u) / 2;
+      let fL = st.A && st.A.kind === 'hole' ? skirtIn(st.A.X.op.reveal) : J, fR = st.B && st.B.kind === 'hole' ? skirtIn(st.B.X.op.reveal) : J;
+      let jl = st.jl, jr = st.jr;
+      // AN INSIDE CORNER: the two faces' stones take turns, course by course. The one whose turn it is runs on past the
+      // corner line (into the corner, as far as the other face's stones stand back), the other butts up against it; both
+      // edges straight there. (A stone two courses tall keeps its turn for the course above too.)
+      if (st.B && st.B.kind === 'cut') {
+        const win = cutTurn(st.B.k, b) === 'L'; if (win) jr = shiftJ(jr, REACH); fR = TIGHT;
+        if (st.top === b + 2) cutSide[st.B.k + ':' + (b + 1)] = cutTurn(st.B.k, b);
+      }
+      if (st.A && st.A.kind === 'cut') {
+        const win = cutTurn(st.A.k, b) === 'R'; if (win) jl = shiftJ(jl, -REACH); fL = TIGHT;
+        if (st.top === b + 2) cutSide[st.A.k + ':' + (b + 1)] = cutTurn(st.A.k, b);
+      }
+      const K = st.kind === 'quoin' ? 0.5 : 1, mid = (jl.u + jr.u) / 2;
       // under a window sill, the rain runs off the sill's edge
-      const X = S.find((x) => !x.door && st.top <= x.isb && overlaps(st.jl.u, st.jr.u, x.sa, x.sb)), drip = X ? at(lines[X.isb], mid) : undefined;
+      const X = S.find((x) => !x.door && st.top <= x.isb && overlaps(jl.u, jr.u, x.sa, x.sb)), drip = X ? at(lines[X.isb], mid) : undefined;
       // SPLIT: now and then a course-tall field stone is two smaller ones, one on the other, their bed tilting its own way
-      if (st.kind === 'field' && st.top === b + 1 && st.jr.u - st.jl.u > 0.9 * hl && at(lines[b + 1], mid) - at(lines[b], mid) > 0.21 * s / 0.3 && R() < 0.2) {
+      if (st.kind === 'field' && st.top === b + 1 && jr.u - jl.u > 0.9 * hl && at(lines[b + 1], mid) - at(lines[b], mid) > 0.21 * s / 0.3 && R() < 0.2) {
         const f0 = 0.4 + 0.2 * R(), tilt = (R() - 0.5) * 0.25;
         const split = (u) => at(lines[b], u) + (at(lines[b + 1], u) - at(lines[b], u)) * f0 + tilt * (u - mid);
-        const q1 = rubble(st.jl, st.jr, lines[b], split, fB, fR, J, fL, K, { BL: st.force?.BL, BR: st.force?.BR });
-        const q2 = rubble(st.jl, st.jr, split, lines[b + 1], J, fR, fT, fL, K);
+        const q1 = rubble(jl, jr, lines[b], split, fB, fR, J, fL, K, { BL: st.force?.BL, BR: st.force?.BR });
+        const q2 = rubble(jl, jr, split, lines[b + 1], J, fR, fT, fL, K);
         for (const q of [q1, q2]) if (q) { q.drip = drip; out.push(q); }
         continue;
       }
-      const q = rubble(st.jl, st.jr, lines[b], lines[st.top], fB, fR, fT, fL, K, st.force);
+      const q = rubble(jl, jr, lines[b], lines[st.top], fB, fR, fT, fL, K, st.force);
       if (!q) continue;
       if (st.kind === 'quoin') q.proud = 0.01 + 0.01 * R();
       q.drip = drip;
@@ -673,6 +712,15 @@ function layoutPacked(sec, ops, o, R, ledge) {
     return { base, angs: ledge ? [0, (R() - 0.5) * 0.07] : [0, 0.04 + 0.045 * R(), -0.04 - 0.045 * R()], S: [] };
   };
   const pile = []; for (let i = 0; i < 40; i++) pile.push(fromPile(sec.y0));
+  // ONE OVER TWO: where each placed stone's ends are, and how high its top is there. A stone whose end would land within
+  // 15 cm (10 on ledgestone) of an end of a stone it rests on is a poor fit (it would carry a joint straight up the wall)
+  // (the ends kept in buckets along the wall, so a check only looks at the few nearby)
+  const gapMin = ledge ? 0.1 : 0.15, nBk = Math.max(1, Math.floor(P / gapMin)), bk = Array.from({ length: nBk }, () => []);
+  const bOf = (u) => ((Math.floor(u / P * nBk) % nBk) + nBk) % nBk;
+  const wrapD = (a, b) => Math.abs((((a - b) % P) + P + P / 2) % P - P / 2);
+  const near = (u, y) => { const c = bOf(u); for (const d of [-1, 0, 1]) for (const e of bk[(c + d + nBk) % nBk]) if (Math.abs(e.y - y) < 0.06 && wrapD(u, e.u) < gapMin) return true; return false; };
+  const stacked = (us, ue, y) => near(us, y) || near(ue, y);
+  const addEnd = (u, y) => bk[bOf(u)].push({ u, y });
   for (let guard = 0; guard < 30000; guard++) {
     // the lowest dip (looked for from a random place, so ties don't always go to the same end)
     const st = Math.floor(R() * N); let im = st;
@@ -698,7 +746,8 @@ function layoutPacked(sec, ops, o, R, ledge) {
         if (obst.some((O) => overlapU(us, ue, O.u0, O.u1) && y < O.v1 - 1e-6 && y + S.h > O.v0 + 1e-6)) continue;
         let voidA = 0, solid = 0;
         for (let j = 0; j < S.cols; j++) { voidA += y + S.lo[j] - prof[wrap(j0 + j)]; solid += S.hi[j] - S.lo[j]; }
-        const score = voidA / Math.max(solid, 1e-6) + 0.3 * Math.max(0, y - ymin - 0.25 * S.h) / S.h - 0.1 * Math.min(1, S.cols * dx / W);
+        const score = voidA / Math.max(solid, 1e-6) + 0.3 * Math.max(0, y - ymin - 0.25 * S.h) / S.h - 0.1 * Math.min(1, S.cols * dx / W)
+          + (pi >= 0 && stacked(us, ue, y) ? 0.25 : 0);
         if (!best || score < best.score) best = { score, S, j0, y, pi };
       }
     };
@@ -722,6 +771,7 @@ function layoutPacked(sec, ops, o, R, ledge) {
     if (best && best.score < 0.5) {
       const { S, j0, y } = best;
       stones.push({ p: S.P.map(([x, yy]) => [j0 * dx + x, y + yy]), f: S.P.map(() => J) });
+      addEnd(j0 * dx, y + S.hi[0]); addEnd((j0 + S.cols) * dx, y + S.hi[S.cols - 1]);
       if (best.pi >= 0) pile[best.pi] = fromPile(ymin);     // a new stone onto the pile in its place
       for (let j = 0; j < S.cols; j++) { const i = wrap(j0 + j); prof[i] = Math.max(prof[i], y + S.hi[j]); }
     } else {
@@ -731,11 +781,14 @@ function layoutPacked(sec, ops, o, R, ledge) {
       for (let j = a; j <= b; j++) prof[wrap(j)] = Math.max(prof[wrap(j)], to);
     }
   }
-  // stones poking out of the top (or bottom) of the strip are cut level there
-  const out = [];
+  // stones poking out of the top (or bottom) of the strip are cut level there; what's left too thin to be a stone (a
+  // sliver) is dropped, and the grout-coloured backing shows instead
+  const out = [], minT = ledge ? 0.02 : 0.026;
   for (let q of stones) {
     q = clip(q, 0, 1, sec.y1, J); if (q.p.length < 3) continue;
-    q = clip(q, 0, -1, -sec.y0, sec.isBottom ? OUT : J); if (q.p.length >= 3) out.push(q);
+    q = clip(q, 0, -1, -sec.y0, sec.isBottom ? OUT : J); if (q.p.length < 3) continue;
+    const b = bbox(q.p); if (b[3] - b[2] < minT || b[1] - b[0] < 2 * minT || Math.abs(area(q.p)) < minT * minT * 2.5) continue;
+    out.push(q);
   }
   // inside corners cut the stones that cross them
   for (let k = 0; k < sec.n; k++) if (!sec.convex[k]) {
@@ -753,11 +806,16 @@ function layoutPacked(sec, ops, o, R, ledge) {
 
 // ── the top: coping stones, a jail's roof slabs, a chimney's cap ────────────────────────────────────────────────────────
 // Slabs 0.5 to 1.3 m long (at the default stone size), each right across a wall's top, or in rows on a wide top; joints
-// slanting a little and staggered row to row. Every slab its own: 20% thicker or thinner, its front edge set further in
-// or out at each end (an overhang of 3 to 10 cm, not parallel to the wall), ragged, its corners chipped 5 to 12 cm. A
-// lip is drawn down the outside edge (the slab's thickness) and its underside where it overhangs.
+// slanting a little and staggered row to row. Every slab its own: up to 10% thicker or thinner (its top higher or
+// lower: its underside always sits on the wall), its front edge set further in or out at each end (an overhang of 4 to
+// 12 cm, not parallel to the wall), ragged, its outer corners chipped, never so far that a chip reaches the wall top.
+// Each slab is closed: its outside edges drawn down to the wall top with the underside of the overhang (one flat, dark
+// soffit all along the wall), and its sides drawn where it meets the next slab.
 function layoutTop(T, o, R) {
-  const out = [], s = o.size, lip = skirtDown(T.t + 0.03, T.over + 0.03), holeLip = skirtDown(T.t + 0.06);
+  // (an outside edge's lip, by how far it overhangs the wall: its underside reaches back to the wall)
+  const lips = new Map(), lipFor = (ov) => { const k = Math.round(Math.max(0, ov) * 1000); if (!lips.has(k)) lips.set(k, { ...skirtDown(T.t, k / 1000 + 0.01), ov: k / 1000 }); return lips.get(k); };
+  const out = [], s = o.size, lip = J, holeLip = skirtDown(T.t + 0.06);
+  const CJ = { inset: 1, skirt: T.t, dir: 'down', soffit: 0 };                 // a joint between slabs: both sides drawn
   const slab = (x0, x1, z0, z1, fl) => ({ p: [[x0, z0], [x1, z0], [x1, z1], [x0, z1]], f: [fl.z0, fl.x1, fl.z1, fl.x0] });
   for (const r of T.rects) {
     const alongX = r.x1 - r.x0 >= r.z1 - r.z0, A0 = alongX ? r.x0 : r.z0, A1 = alongX ? r.x1 : r.z1, C0 = alongX ? r.z0 : r.x0, C1 = alongX ? r.z1 : r.x1;
@@ -797,34 +855,56 @@ function layoutTop(T, o, R) {
       prev = cuts;
     }
   }
-  // each slab its own thickness; its outside edge pulled in by its own amount at each end (so the overhang varies and the
-  // front isn't parallel to the wall), a point pushed out along it (ragged), its outer corners chipped
+  // each edge's kind from where it is: past it the open air (an outside edge: a lip), the flue (drawn down into it), or
+  // the next slab (a joint, its sides drawn)
   const rough = T.rough ? 2 : 1;
+  const inRect = (x, z) => T.rects.some((r) => x > r.x0 - 1e-6 && x < r.x1 + 1e-6 && z > r.z0 - 1e-6 && z < r.z1 + 1e-6);
+  const inHole = (x, z) => (T.holes || []).some(([a, b, c, d]) => x > a && x < b && z > c && z < d);
   return out.map((q) => {
-    const tk = 0.8 + 0.4 * R(), myLip = skirtDown(T.t * tk + 0.03, Math.max(0, T.over) + 0.03), n0 = q.p.length;
-    const F = q.f.map((x) => (x === lip ? myLip : x));
+    const n0 = q.p.length, tk = 0.9 + 0.2 * R();
+    const F = q.p.map((P, i) => {
+      const Q = q.p[(i + 1) % n0], dx = Q[0] - P[0], dz = Q[1] - P[1], L = Math.hypot(dx, dz) || 1, cx = (P[0] + Q[0]) / 2, cz = (P[1] + Q[1]) / 2;
+      const mx = cx + dz / L * 0.012, mz = cz - dx / L * 0.012;
+      if (inHole(mx, mz)) return holeLip;
+      if (inRect(mx, mz)) return CJ;
+      // an outside edge: which side of which rect it lies on says how far it overhangs
+      const r = T.rects.find((r) => cx > r.x0 - 1e-4 && cx < r.x1 + 1e-4 && cz > r.z0 - 1e-4 && cz < r.z1 + 1e-4) || T.rects[0];
+      const side = Math.abs(cx - r.x0) < 1e-4 ? 'x0' : Math.abs(cx - r.x1) < 1e-4 ? 'x1' : Math.abs(cz - r.z0) < 1e-4 ? 'z0' : 'z1';
+      return lipFor(T.over < 0 ? 0 : r.ov[side]);
+    });
+    const isLip = (fl) => fl.ov !== undefined;
+    // the outside edges pulled in by their own amount at each end (the overhang left at each corner, for the chips)
+    const ovIn = [], ovOut = [];
     const P0 = q.p.map((P, i) => {
       let x = P[0], y = P[1];
       for (const e of [(i - 1 + n0) % n0, i]) {
-        if (F[e] !== myLip) continue;
-        const A = q.p[e], B = q.p[(e + 1) % n0], eu = B[0] - A[0], ev = B[1] - A[1], L = Math.hypot(eu, ev) || 1, d = Math.max(0, T.over - 0.03) * R() * rough;
+        if (!isLip(F[e])) { (e === i ? ovOut : ovIn)[i] = Infinity; continue; }
+        const A = q.p[e], B = q.p[(e + 1) % n0], eu = B[0] - A[0], ev = B[1] - A[1], L = Math.hypot(eu, ev) || 1, d = Math.max(0, F[e].ov - 0.04) * R() * rough;
         x += -ev / L * d; y += eu / L * d;                          // (inward: an anticlockwise edge's left)
+        (e === i ? ovOut : ovIn)[i] = F[e].ov - d;
       }
       return [x, y];
     });
     const p = [], f = [], corner = [];
     P0.forEach((P, i) => {
-      p.push(P); f.push(F[i]); corner.push(true);
-      if (F[i].dir === 'down') {
+      p.push(P); f.push(F[i]); corner.push(i);
+      if (isLip(F[i])) {
         const Q = P0[(i + 1) % n0], eu = Q[0] - P[0], ev = Q[1] - P[1], L = Math.hypot(eu, ev) || 1, t = 0.3 + 0.4 * R(), k = (0.005 + 0.02 * R()) * rough;
-        p.push([P[0] + eu * t + ev / L * k, P[1] + ev * t - eu / L * k]); f.push(F[i]); corner.push(false);
+        p.push([P[0] + eu * t + ev / L * k, P[1] + ev * t - eu / L * k]); f.push(F[i]); corner.push(-1);
       }
     });
-    const r = { p, f };
+    const r = { p, f, tk, noDark: true };
     for (let i = r.p.length - 1; i >= 0; i--) {
+      const ci = corner[i]; if (ci < 0) continue;
       const n = r.p.length, a = r.f[(i - 1 + n) % n], b = r.f[i];
-      if (!corner[i] || !(a === myLip || b === myLip)) continue;
-      if (R() < (a === myLip && b === myLip ? 0.85 : 0.35)) chip(r, i, (0.05 + 0.07 * R()) * rough, (0.03 + 0.06 * R()) * rough);
+      if (!(isLip(a) || isLip(b))) continue;
+      // a chip never reaches past the wall line: along a joint no deeper than the lip's overhang, across a corner no
+      // more than the two overhangs together
+      const both = isLip(a) && isLip(b), lim = both ? 0.85 * (ovIn[ci] + ovOut[ci]) : 0.85 * Math.min(ovIn[ci], ovOut[ci]);
+      if (!(lim > 0.012) || R() > (both ? 0.85 : 0.35)) continue;
+      const c1 = Math.min((0.05 + 0.07 * R()) * rough, lim), c2 = Math.min((0.03 + 0.06 * R()) * rough, lim), len = r.p.length;
+      chip(r, i, isLip(a) ? c1 : c2, isLip(b) ? c1 : c2);
+      if (r.p.length > len) r.f[i] = lipFor(0);                  // (the chipped face is an outside edge)
     }
     return r;
   });
@@ -887,7 +967,7 @@ function addPiece(M, q, surf, L, c, A, folds) {
   // corner would stick out like a fin)
   let pin = Infinity;
   q.p.forEach((P, i) => { const Q = q.p[(i + 1) % q.p.length], dx = Q[0] - P[0], dy = Q[1] - P[1], Ln = Math.hypot(dx, dy) || 1; pin = Math.min(pin, Math.abs((pc[0] - P[0]) * dy - (pc[1] - P[1]) * dx) / Ln); });
-  const RG = A > 0.005 ? L.ring : null, share = clamp(Math.sqrt(pa / A) * 1.25, 0.3, 1);
+  const RG = A > 0.014 ? L.ring : null, share = clamp(Math.sqrt(pa / A) * 1.25, 0.3, 1);
   const hP = Math.min((RG ? L.extra : L.hB) * share, 0.7 * pin);
   // with a ring: the outline on the backing, the face (leaning as the stone leans) on the ring
   const faceH = (u, v) => clamp(L.face + L.tu * (u - c[0]) + L.tv * (v - c[1]), 0.006, 2 * L.face + 0.02);
@@ -899,6 +979,7 @@ function addPiece(M, q, surf, L, c, A, folds) {
     if (q.f[i] === FOLD) { const nb = q.p[(i + 1) % q.p.length]; V.push({ u, v: (v + nb[1]) / 2, f: FOLD, F, arris: true }); }
   }
   const n = V.length;
+  const uvAt = (u, v) => [u / TILE + L.uvo[0], (sec ? sec.y0 + (v - sec.y0) * sec.fv[k] : v) / TILE + L.uvo[1]];
   // the bulge's high point: off the middle, up to 30% of the way toward one corner
   const av = V[Math.floor(L.apex[1] * n) % n], cp = [pc[0] + (av.u - pc[0]) * L.apex[0], pc[1] + (av.v - pc[1]) * L.apex[0]];
   const cm = at(cp[0], cp[1]), sN = [cm[3], cm[4], cm[5]];
@@ -907,11 +988,13 @@ function addPiece(M, q, surf, L, c, A, folds) {
       // on the fold: the two faces' normals together, so the stone's edge sits out from both faces alike
       const kA = (P.F.k - 1 + sec.n) % sec.n, mA = mapStrip(sec, P.u, P.v, kA), mB = mapStrip(sec, P.u, P.v, P.F.k);
       const nn = [mA[3] + mB[3], mA[4] + mB[4], mA[5] + mB[5]], o = RG ? L.base : off(P.u, P.v);
-      if (P.arris) P.pos = RG ? add(mA, nn, (L.base + faceH(P.u, P.v)) * 0.92) : add(mA, norm(nn), o + (hP - o) * 0.62);
+      // (the seam where a stone folds round a corner: worked out from the STONE's own heights, never the piece's, and
+      // along both faces' normals at once, so the two faces of the stone share it exactly and nothing pokes out)
+      if (P.arris) P.pos = add(mA, nn, RG ? (L.base + faceH(P.u, P.v)) * 0.92 : o + (Math.min(L.hB, 0.06) - o) * 0.45);
       else P.pos = add(mA, nn, o);
-      P.d = P.arris ? Math.max(0.03, hP) : 0;
+      P.d = P.arris ? Math.max(0.03, L.hB) : 0;
     } else { const m = at(P.u, P.v); P.pos = add(m, [m[3], m[4], m[5]], RG ? L.base : off(P.u, P.v)); P.d = 0; }
-    P.uv = [P.u / TILE + L.uvo[0], P.v / TILE + L.uvo[1]];
+    P.uv = uvAt(P.u, P.v);
   }
   // how far the high point is from each edge (what the edge darkening reads); the smallest of them is the stone's size
   const hEdge = V.map((P, i) => {
@@ -919,7 +1002,7 @@ function addPiece(M, q, surf, L, c, A, folds) {
     return Math.max(0.004, Math.abs((cp[0] - P.u) * dy - (cp[1] - P.v) * dx) / Ln);
   });
   const inr = Math.max(0.02, Math.min(...hEdge.filter((h, i) => V[i].f !== FOLD), 1)) * L.edgeK;
-  const centre = add(cm, sN, (RG ? L.base + faceH(cp[0], cp[1]) : off(cp[0], cp[1])) + hP), cuv = [cp[0] / TILE + L.uvo[0], cp[1] / TILE + L.uvo[1]];
+  const centre = add(cm, sN, (RG ? L.base + faceH(cp[0], cp[1]) : off(cp[0], cp[1])) + hP), cuv = uvAt(cp[0], cp[1]);
   // local triangles first (for the normals), then into the mesh
   const lv = [], lt = [];
   const lvert = (pos, uv, d, ao, g) => { lv.push({ pos, uv, d, ao, g }); return lv.length - 1; };
@@ -935,8 +1018,12 @@ function addPiece(M, q, surf, L, c, A, folds) {
       const l1 = Math.hypot(e1u, e1v) || 1, l2 = Math.hypot(e2u, e2v) || 1; e1u /= l1; e1v /= l1; e2u /= l2; e2v /= l2;
       let bu = -e1v - e2v, bv = e1u + e2u; const bl = Math.hypot(bu, bv) || 1; bu /= bl; bv /= bl;
       const cosT = Math.max(0.35, bu * -e1v + bv * e1u), len = Math.min(inset / cosT, 0.45 * Math.hypot(pc[0] - P.u, pc[1] - P.v));
-      const u = P.u + bu * len, v = P.v + bv * len, m = at(u, v);
-      return lvert(add(m, [m[3], m[4], m[5]], L.base + faceH(u, v)), [u / TILE + L.uvo[0], v / TILE + L.uvo[1]], len * cosT, 0.95, 'g' + i);
+      const u = P.u + bu * len, v = P.v + bv * len, m = at(u, v), h = faceH(u, v), iuv = uvAt(u, v);
+      // (the side from this ring corner down to the outline is longer than it looks from the front: its texture laid
+      // out as if the side were unfolded flat, so it isn't stretched into streaks)
+      const k2 = Math.sqrt(len * len + h * h) / Math.max(len, 1e-4), r = lv[rimIdx[i]];
+      if (!P.F) r.uv = [iuv[0] + (r.uv[0] - iuv[0]) * k2, iuv[1] + (r.uv[1] - iuv[1]) * k2];
+      return lvert(add(m, [m[3], m[4], m[5]], L.base + h), iuv, len * cosT, 0.95, 'g' + i);
     });
     for (let i = 0; i < n; i++) { const j = (i + 1) % n; lt.push([rimIdx[i], rimIdx[j], inner[j]], [rimIdx[i], inner[j], inner[i]]); }
   }
@@ -964,24 +1051,30 @@ function addPiece(M, q, surf, L, c, A, folds) {
     const el0 = Math.hypot(Q.u - P.u, Q.v - P.v), below = Q.u - P.u > 0.7 * el0;
     if (L.shadow && sec && fl.inset && below) {
       // SHADOW ON THE MORTAR (the sun's own shadow map is far too coarse for a joint): a band just in front of the mortar
-      // along the stone's bottom edge, the top third or so of the joint, where the stone above overhangs it
-      const z = L.core + 0.0012, dv = -0.009, tn = L.shadow;
-      const pts = [[P.u, P.v], [Q.u, Q.v], [Q.u, Q.v + dv], [P.u, P.v + dv]].map(([u, v]) => { const m = at(u, v); return add(m, [m[3], m[4], m[5]], z); });
-      const m2 = at((P.u + Q.u) / 2, P.v), sc = 3 / TILE;
-      quad(L.MS, pts[0], pts[1], pts[2], pts[3], [m2[3], m2[4], m2[5]], tn, [0.6, 0.6, 0.8, 0.8], [[P.u * sc, P.v * sc], [Q.u * sc, Q.v * sc], [Q.u * sc, (Q.v + dv) * sc], [P.u * sc, (P.v + dv) * sc]], L.drip);
+      // along the stone's bottom edge, the top third or so of the joint, where the stone above overhangs it. It stops
+      // short of a fold by the mortar's depth (there the next face's mortar takes over), so it never pokes past a corner.
+      const z = L.core + 0.0012, dv = -0.009, tn = L.shadow, tr = -L.core + 0.004;
+      const pu = P.u + (P.F ? tr : 0), qu = Q.u - (Q.F ? tr : 0), vAt = (u) => P.v + (Q.v - P.v) * (u - P.u) / (Q.u - P.u);
+      if (qu - pu > 0.01) {
+        const pv = vAt(pu), qv = vAt(qu);
+        const pts = [[pu, pv], [qu, qv], [qu, qv + dv], [pu, pv + dv]].map(([u, v]) => { const m = at(u, v); return add(m, [m[3], m[4], m[5]], z); });
+        const m2 = at((pu + qu) / 2, pv), sc = 3 / TILE;
+        quad(L.MS, pts[0], pts[1], pts[2], pts[3], [m2[3], m2[4], m2[5]], tn, [0.6, 0.6, 0.8, 0.8], [[pu * sc, pv * sc], [qu * sc, qv * sc], [qu * sc, (qv + dv) * sc], [pu * sc, (pv + dv) * sc]], L.drip);
+      }
     }
     if (!fl.skirt) continue;
     const m = at((P.u + Q.u) / 2, (P.v + Q.v) / 2), fN = [m[3], m[4], m[5]];
-    const dirA = fl.dir === 'down' ? [0, -(fl.skirt + Math.max(0, P.pos[1] - surf.y)), 0] : add([0, 0, 0], fN, -(fl.skirt + dot(sub(P.pos, at(P.u, P.v)), fN)));
-    const dirB = fl.dir === 'down' ? [0, -(fl.skirt + Math.max(0, Q.pos[1] - surf.y)), 0] : add([0, 0, 0], fN, -(fl.skirt + dot(sub(Q.pos, at(Q.u, Q.v)), fN)));
+    // (a side going down ends at one level whatever the top does: a cap slab's sides all reach the wall top under it)
+    const dirA = fl.dir === 'down' ? [0, surf.y - fl.skirt - P.pos[1], 0] : add([0, 0, 0], fN, -(fl.skirt + dot(sub(P.pos, at(P.u, P.v)), fN)));
+    const dirB = fl.dir === 'down' ? [0, surf.y - fl.skirt - Q.pos[1], 0] : add([0, 0, 0], fN, -(fl.skirt + dot(sub(Q.pos, at(Q.u, Q.v)), fN)));
     const a2 = add(P.pos, dirA), b2 = add(Q.pos, dirB);
     let sn = norm(cross(sub(Q.pos, P.pos), sub(a2, P.pos)));
     const mid = [(P.pos[0] + Q.pos[0]) / 2, (P.pos[1] + Q.pos[1]) / 2, (P.pos[2] + Q.pos[2]) / 2], flip = dot(sn, sub(mid, centre)) < 0;
     if (flip) sn = [-sn[0], -sn[1], -sn[2]];
     // its texture carries on over the edge, as if folded down
     const eu = Q.u - P.u, ev = Q.v - P.v, el = Math.hypot(eu, ev) || 1, ou = ev / el, ov = -eu / el, k2 = fl.skirt / TILE;
-    const farAO = fl.dir === 'down' ? 0.6 : 0.62;
-    const i0 = M.v(P.pos, sn, P.uv, tl, 0.86 * ground(P.pos[1]), [0, inr], L.drip), i1 = M.v(Q.pos, sn, Q.uv, tl, 0.86 * ground(Q.pos[1]), [0, inr], L.drip);
+    const farAO = fl.dir === 'down' ? (fl.inset ? 0.8 : 0.66) : 0.8, nearAO = fl.dir === 'down' ? 0.9 : 0.95;
+    const i0 = M.v(P.pos, sn, P.uv, tl, nearAO * ground(P.pos[1]), [0, inr], L.drip), i1 = M.v(Q.pos, sn, Q.uv, tl, nearAO * ground(Q.pos[1]), [0, inr], L.drip);
     const i2 = M.v(b2, sn, [Q.uv[0] + ou * k2, Q.uv[1] + ov * k2], tl, farAO * ground(b2[1]), [fl.skirt, inr], L.drip), i3 = M.v(a2, sn, [P.uv[0] + ou * k2, P.uv[1] + ov * k2], tl, farAO * ground(a2[1]), [fl.skirt, inr], L.drip);
     if (flip) { M.t(i0, i2, i1); M.t(i0, i3, i2); } else { M.t(i0, i1, i2); M.t(i0, i2, i3); }
     if (fl.soffit) {
@@ -1004,7 +1097,7 @@ function quad(M, a, b, c, d, toward, tint, ao, uvs, drip) {
 }
 // the backing behind the stones: mortar (or a dark core, dry walls), set back by the style's recess, with a hole and a
 // lined tunnel (or a recess with a dark back) for each opening, and a lid on the topmost block
-function addCore(M, sec0, ops, st, tint, dark, capY, flue, revealTint, dripY = sec0.y1) {
+function addCore(M, sec0, ops, st, tint, dark, capY, flue, dripY = sec0.y1) {
   // (the topmost block's backing goes on up under the coping, so the coping's joints show mortar, not daylight)
   const sec = capY === null ? sec0 : { ...sec0, y1: capY, loop1: sec0.loop1.map((p, i) => { const a = sec0.loop0[i], t = (capY - sec0.y0) / (sec0.y1 - sec0.y0); return [a[0] + (p[0] - a[0]) * t, a[1] + (p[1] - a[1]) * t]; }) };
   const m = st.recess, L0 = offsetLoop(sec.loop0, m), L1 = offsetLoop(sec.loop1, m), n = sec.n, sc = 3 / TILE, drip = dripY;
@@ -1035,8 +1128,8 @@ function addCore(M, sec0, ops, st, tint, dark, capY, flue, revealTint, dripY = s
       if (op.mirror) continue;
       const [u0, u1, v0, v1] = H[holes.indexOf(op)], d0 = m, d1 = op.through ? op.t - m : op.reveal;
       const Q = (u, v, dd) => [A[0] + U[0] * u - N[0] * dd, v, A[1] + U[2] * u - N[2] * dd];
-      // (lined in the stone's colour, a little darker: the reveal is built of stone, not mortar)
-      const uv = (a, b) => [a * sc / 3, b * sc / 3], ao = [0.72, 0.62, 0.62, 0.72], rt = revealTint || tint;
+      // (the reveal is built of stone: the stones' own sides line it, and what shows between them is mortar)
+      const uv = (a, b) => [a * sc, b * sc], ao = [0.78, 0.7, 0.7, 0.78], rt = tint;
       quad(M, Q(u0, v0, d0), Q(u0, v0, d1), Q(u0, v1, d1), Q(u0, v1, d0), U, rt, ao, [uv(0, v0), uv(d1, v0), uv(d1, v1), uv(0, v1)], v1);
       quad(M, Q(u1, v0, d0), Q(u1, v0, d1), Q(u1, v1, d1), Q(u1, v1, d0), U.map((x) => -x), rt, ao, [uv(0, v0), uv(d1, v0), uv(d1, v1), uv(0, v1)], v1);
       quad(M, Q(u0, v1, d0), Q(u1, v1, d0), Q(u1, v1, d1), Q(u0, v1, d1), [0, -1, 0], rt, ao, [uv(u0, 0), uv(u1, 0), uv(u1, d1), uv(u0, d1)], v1);
@@ -1072,8 +1165,8 @@ export function buildStoneWall(recipe = {}, env = {}) {
   const jw = o.joint * st.joint, ns = (o.seed >>> 0) * 31 + 7;
   let count = 0;
   // a stone's colour: one of the palette's, drifted slowly across the wall, lighter or darker by one number
-  const colourAt = (pos) => {
-    const r = R(), wS = 0.1 + 0.2 * o.colourMix, sw = r < 0.13 ? pal.dark : r < 0.25 ? pal.rust : r < 0.25 + wS ? pal.second : pal.base;
+  const colourAt = (pos, noDark) => {
+    const r = R(), wS = 0.1 + 0.2 * o.colourMix, sw = r < 0.13 && !noDark ? pal.dark : r < 0.25 ? pal.rust : r < 0.25 + wS ? pal.second : pal.base;
     const n1 = noise3(pos[0] / 2.6, pos[1] / 2.6, pos[2] / 2.6, ns), n2 = noise3(pos[0] / 2.6 + 17, pos[1] / 2.6, pos[2] / 2.6 + 5, ns);
     const c = sw === pal.base ? sw.map((x, i) => x + (pal.second[i] - x) * 0.55 * n1) : sw;
     return tintOf(c, (1 + (R() * 2 - 1) * st.value) * (1 + 0.08 * (2 * n2 - 1)));
@@ -1083,16 +1176,19 @@ export function buildStoneWall(recipe = {}, env = {}) {
   const lum = (c) => 0.3 * c[0] + 0.59 * c[1] + 0.11 * c[2], g0 = lum(pal.base);
   const mortarCol = mo.abs ? mo.abs.map((x) => x * st.fill) : pal.base.map((x, i) => (x + (g0 - x) * mo.grey) * mo.light * st.fill * (i === 0 ? mo.warm : i === 2 ? 2 - mo.warm : 1));
   const mortarTint = [...tintOf(mortarCol), 3], shadowTint = [...tintOf(mortarCol, 0.7), 3], halfTint = mortarTint;
-  const dark = [...tintOf([0.06, 0.055, 0.05]), 3], revealTint = [...tintOf(pal.base, 0.82), 4];
+  const dark = [...tintOf([0.06, 0.055, 0.05]), 3];
   // how one stone looks: how far its rim stands out, its lean, its bulge and where that peaks, where it reads the texture
   const look = (q, pos, extra = {}) => {
     const A = Math.abs(area(q.p)), ang = R() * 6.283, tilt = st.tilt * (0.5 + 0.5 * R()), proud = q.proud || 0, rg = st.ring;
     const bb = bbox(q.p), short = Math.min(bb[1] - bb[0], bb[3] - bb[2]);
     const hB = rg ? Math.min(o.bulge * st.bulgeK * Math.sqrt(A) * (0.75 + 0.5 * R()), 0.035 + 0.02 * o.bulge)
       : (st.bulge[0] + (st.bulge[1] - st.bulge[0]) * R()) * short * o.bulge / 0.6 * (R() < 0.12 ? 0.45 : 1) + st.stick * R();
-    const tint = colourAt(pos), lt = Math.pow(q.light || 1, 2.2);
-    return { tint: tint.map((x) => x * lt), r0: -st.recess + st.rim[0] + (st.rim[1] - st.rim[0]) * R() + proud, rMin: -st.recess + 0.002 + proud, rMax: -st.recess + st.rim[1] + 0.006 + proud,
-      tu: Math.cos(ang) * tilt, tv: Math.sin(ang) * tilt, hB, apex: [0.3 * R(), R()], edgeK: 0.35 + 0.65 * R(), rimAO: st.rimAO, uvo: [R(), R()],
+    const tint = colourAt(pos, q.noDark), lt = Math.pow(q.light || 1, 2.2), r0 = -st.recess + st.rim[0] + (st.rim[1] - st.rim[0]) * R() + proud;
+    // (a stone's face is a fan round one point: past about 2 cm proud of the wall line, seen edge on at a corner or a
+    // wall end, that point reads as a spike, not a rounded stone)
+    const hBc = rg ? hB : Math.min(hB, 0.022 + proud - r0);
+    return { tint: tint.map((x) => x * lt), r0, hB: hBc, rMin: -st.recess + 0.002 + proud, rMax: -st.recess + st.rim[1] + 0.006 + proud,
+      tu: Math.cos(ang) * tilt, tv: Math.sin(ang) * tilt, apex: [0.3 * R(), R()], edgeK: 0.35 + 0.65 * R(), rimAO: st.rimAO, uvo: [R(), R()],
       ring: rg, base: -st.recess + 0.0015, face: rg ? hB * rg.faceK + rg.faceAdd[0] + (rg.faceAdd[1] - rg.faceAdd[0]) * R() : 0, extra: rg ? hB * (1 - rg.faceK) : 0,
       core: -st.recess, shadow: st.shadow ? shadowTint : null, shadowHalf: halfTint, MS: M.mortar, drip: q.drip, ...extra };
   };
@@ -1120,16 +1216,19 @@ export function buildStoneWall(recipe = {}, env = {}) {
       f.proud = q.proud; f.drip = spec.building ? -1 : q.drip ?? (sec.isTop ? capBottom : sec.y1);
       addStone(M.stone, f, { sec }, look(f, m, sec.isTop ? { capY: capBottom } : {})); count++;
     }
-    addCore(M.mortar, sec, ops, st, mortarTint, dark, sec.isTop ? T.y - Math.min(0.03, T.t * 0.3) : null, sec.isTop && T.holes ? T.holes[0] : null, revealTint, spec.building ? -1 : sec.y1);
+    addCore(M.mortar, sec, ops, st, mortarTint, dark, sec.isTop ? T.y - Math.min(0.03, T.t * 0.3) : null, sec.isTop && T.holes ? T.holes[0] : null, spec.building ? -1 : sec.y1);
   });
   // the top: coping stones (a jail's roof, a chimney's cap) with their edges drawn down over the wall
   for (const q of layoutTop(T, o, R)) {
     if (T.hide) { const b = bbox(q.p); if (b[0] > T.hide[0] && b[1] < T.hide[1] && b[2] > T.hide[2] && b[3] < T.hide[3]) continue; }
-    const f = finish(q, jw * 0.5, 8, 0.03); if (!f) continue;
-    const c = centroid(f.p); f.drip = T.y - T.t - 0.08;               // (no rain streak down its own lip)
+    // (all its corners kept: merging corners away would pull a slab's joint edge to a point and open a gap)
+    const f = finish(q, jw * 0.5, 64, 0.004); if (!f) continue;
+    const c = centroid(f.p); f.drip = T.y - T.t - 0.08; f.noDark = true;  // (no rain streak down its own lip)
     const L = look(f, [c[0], T.y, c[1]]);
-    // (its top rounded off toward the edges: the edge 1.5 cm down, the middle up; a dry chimney's capstones rougher)
-    Object.assign(L, T.rough ? { r0: -0.01 * R(), rMin: -0.03, rMax: 0.03, hB: 0.025 + 0.03 * R() } : { r0: -0.025 + 0.02 * R(), rMin: -0.035, rMax: 0.008, tu: L.tu * 0.6, tv: L.tv * 0.6, hB: 0.012 + 0.015 * R() }, { ring: null, shadow: null });
+    // (its top: up to 10% higher or lower than the next slab's, rounded off toward its edges; a dry chimney's capstones
+    // rougher)
+    const r0 = T.t * (q.tk - 1);
+    Object.assign(L, T.rough ? { r0: r0 - 0.01 * R(), rMin: r0 - 0.03, rMax: r0 + 0.03, hB: 0.025 + 0.03 * R() } : { r0, rMin: r0 - 0.012, rMax: r0 + 0.012, tu: L.tu * 0.5, tv: L.tv * 0.5, hB: 0.008 + 0.012 * R() }, { ring: null, shadow: null });
     addStone(M.stone, f, { y: T.y, flip: true }, L); count++;
   }
   // STEPS: a stone stoop in front of a door: one or two slabs, their front and ends drawn down into the ground
