@@ -43,7 +43,7 @@ export const PAINTS = {
 };
 // the horses for sale and the bay, in stall order: right front, right middle, right back, left front, left middle, left back
 export const STALL_IDS = ['R1', 'R2', 'R3', 'L1', 'L2', 'L3'];
-export const RECIPE_DEFAULTS = { kind: 'stable', paint: 'red', wear: 0.4, wood: 'straight', stone: 'grey', seed: 7, horses: ['chestnut', 'white', 'donkey', 'palomino', 'midnight', 'bay'] };
+export const RECIPE_DEFAULTS = { kind: 'stable', paint: 'red', wear: 0.42, wood: 'straight', stone: 'grey', seed: 7, horses: ['chestnut', 'white', 'donkey', 'palomino', 'midnight', 'bay'], eating: 'bay' };
 export function stableRecipe(r = {}) {
   const o = { ...RECIPE_DEFAULTS, horses: [...RECIPE_DEFAULTS.horses] };
   if (PAINTS[r.paint]) o.paint = r.paint;
@@ -52,6 +52,7 @@ export function stableRecipe(r = {}) {
   if (PALETTES[r.stone]) o.stone = r.stone;
   if (Number.isFinite(+r.seed)) o.seed = Math.max(1, Math.round(+r.seed));
   if (Array.isArray(r.horses) && r.horses.length === 6) o.horses = r.horses.map(String);
+  if (r.eating === null || o.horses.includes(r.eating)) o.eating = r.eating;   // (the horse with its head down at its hay)
   return o;
 }
 
@@ -81,14 +82,14 @@ const ltUnder = (x) => LT_TOP - (-W / 2 - x) * Math.tan(LTP) - 0.03;     // (x <
 
 // ── colours: tints on the trim sheet's strips (1 = the strip as drawn) ──────────────────────────────────────────────
 const BARE = [1.12, 1.12, 1.14];         // outside boards, unpainted: weathered toward silver-grey
-const INNER = [0.82, 0.74, 0.66];         // the boards' inside faces: browner, kept from the sun
+const INNER = [1.0, 0.9, 0.78];           // the boards' inside faces: honey-brown, kept from the sun
 const TRIM = [0.95, 0.94, 0.94];           // casings, corner boards: bare weathered wood
-const FRAME = [0.9, 0.82, 0.74];          // posts, beams, joists (rough-sawn strips)
+const FRAME = [1.08, 0.97, 0.85];         // posts, beams, joists (rough-sawn strips)
 const SHAKE = [0.74, 0.7, 0.66];
 const ROOFB = [0.66, 0.6, 0.54];          // the roof boards' undersides
 const DOORW = [1.06, 1.0, 0.94];          // door planks: sun-dried
-const STALLW = [1.02, 0.92, 0.8];         // stall planks: rubbed smooth and warmer
-const LOFTW = [0.95, 0.88, 0.8];
+const STALLW = [1.15, 1.02, 0.86];        // stall planks: rubbed smooth and warmer
+const LOFTW = [1.08, 0.98, 0.86];
 const ROPE = [1.3, 1.08, 0.76];           // (on the split-wood strips: straight fibres)
 const IRON = [0.85, 0.8, 0.76];
 const STRAP = [0.035, 0.032, 0.03];       // iron straps on the doors (painted, so they stay one mesh with the planks)
@@ -173,8 +174,8 @@ function windowIn(k, w, op, glazed) {
   casing(k, w, op, { tint: TRIM, depth: 0.12 });
   const wd = op.a1 - op.a0, h = op.y1 - op.y0, ac = (op.a0 + op.a1) / 2, yc = (op.y0 + op.y1) / 2;
   const P = wallM(w, ac, yc, -0.03);
-  k.parts.glow.push({ size: [wd, h, 0.004], m: P, kind: GLOW.window, col: [1.9, 0.82, 0.24] });
-  k.parts.glow.push({ size: [wd, h, 0.004], m: wallM(w, ac, yc, -0.04), kind: GLOW.inPane, col: [0, 0, 0] });
+  // (one pane facing out: from inside it isn't drawn, so the day outside shows through the window)
+  k.parts.glow.push({ size: [wd, h, 0], m: P, pane: true, kind: GLOW.window, col: [1.8, 0.7, 0.18] });
   for (const f of [-1 / 6, 1 / 6]) k.board([0.035, h, 0.03], null, null, { m: wallM(w, ac + f * wd * 2, yc, -0.015), long: 1, tint: TRIM, skip: '-z' });
   k.board([wd, 0.035, 0.03], null, null, { m: wallM(w, ac, yc, -0.015), long: 0, tint: TRIM, skip: '-z' });
   SILLS.push({ ...(() => { const c = new THREE.Vector3(ac, 0, w.d).applyMatrix4(RY(w.th)); return { x: c.x, z: c.z }; })(), hw: Math.abs(Math.cos(w.th)) * (wd / 2 + 0.2) + 0.15, hd: Math.abs(Math.sin(w.th)) * (wd / 2 + 0.2) + 0.15, y: op.y0 - 0.06 });
@@ -278,7 +279,9 @@ function cutAround([a, b], holes) {
 function stalls(k, r) {
   const list = [];
   for (const sx of [1, -1]) for (let i = 0; i < 3; i++) {
-    const zf = STALLZ[i], zb = STALLZ[i + 1], zc = (zf + zb) / 2, id = (sx > 0 ? 'R' : 'L') + (i + 1);
+    const zf = STALLZ[i], zb = STALLZ[i + 1], zc = (zf + zb) / 2, id = (sx > 0 ? 'R' : 'L') + (i + 1), horse = r.horses[STALL_IDS.indexOf(id)];
+    // (a donkey carries its head low: its gate and the wall either side of it are a plank lower, so it looks over them)
+    const low = horse === 'donkey', np = low ? 3 : 4, rail = 0.05 + np * 0.3 + 0.04, gateH = rail - 0.11;
     // the partition at the stall's front edge: planks from the aisle post to the wall post, capped
     const px0 = AX + 0.1, px1 = W / 2 - 0.225, L = px1 - px0, pxc = sx * (px0 + px1) / 2;
     for (let j = 0; j < 7; j++) k.board([L + 0.04, 0.292, 0.045], [pxc, 0.19 + j * 0.286, zf], [k.r(-0.003, 0.003), 0, 0], { long: 0, tint: vary(k, STALLW, 0.85, 1.1), skip: '+x-x-y' + (j < 6 ? '+y' : ''), cuts: [0], segFaces: '+z-z', inside: true });
@@ -288,23 +291,25 @@ function stalls(k, r) {
     const z0 = zb + 0.1 + (i === 2 ? 0.025 : 0), z1 = zf - 0.1, fx = sx * (SF + 0.025), dz0 = zc - 0.55, dz1 = zc + 0.55;
     for (const [a, b] of [[z0, dz0], [dz1, z1]]) {
       const pl = b - a, pc = (a + b) / 2;
-      for (let j = 0; j < 4; j++) k.board([0.05, 0.306, pl + 0.01], [fx, 0.2 + j * 0.3, pc], null, { long: 2, tint: vary(k, STALLW, 0.85, 1.1), skip: '+z-z-y' + (j < 3 ? '+y' : ''), inside: true });
-      k.solid([0.06, 1.2, pl], [fx, 0.65, pc]);
-      const nb = Math.max(3, Math.round(pl / 0.15));
-      for (let j = 1; j < nb; j++) k.box('iron', [0.022, 0.94, 0.022], [fx, 1.8, a + pl * j / nb], null, { tint: IRON, skip: '+y-y' });
+      for (let j = 0; j < np; j++) k.board([0.05, 0.306, pl + 0.01], [fx, 0.2 + j * 0.3, pc], null, { long: 2, tint: vary(k, STALLW, 0.85, 1.1), skip: '+z-z-y' + (j < np - 1 ? '+y' : ''), inside: true });
+      k.solid([0.06, rail - 0.05, pl], [fx, rail / 2, pc]);
+      const nb = Math.max(3, Math.round(pl / 0.15)), bh = 2.22 - rail - 0.04;
+      for (let j = 1; j < nb; j++) k.box('iron', [0.022, bh, 0.022], [fx, rail + 0.04 + bh / 2, a + pl * j / nb], null, { tint: IRON, skip: '+y-y' });
     }
-    k.board([0.07, 0.08, z1 - z0], [fx, 1.29, (z0 + z1) / 2], null, { long: 2, tint: vary(k, STALLW, 0.9, 1.05), inside: true });
+    k.board([0.07, 0.08, z1 - z0], [fx, rail, (z0 + z1) / 2], null, { long: 2, tint: vary(k, STALLW, 0.9, 1.05), inside: true });
     k.board([0.08, 0.1, z1 - z0], [fx, 2.27, (z0 + z1) / 2], null, { long: 2, tint: vary(k, STALLW, 0.9, 1.05), inside: true });
     // the half door (closed), hinged at one side, a latch at the other
     const hz = zc - sx * 0.55;
-    into(k, mul(T(sx * (SF + 0.02), 0.06, hz), RY(-sx * Math.PI / 2)), (t) => doorLeaf(t, { w: 1.1, h: 1.18, side: 1, tint: STALLW, rails: [0.22, 0.98], strap: STRAP }), r.seed * 31 + i + (sx > 0 ? 0 : 7));
-    k.box('iron', [0.03, 0.03, 0.16], [sx * (SF - 0.06), 0.9, zc + sx * 0.5], null, { tint: IRON });
+    into(k, mul(T(sx * (SF + 0.02), 0.06, hz), RY(-sx * Math.PI / 2)), (t) => doorLeaf(t, { w: 1.1, h: gateH, side: 1, tint: STALLW, rails: [0.2, gateH - 0.2], strap: STRAP }), r.seed * 31 + i + (sx > 0 ? 0 : 7));
+    k.box('iron', [0.03, 0.03, 0.16], [sx * (SF - 0.06), gateH - 0.28, zc + sx * 0.5], null, { tint: IRON });
+    // the horse eating: a heap of hay on the floor just inside its gate
+    if (horse === r.eating) for (const [dx, dz, w, hh, d, a] of [[0.42, 0.05, 0.75, 0.13, 0.55, 0.2], [0.62, -0.25, 0.45, 0.09, 0.4, -0.5]]) k.parts.hay.push({ size: [w, hh, d], m: mul(T(sx * (SF + dx), hh / 2 - 0.01, zc + dz), RY(a)), o: { tint: [1.05, 1.0, 0.88], inside: true } });
     // a manger in the back corner by the wall: a plank box on a ledge, hay in it
     const mx = sx * (W / 2 - 0.5), mz = zf - 0.3;
     for (const [sz, pos] of [[[0.6, 0.32, 0.03], [mx, 1.06, mz - 0.25]], [[0.03, 0.32, 0.5], [mx - sx * 0.3, 1.06, mz]]]) k.board(sz, pos, null, { long: sz[0] > 0.1 ? 0 : 2, tint: vary(k, STALLW, 0.8, 0.95), inside: true });
     k.board([0.6, 0.03, 0.5], [mx, 0.91, mz], null, { long: 0, tint: vary(k, STALLW, 0.8, 0.95), inside: true });
     k.parts.hay.push({ size: [0.56, 0.18, 0.46], m: T(mx, 1.02, mz), o: { tint: [1, 0.95, 0.85], inside: true } });
-    list.push({ id, side: sx, z: zc, frontX: sx * SF, face: -sx * Math.PI / 2, doorTop: 1.24, stallBack: sx * (W / 2 - 0.15) });
+    list.push({ id, side: sx, z: zc, frontX: sx * SF, face: -sx * Math.PI / 2, doorTop: rail + 0.04, stallBack: sx * (W / 2 - 0.15), pose: horse === r.eating ? 'eat' : 'look' });
   }
   return list;
 }
@@ -315,7 +320,7 @@ function roofs(k) {
   const len = (W / 2 + EO) / Math.cos(PITCH), x0 = -D / 2 - GO, x1 = D / 2 + GO;
   // each slope in its own frame: its top edge along x (here, along the ridge: z), running down toward its eave
   const common = { x0, x1, topY: ROOF0, len, pitch: PITCH, shakeT: SHAKE, boardT: ROOFB, rafterT: FRAME, hole, barge: true, interior: true, every: 0.8, rows: 2.2 };
-  roofSlope(k, RY(Math.PI / 2), { ...common, cap: true, comb: true });
+  roofSlope(k, RY(Math.PI / 2), { ...common, cap: true });
   roofSlope(k, RY(-Math.PI / 2), { ...common, cap: true });
   // the lean-to: from the wall under the main eave out past its posts
   const llen = (LT + 0.35) / Math.cos(LTP);
@@ -361,13 +366,14 @@ function cupola(k, paint) {
   k.solid([2 * h, y2 - yb, 2 * h], [0, (y2 + yb) / 2, cz]);
   // the cap: four hipped faces of shakes, three courses each, a soffit board under each overhang, hip boards
   const ov = 0.16, he = h + ov, ya = y2 + 0.55, cp = Math.atan2(ya - y2, he), sl = Math.hypot(ya - y2, he);
-  // (a dark core under the cap's shakes, so no sky shows between them)
-  k.prism('wood', ngon(4, (he - 0.04) * Math.SQRT2), ya - y2 - 0.05, [0, y2 + (ya - y2 - 0.05) / 2, cz], null, { tint: [0.2, 0.18, 0.16], taper: 0.97, skip: '-y' });
+  // (under the courses, the cap itself: a pyramid out to the corners, its sides grained like the shakes, so the hips are
+  // closed and no sky shows between the courses)
+  k.prism('wood', ngon(4, he * Math.SQRT2), ya - y2 - 0.005, [0, y2 + (ya - y2 - 0.005) / 2, cz], [0, 0, 0], { tint: SHAKE.map((c) => c * 0.82), strip: WOOD.shake, taper: 0.99, skip: '-y', roof: true });
   for (let f = 0; f < 4; f++) {
     const M = mul(T(0, 0, cz), RY(f * Math.PI / 2));
     k.board([2 * he, 0.02, ov + 0.02], null, null, { m: mul(M, T(0, y2 - 0.01, h + ov / 2 - 0.01)), long: 0, tint: ROOFB, skip: '+y' });
     for (let c = 0; c < 3; c++) {
-      const s0 = c * 0.21, L = Math.min(0.42, sl - s0 + 0.02), sm = s0 + L / 2, half = he * (1 - sm / sl) + 0.02;
+      const s0 = c * 0.21, L = Math.min(0.42, sl - s0 + 0.02), sm = s0 + L / 2, half = he * (1 - sm / sl) * 0.8;
       for (let x = -half; x < half - 0.03;) {
         const w = Math.min(k.r(0.2, 0.34), half - x);
         const m = mul(M, T(x + w / 2, y2 + Math.sin(cp) * sm + 0.02, he - Math.cos(cp) * sm), RX(cp), RY(k.r(-0.03, 0.03)));
@@ -376,7 +382,7 @@ function cupola(k, paint) {
       }
     }
     const hl = Math.hypot(sl, he), ha = Math.atan2(ya - y2, Math.SQRT2 * he);
-    k.board([0.07, 0.04, hl], null, null, { m: mul(M, T(he / 2, (y2 + ya) / 2 + 0.04, he / 2), RY(Math.PI / 4), RX(ha)), long: 2, tint: vary(k, SHAKE, 0.7, 0.8), strip: 11, roof: true });
+    k.board([0.07, 0.035, hl - 0.34], null, null, { m: mul(M, T(he * 0.42, ya - (ya - y2) * 0.58 + 0.03, he * 0.42), RY(Math.PI / 4), RX(ha)), long: 2, tint: vary(k, SHAKE, 0.7, 0.8), strip: 11, roof: true });
   }
   // the weathervane: a rod, a little iron horse at a gallop, an arrow under it, the four points of the compass
   const vy = ya + 0.02;
@@ -390,8 +396,13 @@ function cupola(k, paint) {
 // ── the front: the sign, the hayloft door, the hoist beam with its pulley and rope ──────────────────────────────────
 function front(k, r) {
   const z = D / 2;
-  // the sign's backing board (its painted face is a plane of the boards picture, just in front)
-  k.board([4.72, 0.96, 0.05], [0, 3.93, z + 0.047], null, { long: 0, tint: vary(k, TRIM, 0.7, 0.8), skip: '-z', outside: true });
+  // the sign's backing board (its painted face is a plane of the boards picture, just in front), a frame of boards round
+  // it standing proud of the face
+  k.board([4.86, 1.06, 0.05], [0, 3.93, z + 0.047], null, { long: 0, tint: vary(k, TRIM, 0.7, 0.8), skip: '-z', outside: true });
+  for (const s of [-1, 1]) {
+    k.board([4.86, 0.1, 0.05], [0, 3.93 + s * 0.475, z + 0.095], null, { long: 0, tint: vary(k, FRAME, 0.75, 0.9), strip: 10, outside: true });
+    k.board([0.1, 0.86, 0.05], [s * 2.38, 3.93, z + 0.095], null, { long: 1, tint: vary(k, FRAME, 0.75, 0.9), strip: 11, outside: true });
+  }
   // the hayloft door, X-braced, shut
   into(k, wallM(FRONT, HAY.a0, HAY.y0, 0.085), (t) => doorLeaf(t, { w: HAY.a1 - HAY.a0, h: HAY.y1 - HAY.y0, side: 1, tint: DOORW, xBrace: true, rails: [0.18, 1.47], strap: STRAP }), r.seed * 13 + 3);
   // the hoist beam out of the gable's peak, a brace under it, the pulley block on its end
@@ -415,6 +426,18 @@ function front(k, r) {
   }
   rope([0.92, 5.9, z + 0.1], [0.9, cy - cr * 1.4 - 0.25, z + 0.11]);
   rope([1.0, 5.9, z + 0.1], [1.03, cy - cr * 1.4 - 0.18, z + 0.11]);
+}
+
+// a gooseneck lamp over the sign: an iron arm out of the wall, bent down, a shade with the lamp under it; its light
+// falls on the sign. Returns the light (its glow sprite at the lamp)
+function gooseneck(k, x, z) {
+  const y0 = 4.56, rod = (a, b) => { const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), L = d.length(); const m = new THREE.Matrix4().lookAt(new THREE.Vector3(...a), new THREE.Vector3(...b), new THREE.Vector3(1, 0, 0)); m.setPosition((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2); k.box('iron', [0.022, 0.022, L + 0.01], null, null, { m, tint: IRON }); };
+  k.box('iron', [0.08, 0.12, 0.02], [x, y0, z + 0.03], null, { tint: IRON });
+  const pts = [[x, y0, z + 0.04], [x, y0 + 0.12, z + 0.22], [x, y0 + 0.13, z + 0.42], [x, y0 + 0.06, z + 0.56]];
+  for (let i = 0; i < pts.length - 1; i++) rod(pts[i], pts[i + 1]);
+  k.prism('iron', ngon(10, 0.13), 0.1, [x, y0 + 0.0, z + 0.58], null, { tint: IRON, taper: 0.7, smooth: true });
+  k.parts.glow.push({ size: [0.07, 0.04, 0.07], m: T(x, y0 - 0.05, z + 0.58), kind: GLOW.flame, col: [6, 3.4, 1.2] });
+  return { p: [x, y0 - 0.12, z + 0.6], reach: 6.5, strength: 1.5, glow: [x, y0 - 0.07, z + 0.58] };
 }
 
 // ── odds and ends inside: the ladder to the loft, a feed bin, tack hung on the posts ─────────────────────────────────
@@ -477,6 +500,25 @@ function face(w, h, region, m) {
   g.applyMatrix4(m); return g;
 }
 
+// each wall board's own numbers for the shader (parts.js boardWear), per corner: x its nails (1 a board: two across it, 0.5
+// a batten: one), y the board's height, a centimetre or two off (so a wall's nails don't line up dead level), z how much
+// more of its paint has gone: by the corners and the doorways (handled and knocked), low down, and a little board by
+// board (some boards hold their paint, some have lost most of it)
+function boardAttr(geo, parts, seed) {
+  const R = rng(seed * 97 + 5), of = geo.userData.partOf, P = geo.attributes.position, n = P.count, A = new Float32Array(n * 3);
+  const per = parts.map((Q) => [(R() - 0.5) * 0.03, R() < 0.3 ? 0.15 + 0.2 * R() : 0.08 * R()]);
+  const near = (d, r) => 1 - smooth01(d, 0, r);
+  for (let i = 0; i < n; i++) {
+    const Q = parts[of[i]], o = Q.o; if (!o.nail && !o.paint) continue;
+    const x = P.getX(i), y = P.getY(i), z = P.getZ(i), [jit, own] = per[of[i]];
+    const corner = Math.min(Math.hypot(Math.abs(x) - W / 2, Math.abs(z) - D / 2), 9);
+    const door = Math.abs(Math.abs(z) - D / 2) < 0.2 ? Math.abs(Math.abs(x) - DW / 2) + Math.max(0, y - DH) : 9;
+    A[i * 3] = o.nail || 0; A[i * 3 + 1] = Q.m.elements[13] + jit;
+    A[i * 3 + 2] = own + 0.45 * near(corner, 1.3) + 0.4 * near(door, 1.1) + 0.2 * near(y, 1.3);
+  }
+  geo.setAttribute('aBoard', new THREE.BufferAttribute(A, 3));
+}
+
 // ── build it all ─────────────────────────────────────────────────────────────────────────────────────────────────────
 export function buildStable(recipeIn = {}, env = {}) {
   const t0 = performance.now(), r = stableRecipe(recipeIn), paint = PAINTS[r.paint].c;
@@ -493,10 +535,13 @@ export function buildStable(recipeIn = {}, env = {}) {
   // the iron pintles the front leaves hang on, on the casing
   for (const [hg] of [[hingeL], [hingeR]]) for (const y of [0.3, 2.75]) k.box('iron', [0.05, 0.1, 0.09], [hg[0] - Math.sign(hg[0]) * 0.03, y, D / 2 + 0.07], null, { tint: IRON });
   // the lanterns: on iron brackets on the aisle posts, one hung in the middle, one by the doors outside, one in the lean-to
-  for (const z of [2.6, -2.6]) for (const sx of [-1, 1]) lamps.push(lantern(k, sx * (AX - 0.1 - 0.3), 2.25, z + (z > 0 ? -0.1 : 0.1), { bracket: [sx * 0.3, 0] }));
-  lamps.push(lantern(k, 0, 2.45, 0, { chain: 0.3 }));
-  lamps.push(lantern(k, 2.32, 2.6, D / 2 + 0.36, { bracket: [0, -0.31], strength: 0.9 }));
-  lamps.push(lantern(k, -6.4, 2.35, 1.6, { chain: ltUnder(-6.4) - 0.17 - 2.58, strength: 0.8 }));
+  // (low on the posts between the stalls, close in: under the line from the doorway to the boards over the gates, and
+  // their light falls on the floor and the gates beside them)
+  for (const z of [2.6, -2.6]) for (const sx of [-1, 1]) lamps.push(lantern(k, sx * (AX - 0.1 - 0.17), 1.95, z, { bracket: [sx * 0.17, 0], strength: 1.6 }));
+  lamps.push(lantern(k, 0, 2.5, 0, { chain: 0.25, strength: 1.4 }));
+  lamps.push(lantern(k, 2.32, 2.6, D / 2 + 0.36, { bracket: [0, -0.31], strength: 1.3 }));
+  lamps.push(lantern(k, -6.4, 2.35, 1.6, { chain: ltUnder(-6.4) - 0.17 - 2.58, strength: 1.1 }));
+  for (const x of [-1.25, 1.25]) lamps.push(gooseneck(k, x, D / 2));
   // the front doors' leaves, each its own kit (the open ones block light: solids for the bake)
   const leaves = [];
   for (const [hg, side, ang, harnessed] of [[hingeL, 1, -OPEN, false], [hingeR, -1, OPEN, true]]) {
@@ -507,20 +552,22 @@ export function buildStable(recipeIn = {}, env = {}) {
     k.solid([DW / 2, DH, 0.1], null, null, mul(T(...hg), RY(ang), T(side * DW / 4, DH / 2, 0)));
   }
 
-  // the boards' faces: the sign, and one board over each stall's door, facing the aisle
+  // the boards' faces: the sign, and one board on each stall's front over its gate, facing the aisle (big enough to read
+  // from the doorway)
   const boardList = [], bf = [face(4.6, 0.86, BOARDS.sign, T(0, 3.93, D / 2 + 0.074))];
   const order = ['R1', 'R2', 'R3', 'L1', 'L2', 'L3'];
   for (const S of stallList) {
     const slot = order.indexOf(S.id), x = S.side * (SF - 0.04);
-    k.board([0.03, 0.34, 0.64], [S.side * (SF - 0.02), 2.5, S.z], null, { long: 2, tint: vary(k, TRIM, 0.6, 0.7), inside: true });
-    bf.push(face(0.6, 0.3, BOARDS.slot(slot), mul(T(x, 2.5, S.z), RY(-S.side * Math.PI / 2))));
-    S.horse = r.horses[slot]; S.board = { slot, at: [x, 2.5, S.z] };
+    k.board([0.03, 0.5, 0.96], [S.side * (SF - 0.02), 2.565, S.z], null, { long: 2, tint: vary(k, TRIM, 0.6, 0.7), inside: true });
+    bf.push(face(0.9, 0.45, BOARDS.slot(slot), mul(T(x, 2.565, S.z), RY(-S.side * Math.PI / 2))));
+    S.horse = r.horses[slot]; S.board = { slot, at: [x, 2.565, S.z] };
     boardList.push(S.board);
   }
   // the kit's parts into meshes, one per material
   const R = rng(r.seed + 1), geos = {};
   for (const g of ['wood', 'iron']) geos[g] = buildGeometry(k.parts[g], g, R, { topAt, tintAt });
   // (the mangers' hay: the props' hay picture, with stone-style UVs: each face its own window on the straw)
+  boardAttr(geos.wood, k.parts.wood, r.seed);
   geos.hay = buildGeometry(k.parts.hay, 'stone', R, {});
   geos.glow = glowGeometry(k.parts.glow);
   geos.stone = footing(r, env);
@@ -540,7 +587,7 @@ export function buildStable(recipeIn = {}, env = {}) {
       opening([sx * W / 2, 1.95, (SIDE_WIN.z0 + SIDE_WIN.z1) / 2], [0, 0, 0.5], [0, 0.55, 0], [sx, 0, 0], false, sx < 0 ? 0.6 : 1)]),
   ];
   const insideP = (x, y, z) => Math.abs(x) < W / 2 - 0.01 && Math.abs(z) < D / 2 - 0.01 && y > -0.5 && y < roofUnder(x) - 0.01;
-  const light = new Light(occ, { inside: insideP, openings, lamps, base: 0.14, gain: 2.6 });
+  const light = new Light(occ, { inside: insideP, openings, lamps, base: 0.2, gain: 3.2 });
   for (const g of ['wood', 'iron', 'hay', 'stone', 'floor', 'spill', 'boards']) light.bake(geos[g]);
   for (const L of leaves) {
     light.bake(L.geo, mul(T(...L.hinge), RY(L.open)), 'open');

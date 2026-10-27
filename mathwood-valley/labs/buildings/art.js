@@ -1,7 +1,7 @@
 // THE BUILDING LAB'S OWN PICTURES, DRAWN IN CODE AT LOAD (the wood and stone come from the Material Lab and the Stone Lab):
 //
 //  boards   1024 x 512  one picture for every painted board a building hangs out: the big sign along its top
-//                       ("LIVERY & FEED": white paint gone grey and thin on old planks, dark letters worn at the edges),
+//                       ("LIVERY & FEED": three cream-painted planks, chunky dark letters, worn a little),
 //                       and under it eight small slots, each a stall's chalkboard ("CHESTNUT 120") or, once that horse is
 //                       yours, a brass name plate ("COPPER"). A slot is drawn again in place when it changes.
 //  floor    256 x 256   the barn's floor: packed dirt with straw trodden into it (tiles both ways)
@@ -119,68 +119,71 @@ function wear(g, [x0, y0, w, h], amount, seed, scale = 1) {
   }
   g.putImageData(img, x0, y0);
 }
-// old planks under paint: three boards across, grain lines, seams, and the paint worn grey in patches
+// the sign's boards: three cream-painted planks, each its own shade, dark seams between them, grain showing through the
+// thin paint, and here and there the paint gone to the grey wood under it
 function signBoard(g, [x0, y0, w, h], seed) {
   const R = rng(seed), img = g.createImageData(w, h), d = img.data, planks = 3;
+  const tone = Array.from({ length: planks }, () => 0.93 + 0.12 * R()), warm = Array.from({ length: planks }, () => (R() - 0.5) * 0.06);
   for (let y = 0; y < h; y++) {
     const p = Math.min(planks - 1, Math.floor(y / h * planks)), py = (y / h * planks) - p;
     for (let x = 0; x < w; x++) {
       const u = x / w, i = (y * w + x) * 4;
       const grain = Math.sin((y * 0.9 + fbm(u, py, 6, 1, 3, seed + p * 9) * 30) * 1.3) * 0.5 + 0.5;
       const paintN = fbm(u * 2, y / h, 6, 3, 4, seed + 31) * 0.8 + 0.2 * hash(x >> 1, y >> 1, seed);
-      const bare = clamp01((0.42 - paintN) * 7);                       // grey wood where the whitewash has gone
-      const l = 0.92 - 0.1 * grain * (0.4 + 0.6 * bare) + 0.06 * (fbm(u, py, 20, 2, 2, seed + 5) - 0.5);
-      let r = 214 * l, gg = 205 * l, b = 184 * l;
-      r += (128 - r) * bare; gg += (116 - gg) * bare; b += (98 - b) * bare;
-      const seam = Math.min(Math.abs(py) , Math.abs(1 - py)) * h / planks;
-      if (seam < 2.2) { const k = 0.45 + 0.25 * seam / 2.2; r *= k; gg *= k; b *= k; }
-      const edge = Math.min(x, y, w - 1 - x, h - 1 - y); if (edge < 5) { const k = 0.7 + 0.06 * edge; r *= k; gg *= k; b *= k; }
+      const bare = clamp01((0.33 - paintN) * 6);                       // grey wood where the paint has gone
+      const l = tone[p] * (0.95 - 0.07 * grain * (0.3 + 0.7 * bare) + 0.05 * (fbm(u, py, 20, 2, 2, seed + 5) - 0.5));
+      let r = 232 * l * (1 + warm[p]), gg = 218 * l, b = 186 * l * (1 - warm[p]);
+      r += (126 - r) * bare; gg += (114 - gg) * bare; b += (98 - b) * bare;
+      const seam = Math.min(py, 1 - py) * h / planks;
+      if (seam < 3.5) { const k = 0.32 + 0.4 * seam / 3.5; r *= k; gg *= k; b *= k; }
       d[i] = r; d[i + 1] = gg; d[i + 2] = b; d[i + 3] = 255;
     }
   }
   g.putImageData(img, x0, y0);
-  // a few nail heads with rust run
-  for (let k = 0; k < 6; k++) { const nx = x0 + 18 + (k % 3) * (w - 36) / 2, ny = y0 + h * ((Math.floor(k / 3) + 0.5) / 2); g.fillStyle = 'rgba(70,50,36,0.9)'; g.beginPath(); g.arc(nx, ny, 3.2, 0, 7); g.fill(); g.fillStyle = 'rgba(120,70,40,0.35)'; g.fillRect(nx - 1.5, ny + 3, 3, 10 + R() * 8); }
+  // two nail heads at each end of every plank, a rust run under each
+  for (let p = 0; p < planks; p++) for (const nx of [x0 + 22, x0 + w - 22]) {
+    const ny = y0 + h * (p + 0.5) / planks + (R() - 0.5) * 6;
+    g.fillStyle = 'rgba(60,44,32,0.95)'; g.beginPath(); g.arc(nx, ny, 3.4, 0, 7); g.fill();
+    g.fillStyle = 'rgba(120,70,40,0.3)'; g.fillRect(nx - 1.5, ny + 3, 3, 8 + R() * 10);
+  }
 }
 function drawSign(g, text = ['LIVERY', '&', 'FEED']) {
   const r = BOARDS.sign;
   signBoard(g, r, 811);
-  // the letters: dark paint, a hair of shadow, then worn back with noise (on their own layer, so the wear eats paint only)
+  // the letters: chunky dark slab-serif capitals, the "&" as big as they are, a hair of a darker edge, then worn back a
+  // little with noise (on their own layer, so the wear eats paint only)
   const L = canvasOf(r[2], r[3]), lg = L.getContext('2d');
   lg.textBaseline = 'middle'; lg.textAlign = 'left';
-  const big = 132, amp = 92, gap = 26;
-  lg.font = `${big}px Rye, Georgia, serif`;
-  const wA = lg.measureText(text[0]).width, wC = lg.measureText(text[2]).width;
-  lg.font = `${amp}px Rye, Georgia, serif`; const wB = lg.measureText(text[1]).width;
-  let x = (r[2] - (wA + wB + wC + 2 * gap)) / 2; const y = r[3] / 2 + 6;
-  lg.fillStyle = '#2a2018';
-  lg.font = `${big}px Rye, Georgia, serif`; lg.fillText(text[0], x, y); x += wA + gap;
-  lg.font = `${amp}px Rye, Georgia, serif`; lg.fillText(text[1], x, y + 8); x += wB + gap;
-  lg.font = `${big}px Rye, Georgia, serif`; lg.fillText(text[2], x, y);
-  wear(lg, [0, 0, r[2], r[3]], 0.3, 823, 1.6);
+  const gap = 34, words = text.map((t) => t);
+  let size = 150, font = (sz) => `900 ${sz}px Bitter, Georgia, serif`, widths;
+  for (;;) { lg.font = font(size); widths = words.map((t) => lg.measureText(t).width); if (widths.reduce((a, b) => a + b, 0) + gap * 2 < r[2] * 0.9 || size < 60) break; size -= 4; }
+  let x = (r[2] - (widths.reduce((a, b) => a + b, 0) + gap * 2)) / 2; const y = r[3] / 2 + 8;
+  lg.font = font(size); lg.lineJoin = 'round';
+  words.forEach((t, i) => { lg.strokeStyle = '#120c08'; lg.lineWidth = 5; lg.strokeText(t, x, y); lg.fillStyle = '#2a1d14'; lg.fillText(t, x, y); x += widths[i] + gap; });
+  wear(lg, [0, 0, r[2], r[3]], 0.2, 823, 1.6);
   g.drawImage(L, r[0], r[1]);
 }
-// a stall's chalkboard: slate in a thin wooden frame, the horse's kind in chalk and its price beside a gold coin
+// a stall's chalkboard: slate in a wooden frame, the horse's kind in chalk and its price beside a gold coin (the chalk
+// laid on thick: letters drawn over twice, then worn back a little)
 function drawChalk(g, slot, name, price) {
   const [x0, y0, w, h] = slot, R = rng(900 + x0 + y0);
   g.fillStyle = '#5e4630'; g.fillRect(x0, y0, w, h);                         // the frame
-  g.fillStyle = '#28302c'; g.fillRect(x0 + 9, y0 + 9, w - 18, h - 18);       // the slate
-  // old chalk wiped round and round
+  g.fillStyle = '#26302b'; g.fillRect(x0 + 9, y0 + 9, w - 18, h - 18);       // the slate
   for (let k = 0; k < 26; k++) { g.fillStyle = `rgba(220,226,214,${0.02 + R() * 0.05})`; g.beginPath(); g.ellipse(x0 + 20 + R() * (w - 40), y0 + 20 + R() * (h - 40), 10 + R() * 30, 5 + R() * 12, R() * 3, 0, 7); g.fill(); }
   const L = canvasOf(w, h), lg = L.getContext('2d');
-  lg.textAlign = 'center'; lg.textBaseline = 'middle'; lg.fillStyle = '#eceee4';
-  lg.font = `${name.length > 7 ? 34 : 38}px Smokum, Georgia, serif`;
-  for (let k = 0; k < 3; k++) { lg.globalAlpha = 0.55; lg.fillText(name, w / 2 + (R() - 0.5) * 1.5, 40 + (R() - 0.5) * 1.5); }
-  lg.globalAlpha = 1; lg.font = '46px Rye, Georgia, serif';
+  lg.textAlign = 'center'; lg.textBaseline = 'middle'; lg.fillStyle = '#f2f3ea'; lg.strokeStyle = '#f2f3ea'; lg.lineJoin = 'round';
+  let ns = 40; lg.font = `800 ${ns}px Bitter, Georgia, serif`; while (lg.measureText(name).width > w - 40 && ns > 20) { ns -= 2; lg.font = `800 ${ns}px Bitter, Georgia, serif`; }
+  lg.lineWidth = 2.2; lg.strokeText(name, w / 2, 37); lg.fillText(name, w / 2, 37);
+  lg.font = '900 54px Bitter, Georgia, serif';
   const pw = lg.measureText(String(price)).width;
-  lg.fillText(String(price), w / 2 + 16, 88);
-  lg.strokeStyle = '#eceee4'; lg.lineWidth = 2.5; lg.beginPath(); lg.moveTo(36, 62); lg.lineTo(w - 36, 63); lg.stroke();
-  wear(lg, [0, 0, w, h], 0.18, 931 + x0, 3);
+  lg.lineWidth = 2.5; lg.strokeText(String(price), w / 2 + 18, 89); lg.fillText(String(price), w / 2 + 18, 89);
+  lg.lineWidth = 3.5; lg.beginPath(); lg.moveTo(30, 61); lg.lineTo(w - 30, 62); lg.stroke();
+  wear(lg, [0, 0, w, h], 0.12, 931 + x0, 3);
   g.drawImage(L, x0, y0);
   // the coin: drawn in yellow chalk
-  const cx = x0 + w / 2 + 16 - pw / 2 - 26, cy = y0 + 88;
-  g.strokeStyle = 'rgba(240,200,90,0.9)'; g.lineWidth = 3.5; g.beginPath(); g.arc(cx, cy, 13, 0, 7); g.stroke();
-  g.lineWidth = 2; g.beginPath(); g.arc(cx, cy, 6.5, 0, 7); g.stroke();
+  const cx = x0 + w / 2 + 18 - pw / 2 - 30, cy = y0 + 89;
+  g.strokeStyle = 'rgba(244,204,92,0.95)'; g.lineWidth = 5; g.beginPath(); g.arc(cx, cy, 15, 0, 7); g.stroke();
+  g.lineWidth = 3; g.beginPath(); g.arc(cx, cy, 7, 0, 7); g.stroke();
 }
 // a brass name plate: a gold bevelled plate, the name cut into it (dark, a bright lip under), a screw at each corner
 function drawPlate(g, slot, name) {
@@ -204,7 +207,7 @@ function drawPlate(g, slot, name) {
 
 // all of the lab's own pictures. boards.slotFor(i, { name, price, owned }) draws slot i again (and sends it up)
 export async function makeArt() {
-  try { await Promise.all([document.fonts.load('64px Rye'), document.fonts.load('30px Smokum')]); } catch (e) { /* the fonts are optional */ }
+  try { await Promise.all([document.fonts.load('64px Rye'), document.fonts.load('30px Smokum'), document.fonts.load('900 64px Bitter'), document.fonts.load('800 40px Bitter')]); } catch (e) { /* the fonts are optional */ }
   const t0 = performance.now();
   const bc = canvasOf(BOARDS.w, BOARDS.h), bg = bc.getContext('2d');
   bg.fillStyle = '#3a2c20'; bg.fillRect(0, 0, BOARDS.w, BOARDS.h);

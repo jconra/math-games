@@ -15,7 +15,8 @@ import { PRICES, HORSES } from '../../src/catalog.js';
 import { buildStable, stableRecipe, PAINTS, RECIPE_DEFAULTS, STABLE } from './stable.js';
 import { buildProps } from './props.js';
 import { makeArt } from './art.js';
-import { LU, lit, paintWear, glowMaterial, animalLamps } from './parts.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { LU, lit, boardWear, glowMaterial, animalLamps, setLamps, lanternGlow } from './parts.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const num = (n) => Math.round(n).toLocaleString('en-US');
@@ -55,9 +56,9 @@ const state = {
 // day: the afternoon sun from the front left (as in the concept picture); dusk: low and orange, the sky going; night: a
 // little blue moonlight, the lanterns doing the rest
 const TIMES = {
-  day: { el: 38, sun: 0xfff3e2, sunI: 3.3, sky: 0x9cbbe0, hemiI: 1.85, ground: 0x5a4a34, exp: 1.0, night: 0, lampGain: 1.35 },
-  dusk: { el: 7, sun: 0xffa060, sunI: 1.4, sky: 0xc98a6c, hemiI: 0.75, ground: 0x3c3024, exp: 1.05, night: 0.55, lampGain: 1.2 },
-  night: { el: 40, sun: 0x9bb2e6, sunI: 0.6, sky: 0x24345a, hemiI: 0.8, ground: 0x141210, exp: 1.2, night: 1, lampGain: 1.7, bg: 0x0d1526 },
+  day: { el: 38, sun: 0xfff3e2, sunI: 3.3, sky: 0x9cbbe0, hemiI: 1.85, ground: 0x6a563c, exp: 1.0, night: 0, lampGain: 1.6, glow: 0.5 },
+  dusk: { el: 7, sun: 0xffa060, sunI: 1.4, sky: 0xc98a6c, hemiI: 0.75, ground: 0x3c3024, exp: 1.05, night: 0.55, lampGain: 1.6, glow: 0.8 },
+  night: { el: 40, sun: 0x9bb2e6, sunI: 0.75, sky: 0x2c3e66, hemiI: 1.0, ground: 0x18140f, exp: 1.2, night: 1, lampGain: 1.7, bg: 0x0d1526, glow: 1 },
 };
 const viewCentre = new THREE.Vector3(0, 2.5, 0);
 function applyLight() {
@@ -70,6 +71,7 @@ function applyLight() {
   sun.position.copy(viewCentre).addScaledVector(dir, 40); sun.target.position.copy(viewCentre); sun.target.updateMatrixWorld();
   renderer.toneMappingExposure = L.exp;
   LU.uNight.value = L.night; LU.uLamp.value = state.lamps ? 1 : 0; LU.uLampGain.value = L.lampGain;
+  if (B && B.glow) { B.glow.visible = state.lamps; B.glow.material.opacity = L.glow; }
   U.uShadeDir.value.set(0, 0, -1);
 }
 // the game's quality tiers: how many pixels, how fine the shadows
@@ -95,7 +97,7 @@ function makeMaterials() {
   U.uGrimeColor.value.set('#5e574d'); U.uEdgeAmt.value = 0.6; U.uEdgeWidth.value = 0.02; U.uEdgeBreak.value = 0.75; U.uPaintChip.value = 0.4;
   U.uAOAmt.value = 1.0; U.uAOSun.value = 0.2; U.uEaveDark.value = 0.3; U.uBleach.value = 0; U.uDirtBand.value = 0.8; U.uSkyGrey.value = 0.6;
   U.uEdgeDark.value = 0.45; U.uEdgeDarkW.value = 0.03; U.uBevel.value = 0.55;
-  mats.wood = paintWear(lit(weather(new THREE.MeshStandardMaterial({ map: T.wood, normalMap: T.woodN, normalScale: new THREE.Vector2(0.9, 0.9), roughness: 0.94 }), { box: true, ao: true, bevel: true })));
+  mats.wood = boardWear(lit(weather(new THREE.MeshStandardMaterial({ map: T.wood, normalMap: T.woodN, normalScale: new THREE.Vector2(0.9, 0.9), roughness: 0.94 }), { box: true, ao: true, bevel: true })));
   mats.iron = lit(weather(new THREE.MeshStandardMaterial({ color: 0x3a332e, roughness: 0.55, metalness: 0.65 }), { box: true, ao: true }));
   mats.stone = lit(stoneEdges(weather(new THREE.MeshStandardMaterial({ map: RT.map, normalMap: RT.normalMap, roughness: 0.93 }), { tint: true, ao: true })));
   mats.stone.shadowSide = THREE.FrontSide;
@@ -108,6 +110,18 @@ function makeMaterials() {
   mats.ground = lit(weather(new THREE.MeshStandardMaterial({ map: T.ground, roughness: 0.97 }), { ground: true, tint: true, ao: true }));
 }
 
+// THE TRIM SHEET'S NAILS PAINTED OUT: the Material Lab's board strips carry a nail (and its rust run) a third of the way
+// across each strip, once every 1.2 m along it: on upright boards side by side they came out as rows of big dark ovals
+// right across a wall. A band of each strip either side of them is copied over from just beside it (colour and bumps
+// both), in the lab's copy of the pictures; the stable's nails are drawn by its shader instead (parts.js boardWear)
+function eraseNails(T) {
+  for (const tex of [T.wood, T.woodN]) {
+    const g = tex.image.getContext('2d'), band = g.getImageData(212, 0, 26, 768);
+    g.putImageData(band, 243, 0);
+    tex.needsUpdate = true;
+  }
+}
+
 // ── the building, its props, its horses ──────────────────────────────────────────────────────────────────────────────
 let B = null, P = null, ground = null, groundGeo = null, lib = null;
 const group = new THREE.Group(), propGroup = new THREE.Group(), horseGroup = new THREE.Group();
@@ -115,7 +129,7 @@ scene.add(group, propGroup, horseGroup);
 const horses = [];
 const stats = { buildMs: 0, bakeMs: 0, propMs: 0, texMs: 0 };
 function rebuild() {
-  for (const m of [...group.children]) { group.remove(m); m.geometry.dispose(); }
+  for (const m of [...group.children]) { group.remove(m); m.geometry.dispose(); if (m.isPoints) m.material.dispose(); }
   for (const m of [...propGroup.children]) { propGroup.remove(m); m.geometry.dispose(); }
   const t0 = performance.now();
   B = buildStable(stableRecipe(state), { texMean: RT.mean });
@@ -133,6 +147,9 @@ function rebuild() {
   const off = B.offset;
   P = buildProps(B.props, { seed: state.seed * 7 + 1, bake: (geo) => { geo.translate(-off, 0, 0); B.light.bake(geo); B.light.apply(geo, state.doors); geo.translate(off, 0, 0); } });
   for (const g of ['wood', 'iron', 'hay']) { const m = new THREE.Mesh(P.geos[g], mats[g]); m.castShadow = m.receiveShadow = true; propGroup.add(m); }
+  // the lanterns: where they are, for the shaders' light, and a soft glow round each (one draw for all of them)
+  setLamps(B.lamps);
+  B.glow = lanternGlow(B.lamps); group.add(B.glow); applyLight();
   stats.buildMs = B.msBuild; stats.bakeMs = B.msBake; stats.propMs = P.ms; stats.totalMs = performance.now() - t0;
   setDoors(state.doors);
   bakeGround();
@@ -185,8 +202,12 @@ function drawBoards() {
 }
 
 // THE HORSES: the game's own models (src/actors/animals.js), loaded as the game loads them, one in each stall, its chest
-// just behind the stall door so its head comes out over it into the aisle, idling (head and tail moving)
-const SHAPE = {};   // per kind: how far its chest and nose reach forward of its middle (measured once, in the Idle pose)
+// just behind the stall's gate so its head comes out over it into the aisle, idling (head and tail moving). The models
+// are left as they are (the same horses as everywhere else in the game); what's added here: each its own pose (its head
+// turned a little one way or the other, one with its head down at the hay inside its gate), its own clip speed and
+// place in the clip, a halter (a few straps hung on its head bone), and the lanterns' light (parts.js animalLamps)
+const SHAPE = {};   // per kind: how far its chest and nose reach forward of its middle, and its halter (measured once)
+const HALTER = animalLamps(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, metalness: 0.1 }), 0.45);
 function measure(a) {
   if (SHAPE[a.kind]) return SHAPE[a.kind];
   a.root.position.set(0, 0, 0); a.root.rotation.set(0, 0, 0); a.root.updateMatrixWorld(true);
@@ -197,35 +218,98 @@ function measure(a) {
     nose = Math.max(nose, v.z); top = Math.max(top, v.y);
     if (v.y > 0.45 * a.tall && v.y < 0.62 * a.tall) chest = Math.max(chest, v.z);
   }
-  return (SHAPE[a.kind] = { chest, nose, top });
+  return (SHAPE[a.kind] = { chest, nose, top, halter: halterFor(a) });
 }
+// A HALTER fitted to a kind's head, in the head bone's own frame (so it rides the head through every clip): the head's
+// corners (the ones mostly bound to its head bone) as it stands, its long axis from the bone to the nose; across that
+// axis near the muzzle a noseband, behind the ears a crown strap (each a ring of short straps a centimetre off the head,
+// the size of the head there), a cheek strap down each side between them, and a brass ring under the jaw
+function halterFor(a) {
+  const m = a.mesh, head = a.bones.Head || a.bones[a.info.head]; if (!head) return null;
+  const bi = m.skeleton.bones.indexOf(head), SI = m.geometry.attributes.skinIndex, SW = m.geometry.attributes.skinWeight;
+  const P0 = head.getWorldPosition(new THREE.Vector3()), pts = [], v = new THREE.Vector3();
+  for (let i = 0; i < SI.count; i++) {
+    let w = 0; for (let c = 0; c < 4; c++) if (SI.getComponent(i, c) === bi) w += SW.getComponent(i, c);
+    if (w < 0.5) continue;
+    m.getVertexPosition(i, v); pts.push(v.clone().applyMatrix4(m.matrixWorld));
+  }
+  if (pts.length < 20) return null;
+  const N = pts.reduce((b, p) => (p.z > b.z ? p : b), pts[0]), axis = N.clone().sub(P0), len = axis.length(); axis.normalize();
+  const up = new THREE.Vector3(0, 1, 0).addScaledVector(axis, -axis.y).normalize(), side = new THREE.Vector3().crossVectors(axis, up);
+  // the head's cross-section at a share t of the way to the nose: middle and half-sizes (across, up)
+  // (a low-poly head may have few corners in a thin slice: the slice widens until it has enough)
+  const section = (t, band, topQ = 1) => {
+    let S = [], Uu = [];
+    for (; band < 0.3; band *= 1.4) {
+      S = []; Uu = [];
+      for (const p of pts) { const d = p.clone().sub(P0), tt = d.dot(axis) / len; if (Math.abs(tt - t) < band) { S.push(d.dot(side)); Uu.push(d.dot(up)); } }
+      if (S.length >= 8) break;
+    }
+    if (S.length < 4) return null;
+    S.sort((x, y) => x - y); Uu.sort((x, y) => x - y);
+    const q = (A, f) => A[Math.min(A.length - 1, Math.floor(f * (A.length - 1)))];
+    const s0 = q(S, 0.02), s1 = q(S, 0.98), u0 = q(Uu, 0.02), u1 = q(Uu, topQ);
+    return { c: P0.clone().addScaledVector(axis, t * len).addScaledVector(side, (s0 + s1) / 2).addScaledVector(up, (u0 + u1) / 2), a: (s1 - s0) / 2 + 0.012, b: (u1 - u0) / 2 + 0.012 };
+  };
+  const nose = section(0.7, 0.06), crown = section(0.16, 0.07, 0.7); if (!nose || !crown) return null;
+  const parts = [], LEATHER = [0.075, 0.032, 0.016], BRASS = [0.55, 0.33, 0.08];   // (linear colours: dark oiled leather, brass)
+  const strap = (A, B, w, t, col, normal) => {   // a strap from A to B, w wide, t thick, lying flat on `normal`
+    const X = B.clone().sub(A), L = X.length(); X.normalize();
+    const Z = normal.clone().addScaledVector(X, -normal.dot(X)).normalize(), Y = new THREE.Vector3().crossVectors(Z, X);
+    const g = new THREE.BoxGeometry(L + 0.01, w, t); g.applyMatrix4(new THREE.Matrix4().makeBasis(X, Y, Z).setPosition(A.clone().add(B).multiplyScalar(0.5)));
+    const c = new Float32Array(g.attributes.position.count * 3); for (let i = 0; i < c.length; i += 3) c.set(col, i); g.setAttribute('color', new THREE.BufferAttribute(c, 3));
+    g.deleteAttribute('uv'); parts.push(g);
+  };
+  const ring = (R, n = 10) => {
+    const at = (k) => R.c.clone().addScaledVector(side, R.a * Math.cos(k / n * Math.PI * 2)).addScaledVector(up, R.b * Math.sin(k / n * Math.PI * 2));
+    for (let k = 0; k < n; k++) { const A = at(k), B = at(k + 1), out = A.clone().add(B).multiplyScalar(0.5).sub(R.c); strap(A, B, 0.03, 0.01, LEATHER, out); }
+    return at;
+  };
+  const nAt = ring(nose), cAt = ring(crown);
+  for (const k of [0, 5]) strap(nAt(k), cAt(k), 0.028, 0.01, LEATHER, k ? side.clone().negate() : side);
+  const jaw = nAt(7.5); strap(jaw.clone().addScaledVector(axis, -0.03), jaw.clone().addScaledVector(axis, 0.03), 0.05, 0.016, BRASS, up.clone().negate());
+  const geo = mergeGeometries(parts); for (const g of parts) g.dispose();
+  head.updateMatrixWorld(true); geo.applyMatrix4(head.matrixWorld.clone().invert());
+  return { geo, bone: head.name };
+}
+// each stall's pose: how far its head is turned (radians, about the upright) and its place in the clip, by stall
+const TURN = { R1: 0.22, R2: -0.2, R3: 0.16, L1: -0.24, L2: 0.18, L3: -0.1 };
 function placeHorses() {
-  for (const h of horses) h.a.dispose();
+  for (const h of horses) { if (h.halter) h.halter.removeFromParent(); h.a.dispose(); }
   horses.length = 0;
   if (!lib || !B) return;
   for (const S of B.stalls) {
     const id = S.horse, look = LOOKS[id] || LOOKS.bay;
     const a = makeAnimal(lib, look.kind, { tint: look.tint || '#ffffff' });
-    const sh = measure(a);
-    // facing the aisle; its chest 14 cm inside the stall's front
-    const x = S.frontX + S.side * (0.14 + sh.chest);
+    const sh = measure(a), eat = S.pose === 'eat' && a.clips.includes('Eating');
+    // facing the aisle; its chest 14 cm inside the stall's front (the one eating, further in, its head down at the hay)
+    const x = S.frontX + S.side * ((eat ? 0.9 : 0.14) + sh.chest);
     a.root.position.set(x, 0.015, S.z); a.root.rotation.y = S.face;
-    animalLamps(a.mesh.material, B.lamps, B.light.skyAt(x, 1.5, S.z));
+    animalLamps(a.mesh.material, B.light.skyAt(x, 1.5, S.z) * 1.15);
     a.mesh.material.needsUpdate = true;
+    const speed = 0.82 + 0.36 * ((S.z * 7.3 + S.side * 3.1) % 1 + 1) % 1;
+    a.play(eat ? 'Eating' : 'Idle', { fade: 0, speed }); a.update(Math.abs(S.z * 1.7 + S.side) % 3);
+    let halter = null;
+    if (sh.halter) { halter = new THREE.Mesh(sh.halter.geo, HALTER); halter.castShadow = true; a.bones[sh.halter.bone].add(halter); }
     horseGroup.add(a.root);
-    horses.push({ a, id, stall: S.id, next: 4 + Math.random() * 8, shape: sh });
+    horses.push({ a, id, stall: S.id, next: 4 + Math.random() * 8, shape: sh, eat, speed, halter, turn: eat ? 0 : TURN[S.id] || 0, head: a.bones.Head || a.bones[a.info.head] });
   }
   horseGroup.visible = state.showHorses;
 }
-// now and then a horse shifts to its other idle (a toss of the head) and back
+// now and then a horse shifts to its other idle (a toss of the head) and back; each frame its head is turned its own way
+// (about the upright, at the head's own joint, on top of the clip)
+const _pq = new THREE.Quaternion(), _yq = new THREE.Quaternion(), _up = new THREE.Vector3(0, 1, 0);
 function tickHorses(dt) {
   for (const h of horses) {
     h.a.update(dt);
     h.next -= dt;
-    if (h.next < 0) {
-      const opts = h.a.clips.filter((c) => c === 'Idle' || c === 'Idle_2');
-      const pick = h.a.clip === 'Idle' && opts.length > 1 ? 'Idle_2' : 'Idle';
-      h.a.play(pick, { fade: 0.6 }); h.next = pick === 'Idle' ? 6 + Math.random() * 10 : 3.3;
+    if (h.next < 0 && !h.eat) {
+      const pick = h.a.clip === 'Idle' && h.a.clips.includes('Idle_2') ? 'Idle_2' : 'Idle';
+      h.a.play(pick, { fade: 0.6, speed: h.speed }); h.next = pick === 'Idle' ? 6 + Math.random() * 10 : 3.3;
+    }
+    if (h.turn && h.head && h.head.parent) {
+      h.head.parent.updateWorldMatrix(true, false); h.head.parent.getWorldQuaternion(_pq);
+      _yq.setFromAxisAngle(_up, h.turn); h.head.quaternion.premultiply(_pq.clone().invert().multiply(_yq).multiply(_pq));
     }
   }
 }
@@ -269,9 +353,9 @@ function buildPanel() {
   </div></details>
   <details class="sec"><summary>How it's made</summary><div class="body"><div class="how" style="border:0;margin:0;padding:0">
     <p><b>Parts</b>: every board, batten, post, rafter and shake is a box from the Material Lab's parts kit, merged into one mesh per material (wood, iron), so the whole barn is a handful of draw calls. The walls are <b>board and batten</b>: upright boards 22 to 32 cm wide with a narrow batten over each joint, cut round the doors and windows. Each board is two skins: the outside one painted, the inside one bare (barns are painted outside only).</p>
-    <p><b>Paint</b> is a colour in the recipe. The weathering shader chips it at the edges, and this lab wears it away in streaks down the boards and big soft patches, more of it low down and on the sunny side, less under the eaves; the slider says how much has gone.</p>
-    <p><b>Inside light</b> is baked once: for every corner indoors, how much of the outdoors it sees through the doorways and windows (each opening's share of its view, with a few rays through a grid of the solid parts so a partition shades the stall behind it), kept in two parts so shutting the front doors darkens it. The lanterns' warm light is baked the same way: what faces a lantern and isn't behind a wall is lit, falling off with the distance squared.</p>
-    <p><b>Horses</b> are the game's own (src/actors/animals.js), each in its stall with its chest just behind the door so its head comes over it. Lantern light on them is worked out in their shader (they move), from the same lantern list.</p>
+    <p><b>Paint</b> is a colour in the recipe. The weathering shader chips it at the edges, and this lab wears it away in streaks down the boards and big soft patches, more of it low down, on the sunny side, by the corners and the doorways, less under the eaves, and board by board; the slider says how much has gone. Small nail heads sit where each board crosses a girt inside.</p>
+    <p><b>Inside light</b> is baked once: for every corner indoors, how much of the outdoors it sees through the doorways and windows (each opening's share of its view, with a few rays through a grid of the solid parts so a partition shades the stall behind it), kept in two parts so shutting the front doors darkens it. The lanterns' warm light is worked out per pixel (round pools on the floor and the gates, falling off with the distance squared), times the bake's share of it that gets past the walls. A soft glow sprite hangs round each lantern; two gooseneck lamps light the sign.</p>
+    <p><b>Horses</b> are the game's own (src/actors/animals.js), each in its stall with its chest just behind the gate so its head comes over it (the donkey's gate is a plank lower). Each has its own head turn, clip speed and place in the clip; one eats from the hay inside its gate; each wears a halter fitted to its head and hung on its head bone. The lanterns light them the same way, per pixel.</p>
     <p><b>Props</b> (barrels, the trough, crates, bales, buckets, the wagon) are separate pieces the building lists with their places, for the Town Lab to move.</p>
   </div></div></details>`;
   panel.addEventListener('click', (e) => {
@@ -280,7 +364,7 @@ function buildPanel() {
   });
   $('#s-paint').addEventListener('change', (e) => { state.paint = e.target.value; rebuild(); });
   $('#r-wear').addEventListener('input', (e) => { state.wear = +e.target.value; LU.uPaintWear.value = state.wear; e.target.nextElementSibling.textContent = state.wear.toFixed(2); const rb = $('#recipe'); if (rb) rb.textContent = JSON.stringify(stableRecipe(state)); });
-  $('#s-wood').addEventListener('change', (e) => { state.wood = e.target.value; setWood(T, state.wood); const rb = $('#recipe'); if (rb) rb.textContent = JSON.stringify(stableRecipe(state)); });
+  $('#s-wood').addEventListener('change', (e) => { state.wood = e.target.value; setWood(T, state.wood); eraseNails(T); const rb = $('#recipe'); if (rb) rb.textContent = JSON.stringify(stableRecipe(state)); });
   $('#s-stone').addEventListener('change', (e) => { state.stone = e.target.value; rebuild(); });
   $('#seed').addEventListener('change', (e) => { state.seed = Math.max(1, Math.round(+e.target.value) || 1); rebuild(); });
   $('#newSeed').addEventListener('click', () => { state.seed = 1 + Math.floor(Math.random() * 9999); $('#seed').value = state.seed; rebuild(); });
@@ -350,7 +434,7 @@ function loop() {
   try {
     buildPanel();
     const t0 = performance.now();
-    T = await makeTextures({ wood: state.wood }); RT = makeRubbleTexture(); ART = await makeArt();
+    T = await makeTextures({ wood: state.wood }); eraseNails(T); RT = makeRubbleTexture(); ART = await makeArt();
     stats.texMs = performance.now() - t0;
     U.uNoise.value = T.noise; LU.uPaintWear.value = state.wear;
     makeMaterials(); makeGround();
@@ -370,13 +454,13 @@ function loop() {
 const BL = window.BL = {
   ready: false, state, U, LU,
   get info() { return info(); },
-  get stable() { return B; }, get horses() { return horses.map((h) => ({ id: h.id, stall: h.stall, at: h.a.root.position.toArray().map((x) => +x.toFixed(2)), shape: h.shape })); },
+  get stable() { return B; }, get horses() { return horses.map((h) => ({ id: h.id, stall: h.stall, at: h.a.root.position.toArray().map((x) => +x.toFixed(2)), chest: +h.shape.chest.toFixed(2), halter: !!h.halter, clip: h.a.clip })); },
   cam(pos, tgt) { camera.position.set(...pos); controls.target.set(...tgt); controls.update(); },
   view, time(t) { state.time = t; applyLight(); syncPanel(); }, doors(o) { setDoors(o); syncPanel(); }, lamps(o) { state.lamps = o; applyLight(); syncPanel(); },
   owned(id, v) { state.owned[id] = v; drawBoards(); syncPanel(); },
-  recipe(o) { Object.assign(state, o); if (o.wood) setWood(T, state.wood); if (o.wear !== undefined) LU.uPaintWear.value = state.wear; rebuild(); syncPanel(); return info(); },
+  recipe(o) { Object.assign(state, o); if (o.wood) { setWood(T, state.wood); eraseNails(T); } if (o.wear !== undefined) LU.uPaintWear.value = state.wear; rebuild(); syncPanel(); return info(); },
   quality(q) { state.quality = q; applyQuality(); syncPanel(); },
   show(o) { for (const k in o) state[k] = o[k]; propGroup.visible = state.props; horseGroup.visible = state.showHorses; syncPanel(); },
   render() { renderer.render(scene, camera); },
-  get renderer() { return renderer; }, get scene() { return scene; }, get camera() { return camera; },
+  get renderer() { return renderer; }, get scene() { return scene; }, get camera() { return camera; }, get controls() { return controls; },
 };
