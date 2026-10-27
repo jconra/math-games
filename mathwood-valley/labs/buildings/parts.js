@@ -70,8 +70,11 @@ export function boardAndBatten(k, w, o) {
       if (kind === 'board') {
         const bare = o.paint && k.R() < (o.bare ?? 0.05), paint = o.paint && !bare ? vary(k, o.paint, 0.9, 1.08) : null;
         const hue = k.r(-0.05, 0.05), t0 = bare ? o.tint.map((c) => c * 1.12) : o.tint;
-        const tint = vary(k, [t0[0] * (1 + hue), t0[1], t0[2] * (1 - hue)], 0.8, 1.18), strip = Math.floor(k.R() * 10), uShift = k.r(0, 1.2);
-        k.board([bw + 0.002, h, bt], null, null, { m: wallM(w, ac, yc, -bt / 2), long: 1, tint, paint, strip, uShift, skip: '-z+x-x+y-y', cuts: cl, segFaces: '+z', slope: sl, outside: true, nail: 1 });
+        const tint = vary(k, [t0[0] * (1 + hue), t0[1], t0[2] * (1 - hue)], 0.8, 1.18), strip = Math.floor(k.R() * 12), uShift = k.r(0, 1.2);
+        // (half of them turned round on their long axis: the strip's picture mirrored across the board, so neighbouring
+        // boards don't show the same knots in the same places)
+        const flip = k.R() < 0.5, mo = flip ? mul(wallM(w, ac, yc, -bt / 2), RY(Math.PI)) : wallM(w, ac, yc, -bt / 2);
+        k.board([bw + 0.002, h, bt], null, null, { m: mo, long: 1, tint, paint, strip, uShift, skip: (flip ? '+z' : '-z') + '+x-x+y-y', cuts: cl, segFaces: flip ? '-z' : '+z', slope: flip ? -sl : sl, outside: true, nail: 1 });
         if (o.inTint) k.board([bw + 0.002, h, bt], null, null, { m: wallM(w, ac, yc, -bt / 2), long: 1, tint: vary(k, o.inTint, 0.85, 1.12), strip, uShift, skip: '+z+x-x+y-y', cuts: cl, segFaces: '-z', slope: sl, inside: true });
         if (o.solid !== false) k.solid([bw, h, 0.06], null, null, wallM(w, ac, yc, -bt / 2));
       } else {
@@ -200,7 +203,9 @@ export function doorLeaf(k, o) {
     for (const y of rails) k.board([iw, 0.15, 0.035], [rc, y, z], null, { long: 0, tint: vary(k, o.tint, 0.85, 1.0), skip: sgn > 0 ? '-z' : '+z' });
     // the braces between the rails: a Z (each runs up from the hinge side's low corner to the free side), or an X
     for (let r = 0; r < rails.length - 1; r++) {
-      const ya = rails[r] + 0.075, yb = rails[r + 1] - 0.075, dx = iw - 0.16, dy = yb - ya, ang = Math.atan2(dy, dx), L = Math.hypot(dx, dy) - 0.06;
+      const ya = rails[r] + 0.075, yb = rails[r + 1] - 0.075, dx = iw - 0.16, dy = yb - ya, ang = Math.atan2(dy, dx), sa = Math.sin(ang), ca = Math.cos(ang);
+      // (no longer than the panel lets it be, its 13 cm width and all: a short gate's shallow brace stuck out past its edge)
+      const L = Math.min(Math.hypot(dx, dy) - 0.06, (dx - 0.13 * sa) / ca - 0.02, sa > 0.05 ? (dy - 0.13 * ca) / sa - 0.02 : 9);
       const list = o.xBrace ? [ang, -ang] : [ang];
       for (const a of list) k.board([L, 0.13, 0.035], [rc, (ya + yb) / 2, z], [0, 0, side * a], { long: 0, tint: vary(k, o.tint, 0.85, 1.0), skip: sgn > 0 ? '-z' : '+z' });
     }
@@ -246,10 +251,16 @@ export function lantern(k, x, y, z, o = {}) {
   k.box('iron', [0.15, 0.025, 0.15], [x, y - 0.11, z], null, { tint: iron });
   k.prism('iron', ngon(6, 0.1), 0.06, [x, y + 0.115, z], null, { tint: iron, taper: 0.55, smooth: true });
   for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) k.box('iron', [0.014, 0.2, 0.014], [x + dx * 0.062, y, z + dz * 0.062], null, { tint: iron, skip: '+y-y' });
-  k.box('iron', [0.014, 0.08, 0.014], [x, y + 0.18, z], null, { tint: iron });
-  k.box('iron', [0.07, 0.012, 0.012], [x, y + 0.225, z], null, { tint: iron });
+  // the bail: a wire loop over the cap (a thin tube, when the kit has a rope list), on a short stem
+  k.box('iron', [0.014, 0.05, 0.014], [x, y + 0.165, z], null, { tint: iron });
+  if (k.parts.rope) {
+    const pts = []; for (let i = 0; i <= 8; i++) { const a = i / 8 * Math.PI; pts.push(new THREE.Vector3(x + Math.cos(a) * 0.065, y + 0.16 + Math.sin(a) * 0.09, z)); }
+    k.parts.rope.push({ pts, closed: false, rad: 0.0045, sides: 4, tint: [0.12, 0.11, 0.1] });
+  } else k.box('iron', [0.07, 0.012, 0.012], [x, y + 0.225, z], null, { tint: iron });
+  // the glass (see-through, glowing: GLOW.glass parts are drawn as panes of light over what's behind), the flame in it
   k.parts.glow.push({ size: [0.11, 0.18, 0.11], m: T(x, y, z), kind: GLOW.glass, col: [0.85, 0.32, 0.07] });
-  k.parts.glow.push({ size: [0.024, 0.055, 0.024], m: T(x, y - 0.03, z), kind: GLOW.flame, col: [7, 3.6, 1.1] });
+  k.parts.glow.push({ size: [0.02, 0.06, 0.02], m: T(x, y - 0.025, z), kind: GLOW.flame, col: [9, 5.4, 1.6] });
+  k.parts.glow.push({ size: [0.045, 0.03, 0.045], m: T(x, y - 0.07, z), kind: GLOW.flame, col: [0.5, 0.36, 0.2] });   // the wick's brass burner
   if (o.bracket) {
     const [dx, dz] = o.bracket, L = Math.hypot(dx, dz), a = Math.atan2(dx, dz);
     k.box('iron', [0.025, 0.025, L], [x + dx / 2, y + 0.26, z + dz / 2], [0, a, 0], { tint: iron });
@@ -263,7 +274,8 @@ export function lantern(k, x, y, z, o = {}) {
 }
 // the glow parts as one mesh: boxes, each corner carrying its colour when lit (rgb, brighter than white: it glows) and
 // what it is (a: 1 a window pane, 2 lantern glass, 3 a flame)
-export function glowGeometry(parts) {
+export function glowGeometry(parts, keep = () => true) {
+  parts = parts.filter(keep);
   if (!parts.length) return null;
   const list = parts.map((P) => {
     const g = P.pane ? new THREE.PlaneGeometry(P.size[0], P.size[1]) : new THREE.BoxGeometry(...P.size); g.applyMatrix4(P.m); g.deleteAttribute('uv');
@@ -426,7 +438,7 @@ export class Light {
 // ── shader patches ───────────────────────────────────────────────────────────────────────────────────────────────────
 // a lantern's light falling off with the distance (squared, softened close in, gone by 6.5 m): the same in the bake and
 // in the shaders, so the bake's "how much gets past the walls" matches what the shader draws
-export const LAMP_MAX = 10, LAMP_REACH = 6.5;
+export const LAMP_MAX = 12, LAMP_REACH = 6.5;
 export const lampFall = (d2) => Math.max(0, 1 - d2 / (LAMP_REACH * LAMP_REACH)) ** 2 / (1 + d2 * 1.1);
 // a lamp with a shade (L.dir: the way it points) lights only a cone under it: full within cosI of its axis, none past
 // cosO (so a gooseneck lights the sign below it, not the wall above); (dx, dy, dz): the way from the lamp to the point
@@ -529,9 +541,10 @@ export function boardWear(mat) {
 }
 // the glow: lantern glass and flames, window panes. Unlit (they make their own light), brighter than white when lit
 // (the tone mapping rolls it into a warm glow); dull glass when out
-export function glowMaterial() {
+export function glowMaterial(o = {}) {
   const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-  return chain(mat, 'glow', (sh) => {
+  if (o.panes) Object.assign(mat, { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+  return chain(mat, 'glow' + (o.panes ? 'panes' : ''), (sh) => {
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec4 aGlow, aGlowC; varying vec4 vGlow, vGlowC; varying vec3 vGP;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = aGlow; vGlowC = aGlowC; vGP = (modelMatrix * vec4(position, 1.0)).xyz;');
     sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uLamp, uNight; varying vec4 vGlow, vGlowC; varying vec3 vGP;')
       .replace('#include <color_fragment>', `#include <color_fragment>
@@ -541,7 +554,7 @@ export function glowMaterial() {
         float on = mix(uLamp, uLamp * uNight * 0.3, kWin);
         vec3 lit = vGlow.rgb;
         // (lantern glass: the flame's hot spot behind it, fading to a deep orange at its edges)
-        if (vGlow.a > 1.5 && vGlow.a < 2.5) { float r = length(vGP - vGlowC.xyz) / vGlowC.w; lit *= mix(2.6, 0.3, smoothstep(0.05, 0.8, r)); }
+        if (vGlow.a > 1.5 && vGlow.a < 2.5) { float r = length(vGP - vGlowC.xyz) / vGlowC.w; lit *= mix(1.6, 0.18, smoothstep(0.05, 0.75, r)); off = vec3(0.04, 0.035, 0.03); }
         diffuseColor.rgb = mix(off, lit, on);
       }`);
   });

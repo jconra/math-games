@@ -105,7 +105,7 @@ function makeMaterials() {
   mats.floor = lit(new THREE.MeshStandardMaterial({ map: ART.floor, roughness: 0.97 }), { ao: true });
   mats.spill = lit(new THREE.MeshStandardMaterial({ map: ART.spill, roughness: 1, alphaTest: 0.5 }), { ao: true });
   mats.boards = lit(new THREE.MeshStandardMaterial({ map: ART.boards, roughness: 0.82 }), { ao: true });
-  mats.glow = glowMaterial();
+  mats.glow = glowMaterial(); mats.glass = glowMaterial({ panes: true });
   mats.rope = lit(new THREE.MeshStandardMaterial({ map: ropeTexture(), roughness: 0.92 }), { ao: true, tint: true });
   T.ground.repeat.set(15, 15);
   mats.ground = lit(weather(new THREE.MeshStandardMaterial({ map: T.ground, roughness: 0.97 }), { ground: true, tint: true, ao: true }));
@@ -134,9 +134,10 @@ function rebuild() {
   for (const m of [...propGroup.children]) { propGroup.remove(m); m.geometry.dispose(); }
   const t0 = performance.now();
   B = buildStable(stableRecipe(state), { texMean: RT.mean });
-  for (const g of ['wood', 'iron', 'stone', 'hay', 'floor', 'spill', 'boards', 'glow', 'rope']) {
+  for (const g of ['wood', 'iron', 'stone', 'hay', 'floor', 'spill', 'boards', 'glow', 'glass', 'rope']) {
     const geo = B.geos[g]; if (!geo) continue;
-    const m = new THREE.Mesh(geo, mats[g]); m.name = g; m.castShadow = !['glow', 'spill', 'floor', 'boards'].includes(g); m.receiveShadow = g !== 'glow';
+    const m = new THREE.Mesh(geo, mats[g]); m.name = g; m.castShadow = !['glow', 'glass', 'spill', 'floor', 'boards'].includes(g); m.receiveShadow = g !== 'glow' && g !== 'glass';
+    if (g === 'glass') m.renderOrder = 1;
     group.add(m);
   }
   // the front doors: each its own mesh, turned on its hinge
@@ -281,7 +282,11 @@ function halterFor(a) {
 // same, turned toward the doorway), rack (standing back, its head down in the hay rack inside the gate), side (standing
 // back in its stall at an angle, its side to the aisle), eat (its head down at the hay on the floor). A pose whose clip a
 // kind hasn't got (the farm horse has only Idle) falls back to look.
-const LOOK_TURN = { R1: 0.12, R2: -0.1, R3: 0.16, L1: -0.14, L2: 0.1, L3: -0.12 };
+// each stall's head: turned (radians about the upright; on the right, more is toward the doorway, on the left less is)
+// and nodded (about the horse's own across, + down)
+const TURN = { R1: 0.5, R2: 0.3, R3: -0.6, L1: -0.48, L2: 0.4, L3: 0 }, NOD = { R1: -0.04, R2: -0.14, R3: 0.28, L1: 0.05, L2: -0.06, L3: 0 };
+// a black coat needs a halter that shows against it: a light tan-red one
+const HALTER_RED = animalLamps(new THREE.MeshStandardMaterial({ color: 0xb4532e, roughness: 0.7 }), 0.6);
 function placeHorses() {
   for (const h of horses) { if (h.halter) h.halter.removeFromParent(); h.a.dispose(); }
   horses.length = 0;
@@ -292,7 +297,8 @@ function placeHorses() {
     const sh = measure(a);
     let pose = S.pose;
     if ((pose === 'eat' && !a.clips.includes('Eating')) || (pose === 'rack' && !a.clips.includes('Idle_Headlow'))) pose = 'look';
-    let x = S.frontX + S.side * ({ look: 0.14, door: 0.14, rack: 1.0, eat: 0.9 }[pose] + sh.chest), z = S.z, face = S.face;
+    // (a donkey reaches out a little less: its nose about 30 cm past its gate, the horses' about 45)
+    let x = S.frontX + S.side * ({ look: 0.14, door: 0.14, rack: 1.0, eat: 0.9 }[pose] + (look.kind === 'donkey' ? 0.12 : 0) + sh.chest), z = S.z, face = S.face;
     if (pose === 'side') {
       // (turned 60 degrees toward the barn's front; its middle in the middle of the stall)
       face = S.face + S.side * 1.05; const dx = Math.sin(face), dz = Math.cos(face);
@@ -304,16 +310,16 @@ function placeHorses() {
     const speed = 0.82 + 0.36 * ((S.z * 7.3 + S.side * 3.1) % 1 + 1) % 1;
     a.play({ eat: 'Eating', rack: 'Idle_Headlow' }[pose] || 'Idle', { fade: 0, speed }); a.update(Math.abs(S.z * 1.7 + S.side) % 3);
     let halter = null;
-    if (sh.halter) { halter = new THREE.Mesh(sh.halter.geo, HALTER); halter.castShadow = true; a.bones[sh.halter.bone].add(halter); }
+    if (sh.halter) { halter = new THREE.Mesh(sh.halter.geo, id === 'midnight' ? HALTER_RED : HALTER); halter.castShadow = true; a.bones[sh.halter.bone].add(halter); }
     horseGroup.add(a.root);
-    const turn = pose === 'door' ? S.side * 0.4 : pose === 'look' ? LOOK_TURN[S.id] || 0 : pose === 'side' ? -S.side * 0.25 : 0;
-    horses.push({ a, id, stall: S.id, next: 4 + Math.random() * 8, shape: sh, pose, still: pose !== 'look' && pose !== 'door', speed, halter, turn, head: a.bones.Head || a.bones[a.info.head] });
+    const turn = pose === 'door' || pose === 'look' ? TURN[S.id] || 0 : pose === 'side' ? -S.side * 0.25 : 0, nod = pose === 'door' || pose === 'look' ? NOD[S.id] || 0 : 0;
+    horses.push({ a, id, stall: S.id, next: 4 + Math.random() * 8, shape: sh, pose, still: pose !== 'look' && pose !== 'door', speed, halter, turn, nod, across: new THREE.Vector3(Math.cos(face), 0, -Math.sin(face)), head: a.bones.Head || a.bones[a.info.head] });
   }
   horseGroup.visible = state.showHorses;
 }
 // now and then a horse shifts to its other idle (a toss of the head) and back; each frame its head is turned its own way
 // (about the upright, at the head's own joint, on top of the clip)
-const _pq = new THREE.Quaternion(), _yq = new THREE.Quaternion(), _up = new THREE.Vector3(0, 1, 0);
+const _pq = new THREE.Quaternion(), _yq = new THREE.Quaternion(), _nq = new THREE.Quaternion(), _up = new THREE.Vector3(0, 1, 0);
 function tickHorses(dt) {
   for (const h of horses) {
     h.a.update(dt);
@@ -322,9 +328,9 @@ function tickHorses(dt) {
       const pick = h.a.clip === 'Idle' && h.a.clips.includes('Idle_2') ? 'Idle_2' : 'Idle';
       h.a.play(pick, { fade: 0.6, speed: h.speed }); h.next = pick === 'Idle' ? 6 + Math.random() * 10 : 3.3;
     }
-    if (h.turn && h.head && h.head.parent) {
+    if ((h.turn || h.nod) && h.head && h.head.parent) {
       h.head.parent.updateWorldMatrix(true, false); h.head.parent.getWorldQuaternion(_pq);
-      _yq.setFromAxisAngle(_up, h.turn); h.head.quaternion.premultiply(_pq.clone().invert().multiply(_yq).multiply(_pq));
+      _yq.setFromAxisAngle(_up, h.turn).multiply(_nq.setFromAxisAngle(h.across, h.nod)); h.head.quaternion.premultiply(_pq.clone().invert().multiply(_yq).multiply(_pq));
     }
   }
 }

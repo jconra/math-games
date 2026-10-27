@@ -44,7 +44,7 @@ export const PAINTS = {
 // the horses for sale and the bay, in stall order: right front, right middle, right back, left front, left middle, left back
 export const STALL_IDS = ['R1', 'R2', 'R3', 'L1', 'L2', 'L3'];
 export const RECIPE_DEFAULTS = { kind: 'stable', paint: 'red', wear: 0.42, wood: 'straight', stone: 'grey', seed: 7, horses: ['chestnut', 'white', 'donkey', 'palomino', 'midnight', 'bay'],
-  poses: ['door', 'rack', 'look', 'look', 'side', 'eat'] };
+  poses: ['door', 'look', 'look', 'door', 'look', 'eat'] };
 // each stall's pose (in stall order): look (out over the gate), door (out over the gate, turned toward the doorway), rack
 // (head down at a hay rack inside the gate), side (standing back in its stall, turned side-on to the aisle), eat (head
 // down at a heap of hay on the floor)
@@ -388,7 +388,8 @@ function cupola(k, paint) {
     const M = mul(T(0, 0, cz), RY(f * Math.PI / 2));
     k.board([2 * he, 0.02, ov + 0.02], null, null, { m: mul(M, T(0, y2 - 0.01, h + ov / 2 - 0.01)), long: 0, tint: ROOFB, skip: '+y' });
     for (let c = 0; c < 3; c++) {
-      const s0 = c * 0.21, L = Math.min(0.42, sl - s0 + 0.02), sm = s0 + L / 2, half = he * (1 - sm / sl) * 0.8;
+      const s0 = c * 0.21, L = Math.min(0.42, sl - s0 + 0.02), sm = s0 + L / 2, half = he * (1 - (s0 + L) / sl) * 0.95;
+      if (half < 0.06) continue;
       for (let x = -half; x < half - 0.03;) {
         const w = Math.min(k.r(0.2, 0.34), half - x);
         const m = mul(M, T(x + w / 2, y2 + Math.sin(cp) * sm + 0.02, he - Math.cos(cp) * sm), RX(cp), RY(k.r(-0.03, 0.03)));
@@ -546,6 +547,8 @@ export function buildStable(recipeIn = {}, env = {}) {
   // their light falls on the floor and the gates beside them)
   for (const z of [2.6, -2.6]) for (const sx of [-1, 1]) lamps.push(lantern(k, sx * (AX - 0.1 - 0.17), 1.95, z, { bracket: [sx * 0.17, 0], strength: 1.6 }));
   lamps.push(lantern(k, 0, 2.5, 0, { chain: 0.25, strength: 1.4 }));
+  // (and one on the post between the left stalls 1 and 2: the black horse there needs light on it to read)
+  lamps.push(lantern(k, -(AX - 0.1 - 0.17), 1.95, 0, { bracket: [-0.17, 0], strength: 1.5 }));
   lamps.push(lantern(k, 2.32, 2.6, D / 2 + 0.36, { bracket: [0, -0.31], strength: 1.3 }));
   lamps.push(lantern(k, -6.4, 2.35, 1.6, { chain: ltUnder(-6.4) - 0.17 - 2.58, strength: 1.1 }));
   for (const x of [-1.25, 1.25]) lamps.push(gooseneck(k, x, D / 2));
@@ -576,7 +579,8 @@ export function buildStable(recipeIn = {}, env = {}) {
   // (the mangers' hay: the props' hay picture, with stone-style UVs: each face its own window on the straw)
   boardAttr(geos.wood, k.parts.wood, r.seed);
   geos.hay = buildGeometry(k.parts.hay, 'stone', R, {});
-  geos.glow = glowGeometry(k.parts.glow);
+  geos.glow = glowGeometry(k.parts.glow, (P) => P.kind !== GLOW.glass);
+  geos.glass = glowGeometry(k.parts.glow, (P) => P.kind === GLOW.glass);
   geos.rope = ropeGeometry(k.parts.rope);
   geos.stone = footing(r, env);
   Object.assign(geos, floors());
