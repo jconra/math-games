@@ -74,6 +74,19 @@ function simple(t, f, frac) {
   };
 }
 
+// Work it out's steps for a percent built from 10%: a tenth first, then so many tenths, a half of one for a 5 (35%:
+// 10%, 30%, 5%, then 30% + 5%). what: the words for it ('that comes off', 'tax')
+function tenthSteps(whole, pct, what = '') {
+  const ten = whole / 10, k = Math.floor(pct / 10), five = pct % 10 === 5;
+  const steps = [{ op: 'div', a: whole, b: 10, say: `First 10%${what && pct === 10 ? ` ${what}` : ''}: a tenth of ${whole}` }];
+  if (k > 1) steps.push({ op: 'mul', a: ten, b: k, say: `Then ${k * 10}% is ${k} lots of 10%` });
+  if (five) {
+    steps.push({ op: 'div', a: ten, b: 2, say: 'Then 5% is half of 10%' });
+    if (k >= 1) steps.push({ op: 'add', a: ten * k, b: ten / 2, say: `Then ${k * 10}% and 5% make ${pct}%` });
+  }
+  return steps;
+}
+
 // 2: any percent of a number: 10% first, then so many 10%s (or 5%s)
 function anyPct(t, f, frac) {
   for (let tries = 0; tries < 60; tries++) {
@@ -95,6 +108,7 @@ function anyPct(t, f, frac) {
         { ...C(whole / pct, unit), slip: 'divided', why: `Dividing by ${pct} doesn't give ${pct}%. Find 10% (÷ 10) first, then build ${pct}% from it.` },
       ].filter((s) => s.v > 0 && Number.isInteger(s.v)),
       pic: { kind: 'pctbar', whole, n: pct % 10 ? 20 : 10, take: pct % 10 ? pct / 5 : pct / 10, unit, mode: 'part' },
+      sum: tenthSteps(whole, pct),
       rightWhy: pct === 5 ? `10% of ${whole} is ${ten}, and 5% is half of that: ${part}`
         : pct % 10 ? `10% of ${whole} is ${ten} and 5% is ${ten / 2}: ${pct}% is ${Math.floor(pct / 10)} × ${ten} + ${ten / 2} = ${part}`
           : `10% of ${whole} is ${ten}, so ${pct}% is ${pct / 10} × ${ten} = ${part}`,
@@ -120,6 +134,8 @@ function newPrice(t, f, frac) {
       ].filter((s) => s.v > 0 && Number.isInteger(s.v)),
       pic: { kind: 'pctbar', whole: price, n: pct % 10 ? (pct === 25 ? 4 : 20) : 10, take: pct % 10 ? (pct === 25 ? 1 : 3) : pct / 10, unit: 'money', mode: 'off' },
       rightWhy: `${pct}% of $${price} is $${off}, and $${price} − $${off} = $${pay}`,
+      sum: [...(pct === 25 ? [{ op: 'div', a: price, b: 4, say: 'First the 25% that comes off: a quarter of the price' }] : tenthSteps(price, pct, 'that comes off')),
+        { op: 'sub', a: price, b: off, say: 'Then the price with it taken off' }],
       credit: [{ strand: 'words', at: 66, weight: 0.5 }], size: 2, facts: { price, pct, pay },
     };
   }
@@ -136,6 +152,9 @@ function newPrice(t, f, frac) {
     ].filter((s) => s.v > 0 && Number.isInteger(s.v)),
     pic: { kind: 'pctbar', whole: price, n: 100 / (pct === 8 || pct === 6 || pct === 4 ? 2 : 5), take: pct / (pct === 8 || pct === 6 || pct === 4 ? 2 : 5), unit: 'money', mode: 'tax' },
     rightWhy: `${pct}% of $${price} is $${tax}, and $${price} + $${tax} = $${pay}`,
+    sum: [...(pct === 10 || pct === 5 ? tenthSteps(price, pct, 'tax')
+      : [{ op: 'div', a: price, b: 100, say: 'First 1% of the price: a hundredth of it' }, { op: 'mul', a: price / 100, b: pct, say: `Then the ${pct}% tax is ${pct} lots of 1%` }]),
+      { op: 'add', a: price, b: tax, say: 'Then the price and the tax together' }],
     credit: [{ strand: 'words', at: 66, weight: 0.5 }, { strand: 'money', at: 70, weight: 0.5 }], size: 2, facts: { price, pct, pay },
   };
 }
@@ -166,6 +185,7 @@ function change(t, f, frac) {
     right: P(pct), slips,
     pic: { kind: 'change', old, now, money },
     rightWhy: `It went ${up ? 'up' : 'down'} by ${money ? `$${diff}` : `${diff} head`}, and ${diff} out of ${old} is ${pct}%`,
+    sum: { op: 'sub', a: Math.max(old, now), b: Math.min(old, now), say: `First how much it went ${up ? 'up' : 'down'}` },
     credit: [{ strand: 'frac', at: 50, weight: 0.5 }], size: 2, facts: { old, now, pct },
   };
 }
@@ -188,6 +208,8 @@ function interest(t, f, frac) {
       ].filter((s) => s.v > 0),
       pic: { kind: 'interest', P: P0, r, years: yrs, total: askTotal },
       rightWhy: `${r}% of $${P0} is $${one} a year; ${yrs} years is $${I}${askTotal ? `, so $${P0} + $${I} = $${P0 + I}` : ''}`,
+      sum: [{ op: 'div', a: P0, b: 100, say: `First 1% of $${P0}: a hundredth of it` }, ...(r > 1 ? [{ op: 'mul', a: P0 / 100, b: r, say: `Then ${r}% is a year's interest` }] : []),
+        { op: 'mul', a: one, b: yrs, say: `Then ${yrs} years of it` }, ...(askTotal ? [{ op: 'add', a: P0, b: I, say: 'Then the money and its interest together' }] : [])],
       credit: [{ strand: 'money', at: 70, weight: 0.5 }], size: 2, facts: { P: P0, r, yrs, I, askTotal },
     };
   }

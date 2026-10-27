@@ -6,10 +6,12 @@
 // the panel), Esc (with nothing in hand), or walking away (W, A, S or D held a moment with nothing in hand) puts the
 // builder away: what was built is kept, and the camera glides back behind the rider.
 //
-//   const S = makeBuildSites({ W, camera, canvas, player, obstacles, onStart, onStop })
+//   const S = makeBuildSites({ W, camera, canvas, player, obstacles, onStart, onStop, onWork })
 //     player(): the player (P); obstacles(): the things to hide while they stand between the camera and the site (the
 //     player's person and horse, the dog); onStart() / onStop(): the game holds itself still while a builder is up
-//     (the player and the keys let go, the HUD put away; main.js) and lets go again after
+//     (the player and the keys let go, the HUD put away; main.js) and lets go again after; onWork(): the tools' Work it
+//     out (src/ui/tools.js), or null: a "Work it out" button goes above "Done for now" (the HUD and its tools strip are
+//     put away while a builder is up), for the card being asked (main.js reads the builder's question)
 //   S.add(site) -> the site's record { id, origin, group, groundY }
 //     site = { id, x, z (the middle of what is built: the site's own frame has its 0, 0 here, not turned: +Z is south),
 //              prompt (the words by the person: 'Help the miller build his tower'), meet() -> { x, z } (where the
@@ -61,7 +63,7 @@ export const SITE = {
 const GAME = new URL('../', import.meta.url).href;
 const ease = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 
-export function makeBuildSites({ W, camera, canvas, player = () => null, obstacles = () => [], onStart = () => {}, onStop = () => {} }) {
+export function makeBuildSites({ W, camera, canvas, player = () => null, obstacles = () => [], onStart = () => {}, onStop = () => {}, onWork = null }) {
   const S = { prompt: null, active: null };
   const sites = new Map();
   let near = null;            // the site whose person the player is by
@@ -130,6 +132,13 @@ export function makeBuildSites({ W, camera, canvas, player = () => null, obstacl
       const panel = (me.session && me.session.panel) || root.querySelector('#panel') || overlay;
       const done = document.createElement('button'); done.type = 'button'; done.className = 'bsite-done'; done.textContent = 'Done for now';
       done.title = 'Put the builder away (Esc)'; done.onclick = () => S.close('done');
+      // (Work it out above it: the card's sum in columns, or the entry to type one)
+      if (typeof onWork === 'function') {
+        const work = document.createElement('button'); work.type = 'button'; work.className = 'bsite-work';
+        work.innerHTML = `${WORK_SVG}<span>Work it out</span>`; work.title = 'Work it out on paper: the sum on the card, or your own';
+        work.onclick = (e) => { e.currentTarget.blur(); try { onWork(); } catch (err) { console.error(err); } };
+        panel.appendChild(work); me.work = work;
+      }
       panel.appendChild(done); me.done = done;
     });
   }
@@ -308,7 +317,8 @@ export function mergeStatic(roots, into) {
     undo() { into.remove(group); for (const c of group.children) c.geometry.dispose(); for (const o of hidden) o.visible = true; hidden.length = 0; } };
 }
 
-// The game's own touch on the builder's page: the "Done for now" button at the foot of the lab's panel
+// The game's own touch on the builder's page: "Work it out" and the "Done for now" button at the foot of the lab's panel
+const WORK_SVG = '<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="5" y="4" width="22" height="25" rx="2" fill="#f6edd6" stroke="#6b4614" stroke-width="1.6"/><path d="M9 11h9M9 16h9M9 21h13" stroke="#8a7558" stroke-width="1.4"/><path d="M9 23.5h13" stroke="#2b2219" stroke-width="1.6"/></svg>';
 function ensureCss() {
   if (document.getElementById('bsite-css')) return;
   const st = document.createElement('style'); st.id = 'bsite-css';
@@ -319,6 +329,13 @@ function ensureCss() {
   background: linear-gradient(#e7b65a, #c4882e); color: #2a1a08; font: 600 15px Bitter, Georgia, serif; box-shadow: 0 2px 0 #2a1c10; }
 .bsite-done:hover { background: linear-gradient(#f3c56b, #d39837); }
 @media (max-width: 700px) { .bsite-done { font-size: 13px; padding: 8px 4px; } }
+.bsite-work { flex: none; margin-top: auto; align-self: stretch; display: flex; align-items: center; justify-content: center; gap: 7px; padding: 7px 10px;
+  border-radius: 8px; border: 1px solid rgba(226, 173, 76, 0.55); cursor: pointer; background: rgba(30, 20, 12, 0.82); color: #f3c56b;
+  font: 700 15px Bitter, Georgia, serif; }
+.bsite-work svg { width: 24px; height: 24px; flex: none; }
+.bsite-work:hover { border-color: #e2ad4c; background: rgba(48, 32, 18, 0.9); }
+.bsite-work + .bsite-done { margin-top: 6px; }
+@media (max-width: 700px) { .bsite-work { font-size: 13px; padding: 6px 4px; } .bsite-work svg { width: 20px; height: 20px; } }
 `;
   document.head.appendChild(st);
 }

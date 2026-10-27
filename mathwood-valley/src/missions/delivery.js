@@ -52,7 +52,8 @@ import { openLongWork } from '../ui/longwork.js';
 import { workMul, workDiv, LONG } from '../math/longwork.js';
 import { readAloud, record } from '../math/skill.js';
 import { levelFor } from '../levels/model.js';
-import { sumFrom, factFrom } from '../math/longwork.js';
+import { factFrom } from '../math/longwork.js';
+import { sumOf, workFrom } from '../math/jobsums.js';
 import { recordFact } from '../math/facts.js';
 import { answerTimer } from '../ui/answertimer.js';
 import { crateParts } from '../camps.js';
@@ -112,8 +113,8 @@ export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, r
     partMissed = false; helped = false;
     U.purse(rider.gold);
     const young = readAloud(rider), read = `${part === 0 ? order.story + ' ' : ''}${p.ask}`;
-    const hasSum = !!(p.long || (p.key !== 'vocab' && sumFrom(p.rightWhy || '')));   // (Work it out has a sum for it)
-    U.show({ who: { name: camp.foreman.name }, story: order.story, ask: p.ask, coins: p.coins, equation: null, long: p.long, work: hasSum, read }, { filled: 0, read: young });
+    // (work: the slip's own Work it out on a phone, always: the part's sum, or the entry to type one)
+    U.show({ who: { name: camp.foreman.name }, story: order.story, ask: p.ask, coins: p.coins, equation: null, long: p.long, work: true, read }, { filled: 0, read: young });
     if (young) setTimeout(() => { if (DL.active && order && order.parts[part] === p && !U.busy) speakLine(read); }, 500);
     const f = foot(); if (f) f.textContent = order.parts.length > 1 ? `Step ${part + 1} of ${order.parts.length}` : 'Making up the order';
     if (timer) timer.cancel();
@@ -125,7 +126,7 @@ export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, r
   // the worked area for this part's sum (see ON THE STRANDS above)
   function openLong() {
     const o = order, k = part, p = o && o.parts[k];
-    if (!DL.active || !p || !p.long || longPanel || U.busy) return;
+    if (!DL.active || !p || !p.long || longPanel || U.busy) return false;   // (false: not opened, e.g. already up: the tools open their entry instead)
     const already = !!p.picked;   // (opened after a coin was picked: it helps, but the part's answer is already counted)
     clearTimeout(longT);
     const L = p.long, work = L.op === 'mul' ? workMul(L.a, L.b, L.lead ? { lead: L.lead } : {}) : workDiv(L.n, L.d);
@@ -155,6 +156,7 @@ export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, r
       },
       onClose: () => { longPanel = null; saveRider(rider); },
     });
+    return true;
   }
   function startWork() {
     if (DL.active) return;
@@ -481,13 +483,14 @@ export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, r
   }
   DL.dev = { next: (spec) => { forced = spec || null; }, openLong: () => openLong() };
   // the sum on the part at the slip, for the tools' Work it out (src/ui/tools.js): the part's own worked area (it
-  // counts: open it with DL.openLong), else the sum read from the part's working (plain help), or null
+  // counts: open it with DL.openLong), else the part's own sum or steps (src/math/supplies.js: 5 hands × 3 a day first,
+  // then all 7 days; the cans shared into crates), else its working's (plain help), or null (a word to know: the entry)
   DL.workSum = () => {
     const p = DL.active && order ? order.parts[part] : null;
     if (!p || U.busy) return null;
     const L = p.long;
     if (L) return { own: true, op: L.op, a: L.op === 'div' ? L.n : L.a, b: L.op === 'div' ? L.d : L.b, ask: p.ask };
-    const s = p.key === 'vocab' ? null : sumFrom(p.rightWhy || '');
+    const s = p.key === 'vocab' ? null : p.sum ? sumOf(p.sum) : workFrom(p.rightWhy || '');
     return s ? { ...s, ask: p.ask, story: true } : null;
   };
   DL.openLong = () => openLong();

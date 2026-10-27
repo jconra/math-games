@@ -13,7 +13,8 @@
 //     pic (the helper: shown after a wrong pick or on "Draw it for me"; it never shows the answer), rightWhy, credit:
 //     [{ strand, at, weight }] (what else the answer counts in, besides the maker's own strand), size, facts, read?,
 //     sum? (the question's own sum, for the tools' Work it out, when its working doesn't say it in the question's own
-//     numbers: { op, a, b, money?, cash? }, "2.6 × 6" where the working says "6 × 26 tenths"; else the working is read) }
+//     numbers: { op, a, b, money?, cash? }, "2.6 × 6" where the working says "6 × 26 tenths"; or its steps in order, each
+//     with what it finds: [{ op, a, b, say }], the bill then the change; else the working is read) }
 //   Face = { v (the value: two coins never share one, so 0.5 and 0.50 can't both show), big, small, label }
 // This file turns a core into an order the store's slip shows (the same shape as wordproblems.js makeOrder's): the
 // right coin and up to 3 slips, shuffled. Pure, no page: tests/counter.test.mjs.
@@ -30,6 +31,7 @@ import * as PCT from './percent.js';
 import * as RATIO from './ratios.js';
 import { FOLK } from './wordproblems.js';
 import { MAPS, STRAND, fits, chooseMap, levelOf, maxOf } from './skill.js';
+import { sumOf as checkedSum } from './jobsums.js';
 
 export const COUNTER = { money: MONEY, time: TIME, dec: DEC, pct: PCT, ratio: RATIO };
 export const COUNTER_MAPS = Object.keys(COUNTER);
@@ -78,14 +80,9 @@ export function counterOrder(map, { step = 1, frac = 0, rand = Math.random, who 
   throw new Error(`no ${map} question could be made at step ${st}`);
 }
 
-// a maker's own sum for Work it out, checked: { op, a, b } (decimals welcome, never below 0), money and cash kept
-function sumOf(s) {
-  if (!s || !['add', 'sub', 'mul', 'div'].includes(s.op) || !(s.a >= 0) || !(s.b >= 0) || !Number.isFinite(s.a + s.b)) return null;
-  if ((s.op === 'sub' && s.a < s.b) || (s.op === 'div' && !s.b)) return null;
-  const out = { op: s.op, a: s.a, b: s.b };
-  if (s.money) { out.money = true; out.cash = s.cash || ''; }
-  return out;
-}
+// a maker's own sum (or steps) for Work it out, checked (src/math/jobsums.js sumOf): { op, a, b } (decimals welcome,
+// never below 0), money and cash kept; steps: { chain }
+const sumOf = (s) => checkedSum(s);
 
 // Which question the next customer brings: one of these (a map that fits the rider's level, chosen the skill model's
 // way: a strand still finding its level more often, one not practised lately more often, not the one just asked), or

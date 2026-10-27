@@ -122,7 +122,7 @@ test('no "What do we work out?" anywhere: a story\'s sum opens straight on the c
   assert.ok(w.steps.every((x) => !/what do we work out/i.test(x.ask)));
   assert.equal(sumLabel(s), 'The sum on this question');
   assert.equal(sumLabel({ op: 'mul', a: 7, b: 8 }), '7 × 8');
-  assert.match(sumLabel(null), /Nothing to work out/);
+  assert.equal(sumLabel(null), 'Type your own sum', 'nothing on screen: the entry to type one, never dimmed');
 });
 
 // a decimal's whole board once every step is done: each row read left to right, the points put in

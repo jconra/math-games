@@ -24,8 +24,11 @@ const LT = await import('../src/ui/leveltool.js');
 const M = await import('../src/levels/model.js');
 const S = await import('../src/save.js');
 
-const valueOf = (s) => (s.op === 'add' ? s.a + s.b : s.op === 'sub' ? s.a - s.b : s.op === 'mul' ? s.a * s.b : Math.floor(s.a / s.b));
-const isSum = (s) => s && ['add', 'sub', 'mul', 'div'].includes(s.op) && Number.isFinite(s.a) && Number.isFinite(s.b) && s.a >= 0 && s.b >= 0;
+const valueOf1 = (s) => (s.op === 'add' ? s.a + s.b : s.op === 'sub' ? s.a - s.b : s.op === 'mul' ? s.a * s.b : Math.floor(s.a / s.b));
+// (sums in steps: the last step's answer)
+const valueOf = (s) => (s.chain ? valueOf1(s.chain[s.chain.length - 1]) : valueOf1(s));
+const isSum1 = (s) => s && ['add', 'sub', 'mul', 'div'].includes(s.op) && Number.isFinite(s.a) && Number.isFinite(s.b) && s.a >= 0 && s.b >= 0;
+const isSum = (s) => !!s && (s.chain ? s.chain.length > 1 && s.chain.every(isSum1) : isSum1(s));
 
 test('the bottle range: "Shoot the can closest to 58 + 24" hands over 58 + 24 itself (the estimate stays the kid\'s); other cards no sum', () => {
   assert.deepEqual(J.rangeSum({ kind: 'estimate', ask: { a: 58, op: '+', b: 24, exact: 82 } }), { op: 'add', a: 58, b: 24 });
@@ -62,7 +65,7 @@ test('the round-up and the wagon: a missing-number card hands over its sum (pick
   assert.equal(J.waveSum({ w: { kind: 'times', rule: 'Rope the 7-herd' }, kind: 'herd' }), null);
   assert.equal(J.waveSum({ w: { kind: 'parity', rule: 'Rope the evens' } }), null);
   assert.equal(J.waveSum(null), null);
-  assert.equal(sumLabel(null), 'Nothing to work out on paper here', 'a question with no sum still says so');
+  assert.equal(sumLabel(null), 'Type your own sum', 'a question with no sum: the entry to type one (never "nothing to work out")');
 });
 
 test('the sick sheep: each sheep\'s sum as written (24 + 49 = 63 -> 24 + 49, $2.90 + $3.80 in dollars and cents), worked to its right answer; negatives and x: none', () => {
@@ -114,7 +117,7 @@ test('the loose pigs: the nearest pig\'s sum ("18 + 26: less than 50?" -> 18 + 2
   assert.equal(J.pigSum({ text: '7: EVEN or ODD?' }), null);
 });
 
-test('the deer: a blank to fill gives its sum to pick ("9 + ? = 12" -> 12 − 9), worked to the deer\'s number; two steps: none', () => {
+test('the deer: a blank to fill gives its sum to pick ("9 + ? = 12" -> 12 − 9), worked to the deer\'s number; two steps in steps', () => {
   const kinds = {};
   for (const L of PLACE.deer.levels) {
     const rng = makeRng(11);
@@ -125,12 +128,15 @@ test('the deer: a blank to fill gives its sum to pick ("9 + ? = 12" -> 12 − 9)
       if (!s) continue;
       assert.ok(isSum(s), `${L.id}: ${shot.eq}`);
       const v = /left over/.test(shot.eq) ? s.a % s.b : valueOf(s);
+      if (s.chain) assert.ok(s.story && s.chain[1].carried && s.chain[1].carried.a === 0, `${shot.eq}: two steps, the first's answer carried into the second`);
       assert.equal(v, shot.x, `${L.id}: ${shot.eq} -> ${s.a} ${s.op} ${s.b} = ${shot.x}`);
       if (/\?|x/.test(shot.eq) && !/left over|than/.test(shot.eq)) assert.ok(s.story, `${shot.eq}: the sum isn't written: the button doesn't say it`);
     }
   }
-  for (const id of ['more1', 'add10', 'add20', 'sub20', 'ten', 'mul', 'div', 'left', 'xAdd', 'xMul']) assert.equal(kinds[id], 20, `deer ${id}: every photo hands over a sum`);
-  assert.equal(kinds.xTwo, 0, 'two steps (2x + 7 = 15): no one sum');
+  for (const id of ['more1', 'add10', 'add20', 'sub20', 'ten', 'mul', 'div', 'left', 'xAdd', 'xMul', 'xTwo']) assert.equal(kinds[id], 20, `deer ${id}: every photo hands over a sum`);
+  const two = J.blankWork('2x + 7 = 15');
+  assert.deepEqual(two.chain.map((x) => [x.op, x.a, x.b]), [['sub', 15, 7], ['div', 8, 2]], 'two steps (2x + 7 = 15): the 7 taken away, then the 8 shared by 2');
+  assert.match(two.chain[0].say, /take away the 7/);
   const st = J.blankSum('9 + ? = 12');
   assert.deepEqual(st, { op: 'sub', a: 12, b: 9, story: true });
   assert.equal(sumLabel(st), 'The sum on this question', 'the button doesn\'t give it away');
@@ -138,20 +144,29 @@ test('the deer: a blank to fill gives its sum to pick ("9 + ? = 12" -> 12 − 9)
   assert.ok(!workOf(st).steps.some((x) => /work out\?/.test(x.ask)), 'no "What do we work out?"');
 });
 
-test('loot: a fair share or a leftover gives total ÷ families (picked by the kid); a share by a rule: none', () => {
+test('loot: a fair share or a leftover gives total ÷ families (picked by the kid); a share by a rule: the parts, one part, then the family\'s parts', () => {
+  let rules = 0;
   for (const L of PLACE.loot.levels) {
     for (let k = 0; k < 12; k++) {
       const p = shareAt(L.gen, { rand: seeded(7 * k + 1) });
       const s = J.lootSum(p);
-      if (p.kind === 'rule' || p.kind === 'rule3') { assert.equal(s, null, `${L.id}: by a rule`); continue; }
+      if (p.kind === 'rule' || p.kind === 'rule3') {
+        rules++;
+        assert.ok(isSum(s) && s.chain && s.story, `${L.id}: by a rule, in steps`);
+        assert.equal(valueOf(s), p.each, `${p.rightWhy}: worked through, the family's share`);
+        assert.match(s.chain[0].say, /^First all the parts/);
+        assert.ok(s.chain.some((x) => x.op === 'div' && x.a === p.total && x.b === p.groups), 'one part: the total cut into all the parts');
+        continue;
+      }
       assert.ok(isSum(s) && s.op === 'div' && s.story, `${L.id}: ${p.kind}`);
       assert.equal(s.a, p.total); assert.equal(s.b, p.groups);
       if (p.kind === 'even' || p.kind === 'rem') assert.equal(valueOf(s), p.each, `${p.total} ÷ ${p.groups}: ${p.each} each`);
     }
   }
+  assert.ok(rules > 5, `shares by a rule were dealt (${rules})`);
 });
 
-test('fishing: a fraction of the fish caught gives all ÷ the bottom number (picked by the kid); the other fraction questions: none', () => {
+test('fishing: a fraction of the fish caught gives all ÷ the bottom number, then times the top (picked by the kid); the other fraction questions: none', () => {
   let groups = 0;
   for (const L of PLACE.fishing.levels) {
     for (let k = 0; k < 10; k++) {
@@ -159,9 +174,12 @@ test('fishing: a fraction of the fish caught gives all ÷ the bottom number (pic
       const s = J.fishSum(q);
       if (q.topic === 'group') {
         groups++;
-        const m = /caught (\d+) fish/.exec(q.prompt), d = +/\((\d+)\/(\d+)\)/.exec(q.prompt)[2];
-        assert.ok(isSum(s) && s.op === 'div' && s.story, q.prompt);
-        assert.equal(s.a, +m[1]); assert.equal(s.b, d);
+        const m = /caught (\d+) fish/.exec(q.prompt), [, n, d] = /\((\d+)\/(\d+)\)/.exec(q.prompt).map(Number);
+        const first = s.chain ? s.chain[0] : s;
+        assert.ok(isSum(s) && first.op === 'div' && s.story, q.prompt);
+        assert.equal(first.a, +m[1]); assert.equal(first.b, d);
+        assert.equal(valueOf(s), (+m[1] / d) * n, `${q.prompt}: worked through, ${n}/${d} of them`);
+        if (n > 1) assert.ok(s.chain && s.chain[1].op === 'mul' && s.chain[1].b === n, 'then times the top number');
       } else assert.equal(s, null, `${L.id}: ${q.topic}`);
     }
   }

@@ -16,9 +16,7 @@
 .bmtl-t b { font: 700 14px Bitter, Georgia, serif; color: var(--brass-hi, #f3c56b); white-space: nowrap; }
 .bmtl-t small { font: 500 12px Bitter, Georgia, serif; color: #dccaa5; white-space: nowrap; }
 .bmtl-t small:empty { display: none; }
-/* (no sum on the question in front of the kid: dimmed; a tap says so in a note) */
-.bmtl-b.is-none { opacity: 0.55; }
-.bmtl-b.is-none:hover { border-color: var(--wood-edge, rgba(226, 173, 76, 0.35)); }
+/* (Work it out is never dimmed: with no sum on screen it opens the entry to type one, and says so: "Type your own sum") */
 
 /* the level tool: ‹ 27: Odd steps going down ›, a thin bar under the title */
 .bmtl-level { gap: 2px; padding: 3px 4px; min-height: 40px; }

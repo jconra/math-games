@@ -33,7 +33,7 @@ function fromStore(t, f, type, step, words) {
     key: `ratio:${o.key}`, story: o.story, ask: o.ask,
     right: { v: right.v, big: right.big, small: right.small, label: right.label },
     slips: o.coins.filter((c) => !c.good).map((c) => ({ v: c.v, big: c.big, small: c.small, label: c.label, slip: c.slip, why: c.why })),
-    pic: o.pic, rightWhy: o.rightWhy,
+    pic: o.pic, rightWhy: o.rightWhy, sum: o.sum,
     credit: [{ strand: 'words', at: words, weight: 0.5 }, ...o.credit.filter((c) => c.strand !== 'ratio' && !c.long)],
     size: o.size, facts: { from: type },
   };
@@ -63,6 +63,7 @@ function table(t, f, frac) {
       ].filter((s) => s.v > 0 && s.v !== ans && Number.isInteger(s.v)),
       pic: { kind: 'ratiotable', top: ctx.top[1], bot: S[1], a, b, k },
       rightWhy: `${want} ${ctx.top[1]} is ${k} lots of ${b}, so ${k} lots of ${a}: ${u(ans, S)}`,
+      sum: [{ op: 'div', a: want, b, say: `First how many lots of ${b} ${ctx.top[1]} make ${want}` }, { op: 'mul', a: k, b: a, say: `Then that many lots of ${a} ${S[1]}` }],
       credit: [{ strand: 'mul', at: 30, weight: 0.5 }], facts: { a, b, k, ans },
     };
   }
@@ -91,6 +92,8 @@ function shares(t, f, frac) {
       ].filter((s) => s.v > 0 && s.v !== ans && Number.isInteger(s.v)),
       pic: { kind: 'ratiobar', names: [x, y], a, b, total, ask },
       rightWhy: `${a} + ${b} = ${parts} parts; ${total} ÷ ${parts} = ${k} a part; ${who} gets ${ask === 0 ? a : b} × ${k} = ${ans}`,
+      sum: [{ op: 'add', a, b, say: 'First all the parts, both of theirs' }, { op: 'div', a: total, b: parts, say: `Then one part: the ${total} cut into ${parts} equal parts` },
+        ...((ask === 0 ? a : b) > 1 ? [{ op: 'mul', a: ask === 0 ? a : b, b: k, say: `Then ${who}'s ${ask === 0 ? a : b} parts` }] : [])],
       credit: [{ strand: 'div', at: 33, weight: 0.5 }], size: 2, facts: { a, b, total, ask, ans },
     };
   }
@@ -121,6 +124,7 @@ function proportion(t, f, frac) {
       ].filter((s) => s.v > 0 && s.v !== ans),
       pic: { kind: 'ratiotable', top: `${ctx.unit[1]} in all`, bot: ctx.what, a: n, b: d, k },
       rightWhy: `${D} is ${k} × ${d}, so x is ${k} × ${n} = ${ans}: ${n}/${d} = ${ans}/${D}`,
+      sum: [{ op: 'div', a: D, b: d, say: `First how many lots of ${d} make ${D}` }, ...(n > 1 ? [{ op: 'mul', a: k, b: n, say: `Then that many lots of ${n}` }] : [])],
       credit: [{ strand: 'frac', at: 40, weight: 0.5 }], facts: { n, d, D, ans },
     };
   }

@@ -167,6 +167,8 @@ function several(t, f, frac) {
       ],
       pic: { kind: 'bill', n, price, paid, item },
       rightWhy: `${n} × ${usd(price)} = ${usd(bill)}, then $${paid / 100} − ${usd(bill)} = ${usd(ans)}`,
+      sum: [{ op: 'mul', a: n, b: price / 100, money: true, cash: 'b', say: `First the cost of ${n} ${item[1]}` },
+        { op: 'sub', a: paid / 100, b: bill / 100, money: true, cash: 'ab', say: `Then the change from $${paid / 100}` }],
       credit: [{ strand: 'words', at: 48, weight: 0.5 }], size: 2, facts: { n, price, paid, change: ans },
     };
   }
@@ -199,6 +201,7 @@ function unitPrice(t, f, frac) {
         ],
         wide: true, pic: { kind: 'deals', deals: [[n1, p1], [n2, p2]], one: g.one },
         rightWhy: `${why1} ${good} is cheaper for each ${g.one}`,
+        sum: [{ op: 'div', a: p1, b: n1, say: `First one ${g.one} at ${d1}, in cents` }, { op: 'div', a: p2, b: n2, say: `Then one ${g.one} at ${d2}` }],
         credit: [{ strand: 'ratio', at: 60, weight: 0.5 }], size: 2, facts: { n1, p1, n2, p2, better },
       };
     }
@@ -227,6 +230,25 @@ function unitPrice(t, f, frac) {
 }
 
 // 7: a tip on a hotel supper, or tax on a purchase
+// (Work it out's steps, in dollars: 10% is a tenth of the bill, 5% half of that, 20% two tenths; tax by the 1%, a
+// hundredth of the price, so many times over; then the bill and the tip, or the price and the tax, added)
+const $ = (x) => Math.round(x * 100) / 100;
+function tipSteps(bill, pct, total) {
+  const ten = $(bill / 10), tip = $(bill * pct / 100);
+  const steps = [{ op: 'div', a: bill, b: 10, money: true, cash: 'a', say: 'First 10% of the supper: a tenth of it' }];
+  if (pct === 20) steps.push({ op: 'mul', a: ten, b: 2, money: true, cash: 'a', say: 'Then 20% is two lots of 10%' });
+  if (pct === 15) steps.push({ op: 'div', a: ten, b: 2, money: true, cash: 'a', say: 'Then 5% is half of 10%' }, { op: 'add', a: ten, b: $(ten / 2), money: true, say: 'Then 10% and 5% make 15%' });
+  if (total) steps.push({ op: 'add', a: bill, b: tip, money: true, say: 'Then the supper and the tip together' });
+  return steps;
+}
+function taxSteps(price, pct) {
+  const one = $(price / 100), tax = $(price * pct / 100);
+  return [
+    ...(pct === 10 ? [{ op: 'div', a: price, b: 10, money: true, cash: 'a', say: 'First the 10% tax: a tenth of the price' }]
+      : [{ op: 'div', a: price, b: 100, money: true, cash: 'a', say: 'First 1% of the price: a hundredth of it' }, { op: 'mul', a: one, b: pct, money: true, cash: 'a', say: `Then ${pct}% is ${pct} lots of 1%` }]),
+    { op: 'add', a: price, b: tax, money: true, say: 'Then the price and the tax together' },
+  ];
+}
 function taxTip(t, f, frac) {
   const p = pro(f);
   if (t.chance(0.5)) {
@@ -243,6 +265,7 @@ function taxTip(t, f, frac) {
       ask: askTotal ? `How much ${p.does} pay in all?` : 'How much is the tip?', right: df(askTotal ? total : tip), slips,
       pic: { kind: 'pctbar', whole: bill, n: 20, take: pct / 5, money: true, mode: 'tip' },
       rightWhy: `${pct}% of ${usd(bill)} is ${usd(tip)}${askTotal ? `, so ${usd(bill)} + ${usd(tip)} = ${usd(total)}` : ''}`,
+      sum: tipSteps(bill / 100, pct, askTotal),
       credit: [{ strand: 'pct', at: 66, weight: 0.5 }], size: askTotal ? 2 : 1, facts: { bill, pct, tip, total, askTotal },
     };
   }
@@ -260,6 +283,7 @@ function taxTip(t, f, frac) {
     ].filter((s) => s.v > 0 && Number.isInteger(s.v)),
     pic: { kind: 'pctbar', whole: price, n: 20, take: pct / 5, money: true, mode: 'tax' },
     rightWhy: `${pct}% of ${usd(price)} is ${usd(tax)}, so ${usd(price)} + ${usd(tax)} = ${usd(total)}`,
+    sum: taxSteps(price / 100, pct),
     credit: [{ strand: 'pct', at: 66, weight: 0.5 }], size: 2, facts: { price, pct, tax, total },
   };
 }

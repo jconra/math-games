@@ -37,7 +37,7 @@ import { openStats } from './ui/stats.js';
 import { openLevels, placeOfJob } from './ui/levels.js';
 import { makeHud } from './ui/hud.js';
 import { makeTools } from './ui/tools.js';
-import { waveSum } from './math/jobsums.js';
+import { waveSum, buildSum } from './math/jobsums.js';
 import { makeRoundup } from './missions/roundup.js';
 import { makeFarm } from './farm.js';
 import { makeSheepJob } from './missions/sheep.js';
@@ -113,24 +113,35 @@ const hud = makeHud($('hud-root'), {
 // "Confusing?" on the field jobs' question card (the round-up, the farm jobs, the wagon's gang): only while a question
 // is up there (not on a travel card, nor on "Wave done!")
 flagCard(hud.ruleEl, () => fieldQuestion(), { show: () => !hud.ruleEl.hidden && !/\bis-(travel|job)\b/.test(hud.ruleEl.className) && !!askingJob() && askingJob() !== 'panel' });
-// THE TOOLS (src/ui/tools.js): a strip along the bottom, from any job: Work it out (the question's sum in columns: each
-// job hands over its own question's sum, src/math/jobsums.js; the store's and the deliveries' own order sum), the times
-// chart (the rider's facts, green and red) and the level tool for the place the rider is at (its arrows step the level
-// by hand, unless the rider was made with "Let the rider pick levels" off). The game waits while a tool is open.
-const workJob = () => (SJ && SJ.active ? 'store' : DL && DL.active ? 'delivery' : askingJob());
+// THE TOOLS (src/ui/tools.js): a strip along the bottom, from any job: Work it out (the sum on screen in columns: each
+// job hands over the sum of the part it is on, src/math/jobsums.js; the store's and the deliveries' own order sum; the
+// lock box's part being asked, from the box's own Work it out button; a builder's card, from the button by its "Done
+// for now"; nothing to read: the entry to type a sum by hand), the times chart (the rider's facts, green and red) and the
+// level tool for the place the rider is at (its arrows step the level by hand, unless the rider was made with "Let the
+// rider pick levels" off). The game waits while a tool is open.
+const workJob = () => (BOX ? 'boxes' : SJ && SJ.active ? 'store' : DL && DL.active ? 'delivery' : askingJob());
+// a builder's card (the windmill's or the bridge's: their handles give its kind and answer, the card's line on the page
+// gives its numbers; the fishing's: its own sum)
+function builderSum() {
+  if (FJ && FJ.builder) return FJ.workSum();
+  const B = (WMJ && WMJ.builder) || (BRJ && BRJ.builder), q = B && B.handle && B.handle.question ? B.handle.question() : null;
+  const line = q && document.querySelector('.bsite #question:not([hidden]) > p');
+  return q && !q.teach ? buildSum(q, line ? line.textContent : '') : null;
+}
 // (the round-up's sum is worked out here from its wave, as the wagon's own is: src/missions/roundup.js is left as it is)
 const JOB_SUM = { store: () => SJ && SJ.workSum(), delivery: () => DL && DL.workSum(), range: () => SR && SR.workSum(),
   roundup: () => RU && RU.near ? waveSum(RU.wave) : null, sheep: () => SH && SH.workSum(), pigs: () => PG && PG.workSum(),
   deer: () => DJ && DJ.workSum(), wagon: () => WJ && WJ.workSum(), loot: () => LJ && LJ.workSum(),
-  build: () => (FJ && FJ.builder ? FJ.workSum() : null) };   // (a builder up: the fishing's card; the windmill's and the bridge's ask on their own sheets)
+  build: () => builderSum(), boxes: () => (BOX ? BOX.workSum() : null) };
 // the levels place the rider is at, for the level tool: the job asking (or the one the rider chose), the lock boxes' place
 const toolsPlace = () => { const j = jobNow(); return j === 'boxes' ? 'lockbox' : placeOfJob(j); };
 const TOOLS = makeTools({ hud, rider: () => rider,
   sum: () => { const f = JOB_SUM[workJob()]; return f ? f() || null : null; },
   place: () => (state === 'play' ? toolsPlace() : null),
   onLevel: () => { if (rider) saveRider(rider); },
-  own: () => { if (SJ && SJ.active) { SJ.openLong(); return true; } if (DL && DL.active) { DL.openLong(); return true; } return false; },
-  canOpen: () => state === 'play' && !boxOpen && [...pausedBy].every((w) => w === 'tools'),
+  own: () => (SJ && SJ.active ? !!SJ.openLong() : DL && DL.active ? !!DL.openLong() : false),   // (false: already up: the entry instead)
+  // (from the lock box too: its own button, the HUD being under the box; "Just lock boxes" from the title as well)
+  canOpen: () => (state === 'play' || (state === 'boxes' && !!BOX)) && [...pausedBy].every((w) => w === 'tools' || (w === 'box' && !!BOX)),
   speak: (text) => { if (rider && SKILLS.readAloud(rider)) sayLine(text); },
   onOpen: () => pause('tools'), onClose: () => resume('tools') });
 BM.tools = TOOLS;
@@ -161,6 +172,7 @@ const loading = Promise.all([
 // state: 'loading' | 'title' | 'play' | 'boxes' (just lock boxes, from the title)
 let state = 'loading', paused = false, pausedBy = new Set();
 let rider = null, P = null, D = null, RU = null, hob = null, shops = null, door = null, menu = null, boxOpen = false;
+let BOX = null;   // the lock box open (its handle: src/lockbox/panel.js), for the tools' Work it out on its part being asked
 let stage = null;   // the band on the town's stage and its music (src/stage.js)
 let traffic = null;   // wagons travelling the road through the valley now and then (src/traffic.js)
 let AMBI = null;   // the town's sounds: animals, birds, work out back, the creek, the horse's hooves (src/audio/ambience.js)
@@ -300,7 +312,7 @@ async function ride(r) {
   // the build sites: a lab's builder opened right there in the valley (the windmill's at the mill hill); while one is up
   // the rider stands by, the keys and the HUD are the builder's, and the valley goes on round it
   let siteJob = null;   // (the build site open: its job, for the thumbs up or down as it is put away)
-  BS = makeBuildSites({ W, camera, canvas, player: () => P,
+  BS = makeBuildSites({ W, camera, canvas, player: () => P, onWork: () => TOOLS.work(),
     obstacles: () => [P && P.person && !(BS && BS.active && BS.active.id === 'fishing') && P.person.root, P && P.horse && P.horse.root, D && D.dog && D.dog.root],   // (at the dock the rider fades away by itself: src/fishingjob.js)
     onStart: () => { siteJob = BS && BS.active ? BS.active.id : null; P.enabled = false; I.enabled = false; if (RU) RU.paused = true; hud.prompt(null); hud.rule(null); hud.hint(null); hud.show(false); },
     onStop: () => { P.enabled = !paused; I.enabled = !paused; if (RU) RU.paused = paused; hud.show(true); jobOver(siteJob, { sat: true }); } });
@@ -657,11 +669,11 @@ function openBox(box, { own = false, after = null, problem = null } = {}) {
   // (problem: one set equation, from the store's word problems; the panel closes after it)
   // (audio: the box's read-aloud follows the game's volume; the parts a box asked count in the skill model at once,
   // so the rider is saved as the panel closes even when no box was finished)
-  openLockbox(document.body, { rider, box, debug: DEV, problem, audio: AUD,
+  BOX = openLockbox(document.body, { rider, box, debug: DEV, problem, audio: AUD, ...boxTools(),
     next: own ? null : problem ? () => null : () => ({ tier: boxTier(rider), from: 'sheriff' }),   // the sheriff's pile never runs out
     onBox: (res) => payBox(res, own),
     onDone: (res) => {
-      boxOpen = false;
+      boxOpen = false; BOX = null; TOOLS.close();
       if (box.from === 'store') FB.jobEnd('boxes', 'back to the counter'); else jobOver('boxes', { sat: true });   // (the store's own equation: no thumbs chip for it)
       try {
         saveRider(rider);
@@ -686,11 +698,13 @@ async function justBoxes(r) {
   nextJustBox();
 }
 function nextJustBox() {
-  openLockbox(document.body, { rider, box: { tier: boxTier(rider), from: 'practice' }, debug: DEV, audio: AUD,
+  BOX = openLockbox(document.body, { rider, box: { tier: boxTier(rider), from: 'practice' }, debug: DEV, audio: AUD, ...boxTools(),
     next: () => ({ tier: boxTier(rider), from: 'practice' }),
     onBox: (res) => payBox(res, false),
-    onDone: () => { jobOver('boxes', { sat: true }); saveRider(rider); state = W ? 'title' : 'loading'; if (W) canvas.classList.add('is-on'); T.show(); } });
+    onDone: () => { BOX = null; TOOLS.close(); jobOver('boxes', { sat: true }); saveRider(rider); state = W ? 'title' : 'loading'; if (W) canvas.classList.add('is-on'); T.show(); } });
 }
+// the lock box's own Work it out (the tools' sheet goes over the box; the box hears no keys while a tool is up)
+function boxTools() { return { workOut: () => TOOLS.work(), toolsOpen: () => TOOLS.busy() }; }
 
 // the menu's read-aloud switch, in words (always in the menu: a tap steps through by itself, always, off; save.js)
 function readWords() {

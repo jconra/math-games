@@ -129,7 +129,7 @@ function coins(t, answer, unit, slips, n) {
 
 // ── AN ORDER ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 // -> { id, step, camp, who, goods, story, card: { main, sub }, period: { word, days }, hands, rate, days, per, price,
-//      total, crates, cost, leftover, parts: [{ key, ask, coins, pic, rightWhy, credit, long }], load: { n, box, goods } }
+//      total, crates, cost, leftover, parts: [{ key, ask, coins, pic, rightWhy, sum (Work it out's: src/math/jobsums.js), credit, long }], load: { n, box, goods } }
 //   part.credit: { strand, at } the strand that part counts in (src/math/skill.js), or null (the dozen: just a word)
 //   part.long:   the worked area's sum when the part's sum is too big for the head (src/ui/longwork.js): { op, a, b |
 //                n, d, point, lead (a first fact: one day's worth), final (the crates: the part's own coins) }, or null
@@ -215,6 +215,9 @@ export function makeSupplyOrder({ rand = Math.random, step = 1, camp = { id: 'co
       parts.push({ key: 'total', ask, coins: cs,
         pic: noDays ? { kind: 'groups', groups: H, each: R, item: G.who, unit } : { kind: 'meals', hands: H, rate: R, days: D, who: [who1, whoN], unit, word, two },
         rightWhy: noDays ? `${H} ${whoN} × ${R} each = ${u(total, unit)}` : two ? `${H} ${whoN} × ${D} days = ${u(total, unit)}` : `${H} ${whoN} × ${R} a day × ${D} days = ${u(total, unit)}`,
+        // (Work it out's steps: three numbers are one day for everybody first, then all the days)
+        sum: noDays ? { op: 'mul', a: H, b: R } : two ? { op: 'mul', a: H, b: D }
+          : [{ op: 'mul', a: H, b: R, say: `First one day for all ${H} ${whoN}` }, { op: 'mul', a: H * R, b: D, say: `Then all ${D} days of it` }],
         credit: longMul ? { strand: 'long', at: longMul } : { strand: 'mul', at: pointOf('mul', top, by).at }, long });
     }
     // CRATES: total / per, rounded up
@@ -237,6 +240,7 @@ export function makeSupplyOrder({ rand = Math.random, step = 1, camp = { id: 'co
       const long = longDiv ? { op: 'div', a: null, b: null, n: total, d: per, point: longDiv, lead: null,
         final: { ask, choices: cs.map((c) => ({ label: c.label, good: c.good, why: c.why })), line: rightWhy } } : null;
       parts.push({ key: 'crates', ask, coins: cs, pic: { kind: 'pack', total, per, box: G.box, unit: G.unit }, rightWhy,
+        sum: { op: 'div', a: total, b: per, say: `The ${total} ${G.unit[1]} shared into ${G.box[1]} of ${per}` },
         credit: longDiv ? { strand: 'long', at: longDiv } : { strand: 'div', at: exact ? pointOf('div', total, per).at : 55 }, long });
     }
     // COST: crates x price
@@ -251,7 +255,7 @@ export function makeSupplyOrder({ rand = Math.random, step = 1, camp = { id: 'co
       parts.push({ key: 'cost', ask: `A ${G.box[0]} of ${G.name} is $${price} at the store. What does the order of ${u(crates, G.box)} cost?`,
         coins: coins(t, cost, 'money', slips, 4),
         pic: { kind: 'groups', groups: crates, each: price, item: G.box, unit: 'money', cents: false },
-        rightWhy: `${crates} ${G.box[1]} × $${price} = $${cost}`, credit: { strand: 'money', at: 50 }, long: null });
+        rightWhy: `${crates} ${G.box[1]} × $${price} = $${cost}`, sum: { op: 'mul', a: crates, b: price }, credit: { strand: 'money', at: 50 }, long: null });
     }
     if (parts.some((p) => p.coins.length < 3)) continue;
     return {

@@ -70,6 +70,7 @@ import { line, num, xt, lineText, solve, moveLabel } from '../lockbox/engine.js'
 import { RUNG, checkProblem, makeRng } from '../lockbox/generate.js';
 import { findProblemFor } from '../lockbox/findx.js';
 import { makeLong, needsLong, longPoint, pointOf, mulAt, addAt, subAt, noCarry, digitsOf } from './longwork.js';
+import { sumOf } from './jobsums.js';
 
 // ---- the dials (defaults; change them here) --------------------------------------------------------------------
 
@@ -186,6 +187,9 @@ function face(v, unit, cents) {
 //   slips: the wrong answers kids really give, the likeliest first; why: one plain line for that slip
 //   pic: what the picture for this kind draws (src/ui/storepics.js); it never shows the answer, only '?'
 //   rightWhy: one line said as the coins fly ("4 pies x 3 pounds = 12 pounds")
+//   sum (optional): the question's own sum, or its steps in order with what each finds ("First the cost of 3 shovels",
+//     "Then the change from $50"), for the tools' Work it out (src/math/jobsums.js sumOf), where the working doesn't name
+//     them all as sums with answers (10% off: the tenth first; whole crates: the cans shared into crates)
 const S3 = (size, a, b, c) => [a, b, c][Math.max(1, Math.min(3, size)) - 1];
 const MAKERS = {};
 // 4 pies, 3 pounds each -> 12 pounds
@@ -247,6 +251,7 @@ MAKERS.share = (t, size, f, opts = {}) => {
       ],
       pic: { kind: 'share', total, per, groups: null, box: ctx.box, crates: true },
       rightWhy: `${full} full ${ctx.box[1]} hold ${full * per}, and 1 more for the last ${left}: ${u(ans, ctx.box)}`,
+      sum: { op: 'div', a: total, b: per },
       credit: [{ strand: 'div', at: 55, weight: 0.5 }],
     };
   }
@@ -516,6 +521,7 @@ MAKERS.twostep = (t, size, f) => {
       ],
       pic: { kind: 'twostep', groups: a, each: b, item: ctx.item, unit: ctx.unit, then: 'minus', other: have },
       rightWhy: `${a} × ${b} = ${first}, then ${first} − ${have} = ${u(ans, ctx.unit)}`,
+      sum: [{ op: 'mul', a, b, say: `First the ${ctx.unit[1]} for all ${a} ${ctx.item[1]}` }, { op: 'sub', a: first, b: have, say: `Then take away the ${have} ${p.they} ${ctx.key === 'pies' ? 'has at home' : 'has stacked'}` }],
       credit: [{ ...pointOf('mul', a, b), weight: 0.5 }, { ...pointOf('sub', first, have), weight: 0.5 }],
     };
   }
@@ -535,6 +541,7 @@ MAKERS.twostep = (t, size, f) => {
     ],
     pic: { kind: 'twostep', groups: a, each: b, item: ctx.item, unit: 'money', cents: false, then: 'change', other: paid },
     rightWhy: `${a} × $${b} = $${first}, then $${paid} − $${first} = $${ans}`,
+    sum: [{ op: 'mul', a, b, say: `First the cost of ${a} ${ctx.item[1]}` }, { op: 'sub', a: paid, b: first, say: `Then the change from $${paid}` }],
     credit: [{ ...pointOf('mul', a, b), weight: 0.5 }, { strand: 'money', at: 50, weight: 0.5 }],
   };
 };
@@ -566,6 +573,7 @@ MAKERS.recipe = (t, size, f) => {
     ],
     pic: { kind: 'ratio', base, per, want, k, make: ctx.make, unit: ctx.small },
     rightWhy: `${want} is ${k} × ${base}, so ${k} × ${per} = ${u(ans, ctx.small)}`,
+    sum: [{ op: 'div', a: want, b: base, say: `First how many batches of ${base} make ${want}` }, { op: 'mul', a: k, b: per, say: `Then that many times the ${per} ${per === 1 ? ctx.small[0] : ctx.small[1]}` }],
     credit: [{ strand: 'ratio', at: 55, weight: 0.5 }],
   };
 };
@@ -594,6 +602,7 @@ MAKERS.percent = (t, size, f) => {
       ].filter((s) => s.v > 0),
       pic: { kind: 'percent', whole: price, pct, parts: 100 / pct, mode: 'off' },
       rightWhy: `${pct}% of $${price} is $${part}, and $${price} − $${part} = $${ans}`,
+      sum: [{ op: 'div', a: price, b: 100 / pct, say: `First the ${pct}% that comes off: 1 part in ${100 / pct}` }, { op: 'sub', a: price, b: part, say: 'Then the price with it taken off' }],
       credit: [{ strand: 'pct', at: 62, weight: 1 }],
     };
   }
@@ -608,6 +617,7 @@ MAKERS.percent = (t, size, f) => {
     ],
     pic: { kind: 'percent', whole: base, pct: tax, parts: tax === 5 ? 20 : 10, mode: 'tax' },
     rightWhy: `${tax}% of $${base} is $${add}, and $${base} + $${add} = $${ans}`,
+    sum: [{ op: 'div', a: base, b: 100 / tax, say: `First the ${tax}% tax: 1 part in ${100 / tax}` }, { op: 'add', a: base, b: add, say: 'Then the price and the tax together' }],
     credit: [{ strand: 'pct', at: 66, weight: 1 }],
   };
 };
@@ -678,7 +688,7 @@ MAKERS.kmore = (t, size, f, opts = {}) => {
       { v: b, slip: 'new', why: `${b} is just the new ${b === 1 ? 'one' : 'ones'}. Count them all together.` },
     ],
     pic: { kind: 'things', shape: th.shape, mode: 'more', a, b, unit: U },
-    rightWhy: `${a} and ${b} more make ${u(ans, U)}`, credit: [{ ...pointOf('add', a, b), weight: 0.5 }],
+    rightWhy: `${a} and ${b} more make ${u(ans, U)}`, sum: { op: 'add', a, b }, credit: [{ ...pointOf('add', a, b), weight: 0.5 }],
   };
 };
 MAKERS.kleft = (t, size, f, opts = {}) => {
@@ -694,7 +704,7 @@ MAKERS.kleft = (t, size, f, opts = {}) => {
       { v: a + b, slip: 'added', why: 'Taking some away leaves fewer, not more.' },
     ],
     pic: { kind: 'things', shape: th.shape, mode: 'left', a, b, unit: U },
-    rightWhy: `${a} take away ${b} leaves ${u(ans, U)}`, credit: [{ ...pointOf('sub', a, b), weight: 0.5 }],
+    rightWhy: `${a} take away ${b} leaves ${u(ans, U)}`, sum: { op: 'sub', a, b }, credit: [{ ...pointOf('sub', a, b), weight: 0.5 }],
   };
 };
 MAKERS.kgroups = (t, size, f) => {
@@ -803,7 +813,8 @@ MAKERS.bulk = (t, size, f, opts = {}) => {
 //      coins: [{ v, big, small, label, good, slip, why }], answer: the right coin's label, unit, pic, picFirst (the
 //      picture shows from the start: the picture stories), wide (word coins two to a row), rightWhy, equation? (the
 //      top step: { a, b, c, x, text }), credit: [{ strand, at, weight, long? }] (what else it counts in), size (units
-//      of work), long: the worked area's sum or null: { op, a, b | n, d, point, final } }
+//      of work), long: the worked area's sum or null: { op, a, b | n, d, point, final }, sum: the maker's own sum or
+//      steps for Work it out (src/math/jobsums.js: a sum, { chain }) or null (read from rightWhy) }
 // The coins are shuffled; exactly one is good; the wrong ones are never equal to the answer and never repeat.
 // ladder: 'K' for the picture stories (a K kind uses it anyway); longStep (a step, or a function giving it: asked only
 // when a bulk order is made), longMost: see makeWordProblems' next; longOp: 'mul' | 'div' for a bulk order; sum: a
@@ -844,7 +855,7 @@ export function makeOrder(type, { rand = Math.random, step = 1, who = null, coin
       id: Math.floor(rand() * 1e9).toString(36), type, step: st, ladder: K ? 'K' : 'main', key: core.key, who: f,
       story: core.story, ask: core.ask, read: `${core.story} ${core.ask}`, coins, answer: coins.find((c) => c.good).label,
       unit: core.unit, cents: !!core.cents, pic: core.pic, picFirst: K, wide: !!(core.wide || core.wideCoins), rightWhy: core.rightWhy, afterWhy: core.afterWhy || '',
-      equation: core.equation || null,
+      equation: core.equation || null, sum: core.sum ? sumOf(core.sum) : null,
       credit: (core.credit || []).filter((c) => c && c.strand && Number.isFinite(c.at)), size: SIZE[type] || 1, long,
     };
   }

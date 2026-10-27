@@ -29,6 +29,7 @@ import { ORDER_RULES, toText } from './workout.js';
 import { TIER_NAME, starsFor, goldFor } from './box.js';
 import { answerTimer } from '../ui/answertimer.js';
 import { showNumberLine } from '../ui/numberline.js';
+import { partSum } from '../math/jobsums.js';
 
 const PART_RIGHT_MS = 650;    // a right answer sits in its slot this long before the line is written again
 const PICK_RIGHT_MS = 450;    // a right "which part first?" shows its gold box this long before the part is asked
@@ -483,6 +484,9 @@ export function mountWorkBox(kit, ctx) {
   const ctrl = {
     body, stageEl, B, problem, level: problem.level ?? plan.level, tier, plan,
     phase: () => phase,
+    // Work it out on the part being worked out ("4 × 2", "5 × 5 × 5": src/math/jobsums.js partSum); "which part first?",
+    // a power's meaning ("5² means ?") or a root: none (the tools' entry instead)
+    workSum: () => { const st = steps[si]; return !gone && phase === 'parts' && st && st.kind === 'part' && st.eq === '=' ? partSum(st.q) : null; },
     setPhase: (p) => { phase = p; },
     numberLine: () => !!focusEl.querySelector('.fq-nl svg, .fq-nl canvas'),
     steps: () => null,

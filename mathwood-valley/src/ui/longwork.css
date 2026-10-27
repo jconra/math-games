@@ -1,6 +1,7 @@
 /* The worked area (src/ui/longwork.js): a sheet of paper for long multiplication and long division, in the order
    slip's parchment and inks. On a window it sits to the left of the slip (both in view); on a phone it fills the
-   screen. z-index 31: over the slip (30), under the counters' panels (32), the times chart (35) and the lock box (60). */
+   screen. z-index 31: over the slip (30), under the counters' panels (32), the times chart (35) and the lock box (60);
+   opened over the lock box, 70. The entry to type your own sum (src/ui/ownsum.js) is the same sheet. */
 .bml {
   --paper: #f6edd6; --paper-2: #ecdcb8; --ink: #2b2219; --ink-2: #5a4632; --mute: #8a7558; --brass: #b47f2c; --brass-hi: #e2ad4c;
   --rust: #b5523a; --good: #4f7a2c; --kid: #2f5f8a; --lit: rgba(226, 173, 76, 0.42); --rule: rgba(92, 132, 168, 0.22);
@@ -164,6 +165,84 @@
 @media (max-height: 480px) and (min-width: 761px) {
   .bml.is-free { padding: 8px 10px; }
 }
+/* opened over the lock box (its own Work it out button): over the box (60) */
+.bml.is-top { z-index: 70; }
+@media (min-width: 761px) { .bml.is-top { left: 0; right: 0; top: 0; bottom: 0; padding: 70px 22px 22px; background: rgba(12, 8, 4, 0.45); pointer-events: auto; } }
+
+/* "Type my own sum": a small button in the top strip, beside Close */
+.bml-own { padding: 6px 10px; border-radius: 7px; cursor: pointer; font-size: 13px !important; font-weight: 700 !important; white-space: nowrap;
+  background: transparent; border: 1px dashed rgba(122, 85, 48, 0.7); color: var(--ink-2) !important; }
+.bml-own:hover { background: rgba(43, 34, 25, 0.08); }
+
+/* SUMS IN STEPS: the strip of sums under the title (a number still to find is a ?), the one being worked lit, each done
+   with its answer; the number carried in from an earlier sum in green on the board */
+.bml-chain { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
+.bml-ch { display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px 3px 4px; border-radius: 16px; font: 700 15px Bitter, Georgia, serif;
+  background: rgba(217, 191, 138, 0.32); color: var(--mute); border: 1px solid rgba(122, 85, 48, 0.25); }
+.bml-ch i { display: grid; place-items: center; width: 21px; height: 21px; border-radius: 50%; font: 800 12px Bitter, Georgia, serif; font-style: normal;
+  background: rgba(122, 85, 48, 0.25); color: var(--paper); }
+.bml-ch.is-now { color: var(--ink); background: rgba(226, 173, 76, 0.38); border-color: var(--brass); }
+.bml-ch.is-now i { background: var(--brass); }
+.bml-ch.is-done { color: var(--ink-2); }
+.bml-ch.is-done i { background: var(--good); }
+.bml-ch b { color: var(--good); }
+.bml-cell.is-carried.is-given, .bml-cell.is-carried.is-divisor, .bml-cell.is-carried.is-unit, .bml-cell.is-carried.is-point { color: var(--good); }
+.bml-cell.is-carried.is-given { text-decoration: underline 2px rgba(79, 122, 44, 0.45); text-underline-offset: 10%; }
+.bml-ask small.bml-say { font-style: normal; font-weight: 700; color: var(--good); }
+.bml-line.is-sum { font-weight: 800; }
+
+/* TYPE YOUR OWN SUM (src/ui/ownsum.js): the two numbers and the sign, big boxes to tap; a pad of digits; one line; Work it out */
+.bmn-sheet { width: min(600px, 100%); }
+.bmn-sum { display: grid; grid-template-columns: 1fr auto 1fr; gap: 10px; align-items: stretch; margin: 14px 0 10px; }
+.bmn-num { position: relative; display: grid; align-content: center; justify-items: center; min-height: 82px; padding: 6px 8px; border-radius: 10px; cursor: pointer;
+  background: rgba(255, 252, 240, 0.75); border: 2px solid rgba(122, 85, 48, 0.45); touch-action: manipulation; }
+.bmn-num small { font: 600 12px Bitter, Georgia, serif; color: var(--mute); }
+.bmn-v { font: 800 36px/1.1 Bitter, Georgia, serif; color: var(--kid); font-variant-numeric: tabular-nums; min-height: 1.1em; word-break: break-all; }
+.bmn-num.is-on { border-color: var(--brass); box-shadow: 0 0 0 3px rgba(226, 173, 76, 0.45); background: rgba(255, 250, 230, 0.95); }
+.bmn-num.is-on .bmn-v::after { content: ''; display: inline-block; width: 3px; height: 0.9em; margin-left: 2px; vertical-align: -0.08em; background: var(--brass); animation: bmn-blink 1s steps(2) infinite; }
+@keyframes bmn-blink { 50% { opacity: 0; } }
+.bmn-signs { display: grid; grid-template-columns: repeat(2, 52px); gap: 6px; align-content: center; }
+.bmn-sign { min-height: 38px; border-radius: 9px; cursor: pointer; font: 800 26px/1 Bitter, Georgia, serif !important; color: var(--ink) !important; touch-action: manipulation;
+  background: rgba(217, 191, 138, 0.5); border: 1.5px solid rgba(122, 85, 48, 0.5); }
+.bmn-sign.is-on { background: radial-gradient(circle at 35% 30%, #fbe3a2, #e2ad4c 55%, #b47f2c 95%); border-color: #6b4614; box-shadow: 0 2px 0 #5a3c12; }
+.bmn-pad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; max-width: 420px; margin: 0 auto; }
+.bmn-key { min-height: 54px; border-radius: 10px; cursor: pointer; font: 800 26px/1 Bitter, Georgia, serif !important; color: #3b260c !important; touch-action: manipulation;
+  background: radial-gradient(circle at 35% 30%, #fff3d0, #f0d79a 60%, #d9b56a 100%); border: 1.5px solid #8a6326; box-shadow: 0 3px 0 #7a5420; }
+.bmn-key:active { transform: translateY(2px); box-shadow: 0 1px 0 #7a5420; }
+.bmn-key.is-tool { background: rgba(217, 191, 138, 0.55); box-shadow: 0 3px 0 rgba(122, 85, 48, 0.5); }
+.bmn-key.is-zero { grid-column: span 3; }
+.bmn-key.is-clear { font-size: 16px !important; }
+.bmn-key svg { width: 28px; height: 28px; vertical-align: middle; }
+.bmn-why { margin: 10px 2px 4px; min-height: 2.6em; font: 600 16px/1.35 Bitter, Georgia, serif; text-align: center; color: var(--ink-2); }
+.bmn-why.is-warn { color: var(--rust); font-style: italic; }
+.bmn-why.is-pop { animation: bml-pop 0.3s ease-out; }
+.bmn-go-row { display: flex; gap: 10px; justify-content: center; }
+.bmn-go { min-height: 56px; min-width: 220px; padding: 8px 22px; border-radius: 12px; cursor: pointer; font: 400 24px Rye, Georgia, serif !important; color: #3b260c !important;
+  background: radial-gradient(circle at 35% 30%, #fbe3a2, #e2ad4c 50%, #b47f2c 90%); border: 2px solid #6b4614; box-shadow: 0 4px 0 #5a3c12, 0 6px 12px rgba(0, 0, 0, 0.25); touch-action: manipulation; }
+.bmn-go:active { transform: translateY(2px); }
+.bmn-swap { min-height: 56px; padding: 8px 16px; border-radius: 12px; cursor: pointer; font: 700 17px Bitter, Georgia, serif !important;
+  background: rgba(255, 252, 240, 0.8); border: 2px dashed var(--rust); color: var(--rust) !important; }
+.bmn-swap[hidden] { display: none; }
+.bmn .is-shake { animation: bml-shake 0.45s; }
+@media (max-width: 760px) {
+  .bml-own { padding: 5px 7px; font-size: 12px !important; }
+  .bml-ch { font-size: 13px; }
+  .bmn-sum { grid-template-columns: 1fr; gap: 8px; margin: 10px 0 8px; }
+  .bmn-num { min-height: 64px; }
+  .bmn-v { font-size: 30px; }
+  .bmn-signs { grid-template-columns: repeat(4, 1fr); }
+  .bmn-sign { min-height: 48px; }
+  .bmn-key { min-height: 52px; }
+  .bmn-go { min-width: 0; flex: 1; }
+  .bmn-why { font-size: 15px; margin-top: 8px; }
+}
+@media (max-height: 480px) and (min-width: 761px) {
+  .bmn-sum { margin: 6px 0; }
+  .bmn-num { min-height: 56px; }
+  .bmn-key { min-height: 40px; }
+  .bmn-go { min-height: 44px; }
+}
 @media (prefers-reduced-motion: reduce) {
-  .bml, .bml-cell.is-new, .bml-rule.is-new, .bml-choice.is-shake, .bml-slot { animation-duration: 0.01s !important; transition-duration: 0.01s !important; }
+  .bml, .bml-cell.is-new, .bml-rule.is-new, .bml-choice.is-shake, .bml-slot, .bmn .is-shake, .bmn-why.is-pop { animation-duration: 0.01s !important; transition-duration: 0.01s !important; }
+  .bmn-num.is-on .bmn-v::after { animation: none; }
 }

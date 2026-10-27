@@ -3,7 +3,10 @@
 //
 //   openLockbox(root, { rider, box: { tier, from }, onBox, onDone, next })
 //     from: 'sheriff' (seized boxes at the desk), 'loot' (the saddlebags) or 'practice' ("Just lock boxes" on the title)
-//     -> { el, close() }
+//     -> { el, close(), workSum() (the sum on screen for the tools' Work it out: the part being asked, a find-x box's
+//          line; src/math/jobsums.js partSum / blankWork; or null) }
+//   opts.workOut(): "Work it out" in the top strip (the game's tools, src/ui/tools.js: the HUD is under the box);
+//   opts.toolsOpen(): a tool is up over the box (the box hears no keys meanwhile)
 //   onBox(result)   (optional) runs as each box finishes, solved or set aside: the caller pays the gold and records
 //                   it right then (save.js earn + recordLockbox), so gold is saved the moment it is earned. It may
 //                   return { newTitle, badge } for the panel to show on the coin animation.
@@ -94,6 +97,7 @@ import { setLineSVG } from './setline.js';
 import { GOLDEN_RULE, STEPS, SKIP_WORD, cardMode, currentStep } from './steps.js';
 import { showNumberLine, layoutNumberLine } from '../ui/numberline.js';
 import { SAFECRACKER_BOXES } from '../save.js';
+import { partSum, blankWork } from '../math/jobsums.js';
 
 const PART_RIGHT_MS = 650;       // a part answered right: the answer sits in its slot this long before the next part
 const AUTO_MS = 750;             // the parts that work themselves out (4x − 4x struck out) show this long first
@@ -196,6 +200,8 @@ const SPEAKER_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5
 
 const STAR = (on) => `<svg viewBox="0 0 24 24" class="${on ? 'on' : ''}" aria-hidden="true"><path d="M12 2.2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 17.1l-6 3.5 1.5-6.8L2.3 9.2l6.9-.7z"/></svg>`;
 
+// (Work it out's own picture, as on the tools strip: a sheet of paper with a sum on it)
+const WORK_SVG = '<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="5" y="4" width="22" height="25" rx="2" fill="#f6edd6" stroke="#6b4614" stroke-width="1.6"/><path d="M9 11h9M9 16h9M9 21h13" stroke="#8a7558" stroke-width="1.4"/><path d="M9 23.5h13" stroke="#2b2219" stroke-width="1.6"/></svg>';
 const TOOLS_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 17.8 15.6 5.7l2.7 2.7L6.2 20.5H3.5z" fill="currentColor"/><path d="m16.6 4.7 1.5-1.5a1.3 1.3 0 0 1 1.8 0l.9.9a1.3 1.3 0 0 1 0 1.8l-1.5 1.5z" fill="currentColor" opacity="0.75"/><path d="M13 21h8M17 18.5V21" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>';
 const COIN_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10.5" fill="#e2ad4c" stroke="#8a5f22" stroke-width="1.6"/>
 <circle cx="12" cy="12" r="7" fill="none" stroke="#a8742a" stroke-width="1.1"/><path d="M9.5 9.5h5M9.5 14.5h5M12 7.5v9" stroke="#7a5524" stroke-width="1.4" stroke-linecap="round"/></svg>`;
@@ -389,6 +395,7 @@ export function openLockbox(root = document.body, opts = {}) {
     <div class="lbx-right"><div class="lbx-stars" aria-label="stars"></div>
       <div class="lbx-purse" title="Your gold"><span class="lbx-purse-coin">${COIN_SVG}</span><b class="lbx-purse-n">0</b></div>
       <button class="lbx-rules" type="button" hidden>The rules</button>
+      <button class="lbx-tools lbx-work" type="button" title="Work it out: the part being asked, in columns" aria-label="Work it out" hidden>${WORK_SVG}<span>Work it out</span></button>
       <button class="lbx-tools" type="button" title="Tools: the times chart" hidden>${TOOLS_SVG}<span>Tools</span></button>
       <button class="lbx-done" type="button">Done for now<kbd>Esc</kbd></button></div>`;
   panel.appendChild(top);
@@ -402,7 +409,14 @@ export function openLockbox(root = document.body, opts = {}) {
   // THE TOOLS (src/ui/tools.js, the game's): the same Tools as from every other job, here in the box's own top strip
   // (the HUD is under the box). opts.tools(button) opens their menu; opts.toolsOpen() says one is up, and while it is
   // the box hears no keys (Esc closes the tool, not the box)
-  const toolsBtn = top.querySelector('.lbx-tools');
+  const toolsBtn = top.querySelector('.lbx-tools:not(.lbx-work)');
+  // WORK IT OUT (the tools' own, src/ui/tools.js): opts.workOut() opens it on the part being asked (handle.workSum), or
+  // the entry to type a sum by hand; its sheet goes over the box, and the box hears no keys while it is up (toolsOpen)
+  const workBtn = top.querySelector('.lbx-work');
+  if (typeof opts.workOut === 'function') {
+    workBtn.hidden = false;
+    workBtn.addEventListener('click', (e) => { e.currentTarget.blur(); try { opts.workOut(); } catch (err) { console.error(err); } });
+  }
   if (typeof opts.tools === 'function') {
     toolsBtn.hidden = false;
     toolsBtn.addEventListener('click', (e) => { e.currentTarget.blur(); try { opts.tools(toolsBtn); } catch (err) { console.error(err); } });
@@ -1249,6 +1263,7 @@ export function openLockbox(root = document.body, opts = {}) {
     function askPart(q, k, n, move, P) {
       return new Promise((resolve) => {
         phase = 'parts';
+        partNow = q.kind === 'sign' ? null : q.prompt;   // (Work it out: this part's sum)
         partsSeen++;
         partsAsked++;
         // the part is an answer of its own (strand.js partCredit): numbers in their strand, an x part in the box
@@ -1298,7 +1313,7 @@ export function openLockbox(root = document.body, opts = {}) {
           grid.appendChild(b);
           return b;
         });
-        const done = () => { partKey = null; partHelpFn = null; stopParts = null; resolve(); };
+        const done = () => { partKey = null; partHelpFn = null; stopParts = null; partNow = null; resolve(); };
         function pick(c, b) {
           if (phase !== 'parts' || b.disabled || gone) return;
           lastAction = performance.now();
@@ -1335,6 +1350,7 @@ export function openLockbox(root = document.body, opts = {}) {
     }
 
     let distRedraw = null;   // redraws the bracket arcs when the mat changes size
+    let partNow = null;      // the part (or product) being asked, as its prompt says it ("27 ÷ 9"), for Work it out
 
     // ----- open the brackets by hand -----
     // A line runs from the number outside the brackets to each term inside, with "5·x" and "5·8" written under them;
@@ -1410,6 +1426,7 @@ export function openLockbox(root = document.body, opts = {}) {
         distRedraw = () => { draw(); mark(); drawLinks(); };
         const ask = () => {
           const q = qs[k];
+          partNow = q.prompt;   // (Work it out: this product's sum)
           partsAsked++;
           clock?.cancel();
           clock = answerTimer(); first = true; cr = productCredit(q);
@@ -1431,7 +1448,7 @@ export function openLockbox(root = document.body, opts = {}) {
         };
         const end = () => {
           clock?.cancel();
-          partKey = null; partHelpFn = null; stopParts = null; distRedraw = null;
+          partKey = null; partHelpFn = null; stopParts = null; distRedraw = null; partNow = null;
           layer.remove();
           hideFocus();
           body.classList.remove('brackets-on');
@@ -2102,6 +2119,14 @@ export function openLockbox(root = document.body, opts = {}) {
       body, stageEl, B, problem, level, tier, plan,
       phase: () => phase,
       setPhase: (p) => { phase = p; },
+      // Work it out on what is on screen (src/math/jobsums.js): the part or product being asked; a find-x or a picture
+      // box's line ("x + 4 = 9": 9 − 4); a box worked by moves, between parts (a move to pick): none, the entry instead
+      workSum: () => {
+        if (gone) return null;
+        if ((phase === 'parts' || phase === 'brackets') && partNow) return partSum(partNow);
+        if (phase === 'play' && pickMode && !ineqMode) return blankWork(lineText(B.line));
+        return null;
+      },
       numberLine: () => !!nl,
       steps: () => (B.plan ? B.steps() : null),
       cardShown: () => cardShown,
@@ -2363,6 +2388,8 @@ export function openLockbox(root = document.body, opts = {}) {
   const handle = {
     el,
     close: () => end('closed'),
+    // the sum on screen for the tools' Work it out (the box's own controller reads it), or null
+    workSum: () => { try { return !closed && cur && cur.workSum ? cur.workSum() : null; } catch (e) { console.warn(e); return null; } },
     // for test rigs: the box being worked and its phase (play | anim | parts | brackets | nlpick | review | open | done)
     debug: {
       get box() { return cur.B; },
@@ -2371,6 +2398,7 @@ export function openLockbox(root = document.body, opts = {}) {
       voice: () => (voice ? voice.state() : null),
       get level() { return cur.level; },
       phase: () => (closed ? 'done' : cur.phase()),
+      workSum: () => handle.workSum(),
       algebra: alg,
       numberLine: () => cur.numberLine(),
       steps: () => cur.steps(),

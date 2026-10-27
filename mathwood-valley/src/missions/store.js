@@ -28,9 +28,10 @@
 // filled in), then (for a division) the word answer. Each tap counts lightly in that fact's own strand, the whole sum in
 // Long work, and the order's answer as usual; then the right coin glows and the order is filled as if it were picked.
 // J.workSum() tells the tools button what this order's sum is (the worked area's own, counted as above, or the order's
-// sum, as plain help that counts nothing: the kid still picks the coin): a counter question names its own (order.sum,
-// src/math/counter.js: 2.6 × 6 for the fence boards, $0.80 × 6 for coffee by the pound), else it's read from the
-// order's working (src/math/longwork.js sumFrom: decimals and dollars and cents too, $1.30 + $5.75).
+// sum, as plain help that counts nothing: the kid still picks the coin): a maker names its own (order.sum,
+// src/math/counter.js: 2.6 × 6 for the fence boards, $0.80 × 6 for coffee by the pound; or its steps, the cost of 3
+// tins then the change from $20), else it's read from the order's working (src/math/jobsums.js workFrom: every sum
+// written with its answer, in order; decimals and dollars and cents too, $1.30 + $5.75).
 // A rider who can't read yet (skill.js readAloud) hears each order read out (the browser's voice), with "Read it to
 // me" on the slip to hear it again; the youngest riders' picture stories show the things to count from the start.
 // THE COUNTER'S OTHER QUESTIONS (src/math/counter.js): money (counting coins, change, dollars and cents, tax and tips),
@@ -62,7 +63,8 @@ import { makeWordProblems, makeOrder, lockboxProblem, FOLK, seeded } from '../ma
 import { picture } from '../ui/storepics.js';
 import { makeStoreSlip, speakLine } from '../ui/storeslip.js';
 import { openLongWork } from '../ui/longwork.js';
-import { workMul, workDiv, LONG, sumFrom, factFrom } from '../math/longwork.js';
+import { workMul, workDiv, LONG, factFrom } from '../math/longwork.js';
+import { sumOf, workFrom } from '../math/jobsums.js';
 import { recordFact } from '../math/facts.js';
 import { homestead } from '../math/goods.js';
 import { counterPicture } from '../ui/counterpics.js';
@@ -268,7 +270,7 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
     U.purse(rider.gold);   // (in step with the gold, the lock box's pay included)
     const young = readAloud(rider);
     const own = ownOf(order);
-    order.work = !order.equation && !!(order.long || order.sum || sumFrom(order.rightWhy || ''));   // (Work it out has a sum for it)
+    order.work = true;   // (Work it out always helps: the order's sum, or the entry to type one by hand)
     U.show(order, { filled, pic: order.picFirst ? (order.picture || picture)(order.pic) : null, read: young,
       lead: order.lead ? counterPicture(order.lead) : null, note: order.placing ? 'finding your level' : '' });
     if (young && order.read) setTimeout(() => { if (order && order.read && J.active && !U.busy) speakLine(order.read); }, 500);
@@ -398,7 +400,7 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
   // there.
   function openLong() {
     const o = order;
-    if (!o || !o.long || longPanel || U.busy || !J.active) return;
+    if (!o || !o.long || longPanel || U.busy || !J.active) return false;   // (false: not opened, e.g. already up: the tools open their entry instead)
     const already = !!o.recorded;   // (opened after a coin was picked: it helps, but the order's answer is already counted)
     clearTimeout(longT);
     const L = o.long, work = L.op === 'mul' ? workMul(L.a, L.b, L.lead ? { lead: L.lead } : {}) : workDiv(L.n, L.d);
@@ -425,6 +427,7 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
       },
       onClose: () => { longPanel = null; saveRider(rider); },
     });
+    return true;
   }
 
   // ── STARTING AND STOPPING ────────────────────────────────────────────────────────────────────────────────────
@@ -509,12 +512,14 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
   J.dev = { next: (spec) => { forced = spec || null; }, openLong: () => openLong() };
   // the sum on the order at the counter, for the tools' Work it out (src/ui/tools.js): the worked area's own (it counts,
   // as above: open it with J.openLong), else the order's own sum or the one read from its working (plain help: nothing
-  // counts and the kid still picks the coin), or null (nothing to work out on paper: a clock to read, coins to count)
+  // counts and the kid still picks the coin), or null (a clock to read, coins to count: the tools offer the entry to type
+  // a sum by hand). Two steps answered with one coin (the bill, then the change) are handed over as steps: the maker's
+  // own (order.sum, with what each step finds), else every sum the working names with its answer (jobsums.js workFrom)
   J.workSum = () => {
     if (!J.active || !order || U.busy || eqPending) return null;
     const L = order.long;
     if (L) return { own: true, op: L.op, a: L.op === 'div' ? L.n : L.a, b: L.op === 'div' ? L.d : L.b, ask: order.ask };
-    const s = order.equation ? null : (order.sum || sumFrom(order.rightWhy || ''));
+    const s = order.equation ? null : (order.sum ? sumOf(order.sum) : workFrom(order.rightWhy || ''));
     return s ? { ...s, ask: order.ask, story: true } : null;
   };
   J.openLong = () => openLong();

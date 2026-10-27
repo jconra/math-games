@@ -720,12 +720,23 @@ export function workSub(a, b, { money = false } = {}) {
 // sums with their answers: the first sum written "= something" wins over a sum said along the way ("12 is 4 × 3, so
 // 4 × 4 = 16 cups" is 4 × 4).
 const OPS = { '×': 'mul', 'x': 'mul', '*': 'mul', '÷': 'div', '/': 'div', '+': 'add', '−': 'sub', '-': 'sub' };
-export function sumFrom(text) {
+// a working's money made plain for the reading: thousands' commas gone, cents beside cents as whole cents ("$1.00 − 35¢"
+// is 100 − 35), "$2.00" with no cents about as $2, the ¢ dropped
+function plainMoney(text) {
   let s = String(text || '').replace(/(\d),(\d{3})/g, '$1$2');
   const cents = /¢/.test(s);
   if (cents) s = s.replace(/\$(\d+)\.(\d\d)(?!\d)/g, (m, d, c) => String(Number(d) * 100 + Number(c))).replace(/\$(\d)/g, '$1');
   else if (!/\$\d+\.(?!00(?!\d))\d\d(?!\d)/.test(s)) s = s.replace(/\$(\d+)\.00(?!\d)/g, '$$$1');   // ("$2.00" with no cents about is $2: whole dollars)
-  s = s.replace(/(\d)\s*¢/g, '$1');
+  return s.replace(/(\d)\s*¢/g, '$1');
+}
+// a sum's dollars: kept ($ on the board) when there are cents in it, or whole dollars shared out unevenly
+function withCash(sum, da, db) {
+  const { op, a, b } = sum, cents2 = !Number.isInteger(a) || !Number.isInteger(b);
+  if ((da || db) && (cents2 || (op === 'div' && a % b))) { sum.money = true; sum.cash = (da ? 'a' : '') + (db ? 'b' : ''); }
+  return sum;
+}
+export function sumFrom(text) {
+  const s = plainMoney(text);
   const re = /(\$?)(\d+(?:\.\d+)?)(?:\s+[A-Za-z][A-Za-z' ]{0,24}?)?\s*([×x*÷+−-])\s*(\$?)(\d+(?:\.\d+)?)(?![\d.]*\s*\/)(?![\d.])/g;
   let m, first = null;
   while ((m = re.exec(s))) {
@@ -736,13 +747,79 @@ export function sumFrom(text) {
     if (!Number.isFinite(a) || !Number.isFinite(b) || !o) continue;
     if (o === 'div' && b === 0) continue;
     if (o === 'sub' && a < b) continue;
-    const sum = { op: o, a, b };
-    const dollars = !!(da || db), cents2 = !Number.isInteger(a) || !Number.isInteger(b);
-    if (dollars && (cents2 || (o === 'div' && a % b))) { sum.money = true; sum.cash = (da ? 'a' : '') + (db ? 'b' : ''); }
+    const sum = withCash({ op: o, a, b }, da, db);
     if (/^(?:\s*[A-Za-z][A-Za-z' ]{0,24})?\s*=/.test(s.slice(re.lastIndex))) return sum;   // (written with its answer)
     if (!first) first = sum;
   }
   return first;
+}
+
+// EVERY SUM WRITTEN WITH ITS ANSWER in a working, in order, each as the steps the columns take (Work it out's steps,
+// src/math/jobsums.js workFrom): "3 × $2.25 = $6.75, then $20 − $6.75 = $13.25" is two sums; "5 hands × 3 a day ×
+// 7 days = 105 pounds" is one of three numbers, worked left to right (5 × 3, then 15 × 7); "4 + 4 + 4 = 12" is 4 + 4,
+// then 8 + 4. Each is checked against the answer written (working that doesn't come to it isn't read: the sick sheep's
+// wrong sums are read with sumFrom instead); a division that doesn't come out counts its whole answer ("17 ÷ 7 = 2").
+// A sum said along the way with no answer written isn't one ("12 is 4 × 3, so ..."), nor a fraction, a time of day,
+// a negative number or a power.
+//   -> [{ steps: [{ op, a, b, money?, cash? }], answer }]
+const r9 = (x) => Math.round(x * 1e9) / 1e9;
+function apply(op, a, b) { return r9(op === 'add' ? a + b : op === 'sub' ? a - b : op === 'mul' ? a * b : a / b); }
+export function sumsFrom(text) {
+  const s = plainMoney(text);
+  const T = [];
+  const re = /(\$?)(\d+(?:\.\d+)?)|([×*÷+−=-])|([A-Za-z][A-Za-z']*)|(\S)/g;
+  let m;
+  while ((m = re.exec(s))) {
+    if (m[2] != null) {
+      const before = s[m.index - 1] || '', after = s[re.lastIndex] || '';
+      // (the middle of a fraction, a time of day or a power: 3/4, 6:00, 3²; part of a word: 2x)
+      const bad = /[/:.^]/.test(before) || /^[/:^²³√]/.test(after) || /[A-Za-z]/.test(after);
+      T.push({ k: 'n', v: Number(m[2]), $: !!m[1], i: m.index, bad });
+    } else if (m[3]) T.push(m[3] === '=' ? { k: 'eq', i: m.index } : { k: 'op', o: OPS[m[3]], i: m.index });
+    else if (m[4]) T.push({ k: m[4] === 'x' ? 'x' : 'w', i: m.index });
+    else T.push({ k: 'p', i: m.index });
+  }
+  const out = [];
+  for (let i = 0; i < T.length; i++) {
+    const t0 = T[i];
+    if (t0.k !== 'n' || t0.bad) continue;
+    // (a number with a minus in front of it, and no number before that: below zero, not a sum's)
+    const pr = T[i - 1];
+    if (pr && pr.k === 'op' && pr.o === 'sub' && pr.i === t0.i - 1 && !(T[i - 2] && T[i - 2].k === 'n')) continue;
+    const nums = [t0], ops = [];
+    let j = i + 1;
+    const words = () => { let w = 0; while (T[j] && T[j].k === 'w' && w < 5) { j++; w++; } };
+    for (;;) {
+      const at = j;
+      words();
+      const t = T[j], nx = T[j + 1];
+      let op = null;
+      if (t && t.k === 'op') op = t.o;
+      else if (t && t.k === 'x' && j === at && /\s/.test(s[t.i - 1] || '')) op = 'mul';   // ("x" is times only right between two numbers: 7 x 8)
+      if (op && nx && nx.k === 'n' && !nx.bad) { ops.push(op); nums.push(nx); j += 2; continue; }
+      j = at;
+      break;
+    }
+    if (!ops.length) continue;
+    words();
+    if (!T[j] || T[j].k !== 'eq' || !T[j + 1] || T[j + 1].k !== 'n') continue;
+    const ans = T[j + 1];
+    // worked left to right, it must come to the answer written (a division that doesn't come out: its whole answer)
+    let v = nums[0].v, cash = nums[0].$, ok = true;
+    const steps = [];
+    ops.forEach((op, k) => {
+      const b = nums[k + 1];
+      if ((op === 'sub' && v < b.v) || (op === 'div' && !b.v)) { ok = false; return; }
+      steps.push(withCash({ op, a: v, b: b.v }, cash, b.$));
+      const next = apply(op, v, b.v);
+      cash = op === 'div' ? cash : cash || b.$;
+      v = op === 'div' && k === ops.length - 1 && Number.isInteger(v) && Number.isInteger(b.v) && v % b.v && Math.floor(v / b.v) === ans.v ? ans.v : next;
+    });
+    if (!ok || Math.abs(v - ans.v) > 1e-6) continue;
+    out.push({ steps, answer: ans.v });
+    i = j;   // (the answer may start the next sum: "8 + 3 = 11 − 4 = 7" is rare, but read on from it)
+  }
+  return out;
 }
 
 // the times fact a question's working asks, for the times chart (src/math/facts.js recordFact): "4 pies × 3 pounds"

@@ -116,6 +116,9 @@ function hours(t, f, frac) {
     ].filter((s) => s.v > 0),
     pic: { kind: 'timeline', from: a * 60, to: (across ? 12 + b : b) * 60, noon: across, plain: !across },
     rightWhy: across ? `From ${a} to 12 noon is ${u(12 - a, HOURS)}, then on to ${b} is ${b} more: ${u(len, HOURS)}` : `From ${a} o'clock on to ${b} o'clock: ${u(len, HOURS)}`,
+    // (Work it out: the hours on from the first time to the second; across noon, up to 12 first, then on)
+    sum: across ? [{ op: 'sub', a: 12, b: a, say: `First from ${a} in the morning up to 12 noon` }, { op: 'add', a: 12 - a, b, say: `Then on to ${b} in the afternoon` }]
+      : { op: 'sub', a: b, b: a, say: `The hours from ${a} o'clock on to ${b} o'clock` },
     credit: [], facts: { a, b, across, len },
   };
 }
@@ -181,6 +184,7 @@ function hoursMinutes(t, f, frac) {
       key: 'time:minutes', story: `${f.name}'s stew has to simmer for ${total} minutes.`, ask: 'How long is that in hours and minutes?', right: D(total), wide: true,
       slips, pic: { kind: 'hourbars', total },
       rightWhy: `${u(h, HOURS)} is ${h * 60} minutes, and ${m} more makes ${total}: ${dur(total)}`,
+      sum: { op: 'div', a: total, b: 60, say: 'How many 60s (whole hours) are in it, and the minutes left over' },
       credit: [], facts: { total },
     };
   }
