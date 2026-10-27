@@ -1,0 +1,11 @@
+/* The horse lab: the Material Lab's look (materials.css), plus the name tags in the line-up and a few small extras. */
+.tags { position: absolute; inset: 0 var(--panel-w) 0 0; pointer-events: none; overflow: hidden; z-index: 4; }
+.tag { position: absolute; transform: translate(-50%, 0); padding: 2px 8px; border-radius: 6px; background: var(--wood); border: 1px solid var(--wood-edge);
+  font: 400 14px Rye, Georgia, serif; color: var(--brass-hi); white-space: nowrap; }
+.presets .btn { min-width: 0; }
+.row input[type=number] { width: 100%; background: #24170d; border: 1px solid #5a4024; border-radius: 5px; padding: 2px 4px; font-size: 13px; }
+.legs4 { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; margin: 6px 0; }
+.legs4 label { display: grid; grid-template-columns: 70px 1fr; align-items: center; gap: 6px; font: 400 13px Smokum, Georgia, serif; letter-spacing: .04em; color: var(--ink-2); }
+.legs4 select { width: 100%; background: #24170d; border: 1px solid #5a4024; border-radius: 5px; padding: 3px 4px; font-size: 13px; }
+.btn:disabled { opacity: .45; cursor: default; box-shadow: none; }
+@media (max-width: 760px) { .tags { inset: 0; } .stats { max-width: calc(100% - 130px); } }

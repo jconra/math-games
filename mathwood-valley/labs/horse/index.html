@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Horse Lab</title>
+<meta name="description" content="A Mathwood Valley lab: the new sculpted horse with a coat worked out in the shader. Short-hair streaks and a velvet sheen, mane and tail strands, face and leg markings, dapples and pinto patterns (tobiano, overo, sabino) from a coat recipe, the game's horses as presets, and the old horse to compare.">
+<!-- the on-screen error box comes first, so a crash shows on screen instead of a blank page -->
+<script src="../../oops.js"></script>
+<link rel="stylesheet" href="../../src/ui/fonts/fonts.css">
+<link rel="stylesheet" href="../materials/materials.css?v=1">
+<link rel="stylesheet" href="horse.css?v=1">
+<script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/" } }</script>
+</head>
+<body>
+<div id="app">
+  <canvas id="c" aria-label="A horse standing on grass, its coat drawn by the shader"></canvas>
+  <div class="tags" id="tags" aria-hidden="true"></div>
+  <div class="stats" id="stats" aria-live="polite"></div>
+  <div class="legend" id="legend" hidden></div>
+  <button class="btn panel-toggle" id="panelToggle" aria-expanded="true" aria-controls="panel">Controls</button>
+  <aside class="panel" id="panel" aria-label="Horse controls"></aside>
+</div>
+<div class="loading" id="loading">Saddling up…</div>
+<script type="module" src="main.js?v=1"></script>
+</body>
+</html>
