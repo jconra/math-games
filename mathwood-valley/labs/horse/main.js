@@ -9,7 +9,8 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { loadAnimals, makeAnimal } from '../../src/actors/animals.js';
-import { prepareHorse, coatMaterial, noiseTexture } from './coat.js';
+import { prepareHorse, coatMaterial, eyeMaterial, noiseTexture } from './coat.js';
+import { buildHair, hairMaterial, attachHair, hairTexture } from './hair.js';
 import { PRESETS, PRESET_ORDER, recipe, fill, FACES, LEGS, PINTOS } from './recipes.js';
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -111,7 +112,10 @@ const road = new THREE.Mesh(new THREE.PlaneGeometry(6, 160).rotateX(-Math.PI / 2
 road.position.set(ROAD_X, 0.003, 0); road.receiveShadow = true; road.name = 'road'; scene.add(road);
 
 // ── the horses ────────────────────────────────────────────────────────────────────────────────────────────────────────
-let newLib = null, oldLib = null, oldLoading = null, shape = null, info = null;
+let newLib = null, oldLib = null, oldLoading = null, shape = null, info = null, hair = null, eyeMat = null;
+// how fast each clip carries the horse (m/s, at speed 1): the mane and tail stream with it
+const CLIP_SPEED = { Walk: 1.6, Gallop: 9, Gallop_Jump: 8, Jump_toIdle: 2 };
+const clock = { t: 0 };
 const PX = { value: 0.001 };          // metres across a pixel one metre off (the streaks fade out below a pixel)
 const horses = [];                    // every horse in the scene: { a, mat, r, old, group }
 const group = new THREE.Group(); scene.add(group);
@@ -127,6 +131,10 @@ async function loadNew() {
   timing.load = performance.now() - t0;
   const t1 = performance.now();
   shape = prepareHorse(g.scene, info.scale);
+  const t2 = performance.now();
+  hair = buildHair(shape);
+  timing.hair = performance.now() - t2;
+  if (shape.eye) eyeMat = eyeMaterial(shape, shape.eye.material);
   timing.prep = performance.now() - t1;
   newLib = { dir: '', info: { meshy: info }, kinds: { meshy: { scene: g.scene, clips: g.animations, info } } };
   state.clips = g.animations.map((c) => c.name);
@@ -146,9 +154,12 @@ function makeHorse(r) {
   });
   const mat = coatMaterial(shape, r, { px: PX });
   body.material = mat;
-  if (eye) { eye.frustumCulled = false; eye.castShadow = false; }
+  if (eye) { eye.frustumCulled = false; eye.castShadow = false; if (eyeMat) eye.material = eyeMat; }
   if (a.mesh !== body) { body.computeBoundingSphere(); body.boundingSphere.radius *= 1.35; }
-  const h = { a, body, eye, mat, r, old: null, root: new THREE.Group() };
+  // the mane and tail: hair cards on the body's own skeleton, coloured by the same recipe (they share its uniforms)
+  const hairMat = hairMaterial(shape, mat.coat.uniforms, renderer);
+  const hairMesh = attachHair(body, hair.geometry, hairMat);
+  const h = { a, body, eye, mat, hairMat, hairMesh, r, old: null, root: new THREE.Group() };
   h.root.add(a.root);
   playOn(h);
   return h;
@@ -179,7 +190,7 @@ function playOn(h) {
 }
 function setRecipe(h, r) { h.r = fill(r); h.mat.coat.set(h.r); if (h.old && h.old.look !== h.r.game) oldOf(h); }
 function clearHorses() {
-  for (const h of horses) { h.a.dispose(); if (h.old) h.old.a.dispose(); h.mat.dispose(); h.root.removeFromParent(); }
+  for (const h of horses) { h.a.dispose(); if (h.old) h.old.a.dispose(); h.mat.dispose(); h.hairMat.dispose(); h.root.removeFromParent(); }
   horses.length = 0;
 }
 
@@ -254,44 +265,55 @@ const C = (label, key) => ({ t: 'color', label, key });
 const S = (label, key, opts) => ({ t: 'select', label, key, opts });
 const K = (label, key) => ({ t: 'check', label, key });
 const pct = (v) => Math.round(v * 100) + '%';
-const MASKS = [['off', 'Off'], ['parts', 'Parts (legs, neck, head, hindquarters)'], ['hair', 'Mane and tail (root to tip)'], ['white', 'White'], ['flow', 'Way the hair lies'], ['streaks', 'Streaks'], ['heights', 'Heights (10 cm lines)'], ['albedo', 'Colour only (no light)']];
-const MASK_CODE = { off: 0, parts: 1, hair: 2, white: 3, flow: 4, streaks: 5, heights: 6, albedo: 7 };
+const MASKS = [['off', 'Off'], ['parts', 'Parts (legs, neck, head, hindquarters)'], ['hair', 'Crest and dock (root to tip)'], ['white', 'White'], ['flow', 'Way the hair lies'], ['streaks', 'Streaks'], ['heights', 'Heights (10 cm lines)'], ['albedo', 'Colour only (no light)'], ['shade', 'Baked shade']];
+const MASK_CODE = { off: 0, parts: 1, hair: 2, white: 3, flow: 4, streaks: 5, heights: 6, albedo: 7, shade: 8 };
 const SECTIONS = [
   { id: 'coat', title: 'Coat', open: true, rows: [
-      C('Body colour', 'base'), S('Points', 'points', [['none', 'None'], ['black', 'Black legs and ear tips']]), C('Mane and tail', 'mane'),
+      C('Body colour', 'base'), S('Points', 'points', [['none', 'None'], ['black', 'Black legs and ear tips']]),
       R('Lighter belly', 'belly', 0, 1, 0.01, pct), R('Darker top line', 'sooty', 0, 1, 0.01, pct), R('Dark muzzle', 'muzzle', 0, 1, 0.01, pct),
       R('Greying', 'grey', 0, 1, 0.01, pct), R('Dapples', 'dapples', 0, 1, 0.01, pct), R('Dapple size', 'dappleSize', 0.05, 0.16, 0.005, (v) => Math.round(v * 100) + ' cm'), R('Grey legs', 'greyLegs', 0, 1, 0.01, pct)],
     how: `<p>Nothing is painted into a picture. Every pixel of the horse asks <b>where it sits on the horse standing at rest</b>: the model's own corner positions before the bones move them, in metres (feet on the ground, nose toward +Z). That spot rides along with the bones, so a marking stays put however the horse moves, from a nod to a gallop.</p>
-<p>From that spot it works out its colour: the body colour with a big soft mottle (no coat is one flat colour), a <b>darker top line</b> where the surface faces up along the back, a <b>lighter belly</b> and inside of the legs where it faces down or inward, <b>points</b> (black from the hooves to just over the knees and hocks, black ear tips) for a bay or buckskin, a darker muzzle and dark skin round the eyes.</p>
-<p><b>Greying</b> takes the colour out first, then lightens the grey toward white: lighter on the head, darker on the legs. <b>Dapples</b> are round lighter spots in a darker net: the distance to the nearest of a scatter of points ("cell noise"), about one spot per dapple size.</p>` },
+<p>From that spot it works out its colour: the body colour with a big soft mottle (no coat is one flat colour), a <b>darker top line</b> where the surface faces up along the back, a <b>lighter belly</b> and inside of the legs where it faces down or inward, <b>points</b> (black from the hooves to just over the knees and hocks, black ear tips) for a bay or buckskin, a darker muzzle, dark skin round the eyes and an almond-shaped dark lid.</p>
+<p><b>Greying</b> takes the colour out first, then lightens the grey toward white: lighter on the head, darker on the legs. <b>Dapples</b> are round lighter spots with mid-grey gaps between them, over the whole body and neck: the distance to the nearest of a scatter of points ("cell noise"), each spot its own size.</p>
+<p>A <b>baked shade</b> (worked out once at load: rays from each corner of the body at rest, to see how much sky it sees) dims the sky light under the belly and between the legs, and darkens the creases: behind the elbow, the girth, the stifle, the throat.</p>` },
+  { id: 'manetail', title: 'Mane and tail', open: true, rows: [
+      C('Colour', 'mane'), R('Mane length', 'maneLength', 0.3, 1, 0.01, pct), R('Tail length', 'tailLength', 0.3, 1, 0.01, pct),
+      R('Dark roots', 'roots', 0, 0.8, 0.01, pct), R('Light tips', 'tips', 0, 1, 0.01, pct), R('Strand variation', 'strands', 0, 1.5, 0.01), R('Shine', 'maneShine', 0, 2, 0.01)],
+    how: `<p>The mane and tail are <b>hair cards</b>: a few dozen narrow strips (${'<span id="hairInfo"></span>'}), each drawn with a picture of hair strands made in code (strands of different lengths and shades, solid at the roots, ragged at the tips). The see-through gaps are cut by the picture's alpha, and <b>alpha to coverage</b> lets the screen's multisampling smooth the cut edges.</p>
+<p>The mane's strips are laid along the crest from the withers to the poll and draped down the neck: each starts at the crest, steps down with gravity (pushed off to one side at first), and every step is put back onto the neck's surface and lifted off it a little more toward the tip. A short fringe covers the crest on the far side, and a forelock falls from between the ears. Each corner is skinned like the neck under it, so the mane moves with every clip.</p>
+<p>The tail's strips are rooted round the dock and hang down the tail's chain of bones, on past the last bone to about the hocks, fanning out toward the ends. On top of the bones the vertex shader adds a little life: a tail a clip holds out stiff (the gallop) <b>sags under its own weight</b> (more the more sideways the strand points) and <b>streams back</b> with speed, and both mane and tail ripple.</p>
+<pre>sag    = 1 - max(0, -strand.y)          (0 hanging down .. 1 straight out)
+offset = down * sag * along² * length * 0.55
+       + behind * along² * length * speed * 0.022
+       + side * sin(time * (2 + 0.4 speed) - along * 4.5) * along² * ...</pre>
+<p>Colour, length and pinto white come from the same recipe and the same code as the coat: a strand is white if the skin at its root is (so a tobiano's tail is white where the white crosses the dock, with no dark outline), darker at the roots, lighter at the tips, with a highlight running along the strands (Kajiya-Kay).</p>` },
   { id: 'marks', title: 'Face and legs', open: true, rows: [
       S('Face', 'face', FACES), K('A star too', 'star'), R('Marking size', 'faceSize', 0.5, 1.6, 0.01, (v) => (+v).toFixed(2) + 'x'), R('Ragged edges', 'ragged', 0, 1, 0.01, pct), { t: 'legs' }],
-    how: `<p>The face has its own measuring stick: from the <b>poll</b> (the top of the head, between the ears) to the tip of the nose, 0 to 1, and across from the middle of the face in metres. A <b>star</b> is a blob on the forehead about level with the eyes; a <b>stripe</b> a narrow strip down the bridge of the nose; a <b>blaze</b> a wide one from the forehead over the nose to the lip; a <b>bald face</b> wraps out toward the eyes; a <b>snip</b> sits between the nostrils. Only the surface that faces out of the front of the face takes it, so it doesn't run under the jaw.</p>
-<p>Each leg's white reaches a height: a <b>coronet</b> just round the top of the hoof, a <b>pastern</b> a little higher, a <b>sock</b> past the fetlock, a <b>stocking</b> to the knee or hock. Its top is roughened with noise and runs a touch higher at the front of the leg. Under a white leg the hoof is pale horn.</p>
-<p>White hair edges are soft and a little ragged: the shape's edge is moved in and out by two sizes of noise, and white muzzle shows pink skin.</p>` },
+    how: `<p>The face has its own measuring stick: from the <b>poll</b> (the top of the head, between the ears) to the tip of the nose, 0 to 1, and across from the middle of the face in metres. A <b>star</b> is a round or diamond spot on the forehead about level with the eyes; a <b>stripe</b> a narrow strip down the bridge of the nose; a <b>blaze</b> a wide one from the forehead over the nose to the lip; a <b>bald face</b> wraps out toward the eyes; a <b>snip</b> sits between the nostrils. Only the surface that faces out of the front of the face takes it, so it doesn't run under the jaw.</p>
+<p>Each leg's white reaches a height: a <b>coronet</b> just round the top of the hoof, a <b>pastern</b> a little higher, a <b>sock</b> past the fetlock, a <b>stocking</b> to the knee or hock. Its top waves round the leg and rises to a point at the back. Under a white leg the hoof is pale horn.</p>
+<p>White hair is a little short of pure white and takes the coat's light and streaks. Its edges are soft (1 to 2 cm) and broken hair by hair along the way the hair lies; a white muzzle shows a little pink skin.</p>` },
   { id: 'pinto', title: 'Pinto', open: true, rows: [S('Pattern', 'pinto', PINTOS), R('How much white', 'white', 0, 1, 0.01, pct), R('Roaning', 'roan', 0, 1, 0.01, pct), R('Seed', 'seed', 1, 99, 1, (v) => String(Math.round(v))), { t: 'buttons', items: [['New seed', () => { setField('seed', 1 + Math.floor(Math.random() * 98)); }]] }],
-    how: `<p>Each pattern is a few rules on top of smooth noise read at the pixel's rest spot. The <b>seed</b> slides the noise, so every pinto is different.</p>
-<p><b>Tobiano</b>: big smooth-edged patches. The noise is stretched up and down and barely changes from one side to the other, so the white comes up from the legs and crosses the back; the head and the top of the neck stay dark. <b>Overo</b>: white on the sides of the barrel and neck and under the belly, with jagged edges from two finer noises, kept off the top line and the legs (so the colour frames it), often with a bald face. <b>Sabino</b>: white high up the legs with ragged tops, white along the belly, and <b>roaning</b> round it: single white hairs flecked into the coat, picked by the same hair-sized streak noise as the coat's texture (further off, where a hair is smaller than a pixel, their average).</p>` },
+    how: `<p>Each pattern is a few rules on top of smooth noise read at the pixel's rest spot, then cut at a threshold. The <b>seed</b> slides the noise, so every pinto is different.</p>
+<p><b>Tobiano</b>: big smooth-edged patches. Only slowly changing things go into it (no fine noise, nothing from the way the surface faces), so the cut gives rounded patches without slivers or notches. The noise is stretched up and down and barely changes from one side to the other, so the white comes up from the legs and crosses the back; the head, the top of the neck and the chest stay dark. <b>Overo</b>: a rounded patch on the side of the barrel and on the neck, and white under the belly, its edge scalloped and jagged by two finer noises, kept off the top line and the legs (so the colour frames it), often with a bald face. <b>Sabino</b>: white high up the legs with ragged tops, white along the belly, and <b>roaning</b>: single white hairs ticked into the coat near the white and low on the barrel, picked hair by hair from the coat's own streak noise (further off, where a hair is smaller than a pixel, a light frosting).</p>` },
   { id: 'fur', title: 'Fur', open: false, rows: [
       R('Streak bump', 'bump', 0, 3, 0.01), R('Streak colour', 'streakColor', 0, 3, 0.01), R('Velvet sheen', 'sheen', 0, 3, 0.01), R('Coat shine', 'shine', 0, 3, 0.01),
-      R('Mane shine', 'maneShine', 0, 2, 0.01), R('Dark roots', 'roots', 0, 0.8, 0.01, pct), R('Light tips', 'tips', 0, 1, 0.01, pct), R('Strand variation', 'strands', 0, 1.5, 0.01),
       { t: 'mask' }],
-    how: `<p>Short hair lies one way: back and a little down along the barrel, down the legs and the hindquarters, from the poll down the neck, from the forehead down the face. Each corner of the model knows which part it belongs to (from the bones that move it) and so which way its hair lies.</p>
-<p>The <b>streaks</b> are noise squeezed along that way: about 3 mm across and 7 times as long, plus a coarser 1.5 cm "lie" of the coat. The shader reads the streaks here and one step across the hairs, and tilts the light's normal by the difference: a fine bump across the hairs, no normal map needed. They fade out where a streak gets smaller than a pixel, so far-off horses don't shimmer.</p>
+    how: `<p>Short hair lies the way it grows: back and down along the barrel, down the legs and the hindquarters, down the neck, from the forehead down the face. Each corner of the model knows which part it belongs to (from the bones that move it) and so which way its hair lies. On the barrel the lie swings slowly between two angles, so it isn't one brushed direction.</p>
+<p>The <b>streaks</b> are noise squeezed along that way: about 2.6 mm across and 4.5 times as long, plus a coarser 2 cm "lie" of the coat. The shader reads the streaks here and one step across the hairs, and tilts the light's normal by the difference: a fine bump across the hairs, no normal map needed. They fade out where a streak gets smaller than a pixel, so far-off horses don't shimmer.</p>
 <pre>q = p - A * dot(p, A) * (1 - 1/stretch)   (squeeze along the hair A)
-streak = noise(q * 300)
+streak = noise(q * 380)
 normal += across * (streak(p + across*e) - streak(p)) / e * height</pre>
-<p>The light on the hair has two extra parts: a <b>velvet sheen</b>, a soft glow where light grazes the coat toward the outline (short hair scatters it toward you), and a <b>hair highlight</b> (Kajiya-Kay) that runs across the hairs instead of the round spot of a plastic. The barrel's short coat is a touch glossier than the legs; the mane and tail glossier still, each strand lighter or darker, darker at the roots and lighter at the tips.</p>
+<p>The light on the hair: a narrow <b>velvet sheen</b> where light grazes the coat, and a <b>hair highlight</b> (Kajiya-Kay) that runs across the hairs as a band, both in the coat's own colour (a black coat's: a cool blue-grey), with most of the plain, plastic-white highlight taken out. The outline is a touch lighter, as short hair standing off the skin catches the light. Hooves are matte, with faint growth stripes.</p>
 <p>All the noise comes from one 256 x 256 random picture, read so a single lookup gives smooth 3D noise.</p>` },
   { id: 'motion', title: 'Motion', open: true, rows: [{ t: 'clip' }, R('Speed', 'speed', 0, 2, 0.05, (v) => (+v).toFixed(2) + 'x'), K('Turntable (spin slowly)', 'spin')],
-    how: `<p>The game's own horse clips (Idle, Walk, Gallop, Eating...) and five new ones for standing in a stall: LookLeft, LookRight, Nod, HeadShake, EarFlick. The coat is drawn from the rest pose, so nothing slides as the body bends.</p>` },
+    how: `<p>The game's own horse clips (Idle, Walk, Gallop, Eating...) and five new ones for standing in a stall: LookLeft, LookRight, Nod, HeadShake, EarFlick. The coat is drawn from the rest pose, so nothing slides as the body bends; the mane and tail stream with the clip's speed.</p>` },
   { id: 'view', title: 'View', open: true, rows: [{ t: 'views' }, K('Show the old horse', 'old')],
-    how: `<p><b>Turntable</b>: one horse. <b>Old and new</b>: the game's horse (the animal pack's, with its coat tint) beside the new one. <b>Line-up</b>: every preset in a row, like a stable line-up. <b>Riding view</b>: two horses 25 m down the road, at the height a rider's eye sits. <b>Gallop</b>: mid-gallop from 10 m.</p>` },
+    how: `<p><b>Turntable</b>: one horse. <b>Both sides</b>: the same coat from both sides. <b>Old and new</b>: the game's horse (the animal pack's, with its coat tint) beside the new one. <b>Line-up</b>: every preset in a row, like a stable line-up. <b>Riding view</b>: two horses down the road through the game's own riding camera. <b>Gallop</b>: mid-gallop from 10 m.</p>` },
   { id: 'light', title: 'Light', open: false, rows: [R('Sun direction', 'az', 0, 359, 1, (v) => Math.round(v) + '°'), R('Time of day', 'hour', 5.5, 19.5, 0.25, (v) => { const h = Math.floor(v), m = Math.round((v - h) * 60); return `${h}:${String(m).padStart(2, '0')}`; }), K('Shadows', 'shadows')] },
   { id: 'cost', title: 'Cost', open: true, rows: [{ t: 'cost' }, { t: 'buttons', items: [['Measure', () => measure()]] }],
-    how: `<p><b>ms per frame</b>: the horse alone, drawn 40 times at the current view and size, waiting for the graphics card after each, so it counts the card's work. The old horse is the game's animal-pack model with its one shared material.</p>` },
+    how: `<p><b>ms per frame</b>: the horse alone (with its mane and tail), drawn 40 times at the current view and size, waiting for the graphics card after each, so it counts the card's work. The old horse is the game's animal-pack model with its one shared material.</p>` },
 ];
-const RECIPE_KEYS = new Set(['base', 'points', 'mane', 'belly', 'sooty', 'muzzle', 'grey', 'dapples', 'dappleSize', 'greyLegs', 'face', 'star', 'faceSize', 'ragged', 'pinto', 'white', 'roan', 'seed', 'bump', 'streakColor', 'sheen', 'shine', 'maneShine', 'roots', 'tips', 'strands']);
+const RECIPE_KEYS = new Set(['base', 'points', 'mane', 'belly', 'sooty', 'muzzle', 'grey', 'dapples', 'dappleSize', 'greyLegs', 'face', 'star', 'faceSize', 'ragged', 'pinto', 'white', 'roan', 'seed', 'bump', 'streakColor', 'sheen', 'shine', 'maneShine', 'roots', 'tips', 'strands', 'maneLength', 'tailLength']);
 const panel = $('#panel');
 const getV = (k) => (RECIPE_KEYS.has(k) ? state.r[k] : state[k]);
 function setField(k, v) {
@@ -399,7 +421,7 @@ function usePreset(p) {
 function applyMask() {
   for (const h of horses) h.mat.coat.uniforms.uMask.value = MASK_CODE[state.mask] || 0;
   const L = $('#legend');
-  const text = { parts: 'red: legs · green: neck and head · blue: hindquarters (mane, tail mixed in)', hair: 'red: mane · green: tail · blue: root (dark) to tip', white: 'white hair', flow: 'the way the hair lies, as a colour (x, y, z)', streaks: 'the hair streaks', heights: 'a line every 10 cm up from the ground; red: hoof, green: points', albedo: 'the coat\'s colour with no light on it' }[state.mask];
+  const text = { parts: 'red: legs · green: neck and head · blue: hindquarters (mane, tail mixed in)', white: 'white hair', flow: 'the way the hair lies, as a colour (x, y, z)', streaks: 'the hair streaks', heights: 'a line every 10 cm up from the ground; red: hoof, green: points', albedo: 'the coat\'s colour with no light on it', shade: 'how much sky each spot sees (baked at load)', hair: 'red: mane roots · green: tail dock · blue: root to tip' }[state.mask];
   if (text) { L.hidden = false; L.innerHTML = `<b>Showing:</b> ${text}`; } else L.hidden = true;
 }
 
@@ -439,13 +461,15 @@ function fillStats() {
   const ot = oldTris();
   const eyeTris = shape.eye ? (shape.eye.geometry.index ? shape.eye.geometry.index.count / 3 : 0) : 0;
   t.innerHTML = `<thead><tr><th></th><th>New</th><th>Old</th></tr></thead><tbody>
-    ${row('Triangles', num(shape.tris + eyeTris), ot ? num(ot) : '…')}
-    ${row('Meshes (draw calls)', shape.eye ? '2 (body, eyes)' : '1', '1')}
+    ${row('Triangles', num(shape.tris + eyeTris + hair.tris), ot ? num(ot) : '…')}
+    ${row('&nbsp; of them hair cards', num(hair.tris) + ' (' + hair.cards + ' strips)', '–')}
+    ${row('Meshes (draw calls)', (shape.eye ? 3 : 2) + ' (body, eyes, hair)', '1')}
     ${row('Extra per corner', '12 bytes (' + kb(shape.attrBytes) + ')', '–')}
-    ${row('Pictures', '1 noise, 256 KB', 'none')}
+    ${row('Pictures', 'noise 256 KB, hair ' + kb(hairTexture().bytes), 'none')}
     ${row('ms per frame', bench.newMs ? (bench.newMs - bench.empty).toFixed(2) : '…', bench.oldMs ? (bench.oldMs - bench.empty).toFixed(2) : '…')}
     </tbody>`;
-  $('#cmpNote').textContent = `Loaded in ${Math.round(timing.load)} ms, coat set up (rest positions, parts, mane) in ${Math.round(timing.prep)} ms; shaders compiled and the first frame drawn in ${Math.round(timing.compile + timing.firstFrame)} ms (the coat's program, the old horse's and the ground's, all at once). One program for every horse: a stable of them is one compile.`
+  const hi = $('#hairInfo'); if (hi) hi.textContent = `${hair.cards} strips, ${num(hair.tris)} triangles, one draw`;
+  $('#cmpNote').textContent = `Loaded in ${Math.round(timing.load)} ms, coat set up (rest positions, parts, baked shade ${Math.round(shape.msAO)} ms, hair cards ${Math.round(timing.hair)} ms) in ${Math.round(timing.prep)} ms; shaders compiled and the first frame drawn in ${Math.round(timing.compile + timing.firstFrame)} ms (the coat's program, the old horse's and the ground's, all at once). One program for every horse: a stable of them is one compile.`
     + (bench.newMs ? ` Measured at ${bench.size} px, the horse alone (the empty frame, ${bench.empty.toFixed(2)} ms, taken off).` : '');
 }
 let frames = 0, fpsT = performance.now(), fps = 0, frameMs = 0;
@@ -454,8 +478,19 @@ function updateStats() {
   $('#stats').innerHTML = `<div class="t">Horse Lab</div>
     fps <b>${fps}</b> · ${frameMs.toFixed(1)} ms<br>
     draw calls <b>${I.calls}</b> · triangles <b>${num(I.triangles)}</b><br>
-    ${horses.length} horse${horses.length === 1 ? '' : 's'} · ${num(shape.tris)} triangles each<br>
+    ${horses.length} horse${horses.length === 1 ? '' : 's'} · ${num(shape.tris + hair.tris)} triangles each (${num(hair.tris)} hair)<br>
     shaders ready in <b>${Math.round(timing.compile + timing.firstFrame)}</b> ms (first frame)`;
+}
+
+// the hair's clock (it stops when the clip is paused), how fast the clip carries the horse, and which way is behind it
+const _back = new THREE.Vector3();
+function updateHair() {
+  const spd = (CLIP_SPEED[state.clip] || 0) * state.speed;
+  for (const h of horses) {
+    const U = h.hairMat.hair.uniforms;
+    U.uTime.value = clock.t; U.uSpeed.value = spd;
+    h.a.root.getWorldDirection(_back); U.uBackW.value.copy(_back.negate());
+  }
 }
 
 // ── run ───────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -472,7 +507,8 @@ function loop() {
   requestAnimationFrame(loop);
   const t = performance.now(), dt = Math.min(0.05, (t - last) / 1000); last = t;
   resize(); controls.update();
-  if (state.playing) for (const h of horses) { h.a.update(dt); if (h.old) h.old.a.update(dt); }
+  if (state.playing) { clock.t += dt; for (const h of horses) { h.a.update(dt); if (h.old) h.old.a.update(dt); } }
+  updateHair();
   if (state.spin && (state.view === 'turntable' || state.view === 'gallop')) for (const h of horses) h.root.rotation.y += dt * 0.35;
   const t0 = performance.now(); renderer.render(scene, camera); frameMs = frameMs * 0.9 + (performance.now() - t0) * 0.1;
   placeTags();
@@ -512,6 +548,9 @@ window.HL = {
     state.playing = !pause; const pb = $('#playBtn'); if (pb) pb.textContent = state.playing ? 'Pause' : 'Play'; fillClips();
   },
   old(on) { setField('old', !!on); return needOld(); },
+  // move the hair's clock on (its ripple), without moving the clips
+  run(sec) { clock.t += sec; updateHair(); },
+  get clipLengths() { return newLib ? Object.fromEntries(newLib.kinds.meshy.clips.map((c) => [c.name, +c.duration.toFixed(2)])) : {}; },
   mask(m) { state.mask = m; applyMask(); },
   light(az, hour) { if (az != null) state.az = az; if (hour != null) state.hour = hour; applyLight(); },
   turn(rad) { for (const h of horses) h.root.rotation.y = rad; },
