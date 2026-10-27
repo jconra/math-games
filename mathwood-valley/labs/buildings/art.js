@@ -232,27 +232,38 @@ function raggedEdge(x, y, w, h, seed, depth, rough) {
 }
 function drawSheriffSign(g, [x0, y0, w, h]) {
   const L = canvasOf(w, h), lg = L.getContext('2d');
-  // 1. the old cream coat showing where the ochre has peeled: soft blotches round the letters, thickest across the
-  // middle of the sign, gone at its edges
-  const img = lg.createImageData(w, h), d = img.data;
+  // 1. the older sign under it: "ASSAY OFFICE" in big faded brick-red letters, painted on the bare wall, mostly worn;
+  // they show faintly round the newer sign and plainly where its panel has peeled
+  const G = canvasOf(w, h), gg = G.getContext('2d');
+  gg.textAlign = 'center'; gg.textBaseline = 'middle'; gg.fillStyle = 'rgba(132,58,40,1)';
+  let gs = 150; gg.font = `400 ${gs}px Rye, Georgia, serif`;
+  while (gg.measureText('ASSAY OFFICE').width > w * 0.9 && gs > 60) { gs -= 4; gg.font = `400 ${gs}px Rye, Georgia, serif`; }
+  gg.fillText('ASSAY OFFICE', w / 2 + 10, h * 0.5 + 4);
+  wear(gg, [0, 0, w, h], 0.3, 1231, 2.2);
+  // 2. the newer sign's panel: cream paint with hard, ragged edges and a dark border line just inside them, flaking
+  // off in crisp patches along the boards (where it has gone, the old letters show)
+  const P = canvasOf(w, h), pg = P.getContext('2d'), img = pg.createImageData(w, h), d = img.data;
+  const mx = 34, my = 22;
   for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
     const u = x / w, v = y / h, i = (y * w + x) * 4;
-    const band = Math.min(1, Math.min(u, 1 - u) / 0.12) * Math.min(1, Math.min(v, 1 - v) / 0.2);
-    const n = fbm(u * 2.5, v * 1.2, 5, 3, 4, 1201) * 0.75 + 0.25 * fbm(u * 9, v * 4, 9, 4, 2, 1207);
-    const a = clamp01((n - 0.5 + 0.2 * band) * 4.5) * band;
-    // (streaky: the paint goes along the boards, in long horizontal flakes)
-    const flake = fbm(u * 1.0, v * 6.0, 4, 6, 3, 1213);
-    d[i] = 228; d[i + 1] = 216; d[i + 2] = 188; d[i + 3] = 255 * clamp01(a * (0.55 + 0.6 * flake)) * 0.85;
+    const edge = Math.min(x - mx, w - mx - x, y - my, h - my - y) + (fbm(u * 3, v * 2, 12, 6, 3, 1203) - 0.5) * 14;
+    if (edge < 0) continue;
+    const flake = fbm(u * 1.4, v * 5.5, 7, 9, 4, 1213) * 0.7 + fbm(u * 6, v * 9, 13, 11, 2, 1219) * 0.3;
+    if (flake < 0.36 + 0.08 * (1 - Math.min(1, edge / 30))) continue;                    // peeled (crisp)
+    const border = edge > 5 && edge < 9 ? 1 : 0, n = 0.94 + 0.08 * (fbm(u, v, 20, 6, 2, 1223) - 0.5);
+    d[i] = border ? 70 : 226 * n; d[i + 1] = border ? 50 : 214 * n; d[i + 2] = border ? 36 : 184 * n; d[i + 3] = 255;
   }
-  lg.putImageData(img, 0, 0);
-  // 2. the ghost of the older sign, in a lighter paint: big thin letters, mostly gone
-  const G = canvasOf(w, h), gg = G.getContext('2d');
-  gg.textAlign = 'center'; gg.textBaseline = 'middle'; gg.fillStyle = 'rgba(246,236,210,1)';
-  gg.font = '400 128px Rye, Georgia, serif';
-  let gs = 128; while (gg.measureText('ASSAY OFFICE').width > w * 0.86 && gs > 60) { gs -= 4; gg.font = `400 ${gs}px Rye, Georgia, serif`; }
-  gg.fillText('ASSAY OFFICE', w / 2 + 14, h * 0.5 - 6);
-  wear(gg, [0, 0, w, h], 0.42, 1231, 2.2);
+  pg.putImageData(img, 0, 0);
+  // (the old letters: faint on the bare wall round the panel, ghosting through its thin cream coat, plain where the
+  // coat has peeled)
   lg.globalAlpha = 0.34; lg.drawImage(G, 0, 0); lg.globalAlpha = 1;
+  lg.drawImage(P, 0, 0);
+  const Gin = canvasOf(w, h), gig = Gin.getContext('2d');
+  gig.drawImage(G, 0, 0); gig.globalCompositeOperation = 'destination-in'; gig.drawImage(P, 0, 0);
+  lg.globalAlpha = 0.22; lg.drawImage(Gin, 0, 0); lg.globalAlpha = 1;
+  const Gs = canvasOf(w, h), gsg = Gs.getContext('2d');
+  gsg.drawImage(G, 0, 0); gsg.globalCompositeOperation = 'destination-out'; gsg.drawImage(P, 0, 0);
+  lg.globalAlpha = 0.5; lg.drawImage(Gs, 0, 0); lg.globalAlpha = 1;
   // 3. the letters: chunky dark slab capitals, a dot between the words, the paint worn back with noise
   const T = canvasOf(w, h), tg = T.getContext('2d');
   tg.textBaseline = 'middle'; tg.textAlign = 'left';

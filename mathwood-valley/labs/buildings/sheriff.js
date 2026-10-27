@@ -39,7 +39,8 @@ import { SHERIFF_ART, regionUV } from './art.js';
 // ── the recipe ───────────────────────────────────────────────────────────────────────────────────────────────────────
 // (one more of the Stone Lab's palettes, for the jail: the warm tan and grey fieldstone of the concept picture, its
 // odd stone rust-brown; added to its list here, so the panel's picker offers it for any building)
-if (!PALETTES.fieldstone) PALETTES.fieldstone = { label: 'Tan fieldstone', base: [0.57, 0.49, 0.38], second: [0.5, 0.48, 0.44], dark: [0.35, 0.33, 0.3], rust: [0.56, 0.41, 0.29] };
+// (grey-tan: its warm stones only a little warm, so none reads as a peach patch from the street)
+if (!PALETTES.fieldstone) PALETTES.fieldstone = { label: 'Tan fieldstone', base: [0.53, 0.48, 0.41], second: [0.47, 0.46, 0.43], dark: [0.34, 0.33, 0.31], rust: [0.54, 0.46, 0.37] };
 // paint colours are the paint itself (linear), before the weathering fades and wears it
 export const PAINTS = {
   none: { label: 'None (bare wood)', c: null },
@@ -72,10 +73,10 @@ const RIDGE = EAVE + (XR - XL) / 2 * TP;                   // 5.34
 const ROOF0 = RIDGE + 0.17;                                // the roof boards' top at the ridge
 const EO = 0.28, GO = 0.32;                                // the roof past the side walls; past the back wall
 const CEIL = 3.55;                                         // the office's plank ceiling
-// the false front: above the porch roof it runs out past the side walls (WING each side), hiding the roof's front
-// corners; three steps: a0, a1, top
+// the false front: above the porch roof it runs out past the left side wall (WING), hiding the roof's front corner;
+// on the right, over the jail, the roof's edge shows beside it (as in the concept); three steps: a0, a1, top
 const WING = 0.38, WINGY = 3.52;
-const STEPS = [[XL - WING, -3.45, 5.05], [-3.45, -0.6, 6.15], [-0.6, XR + WING, 5.6]];
+const STEPS = [[XL - WING, -3.45, 5.05], [-3.45, -0.6, 6.15], [-0.6, XR, 5.6]];
 const PT = 3.45, PP = 12 * Math.PI / 180;                  // the porch roof: its top against the false front, pitch
 const PD = 2.55, PZ = ZF + PD;                             // the boardwalk: how deep; its front edge
 const POSTS = [XL + 0.12, -2.25, XR - 0.12];               // the porch posts (x)
@@ -102,20 +103,21 @@ const porchUnder = (z) => PT - (z - (ZF + 0.045)) * Math.tan(PP);
 
 // ── colours: tints on the trim sheet's strips (1 = the strip as drawn) ──────────────────────────────────────────────
 const BARE = [1.1, 1.1, 1.12];            // the siding under the paint: weathered grey
-const INNER = [1.3, 1.12, 0.9];           // the lining inside: honey-brown pine, kept from the sun
+const INNER = [1.12, 1.06, 0.97];         // the lining inside: pine gone grey-brown with age, kept from the sun
 const TRIM = [0.95, 0.93, 0.92];          // casings, corner boards, the caps: bare weathered wood
 const FRAME = [1.06, 0.96, 0.84];         // posts, beams, rafters, studs
 const SHAKE = [0.74, 0.7, 0.66];
 const ROOFB = [0.66, 0.6, 0.54];
 const PORCHR = [0.9, 0.88, 0.86];         // the porch roof's planks: sun-greyed
 const DECK = [1.0, 0.95, 0.9];            // the boardwalk
-const FLOOR = [1.2, 1.02, 0.82];          // the office floor: worn, warmer
+const FLOOR = [0.82, 0.71, 0.58];         // the floors: darker than the walls, worn
 const DOORW = [1.0, 0.92, 0.84];
 const DARKW = [0.62, 0.56, 0.5];          // the notice board, the jail's lining: old dark boards
 const FURN = [0.82, 0.62, 0.46];          // furniture: oiled, darker, browner
 const IRON = [0.85, 0.8, 0.76];
-const TIN = [3.6, 3.4, 3.2];              // a stovepipe's tin, on the dark iron
-const STRAPI = [1.25, 1.12, 1.0];         // the cells' strap iron: dark, a little rusty
+const TIN = [5.4, 6.8, 8.4];              // a stovepipe's tin and the flashing: grey (the dark iron is a warm brown-black)
+const STRAPI = [0.8, 0.9, 1.08];          // the cells' iron: dark, a cool grey
+const LIME = [1.6, 1.66, 1.72];           // whitewash, on the (warm) rubble picture: a cool white
 const STRAP = [0.035, 0.032, 0.03];       // iron straps painted on the doors (one mesh with the planks)
 
 // ── where water drips from (the grime streaks start there) and each corner's tint ──────────────────────────────────
@@ -172,8 +174,8 @@ function walls(k, paint) {
   const sid = (o) => ({ paint, tint: BARE, inTint: INNER, bare: 0.04, ...o });
   // the front, from the boardwalk up to the false front's steps (the patched board low beside the door); its back
   // is drawn where it stands over the roof
-  const wings = [{ a0: XL - WING - 0.01, a1: XL, y0: -1, y1: WINGY }, { a0: XR, a1: XR + WING + 0.01, y0: -1, y1: WINGY }];
-  lapSiding(k, FRONT, sid({ a0: XL - WING, a1: XR + WING, y0: FL - 0.06, tops: STEPS, opens: [DOOR, WIN_F, ...wings], origin: XL - WING, patch: [{ a: 0.85, y: 1.02 }], backFrom: (a) => (a < XL + 0.02 || a > XR - 0.02 ? 3.4 : roofUnder(a) - 0.16) }));
+  const wings = [{ a0: XL - WING - 0.01, a1: XL, y0: -1, y1: WINGY }];
+  lapSiding(k, FRONT, sid({ a0: XL - WING, a1: XR, y0: FL - 0.06, tops: STEPS, opens: [DOOR, WIN_F, ...wings], origin: XL - WING, patch: [{ a: 0.85, y: 1.02 }], backFrom: (a) => (a < XL + 0.02 || a > XR - 0.02 ? 3.4 : roofUnder(a) - 0.16) }));
   lapSiding(k, WEST, sid({ a0: ZB, a1: ZF, y0: Y0, tops: [[ZB, ZF, WTOP]], opens: [WIN_L1, WIN_L2], origin: ZB }));
   lapSiding(k, BACK, sid({ a0: -XR, a1: -XL, y0: Y0, tops: [[-XR, -XL, EAVE + 0.02]], opens: [WIN_B, DOOR_B], origin: -XR }));
   // the right side: full height in front of the jail and behind it; where the jail stands, only over its roof
@@ -185,43 +187,63 @@ function walls(k, paint) {
   const cb = (w, a, y0, y1, wd = 0.15) => k.board([wd, y1 - y0, 0.03], null, null, { m: wallM(w, a, (y0 + y1) / 2, 0.035), long: 1, tint: vary(k, TRIM, 0.88, 1.05), skip: '-z-y', cuts: [-1.2, 0, 1.2].filter((c) => Math.abs(c) < (y1 - y0) / 2 - 0.3), segFaces: '+z', outside: true });
   // (each pair meets: the front or back one runs 5 cm past the side wall's face, the side one's end runs in under it)
   // (the pilasters: at the building's corners up to the wings, and up the wings' outer edges to the caps)
-  cb(FRONT, XL + 0.03, FL - 0.06, PT - 0.06, 0.16); cb(FRONT, XR - 0.03, FL - 0.06, PT - 0.06, 0.16);
-  cb(FRONT, XL - WING + 0.08, WINGY, STEPS[0][2], 0.16); cb(FRONT, XR + WING - 0.08, WINGY, STEPS[2][2], 0.16);
+  cb(FRONT, XL + 0.03, FL - 0.06, PT - 0.06, 0.16); cb(FRONT, XR - 0.03, FL - 0.06, STEPS[2][2], 0.16);
+  cb(FRONT, XL - WING + 0.08, WINGY, STEPS[0][2], 0.16);
   cb(BACK, -XR + 0.03, Y0, EAVE + 0.12, 0.16); cb(BACK, -XL - 0.03, Y0, EAVE + 0.12, 0.16);
   // (the side walls' front corner boards stop under the false front's wings, which cover the corners above)
   cb(WEST, ZF - 0.045, Y0, WINGY - 0.02, 0.13); cb(WEST, ZB + 0.045, Y0, WTOP, 0.13);
-  cb(EAST, -ZF + 0.045, 0.05, WINGY - 0.02, 0.13); cb(EAST, -ZB - 0.045, Y0, WTOP, 0.13);
+  cb(EAST, -ZF + 0.045, 0.05, WTOP, 0.13); cb(EAST, -ZB - 0.045, Y0, WTOP, 0.13);
   // where the jail meets the office: a board over each joint, and the office's foot in front of the jail
   // (clear of the stones' bulges, over the siding's cut ends)
   cb(EAST, -ZJF - 0.1, 0.05, WTOP, 0.13); cb(EAST, -ZJB + 0.1, Y0, WTOP, 0.13);
   k.board([ZF - ZJF - 0.08, 0.22, 0.025], null, null, { m: wallM(EAST, -(ZF + ZJF) / 2, 0.15, 0.03), long: 0, tint: vary(k, TRIM, 0.8, 0.9), skip: '-z', outside: true });
   // the false front's side edges over the side walls: an end board over the boards' ends and the studs behind them
   // (and under each wing a soffit board, so it isn't hollow seen from below or behind)
-  for (const [x, y1, s] of [[XL - WING, STEPS[0][2], -1], [XR + WING, STEPS[2][2], 1]]) {
-    k.board([0.05, y1 - WINGY, 0.22], [x + s * 0.025, (y1 + WINGY) / 2, ZF - 0.07], null, { long: 1, tint: vary(k, TRIM, 0.85, 1.0), outside: true });
-    k.board([WING + 0.04, 0.025, 0.2], [x - s * (WING / 2 - 0.02), WINGY + 0.0125, ZF - 0.08], null, { long: 0, tint: vary(k, TRIM, 0.75, 0.9), outside: true });
-  }
+  k.board([0.05, STEPS[0][2] - WINGY, 0.22], [XL - WING - 0.025, (STEPS[0][2] + WINGY) / 2, ZF - 0.07], null, { long: 1, tint: vary(k, TRIM, 0.85, 1.0), outside: true });
+  k.board([WING + 0.04, 0.025, 0.2], [XL - WING / 2 + 0.02, WINGY + 0.0125, ZF - 0.08], null, { long: 0, tint: vary(k, TRIM, 0.75, 0.9), outside: true });
+  k.board([0.05, STEPS[2][2] - WTOP + 0.06, 0.22], [XR + 0.025, (STEPS[2][2] + WTOP - 0.06) / 2, ZF - 0.07], null, { long: 1, tint: vary(k, TRIM, 0.85, 1.0), skip: '-y', outside: true });
   // a plank step outside the back door
   k.board([1.1, 0.05, 0.42], [0.5, 0.22, ZB - 0.25], null, { long: 0, tint: vary(k, DECK, 0.85, 1.0) });
   for (const x of [0.05, 0.95]) k.board([0.1, 0.2, 0.38], [x, 0.1, ZB - 0.25], null, { long: 2, tint: vary(k, FRAME, 0.7, 0.85), skip: '-y' });
   // the openings' trim, and the windows
-  casing(k, FRONT, { ...DOOR, y0: FL }, { tint: TRIM, depth: 0.19, width: 0.12 });
-  casing(k, BACK, { ...DOOR_B, y0: FL - 0.1 }, { tint: TRIM, depth: 0.19, width: 0.1 });
+  casing(k, FRONT, { ...DOOR, y0: FL }, { tint: TRIM, depth: 0.19, width: 0.12 }); backing(k, FRONT, DOOR);
+  casing(k, BACK, { ...DOOR_B, y0: FL - 0.1 }, { tint: TRIM, depth: 0.19, width: 0.1 }); backing(k, BACK, DOOR_B);
   windowIn(k, FRONT, WIN_F, 3); windowIn(k, WEST, WIN_L1, 3); windowIn(k, WEST, WIN_L2, 3); windowIn(k, BACK, WIN_B, 3);
 }
-// a six-pane window: casing, sill, the sash (two columns of three panes: glazing bars), the pane's glow
+// a six-pane window: casing, sill, the sash (two columns of three panes: glazing bars), the pane's glow; and inside: the
+// sash seen from the room too, a casing round the opening on the lining, a stool and an apron under it, faintly tinted
+// glass facing in
 function windowIn(k, w, op, rows) {
   casing(k, w, op, { tint: TRIM, depth: 0.19 });
+  backing(k, w, op);
   const wd = op.a1 - op.a0, h = op.y1 - op.y0, ac = (op.a0 + op.a1) / 2, yc = (op.y0 + op.y1) / 2;
   k.parts.glow.push({ size: [wd, h, 0], m: wallM(w, ac, yc, -0.05), pane: true, kind: GLOW.window, col: [1.8, 0.7, 0.18] });
-  // the sash: a frame round the glass, a bar up the middle, bars across
-  for (const s of [-1, 1]) k.board([0.05, h, 0.04], null, null, { m: wallM(w, ac + s * (wd / 2 - 0.025), yc, -0.035), long: 1, tint: TRIM, skip: '-z' });
-  for (const y of [op.y0 + 0.03, op.y1 - 0.03]) k.board([wd - 0.1, 0.06, 0.04], null, null, { m: wallM(w, ac, y, -0.035), long: 0, tint: TRIM, skip: '-z' });
-  k.board([0.03, h - 0.1, 0.03], null, null, { m: wallM(w, ac, yc, -0.035), long: 1, tint: TRIM, skip: '-z' });
-  for (let i = 1; i < rows; i++) k.board([wd - 0.1, 0.03, 0.03], null, null, { m: wallM(w, ac, op.y0 + 0.06 + (h - 0.12) * i / rows, -0.035), long: 0, tint: TRIM, skip: '-z' });
+  // the sash: a frame round the glass, a bar up the middle, bars across (both faces drawn)
+  for (const s of [-1, 1]) k.board([0.055, h, 0.045], null, null, { m: wallM(w, ac + s * (wd / 2 - 0.0275), yc, -0.035), long: 1, tint: TRIM });
+  for (const y of [op.y0 + 0.03, op.y1 - 0.03]) k.board([wd - 0.11, 0.06, 0.045], null, null, { m: wallM(w, ac, y, -0.035), long: 0, tint: TRIM });
+  k.board([0.035, h - 0.1, 0.035], null, null, { m: wallM(w, ac, yc, -0.035), long: 1, tint: TRIM });
+  for (let i = 1; i < rows; i++) k.board([wd - 0.11, 0.035, 0.035], null, null, { m: wallM(w, ac, op.y0 + 0.06 + (h - 0.12) * i / rows, -0.035), long: 0, tint: TRIM });
+  panes.push(pane(wd - 0.04, h - 0.04, mul(wallM(w, ac, yc, -0.06), RY(Math.PI))));
+  // inside: the casing on the lining's face (14 cm in), the stool, the apron
+  const o = -INS - 0.03, cw = 0.09;
+  for (const s of [-1, 1]) k.board([cw, h + cw, 0.02], null, null, { m: wallM(w, ac + s * (wd / 2 + cw / 2), yc + cw / 2, o), long: 1, tint: vary(k, INNER, 0.8, 0.9), skip: '+z', inside: true });
+  k.board([wd + 2 * cw + 0.04, 0.1, 0.022], null, null, { m: wallM(w, ac, op.y1 + cw + 0.05, o), long: 0, tint: vary(k, INNER, 0.8, 0.9), skip: '+z', inside: true });
+  k.board([wd + 2 * cw + 0.1, 0.032, 0.13], null, null, { m: wallM(w, ac, op.y0 - 0.016, o - 0.03), long: 0, tint: vary(k, INNER, 0.85, 0.95), inside: true });
+  k.board([wd + 2 * cw, 0.08, 0.02], null, null, { m: wallM(w, ac, op.y0 - 0.08, o), long: 0, tint: vary(k, INNER, 0.8, 0.9), skip: '+z', inside: true });
   const c = new THREE.Vector3(ac, 0, w.d).applyMatrix4(RY(w.th));
   SILLS.push({ x: c.x + w.ox, z: c.z + w.oz, hw: Math.abs(Math.cos(w.th)) * (wd / 2 + 0.2) + 0.15, hd: Math.abs(Math.sin(w.th)) * (wd / 2 + 0.2) + 0.15, y: op.y0 - 0.06 });
 }
+// SHEATHING behind the siding round an opening: a lap siding row that crosses an opening's top or foot is cut away
+// over the whole opening, leaving a strip between the opening and its trim; this board fills it (only seen there)
+function backing(k, w, op) {
+  // (both faces: the inside lining's rows are cut the same way, and from the room it shows through there too)
+  const wd = op.a1 - op.a0 + 0.24, ac = (op.a0 + op.a1) / 2;
+  k.board([wd, 0.27, 0.015], null, null, { m: wallM(w, ac, op.y1 + 0.135, -0.012), long: 0, tint: vary(k, BARE, 0.7, 0.8), outside: true });
+  if (!op.door) k.board([wd, 0.27, 0.015], null, null, { m: wallM(w, ac, op.y0 - 0.135, -0.012), long: 0, tint: vary(k, BARE, 0.7, 0.8), outside: true });
+}
+// glass seen from inside: a plain plane (drawn faintly tinted, see-through, no light baked)
+const panes = [];
+function pane(w, h, m) { const g = new THREE.PlaneGeometry(w, h); g.applyMatrix4(m); return g; }
 // the inside lining: plain boards, flat, across the inside of a wall from the floor to the ceiling, cut round its
 // openings (the reveal boards of the casings line the openings through the wall)
 function lining(k, w, a0, a1, y0, y1, opens, o = {}) {
@@ -268,7 +290,7 @@ function falseFront(k) {
   }
   // behind it, over the roof: studs every 0.6 m (where the nails are), a plate under each cap, two braces down to
   // the roof
-  for (const a of [XL - WING + 0.04, ...Array.from({ length: 20 }, (_, i) => XL - WING + 0.6 * (i + 1)).filter((x) => x < XR + WING - 0.1), XR + WING - 0.04]) {
+  for (const a of [XL - WING + 0.04, ...Array.from({ length: 20 }, (_, i) => XL - WING + 0.6 * (i + 1)).filter((x) => x < XR - 0.1), XR - 0.04]) {
     const y0 = a < XL || a > XR ? WINGY + 0.03 : roofTop(a) - 0.04, y1 = stepTop(a) - 0.05;
     if (y1 - y0 > 0.1) k.board([0.05, y1 - y0, 0.1], [a, (y0 + y1) / 2, ZF - 0.095], null, { long: 1, tint: vary(k, FRAME, 0.85, 1.05), skip: '-y+z', outside: true });
   }
@@ -288,24 +310,48 @@ function footing(r, env) {
   return [sw.stone, sw.mortar];
 }
 
-// ── the jail block: a U of fieldstone whose arms end against the office's wall ──────────────────────────────────────
-// (the outline runs with its outside on the right, walked from above, the front face first: front, right side, back,
-// the back arm's end, then the inside faces back to the front arm's end)
+// ── the jail block: fieldstone outside only (the Stone Lab's wall maker) ──────────────────────────────────────────
+// Its outline is the block's outside, run with the outside on the right, walked from above, the front face first:
+// front, right side, back, and the side against the office (buried 5 cm in the office's wall, out of sight). It is laid
+// as an outer skin of stone: inside, its walls are whitewashed (jailInside), so no stone is laid on the inside faces.
+// Its openings go right through the skin (op.open) with nothing behind them.
 function jailStone(r, env) {
-  const loop = [[JX0, ZJF], [XJ, ZJF], [XJ, ZJB], [JX0, ZJB], [JX0, ZJB + JT], [XJ - JT, ZJB + JT], [XJ - JT, ZJF - JT], [JX0, ZJF - JT]];
-  const G = -0.12;
-  SHAPES.sheriffJail = { label: 'Sheriff\'s jail', stones: { size: 0.75, round: true }, make: () => ({ H: JH,
+  const loop = [[JX0, ZJF], [XJ, ZJF], [XJ, ZJB], [JX0, ZJB]];
+  const G = -0.12, dz = (-DOOR_J.a1 - DOOR_J.a0) / 2;
+  // (its stones laid long and flat, as fieldstone is: not the Stone Lab jail's round cobbles, which stood on end)
+  SHAPES.sheriffJail = { label: 'Sheriff\'s jail', stones: { size: 0.75, round: false }, make: () => ({ H: JH,
     sections: [{ loop0: loop, loop1: loop, y0: G, y1: JH - JCAP }],
     steps: [{ face: 0, u: JDOOR.u, w: 1.45, depth: 0.42, h: 0.17 }],
     openings: [
-      { face: 0, u: JDOOR.u, w: JDOOR.w, v0: G, v1: JDOOR.h, kind: 'door', through: true, t: JT, back: 6 },
-      { face: 0, u: JWIN.u, w: JWIN.w, v0: JWIN.v0, v1: JWIN.v1, kind: 'window', through: true, t: JT, back: 6 },
-      // (the back face runs from the right corner; its inside face from the office's wall: backU says where)
-      ...JBACK.map((x) => ({ face: 2, u: XJ - x, w: 0.4, v0: 2.25, v1: 2.6, kind: 'window', through: true, t: JT, back: 4, backU: x - JX0 })),
+      { face: 0, u: JDOOR.u, w: JDOOR.w, v0: G, v1: JDOOR.h, kind: 'door', open: true, depth: JT },
+      { face: 0, u: JWIN.u, w: JWIN.w, v0: JWIN.v0, v1: JWIN.v1, kind: 'window', open: true, depth: JT },
+      ...JBACK.map((x) => ({ face: 2, u: XJ - x, w: 0.4, v0: 2.25, v1: 2.6, kind: 'window', open: true, depth: JT })),
+      // (the doorway from the office, through the skin's hidden side: wider and taller than the door, so its lining
+      // stays behind the office's own casing and the jail's planks)
+      { face: 3, u: dz - ZJB, w: (DOOR_J.a1 - DOOR_J.a0) + 0.24, v0: FL - 0.1, v1: DOOR_J.y1 + 0.12, kind: 'door', open: true, depth: 0.1 },
     ],
     top: { y: JH, t: JCAP, over: 0.11, rects: [{ x0: JX0, x1: XJ + 0.11, z0: ZJB - 0.11, z1: ZJF + 0.11, open: { x0: 0, x1: 1, z0: 1, z1: 1 }, ov: { x0: 0, x1: 0.11, z0: 0.11, z1: 0.11 } }] } }) };
-  const sw = buildStoneWall({ style: 'mortared', palette: r.stone, mortar: r.mortar, size: 0.56, irregularity: 0.55, colourMix: 0.5, bulge: 0.75, joint: 0.013, mortarDepth: 0.02, shape: 'sheriffJail', seed: r.seed * 7 + 3 }, env);
+  const sw = buildStoneWall({ style: 'mortared', palette: r.stone, mortar: r.mortar, size: 0.44, irregularity: 0.55, colourMix: 0.45, bulge: 0.75, joint: 0.013, mortarDepth: 0.02, shape: 'sheriffJail', seed: r.seed * 7 + 3 }, env);
   return { geos: [sw.stone, sw.mortar], stones: sw.stones, tris: sw.tris };
+}
+// a whitewashed wall inside the jail: plaster boxes (the rubble picture under the lime wash, as stone-style patches)
+// round its holes. ax 'x': the wall runs along x at z = at, facing nz; ax 'z': along z at x = at, facing nx
+function plasterWall(k, ax, at, face, a0, a1, y0, y1, holes) {
+  const xs = [...new Set([a0, a1, ...holes.flatMap((h) => [h[0], h[1]])])].sort((p, q) => p - q);
+  const ys = [...new Set([y0, y1, ...holes.flatMap((h) => [h[2], h[3]])])].sort((p, q) => p - q);
+  for (let i = 0; i + 1 < xs.length; i++) for (let j = 0; j + 1 < ys.length; j++) {
+    const ac = (xs[i] + xs[i + 1]) / 2, yc = (ys[j] + ys[j + 1]) / 2;
+    if (holes.some((h) => ac > h[0] && ac < h[1] && yc > h[2] && yc < h[3])) continue;
+    const L = xs[i + 1] - xs[i] + 0.002, H = ys[j + 1] - ys[j] + 0.002, tint = vary(k, LIME, 0.93, 1.04).map((c, n) => c * (n === 2 ? 0.98 : 1) * (0.88 + 0.12 * smooth01(yc, 0.2, 1.4)));
+    k.box('plaster', ax === 'x' ? [L, H, 0.03] : [0.03, H, L], ax === 'x' ? [ac, yc, at - face * 0.015] : [at - face * 0.015, yc, ac], null, { tint, skip: ax === 'x' ? (face > 0 ? '-z' : '+z') : (face > 0 ? '-x' : '+x') });
+  }
+  // (and the holes' reveals: plaster lining each one back to the stone's own lining)
+  for (const [h0, h1, hy0, hy1] of holes) {
+    const d = 0.12;
+    for (const s of [h0, h1]) k.box('plaster', ax === 'x' ? [0.02, hy1 - hy0, d] : [d, hy1 - hy0, 0.02], ax === 'x' ? [s, (hy0 + hy1) / 2, at - face * d / 2] : [at - face * d / 2, (hy0 + hy1) / 2, s], null, { tint: LIME.map((c) => c * 0.9) });
+    if (hy1 < y1 - 0.01) k.box('plaster', ax === 'x' ? [h1 - h0, 0.02, d] : [d, 0.02, h1 - h0], ax === 'x' ? [(h0 + h1) / 2, hy1, at - face * d / 2] : [at - face * d / 2, hy1, (h0 + h1) / 2], null, { tint: LIME.map((c) => c * 0.85) });
+    if (hy0 > y0 + 0.01) k.box('plaster', ax === 'x' ? [h1 - h0, 0.02, d] : [d, 0.02, h1 - h0], ax === 'x' ? [(h0 + h1) / 2, hy0, at - face * d / 2] : [at - face * d / 2, hy0, (h0 + h1) / 2], null, { tint: LIME.map((c) => c * 0.95) });
+  }
 }
 // the jail's solids for the bake (its walls less the openings, its roof), and what is fixed to it: the door frame and
 // sill, the bars in its windows, the flashing where its roof meets the office
@@ -329,8 +375,8 @@ function jailParts(k) {
   bars(W0, W1, JWIN.v0, JWIN.v1, ZJF - JT / 2, 5);
   for (const x of JBACK) bars(x - 0.2, x + 0.2, 2.25, 2.6, ZJB + JT / 2, 4);
   // the flashing: a strip of tin up the office's wall and over the slabs, where the roof meets it
-  k.box('iron', [0.012, 0.16, ZJF - ZJB + 0.12], [XR + 0.014, JH + 0.07, (ZJF + ZJB) / 2], null, { tint: [0.95, 0.92, 0.88], skip: '-x' });
-  k.box('iron', [0.18, 0.012, ZJF - ZJB + 0.12], [XR + 0.09, JH + 0.02, (ZJF + ZJB) / 2], null, { tint: [0.95, 0.92, 0.88], skip: '-y' });
+  k.box('iron', [0.012, 0.16, ZJF - ZJB + 0.12], [XR + 0.016, JH + 0.07, (ZJF + ZJB) / 2], null, { tint: TIN, skip: '-x' });
+  k.box('iron', [0.18, 0.012, ZJF - ZJB + 0.12], [XR + 0.09, JH + 0.025, (ZJF + ZJB) / 2], null, { tint: TIN, skip: '-y' });
 }
 
 // ── the roofs ────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -338,8 +384,9 @@ function roofs(k) {
   const len = ((XR - XL) / 2 + EO) / Math.cos(PITCH);
   // (along the ridge: from past the back wall to just behind the false front's boards)
   const common = { x0: 0, x1: 0, topY: ROOF0, len, pitch: PITCH, shakeT: SHAKE, boardT: ROOFB, rafterT: FRAME, barge: true, every: 0.8, rows: 2.2, cap: true };
-  roofSlope(k, mul(T(OXC, 0, 0), RY(Math.PI / 2)), { ...common, x0: -(ZF - 0.05), x1: -(ZB - GO) });
-  roofSlope(k, mul(T(OXC, 0, 0), RY(-Math.PI / 2)), { ...common, x0: ZB - GO, x1: ZF - 0.05 });
+  // (a rake board up the back gable, seated on the roof's edge; none at the front, behind the false front)
+  roofSlope(k, mul(T(OXC, 0, 0), RY(Math.PI / 2)), { ...common, x0: -(ZF - 0.05), x1: -(ZB - GO), rake: 'x1' });
+  roofSlope(k, mul(T(OXC, 0, 0), RY(-Math.PI / 2)), { ...common, x0: ZB - GO, x1: ZF - 0.05, rake: 'x0' });
 }
 
 // ── the boardwalk and the porch roof ─────────────────────────────────────────────────────────────────────────────────
@@ -395,8 +442,15 @@ function frontThings(k, lamps) {
   }
   const pz = ZF + 0.05, R = rng(77);
   const paste = (reg, w, x, y, rot) => pic(reg, w, w * reg[3] / reg[2], mul(T(x, y, pz + R() * 0.002), RZ(rot)));
-  paste(A.posters[0], 0.37, nx - 0.22, ny + 0.24, 0.02); paste(A.posters[1], 0.37, nx + 0.21, ny + 0.27, -0.03);
-  paste(A.notices[0], 0.24, nx - 0.29, ny - 0.3, 0.04); paste(A.notices[1], 0.24, nx + 0.0, ny - 0.33, -0.02); paste(A.notices[2], 0.22, nx + 0.29, ny - 0.27, 0.05);
+  // (crowded: older notices underneath, the two big posters over them, overlapping at all angles, some running off the
+  // board's edges, a torn one and scraps of others; each a hair in front of the one before)
+  let lay = 0;
+  const paste2 = (reg, w, x, y, rot) => pic(reg, w, w * reg[3] / reg[2], mul(T(x, y, pz + (lay++) * 0.0012), RZ(rot)));
+  paste2(A.notices[3], 0.24, nx - 0.3, ny + 0.48, -0.12); paste2(A.notices[1], 0.22, nx + 0.38, ny + 0.02, 0.09);
+  paste2(A.posters[2], 0.33, nx - 0.06, ny - 0.12, 0.05); paste2(A.notices[2], 0.2, nx - 0.4, ny - 0.02, -0.07);
+  paste2(A.posters[0], 0.37, nx - 0.22, ny + 0.24, 0.03); paste2(A.posters[1], 0.37, nx + 0.2, ny + 0.29, -0.05);
+  paste2(A.notices[0], 0.23, nx - 0.31, ny - 0.33, 0.06); paste2(A.notices[1], 0.24, nx + 0.02, ny - 0.36, -0.03); paste2(A.notices[2], 0.22, nx + 0.33, ny - 0.27, 0.08);
+  paste2(A.notices[3], 0.2, nx + 0.12, ny - 0.02, 0.2); paste2(A.notices[3], 0.17, nx + 0.46, ny + 0.45, -0.3);
   // (the torn one on the wall itself, between the window and the board; an older notice's scrap by the door)
   pic(A.posters[2], 0.38, 0.38 * A.posters[2][3] / A.posters[2][2], mul(T(-2.5, 1.95, ZF + 0.026), RZ(-0.04)));
   pic(A.notices[3], 0.22, 0.22 * A.notices[3][3] / A.notices[3][2], mul(T(-0.82, 1.55, ZF + 0.026), RZ(0.06)));
@@ -413,7 +467,7 @@ function frontThings(k, lamps) {
   }
   k.prism('iron', ngon(8, 0.035), 0.03, [sx, sy, ZF + 0.035], [Math.PI / 2, 0, 0], { tint: [1.2, 1.05, 0.85], smooth: true });
   // the lantern on an iron bracket over the gap between the board and the door
-  lamps.push(lantern(k, -0.74, 2.95, ZF + 0.31, { bracket: [0, -0.28], strength: 1.5 }));
+  lamps.push(lantern(k, -0.74, 2.95, ZF + 0.31, { bracket: [0, -0.28], strength: 1.5, outdoor: true }));
 }
 
 // ── the doors ────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -496,18 +550,25 @@ function officeInside(k, lamps) {
   casing(k, wallOf(-Math.PI / 2, -(XR - INS - 0.02)), { a0: -DOOR_J.a1, a1: -DOOR_J.a0, y0: FL, y1: DOOR_J.y1, door: true }, { tint: TRIM, depth: 0.25, width: 0.1 });
   k.board([0.2, 0.03, DOOR_J.a1 - DOOR_J.a0], [XR - 0.03, FL - 0.015, -(DOOR_J.a0 + DOOR_J.a1) / 2], null, { long: 2, tint: vary(k, FLOOR, 0.8, 0.9), inside: true });   // the threshold
 
-  // THE DESK: a top on two pedestals of drawers, a panel at the back, papers, an inkwell, a lamp
+  // THE DESK: a partner's desk: a top with a moulded edge on two pedestals, three drawers in each on both sides, a
+  // shallow drawer over the knee-hole (its line and knob), the knee-hole recessed, a panel far back in it; papers, an
+  // inkwell, a lamp
   const dx = -2.4, dz = 0.15, dw = 1.5, dd = 0.75, dh = 0.76, y = FL;
-  k.board([dw, 0.04, dd], [dx, y + dh - 0.02, dz], null, { long: 0, tint: vary(k, FURN, 0.9, 1.0), inside: true });
+  k.board([dw + 0.04, 0.035, dd + 0.04], [dx, y + dh - 0.0175, dz], null, { long: 0, tint: vary(k, FURN, 0.9, 1.0), inside: true });
+  k.board([dw, 0.025, dd], [dx, y + dh - 0.047, dz], null, { long: 0, tint: vary(k, FURN, 0.7, 0.8), inside: true, skip: '+y' });
   for (const s of [-1, 1]) {
     const px = dx + s * (dw / 2 - 0.22);
-    k.board([0.42, dh - 0.06, dd - 0.06], [px, y + (dh - 0.06) / 2, dz], null, { long: 1, tint: vary(k, FURN, 0.8, 0.9), inside: true, skip: '-y+y' });
-    for (let j = 0; j < 3; j++) {
-      k.board([0.36, 0.19, 0.02], [px, y + 0.13 + j * 0.21, dz - dd / 2 + 0.02], null, { long: 0, tint: vary(k, FURN, 0.95, 1.1), inside: true, skip: '+z' });
-      k.box('iron', [0.06, 0.015, 0.02], [px, y + 0.15 + j * 0.21, dz - dd / 2], null, { tint: [1.3, 1.0, 0.6] });
+    k.board([0.42, dh - 0.07, dd - 0.06], [px, y + (dh - 0.07) / 2, dz], null, { long: 1, tint: vary(k, FURN, 0.8, 0.9), inside: true, skip: '-y+y' });
+    for (const f of [-1, 1]) for (let j = 0; j < 3; j++) {
+      k.board([0.36, 0.19, 0.02], [px, y + 0.13 + j * 0.21, dz + f * (dd / 2 - 0.02)], null, { long: 0, tint: vary(k, FURN, 0.95, 1.12), inside: true, skip: f > 0 ? '-z' : '+z' });
+      k.box('iron', [0.07, 0.016, 0.02], [px, y + 0.15 + j * 0.21, dz + f * dd / 2], null, { tint: [1.4, 1.1, 0.65] });
     }
   }
-  k.board([dw - 0.88, dh - 0.25, 0.02], [dx, y + dh - 0.04 - (dh - 0.25) / 2, dz + dd / 2 - 0.05], null, { long: 0, tint: vary(k, FURN, 0.8, 0.9), inside: true });
+  for (const f of [-1, 1]) {
+    k.board([dw - 0.88, 0.1, 0.02], [dx, y + dh - 0.12, dz + f * (dd / 2 - 0.02)], null, { long: 0, tint: vary(k, FURN, 0.95, 1.1), inside: true, skip: f > 0 ? '-z' : '+z' });
+    k.box('iron', [0.06, 0.016, 0.02], [dx, y + dh - 0.12, dz + f * dd / 2], null, { tint: [1.4, 1.1, 0.65] });
+  }
+  k.board([dw - 0.88, dh - 0.3, 0.02], [dx, y + (dh - 0.3) / 2 + 0.1, dz], null, { long: 0, tint: vary(k, FURN, 0.6, 0.7), inside: true });
   k.solid([dw, dh, dd], [dx, y + dh / 2, dz]);
   pic(A.notices[0], 0.21, 0.27, mul(T(dx + 0.15, y + dh + 0.002, dz - 0.05), RX(-Math.PI / 2), RZ(0.3)));
   pic(A.notices[2], 0.21, 0.27, mul(T(dx + 0.38, y + dh + 0.003, dz + 0.05), RX(-Math.PI / 2), RZ(-0.2)));
@@ -523,7 +584,8 @@ function officeInside(k, lamps) {
   for (const [yy, d] of [[FL + 0.62, 0.12], [FL + 1.55, 0.09]]) k.board([0.95, 0.06, d], [gx, yy, gz + d / 2], null, { long: 0, tint: vary(k, FURN, 0.9, 1.0), inside: true });
   for (let i = 0; i < 3; i++) rifle(k, gx - 0.3 + i * 0.3, FL + 0.6, gz + 0.07, 0.06 * (i - 1));
   // THE STOVE: a pot-belly on four legs, its pipe up through the ceiling and the roof
-  const sx = 0.35, sz = -0.95;
+  // (to the left of the door's line, behind the front wall, so it isn't the first thing seen from the street)
+  const sx = -0.95, sz = -1.15;
   potBelly(k, sx, FL, sz);
   stovepipe(k, sx, sz, FL + 1.12, roofTop(sx) + 0.85, { r: 0.075, collarY: roofTop(sx) - 0.02, tint: TIN });
   k.prism('iron', ngon(8, 0.12), 0.02, [sx, CEIL - 0.01, sz], null, { tint: [0.6, 0.55, 0.5], smooth: true });
@@ -550,10 +612,11 @@ function officeInside(k, lamps) {
   cot(k, ix0 + 0.42, FL, -4.3);
   washStand(k, -2.65, FL, iz0 + 0.27);
   trunk(k, -1.0, FL, iz0 + 0.3);
-  lamps.push(lantern(k, ix1 - 0.2, 2.2, -3.6, { bracket: [0.18, 0], strength: 1.6 }));
+  lamps.push(lantern(k, ix0 + 0.2, 2.2, -2.6, { bracket: [-0.18, 0], strength: 1.6 }));
   // the back door, shut: Z-braced planks
   const bd = DOOR_B;
-  doorPlanks(k, mul(T(-bd.a0, FL - 0.08, ZB + 0.045), RY(Math.PI)), bd.a1 - bd.a0, bd.y1 - FL + 0.06);
+  // (a little bigger than its opening, flush with the wall's face: it fills its frame)
+  doorPlanks(k, mul(T(-bd.a0 + 0.02, FL - 0.1, ZB + 0.028), RY(Math.PI)), bd.a1 - bd.a0 + 0.04, bd.y1 - FL + 0.12);
   // and the hanging lantern over the desk
   lamps.push(lantern(k, -1.6, CEIL - 0.62, 0.55, { chain: 0.23, strength: 1.9 }));
 }
@@ -584,17 +647,17 @@ function rifle(k, x, y, z, lean) {
   k.box('iron', [0.012, 0.012, 0.09], null, null, { m: mul(M, T(0, 0.46, 0.06)), tint: [0.5, 0.48, 0.46] });  // the lever
 }
 function potBelly(k, x, y, z) {
-  for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) k.box('iron', [0.04, 0.16, 0.04], [x + sx * 0.17, y + 0.08, z + sz * 0.17], [0, 0, sx * 0.12], { tint: [0.4, 0.38, 0.36] });
-  const C = [0.32, 0.3, 0.29];
+  for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) k.box('iron', [0.04, 0.16, 0.04], [x + sx * 0.17, y + 0.08, z + sz * 0.17], [0, 0, sx * 0.12], { tint: [1.3, 1.3, 1.4] });
+  const C = [1.55, 1.6, 1.75];                 // (cast iron: a dark grey, its round sides catching the light)
   k.prism('iron', ngon(10, 0.24), 0.04, [x, y + 0.18, z], null, { tint: C, smooth: true });
   k.prism('iron', ngon(10, 0.2), 0.22, [x, y + 0.31, z], null, { tint: C, smooth: true, taper: -0.4, skip: '-y' });
   k.prism('iron', ngon(10, 0.28), 0.26, [x, y + 0.55, z], null, { tint: C, smooth: true, taper: 0.3, skip: '-y' });
   k.prism('iron', ngon(10, 0.2), 0.18, [x, y + 0.77, z], null, { tint: C, smooth: true, taper: 0.25, skip: '-y' });
-  k.prism('iron', ngon(10, 0.17), 0.04, [x, y + 0.88, z], null, { tint: [0.4, 0.38, 0.36], smooth: true });
+  k.prism('iron', ngon(10, 0.17), 0.04, [x, y + 0.88, z], null, { tint: [1.9, 1.9, 2.0], smooth: true });
   k.prism('iron', ngon(10, 0.12), 0.24, [x, y + 1.0, z], null, { tint: C, smooth: true, taper: 0.35 });
   // the fire door at the front, a glow through its grate
-  k.box('iron', [0.18, 0.14, 0.03], [x, y + 0.42, z + 0.235], [-0.2, 0, 0], { tint: [0.45, 0.42, 0.4] });
-  k.parts.glow.push({ size: [0.12, 0.03, 0.01], m: mul(T(x, y + 0.37, z + 0.255), RX(-0.2)), kind: GLOW.flame, col: [3, 1.0, 0.25] });
+  k.box('iron', [0.18, 0.14, 0.03], [x, y + 0.42, z + 0.235], [-0.2, 0, 0], { tint: [1.9, 1.9, 2.0] });
+  for (let i = 0; i < 3; i++) k.parts.glow.push({ size: [0.12, 0.012, 0.01], m: mul(T(x, y + 0.38 + i * 0.025, z + 0.255), RX(-0.2)), kind: GLOW.flame, col: [2.2, 0.75, 0.18] });
   k.solid([0.5, 1.0, 0.5], [x, y + 0.5, z]);
 }
 // a lock box: a little wooden chest bound in iron, a hasp and padlock (the game's lock boxes come here to be opened)
@@ -669,38 +732,44 @@ function jailInside(k, lamps, props) {
   k.board([0.4, 0.1, dz1 - dz0], [XR + 0.25, FL - 0.15, (dz0 + dz1) / 2], null, { long: 2, tint: vary(k, DARKW, 0.85, 1.0), inside: true });   // the step down
   // (the heavy door, hinged at the doorway's front side, stood open along the corridor)
   into(k, mul(T(XR + 0.08, FL - 0.02, dz1 - 0.02), RY(0.3)), (t) => jailDoor(t, { w: dz1 - dz0 - 0.04, h: dTop - FL - 0.02, side: 1 }), 4111);
-  // THE CELLS: a wall of woven strap iron across the jail behind the corridor, another between the two cells; a door
-  // in each cell's front (the left one standing open), a plank bunk on chains in each, a bucket
-  const strap = (size, pos, skip) => k.box('iron', size, pos, null, { tint: STRAPI, skip });
-  const lattice = (ax, a0, a1, at, gaps) => {
-    // verticals every 18 cm, flat straps across every 30 cm; a gap where a door is (gaps: [[a, b]])
-    const inGap = (a) => gaps.some(([p, q]) => a > p - 0.01 && a < q + 0.01);
-    for (let a = a0 + 0.06; a < a1 - 0.04; a += 0.18) if (!inGap(a)) strap(ax === 'x' ? [0.05, JCEIL - JFL, 0.008] : [0.008, JCEIL - JFL, 0.05], ax === 'x' ? [a, (JFL + JCEIL) / 2, at] : [at, (JFL + JCEIL) / 2, a], '+y-y');
-    for (let y = JFL + 0.12; y < JCEIL - 0.05; y += 0.3) {
+  // the stone walls inside: lime-washed (the stone skin's openings come through them)
+  const W0 = JX0 + JWIN.u - JWIN.w / 2, W1 = JX0 + JWIN.u + JWIN.w / 2;
+  plasterWall(k, 'x', z1, -1, x0, x1, JFL, JCEIL + 0.13, [[JDX - JDOOR.w / 2, JDX + JDOOR.w / 2, JFL - 0.01, JDOOR.h], [W0, W1, JWIN.v0, JWIN.v1]]);
+  plasterWall(k, 'z', x1, -1, z0, z1, JFL, JCEIL + 0.13, []);
+  plasterWall(k, 'x', z0, 1, x0, x1, JFL, JCEIL + 0.13, JBACK.map((x) => [x - 0.2, x + 0.2, 2.25, 2.6]));
+  // THE CELLS: a wall of iron bars across the jail behind the corridor, another between the two cells: round rods
+  // 2.5 cm thick every 14 cm, flat straps across them on the corridor side; a door in each cell's front (the left one
+  // standing open), a plank bunk on chains in each, a bucket. (The bars don't stop the light: no solid for the bake)
+  const rod = (h, pos) => k.prism('iron', ngon(6, 0.0125), h, pos, null, { tint: STRAPI, smooth: true, skip: '+y-y' });
+  const strapB = (size, pos) => k.box('iron', size, pos, null, { tint: STRAPI.map((c) => c * 0.8) });
+  const bars = (ax, a0, a1, at, gaps) => {
+    const inGap = (a) => gaps.some(([p, q]) => a > p - 0.04 && a < q + 0.04);
+    for (let a = a0 + 0.07; a < a1 - 0.04; a += 0.14) if (!inGap(a)) rod(JCEIL - JFL + 0.1, ax === 'x' ? [a, (JFL + JCEIL) / 2, at] : [at, (JFL + JCEIL) / 2, a]);
+    for (const y of [JFL + 0.12, 1.25, 2.25, JCEIL - 0.1]) {
       let spans = [[a0, a1]];
-      for (const [p, q] of gaps) if (y < 2.2) spans = spans.flatMap(([s, e]) => (q <= s || p >= e ? [[s, e]] : [[s, p], [q, e]].filter(([u, v]) => v - u > 0.05)));
-      for (const [s, e] of spans) strap(ax === 'x' ? [e - s, 0.05, 0.008] : [0.008, 0.05, e - s], ax === 'x' ? [(s + e) / 2, y, at + 0.009] : [at + 0.009, y, (s + e) / 2], ax === 'x' ? '+x-x' : '+z-z');
+      for (const [p, q] of gaps) if (y < 2.2) spans = spans.flatMap(([s, e]) => (q <= s || p >= e ? [[s, e]] : [[s, p - 0.03], [q + 0.03, e]].filter(([u, v]) => v - u > 0.05)));
+      for (const [s, e] of spans) strapB(ax === 'x' ? [e - s, 0.05, 0.01] : [0.01, 0.05, e - s], ax === 'x' ? [(s + e) / 2, y, at + 0.018] : [at + 0.018, y, (s + e) / 2]);
     }
   };
   const doors = [[1.55, 2.3], [3.2, 3.95]];
-  lattice('x', x0 + 0.04, x1 - 0.02, BARS, doors);
-  lattice('z', z0 + 0.02, BARS - 0.02, CELLX, []);
+  bars('x', x0 + 0.04, x1 - 0.02, BARS, doors);
+  bars('z', z0 + 0.02, BARS - 0.02, CELLX, []);
   for (const [p, q] of doors) {
-    // the door's frame (heavier bars up each side and across the top)
-    for (const xx of [p - 0.02, q + 0.02]) k.box('iron', [0.06, 2.2 - JFL, 0.03], [xx, (2.2 + JFL) / 2, BARS], null, { tint: STRAPI.map((c) => c * 0.9), skip: '-y' });
-    k.box('iron', [q - p + 0.1, 0.06, 0.03], [(p + q) / 2, 2.2, BARS], null, { tint: STRAPI.map((c) => c * 0.9) });
+    // the door's frame: flat bars up each side and across the top
+    for (const xx of [p - 0.03, q + 0.03]) k.box('iron', [0.05, 2.2 - JFL, 0.02], [xx, (2.2 + JFL) / 2, BARS + 0.005], null, { tint: STRAPI.map((c) => c * 0.85), skip: '-y' });
+    k.box('iron', [q - p + 0.11, 0.05, 0.02], [(p + q) / 2, 2.2, BARS + 0.005], null, { tint: STRAPI.map((c) => c * 0.85) });
   }
-  // the doors themselves: the left one open into the corridor, the right one shut, a padlock on it
+  // the doors themselves: rods in a frame of flat bar; the left one open into the corridor, the right one shut, a
+  // padlock on it
   const cellDoor = (M, w) => {
     const h = 2.17 - JFL - 0.04;
-    for (let a = 0.04; a < w; a += 0.16) k.box('iron', [0.045, h, 0.008], null, null, { m: mul(M, T(a, h / 2, 0)), tint: STRAPI, skip: '+y-y' });
-    for (let y = 0.1; y < h; y += 0.3) k.box('iron', [w, 0.05, 0.008], null, null, { m: mul(M, T(w / 2, y, 0.009)), tint: STRAPI, skip: '+x-x' });
-    for (const a of [0.01, w - 0.01]) k.box('iron', [0.03, h, 0.025], null, null, { m: mul(M, T(a, h / 2, 0.004)), tint: STRAPI.map((c) => c * 0.9), skip: '-y' });
+    for (let a = 0.08; a < w - 0.04; a += 0.14) k.prism('iron', ngon(6, 0.0115), h - 0.04, null, null, { m: mul(M, T(a, h / 2, 0)), tint: STRAPI, smooth: true, skip: '+y-y' });
+    for (const y of [0.06, h / 2, h - 0.06]) k.box('iron', [w, 0.05, 0.01], null, null, { m: mul(M, T(w / 2, y, 0.016)), tint: STRAPI.map((c) => c * 0.8) });
+    for (const a of [0.015, w - 0.015]) k.box('iron', [0.03, h, 0.02], null, null, { m: mul(M, T(a, h / 2, 0.006)), tint: STRAPI.map((c) => c * 0.8), skip: '-y' });
   };
   cellDoor(mul(T(doors[0][0], JFL + 0.03, BARS + 0.02), RY(-1.25)), doors[0][1] - doors[0][0]);
   cellDoor(T(doors[1][0], JFL + 0.03, BARS + 0.02), doors[1][1] - doors[1][0]);
-  k.box('iron', [0.07, 0.09, 0.03], [doors[1][1] - 0.06, 1.15, BARS + 0.05], null, { tint: [0.4, 0.36, 0.33] });
-  for (const [ax, a0, a1, at] of [['x', x0, x1, BARS], ['z', z0, BARS, CELLX]]) k.solid(ax === 'x' ? [a1 - a0, 2.8, 0.03] : [0.03, 2.8, a1 - a0], ax === 'x' ? [(a0 + a1) / 2, 1.6, at] : [at, 1.6, (a0 + a1) / 2]);
+  k.box('iron', [0.07, 0.09, 0.03], [doors[1][1] - 0.06, 1.15, BARS + 0.05], null, { tint: [0.9, 0.85, 0.8] });
   // the bunks: a plank shelf against the side wall, hung on two chains from the wall, a blanket on it
   for (const [bx, s] of [[x0 + 0.08, 1], [x1 - 0.02, -1]]) {
     const w = 0.7, L = 1.9, by = 0.62, bz = z0 + 0.15 + L / 2, cx = bx + s * w / 2;
@@ -724,7 +793,8 @@ function jailInside(k, lamps, props) {
   k.parts.glow.push({ size: [0.01, 0.03, 0.12], m: T(sx - 0.305, JFL + 0.34, sz), kind: GLOW.flame, col: [3, 1.0, 0.25] });
   stovepipe(k, sx, sz, JFL + 0.61, JH + 0.9, { r: 0.07, collarY: JH + 0.02, tint: TIN });
   k.solid([0.6, 0.6, 0.45], [sx, JFL + 0.3, sz]);
-  lamps.push(lantern(k, 1.9, 2.35, 0.81, { chain: JCEIL - 0.08 - 2.35 - 0.23, strength: 1.9 }));
+  lamps.push(lantern(k, 1.9, 2.35, 0.81, { chain: JCEIL - 0.08 - 2.35 - 0.23, strength: 1.6 }));
+  lamps.push(lantern(k, CELLX, 2.2, BARS + 0.35, { chain: JCEIL - 0.08 - 2.2 - 0.23 + 0.0, strength: 2.0 }));
 }
 
 // ── the props that go with it: each { type, x, y, z, rot, ... } ─────────────────────────────────────────────────────
@@ -763,8 +833,8 @@ function boardAttr(geo, parts, seed) {
 // ── build it all ─────────────────────────────────────────────────────────────────────────────────────────────────────
 export function buildSheriff(recipeIn = {}, env = {}) {
   const t0 = performance.now(), r = sheriffRecipe(recipeIn), paint = PAINTS[r.paint].c;
-  const k = new Kit(r.seed); k.parts.glow = []; k.parts.rope = [];
-  SILLS.length = 0; decals.length = 0;
+  const k = new Kit(r.seed); k.parts.glow = []; k.parts.rope = []; k.parts.plaster = [];
+  SILLS.length = 0; decals.length = 0; panes.length = 0;
   const lamps = [], extraProps = [];
   const marks = [], mark = (name) => marks.push([name, k.parts.wood.length, k.parts.iron.length]);
   walls(k, paint); mark('walls'); falseFront(k); mark('falseFront'); roofs(k); mark('roofs'); porch(k); mark('porch');
@@ -780,7 +850,7 @@ export function buildSheriff(recipeIn = {}, env = {}) {
     leaves.push({ group, geo: g, glass: glowGeometry(lk.parts.glow), hinge, open, closed: 0, parts: lk.parts.wood.length });
     k.solid([w, h, 0.08], null, null, mul(T(...hinge), RY(open), T(side * w / 2, h / 2, 0)));
   };
-  leafOf('office', [DOOR.a1 - 0.01, FL + 0.005, ZF - 0.05], -1, DOOR.a1 - DOOR.a0 - 0.02, 2.19, -100 * Math.PI / 180, officeDoor, r.seed * 19 + 1);
+  leafOf('office', [DOOR.a1 - 0.01, FL + 0.005, ZF - 0.05], -1, DOOR.a1 - DOOR.a0 - 0.02, 2.19, -58 * Math.PI / 180, officeDoor, r.seed * 19 + 1);
   const jw = JDOOR.w - 0.15;
   leafOf('jail', [JDX - jw / 2, JFL + 0.005, ZJF - 0.09], 1, jw, JDOOR.h - 0.1 - JFL - 0.01, -100 * Math.PI / 180, jailDoor, r.seed * 19 + 2);
 
@@ -795,6 +865,9 @@ export function buildSheriff(recipeIn = {}, env = {}) {
   geos.stone = mergeGeometries([...jail.geos, ...foot]); geos.stone.userData.ownAO = true;
   for (const g of [...jail.geos, ...foot]) g.dispose();
   geos.decal = mergeGeometries(decals); for (const g of decals) g.dispose(); decals.length = 0;
+  geos.pane = panes.length ? mergeGeometries(panes) : null; for (const g of panes) g.dispose(); panes.length = 0;
+  // (the jail's whitewashed walls: the rubble picture, stone-style patches)
+  geos.plaster = buildGeometry(k.parts.plaster, 'stone', rng(r.seed + 9), {});
   for (const g in geos) if (!geos[g]) delete geos[g];
   const msBuild = performance.now() - t0;
 
@@ -817,14 +890,14 @@ export function buildSheriff(recipeIn = {}, env = {}) {
   // a dim warm room and not a black box
   const fill = (x, y, z, nx, ny, nz) => {
     const px = x + nx * 0.08, py = y + ny * 0.08, pz = z + nz * 0.08;
-    if (inJail(px, py, pz)) return (pz < BARS ? 0.36 : 0.28) * (1 - 0.3 * smooth01(py, 1.6, 3.0));
-    if (inOffice(px, py, pz)) return (pz < PART ? 0.2 : 0.12) * (1 - 0.3 * smooth01(py, 1.8, 3.5));
+    if (inJail(px, py, pz)) return (pz < BARS ? 0.1 : 0.06) * (1 - 0.3 * smooth01(py, 1.6, 3.0));
+    if (inOffice(px, py, pz)) return (pz < PART ? 0.14 : 0.05) * (1 - 0.3 * smooth01(py, 1.8, 3.5));
     return 0;
   };
   // (a small office lit by a door and four windows: each counts for more than the stable's big doorways did)
   // (and the light bounced about in a small room off its floor and walls: a higher floor under the dark)
   const light = new Light(occ, { inside: (x, y, z) => inOffice(x, y, z) || inJail(x, y, z), fill, openings, lamps, base: 0.34, gain: 7.5 });
-  const BAKED = ['wood', 'iron', 'stone', 'rope', 'decal'];
+  const BAKED = ['wood', 'iron', 'stone', 'rope', 'decal', 'plaster'];
   for (const g of BAKED) if (geos[g]) light.bake(geos[g]);
   for (const L of leaves) {
     light.bake(L.geo, mul(T(...L.hinge), RY(L.open)), 'open');

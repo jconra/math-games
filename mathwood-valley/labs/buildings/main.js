@@ -63,7 +63,8 @@ const BUILDINGS = {
   stable: { label: 'Stable', paints: PAINTS, recipe: () => stableRecipe(state), r: () => state, loading: 'Raising the barn…' },
   // (the sheriff's office: the sun a little lower by day, so it reaches in under the porch roof as in its concept
   // picture; its paint sheltered there)
-  sheriff: { label: "Sheriff's office", paints: SHERIFF_PAINTS, recipe: () => sheriffRecipe(state.sh), r: () => state.sh, loading: 'Building the jail…', sun: { day: 30 }, shelter: 0.45 },
+  // (its grain calmed, its boards' bumps flatter; its outdoor lantern out by day)
+  sheriff: { label: "Sheriff's office", paints: SHERIFF_PAINTS, recipe: () => sheriffRecipe(state.sh), r: () => state.sh, loading: 'Building the jail…', sun: { day: 30 }, shelter: 0.45, calmGrain: true, woodBump: 0.45, outLampsByDay: false },
 };
 const BLD = () => BUILDINGS[state.building];
 const cur = () => BLD().r();
@@ -87,7 +88,12 @@ function applyLight() {
   sun.position.copy(viewCentre).addScaledVector(dir, 40); sun.target.position.copy(viewCentre); sun.target.updateMatrixWorld();
   renderer.toneMappingExposure = L.exp;
   LU.uNight.value = L.night; LU.uLamp.value = state.lamps ? 1 : 0; LU.uLampGain.value = L.lampGain;
+  // (a building may put its outdoor lanterns out by day: their light, their glass and flame, their glow)
+  const outOn = state.time !== 'day' || BLD().outLampsByDay !== false;
+  LU.uOutLamp.value = outOn ? 1 : 0;
+  if (B && B.lamps) B.lamps.forEach((Lp, i) => { if (i < LU.uLampS.value.length) LU.uLampS.value[i] = Lp.outdoor && !outOn ? 0 : Lp.strength; });
   if (B && B.glow) { B.glow.visible = state.lamps; B.glow.material.opacity = L.glow; }
+  if (B && B.glowOut) { B.glowOut.visible = state.lamps && outOn; B.glowOut.material.opacity = L.glow; }
   U.uShadeDir.value.set(0, 0, -1);
 }
 // the game's quality tiers: how many pixels, how fine the shadows
@@ -123,6 +129,9 @@ function makeMaterials() {
   mats.boards = lit(new THREE.MeshStandardMaterial({ map: ART.boards, roughness: 0.82 }), { ao: true });
   // (the sheriff's office: everything painted, pasted or pinned on it, laid a few mm over its boards, see-through round
   // its edges; drawn after the boards and pulled toward the camera a hair so it never fights them)
+  // (the jail's whitewashed walls: the rubble picture under a lime wash; glass seen from inside: faintly tinted)
+  mats.plaster = lit(new THREE.MeshStandardMaterial({ map: RT.map, normalMap: RT.normalMap, normalScale: new THREE.Vector2(0.5, 0.5), roughness: 0.97 }), { ao: true, tint: true });
+  mats.pane = new THREE.MeshBasicMaterial({ color: 0x8fa4b4, transparent: true, opacity: 0.12, depthWrite: false });
   mats.decal = lit(new THREE.MeshStandardMaterial({ map: SART.sheriff, roughness: 0.9, transparent: true, depthWrite: false, alphaTest: 0.01, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }), { ao: true });
   mats.glow = glowMaterial(); mats.glass = glowMaterial({ panes: true });
   mats.rope = lit(new THREE.MeshStandardMaterial({ map: ropeTexture(), roughness: 0.92 }), { ao: true, tint: true });
@@ -134,6 +143,38 @@ function makeMaterials() {
 // across each strip, once every 1.2 m along it: on upright boards side by side they came out as rows of big dark ovals
 // right across a wall. A band of each strip either side of them is copied over from just beside it (colour and bumps
 // both), in the lab's copy of the pictures; the stable's nails are drawn by its shader instead (parts.js boardWear)
+// the lab's copy of the wood sheet for the building shown: the Material Lab's look, its nails painted out, and for a
+// building that asks for it (the sheriff's office) its grain calmed (softenGrain)
+function woodFor(T) { setWood(T, cur().wood); eraseNails(T); if (BLD().calmGrain) softenGrain(T); }
+// THE CALMER GRAIN (the sheriff's office): the sheet's board strips carry a dozen fine, sharp grain lines each; on lap
+// siding seen close they read as ribbed cloth and shimmer at a slant. Each board strip is blurred across its width (the
+// fine lines melt into its tone; the knots stay, as soft blots), and three to five broad, soft streaks are laid along it,
+// wandering a little and tiling round the strip's length; its bumps are flattened the same way. The strip's edges, the
+// shakes and the end grain are left as drawn. (The stable keeps the sheet as it is.)
+function softenGrain(T) {
+  const S = 64, rows = 12, R = (n) => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+  for (const [tex, isN] of [[T.wood, false], [T.woodN, true]]) {
+    // (read through a scratch canvas made for reading back, write straight into the sheet)
+    const c = tex.image, g = c.getContext('2d'), W = c.width, tmp = document.createElement('canvas'); tmp.width = W; tmp.height = S;
+    const tg = tmp.getContext('2d', { willReadFrequently: true });
+    const sig = 3.2, ker = []; for (let k = -8; k <= 8; k++) ker.push(Math.exp(-(k * k) / (2 * sig * sig)));
+    for (let s = 0; s < rows; s++) {
+      const y0 = s * S; tg.clearRect(0, 0, W, S); tg.drawImage(c, 0, y0, W, S, 0, 0, W, S);
+      const img = tg.getImageData(0, 0, W, S), d = img.data, src = d.slice();
+      const bands = 3 + Math.floor(R(s * 3 + 1) * 3), bc = Array.from({ length: bands }, (_, b) => [(b + 0.5) / bands * 52 + 6 + (R(s * 7 + b) - 0.5) * 8, 3 + R(s * 11 + b) * 4, (R(s * 13 + b) - 0.5) * 0.16, 1 + Math.floor(R(s * 17 + b) * 2)]);
+      for (let y = 3; y < S - 3; y++) for (let x = 0; x < W; x++) {
+        let acc = [0, 0, 0], wsum = 0;
+        for (let k = -8; k <= 8; k++) { const yy = Math.min(S - 4, Math.max(3, y + k)), i = (yy * W + x) * 4, w = ker[k + 8]; acc[0] += src[i] * w; acc[1] += src[i + 1] * w; acc[2] += src[i + 2] * w; wsum += w; }
+        const i = (y * W + x) * 4;
+        let f = 1;
+        if (!isN) for (const [cy, bw, amp, wav] of bc) { const yy = cy + Math.sin(x / W * Math.PI * 2 * wav + cy) * 2.5; f += amp * Math.exp(-((y - yy) ** 2) / (2 * bw * bw)); }
+        for (let ch = 0; ch < 3; ch++) d[i + ch] = Math.min(255, acc[ch] / wsum * f);
+      }
+      g.putImageData(img, 0, y0);
+    }
+    tex.needsUpdate = true;
+  }
+}
 function eraseNails(T) {
   for (const tex of [T.wood, T.woodN]) {
     const g = tex.image.getContext('2d'), band = g.getImageData(212, 0, 26, 768);
@@ -153,11 +194,11 @@ function rebuild() {
   for (const m of [...propGroup.children]) { propGroup.remove(m); m.geometry.dispose(); }
   const t0 = performance.now(), sheriff = state.building === 'sheriff';
   B = sheriff ? buildSheriff(sheriffRecipe(state.sh), { texMean: RT.mean }) : buildStable(stableRecipe(state), { texMean: RT.mean });
-  LU.uPaintWear.value = cur().wear; LU.uPaintShelter.value = BLD().shelter || 0; applyLight();
-  for (const g of ['wood', 'iron', 'stone', 'hay', 'floor', 'spill', 'boards', 'decal', 'glow', 'glass', 'rope']) {
+  LU.uPaintWear.value = cur().wear; LU.uPaintShelter.value = BLD().shelter || 0; mats.wood.normalScale.setScalar(BLD().woodBump ?? 0.9); applyLight();
+  for (const g of ['wood', 'iron', 'stone', 'plaster', 'hay', 'floor', 'spill', 'boards', 'decal', 'glow', 'glass', 'pane', 'rope']) {
     const geo = B.geos[g]; if (!geo) continue;
-    const m = new THREE.Mesh(geo, mats[g]); m.name = g; m.castShadow = !['glow', 'glass', 'spill', 'floor', 'boards', 'decal'].includes(g); m.receiveShadow = g !== 'glow' && g !== 'glass';
-    if (g === 'glass') m.renderOrder = 1;
+    const m = new THREE.Mesh(geo, mats[g]); m.name = g; m.castShadow = !['glow', 'glass', 'spill', 'floor', 'boards', 'decal', 'pane'].includes(g); m.receiveShadow = g !== 'glow' && g !== 'glass' && g !== 'pane';
+    if (g === 'glass' || g === 'pane') m.renderOrder = 1;
     if (g === 'decal') m.renderOrder = 0.5;
     group.add(m);
   }
@@ -176,7 +217,10 @@ function rebuild() {
   for (const g of ['wood', 'iron', 'hay']) { const m = new THREE.Mesh(P.geos[g], mats[g]); m.castShadow = m.receiveShadow = true; propGroup.add(m); }
   // the lanterns: where they are, for the shaders' light, and a soft glow round each (one draw for all of them)
   setLamps(B.lamps);
-  B.glow = lanternGlow(B.lamps); group.add(B.glow); applyLight();
+  // (outdoor lanterns' glow apart, so it can go out by day)
+  B.glow = lanternGlow(B.lamps.filter((L) => !L.outdoor)); group.add(B.glow);
+  const outs = B.lamps.filter((L) => L.outdoor); B.glowOut = outs.length ? lanternGlow(outs) : null; if (B.glowOut) group.add(B.glowOut);
+  applyLight();
   stats.buildMs = B.msBuild; stats.bakeMs = B.msBake; stats.propMs = P.ms; stats.totalMs = performance.now() - t0;
   setDoors(state.doors);
   bakeGround();
@@ -380,7 +424,7 @@ const VIEWS = {
     jail: [[9.5, 2.6, 9.0], [3.0, 1.9, 1.5]],
     porch: [[-4.6, 1.9, 4.6], [1.0, 1.6, 3.6]],
     office: [[0.2, 1.75, 1.9], [-3.2, 1.2, -1.2]],
-    cells: [[1.6, 1.75, 1.45], [3.6, 1.1, -1.4]],
+    cells: [[2.3, 1.55, 1.25], [4.0, 0.9, -1.6]],
     back: [[10.5, 4.6, -12.5], [0.0, 2.6, -1.0]],
     roof: [[-3.0, 11.5, -12.0], [-1.6, 4.6, 1.0]],
   },
@@ -436,7 +480,7 @@ function buildPanel() {
   const recipeText = () => { const rb = $('#recipe'); if (rb) rb.textContent = JSON.stringify(BLD().recipe()); };
   $('#s-paint').addEventListener('change', (e) => { cur().paint = e.target.value; rebuild(); });
   $('#r-wear').addEventListener('input', (e) => { cur().wear = +e.target.value; LU.uPaintWear.value = cur().wear; e.target.nextElementSibling.textContent = cur().wear.toFixed(2); recipeText(); });
-  $('#s-wood').addEventListener('change', (e) => { cur().wood = e.target.value; setWood(T, cur().wood); eraseNails(T); recipeText(); });
+  $('#s-wood').addEventListener('change', (e) => { cur().wood = e.target.value; woodFor(T); recipeText(); });
   $('#s-stone').addEventListener('change', (e) => { cur().stone = e.target.value; rebuild(); });
   if (sheriff) $('#s-mortar').addEventListener('change', (e) => { cur().mortar = e.target.value; rebuild(); });
   $('#seed').addEventListener('change', (e) => { cur().seed = Math.max(1, Math.round(+e.target.value) || 1); rebuild(); });
@@ -479,7 +523,7 @@ function loadHorses() {
 function setBuilding(kind) {
   if (!BUILDINGS[kind]) return;
   state.building = kind;
-  setWood(T, cur().wood); eraseNails(T);
+  woodFor(T);
   horseGroup.visible = kind === 'stable' && state.showHorses;
   buildPanel(); rebuild(); syncPanel(); view('front');
   if (kind === 'stable') loadHorses();
@@ -538,7 +582,7 @@ function loop() {
     buildPanel();
     const t0 = performance.now();
     $('#loading').textContent = BLD().loading;
-    T = await makeTextures({ wood: cur().wood }); eraseNails(T); RT = makeRubbleTexture(); ART = await makeArt(); SART = await makeSheriffArt();
+    T = await makeTextures({ wood: cur().wood }); woodFor(T); RT = makeRubbleTexture(); ART = await makeArt(); SART = await makeSheriffArt();
     stats.texMs = performance.now() - t0;
     U.uNoise.value = T.noise; LU.uPaintWear.value = cur().wear;
     makeMaterials(); makeGround();
@@ -568,7 +612,7 @@ const BL = window.BL = {
   recipe(o) {
     const { kind, ...rest } = o;
     if (kind && kind !== state.building) setBuilding(kind);
-    Object.assign(cur(), rest); if (rest.wood) { setWood(T, cur().wood); eraseNails(T); } if (rest.wear !== undefined) LU.uPaintWear.value = cur().wear;
+    Object.assign(cur(), rest); if (rest.wood) woodFor(T); if (rest.wear !== undefined) LU.uPaintWear.value = cur().wear;
     rebuild(); syncPanel(); return info();
   },
   quality(q) { state.quality = q; applyQuality(); syncPanel(); },

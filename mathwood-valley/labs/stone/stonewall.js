@@ -1149,7 +1149,9 @@ function addCore(M, sec0, ops, st, tint, dark, capY, flue, dripY = sec0.y1) {
       quad(M, Q(u1, v0, d0), Q(u1, v0, d1), Q(u1, v1, d1), Q(u1, v1, d0), U.map((x) => -x), rt, ao, [uv(0, v0), uv(d1, v0), uv(d1, v1), uv(0, v1)], v1);
       quad(M, Q(u0, v1, d0), Q(u1, v1, d0), Q(u1, v1, d1), Q(u0, v1, d1), [0, -1, 0], rt, ao, [uv(u0, 0), uv(u1, 0), uv(u1, d1), uv(u0, d1)], v1);
       if (v0 > sec.y0 + 1e-6) quad(M, Q(u0, v0, d0), Q(u1, v0, d0), Q(u1, v0, d1), Q(u0, v0, d1), [0, 1, 0], rt, ao, [uv(u0, 0), uv(u1, 0), uv(u1, d1), uv(u0, d1)], v1);
-      if (!op.through) quad(M, Q(u0, v0, d1), Q(u1, v0, d1), Q(u1, v1, d1), Q(u0, v1, d1), N, dark, 0.15, [uv(u0, v0), uv(u1, v0), uv(u1, v1), uv(u0, v1)], v1);
+      // (op.open: a hole right through a wall built as an outer skin only, its depth the wall's thickness, with nothing
+      // behind it: a building's own inside walls stand there)
+      if (!op.through && !op.open) quad(M, Q(u0, v0, d1), Q(u1, v0, d1), Q(u1, v1, d1), Q(u0, v1, d1), N, dark, 0.15, [uv(u0, v0), uv(u1, v0), uv(u1, v1), uv(u0, v1)], v1);
     }
   }
   if (capY !== null) {

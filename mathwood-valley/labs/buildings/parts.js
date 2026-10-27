@@ -310,7 +310,10 @@ export function roofSlope(k, M, o) {
     below = joints; s += e; row++;
   }
   // barge boards along the gable edges, a little below the shakes (they hang a few cm past it)
-  if (o.barge) for (const x of [x0 + 0.03, x1 - 0.03]) wood([0.05, 0.2, len + 0.03], x, len / 2 - 0.01, -0.085, null, { long: 2, tint: vary(k, o.bargeT || o.rafterT, 0.9, 1.05), strip: 10, outside: true });
+  // (o.rake: instead, a rake board just outside the shakes' ends, standing up past their tops, so seen from below or
+  // from the side no daylight shows in the wedge between the tilted shakes and the boards)
+  if (o.barge && !o.rake) for (const x of [x0 + 0.03, x1 - 0.03]) wood([0.05, 0.2, len + 0.03], x, len / 2 - 0.01, -0.085, null, { long: 2, tint: vary(k, o.bargeT || o.rafterT, 0.9, 1.05), strip: 10, outside: true });
+  if (o.rake) for (const [x, at] of [[x0 - 0.065, o.rake !== 'x1'], [x1 + 0.065, o.rake !== 'x0']]) if (at) wood([0.045, 0.27, len + 0.1], x, len / 2 - 0.02, -0.065, null, { long: 2, tint: vary(k, o.bargeT || o.rafterT, 0.9, 1.05), strip: 10, outside: true });
   // a ridge cap: a board along the top edge, lying on the shakes (thick enough to reach down among their tops, so no
   // daylight shows under it at a gable's end)
   if (o.cap) for (const [a, b] of [[x0 + 0.06, (x0 + x1) / 2 - 0.9], [(x0 + x1) / 2 - 0.9, (x0 + x1) / 2 + 1.6], [(x0 + x1) / 2 + 1.6, x1 - 0.06]]) wood([b - a - 0.004, 0.046, 0.17], (a + b) / 2, len - 0.075, 0.057, null, { long: 0, tint: vary(k, o.shakeT, 0.7, 0.8), strip: 11, roof: true });
@@ -391,9 +394,11 @@ export function lantern(k, x, y, z, o = {}) {
     k.parts.rope.push({ pts, closed: false, rad: 0.0045, sides: 4, tint: [0.12, 0.11, 0.1] });
   } else k.box('iron', [0.07, 0.012, 0.012], [x, y + 0.225, z], null, { tint: iron });
   // the glass (see-through, glowing: GLOW.glass parts are drawn as panes of light over what's behind), the flame in it
-  k.parts.glow.push({ size: [0.11, 0.18, 0.11], m: T(x, y, z), kind: GLOW.glass, col: [0.85, 0.32, 0.07] });
-  k.parts.glow.push({ size: [0.02, 0.06, 0.02], m: T(x, y - 0.025, z), kind: GLOW.flame, col: [9, 5.4, 1.6] });
-  k.parts.glow.push({ size: [0.045, 0.03, 0.045], m: T(x, y - 0.07, z), kind: GLOW.flame, col: [0.5, 0.36, 0.2] });   // the wick's brass burner
+  // (an outdoor lantern's kinds are 10 more: the glow shader puts them out by day, LU.uOutLamp)
+  const ok = o.outdoor ? 10 : 0;
+  k.parts.glow.push({ size: [0.11, 0.18, 0.11], m: T(x, y, z), kind: GLOW.glass + ok, col: [0.85, 0.32, 0.07] });
+  k.parts.glow.push({ size: [0.02, 0.06, 0.02], m: T(x, y - 0.025, z), kind: GLOW.flame + ok, col: [9, 5.4, 1.6] });
+  k.parts.glow.push({ size: [0.045, 0.03, 0.045], m: T(x, y - 0.07, z), kind: GLOW.flame + ok, col: [0.5, 0.36, 0.2] });   // the wick's brass burner
   if (o.bracket) {
     const [dx, dz] = o.bracket, L = Math.hypot(dx, dz), a = Math.atan2(dx, dz);
     k.box('iron', [0.025, 0.025, L], [x + dx / 2, y + 0.26, z + dz / 2], [0, a, 0], { tint: iron });
@@ -403,7 +408,7 @@ export function lantern(k, x, y, z, o = {}) {
     k.box('iron', [0.06, 0.12, 0.02], [x + dx, y + 0.2, z + dz], [0, a, 0], { tint: iron });                     // the plate it's screwed on by
   }
   if (o.chain) k.box('iron', [0.014, o.chain, 0.014], [x, y + 0.23 + o.chain / 2, z], null, { tint: iron, skip: '+y-y' });
-  return { p: [x, y, z], reach: o.reach ?? 6.5, strength: o.strength ?? 1 };
+  return { p: [x, y, z], reach: o.reach ?? 6.5, strength: o.strength ?? 1, outdoor: !!o.outdoor };
 }
 // the glow parts as one mesh: boxes, each corner carrying its colour when lit (rgb, brighter than white: it glows) and
 // what it is (a: 1 a window pane, 2 lantern glass, 3 a flame)
@@ -606,6 +611,7 @@ export const LU = {
   uNight: { value: 0 },                                    // 0 day .. 1 night (the window panes glow with the lamps inside)
   uPaintWear: { value: 0.5 },                              // how much of the paint has gone (0..1)
   uPaintShelter: { value: 0 },                             // how much less paint goes where no rain reaches (under a porch)
+  uOutLamp: { value: 1 },                                  // outdoor lanterns (lantern o.outdoor): 1 lit with the rest, 0 out
 };
 export function setLamps(lamps) {
   for (let i = 0; i < LAMP_MAX; i++) {
@@ -665,7 +671,8 @@ export function boardWear(mat) {
       #endif
       float pOff = smoothstep(0.0, 0.08, pT + (wFine.b - 0.5) * 0.14);
       // (only the wall boards wear in patches, the ones with their own numbers: painted iron straps and leather don't)
-      wPaintVis = wPainted * (1.0 - max(wChip, pOff * step(0.01, vBoard.x + vBoard.z)));
+      // (on horizontal boards the edge chips are few: along every lap they drew a dotted pale line)
+      wPaintVis = wPainted * (1.0 - max(wChip * (vBoard.x > 1.5 ? 0.2 : 1.0), pOff * step(0.01, vBoard.x + vBoard.z)));
     }`)
       .replace('wBare = wWear * (1.0 - wPaintVis);', `#ifdef W_BOX
     if (vBoard.x > 0.25) {
@@ -689,6 +696,14 @@ export function boardWear(mat) {
       diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.055, 0.05, 0.045) * (1.0 + 1.5 * smoothstep(0.004, 0.0, length(nV + vec2(0.0015, -0.0015)))), nHead);
     }
     #endif
+    #ifdef W_BOX
+    // LAP SIDING's SHADOW LINE: each board's foot stands a little out over the one below and shades a band along the top
+    // of what shows of it (a solid soft line, the lap's own shadow; on the front face only)
+    if (vBoard.x > 1.5 && vBoard.x < 3.5) {
+      float lY = vBoard.x < 2.5 ? vLocalTop.y : -vLocalTop.y, lZ = vBoard.x < 2.5 ? vLocalTop.z : -vLocalTop.z;
+      diffuseColor.rgb *= 1.0 - 0.42 * smoothstep(vHalf.y - 0.055, vHalf.y - 0.028, lY) * step(0.0, lZ);
+    }
+    #endif
     // (no paler rubbed edges on bare wood: they drew a bright line down every rafter and board; the paint still chips)
     wBare = 0.0;`);
   });
@@ -700,15 +715,17 @@ export function glowMaterial(o = {}) {
   if (o.panes) Object.assign(mat, { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
   return chain(mat, 'glow' + (o.panes ? 'panes' : ''), (sh) => {
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec4 aGlow, aGlowC; varying vec4 vGlow, vGlowC; varying vec3 vGP;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = aGlow; vGlowC = aGlowC; vGP = (modelMatrix * vec4(position, 1.0)).xyz;');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uLamp, uNight; varying vec4 vGlow, vGlowC; varying vec3 vGP;')
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uLamp, uNight, uOutLamp; varying vec4 vGlow, vGlowC; varying vec3 vGP;')
       .replace('#include <color_fragment>', `#include <color_fragment>
       {
-        float kWin = step(vGlow.a, 1.5);
+        // (a kind over 10 is an outdoor lantern's: out by day, uOutLamp)
+        float gOut = step(9.5, vGlow.a), gK = vGlow.a - 10.0 * gOut;
+        float kWin = step(gK, 1.5);
         vec3 off = mix(vec3(0.16, 0.14, 0.11), vec3(0.035, 0.042, 0.05), kWin);
-        float on = mix(uLamp, uLamp * uNight * 0.3, kWin);
+        float on = mix(uLamp, uLamp * uNight * 0.3, kWin) * mix(1.0, uOutLamp, gOut);
         vec3 lit = vGlow.rgb;
         // (lantern glass: the flame's hot spot behind it, fading to a deep orange at its edges)
-        if (vGlow.a > 1.5 && vGlow.a < 2.5) { float r = length(vGP - vGlowC.xyz) / vGlowC.w; lit *= mix(1.6, 0.18, smoothstep(0.05, 0.75, r)); off = vec3(0.04, 0.035, 0.03); }
+        if (gK > 1.5 && gK < 2.5) { float r = length(vGP - vGlowC.xyz) / vGlowC.w; lit *= mix(1.6, 0.18, smoothstep(0.05, 0.75, r)); off = vec3(0.04, 0.035, 0.03); }
         diffuseColor.rgb = mix(off, lit, on);
       }`);
   });
