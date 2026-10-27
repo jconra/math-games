@@ -270,10 +270,11 @@ const MASK_CODE = { off: 0, parts: 1, hair: 2, white: 3, flow: 4, streaks: 5, he
 const SECTIONS = [
   { id: 'coat', title: 'Coat', open: true, rows: [
       C('Body colour', 'base'), S('Points', 'points', [['none', 'None'], ['black', 'Black legs and ear tips']]),
-      R('Lighter belly', 'belly', 0, 1, 0.01, pct), R('Darker top line', 'sooty', 0, 1, 0.01, pct), R('Dark muzzle', 'muzzle', 0, 1, 0.01, pct),
+      R('Lighter belly', 'belly', 0, 1, 0.01, pct), R('Darker top line', 'sooty', 0, 1, 0.01, pct), R('Dark muzzle', 'muzzle', 0, 1, 0.01, pct), R('Dapple bloom', 'bloom', 0, 1, 0.01, pct),
       R('Greying', 'grey', 0, 1, 0.01, pct), R('Dapples', 'dapples', 0, 1, 0.01, pct), R('Dapple size', 'dappleSize', 0.05, 0.16, 0.005, (v) => Math.round(v * 100) + ' cm'), R('Grey legs', 'greyLegs', 0, 1, 0.01, pct)],
     how: `<p>Nothing is painted into a picture. Every pixel of the horse asks <b>where it sits on the horse standing at rest</b>: the model's own corner positions before the bones move them, in metres (feet on the ground, nose toward +Z). That spot rides along with the bones, so a marking stays put however the horse moves, from a nod to a gallop.</p>
 <p>From that spot it works out its colour: the body colour with a big soft mottle (no coat is one flat colour), a <b>darker top line</b> where the surface faces up along the back, a <b>lighter belly</b> and inside of the legs where it faces down or inward, <b>points</b> (black from the hooves to just over the knees and hocks, black ear tips) for a bay or buckskin, a darker muzzle, dark skin round the eyes and an almond-shaped dark lid.</p>
+<p>A <b>dapple bloom</b> (a well-fed bay or chestnut's faint dapples) puts rounded spots a few per cent lighter, in a slightly darker net, on the hip and the shoulder.</p>
 <p><b>Greying</b> takes the colour out first, then lightens the grey toward white: lighter on the head, darker on the legs. <b>Dapples</b> are round lighter spots with mid-grey gaps between them, over the whole body and neck: the distance to the nearest of a scatter of points ("cell noise"), each spot its own size.</p>
 <p>A <b>baked shade</b> (worked out once at load: rays from each corner of the body at rest, to see how much sky it sees) dims the sky light under the belly and between the legs, and darkens the creases: behind the elbow, the girth, the stifle, the throat.</p>` },
   { id: 'manetail', title: 'Mane and tail', open: true, rows: [
@@ -313,7 +314,7 @@ normal += across * (streak(p + across*e) - streak(p)) / e * height</pre>
   { id: 'cost', title: 'Cost', open: true, rows: [{ t: 'cost' }, { t: 'buttons', items: [['Measure', () => measure()]] }],
     how: `<p><b>ms per frame</b>: the horse alone (with its mane and tail), drawn 40 times at the current view and size, waiting for the graphics card after each, so it counts the card's work. The old horse is the game's animal-pack model with its one shared material.</p>` },
 ];
-const RECIPE_KEYS = new Set(['base', 'points', 'mane', 'belly', 'sooty', 'muzzle', 'grey', 'dapples', 'dappleSize', 'greyLegs', 'face', 'star', 'faceSize', 'ragged', 'pinto', 'white', 'roan', 'seed', 'bump', 'streakColor', 'sheen', 'shine', 'maneShine', 'roots', 'tips', 'strands', 'maneLength', 'tailLength']);
+const RECIPE_KEYS = new Set(['base', 'points', 'mane', 'belly', 'sooty', 'muzzle', 'grey', 'dapples', 'dappleSize', 'greyLegs', 'face', 'star', 'faceSize', 'ragged', 'pinto', 'white', 'roan', 'seed', 'bump', 'streakColor', 'sheen', 'shine', 'maneShine', 'roots', 'tips', 'strands', 'maneLength', 'tailLength', 'bloom']);
 const panel = $('#panel');
 const getV = (k) => (RECIPE_KEYS.has(k) ? state.r[k] : state[k]);
 function setField(k, v) {
@@ -490,6 +491,7 @@ function updateHair() {
     const U = h.hairMat.hair.uniforms;
     U.uTime.value = clock.t; U.uSpeed.value = spd;
     h.a.root.getWorldDirection(_back); U.uBackW.value.copy(_back.negate());
+    const dock = h.a.bones.Tail1 || h.a.bones.Tail2; if (dock) dock.getWorldPosition(U.uDockW.value);
   }
 }
 
@@ -548,6 +550,7 @@ window.HL = {
     state.playing = !pause; const pb = $('#playBtn'); if (pb) pb.textContent = state.playing ? 'Pause' : 'Play'; fillClips();
   },
   old(on) { setField('old', !!on); return needOld(); },
+  hair(on) { for (const h of horses) h.hairMesh.visible = !!on; },
   // move the hair's clock on (its ripple), without moving the clips
   run(sec) { clock.t += sec; updateHair(); },
   get clipLengths() { return newLib ? Object.fromEntries(newLib.kinds.meshy.clips.map((c) => [c.name, +c.duration.toFixed(2)])) : {}; },
