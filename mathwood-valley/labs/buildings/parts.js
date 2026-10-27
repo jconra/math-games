@@ -96,6 +96,134 @@ export function boardAndBatten(k, w, o) {
   }
 }
 
+// ── lap siding ───────────────────────────────────────────────────────────────────────────────────────────────────────
+// Horizontal boards, each lapped over the one under it (tilted, its foot standing a board's thickness out, so every
+// board throws a thin shadow line on the one below), in pieces 1.3 to 3.2 m long, the joints staggered row to row, cut
+// round the openings. The outside skin is painted; o.back draws each board's back as well, bare (where the back shows:
+// a false front above its roof). o:
+//   a0, a1     the run along the wall (wall frame: a to the right seen from outside)
+//   y0         the first board's foot
+//   tops       [[a0, a1, y], ...] the wall's top: one level, or a false front's steps (a row runs only where the top is
+//              over it; the last row under a step is cut down to fit)
+//   opens      [{ a0, a1, y0, y1 }] doors and windows (and anything else the boards stop at: a jail built on)
+//   paint, tint, bare (a share of boards replaced and never painted), patch [{ a, y }] (the board there is a newer
+//   replacement: bare, fresher, a few mm proud), backFrom(a) (only rows above this height get a back), origin (where
+//   the studs start along the wall: the nails line up on them, every 0.6 m), rows (heights where the boards get a row
+//   of corners for the baked light: none needed, each board is one row), bh (a board's height, 0.2)
+// Each board part carries o.hz = [along, flipped] for the nails (parts.js boardWear: horizontal mode), o.paint.
+export function lapSiding(k, w, o) {
+  const bh = o.bh ?? 0.2, lap = 0.025, expo = bh - lap, bt = 0.02;
+  const tops = o.tops, opens = o.opens || [], top = Math.max(...tops.map((t) => t[2])), origin = o.origin ?? o.a0;
+  let below = [];
+  for (let yb = o.y0, row = 0; yb < top - 0.04; yb += expo, row++) {
+    // the row's stretches: each step's part of the run, at the height it allows (a full board, or the last one cut down)
+    const segs = [];
+    for (const [s0, s1, ty] of tops) {
+      const h = Math.min(bh, ty - yb + 0.004); if (h < 0.05) continue;
+      const prev = segs[segs.length - 1];
+      if (prev && Math.abs(prev[1] - s0) < 1e-4 && Math.abs(prev[2] - h) < 1e-4) prev[1] = s1; else segs.push([s0, s1, h]);
+    }
+    const joints = [];
+    for (const [s0, s1, h] of segs) {
+      let spans = [[Math.max(o.a0, s0), Math.min(o.a1, s1)]];
+      for (const op of opens) if (yb < op.y1 - 0.01 && yb + h > op.y0 + 0.01) spans = spans.flatMap(([s, e]) => (op.a1 <= s || op.a0 >= e ? [[s, e]] : [[s, op.a0], [op.a1, e]].filter(([p, q]) => q - p > 0.03)));
+      for (const [s, e] of spans) {
+        if (e - s < 0.03) continue;
+        // the joints: 1.3 to 3.2 m apart, never within 30 cm of one in the row below; never a stub under 40 cm
+        const cuts = [];
+        for (let x = s + k.r(0.6, 2.6); x < e - 0.4; x += k.r(1.3, 3.2)) {
+          let c = x; for (const j of below) if (Math.abs(c - j) < 0.3) c = j + 0.3 * Math.sign(c - j || 1);
+          if (c > s + 0.4 && c < e - 0.4) cuts.push(c);
+        }
+        cuts.sort((p, q) => p - q);
+        let cs = s;
+        for (const ce of [...cuts, e]) {
+          const len = ce - cs, ac = (cs + ce) / 2, yc = yb + h / 2;
+          if (len > 0.02) {
+            const patch = (o.patch || []).some((p) => p.a > cs && p.a < ce && p.y > yb && p.y < yb + h);
+            const bare = patch || (o.paint && k.R() < (o.bare ?? 0.04));
+            const paint = o.paint && !bare ? vary(k, o.paint, 0.9, 1.08) : null;
+            const tint = patch ? [1.25, 1.12, 0.95] : vary(k, bare ? o.tint.map((c) => c * 1.1) : o.tint, 0.84, 1.14);
+            // (half of them turned upside down: the strip's picture mirrored across the board, so neighbours don't show
+            // the same knots in the same places)
+            const flip = k.R() < 0.5, ht = Math.atan2(bt, h);
+            let m = wallM(w, ac, yc, patch ? 0.006 : 0, [-ht, 0, 0]); if (flip) m = mul(m, RX(Math.PI));
+            const cl = []; for (let c = -len / 2 + 1.1; c < len / 2 - 0.3; c += 1.1) cl.push(c);
+            k.board([len + 0.003, h, bt], null, null, { m, long: 0, tint, paint, strip: Math.floor(k.R() * 12), uShift: k.r(0, 1.2), skip: (flip ? '+z-y' : '-z+y') + '+x-x', cuts: cl, segFaces: flip ? '-z' : '+z', outside: true, hz: [ac - origin, flip ? 1 : 0], patch });
+            if (o.backFrom && yb > o.backFrom(ac)) k.board([len + 0.003, h, bt], null, null, { m: wallM(w, ac, yc, -bt, [-ht, 0, 0]), long: 0, tint: vary(k, o.inTint || o.tint, 0.85, 1.1), strip: Math.floor(k.R() * 12), uShift: k.r(0, 1.2), skip: '+z+y-y+x-x', cuts: cl, segFaces: '-z', inside: true });
+            if (o.solid !== false) k.solid([len, h, 0.06], null, null, wallM(w, ac, yc, -0.02));
+          }
+          joints.push(ce); cs = ce;
+        }
+      }
+    }
+    below = joints;
+  }
+}
+// plain boards side by side, flat (an inside lining, a ceiling, a floor): in the frame M, boards along local x from
+// u0 to u1 (each `w` wide, give or take), across local y from v0 to v1; their face toward +z. o: tint, cuts every
+// `step` metres along a board (rows of corners for the baked light), joints (pieces at most this long), skip (default
+// everything but the face), and o.extra for each board's options
+export function plankField(k, M, o) {
+  const { u0, u1, v0, v1 } = o, t = o.t ?? 0.022, step = o.step ?? 1.2, maxL = o.maxL ?? 4.2;
+  for (let v = v0; v < v1 - 0.02;) {
+    const bw = Math.min(k.r(o.w * 0.85, o.w * 1.15), v1 - v), vc = v + bw / 2, tint = vary(k, o.tint, 0.85, 1.12);
+    if (bw < 0.03) break;
+    const cuts = []; for (let x = u0 + k.r(0.4, maxL - 0.3); x < u1 - 0.4; x += k.r(maxL * 0.6, maxL)) cuts.push(x);
+    let cs = u0;
+    for (const ce of [...cuts, u1]) {
+      const L = ce - cs, uc = (cs + ce) / 2, cl = []; for (let c = -L / 2 + step; c < L / 2 - 0.25; c += step) cl.push(c);
+      k.board([L + 0.002, bw + 0.002, t], null, null, { m: mul(M, T(uc, vc, -t / 2)), long: 0, tint, strip: Math.floor(k.R() * 12), uShift: k.r(0, 1.2), skip: o.skip ?? '-z+x-x+y-y', cuts: cl, segFaces: '+z', ...(o.extra || {}), hz: o.nails ? [uc - u0, 2] : undefined });
+      cs = ce;
+    }
+    v += bw;
+  }
+}
+
+// a plank roof (a porch's): wide boards running down the slope side by side, a batten over each joint, on rafters, a
+// fascia along the eave. Built in its own frame like roofSlope (its top edge along x at height topY, z = 0, running down
+// toward +z) and moved into place by M. o: x0, x1, topY, len, pitch, tint (the boards), rafterT, every (rafter spacing),
+// rows (corner rows along a board, for the light), noSolid
+export function plankRoof(k, M, o) {
+  const { x0, x1, topY, len, pitch } = o, sp = Math.sin(pitch), cp = Math.cos(pitch);
+  const up = new THREE.Vector3(0, sp, -cp), nrm = new THREE.Vector3(0, cp, sp), eave = new THREE.Vector3(0, topY - len * sp, len * cp);
+  const at = (x, s, n) => eave.clone().addScaledVector(up, s).addScaledVector(nrm, n).setX(x);
+  const frame = (x, s, n, extra) => { const m = mul(M, T(...at(x, s, n).toArray()), RX(pitch)); if (extra) m.multiply(extra); return m; };
+  const rc = []; for (let z = -len / 2 + (o.rows ?? 0.9); z < len / 2 - 0.25; z += o.rows ?? 0.9) rc.push(z);
+  // the boards: 22 to 30 cm wide, butted edge to edge (no light between: a batten covers each joint), each its own shade
+  // and a hair askew
+  for (let x = x0; x < x1 - 0.02;) {
+    const bw = Math.min(k.r(0.22, 0.3), x1 - x); if (bw < 0.05) break;
+    const L = len + k.r(-0.02, 0.03);
+    k.board([bw + 0.008, 0.025, L], null, null, { m: frame(x + bw / 2, len - L / 2, 0.0125, RY(k.r(-0.0012, 0.0012))), long: 2, tint: vary(k, o.tint, 0.82, 1.15), strip: Math.floor(k.R() * 12), uShift: k.r(0, 1.2), cuts: rc, segFaces: '+y-y', skip: '-z', roof: true });
+    x += bw;
+    if (x < x1 - 0.05) k.board([0.06, 0.022, len - 0.03], null, null, { m: frame(x, len / 2 + 0.015, 0.025 + 0.011), long: 2, tint: vary(k, o.tint, 0.7, 0.9), strip: 10 + (k.R() < 0.5 ? 1 : 0), skip: '-z', roof: true });
+  }
+  if (!o.noSolid) for (let q = 0; q < 3; q++) { const a = x0 + (x1 - x0) * q / 3, b = a + (x1 - x0) / 3; k.solid([b - a, 0.08, len], null, null, frame((a + b) / 2, len / 2, 0.0)); }
+  // rafters under the boards, their tails showing past the beam
+  const every = o.every ?? 0.75, n = Math.max(2, Math.round((x1 - x0 - 0.12) / every));
+  for (let i = 0; i <= n; i++) {
+    const x = x0 + 0.06 + (x1 - x0 - 0.12) * i / n;
+    k.board([0.06, 0.12, len - 0.04], null, null, { m: frame(x, len / 2 + 0.02, -0.06), long: 2, tint: vary(k, o.rafterT, 0.9, 1.1), strip: 10 + (i % 2), skip: '+y-z', cuts: rc, segFaces: '-y+x-x', ends: 'log' });
+  }
+  // the fascia along the eave, over the rafter ends
+  k.board([x1 - x0 + 0.04, 0.12, 0.025], null, null, { m: frame((x0 + x1) / 2, 0.012, -0.03, RX(-pitch)), long: 0, tint: vary(k, o.rafterT, 0.85, 1.0), strip: 10, outside: true });
+  return { at: (x, s, nn) => at(x, s, nn).applyMatrix4(M) };
+}
+
+// a tin stovepipe from y0 up to y1 at (x, z): a round pipe (8 sides), a collar where it goes through, and a rain cap: a
+// shallow cone on three little legs over the pipe's mouth
+export function stovepipe(k, x, z, y0, y1, o = {}) {
+  const r = o.r ?? 0.075, tin = o.tint || [0.9, 0.86, 0.8], rust = [1.5, 1.0, 0.68];
+  k.prism('iron', ngon(8, r), y1 - y0, [x, (y0 + y1) / 2, z], null, { tint: tin, smooth: true, skip: '-y', cuts: [], ...(o.pipe || {}) });
+  if (o.collarY !== undefined) k.prism('iron', ngon(8, r * 1.9), 0.05, [x, o.collarY + 0.025, z], null, { tint: rust, smooth: true, taper: 0.4 });
+  // the cap: a cone (the prism's top end pulled in to a point), its rim a little past the pipe
+  const cy = y1 + 0.09;
+  k.prism('iron', ngon(10, r * 2.2), 0.13, [x, cy + 0.065, z], null, { tint: rust.map((c) => c * 0.8), smooth: true, taper: 0.97 });
+  k.prism('iron', ngon(10, r * 2.2), 0.012, [x, cy - 0.006, z], null, { tint: rust.map((c) => c * 0.6), smooth: true });
+  for (let i = 0; i < 3; i++) { const a = i / 3 * Math.PI * 2; k.box('iron', [0.012, 0.1, 0.012], [x + Math.cos(a) * r * 0.9, y1 + 0.04, z + Math.sin(a) * r * 0.9], null, { tint: tin }); }
+}
+
 // the trim round an opening (in the wall's frame): a board up each side, a head board with a drip cap over it, for a
 // window a sill that sticks out and an apron under it. Over the battens (they stand 2 cm proud), so 3 cm thick
 export function casing(k, w, op, o = {}) {
@@ -148,7 +276,9 @@ export function roofSlope(k, M, o) {
   }
   // the starter strip at the eave (the first course rests its butts on it; it gives the eave its thick edge)
   // (thin, and the first course lifted onto it: thicker than the shakes' own lift, it stood up through them)
-  for (const [a, b] of [[x0 - 0.04, (x0 + x1) / 2 - 1.3], [(x0 + x1) / 2 - 1.3, (x0 + x1) / 2 + 1.1], [(x0 + x1) / 2 + 1.1, x1 + 0.04]]) wood([b - a, 0.026, 0.2], (a + b) / 2, 0.1, 0.013, null, { long: 0, tint: o.shakeT.map((c) => c * 0.62), strip: WOOD.shake, skip: '-z' });
+  // (it runs out under the first course's butts, 9 cm past the boards, a little past the butts: seen from below, the
+  // gaps between those shakes show the strip, not the sky)
+  for (const [a, b] of [[x0 - 0.04, (x0 + x1) / 2 - 1.3], [(x0 + x1) / 2 - 1.3, (x0 + x1) / 2 + 1.1], [(x0 + x1) / 2 + 1.1, x1 + 0.04]]) wood([b - a + 0.002, 0.026, 0.29], (a + b) / 2, 0.055, 0.013, null, { long: 0, tint: o.shakeT.map((c) => c * 0.62), strip: WOOD.shake, skip: '-z' });
   // the shakes: split shakes in level courses, each course resting its butts on the one below (so it tilts up a little,
   // and its butt throws the dark line under each course); a joint never right over one in the course below; most boxes
   // are two shakes side by side (they span both shake strips, whose dark edges draw the gap between them). Drawn: the
@@ -171,7 +301,9 @@ export function roofSlope(k, M, o) {
         const m = frame(cx, s - dL + L / 2, th / 2 + 0.002 + (L / 2) * Math.sin(lift) + (row === 0 ? 0.027 : 0), extra);
         const r = k.R(), g = k.r(0.9, 1.1), low = 0.78 + 0.22 * smooth01(s, 0, len * 0.6);
         const tint = (r < 1 / 6 ? [0.84, 0.82, 0.8] : r < 0.25 ? [1.14, 1.16, 1.18] : [1, 1, 1]).map((c, i) => c * g * low * o.shakeT[i]);
-        k.board([wdt - gap, th, L], null, null, { m, long: 2, strip: pair ? WOOD.shake : WOOD.shake + Math.floor(k.R() * 2), span: pair ? 2 : 1, tint, uShift: k.r(0, 1.2), shakeE: e + dL, skip: row === 0 || (last && o.comb) ? '-z+x-x' : '-y-z+x-x', roof: true });
+        // (the first and last shake in a course stand at the gable's edge: their ends drawn, so it isn't see-through)
+        const ends = (x <= x0 - 0.03 ? '' : '-x') + (x + wdt >= x1 + 0.03 ? '' : '+x');
+        k.board([wdt - gap, th, L], null, null, { m, long: 2, strip: pair ? WOOD.shake : WOOD.shake + Math.floor(k.R() * 2), span: pair ? 2 : 1, tint, uShift: k.r(0, 1.2), shakeE: e + dL, skip: (row === 0 || (last && o.comb) ? '-z' : '-y-z') + ends, roof: true });
       }
       joints.push(x + wdt); x += wdt;
     }
@@ -179,8 +311,9 @@ export function roofSlope(k, M, o) {
   }
   // barge boards along the gable edges, a little below the shakes (they hang a few cm past it)
   if (o.barge) for (const x of [x0 + 0.03, x1 - 0.03]) wood([0.05, 0.2, len + 0.03], x, len / 2 - 0.01, -0.085, null, { long: 2, tint: vary(k, o.bargeT || o.rafterT, 0.9, 1.05), strip: 10, outside: true });
-  // a ridge cap: a board along the top edge, lying on the shakes
-  if (o.cap) for (const [a, b] of [[x0 + 0.06, (x0 + x1) / 2 - 0.9], [(x0 + x1) / 2 - 0.9, (x0 + x1) / 2 + 1.6], [(x0 + x1) / 2 + 1.6, x1 - 0.06]]) wood([b - a - 0.004, 0.028, 0.17], (a + b) / 2, len - 0.075, 0.068, null, { long: 0, tint: vary(k, o.shakeT, 0.7, 0.8), strip: 11, skip: '-y', roof: true });
+  // a ridge cap: a board along the top edge, lying on the shakes (thick enough to reach down among their tops, so no
+  // daylight shows under it at a gable's end)
+  if (o.cap) for (const [a, b] of [[x0 + 0.06, (x0 + x1) / 2 - 0.9], [(x0 + x1) / 2 - 0.9, (x0 + x1) / 2 + 1.6], [(x0 + x1) / 2 + 1.6, x1 - 0.06]]) wood([b - a - 0.004, 0.046, 0.17], (a + b) / 2, len - 0.075, 0.057, null, { long: 0, tint: vary(k, o.shakeT, 0.7, 0.8), strip: 11, roof: true });
   return { at: (x, s, nn) => at(x, s, nn).applyMatrix4(M) };
 }
 
@@ -340,7 +473,8 @@ export function ropeTexture() {
 //   inside  only for corners inside the building: how much of the outside it sees through the doors and windows (each
 //           opening's share of its view, as a "form factor": its area, how squarely each faces the other, over the
 //           distance squared; a few rays through the voxels to each, so a stall's partition shades the stall behind)
-//           kept as two parts, through the front doors and through everything else, so the doors can shut
+//           kept as two parts, through the front doors and through everything else, so the doors can shut (and a
+//           third, through a second door that opens on its own: an opening marked door2)
 //   lamp    how much each lantern lights it: facing it, closer is brighter (falling off with the distance squared and
 //           gone by the lantern's reach), nothing behind a wall (rays through the voxels again)
 // And, if the building gives one, a warm FILL: lantern light that has bounced about inside a stall, no direction, no
@@ -372,7 +506,7 @@ export class Light {
   at(px, py, pz, nx, ny, nz) {
     const occ = this.occ, near = occ.at(px, py, pz, nx, ny, nz), ox = px + nx * 0.07, oy = py + ny * 0.07, oz = pz + nz * 0.07;
     const ins = this.inside(px + nx * 0.05, py + ny * 0.05, pz + nz * 0.05);
-    let fA = 0, fB = 0;
+    let fA = 0, fB = 0, fC = 0;
     if (ins) for (const op of this.openings) {
       let f = 0;
       for (const q of op.pts) {
@@ -382,7 +516,7 @@ export class Light {
         if (!this.clear(ox, oy, oz, q[0], q[1], q[2], 0.12)) continue;
         f += op.dA * cp * co / (Math.PI * d2 + op.dA);
       }
-      if (op.front) fA += f; else fB += f;
+      if (op.front) fA += f; else if (op.door2) fC += f; else fB += f;
     }
     // the lanterns: how much they light it (for the bounce), and how much of that gets here past the walls (the shader
     // works out each lantern's light per pixel and multiplies it by this: round pools on the floor, shadows behind walls)
@@ -397,19 +531,19 @@ export class Light {
       lamp += fall * vis; seen += fall;
     }
     // (a surface facing down indoors sees the floor: some of the light that comes in bounces up to it)
-    if (ins && ny < 0) fB += this.floor * -ny * (fA + fB + 0.02) * 4 + 0.13 * -ny;
-    return [near, ins ? 1 : 0, fA, fB, Math.min(4, lamp), occ.rain(px, py, pz, nx, ny, nz), seen > 1e-4 ? lamp / seen : 1, this.fill ? this.fill(px, py, pz, nx, ny, nz) : 0];
+    if (ins && ny < 0) fB += this.floor * -ny * (fA + fB + fC + 0.02) * 4 + 0.13 * -ny;
+    return [near, ins ? 1 : 0, fA, fB, Math.min(4, lamp), occ.rain(px, py, pz, nx, ny, nz), seen > 1e-4 ? lamp / seen : 1, this.fill ? this.fill(px, py, pz, nx, ny, nz) : 0, fC];
   }
   // bake one geometry (m: its corners to the building's frame, for a door leaf; key: a name to keep that bake under)
   bake(geo, m = null, key = 'main') {
     const t0 = performance.now();
     const P = geo.attributes.position, N = geo.attributes.normal, n = P.count, v = new THREE.Vector3(), w = new THREE.Vector3(), nm = m ? new THREE.Matrix3().getNormalMatrix(m) : null;
-    const B = { near: new Float32Array(n), ins: new Uint8Array(n), fA: new Float32Array(n), fB: new Float32Array(n), lamp: new Float32Array(n), rain: new Float32Array(n), vis: new Float32Array(n), fill: new Float32Array(n) };
+    const B = { near: new Float32Array(n), ins: new Uint8Array(n), fA: new Float32Array(n), fB: new Float32Array(n), fC: new Float32Array(n), lamp: new Float32Array(n), rain: new Float32Array(n), vis: new Float32Array(n), fill: new Float32Array(n) };
     for (let i = 0; i < n; i++) {
       v.fromBufferAttribute(P, i); w.fromBufferAttribute(N, i);
       if (m) { v.applyMatrix4(m); w.applyMatrix3(nm).normalize(); }
       const r = this.at(v.x, v.y, v.z, w.x, w.y, w.z);
-      B.near[i] = r[0]; B.ins[i] = r[1]; B.fA[i] = r[2]; B.fB[i] = r[3]; B.lamp[i] = r[4]; B.rain[i] = r[5]; B.vis[i] = r[6]; B.fill[i] = r[7];
+      B.near[i] = r[0]; B.ins[i] = r[1]; B.fA[i] = r[2]; B.fB[i] = r[3]; B.lamp[i] = r[4]; B.rain[i] = r[5]; B.vis[i] = r[6]; B.fill[i] = r[7]; B.fC[i] = r[8];
     }
     if (!geo.attributes.aAO) geo.setAttribute('aAO', new THREE.BufferAttribute(new Float32Array(n).fill(1), 1));
     if (!geo.attributes.aLamp) geo.setAttribute('aLamp', new THREE.BufferAttribute(new Float32Array(n * 2), 2));
@@ -419,13 +553,14 @@ export class Light {
     this.ms += performance.now() - t0;
     return B;
   }
-  apply(geo, open, key = 'main') {
+  // open: the front doors open; open2: the second door (door2 openings) open
+  apply(geo, open, key = 'main', open2 = false) {
     const B = geo.userData.bakes[key], A = geo.attributes.aAO.array, Lm = geo.attributes.aLamp.array, H = geo.attributes.aHalf, a0 = geo.userData.ao0;
     for (let i = 0; i < A.length; i++) {
       let ao;
       // (indoors the dark comes mostly from how little of the outside a corner sees; the close-in shading only deepens it
       // by half: at full strength the roof boards between the rafters went black, and the rafters read as slivers of light)
-      if (B.ins[i]) ao = (0.5 + 0.5 * B.near[i]) * (this.base + (1 - this.base) * Math.min(1, this.gain * (B.fB[i] + (open ? B.fA[i] : 0)) + this.bounce * Math.min(1, B.lamp[i])));
+      if (B.ins[i]) ao = (0.5 + 0.5 * B.near[i]) * (this.base + (1 - this.base) * Math.min(1, this.gain * (B.fB[i] + (open ? B.fA[i] : 0) + (open2 ? B.fC[i] : 0)) + this.bounce * Math.min(1, B.lamp[i])));
       else ao = this.out[0] + this.out[1] * B.near[i];
       A[i] = a0 ? a0[i] * ao : ao;
       Lm[i * 2] = B.vis[i]; Lm[i * 2 + 1] = B.fill[i];
@@ -470,6 +605,7 @@ export const LU = {
   uLampD: { value: Array.from({ length: LAMP_MAX }, () => new THREE.Vector4(0, -1, 0, 0)) },   // a shaded lamp's way down (w 1)
   uNight: { value: 0 },                                    // 0 day .. 1 night (the window panes glow with the lamps inside)
   uPaintWear: { value: 0.5 },                              // how much of the paint has gone (0..1)
+  uPaintShelter: { value: 0 },                             // how much less paint goes where no rain reaches (under a porch)
 };
 export function setLamps(lamps) {
   for (let i = 0; i < LAMP_MAX; i++) {
@@ -512,27 +648,45 @@ export const NAIL_LINES = [0.6, 1.3, 2.35, 3.75, 5.0, 6.2, 7.2];
 export function boardWear(mat) {
   return chain(mat, 'boardwear', (sh) => {
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec3 aBoard; varying vec3 vBoard;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvBoard = aBoard;');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uPaintWear; varying vec3 vBoard;')
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uPaintWear, uPaintShelter; varying vec3 vBoard;')
       .replace('wPaintVis = wPainted * (1.0 - wChip);', `{
       float pAl = dot(wP.xz, vec2(-wN.z, wN.x));
-      float pStreak = texture2D(uNoise, vec2(pAl * 2.3, wP.y * 0.09)).g * 0.7 + texture2D(uNoise, vec2(pAl * 6.0, wP.y * 0.3)).b * 0.3;
+      // (on upright boards the paint goes in streaks down them; on horizontal ones, lap siding, in long flakes along them)
+      float pStreak = vBoard.x > 1.5
+        ? texture2D(uNoise, vec2(pAl * 0.35, wP.y * 1.9)).g * 0.7 + texture2D(uNoise, vec2(pAl * 1.1, wP.y * 5.0)).b * 0.3
+        : texture2D(uNoise, vec2(pAl * 2.3, wP.y * 0.09)).g * 0.7 + texture2D(uNoise, vec2(pAl * 6.0, wP.y * 0.3)).b * 0.3;
       float pSun = clamp(dot(wN, -uShadeDir) * 0.5 + 0.5, 0.0, 1.0);
       float pLow = 1.0 - smoothstep(0.4, 2.4, wP.y);
       float pEave = 1.0 - smoothstep(0.0, 0.9, wTop - wP.y);
       float pT = 0.6 * (pStreak - 0.5) + 0.45 * (wBig.r - 0.5) + 0.22 * pLow + 0.16 * pSun - 0.22 * pEave + 0.55 * vBoard.z - 0.08 + (uPaintWear - 0.5) * 0.9;
+      #ifdef W_BOX
+      // (sheltered from the rain, under a porch roof: the baked share of rain that reaches it, aHalf.w)
+      pT -= uPaintShelter * (1.0 - smoothstep(0.1, 0.55, vHalf.w));
+      #endif
       float pOff = smoothstep(0.0, 0.08, pT + (wFine.b - 0.5) * 0.14);
       // (only the wall boards wear in patches, the ones with their own numbers: painted iron straps and leather don't)
       wPaintVis = wPainted * (1.0 - max(wChip, pOff * step(0.01, vBoard.x + vBoard.z)));
     }`)
       .replace('wBare = wWear * (1.0 - wPaintVis);', `#ifdef W_BOX
     if (vBoard.x > 0.25) {
-      float nY = vLocalTop.y + vBoard.y, nL = 9.0;
-      ${NAIL_LINES.map((y) => `nL = min(nL, abs(nY - ${y.toFixed(2)}));`).join(' ')}
-      float nAx = abs(vLocalTop.x), nAc = vBoard.x > 0.75 ? abs(nAx - vHalf.x * 0.5) : nAx;
-      float nD = length(vec2(nAc, nL));
+      vec2 nV;
+      if (vBoard.x > 1.5) {
+        // a horizontal board (lap siding, a floor plank): a nail where it crosses each stud or joist, every 0.6 m along
+        // the wall from where the studs start (vBoard.y: how far along the board's middle is); one a little under the
+        // board's middle (2: as built, 3: the board turned over), or two across it (4: a plank)
+        float nA = vLocalTop.x + vBoard.y, nS = abs(fract(nA / 0.6 + 0.5) - 0.5) * 0.6;
+        float nY = vBoard.x < 2.5 ? vLocalTop.y + 0.03 : vBoard.x < 3.5 ? vLocalTop.y - 0.03 : abs(vLocalTop.y) - vHalf.y * 0.5;
+        nV = vec2(nS, abs(nY));
+      } else {
+        float nY = vLocalTop.y + vBoard.y, nL = 9.0;
+        ${NAIL_LINES.map((y) => `nL = min(nL, abs(nY - ${y.toFixed(2)}));`).join(' ')}
+        float nAx = abs(vLocalTop.x), nAc = vBoard.x > 0.75 ? abs(nAx - vHalf.x * 0.5) : nAx;
+        nV = vec2(nAc, nL);
+      }
+      float nD = length(nV);
       float nHead = 1.0 - smoothstep(0.0042, 0.0068, nD);
       diffuseColor.rgb *= 1.0 - 0.3 * (1.0 - smoothstep(0.006, 0.018, nD)) * (1.0 - nHead);   // a faint rust stain round it
-      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.055, 0.05, 0.045) * (1.0 + 1.5 * smoothstep(0.004, 0.0, length(vec2(nAc + 0.0015, nL - 0.0015)))), nHead);
+      diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.055, 0.05, 0.045) * (1.0 + 1.5 * smoothstep(0.004, 0.0, length(nV + vec2(0.0015, -0.0015)))), nHead);
     }
     #endif
     // (no paler rubbed edges on bare wood: they drew a bright line down every rafter and board; the paint still chips)

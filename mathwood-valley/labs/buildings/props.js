@@ -8,6 +8,10 @@
 //   bale     a hay bale (0.9 x 0.4 x 0.46 m), two strings round it
 //   bucket   a wooden bucket, two iron hoops, a wire bail
 //   wagon    a farm wagon: plank box, four spoked wheels (the back ones bigger), the tongue down on the ground
+//   bench    a long plank bench: a thick seat on two splayed leg frames, a stretcher between them (len)
+//   woodpile split firewood stacked on two rails, ends out, a few billets on top (len)
+//   hitchrail a peeled log rail on two posts, an iron ring on each post for the reins (len)
+//   plank    a long board leaning on a wall (len, lean: how far its foot stands out)
 
 import * as THREE from 'three';
 import { Kit, buildGeometry } from '../materials/cabin.js';
@@ -86,6 +90,51 @@ const MAKERS = {
     k.solid([bw + 0.2, 0.5, bl], null, null, mul(M, T(0, fy + 0.2, 0)));
     k.solid([1.5, 1.0, 0.25], null, null, mul(M, T(0, 0.5, -bl / 2 + 0.55)));
     k.solid([1.5, 0.8, 0.25], null, null, mul(M, T(0, 0.4, bl / 2 - 0.55)));
+  },
+  bench(k, M, o) {
+    const q = placer(k, M), L = o.len ?? 1.9, H = 0.46, D = 0.34;
+    q.b([L, 0.06, D], [0, H - 0.03, 0], null, { long: 0, tint: vary(k, PLANK, 0.85, 1.05), cuts: [-0.5, 0.5], segFaces: '+y' });
+    for (const s of [-1, 1]) {
+      const x = s * (L / 2 - 0.22);
+      for (const z of [-1, 1]) q.b([0.07, H - 0.06, 0.07], [x, (H - 0.06) / 2, z * (D / 2 - 0.06)], [z * 0.08, 0, 0], { long: 1, tint: vary(k, DARKW, 0.9, 1.1), skip: '-y' });
+      q.b([0.06, 0.06, D - 0.06], [x, 0.16, 0], null, { long: 2, tint: DARKW });
+    }
+    q.b([L - 0.44, 0.06, 0.05], [0, 0.16, 0], null, { long: 0, tint: DARKW });
+    k.solid([L, H, D], null, null, mul(M, T(0, H / 2, 0)));
+  },
+  woodpile(k, M, o) {
+    const q = placer(k, M), L = o.len ?? 1.1, rows = o.rows ?? 4;
+    for (const s of [-1, 1]) q.b([L + 0.1, 0.07, 0.07], [0, 0.035, s * 0.16], null, { long: 0, tint: DARKW, strip: 10 });
+    const SPLIT = [1.1, 0.92, 0.74];
+    for (let row = 0; row < rows; row++) {
+      const n = Math.max(2, Math.round(L / 0.2) - (row > 2 ? 1 : 0));
+      for (let i = 0; i < n; i++) {
+        const x = -L / 2 + (L / n) * (i + 0.5) + (row % 2 ? 0.05 : 0) + k.r(-0.02, 0.02), y = 0.13 + row * 0.15;
+        // (most of them rounds of a small log, bark on, the rings on their ends; one in three split in half or thirds,
+        // turned its own way round its length; all lying along z, so their ends face out)
+        const r = k.r(0.065, 0.085), ph = k.r(0, 6.28), c = Math.cos(ph), sn = Math.sin(ph), split = k.R() < 0.35;
+        const poly = (split ? [[r, 0], [-r * 0.6, r * k.r(0.75, 0.95)], [-r * 0.6, -r * k.r(0.75, 0.95)]] : ngon(7, r, 0.12, k.R)).map(([a, b]) => [a * c - b * sn, a * sn + b * c]);
+        q.p('wood', poly, k.r(0.42, 0.5), [x, y - (split ? 0 : 0.01), k.r(-0.03, 0.03)], [Math.PI / 2, 0, 0], split ? { tint: vary(k, SPLIT, 0.78, 1.05), strip: 2, fresh: true } : { tint: vary(k, [0.8, 0.72, 0.62], 0.8, 1.05), strip: 10, smooth: true, ends: 'log' });
+      }
+    }
+    k.solid([L, rows * 0.15 + 0.05, 0.46], null, null, mul(M, T(0, (rows * 0.15 + 0.05) / 2, 0)));
+  },
+  hitchrail(k, M, o) {
+    const q = placer(k, M), L = o.len ?? 2.6, H = 0.98, LOG = [0.95, 0.88, 0.8];
+    for (const s of [-1, 1]) {
+      q.p('wood', ngon(7, 0.075, 0.12, k.R), H + 0.05, [s * (L / 2 - 0.15), (H + 0.05) / 2 - 0.02, 0], [0, k.r(0, 3), k.r(-0.03, 0.03)], { tint: vary(k, LOG, 0.85, 1.05), smooth: true, ends: 'log', skip: '-y' });
+      // the ring: eight little iron pieces round, hung from a staple on the post's front
+      const rx = s * (L / 2 - 0.15), ry = H - 0.25, rz = 0.085, rr = 0.05;
+      for (let i = 0; i < 8; i++) { const a = (i + 0.5) / 8 * Math.PI * 2; q.x('iron', [0.012, 0.042, 0.012], [rx + Math.cos(a) * rr, ry + Math.sin(a) * rr, rz], [0, 0, a], { tint: [0.9, 0.8, 0.72] }); }
+      q.x('iron', [0.02, 0.03, 0.03], [rx, ry + rr + 0.015, rz - 0.02], null, { tint: [0.9, 0.8, 0.72] });
+    }
+    q.p('wood', ngon(7, 0.07, 0.1, k.R), L + 0.3, [0, H + 0.02, 0], [0, 0, Math.PI / 2], { tint: vary(k, LOG, 0.9, 1.1), smooth: true, ends: 'log' });
+    k.solid([L, 0.15, 0.15], null, null, mul(M, T(0, H, 0)));
+  },
+  plank(k, M, o) {
+    const q = placer(k, M), L = o.len ?? 2.2, lean = o.lean ?? 0.4, a = Math.asin(Math.min(0.9, lean / L));
+    q.b([0.26, L, 0.035], [0, L / 2 * Math.cos(a), lean / 2], [-a, 0, 0], { long: 1, tint: vary(k, PLANK, 0.8, 1.0), cuts: [-0.5, 0.5] });
+    q.b([0.2, L * 0.92, 0.03], [0.24, L * 0.46 * Math.cos(a), lean * 0.46 + 0.02], [-a, 0, 0.03], { long: 1, tint: vary(k, DARKW, 0.85, 1.05) });
   },
 };
 // a spoked wheel in its own frame (its axle along y)

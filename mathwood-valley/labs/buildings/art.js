@@ -205,6 +205,254 @@ function drawPlate(g, slot, name) {
   }
 }
 
+// ── the sheriff's office: one picture of everything painted, pasted or pinned on it ─────────────────────────────────
+// 1024 x 1024, on see-through (each piece is a plane laid a few mm over the boards or the wall it is on):
+//   sign      "SHERIFF · JAIL" painted straight on the false front's boards: chunky dark slab letters, worn; under them
+//             the ghost of an older sign ("ASSAY OFFICE", pale and mostly gone) and patches where the ochre has peeled
+//             off to the old cream coat under it. Fades to nothing at its edges (no box round it)
+//   posters   three WANTED posters (a face, a name, a reward; one torn half off) and small notices, aged paper, torn edges
+//   hole      a bullet hole: a dark hole, splinters round it
+//   map, calendar, rules, rug, blanket: for inside
+export const SHERIFF_ART = {
+  w: 1024, h: 1024,
+  sign: [0, 0, 1024, 224],
+  posters: [[0, 232, 200, 272], [204, 232, 200, 272], [408, 232, 200, 272]],
+  notices: [[612, 232, 132, 172], [748, 232, 132, 172], [884, 232, 132, 172], [612, 408, 132, 96]],
+  holes: [[748, 408, 64, 64], [816, 408, 64, 64]],
+  map: [0, 512, 448, 320], calendar: [452, 512, 160, 216], rules: [616, 512, 168, 216], rug: [788, 512, 236, 320],
+  blanket: [0, 840, 512, 176], hat: [520, 840, 96, 96],
+};
+// the UVs of a region of a picture W x H (u0, v0 at the bottom left: the canvas is flipped as it goes up)
+export function regionUV([x, y, w, h], W = 1024, H = 1024) { return [x / W, 1 - (y + h) / H, (x + w) / W, 1 - y / H]; }
+
+// a mask that eats in from a region's edges, raggedly (torn paper, a sign's fade): 1 inside, 0 at the edge
+function raggedEdge(x, y, w, h, seed, depth, rough) {
+  const d = Math.min(x, y, w - 1 - x, h - 1 - y), n = fbm(x / 64, y / 64, 8, 8, 3, seed) - 0.5;
+  return clamp01((d - depth * (0.5 + n * rough * 2)) / 2.5);
+}
+function drawSheriffSign(g, [x0, y0, w, h]) {
+  const L = canvasOf(w, h), lg = L.getContext('2d');
+  // 1. the old cream coat showing where the ochre has peeled: soft blotches round the letters, thickest across the
+  // middle of the sign, gone at its edges
+  const img = lg.createImageData(w, h), d = img.data;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const u = x / w, v = y / h, i = (y * w + x) * 4;
+    const band = Math.min(1, Math.min(u, 1 - u) / 0.12) * Math.min(1, Math.min(v, 1 - v) / 0.2);
+    const n = fbm(u * 2.5, v * 1.2, 5, 3, 4, 1201) * 0.75 + 0.25 * fbm(u * 9, v * 4, 9, 4, 2, 1207);
+    const a = clamp01((n - 0.5 + 0.2 * band) * 4.5) * band;
+    // (streaky: the paint goes along the boards, in long horizontal flakes)
+    const flake = fbm(u * 1.0, v * 6.0, 4, 6, 3, 1213);
+    d[i] = 228; d[i + 1] = 216; d[i + 2] = 188; d[i + 3] = 255 * clamp01(a * (0.55 + 0.6 * flake)) * 0.85;
+  }
+  lg.putImageData(img, 0, 0);
+  // 2. the ghost of the older sign, in a lighter paint: big thin letters, mostly gone
+  const G = canvasOf(w, h), gg = G.getContext('2d');
+  gg.textAlign = 'center'; gg.textBaseline = 'middle'; gg.fillStyle = 'rgba(246,236,210,1)';
+  gg.font = '400 128px Rye, Georgia, serif';
+  let gs = 128; while (gg.measureText('ASSAY OFFICE').width > w * 0.86 && gs > 60) { gs -= 4; gg.font = `400 ${gs}px Rye, Georgia, serif`; }
+  gg.fillText('ASSAY OFFICE', w / 2 + 14, h * 0.5 - 6);
+  wear(gg, [0, 0, w, h], 0.42, 1231, 2.2);
+  lg.globalAlpha = 0.34; lg.drawImage(G, 0, 0); lg.globalAlpha = 1;
+  // 3. the letters: chunky dark slab capitals, a dot between the words, the paint worn back with noise
+  const T = canvasOf(w, h), tg = T.getContext('2d');
+  tg.textBaseline = 'middle'; tg.textAlign = 'left';
+  const words = ['SHERIFF', 'JAIL'], gap = 120;
+  let size = 176, widths;
+  const font = (sz) => `900 ${sz}px Bitter, Georgia, serif`;
+  const track = (t, sz) => [...t].reduce((s, c) => s + tg.measureText(c).width, 0) + (t.length - 1) * sz * 0.07;
+  for (;;) { tg.font = font(size); widths = words.map((t) => track(t, size)); if (widths[0] + widths[1] + gap < w * 0.84 || size < 80) break; size -= 4; }
+  let x = (w - (widths[0] + widths[1] + gap)) / 2; const y = h / 2 + 8;
+  tg.font = font(size); tg.lineJoin = 'round';
+  words.forEach((t, wi) => {
+    for (const c of t) {
+      tg.strokeStyle = '#140d08'; tg.lineWidth = 6; tg.strokeText(c, x, y + (Math.sin(x * 0.07) * 2)); tg.fillStyle = '#2b1e15'; tg.fillText(c, x, y + (Math.sin(x * 0.07) * 2));
+      x += tg.measureText(c).width + size * 0.07;
+    }
+    x -= size * 0.07;
+    if (wi === 0) { tg.fillStyle = '#2b1e15'; tg.beginPath(); tg.arc(x + gap / 2, y + 4, size * 0.085, 0, 7); tg.fill(); x += gap; }
+  });
+  wear(tg, [0, 0, w, h], 0.17, 1241, 1.7);
+  // (and drips: a few runs of paint down from the letters' feet)
+  const R = rng(1251);
+  for (let k = 0; k < 9; k++) { const dx = w * (0.12 + 0.76 * R()), dy = y + size * 0.36; tg.fillStyle = 'rgba(43,30,21,0.8)'; tg.fillRect(dx, dy, 2.5, 6 + R() * 18); }
+  lg.drawImage(T, 0, 0);
+  g.clearRect(x0, y0, w, h);
+  g.drawImage(L, x0, y0);
+}
+// aged paper: cream going yellow-brown at the edges, stains, a fold line or two; its outline torn
+function paper(g, [x0, y0, w, h], seed, o = {}) {
+  const img = g.createImageData(w, h), d = img.data, R = rng(seed);
+  const base = o.base || [226, 212, 172], tearY = o.tear ? h * o.tear : null;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const u = x / w, v = y / h, i = (y * w + x) * 4;
+    const edge = Math.min(u, 1 - u, v, 1 - v), burn = 1 - smoothstep(0, 0.12, edge);
+    const n = fbm(u, v, 6, 8, 4, seed), st = fbm(u, v, 3, 3, 3, seed + 7);
+    const l = 0.92 + 0.12 * (n - 0.5) - 0.22 * burn - 0.18 * clamp01((st - 0.62) * 4);
+    d[i] = base[0] * l; d[i + 1] = base[1] * l * (1 - 0.06 * burn); d[i + 2] = base[2] * l * (1 - 0.18 * burn);
+    let a = raggedEdge(x, y, w, h, seed + 11, 3, 1.2);
+    // torn across: everything under a jagged line gone
+    if (tearY !== null) { const ty = tearY + (fbm(u * 3, 0, 12, 1, 3, seed + 13) - 0.5) * h * 0.22 + (u - 0.5) * h * 0.18; if (y > ty) a = 0; else a *= clamp01((ty - y) / 2); }
+    d[i + 3] = 255 * a;
+  }
+  g.putImageData(img, x0, y0);
+  // fold lines
+  for (let f = 0; f < (o.folds ?? 1); f++) { const fy = y0 + h * (0.35 + 0.3 * R()); g.fillStyle = 'rgba(90,70,40,0.12)'; g.fillRect(x0 + 4, fy, w - 8, 2); g.fillStyle = 'rgba(255,250,230,0.12)'; g.fillRect(x0 + 4, fy + 2, w - 8, 1); }
+}
+function smoothstep(a, b, x) { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); }
+// the text on a paper, in the paper's own layer (so the tear and the edges cut it too): clipped to the paper's alpha
+function onPaper(g, [x0, y0, w, h], draw) {
+  const P = canvasOf(w, h), pg = P.getContext('2d');
+  draw(pg, w, h);
+  pg.globalCompositeOperation = 'destination-in'; pg.drawImage(g.canvas, x0, y0, w, h, 0, 0, w, h);
+  g.drawImage(P, x0, y0);
+}
+const INK = '#2a1f16';
+// lines of small print: grey bars of words
+function printLines(pg, x, y, w, rows, R, step = 9) {
+  pg.fillStyle = 'rgba(42,31,22,0.62)';
+  for (let r = 0; r < rows; r++) { let cx = x; const ex = x + w * (r === rows - 1 ? 0.55 + 0.3 * R() : 1); while (cx < ex - 6) { const ww = Math.min(6 + R() * 18, ex - cx); pg.fillRect(cx, y + r * step, ww, 3.2); cx += ww + 4; } }
+}
+// a face sketched in ink: shoulders, a head, a wide-brimmed hat, eyes, a moustache (a friendly one: this is for kids)
+function face(pg, cx, cy, s, R) {
+  pg.fillStyle = 'rgba(60,45,30,0.16)'; pg.fillRect(cx - s * 1.3, cy - s * 1.6, s * 2.6, s * 2.9);   // the sketch's shaded box
+  pg.strokeStyle = INK; pg.fillStyle = INK; pg.lineWidth = 2;
+  pg.beginPath(); pg.moveTo(cx - s * 1.2, cy + s * 1.3); pg.quadraticCurveTo(cx - s * 1.1, cy + s * 0.55, cx - s * 0.3, cy + s * 0.5); pg.lineTo(cx + s * 0.3, cy + s * 0.5); pg.quadraticCurveTo(cx + s * 1.1, cy + s * 0.55, cx + s * 1.2, cy + s * 1.3); pg.stroke();
+  pg.fillStyle = 'rgba(222,200,160,0.9)'; pg.beginPath(); pg.ellipse(cx, cy, s * 0.48, s * 0.6, 0, 0, 7); pg.fill(); pg.stroke();
+  pg.fillStyle = INK;
+  pg.beginPath(); pg.ellipse(cx, cy - s * 0.52, s * 1.0, s * 0.16, 0, 0, 7); pg.fill();                   // the brim
+  pg.beginPath(); pg.moveTo(cx - s * 0.5, cy - s * 0.55); pg.quadraticCurveTo(cx - s * 0.48, cy - s * 1.15, cx, cy - s * 1.1); pg.quadraticCurveTo(cx + s * 0.48, cy - s * 1.15, cx + s * 0.5, cy - s * 0.55); pg.fill();   // the crown
+  for (const ex of [-0.18, 0.18]) { pg.beginPath(); pg.arc(cx + ex * s, cy - s * 0.12, s * 0.055, 0, 7); pg.fill(); }
+  pg.beginPath(); pg.moveTo(cx - s * 0.26, cy + s * 0.2); pg.quadraticCurveTo(cx, cy + s * 0.08, cx + s * 0.26, cy + s * 0.2); pg.quadraticCurveTo(cx, cy + s * (0.26 + 0.05 * R()), cx - s * 0.26, cy + s * 0.2); pg.fill();   // moustache
+  pg.lineWidth = 1.5; pg.beginPath(); pg.moveTo(cx - s * 0.04, cy - s * 0.05); pg.lineTo(cx - s * 0.08, cy + s * 0.1); pg.lineTo(cx + s * 0.03, cy + s * 0.11); pg.stroke();   // nose
+}
+function wantedPoster(g, r, o) {
+  paper(g, r, o.seed, { tear: o.tear, folds: 2 });
+  onPaper(g, r, (pg, w, h) => {
+    const R = rng(o.seed + 3);
+    pg.textAlign = 'center'; pg.textBaseline = 'alphabetic'; pg.fillStyle = INK;
+    pg.font = `400 ${Math.round(w * 0.2)}px Rye, Georgia, serif`; pg.fillText('WANTED', w / 2, h * 0.15);
+    pg.fillRect(w * 0.1, h * 0.18, w * 0.8, 2);
+    face(pg, w / 2, h * 0.39, w * 0.17, R);
+    pg.font = `800 ${Math.round(w * 0.085)}px Bitter, Georgia, serif`; pg.fillText(o.name, w / 2, h * 0.64);
+    pg.font = `400 ${Math.round(w * 0.13)}px Rye, Georgia, serif`; pg.fillText('REWARD', w / 2, h * 0.76);
+    pg.font = `900 ${Math.round(w * 0.12)}px Bitter, Georgia, serif`; pg.fillText(o.reward, w / 2, h * 0.87);
+    printLines(pg, w * 0.14, h * 0.9, w * 0.72, 2, R, 8);
+  });
+  wear(g, r, 0.04, o.seed + 5, 3);
+}
+function notice(g, r, o) {
+  paper(g, r, o.seed, { base: o.base, folds: 1 });
+  onPaper(g, r, (pg, w, h) => {
+    const R = rng(o.seed + 3);
+    pg.textAlign = 'center'; pg.fillStyle = INK;
+    pg.font = `800 ${Math.round(w * 0.13)}px Bitter, Georgia, serif`; pg.fillText(o.title, w / 2, h * 0.2);
+    if (o.big) { pg.font = `400 ${Math.round(w * 0.2)}px Rye, Georgia, serif`; pg.fillText(o.big, w / 2, h * 0.42); }
+    printLines(pg, w * 0.12, h * (o.big ? 0.52 : 0.32), w * 0.76, o.big ? 5 : 8, R, 9);
+  });
+}
+// a bullet hole: dark and ragged in the middle, splinters of paler wood round it, a scorch of dirt
+function bulletHole(g, [x0, y0, w, h], seed) {
+  const R = rng(seed), cx = x0 + w / 2, cy = y0 + h / 2;
+  g.clearRect(x0, y0, w, h);
+  const gr = g.createRadialGradient(cx, cy, 2, cx, cy, w * 0.45);
+  gr.addColorStop(0, 'rgba(40,28,18,0.55)'); gr.addColorStop(1, 'rgba(40,28,18,0)');
+  g.fillStyle = gr; g.fillRect(x0, y0, w, h);
+  for (let k = 0; k < 13; k++) {
+    const a = R() * Math.PI * 2, L = w * (0.2 + 0.24 * R());
+    g.strokeStyle = `rgba(${200 + R() * 30 | 0},${178 + R() * 30 | 0},${140 + R() * 20 | 0},0.85)`; g.lineWidth = 1.5 + R() * 2;
+    g.beginPath(); g.moveTo(cx + Math.cos(a) * 4, cy + Math.sin(a) * 4); g.lineTo(cx + Math.cos(a) * L, cy + Math.sin(a) * L * 0.6); g.stroke();
+  }
+  // (a ring of torn, darker wood round the hole, then the hole itself, ragged)
+  g.fillStyle = 'rgba(52,36,24,0.9)'; g.beginPath();
+  for (let k = 0; k <= 11; k++) { const a = k / 11 * Math.PI * 2, rr = w * (0.17 + 0.06 * R()); g[k ? 'lineTo' : 'moveTo'](cx + Math.cos(a) * rr, cy + Math.sin(a) * rr); }
+  g.fill();
+  g.fillStyle = '#0a0705'; g.beginPath();
+  for (let k = 0; k <= 9; k++) { const a = k / 9 * Math.PI * 2, rr = w * (0.11 + 0.04 * R()); g[k ? 'lineTo' : 'moveTo'](cx + Math.cos(a) * rr, cy + Math.sin(a) * rr); }
+  g.fill();
+}
+// the valley drawn by hand on parchment: a river, hills, the trail, the town, a compass
+function valleyMap(g, r) {
+  paper(g, r, 1301, { base: [222, 204, 160], folds: 2 });
+  onPaper(g, r, (pg, w, h) => {
+    const R = rng(1303);
+    pg.strokeStyle = 'rgba(70,90,110,0.85)'; pg.lineWidth = 5;
+    pg.beginPath(); pg.moveTo(w * 0.05, h * 0.25); pg.bezierCurveTo(w * 0.35, h * 0.1, w * 0.4, h * 0.7, w * 0.95, h * 0.62); pg.stroke();
+    pg.strokeStyle = 'rgba(110,80,50,0.8)'; pg.lineWidth = 2.5; pg.setLineDash([7, 5]);
+    pg.beginPath(); pg.moveTo(w * 0.1, h * 0.9); pg.bezierCurveTo(w * 0.3, h * 0.6, w * 0.6, h * 0.95, w * 0.75, h * 0.3); pg.stroke(); pg.setLineDash([]);
+    pg.fillStyle = 'rgba(60,45,30,0.75)';
+    for (let k = 0; k < 9; k++) { const x = w * (0.55 + 0.4 * R()), y = h * (0.08 + 0.2 * R()); pg.beginPath(); pg.moveTo(x - 16, y + 12); pg.lineTo(x, y - 10); pg.lineTo(x + 16, y + 12); pg.closePath(); pg.fill(); }
+    for (let k = 0; k < 14; k++) { const x = w * (0.05 + 0.3 * R()), y = h * (0.45 + 0.3 * R()); pg.beginPath(); pg.arc(x, y, 5 + R() * 3, 0, 7); pg.fill(); }
+    pg.fillStyle = 'rgba(150,40,30,0.9)'; for (const [x, y] of [[0.52, 0.48], [0.56, 0.5], [0.5, 0.53], [0.55, 0.55], [0.6, 0.47]]) pg.fillRect(w * x, h * y, 10, 8);
+    pg.fillStyle = INK; pg.textAlign = 'center'; pg.font = '400 30px Rye, Georgia, serif'; pg.fillText('MATHWOOD VALLEY', w / 2, h * 0.93);
+    pg.font = '700 15px Bitter, Georgia, serif'; pg.fillText('TOWN', w * 0.55, h * 0.45);
+    pg.strokeStyle = INK; pg.lineWidth = 2; pg.beginPath(); pg.arc(w * 0.88, h * 0.82, 20, 0, 7); pg.moveTo(w * 0.88, h * 0.82 - 28); pg.lineTo(w * 0.88, h * 0.82 + 28); pg.moveTo(w * 0.88 - 28, h * 0.82); pg.lineTo(w * 0.88 + 28, h * 0.82); pg.stroke();
+    pg.font = '800 13px Bitter, Georgia, serif'; pg.fillText('N', w * 0.88, h * 0.82 - 32);
+  });
+}
+function calendar(g, r) {
+  paper(g, r, 1311, { base: [232, 222, 196], folds: 0 });
+  onPaper(g, r, (pg, w, h) => {
+    pg.textAlign = 'center'; pg.fillStyle = 'rgba(140,40,30,0.95)'; pg.font = '400 30px Rye, Georgia, serif'; pg.fillText('MAY', w / 2, 40);
+    pg.fillStyle = INK; pg.font = '700 16px Bitter, Georgia, serif'; pg.fillText('1881', w / 2, 62);
+    pg.strokeStyle = 'rgba(42,31,22,0.55)'; pg.lineWidth = 1;
+    const gx = 12, gy = 74, cw = (w - 24) / 7, ch = (h - 86) / 5;
+    for (let i = 0; i <= 7; i++) { pg.beginPath(); pg.moveTo(gx + i * cw, gy); pg.lineTo(gx + i * cw, gy + 5 * ch); pg.stroke(); }
+    for (let j = 0; j <= 5; j++) { pg.beginPath(); pg.moveTo(gx, gy + j * ch); pg.lineTo(gx + 7 * cw, gy + j * ch); pg.stroke(); }
+    pg.font = '600 11px Bitter, Georgia, serif'; pg.fillStyle = INK;
+    for (let dd = 1; dd <= 31; dd++) { const c = (dd + 6) % 7, rr = Math.floor((dd + 6) / 7); if (rr > 4) continue; pg.fillText(String(dd), gx + c * cw + cw * 0.5, gy + rr * ch + 13); }
+    pg.strokeStyle = 'rgba(42,31,22,0.8)'; pg.lineWidth = 1.6;
+    for (let dd = 1; dd <= 17; dd++) { const c = (dd + 6) % 7, rr = Math.floor((dd + 6) / 7); const cx = gx + c * cw, cy = gy + rr * ch; pg.beginPath(); pg.moveTo(cx + 4, cy + 4); pg.lineTo(cx + cw - 4, cy + ch - 4); pg.stroke(); }
+  });
+}
+function jailRules(g, r) {
+  paper(g, r, 1321, { base: [230, 218, 184], folds: 1 });
+  onPaper(g, r, (pg, w, h) => {
+    pg.textAlign = 'center'; pg.fillStyle = INK; pg.font = '400 24px Rye, Georgia, serif'; pg.fillText('JAIL RULES', w / 2, 38);
+    pg.fillRect(w * 0.15, 48, w * 0.7, 2);
+    pg.textAlign = 'left'; pg.font = '700 13px Bitter, Georgia, serif';
+    ['1. WIPE YOUR BOOTS', '2. NO SPITTING', '3. NO SINGING', '    AFTER DARK', '4. NO ESCAPING', '5. SAY PLEASE'].forEach((t, i) => pg.fillText(t, 14, 78 + i * 22));
+  });
+}
+// a woven rug: bands and stepped diamonds in red, cream, black and grey, worn pale in the middle, a fringe at the ends
+function rug(g, [x0, y0, w, h]) {
+  const img = g.createImageData(w, h), d = img.data;
+  const C = { r: [150, 46, 32], c: [214, 196, 160], k: [40, 32, 28], g: [120, 112, 100] };
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const u = x / w, v = y / h, i = (y * w + x) * 4;
+    const fringe = v < 0.04 || v > 0.96;
+    const bv = Math.abs(v - 0.5) * 2, dia = Math.abs(u - 0.5) * 2 + Math.abs(((v * 3) % 1) - 0.5) * 2;
+    let c = bv > 0.82 ? C.k : bv > 0.74 ? C.c : dia < 0.35 ? C.k : dia < 0.55 ? C.c : dia < 0.75 ? C.r : (Math.floor(v * 24) % 2 ? C.g : C.r);
+    if (Math.abs(u - 0.5) > 0.44) c = C.k;
+    const wv = 0.88 + 0.12 * Math.sin(x * 1.7) * Math.sin(y * 1.3) + 0.1 * (fbm(u, v, 6, 6, 3, 1331) - 0.5) + 0.12 * (1 - Math.min(1, Math.hypot(u - 0.5, v - 0.5) * 2.4));
+    d[i] = c[0] * wv; d[i + 1] = c[1] * wv; d[i + 2] = c[2] * wv;
+    d[i + 3] = fringe ? (x % 5 < 2 ? 200 : 0) : 255;
+    if (fringe) { d[i] = 200; d[i + 1] = 186; d[i + 2] = 150; }
+  }
+  g.putImageData(img, x0, y0);
+}
+// a grey wool blanket, two dark stripes near each end
+function blanket(g, [x0, y0, w, h]) {
+  const img = g.createImageData(w, h), d = img.data;
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const u = x / w, i = (y * w + x) * 4, st = (u > 0.08 && u < 0.12) || (u > 0.15 && u < 0.17) || (u > 0.83 && u < 0.85) || (u > 0.88 && u < 0.92);
+    const l = (st ? 0.35 : 1) * (0.86 + 0.14 * fbm(x / w, y / h, 12, 4, 3, 1341) + 0.05 * Math.sin(x * 2.3 + y * 1.9));
+    d[i] = 120 * l; d[i + 1] = 112 * l; d[i + 2] = 98 * l; d[i + 3] = 255;
+  }
+  g.putImageData(img, x0, y0);
+}
+export async function makeSheriffArt() {
+  try { await Promise.all([document.fonts.load('64px Rye'), document.fonts.load('900 64px Bitter'), document.fonts.load('800 40px Bitter'), document.fonts.load('700 16px Bitter')]); } catch (e) { /* the fonts are optional */ }
+  const t0 = performance.now(), A = SHERIFF_ART, c = canvasOf(A.w, A.h), g = c.getContext('2d', { willReadFrequently: true });
+  drawSheriffSign(g, A.sign);
+  const names = [['DUSTY PETE', '$500'], ['ONE-EYED JACK', '$300'], ['THE KID', '$200']];
+  A.posters.forEach((r, i) => wantedPoster(g, r, { seed: 1401 + i * 17, name: names[i][0], reward: names[i][1], tear: i === 2 ? 0.55 : null }));
+  [['NOTICE', null, null], ['REWARD', '$50', [236, 226, 196]], ['LOST HORSE', null, [214, 200, 168]], ['NOTICE', null, [226, 214, 184]]].forEach(([t, big, base], i) => notice(g, A.notices[i], { seed: 1501 + i * 13, title: t, big, base }));
+  A.holes.forEach((r, i) => bulletHole(g, r, 1601 + i));
+  valleyMap(g, A.map); calendar(g, A.calendar); jailRules(g, A.rules); rug(g, A.rug); blanket(g, A.blanket);
+  const t = tex(c, { repeat: false, aniso: 8 });
+  return { sheriff: t, bytes: gpuBytes(A.w, A.h), ms: performance.now() - t0 };
+}
+
 // all of the lab's own pictures. boards.slotFor(i, { name, price, owned }) draws slot i again (and sends it up)
 export async function makeArt() {
   try { await Promise.all([document.fonts.load('64px Rye'), document.fonts.load('30px Smokum'), document.fonts.load('900 64px Bitter'), document.fonts.load('800 40px Bitter')]); } catch (e) { /* the fonts are optional */ }

@@ -1229,8 +1229,10 @@ export function buildStoneWall(recipe = {}, env = {}) {
     const front = { ...op, sec: op.sec || 0, reveal };
     openings.push(front);
     if (op.through) {
+      // (on its far face at the same place, mirrored; backU says where when the far face isn't the same length, as on
+      // the inside of a U whose arms end against another building)
       const sec = secs[front.sec], wb = sec.C[op.back + 1] - sec.C[op.back];
-      openings.push({ ...front, face: op.back, u: wb - op.u, mirror: true });
+      openings.push({ ...front, face: op.back, u: op.backU ?? wb - op.u, mirror: true });
     }
   }
   const T = spec.top, capBottom = T.y - T.t;
