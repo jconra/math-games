@@ -148,7 +148,10 @@ export function prepareHorse(scene, scale) {
   for (let i = 0; i < n; i++) {
     const t = tA[i], h = hA[i];
     if (W.legs[i] + W.tail[i] > 0.3 || W.ear[i] > 0.2 || t < withersT - 0.08 || t > neckL + 0.05 || rest[i * 3 + 2] < legSplit) continue;
-    const band = BAND * sstep(t, withersT - 0.06, withersT + 0.22) * (1 - (sculptedHair ? 0.35 : 0.7) * sstep(t, neckL - 0.25, neckL)) * (sculptedHair ? 1 : 1 - sstep(t, neckL - 0.04, neckL));
+    // (hair cards: a band of hair colour under the mane, wider down the near side where it falls, so a gap between the
+    // cards shows hair, not coat)
+    const side = sculptedHair ? 1 : 0.85 + 1.15 * sstep(rest[i * 3] - midX, -0.02, 0.03);
+    const band = BAND * side * sstep(t, withersT - 0.06, withersT + 0.22) * (1 - (sculptedHair ? 0.35 : 0.2) * sstep(t, neckL - 0.25, neckL)) * (sculptedHair ? 1 : 1 - sstep(t, neckL - 0.05, neckL - 0.01));
     if (band < 0.005) continue;
     const c = crestAt(t), d = c - h;                 // how far below the crest
     const m = 1 - sstep(d, band - 0.015, band + 0.015);
@@ -304,6 +307,7 @@ float furFineFade = 1.0;
 float furMedFade = 1.0;
 float furHairN = 0.5;        // the fine streak noise here (white edges break up hair by hair)
 float furEdge = 0.0;         // 1: the hair highlight sits toward the outline (the short coat), 0: everywhere (long hair)
+float furBroad = 0.0;        // a soft, broad band of sheen along the hair over the whole coat
 SHAPE_CONSTANTS
 const float FINE_F = 380.0;   // fine hair streaks: about 2.6 mm across ...
 const float FINE_S = 4.5;     // ... and 4.5 times as long
@@ -370,7 +374,7 @@ float faceWhite( vec3 p, vec3 n ) {
   if ( uFace.w > 0.5 || ( uFace.x > 0.5 && uFace.x < 2.5 ) ) {
     vec2 q = vec2( s, ( t - 0.4 ) * FACE_L ) / ( 0.04 * sz );
     float r = mix( length( q ), ( abs( q.x ) + abs( q.y ) ) * 0.82, 0.45 );
-    star = ( 1.0 - smoothstep( 0.78, 1.0, r + rag * 0.9 + hairy / ( 0.04 * sz ) ) ) * facing;
+    star = ( 1.0 - smoothstep( 0.72, 1.02, r + rag * 0.45 + hairy * 0.35 / ( 0.04 * sz ) ) ) * facing;   // (a solid centre, a soft, slightly ragged edge)
   }
   float w = 0.0, t0 = 0.0, t1 = 0.0, edge = 0.008;
   if ( uFace.x > 1.5 && uFace.x < 2.5 ) { w = 0.015 * sz; t0 = 0.42; t1 = 0.84; edge = 0.005; }       // stripe
@@ -382,7 +386,8 @@ float faceWhite( vec3 p, vec3 n ) {
   else if ( uFace.x > 4.5 ) { w = 0.018 * sz; t0 = 0.88; t1 = 1.0; edge = 0.006; }                    // snip
   float band = 0.0;
   if ( w > 0.0 ) {
-    band = ( 1.0 - smoothstep( w - edge, w + edge, s + rag * w * 0.8 + hairy ) )
+    float small = clamp( w / 0.04, 0.3, 1.0 );                              // (a narrow stripe or a snip: less raggedness, so it stays whole)
+    band = ( 1.0 - smoothstep( w - edge, w + edge, s + rag * w * 0.8 * small + hairy * small ) )
          * smoothstep( t0 - 0.03, t0 + 0.03, t + rag * 0.05 ) * ( 1.0 - smoothstep( t1 - 0.03, t1 + 0.02, t ) ) * facing;
   }
   return max( star, band );
@@ -471,6 +476,9 @@ vec3 furDirect( vec3 L, vec3 V, vec3 N, vec3 color, vec3 albedo ) {
   float kk = pow( sqrt( max( 0.0, 1.0 - th * th ) ), furShinePow );
   float edge = mix( 1.0, 0.2 + 1.6 * pow( 1.0 - nv, 1.5 ), furEdge );
   vec3 shine = color * saturate( nl ) * kk * furShine * edge * tint;
+  // and a soft, broad band of it across the whole coat (so the muscles catch the light), not just toward the outline
+  float broad = pow( sqrt( max( 0.0, 1.0 - th * th ) ), 9.0 );
+  shine += color * saturate( nl ) * broad * furBroad * tint;
   return sheen + shine;
 }
 `;
@@ -631,6 +639,7 @@ furSheen = 0.6 * uFur.z * ( 1.0 - cHoof ) * ( 1.0 - 0.6 * cMuz );
 furShine = uFur.w * 0.36 * ( 1.0 - cHoof ) * ( 1.0 - cMuz * 0.7 ) * ( 0.7 + 0.6 * sFine );
 furShinePow = 40.0;
 furEdge = 1.0;
+furBroad = uFur.w * 0.11 * ( 1.0 - cHoof ) * ( 1.0 - cMuz * 0.6 ) * ( 0.8 + 0.4 * sMed );
 vec4 cDebug = vec4( 0.0 );
 if ( uMask > 0.5 ) {
   if ( uMask < 1.5 ) cDebug = vec4( cLegs + cHair * 0.8, cNeck + cHead + cTail * 0.6, cHQ + cMane * 0.9 + cHead, 1.0 );

@@ -25,7 +25,7 @@ const BASE = { mane: '#16110e', points: 'none', belly: 0.6, sooty: 0.25, bloom: 
   bump: 1, streakColor: 1, sheen: 1, shine: 1, roots: 0.35, tips: 0.3, strands: 0.5, maneShine: 0.6, maneLength: 0.85, tailLength: 0.9 };
 
 export const PRESETS = {
-  bay: { label: 'Bay', game: 'bay', base: '#74361b', points: 'black', mane: '#15100d', face: 'star', faceSize: 0.7, sooty: 0.35, bloom: 0.6, seed: 3 },
+  bay: { label: 'Bay', game: 'bay', base: '#7a3f20', points: 'black', mane: '#15100d', face: 'star', faceSize: 0.7, sooty: 0.35, bloom: 0.6, seed: 3 },
   chestnut: { label: 'Chestnut', game: 'chestnut', base: '#a65a2a', mane: '#d6b47a', bloom: 0.5, face: 'blaze', legs: { FL: 'none', FR: 'none', HL: 'sock', HR: 'sock' },
     muzzle: 0.45, roots: 0.25, tips: 0.45, sooty: 0.12, seed: 11 },
   palomino: { label: 'Palomino', game: 'palomino', base: '#c99a52', mane: '#eee2c4', face: 'snip', muzzle: 0.75, belly: 0.35, sooty: 0.1, roots: 0.2, tips: 0.25, seed: 5 },
@@ -33,7 +33,7 @@ export const PRESETS = {
     muzzle: 0.85, belly: 0.1, sooty: 0, face: 'none', strands: 0.9, roots: 0.45, tips: 0.25, seed: 7 },
   midnight: { label: 'Midnight', game: 'midnight', base: '#1d1918', mane: '#110e0d', points: 'none', face: 'star', faceSize: 0.6, belly: 0.25, sooty: 0,
     muzzle: 0.5, shine: 1.3, seed: 9 },
-  tobiano: { label: 'Tobiano', game: 'bay', base: '#74361b', points: 'black', mane: '#15100d', pinto: 'tobiano', white: 0.3, face: 'star', faceSize: 0.8, seed: 21 },
+  tobiano: { label: 'Tobiano', game: 'bay', base: '#7a3f20', points: 'black', mane: '#15100d', pinto: 'tobiano', white: 0.3, face: 'star', faceSize: 0.8, seed: 21 },
   overo: { label: 'Overo', game: 'chestnut', base: '#8c4019', mane: '#6e3214', pinto: 'overo', white: 0.55, face: 'bald', muzzle: 0.5, seed: 4 },
   sabino: { label: 'Sabino', game: 'bay', base: '#4a2616', points: 'black', mane: '#120e0c', pinto: 'sabino', white: 0.3, roan: 0.7, face: 'blaze', faceSize: 1.15, seed: 8 },
 };
@@ -59,7 +59,7 @@ const jitter = (R, hex, amt) => {   // a shade lighter or darker, a touch warmer
 };
 // the coat colours, how common each is (weights), and what goes with them
 const COLOURS = {
-  bay: { w: 30, base: '#74361b', bloom: 0.5, points: 'black', mane: '#15100d' },
+  bay: { w: 30, base: '#7a3f20', bloom: 0.5, points: 'black', mane: '#15100d' },
   darkBay: { w: 14, base: '#4c2617', points: 'black', mane: '#120e0c', sooty: 0.3 },
   chestnut: { w: 24, base: '#a65a2a', mane: '#8a3f1a', muzzle: 0.45, bloom: 0.4 },
   flaxenChestnut: { w: 8, base: '#a65a2a', mane: '#d6b47a', muzzle: 0.45, tips: 0.45 },

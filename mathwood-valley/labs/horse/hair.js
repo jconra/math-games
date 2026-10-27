@@ -15,15 +15,17 @@ import * as THREE from 'three';
 import { COMMON, LIGHT_HOOK } from './coat.js';
 
 export const HAIR = {
-  // the mane: unbroken from just behind the ears to the withers, shortest at the poll and longest mid-neck, most of it
-  // down the near (left) side and some over to the far side, the roots sunk under the skin of the crest
-  mane: { cards: 28, rows: 6, length: 0.42, width: [0.11, 0.12], lift: [-0.012, 0.03], farShare: 0.12 },
-  crest: { cards: 12, rows: 3, length: 0.08, width: [0.09, 0.09], lift: [-0.01, 0.012] },   // a short fringe on the far side
-  forelock: { cards: 4, rows: 5, length: 0.2, width: [0.05, 0.014], lift: [-0.006, 0.008] },   // tapered, to about eye level, lying on the forehead
-  // the tail: a cone from the dock to the middle of the hind cannons, crossed strips through its middle and a fan round it
-  tail: { cards: 18, crossed: 3, rows: 9, end: 0.32, width: [0.06, 0.17], radius: [0.025, 0.15] },
+  // the mane: rooted on one line along the top of the neck (the crest, smoothed), 1.5 cm inside the skin, from just
+  // behind the ears to the withers, neighbours overlapping by well over half; shortest at the poll and longest mid-neck;
+  // most of it down the near (left) side, some over to the far side. Narrow at the root, widest a third of the way down
+  mane: { cards: 34, rows: 6, length: 0.42, width: [0.115, 0.085], lift: [-0.015, 0.028], farShare: 0.1 },
+  crest: { cards: 10, rows: 3, length: 0.08, width: [0.09, 0.08], lift: [-0.012, 0.01] },   // a short fringe on the far side
+  forelock: { cards: 3, rows: 4, length: 0.12, width: [0.04, 0.022] },                       // short, off the face, fading out
+  // the tail: a bundle of cards crossed round its middle line (full from every angle) and a light fan round it, held off
+  // the rump, narrow at the dock and fanning a little toward the end, which reaches the middle of the hind cannons
+  tail: { crossed: 4, fan: 8, rows: 9, end: 0.36, radius: [0.035, 0.085, 0.115], off: 0.06 },
 };
-const KIND = { mane: 0, forelock: 1, tail: 2, crest: 3 };
+const KIND = { mane: 0, forelock: 1, tail: 2, crest: 3, tailFan: 2.25 };   // (the fan: a tail card, drawn lighter)
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
 
 // the nearest corner of the body to a point (a grid of 4 cm cells)
@@ -112,7 +114,8 @@ export function buildHair(shape) {
           if (under > 0) p.addScaledVector(n2, under);
         }
       }
-      rows.push({ c: p.clone(), n, v, w: cfg.width[0] + (cfg.width[1] - cfg.width[0]) * s });
+      // (narrow at the root, widest a third of the way down, a little narrower again at the tip)
+      rows.push({ c: p.clone(), n, v, w: (cfg.width[0] + (cfg.width[1] - cfg.width[0]) * s) * (0.3 + 0.7 * THREE.MathUtils.smoothstep(s, 0, 0.35)) });
     }
     const wave = (R() - 0.5) * 0.03 * sway, ph = R() * 6.28;
     rows.forEach((r, k) => {
@@ -124,51 +127,84 @@ export function buildHair(shape) {
     return rows;
   }
 
-  // THE MANE: along the crest from just behind the ears to the withers, unbroken (the strips overlap two or three deep),
-  // falling down the near (left) side, a few over to the far side, and a short fringe on the far side so the crest is
-  // covered from both sides. The roots start a little under the skin, so no strip shows where it begins.
+  // THE MANE: the crest line first (the top of the neck at each place along it, every centimetre, smoothed over 7 cm and
+  // set on the neck's middle), then the cards rooted on it, from just behind the ears to the withers
   const { neckO, neckA, neckL, up, midX, withersT } = shape;
   const rest = shape.rest, n = rest.length / 3, neckV = [];
   for (let v = 0; v < n; v++) {
     if (shape.W.legs[v] + shape.W.tail[v] > 0.3 || shape.W.ear[v] > 0.2 || Math.abs(rest[v * 3] - midX) > 0.04) continue;
-    const d = S.pos(v).sub(neckO), t = d.dot(neckA); if (t < withersT - 0.05 || t > neckL + 0.02) continue;
+    const d = S.pos(v).sub(neckO), t = d.dot(neckA); if (t < withersT - 0.08 || t > neckL + 0.02) continue;
     neckV.push([v, t, d.dot(up)]);
   }
-  const crestPoint = (t) => { let best = -1, bh = -9; for (const [v, tv, h] of neckV) if (Math.abs(tv - t) < 0.025 && h > bh) { bh = h; best = v; } return best; };
-  const tPoll = neckL - 0.035, tWith = withersT + 0.07, M = HAIR.mane;
+  const crestPoint = (t) => { let best = -1, bh = -9; for (const [v, tv, h] of neckV) if (Math.abs(tv - t) < 0.02 && h > bh) { bh = h; best = v; } return best; };
+  const raw = [];
+  for (let t = withersT - 0.05; t <= neckL; t += 0.01) { const v = crestPoint(t); if (v >= 0) raw.push([t, S.pos(v)]); }
+  const line = raw.map(([t], i) => {
+    const near = raw.slice(Math.max(0, i - 3), i + 4), p = near.reduce((acc, [, q]) => acc.add(q), V(0, 0, 0)).divideScalar(near.length);
+    p.x = midX; return [t, p];
+  });
+  const crestAt = (t) => {
+    if (t <= line[0][0]) return line[0][1].clone();
+    for (let i = 1; i < line.length; i++) if (line[i][0] >= t) { const [t0, p0] = line[i - 1], [t1, p1] = line[i]; return p0.clone().lerp(p1, (t - t0) / (t1 - t0)); }
+    return line[line.length - 1][1].clone();
+  };
+  const tPoll = neckL - 0.05, tWith = withersT + 0.07, M = HAIR.mane;
   for (let i = 0; i < M.cards; i++) {
-    const u = (i + (R() - 0.5) * 0.5) / (M.cards - 1), t = tPoll + (tWith - tPoll) * Math.min(1, Math.max(0, u)), v = crestPoint(t); if (v < 0) continue;
+    const u = Math.min(1, Math.max(0, (i + (R() - 0.5) * 0.4) / (M.cards - 1))), t = tPoll + (tWith - tPoll) * u;
     const far = R() < M.farShare ? -1 : 1;
-    const start = S.pos(v).addScaledVector(V(1, 0, 0), 0.006 * far);
     // shortest at the poll, longest mid-neck, a little shorter again at the withers
-    const uu = Math.min(1, Math.max(0, u));
-    const len = M.length * (0.12 + 0.88 * THREE.MathUtils.smoothstep(uu, 0, 0.42) * (1 - 0.32 * THREE.MathUtils.smoothstep(uu, 0.72, 1))) * (0.88 + 0.24 * R()) * (far < 0 ? 0.8 : 1);
-    card(drape(start, M, { side: far, push: 0.9, back: 0.1, len }), 'mane', skinBody);
+    const len = M.length * (0.12 + 0.88 * THREE.MathUtils.smoothstep(u, 0, 0.42) * (1 - 0.32 * THREE.MathUtils.smoothstep(u, 0.72, 1))) * (0.88 + 0.24 * R()) * (far < 0 ? 0.8 : 1);
+    card(drape(crestAt(t), M, { side: far, push: 0.9, back: 0.1, len }), 'mane', skinBody);
   }
   for (let i = 0; i < HAIR.crest.cards; i++) {
-    // (the fringe stops short of the withers, where the top line flattens and a strip would stand up off it)
-    const t = tPoll + (tWith + 0.12 - tPoll) * (i + 0.5) / HAIR.crest.cards, v = crestPoint(t); if (v < 0) continue;
-    card(drape(S.pos(v).addScaledVector(V(1, 0, 0), -0.004), HAIR.crest, { side: -1, push: 1.0, back: 0.1 }), 'crest', skinBody);
+    // (the fringe starts a little behind the poll and stops short of the withers, where the top line flattens)
+    const t = tPoll - 0.04 + (tWith + 0.12 - tPoll + 0.04) * (i + 0.5) / HAIR.crest.cards;
+    card(drape(crestAt(t), HAIR.crest, { side: -1, push: 1.0, back: 0.1 }), 'crest', skinBody);
   }
-  // THE FORELOCK: three or four tapered locks hanging from between the ears down the forehead to about eye level
+  // THE FORELOCK: two or three short locks from between the ears, angled off the face (not lying on it), down the
+  // forehead, fanning a little apart and fading out at their tips, short of the star
   const head = (v) => shape.W.head[v] > 0.5 && shape.W.ear[v] < 0.15;
-  const F = HAIR.forelock;
+  const F = HAIR.forelock, fa = shape.faceA, ff = shape.faceF;
   for (let i = 0; i < F.cards; i++) {
-    const dx = (i - (F.cards - 1) / 2) * 0.016;
-    const v = S.nearest(V(shape.mid0 + dx, shape.poll.y + 0.035, shape.poll.z + 0.06), head); if (v < 0) continue;
-    const rows = drape(S.pos(v), F, { side: Math.sign(dx) || 0.001, push: 0.04, back: -0.5, filter: head, len: F.length * (0.85 + 0.3 * R()), hang: false, sway: 0.25 });
+    const k = i - (F.cards - 1) / 2, v = S.nearest(V(shape.mid0 + k * 0.014, shape.poll.y + 0.03, shape.poll.z + 0.04), head); if (v < 0) continue;
+    const root = S.pos(v).addScaledVector(S.nor(v), -0.008);
+    const dir = fa.clone().multiplyScalar(Math.cos(0.42)).addScaledVector(ff, Math.sin(0.42)).addScaledVector(V(1, 0, 0), k * 0.18).normalize();
+    const across = new THREE.Vector3().crossVectors(ff, dir).normalize(), L = F.length * (0.85 + 0.3 * R()), rows = [];
+    for (let j = 0; j < F.rows; j++) {
+      const s2 = j / (F.rows - 1);
+      const c = root.clone().addScaledVector(dir, L * s2).addScaledVector(V(0, -1, 0), 0.025 * s2 * s2);
+      rows.push({ c, n: ff.clone(), across, v, w: F.width[0] + (F.width[1] - F.width[0]) * s2 });
+    }
     card(rows, 'forelock', skinBody);
   }
 
-  // THE TAIL: a cone from inside the dock to the middle of the hind cannons: strips crossed through its middle and a fan
-  // of strips round it, all hanging down the tail's chain of bones and on below its last bone; skinned along the chain
+  // THE TAIL: a bundle down the tail's chain of bones and on below its last bone to the middle of the hind cannons. Its
+  // middle line is held behind the rump (the buttock's back, measured from the mesh at each height, plus a gap), narrow
+  // at the dock and fanning a little toward the end. Cards crossed round the middle line make it full from every angle; a
+  // light fan of cards round the outside softens its outline. Skinned along the chain.
   const B = shape.bones, chainNames = ['Tail1', 'Tail2', 'Tail3', 'Tail4', 'Tail5', 'Tail6', 'Tail7'].filter((nm) => B[nm]);
   const chain = chainNames.map((nm) => B[nm].clone()), last = chain[chain.length - 1];
-  const end = V(last.x, Math.min(HAIR.tail.end, last.y - 0.1), last.z - 0.04);
-  const pts = [...chain, end], cum = [0];
+  const T = HAIR.tail, X = V(1, 0, 0);
+  const end = V(last.x, Math.min(T.end, last.y - 0.1), last.z - 0.04);
+  // the back of the rump at a height: the backmost body corner near the middle (not the tail's own), over the hindquarters
+  const rumpAt = (y) => {
+    let zmin = Infinity;
+    for (let v = 0; v < n; v++) {
+      if (shape.W.tail[v] > 0.2 || Math.abs(rest[v * 3] - midX) > 0.1 || Math.abs(rest[v * 3 + 1] - y) > 0.03 || rest[v * 3 + 2] > -0.3) continue;
+      zmin = Math.min(zmin, rest[v * 3 + 2]);
+    }
+    return zmin;
+  };
+  const rad = (a) => (a < 0.5 ? T.radius[0] + (T.radius[1] - T.radius[0]) * THREE.MathUtils.smoothstep(a, 0, 0.5) : T.radius[1] + (T.radius[2] - T.radius[1]) * (a - 0.5) * 2);
+  const pts = [...chain, end].map((p, i, arr) => {
+    const a = i / (arr.length - 1), q = p.clone(), rz = rumpAt(q.y);
+    if (Number.isFinite(rz)) q.z = Math.min(q.z, q.z + (rz - T.off - rad(a) * 0.7 - q.z) * THREE.MathUtils.smoothstep(a, 0.12, 0.35));
+    return q;
+  });
+  const cum = [0];
   for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + pts[i].distanceTo(pts[i - 1]));
   const total = cum[cum.length - 1];
-  const at = (s) => {   // a place along the chain, 0..1: point, direction, and the bones round it
+  const at = (s) => {   // a place along the (held off) chain, 0..1: point, direction, and the bones round it
     const d = s * total; let j = 0; while (j < pts.length - 2 && cum[j + 1] < d) j++;
     const f = Math.min(1, Math.max(0, (d - cum[j]) / (cum[j + 1] - cum[j])));
     const p = pts[j].clone().lerp(pts[j + 1], f), dir = pts[j + 1].clone().sub(pts[j]).normalize();
@@ -176,40 +212,23 @@ export function buildHair(shape) {
     const sk = j + 1 < chainNames.length ? { i: [bi(j), bi(j + 1), 0, 0], w: [1 - f, f, 0, 0] } : { i: [bi(chainNames.length - 1), 0, 0, 0], w: [1, 0, 0, 0] };
     return { p, dir, sk };
   };
-  const X = V(1, 0, 0), T = HAIR.tail;
-  // the dock's own thickness (the tail's skin round its first bones), so the strips grow from its surface and cover it
-  const dockR = (() => {
-    const ds = [], a = B.Tail1, b = B.Tail3 || B.Tail2, ab = b.clone().sub(a), L2 = ab.lengthSq();
-    for (let v = 0; v < n; v++) {
-      if (shape.W.tail[v] < 0.5) continue;
-      const p = S.pos(v), t = Math.min(1, Math.max(0, p.clone().sub(a).dot(ab) / L2));
-      ds.push(p.distanceTo(a.clone().addScaledVector(ab, t)));
-    }
-    ds.sort((x, y) => x - y);
-    return ds.length ? ds[Math.floor(ds.length * 0.6)] : T.radius[0];
-  })();
-  const r0 = Math.max(T.radius[0], dockR * 0.95);
   const tailCard = (phi, s0, crossed, endJit, wJit) => {
     const rows = [], N = T.rows;
     for (let k = 0; k < N; k++) {
       const a = k / (N - 1), s = s0 + (1 - s0) * a * endJit, P = at(s);
       let b1 = new THREE.Vector3().crossVectors(P.dir, X).normalize(); if (b1.z > 0) b1.negate();   // (pointing away from the rump)
       const radial = b1.clone().multiplyScalar(Math.cos(phi)).addScaledVector(X, Math.sin(phi));
-      const r = r0 + (T.radius[1] - r0) * Math.pow(a, 0.85);
-      // a crossed strip lies through the middle (as wide as the cone); a fan strip lies round its outside
-      const c = crossed ? P.p.clone() : P.p.clone().addScaledVector(radial, r * 0.8);
+      const r = rad(s);
+      // a crossed card lies through the middle, as wide as the bundle; a fan card lies round its outside
+      const c = crossed ? P.p.clone() : P.p.clone().addScaledVector(radial, r * 0.85);
       const across = crossed ? radial.clone() : new THREE.Vector3().crossVectors(radial, P.dir).normalize();
-      const w = crossed ? r * 1.9 : (T.width[0] + (T.width[1] - T.width[0]) * a) * wJit;
+      const w = crossed ? r * 2 : r * 1.1 * wJit;
       rows.push({ c, n: crossed ? b1 : radial, across, w, sk: P.sk, axis: P.p.clone() });
     }
-    card(rows, 'tail', (r) => r.sk);
+    card(rows, crossed ? 'tail' : 'tailFan', (r) => r.sk);
   };
-  for (let i = 0; i < T.crossed; i++) tailCard(i * Math.PI / T.crossed, 0.03 + 0.03 * R(), true, 0.97 + 0.03 * R(), 1);
-  for (let i = 0; i < T.cards; i++) {
-    // (the strips on the top of the tail start right at the root, to cover the dock; the rest a little further down)
-    const phi = -2.5 + 5.0 * (i + 0.3 + 0.4 * R()) / T.cards;
-    tailCard(phi, (Math.abs(phi) < 1.3 ? 0.0 : 0.04) + 0.1 * R(), false, 0.84 + 0.16 * R(), 0.85 + 0.3 * R());
-  }
+  for (let i = 0; i < T.crossed; i++) tailCard(i * Math.PI / T.crossed + 0.2, 0.0, true, 0.96 + 0.04 * R(), 1);
+  for (let i = 0; i < T.fan; i++) tailCard(-Math.PI + 2 * Math.PI * (i + 0.5 + 0.3 * (R() - 0.5)) / T.fan, 0.05 + 0.1 * R(), false, 0.85 + 0.15 * R(), 0.85 + 0.3 * R());
 
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(out.pos, 3));
@@ -271,6 +290,7 @@ uniform float uTime;
 uniform float uSpeed;
 uniform vec3 uBackW;
 uniform vec3 uDockW;      // where the tail's root is, in the world, this frame (the tail bends about it)
+uniform vec3 uDockR;      // ... and at rest, in the horse's own space
 uniform mat4 uRestM;
 varying vec4 vHairV;
 varying vec3 vRootR;
@@ -308,12 +328,18 @@ vec4 hairW = modelMatrix * vec4( transformed, 1.0 );
     vec3 v = hairW.xyz - uDockW;
     vec3 va = axisW - uDockW;
     vec3 dir = normalize( va + vec3( 0.0, -0.0001, 0.0 ) );
-    vec3 target = normalize( vec3( 0.0, -1.0, 0.0 ) + uBackW * ( 0.12 + spd * 0.1 ) );
+    // standing and walking, toward hanging (a little back); galloping, toward streaming back (a little down), the root
+    // lifted with it: the turn reaches further up the tail the faster it goes
+    // (standing or walking the turn aims at the tail's own resting way, as it hangs clear of the rump in the model, so a
+    // clip that already lets it hang changes nothing)
+    float run = smoothstep( 2.5, 8.0, spd );
+    vec3 hangW = normalize( mat3( modelMatrix ) * ( aRoot - uDockR ) + vec3( 0.0, -0.0001, 0.0 ) );
+    vec3 target = normalize( mix( hangW, uBackW + vec3( 0.0, -0.22, 0.0 ), run ) );
     vec3 k = cross( dir, target );
     float kl = length( k );
     if ( kl > 0.0001 ) {
       k /= kl;
-      float phi = acos( clamp( dot( dir, target ), -1.0, 1.0 ) ) * clamp( a * 1.3, 0.0, 1.0 ) * 0.8;
+      float phi = acos( clamp( dot( dir, target ), -1.0, 1.0 ) ) * clamp( a * 1.3 + run * 0.35, 0.0, 1.0 ) * mix( 0.8, 0.85, run );
       v = v * cos( phi ) + cross( k, v ) * sin( phi ) + k * dot( k, v ) * ( 1.0 - cos( phi ) );
     }
     hairW.xyz = uDockW + v;
@@ -325,7 +351,8 @@ vec4 hairW = modelMatrix * vec4( transformed, 1.0 );
   float len = mix( 0.32, 1.0, isTail );
   vec3 sideW = normalize( cross( sdW, vec3( 0.0, 1.0, 0.0 ) ) + vec3( 0.0001 ) );
   float wave = sin( uTime * ( 2.0 + 0.4 * spd ) - a * 4.5 + aHair.z * 6.2832 );
-  hairW.xyz += sideW * wave * a2 * len * ( 0.025 + 0.01 * spd ) * mix( 0.35, 1.0, isTail );
+  hairW.xyz += sideW * wave * a2 * len * ( 0.022 + 0.006 * spd ) * mix( 0.35, 1.0, isTail );
+  hairW.xyz += vec3( 0.0, 1.0, 0.0 ) * wave * a2 * len * 0.012 * smoothstep( 2.5, 8.0, spd ) * isTail;   // (a streaming tail also lifts and falls)
 }
 vec4 mvPosition = viewMatrix * hairW;
 gl_Position = projectionMatrix * mvPosition;
@@ -346,11 +373,18 @@ float hv = hAlong / hLen;                                   // (a shorter mane: 
 // (the picture's strands thin out toward its bottom: a tail uses its fuller top part, so it stays full to its end,
 // which the strip's own length and a ragged cut decide)
 vec4 tx = texture2D( uHairTex, vec2( vHairV.y * 0.6 + vHairV.z * 5.37, min( hv, 1.0 ) * mix( 0.88, 0.6, hTail ) ) );
-float hEdge = smoothstep( 0.0, 0.35, vHairV.y ) * ( 1.0 - smoothstep( 0.65, 1.0, vHairV.y ) );   // (the strip's sides thin out: no straight edges)
+float hEdge = smoothstep( 0.0, 0.3, vHairV.y ) * ( 1.0 - smoothstep( 0.7, 1.0, vHairV.y ) );   // (the card's sides thin out: no straight edges)
+float hFore = step( 0.5, vHairV.w ) * step( vHairV.w, 1.5 );
+float hFan = step( 2.1, vHairV.w ) * step( vHairV.w, 2.4 );
 float hPx = length( vViewPosition ) * uPx;
 float hA = tx.a * mix( 1.0, hEdge, 0.9 + 0.1 * hAlong ) * ( 1.0 - smoothstep( 0.8 + 0.17 * tx.r, 1.0, hv ) );
+hA *= smoothstep( 0.0, mix( 0.16, 0.05, hTail ), hAlong );                 // (and fade in from the root: no straight top edge)
+hA *= 1.0 - hFore * smoothstep( 0.35, 1.0, hAlong );                      // (the forelock fades out toward its tips)
+hA *= 1.0 - 0.35 * hFan;                                                   // (the tail's outer fan: lighter)
 hA = clamp( hA * ( 1.0 + 2.0 * smoothstep( 0.002, 0.02, hPx ) ), 0.0, 1.0 );   // (far off, the picture's smaller copies thin the hair out: thicken it back)
-diffuseColor.a = hA;
+// a smooth ramp, not a hard cut: alpha to coverage turns it into a dithered, soft edge
+float hairAlpha = smoothstep( 0.12, 0.62, hA );
+diffuseColor.a = hairAlpha;
 // the colour: the recipe's, strand by strand (from the picture), darker at the roots and lighter at the tips
 float hStrand = tx.r;
 vec3 hc = uManeCol * ( 1.0 + uHair.z * ( hStrand - 0.6 ) * 1.3 );
@@ -392,8 +426,8 @@ const HAIR_FRAG_NORMAL = /* glsl */`
 `;
 
 export function hairMaterial(shape, coatU, renderer) {
-  const u = { ...coatU, uHairTex: { value: hairTexture(renderer) }, uTime: { value: 0 }, uSpeed: { value: 0 }, uBackW: { value: new THREE.Vector3(0, 0, -1) }, uDockW: { value: new THREE.Vector3() } };
-  const m = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, alphaTest: 0.35, roughness: 0.55, metalness: 0 });
+  const u = { ...coatU, uHairTex: { value: hairTexture(renderer) }, uTime: { value: 0 }, uSpeed: { value: 0 }, uBackW: { value: new THREE.Vector3(0, 0, -1) }, uDockW: { value: new THREE.Vector3() }, uDockR: { value: (shape.bones.Tail1 || shape.bones.Tail2).clone() } };
+  const m = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, alphaTest: 0.04, roughness: 0.55, metalness: 0 });
   m.alphaToCoverage = true;
   m.name = 'hair';
   m.onBeforeCompile = (sh) => {
@@ -407,7 +441,10 @@ export function hairMaterial(shape, coatU, renderer) {
       .replace('#include <lights_physical_pars_fragment>', LIGHT_HOOK)
       .replace('#include <color_fragment>', '#include <color_fragment>\n' + HAIR_FRAG_COLOR)
       .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\nroughnessFactor = furRough;')
-      .replace('#include <normal_fragment_begin>', HAIR_FRAG_NORMAL);
+      .replace('#include <normal_fragment_begin>', HAIR_FRAG_NORMAL)
+      // (three.js sets an opaque material's alpha to 1 just before writing it, which would leave alpha to coverage
+      // nothing to work with: put the hair's own back)
+      .replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a = hairAlpha;');
   };
   m.customProgramCacheKey = () => 'horsehair:' + shape.key;
   m.hair = { uniforms: u };
