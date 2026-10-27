@@ -7,9 +7,9 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeTextures, setStone, STONE_LOOKS } from '../materials/textures.js';
-import { makeRubbleTexture } from './stonetex.js?v=2';
+import { makeRubbleTexture } from './stonetex.js?v=4';
 import { U, weather } from '../materials/weather.js';
-import { buildStoneWall, stoneEdges, stoneRecipe, RECIPE_DEFAULTS, SHAPES, STYLES, PALETTES, MORTARS } from './stonewall.js?v=2';
+import { buildStoneWall, stoneEdges, stoneRecipe, RECIPE_DEFAULTS, SHAPES, STYLES, PALETTES, MORTARS } from './stonewall.js?v=4';
 
 const $ = (s, el = document) => el.querySelector(s);
 const num = (n) => Math.round(n).toLocaleString('en-US');
@@ -168,7 +168,7 @@ const cm = (v) => (v * 100).toFixed(1) + ' cm', mm = (v) => (+v).toFixed(2) + ' 
 const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
 const fmtAz = (v) => Math.round(v) + '° ' + COMPASS[Math.round(v / 45) % 8];
 const fmtHour = (v) => { const h = Math.floor(v), m = Math.round((v - h) * 60); return (h % 12 || 12) + ':' + String(m).padStart(2, '0') + (h < 12 ? 'am' : 'pm'); };
-const WALL_SLIDERS = [R_('Stone size', 'size', 0.15, 0.6, 0.01, mm), R_('Irregularity', 'irregularity', 0, 1, 0.01), R_('Joint width', 'joint', 0, 0.05, 0.001, cm),
+const WALL_SLIDERS = [R_('Stone size', 'size', 0.15, 0.6, 0.01, mm), R_('Irregularity', 'irregularity', 0, 1, 0.01), R_('Joint width', 'joint', 0, 0.05, 0.001, cm), R_('Mortar depth', 'mortarDepth', 0, 0.05, 0.001, cm),
   R_('Colour mix', 'colourMix', 0, 1, 0.01), R_('Bulge', 'bulge', 0, 2, 0.01)];
 const LOOK_SLIDERS = [R_('Moss', 'moss', 0, 1, 0.01, undefined, true), R_('Grime', 'grime', 0, 1, 0.01, undefined, true), R_('Edge darkening', 'uEdgeDark', 0, 1, 0.01, undefined, true),
   R_('Edge width', 'uEdgeDarkW', 0.005, 0.1, 0.0025, cm, true), R_('Bevel light', 'uBevel', 0, 1.5, 0.01, undefined, true)];
@@ -261,9 +261,35 @@ function resize() {
   if (sheet) camera.setViewOffset(w, h, 0, h * 0.22, w, h); else camera.clearViewOffset();
   camera.updateProjectionMatrix();
 }
+// the camera never goes inside the stonework (zooming toward a target in the middle of a building would take it
+// through the roof into the hollow inside): if it is within 15 cm of being inside a block of wall, it is moved back out
+// along its line to the target
+const _cv = new THREE.Vector3();
+function insideWall(p) {
+  if (!wall || !wall.solid) return false;
+  if (wall.building) { const B = wall.building; if (p.x > B.x0 - 0.15 && p.x < B.x1 + 0.15 && p.z > B.z0 - 0.15 && p.z < B.z1 + 0.15 && p.y < B.y + 3.8) return true; }
+  for (const S of wall.solid) {
+    if (p.y < S.y0 - 0.15 || p.y > Math.max(S.y1, wall.top) + 0.15) continue;
+    const t = Math.min(1, Math.max(0, (p.y - S.y0) / (S.y1 - S.y0))), L = S.loop0.map((a, i) => [a[0] + (S.loop1[i][0] - a[0]) * t, a[1] + (S.loop1[i][1] - a[1]) * t]);
+    let inside = false, dmin = Infinity;
+    for (let i = 0, j = L.length - 1; i < L.length; j = i++) {
+      const a = L[i], b = L[j];
+      if ((a[1] > p.z) !== (b[1] > p.z) && p.x < (b[0] - a[0]) * (p.z - a[1]) / (b[1] - a[1]) + a[0]) inside = !inside;
+      const ex = b[0] - a[0], ez = b[1] - a[1], l2 = ex * ex + ez * ez || 1, u = Math.max(0, Math.min(1, ((p.x - a[0]) * ex + (p.z - a[1]) * ez) / l2));
+      dmin = Math.min(dmin, Math.hypot(p.x - a[0] - ex * u, p.z - a[1] - ez * u));
+    }
+    if (inside || dmin < 0.15) return true;
+  }
+  return false;
+}
+function keepOutside() {
+  if (!insideWall(camera.position)) return;
+  _cv.subVectors(camera.position, controls.target).normalize();
+  for (let i = 0; i < 80 && insideWall(camera.position); i++) camera.position.addScaledVector(_cv, 0.05);
+}
 function loop() {
   requestAnimationFrame(loop);
-  resize(); controls.update();
+  resize(); controls.update(); keepOutside();
   renderer.render(scene, camera);
   frames++; const t = performance.now();
   if (t - fpsT > 500) { fps = Math.round(frames * 1000 / (t - fpsT)); frames = 0; fpsT = t; updateStats(); }
@@ -318,7 +344,7 @@ window.SL = {
   set(k, v) { setV(k, v); syncPanel(); },
   // build with several options at once, and stand the camera at that shape's view
   build(o = {}) { clearTimeout(rebuildTimer); if (o.stone && o.stone !== state.stone) useLook(o.stone); Object.assign(state, o); rebuild(); applyView(); syncPanel(); return this.info; },
-  cam(pos, tgt) { camera.position.set(...pos); controls.target.set(...tgt); controls.update(); },
+  cam(pos, tgt) { camera.position.set(...pos); controls.target.set(...tgt); controls.update(); keepOutside(); },
   get recipe() { return stoneRecipe(state); },
   get info() { return wall && { recipe: stoneRecipe(state), shape: state.shape, style: state.style, seed: state.seed, stones: wall.stones, tris: wall.tris, trisPerStone: wall.tris.stone / wall.stones, ms: wall.ms, texMs: stats.texMs, calls: renderer.info.render.calls }; },
   get renderer() { return renderer; },
