@@ -384,7 +384,7 @@ test('a recipe order never prints its answer in the story', () => {
 });
 
 // ---- on the strands (the adaptive game) -------------------------------------------------------------------------------
-import { K_LADDER, K_TYPES, SIZE, setupOf } from '../src/math/wordproblems.js';
+import { K_LADDER, K_TYPES, SIZE } from '../src/math/wordproblems.js';
 import { STRAND, MAPS } from '../src/math/strands.js';
 import { needsLong, longPoint } from '../src/math/longwork.js';
 
@@ -415,7 +415,7 @@ test('the youngest riders\' picture stories: small numbers, 3 coins, the things 
   }
 });
 
-test('big orders (bulk): the sum comes from the Long work step, needs the worked area, and the worked area has its setup', () => {
+test('big orders (bulk): the sum comes from the Long work step, needs the worked area, and the worked area opens on the sum itself (no "What do we work out?")', () => {
   for (let longStep = 1; longStep <= 9; longStep++) {
     const r = seeded(800 + longStep);
     for (let i = 0; i < 30; i++) {
@@ -425,9 +425,7 @@ test('big orders (bulk): the sum comes from the Long work step, needs the worked
       const [x, y] = L.op === 'mul' ? [L.a, L.b] : [L.n, L.d];
       assert.ok(needsLong(L.op, x, y));
       assert.equal(L.point, MAPS.long.anchors[longStep - 1], `${o.story}: made at the Long work step's point`);
-      assert.equal(L.setup.choices.filter((c) => c.good).length, 1);
-      assert.equal(L.setup.choices.find((c) => c.good).label, `${x} ${L.op === 'mul' ? '×' : '÷'} ${y}`);
-      for (const c of L.setup.choices) if (!c.good) assert.ok(c.why && c.why.length > 10);
+      assert.equal(L.setup, undefined, 'no setup: the sum is filled in');
       if (L.op === 'div') { assert.ok(L.final, 'a division ends with the word answer'); assert.deepEqual(L.final.choices.map((c) => c.label), o.coins.map((c) => c.label)); }
       else assert.equal(L.final, null);
       assert.ok(o.credit.some((c) => c.strand === 'long' && c.long && c.weight === 0.5 && c.at === L.point), 'a coin picked without the worked area counts in Long work at 0.5');
@@ -527,12 +525,19 @@ test('more goods in the orders: coffee, vegetables, bread, matches and canteens 
   for (const w of ['sacks', 'loaves', 'boxes', 'crates']) assert.match(all, new RegExp(w), `${w} turns up`);
 });
 
-test('the setup choices: the right sum and three wrong ones, each with a nudge', () => {
-  for (const [op, x, y] of [['mul', 16, 7], ['div', 112, 5]]) {
-    const S = setupOf(op, x, y);
-    assert.equal(S.choices.length, 4); assert.equal(new Set(S.choices.map((c) => c.label)).size, 4);
-    assert.equal(S.choices.filter((c) => c.good).length, 1);
+test('no worked area asks which sum it is: every long order\'s sum is filled in (speeds, groups, bulk orders)', () => {
+  let longs = 0;
+  for (let step = 4; step <= 9; step++) {
+    for (const type of ['rate', 'groups', 'bulk', 'share']) {
+      for (let i = 0; i < 40; i++) {
+        let o; try { o = makeOrder(type, { rand: seeded(70 * step + i), step, longStep: 1 + (i % 9), longMost: 80 }); } catch (e) { continue; }
+        if (!o.long) continue;
+        longs++;
+        assert.ok(!('setup' in o.long), `${o.key}: no setup`);
+      }
+    }
   }
+  assert.ok(longs > 20, `long orders made (${longs})`);
 });
 
 test('a step of one kind only (the first picture stories) deals on and on: the same-kind rule can\'t empty it', () => {

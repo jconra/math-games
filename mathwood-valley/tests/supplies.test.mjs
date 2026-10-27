@@ -128,7 +128,7 @@ test('each part counts in its own strand; a part too big for the head carries th
       const L = p.long, [x, y] = L.op === 'mul' ? [L.a, L.b] : [L.n, L.d];
       assert.ok(needsLong(L.op, x, y));
       assert.equal(L.point, longPoint(L.op, x, y)); assert.equal(p.credit.strand, 'long'); assert.equal(p.credit.at, L.point);
-      assert.equal(L.setup.choices.filter((c) => c.good).length, 1, 'one right sum to work out');
+      assert.ok(!('setup' in L), 'no "What do we work out?": the sum is filled in');
       const w = L.op === 'mul' ? workMul(x, y, L.lead ? { lead: L.lead } : {}) : workDiv(x, y);
       if (L.op === 'mul') {
         assert.equal(p.key, 'total');

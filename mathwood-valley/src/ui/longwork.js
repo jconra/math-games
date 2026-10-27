@@ -13,18 +13,23 @@
 // one shakes and goes dull, the line gives a one-line nudge for that slip, and a helper strip shows (the 5s up to 45
 // with where 11 falls; for a times step, counting up in that number): pick again, nothing is lost. The strip also comes
 // up by itself after a long think. The board never shows an answer before it is picked.
-// Before the board: what to work out, from the story ("112 ÷ 5", "8 × 2 × 7"), when the job asks it (setup). After it:
-// the word answer from the story ("23 crates"), when the job asks it (final). Then the finished sum stays a moment
-// and the sheet goes by itself.
+// The sum is on the board from the start: the sheet never asks which sum it is, it teaches it. After the board: the word
+// answer from the story ("23 crates"), when the job asks it (final). Then the finished sum stays a moment and the sheet
+// goes by itself.
+// DECIMALS (src/math/longwork.js): a point is drawn at the corner of the digit in front of it, as on squared paper (the
+// answer's in the kid's ink once it's placed), a $ in front of dollars, a 0 put on the end to line the points up in its
+// own colour (brass). The step that puts the point back in a product rings the whole answer row (its digits stay in
+// view); dividing by a decimal starts with the sum as given in big type over the empty board ("6 ÷ 0.5"), the four
+// sums it's the same as to pick, then the board.
 //
-//   const L = openLongWork(root, { work, setup, final, title, ask, speak, closeLabel, onTap, onDone, onClose })
+//   const L = openLongWork(root, { work, final, title, ask, speak, closeLabel, onTap, onDone, onClose })
 //     work      src/math/longwork.js workMul / workDiv / workAdd / workSub (workOf)
 //     closeLabel   the close button's words ('Back to the slip'; the tools say 'Close')
 //     free      true: no slip beside it (the tools in a field job): the sheet takes the middle of the screen
-//     setup     { ask, choices: [{ label, good, why }] } or null    final: { ask, choices, line } or null
+//     final     { ask, choices: [{ label, good, why }], line } or null: the word answer, after the board
 //     ask       the order's question, small at the top; title: the sheet's name ('Work it out')
 //     speak     (text) => void, or null: each question is said out loud (read-aloud for the youngest riders)
-//     onTap({ part: 'setup' | 'work' | 'final', i, right, first, helped, fact, choice, timed: { ms, hidden, idle } })
+//     onTap({ part: 'work' | 'final', i, right, first, helped, fact, choice, timed: { ms, hidden, idle } })
 //       (helped: the helper strip, which marks the answer, was up before this step's first tap: not a right first try)
 //     onDone({ clean, taps, misses, ms, hidden, idle, final: the final choice's index or -1 })   the last step done
 //     onClose()  closed without finishing ("Back to the slip" or Esc): nothing more is counted
@@ -52,13 +57,12 @@ export const LONGWORK = {
   cellLeast: 24,    // ...and the smallest
 };
 
-export function openLongWork(root = document.body, { work, setup = null, final = null, title = 'Work it out', ask = '', speak = null,
+export function openLongWork(root = document.body, { work, final = null, title = 'Work it out', ask = '', speak = null,
   closeLabel = 'Back to the slip', free = false, onTap = () => {}, onDone = () => {}, onClose = () => {} } = {}) {
   ensureCss();
-  // the parts in order: the setup (optional), the board's steps, the word answer (optional)
+  // the parts in order: the board's steps, the word answer (optional)
   const parts = [];
-  if (setup) parts.push({ part: 'setup', i: 0, ask: setup.ask, choices: setup.choices, wide: true });
-  work.steps.forEach((s, i) => parts.push({ part: 'work', i, ask: s.ask, choices: s.choices, step: s, wide: false }));
+  work.steps.forEach((s, i) => parts.push({ part: 'work', i, ask: s.ask, choices: s.choices, step: s, wide: !!s.wide }));
   if (final) parts.push({ part: 'final', i: 0, ask: final.ask, choices: final.choices, wide: true, line: final.line });
 
   const el = document.createElement('div');
@@ -68,7 +72,7 @@ export function openLongWork(root = document.body, { work, setup = null, final =
   el.innerHTML = `<section class="bml-sheet">
       <header class="bml-top"><div class="bml-title"><b>${esc(title)}</b><small>${esc(ask)}</small></div>
         <button type="button" class="bml-x">${esc(closeLabel)}<kbd>Esc</kbd></button></header>
-      <div class="bml-boardwrap"><div class="bml-board" aria-hidden="true"></div><p class="bml-setupnote"></p></div>
+      <div class="bml-boardwrap"><div class="bml-board" aria-hidden="true"></div><p class="bml-note"></p></div>
       <p class="bml-ask" aria-live="polite"></p>
       <div class="bml-choices" role="group" aria-label="Pick the answer"></div>
       <p class="bml-line" aria-live="polite"></p>
@@ -90,7 +94,7 @@ export function openLongWork(root = document.body, { work, setup = null, final =
   // every cell and line is made once; showing a step only switches classes (so nothing jumps)
   const cellEls = B.cells.map((c) => {
     const d = document.createElement('span');
-    d.className = `bml-cell is-${c.kind}`;
+    d.className = `bml-cell is-${c.kind}${c.tone ? ` is-${c.tone}` : ''}`;
     d.textContent = c.ch;
     d.style.setProperty('--r', c.r); d.style.setProperty('--c', c.c);
     boardEl.appendChild(d);
@@ -107,8 +111,9 @@ export function openLongWork(root = document.body, { work, setup = null, final =
   const slotEl = document.createElement('span'); slotEl.className = 'bml-slot'; slotEl.textContent = '?'; boardEl.appendChild(slotEl);
   boardEl.style.setProperty('--rows', B.rows); boardEl.style.setProperty('--cols', B.cols);
 
-  // the board's step for part k: setup -> -1 (nothing shown yet), a work step -> its index, the final -> all done
-  const boardStep = (kk) => { const p = parts[kk]; if (!p) return work.steps.length; return p.part === 'setup' ? -1 : p.part === 'work' ? p.i : work.steps.length; };
+  // the board's step for part k: a work step -> its index, the final -> all done
+  const boardStep = (kk) => { const p = parts[kk]; if (!p) return work.steps.length; return p.part === 'work' ? p.i : work.steps.length; };
+  const MARK = new Set(['from', 'point', 'unit']);   // (cells that are marks, never lit: the tick, a point, the $)
   function showBoard(kk, { fresh = false, lit: light = true } = {}) {
     const s = boardStep(kk);
     const visible = s >= work.first;
@@ -125,12 +130,14 @@ export function openLongWork(root = document.body, { work, setup = null, final =
     const p = parts[kk], st = p && p.part === 'work' ? p.step : null;
     // the digits this step uses, lit; the place its answer goes, marked
     const lit = new Set(st && light ? st.focus.map(([r, c]) => `${r},${c}`) : []);
-    B.cells.forEach((c, i) => cellEls[i].classList.toggle('is-focus', lit.has(`${c.r},${c.c}`) && c.kind !== 'from' && cellEls[i].classList.contains('is-on')));
-    B.cells.forEach((c, i) => { if (c.kind === 'from') cellEls[i].classList.toggle('is-focus', false); });
+    B.cells.forEach((c, i) => cellEls[i].classList.toggle('is-focus', lit.has(`${c.r},${c.c}`) && !MARK.has(c.kind) && cellEls[i].classList.contains('is-on')));
     if (st && st.slot && light) {
       slotEl.style.setProperty('--r', st.slot.r); slotEl.style.setProperty('--c', st.slot.c); slotEl.style.setProperty('--w', st.slot.w);
+      slotEl.classList.toggle('is-ring', !!st.slot.ring);   // (the point's step: a ring round the answer, its digits in view)
       slotEl.classList.add('is-on');
     } else slotEl.classList.remove('is-on');
+    // (the board not up yet, the sum as given in big type: dividing by a decimal before its points move)
+    $('.bml-note').textContent = !visible && st && st.note ? st.note : '';
   }
   // the board's squares: as big as fits the sheet (on a phone, the sheet's width; on a window, a share of its height)
   function fit() {
@@ -148,7 +155,6 @@ export function openLongWork(root = document.body, { work, setup = null, final =
     busy = false;
     showBoard(k, { fresh });
     const st = p.step;
-    $('.bml-setupnote').textContent = p.part === 'setup' ? 'The sum goes here once you pick it.' : '';
     askEl.innerHTML = (st && st.intro ? `<small>${esc(st.intro)}</small>` : '') + esc(p.ask);
     choicesEl.classList.toggle('is-wide', !!p.wide);
     choicesEl.innerHTML = p.choices.map((c, i) => `<button type="button" class="bml-choice" data-i="${i}" aria-label="${esc(c.label)}"><b>${esc(c.label)}</b><kbd>${i + 1}</kbd></button>`).join('');
@@ -161,7 +167,8 @@ export function openLongWork(root = document.body, { work, setup = null, final =
     if (speak) { try { speak(((st && st.intro) ? st.intro + ' ' : '') + p.ask); } catch (e) { /* (no voice) */ } }
   }
   // the helper strip for a step: the divisor's multiples (where the number falls between them), or counting up in a
-  // times step's number. Never for the setup or the word answer (their help is the nudge line).
+  // times step's number; the point's step counts the digits after the point. Never for the word answer (its help is
+  // the nudge line).
   function helperFor(p) {
     const st = p && p.step;
     if (!st) return null;
@@ -180,6 +187,12 @@ export function openLongWork(root = document.body, { work, setup = null, final =
       return { title: `Counting up in ${b}s`, items: Array.from({ length: Math.max(1, Math.min(9, a)) }, (_, j) => ({ top: `${j + 1}`, v: b * (j + 1), mark: false })), note: st.kind === 'carry' ? 'Then add the number you carried.' : `${a} of them: the last one is ${b} × ${a}.` };
     }
     if (st.kind === 'sum') return { title: 'Adding the rows', items: [], note: 'Add the ones column first, then the tens, then the hundreds. When a column passes 9, carry the 1 to the next column.' };
+    if (st.kind === 'point' && st.count) {   // (the digits after the point in each number, and in all: the answer gets that many)
+      const all = st.count.reduce((a, x) => a + x.places, 0);
+      return { title: 'Digits after the point', items: [...st.count.map((x) => ({ top: x.n, v: x.places, mark: false })), { top: 'in all', v: all, mark: true }],
+        note: `Count ${all} digit${all === 1 ? '' : 's'} in from the right of the answer, and the point goes there.` };
+    }
+    if (st.kind === 'move') return { title: 'Moving the points', items: [], note: 'Times both numbers by 10 for each place the point moves: the sum gets bigger on both sides, and the answer stays the same.' };
     if (st.kind === 'add') {   // (counting on from the top digit: the strip shows the numbers after it)
       const m = /^(\d+)(?: \+ (\d+))?/.exec(st.ask), x = m ? +m[1] : 0, add = st.answer - x;
       return { title: `Counting on from ${x}`, items: Array.from({ length: Math.max(1, Math.min(10, add)) }, (_, j) => ({ top: `+${j + 1}`, v: x + j + 1, mark: false })), note: `${add} more after ${x}: the last one is the answer.` };
@@ -231,7 +244,7 @@ export function openLongWork(root = document.body, { work, setup = null, final =
     if (p.part === 'final') finalPick = i;
     const st = p.step;
     lineEl.className = 'bml-line is-done';
-    lineEl.textContent = p.part === 'setup' ? `${c.label}: let's work it out.` : p.part === 'final' ? (p.line || c.label) : st.done;
+    lineEl.textContent = p.part === 'final' ? (p.line || c.label) : st.done;
     helpEl.hidden = true;
     // the answer goes on the board (the next step's view shows it)
     if (k + 1 < parts.length) {

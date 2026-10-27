@@ -11,7 +11,9 @@
 //   { key, story, ask, right: Face, slips: [Face & { slip, why }] (the likeliest first), wide?, lead? (a picture that
 //     is part of the question, shown above the coins from the start: the clock, the coins to count, the timetable),
 //     pic (the helper: shown after a wrong pick or on "Draw it for me"; it never shows the answer), rightWhy, credit:
-//     [{ strand, at, weight }] (what else the answer counts in, besides the maker's own strand), size, facts, read? }
+//     [{ strand, at, weight }] (what else the answer counts in, besides the maker's own strand), size, facts, read?,
+//     sum? (the question's own sum, for the tools' Work it out, when its working doesn't say it in the question's own
+//     numbers: { op, a, b, money?, cash? }, "2.6 × 6" where the working says "6 × 26 tenths"; else the working is read) }
 //   Face = { v (the value: two coins never share one, so 0.5 and 0.50 can't both show), big, small, label }
 // This file turns a core into an order the store's slip shows (the same shape as wordproblems.js makeOrder's): the
 // right coin and up to 3 slips, shuffled. Pure, no page: tests/counter.test.mjs.
@@ -70,10 +72,19 @@ export function counterOrder(map, { step = 1, frac = 0, rand = Math.random, who 
       coins: all, answer: R.label, unit: null, cents: false, pic: core.pic || null, lead: core.lead || null, picFirst: false,
       wide, rightWhy: core.rightWhy, afterWhy: '', equation: null,
       credit: (core.credit || []).filter((c) => c && STRAND[c.strand] && Number.isFinite(c.at)).map((c) => ({ strand: c.strand, at: c.at, weight: c.weight ?? 0.5 })),
-      size: core.size || 1, long: null, facts: core.facts || null,
+      size: core.size || 1, long: null, facts: core.facts || null, sum: sumOf(core.sum),
     };
   }
   throw new Error(`no ${map} question could be made at step ${st}`);
+}
+
+// a maker's own sum for Work it out, checked: { op, a, b } (decimals welcome, never below 0), money and cash kept
+function sumOf(s) {
+  if (!s || !['add', 'sub', 'mul', 'div'].includes(s.op) || !(s.a >= 0) || !(s.b >= 0) || !Number.isFinite(s.a + s.b)) return null;
+  if ((s.op === 'sub' && s.a < s.b) || (s.op === 'div' && !s.b)) return null;
+  const out = { op: s.op, a: s.a, b: s.b };
+  if (s.money) { out.money = true; out.cash = s.cash || ''; }
+  return out;
 }
 
 // Which question the next customer brings: one of these (a map that fits the rider's level, chosen the skill model's

@@ -27,7 +27,7 @@
 // own climb stays out of it (an order dealt at a given step never moves s.step). Each order says what else it counts
 // in (order.credit: [{ strand, at, weight }], e.g. groups -> Multiplication at 0.5, money -> Money at 1) and how much
 // work it is (order.size). An order whose sum is too big for the head carries order.long: { op, a, b | n, d, point,
-// setup, final, lead } for the worked area (pointOf/needsLong in src/math/longwork.js). opts.longMost keeps the
+// final, lead } for the worked area (pointOf/needsLong in src/math/longwork.js). opts.longMost keeps the
 // numbers of the other kinds within what the rider can do (a speed in miles a day stays in the tables unless the
 // rider's Long work is up to it).
 //
@@ -188,23 +188,6 @@ function face(v, unit, cents) {
 //   rightWhy: one line said as the coins fly ("4 pies x 3 pounds = 12 pounds")
 const S3 = (size, a, b, c) => [a, b, c][Math.max(1, Math.min(3, size)) - 1];
 const MAKERS = {};
-// "What do we work out?": the worked area's first question for a long sum from a story (src/ui/longwork.js setup).
-// The right sum and three wrong ones, each with a nudge (why: the story's own words for them, where it has them).
-export function setupOf(op, x, y, why = {}) {
-  if (op === 'mul') return { ask: 'What do we work out?', choices: [
-    { label: `${x} × ${y}`, good: true },
-    { label: `${x} + ${y}`, good: false, why: why.add || `Adding counts each number once. It's ${y} lots of ${x}: times.` },
-    { label: `${x} − ${y}`, good: false, why: why.sub || 'Nothing is taken away in this story.' },
-    { label: `${x} ÷ ${y}`, good: false, why: why.div || `Nothing is split up: it's ${y} lots of ${x}, all of them.` },
-  ] };
-  return { ask: 'What do we work out?', choices: [
-    { label: `${x} ÷ ${y}`, good: true },
-    { label: `${x} × ${y}`, good: false, why: why.mul || `Times makes it bigger. The ${x} are split into lots of ${y}: divide.` },
-    { label: `${x} − ${y}`, good: false, why: why.sub || `That takes away just one lot of ${y}. How many lots of ${y} are in ${x}? Divide.` },
-    { label: `${y} ÷ ${x}`, good: false, why: why.flip || `That's the other way round: it's the ${x} split up by ${y}.` },
-  ] };
-}
-
 // 4 pies, 3 pounds each -> 12 pounds
 MAKERS.groups = (t, size, f) => {
   const p = pro(f);
@@ -424,7 +407,7 @@ MAKERS.rate = (t, size, f, opts = {}) => {
       key: `rate:speed:${what.key}`, story, ask: `How fast must ${it} go, in miles ${per}?`, answer: sp, unit: SPD, slips,
       pic: { kind: 'road', miles: d, steps: tm, step: TM, speed: null, total: d },
       rightWhy: `${d} miles ÷ ${tm} ${TM[1]} = ${u(sp, SPD)}`,
-      credit, long: long && { ...long, setup: setupOf('div', d, tm, { mul: `Times makes it bigger. Share the ${d} miles out over the ${tm} ${TM[1]}: divide.`, sub: `That takes away just ${tm}. Share the ${d} miles out over ${tm} ${TM[1]}: divide.`, flip: `The other way round: it's the ${d} miles shared over the ${tm} ${TM[1]}.` }) },
+      credit, long: long || null,
     };
   }
   if (form === 'time') {
@@ -441,7 +424,7 @@ MAKERS.rate = (t, size, f, opts = {}) => {
       ask: `How many ${TM[1]} until ${it} gets ${wagon ? 'here' : 'there'}?`, answer: tm, unit: TM, slips,
       pic: { kind: 'road', miles: d, steps: null, step: TM, speed: sp, total: d },
       rightWhy: `${d} miles ÷ ${sp} ${SPD[1]} = ${u(tm, TM)}`,
-      credit, long: long && { ...long, setup: setupOf('div', d, sp, { mul: `Times makes it bigger. Count how many ${sp}-mile ${TM[1]} fit into ${d} miles: divide.`, sub: `That's just one ${TM[0]}'s ride. How many ${sp}-mile ${TM[1]} fit into ${d}? Divide.`, flip: `The other way round: it's the ${d} miles split into ${sp}-mile ${TM[1]}.` }) },
+      credit, long: long || null,
     };
   }
   return {
@@ -455,7 +438,7 @@ MAKERS.rate = (t, size, f, opts = {}) => {
     ],
     pic: { kind: 'road', miles: null, steps: tm, step: TM, speed: sp, total: null },
     rightWhy: `${u(sp, SPD)} × ${tm} ${TM[1]} = ${u(d, MILE)}`,
-    credit, long: long && { ...long, setup: setupOf('mul', sp, tm, { add: `That adds the speed and the ${TM[1]}. Every ${TM[0]} covers ${sp} miles, ${tm} times over: times.`, div: `Nothing is split up: it covers ${sp} miles every ${TM[0]} for ${tm} ${TM[1]}.` }) },
+    credit, long: long || null,
   };
 };
 
@@ -772,14 +755,13 @@ MAKERS.bulk = (t, size, f, opts = {}) => {
       key: `bulk:mul:${ctx.key}`, story: ctx.story(a, b, f), ask: ctx.ask(p, a, b), answer: ans, unit: ctx.unit, slips,
       pic: { kind: 'lots', lots: b, each: a, count: ctx.count, unit: ctx.unit },
       rightWhy: `${b} ${ctx.count} of ${a}: ${a} × ${b} = ${u(ans, ctx.unit)}`,
-      long: { op: 'mul', a, b, setup: setupOf('mul', a, b, { add: `Adding counts each number once. It's ${b} ${ctx.count} of ${a}: times.` }) },
+      long: { op: 'mul', a, b },
       credit: [],
     };
   }
   const { n, d } = sum, q = Math.floor(n / d), r = n % d;
   const forms = r ? ['up', 'rem'] : ['up', 'even'];
   const ctx = t.pick(BULK_DIV.filter((c) => forms.includes(c.form) && (!c.fits || c.fits(d))));
-  const setup = setupOf('div', n, d, { mul: `Times makes it bigger. The ${n} ${ctx.thing[1]} go into ${ctx.box[1]} of ${d}: divide.` });
   const zl = zeroLost(q);
   const base = { story: ctx.story(n, d, f), ask: ctx.ask(p), pic: { kind: 'share', total: n, per: d, groups: null, box: ctx.box, crates: true, thing: ctx.thing } };
   if (ctx.form === 'up') {
@@ -793,7 +775,7 @@ MAKERS.bulk = (t, size, f, opts = {}) => {
     slips.push({ v: n - d, slip: 'subtracted', why: `${n} − ${d} takes away one ${ctx.box[0]}. Count how many ${ctx.box[1]} of ${d} make ${n}: divide.` });
     return { key: `bulk:up:${ctx.key}`, ...base, answer: ans, unit: ctx.box, slips,
       rightWhy: r ? `${u(q, ['full ' + ctx.box[0], 'full ' + ctx.box[1]])} hold ${q * d}; ${r === 1 ? `the last ${ctx.thing[0]} needs a ${ctx.box[0]} too` : `the last ${r} ${ctx.thing[1]} need one more`}: ${u(ans, ctx.box)}` : `${n} ÷ ${d} = ${q}: ${u(ans, ctx.box)} hold them all`,
-      long: { op: 'div', n, d, setup }, credit: [{ strand: 'div', at: 55, weight: 0.5 }] };
+      long: { op: 'div', n, d }, credit: [{ strand: 'div', at: 55, weight: 0.5 }] };
   }
   if (ctx.form === 'rem') {
     const lab = (k, l) => `${u(k, ctx.box)}, ${l} left over`;
@@ -805,7 +787,7 @@ MAKERS.bulk = (t, size, f, opts = {}) => {
         ...(zl ? [{ label: lab(zl, r), good: false, slip: 'zeroLost', why: 'That leaves out a 0 on top: when the number doesn\'t go in, a 0 holds that place.' }] : []),
         { label: lab(q, d - r), good: false, slip: 'subtracted', why: 'Check the last take-away on paper: the full ones, and what\'s left of them.' },
       ],
-      rightWhy: `${n} ÷ ${d} = ${q} r ${r}: ${lab(q, r)}`, long: { op: 'div', n, d, setup }, credit: [{ strand: 'div', at: 55, weight: 0.5 }] };
+      rightWhy: `${n} ÷ ${d} = ${q} r ${r}: ${lab(q, r)}`, long: { op: 'div', n, d }, credit: [{ strand: 'div', at: 55, weight: 0.5 }] };
   }
   const slips = [{ v: n - d, slip: 'subtracted', why: `${n} − ${d} takes away ${d}. Share the ${n} out into ${d} equal parts: divide.` },
     { v: q + 1, slip: 'off', why: `${d} ${ctx.box[1]} of ${q + 1} would be ${(q + 1) * d}, more than ${n}.` },
@@ -813,7 +795,7 @@ MAKERS.bulk = (t, size, f, opts = {}) => {
   if (zl) slips.unshift({ v: zl, slip: 'zeroLost', why: 'That leaves out a 0 on top: when the number doesn\'t go in, a 0 holds that place.' });
   return { key: `bulk:even:${ctx.key}`, ...base, answer: q, unit: ctx.thing, slips,
     pic: { kind: 'share', total: n, groups: d, per: null, box: ctx.box, thing: ctx.thing },
-    rightWhy: `${n} ÷ ${d} = ${q}: ${u(q, ctx.thing)} each`, long: { op: 'div', n, d, setup }, credit: [] };
+    rightWhy: `${n} ÷ ${d} = ${q}: ${u(q, ctx.thing)} each`, long: { op: 'div', n, d }, credit: [] };
 };
 
 // ---- an order: a problem with its townsperson and its coins ------------------------------------------------------------
@@ -821,7 +803,7 @@ MAKERS.bulk = (t, size, f, opts = {}) => {
 //      coins: [{ v, big, small, label, good, slip, why }], answer: the right coin's label, unit, pic, picFirst (the
 //      picture shows from the start: the picture stories), wide (word coins two to a row), rightWhy, equation? (the
 //      top step: { a, b, c, x, text }), credit: [{ strand, at, weight, long? }] (what else it counts in), size (units
-//      of work), long: the worked area's sum or null: { op, a, b | n, d, point, setup, final } }
+//      of work), long: the worked area's sum or null: { op, a, b | n, d, point, final } }
 // The coins are shuffled; exactly one is good; the wrong ones are never equal to the answer and never repeat.
 // ladder: 'K' for the picture stories (a K kind uses it anyway); longStep (a step, or a function giving it: asked only
 // when a bulk order is made), longMost: see makeWordProblems' next; longOp: 'mul' | 'div' for a bulk order; sum: a
@@ -869,17 +851,16 @@ export function makeOrder(type, { rand = Math.random, step = 1, who = null, coin
   throw new Error(`no ${type} order could be made`);
 }
 // an order's sum for the worked area (src/ui/longwork.js), when it's too big for the head: its point on the Long work
-// strand, the setup ("What do we work out?", its choices shuffled) and, for a division, the word answer at the end
+// strand and, for a division, the word answer at the end
 // (the order's own coins). A long sum also counts in Long work at 0.5 when it's answered on the coins without the
 // worked area (credit, long: true; the job leaves that out when the worked area ran and counted it itself).
 function longOf(L, coins, core, t) {
   const [x, y] = L.op === 'mul' ? [L.a, L.b] : [L.n, L.d];
   if (!needsLong(L.op, x, y)) return null;
   const point = longPoint(L.op, x, y);
-  const setup = L.setup ? { ask: L.setup.ask, choices: t.shuffle(L.setup.choices.map((c) => ({ ...c }))) } : null;
   const final = L.op === 'div' ? { ask: core.ask, choices: coins.map((c) => ({ label: c.label, good: c.good, why: c.why })), line: core.rightWhy } : null;
   core.credit = [...(core.credit || []), { strand: 'long', at: point, weight: 0.5, long: true }];
-  return { op: L.op, a: L.a ?? null, b: L.b ?? null, n: L.n ?? null, d: L.d ?? null, lead: L.lead || null, point, setup, final };
+  return { op: L.op, a: L.a ?? null, b: L.b ?? null, n: L.n ?? null, d: L.d ?? null, lead: L.lead || null, point, final };
 }
 
 // ---- the trainer: which order comes next, and how the ladder moves --------------------------------------------------------

@@ -5,9 +5,12 @@
 //                 long division, one highlighted spot at a time with 4 choices. Every job hands over its own question's
 //                 sum (J.workSum(): src/math/jobsums.js; the store and the deliveries: their order's own sum, which
 //                 counts as their worked area always has): the range's "closest to 58 + 24" gives 58 + 24 (the estimate
-//                 stays the kid's), a blank to fill or a story gives its sum with "What do we work out?" first, so
-//                 seeing which sum it is stays the kid's. A question with no sum on it (a series to finish, a herd to
-//                 rope) shows the button dimmed, and a tap says so.
+//                 stays the kid's), a blank to fill or a story gives its sum too, filled in: the sheet opens straight on
+//                 the columns and teaches it (2026-10-26: no "What do we work out?" first, a kid who taps for help is
+//                 helped). Decimals and money too (2.6 × 6, $1.30 + $5.75: src/math/longwork.js puts the points back).
+//                 The button's words don't give a story's sum away ("The sum on this question"); the kid still answers
+//                 the question itself. A question with no sum on it (a series to finish, a herd to rope) shows the
+//                 button dimmed, and a tap says so.
 //   THE TIMES CHART   12 x 12, every fact the rider has answered anywhere coloured: red missed, yellow right once since,
 //                 green known (src/math/facts.js chart: red ones come back soon); src/ui/timeschart.js draws it.
 //   THE LEVEL TOOL   for the place the rider is at: "‹ 27: Odd steps going down ›". The arrows step the rider's level
@@ -21,8 +24,9 @@
 //
 //   const T = makeTools({ hud, rider, sum, own, canOpen, speak, onOpen, onClose, place, onLevel })
 //     hud     the HUD (src/ui/hud.js): the strip goes in it (it hides with it), and its notes say "nothing to work out"
-//     rider() the rider now; sum() -> the question's sum now: { op: 'add' | 'sub' | 'mul' | 'div', a, b, ask, setup,
-//             own } or null (main.js asks the job at work: its workSum())
+//     rider() the rider now; sum() -> the question's sum now: { op: 'add' | 'sub' | 'mul' | 'div', a, b, money, cash,
+//             ask, story, own } or null (main.js asks the job at work: its workSum()); story: the sum isn't written on
+//             the question (the button doesn't say it)
 //     own(sum)  opens a job's own worked area for a sum with own: true (the store's or the deliveries' order)
 //     canOpen() false while the tools can't open (the title, the menu or a lock box is up)
 //     speak(text) | null   read-aloud for a rider who is read to
@@ -32,7 +36,7 @@
 //   T.work(), T.chart(), T.step(dir) (the level tool's arrows), T.close(), T.busy() (a tool is up), T.state() (for
 //   rigs), T.dispose()
 
-import { workOf, needsLong } from '../math/longwork.js';
+import { workOf, needsLong, sumWords } from '../math/longwork.js';
 import { chart as factChart } from '../math/facts.js';
 import { openLongWork } from './longwork.js';
 import { showChart, closeChart, isChartOpen, ensureChartCss } from './timeschart.js';
@@ -45,25 +49,11 @@ function ensureCss() {
 }
 const SIGN = { add: '+', sub: '−', mul: '×', div: '÷' };
 
-// "What do we work out?" for a sum read off a story: the right sum and the same two numbers with the other three signs
-export function setupFor(sum) {
-  const { op, a, b } = sum;
-  const why = {
-    add: 'Adding puts them together. Picture the story again: is it putting together?',
-    sub: 'Taking away finds what is left, or how many more. Picture the story again.',
-    mul: 'Times is so many lots of the same. Picture the story again: are there equal lots?',
-    div: 'Dividing shares out, or finds how many lots fit. Picture the story again.',
-  };
-  const label = (o) => (o === 'sub' && a < b) || (o === 'div' && b === 0) ? null : `${a} ${SIGN[o]} ${b}`;
-  const choices = ['add', 'sub', 'mul', 'div'].map((o) => ({ o, label: label(o) })).filter((c) => c.label)
-    .map((c) => ({ label: c.label, good: c.o === op, why: c.o === op ? '' : why[c.o] }));
-  return { ask: 'What do we work out?', choices };
-}
-// the words on the Work it out button for a sum (a story's sum is not given away: "the sum on this order")
+// the words on the Work it out button for a sum (a story's sum is not given away: "the sum on this question")
 export function sumLabel(sum) {
   if (!sum) return 'Nothing to work out on paper here';
-  if (sum.setup || sum.own) return 'The sum on this question';
-  return `${sum.a} ${SIGN[sum.op] || '?'} ${sum.b}`;
+  if (sum.story || sum.own) return 'The sum on this question';
+  return sumWords(sum);
 }
 
 export function makeTools({ hud, rider = () => null, sum = () => null, own = () => false, canOpen = () => true, speak = null, onOpen = () => {}, onClose = () => {}, place = () => null, onLevel = () => {} } = {}) {
@@ -105,12 +95,12 @@ export function makeTools({ hud, rider = () => null, sum = () => null, own = () 
     if (chartOn) closeChartNow();
     if (s.own) { hold(false); return !!own(s); }   // (the job's own worked area: it counts, and it pauses nothing)
     let work = null;
-    try { work = workOf(s.op === 'div' ? { op: 'div', n: s.a, d: s.b } : s); } catch (e) { console.warn(e); }
+    try { work = workOf(s); } catch (e) { console.warn(e); }
     if (!work) { hold(false); return false; }
     hold(true);
     const slip = !!document.querySelector('.bmo.is-on');
     panel = openLongWork(document.body, {
-      work, setup: s.setup ? setupFor(s) : null, title: 'Work it out', ask: s.ask || '', closeLabel: 'Close', free: !slip, speak,
+      work, title: 'Work it out', ask: s.ask || '', closeLabel: 'Close', free: !slip, speak,
       onDone: () => { setTimeout(() => { panel = null; hold(false); }, 0); },
       onClose: () => { panel = null; hold(false); },
     });

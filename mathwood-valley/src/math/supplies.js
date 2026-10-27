@@ -132,8 +132,7 @@ function coins(t, answer, unit, slips, n) {
 //      total, crates, cost, leftover, parts: [{ key, ask, coins, pic, rightWhy, credit, long }], load: { n, box, goods } }
 //   part.credit: { strand, at } the strand that part counts in (src/math/skill.js), or null (the dozen: just a word)
 //   part.long:   the worked area's sum when the part's sum is too big for the head (src/ui/longwork.js): { op, a, b |
-//                n, d, point, lead (a first fact: one day's worth), setup ("What do we work out?"), final (the crates:
-//                the part's own coins) }, or null
+//                n, d, point, lead (a first fact: one day's worth), final (the crates: the part's own coins) }, or null
 // vocab: the words still new to this kid ({ fortnight: true }): their question comes first
 // small: the rider is below the first step (the youngest): two or three hands for a few days, crates of 2 to 4
 // longMost: the hardest long sum (a point on the Long work strand) the order should need; numbers are tried that keep
@@ -206,21 +205,12 @@ export function makeSupplyOrder({ rand = Math.random, step = 1, camp = { id: 'co
         slips.push({ v: H * R * (D - 1), slip: 'dayOff', why: `That's ${D - 1} days' worth. They need ${D}.` });
       }
       const cs = coins(t, total, unit, slips, two ? 3 : 4);
-      // the worked area for a total too big for the head: what to work out (from the story), then one day's worth first
-      // (8 hands × 2 meals = 16), then the long sum (16 × 7)
+      // the worked area for a total too big for the head: one day's worth first (8 hands × 2 meals = 16), then the long
+      // sum (16 × 7)
       let long = null;
       if (longMul) {
         const three = !two && !noDays;
-        const right = three ? `${H} × ${R} × ${D}` : `${top} × ${by}`;
-        const wrongs = three
-          ? [{ label: `${H} + ${R} + ${D}`, why: `Adding counts each number once. It's ${H} ${whoN}, ${R} each a day, for ${D} days: times all three.` },
-            { label: `${H} × ${D}`, why: `That leaves out the ${R} a day. Each ${who1} needs ${R} every day.` },
-            { label: `${R} × ${D}`, why: `That's enough for one ${who1}. There are ${H} ${whoN}.` }]
-          : [{ label: `${top} + ${by}`, why: `Adding counts each number once. Each of the ${top} needs ${by}: times.` },
-            { label: `${top} − ${by}`, why: 'Nothing is taken away in this order.' },
-            { label: `${top} ÷ ${by}`, why: 'Nothing is split up yet: first how much in all.' }];
-        long = { op: 'mul', a: top, b: by, n: null, d: null, point: longMul, lead: three ? { a: H, b: R, ask: 'One day first' } : null,
-          setup: { ask: 'What do we work out?', choices: t.shuffle([{ label: right, good: true }, ...wrongs.map((w) => ({ ...w, good: false }))]) }, final: null };
+        long = { op: 'mul', a: top, b: by, n: null, d: null, point: longMul, lead: three ? { a: H, b: R, ask: 'One day first' } : null, final: null };
       }
       parts.push({ key: 'total', ask, coins: cs,
         pic: noDays ? { kind: 'groups', groups: H, each: R, item: G.who, unit } : { kind: 'meals', hands: H, rate: R, days: D, who: [who1, whoN], unit, word, two },
@@ -245,10 +235,6 @@ export function makeSupplyOrder({ rand = Math.random, step = 1, camp = { id: 'co
       const ask = `${G.name[0].toUpperCase() + G.name.slice(1)} ${come} ${per} to a ${G.box[0]}. How many ${G.box[1]} make enough for ${total} ${G.unit[1]}?`;
       const rightWhy = exact ? `${total} ÷ ${per} = ${u(crates, G.box)}` : `${full} full ${G.box[1]} hold ${full * per}, and 1 more for the last ${leftover}: ${u(crates, G.box)}`;
       const long = longDiv ? { op: 'div', a: null, b: null, n: total, d: per, point: longDiv, lead: null,
-        setup: { ask: 'What do we work out?', choices: t.shuffle([{ label: `${total} ÷ ${per}`, good: true },
-          { label: `${total} × ${per}`, good: false, why: `Times makes it bigger. The ${total} ${G.unit[1]} are packed ${per} to a ${G.box[0]}: divide.` },
-          { label: `${total} − ${per}`, good: false, why: `That takes away just one ${G.box[0]}. How many ${G.box[1]} of ${per} are in ${total}? Divide.` },
-          { label: `${per} ÷ ${total}`, good: false, why: `That's the other way round: it's the ${total} ${G.unit[1]} split into ${G.box[1]} of ${per}.` }]) },
         final: { ask, choices: cs.map((c) => ({ label: c.label, good: c.good, why: c.why })), line: rightWhy } } : null;
       parts.push({ key: 'crates', ask, coins: cs, pic: { kind: 'pack', total, per, box: G.box, unit: G.unit }, rightWhy,
         credit: longDiv ? { strand: 'long', at: longDiv } : { strand: 'div', at: exact ? pointOf('div', total, per).at : 55 }, long });

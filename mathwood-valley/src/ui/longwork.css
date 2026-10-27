@@ -39,8 +39,9 @@
 .bml-board { position: relative; width: calc(var(--cols) * var(--cell)); height: calc(var(--rows) * var(--cell)); font: 700 calc(var(--cell) * 0.66)/1 Bitter, Georgia, serif;
   font-variant-numeric: tabular-nums; transition: opacity 0.3s; }
 .bml.is-blank .bml-board { opacity: 0.12; }
-.bml-setupnote { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; font: italic 600 16px Bitter, Georgia, serif; color: var(--mute); pointer-events: none; }
-.bml-setupnote:empty { display: none; }
+/* (the sum as given, over the empty board: dividing by a decimal before its points move) */
+.bml-note { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; font: 800 clamp(30px, 7vw, 46px) Bitter, Georgia, serif; color: var(--ink); pointer-events: none; }
+.bml-note:empty { display: none; }
 .bml-cell { position: absolute; left: calc(var(--c) * var(--cell)); top: calc(var(--r) * var(--cell)); width: var(--cell); height: var(--cell);
   display: grid; place-items: center; border-radius: 30%; opacity: 0; transition: opacity 0.25s, background 0.25s; }
 .bml-cell.is-on { opacity: 1; }
@@ -62,6 +63,18 @@
 /* (a digit brought down: a small tick under it where it came from) */
 .bml-cell.is-from.is-on::after { content: ''; position: absolute; left: 30%; right: 30%; bottom: 4%; height: 2px; background: var(--brass); border-radius: 2px; }
 .bml-cell.is-focus { background: var(--lit); box-shadow: 0 0 0 2px rgba(180, 127, 44, 0.45) inset; }
+/* decimals: the point at the bottom corner of the digit in front of it (on the line between two squares, as on squared
+   paper), the answer's in the kid's ink; the $ in front of dollars; a 0 put on the end to line the points up, in brass */
+.bml-cell.is-point { font-size: 0; color: var(--ink); }
+.bml-cell.is-point::after { content: ''; position: absolute; right: calc(var(--cell) * -0.085); bottom: calc(var(--cell) * 0.17); width: calc(var(--cell) * 0.17); height: calc(var(--cell) * 0.17);
+  border-radius: 50%; background: currentColor; }
+.bml-cell.is-point.is-kid { color: var(--kid); }
+.bml-cell.is-point.is-off { opacity: 0; }
+.bml-cell.is-unit { color: var(--ink-2); font-size: 0.82em; font-weight: 600; }
+.bml-cell.is-unit.is-kid { color: var(--kid); }
+.bml-cell.is-pad { color: var(--brass); }
+.bml-cell.is-pad.is-off { opacity: 0.4; }
+.bml-cell.is-pad.is-off::after { content: ''; position: absolute; left: 18%; right: 18%; top: 50%; height: 2px; background: var(--rust); transform: rotate(-24deg); border-radius: 2px; }
 .bml-cell.is-new { animation: bml-write 0.45s ease-out; }
 @keyframes bml-write { from { opacity: 0; transform: translateY(-30%) scale(1.3); } }
 .bml-rule { position: absolute; left: calc(var(--c0) * var(--cell)); width: calc(var(--n) * var(--cell)); top: calc((var(--r) + 1) * var(--cell) - 2px); height: 2.5px;
@@ -77,6 +90,8 @@
   display: none; place-items: center; border: 2px dashed var(--rust); border-radius: 8px; color: var(--rust); font-size: 0.8em; background: rgba(255, 250, 235, 0.6);
   animation: bml-pulse 1.4s ease-in-out infinite; }
 .bml-slot.is-on { display: grid; }
+/* (the point's step: a ring round the whole answer, its digits in view) */
+.bml-slot.is-ring { background: transparent; color: transparent; top: calc(var(--r) * var(--cell) - 3px); height: calc(var(--cell) + 6px); }
 @keyframes bml-pulse { 50% { box-shadow: 0 0 0 4px rgba(181, 82, 58, 0.18); } }
 
 /* the step's question: the biggest words on the sheet */

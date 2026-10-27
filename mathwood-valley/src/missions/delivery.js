@@ -23,7 +23,7 @@
 // 'deliveries'). Numbers are chosen to stay inside the level's school year where they can (longMost). A part whose sum
 // is too big for the head (8 hands × 2 meals × 7 days = 16 × 7; 112 cans in crates of 5) opens THE WORKED AREA
 // (src/ui/longwork.js) by itself, unless the level is well past it (then Work it out, on the slip or from the tools
-// button, src/ui/tools.js, opens it): what to work out, the sum a step at a time (each tap counts lightly in its
+// button, src/ui/tools.js, opens it): the sum a step at a time, filled in (each tap counts lightly in its
 // fact's strand), and for the crates the word answer (the slip's own coins); the whole sum counts in Long work, and
 // the part moves on as if its coin was picked. DL.workSum() tells the tools button the part's sum.
 //
@@ -82,7 +82,7 @@ export const DELIVERY = {
   longMost: 4,          // an order's sums may need long work up to this many points past the level's school year
 };
 
-export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, refresh = () => {}, onStart = () => {}, onStop = () => {}, quiet = () => false, say = null }) {
+export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, refresh = () => {}, onStart = () => {}, onStop = () => {}, quiet = () => false, say = null, work = null }) {
   // a foreman's words: in the speech card over his head (say(campId, text): src/jobfolk.js), else a note at the bottom
   const speak = (c, text, kind) => { if (!(say && say(c.id, text))) hud.toast(`${c.foreman.name}: ${text}`, kind); };
   if (!rider.topics || typeof rider.topics !== 'object') rider.topics = {};
@@ -104,14 +104,16 @@ export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, r
   DL.on = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
 
   // ── THE SLIP AT THE STORE ──────────────────────────────────────────────────────────────────────────────────────
-  const U = makeStoreSlip(document.body, { onPick: (i) => pick(i), onDone: () => stopWork(), onDraw: () => draw(), onWork: () => openLong() });
+  // (work: the tools' Work it out, for the slip's own button on a phone, where the slip covers the tools strip)
+  const U = makeStoreSlip(document.body, { onPick: (i) => pick(i), onDone: () => stopWork(), onDraw: () => draw(), onWork: () => { const p = order && order.parts[part]; if (p && !p.long && work) work(); else openLong(); } });
   const foot = () => U.el.querySelector('.bmo-filled');
   function showPart() {
     const p = order.parts[part];
     partMissed = false; helped = false;
     U.purse(rider.gold);
     const young = readAloud(rider), read = `${part === 0 ? order.story + ' ' : ''}${p.ask}`;
-    U.show({ who: { name: camp.foreman.name }, story: order.story, ask: p.ask, coins: p.coins, equation: null, long: p.long, read }, { filled: 0, read: young });
+    const hasSum = !!(p.long || (p.key !== 'vocab' && sumFrom(p.rightWhy || '')));   // (Work it out has a sum for it)
+    U.show({ who: { name: camp.foreman.name }, story: order.story, ask: p.ask, coins: p.coins, equation: null, long: p.long, work: hasSum, read }, { filled: 0, read: young });
     if (young) setTimeout(() => { if (DL.active && order && order.parts[part] === p && !U.busy) speakLine(read); }, 500);
     const f = foot(); if (f) f.textContent = order.parts.length > 1 ? `Step ${part + 1} of ${order.parts.length}` : 'Making up the order';
     if (timer) timer.cancel();
@@ -129,7 +131,7 @@ export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, r
     const L = p.long, work = L.op === 'mul' ? workMul(L.a, L.b, L.lead ? { lead: L.lead } : {}) : workDiv(L.n, L.d);
     let firstRight = true;
     longPanel = openLongWork(document.body, {
-      work, setup: L.setup, final: L.final, ask: p.ask, speak: readAloud(rider) ? speakLine : null,
+      work, final: L.final, ask: p.ask, speak: readAloud(rider) ? speakLine : null,
       onTap: (tp) => {
         if (!tp.first || tp.helped) return;   // (a tap after the helper strip showed the answer: nothing to count)
         if (tp.part !== 'work') { if (!tp.right) firstRight = false; return; }
@@ -137,7 +139,7 @@ export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, r
       },
       onDone: (r) => {
         if (order !== o || part !== k || !DL.active) return;
-        // the part's answer: the old tally (right when what to work out and the word answer were right first time),
+        // the part's answer: the old tally (right when the word answer was right first time; a part with none: right),
         // and the whole sum in Long work at its point (right when every tap was)
         if (!already) {
           p.picked = true;
@@ -486,7 +488,7 @@ export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, r
     const L = p.long;
     if (L) return { own: true, op: L.op, a: L.op === 'div' ? L.n : L.a, b: L.op === 'div' ? L.d : L.b, ask: p.ask };
     const s = p.key === 'vocab' ? null : sumFrom(p.rightWhy || '');
-    return s ? { ...s, ask: p.ask, setup: true } : null;
+    return s ? { ...s, ask: p.ask, story: true } : null;
   };
   DL.openLong = () => openLong();
   DL.dispose = () => {

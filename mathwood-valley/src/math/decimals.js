@@ -17,6 +17,9 @@
 // Numbers are kept as whole numbers of tenths or hundredths and printed by counterkit's dec(), so no rounding slips
 // creep in. Every coin's value (v) is in millionths, so 0.5 and 0.50 can never both be coins.
 //
+// Each core with a sum in it names it (core.sum) in the question's own numbers, for the tools' Work it out: 2.6 × 6 for
+// the fence boards (the working says 6 × 26 tenths), $0.80 × 6 for coffee by the pound, $2.20 ÷ 4 shared.
+//
 //   make(t, step, f, { frac }) -> core (see src/math/counter.js); STEPS: [{ label }]
 import { dec, usd } from './counterkit.js';
 import { mulAt } from './longwork.js';
@@ -142,7 +145,7 @@ function addSub(t, f, frac) {
         key: 'dec:add', story: `${f.name} buys ${dec(a, 2, { trim: true })} pounds of ${what[0]} and ${dec(b, 2)} pounds of ${what[1]}.`, ask: 'How many pounds is that in all?',
         right: P(s), slips,
         pic: { kind: 'columns', rows: [dec(a, 2, { trim: true }), dec(b, 2)], op: '+' },
-        rightWhy: `${dec(a, 2)} + ${dec(b, 2)} = ${dec(s, 2)} pounds`,
+        rightWhy: `${dec(a, 2)} + ${dec(b, 2)} = ${dec(s, 2)} pounds`, sum: { op: 'add', a: a / 100, b: b / 100 },
         credit: [], facts: { a, b, op: '+', ans: s },
       };
     }
@@ -158,7 +161,7 @@ function addSub(t, f, frac) {
       key: 'dec:sub', story: `A wheel of cheese weighs ${dec(a, 2, { trim: true })} pounds. ${f.name} cuts off ${dec(b, 2)} pounds for the hotel.`, ask: 'How much is left?',
       right: P(d), slips,
       pic: { kind: 'columns', rows: [dec(a, 2, { trim: true }), dec(b, 2)], op: '−' },
-      rightWhy: `${dec(a, 2)} − ${dec(b, 2)} = ${dec(d, 2)} pounds`,
+      rightWhy: `${dec(a, 2)} − ${dec(b, 2)} = ${dec(d, 2)} pounds`, sum: { op: 'sub', a: a / 100, b: b / 100 },
       credit: [], facts: { a, b, op: '−', ans: d },
     };
   }
@@ -183,7 +186,7 @@ function tens(t, f, frac) {
         { ...M(each - 5), slip: 'off', why: `10 at ${usd(each - 5)} would cost only ${usd(10 * (each - 5))}. Each digit moves one place right.` },
       ],
       pic: { kind: 'shift', from: total, places: 2, by: 10, op: '÷', money: true },
-      rightWhy: `${usd(total)} ÷ 10 = ${usd(each)}: every digit moves one place to the right`,
+      rightWhy: `${usd(total)} ÷ 10 = ${usd(each)}: every digit moves one place to the right`, sum: { op: 'div', a: total / 100, b: 10, money: true, cash: 'a' },
       credit: [], facts: { total, each, n: 10 },
     };
   }
@@ -207,7 +210,7 @@ function tens(t, f, frac) {
     ],
     pic: { kind: 'shift', from: one, places, by, op: '×' },
     rightWhy: `${dec(one, places)} × ${by} = ${dec(one * by, places, { trim: true })} pounds: each digit moves ${moved} to the left`,
-    credit: [], facts: { one, places, by, ans },
+    sum: { op: 'mul', a: one / 10 ** places, b: by }, credit: [], facts: { one, places, by, ans },
   };
 }
 
@@ -225,7 +228,7 @@ function times(t, f, frac) {
         { ...L(dec(p, 3), p / 1000), slip: 'tooMany', why: 'Three places is too many: one place in each number makes two.' },
       ],
       pic: { kind: 'area', a, b },
-      rightWhy: `${a} × ${b} = ${p}, and tenths times tenths are hundredths: ${dec(p, 2)}`,
+      rightWhy: `${a} × ${b} = ${p}, and tenths times tenths are hundredths: ${dec(p, 2)}`, sum: { op: 'mul', a: a / 10, b: b / 10 },
       credit: [{ strand: 'mul', at: mulAt(a, b), weight: 0.5 }], facts: { a, b, p },
     };
   }
@@ -244,7 +247,7 @@ function times(t, f, frac) {
         { ...M(total + each), slip: 'groupOff', why: `That's ${n + 1} pounds. ${f.she ? 'She' : 'He'} wants ${n}.` },
       ],
       pic: { kind: 'bars', n, label: usd(each), line: `${n} pounds at ${usd(each)} each: ${n} lots of ${each} cents.` },
-      rightWhy: `${n} × ${each}¢ = ${total}¢ = ${usd(total)}`,
+      rightWhy: `${n} × ${each}¢ = ${total}¢ = ${usd(total)}`, sum: { op: 'mul', a: each / 100, b: n, money: true, cash: 'a' },
       credit: each % 10 === 0 ? [{ strand: 'mul', at: mulAt(n, each / 10), weight: 0.5 }] : [], facts: { n, each, total },
     };
   }
@@ -261,7 +264,7 @@ function times(t, f, frac) {
       { ...F(one + n * 10, 1), slip: 'added', why: 'That adds the count on. End to end, every board adds its whole length: multiply.' },
     ],
     pic: { kind: 'bars', n, label: dec(one, 1), line: `${n} boards of ${dec(one, 1)} feet: ${n} lots of ${one} tenths.` },
-    rightWhy: `${n} × ${one} tenths = ${p} tenths = ${dec(p, 1, { trim: true })} feet`,
+    rightWhy: `${n} × ${one} tenths = ${p} tenths = ${dec(p, 1, { trim: true })} feet`, sum: { op: 'mul', a: one / 10, b: n },
     credit: [], facts: { n, one, p },
   };
 }
@@ -282,7 +285,7 @@ function divide(t, f, frac) {
         { ...M(total * n), slip: 'multiplied', why: 'Sharing gives each child less than the whole: divide.' },
       ],
       pic: { kind: 'share', total, groups: n, per: null, box: ['child', 'children'], thing: ['cent', 'cents'] },
-      rightWhy: `${usd(total)} is ${total} cents; ${total} ÷ ${n} = ${each} cents: ${usd(each)} each`,
+      rightWhy: `${usd(total)} is ${total} cents; ${total} ÷ ${n} = ${each} cents: ${usd(each)} each`, sum: { op: 'div', a: total / 100, b: n, money: true, cash: 'a' },
       credit: [], facts: { n, total, each },
     };
   }
@@ -300,7 +303,7 @@ function divide(t, f, frac) {
       key: `dec:bags:${P}`, story: `${f.name} has ${whole} pound${whole === 1 ? '' : 's'} of tea to put into little bags of ${P} pound each.`, ask: 'How many bags can be filled?',
       right: C(n, 'bags'), slips,
       pic: { kind: 'fit', whole, part, label: P },
-      rightWhy: `${whole} ÷ ${P} = ${n}: ${n} bags of ${P} make ${whole} pound${whole === 1 ? '' : 's'}`,
+      rightWhy: `${whole} ÷ ${P} = ${n}: ${n} bags of ${P} make ${whole} pound${whole === 1 ? '' : 's'}`, sum: { op: 'div', a: whole, b: part },
       credit: [], facts: { whole, part, n },
     };
   }
@@ -316,7 +319,7 @@ function divide(t, f, frac) {
       { ...C(q + 1, 'pieces'), slip: 'off', why: `${q + 1} pieces of ${dec(b, 1)} would need ${dec((q + 1) * b, 1)} feet.` },
     ],
     pic: { kind: 'fit', whole: a / 10, part: b / 10, label: dec(b, 1) },
-    rightWhy: `${dec(a, 1)} ÷ ${dec(b, 1)} is the same as ${a} ÷ ${b} (both in tenths) = ${q}`,
+    rightWhy: `${dec(a, 1)} ÷ ${dec(b, 1)} is the same as ${a} ÷ ${b} (both in tenths) = ${q}`, sum: { op: 'div', a: a / 10, b: b / 10 },
     credit: [{ strand: 'div', at: 37, weight: 0.5 }], facts: { a, b, q },
   };
 }

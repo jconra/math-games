@@ -61,7 +61,7 @@ if (Q.get('sheet') === 'counter') {
   const openLong = () => {
     if (!order || !order.long || panel) return;
     const L = order.long, work = L.op === 'mul' ? workMul(L.a, L.b, L.lead ? { lead: L.lead } : {}) : workDiv(L.n, L.d);
-    panel = window.L = openLongWork(document.body, { work, setup: L.setup, final: L.final, ask: order.ask,
+    panel = window.L = openLongWork(document.body, { work, final: L.final, ask: order.ask,
       onDone: () => { setTimeout(() => { panel = null; U.onPickRight && U.onPickRight(); }, 1700); }, onClose: () => { panel = null; } });
   };
   const pic = (o) => (o.picture || picture)(o.pic);

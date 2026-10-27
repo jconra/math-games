@@ -12,7 +12,9 @@
 //                                 to read, the coins to count: src/ui/counterpics.js); note: a quiet word in the corner,
 //                                 e.g. "finding your level").
 //                                 An order with a sum too big for the head (order.long) shows "Work it out" (onWork:
-//                                 the job opens the worked area, src/ui/longwork.js). order.wide: word coins, two a row)
+//                                 the job opens the worked area, src/ui/longwork.js); so does any order with a sum
+//                                 (order.work) on a phone, where the slip covers the tools strip and its Work it out
+//                                 (onWork: the job opens the tools' one). order.wide: word coins, two a row)
 //   U.speak(text)                 read a line out loud in the browser's voice (read-aloud for riders who can't read yet)
 //   U.wrong(i, { why, pic, inLead })   coin i was wrong: shake it, dull it, show the reason and the picture ({ svg,
 //                                 title, line }); inLead: the picture takes the lead picture's place (the clock with
@@ -144,7 +146,8 @@ export function makeStoreSlip(root = document.body, { onPick = () => {}, onDone 
     const wide = !!(o.equation || o.wide);
     slip.classList.toggle('is-eq', wide);
     coinsEl.classList.toggle('is-eq', wide);
-    workBtn.hidden = !o.long;
+    // (on a phone the slip covers the tools strip: its own button stands in for the strip's Work it out)
+    workBtn.hidden = !(o.long || (o.work && typeof matchMedia === 'function' && matchMedia('(max-width: 760px)').matches));
     readBtn.hidden = !(read && canSpeak());
     coinsEl.innerHTML = o.coins.map((c, i) => `<button type="button" class="bmo-coin${wide ? ' is-eq' : ''}" data-i="${i}" aria-label="${esc(c.label)}">
         <span class="bmo-face"><b${!wide && String(c.big).length > 5 ? ' class="is-long"' : ''}>${esc(c.big)}</b>${c.small ? `<small>${esc(c.small)}</small>` : ''}</span><kbd>${i + 1}</kbd></button>`).join('');
