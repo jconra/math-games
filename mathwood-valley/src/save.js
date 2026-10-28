@@ -18,9 +18,10 @@
 //             new (the bottle range is for every rider now)
 //   topicsOn: { counting, adding, taking, times, dividing, algebra }   the old title's math topic ticks; kept in saves,
 //             no longer shown (the skill model below picks the math)
-//   readAloud: true | 'on' | false   the grown-ups' switch for questions read out loud (src/audio/readaloud.js):
-//             true (the default) = by itself: on while the rider's math is young, or for an age of 7 and under
-//             (skill.js readAloud, readAloudLevel); 'on' = always; false = off
+//   readAloud: false | true | 'on'   the grown-ups' switch for the maker's recorded voice reading the basic math cards
+//             (src/audio/readaloud.js; the browser's synthetic voice is never used): false (the default) = off; true =
+//             by itself: on while the rider's math is young, or for an age of 7 and under (skill.js readAloud,
+//             readAloudLevel); 'on' = always. readV: 2 once that default changed (older riders start off)
 //   topics:   { times: {...}, algebra: {...} }   each math module keeps its own progress object in here
 //   missions: { store, deliveries, sheep, pigs, wagon, loot, hunt, range, ... }   which jobs are on (MISSIONS): every
 //             one on by default; a grown-up can turn some off on the title (jobOn)
@@ -128,9 +129,9 @@ export function jobOn(rider, id) {
 export function readAloudLevel(rider) {
   return !!rider && readsNow({ ...rider, readAloud: true });
 }
-// The read-aloud switch's three settings, in the order a tap steps through them: by itself, always, off.
-export const READ_MODES = [true, 'on', false];
-export function readMode(rider) { return rider && rider.readAloud === 'on' ? 'on' : rider && rider.readAloud === false ? false : true; }
+// The read-aloud switch's three settings, in the order a tap steps through them: off, by itself, always.
+export const READ_MODES = [false, true, 'on'];
+export function readMode(rider) { return rider && rider.readAloud === 'on' ? 'on' : rider && rider.readAloud === true ? true : false; }
 export function nextReadMode(rider) { const i = READ_MODES.indexOf(readMode(rider)); return READ_MODES[(i + 1) % READ_MODES.length]; }
 // The switch's words: 'By itself (on now)', 'Always on', 'Off'
 export function readModeWords(rider) {
@@ -387,7 +388,10 @@ export function fixRider(r) {
     gold: whole(r.gold),
     bounty: whole(r.bounty),
     mode: r.mode === 'shoot' ? 'shoot' : 'lasso',
-    readAloud: r.readAloud === 'on' ? 'on' : r.readAloud !== false,
+    // Read aloud is OFF unless a grown-up turns it on (2026-10-28). Riders from before readV 2 had "by itself" as the
+    // default, which read every townsfolk line in the browser's voice: they start off now; a choice made since stays.
+    readAloud: r.readAloud === 'on' ? 'on' : r.readV === 2 && r.readAloud === true,
+    readV: 2,
     topicsOn: {},
     topics: { ...obj(r.topics) },
     missions: {},

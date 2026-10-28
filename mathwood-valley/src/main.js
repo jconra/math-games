@@ -706,11 +706,11 @@ function nextJustBox() {
 // the lock box's own Work it out (the tools' sheet goes over the box; the box hears no keys while a tool is up)
 function boxTools() { return { workOut: () => TOOLS.work(), toolsOpen: () => TOOLS.busy() }; }
 
-// the menu's read-aloud switch, in words (always in the menu: a tap steps through by itself, always, off; save.js)
+// the menu's read-aloud switch, in words (always in the menu: a tap steps through off, by itself, always; save.js)
 function readWords() {
   const m = readMode(rider);
-  return `Read aloud: ${readModeWords(rider)}<small>${m === 'on' ? 'Every question is read out loud' : m === false ? 'Nothing is read out loud'
-    : 'Read out loud while the math is new (and for an age of 7 and under)'}</small>`;
+  return `Read aloud: ${readModeWords(rider)}<small>${m === 'on' ? 'The basic math cards, always (a recorded voice)' : m === false ? 'Nothing is read out loud'
+    : 'The basic math cards while the math is new (a recorded voice)'}</small>`;
 }
 // the menu's "What's left" line: the checklist's percent and the first goal's progress
 function leftWords() {

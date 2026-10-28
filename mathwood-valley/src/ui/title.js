@@ -388,8 +388,8 @@ export function showTitle(root, opts = {}) {
     const rm = readMode(r);
     const readRow = readAloudLevel(r) || rm !== true ? `<div class="bmt-read">
         <button class="bmt-hat bmt-readsw" aria-pressed="${rm !== false}" data-act="read" data-k="read">${rm !== false ? ICON.speaker : ICON.speakerOff}Read aloud: ${esc(readModeWords(r))}</button>
-        <small>${rm === 'on' ? 'Every question is read out loud, whatever the math.' : rm === false ? 'Nothing is read out loud. Tap to have it read by itself again.'
-          : 'Questions are read out loud while the math is new (and for an age of 7 and under). Tap for always, or off.'}</small></div>` : '';
+        <small>${rm === 'on' ? 'The basic math cards are always read out loud (a recorded voice). Tap to turn it off.' : rm === false ? 'Nothing is read out loud. Tap to have the basic math cards read out by a recorded voice.'
+          : 'The basic math cards are read out loud by a recorded voice while the math is new (and for an age of 7 and under). Tap for always.'}</small></div>` : '';
     // JOBS: every job on; a grown-up can turn some off (folded away)
     const jobs = MISSIONS.filter((m) => m.ready);
     const on = jobs.filter((m) => jobOn(r, m.id)).length;

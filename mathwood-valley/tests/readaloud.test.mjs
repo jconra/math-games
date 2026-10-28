@@ -162,10 +162,13 @@ test('reactions: "That\'s right!" about one in three, never twice running; wrong
   assert.equal(C.pick('right'), 'right'); assert.equal(C.pick('right'), null); C.pick('wrong'); assert.equal(C.pick('right'), 'right');
 });
 
-test('a rider reads aloud unless switched off (older saves too)', () => {
-  assert.equal(fixRider({ name: 'A' }).readAloud, true);
+test('read aloud is off unless a grown-up turns it on (older saves start off)', () => {
+  assert.equal(fixRider({ name: 'A' }).readAloud, false);
   assert.equal(fixRider({ name: 'A', readAloud: false }).readAloud, false);
-  assert.equal(fixRider({ name: 'A', readAloud: true }).readAloud, true);
+  assert.equal(fixRider({ name: 'A', readAloud: true }).readAloud, false);              // the old "by itself" default
+  assert.equal(fixRider({ name: 'A', readAloud: true, readV: 2 }).readAloud, true);     // chosen since
+  assert.equal(fixRider({ name: 'A', readAloud: 'on' }).readAloud, 'on');
+  assert.equal(fixRider(fixRider({ name: 'A', readAloud: true })).readAloud, false);    // and it stays off on reload
 });
 
 // a stand-in for the browser's sound: a clock the test moves, sources that end on that clock, and fetches that answer

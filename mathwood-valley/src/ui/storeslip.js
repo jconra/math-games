@@ -58,20 +58,12 @@ export function sayable(text) {
     .replace(/(\d+) h (\d+) min\b/g, '$1 hours $2 minutes').replace(/(\d+) min\b/g, '$1 minutes').replace(/\b1 hours\b/g, '1 hour')
     .replace(/×/g, ' times ').replace(/÷/g, ' divided by ').replace(/−/g, ' minus ');
 }
-// The browser's own voice, for reading a story out loud to a rider who can't read yet (the maker's recorded voice,
-// src/audio/readaloud.js, says counting cards; a whole story needs the browser's). Returns false when there's none.
-export function speakLine(text) {
-  try {
-    const S = globalThis.speechSynthesis, Utt = globalThis.SpeechSynthesisUtterance;
-    if (!S || !Utt || !text) return false;
-    S.cancel();
-    const u = new Utt(sayable(text));
-    u.rate = 0.92; u.lang = 'en-US';
-    S.speak(u);
-    return true;
-  } catch (e) { return false; }
+// The browser's own (synthetic) voice is not used in the game (only the maker's recorded clips are, when Read aloud
+// is on): speakLine says nothing and returns false, and canSpeak is false, so no "Read it to me" button shows.
+export function speakLine(text) {   // eslint-disable-line no-unused-vars
+  return false;
 }
-export const canSpeak = () => { try { return !!(globalThis.speechSynthesis && globalThis.SpeechSynthesisUtterance); } catch (e) { return false; } };
+export const canSpeak = () => false;
 
 export const SLIP = {
   flyMs: 650,        // a coin's flight from the picked coin to the purse
