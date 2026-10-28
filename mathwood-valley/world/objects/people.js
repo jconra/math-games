@@ -19,6 +19,14 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 // how fast each skeleton's walk and run go at their own speed (m/s: the planted foot's speed backward, measured in the
 // People Lab), so a clip's speed can match how fast its person moves
 export const STRIDE = { f: { Walk: 1.055, Run: 2.395 }, m: { Walk: 1.318, Run: 2.994 } };
+// the bones bent by hand over the clips each frame (a rider's legs round the barrel, the waist turned to a throw, a
+// bandit's hands up: src/actors/seat.js, src/actors/riders.js, src/player.js). Each bend is laid on what the mixer left
+// in the bone, but the mixer only writes a bone when its value has changed since the frame before (three's
+// PropertyMixer): a value held still (a two-key track that never moves, a clip held at its end, a slow clip between two
+// frames) leaves last frame's bend in the bone, and the next one goes on top. The bends piled up: a rider's feet walked
+// out a centimetre a frame until they stood out from the horse like wings. So before the mixer runs these bones are put
+// back as it last left them, and whatever it doesn't write is then what it wrote last
+const BENT = /^(Hips|Abdomen|Spine\d?|Chest|Neck|Head|Shoulder[LR]|UpperArm[LR]|LowerArm[LR]|Wrist[LR]|UpperLeg[LR]|LowerLeg[LR]|Foot[LR])$/;
 const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 const load = (url) => new Promise((ok, bad) => loader.load(url, ok, undefined, bad));
 
@@ -86,6 +94,7 @@ export class Person {
     this.mixer = new THREE.AnimationMixer(this.root);
     this.actions = {}; for (const c of lib.clips[kind.body]) this.actions[c.name] = this.mixer.clipAction(c);
     this.cur = null; this.curName = '';
+    this.kept = this.mesh.skeleton.bones.filter((b) => BENT.test(b.name)).map((b) => [b, b.position.clone(), b.quaternion.clone()]);
   }
   setLook(l) {
     const u = this.u; this.look = l;
@@ -100,6 +109,10 @@ export class Person {
     if (this.cur) this.cur.fadeOut(fade);
     this.cur = a; this.curName = name;
   }
-  update(dt) { this.mixer.update(dt); }
+  update(dt) {
+    for (const k of this.kept) { k[0].position.copy(k[1]); k[0].quaternion.copy(k[2]); }   // (as the mixer last left them)
+    this.mixer.update(dt);
+    for (const k of this.kept) { k[1].copy(k[0].position); k[2].copy(k[0].quaternion); }
+  }
   dispose() { this.mesh.material.dispose(); this.mixer.stopAllAction(); }
 }
