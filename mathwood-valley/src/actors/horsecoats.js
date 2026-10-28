@@ -1,4 +1,4 @@
-// COAT RECIPES: what a horse's coat is made of, as a handful of plain settings (coat.js turns them into the shader's
+// COAT RECIPES: what a horse's coat is made of, as a handful of plain settings (horsecoat.js turns them into the shader's
 // numbers). The presets match the game's horses (src/player.js HORSE_LOOKS, src/catalog.js) plus three pintos, and
 // randomCoat(seed) makes a believable coat of its own from a seed.
 //
@@ -8,6 +8,8 @@
 //   bloom      faint dapples on the hip and shoulder (0..1), for a bay or chestnut
 //   grey       greying: 0 none .. 1 white           dapples   round dapples in the grey (0..1), dappleSize (m)
 //   greyLegs   how much darker a grey's legs stay
+//   dorsal     a dun's dark stripe down the back (0..1), dorsalWidth (m, its half-width); barring: faint dark bars
+//              across the upper legs (0..1)
 //   face       'none' | 'star' | 'stripe' | 'blaze' | 'bald' | 'snip'; star: also a star; faceSize; ragged (edges)
 //   legs       { FL, FR, HL, HR }: 'none' | 'coronet' | 'pastern' | 'sock' | 'stocking'
 //   pinto      'none' | 'tobiano' | 'overo' | 'sabino'; white (how much, 0..1); roan (sabino roaning, 0..1)
@@ -22,6 +24,7 @@ const NO_LEGS = { FL: 'none', FR: 'none', HL: 'none', HR: 'none' };
 
 const BASE = { mane: '#16110e', points: 'none', belly: 0.6, sooty: 0.25, bloom: 0, muzzle: 0.82, grey: 0, dapples: 0, dappleSize: 0.1, greyLegs: 0.6,
   face: 'none', faceSize: 1, ragged: 0.5, star: false, legs: NO_LEGS, pinto: 'none', white: 0.5, roan: 0.6, seed: 1,
+  dorsal: 0, dorsalWidth: 0.03, barring: 0,
   bump: 1, streakColor: 1, sheen: 1, shine: 1, roots: 0.35, tips: 0.3, strands: 0.5, maneShine: 0.6, maneLength: 0.85, tailLength: 0.9 };
 
 export const PRESETS = {
@@ -33,11 +36,14 @@ export const PRESETS = {
     muzzle: 0.85, belly: 0.1, sooty: 0, face: 'none', strands: 0.9, roots: 0.45, tips: 0.25, seed: 7 },
   midnight: { label: 'Midnight', game: 'midnight', base: '#1d1918', mane: '#110e0d', points: 'none', face: 'star', faceSize: 0.6, belly: 0.25, sooty: 0,
     muzzle: 0.5, shine: 1.3, seed: 9 },
+  // a dun: a sandy body with black points, a dark mane and tail, a dark stripe down the back and faint bars on the legs
+  dun: { label: 'Dun', game: 'bay', base: '#b0946a', points: 'black', mane: '#1d1712', dorsal: 0.9, dorsalWidth: 0.032, barring: 0.6,
+    sooty: 0.12, belly: 0.4, muzzle: 0.8, face: 'none', seed: 13 },
   tobiano: { label: 'Tobiano', game: 'bay', base: '#7a3f20', points: 'black', mane: '#15100d', pinto: 'tobiano', white: 0.3, face: 'star', faceSize: 0.8, seed: 21 },
   overo: { label: 'Overo', game: 'chestnut', base: '#8c4019', mane: '#6e3214', pinto: 'overo', white: 0.55, face: 'bald', muzzle: 0.5, seed: 4 },
   sabino: { label: 'Sabino', game: 'bay', base: '#4a2616', points: 'black', mane: '#120e0c', pinto: 'sabino', white: 0.3, roan: 0.7, face: 'blaze', faceSize: 1.15, seed: 8 },
 };
-export const PRESET_ORDER = ['bay', 'chestnut', 'palomino', 'white', 'midnight', 'tobiano', 'overo', 'sabino', 'random'];
+export const PRESET_ORDER = ['bay', 'chestnut', 'palomino', 'white', 'midnight', 'dun', 'tobiano', 'overo', 'sabino', 'random'];
 
 export function recipe(name, seed) {
   if (name === 'random') return randomCoat(seed ?? 1);
@@ -92,4 +98,26 @@ export function randomCoat(seed) {
     if (r.pinto === 'tobiano' && (r.face === 'bald' || r.face === 'blaze')) r.face = 'star';
   }
   return r;
+}
+
+// ── a saved coat, made safe (src/save.js: a horse bought keeps its whole recipe) ──────────────────────────────────────
+// every field filled from the defaults, numbers kept to their ranges, colours to #rrggbb, the kinds of marking to the
+// ones the shader knows; fields it doesn't know are kept as they are (a newer build's)
+const HEX = /^#[0-9a-f]{6}$/i;
+const RANGE = { belly: [0, 1], sooty: [0, 1], muzzle: [0, 1], bloom: [0, 1], grey: [0, 1], dapples: [0, 1], dappleSize: [0.05, 0.16], greyLegs: [0, 1],
+  faceSize: [0.5, 1.6], ragged: [0, 1], white: [0, 1], roan: [0, 1], seed: [1, 99999], bump: [0, 3], streakColor: [0, 3], sheen: [0, 3], shine: [0, 3],
+  roots: [0, 0.8], tips: [0, 1], strands: [0, 1.5], maneShine: [0, 2], maneLength: [0.3, 1], tailLength: [0.3, 1], dorsal: [0, 1], dorsalWidth: [0.015, 0.06], barring: [0, 1] };
+const ids = (list) => list.map(([k]) => k);
+export function cleanCoat(r) {
+  const o = r && typeof r === 'object' && !Array.isArray(r) ? r : {};
+  const out = fill(o);
+  for (const [k, [lo, hi]] of Object.entries(RANGE)) { const v = +out[k]; out[k] = Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : BASE[k]; }
+  out.base = HEX.test(out.base) ? out.base : PRESETS.bay.base;
+  out.mane = HEX.test(out.mane) ? out.mane : BASE.mane;
+  out.points = out.points === 'black' ? 'black' : 'none';
+  if (!ids(FACES).includes(out.face)) out.face = 'none';
+  if (!ids(PINTOS).includes(out.pinto)) out.pinto = 'none';
+  out.star = out.star === true;
+  for (const k of ['FL', 'FR', 'HL', 'HR']) if (!ids(LEGS).includes(out.legs[k])) out.legs[k] = 'none';
+  return out;
 }

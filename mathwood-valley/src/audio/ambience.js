@@ -120,7 +120,7 @@ export const BURST = {
 // farm horse's are the wagons' (wagonsound.js)
 const RIDING = { Walk: [0.24, 0.40, 0.75, 0.96], Gallop: [0.34, 0.52, 0.76, 0.94] };
 export const HOOVES = {
-  horse: RIDING, horseWhite: RIDING, donkey: RIDING,
+  horse: RIDING, horseWhite: RIDING, steed: RIDING, donkey: RIDING,   // (the steed: the pack horse's own clips)
   farmHorse: { Walk: [0.16, 0.51, 0.67, 0.9], Gallop: [0.14, 0.29, 0.49, 0.66] },
   level: { Walk: 0.7, Gallop: 1.5 },     // a hoof at a walk, and at a gallop (a trot is the Walk clip, sped up: between)
   far: 50,

@@ -190,14 +190,41 @@
    "z": -165.0,
    "rot": 0,
    "size": 1.0
+  },
+  {
+   "id": "parkedFarmWagon",
+   "type": "prop",
+   "kind": "farmWagon",
+   "x": -51.5,
+   "z": -185.2,
+   "rot": 165,
+   "size": 1
+  },
+  {
+   "id": "parkedFreightWagon",
+   "type": "prop",
+   "kind": "freightWagon",
+   "x": 16.5,
+   "z": -187,
+   "rot": 135.2,
+   "size": 1
+  },
+  {
+   "id": "parkedCoveredWagon",
+   "type": "prop",
+   "kind": "coveredWagon",
+   "x": -6,
+   "z": -162,
+   "rot": 315,
+   "size": 1
   }
  ],
  "roads": [],
  "game": {
   "spawn": {
-   "x": -16.24,
-   "z": -209.24,
-   "rot": 45
+   "x": -16.2,
+   "z": -211.8,
+   "rot": 16
   },
   "square": {
    "x": -12.0,

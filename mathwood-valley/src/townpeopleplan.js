@@ -11,7 +11,7 @@
 //   residents()             [{ name, she, look, home }] every townsperson, with a hat and a colour of their own
 //   LIKES                   how much a person likes each kind of spot (porch, square, stage, yard, lake, lane, home)
 //   STAY                    [clip, from, to] seconds at each kind of spot
-//   outCap(tier, night)     how many may be out at once
+//   outCap(tier, night)     how many may be out at once (tier: a tier's name, or the most by day itself)
 //   pick(weights, rand)     an index chosen in proportion to the weights (-1 when they are all 0)
 //   nextFor(person, spots, { night, rand, at, playing, here, fresh })   where a person goes next: { go: 'spot', spot } |
 //                           { go: 'home' } | { go: 'door', door } (a visit indoors) | { go: 'road' } (out of town)
@@ -40,6 +40,8 @@ export const TOWN = {
   road: 4.5,           // m from the middle of the wagons' road that the places people stand about keep (its lanes, a
                        // wagon's width, and the step to one side a second person takes at a spot): a spot in the street
                        // had wagons waiting the best part of a minute behind two people talking there
+  porchRoad: 3.6,      // m: the same for a porch's places, along a building's front (its second person steps along the
+                       // front, not out into the street): the wagons' lane edge is 2.5 m out from the road's middle
   wagonWait: 1.5,      // s someone standing about lets a wagon wait on them, stopped close in front of its team, before
                        // they move on out of its way
   aside: [2.8, 3.6, 4.5],   // m straight out to one side of a waiting wagon's way that they step (the first with room)
@@ -78,7 +80,8 @@ export const ROAM = 70;        // m: a spot this much further off is a third as 
 export const STAY = { porch: ['Idle', 20, 55], square: ['Idle_Neutral', 15, 40], stage: ['Idle', 40, 110], yard: ['Interact', 12, 35],
   lake: ['Idle_Neutral', 25, 70], lane: ['Idle', 10, 25], home: ['Idle', 12, 35] };
 
-export const outCap = (tier, night = 0) => Math.max(1, Math.round((TOWN.out[tier] || TOWN.out.normal) * (1 - (1 - TOWN.nightOut) * Math.max(0, Math.min(1, night)))));
+// (tier: a tier's name, or the most itself: the governor's 'townsfolk' dial, world/governor.js)
+export const outCap = (tier, night = 0) => Math.max(1, Math.round((typeof tier === 'number' ? tier : TOWN.out[tier] || TOWN.out.normal) * (1 - (1 - TOWN.nightOut) * Math.max(0, Math.min(1, night)))));
 
 export function pick(w, rand = Math.random) {
   let sum = 0; for (const v of w) sum += v;

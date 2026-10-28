@@ -7,7 +7,8 @@
 //   buildLampMap(u, lamps)       lamps: [{ x, z, y (the light's height, world), reach (m), strength (0..1) }]
 //   LAMP_GLSL                    the uniforms and lampLight(worldPos, normalView) -> light (as a light's irradiance:
 //                                a lit surface adds it times its albedo over pi); a zero normal: lit evenly all round
-//   lampStandard(fragmentShader) a MeshStandard / Lambert / Phong shader with the lamps' light added to its diffuse
+//   lampStandard(fragmentShader, who)   a MeshStandard / Lambert / Phong shader with the lamps' light added to its diffuse
+//                                (once: a shader that has it already comes back unchanged, and a console error names who)
 //
 // The picture: R how much light (all the lamps' together), G B the way toward them across the ground (weighted, so
 // under a lamp it shrinks to nothing and the light comes from above), A the light's height. Over the light's height it
@@ -56,7 +57,11 @@ export function buildLampMap(u, lamps, metresPerPixel = 0.3, maxSize = 1024) {
   return { size: M, metresPerPixel: px };
 }
 
+// (written once into a shader however many patches add it: LAMP_LIGHT_DEFINED. Two patches that each wrote the function
+// into one material's shader stopped it compiling: "'lampLight': function already has a body")
 export const LAMP_GLSL = `
+#ifndef LAMP_LIGHT_DEFINED
+#define LAMP_LIGHT_DEFINED
   uniform sampler2D lampMap; uniform vec4 lampArea; uniform vec3 lampColour; uniform float lampOn, lampSpan;
   vec3 lampLight(vec3 wpos, vec3 nView) {
     if (lampOn <= 0.0) return vec3(0.0);
@@ -69,10 +74,18 @@ export const LAMP_GLSL = `
     float face = dot(nView, nView) > 0.0 ? 0.25 + 0.75 * max(dot(nView, normalize((viewMatrix * vec4(L, 0.0)).xyz)), 0.0) : 0.7;
     return lampColour * (k * face * lampOn);
   }
+#endif
 `;
 
-// (after the shader's own lights: the lamps' light on its diffuse colour, as a light would add it)
-export function lampStandard(fs) {
+// (after the shader's own lights: the lamps' light on its diffuse colour, as a light would add it). Once a shader: a
+// shader that has it already is handed back as it is (the light added twice would light it twice), and said loudly, with
+// `who` (the material's name, or whatever patched it) - two patches on one material is a mistake to find, not to hide
+export function lampStandard(fs, who = '') {
+  if (fs.includes('LAMP_LIGHT_DEFINED') || /\bvec3 lampLight\s*\(/.test(fs)) {
+    if (!lampStandard.said.has(who)) { lampStandard.said.add(who); console.error(`lampLight: the street lamps' light was patched into one shader twice (${who || 'a material'}): the second left out`); }
+    return fs;
+  }
   return LAMP_GLSL + fs.replace('#include <lights_fragment_end>', `#include <lights_fragment_end>
     { vec3 lampW = cameraPosition + (-vViewPosition) * mat3(viewMatrix); reflectedLight.directDiffuse += lampLight(lampW, normal) * BRDF_Lambert(diffuseColor.rgb); }`);
 }
+lampStandard.said = new Set();   // (each culprit said once)

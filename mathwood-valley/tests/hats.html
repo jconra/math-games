@@ -28,6 +28,7 @@ import { loadFolk, makePerson } from '../src/actors/folk.js';
 import { seatRider } from '../src/actors/seat.js';
 import { HATS } from '../src/hats.js';
 import { HORSE_LOOKS } from '../src/player.js';
+import { makeHorse } from '../src/actors/horses.js';
 
 const Q = new URLSearchParams(location.search), VIEW = Q.get('view') || 'hats', CAM = Q.get('cam') || 'front';
 const T = window.T = { ready: false };
@@ -71,7 +72,9 @@ if (VIEW === 'hats' || VIEW === 'heads') {
   const only = Q.get('only') ? Q.get('only').split(',') : null, ids = Object.keys(HORSE_LOOKS).filter((id) => !only || only.includes(id));
   ids.forEach((id, i) => {
     const look = HORSE_LOOKS[id], x = (i - (ids.length - 1) / 2) * 3.2;
-    const a = makeAnimal(animals, look.kind, look.tint ? { tint: look.tint } : {}); a.root.position.set(x, 0, 0); a.root.rotation.y = Math.PI / 2; scene.add(a.root);
+    // (the new horse dressed in its coat at its size, as the game rides it: src/actors/horses.js; the donkey as he is)
+    const a = look.kind === 'steed' ? makeHorse(animals, { recipe: look.coat, size: look.size }).a : makeAnimal(animals, look.kind, look.tint ? { tint: look.tint } : {});
+    a.root.position.set(x, 0, 0); a.root.rotation.y = Math.PI / 2; scene.add(a.root);
     saddleOn(a, saddle.clone());
     const p = makePerson(folk, { outfit: 'farmer_m', palette: 'drifter', hatStyle: HATS[i % HATS.length].id }); scene.add(p.root);
     a.play(gait, { fade: 0 });

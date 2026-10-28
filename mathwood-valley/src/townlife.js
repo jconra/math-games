@@ -21,9 +21,12 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { WAGONS_OUT, inWagons, pushFromWagons } from './wagon.js';
+import { howdyCam } from './ui/howdy.js';
+import { makeSight } from './sight.js';
 
 export const CHICKEN = {
   count: 12,
+  most: 16,                    // with the governor (world/governor.js) the flock is made this big, and its dial says how many are about
   kinds: ['white', 'white', 'gold', 'gold', 'gold', 'black'],   // picked at random: more white and gold than black
   size: [0.88, 1.08],          // each one this much smaller or bigger than the file's hen (0.42 m to the top of the comb)
   stride: { Walk: 0.235, Run: 0.906 },   // m/s the Walk and Run clips carry it at speed 1 (measured: a foot that is down stays put)
@@ -93,7 +96,8 @@ export function makeChicken(lib, kind, { shadows = true } = {}) {
   return ch;
 }
 
-// where the chickens live: in the square and beside the buildings' doors (out of the doorway, a few metres to the side)
+// where the chickens live: in the square, beside the buildings' doors (out of the doorway, a few metres to the side),
+// and round the town's chicken coops
 function spotsOf(W) {
   const p = W.places, out = [];
   const sq = p.square || p.spawn;
@@ -107,11 +111,25 @@ function spotsOf(W) {
       if (!W.blocked(x, z)) { out.push({ x, z, r: CHICKEN.roam, share }); break; }
     }
   }
+  // the chicken coops put down in the town (the Town Lab's 'chickenCoop' props): a few hens pecking round in front of
+  // each (the same flock, shared out: the governor's chicken dial still says how many are about)
+  const T = W.V && W.V.TOWN, items = (T && (T.layout || (T.village && T.village.layout)) || {}).items || [];   // (the whole layout: the village's own leaves the decor's props out)
+  for (const it of items) if (it.type === 'prop' && it.kind === 'chickenCoop') {
+    const r = (it.rot || 0) * Math.PI / 180, k = it.size || 1;
+    for (const [f, side] of [[2.6, 0.4], [2.6, -1.4], [3.6, 0], [0, 3.2]]) {   // (in front of its ramp, else beside its run)
+      const x = it.x + Math.cos(r) * side * k + Math.sin(r) * f * k, z = it.z - Math.sin(r) * side * k + Math.cos(r) * f * k;
+      if (!W.blocked(x, z)) { out.push({ x, z, r: CHICKEN.roam * 0.6, share: 2, coop: it.id }); break; }
+    }
+  }
   return out;
 }
 
-export function makeTownLife({ W, scene = W.scene, count = W.tier === 'potato' ? 8 : CHICKEN.count, spots = null }) {
-  const T = { chickens: [], ready: null, loaded: false };
+export function makeTownLife({ W, scene = W.scene, count = W.governor ? CHICKEN.most : W.tier === 'potato' ? 8 : CHICKEN.count, spots = null }) {
+  // T.active: how many are about (the rest hidden and still): all of them, or the governor's 'chickens' dial, live
+  // (world/governor.js; the flock is made at its most, CHICKEN.most). One comes out, or is put away, only where the
+  // player can't see it (src/sight.js): turned up or down, the flock follows a chicken at a time as one is out of sight
+  const T = { chickens: [], ready: null, loaded: false, active: count };
+  const offGov = W.governor ? W.governor.on('chickens', (v) => { T.active = v; }) : null;
   const shadows = W.tier !== 'potato';
   const S = spots || spotsOf(W);
   // the movers that scare chickens: their places and how fast they go (kept from frame to frame, made once)
@@ -136,6 +154,8 @@ export function makeTownLife({ W, scene = W.scene, count = W.tier === 'potato' ?
         scene.add(ch.root); T.chickens.push(c);
       }
     });
+    for (let i = T.chickens.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [T.chickens[i], T.chickens[j]] = [T.chickens[j], T.chickens[i]]; }
+    T.chickens.forEach((c, i) => { c.about = i < T.active; });   // (the first ones about from the start: the flock comes with the town)
     T.loaded = true;
   }).catch((e) => console.warn('town life: the chickens could not load', e));
 
@@ -293,12 +313,24 @@ export function makeTownLife({ W, scene = W.scene, count = W.tier === 'potato' ?
   }
 
   const target = new THREE.Vector3();
+  let sight = null, flockT = 0;
+  // one more about, or one fewer, as the dial says: a chicken out of the player's sight
+  function flock(dt) {
+    if ((flockT -= dt) > 0) return; flockT = 0.4;
+    const n = T.chickens.reduce((a, c) => a + (c.about ? 1 : 0), 0); if (n === T.active) return;
+    const cam = howdyCam(); if (cam && !sight) sight = makeSight({ W, camera: cam });
+    const out = (c) => !sight || sight.unseen(c.x, c.z, undefined, 0.6);
+    const c = T.chickens.find((q) => (n < T.active ? !q.about : q.about) && out(q));
+    if (c) c.about = n < T.active;
+  }
   T.update = (dt, P = null, D = null) => {
     if (!T.loaded || dt <= 0) return;
+    flock(dt);
     readMovers(dt, P, D);
     if (W.camTarget) target.copy(W.camTarget); else if (P && P.position) target.copy(P.position);
     for (let i = 0; i < T.chickens.length; i++) {
       const c = T.chickens[i], d = Math.hypot(c.x - target.x, c.z - target.z);
+      if (!c.about) { c.ch.root.visible = false; continue; }   // (not about just now: the governor's dial)
       c.ch.root.visible = d < CHICKEN.gone;
       c.ch.setShadow(shadows && d < CHICKEN.shadowNear);
       // near ones every frame; further ones a few times a second (each in its own time, so they don't all go at once)
@@ -311,7 +343,7 @@ export function makeTownLife({ W, scene = W.scene, count = W.tier === 'potato' ?
     }
   };
   T.state = () => T.chickens.map((c) => ({ kind: c.ch.kind, state: c.state, clip: c.ch.clip, v: +c.v.toFixed(2), x: +c.x.toFixed(2), z: +c.z.toFixed(2) }));
-  T.dispose = () => { for (const c of T.chickens) { c.ch.mixer.stopAllAction(); c.ch.root.removeFromParent(); } T.chickens.length = 0; };
+  T.dispose = () => { if (offGov) offGov(); for (const c of T.chickens) { c.ch.mixer.stopAllAction(); c.ch.root.removeFromParent(); } T.chickens.length = 0; };
   return T;
 }
 

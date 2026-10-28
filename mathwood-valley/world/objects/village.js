@@ -154,8 +154,9 @@ function standOf(m, A) {
 // every item's object: a group placed at (x, ground, z), turned by rot, scaled; inside it the thing, centred and with its
 // front to +z; and an invisible box the size of its footprint, for picking it with the mouse
 export class Village {
-  constructor({ scene, lo = false, heightAt, size }) {
-    this.scene = scene; this.lo = lo; this.heightAt = heightAt; this.size = size;    // size: the land's width (m), for the road picture
+  // code: the code-built buildings (objects/codebuildings.js): a kind it has is built in code, not loaded as a model
+  constructor({ scene, lo = false, heightAt, size, code = null }) {
+    this.scene = scene; this.lo = lo; this.heightAt = heightAt; this.size = size; this.code = code;    // size: the land's width (m), for the road picture
     this.group = new THREE.Group(); scene.add(this.group);
     this.objs = new Map();                                        // id -> { group, pick, it }
     this.pickMat = new THREE.MeshBasicMaterial({ visible: false });
@@ -165,14 +166,21 @@ export class Village {
   // makes the scene match the layout (new items built, gone ones removed, the rest placed)
   sync() {
     const ids = new Set(this.layout.items.map(i => i.id));
-    for (const [id, o] of this.objs) if (!ids.has(id)) { this.group.remove(o.group); this.objs.delete(id); }
-    for (const it of this.layout.items) { let o = this.objs.get(it.id); if (!o || o.kind !== it.kind) { if (o) this.group.remove(o.group); o = this.build(it); } o.it = it; this.place(o); }
+    const gone = (o) => { this.group.remove(o.group); if (o.code && this.code) this.code.detach(o); };
+    for (const [id, o] of this.objs) if (!ids.has(id)) { gone(o); this.objs.delete(id); }
+    // (a code-built building whose design changed (a cabin's preset or seed) is built again)
+    const look = (it) => (this.code && it.type === 'model' ? this.code.lookKey(it) : '');
+    for (const it of this.layout.items) { let o = this.objs.get(it.id); if (!o || o.kind !== it.kind || (o.isCode && o.look !== look(it))) { if (o) gone(o); o = this.build(it); o.look = look(it); } o.it = it; this.place(o); }
   }
   // (a model's file is its kind's, or the one its kind borrows: TOWN_ASSETS file; the homes are the town cabin)
   build(it) {
     const group = new THREE.Group(), pick = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), this.pickMat); pick.userData.id = it.id; group.add(pick);
     const o = { group, pick, it, kind: it.kind, inner: null };
-    if (it.type === 'model') loadModel((TOWN_ASSETS[it.kind] && TOWN_ASSETS[it.kind].file) || it.kind, this.lo).then(m => { if (this.objs.get(it.id) !== o) return;
+    // (a building made in code: its own group, at its own metres, its front already toward +z)
+    o.isCode = !!(it.type === 'model' && this.code && this.code.has(it.kind, it));
+    if (o.isCode) this.code.make(it).then((b) => { if (this.objs.get(it.id) !== o) { b.dispose(); return; }
+      o.code = b; o.inner = b.group; group.add(b.group); this.place(o); this.code.attach(o); this.onLoaded && this.onLoaded(); }, () => {});
+    else if (it.type === 'model' && !TOWN_ASSETS[it.kind].code) loadModel((TOWN_ASSETS[it.kind] && TOWN_ASSETS[it.kind].file) || it.kind, this.lo).then(m => { if (this.objs.get(it.id) !== o) return;
       const A = TOWN_ASSETS[it.kind], inner = new THREE.Group(), body = m.scene.clone(true), st = standOf(m, A);
       body.position.copy(st.at); body.rotation.x = st.tilt; inner.add(body); inner.rotation.y = FRONT_YAW[A.front] || 0; o.inner = inner; group.add(inner); this.place(o); this.onLoaded && this.onLoaded(); });
     else if (it.type === 'prop') { o.inner = makeProp(it.kind); group.add(o.inner); }
@@ -180,9 +188,10 @@ export class Village {
     return o;
   }
   place(o) {
-    const it = o.it, { w, d, h } = footprintOf(it);
+    const it = o.it, { w, d, h } = (o.code && o.code.B.anchors.footprint) || footprintOf(it);   // (a code-built one: its own size)
     o.group.position.set(it.x, this.heightAt(it.x, it.z) + (it.y || 0), it.z); o.group.rotation.y = it.rot * Math.PI / 180;   // (y: raised or sunk from the ground, m)
-    if (o.inner) { if (it.type === 'model') { const A = TOWN_ASSETS[it.kind]; o.inner.scale.setScalar(it.size / Math.max(A.box[0], A.box[2])); } else o.inner.scale.setScalar(it.size); }
+    if (o.inner) { if (o.code) o.inner.scale.setScalar(1); else if (it.type === 'model') { const A = TOWN_ASSETS[it.kind]; o.inner.scale.setScalar(it.size / Math.max(A.box[0], A.box[2])); } else o.inner.scale.setScalar(it.size); }
+    if (o.code && this.code) this.code.moved(o);   // (its lights, its sign and its ground follow it)
     o.pick.scale.set(w, h, d); o.pick.position.set(0, h / 2, 0);
     o.group.visible = it.type !== 'tree' || !!this.showTreePicks;   // trees are drawn by the forest; their group only holds the pick box
   }
@@ -199,7 +208,10 @@ export function normalise(L) {
     if (it.type === 'prop' && !PROP_KINDS.some(p => p.kind === it.kind)) continue;   // (a layout from a newer page: skipped, not a crash)
     if (it.type === 'tree' && !TOWN_TREES[it.kind]) continue;
     out.items.push({ id: it.id || newId(), type: it.type, kind: it.kind, x: +it.x || 0, z: +it.z || 0, rot: ((+it.rot || 0) % 360 + 360) % 360,
-      size: +it.size || (it.type === 'model' ? TOWN_ASSETS[it.kind].size : 1), ...(it.level === true ? { level: true } : {}), ...(+it.y ? { y: +(+it.y).toFixed(2) } : {}) });
+      size: +it.size || (it.type === 'model' ? TOWN_ASSETS[it.kind].size : 1), ...(it.level === true ? { level: true } : {}), ...(+it.y ? { y: +(+it.y).toFixed(2) } : {}),
+      // (a code-built building's design: a cabin's preset, a seed; the player's cabin marked player: true)
+      ...(it.type === 'model' && typeof it.preset === 'string' && it.preset ? { preset: it.preset } : {}), ...(it.type === 'model' && +it.seed > 0 ? { seed: Math.round(+it.seed) } : {}),
+      ...(it.type === 'model' && it.player === true ? { player: true } : {}) });
   }
   for (const r of (L && L.roads) || []) if (r && r.pts && r.pts.length) out.roads.push({ mat: r.mat || 'cobbles', w: +r.w || 4, pts: r.pts.map(p => [+(+p[0]).toFixed(2), +(+p[1]).toFixed(2)]) });
   return out;

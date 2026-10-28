@@ -31,7 +31,7 @@ test('a new rider has every default and is not saved until asked', () => {
   assert.equal(r.missionsV, 2);
   assert.ok(S.MISSIONS.every((m) => S.jobOn(r, m.id)));
   assert.equal(r.topicsOn.times, true); assert.equal(r.topicsOn.algebra, true); assert.equal(r.topicsOn.adding, false);
-  assert.deepEqual(r.owned, { saddle: null, horse: 'bay', dog: null });
+  assert.deepEqual(r.owned, { saddle: null, horse: null, dog: null, horsesV: 2 }, 'on foot: every horse is bought now');
   assert.equal(r.look.outfit, 'adventurer_f'); assert.equal(typeof r.look.skin, 'string');
   assert.deepEqual(r.lockboxes, []);
   assert.equal(r.stats.answered, 0); assert.deepEqual(r.stats.recent, []);

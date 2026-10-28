@@ -3,12 +3,28 @@
 // src/roadfolk.js; tested in tests/roadfolk.test.mjs.
 
 export const ROADFOLK = {
-  most: { gaming: 8, normal: 6, potato: 3 },          // travellers on the road at once (the far ones are only numbers)
+  // (with the governor, world/governor.js, these three follow its 'travellers' dial instead, live; these are its levels
+  // at each tier's start: more than before, now the wagons are fewer, src/traffic.js)
+  most: { gaming: 10, normal: 8, potato: 3 },         // travellers on the road at once (the far ones are only numbers,
+                                                      // or far figures: src/crowd.js)
   made: { gaming: 5, normal: 4, potato: 2 },          // ... at most this many made and drawn at once (the nearest)
   show: { gaming: 190, normal: 160, potato: 120 },    // m from the player within which one is made
   hide: 25,             // m further than `show` before one is put away again
-  every: [12, 28],      // s between one setting off and the next (while there are fewer than `most`)
-  riders: 0.45,         // the share of riders (the rest walk)
+  makeEvery: 0.25,      // s between one made (a real model) and the next, at the least
+  always: 40,           // m: a party this close is always made, over the most if need be (no far figure beside the player)
+  every: [12, 28],      // s between one party setting off and the next (while there are fewer than `most`; shorter
+                        // when the most is big: everyEach)
+  everyEach: 10,        // ... the gaps are divided by the most over this (a road of 120 sets off a party every second or two)
+  riders: 0.5,          // the share of parties that ride (the rest walk)
+  // THE PARTIES (Dad: "more pairs of mounted riders and hikers"): riders often in pairs, side by side at the same pace;
+  // hikers alone, in twos side by side, or threes (two abreast and one a step behind), most with packs
+  riderPair: 0.6,       // of the riding parties, the share that ride two abreast
+  hikers: [0.3, 0.45, 0.25],   // of the walking parties, the shares of one, two and three
+  abreast: { rider: 1.4, walker: 0.8 },   // m between two side by side (the second one further out, toward the road's edge)
+  behind: 1.5,          // m the third hiker walks behind the two (and the second, in single file where the road is tight)
+  ease: 0.8,            // m/s a party member eases into a new place in the party (falling in behind, coming back alongside)
+  packs: 0.7,           // the share of hikers in the outfits that carry a pack (the adventurers': src/actors/folk.js) ...
+  bedroll: 0.65,        // ... and of those, the share with a bedroll strapped on top of it
   nightWalk: 0.6,       // at night (W.night 1) this share of the walkers stay home: fewer set off
   walk: [1.15, 1.45],   // m/s: a walker's pace
   ride: [2.0, 3.6],     // m/s: a rider's (a walk or an easy trot)
@@ -32,6 +48,7 @@ export const ROADFOLK = {
 };
 
 // what they look like: working clothes in drab period colours (never all black and charcoal: that reads as the gang)
+// (a hiker with a pack wears an adventurer's outfit: hikerKit)
 export const TRAVELLER_LOOKS = {
   outfits: ['adventurer_m', 'adventurer_f', 'casual_m', 'casual_f', 'worker_m', 'farmer_m', 'casual_m', 'adventurer_m'],
   palettes: ['drifter', 'rancher', 'homestead', 'prairie', 'townsman', 'mustard', 'sage'],
@@ -41,6 +58,33 @@ export const TRAVELLER_LOOKS = {
 export function pickKind(rand = Math.random, night = 0) {
   const walk = (1 - ROADFOLK.riders) * (1 - ROADFOLK.nightWalk * Math.max(0, Math.min(1, night || 0)));
   return rand() * (ROADFOLK.riders + walk) < ROADFOLK.riders ? 'rider' : 'walker';
+}
+// a party setting off: { kind, size } (a pair of riders, or one to three hikers)
+export function pickParty(rand = Math.random, night = 0) {
+  const kind = pickKind(rand, night), r = rand();
+  if (kind === 'rider') return { kind, size: r < ROADFOLK.riderPair ? 2 : 1 };
+  const h = ROADFOLK.hikers; return { kind, size: r < h[0] ? 1 : r < h[0] + h[1] ? 2 : 3 };
+}
+// where each member of a party keeps, from its leader: du metres behind it along the road, dk metres further out toward
+// the road's edge (the leader keeps the traveller's usual line, outside the wagons' lane, so the pair never crowds a
+// wagon). room: clear metres out past the leader's line (where there is too little, or while the party passes someone
+// or steps round the player, the second falls in behind instead: single file)
+export function slotFor(kind, i, room = Infinity) {
+  if (i === 0) return { du: 0, dk: 0 };
+  const side = ROADFOLK.abreast[kind] ?? ROADFOLK.abreast.walker;
+  if (i === 1) return room >= side ? { du: 0, dk: side } : { du: ROADFOLK.behind, dk: 0 };
+  // (the third: a step behind the two, between them; in single file, behind the second)
+  return room >= side ? { du: ROADFOLK.behind, dk: side / 2 } : { du: ROADFOLK.behind * 2, dk: 0 };
+}
+// a hiker's kit: an outfit that carries a pack (most of them), and a bedroll on top of some of those
+export function hikerKit(rand = Math.random) {
+  const pack = rand() < ROADFOLK.packs;
+  return { outfit: pack ? (rand() < 0.5 ? 'adventurer_m' : 'adventurer_f') : null, bedroll: pack && rand() < ROADFOLK.bedroll };
+}
+// how far apart parties set off, and how often, for a road of length L with `most` on it (the busier, the closer)
+export function spacing(most, L) {
+  const parties = Math.max(1, most / 1.8);
+  return { apart: Math.max(10, Math.min(ROADFOLK.apart, L / parties * 0.5)), every: ROADFOLK.every.map((e) => e / Math.max(1, most / ROADFOLK.everyEach)) };
 }
 // the pace a new traveller keeps (m/s)
 export function paceFor(kind, rand = Math.random) {
@@ -52,14 +96,16 @@ export const edgeOf = (kind, lane) => lane + (ROADFOLK.edge[kind] ?? ROADFOLK.ed
 
 // where a new traveller going `dir` (+1 along the road, -1 back) sets off, metres along it, or null for nowhere just
 // now: the road's own end it comes in from, else out of sight of the town (`reach` from the square, as the wagons),
-// whichever is further than `far` from the player (dist(u): metres from the player to the road there) and at least
-// `apart` from another traveller going the same way (others: [{ dir, u }])
-export function startFor(dir, { L, square, dist, far, others = [] }) {
+// whichever is further than `far` from the player (dist(u): metres from the player to the road there), out of sight
+// (ok(u): false where the player could see it) and at least `apart` from another traveller going the same way
+// (others: [{ dir, u }])
+export function startFor(dir, { L, square, dist, far, others = [], apart = ROADFOLK.apart, ok = () => true }) {
   const ends = [dir > 0 ? 0 : L, square - dir * ROADFOLK.reach];
   for (const s of ends) {
     const u = Math.min(L, Math.max(0, s));
     if (dist(u) <= far) continue;
-    if (others.some((o) => o.dir === dir && Math.abs(o.u - u) < ROADFOLK.apart)) continue;
+    if (!ok(u)) continue;   // (in sight of the player: nobody sets off there just now)
+    if (others.some((o) => o.dir === dir && Math.abs(o.u - u) < apart)) continue;
     return u;
   }
   return null;
@@ -67,12 +113,12 @@ export function startFor(dir, { L, square, dist, far, others = [] }) {
 
 // the spots of those already on the road when the player rides out: n of them spread along it, each at least
 // `away` metres from the player (dist(u)) and `apart` from the others; [{ u, dir }]
-export function seedSpots(n, { L, dist, away = ROADFOLK.seedAway, rand = Math.random }) {
+export function seedSpots(n, { L, dist, away = ROADFOLK.seedAway, rand = Math.random, apart = ROADFOLK.apart, others = [] }) {
   const out = [];
   for (let k = 0; k < n * 12 && out.length < n; k++) {
     const u = 4 + rand() * (L - 8), dir = rand() < 0.5 ? 1 : -1;
     if (dist(u) < away) continue;
-    if (out.some((o) => Math.abs(o.u - u) < ROADFOLK.apart * 2)) continue;
+    if (out.some((o) => Math.abs(o.u - u) < apart * 2) || others.some((o) => Math.abs(o.u - u) < apart)) continue;
     out.push({ u, dir });
   }
   return out;

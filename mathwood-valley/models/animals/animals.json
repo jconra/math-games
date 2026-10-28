@@ -1,5 +1,5 @@
 {
- "about": "Quaternius animals for Mathwood Valley. scale: model units to metres (the files are as made; makeAnimal scales them). height: metres at the withers (top of the shoulders); tall: top of the head standing idle; length: nose to tail. All face +Z. stride: how fast the clip carries it at clip speed 1 (m/s): how fast a foot that is down moves back under the body, the median over all four feet through the clip (rigs/animals/gait_measure.cjs), so a clip played at speed = pace / stride keeps its feet on the ground (the dogs' Walk barely plants its front feet: theirs is from the back feet). gait (the dogs): their own settings for gaitFor in src/actors/animals.js (their Walk is a slow amble; their Trot, made for the game, covers the paces between it and the Gallop). seat: where a saddle sits (offset in that bone's own space, model units; at: metres in the animal's own space, idle). lasso: the bone a rope loops round and the neck's radius there. Bone names are as three.js gives them (dots dropped: FrontShoulder.L is FrontShoulderL). The farm pack (farmCow, farmHorse, pig, sheep, pug; files in farm/) was exported from the pack's Cow/Horse/Pig/Pug/Sheep.blend files by the farm export rigs: clips Idle, Walk, WalkSlow, Gallop (the pack's Run, renamed so every animal answers to the same names), Jump and Death; the pig, sheep and pug had the horse's clips, so their strides were scaled down to their short legs and quickened (farm/fixes_<Name>.json there). The pug also has Trot, Sit_Down, Sit, Lie_Down and Lie (Lie is a sploot: back legs stretched out behind), made on its own rig by farm_dogclips.py. Their stride also lists WalkSlow (gaitFor doesn't use it); their bones: Body, Torso (the seat), Neck, Head (the rope goes round the neck just behind it), FrontFoot / BackFoot (the hooves and paws).",
+ "about": "Quaternius animals for Mathwood Valley. scale: model units to metres (the files are as made; makeAnimal scales them). height: metres at the withers (top of the shoulders); tall: top of the head standing idle; length: nose to tail. All face +Z. stride: how fast the clip carries it at clip speed 1 (m/s): how fast a foot that is down moves back under the body, the median over all four feet through the clip (rigs/animals/gait_measure.cjs), so a clip played at speed = pace / stride keeps its feet on the ground (the dogs' Walk barely plants its front feet: theirs is from the back feet). gait (the dogs): their own settings for gaitFor in src/actors/animals.js (their Walk is a slow amble; their Trot, made for the game, covers the paces between it and the Gallop). seat: where a saddle sits (offset in that bone's own space, model units; at: metres in the animal's own space, idle). lasso: the bone a rope loops round and the neck's radius there. Bone names are as three.js gives them (dots dropped: FrontShoulder.L is FrontShoulderL). The farm pack (farmCow, farmHorse, pig, sheep, pug; files in farm/) was exported from the pack's Cow/Horse/Pig/Pug/Sheep.blend files by the farm export rigs: clips Idle, Walk, WalkSlow, Gallop (the pack's Run, renamed so every animal answers to the same names), Jump and Death; the pig, sheep and pug had the horse's clips, so their strides were scaled down to their short legs and quickened (farm/fixes_<Name>.json there). The pug also has Trot, Sit_Down, Sit, Lie_Down and Lie (Lie is a sploot: back legs stretched out behind), made on its own rig by farm_dogclips.py. Their stride also lists WalkSlow (gaitFor doesn't use it); their bones: Body, Torso (the seat), Neck, Head (the rope goes round the neck just behind it), FrontFoot / BackFoot (the hooves and paws). steed: the new horse (the Horse Lab's, labs/horse), on the pack horse's own skeleton and clips (five stall clips added) at the pack horse's scale; coat: true, its colours are worked out in the shader per horse (src/actors/horsecoat.js, horses.js), not in the vertices; eye: the name of the glossy eye primitive's material, which keeps its own material. Its entry is measured by ~/pw/bandit-math/rigs/horses/steed_json.cjs.",
  "kinds": {
   "horse": {
    "file": "horse.glb",
@@ -108,6 +108,67 @@
    "head": "Head",
    "tris": 2182,
    "kb": 267
+  },
+  "steed": {
+   "file": "steed.glb",
+   "from": "the Horse Lab (labs/horse): a Meshy body on the pack Horse's skeleton, its 13 clips and five stall clips",
+   "scale": 0.44203,
+   "height": 1.56,
+   "tall": 2.01,
+   "length": 2.39,
+   "width": 0.68,
+   "facing": "+Z",
+   "clips": {
+    "Attack_Headbutt": 1.033,
+    "Attack_Kick": 1,
+    "Death": 1,
+    "EarFlick": 1.417,
+    "Eating": 6,
+    "Gallop": 0.6,
+    "Gallop_Jump": 1.467,
+    "HeadShake": 1.583,
+    "Idle": 3.333,
+    "Idle_2": 3.333,
+    "Idle_Headlow": 3.333,
+    "Idle_HitReact1": 0.667,
+    "Idle_HitReact2": 0.667,
+    "Jump_toIdle": 1.733,
+    "LookLeft": 2.583,
+    "LookRight": 2.583,
+    "Nod": 2.208,
+    "Walk": 1.167
+   },
+   "stride": {
+    "Walk": 1.03,
+    "Gallop": 4.55
+   },
+   "seat": {
+    "bone": "Torso2",
+    "offset": [
+     0,
+     0.4017,
+     0.6619
+    ],
+    "at": [
+     0,
+     1.505,
+     0.221
+    ]
+   },
+   "lasso": {
+    "bone": "Neck3",
+    "radius": 0.217,
+    "at": [
+     0,
+     1.628,
+     0.944
+    ]
+   },
+   "head": "Head",
+   "tris": 10778,
+   "kb": 334,
+   "coat": true,
+   "eye": "eye"
   },
   "donkey": {
    "file": "donkey.glb",

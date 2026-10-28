@@ -1,10 +1,10 @@
 // THE BUILDING LAB: the town's buildings built from parts in code, one module each (the stable: stable.js; the sheriff's
-// office and jail: sheriff.js), with their props (props.js) and, for the stable, the game's own horses standing in its
+// office and jail: sheriff.js; the general store: store.js), with their props (props.js) and, for the stable, the game's own horses standing in its
 // stalls. The wood is the Material Lab's trim sheet and weathering, the stone the Stone Lab's wall maker; this lab adds
 // the light baked through the doors and windows and from the lanterns (parts.js), and its own pictures (art.js: the
 // signs, the stall boards, straw, the wanted posters). This file: the scene, the light and the time of day, the horses,
 // the panel (one panel for every building: a picker at its top), the stats, and the rigs' handle (window.BL).
-// ?b=stable or ?b=sheriff picks the building it opens on.
+// ?b=stable, ?b=sheriff or ?b=store picks the building it opens on.
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -18,8 +18,13 @@ import { buildStable, stableRecipe, PAINTS, RECIPE_DEFAULTS, STABLE } from './st
 import { buildSheriff, sheriffRecipe, PAINTS as SHERIFF_PAINTS, RECIPE_DEFAULTS as SHERIFF_DEFAULTS } from './sheriff.js';
 import { MORTARS } from '../stone/stonewall.js';
 import { buildProps } from './props.js';
-import { makeArt, makeSheriffArt } from './art.js';
+import { makeArt, makeSheriffArt, makeStoreArt } from './art.js';
+import { softenGrain, eraseNails } from './woodlook.js';
+import { buildStore, storeRecipe, PAINTS as STORE_PAINTS, RECIPE_DEFAULTS as STORE_DEFAULTS, SIGN_LAYOUT } from './store.js';
+import { buildSaloon, saloonRecipe, PAINTS as SALOON_PAINTS, TRIMS as SALOON_TRIMS, RECIPE_DEFAULTS as SALOON_DEFAULTS, makeSaloonArt } from './saloon.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { buildCabin, cabinRecipe, CABIN_PAINTS, CABIN_DEFAULTS, CABIN_VIEW_NAMES, cabinControls, wireCabin } from './cabins.js';
+import { buildBlacksmith, blacksmithRecipe, BS_PAINTS, BS_DEFAULTS } from './blacksmith.js';
 import { LU, lit, boardWear, glowMaterial, animalLamps, setLamps, lanternGlow, ropeTexture } from './parts.js';
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -55,8 +60,8 @@ const state = {
   ...RECIPE_DEFAULTS, horses: [...RECIPE_DEFAULTS.horses],
   doors: true, lamps: true, time: 'day', props: true, showHorses: true, quality: 'gaming', az: 200,
   owned: { bay: true, donkey: false, chestnut: false, palomino: false, white: false, midnight: false },
-  building: new URLSearchParams(location.search).get('b') === 'stable' ? 'stable' : 'sheriff',
-  sh: { ...SHERIFF_DEFAULTS }, jailDoor: false,
+  building: ({ stable: 'stable', store: 'store', saloon: 'saloon', cabin: 'cabin', blacksmith: 'blacksmith' })[new URLSearchParams(location.search).get('b')] || 'sheriff',
+  sh: { ...SHERIFF_DEFAULTS }, st: { ...STORE_DEFAULTS }, sa: { ...SALOON_DEFAULTS }, ca: { ...CABIN_DEFAULTS }, bs: { ...BS_DEFAULTS }, jailDoor: false,
 };
 // THE BUILDINGS: what the panel and the rebuild need of each
 const BUILDINGS = {
@@ -65,8 +70,28 @@ const BUILDINGS = {
   // picture; its paint sheltered there)
   // (its grain calmed, its boards' bumps flatter; its outdoor lantern out by day)
   sheriff: { label: "Sheriff's office", paints: SHERIFF_PAINTS, recipe: () => sheriffRecipe(state.sh), r: () => state.sh, loading: 'Building the jail…', sun: { day: 30 }, shelter: 0.45, calmGrain: true, woodBump: 0.45, outLampsByDay: false },
+  // (the general store: its storeroom's sliding door stands open to begin with, as in its concept picture; its porch
+  // lantern out by day; the sun a little lower, so it lays stripes through the windows onto the floor; its grain calmed
+  // (its walls inside are upright planks, seen close); the wood under its peeling whitewash weathered grey)
+  store: { label: 'General store', paints: STORE_PAINTS, recipe: () => storeRecipe(state.st), r: () => state.st, loading: 'Stocking the shelves…', sun: { day: 26 }, shelter: 0.4, woodBump: 0.6, outLampsByDay: false, door2: true, calmGrain: { straight: true }, bareTint: [0.86, 0.76, 0.66],
+    // (its whitewash thin and chalky, the grain through it, peeling softly, more along the boards' edges; a dark lap line
+    // under each board, small faint nails; its sign holding on where the wash has gone; by night its white front lit only a
+    // little by the moon, the lanterns and the windows doing the rest)
+    paintLook: { uPaintGrain: 0.85, uPeelSoft: 0.3, uEdgePeel: 0.08, uLapShadow: 0.48, uLapLip: 0.4, uNail: 0.35, uSignKeep: 0.6, uStreakW: 0.5, uFlake: 1, uLapUnder: 0.3 },
+    // (less grime streaked down its pale front: close up it read as soot)
+    grimeLook: { uGrimeAmt: 0.45, uDirtBand: 0.45 }, light: { night: { sunI: 0.32, hemiI: 0.55 } } },
+  // (the saloon, on its corner: its batwings hang shut to begin with (door1: the doors' switch holds them hooked open),
+  // its two door lanterns out by day; the wood under its oxblood paint weathered grey; its own trim colour)
+  saloon: { label: 'Saloon', paints: SALOON_PAINTS, trims: SALOON_TRIMS, recipe: () => saloonRecipe(state.sa), r: () => state.sa, loading: 'Polishing the bar…', sun: { day: 30 }, shelter: 0.35, woodBump: 0.6, outLampsByDay: false, door1: false, calmGrain: { straight: true }, bareTint: [1.0, 1.0, 1.04] },
+  // (the cabins: a recipe each, cabins.js; the back door is the second door switch, open to begin with)
+  cabin: { label: 'Cabins', paints: CABIN_PAINTS, recipe: () => cabinRecipe(state.ca), r: () => state.ca, loading: 'Raising the cabin…', sun: { day: 34 }, shelter: 0.4, woodBump: 0.75, outLampsByDay: false, door2: true },
+  blacksmith: { label: 'Blacksmith', paints: BS_PAINTS, recipe: () => blacksmithRecipe(state.bs), r: () => state.bs, loading: 'Lighting the forge…', sun: { day: 34 }, shelter: 0.3, woodBump: 0.75, outLampsByDay: false, door2: true },
 };
 const BLD = () => BUILDINGS[state.building];
+// how paint wears, for a building that doesn't say (parts.js LU: the stable's and the sheriff's look)
+const PAINT_LOOK = { uPaintGrain: 0, uPeelSoft: 0.08, uEdgePeel: 0, uLapShadow: 0.42, uLapLip: 0, uNail: 1, uSignKeep: 0.25, uStreakW: 1, uFlake: 0, uLapUnder: 1 };
+// the weathering's grime for a building that doesn't say (weather.js U: as makeMaterials sets it)
+const GRIME_LOOK = { uGrimeAmt: 0.8, uDirtBand: 0.8 };
 const cur = () => BLD().r();
 
 // ── the time of day ──────────────────────────────────────────────────────────────────────────────────────────────────
@@ -81,8 +106,9 @@ const viewCentre = new THREE.Vector3(0, 2.5, 0);
 function applyLight() {
   const L = TIMES[state.time], az = (state.time === 'night' ? 140 : state.az) * Math.PI / 180, el = ((BLD().sun || {})[state.time] ?? L.el) * Math.PI / 180;
   const dir = new THREE.Vector3(Math.sin(az) * Math.cos(el), Math.sin(el), -Math.cos(az) * Math.cos(el)).normalize();
-  sun.color.set(L.sun); sun.intensity = L.sunI;
-  hemi.color.set(L.sky).lerp(new THREE.Color(1, 1, 1), state.time === 'night' ? 0.1 : 0.25); hemi.groundColor.set(L.ground); hemi.intensity = L.hemiI;
+  const NL = (BLD().light || {})[state.time] || {};   // (a building may dim the moon on a pale front)
+  sun.color.set(L.sun); sun.intensity = NL.sunI ?? L.sunI;
+  hemi.color.set(L.sky).lerp(new THREE.Color(1, 1, 1), state.time === 'night' ? 0.1 : 0.25); hemi.groundColor.set(L.ground); hemi.intensity = NL.hemiI ?? L.hemiI;
   const sky = new THREE.Color(L.bg ?? L.sky);
   scene.background = sky; scene.fog = new THREE.Fog(sky, 50, 150);
   sun.position.copy(viewCentre).addScaledVector(dir, 40); sun.target.position.copy(viewCentre); sun.target.updateMatrixWorld();
@@ -108,7 +134,7 @@ function applyQuality() {
 }
 
 // ── materials ────────────────────────────────────────────────────────────────────────────────────────────────────────
-let T, RT, ART, SART;
+let T, RT, ART, SART, STA, SAA;
 const mats = {};
 function makeMaterials() {
   // (the Material Lab's frontier-cabin weathering, a little softer: moss mostly on what faces up and on the shady side,
@@ -135,6 +161,9 @@ function makeMaterials() {
   mats.decal = lit(new THREE.MeshStandardMaterial({ map: SART.sheriff, roughness: 0.9, transparent: true, depthWrite: false, alphaTest: 0.01, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }), { ao: true });
   mats.glow = glowMaterial(); mats.glass = glowMaterial({ panes: true });
   mats.rope = lit(new THREE.MeshStandardMaterial({ map: ropeTexture(), roughness: 0.92 }), { ao: true, tint: true });
+  // (the general store's goods: one picture of labels, prints, cloth and heaps, each corner its own tint; glass jars)
+  mats.goods = lit(new THREE.MeshStandardMaterial({ map: STA.store, roughness: 0.78 }), { ao: true, tint: true });
+  mats.jar = lit(new THREE.MeshStandardMaterial({ color: 0xdfeceb, roughness: 0.06, metalness: 0.1, transparent: true, opacity: 0.38, depthWrite: false }), { ao: true });
   T.ground.repeat.set(15, 15);
   mats.ground = lit(weather(new THREE.MeshStandardMaterial({ map: T.ground, roughness: 0.97 }), { ground: true, tint: true, ao: true }));
 }
@@ -145,43 +174,8 @@ function makeMaterials() {
 // both), in the lab's copy of the pictures; the stable's nails are drawn by its shader instead (parts.js boardWear)
 // the lab's copy of the wood sheet for the building shown: the Material Lab's look, its nails painted out, and for a
 // building that asks for it (the sheriff's office) its grain calmed (softenGrain)
-function woodFor(T) { setWood(T, cur().wood); eraseNails(T); if (BLD().calmGrain) softenGrain(T); }
-// THE CALMER GRAIN (the sheriff's office): the sheet's board strips carry a dozen fine, sharp grain lines each; on lap
-// siding seen close they read as ribbed cloth and shimmer at a slant. Each board strip is blurred across its width (the
-// fine lines melt into its tone; the knots stay, as soft blots), and three to five broad, soft streaks are laid along it,
-// wandering a little and tiling round the strip's length; its bumps are flattened the same way. The strip's edges, the
-// shakes and the end grain are left as drawn. (The stable keeps the sheet as it is.)
-function softenGrain(T) {
-  const S = 64, rows = 12, R = (n) => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
-  for (const [tex, isN] of [[T.wood, false], [T.woodN, true]]) {
-    // (read through a scratch canvas made for reading back, write straight into the sheet)
-    const c = tex.image, g = c.getContext('2d'), W = c.width, tmp = document.createElement('canvas'); tmp.width = W; tmp.height = S;
-    const tg = tmp.getContext('2d', { willReadFrequently: true });
-    const sig = 3.2, ker = []; for (let k = -8; k <= 8; k++) ker.push(Math.exp(-(k * k) / (2 * sig * sig)));
-    for (let s = 0; s < rows; s++) {
-      const y0 = s * S; tg.clearRect(0, 0, W, S); tg.drawImage(c, 0, y0, W, S, 0, 0, W, S);
-      const img = tg.getImageData(0, 0, W, S), d = img.data, src = d.slice();
-      const bands = 3 + Math.floor(R(s * 3 + 1) * 3), bc = Array.from({ length: bands }, (_, b) => [(b + 0.5) / bands * 52 + 6 + (R(s * 7 + b) - 0.5) * 8, 3 + R(s * 11 + b) * 4, (R(s * 13 + b) - 0.5) * 0.16, 1 + Math.floor(R(s * 17 + b) * 2)]);
-      for (let y = 3; y < S - 3; y++) for (let x = 0; x < W; x++) {
-        let acc = [0, 0, 0], wsum = 0;
-        for (let k = -8; k <= 8; k++) { const yy = Math.min(S - 4, Math.max(3, y + k)), i = (yy * W + x) * 4, w = ker[k + 8]; acc[0] += src[i] * w; acc[1] += src[i + 1] * w; acc[2] += src[i + 2] * w; wsum += w; }
-        const i = (y * W + x) * 4;
-        let f = 1;
-        if (!isN) for (const [cy, bw, amp, wav] of bc) { const yy = cy + Math.sin(x / W * Math.PI * 2 * wav + cy) * 2.5; f += amp * Math.exp(-((y - yy) ** 2) / (2 * bw * bw)); }
-        for (let ch = 0; ch < 3; ch++) d[i + ch] = Math.min(255, acc[ch] / wsum * f);
-      }
-      g.putImageData(img, 0, y0);
-    }
-    tex.needsUpdate = true;
-  }
-}
-function eraseNails(T) {
-  for (const tex of [T.wood, T.woodN]) {
-    const g = tex.image.getContext('2d'), band = g.getImageData(212, 0, 26, 768);
-    g.putImageData(band, 243, 0);
-    tex.needsUpdate = true;
-  }
-}
+function woodFor(T) { setWood(T, cur().wood); eraseNails(T); if (BLD().calmGrain) softenGrain(T, typeof BLD().calmGrain === 'object' ? BLD().calmGrain : {}); }
+// (softenGrain and eraseNails: woodlook.js, shared with the game)
 
 // ── the building, its props, its horses ──────────────────────────────────────────────────────────────────────────────
 let B = null, P = null, ground = null, groundGeo = null, lib = null;
@@ -192,43 +186,60 @@ const stats = { buildMs: 0, bakeMs: 0, propMs: 0, texMs: 0 };
 function rebuild() {
   for (const m of [...group.children]) { group.remove(m); m.traverse((c) => { if (c.geometry) c.geometry.dispose(); }); if (m.isPoints) m.material.dispose(); }
   for (const m of [...propGroup.children]) { propGroup.remove(m); m.geometry.dispose(); }
-  const t0 = performance.now(), sheriff = state.building === 'sheriff';
-  B = sheriff ? buildSheriff(sheriffRecipe(state.sh), { texMean: RT.mean }) : buildStable(stableRecipe(state), { texMean: RT.mean });
-  LU.uPaintWear.value = cur().wear; LU.uPaintShelter.value = BLD().shelter || 0; mats.wood.normalScale.setScalar(BLD().woodBump ?? 0.9); applyLight();
+  const t0 = performance.now(), sheriff = state.building === 'sheriff', store = state.building === 'store', saloon = state.building === 'saloon';
+  B = state.building === 'blacksmith' ? buildBlacksmith(blacksmithRecipe(state.bs), { texMean: RT.mean }) : state.building === 'cabin' ? buildCabin(cabinRecipe(state.ca), { texMean: RT.mean }) : saloon ? buildSaloon(saloonRecipe(state.sa), { texMean: RT.mean }) : store ? buildStore(storeRecipe(state.st), { texMean: RT.mean }) : sheriff ? buildSheriff(sheriffRecipe(state.sh), { texMean: RT.mean }) : buildStable(stableRecipe(state), { texMean: RT.mean });
+  LU.uPaintWear.value = cur().wear; LU.uPaintShelter.value = BLD().shelter || 0; mats.wood.normalScale.setScalar(BLD().woodBump ?? 0.9); LU.uBareTint.value.setRGB(...(BLD().bareTint || [0.9, 0.82, 0.74]));
+  for (const [u, v] of Object.entries({ ...PAINT_LOOK, ...(BLD().paintLook || {}) })) LU[u].value = v;
+  for (const [u, v] of Object.entries({ ...GRIME_LOOK, ...(BLD().grimeLook || {}) })) U[u].value = v;
+  applyLight();
   // (a sign painted straight onto the boards: the board shader lays it on, from its picture and its place on the wall)
   const SP = B.anchors.signPaint;
-  LU.uSignOn.value = SP ? 1 : 0; LU.uSignMap.value = SART.signPaint;
+  LU.uSignOn.value = SP ? 1 : 0; LU.uSignMap.value = store ? STA.signPaint : SART.signPaint;
+  // (the decals' picture: the store's own, or the sheriff's)
+  const decalMap = saloon ? SAA.saloon : store ? STA.store : SART.sheriff; if (mats.decal.map !== decalMap) { mats.decal.map = decalMap; mats.decal.needsUpdate = true; }
+  // (the goods' picture: the saloon's own, or the store's)
+  const goodsMap = saloon ? SAA.saloon : STA.store; if (mats.goods.map !== goodsMap) { mats.goods.map = goodsMap; mats.goods.needsUpdate = true; }
   if (SP) { LU.uSignRect.value.set(SP.x0, SP.y0, 1 / SP.w, 1 / SP.h); LU.uSignZ.value = SP.z; }
-  for (const g of ['wood', 'iron', 'stone', 'plaster', 'hay', 'floor', 'spill', 'boards', 'decal', 'glow', 'glass', 'pane', 'rope']) {
+  for (const g of ['wood', 'iron', 'stone', 'plaster', 'hay', 'floor', 'spill', 'boards', 'decal', 'glow', 'glass', 'pane', 'rope', 'goods', 'jar']) {
     const geo = B.geos[g]; if (!geo) continue;
-    const m = new THREE.Mesh(geo, mats[g]); m.name = g; m.castShadow = !['glow', 'glass', 'spill', 'floor', 'boards', 'decal', 'pane'].includes(g); m.receiveShadow = g !== 'glow' && g !== 'glass' && g !== 'pane';
-    if (g === 'glass' || g === 'pane') m.renderOrder = 1;
+    const m = new THREE.Mesh(geo, mats[g]); m.name = g; m.castShadow = !['glow', 'glass', 'spill', 'floor', 'boards', 'decal', 'pane', 'jar'].includes(g); m.receiveShadow = g !== 'glow' && g !== 'glass' && g !== 'pane';
+    if (g === 'glass' || g === 'pane' || g === 'jar') m.renderOrder = 1;
     if (g === 'decal') m.renderOrder = 0.5;
     group.add(m);
+  }
+  // (a building's meshes kept apart, named 'part:material' (the saloon's upstairs, its roof): the material after the colon)
+  for (const g in B.geos) {
+    const mat = g.includes(':') && mats[g.split(':')[1]]; if (!mat) continue;
+    const m = new THREE.Mesh(B.geos[g], mat); m.name = g; m.castShadow = true; m.receiveShadow = true; group.add(m);
   }
   // the front doors: each its own mesh, turned on its hinge (a door with a window carries its glass with it)
   B.doorMeshes = B.doors.map((L, i) => {
     const m = new THREE.Mesh(L.geo, mats.wood); m.name = 'door ' + (L.group || (i ? 'right' : 'left')); m.castShadow = m.receiveShadow = true;
     m.position.set(...L.hinge); group.add(m);
     if (L.glass) { const gm = new THREE.Mesh(L.glass, mats.glass); gm.renderOrder = 1; gm.name = 'door glass'; m.add(gm); }
+    // (its knob, plates and hangers: iron, swinging or sliding with it)
+    if (L.iron) { const im = new THREE.Mesh(L.iron, mats.iron); im.castShadow = im.receiveShadow = true; im.name = 'door iron'; m.add(im); }
     // (its harness collar: a leather tube, swinging with the door; lit evenly)
     if (L.rope) { const n = L.rope.attributes.position.count; L.rope.setAttribute('aAO', new THREE.BufferAttribute(new Float32Array(n).fill(0.8), 1)); L.rope.setAttribute('aLamp', new THREE.BufferAttribute(Float32Array.from({ length: n * 2 }, (_, i) => (i % 2 ? 0 : 0.6)), 2)); const c = new THREE.Mesh(L.rope, mats.rope); c.castShadow = true; c.name = 'collar'; m.add(c); }
     return m;
   });
+  // (anything else the building brings that moves on its own: the saloon's walker)
+  if (B.extra) group.add(B.extra);
   // the props, baked in the building's light
   const off = B.offset, offZ = B.offsetZ || 0;
   P = buildProps(B.props, { seed: cur().seed * 7 + 1, bake: (geo) => { geo.translate(-off, 0, -offZ); B.light.bake(geo); B.light.apply(geo, state.doors, 'main', state.jailDoor); geo.translate(off, 0, offZ); } });
-  for (const g of ['wood', 'iron', 'hay']) { const m = new THREE.Mesh(P.geos[g], mats[g]); m.castShadow = m.receiveShadow = true; propGroup.add(m); }
+  for (const g of ['wood', 'iron', 'hay', 'goods', 'decal']) { if (!P.geos[g]) continue; const m = new THREE.Mesh(P.geos[g], mats[g]); m.castShadow = g !== 'decal'; m.receiveShadow = true; if (g === 'decal') m.renderOrder = 0.5; propGroup.add(m); }
   // the lanterns: where they are, for the shaders' light, and a soft glow round each (one draw for all of them)
   setLamps(B.lamps);
   // (outdoor lanterns' glow apart, so it can go out by day)
-  B.glow = lanternGlow(B.lamps.filter((L) => !L.outdoor)); group.add(B.glow);
-  const outs = B.lamps.filter((L) => L.outdoor); B.glowOut = outs.length ? lanternGlow(outs) : null; if (B.glowOut) group.add(B.glowOut);
+  // (a light with no lantern, L.noGlow: a lit window's warmth thrown out onto a porch; no glow sprite)
+  B.glow = lanternGlow(B.lamps.filter((L) => !L.outdoor && !L.noGlow)); group.add(B.glow);
+  const outs = B.lamps.filter((L) => L.outdoor && !L.noGlow); B.glowOut = outs.length ? lanternGlow(outs) : null; if (B.glowOut) group.add(B.glowOut);
   applyLight();
   stats.buildMs = B.msBuild; stats.bakeMs = B.msBake; stats.propMs = P.ms; stats.totalMs = performance.now() - t0;
   setDoors(state.doors);
   bakeGround();
-  if (!sheriff) drawBoards();
+  if (state.building === 'stable') drawBoards();
   placeHorses();
   propGroup.visible = state.props;
   const rb = $('#recipe'); if (rb) rb.textContent = JSON.stringify(BLD().recipe());
@@ -239,7 +250,11 @@ function setDoors(open, open2 = state.jailDoor) {
   state.doors = open; state.jailDoor = open2;
   if (!B) return;
   B.light.setDoors(open, open2);
-  B.doorMeshes.forEach((m, i) => { const L = B.doors[i], o = L.group === 'jail' ? open2 : open; m.rotation.y = o ? L.open : 0; });
+  // (the jail's door and the store's storeroom door go with open2; a sliding door slides along its track instead)
+  B.doorMeshes.forEach((m, i) => {
+    const L = B.doors[i], o = L.group === 'jail' || L.group === 'loading' || L.group === 'back' ? open2 : open;
+    if (L.slide) m.position.set(L.hinge[0] + (o ? L.slide[0] : 0), L.hinge[1] + (o ? L.slide[1] : 0), L.hinge[2] + (o ? L.slide[2] : 0)); else m.rotation.y = o ? L.open : 0;
+  });
   const oz = B.offsetZ || 0;
   for (const g of Object.values(P.geos)) { g.translate(-B.offset, 0, -oz); B.light.apply(g, open, 'main', open2); g.translate(B.offset, 0, oz); }
 }
@@ -264,7 +279,8 @@ function bakeGround() {
   for (let i = 0; i < P0.count; i++) {
     const x = P0.getX(i), z = P0.getZ(i);
     const dB = rect(x, z, -F.w / 2 - 0.4, F.w / 2 + 0.3, -F.d / 2 - 0.5, F.d / 2 + 0.6);
-    const dYard = rect(x, z, Y[0], Y[1], Y[2], Y[3]) + Math.sin(x * 0.7 + z * 0.3) * 0.4;
+    // (a corner building has a street along each of its fronts)
+    const dYard = Math.min(...(B.anchors.streets || [Y]).map((Q) => rect(x, z, Q[0], Q[1], Q[2], Q[3]))) + Math.sin(x * 0.7 + z * 0.3) * 0.4;
     A.array[i * 4] = Math.max(1 - THREE.MathUtils.smoothstep(dB, 0, 1.6), 0.9 * (1 - THREE.MathUtils.smoothstep(dYard, 0, 1.8)) * (1 - THREE.MathUtils.smoothstep(z, F.d / 2 + 6, F.d / 2 + 11)));
     // (the ground's shade where it meets the walls, and the lanterns' light on it: the building's bake, at the ground)
     const near = Math.abs(x) < 12 && Math.abs(z) < 11, b = near ? B.light.at(x - B.offset, 0.01, z - oz, 0, 1, 0) : null;
@@ -413,6 +429,9 @@ function tickHorses(dt) {
 const panel = $('#panel');
 // where to look from, per building: [camera, target]
 const VIEWS = {
+  // (the cabins: each cabin works out its own views from its footprint, cabins.js cabinViews)
+  get blacksmith() { return state.building === 'blacksmith' && B && B.views ? B.views : { front34: [[-11.5, 3.6, 12.5], [0.6, 2.2, 0]] }; },
+  get cabin() { return state.building === 'cabin' && B && B.views ? B.views : Object.fromEntries(CABIN_VIEW_NAMES.map((n) => [n, [[-12, 4, 14], [0, 2, 0]]])); },
   stable: {
     front: [[-9.5, 4.2, 17.5], [0.3, 3.2, 0]],
     doors: [[0.9, 2.6, 10.6], [1.2, 2.9, 3]],
@@ -432,8 +451,40 @@ const VIEWS = {
     back: [[10.5, 4.6, -12.5], [0.0, 2.6, -1.0]],
     roof: [[-3.0, 11.5, -12.0], [-1.6, 4.6, 1.0]],
   },
+  store: {
+    front: [[-8.6, 3.0, 13.4], [0.2, 3.9, 0.0]],
+    door: [[1.4, 2.4, 9.6], [1.6, 3.0, 1.7]],
+    porch: [[-1.2, 1.95, 3.15], [5.0, 2.1, 2.3]],
+    leanto: [[-11.0, 2.7, 5.0], [-3.6, 2.6, -0.8]],
+    counter: [[1.75, 1.62, 1.5], [2.1, 1.2, -2.9]],
+    shelves: [[1.9, 1.75, 0.6], [4.9, 2.2, -1.4]],
+    stove: [[2.6, 1.6, -1.9], [-0.9, 1.1, 0.3]],
+    back: [[10.0, 4.6, -12.6], [0.6, 3.6, -1.0]],
+    roof: [[-4.8, 13.5, -11.0], [0.6, 6.8, 0.6]],
+  },
+  // (the saloon: its own frame as built, moved by its footprint's centring: x + 1.41, z - 1.425)
+  saloon: {
+    front: [[-14.09, 2.6, 18.375], [0.21, 5.0, -0.225]],
+    door_a: [[2.01, 2.4, 13.075], [1.71, 3.2, 4.575]],
+    door_b: [[-12.09, 2.4, -2.225], [-3.39, 3.0, -2.625]],
+    balcony: [[5.21, 2.1, 5.975], [-4.09, 3.6, 6.175]],
+    bar: [[1.21, 2.15, 4.025], [0.61, 2.6, -4.425]],
+    stage: [[1.11, 2.2, 0.175], [1.71, 2.0, -5.925]],
+    stairs: [[-1.59, 2.3, 2.775], [4.41, 3.8, -3.625]],
+    chalkboard: [[2.41, 2.1, 3.775], [4.31, 1.9, 1.475]],
+    back: [[15.41, 6.0, -17.425], [1.41, 4.0, -2.425]],
+    roof: [[9.41, 18.0, -16.425], [0.41, 8.5, 0.575]],
+  },
 };
 const SHOW = {
+  blacksmith: `<div class="row check"><label><input type="checkbox" id="doors"> Big doors open</label></div>
+    <div class="row check"><label><input type="checkbox" id="jailDoor"> Shed door open</label></div>
+    <div class="row check"><label><input type="checkbox" id="lamps"> Lanterns and the forge lit</label></div>
+    <div class="row check"><label><input type="checkbox" id="props"> Props (anvil, quench tub, coal, wheel, trough, hitching rail)</label></div>`,
+  cabin: `<div class="row check"><label><input type="checkbox" id="doors"> Front doors open</label></div>
+    <div class="row check"><label><input type="checkbox" id="jailDoor"> Back door open</label></div>
+    <div class="row check"><label><input type="checkbox" id="lamps"> Lanterns and fires lit</label></div>
+    <div class="row check"><label><input type="checkbox" id="props"> Props (woodpile, barrel, bench, bucket, washtub)</label></div>`,
   stable: `<div class="row check"><label><input type="checkbox" id="doors"> Front doors open</label></div>
     <div class="row check"><label><input type="checkbox" id="lamps"> Lanterns lit</label></div>
     <div class="row check"><label><input type="checkbox" id="props"> Props (barrels, trough, crates, bales, wagon)</label></div>
@@ -442,8 +493,24 @@ const SHOW = {
     <div class="row check"><label><input type="checkbox" id="jailDoor"> Jail door open</label></div>
     <div class="row check"><label><input type="checkbox" id="lamps"> Lanterns lit</label></div>
     <div class="row check"><label><input type="checkbox" id="props"> Props (bench, barrels, crates, trough, hitching rail, woodpile)</label></div>`,
+  store: `<div class="row check"><label><input type="checkbox" id="doors"> Front doors open</label></div>
+    <div class="row check"><label><input type="checkbox" id="jailDoor"> Storeroom door open</label></div>
+    <div class="row check"><label><input type="checkbox" id="lamps"> Lanterns lit</label></div>
+    <div class="row check"><label><input type="checkbox" id="props"> Props (barrels of apples and crackers, crates, flour sacks, pails, the bench, shovels, the washtub)</label></div>`,
+  get saloon() {
+    return `<div class="row two"><label for="s-trim">Trim</label><select id="s-trim">${Object.entries(SALOON_TRIMS).map(([k, L]) => `<option value="${k}"${k === state.sa.trim ? ' selected' : ''}>${L.label}</option>`).join('')}</select></div>
+    <div class="row check"><label><input type="checkbox" id="walker"> Someone walking through (the batwings swing)</label></div>
+    <div class="row check"><label><input type="checkbox" id="doors"> Batwings hooked open</label></div>
+    <div class="row check"><label><input type="checkbox" id="lamps"> Lamps lit</label></div>
+    <div class="row check"><label><input type="checkbox" id="props"> Props (tables, chairs, stools, the piano, barrels, benches, the hitching rail and trough)</label></div>`;
+  },
 };
 const HOW = {
+  blacksmith: `<p><b>The blacksmith</b> (blacksmith.js): a board-and-batten smithy with big double doors in its gable end, open inside to the rafters, a packed-earth floor; a stone forge against the back wall with a sheet-iron hood and a stone chimney through the roof, leather bellows on a frame, a workbench with a vise, tongs and hammers on a rack, horseshoes over the doors; an open shoeing shed on its right. The forge glows and lights the shop at night. Props (the anvil on its stump, the quench tub, the coal, a wagon wheel, the trough, the hitching rail) are separate pieces.</p>`,
+  cabin: `<p><b>Cabins</b> are made from a recipe (cabins.js): hewn or round logs, board and batten or lap siding; a single pen, a double pen, a dogtrot (two pens and an open breezeway under one roof) or an L with a kitchen wing; a lean-to room on the back or an end; a back door; a front, shed or wrap-around porch; a stone, stick-and-mud or stovepipe chimney; a gable or shed roof of split shakes or boards; shuttered or six-pane windows; stone piers, a stone footing or log sills. The presets cover the range; Random makes one up from the seed.</p>
+    <p><b>Logs</b> are boxes (hewn, with clay chinking set back between them on both faces) or eight-sided poles (round, scribed tight), their ends running past the corners. Openings take out the courses they cross. Stone chimneys and footings are the Stone Lab's wall maker; piers and hearths are flat stones.</p>
+    <p><b>Inside</b>: plank floors, plank ceilings on peeled-pole joists, a fireplace with a mantel or a box stove, doorways between the rooms, a lantern in each room. The furniture comes from the props library: each room lists where its bed, table, stove and shelves go.</p>
+    <p><b>Far look</b>: no inside, the chinking one sheet per wall, wide shakes, two meshes. <b>All presets in a row</b> merges every preset into one set of meshes, as the town would.</p>`,
   stable: `<p><b>Parts</b>: every board, batten, post, rafter and shake is a box from the Material Lab's parts kit, merged into one mesh per material (wood, iron), so the whole barn is a handful of draw calls. The walls are <b>board and batten</b>: upright boards 22 to 32 cm wide with a narrow batten over each joint, cut round the doors and windows. Each board is two skins: the outside one painted, the inside one bare (barns are painted outside only).</p>
     <p><b>Paint</b> is a colour in the recipe. The weathering shader chips it at the edges, and this lab wears it away in streaks down the boards and big soft patches, more of it low down, on the sunny side, by the corners and the doorways, less under the eaves, and board by board; the slider says how much has gone. Small nail heads sit where each board crosses a girt inside.</p>
     <p><b>Inside light</b> is baked once: for every corner indoors, how much of the outdoors it sees through the doorways and windows (each opening's share of its view, with a few rays through a grid of the solid parts so a partition shades the stall behind it), kept in two parts so shutting the front doors darkens it. The lanterns' warm light is worked out per pixel (round pools on the floor and the gates, falling off with the distance squared), times the bake's share of it that gets past the walls. A soft glow sprite hangs round each lantern; two gooseneck lamps light the sign.</p>
@@ -454,27 +521,37 @@ const HOW = {
     <p><b>The jail</b> is the Stone Lab's wall maker: a U of mortared fieldstone whose arms end against the office's wall, a slab roof, a door through its front on a stone step, a tiny barred window, slots high in the back; inside, the office's wall is lined with heavy planks bound in strap iron, and two cells sit behind woven strap-iron bars.</p>
     <p><b>Light</b> is baked as for the stable (the doorways and windows, the lanterns), with the office door and the jail door each kept apart so either can shut; the cells and the back room get a warm fill so they're dim rooms, not black boxes.</p>
     <p><b>Props</b> (the bench, barrels, crates, the trough, the hitching rail, the woodpile, a leaning plank, the cells' buckets) are separate pieces the building lists with their places, for the Town Lab to move.</p>`,
+  store: `<p><b>The store</b> is two storeys of <b>lap siding</b> behind a tall <b>false front</b> that steps up in three, each step with a cornice of a cap, mouldings, a frieze, dentils and paired brackets. Upstairs, six-pane windows with their blinds part drawn. The <b>porch roof</b> is corrugated tin (sheets of narrow facets tilted either way, some rustier than others) on purlins and rafters, carried by a beam on five <b>turned posts</b> (a square foot and head, a lathe-turned shaft of beads, a vase and a long taper) over a raised boardwalk on short posts and pads.</p>
+    <p><b>Paint</b> is whitewash in the recipe, peeled back to grey wood in streaks and patches board by board, more by the corners, the doors and low down. The sign is painted straight onto the boards: "GENERAL STORE", "DRY GOODS · GROCERIES · HARDWARE" under it, and the ghost of an older sign in faded red above and below, plainer where the whitewash has gone.</p>
+    <p><b>The lean-to storeroom</b> is boards and battens, with a big Z-braced door that slides along an iron track over its doorway (the second door switch), its own loading dock, and a freestanding hoist: a post, an arm, a brace, a pulley block and chain.</p>
+    <p><b>Inside</b>, upright plank walls, a beamed ceiling, a floor worn pale along the paths people walk. The counter runs down the right side (a brass till, a coffee grinder, candy jars, a balance scale) with shelves to the ceiling behind it over a bank of labelled drawers, a rolling ladder, pictures and a flag on top. The goods (tins, jars, packets, bolts of cloth, boots, books, sacks) are drawn from one picture of labels and prints, so the whole stock is one draw. The open floor in front of the counter is kept clear for the store's job.</p>
+    <p><b>Props</b> (barrels of apples and crackers, kegs, crates of apples and of pails, flour and coffee sacks, the bench, the shovels, the washtub, the coal bucket, a broom) are separate pieces for the Town Lab.</p>`,
+  saloon: `<p><b>The saloon</b> stands on a corner, both street faces finished: two storeys of <b>lap siding</b> in oxblood red peeling to grey wood, cream pilasters and trim, a tall <b>false front</b> on each street face (the main one taller, the side one stepping down) with a bracketed cornice and "SALOON" painted on it in cream, laid board by board so the letters follow the laps. A stone chimney stands behind the side front.</p>
+    <p><b>The boardwalk</b> wraps the corner on blocks, steps up to each door. Over it, <b>one balcony</b> on turned posts with curved knee brackets: its deck is the porch's ceiling (boards and joists seen from under it), a railing of turned balusters between ball-topped newels. Each street face has a wide doorway with a pair of <b>louvred batwing doors</b> (they swing when someone walks through, both ways, on their springs) and a lantern over it, display windows with SALOON in gold on the glass, six-pane windows upstairs with lace and lamplight.</p>
+    <p><b>Inside</b>, a double-height hall: the bar down the left with a brass foot rail, tap towers and lamps, a back-bar with an arched mirror and shelves of sarsaparilla and root beer; a gallery across the back with closed doors, a wide stair up the right wall; under the gallery the band's <b>stage</b> (velvet drapes, a fringed valance, footlights, the piano); round tables, a wagon-wheel chandelier, red wallpaper over a dark wainscot; at the front right a <b>chalkboard</b> on an easel for the graph teacher. Pictures, wallpaper, velvet, lace and bottles all come from one picture drawn in code.</p>
+    <p><b>Props</b> (tables, chairs, stools, the piano and its stool, barrels, benches, the hitching rail and trough) are separate pieces for the Town Lab.</p>`,
 };
 let panelWired = false;
 function buildPanel() {
   const opt = (obj, cur) => Object.entries(obj).map(([k, L]) => `<option value="${k}"${k === cur ? ' selected' : ''}>${L.label || L}</option>`).join('');
-  const forSale = Object.keys(PRICES.horse), R = cur(), kind = state.building, sheriff = kind === 'sheriff';
+  const forSale = Object.keys(PRICES.horse), R = cur(), kind = state.building, sheriff = kind === 'sheriff', mortar = kind !== 'stable';
   panel.innerHTML = `<h1>Building Lab</h1><p class="sub">The town's buildings built from parts in code: walls, roof, doors and all, ready to walk into. <a href="../">All labs</a></p>
   <details class="sec" open><summary>Building</summary><div class="body">
-    <div class="picks"><button class="btn${kind === 'stable' ? ' on' : ''}" data-bld="stable">Stable</button><button class="btn${sheriff ? ' on' : ''}" data-bld="sheriff">Sheriff's office</button><button class="btn" disabled title="next">General store</button></div>
+    <div class="picks"><button class="btn${kind === 'stable' ? ' on' : ''}" data-bld="stable">Stable</button><button class="btn${sheriff ? ' on' : ''}" data-bld="sheriff">Sheriff's office</button><button class="btn${kind === 'store' ? ' on' : ''}" data-bld="store">General store</button><button class="btn${kind === 'saloon' ? ' on' : ''}" data-bld="saloon">Saloon</button><button class="btn${kind === 'cabin' ? ' on' : ''}" data-bld="cabin">Cabins</button><button class="btn${kind === 'blacksmith' ? ' on' : ''}" data-bld="blacksmith">Blacksmith</button></div>
+    ${kind === 'cabin' ? cabinControls(R) : ''}
     <div class="row two"><label for="s-paint">Paint</label><select id="s-paint">${opt(BLD().paints, R.paint)}</select></div>
     <div class="row" data-key="wear"><label for="r-wear">Paint worn off</label><input type="range" id="r-wear" min="0" max="1" step="0.01" value="${R.wear}"><output>${R.wear.toFixed(2)}</output></div>
     <div class="row two"><label for="s-wood">Wood</label><select id="s-wood">${opt(WOOD_LOOKS, R.wood)}</select></div>
     <div class="row two"><label for="s-stone">Stone colours</label><select id="s-stone">${opt(PALETTES, R.stone)}</select></div>
-    ${sheriff ? `<div class="row two"><label for="s-mortar">Mortar</label><select id="s-mortar">${opt(MORTARS, R.mortar)}</select></div>` : ''}
+    ${mortar ? `<div class="row two"><label for="s-mortar">Mortar</label><select id="s-mortar">${opt(MORTARS, R.mortar)}</select></div>` : ''}
     <div class="seedrow"><label for="seed">Seed</label><input id="seed" type="number" min="1" step="1" value="${R.seed}"><button class="btn" id="newSeed">New seed</button></div>
     <div class="lbl">This building's recipe</div><pre class="recipe" id="recipe">${JSON.stringify(BLD().recipe())}</pre>
-    <p class="note">Everything that makes this ${sheriff ? "sheriff's office" : 'stable'} its own, small enough for the town to keep one per building.</p>
+    <p class="note">Everything that makes this ${({ stable: 'stable', sheriff: "sheriff's office", store: 'store', saloon: 'saloon', cabin: 'cabin', blacksmith: 'blacksmith' })[kind]} its own, small enough for the town to keep one per building.</p>
   </div></details>
   <details class="sec" open><summary>Show</summary><div class="body">
     <div class="picks" id="times">${['day', 'dusk', 'night'].map((t) => `<button class="btn" data-time="${t}">${t[0].toUpperCase() + t.slice(1)}</button>`).join('')}</div>
     ${SHOW[kind]}
-    ${sheriff ? '' : `<div class="lbl">Bought (its board turns into a name plate)</div>
+    ${kind !== 'stable' ? '' : `<div class="lbl">Bought (its board turns into a name plate)</div>
     ${forSale.map((id) => `<div class="row check"><label><input type="checkbox" data-owned="${id}"> ${FULL[id] || id} (${PRICES.horse[id]} gold)</label></div>`).join('')}`}
     <div class="lbl">Look from</div>
     <div class="picks">${Object.keys(VIEWS[kind]).map((v) => `<button class="btn" data-view="${v}">${v}</button>`).join('')}</div>
@@ -486,18 +563,23 @@ function buildPanel() {
   $('#r-wear').addEventListener('input', (e) => { cur().wear = +e.target.value; LU.uPaintWear.value = cur().wear; e.target.nextElementSibling.textContent = cur().wear.toFixed(2); recipeText(); });
   $('#s-wood').addEventListener('change', (e) => { cur().wood = e.target.value; woodFor(T); recipeText(); });
   $('#s-stone').addEventListener('change', (e) => { cur().stone = e.target.value; rebuild(); });
-  if (sheriff) $('#s-mortar').addEventListener('change', (e) => { cur().mortar = e.target.value; rebuild(); });
+  if (mortar) $('#s-mortar').addEventListener('change', (e) => { cur().mortar = e.target.value; rebuild(); });
   $('#seed').addEventListener('change', (e) => { cur().seed = Math.max(1, Math.round(+e.target.value) || 1); rebuild(); });
   $('#newSeed').addEventListener('click', () => { cur().seed = 1 + Math.floor(Math.random() * 9999); $('#seed').value = cur().seed; rebuild(); });
   $('#doors').addEventListener('change', (e) => setDoors(e.target.checked));
-  if (sheriff) $('#jailDoor').addEventListener('change', (e) => setDoors(state.doors, e.target.checked));
+  if ($('#jailDoor')) $('#jailDoor').addEventListener('change', (e) => setDoors(state.doors, e.target.checked));
+  // (the saloon: its walker, its trim colour)
+  if ($('#walker')) $('#walker').addEventListener('change', (e) => { if (B && B.walker) B.walker.on = e.target.checked; });
+  if ($('#s-trim')) $('#s-trim').addEventListener('change', (e) => { cur().trim = e.target.value; rebuild(); });
   $('#lamps').addEventListener('change', (e) => { state.lamps = e.target.checked; applyLight(); });
   $('#props').addEventListener('change', (e) => { state.props = e.target.checked; propGroup.visible = state.props; });
-  if (!sheriff) {
+  if (kind === 'stable') {
     $('#showHorses').addEventListener('change', (e) => { state.showHorses = e.target.checked; horseGroup.visible = state.showHorses; });
     panel.querySelectorAll('[data-owned]').forEach((c) => c.addEventListener('change', () => { state.owned[c.dataset.owned] = c.checked; drawBoards(); }));
   }
   $('#s-q').addEventListener('change', (e) => { state.quality = e.target.value; applyQuality(); });
+  // (the cabins: their recipe controls; a choice that shows or hides others draws the panel again)
+  if (kind === 'cabin') wireCabin(panel, R, (full) => { rebuild(); if (full) buildPanel(); syncPanel(); if (full) view(R.lineup ? 'row0' : 'front34'); });
   if (panelWired) return;
   // (once: the panel's clicks, and the phone's panel toggle)
   panelWired = true;
@@ -527,6 +609,7 @@ function loadHorses() {
 function setBuilding(kind) {
   if (!BUILDINGS[kind]) return;
   state.building = kind;
+  state.jailDoor = !!BLD().door2; if (BLD().door1 !== undefined) state.doors = BLD().door1;
   woodFor(T);
   horseGroup.visible = kind === 'stable' && state.showHorses;
   buildPanel(); rebuild(); syncPanel(); view('front');
@@ -536,16 +619,16 @@ function setBuilding(kind) {
 function view(name) {
   const V = VIEWS[state.building][name]; if (!V) return;
   // (a tall, narrow screen, a phone held upright, sees less across: stand further back)
-  const back = ['aisle', 'stall', 'office', 'cells', 'porch'].includes(name) ? 1 : Math.min(2.4, Math.max(1, 1.2 / camera.aspect)), t = new THREE.Vector3(...V[1]);
+  const back = ['aisle', 'stall', 'office', 'cells', 'porch', 'counter', 'shelves', 'stove', 'bar', 'stage', 'stairs', 'chalkboard', 'balcony', 'room', 'room2', 'inside', 'forge'].includes(name) ? 1 : Math.min(2.4, Math.max(1, 1.2 / camera.aspect)), t = new THREE.Vector3(...V[1]);
   camera.position.copy(t).add(new THREE.Vector3(...V[0]).sub(t).multiplyScalar(back)); controls.target.copy(t); controls.update();
 }
 
 // ── the stats box ────────────────────────────────────────────────────────────────────────────────────────────────────
-const texBytes = () => [T.wood, T.woodN, RT.map, RT.normalMap, T.noise, T.ground].reduce((s, t) => s + gpuBytes(t.image.width, t.image.height), 0) + ART.bytes + (SART ? SART.bytes : 0);
+const texBytes = () => [T.wood, T.woodN, RT.map, RT.normalMap, T.noise, T.ground].reduce((s, t) => s + gpuBytes(t.image.width, t.image.height), 0) + ART.bytes + (SART ? SART.bytes : 0) + (STA ? STA.bytes : 0) + (SAA ? SAA.bytes : 0);
 const trisOf = (g) => (g ? g.index.count / 3 : 0);
 function info() {
   if (!B) return null;
-  const doorTris = B.doors.reduce((s, L) => s + trisOf(L.geo) + trisOf(L.glass), 0);
+  const doorTris = B.doors.reduce((s, L) => s + trisOf(L.geo) + trisOf(L.glass) + trisOf(L.iron), 0);
   const bt = Object.values(B.geos).reduce((s, g) => s + trisOf(g), 0) + doorTris;
   const ht = horses.reduce((s, h) => s + trisOf(h.a.mesh.geometry), 0);
   const per = {}; for (const g in B.geos) per[g] = trisOf(B.geos[g]); per.doors = doorTris;
@@ -575,7 +658,7 @@ let last = performance.now();
 function loop() {
   requestAnimationFrame(loop);
   const t = performance.now(), dt = Math.min(0.1, (t - last) / 1000); last = t;
-  resize(); controls.update(); tickHorses(dt);
+  resize(); controls.update(); tickHorses(dt); if (B && B.tick) B.tick(dt);
   renderer.render(scene, camera);
   frames++;
   if (t - fpsT > 500) { fps = Math.round(frames * 1000 / (t - fpsT)); frames = 0; fpsT = t; updateStats(); }
@@ -586,7 +669,8 @@ function loop() {
     buildPanel();
     const t0 = performance.now();
     $('#loading').textContent = BLD().loading;
-    T = await makeTextures({ wood: cur().wood }); woodFor(T); RT = makeRubbleTexture(); ART = await makeArt(); SART = await makeSheriffArt();
+    T = await makeTextures({ wood: cur().wood }); woodFor(T); RT = makeRubbleTexture(); ART = await makeArt(); SART = await makeSheriffArt(); STA = await makeStoreArt(SIGN_LAYOUT); SAA = await makeSaloonArt();
+    state.jailDoor = !!BLD().door2; if (BLD().door1 !== undefined) state.doors = BLD().door1;
     stats.texMs = performance.now() - t0;
     U.uNoise.value = T.noise; LU.uPaintWear.value = cur().wear;
     makeMaterials(); makeGround();
@@ -620,6 +704,7 @@ const BL = window.BL = {
     rebuild(); syncPanel(); return info();
   },
   quality(q) { state.quality = q; applyQuality(); syncPanel(); },
+  walker(on) { if (B && B.walker) B.walker.on = on; const c = $('#walker'); if (c) c.checked = !!on; return B && B.walker ? B.walker.on : null; },
   show(o) { for (const k in o) state[k] = o[k]; propGroup.visible = state.props; horseGroup.visible = state.showHorses; syncPanel(); },
   render() { renderer.render(scene, camera); },
   get renderer() { return renderer; }, get scene() { return scene; }, get camera() { return camera; }, get controls() { return controls; },

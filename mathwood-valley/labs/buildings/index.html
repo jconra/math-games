@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Building Lab</title>
-<meta name="description" content="A Mathwood Valley lab: the town's buildings built from parts in code, ready to walk into. A livery stable (stalls with the game's horses in them, a hayloft, lanterns) and a sheriff's office with its stone jail (a false front, wanted posters, cells behind strap-iron bars).">
+<meta name="description" content="A Mathwood Valley lab: the town's buildings built from parts in code, ready to walk into. A livery stable (stalls with the game's horses in them, a hayloft, lanterns), a sheriff's office with its stone jail (a false front, wanted posters, cells behind strap-iron bars) and a general store (a whitewashed false front, display windows full of goods, a counter, shelves to the ceiling, a lean-to storeroom with a hoist).">
 <!-- the on-screen error box comes first, so a crash shows on screen instead of a blank page -->
 <script src="../../oops.js"></script>
 <link rel="stylesheet" href="../../src/ui/fonts/fonts.css">
@@ -15,12 +15,12 @@
 </head>
 <body>
 <div id="app">
-  <canvas id="c" aria-label="A town building built from parts: a livery stable or a sheriff's office and jail"></canvas>
+  <canvas id="c" aria-label="A town building built from parts: a livery stable, a sheriff's office and jail, or a general store"></canvas>
   <div class="stats" id="stats" aria-live="polite"></div>
   <button class="btn panel-toggle" id="panelToggle" aria-expanded="true" aria-controls="panel">Controls</button>
   <aside class="panel" id="panel" aria-label="Building controls"></aside>
 </div>
 <div class="loading" id="loading">Building…</div>
-<script type="module" src="main.js?v=2"></script>
+<script type="module" src="main.js?v=3"></script>
 </body>
 </html>

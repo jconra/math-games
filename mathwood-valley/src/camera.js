@@ -5,8 +5,10 @@
 // that is worked out from the frame's time, so it moves the same at 30 or 144 frames a second.
 //
 //   const C = makeCamera({ camera, W, input })
-//   C.update(dt, { at, heading, onHorse, speed })   each frame, after the player has moved: at: the player's feet
-//                (a Vector3); heading: the way they face (radians, as three's rotation.y: facing (sin, cos)); speed: m/s.
+//   C.update(dt, { at, heading, onHorse, speed, seat })   each frame, after the player has moved: at: the player's feet
+//                (a Vector3); heading: the way they face (radians, as three's rotation.y: facing (sin, cos)); speed: m/s;
+//                seat: on a horse, how high its saddle sits over its feet (m; the bay's 1.505 if not given): a bigger
+//                horse lifts the view by as much as its seat is higher.
 //                It also keeps W.camTarget on the player (the valley's plant and tree circles follow it).
 //   C.swing(dt, { heading, onHorse, speed })   optional: the swing back round behind, on its own, for a player that
 //                moves in short steps within a frame (the push is read the way the camera looks, so the two are best
@@ -21,6 +23,7 @@ import * as THREE from 'three';
 export const CAM = {
   dist: 6, horseDist: 9,            // metres behind
   eye: 1.55, horseEye: 2.35,        // the point it looks at: this high over the player's feet (the horse's back + a head)
+  horseSeat: 1.505,                 // (the bay's seat height, which horseEye was set for)
   pitch: 0.3, horsePitch: 0.26,     // how far it looks down (radians)
   pitchMin: -0.35, pitchMax: 1.2,
   turn: 0.0052, tilt: 0.0042,       // radians per pixel dragged
@@ -49,8 +52,10 @@ export function makeCamera({ camera, W, input = null }) {
   const B = ((W.places && W.places.buildings) || []).filter((b) => b && b.w)
     .map((b) => ({ x: b.x, z: b.z, c: Math.cos(b.rot), s: Math.sin(b.rot), hw: b.w / 2 + 0.3, hd: b.d / 2 + 0.3, h: b.h || 8 }));
   // inside a building's box (its footprint up to its roof)?
-  const inBuilding = (x, y, z) => B.some((b) => { const dx = x - b.x, dz = z - b.z;
-    return Math.abs(b.c * dx - b.s * dz) < b.hw && Math.abs(b.s * dx + b.c * dz) < b.hd && y < W.heightAt(b.x, b.z) + b.h; });
+  // (in a code-built building, under its roof: its own walls and ceilings stop the camera, not its whole box: W.codeRoom)
+  let room = null;
+  const inBuilding = (x, y, z) => (room ? room.solid(x, y, z) : B.some((b) => { const dx = x - b.x, dz = z - b.z;
+    return Math.abs(b.c * dx - b.s * dz) < b.hw && Math.abs(b.s * dx + b.c * dz) < b.hd && y < W.heightAt(b.x, b.z) + b.h; }));
   const C = {
     yaw: 0, pitch: CAM.pitch, zoom: 1, enabled: true, dist: CAM.dist, eye: CAM.eye, reach: 1,
     started: false,
@@ -86,10 +91,11 @@ export function makeCamera({ camera, W, input = null }) {
     if (!C.enabled || !C.started) return;
     swingBack(Math.min(dt, 0.1), heading, onHorse, speed); swung = true;
   };
-  C.update = (dt, { at, heading = 0, onHorse = false, speed = 0 }) => {
+  C.update = (dt, { at, heading = 0, onHorse = false, speed = 0, seat = null }) => {
     dt = Math.min(dt, 0.1);
     W.camTarget.copy(at);
     if (!C.enabled) return;
+    room = W.codeRoom ? W.codeRoom(at.x, at.y + 1, at.z) : null;
     // what the player did: dragged to look, or the wheel
     if (input && input.enabled) {
       const l = input.takeLook();
@@ -97,7 +103,7 @@ export function makeCamera({ camera, W, input = null }) {
       const z = input.takeZoom(); if (z) C.zoom = Math.max(CAM.zoomMin, Math.min(CAM.zoomMax, C.zoom * Math.pow(1.12, z)));
       if (input.lookedAt > lastDragAt) lastDragAt = input.lookedAt;
     }
-    const baseDist = onHorse ? CAM.horseDist : CAM.dist, eye = onHorse ? CAM.horseEye : CAM.eye;
+    const baseDist = onHorse ? CAM.horseDist : CAM.dist, eye = onHorse ? CAM.horseEye + (seat > 0 ? seat - CAM.horseSeat : 0) : CAM.eye;
     if (!C.started) {                                                // (the first frame, or after snap(): straight behind)
       C.started = true; C.yaw = heading; C.pitch = onHorse ? CAM.horsePitch : CAM.pitch; C.dist = baseDist; C.eye = eye; C.reach = 1;
       focus.set(at.x, at.y + eye, at.z); lastAim.copy(focus); lastHeading = heading;

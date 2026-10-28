@@ -47,7 +47,7 @@
 import * as THREE from 'three';
 import { makePerson } from './actors/folk.js';
 import { gridSteps, route as findRoute, along, cellAt, openAt, shut, reopen, reopenSome, makeRoute, COST } from './townpaths.js';
-import { TOWN, residents, nextFor, STAY, outCap, lendCost } from './townpeopleplan.js';
+import { TOWN, HOME_OF, residents, nextFor, STAY, outCap, lendCost } from './townpeopleplan.js';
 import { howdy, makeHowdyWatch } from './ui/howdy.js';
 import { wagonAt, roadCurve, WAGONS_OUT } from './wagon.js';
 import { modelFootprint } from '../world/objects/townAssets.js';
@@ -74,6 +74,10 @@ export function addHomes(W) {
 export function makeTownPeople({ W, folk, camera, player = () => null, jobs = {}, scene = W.scene }) {
   const job = (k) => { try { return jobs[k] ? jobs[k]() : null; } catch (e) { return null; } };
   const tier = W.tier || 'normal', shadows = tier !== 'potato' && !!(W.V && W.V.SHADOW ? W.V.SHADOW.on : true);
+  // how many may be out at once: the tier's (src/townpeopleplan.js TOWN.out), or the governor's 'townsfolk' dial, live
+  // (world/governor.js): turned down, the extra ones go home in their own time
+  let outMost = tier;
+  const offGov = W.governor ? W.governor.on('townsfolk', (v) => { outMost = v; }) : null;
   const P = W.places, homes = addHomes(W);
   for (const hm of homes) hm.y0 = W.heightAt(hm.x, hm.z);
   const TP = { people: [], doors: [], spots: [], edges: [], log: [], expecting: new Map() };
@@ -97,24 +101,34 @@ export function makeTownPeople({ W, folk, camera, player = () => null, jobs = {}
   const doorOf = (id) => TP.doors.find((d) => d.id === id) || null;
   const nearDoor = (x, z, d) => TP.doors.some((q) => Math.hypot(q.x - x, q.z - z) < d);
   // the places people gather
-  const spot = (id, kind, x, z, face, cap, extra = {}) => {
-    if (!free(x, z) || nearDoor(x, z, 2.2) || !clearOfRoad(x, z)) return null;
+  // (keep: how far from the road's middle; a porch's people stand along the building's front, the second a step along
+  // it, never out toward the road: TOWN.porchRoad there. The shops and the stable face the main street with the wagon
+  // road a few metres out, so each spot below has a few places to try, nearest the old one first)
+  const spot = (id, kind, x, z, face, cap, extra = {}, keep = TOWN.road) => {
+    if (!free(x, z) || nearDoor(x, z, 2.2) || roadGap(x, z) < keep) return null;
     const s = { id, kind, x, z, face, cap, used: 0, taken: [], crowd: 0, ...extra }; TP.spots.push(s); return s;
   };
-  if (P.saloon) { const { o, s } = frame(P.saloon); for (const k of [1, -1]) spot('saloon-porch-' + (k > 0 ? 'a' : 'b'), 'porch', P.saloon.door.x + o.x * 1.6 + s.x * 3.4 * k, P.saloon.door.z + o.z * 1.6 + s.z * 3.4 * k, P.saloon.rot, 2); }
-  if (P.store) {   // (the side away from the counter's customers: they queue on the store's other side, STORE.queue's -1;
+  if (P.saloon) { const { o, s } = frame(P.saloon); for (const k of [1, -1]) { let made = null; for (const out of [1.6, 0.8]) if (!made) made = spot('saloon-porch-' + (k > 0 ? 'a' : 'b'), 'porch', P.saloon.door.x + o.x * out + s.x * 3.4 * k, P.saloon.door.z + o.z * out + s.z * 3.4 * k, P.saloon.rot, 2, {}, TOWN.porchRoad); } }
+  if (P.store) {   // (the side away from the counter's customers first: they queue on the store's other side, STORE.queue's -1;
                    // the street bends in close to the store's front at that end, and the spot was made out in the road there)
     const { o, s } = frame(P.store); let made = null;
-    for (const k of [1, -1]) for (const out of [1, 2, 0]) if (!made) made = spot('store-porch', 'porch', P.store.door.x + o.x * out + s.x * 4.6 * k, P.store.door.z + o.z * out + s.z * 4.6 * k, P.store.rot, 2);
+    for (const k of [-1, 1]) for (const out of [1, 2, 0, -0.7]) if (!made) made = spot('store-porch', 'porch', P.store.door.x + o.x * out + s.x * 4.6 * k, P.store.door.z + o.z * out + s.z * 4.6 * k, P.store.rot, 2, {}, TOWN.porchRoad);
   }
-  if (P.stable) { const { o, s } = frame(P.stable); spot('stable-yard', 'yard', P.stable.door.x + o.x * 6 + s.x * 1.5, P.stable.door.z + o.z * 6 + s.z * 1.5, P.stable.rot + Math.PI, 3); }
-  if (P.square) {
+  if (P.stable) {   // (out in front of its big doors; else the yard beside it, the far side from its door's keeper first)
+    const { o, s } = frame(P.stable); let made = null;
+    for (const [out, side, face] of [[6, 1.5, Math.PI], [-4.5, 9.5, 0], [-4.5, -9.5, 0]]) if (!made) made = spot('stable-yard', 'yard', P.stable.door.x + o.x * out + s.x * side, P.stable.door.z + o.z * out + s.z * side, P.stable.rot + face, 3);
+  }
+  if (P.square) {   // (two places round its edge: either side of the way to the cabin, else further round)
     const sq = P.square, toCab = P.cabin ? Math.atan2(P.cabin.x - sq.x, P.cabin.z - sq.z) : 0;
-    for (const [i, a] of [[0, toCab + 0.5], [1, toCab - 1.4]]) { const x = sq.x + Math.sin(a) * sq.r * 0.72, z = sq.z + Math.cos(a) * sq.r * 0.72; spot('square-' + i, 'square', x, z, Math.atan2(sq.x - x, sq.z - z), 2); }
+    let i = 0;
+    for (const a of [toCab + 0.5, toCab - 1.4, toCab + 1.5, toCab - 0.6, toCab + 2.5, toCab - 2.4, toCab + Math.PI]) { if (i >= 2) break; const x = sq.x + Math.sin(a) * sq.r * 0.72, z = sq.z + Math.cos(a) * sq.r * 0.72; if (spot('square-' + i, 'square', x, z, Math.atan2(sq.x - x, sq.z - z), 2)) i++; }
   }
   if (P.stage && P.stage.crowd) { const c = P.stage.crowd; spot('stage-crowd', 'stage', c.x, c.z, Math.atan2(P.stage.x - c.x, P.stage.z - c.z), 4, { r: c.r }); }
   if (homes.length) {
-    const mid = { x: homes.reduce((a, h) => a + h.door.x, 0) / homes.length, z: homes.reduce((a, h) => a + h.door.z, 0) / homes.length };
+    // the lane: the middle of the homes people live in (a house put down elsewhere in the town, nobody's, doesn't pull it
+    // off their lane)
+    const lived = new Set(Object.values(HOME_OF)), lane = homes.some((h) => lived.has(h.id)) ? homes.filter((h) => lived.has(h.id)) : homes;
+    const mid = { x: lane.reduce((a, h) => a + h.door.x, 0) / lane.length, z: lane.reduce((a, h) => a + h.door.z, 0) / lane.length };
     TP.lane = mid;
     spot('lane', 'lane', mid.x, mid.z, Math.PI, 2);
     for (const hm of homes) { const { o, s } = frame(hm); spot(hm.id + '-yard', 'home', hm.door.x + o.x * 0.6 + s.x * 2.6, hm.door.z + o.z * 0.6 + s.z * 2.6, hm.rot, 2, { home: hm.id }); }
@@ -238,7 +252,7 @@ export function makeTownPeople({ W, folk, camera, player = () => null, jobs = {}
     const stage = job('stage'), playing = !stage || !stage.state || stage.state().playing !== false;
     for (const s of TP.spots) s.crowd = s.used;
     const here = r.at; release(r);
-    const n = night(), over = outCount() > outCap(tier, n) + 1;
+    const n = night(), over = outCount() > outCap(outMost, n) + 1;
     const fresh = !!r.fresh; r.fresh = false;   // (just out of a door: not straight back in)
     const nx = over && !fresh ? { go: r.home === 'west' || r.home === 'east' ? 'road' : 'home' } : nextFor(r, TP.spots, { night: n, at: r, playing, here, fresh });
     let target = null, then = null;
@@ -500,7 +514,7 @@ export function makeTownPeople({ W, folk, camera, player = () => null, jobs = {}
 
   // ── THE START: some already about when the ride begins (placed before anything is drawn) ─────────────────────────
   {
-    const n = Math.round(outCap(tier, night()) * TOWN.start), order = TP.people.slice().sort(() => Math.random() - 0.5);
+    const n = Math.round(outCap(outMost, night()) * TOWN.start), order = TP.people.slice().sort(() => Math.random() - 0.5);
     let placed = 0;
     for (const r of order) {
       if (placed >= n) break;
@@ -522,7 +536,7 @@ export function makeTownPeople({ W, folk, camera, player = () => null, jobs = {}
     const n = night(); TP.windows(n, dt);
     predict();
     for (const [k, e] of TP.expecting) if (now() > e.until) TP.expecting.delete(k);
-    const pl = player(), cam = camera.position, cap = outCap(tier, n);
+    const pl = player(), cam = camera.position, cap = outCap(outMost, n);
     let out = outCount();
     for (const r of TP.people) {
       if (r.lent) { if (r.p && r.fade < 1) { r.fade = Math.min(1, r.fade + dt / TOWN.door); r.p.fade = r.fade; } continue; }
@@ -622,12 +636,12 @@ export function makeTownPeople({ W, folk, camera, player = () => null, jobs = {}
   TP.laneSpot = () => (TP.lane ? { x: TP.lane.x, z: TP.lane.z, rot: Math.PI } : null);
   TP.way = (from, to) => viaPoints(from, to);   // (rigs: the way a townsperson would walk from one spot to another, [{ x, z }, ...])
   TP.dockSpot = () => { const d = TP.spots.find((q) => q.id === 'dock'); return d ? { x: d.x, z: d.z, rot: d.face } : null; };
-  TP.state = () => ({ grid: !!G, gridMs: TP.gridMs || null, routes: routes.size, shut: shutBy.size, shutCells: G && G.base ? G.base.size : 0, cap: outCap(tier, night()), night: night(), out: outCount(),
+  TP.state = () => ({ grid: !!G, gridMs: TP.gridMs || null, routes: routes.size, shut: shutBy.size, shutCells: G && G.base ? G.base.size : 0, cap: outCap(outMost, night()), night: night(), out: outCount(),
     expecting: [...TP.expecting].map(([k, e]) => ({ key: k, names: [...e.names] })),
     people: TP.people.map((r) => ({ name: r.name, home: r.home, state: r.state, out: r.out, lent: r.lent, in: r.out ? null : r.in, x: +r.x.toFixed(2), z: +r.z.toFixed(2), y: +r.y.toFixed(2),
       fade: +(r.p ? r.p.fade : r.fade).toFixed(2), drawn: !!(r.p && r.p.root.visible && (r.p.fade > 0)), clip: r.p ? r.p.clip : null, goal: r.goal ? r.goal.kind : null })) });
   TP.dispose = () => {
-    offBlock();
+    offBlock(); if (offGov) offGov();
     for (const r of TP.people) if (r.p && !r.lent) { r.p.root.removeFromParent(); try { r.p.dispose(); } catch (e) { /* (gone) */ } }
     if (W.lights && W.lights.set) for (const hm of homes) W.lights.set(hm.id, 1);
     if (G) reopen(G);

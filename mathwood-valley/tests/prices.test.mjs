@@ -12,9 +12,10 @@ const { ANIMALS, KINDS } = await import('../src/math/goods.js');
 const { completion } = await import('../src/completion.js');
 S.useSaveKey('bandit-math.riders.pricetest');
 
-test('the prices as decided on 2026-10-19: every one doubled, the cabin 600', () => {
+test('the prices as decided on 2026-10-19: every one doubled, the cabin 600 (the horses: 2026-10-27, no free horse)', () => {
   assert.deepEqual(PRICES.saddle, { plain: 30, tooled: 120, silver: 300 });
-  assert.deepEqual(PRICES.horse, { donkey: 40, chestnut: 120, palomino: 200, white: 300, midnight: 400 });
+  // (Dad, 2026-10-27: every rider starts on foot; the price goes up with the speed, the donkey 30 to Midnight 400)
+  assert.deepEqual(PRICES.horse, { donkey: 30, chestnut: 45, bay: 60, palomino: 200, white: 300, midnight: 400 });
   assert.deepEqual(PRICES.hat, { white: 40, straw: 60, bowler: 100, ranger: 160, cattleman: 240, sombrero: 400 });
   assert.deepEqual(PRICES.dog, { shiba: 120, husky: 120, pug: 50 });
   assert.deepEqual(PRICES.animal, { hen: 30, pig: 70, sheep: 100, cow: 240 });
@@ -30,7 +31,7 @@ test('one table: the furniture and the farm animals sell at the catalog\'s price
   const all = buy.reduce((a, i) => a + i.need, 0);
   const sum = (o) => Object.values(o).reduce((a, b) => a + b, 0);
   assert.equal(all, PRICES.cabin + sum(PRICES.saddle) + sum(PRICES.horse) + sum(PRICES.hat) + sum(PRICES.dog) + sum(PRICES.animal) + sum(PRICES.furniture));
-  assert.equal(all, 5260, 'everything to buy');
+  assert.equal(all, 5235, 'everything to buy (5,260 before the horses changed on 2026-10-27)');
   assert.ok(buy.every((i) => i.live), 'the cabin is for sale (COMING.cabin on)');
 });
 

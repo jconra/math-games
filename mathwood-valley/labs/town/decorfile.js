@@ -5,7 +5,7 @@
 //   decorText(decor) -> the file's text: one line a thing, so it reads (and diffs) easily
 const r2 = (v) => Math.round(+v * 100) / 100;
 const same = (a, b) => Math.abs((+a || 0) - (+b || 0)) < 0.005;
-const strokeKey = (s) => JSON.stringify([s.mode, s.kind, s.r, s.density, s.size, s.seed, s.pts]);
+const strokeKey = (s) => JSON.stringify([s.mode, s.kind, s.r, s.density, s.size, s.seed, s.pts, s.style || null]);
 const itemKey = (i) => JSON.stringify([i.kind, i.x, i.y, i.z, i.rx, i.ry, i.rz, i.sx, i.sy, i.sz, i.clear]);
 
 export function makeDecor(shipped, now, nameOf = () => '') {
@@ -20,6 +20,9 @@ export function makeDecor(shipped, now, nameOf = () => '') {
     if (!same(it.y, o.y)) m.y = r2(it.y || 0);
     if (!same(it.size, o.size)) m.size = r2(it.size);
     if ((it.level === true) !== (o.level === true)) m.level = it.level === true;
+    // (a code-built building's design, and the player's-cabin mark: world/objects/decor.js)
+    for (const k of ['preset', 'seed']) if ((it[k] || null) !== (o[k] || null) && it[k]) m[k] = it[k];
+    if (it.player === true && o.player !== true) m.player = true;
     if (Object.keys(m).length) moved[it.id] = m;
   }
   if (Object.keys(moved).length) out.moved = moved;
@@ -27,7 +30,8 @@ export function makeDecor(shipped, now, nameOf = () => '') {
   if (removed.length) out.removed = removed;
   // the things put down
   const placed = now.layout.items.filter((it) => !was.has(it.id)).map((it) => ({ type: it.type, kind: it.kind, x: r2(it.x), z: r2(it.z), rot: r2(it.rot),
-    ...(same(it.size ?? 1, 1) && it.type !== 'model' ? {} : { size: r2(it.size ?? 1) }), ...(it.y ? { y: r2(it.y) } : {}), ...(it.level === true ? { level: true } : {}) }));
+    ...(same(it.size ?? 1, 1) && it.type !== 'model' ? {} : { size: r2(it.size ?? 1) }), ...(it.y ? { y: r2(it.y) } : {}), ...(it.level === true ? { level: true } : {}),
+    ...(it.preset ? { preset: it.preset } : {}), ...(it.seed ? { seed: it.seed } : {}), ...(it.player === true ? { player: true } : {}) }));
   if (placed.length) out.placed = placed;
   // stone roads: those painted after the shipped ones
   const R0 = shipped.layout.roads || [], R1 = now.layout.roads || [];
@@ -36,7 +40,7 @@ export function makeDecor(shipped, now, nameOf = () => '') {
   const P0 = shipped.planting, P1 = now.planting, s0 = new Map(P0.strokes.map((s) => [s.id, strokeKey(s)])), i0 = new Map(P0.items.map((i) => [i.id, itemKey(i)]));
   const s1 = new Set(P1.strokes.filter((s) => s0.get(s.id) === strokeKey(s)).map((s) => s.id)), i1 = new Set(P1.items.filter((i) => i0.get(i.id) === itemKey(i)).map((i) => i.id));
   const note = (o) => { const n = nameOf(o); return n ? { name: n } : {}; };
-  const strokes = P1.strokes.filter((s) => !s1.has(s.id)).map((s) => ({ ...note(s), mode: s.mode, kind: s.kind, r: s.r, density: s.density, size: s.size, seed: s.seed, pts: s.pts }));
+  const strokes = P1.strokes.filter((s) => !s1.has(s.id)).map((s) => ({ ...note(s), mode: s.mode, kind: s.kind, r: s.r, density: s.density, size: s.size, seed: s.seed, ...(s.style ? { style: s.style } : {}), pts: s.pts }));   // (style: a fence's look)
   const items = P1.items.filter((i) => !i1.has(i.id)).map((i) => { const { id, ...rest } = i; return { ...note(i), ...rest }; });
   const gone = [...P0.strokes.filter((s) => !s1.has(s.id)), ...P0.items.filter((i) => !i1.has(i.id))].map((s) => s.id);
   const pl = {};

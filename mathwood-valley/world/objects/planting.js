@@ -9,6 +9,7 @@
 //
 //   planting: { v: 1, procedural (do the plants that grow by themselves still grow at all), strokes: [stroke], items: [item] }
 //   stroke:   { id, mode: 'paint' | 'clear', kind, r (brush radius, m), density (plants a square metre), size (x), seed, pts: [[x, z], ...] }
+//             style (a fence's look: one of objects/fenceplan.js FENCE_STYLES; none, the plain fence; kept only when given)
 //   item:     { id, kind, x, y (m above the ground), z, rx, ry, rz (degrees), sx, sy, sz, clear (m: nothing else grows this close) }
 //
 //   normalisePlanting(o)               any saved or pasted planting (the object or its text) made safe: bad entries dropped, gaps filled
@@ -290,7 +291,7 @@ export function normalisePlanting(o) {
     if (!pts.length) continue;
     out.strokes.push({ id: idOf(s.id), mode: s.mode === 'clear' ? 'clear' : 'paint', kind: kindOf(s.kind),
       r: round(clamp(num(s.r, 2), 0.05, 200), 1000), density: round(clamp(num(s.density, 4), 0, 400), 1000), size: round(clamp(num(s.size, 1), 0.01, 100), 1000),
-      seed: fin(s.seed) ? Math.trunc(+s.seed) >>> 0 : seedFrom(pts), pts });
+      seed: fin(s.seed) ? Math.trunc(+s.seed) >>> 0 : seedFrom(pts), pts, ...(typeof s.style === 'string' && /^[A-Za-z]{1,24}$/.test(s.style) ? { style: s.style } : {}) });
   }
   for (const it of Array.isArray(o.items) ? o.items : []) {
     if (!it || typeof it !== 'object' || !fin(it.x) || !fin(it.z)) continue;

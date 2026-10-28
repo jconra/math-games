@@ -38,6 +38,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { makePerson } from './folk.js';
 import { makeAnimal, saddleOn, gaitFor, COATS } from './animals.js';
+import { makeHorse as makeSteed, horseDial } from './horses.js';
+import { rollPenHorse } from '../horsepenplan.js';
 import { seatRider } from './seat.js';
 
 export const RIDERS = {
@@ -86,6 +88,7 @@ export function loadRiderKit({ animals, base = GAME } = {}) {
 }
 async function makeKit(animals, base) {
   await Promise.all(['horse', 'horseWhite'].map((k) => animals.need(k)));
+  await animals.need('steed').catch(() => null);   // (the new horse, for the governor's top level: makeRider)
   const saddles = await Promise.all(SADDLE_FILES.map((f) => loader.loadAsync(base + 'models/saddles/' + f + '.glb').then((g) => g.scene).catch(() => null)));
   return { animals, saddles, bagGeo: bagGeometry(), kerchiefGeo: kerchiefGeometry() };
 }
@@ -197,7 +200,14 @@ export function makeRider(kit, { W, folk, scene = W.scene, look = null, horse = 
   const L = RIDER_LOOKS;
   const lk = { outfit: pick(L.outfits), palette: pick(L.palettes), skin: Math.floor(Math.random() * 8), hair: Math.floor(Math.random() * 11), ...(look || {}) };
   const person = makePerson(folk, { ...lk, shadows });
-  const a = makeAnimal(kit.animals, horse || pick(L.horses), { shadows, tint: coat || pick(COATS) });
+  // (the governor's horse dial at its top, every: the road's and the jobs' riders on the new horse too, in a common or
+  // less common coat from the pen's pool, one pool for bandits and townsfolk alike so a coat never gives the answer away;
+  // else the pack's horses, tinted, as always. It only changes at a hiding moment, and riders are made out of sight)
+  const dial = !horse && W ? horseDial(W) : null;
+  const st = dial && dial.every && kit.animals.kinds && kit.animals.kinds.steed ? makeSteed(kit.animals, { recipe: roadCoat(), size: 1, tier: dial.look, shadows }) : null;
+  const a = st ? st.a : makeAnimal(kit.animals, horse || pick(L.horses), { shadows, tint: coat || pick(COATS) });
+  // (the new horse's coat has its own dissolve, which fadeAll (src/wagon.js) can't reach: it fades with its rider)
+  if (st) { const d = Object.getOwnPropertyDescriptor(person, 'fade'); if (d && d.set) Object.defineProperty(person, 'fade', { configurable: true, enumerable: true, get: d.get, set(f) { d.set.call(person, f); st.fade = f; } }); }
   const sad = kit.saddles[saddle ?? Math.floor(Math.random() * kit.saddles.length)] || kit.saddles.find(Boolean);
   if (sad) saddleOn(a, sad.clone(), { shadows });
   scene.add(a.root, person.root);
@@ -408,7 +418,9 @@ export function makeRider(kit, { W, folk, scene = W.scene, look = null, horse = 
     tiePose(person, 1);
   }
 
+  R.steed = st;   // (the new horse, when the governor has every horse new: its look by how far it is from the player)
   R.update = (dt) => {
+    if (st && W.camTarget) st.look(W.camTarget);
     if (R.mode === 'ride') {
       placeHorse(dt); clips();
       a.update(dt); person.update(dt); syncRide();
@@ -440,7 +452,13 @@ export function makeRider(kit, { W, folk, scene = W.scene, look = null, horse = 
     bag.removeFromParent(); bagTex.dispose();
     kc.removeFromParent();
     if (rope) { rope.removeFromParent(); rope.geometry.dispose(); rope.material.dispose(); }
-    a.dispose(); person.dispose();
+    if (st) st.dispose(); else a.dispose();
+    person.dispose();
   };
   return R;
+}
+// a coat for a rider's new horse: the pen's pool, its common and less common part
+function roadCoat() {
+  for (let k = 0; k < 24; k++) { const h = rollPenHorse(1 + Math.floor(Math.random() * 1e6)); if (h.rarity === 'common' || h.rarity === 'less') return h.recipe; }
+  return 'bay';
 }

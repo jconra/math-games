@@ -54,7 +54,8 @@ const SLIDERS = [
 const SHOWN = { select: [], place: ['size', 'clearRadius'], paint: ['brush', 'density', 'size', 'clearRadius'], clear: ['brush'] };   // ('place' is no longer offered: Add does both)
 const ACTS = [['undo', 'Undo', 'Undo the last change'], ['redo', 'Redo', 'Put back what Undo took away'], ['export', 'Export', 'List what you changed from the default, to give to Claude'],
   ['paste', 'Paste', 'Paste planting or a town copied before'], ['duplicate', 'Duplicate', 'A copy of the chosen thing beside it (Ctrl+D)'],
-  ['sizeAll', 'All this size', 'Make every one of the chosen kind this size (every street lamp, say)'], ['delete', 'Delete', 'Delete the chosen thing'],
+  ['sizeAll', 'All this size', 'Make every one of the chosen kind this size (every street lamp, say)'],
+  ['newLook', 'New look', 'A different design for the chosen cabin or home (saved with the town)'], ['delete', 'Delete', 'Delete the chosen thing'],
   ['loadDefault', 'Load default', 'Throw away what this browser keeps and load the default town and planting (press twice; Undo brings yours back)']];
 const SURE = { loadDefault: 'Press again: what this browser keeps is thrown away and the default loaded' };   // (actions that want a second press)
 const STEPS = 1000;   // (the log slider's positions)
@@ -167,7 +168,7 @@ export class PlantBar {
   constructor({ kinds = [], onChange, onAction, container = document.body, title = 'Plants' } = {}) {   // title: the round button's word
     this.kinds = kinds; this.onChange = onChange; this.onAction = onAction; this.shown = true; this.sure = null; this.title = title;
     this.state = { open: true, mode: 'select', kind: kinds.length ? kinds[0].id : null, gizmo: 'translate', brush: 6, density: 2, size: 1, clearRadius: 1.5, procedural: true, level: true };
-    this.levelShown = null; this.sure = null; this.sureAct = null;
+    this.levelShown = null; this.lookShown = false; this.sure = null; this.sureAct = null;
     addStyle(); this.build(container); this.render();
   }
 
@@ -294,6 +295,8 @@ export class PlantBar {
     document.body.appendChild(m); m.querySelector('[data-m="copy"]').focus();
   }
   showLevel(on) { this.levelShown = on == null ? null : !!on; if (on != null) this.state.level = !!on; this.render(); }
+  // (New look: shown while a building with designs to pick from is chosen, a code-built cabin or home)
+  showLook(on) { this.lookShown = !!on; this.render(); }
   render() {
     const s = this.state, b = this.b, kd = this.kinds.find((x) => x.id === s.kind), handles = s.mode === 'select' || s.mode === 'place';
     const shown = (s.mode === 'paint' && kd && kd.sliders) || SHOWN[s.mode] || [];   // (a kind may name its own sliders: a path brush only has a size)
@@ -301,7 +304,7 @@ export class PlantBar {
     b.modes.forEach((x) => x.setAttribute('aria-pressed', x.dataset.mode === s.mode));
     b.gizmos.forEach((x) => x.setAttribute('aria-pressed', x.dataset.gizmo === s.gizmo));
     b.kindBtns.forEach((x) => x.setAttribute('aria-pressed', this.kinds[+x.dataset.i].id === s.kind));
-    b.gizmo.hidden = !handles; b.acts.delete.hidden = !handles; b.acts.duplicate.hidden = !handles; b.acts.sizeAll.hidden = !handles;
+    b.gizmo.hidden = !handles; b.acts.delete.hidden = !handles; b.acts.duplicate.hidden = !handles; b.acts.sizeAll.hidden = !handles; b.acts.newLook.hidden = !handles || !this.lookShown;
     b.level.hidden = !handles || this.levelShown == null; b.levelBox.checked = !!this.levelShown;
     for (const [key, sl] of Object.entries(b.sliders)) { sl.row.hidden = !shown.includes(key); sl.inp.value = this.toSlider(key, s[key]); sl.out.textContent = this.fmt(key, s[key]); }
     b.proc.checked = !!s.procedural; this.edges();

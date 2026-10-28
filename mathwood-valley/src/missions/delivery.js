@@ -250,6 +250,10 @@ export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, r
     const s = a.info.seat.at;
     _m.makeTranslation(s[0], s[1], s[2]).premultiply(a.seatRest.clone().invert());
     _m.decompose(load.position, load.quaternion, load.scale);
+    // (the crates keep their own size; where they hang from the seat grows with a bigger horse, so the panniers sit on
+    // its wider hindquarters as they do on the bay's)
+    const k = a.size || 1;
+    for (const m of load.children) { if (!m.userData.at) m.userData.at = m.position.clone(); m.position.copy(m.userData.at).multiplyScalar(k); }
     a.bones[a.info.seat.bone].add(load);
     loadOn = a;
     return true;
@@ -304,7 +308,7 @@ export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, r
       else speak(c, `Finish that order for ${camp.short} first, partner.`, 'warn');
       return true;
     }
-    if (!P.canRide) { speak(c, 'Need a saddled horse to haul crates. The stable in town sells saddles.', 'warn'); if (hob) hob.event('deliveryNoSaddle'); return true; }
+    if (!P.canRide) { speak(c, 'Need a saddled horse to haul crates. The stable in town sells horses and saddles.', 'warn'); if (hob) hob.event('deliveryNoSaddle'); return true; }
     newOrder(c);
     return true;
   };

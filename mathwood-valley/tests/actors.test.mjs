@@ -20,10 +20,13 @@ const source = (path) => fs.readFileSync(new URL(path, import.meta.url)).toStrin
 
 test('every animal is there, at its real size, with the clips and bones the game uses', () => {
   const { kinds } = json('animals/animals.json');
-  const KINDS = ['horse', 'horseWhite', 'donkey', 'cow', 'bull', 'deer', 'stag', 'shiba', 'husky', 'wolf'];
+  const KINDS = ['horse', 'horseWhite', 'steed', 'donkey', 'cow', 'bull', 'deer', 'stag', 'shiba', 'husky', 'wolf'];
   assert.deepEqual(Object.keys(kinds).sort(), [...KINDS, ...FARM].sort());
+  // (the game's own list, src/actors/animals.js KINDS, is the same)
+  const listed = source('../src/actors/animals.js').match(/export const KINDS = \[([^\]]*)\]/)[1].match(/'([^']+)'/g).map((s) => s.slice(1, -1));
+  assert.deepEqual(listed, KINDS);
   // metres at the shoulder: what a saddle horse, a cow, a deer and the dogs really stand
-  const SHOULDER = { horse: [1.5, 1.7], horseWhite: [1.5, 1.7], donkey: [1.0, 1.3], cow: [1.3, 1.5], bull: [1.35, 1.65], deer: [1.0, 1.3],
+  const SHOULDER = { horse: [1.5, 1.7], horseWhite: [1.5, 1.7], steed: [1.5, 1.7], donkey: [1.0, 1.3], cow: [1.3, 1.5], bull: [1.35, 1.65], deer: [1.0, 1.3],
     stag: [1.2, 1.5], shiba: [0.35, 0.45], husky: [0.5, 0.65], wolf: [0.65, 0.85] };
   for (const kind of KINDS) {
     const k = kinds[kind];
@@ -38,7 +41,20 @@ test('every animal is there, at its real size, with the clips and bones the game
     const names = nodeNames(g);
     for (const b of [k.seat.bone, k.lasso.bone, k.head]) assert.ok(names.has(b), `${kind} has the bone ${b}`);
     assert.ok(k.stride.Walk > 0 && k.stride.Gallop > k.stride.Walk, kind + ' gallops faster than it walks');
-    assert.equal(g.meshes.length, 1, kind + ': one mesh'); assert.equal(g.meshes[0].primitives.length, 1, kind + ': drawn in one go');
+    assert.equal(g.meshes.length, 1, kind + ': one mesh');
+    if (k.coat) {
+      // a coat kind (the steed): the body and its glossy eye, two primitives of the one mesh; the eye's material is the
+      // one animals.json names, and the body's isn't it (src/actors/animals.js: the body is the biggest skinned mesh)
+      const prims = g.meshes[0].primitives, mats = prims.map((pr) => g.materials[pr.material].name);
+      assert.equal(prims.length, 2, kind + ': a body and an eye');
+      assert.ok(mats.includes(k.eye) && mats.filter((m) => m === k.eye).length === 1, `${kind}: one eye primitive (${mats})`);
+      const count = (pr) => g.accessors[pr.attributes.POSITION].count, body = prims.find((pr) => g.materials[pr.material].name !== k.eye);
+      assert.ok(count(body) > 10 * count(prims.find((pr) => g.materials[pr.material].name === k.eye)), kind + ': the body is by far the bigger');
+      for (const c of ['LookLeft', 'LookRight', 'Nod', 'HeadShake', 'EarFlick']) assert.ok(clips.includes(c), kind + ' has the stall clip ' + c);
+      // the same skeleton and clips as the pack horse, at its scale (the seat, the strides and the riding clips were made for it)
+      assert.equal(k.scale, kinds.horse.scale, kind + ': the pack horse\'s scale'); assert.deepEqual(k.seat, kinds.horse.seat, kind + ': the pack horse\'s seat');
+      for (const [c, d] of Object.entries(kinds.horse.clips)) assert.equal(k.clips[c], d, `${kind}: ${c} as long as the pack horse's`);
+    } else assert.equal(g.meshes[0].primitives.length, 1, kind + ': drawn in one go');
   }
 });
 

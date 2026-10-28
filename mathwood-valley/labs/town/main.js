@@ -7,7 +7,15 @@
 //   (~/pw/bandit-math/rigs/town/save_server.cjs, port 8998), which writes it into the game's folder; anywhere else (or
 //   with the script not running) downloaded, to hand over. Open… reads one back; Back to saved goes back to the game's.
 // The work in hand is also kept in this browser as it goes (the Build bar's own copy), so a reload doesn't lose it.
-// For rigs: window.TL = { ready, V, tool, text(), savedText(), save(), open(decor), view(name), look(..), screen(x, y, z), camera, fps }
+// Fences: a style picked from the pictures goes on the next fence run (saved on its stroke as `style`; the plain fence
+// has none), the Gate tool puts a gate in the fence clicked (it takes that fence's style), Height sizes the next run.
+// ONE MENU: the Build bar along the bottom (every kind of thing, Select / Add / Clear, Move and Turn with Snap, Undo,
+// Redo); a slim strip along the top (Save, Download, Open, Back to saved, the views, help); and while a fence or a
+// flower is picked on the bar, its choices in a small row just over it (the fence's style pictures, height, Straight
+// runs, Draw, Gate, Take down; Paint, Rub out). FLYING THE VIEW: W A S D along the ground the way the view faces, Space
+// up, C down, Shift faster (quicker the higher up); the mouse drags and zooms as before (OrbitControls).
+// For rigs: window.TL = { ready, V, tool, text(), savedText(), save(), open(decor), view(name), look(..), screen(x, y, z), camera, fps,
+//   fences: { style(), setStyle(id), height(v), stats(), icons }, pick(name), fly: { keys(), speed() } }
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { makeValley, TIER_SET } from '../../world/valley.js';
@@ -21,6 +29,8 @@ import { PROP_KINDS } from '../../world/objects/townProps.js';
 import { KIND_INFO } from '../../world/objects/growth.js';
 import { BACKWOODS } from '../../src/missions/backwoods.js';
 import { makeDecor, decorText } from './decorfile.js';
+import { FENCE_STYLES, PLAIN, GATES, styleInfo, nearestFence } from '../../world/objects/fenceplan.js';
+import { makeCodePlaces } from './codeplaces.js';
 
 const $ = (id) => document.getElementById(id);
 const Q = new URLSearchParams(location.search);
@@ -72,11 +82,43 @@ const VIEWS = {
   'The homes': () => { const h = at('home2'); look(h.x - 30, 22, h.z - 26, h.x - 10, h.z + 6); },
   'Down the street': () => look(SQ.x - 14, 2.2, SQ.z - 10, SQ.x + 20, SQ.z + 22, 1.6),
 };
-for (const [name, f] of Object.entries(VIEWS)) { const b = document.createElement('button'); b.type = 'button'; b.textContent = name; b.onclick = f; $('tlViews').appendChild(b); }
+for (const name of Object.keys(VIEWS)) $('tlView').add(new Option(name, name));
+$('tlView').onchange = () => { const v = $('tlView').value; if (VIEWS[v]) VIEWS[v](); $('tlView').value = ''; $('tlView').blur(); };
 TL.view = (n) => VIEWS[n] && VIEWS[n]();
-TL.look = look; TL.camera = camera; TL.renderer = renderer;
+TL.look = look; TL.camera = camera; TL.renderer = renderer; TL.controls = controls;
 TL.screen = (x, y, z) => { const v = new THREE.Vector3(x, y, z).project(camera), r = renderer.domElement.getBoundingClientRect(); return { x: r.left + (v.x + 1) / 2 * r.width, y: r.top + (1 - v.y) / 2 * r.height, behind: v.z > 1 }; };   // (rigs: where a spot is on screen)
 VIEWS['The square']();
+
+// ── flying the view from the keyboard: W A S D along the ground the way it faces, Space up, C down, Shift faster ──
+// (the camera and the point it turns round move together, so the mouse goes on turning the view round what's ahead.
+// The speed grows with the height over the ground: slow near it, quick high up; it eases in and out. Not while typing
+// in a box, and Ctrl/Cmd keys stay the page's: Ctrl+S saves, Ctrl+Z/Y undo and redo)
+const FLY = { KeyW: [0, 0, 1], KeyS: [0, 0, -1], KeyA: [-1, 0, 0], KeyD: [1, 0, 0], Space: [0, 1, 0], KeyC: [0, -1, 0] };
+const FLYING = { keys: new Set(), fast: false, vel: new THREE.Vector3(), slow: 4, perHeight: 0.9, most: 150, shift: 3, ease: 7, up: 0.7, floor: 1.2 };
+const typingIn = (t) => !!t && (t.isContentEditable || (['INPUT', 'SELECT', 'TEXTAREA'].includes(t.tagName) && t.type !== 'range' && t.type !== 'checkbox'));
+addEventListener('keydown', (e) => {
+  FLYING.fast = e.shiftKey;
+  if (!FLY[e.code] || e.ctrlKey || e.metaKey || e.altKey || typingIn(e.target) || typingIn(document.activeElement) || document.querySelector('.pb-modal')) return;
+  FLYING.keys.add(e.code); if (e.code === 'Space') e.preventDefault();   // (Space: no page scroll, no button pressed again)
+});
+addEventListener('keyup', (e) => { FLYING.fast = e.shiftKey; FLYING.keys.delete(e.code); });
+addEventListener('blur', () => FLYING.keys.clear());
+const _fwd = new THREE.Vector3(), _right = new THREE.Vector3(), _want = new THREE.Vector3(), _step = new THREE.Vector3(), UP = new THREE.Vector3(0, 1, 0);
+function fly(dt) {
+  const F = FLYING; let fx = 0, fy = 0, fz = 0;
+  for (const k of F.keys) { const v = FLY[k]; fx += v[0]; fy += v[1]; fz += v[2]; }
+  const p = camera.position, above = Math.max(0.5, p.y - heightAt(p.x, p.z));
+  const speed = Math.min(F.most, Math.max(F.slow, above * F.perHeight)) * (F.fast ? F.shift : 1);
+  camera.getWorldDirection(_fwd); _fwd.y = 0; if (_fwd.lengthSq() < 1e-8) _fwd.set(0, 0, -1); _fwd.normalize();
+  _right.crossVectors(_fwd, UP).normalize();
+  _want.set(0, 0, 0).addScaledVector(_fwd, fz).addScaledVector(_right, fx); if (_want.lengthSq() > 1) _want.normalize();
+  _want.multiplyScalar(speed); _want.y = fy * speed * F.up;
+  F.vel.lerp(_want, 1 - Math.exp(-F.ease * dt));
+  if (!F.keys.size && F.vel.lengthSq() < 0.0004) { F.vel.set(0, 0, 0); return; }
+  _step.copy(F.vel).multiplyScalar(dt); p.add(_step); controls.target.add(_step);
+  const floor = heightAt(p.x, p.z) + F.floor; if (p.y < floor) { controls.target.y += floor - p.y; p.y = floor; if (F.vel.y < 0) F.vel.y = 0; }   // (never into the ground)
+}
+TL.fly = { keys: () => [...FLYING.keys], speed: () => FLYING.vel.length(), set: (o) => Object.assign(FLYING, o) };
 
 // ── the frame loop ─────────────────────────────────────────────────────────────────────────────────────────────
 const fit = () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); renderer.getDrawingBufferSize(V.U.res.value); };
@@ -86,6 +128,7 @@ renderer.info.autoReset = false;
 renderer.setAnimationLoop(() => {
   const now = performance.now(), dt = Math.min(0.1, (now - last) / 1000); last = now; frames++;
   renderer.info.reset();
+  fly(dt);
   V.update(dt, () => controls.update());
   if (PLANT.tool) PLANT.tool.update();
   V.render();
@@ -100,7 +143,9 @@ TL.tool = tool;
 
 // ── the decor: what's changed from the shipped town ─────────────────────────────────────────────────────────────
 const plain = (n) => String(n || '').replace(/\s*\(.*\)\s*$/, '').trim();
-const nameOf = (o) => { const k = tool.kindOf(o.kind); const n = plain(k.name); if (!n) return ''; return o.mode === 'clear' ? (n === 'fence' ? 'fence taken down' : 'cleared') : n; };
+const nameOf = (o) => { const k = tool.kindOf(o.kind); const n = plain(k.name); if (!n) return '';
+  if (o.mode === 'clear') return n === 'fence' ? 'fence taken down' : n === 'gate' ? 'gate taken out' : 'cleared';
+  return n === 'fence' && FENCE_STYLES[o.style] ? FENCE_STYLES[o.style].name.toLowerCase() + ' fence' : n; };
 const nowTown = () => ({ layout: TOWN.village.layout, planting: tool.planting });
 const textOf = (town) => decorText(makeDecor(SHIPPED, town, nameOf));
 const appliedOf = (decor) => { const D = applyDecor(LAYOUT_RAW, PLANTING_RAW, decor); return { layout: normaliseTown(D.layout), planting: normalisePlanting(D.planting) }; };
@@ -139,36 +184,48 @@ $('tlLoad').onclick = () => $('tlFile').click();
 $('tlFile').onchange = async () => { const f = $('tlFile').files[0]; if (!f) return; try { TL.open(JSON.parse(await f.text())); } catch (e) { say("That file isn't a decor file.", 'unsaved'); } $('tlFile').value = ''; };
 $('tlRevert').onclick = async () => { if (TL.text() === SAVED || confirm('Throw away the changes since the last save? (Undo can bring them back.)')) { await tool.loadDefault(); SAVED = TL.text(); say('Back to the saved town.'); } };
 
-// ── quick picks: the Build bar set for the job ───────────────────────────────────────────────────────────────────
+// ── quick picks: the Build bar set for the job (the buttons in the row over the bar; rigs: TL.pick(name)) ──────────
 const use = (state, info) => {
   const was = bar.state.open; bar.setState({ open: true, ...state });
   if (!was) tool.barChanged({ ...bar.state }, 'open');
   tool.barChanged({ ...bar.state }, 'mode'); if (state.gizmo) tool.barChanged({ ...bar.state }, 'gizmo');
-  bar.setInfo(info);
-  document.querySelectorAll('[data-pick]').forEach((b) => b.classList.toggle('on', b === picked)); picked = null;
+  bar.setInfo(info); syncOpts();
 };
-let picked = null;
-const FLOWERS = ['paintbrush', 'columbine', 'dandelion', 'violets', 'snowdrops', 'marsh marigold', 'wild strawberry', 'broad-leaf hosta'];
-for (const n of FLOWERS) { const k = KIND_INFO.findIndex((K) => K.name === n); if (k >= 0) $('tlFlower').add(new Option(n, k)); }
+let fenceStyle = 'picketWhite', fenceH = 1;
+const FLOWER = KIND_INFO.findIndex((K) => K.name === 'paintbrush');   // (the flowers' Paint with no plant picked on the bar)
+const isPlant = (k) => Number.isInteger(k) && k >= 0 && k < KIND_INFO.length;
+const plantNow = () => (isPlant(bar.state.kind) ? bar.state.kind : Math.max(0, FLOWER));
 const PICKS = {
   move: () => use({ mode: 'select', gizmo: 'translate' }, 'Click a building or prop, then drag an arrow (or the white ball) to move it.'),
   turn: () => use({ mode: 'select', gizmo: 'rotate' }, 'Click a building or prop, then drag across the green ring to turn it.'),
-  fence: () => use({ mode: 'paint', kind: PLANT.FENCE, size: 1 }, 'Drag along the ground to run a fence; let go to finish it.'),
+  fence: () => use({ mode: 'paint', kind: PLANT.FENCE, size: fenceH }, `Drag along the ground to run a ${(fenceStyle === 'plain' ? PLAIN : FENCE_STYLES[fenceStyle]).name.toLowerCase()} fence; let go to finish it.`),
+  gate: () => use({ mode: 'paint', kind: PLANT.GATE, brush: 0.6 }, 'Click on a fence to put a gate in it: it takes the fence\'s style (Take down takes it out).'),
   unfence: () => use({ mode: 'clear', kind: PLANT.FENCE, brush: 1.5 }, 'Drag over a fence to take it down.'),
-  flowers: () => use({ mode: 'paint', kind: +$('tlFlower').value, brush: 2.5, density: 5, size: 1 }, 'Drag to paint flowers (the brush size and thickness are on the bar).'),
-  erase: () => use({ mode: 'clear', kind: +$('tlFlower').value, brush: 2 }, 'Drag to rub out plants and flowers.'),
+  flowers: () => use({ mode: 'paint', kind: plantNow(), brush: 2.5, density: 5, size: 1 }, 'Drag to paint flowers (the brush size and thickness are on the bar).'),
+  erase: () => use({ mode: 'clear', kind: plantNow(), brush: 2 }, 'Drag to rub out plants and flowers.'),
 };
-const PUT = ['barrel', 'crate', 'hitchingPost', 'trough', 'lantern', 'garden', 'flowerBed', 'planter', 'bench', 'picnicTable', 'signpost'];
-for (const kind of PUT) {
-  const i = PROP_KINDS.findIndex((P) => P.kind === kind); if (i < 0) continue;
-  PICKS[kind] = () => use({ mode: 'paint', kind: PLANT.PROP0 + i }, `Click the ground to put down a ${PROP_KINDS[i].name.toLowerCase()}; again for another.`);
-  const b = document.createElement('button'); b.type = 'button'; b.dataset.pick = kind; b.textContent = PROP_KINDS[i].name; $('tlProps').appendChild(b);
+TL.pick = (name) => { if (!PICKS[name]) return false; PICKS[name](); return true; };
+document.addEventListener('click', (e) => { const b = e.target.closest('[data-pick]'); if (b && PICKS[b.dataset.pick]) PICKS[b.dataset.pick](); });
+// the row over the bar: a fence's choices while a fence or a gate is picked on it, a flower's while a plant is; the
+// button for what the bar is doing now lit
+function syncOpts() {
+  const s = bar.state, fence = s.kind === PLANT.FENCE || s.kind === PLANT.GATE, plant = isPlant(s.kind) && s.mode !== 'select';
+  $('tlFenceOpts').hidden = !fence; $('tlFlowerOpts').hidden = !plant;
+  $('tlOpts').hidden = !s.open || !(fence || plant) || !bar.shown;
+  if (plant) $('tlFlowerName').textContent = KIND_INFO[s.kind].name;
+  const on = { fence: s.kind === PLANT.FENCE && s.mode === 'paint', gate: s.kind === PLANT.GATE, unfence: s.kind === PLANT.FENCE && s.mode === 'clear',
+    flowers: plant && s.mode === 'paint', erase: plant && s.mode === 'clear' };
+  document.querySelectorAll('.tl-opts [data-pick]').forEach((b) => b.classList.toggle('on', !!on[b.dataset.pick]));
 }
-document.addEventListener('click', (e) => { const b = e.target.closest('[data-pick]'); if (b && PICKS[b.dataset.pick]) { picked = b; PICKS[b.dataset.pick](); } });
-$('tlFlower').onchange = () => { if (bar.state.mode === 'paint' && KIND_INFO[bar.state.kind]) PICKS.flowers(); };
-$('tlFold').onclick = () => { const p = $('tlPanel'), f = p.classList.toggle('folded'); $('tlFold').textContent = f ? 'Show' : 'Hide'; $('tlFold').setAttribute('aria-expanded', String(!f)); };
-// (the panel keeps clear of the Build bar along the bottom)
-new ResizeObserver(() => { const r = bar.el.querySelector('.pb-bar').getBoundingClientRect(); document.documentElement.style.setProperty('--bar-room', (r.height ? r.height + 12 : 0) + 'px'); }).observe(bar.el);
+{ const told = bar.onChange; bar.onChange = (st, key) => { if (told) told(st, key); syncOpts(); }; }   // (a pick on the bar itself, its Hide too)
+// Snap on the bar, beside Move / Turn / Size: a thing moved snaps to the half metre, turned to 15°, put down on the half metre
+{ const l = document.createElement('label'); l.className = 'pb-check tl-snap'; l.title = 'Moving: to the half metre; turning: to 15°; putting down: on the half metre';
+  l.innerHTML = '<input type="checkbox" id="tlSnap" checked> Snap'; bar.el.querySelector('.pb-gizmo').after(l); }
+// the row over the bar keeps clear of it (and goes with it when it hides)
+new ResizeObserver(() => { const r = bar.el.querySelector('.pb-bar').getBoundingClientRect(); document.documentElement.style.setProperty('--bar-room', (r.height ? r.height + 12 : 0) + 'px'); syncOpts(); }).observe(bar.el);
+// the top strip: a click lets go of the keyboard (Space flies up, it doesn't press Save again); help opens and shuts
+$('tlTop').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b && e.detail) b.blur(); });
+$('tlHelpBtn').onclick = () => { const h = $('tlHelp'), open = h.hidden; h.hidden = !open; $('tlHelpBtn').setAttribute('aria-expanded', String(open)); };
 
 // ── snapping: a town thing moved snaps to the half metre, turned to 15° (only what changed: moving doesn't turn it) ──
 const SNAP = { m: 0.5, deg: 15 };
@@ -196,6 +253,15 @@ function straighten(pts, tol) {   // (Douglas-Peucker: the fewest points within 
 }
 { const finish = tool.finish.bind(tool);
   tool.finish = (s) => {
+    if (s && s.kind === PLANT.FENCE && s.mode === 'paint' && fenceStyle !== 'plain') s.style = fenceStyle;   // (the picked look, kept on the stroke)
+    if (s && s.kind === PLANT.GATE && s.mode === 'paint') {   // (a gate: on the fence clicked, or nowhere)
+      const [x, z] = s.pts[s.pts.length - 1], n = V.FENCE.plan && nearestFence(V.FENCE.plan, x, z);
+      if (!n) { bar.setInfo('No fence there: click right on a fence to put a gate in it.'); return; }
+      s.pts = [[+n.x.toFixed(2), +n.z.toFixed(2)]]; s.r = 0.6;
+      const r = finish(s);   // (the fences are laid again a moment later: then it says what went in)
+      setTimeout(() => { const g = V.FENCE.plan && V.FENCE.plan.gates.find((q) => q.id === s.id); bar.setInfo(g ? `A ${GATES[g.kind].name} put in, ${g.w.toFixed(1)} m wide (Undo takes it out).` : 'No room for a gate there (another gate, or the fence is too short).'); }, 300);
+      return r;
+    }
     if (s && s.kind === PLANT.FENCE && s.mode === 'paint' && s.pts.length > 1 && $('tlStraight').checked) {
       let p = straighten(s.pts, 0.8);
       if (snapOn()) p = p.map(([x, z]) => [+(Math.round(x / SNAP.m) * SNAP.m).toFixed(2), +(Math.round(z / SNAP.m) * SNAP.m).toFixed(2)]);
@@ -204,6 +270,44 @@ function straighten(pts, tol) {   // (Douglas-Peucker: the fewest points within 
     return finish(s);
   };
 }
+// ── fence styles: the picker (a picture of each), the height, the gate tool ─────────────────────────────────────────
+TL.fences = { style: () => fenceStyle, setStyle: (id) => pickStyle(id), height: (v) => { $('tlFenceH').value = v; fenceHeight(); }, icons: {}, stats: () => fenceStats() };
+const STYLE_IDS = [...Object.keys(FENCE_STYLES), 'plain'];
+for (const id of STYLE_IDS) {
+  const S = id === 'plain' ? PLAIN : FENCE_STYLES[id], b = document.createElement('button');
+  b.type = 'button'; b.className = 'tl-style'; b.dataset.style = id; b.title = `${S.name}: ${S.note}`; b.setAttribute('role', 'radio');
+  b.innerHTML = `<img alt="" width="120" height="80"><span>${S.name}</span>`;
+  b.onclick = () => { pickStyle(id); PICKS.fence(); };
+  $('tlStyles').appendChild(b);
+}
+function pickStyle(id) {
+  fenceStyle = STYLE_IDS.includes(id) ? id : 'plain';
+  document.querySelectorAll('.tl-style').forEach((b) => { const on = b.dataset.style === fenceStyle; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); });
+  fenceHeight();
+}
+function fenceHeight() {
+  fenceH = +$('tlFenceH').value;
+  $('tlFenceHOut').textContent = `${(styleInfo(fenceStyle === 'plain' ? null : fenceStyle).h * fenceH).toFixed(2)} m`;
+  if (bar.state.mode === 'paint' && bar.state.kind === PLANT.FENCE) bar.setState({ size: fenceH });
+}
+$('tlFenceH').oninput = fenceHeight;
+pickStyle(fenceStyle);
+// the pictures: drawn once the wood (and, for the wall, the stone) is in
+{ const maker = V.FENCE.make(), draw = (id) => { try { const src = maker.icon(id === 'plain' ? null : id, renderer); TL.fences.icons[id] = src; const img = document.querySelector(`.tl-style[data-style="${id}"] img`); if (img) img.src = src; } catch (e) { console.error('fence icon', id, e); } };
+  maker.woodReady.then(() => { STYLE_IDS.filter((id) => id !== 'stone').forEach(draw); return maker.loadStone(); }).then(() => draw('stone')); }
+// the number of triangles in 10 m of each style (and with a gate), and its draws (rigs)
+function fenceStats() {
+  const maker = V.FENCE.make(), out = {};
+  for (const id of [...Object.keys(FENCE_STYLES), 'plain']) out[id] = { run: maker.sample(id, { len: 10 }), gate: maker.sample(id, { len: 10, gate: true }) };
+  return { styles: out, bytes: maker.info.bytes };
+}
+// ── the game's own things (the farm, the homestead behind the player's cabin, the mill hill, the range, the jobs board):
+// outlines and names on the ground, so the town is laid out round them (codeplaces.js); the button in the strip hides them
+// (the farm's place: the layout's game.farm, else the game's own spot, as src/world.js has it)
+const FARM_AT = () => { const f = GAME.farm; return f ? { x: +f.x || 0, z: +f.z || 0, rot: (+f.rot || 0) * Math.PI / 180, w: +f.w || 56, d: +f.d || 48 } : { x: -6, z: -278, rot: 0, w: 56, d: 48 }; };
+makeCodePlaces({ scene: V.scene, heightAt, cabin: () => TOWN.village.item('cabin'), farm: FARM_AT }).then((cp) => {
+  TL.code = cp; setInterval(() => cp.update(), 1000);
+  $('tlCode').onclick = () => { cp.show(!cp.shown); $('tlCode').setAttribute('aria-pressed', String(cp.shown)); };
+}).catch((e) => console.error('town lab: the game\'s own things could not be shown', e));
 PICKS.move();
-document.querySelector('[data-pick="move"]').classList.add('on');
 TL.ready = true;

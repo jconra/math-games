@@ -102,6 +102,7 @@ export class PlantTool {
     else if (a === 'delete') this.removeSel();
     else if (a === 'duplicate') this.duplicateSel();
     else if (a === 'sizeAll') this.sizeAllSel();
+    else if (a === 'newLook') this.newLookSel();
     else if (a === 'loadDefault') this.loadDefault();
     else if (a === 'export') this.exportChanges();
     else if (a === 'paste') this.paste();
@@ -205,6 +206,12 @@ export class PlantTool {
     const it = this.item(this.sel); if (!it) return;
     this.before(); const c = { ...it, id: newId(), x: +(it.x + 1).toFixed(2), z: +(it.z + 1).toFixed(2) }; this.planting.items.push(c); this.commit(); this.select(c.id);
   }
+  // the chosen cabin or home given the next design (New look): one step for Undo
+  newLookSel() {
+    const t = this.townItem(this.sel); if (!t || !this.town.newLook) return;
+    this.townBefore(); const name = this.town.newLook(this.sel.slice(2));
+    if (name) this.bar.setInfo(`New look: ${name}. Press again for the next one (Undo puts it back).`);
+  }
   // every other one of the chosen thing's kind made its size (All this size): one step for Undo
   sizeAllSel() {
     if (!this.sel) return;
@@ -242,6 +249,7 @@ export class PlantTool {
     this.sel = id; this.dragFrom = null;
     const t = this.townItem(id);
     this.bar.showLevel(t && t.type === 'model' ? t.level === true : null);   // (a building: its 'Level the ground under it' box)
+    if (this.bar.showLook) this.bar.showLook(!!(t && this.town.lookOf && this.town.lookOf(t)));   // (a cabin or home: New look)
     if (t) {                                                             // a building, prop or town tree: slides, lifts, turns upright, sizes evenly
       this.proxy.position.set(t.x, this.heightAt(t.x, t.z) + (t.y || 0), t.z); this.proxy.quaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), t.rot * DEG); this.proxy.scale.set(1, 1, 1);
       this.townFrom = { size: t.size }; this.gizmo.mode = this.st.gizmo; this.limits();

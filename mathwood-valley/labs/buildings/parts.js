@@ -109,7 +109,10 @@ export function boardAndBatten(k, w, o) {
 //   paint, tint, bare (a share of boards replaced and never painted), patch [{ a, y }] (the board there is a newer
 //   replacement: bare, fresher, a few mm proud), backFrom(a) (only rows above this height get a back), origin (where
 //   the studs start along the wall: the nails line up on them, every 0.6 m), rows (heights where the boards get a row
-//   of corners for the baked light: none needed, each board is one row), bh (a board's height, 0.2)
+//   of corners for the baked light: none needed, each board is one row), bh (a board's height, 0.2), cutEvery (a row of
+//   corners along each board every so many metres, for the baked light; 1.1 unless given), joints [first from, to,
+//   then every from, to] (where a row's butt joints fall, metres; [0.6, 2.6, 1.3, 3.2] unless given), paintVar and
+//   tintVar ([low, high]: how much one board's paint and wood differ from the next; [0.9, 1.08] and [0.84, 1.14])
 // Each board part carries o.hz = [along, flipped] for the nails (parts.js boardWear: horizontal mode), o.paint.
 export function lapSiding(k, w, o) {
   const bh = o.bh ?? 0.2, lap = 0.025, expo = bh - lap, bt = 0.02;
@@ -131,7 +134,8 @@ export function lapSiding(k, w, o) {
         if (e - s < 0.03) continue;
         // the joints: 1.3 to 3.2 m apart, never within 30 cm of one in the row below; never a stub under 40 cm
         const cuts = [];
-        for (let x = s + k.r(0.6, 2.6); x < e - 0.4; x += k.r(1.3, 3.2)) {
+        const J = o.joints || [0.6, 2.6, 1.3, 3.2];
+        for (let x = s + k.r(J[0], J[1]); x < e - 0.4; x += k.r(J[2], J[3])) {
           let c = x; for (const j of below) if (Math.abs(c - j) < 0.3) c = j + 0.3 * Math.sign(c - j || 1);
           if (c > s + 0.4 && c < e - 0.4) cuts.push(c);
         }
@@ -143,15 +147,17 @@ export function lapSiding(k, w, o) {
             const patch = (o.patch || []).some((p) => p.a > cs && p.a < ce && p.y > yb && p.y < yb + h);
             // (keepPaint(a, y): a stretch of wall whose boards are all the old painted ones, under a painted sign)
             const bare = patch || (o.paint && k.R() < (o.bare ?? 0.04) && !(o.keepPaint && o.keepPaint(ac, yb + h / 2)));
-            const paint = o.paint && !bare ? vary(k, o.paint, 0.9, 1.08) : null;
-            const tint = patch ? [1.25, 1.12, 0.95] : vary(k, bare ? o.tint.map((c) => c * 1.1) : o.tint, 0.84, 1.14);
+            const paint = o.paint && !bare ? vary(k, o.paint, ...(o.paintVar || [0.9, 1.08])) : null;
+            const tint = patch ? [1.25, 1.12, 0.95] : vary(k, bare ? o.tint.map((c) => c * 1.1) : o.tint, ...(o.tintVar || [0.84, 1.14]));
             // (half of them turned upside down: the strip's picture mirrored across the board, so neighbours don't show
             // the same knots in the same places)
             const flip = k.R() < 0.5, ht = Math.atan2(bt, h);
             let m = wallM(w, ac, yc, patch ? 0.006 : 0, [-ht, 0, 0]); if (flip) m = mul(m, RX(Math.PI));
-            const cl = []; for (let c = -len / 2 + 1.1; c < len / 2 - 0.3; c += 1.1) cl.push(c);
+            const ce1 = o.cutEvery ?? 1.1, cl = []; for (let c = -len / 2 + ce1; c < len / 2 - 0.3; c += ce1) cl.push(c);
             k.board([len + 0.003, h, bt], null, null, { m, long: 0, tint, paint, strip: Math.floor(k.R() * 12), uShift: k.r(0, 1.2), skip: (flip ? '+z-y' : '-z+y') + '+x-x', cuts: cl, segFaces: flip ? '-z' : '+z', outside: true, hz: [ac - origin, flip ? 1 : 0], patch });
-            if (o.backFrom && yb > o.backFrom(ac)) k.board([len + 0.003, h, bt], null, null, { m: wallM(w, ac, yc, -bt, [-ht, 0, 0]), long: 0, tint: vary(k, o.inTint || o.tint, 0.85, 1.1), strip: Math.floor(k.R() * 12), uShift: k.r(0, 1.2), skip: '+z+y-y+x-x', cuts: cl, segFaces: '-z', inside: true });
+            // (o.backSpan: the back skin wherever any part of the board stands over the roof, not only its middle: a long
+            // board over a pitched roof left a slot open toward its ends)
+            if (o.backFrom && yb > (o.backSpan ? Math.min(o.backFrom(cs), o.backFrom(ce), o.backFrom(ac)) : o.backFrom(ac))) k.board([len + 0.003, h, bt], null, null, { m: wallM(w, ac, yc, -bt, [-ht, 0, 0]), long: 0, tint: vary(k, o.inTint || o.tint, 0.85, 1.1), strip: Math.floor(k.R() * 12), uShift: k.r(0, 1.2), skip: '+z+y-y+x-x', cuts: cl, segFaces: '-z', inside: true });
             if (o.solid !== false) k.solid([len, h, 0.06], null, null, wallM(w, ac, yc, -0.02));
           }
           joints.push(ce); cs = ce;
@@ -248,7 +254,8 @@ export function casing(k, w, op, o = {}) {
 // o: x0, x1 (along the top edge), topY, len (along the slope), pitch, shakeT (tint), boardT (the boards under it),
 //    rafterT, every (rafter spacing), hole(x, z) (in the building's frame: no shakes there, a cupola stands on them),
 //    barge (barge boards at both ends), cap (a ridge cap board on this slope's top edge), comb (its top course runs on
-//    past the peak), rows (spacing of rows of corners along the boards, for the baked light), noSolid
+//    past the peak), rows (spacing of rows of corners along the boards, for the baked light), noSolid, course ([low,
+//    high]: how much of each course of shakes shows, 0.41 to 0.45 m unless given), shakeW (the shakes' widths times this)
 const _v3 = new THREE.Vector3();
 export function roofSlope(k, M, o) {
   const { x0, x1, topY, len, pitch } = o;
@@ -279,18 +286,21 @@ export function roofSlope(k, M, o) {
   // (thin, and the first course lifted onto it: thicker than the shakes' own lift, it stood up through them)
   // (it runs out under the first course's butts, 9 cm past the boards, a little past the butts: seen from below, the
   // gaps between those shakes show the strip, not the sky)
-  for (const [a, b] of [[x0 - 0.04, (x0 + x1) / 2 - 1.3], [(x0 + x1) / 2 - 1.3, (x0 + x1) / 2 + 1.1], [(x0 + x1) / 2 + 1.1, x1 + 0.04]]) wood([b - a + 0.002, 0.026, 0.29], (a + b) / 2, 0.055, 0.013, null, { long: 0, tint: o.shakeT.map((c) => c * 0.62), strip: WOOD.shake, skip: '-z' });
+  // (o.starterOut: how far past the eave the strip runs, 9 cm unless given: further, and a low ray up between two of the
+  // first course's butts still meets the strip, not the sky)
+  const sOut = o.starterOut ?? 0.09, sDep = 0.2 + sOut;
+  for (const [a, b] of [[x0 - 0.04, (x0 + x1) / 2 - 1.3], [(x0 + x1) / 2 - 1.3, (x0 + x1) / 2 + 1.1], [(x0 + x1) / 2 + 1.1, x1 + 0.04]]) wood([b - a + 0.002, 0.026, sDep], (a + b) / 2, 0.2 - sDep / 2, 0.013, null, { long: 0, tint: o.shakeT.map((c) => c * 0.62), strip: WOOD.shake, skip: '-z' });
   // the shakes: split shakes in level courses, each course resting its butts on the one below (so it tilts up a little,
   // and its butt throws the dark line under each course); a joint never right over one in the course below; most boxes
   // are two shakes side by side (they span both shake strips, whose dark edges draw the gap between them). Drawn: the
   // top and the butt (the rest is under or between other shakes). Lower courses darker (the water runs off there).
   let s = -0.06, row = 0, below = [];
   while (s < len - 0.1) {
-    const e = k.r(0.41, 0.45), joints = [], last = s + e >= len - 0.12;
+    const e = k.r(...(o.course || [0.41, 0.45])), joints = [], last = s + e >= len - 0.12, sw = o.shakeW ?? 1;
     let x = x0 - 0.04, first = true;
     while (x < x1 + 0.04) {
       const pair = !first && k.R() < 0.88;
-      let wdt = first ? k.r(0.12, 0.26) : pair ? k.r(0.42, 0.62) : k.r(0.2, 0.3);
+      let wdt = (first ? k.r(0.12, 0.26) : pair ? k.r(0.42, 0.62) : k.r(0.2, 0.3)) * sw;
       first = false;
       for (const j of below) if (Math.abs(x + wdt - j) < 0.035) wdt += 0.05;
       wdt = Math.min(wdt, x1 + 0.06 - x); if (wdt < 0.05) break;
@@ -325,7 +335,8 @@ export function roofSlope(k, M, o) {
 // Built in its own frame round its hinge: the hinge line is the y axis, the leaf runs from x = 0 to side * w, its middle
 // at z = 0 (its outside face toward +z). Planks on rails, a Z of braces between the rails on both faces, strap hinges
 // (painted iron-black). o: w, h, side (+1, -1), tint, strap (the hinges' paint), rails (heights), xBrace (an X between
-// two rails instead of a Z), harness (a collar and straps hung on the inside face)
+// two rails instead of a Z), harness (a collar and straps hung on the inside face), braceFit (each brace runs right into
+// the rails at both ends, its square-cut corners buried in them, as a fitted brace looks)
 export function doorLeaf(k, o) {
   const { w, h, side } = o, pt = 0.045, np = Math.max(3, Math.round(w / 0.2)), pw = w / np;
   const rails = o.rails || [0.28, h / 2, h - 0.28];
@@ -342,7 +353,8 @@ export function doorLeaf(k, o) {
     for (let r = 0; r < rails.length - 1; r++) {
       const ya = rails[r] + 0.075, yb = rails[r + 1] - 0.075, dx = iw - 0.16, dy = yb - ya, ang = Math.atan2(dy, dx), sa = Math.sin(ang), ca = Math.cos(ang);
       // (no longer than the panel lets it be, its 13 cm width and all: a short gate's shallow brace stuck out past its edge)
-      const L = Math.min(Math.hypot(dx, dy) - 0.06, (dx - 0.13 * sa) / ca - 0.02, sa > 0.05 ? (dy - 0.13 * ca) / sa - 0.02 : 9);
+      let L = Math.min(Math.hypot(dx, dy) - 0.06, (dx - 0.13 * sa) / ca - 0.02, sa > 0.05 ? (dy - 0.13 * ca) / sa - 0.02 : 9);
+      if (o.braceFit && sa > 0.05) L = Math.min((dy + 0.13 * ca) / sa, (iw - 0.13 * sa) / ca);
       const list = o.xBrace ? [ang, -ang] : [ang];
       for (const a of list) k.board([L, 0.13, 0.035], [rc, (ya + yb) / 2, z], [0, 0, side * a], { long: 0, tint: vary(k, o.tint, 0.85, 1.0), skip: sgn > 0 ? '-z' : '+z' });
     }
@@ -591,7 +603,7 @@ export function spotOf(L, dx, dy, dz) {
 }
 const LAMP_GLSL = `
 uniform vec3 uLampP[${LAMP_MAX}]; uniform float uLampS[${LAMP_MAX}]; uniform vec4 uLampD[${LAMP_MAX}]; uniform float uLamp, uLampGain; uniform vec3 uLampCol;
-vec3 lampLight(vec3 p, vec3 n) {
+vec3 bldLampLight(vec3 p, vec3 n) {
   float sum = 0.0;
   for (int i = 0; i < ${LAMP_MAX}; i++) {
     vec3 L = uLampP[i] - p; float d2 = dot(L, L), d = sqrt(d2) + 1e-4;
@@ -617,6 +629,18 @@ export const LU = {
   // are its own): its picture (rgb the paint, linear-ish sRGB decoded in the shader; a how much paint), where it is on
   // the wall (x0, y0, 1/width, 1/height, world metres), the wall's face (z), on or off
   uSignMap: { value: null }, uSignRect: { value: new THREE.Vector4(0, 0, 1, 1) }, uSignZ: { value: 0 }, uSignOn: { value: 0 },
+  uSignInv: { value: new THREE.Matrix4() },               // (the world to the building's own frame: identity in the lab)
+  // the wood under a painted board's paint, where it has peeled (a tint on the trim sheet: the weathering's own warm
+  // brown unless a building asks for another: the general store's whitewash peels to grey)
+  uBareTint: { value: new THREE.Color(0.9, 0.82, 0.74) },
+  // how a building's paint wears (parts.js boardWear; the defaults are the stable's and the sheriff's look): the grain
+  // showing through thin paint (0 none), how soft the edge of a peeled patch is (m of the wear measure: wider is a
+  // chalky fade, not a hard flake), more loss along each board's long edges, the lap's shadow line under each board and
+  // a dark line at its lip, how strong the nail heads are, how much of a painted sign stays where the wall's paint went
+  uPaintGrain: { value: 0 }, uPeelSoft: { value: 0.08 }, uEdgePeel: { value: 0 }, uLapShadow: { value: 0.42 }, uLapLip: { value: 0 }, uNail: { value: 1 }, uSignKeep: { value: 0.25 },
+  // (and: how strong the streaks along the grain are, small hard-edged flakes of paint gone (by board ends, low down, on
+  // the sunny side), how dark a lap board's underside is)
+  uStreakW: { value: 1 }, uFlake: { value: 0 }, uLapUnder: { value: 1 },
 };
 export function setLamps(lamps) {
   for (let i = 0; i < LAMP_MAX; i++) {
@@ -627,7 +651,9 @@ export function setLamps(lamps) {
 // chain a patch after whatever the material already has (the Material Lab's weathering, the Stone Lab's edges)
 function chain(mat, key, fn) {
   const prev = mat.onBeforeCompile, prevKey = mat.customProgramCacheKey ? mat.customProgramCacheKey.bind(mat) : () => '';
-  mat.onBeforeCompile = (sh, r) => { if (prev) prev.call(mat, sh, r); Object.assign(sh.uniforms, LU); fn(sh); };
+  // (mat.userData.uni: this material's own uniform objects, in place of the shared ones of the same names: so several
+  // buildings in one scene (the game's town) each keep their own paint, sign, lanterns and weathering)
+  mat.onBeforeCompile = (sh, r) => { if (prev) prev.call(mat, sh, r); Object.assign(sh.uniforms, LU); if (mat.userData.uni) Object.assign(sh.uniforms, mat.userData.uni); fn(sh); };
   mat.customProgramCacheKey = () => prevKey() + '+' + key;
   return mat;
 }
@@ -645,7 +671,7 @@ vLamp = aLamp; vLW = (modelMatrix * vec4(position, 1.0)).xyz;${o.ao ? ' vAOb = a
 ${LAMP_GLSL}
 varying vec2 vLamp; varying vec3 vLW;${o.ao ? ' varying float vAOb;' : ''}${o.tint ? ' varying vec3 vTintB;' : ''}`)
       .replace('#include <map_fragment>', '#include <map_fragment>' + (o.tint ? '\ndiffuseColor.rgb *= vTintB;' : ''))
-      .replace(DIFFUSE, `${o.ao ? 'reflectedLight.indirectDiffuse *= vAOb; reflectedLight.indirectSpecular *= vAOb;\n' : ''}reflectedLight.directDiffuse += diffuseColor.rgb * (lampLight(vLW, inverseTransformDirection(normal, viewMatrix)) * vLamp.x + uLampCol * (vLamp.y * uLamp * uLampGain));
+      .replace(DIFFUSE, `${o.ao ? 'reflectedLight.indirectDiffuse *= vAOb; reflectedLight.indirectSpecular *= vAOb;\n' : ''}reflectedLight.directDiffuse += diffuseColor.rgb * (bldLampLight(vLW, inverseTransformDirection(normal, viewMatrix)) * vLamp.x + uLampCol * (vLamp.y * uLamp * uLampGain));
 ${DIFFUSE}`);
   });
 }
@@ -659,7 +685,9 @@ export const NAIL_LINES = [0.6, 1.3, 2.35, 3.75, 5.0, 6.2, 7.2];
 export function boardWear(mat) {
   return chain(mat, 'boardwear', (sh) => {
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec3 aBoard; varying vec3 vBoard;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvBoard = aBoard;');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uPaintWear, uPaintShelter, uSignZ, uSignOn; uniform sampler2D uSignMap; uniform vec4 uSignRect; varying vec3 vBoard;')
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uPaintWear, uPaintShelter, uSignZ, uSignOn; uniform sampler2D uSignMap; uniform vec4 uSignRect; uniform mat4 uSignInv; uniform vec3 uBareTint; uniform float uPaintGrain, uPeelSoft, uEdgePeel, uLapShadow, uLapLip, uNail, uSignKeep, uStreakW, uFlake, uLapUnder; varying vec3 vBoard;')
+      .replace('vec3 wPaint = vTintPaint.rgb * (0.9 + 0.45 * wLum);', 'vec3 wPaint = vTintPaint.rgb * (0.9 + 0.45 * wLum) * mix(1.0, 0.5 + 2.0 * wLum, uPaintGrain);')
+      .replace('vec3 wWood = diffuseColor.rgb * mix(vTintPaint.rgb, vec3(0.9, 0.82, 0.74), wPainted);', 'vec3 wWood = diffuseColor.rgb * mix(vTintPaint.rgb, uBareTint, wPainted);')
       .replace('wPaintVis = wPainted * (1.0 - wChip);', `{
       float pAl = dot(wP.xz, vec2(-wN.z, wN.x));
       // (on upright boards the paint goes in streaks down them; on horizontal ones, lap siding, in long flakes along them)
@@ -669,12 +697,26 @@ export function boardWear(mat) {
       float pSun = clamp(dot(wN, -uShadeDir) * 0.5 + 0.5, 0.0, 1.0);
       float pLow = 1.0 - smoothstep(0.4, 2.4, wP.y);
       float pEave = 1.0 - smoothstep(0.0, 0.9, wTop - wP.y);
-      float pT = 0.6 * (pStreak - 0.5) + 0.45 * (wBig.r - 0.5) + 0.22 * pLow + 0.16 * pSun - 0.22 * pEave + 0.55 * vBoard.z - 0.08 + (uPaintWear - 0.5) * 0.9;
+      float pT = 0.6 * uStreakW * (pStreak - 0.5) + 0.45 * (wBig.r - 0.5) + 0.22 * pLow + 0.16 * pSun - 0.22 * pEave + 0.55 * vBoard.z - 0.08 + (uPaintWear - 0.5) * 0.9;
       #ifdef W_BOX
       // (sheltered from the rain, under a porch roof: the baked share of rain that reaches it, aHalf.w)
       pT -= uPaintShelter * (1.0 - smoothstep(0.1, 0.55, vHalf.w));
+      // (more gone along each board's long edges, where water sits and the boards work)
+      pT += uEdgePeel * (1.0 - smoothstep(0.0, 0.05, vBoard.x > 1.5 ? vHalf.y - abs(vLocalTop.y) : vHalf.x - abs(vLocalTop.x)));
       #endif
-      float pOff = smoothstep(0.0, 0.08, pT + (wFine.b - 0.5) * 0.14);
+      float pOff = smoothstep(0.0, uPeelSoft, pT + (wFine.b - 0.5) * 0.14);
+      // (flakes: a fine noise cut hard, more of them near a board's ends, low down and on the sunny side)
+      float pEnd = 0.0;
+      #ifdef W_BOX
+      pEnd = 1.0 - smoothstep(0.0, 0.3, (vBoard.x > 1.5 ? vHalf.x - abs(vLocalTop.x) : vHalf.y - abs(vLocalTop.y)));
+      #endif
+      float pFn = texture2D(uNoise, vec2(pAl * 2.9 + 0.37, wP.y * (vBoard.x > 1.5 ? 4.1 : 1.3) + 0.11)).r * 0.75 + texture2D(uNoise, vec2(pAl * 7.3, wP.y * 6.1)).b * 0.25;
+      // (none inside a painted sign's rectangle: its letters were painted over sound paint, and at night the flakes there
+      // read as ink dripping off them)
+      vec3 pSP = (uSignInv * vec4(wP, 1.0)).xyz;
+      vec2 pSU = vec2((pSP.x - uSignRect.x) * uSignRect.z, (pSP.y - uSignRect.y) * uSignRect.w);
+      float pInSign = uSignOn * step(0.6, (uSignInv * vec4(wN, 0.0)).z) * step(abs(pSP.z - uSignZ), 0.06) * step(0.0, pSU.x) * step(pSU.x, 1.0) * step(0.0, pSU.y) * step(pSU.y, 1.0);
+      pOff = max(pOff, uFlake * (1.0 - 0.9 * pInSign) * step(0.0, pFn + 0.3 * pEnd + 0.18 * pLow + 0.08 * pSun + (uPaintWear - 0.5) * 0.2 - 0.9));
       // (only the wall boards wear in patches, the ones with their own numbers: painted iron straps and leather don't)
       // (on horizontal boards the edge chips are few: along every lap they drew a dotted pale line)
       wPaintVis = wPainted * (1.0 - max(wChip * (vBoard.x > 1.5 ? 0.2 : 1.0), pOff * step(0.01, vBoard.x + vBoard.z)));
@@ -683,13 +725,15 @@ export function boardWear(mat) {
     #ifdef W_BOX
     // THE PAINTED SIGN, on the lap siding's outer faces inside its rectangle: its paint over the wall's, worn back along
     // each board's edges (a band 0.5 to 4 cm, ragged) and gone with the wall's own paint where that has peeled
-    if (uSignOn > 0.5 && vBoard.x > 1.5 && vBoard.x < 3.5 && wN.z > 0.6 && abs(wP.z - uSignZ) < 0.06) {
-      vec2 sUV = vec2((wP.x - uSignRect.x) * uSignRect.z, (wP.y - uSignRect.y) * uSignRect.w);
+    // (in the building's own frame: uSignInv takes the world back to it, for a building turned and moved in a town)
+    vec3 sP = (uSignInv * vec4(wP, 1.0)).xyz, sNr = (uSignInv * vec4(wN, 0.0)).xyz;
+    if (uSignOn > 0.5 && vBoard.x > 1.5 && vBoard.x < 3.5 && sNr.z > 0.6 && abs(sP.z - uSignZ) < 0.06) {
+      vec2 sUV = vec2((sP.x - uSignRect.x) * uSignRect.z, (sP.y - uSignRect.y) * uSignRect.w);
       if (sUV.x > 0.0 && sUV.x < 1.0 && sUV.y > 0.0 && sUV.y < 1.0) {
         vec4 sg = texture2D(uSignMap, sUV);
         float sAcross = vHalf.y - abs(vLocalTop.y);
         float sEdge = 1.0 - smoothstep(0.002, 0.004 + 0.028 * smoothstep(0.42, 0.85, wFine.b * 0.6 + wBig.g * 0.6), sAcross);
-        float sA = sg.a * (1.0 - 0.92 * sEdge) * mix(0.25, 1.0, wPaintVis);
+        float sA = sg.a * (1.0 - 0.92 * sEdge) * mix(uSignKeep, 1.0, wPaintVis);
         diffuseColor.rgb = mix(diffuseColor.rgb, pow(sg.rgb, vec3(2.2)) * (0.86 + 0.4 * wLum), sA);
       }
     }
@@ -710,9 +754,9 @@ export function boardWear(mat) {
         float nAx = abs(vLocalTop.x), nAc = vBoard.x > 0.75 ? abs(nAx - vHalf.x * 0.5) : nAx;
         nV = vec2(nAc, nL);
       }
-      float nD = length(nV);
-      float nHead = 1.0 - smoothstep(0.0042, 0.0068, nD);
-      diffuseColor.rgb *= 1.0 - 0.3 * (1.0 - smoothstep(0.006, 0.018, nD)) * (1.0 - nHead);   // a faint rust stain round it
+      float nD = length(nV) / mix(0.65, 1.0, uNail);
+      float nHead = (1.0 - smoothstep(0.0042, 0.0068, nD)) * uNail;
+      diffuseColor.rgb *= 1.0 - 0.3 * uNail * (1.0 - smoothstep(0.006, 0.018, nD)) * (1.0 - nHead);   // a faint rust stain round it
       diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.055, 0.05, 0.045) * (1.0 + 1.5 * smoothstep(0.004, 0.0, length(nV + vec2(0.0015, -0.0015)))), nHead);
     }
     #endif
@@ -721,10 +765,12 @@ export function boardWear(mat) {
     // of what shows of it (a solid soft line, the lap's own shadow; on the front face only)
     if (vBoard.x > 1.5 && vBoard.x < 3.5) {
       float lY = vBoard.x < 2.5 ? vLocalTop.y : -vLocalTop.y, lZ = vBoard.x < 2.5 ? vLocalTop.z : -vLocalTop.z;
-      diffuseColor.rgb *= 1.0 - 0.42 * smoothstep(vHalf.y - 0.055, vHalf.y - 0.028, lY) * step(0.0, lZ);
+      diffuseColor.rgb *= 1.0 - uLapShadow * smoothstep(vHalf.y - 0.055, vHalf.y - 0.028, lY) * step(0.0, lZ);
+      // (and its lip: the foot of each board's face, a dark line where it stands out over the board below)
+      diffuseColor.rgb *= 1.0 - uLapLip * (1.0 - smoothstep(0.002, 0.012, lY + vHalf.y)) * step(0.0, lZ);
       // (the lap's underside, 2 cm deep: the whole strip's picture squeezed into it drew a dotted line along every board;
       // it is one solid shade of the board, in shadow)
-      if (vHalf.y - abs(vLocalTop.y) < 0.0015) diffuseColor.rgb = (wIsPaint > 0.5 ? vTintPaint.rgb * 0.55 : vTintPaint.rgb * 0.16) * 0.7;
+      if (vHalf.y - abs(vLocalTop.y) < 0.0015) diffuseColor.rgb = (wIsPaint > 0.5 ? vTintPaint.rgb * 0.55 : vTintPaint.rgb * 0.16) * 0.7 * uLapUnder;
     }
     #endif
     // (no paler rubbed edges on bare wood: they drew a bright line down every rafter and board; the paint still chips)
@@ -779,7 +825,7 @@ export function animalLamps(mat, shade, fill = 0) {
 ${LAMP_GLSL}
 uniform float uShade, uFill; varying vec3 vHW;`)
       .replace(DIFFUSE, `reflectedLight.indirectDiffuse *= uShade; reflectedLight.indirectSpecular *= uShade;
-reflectedLight.directDiffuse += diffuseColor.rgb * (lampLight(vHW, inverseTransformDirection(normal, viewMatrix)) * 0.85 + uLampCol * (uFill * uLamp * uLampGain));
+reflectedLight.directDiffuse += diffuseColor.rgb * (bldLampLight(vHW, inverseTransformDirection(normal, viewMatrix)) * 0.85 + uLampCol * (uFill * uLamp * uLampGain));
 ${DIFFUSE}`);
   });
 }

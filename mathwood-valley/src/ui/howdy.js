@@ -76,6 +76,7 @@ let cam = null, box = null, raf = 0, hidden = false;
 const up = [];   // { el, key, who, lift, t0, ms, shown }
 let V3 = null;   // (a THREE.Vector3, borrowed from the camera's own class: no three.js import, so the tests can load this)
 export function howdyCamera(camera) { cam = camera || null; if (cam && !V3) V3 = new cam.position.constructor(); }
+export const howdyCam = () => cam;   // (the game's camera, for anything that must know what is in sight: src/townlife.js)
 export function hideHowdies(on) {
   hidden = !!on;
   for (const b of up) b.el.hidden = hidden || !b.shown;

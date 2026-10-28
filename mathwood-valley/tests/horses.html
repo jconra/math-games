@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mathwood Valley: horses</title>
+<script src="../oops.js"></script>
+<style>
+  html, body { margin: 0; height: 100%; background: #b9c4cc; overflow: hidden; font: 13px/1.35 system-ui, sans-serif; }
+  canvas { display: block; }
+  #bar { position: fixed; left: 8px; top: 8px; z-index: 5; display: flex; flex-wrap: wrap; gap: 4px; max-width: calc(100vw - 16px); }
+  #bar button { font: inherit; padding: 4px 9px; border-radius: 5px; border: 1px solid #5b4630; background: #f3ead6; color: #3b2a1e; cursor: pointer; }
+  #info { position: fixed; left: 8px; bottom: 8px; z-index: 5; color: #2a1d12; background: rgba(243, 234, 214, 0.88); border-radius: 6px; padding: 6px 10px; font: 12px/1.45 ui-monospace, monospace; white-space: pre; }
+  .tag { position: fixed; z-index: 4; transform: translateX(-50%); font: 600 12px/1.2 system-ui, sans-serif; color: #2a1d12; background: rgba(243, 234, 214, 0.9); border-radius: 4px; padding: 2px 6px; pointer-events: none; }
+  body.shot #bar, body.shot #info, body.shot .tag.hide { display: none; }
+</style>
+<script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/" } }</script>
+</head>
+<body>
+<div id="bar"></div>
+<div id="info">loading...</div>
+<script type="module">
+// A test page for the new horse (src/actors/horses.js): the stable's ladder in a row at their sizes (the donkey as it
+// is), the far look by distance, the fade, re-rolling coats and whole horses (with the renderer's counts: nothing
+// should pile up), and how far the hooves slide at a gallop.
+//   ?q=potato|normal|gaming (the look distances; default normal)  ?view=row|far|close  ?shot (no buttons)  ?aa=0
+// window.HT for rigs: { ready, horses, row(), view(name), fade(f), recolor(n), reroll(n), info(), slip(...), errors }
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { loadAnimals, makeAnimal, GAIT } from '../src/actors/animals.js';
+import { makeHorse, warmHorses, HORSE_LOOK } from '../src/actors/horses.js';
+import { randomCoat } from '../src/actors/horsecoats.js';
+import { LADDER, HORSES as SOLD } from '../src/catalog.js';
+
+const Q = new URLSearchParams(location.search);
+if (Q.has('shot')) document.body.classList.add('shot');
+const HT = window.HT = { ready: false, errors: [] };
+addEventListener('error', (e) => HT.errors.push(String(e.message)));
+const TIER = ['potato', 'normal', 'gaming'].includes(Q.get('q')) ? Q.get('q') : 'normal';
+const R = new THREE.WebGLRenderer({ antialias: Q.get('aa') !== '0' });
+R.setPixelRatio(Math.min(devicePixelRatio, 2)); R.setSize(innerWidth, innerHeight);
+R.outputColorSpace = THREE.SRGBColorSpace; R.toneMapping = THREE.ACESFilmicToneMapping;
+R.shadowMap.enabled = true; R.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(R.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color(0xb9c4cc);
+scene.add(new THREE.HemisphereLight(0xfff1dc, 0x6b5a44, 1.4));
+const sun = new THREE.DirectionalLight(0xfff0d8, 2.6); sun.position.set(-8, 14, 10); sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048); Object.entries({ left: -12, right: 12, top: 12, bottom: -12, near: 1, far: 60 }).forEach(([k, v]) => { sun.shadow.camera[k] = v; });
+scene.add(sun, sun.target);
+const ground = new THREE.Mesh(new THREE.CircleGeometry(200, 64), new THREE.MeshStandardMaterial({ color: 0x9c8460, roughness: 1 }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+const grid = new THREE.GridHelper(120, 120, 0x6b5a44, 0x857055); grid.position.y = 0.005; scene.add(grid);
+const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 500);
+const orbit = new OrbitControls(camera, R.domElement);
+
+const lib = await loadAnimals('../', { kinds: ['steed', 'donkey'] });
+// (?nowarm: no shaders built ahead, to see what the first frame costs without)
+const t0 = performance.now(); if (!Q.has('nowarm')) await warmHorses({ lib, renderer: R, camera, scene }); HT.warmMs = performance.now() - t0;
+const group = new THREE.Group(); scene.add(group);
+const horses = HT.horses = [];   // { h (makeHorse) | a (the donkey), id, size }
+const tags = [];
+// THE ROW: the ladder (src/catalog.js LADDER), cheapest to dearest, each at its size, side on
+HT.row = () => {
+  for (const x of horses.splice(0)) (x.h ? x.h.dispose() : x.a.dispose());
+  for (const t of tags.splice(0)) t.el.remove();
+  const ids = Object.keys(LADDER).sort((a, b) => LADDER[a].gallop - LADDER[b].gallop);
+  ids.forEach((id, i) => {
+    const L = LADDER[id], x = (i - (ids.length - 1) / 2) * 2.0;
+    let entry;
+    if (L.kind === 'steed') { const h = makeHorse(lib, { recipe: L.coat, size: L.size, tier: TIER, renderer: R }); h.a.root.position.set(x, 0, 0); h.a.root.rotation.y = -Math.PI / 2; group.add(h.a.root); entry = { h, a: h.a, id, size: L.size }; }
+    else { const a = makeAnimal(lib, L.kind); a.root.position.set(x, 0, 0); a.root.rotation.y = -Math.PI / 2; group.add(a.root); entry = { a, id, size: 1 }; }
+    entry.a.mixer.update(i * 0.37);
+    horses.push(entry);
+    const el = document.createElement('div'); el.className = 'tag'; el.textContent = `${(SOLD.find((s) => s.id === id) || { name: id }).name.split(' the ')[0]} ${entry.size.toFixed(2)}x`; document.body.appendChild(el); tags.push({ el, a: entry.a });
+  });
+};
+// views: the row side on (close enough for the full look), the row 60 m off (the far look), close on the biggest
+const VIEWS = {
+  row: () => { camera.position.set(0, 2.6, 13); orbit.target.set(0, 1.1, 0); },
+  far: () => { camera.position.set(0, 4, 60); orbit.target.set(0, 1.1, 0); },
+  mid: () => { camera.position.set(0, 3, 32); orbit.target.set(0, 1.1, 0); },
+  close: () => { const a = horses[horses.length - 1].a; camera.position.set(a.root.position.x, 1.6, 4.5); orbit.target.set(a.root.position.x, 1.2, 0); },
+};
+HT.view = (name = 'row') => { (VIEWS[name] || VIEWS.row)(); orbit.update(); };
+HT.fade = (f) => { for (const x of horses) if (x.h) x.h.fade = f; };
+HT.info = () => { const m = R.info.memory; return { geometries: m.geometries, textures: m.textures, programs: R.info.programs.length, calls: R.info.render.calls, tris: R.info.render.triangles }; };
+const draw = () => { for (const x of horses) if (x.h) x.h.look(camera.position); R.render(scene, camera); };
+// new coats on the same horses n times (uniforms only), then whole horses made and let go n times (one at a time, each
+// drawn once): the renderer's counts before and after
+HT.recolor = (n = 20) => { const before = HT.info(); for (let k = 0; k < n; k++) { for (const x of horses) if (x.h) x.h.setRecipe(randomCoat(1 + Math.floor(Math.random() * 9999))); draw(); } return { before, after: HT.info() }; };
+HT.reroll = (n = 20) => {
+  draw(); const before = HT.info();
+  for (let k = 0; k < n; k++) {
+    const i = 1 + (k % (horses.length - 1)), x = horses[i]; if (!x.h) continue;
+    const p = x.a.root.position.clone(), r = x.a.root.rotation.y, size = [0.95, 1, 1.05, 1.1, 1.15][k % 5];
+    x.h.dispose();
+    x.h = makeHorse(lib, { recipe: randomCoat(1 + k * 31), size, tier: TIER, renderer: R }); x.a = x.h.a; x.size = size;
+    x.a.root.position.copy(p); x.a.root.rotation.y = r; group.add(x.a.root);
+    tags[i].a = x.a; tags[i].el.textContent = `re-roll ${k + 1} ${size.toFixed(2)}x`;
+    draw();
+  }
+  return { before, after: HT.info() };
+};
+// HOW FAR THE HOOVES SLIDE: a steed at size s going v m/s with its gallop clip let play up to `cap` times its speed (the
+// animals' own rule plays a clip at pace / stride, never past `most`), the clip posed exactly (no frame times), from a
+// start `phase` (0..1) into the clip; each foot (the bones' groups, as rigs/animals/www/lab.html LAB.slip): while it is
+// down, how fast its lowest point moves over the ground (m/s; + skates forward). Returns the clip, its speed, the median
+// and the mean of the slide, all four feet
+const slipAnimal = {};
+HT.slip = ({ size = 1, v = 13, cap = GAIT.most.Gallop, phase = 0, n = 360, loops = 2, kind = 'steed' } = {}) => {
+  const key = kind + size;   // (kind 'horse': the pack horse, today's, once lib.need('horse') has loaded it)
+  if (!slipAnimal[key]) slipAnimal[key] = makeAnimal(lib, kind, { size, shadows: false });
+  const a = slipAnimal[key], c = a.actions.Gallop.getClip(), st = a.stride.Gallop, s = Math.min(cap, v / st);
+  const pos = a.mesh.geometry.attributes.position, sk = a.mesh.geometry.attributes.skinIndex, sw = a.mesh.geometry.attributes.skinWeight, names = a.mesh.skeleton.bones.map((b) => b.name);
+  const want = { FL: /^(FFL|IKFrontLegL)$/, FR: /^(FFR|IKFrontLegR)$/, BL: /^(FFBL|IKBackLegL)$/, BR: /^(FFBR|IKBackLegR)$/ }, feet = { FL: [], FR: [], BL: [], BR: [] };
+  for (let i = 0; i < pos.count; i++) { let best = 0, bw = -1; for (let k = 0; k < 4; k++) { const w = sw.getComponent(i, k); if (w > bw) { bw = w; best = sk.getComponent(i, k); } } for (const [k, re] of Object.entries(want)) if (re.test(names[best])) feet[k].push(i); }
+  const vtx = new THREE.Vector3(), world = (i, v2 = vtx) => a.mesh.getVertexPosition(i, v2).applyMatrix4(a.mesh.matrixWorld);
+  const pose = (t, z) => { a.mixer.stopAllAction(); const act = a.actions.Gallop; act.reset(); act.setEffectiveWeight(1); act.setEffectiveTimeScale(1); act.play(); a.mixer.setTime(t); a.root.position.set(0, 0, z); a.root.updateMatrixWorld(true); };
+  const T = c.duration * loops / s, dt = T / n, t0 = phase * c.duration, thr = a.height * 0.025, all = [];
+  const at = (i) => (t0 + i * dt * s) % c.duration;
+  const tracks = {}; for (const k of Object.keys(feet)) tracks[k] = [];
+  for (let i = 0; i <= n; i++) { pose(at(i), v * i * dt); for (const [k, idx] of Object.entries(feet)) { let y = 1e9, w = -1; for (const j of idx) { world(j); if (vtx.y < y) { y = vtx.y; w = j; } } tracks[k].push({ y, w }); } }
+  for (const tr of Object.values(tracks)) {
+    const ymin = Math.min(...tr.map((p) => p.y));
+    for (let i = 0; i < n; i++) {
+      if (tr[i].y > ymin + thr || tr[i + 1].y > ymin + thr || at(i + 1) < at(i)) continue;
+      pose(at(i), v * i * dt); const z0 = world(tr[i].w, new THREE.Vector3()).z;
+      pose(at(i + 1), v * (i + 1) * dt); const z1 = world(tr[i].w, new THREE.Vector3()).z;
+      all.push((z1 - z0) / dt);
+    }
+  }
+  all.sort((x, y) => x - y);
+  return { size, v, cap, stride: +st.toFixed(3), clipSpeed: +s.toFixed(3), slide: +(all[Math.floor(all.length / 2)] || 0).toFixed(3), meanAbs: +(all.reduce((p, x) => p + Math.abs(x), 0) / Math.max(1, all.length)).toFixed(3), samples: all.length };
+};
+// THE GALLOP STRIP (for watching the hooves): one horse at a time galloping past a camera that stands still, side on,
+// over a fine grid (lines every 25 cm): a hoof that is down should stay on its line from frame to frame. who: { key,
+// kind: 'steed' | 'horse' (the pack horse, today's), size, coat, v (m/s), cap }; t: seconds into the run. Returns the
+// clip's speed and how long one stride takes
+const strip = { on: false, made: {}, grid: null };
+HT.stripFrame = async ({ who, t, z0 = 0 }) => {
+  if (!strip.on) {
+    strip.on = true; group.visible = false; grid.visible = false; for (const x of tags) x.el.style.display = 'none';
+    strip.grid = new THREE.GridHelper(40, 160, 0x4a3a28, 0x6b5a44); strip.grid.position.y = 0.006; scene.add(strip.grid);
+    await lib.need('horse');
+  }
+  let m = strip.made[who.key];
+  if (!m) {
+    if (who.kind === 'steed') { const h = makeHorse(lib, { recipe: who.coat || 'bay', size: who.size || 1, tier: 'gaming', renderer: R }); m = { h, a: h.a }; }
+    else m = { a: makeAnimal(lib, who.kind) };
+    scene.add(m.a.root); strip.made[who.key] = m;
+  }
+  for (const x of Object.values(strip.made)) x.a.root.visible = x === m;
+  const a = m.a, c = a.actions.Gallop.getClip(), s = Math.min(who.cap, who.v / a.stride.Gallop);
+  a.mixer.stopAllAction(); const act = a.actions.Gallop; act.reset(); act.setEffectiveWeight(1); act.setEffectiveTimeScale(1); act.play(); a.mixer.setTime((t * s) % c.duration);
+  a.root.position.set(0, 0, z0 + who.v * t); a.root.rotation.set(0, 0, 0); a.root.updateMatrixWorld(true);
+  if (m.h) { m.h.speed = who.v; m.h.look(camera.position); }
+  sun.target.position.set(0, 0, z0 + who.v * t); sun.position.set(-8, 14, z0 + who.v * t + 10);
+  return { clipSpeed: +s.toFixed(3), strideSec: +(c.duration / s).toFixed(4), stride: +a.stride.Gallop.toFixed(3) };
+};
+// each foot's lowest point now (the strip's horse): in the world, and where it is on the page (0..1 across and down)
+const footsOf = new Map();
+HT.stripFeet = (key) => {
+  const m = strip.made[key]; if (!m) return null;
+  const a = m.a, mesh = a.mesh;
+  if (!footsOf.has(a)) {
+    const sk = mesh.geometry.attributes.skinIndex, sw = mesh.geometry.attributes.skinWeight, names = mesh.skeleton.bones.map((b) => b.name);
+    const want = { FL: /^(FFL|IKFrontLegL)$/, FR: /^(FFR|IKFrontLegR)$/, BL: /^(FFBL|IKBackLegL)$/, BR: /^(FFBR|IKBackLegR)$/ }, feet = { FL: [], FR: [], BL: [], BR: [] };
+    for (let i = 0; i < sk.count; i++) { let best = 0, bw = -1; for (let k = 0; k < 4; k++) { const w = sw.getComponent(i, k); if (w > bw) { bw = w; best = sk.getComponent(i, k); } } for (const [k, re] of Object.entries(want)) if (re.test(names[best])) feet[k].push(i); }
+    footsOf.set(a, feet);
+  }
+  const out = {}, v = new THREE.Vector3();
+  for (const [k, idx] of Object.entries(footsOf.get(a))) {
+    let lo = null;
+    for (const i of idx) { mesh.getVertexPosition(i, v).applyMatrix4(mesh.matrixWorld); if (!lo || v.y < lo.y) lo = v.clone(); }
+    const sc = lo.clone().project(camera);
+    out[k] = { x: +lo.x.toFixed(4), y: +lo.y.toFixed(4), z: +lo.z.toFixed(4), sx: (sc.x + 1) / 2, sy: (1 - sc.y) / 2 };
+  }
+  return out;
+};
+HT.stripCamera = (z, { dist = 7.5, y = 1.15, fov = 40, at = 0.95 } = {}) => { orbit.enabled = false; camera.fov = fov; camera.updateProjectionMatrix(); camera.position.set(dist, y, z); camera.lookAt(0, at, z); camera.updateMatrixWorld(); };
+HT.render = () => { R.render(scene, camera); };
+// buttons
+const bar = document.getElementById('bar');
+const btn = (label, fn) => { const b = document.createElement('button'); b.textContent = label; b.onclick = fn; bar.appendChild(b); };
+for (const v of Object.keys(VIEWS)) btn(v, () => HT.view(v));
+btn('fade 0.5', () => HT.fade(0.5)); btn('fade 1', () => HT.fade(1));
+btn('recolor', () => { const r = HT.recolor(1); console.log(r); }); btn('re-roll 20', () => console.log(HT.reroll(20)));
+// (the scene drawn once with a donkey and no horses first: the ground's, the donkey's and the shadows' shaders are built
+// then, so the frame timed below counts the horses alone)
+{ HT.view('row'); const d = makeAnimal(lib, 'donkey'); scene.add(d.root); R.render(scene, camera); d.dispose(); }
+HT.row(); HT.view(Q.get('view') || 'row');
+// the first frame with the horses in it, waited for (ms): with the shaders built ahead it should be an ordinary frame
+HT.progBefore = R.info.programs.map((x) => x.name + ':' + x.cacheKey.slice(0, 40));
+{ const gl = R.getContext(), px = new Uint8Array(4), a = performance.now(); draw(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); HT.firstMs = performance.now() - a;
+  const b = performance.now(); draw(); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); HT.secondMs = performance.now() - b; }
+HT.progAfter = R.info.programs.map((x) => x.name + ':' + x.cacheKey.slice(0, 40));
+const _v = new THREE.Vector3(), clock = new THREE.Clock();
+function loop() {
+  requestAnimationFrame(loop);
+  const dt = Math.min(0.05, clock.getDelta());
+  for (const x of horses) x.a.update(dt);
+  if (!strip.on) { orbit.update(); draw(); } else R.render(scene, camera);
+  for (const t of tags) { t.a.root.getWorldPosition(_v); _v.y = -0.05; _v.project(camera); t.el.style.left = ((_v.x + 1) / 2 * innerWidth) + 'px'; t.el.style.top = ((1 - _v.y) / 2 * innerHeight) + 'px'; }
+  const I = HT.info();
+  document.getElementById('info').textContent = `tier ${TIER} (${JSON.stringify(HORSE_LOOK[TIER])}) · warm ${HT.warmMs.toFixed(0)} ms · first frame ${HT.firstMs.toFixed(0)} ms\n${I.calls} draws · ${I.tris} triangles · ${I.programs} programs · ${I.geometries} geometries · ${I.textures} textures\nlooks: ${horses.filter((x) => x.h).map((x) => x.h.lookNow.coat[0] + x.h.lookNow.hair[0]).join(' ')}`;
+}
+addEventListener('resize', () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); R.setSize(innerWidth, innerHeight); });
+loop();
+HT.ready = true;
+</script>
+</body>
+</html>

@@ -21,8 +21,9 @@
 //   W.waterAt(x, z)    how wet, 0..1 (over 0.3: in a stream or pond)
 //   W.settled()        true once the trees and plants are laid and baked
 //   W.blocked(x, z)    true where a walker can't go: a building (its footprint and half a metre round it), a fence, a tree's
-//                      trunk, ground steeper than ~39 degrees (~58 by a creek or pond: a bank can be scrambled), water
-//                      deeper than 0.9 m, or off the land's edge
+//                      trunk, a hitching post, a water trough, a signpost, a street lamp, a parked wagon or a chicken coop
+//                      (SOLID_PROPS: the town's props that are always drawn), ground steeper than ~39 degrees (~58 by a creek or pond: a bank can be
+//                      scrambled), water deeper than 0.9 m, or off the land's edge
 //   W.addBlocker(fn)   fn(x, z) -> true also blocks there (the farm's fences and barn); returns a function that takes it off
 //   W.places     where things are (metres; rot: radians, the way the thing faces: a front facing +z is 0, as three's
 //                rotation.y, so the facing direction is (sin rot, cos rot)):
@@ -31,7 +32,8 @@
 //                           door: a spot on the ground just in front of the steps (the stage's: in front of its middle);
 //                           size: the longest side; w, d, h: width (along its front), depth and height
 //                           stage.crowd: { x, z, r }: the trodden patch in front of the stage where an audience stands
-//                  buildings: [ the six above ] (for anything that must keep out of them all, the camera say)
+//                  buildings: [ the six above, and any other building in the layout (a second cabin put down for decor,
+//                           say: { kind, id, ... } as above) ] (for anything that must keep out of them all, the camera say)
 //                  square:  { x, z, r }                         the dusty open square the buildings face
 //                  pasture: { x, z, r }                         open meadow, where the cattle graze
 //                  corral:  { x, z, r, w, d, rot, gate: { x, z, rot, width, in: { x, z }, out: { x, z } } }
@@ -62,7 +64,8 @@
 //   W.warmFor(root)   the shaders of things not in the scene yet built in the background, for the valley's lights
 //   W.warm()     the scene's shaders not built yet built ahead, a couple a frame: done by itself a few seconds into the
 //                ride, later, and in the mist before the way round; call it after adding new kinds of things
-//   W.tier       'potato' | 'normal' | 'gaming'
+//   W.tier       'potato' | 'normal' | 'gaming': the band this load was made for (what needs a reload follows it)
+//   W.governor   the dials, turned up and down by how fast the machine runs (world/governor.js): W.governor.on(dial, fn)
 //   W.camTarget  a THREE.Vector3 the game keeps on the player: the plants' and trees' circles and the sun's shadows
 //                follow it (the valley reads it as its "controls target")
 //   W.V          the valley itself (advanced use only: its tunings, maps and forests)
@@ -70,6 +73,8 @@ import * as THREE from 'three';
 import { makeValley, TIER_SET } from '../world/valley.js';
 import { BACKWOODS } from './missions/backwoods.js';
 import { chooseTier, TIERS } from '../world/quality.js';
+import { makeGovernor } from '../world/governor.js';
+import { bindValley } from '../world/valleydials.js';
 import { footprintOf } from '../world/objects/village.js';
 import { BASE } from '../world/base.js';
 
@@ -84,6 +89,11 @@ const PLACE_OF = { cabin: 'cabin', stable: 'stable', generalStore: 'store', sher
 // on the other let a walker down into it and not up the far side (stuck in the middle).
 const BANK = 1.6, BANK_NEAR = 2;
 const STEEP = 0.8, DEEP = 0.9, EDGE = 780, FENCE_HALF = 0.35, WALL_PAD = 0.5, TRUNK = 0.4;   // (slope as rise over run; metres; a trunk's radius for a tree of scale 1)
+// the town's props a walker goes round rather than through: the ones always drawn (world/valleydials.js DECOR_PROPS are
+// the ones a slow machine leaves out: not these). A rail or a trough its footprint and PROP_PAD round it; a post a disc.
+// (A horse whistled up along the main street stood in a hitching rail, and the townsfolk walked through the troughs)
+const SOLID_PROPS = { hitchingPost: 'box', trough: 'box', signpost: 0.3, lamp: 0.3, chickenCoop: 'box',
+  farmWagon: 'box', freightWagon: 'box', coveredWagon: 'box', chuckWagon: 'box' }, PROP_PAD = 0.15;   // (the parked wagons and the coops: the town's props now)
 // THE VALLEY'S ENDS: the mist banks across them (the valley's FOG_DIR.bank0/1: thin from `a` metres out along x, full by
 // `b`; topping out `top` metres over each end's floor) and the line in the full mist where a rider comes out of the
 // other end's (`wrap`, inside the land's edge at EDGE). West -x, east +x (the valley's floor runs out west and south-east)
@@ -131,17 +141,33 @@ export async function makeWorld({ renderer, camera, quality = null, look = 'gree
   const t0 = performance.now();
   const GAME = ((await layoutP) || {}).game || {};
   const V = await makeValley({ renderer, camera, controls, quality: QUAL, look, live, slice: true, showcase: false, folk: false, treeClear: campWays(GAME) });
+  // THE GOVERNOR (world/governor.js): the dials turned up and down by how fast this machine really runs; the valley's own
+  // wired here (world/valleydials.js), the game's in their own files (W.governor.on)
+  const GOVERN = makeGovernor({ renderer, quality: QUAL }); bindValley(GOVERN, { V, renderer });
   say(0.45, 'The land is laid');
 
   // ── THE PLACES ─────────────────────────────────────────────────────────────────────────────────────────
-  const places = {}, FOOT = [];
-  for (const it of V.TOWN.village.layout.items) {
+  const places = {}, FOOT = [], OTHERS = [], PROPS = [];
+  // (the whole layout: the village's own leaves out the decor's props, drawn together elsewhere: world/valley.js drawDecor)
+  for (const it of (V.TOWN.layout || V.TOWN.village.layout).items) {
+    if (it.type === 'prop' && SOLID_PROPS[it.kind]) {
+      const k = SOLID_PROPS[it.kind], { w, d } = footprintOf({ ...it, size: it.size || 1 }), rot = (it.rot || 0) * Math.PI / 180;
+      PROPS.push(k === 'box' ? { x: it.x, z: it.z, c: Math.cos(rot), s: Math.sin(rot), hw: w / 2 + PROP_PAD, hd: d / 2 + PROP_PAD, r: Math.hypot(w, d) / 2 + PROP_PAD } : { x: it.x, z: it.z, disc: k * (it.size || 1), r: k * (it.size || 1) });
+      continue;
+    }
     if (it.type !== 'model') continue;
     const { w, d, h } = footprintOf(it), rot = it.rot * Math.PI / 180, c = Math.cos(rot), s = Math.sin(rot);
-    FOOT.push({ x: it.x, z: it.z, c, s, hw: w / 2 + WALL_PAD, hd: d / 2 + WALL_PAD });
-    const name = PLACE_OF[it.kind]; if (!name || places[name]) continue;
+    // (a building made in code is walked into: its own walls, counters and porch edges block instead, V.CODE.blocked)
+    if (!(V.CODE && V.CODE.has(it.kind, it))) FOOT.push({ x: it.x, z: it.z, c, s, hw: w / 2 + WALL_PAD, hd: d / 2 + WALL_PAD });
     const out = d / 2 + 1.5;                                             // (just past the steps, in front of the middle)
-    places[name] = { kind: it.kind, x: it.x, z: it.z, rot, door: { x: it.x + s * out, z: it.z + c * out }, size: Math.max(w, d), w, d, h };
+    // (a code-built building's way in may stand off its middle: its steps, its barn's doors; world/objects/codebuildings.js)
+    const along = V.CODE && V.CODE.has(it.kind, it) ? V.CODE.doorAlong(it.kind) : 0;
+    const rec = { kind: it.kind, id: it.id, x: it.x, z: it.z, rot, door: { x: it.x + s * out + c * along, z: it.z + c * out - s * along }, size: Math.max(w, d), w, d, h };
+    const name = PLACE_OF[it.kind];
+    // (a second building of a kind, a cabin put down for decor say, isn't that place: it is only one of the buildings,
+    // which the camera keeps out of and sight looks past. The homes are src/townpeople.js's: W.places.homes; a bridge is walked on)
+    if (!name || places[name]) { if (it.kind !== 'home' && it.kind !== 'bridge') OTHERS.push(rec); continue; }
+    places[name] = rec;
   }
   const xz = (p, rot = false) => (p ? { x: +p.x || 0, z: +p.z || 0, ...(rot ? { rot: (+p.rot || 0) * Math.PI / 180 } : {}) } : null);
   places.spawn = xz(GAME.spawn, true) || { x: 0, z: 0, rot: 0 };
@@ -155,7 +181,7 @@ export async function makeWorld({ renderer, camera, quality = null, look = 'gree
     places.corral = { x: C.x, z: C.z, r: Math.min(C.w, C.d) / 2 - 1, w: C.w, d: C.d, rot, gate };
   }
   if (places.stage && GAME.crowd) places.stage.crowd = { ...xz(GAME.crowd), r: +GAME.crowd.r || 5 };
-  Object.defineProperty(places, 'buildings', { value: Object.values(PLACE_OF).map((k) => places[k]).filter(Boolean), enumerable: false });   // (not enumerable: a loop over the places still meets each building once)
+  Object.defineProperty(places, 'buildings', { value: [...Object.values(PLACE_OF).map((k) => places[k]).filter(Boolean), ...OTHERS], enumerable: false });   // (not enumerable: a loop over the places still meets each building once)
   const trail = (V.PLANTING_FIRST && V.PLANTING_FIRST.strokes || []).find((st) => st.id === 'trail');
   places.trail = trail ? trail.pts.map(([x, z]) => [x, z]) : [];
   // the farm: a spot picked from a survey of the land (height within about 2.5 m over its 56 by 48 m, no water, no
@@ -184,14 +210,16 @@ export async function makeWorld({ renderer, camera, quality = null, look = 'gree
   }
   // more things that block, added by the game after the world is made (the farm's fences and barn): W.addBlocker(fn),
   // fn(x, z) -> true where a walker can't go
-  const EXTRA = [];
+  const EXTRA = V.CODE ? [(x, z) => V.CODE.blocked(x, z)] : [];
   function blocked(x, z) {
     if (!(Math.abs(x) < EDGE && Math.abs(z) < EDGE)) return true;
     for (let i = 0; i < EXTRA.length; i++) if (EXTRA[i](x, z)) return true;
     { const cells = trunks(), ci = Math.floor(x / 8), cj = Math.floor(z / 8);
       for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) { const c = cells.get((ci + di) + ',' + (cj + dj)); if (c) for (const [tx, tz, r] of c) if ((x - tx) ** 2 + (z - tz) ** 2 < r * r) return true; } }
     for (const b of FOOT) { const dx = x - b.x, dz = z - b.z; if (Math.abs(b.c * dx - b.s * dz) < b.hw && Math.abs(b.s * dx + b.c * dz) < b.hd) return true; }
-    for (const [p, q] of V.FENCE.rails || []) if (segNear(x, z, p[0], p[2], q[0], q[2], FENCE_HALF)) return true;
+    for (const q of PROPS) { const dx = x - q.x, dz = z - q.z; if (Math.abs(dx) > q.r || Math.abs(dz) > q.r) continue;
+      if (q.disc ? dx * dx + dz * dz < q.disc * q.disc : Math.abs(q.c * dx - q.s * dz) < q.hw && Math.abs(q.s * dx + q.c * dz) < q.hd) return true; }
+    for (const [p, q, , half] of V.FENCE.rails || []) if (segNear(x, z, p[0], p[2], q[0], q[2], half || FENCE_HALF)) return true;   // (a styled fence says how wide it blocks: a buck fence's legs spread)
     const i = Math.min(V.N - 1, Math.max(0, Math.floor((x + V.SIZE / 2) / V.TEX))), j = Math.min(V.N - 1, Math.max(0, Math.floor((z + V.SIZE / 2) / V.TEX)));
     if (V.inFine && V.inFine(x, z)) {   // (where the ground is drawn finer than its grid, the bridge crossing's ravine: its own slope, and no scrambling down a bank there)
       const e = 0.6, gx = V.heightAt(x + e, z) - V.heightAt(x - e, z), gz = V.heightAt(x, z + e) - V.heightAt(x, z - e);
@@ -204,7 +232,10 @@ export async function makeWorld({ renderer, camera, quality = null, look = 'gree
   const W = {
     scene: V.scene, V, tier: QUAL.tier, quality: QUAL, look, camTarget, places, blocked,
     addBlocker: (fn) => { EXTRA.push(fn); return () => { const i = EXTRA.indexOf(fn); if (i >= 0) EXTRA.splice(i, 1); }; },
-    heightAt: V.heightAt, waterAt: V.waterAt, settled: V.settled,
+    // (the ground, or a code-built building's floor, porch or steps where it stands: world/objects/codebuildings.js)
+    heightAt: V.CODE ? (x, z) => V.CODE.heightAt(x, z, V.heightAt) : V.heightAt, waterAt: V.waterAt, settled: V.settled,
+    // the code-built building a point is in, under its roof, or null: its walls and ceilings (room.solid) stop the camera
+    codeRoom: V.CODE ? (x, y, z) => V.CODE.room(x, y, z) : null,
     update: (dt) => { V.update(Math.min(dt, 0.1)); warmLater(dt); },   // (a long pause, a tab come back, counts as a tenth of a second)
     render: (afterScene) => V.render(afterScene),   // (afterScene: src/fx/dof.js puts its picture on screen there)
     loadedIn: 0,                                                         // (seconds to settled, for the record)
@@ -214,6 +245,7 @@ export async function makeWorld({ renderer, camera, quality = null, look = 'gree
     lights: { set: (id, v) => V.NIGHT_LIGHTS.set(id, v), get: (id) => V.NIGHT_LIGHTS.get(id) },
     setHour: (h) => { const D = V.DAY; h = ((+h % 24) + 24) % 24; if (!Number.isFinite(h)) return; D.hour = D.t = h; D.dirty = true; D.reshade = true; },
   };
+  GOVERN.attach(W);   // (W.governor; only frames W.render draws are measured)
   // ── THE VALLEY'S ENDS: the mist and the way round ──────────────────────────────────────────────────────
   // each end's floor (the lowest ground across it, near the wrap line) and the band of ground a rider can be on there
   // (the run of walkable ground round the floor), so a rider coming out of the other end's mist comes out at the same

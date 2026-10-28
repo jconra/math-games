@@ -65,7 +65,7 @@ test('the bones the code names are in the models', () => {
     for (const b of ['Hips', 'Abdomen', 'WristR', 'Middle1R', 'UpperLegL', 'LowerLegL', 'FootL', 'Head']) assert.ok(names.has(b), `${b} in ${file}`);
   }
   // the horse: its seat bone and the bone the loop goes round; the dogs: the back legs folded to sit
-  for (const kind of ['horse', 'horseWhite', 'cow', 'bull']) {
+  for (const kind of ['horse', 'horseWhite', 'steed', 'cow', 'bull']) {
     const k = animals[kind], names = nodeNames(glb('models/animals/' + k.file));
     assert.ok(names.has(k.seat.bone) && names.has(k.lasso.bone), `${kind}: ${k.seat.bone}, ${k.lasso.bone}`);
     assert.ok(k.lasso.radius > 0.05 && k.lasso.radius < 0.5, `${kind} neck radius ${k.lasso.radius} m`);
@@ -83,10 +83,11 @@ test('the saddles and horses a rider can own are on disk', () => {
   const saddles = Object.fromEntries([...p.match(/SADDLE_FILES = \{([^}]+)\}/)[1].matchAll(/(\w+): '(\w+)'/g)].map((m) => [m[1], m[2]]));
   assert.deepEqual(Object.keys(saddles).sort(), ['plain', 'silver', 'tooled'], 'the shop\'s three saddles (save.js: owned.saddle)');
   for (const f of Object.values(saddles)) assert.equal(glb(`models/saddles/${f}.glb`).asset.version, '2.0');
-  // (the mounts: player.js HORSE_LOOKS, one line each, { kind: '<animal>', ... })
-  const looks = p.match(/HORSE_LOOKS = \{\n([\s\S]*?)\n\};/)[1];
-  const mounts = Object.fromEntries([...looks.matchAll(/^\s+(\w+): \{ kind: '(\w+)'/gm)].map((m) => [m[1], m[2]]));
-  assert.ok(Object.keys(mounts).length >= 2 && mounts.bay === 'horse', 'the bay comes free (save.js: owned.horse defaults to bay)');
+  // (the mounts: player.js HORSE_LOOKS is made from src/catalog.js LADDER, { kind: '<animal>', ... } each)
+  assert.match(p, /HORSE_LOOKS = Object\.fromEntries\(Object\.entries\(LADDER\)/, 'the player rides the ladder');
+  const ladder = source('src/catalog.js').match(/export const LADDER = \{\n([\s\S]*?)\n\};/)[1];
+  const mounts = Object.fromEntries([...ladder.matchAll(/^\s+(\w+): \{ kind: '(\w+)'/gm)].map((m) => [m[1], m[2]]));
+  assert.ok(Object.keys(mounts).length >= 2 && mounts.bay === 'steed', 'the bay comes free, the new horse (save.js: owned.horse defaults to bay)');
   for (const kind of Object.values(mounts)) assert.ok(animals[kind], kind + ' in animals.json');
   // every horse the stable sells is one the player knows how to ride, with a price (the bay is free)
   const shop = source('src/catalog.js');   // (what the stable sells and the prices: src/catalog.js, sold by src/shop.js)

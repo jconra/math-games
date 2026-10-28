@@ -412,7 +412,7 @@ export function makeJobsBoard({ W, camera, I = null, hud = null, rider = null, p
     const saddle = needsSaddle(j);
     const line = saddle ? `${j.name} needs a saddled horse: the hoofprints go by the stable first` : `The hoofprints lead to the job: ${j.name}`;
     if (hud) hud.toast(line, 'good');
-    if (speak) try { speak(saddle ? `${j.name}. First, a saddle at the stable. Follow the hoofprints.` : `${j.name}. Follow the hoofprints.`) } catch (e) { /* (no voice) */ }
+    if (speak) try { speak(saddle ? `${j.name}. First, a horse and a saddle at the stable. Follow the hoofprints.` : `${j.name}. Follow the hoofprints.`) } catch (e) { /* (no voice) */ }
     return true;
   };
   JB.goal = () => {

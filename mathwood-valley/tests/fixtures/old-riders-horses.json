@@ -1,0 +1,114 @@
+{
+ "note": "Riders saved before the new horse (2026-10-27): Saddlebags owns every horse the stable sold (the palomino and the white were the pack horse tinted, the chestnut the farm horse) and rides the white; Newbuild comes from a newer build with a pen horse it rides (pen-1), an id this build doesn't know in owned.horses and a field of its own. tests/mounts.test.mjs opens them.",
+ "version": 1,
+ "riders": [
+  {
+   "id": "rhorse1",
+   "name": "Saddlebags",
+   "look": {
+    "outfit": "farmer_m",
+    "palette": "drifter",
+    "skin": "#c68d62",
+    "hair": "#3f2a1b",
+    "hat": true
+   },
+   "gold": 37,
+   "bounty": 2210,
+   "mode": "lasso",
+   "readAloud": true,
+   "topicsOn": {
+    "times": true,
+    "algebra": true
+   },
+   "topics": {},
+   "missions": {
+    "store": true
+   },
+   "missionsV": 2,
+   "owned": {
+    "saddle": "tooled",
+    "saddles": [
+     "plain",
+     "tooled"
+    ],
+    "horse": "white",
+    "horses": [
+     "bay",
+     "donkey",
+     "chestnut",
+     "palomino",
+     "white",
+     "midnight"
+    ],
+    "dog": null
+   },
+   "lockboxes": [],
+   "stats": {
+    "answered": 120,
+    "right": 104
+   },
+   "badges": [],
+   "done": [
+    "buy:saddle:plain",
+    "buy:saddle:tooled",
+    "buy:horse:donkey",
+    "buy:horse:chestnut",
+    "buy:horse:palomino",
+    "buy:horse:white",
+    "buy:horse:midnight"
+   ],
+   "made": 1791475813674.0,
+   "last": 1791975813674.0
+  },
+  {
+   "id": "rhorse2",
+   "name": "Newbuild",
+   "look": {
+    "outfit": "adventurer_f",
+    "palette": "prairie"
+   },
+   "gold": 5,
+   "bounty": 640,
+   "owned": {
+    "saddle": "plain",
+    "horse": "pen-1",
+    "horses": [
+     "bay",
+     "palomino",
+     "cabinpasture-7"
+    ],
+    "penNext": 2,
+    "pastureNote": "a field a newer build keeps",
+    "mounts": {
+     "pen-1": {
+      "name": "Sandy the dun",
+      "line": "A dun with a dark stripe down its back.",
+      "size": 1.1,
+      "gallop": 15,
+      "price": 300,
+      "from": "pen",
+      "at": 1792275813674.0,
+      "spots": 3,
+      "coat": {
+       "base": "#b0946a",
+       "points": "black",
+       "mane": "#1d1712",
+       "dorsal": 0.9,
+       "dorsalWidth": 0.032,
+       "barring": 0.6,
+       "face": "star",
+       "legs": {
+        "HL": "sock"
+       },
+       "seed": 4471,
+       "sheen": 9,
+       "newField": "kept"
+      }
+     }
+    }
+   },
+   "made": 1791875813674.0,
+   "last": 1792275813674.0
+  }
+ ]
+}

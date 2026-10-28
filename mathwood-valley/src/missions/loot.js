@@ -104,8 +104,9 @@ export const LOOT = {
   town: 75,             // m from the sheriff's door with the loot: the folks it was taken from come out to wait
   townGone: 170,        // ... farther than this they go home (and come out again when the loot comes back)
   stuff: 24,            // m from them: one of them sees his goods ("Is that my stuff?")
-  spot: 7.2,            // m out in front of the sheriff's door: where you hand it back
-  arc: 3.7,             // m from that spot (toward the door) the folks stand, in an arc facing it
+  spot: 2.0,            // m out in front of the sheriff's door: where you hand it back (the office faces the main street
+                        // and the wagon road runs a few metres out: further out, the folks stood in the road)
+  arc: 2.7,             // m from that spot (toward the door) the folks stand, in an arc facing it
   share: 4.5,           // m from the spot, slower than shareSlow (m/s): the slip comes up
   shareSlow: 3.2,
   again: 11.5,          // after the slip went away, it comes up again only after this far off and back
@@ -432,6 +433,9 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
     const s = a.info.seat.at;
     _hm.makeTranslation(s[0], s[1], s[2]).premultiply(a.seatRest.clone().invert());
     _hm.decompose(load.position, load.quaternion, load.scale);
+    // (the sacks and the strongbox keep their own size; where they hang from the seat grows with a bigger horse)
+    const k = a.size || 1;
+    for (const m of load.children) { if (!m.userData.at) m.userData.at = m.position.clone(); m.position.copy(m.userData.at).multiplyScalar(k); }
     a.bones[a.info.seat.bone].add(load);
     loadOn = a;
     return true;

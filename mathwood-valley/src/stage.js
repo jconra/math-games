@@ -26,6 +26,7 @@
 //   S.state()               for rigs: { near, made, playing, gain, distance, clips, song, asked }
 //   S.analyser()            for rigs: an AnalyserNode on the band's sound as it goes into the game's mix (or null)
 //   S.dispose()
+// With no stage in the town (W.places.stage missing) the handle is a quiet one: no players, no music, no prompt.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
@@ -67,6 +68,9 @@ const CLIPS = { m: 'clips_stage_m.glb', f: 'clips_stage_f.glb' };
 
 export function makeStage({ W, folk, audio, scene = W.scene, speak = null }) {
   const place = W.places.stage;
+  // no stage in the town (the layout's decor took it away: the band is to play inside the saloon, later): no band, no
+  // music and no prompt, rather than the players standing at the world's middle
+  if (!place) return quietStage();
   // the stage model's frame in the world (the village's own object for it when there is one; else from the places)
   const frame = new THREE.Matrix4();
   {
@@ -263,5 +267,20 @@ export function makeStage({ W, folk, audio, scene = W.scene, speak = null }) {
     players.length = 0; made = null;
     if (harmonica) { harmonica.removeFromParent(); harmonica.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } }); harmonica = null; }
   };
+  return S;
+}
+
+// the band with nowhere to play: the same handle, doing nothing
+function quietStage() {
+  const S = { prompt: null, spots: null, quiet: true };
+  S.ask = () => null;
+  S.update = () => {};
+  S.testTone = () => false;
+  S.state = () => ({ near: false, made: false, playing: false, gain: 0, distance: Infinity, clips: [], notes: 0, context: 'none', song: SONGS[0].id, asked: 0, prompt: null, beatLen: null, quiet: true });
+  Object.defineProperty(S, 'song', { get: () => SONGS[0] });
+  S.analyser = () => null;
+  Object.defineProperty(S, 'music', { get: () => null });
+  Object.defineProperty(S, 'players', { get: () => null });
+  S.dispose = () => {};
   return S;
 }

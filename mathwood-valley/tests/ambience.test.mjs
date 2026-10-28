@@ -86,7 +86,7 @@ test('the mix: dips under the music and Hob, quieter indoors; the air dulls far 
 
 test('hooves land where the clips put them down; a gallop louder than a walk', () => {
   assert.ok(crossed(0.2, 0.3, 0.24) && !crossed(0.2, 0.3, 0.4) && crossed(0.9, 0.1, 0.96) && crossed(0.9, 0.1, 0.05) && !crossed(-1, 0.5, 0.3));
-  for (const k of ['horse', 'horseWhite', 'donkey', 'farmHorse']) for (const c of ['Walk', 'Gallop']) {
+  for (const k of ['horse', 'horseWhite', 'steed', 'donkey', 'farmHorse']) for (const c of ['Walk', 'Gallop']) {
     const l = HOOVES[k][c]; assert.equal(l.length, 4, k + c);
     for (let i = 0; i < 4; i++) { assert.ok(l[i] > 0 && l[i] <= 1); if (i) assert.ok(l[i] > l[i - 1]); }
   }

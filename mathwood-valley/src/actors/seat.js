@@ -20,6 +20,9 @@
 //   seatRider(horse, person)   puts the person in the saddle this frame (call after both have been updated)
 //   RIDER_FROM_SADDLE   that offset, metres in the horse's own space ([across, up, forward]) for a full-size person
 //   sideOf(horse, v, side = 1, out = 1.25)   a spot on the ground beside the horse (side 1: its left, -1: its right)
+//   legsOut(horse, person)    on a bigger horse (the stable's ladder: actors/horses.js), the lower legs turned out at the
+//                             knee and the feet moved out with them, so the feet clear its wider barrel (FEET_OUT);
+//                             called after seatRider each frame (S.update does)
 //   poseSit(person, amount)   bends a person's legs into a seat by hand (0: as the clip left them, 1: sitting astride),
 //                             for a person without the riding clips; called after the person's update each frame
 import * as THREE from 'three';
@@ -44,6 +47,37 @@ export function seatRider(horse, person) {
   } else root.quaternion.copy(_hq);
   root.position.copy(_s);
   root.updateWorldMatrix(false, true);
+}
+
+// THE FEET ROUND A BIGGER BARREL: the riding clips were made on the bay; on the stable's bigger horses the barrel is
+// wider where the rider's feet hang (low on its side, just behind the elbow), and with the rider the same size the feet
+// went into it (the knees stay clear: 3 cm or more at every size). So each lower leg is turned out at the knee, about the
+// horse's forward line, as far as moves its foot out by this much, and the foot (a bone of its own, not the shin's
+// child) moved out by as much. Metres by the horse's size, from the knee probe (~/pw/bandit-math/rigs/horses/sizes.cjs:
+// farmer_m and adventurer_f, at a stand, walk, trot and gallop): the feet's least clearance was 0.3, 0.0, -0.9, -2.2 and
+// -3.3 cm at 0.95 to 1.15, so each gets 1 cm clear and 3 mm to spare. The donkey and the pack horses: none.
+export const FEET_OUT = [[0.95, 0.010], [1, 0.013], [1.05, 0.022], [1.1, 0.035], [1.15, 0.046]];
+const tableAt = (tab, x) => { if (x <= tab[0][0]) return tab[0][1]; for (let i = 1; i < tab.length; i++) if (x <= tab[i][0]) { const [x0, y0] = tab[i - 1], [x1, y1] = tab[i]; return y0 + (y1 - y0) * (x - x0) / (x1 - x0); } return tab[tab.length - 1][1]; };
+const _k = new THREE.Vector3(), _f = new THREE.Vector3(), _ax = new THREE.Vector3(), _out = new THREE.Vector3(), _iq = new THREE.Quaternion(), _lq = new THREE.Quaternion();
+export function legsOut(horse, person) {
+  if (!horse || !horse.coat) return;
+  const d = tableAt(FEET_OUT, horse.size || 1); if (!(d > 0)) return;
+  horse.root.getWorldQuaternion(_hq);
+  _ax.set(0, 0, 1).applyQuaternion(_hq);                          // (the horse's forward line)
+  for (const [s, side] of [['L', 1], ['R', -1]]) {                // (the rider's left leg on the horse's left, its +X)
+    const lo = person.bones['LowerLeg' + s], foot = person.bones['Foot' + s]; if (!lo || !lo.parent) continue;
+    _out.set(side, 0, 0).applyQuaternion(_hq);
+    lo.getWorldPosition(_k);
+    const drop = foot ? Math.max(0.2, _k.y - foot.getWorldPosition(_f).y) : 0.45;   // (how far the foot hangs below the knee)
+    _lq.setFromAxisAngle(_ax, Math.asin(Math.min(0.5, d / drop)) * side);   // (turned about the forward line: the shin's foot end out by d)
+    lo.parent.getWorldQuaternion(_pq);
+    lo.quaternion.premultiply(_iq.copy(_pq).invert().multiply(_lq).multiply(_pq));
+    lo.updateMatrixWorld(true);
+    if (foot && foot.parent) {
+      foot.getWorldPosition(_f).addScaledVector(_out, d);
+      foot.parent.updateMatrixWorld(true); foot.parent.worldToLocal(_f); foot.position.copy(_f); foot.updateMatrixWorld(true);
+    }
+  }
 }
 
 export function sideOf(horse, v = new THREE.Vector3(), side = 1, out = 1.25) {
@@ -95,17 +129,17 @@ export function makeSeat(person) {
   S.update = (dt) => {
     const horse = S.horse; if (!horse) return;
     if (S.handPosed) { S.sit = hop ? (hop.up ? Math.min(1, hop.t / hop.time) : 1 - Math.min(1, hop.t / hop.time)) : (S.riding ? 1 : 0); poseSit(person, S.sit); }
-    const sit = () => { if (S.handPosed) sitOn(horse, person, { dt }); else seatRider(horse, person); };
+    const sit = () => { if (S.handPosed) sitOn(horse, person, { dt }); else seatRider(horse, person); legsOut(horse, person); };
     if (!hop) { sit(); return; }
     hop.t += dt; const f = ease(Math.min(1, hop.t / hop.time));
     const root = person.root;
     if (hop.up) {
       sit();                                                      // (where the seat puts them this frame: the hop ends there)
       _a.copy(root.position); _q.copy(root.quaternion);
-      root.position.lerpVectors(hop.from, _a, f); root.position.y += Math.sin(f * Math.PI) * 0.35;
+      root.position.lerpVectors(hop.from, _a, f); root.position.y += Math.sin(f * Math.PI) * 0.35 * (horse.size || 1);   // (a bigger horse: a higher hop)
       root.quaternion.slerpQuaternions(hop.fromQ, _q, f);
     } else {
-      root.position.lerpVectors(hop.from, hop.to, f); root.position.y += Math.sin(f * Math.PI) * 0.25;
+      root.position.lerpVectors(hop.from, hop.to, f); root.position.y += Math.sin(f * Math.PI) * 0.25 * (horse.size || 1);
       root.quaternion.copy(hop.fromQ);
     }
     root.updateWorldMatrix(false, true);

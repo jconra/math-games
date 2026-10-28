@@ -38,7 +38,15 @@ export const PROP_KINDS = [
   { kind: 'trough', name: 'Water trough', footprint: [1.9, 0.7] },
   { kind: 'lantern', name: 'Lantern post', footprint: [0.75, 0.3] },
   { kind: 'garden', name: 'Garden patch', footprint: [2.6, 1.7] },
+  { kind: 'chickenCoop', name: 'Chicken coop', footprint: [3.1, 2.2] },   // (the game lets a few hens out round each one: src/townlife.js)
+  // the wagons that stand about for good (src/wagon.js's models, no team): one object each, loaded with the wagons
+  { kind: 'farmWagon', name: 'Farm wagon', footprint: [1.9, 3.8] },
+  { kind: 'freightWagon', name: 'Freight wagon', footprint: [2.1, 3.6] },
+  { kind: 'coveredWagon', name: 'Covered wagon', footprint: [1.8, 3.5] },
+  { kind: 'chuckWagon', name: 'Chuck wagon', footprint: [1.8, 3.6] },
 ];
+// the wagon props and the wagon each is (src/wagon.js WAGON_KINDS)
+export const WAGON_PROPS = { farmWagon: 'farm', freightWagon: 'freight', coveredWagon: 'covered', chuckWagon: 'chuck' };
 
 // ── palette ─────────────────────────────────────────────────────────────────
 const C = {
@@ -589,11 +597,41 @@ function garden(k) {
     k.add('matte', place(blob(0.09), [x, 0.45, -0.6], [k.r() * 3, k.r() * 3, 0], [0.8, 2.6, 0.8]), k.tone(C.leafDark, 0.08), { shade: false });
   }
 }
-const BUILDERS = { bench, easel, lamp, planter, picnicTable, stall, signpost, flowerBed, dock, barrel, crate, hitchingPost, trough, lantern, garden };
+// Chicken coop: a little plank hen house up on short legs, a sloping roof, its pop hole and a ramp down to the ground,
+// and a small run of posts and rails beside it for the hens.
+function chickenCoop(k) {
+  const hx = -0.75, W = 1.4, D = 1.15, LEG = 0.32, H = 0.9;   // (the house on the -x side, the run on the +x side)
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) k.add('matte', place(chamferBox(0.09, LEG + 0.04, 0.09, 0.01), [hx + sx * (W / 2 - 0.06), (LEG + 0.04) / 2, sz * (D / 2 - 0.06)]), k.tone(C.woodDark, 0.05));
+  k.add('matte', place(chamferBox(W, H, D, 0.02), [hx, LEG + H / 2, 0]), k.tone(C.woodRed, 0.06));
+  for (let i = 0; i < 4; i++) k.add('matte', place(chamferBox(W + 0.02, 0.025, 0.02, 0.005), [hx, LEG + 0.18 + i * 0.2, D / 2 + 0.01]), k.tone(C.woodDark, 0.05));   // (the boards' lines on its front)
+  k.add('matte', place(chamferBox(W + 0.24, 0.06, D + 0.34, 0.012), [hx, LEG + H + 0.07, 0.02], [-0.22, 0, 0]), k.tone(C.woodDark, 0.06));   // (the roof, down toward the front)
+  k.add('iron', place(new THREE.BoxGeometry(0.3, 0.32, 0.02), [hx + 0.32, LEG + 0.2, D / 2 + 0.02]), 0x241a12, { shade: false });   // (the pop hole)
+  k.add('matte', beam([hx + 0.32, LEG + 0.04, D / 2 + 0.02], [hx + 0.32, 0.02, D / 2 + 0.62], 0.26, 0.03, 0.006), k.tone(C.wood, 0.05));   // (the ramp)
+  for (const [x0, z0, x1, z1] of [[0.0, -0.95, 1.5, -0.95], [1.5, -0.95, 1.5, 0.95], [1.5, 0.95, 0.0, 0.95]]) {   // (the run: three sides, the house the fourth)
+    for (const [x, z] of [[x0, z0], [x1, z1]]) k.add('matte', place(chamferBox(0.07, 0.8, 0.07, 0.01), [x, 0.4, z]), k.tone(C.woodDark, 0.05));
+    for (const y of [0.3, 0.7]) k.add('matte', beam([x0, y, z0], [x1, y, z1], 0.035, 0.03, 0.005), k.tone(C.wood, 0.06));
+  }
+}
+const BUILDERS = { bench, easel, lamp, planter, picnicTable, stall, signpost, flowerBed, dock, barrel, crate, hitchingPost, trough, lantern, garden, chickenCoop };
+// a wagon standing for good (no team, no driver): the game's own wagon models (src/wagon.js), loaded once with every kind;
+// the Group comes back at once and the wagon goes in it when it has loaded. Its middle at the prop's spot, its tongue
+// resting on the ground toward the prop's front (+z). (Never in a walker's way through the wagons' list: the world's
+// blockers have it as a prop, src/world.js SOLID_PROPS)
+let WAGON_LIB = null;
+function wagonProp(kind) {
+  const group = new THREE.Group(); group.name = kind; group.userData.kind = kind;
+  WAGON_LIB = WAGON_LIB || import('../../src/wagon.js').then((M) => M.loadWagons().then((lib) => ({ M, lib })));
+  group.userData.ready = WAGON_LIB.then(({ M, lib }) => {   // (ready: for a picture of it, once it's in)
+    const wg = M.standWagon(lib, { kind: WAGON_PROPS[kind], W: { heightAt: () => 0 }, team: false, driver: false });
+    wg.boxes = null; group.add(wg.root);
+  }).catch((e) => console.warn('townProps: the wagon could not be made', kind, e));
+  return group;
+}
 const CACHE = new Map();
 
 // A new Group for the prop: meshes sharing the cached geometry and materials.
 export function makeProp(kind) {
+  if (WAGON_PROPS[kind]) return wagonProp(kind);
   if (kind === 'valehexGlobe') return makeValehexGlobe();
   if (kind === 'stateMap') return makeStateMap();
   if (kind === 'obelisk') return makeObelisk();

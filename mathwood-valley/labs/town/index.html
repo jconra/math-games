@@ -14,73 +14,95 @@
   * { box-sizing: border-box; }
   html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font: 400 14px/1.4 Bitter, Georgia, serif; }
   canvas { display: block; touch-action: none; }
-  .tl-panel { position: fixed; left: 12px; top: 12px; z-index: 7; width: min(330px, calc(100vw - 24px)); max-height: calc(100vh - 24px - var(--bar-room, 0px)); overflow: auto;
-    background: var(--panel); border: 1px solid var(--edge); border-radius: 12px; padding: 10px 12px 12px; }
-  .tl-panel h1 { font: 400 22px/1.1 Rye, Georgia, serif; color: var(--brass-hi); margin: 0; letter-spacing: 0.02em; }
-  .tl-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  .tl-head a { color: var(--dim); font-size: 13px; }
-  .tl-panel h2 { font: 600 12px/1.2 Bitter, Georgia, serif; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); margin: 10px 0 5px; }
-  .tl-row { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
-  .tl-panel button, .tl-panel select { font: inherit; font-size: 13px; color: var(--text); background: #3a2716; border: 1px solid var(--edge); border-radius: 8px; padding: 4px 8px; cursor: pointer; }
-  .tl-panel button:hover, .tl-panel button:focus-visible { border-color: var(--brass-hi); outline: none; }
-  .tl-panel button.on { background: #5b3d1c; border-color: var(--brass-hi); }
-  .tl-panel button.save { background: #6b4a16; border-color: var(--brass-hi); font-weight: 600; }
-  .tl-panel label { display: inline-flex; gap: 6px; align-items: center; color: var(--dim); }
-  .tl-status { margin: 8px 0 0; color: var(--dim); min-height: 1.4em; }
+  /* THE TOP STRIP: the file (Save, Download, Open, Back to saved), what it says, the views, help. One slim line; on a
+     phone it swipes sideways */
+  .tl-top { position: fixed; left: 0; right: 0; top: 0; z-index: 7; display: flex; align-items: center; gap: 6px; padding: 5px 10px; padding-left: max(10px, env(safe-area-inset-left));
+    background: var(--panel); border-bottom: 1px solid var(--edge); white-space: nowrap; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; touch-action: pan-x; }
+  .tl-top::-webkit-scrollbar { display: none; }
+  .tl-top h1 { font: 400 18px/1 Rye, Georgia, serif; color: var(--brass-hi); margin: 0 6px 0 0; letter-spacing: 0.02em; flex: none; }
+  .tl-top a { color: var(--dim); font-size: 13px; flex: none; margin-left: 4px; }
+  .tl-top button, .tl-top select, .tl-opts button { font: inherit; font-size: 13px; color: var(--text); background: #3a2716; border: 1px solid var(--edge); border-radius: 8px; padding: 3px 9px; cursor: pointer; flex: none; min-height: 30px; }
+  .tl-top button:hover, .tl-top button:focus-visible, .tl-top select:focus-visible, .tl-opts button:hover, .tl-opts button:focus-visible { border-color: var(--brass-hi); outline: none; }
+  .tl-top button.save { background: #6b4a16; border-color: var(--brass-hi); font-weight: 600; }
+  .tl-top button[aria-expanded="true"], .tl-top button[aria-pressed="true"], .tl-opts button.on { background: #5b3d1c; border-color: var(--brass-hi); }
+  .tl-status { flex: 1 1 auto; min-width: 9em; overflow: hidden; text-overflow: ellipsis; color: var(--dim); font-size: 13px; padding: 0 4px; }
   .tl-status.unsaved { color: var(--warn); }
   .tl-status.saved { color: var(--ok); }
-  .tl-help { color: var(--dim); font-size: 13px; margin: 6px 0 0; }
-  .tl-fold { display: none; }
-  .tl-hud { position: fixed; right: 12px; top: 12px; z-index: 5; color: var(--dim); background: rgba(30, 20, 12, 0.7); border-radius: 8px; padding: 4px 8px; font-size: 12px; pointer-events: none; }
+  .tl-sep { width: 1px; align-self: stretch; background: var(--edge); margin: 2px 2px; flex: none; }
+  /* help: a small card under the strip, opened by ? */
+  .tl-help { position: fixed; right: 10px; top: 48px; z-index: 8; width: min(380px, calc(100vw - 20px)); background: var(--panel); border: 1px solid var(--edge); border-radius: 10px;
+    padding: 8px 12px; color: var(--dim); font-size: 13px; }
+  .tl-help[hidden] { display: none; }
+  .tl-help b { color: var(--text); font-weight: 600; }
+  .tl-help p { margin: 4px 0; }
+  .tl-hud { position: fixed; right: 12px; top: 48px; z-index: 5; color: var(--dim); background: rgba(30, 20, 12, 0.7); border-radius: 8px; padding: 4px 8px; font-size: 12px; pointer-events: none; }
+  /* A FENCE'S OR A FLOWER'S OPTIONS: a small row just over the Build bar, shown while one is picked on it */
+  .tl-opts { position: fixed; left: 12px; right: 12px; bottom: calc(var(--bar-room, 0px) + 4px); z-index: 6; display: flex; align-items: center; gap: 8px; padding: 5px 8px;
+    background: var(--panel); border: 1px solid var(--edge); border-radius: 10px; white-space: nowrap; overflow-x: auto; overflow-y: hidden; scrollbar-width: thin; touch-action: pan-x; }
+  .tl-opts[hidden], .tl-opts > [hidden] { display: none; }
+  .tl-opts > div { display: flex; align-items: center; gap: 8px; flex: none; }
+  .tl-opts label { display: inline-flex; gap: 6px; align-items: center; color: var(--dim); font-size: 13px; flex: none; }
+  .tl-opts .tl-what { color: var(--brass-hi); font-weight: 600; font-size: 13px; flex: none; }
+  .tl-styles { display: flex; gap: 4px; flex: none; }
+  .tl-opts button.tl-style { display: flex; flex-direction: column; align-items: stretch; gap: 1px; padding: 2px 2px 2px; font-size: 10px; line-height: 1.05; text-align: center; width: 62px; min-height: 0; }
+  .tl-style img { width: 100%; height: auto; aspect-ratio: 3 / 2; border-radius: 4px; background: #2a1d10; display: block; }   /* (height: auto, over its height attribute) */
+  .tl-style span { overflow: hidden; text-overflow: ellipsis; }
+  .tl-opts button.tl-style.on { background: #6b4a16; border-color: var(--brass-hi); box-shadow: 0 0 0 1px var(--brass-hi) inset; }
+  .tl-slide input { width: 100px; accent-color: var(--brass); }
+  .tl-slide output { min-width: 3.4em; color: var(--text); }
+  /* the Build bar's own snap box, and on a phone its tools in one row that swipes sideways (the plant row does already) */
+  .tl-snap { margin-left: 2px; }
+  @media (max-width: 700px) {
+    .pb-bar .pb-top { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; touch-action: pan-x; scrollbar-width: none; }   /* (.pb-bar: over the bar's own .pb-line, which comes later) */
+    .pb-bar .pb-top::-webkit-scrollbar { display: none; }
+    .pb-bar .pb-top > *, .pb-bar .pb-top .pb-b { flex: none; }
+    .tl-top h1 { display: none; }
+    .tl-hud { display: none; }
+    .tl-opts { left: 8px; right: 8px; }
+    .tl-opts button.tl-style { width: 54px; font-size: 9.5px; }
+  }
   .tl-loading { position: fixed; inset: 0; display: grid; place-items: center; z-index: 9; background: var(--bg); color: var(--brass-hi); font: 400 24px Rye, Georgia, serif; text-align: center; padding: 16px; }
   .tl-loading[hidden] { display: none; }
-  @media (max-width: 640px) {
-    .tl-panel { padding: 8px 10px; }
-    .tl-panel.folded .tl-body { display: none; }
-    .tl-fold { display: inline-block; }
-    .tl-hud { top: auto; bottom: 12px; }
-  }
 </style>
 </head>
 <body>
-<div class="tl-panel" id="tlPanel">
-  <div class="tl-head"><h1>Town Lab</h1><span><button type="button" class="tl-fold" id="tlFold" aria-expanded="true">Hide</button> <a href="../">Labs</a></span></div>
-  <div class="tl-body">
-    <p class="tl-status" id="tlStatus" aria-live="polite">Loading the valley…</p>
-    <div class="tl-row">
-      <button type="button" class="save" id="tlSave" title="Save the decor for the game (Ctrl+S)">Save</button>
-      <button type="button" id="tlDownload" title="Download decor.json to hand over">Download</button>
-      <button type="button" id="tlLoad" title="Open a decor.json file">Open…</button>
-      <button type="button" id="tlRevert" title="Throw away the changes since the last save">Back to saved</button>
-      <input type="file" id="tlFile" accept=".json,application/json" hidden>
-    </div>
-    <h2>Move</h2>
-    <div class="tl-row">
-      <button type="button" data-pick="move">Move things</button>
-      <button type="button" data-pick="turn">Turn things</button>
-      <label><input type="checkbox" id="tlSnap" checked> Snap to half metres and 15°</label>
-    </div>
-    <h2>Put down</h2>
-    <div class="tl-row" id="tlProps"></div>
-    <h2>Fences</h2>
-    <div class="tl-row">
-      <button type="button" data-pick="fence">Fence run</button>
-      <button type="button" data-pick="unfence">Take fence down</button>
-      <label><input type="checkbox" id="tlStraight" checked> Straight runs</label>
-    </div>
-    <h2>Flowers and plants</h2>
-    <div class="tl-row">
-      <select id="tlFlower" aria-label="Which flower"></select>
-      <button type="button" data-pick="flowers">Paint</button>
-      <button type="button" data-pick="erase">Erase plants</button>
-    </div>
-    <h2>Look at</h2>
-    <div class="tl-row" id="tlViews"></div>
-    <p class="tl-help">Drag the ground to turn the view, right-drag (or two fingers) to slide it, wheel or pinch to zoom. The bar along the bottom has every kind of thing, Undo and Redo (Ctrl+Z, Ctrl+Y); Delete takes the chosen thing away.</p>
+<header class="tl-top" id="tlTop">
+  <h1>Town Lab</h1>
+  <button type="button" class="save" id="tlSave" title="Save the decor for the game (Ctrl+S)">Save</button>
+  <span class="tl-status" id="tlStatus" aria-live="polite">Loading the valley…</span>
+  <button type="button" id="tlDownload" title="Download decor.json to hand over">Download</button>
+  <button type="button" id="tlLoad" title="Open a decor.json file">Open…</button>
+  <button type="button" id="tlRevert" title="Throw away the changes since the last save">Back to saved</button>
+  <span class="tl-sep"></span>
+  <select id="tlView" aria-label="Look at" title="Take the view to a part of the town"><option value="">Look at…</option></select>
+  <button type="button" id="tlCode" aria-pressed="true" title="Show or hide the outlines of what the game puts down itself: the farm, your homestead, the mill hill, the range, the jobs board">Game's things</button>
+  <button type="button" id="tlHelpBtn" aria-expanded="false" aria-controls="tlHelp" title="How to fly the view and build">?</button>
+  <a href="../">Labs</a>
+  <input type="file" id="tlFile" accept=".json,application/json" hidden>
+</header>
+<div class="tl-help" id="tlHelp" hidden>
+  <p><b>W A S D</b> fly the view forward, left, back and right, along the ground the way it faces; <b>Space</b> up, <b>C</b> down; hold <b>Shift</b> to go faster. Drag the ground to turn the view, right-drag (or two fingers) to slide it, wheel or pinch to zoom.</p>
+  <p><b>The bar along the bottom</b> has everything: Select (then Move or Turn, Snap to half metres and 15°), Add, Clear, every building, prop, fence, gate, path, tree and flower, Undo and Redo. Picking a fence or a flower shows its choices just over the bar (a fence's style and height, Gate, Take down; Paint or Rub out).</p>
+  <p><b>Ctrl+S</b> saves, <b>Ctrl+Z</b> / <b>Ctrl+Y</b> undo and redo, <b>Delete</b> takes the chosen thing away.</p>
+</div>
+<div class="tl-opts" id="tlOpts" hidden>
+  <div id="tlFenceOpts" hidden>
+    <span class="tl-what">Fence</span>
+    <div class="tl-styles" id="tlStyles" role="radiogroup" aria-label="Fence style"></div>
+    <label class="tl-slide" title="The fence's height against its style's usual">Height <input type="range" id="tlFenceH" min="0.6" max="1.5" step="0.05" value="1"> <output id="tlFenceHOut" for="tlFenceH"></output></label>
+    <label title="A dragged fence pulled straight between its corners"><input type="checkbox" id="tlStraight" checked> Straight runs</label>
+    <button type="button" data-pick="fence" title="Drag along the ground to run a fence">Draw</button>
+    <button type="button" data-pick="gate" title="Click on a fence to put a gate in it (it takes the fence's style)">Gate</button>
+    <button type="button" data-pick="unfence" title="Drag over a fence to take it down">Take down</button>
+  </div>
+  <div id="tlFlowerOpts" hidden>
+    <span class="tl-what" id="tlFlowerName">Flowers</span>
+    <button type="button" data-pick="flowers" title="Drag to paint them (the brush size and thickness are on the bar)">Paint</button>
+    <button type="button" data-pick="erase" title="Drag to rub out plants and flowers">Rub out</button>
   </div>
 </div>
 <div class="tl-hud" id="tlHud"></div>
 <div class="tl-loading" id="tlLoading">Riding into the valley…</div>
-<script type="module" src="main.js?v=1"></script>
+<script type="module" src="main.js?v=6"></script>
 </body>
 </html>

@@ -25,6 +25,9 @@ export const TOWN_ASSETS = {
   // player's cabin, so it loads once), a little smaller, as other people's homes behind the main row toward the lake
   // (src/townpeople.js knows their doors: people go in and out of them, and their windows light up at night)
   home: { name: 'Home', file: 'cabin', box: [0.944, 0.897, 1.0], front: '+Z', size: 8.6, category: 'home', sink: 0.006 },
+  // BUILT IN CODE ONLY (code: true, no model file: objects/codebuildings.js builds it, labs/buildings/blacksmith.js): the
+  // smithy, board and batten, its big doors in its gable end, a shoeing shed on its right; box: its own 11.1 x 5.6 x 7.8 m
+  blacksmith: { name: 'Blacksmith', code: true, box: [1.0, 0.505, 0.703], front: '+Z', size: 11.1, category: 'work' },
 };
 // a building's footprint (width along its own x, depth along its own z, metres) and height, from its kind and size
 export function modelFootprint(it) {

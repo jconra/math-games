@@ -37,10 +37,10 @@ test('the items: every job\'s four buckles, everything for sale, the collections
   assert.equal(c.items.filter((i) => i.group === 'buckles').length, jobs.length * BUCKLES.length, 'four buckles a job');
   assert.ok(all.includes('buckle:targets:gold'), 'the target range counts for every rider (no shooting mode)');
   const buy = all.filter((i) => i.startsWith('buy:'));
-  assert.equal(buy.length, 1 + SADDLES.length + (HORSES.length - 1) + (HATS.length - 1) + DOGS.length + KINDS.length + SLOTS.length,
-    'the cabin, every saddle, every horse but the free bay, every hat but the free one, every dog, one of each farm animal, every piece of furniture');
+  assert.equal(buy.length, 1 + SADDLES.length + HORSES.length + (HATS.length - 1) + DOGS.length + KINDS.length + SLOTS.length,
+    'the cabin, every saddle, every horse (none free: every rider starts on foot), every hat but the free one, every dog, one of each farm animal, every piece of furniture');
   assert.equal(c.items.find((i) => i.id === 'buy:cabin:home').need, PRICES.cabin, 'the cabin is for sale');
-  for (const h of HORSES) assert.equal(all.includes(`buy:horse:${h.id}`), h.id !== 'bay', h.id);
+  for (const h of HORSES) assert.ok(all.includes(`buy:horse:${h.id}`), h.id);
   for (const k of Object.keys(KEEPSAKES)) assert.ok(all.includes(`collect:keepsake:${k}`), k);
   for (const h of HIDEOUTS) assert.ok(all.includes(`collect:hideout:${h.id}`), h.id);
   for (const n of PHOTO_STEPS) assert.ok(all.includes(`collect:photos:${n}`), String(n));
@@ -76,7 +76,7 @@ test('a played rider: what they did is checked off, from the fields the game alr
   r.album = [{ eq: 'x + 1 = 2', x: '1' }];
   r.topics.loot = { trips: 2 };
   const c = completion(r), done = new Set(c.items.filter((i) => i.done).map((i) => i.id));
-  const want = ['buckle:cattle:tin', 'buckle:cattle:copper', 'buckle:boxes:tin', 'buckle:boxes:copper', 'buy:saddle:plain', 'buy:horse:donkey',
+  const want = ['buckle:cattle:tin', 'buckle:cattle:copper', 'buckle:boxes:tin', 'buckle:boxes:copper', 'buy:saddle:plain', 'buy:horse:bay', 'buy:horse:donkey',
     'buy:hat:straw', 'buy:hat:bowler', 'buy:dog:pug', 'buy:animal:sheep', 'buy:furniture:rug', 'collect:photos:1', 'collect:photos:6',
     'collect:hideout:hollow', 'collect:hideout:timber'];
   assert.deepEqual([...done].sort(), want.sort());
@@ -166,7 +166,7 @@ test('goals: pin up to two, progress, reached ones make room, finished or unknow
   assert.equal(progressLine({ group: 'buy', have: 60, need: 60, done: false }), 'You have the gold!');
   // buying one thing moves the count; buying the lot reaches the goal (flagged, stamped) and makes room
   unlocked(r);
-  r.owned.horses = ['bay', 'midnight'];
+  r.owned.horses = ['midnight'];
   assert.deepEqual(unlocked(r).map((i) => [i.id, !!i.goal]), [['buy:horse:midnight', false]]);
   assert.equal(goalsOf(r)[1].line, `1 / ${buyAll}`);
   const all = everything();
@@ -267,7 +267,7 @@ test('the copies of the camps and hideouts match the files that draw them; the a
 
 test('the shop sells what the catalog lists (shop.js takes its tables from src/catalog.js)', () => {
   const shop = source('../src/shop.js');
-  assert.match(shop, /import \{ PRICES, SADDLES, HORSES, DOGS, DOG_NAMES \} from '\.\/catalog\.js';/);
+  assert.match(shop, /import \{ PRICES, SADDLES, HORSES, DOGS, DOG_NAMES(, LADDER)? \} from '\.\/catalog\.js';/);   // (LADDER: each horse's size and speed)
   assert.match(shop, /export \{ PRICES, SADDLES, HORSES, DOGS, DOG_NAMES \};/);
   assert.ok(!/export const (PRICES|SADDLES|HORSES|DOGS) =/.test(shop), 'one copy of each table');
   for (const s of SADDLES) assert.ok(PRICES.saddle[s.id] > 0, s.id);

@@ -45,7 +45,7 @@ export const LANTERNS = {
 };
 export const WIN_MAX = 16;                                            // (the most boxes a building has: the saloon's 14 and its 2 lanterns)
 const AXIS = { front: [2, 1], back: [2, -1], px: [0, 1], nx: [0, -1] };   // (the wall's depth axis: 0 x, 2 z; and which way is out)
-const LIT_DEFAULT = (it) => (it.kind === 'cabin' ? 0 : 1);
+const LIT_DEFAULT = (it) => (it.id === 'cabin' ? 0 : 1);   // (the player's cabin is the layout's 'cabin'; a cabin put down for decor is somebody's house, lit)
 const COLOUR = new THREE.Color(1.0, 0.42, 0.1).multiplyScalar(0.22);   // (the windows' warm light: a lamp's, linear; after the night's exposure about a bright orange, the panes' bars still dark)
 
 // the patch on a building's own material copy: a box test over the frame's position (vWin), emissive by how dark the
@@ -98,7 +98,15 @@ export function makeNightLights({ village, shade = null, heightAt = () => 0 }) {
 
   // a building fitted: its windows' boxes found, its material copied and patched
   function fit(o) {
-    const it = o.it, W = WINDOWS[it.kind], LT = LANTERNS[it.kind]; if (!W && !LT) return null;
+    const it = o.it, W = WINDOWS[it.kind], LT = LANTERNS[it.kind];
+    // (a building made in code lights itself: its own lanterns, glow and window panes (objects/codebuild.js lit); here
+    // only how lit it is, and the light it throws on the street for the lamps' picture)
+    if (o.code) {
+      if (!want.has(it.id)) want.set(it.id, LIT_DEFAULT(it));
+      shown.set(it.id, want.get(it.id)); o.lit = true;
+      return { o, U: { winOn: { value: 0 } }, mats: [], lamps: o.code.nightLamps.map((L) => ({ at: L.at, reach: L.reach, strength: L.strength })), lanterns: [], at: o.group.matrixWorld.clone(), code: o.code };
+    }
+    if (!W && !LT) return null;
     const s = it.size / ((W || LT).ref || it.size), boxes = [], lamps = [], lanterns = [];
     o.group.updateMatrixWorld(true); const inv = new THREE.Matrix4().copy(o.group.matrixWorld).invert();
     const meshes = []; o.inner.traverse((m) => { if (m.isMesh) meshes.push(m); });
@@ -167,6 +175,7 @@ export function makeNightLights({ village, shade = null, heightAt = () => 0 }) {
         if (Math.abs(s1 - s0) > 1e-4) { shown.set(id, s1); moved = true; }
         f.U.winOn.value = on * s1;
         for (const q of f.mats) q.U.winOn.value = on * s1;
+        if (f.code) f.code.lit(on, s1);
       }
       // the halos (one each lantern, by its building's light) and the lamp list, again when anything changed
       if (moved || halosDirty) {

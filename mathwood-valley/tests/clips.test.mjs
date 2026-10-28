@@ -51,12 +51,14 @@ for (const body of ['m', 'f']) {
   });
 }
 
-test('the riding loops last exactly as long as the horse\'s Walk and Gallop', () => {
+test('the riding loops last exactly as long as the horse\'s Walk and Gallop (the pack horse\'s and the steed\'s)', () => {
   const { kinds } = JSON.parse(fs.readFileSync(new URL('animals/animals.json', MODELS)).toString());
   for (const body of ['m', 'f']) {
     const g = glb(`people/clips_${body}.glb`);
-    assert.ok(Math.abs(length(g, clip(g, 'Ride')) - kinds.horse.clips.Walk) < 0.002, 'Ride vs the horse\'s Walk');
-    assert.ok(Math.abs(length(g, clip(g, 'Ride_Gallop')) - kinds.horse.clips.Gallop) < 0.002, 'Ride_Gallop vs the horse\'s Gallop');
+    for (const kind of ['horse', 'steed']) {
+      assert.ok(Math.abs(length(g, clip(g, 'Ride')) - kinds[kind].clips.Walk) < 0.002, `Ride vs the ${kind}'s Walk`);
+      assert.ok(Math.abs(length(g, clip(g, 'Ride_Gallop')) - kinds[kind].clips.Gallop) < 0.002, `Ride_Gallop vs the ${kind}'s Gallop`);
+    }
   }
 });
 

@@ -26,7 +26,12 @@
 //   missions: { store, deliveries, sheep, pigs, wagon, loot, hunt, range, ... }   which jobs are on (MISSIONS): every
 //             one on by default; a grown-up can turn some off on the title (jobOn)
 //   missionsV: 2   the jobs were all switched on once (riders from before every job was on by default)
-//   owned:    { saddle: null|'plain'|'tooled'|'silver', horse: 'bay', dog: null|{ kind, name } }
+//   owned:    { saddle: null|'plain'|'tooled'|'silver', horse: null|'donkey'|..., dog: null|{ kind, name }, horsesV: 2 }
+//             (every rider starts on foot: horse null until one is bought; the bay was every rider's free horse until
+//               2026-10-27 and is bought now: a rider from before (no horsesV) keeps it, put in owned.horses once)
+//             (+ horses: ['donkey', 'white', ...] the stable's horses bought; mounts: { 'pen-3': { name, line, coat, size,
+//               gallop, price, from, at } } horses of the rider's own off the stable's ladder, each with its whole coat;
+//               penNext: the pen's next number. horse is the id ridden. src/mounts.js reads them all)
 //             (+ home: 'cabin' once the cabin itself is bought (src/catalog.js PRICES.cabin); a rider with any furniture
 //               from before the cabin was for sale has it as bought (fixRider))
 //             (+ cabin: ['rug', 'bed', ...] the furnishings bought for the cabin, once any are: src/cabin/slots.js)
@@ -56,6 +61,7 @@
 
 import { cleanAnimals, cleanGoods } from './math/goods.js';
 import { PRICES } from './catalog.js';
+import { cleanMounts } from './mounts.js';
 import { migrate as migrateSkill, record as recordSkill, readAloud as readsNow } from './math/skill.js';
 import { migrate as migrateLevels, recordLevel, PLACE } from './levels/model.js';
 import { migrate as migrateFacts } from './math/facts.js';
@@ -398,7 +404,7 @@ export function fixRider(r) {
     owned: {
       ...owned,
       saddle: owned.saddle == null ? null : String(owned.saddle),
-      horse: typeof owned.horse === 'string' ? owned.horse : 'bay',
+      horse: typeof owned.horse === 'string' ? owned.horse : owned.horsesV === 2 ? null : 'bay',
       dog: owned.dog && typeof owned.dog === 'object' ? owned.dog : null,
       // the cabin's furnishings bought (slot ids, src/cabin/slots.js), only when the rider has any
       ...(owned.cabin !== undefined ? { cabin: [...new Set((Array.isArray(owned.cabin) ? owned.cabin : []).filter(c => typeof c === 'string'))] } : {}),
@@ -406,6 +412,9 @@ export function fixRider(r) {
       ...(owned.animals !== undefined ? { animals: cleanAnimals(owned.animals) } : {}),
       ...(owned.goods !== undefined ? { goods: cleanGoods(owned.goods) } : {}),
       ...(owned.yard !== undefined ? { yard: cleanGoods(owned.yard, { parts: true }) } : {}),
+      // the rider's own horses off the stable's ladder (src/mounts.js), only when the rider has any
+      ...(owned.mounts !== undefined ? { mounts: cleanMounts(owned.mounts) } : {}),
+      ...(owned.penNext !== undefined ? { penNext: Math.max(1, Math.round(+owned.penNext || 1)) } : {}),
     },
     lockboxes: cleanBoxes(r.lockboxes),
     stats: {
@@ -427,6 +436,10 @@ export function fixRider(r) {
   if (owned.home === 'cabin' || (!otherHome && Array.isArray(owned.cabin) && owned.cabin.some(c => typeof c === 'string' && PRICES.furniture[c] != null))) out.owned.home = 'cabin';
   else if (otherHome) out.owned.home = owned.home;
   else delete out.owned.home;
+  // The bay was every rider's free horse until 2026-10-27; every horse is bought now (riders start on foot). A rider
+  // from before keeps it: put in the horses owned once (horsesV 2), whether it was ridden or only implied.
+  if (owned.horsesV !== 2) out.owned.horses = [...new Set(['bay', ...(Array.isArray(owned.horses) ? owned.horses.filter(h => typeof h === 'string') : [])])];
+  out.owned.horsesV = 2;
   // Bounty is every coin ever earned, so it can never be less than the gold in hand.
   if (out.bounty < out.gold) out.bounty = out.gold;
   out.topics.times = obj(out.topics.times);
@@ -486,7 +499,7 @@ export function saveRider(rider) {
 // A fresh rider with every default filled in. It is NOT saved until saveRider() is called.
 // look = { outfit, palette, skin, hair } (any part may be left out).
 export function newRider(name, look) {
-  return fixRider({ id: makeId(), name, look, made: Date.now(), last: 0 });
+  return fixRider({ id: makeId(), name, look, made: Date.now(), last: 0, owned: { horse: null, horsesV: 2 } });   // (on foot: the stable sells horses, the donkey first at 30)
 }
 
 export function deleteRider(id) {

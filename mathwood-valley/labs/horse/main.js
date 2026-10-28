@@ -1,23 +1,21 @@
-// THE HORSE LAB: the new sculpted horse (horse.glb: the game's horse skeleton and clips, a sculpted body, glossy eyes)
-// with its coat worked out in the shader (coat.js) from a coat recipe (recipes.js), on grass under the Material Lab's
-// light. A turntable, a line-up of every preset, the old horse beside the new, and two horses down the road at the
-// distance a rider sees them.
+// THE HORSE LAB: the new sculpted horse (the game's models/animals/steed.glb: the pack horse's skeleton and clips, a
+// sculpted body, glossy eyes) with its coat worked out in the shader (src/actors/horsecoat.js) from a coat recipe
+// (src/actors/horsecoats.js), on grass under the Material Lab's light. A turntable, a line-up of every preset, the old horse beside the new, and two
+// horses down the road at the distance a rider sees them. (The coat, the hair and the recipes are the game's own,
+// in src/actors/: the lab imports them from there.)
 // This file: the scene, the horses, the panel, the measuring.
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { loadAnimals, makeAnimal } from '../../src/actors/animals.js';
-import { prepareHorse, coatMaterial, eyeMaterial, noiseTexture } from './coat.js';
-import { buildHair, hairMaterial, attachHair, hairTexture } from './hair.js';
-import { PRESETS, PRESET_ORDER, recipe, fill, FACES, LEGS, PINTOS } from './recipes.js';
+import { coatMaterial, eyeMaterial, noiseTexture } from '../../src/actors/horsecoat.js';
+import { hairMaterial, attachHair, hairTexture } from '../../src/actors/horsehair.js';
+import { PRESETS, PRESET_ORDER, recipe, fill, FACES, LEGS, PINTOS } from '../../src/actors/horsecoats.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const num = (n) => Math.round(n).toLocaleString('en-US');
 const kb = (b) => (b >= 1048576 ? (b / 1048576).toFixed(2) + ' MB' : Math.round(b / 1024) + ' KB');
 const GAME = new URL('../../', import.meta.url).href;
-const MODEL = 'horse.glb';
 // the game's horses as the game dresses them (src/player.js HORSE_LOOKS: which animal, a coat tint over it)
 const OLD_LOOKS = {
   bay: { kind: 'horse' }, white: { kind: 'horseWhite' }, palomino: { kind: 'horseWhite', tint: '#f3d394' },
@@ -27,9 +25,11 @@ const CLIPS_NEW = ['LookLeft', 'LookRight', 'Nod', 'HeadShake', 'EarFlick'];
 
 // ── renderer, scene, camera, light (the Material Lab's) ───────────────────────────────────────────────────────────────
 const canvas = $('#c');
-// (?webgl1: draw with WebGL 1, as on a computer without WebGL 2, to check the coat still compiles there)
+// (?webgl1: draw with WebGL 1, as on a computer without WebGL 2, to check the coat still compiles there; ?aa=0: no screen
+// smoothing (multisampling), as the game's potato tier asks: the hair then draws with a hard alpha cut)
 const WEBGL1 = new URLSearchParams(location.search).has('webgl1');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance', context: WEBGL1 ? canvas.getContext('webgl', { antialias: true }) : undefined });
+const AA = new URLSearchParams(location.search).get('aa') !== '0';
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: AA, powerPreference: 'high-performance', context: WEBGL1 ? canvas.getContext('webgl', { antialias: AA }) : undefined });
 renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
@@ -46,6 +46,7 @@ const state = {
   preset: 'bay', r: recipe('bay'), view: 'turntable', old: false, mask: 'off',
   clip: 'Idle', playing: true, speed: 1, spin: false,
   az: 200, hour: 15.5, shadows: true,
+  lite: false, size: 1, fade: 1, aa0: !AA,   // (the far look; the horse's size; its fade; no screen smoothing)
 };
 
 const SKY_DAY = new THREE.Color(0x9cbbe0), SKY_DUSK = new THREE.Color(0xd99a72), SUN_DAY = new THREE.Color(0xfff3e2), SUN_LOW = new THREE.Color(0xffa060);
@@ -112,7 +113,7 @@ const road = new THREE.Mesh(new THREE.PlaneGeometry(6, 160).rotateX(-Math.PI / 2
 road.position.set(ROAD_X, 0.003, 0); road.receiveShadow = true; road.name = 'road'; scene.add(road);
 
 // ── the horses ────────────────────────────────────────────────────────────────────────────────────────────────────────
-let newLib = null, oldLib = null, oldLoading = null, shape = null, info = null, hair = null, eyeMat = null;
+let newLib = null, oldLib = null, oldLoading = null, shape = null, info = null, hair = null, hairLite = null;
 // how fast each clip carries the horse (m/s, at speed 1): the mane and tail stream with it
 const CLIP_SPEED = { Walk: 1.6, Gallop: 9, Gallop_Jump: 8, Jump_toIdle: 2 };
 const clock = { t: 0 };
@@ -121,23 +122,15 @@ const horses = [];                    // every horse in the scene: { a, mat, r, 
 const group = new THREE.Group(); scene.add(group);
 const timing = { load: 0, prep: 0, compile: 0, firstFrame: 0 };
 
+// the new horse from the game's own animal library (models/animals/steed.glb; src/actors/animals.js loads it, measures
+// the body for the coat and makes the hair cards, once)
 async function loadNew() {
   const t0 = performance.now();
-  const [g, json] = await Promise.all([
-    new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(MODEL),
-    fetch(GAME + 'models/animals/animals.json').then((r) => r.json()),
-  ]);
-  info = { ...json.kinds.horse };
-  timing.load = performance.now() - t0;
-  const t1 = performance.now();
-  shape = prepareHorse(g.scene, info.scale);
-  const t2 = performance.now();
-  hair = buildHair(shape);
-  timing.hair = performance.now() - t2;
-  if (shape.eye) eyeMat = eyeMaterial(shape, shape.eye.material);
-  timing.prep = performance.now() - t1;
-  newLib = { dir: '', info: { meshy: info }, kinds: { meshy: { scene: g.scene, clips: g.animations, info } } };
-  state.clips = g.animations.map((c) => c.name);
+  newLib = await loadAnimals(GAME, { kinds: ['steed'] });
+  const K = newLib.kinds.steed;
+  info = K.info; shape = K.shape; hair = K.hair; hairLite = K.hairLite;
+  timing.prep = K.prepMs; timing.load = performance.now() - t0 - K.prepMs;
+  state.clips = K.clips.map((c) => c.name);
 }
 function needOld() {
   if (!oldLoading) oldLoading = loadAnimals(GAME, { kinds: ['horse', 'horseWhite', 'farmHorse'] }).then((l) => { oldLib = l; return l; });
@@ -145,24 +138,29 @@ function needOld() {
 }
 // one horse: the new body with its own coat (and the eyes as they come), and the game's old one for the same horse
 function makeHorse(r) {
-  const a = makeAnimal(newLib, 'meshy', { shadows: true });
-  let body = null, eye = null;
-  a.model.traverse((o) => {
-    if (!o.isSkinnedMesh) return;
-    if (o.material && o.material.name === 'eye') eye = o;
-    else if (!body || o.geometry.attributes.position.count > body.geometry.attributes.position.count) body = o;
-  });
+  const a = makeAnimal(newLib, 'steed', { shadows: true });
+  const body = a.mesh, eye = a.eye;
   const mat = coatMaterial(shape, r, { px: PX });
+  // (the far look: its own program, the same uniforms)
+  const liteMat = coatMaterial(shape, null, { lite: true, uniforms: mat.coat.uniforms });
   body.material = mat;
-  if (eye) { eye.frustumCulled = false; eye.castShadow = false; if (eyeMat) eye.material = eyeMat; }
-  if (a.mesh !== body) { body.computeBoundingSphere(); body.boundingSphere.radius *= 1.35; }
+  if (eye) { eye.frustumCulled = false; eye.castShadow = false; eye.material = eyeMaterial(shape, shape.eye.material, { fade: mat.coat.uniforms.uFade }); }
   // the mane and tail: hair cards on the body's own skeleton, coloured by the same recipe (they share its uniforms)
   const hairMat = hairMaterial(shape, mat.coat.uniforms, renderer);
   const hairMesh = attachHair(body, hair.geometry, hairMat);
-  const h = { a, body, eye, mat, hairMat, hairMesh, r, old: null, root: new THREE.Group() };
+  const h = { a, body, eye, mat, liteMat, hairMat, hairMesh, r, old: null, root: new THREE.Group() };
   h.root.add(a.root);
+  dress(h);
   playOn(h);
   return h;
+}
+// the far look or the full one, the size and the fade, as the panel has them
+function dress(h, lite = state.lite) {
+  h.body.material = lite ? h.liteMat : h.mat;
+  h.hairMesh.geometry = lite ? hairLite.geometry : hair.geometry;
+  h.a.root.scale.setScalar(state.size);
+  h.mat.coat.uniforms.uFade.value = state.fade;
+  if (h.eye) h.eye.visible = true;
 }
 function oldOf(h) {
   if (!oldLib) return null;
@@ -190,7 +188,7 @@ function playOn(h) {
 }
 function setRecipe(h, r) { h.r = fill(r); h.mat.coat.set(h.r); if (h.old && h.old.look !== h.r.game) oldOf(h); }
 function clearHorses() {
-  for (const h of horses) { h.a.dispose(); if (h.old) h.old.a.dispose(); h.mat.dispose(); h.hairMat.dispose(); h.root.removeFromParent(); }
+  for (const h of horses) { h.a.dispose(); if (h.old) h.old.a.dispose(); h.mat.dispose(); h.liteMat.dispose(); h.hairMat.dispose(); h.root.removeFromParent(); }
   horses.length = 0;
 }
 
@@ -271,11 +269,13 @@ const SECTIONS = [
   { id: 'coat', title: 'Coat', open: true, rows: [
       C('Body colour', 'base'), S('Points', 'points', [['none', 'None'], ['black', 'Black legs and ear tips']]),
       R('Lighter belly', 'belly', 0, 1, 0.01, pct), R('Darker top line', 'sooty', 0, 1, 0.01, pct), R('Dark muzzle', 'muzzle', 0, 1, 0.01, pct), R('Dapple bloom', 'bloom', 0, 1, 0.01, pct),
-      R('Greying', 'grey', 0, 1, 0.01, pct), R('Dapples', 'dapples', 0, 1, 0.01, pct), R('Dapple size', 'dappleSize', 0.05, 0.16, 0.005, (v) => Math.round(v * 100) + ' cm'), R('Grey legs', 'greyLegs', 0, 1, 0.01, pct)],
+      R('Greying', 'grey', 0, 1, 0.01, pct), R('Dapples', 'dapples', 0, 1, 0.01, pct), R('Dapple size', 'dappleSize', 0.05, 0.16, 0.005, (v) => Math.round(v * 100) + ' cm'), R('Grey legs', 'greyLegs', 0, 1, 0.01, pct),
+      R('Dun stripe', 'dorsal', 0, 1, 0.01, pct), R('Stripe width', 'dorsalWidth', 0.015, 0.06, 0.001, (v) => (v * 200).toFixed(1) + ' cm'), R('Leg bars', 'barring', 0, 1, 0.01, pct)],
     how: `<p>Nothing is painted into a picture. Every pixel of the horse asks <b>where it sits on the horse standing at rest</b>: the model's own corner positions before the bones move them, in metres (feet on the ground, nose toward +Z). That spot rides along with the bones, so a marking stays put however the horse moves, from a nod to a gallop.</p>
 <p>From that spot it works out its colour: the body colour with a big soft mottle (no coat is one flat colour), a <b>darker top line</b> where the surface faces up along the back, a <b>lighter belly</b> and inside of the legs where it faces down or inward, <b>points</b> (black from the hooves to just over the knees and hocks, black ear tips) for a bay or buckskin, a darker muzzle, dark skin round the eyes and an almond-shaped dark lid.</p>
 <p>A <b>dapple bloom</b> (a well-fed bay or chestnut's faint dapples) puts rounded spots a few per cent lighter, in a slightly darker net, on the hip and the shoulder.</p>
 <p><b>Greying</b> takes the colour out first, then lightens the grey toward white: lighter on the head, darker on the legs. <b>Dapples</b> are round lighter spots with mid-grey gaps between them, over the whole body and neck: the distance to the nearest of a scatter of points ("cell noise"), each spot its own size.</p>
+<p>A <b>dun</b> has a dark <b>stripe</b> down the top line from the withers to the dock (a little uneven along its edges) and faint dark <b>bars</b> across the upper legs, above the knees and hocks.</p>
 <p>A <b>baked shade</b> (worked out once at load: rays from each corner of the body at rest, to see how much sky it sees) dims the sky light under the belly and between the legs, and darkens the creases: behind the elbow, the girth, the stifle, the throat.</p>` },
   { id: 'manetail', title: 'Mane and tail', open: true, rows: [
       C('Colour', 'mane'), R('Mane length', 'maneLength', 0.3, 1, 0.01, pct), R('Tail length', 'tailLength', 0.3, 1, 0.01, pct),
@@ -308,13 +308,15 @@ normal += across * (streak(p + across*e) - streak(p)) / e * height</pre>
 <p>All the noise comes from one 256 x 256 random picture, read so a single lookup gives smooth 3D noise.</p>` },
   { id: 'motion', title: 'Motion', open: true, rows: [{ t: 'clip' }, R('Speed', 'speed', 0, 2, 0.05, (v) => (+v).toFixed(2) + 'x'), K('Turntable (spin slowly)', 'spin')],
     how: `<p>The game's own horse clips (Idle, Walk, Gallop, Eating...) and five new ones for standing in a stall: LookLeft, LookRight, Nod, HeadShake, EarFlick. The coat is drawn from the rest pose, so nothing slides as the body bends; the mane and tail stream with the clip's speed.</p>` },
-  { id: 'view', title: 'View', open: true, rows: [{ t: 'views' }, K('Show the old horse', 'old')],
-    how: `<p><b>Turntable</b>: one horse. <b>Both sides</b>: the same coat from both sides. <b>Old and new</b>: the game's horse (the animal pack's, with its coat tint) beside the new one. <b>Line-up</b>: every preset in a row, like a stable line-up. <b>Riding view</b>: two horses down the road through the game's own riding camera. <b>Gallop</b>: mid-gallop from 10 m.</p>` },
+  { id: 'view', title: 'View', open: true, rows: [{ t: 'views' }, K('Show the old horse', 'old'), K('Far look (lite)', 'lite'),
+      R('Size', 'size', 0.95, 1.15, 0.05, (v) => (+v).toFixed(2) + 'x'), R('Fade', 'fade', 0, 1, 0.01, pct), K('No screen smoothing (reloads)', 'aa0')],
+    how: `<p><b>Far look</b>: the game's horse past about 30 m: a second, cheaper program (no hair streaks, no cell noise for the dapples, no hair highlight, no hard lines; two fewer varyings, for WebGL 1) and a third of the hair cards. <b>Size</b>: the game's ladder, 0.95x (Copper) to 1.15x (Midnight): the markings, being worked out on the horse at rest, grow with it. <b>Fade</b>: the horse dissolving in or out of sight, a 4 x 4 pattern of pixels at a time, as the game's people do. <b>No screen smoothing</b>: as the game's potato tier draws (no multisampling): the mane and tail are cut hard at their alpha instead of dithered.</p>
+<p><b>Turntable</b>: one horse. <b>Both sides</b>: the same coat from both sides. <b>Old and new</b>: the game's horse (the animal pack's, with its coat tint) beside the new one. <b>Line-up</b>: every preset in a row, like a stable line-up. <b>Riding view</b>: two horses down the road through the game's own riding camera. <b>Gallop</b>: mid-gallop from 10 m.</p>` },
   { id: 'light', title: 'Light', open: false, rows: [R('Sun direction', 'az', 0, 359, 1, (v) => Math.round(v) + '°'), R('Time of day', 'hour', 5.5, 19.5, 0.25, (v) => { const h = Math.floor(v), m = Math.round((v - h) * 60); return `${h}:${String(m).padStart(2, '0')}`; }), K('Shadows', 'shadows')] },
   { id: 'cost', title: 'Cost', open: true, rows: [{ t: 'cost' }, { t: 'buttons', items: [['Measure', () => measure()]] }],
-    how: `<p><b>ms per frame</b>: the horse alone (with its mane and tail), drawn 40 times at the current view and size, waiting for the graphics card after each, so it counts the card's work. The old horse is the game's animal-pack model with its one shared material.</p>` },
+    how: `<p><b>ms per frame</b>: the horse alone (with its mane and tail) at the current view and size: the graphics card's own time for each of 60 frames (the middle one), where the browser lets it time its work (WebGL 2); else drawn 40 times, waiting for the card after each. The empty frame's time is taken off. <b>Far look</b>: the lite coat and the lite hair the game uses past about 30 m. The old horse is the game's animal-pack model with its one shared material.</p>` },
 ];
-const RECIPE_KEYS = new Set(['base', 'points', 'mane', 'belly', 'sooty', 'muzzle', 'grey', 'dapples', 'dappleSize', 'greyLegs', 'face', 'star', 'faceSize', 'ragged', 'pinto', 'white', 'roan', 'seed', 'bump', 'streakColor', 'sheen', 'shine', 'maneShine', 'roots', 'tips', 'strands', 'maneLength', 'tailLength', 'bloom']);
+const RECIPE_KEYS = new Set(['base', 'points', 'mane', 'belly', 'sooty', 'muzzle', 'grey', 'dapples', 'dappleSize', 'greyLegs', 'face', 'star', 'faceSize', 'ragged', 'pinto', 'white', 'roan', 'seed', 'bump', 'streakColor', 'sheen', 'shine', 'maneShine', 'roots', 'tips', 'strands', 'maneLength', 'tailLength', 'bloom', 'dorsal', 'dorsalWidth', 'barring']);
 const panel = $('#panel');
 const getV = (k) => (RECIPE_KEYS.has(k) ? state.r[k] : state[k]);
 function setField(k, v) {
@@ -324,6 +326,8 @@ function setField(k, v) {
     if (k === 'speed') horses.forEach(playOn);
     if (k === 'old') { if (v) needOld().then(() => { horses.forEach((h) => showOld(h, true)); fillStats(); }); else horses.forEach((h) => showOld(h, !!h.isOld)); }
     if (k === 'az' || k === 'hour' || k === 'shadows') applyLight();
+    if (k === 'lite' || k === 'size' || k === 'fade') { horses.forEach((h) => dress(h)); fillStats(); }
+    if (k === 'aa0') { const q = new URLSearchParams(location.search); if (v) q.set('aa', '0'); else q.delete('aa'); location.search = q.toString(); }
   }
   syncPanel();
 }
@@ -435,6 +439,22 @@ function gpuMs(n = 40) {
   for (let i = 0; i < n; i++) { renderer.render(scene, camera); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); }
   return (performance.now() - t) / n;
 }
+// (where the graphics card can time its own work (WebGL 2's timer queries): the median of n frames' GPU time, which is
+// steadier than the wall clock; else the wall clock as above)
+const TQ = renderer.capabilities.isWebGL2 ? renderer.getContext().getExtension('EXT_disjoint_timer_query_webgl2') : null;
+async function timedMs(n = 60) {
+  if (!TQ) return gpuMs(n);
+  const gl = renderer.getContext(), qs = [], out = [];
+  renderer.render(scene, camera);
+  for (let i = 0; i < n; i++) { const q = gl.createQuery(); gl.beginQuery(TQ.TIME_ELAPSED_EXT, q); renderer.render(scene, camera); gl.endQuery(TQ.TIME_ELAPSED_EXT); qs.push(q); }
+  for (const q of qs) {
+    for (let k = 0; k < 400 && !gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE); k++) await new Promise((r) => setTimeout(r, 5));
+    if (gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE) && !gl.getParameter(TQ.GPU_DISJOINT_EXT)) out.push(gl.getQueryParameter(q, gl.QUERY_RESULT) / 1e6);
+    gl.deleteQuery(q);
+  }
+  out.sort((a, b) => a - b);
+  return out.length ? out[Math.floor(out.length / 2)] : gpuMs(n);
+}
 async function measure() {
   await needOld();
   const keepVis = horses.map((h) => [h.a.root.visible, h.old && h.old.a.root.visible]);
@@ -443,12 +463,18 @@ async function measure() {
   oldOf(h);
   for (const x of horses) { x.a.root.visible = false; if (x.old) x.old.a.root.visible = false; }
   ground.visible = road.visible = false;
-  bench.empty = gpuMs();
-  h.a.root.visible = true; renderer.info.reset(); bench.newMs = gpuMs(); bench.newCalls = renderer.info.render.calls;
-  h.a.root.visible = false; h.old.a.root.visible = true; bench.oldMs = gpuMs(); bench.oldCalls = renderer.info.render.calls;
+  bench.empty = await timedMs();
+  h.a.root.visible = true;
+  dress(h, false); renderer.info.reset(); bench.newMs = await timedMs(); bench.newCalls = renderer.info.render.calls;
+  dress(h, true); bench.liteMs = await timedMs();                     // (the far look: the lite coat and the lite hair)
+  h.hairMesh.visible = false;
+  dress(h, false); bench.fullNoHair = await timedMs();                // (the coat alone, with the eyes: full, then lite)
+  dress(h, true); bench.liteNoHair = await timedMs();
+  h.hairMesh.visible = true; dress(h);
+  h.a.root.visible = false; h.old.a.root.visible = true; bench.oldMs = await timedMs(); bench.oldCalls = renderer.info.render.calls;
   ground.visible = keepG[0]; road.visible = keepG[1];
   horses.forEach((x, i) => { x.a.root.visible = keepVis[i][0]; if (x.old) x.old.a.root.visible = !!keepVis[i][1]; });
-  bench.size = `${renderer.domElement.width} x ${renderer.domElement.height}`;
+  bench.size = `${renderer.domElement.width} x ${renderer.domElement.height}`; bench.timer = TQ ? 'gpu' : 'clock';
   fillStats();
   return bench;
 }
@@ -468,10 +494,13 @@ function fillStats() {
     ${row('Extra per corner', '12 bytes (' + kb(shape.attrBytes) + ')', '–')}
     ${row('Pictures', 'noise 256 KB, hair ' + kb(hairTexture().bytes), 'none')}
     ${row('ms per frame', bench.newMs ? (bench.newMs - bench.empty).toFixed(2) : '…', bench.oldMs ? (bench.oldMs - bench.empty).toFixed(2) : '…')}
+    ${row('&nbsp; far look (lite)', bench.liteMs ? (bench.liteMs - bench.empty).toFixed(2) : '…', '–')}
+    ${row('&nbsp; coat alone, full / lite', bench.fullNoHair ? (bench.fullNoHair - bench.empty).toFixed(2) + ' / ' + (bench.liteNoHair - bench.empty).toFixed(2) : '…', '–')}
+    ${row('Far look triangles', num(shape.tris + eyeTris + hairLite.tris) + ' (' + hairLite.cards + ' strips)', '–')}
     </tbody>`;
   const hi = $('#hairInfo'); if (hi) hi.textContent = `${hair.cards} strips, ${num(hair.tris)} triangles, one draw`;
-  $('#cmpNote').textContent = `Loaded in ${Math.round(timing.load)} ms, coat set up (rest positions, parts, baked shade ${Math.round(shape.msAO)} ms, hair cards ${Math.round(timing.hair)} ms) in ${Math.round(timing.prep)} ms; shaders compiled and the first frame drawn in ${Math.round(timing.compile + timing.firstFrame)} ms (the coat's program, the old horse's and the ground's, all at once). One program for every horse: a stable of them is one compile.`
-    + (bench.newMs ? ` Measured at ${bench.size} px, the horse alone (the empty frame, ${bench.empty.toFixed(2)} ms, taken off).` : '');
+  $('#cmpNote').textContent = `Loaded in ${Math.round(timing.load)} ms (the game's own models/animals/steed.glb), coat set up (rest positions, parts, baked shade ${Math.round(shape.msAO)} ms, the full and far hair cards) in ${Math.round(timing.prep)} ms; shaders compiled and the first frame drawn in ${Math.round(timing.compile + timing.firstFrame)} ms (the coat's program, the old horse's and the ground's, all at once). One program for every horse: a stable of them is one compile.`
+    + (bench.newMs ? ` Measured at ${bench.size} px (${bench.timer === 'gpu' ? "the card's own timer" : 'the clock'}), the horse alone (the empty frame, ${bench.empty.toFixed(2)} ms, taken off).` : '');
 }
 let frames = 0, fpsT = performance.now(), fps = 0, frameMs = 0;
 function updateStats() {
@@ -479,7 +508,7 @@ function updateStats() {
   $('#stats').innerHTML = `<div class="t">Horse Lab</div>
     fps <b>${fps}</b> · ${frameMs.toFixed(1)} ms<br>
     draw calls <b>${I.calls}</b> · triangles <b>${num(I.triangles)}</b><br>
-    ${horses.length} horse${horses.length === 1 ? '' : 's'} · ${num(shape.tris + hair.tris)} triangles each (${num(hair.tris)} hair)<br>
+    ${horses.length} horse${horses.length === 1 ? '' : 's'} · ${num(shape.tris + (state.lite ? hairLite : hair).tris)} triangles each (${num((state.lite ? hairLite : hair).tris)} hair)${state.lite ? ' · far look' : ''}${AA ? '' : ' · no smoothing'}<br>
     shaders ready in <b>${Math.round(timing.compile + timing.firstFrame)}</b> ms (first frame)`;
 }
 
@@ -553,7 +582,7 @@ window.HL = {
   hair(on) { for (const h of horses) h.hairMesh.visible = !!on; },
   // move the hair's clock on (its ripple), without moving the clips
   run(sec) { clock.t += sec; updateHair(); },
-  get clipLengths() { return newLib ? Object.fromEntries(newLib.kinds.meshy.clips.map((c) => [c.name, +c.duration.toFixed(2)])) : {}; },
+  get clipLengths() { return newLib ? Object.fromEntries(newLib.kinds.steed.clips.map((c) => [c.name, +c.duration.toFixed(2)])) : {}; },
   mask(m) { state.mask = m; applyMask(); },
   light(az, hour) { if (az != null) state.az = az; if (hour != null) state.hour = hour; applyLight(); },
   turn(rad) { for (const h of horses) h.root.rotation.y = rad; },
@@ -562,5 +591,9 @@ window.HL = {
   get horses() { return horses; },
   get info() { const I = renderer.info.render; return { webgl2: renderer.capabilities.isWebGL2, calls: I.calls, tris: I.triangles, timing, shape: shape && { dock: shape.dock && { start: shape.dock.start.toArray().map((x) => +x.toFixed(3)), end: shape.dock.end.toArray().map((x) => +x.toFixed(3)), r: +shape.dock.r.toFixed(3) }, mid: [shape.midX, shape.mid0, shape.mid1], msAO: shape.msAO, tris: shape.tris, verts: shape.verts, attrBytes: shape.attrBytes, hoofTop: shape.hoofTop, knee: shape.knee, hock: shape.hock, fetlock: shape.fetlock, poll: shape.poll.toArray(), nose: shape.nose.toArray(), eyeL: shape.eyeL.toArray(), legSplit: shape.legSplit }, bench, programs: renderer.info.programs.length }; },
   get renderer() { return renderer; },
+  get scene() { return scene; },
+  // the far look, the size and the fade (as the panel's View rows)
+  lite(on) { setField('lite', !!on); }, size(s) { setField('size', +s); }, fade(f) { setField('fade', +f); },
+  get hairInfo() { return { full: { tris: hair.tris, cards: hair.cards }, lite: { tris: hairLite.tris, cards: hairLite.cards }, cut: horses[0] ? horses[0].hairMat.hair.cut : null }; },
   get camera() { return camera; },
 };

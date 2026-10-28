@@ -43,6 +43,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { SLOTS, SLOT, KEEPSAKE_SPOTS } from './slots.js';
 import { makePiece, makeKeepsake, disposeTree, disposeShared } from './pieces.js';
+import { loadBand } from '../../world/quality.js';   // (which cabin file: the band this load will be)
 
 export const LIGHT = {
   skyInside: 0.55,                        // the sky's light on the inside surfaces (a share of it)
@@ -58,9 +59,16 @@ export const NEAR = { show: 26, hide: 30 };   // m from the cabin: the inside's 
 const CELL = 0.5;
 const loader = new GLTFLoader();
 let modelP = null;
-// the model, loaded once (started early: cabin.js calls it as the game boots, so it is there when the ride starts)
+// the model, loaded once (started early: cabin.js calls it as the game boots, so it is there when the ride starts). The
+// governor's reload dial (world/governor.js RELOAD.cabin): the gaming band loads the full file, its outside picture 4096
+// square (173 MB on the graphics card); potato and normal the copy with that picture 2048 square (106 MB; the rest of the
+// file the same), chosen by the band this load will be (world/quality.js loadBand: the remembered level for this card)
+export const HOME_FILE = { gaming: 'models/town/cabin_inside.glb', other: 'models/town/cabin_inside_2048.glb' };
 export function loadHomeModel(base = new URL('../../', import.meta.url).href) {
-  return modelP || (modelP = loader.loadAsync(base + 'models/town/cabin_inside.glb').catch((e) => { modelP = null; throw e; }));
+  let band = 'normal'; try { band = loadBand(); } catch (e) { /* (no storage, no WebGL: the smaller one) */ }
+  const force = new URLSearchParams(location.search).get('cabin');   // (rigs: ?cabin=4096 or 2048, either file on any tier)
+  const big = force ? force === '4096' : band === 'gaming';
+  return modelP || (modelP = loader.loadAsync(base + (big ? HOME_FILE.gaming : HOME_FILE.other)).catch((e) => { modelP = null; throw e; }));
 }
 
 // FEWER DRAWS: a piece made in code (a keepsake, the rifle rack, a dog bed...) is many small shapes, each its own draw.

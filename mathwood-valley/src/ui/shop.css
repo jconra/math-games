@@ -82,3 +82,6 @@
   .bms-row { flex-wrap: wrap; }
   .bms-act { width: 100%; justify-content: flex-end; }
 }
+/* a horse's top speed, a plain number (the stable) */
+.bms-speed { display: inline-block; margin-top: 3px; font-size: 13px; color: var(--ink-2); padding: 1px 8px; border-radius: 999px; border: 1px solid rgba(226, 173, 76, 0.3); }
+.bms-what .bms-speed b { display: inline; font: 700 16px Bitter, Georgia, serif; color: var(--brass-hi); }   /* (not the row name's block) */

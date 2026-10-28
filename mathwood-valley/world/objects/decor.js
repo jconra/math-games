@@ -1,15 +1,18 @@
 // THE TOWN'S DECOR: models/town/decor.json, made in the Town Lab (labs/town/): what was changed from the town as shipped
 // (models/town/layout.json and planting.json), kept apart from them, small and plain. The game only reads it:
 //   { v: 1,
-//     moved:    { <layout id>: { x, z, rot, y, size, level } }   a building, prop or town tree put somewhere else (any of the
-//                                                              fields; the rest stay as shipped)
+//     moved:    { <layout id>: { x, z, rot, y, size, level, preset, seed, player } }   a building, prop or town tree put
+//                                                              somewhere else (any of the fields; the rest stay as shipped).
+//                                                              preset, seed: a code-built building's design (a cabin's
+//                                                              cabins.js preset); player: true marks the player's cabin
 //     removed:  [<layout id>, ...]                              taken away
-//     placed:   [{ type: 'prop' | 'model' | 'tree', kind, x, z, rot, size, y }]   put down (rot: degrees; size: a prop's or a
-//                                                              tree's scale, a building's longest side in metres)
+//     placed:   [{ type: 'prop' | 'model' | 'tree', kind, x, z, rot, size, y, preset, seed }]   put down (rot: degrees; size:
+//                                                              a prop's or a tree's scale, a building's longest side in
+//                                                              metres; preset, seed: as in moved)
 //     roads:    [{ mat, w, pts }]                               stone roads painted after the shipped ones
 //     planting: { strokes: [stroke], items: [item], removed: [id, ...], procedural }   brush strokes (flowers painted,
-//                                                              fence runs, patches cleared) and placed plants, after the
-//                                                              shipped ones (planting.js has their fields) }
+//                                                              fence runs and their style, gates, patches cleared) and placed
+//                                                              plants, after the shipped ones (planting.js has their fields) }
 //   `name` on anything is a note for whoever reads the file, and is skipped.
 // With no decor (no file, or an empty one) the town is exactly as shipped.
 //
@@ -19,9 +22,11 @@
 //     and material, standing on the ground as the town's own props do (objects/village.js place); three and the props'
 //     maker handed in, so this file needs neither (the node tests read it)
 
-// props that stay one object each, with the town's own (lit at night, turning, or walked on)
-const ALONE = new Set(['lamp', 'valehexGlobe', 'stateMap', 'obelisk', 'dock']);
+// props that stay one object each, with the town's own (lit at night, turning, walked on, or a loaded model)
+const ALONE = new Set(['lamp', 'valehexGlobe', 'stateMap', 'obelisk', 'dock', 'farmWagon', 'freightWagon', 'coveredWagon', 'chuckWagon']);   // (the wagons: loaded models, filled in when they come)
 const num = (v, d = 0) => (Number.isFinite(+v) ? +v : d);
+// (a code-built building's design and the player's-cabin mark, from a moved or placed entry: only what is there and sound)
+const design = (m) => ({ ...(typeof m.preset === 'string' && m.preset ? { preset: m.preset } : {}), ...(+m.seed > 0 ? { seed: Math.round(+m.seed) } : {}), ...(m.player === true ? { player: true } : {}) });
 
 export function applyDecor(layout, planting, decor) {
   const merged = new Set();
@@ -33,11 +38,12 @@ export function applyDecor(layout, planting, decor) {
     const m = moved[it.id]; if (!m || typeof m !== 'object') continue;
     for (const k of ['x', 'z', 'rot', 'y', 'size']) if (k in m && Number.isFinite(+m[k])) it[k] = +m[k];
     if ('level' in m) { if (m.level === true) it.level = true; else delete it.level; }
+    Object.assign(it, design(m));
   }
   (Array.isArray(decor.placed) ? decor.placed : []).forEach((p, i) => {
     if (!p || typeof p !== 'object' || !p.kind || !Number.isFinite(+p.x) || !Number.isFinite(+p.z)) return;
     const type = p.type || 'prop', id = 'decor' + (i + 1);
-    const it = { id, type, kind: p.kind, x: +p.x, z: +p.z, rot: num(p.rot), ...(p.size != null ? { size: +p.size } : {}), ...(num(p.y) ? { y: +p.y } : {}), ...(p.level === true ? { level: true } : {}) };
+    const it = { id, type, kind: p.kind, x: +p.x, z: +p.z, rot: num(p.rot), ...(p.size != null ? { size: +p.size } : {}), ...(num(p.y) ? { y: +p.y } : {}), ...(p.level === true ? { level: true } : {}), ...design(p) };
     L.items.push(it);
     if (type === 'prop' && !ALONE.has(p.kind)) merged.add(id);
   });

@@ -25,9 +25,12 @@ import { FB } from './feedback.js';
 import { flagCard, rateJob, menuRows } from './ui/flag.js';   // (first: its key guard for the note boxes goes on before any of the game's key listeners)
 import './curvetangent.js';   // (the roads' per-frame curve sums without the garbage)
 import { makeWorld } from './world.js';
-import { chooseTier } from '../world/quality.js';
+import { chooseTier, wantAntialias } from '../world/quality.js';
 import { loadFolk, checkFades } from './actors/folk.js';
 import { loadAnimals } from './actors/animals.js';
+import { warmHorses, horseRenderer } from './actors/horses.js';
+import { makeHorsePen } from './horsepen.js';
+import { makeStableLife } from './stablelife.js';
 import { makeInput } from './input.js';
 import { makePlayer, MOVE } from './player.js';
 import { makeDog, dogKind } from './dog.js';
@@ -79,6 +82,7 @@ import { makeBridgeJob } from './bridgejob.js';
 import { makeFishingJob, DOCK } from './fishingjob.js';
 import { makeDof } from './fx/dof.js';
 import { completion, goalsOf } from './completion.js';
+import { graphicsRow } from './ui/graphics.js';
 
 export const BUILD = '1 (2026-10-09)';
 const Q = new URLSearchParams(location.search);
@@ -90,7 +94,7 @@ addEventListener('error', (e) => BM.errors.push(String(e.message)));
 
 // ── THE RENDERER, THE CAMERA, THE TIER ───────────────────────────────────────────────────────────────────────────
 const canvas = $('game');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: Q.get('q') !== 'potato', powerPreference: 'high-performance' });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: wantAntialias(), powerPreference: 'high-performance' });   // (off where the tier will be potato: forced, chosen, remembered for this card, or detected: world/quality.js)
 renderer.setSize(innerWidth, innerHeight);
 // (?perf counts every pass of a frame: the valley, then the six-shooter over it. Left to itself each render() would wipe
 // the count, and the readout would show only the gun's pass)
@@ -164,8 +168,13 @@ const loading = Promise.all([
   W.update(0.016); W.render();
   if (state !== 'boxes') canvas.classList.add('is-on');   // ("Just lock boxes" keeps its plain dark backdrop)
   T.setProgress(1, 'Ready to ride');
+  // (the governor's curtains, world/governor.js: the scenery changes only where the change is hidden)
+  if (W.governor) W.governor.scene = () => (state === 'title' ? 'title' : state !== 'play' ? 'away' : paused ? 'paused' : cabin && cabin.inside ? 'cabin' : 'play');
   BM.ready = true;
   setTimeout(() => { try { roadCurve(W); } catch (e) { console.warn('the road could not be laid', e); } }, 300);   // (the wagons' road, worked out once while the title shows, so riding out doesn't wait on it)
+  // (the new horse loaded and its shaders built for the valley's lights while the title shows: src/actors/horses.js)
+  horseRenderer(renderer);
+  setTimeout(() => { BM.horsesWarm = warmHorses({ W, lib: animals, renderer, camera }); }, 600);
 }).catch((e) => { console.error('Mathwood Valley could not load the valley', e); T.setProgress(0, 'The valley could not load: please reload the page'); });
 
 // ── THE GAME'S STATE ─────────────────────────────────────────────────────────────────────────────────────────────
@@ -184,6 +193,8 @@ let PG = null;   // the farm's loose-pigs job (src/missions/pigs.js)
 let SJ = null;   // the general store's counter: word problems on order slips (src/missions/store.js)
 let WJ = null;   // protect the wagon: the gang on the road east of the pasture (src/missions/wagonjob.js), unless a grown-up turned it off
 let HS = null;   // the rider's own farm animals in a yard behind the cabin, and their goods (src/homestead.js)
+let PEN = null;  // the pen of horses for sale behind the stable, new ones after each trip out of town (src/horsepen.js)
+let STABLE = null;  // the stable's stall horses and its saddle racks (src/stablelife.js: the code-built stable)
 let camps = null, DL = null;   // the camps out in the valley (src/camps.js) and their deliveries (src/missions/delivery.js)
 let deer = null;   // the wild deer herds out in the valley (src/deer.js)
 let DJ = null;   // deer photographs with Miss Wren's box camera (src/missions/deerjob.js), unless a grown-up turned it off
@@ -266,6 +277,7 @@ async function ride(r) {
   canvas.classList.add('is-on');
   I.enabled = true;
   P = makePlayer({ W, folk, animals, rider, input: I, camera, say: (t) => hud.toast(t) });
+  if (W.V && W.V.FENCE) W.V.FENCE.near = trafficThings;   // (the town's gates swing open for the rider, the horse, the dog, the cattle, the townsfolk)
   makeDogIfOwned();
   cardBy = null; theJob = null; shownCard = null; jobCardObj = null; jobCardKey = ''; worked = false; for (const k in lastCard) delete lastCard[k];
   // (no babble voice: reading works better; src/audio/voice.js is kept for the Sound Lab. A rider who can't read yet
@@ -289,10 +301,12 @@ async function ride(r) {
   READ = makeReadAloud({ audio: AUD, on: () => !!(rider && rider.readAloud !== false), busy: () => !!(SHOUT && SHOUT.speaking) || talking() }); BM.read = READ;
   AUD.hold('pause', false); AUD.hold('title', false);
   HS = makeHomestead({ W, animals, rider, hud, hob, refresh });
-  shops = makeShops({ W, rider, say: (t, k) => hud.toast(t, k), extra: HS.shop,
+  PEN = makeHorsePen({ W, animals, rider, camera, player: () => P, shadows: !!(W.V && W.V.SHADOW ? W.V.SHADOW.on : true) });
+  shops = makeShops({ W, rider, say: (t, k) => hud.toast(t, k), extra: { ...HS.shop, stable: PEN.shop },
     onOpen: () => pause('counter'), onClose: () => resume('counter'),
     onBuy: (what) => { refresh(); if (what === 'saddle' || what === 'horse') P.refreshOwned(); if (what === 'dog') { makeDogIfOwned(); if (cabin) cabin.dogsChanged(); } if (what === 'hat' && P && P.person) { if (!P.person.hat) P.person.hatOn(); P.person.setHat(rider.look.hatStyle); } hob.event(what); },
     onLockbox: (box, o) => openBox(box, o), onStoreJob: jobOn(rider, 'store') ? () => { if (SJ) SJ.start(); } : null });   // (no "Mind the counter" when a grown-up turned the store job off)
+  STABLE = makeStableLife({ W, animals, rider, camera, player: () => P, shops, say: (t) => hud.toast(t), shadows: !!(W.V && W.V.SHADOW ? W.V.SHADOW.on : true) }); BM.stable = STABLE;
   cabin = makeCabin({ W, renderer, camera, animals, rider, hud, input: I, audio: AUD, player: () => P, follower: () => D,
     onBuy: () => refresh(), onLockbox: (box, o) => openBox(box, o) });
   // (the round-up's Hob also hears a whole wave roped: now and then a thank-you calf from the rancher)
@@ -421,6 +435,7 @@ function endRide() {
   DL = camps = null;
   if (farm) farm.dispose();
   if (HS) { HS.dispose(); HS = null; }
+  if (PEN) { PEN.dispose(); PEN = null; }
   if (hob) hob.dispose();
   if (D) D.dispose();
   if (P) P.dispose();
@@ -852,7 +867,7 @@ function openMenu() {
       ? 'thumb stick on the left to move (push it to the edge to gallop) · drag to look · tap a steer or a rider, or press Rope · Horse calls your horse · On / off gets on and off · tap the prompt at a door'
       : `<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · drag to look · <kbd>Shift</kbd> run or gallop ·
       click a steer (or <kbd>F</kbd>) to rope it · <kbd>H</kbd> call your horse · <kbd>E</kbd> on and off, or talk at a door`}</div>`;
-  body.querySelector('.bms-menu').after(volumeRow(AUD));
+  body.querySelector('.bms-menu').after(volumeRow(AUD), graphicsRow(W && W.governor));   // (Auto, or a tier chosen by hand: src/ui/graphics.js)
   { const m = body.querySelector('.bms-menu'), last = m.querySelector('[data-do="title"]'); for (const x of menuRows({ report: tellReport })) m.insertBefore(x, last); }   // (Tell us, and the share switch)
   let then = null;
   menu = makePanel({ title: 'Taking a breather', sub: `${rider.name} · ${titleOf(rider)}`, body,
@@ -905,7 +920,7 @@ function openCounter(id) {
   }
   if (shops && !shops.isOpen && !paused) shops.open(id);
 }
-const NEAR_REMARK = 4;   // metres from the saloon's door or the front of the stage where Hob remarks on it
+const NEAR_REMARK = 4;   // metres from the saloon's door where Hob remarks on it
 function doors() {
   door = null;
   if (!P || paused || (P.mode !== 'foot' && P.mode !== 'horse')) { hud.prompt(null); return; }
@@ -939,10 +954,12 @@ function doors() {
   if (!door && !fresh && BS && BS.prompt) { say = BS.prompt; act = () => BS.talk(); }
   // at the target range (src/missions/shooting.js): E by Miss Opal takes up her six-shooter
   if (!door && !fresh && SR && SR.prompt) { say = SR.prompt; act = () => SR.start(); }
+  // by a saddle rack in the stable's lean-to (src/stablelife.js): E buys it, or puts it on your horse
+  if (!door && !fresh && STABLE && STABLE.prompt) { say = STABLE.prompt; act = () => STABLE.act(); }
   hud.prompt(say);
   if (act && I.enabled && I.tap('KeyE')) act();
-  // the saloon's doors and the stage have no counter yet: walking up to them, Old Hob says so
-  if (hob) for (const k of ['saloon', 'stage']) {
+  // the saloon's doors have no counter yet: walking up to them, Old Hob says so
+  if (hob) for (const k of ['saloon']) {
     const pl = W.places[k];
     if (pl && pl.door && Math.hypot(P.position.x - pl.door.x, P.position.z - pl.door.z) < NEAR_REMARK) hob.event('near', { place: k });
   }
@@ -1072,6 +1089,8 @@ function step(dt) {
     RU.update(dt);
     if (farm) farm.update(dt, P.position);
     if (HS) HS.update(dt, P.position);   // (the farm animals behind the cabin; their goods are laid up over play time)
+    if (PEN) PEN.update(dt);             // (the horses for sale behind the stable)
+    if (STABLE) STABLE.update(dt);       // (the stall horses and the saddle racks in the stable)
     if (SH) SH.update(dt);
     if (PG) PG.update(dt);
     if (SJ) SJ.update(dt);   // (after the player: it places the camera while the counter is open)
@@ -1110,6 +1129,7 @@ renderer.setAnimationLoop(() => {
   const now = performance.now(), dt = Math.min(0.1, (now - last) / 1000); last = now;
   if (PERF) renderer.info.reset();   // (the frame's count starts here: see autoReset above)
   step(dt);
+  if (W && W.governor) W.governor.work(now);   // (the frame's own work, for the governor's spare-time test)
   if (PERF && renderer.info.render.calls) drawn = { calls: renderer.info.render.calls, triangles: renderer.info.render.triangles };   // (the last frame that drew: a paused game draws only now and then)
   frames++;
   if (now - fpsT > 500) {
@@ -1148,7 +1168,7 @@ const SPOTS = {
   // just inside the pig yard's gate, looking at the pens
   pigs: () => { if (!farm) return W.places.spawn; const g = farm.layout.yard.gate; return { x: g.in.x, z: g.in.z + 1, rot: g.rot + Math.PI }; },
 };
-for (const k of ['cabin', 'stable', 'store', 'sheriff', 'saloon', 'stage']) {
+for (const k of ['cabin', 'stable', 'store', 'sheriff', 'saloon']) {
   SPOTS[k] = () => { const b = W.places[k]; if (!b) return W.places.spawn; return { x: b.door.x + Math.sin(b.rot) * 1.2, z: b.door.z + Math.cos(b.rot) * 1.2, rot: b.rot + Math.PI }; };
 }
 // the camps (src/camps.js): out front, where a horse with crates is unloaded, facing the camp
@@ -1252,6 +1272,7 @@ Object.defineProperties(BM, { deer: { get: () => deer }, deerjob: { get: () => D
 Object.defineProperties(BM, { board: { get: () => JB }, job: { get: () => theJob } });   // (the jobs board; the job the rider chose: THE JOB)
 Object.defineProperties(BM, { townpeople: { get: () => TP } });   // (the townsfolk: TP.state(), TP.log)
 Object.defineProperties(BM, { range: { get: () => SR } });   // (the target range)
+Object.defineProperties(BM, { pen: { get: () => PEN } });   // (the horse pen: BM.pen.dev.state(), .roll(seed), .visit())
 Object.defineProperties(BM, { sites: { get: () => BS }, windmill: { get: () => WMJ } });   // (the build sites; the windmill job: .builder.handle is the lab's WM handle)
 Object.defineProperties(BM, { bridge: { get: () => BRJ } });   // (the bridge job: .builder.handle is the lab's BR handle; .state(), .rating())
 Object.defineProperties(BM, { fishing: { get: () => FJ } });   // (the fishing job: .builder.handle is the lab's FI handle; .state())

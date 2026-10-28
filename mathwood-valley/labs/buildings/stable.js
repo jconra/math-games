@@ -364,6 +364,25 @@ function leanTo(k, paint) {
   k.board([0.14, ltUnder(LXP) - 0.03, 0.03], null, null, { m: wallM(bw, end - 0.06, (ltUnder(LXP) + 0.03) / 2, 0.035), long: 1, tint: TRIM, skip: '-y' });
 }
 
+// ── the tack wall: three saddle racks on the lean-to's back wall ─────────────────────────────────────────────────────
+// each a saddle tree: a short beam out from the wall at a horse's back height, a ridge of two boards over it (the saddle
+// rides on that), a brace under it to the wall, a backing plank, a peg for a bridle. Returns where the saddles sit
+function tackWall(k) {
+  const zw = -D / 2 + 0.03, out = [];
+  for (const x of [-5.55, -6.55, -7.5]) {
+    const y = 0.98, L = 0.55;
+    k.board([0.9, 0.24, 0.03], [x, y + 0.08, zw + 0.015], null, { long: 0, tint: vary(k, FRAME, 0.85, 1.0), skip: '-z' });            // the backing plank
+    k.board([0.08, 0.1, L], [x, y - 0.02, zw + L / 2], null, { long: 2, tint: vary(k, FRAME, 0.9, 1.05), strip: 10, ends: 'log' });   // the beam
+    for (const sx of [-1, 1]) k.board([0.17, 0.025, L - 0.04], [x + sx * 0.065, y + 0.055, zw + L / 2 + 0.01], [0, 0, -sx * 0.6], { long: 2, tint: vary(k, STALLW, 0.85, 1.0) });   // the ridge
+    const bl = Math.hypot(0.42, 0.42), ba = Math.atan2(0.42, 0.42);
+    k.board([0.06, 0.06, bl], [x, y - 0.27, zw + 0.23], [-ba, 0, 0], { long: 2, tint: vary(k, FRAME, 0.85, 1.0), strip: 11 });          // the brace
+    k.board([0.04, 0.04, 0.12], [x + 0.38, y + 0.1, zw + 0.07], null, { long: 2, tint: FRAME });                                     // a peg
+    k.solid([0.5, 0.3, L], [x, y, zw + L / 2]);
+    out.push({ seat: [x, y + 0.09, zw + L / 2 + 0.02], face: [0, 0, 1], board: [x, y + 0.62, zw + 0.02] });
+  }
+  return out;
+}
+
 // ── the cupola: a board-and-batten box on the ridge, louvred all round, a hipped cap, a horse weathervane ───────────
 function cupola(k, paint) {
   const h = CUP.half, cz = CUP.z, yb = ROOF0 - h * TP - 0.08, y1 = RIDGE + 0.6, y2 = y1 + 0.55;
@@ -534,7 +553,7 @@ export function buildStable(recipeIn = {}, env = {}) {
   SILLS.length = 0;
   const lamps = [];
   const marks = [], mark = (name) => marks.push([name, k.parts.wood.length, k.parts.iron.length]);
-  walls(k, paint); mark('walls'); frame(k); mark('frame'); const stallList = stalls(k, r); mark('stalls'); roofs(k); mark('roofs'); leanTo(k, paint); mark('leanTo');
+  walls(k, paint); mark('walls'); frame(k); mark('frame'); const stallList = stalls(k, r); mark('stalls'); roofs(k); mark('roofs'); leanTo(k, paint); mark('leanTo'); const tack = tackWall(k); mark('tack');
   cupola(k, paint); mark('cupola'); front(k, r); mark('front'); inside(k); mark('inside');
   // the back doors, swung open and left so (into the static mesh); the front ones are their own meshes
   const LEAF = { w: DW / 2, h: DH - 0.05, tint: DOORW, strap: STRAP, rails: [0.3, 1.5, 2.75] };
@@ -639,6 +658,9 @@ export function buildStable(recipeIn = {}, env = {}) {
     anchors: {
       doorways: [{ name: 'front', centre: [OX, DH / 2, D / 2], w: DW, h: DH, out: [0, 0, 1] }, { name: 'back', centre: [OX, DH / 2, -D / 2], w: DW, h: DH, out: [0, 0, -1] }],
       sign: { centre: [OX, 3.93, D / 2 + 0.074], w: 4.6, h: 0.86 }, boards: boardList, lanterns: lamps.map((L) => L.p),
+      // (the saddle racks on the lean-to's back wall: where a saddle sits on each, which way it faces, where its price
+      // board hangs; the game puts its own saddles and boards there)
+      tack: tack.map((T) => ({ seat: [T.seat[0] + OX, T.seat[1], T.seat[2]], face: T.face, board: [T.board[0] + OX, T.board[1], T.board[2]] })),
       footprint: { w: W + LT + 0.35 + EO, d: D + 2 * GO, h: ROOF0 + 1.6, ridge: RIDGE, eave: EAVE, loft: LOFT },
     },
     counts, parts, msBuild, msBake, ms: performance.now() - t0, offset: OX,
@@ -656,7 +678,7 @@ function propList(OX) {
     ...[1, -1].flatMap((sx) => [0, 1, 2].map((i) => ({ type: 'bucket', x: sx * (W / 2 - 0.38), z: STALLZ[i + 1] + 0.38, inStall: true }))),
     { type: 'crate', x: -5.45, z: D / 2 - 0.45, rot: 0.2 }, { type: 'crate', x: -5.4, z: D / 2 - 0.5, y: 0.6, rot: -0.15, size: 0.5 }, { type: 'crate', x: 4.05, z: 3.4, rot: 0.1 },
     { type: 'bale', x: -2.2, z: D / 2 + 1.35, rot: 0.35 }, { type: 'bale', x: -2.35, z: 4.55, rot: 0.08 }, { type: 'bale', x: -2.55, z: 3.35, rot: 0.1 }, { type: 'bale', x: -2.5, z: 3.4, y: 0.4, rot: -0.05 },
-    { type: 'bale', x: -5.5, z: -3.6, rot: 0.05 }, { type: 'bale', x: -5.5, z: -2.6, rot: -0.05 }, { type: 'bale', x: -5.45, z: -3.1, y: 0.4, rot: 0.1 },
+    { type: 'bale', x: -7.62, z: -3.45, rot: Math.PI / 2 + 0.05 }, { type: 'bale', x: -7.62, z: -2.5, rot: Math.PI / 2 - 0.05 }, { type: 'bale', x: -7.6, z: -3.0, y: 0.4, rot: Math.PI / 2 + 0.1 },
     { type: 'wagon', x: -6.45, z: -0.6, rot: 0 },
   ];
   // bales stacked along both lofts' edges (two high here and there)

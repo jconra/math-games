@@ -80,10 +80,15 @@ export const STORE = {
   clerk: 0.9,          // metres out from the store's door where the rider stands, facing the square
   front: 2.35,         // ...and where the customer stands, facing the rider
   queue: [4.1, -1.0],  // the next customer waits this far out and this far to the side (away from the camera)
+  queue2: [3.5, -2.6], // ...and the one after, a step further along the store's front (a line of two: a quick answer
+                       // never waits on somebody still walking over from across the town)
   from: 7,             // customers walk in from about this far out in the square...
   spread: 6,           // ...and up to this far to either side
   walk: 1.5,           // m/s, a brisk stroll
   jog: 2.4,            // m/s, a townsperson still a way off while the counter is open (src/townpeople.js lends them)
+  hurryOver: 3,        // ...a way off: more than this many metres left to walk to their place in the line (2 to the
+                       // counter itself: the slip is waiting on them)
+  served: 3,           // the last this many customers served aren't asked back into the line straight away
   handOver: 1.4,       // metres from the counter when the customer's slip comes up (they finish stepping up as you read)
   think: 12,           // seconds without a pick before the "Draw it for me" button is offered
   eqWait: 1.3,         // seconds the picked equation shows before the lock box opens
@@ -120,6 +125,8 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
   const out = new THREE.Vector2(Math.sin(rot), Math.cos(rot)), side = new THREE.Vector2(-Math.cos(rot), Math.sin(rot));
   const at = (o, s = 0) => ({ x: door.x + out.x * o + side.x * s, z: door.z + out.y * o + side.y * s });
   const clerkAt = at(STORE.clerk), frontAt = at(STORE.front), queueAt = at(STORE.queue[0], STORE.queue[1]);
+  // (the second place in line, unless something stands there: then a line of one, as before)
+  const queue2At = (() => { const q = at(STORE.queue2[0], STORE.queue2[1]); return place && W.blocked && W.blocked(q.x, q.z) ? null : q; })();
 
   const U = makeStoreSlip(document.body, { onPick: (i) => pick(i), onDone: () => J.stop(), onDraw: () => draw(), onWork: () => (order && !order.long && work ? work() : openLong()) });
   const J = { active: false };
@@ -128,10 +135,14 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
   let lastAsk = null, timer = null, longPanel = null, longT = null, forced = null;
   const news = [];       // a badge or a new title won with the order at the counter, told on the slip with the tip
   const people = [];         // the customers about: { p, x, z, yaw, state: 'come'|'queue'|'front'|'serve'|'go', who, to }
+  // the names of the last few served: just thanked and walking off, they aren't the town's "best placed" for the line
+  // (given back right at the counter, they were: the same person turned round and got back in line)
+  const served = [];
+  const busyNames = () => [...people.map((c) => c.who.name), ...served, ...Q.state.lastWho];
 
   // ── THE CUSTOMERS ──────────────────────────────────────────────────────────────────────────────────────────────
   function pickWho() {
-    const busy = new Set([...people.map((c) => c.who.name), ...Q.state.lastWho]);
+    const busy = new Set(busyNames());
     const free = FOLK.filter((f) => !busy.has(f.name));
     const list = free.length ? free : FOLK.filter((f) => !people.some((c) => c.who.name === f.name));
     return list[Math.floor(Math.random() * list.length)] || FOLK[0];
@@ -141,7 +152,7 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
     // store's own), walking the town's paths to the counter; given back when they leave
     const T = town ? town() : null;
     if (T) {
-      const busy = new Set([...people.map((c) => c.who.name), ...Q.state.lastWho]), names = FOLK.map((f) => f.name).filter((n) => !busy.has(n));
+      const busy = new Set(busyNames()), names = FOLK.map((f) => f.name).filter((n) => !busy.has(n));
       const got = T.lend({ to: dest, names: names.length ? names : null, notDoor: 'store' });
       if (got) {
         const c = { p: got.p, who: FOLK.find((f) => f.name === got.name) || got.who, x: got.x, z: got.z, yaw: got.yaw, state: 'come', to: dest, walking: false, via: got.via, lent: got };
@@ -178,14 +189,21 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
       if (c.walking) { c.walking = false; c.clip = 'Idle'; c.p.play('Idle', { fade: 0.3 }); }
       return true;
     }
-    // (a townsperson still a way off while the counter is open hurries along, so the player doesn't wait)
-    const hurry = J.active && c.state !== 'go' && c.via && c.via.length > 4, clip = hurry ? 'Run' : 'Walk';
+    // (a townsperson still a way off while the counter is open hurries along, so the player doesn't wait. A way off by
+    // the metres left to walk: a straight way across the square has only a point or two on it)
+    const hurry = J.active && c.state !== 'go' && c.lent && left(c) > (c.state === 'front' ? 2 : STORE.hurryOver), clip = hurry ? 'Run' : 'Walk';
     const pace = hurry ? STORE.jog : c.state === 'go' ? STORE.walk * 1.15 : STORE.walk;
     if (!c.walking || c.clip !== clip) { c.walking = true; c.clip = clip; c.p.play(clip, { fade: 0.25, speed: pace / ((c.p.stride && c.p.stride[clip]) || 1.2) }); }   // (stride: m/s per clip, { Walk, Run })
     const v = Math.min(pace, d * 3), step = Math.min(d, v * dt);
     c.x += dx / d * step; c.z += dz / d * step;
     turn(c, Math.atan2(dx, dz), dt);
     return false;
+  }
+  // the metres c has left to walk: along the town's path points, then to the spot (theirs, or `to`)
+  function left(c, to = c.to) {
+    let d = 0, x = c.x, z = c.z;
+    if (c.via) for (const q of c.via) { d += Math.hypot(q.x - x, q.z - z); x = q.x; z = q.z; }
+    return d + Math.hypot(to.x - x, to.z - z);
   }
   function turn(c, want, dt) {
     const a = Math.atan2(Math.sin(want - c.yaw), Math.cos(want - c.yaw));
@@ -214,17 +232,27 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
   // (where a borrowed townsperson stands now, for the town to take them on from there)
   function syncBack(c) { c.lent.x = c.x; c.lent.z = c.z; c.lent.yaw = c.yaw; }
   const atFront = () => people.find((c) => c.state === 'front' || c.state === 'serve');
-  const inQueue = () => people.find((c) => c.state === 'queue' || (c.state === 'come' && c.to === queueAt));
+  // the one in (or on the way to) a place in line
+  const inLine = (spot) => (spot ? people.find((c) => (c.state === 'queue' || c.state === 'come') && c.to === spot) : null);
+  const stepTo = (c, spot, state) => { c.state = state; c.to = spot; c.walking = false; };
 
-  // the line moves up: the one waiting steps to the counter, and somebody new heads for the line
+  // the line moves up: whichever of the two in line is nearer the counter steps up to it (the first, unless they are
+  // still on their way over and the second is already here), the other takes the first place, and somebody new heads
+  // for the back of the line
   function moveUp() {
     if (!J.active) return;
     if (!atFront()) {
-      const q = inQueue();
-      if (q) { q.state = 'front'; q.to = frontAt; q.walking = false; }
+      const a = inLine(queueAt), b = inLine(queue2At);
+      const q = a && b ? (left(b, frontAt) < left(a, frontAt) - 0.5 ? b : a) : a || b;
+      if (q) stepTo(q, frontAt, 'front');
       else { const c = spawn(frontAt, true); if (c) c.state = 'front'; }
     }
-    if (!inQueue()) { const c = spawn(queueAt); if (c) c.state = 'come'; }
+    if (!inLine(queueAt)) {
+      const q2 = inLine(queue2At);
+      if (q2) stepTo(q2, queueAt, q2.state === 'queue' ? 'come' : q2.state);
+      else { const c = spawn(queueAt); if (c) c.state = 'come'; }
+    }
+    if (queue2At && !inLine(queue2At)) { const c = spawn(queue2At); if (c) c.state = 'come'; }
   }
 
   // the tip goes by how far up the store's ladder the order was made (1 at the bottom .. 9 at the top, as the old steps)
@@ -265,6 +293,7 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
   }
   function serve(c) {
     c.state = 'serve';
+    served.push(c.who.name); if (served.length > STORE.served) served.shift();
     order = deal(c.who);
     missed = false; helped = false; thinkT = 0; eqPending = false;
     U.purse(rider.gold);   // (in step with the gold, the lock box's pay included)
@@ -474,7 +503,7 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
         && Math.hypot(c.x - frontAt.x, c.z - frontAt.z) < STORE.handOver) serve(c);
       if (there) {
         if (c.state === 'front' && J.active && phase === 'open' && !order && !U.busy) serve(c);
-        else if (c.state === 'come' && c.to === queueAt) c.state = 'queue';
+        else if (c.state === 'come' && (c.to === queueAt || c.to === queue2At)) c.state = 'queue';
         else if (c.state === 'go') { removePerson(c); continue; }
         if (c.state === 'serve' && c.hand) handOver(c);
         if (c.state === 'serve' || c.state === 'queue' || c.state === 'front') turn(c, faceRider, dt);
@@ -505,7 +534,7 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
     longOpen: !!longPanel, long: longPanel ? longPanel.state() : null,
     people: people.map((c) => ({ who: c.who.name, state: c.state, x: +c.x.toFixed(2), z: +c.z.toFixed(2) })), busy: U.busy });
   J.people = people;    // (read each frame by the wagons, which stop for customers: no copies made)
-  J.busyNames = () => [...people.map((c) => c.who.name), ...Q.state.lastWho];   // (the town doesn't send these over: src/townpeople.js)
+  J.busyNames = busyNames;   // (the town doesn't send these over: src/townpeople.js)
   J.trainer = Q;
   // (rigs: the next customer brings this order: { type, ladder: 'K', step, sum: { op: 'div', n: 112, d: 5 }, longStep,
   // longOp }, or a counter question: { counter: 'time', step: 2, seed } (seed: the same question every time))

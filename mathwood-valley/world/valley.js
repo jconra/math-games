@@ -57,9 +57,12 @@ import { PROP_KINDS, makeProp } from './objects/townProps.js';
 import { savedLayout as savedTown, forgetLayout as forgetTown } from './objects/villageEditor.js';
 import { textHash } from './objects/changes.js';
 import { applyDecor, drawDecor } from './objects/decor.js';
+import { planFences, styleOf, FENCE_STYLES } from './objects/fenceplan.js';
+import { Fences } from './objects/fences.js';
 import { makeLandforms } from './objects/landforms.js';
 import { makeLampUniforms, buildLampMap, lampStandard } from './objects/lampLight.js';
 import { makeNightLights } from './objects/nightLights.js';
+import { makeCodeBuildings } from './objects/codebuildings.js';
 import { IMPOSTER_CLOCK, IMPOSTER_RISE } from './objects/imposter.js';
 import { sunDirection, moonDirection, elevationOf, daylightAt, newDaylight } from './objects/daylight.js';
 import { Sunbeams } from './objects/sunbeams.js';
@@ -164,6 +167,11 @@ export async function makeValley({ renderer, camera, controls, quality, lab = fa
 // season -1 midwinter .. 1 midsummer (0.64: a noon sun 60° up); dayMin: minutes a whole day takes when it goes by itself
 // t (Mathwood Valley): the hours gone by on the clock, counted on past midnight (the land's shade is worked out ahead by it: SHADE)
 const DAY = { hour: 9 + 40 / 60, t: 9 + 40 / 60, auto: false, dayMin: 12, season: 0.64, turn: 192, lat: 45, bake: null, baked: null, dirty: true, stamp: 0, glow: 1, elev: 48 };
+// (Mathwood Valley) the stable, the sheriff's office and the store built from parts in code (objects/codebuildings.js),
+// made while the title shows, each walkable; their shaders take the hill shade and the street lamps' light as the
+// models' do (FOLK_SHADE, made further down). ?tripo in the address: the old Tripo models instead (to compare)
+const CODE = typeof location !== 'undefined' && new URLSearchParams(location.search).has('tripo') ? null : makeCodeBuildings({ shade: (sh) => FOLK_SHADE(sh), tier: () => QUAL.tier,
+  renderer, scene: () => scene, others: () => (FENCE.near ? FENCE.near() : null) });   // (renderer: the insides made ready and the windows' pictures taken; others: what opens a door besides the player)
 // (Mathwood Valley) the lawn following the camera: see lawnFrame (made here, before anything can lay the lawn)
 const LAWN_GO = { ahead: 0.2, wide: 1.3, near: 0.45, edge: 0.3, step: 0.08, job: null, at: new THREE.Vector3(1e9, 0, 0), cam: new THREE.Vector3(1e9, 0, 0), cache: {}, born: new Map(), lays: 0, ms: 0 };
 const lawnKey = (x, z) => Math.round(x * 16) * 65536 + Math.round(z * 16);
@@ -241,6 +249,7 @@ const SUN_DIR = SUN_AT.clone();                                       // (the li
   SUN_DIR.copy(d); SUN_AT.copy(d); SUN_X.set(d.z, 0, -d.x).normalize(); SUN_Y.crossVectors(SUN_AT, SUN_X); sun.position.copy(d).multiplyScalar(900); }
 function followShadow() {
   if (!SHADOW.on) return;
+  if (SHADOW.paused) { sun.position.copy(sun.target.position).addScaledVector(SUN_AT, 900); return; }   // (the governor's shadows 'off', world/valleydials.js: the map left empty and not drawn; the light still follows the sun)
   const R = SHADOW.range, c = sun.shadow.camera, t = controls.target, fwd = new THREE.Vector3().subVectors(t, camera.position).setY(0);
   const at = camera.position.clone().addScaledVector(fwd.lengthSq() > 1e-6 ? fwd.normalize() : fwd, R * 0.5); at.y = 0;
   const texel = 2 * R / sun.shadow.mapSize.x, px = at.dot(SUN_X), py = at.dot(SUN_Y);
@@ -989,7 +998,7 @@ function tex(name) {
 
 // ── the ground material ────────────────────────────────────────────────────────
 const U = {
-  tile: { value: 24 }, split: { value: 0 }, res: { value: new THREE.Vector2(innerWidth, innerHeight) },
+  tile: { value: 12 }, split: { value: 0 }, res: { value: new THREE.Vector2(innerWidth, innerHeight) },
   hexOn: { value: 1 }, hexSize: { value: 0.8 }, hexRot: { value: Math.PI }, hexSharp: { value: 7 }, hexBright: { value: 0.6 },
   macroOn: { value: 1 }, macroStr: { value: 1 }, macroSize: { value: 5 }, macroHue: { value: 0.5 },
   farOn: { value: 0 }, farFrom: { value: 40 }, grid: { value: 0 },
@@ -1372,7 +1381,7 @@ mat.onBeforeCompile = (sh) => {
   `);
 };
 // (Mathwood Valley) the lanterns' and the lit windows' warm light on the ground round them (the lamps' picture, lampLight.js)
-{ const own = mat.onBeforeCompile; mat.onBeforeCompile = (sh, r) => { own(sh, r); Object.assign(sh.uniforms, LAMPU); sh.fragmentShader = lampStandard(sh.fragmentShader); }; }
+{ const own = mat.onBeforeCompile; mat.onBeforeCompile = (sh, r) => { own(sh, r); Object.assign(sh.uniforms, LAMPU); sh.fragmentShader = lampStandard(sh.fragmentShader, 'the ground'); }; }
 mat.customProgramCacheKey = () => 'terrain-lab-29-lamps-wfog' + (GL2 ? 'g' : '');
 if (!GL2) mat.extensions = { derivatives: true };
 const ground = new THREE.Group(); ground.name = 'ground'; scene.add(ground);
@@ -1591,7 +1600,7 @@ loadSheet(BASE + 'models/props/groundPlants.glb', 4, (parts, m) => { if (LOOK) m
 // wood leaves the trees); a clear stroke clears every sort.
 // ...then the footpath (25: paint a path) and its eraser (26), the town's buildings (30 on) and props (50 on), which live in
 // the town's own layout (the tool reaches them through `town`)
-const PLANT = { tool: null, base: null, LAWN_KIND: KIND_INFO.length, TREE0: KIND_INFO.length + 1, ROCK0: KIND_INFO.length + 5, PATH: KIND_INFO.length + 9, NOPATH: KIND_INFO.length + 10, FENCE: KIND_INFO.length + 11, STONE: KIND_INFO.length + 12, NOSTONE: KIND_INFO.length + 13, BUILD0: 30, PROP0: 50, ROCKS: 99 };   // (ROCKS: the four rocks mixed, a brush; past the props)
+const PLANT = { tool: null, base: null, LAWN_KIND: KIND_INFO.length, TREE0: KIND_INFO.length + 1, ROCK0: KIND_INFO.length + 5, PATH: KIND_INFO.length + 9, NOPATH: KIND_INFO.length + 10, FENCE: KIND_INFO.length + 11, STONE: KIND_INFO.length + 12, NOSTONE: KIND_INFO.length + 13, BUILD0: 30, PROP0: 50, GATE: 98, ROCKS: 99 };   // (ROCKS: the four rocks mixed, a brush; GATE: a gate put in a fence; both past the props)
 // the planting as the land reads it: the Build bar's once it's there (it's handed this same planting), else the planting
 // itself, from the start (the first laying of the land already keeps to its paths and clears). In the lab: the one kept in
 // this browser (one from before the land's paths were baked into footpath strokes, landpath1.., gets them, ahead of its
@@ -1601,14 +1610,14 @@ const PLANT = { tool: null, base: null, LAWN_KIND: KIND_INFO.length, TREE0: KIND
   if (kept && baked.length && !kept.strokes.some(isLand)) { kept.strokes.unshift(...baked); savePlanting(kept); }
   const planting = normalisePlanting(kept || PLANTING_FIRST || emptyPlanting()); PLANT.base = { planting, index: new PlantIndex(planting) }; }
 const plantNow = () => PLANT.tool || PLANT.base;
-const SORT = { plant: (k) => k <= PLANT.LAWN_KIND, tree: (k) => k >= PLANT.TREE0 && k < PLANT.ROCK0, rock: (k) => (k >= PLANT.ROCK0 && k < PLANT.ROCK0 + 4) || k === PLANT.ROCKS, path: (k) => k === PLANT.PATH || k === PLANT.NOPATH, fence: (k) => k === PLANT.FENCE };
+const SORT = { plant: (k) => k <= PLANT.LAWN_KIND, tree: (k) => k >= PLANT.TREE0 && k < PLANT.ROCK0, rock: (k) => (k >= PLANT.ROCK0 && k < PLANT.ROCK0 + 4) || k === PLANT.ROCKS, path: (k) => k === PLANT.PATH || k === PLANT.NOPATH, fence: (k) => k === PLANT.FENCE || k === PLANT.GATE };
 // the planting seen by one sort: its paint strokes and every clear (the land's own plants follow the procedural switch;
 // trees and rocks always), with its own index; made once a change
 const sortParts = new WeakMap();
 function plantingFor(sort) {
   const t = plantNow(), P = t.planting; let m = sortParts.get(t.index); if (!m) sortParts.set(t.index, m = {});
   if (!m[sort]) {   // (a placed plant's clear circle keeps the meadow back, not the trees: trees and rocks heed only their own sort's)
-    const pl = { ...P, procedural: sort === 'plant' ? P.procedural : true, strokes: P.strokes.filter((st) => (st.mode === 'clear' && st.kind !== PLANT.FENCE && (sort === 'rock' || !SORT.rock(st.kind))) || SORT[sort](st.kind)), items: sort === 'plant' ? P.items : P.items.filter((i) => SORT[sort](i.kind)) };   // (Clear with a fence chosen takes down fences only; with a rock chosen, rocks only)
+    const pl = { ...P, procedural: sort === 'plant' ? P.procedural : true, strokes: P.strokes.filter((st) => (st.mode === 'clear' && !SORT.fence(st.kind) && (sort === 'rock' || !SORT.rock(st.kind))) || SORT[sort](st.kind)), items: sort === 'plant' ? P.items : P.items.filter((i) => SORT[sort](i.kind)) };   // (Clear with a fence chosen takes down fences only; with a rock chosen, rocks only)
     m[sort] = { planting: pl, index: new PlantIndex(pl) };
   }
   return m[sort];
@@ -1630,7 +1639,7 @@ const plantingParts = new WeakMap();
 function paintedOnly(t, lawn) {   // (lawn: false the plants, true the lawn, or 'trees' / 'rocks')
   let v = plantingParts.get(t.index);
   if (!v) {
-    const P = t.planting, part = (want) => ({ ...P, strokes: P.strokes.filter((s) => !(s.mode === 'clear' && (s.kind === PLANT.FENCE || (SORT.rock(s.kind) && !want(s.kind))))).map((s) => s.mode !== 'clear' && !want(s.kind) ? { ...s, density: 0 } : s) });
+    const P = t.planting, part = (want) => ({ ...P, strokes: P.strokes.filter((s) => !(s.mode === 'clear' && (SORT.fence(s.kind) || (SORT.rock(s.kind) && !want(s.kind))))).map((s) => s.mode !== 'clear' && !want(s.kind) ? { ...s, density: 0 } : s) });
     v = { plants: part((k) => k < PLANT.LAWN_KIND), lawn: part((k) => k === PLANT.LAWN_KIND), trees: part(SORT.tree), rocks: part(SORT.rock) }; plantingParts.set(t.index, v);
   }
   return typeof lawn === 'string' ? v[lawn] : lawn ? v.lawn : v.plants;
@@ -1710,7 +1719,7 @@ function plantedTrees(species) {
   return out;
 }
 // what of the planting the trees and the stones were last laid from, so a change to plants alone doesn't lay them again
-const CLEARS = { path: () => false, fence: (k) => k === PLANT.FENCE, tree: (k) => k !== PLANT.FENCE && !SORT.rock(k), rock: (k) => k !== PLANT.FENCE };   // (the clears that take away each sort: a rock's clear redoes no paths, trees or fences)
+const CLEARS = { path: () => false, fence: (k) => SORT.fence(k), tree: (k) => !SORT.fence(k) && !SORT.rock(k), rock: (k) => !SORT.fence(k) };   // (the clears that take away each sort: a rock's clear redoes no paths, trees or fences; a fence's or a gate's only the fences)
 const sortSig = (sort) => { const t = plantNow(); return t ? JSON.stringify([t.planting.strokes.filter((s) => (s.mode === 'clear' && CLEARS[sort](s.kind)) || SORT[sort](s.kind)), t.planting.items.filter((i) => SORT[sort](i.kind))]) : ''; };
 const lastSig = { tree: sortSig('tree'), rock: sortSig('rock'), path: sortSig('path'), fence: sortSig('fence') };   // (what the first laying, below, lays them from)
 function makePlantTool() {
@@ -1741,11 +1750,14 @@ function makePlantTool() {
   { const c = document.createElement('canvas'); c.width = c.height = 96; const g = c.getContext('2d'); g.fillStyle = '#7a5a3c';   // a fence: posts and two rails
     for (const x of [14, 40, 66]) g.fillRect(x, 30, 9, 54); g.fillRect(10, 42, 76, 7); g.fillRect(10, 62, 76, 7);
     kinds.push({ id: PLANT.FENCE, name: 'fence (drag to draw it; Plant size: its height)', group: 'Fences', icon: c.toDataURL() }); }
+  { const c = document.createElement('canvas'); c.width = c.height = 96; const g = c.getContext('2d'); g.fillStyle = '#7a5a3c';   // a gate: two posts, a braced leaf
+    g.fillRect(10, 24, 10, 62); g.fillRect(76, 24, 10, 62); for (const y of [36, 54, 72]) g.fillRect(22, y, 52, 7); g.save(); g.translate(24, 76); g.rotate(-0.62); g.fillRect(0, -3, 62, 7); g.restore();
+    kinds.push({ id: PLANT.GATE, name: 'gate (click a fence: a gap with a gate in it, the fence\'s style)', group: 'Fences', icon: c.toDataURL(), sliders: [] }); }
   // the town's things: buildings and props, one at a time (the gizmo moves, lifts, turns and sizes them)
   Object.entries(TOWN_ASSETS).forEach(([key, A], i) => kinds.push({ id: PLANT.BUILD0 + i, name: A.name || key, group: 'Buildings', town: 'model:' + key }));
   PROP_KINDS.forEach((P, i) => kinds.push({ id: PLANT.PROP0 + i, name: P.name || P.kind, group: 'Props', town: 'prop:' + P.kind }));
   // the placed plants' look: the land's plant material, swaying in the same breeze (each kind its own height)
-  const materials = COVER.parts.map((g, k) => { g.computeBoundingBox(); const m = COVER.material.clone(), own = COVER.material.onBeforeCompile; m.onBeforeCompile = (sh, r) => { own(sh, r); Object.assign(sh.uniforms, LAMPU); sh.fragmentShader = lampStandard(sh.fragmentShader); }; m.customProgramCacheKey = () => COVER.material.customProgramCacheKey() + '-lamps'; return swayMaterial(m, Math.max(0.05, g.boundingBox.max.y), KIND_INFO[k].lit ? 0.45 : 1, '-placed'); });
+  const materials = COVER.parts.map((g, k) => { g.computeBoundingBox(); const m = COVER.material.clone(), own = COVER.material.onBeforeCompile; m.onBeforeCompile = (sh, r) => { own(sh, r); Object.assign(sh.uniforms, LAMPU); sh.fragmentShader = lampStandard(sh.fragmentShader, 'a placed plant'); }; m.customProgramCacheKey = () => COVER.material.customProgramCacheKey() + '-lamps'; return swayMaterial(m, Math.max(0.05, g.boundingBox.max.y), KIND_INFO[k].lit ? 0.45 : 1, '-placed'); });
   const parts = [...COVER.parts], mats = [...materials];
   shapes.forEach((g, i) => { parts[PLANT.ROCK0 + i] = g; mats[PLANT.ROCK0 + i] = landShaded(new THREE.MeshStandardMaterial({ color: ROCK_TEX ? 0xffffff : 0x8d8a84, roughness: 0.92, flatShading: true }), ROCK_TEX ? ROCK_TEX[i % 2] : null); });
   // a placed plant's own scale: the brush's plants are sized in metres by the forest (its height over the model's), so the placed ones are too
@@ -1767,6 +1779,12 @@ function makePlantTool() {
     road: (stroke) => { TOWN.village.layout.roads.push(stroke); TOWN.editor.redrawRoads(); composePathRoad(); paveLater(); TOWN.editor.commit('roads'); },
     duplicate: (id) => { const it = TOWN.village.item(id); if (!it) return null; const c = { ...it, id: newTownId(), x: +(it.x + 3).toFixed(2), z: +(it.z + 3).toFixed(2) };
       TOWN.village.layout.items.push(c); TOWN.village.sync(); TOWN.editor.commit('add'); return c.id; },
+    // a code-built cabin's or home's design (its preset, the next of cabins.js PRESETS, and a new seed: New look)
+    lookOf: (it) => !!(CODE && it && it.type === 'model' && (it.kind === 'home' || it.kind === 'cabin') && CODE.has(it.kind, it)),
+    newLook: (id) => { const it = TOWN.village.item(id), L = CODE ? CODE.looks() : []; if (!it || !L.length || !town.lookOf(it)) return null;
+      const b = CODE.find && [...TOWN.village.objs.values()].find((o) => o.it === it && o.code), now = it.preset || (b && b.code.look.preset);
+      it.preset = L[(L.indexOf(now) + 1) % L.length]; it.seed = 1 + Math.floor(Math.random() * 9973);
+      TOWN.village.sync(); TOWN.editor.commit('move'); return CODE.lookName(it.preset); },
     sizeAll: (id) => { const it = TOWN.village.item(id); if (!it) return 0; let n = 0;   // (every other one of its kind made its size)
       for (const o of TOWN.village.layout.items) if (o.type === it.type && o.kind === it.kind && o !== it && o.size !== it.size) { o.size = it.size; n++; }
       if (n) { TOWN.village.sync(); TOWN.editor.commit('move'); } return n; },
@@ -1793,39 +1811,49 @@ function makePlantTool() {
     opened: (on) => { document.body.classList.toggle('planting', on); if (TOWN.village) { TOWN.village.showTreePicks = on; TOWN.village.sync(); } } });   // (the town's own trees pickable while the bar is open, as the old town editor did)
   treeIcons();
   // the buildings' and props' icons, from the models (loaded as the town loads them) and the props as made
-  Object.keys(TOWN_ASSETS).forEach((key, i) => loadModel(TOWN_ASSETS[key].file || key, QUAL.tier !== 'gaming').then((m) => PLANT.tool.iconFrom(PLANT.BUILD0 + i, m.scene.clone())).catch(() => {}));
+  // (a building made in code: its icon from the building once it is made, so its old model is never loaded)
+  Object.keys(TOWN_ASSETS).forEach((key, i) => (CODE && CODE.has(key) ? CODE.ready.then(() => { const g = CODE.sample(key); if (g) PLANT.tool.iconFrom(PLANT.BUILD0 + i, g.clone()); })
+    : TOWN_ASSETS[key].code ? Promise.resolve() : loadModel(TOWN_ASSETS[key].file || key, QUAL.tier !== 'gaming').then((m) => PLANT.tool.iconFrom(PLANT.BUILD0 + i, m.scene.clone()))).catch(() => {}));
   { const g = new THREE.Group(); [[0, 0, 0, 1], [1.1, 0, 0.3, 0.75], [0.4, 0, 1.0, 0.85], [-0.6, 0, 0.8, 0.6]].forEach(([x, y, z, sc], i) => { const m = new THREE.Mesh(parts[PLANT.ROCK0 + i], mats[PLANT.ROCK0 + i]); m.position.set(x, y, z); m.scale.setScalar(sc); m.rotation.y = i * 1.3; g.add(m); });
     PLANT.tool.iconFrom(PLANT.ROCKS, g); }   // (the mixed rocks' icon: the four of them together)
-  PROP_KINDS.forEach((P, i) => { try { PLANT.tool.iconFrom(PLANT.PROP0 + i, makeProp(P.kind)); } catch (e) { /* no icon then */ } });
+  PROP_KINDS.forEach((P, i) => { try { const g = makeProp(P.kind); (g.userData.ready || Promise.resolve()).then(() => PLANT.tool.iconFrom(PLANT.PROP0 + i, g)); } catch (e) { /* no icon then */ } });   // (ready: a wagon, once its model is in)
   { const i = PROP_KINDS.findIndex((P) => P.kind === 'stateMap');   // (the outline prop is unseen: its icon is its outline, drawn)
     if (i >= 0) stateOutline('MT').then((pts) => { if (!pts) return; const S = 96, cv = document.createElement('canvas'); cv.width = cv.height = S; const g = cv.getContext('2d'); g.strokeStyle = '#e8443a'; g.lineWidth = 4; g.lineJoin = 'round'; g.beginPath(); pts.forEach(([x, z], j) => g[j ? 'lineTo' : 'moveTo'](S / 2 + x * 21, S / 2 + z * 21)); g.stroke(); PLANT.tool.bar.setIcon(PLANT.PROP0 + i, cv.toDataURL()); }); }
 }
-// FENCES (the Build bar's fence, drawn with a drag): rustic posts about every 2.2 m along the line, two rails between each
-// pair, standing on the land (rails slope with it); a later Clear stroke takes posts out, and the rails to them. Two draws
-const FENCE = { meshes: [], mat: null, post: new THREE.BoxGeometry(0.14, 1, 0.14).translate(0, 0.5, 0), rail: new THREE.BoxGeometry(1, 0.08, 0.06).translate(0.5, 0, 0) };
+// FENCES (the Build bar's fence, drawn with a drag). A fence stroke with no style is the PLAIN fence, drawn here as it
+// always was: rustic posts about every 2.2 m along the line, two rails between each pair, standing on the land (rails
+// slope with it); a later Clear stroke takes posts out, and the rails to them (drawn as textured boards by objects/
+// fences.js since round 1 of the fence styles: in the fences' one wood draw). A stroke with a style (the
+// Town Lab's picker: picket, corral, zigzag, buck and rail, wire, stone, log rail, wattle) and every gate are planned by
+// objects/fenceplan.js and drawn by objects/fences.js (FENCE.maker: made the first time one is wanted); a gate in a
+// plain fence splits it, each part laid the same way from its own start, leaving out the post where the gate's stands.
+// FENCE.rails: the lines walkers can't cross ([[x, y, z], [x, y, z], height, half width (styled only)]); FENCE.plan: the
+// plan; FENCE.near: () -> [{ x, z }] what the gates swing open for (the game's; else the camera's target)
+const FENCE = { meshes: [], mat: null, rails: [], posts: 0, plan: null, maker: null, near: null };
+FENCE.make = () => FENCE.maker || (FENCE.maker = new Fences({ scene, heightAt, shade: (m) => landShaded(m, null), tier: QUAL.tier, shadows: SHADOW.on, onReady: (what) => { if (what === 'stone') buildFences(); } }));
 function buildFences() {
   for (const m of FENCE.meshes) { scene.remove(m); m.dispose(); }
   FENCE.meshes = [];
   const strokes = plantNow().planting.strokes, posts = [], rails = [], GAP = 2.2;
+  const plan = FENCE.plan = planFences(strokes, { fence: PLANT.FENCE, gate: PLANT.GATE, inStroke }), runOf = new Map(plan.runs.map((R) => [R.si, R]));
   strokes.forEach((st, si) => {
-    if (st.kind !== PLANT.FENCE || st.mode === 'clear' || st.pts.length < 2) return;
-    const h = 1.1 * (st.size || 1), at = [st.pts[0]]; let left = GAP;   // (posts every GAP along the line: left is how far to the next)
-    for (let i = 1; i < st.pts.length; i++) { const [ax, az] = st.pts[i - 1], [bx, bz] = st.pts[i], L = Math.hypot(bx - ax, bz - az); let d = left;
-      while (d <= L) { at.push([ax + (bx - ax) * d / L, az + (bz - az) * d / L]); d += GAP; } left = d - L; }
-    const end = st.pts[st.pts.length - 1], last = at[at.length - 1]; if (Math.hypot(end[0] - last[0], end[1] - last[1]) > GAP * 0.35) at.push(end);
-    const kept = at.map(([x, z]) => strokes.some((c, ci) => ci > si && c.mode === 'clear' && c.kind === PLANT.FENCE && inStroke(c, x, z)) ? null : [x, heightAt(x, z), z]);   // (taken down by Clear with a fence chosen)
-    kept.forEach((p, i) => { if (!p) return; posts.push([p, h]); if (kept[i + 1]) rails.push([p, kept[i + 1], h]); });
+    if (st.kind !== PLANT.FENCE || st.mode === 'clear' || st.pts.length < 2 || styleOf(st)) return;
+    const R = runOf.get(si), parts = R && R.gaps.length ? R.pieces : [{ pts: st.pts }];
+    for (const part of parts) {
+      const line = part.pts, h = 1.1 * (st.size || 1), at = [line[0]]; let left = GAP;   // (posts every GAP along the line: left is how far to the next)
+      for (let i = 1; i < line.length; i++) { const [ax, az] = line[i - 1], [bx, bz] = line[i], L = Math.hypot(bx - ax, bz - az); let d = left;
+        while (d <= L) { at.push([ax + (bx - ax) * d / L, az + (bz - az) * d / L]); d += GAP; } left = d - L; }
+      const end = line[line.length - 1], last = at[at.length - 1]; if (Math.hypot(end[0] - last[0], end[1] - last[1]) > GAP * 0.35) at.push(end);
+      const kept = at.map(([x, z]) => strokes.some((c, ci) => ci > si && c.mode === 'clear' && c.kind === PLANT.FENCE && inStroke(c, x, z)) ? null : [x, heightAt(x, z), z]);   // (taken down by Clear with a fence chosen)
+      kept.forEach((p, i) => { if (!p) return; if (!((i === 0 && part.gateA) || (i === kept.length - 1 && part.gateB))) posts.push([p, h]); if (kept[i + 1]) rails.push([p, kept[i + 1], h]); });
+    }
   });
-  FENCE.rails = rails;                                                   // (the townsfolk's walking grid keeps them out)
-  if (!posts.length) return;
-  FENCE.mat = FENCE.mat || landShaded(new THREE.MeshStandardMaterial({ color: 0x7a5a3c, roughness: 0.92 }), null);
-  const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), X = new THREE.Vector3(1, 0, 0), Y = new THREE.Vector3(0, 1, 0), c = new THREE.Color(), dir = new THREE.Vector3();
-  const pm = new THREE.InstancedMesh(FENCE.post, FENCE.mat, posts.length);
-  posts.forEach(([p, h], i) => { const r = hash(p[0] * 1.7, p[2] * 2.3); pm.setMatrixAt(i, M.compose(new THREE.Vector3(p[0], p[1] - 0.08, p[2]), Q.setFromAxisAngle(Y, r * 6.28), new THREE.Vector3(1, h + 0.08 + r * 0.1, 1))); pm.setColorAt(i, c.setScalar(0.8 + 0.35 * r)); });
-  const rm = new THREE.InstancedMesh(FENCE.rail, FENCE.mat, rails.length * 2 || 1); rm.count = rails.length * 2;
-  rails.forEach(([p, q, h], i) => { dir.set(q[0] - p[0], q[1] - p[1], q[2] - p[2]); const L = dir.length(); dir.normalize(); Q.setFromUnitVectors(X, dir);
-    for (const [k, f] of [[0, 0.42], [1, 0.82]]) { rm.setMatrixAt(i * 2 + k, M.compose(new THREE.Vector3(p[0], p[1] + h * f, p[2]), Q, new THREE.Vector3(L, 1, 1))); rm.setColorAt(i * 2 + k, c.setScalar(0.85 + 0.3 * hash(p[0] + k, p[2]))); } });
-  for (const m of [pm, rm]) { m.castShadow = m.receiveShadow = SHADOW.on; m.frustumCulled = false; scene.add(m); FENCE.meshes.push(m); }
+  // all of it drawn by objects/fences.js: the plain fence's posts and rails (as laid above) as textured boards, the
+  // styled fences and the gates (the plain fence was flat boxes before: two instanced draws, untextured)
+  const styled = posts.length || plan.gates.length || plan.runs.some((R) => R.style) ? FENCE.make().build(plan, { posts, rails }) : (FENCE.maker ? FENCE.maker.build(plan) : []);
+  FENCE.rails = [...rails, ...styled];                                   // (the townsfolk's walking grid keeps them out; the game's walkers too)
+  FENCE.posts = posts.length;                                            // (rigs: the plain fence's posts)
+  if (posts.length) FENCE.mat = FENCE.mat || landShaded(new THREE.MeshStandardMaterial({ color: 0x7a5a3c, roughness: 0.92 }), null);   // (the farm, homestead and range borrow its shading)
 }
 // the trees' icons, drawn from the forest's own trees once they are in (a copy each: the forest keeps its own)
 function treeIcons() {
@@ -1866,7 +1894,7 @@ function stoneShapes() {
 function landShaded(m, rock = null) {
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, { shadeMap: U.shadeMap, landSize: U.landSize, hillShade: U.hillShade, aoShade: U.aoShade, treeShade: U.treeShade }, LAMPU);
-    sh.fragmentShader = lampStandard(sh.fragmentShader);                // (the street lamps' light)
+    sh.fragmentShader = lampStandard(sh.fragmentShader, 'land-shaded ' + (m.name || m.type));   // (the street lamps' light)
     if (rock) {
       sh.uniforms.rockMap = { value: rock };
       sh.vertexShader = 'varying vec3 vRockP; varying vec3 vRockN;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvRockP = position; vRockN = normal;');
@@ -2042,15 +2070,15 @@ const PAVE_VS = 'uniform vec3 eyePos; uniform float paveLod; uniform vec3 stoneG
 // goes into the sky's light with the ground round it instead of glowing in a sun it can't see. Any lit material: its world
 // position from its view position (no new varyings). sunShadeK: the Hill shadows setting, 0 until the shade is baked.
 const SUNSHADE_U = { shadeMap: U.shadeMap, landSize: U.landSize, sunShadeK: { value: 0 }, ...LAMPU };   // (and the street lamps' light: lampStandard)
-const sunShadeFrag = (fs) => lampStandard('uniform sampler2D shadeMap; uniform float landSize, sunShadeK;\n' + fs.replace('#include <lights_fragment_begin>', `float landSunAt = 1.0;
+const sunShadeFrag = (fs, who = 'hill shade') => lampStandard('uniform sampler2D shadeMap; uniform float landSize, sunShadeK;\n' + fs.replace('#include <lights_fragment_begin>', `float landSunAt = 1.0;
   if (sunShadeK > 0.0) { vec3 wpos = cameraPosition + (-vViewPosition) * mat3(viewMatrix); landSunAt = mix(1.0, texture2D(shadeMap, wpos.xz / landSize + 0.5).r, sunShadeK); }
-  ` + THREE.ShaderChunk.lights_fragment_begin.replace('getDirectionalLightInfo( directionalLight, directLight );', 'getDirectionalLightInfo( directionalLight, directLight ); directLight.color *= landSunAt;')));
+  ` + THREE.ShaderChunk.lights_fragment_begin.replace('getDirectionalLightInfo( directionalLight, directLight );', 'getDirectionalLightInfo( directionalLight, directLight ); directLight.color *= landSunAt;')), who);
 // every lit material in the scene with no shader patch of its own gets it (buildings and props load as they come: looked
 // for again now and then)
 function sunShadeAll() {
   scene.traverse((o) => { if (!o.isMesh) return; for (const m of [].concat(o.material)) {
     if (!m || m.userData.sunShade || !(m.isMeshStandardMaterial || m.isMeshLambertMaterial || m.isMeshPhongMaterial) || m.onBeforeCompile !== THREE.Material.prototype.onBeforeCompile) continue;
-    m.userData.sunShade = true; m.onBeforeCompile = (sh) => { Object.assign(sh.uniforms, SUNSHADE_U); sh.fragmentShader = sunShadeFrag(sh.fragmentShader); }; m.needsUpdate = true; } });
+    m.userData.sunShade = true; const who = 'hill shade on ' + (m.name || o.name || m.type); m.onBeforeCompile = (sh) => { Object.assign(sh.uniforms, SUNSHADE_U); sh.fragmentShader = sunShadeFrag(sh.fragmentShader, who); }; m.needsUpdate = true; } });
 }
 const paveMat = new THREE.MeshStandardMaterial({ roughness: 0.88, metalness: 0 });
 paveMat.onBeforeCompile = (sh) => {
@@ -2061,7 +2089,7 @@ paveMat.onBeforeCompile = (sh) => {
   sh.fragmentShader = 'varying vec2 vCell; varying float vEdge; varying vec3 vStW; uniform vec3 eyePos; uniform float bevelDark;\n' + STONE_GLSL + sh.fragmentShader
     .replace('#include <map_fragment>', `#include <map_fragment>
       diffuseColor.rgb = stoneColour(vStW.xz, stCell(vCell), vCell, smoothstep(6.0, 30.0, length(vStW - eyePos))) * (1.0 - bevelDark * (1.0 - vEdge));`);
-  Object.assign(sh.uniforms, SUNSHADE_U); sh.fragmentShader = sunShadeFrag(sh.fragmentShader);   // (the hill's shadow, as everything else)
+  Object.assign(sh.uniforms, SUNSHADE_U); sh.fragmentShader = sunShadeFrag(sh.fragmentShader, 'the paving');   // (the hill's shadow, as everything else)
 };
 paveMat.customProgramCacheKey = () => 'town-paving-3';
 const paveDepth = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });   // their shadows sink with them
@@ -2126,7 +2154,7 @@ if (slice) { TOWN.job = null; const g = landSteps(); for (let done = false; !don
 else buildLand();
 LAND_READY.done = true; for (const f of LAND_READY.then.splice(0)) f();
 // THE TOWN: the buildings, props and the editor. Potato and normal (phones) get the 1K pictures, gaming the 2K
-TOWN.village = new Village({ scene, lo: QUAL.tier !== 'gaming', heightAt, size: SIZE });
+TOWN.village = new Village({ scene, lo: QUAL.tier !== 'gaming', heightAt, size: SIZE, code: CODE });
 TOWN.village.setLayout(lab || !DECOR.merged.size ? TOWN.layout : { ...TOWN.layout, items: TOWN.layout.items.filter((it) => !DECOR.merged.has(it.id)) });
 if (!lab && DECOR.merged.size) drawDecor({ items: TOWN.layout.items.filter((it) => DECOR.merged.has(it.id)), parent: TOWN.village.group, heightAt, THREE, makeProp });   // (the decor's props: one draw a kind; in the lab each is its own, to move)
 // (Mathwood Valley) THE TOWN'S WINDOWS AND LANTERNS at night (objects/nightLights.js): fitted to each building as it loads,
@@ -2171,7 +2199,7 @@ function townRebuildNow() {
 // else (the hill's shadow, the lamps: FOLK_SHADE); how many by the tier. size: how big they are against a real grown-up (the
 // town's props are sized up from life, benches 1.7 times, lamps 2: so the people too, as the benches, Jacob 2026-10-06)
 const FOLK = { on: folk && TS.people > 0, count: TS.people, size: 1.7, lib: null, town: null, grid: null, job: null, sig: '', due: 0, tick: 0, decks: new Map(), deckList: [], deckWait: new Map(), deckBusy: false };
-const FOLK_SHADE = (sh) => { Object.assign(sh.uniforms, SUNSHADE_U); sh.fragmentShader = sunShadeFrag(sh.fragmentShader); };
+const FOLK_SHADE = (sh) => { Object.assign(sh.uniforms, SUNSHADE_U); sh.fragmentShader = sunShadeFrag(sh.fragmentShader, 'the shade handed out (people, lit windows, code-built buildings)'); };
 const atLocal = (it, lx, lz) => { const a = it.rot * Math.PI / 180, c = Math.cos(a), s = Math.sin(a); return [it.x + c * lx + s * lz, it.z - s * lx + c * lz]; };   // (a thing's own x, z to the world's, as the village turns it)
 const faceLocal = (it, lx, lz) => { const a = it.rot * Math.PI / 180, c = Math.cos(a), s = Math.sin(a); return Math.atan2(c * lx + s * lz, -s * lx + c * lz); };
 // a step's cost (tenths): road 10, footpath 11, grass 18-26 (less near a path), steeper costs more; 0 in the water or up a slope
@@ -2195,7 +2223,7 @@ function walkWalls(L, x0, z0, x1, z1) {
       else walls.push({ rect: { x: it.x, z: it.z, w: w + 0.3, d: d + 0.3, rot: rad(it) } });   // (padded: a thin one at a slant could cover no cell's centre)
     } else walls.push({ disc: { x: it.x, z: it.z, r: 0.6 * it.size } });   // (a town tree's trunk)
   }
-  for (const [p, q] of FENCE.rails || []) walls.push({ line: [p[0], p[2], q[0], q[2]], w: 0.3 });
+  for (const [p, q, , half] of FENCE.rails || []) walls.push({ line: [p[0], p[2], q[0], q[2]], w: half ? Math.max(0.3, half * 1.2) : 0.3 });
   for (const it of plantNow().planting.items) {
     if (SORT.tree(it.kind)) walls.push({ disc: { x: it.x, z: it.z, r: 0.6 } });
     else if (SORT.rock(it.kind)) walls.push({ disc: { x: it.x, z: it.z, r: 0.45 * Math.max(it.sx || 1, it.sz || 1) } });
@@ -2490,6 +2518,7 @@ function dayFrame(dt, quiet = false) {
   shadeFrame(dt);
   lampsFrame();
   NIGHT_LIGHTS.update(dt, LAMPU.lampOn.value);                          // (the windows and lanterns, with the lamps)
+  if (CODE) CODE.update(dt, camera, LAMPU.lampOn.value, controls && controls.target);   // (the code buildings' insides drawn near the camera or the player only)
   folkFrame(dt, quiet);
 }
 // THE STREET LAMPS come on as the sun goes: the lantern glass brightens, a soft halo round it, and a warm pool on the
@@ -2547,7 +2576,9 @@ renderer.getDrawingBufferSize(U.res.value);
 function update(dt, afterShow = null, quiet = false) {
   if (TOWN.job) { const t0 = performance.now(), budget = Math.min(6, Math.max(2, dt * 1000 * 0.25)); while (performance.now() - t0 < budget) if (TOWN.job.next().done) { TOWN.job = null; break; } }   // (a light town rebuild, a slice a frame: townRebuildNow)
   if (PAVE.job) { const t0 = performance.now(), budget = Math.min(6, Math.max(2, dt * 1000 * 0.25)); while (performance.now() - t0 < budget) if (PAVE.job.next().done) { PAVE.job = null; break; } }   // (the paving laid again after a road edit: paveLater)
-  if (!quiet) { if (SHOW.sc) SHOW.sc.update(dt); tickGlobes(dt); } if (afterShow) afterShow(); followCover(); lawnFrame(dt); U.time.value += dt; sky.update(camera, dt); if (WIND.on) tickWind(dt); dayFrame(dt, quiet); followShadow();
+  if (!quiet) { if (SHOW.sc) SHOW.sc.update(dt); tickGlobes(dt); } if (afterShow) afterShow(); followCover();
+  if (FENCE.maker) FENCE.maker.update(dt, FENCE.near ? FENCE.near() : [controls && controls.target], camera, renderer);   // (the gates swing open for what's near; the wire's width kept to the pixels)
+  lawnFrame(dt); U.time.value += dt; sky.update(camera, dt); if (WIND.on) tickWind(dt); dayFrame(dt, quiet); followShadow();
   for (const f of [treeForest, coverForest]) if (f) {
     f.landU.landShade.value = U.shadeMap.value; f.landU.landShadeK.value.set(U.hillShade.value, U.aoShade.value, U.treeShade.value * 0.6, U.shadeMap.value ? 1 : 0);   // the land's baked shade, on the plants too
     f.update(camera, controls.target, camera.position, dt);
@@ -2578,8 +2609,8 @@ function bakeData() {
     hashes: { heights: fnvBytes([hpre]), cells: fnvBytes([wd, pond, gully, fan]), water: fnvBytes([waterRgba], 61), paths: fnvBytes([MAPS.path], 61) } };
 }
 return {
-  scene, sky, sun, hemi, ground, mat, lawn, LAWN_SKIP, U, MAPS, TOWN, PLANT, COVER, GROW, PLANT_KINDS, FAMILY, FOREST, LEAF, LAND, VALLEY, SHAPE, WATER, PAVE, DAY, DL, SHADE, NIGHT, NIGHT_GRADE, NIGHT_LIGHTS, STONES, LAWN, LAWN_GO, CALM, FOLK, SHOW, BEAMS, RAIN, FENCE, FOG_EDGE: FOG_DIR.edge,
-  TS, QUAL, TEXTURES, LAYERS, TREE_SPECIES, TOWN_DEFAULT, PLANTING_FIRST, weights, FLOW, SETTLE, WDEPTH, ACC, POND, OUTLETS, Hg, N, SIZE, TEX, SEG, groundTiles, SUN_NOW, FOG_DIR, LAMPU,
+  scene, sky, sun, hemi, ground, mat, lawn, LAWN_SKIP, U, MAPS, TOWN, PLANT, COVER, GROW, PLANT_KINDS, FAMILY, FOREST, LEAF, LAND, VALLEY, SHAPE, WATER, PAVE, DAY, DL, SHADE, NIGHT, NIGHT_GRADE, NIGHT_LIGHTS, STONES, LAWN, LAWN_GO, CALM, FOLK, SHOW, BEAMS, RAIN, FENCE, SHADOW, FOG_EDGE: FOG_DIR.edge,
+  TS, QUAL, TEXTURES, LAYERS, TREE_SPECIES, TOWN_DEFAULT, PLANTING_FIRST, weights, FLOW, SETTLE, WDEPTH, ACC, POND, OUTLETS, Hg, N, SIZE, TEX, SEG, groundTiles, SUN_NOW, FOG_DIR, LAMPU, CODE,
   FINE, get LANDF() { return LANDF; }, inFine: (x, z) => !!FINE.h && x > FINE.x0 && x < FINE.x1 && z > FINE.z0 && z < FINE.z1,
   BAKE, bakeData, update, render, settled, heightAt, groundAt, slopeAt, waterAt, coverGround, buildLand, buildHeights, shapeMesh, fastMesh, baseGrid, erodeSteps, smoothErosion, cutRavines, addCrags, findWater, townLand, paintWater,
   placeCover, placeTrees, placeStones, placeLawn, calmCover, buildPaving, applyPave, paveLater, composePathRoad, tex, setAverages, applyWeights, drawPaths, followShadow, followCover, townRebuildNow, beamsReady,

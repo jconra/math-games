@@ -32,7 +32,7 @@ const frame = (b) => { const { w, d } = modelFootprint(b), a = b.rot * Math.PI /
 test('the town is the western one: the six buildings, once each, the townsfolk\'s homes, and nothing of the old town', () => {
   const models = B.filter((i) => i.kind !== 'home').map((i) => i.kind).sort();
   assert.deepEqual(models, SIX);
-  assert.deepEqual(Object.keys(TOWN_ASSETS).sort(), [...SIX, 'home'].sort(), 'TOWN_ASSETS lists only the western buildings and the homes');
+  assert.deepEqual(Object.keys(TOWN_ASSETS).filter((k) => !TOWN_ASSETS[k].code).sort(), [...SIX, 'home'].sort(), 'TOWN_ASSETS lists only the western buildings and the homes (and those built in code only)');
   for (const k of new Set(B.map((i) => i.kind))) { const f = TOWN_ASSETS[k].file || k; assert.ok(existsSync(join(GAME, `models/town/${f}.glb`)) && existsSync(join(GAME, `models/town/lo/${f}.glb`)), k + ': both sizes of model'); }
   const props = layout.items.filter((i) => i.type === 'prop').map((i) => i.kind);
   for (const no of ['lamp', 'valehexGlobe', 'stateMap', 'obelisk', 'easel']) assert.ok(!props.includes(no), 'no ' + no);
@@ -51,7 +51,7 @@ function glbBounds(file) {
 }
 
 test("each building's box is its model's own size (the store's measured once stood upright)", () => {
-  for (const [k, A] of Object.entries(TOWN_ASSETS)) for (const f of [`models/town/${A.file || k}.glb`, `models/town/lo/${A.file || k}.glb`]) {
+  for (const [k, A] of Object.entries(TOWN_ASSETS)) if (!A.code) for (const f of [`models/town/${A.file || k}.glb`, `models/town/lo/${A.file || k}.glb`]) {
     const s = glbBounds(f);
     if (!A.tilt) { for (let i = 0; i < 3; i++) assert.ok(Math.abs(s[i] - A.box[i]) < 0.004, `${f}: box ${A.box} against its own ${s.map((v) => v.toFixed(3))}`); continue; }
     // turned upright about x: the width is the same; leaning, it was taller and deeper than it stands

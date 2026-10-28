@@ -864,7 +864,8 @@ export function buildSheriff(recipeIn = {}, env = {}) {
     leaves.push({ group, geo: g, glass: glowGeometry(lk.parts.glow), hinge, open, closed: 0, parts: lk.parts.wood.length });
     k.solid([w, h, 0.08], null, null, mul(T(...hinge), RY(open), T(side * w / 2, h / 2, 0)));
   };
-  leafOf('office', [DOOR.a1 - 0.01, FL + 0.005, ZF - 0.05], -1, DOOR.a1 - DOOR.a0 - 0.02, 2.19, -58 * Math.PI / 180, officeDoor, r.seed * 19 + 1);
+  // (half open, as in the concept; in a town it is walked through: env.inTown swings it right back to the wall)
+  leafOf('office', [DOOR.a1 - 0.01, FL + 0.005, ZF - 0.05], -1, DOOR.a1 - DOOR.a0 - 0.02, 2.19, (env.inTown ? -100 : -58) * Math.PI / 180, officeDoor, r.seed * 19 + 1);
   const jw = JDOOR.w - 0.15;
   leafOf('jail', [JDX - jw / 2, JFL + 0.005, ZJF - 0.09], 1, jw, JDOOR.h - 0.1 - JFL - 0.01, -100 * Math.PI / 180, jailDoor, r.seed * 19 + 2);
 

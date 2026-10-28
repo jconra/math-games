@@ -1,14 +1,22 @@
 // ANIMALS: the horses, cattle, deer, dogs and wolves (Quaternius' animal pack, prepared into models/animals/ by
 // ~/pw/bandit-math/rigs/animals_bm.mjs: one skinned mesh each, its colours in the vertices, so an animal draws in one go).
+// The steed, the new horse (the Horse Lab's: a sculpted body on the pack horse's own skeleton and clips), is a coat kind
+// (animals.json "coat": true): its colours are worked out in the shader for each horse (horsecoat.js, dressed by
+// horses.js makeHorse), and it has a second, small mesh for its glossy eyes (animals.json "eye": that material's name).
 // The files keep the pack's own size; animals.json says how much to scale each one to its real size, which way it faces
 // (+Z, all of them), where a saddle sits, where a rope goes round the neck, and how fast each walk and gallop carries it.
 //
 //   loadAnimals(base, { kinds }) -> Promise<lib>   base: the game's folder (default: found from this file), its models/
 //                                                  folder, or the animals folder itself. kinds: only these (default: all)
 //   lib.need(kind) -> Promise                       loads one more kind later
-//   makeAnimal(lib, kind, { shadows, tint }) -> animal
+//   makeAnimal(lib, kind, { shadows, tint, size }) -> animal
 //                tint: a colour laid over the whole coat (multiplied: '#e8dccb' a shade paler and warmer, '#b0a49a' darker),
 //                so a herd isn't all one cow. Without it every animal of a kind shares one material
+//                size: how big, against the kind's own size (1: as animals.json has it; the stable's horses go from 0.95
+//                to 1.15). The model inside is scaled, the root isn't; height, tall, length, stride, neckRadius and
+//                .info's metres (sizedInfo) are the sized ones
+//     .size, .setSize(s)   its size; a new size as it stands (the seat, and a saddle on it, with it)
+//     .mesh        the body (the biggest skinned mesh); .eye a coat kind's eye mesh (else null); .coat: a coat kind
 //     .root        place and turn it: standing on y = 0, facing +Z, real size (the model inside is scaled)
 //     .play(name, { fade, speed, once })   crossfades to a clip (the same one again only changes its speed)
 //     .update(dt)  steps its clips
@@ -39,8 +47,11 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { softShade } from './shading.js';
+import { prepareHorse } from './horsecoat.js';
+import { buildHair } from './horsehair.js';
 
-export const KINDS = ['horse', 'horseWhite', 'donkey', 'cow', 'bull', 'deer', 'stag', 'shiba', 'husky', 'wolf'];
+// steed: the new horse (the Horse Lab's), a coat kind (animals.json "coat": true): see loadAnimals and makeAnimal
+export const KINDS = ['horse', 'horseWhite', 'steed', 'donkey', 'cow', 'bull', 'deer', 'stag', 'shiba', 'husky', 'wolf'];
 // the farm pack (models/animals/farm/, from the pack's .blend files): not in the world yet, except the pug as a dog
 export const FARM_KINDS = ['farmCow', 'farmHorse', 'pig', 'sheep', 'pug'];
 // coat tints for a herd (makeAnimal's tint): as made, then paler and darker, warmer and duller, so no two cows match
@@ -100,6 +111,17 @@ export async function loadAnimals(base, { kinds = null } = {}) {
   lib.need = (kind) => {
     if (!info[kind]) return Promise.reject(new Error('no such animal: ' + kind));
     return lib.loading[kind] || (lib.loading[kind] = loader.loadAsync(dir + info[kind].file).then((g) => {
+      if (info[kind].coat) {
+        // a coat kind (the new horse): its colours are worked out in the shader, per horse (horsecoat.js, horses.js), so
+        // its material is left as the file has it (not vertex colours, not re-shaded: the builder's normals stay), the
+        // glossy eye keeps its own, and what every horse of the kind shares is made once, here: the coat's measurements
+        // of the body (prepareHorse: four small attributes on the shared geometry, the baked shade) and the hair cards
+        // (the full set and the far look's)
+        const t0 = performance.now(), shape = prepareHorse(g.scene, info[kind].scale);
+        const hair = buildHair(shape), hairLite = buildHair(shape, { lite: true });
+        lib.kinds[kind] = { scene: g.scene, clips: g.animations, info: info[kind], shape, hair, hairLite, prepMs: performance.now() - t0 };
+        return lib.kinds[kind];
+      }
       // a shared material for every animal of a kind: the colours are in the vertices
       g.scene.traverse((o) => { if (o.isMesh && o.material) { o.material.vertexColors = true; o.material.roughness = 0.75; o.geometry = softShade(o.geometry); } });
       lib.kinds[kind] = { scene: g.scene, clips: g.animations, info: info[kind] };
@@ -110,16 +132,30 @@ export async function loadAnimals(base, { kinds = null } = {}) {
   return lib;
 }
 
-export function makeAnimal(lib, kind, { shadows = true, tint = null } = {}) {
+// an animal's numbers at a size (metres and m/s grow with it; the seat's offset is in the bone's own space, which the
+// model's scale already grows)
+export function sizedInfo(info, s = 1) {
+  if (s === 1) return info;
+  const m = (o) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, v * s]));
+  return { ...info, size: s, height: info.height * s, tall: info.tall * s, length: info.length * s, width: info.width * s, stride: m(info.stride),
+    seat: { ...info.seat, at: info.seat.at.map((x) => x * s) }, lasso: { ...info.lasso, radius: info.lasso.radius * s, at: info.lasso.at.map((x) => x * s) } };
+}
+export function makeAnimal(lib, kind, { shadows = true, tint = null, size = 1 } = {}) {
   const k = lib.kinds[kind];
   if (!k) throw new Error(lib.info[kind] ? `animal ${kind} is not loaded yet (lib.need('${kind}'))` : 'no such animal: ' + kind);
-  const info = k.info;
+  const base = k.info, eyeName = base.coat ? base.eye || 'eye' : null;
+  size = +size > 0 ? +size : 1;
+  const info = sizedInfo(base, size);
   const root = new THREE.Group(); root.name = kind;
-  const model = cloneSkinned(k.scene); model.scale.setScalar(info.scale); root.add(model);
-  let mesh = null; const bones = {};
+  const model = cloneSkinned(k.scene); model.scale.setScalar(base.scale * size); root.add(model);
+  // (the body: the biggest skinned mesh; a coat kind's eye is a mesh of its own, small and glossy: it casts no shadow, and
+  // it is never dropped at the screen's edge by itself, its bounds being the standing eye's)
+  let mesh = null, eye = null; const bones = {};
   model.traverse((o) => {
     if (o.isSkinnedMesh) {
-      mesh = o; o.castShadow = shadows; o.receiveShadow = shadows;
+      if (eyeName && o.material && o.material.name === eyeName) { eye = o; o.castShadow = false; o.receiveShadow = shadows; o.frustumCulled = false; return; }
+      if (!mesh || o.geometry.attributes.position.count > mesh.geometry.attributes.position.count) mesh = o;
+      o.castShadow = shadows; o.receiveShadow = shadows;
       if (tint !== null && tint !== undefined) { o.material = o.material.clone(); o.material.color.set(tint); }
     }
     if (o.isBone) bones[o.name] = o;
@@ -130,7 +166,7 @@ export function makeAnimal(lib, kind, { shadows = true, tint = null } = {}) {
   const seatBone = bones[info.seat.bone], seatAt = new THREE.Vector3().fromArray(info.seat.offset);
   const neckBone = bones[info.lasso.bone];
   const a = {
-    root, model, mesh, bones, kind, info, mixer, actions,
+    root, model, mesh, eye, bones, kind, info, mixer, actions, size, coat: !!base.coat,
     height: info.height, tall: info.tall, length: info.length, stride: info.stride, neckRadius: info.lasso.radius,
     clips: Object.keys(actions),
     get clip() { return curName; },
@@ -152,11 +188,24 @@ export function makeAnimal(lib, kind, { shadows = true, tint = null } = {}) {
     // (both read the bones as last drawn or last updated: call after update(dt) and root.updateMatrixWorld())
     seat(v = new THREE.Vector3()) { return seatBone.localToWorld(v.copy(seatAt)); },
     neck(v = new THREE.Vector3()) { return neckBone.getWorldPosition(v); },
-    // (each animal's skeleton is its own copy, with a bone texture the renderer makes for it: freed here too)
+    // (each animal's skeleton is its own copy, with a bone texture the renderer makes for it: freed here too. A coat
+    // kind's own materials (the coat, the eyes, the hair: horses.js) are let go, not disposed: disposing the last
+    // material drawn with a program throws the program away, and the next horse would build it again, a long frame.
+    // A material holds nothing else on the graphics card. The geometry is the kind's, shared: never freed here)
     dispose() {
       mixer.stopAllAction(); mixer.uncacheRoot(model); if (tint !== null && tint !== undefined) mesh.material.dispose();
       model.traverse((o) => { if (o.isSkinnedMesh && o.skeleton) o.skeleton.dispose(); });
       root.removeFromParent();
+    },
+    // a new size, as it stands (its numbers, its seat and its saddle with it; the saddle keeps its own size)
+    setSize(s) {
+      s = +s > 0 ? +s : 1; if (s === a.size) return;
+      const f = s / a.size;
+      a.size = s; model.scale.setScalar(base.scale * s);
+      a.info = sizedInfo(base, s); a.height = a.info.height; a.tall = a.info.tall; a.length = a.info.length; a.stride = a.info.stride; a.neckRadius = a.info.lasso.radius;
+      a.seatRest.premultiply(new THREE.Matrix4().makeScale(f, f, f));
+      model.updateMatrixWorld(true);
+      if (a.saddle && a.saddle.children[0]) saddleOn(a, a.saddle.children[0], a.saddleOpts || {});
     },
   };
   // the seat bone as it stands at the start of Idle (the pose the seat was measured in), in the animal's own space: a
@@ -169,6 +218,7 @@ export function makeAnimal(lib, kind, { shadows = true, tint = null } = {}) {
   model.updateMatrixWorld(true); mesh.computeBoundingSphere(); mesh.boundingSphere.radius *= 1.35;
   return a;
 }
+// (a coat kind made with makeAnimal alone wears the file's own plain material: horses.js makeHorse dresses it in its coat)
 
 // A SADDLE on an animal's back (the saddles, models/saddles/: horn toward +Z, real size in metres, the origin the
 // point that rests on the back). It is hung on the back bone, fitted once to where the seat was measured, so it rides
@@ -190,19 +240,22 @@ const _m = new THREE.Matrix4();
 export function saddleOn(animal, saddle, { at = [0, 0, 0], shadows = true } = {}) {
   if (animal.saddle) { animal.saddle.removeFromParent(); animal.saddle = null; }
   if (!saddle) return null;
+  animal.saddleOpts = { at, shadows };
   const holder = new THREE.Group(); holder.name = 'saddle'; holder.add(saddle);
   saddle.traverse((o) => { if (o.isMesh) { o.castShadow = shadows; o.receiveShadow = shadows; } });
-  const s = animal.info.seat.at;
+  const s = animal.info.seat.at;   // (at the animal's size: sizedInfo)
   // where it goes in the animal's own space (level, horn forward, metres), then into the bone's space as it stood then
+  // (the bone's space carries the model's scale, size and all, and the holder takes its inverse: the saddle keeps its
+  // own size on a bigger or smaller horse, and its flaps are fitted to that horse's barrel)
   _m.makeTranslation(s[0] + at[0], s[1] + at[1], s[2] + at[2]).premultiply(animal.seatRest.clone().invert());
   _m.decompose(holder.position, holder.quaternion, holder.scale);
   animal.bones[animal.info.seat.bone].add(holder);
   try { drape(animal, saddle); } catch (e) { console.warn('saddle: not fitted', e && e.message); }
   return (animal.saddle = holder);
 }
-const DRAPED = new Map();   // an animal kind -> (a saddle's own geometry -> the geometry fitted to that kind)
+const DRAPED = new Map();   // an animal kind and size -> (a saddle's own geometry -> the geometry fitted to that kind)
 function drape(animal, saddle) {
-  const D = SADDLE.drape, kind = animal.kind;
+  const D = SADDLE.drape, kind = animal.kind + (animal.size && animal.size !== 1 ? '@' + animal.size : '');
   const meshes = []; saddle.traverse((o) => { if (o.isMesh) meshes.push(o); });
   const fitted = DRAPED.get(kind) || DRAPED.set(kind, new Map()).get(kind);
   const own = (g) => g.userData.draped || g;   // (a copy of a saddle already fitted: its own geometry)

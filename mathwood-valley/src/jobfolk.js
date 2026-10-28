@@ -63,8 +63,9 @@ export const STAND = {
   vet: { out: 2.2, side: -4.6 },      // from the sheep pasture's gate: out in front, and along the fence away from the lane
   wife: { x: 6.8, z: 3.5 },           // in the farm's own frame: the lane's edge just past the way into the pig yard (pigs.js
                                       // PIGS.byWife holds the same spot: standing by her counts as being at the pigs)
-  sheriff: { out: 2.6, side: 3.4 },   // from the sheriff's door: out toward the square, and to one side of the steps
-  keeper: { out: 1.8, side: -3.8 },   // from the stable's door: out in front, and to one side of its big doors (not the
+  sheriff: { out: 1.0, side: 3.4 },   // from the sheriff's door: out toward the street, and to one side of the steps (the
+                                      // wagon road runs past a few metres out: further out, he stood in a wagon's way)
+  keeper: { out: 1.2, side: -3.8 },   // from the stable's door: out in front, and to one side of its big doors (not the
                                       // side where the player's horse waits, player.js homeSpot: +4 along the front)
   naturalist: 40,                     // m from the deer herd's home, toward the town square (outside a rider's alert
                                       // range of the job's herd, 18 x 1.35 = 24 m, plus the 6 m the deer graze from it)

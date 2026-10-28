@@ -191,7 +191,7 @@ function allItems(rider) {
   buy('Your cabin', 'cabin', 'home', 'Your own cabin', PRICES.cabin, `The cabin in town is for sale: ${PRICES.cabin} gold. Walk up to its door.`, own.home, COMING.cabin);
   for (const s of SADDLES) buy('Saddles', 'saddle', s.id, s.name, PRICES.saddle[s.id], `The stable sells it for ${PRICES.saddle[s.id]} gold.`, own.saddles.has(s.id));
   for (const h of HORSES) {
-    if (PRICES.horse[h.id] == null) continue;   // (the bay comes free)
+    if (PRICES.horse[h.id] == null) continue;   // (the donkey comes free: every rider's first)
     buy('Horses', 'horse', h.id, h.name, PRICES.horse[h.id], `The stable sells ${h.id === 'donkey' ? 'him' : 'this one'} for ${PRICES.horse[h.id]} gold.`, own.horses.has(h.id));
   }
   for (const h of HATS) {

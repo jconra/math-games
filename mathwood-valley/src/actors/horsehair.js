@@ -4,15 +4,18 @@
 // screen's multisampling). Every corner of every card is skinned to the bones under it (the mane to the neck's and the
 // head's, as the body is there; the tail down the tail's chain), so they move with every clip, and the vertex shader
 // adds a little life on top: the tail bends about its root toward hanging down (and back, with speed), so a tail a clip
-// holds out stiff arcs down; the mane lifts at speed; both ripple. Colour, length and pinto white come from the coat recipe, the same code as the coat (coat.js COMMON).
+// holds out stiff arcs down; the mane lifts at speed; both ripple. Colour, length and pinto white come from the coat recipe, the same code as the coat (horsecoat.js COMMON).
 //
-//   buildHair(shape) -> { geometry, tris, cards }     once per model (shape from prepareHorse)
-//   hairMaterial(shape, coatUniforms) -> material     per horse: shares the coat's uniforms, so a new recipe recolours both
+//   buildHair(shape, { lite }) -> { geometry, tris, cards }   once per model (shape from prepareHorse); lite: the far
+//                                                     look's third of the cards (HAIR_LITE), drawn by the same material
+//   hairMaterial(shape, coatUniforms, renderer, { cut }) -> material   per horse: shares the coat's uniforms, so a new
+//                                                     recipe recolours both (and its uFade fades both); cut: a hard
+//                                                     alpha cut for a context without the screen's multisampling
 //   attachHair(body, geometry, material) -> mesh      a skinned mesh on the body's own skeleton (one more draw)
 //   material.hair.uniforms.uTime / uSpeed / uBackW / uDockW   per frame: the clock, how fast the horse is going (m/s),
 //                                                     which way is behind it, and where the tail's root is (world)
 import * as THREE from 'three';
-import { COMMON, LIGHT_HOOK } from './coat.js';
+import { COMMON, LIGHT_HOOK } from './horsecoat.js';
 
 export const HAIR = {
   // the mane: rooted on one line along the top of the neck (the crest, smoothed), 1.5 cm inside the skin, from just
@@ -26,6 +29,14 @@ export const HAIR = {
   // the tail: a bundle of cards crossed round its middle line (full from every angle) and a light fan round it, held off
   // the rump, narrow at the dock and fanning a little toward the end, which reaches the middle of the hind cannons
   tail: { crossed: 4, fan: 12, rows: 10, end: 0.36, radius: [0.035, 0.085, 0.115], off: 0.06 },
+};
+// THE FAR LOOK's hair (buildHair(shape, { lite: true })): about a third of the cards, each wider, fewer rows: 12 mane
+// cards, a 4-card fringe, 6 forelock locks, the tail's 4 crossed cards and no fan
+export const HAIR_LITE = {
+  mane: { ...HAIR.mane, cards: 12, rows: 5, width: [0.19, 0.14] },
+  crest: { ...HAIR.crest, cards: 4, rows: 2, width: [0.13, 0.11] },
+  forelock: { width: [0.07, 0.025], part: 0.004, layers: [{ cards: 6, rows: 6, reach: 1.5, lift: 0.1, spread: 0.011 }] },
+  tail: { ...HAIR.tail, fan: 0, rows: 8 },
 };
 const KIND = { mane: 0, forelock: 1, tail: 2, crest: 3, tailFan: 2.25 };   // (the fan: a tail card, drawn lighter)
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -60,7 +71,8 @@ function surfaceIndex(shape) {
 }
 function rand(seed) { let s = seed >>> 0 || 1; return () => ((s = (s * 16807) % 2147483647) / 2147483647); }
 
-export function buildHair(shape) {
+export function buildHair(shape, { lite = false } = {}) {
+  const HC = lite ? HAIR_LITE : HAIR;
   const S = surfaceIndex(shape), R = rand(11);
   const Minv = shape.M.clone().invert();
   const names = shape.boneNames, SI = shape.skinIndex, SW = shape.skinWeight;
@@ -156,7 +168,7 @@ export function buildHair(shape) {
     for (let i = 1; i < line.length; i++) if (line[i][0] >= t) { const [t0, p0] = line[i - 1], [t1, p1] = line[i]; return p0.clone().lerp(p1, (t - t0) / (t1 - t0)); }
     return line[line.length - 1][1].clone();
   };
-  const tPoll = neckL - 0.05, tWith = withersT + 0.07, M = HAIR.mane;
+  const tPoll = neckL - 0.05, tWith = withersT + 0.07, M = HC.mane;
   for (let i = 0; i < M.cards; i++) {
     const u = Math.min(1, Math.max(0, (i + (R() - 0.5) * 0.4) / (M.cards - 1))), t = tPoll + (tWith - tPoll) * u;
     const far = R() < M.farShare ? -1 : 1;
@@ -164,16 +176,16 @@ export function buildHair(shape) {
     const len = M.length * (0.12 + 0.88 * THREE.MathUtils.smoothstep(u, 0, 0.42) * (1 - 0.32 * THREE.MathUtils.smoothstep(u, 0.72, 1))) * (0.88 + 0.24 * R()) * (far < 0 ? 0.8 : 1);
     card(drape(crestAt(t), M, { side: far, push: 0.9, back: 0.1, len }), 'mane', skinBody);
   }
-  for (let i = 0; i < HAIR.crest.cards; i++) {
+  for (let i = 0; i < HC.crest.cards; i++) {
     // (the fringe starts a little behind the poll and stops short of the withers, where the top line flattens)
-    const t = tPoll - 0.04 + (tWith + 0.12 - tPoll + 0.04) * (i + 0.5) / HAIR.crest.cards;
-    card(drape(crestAt(t), HAIR.crest, { side: -1, push: 1.0, back: 0.1 }), 'crest', skinBody);
+    const t = tPoll - 0.04 + (tWith + 0.12 - tPoll + 0.04) * (i + 0.5) / HC.crest.cards;
+    card(drape(crestAt(t), HC.crest, { side: -1, push: 1.0, back: 0.1 }), 'crest', skinBody);
   }
   // THE FORELOCK: a tuft from between the ears falling over the forehead to about the eyes' level, parted in the middle
   // (so a star or a blaze shows through), its locks a little off the face, fanning apart and thinning out at their tips:
   // a top layer of long locks and a shorter one under it, for fullness
   const head = (v) => shape.W.head[v] > 0.5 && shape.W.ear[v] < 0.15;
-  const F = HAIR.forelock, fa = shape.faceA, ff = shape.faceF;
+  const F = HC.forelock, fa = shape.faceA, ff = shape.faceF;
   // (rooted on the top of the head between the ears: the highest skin on the middle line within 6 cm of the poll bone)
   let topY = shape.poll.y;
   for (let v = 0; v < n; v++) if (head(v) && Math.abs(rest[v * 3] - midX) < 0.03 && Math.abs(rest[v * 3 + 2] - shape.poll.z) < 0.06) topY = Math.max(topY, rest[v * 3 + 1]);
@@ -213,7 +225,7 @@ export function buildHair(shape) {
   // it, the sides and the underside a little further along. Each row is skinned to the tail's bones round it.
   const B = shape.bones, chainNames = ['Tail1', 'Tail2', 'Tail3', 'Tail4', 'Tail5', 'Tail6', 'Tail7'].filter((nm) => B[nm]);
   const chain = chainNames.map((nm) => B[nm].clone()), last = chain[chain.length - 1];
-  const T = HAIR.tail, X = V(1, 0, 0);
+  const T = HC.tail, X = V(1, 0, 0);
   const rumpAt = (y) => {
     let zmin = Infinity;
     for (let v = 0; v < n; v++) {
@@ -478,10 +490,15 @@ const HAIR_FRAG_NORMAL = /* glsl */`
 }
 `;
 
-export function hairMaterial(shape, coatU, renderer) {
+// cut: draw the cards' see-through gaps with a hard alpha cut (about 0.45) instead of alpha to coverage. Without the
+// screen's multisampling (a context made with antialias off: ?q=potato, or a browser that gave none) alpha to coverage
+// has nothing to dither with, and every pixel over the soft cut's 4% would be drawn solid. Default: from the context
+export const HAIR_CUT = 0.45;
+export function hairMaterial(shape, coatU, renderer, { cut = null } = {}) {
+  if (cut === null) { try { const at = renderer && renderer.getContext().getContextAttributes(); cut = !!at && !at.antialias; } catch (e) { cut = false; } }
   const u = { ...coatU, uHairTex: { value: hairTexture(renderer) }, uTime: { value: 0 }, uSpeed: { value: 0 }, uBackW: { value: new THREE.Vector3(0, 0, -1) }, uDockW: { value: new THREE.Vector3() }, uDockR: { value: (shape.bones.Tail1 || shape.bones.Tail2).clone() } };
-  const m = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, alphaTest: 0.04, roughness: 0.55, metalness: 0 });
-  m.alphaToCoverage = true;
+  const m = new THREE.MeshStandardMaterial({ side: THREE.DoubleSide, alphaTest: cut ? HAIR_CUT : 0.04, roughness: 0.55, metalness: 0 });
+  m.alphaToCoverage = !cut;
   m.name = 'hair';
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u);
@@ -497,10 +514,11 @@ export function hairMaterial(shape, coatU, renderer) {
       .replace('#include <normal_fragment_begin>', HAIR_FRAG_NORMAL)
       // (three.js sets an opaque material's alpha to 1 just before writing it, which would leave alpha to coverage
       // nothing to work with: put the hair's own back)
-      .replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a = hairAlpha;');
+      .replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a = hairAlpha;')
+      .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\n  if ( uFade < 0.999 && horseBayer( gl_FragCoord.xy ) >= uFade ) discard;');
   };
   m.customProgramCacheKey = () => 'horsehair:' + shape.key;
-  m.hair = { uniforms: u };
+  m.hair = { uniforms: u, cut };
   return m;
 }
 

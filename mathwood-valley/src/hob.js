@@ -16,8 +16,7 @@
 //                         'ride' (riding out; data.range, data.wagon, data.sheep, data.pigs, data.deliveries, data.store ...:
 //                         which jobs are on, false for one a grown-up turned off: its tips aren't said), 'arrive' (at the herd), 'catch', 'miss', 'waveDone' (data.gold),
 //                         'boxWon', 'saddle', 'dog', 'horse', 'title' (data.title), 'near' (data.place: at the saloon's
-//                         doors, nothing behind them yet, or the front of the stage, where the town band plays; said
-//                         again only after NEAR_AGAIN)
+//                         doors, nothing behind them yet; said again only after NEAR_AGAIN)
 //                         The farm (missions/sheep.js): 'farmArrive' (at the sheep pasture), 'sheepHealed', 'sheepWrong' (a
 //                         wrong bottle), 'sheepFine' (medicine for a healthy sheep: a short line, the why is in the hint), 'flockDone'
 //                         The pig yard (missions/pigs.js): 'pigsArrive', 'pigPenned', 'pigWrong' (data.line: why not that pen,
@@ -57,6 +56,7 @@
 //   B.dispose()
 import * as THREE from 'three';
 import { saveRider } from './save.js';
+import { PRICES } from './catalog.js';
 import { makePathSearch, nearestAlong } from './trailpath.js';
 
 export const HOB = {
@@ -88,9 +88,16 @@ const LINES = {
   catch: "Nice throw! It'll gallop itself over to the corral.",
   miss: 'No harm done. The help shows why it wasn\'t that one. Then try another.',
   waveSaddle: "That's a day's wages! Enough for a saddle. The stable's back in town.",
+  // (every rider starts on foot: the first ride is a horse and a saddle from the stable, Jasper the donkey cheapest)
+  waveRide: "That's a day's wages! Enough for Jasper the donkey and a plain saddle. The stable's back in town.",
+  waveDonkey: "That's a day's wages! Enough for Jasper the donkey to carry that saddle of yours. The stable's back in town.",
+  waveSave: "Good work! Keep at it: sixty gold buys Jasper the donkey and a saddle at the stable, and then you can ride.",
   wave: 'Good work. Another bunch is wandering in.',
   boxWon: "There's a lock box in your saddlebags. Crack it at the sheriff's desk, or at your cabin table.",
   saddle: 'Whistle with H and your horse comes running. E gets you up, Shift lets her gallop.',
+  saddleDonkey: "Whistle with H and old Jasper comes running. E gets you up, Shift gets him going. Save your gold and the stable has horses that run.",
+  saddleNoHorse: "A fine saddle! Now it needs something under it: Jasper the donkey's the cheapest at the stable.",
+  horseNoSaddle: "He's all yours! You'll want a saddle to ride him, though: the plain one's thirty, right there at the stable.",
   dog: 'Every cowhand needs a dog. Yours will keep up, never you mind.',
   dogPug: "A pug! Them little legs won't keep up with a horse, but he'll find you. He always does.",
   horse: 'Fine-looking horse. Treat her well.',
@@ -126,7 +133,7 @@ const LINES = {
   deliveryArrive: 'Here come the hands to unload.',
   deliveryDone: ["Hauling's honest work. Talk to the foreman for the next order.", 'Another one delivered.', 'Good hauling, partner.'],
   deliveryFirst: "That's your first delivery! Talk to the foreman again whenever you want the next order.",
-  deliveryNoSaddle: "Crates need a saddled horse to carry 'em. The stable sells saddles.",
+  deliveryNoSaddle: "Crates need a saddled horse to carry 'em. The stable sells horses and saddles.",
   deliveryRobbed: "The gang got the crates! Don't fret: ride back to the store and they'll make it up again.",
   // protect the wagon: the gang wears its numbers; the townsfolk riding along look just the same
   wagonArrive: "Every bandit wears a number: the card up top says which. Townsfolk ride along too, looking just like the gang: only the number tells. Point at a rider and click, or press F.",
@@ -138,12 +145,10 @@ const LINES = {
   banditsDone: ['The wagon rolls on safe. More road ahead, and likely more trouble.', "That's the gang seen to. Keep alongside, partner.", 'Fine riding. Eyes on the road.'],
   wagonStop: "The wagon will wait. Come back any time.",
   wagonWaits: "A freight driver's waiting with his wagon on the road east of the pasture: follow the wagon on your compass and ride up to him.",
-  // walking up to the saloon's doors (nothing to open yet) and the front of the stage (the town band plays there)
+  // walking up to the saloon's doors (nothing to open yet). (The town band's lines went with the open-air stage: the
+  // band is to play inside the saloon, later)
   saloon: ["Saloon's shut till sundown, partner. Lock boxes are next door at the sheriff's.",
-    "Doors stay shut till evening. The band out front keeps folks company meanwhile."],
-  stage: ["That's the town band. The Professor on the piano, Josie on the harmonica.",
-    "They know a few tunes. Walk up front and ask 'em for another: Josie's got a quick one.",
-    "Josie learned that harmonica on a cattle drive. The Professor plays it all by ear."],
+    "Doors stay shut till evening. Folks say there'll be music in there one day."],
   // the homestead behind your cabin: the first of each kind bought, the thank-yous, the goods
   animal: {
     hen: "A hen of your own! She'll lay eggs in the coop behind your cabin. Walk past to pick them up, and sell them at the store counter.",
@@ -178,7 +183,7 @@ const LINES = {
   lootGuard: "Got him! He'll keep there till the sheriff collects him.",
   lootFled: "Let him run, partner. It's the loot that counts.",
   lootLoaded: "Loot's on your horse. Take it back to the sheriff's office: the folks it was taken from will be waiting.",
-  lootNoSaddle: "That's too much to carry by hand. You'll want a saddled horse: the stable sells saddles.",
+  lootNoSaddle: "That's too much to carry by hand. You'll want a saddled horse: the stable sells horses and saddles.",
   lootShare: "Read who lost what, then pick the coin that shares it out fair. Whatever won't go round is the leftover.",
   lootMiss: "Not that one. The picture shows the sharing: deal it out round and round. Pick again, no charge.",
   lootDone: ['Every family got their goods back. That\'s good work.', 'The town owes you one, partner.', 'Fair shares all round.'],
@@ -204,6 +209,10 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
   const touch = () => !!(I && I.touch);
   const flags = () => { rider.flags = rider.flags && typeof rider.flags === 'object' ? rider.flags : {}; const f = rider.flags; f.hob = f.hob || {}; return f.hob; };
   const once = (id) => { const f = flags(); if (f[id]) return false; f[id] = 1; saveRider(rider); return true; };
+  // (what the rider has to ride with: every rider starts on foot, with neither)
+  const hasHorse = () => !!(rider.owned && rider.owned.horse), hasSaddle = () => !!(rider.owned && rider.owned.saddle);
+  const ridesNow = () => hasHorse() && hasSaddle();
+  const needs = () => (hasHorse() ? 0 : PRICES.horse.donkey) + (hasSaddle() ? 0 : PRICES.saddle.plain);
   const queue = [];
   let fineN = 0, doneN = 0;       // ('sheepFine', 'flockDone': which line said last)
   let pigN = 0;                   // ('pigsDone': which line said last)
@@ -232,7 +241,7 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
     hud.caption(text, t); speaking = t / 1000 + 0.4; saying = { text, ms, key, urgent };
     if (voice) voice.speak(text, { key });
     // (the saddle line sends the rider to the stable: the trail goes there for a while, once it is really said)
-    if (text === LINES.waveSaddle) sentTo = { place: 'stable', until: now + WANT_FOR };
+    if (text === LINES.waveSaddle || text === LINES.waveRide || text === LINES.waveDonkey || text === LINES.saddleNoHorse || text === LINES.horseNoSaddle) sentTo = { place: 'stable', until: now + WANT_FOR };
   };
   // while a question is up where the player is (B.update's asking: the job asking, or 'panel'), only lines about that
   // job are said (and the why of a pick: urgent); his tips and other jobs' lines wait their turn
@@ -269,21 +278,31 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
       case 'waveDone':
         drop('miss');
         // (the saddle line: the trail goes to the stable for a while, so what he says and where the hoofprints lead agree)
-        if (!(rider.owned && rider.owned.saddle) && rider.gold >= (data.saddle || 15) && once('waveSaddle')) B.say(LINES.waveSaddle, 6500);
+        // (what the rider still needs to ride: a horse, a saddle or both, and whether the gold in hand buys it)
+        if (!ridesNow() && rider.gold >= needs() && once('waveRide')) B.say(!hasSaddle() ? (hasHorse() ? LINES.waveSaddle : LINES.waveRide) : LINES.waveDonkey, 7000);
+        else if (!ridesNow() && !hasHorse() && once('waveSave')) B.say(LINES.waveSave, 7000);
         else if (once('wave')) B.say(LINES.wave);
         else if (once('boardTip')) B.say(LINES.boardTip, 7000);
         else if ((on.sheep !== false || on.pigs !== false) && once('farmTip')) B.say(on.pigs === false ? LINES.farmTipSheep : on.sheep === false ? LINES.farmTipPigs : LINES.farmTip, 6500);
         else if (on.deliveries !== false && rider.owned && rider.owned.saddle && once('campTip')) B.say(LINES.campTip, 8000);
         break;
       case 'boxWon': if (once('boxWon')) B.say(LINES.boxWon, 6500); break;
-      case 'saddle': if (sentTo && sentTo.place === 'stable') sentTo = null; if (once('saddle')) B.say(LINES.saddle, 6500); break;
+      case 'saddle':
+        if (!hasHorse()) { if (once('saddleNoHorse')) B.say(LINES.saddleNoHorse, 6500); break; }
+        if (sentTo && sentTo.place === 'stable') sentTo = null; if (once('saddle')) B.say(rider.owned.horse === 'donkey' ? LINES.saddleDonkey : LINES.saddle, 7000); break;
       case 'dog': {
         // (the pug can't keep up with a galloping horse, so he gets his own line)
         const pug = rider.owned && rider.owned.dog && rider.owned.dog.kind === 'pug';
         if (pug ? once('dogPug') : once('dog')) B.say(pug ? LINES.dogPug : LINES.dog);
         break;
       }
-      case 'horse': B.say(rider.owned && rider.owned.horse === 'donkey' ? LINES.donkey : LINES.horse); break;
+      case 'horse':
+        if (!hasSaddle()) { if (once('horseNoSaddle')) B.say(LINES.horseNoSaddle, 6500); else B.say(rider.owned.horse === 'donkey' ? LINES.donkey : LINES.horse); break; }
+        if (sentTo && sentTo.place === 'stable') sentTo = null;
+        // (the first horse with a saddle already bought: how to call it and get on, said once)
+        if (once('saddle')) B.say(rider.owned.horse === 'donkey' ? LINES.saddleDonkey : LINES.saddle, 7000);
+        else B.say(rider.owned.horse === 'donkey' ? LINES.donkey : LINES.horse);
+        break;
       case 'hat': B.say(LINES.hat[(hatN++) % LINES.hat.length], 3000); break;
       case 'farmArrive': if (once('farmArrive')) B.say(touch() ? LINES.farmArriveTouch : LINES.farmArrive, 9000); break;
       case 'sheepHealed': drop('sheepWrong', 'sheepFine'); if (once('sheepHealed')) B.say(LINES.sheepHealed); break;
@@ -567,7 +586,7 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
     mesh.visible = fade > 0.002 && mesh.count > 0;
   };
   // the place his last line sent the rider to, while it holds (main.js leads the trail there instead): 'stable' | null
-  B.wants = () => (sentTo && now <= sentTo.until && !(sentTo.place === 'stable' && rider.owned && rider.owned.saddle) ? sentTo.place : null);
+  B.wants = () => (sentTo && now <= sentTo.until && !(sentTo.place === 'stable' && ridesNow()) ? sentTo.place : null);
   Object.defineProperty(B, 'prints', { get: () => prints.length });
   // (for rigs: the trail laid now, and the job it leads to)
   B.trailState = () => ({ id: shown && shown.id, goal: goal && goal.id, prints: prints.length, fade, searching: !!search, gone, length: U.uLen.value,

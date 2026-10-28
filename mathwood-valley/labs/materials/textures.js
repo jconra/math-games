@@ -719,6 +719,12 @@ function stonePixels(look) {
   const t0 = performance.now(), S = drawStone(look);
   return { col: S.col, nrm: normalsFrom(S.H, 256, 256, STONE_LOOKS[look].nrm, true), mean: S.mean, ms: performance.now() - t0 };
 }
+// the wood trim sheet alone, as pixels (for a page that needs only the wood: the game's fences, world/objects/fences.js):
+// col, its colour (RGBA, WOOD.w x WOOD.h), and nrm, its normal map (null when not asked for: it costs a third more time)
+export function woodSheet(look = DEFAULT_WOOD, normals = true) {
+  const W = drawWood(WOOD_LOOKS[look] ? look : DEFAULT_WOOD);
+  return { col: W.col, nrm: normals ? normalsFrom(W.H, WOOD.w, WOOD.h, 6, false) : null };
+}
 // paint a new look onto the textures T already has; returns how long it took (ms), drawing and upload together
 export function setWood(T, look) {
   if (!WOOD_LOOKS[look]) look = DEFAULT_WOOD;

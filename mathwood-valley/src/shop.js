@@ -1,7 +1,9 @@
 // THE SHOPS: walk up to a building's door and press E (or tap the prompt) to open its counter as a simple panel over the
 // paused game. There is no inside in 3D: each counter is a panel.
-//   stable          saddles (any one lets you ride; the horse wears the one you pick) and horses: the bay comes free, the
-//                   others are bought (each has its name, coat and paces: player.js HORSE_LOOKS), the one picked is ridden
+//   stable          saddles (any one lets you ride; the horse wears the one you pick) and horses: "Your horses" (every
+//                   one the rider owns, src/mounts.js: Ride this one) and "In the stalls" (the stable's ladder not owned
+//                   yet: catalog.js HORSES, LADDER), each with its top speed as a number (mph); every rider starts on
+//                   foot and buys a horse (the donkey, 30, first) and a saddle; the one picked is ridden
 //   general store   "Mind the counter": the word-problem job (src/missions/store.js: townsfolk bring order slips); and
 //                   dogs: a Shiba, a Husky or the pug (the cheap joke pick), each named by the kid; more than one can be
 //                   bought, and the one picked follows you while the others wait at home; and hats (src/hats.js): bought
@@ -14,7 +16,8 @@
 //
 //   const S = makeShops({ W, rider, onOpen, onClose, onBuy, onLockbox, onStoreJob, say, extra })
 //     extra: more rows for a counter from elsewhere: { store: { html(), click(what, id, body) -> undefined (not its
-//     button) | { note, bought }, input(e), keydown(e, body) } } (the homestead's farm animals: src/homestead.js)
+//     button) | { note, bought }, input(e), keydown(e, body) } } (the homestead's farm animals: src/homestead.js); the
+//     stable takes the same (stable: the pen's horses, after the stalls)
 //     onStoreJob(): "Mind the counter" was picked at the general store (the panel has closed; main.js starts the job)
 //     onOpen() / onClose(): the game pauses and resumes; onBuy(what): something was bought (the player looks at
 //     rider.owned again, the HUD's purse is redrawn); onLockbox(box, { own, after }): open a lock box (main.js
@@ -30,7 +33,8 @@ import { TIER_NAME, TIER_GOLD } from './lockbox/index.js';
 import { RUNG_IDS, RUNG } from './lockbox/generate.js';
 import { HATS, hatOf, hatIcon } from './hats.js';
 import { PALETTES } from './actors/folk.js';
-import { PRICES, SADDLES, HORSES, DOGS, DOG_NAMES } from './catalog.js';
+import { PRICES, SADDLES, HORSES, DOGS, DOG_NAMES, LADDER } from './catalog.js';
+import { ownedHorses, ownsHorse, rideHorse, horseLook, ridden } from './mounts.js';
 export { PRICES, SADDLES, HORSES, DOGS, DOG_NAMES };
 
 // ── PAY (gold; the prices are in src/catalog.js) ──────────────────────────────────────────────────────────────────
@@ -145,13 +149,14 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
     return list.map((d) => (o.dog && d.kind === o.dog.kind ? { kind: d.kind, name: o.dog.name } : { kind: d.kind, name: d.name }));
   };
   const breedName = (kind) => (DOGS.find((d) => d.id === kind) || DOGS[0]).name;
+  // the stable's horses bought (owned.horses); ids this build doesn't know are kept
   const horsesOwned = () => {
-    const o = owned();
-    const list = Array.isArray(o.horses) ? o.horses.filter((h) => h === 'bay' || PRICES.horse[h] != null) : [];
-    if (!list.includes('bay')) list.unshift('bay');
-    if (o.horse && !list.includes(o.horse)) list.push(o.horse);
-    return list;
+    const o = owned(), list = Array.isArray(o.horses) ? o.horses.filter((h) => typeof h === 'string') : [];
+    if (o.horse && LADDER[o.horse] && !list.includes(o.horse)) list.push(o.horse);
+    return [...new Set(list)];
   };
+  // a horse's top speed, as a number (Dad: "even little kids know bigger number is better")
+  const speedOf = (look) => (look && look.mph ? `<span class="bms-speed" title="Top speed"><b>${look.mph}</b> mph</span>` : '');
   const price = (n) => `<span class="bms-price">${COIN}<b>${n}</b></span>`;
   const short = (n) => `Need ${n - rider.gold} more`;
 
@@ -180,16 +185,21 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
         else right = `${price(cost)}<button type="button" data-do="buy-saddle" data-id="${s.id}" ${rider.gold < cost ? 'disabled' : ''}>${rider.gold < cost ? short(cost) : 'Buy'}</button>`;
         h += row({ name: s.name, line: s.line, right });
       }
-      h += `<h3 class="bms-h">Horses</h3>`;
-      const hs = horsesOwned(), ride = owned().horse || 'bay';
-      for (const x of HORSES) {
-        const cost = PRICES.horse[x.id] || 0;
-        let right;
-        if (ride === x.id) right = `<span class="bms-tag is-on">Riding this one</span>`;
-        else if (hs.includes(x.id)) right = `<button type="button" data-do="use-horse" data-id="${x.id}">Ride this one</button>`;
-        else right = `${price(cost)}<button type="button" data-do="buy-horse" data-id="${x.id}" ${rider.gold < cost ? 'disabled' : ''}>${rider.gold < cost ? short(cost) : 'Buy'}</button>`;
-        h += row({ name: x.name, line: x.line, right });
+      // your horses (any of them ridden at a click), then the stable's stalls (the ones not owned yet), then the pen's
+      const mine = ownedHorses(rider);
+      if (mine.length) h += `<h3 class="bms-h">${mine.length > 1 ? 'Your horses' : 'Your horse'}</h3>`;
+      for (const x of mine) {
+        const right = x.ridden ? `<span class="bms-tag is-on">Riding this one</span>` : `<button type="button" data-do="use-horse" data-id="${esc(x.id)}">Ride this one</button>`;
+        h += row({ name: x.name, line: x.line, right, extra: speedOf(x.look) });
       }
+      const stalls = HORSES.filter((x) => PRICES.horse[x.id] != null && !ownsHorse(rider, x.id));
+      if (stalls.length) h += `<h3 class="bms-h">In the stalls</h3>`;
+      for (const x of stalls) {
+        const cost = PRICES.horse[x.id];
+        const right = `${price(cost)}<button type="button" data-do="buy-horse" data-id="${x.id}" ${rider.gold < cost ? 'disabled' : ''}>${rider.gold < cost ? short(cost) : 'Buy'}</button>`;
+        h += row({ name: x.name, line: x.line, right, extra: speedOf(horseLook(rider, x.id)) });
+      }
+      if (extra && extra.stable) h += extra.stable.html();   // (the pen's horses, once there is a pen)
       const fingers = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;   // (a phone or tablet: its buttons, not keys)
       h += fingers ? `<p class="bms-tip">Horse whistles your horse over · On / off gets on and off · push the thumb stick to its edge to gallop</p>`
         : `<p class="bms-tip"><kbd>H</kbd> whistles your horse over · <kbd>E</kbd> gets on and off · <kbd>Shift</kbd> gallops</p>`;
@@ -298,20 +308,20 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
     const x = extra && extra[openId] && extra[openId].click ? extra[openId].click(what, id, panel.body) : undefined;
     if (x !== undefined) { if (x && x.bought) onBuy(x.bought); draw((x && x.note) || ''); return; }
     if (what === 'buy-saddle') {
-      if (!spend(rider, PRICES.saddle[id])) { draw('Not enough gold yet.'); return; }
-      o.saddles = [...new Set([...saddlesOwned(), id])]; o.saddle = id; saveRider(rider);
       // (the counter's own note says it: no toast on top of it, as at the sheriff's desk)
-      onBuy('saddle');
-      draw(`The ${SADDLES.find((s) => s.id === id).name.toLowerCase()} is on your horse. Press H to whistle for it.`);
+      draw(S.buySaddle(id).note);
     } else if (what === 'use-saddle') {
-      o.saddle = id; saveRider(rider); onBuy('saddle'); draw();
+      S.useSaddle(id); draw();
     } else if (what === 'buy-horse') {
+      if (PRICES.horse[id] == null || ownsHorse(rider, id)) return;
       if (!spend(rider, PRICES.horse[id])) { draw('Not enough gold yet.'); return; }
-      o.horses = [...new Set([...horsesOwned(), id])]; o.horse = id; saveRider(rider);
+      o.horses = [...new Set([...horsesOwned(), id])]; rideHorse(rider, id); saveRider(rider);
       const nm = HORSES.find((h) => h.id === id).name;
       onBuy('horse'); draw(saddlesOwned().length ? `${nm} is yours, saddled up by the stable.` : `${nm} is yours, waiting by the stable. You'll need a saddle to ride.`);
     } else if (what === 'use-horse') {
-      o.horses = horsesOwned(); o.horse = id; saveRider(rider); onBuy('horse'); draw();
+      if (!rideHorse(rider, id)) return;
+      saveRider(rider); onBuy('horse');
+      const L = horseLook(rider, id); draw(L ? `${L.name} is saddled and waiting by the stable.` : '');
     } else if (what === 'buy-hat') {
       if (!spend(rider, PRICES.hat[id])) { draw('Not enough gold yet.'); return; }
       o.hats = [...new Set([...hatsOwned().filter((h) => h !== 'cowboy'), id])];
@@ -356,6 +366,18 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
     if (r.solved) return `Cracked it! ${r.stars} star${r.stars === 1 ? '' : 's'}, +${r.gold} gold.`;
     return 'You left that box. It will keep.';
   }
+  // A SADDLE BOUGHT, or put on (the counter's rows, and the saddle racks in the stable: src/stabletack.js): -> { ok, note }
+  S.buySaddle = (id) => {
+    const o = owned();
+    if (PRICES.saddle[id] == null) return { ok: false, note: '' };
+    if (!spend(rider, PRICES.saddle[id])) return { ok: false, note: 'Not enough gold yet.' };
+    o.saddles = [...new Set([...saddlesOwned(), id])]; o.saddle = id; saveRider(rider);
+    onBuy('saddle');
+    const sn = SADDLES.find((s) => s.id === id).name.toLowerCase();
+    return { ok: true, note: ridden(rider) ? `The ${sn} is on your horse. Press H to whistle for it.` : `The ${sn} is yours. Now it needs a horse under it: Jasper the donkey is the cheapest.` };
+  };
+  S.useSaddle = (id) => { const o = owned(); o.saddle = id; saveRider(rider); onBuy('saddle'); return { ok: true, note: '' }; };
+  S.saddlesOwned = () => saddlesOwned();
   S.redraw = () => draw();
   S.dispose = () => S.close();
   return S;

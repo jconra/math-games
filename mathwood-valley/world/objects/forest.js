@@ -315,7 +315,7 @@ export class Forest {
             sh.fragmentShader = 'varying float vFade;\n' + sh.fragmentShader.replace('#include <alphatest_fragment>', '#include <alphatest_fragment>\n{ float dither = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715)))); if (vFade < dither) discard; }');
             if (cover) { sh.uniforms.coverTexels = { value: new THREE.Vector2(mat.map.image.width, mat.map.image.height) }; sh.uniforms.coverMip = COVER_U.coverMip; sh.uniforms.coverFar = COVER_U.coverFar;
               sh.fragmentShader = 'uniform vec2 coverTexels; uniform float coverMip, coverFar;\n' + sh.fragmentShader.replace('#include <alphatest_fragment>', COVER_ALPHA).replace('#include <opaque_fragment>', COVER_OUT); }
-            if (this.lamps) { Object.assign(sh.uniforms, this.lamps); sh.fragmentShader = lampStandard(sh.fragmentShader); }   // (street lamps: lampLight.js)
+            if (this.lamps) { Object.assign(sh.uniforms, this.lamps); sh.fragmentShader = lampStandard(sh.fragmentShader, 'the trees'); }   // (street lamps: lampLight.js)
           };
           mat.alphaToCoverage = cover;
           mat.customProgramCacheKey = () => 'forest-mesh' + (sp.upNormals ? '-up2' : '') + (sp.soften ? '-s' + sp.soften : '') + (sp.shape ? '-shape' : '') + (leafy ? `-leaf${under}-${glow}` : '') + (cover ? '-cover' : '') + (this.lamps ? '-lamps' : ''); mat.needsUpdate = true;
