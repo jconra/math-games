@@ -21,10 +21,10 @@
 //   W.waterAt(x, z)    how wet, 0..1 (over 0.3: in a stream or pond)
 //   W.settled()        true once the trees and plants are laid and baked
 //   W.blocked(x, z)    true where a walker can't go: a building (its footprint and half a metre round it), a fence, a tree's
-//                      trunk, a hitching post, a water trough, a signpost, a street lamp, a parked wagon or a chicken coop
-//                      (SOLID_PROPS: the town's props that are always drawn), ground steeper than ~39 degrees (~58 by a creek or pond: a bank can be
+//                      trunk, a hitching post, a water trough, a signpost, a street lamp, a parked wagon, a chicken coop or
+//                      the hay (SOLID_PROPS: the town's props that are always drawn), ground steeper than ~39 degrees (~58 by a creek or pond: a bank can be
 //                      scrambled), water deeper than 0.9 m, or off the land's edge
-//   W.addBlocker(fn)   fn(x, z) -> true also blocks there (the farm's fences and barn); returns a function that takes it off
+//   W.addBlocker(fn)   fn(x, z) -> true also blocks there (the farm's fences); returns a function that takes it off
 //   W.places     where things are (metres; rot: radians, the way the thing faces: a front facing +z is 0, as three's
 //                rotation.y, so the facing direction is (sin rot, cos rot)):
 //                  spawn:   { x, z, rot }                      the square, facing the sheriff's office
@@ -76,6 +76,7 @@ import { chooseTier, TIERS } from '../world/quality.js';
 import { makeGovernor } from '../world/governor.js';
 import { bindValley } from '../world/valleydials.js';
 import { footprintOf } from '../world/objects/village.js';
+import { farmItems } from './farmplan.js';
 import { BASE } from '../world/base.js';
 
 // the buildings by the names the game uses
@@ -92,7 +93,7 @@ const STEEP = 0.8, DEEP = 0.9, EDGE = 780, FENCE_HALF = 0.35, WALL_PAD = 0.5, TR
 // the town's props a walker goes round rather than through: the ones always drawn (world/valleydials.js DECOR_PROPS are
 // the ones a slow machine leaves out: not these). A rail or a trough its footprint and PROP_PAD round it; a post a disc.
 // (A horse whistled up along the main street stood in a hitching rail, and the townsfolk walked through the troughs)
-const SOLID_PROPS = { hitchingPost: 'box', trough: 'box', signpost: 0.3, lamp: 0.3, chickenCoop: 'box',
+const SOLID_PROPS = { hitchingPost: 'box', trough: 'box', signpost: 0.3, lamp: 0.3, chickenCoop: 'box', hayBales: 'box', haystack: 'box',
   farmWagon: 'box', freightWagon: 'box', coveredWagon: 'box', chuckWagon: 'box' }, PROP_PAD = 0.15;   // (the parked wagons and the coops: the town's props now)
 // THE VALLEY'S ENDS: the mist banks across them (the valley's FOG_DIR.bank0/1: thin from `a` metres out along x, full by
 // `b`; topping out `top` metres over each end's floor) and the line in the full mist where a rider comes out of the
@@ -140,7 +141,14 @@ export async function makeWorld({ renderer, camera, quality = null, look = 'gree
   say(0.02, 'Riding into the valley');
   const t0 = performance.now();
   const GAME = ((await layoutP) || {}).game || {};
-  const V = await makeValley({ renderer, camera, controls, quality: QUAL, look, live, slice: true, showcase: false, folk: false, treeClear: campWays(GAME) });
+  const xz = (p, rot = false) => (p ? { x: +p.x || 0, z: +p.z || 0, ...(rot ? { rot: (+p.rot || 0) * Math.PI / 180 } : {}) } : null);
+  // the farm: a spot picked from a survey of the land (height within about 2.5 m over its 56 by 48 m, no water, no
+  // trees, clear of the trail, the corral and the pasture); the layout's `game.farm` can move it. Its barn, wind pump,
+  // troughs and hay go into the town's layout as the valley is made (src/farmplan.js farmItems): built, levelled and drawn
+  // as the town's own
+  const farm = GAME.farm ? { ...xz(GAME.farm, true), r: +GAME.farm.r || 34, w: +GAME.farm.w || 56, d: +GAME.farm.d || 48 }
+    : { x: -6, z: -278, rot: 0, r: 34, w: 56, d: 48 };
+  const V = await makeValley({ renderer, camera, controls, quality: QUAL, look, live, slice: true, showcase: false, folk: false, treeClear: campWays(GAME), extra: farmItems(farm) });
   // THE GOVERNOR (world/governor.js): the dials turned up and down by how fast this machine really runs; the valley's own
   // wired here (world/valleydials.js), the game's in their own files (W.governor.on)
   const GOVERN = makeGovernor({ renderer, quality: QUAL }); bindValley(GOVERN, { V, renderer });
@@ -169,7 +177,6 @@ export async function makeWorld({ renderer, camera, quality = null, look = 'gree
     if (!name || places[name]) { if (it.kind !== 'home' && it.kind !== 'bridge') OTHERS.push(rec); continue; }
     places[name] = rec;
   }
-  const xz = (p, rot = false) => (p ? { x: +p.x || 0, z: +p.z || 0, ...(rot ? { rot: (+p.rot || 0) * Math.PI / 180 } : {}) } : null);
   places.spawn = xz(GAME.spawn, true) || { x: 0, z: 0, rot: 0 };
   places.square = GAME.square ? { ...xz(GAME.square), r: +GAME.square.r || 15 } : { ...places.spawn, r: 15 };
   places.pasture = GAME.pasture ? { ...xz(GAME.pasture), r: +GAME.pasture.r || 30 } : null;
@@ -184,10 +191,7 @@ export async function makeWorld({ renderer, camera, quality = null, look = 'gree
   Object.defineProperty(places, 'buildings', { value: [...Object.values(PLACE_OF).map((k) => places[k]).filter(Boolean), ...OTHERS], enumerable: false });   // (not enumerable: a loop over the places still meets each building once)
   const trail = (V.PLANTING_FIRST && V.PLANTING_FIRST.strokes || []).find((st) => st.id === 'trail');
   places.trail = trail ? trail.pts.map(([x, z]) => [x, z]) : [];
-  // the farm: a spot picked from a survey of the land (height within about 2.5 m over its 56 by 48 m, no water, no
-  // trees, clear of the trail, the corral and the pasture); the layout's `game.farm` can move it
-  places.farm = GAME.farm ? { ...xz(GAME.farm, true), r: +GAME.farm.r || 34, w: +GAME.farm.w || 56, d: +GAME.farm.d || 48 }
-    : { x: -6, z: -278, rot: 0, r: 34, w: 56, d: 48 };
+  places.farm = farm;
 
   // ── WHERE A WALKER CAN'T GO ────────────────────────────────────────────────────────────────────────────
   const segNear = (x, z, ax, az, bx, bz, r) => { const vx = bx - ax, vz = bz - az, L2 = vx * vx + vz * vz || 1e-9, t = Math.max(0, Math.min(1, ((x - ax) * vx + (z - az) * vz) / L2)), dx = ax + vx * t - x, dz = az + vz * t - z; return dx * dx + dz * dz < r * r; };
@@ -208,7 +212,7 @@ export async function makeWorld({ renderer, camera, quality = null, look = 'gree
     }
     return banks[k] === 1;
   }
-  // more things that block, added by the game after the world is made (the farm's fences and barn): W.addBlocker(fn),
+  // more things that block, added by the game after the world is made (the farm's fences): W.addBlocker(fn),
   // fn(x, z) -> true where a walker can't go
   const EXTRA = V.CODE ? [(x, z) => V.CODE.blocked(x, z)] : [];
   function blocked(x, z) {

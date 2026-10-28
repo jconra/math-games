@@ -150,10 +150,9 @@ const LINES = {
   banditsDone: ['The wagon rolls on safe. More road ahead, and likely more trouble.', "That's the gang seen to. Keep alongside, partner.", 'Fine riding. Eyes on the road.'],
   wagonStop: "The wagon will wait. Come back any time.",
   wagonWaits: "A freight driver's waiting with his wagon on the road east of the pasture: follow the wagon on your compass and ride up to him.",
-  // walking up to the saloon's doors (nothing to open yet). (The town band's lines went with the open-air stage: the
-  // band is to play inside the saloon, later)
-  saloon: ["Saloon's shut till sundown, partner. Lock boxes are next door at the sheriff's.",
-    "Doors stay shut till evening. Folks say there'll be music in there one day."],
+  // walking up to the saloon's doors: the band plays on the stage inside (src/stage.js) and takes requests
+  saloon: ["Hear that? The band's playing in the saloon. Walk up to the stage and ask for a song!",
+    "The saloon band takes requests, partner. Step in and pick a tune."],
   // the homestead behind your cabin: the first of each kind bought, the thank-yous, the goods
   animal: {
     hen: "A hen of your own! She'll lay eggs in the coop behind your cabin. Walk past to pick them up, and sell them at the store counter.",

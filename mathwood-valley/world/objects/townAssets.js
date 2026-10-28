@@ -28,6 +28,12 @@ export const TOWN_ASSETS = {
   // BUILT IN CODE ONLY (code: true, no model file: objects/codebuildings.js builds it, labs/buildings/blacksmith.js): the
   // smithy, board and batten, its big doors in its gable end, a shoeing shed on its right; box: its own 11.1 x 5.6 x 7.8 m
   blacksmith: { name: 'Blacksmith', code: true, box: [1.0, 0.505, 0.703], front: '+Z', size: 11.1, category: 'work' },
+  // the farm's, built in code only too (labs/buildings/barn.js, windpump.js; src/farm.js puts them at the farm, and the
+  // Town Lab can put more about): the barn, board and batten, its big doors in its front gable; box: its walls with the
+  // roof's overhangs, 12.9 x 7.4 x 9.8 m. The wind pump: a wooden tower and wheel, 3 m across its legs' feet, 12.2 m to
+  // the top of its wheel
+  barn: { name: 'Barn', code: true, box: [1.0, 0.574, 0.76], front: '+Z', size: 12.9, category: 'work' },
+  windpump: { name: 'Wind pump', code: true, box: [1.0, 4.07, 1.0], front: '+Z', size: 3.0, category: 'work' },
 };
 // a building's footprint (width along its own x, depth along its own z, metres) and height, from its kind and size
 export function modelFootprint(it) {

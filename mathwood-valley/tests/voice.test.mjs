@@ -54,13 +54,21 @@ test("the Sound Lab's copy of the voice code is the game's", () => {
 });
 
 test('voice clip slots: "Rope the evens", "Rope the odds" and "Help! Bandits" each have a named file, quiet until recorded', async () => {
-  const { CLIP_SLOTS, slotFiles, playSlot } = await import('../src/audio/clipslots.js');
+  const { CLIP_SLOTS, slotFiles, slotTakes, playSlot } = await import('../src/audio/clipslots.js');
   const { AMBUSH } = await import('../src/missions/wagonplan.js');
-  const want = { ropeEvens: 'rope_the_evens', ropeOdds: 'rope_the_odds', helpBandits: 'help_bandits' };
+  const want = { ropeEvens: 'rope_the_evens', ropeOdds: 'rope_the_odds' };
   for (const [id, file] of Object.entries(want)) {
     assert.equal(CLIP_SLOTS[id].file, file);
     assert.deepEqual(slotFiles(id), CLIP_SLOTS[id].recorded ? [file] : []);
     assert.equal(playSlot(null, id), false, 'no sound: the caller falls back');
   }
+  // the held-up driver: Dad's four recorded takes, each with its own words for his bubble
+  assert.deepEqual(slotFiles('helpBandits'), ['help_1', 'help_2', 'help_3', 'help_4']);
+  for (const t of slotTakes('helpBandits')) assert.ok(t.says && /Help|Heelp|Heeeelp/.test(t.says), t.file);
   assert.deepEqual(AMBUSH.helpClips, slotFiles('helpBandits'));
+  assert.deepEqual(AMBUSH.helpTakes, slotTakes('helpBandits'));
+  assert.ok(AMBUSH.helpRest > 0);
+  // a slot marked recorded has both files in sounds/voice (a missing one would be a failed request every play)
+  for (const id of Object.keys(CLIP_SLOTS)) for (const f of slotFiles(id)) for (const ext of ['.ogg', '.m4a'])
+    assert.ok(fs.existsSync(new URL('../sounds/voice/' + f + ext, import.meta.url)), f + ext);
 });

@@ -6,6 +6,7 @@
 //   trough   a plank water trough on two skids, iron bands round its ends, dark water in it
 //   crate    a slatted crate (size), its dark inside showing between the slats
 //   bale     a hay bale (0.9 x 0.4 x 0.46 m), two strings round it
+//   hayHeap  a heap of loose hay, forked off a load (w x d, h high): low lumps lying over one another
 //   bucket   a wooden bucket, two iron hoops, a wire bail
 //   wagon    a farm wagon: plank box, four spoked wheels (the back ones bigger), the tongue down on the ground
 //   bench    a long plank bench: a thick seat on two splayed leg frames, a stretcher between them (len)
@@ -74,6 +75,17 @@ export const MAKERS = {
       for (const s of [-1, 1]) q.b([0.018, H - 0.02, 0.008], [x, H / 2, s * (Wd / 2 + 0.002)], null, { long: 1, tint: TWINE, strip: 13, skip: '-y+y' + (s > 0 ? '-z' : '+z') });
     }
     k.solid([L, H, Wd], null, null, mul(M, T(0, H / 2, 0)));
+  },
+  hayHeap(k, M, o) {
+    const q = placer(k, M), w = o.w ?? 1.6, d = o.d ?? 1.4, h = o.h ?? 0.8, HAY = [1, 0.96, 0.88];
+    const lump = (r, jit) => ngon(8, r, jit, k.R).map(([x, z]) => [x * w, z * d]);
+    q.p('hay', lump(0.5, 0.25), h * 0.55, [0, h * 0.27, 0], [0, k.r(0, 3), 0], { taper: 0.45, tint: vary(k, HAY, 0.9, 1.05) });
+    for (let i = 0; i < 6; i++) {
+      const a = i / 6 * Math.PI * 2 + k.r(-0.4, 0.4), rr = k.r(0.18, 0.3), hh = h * k.r(0.35, 0.6);
+      q.p('hay', lump(k.r(0.26, 0.36), 0.3), hh, [Math.cos(a) * rr * w, hh / 2 - 0.02, Math.sin(a) * rr * d], [k.r(-0.12, 0.12), k.r(0, 3), k.r(-0.12, 0.12)], { taper: 0.6, tint: vary(k, HAY, 0.88, 1.06) });
+    }
+    q.p('hay', lump(0.24, 0.3), h * 0.42, [0, h * 0.68, 0], [0, k.r(0, 3), 0], { taper: 0.7, tint: vary(k, HAY, 0.92, 1.08) });
+    k.solid([w * 0.8, h, d * 0.8], null, null, mul(M, T(0, h / 2, 0)));
   },
   bucket(k, M, o) {
     const q = placer(k, M), h = 0.3, r = 0.14;

@@ -193,7 +193,7 @@ test('a hold-up asks 3 to 5 questions: the bunch', () => {
 
 test('the job holds up the traffic\'s wagons and lets them go, and thanks the player at the end of a trip', () => {
   const src = fs.readFileSync(new URL('../src/missions/wagonjob.js', import.meta.url), 'utf8');
-  for (const name of ['T.holdUp(t)', 'A.T.letGo(A.t)', 'ambushPick(', 'makeOpenRoad(', "howdy(d, AMBUSH.words.help", 'tripLeft(', 'function arrive()']) assert.ok(src.includes(name), name);
+  for (const name of ['T.holdUp(t)', 'A.T.letGo(A.t)', 'ambushPick(', 'makeOpenRoad(', 'howdy(d, t ? t.says : AMBUSH.words.help', 'AMBUSH.helpTakes', 'tripLeft(', 'function arrive()']) assert.ok(src.includes(name), name);
   // the driver's thank-you ('banditsDone', heard by the job folk) comes at the end of a trip, not after every gang
   const arrive = src.slice(src.indexOf('function arrive()'), src.indexOf('function giveUp()'));
   assert.ok(arrive.includes("hob.event('banditsDone'"));

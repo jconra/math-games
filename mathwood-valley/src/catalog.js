@@ -61,6 +61,11 @@ export const PEN = {
 };
 export const MPH = 2.23694;   // miles an hour in a metre a second
 export const mphOf = (mps) => Math.round(mps * MPH);
+// how tall a horse stands at the shoulder, as horsemen give it: hands (a hand is 4 inches), to the nearest half. The steed
+// stands 1.56 m at the withers at its own size (1) and grows with it; the donkey 1.15 m (rigs/animals_json.cjs WITHERS)
+export const WITHERS_M = { steed: 1.56, donkey: 1.15 };
+export const handsOf = (look) => Math.round((WITHERS_M[look && look.kind] || WITHERS_M.steed) * ((look && look.size) || 1) / 0.1016 * 2) / 2;
+export const handsText = (h) => `${Math.floor(h)}${h % 1 ? '\u00bd' : ''}`;   // (15.5 -> "15½")
 // The stable's horses, cheapest and slowest first. (Each horse's top speed shows beside its line as a number, LADDER
 // mph: the lines say how big it is and nothing the numbers don't bear out.)
 export const HORSES = [

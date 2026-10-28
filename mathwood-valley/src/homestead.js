@@ -3,13 +3,18 @@
 // door. Each kind has a home made in code in the farm's style, which appears with the first animal of its kind:
 //   the coop   a small plank hen house on legs with a ramp, in a run of chicken wire        (the hens)
 //   the pen    a low plank pen with a mud wallow, a trough and a lean-to                     (the pigs)
-//   the corral a little post-and-rail corral with a water trough and a bale of hay          (the sheep and the milk cow)
+//   the corral the big pasture behind the cabin, with a water trough and a bale of hay      (the sheep and the milk cow)
+// Dad: "I don't really want the chicken coop and other pens inside the big pasture. Maybe we can put the big pasture
+// off to one side and pens for the pigs and the chicken coop on the other side. Sheep and cows and horses can probably
+// share the pasture." So the big pasture fills the west of the ground behind the cabin (and the strip right behind it),
+// fenced by the town's own buck-and-rail fence (models/town/decor.json: straight runs from the cabin's back corners
+// round, a ranch gate in its east side); the pig pen and the coop stand outside it, to the east.
 // The animals potter about inside their own home (a walk, a stand, the hens peck), feet on the ground (each clip at
 // its own pace over its stride), and their names (typed at the store, as the dog's are) float over them when you walk
 // near. Goods are laid up over play time (src/math/goods.js: eggs, wool, milk) and wait at the yard (a basket of eggs
-// by the coop, a milk can and a bundle of wool by the corral); walking past picks them up into the saddlebags, with a
-// small note ("+6 eggs"), no button. They are sold at the general store counter as word problems (missions/store.js
-// asks H.saleOrder now and then).
+// by the coop, a milk can and a bundle of wool by the pasture's gate); walking past picks them up into the saddlebags,
+// with a small note ("+6 eggs"), no button. They are sold at the general store counter as word problems
+// (missions/store.js asks H.saleOrder now and then).
 //
 // Bought at the general store (shop.js: the "Farm animals" rows come from H.shop): the store already has the
 // counter where goods are sold and the dogs' buy-and-name row, so the animals sit beside them (simpler than a new
@@ -42,12 +47,17 @@ import {
 } from './math/goods.js';
 
 export const YARD = {
-  // the homes, in the cabin's own frame (metres): z out of the cabin's back wall (the back wall is about 2.9 m from the
-  // cabin's middle), x across it (+x toward the picnic table, -x toward the wagon road). x0..x1 across, z0..z1 out
-  coop: { x0: 3.2, x1: 9.6, z0: 7.6, z1: 12.4, house: { x: 7.4, z: 11.0, w: 1.7, d: 1.3 } },
-  pen: { x0: -10.4, x1: -4.4, z0: 7.6, z1: 12.8 },
-  corral: { x0: -7.5, x1: 7.5, z0: 15.6, z1: 24.6 },
-  inset: { coop: 0.45, pen: 0.9, corral: 1.2 },   // how far inside its fence an animal keeps (its middle)
+  // the homes, in the cabin's own frame (metres): z out of the cabin's back wall (the two-room house's back wall is 3.6 m
+  // from its middle, its back corners at x 4.13 and -3.67), x across it (+x toward the west: the pasture's side; -x
+  // toward the east: the pens' side and the path to the farm). x0..x1 across, z0..z1 out
+  // (the pen and the coop east of the pasture's fence (x -3.9), clear of its gate (z 4.7 to 8.5) and of the aspen
+  // standing at (-6.9, 13.1) between them and the fence)
+  coop: { x0: -13.8, x1: -7.8, z0: 16.4, z1: 21.2, house: { x: -11.6, z: 19.8, w: 1.7, d: 1.3 } },
+  pen: { x0: -13.4, x1: -7.8, z0: 9.2, z1: 14.4 },
+  // (the sheep's and the milk cow's: the big pasture itself, inside the decor's fence; fenced: false, no fence of its
+  // own. Its east side and the gate in it: models/town/decor.json)
+  corral: { x0: -3.9, x1: 15.5, z0: 3.75, z1: 37.5, fenced: false, gate: { x: -3.9, z: 6.6 } },
+  inset: { coop: 0.45, pen: 0.9, corral: 1.9 },   // how far inside its fence an animal keeps (its middle; the buck-and-rail spreads 0.55 m)
   collect: 4,          // metres from any home's fence where the goods waiting are picked up as you walk past
   tagNear: 7,          // the names show within this many metres (fading out to tagFar)
   tagFar: 10,
@@ -253,8 +263,9 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
   function corralPieces(out, segs) {
     const R = YARD.corral;
     // post and rail, as the town's corral: posts every 2.2 m, three rails; a two-rail gate (shut) toward the cabin
+    // (none when the town's own fence goes round it: the big pasture, R.fenced false)
     let gate = null;    // (the near side's middle span: no rails there, the gate fills it)
-    fenceLines(R).forEach((line, side) => {
+    if (R.fenced !== false) fenceLines(R).forEach((line, side) => {
       const ps = postsAlong(line, 2.2);
       for (let i = 0; i < ps.length; i++) {
         const [x, y, z] = ps[i];
@@ -275,21 +286,21 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
       for (const h of [0.3, 1.14]) out.push(piece(box(0.24, 0.05, 0.08), COL.dark, { at: [ga + 0.06, gy + h, gz], plain: true }));
       out.push(piece(box(0.09, 0.07, 0.1), COL.dark, { at: [gb - 0.02, gy + 0.9, gz], plain: true }));   // the latch
     }
-    // a water trough and a bale of hay inside
-    const wx = R.x1 - 2.2, wz = R.z1 - 1.2, wy = ground(wx, wz);
+    // a water trough and a bale of hay inside (the big pasture's near the cabin and its gate, where they're seen)
+    const big = R.fenced === false, wx = big ? 1.6 : R.x1 - 2.2, wz = big ? 11.5 : R.z1 - 1.2, wy = ground(wx, wz);
     // (hollow: a floor and four sides, the water a hand below the rim, so the two faces never share a plane)
     out.push(piece(box(2.2, 0.2, 0.7), COL.wood, { at: [wx, wy + 0.05, wz], shade: 0.1 }));
     for (const sz of [-1, 1]) out.push(piece(box(2.2, 0.4, 0.09), COL.wood, { at: [wx, wy + 0.35, wz + sz * 0.305], shade: 0.1 }));
     for (const sx of [-1, 1]) out.push(piece(box(0.1, 0.4, 0.52), COL.wood, { at: [wx + sx * 1.05, wy + 0.35, wz], shade: 0.1 }));
     out.push(piece(box(2.0, 0.02, 0.52), COL.water, { at: [wx, wy + 0.42, wz], plain: true }));
-    const hx = R.x0 + 1.9, hz = R.z1 - 1.4, hy = ground(hx, hz) + 0.42;
+    const hx = big ? 6.2 : R.x0 + 1.9, hz = big ? 8.4 : R.z1 - 1.4, hy = ground(hx, hz) + 0.42;
     out.push(piece(box(1.3, 0.85, 0.9), COL.hay, { at: [hx, hy, hz], rot: [0, 0.25, 0], plain: true, shade: 0.2 }));
     for (const bx of [-0.33, 0.33]) out.push(piece(box(0.035, 0.9, 0.95).translate(bx, 0, 0), COL.twine, { at: [hx, hy, hz], rot: [0, 0.25, 0], plain: true }));
     boxes.push([wx - 1.2, wz - 0.45, wx + 1.2, wz + 0.45, 'corral'], [hx - 0.9, hz - 0.8, hx + 0.9, hz + 0.8, 'corral']);
   }
 
   // the little shapes for goods waiting at the yard: a basket of eggs by the coop, a milk can and a bundle of wool
-  // by the corral's gate (outside the fences, where you walk past)
+  // by the corral's gate (outside the fences, where you walk past: the big pasture's, by the cabin's back corner)
   function goodsMarks() {
     for (const k of Object.keys(marks)) { marks[k].removeFromParent(); marks[k].geometry.dispose(); delete marks[k]; }
     const add = (id, parts, lx, lz) => {
@@ -304,14 +315,17 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
       add('eggs', parts, YARD.coop.x0 + 1.0, YARD.coop.z0 - 0.6);
     }
     if (built.includes('corral')) {
+      // (outside the near side, either side of its gate; the big pasture's gate is in its side by the cabin: the two
+      // by the cabin's back corner, short of it)
+      const C = YARD.corral, goodsAt = (i) => (C.fenced === false ? [C.x0 - 1.7 - 1.2 * i, C.z0 - 0.75 + 0.3 * i] : [i ? -1.9 : 1.9, C.z0 - 0.7]);
       add('milk', [piece(new THREE.CylinderGeometry(0.14, 0.16, 0.5, 12), COL.can, { at: [0, 0.25, 0], plain: true }),
         piece(new THREE.CylinderGeometry(0.08, 0.12, 0.12, 12), COL.can, { at: [0, 0.56, 0], plain: true }),
-        piece(new THREE.CylinderGeometry(0.1, 0.1, 0.04, 12), COL.dark, { at: [0, 0.63, 0], plain: true })], 1.9, YARD.corral.z0 - 0.7);
+        piece(new THREE.CylinderGeometry(0.1, 0.1, 0.04, 12), COL.dark, { at: [0, 0.63, 0], plain: true })], ...goodsAt(0));
       // (a burlap wool sack, stuffed full, the fleece puffing out of its open top)
       const fleece = [piece(new THREE.CylinderGeometry(0.2, 0.24, 0.5, 12), '#b39466', { at: [0, 0.25, 0], plain: true, shade: 0.15 }),
         piece(new THREE.TorusGeometry(0.205, 0.02, 4, 16).rotateX(Math.PI / 2), COL.twine, { at: [0, 0.44, 0], plain: true })];
       for (const [x, z, r] of [[0, 0, 0.15], [0.09, 0.07, 0.11], [-0.09, 0.06, 0.11], [0.05, -0.1, 0.11], [-0.07, -0.08, 0.1]]) fleece.push(piece(new THREE.SphereGeometry(r, 14, 10), '#f6f1e4', { at: [x, 0.52 + r * 0.25, z], plain: true }));
-      add('wool', fleece, -1.9, YARD.corral.z0 - 0.7);
+      add('wool', fleece, ...goodsAt(1));
     }
   }
 
@@ -354,7 +368,9 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
   function blocked(x, z) { if (Math.abs(x - L.x) > reach || Math.abs(z - L.z) > reach) return false; const p = L.local(x, z); return blockedLocal(p.x, p.z); }
   // an animal's own test: inside its home and clear of the hen house, the trough and the hay (not the fences: the
   // inset keeps it off them)
-  const clearFor = (home, x, z) => { const p = L.local(x, z); return L.inside(home, x, z) && !boxes.some((b) => b[4] === home && p.x > b[0] - 0.2 && p.x < b[2] + 0.2 && p.z > b[1] - 0.2 && p.z < b[3] + 0.2); };
+  // (the big pasture: clear of whatever else blocks there too, its trees)
+  const clearFor = (home, x, z) => { const p = L.local(x, z); return L.inside(home, x, z) && !boxes.some((b) => b[4] === home && p.x > b[0] - 0.2 && p.x < b[2] + 0.2 && p.z > b[1] - 0.2 && p.z < b[3] + 0.2)
+    && !(home === 'corral' && YARD.corral.fenced === false && W.blocked(x, z)); };
 
   // the ground round the homes, mown (as the town's yards: no tall meadow hiding the hens), fading back to the meadow
   function mow() {

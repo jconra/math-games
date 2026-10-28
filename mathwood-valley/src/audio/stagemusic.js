@@ -10,8 +10,13 @@
 // resting over the others. Nothing in it is taken from any recording: only the SOUND of the two instruments was measured
 // (overtones, swell and fade times, wobble rates, breath; see ~/pw/bandit-math/sound/REPORT.md).
 //
-//   const M = makeStageMusic(ctx, { harp, piano, room, seed, song })   harp / piano: where each instrument's notes go (an
-//                          AudioNode: the game puts each through its own positioned panner); room: where their echo goes;
+// Since the band moved into the saloon a drummer plays with them: a packing crate played with the hands (THE BOX below:
+// a thump in the middle of its face, a slap at its top edge, a light finger tap between), noise through filters, no
+// tones. Each song has its own box part, made by dice of its own, so the piano and the harmonica play just as they did.
+//
+//   const M = makeStageMusic(ctx, { harp, piano, box, room, seed, song })   harp / piano / box: where each instrument's
+//                          notes go (an AudioNode: the game puts each through its own positioned panner; no box: no
+//                          drummer, the old band); room: where their echo goes;
 //                          song: which of SONGS ('easy', 'boots', 'waltz', 'lonesome'; see MORE SONGS below)
 //   M.start(at)            starts the tune at ctx time `at` (the first beat); in an OfflineAudioContext it writes the
 //                          whole render at once
@@ -27,6 +32,8 @@
 //                          last EVENTS_KEPT are kept (the band can play for hours), an offline render keeps them all
 //   M.played               how many notes have been scheduled in all
 //   notePatch(patch, opts) the note as patch data (exported for the render rig)
+//   boxNote(hit, patches)  one hit on the box as patch data: { hit: 'thump' | 'slap' | 'tap', vel, tone }
+//   makeBoxPart(song, seed, { intro }) -> nextLine   the box's part, a line (four bars) at a time, as the tunes are made
 import { playPatch, voicePatch, PATCH_PRESETS } from './patch.js';
 
 export const BEAT = 0.75;                 // seconds a beat in the first song (80 a minute); the performers' clips are four beats long
@@ -214,7 +221,7 @@ export function makeTune(seed = 1, { intro = true } = {}) {
 //                               rests between
 // A song: { id, name, beat (seconds a beat), bar (beats a bar), tune(seed, { intro }) -> nextLine (four bars a line, as
 // makeTune; intro: the first line is the piano's alone), ask (what the harmonica player says when asked for it: short,
-// to fit one speech bubble's line), upbeat }. Piano notes' len is in seconds (as the first tune's always were); the
+// to fit one speech bubble's line), feel (a word or two for the band's card: 'a waltz'), upbeat }. Piano notes' len is in seconds (as the first tune's always were); the
 // harmonica's lenBeats in the song's own beats.
 const PENT_G = [62, 64, 67, 69, 71, 74, 76];
 // a melody walking a scale a step or two at a time, from `cur`, ending (last) on one of `tones`
@@ -367,26 +374,159 @@ export function makeLonesome(seed = 1, { intro = true } = {}) {
   };
 }
 
+// ── THE BOX ──────────────────────────────────────────────────────────────────────────────────────────────────────────
+// The drummer's packing crate, played with the hands, as a box drum is: the palm in the middle of its front face for a
+// low thump (the air in the box booms, the boards with it), the fingers at its top edge for a slap (a crack and the board's knock), and a
+// light tap of the fingers between the beats. All noise: a slow stepped noise through a low band that slides down a
+// little (the boom), white noise through bands and a high pass (the crack, the snap, the wood). Sound Lab patches, as
+// the piano's and the harmonica's are (a preset of the same name in patch.js takes their place: one tuned in the lab).
+export const BOX_THUMP = 'STAGE — BOX THUMP', BOX_SLAP = 'STAGE — BOX SLAP';
+export const BOX_PATCHES = {
+  [BOX_THUMP]: {
+    name: 'Box drum (thump)', group: 'MUSIC', kind: 'perc', dur: 0.5,
+    nodes: [
+      { id: 'air', type: 'noise', name: 'air', freq: 120, steps: 2, rate: 1, loopLen: 0.5 },
+      { id: 'boom-f', type: 'filter', name: 'boom', ftype: 'bandpass', freq: 132, freqEnd: 84, glide: 0.09, Q: 3.2 },
+      { id: 'boom-lp', type: 'filter', name: 'boom (soft)', ftype: 'lowpass', freq: 260, Q: 0.7 },
+      { id: 'boom-e', type: 'env', name: 'boom', peak: 0.5, attack: 0.004, decay: 0.24, sustain: 0 },
+      { id: 'boom-v', type: 'gain', name: 'boom', gain: 0 },
+      { id: 'nz', type: 'noise', name: 'palm', freq: 600, steps: 256, rate: 1, loopLen: 0.4 },
+      { id: 'body-f', type: 'filter', name: 'body', ftype: 'bandpass', freq: 230, Q: 2.2 },
+      { id: 'body-e', type: 'env', name: 'body', peak: 1.3, attack: 0.002, decay: 0.12, sustain: 0 },
+      { id: 'body-v', type: 'gain', name: 'body', gain: 0 },
+      { id: 'palm-f', type: 'filter', name: 'palm', ftype: 'bandpass', freq: 380, Q: 1.2 },
+      { id: 'palm-e', type: 'env', name: 'palm', peak: 1, attack: 0.001, decay: 0.05, sustain: 0 },
+      { id: 'palm-v', type: 'gain', name: 'palm', gain: 0 },
+      { id: 'mix', type: 'gain', name: 'mix', gain: 1 },
+      { id: 'send', type: 'send', name: 'room', gain: 0.05 },
+      { id: 'out', type: 'out', name: 'output', gain: 2.0 },
+    ],
+    cables: [
+      { from: 'air', to: 'boom-f' }, { from: 'boom-f', to: 'boom-lp' }, { from: 'boom-lp', to: 'boom-v' }, { from: 'boom-e', to: 'boom-v', port: 'gain' },
+      { from: 'boom-v', to: 'mix' }, { from: 'nz', to: 'body-f' }, { from: 'body-f', to: 'body-v' }, { from: 'body-e', to: 'body-v', port: 'gain' },
+      { from: 'body-v', to: 'mix' }, { from: 'nz', to: 'palm-f' }, { from: 'palm-f', to: 'palm-v' }, { from: 'palm-e', to: 'palm-v', port: 'gain' },
+      { from: 'palm-v', to: 'mix' }, { from: 'mix', to: 'out' }, { from: 'mix', to: 'send' },
+    ],
+  },
+  [BOX_SLAP]: {
+    name: 'Box drum (slap)', group: 'MUSIC', kind: 'perc', dur: 0.3,
+    nodes: [
+      { id: 'nz', type: 'noise', name: 'crack', freq: 600, steps: 256, rate: 1, loopLen: 0.4 },
+      { id: 'crack-f', type: 'filter', name: 'crack', ftype: 'bandpass', freq: 2300, Q: 0.9 },
+      { id: 'crack-e', type: 'env', name: 'crack', peak: 1, attack: 0.001, decay: 0.055, sustain: 0 },
+      { id: 'crack-v', type: 'gain', name: 'crack', gain: 0 },
+      { id: 'snap-f', type: 'filter', name: 'snap', ftype: 'highpass', freq: 5200, Q: 0.7 },
+      { id: 'snap-e', type: 'env', name: 'snap', peak: 0.7, attack: 0.0005, decay: 0.016, sustain: 0 },
+      { id: 'snap-v', type: 'gain', name: 'snap', gain: 0 },
+      { id: 'wood-f', type: 'filter', name: 'wood', ftype: 'bandpass', freq: 640, Q: 2.6 },
+      { id: 'wood-e', type: 'env', name: 'wood', peak: 1.4, attack: 0.001, decay: 0.05, sustain: 0 },
+      { id: 'wood-v', type: 'gain', name: 'wood', gain: 0 },
+      { id: 'air', type: 'noise', name: 'air', freq: 120, steps: 2, rate: 1, loopLen: 0.5 },
+      { id: 'body-f', type: 'filter', name: 'body', ftype: 'bandpass', freq: 150, Q: 2.4 },
+      { id: 'body-e', type: 'env', name: 'body', peak: 0.3, attack: 0.002, decay: 0.08, sustain: 0 },
+      { id: 'body-v', type: 'gain', name: 'body', gain: 0 },
+      { id: 'mix', type: 'gain', name: 'mix', gain: 1 },
+      { id: 'send', type: 'send', name: 'room', gain: 0.06 },
+      { id: 'out', type: 'out', name: 'output', gain: 1.0 },
+    ],
+    cables: [
+      { from: 'nz', to: 'crack-f' }, { from: 'crack-f', to: 'crack-v' }, { from: 'crack-e', to: 'crack-v', port: 'gain' }, { from: 'crack-v', to: 'mix' },
+      { from: 'nz', to: 'snap-f' }, { from: 'snap-f', to: 'snap-v' }, { from: 'snap-e', to: 'snap-v', port: 'gain' }, { from: 'snap-v', to: 'mix' },
+      { from: 'nz', to: 'wood-f' }, { from: 'wood-f', to: 'wood-v' }, { from: 'wood-e', to: 'wood-v', port: 'gain' }, { from: 'wood-v', to: 'mix' },
+      { from: 'air', to: 'body-f' }, { from: 'body-f', to: 'body-v' }, { from: 'body-e', to: 'body-v', port: 'gain' }, { from: 'body-v', to: 'mix' },
+      { from: 'mix', to: 'out' }, { from: 'mix', to: 'send' },
+    ],
+  },
+};
+// one hit: { hit: 'thump' | 'slap' | 'tap', vel 0..1, tone (a little more or less ring: 0.94..1.06, so no two hits are
+// quite the same) }. A tap is a slap with the fingers alone: lighter, quicker, no boom under it.
+export function boxNote({ hit = 'thump', vel = 0.8, tone = 1 } = {}, patches = PATCH_PRESETS) {
+  const v = Math.max(0.05, Math.min(1, vel)), gain = 0.2 + 0.8 * Math.pow(v, 1.3);
+  if (hit === 'thump') return notePatch(patches[BOX_THUMP] || BOX_PATCHES[BOX_THUMP], { gain, set: { 'boom-f': { freq: 132 * tone, freqEnd: 84 * tone }, 'boom-e': { decay: 0.24 * (0.85 + 0.3 * v) } } });
+  const tap = hit === 'tap';
+  return notePatch(patches[BOX_SLAP] || BOX_PATCHES[BOX_SLAP], { gain: tap ? gain * 0.55 : gain, set: {
+    'crack-f': { freq: (tap ? 3100 : 2300) * tone }, 'crack-e': { decay: tap ? 0.03 : 0.055 }, 'wood-f': { freq: 640 * tone },
+    ...(tap ? { 'body-e': { peak: 0 }, 'wood-e': { peak: 0.6 } } : {}),
+  } });
+}
+// Each song's part, a bar at a time: [beat in the bar, hit, how hard], with the line's dice (first: the song's opening
+// line, the piano's alone; end: the line's last bar, where a little fill leads round)
+const BOX_BARS = {
+  // the easy one: a backbeat (thump on one and three, slap on two and four), a push into three now and then, a tap on
+  // the "and" of four into the next bar; the opening line just a soft thump a bar, under the piano
+  easy: (r, { first, end }) => {
+    if (first) return [[0, 'thump', 0.5]];
+    const h = [[0, 'thump', 0.9], [1, 'slap', 0.66], [2, 'thump', 0.7], [3, 'slap', 0.72]];
+    if (r.chance(0.3)) h.push([2.5, 'thump', 0.42]);
+    if (end && r.chance(0.5)) h.push([3.5, 'slap', 0.6]); else if (r.chance(0.3)) h.push([3.5, 'tap', 0.4]);
+    return h;
+  },
+  // the quick one: the same backbeat with taps on the "and"s, the gallop's extra thump before three, a fill at the end
+  boots: (r, { first, end }) => {
+    if (first) return [[0, 'thump', 0.7], [2, 'thump', 0.6]];
+    const h = [[0, 'thump', 0.9], [1, 'slap', 0.7], [2, 'thump', 0.72], [3, 'slap', 0.74]];
+    for (const a of [0.5, 1.5, 2.5]) if (r.chance(a === 1.5 ? 0.7 : 0.45)) h.push([a, a === 2.5 && r.chance(0.5) ? 'thump' : 'tap', a === 2.5 ? 0.5 : 0.34]);
+    if (end && r.chance(0.55)) h.push([3.5, 'slap', 0.66]); else if (r.chance(0.5)) h.push([3.5, 'tap', 0.36]);
+    return h;
+  },
+  // the waltz: thump, slap, slap (the oom-pah-pah), the slaps light; now and then a tap before the next bar
+  waltz: (r, { first, end }) => {
+    if (first) return [[0, 'thump', 0.5]];
+    const h = [[0, 'thump', 0.82], [1, 'slap', 0.46], [2, 'slap', 0.42]];
+    if (!end && r.chance(0.18)) h.push([2.5, 'tap', 0.3]);
+    return h;
+  },
+  // the slow one: sparse, a thump a bar and a soft slap on three in most; the opening line left to the piano
+  lonesome: (r, { first, end }) => {
+    if (first) return [];
+    const h = [[0, 'thump', 0.62]];
+    if (!end && r.chance(0.65)) h.push([2, 'slap', 0.36]);
+    if (!end && r.chance(0.2)) h.push([3.5, 'tap', 0.24]);
+    return h;
+  },
+};
+export function makeBoxPart(song, seed = 1, { intro = true } = {}) {
+  const S = songOf(song), part = BOX_BARS[S.id] || BOX_BARS.easy, rnd = makeRandom(seed * 7 + 3);   // (its own dice: the tune's stay as they were)
+  let line = 0;
+  return function nextLine() {
+    const t0 = line * S.bar * 4, ev = [], first = line === 0 && intro;
+    for (let b = 0; b < 4; b++) {
+      for (const [at, hit, vel] of part(rnd, { first, end: b === 3, bar: b })) {
+        // (a hair early or late, and a little harder or softer: a person playing, not a machine)
+        const beat = t0 + b * S.bar + at + (at > 0 ? rnd.range(-0.012, 0.012) : 0);
+        ev.push({ beat, what: 'box', hit, vel: Math.min(1, vel * rnd.range(0.92, 1.06)), tone: rnd.range(0.95, 1.05) });
+      }
+    }
+    line++;
+    return ev.sort((a, b) => a.beat - b.beat);
+  };
+}
+
 export const SONGS = [
-  { id: 'easy', name: 'Easy Afternoon', beat: BEAT, bar: 4, tune: makeTune, ask: 'Easy Afternoon it is!' },
-  { id: 'boots', name: 'Dusty Boots', beat: 60 / 138, bar: 4, tune: makeBoots, upbeat: true, ask: 'Dusty Boots: a quick one!' },
-  { id: 'waltz', name: 'Prairie Waltz', beat: 0.6, bar: 3, tune: makeWaltz, ask: 'A waltz: Prairie Waltz!' },
-  { id: 'lonesome', name: 'Lonesome Trail', beat: 60 / 64, bar: 4, tune: makeLonesome, ask: 'A slow one: Lonesome Trail.' },
+  { id: 'easy', name: 'Easy Afternoon', beat: BEAT, bar: 4, tune: makeTune, ask: 'Easy Afternoon it is!', feel: 'easy-going' },
+  { id: 'boots', name: 'Dusty Boots', beat: 60 / 138, bar: 4, tune: makeBoots, upbeat: true, ask: 'Dusty Boots: a quick one!', feel: 'a quick one' },
+  { id: 'waltz', name: 'Prairie Waltz', beat: 0.6, bar: 3, tune: makeWaltz, ask: 'A waltz: Prairie Waltz!', feel: 'a waltz' },
+  { id: 'lonesome', name: 'Lonesome Trail', beat: 60 / 64, bar: 4, tune: makeLonesome, ask: 'A slow one: Lonesome Trail.', feel: 'a slow one' },
 ];
 export const songOf = (id) => SONGS.find((s) => s.id === id) || SONGS[0];
 
 // ── PLAYING IT ───────────────────────────────────────────────────────────────────────────────────────────────────────
 // song: one of SONGS' ids ('easy' when left out: the first tune, as it always was); intro: false starts the harmonica in
-// the first line (a song asked for: the band strikes it up at once) instead of the piano's line alone
-export function makeStageMusic(ctx, { harp, piano, room = null, seed = 1, patches = PATCH_PRESETS, song = 'easy', intro = true } = {}) {
+// the first line (a song asked for: the band strikes it up at once) instead of the piano's line alone; box: the
+// drummer's notes go there (none: the band without him)
+export function makeStageMusic(ctx, { harp, piano, box = null, room = null, seed = 1, patches = PATCH_PRESETS, song = 'easy', intro = true } = {}) {
   const S = songOf(song), BL = S.beat, LINE = S.bar * 4;   // (seconds a beat; beats a line of four bars)
-  const tune = S.tune(seed, { intro }), queue = [], events = [], harpSpans = [], voices = [];
+  const tune = S.tune(seed, { intro }), drum = box ? makeBoxPart(S.id, seed, { intro }) : null, queue = [], events = [], harpSpans = [], voices = [];
   let origin = null, made = 0, timer = null, running = false;
   const offline = typeof ctx.startRendering === 'function';
   const secs = (beat) => origin + beat * BL;
+  const lineOf = () => (drum ? [...tune(), ...drum()] : tune());   // (a line: the tune's notes and the box's)
   function play(ev) {
     const at = secs(ev.beat);
-    if (ev.what === 'piano') {
+    if (ev.what === 'box') {
+      keep(playPatch(ctx, null, box, room, boxNote(ev, patches), null, { at }), at, at + 0.35);
+      events.push({ at, what: 'box', hit: ev.hit, vel: ev.vel });
+    } else if (ev.what === 'piano') {
       for (const p of pianoNotes({ midi: ev.midi, len: ev.len, vel: ev.vel }, patches[PIANO])) keep(playPatch(ctx, null, piano, room, p, null, { at }), at, at + ev.len);
       events.push({ at, what: 'piano', midi: ev.midi, len: ev.len, vel: ev.vel });
     } else {
@@ -410,7 +550,7 @@ export function makeStageMusic(ctx, { harp, piano, room = null, seed = 1, patche
   function pump() {
     if (!running) return;
     const until = (ctx.currentTime - origin) / BL + LOOKAHEAD / BL;
-    while (made * LINE <= until + LINE) { queue.push(...tune()); made++; }
+    while (made * LINE <= until + LINE) { queue.push(...lineOf()); made++; }
     queue.sort((a, b) => a.beat - b.beat);
     while (queue.length && queue[0].beat <= until) {
       const ev = queue.shift();
@@ -427,7 +567,7 @@ export function makeStageMusic(ctx, { harp, piano, room = null, seed = 1, patche
       origin = at - made * LINE * BL;
       if (offline) {
         const end = (ctx.length / ctx.sampleRate - origin) / BL;
-        while (made * LINE <= end) { queue.push(...tune()); made++; }
+        while (made * LINE <= end) { queue.push(...lineOf()); made++; }
         for (const ev of queue.sort((a, b) => a.beat - b.beat)) if (secs(ev.beat) >= at - 1e-6 && ev.beat <= end) play(ev);
         queue.length = 0;
       } else { pump(); timer = setInterval(pump, 200); }

@@ -654,7 +654,7 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
     // (with the six-shooter the words say "bring in", not "rope": src/gun.js)
     const gun = canShoot(rider), left = wave.goods - wave.caught;
     const togoLine = wave.caught ? `${wave.caught} ${gun ? 'brought in' : 'roped'} · ${left} to go` : `${left} to ${gun ? 'bring in' : 'rope'}`;
-    const main = gun ? String(wave.w.rule || '').replace(/^Rope the /, 'Bring in the ') : wave.w.rule;
+    const main = gun ? String(wave.w.rule || '').replace(/^Rope the /, 'Arrest the ') : wave.w.rule;   // (the level's own title for a rider who may shoot: "Arrest the evens")
     if (wave.kind === 'parity') rule({ kind: 'gang', main, sub: `${parityLine(wave.w)} · ${togoLine}${finding}` });
     else if (wave.kind === 'missing') rule({ kind: 'gang', main, sub: `${gun ? 'Bring in' : 'Rope'} the rider wearing the missing number${finding}` });
     else rule({ kind: 'gang', main: `The ${wave.table}-Gang`, sub: `Every bandit wears a multiple of ${wave.table} · ${togoLine}${finding}` });
@@ -1672,7 +1672,12 @@ export function makeWagonJob(opts) {
   const howTo = () => { if (told || !hob.say) return; told = true; const g = canShoot(opts.rider) ? 'Gun' : ''; hob.say(I && I.touch ? HOWTO['touch' + g] : HOWTO['click' + g], 9000); };
   // the held-up wagon's driver: "Help!" over his head (and his recorded shout, once there is one), his thanks after
   const driverOf = () => (A && A.t.wg && A.t.wg.driver) || null;
-  function help() { const d = driverOf(); if (!d) return; if (clearOfCard(d)) howdy(d, AMBUSH.words.help, { ms: 2600, key: 'holdup' + A.n }); helpVoice(); }
+  function help() {
+    const d = driverOf(); if (!d) return;
+    const t = helpVoice();                              // (a take he shouts now; false: the last one is still ringing or resting)
+    if (t === false) return;
+    if (clearOfCard(d)) howdy(d, t ? t.says : AMBUSH.words.help, { ms: t ? Math.max(2600, t.ms + 500) : 2600, key: 'holdup' + A.n });
+  }
   // (far off, his head sits up by the horizon, where the card at the top is: no bubble over the card, which says
   // "Help!" itself; the shout goes up again once the wagon is lower in the view)
   const _h = new THREE.Vector3();
@@ -1685,24 +1690,34 @@ export function makeWagonJob(opts) {
     return !(y - 48 < r.bottom + 6 && x > r.left - 70 && x < r.right + 70);
   }
   function thanks() { const d = driverOf(); if (d) { const L = AMBUSH.words.thanks; howdy(d, L[Math.floor(Math.random() * L.length)], { ms: 4500, key: 'holdup' + A.n }); } }
-  const helpBufs = []; let helpLoading = false, helpNext = 0;
+  // his recorded shouts: the takes loaded the first time he calls (the bubble alone meanwhile); then one at a time at
+  // random, never the same twice running, with AMBUSH.helpRest s of quiet after each. -> { says, ms } for the take he
+  // shouts now, false while one is ringing or resting, null with no take to play (no sound, none loaded)
+  const helpBufs = new Map(); let helpLoading = false, helpLast = null, helpUntil = 0;
   function helpVoice() {
-    if (!AMBUSH.helpClips.length || !audio || !audio.ctx || !audio.running) return;
+    const takes = AMBUSH.helpTakes || [];
+    if (!takes.length || !audio || !audio.ctx || !audio.running) return null;
     if (!helpLoading) {
       helpLoading = true;
       const ext = clipExt((n) => document.createElement('audio').canPlayType(n)), ctx = audio.ctx;
-      for (const name of AMBUSH.helpClips) fetch(GAME + 'sounds/voice/' + name + ext).then((r) => { if (!r.ok) throw new Error(r.status + ''); return r.arrayBuffer(); })
-        .then((ab) => ctx.decodeAudioData(ab)).then((b) => helpBufs.push(b)).catch((e) => console.warn('wagon job: a "Help!" clip could not load', name, e && e.message));
-      return;
+      for (const t of takes) fetch(GAME + 'sounds/voice/' + t.file + ext).then((r) => { if (!r.ok) throw new Error(r.status + ''); return r.arrayBuffer(); })
+        .then((ab) => ctx.decodeAudioData(ab)).then((b) => helpBufs.set(t.file, b)).catch((e) => console.warn('wagon job: a "Help!" clip could not load', t.file, e && e.message));
+      return null;
     }
-    if (!helpBufs.length || !A || !A.t.wg) return;
-    const ctx = audio.ctx, p = A.t.wg.pos, src = ctx.createBufferSource(), pan = ctx.createPanner();
+    const ctx = audio.ctx;
+    if (ctx.currentTime < helpUntil) return false;
+    const ready = takes.filter((t) => helpBufs.has(t.file)), pick = ready.length > 1 ? ready.filter((t) => t.file !== helpLast) : ready;
+    if (!pick.length || !A || !A.t.wg) return null;
+    const t = pick[Math.floor(Math.random() * pick.length)], b = helpBufs.get(t.file);
+    const p = A.t.wg.pos, src = ctx.createBufferSource(), pan = ctx.createPanner();
     pan.panningModel = 'equalpower'; pan.distanceModel = 'inverse'; pan.refDistance = 8; pan.rolloffFactor = 1; pan.maxDistance = 10000;
     if (pan.positionX) { pan.positionX.value = p.x; pan.positionY.value = p.y + 2.2; pan.positionZ.value = p.z; } else pan.setPosition(p.x, p.y + 2.2, p.z);
-    src.buffer = helpBufs[helpNext++ % helpBufs.length];
+    src.buffer = b;
     src.connect(pan).connect(audio.out);
     src.onended = () => { try { src.disconnect(); pan.disconnect(); } catch (e) { /* gone */ } };
     src.start();
+    helpLast = t.file; helpUntil = ctx.currentTime + b.duration + (AMBUSH.helpRest ?? 2.5);
+    return { says: t.says, ms: b.duration * 1000 };
   }
 
   // where the player is along the traffic's road (the nearest of its points every 2 m) and how far off its middle

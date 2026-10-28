@@ -5,19 +5,25 @@
 // yet, a file that won't load), the caller falls back to what it did before.
 //
 //   CLIP_SLOTS                     { id: { file, says, recorded } }
-//   slotFiles(id) -> ['help_bandits'] when recorded, else []   (a list, for callers that take several clips)
+//   slotFiles(id) -> ['help_1', ...] when recorded, else []   (a list, for callers that take several clips)
+//   slotTakes(id) -> [{ file, says }] when recorded, else []   (a slot of several takes: each with its own words)
 //   playSlot(audio, id, { after })  -> true if the clip will play (the caller then skips its fallback), false if not.
 //                                     audio: src/audio/audio.js's { ctx, out, running }. after: ms to wait first.
 
 export const CLIP_SLOTS = {
   ropeEvens: { file: 'rope_the_evens', says: 'Rope the evens', recorded: false },     // the wagon's evens card, read out
   ropeOdds: { file: 'rope_the_odds', says: 'Rope the odds', recorded: false },        // the wagon's odds card, read out
-  helpBandits: { file: 'help_bandits', says: 'Help! Bandits', recorded: false },      // a held-up wagon's driver
+  // a held-up wagon's driver: Dad's four takes, one at a time at random, his bubble saying the words of the one he shouts
+  helpBandits: { file: 'help_1', says: 'Help! Ah, bandits!', recorded: true, takes: [
+    { file: 'help_1', says: 'Help! Ah, bandits!' }, { file: 'help_2', says: 'Heelp! Bandits!' },
+    { file: 'help_3', says: "Help! They're trying to rob me!" }, { file: 'help_4', says: 'Stay back! Heeeelp!' }] },
 };
 
-export function slotFiles(id) {
+export function slotFiles(id) { return slotTakes(id).map((t) => t.file); }
+// the slot's takes, each with its own words: [{ file, says }] when recorded (a slot of one take: that one), else []
+export function slotTakes(id) {
   const s = CLIP_SLOTS[id];
-  return s && s.recorded ? [s.file] : [];
+  return s && s.recorded ? (s.takes || [{ file: s.file, says: s.says }]) : [];
 }
 
 const GAME = new URL('../../', import.meta.url).href;

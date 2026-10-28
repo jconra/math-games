@@ -29,7 +29,7 @@ const BASE = { mane: '#16110e', points: 'none', belly: 0.6, sooty: 0.25, bloom: 
 
 export const PRESETS = {
   bay: { label: 'Bay', game: 'bay', base: '#7a3f20', points: 'black', mane: '#15100d', face: 'star', faceSize: 1.0, sooty: 0.35, bloom: 0.6, seed: 3 },
-  chestnut: { label: 'Chestnut', game: 'chestnut', base: '#a65a2a', mane: '#d6b47a', bloom: 0.5, face: 'blaze', legs: { FL: 'none', FR: 'none', HL: 'sock', HR: 'sock' },
+  chestnut: { label: 'Chestnut', game: 'chestnut', base: '#a65a2a', mane: '#4e2615', bloom: 0.5, face: 'blaze', legs: { FL: 'none', FR: 'none', HL: 'sock', HR: 'sock' },
     muzzle: 0.45, roots: 0.25, tips: 0.45, sooty: 0.12, seed: 11 },
   palomino: { label: 'Palomino', game: 'palomino', base: '#c99a52', mane: '#eee2c4', face: 'snip', muzzle: 0.75, belly: 0.35, sooty: 0.1, roots: 0.2, tips: 0.25, seed: 5 },
   white: { label: 'White', game: 'white', base: '#4a4544', mane: '#d9d6d2', grey: 0.88, dapples: 0.7, dappleSize: 0.09, greyLegs: 0.6,

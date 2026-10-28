@@ -23,6 +23,7 @@ import { makeSight } from './sight.js';
 import { rollPenHorse, PENPLAN } from './horsepenplan.js';
 import { spend, saveRider } from './save.js';
 import { ownedHorses, rideHorse } from './mounts.js';
+import { handsOf, handsText } from './catalog.js';
 
 export const PEN_STROKE = 'horsepen';
 // (the pen as laid in models/town/planting.json, if the world's fence plan doesn't have it: the paddock behind the stable
@@ -183,7 +184,7 @@ export function makeHorsePen({ W, animals, rider, camera, player, shadows = true
         let h = `<h3 class="bms-h">In the pen out back</h3>`;
         for (const s of list) {
           const d = s.data, cost = d.price, can = rider.gold >= cost;
-          h += `<div class="bms-row">${horseIcon(d.recipe)}<div class="bms-what"><b>${esc(d.name)}</b><small>${esc(d.line)}</small><span class="bms-speed" title="Top speed"><b>${d.mph}</b> mph</span></div>`
+          h += `<div class="bms-row">${horseIcon(d.recipe)}<div class="bms-what"><b>${esc(d.name)}</b><small>${esc(d.line)}</small><span class="bms-speed" title="Top speed"><b>${d.mph}</b> mph</span> <span class="bms-speed" title="Height at the shoulder (a hand is 4 inches)"><b>${handsText(handsOf({ kind: 'steed', size: d.size }))}</b> hands</span></div>`
             + `<div class="bms-act"><span class="bms-price">${COIN}<b>${cost}</b></span><button type="button" data-do="buy-pen" data-id="${s.i}" ${can ? '' : 'disabled'}>${can ? 'Buy' : `Need ${cost - rider.gold} more`}</button></div></div>`;
         }
         return h + `<p class="bms-tip">New horses come into the pen while you're out of town.</p>`;

@@ -36,7 +36,7 @@ import { TIER_NAME, TIER_GOLD } from './lockbox/index.js';
 import { RUNG_IDS, RUNG } from './lockbox/generate.js';
 import { HATS, hatOf, hatIcon } from './hats.js';
 import { PALETTES } from './actors/folk.js';
-import { PRICES, SADDLES, HORSES, DOGS, DOG_NAMES, LADDER, REVOLVER } from './catalog.js';
+import { PRICES, SADDLES, HORSES, DOGS, DOG_NAMES, LADDER, REVOLVER, handsOf, handsText } from './catalog.js';
 import { gunShop, buyGun } from './gun.js';
 import { ownedHorses, ownsHorse, rideHorse, horseLook, ridden } from './mounts.js';
 import { TREATS, BOND, TREAT_KINDS, treatsOf, countOf, roomOf, addTreats, treatQuestion, answerLine, bondOf, heartsLine, treatWord } from './treats.js';
@@ -165,7 +165,8 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
     return [...new Set(list)];
   };
   // a horse's top speed, as a number (Dad: "even little kids know bigger number is better")
-  const speedOf = (look) => (look && look.mph ? `<span class="bms-speed" title="Top speed"><b>${look.mph}</b> mph</span>` : '');
+  const speedOf = (look) => (look && look.mph ? `<span class="bms-speed" title="Top speed"><b>${look.mph}</b> mph</span>` : '')
+    + (look && look.kind ? ` <span class="bms-speed" title="Height at the shoulder (a hand is 4 inches)"><b>${handsText(handsOf(look))}</b> hands</span>` : '');   // (and how tall it stands, in hands)
   const price = (n) => `<span class="bms-price">${COIN}<b>${n}</b></span>`;
   // a horse of the rider's own: its hearts (src/treats.js BOND), filled by feeding it treats; full, it comes faster
   const heartsOf = (id) => {

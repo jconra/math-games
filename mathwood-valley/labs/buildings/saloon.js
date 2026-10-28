@@ -1467,10 +1467,12 @@ export function buildSaloon(recipeIn = {}, env = {}) {
       signs: [{ face: 'a', centre: P3((SIGN_A.a0 + SIGN_A.a1) / 2, (SIGN_A.y0 + SIGN_A.y1) / 2, ZF), w: SIGN_A.a1 - SIGN_A.a0, h: SIGN_A.y1 - SIGN_A.y0 }, { face: 'b', centre: P3(XL, (SIGN_B.y0 + SIGN_B.y1) / 2, (SIGN_B.a0 + SIGN_B.a1) / 2), w: SIGN_B.a1 - SIGN_B.a0, h: SIGN_B.y1 - SIGN_B.y0 }],
       lanterns: lamps.map((L) => L.p),
       // THE STAGE, in the form of src/stage.js STAGE (the stool's middle on the stage floor and the way the keys face from
-      // it, as three's rotation.y; the harmonica player's spot and facing), in the saloon's own centred frame
+      // it, as three's rotation.y; the harmonica player's spot and facing; the drummer's crate, at the stage's left, a
+      // little back from her and turned toward the middle), in the saloon's own centred frame
       stage: {
         piano: { x: +(stool[0] + OX).toFixed(3), y: STG, z: +(stool[1] + OZ).toFixed(3), rot: +Math.atan2(-kdir[0], -kdir[1]).toFixed(4) },
         harmonica: { x: +(-0.35 + OX).toFixed(3), y: STG, z: +(-3.35 + OZ).toFixed(3), rot: 0.12 },
+        drummer: { x: +(-1.45 + OX).toFixed(3), y: STG, z: +(-3.75 + OZ).toFixed(3), rot: 0.35 },
         floor: STG, front: P3(0, STG, SZ1), rect: { x0: SX0 + OX, x1: SX1 + OX, z0: SZ0 + OZ, z1: SZ1 + OZ }, pianoAt: P3(pianoP.x, STG, pianoP.z), pianoRot: keysRot,
       },
       // THE CHALKBOARD: the board's middle and the way it faces; where the teacher stands (beside it, turned half to the

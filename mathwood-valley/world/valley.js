@@ -34,7 +34,10 @@
 //       planting are the shipped ones (models/town/layout.json, planting.json) and nothing is edited or saved; live: the
 //       land worked out here and now, not loaded from its bake (models/town/land; see THE BAKE); slice: the land laid a few
 //       milliseconds a frame (a page that is showing something else meanwhile, the film), not in one go;
-//       showEnabled(): when the landmarks answer the pointer (the default: while the Build bar is shut)
+//       showEnabled(): when the landmarks answer the pointer (the default: while the Build bar is shut); (Mathwood Valley)
+//       extra: the game's own things put into the town's layout, layout items as the village's (the farm's barn, wind
+//       pump, troughs and hay: src/farmplan.js farmItems): built, levelled, kept clear of plants and drawn as the town's own;
+//       not in the lab (the Town Lab shows the farm as outlines, labs/town/codeplaces.js)
 //     V.scene: its own scene (its sky, haze, light); V.update(dt, afterShow) each frame, then V.render() (which also sets the
 //       renderer's exposure to the time of day's: a page sharing its renderer sets its own back); V.update(dt, null, true):
 //       quietly, off stage (no landmarks, townsfolk or globes), while V.settled() is false: the plants laid, the trees baked
@@ -160,7 +163,7 @@ export const TIER_SET = {
             u: { wWaveOn: 1, stampFar: 73 }, checks: { stampOn: true, hexOn: true, farOn: true, wWaveOn: true, cloudsOn: true, beamsOn: true } },
 };
 
-export async function makeValley({ renderer, camera, controls, quality, lab = false, live = false, slice = false, showEnabled = null, showcase = false, folk = false, look = 'green', treeClear = [] }) {
+export async function makeValley({ renderer, camera, controls, quality, lab = false, live = false, slice = false, showEnabled = null, showcase = false, folk = false, look = 'green', treeClear = [], extra = [] }) {
 // THE TIME OF DAY's state (the rest is by the frame loop, see dayFrame): hour, local solar time; turn: the sun's whole
 // path turned round. 192: the sun rises and sets through the valley's two open ends (the hills there 3-4° high from the
 // town and the meadow; everywhere else 20-40°, so a sun setting there left the valley in shadow by mid-afternoon), and
@@ -210,6 +213,9 @@ const PATHROAD = new Uint8Array(2048 * 2048 * 4);              // the paths-and-
 // the buildings, props, rocks, plants and the lawn where each pixel stands; built in lampsFrame (again when a lamp moves)
 const LAMPU = makeLampUniforms();
 const TOWN = { layout: normaliseTown((lab && savedTown()) || TOWN_DEFAULT), Hpre: null, block: null, road: null, canvas: document.createElement('canvas'), village: null };
+// (Mathwood Valley) the game's own things in the town's layout (makeValley's extra: the farm's); their props drawn with the
+// decor's, one draw a kind (drawDecor below)
+if (!lab && extra && extra.length) { const add = normaliseTown({ items: extra }).items; TOWN.layout.items.push(...add); for (const it of add) if (it.type === 'prop') DECOR.merged.add(it.id); }
 // (Mathwood Valley) THE GROUND DRAWN FINER where the landforms need it (buildFine, by the ground's mesh): h, the heights on its own grid
 const FINE = { h: null, dirty: false, geo: null, mesh: null, cut: '', x0: 0, x1: 0, z0: 0, z1: 0, nx: 0, nz: 0, sx: 1, sz: 1, i0: 0, i1: 0, j0: 0, j1: 0 };
 // THE TOWN'S PAVING (src/objects/stones.js, tuned in the Stone Lab): irregular stones, one per scattered point, so

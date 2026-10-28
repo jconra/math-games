@@ -18,7 +18,7 @@ import { makeCampfire } from '../fire/campfire.js';
 export const CAMP = {
   // the spots tried, in the cabin's own frame (x across, z out of its front: the creek is behind it, off to the right
   // as you face the door from inside), nearest the cabin first
-  look: { x: [13, 44], z: [-12, -44], step: 2 },   // (x from 13: clear of the yard's pig pen, homestead.js YARD)
+  look: { x: [17, 44], z: [-12, -44], step: 2 },   // (x from 17: clear of the yard's pig pen and coop, homestead.js YARD)
   clear: 2.4,          // m round the fire with nothing that blocks a walker
   creek: [3.5, 10],    // m to the creek's water: at least, at most
   dry: 0.05,           // waterAt under the camp and round it must be under this

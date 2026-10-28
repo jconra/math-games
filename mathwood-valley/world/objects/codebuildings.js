@@ -1,5 +1,5 @@
 // THE TOWN'S CODE-BUILT BUILDINGS: the stable, the sheriff's office, the general store, the saloon, the homes and cabins
-// (each a cabin design, cabins.js) and the blacksmith built from parts in code (the Building Lab's, through
+// (each a cabin design, cabins.js), the blacksmith, and the farm's barn and wind pump built from parts in code (the Building Lab's, through
 // objects/codebuild.js) instead of loaded as Tripo models, standing where the layout (and Dad's decor.json) puts them.
 // The player's own cabin (the layout's 'cabin', or an item marked player: true) stays the model it was, with its inside
 // (src/cabin/). A cabin's design is its item's preset and seed (saved in the decor), else picked from its id. Each is built once, while the title shows (the pictures, then one building at a time, a frame
@@ -49,11 +49,12 @@
 import * as THREE from 'three';
 import { makeDoorKeeper } from './doorkeeper.js';
 
-export const CODE_KINDS = new Set(['stable', 'sheriff', 'generalStore', 'saloon', 'home', 'cabin', 'blacksmith']);
+export const CODE_KINDS = new Set(['stable', 'sheriff', 'generalStore', 'saloon', 'home', 'cabin', 'blacksmith', 'barn', 'windpump']);
 // where each one's way in is along its front (m from its middle, + to the right seen from the street): the stable's big
 // doors (over its barn, not the middle of barn and lean-to), the sheriff's steps, the store's steps (right of its door),
-// the saloon's batwings, the blacksmith's big doors (left of its shoeing shed). A cabin's door is near its middle. The
-// game's door spots (src/world.js places) stand out from there (CODE.stats() has each one's doorway as built)
+// the saloon's batwings, the blacksmith's big doors (left of its shoeing shed). A cabin's door is near its middle, the
+// barn's big doors at its middle (the wind pump has none). The game's door spots (src/world.js places) stand out from
+// there (CODE.stats() has each one's doorway as built)
 export const CODE_DOORS = { stable: 1.65, sheriff: 0.05, generalStore: 3.14, saloon: 1.41, blacksmith: -1.47 };
 // the player's own cabin: built in code too (a cabin design, the two-room log house unless its item says another), its
 // furniture the player's own (src/cabin/: bought for its slots), so the design's own furniture is left out of it
@@ -74,10 +75,10 @@ const LAYER = 7;                                    // (the stand-ins' pictures 
 // wider), the doors shut and it out of view. The governor's Window view dial: 0 the pictures only (potato), 1 the
 // rooms (priority 1), 3 everything (objects/codebuild.js priorities, never past the Inside detail dial)
 export const ARC = { half: 60, reach: 25, cone: 30, stay: 10, out: 5 };
-// THE FLAT LOOK (the potato tier only): the homes, the cabins and the smithy (no signs to lose) past the outsides'
-// reach, by day, all drawn as ONE mesh in plain colours (the wood its picture's average colour, its tint, its baked
-// shade): a street of houses down the lane is one draw, not two each
-const FLAT_KINDS = new Set(['home', 'cabin', 'blacksmith']), FLAT_NIGHT = 0.08;
+// THE FLAT LOOK (the potato tier only): the homes, the cabins, the smithy and the barn (no signs to lose; not the wind
+// pump: its wheel turns) past the outsides' reach, by day, all drawn as ONE mesh in plain colours (the wood its
+// picture's average colour, its tint, its baked shade): a street of houses down the lane is one draw, not two each
+const FLAT_KINDS = new Set(['home', 'cabin', 'blacksmith', 'barn']), FLAT_NIGHT = 0.08;
 
 export function makeCodeBuildings({ shade = null, tier = () => 'gaming', renderer = null, scene = () => null } = {}) {
   let kitP = null, mod = null, queue = Promise.resolve(), made = 0, wanted = 0;

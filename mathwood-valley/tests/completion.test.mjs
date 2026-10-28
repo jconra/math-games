@@ -267,7 +267,7 @@ test('the copies of the camps and hideouts match the files that draw them; the a
 
 test('the shop sells what the catalog lists (shop.js takes its tables from src/catalog.js)', () => {
   const shop = source('../src/shop.js');
-  assert.match(shop, /import \{ PRICES, SADDLES, HORSES, DOGS, DOG_NAMES(, LADDER)?(, REVOLVER)? \} from '\.\/catalog\.js';/);   // (LADDER: each horse's size and speed; REVOLVER: the six-shooter, src/gun.js)
+  assert.match(shop, /import \{ PRICES, SADDLES, HORSES, DOGS, DOG_NAMES(, LADDER)?(, REVOLVER)?(, handsOf, handsText)? \} from '\.\/catalog\.js';/);   // (LADDER: each horse's size and speed; REVOLVER: the six-shooter, src/gun.js)
   assert.match(shop, /export \{ PRICES, SADDLES, HORSES, DOGS, DOG_NAMES \};/);
   assert.ok(!/export const (PRICES|SADDLES|HORSES|DOGS) =/.test(shop), 'one copy of each table');
   for (const s of SADDLES) assert.ok(PRICES.saddle[s.id] > 0, s.id);
@@ -328,4 +328,12 @@ test('the windmill, the bridge and fishing turned off: their places, buckles and
   const all = completion(newRider('Mo'), { all: true }).items;
   assert.match(all.find((i) => i.id === 'buckle:tower:tin').how, /miller/);
   assert.match(all.find((i) => i.id === 'collect:keepsake:tower').how, /windowsill/);
+});
+
+test('each horse shows how tall it stands in hands: bigger horses more hands, to the nearest half (a hand is 4 inches)', async () => {
+  const C = await import('../src/catalog.js');
+  const order = ['donkey', 'chestnut', 'bay', 'palomino', 'white', 'midnight'].map((id) => C.handsOf(C.LADDER[id]));
+  assert.deepEqual(order, [11.5, 14.5, 15.5, 16, 17, 17.5]);
+  for (const h of order) assert.equal(h * 2, Math.round(h * 2));
+  assert.equal(C.handsText(15.5), '15½'); assert.equal(C.handsText(16), '16');
 });

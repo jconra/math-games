@@ -29,9 +29,9 @@ export const PLACE = {
   id: 'wagon', name: 'Protect the wagon', short: 'Wagon', math: 'Odds & evens, times tables', pic: 'wagon', job: 'wagon', fastFrom: null,
   line: 'A gang rides at the wagon: rope the riders whose numbers fit the card.',
   levels: [
-    { id: 'even10', title: 'Rope the evens', line: 'The gang wears the even numbers up to 10 (2, 4, 6, 8, 10)', grade: 8, strand: 'number', count: 8, read: true,
+    { id: 'even10', title: 'Arrest the evens', line: 'The gang wears the even numbers up to 10 (2, 4, 6, 8, 10)', grade: 8, strand: 'number', count: 8, read: true,
       gen: { kind: 'parity', want: 'even', top: 10 } },
-    { id: 'odd10', title: 'Rope the odds', line: 'The gang wears the odd numbers up to 10 (1, 3, 5, 7, 9)', grade: 9, strand: 'number', count: 8, read: true,
+    { id: 'odd10', title: 'Arrest the odds', line: 'The gang wears the odd numbers up to 10 (1, 3, 5, 7, 9)', grade: 9, strand: 'number', count: 8, read: true,
       gen: { kind: 'parity', want: 'odd', top: 10 } },
     { id: 'eo20', title: 'Evens or odds up to 20', line: 'Either card, numbers up to 20', grade: 12, strand: 'number', count: 8, read: true,
       gen: { kind: 'parity', want: 'either', top: 20 } },

@@ -1,5 +1,5 @@
 // THE GAME'S OWN THINGS, SHOWN IN THE TOWN LAB: what the game puts down in code rather than from the layout (the farm with
-// its barn, pens and windmill; the homestead behind the player's cabin: the coop, the pig pen, the corral; the windmill
+// its barn, pens and windmill; the homestead behind the player's cabin: the coop, the pig pen, the pasture; the windmill
 // job's mill hill; the target range; the jobs board), drawn as outlines on the ground with their names over them, so
 // the town can be laid out round them. Lab only: nothing here is in the game. The homestead follows the player's cabin
 // as it is moved (it is laid out from the cabin's back wall, src/homestead.js).
@@ -76,7 +76,7 @@ export async function makeCodePlaces({ scene, heightAt, cabin = () => null, farm
     for (const o of [...parts.yard.children]) { parts.yard.remove(o); o.geometry.dispose(); if (o.material.map) o.material.map.dispose(); o.material.dispose(); }
     for (let i = listed.length - 1; i >= 0; i--) if (listed[i].yard) listed.splice(i, 1);
     const L = H.yardLayout({ x: it.x, z: it.z, rot: (it.rot || 0) * Math.PI / 180 }), n0 = listed.length;
-    const names = { coop: 'your coop', pen: 'your pig pen', corral: 'your corral' };
+    const names = { coop: 'your coop', pen: 'your pig pen', corral: 'your pasture (sheep, cows)' };
     for (const [k, h] of Object.entries(L.homes)) { box(parts.yard, COL.homestead, h.x, h.z, h.rot, h.w, h.d); label(parts.yard, names[k] || k, COL.homestead, h.x, h.z, 3); }
     label(parts.yard, 'Homestead (behind your cabin)', COL.homestead, (L.homes.corral.x + L.homes.coop.x + L.homes.pen.x) / 3, (L.homes.corral.z + L.homes.coop.z + L.homes.pen.z) / 3, 7);
     for (let i = n0; i < listed.length; i++) listed[i].yard = true;

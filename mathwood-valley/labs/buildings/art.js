@@ -476,6 +476,10 @@ export async function makeSheriffArt() {
 }
 
 // all of the lab's own pictures. boards.slotFor(i, { name, price, owned }) draws slot i again (and sends it up)
+// the hay picture, made once and shared: the buildings' hay (makeArt: the mangers, the bales, the loose hay) and the
+// town's hay props (world/objects/townProps.js: the stacks of bales, the haystacks)
+let HAY = null;
+export const hayTexture = () => HAY || (HAY = tex(drawHay()));
 export async function makeArt() {
   try { await Promise.all([document.fonts.load('64px Rye'), document.fonts.load('30px Smokum'), document.fonts.load('900 64px Bitter'), document.fonts.load('800 40px Bitter')]); } catch (e) { /* the fonts are optional */ }
   const t0 = performance.now();
@@ -488,7 +492,7 @@ export async function makeArt() {
     if (o.owned) drawPlate(bg, s, o.plate); else drawChalk(bg, s, o.label, o.price);
     boards.needsUpdate = true;
   };
-  const floor = tex(drawFloor()), spill = tex(drawSpill(), { repeat: false }), hay = tex(drawHay());
+  const floor = tex(drawFloor()), spill = tex(drawSpill(), { repeat: false }), hay = hayTexture();
   const list = [
     { name: 'Sign and stall boards', canvas: bc }, { name: 'Barn floor', canvas: floor.image },
     { name: 'Loose straw', canvas: spill.image }, { name: 'Hay', canvas: hay.image },

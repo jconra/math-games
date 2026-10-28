@@ -1,8 +1,9 @@
-// THE CODE-BUILT BUILDINGS, MADE FOR A SCENE: the Building Lab's stable, sheriff's office, general store, saloon, cabins
-// and blacksmith (built from parts in code, labs/buildings/) turned into ready-to-place three.js groups, each with its
-// own materials, so several can stand in one scene. Each is built from its lab file as that file is now (a builder still
-// working on one changes it here too). Everything the game takes from labs/buildings/, labs/materials/ and labs/stone/ comes through
-// this one module (a later step moves the shared kit to world/kit/: then only these imports change).
+// THE CODE-BUILT BUILDINGS, MADE FOR A SCENE: the Building Lab's stable, sheriff's office, general store, saloon, cabins,
+// blacksmith, and the farm's barn and wind pump (built from parts in code, labs/buildings/) turned into ready-to-place
+// three.js groups, each with its own materials, so several can stand in one scene. Each is built from its lab file as
+// that file is now (a builder still working on one changes it here too). Everything the game takes from labs/buildings/,
+// labs/materials/ and labs/stone/ comes through this one module (a later step moves the shared kit to world/kit/: then
+// only these imports change).
 //
 //   const kit = await makeBuildKit({ step, small, oneSheet })   the shared pictures (the wood sheet in each building's
 //                                              look, the rubble, the signs, the store's goods, the stable's boards), made
@@ -46,6 +47,8 @@ import { buildStore, storeRecipe, SIGN_LAYOUT } from '../../labs/buildings/store
 import { buildSaloon, saloonRecipe, makeSaloonArt } from '../../labs/buildings/saloon.js';
 import { buildCabin, cabinRecipe, PRESETS as CABIN_PRESETS } from '../../labs/buildings/cabins.js';
 import { buildBlacksmith, blacksmithRecipe } from '../../labs/buildings/blacksmith.js';
+import { buildBarn, barnRecipe } from '../../labs/buildings/barn.js';
+import { buildWindpump, windpumpRecipe } from '../../labs/buildings/windpump.js';
 import { buildProps } from '../../labs/buildings/props.js';
 import { makeArt, makeSheriffArt, makeStoreArt } from '../../labs/buildings/art.js';
 import { LAMP_MAX, lit, boardWear, glowMaterial, lanternGlow, ropeTexture } from '../../labs/buildings/parts.js';
@@ -64,12 +67,15 @@ const LOOKS = {
   saloon: { sheet: 'straight', bump: 0.6, shelter: 0.35, bare: [1.0, 1.0, 1.04], paint: {}, grime: {} },
   cabin: { sheet: 'weathered', bump: 0.75, shelter: 0.4, bare: [0.9, 0.82, 0.74], paint: {}, grime: {} },
   blacksmith: { sheet: 'weathered', bump: 0.75, shelter: 0.3, bare: [0.9, 0.82, 0.74], paint: {}, grime: {} },
+  // (the farm's: the old boards gone silver where the red ochre has worn off; the wind pump all bare wood)
+  barn: { sheet: 'weathered', bump: 0.8, shelter: 0, bare: [0.9, 0.82, 0.74], paint: {}, grime: {} },
+  windpump: { sheet: 'weathered', bump: 0.75, shelter: 0, bare: [0.9, 0.82, 0.74], paint: {}, grime: {} },
 };
 LOOKS.home = LOOKS.cabin;
 // (weathered: the cabins' and the smithy's old boards gone silver, labs/buildings/woodlook.js weatherGrain)
 const SHEETS = { calm: {}, straight: { straight: true }, weathered: { weathered: true } };
 const PAINT_DEFAULT = { uPaintGrain: 0, uPeelSoft: 0.08, uEdgePeel: 0, uLapShadow: 0.42, uLapLip: 0, uNail: 1, uSignKeep: 0.25, uStreakW: 1, uFlake: 0, uLapUnder: 1 };
-export const CODE_KINDS = ['stable', 'sheriff', 'generalStore', 'saloon', 'home', 'cabin', 'blacksmith'];
+export const CODE_KINDS = ['stable', 'sheriff', 'generalStore', 'saloon', 'home', 'cabin', 'blacksmith', 'barn', 'windpump'];
 
 // ── a cabin's design: the layout item's preset (any of cabins.js PRESETS) and seed, or, with none saved, one picked from
 // its id, so each house in town differs and keeps its look from one visit to the next. The picks leave out the designs
@@ -366,6 +372,8 @@ const BUILDERS = {
   saloon: (env, look) => buildSaloon(saloonRecipe(seedOf(look)), env),
   cabin: (env, look) => buildCabin(cabinRecipe({ preset: look.preset, seed: look.seed }), env),
   blacksmith: (env, look) => buildBlacksmith(blacksmithRecipe(seedOf(look)), env),
+  barn: (env, look) => buildBarn(barnRecipe(seedOf(look)), env),
+  windpump: (env, look) => buildWindpump(windpumpRecipe(seedOf(look)), env),
 };
 BUILDERS.home = BUILDERS.cabin;
 // (meshes seen only from inside, whole: the goods, the jars, the glass seen from inside, the rope, the plaster; the
@@ -395,7 +403,10 @@ function farTrim(mats, meshes, cardGeos) {
   if (!nv) return null;
   const pos = new Float32Array(nv * 3), nrm = new Float32Array(nv * 3), col = new Float32Array(nv * 3), idx = nv > 65535 ? new Uint32Array(ni) : new Uint16Array(ni);
   let v0 = 0, i0 = 0, solid = 0;
-  const c = new THREE.Color();
+  const c = new THREE.Color(), paint = new THREE.Color();
+  // (a painted board as the wood's shader lays its paint on: the paint itself, a little brighter on lighter grain, worn
+  // back toward the bare wood by the building's wear; not the paint times the wood's picture, which came out near black)
+  const U = mats.wood && mats.wood.userData.uni, wear = U ? U.uPaintWear.value : 0.5, bare = U ? U.uBareTint.value : new THREE.Color(0.9, 0.82, 0.74);
   for (const P of all) {
     if (P.name === 'glow' && !solid) solid = i0;
     const A = P.geo.attributes, n = A.position.count, M = mats[P.name];
@@ -410,7 +421,11 @@ function farTrim(mats, meshes, cardGeos) {
         if (gK <= 1.5) c.setRGB(0.035, 0.042, 0.05); else if (out) { if (gK < 2.5) c.setRGB(0.04, 0.035, 0.03); else c.setRGB(0.16, 0.14, 0.11); } else c.setRGB(glow.getX(i), glow.getY(i), glow.getZ(i));
       } else {
         c.copy(base);
-        if (tint) c.multiply({ r: tint.getX(i), g: tint.getY(i), b: tint.getZ(i) });
+        if (tint && P.name === 'wood' && Math.abs(tint.getW(i) - 1) < 0.01) {
+          const lum = base.r * 0.3 + base.g * 0.59 + base.b * 0.11;
+          paint.setRGB(tint.getX(i), tint.getY(i), tint.getZ(i)).multiplyScalar(0.9 + 0.45 * lum);
+          c.multiply(bare).lerp(paint, 1 - 0.55 * wear);
+        } else if (tint) c.multiply({ r: tint.getX(i), g: tint.getY(i), b: tint.getZ(i) });
         if (ao) c.multiplyScalar(0.45 + 0.55 * ao.getX(i));
       }
       col[k] = c.r; col[k + 1] = c.g; col[k + 2] = c.b;
@@ -526,6 +541,14 @@ export function buildCodeBuilding(kit, kind, o = {}) {
     doorways.forEach((D, i) => { const d = Math.hypot(D.centre[0] - L.hinge[0], D.centre[2] - L.hinge[2]); if (d < best) { best = d; way = i; } });
     doorsG.add(pivot); doors.push({ pivot, L, way, t: rest, want: rest, rest, flap: 0 });
   }
+  // THE SPINNING PARTS (the wind pump's wheel, B.spins): each its own pivot on the shell at its axle, its meshes with the
+  // shell's materials, turned about its axis (tick) while the outside is drawn
+  const spins = (B.spins || []).map((S) => {
+    const pivot = new THREE.Group(); pivot.position.set(...S.at); pivot.name = 'spin';
+    for (const [k, g] of Object.entries(S.geos)) if (g && mats[k]) { const ref = shell.children.find((m) => m.isMesh && m.name === k); add(pivot, fitAttrs(g, ref && ref.geometry), mats[k], k); }
+    shell.add(pivot);
+    return { pivot, axis: new THREE.Vector3(...(S.axis || [0, 0, 1])).normalize(), speed: S.speed || 0 };
+  });
   // the props, baked in the building's light: its outdoor ones (the Decorations dial's), and the inside ones by their
   // priority (PROP_PRI), the saloon's rooms' own upstairs
   const bake = (geo) => { geo.translate(-OX, 0, -OZ); B.light.bake(geo); B.light.apply(geo, true, 'main', true); geo.translate(OX, 0, OZ); };
@@ -689,6 +712,7 @@ export function buildCodeBuilding(kit, kind, o = {}) {
     flapDoor(way) { let ch = false; for (const d of doors) if (d.way === way && d.rest) { d.flap = DOOR.flap; ch = true; } if (ch && swinging() !== liveNow) show(); return ch; },
     tick(dt) {
       if (extra && B.tick && shell.visible && group.visible) B.tick(dt);   // (the smithy's smoke rising)
+      if (group.visible) for (const S of spins) S.pivot.rotateOnAxis(S.axis, -S.speed * dt);   // (the wind pump's wheel)
       // the stand-ins once the real room is in and drawn: a couple of frames on (its buffers sent, the first frame
       // drawn), then a crossfade out over CARD_FADE s, so the swap reads as the room coming into focus
       if (out.loaded && out.seen && cardA > 0) {

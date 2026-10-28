@@ -15,6 +15,7 @@ import { mergeGeometries, mergeVertices } from 'three/addons/utils/BufferGeometr
 import { makeValehexGlobe } from './valehexGlobe.js';
 import { makeStateMap } from './stateMap.js';
 import { makeObelisk } from './obelisk.js';
+import { hayTexture } from '../../labs/buildings/art.js';
 
 // footprint is [width along x, depth along z] in metres. The signpost's is its post and the stones
 // round it: it turns about the post, and its arrows reach out 0.8 m above head height.
@@ -39,6 +40,9 @@ export const PROP_KINDS = [
   { kind: 'lantern', name: 'Lantern post', footprint: [0.75, 0.3] },
   { kind: 'garden', name: 'Garden patch', footprint: [2.6, 1.7] },
   { kind: 'chickenCoop', name: 'Chicken coop', footprint: [3.1, 2.2] },   // (the game lets a few hens out round each one: src/townlife.js)
+  // hay, in the buildings' own hay picture (the farm has both: src/farmplan.js farmItems)
+  { kind: 'hayBales', name: 'Hay bales (a stack)', footprint: [1.9, 1.0] },
+  { kind: 'haystack', name: 'Haystack', footprint: [3.6, 2.8] },
   // the wagons that stand about for good (src/wagon.js's models, no team): one object each, loaded with the wagons
   { kind: 'farmWagon', name: 'Farm wagon', footprint: [1.9, 3.8] },
   { kind: 'freightWagon', name: 'Freight wagon', footprint: [2.1, 3.6] },
@@ -77,6 +81,10 @@ function materials() {
     glow: new THREE.MeshStandardMaterial({ color: 0x8a6a40, emissive: 0xffcf80, emissiveIntensity: 1.5, roughness: 0.4 }),
     paint: new THREE.MeshStandardMaterial({ map: paintingTexture(), roughness: 0.92 }),
     bloom: new THREE.MeshStandardMaterial({ map: bloomTexture(), roughness: 0.95 }),
+    // (the hay: the Building Lab's hay picture, shared with the buildings' bales and mangers (labs/buildings/art.js),
+    // under each corner's colour: bleached on top, darker low down. The picture is dark, drawn for a barn's lantern-lit
+    // inside: brought up to sunlit straw by the material's own colour, over 1)
+    hay: new THREE.MeshStandardMaterial({ vertexColors: true, map: hayTexture(), roughness: 1, color: new THREE.Color(2.0, 1.85, 1.5) }),
   };
   return MAT;
 }
@@ -222,7 +230,7 @@ function blob(r) {
 // darken towards the ground (a painted-in contact shadow); k = 1 above 30 cm
 const ao = (y) => { const t = Math.min(1, Math.max(0, y / 0.3)); return 0.74 + 0.26 * t * t * (3 - 2 * t); };
 
-const TEXTURED = new Set(['paint', 'bloom']);   // materials whose parts keep their uvs
+const TEXTURED = new Set(['paint', 'bloom', 'hay']);   // materials whose parts keep their uvs
 
 // Collects parts per material; `build()` merges each material's parts into one geometry.
 class Kit {
@@ -612,7 +620,63 @@ function chickenCoop(k) {
     for (const y of [0.3, 0.7]) k.add('matte', beam([x0, y, z0], [x1, y, z1], 0.035, 0.03, 0.005), k.tone(C.wood, 0.06));
   }
 }
-const BUILDERS = { bench, easel, lamp, planter, picnicTable, stall, signpost, flowerBed, dock, barrel, crate, hitchingPost, trough, lantern, garden, chickenCoop };
+// (Mathwood Valley) HAY, as an 1880s farm kept it: pressed bales (a horse-powered press, the bales bound with twine)
+// stacked crosswise, and hay stacked loose in a long rounded stack, a pole up its middle, loose hay fallen round its foot.
+// Both in the buildings' hay picture, its straws lying along u: the uvs are laid in metres on each face (hayUV)
+const HAY_M = 0.7;   // (metres of straw a hay picture covers)
+function hayUV(g) {
+  const P = g.attributes.position, N = g.attributes.normal, uv = new Float32Array(P.count * 2);
+  for (let i = 0; i < P.count; i++) {
+    const x = P.getX(i), y = P.getY(i), z = P.getZ(i), nx = Math.abs(N.getX(i)), ny = Math.abs(N.getY(i)), nz = Math.abs(N.getZ(i));
+    const [u, v] = ny > 0.6 ? [x, z] : nx > nz ? [z, y] : [x, y];
+    uv[i * 2] = u / HAY_M; uv[i * 2 + 1] = v / HAY_M;
+  }
+  g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+  return g;
+}
+// one bale, its length along x, two bands of twine round it (its foot at y)
+function bale(k, x, y, z, ry) {
+  const L = 0.9, H = 0.42, Wd = 0.46, tone = k.tone(0xece2cc, 0.07);
+  k.add('hay', place(hayUV(chamferBox(L, H, Wd, 0.035)), [x, y + H / 2, z], [0, ry, 0]), (px, py) => tone.clone().multiplyScalar(py > y + H - 0.02 ? 1.06 : 1));
+  // (the twine in the hay's own material, darkened: the whole stack one draw)
+  for (const bx of [-0.22, 0.22]) k.add('hay', place(hayUV(new THREE.BoxGeometry(0.022, H + 0.012, Wd + 0.012)), [x + Math.cos(ry) * bx, y + H / 2, z - Math.sin(ry) * bx], [0, ry, 0]), k.tone(0x4a3a26, 0.06));
+}
+// Hay bales: four on the ground, two across them, one on top, each a little askew
+function hayBales(k) {
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) bale(k, sx * 0.47, 0, sz * 0.245, (k.r() - 0.5) * 0.05);
+  for (const sx of [-1, 1]) bale(k, sx * 0.25, 0.42, 0.01 * sx, Math.PI / 2 + (k.r() - 0.5) * 0.08);
+  bale(k, 0.08, 0.84, -0.03, 0.12);
+}
+// Haystack: a long rounded loaf of loose hay, 3.4 x 2.6 m and 2.6 m high, lumpy, its foot spread a little where hay has
+// fallen; bleached grey-gold on top and darker at its foot; the stacker's pole standing up out of its middle
+function haystack(k) {
+  const RX = 1.62, RZ = 1.22, H = 2.6, nA = 24, nU = 10;
+  // (the profile: the share of the full width at each height, the foot spread, the shoulders, the rounded top)
+  const prof = [[0, 1.1], [0.05, 1.04], [0.18, 1.05], [0.38, 1.0], [0.56, 0.9], [0.7, 0.76], [0.82, 0.58], [0.91, 0.38], [0.97, 0.18], [1, 0.02]];
+  // (u round it a whole number of pictures, so they meet at the seam; v the way up the profile, in metres)
+  const UR = Math.round(Math.PI * (RX + RZ) / HAY_M), S = [0];
+  for (let j = 1; j < nU; j++) S.push(S[j - 1] + Math.hypot((prof[j][1] - prof[j - 1][1]) * (RX + RZ) / 2, (prof[j][0] - prof[j - 1][0]) * H));
+  const pos = [], idx = [], uvs = [];
+  for (let j = 0; j < nU; j++) {
+    const [t, f] = prof[j];
+    for (let i = 0; i <= nA; i++) {
+      const a = i / nA * Math.PI * 2, lump = 1 + 0.05 * Math.sin(a * 3 + t * 6) + 0.035 * Math.sin(a * 7 + 1.3 + t * 11) + (j === 0 ? 0.06 * Math.sin(a * 5 + 2) : 0);
+      const x = Math.cos(a) * RX * f * lump, z = Math.sin(a) * RZ * f * lump, y = t * H + (j === 0 ? -0.04 : 0);
+      pos.push(x, y, z); uvs.push(i / nA * UR, S[j] / HAY_M);
+    }
+  }
+  for (let j = 0; j < nU - 1; j++) for (let i = 0; i < nA; i++) { const a = j * (nA + 1) + i, b = a + nA + 1; idx.push(a, b, a + 1, a + 1, b, b + 1); }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2)); g.setIndex(idx); g.computeVertexNormals();
+  const top = new THREE.Color(0xe2dccb), mid = new THREE.Color(0xf0e4c8), foot = new THREE.Color(0xb4a68c);
+  k.add('hay', g, (x, y) => { const t = y / H; return t < 0.3 ? foot.clone().lerp(mid, t / 0.3) : mid.clone().lerp(top, Math.min(1, (t - 0.3) / 0.5)); });
+  // loose hay fallen round its foot: a few low lumps
+  for (let i = 0; i < 6; i++) {
+    const a = i / 6 * Math.PI * 2 + k.r() * 0.6, c = place(hayUV(new THREE.CylinderGeometry(0.25 + k.r() * 0.15, 0.45 + k.r() * 0.2, 0.14, 7)), [Math.cos(a) * (RX + 0.12), 0.05, Math.sin(a) * (RZ + 0.12)], [0, k.r() * 3, 0], [1.3, 1, 0.8]);
+    k.add('hay', c, k.tone(0xb8aa90, 0.08));
+  }
+  k.add('hay', place(hayUV(cyl(0.05, 0.06, 1.2, 6)), [0.1, H - 0.1 + 0.55, 0], [0.04, 0, -0.06]), k.tone(0x4f463c, 0.05), { shade: false });   // (the pole: the hay's material, dark: one draw)
+}
+const BUILDERS = { bench, easel, lamp, planter, picnicTable, stall, signpost, flowerBed, dock, barrel, crate, hitchingPost, trough, lantern, garden, chickenCoop, hayBales, haystack };
 // a wagon standing for good (no team, no driver): the game's own wagon models (src/wagon.js), loaded once with every kind;
 // the Group comes back at once and the wagon goes in it when it has loaded. Its middle at the prop's spot, its tongue
 // resting on the ground toward the prop's front (+z). (Never in a walker's way through the wagons' list: the world's

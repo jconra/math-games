@@ -60,6 +60,7 @@ import { makeJobFolk } from './jobfolk.js';
 import { howdyCamera, hideHowdies } from './ui/howdy.js';
 import { makeTownPeople, addHomes } from './townpeople.js';
 import { makeStage } from './stage.js';
+import { makeBandCard } from './ui/bandcard.js';
 import { makeJobsBoard } from './jobsboard.js';
 import { makeTraffic } from './traffic.js';
 import { roadCurve } from './wagon.js';
@@ -112,7 +113,7 @@ const T = showTitle($('title-root'), { riders: loadRiders(), build: BUILD, onRid
 T.setProgress(0.01, 'Riding into the valley');
 // the game's sound (src/audio/audio.js): it wakes on the first click or key press, and is quiet on the title and while paused
 const AUD = makeAudio(); AUD.hold('title', true);
-Object.defineProperty(BM, 'stage', { get: () => stage }); BM.audio = AUD;
+Object.defineProperty(BM, 'stage', { get: () => stage }); Object.defineProperty(BM, 'bandCard', { get: () => bandCard }); BM.audio = AUD;
 const hud = makeHud($('hud-root'), {
   onMenu: () => openMenu(),
   onPrompt: () => { if (paused) return; if (door) openCounter(door.id); else if (I) I.press('KeyE'); },
@@ -187,7 +188,8 @@ const loading = Promise.all([
 let state = 'loading', paused = false, pausedBy = new Set();
 let rider = null, P = null, D = null, RU = null, hob = null, shops = null, door = null, menu = null, boxOpen = false;
 let BOX = null;   // the lock box open (its handle: src/lockbox/panel.js), for the tools' Work it out on its part being asked
-let stage = null;   // the band on the town's stage and its music (src/stage.js)
+let stage = null;   // the band on the saloon's stage and its music (src/stage.js)
+let bandCard = null;   // the band's card: its songs and a break, asked for at the front of the stage (src/ui/bandcard.js)
 let traffic = null;   // wagons travelling the road through the valley now and then (src/traffic.js)
 let AMBI = null;   // the town's sounds: animals, birds, work out back, the creek, the horse's hooves (src/audio/ambience.js)
 let SHOUT = null;   // the player's own voice: hyah, whoa, yeehaw, howdy (src/audio/shouts.js)
@@ -246,6 +248,7 @@ const FOUND_NEAR = { camp: 28, hideout: 30 };
 
 function pause(why) {
   pausedBy.add(why);
+  if (bandCard) bandCard.close();   // (the band's card never stays up under a panel)
   if (paused) return;
   paused = true;
   if (P) P.enabled = false;
@@ -295,7 +298,7 @@ async function ride(r) {
   // hears Hob's lines in the browser's voice, each in turn: src/audio/sayline.js)
   hob = makeHob({ W, hud, rider, I, roads: roadLines, voice: { speak: (text) => { if (rider && SKILLS.readAloud(rider)) sayLine(text); }, stop: () => {} } });
   { const heard = hob.event; hob.event = (n, d) => { const own = !!(SK && SK.heard(n, d)); heard(n, d); if (JF) JF.heard(n, own ? { ...(d || {}), shiftEnd: true } : d); if (SHOUT) SHOUT.heard(n, d); if (JB) JB.heard(n); jobHeard(n, d); if (JOB_ENDS[n]) jobOver(JOB_ENDS[n]); }; }   // (the job folk hear the jobs too: their thank-yous; and the player's yeehaw at a job's end; the jobs board: at work at a job, its tracks give way; the shifts first: a round counted, and at a shift's end its own thank-you in place of the job's usual one)
-  stage = makeStage({ W, folk, audio: AUD, speak: (text) => { if (rider && SKILLS.readAloud(rider)) sayLine(text); } });   // (speak: the band's answer read out to a rider who can't read yet)
+  stage = makeStage({ W, folk, audio: AUD, camera, speak: (text) => { if (rider && SKILLS.readAloud(rider)) sayLine(text); } });   // (camera: the ears; speak: the band's answer read out to a rider who can't read yet)
   traffic = makeTraffic({ W, animals, folk, audio: AUD, obstacles: trafficThings, camps: () => camps, camera, riding: () => !!(P && P.onHorse) });   // (camera: wagons and travellers dissolve in and out of sight)
   { let ends = null; W.roadEnds = () => {   // (the road's two ends: riding on past one into the mist comes out by the other, src/world.js W.wrap)
     const c = traffic && traffic.road; if (!c) return null;
@@ -468,6 +471,7 @@ function endRide() {
   if (D) D.dispose();
   if (P) P.dispose();
   if (stage) stage.dispose();
+  if (bandCard) bandCard.close();
   if (traffic) { traffic.dispose(); traffic = null; }
   if (AMBI) { AMBI.dispose(); AMBI = BM.ambience = null; }
   if (SHOUT) { SHOUT.dispose(); SHOUT = BM.shouts = null; }
@@ -974,8 +978,8 @@ function doors() {
   if (!door && (!mount || talkFirst) && !fresh && DL && DL.prompt) { say = DL.prompt; act = () => DL.talk(); }
   // in sight of the deer job's herd (src/missions/deerjob.js): E sets the camera up (before getting on the horse)
   if (!door && !fresh && DJ && DJ.prompt) { say = DJ.prompt; act = () => DJ.setUp(); }
-  // at the front of the stage (src/stage.js): E asks the band for another song
-  if (!door && (!mount || talkFirst) && !fresh && stage && stage.prompt) { say = stage.prompt; act = () => stage.ask(); }
+  // at the front of the saloon's stage (src/stage.js): E opens the band's card (its songs, a break); none while it is up
+  if (!door && (!mount || talkFirst) && !fresh && stage && stage.prompt && !(bandCard && bandCard.isOpen)) { say = stage.prompt; act = () => openBand(); }
   // at the jobs board in the square (src/jobsboard.js): E opens it
   if (!door && (!mount || talkFirst) && !fresh && JB && JB.prompt) { say = JB.prompt; act = () => JB.open(); }
   // a job's person close by (src/jobfolk.js): E does what they ask (the wagon rolls, the camera goes up, the sheriff's desk)
@@ -999,11 +1003,20 @@ function doors() {
   if (kd && (!door || kd.dist < door.dist)) { door = null; say = kd.open ? 'Close the door' : 'Open the door'; act = () => DK.use(kd.door, !kd.open); }
   hud.prompt(say);
   if (act && I.enabled && I.tap('KeyE')) act();
-  // the saloon's doors have no counter yet: walking up to them, Old Hob says so
+  // walking up to the saloon's doors, Old Hob tells of the band inside (src/hob.js LINES.saloon)
   if (hob) for (const k of ['saloon']) {
     const pl = W.places[k];
     if (pl && pl.door && Math.hypot(P.position.x - pl.door.x, P.position.z - pl.door.z) < NEAR_REMARK) hob.event('near', { place: k });
   }
+}
+
+// ── THE BAND'S CARD ──────────────────────────────────────────────────────────────────────────────────────────────
+// at the front of the saloon's stage: the songs by name and "Take a break" (src/ui/bandcard.js); one tap asks the band
+// (src/stage.js) and the card goes. The game carries on behind it; a panel opening over the game closes it
+function openBand() {
+  if (!stage || paused) return;
+  if (!bandCard) bandCard = makeBandCard({ onPick: (id) => { if (!stage) return; if (id === 'break') stage.rest(); else if (id === 'again') stage.again(); else stage.request(id); } });
+  bandCard.open(stage.choices());
 }
 
 // ── THE COMPASS: the cabin, the job and your horse ─────────────────────────────────────────────────────────────────
@@ -1160,6 +1173,7 @@ function step(dt) {
     hob.trailTo((JB && JB.goal()) || hobGoal() || trailGoal());
     hob.update(dt, P.position, { hold: !!((JF && JF.speaking()) || (SR && SR.speaking()) || home), asking: askingJob() });   // (on a phone, Hob waits while a job person is talking or you're in the cabin; while a question is up, only its job's lines come)
     if (stage) stage.update(dt, P.position);
+    if (bandCard && bandCard.isOpen && !(stage && stage.inReach)) bandCard.close();   // (walked away from the stage)
     if (traffic) { traffic.keepView = SJ && SJ.active && !P.cam.enabled ? camera : null; traffic.update(dt, P.position, camera.position); }   // (no wagon through the store counter's picture)
     townSounds(dt, !!(cabin && cabin.indoor));   // (muffled inside the cabin with its door shut)
     W.update(dt);

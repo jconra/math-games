@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import { SHOUTS, VOICE_CLIPS, JINGLE, makeShoutBrain, pickShout, isMale } from '../src/audio/shouts.js';
 import { JOB_FOLK } from '../src/jobfolkplan.js';
 import { FOLK } from '../src/math/wordproblems.js';
+import { CLIP_SLOTS, slotFiles } from '../src/audio/clipslots.js';
 
 const VOICE = new URL('../sounds/voice/', import.meta.url);
 // dice that come up in order (then repeat)
@@ -21,7 +22,8 @@ test('every voice clip is in sounds/voice as .ogg and .m4a; every clip but the o
   assert.deepEqual(SHOUTS.unused, []);   // (mystuff_1 is Loot the gang's now)
   assert.ok(SHOUTS.kinds.mystuff.him && SHOUTS.kinds.mystuff.clips[0][0] === 'mystuff_1');
   assert.ok(SHOUTS.jobEnds.includes('lootDone') && !SHOUTS.events.lootDone, "a job's end is the coins, not a voice");
-  for (const f of fs.readdirSync(VOICE).filter((f) => /\.(ogg|m4a)$/.test(f))) assert.ok(VOICE_CLIPS[f.replace(/\.(ogg|m4a)$/, '')], f + ' is listed');
+  const slots = new Set(Object.keys(CLIP_SLOTS).flatMap((id) => slotFiles(id)));   // (and the recorded clip slots' takes: src/audio/clipslots.js)
+  for (const f of fs.readdirSync(VOICE).filter((f) => /\.(ogg|m4a)$/.test(f))) { const n = f.replace(/\.(ogg|m4a)$/, ''); assert.ok(VOICE_CLIPS[n] || slots.has(n), f + ' is listed'); }
   for (const k of Object.values(SHOUTS.events)) assert.ok(SHOUTS.kinds[k], k);
 });
 

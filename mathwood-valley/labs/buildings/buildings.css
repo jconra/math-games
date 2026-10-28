@@ -2,3 +2,8 @@
 .btn:disabled { opacity: .45; cursor: default; box-shadow: none; }
 .btn:disabled:hover { background: linear-gradient(#7a5533, #5e3f24); }
 @media (max-width: 760px) { .stats { max-width: calc(100% - 130px); } }
+/* over the view, top right (beside the panel on a desktop, where Controls hides; under Controls on a phone): the doors
+   open or shut, the next building. The performance numbers live in the panel now, not over the view */
+.viewbtns { position: absolute; right: calc(var(--panel-w) + 10px); top: max(10px, env(safe-area-inset-top)); z-index: 7; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.viewbtns .panel-toggle { position: static; }
+.panel .stats { position: static; pointer-events: auto; min-width: 0; padding: 0; border: 0; background: none; font-size: 13px; }
