@@ -956,7 +956,7 @@ function doors() {
   // (a horse on its way after a whistle, or one just bought or picked at the stable and waiting a few steps off: E gets
   // on it too, rather than opening the door again; the horse walks up if it isn't close enough yet)
   const fresh = h && hd < 14 && (P.horseComing || (P.horsePickedAt && performance.now() - P.horsePickedAt < 8000));
-  if (d && !(mount && (hd < d.dist || called)) && !fresh) door = d;
+  if (d && !(mount && (hd < d.dist || called)) && !fresh && !(d.id === 'cabin' && cabin && cabin.owned)) door = d;   // (the cabin bought: its door's own E, src/cabin/cabin.js)
   // (one prompt a frame: the later ones below take over from the earlier, and hud.prompt is called once at the end, so the
   // prompt never flickers off and on within a frame, which kept restarting its fade-in on a phone)
   let say = door ? (door.id === 'cabin' ? cabin && cabin.prompt() : door.prompt) : mount || fresh ? 'Get on your horse' : null;   // (the cabin's: in, or buy it, or nothing while short of gold)

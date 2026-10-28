@@ -1312,13 +1312,14 @@ function inside(c) {
     // (a room's floor runs out under the walls' feet a little, so no gap shows along them)
     plankField(k, mul(T(0, L.FL, 0), RX(-Math.PI / 2)), { u0: R.x0 - 0.04, u1: R.x1 + 0.04, v0: -R.z1 - 0.04, v1: -R.z0 + 0.04, w: 0.17, t: 0.03, tint: FLOOR, nails: true, maxL: 4.2, step: 1.2, extra: { inside: true } });
     k.solid([R.x1 - R.x0, 0.1, R.z1 - R.z0], [(R.x0 + R.x1) / 2, L.FL - 0.05, (R.z0 + R.z1) / 2]);
-    if (R.lean) { const lx = (R.x0 + R.x1) / 2, lz = (R.z0 + R.z1) / 2, ry = L.lean.y(lx, lz); c.lamps.push(lantern(k, lx, ry - 0.62, lz, { chain: 0.38, strength: 1.0 })); R.lamp = [lx, lz]; continue; }
+    // (the lanterns hang high, their bottoms over 1.8 m up: a walker's eyes, the player's in their own cabin, pass under)
+    if (R.lean) { const lx = (R.x0 + R.x1) / 2, lz = (R.z0 + R.z1) / 2, ry = L.lean.y(lx, lz); c.lamps.push(lantern(k, lx, ry - 0.42, lz, { chain: 0.17, strength: 1.0 })); R.lamp = [lx, lz]; continue; }
     plankField(k, mul(T(0, R.ceil, 0), RX(Math.PI / 2)), { u0: R.x0 - 0.03, u1: R.x1 + 0.03, v0: R.z0 - 0.03, v1: R.z1 + 0.03, w: 0.22, t: 0.025, tint: INNER.map((q) => q * 0.9), maxL: 4.4, step: 1.4, extra: { inside: true } });
     k.solid([R.x1 - R.x0 + 0.2, 0.1, R.z1 - R.z0 + 0.2], [(R.x0 + R.x1) / 2, R.ceil + 0.06, (R.z0 + R.z1) / 2]);
     joists(c, R.x0, R.x1, R.z0, R.z1, R.ceil, !R.wing);
     // a lantern hanging from a joist over the middle of the room
     const lx = (R.x0 + R.x1) / 2 + k.r(-0.3, 0.3), lz = (R.z0 + R.z1) / 2 + k.r(-0.2, 0.2);
-    c.lamps.push(lantern(k, lx, R.ceil - 0.62, lz, { chain: 0.38, strength: 0.95 }));
+    c.lamps.push(lantern(k, lx, R.ceil - 0.42, lz, { chain: 0.17, strength: 0.95 }));
     R.lamp = [lx, lz];
   }
   if (L.breeze) {
@@ -1570,9 +1571,19 @@ function yardProps(c) {
   if (!(L.porch && L.porch.wrap === (wpSide < 0 ? 'left' : 'right'))) out.push({ type: 'woodpile', x: wx0 + wpSide * 0.5, z: m.z0 + 1.1, rot: Math.PI / 2, len: Math.min(2.2, r.d - 1.2), rows: 4 });
   out.push({ type: 'barrel', x: (wpSide < 0 ? m.x1 : m.x0) - wpSide * 0.15 + (wpSide < 0 ? 0.55 : -0.55) * (L.porch && L.porch.wrap ? 0 : 1), z: m.z0 + 0.45 - (L.lean && L.lean.side === 'back' ? L.lean.depth : 0), h: 0.86 });
   if (L.porch) {
-    const P = L.porch;
-    out.push({ type: 'bench', x: (P.x0 + P.x1) / 2 + (R() < 0.5 ? -1 : 1) * Math.min(1.6, (P.x1 - P.x0) / 4), y: P.deck, z: m.z1 + 0.32, len: 1.5 });
-    out.push({ type: 'bucket', x: P.x1 - 0.5, y: P.deck, z: m.z1 + 0.4 });
+    // (along the porch, never across a door: the bench in the longest stretch clear of the front doors, if one is long
+    // enough; the bucket at an end that is clear. A partial porch's bench stood across its one door)
+    const P = L.porch, fronts = [];
+    for (const w of L.walls) for (const o of w.opens) { if (o.kind !== 'door') continue; const q = w.P((o.a0 + o.a1) / 2, 0, -w.t); if (q[2] > m.z1 - 0.6) fronts.push(q[0]); }
+    let spans = [[P.x0 + 0.25, P.x1 - 0.25]];
+    for (const dx of fronts) spans = spans.flatMap(([a, b]) => [[a, Math.min(b, dx - 0.8)], [Math.max(a, dx + 0.8), b]]).filter(([a, b]) => b - a > 0.05);
+    const long = spans.slice().sort((p1, p2) => (p2[1] - p2[0]) - (p1[1] - p1[0]))[0];
+    if (long && long[1] - long[0] >= 1.7) {
+      const len = Math.min(1.5, long[1] - long[0] - 0.2), mid = (long[0] + long[1]) / 2 + (R() < 0.5 ? -1 : 1) * Math.max(0, (long[1] - long[0] - len - 0.2) / 2) * 0.5;
+      out.push({ type: 'bench', x: mid, y: P.deck, z: m.z1 + 0.32, len });
+    }
+    const end = [P.x1 - 0.5, P.x0 + 0.5].find((x) => fronts.every((dx) => Math.abs(x - dx) > 0.8));
+    if (end != null) out.push({ type: 'bucket', x: end, y: P.deck, z: m.z1 + 0.4 });
   } else {
     out.push({ type: 'bucket', x: m.x1 - 0.7, z: m.z1 + 0.45 });
   }

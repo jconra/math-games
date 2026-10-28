@@ -1,49 +1,47 @@
-// THE PLAYER'S CABIN IN THE VALLEY: the walk-in cabin (models/town/cabin_inside.glb, inside and out: porch, steps, a
-// door that swings, logs and floor boards up close) stood at the cabin's place in town (W.places.cabin), in the same
-// world as everything else: no scene of its own, no fade. It takes the place of the town's cabin model there (that one
-// is hidden). Everything in it stands in the cabin's own frame (metres; the floor about 0.82 m up, the door on the +z
-// side, the room running x -2.4 .. 3.0 and z -2.85 .. 0.6, the porch out to z 3.1): the pieces bought for its fixed slots
-// (slots.js), the belt-buckle keepsakes, the dogs at home (homedogs.js, added by cabin.js).
+// THE PLAYER'S CABIN IN THE VALLEY: a cabin design built in code like the town's other buildings (world/objects/
+// codebuildings.js: the layout's 'cabin', the two-room log house unless its item names another, PLAYER_CABIN), walked into
+// as any building is. This adds what is the player's own: the pieces bought for its slots (slots.js), the belt-buckle
+// keepsakes, the dogs at home (homedogs.js, added by cabin.js), all placed by the design's own rooms and anchors
+// (layout.js). Everything here is in the building's own frame (metres; its front toward +z; the floor at its anchors' floor).
 //
-// THE LIGHT INSIDE: the valley's own (its sun through the windows and the door, casting shadows; its day and night),
-// with the sky's light on the inside surfaces turned down (it can't reach in there much) and a faint warm light from every
-// side (the light bounced round the room), so the room reads as indoors and its shadows aren't black. At night that
-// bounced light goes down with the daylight, and the lanterns and the stove light the room. They are not real lights: a
-// PointLight in the valley would make every lit thing there costlier. Their light is worked out by the inside surfaces
-// alone (the `lit` patch: up to three lamps, from the pieces' lamp markers, pieces.js lampOf), so it lights the room
-// and nothing outside. Where the valley has no shadows (the potato tier) the sun's direct light on the inside surfaces is
-// turned well down, or it would shine through the roof.
+// THE LIGHT on the pieces: the valley's own, with the sky's light turned down indoors and a faint warm light from every
+// side (bounced round the room), and the lanterns' and the stove's light worked out by the pieces themselves (the `lit`
+// patch: up to three lamps, from the pieces' lamp markers, pieces.js lampOf). Not real lights: a PointLight in the valley
+// would make every lit thing there costlier. (The cabin's own walls are lit as the town's buildings are.)
 //
-// FAR OFF the inside's things (the furniture, the keepsakes, the dogs on their beds, the lamps) are left out of the
-// drawing (NEAR): through a window at that distance they can't be made out. The cabin itself is always drawn.
-//
-// Walls stop you as in tests/cabin.html: two balls (knee and chest high) are pushed sideways out of every nearby wall-
-// like triangle, and the floor under you is found by rays straight down; the furniture is a box on the floor each.
+// FAR OFF, or with the building's inside not to be seen (its doors shut, the camera outside), the pieces inside aren't
+// drawn. The bought furniture stands in a walker's way (CODE.blockers), as the design's own does.
 //
 //   const R = await makeHome({ W, renderer, base })   base: the game's folder URL (for models/)
-//   R.group                              the cabin in the valley (W.scene's); R.inner: the inside's things (hidden far off)
+//   R.group                              the pieces' frame in the valley (the building's own); R.inner: the inside's pieces
+//   R.code, R.layout                     the code-built building (codebuild.js) and where its things go (layout.js)
 //   R.toWorld(x, y, z, out) / R.toLocal(x, y, z, out)   the cabin's own frame <-> the valley's (Vector3 out)
 //   R.yaw                                the cabin's turn in the valley (radians; a heading in its frame + yaw = the valley's)
-//   R.floorUnder(x, z, fromY)            the floor's height under a spot (the cabin's frame: the highest surface no higher
-//                                        than fromY; 0 where there's no cabin under it)
-//   R.pushOut(body, { radius, balls })   pushes body { x, y, z } (its frame) out of the walls and furniture; -> true if moved
-//   R.setDoor(t)                         the door, 0 shut .. 1 open (it swings into the room)
+//   R.floorUnder(x, z)                   the floor's height under a spot (its frame: the floor, the porch, or the ground)
+//   R.pushOut(body, { radius })          pushes body { x, y, z } (its frame) out of the walls and the furniture; -> moved
+//   R.inside(x, z)                       a point (its frame) is in one of its rooms
 //   R.furnish(owned, { dogs })           shows the pieces owned (slot ids) and hides the rest; dogs: how many dog beds
+//   R.spec(id)                           a slot as it stands in this cabin: slots.js's piece, at layout.js's place
 //   R.ghost(id | null)                   a see-through look at a slot's piece, in its place, before it is bought
 //   R.pop(id)                            a piece just bought grows into place
-//   R.keepsakes([{ job, tier }])         the keepsakes earned
+//   R.keepsakes([{ job, tier }])         the keepsakes earned; R.keepLook(job) -> where one is looked at
 //   R.bedSpots(n)                        where the dog beds are: [{ x, y, z, rot }] (its frame)
 //   R.lit(material)                      gives a material the inside light
-//   R.near(on)                           the inside's things drawn (true) or left out (far off)
+//   R.near(on)                           the inside's pieces drawn (true) or left out (far off)
 //   R.update(dt, { night })              the flames flicker, pieces settle, the lamps' light follows them; night: 0..1
-//   R.porch                              { y, front } the porch floor's height and its front edge (z), the steps' foot (z)
-//   R.dispose()                          frees everything and shows the town's own cabin model again
+//   R.openings()                         points (its frame) round its windows' glass and its doorways: where the valley
+//                                        can be seen from inside (cabin.js leaves the valley undrawn while none is in view)
+//   R.portals()                          the same as rectangles: [{ c, corners: [4 x [x, y, z]], n }] (its frame; n: out),
+//                                        the windows' panes (each window's glass, from its pane shapes) and the doorways
+//   R.stale()                            true once the building has been built again (the Town Lab's New look): make anew
+//   R.dispose()
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { SLOTS, SLOT, KEEPSAKE_SPOTS } from './slots.js';
+import { SLOTS } from './slots.js';
+import { cabinLayout } from './layout.js';
 import { makePiece, makeKeepsake, disposeTree, disposeShared } from './pieces.js';
-import { loadBand } from '../../world/quality.js';   // (which cabin file: the band this load will be)
+import { isPlayersCabin } from '../../world/objects/codebuildings.js';
 
 export const LIGHT = {
   skyInside: 0.55,                        // the sky's light on the inside surfaces (a share of it)
@@ -56,20 +54,7 @@ export const LIGHT = {
   lamps: 3,                               // the most lamps the inside works out (two lanterns and the stove)
 };
 export const NEAR = { show: 26, hide: 30 };   // m from the cabin: the inside's things are drawn within `show`, left out past `hide`
-const CELL = 0.5;
 const loader = new GLTFLoader();
-let modelP = null;
-// the model, loaded once (started early: cabin.js calls it as the game boots, so it is there when the ride starts). The
-// governor's reload dial (world/governor.js RELOAD.cabin): the gaming band loads the full file, its outside picture 4096
-// square (173 MB on the graphics card); potato and normal the copy with that picture 2048 square (106 MB; the rest of the
-// file the same), chosen by the band this load will be (world/quality.js loadBand: the remembered level for this card)
-export const HOME_FILE = { gaming: 'models/town/cabin_inside.glb', other: 'models/town/cabin_inside_2048.glb' };
-export function loadHomeModel(base = new URL('../../', import.meta.url).href) {
-  let band = 'normal'; try { band = loadBand(); } catch (e) { /* (no storage, no WebGL: the smaller one) */ }
-  const force = new URLSearchParams(location.search).get('cabin');   // (rigs: ?cabin=4096 or 2048, either file on any tier)
-  const big = force ? force === '4096' : band === 'gaming';
-  return modelP || (modelP = loader.loadAsync(base + (big ? HOME_FILE.gaming : HOME_FILE.other)).catch((e) => { modelP = null; throw e; }));
-}
 
 // FEWER DRAWS: a piece made in code (a keepsake, the rifle rack, a dog bed...) is many small shapes, each its own draw.
 // Its plain-coloured shapes (no picture, not see-through) become one shape for the matte ones and one for the metal
@@ -115,12 +100,18 @@ export function slim(root) {
 }
 
 export async function makeHome({ W, renderer, base = new URL('../../', import.meta.url).href }) {
-  const pl = W.places.cabin;
-  if (!pl) throw new Error('no cabin place');
+  const CODE = W.V && W.V.CODE;
+  if (!CODE) throw new Error('no code-built buildings');
+  await CODE.ready;
+  const o = [...W.V.TOWN.village.objs.values()].find((q) => q.code && isPlayersCabin(q.it));
+  if (!o) throw new Error('no player\'s cabin built');
+  const B = o.code, Lay = cabinLayout(B.B.anchors);
   const group = new THREE.Group(); group.name = 'player-cabin';
   const inner = new THREE.Group(); inner.name = 'cabin-inside'; group.add(inner);
-  const own = new Set();                    // everything made here, freed in dispose (groups and their contents)
-  const keep = (o) => { own.add(o); return o; };
+  B.group.add(group);
+  const maxAniso = renderer.capabilities.getMaxAnisotropy();
+  const SPEC = Object.fromEntries(SLOTS.map((s) => [s.id, { ...s, ...(Lay.slots[s.id] || {}), box: (Lay.slots[s.id] && 'box' in Lay.slots[s.id]) ? Lay.slots[s.id].box : s.box }]));
+  const KEEP = Lay.keepsakes;
 
   // ── THE INSIDE LIGHT (shared by every patched material) ──
   const U = {
@@ -158,138 +149,37 @@ export async function makeHome({ W, renderer, base = new URL('../../', import.me
   }
   const litTree = (o) => o.traverse((c) => { if (c.isMesh) for (const m of [].concat(c.material)) lit(m); });
 
-  // ── THE CABIN ──
-  const gltf = await loadHomeModel(base);
-  const cabin = keep(gltf.scene.clone(true)); group.add(cabin);
-  const hinge = cabin.getObjectByName('DoorHinge');
-  if (!hinge) throw new Error('cabin_inside.glb has no DoorHinge');
-  const maxAniso = renderer.capabilities.getMaxAnisotropy();
-  cabin.traverse((o) => {
-    if (!o.isMesh) return;
-    o.castShadow = o.receiveShadow = true;
-    for (const m of [].concat(o.material)) {
-      for (const t of [m.map, m.normalMap]) if (t) t.anisotropy = Math.min(8, maxAniso);
-      if (m.name.startsWith('inside')) lit(m);
+
+  // ── THE FRAME: the building's own, in the valley (its matrix again once a frame: the Town Lab can move it) ──
+  const M = new THREE.Matrix4(), Mi = new THREE.Matrix4();
+  const frame = () => { group.updateWorldMatrix(true, false); M.copy(group.matrixWorld); Mi.copy(M).invert(); };
+  frame();
+  const toWorld = (x, y, z, out = new THREE.Vector3()) => out.set(x, y, z).applyMatrix4(M);
+  const toLocal = (x, y, z, out = new THREE.Vector3()) => out.set(x, y, z).applyMatrix4(Mi);
+  const yawOf = () => Math.atan2(M.elements[8], M.elements[10]);
+  const _w = new THREE.Vector3(), _l = new THREE.Vector3();
+  // the floor (or the porch, or the ground) under a spot in its frame
+  function floorUnder(x, z) { toWorld(x, 0, z, _w); return CODE.heightAt(_w.x, _w.z, W.heightAt) - M.elements[13]; }
+  const inside = (x, z) => Lay.rooms.some((r) => x > r.x0 && x < r.x1 && z > r.z0 && z < r.z1);
+  // the furniture's boxes on the floor: { x, z, c, s, hw, hd } (slot id -> [box, ...]); they stop a walker (CODE.blockers)
+  const boxes = new Map();
+  const inBox = (b, x, z, r) => { const dx = x - b.x, dz = z - b.z, lx = b.c * dx - b.s * dz, lz = b.s * dx + b.c * dz; return Math.abs(lx) < b.hw + r && Math.abs(lz) < b.hd + r; };
+  const blocker = (x, z) => { if (!boxes.size) return false; toLocal(x, 0, z, _l); for (const list of boxes.values()) for (const b of list) if (inBox(b, _l.x, _l.z, 0.2)) return true; return false; };
+  CODE.blockers.push(blocker);
+  // a dog walking about inside: out of the furniture's boxes, and back from a wall toward the room's middle
+  function pushOut(body, { radius = 0.26 } = {}) {
+    let moved = false;
+    for (const list of boxes.values()) for (const b of list) {
+      const dx = body.x - b.x, dz = body.z - b.z, lx = b.c * dx - b.s * dz, lz = b.s * dx + b.c * dz;
+      const qx = Math.max(-b.hw, Math.min(b.hw, lx)), qz = Math.max(-b.hd, Math.min(b.hd, lz)), ox = lx - qx, oz = lz - qz, d = Math.hypot(ox, oz);
+      if (d >= radius) continue;
+      if (d < 1e-5) { let nx = lx, nz = lz; if (b.hw - Math.abs(lx) < b.hd - Math.abs(lz)) nx = (Math.sign(lx) || 1) * (b.hw + radius); else nz = (Math.sign(lz) || 1) * (b.hd + radius); body.x = b.x + b.c * nx + b.s * nz; body.z = b.z - b.s * nx + b.c * nz; moved = true; continue; }
+      const k = (radius - d + 0.002) / d, px = ox * k, pz = oz * k; body.x += b.c * px + b.s * pz; body.z += -b.s * px + b.c * pz; moved = true;
     }
-  });
-  group.updateMatrixWorld(true);              // (still at the valley's middle: the cabin's frame is the valley's here)
-
-  // ── WHAT YOU BUMP INTO: every triangle of the cabin in half-metre cells (the door's own, moved as it swings) ──
-  const cells = new Map(), doorTris = [], statMeshes = [];
-  const key = (i, j) => i * 4096 + j;
-  const nrm = new THREE.Vector3();
-  const fit = (e) => { const t = e.t; e.y0 = Math.min(t.a.y, t.b.y, t.c.y); e.y1 = Math.max(t.a.y, t.b.y, t.c.y); e.ny = t.getNormal(nrm).y; };
-  const entry = (tri) => { const e = { t: tri, y0: 0, y1: 0, ny: 0 }; fit(e); return e; };
-  function addTris(m, list, toGrid) {
-    const g = m.geometry, P = g.attributes.position, I = g.index, n = I ? I.count : P.count;
-    for (let k = 0; k < n; k += 3) {
-      const t = [0, 1, 2].map((q) => new THREE.Vector3().fromBufferAttribute(P, I ? I.getX(k + q) : k + q).applyMatrix4(m.matrixWorld));
-      const tri = entry(new THREE.Triangle(t[0], t[1], t[2])); list.push(tri);
-      if (!toGrid) continue;
-      const x0 = Math.floor(Math.min(t[0].x, t[1].x, t[2].x) / CELL), x1 = Math.floor(Math.max(t[0].x, t[1].x, t[2].x) / CELL);
-      const z0 = Math.floor(Math.min(t[0].z, t[1].z, t[2].z) / CELL), z1 = Math.floor(Math.max(t[0].z, t[1].z, t[2].z) / CELL);
-      for (let i = x0; i <= x1; i++) for (let j = z0; j <= z1; j++) { const c = cells.get(key(i, j)); if (c) c.push(tri); else cells.set(key(i, j), [tri]); }
-    }
+    const r = Lay.rooms.find((q) => body.x > q.x0 - 0.5 && body.x < q.x1 + 0.5 && body.z > q.z0 - 0.5 && body.z < q.z1 + 0.5);
+    if (r) { const cx = Math.max(r.x0 + radius, Math.min(r.x1 - radius, body.x)), cz = Math.max(r.z0 + radius, Math.min(r.z1 - radius, body.z)); if (cx !== body.x || cz !== body.z) { body.x = cx; body.z = cz; moved = true; } }
+    return moved;
   }
-  const doorMeshes = [];
-  cabin.traverse((o) => { if (!o.isMesh) return; let d = false; for (let p = o; p; p = p.parent) if (p === hinge) d = true; if (d) doorMeshes.push(o); else { statMeshes.push(o); addTris(o, [], true); } });
-  const doorLocal = []; for (const m of doorMeshes) addTris(m, doorLocal, false);
-  const hingeInv = new THREE.Matrix4().copy(hinge.matrixWorld).invert();
-  const doorRest = doorLocal.map(({ t }) => new THREE.Triangle(t.a.clone().applyMatrix4(hingeInv), t.b.clone().applyMatrix4(hingeInv), t.c.clone().applyMatrix4(hingeInv)));
-  for (let k = 0; k < doorRest.length; k++) doorTris.push(entry(new THREE.Triangle(new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3())));
-
-  // ── STOOD IN THE VALLEY at the cabin's place: its middle over the spot, its feet on the ground, its front the place's ──
-  group.position.set(pl.x, W.heightAt(pl.x, pl.z), pl.z);
-  group.rotation.set(0, pl.rot, 0);
-  group.updateMatrixWorld(true);
-  const groupInv = new THREE.Matrix4().copy(group.matrixWorld).invert();
-  const hingeRel = new THREE.Matrix4();
-  function moveDoorTris() {
-    hinge.updateMatrixWorld(true); hingeRel.multiplyMatrices(groupInv, hinge.matrixWorld);
-    doorRest.forEach((t, k) => { const d = doorTris[k]; d.t.a.copy(t.a).applyMatrix4(hingeRel); d.t.b.copy(t.b).applyMatrix4(hingeRel); d.t.c.copy(t.c).applyMatrix4(hingeRel); fit(d); });
-  }
-  moveDoorTris();
-  W.scene.add(group);
-  const toWorld = (x, y, z, out = new THREE.Vector3()) => out.set(x, y, z).applyMatrix4(group.matrixWorld);
-  const toLocal = (x, y, z, out = new THREE.Vector3()) => out.set(x, y, z).applyMatrix4(groupInv);
-
-  function near(x, z, r) {
-    const out = new Set();
-    for (let i = Math.floor((x - r) / CELL); i <= Math.floor((x + r) / CELL); i++) for (let j = Math.floor((z - r) / CELL); j <= Math.floor((z + r) / CELL); j++) { const c = cells.get(key(i, j)); if (c) for (const t of c) out.add(t); }
-    for (const t of doorTris) out.add(t);
-    return out;
-  }
-  const ray = new THREE.Ray(), hitP = new THREE.Vector3(), cp = new THREE.Vector3(), ball = new THREE.Vector3();
-  const FOOT = [[0, 0], [0.15, 0], [-0.15, 0], [0, 0.15], [0, -0.15]];
-  function floorUnder(x, z, fromY, feet = FOOT) {
-    let best = 0;
-    const tris = near(x, z, 0.2);
-    for (const [fx, fz] of feet) {
-      ray.origin.set(x + fx, fromY, z + fz); ray.direction.set(0, -1, 0);
-      for (const { t, y0, ny } of tris) {
-        if (Math.abs(ny) < 0.5 || y0 > fromY) continue;
-        if (ray.intersectTriangle(t.a, t.b, t.c, false, hitP) && hitP.y > best) best = hitP.y;
-      }
-    }
-    return best;
-  }
-  // the furniture's boxes on the floor: { x, z, c, s, hw, hd }
-  const boxes = new Map();   // slot id -> [box, ...]
-  function pushOut(body, { radius = 0.26, balls = [0.62, 1.3] } = {}) {
-    let movedAny = false;
-    for (let pass = 0; pass < 3; pass++) {
-      let moved = false;
-      for (const h of balls) {
-        ball.set(body.x, body.y + h, body.z);
-        for (const { t, y0, y1, ny } of near(body.x, body.z, radius + 0.1)) {
-          if (Math.abs(ny) > 0.5 || y0 > ball.y + radius || y1 < ball.y - radius) continue;
-          t.closestPointToPoint(ball, cp);
-          const dx = ball.x - cp.x, dz = ball.z - cp.z, dy = ball.y - cp.y, d = Math.hypot(dx, dy, dz);
-          if (!(d < radius)) continue;
-          const flat = Math.hypot(dx, dz); if (flat < 1e-4) continue;
-          const push = Math.sqrt(radius * radius - dy * dy) - flat + 0.002;
-          if (push <= 0) continue;
-          body.x += dx / flat * push; body.z += dz / flat * push; ball.set(body.x, body.y + h, body.z); moved = movedAny = true;
-        }
-      }
-      // the furniture: out of each box, the shortest way
-      for (const list of boxes.values()) for (const b of list) {
-        const dx = body.x - b.x, dz = body.z - b.z, lx = b.c * dx - b.s * dz, lz = b.s * dx + b.c * dz;
-        const qx = Math.max(-b.hw, Math.min(b.hw, lx)), qz = Math.max(-b.hd, Math.min(b.hd, lz));
-        const ox = lx - qx, oz = lz - qz, d = Math.hypot(ox, oz);
-        if (d >= radius) continue;
-        if (d < 1e-5) {   // (the middle is inside the box: out through the nearest side)
-          let nx = lx, nz = lz;
-          if (b.hw - Math.abs(lx) < b.hd - Math.abs(lz)) nx = (Math.sign(lx) || 1) * (b.hw + radius); else nz = (Math.sign(lz) || 1) * (b.hd + radius);
-          body.x = b.x + b.c * nx + b.s * nz; body.z = b.z - b.s * nx + b.c * nz; moved = movedAny = true; continue;
-        }
-        const k = (radius - d + 0.002) / d, px = ox * k, pz = oz * k;
-        body.x += b.c * px + b.s * pz; body.z += -b.s * px + b.c * pz; moved = movedAny = true;
-      }
-      if (!moved) break;
-    }
-    return movedAny;
-  }
-  // a point on a wall (the cabin's frame): from `at`, back into the room a little, then along dir until a wall
-  const caster = new THREE.Raycaster(), wv = new THREE.Vector3(), wd = new THREE.Vector3();
-  function wallPoint(at, dir) {
-    const d = new THREE.Vector3(...dir).normalize(), from = new THREE.Vector3(at[0], at[1], at[2]).addScaledVector(d, -1.2);
-    caster.set(toWorld(from.x, from.y, from.z, wv), wd.copy(d).applyQuaternion(group.quaternion)); caster.far = 3;
-    const hit = caster.intersectObjects(statMeshes, false)[0];
-    return hit ? toLocal(hit.point.x, hit.point.y, hit.point.z) : new THREE.Vector3(at[0], at[1], at[2]);
-  }
-
-  // ── THE PORCH: its floor's height (the lowest of a row of spots along it: a crate or a barrel stands higher) and
-  // the foot of its steps, on the door's line ──
-  const porchY = Math.min(...[-1.5, -0.5, 0.5, 1.5].map((x) => floorUnder(x, 1.7, 2)).filter((y) => y > 0.2), 0.82);
-  let stepsFoot = 3.1;
-  for (let z = 1.2; z < 4.5; z += 0.05) { if (floorUnder(0.24, z, 2) < 0.08) { stepsFoot = z; break; } }
-  const porch = { y: porchY, front: 2.6, foot: stepsFoot, doorX: 0.24 };
-
-  // ── THE DOOR ──
-  const OPEN_DEG = 92;
-  const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
-  function setDoor(t) { hinge.rotation.y = THREE.MathUtils.degToRad(OPEN_DEG * ease(Math.max(0, Math.min(1, t)))); moveDoorTris(); }
 
   // ── THE FURNISHINGS ──
   const files = new Map();     // file -> Promise<template scene>
@@ -311,22 +201,22 @@ export async function makeHome({ W, renderer, base = new URL('../../', import.me
   }
   function stand(g, spec) {
     const [x, y, z] = spec.at;
-    if (spec.wall) {
-      const p = wallPoint(spec.at, spec.wall), w = spec.wall;
-      g.position.set(p.x - w[0] * 0.01, p.y, p.z - w[2] * 0.01); g.rotation.set(0, Math.atan2(-w[0], -w[2]), 0);
+    if (spec.wall) {   // (on the wall's face: layout.js puts `at` there; just off it, facing into the room)
+      const w = spec.wall;
+      g.position.set(x - w[0] * 0.03, y, z - w[2] * 0.03); g.rotation.set(0, Math.atan2(-w[0], -w[2]), 0);
     } else {
-      g.position.set(x, y == null ? floorUnder(x, z, 1.6) : y, z); g.rotation.set(0, THREE.MathUtils.degToRad(spec.rot || 0), 0);
+      g.position.set(x, y == null ? floorUnder(x, z) : y, z); g.rotation.set(0, THREE.MathUtils.degToRad(spec.rot || 0), 0);
     }
   }
   const boxOf = (spec) => { const a = THREE.MathUtils.degToRad(spec.rot || 0); return { x: spec.at[0], z: spec.at[2], c: Math.cos(a), s: Math.sin(a), hw: spec.box[0] / 2, hd: spec.box[1] / 2 }; };
   const made = (o) => { o.userData.made = true; return o; };   // (made here: freed on its own; a file's copies share the file's)
-  const BED_SPOTS = SLOT.dogbeds.looks.map(([x, , z], i) => ({ x, z, rot: [0.5, 0.2, -0.3][i] }));
+  const BED_SPOTS = Lay.bedSpots;
   // a slot's piece: a group with everything it shows (made in code, or its files placed); built once, kept
   const pieces = new Map();    // id -> Promise<group>
   function pieceOf(id, opts = {}) {
     const k = id + (id === 'dogbeds' ? ':' + opts.dogs : '');
     if (pieces.has(k)) return pieces.get(k);
-    const spec = SLOT[id];
+    const spec = SPEC[id];
     const p = (async () => {
       const g = new THREE.Group(); g.name = 'slot-' + id;
       if (spec.made === 'lanterns') {
@@ -341,7 +231,7 @@ export async function makeHome({ W, renderer, base = new URL('../../', import.me
         }
       } else if (spec.made === 'dogbeds') {
         const n = Math.max(1, Math.min(BED_SPOTS.length, opts.dogs || 1)), tints = ['#8e3b30', '#3f5a78', '#5f6e3a'];
-        for (let i = 0; i < n; i++) { const b = made(makePiece('dogbed', { tint: tints[i] })), s = BED_SPOTS[i]; b.position.set(s.x, floorUnder(s.x, s.z, 1.6), s.z); b.rotation.y = s.rot; g.add(b); }
+        for (let i = 0; i < n; i++) { const b = made(makePiece('dogbed', { tint: tints[i] })), s = BED_SPOTS[i]; b.position.set(s.x, floorUnder(s.x, s.z), s.z); b.rotation.y = s.rot; g.add(b); }
       } else if (spec.made === 'rifles') {
         // the rifle and the shotgun (models/guns, as the riders' own: guns.json says each one's scale and which way its
         // barrel points), laid along the rack, muzzles opposite ways, each centred on it
@@ -379,8 +269,8 @@ export async function makeHome({ W, renderer, base = new URL('../../', import.me
   };
   async function furnish(list, { dogs = 0 } = {}) {
     owned = list.slice(); dogsN = dogs; const my = ++gen;
-    for (const s of SLOTS) {
-      const want = owned.includes(s.id);
+    for (const s0 of SLOTS) {
+      const s = SPEC[s0.id], want = owned.includes(s.id);
       if (!want) { const g = shown.get(s.id); if (g) { g.removeFromParent(); shown.delete(s.id); } boxes.delete(s.id); continue; }
       const g = await pieceOf(s.id, { dogs });
       if (my !== gen) return;                       // (a newer call took over)
@@ -408,34 +298,30 @@ export async function makeHome({ W, renderer, base = new URL('../../', import.me
   const kept = new Map();      // job -> { key, g }
   function keepsakes(list) {
     const table = owned.includes('table');
-    const keyOf = (job, tier) => tier + (KEEPSAKE_SPOTS[job] && KEEPSAKE_SPOTS[job].table ? (table ? ':table' : ':crate') : '');
+    const keyOf = (job, tier) => tier + (KEEP[job] && KEEP[job].table ? (table ? ':table' : ':crate') : '');
     const want = new Map(list.map((k) => [k.job, keyOf(k.job, k.tier)]));
     for (const [job, k] of kept) if (want.get(job) !== k.key) { disposeTree(k.g); kept.delete(job); }
     for (const k of list) {
-      const spot = KEEPSAKE_SPOTS[k.job];
+      const spot = KEEP[k.job];
       if (kept.has(k.job) || !spot) continue;
       // (one that stands on the table sits on a crate as high as the table till there is one)
       const g = makeKeepsake(k.job, k.tier, spot.table ? { raise: table ? 0 : spot.table } : undefined); if (!g) continue;
       if (spot.wall) stand(g, spot);
-      else if (spot.table) { const [x, , z] = spot.at; g.position.set(x, floorUnder(x, z, 1.6) + (table ? spot.table : 0), z); g.rotation.set(0, THREE.MathUtils.degToRad(spot.rot || 0), 0); }
-      else { g.position.set(spot.at[0], floorUnder(spot.at[0], spot.at[2], 1.6), spot.at[2]); g.rotation.set(-0.18, THREE.MathUtils.degToRad(spot.rot || 0), 0); }
+      else if (spot.table) { const [x, , z] = spot.at; g.position.set(x, floorUnder(x, z) + (table ? spot.table : 0), z); g.rotation.set(0, THREE.MathUtils.degToRad(spot.rot || 0), 0); }
+      else { g.position.set(spot.at[0], floorUnder(spot.at[0], spot.at[2]), spot.at[2]); g.rotation.set(-0.18, THREE.MathUtils.degToRad(spot.rot || 0), 0); }
       slim(g); g.traverse((o) => { if (o.isMesh) o.castShadow = false; });
       litTree(g); inner.add(g); kept.set(k.job, { key: keyOf(k.job, k.tier), g });
     }
   }
 
-  // ── THE TOWN'S OWN CABIN MODEL at the spot: hidden while this one stands there (it may still be loading) ──
-  const townCabin = () => { const o = W.V && W.V.TOWN && W.V.TOWN.village && W.V.TOWN.village.objs && W.V.TOWN.village.objs.get('cabin'); return o && o.inner; };
-  let hidTown = null;
-  function hideTown() { const t = townCabin(); if (t && t !== hidTown) { t.visible = false; hidTown = t; } }
-  hideTown();
-
   // ── EACH FRAME ──
   const lamps = [], lw = new THREE.Vector3(), fillNow = new THREE.Color();
-  let clock = 0, nearOn = true, townT = 0;
+  let clock = 0, nearOn = true;
   function update(dt, { night = 0 } = {}) {
     clock += dt;
-    if ((townT -= dt) < 0) { townT = 1; hideTown(); }
+    frame();
+    // (the pieces inside drawn only near, and while the building's inside is to be seen: a door open, or inside)
+    inner.visible = nearOn && B.loaded && B.seen;
     // the bounced light: more of it before there are lanterns; down with the daylight at night
     const n = Math.max(0, Math.min(1, night || 0)), day = 1 - (1 - LIGHT.fillNight) * n;
     fillNow.setRGB(...(owned.includes('lanterns') ? LIGHT.fill : LIGHT.fillBare)).multiplyScalar(day);
@@ -447,9 +333,8 @@ export async function makeHome({ W, renderer, base = new URL('../../', import.me
       const p = pops[i]; p.t += dt; const k = Math.min(1, p.t / 0.45), s = k < 1 ? 0.6 + 0.4 * (1 - Math.pow(1 - k, 3)) + 0.08 * Math.sin(k * Math.PI) : 1;
       p.g.scale.setScalar(s); if (k >= 1) pops.splice(i, 1);
     }
-    // the lamps' light: where each lamp is in the valley, and how bright now (its flicker). The valley brightens the
-    // whole picture at night (its exposure goes up to about 2.2, so moonlit nights are bright): the lamps are tuned for
-    // the day's exposure of 1, so they are turned down by as much, or they'd glare white
+    // the lamps' light: where each lamp is in the valley, and how bright now (its flicker), turned down by the valley's
+    // night exposure (the lamps are tuned for the day's exposure of 1)
     const ex = 1 / Math.max(1, renderer.toneMappingExposure || 1);
     for (let i = 0; i < N; i++) {
       const L = lamps[i];
@@ -460,30 +345,79 @@ export async function makeHome({ W, renderer, base = new URL('../../', import.me
     }
   }
   function setNear(on) {
-    if (on === nearOn) return; nearOn = on; inner.visible = on;
+    if (on === nearOn) return; nearOn = on;
     if (!on) for (const v of U.lampCol.value) v.set(0, 0, 0);
   }
 
+  // where the valley shows from inside: the windows' glass (its corners, a few points a pane) and each doorway's corners
+  let holes = null;
+  function openings() {
+    if (holes) return holes;
+    holes = [];
+    for (const r of [B.group, ...B.insideRoots()]) r.traverse((m) => {
+      if (!m.isMesh || (m.name !== 'pane' && m.name !== 'glass')) return;
+      const P = m.geometry.attributes.position, step = Math.max(1, Math.floor(P.count / 120));
+      for (let i = 0; i < P.count; i += step) holes.push([P.getX(i), P.getY(i), P.getZ(i)]);
+    });
+    for (const D of B.doorways) { const [cx, cy, cz] = D.centre, s = [D.out[2], -D.out[0]]; for (const [u, v] of [[0, 0], [-1, -1], [1, -1], [-1, 1], [1, 1]]) holes.push([cx + s[0] * u * D.w / 2, cy + v * D.h / 2, cz + s[1] * u * D.w / 2]); }
+    return holes;
+  }
+
+  // the openings as rectangles: each window's glass (its pane shapes' corners gathered by window: those within 1.2 m of
+  // one another, flat across one way), and each doorway to the outside
+  let rects = null;
+  function portals() {
+    if (rects) return rects;
+    rects = [];
+    const pts = [];
+    for (const r of [B.group, ...B.insideRoots()]) r.traverse((m) => {
+      if (!m.isMesh || (m.name !== 'pane' && m.name !== 'glass') || m.parent && m.parent.name === 'door') return;
+      const P = m.geometry.attributes.position; for (let i = 0; i < P.count; i++) pts.push([P.getX(i), P.getY(i), P.getZ(i)]);
+    });
+    const groups = [];
+    for (const p of pts) {
+      let g = groups.find((q) => Math.abs(p[0] - q.mx) < 1.2 && Math.abs(p[1] - q.my) < 1.4 && Math.abs(p[2] - q.mz) < 1.2);
+      if (!g) { g = { lo: p.slice(), hi: p.slice(), n: 0, sx: 0, sy: 0, sz: 0, mx: p[0], my: p[1], mz: p[2] }; groups.push(g); }
+      for (let a = 0; a < 3; a++) { g.lo[a] = Math.min(g.lo[a], p[a]); g.hi[a] = Math.max(g.hi[a], p[a]); }
+      g.n++; g.sx += p[0]; g.sy += p[1]; g.sz += p[2]; g.mx = g.sx / g.n; g.my = g.sy / g.n; g.mz = g.sz / g.n;
+    }
+    for (const g of groups) {
+      const dx = g.hi[0] - g.lo[0], dy = g.hi[1] - g.lo[1], dz = g.hi[2] - g.lo[2];
+      if (dy < 0.25 || Math.max(dx, dz) < 0.25 || Math.min(dx, dz) > 0.25) continue;   // (a lantern's glass, not a window)
+      const c = [(g.lo[0] + g.hi[0]) / 2, (g.lo[1] + g.hi[1]) / 2, (g.lo[2] + g.hi[2]) / 2], acrossX = dx < dz;
+      const n = acrossX ? [Math.sign(c[0]) || 1, 0, 0] : [0, 0, Math.sign(c[2]) || 1];
+      const corners = acrossX ? [[c[0], g.lo[1], g.lo[2]], [c[0], g.lo[1], g.hi[2]], [c[0], g.hi[1], g.hi[2]], [c[0], g.hi[1], g.lo[2]]]
+        : [[g.lo[0], g.lo[1], c[2]], [g.hi[0], g.lo[1], c[2]], [g.hi[0], g.hi[1], c[2]], [g.lo[0], g.hi[1], c[2]]];
+      rects.push({ c, corners, n });
+    }
+    for (const D of (B.B.anchors.doorways || []).filter((q) => !q.inner)) {   // (the doors to the outside: a window beyond an inside door is its own portal)
+      const [cx, cy, cz] = D.centre, s = [D.out[2], -D.out[0]], hw = D.w / 2, hh = D.h / 2;
+      rects.push({ c: [cx, cy, cz], n: [D.out[0], 0, D.out[2]], corners: [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([u, v]) => [cx + s[0] * u * hw, cy + v * hh, cz + s[1] * u * hw]) });
+    }
+    return rects;
+  }
+
   function dispose() {
-    if (hidTown) hidTown.visible = true;
+    const i = CODE.blockers.indexOf(blocker); if (i >= 0) CODE.blockers.splice(i, 1);
     if (ghostObj) ghostObj.removeFromParent();
     for (const m of ghostMats.values()) m.dispose(); ghostMats.clear();
     for (const k of kept.values()) disposeTree(k.g); kept.clear();
-    // the pieces (their own shapes; the files' templates are freed below, once)
     Promise.all([...pieces.values()]).then((gs) => {
-      for (const g of gs) { const mine = []; g.traverse((o) => { if (o.userData.made) mine.push(o); }); for (const m of mine) disposeTree(m); g.removeFromParent(); }
+      for (const g of gs) { const mine = []; g.traverse((q) => { if (q.userData.made) mine.push(q); }); for (const m of mine) disposeTree(m); g.removeFromParent(); }
     }).catch(() => {});
     Promise.all([...files.values()]).then((ts) => { for (const t of ts) disposeTree(t); }).catch(() => {});
     pieces.clear(); files.clear(); shown.clear(); boxes.clear();
     group.removeFromParent();
-    // (the model's shapes and pictures are the loaded file's, shared with a later ride: kept)
     disposeShared();
   }
 
   return {
-    group, inner, cabin, hinge, lit, floorUnder, pushOut, setDoor, furnish, ghost, pop, keepsakes, update, dispose, wallPoint, toWorld, toLocal,
-    near: setNear, porch, yaw: pl.rot, uniforms: U,
-    bedSpots: (n) => BED_SPOTS.slice(0, Math.max(1, n)).map((s) => ({ ...s, y: floorUnder(s.x, s.z, 1.6) })),
+    group, inner, code: B, layout: Lay, lit, floorUnder, pushOut, inside, furnish, ghost, pop, keepsakes, update, dispose, toWorld, toLocal,
+    near: setNear, get yaw() { return yawOf(); }, uniforms: U, spec: (id) => SPEC[id],
+    keepLook: (job) => { const k = KEEP[job]; if (!k) return null; return [k.at[0] - (k.wall ? k.wall[0] * 0.15 : 0), k.at[1] == null ? floorUnder(k.at[0], k.at[2]) + (k.table ? 0.95 : 0.35) : k.at[1], k.at[2] - (k.wall ? k.wall[2] * 0.15 : 0)]; },
+    bedSpots: (n) => BED_SPOTS.slice(0, Math.max(1, n)).map((q) => ({ ...q, y: floorUnder(q.x, q.z) })),
+    stale: () => !o.code || o.code !== B || !B.group.parent,
+    openings, portals,
     get owned() { return owned.slice(); }, get shown() { return [...shown.keys()]; }, get nearOn() { return nearOn; }, boxes,
   };
 }

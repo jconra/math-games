@@ -290,7 +290,9 @@ function withDoors(base, extra) {
 // edge with no steps (a rise of more than 0.42 m to the cell beside it) blocked, and every block widened by a walker's
 // half-width (0.18 m), so nobody stands in a wall.
 const CELL = 0.1, WALK = [0.62, 1.75], PAD = 0.18, LEDGE = 0.42;
-function walkGrid(solids, foot, ox, oz) {
+// (base: the building's own floor's height, a cabin's raised on its footing: its floor's boards are stood on, not a
+// counter's top, though they are up off the ground)
+function walkGrid(solids, foot, ox, oz, base = 0) {
   const x0 = -foot.w / 2 - 1.2, z0 = -foot.d / 2 - 1.2, nx = Math.ceil((foot.w + 2.4) / CELL), nz = Math.ceil((foot.d + 2.4) / CELL), n = nx * nz;
   const blocked = new Uint8Array(n), floor = new Float32Array(n), ceil = new Float32Array(n).fill(99);
   const inv = new THREE.Matrix4(), o = new THREE.Vector3(), d = new THREE.Vector3(), bb = new THREE.Box3(), h = new THREE.Vector3();
@@ -315,15 +317,15 @@ function walkGrid(solids, foot, ox, oz) {
       const k = j * nx + i;
       if (tmax <= 1.05 && tmax > floor[k]) floor[k] = tmax;
       if (tmin < WALK[1] && tmax > WALK[0] && tmax > 1.05) blocked[k] = 1;
-      else if (tmin < WALK[1] && tmax > WALK[0] && tmin > 0.3) blocked[k] = 1;   // (a counter, a table: up off the floor)
+      else if (tmin < WALK[1] && tmax > WALK[0] && tmin > 0.3 && tmax > base + 0.1) blocked[k] = 1;   // (a counter, a table: up off the floor)
       if (tmin >= 1.9 && tmin < ceil[k]) ceil[k] = tmin;
     }
   }
   // (a low thing that reaches a walker's height counts: a chair's seat, a barrel; stood on only if it is the floor)
   for (let k = 0; k < n; k++) if (!blocked[k] && floor[k] > WALK[0] + 0.25) blocked[k] = 1;
   // a doorway's sill: the gap between a porch's boards and the floor inside (the wall's thickness, nothing solid under it
-  // there) bridged at the lower of the two, up to 0.3 m across
-  const span = 3, f0 = floor.slice();
+  // there) bridged at the lower of the two, up to 0.5 m across (a log wall is thicker than a framed one)
+  const span = 5, f0 = floor.slice();
   for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
     const k = j * nx + i; if (blocked[k]) continue;
     for (const [di, dj] of [[1, 0], [0, 1]]) {
@@ -528,7 +530,11 @@ export function buildCodeBuilding(kit, kind, o = {}) {
   // priority (PROP_PRI), the saloon's rooms' own upstairs
   const bake = (geo) => { geo.translate(-OX, 0, -OZ); B.light.bake(geo); B.light.apply(geo, true, 'main', true); geo.translate(OX, 0, OZ); };
   const lists = { out: [], up: [], 1: [], 2: [], 3: [] };
-  for (const p of B.props) lists[p.upstairs && rooms ? 'up' : !p.inside ? 'out' : Math.max(1, Math.min(3, p.pri ?? PROP_PRI[p.type] ?? 2))].push(p);   // (a prop can say its own: the cabins' furniture, pri 3)
+  // (the player's cabin: none of the design's own room furniture (marked low): the player buys their own, src/cabin/)
+  // (and none of its outdoor props in the way of a door: a partial porch's bench stood across the front door)
+  const ways = (B.anchors.doorways || []).filter((D) => !D.inner);
+  const atDoor = (p) => ways.some((D) => Math.hypot(p.x - D.centre[0], p.z - D.centre[2]) < 1.2);
+  for (const p of B.props) { if (o.player && (p.low || (!p.inside && atDoor(p)))) continue; lists[p.upstairs && rooms ? 'up' : !p.inside ? 'out' : Math.max(1, Math.min(3, p.pri ?? PROP_PRI[p.type] ?? 2))].push(p); }   // (a prop can say its own: the cabins' furniture, pri 3)
   const propSolidsRaw = []; let propTris = 0;
   for (const [key, list] of Object.entries(lists)) {
     if (!list.length) continue;
@@ -591,7 +597,19 @@ export function buildCodeBuilding(kit, kind, o = {}) {
   // where a walker can stand
   // (the props' solids stand where the props do, in the centred frame: moved back to the build's own)
   const back = new THREE.Matrix4().makeTranslation(-OX, 0, -OZ), propSolids = propSolidsRaw.map((S) => ({ size: S.size, m: back.clone().multiply(S.m) }));
-  const foot = B.anchors.footprint, grid = walkGrid([...B.kit.occ, ...propSolids], foot, OX, OZ);
+  const foot = B.anchors.footprint, grid = walkGrid([...B.kit.occ, ...propSolids], foot, OX, OZ, B.anchors.floor || 0);
+  // every way in can be walked through: a doorway's own width, from just inside to just outside, cleared and its floor
+  // eased from the room's down to what is outside (a back door with only stair stones under it read as a ledge)
+  for (const D of (B.anchors.doorways || []).filter((q) => !q.inner)) {
+    const ox = D.out[0], oz = D.out[2], sx = oz, sz = -ox, half = D.w / 2 - 0.14;
+    const fAt = (o2) => { const k = grid.at(D.centre[0] + ox * o2, D.centre[2] + oz * o2); return k < 0 ? 0 : grid.floor[k]; };
+    const fin = fAt(-0.6), fout = Math.max(fAt(1.0), 0);
+    for (let o2 = -0.6; o2 <= 1.0; o2 += 0.05) for (let a2 = -half; a2 <= half; a2 += 0.05) {
+      const k = grid.at(D.centre[0] + ox * o2 + sx * a2, D.centre[2] + oz * o2 + sz * a2); if (k < 0) continue;
+      const t = (o2 + 0.6) / 1.6, e = t * t * (3 - 2 * t);
+      grid.blocked[k] = 0; grid.wall[k] = 0; grid.floor[k] = fin + (fout - fin) * e;
+    }
+  }
   // the light it throws out at night: its outdoor lanterns, and a warm pool before each doorway and each window
   const nightLamps = [...outLamps.map((L) => ({ at: L.p, reach: 8, strength: 1 })),
     ...doorways.map((D) => ({ at: [D.centre[0] + D.out[0] * 1.2, 1.4, D.centre[2] + D.out[2] * 1.2], reach: 5.5, strength: 0.45 }))];

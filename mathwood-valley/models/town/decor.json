@@ -5,7 +5,7 @@
     "generalStore": {"x":2.96,"z":-195.38,"rot":180.9},
     "saloon": {"x":-30.78,"z":-194.64,"rot":180.5},
     "stable": {"x":-50.58,"z":-194.9,"rot":180},
-    "cabin": {"x":-66.17,"z":-220.71,"rot":11.7},
+    "cabin": {"x":-66.17,"z":-220.71,"rot":11.7,"preset":"tworoom"},
     "picnicTable2": {"x":-11.44,"z":-215.61},
     "parkedFarmWagon": {"x":-64,"z":-196,"rot":180},
     "home1": {"preset":"homestead","seed":101},

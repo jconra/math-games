@@ -1,86 +1,80 @@
-// THE PLAYER'S CABIN: the log cabin in town is the rider's home, once bought. It stands in the valley like everything
-// else (interior.js): no fade and no scene of its own. Walk up to its door and press E (or tap the prompt, or just walk
-// on into the steps): you are in at once, in first person just inside the door, looking into the room, and the door is
-// heard shutting behind you. There is no walk up the steps and no camera move: the keys, the mouse and the thumb stick
-// work from the very first frame inside. Mouse: drag to look, or click once to look with the mouse freely (Esc lets
-// go); WASD or the arrows step about, Shift hurries. Phone: the thumb stick on the left steps, a drag on the right
-// looks. The walls and the furniture stop you. The village shows through the windows, its sounds and the band's music
-// go on (a little muffled with the door shut), and the valley's light (its sun, its day and night) comes in. To go out:
-// look at the door and press E, or walk into it: you are out at once, just in front of the steps and facing the town,
-// the camera behind you as it is anywhere in town, and the door swings shut behind you.
+// THE PLAYER'S CABIN: a cabin built in code like the town's other buildings (world/objects/codebuildings.js: the
+// two-room log house unless the layout names another design, which the Town Lab's New look changes), the rider's home
+// once bought. Dad: "I'd prefer to have the door opening controlled manually (press 'E' to open/close). Then I'd want the
+// player to move forward the same way they always do ... Once they are in the door the camera moves to 1st person. But
+// the door stays open unless they shut it."
+//   - its doors are the town's (world/objects/doorkeeper.js): E at the doorway opens or shuts one, and the cabin's stay
+//     open until the player shuts them (the shops' shut themselves once you have gone)
+//   - walking up the porch and in is the game's own walking, at its own pace: nothing moves the player for them
+//   - crossing a doorway into a room the camera eases to the player's eyes (first person), and back behind them on the
+//     way out; looking about is the same drag (or the stick) as anywhere
 //
-// FOR SALE: until a rider buys it (catalog.js PRICES.cabin) the cabin wears a "For sale" sign and its door is locked. At
-// the door with the gold the prompt says "Buy the cabin"; one press buys it and walks in. Without the gold, a small card
-// says how much more is needed. Before that the rider camps by the creek behind it (camp.js: a bedroll and a small
-// fire), where the dogs wait. Bought: a SOLD board goes up on the sign, and the sign and the camp are taken away once
-// they are out of sight. A rider from before the cabin was for sale who has any furniture has it as bought (save.js).
+// FOR SALE: until a rider buys it (catalog.js PRICES.cabin) the cabin wears a "For sale" sign and its doors are locked.
+// At its door spot with the gold the prompt says "Buy the cabin"; one press buys it. Without the gold, a small card says
+// how much more is needed. Before that the rider camps by the creek behind it (camp.js), where the dogs wait. Bought: a
+// SOLD board goes up on the sign, the windows light at night, and the sign and the camp are taken away once out of sight.
 //
-// The cabin has fixed slots for furnishings (slots.js: a rug, lanterns, a painting, dog beds, a table and chairs, porch
-// rockers, a bed, a rifle rack, a stove), cheap to costly. Look at an empty slot: a see-through look at the piece shows
-// in its place, with its name, its price and what it is in a small card; E (or a tap on the prompt) buys it, and it
-// grows into place. Bought pieces are saved with the rider (rider.owned.cabin). At the table you open your lock boxes.
-// The belt-buckle keepsakes (save.js KEEPSAKES) hang in their spots once earned (one won out on this ride is hung as you
-// walk in). The dogs at home (homedogs.js) are on their beds inside once there are dog beds, else on the porch (or by
-// the camp's fire before the cabin is bought). The dog that follows you waits by the porch steps while you're inside
-// (main.js reads C.dogWait).
+// INSIDE, in first person: look at a slot (slots.js, placed by the design's rooms: layout.js) and a see-through look at
+// its piece shows with its name, price and what it is; E buys it and it grows into place. At the table you open your lock
+// boxes. The belt-buckle keepsakes hang in their spots once earned. The dogs at home (homedogs.js) are on their beds
+// inside once there are dog beds, else on the porch (or by the camp's fire before the cabin is bought). The dog that
+// follows you waits by the porch steps while you're inside (main.js reads C.dogWait).
 //
 //   const C = makeCabin({ W, renderer, camera, animals, rider, hud, input, audio, player, follower, onBuy, onLockbox })
-//     player(): the player (P, from player.js); follower(): the dog following you (D, from dog.js) or null
-//     onBuy(id): a piece (or 'cabin', the cabin itself) was bought (the purse is redrawn); onLockbox(box, { own, after })
-//   C.ready                       a promise: the cabin is stood in the valley
-//   C.inside                      the cabin has the player (main.js then calls C.update instead of moving the player
-//                                 itself, and skips the town's doors)
-//   C.busy                        always false: going in and out is at once, so nothing has to wait for it
-//   C.indoor                      inside with the door shut (the town's sounds muffled)
-//   C.prompt()                    the words for the town door prompt at the cabin ('Go into your cabin', 'Buy the
-//                                 cabin: 600 gold'), or null (not ready, or short of gold: the card says so)
+//   C.ready                       a promise: the cabin's things are stood in it
+//   C.inside                      the player is in its rooms (or the camera still easing back out): main.js then calls
+//                                 C.update instead of its own doors and the player's update
+//   C.busy                        always false
+//   C.indoor                      inside with its doors shut (the town's sounds muffled)
+//   C.prompt()                    the town door prompt at the cabin's spot: 'Buy the cabin: 600 gold' (not yet bought,
+//                                 the gold there), else null (bought: its door has its own prompt)
+//   C.owned                       the rider owns it (main.js: no counter at its spot then)
 //   C.markLabel                   the compass's name for it ('Your cabin' or 'The cabin for sale')
-//   C.dogWait                     while the cabin has the player: where the dog that follows waits (a Vector3), else null
-//   C.enter(), C.leave({ to })    to: { x, z, rot } somewhere else in town to come out at (the menu's "back to town": at once)
-//   C.update(dt)                  each frame while C.inside (moves the player and the camera)
+//   C.dogWait                     while the player is inside: where the dog that follows waits (a Vector3), else null
+//   C.enter()                     not yet bought: buys it. Bought: (rigs and the dev buttons) stands the player just
+//                                 inside its front door, facing in
+//   C.leave({ to })               to: { x, z, rot } somewhere else in town (the menu's "back to town": at once)
+//   C.update(dt)                  each frame while C.inside: the player's own update, then the first person camera, what
+//                                 is looked at, the prompt and E
 //   C.render()                    draws the frame (the valley's: W.render)
-//   C.town(dt)                    each frame of play: the sign, the camp, the dogs at home, the inside's things near or far
+//   C.town(dt)                    each frame of play: the sign, the camp, the dogs at home, the pieces near or far
 //   C.dogsChanged()               the rider's dogs changed (bought one, took another along)
 //   C.state()                     for a rig;  C.dev: { buy(id), give(id), own(on), look(x, z, yaw, pitch) }
 //   C.dispose()
 import * as THREE from 'three';
-import { makeHome, loadHomeModel, NEAR } from './interior.js';
-import { makeIndoor } from './indoor.js';
+import { makeHome, NEAR } from './interior.js';
 import { makeHomeDog } from './homedogs.js';
 import { makeSaleSign } from './forsale.js';
 import { makeCamp } from './camp.js';
-import { playDoor } from './doorsound.js';
-import { SLOTS, SLOT, ownedPieces, nextPiece, buyPiece, homeDogs } from './slots.js';
+import { SLOTS, ownedPieces, nextPiece, buyPiece, homeDogs } from './slots.js';
 import { spend, saveRider, KEEPSAKES, BUCKLES, BUCKLE_NAMES, buckleOf, jobWords, JOBS } from '../save.js';
 import { PRICES } from '../catalog.js';
+import { CAM } from '../camera.js';
 
+// FIRST PERSON inside: the eyes over the feet, the field of view, how fast the camera eases in and out; what E reaches
+// INDOORS, THE VALLEY LEFT UNDRAWN WHEN NO OPENING IS IN VIEW: facing a log wall the whole valley behind it would be
+// drawn all the same. While none of the room's openings (its windows' glass, its doorways: R.openings) is on screen,
+// with a margin round the edges, the camera's far limit is pulled in to just past the room, so the valley is left out
+// by the usual out-of-view check; the moment one comes near the screen's edge it goes back out, before any of the
+// outside could show. And all the while inside, the sun's shadows are drawn again a few times a second, not every frame.
+//
+// PORTALS: and while some are in view, only what can be seen through them is drawn: each opening on screen (a window's
+// glass, a doorway: R.portals) and the eyes make a narrow view of their own (four sides, from the eyes through the
+// opening's four edges), and every outdoor thing whose bounds fall outside all of those views is left out of the frame
+// (its layer 0 put off, so nothing else's own showing and hiding is touched; back on the moment it can be seen, and as
+// soon as the player is out). The things looked at are gathered again every PORTAL.every seconds.
+export const INDOOR = { margin: 1.25, far: 14, shadowEvery: 0.4 };
+export const PORTAL = { every: 1, grow: 0.15, skinned: 1.2 };   // (s; m added round each opening; m added to a body's bounds)
 export const FP = {
-  eye: 1.65, radius: 0.26, balls: [0.62, 1.3], step: 0.42,   // eyes above the feet, the body's size, the highest step
-  walk: 1.7, hurry: 3.2,                                      // m/s
-  mouse: 0.0022, drag: 0.0042, touchDrag: 0.005,              // radians per pixel: free mouse look, a mouse drag, a finger
-  fov: 70, near: 0.06,                                        // degrees up and down on a wide screen (a tall one sees ~60
-                                                              // across); the near plane inside (the walls are close)
-  reach: 3.0, aim: 0.36,                                      // how far off and how far from the middle of the view (radians) E picks
-  door: [[0.24, 2.4, 0.66], [0.24, 1.6, 0.66]],               // where you look to use the door (high and low on it)
-  doorX: 0.24,                                                // the door's middle across the cabin (its own frame)
-};
-// GOING IN AND OUT (the cabin's own frame: the door on the +z side at z 0.64, the porch out to about 3)
-export const WALK = {
-  inside: -0.75,              // where you stand on going in (z, on the door's line, facing into the room): clear of the
-                              // door's swing (it swings into the room, 1.13 m round its hinge), away from the walls
-  swing: 0.55,                // seconds for the door to swing shut behind you on the way out
-  push: 0.3,                  // seconds walking into the door (inside) or the steps (outside) before you go through
-  again: 0.5,                 // seconds after going through before the door takes you back through: a double press of E
-                              // (or a double tap: "Go outside" and "Go into your cabin" stand in the same spot) goes
-                              // through once. Only the door waits: walking and looking are yours all the while
+  eye: 1.62, fov: 68, ease: 0.38,     // m; degrees (the town's is 55); s to ease all the way in or out
+  pitch: 1.3,                         // how far a drag tilts the view up and down (the chase camera's tilt, scaled)
+  reach: 3.0, aim: 0.36,              // how far off and how far from the middle of the view (radians) E picks a slot
 };
 const BASE = new URL('../../', import.meta.url).href;
 const CSS_HREF = new URL('./cabin.css', import.meta.url).href;
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const COIN = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#e2ad4c"/><circle cx="12" cy="12" r="7.4" fill="none" stroke="#a8742a" stroke-width="1.6"/></svg>';
-const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
-loadHomeModel(BASE).catch(() => {});   // (the walk-in cabin's model starts loading as the game boots: there by the ride)
 
 // the keepsakes a rider has earned: [{ job, tier }] (tier: the buckle they hold for that job)
 export function keepsakesOf(rider) {
@@ -99,47 +93,48 @@ export function makeCabin({ W, renderer, camera, animals, rider, hud, input: I, 
   ui.innerHTML = '<div class="bmc-dot" hidden></div><div class="bmc-card" hidden></div>';
   document.body.appendChild(ui);
   const dotEl = ui.querySelector('.bmc-dot'), cardEl = ui.querySelector('.bmc-card');
-  const canvas = renderer.domElement;
-  const pl = W.places.cabin;
+  const pl = W.places.cabin, CODE = W.V && W.V.CODE;
 
-  let R = null, disposed = false;
-  let phase = 'town';                         // 'town' | 'inside'
-  const me = { x: 0, y: 0.82, z: 0, yaw: 0, pitch: -0.05 };   // (inside: the cabin's own frame)
-  let focus = null, dogs = [], dogsWhere = '', dogsDirty = true, told = false, doorT = 0, doorTo = 0, pushT = 0;
-  let throughAt = -1e9;   // (when you last went through the door, in or out)
-  const settling = () => performance.now() - throughAt < WALK.again * 1000;
-  const saved = { fov: camera.fov, near: camera.near };
+  let R = null, disposed = false, inRoom = false, fpT = 0, focus = null, dogs = [], dogsWhere = '', dogsDirty = true, told = false, building = null;
   const C = {
-    get inside() { return phase !== 'town'; }, busy: false,
-    get indoor() { return phase === 'inside' && doorT < 0.05; },
+    get inside() { return inRoom || fpT > 0.02; }, busy: false,
+    get indoor() { return inRoom && !!R && !R.code.anyOpen(); },
+    get owned() { return ownsHome(); },
     get markLabel() { return ownsHome() ? 'Your cabin' : 'The cabin for sale'; },
     dogWait: null,
   };
   const ownsHome = () => !!(rider.owned && rider.owned.home === 'cabin');
   const owned = () => ownedPieces(rider);
   const night = () => { const n = W.night; return typeof n === 'number' && Number.isFinite(n) ? n : 0; };
+  if (CODE) CODE.cabinLocked = () => !ownsHome();   // (its doors: locked till it is bought, world/objects/doorkeeper.js)
+  const lights = () => { if (W.lights && W.lights.set) W.lights.set('cabin', ownsHome() ? 1 : 0); };   // (its windows lit at night once it's yours)
 
-  // ── STANDING IN THE VALLEY ──
-  let sign = null, camp = null, clock = 0, indoor = null;   // (indoor: the valley left undrawn inside while no window is in view)
-  C.ready = makeHome({ W, renderer, base: BASE }).then((home) => {
-    if (disposed) { home.dispose(); return; }
-    R = home;
-    try { indoor = makeIndoor({ R, camera, renderer }); } catch (e) { console.warn('cabin: the openings could not be found', e); }
-    sync();
-    if (!ownsHome()) { putSign(); putCamp(); }
-    dogsDirty = true;
-  }).catch((e) => { console.error('cabin: the walk-in cabin could not be stood in the valley', e); });
+  // ── STANDING IN THE VALLEY: the pieces in the code-built cabin (made again if the Town Lab gives it a new look) ──
+  let sign = null, camp = null, clock = 0;
+  function build() {
+    if (building) return building;
+    building = makeHome({ W, renderer, base: BASE }).then((home) => {
+      building = null;
+      if (disposed) { home.dispose(); return; }
+      if (R) { clearDogs(); if (sign) { sign.dispose(); sign = null; } R.dispose(); }
+      R = home;
+      // (its spot in the valley: before the porch's steps, where the buy prompt and the compass point)
+      const st = R.toWorld(R.layout.steps.x, 0, R.layout.steps.z); pl.door = { x: st.x, z: st.z };
+      sync(); lights();
+      if (!ownsHome()) { putSign(); putCamp(); }
+      dogsDirty = true;
+    }).catch((e) => { building = null; console.error('cabin: the player\'s cabin could not be furnished', e); });
+    return building;
+  }
+  C.ready = build();
   function putSign() {
     if (sign || !R) return;
     sign = makeSaleSign({ price: PRICES.cabin });
-    const g = sign.group, x = FP.doorX + 2.3, z = R.porch.foot + 0.8;
-    g.position.set(x, groundLocal(x, z), z); g.rotation.y = -0.35;
+    const g = sign.group, S = R.layout.sign;
+    g.position.set(S.x, R.floorUnder(S.x, S.z), S.z); g.rotation.y = S.rot;
     R.group.add(g);
   }
   function putCamp() { if (!camp) camp = makeCamp({ W, camera, audio, frame: pl }); }
-  // the ground's height in the cabin's frame (its pad is level, but the land round the porch may not be)
-  const _w = new THREE.Vector3(), _l = new THREE.Vector3();
-  function groundLocal(x, z) { R.toWorld(x, 0, z, _w); return W.heightAt(_w.x, _w.z) - R.group.position.y; }
   // is a spot (the valley's) in the camera's view? (a little wider than the screen, so nothing goes at its edge)
   const frustum = new THREE.Frustum(), projM = new THREE.Matrix4(), sphere = new THREE.Sphere();
   function inView(p, r = 2) {
@@ -150,7 +145,6 @@ export function makeCabin({ W, renderer, camera, animals, rider, hud, input: I, 
   // ── THE DOGS AT HOME: on their beds, on the porch, or by the camp's fire ──
   function clearDogs() { for (const d of dogs) d.dispose(); dogs = []; }
   function whereDogs() { return !ownsHome() ? 'camp' : owned().includes('dogbeds') ? 'beds' : 'porch'; }
-  const PORCH_DOGS = [[1.25, 1.75, 0.3], [-0.85, 1.95, -0.4], [2.0, 2.25, 0.1]];   // (x, z on the porch, a turn)
   function placeDogs() {
     clearDogs(); dogsDirty = false;
     const home = homeDogs(rider).filter((d) => !d.following);
@@ -159,20 +153,22 @@ export function makeCabin({ W, renderer, camera, animals, rider, hud, input: I, 
     const where = whereDogs();
     if (where === 'beds') {
       const spots = R.bedSpots(home.length);
-      home.forEach((d, i) => { const s = spots[i]; dogs.push(makeHomeDog({ animals, kind: d.kind, name: d.name, scene: R.inner, spot: { x: s.x, y: s.y, z: s.z, rot: s.rot + Math.PI * 0.5 }, mode: 'bed', floor: (x, z) => R.floorUnder(x, z, 1.6), push: (b) => R.pushOut(b, { radius: 0.24, balls: [0.32] }), lit: R.lit, others: () => dogs })); });
+      home.forEach((d, i) => { const q = spots[i]; dogs.push(makeHomeDog({ animals, kind: d.kind, name: d.name, scene: R.inner, spot: { x: q.x, y: q.y, z: q.z, rot: q.rot + Math.PI * 0.5 }, mode: 'bed', floor: (x, z) => R.floorUnder(x, z), push: (b) => R.pushOut(b, { radius: 0.24 }), lit: R.lit, others: () => dogs })); });
       dogs.frame = 'cabin';
     } else if (where === 'porch') {
-      home.forEach((d, i) => { const [x, z, turn] = PORCH_DOGS[i % PORCH_DOGS.length], y = R.floorUnder(x, z, 2) || R.porch.y; dogs.push(makeHomeDog({ animals, kind: d.kind, name: d.name, scene: R.group, spot: { x, y, z, rot: turn }, mode: 'porch', floor: () => y })); });
+      home.forEach((d, i) => { const [x, z, turn] = R.layout.porchDogs[i % R.layout.porchDogs.length], y = R.floorUnder(x, z); dogs.push(makeHomeDog({ animals, kind: d.kind, name: d.name, scene: R.group, spot: { x, y, z, rot: turn }, mode: 'porch', floor: () => y })); });
       dogs.frame = 'cabin';
     } else if (camp) {
-      camp.dogSpots(home.length).forEach((s, i) => { const d = home[i]; dogs.push(makeHomeDog({ animals, kind: d.kind, name: d.name, scene: W.scene, spot: s, mode: 'porch', floor: () => s.y })); });
+      camp.dogSpots(home.length).forEach((q, i) => { const d = home[i]; dogs.push(makeHomeDog({ animals, kind: d.kind, name: d.name, scene: W.scene, spot: q, mode: 'porch', floor: () => q.y })); });
       dogs.frame = 'valley';
     }
   }
   // the dogs move to their new place only while neither the old place nor the new one is in view (nothing pops)
   function dogSpotOf(where) {
     if (where === 'camp') return camp ? new THREE.Vector3(camp.spot.x, W.heightAt(camp.spot.x, camp.spot.z), camp.spot.z) : null;
-    return R ? R.toWorld(0.5, 1.2, where === 'beds' ? -0.8 : 1.9) : null;
+    if (!R) return null;
+    const m = R.layout.main, s = R.layout.steps;
+    return where === 'beds' ? R.toWorld((m.x0 + m.x1) / 2, 1.2, (m.z0 + m.z1) / 2) : R.toWorld(s.x, 1.2, s.z);
   }
   function maybeMoveDogs(force = false) {
     const key = whereDogs() + ':' + homeDogs(rider).filter((d) => !d.following).map((d) => d.kind + d.name).join(',');
@@ -198,28 +194,29 @@ export function makeCabin({ W, renderer, camera, animals, rider, hud, input: I, 
     });
   }
 
-  // ── THE TOWN, EACH FRAME: the sign, the camp, the dogs, the inside's things near or far ──
-  let nearOn = true, townT = 0;
+  // ── THE TOWN, EACH FRAME: the sign, the camp, the dogs, the pieces near or far, and whether the player is inside ──
+  let nearOn = true, townT = 0, wasOwned = ownsHome();
   const atL = new THREE.Vector3();
   C.town = (dt) => {
     clock += dt;
+    if (R && R.stale()) build();   // (built again: the Town Lab's New look)
     if (!R) return;
     const P = player(), at = P ? P.position : null;
+    if (at) R.toLocal(at.x, at.y, at.z, atL);
     const d = at ? Math.hypot(at.x - pl.x, at.z - pl.z) : 0;
-    const want = phase !== 'town' || d < (nearOn ? NEAR.hide : NEAR.show);
+    // (in one of its rooms: past a doorway; the camera eases to first person, C.update)
+    const was = inRoom; inRoom = !!at && P.mode === 'foot' && R.inside(atL.x, atL.z);
+    if (inRoom !== was) { wallsHide(inRoom); C.dogWait = inRoom ? R.toWorld(R.layout.wait.x, 0, R.layout.wait.z) : null; { const D = follower(); if (D) D.tagOn = !inRoom; } if (inRoom) arrived(); }
+    const want = inRoom || d < (nearOn ? NEAR.hide : NEAR.show);
     if (want !== nearOn) { nearOn = want; R.near(want); }
-    if (indoor) { if (nearOn && !indoor.ready) indoor.prepare(1); if (phase === 'town') indoor.update(false); }
     R.update(dt, { night: night() });
-    // the door eases toward open or shut (it is heard where it is moved: C.enter, C.leave)
-    if (doorT !== doorTo) { const step = Math.min(dt, 0.05) / WALK.swing; doorT = doorTo > doorT ? Math.min(doorTo, doorT + step) : Math.max(doorTo, doorT - step); R.setDoor(doorT); }
+    if (wasOwned !== ownsHome()) { wasOwned = ownsHome(); lights(); }
     if (sign) sign.update(dt, clock);
     if (camp && d < 160) camp.update(dt, clock);
     if ((townT -= dt) < 0) {
       townT = 0.5;
-      if (phase !== 'town') wallsHide(true);
-      // bought: the sign (with its SOLD board) and the camp are taken away once out of sight. The sign stays while you're
-      // inside (going in is at once, so its SOLD board is first seen on the way out) and goes once you're off from it
-      if (ownsHome() && sign && phase === 'town' && d > 12 && !inView(R.toWorld(FP.doorX + 2.3, 1.2, R.porch.foot + 0.8), 2)) { sign.dispose(); sign = null; }
+      // bought: the sign (with its SOLD board) and the camp are taken away once out of sight
+      if (ownsHome() && sign && !inRoom && d > 12 && !inView(R.toWorld(R.layout.sign.x, 1.2, R.layout.sign.z), 2)) { sign.dispose(); sign = null; }
       // (the camp goes with the dogs that waited there: both only while the camp and the dogs' new place are out of view)
       if (ownsHome() && camp && !inView(new THREE.Vector3(camp.spot.x, W.heightAt(camp.spot.x, camp.spot.z) + 0.6, camp.spot.z), 4) && (!at || Math.hypot(at.x - camp.spot.x, at.z - camp.spot.z) > 20)) {
         const to = dogSpotOf(whereDogs());
@@ -229,158 +226,167 @@ export function makeCabin({ W, renderer, camera, animals, rider, hud, input: I, 
     }
     // the dogs at home: they get up as you come near (the porch's and the camp's), greet you inside
     if (at && (dogs.frame === 'valley' || nearOn)) {
-      if (dogs.frame === 'cabin') { R.toLocal(at.x, at.y, at.z, atL); }
-      const here = phase === 'inside' ? { x: me.x, z: me.z, heading: me.yaw + Math.PI }
-        : dogs.frame === 'cabin' ? { x: atL.x, z: atL.z, heading: (P ? P.heading : 0) - R.yaw } : { x: at.x, z: at.z, heading: P ? P.heading : 0 };
+      const here = dogs.frame === 'cabin' ? { x: atL.x, z: atL.z, heading: (P ? P.heading : 0) - R.yaw } : { x: at.x, z: at.z, heading: P ? P.heading : 0 };
       for (const g of dogs) g.update(dt, here);
     }
-    // in town: the card at the door of a cabin still for sale; walking on into the steps goes in
-    if (phase === 'town' && P) doorCard(P, dt);
+    // in town: the card at the door of a cabin still for sale
+    if (!inRoom && P) doorCard(P);
   };
-  // at the door: a cabin not bought yet, and not enough gold for it: a card says what it costs and how much more to go
+  // at its door spot: a cabin not bought yet, and not enough gold for it: a card says what it costs and how much more to go
   let cardShown = '';
-  function doorCard(P, dt) {
-    // (on horseback too, a little further out for the horse's length: the card shows the same, so a rider short of
-    // gold always hears why nothing happens at the door)
-    const foot = P.mode === 'foot', pd = W.places.cabin.door, near = Math.hypot(P.position.x - pd.x, P.position.z - pd.z) < (foot ? 3.4 : 4.6);
+  function doorCard(P) {
+    const foot = P.mode === 'foot', pd = pl.door, near = Math.hypot(P.position.x - pd.x, P.position.z - pd.z) < (foot ? 3.4 : 4.6);
     let html = '';
     if (near && !ownsHome() && rider.gold < PRICES.cabin) {
       html = `<b>This cabin is for sale</b><span class="bmc-price">${COIN}${PRICES.cabin}</span><small>A home of your own: rooms to furnish, a porch, a bed for your dogs.</small><em>${PRICES.cabin - rider.gold} more gold to go</em>`;
     }
     if (html !== cardShown) { cardShown = html; cardEl.innerHTML = html; cardEl.hidden = !html; cardEl.classList.toggle('is-door', !!html); }
-    // walking on into the porch steps from the door: in you go (a cabin that is yours)
-    if (near && foot && ownsHome() && P.enabled !== false && I.enabled && I.move && I.move.mag > 0.5) {
-      R.toLocal(P.position.x, 0, P.position.z, _l);
-      const h = wrap((P.heading - R.yaw) - Math.PI);   // (0: facing straight at the door, -z in the cabin's frame)
-      pushT = Math.abs(_l.x - FP.doorX) < 1.2 && Math.abs(h) < 0.6 && P.speed < 0.6 ? pushT + dt : 0;
-      if (pushT > WALK.push) { pushT = 0; C.enter(); }
-    } else pushT = 0;
   }
   C.prompt = () => {
-    if (!R || phase !== 'town' || settling()) return null;   // (just out: the prompt waits a moment, not under the finger)
-    if (ownsHome()) return 'Go into your cabin';
+    if (!R || ownsHome()) return null;   // (bought: its door has its own prompt, the keeper's)
     return rider.gold >= PRICES.cabin ? `Buy the cabin: ${PRICES.cabin} gold` : null;
   };
-
-  // ── THE CAMERA: in the cabin's frame, written to the valley's camera ──
-  const qY = new THREE.Quaternion(), eul = new THREE.Euler(0, 0, 0, 'YXZ'), UP = new THREE.Vector3(0, 1, 0);
-  function fpQuat(yaw, pitch, out = new THREE.Quaternion()) { eul.set(pitch, yaw, 0, 'YXZ'); return out.setFromEuler(eul); }
-  function fpFov() { const a = innerWidth / innerHeight; return a >= 1 ? FP.fov : Math.min(95, THREE.MathUtils.radToDeg(2 * Math.atan(Math.tan(THREE.MathUtils.degToRad(30)) / a))); }
-  function setCamera(pos, quat, fov, near) {
-    R.toWorld(pos.x, pos.y, pos.z, camera.position);
-    qY.setFromAxisAngle(UP, R.yaw); camera.quaternion.copy(qY).multiply(quat);
-    const a = innerWidth / innerHeight;
-    if (Math.abs(camera.fov - fov) > 1e-3 || camera.near !== near || camera.aspect !== a) { camera.fov = fov; camera.near = near; camera.aspect = a; camera.updateProjectionMatrix(); }
-    camera.updateMatrixWorld();
+  function buy() {
+    if (ownsHome()) return true;
+    if (!spend(rider, PRICES.cabin)) { hud.toast(`${PRICES.cabin - rider.gold} more gold for the cabin. Rope some cattle or crack a lock box.`, 'warn'); return false; }
+    const o = rider.owned || (rider.owned = {}); o.home = 'cabin'; saveRider(rider);
+    if (sign) sign.sold();
+    hud.toast(`The cabin is yours! −${PRICES.cabin} gold. Press E at its door to go in.`, 'gold');
+    onBuy('cabin'); lights();
+    dogsDirty = true; cardEl.hidden = true; cardShown = '';
+    return true;
   }
-  // the camera at your eyes inside (first person)
-  const eyeP = new THREE.Vector3(), eyeQ = new THREE.Quaternion();
-  function eyes() { setCamera(eyeP.set(me.x, me.y + FP.eye, me.z), fpQuat(me.yaw, me.pitch, eyeQ), fpFov(), FP.near); }
-
-  // ── FREE MOUSE LOOK (a click on the view while inside; Esc lets go) ──
-  // (not under test automation: headless Chrome runs out of memory when a locked pointer is then dragged by a script)
-  const onClick = () => { if (phase === 'inside' && !I.touch && !navigator.webdriver && document.pointerLockElement !== canvas) { try { const p = canvas.requestPointerLock && canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch (e) { /* (not allowed here) */ } } };
-  const onMouse = (e) => { if (phase !== 'inside' || document.pointerLockElement !== canvas || !I.enabled) return; me.yaw -= e.movementX * FP.mouse; me.pitch = THREE.MathUtils.clamp(me.pitch - e.movementY * FP.mouse, -1.4, 1.4); };
-  let listening = false;
-  function listen(on) {
-    if (on === listening) return; listening = on;
-    if (on) { canvas.addEventListener('click', onClick); addEventListener('mousemove', onMouse); }
-    else { canvas.removeEventListener('click', onClick); removeEventListener('mousemove', onMouse); if (document.pointerLockElement === canvas) document.exitPointerLock(); }
-  }
-
-  // ── GOING IN: at once, first person just inside the door, looking into the room; the door shut behind you ──
-  // (no walk up the steps and no camera move: the keys and the stick are yours from the first frame inside. The spot
-  // is clear of the walls and of the door's swing, so the door is never seen moving: you hear it shut behind you)
+  // in through a doorway: a keepsake won out on this ride hung, the dogs greet you, a word about what to buy next
   let greetDone = false;
-  C.enter = () => {
-    if (phase !== 'town' || disposed || !R || settling()) return;
-    const P = player(); if (!P) return;
-    if (!ownsHome()) {
-      if (!spend(rider, PRICES.cabin)) { hud.toast(`${PRICES.cabin - rider.gold} more gold for the cabin. Rope some cattle or crack a lock box.`, 'warn'); return; }
-      const o = rider.owned || (rider.owned = {}); o.home = 'cabin'; saveRider(rider);
-      if (sign) sign.sold();
-      hud.toast(`The cabin is yours! −${PRICES.cabin} gold`, 'gold');
-      onBuy('cabin');
-      dogsDirty = true;
-    }
-    cardEl.hidden = true; cardShown = '';
-    R.keepsakes(keepsakesOf(rider));   // (a keepsake won out in the valley on this ride is hung as you come in)
-    saved.fov = camera.fov; saved.near = camera.near;
-    P.enabled = false; if (P.cam) P.cam.enabled = false; if (P.cancelLasso) P.cancelLasso();
-    const greeters = whereDogs() === 'beds' && dogs.length;   // (dogs on their beds: looking a little down at them)
-    me.x = FP.doorX; me.z = WALK.inside; me.y = R.floorUnder(me.x, me.z, 2); me.yaw = 0; me.pitch = greeters ? -0.2 : -0.05;
-    R.pushOut(me, FP);
-    phase = 'inside'; pushT = 0; greetDone = false; wasLive = false; throughAt = performance.now();
-    if (doorT > 0) { doorT = doorTo = 0; R.setDoor(0); }   // (back in before it had swung shut from going out)
-    playDoor(audio, 'shut', R.toWorld(FP.doorX, 1.9, 0.64));
-    wallsHide(true);
-    C.dogWait = R.toWorld(FP.doorX + 1.7, 0, R.porch.foot + 1.4);
-    { const D = follower(); if (D) D.tagOn = false; }   // (its name tag shows through walls: hidden while you're in)
-    hud.prompt(null); hud.touch(false); hud.el.classList.add('is-home');
-    I.takeLook(); I.pick.length = 0;
-    // the view at your eyes now, so the very next frame drawn is inside (the rider's own body faded out)
-    R.toWorld(me.x, 0, me.z, _w); P.position.set(_w.x, P.position.y, _w.z);
-    if (P.person) P.person.fade = 0;
-    eyes();
-    listen(true); dotEl.hidden = false;
-    greet();
+  function arrived() {
+    if (!R) return;
+    R.keepsakes(keepsakesOf(rider));
+    greetDone = false; greet();
     if (!told) { told = true; const n = nextPiece(rider); if (n) hud.toast(n.price <= rider.gold ? `Look round: there's room for ${a(n.name)}.` : `Saving up? Next for the cabin: ${n.name.toLowerCase()}, ${n.price} gold.`, 'gold'); }
-  };
-  // the dogs on their beds come and say hello once you're in
+  }
   function greet() {
     if (greetDone) return; greetDone = true;
-    if (dogs.frame === 'cabin' && whereDogs() === 'beds') dogs.forEach((h, i) => (h.ready || Promise.resolve()).then(() => setTimeout(() => { if (phase === 'inside') h.greet(i, dogs.length); }, 300 + i * 350)));
+    if (dogs.frame === 'cabin' && whereDogs() === 'beds') dogs.forEach((h, i) => (h.ready || Promise.resolve()).then(() => setTimeout(() => { if (inRoom) h.greet(i, dogs.length); }, 300 + i * 350)));
   }
-
-  // ── COMING OUT: at once, just in front of the steps facing the town, the camera behind you as anywhere in town; the
-  // door stands open behind you and swings shut ──
-  C.leave = ({ to = null } = {}) => {
-    if (phase === 'town' || disposed || !R || (!to && settling())) return;
-    finish(to);
-    if (!to) { throughAt = performance.now(); doorT = 1; doorTo = 0; R.setDoor(1); playDoor(audio, 'shut', R.toWorld(FP.doorX, 1.9, 0.64)); }   // (to: the menu's "back to town", elsewhere)
+  C.enter = () => {
+    if (disposed || !R) return;
+    if (!ownsHome()) { buy(); return; }
+    // (rigs and the dev buttons: just inside the front door, facing in; the door left as it is)
+    const P = player(); if (!P) return;
+    const f = R.layout.front, w = R.toWorld(f.x - f.ox * 1.1, 0, f.z - f.oz * 1.1);
+    P.teleport(w.x, w.z, Math.atan2(-f.ox, -f.oz) + R.yaw);
   };
-  function finish(to = null) {
-    const P = player();
-    phase = 'town'; doorTo = 0; C.dogWait = null;
-    wallsHide(false);
-    { const D = follower(); if (D) D.tagOn = true; }
-    focus = null; cardEl.hidden = true; cardShown = ''; hud.prompt(null);
-    listen(false); dotEl.hidden = true;
-    camera.fov = saved.fov; camera.near = saved.near; camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
-    if (indoor) indoor.update(false);   // (the far limit and the shadows as they were, now: the menu's way out is taken paused)
-    if (R) R.ghost(null);
-    if (P) {
-      const s = to || { x: W.places.cabin.door.x, z: W.places.cabin.door.z, rot: R ? R.yaw : pl.rot };
-      if (P.person) P.person.fade = 1;
-      P.teleport(s.x, s.z, s.rot); P.enabled = true;
-      // the chase camera placed now (straight behind, or off to the side where the cabin is behind), so the very next
-      // frame drawn is outside (not one more frame of the room through the town's lens)
-      if (P.cam) { P.cam.enabled = true; P.cam.snap(); if (!disposed) P.cam.update(0, { at: P.position, heading: P.heading, onHorse: false, speed: 0 }); }
+  C.leave = ({ to = null } = {}) => {
+    const P = player(); if (!P || !to) return;
+    P.teleport(to.x, to.z, to.rot); inRoom = false; fpT = 0; settle(P);
+  };
+
+  // ── FIRST PERSON: the chase camera's pose (P.update placed it) eased toward the player's eyes ──
+  const thirdP = new THREE.Vector3(), thirdQ = new THREE.Quaternion(), eyeP = new THREE.Vector3(), eyeQ = new THREE.Quaternion(), eul = new THREE.Euler(0, 0, 0, 'YXZ');
+  const smooth = (t) => t * t * (3 - 2 * t);
+  let fovWas = null;
+  function firstPerson(P, dt) {
+    fpT = Math.max(0, Math.min(1, fpT + (inRoom ? 1 : -1) * dt / FP.ease));
+    const k = smooth(fpT);
+    if (P.person) P.person.fade = Math.max(0, 1 - k * 2);   // (the rider's own body gone by half way)
+    if (fovWas == null) fovWas = camera.fov;
+    if (k <= 0) { settle(P); return; }
+    const cam = P.cam;
+    thirdP.copy(camera.position); thirdQ.copy(camera.quaternion);
+    eyeP.set(P.position.x, P.position.y + FP.eye, P.position.z);
+    const yaw = cam ? cam.yaw : P.heading, pitch = cam ? THREE.MathUtils.clamp((CAM.pitch - cam.pitch) * FP.pitch, -1.25, 1.25) : 0;
+    eul.set(pitch, yaw + Math.PI, 0, 'YXZ'); eyeQ.setFromEuler(eul);
+    camera.position.lerpVectors(thirdP, eyeP, k); camera.quaternion.slerpQuaternions(thirdQ, eyeQ, k);
+    const fov = fovWas + (FP.fov - fovWas) * k;
+    if (Math.abs(camera.fov - fov) > 1e-3) { camera.fov = fov; camera.updateProjectionMatrix(); }
+    camera.updateMatrixWorld();
+  }
+  // the valley left out while no opening is in view (INDOOR); the shadows a few times a second
+  const hv = new THREE.Vector3();
+  let farWas = null, shadowWas = null, shadowT = 0;
+  function indoors(dt) {
+    const on = fpT > 0.9 && inRoom;
+    if (on && shadowWas == null) shadowWas = renderer.shadowMap.autoUpdate;
+    if (on) { renderer.shadowMap.autoUpdate = false; if ((shadowT -= dt) <= 0) { shadowT = INDOOR.shadowEvery; renderer.shadowMap.needsUpdate = true; } }
+    else if (shadowWas != null) { renderer.shadowMap.autoUpdate = shadowWas; shadowWas = null; }
+    let seen = !on;
+    if (on) { camera.updateMatrixWorld(); for (const p of R.openings()) { R.toWorld(p[0], p[1], p[2], hv).project(camera); if (hv.z < 1 && Math.abs(hv.x) < INDOOR.margin && Math.abs(hv.y) < INDOOR.margin) { seen = true; break; } } }
+    if (!seen) { if (farWas == null) farWas = camera.far; if (camera.far !== INDOOR.far) { camera.far = INDOOR.far; camera.updateProjectionMatrix(); } }
+    else if (farWas != null) { camera.far = farWas; farWas = null; camera.updateProjectionMatrix(); }
+    if (on && seen) portalCull(dt); else uncull();
+  }
+  // ── THE PORTALS (above) ──
+  const culled = new Set(), sph = new THREE.Sphere(), views = [], pv = [0, 1, 2, 3].map(() => new THREE.Vector3()), pc = new THREE.Vector3(), cw = new THREE.Vector3();
+  let things = [], thingsT = 0;
+  function gather() {
+    things = [];
+    const mine = R.code.group;
+    W.scene.traverse((o) => {
+      if (!(o.isMesh || o.isPoints || o.isLine || o.isSprite) || o.frustumCulled === false) return;
+      for (let a = o; a; a = a.parent) if (a === mine) return;   // (the cabin's own: the room, its pieces, its dogs)
+      things.push(o);
+    });
+  }
+  function frustumThrough(rect) {
+    // (the four sides from the eyes through the opening's edges, a little wider; each faces in, toward its middle)
+    pc.set(rect.c[0], rect.c[1], rect.c[2]); R.toWorld(pc.x, pc.y, pc.z, pc);
+    rect.corners.forEach((q, i) => { R.toWorld(q[0], q[1], q[2], pv[i]); pv[i].sub(pc).multiplyScalar(1 + PORTAL.grow / Math.max(0.3, pv[i].length())).add(pc); });
+    const F = views.length < 16 ? new THREE.Frustum() : null; if (!F) return null;
+    for (let i = 0; i < 4; i++) {
+      const a = pv[i], b = pv[(i + 1) % 4], P = F.planes[i];
+      P.setFromCoplanarPoints(cw, a, b); if (P.distanceToPoint(pc) < 0) P.negate();
     }
-    I.takeLook(); I.pick.length = 0;
-    hud.touch(I.touch); hud.el.classList.remove('is-home');
+    F.planes[4].setFromNormalAndCoplanarPoint(hv.subVectors(pc, cw).normalize(), cw);   // (in front of the eyes)
+    F.planes[5].set(new THREE.Vector3(0, 0, 0), 1);   // (no far side)
+    return F;
+  }
+  function portalCull(dt) {
+    if ((thingsT -= dt) <= 0) { thingsT = PORTAL.every; gather(); }
+    views.length = 0; cw.copy(camera.position);
+    for (const rect of R.portals()) {
+      let on = false;
+      for (const q of rect.corners) { R.toWorld(q[0], q[1], q[2], hv).project(camera); if (hv.z < 1 && Math.abs(hv.x) < INDOOR.margin && Math.abs(hv.y) < INDOOR.margin) { on = true; break; } }
+      if (!on) continue;
+      const F = frustumThrough(rect); if (F) views.push(F);
+    }
+    for (const o of things) {
+      const g = o.geometry; let bs = o.isInstancedMesh || o.isSkinnedMesh ? (o.boundingSphere || (o.computeBoundingSphere && (o.computeBoundingSphere(), o.boundingSphere))) : g && (g.boundingSphere || (g.computeBoundingSphere(), g.boundingSphere));
+      if (!bs) continue;
+      sph.copy(bs).applyMatrix4(o.matrixWorld); if (o.isSkinnedMesh) sph.radius += PORTAL.skinned;
+      let see = false; for (const F of views) if (F.intersectsSphere(sph)) { see = true; break; }
+      if (see) { if (culled.has(o)) { o.layers.enable(0); culled.delete(o); } }
+      else if (!culled.has(o) && o.layers.isEnabled(0)) { o.layers.disable(0); culled.add(o); }
+    }
+  }
+  function uncull() { if (!culled.size) return; for (const o of culled) o.layers.enable(0); culled.clear(); }
+  // back to the town's camera as it was (out, or carried away)
+  function settle(P) {
+    uncull();
+    if (farWas != null) { camera.far = farWas; farWas = null; camera.updateProjectionMatrix(); }
+    if (shadowWas != null) { renderer.shadowMap.autoUpdate = shadowWas; shadowWas = null; }
+    if (P && P.person) P.person.fade = 1;
+    if (fovWas != null && camera.fov !== fovWas) { camera.fov = fovWas; camera.updateProjectionMatrix(); }
+    fovWas = null; dotEl.hidden = true;
   }
 
-  // ── WHAT YOU LOOK AT INSIDE: the door, the table, a slot, a keepsake ──
-  const fwd = new THREE.Vector3(), eye = new THREE.Vector3(), tmp = new THREE.Vector3();
+  // ── WHAT YOU LOOK AT INSIDE (first person): a slot, the table, a keepsake ──
+  const fwd = new THREE.Vector3(), eye = new THREE.Vector3(), tmp = new THREE.Vector3(), qInv = new THREE.Quaternion();
   function pickFocus() {
-    eye.set(me.x, me.y + FP.eye, me.z);
-    fwd.set(-Math.sin(me.yaw) * Math.cos(me.pitch), Math.sin(me.pitch), -Math.cos(me.yaw) * Math.cos(me.pitch));
+    R.toLocal(camera.position.x, camera.position.y, camera.position.z, eye);
+    camera.getWorldDirection(fwd); qInv.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -R.yaw); fwd.applyQuaternion(qInv);
     let best = null, bestS = Infinity;
     const consider = (kind, id, p, reach = FP.reach) => {
       tmp.set(p[0], p[1], p[2]).sub(eye); const d = tmp.length(); if (d > reach || d < 0.05) return;
       const ang = tmp.angleTo(fwd); if (ang > FP.aim) return;
       const s = ang + d * 0.04; if (s < bestS) { bestS = s; best = { kind, id }; }
     };
-    for (const p of FP.door) consider('door', 'door', p, 2.6);
     const have = owned();
-    for (const s of SLOTS) for (const p of s.looks) consider(have.includes(s.id) ? 'piece' : 'slot', s.id, p, s.id === 'porch' ? 3.4 : FP.reach);
+    // (the porch's rockers: looked at out through the open front door, from just inside)
+    for (const s of SLOTS) { const q = R.spec(s.id); for (const p of q.looks) consider(have.includes(s.id) ? 'piece' : 'slot', s.id, p, s.id === 'porch' ? 4.2 : FP.reach); }
     // (the counter bell stands on the table: once there is one, looking there is the table's, for its lock boxes)
-    for (const k of keepsakesOf(rider)) if (KEEP_LOOK[k.job] && !(k.job === 'orders' && have.includes('table'))) consider('keepsake', k.job, KEEP_LOOK[k.job], 3.6);
+    for (const k of keepsakesOf(rider)) { const p = R.keepLook(k.job); if (p && !(k.job === 'orders' && have.includes('table'))) consider('keepsake', k.job, p, 3.6); }
     return best;
   }
-  const KEEP_LOOK = { cattle: [1.6, 2.5, -2.7], boxes: [1.75, 1.15, -2.55], sheep: [1.12, 2.3, 0.55], pigs: [2.85, 2.05, -1.9], bandits: [-2.3, 2.35, -1.75], deliveries: [-1.55, 3.0, 0.55], orders: [2.3, 1.65, -0.62], tower: [2.85, 1.75, -0.45], loads: [2.85, 1.75, 0.25], fish: [-0.62, 2.0, -2.75],
-    targets: [2.85, 1.75, -1.22], loot: [0.55, 0.35, -2.4] };   // (where each keepsake is looked at: its card shows)
   // (the card and the prompt are drawn again only when what you look at changes, or the gold does)
   function showFocus(f, force = false) {
     const k = f ? f.kind + ':' + f.id : null, was = focus ? focus.kind + ':' + focus.id : null;
@@ -389,9 +395,8 @@ export function makeCabin({ W, renderer, camera, animals, rider, hud, input: I, 
     if (k === was && !force) return;
     if (!f) { cardEl.hidden = true; hud.prompt(null); return; }
     let card = '', prompt = null;
-    if (f.kind === 'door') prompt = 'Go outside';
-    else if (f.kind === 'slot') {
-      const s = SLOT[f.id], short = s.price - rider.gold;
+    if (f.kind === 'slot') {
+      const s = R.spec(f.id), short = s.price - rider.gold;
       card = `<b>${esc(s.name)}</b><span class="bmc-price">${COIN}${s.price}</span><small>${esc(s.line)}</small>`
         + (short > 0 ? `<em>${short} more gold to go</em>` : '');
       prompt = short > 0 ? null : `Buy ${a(s.name)}`;
@@ -408,9 +413,8 @@ export function makeCabin({ W, renderer, camera, animals, rider, hud, input: I, 
   const a = (name) => (/^(a|two|an) /i.test(name) || (/[^s]s$/i.test(name) && !/ and /i.test(name)) ? name.toLowerCase() : (/^[aeiou]/i.test(name) ? 'an ' : 'a ') + name.toLowerCase());
   function act() {
     const f = focus; if (!f) return;
-    if (f.kind === 'door') { C.leave(); return; }
     if (f.kind === 'slot') {
-      const s = SLOT[f.id], r = buyPiece(rider, f.id, spend, saveRider);
+      const s = R.spec(f.id), r = buyPiece(rider, f.id, spend, saveRider);
       if (r === 'short') { hud.toast(`${s.price - rider.gold} more gold for ${a(s.name)}. Rope some cattle or crack a lock box.`, 'warn'); return; }
       if (r !== 'bought') return;
       R.ghost(null); sync();
@@ -428,79 +432,59 @@ export function makeCabin({ W, renderer, camera, animals, rider, hud, input: I, 
   }
   function sync() {
     if (!R) return;
-    R.furnish(owned(), { dogs: homeDogs(rider).filter((d) => !d.following).length });
+    // (the pieces' shaders built as they come, for the valley's lights: the first look in through the door doesn't stall)
+    const home = R;
+    R.furnish(owned(), { dogs: homeDogs(rider).filter((d) => !d.following).length }).then(() => { if (R === home && W.warmFor) W.warmFor(home.group); }).catch(() => {});
     R.keepsakes(keepsakesOf(rider));
   }
 
-  // ── EACH FRAME WHILE THE CABIN HAS THE PLAYER ──
-  let wasLive = false, lastFrame = 0, gold = rider.gold;
+  // ── EACH FRAME WHILE THE PLAYER IS INSIDE (or the camera still easing out): the player's own walking, then the eyes ──
+  let gold = rider.gold;
   C.update = (dt) => {
-    if (phase === 'town' || !R) return;
-    const P = player(); if (!P) return;
-    dt = Math.min(dt, 0.05);
-    insideStep(P, dt);
-    if (indoor) indoor.update(phase === 'inside', dt);   // (after the camera is placed)
-  };
-  function insideStep(P, dt) {
-    const t = performance.now();
-    if (t - lastFrame > 250) wasLive = false;   // (the game stops calling update while paused: drawn again on the first frame back)
-    lastFrame = t;
-    const live = I.enabled;
-    let pushing = false;
-    if (live) {
-      const l = I.takeLook(), k = I.touch ? FP.touchDrag : FP.drag;
-      if (l.dx || l.dy) { me.yaw -= l.dx * k; me.pitch = THREE.MathUtils.clamp(me.pitch - l.dy * k, -1.4, 1.4); }
-      I.pick.length = 0; I.takeZoom();
-      const f = I.move.y * I.move.mag, s = I.move.x * I.move.mag, len = Math.hypot(f, s);
-      if (len > 0.05) {
-        const sp = (I.run ? FP.hurry : FP.walk) * dt, sy = Math.sin(me.yaw), cy = Math.cos(me.yaw), n = Math.ceil(sp * len / 0.05);
-        const x0 = me.x, z0 = me.z;
-        for (let i = 0; i < n; i++) { me.x += (-sy * f + cy * s) * sp / n; me.z += (-cy * f - sy * s) * sp / n; R.pushOut(me, FP); }
-        // walking into the shut door: out you go
-        const dz = (-cy * f - sy * s);
-        pushing = me.z > 0.22 && Math.abs(me.x - FP.doorX) < 0.5 && dz > 0.6 * len && Math.hypot(me.x - x0, me.z - z0) < sp * len * 0.3;
-      } else R.pushOut(me, FP);
-      const fl = R.floorUnder(me.x, me.z, me.y + FP.step);
-      me.y = fl > me.y ? THREE.MathUtils.damp(me.y, fl, 18, dt) : Math.max(fl, me.y - 4 * dt);
-      showFocus(pickFocus(), gold !== rider.gold || !wasLive);
-      if (I.tap('KeyE')) { act(); if (phase !== 'inside') return; }   // (out through the door: the town has the player now)
-    }
-    pushT = pushing ? pushT + dt : 0;
-    if (pushT > WALK.push) { pushT = 0; C.leave(); if (phase !== 'inside') return; }
-    wasLive = live;
-    // the player stands where you are (for everything else in the valley); the rest of the player (the horse) goes on
-    R.toWorld(me.x, 0, me.z, _w); P.position.set(_w.x, P.position.y, _w.z);
+    const P = player(); if (!P || !R) return;
+    const e = I.enabled && I.tap('KeyE');   // (E read before the player's own update, which would take it for the horse)
     P.update(dt);
-    if (P.person) P.person.fade = 0;
-    eyes();
+    firstPerson(P, dt);
+    indoors(dt);
+    const fp = fpT > 0.6;
+    dotEl.hidden = !fp;
+    // what E does: a slot, the table, a keepsake (looked at); else the door at hand (the keeper's), open or shut
+    const f = fp ? pickFocus() : null;
+    showFocus(f, gold !== rider.gold);
+    if (!f) {
+      const DK = CODE && CODE.doors, kd = DK && P.mode === 'foot' ? DK.near(P.position.x, P.position.z) : null;
+      hud.prompt(kd ? (kd.open ? 'Close the door' : 'Open the door') : null);
+      if (kd && e) DK.use(kd.door, !kd.open);
+    } else if (e) act();
     gold = rider.gold;
-  }
+  };
   C.render = () => W.render();
 
   // ── for rigs and the dev buttons ──
-  C.state = () => ({ phase, inside: phase !== 'town', busy: C.busy, home: ownsHome(), at: { x: +me.x.toFixed(2), y: +me.y.toFixed(2), z: +me.z.toFixed(2), yaw: +me.yaw.toFixed(2), pitch: +me.pitch.toFixed(2) },
-    door: +doorT.toFixed(2),
+  C.state = () => ({ inside: C.inside, inRoom, fp: +fpT.toFixed(2), home: ownsHome(), door: R ? R.code.doors.map((q) => +q.t.toFixed(2)) : [],
+    at: R ? { x: +atL.x.toFixed(2), z: +atL.z.toFixed(2) } : null,
     focus: focus ? { ...focus } : null, owned: owned(), shown: R ? R.shown : [], keepsakes: keepsakesOf(rider).map((k) => k.job + ':' + k.tier),
     dogs: dogs.map((d) => d.state()), dogsAt: dogsWhere.split(':')[0], sign: sign ? (sign.isSold ? 'sold' : 'for sale') : null, camp: camp ? { x: +camp.spot.x.toFixed(1), z: +camp.spot.z.toFixed(1), local: camp.spot.local } : null,
-    near: nearOn, ready: !!R, porch: R ? R.porch : null });
+    near: nearOn, ready: !!R, preset: R ? R.code.look.preset : null });
   C.dev = {
-    look(x, z, yaw = me.yaw, pitch = me.pitch) { me.x = x; me.z = z; me.yaw = yaw; me.pitch = pitch; if (R) me.y = R.floorUnder(x, z, 2); },
+    // (stand inside at a spot of its frame, looking yaw (its frame: 0 toward +z) and pitch up)
+    look(x, z, yaw = 0, pitch = 0) { const P = player(); if (!P || !R) return; const w = R.toWorld(x, 0, z); P.teleport(w.x, w.z, yaw + R.yaw); if (P.cam) { P.cam.yaw = yaw + R.yaw; P.cam.pitch = CAM.pitch - pitch / FP.pitch; } },
     give(id) { const o = rider.owned || (rider.owned = {}); o.cabin = [...new Set([...ownedPieces(rider), id])]; saveRider(rider); sync(); if (id === 'dogbeds') dogsDirty = true; },
-    own(on = true) { const o = rider.owned || (rider.owned = {}); if (on) o.home = 'cabin'; else delete o.home; saveRider(rider); if (!on) { putSign(); putCamp(); } dogsDirty = true; },
+    own(on = true) { const o = rider.owned || (rider.owned = {}); if (on) o.home = 'cabin'; else delete o.home; saveRider(rider); if (!on) { putSign(); putCamp(); } dogsDirty = true; lights(); },
     buy(id) { focus = { kind: 'slot', id }; act(); },
     moveDogs() { placeDogs(); },
-    get interior() { return R; }, get indoor() { return indoor; }, get camp() { return camp; }, get sign() { return sign; },
+    get interior() { return R; }, get camp() { return camp; }, get sign() { return sign; },
   };
   C.dispose = () => {
     disposed = true;
-    if (phase !== 'town') finish(null);
-    if (indoor) { indoor.update(false); indoor = null; }
-    listen(false);
+    if (inRoom) wallsHide(false);
+    settle(player());
     clearDogs();
     if (sign) { sign.dispose(); sign = null; }
     if (camp) { camp.dispose(); camp = null; }
     if (R) R.dispose();
     R = null;
+    if (CODE && CODE.cabinLocked) CODE.cabinLocked = null;
     ui.remove();
   };
   return C;

@@ -55,8 +55,10 @@ export const CODE_KINDS = new Set(['stable', 'sheriff', 'generalStore', 'saloon'
 // the saloon's batwings, the blacksmith's big doors (left of its shoeing shed). A cabin's door is near its middle. The
 // game's door spots (src/world.js places) stand out from there (CODE.stats() has each one's doorway as built)
 export const CODE_DOORS = { stable: 1.65, sheriff: 0.05, generalStore: 3.14, saloon: 1.41, blacksmith: -1.47 };
-// the player's own cabin: kept as it was (src/cabin/ has its inside)
+// the player's own cabin: built in code too (a cabin design, the two-room log house unless its item says another), its
+// furniture the player's own (src/cabin/: bought for its slots), so the design's own furniture is left out of it
 export const isPlayersCabin = (it) => !!it && (it.player === true || (it.kind === 'cabin' && it.id === 'cabin'));
+export const PLAYER_CABIN = 'tworoom';
 const HYST = 3;                                     // (metres: drawn near from range, put far again past range + HYST)
 // (metres from the nearest doorway: an inside comes in within near, or gallop riding fast (over GALLOP m/s); goes out
 // past far once its doors are shut and it is out of view, or past gone regardless. The doors' own distances:
@@ -85,8 +87,8 @@ export function makeCodeBuildings({ shade = null, tier = () => 'gaming', rendere
   const kit = () => kitP || (kitP = import('./codebuild.js').then(async (m) => { mod = m; await frame(); const t = tier(); return m.makeBuildKit({ step: frame, small: t === 'potato', oneSheet: t === 'potato' }); }));
   let readyFn; const ready = new Promise((ok) => { readyFn = ok; });
   const CODE = {
-    range: 40, propsOn: true, detail: 3, arc: 3, camTest: true, ready,
-    has: (kind, it) => CODE_KINDS.has(kind) && !isPlayersCabin(it),
+    range: 40, propsOn: true, detail: 3, arc: 3, camTest: true, ready, blockers: [],
+    has: (kind) => CODE_KINDS.has(kind),
     lookKey: (it) => (it ? `${it.preset || ''}/${it.seed || ''}` : ''),
     looks: () => (mod ? [...mod.CABIN_LOOKS] : []),
     lookName: (k) => (mod && mod.CABIN_LABELS[k]) || k,
@@ -94,8 +96,8 @@ export function makeCodeBuildings({ shade = null, tier = () => 'gaming', rendere
     // one building at a time, a frame between each (each is about half a second of baking light)
     make(it) {
       wanted++;
-      const look = { id: it.id, preset: it.preset, seed: it.seed };
-      const p = queue.then(async () => { const K = kitNow = await kit(); await K.art(it.kind); await frame(); const b = mod.buildCodeBuilding(K, it.kind, { shade, look }); await frame(); return b; });
+      const player = isPlayersCabin(it), look = { id: it.id, preset: it.preset || (player ? PLAYER_CABIN : undefined), seed: it.seed };
+      const p = queue.then(async () => { const K = kitNow = await kit(); await K.art(it.kind); await frame(); const b = mod.buildCodeBuilding(K, it.kind, { shade, look, player }); await frame(); return b; });
       queue = p.catch(() => {});
       p.then(() => { if (++made >= wanted) readyFn(); }, (e) => { console.warn('code building: not built', it.kind, e); if (++made >= wanted) readyFn(); });
       return p;
@@ -105,6 +107,7 @@ export function makeCodeBuildings({ shade = null, tier = () => 'gaming', rendere
     moved(o) { if (placed.has(o)) { place(o); flatDirty = true; } },
     blocked(x, z) {
       if (K.blocked(x, z)) return true;   // (a shut door)
+      for (const f of CODE.blockers) if (f(x, z)) return true;   // (what else stands in a building: the player's cabin's bought furniture)
       for (const o of placed) { const q = o.q; if (!q || Math.abs(x - q.x) > q.r || Math.abs(z - q.z) > q.r) continue;
         const k = cellOf(o, x, z); if (k >= 0 && o.code.grid.blocked[k]) return true; }
       return false;
@@ -210,7 +213,9 @@ export function makeCodeBuildings({ shade = null, tier = () => 'gaming', rendere
     C.doorways.forEach((D, i) => {
       if (!C.batwings && !C.hasDoor(i)) return;   // (an open doorway, no door in it)
       v.set(...D.centre).applyMatrix4(M); n.set(...D.out).transformDirection(M); n.y = 0; n.normalize();
-      o.keep.push(K.add({ x: v.x, y: v.y, z: v.z, ox: n.x, oz: n.z, half: D.w / 2 + 0.05, batwing: C.batwings, building: o, way: i,
+      // (the player's cabin: open till they shut it, and locked till it is bought: src/cabin/cabin.js sets CODE.cabinLocked)
+      const mine = isPlayersCabin(o.it);
+      o.keep.push(K.add({ x: v.x, y: v.y, z: v.z, ox: n.x, oz: n.z, half: D.w / 2 + 0.05, batwing: C.batwings, building: o, way: i, keep: mine, locked: mine ? () => !!(CODE.cabinLocked && CODE.cabinLocked()) : null,
         open: (on) => C.openDoor(i, on), ajar: () => C.doorAjar(i), flap: () => C.flapDoor(i),
         inside: (x, z) => howNear(o, x, z) === 0, ready: () => { o.byDoor = true; if (!C.loaded) { C.load(true); o.loadedAt = performance.now() / 1000; } } }));
     });

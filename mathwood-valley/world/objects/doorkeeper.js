@@ -15,7 +15,9 @@
 //   K.add(door) -> door   door: { x, z, y (the doorway's middle, world), ox, oz (its way out), half (half its width),
 //                         open(on) (swing it; true if that changed anything), ajar() (0 shut .. 1 open), flap()
 //                         (batwings: swing them through), batwing (rests open: no E, no blocking), inside(x, z) (true
-//                         with a point in its building), ready() (before it opens for the player: its inside loaded) }
+//                         with a point in its building), ready() (before it opens for the player: its inside loaded),
+//                         keep (true: never shuts itself: the player's cabin, open till they shut it), locked() (true:
+//                         no E: the cabin before it is bought) }
 //   K.remove(door)
 //   K.near(x, z, reach?) -> { door, open, dist } | null   the door the player could use with E, standing there
 //   K.use(door, on)       the player's E
@@ -48,13 +50,13 @@ export function makeDoorKeeper({ sound = () => {}, seen = () => false } = {}) {
     remove(d) { doors.delete(d); },
     near(x, z, reach = DOORWAYS.reach) {
       let best = null, bd = reach;
-      for (const d of doors) { if (d.batwing) continue; const k = Math.hypot(x - d.x, z - d.z); if (k < bd) { bd = k; best = d; } }
+      for (const d of doors) { if (d.batwing || (d.locked && d.locked())) continue; const k = Math.hypot(x - d.x, z - d.z); if (k < bd) { bd = k; best = d; } }
       return best ? { door: best, open: best.isOpen, dist: bd } : null;
     },
     use(d, on) { return set(d, on, 'player'); },
     pass(x, z, hold = DOORWAYS.hold) {
       let best = null, bd = DOORWAYS.pass;
-      for (const d of doors) { const k = Math.hypot(x - d.x, z - d.z); if (k < bd) { bd = k; best = d; } }
+      for (const d of doors) { if (d.keep) continue; const k = Math.hypot(x - d.x, z - d.z); if (k < bd) { bd = k; best = d; } }   // (nobody else goes in the player's cabin)
       if (!best) return null;
       if (best.batwing) { if (best.flap && best.flap()) sound('flap', at(best)); return best; }
       if (!best.isOpen) set(best, true, 'folk', now() + hold);
@@ -64,7 +66,7 @@ export function makeDoorKeeper({ sound = () => {}, seen = () => false } = {}) {
     update(dt, player) {
       const t = now();
       for (const d of doors) {
-        if (!d.isOpen) continue;
+        if (!d.isOpen || d.keep) continue;   // (the player's cabin's: open till they shut it)
         const dp = player ? Math.hypot(player.x - d.x, player.z - d.z) : Infinity;
         if (d.by === 'folk') { if (t > d.until && dp > DOORWAYS.reach) set(d, false); continue; }
         // (the player's: open while they are inside or near; then once it is out of view, or they are far off)

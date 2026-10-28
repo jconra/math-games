@@ -127,7 +127,6 @@ export const RELOAD = {
   board: { label: 'Jobs board picture', by: ['half', 'full', 'full'], where: 'src/jobsboard.js' },
   stoneShapes: { label: 'Stone shapes', by: ['20 faces, no pictures, 1,500', '20 faces, 14,000', '80 faces, 26,000'], where: 'world/valley.js stoneShapes, TIER_SET.stones' },
   paving: { label: '3D paving stones', by: ['painted only', '3D near', '3D near'], where: 'world/valley.js TIER_SET.paving3D' },
-  cabin: { label: 'The cabin\'s pictures', by: ['2048 outside (106 MB)', '2048 outside (106 MB)', '4096 outside (173 MB)'], where: 'src/cabin/interior.js loadHomeModel: models/town/cabin_inside_2048.glb or cabin_inside.glb' },
 };
 
 // ── THE LADDERS (the order going up; going down is the same, backwards) ────────────────────────────────────────────

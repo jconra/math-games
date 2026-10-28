@@ -2,8 +2,12 @@
 // rider owns. Plain data and small helpers only (no three.js), so the tests can read it without a browser.
 //
 // Every piece stands in one fixed SLOT. A slot names its model file (models/furniture/<file>.glb) or says it is made in
-// code (pieces.js), where it stands in the cabin (metres, in cabin_inside.glb's own space: the floor is about 0.8 m up,
-// the door is on the +z side, the room runs x -2.4 .. 3.0 and z -2.85 .. 0.6), and how big it should be. A file is fitted
+// code (pieces.js), and how big it should be. WHERE it stands now comes from the cabin design the player's cabin is
+// built as (layout.js, from its rooms' anchors: the table and chairs, the stove, the rug and the dog beds in the main
+// room clear of the ways between its doors, the bed and the painting in the bedroom...); the at, rot, box and looks
+// below are the old walk-in model's (cabin_inside.glb, retired), kept as each piece's defaults.
+// (Still to come: these furniture-shop pieces stay as they are until the props library replaces them. Dad flagged the
+// dog bed as too bright.) A file is fitted
 // to its slot whatever size it comes at (its longest side across the floor is made `fit` metres, or its height `fitH`),
 // stood on the floor, centred, and turned so its own front (+z) faces the way `rot` says. So a nicer model (a Tripo one)
 // replaces a stand-in by changing `file` and nothing else.

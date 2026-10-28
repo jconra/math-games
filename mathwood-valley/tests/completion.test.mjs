@@ -298,12 +298,21 @@ test('a job a grown-up turned off leaves the list (what is done stays), so 100% 
   assert.equal(setGoal(r, 'buckle:targets:gold'), false);
 });
 
-test('every job has its own sign on its buckle, and every keepsake a spot in the cabin to be looked at', () => {
-  const hud = source('../src/ui/hud.js'), cabin = source('../src/cabin/cabin.js');
+test('every job has its own sign on its buckle, and every keepsake a spot in the cabin to be looked at', async () => {
+  const hud = source('../src/ui/hud.js');
   const signs = hud.slice(hud.indexOf('const SIGN = {'), hud.indexOf('const signAt'));
-  const look = cabin.slice(cabin.indexOf('const KEEP_LOOK = {'), cabin.indexOf('};', cabin.indexOf('const KEEP_LOOK = {')));
   for (const j of JOBS) assert.match(signs, new RegExp(`\\n  ${j.id}: \\(f, ink\\)`), `a buckle sign for ${j.id} (else it shows the longhorn)`);
-  for (const id of Object.keys(KEEPSAKES)) assert.match(look, new RegExp(`\\b${id}: \\[`), `a look spot for the ${id} keepsake`);
+  // (the player's cabin is a cabin design built in code: its keepsakes' spots come from its rooms, src/cabin/layout.js;
+  // here the two-room log house's rooms, doorways and porch as built)
+  const { cabinLayout } = await import('../src/cabin/layout.js');
+  const L = cabinLayout({ floor: 0.63, footprint: { x0: -4.27, x1: 4.27, z0: -4.19, z1: 4.19 }, porch: { x0: -3.02, x1: -0.32, z0: 0.97, z1: 2.87, y: 0.59 },
+    doorways: [{ name: 'front', centre: [-1.67, 1.67, 0.97], out: [0, 0, 1], w: 0.92 }, { name: 'back', centre: [1.58, 1.67, -3.63], out: [0, 0, -1], w: 0.92 }, { name: 'between the rooms', centre: [-0.22, 1.6, -2.61], out: [1, 0, 0], w: 0.92, inner: true }],
+    rooms: [{ name: 'left room', floor: [-3.55, -0.36, -3.36, 0.7], ceiling: 3.01, anchors: { bed: { x: -2.8, z: -2.31, rot: 0 }, table: { x: -1.5, z: -1.03, rot: 0 }, shelves: { x: -0.56, z: -0.69, rot: 4.712, len: 1.6 } } },
+      { name: 'right room', floor: [-0.09, 3.11, -3.36, 0.7], ceiling: 3.01, anchors: { bed: { x: 0.67, z: -0.35, rot: Math.PI }, table: { x: 1.96, z: -1.63 }, hearth: { x: 3.11, z: -1.33 }, shelves: { x: 2.91, z: 0, rot: 4.712, len: 1.14 } } }] });
+  for (const id of Object.keys(KEEPSAKES)) assert.ok(L.keepsakes[id] && L.keepsakes[id].at, `a spot for the ${id} keepsake`);
+  // and every slot a place, the dog beds clear of the doorways
+  for (const id of ['rug', 'lanterns', 'picture', 'dogbeds', 'table', 'porch', 'bed', 'rifles', 'stove']) assert.ok(L.slots[id] && L.slots[id].looks.length, `a place for the ${id}`);
+  for (const q of L.bedSpots) assert.ok(Math.hypot(q.x + 1.67, q.z - 0.97) > 1.0, 'a dog bed in the front doorway');
 });
 
 test('the windmill, the bridge and fishing turned off: their places, buckles and keepsakes leave the list (what is done stays)', () => {
