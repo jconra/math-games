@@ -53,6 +53,8 @@
 //     can't just then (paused, or a box already open), and it is asked again shortly; pay: { order,
 //     orderEvery, orderFirst } (shop.js PAY); onStart / onStop: the game puts the round-up and the keys away meanwhile;
 //     voice(kind, { at, male }): a customer's recorded line ('whatchagot', 'thanksStore', 'niceday': src/audio/shouts.js)
+//     open(): false once the day's shift is done (src/shifts.js): the order that finished it is the last, the counter
+//     closes by itself after it and no new customer steps up (main.js keeps "Mind the counter" from opening it again)
 //   J.start()   to the counter (off the horse first, if riding)
 //   J.stop()    "Done for now": the customers wander off, the camera comes back to the rider
 //   J.update(dt)   each frame (also after stopping: the last customers walk away)
@@ -111,7 +113,7 @@ const formsOf = (map) => (MAPS[map] ? MAPS[map].ids.map((id, i) => [id, MAPS[map
 const SALE_FORMS = { sales: formsOf('sales'), wool: formsOf('wool') };
 
 export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, refresh = () => {}, openBox = null,
-  onStart = () => {}, onStop = () => {}, pay = { order: 3, orderEvery: 3, orderFirst: 1 }, scene = W.scene, goods = null, fish = null, voice = null, town = null, work = null }) {
+  onStart = () => {}, onStop = () => {}, pay = { order: 3, orderEvery: 3, orderFirst: 1 }, scene = W.scene, goods = null, fish = null, voice = null, town = null, work = null, open: shiftOpen = () => true }) {
   // a customer's recorded line (src/audio/shouts.js: the men only; it knows by `male`), from where they stand
   const speak = (kind, c) => { if (voice && c) voice(kind, { at: () => ({ x: c.x, z: c.z }), male: !c.who.she }); };
   const place = W.places.store;
@@ -240,7 +242,7 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
   // still on their way over and the second is already here), the other takes the first place, and somebody new heads
   // for the back of the line
   function moveUp() {
-    if (!J.active) return;
+    if (!J.active || !shiftOpen()) return;   // (the day's shift done: nobody new steps up)
     if (!atFront()) {
       const a = inLine(queueAt), b = inLine(queue2At);
       const q = a && b ? (left(b, frontAt) < left(a, frontAt) - 0.5 ? b : a) : a || b;
@@ -396,7 +398,7 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
     let from = rider.gold, buckle = null;
     if (gold > 0) { const e = earn(rider, gold); earned += gold; if (e && e.newTitle) news.push(`You're a ${e.newTitle} now!`); }
     if (boxGold) { earned += boxGold; from = rider.gold; }
-    if (!unfilled) { filled++; buckle = countJob(rider, 'orders', 1).buckle; }
+    if (!unfilled) { filled++; buckle = countJob(rider, 'orders', 1).buckle; if (hob) hob.event('storeFilled'); }   // (a round of the day's shift: src/shifts.js)
     if (buckle) hud.buckle(buckle, { delay: 600 });
     setTimeout(refresh, 700);   // (the HUD's purse goes up as the slip's coins land)
     order = null; eqPending = false;
@@ -408,6 +410,7 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
     await U.leave();
     if (!J.active) return;
     if (c && c.state === 'serve') leave(c);
+    if (!shiftOpen()) { J.stop(); return; }   // (that was the shift's last order: the counter closes)
     moveUp();
     const next = atFront();
     if (next) U.waiting(`Here comes ${next.who.name}…`);

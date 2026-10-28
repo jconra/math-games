@@ -8,15 +8,18 @@
 // what it was. The deer photographs lead to Miss Wren, always, and give way there once her camera is lent (the job's own
 // trail then leads on to her herd).
 // A job that needs a saddled horse (deliveries, the gang's loot) leads by the stable first while the rider has none.
+// A job whose shift is done for the day (src/shifts.js) has its notice stamped "Done for today", on the board and in the
+// panel; picking it there asks for more work (shift.ask: a fresh shift at once) and the hoofprints lead to it as ever.
 //
 // The board: two posts, a shingled roof, a plank backboard with a painted "JOBS" header and the notices pinned on it
 // (one canvas picture: src drawn here in code), a lantern on a post that glows at night (W.night, when the world has
 // it). Three draws, and it blocks walkers at its posts. Only the jobs on for this rider are pinned up.
 //
-//   const JB = makeJobsBoard({ W, camera, I, hud, rider, player, jobs, onOpen, onClose, speak, scene })
+//   const JB = makeJobsBoard({ W, camera, I, hud, rider, player, jobs, onOpen, onClose, speak, scene, shift })
 //     player(): the player (P); jobs: { roundup, sheep, pigs, store, delivery, wagon, deer, range, loot, farm, camps,
 //       jobfolk }: each () -> that job's object or null (a job turned off is null: not on the board); onOpen / onClose:
-//       the game pauses while the board's panel is up; speak(text): read out for a rider who can't read yet (or null)
+//       the game pauses while the board's panel is up; speak(text): read out for a rider who can't read yet (or null);
+//       shift: { done(id), ask(id) } (src/shiftkeeper.js) or null: which jobs are done for today, and more work asked for
 //   JB.update(dt, at, { busy })   each frame of play; busy: the job asking a question where the player is (main.js
 //                       askingJob: 'roundup', 'store', ..., or 'panel'), or null: a sit-down one (the store's counter, a
 //                       delivery's slip, the camera, the loot's slip, the range) means the rider is at work there
@@ -24,7 +27,9 @@
 //                       steer roped or missed, a sheep dosed, a bandit roped...) lets the tracks give way
 //   JB.prompt           'Read the jobs board' near its front, else null;  JB.open()  opens the board's panel (as E there)
 //   JB.goal()           { id, x, z, hide } while a picked job's tracks are wanted, else null
-//   JB.pick(id)         as tapping that job's notice;  JB.picked  the job picked (its id) or null (it stays main.js's
+//   JB.pick(id, { quiet, more })   the hoofprints lead to that job (quiet: no toast or read-out, Old Hob says it;
+//                       more: more work was asked for);  JB.choose(id) as tapping its notice (a done job: more work
+//                       asked for first);  JB.picked  the job picked (its id) or null (it stays main.js's
 //                       chosen job after the tracks give way: the card and the trail keep to it, see main.js THE JOB)
 //   JB.where(id), JB.nameOf(id), JB.whatOf(id), JB.wayTo(from, to)   where a job is, its name and line, 'north-east'...
 //   JB.jobs             the jobs on the board now: [{ id, name, what, pic, saddle }]
@@ -235,7 +240,7 @@ function picURL(kind, px = 160) {
 
 // the board's face: weathered planks, the JOBS header, the notices pinned on in rows; -> { canvas, hits: [{ id, u0, v0,
 // u1, v1 }] } (each notice's box on the picture, 0..1 across and up)
-function paintBoard(list, [W0, H0]) {
+function paintBoard(list, [W0, H0], done = new Set()) {
   const cv = document.createElement('canvas'); cv.width = W0; cv.height = H0;
   const c = cv.getContext('2d'), k = W0 / 1536;
   // planks, each a little different, with grain and gaps
@@ -272,16 +277,38 @@ function paintBoard(list, [W0, H0]) {
     c.fillText(j.name, 0, h / 2 - h * 0.14);
     if (j.saddle) drawPic(c, 'saddle', w / 2 - 54 * k, -h / 2 + 6 * k, 48 * k);
     c.fillStyle = '#9a9690'; c.beginPath(); c.arc(0, -h / 2 + 12 * k, 7 * k, 0, Math.PI * 2); c.fill();   // (the nail)
+    if (done.has(j.id)) stamp(c, w, h, k);
     c.restore();
     hits.push({ id: j.id, u0: (cx - w / 2) / W0, u1: (cx + w / 2) / W0, v0: 1 - (cy + h / 2) / H0, v1: 1 - (cy - h / 2) / H0 });
   });
   return { canvas: cv, hits, header: { u0: 0.3, u1: 0.7, v0: 1 - hh / H0, v1: 1 } };
 }
 
+// a rubber stamp across a notice, in red ink: a ring with a check mark and "DONE FOR TODAY" (the check reads without
+// the words, for a rider who can't read yet)
+function stamp(c, w, h, k) {
+  c.save(); c.rotate(-0.22); c.globalAlpha = 0.86;
+  const sw = w * 0.92, sh = h * 0.42, ink = '#b3261e';
+  c.strokeStyle = ink; c.fillStyle = 'rgba(246, 236, 210, 0.78)'; c.lineWidth = 5 * k;
+  c.beginPath(); c.roundRect ? c.roundRect(-sw / 2, -sh / 2, sw, sh, 10 * k) : c.rect(-sw / 2, -sh / 2, sw, sh); c.fill(); c.stroke();
+  c.lineWidth = 2 * k; c.strokeRect(-sw / 2 + 7 * k, -sh / 2 + 7 * k, sw - 14 * k, sh - 14 * k);
+  c.fillStyle = ink; c.textAlign = 'center'; c.textBaseline = 'middle';
+  // (two lines, as big as the stamp holds: DONE, then FOR TODAY)
+  const fit = (t, most, wide) => { let fs = most; c.font = `900 ${fs}px Bitter, Georgia, serif`; while (c.measureText(t).width > wide && fs > 10 * k) { fs -= 1 * k; c.font = `900 ${fs}px Bitter, Georgia, serif`; } return fs; };
+  const tx = sw * 0.12, wide = sw * 0.6;
+  const big = fit('DONE', sh * 0.42, wide); c.fillText('DONE', tx, -sh * 0.14);
+  fit('FOR TODAY', Math.min(big * 0.62, sh * 0.26), wide); c.fillText('FOR TODAY', tx, sh * 0.2);
+  // the check mark at its left end
+  const cx = -sw / 2 + sh * 0.55, r = sh * 0.3;
+  c.lineWidth = 6 * k; c.lineCap = 'round'; c.lineJoin = 'round'; c.beginPath();
+  c.moveTo(cx - r * 0.75, 0); c.lineTo(cx - r * 0.15, r * 0.6); c.lineTo(cx + r * 0.85, -r * 0.7); c.stroke();
+  c.restore();
+}
+
 const WAY8 = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west'];
 const wayTo = (from, to) => WAY8[Math.round(((Math.atan2(to.x - from.x, -(to.z - from.z)) * 180 / Math.PI) + 360) % 360 / 45) % 8];   // (north is -z)
 
-export function makeJobsBoard({ W, camera, I = null, hud = null, rider = null, player = () => null, jobs = {}, onOpen = () => {}, onClose = () => {}, speak = null, scene = W.scene }) {
+export function makeJobsBoard({ W, camera, I = null, hud = null, rider = null, player = () => null, jobs = {}, onOpen = () => {}, onClose = () => {}, speak = null, scene = W.scene, shift = null }) {
   const shadows = !!(W.V && W.V.SHADOW ? W.V.SHADOW.on : true);
   const get = (k) => { try { return jobs[k] ? jobs[k]() : null; } catch (e) { return null; } };
   // the jobs on the board: those this rider has (a grown-up may have turned some off); the round-up and the sheriff's
@@ -313,7 +340,10 @@ export function makeJobsBoard({ W, camera, I = null, hud = null, rider = null, p
   const roofMesh = new THREE.Mesh(mergeGeometries(roofParts), roofMat); roofParts.forEach((g) => g.dispose());
   // the face with the notices
   const tier = W.tier || 'normal', [TW, TH] = tier === 'potato' ? BOARD.tex.map((v) => v / 2) : BOARD.tex;
-  const painted = paintBoard(list, [TW, TH]);
+  // (the jobs done for today, stamped: painted again when that changes, JB.update)
+  const doneNow = () => new Set(shift && shift.done ? list.filter((j) => { try { return shift.done(j.id); } catch (e) { return false; } }).map((j) => j.id) : []);
+  let doneKey = [...doneNow()].join(',');
+  let painted = paintBoard(list, [TW, TH], doneNow());
   const tex = new THREE.CanvasTexture(painted.canvas); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 8;
   const faceMat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.92, metalness: 0 });
   const face = new THREE.Mesh(new THREE.PlaneGeometry(BOARD.w, BOARD.h).translate(0, BOARD.low + BOARD.h / 2, -0.03), faceMat);
@@ -405,15 +435,24 @@ export function makeJobsBoard({ W, camera, I = null, hud = null, rider = null, p
   // ── PICKING A JOB ──────────────────────────────────────────────────────────────────────────────────────────────
   let picked = null, panel = null;   // picked: { id, t }
   const JB = { prompt: null, jobs: list.map((j) => ({ ...j })) };
-  JB.pick = (id) => {
+  JB.pick = (id, { quiet = false, more = false } = {}) => {
     const j = list.find((q) => q.id === id); if (!j) return false;
     picked = { id, t: 0 };
     if (panel) { const pn = panel; panel = null; pn.close(); }
+    if (quiet) return true;   // (Old Hob's suggestion: he says it himself)
     const saddle = needsSaddle(j);
-    const line = saddle ? `${j.name} needs a saddled horse: the hoofprints go by the stable first` : `The hoofprints lead to the job: ${j.name}`;
+    const line = saddle ? `${j.name} needs a saddled horse: the hoofprints go by the stable first`
+      : more ? `More work at ${j.name}: the hoofprints lead the way` : `The hoofprints lead to the job: ${j.name}`;
     if (hud) hud.toast(line, 'good');
     if (speak) try { speak(saddle ? `${j.name}. First, a horse and a saddle at the stable. Follow the hoofprints.` : `${j.name}. Follow the hoofprints.`) } catch (e) { /* (no voice) */ }
     return true;
+  };
+  // a notice tapped (in the panel, or on the board itself): a job done for today asks for more work first
+  JB.choose = (id) => {
+    const more = !!(shift && shift.done && shift.done(id));
+    if (more && shift.ask) shift.ask(id);
+    if (more) restamp();
+    return JB.pick(id, { more });
   };
   JB.goal = () => {
     if (!picked) return null;
@@ -444,12 +483,13 @@ export function makeJobsBoard({ W, camera, I = null, hud = null, rider = null, p
     body.innerHTML = list.map((j) => {
       const g = goalPlace(j.id), d = g && pos ? Math.hypot(g.x - pos.x, g.z - pos.z) : null;   // (how far the tracks would lead)
       const far = d == null ? '' : d < 25 ? 'right here' : `${d > 100 ? Math.round(d / 10) * 10 : Math.round(d)} m ${wayTo(pos, g)}`;
-      const saddle = needsSaddle(j);
-      return `<button type="button" class="bjb-job${picked && picked.id === j.id ? ' is-on' : ''}" data-id="${j.id}" aria-label="${esc(j.name)}">
+      const saddle = needsSaddle(j), done = !!(shift && shift.done && shift.done(j.id));
+      return `<button type="button" class="bjb-job${picked && picked.id === j.id ? ' is-on' : ''}${done ? ' is-done' : ''}" data-id="${j.id}" aria-label="${esc(j.name)}${done ? ': done for today. Ask for more work' : ''}">
         <img src="${picURL(j.pic)}" alt="" draggable="false">${saddle ? `<img class="bjb-saddle" src="${picURL('saddle', 64)}" alt="needs a saddle" title="Needs a saddled horse: the stable first">` : ''}
-        <b>${esc(j.name)}</b><small>${esc(j.what)}${far ? ` · ${far}` : ''}${saddle ? ' · needs a saddle: the stable first' : ''}</small>${picked && picked.id === j.id ? '<i>Following</i>' : ''}</button>`;
+        ${done ? '<span class="bjb-stamp" aria-hidden="true">✓ Done for today</span>' : ''}
+        <b>${esc(j.name)}</b><small>${done ? '<em>Ask for more work</em> · ' : ''}${esc(j.what)}${far ? ` · ${far}` : ''}${saddle ? ' · needs a saddle: the stable first' : ''}</small>${picked && picked.id === j.id ? '<i>Following</i>' : ''}</button>`;
     }).join('');
-    body.addEventListener('click', (e) => { const b = e.target.closest('.bjb-job'); if (b) JB.pick(b.dataset.id); });
+    body.addEventListener('click', (e) => { const b = e.target.closest('.bjb-job'); if (b) JB.choose(b.dataset.id); });
     onOpen();
     panel = makePanel({ title: 'Jobs board', sub: 'Pick a job, and the golden hoofprints lead the way', body, wide: true,
       onClose: () => { panel = null; onClose(); } });
@@ -467,7 +507,7 @@ export function makeJobsBoard({ W, camera, I = null, hud = null, rider = null, p
     _inv.copy(face.matrixWorld).invert(); _p.copy(p.hit.point).applyMatrix4(_inv);
     const u = _p.x / BOARD.w + 0.5, v = (_p.y - BOARD.low) / BOARD.h;
     const n = painted.hits.find((h) => u >= h.u0 && u <= h.u1 && v >= h.v0 && v <= h.v1);
-    if (n) JB.pick(n.id); else JB.open();
+    if (n) JB.choose(n.id); else JB.open();
   }) : () => {};
 
   // ── EACH FRAME ─────────────────────────────────────────────────────────────────────────────────────────────────
@@ -492,7 +532,16 @@ export function makeJobsBoard({ W, camera, I = null, hud = null, rider = null, p
     }
     const night = Number.isFinite(W.night) ? W.night : 0;
     lampMat.emissiveIntensity = 0.15 + 2.2 * night;
+    if ((stampT -= dt) <= 0) { stampT = 1; restamp(); }   // (a job's shift done, or a new day: the stamps)
   };
+  let stampT = 0;
+  function restamp() {
+    const key = [...doneNow()].join(',');
+    if (key === doneKey) return;
+    doneKey = key;
+    painted = paintBoard(list, [TW, TH], doneNow());
+    tex.image = painted.canvas; tex.needsUpdate = true;
+  }
 
   const _s = new THREE.Vector3();
   JB.screenOf = (id) => {
@@ -501,7 +550,7 @@ export function makeJobsBoard({ W, camera, I = null, hud = null, rider = null, p
     return { x: (_s.x + 1) / 2 * innerWidth, y: (1 - _s.y) / 2 * innerHeight, on: _s.z < 1 && Math.abs(_s.x) < 1 && Math.abs(_s.y) < 1 };
   };
   JB.state = () => ({ picked: picked ? picked.id : null, prompt: JB.prompt, open: !!panel, jobs: list.map((j) => j.id), spot: { x: B.x, z: B.z, rot: +B.rot.toFixed(3) }, front,
-    goal: JB.goal() });
+    goal: JB.goal(), stamped: doneKey ? doneKey.split(',') : [] });
   JB.dispose = () => {
     if (panel) { const pn = panel; panel = null; pn.close(); }
     offPick(); offTarget(); offBlock(); unmow();
@@ -530,6 +579,11 @@ function ensureCss() {
 .bms .bjb-job b { font: 700 17px/1.15 Bitter, Georgia, serif; color: #2b1d12; }
 .bms .bjb-job small { color: #5a4630; }
 .bms .bjb-job.is-on { border-color: #e2b33c; box-shadow: 0 0 0 3px rgba(226, 179, 60, 0.6), 0 3px 8px rgba(0, 0, 0, 0.25); }
+.bms .bjb-job.is-done img { opacity: 0.55; }
+.bjb-stamp { position: absolute; left: 50%; top: 36px; transform: translateX(-50%) rotate(-12deg); white-space: nowrap; pointer-events: none;
+  font: 900 13px/1 Bitter, Georgia, serif; letter-spacing: 0.04em; text-transform: uppercase; color: #b3261e; background: rgba(246, 236, 210, 0.85);
+  border: 2.5px solid #b3261e; border-radius: 6px; padding: 5px 7px; box-shadow: inset 0 0 0 2px rgba(246, 236, 210, 0.85), inset 0 0 0 3.5px #b3261e; }
+.bms .bjb-job small em { font-style: normal; font-weight: 700; color: #7a3b16; }
 .bjb-job i { position: absolute; top: 6px; left: 6px; font: 700 11px Bitter, Georgia, serif; font-style: normal; background: #e2b33c; color: #2b1d12; padding: 2px 6px; border-radius: 6px; }
 @media (max-width: 900px) { .bjb-grid { grid-template-columns: repeat(4, 1fr); } }
 @media (max-width: 700px) { .bjb-grid { grid-template-columns: repeat(3, 1fr); } }

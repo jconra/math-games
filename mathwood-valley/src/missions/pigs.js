@@ -16,7 +16,10 @@
 // For a rider who can't read yet (skill.js readAloud) the two pens' signs are read out (the browser's voice) on arriving
 // at the yard and with each new batch.
 //
-//   const PG = makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, hob, refresh })
+//   const PG = makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, hob, refresh, open, left })
+//     open(): false once the day's shift is done (src/shifts.js): the pigs stay in their pens till it is true again, and
+//     the card says so; left(): the pigs still to pen in the shift (the shift's last batch lets out no more than that:
+//     the rest stay penned)
 //   PG.update(dt)       each frame, after P.update
 //   PG.paused = true    a panel is open (the help is put away)
 //   PG.near             true while the player is at the pig yard (the job's card is up)
@@ -113,7 +116,7 @@ function paintSign({ cv, tex }, pen) {
   tex.needsUpdate = true;
 }
 
-export function makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, hob, refresh = () => {}, scene = W.scene }) {
+export function makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, hob, refresh = () => {}, scene = W.scene, open = () => true, left: shiftLeft = () => Infinity }) {
   const L = farm.layout, Y = L.yard, pens = L.pens;
   ensureNumberLineStyles();
   const fontReady = (document.fonts && document.fonts.load) ? document.fonts.load('800 108px Bitter').catch(() => null) : Promise.resolve();
@@ -171,7 +174,8 @@ export function makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, ho
       g.label.visible = false; scene.add(g.label);
       pigs.push(g);
     }
-    newBatch({ first: true });
+    if (open()) newBatch({ first: true });
+    else penAll();   // (the day's shift already done: every pig in a pen)
   }).catch((e) => console.warn('pigs: the pigs could not load', e));
 
   function card(g) {
@@ -183,16 +187,33 @@ export function makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, ho
   }
 
   // ── A BATCH ────────────────────────────────────────────────────────────────────────────────────────────────────
+  // every pig in a pen, nothing asked (the day's shift done before the yard was ever opened)
+  function penAll() {
+    pigs.forEach((g, i) => {
+      const pi = i % pens.length, p = penArea[pi].random();
+      g.root.position.set(p.x, W.heightAt(p.x, p.z), p.z);
+      g.state = 'penned'; g.pen = pi; g.item = null; g.right = false; g.w.area = penArea[pi]; g.w.goal = null;
+    });
+    showCard();
+  }
   function newBatch({ first = false } = {}) {
     endHelp(); hint(null);
     // (the rider's level on the pigs' ladder, src/levels/place/pigs.js: the whole batch is made at it)
     const q = levelFor(rider, 'pigs'); saveRider(rider);
-    batch = batchAt(q.level.gen, { size: pigs.length });
+    // (the shift's last pigs: only that many let out with sums, the loose ones first; the others stay in their pens)
+    const n = shiftLeft(), size = Number.isFinite(n) && n >= 1 ? Math.min(pigs.length, Math.ceil(n)) : pigs.length;
+    if (first && size < pigs.length) pigs.forEach((g, i) => { if (i >= size) { const pi = i % pens.length, p = penArea[pi].random(); g.root.position.set(p.x, W.heightAt(p.x, p.z), p.z); g.state = 'penned'; g.pen = pi; g.w.area = penArea[pi]; g.w.goal = null; } });
+    const order = size < pigs.length ? [...pigs].sort((a, b) => (a.state === 'penned' ? 1 : 0) - (b.state === 'penned' ? 1 : 0)) : pigs;
+    const asked = new Set(order.slice(0, Math.max(size, pigs.filter((g) => g.state !== 'penned').length)));
+    batch = batchAt(q.level.gen, { size: Math.max(2, asked.size) });
+    batch.pigs = batch.pigs.slice(0, asked.size);
     batch.q = q;
     PG.batch = batch; penned = 0; nextT = -1; batches++;
     paintSigns();
+    let k = 0;
     pigs.forEach((g, i) => {
-      g.item = batch.pigs[i]; g.right = false; g.showT = 0; g.chased = 0; g.noPen = -1; g.told = false;
+      if (!asked.has(g)) { g.item = null; g.right = false; g.showT = 0; return; }   // (stays in its pen)
+      g.item = batch.pigs[k++]; g.right = false; g.showT = 0; g.chased = 0; g.noPen = -1; g.told = false;
       // pigs in a pen (or on their way in or out of one) trot out into the yard, one after another through each gate;
       // loose ones just get new sums
       const at = g.root.position;
@@ -219,7 +240,9 @@ export function makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, ho
   }
   const left = () => pigs.filter((g) => g.item && g.state !== 'penned' && !(g.state === 'enter' && g.right)).length;
   function showCard() {
-    if (!PG.near || !batch) return;
+    if (!PG.near) return;
+    if ((!batch || batch.done) && !open()) { hud.rule({ kind: 'job', main: 'Done for today', sub: 'Every pig is back in its pen · back at sunrise, or ask for more work at the jobs board' }); return; }
+    if (!batch) return;
     if (batch.done) { hud.rule({ main: 'All penned!', sub: 'New sums coming up…' }); return; }
     const n = left();
     // (on a phone the card is kept short, so it doesn't cover the pens' signs: the how-to line goes once a pig is in)
@@ -506,7 +529,10 @@ export function makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, ho
       else { endHelp(); hud.rule(null); hud.hint(null); hintT = 0; }   // (its own card down: the chosen job's where-it-is card, or the round-up's or the sheep's, comes back by itself)
     }
     if (hintT > 0 && (hintT -= dt) <= 0) hud.hint(null);
-    if (nextT > 0 && (nextT -= dt) <= 0) newBatch();
+    // (new sums once the last batch has had its moment; none while the day's shift is done: more work asked for at the
+    // jobs board, or a new day, lets them out again)
+    if (nextT <= 0 && pigs.length && (!batch || batch.done) && open()) nextT = 0.5;
+    if (nextT > 0 && (nextT -= dt) <= 0) { if (open()) newBatch(); else { nextT = -1; showCard(); } }
     const d = Math.hypot(P.position.x - yardAt.x, P.position.z - yardAt.z);
     if (d > 220) return;
     for (const g of pigs) pigStep(g, dt);

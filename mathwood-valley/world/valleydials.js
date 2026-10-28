@@ -118,6 +118,8 @@ export function bindValley(G, { V, renderer }) {
   offs.push(G.on('outsides', (m) => { if (V.CODE) V.CODE.setRange(m); }));
   // ... and how much of their insides loads when the player comes to a door (1 needed .. 3 clutter: GOVERNOR.md Interiors)
   offs.push(G.on('insideDetail', (n) => { if (V.CODE) V.CODE.setDetail(n); }));
+  // ... and whether a see-through window in view, the player in front of it, brings its room in (GOVERNOR.md Interiors)
+  offs.push(G.on('windowArc', (v) => { if (V.CODE) V.CODE.setArc(v); }));
 
   // (now and then: what was made again since, the stones laid again, the plants' drawer rebuilt, new props, kept to the dials)
   const keepUp = setInterval(() => {

@@ -84,8 +84,8 @@ const BUILDINGS = {
   // its two door lanterns out by day; the wood under its oxblood paint weathered grey; its own trim colour)
   saloon: { label: 'Saloon', paints: SALOON_PAINTS, trims: SALOON_TRIMS, recipe: () => saloonRecipe(state.sa), r: () => state.sa, loading: 'Polishing the bar…', sun: { day: 30 }, shelter: 0.35, woodBump: 0.6, outLampsByDay: false, door1: false, calmGrain: { straight: true }, bareTint: [1.0, 1.0, 1.04] },
   // (the cabins: a recipe each, cabins.js; the back door is the second door switch, open to begin with)
-  cabin: { label: 'Cabins', paints: CABIN_PAINTS, recipe: () => cabinRecipe(state.ca), r: () => state.ca, loading: 'Raising the cabin…', sun: { day: 34 }, shelter: 0.4, woodBump: 0.75, outLampsByDay: false, door2: true },
-  blacksmith: { label: 'Blacksmith', paints: BS_PAINTS, recipe: () => blacksmithRecipe(state.bs), r: () => state.bs, loading: 'Lighting the forge…', sun: { day: 34 }, shelter: 0.3, woodBump: 0.75, outLampsByDay: false, door2: true },
+  cabin: { label: 'Cabins', paints: CABIN_PAINTS, recipe: () => cabinRecipe(state.ca), r: () => state.ca, loading: 'Raising the cabin…', sun: { day: 34 }, shelter: 0.4, woodBump: 0.75, outLampsByDay: false, door2: true, calmGrain: { weathered: true } },
+  blacksmith: { label: 'Blacksmith', paints: BS_PAINTS, recipe: () => blacksmithRecipe(state.bs), r: () => state.bs, loading: 'Lighting the forge…', sun: { day: 34 }, shelter: 0.3, woodBump: 0.75, outLampsByDay: false, door2: true, calmGrain: { weathered: true } },
 };
 const BLD = () => BUILDINGS[state.building];
 // how paint wears, for a building that doesn't say (parts.js LU: the stable's and the sheriff's look)

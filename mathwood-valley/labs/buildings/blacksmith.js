@@ -25,7 +25,7 @@ import { makeBarrel } from '../materials/barrel.js';
 import { CABIN_PAINTS, slope, sash, tintAt, cutsFor, onMean } from './cabins.js';
 
 export const BS_PAINTS = CABIN_PAINTS;
-export const BS_DEFAULTS = { kind: 'blacksmith', paint: 'none', wear: 0.6, wood: 'rustic', stone: 'grey', mortar: 'grey', seed: 31, look: 'near' };
+export const BS_DEFAULTS = { kind: 'blacksmith', paint: 'none', wear: 0.6, wood: 'straight', stone: 'grey', mortar: 'grey', seed: 31, look: 'near' };
 export function blacksmithRecipe(r = {}) {
   const o = { ...BS_DEFAULTS, ...r };
   if (!BS_PAINTS[o.paint]) o.paint = 'none';
@@ -62,11 +62,18 @@ const put = (k, M, group, size, pos, rot, o = {}) => {
 const BS_MAKERS = {
   anvil(k, M) {
     k.prism('wood', ngon(9, 0.26, 0.08, k.R), 0.56, null, null, { m: mul(M, T(0, 0.28, 0)), tint: vary(k, [0.95, 0.85, 0.72], 0.85, 1.05), smooth: true, ends: 'log', strip: 11 });
-    const y = 0.56, ir = IRON.map((q) => q * 0.75);
-    put(k, M, 'iron', [0.34, 0.07, 0.22], [0, y + 0.035, 0], null, { tint: ir });
-    put(k, M, 'iron', [0.18, 0.13, 0.13], [0, y + 0.135, 0], null, { tint: ir });
-    put(k, M, 'iron', [0.42, 0.11, 0.13], [-0.02, y + 0.255, 0], null, { tint: IRON.map((q) => q * 0.9) });
-    k.prism('iron', ngon(6, 0.055), 0.24, null, null, { m: mul(M, T(0.3, y + 0.27, 0), RZ(-Math.PI / 2)), tint: ir, taper: 0.8, smooth: true });
+    const y = 0.56, ir = IRON.map((q) => q * 0.75), face = IRON.map((q) => q * 0.95);
+    // (its feet: four splayed, a base between them; the waist narrowing up to the body)
+    put(k, M, 'iron', [0.3, 0.05, 0.2], [-0.01, y + 0.025, 0], null, { tint: ir });
+    for (const [fx, fz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) put(k, M, 'iron', [0.09, 0.045, 0.07], [fx * 0.16 - 0.01, y + 0.022, fz * 0.11], [0, fx * fz * 0.4, 0], { tint: ir });
+    k.prism('iron', [[-0.1, -0.075], [0.1, -0.075], [0.1, 0.075], [-0.1, 0.075]], 0.12, null, null, { m: mul(M, T(-0.01, y + 0.11, 0)), tint: ir, taper: 0.3 });
+    // (the body and its face, the heel stepping out behind, a hardy hole in the heel)
+    put(k, M, 'iron', [0.34, 0.1, 0.13], [0.0, y + 0.22, 0], null, { tint: face });
+    put(k, M, 'iron', [0.12, 0.07, 0.1], [-0.22, y + 0.235, 0], null, { tint: face });
+    put(k, M, 'iron', [0.026, 0.004, 0.026], [-0.24, y + 0.271, 0], null, { tint: [0.1, 0.1, 0.1] });
+    // (the horn: a long round cone out of the body's front, its tip dropping a little)
+    k.prism('iron', ngon(8, 0.06), 0.3, null, null, { m: mul(M, T(0.31, y + 0.225, 0), RZ(-Math.PI / 2 - 0.06)), tint: face, taper: 0.9, smooth: true, skip: '-y' });
+    put(k, M, 'iron', [0.08, 0.09, 0.115], [0.19, y + 0.22, 0], null, { tint: face });
     k.solid([0.5, y + 0.32, 0.5], null, null, mul(M, T(0, (y + 0.32) / 2, 0)));
   },
   quench(k, M, o) {
@@ -146,11 +153,13 @@ export function buildBlacksmith(recipeIn = {}, env = {}) {
       }
     }
   }
-  // horseshoes nailed on a board over the big doors (for luck, ends up), a sign without words
+  // the sign: a long board in the gable over the big doors, BLACKSMITH painted on it (its letters a picture, sign()
+  // below), a horseshoe nailed either side of it for luck
+  const SIGN = { y: DOOR.y1 + 0.82, w: 2.7, h: 0.56 };
   {
-    const y = DOOR.y1 + 0.75;
-    wb(k, FRONT, [1.7, 0.36, 0.04], 0, y, 0.06, null, { long: 0, tint: vary(k, DARKW, 0.8, 0.95) });
-    for (let i = 0; i < 5; i++) horseshoe(k, mul(wallM(FRONT, -0.64 + i * 0.32, y, 0.09), RZ(Math.PI)), 1.25);
+    wb(k, FRONT, [SIGN.w, SIGN.h, 0.04], 0, SIGN.y, 0.06, null, { long: 0, tint: vary(k, DARKW, 0.7, 0.8) });
+    for (const s of [-1, 1]) wb(k, FRONT, [SIGN.w + 0.08, 0.05, 0.05], 0, SIGN.y + s * (SIGN.h / 2 + 0.02), 0.07, null, { long: 0, tint: vary(k, DARKW, 0.6, 0.7) });
+    for (const s of [-1, 1]) horseshoe(k, mul(wallM(FRONT, s * (SIGN.w / 2 + 0.24), SIGN.y, 0.06), RZ(Math.PI)), 1.35);
   }
   // the solids for the bake: the walls, the attic of the gables
   // THE ROOF: shakes on two slopes, the ridge front to back; open inside to the rafters (their undersides lit inside)
@@ -186,10 +195,10 @@ export function buildBlacksmith(recipeIn = {}, env = {}) {
   // from the hood through the roof
   {
     const G = -0.12, fl = [[FORGE.x0, FORGE.z1], [FORGE.x1, FORGE.z1], [FORGE.x1, FORGE.z0], [FORGE.x0, FORGE.z0]];
-    const sx0 = STACK.x - STACK.w / 2, sx1 = STACK.x + STACK.w / 2, sz0 = STACK.z - STACK.d / 2, sz1 = STACK.z + STACK.d / 2, sTop = roofY(STACK.x) + 0.95;
+    const sx0 = STACK.x - STACK.w / 2, sx1 = STACK.x + STACK.w / 2, sz0 = STACK.z - STACK.d / 2, sz1 = STACK.z + STACK.d / 2, sTop = roofY(STACK.x) + 1.9;
     const sk = [[sx0, sz1], [sx1, sz1], [sx1, sz0], [sx0, sz0]];
     SHAPES.smithyForge = { label: 'Forge', make: () => ({ H: FORGE.h, sections: [{ loop0: fl, loop1: fl, y0: G, y1: FORGE.h - 0.1 }], openings: [{ face: 0, u: (FORGE.x1 - FORGE.x0) / 2, w: 0.5, v0: 0.2, v1: 0.55, kind: 'door', depth: 0.4 }],
-      top: { y: FORGE.h, t: 0.1, over: 0.04, rects: [{ x0: FORGE.x0 - 0.04, x1: FORGE.x1 + 0.04, z0: FORGE.z0, z1: FORGE.z1 + 0.04, open: { x0: 1, x1: 1, z0: 0, z1: 1 }, ov: { x0: 0.04, x1: 0.04, z0: 0, z1: 0.04 } }], holes: [[-1.5, -1.0, Z0 + 0.45, Z0 + 0.85]] } }) };
+      top: { y: FORGE.h - 0.1, t: 0, over: 0, rects: [] } }) };
     SHAPES.smithyStack = { label: 'Forge chimney', make: () => ({ H: sTop, sections: [{ loop0: sk, loop1: sk, y0: 2.3, y1: sTop - 0.1 }], openings: [], top: { y: sTop, t: 0.1, over: 0.05, rects: [{ x0: sx0 - 0.05, x1: sx1 + 0.05, z0: sz0 - 0.05, z1: sz1 + 0.05, open: { x0: 1, x1: 1, z0: 1, z1: 1 }, ov: { x0: 0.05, x1: 0.05, z0: 0.05, z1: 0.05 } }], holes: [[STACK.x - 0.12, STACK.x + 0.12, STACK.z - 0.1, STACK.z + 0.1]] } }) };
     for (const [shape, seed] of [['smithyForge', 3], ['smithyStack', 7]]) {
       const sw = buildStoneWall({ style: 'mortared', palette: r.stone, mortar: r.mortar, size: far ? 0.55 : 0.3, irregularity: 0.5, colourMix: 0.5, bulge: 0.5, joint: 0.012, shape, seed: r.seed * 11 + seed }, env);
@@ -197,26 +206,34 @@ export function buildBlacksmith(recipeIn = {}, env = {}) {
     }
     k.solid([FORGE.x1 - FORGE.x0, FORGE.h, FORGE.z1 - FORGE.z0], [(FORGE.x0 + FORGE.x1) / 2, FORGE.h / 2, (FORGE.z0 + FORGE.z1) / 2]);
     k.solid([STACK.w, sTop - 2.3, STACK.d], [STACK.x, (sTop + 2.3) / 2, STACK.z]);
-    // the hood: four sloped sheets from a wide skirt over the hearth up to the stack
-    k.prism('iron', [[-0.72, -0.5], [0.72, -0.5], [0.72, 0.5], [-0.72, 0.5]], 0.62, [STACK.x, 2.0, Z0 + 0.62], null, { tint: IRON.map((q) => q * 0.7), taper: 0.58 });
-    k.box('iron', [1.5, 0.08, 1.06], [STACK.x, 1.68, Z0 + 0.62], null, { tint: IRON.map((q) => q * 0.6), skip: '+y' });
+    // the hearth's top: a slab of sooty firebrick-grey (no moss on a working forge), a dark firepot sunk in it
+    k.box('plaster', [FORGE.x1 - FORGE.x0 + 0.08, 0.1, FORGE.z1 - FORGE.z0 + 0.04], [(FORGE.x0 + FORGE.x1) / 2, FORGE.h - 0.05, (FORGE.z0 + FORGE.z1) / 2 + 0.02], null, { tint: onMean([0.27, 0.25, 0.23], env.texMean), skip: '-y' });
+    k.box('plaster', [0.5, 0.012, 0.4], [STACK.x, FORGE.h + 0.004, Z0 + 0.65], null, { tint: onMean([0.08, 0.07, 0.065], env.texMean) });
+    // the hood: four sloped sheets from a wide skirt over the hearth narrowing right into the stack
+    k.prism('iron', [[-0.66, -0.59], [0.66, -0.59], [0.66, 0.59], [-0.66, 0.59]], 0.68, [STACK.x, 2.06, STACK.z], null, { tint: IRON.map((q) => q * 0.7), taper: 0.53 });
+    k.box('iron', [1.38, 0.08, 1.24], [STACK.x, 1.72, STACK.z], null, { tint: IRON.map((q) => q * 0.6), skip: '+y' });
     if (!far) {
       // the fire: coals glowing in the hearth's firepot, a few dark ones round them; its light low and orange
-      k.parts.glow.push({ size: [0.46, 0.03, 0.36], m: T(STACK.x, FORGE.h + 0.005, Z0 + 0.65), kind: GLOW.flame, col: [1.3, 0.32, 0.05] });
-      k.parts.glow.push({ size: [0.16, 0.06, 0.12], m: T(STACK.x + 0.04, FORGE.h + 0.03, Z0 + 0.62), kind: GLOW.flame, col: [2.2, 0.7, 0.1] });
-      for (let i = 0; i < 16; i++) { const s = k.r(0.04, 0.07); k.box('iron', [s, s * 0.7, s], [STACK.x + k.r(-0.3, 0.3), FORGE.h + 0.02, Z0 + 0.65 + k.r(-0.22, 0.22)], [k.r(0, 3), k.r(0, 3), 0], { tint: [0.15, 0.15, 0.16] }); }
+      for (let i = 0; i < 14; i++) {
+        const rr = Math.sqrt(k.R()) * 0.15, a = k.r(0, 6.28), s = k.r(0.03, 0.06), hot = 1 - rr / 0.16;
+        k.parts.glow.push({ size: [s, s * 0.6, s], m: mul(T(STACK.x + Math.cos(a) * rr, FORGE.h + 0.015 + s * 0.3, Z0 + 0.65 + Math.sin(a) * rr * 0.8), RY(k.r(0, 3))), kind: GLOW.flame, col: [0.9 + 1.4 * hot, 0.22 + 0.5 * hot, 0.03 + 0.06 * hot] });
+      }
+      for (let i = 0; i < 26; i++) {
+        const rr = k.r(0.14, 0.3), a = k.r(0, 6.28), s = k.r(0.035, 0.065);
+        k.prism('iron', ngon(5, s, 0.4, k.R), s * 0.8, [STACK.x + Math.cos(a) * rr, FORGE.h + 0.02, Z0 + 0.65 + Math.sin(a) * rr * 0.75], [k.r(-0.4, 0.4), k.r(0, 6), k.r(-0.4, 0.4)], { tint: [0.15, 0.15, 0.16] });
+      }
       c.lamps.push({ p: [STACK.x, 1.15, Z0 + 1.15], reach: 6.5, strength: 1.5, outdoor: false, noGlow: true, fire: true });
       // the bellows beside it: two pear-shaped boards with leather between, on a frame, a lever over them, a nozzle
       // into the side of the hearth
-      const bx = FORGE.x1 + 0.62, bz = Z0 + 0.62, pear = [[-0.42, 0], [-0.25, -0.16], [0, -0.27], [0.28, -0.3], [0.42, -0.18], [0.46, 0], [0.42, 0.18], [0.28, 0.3], [0, 0.27], [-0.25, 0.16]];
-      for (const y of [0.92, 1.22]) k.prism('wood', pear, 0.04, [bx, y, bz], null, { tint: vary(k, DARKW, 0.85, 1.0), strip: 10 });
-      k.prism('wood', pear.map(([x, z]) => [x * 0.94, z * 0.9]), 0.26, [bx + 0.02, 1.07, bz], null, { paint: [0.11, 0.065, 0.035], tint: [0.5, 0.4, 0.3], skip: '+y-y' });
+      const bx = FORGE.x1 + 0.72, bz = Z0 + 0.66, pear = [[-0.42, 0], [-0.25, -0.16], [0, -0.27], [0.28, -0.3], [0.42, -0.18], [0.46, 0], [0.42, 0.18], [0.28, 0.3], [0, 0.27], [-0.25, 0.16]].map(([x, z]) => [x * 1.3, z * 1.3]);
+      for (const y of [0.9, 1.26]) k.prism('wood', pear, 0.045, [bx, y, bz], null, { tint: vary(k, FRAME, 0.85, 1.0), strip: 10 });
+      for (const [y, f] of [[1.0, 0.92], [1.16, 0.86]]) k.prism('wood', pear.map(([x, z]) => [x * f, z * f]), 0.16, [bx + 0.02, y, bz], null, { paint: [0.2, 0.12, 0.07], tint: [0.5, 0.4, 0.3], skip: '+y-y' });
       k.prism('iron', ngon(6, 0.035), 0.42, null, null, { m: mul(T(bx - 0.6, 1.0, bz), RZ(Math.PI / 2)), tint: IRON.map((q) => q * 0.7), smooth: true });
       for (const z of [bz - 0.38, bz + 0.38]) k.board([0.08, 1.85, 0.08], [bx + 0.5, 0.925, z], null, { long: 1, tint: vary(k, FRAME, 0.8, 0.95) });
       k.board([0.08, 0.08, 0.86], [bx + 0.5, 1.85, bz], null, { long: 2, tint: vary(k, FRAME, 0.8, 0.95) });
       k.board([1.7, 0.06, 0.06], [bx + 0.3, 1.9, bz], [0, 0, 0.12], { long: 0, tint: vary(k, FRAME, 0.85, 1.0) });
       k.box('iron', [0.015, 0.62, 0.015], [bx - 0.15, 1.55, bz], null, { tint: IRON });
-      k.solid([1.0, 1.3, 0.8], [bx + 0.1, 0.65, bz]);
+      k.solid([1.2, 1.3, 0.8], [bx + 0.1, 0.65, bz]);
     }
   }
   // INSIDE: the earth floor; a workbench with a vise under the left windows; a rack of tongs and hammers on the left
@@ -324,7 +341,7 @@ export function buildBlacksmith(recipeIn = {}, env = {}) {
     { type: 'anvil', x: -0.55, z: Z0 + 1.95, rot: 0.25, inside: true }, { type: 'quench', x: -2.55, z: Z0 + 1.75, inside: true },
     { type: 'coal', x: X0 + 0.75, z: Z0 + 0.6, w: 1.1, d: 0.8, inside: true }, { type: 'bucket', x: -2.0, z: Z0 + 2.3, inside: true },
     { type: 'barrel', x: 0.9, z: Z0 + 0.45, inside: true },
-    { type: 'wheel', x: 2.4, z: Z1 + 0.22, r: 0.62 }, { type: 'barrel', x: X1 + 0.5, z: Z0 + 0.45 }, { type: 'trough', x: SHED.x1 - 0.65, z: Z1 - 1.3, rot: Math.PI / 2, len: 1.7 },
+    { type: 'wheel', x: -2.75, z: Z1 + 0.22, r: 0.62 }, { type: 'anvil', x: 2.85, z: Z1 + 1.35, rot: -0.5 }, { type: 'barrel', x: X1 + 0.5, z: Z0 + 0.45 }, { type: 'trough', x: SHED.x1 - 0.65, z: Z1 - 1.3, rot: Math.PI / 2, len: 1.7 },
     { type: 'hitchrail', x: SHED.x1 + 0.9, z: 0, rot: Math.PI / 2, len: 3.0 }, { type: 'crate', x: X1 + 0.45, z: Z1 - 0.4, rot: 0.2, size: 0.5 },
   ].map((p) => ({ ...p, y: p.inside ? FL : 0, x: p.x + OX, z: p.z + OZ }));
   const f2 = (x) => +x.toFixed(2);
@@ -340,7 +357,8 @@ export function buildBlacksmith(recipeIn = {}, env = {}) {
     street: [fp.x0 - 1, fp.x1 + 1, fp.z1 - 0.5, fp.z1 + 6],
   };
   const counts = {}; let parts = 0; for (const g in k.parts) { counts[g] = k.parts[g].length; parts += counts[g]; }
-  const B = { recipe: r, geos, doors: leaves, lamps: c.lamps, light, occ, props, offset: OX, offsetZ: OZ, anchors, counts, parts, msBuild, msBake, ms: performance.now() - t0, marks: [], kit: k };
+  const extra = far ? null : signAndSmoke(SIGN, [STACK.x + OX, roofY(STACK.x) + 1.95, STACK.z + OZ], [OX, OZ]);
+  const B = { extra, tick: extra ? extra.userData.tick : null, recipe: r, geos, doors: leaves, lamps: c.lamps, light, occ, props, offset: OX, offsetZ: OZ, anchors, counts, parts, msBuild, msBake, ms: performance.now() - t0, marks: [], kit: k };
   const H = fp.h, cx = OX, cz = OZ;
   B.views = {
     front34: [[-11.5, 3.6, 12.5], [0.6, 2.2, 0]], front: [[0.2 + cx, 2.0, 12.5], [cx, 2.2, 0]], back34: [[11.5, H * 0.6, -11.5], [0, 2.4, 0]],
@@ -349,4 +367,35 @@ export function buildBlacksmith(recipeIn = {}, env = {}) {
     roof: [[-8, 13, 9], [0, 4, 0]], far: [[-40, 9, 58], [0, 2.4, 0]], night: [[-11.5, 3.6, 12.5], [0.6, 2.2, 0]],
   };
   return B;
+}
+
+// THE SIGN'S LETTERS AND THE SMOKE (the lab adds B.extra to its scene and calls B.tick each frame; in the town they are
+// two small meshes beside the building's own): the letters painted on a canvas, faded cream, a little worn, on a plane
+// over the sign board; a few soft grey puffs rising from the chimney and thinning out
+function signAndSmoke(SIGN, top, off) {
+  const g = new THREE.Group(); g.name = 'sign and smoke';
+  const cv = document.createElement('canvas'); cv.width = 1024; cv.height = 192;
+  const x = cv.getContext('2d');
+  x.fillStyle = 'rgba(214, 200, 168, 0.92)'; x.font = 'bold 132px Georgia, "Times New Roman", serif'; x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillText('BLACKSMITH', 512, 104);
+  // (worn: flecks of the paint gone, more along the bottom)
+  const img = x.getImageData(0, 0, 1024, 192), d = img.data, R = rng(41);
+  for (let i = 0; i < d.length; i += 4) { const py = (i / 4 / 1024) | 0; if (d[i + 3] && R() < 0.08 + 0.12 * (py / 192)) d[i + 3] *= R() * 0.5; }
+  x.putImageData(img, 0, 0);
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(SIGN.w - 0.12, (SIGN.w - 0.12) * 192 / 1024), new THREE.MeshStandardMaterial({ map: tex, transparent: true, alphaTest: 0.05, roughness: 0.9, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }));
+  sign.position.set(off[0], SIGN.y, Z1 + 0.082 + off[1]); sign.name = 'sign letters'; g.add(sign);
+  // the smoke: soft grey puffs, each rising and spreading as it goes, round again when it has thinned out
+  const pc = document.createElement('canvas'); pc.width = pc.height = 64;
+  const px = pc.getContext('2d'), gr = px.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, 'rgba(150,146,140,0.55)'); gr.addColorStop(0.5, 'rgba(140,136,130,0.25)'); gr.addColorStop(1, 'rgba(130,126,120,0)');
+  px.fillStyle = gr; px.fillRect(0, 0, 64, 64);
+  const N = 7, pos = new Float32Array(N * 3), age = Array.from({ length: N }, (_, i) => i / N);
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const puffs = new THREE.Points(geo, new THREE.PointsMaterial({ map: new THREE.CanvasTexture(pc), size: 1.4, sizeAttenuation: true, transparent: true, depthWrite: false, opacity: 0.55, color: 0xffffff }));
+  puffs.name = 'smoke'; puffs.frustumCulled = false; g.add(puffs);
+  const place = () => { for (let i = 0; i < N; i++) { const a = age[i]; pos.set([top[0] + a * 1.1 + Math.sin(i * 2.1 + a * 3) * 0.15, top[1] + a * 3.2, top[2] + a * 0.4], i * 3); } geo.attributes.position.needsUpdate = true; };
+  place();
+  g.userData.tick = (dt) => { for (let i = 0; i < N; i++) age[i] = (age[i] + dt * 0.12) % 1; place(); };
+  return g;
 }

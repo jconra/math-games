@@ -67,6 +67,7 @@ import { makeCabin } from './cabin/cabin.js';
 import { makeHomestead } from './homestead.js';
 import { makeAudio, volumeRow } from './audio/audio.js';
 import { makeAmbience } from './audio/ambience.js';
+import { makeDoorSound } from './audio/doorsound.js';
 import { makeShouts } from './audio/shouts.js';
 import { makeReadAloud } from './audio/readaloud.js';
 import { sayLine, talking, hush as hushVoice } from './audio/sayline.js';
@@ -83,6 +84,7 @@ import { makeFishingJob, DOCK } from './fishingjob.js';
 import { makeDof } from './fx/dof.js';
 import { completion, goalsOf } from './completion.js';
 import { graphicsRow } from './ui/graphics.js';
+import { makeShiftKeeper } from './shiftkeeper.js';
 
 export const BUILD = '1 (2026-10-09)';
 const Q = new URLSearchParams(location.search);
@@ -208,6 +210,11 @@ let WMJ = null;  // the windmill: the miller on the mill hill and the tower buil
 let FJ = null;   // fishing: the old fisherman and the dock at the lake south of the saloon, fish sold at the store (src/fishingjob.js)
 let BRJ = null;  // the bridge: the engineer at the ravine on the west river and the bridge built there (src/bridgejob.js)
 let CM = null;   // the checklist: a toast when an item is checked off, the pinned goals in the corner (src/ui/completion.js)
+let SK = null;   // the shifts: each job ends after a shift of rounds, with a thank-you, till the next sunrise (src/shiftkeeper.js)
+// may a job deal another round (its day's shift not done); the rounds left today; the job person's polite no
+const shiftOpen = (id) => !SK || SK.open(id);
+const shiftLeft = (id) => (SK ? SK.left(id) : Infinity);
+const shiftNo = (id, o) => { if (SK) SK.decline(id, o); };
 const atCounter = () => !!(SJ && SJ.active) || !!(DL && DL.active) || !!(DJ && DJ.active) || !!(SR && SR.active) || !!(BS && BS.active);   // (a builder up at its site, too)   // (or making up a camp's order on the slip)   // (working the counter: the rider stands still, the store's camera)
 // a question is up (the checklist's toast waits till it's answered): a panel or a lock box, a counter or a slip, the
 // camera or the six-shooter up, the loot's slip, or a wave of a job under way where the player is
@@ -283,7 +290,7 @@ async function ride(r) {
   // (no babble voice: reading works better; src/audio/voice.js is kept for the Sound Lab. A rider who can't read yet
   // hears Hob's lines in the browser's voice, each in turn: src/audio/sayline.js)
   hob = makeHob({ W, hud, rider, I, roads: roadLines, voice: { speak: (text) => { if (rider && SKILLS.readAloud(rider)) sayLine(text); }, stop: () => {} } });
-  { const heard = hob.event; hob.event = (n, d) => { heard(n, d); if (JF) JF.heard(n, d); if (SHOUT) SHOUT.heard(n, d); if (JB) JB.heard(n); jobHeard(n, d); if (JOB_ENDS[n]) jobOver(JOB_ENDS[n]); }; }   // (the job folk hear the jobs too: their thank-yous; and the player's yeehaw at a job's end; the jobs board: at work at a job, its tracks give way)
+  { const heard = hob.event; hob.event = (n, d) => { const own = !!(SK && SK.heard(n, d)); heard(n, d); if (JF) JF.heard(n, own ? { ...(d || {}), shiftEnd: true } : d); if (SHOUT) SHOUT.heard(n, d); if (JB) JB.heard(n); jobHeard(n, d); if (JOB_ENDS[n]) jobOver(JOB_ENDS[n]); }; }   // (the job folk hear the jobs too: their thank-yous; and the player's yeehaw at a job's end; the jobs board: at work at a job, its tracks give way; the shifts first: a round counted, and at a shift's end its own thank-you in place of the job's usual one)
   stage = makeStage({ W, folk, audio: AUD, speak: (text) => { if (rider && SKILLS.readAloud(rider)) sayLine(text); } });   // (speak: the band's answer read out to a rider who can't read yet)
   traffic = makeTraffic({ W, animals, folk, audio: AUD, obstacles: trafficThings, camps: () => camps, camera, riding: () => !!(P && P.onHorse) });   // (camera: wagons and travellers dissolve in and out of sight)
   { let ends = null; W.roadEnds = () => {   // (the road's two ends: riding on past one into the mist comes out by the other, src/world.js W.wrap)
@@ -295,6 +302,7 @@ async function ride(r) {
     }
     return ends; }; }
   AMBI = makeAmbience({ audio: AUD, W }); BM.ambience = AMBI;
+  if (W.V && W.V.CODE) W.V.CODE.onDoor = makeDoorSound({ audio: AUD }).play;   // (the town's doors' creak, thunk and flap: src/audio/doorsound.js)
   // (one voice at a time: a shout waits while a card is read, and a card waits for a shout to finish)
   SHOUT = makeShouts({ audio: AUD, hush: () => !!(READ && READ.speaking) }); BM.shouts = SHOUT;
   // (a card's clips wait while the browser's voice says a line: Hob's directions, a why)
@@ -305,23 +313,24 @@ async function ride(r) {
   shops = makeShops({ W, rider, say: (t, k) => hud.toast(t, k), extra: { ...HS.shop, stable: PEN.shop },
     onOpen: () => pause('counter'), onClose: () => resume('counter'),
     onBuy: (what) => { refresh(); if (what === 'saddle' || what === 'horse') P.refreshOwned(); if (what === 'dog') { makeDogIfOwned(); if (cabin) cabin.dogsChanged(); } if (what === 'hat' && P && P.person) { if (!P.person.hat) P.person.hatOn(); P.person.setHat(rider.look.hatStyle); } hob.event(what); },
-    onLockbox: (box, o) => openBox(box, o), onStoreJob: jobOn(rider, 'store') ? () => { if (SJ) SJ.start(); } : null });   // (no "Mind the counter" when a grown-up turned the store job off)
+    onLockbox: (box, o) => openBox(box, o), onStoreJob: jobOn(rider, 'store') ? () => { if (!SJ) return; if (!shiftOpen('store')) { shiftNo('store'); return; } SJ.start(); } : null });   // (the day's shift done: the storekeeper's polite no)   // (no "Mind the counter" when a grown-up turned the store job off)
   STABLE = makeStableLife({ W, animals, rider, camera, player: () => P, shops, say: (t) => hud.toast(t), shadows: !!(W.V && W.V.SHADOW ? W.V.SHADOW.on : true) }); BM.stable = STABLE;
   cabin = makeCabin({ W, renderer, camera, animals, rider, hud, input: I, audio: AUD, player: () => P, follower: () => D,
     onBuy: () => refresh(), onLockbox: (box, o) => openBox(box, o) });
   // (the round-up's Hob also hears a whole wave roped: now and then a thank-you calf from the rancher)
   const herdHob = Object.create(hob); herdHob.event = (n, d) => { hob.event(n, d); if (HS && n === 'waveDone') HS.jobDone(n); };
-  RU = makeRoundup({ W, animals, P, I, camera, canvas, rider, hud: roundupHud(), hob: herdHob, refresh, read: READ });
+  RU = makeRoundup({ W, animals, P, I, camera, canvas, rider, hud: roundupHud(), hob: herdHob, refresh, read: READ, open: () => shiftOpen('roundup') });
   farm = makeFarm({ W, animals });
   // (the farm jobs' Hob also hears a whole flock healed or a batch penned: now and then a thank-you lamb or piglet)
   const farmHob = Object.create(hob); farmHob.event = (n, d) => { hob.event(n, d); if (HS && (n === 'flockDone' || n === 'pigsDone')) HS.jobDone(n); };
   // (every job is on unless a grown-up turned it off on the title: save.js jobOn; the round-up and the lock boxes always are)
-  SH = !jobOn(rider, 'sheep') ? null : makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hud: tagHud('sheep'), hob: farmHob, refresh, defer: (at) => !!(PG && PG.wants(at)) });
-  PG = !jobOn(rider, 'pigs') ? null : makePigJob({ W, animals, farm, P, camera, canvas, rider, hud: tagHud('pigs'), hob: farmHob, refresh });
+  SH = !jobOn(rider, 'sheep') ? null : makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hud: tagHud('sheep'), hob: farmHob, refresh, defer: (at) => !!(PG && PG.wants(at)),
+    open: () => shiftOpen('sheep'), left: () => shiftLeft('sheep') });
+  PG = !jobOn(rider, 'pigs') ? null : makePigJob({ W, animals, farm, P, camera, canvas, rider, hud: tagHud('pigs'), hob: farmHob, refresh, open: () => shiftOpen('pigs'), left: () => shiftLeft('pigs') });
   SJ = !jobOn(rider, 'store') ? null : makeStoreJob({ W, folk, P, I, camera, rider, hud: tagHud('store'), hob, refresh, pay: PAY, goods: HS, fish: () => FJ, voice: (k, who) => { if (SHOUT) SHOUT.say(k, who); }, town: () => TP, work: () => TOOLS.work(),
     openBox: (problem, after) => !paused && openBox({ tier: problem.tier, from: 'store' }, { problem, after }),   // (false: not now, the store tries again)
     onStart: () => { I.enabled = false; if (RU) RU.paused = true; hud.prompt(null); hud.rule(null); hud.hint(null); },
-    onStop: () => { I.enabled = !paused; if (RU) RU.paused = paused; } });
+    onStop: () => { I.enabled = !paused; if (RU) RU.paused = paused; }, open: () => shiftOpen('store') });
   camps = makeCamps({ W, folk, camera, audio: AUD });
   // the build sites: a lab's builder opened right there in the valley (the windmill's at the mill hill); while one is up
   // the rider stands by, the keys and the HUD are the builder's, and the valley goes on round it
@@ -333,44 +342,57 @@ async function ride(r) {
   WMJ = makeWindmillJob({ W, folk, rider, sites: BS, player: () => P, hud, refresh, audio: AUD, on: jobOn(rider, 'windmill'),   // (off: the miller has no prompt; what was built still stands)
     speak: (text) => { if (rider && SKILLS.readAloud(rider)) sayLine(text); } });   // (the miller's questions read out to a rider who can't read yet)
   BRJ = makeBridgeJob({ W, folk, rider, sites: BS, hud, refresh, camera, audio: AUD, traffic, animals, obstacles: () => [P && P.position, P && P.horse && P.horse.root, D && D.dog && D.dog.root], player: () => P, dog: () => D, speak: (text) => { if (rider && SKILLS.readAloud(rider)) sayLine(text); } });   // (off: the engineer has no prompt; what was built still stands and is used)
-  FJ = makeFishingJob({ W, folk, rider, sites: BS, player: () => P, audio: AUD, hud, refresh, renderer, camera, on: jobOn(rider, 'fishing'), speak: (text) => sayLine(text) });   // (off: the fisherman has no prompt; the dock still stands)
+  FJ = makeFishingJob({ W, folk, rider, sites: BS, player: () => P, audio: AUD, hud, refresh, renderer, camera, on: jobOn(rider, 'fishing'), speak: (text) => sayLine(text),
+    onLanded: () => hob.event('fishLanded') });   // (a round of the fishing's shift)   // (off: the fisherman has no prompt; the dock still stands)
   deer = makeDeer({ W, animals });
   DJ = jobOn(rider, 'hunt') ? makeDeerJob({ W, deer, P, I, camera, canvas, rider, hud: tagHud('deer'), hob, audio: AUD, refresh, read: READ,
     onStart: () => { P.enabled = false; I.enabled = false; if (RU) RU.paused = true; hud.prompt(null); },
     onStop: () => { P.enabled = !paused; I.enabled = !paused; if (RU) RU.paused = paused; },
-    busy: () => !!((WJ && (WJ.on || WJ.near)) || (RU && RU.near) || (SH && SH.near) || (PG && PG.near) || (DL && (DL.active || DL.card))) }) : null;   // (another job has the player: the deer card stands aside)
+    busy: () => !!((WJ && (WJ.on || WJ.near)) || (RU && RU.near) || (SH && SH.near) || (PG && PG.near) || (DL && (DL.active || DL.card))),   // (another job has the player: the deer card stands aside)
+    open: () => shiftOpen('deer'), decline: () => shiftNo('deer') }) : null;
   // the bottle range, for every rider: bottles and tin cans, never anything alive (cattle and bandits are roped)
   SR = jobOn(rider, 'range') ? makeShootingJob({ W, folk, P, I, camera, canvas, renderer, rider, hud: tagHud('range'), hob, audio: AUD, refresh, read: READ,
     onStart: () => { P.enabled = false; I.enabled = false; if (RU) RU.paused = true; hud.prompt(null); },
     onStop: () => { P.enabled = !paused; I.enabled = !paused; if (RU) RU.paused = paused; jobOver('range', { sat: true }); },
-    busy: () => !!((WJ && WJ.on) || (DL && DL.active) || (DJ && DJ.active)) }) : null;
+    busy: () => !!((WJ && WJ.on) || (DL && DL.active) || (DJ && DJ.active)), open: () => shiftOpen('range'), decline: () => shiftNo('range') }) : null;
   DL = !jobOn(rider, 'deliveries') ? null : makeDeliveryJob({ W, camps, P, camera, rider, hud: tagHud('delivery'), hob, refresh, work: () => TOOLS.work(),
     onStart: () => { P.enabled = false; I.enabled = false; if (RU) RU.paused = true; hud.prompt(null); },
     onStop: () => { P.enabled = !paused; I.enabled = !paused; if (RU) RU.paused = paused; },
     quiet: () => !!((RU && RU.near) || (SH && SH.near) || (PG && PG.near) || (SJ && SJ.active) || (WJ && WJ.near)),
-    say: (id, t) => !!(JF && JF.say(id, t)) });   // (the foremen's words in the job folk's speech card)
+    say: (id, t) => !!(JF && JF.say(id, t)),   // (the foremen's words in the job folk's speech card)
+    open: () => shiftOpen('delivery'), decline: (c) => shiftNo('delivery', { who: c && c.id }) });
   WJ = jobOn(rider, 'wagon') ? makeWagonJob({ W, folk, animals, P, I, camera, canvas, rider, hud: tagHud('wagon'), hob, audio: AUD, refresh, read: READ,
     times: () => RU && RU.trainer('times'),   // (one times trainer for both jobs)
     wagonLib: () => traffic && traffic.ready,   // (the wagon models the traffic loads, shared)
     traffic: () => traffic, shouts: () => SHOUT,   // (hold-ups on the long roads: a gang jumps one of the traffic's wagons)
-    quiet: () => !!((RU && RU.near) || (SH && SH.near) || (PG && PG.near) || atCounter() || (DL && DL.card)) }) : null;
+    quiet: () => !!((RU && RU.near) || (SH && SH.near) || (PG && PG.near) || atCounter() || (DL && DL.card)),
+    open: () => shiftOpen('wagon'), decline: () => shiftNo('wagon') }) : null;
   LJ = jobOn(rider, 'loot') ? makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud: tagHud('loot'), hob, refresh, audio: AUD, town: () => TP,   // (audio: a gang camp's fire crackles; town: the townsfolk come for their goods)
     voice: (k, who) => { if (SHOUT) SHOUT.say(k, who); },   // (a townsman's recorded lines: "Is that my stuff?", a thank-you)
-    quiet: () => !!((RU && RU.near) || (SH && SH.near) || (PG && PG.near) || atCounter() || (WJ && WJ.near) || (DL && DL.card) || (DJ && DJ.card)) }) : null;
+    quiet: () => !!((RU && RU.near) || (SH && SH.near) || (PG && PG.near) || atCounter() || (WJ && WJ.near) || (DL && DL.card) || (DJ && DJ.card)),
+    open: () => shiftOpen('loot'), decline: () => shiftNo('loot', { far: true }) }) : null;
   JF = makeJobFolk({ W, folk, P, camera, hud,
     jobs: { roundup: () => RU, sheep: () => SH, pigs: () => PG, wagon: () => WJ, deer: () => DJ, camps: () => camps, farm: () => farm, delivery: () => DL, loot: () => LJ, windmill: () => (WMJ && WMJ.on ? WMJ : null), fishing: () => (FJ && FJ.on ? FJ : null), bridge: () => (BRJ && jobOn(rider, 'bridge') ? BRJ : null) },
     actions: { sheriff: () => openCounter('sheriff'), stable: () => openCounter('stable') }, onTalk: (what, id, who) => { if (SHOUT) SHOUT.talk(what, who && { id, ...who }); },
     // (the trail boss, the vet and the others: their speech card read out, in the browser's voice, to a rider who can't read yet)
-    onSay: (name, lines) => { if (rider && SKILLS.readAloud(rider)) sayLine(lines.join(' ')); } });
+    onSay: (name, lines) => { if (rider && SKILLS.readAloud(rider)) sayLine(lines.join(' ')); },
+    helloFor: (id) => (SK ? SK.helloFor(id) : null) });   // (a job done for today: its person's polite no in place of the hello)
   TP = makeTownPeople({ W, folk, camera, player: () => P, jobs: { store: () => SJ, loot: () => LJ, stage: () => stage } });
   JB = makeJobsBoard({ W, camera, I, hud, rider, player: () => P, onOpen: () => pause('board'), onClose: () => resume('board'),
     jobs: { roundup: () => RU, sheep: () => SH, pigs: () => PG, store: () => SJ, delivery: () => DL, wagon: () => WJ, deer: () => DJ, range: () => SR, loot: () => LJ, farm: () => farm, camps: () => camps, jobfolk: () => JF, windmill: () => (WMJ && WMJ.on ? WMJ : null), bridge: () => (BRJ && jobOn(rider, 'bridge') ? BRJ : null), fishing: () => (FJ && FJ.on ? FJ : null) },
-    speak: (text) => { if (rider && SKILLS.readAloud(rider)) sayLine(text); } });   // (a job picked there is read out to a rider who can't read yet)
+    speak: (text) => { if (rider && SKILLS.readAloud(rider)) sayLine(text); },   // (a job picked there is read out to a rider who can't read yet)
+    shift: { done: (id) => !!(SK && SK.done(id)), ask: (id) => !!(SK && SK.ask(id)) } });   // (a job done for today: stamped on the board; picked there, more work)
   // (made before anything can be bought or done: its first look takes what an old save already has as announced)
   CM = makeChecklist({ hud, audio: AUD, rider, busy: asking, save: () => saveRider(rider), world: {
     place: () => { const c = camps && P && camps.near(P.position, FOUND_NEAR.camp); return c ? c.id : null; },
     hideout: () => { const c = LJ && LJ.cache; return c && P && Math.hypot(c.x - P.position.x, c.z - P.position.z) < FOUND_NEAR.hideout ? c.def.id : null; },
     home: () => !!(cabin && cabin.inside) } });
+  // the shifts (before the round-up deals its first bunch: a shift already done today keeps it waiting)
+  SK = makeShiftKeeper({ W, rider, hud, hob, audio: AUD, folk: () => JF, board: () => JB, range: () => SR, player: () => P,
+    busy: () => paused || boxOpen || atCounter() || !!(LJ && LJ.active) || !!(cabin && cabin.busy),
+    current: () => jobNow(), working: () => askingJob(), jobOn: (id) => !!(JOB_NOW[id] && JOB_NOW[id]()), refresh,
+    store: () => (W.places.store && W.places.store.door) || null, foreman: (id) => !!(camps && camps.byId && camps.byId(id)),
+    ends: { fishing: () => { if (BS && BS.active && BS.active.id === 'fishing') BS.close('done'); } } });   // (the rod put down once the day's fish are landed)
   RU.start();
   hob.trail(true);
   hud.show(true); hud.touch(I.touch);
@@ -445,6 +467,7 @@ function endRide() {
   if (SHOUT) { SHOUT.dispose(); SHOUT = BM.shouts = null; }
   if (READ) { READ.dispose(); READ = BM.read = null; }
   if (CM) { CM.dispose(); CM = null; }
+  if (SK) { SK.dispose(); SK = null; }
   RU = hob = shops = D = P = stage = SH = PG = SJ = farm = null; door = null;
   AUD.hold('title', true);
   pausedBy.clear(); paused = false;
@@ -950,12 +973,20 @@ function doors() {
   if (!door && (!mount || talkFirst) && !fresh && JB && JB.prompt) { say = JB.prompt; act = () => JB.open(); }
   // a job's person close by (src/jobfolk.js): E does what they ask (the wagon rolls, the camera goes up, the sheriff's desk)
   if (!door && (!mount || talkFirst) && !fresh && JF && JF.prompt) { say = JF.prompt; act = () => { const was = JF.prompt; JF.talk(); if (/camera/.test(was || '') && DJ && DJ.lent()) chooseJob('deer'); else if (/lock boxes/.test(was || '')) chooseJob('boxes'); }; }   // (taking a job up with its person chooses it: THE JOB)
-  // by a build site's person (src/buildsite.js: the miller on the mill hill): E opens the builder there
-  if (!door && !fresh && BS && BS.prompt) { say = BS.prompt; act = () => BS.talk(); }
+  // by a build site's person (src/buildsite.js: the miller on the mill hill): E opens the builder there (the old
+  // fisherman, his day's fishing done: a word with him, his polite no)
+  if (!door && !fresh && BS && BS.prompt) {
+    if (SK && SK.done('fishing') && BS.state().near === 'fishing') { say = 'Talk to the old fisherman'; act = () => shiftNo('fishing'); }
+    else { say = BS.prompt; act = () => BS.talk(); }
+  }
   // at the target range (src/missions/shooting.js): E by Miss Opal takes up her six-shooter
   if (!door && !fresh && SR && SR.prompt) { say = SR.prompt; act = () => SR.start(); }
   // by a saddle rack in the stable's lean-to (src/stablelife.js): E buys it, or puts it on your horse
   if (!door && !fresh && STABLE && STABLE.prompt) { say = STABLE.prompt; act = () => STABLE.act(); }
+  // at a code-built building's doorway, on foot (world/objects/doorkeeper.js): E opens or shuts its door. By the horse,
+  // or nearer a counter's spot than the doorway, those keep E (a phone's tap on the prompt goes the same way)
+  const DK = W && W.V && W.V.CODE && W.V.CODE.doors, kd = DK && P.mode === 'foot' && !mount && !fresh ? DK.near(P.position.x, P.position.z) : null;
+  if (kd && (!door || kd.dist < door.dist)) { door = null; say = kd.open ? 'Close the door' : 'Open the door'; act = () => DK.use(kd.door, !kd.open); }
   hud.prompt(say);
   if (act && I.enabled && I.tap('KeyE')) act();
   // the saloon's doors have no counter yet: walking up to them, Old Hob says so
@@ -1085,7 +1116,7 @@ function step(dt) {
     // (the wagon's gang took the shared times trainer's wave: back at the herd, the round-up deals its own afresh, but
     // never while the gang's wave is still open beside the wagon, or the two jobs take the trainer from each other; only
     // a herd uses the trainer: a series card wave carries on)
-    if (WJ && WJ.tookTrainer && RU.near && !(WJ.near && WJ.wave && !WJ.wave.done)) { WJ.tookTrainer = false; if (!RU.wave || RU.wave.topic === 'times') RU.newWave(); }
+    if (WJ && WJ.tookTrainer && RU.near && !(WJ.near && WJ.wave && !WJ.wave.done)) { WJ.tookTrainer = false; if ((!RU.wave || RU.wave.topic === 'times') && shiftOpen('roundup')) RU.newWave(); }   // (none while the round-up's day's shift is done)
     RU.update(dt);
     if (farm) farm.update(dt, P.position);
     if (HS) HS.update(dt, P.position);   // (the farm animals behind the cabin; their goods are laid up over play time)
@@ -1107,6 +1138,7 @@ function step(dt) {
     if (BS) BS.update(dt);   // (after the player: it places the camera while a builder is up)
     if (JB) JB.update(dt, P.position, { busy: askingJob() });   // (a job picked on the jobs board: its tracks lead first, till the rider is there or busy at a job)
     jobStep();   // (the job the rider chose keeps the card: THE JOB)
+    if (SK) SK.update(dt);   // (the shifts: the sunrise, a shift's ending, the counter on the HUD)
     if ((toolsT -= dt) <= 0) { toolsT = 0.25; TOOLS.update(); }   // (the tools strip: the sum on Work it out, the place's level)
     if ((fadesT -= dt) <= 0) { fadesT = 1; checkFades(W.scene); }   // (anyone left part-faded walking about made solid: src/actors/folk.js)
     hob.trailTo((JB && JB.goal()) || hobGoal() || trailGoal());
@@ -1277,6 +1309,7 @@ Object.defineProperties(BM, { sites: { get: () => BS }, windmill: { get: () => W
 Object.defineProperties(BM, { bridge: { get: () => BRJ } });   // (the bridge job: .builder.handle is the lab's BR handle; .state(), .rating())
 Object.defineProperties(BM, { fishing: { get: () => FJ } });   // (the fishing job: .builder.handle is the lab's FI handle; .state())
 Object.defineProperties(BM, { checklist: { get: () => CM } });   // (the checklist's toasts and goals corner, while riding)
+Object.defineProperties(BM, { shifts: { get: () => SK } });   // (the shifts: BM.shifts.state(), .dev.end(id), .dev.day(): src/shiftkeeper.js)
 Object.defineProperties(BM, { camps: { get: () => camps }, delivery: { get: () => DL }, homestead: { get: () => HS }, loot: { get: () => LJ } });   // (the camps and their deliveries; DL.rob() is the bandits' hook)
 Object.assign(BM, {
   dev, hud, title: T, camera, renderer, screenOf, prices: PRICES, loading, skills: SKILLS,

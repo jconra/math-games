@@ -37,26 +37,28 @@ import { Kit, buildGeometry, Occlusion } from '../materials/cabin.js';
 import { rng, WOOD, WOOD_LOOKS } from '../materials/textures.js';
 import { buildStoneWall, SHAPES, PALETTES, MORTARS } from '../stone/stonewall.js';
 import { T, RX, RY, RZ, mul, vary, smooth01, ngon, wallOf, wallM, wallP, boardAndBatten, lapSiding, plankField, stovepipe, casing, doorLeaf, lantern, glowGeometry, Light, GLOW } from './parts.js';
+import { MAKERS } from './props.js';
 
 // ── the recipe ───────────────────────────────────────────────────────────────────────────────────────────────────────
 // paint colours are the paint itself (linear), before the weathering fades and wears it. On a log cabin only the doors
 // and the shutters take it.
 export const CABIN_PAINTS = {
   none: { label: 'None (bare wood)', c: null },
-  white: { label: 'Whitewash', c: [0.6, 0.58, 0.53] },
+  white: { label: 'Whitewash (faded)', c: [0.47, 0.46, 0.43] },
   red: { label: 'Faded barn red', c: [0.34, 0.085, 0.058] },
   ochre: { label: 'Faded ochre', c: [0.48, 0.29, 0.07] },
   green: { label: 'Faded green', c: [0.12, 0.19, 0.11] },
   blue: { label: 'Faded blue-grey', c: [0.17, 0.21, 0.26] },
-  cream: { label: 'Faded cream', c: [0.52, 0.47, 0.36] },
+  cream: { label: 'Faded cream', c: [0.5, 0.45, 0.35] },
 };
 // the choices, with the panel's words for them
 export const CABIN_OPTIONS = {
   walls: { hewn: 'Hewn logs', round: 'Round logs', batten: 'Board and batten', lap: 'Lap siding' },
-  plan: { single: 'Single pen', double: 'Double pen', dogtrot: 'Dogtrot (open breezeway)', ell: 'L (a wing at the back)' },
+  plan: { single: 'Single pen', double: 'Double pen', dogtrot: 'Dogtrot (open breezeway)', ell: 'L (a wing)' },
   wing: { right: 'Wing on the right', left: 'Wing on the left' },
+  wingAt: { front: 'Wing toward the street (gable front)', back: 'Wing at the back' },
   room: { none: 'No lean-to', back: 'Lean-to on the back', left: 'Lean-to on the left', right: 'Lean-to on the right' },
-  porch: { none: 'No porch (a step)', front: 'Front porch', shed: 'Shed porch (roof carried down)', wrap: 'Wrap-around porch' },
+  porch: { none: 'No porch (a step)', partial: 'A small porch at the door', front: 'Front porch', shed: 'Shed porch (roof carried down)', wrap: 'Wrap-around porch' },
   wrap: { right: 'Wrapping round the right', left: 'Wrapping round the left' },
   chimney: { stone: 'Stone', stick: 'Stick and mud', pipe: 'Stovepipe', none: 'None' },
   chimneyAt: { left: 'Left end', right: 'Right end', both: 'Both ends', middle: 'Middle', leanto: 'In the lean-to' },
@@ -64,31 +66,47 @@ export const CABIN_OPTIONS = {
   cover: { shakes: 'Split shakes', boards: 'Boards and battens' },
   windows: { shutters: 'Small, board shutters', glass: 'Six-pane sashes' },
   foundation: { piers: 'Stone piers', footing: 'Stone footing', sills: 'Log sills on flat stones' },
+  logTone: { auto: 'Logs: from the seed', brown: 'Logs: brown', grey: 'Logs: silver-grey', dark: 'Logs: dark, oiled' },
 };
 const RANGES = { w: [3.6, 7.2], d: [3.4, 5.6], breeze: [1.8, 3.2], pitch: [10, 45], overhang: [0.15, 0.7], winFront: [0, 3], winSide: [0, 2], winBack: [0, 2], wear: [0, 1] };
 export const CABIN_DEFAULTS = {
-  kind: 'cabin', preset: 'homestead', walls: 'hewn', plan: 'single', wing: 'right', w: 5.2, d: 4.4, breeze: 2.4, doors2: false,
+  kind: 'cabin', preset: 'homestead', walls: 'hewn', plan: 'single', wing: 'right', wingAt: 'back', w: 5.2, d: 4.4, breeze: 2.4, doors2: false,
   room: 'none', backDoor: false, porch: 'front', wrap: 'right', rails: true, chimney: 'stone', chimneyAt: 'left',
   roof: 'gable', cover: 'shakes', pitch: 35, overhang: 0.4, windows: 'glass', winFront: 1, winSide: 1, winBack: 1,
-  foundation: 'piers', lantern: false, paint: 'none', wear: 0.55, wood: 'rustic', stone: 'grey', mortar: 'grey', seed: 11,
+  foundation: 'piers', lantern: false, logTone: 'auto', paint: 'none', wear: 0.55, wood: 'straight', stone: 'grey', mortar: 'grey', seed: 11,
   look: 'near', lineup: false,
 };
-// THE PRESETS: the range, from a trapper's one-room shack to a frame house with a wrap-around porch. Each fits the
-// town's spots for the homes it replaces (8.1 x 8.6 m) unless its note says otherwise.
+// THE PRESETS: the range, from a trapper's one-room shack to a frame house with a wrap-around porch. The log houses each
+// show the street a different front: porch (none, a small one at the door, full, shed or wrapped), pitch, chimney end
+// and log tone. Footprints: see changes.md (bigger than the Tripo homes' spots is fine).
 export const PRESETS = {
-  trapper: { label: "Trapper's cabin", walls: 'round', plan: 'single', w: 4.2, d: 3.8, room: 'none', backDoor: false, porch: 'none', chimney: 'pipe', chimneyAt: 'right', roof: 'gable', cover: 'shakes', pitch: 38, overhang: 0.35, windows: 'shutters', winFront: 1, winSide: 1, winBack: 0, foundation: 'sills', paint: 'none', seed: 3 },
-  homestead: { label: "Homesteader's double pen", walls: 'hewn', plan: 'double', w: 3.7, d: 4.4, doors2: true, room: 'none', backDoor: false, porch: 'front', chimney: 'stone', chimneyAt: 'left', roof: 'gable', cover: 'shakes', pitch: 36, overhang: 0.4, windows: 'glass', winFront: 0, winSide: 1, winBack: 1, foundation: 'piers', paint: 'none', lantern: true, seed: 11 },
-  dogtrot: { label: 'Dogtrot', walls: 'hewn', plan: 'dogtrot', w: 3.5, d: 4.2, breeze: 2.4, porch: 'front', chimney: 'stone', chimneyAt: 'both', roof: 'gable', cover: 'shakes', pitch: 34, overhang: 0.4, windows: 'shutters', winFront: 1, winSide: 0, winBack: 1, foundation: 'piers', backDoor: true, paint: 'none', seed: 21 },
+  trapper: { label: "Trapper's cabin", walls: 'round', plan: 'single', w: 4.2, d: 3.8, room: 'none', backDoor: false, porch: 'none', chimney: 'pipe', chimneyAt: 'right', roof: 'gable', cover: 'shakes', pitch: 38, overhang: 0.35, windows: 'shutters', winFront: 1, winSide: 1, winBack: 0, foundation: 'sills', logTone: 'grey', paint: 'none', seed: 3 },
+  homestead: { label: "Homesteader's double pen", walls: 'hewn', plan: 'double', w: 3.7, d: 4.4, doors2: true, room: 'none', backDoor: false, porch: 'front', chimney: 'stone', chimneyAt: 'left', roof: 'gable', cover: 'shakes', pitch: 36, overhang: 0.4, windows: 'glass', winFront: 1, winSide: 1, winBack: 1, foundation: 'piers', logTone: 'brown', paint: 'none', lantern: true, seed: 11 },
+  dogtrot: { label: 'Dogtrot (open breezeway)', walls: 'hewn', plan: 'dogtrot', w: 3.5, d: 4.2, breeze: 2.6, porch: 'none', chimney: 'stone', chimneyAt: 'both', roof: 'gable', cover: 'shakes', pitch: 31, overhang: 0.45, windows: 'shutters', winFront: 1, winSide: 0, winBack: 1, foundation: 'piers', backDoor: true, logTone: 'grey', paint: 'none', seed: 21 },
   kitchen: { label: 'Board-and-batten house with a lean-to kitchen', walls: 'batten', plan: 'single', w: 5.6, d: 4.4, room: 'back', backDoor: true, porch: 'front', chimney: 'pipe', chimneyAt: 'leanto', roof: 'gable', cover: 'shakes', pitch: 34, overhang: 0.4, windows: 'glass', winFront: 2, winSide: 1, winBack: 1, foundation: 'piers', paint: 'red', wear: 0.6, lantern: true, seed: 7 },
-  tworoom: { label: 'Two-room log house (back door, stone chimney)', walls: 'hewn', plan: 'double', w: 3.5, d: 4.6, doors2: false, backDoor: true, porch: 'shed', chimney: 'stone', chimneyAt: 'right', roof: 'gable', cover: 'shakes', pitch: 35, overhang: 0.4, windows: 'glass', winFront: 1, winSide: 1, winBack: 1, foundation: 'footing', paint: 'none', seed: 5 },
+  tworoom: { label: 'Two-room log house (back door, stone chimney)', walls: 'hewn', plan: 'double', w: 3.5, d: 4.6, doors2: false, backDoor: true, porch: 'partial', chimney: 'stone', chimneyAt: 'right', roof: 'gable', cover: 'shakes', pitch: 41, overhang: 0.35, windows: 'glass', winFront: 1, winSide: 1, winBack: 1, foundation: 'footing', logTone: 'dark', paint: 'none', seed: 5 },
   frame: { label: 'Whitewashed frame house', walls: 'lap', plan: 'single', w: 5.6, d: 4.6, room: 'left', backDoor: true, porch: 'wrap', wrap: 'right', chimney: 'pipe', chimneyAt: 'middle', roof: 'gable', cover: 'shakes', pitch: 32, overhang: 0.35, windows: 'glass', winFront: 2, winSide: 1, winBack: 1, foundation: 'footing', paint: 'white', wear: 0.55, lantern: true, seed: 9 },
-  ell: { label: 'Log house with a kitchen wing', walls: 'hewn', plan: 'ell', wing: 'right', w: 6.0, d: 4.4, backDoor: true, porch: 'front', chimney: 'stone', chimneyAt: 'left', roof: 'gable', cover: 'shakes', pitch: 36, overhang: 0.4, windows: 'glass', winFront: 2, winSide: 1, winBack: 1, foundation: 'piers', paint: 'none', seed: 13 },
+  ell: { label: 'Log house with a wing toward the street', walls: 'hewn', plan: 'ell', wing: 'right', wingAt: 'front', w: 6.0, d: 4.4, backDoor: true, porch: 'partial', chimney: 'stone', chimneyAt: 'left', roof: 'gable', cover: 'shakes', pitch: 38, overhang: 0.4, windows: 'glass', winFront: 1, winSide: 1, winBack: 1, foundation: 'piers', logTone: 'grey', paint: 'none', seed: 13 },
   shanty: { label: 'Claim shanty', walls: 'batten', plan: 'single', w: 4.6, d: 3.8, room: 'none', porch: 'none', chimney: 'pipe', chimneyAt: 'right', roof: 'shed', cover: 'boards', pitch: 14, overhang: 0.3, windows: 'shutters', winFront: 1, winSide: 1, winBack: 0, foundation: 'sills', paint: 'none', backDoor: false, seed: 17 },
-  saddlebag: { label: 'Saddlebag cabin (chimney in the middle)', walls: 'round', plan: 'double', w: 3.6, d: 4.2, doors2: true, porch: 'front', chimney: 'stone', chimneyAt: 'middle', roof: 'gable', cover: 'shakes', pitch: 36, overhang: 0.4, windows: 'shutters', winFront: 0, winSide: 1, winBack: 1, foundation: 'piers', paint: 'none', seed: 19 },
-  prospector: { label: "Prospector's cabin (stick chimney, woodshed)", walls: 'round', plan: 'single', w: 4.4, d: 4.0, room: 'right', porch: 'none', chimney: 'stick', chimneyAt: 'left', roof: 'gable', cover: 'boards', pitch: 30, overhang: 0.35, windows: 'shutters', winFront: 1, winSide: 0, winBack: 1, foundation: 'sills', paint: 'none', backDoor: false, seed: 23 },
-  squared: { label: 'Squared-log house with a wrap porch', walls: 'hewn', plan: 'single', w: 5.8, d: 4.6, porch: 'wrap', wrap: 'left', chimney: 'stone', chimneyAt: 'right', roof: 'gable', cover: 'shakes', pitch: 35, overhang: 0.4, windows: 'glass', winFront: 2, winSide: 1, winBack: 1, foundation: 'footing', backDoor: true, paint: 'green', lantern: true, seed: 29 },
+  saddlebag: { label: 'Saddlebag cabin (chimney in the middle)', walls: 'round', plan: 'double', w: 3.6, d: 4.2, doors2: true, porch: 'front', chimney: 'stone', chimneyAt: 'middle', roof: 'gable', cover: 'shakes', pitch: 29, overhang: 0.5, windows: 'shutters', winFront: 0, winSide: 1, winBack: 1, foundation: 'piers', logTone: 'brown', paint: 'none', seed: 19 },
+  prospector: { label: "Prospector's cabin (stick chimney, woodshed)", walls: 'round', plan: 'single', w: 4.4, d: 4.0, room: 'right', porch: 'none', chimney: 'stick', chimneyAt: 'left', roof: 'gable', cover: 'boards', pitch: 30, overhang: 0.35, windows: 'shutters', winFront: 1, winSide: 0, winBack: 1, foundation: 'sills', logTone: 'dark', paint: 'none', backDoor: false, seed: 23 },
+  squared: { label: 'Squared-log house with a wrap porch', walls: 'hewn', plan: 'single', w: 5.8, d: 4.6, porch: 'wrap', wrap: 'left', chimney: 'stone', chimneyAt: 'right', roof: 'gable', cover: 'shakes', pitch: 33, overhang: 0.4, windows: 'glass', winFront: 2, winSide: 1, winBack: 1, foundation: 'footing', backDoor: true, logTone: 'grey', paint: 'green', lantern: true, seed: 29 },
 };
-export const PRESET_NOTES = { dogtrot: 'wider than a home spot: 11.6 m across with its two chimneys', ell: 'deeper than a home spot: its wing runs 3.3 m back' };
+export const PRESET_NOTES = { dogtrot: 'wider than a home spot: two pens, the breezeway and two chimneys', ell: 'its wing stands out toward the street' };
+// THE SEED'S OWN VARIETY: a preset built with a seed other than its own (the town's homes) is varied a little: its pitch
+// up to 3 degrees, its log tone (when 'auto'), a full porch made a small one now and then (or the other way), the
+// chimney to the other end, the wing to the other side. Worked out at build time only (the recipe kept as given)
+function seedVariety(r) {
+  const R = rng(r.seed * 7 + 13), own = PRESETS[r.preset] && PRESETS[r.preset].seed === r.seed, o = { ...r };
+  if (o.logTone === 'auto') o.logTone = ['brown', 'grey', 'brown', 'dark'][Math.floor(R() * 4)];
+  if (own || !PRESETS[r.preset]) return cabinRecipe(o);
+  o.pitch = Math.round(o.pitch + (R() - 0.5) * 6);
+  if (o.porch === 'front' && R() < 0.3) o.porch = 'partial'; else if (o.porch === 'partial' && R() < 0.25) o.porch = 'front';
+  if ((o.chimneyAt === 'left' || o.chimneyAt === 'right') && R() < 0.5) o.chimneyAt = o.chimneyAt === 'left' ? 'right' : 'left';
+  if (o.plan === 'ell' && R() < 0.5) o.wing = o.wing === 'left' ? 'right' : 'left';
+  if (o.porch === 'wrap' && R() < 0.5) o.wrap = o.wrap === 'left' ? 'right' : 'left';
+  return cabinRecipe(o);
+}
 
 // a recipe tidied: every key known, every name a known choice, every number in range; things that can't go together
 // worked out (a chimney where a lean-to is goes to the other end, and so on)
@@ -106,8 +124,10 @@ export function cabinRecipe(r = {}) {
   for (const k of ['doors2', 'backDoor', 'rails', 'lantern', 'lineup']) o[k] = !!o[k];
   if (o.look !== 'far') o.look = 'near';
   // (an L has its wing on the back: a lean-to goes on an end instead, and a shed roof can't meet the wing's gable)
-  if (o.plan === 'ell' && o.room === 'back') o.room = o.wing === 'right' ? 'left' : 'right';
+  if (o.plan === 'ell' && o.room === 'back' && o.wingAt === 'back') o.room = o.wing === 'right' ? 'left' : 'right';
   if (o.plan === 'ell') o.roof = 'gable';
+  // (a wing toward the street takes part of the front: the porch there is a small one beside it)
+  if (o.plan === 'ell' && o.wingAt === 'front' && (o.porch === 'wrap' || o.porch === 'shed' || o.porch === 'front')) o.porch = 'partial';
   // (where the chimney can't go: the middle of a single pen or an L is the left end; a dogtrot's middle is its breezeway,
   // so both ends; in the lean-to only a stovepipe, and only with a lean-to)
   if (o.chimneyAt === 'middle' && o.chimney !== 'pipe' && (o.plan === 'single' || o.plan === 'ell')) o.chimneyAt = 'left';
@@ -152,8 +172,9 @@ export function randomRecipe(seed = 1 + Math.floor(Math.random() * 99999)) {
 }
 
 // ── colours: tints on the trim sheet's strips (1 = the strip as drawn) ──────────────────────────────────────────────
-const LOG = [1.32, 1.27, 1.2], LOG_GREY = [1.3, 1.31, 1.32];      // hewn logs (a few gone greyer)
-const ROUNDT = [1.24, 1.17, 1.08];                                   // peeled round logs, a little warmer
+// (tuned on the weathered straight-grain sheet: silver-brown, never pink)
+const LOG = [0.97, 0.93, 0.88], LOG_GREY = [0.96, 0.97, 0.98];      // hewn logs (a few gone greyer)
+const ROUNDT = [0.95, 0.9, 0.83];                                   // peeled round logs, a little warmer
 const DARKW = [0.8, 0.77, 0.74];                                    // frames, shutters, sheathing
 const BOARD = [1.08, 1.05, 1.0];                                    // the gable boards
 const SHAKE = [0.74, 0.7, 0.66];                                    // split shakes
@@ -174,7 +195,7 @@ const TIN = [5.4, 6.8, 8.4];                                        // a stovepi
 const RUST = [1.5, 1.0, 0.68];
 // (sRGB colours of the clay: the chinking between hewn logs, the daub on a stick chimney, whitewash; turned into tints on
 // the rubble picture by its average colour, so they come out as these whatever the picture is)
-const CLAY = [0.43, 0.37, 0.29], DAUB = [0.5, 0.42, 0.32], SOOT = [0.1, 0.09, 0.085], HEARTH = [0.46, 0.44, 0.41];
+const CLAY = [0.43, 0.37, 0.29], DAUB = [0.5, 0.42, 0.32], SOOT = [0.1, 0.09, 0.085], HEARTH = [0.37, 0.345, 0.31];
 const lin = (c) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
 export const onMean = (c, mean) => c.map((x, i) => lin(x) / lin(mean ? mean[i] : 0.5));
 
@@ -216,7 +237,7 @@ function layout(r, k) {
   const leanSide = r.room === 'left' || r.room === 'right' ? r.room : null;
   L.GX = [leanSide === 'left' ? 0.22 : r.overhang + 0.05, leanSide === 'right' ? 0.22 : r.overhang + 0.05];   // past the end walls (left, right)
   L.OVB = r.room === 'back' ? 0.06 : r.overhang + 0.1;                                                    // past the back wall
-  L.OVF = r.porch === 'front' || r.porch === 'wrap' ? 0.12 : r.porch === 'shed' ? 0.02 : r.overhang + 0.1;  // past the front wall
+  L.OVF = r.porch === 'front' || r.porch === 'wrap' ? 0.12 : r.porch === 'partial' ? 0.3 : r.porch === 'shed' ? 0.02 : r.overhang + 0.1;  // past the front wall
   if (gable) { L.RIDGE = L.EAVE + D / 2 * L.tp; L.roofY = (x, z) => L.RIDGE - Math.abs(z) * L.tp; }
   else {
     // (the front wall's top: a course boundary on a log cabin, so its logs end level under the roof)
@@ -229,9 +250,9 @@ function layout(r, k) {
   // THE WING of an L: behind the main block, set in half a metre from its end (so the end wall's logs and the wing's
   // don't meet in one line), its own gable along z, the same eave and pitch (a lower ridge: it is narrower)
   if (r.plan === 'ell') {
-    const Ww = clamp(Math.min(D - 0.9, W * 0.6), 2.8, 4.0), Lw = clamp(D * 0.75, 2.8, 3.6), inset = 0.5;
+    const front = r.wingAt === 'front', Ww = clamp(Math.min(D - 0.9, W * 0.6), 2.8, 4.0), Lw = front ? clamp(D * 0.62, 2.5, 3.2) : clamp(D * 0.75, 2.8, 3.6), inset = 0.5;
     const x1 = r.wing === 'left' ? main.x0 + inset + Ww : main.x1 - inset, x0 = x1 - Ww;
-    L.wing = { x0, x1, z0: -D / 2 - Lw, z1: -D / 2, xc: (x0 + x1) / 2, Ww, Lw, RW: L.EAVE + Ww / 2 * L.tp, name: 'kitchen' };
+    L.wing = { x0, x1, z0: front ? D / 2 : -D / 2 - Lw, z1: front ? D / 2 + Lw : -D / 2, xc: (x0 + x1) / 2, Ww, Lw, RW: L.EAVE + Ww / 2 * L.tp, name: front ? 'front room' : 'kitchen', front, sg: front ? 1 : -1 };
     L.wingY = (x, z) => L.wing.RW - Math.abs(x - L.wing.xc) * L.tp;
   }
   // THE LEAN-TO: a shed roof against the main wall, its top tucked under the main eave, falling away at 10 degrees
@@ -250,8 +271,10 @@ function layout(r, k) {
   // THE PORCH
   if (r.porch !== 'none') {
     const PD = r.porch === 'wrap' ? 2.0 : 1.9, wrapR = r.porch === 'wrap' && r.wrap === 'right', wrapL = r.porch === 'wrap' && r.wrap === 'left';
-    L.porch = { kind: r.porch, depth: PD, deck: L.FL - 0.04, pitch: (r.porch === 'shed' ? 13 : 11) * D2R, top: r.porch === 'shed' ? L.EAVE + 0.035 : L.EAVE - 0.22,
-      x0: main.x0 - (wrapL ? PD : 0), x1: main.x1 + (wrapR ? PD : 0), wrap: r.porch === 'wrap' ? r.wrap : null };
+    L.porch = { kind: r.porch, depth: PD, deck: L.FL - 0.04, pitch: (r.porch === 'shed' ? 13 : 11) * D2R, top: r.porch === 'shed' ? L.EAVE + 0.035 : r.porch === 'partial' ? L.EAVE - 0.3 : L.EAVE - 0.22,
+      x0: main.x0 - (wrapL ? PD : 0), x1: main.x1 + (wrapR ? PD : 0), wrap: r.porch === 'wrap' ? r.wrap : null, partial: r.porch === 'partial' };
+    // (a wing toward the street: the porch runs along the rest of the front, its end against the wing)
+    if (L.wing && L.wing.front) { if (r.wing === 'right') { L.porch.x1 = L.wing.x0 - 0.03; L.porch.abut = 'right'; } else { L.porch.x0 = L.wing.x1 + 0.03; L.porch.abut = 'left'; } }
   }
   // THE CHIMNEYS: each { type, side (-1 left end, 1 right end, 0 the middle), x, z, ... }
   L.chims = [];
@@ -289,7 +312,7 @@ function walls(L, k) {
     else if (side === 'back') { f = wallOf(Math.PI, -b.z0); a0 = -b.x1; a1 = -b.x0; }
     else if (side === 'right') { f = wallOf(Math.PI / 2, b.x1); a0 = -b.z1; a1 = -b.z0; }
     else { f = wallOf(-Math.PI / 2, -b.x0); a0 = b.z0; a1 = b.z1; }
-    const w = { side, f, a0, a1, kind: L.kind, phase: side === 'front' || side === 'back' ? 'eave' : 'gable', e: [true, true], levelTop: L.EAVE, gable: false, inner: false, covered: [], opens: [], t: L.T, block: b, ...o };
+    const w = { side, f, a0, a1, kind: L.kind, phase: side === 'front' || side === 'back' ? 'eave' : 'gable', e: [true, true], levelTop: L.EAVE, gable: false, inner: false, covered: [], opens: [], t: L.T, block: b, roofY: L.roofY, ...o };
     w.P = (a, y = 0, out = 0) => wallP(w.f, a, y, out);
     list.push(w); return w;
   };
@@ -298,8 +321,8 @@ function walls(L, k) {
   const mainTop = (w) => (a) => { const [x, , z] = w.P(a); return roofUnder(L.roofY(x, z)); };
   const blocks = r.plan === 'dogtrot' ? pens : [main];
   for (const b of blocks) {
-    const fr = mk('front', b, { levelTop: shedFront ? L.EAVE_H : L.EAVE, nTop: shedFront ? L.nH : L.nE });
-    const bk = mk('back', b, { nTop: L.nE });
+    const fr = mk('front', b, { levelTop: shedFront ? L.EAVE_H : L.EAVE, nTop: shedFront ? L.nH : L.nE, eave: true });
+    const bk = mk('back', b, { nTop: L.nE, eave: true });
     const lf = mk('left', b, { gable: b === blocks[0], nTop: L.nE }), rt = mk('right', b, { gable: b === blocks[blocks.length - 1], nTop: L.nE });
     for (const w of [fr, bk, lf, rt]) w.topAt = w.phase === 'eave' ? () => w.levelTop : mainTop(w);
     b.walls = { front: fr, back: bk, left: lf, right: rt };
@@ -314,14 +337,16 @@ function walls(L, k) {
     if (!L.log) pt.kind = 'partition';
     L.partition = pt;
   }
-  // the wing: its two side walls butt against the main back wall; its back wall has the gable
+  // the wing: its two side walls butt against the main wall (the back, or the front for a wing toward the street);
+  // its far wall has the gable
   if (L.wing) {
-    const g = L.wing;
-    const wr = mk('right', g, { e: [false, true], nTop: L.nE }), wl = mk('left', g, { e: [true, false], nTop: L.nE }), wb = mk('back', g, { gable: true, nTop: L.nE });
-    wb.topAt = (a) => { const [x] = wb.P(a); return roofUnder(L.wingY(x, 0)); };
+    const g = L.wing, fr = g.front;
+    const wr = mk('right', g, { e: fr ? [true, false] : [false, true], nTop: L.nE, eave: true, roofY: L.wingY }), wl = mk('left', g, { e: fr ? [false, true] : [true, false], nTop: L.nE, eave: true, roofY: L.wingY });
+    const we = mk(fr ? 'front' : 'back', g, { gable: true, nTop: L.nE, roofY: L.wingY });
+    we.topAt = (a) => { const [x] = we.P(a); return roofUnder(L.wingY(x, 0)); };
     wr.topAt = wl.topAt = () => L.EAVE;
-    g.walls = { right: wr, left: wl, back: wb };
-    main.walls.back.covered.push([-g.x1, -g.x0]);
+    g.walls = { right: wr, left: wl, [fr ? 'front' : 'back']: we, end: we };
+    if (fr) main.walls.front.covered.push([g.x0, g.x1]); else main.walls.back.covered.push([-g.x1, -g.x0]);
   }
   // the lean-to: board and batten always (a lean-to was put up later, of boards), its roof's slope along its end walls
   if (L.lean) {
@@ -329,7 +354,7 @@ function walls(L, k) {
     const ws = lt.side === 'back' ? ['back', 'left', 'right'] : [lt.side, 'front', 'back'];
     lt.walls = {};
     for (const s of ws) {
-      const w = mk(s, lt, { kind, t: 0.1, lean: true, e: [false, false] });
+      const w = mk(s, lt, { kind, t: 0.1, lean: true, e: [false, false], eave: s === lt.side, roofY: lt.y });
       w.topAt = ltTop(w); w.levelTop = lt.low - 0.04;
       lt.walls[s] = w;
     }
@@ -356,13 +381,15 @@ function walls(L, k) {
     door(main.walls.front, c0 + 0.35, { leaf: 'main', name: 'front' });
     if (r.doors2) door(main.walls.front, c1 - 0.35, { leaf: 'main', name: 'front 2' });
   } else {
-    const off = (L.chims.length && L.chims[0].side ? -L.chims[0].side : k.R() < 0.5 ? -1 : 1) * k.r(0.0, 0.18) * r.w;
+    let off = (L.chims.length && L.chims[0].side ? -L.chims[0].side : k.R() < 0.5 ? -1 : 1) * k.r(0.0, 0.18) * r.w;
+    // (beside a wing toward the street: in the middle of the front that's left)
+    if (L.wing && L.wing.front) off = r.wing === 'right' ? (main.x0 + L.wing.x0) / 2 + 0.15 : (L.wing.x1 + main.x1) / 2 - 0.15;
     door(main.walls.front, off, { leaf: 'main', name: 'front' });
   }
   // the back door
   if (r.backDoor) {
     const lt = L.lean;
-    if (L.wing) door(L.wing.walls.back, -L.wing.xc, { leaf: 'back', name: 'back' });
+    if (L.wing && !L.wing.front) door(L.wing.walls.back, -L.wing.xc, { leaf: 'back', name: 'back' });
     else if (lt && lt.side === 'back') {
       // (in the lean-to's end, near the main wall where it's tallest; the end away from the stove)
       const s = L.chims.some((c) => c.room === 'lean' && c.x < (lt.x0 + lt.x1) / 2) ? 'right' : 'left', w = lt.walls[s];
@@ -380,7 +407,7 @@ function walls(L, k) {
     const mid = L.chims.some((c) => c.side === 0 && c.type !== 'pipe'), z = mid ? main.z1 - 0.95 : main.z0 + L.T + 0.75;
     door(L.partition, A(L.partition, 0, z), { inner: true, name: 'between the rooms' });
   }
-  if (L.wing) door(main.walls.back, -L.wing.xc, { inner: true, name: 'into the wing' });
+  if (L.wing) { if (L.wing.front) door(main.walls.front, L.wing.xc, { inner: true, name: 'into the wing' }); else door(main.walls.back, -L.wing.xc, { inner: true, name: 'into the wing' }); }
   if (L.lean) {
     const lt = L.lean, b = r.plan === 'dogtrot' ? pens[1] : main, mw = b.walls[lt.side];
     const pipe = L.chims.find((c) => c.room === 'lean');
@@ -425,7 +452,7 @@ function walls(L, k) {
   }
   // (a double pen with a door to each room has its windows in the ends and the back; one with a single door puts one
   // window in the other room's front)
-  if (L.wing) { place(L.wing.walls[r.wing === 'right' ? 'right' : 'left'], 1); place(L.wing.walls[r.wing === 'right' ? 'left' : 'right'], 1); }
+  if (L.wing) { place(L.wing.walls[r.wing === 'right' ? 'right' : 'left'], 1); place(L.wing.walls[r.wing === 'right' ? 'left' : 'right'], 1); if (L.wing.front) place(L.wing.walls.end, Math.max(1, Math.min(2, r.winFront))); }
   if (L.lean) { const lt = L.lean; place(lt.walls[lt.side === 'back' ? 'back' : lt.side], 1); }
 }
 
@@ -499,7 +526,7 @@ function logWall(c, w) {
       if (L.round) {
         // a round log: an eight-sided pole lying along the wall, in pieces of up to 2 m (end to end, the grain running on
         // through) so the baked shading has rows of corners along it
-        const rad = h * 0.58, yc = (yb + yt) / 2 + 0.01, out = -rad - k.r(0, 0.02), tint = vary(k, ROUNDT, 0.86, 1.12), strip = [10, 11, 1, 3, 5, 9][Math.floor(k.R() * 6)], uS = k.r(0, 1.2);
+        const tone = L.r.logTone, rad = h * 0.58, yc = (yb + yt) / 2 + 0.01, out = -rad - k.r(0, 0.02), tint = vary(k, tone === 'grey' ? LOG_GREY.map((q) => q * 0.98) : tone === 'dark' ? ROUNDT.map((q) => q * 0.74) : ROUNDT, 0.86, 1.12), strip = [10, 11, 1, 3, 5, 9][Math.floor(k.R() * 6)], uS = k.r(0, 1.2);
         const poly = ngon(8, rad, 0.06, k.R), n = Math.max(1, Math.ceil(len / (far ? 9 : 2.0))), rot = [k.r(-0.02, 0.02), 0, k.r(-0.004, 0.004)];
         for (let q = 0; q < n; q++) {
           const a = s + len * q / n, b = s + len * (q + 1) / n;
@@ -510,7 +537,7 @@ function logWall(c, w) {
       } else {
         const t = k.r(0.2, 0.28), hh = h * k.r(0.9, 1.0), dy = k.r(-0.5, 0.5) * (h - hh);
         const rot = [k.r(-0.03, 0.03), k.r(-0.005, 0.005), k.r(-0.004, 0.004) * (len > 2 ? 1 : 2)];
-        const grey = k.R() < 0.22, tint = (grey ? LOG_GREY : LOG).map((x) => x * k.r(0.86, 1.14));
+        const tone = L.r.logTone, grey = k.R() < (tone === 'grey' ? 0.75 : 0.22), tint = (grey ? LOG_GREY : LOG).map((x) => x * k.r(0.86, 1.14) * (tone === 'dark' ? 0.74 : tone === 'grey' ? 1.04 : 1));
         k.board([len, hh, t], null, null, { m: wallM(w.f, mid, (yb + yt) / 2 + dy + k.r(-0.01, 0.01), k.r(-0.015, 0.015) - t / 2, rot), long: 0, tint, round: true, ends: 'log', bleach: 0.45, strip: [10, 11, 1, 3, 5, 9][Math.floor(k.R() * 6)], cuts: far ? [] : cutsFor(len, mk), segFaces: '+z-z', skip: far && !w.inner ? '-z' : '' });
         k.solid([len, h + 0.04, 0.24], null, null, wallM(w.f, mid, (yb + yt) / 2 + 0.02, -0.13));
       }
@@ -554,7 +581,7 @@ function gableBoards(c, w) {
   const stacks = L.chims.filter((ch) => ch.wall === w && ch.side).map((ch) => { const a = w.side === 'right' ? -ch.z : ch.z; return [a - ch.sw / 2 + 0.03, a + ch.sw / 2 - 0.03]; });
   // (from the peak out each way, so the boards either side of a gable's peak each have one slope)
   const apexA = L.r.roof === 'gable' ? (w.side === 'right' ? 0 : w.side === 'left' ? 0 : (lo + hi) / 2) : lo;
-  const wingApex = w === (L.wing && L.wing.walls.back) ? -L.wing.xc : null, ap = wingApex ?? apexA;
+  const wingApex = L.wing && w === L.wing.walls.end ? (L.wing.front ? L.wing.xc : -L.wing.xc) : null, ap = wingApex ?? apexA;
   for (const dir of L.r.roof === 'gable' ? [1, -1] : [1]) {
     let a = ap;
     while (dir > 0 ? a < hi : a > lo) {
@@ -582,7 +609,9 @@ function boardWall(c, w) {
   const opens = w.opens.map((o) => ({ ...o, y0: o.kind === 'door' ? -1 : o.y0 }));
   const rowsAt = [1.3, 2.3, 3.3];
   const tint = w.lean ? BARE.map((x) => x * 0.96) : BARE;
-  const lpaint = w.lean && L.log ? null : paint;
+  // (a wall another room stands against all along is inside that room: never the outside's paint)
+  const covered = w.covered.some(([s, e]) => s <= lo + 0.05 && e >= hi - 0.05);
+  const lpaint = (w.lean && L.log) || covered ? null : paint;
   if (w.kind === 'lap') {
     lapSiding(k, w.f, { a0: lo, a1: hi, y0, tops: [[lo, hi, w.levelTop + 0.04]], opens, paint: lpaint, tint, bare: 0.04, origin: lo });
     if (w.topAt(lo) > w.levelTop + 0.1 || w.topAt((lo + hi) / 2) > w.levelTop + 0.1) {
@@ -591,7 +620,7 @@ function boardWall(c, w) {
     }
     if (!c.far) lining(c, w, lo + L.T - 0.02, hi - L.T + 0.02, L.FL, L.CEIL, w.opens);
   } else {
-    const apex = L.r.roof === 'gable' && w.gable ? (w === (L.wing && L.wing.walls.back) ? -L.wing.xc : (lo + hi) / 2) : undefined;
+    const apex = L.r.roof === 'gable' && w.gable ? (L.wing && w === L.wing.walls.end ? (L.wing.front ? L.wing.xc : -L.wing.xc) : (lo + hi) / 2) : undefined;
     boardAndBatten(k, w.f, { a0: lo, a1: hi, y0, top: (a) => Math.max(w.levelTop, w.gable || w.lean ? w.topAt(a) : w.levelTop) + 0.012, apex, opens, paint: lpaint, tint, inTint: c.far ? null : INNER, rows: rowsAt.filter((y) => y < w.levelTop), bare: 0.05 });
   }
   // the corner boards, at both ends, on the outside; the sill along the foot
@@ -751,8 +780,9 @@ export function slope(c, M, o) {
   // the sheathing: wide boards across the slope, only their undersides drawn
   if (far) {
     if (eaveS > 0.05) wood([x1 - x0, 0.024, eaveS], (x0 + x1) / 2, eaveS / 2, -0.012, null, { long: 0, tint: DARKW, skip: '+y' });
+    if (o.topS) wood([x1 - x0, 0.024, o.topS], (x0 + x1) / 2, len - o.topS / 2, -0.012, null, { long: 0, tint: DARKW, skip: '+y' });
   } else for (let s = 0; s < len - 0.02;) {
-    const ds = Math.min(k.r(0.32, 0.46), len - s), full = all || s < eaveS + 0.02;
+    const ds = Math.min(k.r(0.32, 0.46), len - s), full = all || s < eaveS + 0.02 || (o.topS && s + ds > len - o.topS);
     const j1 = x0 + (x1 - x0) * k.r(0.25, 0.4), j2 = x0 + (x1 - x0) * k.r(0.6, 0.75);
     const pieces = full ? [[x0, j1], [j1, j2], [j2, x1]] : [...(inX0 > x0 + 0.05 ? [[x0, inX0 + 0.3]] : []), ...(inX1 < x1 - 0.05 ? [[inX1 - 0.3, x1]] : [])];
     for (const [a, b] of pieces) {
@@ -770,7 +800,7 @@ export function slope(c, M, o) {
   if (!o.noSolid) for (let q = 0; q < 6; q++) { const a = x0 + (x1 - x0) * q / 6, b = a + (x1 - x0) / 6; if (keep(world((a + b) / 2, len / 2, 0), 'solid')) k.solid([b - a, 0.1, len], null, null, frame((a + b) / 2, len / 2, -0.07)); }
   // over the attic, where the sheathing is left out, a dark underlay (seen only through a gap or a missing shake)
   if (!all && !far && eaveS < len - 0.1) {
-    const a = inX0 + 0.25, b = inX1 - 0.25, s0 = eaveS, s1 = len + 0.02;
+    const a = inX0 + 0.25, b = inX1 - 0.25, s0 = eaveS, s1 = len - (o.topS || 0) + 0.02;
     k.box('wood', [b - a, 0.01, s1 - s0], null, null, { m: frame((a + b) / 2, (s0 + s1) / 2, -0.004), tint: [0.2, 0.18, 0.16], skip: '-y+x-x+z-z', cuts: [-2.2, -1.1, 0, 1.1, 2.2], long: 0, strip: 10 });
   }
   // rafters: their tails under the eave overhang (or right up a lean-to, seen from inside), every 60 cm
@@ -831,13 +861,20 @@ export function slope(c, M, o) {
     }
   }
   // barge boards along the gable ends, tucked under the courses' ends
-  for (const [x, on] of [[x0 + 0.025, o.barge && o.barge[0]], [x1 - 0.025, o.barge && o.barge[1]]]) if (on) wood([0.045, 0.15, len + 0.02], x, len / 2 - 0.01, -0.078, RY(k.r(-0.01, 0.01)), { long: 2, tint: ROOFW, strip: WOOD.shake });
+  // (in pieces, so none runs on through a chimney's stack)
+  for (const [x, on] of [[x0 + 0.025, o.barge && o.barge[0]], [x1 - 0.025, o.barge && o.barge[1]]]) if (on) {
+    const n = Math.max(1, Math.ceil(len / 0.6)), turn = RY(k.r(-0.01, 0.01));
+    for (let q = 0; q < n; q++) {
+      const s0 = -0.02 + (len + 0.04) * q / n, s1 = -0.02 + (len + 0.04) * (q + 1) / n;
+      if (keep(world(x, (s0 + s1) / 2, -0.078))) wood([0.045, 0.15, s1 - s0 + 0.002], x, (s0 + s1) / 2, -0.078, turn, { long: 2, tint: ROOFW, strip: WOOD.shake, skip: (q > 0 ? '-z' : '') + (q < n - 1 ? '+z' : '') });
+    }
+  }
   // purlins: poles along the roof, their ends out of the gables under the overhang
   if (o.purlins && !far) for (const [ss, r] of [[len * 0.45, 0.085], ...(o.ridgePole ? [[len - 0.02, 0.1]] : [])]) {
     for (const [xa, xb, on] of [[x0, inX0, o.barge && o.barge[0]], [inX1, x1, o.barge && o.barge[1]]]) {
       if (!on || xb - xa < 0.1) continue;
       const Lp = xb - xa + 0.15, xc = (xa + xb) / 2 + (xa === x0 ? 0.04 : -0.04);
-      if (!keep(world(xc, ss, -0.1), 'rafter')) continue;
+      if ([0, 0.25, 0.5, 0.75, 1].some((f) => !keep(world(xa + (xb - xa) * f, ss, -0.1), 'rafter'))) continue;
       k.prism('wood', ngon(7, r, 0.15, k.R), Lp, null, null, { m: frame(xc, ss, -0.024 - r, mul(RX(-pitch), RZ(-Math.PI / 2))), tint: POLE.map((q) => q * 0.8), smooth: true, skip: '-y+y' });
     }
   }
@@ -851,12 +888,13 @@ export function slope(c, M, o) {
 
 // a tin flashing strip lying on a slope along a valley or a hip (from p0 to p1, world points on the roof planes): its
 // normal n (the slope's), offset sideways into that slope by `side` (a world direction across the line)
-function flashing(c, p0, p1, n, side, wdt = 0.24, lift = 0.045, tint = TIN) {
+function flashing(c, p0, p1, n, side, wdt = 0.24, lift = 0.045, tint = TIN, group = 'iron') {
   const Z = new THREE.Vector3().subVectors(p1, p0), Lx = Z.length(); Z.normalize();
   const Y = new THREE.Vector3(...n).addScaledVector(Z, -new THREE.Vector3(...n).dot(Z)).normalize(), X = new THREE.Vector3().crossVectors(Y, Z);
   const off = new THREE.Vector3(...side).normalize();
   const ctr = p0.clone().add(p1).multiplyScalar(0.5).addScaledVector(Y, lift).addScaledVector(off, wdt * 0.42);
-  c.k.box('iron', [wdt, 0.008, Lx], null, null, { m: new THREE.Matrix4().makeBasis(X, Y, Z).setPosition(ctr), tint, skip: '-y' });
+  if (group === 'wood') c.k.board([wdt, 0.03, Lx], null, null, { m: new THREE.Matrix4().makeBasis(X, Y, Z).setPosition(ctr), long: 2, tint, strip: WOOD.shake, skip: '-y', roof: true });
+  else c.k.box('iron', [wdt, 0.008, Lx], null, null, { m: new THREE.Matrix4().makeBasis(X, Y, Z).setPosition(ctr), tint, skip: '-y' });
 }
 
 function roofs(c) {
@@ -869,7 +907,8 @@ function roofs(c) {
   const inHole = (p) => holes.some((h) => p.x > h.x0 && p.x < h.x1 && p.z > h.z0 && p.z < h.z1);
   const g = L.wing;
   // (the main roof's back slope gives way to the wing's roof between the valleys; the wing's slopes stop at the main roof)
-  const underWing = (p) => g && p.z < main.z0 + 0.02 - 0 && Math.abs(p.x - g.xc) < (-p.z - (main.z1 - main.z0 - g.Ww) / 2) && Math.abs(p.x - g.xc) < g.Ww / 2 + L.OVB + 0.5 && -p.z > (r.d - g.Ww) / 2;
+  const sg = g ? g.sg : 0, ovw = g && g.front ? L.OVF : L.OVB;
+  const underWing = (p) => { if (!g) return false; const q = sg * p.z - (r.d - g.Ww) / 2; return q > 0 && Math.abs(p.x - g.xc) < q && Math.abs(p.x - g.xc) < g.Ww / 2 + ovw + 0.5; };
   const keepMain = (p) => !inHole(p) && !underWing(p);
   const common = { x0, x1, inX0: main.x0, inX1: main.x1, pitch: L.pitch, cover: r.cover, barge: [true, true], purlins: log, poleRafters: log, rafterT: log ? POLE.map((q) => q * 0.85) : DARKW };
   if (gable) {
@@ -880,23 +919,25 @@ function roofs(c) {
   } else {
     // one slope from over the front wall (and its overhang) down past the back wall
     const len = (r.d + L.OVF + L.OVB) / Math.cos(L.ps), topY = L.EAVE_H + L.OVF * L.tps;
-    slope(c, mul(T(0, 0.02, main.z1 + L.OVF), RY(Math.PI)), { ...common, x0: -x1, x1: -x0, inX0: -main.x1, inX1: -main.x0, topY, len, pitch: L.ps, eaveS: L.OVB / Math.cos(L.ps), keep: keepMain, topEdge: true });
+    slope(c, mul(T(0, 0.02, main.z1 + L.OVF), RY(Math.PI)), { ...common, x0: -x1, x1: -x0, inX0: -main.x1, inX1: -main.x0, topY, len, pitch: L.ps, eaveS: L.OVB / Math.cos(L.ps), keep: keepMain, topEdge: true, topS: (L.OVF + 0.2) / Math.cos(L.ps) });
   }
   // THE WING'S ROOF: a gable along z at the same pitch (a lower ridge), from past its back wall to where its ridge meets
   // the main roof's back slope; tin valleys where they meet
   if (g) {
-    const zr = -(r.d - g.Ww) / 2, zb = g.z0 - L.GX[0], lenW = (g.Ww / 2 + L.OVB) / Math.cos(L.pitch);
-    const keepW = (p) => !inHole(p) && -p.z > (r.d - g.Ww) / 2 + Math.abs(p.x - g.xc) - 0.02;
-    slope(c, mul(T(g.xc, 0.02, 0), RY(Math.PI / 2)), { ...common, x0: -(zr + 0.4), x1: -zb, inX0: -main.z0, inX1: -g.z0, topY: g.RW, len: lenW, eaveS: L.OVB / Math.cos(L.pitch), keep: keepW, barge: [false, true], comb: true, ridgePole: false });
-    slope(c, mul(T(g.xc, 0.02, 0), RY(-Math.PI / 2)), { ...common, x0: zb, x1: zr + 0.4, inX0: g.z0, inX1: main.z0, topY: g.RW, len: lenW, eaveS: L.OVB / Math.cos(L.pitch), keep: keepW, barge: [true, false], ridgePole: false });
-    // the valleys: from the wing's eave corners (the main back eave line) up to where the ridges meet
+    // (sg: +1 a wing toward the street, -1 one at the back; zr: where its ridge meets the main roof)
+    const half = (r.d - g.Ww) / 2, zr = sg * half, zEnd = g.front ? g.z1 + L.GX[0] : g.z0 - L.GX[0], lenW = (g.Ww / 2 + ovw) / Math.cos(L.pitch), es = ovw / Math.cos(L.pitch);
+    const keepW = (p) => !inHole(p) && sg * p.z > half + Math.abs(p.x - g.xc) - 0.02;
+    const zA = g.front ? zr - 0.4 : zEnd, zB = g.front ? zEnd : zr + 0.4, wA = g.front ? main.z1 : g.z0, wB = g.front ? g.z1 : main.z0;
+    slope(c, mul(T(g.xc, 0.02, 0), RY(Math.PI / 2)), { ...common, x0: -zB, x1: -zA, inX0: -wB, inX1: -wA, topY: g.RW, len: lenW, eaveS: es, keep: keepW, barge: g.front ? [true, false] : [false, true], comb: true, ridgePole: false });
+    slope(c, mul(T(g.xc, 0.02, 0), RY(-Math.PI / 2)), { ...common, x0: zA, x1: zB, inX0: wA, inX1: wB, topY: g.RW, len: lenW, eaveS: es, keep: keepW, barge: g.front ? [false, true] : [true, false], ridgePole: false });
+    // the valleys: from the wing's eave corners (on the main eave line) up to where the ridges meet
     const tpp = L.tp, sx = 0.026 / Math.cos(L.pitch) + 0.03;
     for (const s of [-1, 1]) {
-      const pa = new THREE.Vector3(g.xc + s * (g.Ww / 2 + L.OVB), L.EAVE - L.OVB * tpp + sx, main.z0 - L.OVB), pb = new THREE.Vector3(g.xc, g.RW + sx, zr);
-      const nMain = [0, Math.cos(L.pitch), -Math.sin(L.pitch)], nWing = [s * Math.sin(L.pitch), Math.cos(L.pitch), 0];
-      flashing(c, pa, pb, nMain, [0, 0, 1], 0.26); flashing(c, pa, pb, nWing, [s, 0, 0], 0.26);
+      const pa = new THREE.Vector3(g.xc + s * (g.Ww / 2 + ovw), L.EAVE - ovw * tpp + sx, sg > 0 ? main.z1 + ovw : main.z0 - ovw), pb = new THREE.Vector3(g.xc, g.RW + sx, zr);
+      const nMain = [0, Math.cos(L.pitch), sg * Math.sin(L.pitch)], nWing = [s * Math.sin(L.pitch), Math.cos(L.pitch), 0];
+      flashing(c, pa, pb, nMain, [0, 0, -sg], 0.26); flashing(c, pa, pb, nWing, [s, 0, 0], 0.26);
     }
-    if (r.cover === 'boards') ridgeCap(c, -(zr), -zb, g.RW + 0.02, L.pitch, (p) => true, mul(T(g.xc, 0, 0), RY(Math.PI / 2)));
+    if (r.cover === 'boards') ridgeCap(c, -zB, -zA, g.RW + 0.02, L.pitch, () => true, mul(T(g.xc, 0, 0), RY(Math.PI / 2)));
   }
   // THE LEAN-TO'S ROOF: from just under the main eave, down past its outer wall; its undersides seen from inside
   if (L.lean) {
@@ -1004,23 +1045,33 @@ function porches(c) {
   const fronts = r.plan === 'dogtrot' ? [] : main.walls.front.opens.filter((o) => o.kind === 'door' && !o.inner);
   if (r.plan === 'dogtrot') fronts.push({ a0: L.breeze.x0 + 0.2, a1: L.breeze.x1 - 0.2 });
   if (!P) {
-    // no porch: a stoop at each outside door: a flat stone, or plank steps up to a raised floor
+    // no porch: a stoop at each outside door (plank steps up to a raised floor, a flat stone at their foot); a
+    // dogtrot's breezeway a wide one front and back (its pens' doors open onto its deck)
+    const stoops = [];
     for (const w of L.walls) for (const o of w.opens) {
       if (o.kind !== 'door' || o.inner) continue;
-      const ac = (o.a0 + o.a1) / 2, M = mul(wallM(w.f, ac, 0, 0), new THREE.Matrix4());
-      if (L.FL > 0.3) stoop(c, M, L.FL);
-      c.flats.push({ M: mul(wallM(w.f, ac, 0, L.FL > 0.3 ? 0.62 + (L.FL > 0.5 ? 0.28 : 0) : 0.32)), w: 1.15, d: 0.5 });
+      if (L.breeze && (w.side === 'left' || w.side === 'right') && Math.abs(w.P(0)[0]) < L.breeze.x1 + 0.1) continue;
+      stoops.push([w.f, (o.a0 + o.a1) / 2, 1.05]);
+    }
+    if (L.breeze) { const b = L.breeze, cx = (b.x0 + b.x1) / 2, bw = b.x1 - b.x0 - 0.3; stoops.push([wallOf(0, b.z1), cx, bw], [wallOf(Math.PI, -b.z0), -cx, bw]); }
+    for (const [f, ac, sw] of stoops) {
+      if (L.FL > 0.3) stoop(c, wallM(f, ac, 0, 0), L.FL, sw);
+      c.flats.push({ M: wallM(f, ac, 0, L.FL > 0.3 ? 0.62 + (L.FL > 0.5 ? 0.28 : 0) : 0.32), w: Math.min(1.15, sw + 0.1), d: 0.5 });
     }
     return;
   }
-  const PD = P.depth, steps = fronts.map((o) => ({ x: (o.a0 + o.a1) / 2, w: Math.min(1.3, Math.max(1.0, o.a1 - o.a0 + 0.25)) }));
+  // (a small porch: only before the first door, about 2.7 m wide)
+  if (P.partial && fronts.length) { const dc = (fronts[0].a0 + fronts[0].a1) / 2; P.x0 = Math.max(P.x0, dc - 1.35); P.x1 = Math.min(P.x1, dc + 1.35); }
+  const PD = P.depth, steps = fronts.map((o) => ({ x: (o.a0 + o.a1) / 2, w: Math.min(1.3, Math.max(1.0, o.a1 - o.a0 + 0.25)) })).filter((st) => st.x > P.x0 && st.x < P.x1);
   const front = mul(T(0, 0, main.z1), new THREE.Matrix4());
   const xs = postsFor(P.x0, P.x1, steps, k);
   const wrapR = P.wrap === 'right', wrapL = P.wrap === 'left';
   // (a wrap-around: the front run takes the corner square; the side run starts behind it; the two roofs meet in a hip)
   const keepF = P.wrap ? (p) => (wrapR ? p.x - main.x1 < p.z - main.z1 + 0.02 : main.x0 - p.x < p.z - main.z1 + 0.02) : null;
-  porchRun(c, front, { x0: P.x0 - 0.12 * (wrapL ? 0 : 1), x1: P.x1 + 0.12 * (wrapR ? 0 : 1), depth: PD, deck: P.deck, top: P.top, pitch: P.pitch, posts: xs, steps, rails: r.rails, railEnds: [true, true], keep: keepF, ledger: P.kind !== 'shed',
-    roofX0: P.x0 - 0.2 - (wrapL ? 0.25 : 0), roofX1: P.x1 + 0.2 + (wrapR ? 0.25 : 0) });
+  // (a porch whose end meets a wing: its deck and roof stop against the wing's wall)
+  const abL = P.abut === 'left', abR = P.abut === 'right';
+  porchRun(c, front, { x0: P.x0 - 0.12 * (wrapL || abL ? 0 : 1), x1: P.x1 + 0.12 * (wrapR || abR ? 0 : 1), depth: PD, deck: P.deck, top: P.top, pitch: P.pitch, posts: xs, steps, rails: r.rails, railEnds: [!abL, !abR], keep: keepF, ledger: P.kind !== 'shed',
+    roofX0: P.x0 - (abL ? 0 : 0.2) - (wrapL ? 0.25 : 0), roofX1: P.x1 + (abR ? 0 : 0.2) + (wrapR ? 0.25 : 0) });
   if (P.wrap) {
     const s = wrapR ? 1 : -1, wallX = wrapR ? main.x1 : main.x0;
     const M = wrapR ? mul(T(wallX, 0, 0), RY(Math.PI / 2)) : mul(T(wallX, 0, 0), RY(-Math.PI / 2));
@@ -1034,7 +1085,9 @@ function porches(c) {
     // the hip where the two roofs meet: a cap board from the wall's corner out to the corner post
     const rTop = P.top, rp = P.pitch, outD = PD + 0.3, sx = 0.026 / Math.cos(rp) + 0.035;
     const pa = new THREE.Vector3(wallX, rTop + sx + 0.02, main.z1), pb = new THREE.Vector3(wallX + s * outD, rTop - outD * Math.tan(rp) + sx, main.z1 + outD);
-    flashing(c, pa, pb, [0, Math.cos(rp), Math.sin(rp)], [s, 0, -1], 0.2, 0.035, ROOFW.map((q) => q * 0.6));
+    // (two narrow cap strips, each lying on its own slope along the hip)
+    flashing(c, pa, pb, [0, Math.cos(rp), Math.sin(rp)], [-s, 0, 1], 0.12, 0.022, SHAKE.map((q) => q * 0.7), 'wood');
+    flashing(c, pa, pb, [s * Math.sin(rp), Math.cos(rp), 0], [s, 0, -1], 0.12, 0.022, SHAKE.map((q) => q * 0.7), 'wood');
     void k;
   }
   // a lantern on the wall by the front door, lit at dusk
@@ -1055,8 +1108,8 @@ function postsFor(a, b, steps, k) {
   return xs;
 }
 // plank steps up to a door with no porch (M: the door's foot on the wall's face, facing out)
-function stoop(c, M, h) {
-  const { k } = c, n = Math.max(1, Math.round(h / 0.19)), rise = h / n, run = 0.28, w = 1.05;
+function stoop(c, M, h, w = 1.05) {
+  const { k } = c, n = Math.max(1, Math.round(h / 0.19)), rise = h / n, run = 0.28;
   const put = (size, pos, rot, o) => k.board(size, null, null, { ...o, m: mul(M, T(...pos), rot ? new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(...rot, 'YXZ')) : new THREE.Matrix4()) });
   put([w + 0.1, 0.05, 0.42], [0, h - 0.025, 0.21], null, { long: 0, tint: vary(k, DECKW, 0.95, 1.1), strip: WOOD.shake });
   for (let i = 1; i < n; i++) put([w, 0.045, run + 0.02], [k.r(-0.02, 0.02), h - i * rise - 0.02, 0.42 + (i - 0.5) * run], null, { long: 0, tint: vary(k, DECKW, 1.0, 1.15), strip: WOOD.shake, skip: '-y' });
@@ -1185,7 +1238,7 @@ function stove(c, ch) {
   }
   // the pipe: up through the ceiling (a tin collar there) and out through the roof
   const lt = ch.room === 'lean' ? L.lean : null;
-  const roofAt = lt ? lt.y(x, z) : L.wing && z < L.main.z0 ? L.wingY(x, z) : L.roofY(x, z);
+  const roofAt = lt ? lt.y(x, z) : L.wing && (L.wing.front ? z > L.main.z1 : z < L.main.z0) ? L.wingY(x, z) : L.roofY(x, z);
   const top = Math.max(roofAt + 0.75, lt ? lt.top + 0.6 : 0);
   stovepipe(k, x, z, y + 0.67, top, { r: 0.075, collarY: roofAt + 0.02, tint: TIN.map((q) => q * 0.16) });
   if (!lt && !c.far) k.box('iron', [0.3, 0.012, 0.3], [x, L.CEIL - 0.006, z], null, { tint: TIN.map((q) => q * 0.14) });
@@ -1222,8 +1275,9 @@ function foundation(c) {
   }
   // the flat stones at the foot of the steps
   for (const f of c.flats) {
-    const v = new THREE.Vector3().setFromMatrixPosition(f.M), q = new THREE.Quaternion().setFromRotationMatrix(f.M);
-    k.box('plaster', [f.w, 0.09, f.d], null, null, { m: new THREE.Matrix4().compose(v.setY(0.02), q.multiply(new THREE.Quaternion().setFromEuler(new THREE.Euler(k.r(-0.03, 0.03), k.r(-0.06, 0.06), k.r(-0.02, 0.02)))), new THREE.Vector3(1, 1, 1)), tint: vary(k, c.flatTint, 0.85, 1.1), skip: '-y' });
+    const v = new THREE.Vector3().setFromMatrixPosition(f.M), yaw = Math.atan2(f.M.elements[8], f.M.elements[10]);
+    const poly = ngon(7, 0.5, 0.3, k.R).map(([x, z]) => [x * f.w, z * f.d]);
+    k.prism('plaster', poly, 0.08, [v.x, 0.025, v.z], [k.r(-0.03, 0.03), yaw + k.r(-0.12, 0.12), k.r(-0.02, 0.02)], { tint: vary(k, c.flatTint.map((q) => q * 0.88), 0.82, 1.05), skip: '-y', taper: 0.12 });
   }
 }
 function piersFor(b, out, L, low = false) {
@@ -1231,13 +1285,14 @@ function piersFor(b, out, L, low = false) {
   for (let i = 0; i <= nx; i++) for (const z of [b.z0 + 0.14, b.z1 - 0.14]) out.push({ x: b.x0 + 0.14 + (b.x1 - b.x0 - 0.28) * i / nx, z, h, w: low ? 0.36 : 0.44 });
   for (let j = 1; j < nz; j++) for (const x of [b.x0 + 0.14, b.x1 - 0.14]) out.push({ x, z: b.z0 + 0.14 + (b.z1 - b.z0 - 0.28) * j / nz, h, w: 0.44 });
 }
-// one pier: two or three flat stones on top of each other, each its own size and turn (Kit stones, the rubble picture)
+// one pier: two or three flat rocks stacked, each its own ragged outline (six or seven sides), size and turn, a little
+// off the one under it (Kit stones on the rubble picture, a darker warm grey)
 function pier(c, p) {
-  const { k } = c, t = c.flatTint, n = p.h > 0.24 ? 2 : 1;
+  const { k } = c, t = c.flatTint, n = p.h > 0.2 ? 3 : p.h > 0.12 ? 2 : 1;
   let y = 0;
   for (let i = 0; i < n; i++) {
-    const hh = p.h / n, sz = p.w * (i ? k.r(0.8, 0.9) : k.r(1.0, 1.12));
-    k.box('plaster', [sz, hh + 0.01, sz * k.r(0.9, 1.05)], [p.x + k.r(-0.02, 0.02), y + hh / 2, p.z + k.r(-0.02, 0.02)], [k.r(-0.03, 0.03), k.r(-0.4, 0.4), k.r(-0.03, 0.03)], { tint: vary(k, t, 0.82, 1.12), skip: '-y' });
+    const last = i === n - 1, hh = last ? p.h - y : p.h / n * k.r(0.85, 1.15), r = p.w / 2 * (i === 0 ? k.r(1.05, 1.2) : k.r(0.82, 1.0));
+    k.prism('plaster', ngon(k.R() < 0.5 ? 6 : 7, r, 0.38, k.R), hh + 0.01, [p.x + k.r(-0.04, 0.04), y + hh / 2, p.z + k.r(-0.04, 0.04)], [k.r(-0.04, 0.04), k.r(0, 6), k.r(-0.04, 0.04)], { tint: vary(k, t, 0.8, 1.15), skip: '-y', taper: k.r(0.05, 0.18) });
     y += hh;
   }
   k.solid([p.w, p.h, p.w], [p.x, p.h / 2, p.z]);
@@ -1251,13 +1306,13 @@ function inside(c) {
   const rooms = c.rooms = [];
   const half = L.partition ? (log ? T0 / 2 : 0.06) : 0;
   for (const [i, p] of L.pens.entries()) rooms.push({ name: p.name, x0: p.x0 + (L.partition && i === 1 ? half : T0), x1: p.x1 - (L.partition && i === 0 ? half : T0), z0: p.z0 + T0, z1: p.z1 - T0, ceil: L.CEIL, pen: p });
-  if (L.wing) { const g = L.wing; rooms.push({ name: g.name, x0: g.x0 + T0, x1: g.x1 - T0, z0: g.z0 + T0, z1: g.z1 + 0.02, ceil: L.CEIL, wing: true }); }
+  if (L.wing) { const g = L.wing; rooms.push({ name: g.name, x0: g.x0 + T0, x1: g.x1 - T0, z0: g.front ? g.z0 - 0.02 : g.z0 + T0, z1: g.front ? g.z1 - T0 : g.z1 + 0.02, ceil: L.CEIL, wing: true }); }
   if (L.lean) { const lt = L.lean; rooms.push({ name: lt.name, x0: lt.side === 'right' ? lt.x0 + 0.02 : lt.x0 + 0.1, x1: lt.side === 'left' ? lt.x1 - 0.02 : lt.x1 - 0.1, z0: lt.z0 + 0.1, z1: lt.side === 'back' ? lt.z1 + 0.02 : lt.z1 - 0.1, ceil: lt.low - 0.12, lean: true }); }
   for (const R of rooms) {
     // (a room's floor runs out under the walls' feet a little, so no gap shows along them)
     plankField(k, mul(T(0, L.FL, 0), RX(-Math.PI / 2)), { u0: R.x0 - 0.04, u1: R.x1 + 0.04, v0: -R.z1 - 0.04, v1: -R.z0 + 0.04, w: 0.17, t: 0.03, tint: FLOOR, nails: true, maxL: 4.2, step: 1.2, extra: { inside: true } });
     k.solid([R.x1 - R.x0, 0.1, R.z1 - R.z0], [(R.x0 + R.x1) / 2, L.FL - 0.05, (R.z0 + R.z1) / 2]);
-    if (R.lean) continue;
+    if (R.lean) { const lx = (R.x0 + R.x1) / 2, lz = (R.z0 + R.z1) / 2, ry = L.lean.y(lx, lz); c.lamps.push(lantern(k, lx, ry - 0.62, lz, { chain: 0.38, strength: 1.0 })); R.lamp = [lx, lz]; continue; }
     plankField(k, mul(T(0, R.ceil, 0), RX(Math.PI / 2)), { u0: R.x0 - 0.03, u1: R.x1 + 0.03, v0: R.z0 - 0.03, v1: R.z1 + 0.03, w: 0.22, t: 0.025, tint: INNER.map((q) => q * 0.9), maxL: 4.4, step: 1.4, extra: { inside: true } });
     k.solid([R.x1 - R.x0 + 0.2, 0.1, R.z1 - R.z0 + 0.2], [(R.x0 + R.x1) / 2, R.ceil + 0.06, (R.z0 + R.z1) / 2]);
     joists(c, R.x0, R.x1, R.z0, R.z1, R.ceil, !R.wing);
@@ -1270,7 +1325,7 @@ function inside(c) {
     const b = L.breeze, x0 = b.x0 + 0.02, x1 = b.x1 - 0.02, DK = L.FL - 0.04;
     for (let x = x0; x < x1 - 0.04;) {
       const bw = Math.min(k.r(0.14, 0.2), x1 - x), z0 = b.z0 - 0.04, z1 = b.z1 + 0.02;
-      k.board([bw - 0.01, 0.04, z1 - z0], [x + bw / 2, DK - 0.02, (z0 + z1) / 2], [0, k.r(-0.004, 0.004), 0], { long: 2, tint: vary(k, DECKW, 0.85, 1.12), deck: true, strip: WOOD.shake + Math.floor(k.R() * 2), skip: '-y', cuts: cutsFor(z1 - z0, [], 1.2), segFaces: '+y' });
+      k.board([bw - 0.01, 0.04, z1 - z0], [x + bw / 2, DK - 0.02, (z0 + z1) / 2], [0, k.r(-0.004, 0.004), 0], { long: 2, tint: vary(k, DECKW.map((q) => q * 1.2), 0.9, 1.1), deck: true, strip: WOOD.shake + Math.floor(k.R() * 2), skip: '-y', cuts: cutsFor(z1 - z0, [], 1.2), segFaces: '+y' });
       x += bw;
     }
     k.solid([x1 - x0, DK, b.z1 - b.z0], [(x0 + x1) / 2, DK / 2, 0]);
@@ -1381,18 +1436,19 @@ function dripAt(c) {
       const a = (x - ax) * al[0] + (z - az) * al[2], out = (x - ax) * on[0] + (z - az) * on[2];
       if (a > s.a0 && a < s.a1 && out > -0.35 && out < 0.2 && y < s.y + 0.01) return s.y - 0.01;
     }
-    if (P && z > m.z1 + 0.02 && z < m.z1 + P.depth + 0.4) return P.top - (z - m.z1) * Math.tan(P.pitch) - 0.05;
+    if (P && z > m.z1 + 0.02 && z < m.z1 + P.depth + 0.4 && x > P.x0 - 0.5 && x < P.x1 + 0.5) return P.top - (z - m.z1) * Math.tan(P.pitch) - 0.05;
     if (P && z > m.z1 - 0.35 && z < m.z1 + 0.06 && x > m.x0 - 0.1 && x < m.x1 + 0.1) return P.deck + 0.35;
     if (L.lean) { const lt = L.lean; if (x > lt.x0 - 0.3 && x < lt.x1 + 0.3 && z > lt.z0 - 0.3 && z < lt.z1 + 0.3 && (lt.side !== 'back' || z < m.z0 + 0.05)) return lt.y(x, z) - 0.05; }
-    if (L.wing && z < m.z0 - 0.05) return Math.max(L.EAVE, L.wingY(x, z)) - 0.02;
+    if (L.wing && (L.wing.front ? z > m.z1 + 0.05 : z < m.z0 - 0.05)) return Math.max(L.EAVE, L.wingY(x, z)) - 0.02;
     return Math.max(L.EAVE, L.roofY(x, z)) - 0.02;
   };
 }
 
 // ── build it all ─────────────────────────────────────────────────────────────────────────────────────────────────────
 export function buildCabin(recipeIn = {}, env = {}) {
-  const t0 = performance.now(), r = cabinRecipe(recipeIn);
-  if (r.lineup) return buildLineup(r, env);
+  const t0 = performance.now(), r0 = cabinRecipe(recipeIn);
+  if (r0.lineup) return buildLineup(r0, env);
+  const r = seedVariety(r0);
   const far = r.look === 'far', k = new Kit(r.seed);
   k.parts.glow = []; k.parts.plaster = [];
   const L = layout(r, k), paint = CABIN_PAINTS[r.paint].c;
@@ -1406,6 +1462,7 @@ export function buildCabin(recipeIn = {}, env = {}) {
   // walls first (the log walls snap their openings to the courses), then everything that hangs on them
   for (const w of L.walls) if (w.kind === 'log') logWall(c, w); else if (w.kind !== 'partition') boardWall(c, w);
   for (const w of L.walls) if (w.kind === 'log' && w.gable) gableBoards(c, w);
+  for (const w of L.walls) if (w.eave) eaveSeal(c, w);
   mark('walls'); openings(c); mark('openings'); roofs(c); mark('roofs'); porches(c); mark('porch');
   for (const ch of L.chims) { if (ch.type === 'pipe') stove(c, ch); else if (ch.side) stoneChimney(c, ch); else middleChimney(c, ch); }
   mark('chimneys'); foundation(c); mark('foundation');
@@ -1417,6 +1474,16 @@ export function buildCabin(recipeIn = {}, env = {}) {
   // the kit's parts into meshes, one per material
   const R = rng(r.seed + 1), geos = {}, topAt = dripAt(c);
   geos.wood = buildGeometry(k.parts.wood, 'wood', R, { topAt, tintAt });
+  // (indoors the wood's pattern at half the size along the grain: a knot a board's size, not a log's. Only the board
+  // strips' faces: the end grain and the shakes keep theirs)
+  if (!far) {
+    const Pw = geos.wood.attributes.position, Nw = geos.wood.attributes.normal, UV = geos.wood.attributes.uv, rs = c.rooms.filter((q) => !q.open);
+    for (let i = 0; i < Pw.count; i++) {
+      if (UV.getY(i) < 0.25) continue;
+      const x = Pw.getX(i) + Nw.getX(i) * 0.06, y = Pw.getY(i) + Nw.getY(i) * 0.06, z = Pw.getZ(i) + Nw.getZ(i) * 0.06;
+      if (rs.some((q) => x > q.x0 - 0.05 && x < q.x1 + 0.05 && z > q.z0 - 0.05 && z < q.z1 + 0.05 && y > L.FL - 0.1 && y < q.ceil + 0.4)) UV.setX(i, UV.getX(i) * 2);
+    }
+  }
   boardAttr(geos.wood, k.parts.wood, r.seed, L);
   if (k.parts.iron.length) geos.iron = buildGeometry(k.parts.iron, 'iron', R, { topAt });
   geos.plaster = buildGeometry(k.parts.plaster, 'stone', rng(r.seed + 9), {});
@@ -1445,8 +1512,8 @@ export function buildCabin(recipeIn = {}, env = {}) {
   // (a dogtrot's pens' doors open onto the breezeway, which is outdoors; a lean-to's room is indoors)
   const rooms = c.rooms.filter((q) => !q.open);
   const inRoom = (x, y, z) => rooms.some((q) => x > q.x0 - 0.02 && x < q.x1 + 0.02 && z > q.z0 - 0.02 && z < q.z1 + 0.02 && y > L.FL - 0.6 && y < q.ceil + (q.lean ? 0.6 : 0.03));
-  const fill = (x, y, z, nx, ny, nz) => (inRoom(x + nx * 0.08, y + ny * 0.08, z + nz * 0.08) ? 0.07 * (1 - 0.3 * smooth01(y + ny * 0.08, 1.6, 3.0)) : 0);
-  const light = new Light(occ, { inside: inRoom, fill, openings: lightOpen, lamps: c.lamps, base: 0.3, gain: 7.0 });
+  const fill = (x, y, z, nx, ny, nz) => (inRoom(x + nx * 0.08, y + ny * 0.08, z + nz * 0.08) ? 0.15 * (1 - 0.3 * smooth01(y + ny * 0.08, 1.6, 3.0)) : 0);
+  const light = new Light(occ, { inside: inRoom, fill, openings: lightOpen, lamps: c.lamps, base: 0.36, gain: 7.0 });
   const BAKED = ['wood', 'iron', 'stone', 'plaster'];
   for (const g of BAKED) if (geos[g]) light.bake(geos[g]);
   for (const Lf of c.leaves) { light.bake(Lf.geo, mul(T(...Lf.hinge), RY(Lf.open)), 'open'); light.bake(Lf.geo, T(...Lf.hinge), 'closed'); }
@@ -1509,21 +1576,88 @@ function yardProps(c) {
   } else {
     out.push({ type: 'bucket', x: m.x1 - 0.7, z: m.z1 + 0.45 });
   }
-  // inside, furnished cheaply until the props library comes: a bench along a wall, a crate and a bucket, clear of the
-  // spots kept for the bed and the table
+  // INSIDE, plainly furnished (the governor may leave these out: pri 3, low): in each room a bed (not in a lean-to
+  // kitchen), a table and a chair at it, a shelf on the wall, at the room's anchors; a bucket by the fire
   for (const Rm of c.rooms) {
     if (Rm.open) continue;
-    const a = roomAnchors(c, Rm), sh = a.shelves;
-    if (sh) out.push({ type: 'bench', x: sh.x + Math.sin(sh.rot) * 0.05, y: L.FL, z: sh.z + Math.cos(sh.rot) * 0.05, rot: sh.rot, len: Math.min(1.4, sh.len), inside: true });
-    const cx = a.bed.x < (Rm.x0 + Rm.x1) / 2 ? Rm.x1 - 0.45 : Rm.x0 + 0.45, cz = a.bed.z < (Rm.z0 + Rm.z1) / 2 ? Rm.z1 - 0.5 : Rm.z0 + 0.45;
-    out.push({ type: 'crate', x: cx, y: L.FL, z: cz, rot: R() * 0.6, size: 0.5, inside: true });
-    if (a.hearth || a.stove) { const f = a.hearth || a.stove; out.push({ type: 'bucket', x: f.x + (R() < 0.5 ? -0.85 : 0.85) * (Math.abs(f.z) > Math.abs(f.x) ? 1 : 0.2), y: L.FL, z: f.z + (Math.abs(f.x) >= Math.abs(f.z) ? 0.8 : 0) * (R() < 0.5 ? -1 : 1), inside: true }); }
+    const a = roomAnchors(c, Rm), low = { y: L.FL, inside: true, pri: 3, low: true };
+    if (!Rm.lean) out.push({ type: 'cabinBed', x: a.bed.x, z: a.bed.z, rot: a.bed.rot, w: 1.2, len: 1.9, ...low });
+    out.push({ type: 'cabinTable', x: a.table.x, z: a.table.z, rot: 0, ...low });
+    out.push({ type: 'cabinChair', x: a.table.x + 0.66, z: a.table.z + 0.05, rot: -Math.PI / 2, ...low });
+    if (a.shelves) out.push({ type: 'cabinShelf', x: a.shelves.x, z: a.shelves.z, rot: a.shelves.rot, len: Math.min(1.2, a.shelves.len), ...low });
+    if (a.hearth || a.stove) { const f = a.hearth || a.stove; out.push({ type: 'bucket', x: f.x + (R() < 0.5 ? -0.85 : 0.85) * (Math.abs(f.z) > Math.abs(f.x) ? 1 : 0.2), z: f.z + (Math.abs(f.x) >= Math.abs(f.z) ? 0.8 : 0) * (R() < 0.5 ? -1 : 1), ...low }); }
   }
-  // (the washtub hung on the end wall with the woodpile, never the chimney's end, nor where a lean-to stands)
-  if (R() < 0.6 && !leanOn) out.push({ type: 'washtub', x: wpSide < 0 ? m.x0 - 0.06 : m.x1 + 0.06, y: 1.3, z: m.z1 - 0.9, rot: wpSide < 0 ? -Math.PI / 2 : Math.PI / 2, hung: true });
+  // (a dark galvanized washtub hung on the end wall with the woodpile, never the chimney's end, nor where a lean-to is)
+  if (R() < 0.6 && !leanOn) out.push({ type: 'cabinTub', x: wpSide < 0 ? m.x0 - 0.02 : m.x1 + 0.02, y: 1.3, z: m.z1 - 0.9, rot: wpSide < 0 ? -Math.PI / 2 : Math.PI / 2 });
   void k;
   return out;
 }
+
+// THE EAVE SEALED: along the top of a wall under an eave, a frieze board on each face from the top log (or plate) up
+// into the roof boards, and the wedge between the wall's top and the roof filled for the light, so neither lamplight nor
+// sky shows between them
+function eaveSeal(c, w) {
+  const { k, L } = c, lo = Math.min(w.a0, w.a1), hi = Math.max(w.a0, w.a1), len = hi - lo, fy = w.roofY || L.roofY;
+  const at = (out) => { const [x, , z] = w.P((lo + hi) / 2, 0, out); return fy(x, z) - 0.03; };
+  const y0 = w.levelTop - 0.1, yo = at(0.02), yi = at(-w.t - 0.02), log = w.kind === 'log';
+  if (yo > y0 + 0.02) wb(k, w, [len + 0.02, yo - y0, 0.025], (lo + hi) / 2, (y0 + yo) / 2, 0.012, null, { long: 0, tint: vary(k, log ? DARKW : TRIM, 0.85, 1.0), paint: !log && !w.lean ? c.paint : null, skip: '-z', outside: true });
+  if (!c.far && yi > y0 + 0.02) wb(k, w, [len - 0.1, yi - y0, 0.025], (lo + hi) / 2, (y0 + yi) / 2, -w.t - 0.012, null, { long: 0, tint: vary(k, DARKW, 0.7, 0.85), skip: '+z' });
+  const top = Math.max(yo, yi) + 0.04;
+  k.solid([len, Math.max(0.1, top - y0), w.t + 0.04], null, null, wallM(w.f, (lo + hi) / 2, (y0 + top) / 2, -w.t / 2));
+}
+
+// THE CABINS' OWN PROPS (registered with props.js's makers; nothing there changes): a plank bed with a straw tick and a
+// faded wool blanket, a plank table, a ladder-back chair, a wall shelf with a crock and tins, a dark galvanized
+// washtub hung on a wall. Each is a handful of boards (the props' wood and iron meshes).
+const FURN = [0.82, 0.64, 0.48], WOOL = [[0.3, 0.1, 0.07], [0.12, 0.14, 0.21], [0.29, 0.27, 0.23], [0.22, 0.17, 0.09]];
+const fput = (k, M, size, pos, rot, o) => k.board(size, null, null, { ...o, m: mul(M, T(...pos), rot ? new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(...rot, 'YXZ')) : new THREE.Matrix4()) });
+const CABIN_MAKERS = {
+  cabinBed(k, M, o) {
+    // (its head at -z)
+    const W = o.w ?? 1.2, Ln = o.len ?? 1.9, tint = vary(k, FURN, 0.8, 1.0), wool = WOOL[Math.floor(k.R() * WOOL.length)];
+    for (const [sx, sz, h] of [[-1, -1, 0.95], [1, -1, 0.95], [-1, 1, 0.6], [1, 1, 0.6]]) fput(k, M, [0.08, h, 0.08], [sx * (W / 2 - 0.04), h / 2, sz * (Ln / 2 - 0.04)], null, { long: 1, tint });
+    for (const s of [-1, 1]) fput(k, M, [0.05, 0.14, Ln - 0.1], [s * (W / 2 - 0.04), 0.36, 0], null, { long: 2, tint });
+    fput(k, M, [W - 0.1, 0.34, 0.04], [0, 0.7, -Ln / 2 + 0.04], null, { long: 0, tint });
+    fput(k, M, [W - 0.14, 0.12, Ln - 0.16], [0, 0.48, 0], null, { long: 2, tint: [0.6, 0.55, 0.45], paint: [0.44, 0.4, 0.31] });   // the straw tick
+    fput(k, M, [W - 0.05, 0.05, Ln * 0.62], [0, 0.565, Ln * 0.17], null, { long: 2, tint: [0.5, 0.45, 0.4], paint: wool });
+    for (const s of [-1, 1]) fput(k, M, [0.02, 0.24, Ln * 0.62], [s * (W / 2 - 0.02), 0.46, Ln * 0.17], null, { long: 2, tint: [0.5, 0.45, 0.4], paint: wool.map((q) => q * 0.9) });
+    fput(k, M, [W - 0.4, 0.09, 0.32], [0, 0.585, -Ln / 2 + 0.26], null, { long: 0, tint: [0.6, 0.55, 0.45], paint: [0.48, 0.45, 0.38] });
+    k.solid([W, 0.6, Ln], null, null, mul(M, T(0, 0.3, 0)));
+  },
+  cabinTable(k, M, o) {
+    const W = o.w ?? 1.05, D2 = o.d ?? 0.7, tint = vary(k, FURN, 0.8, 1.0);
+    fput(k, M, [W, 0.05, D2], [0, 0.735, 0], null, { long: 0, tint });
+    for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) fput(k, M, [0.06, 0.71, 0.06], [sx * (W / 2 - 0.07), 0.355, sz * (D2 / 2 - 0.07)], null, { long: 1, tint, skip: '-y' });
+    for (const s of [-1, 1]) fput(k, M, [0.03, 0.06, D2 - 0.16], [s * (W / 2 - 0.07), 0.18, 0], null, { long: 2, tint });
+    fput(k, M, [W - 0.16, 0.06, 0.03], [0, 0.18, 0], null, { long: 0, tint });
+    k.solid([W, 0.76, D2], null, null, mul(M, T(0, 0.38, 0)));
+  },
+  cabinChair(k, M, o) {
+    // (facing +z, its back at -z: two tall back posts, two slats, a plank seat)
+    const tint = vary(k, FURN, 0.85, 1.05), S = 0.42;
+    for (const [sx, sz, h] of [[-1, -1, 0.95], [1, -1, 0.95], [-1, 1, 0.45], [1, 1, 0.45]]) fput(k, M, [0.04, h, 0.04], [sx * (S / 2 - 0.02), h / 2, sz * (S / 2 - 0.02)], null, { long: 1, tint, skip: '-y' });
+    fput(k, M, [S, 0.03, S], [0, 0.45, 0], null, { long: 0, tint });
+    for (const y of [0.68, 0.86]) fput(k, M, [S - 0.04, 0.07, 0.02], [0, y, -S / 2 + 0.02], null, { long: 0, tint });
+    k.solid([S, 0.95, S], null, null, mul(M, T(0, 0.47, 0)));
+  },
+  cabinShelf(k, M, o) {
+    // (its back at -z, against a wall: two boards on iron brackets, a crock and two tins on them)
+    const Ln = o.len ?? 1.1, tint = vary(k, FURN, 0.85, 1.0);
+    for (const y of [1.25, 1.62]) {
+      fput(k, M, [Ln, 0.03, 0.24], [0, y, -0.08], null, { long: 0, tint });
+      for (const s of [-1, 1]) k.box('iron', [0.02, 0.16, 0.16], null, null, { m: mul(M, T(s * (Ln / 2 - 0.12), y - 0.09, -0.12)), tint: IRON.map((q) => q * 0.7) });
+    }
+    k.prism('iron', ngon(8, 0.08), 0.2, null, null, { m: mul(M, T(-Ln / 4, 1.365, -0.08)), tint: [2.6, 2.3, 1.9], smooth: true, taper: 0.25 });
+    for (const dx of [0.12, 0.28]) k.prism('iron', ngon(8, 0.05), 0.12, null, null, { m: mul(M, T(dx, 1.695, -0.08)), tint: TIN.map((q) => q * 0.5), smooth: true });
+  },
+  cabinTub(k, M) {
+    // (a dark galvanized washtub hung on a nail, its bottom to the wall at -z)
+    const W0 = mul(M, T(0, 0, 0.02), RX(Math.PI / 2));
+    k.prism('iron', ngon(14, 0.31).map(([x, z]) => [x, z * 0.74]), 0.26, null, null, { m: mul(W0, T(0, 0.13, 0)), tint: TIN.map((q) => q * 0.42), smooth: true, taper: -0.12, skip: '+y' });
+    k.box('iron', [0.012, 0.012, 0.06], null, null, { m: mul(M, T(0, 0.26, 0.03)), tint: [0.4, 0.38, 0.36] });
+  },
+};
+for (const [n, f] of Object.entries(CABIN_MAKERS)) if (!MAKERS[n]) MAKERS[n] = f;
 
 // ── where the lab's camera looks from, for this cabin: [camera, target] ──────────────────────────────────────────────
 export const CABIN_VIEW_NAMES = ['front34', 'front', 'back34', 'side', 'roof', 'room', 'room2', 'backdoor', 'leanto', 'far', 'night'];

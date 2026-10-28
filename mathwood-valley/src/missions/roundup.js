@@ -25,9 +25,10 @@
 // reads itself out when it appears at the herd (a speaker on the card says it again), and a right or wrong pick may
 // get a word ("That's right!", "Not that one.").
 //
-//   const RU = makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob, refresh, read })
+//   const RU = makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob, refresh, read, open })
 //     P, I: the player and the input; hud: makeHud's; hob: makeHob's (for its lines); refresh(): redraw the purse;
-//     read: makeReadAloud's (optional)
+//     read: makeReadAloud's (optional); open(): false once the day's shift is done (src/shifts.js): no new bunch comes
+//     in till it is true again (the next sunrise, or more work asked for at the jobs board), and the card says so
 //   RU.update(dt)        each frame, after P.update (moves the herd, places the numbers, moves the target ring)
 //   RU.paused = true     a panel is open: help is put away, the ring hidden (the game stops calling update meanwhile)
 //   RU.targets           the herd (steer records: { n, text, good, state, a (the animal), root, label })
@@ -108,7 +109,7 @@ function drawLabel(s, text) {
   tex.needsUpdate = true;
 }
 
-export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob, refresh = () => {}, read = null }) {
+export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob, refresh = () => {}, read = null, open = () => true }) {
   const scene = W.scene, PA = W.places.pasture, CO = W.places.corral;
   const R = makeTargetRing({ scene, camera, canvas, W });
   ensureChartCss(); ensureNumberLineStyles();
@@ -350,7 +351,7 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
   // read-aloud: a card is read when it first shows at the herd (again after the player has been away), not each time
   // the card is drawn again. Only a young level's card (its `read`), while the rider's math is young enough (skill.js
   // readAloud) and read-aloud is on. (The read-aloud clips are the counting topic's: numbers, "what comes next" ...)
-  let readFor = null;
+  let readFor = null, closedKey = null;
   const canRead = (card) => !!(read && card && card.read && readAloud(rider) && read.can('counting'));
   // What a herd's rope is an answer to: the herd's level, while the rider is still on the level the herd was dealt at.
   // Once a rope has moved the rider to another level (up, or down after misses; or a step of placement), the herd's
@@ -374,6 +375,14 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
   const sayCard = (c) => (read ? read.say(c.say, { topic: 'counting' }) : false);
   function showCard() {
     if (!wave || !RU.near || wave.done || wave.kind !== 'card') readFor = null;
+    // (the day's shift done: no travel card luring the rider out here, and at the herd it says so)
+    // (put up or taken down once, not every second: away from the herd its null mustn't take down another job's card)
+    if ((!wave || wave.done) && !open()) {
+      const key = RU.near ? 'done' : 'off';
+      if (key !== closedKey) { closedKey = key; hud.rule(RU.near ? { kind: 'job', main: 'Done for today', sub: "Cal's cattle are all corralled · back at sunrise, or ask for more work at the jobs board" } : null); }
+      return;
+    }
+    closedKey = null;
     if (!wave) { hud.rule(null); return; }
     if (!RU.near) {
       const d = Math.round(Math.hypot(P.position.x - PA.x, P.position.z - PA.z));
@@ -614,9 +623,12 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
     } else if (!RU.near && (cardT -= dt) <= 0) { cardT = 1; showCard(); }   // (the distance on the travel card)
     if (hintT > 0 && (hintT -= dt) <= 0) hint(null);
 
-    // a new wave, once the last one has had its moment
+    // a new wave, once the last one has had its moment (none while the day's shift is done; more work asked for at the
+    // jobs board, or a new day: the next bunch comes in)
+    if (nextWaveT <= 0 && (!wave || wave.done) && open()) nextWaveT = 0.5;
     if (nextWaveT > 0 && (nextWaveT -= dt) <= 0) {
-      if (RU.near || (d < 120 && !othersWave())) newWave(); else nextWaveT = 0.5;
+      if (!open()) { nextWaveT = -1; showCard(); }
+      else if (RU.near || (d < 120 && !othersWave())) newWave(); else nextWaveT = 0.5;
     }
 
     // F (or Space on foot) ropes the ringed one
@@ -712,7 +724,7 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
   });
 
   RU.newWave = (at = null) => { for (const s of herd) if (free(s)) s.state = 'graze'; newWave(at); };   // (at: a level id, or 'times' for a herd: dev and rigs)
-  RU.start = () => { stock(); newWave(); };
+  RU.start = () => { stock(); if (open()) newWave(); else showCard(); };
   RU.trainer = () => trainer();   // the times trainer (shared with the wagon's gangs: main.js)
   RU.state = () => ({
     near: RU.near, topic: wave && wave.topic, rule: wave && (wave.kind === 'card' ? wave.card && wave.card.text : wave.w.rule),

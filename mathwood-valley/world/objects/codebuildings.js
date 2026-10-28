@@ -6,11 +6,10 @@
 // let through between the slow parts), and is walkable: its walls, counters and furniture block (blocked), its floors,
 // porch and steps are stood on (heightAt), and the camera follows a walker in under its ceilings (room).
 //
-//   const CODE = makeCodeBuildings({ shade, tier, renderer, scene, others })   shade(sh): the valley's hill shade and
+//   const CODE = makeCodeBuildings({ shade, tier, renderer, scene })   shade(sh): the valley's hill shade and
 //                                  street-lamp light, for its shaders; tier(): the quality tier the game loaded with (the
 //                                  potato tier: its pictures small, objects/codebuild.js makeBuildKit); renderer, scene():
-//                                  to build each inside's shaders and take its windows' pictures when it is made;
-//                                  others(): the positions of what else opens a door ([{ x, z }]: the townsfolk, the horse)
+//                                  to build each inside's shaders and take its windows' pictures when it is made
 //   CODE.has(kind, it)             whether a layout kind (and that item, when given: not the player's cabin) is built in code
 //   CODE.make(it) -> Promise<b>    a layout item's building (objects/codebuild.js buildCodeBuilding); the village hangs
 //                                  b.group in the item's group, at scale 1 (its own metres)
@@ -35,14 +34,20 @@
 //   - its shaders are built when it is made (one real draw through a single pixel, as the horses' warm-up), so it
 //     comes in without a stall
 //   - see-through windows show a picture of the inside taken when it is made, from just outside each (STAND-INS)
-//   - a door swings open as the player walks into it (as the cabin's: walking up opens it; E stays the counter's),
-//     and for the townsfolk passing while the inside is in; it stays open while the player is inside, and shuts once
-//     the player has gone and it is out of sight
+//   - the doors are kept by CODE.doors (objects/doorkeeper.js): E at a doorway opens or shuts its door (src/main.js);
+//     one the player opened stays open while they are inside or near, and shuts once they have gone and it is out
+//     of sight; a townsperson pushes a door open as they go in or out (CODE.doors.pass: src/townpeople.js) and it
+//     swings shut behind them; the batwings flap. A shut door stands in a walker's way. Their sounds: CODE.onDoor
+//   CODE.doors                     the doors' keeper (objects/doorkeeper.js): near, use, pass, blocked; the player's
+//                                  cabin can add its own door to it
+//   CODE.onDoor(kind, at)          set by the game: a door's sound ('open' | 'shut' | 'flap', at { x, y, z })
+//   CODE.entrance(id)              a building's way in (its first doorway), by its layout id: { x, y, z, ox, oz } or null
 //   - the saloon's rooms upstairs only while the player is up on its galleries or stairs
 //   CODE.setProps(on)              its props drawn at all (the governor's Decorations dial)
 //   CODE.ready                     a promise: every code building made
 //   CODE.stats()                   for the rigs: each building's triangles, meshes, build time, near or far
 import * as THREE from 'three';
+import { makeDoorKeeper } from './doorkeeper.js';
 
 export const CODE_KINDS = new Set(['stable', 'sheriff', 'generalStore', 'saloon', 'home', 'cabin', 'blacksmith']);
 // where each one's way in is along its front (m from its middle, + to the right seen from the street): the stable's big
@@ -54,16 +59,25 @@ export const CODE_DOORS = { stable: 1.65, sheriff: 0.05, generalStore: 3.14, sal
 export const isPlayersCabin = (it) => !!it && (it.player === true || (it.kind === 'cabin' && it.id === 'cabin'));
 const HYST = 3;                                     // (metres: drawn near from range, put far again past range + HYST)
 // (metres from the nearest doorway: an inside comes in within near, or gallop riding fast (over GALLOP m/s); goes out
-// past far once its doors are shut and it is out of view, or past gone regardless. A door opens for the player within
-// open, for anyone else within openOther; it shuts once the player is past shut and it is out of view (or past gone))
-export const LOAD = { near: 9, gallop: 15, GALLOP: 6, far: 30, gone: 60, open: 2.4, openOther: 1.6, shut: 4 };
+// past far once its doors are shut and it is out of view, or past gone regardless. The doors' own distances:
+// objects/doorkeeper.js DOORWAYS)
+export const LOAD = { near: 9, gallop: 15, GALLOP: 6, far: 30, gone: 60 };
 const LAYER = 7;                                    // (the stand-ins' pictures are taken of this layer only)
+// THE WINDOWS' VIEW ARCS (Dad: "an arc in front of the window where it will load the interior and allow vision inside"):
+// a wedge out from each see-through window (and the saloon's open doorways), `half` degrees either side of its facing
+// and out to `reach` m. With the player or the camera in one, AND that window inside the camera's view widened by
+// `cone` degrees past the screen's edge (riding straight down the street loads nothing off to the sides behind), the
+// building's real inside comes in, so the glass shows the room with depth; its picture crossfades out once it is in
+// (objects/codebuild.js). It stays in at least `stay` s, and goes only once out of every arc (`out` m and degrees
+// wider), the doors shut and it out of view. The governor's Window view dial: 0 the pictures only (potato), 1 the
+// rooms (priority 1), 3 everything (objects/codebuild.js priorities, never past the Inside detail dial)
+export const ARC = { half: 60, reach: 25, cone: 30, stay: 10, out: 5 };
 // THE FLAT LOOK (the potato tier only): the homes, the cabins and the smithy (no signs to lose) past the outsides'
 // reach, by day, all drawn as ONE mesh in plain colours (the wood its picture's average colour, its tint, its baked
 // shade): a street of houses down the lane is one draw, not two each
 const FLAT_KINDS = new Set(['home', 'cabin', 'blacksmith']), FLAT_NIGHT = 0.08;
 
-export function makeCodeBuildings({ shade = null, tier = () => 'gaming', renderer = null, scene = () => null, others = () => null } = {}) {
+export function makeCodeBuildings({ shade = null, tier = () => 'gaming', renderer = null, scene = () => null } = {}) {
   let kitP = null, mod = null, queue = Promise.resolve(), made = 0, wanted = 0;
   const placed = new Set();                         // the village's objects with a building in them
   const frame = () => new Promise((ok) => (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(() => setTimeout(ok, 0)) : setTimeout(ok, 0)));
@@ -71,7 +85,7 @@ export function makeCodeBuildings({ shade = null, tier = () => 'gaming', rendere
   const kit = () => kitP || (kitP = import('./codebuild.js').then(async (m) => { mod = m; await frame(); const t = tier(); return m.makeBuildKit({ step: frame, small: t === 'potato', oneSheet: t === 'potato' }); }));
   let readyFn; const ready = new Promise((ok) => { readyFn = ok; });
   const CODE = {
-    range: 40, propsOn: true, detail: 3, ready,
+    range: 40, propsOn: true, detail: 3, arc: 3, camTest: true, ready,
     has: (kind, it) => CODE_KINDS.has(kind) && !isPlayersCabin(it),
     lookKey: (it) => (it ? `${it.preset || ''}/${it.seed || ''}` : ''),
     looks: () => (mod ? [...mod.CABIN_LOOKS] : []),
@@ -87,9 +101,10 @@ export function makeCodeBuildings({ shade = null, tier = () => 'gaming', rendere
       return p;
     },
     attach(o) { placed.add(o); place(o); flatDirty = true; o.code.setLevel(CODE.detail); try { prepare(o); } catch (e) { console.warn('code building: its inside not made ready', o.it.kind, e); } },
-    detach(o) { placed.delete(o); flatDirty = true; if (o.code) o.code.dispose(); },
+    detach(o) { placed.delete(o); flatDirty = true; for (const d of o.keep || []) K.remove(d); o.keep = []; if (o.code) o.code.dispose(); },
     moved(o) { if (placed.has(o)) { place(o); flatDirty = true; } },
     blocked(x, z) {
+      if (K.blocked(x, z)) return true;   // (a shut door)
       for (const o of placed) { const q = o.q; if (!q || Math.abs(x - q.x) > q.r || Math.abs(z - q.z) > q.r) continue;
         const k = cellOf(o, x, z); if (k >= 0 && o.code.grid.blocked[k]) return true; }
       return false;
@@ -114,9 +129,14 @@ export function makeCodeBuildings({ shade = null, tier = () => 'gaming', rendere
       // (how fast the player goes: an inside comes in sooner ahead of a galloping rider)
       if (dt > 0 && last) speed += (Math.min(30, Math.hypot(pl.x - last.x, pl.z - last.z) / dt) - speed) * Math.min(1, dt * 4);
       last = { x: pl.x, z: pl.z };
-      const near = speed > LOAD.GALLOP ? LOAD.gallop : LOAD.near, them = others() || [];
+      const near = speed > LOAD.GALLOP ? LOAD.gallop : LOAD.near;
+      K.update(dt, at ? { x: at.x, z: at.z } : null);   // (the doors shutting themselves)
       // (the stand-ins at night: the inside's lamps lit, warmer and dimmer than its daylight picture)
-      if (kitNow) { const k = Math.max(0, Math.min(1, +night || 0)); kitNow.standMat.color.setRGB(1 - 0.05 * k, 1 - 0.3 * k, 1 - 0.55 * k); }
+      { const k = Math.max(0, Math.min(1, +night || 0)); TINT.setRGB(1 - 0.05 * k, 1 - 0.3 * k, 1 - 0.55 * k); }
+      // (the camera's view cone, for the windows: its forward, and the half-angle of the screen's wider side)
+      camera.getWorldDirection(FWD);
+      const coneCos = Math.cos(Math.min(Math.PI * 0.95, Math.atan(Math.tan((camera.fov || 50) * Math.PI / 360) * Math.max(1, camera.aspect || 1)) + ARC.cone * Math.PI / 180));
+      const tnow = performance.now() / 1000;
       for (const o of placed) { const q = o.q; if (!q) continue;
         const C = o.code;
         // (the whole outside: within range of a doorway, the camera's or the player's; a close-up camera stands off to
@@ -125,11 +145,20 @@ export function makeCodeBuildings({ shade = null, tier = () => 'gaming', rendere
         if (C.full && d > CODE.range + HYST) C.setFull(false); else if (!C.full && d < CODE.range) C.setFull(true);
         // the inside: in ahead of the player, out once they are well away, its doors shut and it out of view
         const dp = howNear(o, pl.x, pl.z);
-        if (!C.loaded && dp < near) C.load(true);
-        if (C.loaded) doorsFor(o, C, dp, them, dt);
+        if (dp < near) o.byDoor = true;
+        // (a window's view arc: the player or the camera in it, and the window in the camera's widened view)
+        const wins = CODE.arc > 0 && q.wins.length;
+        const inArc = wins && !C.loaded && arcIn(q, camera.position, pl, ARC.reach, ARC.half, camera.position, CODE.camTest ? coneCos : -2);
+        if (!C.loaded && (dp < near || inArc)) { C.load(true); o.loadedAt = tnow; o.loads = (o.loads || 0) + 1; LOADS.push({ t: tnow, id: o.it.id, by: dp < near ? 'door' : 'window' }); if (LOADS.length > 200) LOADS.shift(); }
+        // (how much of it: the whole of the Inside detail dial once the player has come to a door or is inside; through
+        // the windows only, the Window view dial's part of it)
+        if (C.loaded) C.setLevel(o.byDoor || !wins ? CODE.detail : Math.min(CODE.detail, CODE.arc));
+        C.cardTint(TINT);
+        C.tick(dt);   // (its doors swinging, loaded or not: the townsfolk use them too)
         // (drawn only while it can be seen: a door open, the camera inside it, or windows into it)
         if (C.loaded) C.setSeen(C.windows.length > 0 || C.anyOpen() || howNear(o, cx, cz) === 0);
-        if (C.loaded && dp > LOAD.far && !C.tick(0) && (dp > LOAD.gone || !inView(q.x, q.y + 3, q.z, q.r))) C.load(false);
+        if (C.loaded && dp > LOAD.far && !C.anyOpen() && tnow - (o.loadedAt || 0) > ARC.stay && (dp > LOAD.gone || !inView(q.x, q.y + 3, q.z, q.r))
+          && !(wins && arcIn(q, camera.position, pl, ARC.reach + ARC.out, ARC.half + ARC.out, null, -2))) { C.load(false); o.byDoor = false; }
         if (C.hasUpstairs) C.setUpstairs(C.loaded && dp === 0 && pl.y - q.y > C.B.anchors.upstairs.floor * 0.4);
         o.code.group.props.visible = C.full && CODE.propsOn;   // (the Decorations dial can take the props away)
         if (flatOn() && FLAT_KINDS.has(o.it.kind)) { const f = night <= FLAT_NIGHT && !C.full && !(C.loaded && C.seen); if (f !== !!o.isFlat) { o.isFlat = f; C.group.visible = !f; flatPick = true; } }
@@ -138,7 +167,9 @@ export function makeCodeBuildings({ shade = null, tier = () => 'gaming', rendere
       if (flatOn()) flatFrame();
     },
     setRange(m) { CODE.range = +m || 0; },
-    setDetail(n) { CODE.detail = n; for (const o of placed) if (o.code) o.code.setLevel(n); },
+    setDetail(n) { CODE.detail = n; for (const o of placed) if (o.code && o.code.loaded && (o.byDoor || !o.q.wins.length)) o.code.setLevel(n); },
+    setArc(v) { CODE.arc = +v || 0; },
+    loads: () => LOADS.slice(),   // (for the rigs: the insides that came in, when and why: 'door' or 'window')
     setProps(on) { CODE.propsOn = !!on; },
     // for the rigs: a building's walk grid at a point in its own frame
     probe(kind, lx, lz) { for (const o of placed) if (o.it.kind === kind) { const G = o.code.grid, k = G.at(lx, lz); return k < 0 ? null : { blocked: G.blocked[k], wall: G.wall[k], floor: +G.floor[k].toFixed(2), ceil: +G.ceil[k].toFixed(2) }; } return null; },
@@ -147,12 +178,44 @@ export function makeCodeBuildings({ shade = null, tier = () => 'gaming', rendere
     // a made building's group of a kind (the Build bar's icon is drawn from a copy of it)
     sample(kind) { for (const o of placed) if (o.it.kind === kind) return o.code.group; return null; },
     stats: () => [...placed].map((o) => ({ id: o.it.id, kind: o.it.kind, look: o.code.look, full: o.code.full, loaded: o.code.loaded, level: o.code.level, upstairs: o.code.upstairs,
-      doors: o.code.doors.map((d) => +d.t.toFixed(2)), pictures: o.code.windows.length, tris: o.code.tris, meshes: o.code.meshes, ms: o.code.ms, bake: o.code.msBake, prepMs: o.prepMs,
+      doors: o.code.doors.map((d) => +d.t.toFixed(2)), loads: o.loads || 0, cards: o.code.cardsShowing(), pictures: o.code.windows.length, tris: o.code.tris, meshes: o.code.meshes, ms: o.code.ms, bake: o.code.msBake, prepMs: o.prepMs,
       at: o.q && [o.q.x, o.q.y, o.q.z], foot: o.code.B.anchors.footprint, doorways: o.code.B.anchors.doorways })),
     get kitMs() { return kitP && mod ? true : false; },
   };
   const VIEW = new THREE.Frustum(), PM = new THREE.Matrix4(), SPH = new THREE.Sphere();
   let last = null, speed = 0, kitNow = null;   // (kitNow: the kit, once the first building has asked for it)
+  const TINT = new THREE.Color(1, 1, 1), FWD = new THREE.Vector3(), LOADS = [];
+  // the player (pl) or the camera (cam) in one of q's windows' arcs (reach m, half degrees), and (view: the camera's
+  // place, with coneCos) that window within the camera's widened view
+  function arcIn(q, cam, pl, reach, half, view, coneCos) {
+    const c = Math.cos(half * Math.PI / 180);
+    for (const w of q.wins) {
+      let hit = false;
+      for (const p of [cam, pl]) { if (!p) continue; const dx = p.x - w.x, dz = p.z - w.z, d = Math.hypot(dx, dz); if (d < reach && d > 0.05 && (dx * w.nx + dz * w.nz) / d > c) { hit = true; break; } }
+      if (!hit) continue;
+      if (!view) return true;
+      const vx = w.x - view.x, vy = w.y - view.y, vz = w.z - view.z, vd = Math.hypot(vx, vy, vz) || 1;
+      if ((vx * FWD.x + vy * FWD.y + vz * FWD.z) / vd > coneCos) return true;
+    }
+    return false;
+  }
+  // THE DOORS' KEEPER: one door for each doorway with a door (and each batwings' doorway), in the world
+  const K = makeDoorKeeper({ sound: (kind, at) => { if (CODE.onDoor) try { CODE.onDoor(kind, at); } catch (e) { /* no sound */ } }, seen: (x, y, z, r) => inView(x, y, z, r) });
+  CODE.doors = K; CODE.onDoor = null;
+  function fitDoors(o) {
+    for (const d of o.keep || []) K.remove(d);
+    o.keep = [];
+    const C = o.code; if (!C) return;
+    const M = C.group.matrixWorld, v = new THREE.Vector3(), n = new THREE.Vector3();
+    C.doorways.forEach((D, i) => {
+      if (!C.batwings && !C.hasDoor(i)) return;   // (an open doorway, no door in it)
+      v.set(...D.centre).applyMatrix4(M); n.set(...D.out).transformDirection(M); n.y = 0; n.normalize();
+      o.keep.push(K.add({ x: v.x, y: v.y, z: v.z, ox: n.x, oz: n.z, half: D.w / 2 + 0.05, batwing: C.batwings, building: o, way: i,
+        open: (on) => C.openDoor(i, on), ajar: () => C.doorAjar(i), flap: () => C.flapDoor(i),
+        inside: (x, z) => howNear(o, x, z) === 0, ready: () => { o.byDoor = true; if (!C.loaded) { C.load(true); o.loadedAt = performance.now() / 1000; } } }));
+    });
+  }
+  CODE.entrance = (id) => { for (const o of placed) if (o.it.id === id && o.keep && o.keep.length) { const d = o.keep.find((q) => q.way === 0) || o.keep[0]; return { x: d.x, y: d.y, z: d.z, ox: d.ox, oz: d.oz }; } return null; };
   // the flat look's one mesh: every flat-kind building's corners in the world, and the triangles of those drawn flat now
   let flatTier = null; const flatOn = () => flatTier ?? (flatTier = tier() === 'potato');   // (asked once the game is under way: the tier is known by then)
   let flatMesh = null, flatIdx = null, flatDirty = false, flatPick = false;
@@ -190,20 +253,6 @@ export function makeCodeBuildings({ shade = null, tier = () => 'gaming', rendere
     }
   }
   const inView = (x, y, z, r) => { SPH.center.set(x, y, z); SPH.radius = r; return VIEW.intersectsSphere(SPH); };
-  // each doorway's leaves: open for the player walking into it, or anyone else passing (the inside is in); shut again
-  // once the player is away (and not inside) and the doorway is out of view, or the player far off
-  function doorsFor(o, C, dp, them, dt) {
-    if (!C.doors.length) return;
-    const q = o.q, pl = last;
-    for (let i = 0; i < q.doors.length / 2; i++) {
-      const x = q.doors[i * 2], z = q.doors[i * 2 + 1], dPl = pl ? Math.hypot(pl.x - x, pl.z - z) : Infinity;
-      let want = dPl < LOAD.open;
-      if (!want) for (const t of them) if (t && Math.hypot(t.x - x, t.z - z) < LOAD.openOther) { want = true; break; }
-      if (want) C.openDoor(i, true);
-      else if (C.doorOpen(i) && dp > 0 && dPl > LOAD.shut && (dPl > LOAD.gone || !inView(x, q.y + 1.2, z, 1.6))) C.openDoor(i, false);
-    }
-    C.tick(dt);
-  }
   // THE INSIDE MADE READY when the building is made, while the title shows: the stand-ins' pictures taken (each
   // see-through window's, from 1.6 m out from it, of the building alone: its parts and the valley's lights on a layer
   // of their own), then its shaders built by one real draw through a single pixel (as the horses' warm-up does: the
@@ -221,7 +270,8 @@ export function makeCodeBuildings({ shade = null, tier = () => 'gaming', rendere
     try {
       R.setRenderTarget(null); R.shadowMap.autoUpdate = false; R.setScissorTest(true); R.setClearColor(0x150e09, 1);
       // the pictures: the inside as it will load (this priority), the stand-ins themselves away
-      C.load(true); C.setSeen(true); C.setUpstairs(false); C.group.cards.visible = false; C.group.updateMatrixWorld(true);
+      // (the level the windows will first show: the Window view dial's part; the pictures only (0): the doors' level)
+      C.load(true); C.setSeen(true); C.setUpstairs(false); C.setLevel(CODE.arc > 0 ? Math.min(CODE.detail, CODE.arc) : CODE.detail); C.group.cards.visible = false; C.group.updateMatrixWorld(true);
       if (C.windows.length) {
         const px = new Uint8Array(cell * cell * 4), c = new THREE.Vector3(), n = new THREE.Vector3(), D = 1.6;
         R.setViewport(0, 0, (cell + 0.5) / pr, (cell + 0.5) / pr); R.setScissor(0, 0, (cell + 0.5) / pr, (cell + 0.5) / pr);
@@ -260,8 +310,12 @@ export function makeCodeBuildings({ shade = null, tier = () => 'gaming', rendere
     // (its doorways to the outside, in the world: the insides are drawn when the camera is near one)
     const doors = [], v = new THREE.Vector3();
     for (const D of o.code.B.anchors.doorways || []) if (!D.inner) { v.set(...D.centre).applyMatrix4(o.code.group.matrixWorld); doors.push(v.x, v.z); }
-    o.q = { x: e[12], y: e[13], z: e[14], c: Math.cos(rot), s: Math.sin(rot), r: Math.hypot(G.nx, G.nz) * G.cell / 2 + 0.5, doors };
+    // (its see-through windows (and the batwings' doorways) in the world, facing out: their view arcs)
+    const wins = [], n = new THREE.Vector3();
+    for (const W of o.code.windows) { v.set(...W.c).applyMatrix4(o.code.group.matrixWorld); n.set(...W.n).transformDirection(o.code.group.matrixWorld); n.y = 0; n.normalize(); wins.push({ x: v.x, y: v.y, z: v.z, nx: n.x, nz: n.z }); }
+    o.q = { x: e[12], y: e[13], z: e[14], c: Math.cos(rot), s: Math.sin(rot), r: Math.hypot(G.nx, G.nz) * G.cell / 2 + 0.5, doors, wins };
     o.code.sync();
+    fitDoors(o);   // (its doors' places in the world, for the keeper)
   }
   // how near a point is to a building's rooms: to the nearest of its doorways, where they are seen from outside; nought
   // inside it, under its roof; one with no doorway, from its middle less half its size

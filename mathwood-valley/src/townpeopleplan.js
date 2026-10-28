@@ -29,6 +29,9 @@ export const TOWN = {
   insideNight: [240, 600],   // ... by night
   door: 0.6,           // s to step through a door: dissolving in or out
   doorStep: 0.9,       // m walked while dissolving (from the foot of the steps out to the door's spot, or back in)
+  // a code-built building's real door (world/objects/doorkeeper.js): pushed open as they come to it, walked through
+  // from this far out to this far in (m), over doorWalk s, dissolving only once past the doorway; it swings shut behind
+  doorOut: 1.0, doorIn: 0.5, doorWalk: 1.45,
   start: 0.7,          // the share of the most-out-at-once already about when the ride starts
   shadowNear: 45,      // m from the camera's target within which they cast shadows
   near: 40, far: 110,  // m: animated every frame within near, every other frame to far, every fourth beyond

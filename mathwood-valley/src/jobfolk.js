@@ -49,6 +49,12 @@
 //   JF.heard(event, data)   a Hob event (src/hob.js): the thank-yous and the driver's "let's roll" come from these;
 //                       also 'sheriffDone' (lock boxes cracked for the sheriff)
 //   JF.say(id, text)    a person (an id of JOB_FOLK, or a camp's id for its foreman) says a line now
+//   JF.thank(who, text)  a thank-you waiting its turn, as the jobs' own (the shift's end: src/shiftkeeper.js): who is a
+//                       person's id, a camp's id or short name (its foreman), or { id, name, x, z } for a speaker
+//                       with no person of their own (the storekeeper, inside the store: the card shows over that spot)
+//   helloFor(id)        (an option) lines a person says in place of their hello, or null: the shift done for the day,
+//                       their polite no (src/shifts.js)
+//   (an event's data with shiftEnd: true: the shift's own thank-you takes the place of the job's usual one)
 //   JF.speaking()       true while a speech card is on the screen
 //   JF.people           the records: { id, name, role, p (the person), x, z, face }
 //   JF.state()          for rigs;  JF.dispose()
@@ -99,7 +105,7 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const HATS = { boss: 'cattleman', vet: 'bowler', wife: 'straw', naturalist: 'ranger', sheriff: 'white', deputy: 'cowboy', keeper: 'straw' };
 
-export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, scene = W.scene, onTalk = null, onSay = null }) {
+export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, scene = W.scene, onTalk = null, onSay = null, helloFor = null }) {
   const get = (k) => { try { return jobs[k] ? jobs[k]() : null; } catch (e) { return null; } };
   const shadows = !!(W.V && W.V.SHADOW ? W.V.SHADOW.on : true);
   const people = [];
@@ -402,8 +408,8 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     card.innerHTML = `<b>${esc(r.name)}</b>${L.map((l) => `<p>${esc(l)}</p>`).join('')}`;
     card.hidden = false; card.classList.remove('is-out'); card.style.opacity = '';
     if (onSay) { try { onSay(r.name, L); } catch (e) { console.error(e); } }   // (main.js: read out to a rider who can't read yet)
-    // (a wave the first time, a nod of the head after)
-    if (r.kind !== 'driver' || r.down) {
+    // (a wave the first time, a nod of the head after; a speaker with no person of their own just talks)
+    if (r.p && (r.kind !== 'driver' || r.down)) {
       const clip = r.greet.said && r.waved ? 'Interact' : 'Wave';
       if (r.p.play(clip, { fade: 0.25, once: true })) { r.clipT = 1.7; r.waved = true; }
     }
@@ -411,6 +417,16 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
   const JF = { people, prompt: null };
   JF.say = (id, text) => { const r = byId(id); if (r) { say(r, text); return true; } return false; };
   JF.speaking = () => !!talking && !card.hidden;   // (a speech card is on the screen: Old Hob waits his turn on a phone)
+  // a thank-you waiting its turn (the shift's end): a person, a foreman by his camp, or a speaker with no person
+  JF.thank = (who, text) => {
+    let r = null;
+    if (who && typeof who === 'object') r = { id: who.id || 'voice', name: who.name || '', role: '', p: null, kind: 'voice', x: +who.x || 0, z: +who.z || 0 };
+    else r = byId(who) || foremen.find((f) => f.camp && (f.camp.short === who || f.camp.id === who)) || null;
+    if (!r || !text) return false;
+    pending.push({ r, text, t: TALK.keep });
+    if (talking && talking.hello) talking.t = Math.min(talking.t, 0.55);   // (a hello just then gives way at once)
+    return true;
+  };
 
   // ── TALKING: E by a person ─────────────────────────────────────────────────────────────────────────────────────
   let promptFor = null;
@@ -465,6 +481,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     if (event === 'deerSetup') camUsed = true;   // (her camera set up since she lent it: E by her may give it back now)
     // (a pick at an area job: that job is the one leaving says goodbye to, and the others forget theirs)
     if (WORK[event]) for (const a of areas) { if (a.id === WORK[event]) a.watch.worked(); else a.watch.other(); }
+    if (data && data.shiftEnd) return;   // (the shift's own thank-you comes instead: JF.thank)
     if (event === 'wagonArrive' && driver) { say(driver, FOLK_BY_ID.driver.start); driver.greet.update(0, true, false); return; }   // (the job started: no hello now)
     if (event === 'deliveryDone' && data && data.camp) { const r = foremen.find((f) => f.camp && (f.camp.short === data.camp || f.camp.id === data.camp)); if (r) pending.push({ r, text: "Right where we need 'em. Come see me for the next order.", t: TALK.keep }); return; }
     const id = thanksFor(event); if (!id) return;
@@ -524,8 +541,9 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
       // (Miss Wren with her camera already lent (an earlier ride; the jobs board's hoofprints lead to her all the same):
       // not "borrow my camera", but on to the herd, as when she lends it)
       const DJn = r.id === 'naturalist' ? get('deer') : null;
-      const hello = DJn && r.def.lend && DJn.lent() ? lendLines(r, DJn.inReach && DJn.inReach(), true) : r.def.hello;
-      if (r.greet.update(dt, near, away)) { say(r, hello, { pin: !!(area && area.near), hello: true }); if (onTalk) onTalk('hello', r.id); }   // (over anybody else's: the newest one met is the one in front of you; arriving at the job from where the person is out of sight, in a card of its own)
+      let hello = DJn && r.def.lend && DJn.lent() ? lendLines(r, DJn.inReach && DJn.inReach(), true) : r.def.hello;
+      { const no = helloFor ? helloFor(r.id) : null; if (no && no.length) hello = no; }   // (done for today: the polite no)
+      if (r.greet.update(dt, near, away) && !pending.some((q) => q.r === r)) { say(r, hello, { pin: !!(area && area.near), hello: true }); if (onTalk) onTalk('hello', r.id); }   // (a thank-you of theirs waiting: that, not a hello)   // (over anybody else's: the newest one met is the one in front of you; arriving at the job from where the person is out of sight, in a card of its own)
       // idle about, turn to the player when close (the camps turn their own foremen; the driver only on the ground)
       if (r.kind === 'own' || r.kind === 'lent' || (r.kind === 'driver' && r.down)) {
         if (d < TALK.awake) {
@@ -546,7 +564,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     }
     // a thank-you waiting its turn: said once nothing else is being said
     for (let i = pending.length - 1; i >= 0; i--) if ((pending[i].t -= dt) <= 0) pending.splice(i, 1);
-    if (pending.length && (!talking || talking.t < 0.6)) { const q = pending.shift(); say(q.r, q.text, { pin: true }); if (onTalk) onTalk('thanks', q.r.id, voiceOf(q.r)); }
+    if (pending.length && (!talking || talking.t < 0.6)) { const q = pending.shift(); say(q.r, q.text, { pin: true }); if (onTalk && q.r.p) onTalk('thanks', q.r.id, voiceOf(q.r)); }
     // the speech card: over the speaker's head, or a card of its own in the middle when the speaker is out of sight
     if (talking) {
       if ((talking.t -= dt) <= 0) { talking = null; card.hidden = true; }
@@ -596,7 +614,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
 
   // a page element over a person's head (lift 0: the name tag; 1: the speech card above it); false when out of sight
   function place(r, el, lift) {
-    const b = r.p.bones && r.p.bones.Head;
+    const b = r.p && r.p.bones && r.p.bones.Head;
     if (b) { b.getWorldPosition(head); head.y += STAND.anchor; } else head.set(r.x, W.heightAt(r.x, r.z) + 2.2, r.z);
     head.project(camera);
     if (head.z > 1 || Math.abs(head.x) > 1.05 || Math.abs(head.y) > 1.05) return false;

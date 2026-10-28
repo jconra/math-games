@@ -35,6 +35,8 @@
 //   const DJ = makeDeerJob({ W, deer, P, I, camera, canvas, rider, hud, hob, audio, refresh, onStart, onStop })
 //     deer: makeDeer's herds; I: the input (a touch screen is told to tap); onStart / onStop: the game hands over the controls while the camera is up, and back
 //     busy(): optional, true while another job has the player (the wagon, the round-up, the farm jobs): the deer job's card and prompt stand aside
+//     open(): false once the day's shift is done (src/shifts.js): the photo that finished it ends the roll, the camera
+//     isn't set up again till it is true (the card says so); decline(): Miss Wren's polite no (main.js)
 //   DJ.update(dt)     each frame, after the player (it places the camera while the viewfinder is up)
 //   DJ.prompt         'Set up the camera' when E would set it up here, else null; DJ.setUp() does it (as E does)
 //   DJ.near           the player is within SNAP.near of the job's herd; DJ.card: the job's card is up (the HUD's rule card)
@@ -103,7 +105,8 @@ export const SNAP = {
 const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, hob, audio = null, refresh = () => {}, onStart = () => {}, onStop = () => {}, busy = () => false, read = null }) {
+export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, hob, audio = null, refresh = () => {}, onStart = () => {}, onStop = () => {}, busy = () => false, read = null,
+  open: shiftOpen = () => true, decline = () => {} }) {
   ensureCss();
   const touch = () => !!(I && I.touch);
   const K = makeBoxCamera({ scene: W.scene }); K.root.visible = false;
@@ -140,6 +143,16 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
   function travel(dt) {
     const c = where(), d = Math.hypot(P.position.x - c.x, P.position.z - c.z);
     if (resting && d > SNAP.rest) resting = false;
+    if (!shiftOpen()) {
+      // (the day's shift done: no camera set up here today; by the herd the card says so)
+      DJ.prompt = null; DJ.near = d < SNAP.near;
+      if (DJ.near && !busy() && !resting) {
+        const key = 'deer|done';
+        if (key !== cardKey) { cardKey = key; hud.rule({ main: 'Deer photographs', sub: "Done for today: Miss Wren has the pictures she needs · back at sunrise, or ask for more work at the jobs board", kind: 'job' }); }
+        DJ.card = true;
+      } else if (DJ.card) { DJ.card = false; cardKey = ''; hud.rule(null); }
+      return;
+    }
     if (resting) {
       // (the camera given back: no card and no trail, but walking up to the herd still offers it: setting it up
       // borrows it again)
@@ -197,6 +210,7 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
 
   DJ.setUp = () => {
     if (state !== 'travel' || !DJ.prompt || DJ.paused) return false;
+    if (!shiftOpen()) { decline(); return false; }
     DJ.prompt = null; state = 'setting'; t = 0; waitT = 0;
     if (!rider.cameraLent) { rider.cameraLent = true; saveRider(rider); }
     resting = false;
@@ -557,8 +571,8 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
     setTimeout(() => {
       if (disposed || vf !== my || !vf.el) return;
       album();
-      if (vf.pics < SNAP.per) { vf.busy = false; newShot(); }
-      else outingDone();
+      if (vf.pics < SNAP.per && shiftOpen()) { vf.busy = false; newShot(); }
+      else outingDone();   // (a full roll, or the day's shift done with this photo)
     }, (SNAP.printShow + 0.9) * 1000);
   }
 

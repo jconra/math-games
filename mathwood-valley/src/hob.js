@@ -45,7 +45,8 @@
 //                         'lootDone' (data.trips), 'lootWord' (data.place: the next cache); 'ride' with data.loot: the job is on;
 //                         'lootWoodsTip' (after a trip: the back woods have gang camps too, said once), 'lootCamp' (a
 //                         back-woods camp found, said once)
-//   B.say(text)           says a line now (or after the line he is saying)
+//   B.say(text, ms, { urgent, first })   says a line now (or after the line he is saying; first: ahead of the others
+//                         waiting, as a shift's end sending the rider on to the next job: src/shiftkeeper.js)
 //   B.trail(on)           the hoofprints on or off (they fade in and out)
 //   B.trailTo(goal | null)   each frame: where the trail leads, { id, x, z, hide: { x, z, r } } (id: which job; hide: a
 //                         circle where the trail is not wanted, as the whole pasture for the round-up), or null for no
@@ -233,10 +234,10 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
   let key = null;                  // (the event being handled, so the line it says remembers where it came from)
   const B = {};
   // (urgent: the why of a pick just made, said even while Hob is waiting his turn)
-  B.say = (text, ms, { urgent = false } = {}) => {
+  B.say = (text, ms, { urgent = false, first = false } = {}) => {
     if (!text) return;
     // (what a wave just earned goes ahead of the tips waiting: it is said next, before the next bunch)
-    if (speaking > 0 || (hold && !urgent) || held(key, urgent)) { if (!queue.some((q) => q.text === text)) queue[key === 'waveDone' ? 'unshift' : 'push']({ text, ms, key, at: now }); return; }
+    if (speaking > 0 || (hold && !urgent) || held(key, urgent)) { if (!queue.some((q) => q.text === text)) queue[key === 'waveDone' || first ? 'unshift' : 'push']({ text, ms, key, at: now }); return; }
     const t = ms || Math.max(4500, 1800 + text.length * 55);
     hud.caption(text, t); speaking = t / 1000 + 0.4; saying = { text, ms, key, urgent };
     if (voice) voice.speak(text, { key });

@@ -62,11 +62,12 @@ const LOOKS = {
     paint: { uPaintGrain: 0.85, uPeelSoft: 0.3, uEdgePeel: 0.08, uLapShadow: 0.48, uLapLip: 0.4, uNail: 0.35, uSignKeep: 0.6, uStreakW: 0.5, uFlake: 1, uLapUnder: 0.3 },
     grime: { uGrimeAmt: 0.45, uDirtBand: 0.45 } },
   saloon: { sheet: 'straight', bump: 0.6, shelter: 0.35, bare: [1.0, 1.0, 1.04], paint: {}, grime: {} },
-  cabin: { sheet: 'raw', bump: 0.75, shelter: 0.4, bare: [0.9, 0.82, 0.74], paint: {}, grime: {} },
-  blacksmith: { sheet: 'raw', bump: 0.75, shelter: 0.3, bare: [0.9, 0.82, 0.74], paint: {}, grime: {} },
+  cabin: { sheet: 'weathered', bump: 0.75, shelter: 0.4, bare: [0.9, 0.82, 0.74], paint: {}, grime: {} },
+  blacksmith: { sheet: 'weathered', bump: 0.75, shelter: 0.3, bare: [0.9, 0.82, 0.74], paint: {}, grime: {} },
 };
 LOOKS.home = LOOKS.cabin;
-const SHEETS = { calm: {}, straight: { straight: true } };
+// (weathered: the cabins' and the smithy's old boards gone silver, labs/buildings/woodlook.js weatherGrain)
+const SHEETS = { calm: {}, straight: { straight: true }, weathered: { weathered: true } };
 const PAINT_DEFAULT = { uPaintGrain: 0, uPeelSoft: 0.08, uEdgePeel: 0, uLapShadow: 0.42, uLapLip: 0, uNail: 1, uSignKeep: 0.25, uStreakW: 1, uFlake: 0, uLapUnder: 1 };
 export const CODE_KINDS = ['stable', 'sheriff', 'generalStore', 'saloon', 'home', 'cabin', 'blacksmith'];
 
@@ -449,7 +450,8 @@ function fitAttrs(g, ref) {
   return g;
 }
 const ease = (t) => t * t * (3 - 2 * t);
-export const DOOR = { time: 0.55 };   // (s: a door swinging all the way open or shut)
+export const DOOR = { time: 0.55, flap: 1.1 };
+const CARD_FADE = 0.3;   // (s: the stand-in pictures fading out once the room behind them is in)   // (s: a door swinging all the way open or shut; the batwings' flap)
 
 export function buildCodeBuilding(kit, kind, o = {}) {
   const t0 = performance.now();
@@ -471,16 +473,17 @@ export function buildCodeBuilding(kit, kind, o = {}) {
     if (name === 'decal') m.renderOrder = 0.5;
     to.add(m); return m;
   };
-  // THE DOORS shut in town: each leaf merged shut into the shell's mesh of its material, at its end (a building drawn
-  // from the street costs nothing more for its doors); while the inside is loaded the leaves are their own meshes,
-  // swinging on their hinges, and the shell's meshes stop short of their copies (the draw range). The saloon's batwings
-  // stand open as built (half doors: the hall is seen over them): its doorways show stand-ins instead, like windows
-  const live = kind !== 'saloon';
+  // THE DOORS shut in town: each leaf merged at rest into the shell's mesh of its material, at its end (a building drawn
+  // from the street costs nothing more for its doors); while one swings, or stands open, the leaves are their own
+  // meshes on their hinges and the shell's meshes stop short of their copies (the draw range). The saloon's batwings
+  // rest open as built (half doors: the hall is seen over them, its doorways show stand-ins, like windows) and flap
+  // when somebody passes through
+  const batwings = kind === 'saloon', rest = batwings ? 1 : 0;
   B.light.setDoors(true, true);
   const leafParts = { wood: [], glass: [], iron: [], rope: [] };
   for (const L of B.doors) {
-    const M = new THREE.Matrix4().makeTranslation(L.hinge[0] + (!live && L.slide ? L.slide[0] : 0), L.hinge[1], L.hinge[2]);
-    if (!live && !L.slide) M.multiply(new THREE.Matrix4().makeRotationY(L.open));
+    const M = new THREE.Matrix4().makeTranslation(L.hinge[0] + (batwings && L.slide ? L.slide[0] : 0), L.hinge[1], L.hinge[2]);
+    if (batwings && !L.slide) M.multiply(new THREE.Matrix4().makeRotationY(L.open));
     if (L.rope) {   // (the collar: lit evenly, as the lab does)
       const n = L.rope.attributes.position.count;
       L.rope.setAttribute('aAO', new THREE.BufferAttribute(new Float32Array(n).fill(0.8), 1)); L.rope.setAttribute('aLamp', new THREE.BufferAttribute(Float32Array.from({ length: n * 2 }, (_, i) => (i % 2 ? 0 : 0.6)), 2));
@@ -490,7 +493,7 @@ export function buildCodeBuilding(kit, kind, o = {}) {
   const rooms = (B.anchors.upstairs && B.anchors.upstairs.rooms) || null, upY = B.anchors.upstairs ? B.anchors.upstairs.floor - 0.3 : 0;
   // (a building's meshes kept apart in the lab, named 'part:material' (the saloon's upstairs, its roof): their material
   // after the colon, split and drawn like the rest)
-  const doorBase = (m, base, leaves) => { if (live && leaves.length) m.userData.base = base ? base.index.count : 0; };
+  const doorBase = (m, base, leaves) => { if (leaves.length) m.userData.base = base ? base.index.count : 0; };
   const inPart = (geo, mat, g, name) => {   // (an inside part: into its priority's group, or the rooms upstairs)
     let rest = geo, roomsGeo = null;
     if (rooms && name.startsWith('up:')) [rest, roomsGeo] = splitRooms(geo, rooms, upY);
@@ -511,7 +514,7 @@ export function buildCodeBuilding(kit, kind, o = {}) {
   // doorway nearest it
   const doorways = (B.anchors.doorways || []).filter((D) => !D.inner);   // (a cabin's doorways between its rooms: indoors)
   const doors = [];
-  if (live) for (const L of B.doors) {
+  for (const L of B.doors) {
     const pivot = new THREE.Group(); pivot.position.set(...L.hinge); pivot.name = 'door';
     for (const [k, g] of [['wood', L.geo], ['glass', L.glass], ['iron', L.iron], ['rope', L.rope]]) if (g) {
       const ref = shell.children.find((m) => m.isMesh && m.name === k);
@@ -519,13 +522,13 @@ export function buildCodeBuilding(kit, kind, o = {}) {
     }
     let way = 0, best = Infinity;
     doorways.forEach((D, i) => { const d = Math.hypot(D.centre[0] - L.hinge[0], D.centre[2] - L.hinge[2]); if (d < best) { best = d; way = i; } });
-    doorsG.add(pivot); doors.push({ pivot, L, way, t: 0, want: 0 });
+    doorsG.add(pivot); doors.push({ pivot, L, way, t: rest, want: rest, rest, flap: 0 });
   }
   // the props, baked in the building's light: its outdoor ones (the Decorations dial's), and the inside ones by their
   // priority (PROP_PRI), the saloon's rooms' own upstairs
   const bake = (geo) => { geo.translate(-OX, 0, -OZ); B.light.bake(geo); B.light.apply(geo, true, 'main', true); geo.translate(OX, 0, OZ); };
   const lists = { out: [], up: [], 1: [], 2: [], 3: [] };
-  for (const p of B.props) lists[p.upstairs && rooms ? 'up' : !p.inside ? 'out' : (PROP_PRI[p.type] || 2)].push(p);
+  for (const p of B.props) lists[p.upstairs && rooms ? 'up' : !p.inside ? 'out' : Math.max(1, Math.min(3, p.pri ?? PROP_PRI[p.type] ?? 2))].push(p);   // (a prop can say its own: the cabins' furniture, pri 3)
   const propSolidsRaw = []; let propTris = 0;
   for (const [key, list] of Object.entries(lists)) {
     if (!list.length) continue;
@@ -538,19 +541,40 @@ export function buildCodeBuilding(kit, kind, o = {}) {
   const inLamps = B.lamps.filter((L) => !L.outdoor && !L.noGlow), outLamps = B.lamps.filter((L) => L.outdoor && !L.noGlow);
   const glowIn = inLamps.length ? lanternGlow(inLamps) : null, glowOut = outLamps.length ? lanternGlow(outLamps) : null;
   if (glowIn) ins[1].add(glowIn); if (glowOut) shell.add(glowOut);
+  // what else a building brings for the town, moving on its own (B.tick): the smithy's painted sign letters and its
+  // chimney smoke. (The saloon's B.extra is the Building Lab's walker: not for the town)
+  const extra = kind === 'blacksmith' && B.extra ? B.extra : null;
+  if (extra) {
+    shell.add(extra);
+    extra.traverse((m) => {
+      if (!m.material) return;
+      if (kit.small && m.material.map && m.material.map.image && m.material.map.image.width > 256) halve(m.material.map);
+      // (a lit one takes the valley's hill shade now, as the building's own do, so its shader is built once, in the
+      // warm-up: left to the valley's later sweep for plain materials, it was built again the first time it was seen,
+      // a 50 ms frame on the potato tier)
+      const M = m.material;
+      if (o.shade && M.isMeshStandardMaterial && !M.userData.sunShade) { M.userData.sunShade = true; M.onBeforeCompile = (sh) => o.shade(sh); M.customProgramCacheKey = () => 'codebuilt-extra+valleyshade'; }
+    });
+  }
   // THE STAND-INS: a card a little behind each see-through window (and the saloon's open doorways) showing a picture
   // of the inside taken from outside it (objects/codebuildings.js takes them, into the kit's shared sheet), while the
   // inside isn't loaded. Dark until its picture is taken. (With the inside not drawn the far walls' inner faces aren't
-  // either: without a card the sky would show through.) A shut door needs none
+  // either: without a card the sky would show through.) A doorway with a door has a plain dark card: seen only while
+  // somebody holds its door open with the inside not loaded (a townsperson going in)
   const cardGeos = [], windows = [], o3 = new THREE.Object3D();
   const card = (w, h, c, n, back) => { o3.position.set(c[0] - n.x * back, c[1], c[2] - n.z * back); o3.lookAt(o3.position.clone().add(n)); o3.updateMatrix(); cardGeos.push(new THREE.PlaneGeometry(w, h).applyMatrix4(o3.matrix)); };
   for (const W of B.anchors.seeThrough || []) { const n = new THREE.Vector3(...W.n).normalize(); card(W.w, W.h, W.c, n, 0.25); windows.push({ w: W.w, h: W.h, c: W.c, n: [n.x, n.y, n.z] }); }
-  if (!live) for (const D of doorways) { const n = new THREE.Vector3(...D.out).normalize(); card(D.w * 0.98, D.h * 0.98, D.centre, n, 0.6); windows.push({ w: D.w, h: D.h, c: D.centre, n: [n.x, n.y, n.z], door: true }); }
-  let cardMesh = null, cardUV = null;
+  if (batwings) for (const D of doorways) { const n = new THREE.Vector3(...D.out).normalize(); card(D.w * 0.98, D.h * 0.98, D.centre, n, 0.6); windows.push({ w: D.w, h: D.h, c: D.centre, n: [n.x, n.y, n.z], door: true }); }
+  else for (const D of doorways) { const n = new THREE.Vector3(...D.out).normalize(); card(D.w * 0.98, D.h * 0.98, D.centre, n, 0.6); }   // (after the pictures' cards: they keep cell 0, the dark)
+  let cardMesh = null, cardUV = null; const nCards = cardGeos.length;
+  const cardMat = kit.standMat.clone(); cardMat.transparent = true; cardMat.depthWrite = false;
+  let cardA = 1, cardWait = 0;   // (the pictures' opacity; frames the room has been in, to be sure it is on the card first)
   if (cardGeos.length) {
     const cg = mergeGeometries(cardGeos); for (const g of cardGeos) g.dispose();
     cardUV = cg.attributes.uv.array.slice();   // (each card's own 0..1, to place its picture in the sheet)
-    cardMesh = new THREE.Mesh(cg, kit.standMat); cardMesh.name = 'stand-ins'; cards.add(cardMesh);
+    // (its own copy of the stand-ins' material, the sheet shared: its pictures fade out on their own when the room
+    // behind them comes in)
+    cardMesh = new THREE.Mesh(cg, cardMat); cardMesh.name = 'stand-ins'; cards.add(cardMesh);
   }
   const picture = (i, cell) => {   // (card i shows the sheet's cell: kit.atlas.uv)
     if (!cardMesh) return;
@@ -558,7 +582,7 @@ export function buildCodeBuilding(kit, kind, o = {}) {
     for (let j = i * 4; j < i * 4 + 4; j++) uv.setXY(j, u0 + cardUV[j * 2] * (u1 - u0), v0 + cardUV[j * 2 + 1] * (v1 - v0));
     uv.needsUpdate = true;
   };
-  windows.forEach((_, i) => picture(i, 0));
+  for (let i = 0; i < nCards; i++) picture(i, 0);
   // THE FAR LOOK: the small outside pieces merged (FAR TRIM above); those pieces themselves hide while it shows
   const trimmed = shell.children.filter((m) => m.isMesh && TRIM.has(m.name)), glowMesh = trimmed.find((m) => m.name === 'glow') || null;
   const T = farTrim(mats, trimmed, []);
@@ -579,7 +603,7 @@ export function buildCodeBuilding(kit, kind, o = {}) {
   // ── what is drawn: the far look or the whole outside; the inside loaded or not (its stand-ins then); the doors ──────
   let nightNow = 0, flat = null;
   // (the leaves swing as their own meshes only while one is open or opening; shut, they are the shell's again)
-  const swinging = () => out.loaded && doors.some((d) => d.t > 0 || d.want > 0);
+  const swinging = () => doors.some((d) => d.t !== d.rest || d.want !== d.rest || d.flap > 0);
   let liveNow = false;
   const show = () => {
     // (far: past the outsides' reach, and its inside not to be seen: not loaded, or loaded behind shut doors)
@@ -596,7 +620,8 @@ export function buildCodeBuilding(kit, kind, o = {}) {
     }
     far.visible = isFar;
     if (trimMesh) trimMesh.geometry.setDrawRange(0, glowOn ? T.solid : Infinity);
-    cards.visible = !(out.loaded && out.seen);
+    if (!(out.loaded && out.seen)) { cardA = 1; cardWait = 0; cardMat.opacity = 1; }
+    cards.visible = cardA > 0;
     doorsG.visible = liveNow;
     // (loaded: in the scene, its shaders and buffers ready; drawn only while it can be seen: a door open, the camera
     // inside, or windows to see it through)
@@ -627,23 +652,46 @@ export function buildCodeBuilding(kit, kind, o = {}) {
     // the whole outside (true) or the far look (false: not while the inside is loaded and to be seen)
     setFull(on) { if (out.full !== on) { out.full = on; show(); } },
     // the inside into the scene (true) or out of it: its doors shut first (codebuildings.js sees to that)
-    load(on) { if (out.loaded !== on) { out.loaded = on; if (!on) for (const d of doors) { d.t = d.want = 0; place(d); } show(); } },
+    load(on) { if (out.loaded !== on) { out.loaded = on; show(); } },
     setLevel(n) { n = Math.max(1, Math.min(3, Math.round(+n) || 1)); if (out.level !== n) { out.level = n; show(); } },
     setUpstairs(on) { if (out.upstairs !== on) { out.upstairs = on; show(); } },
     // the loaded inside drawn (true) or only kept ready (a building with its doors shut and no windows into it)
     setSeen(on) { if (out.seen !== on) { out.seen = on; show(); } },
-    anyOpen: () => doors.some((d) => d.t > 0 || d.want > 0),
-    // a doorway's leaves to swing open (true) or shut; tick(dt) swings them: true while any stands open at all
-    openDoor(way, on) { let ch = false; for (const d of doors) if (d.way === way && d.want !== (on ? 1 : 0)) { d.want = on ? 1 : 0; ch = true; } if (ch && swinging() !== liveNow) show(); },
-    doorOpen: (way) => doors.some((d) => d.way === way && d.t > 0),
+    // (a door open, or opening: the batwings, resting open, never count)
+    anyOpen: () => doors.some((d) => !d.rest && (d.t > 0 || d.want > 0)),
+    batwings,
+    // a doorway's leaves to swing open (true) or shut; tick(dt) swings them: true while any door (not the batwings)
+    // stands open at all
+    openDoor(way, on) { let ch = false; for (const d of doors) if (d.way === way && !d.rest && d.want !== (on ? 1 : 0)) { d.want = on ? 1 : 0; ch = true; } if (ch && swinging() !== liveNow) show(); return ch; },
+    doorOpen: (way) => doors.some((d) => d.way === way && !d.rest && d.t > 0),
+    // how far a doorway's door stands open, 0 shut .. 1 open (what blocks a walker: objects/codebuildings.js)
+    doorAjar: (way) => { let t = 1, n = 0; for (const d of doors) if (d.way === way && !d.rest) { t = Math.min(t, d.t); n++; } return n ? t : 1; },
+    hasDoor: (way) => doors.some((d) => d.way === way && !d.rest),
+    // the batwings pushed through: they swing in and out and settle open again
+    flapDoor(way) { let ch = false; for (const d of doors) if (d.way === way && d.rest) { d.flap = DOOR.flap; ch = true; } if (ch && swinging() !== liveNow) show(); return ch; },
     tick(dt) {
+      if (extra && B.tick && shell.visible && group.visible) B.tick(dt);   // (the smithy's smoke rising)
+      // the stand-ins once the real room is in and drawn: a couple of frames on (its buffers sent, the first frame
+      // drawn), then a crossfade out over CARD_FADE s, so the swap reads as the room coming into focus
+      if (out.loaded && out.seen && cardA > 0) {
+        if (cardWait < 2) cardWait++;
+        else { cardA = Math.max(0, cardA - dt / CARD_FADE); cardMat.opacity = cardA; if (cardA <= 0) cards.visible = false; }
+      }
       let open = false;
-      for (const d of doors) { if (d.t !== d.want) { d.t = d.want > d.t ? Math.min(1, d.t + dt / DOOR.time) : Math.max(0, d.t - dt / DOOR.time); place(d); } if (d.t > 0) open = true; }
+      for (const d of doors) {
+        let moved = false;
+        if (d.t !== d.want) { d.t = d.want > d.t ? Math.min(1, d.t + dt / DOOR.time) : Math.max(0, d.t - dt / DOOR.time); moved = true; }
+        if (d.flap > 0) { d.flap = Math.max(0, d.flap - dt); moved = true; }
+        if (moved) place(d);
+        if (!d.rest && d.t > 0) open = true;
+      }
       if (swinging() !== liveNow) show();
       return open;
     },
-    // the stand-in pictures: card i shows the sheet's cell
+    // the stand-in pictures: card i shows the sheet's cell; their tint (the night's: objects/codebuildings.js)
     picture,
+    cardTint: (c) => cardMat.color.copy(c),
+    cardsShowing: () => cards.visible && cardA > 0,
     // THE FLAT LOOK (the potato tier's far homes, objects/codebuildings.js): the whole outside, the wood too, in plain
     // colours, as one geometry in the building's own frame (made the first time it is asked for)
     flatGeo: () => flat || (flat = (farTrim(mats, shell.children.filter((m) => m.isMesh && (m.name === 'wood' || TRIM.has(m.name)) && m.name !== 'glow'), []) || {}).geo || null),
@@ -664,12 +712,14 @@ export function buildCodeBuilding(kit, kind, o = {}) {
     dispose() {
       const gone = new Set(); if (flat) flat.dispose();
       for (const r of [group, ...out.insideRoots()]) r.traverse((m) => { if (m.geometry && !gone.has(m.geometry)) { gone.add(m.geometry); m.geometry.dispose(); } });
-      for (const k in mats) mats[k].dispose();   // (the far trim's and the stand-ins' materials are the kit's, shared: not this building's to drop)
+      for (const k in mats) mats[k].dispose(); cardMat.dispose();   // (the far trim's material and the sheet are the kit's, shared: not this building's to drop)
     },
   };
-  function place(d) {   // (a leaf where its swing has got to)
+  function place(d) {   // (a leaf where its swing has got to; a batwing's flap swings it in and out, dying away)
     const e = ease(d.t), L = d.L;
-    if (L.slide) d.pivot.position.x = L.hinge[0] + L.slide[0] * e; else d.pivot.rotation.y = L.open * e;
+    let k = e;
+    if (d.flap > 0) { const u = DOOR.flap - d.flap; k = e * (1 - 0.45 * Math.sin(u * Math.PI * 2 * 2.2) * Math.exp(-u * 3.5)); }
+    if (L.slide) d.pivot.position.x = L.hinge[0] + L.slide[0] * k; else d.pivot.rotation.y = L.open * k;
   }
   for (const [k, g] of [['shell', shell], ['props', props]]) { let n = 0; g.traverse((m) => { if (m.isMesh || m.isPoints) n++; }); out.meshes[k] = n; }
   for (const r of out.insideRoots()) r.traverse((m) => { if (m.isMesh || m.isPoints) out.meshes.inside++; });

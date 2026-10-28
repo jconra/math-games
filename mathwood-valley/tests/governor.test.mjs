@@ -75,7 +75,8 @@ test('the machine\'s memory: remembered by graphics card, read back with its ban
   globalThis.localStorage = { getItem: (k) => (store.has(k) ? store.get(k) : null), setItem: (k, v) => store.set(k, String(v)), removeItem: (k) => store.delete(k) };
   const { recall, remember } = await import('../world/quality.js');
   assert.equal(recall('Radeon RX 7900 XT'), null);
-  remember('Radeon RX 7900 XT', { v: 'x', scenery: 40, people: 20, band: bandOf(40) });
+  const high = START.scenery.gaming + 1;   // (a rung in the gaming band, wherever the ladder puts it)
+  remember('Radeon RX 7900 XT', { v: 'x', scenery: high, people: 20, band: bandOf(high) });
   remember('Intel(R) UHD Graphics', { v: 'x', scenery: 3, people: 2, band: bandOf(3) });
   assert.equal(recall('Radeon RX 7900 XT').band, 'gaming');
   assert.equal(recall('Intel(R) UHD Graphics').band, 'potato');

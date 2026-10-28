@@ -32,6 +32,9 @@
 //   H.perf(text | null)        the ?perf readout
 //   H.buckle(b, { delay })     a belt buckle just won (save.js countJob / recordLockbox's buckle): a short note with
 //                              the buckle drawn in it, low in the middle, for about three seconds; nothing to click
+//   H.shift({ label, n, of, done }) | H.shift(null)   the shift counter of the job in progress (src/shifts.js), in the
+//                              purse under the gold: 'Sheep healed 4/7' and a pip for each round; done: the day's shift is
+//                              over ('done for today', the pips all lit)
 //   H.dispose()
 //
 // It is all page elements (no 3D), with pointer-events off except on the buttons, so clicks fall through to the valley.
@@ -210,6 +213,7 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
       <div class="bmh-badges"></div>
       <div class="bmh-bag" hidden>${ICON.box}<span></span></div>
       <div class="bmh-bag bmh-goods" hidden>${GOODS_ICON}<span></span></div>
+      <div class="bmh-shift" hidden><span class="bmh-shift-text"></span><span class="bmh-shift-pips" aria-hidden="true"></span></div>
     </div>
     <div class="bmh-top">
       <div class="bmh-compass" aria-hidden="true"><div class="bmh-ticks"></div><div class="bmh-marks"></div><i class="bmh-notch"></i></div>
@@ -269,6 +273,20 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
     bagEl.hidden = !boxes;
     bagEl.querySelector('span').textContent = boxes === 1 ? '1 lock box in your saddlebags' : `${boxes} lock boxes in your saddlebags`;
     const ge = $('.bmh-goods'); ge.hidden = !goods; ge.querySelector('span').textContent = goods || '';
+  }
+  // ── THE SHIFT COUNTER (src/shifts.js): only redrawn when it changes ─────────────────────────────────────────────
+  const shiftEl = $('.bmh-shift');
+  let shiftKey = '';
+  function shift(o) {
+    const key = o ? `${o.label}|${o.n}|${o.of}|${o.done ? 1 : 0}` : '';
+    if (key === shiftKey) return;
+    shiftKey = key;
+    shiftEl.hidden = !o;
+    if (!o) return;
+    const n = Math.min(o.n, o.of);
+    shiftEl.classList.toggle('is-done', !!o.done);
+    shiftEl.querySelector('.bmh-shift-text').textContent = `${o.label} ${n}/${o.of}${o.done ? ' · done for today' : ''}`;
+    shiftEl.querySelector('.bmh-shift-pips').innerHTML = o.of <= 12 ? Array.from({ length: o.of }, (x, k) => `<i class="${k < n ? 'is-on' : ''}"></i>`).join('') : '';
   }
   function pop(text) {
     const p = document.createElement('div');
@@ -464,7 +482,7 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
   const H = {
     el, ruleEl, hintEl, helpEl, jobEl: $('.bmh-job'),
     show(on) { el.classList.toggle('is-hidden', !on); if (!on) { prompt(null); caption(null); if (quiet()) { buckleQ.length = 0; if (buckleBusy && buckleWatch) endBuckle(); } } },
-    purse, toast, prompt, caption, rule, hint, compass, buckle,
+    purse, toast, prompt, caption, rule, hint, compass, buckle, shift,
     touch(on) { if (touchEl.hidden === !on) return; touchEl.hidden = !on; if (promptText) { const t = promptText; promptText = null; prompt(t); } placeBottom(); callHorse(callOn); },
     callHorse,
     perf(text) { perfEl.hidden = !text; if (text) perfEl.textContent = text; },

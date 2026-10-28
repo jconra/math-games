@@ -26,6 +26,9 @@
 //   const SR = makeShootingJob({ W, folk, P, I, camera, canvas, renderer, rider, hud, hob, audio, refresh, onStart, onStop, read })
 //     read: src/audio/readaloud.js's (optional): the counting cards are read out
 //     onStart / onStop: the game hands over the controls while the gun is up, and back
+//     open(): false once the day's shift is done (src/shifts.js): the card that finished it is the last, the gun is put
+//     away by itself, and E by Miss Opal is a word with her (decline(): her polite no, main.js) till it is true again
+//   SR.say(lines, { ms })   Miss Opal says a line (over her head, or in the gun's card while it is up)
 //   SR.update(dt)     each frame, after the player (it places the camera while the gun is up)
 //   SR.draw()         each frame, after the valley is drawn: the six-shooter over it
 //   SR.prompt         the prompt's words when E by Miss Opal would take up the gun, else null;  SR.start() does it
@@ -89,7 +92,7 @@ const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const smooth = (f) => f * f * (3 - 2 * f);
 
 export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer, rider, hud, hob = null, audio = null, refresh = () => {},
-  onStart = () => {}, onStop = () => {}, busy = () => false, scene = W.scene, read = null }) {
+  onStart = () => {}, onStop = () => {}, busy = () => false, scene = W.scene, read = null, open: shiftOpen = () => true, decline = () => {} }) {
   ensureCss();
   const touch = () => !!(I && I.touch) || (typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches);
   const R = makeRange({ W, scene });
@@ -176,10 +179,11 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
     if (state !== 'idle' || J.paused || (P.mode !== 'foot' && P.mode !== 'horse') || busy()) return;
     const at = P.position, st = R.layout.stand;
     const d = Math.min(Math.hypot(at.x - K.x, at.z - K.z), Math.hypot(at.x - st.x, at.z - st.z)) - (P.onHorse ? 1.2 : 0);
-    if (d < TALK.prompt) J.prompt = KEEPER.stand;
+    if (d < TALK.prompt) J.prompt = shiftOpen() ? KEEPER.stand : 'Talk to Miss Opal';   // (the day's shift done: just a word)
   }
   J.start = () => {
     if (state !== 'idle' || !J.prompt || J.paused) return false;
+    if (!shiftOpen()) { decline(); return false; }
     J.prompt = null; state = 'setting'; J.active = true;
     onStart(); hud.prompt(null);
     say.hidden = true; tag.hidden = true; K.talking = null;
@@ -439,6 +443,7 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
     held = null;   // (the shelf glides back to the middle while the next targets are on their way)
     between = true;
     inString++; dots();
+    if (hob) hob.event('rangeCard');   // (a round of the day's shift: src/shifts.js)
     // (the rider's level has brought the next level's cards: a word for it, once the level is found)
     if (wrong === 0 && !helped && !card.q.placing) { const q2 = levelFor(rider, 'range'); if (q2.i > card.q.i && !q2.placing) hud.toast('Nice shooting! Harder numbers next', 'good'); }
     R.clear();
@@ -455,6 +460,7 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
     setTimeout(() => {
       if (disposed || state !== 'aim' || card !== my) return;
       if (stringDone) { inString = 0; N.newString(); dots(); }
+      if (!shiftOpen()) { J.done(); return; }   // (that was the shift's last card: the gun goes back)
       newCard();
     }, (SHOOT.nextCard + (stringDone ? 0.6 : 0)) * 1000);
   }
@@ -567,6 +573,7 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
   J.draw = () => { if (G && (state === 'aim' || state === 'in' || state === 'out')) G.render(renderer); };
 
   J.marks = () => (state === 'idle' ? [{ id: 'range', icon: 'job', x: R.layout.x, z: R.layout.z, label: 'The target range' }] : []);
+  J.say = (lines, o = {}) => keeperSay(lines, o);
   J.speaking = () => !say.hidden;   // (Miss Opal's speech card is on the screen: Old Hob waits his turn on a phone)
   J.tags = () => (card ? R.targets.map((T, i) => { const s = screenOf(T.top), b = screenOf(T.mid); return { n: card.targets[i].n, x: Math.round(b.x), y: Math.round(b.y), tagX: Math.round(s.x), tagY: Math.round(s.y), alive: T.alive, right: rightNow(card, gone).includes(i) }; }) : []);
   J.pick = (n) => { if (!card) return false; const i = card.targets.findIndex((x, k) => x.n === n && R.targets[k].alive); if (i < 0) return false; const b = screenOf(R.targets[i].mid); return fire(b.x, b.y); };

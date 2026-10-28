@@ -9,6 +9,7 @@
 // shakes and the end grain are left as drawn. (The stable keeps the sheet as it is.) o.straight (the general store): the
 // streaks run dead along the strip, more of them and finer, mostly darker, as the grain lines of weathered siding
 export function softenGrain(T, o = {}) {
+  if (o.weathered) return weatherGrain(T, o);   // (the cabins' and the blacksmith's look: below)
   const S = 64, rows = 12, R = (n) => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
   for (const [tex, isN] of [[T.wood, false], [T.woodN, true]]) {
     // (read through a scratch canvas made for reading back, write straight into the sheet)
@@ -41,6 +42,45 @@ export function eraseNails(T) {
   for (const tex of [T.wood, T.woodN]) {
     const g = tex.image.getContext('2d'), band = g.getImageData(212, 0, 26, 768);
     g.putImageData(band, 243, 0);
+    tex.needsUpdate = true;
+  }
+}
+
+// THE WEATHERED GRAIN (the cabins and the blacksmith: softenGrain(T, { weathered: true })): old boards gone silver.
+// Each board strip is blurred along its length (a long blur along the grain keeps the grain's lines and melts what
+// crosses them, so a knot keeps only a small soft core, about 60% less of it), its contrast lowered toward the strip's
+// own mean, its colour moved a third of the way to grey and lifted a little; its bumps flattened the same way. The
+// boards' edges (the strip's outer rows), the shakes and the end grain are left as drawn. Nothing else uses it.
+export function weatherGrain(T, o = {}) {
+  const S = 64, rows = 12, keep = o.knots ?? 0.38, grey = o.grey ?? 0.32, lift = o.lift ?? 1.1, con = o.contrast ?? 0.72, R = 28;
+  for (const [tex, isN] of [[T.wood, false], [T.woodN, true]]) {
+    const c = tex.image, g = c.getContext('2d'), W = c.width, tmp = document.createElement('canvas'); tmp.width = W; tmp.height = S;
+    const tg = tmp.getContext('2d', { willReadFrequently: true });
+    for (let s = 0; s < rows; s++) {
+      tg.clearRect(0, 0, W, S); tg.drawImage(c, 0, s * S, W, S, 0, 0, W, S);
+      const img = tg.getImageData(0, 0, W, S), d = img.data, src = d.slice();
+      // (the strip's mean colour, over its inner rows)
+      const m = [0, 0, 0]; let n = 0;
+      for (let y = 4; y < S - 4; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; m[0] += src[i]; m[1] += src[i + 1]; m[2] += src[i + 2]; n++; }
+      for (let ch = 0; ch < 3; ch++) m[ch] /= n;
+      for (let y = 4; y < S - 4; y++) {
+        const acc = [0, 0, 0];
+        for (let q = -R; q <= R; q++) { const i = (y * W + ((q % W) + W) % W) * 4; acc[0] += src[i]; acc[1] += src[i + 1]; acc[2] += src[i + 2]; }
+        for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * 4, v = [0, 0, 0];
+          for (let ch = 0; ch < 3; ch++) {
+            const b = acc[ch] / (2 * R + 1), mixd = src[i + ch] * keep + b * (1 - keep);
+            v[ch] = isN ? 128 + ((ch < 2 ? mixd : src[i + ch]) - 128) * (ch < 2 ? 0.6 : 1) : m[ch] + (mixd - m[ch]) * con;
+          }
+          if (!isN) { const lum = 0.3 * v[0] + 0.59 * v[1] + 0.11 * v[2]; for (let ch = 0; ch < 3; ch++) v[ch] = (v[ch] + (lum - v[ch]) * grey) * lift; }
+          for (let ch = 0; ch < 3; ch++) d[i + ch] = Math.max(0, Math.min(255, v[ch]));
+          // (slide the window along: add the pixel coming in, drop the one going out, wrapping round the strip)
+          const ia = (y * W + (x + R + 1) % W) * 4, ib = (y * W + ((x - R) % W + W) % W) * 4;
+          for (let ch = 0; ch < 3; ch++) acc[ch] += src[ia + ch] - src[ib + ch];
+        }
+      }
+      g.putImageData(img, 0, s * S);
+    }
     tex.needsUpdate = true;
   }
 }

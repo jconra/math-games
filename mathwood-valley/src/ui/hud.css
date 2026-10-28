@@ -45,6 +45,15 @@
 .bmh-bag { display: flex; align-items: center; gap: 6px; margin-top: 7px; font-size: 13px; color: var(--ink-2); }
 .bmh-bag svg { width: 22px; height: 22px; flex: none; }
 .bmh-bag[hidden] { display: none; }
+/* the shift counter: 'Sheep healed 4/7' and a pip a round (src/shifts.js) */
+.bmh-shift { margin-top: 7px; padding-top: 6px; border-top: 1px solid rgba(226, 173, 76, 0.22); font: 600 13px/1.25 Bitter, Georgia, serif; color: var(--ink); }
+.bmh-shift[hidden] { display: none; }
+.bmh-shift-text { display: block; }
+.bmh-shift-pips { display: flex; gap: 4px; margin-top: 4px; }
+.bmh-shift-pips:empty { display: none; }
+.bmh-shift-pips i { width: 10px; height: 10px; border-radius: 50%; border: 1.5px solid var(--brass); background: transparent; }
+.bmh-shift-pips i.is-on { background: var(--brass-hi); box-shadow: 0 0 4px rgba(243, 197, 107, 0.6); }
+.bmh-shift.is-done .bmh-shift-text { color: var(--good); }
 .bmh-pop { position: absolute; left: 44px; top: 4px; display: flex; align-items: center; gap: 4px; pointer-events: none;
   animation: bmh-pop 1.4s ease-out forwards; }
 .bmh-pop svg { width: 20px; height: 20px; }
@@ -225,6 +234,9 @@
   .bmh-gold b { font-size: 22px; }
   .bmh-gold svg { width: 22px; height: 22px; }
   .bmh-next, .bmh-bag span { display: none; }
+  .bmh-shift { margin-top: 4px; padding-top: 4px; font-size: 12px; }
+  .bmh-shift-pips { margin-top: 3px; gap: 3px; }
+  .bmh-shift-pips i { width: 8px; height: 8px; }
   .bmh-compass { width: 40vw; height: 34px; }
   .bmh-rule-main { font-size: 22px; }
   /* the bottom stacks up from just above the touch buttons and the tools strip over them (src/ui/tools.css): the door
@@ -249,9 +261,12 @@
   .bmh-title { font-size: 14px; }
   .bmh-badges { display: none; }
   .bmh-bag { margin-top: 3px; }
+  .bmh-shift { grid-column: 1 / -1; font-size: 11.5px; }
+  .bmh-shift-pips { display: none; }
   .bmh-top { top: 8px; align-items: stretch; }
   .bmh-compass { width: auto; margin: 0 58px 0 186px; }
   .bmh-job { margin-top: 20px; align-self: center; gap: 6px; }
+  .bmh:has(.bmh-shift:not([hidden])) .bmh-job { margin-top: 36px; }   /* (the purse a line taller with the shift counter) */
   /* the job card and the line under it kept compact, so they cover less of the herd, the flock or the pens' signs: the
      line's heading runs on in front of the reason instead of over it */
   .bmh-rule { min-width: 0; max-width: calc(100vw - 32px); padding: 5px 14px 6px; }

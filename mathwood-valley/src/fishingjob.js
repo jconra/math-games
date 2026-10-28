@@ -24,7 +24,8 @@
 //     lab's sounds); on: the job switch (save.js jobOn 'fishing'): off, the fisherman has no prompt (the dock stays);
 //     speak(text): a line read out (main.js sayLine) for a rider who can't read yet; refresh(): the HUD's purse and the
 //     checklist; hud: for the buckle's note; renderer, camera: to ready the fishing's shaders ahead (compileAsync,
-//     in the background) so opening the dock doesn't stall a frame building them
+//     in the background) so opening the dock doesn't stall a frame building them; onLanded(): a fish landed (a round
+//     of the day's shift, src/shifts.js: main.js puts the rod down once the shift is done)
 //   J.update(dt)        each frame while riding (and, the first time the rod is out, the first card's view drawn ahead)
 //   J.site, J.keeper (his person), J.builder (the open builder, or null: its .handle is the lab's FI handle)
 //   J.where()           { x, z } of the fisherman (the jobs board, the trail)
@@ -67,7 +68,7 @@ export const DOCK = {
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const ease = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 
-export function makeFishingJob({ W, folk, rider, sites, player = () => null, audio = null, on = true, speak = null, refresh = () => {}, hud = null, renderer = null, camera = null }) {
+export function makeFishingJob({ W, folk, rider, sites, player = () => null, audio = null, on = true, speak = null, refresh = () => {}, hud = null, renderer = null, camera = null, onLanded = null }) {
   const J = { builder: null, on };
   const endZ = DOCK.foot + DOCK.len;
   const F = () => fishingOf(rider);
@@ -181,6 +182,7 @@ export function makeFishingJob({ W, folk, rider, sites, player = () => null, aud
       if (markFound(rider, 'place', 'fishing')) saveT = 0.01;
       const b = countJob(rider, 'fish', 1).buckle; if (b) buckles.push(b);
       saveT = DOCK.saveAfter;
+      if (onLanded) try { onLanded(); } catch (e) { console.warn('fishing: the landed fish could not be counted', e); }
     },
   };
 

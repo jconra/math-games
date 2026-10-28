@@ -35,7 +35,9 @@
 // checklist's hideouts still mean the deputy's). A camp emptied is struck once nobody's looking, and a new one is pitched
 // somewhere else in the back woods a few minutes later: never in sight, never near the player.
 //
-//   const LJ = makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, refresh, voice, quiet })
+//   const LJ = makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, refresh, voice, quiet, open, decline })
+//     open(): false once the day's shift is done (src/shifts.js): no loot is loaded till it is true again (decline():
+//     the deputy's polite no, main.js; the card by a camp says so)
 //     voice(kind, who): a recorded line from a townsman ('mystuff', 'thanks': src/audio/shouts.js S.say; who: { at,
 //     male, id }); quiet(): true while another job has the HUD's card (this job's card stays down then); town(): the
 //     town's people (src/townpeople.js) or null: the folks are townsfolk borrowed from it (already walking over, or out
@@ -181,7 +183,8 @@ function lootParts() {
   return PARTS;
 }
 
-export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud, hob = null, refresh = () => {}, voice = null, quiet = () => false, scene = W.scene, audio = null, town = null }) {
+export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud, hob = null, refresh = () => {}, voice = null, quiet = () => false, scene = W.scene, audio = null, town = null,
+  open: shiftOpen = () => true, decline = () => {} }) {
   if (!rider.topics || typeof rider.topics !== 'object') rider.topics = {};
   if (!rider.topics.loot || typeof rider.topics.loot !== 'object') rider.topics.loot = {};
   const Q = makeShares(rider.topics.loot);
@@ -727,11 +730,12 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
   }
 
   // ── LOADING THE LOOT AT A CAMP ─────────────────────────────────────────────────────────────────────────────────
-  let toldNoSaddle = false, toldWhistle = false, toldFull = false;
+  let toldNoSaddle = false, toldWhistle = false, toldFull = false, toldDone = false;
   function tryLoad() {
     const st = nearS, d = st ? distTo(st) : Infinity;
-    if (d > LOOT.load + 8) { toldNoSaddle = false; toldWhistle = false; toldFull = false; }
+    if (d > LOOT.load + 8) { toldNoSaddle = false; toldWhistle = false; toldFull = false; toldDone = false; }
     if (!st || d > LOOT.load) return false;
+    if (!shiftOpen() && LJ.phase !== 'carrying') { if (!toldDone) { toldDone = true; decline(); } return false; }   // (the day's shift done: it waits for tomorrow)
     const g = st.guard;
     if (g && (g.state === 'stand' || g.state === 'throw')) return false;   // (he runs as you come in: next frame)
     if (LJ.phase === 'carrying') { if (!toldFull) { toldFull = true; hud.toast("Your horse is loaded already: take this loot to the sheriff's office first, then come back for this"); } return false; }
@@ -762,6 +766,7 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
     if (nearS) {
       const g = nearS.guard && (nearS.guard.state === 'stand' || nearS.guard.state === 'throw');
       const main = nearS.kind === 'woods' ? `A gang camp in ${AREAS[nearS.area] || 'the back woods'}` : `The gang's cache: ${nearS.def.name}`;
+      if (!shiftOpen()) return { main, sub: 'Done for today: the deputy says leave it till tomorrow · or ask for more work at the jobs board' };
       return { main, sub: g ? 'A guard sits his horse by it: rope him, or ride straight in' : 'Ride in close to load the loot on your horse' };
     }
     return null;

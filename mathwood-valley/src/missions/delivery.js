@@ -35,7 +35,8 @@
 //     camps: makeCamps(...); onStart / onStop: the slip opening and closing (the game holds the keys and the round-up
 //     meanwhile); quiet(): true while another job wants the job card (the herd, the farm, the store's counter)
 //     say(campId, text): a foreman's words go in the job folk's speech card over his head (src/jobfolk.js; false: not
-//     said there, so they show as a note at the bottom as before)
+//     said there, so they show as a note at the bottom as before); open(): false once the day's shift is done
+//     (src/shifts.js): the foremen give no new orders till it is true again (decline(camp): his polite no, main.js)
 //   DL.update(dt)       each frame, after the player
 //   DL.prompt           the words for the door prompt while by a foreman ('Take an order from Dusty'), or null
 //   DL.talk()           E by the foreman (main.js calls it when the prompt is DL's)
@@ -83,7 +84,8 @@ export const DELIVERY = {
   longMost: 4,          // an order's sums may need long work up to this many points past the level's school year
 };
 
-export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, refresh = () => {}, onStart = () => {}, onStop = () => {}, quiet = () => false, say = null, work = null }) {
+export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, refresh = () => {}, onStart = () => {}, onStop = () => {}, quiet = () => false, say = null, work = null,
+  open: shiftOpen = () => true, decline = () => {} }) {
   // a foreman's words: in the speech card over his head (say(campId, text): src/jobfolk.js), else a note at the bottom
   const speak = (c, text, kind) => { if (!(say && say(c.id, text))) hud.toast(`${c.foreman.name}: ${text}`, kind); };
   if (!rider.topics || typeof rider.topics !== 'object') rider.topics = {};
@@ -308,6 +310,7 @@ export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, r
       else speak(c, `Finish that order for ${camp.short} first, partner.`, 'warn');
       return true;
     }
+    if (!shiftOpen()) { decline(c); return true; }   // (the day's shift done: no new order today)
     if (!P.canRide) { speak(c, 'Need a saddled horse to haul crates. The stable in town sells horses and saddles.', 'warn'); if (hob) hob.event('deliveryNoSaddle'); return true; }
     newOrder(c);
     return true;
@@ -403,7 +406,7 @@ export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, r
     const out = [];
     if (phase === 'ordered' || phase === 'working' || phase === 'robbed' || phase === 'waitHorse') out.push({ id: 'store', icon: 'job', x: store.door.x, z: store.door.z, label: 'The general store: make up the order' });
     else if (phase === 'carrying' || phase === 'unloading') out.push({ id: 'camp', icon: 'job', x: camp.x, z: camp.z, label: `${camp.name}: the delivery` });
-    else if (P.canRide) {   // no order: the nearest camp, so a rider can find the work
+    else if (P.canRide && shiftOpen()) {   // no order: the nearest camp, so a rider can find the work (none once the day's shift is done)
       let best = null, bd = Infinity; for (const c of camps.list) { const d = Math.hypot(c.x - P.position.x, c.z - P.position.z); if (d < bd) { bd = d; best = c; } }
       if (best && bd > 30) out.push({ id: 'camps', icon: 'job', x: best.x, z: best.z, label: `${best.name}: supplies to haul` });
     }
@@ -428,7 +431,7 @@ export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, r
       } else lastNear = null;
       // (just after a drop-off, still mounted, the kid most likely wants to get down: E is left to do that)
       if (near && phase === 'none' && P.onHorse && performance.now() - droppedAt < DELIVERY.afterDrop * 1000) near = null;
-      if (near) DL.prompt = phase === 'none' ? `Take an order from ${near.foreman.name}` : `Talk to ${near.foreman.name}`;
+      if (near) DL.prompt = phase === 'none' && shiftOpen() ? `Take an order from ${near.foreman.name}` : `Talk to ${near.foreman.name}`;
     }
     // the store: pulling up out front makes up the order (or loads it again after a robbery)
     if (store && (phase === 'ordered' || phase === 'robbed') && !DL.active && P.enabled) {

@@ -96,8 +96,20 @@ export function makeTownPeople({ W, folk, camera, player = () => null, jobs = {}
   for (const [id, b] of [['store', P.store], ['saloon', P.saloon], ['sheriff', P.sheriff], ['stable', P.stable], ...homes.map((h) => [h.id, h])]) {
     if (!b || !b.door) continue;
     const { o } = frame(b);
-    TP.doors.push({ id, kind: 'door', x: b.door.x, z: b.door.z, face: b.rot, step: { x: b.door.x - o.x * TOWN.doorStep, z: b.door.z - o.z * TOWN.doorStep }, home: /^home/.test(id) ? id : null });
+    TP.doors.push({ id, item: b.id || id, kind: 'door', x: b.door.x, z: b.door.z, face: b.rot, step: { x: b.door.x - o.x * TOWN.doorStep, z: b.door.z - o.z * TOWN.doorStep }, home: /^home/.test(id) ? id : null });
   }
+  // a code-built building's doors are real (world/objects/doorkeeper.js): its door's spot just outside its doorway and
+  // the step just inside it, and they push the door open going through (once the buildings are made)
+  const CODE = W.V && W.V.CODE;
+  const fitDoors = () => {
+    if (!CODE || !CODE.entrance) return;
+    for (const d of TP.doors) {
+      const e = CODE.entrance(d.item); if (!e) continue;
+      Object.assign(d, { x: e.x + e.ox * TOWN.doorOut, z: e.z + e.oz * TOWN.doorOut, face: Math.atan2(e.ox, e.oz), step: { x: e.x - e.ox * TOWN.doorIn, z: e.z - e.oz * TOWN.doorIn }, code: { x: e.x, z: e.z } });
+    }
+  };
+  fitDoors(); if (CODE && CODE.ready) CODE.ready.then(fitDoors);
+  const push = (d) => { if (d && d.code && CODE && CODE.doors) CODE.doors.pass(d.code.x, d.code.z, TOWN.doorWalk + 0.4); };
   const doorOf = (id) => TP.doors.find((d) => d.id === id) || null;
   const nearDoor = (x, z, d) => TP.doors.some((q) => Math.hypot(q.x - x, q.z - z) < d);
   // the places people gather
@@ -222,6 +234,7 @@ export function makeTownPeople({ W, folk, camera, player = () => null, jobs = {}
     r.x = door.step.x; r.z = door.step.z; r.y = W.heightAt(r.x, r.z); r.yaw = door.face; r.out = true; r.state = 'appear'; r.t = 0; r.fade = 0;
     r.p.fade = 0; r.p.root.visible = true; play(r, 'Walk', { fade: 0, speed: walkSpeed(r, 'Walk') }); placeBody(r);
     r.door = door; door.busy = now() + 1.1; view(); log(r, 'appear', why, seen(door.x, door.z));
+    push(door);   // (a real door: pushed open from inside)
     return true;
   }
   function fromRoad(r, edge) {
@@ -280,7 +293,7 @@ export function makeTownPeople({ W, folk, camera, player = () => null, jobs = {}
   function arrive(r) {
     const g = r.goal; r.route = null;
     if (!g) { r.state = 'stay'; r.until = rnd(4, 9); play(r, 'Idle', { fade: 0.3 }); return; }
-    if (g.kind === 'door') { r.state = 'enter'; r.t = 0; r.door = g.door; play(r, 'Walk', { fade: 0.2, speed: walkSpeed(r, 'Walk') }); return; }
+    if (g.kind === 'door') { r.state = 'enter'; r.t = 0; r.door = g.door; push(g.door); play(r, 'Walk', { fade: 0.2, speed: walkSpeed(r, 'Walk') }); return; }
     if (g.kind === 'road') { r.state = 'away'; r.t = 0; r.edge = g.edge; return; }
     if (g.kind === 'wait') { r.state = 'stay'; r.until = 2; play(r, 'Idle', { fade: 0.3 }); return; }   // (an expected person: waits for the job)
     if (g.kind === 'aside') { r.goal = null; r.state = 'stay'; r.until = rnd(1.5, 4); play(r, 'Idle', { fade: 0.3 }); return; }   // (stepped out of a wagon's way)
@@ -436,9 +449,10 @@ export function makeTownPeople({ W, folk, camera, player = () => null, jobs = {}
     log(r, 'back', 'job', false);
   };
   // a job will want people soon: they start walking there (a place a few steps off `to`, so the job's own walk is short)
-  TP.expect = ({ key, to, names = null, n = 1, notDoor = null }) => {
+  // (exact: waiting on `to` itself, not a couple of steps off it: the end of the store's line)
+  TP.expect = ({ key, to, names = null, n = 1, notDoor = null, exact = false }) => {
     let e = TP.expecting.get(key);
-    if (!e || Math.hypot(e.to.x - to.x, e.to.z - to.z) > 4) { e = { to, names: new Set(), until: now() + TOWN.expect }; TP.expecting.set(key, e); }
+    if (!e || Math.hypot(e.to.x - to.x, e.to.z - to.z) > 4) { e = { to, names: new Set(), until: now() + TOWN.expect, exact }; TP.expecting.set(key, e); }
     e.until = now() + TOWN.expect;
     let have = e.names.size;
     while (have < n) {
@@ -456,7 +470,7 @@ export function makeTownPeople({ W, folk, camera, player = () => null, jobs = {}
     // faded as they were. Left as it was, the fade stayed there and they walked about see-through)
     if (r.fade < 1) r.fadeIn = true;
     const e = TP.expecting.get(key), i = e ? [...e.names].indexOf(r.name) : 0, a = i * 1.9 + 0.6;
-    let x = to.x + Math.sin(a) * 2.6, z = to.z + Math.cos(a) * 2.6; if (!free(x, z)) { x = to.x; z = to.z; }
+    let x = to.x + Math.sin(a) * 2.6, z = to.z + Math.cos(a) * 2.6; if (!free(x, z) || (e && e.exact && free(to.x, to.z))) { x = to.x; z = to.z; }
     // (never waiting out in the road: the store's place is in the street in front of its door. The nearest place round
     // it a little further off that is clear of the road, if there is one)
     if (!clearOfRoad(x, z)) {
@@ -477,6 +491,12 @@ export function makeTownPeople({ W, folk, camera, player = () => null, jobs = {}
       const d = Math.hypot(at.x - P.store.door.x, at.z - P.store.door.z), was = lastStore ? Math.hypot(lastStore.x - P.store.door.x, lastStore.z - P.store.door.z) : d;
       lastStore = { x: at.x, z: at.z };
       if (d < 7 || (d < 16 && was - d > 0.02)) { const o = frame(P.store).o; TP.expect({ key: 'store', to: { x: P.store.door.x + o.x * 5.5, z: P.store.door.z + o.z * 5.5 }, n: 2, names: storeNames(SJ), notDoor: 'store' }); }
+    }
+    // (the counter open: one more waiting at the end of its line, along the store's front away from the camera, so a
+    // quick answer never waits on somebody walking over from a door across the town: src/missions/store.js's line)
+    if (SJ && SJ.active && P.store) {
+      const { o, s } = frame(P.store);
+      TP.expect({ key: 'storeLine', to: { x: P.store.door.x + o.x * 2.9 + s.x * 4.2, z: P.store.door.z + o.z * 2.9 + s.z * 4.2 }, n: 1, names: storeNames(SJ), notDoor: 'store', exact: true });
     }
     const LJ = job('loot'), want = LJ && LJ.wanted ? LJ.wanted() : null;
     if (want && want.names && want.names.length) {
@@ -558,16 +578,18 @@ export function makeTownPeople({ W, folk, camera, player = () => null, jobs = {}
           if (d && (!seen(d.x, d.z) || (r.held = (r.held || 0) + 1) > 6)) { r.held = 0; if (emerge(r, d)) { out++; r.after = { kind: 'think' }; } } else r.until = rnd(3, 7);
           break;
         }
-        case 'appear': {   // (out of a door: from the foot of the steps to its spot, dissolving in)
-          r.t += dt; const k = Math.min(1, r.t / TOWN.door), d = r.door;
-          r.fade = k; r.p.fade = k;
+        case 'appear': {   // (out of a door: from the foot of the steps to its spot, dissolving in; through a real door,
+                           // walked out as it swings open, there as soon as they are past the doorway)
+          r.t += dt; const d = r.door, k = Math.min(1, r.t / (d.code ? TOWN.doorWalk : TOWN.door));
+          r.fade = d.code ? Math.max(0, Math.min(1, (k - 0.12) / 0.3)) : k; r.p.fade = r.fade;
           r.x = d.step.x + (d.x - d.step.x) * k; r.z = d.step.z + (d.z - d.step.z) * k; r.yaw = d.face;
           if (k >= 1) { const a = r.after; r.after = null; if (a && a.kind === 'expect') sendTo(r, a.to, a.key); else { r.fresh = true; think(r); } }
           break;
         }
-        case 'enter': {    // (in through a door: from its spot to the foot of the steps, dissolving out)
-          r.t += dt; const k = Math.min(1, r.t / TOWN.door), d = r.door;
-          r.fade = 1 - k; r.p.fade = r.fade;
+        case 'enter': {    // (in through a door: from its spot to the foot of the steps, dissolving out; through a real
+                           // door, walked in as it swings open, gone once past the doorway, and it swings shut behind)
+          r.t += dt; const d = r.door, k = Math.min(1, r.t / (d.code ? TOWN.doorWalk : TOWN.door));
+          r.fade = d.code ? Math.min(1, (1 - k) / 0.4) : 1 - k; r.p.fade = r.fade;
           r.x = d.x + (d.step.x - d.x) * k; r.z = d.z + (d.step.z - d.z) * k; r.yaw = turnTo(r.yaw, d.face + Math.PI, dt * 8);
           if (k >= 1) goInside(r, d.id, 'door');
           break;

@@ -171,7 +171,7 @@ const DAY = { hour: 9 + 40 / 60, t: 9 + 40 / 60, auto: false, dayMin: 12, season
 // made while the title shows, each walkable; their shaders take the hill shade and the street lamps' light as the
 // models' do (FOLK_SHADE, made further down). ?tripo in the address: the old Tripo models instead (to compare)
 const CODE = typeof location !== 'undefined' && new URLSearchParams(location.search).has('tripo') ? null : makeCodeBuildings({ shade: (sh) => FOLK_SHADE(sh), tier: () => QUAL.tier,
-  renderer, scene: () => scene, others: () => (FENCE.near ? FENCE.near() : null) });   // (renderer: the insides made ready and the windows' pictures taken; others: what opens a door besides the player)
+  renderer, scene: () => scene });   // (renderer: the insides made ready and the windows' pictures taken)
 // (Mathwood Valley) the lawn following the camera: see lawnFrame (made here, before anything can lay the lawn)
 const LAWN_GO = { ahead: 0.2, wide: 1.3, near: 0.45, edge: 0.3, step: 0.08, job: null, at: new THREE.Vector3(1e9, 0, 0), cam: new THREE.Vector3(1e9, 0, 0), cache: {}, born: new Map(), lays: 0, ms: 0 };
 const lawnKey = (x, z) => Math.round(x * 16) * 65536 + Math.round(z * 16);

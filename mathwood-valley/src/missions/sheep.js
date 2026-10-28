@@ -18,8 +18,10 @@
 // For a rider who can't read yet (skill.js readAloud) a sheep's sum is read out (the browser's voice) as her bottles
 // come up: "5 plus 1 equals 6. Is that right?"
 //
-//   const SH = makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hud, hob, refresh, defer })
+//   const SH = makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hud, hob, refresh, defer, open, left })
 //     defer(at): true while another farm job has the player (the pig yard, say): the sheep job's card and help step aside
+//     open(): false once the day's shift is done (src/shifts.js): no new sums till it is true again, and the card says so;
+//     left(): the sheep still to heal in the shift (a flock has no more sick sheep than that)
 //   SH.update(dt)       each frame, after P.update
 //   SH.paused = true    a panel is open (the bottles and the help are put away, the ring hidden)
 //   SH.near             true while the player is at the sheep pasture (the job's card is up)
@@ -135,7 +137,7 @@ const BOTTLE = (n) => `<svg viewBox="0 0 40 64" aria-hidden="true"><rect x="14" 
   <rect x="9" y="33" width="22" height="16" rx="2" fill="#f1e4c6" stroke="#7a5530" stroke-width="1"/><path d="M12 41h16" stroke="#7a5530" stroke-width="1.6"/>
   <path d="M11 22c2-2 4-3 6-3" stroke="rgba(255,255,255,0.45)" stroke-width="2" fill="none" stroke-linecap="round"/></svg>`;
 
-export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hud, hob, refresh = () => {}, scene = W.scene, defer = () => false }) {
+export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hud, hob, refresh = () => {}, scene = W.scene, defer = () => false, open = () => true, left: shiftLeft = () => Infinity }) {
   const L = farm.layout, PA = L.sheep, area = L.area(PA, 2.2);
   const R = makeTargetRing({ scene, camera, canvas, W });
   ensureCss(); ensureChartCss(); ensureNumberLineStyles();
@@ -163,7 +165,7 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
       s.tie = makeTie(); scene.add(s.tie);
       flock.push(s);
     }
-    newFlock();
+    if (open()) newFlock(); else showCard();   // (the day's shift already done: the flock grazes, every sum put away)
   }).catch((e) => console.warn('sheep: the flock could not load', e));
 
   function card(s) {
@@ -177,6 +179,8 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
   // ── A FLOCK'S SUMS ─────────────────────────────────────────────────────────────────────────────────────────────
   function newFlock({ sick = null } = {}) {
     closePicker(); endHelp(); hint(null);
+    // (the shift's last sheep: no more sick ones than the shift has left, so the shift ends with the flock healed)
+    { const n = shiftLeft(); if (sick == null && Number.isFinite(n) && n >= 1 && n < 2) sick = 1; }
     // (the rider's level on the sheep's ladder, src/levels/place/sheep.js: the whole flock is made at it)
     const q = levelFor(rider, 'sheep'); saveRider(rider);
     flockN++;
@@ -190,7 +194,9 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
   }
   const sickLeft = () => (cur ? flock.filter((s) => s.item && s.item.sick && !s.healed).length : 0);
   function showCard() {
-    if (!SH.near || !cur) return;   // (away from the farm the round-up's card is up)
+    if (!SH.near) return;   // (away from the farm the round-up's card is up)
+    if ((!cur || cur.done) && !open()) { hud.rule({ kind: 'job', main: 'Done for today', sub: 'The whole flock is on the mend · back at sunrise, or ask for more work at the jobs board' }); return; }
+    if (!cur) return;
     if (cur.done) { hud.rule({ main: 'Flock healed!', sub: 'New sums coming up…' }); return; }
     const left = sickLeft(), helpBtn = helpButton();
     hud.rule({
@@ -400,7 +406,10 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
       else { endHelp(); closePicker(); hud.rule(null); hud.hint(null); hintT = 0; }
     }
     if (hintT > 0 && (hintT -= dt) <= 0) hud.hint(null);
-    if (nextT > 0 && (nextT -= dt) <= 0) newFlock();
+    // (a new set of sums once the last flock has had its moment; none while the day's shift is done: more work asked for
+    // at the jobs board, or a new day, brings them)
+    if (nextT <= 0 && flock.length && (!cur || cur.done) && open()) nextT = 0.5;
+    if (nextT > 0 && (nextT -= dt) <= 0) { if (open()) newFlock(); else { nextT = -1; showCard(); } }
 
     // F (or Space on foot, or the Rope button) gives medicine to the ringed sheep (only read at the farm: away from it,
     // the press is left for the job the player is at, the wagon's bandits or the gang's guard)

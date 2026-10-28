@@ -61,6 +61,9 @@
 //   WJ.targets        the riders' records { r (actors/riders.js), n, text, good, state, label, person }
 //   WJ.throwAt(rec)   rope this one (as a click on it does)
 //   WJ.start(), WJ.stop({ away })   start now (dev, or E by the driver) / stop (the pause menu; away: rode off)
+//   (opts.open(): false once the day's shift is done, src/shifts.js: the gang that finished it is the last, the wagon
+//   pulls up there, and it doesn't roll again till it is true (opts.decline(): the driver's polite no, main.js). The
+//   hold-ups on the long roads are a call for help, never a shift's: they go on as ever)
 //   WJ.rig, WJ.phase  the wagon (src/wagon.js's, or null) and the job's state ('loading' | 'waiting' | 'on' | 'stopped')
 //   WJ.newWave()      a new gang now (dev)
 //   WJ.tieAt(x, z)    (dev and rigs) a bandit pulled down and tied there now: he gets up and walks off to the sheriff's
@@ -369,7 +372,8 @@ function makeRail() {
 // ── ONE GANG ROUND ONE WAGON: the job's own wagon (kind 'job'), or a wagon of the traffic held up on the long roads
 // (kind 'ambush'; hold: { T (the traffic), t (the traveller held up), road (makeOpenRoad, the way it goes), onEnd(how),
 // howTo() (the first hold-up a ride: how it goes, from Old Hob), voice (the driver as a voice: shouts.js) })
-function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, audio = null, refresh = () => {}, times = null, quiet = () => false, wagonLib = null, read = null, kind = 'job', hold = null }) {
+function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, audio = null, refresh = () => {}, times = null, quiet = () => false, wagonLib = null, read = null, kind = 'job', hold = null,
+  open: shiftOpen = () => true, decline = () => {} }) {
   const ambush = kind === 'ambush';
   const scene = W.scene, road = ambush ? hold.road : makeRoad(ROAD_POINTS);
   const R = makeTargetRing({ scene, camera, canvas, W });
@@ -629,7 +633,8 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
     // (no "Done for now" button: riding away from the wagon stops the job, as the pause menu's "Let the wagon wait" does)
     if (state !== 'on') {
       if (ambush) { if (ended === 'safe' && doneT > 0) rule({ main: 'The wagon rolls on safe!', sub: 'The driver is much obliged to you' }); return; }
-      if (arrived) { rule({ main: 'Safe at the end of the road!', sub: 'Ride along with the driver again when you\'re ready' }); return; }
+      if (!shiftOpen()) { rule({ kind: 'job', main: 'Done for today', sub: "Gus's freight is safe · back at sunrise, or ask for more work at the jobs board" }); return; }
+    if (arrived) { rule({ main: 'Safe at the end of the road!', sub: 'Ride along with the driver again when you\'re ready' }); return; }
       rule({ main: 'Protect the wagon', sub: state === 'stopped' ? 'The wagon waits here. Ride along with the driver when you\'re ready' : 'Ride up to the wagon to set off' }); return;
     }
     const togo = trip ? (trip.left > 2 ? `${Math.round(trip.left)} m to the end of the road` : 'Nearly there…') : 'More road ahead…';
@@ -1168,6 +1173,17 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
     for (const rec of recs) if (rec.wave === w && free(rec)) { rec.state = 'leave'; setNumber(rec, null); }
     if (music) music.action(false);
     nextWaveT = trip && trip.left < TRIP.quiet ? -1 : WAGONJOB.nextWave;   // (the last stretch of a trip is quiet)
+    if (!shiftOpen()) { rest(); return; }   // (that was the shift's last gang: the wagon pulls up here)
+    showCard();
+  }
+  // the day's shift done: the wagon pulls up where it is, safe (the driver's thank-you is the shift's: src/shiftkeeper.js),
+  // and rests there till the shift opens again
+  function rest() {
+    state = 'stopped'; WJ.on = false; trip = null; arrived = false;
+    endHelp(); hint(null); hideRail();
+    for (const rec of recs) if (free(rec)) { rec.state = 'leave'; setNumber(rec, null); }
+    wave = null; WJ.wave = null; nextWaveT = -1;
+    if (music) music.action(false);
     showCard();
   }
   // the job's wagon pulled up at the end of its trip, safe: the driver's thank-you (the job folk's, src/jobfolk.js, with
@@ -1239,6 +1255,7 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
   // ── STARTING AND STOPPING ──────────────────────────────────────────────────────────────────────────────────────
   WJ.start = () => {
     if (!kit || state === 'on' || ambush) return false;
+    if (!shiftOpen()) { decline(); return false; }   // (the day's shift done: the driver's polite no)
     state = 'on'; WJ.on = true; s = s || 0;
     trip = { left: tripLeft(s, road.length), caught: 0 }; arrived = false;   // (on to the far end's mark)
     nextWaveT = WAGONJOB.firstWave;
@@ -1362,7 +1379,7 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
       // (the "rolls on safe" card a few seconds, then down: the hold-up is over)
       if (doneT > 0 && (doneT -= dt) <= 0 && ownCard && hud.ruleEl && !hud.ruleEl.hidden && (hud.ruleEl.textContent || '').includes(ownCard)) rule(null);
     } else {
-      if (state === 'waiting' && dW < WAGONJOB.startNear) WJ.start();
+      if (state === 'waiting' && dW < WAGONJOB.startNear && shiftOpen()) WJ.start();
       // (rode away: the job ends, nothing lost; riding on up the road ahead of the wagon is still riding with it, so that
       // is given much more room)
       let up = (P.position.x - wp.x) * Math.sin(wagon.heading) + (P.position.z - wp.z) * Math.cos(wagon.heading) > 0;

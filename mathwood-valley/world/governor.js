@@ -88,6 +88,10 @@ export const DIALS = {
   // (each inside part's priority: objects/codebuild.js PROP_PRI; potato keeps to the rooms and what a walker goes round)
   insideDetail: { label: 'Inside detail', lane: 'scenery', live: 'live', about: 'the code-built buildings\' insides loaded up to this priority: 1 the rooms, counters, shelves and furniture; 2 the goods, barrels and crates; 3 the clutter and the pictures on the walls',
     levels: [{ name: 'needed', v: 1 }, { name: 'normal', v: 2 }, { name: 'all', v: 3 }] },
+  // (a window's view arc, world/objects/codebuildings.js ARC: the room behind the glass loaded, in 3D, as the player
+  // comes into the arc in front of it looking that way; else the picture taken of it)
+  windowArc: { label: 'Window view', lane: 'scenery', live: 'live', about: 'what the code-built buildings\' see-through windows show in front of them: the picture taken of the room, the room itself with its priority-1 parts, or the whole room',
+    levels: [{ name: 'pictures', v: 0 }, { name: 'rooms', v: 1 }, { name: 'full', v: 3 }] },
   // (look: which HORSE_LOOK distances the new horse keeps (src/actors/horses.js); player: the player's own horse, the old
   // pack horse or the new one; pen: how many horses in the pen behind the stable (src/horsepen.js, ~22k triangles each up
   // close), penFar: the pen's horses always in their far look; every: every horse in the valley the new one (the road
@@ -132,10 +136,10 @@ export const LADDERS = {
   // the slow lane: the resolution's big jumps where a band begins (each is most of a fill-bound machine's frame)
   scenery: [
     ['grass', 1], ['ground', 1], ['stones', 1], ['horse', 1], ['fences', 1], ['ratio', 1], ['sky', 1], ['trees', 1], ['lawn', 1],
-    ['ratio', 2], ['shadows', 1], ['grass', 2], ['ground', 2], ['stones', 2], ['beams', 1], ['props', 1], ['outsides', 1], ['insideDetail', 1], ['grass', 3], ['lawn', 2],
+    ['ratio', 2], ['shadows', 1], ['grass', 2], ['ground', 2], ['stones', 2], ['beams', 1], ['props', 1], ['outsides', 1], ['insideDetail', 1], ['windowArc', 1], ['grass', 3], ['lawn', 2],
     ['ground', 3], ['trees', 2], ['shadows', 2], ['horse', 2], ['fences', 2], ['stones', 3], ['ratio', 3],
     '|normal',
-    ['grass', 4], ['trees', 3], ['lawn', 3], ['shadows', 3], ['ground', 4], ['grass', 5], ['shadows', 4], ['horse', 3], ['outsides', 2], ['insideDetail', 2], ['fences', 3], ['ratio', 4],
+    ['grass', 4], ['trees', 3], ['lawn', 3], ['shadows', 3], ['ground', 4], ['grass', 5], ['shadows', 4], ['horse', 3], ['outsides', 2], ['insideDetail', 2], ['windowArc', 2], ['fences', 3], ['ratio', 4],
     '|gaming',
     ['grass', 6], ['lawn', 4], ['trees', 4], ['shadows', 5], ['grass', 7], ['horse', 4], ['outsides', 3], ['lawn', 5], ['trees', 5],
   ],
@@ -509,7 +513,7 @@ export function makeGovernor({ renderer, quality, W = null } = {}) {
     box.className = 'mv-gov';
     box.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:27;max-width:min(600px,calc(100vw - 16px));font:11px/1.35 ui-monospace,Menlo,monospace;color:#eef3df;background:rgba(0,0,0,.58);padding:6px 8px;border-radius:6px;pointer-events:none;white-space:pre-wrap';
     document.body.appendChild(box);
-    const short = { ratio: 'res', shadows: 'shadow', grass: 'grass', lawn: 'lawn', stones: 'stones', trees: 'trees', ground: 'ground', sky: 'clouds', beams: 'beams', props: 'props', outsides: 'outsides', insideDetail: 'inside', horse: 'horse', fences: 'fences', travellers: 'road', wagons: 'wagons', townsfolk: 'town', chickens: 'hens', crowd: 'far' };
+    const short = { ratio: 'res', shadows: 'shadow', grass: 'grass', lawn: 'lawn', stones: 'stones', trees: 'trees', ground: 'ground', sky: 'clouds', beams: 'beams', props: 'props', outsides: 'outsides', insideDetail: 'inside', windowArc: 'windows', horse: 'horse', fences: 'fences', travellers: 'road', wagons: 'wagons', townsfolk: 'town', chickens: 'hens', crowd: 'far' };
     const paint = () => {
       if (disposed) return;
       boxT = setTimeout(paint, 500);
