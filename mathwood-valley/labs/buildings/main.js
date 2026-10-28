@@ -62,7 +62,7 @@ const state = {
   ...RECIPE_DEFAULTS, horses: [...RECIPE_DEFAULTS.horses],
   doors: true, doorsOpen: true, lamps: true, time: 'day', props: true, showHorses: true, quality: 'gaming', az: 200,
   owned: { bay: true, donkey: false, chestnut: false, palomino: false, white: false, midnight: false },
-  building: ({ stable: 'stable', store: 'store', saloon: 'saloon', cabin: 'cabin', blacksmith: 'blacksmith', barn: 'barn', windpump: 'windpump' })[new URLSearchParams(location.search).get('b')] || 'sheriff',
+  building: ({ stable: 'stable', sheriff: 'sheriff', store: 'store', saloon: 'saloon', cabin: 'cabin', blacksmith: 'blacksmith', barn: 'barn', windpump: 'windpump' })[new URLSearchParams(location.search).get('b')] || 'saloon',   // (the saloon first: the town's showpiece)
   sh: { ...SHERIFF_DEFAULTS }, st: { ...STORE_DEFAULTS }, sa: { ...SALOON_DEFAULTS }, ca: { ...CABIN_DEFAULTS }, bs: { ...BS_DEFAULTS }, bn: { ...BARN_DEFAULTS }, wp: { ...WINDPUMP_DEFAULTS }, jailDoor: false,
 };
 // THE BUILDINGS: what the panel and the rebuild need of each
@@ -92,6 +92,9 @@ const BUILDINGS = {
   barn: { label: 'Barn', paints: BARN_PAINTS, recipe: () => barnRecipe(state.bn), r: () => state.bn, loading: 'Raising the barn…', sun: { day: 34 }, woodBump: 0.8, calmGrain: { weathered: true } },
   windpump: { label: 'Wind pump', paints: { none: { label: 'None (bare wood)' } }, recipe: () => windpumpRecipe(state.wp), r: () => state.wp, loading: 'Raising the tower…', sun: { day: 34 }, woodBump: 0.75, calmGrain: { weathered: true } },
 };
+// the buildings in the order the panel lists them and Next steps through them: the showpieces first, the cabins (eleven
+// designs, Next steps through each) and the wind pump last
+const ORDER = ['saloon', 'store', 'stable', 'sheriff', 'blacksmith', 'barn', 'cabin', 'windpump'];
 const BLD = () => BUILDINGS[state.building];
 // how paint wears, for a building that doesn't say (parts.js LU: the stable's and the sheriff's look)
 const PAINT_LOOK = { uPaintGrain: 0, uPeelSoft: 0.08, uEdgePeel: 0, uLapShadow: 0.42, uLapLip: 0, uNail: 1, uSignKeep: 0.25, uStreakW: 1, uFlake: 0, uLapUnder: 1 };
@@ -420,9 +423,13 @@ function placeHorses() {
 // now and then a horse shifts to its other idle (a toss of the head) and back; each frame its head is turned its own way
 // (about the upright, at the head's own joint, on top of the clip)
 const _pq = new THREE.Quaternion(), _yq = new THREE.Quaternion(), _nq = new THREE.Quaternion(), _up = new THREE.Vector3(0, 1, 0);
+// (the head put back as the clip last left it before the mixer runs: the mixer only writes a bone whose value has
+// changed, so a head held still by the clip kept last frame's turn and the next went on top: the heads spun round)
 function tickHorses(dt) {
   for (const h of horses) {
+    if (h.head && h.headClip) h.head.quaternion.copy(h.headClip);
     h.a.update(dt);
+    if (h.head) (h.headClip || (h.headClip = new THREE.Quaternion())).copy(h.head.quaternion);
     h.next -= dt;
     if (h.next < 0 && !h.still) {
       const pick = h.a.clip === 'Idle' && h.a.clips.includes('Idle_2') ? 'Idle_2' : 'Idle';
@@ -557,7 +564,7 @@ function buildPanel() {
   const forSale = Object.keys(PRICES.horse), R = cur(), kind = state.building, sheriff = kind === 'sheriff', mortar = kind !== 'stable';
   panel.innerHTML = `<h1>Building Lab</h1><p class="sub">The town's buildings built from parts in code: walls, roof, doors and all, ready to walk into. <a href="../">All labs</a></p>
   <details class="sec" open><summary>Building</summary><div class="body">
-    <div class="picks"><button class="btn${kind === 'stable' ? ' on' : ''}" data-bld="stable">Stable</button><button class="btn${sheriff ? ' on' : ''}" data-bld="sheriff">Sheriff's office</button><button class="btn${kind === 'store' ? ' on' : ''}" data-bld="store">General store</button><button class="btn${kind === 'saloon' ? ' on' : ''}" data-bld="saloon">Saloon</button><button class="btn${kind === 'cabin' ? ' on' : ''}" data-bld="cabin">Cabins</button><button class="btn${kind === 'blacksmith' ? ' on' : ''}" data-bld="blacksmith">Blacksmith</button><button class="btn${kind === 'barn' ? ' on' : ''}" data-bld="barn">Barn</button><button class="btn${kind === 'windpump' ? ' on' : ''}" data-bld="windpump">Wind pump</button></div>
+    <div class="picks">${ORDER.map((k) => `<button class="btn${kind === k ? ' on' : ''}" data-bld="${k}">${BUILDINGS[k].label}</button>`).join('')}</div>
     ${kind === 'cabin' ? cabinControls(R) : ''}
     <div class="row two"><label for="s-paint">Paint</label><select id="s-paint">${opt(BLD().paints, R.paint)}</select></div>
     <div class="row" data-key="wear"><label for="r-wear">Paint worn off</label><input type="range" id="r-wear" min="0" max="1" step="0.01" value="${R.wear}"><output>${R.wear.toFixed(2)}</output></div>
@@ -620,7 +627,7 @@ function nextModel() {
     const names = [...sel.options].map((o) => o.value).filter((v) => v !== 'random' && v !== 'custom'), i = names.indexOf(sel.value);
     if (i >= 0 && i < names.length - 1) { sel.value = names[i + 1]; sel.dispatchEvent(new Event('change')); return; }
   }
-  const kinds = Object.keys(BUILDINGS), next = kinds[(kinds.indexOf(state.building) + 1) % kinds.length];
+  const next = ORDER[(ORDER.indexOf(state.building) + 1) % ORDER.length];
   setBuilding(next);
   if (next === 'cabin') {   // (the cabins from their first design)
     const s2 = $('#c-preset'), first = s2 && [...s2.options].map((o) => o.value).find((v) => v !== 'random' && v !== 'custom');
@@ -728,7 +735,7 @@ function loop() {
 const BL = window.BL = {
   ready: false, state, U, LU,
   get info() { return info(); },
-  get stable() { return B; }, get building() { return B; }, get horses() { return horses.map((h) => ({ id: h.id, stall: h.stall, at: h.a.root.position.toArray().map((x) => +x.toFixed(2)), chest: +h.shape.chest.toFixed(2), halter: !!h.halter, clip: h.a.clip, pose: h.pose })); },
+  get stable() { return B; }, get building() { return B; }, get heads() { return horses.map((h) => h.head || null); },   // (heads: the stall horses' head bones, for a rig) get horses() { return horses.map((h) => ({ id: h.id, stall: h.stall, at: h.a.root.position.toArray().map((x) => +x.toFixed(2)), chest: +h.shape.chest.toFixed(2), halter: !!h.halter, clip: h.a.clip, pose: h.pose })); },
   // (a rig's camera may look up from below its target: under an eave, under the porch roof; the orbit's own limit, which
   // keeps a hand-held camera above the ground, would otherwise pull it up level with the target)
   cam(pos, tgt) { controls.maxPolarAngle = Math.PI; camera.position.set(...pos); controls.target.set(...tgt); controls.update(); },
