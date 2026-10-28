@@ -45,7 +45,7 @@ export const GUN = {
 };
 
 // the walnut grip: its middle, and how far it leans back from upright (the butt behind the trigger)
-const GRIP = { at: [0, -0.024, -0.03], lean: 0.38 };
+export const GRIP = { at: [0, -0.024, -0.03], lean: 0.38 };
 const COL = { blued: '#2a2f35', frame: '#5b4d40', steel: '#7b8288', dark: '#14171a', brass: '#c09a48', wood: '#6b3f22', woodDark: '#4a2a16' };
 
 // a box or cylinder as a coloured piece: placed, turned (radians, as Euler XYZ), no uvs
@@ -64,7 +64,7 @@ const box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
 const cyl = (r, len, seg = 10) => new THREE.CylinderGeometry(r, r, len, seg).rotateX(Math.PI / 2);   // (along +Z)
 
 // a soft round picture for the flash and the smoke
-function puffPicture(inner, outer) {
+export function puffPicture(inner, outer) {
   const cv = document.createElement('canvas'); cv.width = cv.height = 64;
   const c = cv.getContext('2d'), g = c.createRadialGradient(32, 32, 0, 32, 32, 32);
   g.addColorStop(0, inner); g.addColorStop(0.45, outer); g.addColorStop(1, 'rgba(0,0,0,0)');
@@ -78,6 +78,29 @@ function puffPicture(inner, outer) {
 // loaded or copied again, and the head, the body and the other arm are simply not in it. It rides on the gun, the grip
 // in the fist: up the grip is the line of the knuckles, the grip's middle in the middle of the three fingers round it.
 //   arm.holder (added to the gun), arm.wrist / arm.elbow (in the gun's frame), arm.follow(elbow), arm.tris, arm.dispose()
+// THE FIST: where a gun sits in a right hand posed holding one (the bones' world places as they are now): a matrix that
+// turns the gun's frame into the world's (into the person's own, with the person's root left at the origin). Up the grip
+// is the line of the knuckles (the pinky's knuckle to the index's), across it from the pointing finger, and the grip's
+// middle in the middle of the three fingers round it (moved by GUN.hold.at, in the fist's frame). The gun's own size is
+// kept (no scale). The range's hand (makeArm) and the rider's own hand out on the trail (src/sixgun.js) both use it.
+export function fistFrame(B, hold = GUN.hold) {
+  const at = (n) => B[n].getWorldPosition(new THREE.Vector3());
+  const up = at('Index2R').sub(at('Pinky2R')).normalize();
+  const across = new THREE.Vector3().crossVectors(up, at('Index4R').sub(at('Index2R'))).normalize();   // (the pointing finger says which way is forward)
+  const hole = new THREE.Vector3();
+  for (const f of ['Middle', 'Ring', 'Pinky']) for (let k = 2; k <= 4; k++) hole.add(at(`${f}${k}R`));
+  hole.divideScalar(9);
+  // the grip's own frame in the gun's: across, up the grip (leaning forward from the butt), and forward square to it;
+  // F turns the gun's frame into the person's, the grip's middle at the hole (moved by hold.at, in the fist's frame)
+  const gUp = new THREE.Vector3(0, Math.cos(GRIP.lean), Math.sin(GRIP.lean)), gAcross = new THREE.Vector3(1, 0, 0);
+  const inHand = new THREE.Matrix4().makeBasis(across, up, new THREE.Vector3().crossVectors(across, up));
+  const inGun = new THREE.Matrix4().makeBasis(gAcross, gUp, new THREE.Vector3().crossVectors(gAcross, gUp));
+  const F = inHand.clone().multiply(inGun.transpose());
+  const grip = new THREE.Vector3(...GRIP.at).applyMatrix4(F);
+  F.setPosition(hole.add(new THREE.Vector3(...hold.at).applyMatrix4(inHand)).sub(grip));
+  return F;
+}
+
 function makeArm(folk, look) {
   const H = GUN.hold;
   const person = makePerson(folk, { outfit: 'farmer_m', palette: 'drifter', ...look, hat: false, badge: false, holster: false, shadows: false, kid: false });
@@ -91,21 +114,8 @@ function makeArm(folk, look) {
   // the arm's joints as posed, in the person's own frame (the arm is bent from these each frame)
   const rest = { shoulder: B.ShoulderR.matrixWorld.clone(), upper: B.UpperArmR.matrixWorld.clone(), fore: B.LowerArmR.matrixWorld.clone(), wrist: B.WristR.matrixWorld.clone() };
   const W0 = new THREE.Vector3().setFromMatrixPosition(rest.wrist), E0 = new THREE.Vector3().setFromMatrixPosition(rest.fore);
-  // the fist, in the person's frame: up the grip (the pinky's knuckle to the index's), across it, and the hole
-  const at = (n) => B[n].getWorldPosition(new THREE.Vector3());
-  const up = at('Index2R').sub(at('Pinky2R')).normalize();
-  const across = new THREE.Vector3().crossVectors(up, at('Index4R').sub(at('Index2R'))).normalize();   // (the pointing finger says which way is forward)
-  const hole = new THREE.Vector3();
-  for (const f of ['Middle', 'Ring', 'Pinky']) for (let k = 2; k <= 4; k++) hole.add(at(`${f}${k}R`));
-  hole.divideScalar(9);
-  // the grip's own frame in the gun's: across, up the grip (leaning forward from the butt), and forward square to it;
-  // F turns the gun's frame into the person's, the grip's middle at the hole (moved by H.at, in the fist's frame)
-  const gUp = new THREE.Vector3(0, Math.cos(GRIP.lean), Math.sin(GRIP.lean)), gAcross = new THREE.Vector3(1, 0, 0);
-  const inHand = new THREE.Matrix4().makeBasis(across, up, new THREE.Vector3().crossVectors(across, up));
-  const inGun = new THREE.Matrix4().makeBasis(gAcross, gUp, new THREE.Vector3().crossVectors(gAcross, gUp));
-  const F = inHand.clone().multiply(inGun.transpose());
-  const grip = new THREE.Vector3(...GRIP.at).applyMatrix4(F);
-  F.setPosition(hole.add(new THREE.Vector3(...H.at).applyMatrix4(inHand)).sub(grip));
+  // the gun's frame in the person's (fistFrame), and the person put in the gun's frame
+  const F = fistFrame(B);
   F.invert().decompose(person.root.position, person.root.quaternion, person.root.scale);
   // the trigger finger crooked part of the way to the fist the others make (after the fist was measured)
   for (let k = 2; k <= 4; k++) { const i = B[`Index${k}R`], m = B[`Middle${k}R`]; if (i && m) i.quaternion.slerp(m.quaternion, H.trigger); }
@@ -150,21 +160,14 @@ function makeArm(folk, look) {
   };
 }
 
-export function makeRevolver({ look = {}, folk = null } = {}) {
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(GUN.fov, innerWidth / innerHeight, 0.02, 20);
-  const hemi = new THREE.HemisphereLight(0xdfe8ff, 0x6a5a40, 1.1); scene.add(hemi);
-  const sun = new THREE.DirectionalLight(0xfff2dc, 2.2); scene.add(sun); scene.add(sun.target);
-  const flashLight = new THREE.PointLight(0xffb060, 0, 1.2, 2); scene.add(flashLight);
-
-  const metal = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.4, roughness: 0.42, flatShading: true });
-  const matte = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0, roughness: 0.78, flatShading: true });
-
-  // ── THE GUN (in its own frame: +Z the muzzle's way, +Y up, the trigger at the origin) ─────────────────────────
-  const aimer = new THREE.Group(); scene.add(aimer);            // turned to the aim
-  const kicker = new THREE.Group(); aimer.add(kicker);          // the kick and the reload's tip
-  const gun = new THREE.Group(); kicker.add(gun);
-  const HELD = new THREE.Vector3(0, 0.02, -0.03);              // (the gun's place from where the hand holds it: GUN.at)
+// THE GUN ITSELF, as a group in its own frame (+Z the muzzle's way, +Y up, the trigger at the origin): the frame, barrel,
+// sights, trigger guard and grip, the cylinder that turns and the hammer on its pin. The range's view (makeRevolver) and
+// the rider's own hand out on the trail (src/sixgun.js) are the same gun. metal, matte: its two materials (made here
+// when left out). -> { gun, cylinder, hammerPin, muzzle (an empty at the muzzle), metal, matte }
+export function makeGunModel({ metal = null, matte = null } = {}) {
+  metal = metal || new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.4, roughness: 0.42, flatShading: true });
+  matte = matte || new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0, roughness: 0.78, flatShading: true });
+  const gun = new THREE.Group();
   const body = mergeGeometries([
     piece(box(0.026, 0.044, 0.062), COL.frame, { at: [0, 0.03, 0.012] }),                   // the frame
     piece(box(0.018, 0.009, 0.064), COL.frame, { at: [0, 0.057, 0.012] }),                  // the top strap
@@ -200,6 +203,26 @@ export function makeRevolver({ look = {}, folk = null } = {}) {
     piece(box(0.008, 0.007, 0.016), COL.blued, { at: [0, 0.02, -0.007], rot: [0.5, 0, 0] }),     // the spur
   ]), metal);
   hammerPin.add(hammer);
+  const muzzle = new THREE.Object3D(); muzzle.position.set(0, 0.047, 0.19); gun.add(muzzle);
+  return { gun, cylinder, hammerPin, muzzle, metal, matte };
+}
+
+export function makeRevolver({ look = {}, folk = null } = {}) {
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(GUN.fov, innerWidth / innerHeight, 0.02, 20);
+  const hemi = new THREE.HemisphereLight(0xdfe8ff, 0x6a5a40, 1.1); scene.add(hemi);
+  const sun = new THREE.DirectionalLight(0xfff2dc, 2.2); scene.add(sun); scene.add(sun.target);
+  const flashLight = new THREE.PointLight(0xffb060, 0, 1.2, 2); scene.add(flashLight);
+
+  const metal = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0.4, roughness: 0.42, flatShading: true });
+  const matte = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: 0, roughness: 0.78, flatShading: true });
+
+  // ── THE GUN (in its own frame: +Z the muzzle's way, +Y up, the trigger at the origin) ─────────────────────────
+  const aimer = new THREE.Group(); scene.add(aimer);            // turned to the aim
+  const kicker = new THREE.Group(); aimer.add(kicker);          // the kick and the reload's tip
+  const model = makeGunModel({ metal, matte }), gun = model.gun, cylinder = model.cylinder, hammerPin = model.hammerPin, muzzle = model.muzzle;
+  kicker.add(gun);
+  const HELD = new THREE.Vector3(0, 0.02, -0.03);              // (the gun's place from where the hand holds it: GUN.at)
   // the rider's own right hand round the grip, and their forearm back to the corner of the view
   let arm = null;
   if (folk) try { arm = makeArm(folk, look); gun.add(arm.holder); } catch (e) { console.warn('revolver: the hand could not be made', e); }
@@ -210,7 +233,6 @@ export function makeRevolver({ look = {}, folk = null } = {}) {
   const elbowAt = arm ? arm.elbow.clone().sub(pivot) : null;    // (the elbow from the pivot, the same)
 
   // ── THE FLASH AND THE SMOKE ──────────────────────────────────────────────────────────────────────────────────
-  const muzzle = new THREE.Object3D(); muzzle.position.set(0, 0.047, 0.19); gun.add(muzzle);
   const flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: puffPicture('rgba(255,250,220,1)', 'rgba(255,170,60,0.85)'), blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, toneMapped: false }));
   flash.visible = false; scene.add(flash);
   const smokeMap = puffPicture('rgba(235,232,225,0.75)', 'rgba(200,196,188,0.35)');

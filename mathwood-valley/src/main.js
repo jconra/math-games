@@ -73,6 +73,7 @@ import { makeReadAloud } from './audio/readaloud.js';
 import { sayLine, talking, hush as hushVoice } from './audio/sayline.js';
 import { openLockbox, TIER_NAME } from './lockbox/index.js';
 import { loadRiders, saveRider, earn, recordLockbox, titleOf, nextTitle, badgesOf, cleanBoxes, BOX_TIERS, jobOn, readMode, nextReadMode, readModeWords } from './save.js';
+import { canShoot } from './gun.js';
 import * as SKILLS from './math/skill.js';
 import * as LEVELS from './levels/model.js';
 import * as FACTS from './math/facts.js';
@@ -1132,6 +1133,8 @@ function step(dt) {
     if (DJ) DJ.update(dt);   // (after the player: it places the camera while the viewfinder is up)
     if (SR) SR.update(dt);   // (after the player: it places the camera while the six-shooter is up)
     if (LJ) LJ.update(dt);
+    // the big touch button says Shoot near the bandits once the six-shooter is the rider's tool (src/gun.js)
+    hud.fireWord(canShoot(rider) && ((WJ && WJ.on && WJ.near) || (WJ && WJ.ambush && WJ.ambush.near) || (LJ && LJ.guardUp)) ? 'Shoot' : 'Rope');
     if (WMJ) WMJ.update(dt);
     if (BRJ) BRJ.update(dt, P.position);
     if (FJ) FJ.update(dt);   // (the rider and the double at the end of the dock fading)

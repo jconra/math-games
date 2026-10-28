@@ -12,6 +12,12 @@
 //          rides in wearing it)
 // Riders weave about the wagon in a loose bunch; now and then one gallops off ahead and is gone round the bend, then
 // comes back in from behind: a missed bandit never escapes. There is no timer and no way to lose.
+// THE SIX-SHOOTER (a rider whose grown-up set "Bandits: lasso or revolver" and who bought it: src/gun.js): F, Shoot, a
+// click or a tap fires at the rider instead of throwing the rope, from up to GUNPLAY.reach metres, with the range's
+// sights over the ringed rider. The math is the same pick: the right bandit is knocked from the saddle (a tumble and a
+// puff of dust, no blood: riders.js fall shot), sits up dazed with his hands raised, drops his sacks and the fact, and
+// turns himself in at the sheriff's office with his hands up, counted, paid and buckled as a roped one; a wrong one
+// ducks, the shot kicks up the dirt behind him, and the same "Not me, partner", rail and line show. No penalty.
 // Wave done: the wagon rolls on safe, gold and bounty are paid, a strongbox from the gang goes in the saddlebags, the
 // roped bandits are "brought in" (stats.jobs.bandits and its belt buckle), the townsfolk ride on ahead, and the next
 // stretch of road brings the next gang. Nothing to click. Riding well away from the wagon stops it (as "Let the wagon
@@ -82,7 +88,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeAnimal, gaitFor } from '../actors/animals.js';
-import { loadRiderKit, makeRider, makeCard, drawCard, RIDERS, TIE, tiePose } from '../actors/riders.js';
+import { loadRiderKit, makeRider, makeCard, drawCard, RIDERS, TIE, tiePose, sitLegs, handsUp } from '../actors/riders.js';
 import { makeTimes } from '../math/times.js';
 import { makeParity } from '../math/parity.js';
 import { levelFor, stateOf } from '../levels/model.js';
@@ -94,6 +100,10 @@ import { playSlot } from '../audio/clipslots.js';
 import { showGroups } from '../ui/groups.js';
 import { watchHesitation as watchLine } from '../ui/numberline.js';
 import { makeTargetRing } from '../targetring.js';
+import { canShoot, GUNPLAY } from '../gun.js';
+import { makeSights } from '../sixgun.js';
+import { makeRangeSound } from '../audio/rangesound.js';
+import { makeDust } from '../fx/dust.js';
 import { offerChart, closeChart, chartOptions, watchHesitation as watchChart, ensureChartCss } from '../ui/timeschart.js';
 import { recordAnswer, earn, saveRider, countJob } from '../save.js';
 import { PAY, boxTier } from '../shop.js';
@@ -641,9 +651,12 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
     if (!wave) { rule({ main: 'Protect the wagon', sub: `Keep alongside. ${togo}` }); return; }
     if (wave.done) { rule({ main: 'The wagon rolls on safe!', sub: togo }); return; }
     const finding = wave.q && wave.q.placing ? ' · finding your level' : '';
-    const left = wave.goods - wave.caught, togoLine = wave.caught ? `${wave.caught} roped · ${left} to go` : `${left} to rope`;
-    if (wave.kind === 'parity') rule({ kind: 'gang', main: wave.w.rule, sub: `${parityLine(wave.w)} · ${togoLine}${finding}` });
-    else if (wave.kind === 'missing') rule({ kind: 'gang', main: wave.w.rule, sub: `Rope the rider wearing the missing number${finding}` });
+    // (with the six-shooter the words say "bring in", not "rope": src/gun.js)
+    const gun = canShoot(rider), left = wave.goods - wave.caught;
+    const togoLine = wave.caught ? `${wave.caught} ${gun ? 'brought in' : 'roped'} · ${left} to go` : `${left} to ${gun ? 'bring in' : 'rope'}`;
+    const main = gun ? String(wave.w.rule || '').replace(/^Rope the /, 'Bring in the ') : wave.w.rule;
+    if (wave.kind === 'parity') rule({ kind: 'gang', main, sub: `${parityLine(wave.w)} · ${togoLine}${finding}` });
+    else if (wave.kind === 'missing') rule({ kind: 'gang', main, sub: `${gun ? 'Bring in' : 'Rope'} the rider wearing the missing number${finding}` });
     else rule({ kind: 'gang', main: `The ${wave.table}-Gang`, sub: `Every bandit wears a multiple of ${wave.table} · ${togoLine}${finding}` });
   }
 
@@ -697,6 +710,7 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
   WJ.throwAt = (rec) => {
     if (!rec || !ropeable(rec) || WJ.paused || state !== 'on') return false;
     if (!ownsTrainer()) { newWave(); return false; }   // (the round-up dealt in between: a fresh gang)
+    if (canShoot(rider)) return shootAt(rec);
     const w = wave;
     const ok = P.throwLasso(rec.tgt, {
       good: rec.good, hold: WAGONJOB.hold, lead: false,
@@ -715,7 +729,33 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
     return ok;
   };
 
-  function landed(rec, w, good) {
+  // THE SIX-SHOOTER instead of the rope (src/gun.js): the same pick, landed the same way
+  let SND = null, dust = null;
+  function shootAt(rec) {
+    const w = wave;
+    const ok = P.shoot(rec.tgt, {
+      good: rec.good,
+      onFire: () => { (SND || (SND = makeRangeSound({ audio }))).shot(); },
+      onLand: (good) => {
+        curTarget = null;
+        if (!good) missPuff(rec);   // (the shot goes over his head, into the dirt behind him)
+        landed(rec, w, good, true);
+      },
+      onCancel: () => { curTarget = null; if (rec.state === 'throw') rec.state = 'ride'; if (hes && wave === w && !w.done) hes.restart(); },
+    });
+    if (ok) { rec.state = 'throw'; curTarget = rec.tgt; if (hes) hes.answered(); }
+    return ok;
+  }
+  // a little dust kicked up a few metres past a rider who ducked
+  function missPuff(rec) {
+    const dx = rec.r.x - P.position.x, dz = rec.r.z - P.position.z, d = Math.hypot(dx, dz) || 1;
+    const x = rec.r.x + dx / d * 5, z = rec.r.z + dz / d * 5;
+    if (!dust) dust = makeDust(scene);
+    dust.puff({ x, y: W.heightAt(x, z), z }, { n: 4, size: 0.6, up: 0.8 });
+  }
+  WJ.shoots = () => canShoot(rider);
+
+  function landed(rec, w, good, shot = false) {
     if (w !== wave || !wave) { rec.state = 'ride'; return; }
     // (another job dealt on the shared trainer while the rope flew: no answer is counted against its wave)
     if (!ownsTrainer()) { rec.state = 'ride'; curTarget = null; setTimeout(() => P.cancelLasso(), 0); return; }   // (the rope just reels in)
@@ -736,7 +776,9 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
       const ex = T.explain(rec.n);
       rec.fact = ex && ex.good ? ex.short || ex.line : `${rec.n}`;   // (the card over him: "24 = 4 × 6", "8 = 4 pairs")
       hint(null); hideRail(); hideLine();   // (the last miss's line, rail and picture go: this catch is the news now)
-      hud.toast(`Roped the ${rec.text}! ${rec.fact}`, 'good');
+      hud.toast(shot ? `Down comes the ${rec.text}! ${rec.fact}` : `Roped the ${rec.text}! ${rec.fact}`, 'good');
+      // (shot: knocked from the saddle now; he sits up with his hands raised. Roped: the rope pulls him down: onCaught)
+      if (shot) rec.r.fall(P.position, { shot: true, onDown: () => downed(rec, w) });
       if (e.newTitle) setTimeout(() => hud.toast(`You're a ${e.newTitle} now!`, 'gold'), 1600);
       hob.event('banditCatch', { at: () => ({ x: rec.r.x, z: rec.r.z }), male: /_m$/.test((rec.r.look && rec.r.look.outfit) || '') });   // (who he is and where: his "you got me", shouts.js)
       if (music) music.hit();
@@ -744,7 +786,7 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
     } else {
       w.misses++;
       rec.state = 'tangled';
-      rec.r.tipHat();
+      if (shot) rec.r.duck(); else rec.r.tipHat();
       rec.say = 2.6; drawCard(rec.label, 'Not me, partner', { font: '700 40px Bitter, Georgia, serif' });
       const ex = T.explain(rec.n);
       // (odds and evens: the line is written once, under the pairs' picture, where there is one)
@@ -930,13 +972,15 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
     const i = recs.indexOf(rec); if (i >= 0) recs.splice(i, 1);
     const r = rec.r, person = r.person;
     if (!person.root.visible) { r.dispose(); return; }   // (out of sight with the gang: nobody sees him go)
-    // the rope from his wrists to his ankles comes off (a short one stays round his wrists)
+    // the rope from his wrists to his ankles comes off (a short one stays round his wrists); one who was shot down has
+    // no rope: he walks in with his hands up
     person.root.traverse((o) => { if (o.isMesh && o.geometry && o.geometry.parameters && o.geometry.parameters.radiusTop === 0.018) o.visible = false; });
+    const shot = !!r.shot;
     person.play('Idle', { fade: 0.3 });
     if (!ropeGeo) { ropeGeo = new THREE.CylinderGeometry(0.022, 0.022, 1, 6, 1).translate(0, 0.5, 0); ropeMat = new THREE.MeshStandardMaterial({ color: 0xc9a46a, roughness: 0.9 }); }
-    const wrists = new THREE.Mesh(ropeGeo, ropeMat); wrists.castShadow = false; scene.add(wrists);
+    const wrists = new THREE.Mesh(ropeGeo, ropeMat); wrists.castShadow = false; wrists.visible = !shot; scene.add(wrists);
     const p = person.root.position, door = W.places.sheriff ? W.places.sheriff.door : null;
-    const k = { r, person, wrists, phase: 'rise', t: 0, x: p.x, z: p.z, h: 0, path: null, at: 0, fade: 1, q0: person.root.quaternion.clone(), y0: p.y };
+    const k = { r, person, wrists, shot, phase: 'rise', t: 0, x: p.x, z: p.z, h: 0, path: null, at: 0, fade: 1, q0: person.root.quaternion.clone(), y0: p.y };
     // the way: near town, round the buildings to the sheriff's door; else just toward town
     if (door && Math.hypot(door.x - p.x, door.z - p.z) < WAGONJOB.townNear) k.path = toDoor(p.x, p.z);
     const first = k.path && k.path.length > 1 ? k.path[1] : door || { x: p.x - 1, z: p.z };
@@ -1009,7 +1053,7 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
       person.root.quaternion.slerpQuaternions(k.q0, _wq, e);
       person.root.position.set(k.x, k.y0 + (W.heightAt(k.x, k.z) - k.y0) * e, k.z);
       person.update(dt);
-      tiePose(person, 1 - e, LEGS);
+      if (k.shot) sitLegs(person, 1 - e); else tiePose(person, 1 - e, LEGS);
       if (f >= 1) { k.phase = k.path ? 'town' : 'away'; k.at = 1; person.play('Walk', { fade: 0.3, speed: WAGONJOB.walk / ((person.stride && person.stride.Walk) || 1.4) }); }
     } else {
       let goal = null;
@@ -1068,7 +1112,9 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
       if (person.person && person.person.cur) person.person.cur.setEffectiveTimeScale(v > 0 ? v / ((person.stride && person.stride.Walk) || 1.4) : 0.3);
       person.update(dt);
     }
-    // the hands tied behind him: each arm pointed where WAGONJOB.hands says, in his own frame (whatever the clip did)
+    // the hands tied behind him: each arm pointed where WAGONJOB.hands says, in his own frame (whatever the clip did);
+    // one who was shot down walks in with his hands up (riders.js handsUp)
+    if (k.shot) { handsUp(person, 1); if (k.fade < 1) fadeTo(k, k.fade); return true; }
     person.root.updateMatrixWorld(true);
     person.root.getWorldQuaternion(_wq);
     _fw.set(0, 0, 1).applyQuaternion(_wq); _lf.set(1, 0, 0).applyQuaternion(_wq); _upw.set(0, 1, 0).applyQuaternion(_wq);
@@ -1107,7 +1153,7 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
   function fadeTo(k, a) {
     if (!k.mats) { k.mats = []; k.person.root.traverse((o) => { if (o.isMesh && o.material) for (const m of [].concat(o.material)) if (!k.mats.includes(m)) { m.transparent = true; m.needsUpdate = true; k.mats.push(m); } }); }
     for (const m of k.mats) m.opacity = a;
-    k.wrists.visible = a > 0.5;
+    k.wrists.visible = a > 0.5 && !k.shot;
   }
   const _ivp = new THREE.Vector3();
   function inViewAt(x, z) {
@@ -1300,7 +1346,11 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
     if (t) { WJ.throwAt(t); return; }
     // a tap on no rider still answers: a ripple where the finger was, and now and then a word on what to tap
     if (p.touch) tapRipple(p.x, p.y);
-    if (R.target && !P.lassoBusy && performance.now() - hintAt > 5000) { hintAt = performance.now(); hud.toast(p.touch ? 'Tap a rider or his number to rope him (or press Rope)' : 'Point at a rider to rope them (or press F)'); }
+    if (R.target && !P.lassoBusy && performance.now() - hintAt > 5000) {
+      hintAt = performance.now();
+      const gun = canShoot(rider);
+      hud.toast(p.touch ? `Tap a rider or his number to ${gun ? 'shoot' : 'rope him'} (or press ${gun ? 'Shoot' : 'Rope'})` : `Point at a rider to ${gun ? 'shoot' : 'rope them'} (or press F)`);
+    }
   });
 
   // ── THE CARDS AT THE TOP OVER THE RIDERS' NUMBERS ─────────────────────────────────────────────────────────────
@@ -1363,7 +1413,7 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
 
   // ── EACH FRAME ─────────────────────────────────────────────────────────────────────────────────────────────────
   const camFwd = new THREE.Vector3(), lp = new THREE.Vector3();
-  let wasNear = false, cardT = 0, rumble = null;
+  let wasNear = false, cardT = 0, rumble = null, sights = null;
   const qUp = {};
   WJ.update = (dt) => {
     time += dt;
@@ -1461,7 +1511,15 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
     }
     if (offer && (offerT -= dt) <= 0) { offerT = 0.25; placeOffer(); }
     if ((seeT -= dt) <= 0) { seeT = 0.1; seeThrough(); }
-    R.update(dt, { targets: WJ.near && state === 'on' ? recs : [], player: P, can: ropeable, hold: P.lassoBusy, busy: P.lasso.busy });
+    const gun = canShoot(rider);
+    R.update(dt, { targets: WJ.near && state === 'on' ? recs : [], player: P, can: ropeable, hold: P.lassoBusy, busy: P.lasso.busy, ...(gun ? { reach: GUNPLAY.reach } : {}) });
+    if (gun) {
+      // the range's sights over the ringed rider, gold when he is in the six-shooter's reach
+      if (!sights) sights = makeSights();
+      const on = WJ.near && state === 'on' && !WJ.paused && !!R.target && !!R.screen && R.visible !== false && !P.gunBusy;
+      sights.place(on ? R.screen : null, R.inReach);
+    } else if (sights) sights.place(null);
+    if (dust) dust.update(dt);
     sound();
   };
 
@@ -1569,6 +1627,8 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
     if (rumble) { rumble.dispose(); rumble = null; }
     if (wagon) wagon.dispose();
     rail.dispose(); R.dispose();
+    if (sights) { sights.dispose(); sights = null; }
+    if (dust) { dust.dispose(); dust = null; }
     if (music) music.stop({ now: true });
     if (audio) audio.need(ambush ? 'ambush' : 'action', false);
     if (bus) { bus.ctx.removeEventListener('statechange', bus.onState); const g = bus.g; g.gain.setTargetAtTime(0, bus.ctx.currentTime, 0.05); setTimeout(() => { try { g.disconnect(); } catch (e) { /* gone */ } }, 400); bus = null; }
@@ -1586,6 +1646,9 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
 const HOWTO = {
   click: "Bandits! Rope the ones wearing the gang's number: the card up top says which. Folks riding along look just the same. Point at a rider and click, or press F.",
   touch: "Bandits! Rope the ones wearing the gang's number: the card up top says which. Folks riding along look just the same. Tap a rider, or the Rope button.",
+  // (with the six-shooter: src/gun.js)
+  clickGun: "Bandits! Bring in the ones wearing the gang's number: the card up top says which. Folks riding along look just the same. Point at a rider and click, or press F to shoot.",
+  touchGun: "Bandits! Bring in the ones wearing the gang's number: the card up top says which. Folks riding along look just the same. Tap a rider, or the Shoot button.",
 };
 const GAME = new URL('../../', import.meta.url).href;
 const rndIn = ([a, b]) => a + Math.random() * (b - a);
@@ -1606,7 +1669,7 @@ export function makeWagonJob(opts) {
     if (n === 'banditsDone') { const S = shouts && shouts(); if (S) { S.jingle(); if (A && A.voice) S.talk('thanks', A.voice); } return; }
     hob.event(n, d);
   };
-  const howTo = () => { if (told || !hob.say) return; told = true; hob.say(I && I.touch ? HOWTO.touch : HOWTO.click, 9000); };
+  const howTo = () => { if (told || !hob.say) return; told = true; const g = canShoot(opts.rider) ? 'Gun' : ''; hob.say(I && I.touch ? HOWTO['touch' + g] : HOWTO['click' + g], 9000); };
   // the held-up wagon's driver: "Help!" over his head (and his recorded shout, once there is one), his thanks after
   const driverOf = () => (A && A.t.wg && A.t.wg.driver) || null;
   function help() { const d = driverOf(); if (!d) return; if (clearOfCard(d)) howdy(d, AMBUSH.words.help, { ms: 2600, key: 'holdup' + A.n }); helpVoice(); }

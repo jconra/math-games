@@ -4,7 +4,9 @@
 // (the crates are the camps' own: src/camps.js crateParts). Now and then one of the gang sits his horse there on guard
 // (riders.js: he looks like any rider; being there is what gives him away). Roping him is a choice, not a toll: rope
 // him (the green ring, a click or F, like the wagon job's bandits) and he's pulled down and hogtied (a bandit brought in,
-// and a small bounty); ride straight in and he lights out for the hills. Nothing is lost either way.
+// and a small bounty); ride straight in and he lights out for the hills. Nothing is lost either way. A rider with the
+// six-shooter on and bought (src/gun.js) shoots him instead, from farther off: he tumbles from the saddle (no blood),
+// sits up with his hands raised, and is brought in all the same.
 //
 // Riding up to the cache loads the loot on the horse (it shows on her back, in panniers and a strongbox on top). The
 // loot is heavy: it needs a saddled horse (the deputy and Old Hob say where to buy one). The compass then points back
@@ -66,6 +68,9 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makePerson } from '../actors/folk.js';
 import { loadRiderKit, makeRider } from '../actors/riders.js';
 import { makeTargetRing } from '../targetring.js';
+import { canShoot, GUNPLAY } from '../gun.js';
+import { makeSights } from '../sixgun.js';
+import { makeRangeSound } from '../audio/rangesound.js';
 import { crateParts } from '../camps.js';
 import { makeCampfire } from '../fire/campfire.js';
 import { BACKWOODS, AREAS, WOODS, pickSpot } from './backwoods.js';
@@ -355,27 +360,40 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
   }
   const R = makeTargetRing({ scene, camera, canvas, W });
   let curTarget = null;
+  // the guard brought in: roped (pulled down and hogtied) or, with the six-shooter, shot (knocked down, hands up)
+  let SND = null, sights = null;
   function throwAt(g) {
     if (!g || !g.st || g.st.guard !== g || g.state !== 'stand' || LJ.paused) return false;
+    if (canShoot(rider)) {
+      const ok = P.shoot(g.tgt, {
+        good: true,
+        onFire: () => { (SND || (SND = makeRangeSound({ audio }))).shot(); },
+        onLand: () => { curTarget = null; if (g.state === 'throw') caught(g, true); },
+        onCancel: () => { curTarget = null; if (g.state === 'throw') g.state = 'stand'; },
+      });
+      if (ok) { g.state = 'throw'; curTarget = g.tgt; }
+      return ok;
+    }
     const ok = P.throwLasso(g.tgt, {
       good: true, hold: 1.1, lead: false,
       onLand: () => { curTarget = null; },
-      onCaught: () => {
-        curTarget = null; g.state = 'caught';
-        g.r.fall(P.position, { onDown: () => { g.state = 'down'; } });
-        const e = earn(rider, LOOT.pay.guard);
-        const rec = countJob(rider, 'bandits', 1);
-        hud.toast(`Roped the gang's guard! +${LOOT.pay.guard} gold`, 'gold');
-        if (rec.buckle) hud.buckle(rec.buckle, { delay: 900 });
-        if (e && e.newTitle) setTimeout(() => hud.toast(`You're a ${e.newTitle} now!`, 'gold'), 1600);
-        if (hob) hob.event('lootGuard', { at: () => ({ x: g.r.x, z: g.r.z }), male: /_m$/.test((g.r.look && g.r.look.outfit) || '') });
-        refresh();
-      },
+      onCaught: () => { curTarget = null; caught(g, false); },
       onMissed: () => { curTarget = null; },
       onCancel: () => { curTarget = null; if (g.state === 'throw') g.state = 'stand'; },
     });
     if (ok) { g.state = 'throw'; curTarget = g.tgt; }
     return ok;
+  }
+  function caught(g, shot) {
+    g.state = 'caught';
+    g.r.fall(P.position, { shot, onDown: () => { g.state = 'down'; } });
+    const e = earn(rider, LOOT.pay.guard);
+    const rec = countJob(rider, 'bandits', 1);
+    hud.toast(shot ? `Brought in the gang's guard! +${LOOT.pay.guard} gold` : `Roped the gang's guard! +${LOOT.pay.guard} gold`, 'gold');
+    if (rec.buckle) hud.buckle(rec.buckle, { delay: 900 });
+    if (e && e.newTitle) setTimeout(() => hud.toast(`You're a ${e.newTitle} now!`, 'gold'), 1600);
+    if (hob) hob.event('lootGuard', { at: () => ({ x: g.r.x, z: g.r.z }), male: /_m$/.test((g.r.look && g.r.look.outfit) || '') });
+    refresh();
   }
   const offPick = I.onPick((p) => {
     if (LJ.paused || !nearS || !nearS.guard || nearS.guard.state !== 'stand' || !LJ.near) return;
@@ -767,7 +785,7 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
       const g = nearS.guard && (nearS.guard.state === 'stand' || nearS.guard.state === 'throw');
       const main = nearS.kind === 'woods' ? `A gang camp in ${AREAS[nearS.area] || 'the back woods'}` : `The gang's cache: ${nearS.def.name}`;
       if (!shiftOpen()) return { main, sub: 'Done for today: the deputy says leave it till tomorrow · or ask for more work at the jobs board' };
-      return { main, sub: g ? 'A guard sits his horse by it: rope him, or ride straight in' : 'Ride in close to load the loot on your horse' };
+      return { main, sub: g ? `A guard sits his horse by it: ${canShoot(rider) ? 'shoot' : 'rope'} him, or ride straight in` : 'Ride in close to load the loot on your horse' };
     }
     return null;
   }
@@ -838,9 +856,14 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
     const ng = nearS && nearS.guard;
     if (ng && ng.state === 'stand' && I.enabled && P.enabled && (I.tap('KeyF') || (!P.onHorse && I.tap('Space')))) throwAt(R.target);
     const ringOn = !!(ng && (ng.state === 'stand' || ng.state === 'throw') && distTo(ng.r) < LOOT.ropeNear);
-    R.update(dt, { targets: ringOn ? [ng] : [], player: P, can: (t) => t.state === 'stand', hold: P.lassoBusy, busy: P.lasso.busy });
+    const gun = canShoot(rider);
+    R.update(dt, { targets: ringOn ? [ng] : [], player: P, can: (t) => t.state === 'stand', hold: P.lassoBusy, busy: P.lasso.busy, ...(gun ? { reach: GUNPLAY.reach } : {}) });
+    // with the six-shooter: the range's sights over him (src/sixgun.js), gold in its reach
+    if (gun || sights) { if (!sights) sights = makeSights(); sights.place(gun && ringOn && R.target && R.screen && !LJ.paused && !P.gunBusy ? R.screen : null, R.inReach); }
+    LJ.guardUp = !!(ng && ng.state === 'stand' && ringOn);
     // the guard's tag over his hat while he's there to be roped
     if (ringOn && overHead(ng.r.person.root.position, ng.r.top() + 0.35, tagEl)) tagEl.hidden = false; else tagEl.hidden = true;
+    if (ringOn) { const w = gun ? '<b>Gang guard</b><small>shoot him, or ride in</small>' : '<b>Gang guard</b><small>rope him, or ride in</small>'; if (tagEl.innerHTML !== w) tagEl.innerHTML = w; }
     tryLoad();
     // keep the load on the horse (a horse bought or swapped on the way carries it on)
     if (LJ.phase === 'carrying' && P.horse && loadOn !== P.horse) { hangLoad(); showBundles(trip.problems.length - trip.at); }
@@ -922,7 +945,7 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
   LJ.dispose = () => {
     stopShare();
     removeEventListener('keydown', onKey, true);
-    offPick(); R.dispose();
+    offPick(); R.dispose(); if (sights) sights.dispose();
     for (const st of [...stashes]) dropStash(st);
     for (const c of [...people]) removePerson(c);
     load.removeFromParent();

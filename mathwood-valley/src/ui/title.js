@@ -11,9 +11,11 @@
 // far, with the levels page, src/ui/levels.js, and the stats page, src/ui/stats.js, a tap away), their goals and completion (src/completion.js, when the game
 // has it: a grown-up pins a goal, "Set a goal"), the read-aloud switch while their math is young, and a folded "Jobs"
 // list where a grown-up can turn some jobs off (every job is on by default); RIDE OUT; "Just lock boxes"; a small
-// build number; and a folded Grown-ups corner (each rider's math, age and progress; delete a rider).
-// No math topics or missions to tick and no lasso-or-shooting choice: every rider gets every job, the bottle range
-// included, at their own level.
+// build number; and a folded Grown-ups corner (each rider's math, age and progress, the bandits switch; delete a rider).
+// No math topics or missions to tick: every rider gets every job, the bottle range included, at their own level.
+// THE BANDITS SWITCH (src/gun.js): "Bandits: lasso only / lasso or revolver", on the new-rider form and on each rider's
+// row in the Grown-ups corner, shown plainly and set to lasso only at the start. It is the rider's saved mode
+// ('lasso' | 'shoot'): on, the general store sells the rider a six-shooter for bringing in bandits.
 //
 // Every change is saved straight away (save.js), so settings stick after a reload. RIDE OUT can be pressed while
 // the valley is still loading: it then reads "Saddling up" and rides out the moment loading reaches 1. If
@@ -36,6 +38,8 @@ import { openLevels, gridWords } from './levels.js';
 import { placeStats, stateOf } from '../levels/model.js';
 import { buckleSVG } from './hud.js';
 import { hatSVG, hatOf, hatColour } from '../hats.js';
+import { BANDIT_MODES, gunOn, ownsGun, setBandits } from '../gun.js';
+import { PRICES } from '../catalog.js';
 
 // ---- small drawings --------------------------------------------------------------------------------------------
 
@@ -417,7 +421,7 @@ export function showTitle(root, opts = {}) {
   function freshDraft() {
     const look = LOOKS[riders.length % LOOKS.length];
     return { name: '', pick: freeName(new Set(riders.map((x) => String(x.name || '').toLowerCase()))), look: look.id,
-      skin: SKINS[(2 + riders.length) % SKINS.length], hair: look.hair, hairPicked: false, hat: true, age: null, pick: true };
+      skin: SKINS[(2 + riders.length) % SKINS.length], hair: look.hair, hairPicked: false, hat: true, age: null, levels: true, bandits: 'lasso' };
   }
   function draftLook() {
     const d = S.draft, l = LOOKS.find(x => x.id === d.look) || LOOKS[0];
@@ -429,6 +433,15 @@ export function showTitle(root, opts = {}) {
       <button class="bmt-agech is-skip" role="radio" aria-checked="${cur == null}" tabindex="${cur == null ? 0 : -1}" data-act="${kind}" data-v="" data-k="${kind}:-">Skip</button>
       ${AGES.map((a) => `<button class="bmt-agech" role="radio" aria-checked="${cur === a}" tabindex="${cur === a ? 0 : -1}" aria-label="${a >= 16 ? '16 or older' : a <= 5 ? '5 or under' : a}"
           data-act="${kind}" data-v="${a}" data-k="${kind}:${a}">${ageWord(a)}</button>`).join('')}
+    </div>`;
+  }
+
+  // the bandits switch as two round buttons, lasso only first (the new-rider form; a rider's row in the Grown-ups
+  // corner, with id)
+  function banditPick(cur, kind, label, id = null) {
+    return `<div class="bmt-agepick bmt-bandits" role="radiogroup" aria-label="${label}" data-nav="radio">
+      ${BANDIT_MODES.map((m) => `<button class="bmt-agech is-skip" role="radio" aria-checked="${cur === m.id}" tabindex="${cur === m.id ? 0 : -1}"
+          data-act="${kind}" data-v="${m.id}"${id ? ` data-id="${esc(id)}"` : ''} data-k="${kind}:${id ? esc(id) + ':' : ''}${m.id}">${esc(m.words)}</button>`).join('')}
     </div>`;
   }
 
@@ -463,8 +476,13 @@ export function showTitle(root, opts = {}) {
           <h3 class="bmt-label">Age <small>if you like</small></h3>
           ${agePick(d.age, 'age', 'Age, if you like')}
           <p class="bmt-auto">${ICON.compass}<span><b>No level to set.</b> ${AUTO_LINE} An age only gives a small head start.</span></p>
-          <div class="bmt-read"><button class="bmt-hat" role="switch" aria-checked="${d.pick !== false}" data-act="picklv" data-k="picklv">${ICON.ladder}Let the rider pick levels: ${d.pick !== false ? 'On' : 'Off'}</button>
-            <small>${d.pick !== false ? 'Arrows by the level at the bottom of the screen step it down or up by hand.' : 'Only the game moves the level: the arrows by it are hidden.'}</small></div>
+          <div class="bmt-read"><button class="bmt-hat" role="switch" aria-checked="${d.levels !== false}" data-act="picklv" data-k="picklv">${ICON.ladder}Let the rider pick levels: ${d.levels !== false ? 'On' : 'Off'}</button>
+            <small>${d.levels !== false ? 'Arrows by the level at the bottom of the screen step it down or up by hand.' : 'Only the game moves the level: the arrows by it are hidden.'}</small></div>
+        </section>
+        <section>
+          <h3 class="bmt-label">Bandits <small>a grown-up's choice</small></h3>
+          ${banditPick(d.bandits, 'bandits', 'Bandits')}
+          <p class="bmt-auto is-small"><span>${esc((BANDIT_MODES.find((m) => m.id === d.bandits) || BANDIT_MODES[0]).line)}</span></p>
         </section>
         <div class="bmt-formbtns">
           ${riders.length ? '<button class="bmt-btn" data-act="cancel" data-k="cancel">Cancel</button>' : ''}
@@ -590,6 +608,8 @@ export function showTitle(root, opts = {}) {
         <dt>Levels</dt><dd>${esc(gridWords(r) || 'every level on in every place: the game finds each one')}</dd>
         <dt>Pick levels</dt><dd><button class="bmt-chip" aria-pressed="${r.pickLevels !== false}" data-act="picklv" data-id="${esc(r.id)}" data-k="picklv:${esc(r.id)}">${ICON.ladder}${r.pickLevels !== false ? 'On' : 'Off'}</button>
           <small>the arrows by the level at the bottom of the screen</small></dd>
+        <dt>Bandits</dt><dd>${banditPick(gunOn(r) ? 'shoot' : 'lasso', 'bandits', `${esc(r.name)}'s bandits`, r.id)}
+          <small>${gunOn(r) ? (ownsGun(r) ? 'the six-shooter is bought: F shoots at bandits' : `a six-shooter can be bought at the general store (${PRICES.revolver} gold)`) : (ownsGun(r) ? 'the six-shooter bought is put away: bandits are roped' : 'bandits are roped; the six-shooter shows in the store, greyed')}</small></dd>
         <dt>Jobs</dt><dd>${off.length ? `turned off: ${off.map((m) => esc(m.name)).join(', ')}` : 'every job on'}</dd>
         ${c ? `<dt>Completion</dt><dd>${c.pct}%${c.goals.length ? ` · goals: ${c.goals.map((g) => esc(g.name)).join(', ')}` : ''}</dd>` : ''}
         <dt>Lock boxes</dt><dd>${boxes}</dd>
@@ -678,14 +698,15 @@ export function showTitle(root, opts = {}) {
       case 'picklv': {   // "Let the rider pick levels": on the new-rider form, or a rider's row in the Grown-ups corner
         const who = data.id ? riders.find(x => x.id === data.id) : null;
         if (who) { who.pickLevels = who.pickLevels === false; keepFocus(() => { renderPanel(); renderSheet(); }); changed(who); return; }
-        S.draft.pick = S.draft.pick === false; keepFocus(renderPanel); return;
+        S.draft.levels = S.draft.levels === false; keepFocus(renderPanel); return;
       }
       case 'create': {
         const name = (S.draft && S.draft.name || '').trim() || (S.draft && S.draft.pick) || '';
         if (!name || !canMakeMore()) { focusKey('name'); return; }
         const nr = newRider(name, draftLook());
         nr.age = S.draft.age == null ? null : S.draft.age;   // (optional: a modest head start, src/math/skill.js ageStart)
-        nr.pickLevels = S.draft.pick !== false;   // (the level tool's arrows: src/ui/leveltool.js)
+        nr.pickLevels = S.draft.levels !== false;   // (the level tool's arrows: src/ui/leveltool.js)
+        setBandits(nr, S.draft.bandits);   // (the bandits switch: src/gun.js)
         riders.push(nr);
         saveRider(nr);
         S.saveOk = storageWorks();
@@ -693,6 +714,12 @@ export function showTitle(root, opts = {}) {
         renderAll();
         focusKey('ride');
         try { onChange(nr); } catch (e) { console.error(e); }
+        return;
+      }
+      case 'bandits': {   // the bandits switch: on the new-rider form, or a rider's row in the Grown-ups corner
+        const who = data.id ? riders.find(x => x.id === data.id) : null;
+        if (who) { setBandits(who, data.v); keepFocus(() => { renderPanel(); renderSheet(); }); changed(who); return; }
+        if (S.draft) { S.draft.bandits = data.v === 'shoot' ? 'shoot' : 'lasso'; keepFocus(renderPanel); }
         return;
       }
       case 'read': {   // the read-aloud switch: by itself -> always -> off -> by itself (the panel, or a Grown-ups row)

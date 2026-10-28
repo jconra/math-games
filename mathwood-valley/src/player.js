@@ -13,6 +13,8 @@
 // and pitches with the slope under it. The rider is seated every frame at a fixed offset from the saddle on the horse's
 // back bone (seatRider in actors/seat.js) and plays Ride or Ride_Gallop in step with the horse's Walk or Gallop.
 //
+// The six-shooter (a rider whose grown-up turned it on, and who bought it: src/gun.js): P.shoot(target, ...) works as
+// the throw does, from farther off, with the gun in the rider's own right hand (src/sixgun.js).
 // The lasso: P.throwLasso(target, { good, onCaught, onMissed }) walks or rides closer first if the target is out of reach
 // (about 15 m), turns to it, swings, throws (Lasso_Swing, Lasso_Throw), and the loop flies to the neck (lasso.js). From
 // the saddle only the upper body throws: the riding clip keeps the hips and legs and the lasso clip takes the rest.
@@ -39,6 +41,13 @@
 //                       to a far target, or P.cancelLasso() / P.teleport() before the throw is settled, calls onCancel
 //                       instead of onCaught / onMissed. The rest: see lasso.js
 //   P.lassoBusy, P.cancelLasso()
+//   P.shoot(target, { good, onFire, onLand, onCancel }) -> true if started: the six-shooter for bandits (src/gun.js,
+//                       src/sixgun.js), as the lasso: rides or walks up first if the target is out of the gun's reach
+//                       (GUNPLAY.reach), turns to it, brings the gun up in the right hand (the gun clip: the upper body
+//                       only from the saddle) and fires; onFire() at the shot (the job plays the sound), onLand(good) as
+//                       the bullet gets there (the job knocks him down, or he ducks). The gun stays up a moment, then is
+//                       put away. Cancelled as the lasso is (P.cancelLasso: onCancel, if it hasn't fired yet)
+//   P.gunBusy           the gun is being brought up or has just fired
 //   P.teleport(x, z, rot)   to another place at once (the horse comes along if being ridden)
 //   P.moveHorse(x, z)   the horse left standing (not ridden) moved there at once (false: none, or being ridden)
 //   P.shift({ dx, dy, dz })  moved as it stands, the horse and the camera with it (the way round at the valley's ends)
@@ -60,6 +69,8 @@ import { LADDER } from './catalog.js';
 import { horseLook, ridden } from './mounts.js';
 import { makeCamera } from './camera.js';
 import { makeLasso } from './lasso.js';
+import { makeHeldGun } from './sixgun.js';
+import { GUNPLAY } from './gun.js';
 import { pushFromWagons } from './wagon.js';
 
 export const MOVE = {
@@ -141,6 +152,7 @@ const GAME = new URL('../', import.meta.url).href;
 // the riding clips' parts: the hips and legs (kept from the riding clip while throwing from the saddle), the rest
 const LEGS = /^(Root|Body|Hips|UpperLeg[LR]|LowerLeg[LR]|Foot[LR]|PT[LR])\./;
 const SWING_S = 1.0;         // Lasso_Swing's length: one turn of the hand overhead (seconds)
+const GUN_CLIP = 'Idle_Gun_Pointing';   // the six-shooter held out (the range's hand is posed in it too: src/revolver.js)
 const STEP = 1 / 120;        // the longest step the moving is worked out in (a 30 fps frame is taken as four)
 
 // a short note at the bottom of the screen, when the game hasn't given its own way to say things
@@ -176,7 +188,7 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
   const lasso = P.lasso = makeLasso({ scene, W });
 
   // ── THE PERSON ──────────────────────────────────────────────────────────────────────────────────────────────
-  let person = null, seat = null, layer = null, layerName = '', twist = 0;
+  let person = null, seat = null, layer = null, layerName = '', twist = 0, held = null;
   function makeRider(look) {
     const p = makePerson(folk, { outfit: 'farmer_m', palette: 'drifter', ...(look || {}) });
     p.root.position.copy(pos); p.root.rotation.y = P.heading; scene.add(p.root);
@@ -185,6 +197,7 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
   function setPerson(p) {
     if (person) person.dispose();
     person = P.person = p; seat = makeSeat(person); layer = null; layerName = '';
+    if (held) { held.show(false); held.fitted = null; }   // (the six-shooter goes into the new body's hand the next time it is up)
   }
   setPerson(makeRider(rider && rider.look));
   const has = (name) => person.clips.includes(name);
@@ -340,7 +353,46 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
     job = { target, opts, t: 0, thrown: false };
     return true;
   };
-  P.cancelLasso = () => { if (job && !job.thrown && job.opts.onCancel) job.opts.onCancel(); job = null; lasso.cancel(); };
+  P.cancelLasso = () => {
+    if (job && (!job.thrown || (job.gun && !gunS.fired)) && job.opts.onCancel) job.opts.onCancel();
+    if (job && job.gun) { gunS.phase = 'idle'; gunS.up = 0; }
+    job = null; lasso.cancel();
+  };
+  // THE SIX-SHOOTER: gunS.phase 'idle' | 'draw' (coming up, turning to him) | 'fly' (fired: the bullet on its way);
+  // up: seconds the gun stays in the hand; target: what it is pointed at
+  const gunS = { phase: 'idle', t: 0, up: 0, target: null, fired: false, fly: 0 };
+  P.shoot = (target, opts = {}) => {
+    if (job || lasso.busy || !target || seat.busy() || P.mode === 'mounting' || P.mode === 'dismounting' || gunS.phase !== 'idle') return false;
+    job = { target, opts, t: 0, thrown: false, gun: true };
+    return true;
+  };
+  Object.defineProperty(P, 'gunBusy', { get: () => gunS.phase !== 'idle' });
+  function startShot() {
+    job.thrown = true;
+    gunS.phase = 'draw'; gunS.t = 0; gunS.fired = false; gunS.target = job.target; gunS.up = GUNPLAY.draw + GUNPLAY.hold;
+    if (!held) held = P.held = makeHeldGun({ scene });
+  }
+  // each frame after the body is posed: the gun into the hand once the gun clip is fully in, the shot, the bullet
+  function gunStep(dt) {
+    if (held) held.update(dt);
+    if (gunS.up <= 0) { if (held) held.show(false); return; }
+    gunS.up -= dt; gunS.t += dt;
+    if (held && held.fitted !== person && gunS.t > 0.2) held.fit(person);
+    if (held) held.show(gunS.t > 0.12 && gunS.up > 0.05);
+    if (gunS.phase === 'draw' && gunS.t >= GUNPLAY.draw && job && job.gun) {
+      // fired: the flash and the smoke, the job's sound; the bullet gets there a moment later
+      gunS.fired = true; gunS.phase = 'fly';
+      if (held) held.fire();
+      const tp = targetPos(job.target, tmp);
+      gunS.fly = Math.hypot(tp.x - pos.x, tp.z - pos.z) / GUNPLAY.bullet;
+      if (job.opts.onFire) job.opts.onFire();
+    } else if (gunS.phase === 'fly' && (gunS.fly -= dt) <= 0) {
+      gunS.phase = 'idle';
+      const o = job && job.gun ? job.opts : null; job = null;
+      if (o && o.onLand) o.onLand(o.good !== false);
+    }
+    if (gunS.up <= 0) { gunS.target = null; if (held) held.show(false); }
+  }
   function startThrow() {
     const o = job.opts; job.thrown = true;
     // the loop overhead turns with the hand: in Lasso_Swing the right hand circles once a second, counterclockwise seen
@@ -356,13 +408,20 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
     job.t += dt;
     const tp = targetPos(job.target, tmp), d = Math.hypot(tp.x - pos.x, tp.z - pos.z), dir = Math.atan2(tp.x - pos.x, tp.z - pos.z);
     if (!job.thrown) {
-      if (want.mag > 0.3 && job.t > 0.25 && d > MOVE.reach) { const f = job.opts.onCancel; job = null; if (f) f(); return null; }   // (walked away from it)
+      if (want.mag > 0.3 && job.t > 0.25 && d > (job.gun ? GUNPLAY.reach : MOVE.reach)) { const f = job.opts.onCancel; job = null; if (f) f(); return null; }   // (walked away from it)
       // getting no nearer (a fence or a building in the way)? given up, with a word, rather than running on the spot
       if (d < (job.best ?? Infinity) - 0.5) { job.best = d; job.stuckT = 0; } else job.stuckT = (job.stuckT || 0) + dt;
       if (job.t > 20 || job.stuckT > 2.5) { const f = job.opts.onCancel; job = null; tell(SAY.unreachable); if (f) f(); return null; }
-      if (d > MOVE.reach || (job.closing && d > MOVE.throwFrom)) { job.closing = true;
+      const reach = job.gun ? GUNPLAY.reach : MOVE.reach, from = job.gun ? GUNPLAY.from : MOVE.throwFrom;
+      if (d > reach || (job.closing && d > from)) { job.closing = true;
         return { dir, mag: 1, run: P.onHorse ? d > 40 : d > 8, approach: true }; }
-      startThrow();
+      if (job.gun) startShot(); else startThrow();
+    }
+    if (job.gun) {
+      // (the gun: on foot, stand and face him while it comes up; from the saddle the rider keeps the reins)
+      job.face = dir;
+      if (!P.onHorse && gunS.phase === 'draw') return { dir, mag: 0, run: false, face: true };
+      return null;
     }
     if (!lasso.busy) { job = null; return null; }
     job.face = dir;
@@ -478,6 +537,7 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
     if (P.mode === 'foot') { person.root.position.copy(pos); person.root.rotation.set(0, P.heading, 0); person.root.updateMatrixWorld(true); }
     else { seat.update(dt); turnToThrow(dt); }
     if (P.mode === 'horse' || P.mode === 'mounting') { pos.set(H.x, H.a.root.position.y, H.z); }
+    gunStep(dt);
     lasso.update(dt);
     cam.update(dt, { at: pos, heading: P.mode === 'horse' ? H.heading : P.heading, onHorse: P.mode === 'horse' || P.mode === 'mounting', speed: P.mode === 'horse' ? H.speed : P.speed, seat: H && H.big ? H.a.info.seat.at[1] : null });
     if (H && H.steed) H.steed.look(camera.position);   // (the full or the far look, by how far off it is)
@@ -677,9 +737,12 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
     if (ph === 'catch' || ph === 'held') return has('Lasso_Pull') ? ['Lasso_Pull', false] : null;
     return null;
   }
+  // the gun clip while the six-shooter is up (on foot, walking off puts it away)
+  function gunClip() { return gunS.up > 0 && has(GUN_CLIP) ? [GUN_CLIP, false] : null; }
   function animate() {
     if (H) horseGait();
-    const lc = lassoClip();
+    if (P.mode === 'foot' && gunS.up > 0 && gunS.phase === 'idle' && personGait()[0] !== 'Idle') gunS.up = 0;
+    const lc = lassoClip() || gunClip();
     if (P.mode === 'foot') {
       const [g, s] = personGait();
       if (lc && (g === 'Idle' || lasso.phase !== 'held')) person.play(lc[0], { fade: 0.2, once: lc[1] });
@@ -710,9 +773,10 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
   // from the saddle, the body turns at the waist toward what it is throwing at (up to about 75 degrees either way)
   const _q = new THREE.Quaternion(), _pq = new THREE.Quaternion(), _iq = new THREE.Quaternion(), Y = new THREE.Vector3(0, 1, 0);
   function turnToThrow(dt) {
-    const ph = lasso.phase, on = P.mode === 'horse' && job && ph !== 'idle' && ph !== 'reel';
+    const ph = lasso.phase, gunAt = P.mode === 'horse' && gunS.up > 0 && gunS.target ? gunS.target : null;
+    const on = gunAt || (P.mode === 'horse' && job && !job.gun && ph !== 'idle' && ph !== 'reel');
     let want = 0;
-    if (on) { const tp = targetPos(job.target, tmp); want = Math.max(-1.3, Math.min(1.3, wrap(Math.atan2(tp.x - pos.x, tp.z - pos.z) - H.heading))); }
+    if (on) { const tp = targetPos(gunAt || job.target, tmp); want = Math.max(-1.3, Math.min(1.3, wrap(Math.atan2(tp.x - pos.x, tp.z - pos.z) - H.heading))); }
     twist = damp(twist, want, 6, dt);
     const b = person.bones.Abdomen; if (!b || Math.abs(twist) < 0.01) return;
     b.parent.getWorldQuaternion(_pq);
@@ -722,10 +786,10 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
 
   P.state = () => ({
     mode: P.mode, speed: +P.speed.toFixed(2), heading: +P.heading.toFixed(3), x: +pos.x.toFixed(2), z: +pos.z.toFixed(2), clip: person.clip,
-    layer: layerName, lasso: lasso.phase, job: job ? (job.thrown ? 'thrown' : 'approach') : null,
+    layer: layerName, lasso: lasso.phase, job: job ? (job.thrown ? 'thrown' : 'approach') : null, gun: gunS.phase, gunUp: +gunS.up.toFixed(2),
     horse: H ? { id: horseId, kind: H.a.kind, size: H.a.size || 1, cap: +((H.a.info.gait && H.a.info.gait.most && H.a.info.gait.most.Gallop) || GAIT.most.Gallop).toFixed(2), look: H.steed ? H.steed.lookNow.coat : null, mode: H.mode, x: +H.x.toFixed(2), z: +H.z.toFixed(2), speed: +H.speed.toFixed(2), gait: H.gait, clip: H.a.clip, clipSpeed: +(H.clipSpeed || 0).toFixed(2), saddle: saddleKind, dist: +Math.hypot(H.x - pos.x, H.z - pos.z).toFixed(2) } : null,
     canRide: P.canRide, cam: { yaw: +cam.yaw.toFixed(3), pitch: +cam.pitch.toFixed(3), zoom: +cam.zoom.toFixed(2) },
   });
-  P.dispose = () => { disposed = true; offDial(); lasso.dispose(); person.dispose(); if (H) { if (H.steed) H.steed.dispose(); else H.a.dispose(); } };
+  P.dispose = () => { disposed = true; offDial(); lasso.dispose(); if (held) held.dispose(); person.dispose(); if (H) { if (H.steed) H.steed.dispose(); else H.a.dispose(); } };
   return P;
 }

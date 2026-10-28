@@ -58,6 +58,7 @@
 import * as THREE from 'three';
 import { saveRider } from './save.js';
 import { PRICES } from './catalog.js';
+import { canShoot } from './gun.js';
 import { makePathSearch, nearestAlong } from './trailpath.js';
 
 export const HOB = {
@@ -83,7 +84,7 @@ const LINES = {
   firstDay: "Mornin'! Rancher next door needs a hand with his herd. His trail boss is out by the corral: follow the hoofprints.",
   back: ["Herd's waiting out in the pasture. The hoofprints know the way.", "Good to see you. The rancher's got more cattle needing a rope.",
     "Fine day for a round-up. Pasture's east, past the creek."],
-  shoot: "Miss Opal keeps a target range across the creek, east end of town. Bottles and tin cans only, mind: it's still the rope for cattle and bandits.",
+  shoot: "Miss Opal keeps a target range across the creek, east end of town. Bottles and tin cans only, mind: it's still the rope for cattle.",
   arrive: 'Each steer carries a number. Rope the ones the card up top asks for: point at one and click, or press F.',
   arriveTouch: 'Each steer carries a number. Rope the ones the card up top asks for: tap one, or the Rope button.',
   catch: "Nice throw! It'll gallop itself over to the corral.",
@@ -104,6 +105,9 @@ const LINES = {
   horse: 'Fine-looking horse. Treat her well.',
   donkey: "A donkey! Slow as molasses, but he won't quit on you.",
   hat: ['Now that is a fine hat.', 'Suits you, partner.', 'Look at you! A proper hat for a proper rider.'],
+  // the six-shooter for bandits (src/gun.js), bought at the general store
+  revolver: "A six-shooter! Out by the wagon, F fires at the rider you point at. Only the one wearing the right number, mind: the others duck.",
+  revolverTouch: "A six-shooter! Out by the wagon, tap a rider or press Shoot. Only the one wearing the right number, mind: the others duck.",
   // the farm north of town: the sick-sheep job
   farmTip: "There's a farm north of town, behind your cabin. The vet out there could use a hand with the sheep, and the pigs got loose.",
   farmTipSheep: "There's a farm north of town, behind your cabin. The vet out there could use a hand with the sheep.",
@@ -305,6 +309,7 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
         else B.say(rider.owned.horse === 'donkey' ? LINES.donkey : LINES.horse);
         break;
       case 'hat': B.say(LINES.hat[(hatN++) % LINES.hat.length], 3000); break;
+      case 'revolver': if (once('revolver')) B.say(touch() ? LINES.revolverTouch : LINES.revolver, 8000); break;
       case 'farmArrive': if (once('farmArrive')) B.say(touch() ? LINES.farmArriveTouch : LINES.farmArrive, 9000); break;
       case 'sheepHealed': drop('sheepWrong', 'sheepFine'); if (once('sheepHealed')) B.say(LINES.sheepHealed); break;
       case 'sheepWrong': if (once('sheepWrong')) B.say(LINES.sheepWrong); break;
@@ -331,7 +336,7 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
       case 'deliveryDone': drop('deliveryArrive'); if (data.first && once('deliveryFirst')) B.say(LINES.deliveryFirst, 6000); else B.say(LINES.deliveryDone[(haulN++) % LINES.deliveryDone.length], 3500); break;
       case 'deliveryNoSaddle': if (once('deliveryNoSaddle')) B.say(LINES.deliveryNoSaddle); break;
       case 'deliveryRobbed': B.say(LINES.deliveryRobbed, 6000); break;
-      case 'wagonArrive': if (once('wagonArrive')) B.say(touch() ? LINES.wagonArriveTouch : LINES.wagonArrive, 9000); break;
+      case 'wagonArrive': if (once('wagonArrive')) B.say(touch() ? LINES.wagonArriveTouch.replace('the Rope button', canShoot(rider) ? 'the Shoot button' : 'the Rope button') : LINES.wagonArrive, 9000); break;
       case 'banditCatch': drop('banditMiss'); if (once('banditCatch')) B.say(LINES.banditCatch); break;
       case 'banditMiss': if (once(data.card ? 'banditMissCard' : 'banditMiss')) B.say(data.card ? LINES.banditMissCard : LINES.banditMiss, 6000); break;
       case 'banditLoop': if (once('banditLoop')) B.say(LINES.banditLoop); break;
@@ -383,7 +388,7 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
       case 'lootDone': drop('lootMiss', 'lootShare'); B.say(LINES.lootDone[(lootN++) % LINES.lootDone.length], 3500); break;
       case 'lootWord': B.say(LINES.lootWord.replace('{place}', data.place || 'another spot'), 6000); break;
       case 'lootWoodsTip': if (once('lootWoodsTip')) B.say(LINES.lootWoodsTip, 8000); break;
-      case 'lootCamp': if (once('lootCamp')) B.say(LINES.lootCamp, 6500); break;
+      case 'lootCamp': if (once('lootCamp')) B.say(canShoot(rider) ? LINES.lootCamp.replace('Rope the guard', 'Bring in the guard') : LINES.lootCamp, 6500); break;
       default: break;
     }
   }

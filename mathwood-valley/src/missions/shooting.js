@@ -1,5 +1,6 @@
-// TARGET SHOOTING: the bottle range, for every rider. Guns are only ever used on bottles and tin cans, here at the range
-// on the east edge of town (src/range.js); cattle and bandits are roped and deer photographed. Miss Opal Tate, who shot in the travelling Wild West shows, keeps the range: walk or ride
+// TARGET SHOOTING: the bottle range, for every rider: bottles and tin cans, here at the range on the east edge of town
+// (src/range.js). Cattle are roped and deer photographed; bandits are roped, or brought in with a six-shooter of the
+// rider's own where a grown-up has turned that on (src/gun.js: the same gun as this one, src/sixgun.js). Miss Opal Tate, who shot in the travelling Wild West shows, keeps the range: walk or ride
 // up and she says what it's about; E by her (or a tap on the prompt) takes up her six-shooter (src/revolver.js).
 //
 // The view goes to the rider's own eyes at the firing line, the revolver in their hand at the bottom right. Bottles or

@@ -7,7 +7,8 @@
 //   general store   "Mind the counter": the word-problem job (src/missions/store.js: townsfolk bring order slips); and
 //                   dogs: a Shiba, a Husky or the pug (the cheap joke pick), each named by the kid; more than one can be
 //                   bought, and the one picked follows you while the others wait at home; and hats (src/hats.js): bought
-//                   once, worn at once, swapped back and forth free
+//                   once, worn at once, swapped back and forth free; and the six-shooter for bandits (src/gun.js),
+//                   greyed with a word for a rider whose grown-up has "Bandits" on lasso only
 //   sheriff's desk  open the lock boxes you won, or crack seized boxes for the sheriff's pay (as many as you like)
 //   cabin           your table: open the lock boxes you won
 //
@@ -33,7 +34,8 @@ import { TIER_NAME, TIER_GOLD } from './lockbox/index.js';
 import { RUNG_IDS, RUNG } from './lockbox/generate.js';
 import { HATS, hatOf, hatIcon } from './hats.js';
 import { PALETTES } from './actors/folk.js';
-import { PRICES, SADDLES, HORSES, DOGS, DOG_NAMES, LADDER } from './catalog.js';
+import { PRICES, SADDLES, HORSES, DOGS, DOG_NAMES, LADDER, REVOLVER } from './catalog.js';
+import { gunShop, buyGun } from './gun.js';
 import { ownedHorses, ownsHorse, rideHorse, horseLook, ridden } from './mounts.js';
 export { PRICES, SADDLES, HORSES, DOGS, DOG_NAMES };
 
@@ -76,6 +78,8 @@ function ensureCss() {
   const l = document.createElement('link'); l.rel = 'stylesheet'; l.href = CSS_HREF; l.dataset.bmShop = '1'; document.head.appendChild(l);
 }
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+// a small six-shooter for the store's row (side on, the muzzle to the right)
+const GUN_PIC = '<svg viewBox="0 0 48 32" width="56" height="28" aria-hidden="true" style="flex:none;display:block"><ellipse cx="24" cy="17" rx="23" ry="13" fill="#f3e6c8" opacity="0.16"/><path d="M15 10h29v5H22z" fill="#3a4047"/><rect x="13" y="8" width="10" height="11" rx="1.5" fill="#6b5d4e"/><rect x="18" y="10" width="9" height="7" rx="2" fill="#8a9097"/><path d="M13 15l-6 12q-1 3 2 3h5l5-11z" fill="#6b3f22"/><path d="M19 19q1 5 6 4" fill="none" stroke="#c09a48" stroke-width="1.6"/><path d="M12 9l-3-3" stroke="#3a4047" stroke-width="2.4" stroke-linecap="round"/></svg>';
 const COIN = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="#e2ad4c"/><circle cx="12" cy="12" r="7.4" fill="none" stroke="#a8742a" stroke-width="1.6"/></svg>';
 
 // ── THE PLAIN PANEL ──────────────────────────────────────────────────────────────────────────────────────────────
@@ -247,6 +251,18 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
         else right = `${price(cost)}<button type="button" data-do="buy-hat" data-id="${x.id}" ${rider.gold < cost ? 'disabled' : ''}>${rider.gold < cost ? short(cost) : 'Buy'}</button>`;
         h += row({ name: x.name, line: x.line, right, pic: hatIcon(x.id, x.colour || palHat()) });
       }
+      // the six-shooter for bandits (src/gun.js): shown to every rider; greyed, with a word, while the rider's grown-up
+      // has "Bandits" on lasso only
+      const g = gunShop(rider);
+      h += `<h3 class="bms-h">Hardware</h3>`;
+      if (g.state === 'off') {
+        h += `<div class="bms-row is-off">${GUN_PIC}<div class="bms-what"><b>${esc(REVOLVER.name)}</b><small>For bringing in bandits. It's off for this rider: a grown-up can turn it on in the rider's settings (Grown-ups, on the title screen).</small></div>
+          <div class="bms-act">${price(g.price)}<button type="button" disabled>Turned off</button></div></div>`;
+      } else {
+        const right = g.state === 'owned' ? `<span class="bms-tag is-on">In your holster</span>`
+          : `${price(g.price)}<button type="button" data-do="buy-gun" ${g.state === 'short' ? 'disabled' : ''}>${g.state === 'short' ? short(g.price) : 'Buy'}</button>`;
+        h += row({ name: REVOLVER.name, line: g.state === 'owned' ? 'Near the bandits, F (or Shoot) fires instead of the rope. Cattle are still roped.' : REVOLVER.line, right, pic: GUN_PIC });
+      }
       return note + h;
     },
     sheriff(note) {
@@ -328,6 +344,10 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
       rider.look = { ...(rider.look || {}), hatStyle: id, hat: true }; saveRider(rider);
       onBuy('hat');
       draw(`The ${HATS.find((x) => x.id === id).name.toLowerCase()} is on your head. It suits you!`);
+    } else if (what === 'buy-gun') {
+      const r = buyGun(rider);
+      if (r.ok) onBuy('revolver');
+      draw(r.note);
     } else if (what === 'wear-hat') {
       rider.look = { ...(rider.look || {}), hatStyle: id, hat: true }; saveRider(rider); onBuy('hat'); draw();
     } else if (what === 'kind') {

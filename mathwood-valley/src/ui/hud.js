@@ -26,7 +26,7 @@
 //   H.compass(yaw, marks)      marks: [{ id, icon: 'cabin'|'job'|'horse'|'dog', bearing, dist, label }] (radians,
 //                              as three's rotation.y: facing (sin, cos))
 //   H.caption(text, ms) | H.caption(null)   Old Hob's caption (hob.js says what)
-//   H.touch(on)                the round touch buttons
+//   H.touch(on)                the round touch buttons;  H.fireWord('Rope' | 'Shoot')  the big one's word
 //   H.callHorse(on)            the "call your horse" button (bottom right, with its key: H), while the horse is far off
 //                              or out of view; with the touch buttons up, their Horse button lights up instead
 //   H.perf(text | null)        the ?perf readout
@@ -483,6 +483,8 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
     el, ruleEl, hintEl, helpEl, jobEl: $('.bmh-job'),
     show(on) { el.classList.toggle('is-hidden', !on); if (!on) { prompt(null); caption(null); if (quiet()) { buckleQ.length = 0; if (buckleBusy && buckleWatch) endBuckle(); } } },
     purse, toast, prompt, caption, rule, hint, compass, buckle, shift,
+    // the big touch button's word: 'Rope', or 'Shoot' while the six-shooter is the tool (src/gun.js)
+    fireWord(w) { const b = touchEl.querySelector('[data-code="KeyF"]'); if (b && b.textContent !== w) b.textContent = w; },
     touch(on) { if (touchEl.hidden === !on) return; touchEl.hidden = !on; if (promptText) { const t = promptText; promptText = null; prompt(t); } placeBottom(); callHorse(callOn); },
     callHorse,
     perf(text) { perfEl.hidden = !text; if (text) perfEl.textContent = text; },

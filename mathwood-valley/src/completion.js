@@ -7,7 +7,8 @@
 //   buckles   every job's four belt buckles (save.js JOBS and BUCKLES: the counts in rider.stats.jobs)
 //   buy       everything for sale: the saddles and horses at the stable (every coat), the hats and dogs at the general
 //             store, one of each farm animal (bought, or a thank-you lamb, piglet or calf) and each piece of cabin
-//             furniture (src/cabin/slots.js); the cabin itself once it can be bought (COMING.cabin)
+//             furniture (src/cabin/slots.js); the cabin itself once it can be bought (COMING.cabin); the six-shooter
+//             only for a rider with "Bandits: lasso or revolver" on (src/gun.js) or who has bought it
 //   collect   deer photographs (rider.stats.jobs.photos, or the album), the keepsakes in the cabin (a job's tin buckle,
 //             then seen at home: rider.found.keepsake), the gang's hideouts (reached: rider.found.hideout, or the loot
 //             brought back from them: rider.topics.loot.trips)
@@ -56,9 +57,10 @@
 //   rider.goals   [{ id, at, doneAt? }]        the goals pinned (at: when, ms since 1970): 'goal:...' or 'buckle:...' ids
 //   rider.found   { place: ['camp-cow'], hideout: ['hollow'], keepsake: ['cattle'], windmill: feet }
 // Item ids never change once shipped (goals and rider.done keep them): 'buckle:<job>:<tier>', 'buy:<kind>:<id>'
-// (saddle, horse, hat, dog, animal, furniture, cabin), 'collect:<kind>:<id>' (photos, keepsake, hideout), 'place:<id>'.
+// (saddle, horse, hat, dog, animal, furniture, cabin, gun), 'collect:<kind>:<id>' (photos, keepsake, hideout), 'place:<id>'.
 import { JOBS, BUCKLES, BUCKLE_NAMES, KEEPSAKES, jobCount, jobOn, goalIdOf, upgradeGoals } from './save.js';
-import { PRICES, SADDLES, HORSES, DOGS } from './catalog.js';
+import { PRICES, SADDLES, HORSES, DOGS, REVOLVER } from './catalog.js';
+import { gunOn, ownsGun } from './gun.js';
 import { HATS } from './hats.js';
 import { SLOTS } from './cabin/slots.js';
 import { ANIMALS, KINDS } from './math/goods.js';
@@ -207,6 +209,10 @@ function allItems(rider) {
     buy('Farm animals', 'animal', k, k === 'cow' ? 'A milk cow' : `A ${A.name.toLowerCase()}`, A.price, FARM_HOW[k](A.price), own.animals.has(k), true, by);
   }
   for (const s of SLOTS) buy('Cabin furniture', 'furniture', s.id, s.name, s.price, `In your cabin, look at its empty spot and press E: ${s.price} gold.`, own.furniture.has(s.id));
+  // the six-shooter: on the list only for a rider whose grown-up set "Bandits: lasso or revolver" (src/gun.js), or who
+  // has it already (nothing bought leaves the list)
+  buy('The six-shooter', 'gun', REVOLVER.id, REVOLVER.name, PRICES.revolver, `The general store sells it for ${PRICES.revolver} gold.`, ownsGun(rider));
+  if (!ownsGun(rider) && !gunOn(rider)) out[out.length - 1].off = true;
 
   // collections: deer photographs, the keepsakes, the gang's hideouts
   const album = Array.isArray(rider && rider.album) ? rider.album.length : 0;

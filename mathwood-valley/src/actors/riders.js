@@ -15,6 +15,10 @@
 //              opposite way, toward the rope, and lands face down on the ground beside the trail
 //   (then)     hogtied: lying face down, wrists behind the back and the ankles drawn up to them, a short rope between,
 //              with a little wriggle now and then. The riderless horse gallops off.
+//   fall(at, { shot: true })   knocked from the saddle by the six-shooter (src/gun.js; no blood): he tumbles off the far
+//              side, away from the shooter, in a puff of dust, lies flat a moment, sits up dazed with his hat askew, and
+//              puts his hands up. The riderless horse trots off. (Getting up and walking to the sheriff: the job's.)
+//   duck()     a townsman shot at by mistake ducks down in the saddle as the shot goes over, and comes back up
 //
 //   const kit = await loadRiderKit({ animals, base })   loads the horses and two saddles (once a ride)
 //   const r = makeRider(kit, { W, folk, scene, look, horse, coat, saddle, kerchief, shadows })
@@ -28,8 +32,8 @@
 //   r.top()                  the height (world y) just over the hat, where the card sits
 //   r.neck(v), r.neckRadius  where a lasso loop goes round the rider's neck (for lasso.js)
 //   r.person, r.horse        the folk.js person and the animal
-//   r.mode                   'ride' | 'fall' | 'down' (hogtied on the ground) | 'gone'
-//   r.tipHat(), r.fall(at, { onDown })
+//   r.mode                   'ride' | 'fall' | 'down' (hogtied on the ground, or sitting with his hands up) | 'gone'
+//   r.tipHat(), r.fall(at, { onDown, shot }), r.duck(), r.shot (true once knocked down by a shot)
 //   r.show(on)               drawn, or put out of sight (far from the player)
 //   r.dispose()
 //   RIDERS                   the sizes and timings
@@ -41,6 +45,7 @@ import { makeAnimal, saddleOn, gaitFor, COATS } from './animals.js';
 import { makeHorse as makeSteed, horseDial } from './horses.js';
 import { rollPenHorse } from '../horsepenplan.js';
 import { seatRider } from './seat.js';
+import { makeDust } from '../fx/dust.js';
 
 export const RIDERS = {
   turn: [[0, 2.2], [3, 1.6], [8, 1.0], [13, 0.8]],   // the fastest a horse turns (radians a second) at a speed (m/s)
@@ -53,6 +58,11 @@ export const RIDERS = {
   card: [320, 128],       // the number card's canvas (pixels)
   overHat: 0.42,          // metres from the neck to the card's foot (just over the hat's crown)
   bolt: 7,                // seconds a riderless horse gallops off before it is put away
+  // knocked from the saddle by a shot (seconds): the tumble to the ground, lying flat, sitting up, a dazed moment, the
+  // hands going up; then sitting with them up. out: metres from the horse's middle he lands; trot: the riderless
+  // horse's pace (m/s), going off for bolt seconds at it
+  shot: { tumble: 0.8, lie: 0.55, sit: 0.7, dazed: 0.7, hands: 0.45, out: 1.7, trot: 4.2, bolt: 10 },
+  duck: 1.2,              // seconds a duck takes: down fast, back up slowly
 };
 
 // the shared pool of looks: bandits and townsfolk are both drawn from it, so a look never gives the answer away
@@ -195,6 +205,69 @@ export function tiePose(person, amount, T = TIE) {
   }
 }
 
+// THE TUCK of the tumble (laid over the standing Idle clip with tiePose, as the tied pose is): the knees drawn up
+export const TUCK = { thigh: -1.7, knee: 1.9, arm: [0, 0, 0], fore: [0, 0, 0] };
+// SITTING ON THE GROUND (sitLegs): each thigh and shin pointed out in front, a little out to his side and a touch down,
+// in the person's own frame (x: out to his left, y: up, z: forward)
+export const SIT_LEGS = { thigh: [0.22, -0.08, 1], shin: [0.06, -0.1, 1] };
+// HANDS UP (amount 0..1 blended over whatever the clip has the arms doing): each upper arm out to the side and up, the
+// elbows about shoulder high, the forearms straight up, the hands by the head. The directions are in the person's own
+// frame (x: out to his left, y: up, z: forward). The walk to the sheriff's office keeps them up too (src/missions/wagonjob.js)
+export const HANDS_UP = { arm: [0.85, 0.42, 0.12], fore: [0.1, 1, 0.12] };
+const _hq = new THREE.Quaternion(), _hx = new THREE.Vector3(), _hy = new THREE.Vector3(), _hz = new THREE.Vector3(), _hd = new THREE.Vector3();
+const _hb = new THREE.Quaternion(), _hp = new THREE.Quaternion(), _ht = new THREE.Quaternion(), _h0 = new THREE.Quaternion(), _hby = new THREE.Vector3();
+// a bone turned (part of the way: k) so that it points (its own +y, along it to its child) along the world direction dir
+function pointAlong(bone, dir, k) {
+  dir.normalize();
+  bone.getWorldQuaternion(_hb);
+  _hby.set(0, 1, 0).applyQuaternion(_hb);
+  _ht.setFromUnitVectors(_hby, dir).multiply(_hb);
+  bone.parent.getWorldQuaternion(_hp);
+  _h0.copy(bone.quaternion);
+  _ht.premultiply(_hp.invert());
+  bone.quaternion.slerpQuaternions(_h0, _ht, k);
+  bone.updateMatrixWorld(true);
+}
+// the legs out in front, sitting (amount 0..1 over whatever the clip has them doing): each thigh and shin pointed, then
+// the foot (a bone of its own under the root, not the shin's child) put at the end of its shin and turned as far as
+// the shin turned, as tiePose does
+const _lq0 = new THREE.Quaternion(), _lq1 = new THREE.Quaternion(), _lpq = new THREE.Quaternion(), _lt = new THREE.Quaternion(), _lp = new THREE.Vector3();
+export function sitLegs(person, k = 1, L = SIT_LEGS) {
+  if (k <= 0) return;
+  const b = person.bones;
+  person.root.updateMatrixWorld(true);
+  person.root.getWorldQuaternion(_hq);
+  _hx.set(1, 0, 0).applyQuaternion(_hq); _hy.set(0, 1, 0).applyQuaternion(_hq); _hz.set(0, 0, 1).applyQuaternion(_hq);
+  for (const [s, sg] of [['L', 1], ['R', -1]]) {
+    const up = b['UpperLeg' + s], lo = b['LowerLeg' + s], foot = b['Foot' + s];
+    if (!up || !lo) continue;
+    lo.getWorldQuaternion(_lq0);
+    pointAlong(up, _hd.copy(_hx).multiplyScalar(sg * L.thigh[0]).addScaledVector(_hy, L.thigh[1]).addScaledVector(_hz, L.thigh[2]), k);
+    pointAlong(lo, _hd.copy(_hx).multiplyScalar(sg * L.shin[0]).addScaledVector(_hy, L.shin[1]).addScaledVector(_hz, L.shin[2]), k);
+    if (!foot) continue;
+    lo.getWorldQuaternion(_lq1);
+    lo.localToWorld(_lp.set(0, Math.max(0.3, lo.position.length()), 0));
+    foot.parent.updateMatrixWorld(true); foot.parent.worldToLocal(_lp);
+    foot.position.copy(_lp);
+    foot.parent.getWorldQuaternion(_lpq);
+    _lt.copy(_lpq).invert().multiply(_lq1.multiply(_lq0.invert())).multiply(_lpq);   // (the shin's turn, in the foot's parent's frame)
+    foot.quaternion.premultiply(_lt);
+  }
+}
+export function handsUp(person, k, H = HANDS_UP) {
+  if (k <= 0) return;
+  const b = person.bones;
+  person.root.updateMatrixWorld(true);
+  person.root.getWorldQuaternion(_hq);
+  _hx.set(1, 0, 0).applyQuaternion(_hq); _hy.set(0, 1, 0).applyQuaternion(_hq); _hz.set(0, 0, 1).applyQuaternion(_hq);
+  for (const [s, sg] of [['L', 1], ['R', -1]]) {
+    const ua = b['UpperArm' + s], la = b['LowerArm' + s];
+    if (!ua || !la) continue;
+    pointAlong(ua, _hd.copy(_hx).multiplyScalar(sg * H.arm[0]).addScaledVector(_hy, H.arm[1]).addScaledVector(_hz, H.arm[2]), k);
+    pointAlong(la, _hd.copy(_hx).multiplyScalar(sg * H.fore[0]).addScaledVector(_hy, H.fore[1]).addScaledVector(_hz, H.fore[2]), k);
+  }
+}
+
 // ── A RIDER ──────────────────────────────────────────────────────────────────────────────────────────────────────────
 export function makeRider(kit, { W, folk, scene = W.scene, look = null, horse = null, coat = null, saddle = null, kerchief = null, shadows = true } = {}) {
   const L = RIDER_LOOKS;
@@ -236,7 +309,7 @@ export function makeRider(kit, { W, folk, scene = W.scene, look = null, horse = 
     height: 2.6,                            // (for anything that sizes by height: rider and horse together)
     ring: { y: 1.25, radius: 0.55 },        // (the target ring: round the rider's chest, in the person's own space)
   };
-  let gait = 'Idle', clipSpeed = 1, tip = 0, fall = null, down = null, bolt = 0, wriggle = Math.random() * 10;
+  let gait = 'Idle', clipSpeed = 1, tip = 0, fall = null, down = null, bolt = 0, wriggle = Math.random() * 10, duck = 0, knock = null, dust = null;
   const tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
 
   R.setNumber = (text) => {
@@ -300,6 +373,28 @@ export function makeRider(kit, { W, folk, scene = W.scene, look = null, horse = 
 
   // ── THE HAT TIP ─────────────────────────────────────────────────────────────────────────────────────────────────
   R.tipHat = () => { if (R.mode === 'ride') tip = RIDERS.tip; };
+  // ── THE DUCK (a wrong one shot at: the shot goes over his head) ────────────────────────────────────────────────
+  R.duck = () => { if (R.mode === 'ride') { duck = RIDERS.duck; tip = 0; } };
+  const _dq = new THREE.Quaternion(), _dp = new THREE.Quaternion(), _dq2 = new THREE.Quaternion(), _da = new THREE.Vector3();
+  // a bone bent about a world axis (in its parent's frame), as the player's waist turns (src/player.js)
+  function bendAbout(bone, axis, angle) {
+    if (!bone || !bone.parent) return;
+    bone.parent.getWorldQuaternion(_dp);
+    _dq2.setFromAxisAngle(axis, angle);
+    bone.quaternion.premultiply(_dp.clone().invert().multiply(_dq2).multiply(_dp));
+    bone.updateMatrixWorld(true);
+  }
+  function poseDuck(dt) {
+    if (duck <= 0) return;
+    duck = Math.max(0, duck - dt);
+    const f = 1 - duck / RIDERS.duck, k = f < 0.18 ? ease(f / 0.18) : ease(Math.max(0, Math.min(1, 1 - (f - 0.45) / 0.55)));   // (down fast, held, up slowly)
+    person.root.updateMatrixWorld(true);
+    person.root.getWorldQuaternion(_dq); _da.set(1, 0, 0).applyQuaternion(_dq);   // (his left: bending about it tips him forward)
+    const b = person.bones;
+    bendAbout(b.Abdomen, _da, 0.55 * k);
+    bendAbout(b.Chest, _da, 0.35 * k);
+    bendAbout(b.Head, _da, 0.25 * k);
+  }
   const _q = new THREE.Quaternion(), _e = new THREE.Euler();
   function poseTip(dt) {
     if (tip <= 0) return;
@@ -347,8 +442,9 @@ export function makeRider(kit, { W, folk, scene = W.scene, look = null, horse = 
 
   // ── PULLED FROM THE SADDLE, THEN HOGTIED ────────────────────────────────────────────────────────────────────────
   // at: where the roper is (a Vector3 or { x, z }); onDown(): called once the rider is tied on the ground
-  R.fall = (at, { onDown = null } = {}) => {
+  R.fall = (at, { onDown = null, shot = false } = {}) => {
     if (R.mode !== 'ride') return false;
+    if (shot) return knockDown(at, onDown);
     R.mode = 'fall'; tip = 0;
     person.root.updateWorldMatrix(true, false);
     // the side toward the roper, a body's length from the horse's middle
@@ -363,6 +459,89 @@ export function makeRider(kit, { W, folk, scene = W.scene, look = null, horse = 
     if (person.hat && person.hat.userData.y0 != null) { person.hat.position.y = person.hat.userData.y0; person.hat.rotation.x = 0; }
     return true;
   };
+  // ── KNOCKED FROM THE SADDLE BY A SHOT, THEN HANDS UP ─────────────────────────────────────────────────────────────
+  // He goes off the far side from the shooter, tumbling, lands flat on his back with his feet toward the shooter (a puff
+  // of dust), sits up dazed with his hat knocked askew, and puts his hands up, facing the shooter. Placed by his hips
+  // (whatever the clip does with the root): the hips follow the arc, then sit on the ground.
+  const _kh = new THREE.Vector3(), _kq = new THREE.Quaternion(), _kq2 = new THREE.Quaternion(), _kq3 = new THREE.Quaternion(), _ke = new THREE.Euler();
+  const _kx = new THREE.Vector3(1, 0, 0), _ky = new THREE.Vector3(0, 1, 0);
+  function knockDown(at, onDown) {
+    R.mode = 'fall'; R.shot = true; tip = 0; duck = 0;
+    const T = RIDERS.shot;
+    person.root.updateMatrixWorld(true);
+    const toX = at.x - R.x, toZ = at.z - R.z, side = -(Math.sign(Math.cos(R.heading) * toX - Math.sin(R.heading) * toZ) || 1);   // (away from the shooter)
+    const lx = R.x + Math.cos(R.heading) * side * T.out, lz = R.z - Math.sin(R.heading) * side * T.out;
+    const face = Math.atan2(at.x - lx, at.z - lz);
+    const hips = person.bones.Hips ? person.bones.Hips.getWorldPosition(new THREE.Vector3()) : person.root.position.clone().setY(person.root.position.y + 1);
+    knock = { t: 0, from: hips, fromQ: person.root.quaternion.clone(), to: new THREE.Vector3(lx, W.heightAt(lx, lz) + 0.13, lz), face, onDown, landed: false, done: false,
+      roll: new THREE.Vector3(lx - R.x, 0, lz - R.z).normalize() };
+    person.play('Idle', { fade: 0.15 });
+    if (person.hat && person.hat.userData.y0 != null) { person.hat.position.y = person.hat.userData.y0; person.hat.rotation.x = 0; }
+    // the horse, riderless, trots off away from the shooter
+    bolt = T.bolt; R.boltDir = Math.atan2(R.x - at.x, R.z - at.z) - side * 0.5; R.trot = true;
+    return true;
+  }
+  // his hips put at `want` (the clip and poses already laid on): the root moved by however far the hips are off
+  function hipsAt(want) {
+    person.root.updateMatrixWorld(true);
+    if (!person.bones.Hips) { person.root.position.copy(want); return; }
+    person.bones.Hips.getWorldPosition(_kh);
+    person.root.position.add(_kh.subVectors(want, _kh));
+    person.root.updateMatrixWorld(true);
+  }
+  // sitting facing the shooter, leaning back by a (radians: about -1.45 is flat on his back, the feet up)
+  const lean = (face, a) => _kq.setFromAxisAngle(_ky, face).multiply(_kq2.setFromAxisAngle(_kx, a));
+  function stepKnock(dt) {
+    const K = knock, T = RIDERS.shot; K.t += dt;
+    const t1 = T.tumble, t2 = t1 + T.lie, t3 = t2 + T.sit, t4 = t3 + T.dazed, t5 = t4 + T.hands;
+    person.update(dt);
+    if (K.t < t1) {
+      // the tumble: an arc off the horse, rolling over once along the way, knees tucked
+      const f = K.t / t1, e = ease(f);
+      const at = new THREE.Vector3().lerpVectors(K.from, K.to, e); at.y += Math.sin(f * Math.PI) * 0.5;
+      person.root.quaternion.slerpQuaternions(K.fromQ, lean(K.face, -1.45), e).premultiply(_kq3.setFromAxisAngle(K.roll, -Math.PI * 2 * e));
+      tiePose(person, Math.sin(f * Math.PI), TUCK);
+      hipsAt(at);
+      return;
+    }
+    if (!K.landed) { K.landed = true; if (!dust) dust = makeDust(scene); dust.puff({ x: K.to.x, y: K.to.y - 0.13, z: K.to.z }, { n: 7, size: 1.1 }); }
+    if (K.t < t2) person.root.quaternion.copy(lean(K.face, -1.45));
+    else if (K.t < t3) person.root.quaternion.copy(lean(K.face, -1.45 + 1.33 * ease((K.t - t2) / T.sit)));   // (sitting up)
+    else person.root.quaternion.copy(lean(K.face, -0.12));
+    sitLegs(person, 1);
+    // dazed: his head wobbles a moment; then the hands go up
+    const b = person.bones;
+    if (K.t >= t2 && b.Head) {
+      const w = Math.max(0, 1 - Math.max(0, K.t - t3) / (T.dazed + T.hands)) * Math.min(1, (K.t - t2) / 0.3);
+      b.Head.quaternion.multiply(_kq3.setFromEuler(_ke.set(0.15 * w * Math.sin(K.t * 7), 0, 0.25 * w * Math.sin(K.t * 4.5))));
+    }
+    hipsAt(K.to);
+    if (K.t >= t4) handsUp(person, ease(Math.min(1, (K.t - t4) / T.hands)));
+    if (K.t >= t2) askew(Math.min(1, (K.t - t2) / 0.25));
+    if (K.t >= t5 && !K.done) {
+      K.done = true; R.mode = 'down'; down = { t: 0, sit: true };
+      const cb = K.onDown; if (cb) cb();
+    }
+  }
+  // his hat knocked askew by the fall (tipped over one ear and back)
+  function askew(k) {
+    const hat = person.hat; if (!hat) return;
+    const y0 = hat.userData.y0 ?? (hat.userData.y0 = hat.position.y);
+    hat.position.y = y0 + 0.03 * k; hat.rotation.set(-0.25 * k, 0, 0.42 * k);
+  }
+  // sitting with his hands up: a little sway, and now and then a look round
+  function stepSit(dt) {
+    down.t += dt; wriggle += dt;
+    person.root.quaternion.copy(lean(knock.face, -0.12 + 0.03 * Math.sin(wriggle * 1.3)));
+    person.update(dt);
+    sitLegs(person, 1);
+    const b = person.bones;
+    if (b.Head) b.Head.quaternion.multiply(_kq3.setFromEuler(_ke.set(0, 0.35 * Math.sin(wriggle * 0.5) ** 3, 0)));
+    hipsAt(knock.to);
+    handsUp(person, 1);
+    askew(1);
+  }
+
   // the rope from the wrists to the ankles, made once the rider is down
   let rope = null;
   function tieRope() {
@@ -426,20 +605,22 @@ export function makeRider(kit, { W, folk, scene = W.scene, look = null, horse = 
       a.update(dt); person.update(dt); syncRide();
       seatRider(a, person);
       poseTip(dt);
+      poseDuck(dt);
       return;
     }
+    if (dust) dust.update(dt);
     // the riderless horse gallops off, then is put away
     if (bolt > 0) {
       bolt -= dt;
-      const v = Math.min(9, R.speed + 6 * dt);
+      const v = R.trot ? Math.min(RIDERS.shot.trot, R.speed + 3 * dt) : Math.min(9, R.speed + 6 * dt);   // (a shot one's horse trots off)
       R.speed = v; R.heading = wrapA(R.heading + wrapA(R.boltDir - R.heading) * Math.min(1, 2 * dt));
       const nx = R.x + Math.sin(R.heading) * v * dt, nz = R.z + Math.cos(R.heading) * v * dt;
       if (!W.blocked(nx, nz)) { R.x = nx; R.z = nz; }
       placeHorse(dt); clips(); a.update(dt);
       if (bolt <= 0) a.root.visible = false;
     }
-    if (R.mode === 'fall') stepFall(dt);
-    else if (R.mode === 'down') stepDown(dt);
+    if (R.mode === 'fall') { if (knock) stepKnock(dt); else stepFall(dt); }
+    else if (R.mode === 'down') { if (knock) stepSit(dt); else stepDown(dt); }
   };
   R.horseGone = () => bolt <= 0;
   // shown or put out of sight (far from the player: nothing of it is drawn or moved meanwhile)
@@ -452,6 +633,7 @@ export function makeRider(kit, { W, folk, scene = W.scene, look = null, horse = 
     bag.removeFromParent(); bagTex.dispose();
     kc.removeFromParent();
     if (rope) { rope.removeFromParent(); rope.geometry.dispose(); rope.material.dispose(); }
+    if (dust) { dust.dispose(); dust = null; }
     if (st) st.dispose(); else a.dispose();
     person.dispose();
   };

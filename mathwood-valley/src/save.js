@@ -14,8 +14,10 @@
 //             (outfit = a people model file; the fields match the actors' makePerson options)
 //   gold,     spending money
 //   bounty,   all the gold ever earned; it never goes down, and the rider's title comes from it
-//   mode:     'lasso' | 'shoot'    from the days of the title's lasso-or-shooting choice; kept in saves, read by nothing
-//             new (the bottle range is for every rider now)
+//   mode:     'lasso' | 'shoot'    the grown-ups' "Bandits: lasso only / lasso or revolver" switch (src/gun.js): 'shoot'
+//             lets the rider buy the six-shooter at the general store and shoot bandits with it (the bottle range is
+//             for every rider either way). The same field the old title's lasso-or-shooting choice kept
+//   (owned.revolver: true once the six-shooter is bought: src/gun.js)
 //   topicsOn: { counting, adding, taking, times, dividing, algebra }   the old title's math topic ticks; kept in saves,
 //             no longer shown (the skill model below picks the math)
 //   readAloud: false | true | 'on'   the grown-ups' switch for the maker's recorded voice reading the basic math cards

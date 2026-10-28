@@ -85,3 +85,6 @@
 /* a horse's top speed, a plain number (the stable) */
 .bms-speed { display: inline-block; margin-top: 3px; font-size: 13px; color: var(--ink-2); padding: 1px 8px; border-radius: 999px; border: 1px solid rgba(226, 173, 76, 0.3); }
 .bms-what .bms-speed b { display: inline; font: 700 16px Bitter, Georgia, serif; color: var(--brass-hi); }   /* (not the row name's block) */
+/* a thing for sale that a grown-up has turned off for this rider (the six-shooter): greyed, its word still readable */
+.bms-row.is-off > svg, .bms-row.is-off .bms-what b, .bms-row.is-off .bms-act { opacity: 0.5; }
+.bms-row.is-off .bms-what small { color: var(--mute); }
