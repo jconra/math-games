@@ -13,7 +13,8 @@ import { makeRubbleTexture } from '../stone/stonetex.js';
 import { U, weather } from '../materials/weather.js';
 import { stoneEdges, PALETTES } from '../stone/stonewall.js';
 import { loadAnimals, makeAnimal } from '../../src/actors/animals.js';
-import { PRICES, HORSES } from '../../src/catalog.js';
+import { PRICES, HORSES, LADDER } from '../../src/catalog.js';
+import { makeHorse, HORSE_KIND } from '../../src/actors/horses.js';
 import { buildStable, stableRecipe, PAINTS, RECIPE_DEFAULTS, STABLE } from './stable.js';
 import { buildSheriff, sheriffRecipe, PAINTS as SHERIFF_PAINTS, RECIPE_DEFAULTS as SHERIFF_DEFAULTS } from './sheriff.js';
 import { MORTARS } from '../stone/stonewall.js';
@@ -34,12 +35,8 @@ const num = (n) => Math.round(n).toLocaleString('en-US');
 const MB = (b) => (b / 1048576).toFixed(1) + ' MB';
 const GAME = new URL('../../', import.meta.url).href;
 
-// THE HORSES, as the game dresses them (src/player.js HORSE_LOOKS: which animal, a coat tint over it). Their names and
-// prices are the game's own (src/catalog.js); the bay comes free, so it is always "owned".
-const LOOKS = {
-  bay: { kind: 'horse' }, white: { kind: 'horseWhite' }, palomino: { kind: 'horseWhite', tint: '#f3d394' },
-  midnight: { kind: 'horse', tint: '#615753' }, chestnut: { kind: 'farmHorse' }, donkey: { kind: 'donkey' },
-};
+// THE HORSES, as the game's stable shows them (src/stablelife.js): the stable's ladder (src/catalog.js LADDER), each its
+// coat and size on the new horse (src/actors/horses.js), the donkey as he is. Their names and prices are the game's own.
 const NAME = Object.fromEntries(HORSES.map((h) => [h.id, h.name.split(' ')[0].toUpperCase()]));
 const FULL = Object.fromEntries(HORSES.map((h) => [h.id, h.name]));
 
@@ -317,7 +314,8 @@ function drawBoards() {
 const SHAPE = {};   // per kind: how far its chest and nose reach forward of its middle, and its halter (measured once)
 const HALTER = animalLamps(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, metalness: 0.1 }), 0.45);
 function measure(a) {
-  if (SHAPE[a.kind]) return SHAPE[a.kind];
+  const key = a.kind + ':' + a.tall.toFixed(3);   // (by size too: the ladder's horses are five sizes of the one kind)
+  if (SHAPE[key]) return SHAPE[key];
   a.root.position.set(0, 0, 0); a.root.rotation.set(0, 0, 0); a.root.updateMatrixWorld(true);
   const m = a.mesh, v = new THREE.Vector3();
   let chest = -Infinity, nose = -Infinity, top = 0;
@@ -326,7 +324,7 @@ function measure(a) {
     nose = Math.max(nose, v.z); top = Math.max(top, v.y);
     if (v.y > 0.45 * a.tall && v.y < 0.62 * a.tall) chest = Math.max(chest, v.z);
   }
-  return (SHAPE[a.kind] = { chest, nose, top, halter: halterFor(a) });
+  return (SHAPE[key] = { chest, nose, top, halter: halterFor(a) });
 }
 // A HALTER fitted to a kind's head, in the head bone's own frame (so it rides the head through every clip): the head's
 // corners (the ones mostly bound to its head bone) as it stands, its long axis from the bone to the nose; across that
@@ -391,12 +389,14 @@ const TURN = { R1: 0.5, R2: 0.3, R3: -0.6, L1: -0.48, L2: 0.4, L3: 0 }, NOD = { 
 // a black coat needs a halter that shows against it: a light tan-red one
 const HALTER_RED = animalLamps(new THREE.MeshStandardMaterial({ color: 0xb4532e, roughness: 0.7 }), 0.6);
 function placeHorses() {
-  for (const h of horses) { if (h.halter) h.halter.removeFromParent(); h.a.dispose(); }
+  for (const h of horses) { if (h.halter) h.halter.removeFromParent(); if (h.horse) h.horse.dispose(); else h.a.dispose(); }
   horses.length = 0;
   if (!lib || !B || !B.stalls) return;
   for (const S of B.stalls) {
-    const id = S.horse, look = LOOKS[id] || LOOKS.bay;
-    const a = makeAnimal(lib, look.kind, { tint: look.tint || '#ffffff' });
+    // (each the game's own: the stable's ladder's coat and size on the new horse, the donkey as he is: src/stablelife.js)
+    const id = S.horse, L = LADDER[id] || LADDER.bay, look = { kind: L.kind };
+    const horse = L.kind === HORSE_KIND ? makeHorse(lib, { recipe: L.coat, size: L.size, tier: state.quality, renderer }) : null;
+    const a = horse ? horse.a : makeAnimal(lib, L.kind, { size: L.size });
     const sh = measure(a);
     let pose = S.pose;
     if ((pose === 'eat' && !a.clips.includes('Eating')) || (pose === 'rack' && !a.clips.includes('Idle_Headlow'))) pose = 'look';
@@ -416,7 +416,7 @@ function placeHorses() {
     if (sh.halter) { halter = new THREE.Mesh(sh.halter.geo, id === 'midnight' ? HALTER_RED : HALTER); halter.castShadow = true; a.bones[sh.halter.bone].add(halter); }
     horseGroup.add(a.root);
     const turn = pose === 'door' || pose === 'look' ? TURN[S.id] || 0 : pose === 'side' ? -S.side * 0.25 : 0, nod = pose === 'door' || pose === 'look' ? NOD[S.id] || 0 : 0;
-    horses.push({ a, id, stall: S.id, next: 4 + Math.random() * 8, shape: sh, pose, still: pose !== 'look' && pose !== 'door', speed, halter, turn, nod, across: new THREE.Vector3(Math.cos(face), 0, -Math.sin(face)), head: a.bones.Head || a.bones[a.info.head] });
+    horses.push({ a, horse, id, stall: S.id, next: 4 + Math.random() * 8, shape: sh, pose, still: pose !== 'look' && pose !== 'door', speed, halter, turn, nod, across: new THREE.Vector3(Math.cos(face), 0, -Math.sin(face)), head: a.bones.Head || a.bones[a.info.head] });
   }
   horseGroup.visible = state.showHorses;
 }
@@ -429,6 +429,7 @@ function tickHorses(dt) {
   for (const h of horses) {
     if (h.head && h.headClip) h.head.quaternion.copy(h.headClip);
     h.a.update(dt);
+    if (h.horse) h.horse.look(camera.position);
     if (h.head) (h.headClip || (h.headClip = new THREE.Quaternion())).copy(h.head.quaternion);
     h.next -= dt;
     if (h.next < 0 && !h.still) {
@@ -648,7 +649,7 @@ function syncPanel() {
 // switch the building: its own wood look, its own panel, built, looked at from the front
 let horsesLoading = null;
 function loadHorses() {
-  if (!horsesLoading) horsesLoading = loadAnimals(GAME, { kinds: ['horse', 'horseWhite', 'donkey', 'farmHorse'] }).then((l) => { lib = l; placeHorses(); });
+  if (!horsesLoading) horsesLoading = loadAnimals(GAME, { kinds: [HORSE_KIND, 'donkey'] }).then((l) => { lib = l; placeHorses(); });
   return horsesLoading;
 }
 function setBuilding(kind) {
