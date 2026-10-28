@@ -29,6 +29,7 @@ import { buildBlacksmith, blacksmithRecipe, BS_PAINTS, BS_DEFAULTS } from './bla
 import { buildBarn, barnRecipe, BARN_PAINTS, BARN_DEFAULTS } from './barn.js';
 import { buildWindpump, windpumpRecipe, WINDPUMP_DEFAULTS } from './windpump.js';
 import { LU, lit, boardWear, glowMaterial, animalLamps, setLamps, lanternGlow, ropeTexture } from './parts.js';
+import { spotsOf, makeNav } from '../../src/saloonfolkplan.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const num = (n) => Math.round(n).toLocaleString('en-US');
@@ -57,7 +58,7 @@ scene.add(sun, sun.target, hemi);
 // (the stable's recipe sits on the state itself, as it always has; the sheriff's office keeps its own in state.sh)
 const state = {
   ...RECIPE_DEFAULTS, horses: [...RECIPE_DEFAULTS.horses],
-  doors: true, doorsOpen: true, lamps: true, time: 'day', props: true, showHorses: true, quality: 'gaming', az: 200,
+  doors: true, doorsOpen: true, lamps: true, time: 'day', props: true, showHorses: true, quality: 'gaming', az: 200, crowdMarks: false,
   owned: { bay: true, donkey: false, chestnut: false, palomino: false, white: false, midnight: false },
   building: ({ stable: 'stable', sheriff: 'sheriff', store: 'store', saloon: 'saloon', cabin: 'cabin', blacksmith: 'blacksmith', barn: 'barn', windpump: 'windpump' })[new URLSearchParams(location.search).get('b')] || 'saloon',   // (the saloon first: the town's showpiece)
   sh: { ...SHERIFF_DEFAULTS }, st: { ...STORE_DEFAULTS }, sa: { ...SALOON_DEFAULTS }, ca: { ...CABIN_DEFAULTS }, bs: { ...BS_DEFAULTS }, bn: { ...BARN_DEFAULTS }, wp: { ...WINDPUMP_DEFAULTS }, jailDoor: false,
@@ -184,8 +185,27 @@ function woodFor(T) { setWood(T, cur().wood); eraseNails(T); if (BLD().calmGrain
 
 // ── the building, its props, its horses ──────────────────────────────────────────────────────────────────────────────
 let B = null, P = null, ground = null, groundGeo = null, lib = null;
-const group = new THREE.Group(), propGroup = new THREE.Group(), horseGroup = new THREE.Group();
-scene.add(group, propGroup, horseGroup);
+const group = new THREE.Group(), propGroup = new THREE.Group(), horseGroup = new THREE.Group(), crowdGroup = new THREE.Group();
+scene.add(group, propGroup, horseGroup, crowdGroup);
+// THE SALOON CROWD'S PLACES (the game's src/saloonfolk.js uses them; src/saloonfolkplan.js reads them): flat marks on the
+// hall's floor: a disc for each seat (blue a chair, violet a bar stool) and standing spot (pink), with a tick the way it
+// faces; the aisles' points (green) and the walks between them; red rings round what is kept clear (the chalkboard and
+// its teacher's and player's spots, the stairs' foot), amber round the doorways' ways in
+function drawCrowdMarks() {
+  for (const m of [...crowdGroup.children]) { crowdGroup.remove(m); m.geometry.dispose(); m.material.dispose(); }
+  const C = B && B.anchors && B.anchors.crowd; if (!C) return;
+  const y = C.floor + 0.015, flat = (geo, col, x, z, rot = 0) => { const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.85, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.rotation.z = rot; m.position.set(x, y, z); m.renderOrder = 2; crowdGroup.add(m); return m; };
+  const nav = makeNav(C);
+  for (const s of spotsOf(C)) {
+    flat(new THREE.CircleGeometry(0.17, 20), { chair: 0x2f7bff, stool: 0x9a3cff, stand: 0xff4fa3 }[s.kind], s.x, s.z);
+    const tick = flat(new THREE.PlaneGeometry(0.05, 0.3), 0xffffff, s.x + Math.sin(s.rot) * 0.2, s.z + Math.cos(s.rot) * 0.2); tick.rotation.z = s.rot;
+  }
+  for (const n of nav.nodes) flat(new THREE.CircleGeometry(0.09, 12), 0x26b34a, n.x, n.z);
+  const pts = []; nav.edges.forEach((row, i) => row.forEach((e, j) => { if (e != null && j > i) pts.push(nav.nodes[i].x, y, nav.nodes[i].z, nav.nodes[j].x, y, nav.nodes[j].z); }));
+  const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+  const lines = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0x26b34a, transparent: true, opacity: 0.6 })); lines.renderOrder = 2; crowdGroup.add(lines);
+  for (const [x, z, r, walk] of C.keep.circles) flat(new THREE.RingGeometry(r - 0.05, r, 40), walk ? 0xe0a030 : 0xe03030, x, z);
+}
 const horses = [];
 const stats = { buildMs: 0, bakeMs: 0, propMs: 0, texMs: 0 };
 function rebuild() {
@@ -252,6 +272,7 @@ function rebuild() {
   if (state.building === 'stable') drawBoards();
   placeHorses();
   propGroup.visible = state.props;
+  drawCrowdMarks(); crowdGroup.visible = state.crowdMarks;
   const rb = $('#recipe'); if (rb) rb.textContent = JSON.stringify(BLD().recipe());
   updateStats();
 }
@@ -527,7 +548,8 @@ const SHOW = {
     <div class="row check"><label><input type="checkbox" id="walker"> Someone walking through (the batwings swing)</label></div>
     <div class="row check"><label><input type="checkbox" id="doors"> Batwings hooked open</label></div>
     <div class="row check"><label><input type="checkbox" id="lamps"> Lamps lit</label></div>
-    <div class="row check"><label><input type="checkbox" id="props"> Props (tables, chairs, stools, the piano, barrels, benches, the hitching rail and trough)</label></div>`;
+    <div class="row check"><label><input type="checkbox" id="props"> Props (tables, chairs, stools, the piano, barrels, benches, the hitching rail and trough)</label></div>
+    <div class="row check"><label><input type="checkbox" id="crowdMarks"> The crowd's places (where the townsfolk sit and stand while the band plays, the aisles they walk, what is kept clear)</label></div>`;
   },
 };
 const HOW = {
@@ -600,6 +622,7 @@ function buildPanel() {
   // (the saloon: its walker, its trim colour)
   if ($('#walker')) $('#walker').addEventListener('change', (e) => { if (B && B.walker) B.walker.on = e.target.checked; });
   if ($('#s-trim')) $('#s-trim').addEventListener('change', (e) => { cur().trim = e.target.value; rebuild(); });
+  if ($('#crowdMarks')) $('#crowdMarks').addEventListener('change', (e) => { state.crowdMarks = e.target.checked; crowdGroup.visible = state.crowdMarks; });
   $('#lamps').addEventListener('change', (e) => { state.lamps = e.target.checked; applyLight(); });
   $('#props').addEventListener('change', (e) => { state.props = e.target.checked; propGroup.visible = state.props; });
   if (kind === 'stable') {
@@ -638,7 +661,7 @@ function nextModel() {
 function syncPanel() {
   const R = cur();
   panel.querySelectorAll('[data-time]').forEach((b) => b.classList.toggle('on', b.dataset.time === state.time));
-  for (const k of ['doors', 'jailDoor', 'lamps', 'props', 'showHorses']) { const c = $('#' + k); if (c) c.checked = !!state[k]; }
+  for (const k of ['doors', 'jailDoor', 'lamps', 'props', 'showHorses', 'crowdMarks']) { const c = $('#' + k); if (c) c.checked = !!state[k]; }
   const db = $('#doorsBtn'); if (db) { const o = state.doors || state.jailDoor; db.textContent = o ? 'Doors: open' : 'Doors: shut'; db.setAttribute('aria-pressed', String(o)); }
   panel.querySelectorAll('[data-owned]').forEach((c) => { c.checked = !!state.owned[c.dataset.owned]; });
   $('#s-paint').value = R.paint; $('#s-wood').value = R.wood; $('#s-stone').value = R.stone; $('#seed').value = R.seed; $('#s-q').value = state.quality;
@@ -752,7 +775,7 @@ const BL = window.BL = {
   },
   quality(q) { state.quality = q; applyQuality(); syncPanel(); },
   walker(on) { if (B && B.walker) B.walker.on = on; const c = $('#walker'); if (c) c.checked = !!on; return B && B.walker ? B.walker.on : null; },
-  show(o) { for (const k in o) state[k] = o[k]; propGroup.visible = state.props; horseGroup.visible = state.showHorses; syncPanel(); },
+  show(o) { for (const k in o) state[k] = o[k]; propGroup.visible = state.props; horseGroup.visible = state.showHorses; crowdGroup.visible = state.crowdMarks; syncPanel(); },
   render() { renderer.render(scene, camera); },
   get renderer() { return renderer; }, get scene() { return scene; }, get camera() { return camera; }, get controls() { return controls; },
 };

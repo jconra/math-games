@@ -1,7 +1,8 @@
 // THE BAND'S CARD: the saloon band's songs, picked at the front of its stage (src/stage.js; main.js opens it on E or a
-// tap on the prompt). A small dark card at the right of the screen (the bottom on a phone): a row for each song, with a
-// picture and its name (so a rider who can't read yet can pick one too), the one playing marked "playing now", and "Take
-// a break" under them; on a break, "Play again" first. One tap (or its key: 1 to 4, B, Enter) asks the band and the card
+// tap on the prompt). A dark card at the right of the screen (the bottom on a phone) in two columns: "The band's own"
+// songs with "Take a break" under them, and "Old fiddle tunes"; a row for each song, with a picture and its name (so a
+// rider who can't read yet can pick one too), the one playing marked "playing now"; on a break, "Play again" first,
+// across the top. One tap (or its key: 1 to 9, 0 and - along the number row, B, Enter) asks the band and the card
 // closes: the answer comes from the stage, in a speech bubble. The game goes on behind it (nothing pauses): Esc, a tap
 // anywhere off the card, or walking away from the stage (main.js) closes it.
 //
@@ -33,6 +34,17 @@ export const BAND_PICS = {
   waltz: S('<path d="M9 22V9l12-3v13"/><circle cx="7" cy="22" r="2.6" fill="currentColor" stroke="none"/><circle cx="19" cy="19" r="2.6" fill="currentColor" stroke="none"/><path d="M5 28q11 3 22-4"/>'),
   // Lonesome Trail: the moon over a hill
   lonesome: S('<path d="M20 5a8 8 0 1 0 7 11 6.5 6.5 0 0 1-7-11z"/><path d="M3 27q8-7 15-3t11 1"/>'),
+  // the old fiddle tunes: Soldier's Joy, a drum and its sticks; Old Joe Clark, a banjo; Arkansas Traveler, the road
+  // into the hills; Sally Goodin, a pie; Cripple Creek, the creek; Devil's Dream, a fiddle going quick; Fisher's
+  // Hornpipe, a fish
+  soldiers: S('<ellipse cx="16" cy="13" rx="10" ry="3.5"/><path d="M6 13v9q10 6 20 0v-9M10 16.5l3 7M22 16.5l-3 7M16 17v8"/><path d="M19 8l8-5M13 8L5 3"/>'),
+  joeclark: S('<circle cx="11.5" cy="20.5" r="7"/><circle cx="11.5" cy="20.5" r="2.5"/><path d="M16.5 15.5L27 5"/><path d="M24.5 3.5l3.5 3.5"/>'),
+  arkansas: S('<path d="M5 29l9-14M27 29l-9-14M16 27v-2.5M16 21.5v-2M16 17v-1.5"/><path d="M2 13q5-6 10-1 3-4 7-1 4-5 11 1"/>'),
+  sally: S('<path d="M4 18h24l-3.5 7h-17z"/><path d="M5 18q11-11 22 0"/><path d="M11 14.5l1.5 2M16 12.5v3M21 14.5l-1.5 2"/>'),
+  cripple: S('<path d="M3 11q3.5-3 7 0t7 0 7 0 6 0M3 17q3.5-3 7 0t7 0 7 0 6 0M3 23q3.5-3 7 0t7 0 7 0 6 0"/>'),
+  devils: S('<path d="M12 5h5v4q4 1.5 4 6t-4 6v4h-5v-4q-4-1.5-4-6t4-6z"/><path d="M14.5 3v24M24 6l4-2M25 11l4 0M24 16l4 2"/>'),
+  fishers: S('<path d="M3 16q8-9 18 0-10 9-18 0z"/><path d="M21 16l7-5.5v11z"/><circle cx="8.5" cy="15" r="1.2" fill="currentColor" stroke="none"/>'),
+  fiddle: S('<path d="M12 5h5v4q4 1.5 4 6t-4 6v4h-5v-4q-4-1.5-4-6t4-6z"/><path d="M14.5 3v24M5 26L27 8"/>'),
   // Take a break: a tin cup, steaming
   break: S('<path d="M8 14h13v8a5 5 0 0 1-5 5h-3a5 5 0 0 1-5-5z"/><path d="M21 16h2.5a3 3 0 0 1 0 6H21"/><path d="M11 5q-1.5 2 0 4M15.5 4q-1.5 2.5 0 5"/>'),
   // Play again: a play mark in a ring
@@ -50,13 +62,19 @@ export function makeBandCard({ onPick = () => {}, onClose = () => {} } = {}) {
   const card = el.querySelector('.bmb-card'), list = el.querySelector('.bmb-rows');
   let rows = [], openAt = 0, hideT = null;
   const C = { el, isOpen: false };
+  function row(r, i) {
+    const pic = BAND_PICS[r.id] || (r.group === 'old' ? BAND_PICS.fiddle : BAND_PICS.again), cls = ['bmb-row', r.id === 'again' ? 'is-main' : '', r.id === 'break' ? 'is-break' : '', r.on ? 'is-on' : ''].filter(Boolean).join(' ');
+    return `<button class="${cls}" type="button" data-i="${i}">${pic}<span class="bmb-what"><b>${esc(r.label)}</b>`
+      + `${r.sub || r.on ? `<small><span class="bmb-sub">${esc(r.sub || '')}</span>${r.on ? '<span class="bmb-tag">playing now</span>' : ''}</small>` : ''}</span>`
+      + `${r.keyName ? `<kbd class="bmb-key">${esc(r.keyName)}</kbd>` : ''}</button>`;
+  }
+  // "Play again" across the top; the band's own songs and the break in the first column, the old tunes in the second
   function draw() {
-    list.innerHTML = rows.map((r, i) => {
-      const pic = BAND_PICS[r.id] || BAND_PICS.again, cls = ['bmb-row', r.id === 'again' ? 'is-main' : '', r.id === 'break' ? 'is-break' : '', r.on ? 'is-on' : ''].filter(Boolean).join(' ');
-      return `<button class="${cls}" type="button" data-i="${i}">${pic}<span class="bmb-what"><b>${esc(r.label)}</b>`
-        + `${r.sub || r.on ? `<small>${esc(r.sub || '')}${r.on ? '<span class="bmb-tag">playing now</span>' : ''}</small>` : ''}</span>`
-        + `${r.keyName ? `<kbd class="bmb-key">${esc(r.keyName)}</kbd>` : ''}</button>`;
-    }).join('');
+    const at = rows.map((r, i) => [r, i]), own = at.filter(([r]) => r.group === 'own'), old = at.filter(([r]) => r.group === 'old');
+    const top = at.filter(([r]) => r.id === 'again'), brk = at.filter(([r]) => r.id === 'break'), other = at.filter(([r]) => !r.group && r.id !== 'again' && r.id !== 'break');
+    const col = (title, list) => `<div class="bmb-col"><h3 class="bmb-group">${title}</h3>${list.map(([r, i]) => row(r, i)).join('')}</div>`;
+    list.innerHTML = top.map(([r, i]) => row(r, i)).join('')
+      + `<div class="bmb-cols">${col('The band\'s own', [...own, ...other, ...brk])}${old.length ? col('Old fiddle tunes', old) : ''}</div>`;
   }
   function pick(r) {
     if (!r || !C.isOpen) return;

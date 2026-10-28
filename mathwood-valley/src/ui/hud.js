@@ -37,6 +37,10 @@
 //   H.shift({ label, n, of, done }) | H.shift(null)   the shift counter of the job in progress (src/shifts.js), in the
 //                              purse under the gold: 'Sheep healed 4/7' and a pip for each round; done: the day's shift is
 //                              over ('done for today', the pips all lit)
+//   H.meter({ label, value, sub, low }) | H.meter(null)   a health bar right under the rule card (a hold-up's wagon:
+//                              src/missions/wagonjob.js): a little wagon, the label, the bar (value 0..1; low: it goes
+//                              orange) and a short line after it ('Wave 2 of 3'); H.meter.hit() flashes it a moment
+//   H.meterEl                  its element
 //   H.dispose()
 //
 // It is all page elements (no 3D), with pointer-events off except on the buttons, so clicks fall through to the valley.
@@ -201,6 +205,10 @@ export function buckleSVG(tier, job = 'cattle') {
 // how much of the compass strip one radian takes (the strip shows about 100 degrees either side)
 const COMPASS_SPAN = 1.75;
 // a basket of eggs: the homestead's goods in the saddlebags
+// the meter's little wagon: a covered wagon side on, a strongbox at its tail
+const METER_WAGON = '<svg viewBox="0 0 32 24" aria-hidden="true"><path d="M5 13.5L4 4.6c3-2 5.6-2 7.6-.2 2.3-1.9 4.5-1.9 6.8 0 2-1.8 4.6-1.8 7.6.2l-1 8.9z" fill="#f2e8d2" stroke="#3b2a1e" stroke-width="1.1" stroke-linejoin="round"/>'
+  + '<rect x="3" y="13.2" width="24.5" height="3.6" rx="0.8" fill="#8b5e34" stroke="#3b2a1e" stroke-width="1"/><rect x="25" y="9.4" width="5" height="4" rx="0.6" fill="#5a3a22" stroke="#2b1d12" stroke-width="0.9"/><path d="M26.4 9.4v4M28.6 9.4v4" stroke="#c9a24f" stroke-width="0.8"/>'
+  + '<g fill="none" stroke="#3b2a1e" stroke-width="1.6"><circle cx="8" cy="19.2" r="3.4"/><circle cx="22.5" cy="19.2" r="3.4"/></g><circle cx="8" cy="19.2" r="0.9" fill="#3b2a1e"/><circle cx="22.5" cy="19.2" r="0.9" fill="#3b2a1e"/></svg>';
 const GOODS_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="9" cy="10" rx="3" ry="3.8" fill="#f2e8d2" stroke="#3b2a1e" stroke-width="1"/><ellipse cx="14.5" cy="9.5" rx="3" ry="3.8" fill="#efe2c4" stroke="#3b2a1e" stroke-width="1"/><path d="M3 12h18l-2.4 8H5.4z" fill="#8b6a3e" stroke="#3b2a1e" stroke-width="1.2" stroke-linejoin="round"/><path d="M6 15h12M7 18h10" stroke="#5b4428" stroke-width="1"/></svg>';
 
 export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch = () => {} } = {}) {
@@ -222,6 +230,7 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
       <div class="bmh-compass" aria-hidden="true"><div class="bmh-ticks"></div><div class="bmh-marks"></div><i class="bmh-notch"></i></div>
       <div class="bmh-job">
         <div class="bmh-rule" hidden><button class="bmh-rule-say" type="button" hidden aria-label="Read the card again" title="Read it again">${ICON.speaker}</button><div class="bmh-rule-main"></div><div class="bmh-rule-sub"></div><div class="bmh-rule-btns"></div></div>
+        <div class="bmh-meter" hidden><span class="bmh-meter-pic" aria-hidden="true">${METER_WAGON}</span><b class="bmh-meter-label"></b><span class="bmh-meter-bar" role="meter" aria-valuemin="0" aria-valuemax="100"><i></i></span><span class="bmh-meter-sub"></span></div>
         <div class="bmh-hint" hidden role="status"></div>
       </div>
     </div>
@@ -302,6 +311,28 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
     shiftEl.querySelector('.bmh-shift-text').textContent = `${o.label} ${n}/${o.of}${o.done ? ' · done for today' : ''}`;
     shiftEl.querySelector('.bmh-shift-pips').innerHTML = o.of <= 12 ? Array.from({ length: o.of }, (x, k) => `<i class="${k < n ? 'is-on' : ''}"></i>`).join('') : '';
   }
+  // ── THE METER under the rule card (a held-up wagon's health) ────────────────────────────────────────────────────
+  const meterEl = $('.bmh-meter'), meterBar = meterEl.querySelector('.bmh-meter-bar'), meterFill = meterBar.querySelector('i');
+  let meterKey = '', meterHitT = 0;
+  function meter(o) {
+    const pct = o ? Math.max(0, Math.min(100, Math.round((o.value ?? 0) * 100))) : 0;
+    const key = o ? `${o.label}|${pct}|${o.sub || ''}|${o.low ? 1 : 0}` : '';
+    if (key === meterKey) return;
+    meterKey = key;
+    meterEl.hidden = !o;
+    if (!o) return;
+    meterEl.querySelector('.bmh-meter-label').textContent = o.label || '';
+    meterEl.querySelector('.bmh-meter-sub').textContent = o.sub || '';
+    meterEl.classList.toggle('is-low', !!o.low);
+    meterEl.classList.toggle('is-empty', pct <= 0);
+    meterFill.style.width = pct + '%';
+    meterBar.setAttribute('aria-valuenow', String(pct));
+    meterBar.setAttribute('aria-label', `${o.label || 'Health'} ${pct} out of 100`);
+  }
+  meter.hit = () => {
+    meterEl.classList.remove('is-hit'); void meterEl.offsetWidth; meterEl.classList.add('is-hit');
+    clearTimeout(meterHitT); meterHitT = setTimeout(() => meterEl.classList.remove('is-hit'), 260);
+  };
   function pop(text) {
     const p = document.createElement('div');
     p.className = 'bmh-pop'; p.innerHTML = `${ICON.coin}<b>${esc(text)}</b>`;
@@ -426,7 +457,7 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
       seen.add(m.id);
       let e = markEls.get(m.id);
       if (!e) {
-        e = document.createElement('div'); e.className = `bmh-mark is-${m.icon}`;
+        e = document.createElement('div'); e.className = `bmh-mark is-${m.icon}`; e.dataset.mark = m.id;
         e.innerHTML = `${ICON[m.icon] || ICON.job}<small></small>`;
         marksEl.appendChild(e); markEls.set(m.id, e);
       }
@@ -494,9 +525,9 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
   }
 
   const H = {
-    el, ruleEl, hintEl, helpEl, jobEl: $('.bmh-job'),
+    el, ruleEl, hintEl, helpEl, meterEl, jobEl: $('.bmh-job'),
     show(on) { el.classList.toggle('is-hidden', !on); if (!on) { prompt(null); caption(null); if (quiet()) { buckleQ.length = 0; if (buckleBusy && buckleWatch) endBuckle(); } } },
-    purse, toast, prompt, caption, rule, hint, compass, buckle, shift,
+    purse, toast, prompt, caption, rule, hint, compass, buckle, shift, meter,
     // the big touch button's word: 'Rope', or 'Shoot' while the six-shooter is the tool (src/gun.js)
     fireWord(w) { const b = touchEl.querySelector('[data-code="KeyF"]'); if (b && b.textContent !== w) b.textContent = w; },
     touch(on) { if (touchEl.hidden === !on) return; touchEl.hidden = !on; if (promptText) { const t = promptText; promptText = null; prompt(t); } placeBottom(); callHorse(callOn); },

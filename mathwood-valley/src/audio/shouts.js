@@ -43,8 +43,9 @@
 //   S.heard(event, data)     a Hob event (src/hob.js): the jobs' ends (the coin jingle), a catch, a pig penned, "Done
 //                            for now", a bandit caught or a rider roped by mistake (data: { at: { x, z }, male })
 //   S.jingle()               the coins (a job's end)
-//   S.talk(what, who)        the job folk (src/jobfolk.js): 'hello' (a person greets the player), 'leave' (the toast on
-//                            walking away from a job), 'thanks' (a person's thank-you); who: { at, male }
+//   S.talk(what, who, { clip })   the job folk (src/jobfolk.js): 'hello' (a person greets the player), 'leave' (the
+//                            toast on walking away from a job), 'thanks' (a person's thank-you); who: { at, male };
+//                            clip: that very take (a thanks whose words are already in a bubble: a hold-up's driver)
 //   S.say(kind, who)         another job's people: 'thanksStore', 'niceday', 'whatchagot' (the store counter)
 //                            who: { at: { x, z } or a function returning one, male }
 //   S.speaking               true while a clip plays (the town's sounds dip a little under it)
@@ -142,9 +143,10 @@ export function pickShout(list, avoid = [], rand = Math.random) {
 }
 
 // THE DECIDING, without sound (the tests drive it with their own clock and dice):
-//   B.ask(kind, now, { who, then, sure })   the moment for a kind: true if it will be said (its chance came up, its
-//                         wait is over, it isn't waiting already). who: the man saying it ({ male, at }; a 'him' kind
-//                         without a man is never said); then: { kind, who, sure } said right after this one; sure: no dice
+//   B.ask(kind, now, { who, then, sure, clip })   the moment for a kind: true if it will be said (its chance came up,
+//                         its wait is over, it isn't waiting already). who: the man saying it ({ male, at }; a 'him'
+//                         kind without a man is never said); then: { kind, who, sure } said right after this one; sure:
+//                         no dice; clip: this take of the kind's, not one picked at random
 //   B.ride(now, { onHorse, speed, push, run })   the horse each frame: asks for a spur or a whoa when one happens
 //   B.next(now, busy)       the clip to start now, or null: { kind, name, who }; busy: one is still playing
 //   B.ended(now)            the clip playing has just ended (its answer, if any, is asked for now)
@@ -154,7 +156,7 @@ export function makeShoutBrain(rand = Math.random, S = SHOUTS) {
     runFrom: null, whooped: false, pushed: false, met: false, lastD: null };
   B.rand = rand;   // (a rig may set it: dice that always say yes)
   const between = ([a, b]) => a + B.rand() * (b - a);
-  B.ask = (kind, now, { who = null, then = null, sure = false, answer = false } = {}) => {
+  B.ask = (kind, now, { who = null, then = null, sure = false, answer = false, clip = null } = {}) => {
     const K = S.kinds[kind]; if (!K) return false;
     B.moments[kind] = (B.moments[kind] || 0) + 1;
     if (K.him && !(who && who.male)) return false;   // (the maker's voice: only a man says it)
@@ -162,7 +164,7 @@ export function makeShoutBrain(rand = Math.random, S = SHOUTS) {
     if (B.queue.some((q) => q.kind === kind) || B.queue.length >= S.most) return false;
     if (!sure && B.rand() >= K.chance) return false;
     const at = now + (K.delay || 0);
-    B.queue.push({ kind, at, until: at + K.wait, prio: K.prio, who, then, answer });
+    B.queue.push({ kind, at, until: at + K.wait, prio: K.prio, who, then, answer, clip });
     B.queue.sort((a, b) => b.prio - a.prio || (b.answer - a.answer));   // (the bigger moment in front; an answer first)
     return true;
   };
@@ -199,7 +201,7 @@ export function makeShoutBrain(rand = Math.random, S = SHOUTS) {
     let list = K.clips;
     if (q.kind === 'hello' && !B.greeted && S.morning && B.rand() < S.morning.chance) list = S.morning.clips;
     if (q.kind === 'hello') B.greeted = true;
-    const name = pickShout(list, [B.last, B.lastOf[group]].filter(Boolean), B.rand);
+    const name = q.clip && VOICE_CLIPS[q.clip] ? q.clip : pickShout(list, [B.last, B.lastOf[group]].filter(Boolean), B.rand);
     if (!name) return null;
     B.last = name; B.lastOf[group] = name;
     B.coolUntil[q.kind] = now + between(K.cool);
@@ -360,10 +362,10 @@ export function makeShouts({ audio, base = GAME, hush = () => false }) {
     }
     setTimeout(() => { for (const n of nodes) { try { n.disconnect(); } catch (e) { /* gone */ } } }, (t - c.currentTime + J.ring + 0.3) * 1000);
   };
-  S.talk = (what, who = null) => {
+  S.talk = (what, who = null, { clip = null } = {}) => {
     const w = him(who);
     if (what === 'hello') ask('hello');
-    else if (what === 'thanks') ask('thanks', { who: w });
+    else if (what === 'thanks') ask('thanks', { who: w, clip, sure: !!clip });
     else if (what === 'leave') {
       // the player's see-ya, and the person's "have a nice day" after it now and then (or on its own)
       const nice = w && w.male && B.rand() < SHOUTS.kinds.niceday.chance ? { kind: 'niceday', who: w, sure: true } : null;

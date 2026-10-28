@@ -24,7 +24,6 @@
 
 export const TALK = {
   greet: 9,            // m from a person where they say hello as the player walks or rides up
-  hail: 40,            // m: the freight driver calls out from this far (his wagon starts when the player is 26 m off)
   prompt: 4.2,         // m from a person where E (or a tap on the prompt) does what they ask
   tag: 16,             // m within which a person's name tag shows
   face: 10,            // m within which a person turns to face the player
@@ -55,12 +54,6 @@ export const JOB_FOLK = [
       "Each pig has a sum on it. Herd it into the pen whose sign shows the answer: come at it from behind."],
     thanks: ['Every pig back in! Bless you.', "That's the lot penned. Thank you kindly!", 'Back in their pens. You herd better than my husband!'],
     leave: 'The pigs will wait for you' },
-  { id: 'driver', job: 'wagon', name: 'Gus Tolliver', role: 'freight driver', look: null,   // (the wagon's own driver)
-    hello: ["A gang's been hitting this road, and I've freight to get through.",
-      'Ride along and rope the bandits for me? Ride up alongside and we roll.'],
-    start: "Let's roll! Keep alongside, partner.",
-    thanks: ["That's that gang seen to. Obliged!", 'Freight rolls on safe. Thank you, partner.', "You're a fair hand with a rope! More road ahead."],
-    leave: 'The wagon will wait for you' },
   { id: 'naturalist', job: 'deer', name: 'Miss Ada Wren', role: 'naturalist', look: { outfit: 'adventurer_f', palette: 'sage', skin: 1, hair: 6 },
     hello: ["I'm making a book of this valley's animals, and I need pictures of the deer.",
       'Borrow my camera! Set it up a good way off, and photograph the deer whose tag makes the equation true.'],
@@ -126,7 +119,7 @@ export const FOREMAN_HELLO = {
 };
 
 // which person thanks the player for which job event (the game's Hob events: src/hob.js)
-const THANKS = { waveDone: 'boss', flockDone: 'vet', pigsDone: 'wife', banditsDone: 'driver', deerDone: 'naturalist', sheriffDone: 'sheriff', lootDone: 'deputy',
+const THANKS = { waveDone: 'boss', flockDone: 'vet', pigsDone: 'wife', deerDone: 'naturalist', sheriffDone: 'sheriff', lootDone: 'deputy',
   saddle: 'keeper', horse: 'keeper' };   // (a saddle or a horse bought at the stable: the keeper's thank-you once its counter closes)
 export const thanksFor = (event) => THANKS[event] || null;
 // the job events that count as working at an area job (a pick, right or wrong), by the area's person

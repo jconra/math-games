@@ -17,3 +17,25 @@ labs/buildings), check the ground it now covers before calling the work done:
   - Flowers go round a building's edges, a little at random (busy homesteaders planted them), never in front of a door.
 - Write decor.json with labs/town/decorfile.js `decorText` (one line a thing), so it reads and diffs cleanly.
 - If footpath strokes changed, re-bake the land: `node ~/pw/bandit-math/rigs/bakeland.cjs`.
+
+## Keep the labs in step with the game
+
+The game's maker: "it would be nice to update the labs as we update the games. I think the labs for this project are fantastic."
+He shows them to people, so a lab showing last week's version looks like a bug.
+
+- When you change something a lab shows, bring that lab up to date in the same piece of work. Check it loads clean and
+  shows the new version, and bump its `index.html` `?v=` so phones get it.
+- Share one piece of code. The game already builds from the labs' code: the building recipes, stone, materials, the
+  windmill tower, the bridge, the fishing scene. Labs drift when the game builds something better on top of a lab's
+  piece and the lab keeps its own copy. That's how the Building Lab's stalls kept the old horses: the game's stable used
+  `makeHorse` while the lab had its own table and `makeAnimal`. A lab imports the game's code, never a copy of a table
+  or a recipe.
+- Which lab shows what:
+  - **Building Lab** (labs/buildings): the code-built buildings, their doors and insides, the stable's horses.
+  - **Town Lab** (labs/town): the town's layout and decor.json (plants, props, fences, footpaths).
+  - **Horse Lab** (labs/horse): horse coats, manes and the new horse.
+  - **Material Lab** and **Stone Lab**: the wood, weather and stone the buildings wear.
+  - **Windmill Tower Lab**, **Bridge Lab** and **Fishing Lab**: those places and their questions.
+  - **Practice**: the math levels and lockboxes.
+  - **Props Lab** (planned, ~/pw/bandit-math/PROPS.md): the props.
+- If a new part of the game has no lab, say so in its plan file. Whether it gets one is the game maker's call.

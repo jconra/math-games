@@ -4,8 +4,6 @@
 //   the trail boss       by the corral's gate: his brand's cattle are mixed in with the big herd (the round-up)
 //   the veterinarian     by the sheep pasture's gate at the farm: a sickness went through the flock (the sick sheep)
 //   the farmer's wife    in the farm's lane by the pig yard: the wind blew the gate open (the loose pigs)
-//   the freight driver   the wagon's own driver: while the wagon waits he gets down and stands beside it, and climbs
-//                        back up when it rolls (Protect the wagon)
 //   the naturalist       at her one spot, a good way off the deer job's one herd on the town's side, in the open
 //                        with the herd in view and the meadow mown round her (STAND.natAt): E by her lends the camera
 //                        (strapped behind the saddle at once); while it is lent she strolls after the player round her
@@ -29,13 +27,14 @@
 //
 // Talking: walking or riding up, the person says their two lines in a speech card over their head (no button). At an
 // area job (the herd, the sheep, the pigs) the job is already running as you arrive, so the hello is said on arriving.
-// Where a job waits to be started, E (or a tap on the prompt) by the person starts it: the freight driver's wagon rolls,
-// the naturalist's camera is set up, the sheriff's desk opens. Riding into the job as before still starts it too.
+// Where a job waits to be started, E (or a tap on the prompt) by the person starts it: the naturalist's camera is set
+// up, the sheriff's desk opens. Riding into the job as before still starts it too. (Protect the wagon has no person of
+// its own: a held-up wagon's driver is the traffic's, and calls for help and thanks the player himself:
+// src/missions/wagonjob.js.)
 // After a job's batch is done the person says a thank-you.
 //
 // Walking away: riding or walking well clear of the herd, the sheep pasture or the pig yard after working there shows a
-// small toast ("The sheep will wait for you"); nothing is lost (the job carries on where it was when you come back). The
-// wagon job ends itself the same way (src/missions/wagonjob.js).
+// small toast ("The sheep will wait for you"); nothing is lost (the job carries on where it was when you come back).
 //
 //   const JF = makeJobFolk({ W, folk, P, camera, hud, jobs, actions })
 //     folk: the people library; jobs: getters for the jobs and places { roundup, sheep, pigs, wagon, deer, camps, farm,
@@ -46,7 +45,7 @@
 //   JF.update(dt, { hidden })   each frame while riding, before the doors are looked at (hidden: a panel or the cabin is
 //                       up: the tags and the speech card are put away and the people wait)
 //   JF.prompt           the prompt's words when E by a person does something, else null; JF.talk() does it
-//   JF.heard(event, data)   a Hob event (src/hob.js): the thank-yous and the driver's "let's roll" come from these;
+//   JF.heard(event, data)   a Hob event (src/hob.js): the thank-yous come from these;
 //                       also 'sheriffDone' (lock boxes cracked for the sheriff)
 //   JF.say(id, text)    a person (an id of JOB_FOLK, or a camp's id for its foreman) says a line now
 //   JF.thank(who, text)  a thank-you waiting its turn, as the jobs' own (the shift's end: src/shiftkeeper.js): who is a
@@ -90,7 +89,6 @@ export const STAND = {
                                       // m nearer or further than `naturalist`; good when no tree's crown is within
                                       // `crown` m of her (past the 1.5 m W.crownClear keeps) and at most `cover` of the
                                       // way to the herd is under crowns, open ground all the way to `herd` m from its middle
-  driver: { side: 2.3, ahead: 1.2 },  // beside the waiting wagon: out from its middle, and a little toward the team
   anchor: 0.48,                       // m above the head bone the name tag sits (over the hat)
   trail: 3.5,                         // m a person stands at least from the middle of the trail to the pasture
   natWalk: { pace: 1.5, start: 16, near: 7, roam: 60 },   // the naturalist with her camera lent: strolls (m/s) after a
@@ -98,9 +96,8 @@ export const STAND = {
                                       // m from her own spot
 };
 
-// a person as a voice: where they stand, and whether he is a man (the recorded voices are the game maker's: men only;
-// the freight driver has no look of his own, and is a man)
-const voiceOf = (r) => ({ at: () => ({ x: r.x, z: r.z }), male: r.def && r.def.look ? /_m$/.test(r.def.look.outfit || '') : r.id === 'driver' });
+// a person as a voice: where they stand, and whether he is a man (the recorded voices are the game maker's: men only)
+const voiceOf = (r) => ({ at: () => ({ x: r.x, z: r.z }), male: !!(r.def && r.def.look && /_m$/.test(r.def.look.outfit || '')) });
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const HATS = { boss: 'cattleman', vet: 'bowler', wife: 'straw', naturalist: 'ranger', sheriff: 'white', deputy: 'cowboy', keeper: 'straw' };
@@ -190,8 +187,6 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
   // the naturalist: placed by the deer job's herd once it has one (see placeNaturalist)
   const naturalist = get('deer') ? addPerson(FOLK_BY_ID.naturalist, { x: 0, z: 0 }, 0) : null;
   if (naturalist) { naturalist.p.root.visible = false; naturalist.placed = false; }
-  // the freight driver: the wagon's own (made when the wagon is)
-  let driver = null;
   // the camp foremen: the camps' own people
   const foremen = [];
   // the miller: the windmill job's own person, lent for his tag and hello (kind 'lent': the job moves and animates him)
@@ -230,7 +225,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     engineerRec = addPerson(def, { x: w.x, z: w.z }, e.rotation.y + turn, { person: J.engineer, kind: 'lent', here: () => !J.builder, turn });
   }
 
-  // walkers don't go through a person standing still (the wagon's driver only while he stands down beside it)
+  // walkers don't go through a person standing still
   const offBlock = W.addBlocker ? W.addBlocker((x, z) => {
     for (const r of people) if (r.block && r.p.root.visible && Math.abs(x - r.x) < TALK.block && Math.abs(z - r.z) < TALK.block && Math.hypot(x - r.x, z - r.z) < TALK.block) return true;
     return false;
@@ -359,29 +354,6 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     if (!naturalist.walking) naturalist.home = Math.hypot(naturalist.x - sp.x, naturalist.z - sp.z) < 1 && natHerd ? Math.atan2(natHerd.mid.x - sp.x, natHerd.mid.z - sp.z) : naturalist.face;
   }
 
-  // ── THE FREIGHT DRIVER: down beside his wagon while it waits, up on the seat when it rolls ─────────────────────
-  function driverStep() {
-    const WJ = get('wagon');
-    const G = WJ && WJ.rig;
-    if (!G || !G.driver) return;
-    if (!driver) driver = addPerson(FOLK_BY_ID.driver, { x: G.pos.x, z: G.pos.z }, G.heading, { person: G.driver, kind: 'driver' });
-    if (!driver) return;
-    const waiting = WJ.phase === 'waiting' || WJ.phase === 'stopped';
-    if (waiting && !G.driverDown && G.pace < 0.05) {
-      // (on the side of the wagon nearer the player, beside the front wheel)
-      const h = G.heading, side = { x: Math.cos(h), z: -Math.sin(h) }, fwd = { x: Math.sin(h), z: Math.cos(h) };
-      const k = (P.position.x - G.pos.x) * side.x + (P.position.z - G.pos.z) * side.z >= 0 ? 1 : -1;
-      let at = null;
-      for (const kk of [k, -k]) {
-        const x = G.pos.x + side.x * STAND.driver.side * kk + fwd.x * STAND.driver.ahead, z = G.pos.z + side.z * STAND.driver.side * kk + fwd.z * STAND.driver.ahead;
-        if (free(x, z)) { at = { x, z }; break; }
-      }
-      if (at) { G.climbDown(at.x, at.z, h + Math.PI / 2 * k); driver.x = at.x; driver.z = at.z; driver.home = driver.face = h + Math.PI / 2 * k; }
-    } else if (!waiting && G.driverDown) G.climbUp();
-    driver.down = G.driverDown;
-    driver.block = !!G.driverDown;   // (standing by the wheel, nobody walks through him; on the seat the wagon itself blocks)
-  }
-
   // ── THE CAMP FOREMEN (name tags and hellos only: the camps move them) ──────────────────────────────────────────
   function foremenStep() {
     const C = get('camps');
@@ -409,7 +381,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     card.hidden = false; card.classList.remove('is-out'); card.style.opacity = '';
     if (onSay) { try { onSay(r.name, L); } catch (e) { console.error(e); } }   // (main.js: read out to a rider who can't read yet)
     // (a wave the first time, a nod of the head after; a speaker with no person of their own just talks)
-    if (r.p && (r.kind !== 'driver' || r.down)) {
+    if (r.p) {
       const clip = r.greet.said && r.waved ? 'Interact' : 'Wave';
       if (r.p.play(clip, { fade: 0.25, once: true })) { r.clipT = 1.7; r.waved = true; }
     }
@@ -447,20 +419,18 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
       if (d < bd) { bd = d; best = r; }
     }
     if (!best) return;
-    const WJ = get('wagon'), DJ = get('deer');
-    if (best.id === 'driver' && WJ && (WJ.phase === 'waiting' || WJ.phase === 'stopped') && best.down && bd < TALK.hail) { JF.prompt = `Ride along with ${best.name.split(' ')[0]}`; promptFor = best; }
+    const DJ = get('deer');
     // (her camera lent and not set up since (this ride): no handing it back yet. Just lent, a second E would give it
     // straight back, her "follow the hoofprints to the herd" hardly said; and the jobs board's hoofprints lead to her
     // first even with it lent on an earlier ride, so E on arriving would end the job before it began. By the herd the
     // E is the deer job's own, setting it up)
-    else if (best.id === 'naturalist' && DJ && bd < TALK.prompt && !DJ.active && !(DJ.lent() && !camUsed)) { const who = best.name.replace(/ Ada/, ''); JF.prompt = DJ.lent() ? `Give ${who} her camera back` : `Borrow ${who}'s camera`; promptFor = best; }
+    if (best.id === 'naturalist' && DJ && bd < TALK.prompt && !DJ.active && !(DJ.lent() && !camUsed)) { const who = best.name.replace(/ Ada/, ''); JF.prompt = DJ.lent() ? `Give ${who} her camera back` : `Borrow ${who}'s camera`; promptFor = best; }
     else if (best.id === 'sheriff' && actions.sheriff && bd < TALK.prompt) { JF.prompt = 'Crack lock boxes for the sheriff'; promptFor = best; }
     else if (best.id === 'keeper' && actions.stable && bd < TALK.prompt) { JF.prompt = 'Talk to the stable keeper'; promptFor = best; }
     else if (best.id === 'deputy' && bd < TALK.prompt) { const LJ = get('loot'); if (LJ && LJ.canShare) { JF.prompt = 'Share out the loot'; promptFor = best; } }
   }
   JF.talk = () => {
     const r = promptFor; if (!r) return false;
-    if (r.id === 'driver') { const WJ = get('wagon'); if (WJ) WJ.start(); return true; }   // (his "let's roll" comes with the job's start: heard below)
     if (r.id === 'naturalist') {
       const DJ = get('deer'); if (!DJ) return false;
       // (the camera not lent yet: she hands it over, strapped behind the saddle, and says how it goes)
@@ -482,10 +452,9 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     // (a pick at an area job: that job is the one leaving says goodbye to, and the others forget theirs)
     if (WORK[event]) for (const a of areas) { if (a.id === WORK[event]) a.watch.worked(); else a.watch.other(); }
     if (data && data.shiftEnd) return;   // (the shift's own thank-you comes instead: JF.thank)
-    if (event === 'wagonArrive' && driver) { say(driver, FOLK_BY_ID.driver.start); driver.greet.update(0, true, false); return; }   // (the job started: no hello now)
     if (event === 'deliveryDone' && data && data.camp) { const r = foremen.find((f) => f.camp && (f.camp.short === data.camp || f.camp.id === data.camp)); if (r) pending.push({ r, text: "Right where we need 'em. Come see me for the next order.", t: TALK.keep }); return; }
     const id = thanksFor(event); if (!id) return;
-    const r = id === 'driver' ? driver : byId(id); if (!r) return;
+    const r = byId(id); if (!r) return;
     const L = FOLK_BY_ID[id].thanks; const n = thanksN[id] = ((thanksN[id] ?? -1) + 1);
     pending.push({ r, text: L[n % L.length], t: TALK.keep });
   };
@@ -504,7 +473,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
   JF.update = (dt, { hidden = false } = {}) => {
     if (hidden) { if (!hiddenNow) { hiddenNow = true; hideAll(); } JF.prompt = null; return; }
     if (hiddenNow) { hiddenNow = false; if (talking) card.hidden = false; }
-    placeNaturalist(); naturalistWalk(dt); driverStep(); foremenStep(); millerStep(); fisherStep(); engineerStep();
+    placeNaturalist(); naturalistWalk(dt); foremenStep(); millerStep(); fisherStep(); engineerStep();
     const at = P.position;
     // the area jobs: hellos on arriving, the toast on walking away
     for (const a of areas) {
@@ -515,13 +484,12 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     }
     for (const r of people) {
       const d = Math.hypot(at.x - r.x, at.z - r.z);
-      // (the foremen and the driver are placed by their camps and their wagon: follow them)
+      // (the foremen are placed by their camps: follow them)
       if (r.kind === 'foreman') { r.x = r.h.x; r.z = r.h.z; }
       if (r.kind === 'lent') {   // (lent on to the builder: not here)
         if (r.here ? !r.here() : r.p.root.parent !== scene) { r.tag.hidden = true; continue; }
         if (r.p.root.parent === scene) { r.x = r.p.root.position.x; r.z = r.p.root.position.z; } else { r.p.root.getWorldPosition(head); r.x = head.x; r.z = head.z; }
       }
-      if (r.kind === 'driver' && !r.down) { const G = get('wagon') && get('wagon').rig; if (G) { r.x = G.pos.x; r.z = G.pos.z; } }
       // (drawn within TALK.show. Hidden only while out of the camera's view, never vanishing in sight; but shown at once,
       // in view or not: riding up to a person from further off keeps them in view all the way in, and waiting for them to
       // be out of view left them undrawn at the very end of the hoofprints (Miss Wren, out by a far herd). A person coming
@@ -531,21 +499,19 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
       if (!shown) { r.tag.hidden = true; r.greet.update(dt, false, true); continue; }   // (out of sight is away: the 'hello again' clock keeps running)
       // the hello: walking or riding up, or arriving at the person's job
       const area = areas.find((a) => a.id === r.id);
-      const WJ = get('wagon');
       let near = d < TALK.greet;
       if (area && area.near) near = true;
-      if (r.id === 'driver') near = r.down && WJ && WJ.phase === 'waiting' && d < TALK.hail;
       if (r.id === 'naturalist') { const DJ = get('deer'); near = near && !(DJ && DJ.active); }
       if (r.kind === 'foreman') { const DL = get('delivery'); near = near && !(DL && DL.phase !== 'none'); }
-      const away = d > TALK.away && !(area && area.near) && !(r.id === 'driver' && d < TALK.hail);
+      const away = d > TALK.away && !(area && area.near);
       // (Miss Wren with her camera already lent (an earlier ride; the jobs board's hoofprints lead to her all the same):
       // not "borrow my camera", but on to the herd, as when she lends it)
       const DJn = r.id === 'naturalist' ? get('deer') : null;
       let hello = DJn && r.def.lend && DJn.lent() ? lendLines(r, DJn.inReach && DJn.inReach(), true) : r.def.hello;
       { const no = helloFor ? helloFor(r.id) : null; if (no && no.length) hello = no; }   // (done for today: the polite no)
       if (r.greet.update(dt, near, away) && !pending.some((q) => q.r === r)) { say(r, hello, { pin: !!(area && area.near), hello: true }); if (onTalk) onTalk('hello', r.id); }   // (a thank-you of theirs waiting: that, not a hello)   // (over anybody else's: the newest one met is the one in front of you; arriving at the job from where the person is out of sight, in a card of its own)
-      // idle about, turn to the player when close (the camps turn their own foremen; the driver only on the ground)
-      if (r.kind === 'own' || r.kind === 'lent' || (r.kind === 'driver' && r.down)) {
+      // idle about, turn to the player when close (the camps turn their own foremen)
+      if (r.kind === 'own' || r.kind === 'lent') {
         if (d < TALK.awake) {
           // (the naturalist walking after the player: facing the way she goes, the Walk clip on; naturalistWalk)
           if (!r.walking) {
@@ -571,9 +537,9 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
       else {
         const r = talking.r, d = Math.hypot(at.x - r.x, at.z - r.z);
         card.classList.toggle('is-out', talking.t < 0.5);
-        // (a hello stops once the player has gone off: further than the hail for the driver, the job's area for the
-        // area jobs' people, a few steps for the rest; a thank-you is seen through)
-        const far = talking.hello ? (r.id === 'driver' ? TALK.hail : areas.some((a) => a.id === r.id) ? 70 : TALK.away) + 8 : Infinity;
+        // (a hello stops once the player has gone off: further than the job's area for the area jobs' people, a few
+        // steps for the rest; a thank-you is seen through)
+        const far = talking.hello ? (areas.some((a) => a.id === r.id) ? 70 : TALK.away) + 8 : Infinity;
         card.hidden = false;   // (shown before it is measured)
         if (d > far) { talking = null; card.hidden = true; }
         else if (d < TALK.thanksNear && (card.classList.remove('is-pinned'), place(r, card, 1))) { /* over the speaker's head */ }
@@ -645,7 +611,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
 
   JF.state = () => ({
     people: people.map((r) => ({ id: r.id, name: r.name, kind: r.kind, x: +r.x.toFixed(2), z: +r.z.toFixed(2), y: r.p.root.visible ? +r.p.root.getWorldPosition(new THREE.Vector3()).y.toFixed(2) : null,
-      ground: +W.heightAt(r.x, r.z).toFixed(2), visible: r.p.root.visible, tag: !r.tag.hidden, down: r.kind === 'driver' ? !!r.down : undefined, clip: r.p.clip })),
+      ground: +W.heightAt(r.x, r.z).toFixed(2), visible: r.p.root.visible, tag: !r.tag.hidden, clip: r.p.clip })),
     talking: talking ? { id: talking.r.id, lines: talking.lines, pinned: card.classList.contains('is-pinned') } : null, prompt: JF.prompt, pending: pending.length,
   });
   JF.dispose = () => {
@@ -653,7 +619,6 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     unmowNat();
     offBlock();
     for (const r of people) { r.tag.remove(); if (r.kind === 'own') { r.p.root.removeFromParent(); try { r.p.dispose(); } catch (e) { /* (gone) */ } } }
-    const G = get('wagon') && get('wagon').rig; if (G && G.driverDown) G.climbUp();
     box.remove();
   };
   return JF;

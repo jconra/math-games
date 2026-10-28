@@ -19,6 +19,10 @@
 //              side, away from the shooter, in a puff of dust, lies flat a moment, sits up dazed with his hat askew, and
 //              puts his hands up. The riderless horse trots off. (Getting up and walking to the sheriff: the job's.)
 //   duck()     a townsman shot at by mistake ducks down in the saddle as the shot goes over, and comes back up
+//   the revolver out (a hold-up's riders, src/missions/wagonjob.js: r.gun): the right arm carried bent, the forearm
+//              upright with the gun by the hat brim; raised straight up for a shot into the air, or out straight at a
+//              point. The gun itself is the job's (src/fx/gunfire.js: one shared mesh for every rider's), put where
+//              r.gunHand says. It goes away for a hat tip and when he falls.
 //
 //   const kit = await loadRiderKit({ animals, base })   loads the horses and two saddles (once a ride)
 //   const r = makeRider(kit, { W, folk, scene, look, horse, coat, saddle, kerchief, shadows })
@@ -34,6 +38,9 @@
 //   r.person, r.horse        the folk.js person and the animal
 //   r.mode                   'ride' | 'fall' | 'down' (hogtied on the ground, or sitting with his hands up) | 'gone'
 //   r.tipHat(), r.fall(at, { onDown, shot }), r.duck(), r.shot (true once knocked down by a shot)
+//   r.gun                    { on (drawn), up (0..1 raised overhead), aim (0..1 pointed at `at`), at (a Vector3) }: the
+//                            job sets it; r.gunK (0..1) how far it is out now; r.gunHand(pos, dir) where the fist is and
+//                            the way the forearm points (world), false while it is put away
 //   r.show(on)               drawn, or put out of sight (far from the player)
 //   r.dispose()
 //   RIDERS                   the sizes and timings
@@ -58,6 +65,10 @@ export const RIDERS = {
   card: [320, 128],       // the number card's canvas (pixels)
   overHat: 0.42,          // metres from the neck to the card's foot (just over the hat's crown)
   bolt: 7,                // seconds a riderless horse gallops off before it is put away
+  // the revolver out: where the upper arm and the forearm point, in his own frame ([out to his right, up, forward]),
+  // carried (the gun by the hat brim, muzzle up) and raised (straight up, for a shot into the air); fist: m from the
+  // wrist bone to the middle of the fist
+  gun: { carry: { arm: [0.55, -0.45, 0.4], fore: [0.12, 1, 0.3] }, raise: { arm: [0.35, 0.8, 0.2], fore: [0.05, 1, 0.05] }, fist: 0.07 },
   // knocked from the saddle by a shot (seconds): the tumble to the ground, lying flat, sitting up, a dazed moment, the
   // hands going up; then sitting with them up. out: metres from the horse's middle he lands; trot: the riderless
   // horse's pace (m/s), going off for bolt seconds at it
@@ -373,6 +384,36 @@ export function makeRider(kit, { W, folk, scene = W.scene, look = null, horse = 
 
   // ── THE HAT TIP ─────────────────────────────────────────────────────────────────────────────────────────────────
   R.tipHat = () => { if (R.mode === 'ride') tip = RIDERS.tip; };
+  // ── THE REVOLVER OUT (a hold-up's riders) ───────────────────────────────────────────────────────────────────────
+  R.gun = { on: false, up: 0, aim: 0, at: new THREE.Vector3() };
+  R.gunK = 0;
+  const _gs = new THREE.Vector3(), _ga = new THREE.Vector3(), _gf = new THREE.Vector3(), _gt = new THREE.Vector3();
+  function poseGun(dt) {
+    const G = R.gun, want = G.on && tip <= 0 ? 1 : 0;
+    R.gunK += (want - R.gunK) * Math.min(1, dt * (want ? 5 : 9));
+    if (R.gunK < 0.002) { R.gunK = 0; return; }
+    const b = person.bones, ua = b.UpperArmR, la = b.LowerArmR;
+    if (!ua || !la) return;
+    person.root.updateMatrixWorld(true);
+    person.root.getWorldQuaternion(_hq);
+    _hx.set(1, 0, 0).applyQuaternion(_hq); _hy.set(0, 1, 0).applyQuaternion(_hq); _hz.set(0, 0, 1).applyQuaternion(_hq);
+    // (his own frame: x out to his left, so the right arm's "out" is -x)
+    const dirIn = (v, x, y, z) => v.copy(_hx).multiplyScalar(x).addScaledVector(_hy, y).addScaledVector(_hz, z).normalize();
+    const C = RIDERS.gun, u = G.up || 0, k = G.aim || 0;
+    dirIn(_ga, -C.carry.arm[0], C.carry.arm[1], C.carry.arm[2]).lerp(dirIn(_gt, -C.raise.arm[0], C.raise.arm[1], C.raise.arm[2]), u);
+    dirIn(_gf, -C.carry.fore[0], C.carry.fore[1], C.carry.fore[2]).lerp(dirIn(_gt, -C.raise.fore[0], C.raise.fore[1], C.raise.fore[2]), u);
+    if (k > 0) { ua.getWorldPosition(_gs); _gt.subVectors(G.at, _gs).normalize(); _ga.lerp(_gt, k); _gf.lerp(_gt, k); }
+    pointAlong(ua, _ga, R.gunK);
+    pointAlong(la, _gf, R.gunK);
+  }
+  R.gunHand = (pos, dir) => {
+    if (R.mode !== 'ride' || R.gunK < 0.35 || !person.root.visible) return false;
+    const b = person.bones; if (!b.LowerArmR || !b.WristR) return false;
+    b.LowerArmR.getWorldPosition(_gs); b.WristR.getWorldPosition(pos);
+    dir.subVectors(pos, _gs).normalize();
+    pos.addScaledVector(dir, RIDERS.gun.fist);
+    return true;
+  };
   // ── THE DUCK (a wrong one shot at: the shot goes over his head) ────────────────────────────────────────────────
   R.duck = () => { if (R.mode === 'ride') { duck = RIDERS.duck; tip = 0; } };
   const _dq = new THREE.Quaternion(), _dp = new THREE.Quaternion(), _dq2 = new THREE.Quaternion(), _da = new THREE.Vector3();
@@ -606,6 +647,7 @@ export function makeRider(kit, { W, folk, scene = W.scene, look = null, horse = 
       seatRider(a, person);
       poseTip(dt);
       poseDuck(dt);
+      poseGun(dt);
       return;
     }
     if (dust) dust.update(dt);

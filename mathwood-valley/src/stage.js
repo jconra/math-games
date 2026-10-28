@@ -23,6 +23,19 @@
 // harmonica put away, the pianist turned to the room, the drummer sitting up) until a song or "Play again" is picked.
 // Nothing of it is saved: the band's song and break are the town's for this ride.
 //
+// SONGS END. A song goes on two or three minutes (a written tune two or three times round: src/bandplan.js songLines),
+// then the band plays to the end of the line (a round) and lands on its home chord together (src/audio/songend.js); the
+// players rest a moment while the crowd in the saloon claps (src/saloonfolk.js, src/audio/applause.js), the harmonica
+// player names the next song (src/bandplan.js nextSong: not one of the last two, the band's own and the old tunes in a
+// fair mix) and the pianist leads it in. A song picked from the card still changes it at once (no clapping for a song cut
+// off); a song picked from the card that is played to its end is clapped like any other. On a break nothing changes on
+// its own. Out of earshot for a good while, the band has moved on to another song when the player comes back.
+//
+// THE MUSIC CARRIES across the town and past its edge (STAGE.far): softer with distance (more gently than a bare
+// speaker would, STAGE.carry), its highs lost to the air and the buildings, fading out at the far end; through the
+// saloon's walls a little muffled, in front of its open doors loud and bright down the street (src/bandplan.js BAND).
+// The band steps back under the hold-up's action music and the shift's fanfare (STAGE.duck).
+//
 //   const S = makeStage({ W, folk, audio, camera, scene, speak })   folk: the people (src/actors/folk.js); audio:
 //                           src/audio/audio.js's; camera: the ears (where the sound is heard from; else the player);
 //                           speak(text): says a line out loud for a rider who can't read yet (or null)
@@ -36,7 +49,12 @@
 //   S.song, S.resting       the song the band plays (or will play when the music next starts), and on a break or not
 //   S.music                 the stage music while it plays (or null)
 //   S.players               { pianist, harpist, drummer } once made (or null);  S.spots  their places in the world
-//   S.state()               for rigs: { near, made, playing, resting, inside, through, gain, hz, distance, clips, song, ... }
+//   S.state()               for rigs: { near, made, playing, resting, phase, inside, through, gain, hz, distance, clips,
+//                           song, played, next, ... }
+//   S.crowd                 the saloon's crowd (src/saloonfolk.js; main.js sets it): told when a song ends (crowd.applaud)
+//   S.soundIn()             { ctx, input } the band's sound path (its distance and walls) for the crowd's own sounds, or null
+//   S.endSong()             for rigs: the song finishes at the end of the line now playing (as it would on its own)
+//   S.phase                 'play' (a song on, or waiting to start), 'end' (its last chord ringing, the crowd clapping)
 //   S.analyser()            for rigs: an AnalyserNode on the band's sound as it goes into the game's mix (or null)
 //   S.setOff(on)            for rigs: the saloon without its band (none drawn, moved or heard) while on
 //   S.dispose()
@@ -47,8 +65,9 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makePerson } from './actors/folk.js';
-import { makeStageMusic, makeRoom, SONGS } from './audio/stagemusic.js';
-import { bandChoices, bandLine, soundThrough } from './bandplan.js';
+import { makeStageMusic, makeRoom, SONGS, loadFiddle } from './audio/stagemusic.js';
+import { bandChoices, bandLine, soundThrough, songLines, nextSong } from './bandplan.js';
+import { playEnding } from './audio/songend.js';
 import { howdy } from './ui/howdy.js';
 
 export const STAGE = {
@@ -59,16 +78,35 @@ export const STAGE = {
   // the drummer's packing crate (metres: across, front to back, tall; as build_stage_clips.py's BOX, which he sits on)
   crate: { w: 0.5, d: 0.38, h: 0.4 },
   make: 45,               // metres from the saloon's middle within which the players are made (hidden till its inside is in)
-  near: 16,               // metres from the stage: full volume (as near things are: the distance itself still softens it)
-  far: 70,                // metres: silent; past this the music stops
-  start: 60,              // metres: the music starts again when the player comes this near
+  near: 16,               // metres from the stage: the sound's own distance only, as near things are
+  fade: 130,              // metres: from here the band fades out ...
+  far: 250,               // ... silent here; past this the music stops (the town's buildings, porches and yards are all
+                          // within about 75 m of the band, the farm and the lake's dock about 95, the corral 160, the
+                          // pasture 210: heard all over town and out to the farm, fading over the corral, faint at the
+                          // pasture, gone a little past it)
+  start: 235,             // metres: the music starts again when the player comes this near
+  // past `near` the band carries further than a bare speaker would: the distance's softening (the panners' 1 / distance)
+  // made up by (distance / near) ^ k, so it falls about 3 dB a doubling of the distance instead of 6
+  carry: 0.5,
   level: 3.5,             // the band's loudness (the patches are written quieter, for the Sound Lab)
   boxLevel: 3.2,          // the drummer's crate's loudness
+  // the sampled fiddle (src/audio/stagemusic.js THE FIDDLE): off until the game's maker has heard it and the band has a fiddler on
+  // its stage to play it; on, its samples load when the band is first heard and the old tunes take it into their turns
+  // (heard from the harmonica player's spot meanwhile)
+  fiddle: false,
   room: 0.6,              // how much of the room's echo
   // the positioned sound: full at refDistance metres, softening as 1 / distance past it (rolloff: how fast)
   ref: 3, rolloff: 1.1,
-  muffle: { from: 12, to: 70, hz: 1100 },    // the far sound loses its highs (air, the buildings): open at `from` m, down
+  muffle: { from: 20, to: 250, hz: 1500 },   // the far sound loses its highs (air, the buildings): open at `from` m, down
                                              // to `hz` at `to` m (the saloon's walls muffle it more: src/bandplan.js)
+  // the band steps back (this much of it, eased over `tc` s) while any of these sounds is wanted (src/audio/audio.js
+  // need): the hold-up's action music ('ambush', src/missions/wagonjob.js), the shift's fanfare
+  duck: { under: ['ambush', 'fanfare'], gain: 0.28, tc: 0.4 },
+  // a song's end (in s from its last chord): the crowd claps from `clap`, the harmonica player names the next song at
+  // `name`, the next song's first beat at `next` (its opening line, the piano's alone, leads it in); the players rest
+  // from `rest` until a moment before
+  end: { ahead: 1.5, clap: 0.18, name: 2.4, next: 5.6, rest: 1.6, back: 0.9 },
+  awayNew: 90,            // s out of earshot after which the band is on another song when the player comes back
   lift: 0.6,              // s before a harmonica phrase that the player lifts it to the mouth (and after, keeps it there)
   // the harmonica in her hands (metres: long, tall, deep; how far it sits behind the middle of her hands, toward her, and
   // above it: at the lips while she plays)
@@ -87,6 +125,11 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
   let disposed = false, made = null, making = null, visible = false, music = null, gain = 0, hz = 20000, distance = Infinity;
   let hall = null, findT = 0, frame = null, unframe = null, walls = null, spots = null, middle = null, front = null, ways = [], hear = false, inside = false, through = 0;
   let songI = 0, intro = true, asked = 0, askT = 0, resting = false;   // (which of SONGS; a song asked for starts without the piano's intro line)
+  // a song's course: when it began (ctx time of its first beat), how many lines it goes on, the seconds of it still to
+  // play (kept over a pause), the songs played (for the next pick); its end: the phase, the last chord's time, the next
+  // song and when it starts, whether it has been named yet
+  let songT0 = null, lines = null, left = null, phase = 'play', endAt = null, nextAt = null, nextI = null, named = false, ending = null, awayT = 0, duck = 1;
+  const played = [];
   const players = [];
 
   // ── THE SALOON: its stage's spots in the world (found once the code-built buildings are made; again if it moves) ────
@@ -240,7 +283,8 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
     const harpIn = ctx.createGain(), pianoIn = ctx.createGain(), boxIn = ctx.createGain(); harpIn.gain.value = pianoIn.gain.value = STAGE.level; boxIn.gain.value = STAGE.boxLevel;
     harpIn.connect(harp); pianoIn.connect(piano); boxIn.connect(box);
     const roomIn = ctx.createGain(); roomIn.gain.value = STAGE.level; roomIn.connect(room.input);
-    bus = { ctx, fade, muffle, harp, harpIn, pianoIn, boxIn, roomIn, nodes: [fade, muffle, harp, piano, box, echo, wet, harpIn, pianoIn, boxIn, roomIn, room.output], sent: null,
+    if (STAGE.fiddle) loadFiddle(ctx).then((kit) => { if (bus && bus.ctx === ctx) bus.fiddleKit = kit; }).catch((e) => console.warn('Mathwood Valley: no fiddle', e));
+    bus = { ctx, fade, muffle, harp, harpIn, pianoIn, boxIn, roomIn, fiddleKit: null, nodes: [fade, muffle, harp, piano, box, echo, wet, harpIn, pianoIn, boxIn, roomIn, room.output], sent: null,
       at: [[harp, () => spots.harmonica, 1.55], [piano, () => spots.piano, 1.0], [box, () => spots.drummer, 0.3], [echo, () => middle, 1.5]] };
     // when the sound goes to sleep (a pause, a panel, a hidden tab), the band stops and lets its notes go; it starts a
     // fresh line when the sound wakes. (Asleep, the sound's clock stands still while the notes' own timers don't, so the
@@ -249,13 +293,39 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
     ctx.addEventListener('statechange', bus.onState);
   }
   function startMusic(at = null) {
-    if (music || !bus || resting) return;
-    music = makeStageMusic(bus.ctx, { harp: bus.harpIn, piano: bus.pianoIn, box: bus.boxIn, room: bus.roomIn, seed: 1 + Math.floor(Math.random() * 1e6), song: SONGS[songI].id, intro });
-    music.start(at != null ? at : bus.ctx.currentTime + 0.2);
+    if (music || !bus || resting || phase !== 'play') return;
+    const song = SONGS[songI], lineSecs = song.beat * song.bar * 4, open = intro ? lineSecs : 0;
+    if (left == null) left = songLines(song, { intro }) * lineSecs;   // (a song begun: how long it goes on)
+    // (the lines from what is left of it: a written tune to the end of a round, at least once round)
+    lines = song.round ? (intro ? 1 : 0) + Math.max(1, Math.round((left - open) / (song.round * lineSecs))) * song.round : Math.max(1, Math.round(left / lineSecs));
+    music = makeStageMusic(bus.ctx, { harp: bus.harpIn, piano: bus.pianoIn, box: bus.boxIn, room: bus.roomIn, seed: 1 + Math.floor(Math.random() * 1e6), song: song.id, intro, fiddle: bus.harpIn, fiddleKit: bus.fiddleKit });
+    songT0 = at != null ? at : bus.ctx.currentTime + 0.2;
+    music.start(songT0);
   }
-  function stopMusic(now = false) { if (music) { music.stop({ now }); music = null; } }
+  // (the seconds of the song still to play, when it stops short of its end: a pause, a break)
+  function spent() { if (music && bus && songT0 != null && left != null) left = Math.max(0, left - Math.max(0, bus.ctx.currentTime - songT0)); }
+  function stopMusic(now = false) { if (music) { spent(); music.stop({ now }); music = null; } }
   // the notes sounding ring out (the ones made ahead let go), and the band stops
-  function ringOut() { if (music && bus) { music.stop({ from: bus.ctx.currentTime + 0.05 }); music = null; } }
+  function ringOut() { if (music && bus) { spent(); music.stop({ from: bus.ctx.currentTime + 0.05 }); music = null; } }
+  // the song's end: the notes up to the end of its last line play on, the ones made past it are let go, and the band
+  // lands on the home chord there; the crowd claps, the next song is chosen
+  function finish(tEnd) {
+    const song = SONGS[songI];
+    music.stop({ from: tEnd - 0.004 }); music = null;
+    ending = playEnding(bus.ctx, { harp: bus.harpIn, piano: bus.pianoIn, box: bus.boxIn, room: bus.roomIn, song, at: tEnd });
+    played.push(song.id); if (played.length > 12) played.shift();
+    phase = 'end'; endAt = tEnd; named = false; left = null;
+    nextI = Math.max(0, SONGS.indexOf(nextSong({ played })));
+    nextAt = tEnd + STAGE.end.next;
+    if (S.crowd && S.crowd.applaud) try { S.crowd.applaud(tEnd + STAGE.end.clap); } catch (e) { console.error('stage: the crowd could not clap', e); }
+  }
+  // a song's end let go (the card asked for another, or a break): the last chord too, if it is still to come, and the
+  // clapping with it
+  function unEnd() {
+    if (phase !== 'end') return;
+    if (ending && bus && bus.ctx.currentTime < ending.at) { ending.stop(); if (S.crowd && S.crowd.hush) S.crowd.hush(); }
+    phase = 'play'; ending = null; nextAt = null;
+  }
 
   const S = { prompt: null, inReach: false };
   // a player says it (and it is read out for a rider who can't read yet)
@@ -269,10 +339,13 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
   S.request = (id) => {
     if (disposed) return null;
     const i = Math.max(0, SONGS.findIndex((s) => s.id === id)), same = i === songI && !resting && !!music;   // (the one playing: from the top)
+    if (music && !same) { played.push(SONGS[songI].id); if (played.length > 12) played.shift(); }   // (cut short, but heard)
+    unEnd();
     songI = i; intro = false; asked++; askT = STAGE.askAgain; resting = false;
     const song = SONGS[songI];
     say('harpist', bandLine(same ? 'same' : 'song', song));
-    ringOut();
+    if (S.crowd && S.crowd.cheer) S.crowd.cheer();   // (now and then someone in the saloon calls out)
+    ringOut(); left = null;
     if (bus && bus.ctx.state === 'running' && hear) startMusic(bus.ctx.currentTime + STAGE.between);
     S.prompt = null;
     return song;
@@ -281,12 +354,14 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
   S.again = () => {
     if (disposed || !resting) return null;
     resting = false; intro = false; asked++; askT = STAGE.askAgain;
+    if (left != null && left < 20) left = null;   // (a song stopped near its end starts afresh)
     say('harpist', bandLine('again', SONGS[songI]));
     if (bus && bus.ctx.state === 'running' && hear) startMusic(bus.ctx.currentTime + STAGE.between);
     return SONGS[songI];
   };
   S.rest = () => {
     if (disposed || resting) return false;
+    if (phase === 'end') { unEnd(); songI = nextI; left = null; intro = true; }   // (between songs: the next one is the one played again)
     resting = true; asked++; askT = STAGE.askAgain;
     say('drummer', bandLine('break', SONGS[songI]));
     ringOut();
@@ -325,16 +400,35 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
     if (show !== visible) setVisible(show);
     // the sound: the band plays while the player is in earshot (and not on a break)
     if (audio) {
-      hear = !resting && distance < (music ? STAGE.far : STAGE.start);
+      hear = !resting && distance < (music || phase === 'end' ? STAGE.far : STAGE.start);
       audio.need('stage', hear);
       if (hear && audio.ctx && !bus) makeSound(audio.ctx, audio.out);
+      // (out of earshot a good while: the band has played on, and is on another song when the player comes back)
+      if (!hear && !resting && phase === 'play') awayT += dt;
+      else if (hear) { if (awayT > STAGE.awayNew && !music) { played.push(SONGS[songI].id); songI = Math.max(0, SONGS.indexOf(nextSong({ played }))); intro = true; left = null; } awayT = 0; }
       if (hear && bus && audio.running) startMusic();
       if (!hear && !resting) stopMusic();
+      if (bus && audio.running) {
+        // the song's end: found a little ahead of its last line's end (its notes up to there already made); then the
+        // pause: the next song named, and started
+        const t = bus.ctx.currentTime;
+        if (music && phase === 'play' && lines != null && songT0 != null) {
+          const song = SONGS[songI], tEnd = songT0 + lines * song.beat * song.bar * 4;
+          if (t >= tEnd - STAGE.end.ahead) finish(tEnd);
+        }
+        if (phase === 'end') {
+          if (!named && t >= endAt + STAGE.end.name) { named = true; if (visible) say('harpist', bandLine('next', SONGS[nextI])); }
+          if (t >= nextAt - 0.3) { phase = 'play'; songI = nextI; intro = true; left = null; ending = null; if (hear) startMusic(Math.max(nextAt, t + 0.1)); }
+        }
+      }
       if (bus) {
-        const u = Math.max(0, Math.min(1, (distance - STAGE.near) / (STAGE.far - STAGE.near)));
+        const u = Math.max(0, Math.min(1, (distance - STAGE.fade) / (STAGE.far - STAGE.fade)));
         const T = soundThrough({ inside, ways: inside ? [] : ways.map((w) => throughWay(w, ear)) });
         through = T.through;
-        gain = distance < STAGE.far ? (1 - u * u * (3 - 2 * u)) * T.gain : 0;   // (on a break too: the last notes ring out)
+        const D = STAGE.duck, ducked = !!audio.needs && D.under.some((n) => audio.needs.has(n));
+        duck += ((ducked ? D.gain : 1) - duck) * Math.min(1, dt / D.tc);
+        const carry = Math.pow(Math.max(1, distance / STAGE.near), STAGE.carry);
+        gain = distance < STAGE.far ? (1 - u * u * (3 - 2 * u)) * T.gain * carry * duck : 0;   // (on a break too: the last notes ring out)
         const M = STAGE.muffle, f = Math.max(0, Math.min(1, (distance - M.from) / (M.to - M.from)));
         hz = Math.min(20000 * Math.pow(M.hz / 20000, f), T.hz);
         // only while the sound is awake, and only when the level or the muffle has moved a little: asleep, its clock
@@ -353,10 +447,13 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
     // their own rest clips at their own pace
     const beat = music && bus ? music.beat() - (bus.ctx.outputLatency || 0) / music.beatLen : null;
     const t = bus ? bus.ctx.currentTime : 0;
-    if (resting) {
-      for (const [who, clip] of Object.entries(STAGE.restClip)) made[who].play(clip, { fade: 0.8 });
+    // (between two songs: a breather while the crowd claps, the harmonica held at the chest)
+    const between = phase === 'end' && endAt != null && t > endAt + STAGE.end.rest && t < nextAt - STAGE.end.back;
+    if (resting || between) {
+      for (const [who, clip] of Object.entries(STAGE.restClip)) made[who].play(between && who === 'harpist' ? 'Harmonica_Rest' : clip, { fade: 0.8 });
     } else {
-      const playing = music && (music.harmonicaAt(t + STAGE.lift) || music.harmonicaAt(t) || music.harmonicaAt(t - STAGE.lift * 0.5));
+      const playing = music ? (music.harmonicaAt(t + STAGE.lift) || music.harmonicaAt(t) || music.harmonicaAt(t - STAGE.lift * 0.5))
+        : phase === 'end' && endAt != null && t > endAt - STAGE.lift && t < endAt + 2.0;   // (the last chord's held note)
       made.harpist.play(playing ? 'Play_Harmonica' : 'Harmonica_Rest', { fade: 0.45 });
       made.pianist.play('Play_Piano', { fade: 0.6 }); made.drummer.play('Play_Box', { fade: 0.5 });
       if (harmonica && !harmonica.visible) harmonica.visible = true;
@@ -386,7 +483,19 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
   };
   S.state = () => ({ near: visible, made: !!made, playing: !!music, resting, inside, through: +through.toFixed(3), gain, hz: Math.round(hz), distance, saloon: !!hall,
     clips: players.map((p) => p.clip), notes: music ? music.played : 0, context: audio && audio.ctx ? audio.ctx.state : 'none', song: SONGS[songI].id, asked,
-    prompt: S.prompt, inReach: S.inReach, beatLen: music ? music.beatLen : null, harmonica: !!(harmonica && harmonica.visible) });
+    prompt: S.prompt, inReach: S.inReach, beatLen: music ? music.beatLen : null, harmonica: !!(harmonica && harmonica.visible),
+    phase, played: played.slice(-6), next: phase === 'end' && nextI != null ? SONGS[nextI].id : null, lines, songAt: songT0, endAt, nextAt, left: left == null ? null : +left.toFixed(1),
+    duck: +duck.toFixed(3), now: bus ? bus.ctx.currentTime : null });
+  // (rigs) the song ends at the end of the line playing now, as it would on its own
+  S.endSong = () => {
+    if (!music || !bus || phase !== 'play') return false;
+    const song = SONGS[songI], L = song.beat * song.bar * 4, k = Math.floor((bus.ctx.currentTime - songT0) / L);
+    lines = k + ((songT0 + (k + 1) * L) - bus.ctx.currentTime > STAGE.end.ahead + 0.3 ? 1 : 2);
+    return songT0 + lines * L;
+  };
+  // the band's sound path for the crowd's own sounds (their clapping): into the band's distance and walls
+  S.soundIn = () => (bus ? { ctx: bus.ctx, input: bus.fade, room: bus.roomIn } : null);
+  Object.defineProperty(S, 'phase', { get: () => phase });
   Object.defineProperty(S, 'song', { get: () => SONGS[songI] });
   Object.defineProperty(S, 'resting', { get: () => resting });
   // (rigs) an analyser on the band's own sound, after its fades (what reaches the game's mix from the stage)
@@ -395,7 +504,7 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
   Object.defineProperty(S, 'music', { get: () => music });
   Object.defineProperty(S, 'players', { get: () => made });
   S.dispose = () => {
-    disposed = true; stopMusic(); S.prompt = null; S.inReach = false;
+    disposed = true; stopMusic(); if (ending) ending.stop(); S.prompt = null; S.inReach = false;
     if (audio) audio.need('stage', false);
     if (bus) { const b = bus; bus = null; b.ctx.removeEventListener('statechange', b.onState); b.fade.gain.setTargetAtTime(0, b.ctx.currentTime, 0.05); setTimeout(() => { for (const n of b.nodes) try { n.disconnect(); } catch (e) { /* gone */ } }, 400); }
     for (const p of players) { p.root.removeFromParent(); p.dispose(); }

@@ -411,7 +411,8 @@ export function makeTownPeople({ W, folk, camera, player = () => null, jobs = {}
     const doorNear = TP.doors.filter((d) => d.id !== notDoor).map((d) => ({ d, k: Math.hypot(d.x - to.x, d.z - to.z) + ((d.busy || 0) > now() ? 12 : 0) })).sort((a, b) => a.k - b.k)[0];
     for (const r of TP.people) {
       if (r.lent || (names && !names.includes(r.name)) || (skip && skip(r))) continue;
-      const c = r.out ? lendCost({ out: true, d: Math.hypot(r.x - to.x, r.z - to.z) + (r.state === 'enter' ? 4 : 0) }) : doorNear ? lendCost({ out: false, d: doorNear.k }) : Infinity;
+      // (r.busyIn: metres more for someone the saloon's crowd has in its hall, src/saloonfolk.js: borrowed last)
+      const c = r.out ? lendCost({ out: true, d: Math.hypot(r.x - to.x, r.z - to.z) + (r.state === 'enter' ? 4 : 0) }) : doorNear ? lendCost({ out: false, d: doorNear.k + (r.busyIn || 0) }) : Infinity;
       if (c < cost - 1e-6 || (Math.abs(c - cost) < 1e-6 && Math.random() < 0.5)) { cost = c; pick = r; }
     }
     return pick ? { r: pick, door: !pick.out ? doorNear && doorNear.d : null } : null;

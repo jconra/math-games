@@ -10,9 +10,12 @@
 //
 // A ROUND is one go at the job, as the kid sees it: a bunch of cattle corralled, a sheep healed, a pig penned, an order
 // filled, a card of bottles shot, a photo taken, a fish landed; on the long trips a delivery made, a stash of loot
-// handed back, a gang seen off the wagon. Each job says which game event counts a round (`round`).
+// handed back; at a hold-up on the road (the wagon), a wave of the gang seen off. Each job says which game event counts
+// a round (`round`).
 //
-// HOW LONG A SHIFT IS (shiftLength): the regular jobs run 5 to 10 rounds, most riders 6 to 8; the long trips 3 to 5.
+// HOW LONG A SHIFT IS (shiftLength): the regular jobs run 5 to 10 rounds, most riders 6 to 8; the long trips 3 to 5;
+// the wagon's is one hold-up of 2 to 4 waves (most riders 3: src/missions/wagonjob.js deals a hold-up's waves by the
+// same rule whether the jobs board sent it or it happened on the way).
 // Younger or slower riders get the short end, quick riders the long end. "Pace" (0 short .. 1 long) comes from:
 //   - how often the rider has been right lately at this job's place (the levels model's last answers there,
 //     src/levels/model.js `h`; with too few, every job's last answers, save.js stats.recent; with too few of those, the
@@ -33,14 +36,16 @@
 //   SHIFT_JOBS, SHIFT, shiftLength(rider, id), pace(rider, id)
 //   cleanShifts(v), shiftsOf(rider), today(rider), shiftOf(rider, id) (read: a fresh one for a past day, not stored),
 //   ensureShift(rider, id) (today's record, made if needed: its length fixed then), countRound(rider, id) -> { n, of,
-//   done, ended } (ended: this round finished the shift), resetShift(rider, id), isDone(rider, id), roundsLeft(rider, id),
+//   done, ended } (ended: this round finished the shift), cutShift(rider, id) (ended early: the gang grabbed the
+//   wagon's strongbox), resetShift(rider, id), isDone(rider, id), roundsLeft(rider, id),
 //   newDay(rider), startRide(rider, now) -> true when a new calendar day began a new game day, crossedSunrise(from, to),
 //   thanksLine(id, k), declineLines(id), counterText(id, rec), dateKey(ms), pickNext(list)
 
 export const SHIFT = {
   regular: [5, 10],    // rounds in a regular job's shift: the short end, the long end (most riders land on 6 to 8)
-  long: [3, 5],        // ... and on the long trips (deliveries, the gang's loot, the wagon)
-  middle: 0.45,        // the pace when nothing is known about the rider yet (7 rounds, 4 on a long trip)
+  long: [3, 5],        // ... and on the long trips (deliveries, the gang's loot)
+  holdup: [2, 4],      // ... and the waves of a hold-up on the road (the wagon)
+  middle: 0.45,        // the pace when nothing is known about the rider yet (7 rounds, 4 on a long trip, 3 waves)
   acc: [0.65, 0.98],   // right share at the place: at or under the first is the short end, at or over the second the long
   fastShare: 0.25,     // how much the fast answers add at a sit-down job (the share fast, times this)
   recent: 20,          // the place's last answers looked at
@@ -57,7 +62,9 @@ export const SHIFT = {
 // batch ends with, whose usual thank-you gives way to the shift's own when the two come together; buckle: the job's
 // count in save.js JOBS (the shift's credit goes there: `credit` of it, about one round's worth); tip: gold, about one
 // round's pay; giver: who thanks the rider (a job person's id in src/jobfolkplan.js, 'marksman' for Miss Opal at the
-// range, 'storekeeper' for the store, 'foreman' for the camp's own); label: the HUD's counter ("Sheep healed 4/7").
+// range, 'storekeeper' for the store, 'foreman' for the camp's own, 'driver' for the held-up wagon's driver, who says
+// his own thank-you: `own`); label: the HUD's counter ("Sheep healed 4/7"); holdup: its rounds are a hold-up's waves
+// (SHIFT.holdup); cut: an event that ends the shift early (the hold-up's strongbox grabbed: half the tip, no penalty).
 export const SHIFT_JOBS = [
   { id: 'roundup', place: 'roundup', round: 'waveDone', batch: 'waveDone', buckle: 'cattle', credit: 5, tip: 12, giver: 'boss', label: 'Bunches corralled', name: 'the round-up' },
   { id: 'sheep', place: 'sheep', round: 'sheepHealed', batch: 'flockDone', buckle: 'sheep', credit: 1, tip: 5, giver: 'vet', label: 'Sheep healed', name: 'the sick sheep' },
@@ -68,11 +75,12 @@ export const SHIFT_JOBS = [
   { id: 'fishing', place: 'fishing', round: 'fishLanded', batch: null, buckle: 'fish', credit: 1, tip: 5, giver: 'fisherman', label: 'Fish landed', name: 'fishing', sit: true },
   { id: 'delivery', place: 'deliveries', long: true, round: 'deliveryDone', batch: 'deliveryDone', buckle: 'deliveries', credit: 1, tip: 12, giver: 'foreman', label: 'Deliveries made', name: 'the deliveries', sit: true },
   { id: 'loot', place: 'loot', long: true, round: 'lootDone', batch: 'lootDone', buckle: 'loot', credit: 2, tip: 15, giver: 'deputy', label: 'Stashes returned', name: "the gang's loot", sit: true },
-  { id: 'wagon', place: 'wagon', long: true, round: 'gangDone', batch: 'banditsDone', buckle: 'bandits', credit: 4, tip: 15, giver: 'driver', label: 'Gangs seen off', name: 'the wagon' },
+  { id: 'wagon', place: 'wagon', holdup: true, round: 'gangDone', batch: 'banditsDone', cut: 'boxGrabbed', buckle: 'bandits', credit: 4, tip: 15, giver: 'driver', own: true, label: 'Gangs seen off', name: 'the wagon' },
 ];
 export const SHIFT_BY = Object.fromEntries(SHIFT_JOBS.map((j) => [j.id, j]));
-// the round events, to the job they count for
+// the round events, to the job they count for; the events that end a job's shift early
 export const ROUND_OF = Object.fromEntries(SHIFT_JOBS.map((j) => [j.round, j.id]));
+export const CUT_OF = Object.fromEntries(SHIFT_JOBS.filter((j) => j.cut).map((j) => [j.cut, j.id]));
 
 // ── THE WORDS ────────────────────────────────────────────────────────────────────────────────────────────────────
 // The job person's thank-you at the end of a shift: warm, plain, of the time and place (said in turn, never the same
@@ -96,8 +104,10 @@ export const THANKS = {
     'Fine hauling today! The whole crew sends their thanks.'],
   loot: ["Every family's got their goods back. The whole town thanks you!", "That's the gang's loot all handed back for today. Fine work, partner!",
     "You've done the law proud today. Much obliged!"],
-  wagon: ['My freight got through safe all day, thanks to you!', "That's the road cleared for today. I'm much obliged, partner!",
-    'No gang can touch this wagon with you riding along. Thank you kindly!'],
+  // (the held-up wagon's driver says his own: the game maker's recorded thank-you, src/missions/wagonplan.js HOLDUP.thanks; these
+  // stand by for a speech card)
+  wagon: ['My wagon got through safe, thanks to you!', "That's the gang seen off. I'm much obliged, partner!",
+    'You saved my whole load today. Thank you kindly!'],
 };
 // ... and once the shift is done, the polite no (the first line every time, the second as it fits the job)
 export const DECLINE = "That's all I need for today, partner. Come back tomorrow!";
@@ -111,7 +121,7 @@ export const NEXT = {
   roundup: "The trail boss could use a hand with his cattle", sheep: "Doc Pruitt's sheep need doctoring", pigs: "Mrs. Haskell's pigs are loose again",
   store: 'The general store could use a hand at the counter', range: "Miss Opal's got bottles lined up at the range",
   deer: 'Miss Wren wants more deer pictures for her book', fishing: "The fish are biting off Walt's dock", delivery: 'The camps need supplies hauled',
-  loot: "The deputy's got loot to bring back", wagon: "Gus has freight to get through on the road", boxes: "The sheriff's got lock boxes piling up",
+  loot: "The deputy's got loot to bring back", wagon: "A wagon's being held up out on the road", boxes: "The sheriff's got lock boxes piling up",
 };
 export const thanksLine = (id, k = 0) => { const L = THANKS[id] || ['Thank you kindly, partner!']; return L[((k % L.length) + L.length) % L.length]; };
 export const declineLines = (id) => [DECLINE, ...(DECLINE_MORE[id] ? [DECLINE_MORE[id]] : [])];
@@ -154,7 +164,7 @@ export function pace(rider, id) {
 }
 export function shiftLength(rider, id) {
   const j = SHIFT_BY[id]; if (!j) return 0;
-  const [lo, hi] = j.long ? SHIFT.long : SHIFT.regular;
+  const [lo, hi] = j.holdup ? SHIFT.holdup : j.long ? SHIFT.long : SHIFT.regular;
   return lo + Math.round((hi - lo) * pace(rider, id));
 }
 
@@ -206,6 +216,15 @@ export function countRound(rider, id) {
   const ended = r.n >= r.of;
   if (ended) r.done = true;
   return { n: r.n, of: r.of, done: r.done, ended };
+}
+// the shift ended early (the gang grabbed the hold-up's strongbox: the hold-up is over, nothing lost): done for the day
+// as it stands -> { n, of, done, ended } (ended: false when it was done already)
+export function cutShift(rider, id) {
+  if (!SHIFT_BY[id]) return null;
+  const r = ensureShift(rider, id);
+  if (r.done) return { n: r.n, of: r.of, done: true, ended: false };
+  r.done = true;
+  return { n: r.n, of: r.of, done: true, ended: true };
 }
 // picked on the jobs board: a fresh shift at once (its length worked out again)
 export function resetShift(rider, id) {

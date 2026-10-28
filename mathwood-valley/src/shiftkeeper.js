@@ -1,7 +1,8 @@
 // THE SHIFT KEEPER: the game's side of the shifts (the logic and the words are src/shifts.js). It hears the jobs'
 // events (main.js hands it every Hob event first), counts the rounds of each job's shift, and when a shift is done:
 //   - the job's person thanks the rider in their speech card (src/jobfolk.js JF.thank; Miss Opal's own card at the
-//     range; the storekeeper's card over the store's door), in place of the job's usual thank-you just then
+//     range; the storekeeper's card over the store's door), in place of the job's usual thank-you just then (a hold-up's
+//     driver says his own, recorded: src/missions/wagonjob.js)
 //   - a tip of about one round's pay goes in the purse (a toast says who gave it)
 //   - a short, gentle fanfare (src/audio/fanfare.js)
 //   - the shift counts toward the job's belt buckle (about one round's worth: SHIFT_JOBS credit)
@@ -19,15 +20,17 @@
 //     rider is (main.js askingJob); jobOn(id): the job is on for this rider (not turned off, and in this ride);
 //     ends: { [id]: () => {} } what a job does when its shift ends, beyond what it does itself (the fishing's rod put
 //     down); store(): where the storekeeper's card shows ({ x, z }: the store's door)
-//   SK.heard(name, data) -> true when the event's usual thank-you gives way to the shift's own (data.shiftEnd)
+//   SK.heard(name, data) -> true when the event's usual thank-you gives way to the shift's own (data.shiftEnd); a job's
+//                       `cut` event (the hold-up's strongbox grabbed) ends its shift early, with half the tip
 //   SK.open(id), SK.left(id), SK.done(id)   may the job deal another round; rounds left today; done for the day
 //   SK.ask(id)          picked on the jobs board ("Ask for more work"): a fresh shift now
+//   SK.start(id)        today's shift made now, its length fixed (a hold-up the jobs board sends deals its waves by it)
 //   SK.decline(id)      the person's polite no (said once in a while, however often it is asked for)
 //   SK.helloFor(personId)   the polite no in place of a person's hello while their job is done for today, or null
 //   SK.update(dt)       each frame of play: the sunrise, the ending's steps, the HUD's counter
 //   SK.state(), SK.dev { end(id) (finish the job's shift now), day() (a sunrise now), set(id, n, of) (today's shift at
 //                       n rounds done, of long) }
-import { SHIFT_BY, SHIFT_JOBS, ROUND_OF, shiftOf, countRound, resetShift, isDone, roundsLeft, newDay, startRide, crossedSunrise,
+import { SHIFT_BY, SHIFT_JOBS, ROUND_OF, CUT_OF, shiftOf, countRound, cutShift, resetShift, isDone, roundsLeft, newDay, startRide, crossedSunrise,
   thanksLine, declineLines, hobLine, ensureShift, shiftsOf, pickNext } from './shifts.js';
 import { saveRider, earn, countJob, JOBS } from './save.js';
 import { playFanfare } from './audio/fanfare.js';
@@ -45,10 +48,10 @@ export const KEEPER = {
 
 // who thanks the rider for each job, by the giver's id (src/shifts.js SHIFT_JOBS giver): the name for the toast and
 // Hob's line
-const NAMES = { boss: 'Cal Wheeler', vet: 'Doc Pruitt', wife: 'Mrs. Haskell', driver: 'Gus', naturalist: 'Miss Wren', deputy: 'Deputy Mills',
+const NAMES = { boss: 'Cal Wheeler', vet: 'Doc Pruitt', wife: 'Mrs. Haskell', driver: 'The driver', naturalist: 'Miss Wren', deputy: 'Deputy Mills',
   fisherman: 'Old Walt', marksman: 'Miss Opal', storekeeper: 'The storekeeper', foreman: 'The foreman' };
-// a job person's id (src/jobfolkplan.js) to the job they give
-const PERSON_JOB = { boss: 'roundup', vet: 'sheep', wife: 'pigs', driver: 'wagon', naturalist: 'deer', deputy: 'loot', fisherman: 'fishing' };
+// a job person's id (src/jobfolkplan.js) to the job they give (the held-up wagons' drivers are the traffic's, no one's)
+const PERSON_JOB = { boss: 'roundup', vet: 'sheep', wife: 'pigs', naturalist: 'deer', deputy: 'loot', fisherman: 'fishing' };
 
 export function makeShiftKeeper({ W, rider, hud, hob, audio = null, folk = () => null, board = () => null, range = () => null, player = () => null,
   busy = () => false, current = () => null, working = () => null, jobOn = () => true, refresh = () => {}, ends = {}, store = () => null, foreman = () => false }) {
@@ -74,6 +77,12 @@ export function makeShiftKeeper({ W, rider, hud, hob, audio = null, folk = () =>
       saveRider(rider);
       if (r && r.ended) { end(id, data); return true; }
     }
+    const cut = CUT_OF[name];
+    if (cut && on(cut) && !(data && data.ambush)) {   // (the hold-up's strongbox grabbed: its shift is over as it stands)
+      const r = cutShift(rider, cut);
+      saveRider(rider);
+      if (r && r.ended) { end(cut, { ...data, short: true }); return true; }
+    }
     // (a job's own batch thank-you that comes with the shift's end: the shift's own takes its place)
     if (lastEnd && SHIFT_BY[lastEnd.id].batch === name && time - lastEnd.at < KEEPER.quiet) return true;
     return false;
@@ -85,8 +94,10 @@ export function makeShiftKeeper({ W, rider, hud, hob, audio = null, folk = () =>
     const j = SHIFT_BY[id];
     lastEnd = { id, at: time };
     ending = { id, t: 0, free: 0, data: data || {}, toast: false, hob: false, closed: false, said: false };
-    // the tip, and the shift's credit toward the job's buckle
-    const e = earn(rider, j.tip);
+    // the tip (half when the shift was cut short), and the shift's credit toward the job's buckle
+    const tip = data && data.short ? Math.round(j.tip / 2) : j.tip;
+    ending.tip = tip;
+    const e = earn(rider, tip);
     const c = countJob(rider, j.buckle, j.credit);
     saveRider(rider);
     refresh();
@@ -97,7 +108,8 @@ export function makeShiftKeeper({ W, rider, hud, hob, audio = null, folk = () =>
     // has gone); the range's Miss Opal once the six-shooter is put away (update)
     const k = thanksN[id] = (thanksN[id] ?? -1) + 1, line = thanksLine(id, k + Math.floor(Math.random() * 2));
     ending.line = line;
-    if (j.giver !== 'marksman') { thank(id, line, data); ending.said = true; }
+    if (j.own) ending.said = true;   // (the job's own thank-you: the held-up wagon's driver, recorded)
+    else if (j.giver !== 'marksman') { thank(id, line, data); ending.said = true; }
   }
   function thank(id, text, data) {
     const JF = folk(), j = SHIFT_BY[id];
@@ -131,7 +143,7 @@ export function makeShiftKeeper({ W, rider, hud, hob, audio = null, folk = () =>
     const E = ending, j = SHIFT_BY[E.id];
     E.t += dt;
     E.free = busy() ? 0 : E.free + dt;   // (how long the rider has been free of a counter, a slip or a panel)
-    if (!E.toast && E.t >= KEEPER.toast && E.free >= Math.min(E.t, KEEPER.freeToast)) { E.toast = true; hud.toast(`Done for today! ${j.giver === 'foreman' ? NAMES.foreman : NAMES[j.giver]} tips you ${j.tip} gold`, 'gold'); }
+    if (!E.toast && E.t >= KEEPER.toast && E.free >= Math.min(E.t, KEEPER.freeToast)) { E.toast = true; hud.toast(`Done for today! ${j.giver === 'foreman' ? NAMES.foreman : NAMES[j.giver]} tips you ${E.tip ?? j.tip} gold`, 'gold'); }
     if (!E.closed && E.t >= KEEPER.close) { E.closed = true; const f = ends[E.id]; if (f) try { f(); } catch (e) { console.warn('shifts: the job could not be put away', e); } }
     // (Miss Opal: her card over her head once the six-shooter is put away)
     if (!E.said && j.giver === 'marksman') { const SR = range(); if (!SR) E.said = true; else if (!SR.active && SR.say) { SR.say([E.line]); E.said = true; } }
@@ -168,6 +180,8 @@ export function makeShiftKeeper({ W, rider, hud, hob, audio = null, folk = () =>
     if (lastEnd && lastEnd.id === id) lastEnd = null;
     return true;
   };
+
+  SK.start = (id) => { if (!on(id)) return null; const r = ensureShift(rider, id); saveRider(rider); return { ...r }; };
 
   // ── EACH FRAME ─────────────────────────────────────────────────────────────────────────────────────────────────
   let hudT = 0;

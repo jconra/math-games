@@ -111,6 +111,8 @@ export const DIALS = {
   townsfolk: { label: 'Townsfolk', lane: 'people', live: 'live', about: 'the most of the town\'s people out at once (by day)',
     levels: [{ name: '4', v: 4 }, { name: '7', v: 7 }, { name: '10', v: 10 }, { name: '13', v: 13 }, { name: '16', v: 16 }] },
   chickens: { label: 'Chickens', lane: 'people', live: 'live', about: 'chickens about the town', levels: [{ name: '4', v: 4 }, { name: '8', v: 8 }, { name: '12', v: 12 }, { name: '16', v: 16 }] },
+  saloon: { label: 'Saloon crowd', lane: 'people', live: 'live', about: 'the townsfolk in the saloon\'s hall at most while the band plays (src/saloonfolk.js: they come and go by its doors)',
+    levels: [{ name: '2', v: 2 }, { name: '4', v: 4 }, { name: '6', v: 6 }, { name: '8', v: 8 }, { name: '10', v: 10 }] },
   crowd: { label: 'Far figures', lane: 'people', live: 'live', about: 'travellers and wagons past the drawn ones shown as cheap far figures, out to (m): src/crowd.js',
     levels: [{ name: '320 m', v: 320 }, { name: '450 m', v: 450 }, { name: '600 m', v: 600 }, { name: '850 m', v: 850 }] },
 };
@@ -144,12 +146,12 @@ export const LADDERS = {
   ],
   // the fast lane: people first (Dad: "Id love to see more pairs of mounted riders and hikers")
   people: [
-    ['travellers', 1], ['chickens', 1], ['townsfolk', 1], ['wagons', 1], ['travellers', 2], ['wagons', 2], ['chickens', 2],
+    ['travellers', 1], ['chickens', 1], ['townsfolk', 1], ['wagons', 1], ['travellers', 2], ['wagons', 2], ['chickens', 2], ['saloon', 1],
     '|normal',
-    ['travellers', 3], ['townsfolk', 2], ['wagons', 3], ['crowd', 1],
+    ['travellers', 3], ['townsfolk', 2], ['wagons', 3], ['crowd', 1], ['saloon', 2],
     '|gaming',
-    ['travellers', 4], ['townsfolk', 3], ['crowd', 2], ['chickens', 3], ['travellers', 5], ['townsfolk', 4], ['wagons', 4], ['travellers', 6],
-    ['crowd', 3], ['travellers', 7], ['travellers', 8],
+    ['travellers', 4], ['townsfolk', 3], ['crowd', 2], ['chickens', 3], ['saloon', 3], ['travellers', 5], ['townsfolk', 4], ['wagons', 4], ['travellers', 6],
+    ['crowd', 3], ['saloon', 4], ['travellers', 7], ['travellers', 8],
   ],
 };
 export const LANES = ['scenery', 'people'];

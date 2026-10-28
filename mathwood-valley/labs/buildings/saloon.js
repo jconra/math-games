@@ -29,7 +29,9 @@
 //     lamps     [{ p, reach, strength, outdoor?, dir? }]   light (the baked light)
 //     anchors   doorways (both, with which way is out), the signs, the stage's spots (in the same form as the game's
 //               src/stage.js STAGE: the piano stool's middle on the stage floor and the way the keys face from it, the
-//               harmonica player's spot), the chalkboard's teacher and player spots, the bar, the footprint, the streets
+//               harmonica player's spot), the chalkboard's teacher and player spots, the bar, the footprint, the streets,
+//               the crowd's places (crowdPlaces below: the seats and standing spots the townsfolk use while the band
+//               plays, the ways in, what is in the way of walking and what is kept clear)
 //     batwings  THE DOORS' HOOK: batwings.update(dt, bodies) swings the leaves: bodies [{ x, z, r }] (the saloon's frame,
 //               metres: anyone near a door: the player, townsfolk, horses) push the leaves they overlap out of their way
 //               (each leaf double-acting, either way), and once clear a leaf swings back on its spring, past shut and
@@ -1271,6 +1273,60 @@ function makeWalker(off) {
   return W;
 }
 
+// ── THE CROWD'S PLACES (src/saloonfolk.js): where the townsfolk sit and stand in the hall while the band plays ─────
+// The seats: every chair at the hall's tables (facing its table) and every bar stool (facing the bar), with the seat's
+// height; the standing spots, at the sides of the stage and against the front wall by the main door, facing the stage.
+// Kept clear (nobody sits or stands there, and the walk ways keep off them): the chalkboard with its teacher's and
+// player's spots (the graph teacher's, later), the doorways' ways in, the stairs' foot, the bar's two ends where the
+// bartender comes round. In the way of walking: the tables, chairs, stools, barrels, the bar, the stage, the stairs, the
+// chalkboard. A few points to walk between (the aisles), and each doorway's point just inside and out on the boardwalk.
+// In the build's own frame here; crowdPlaces moves them into the centred frame with the rest of the anchors.
+const CROWD = {
+  chair: 0.485, stool: 0.85,       // the seats' tops (saloonprops.js spindleChair, barStool)
+  // the standing spots [x, z, facing (three's rotation.y)]: left of the stage, right of it, by the bar's front end
+  stands: [[-2.76, -2.975, 2.01], [2.89, -3.125, -1.95], [-1.96, 5.425, 2.95]],
+  // the aisles' points: just inside the main door (0), along the bar (1-4), the hall's east side (5-7), before the stage
+  // (8, 9), just inside the side door (10), the way past the stage's left to the table behind (11)
+  nodes: [[0, 5.325], [-1.21, 4.025], [-1.16, 2.325], [-1.11, 0.425], [-1.11, -0.875], [0.99, 3.325], [1.44, 2.325], [1.14, -0.575],
+    [-1.11, -2.175], [1.49, -2.325], [-4.21, -1.4], [-3.71, -2.825]],
+  doors: [{ name: 'a', node: 0, out: [0, 6.6] }, { name: 'b', node: 10, out: [-5.5, -1.4] }],
+};
+function crowdPlaces(props, piano, OX, OZ) {
+  const C = (x, z) => [+(x + OX).toFixed(3), +(z + OZ).toFixed(3)];
+  const cb = CB, f = [Math.sin(cb.face), Math.cos(cb.face)], right = [f[1], -f[0]];
+  const teacher = [cb.x + right[0] * 1.0 + f[0] * 0.45, cb.z + right[1] * 1.0 + f[1] * 0.45], player = [cb.x + f[0] * 1.55, cb.z + f[1] * 1.55];
+  const keep = {
+    // [x, z, r, walked through (the doorways' ways in) or walked round (the rest)]
+    circles: [[...C(cb.x, cb.z), 1.6, 0], [...C(...teacher), 1.1, 0], [...C(...player), 1.2, 0], [...C(0, ZF - 0.7), 1.2, 1], [...C(XL + 0.6, (DOOR_B.a0 + DOOR_B.a1) / 2), 1.0, 1], [...C((STX0 + STX1) / 2, STZ0 + 0.5), 1.0, 0]],
+    // (the bar's two ends, where the bartender comes round: by the side door, and at the front; the stage)
+    rects: [[...C(XL, BZ0 - 2.0), ...C(BXF + 0.45, BZ0 + 0.2)], [...C(XL, BZ1 - 0.2), ...C(BXF + 0.05, BZ1 + 1.0)], [...C(SX0, SZ0), ...C(SX1, SZ1)]],
+  };
+  const inKeep = (x, z) => keep.circles.some(([a, b, r]) => Math.hypot(x - a, z - b) < r) || keep.rects.some(([a, b, c, d]) => x > Math.min(a, c) && x < Math.max(a, c) && z > Math.min(b, d) && z < Math.max(b, d));
+  const seats = [], circles = [], rects = [];
+  const tables = props.filter((p) => p.type === 'roundTable');
+  for (const p of props) {
+    if (p.upstairs || p.y > FL + 0.01 || p.z - OZ > ZF || p.x - OX < XL) continue;   // (the stage's, the rooms', the boardwalk's)
+    if (p.type === 'roundTable') circles.push([+p.x.toFixed(3), +p.z.toFixed(3), p.r ?? 0.46]);
+    else if (p.type === 'barrel') circles.push([+p.x.toFixed(3), +p.z.toFixed(3), 0.3]);
+    else if (p.type === 'spindleChair' || p.type === 'barStool') {
+      const chair = p.type === 'spindleChair';
+      circles.push([+p.x.toFixed(3), +p.z.toFixed(3), chair ? 0.24 : 0.19]);
+      if (inKeep(p.x, p.z)) continue;
+      const t = chair ? tables.reduce((b, q) => (!b || Math.hypot(q.x - p.x, q.z - p.z) < Math.hypot(b.x - p.x, b.z - p.z) ? q : b), null) : null;
+      seats.push({ kind: chair ? 'chair' : 'stool', x: +p.x.toFixed(3), z: +p.z.toFixed(3), rot: chair ? +p.rot.toFixed(4) : -Math.PI / 2, h: chair ? CROWD.chair : CROWD.stool,
+        table: t && Math.hypot(t.x - p.x, t.z - p.z) < 1.2 ? [+t.x.toFixed(3), +t.z.toFixed(3)] : null });
+    }
+  }
+  rects.push([...C(BXF - BD, BZ0), ...C(BXF, BZ1)], [...C(SX0, SZ0 - 0.5), ...C(SX1, SZ1)], [...C(STX0, ZG), ...C(STX1, STZ0)]);
+  circles.push([...C(cb.x, cb.z), 0.5]);
+  const stageMid = C((SX0 + SX1) / 2, (SZ0 + SZ1) / 2);
+  return {
+    floor: FL, seats, stands: CROWD.stands.filter(([x, z]) => !inKeep(x + OX, z + OZ)).map(([x, z, rot]) => ({ kind: 'stand', x: C(x, z)[0], z: C(x, z)[1], rot, h: 0 })),
+    nodes: CROWD.nodes.map(([x, z]) => C(x, z)), doors: CROWD.doors.map((d) => ({ name: d.name, node: d.node, out: C(...d.out) })),
+    obstacles: { circles, rects }, keep, stage: stageMid, walls: [...C(XL + INS, ZB + INS), ...C(XR - INS, ZF - INS)],
+  };
+}
+
 // ── the props that go with it: each { type, x, y, z, rot, ... } ─────────────────────────────────────────────────────
 // the round tables and the chairs round each (chairs facing the table's middle)
 const TABLES = [[0.35, 1.25, 4], [2.25, -0.15, 3], [0.15, -1.55, 4], [-3.55, -4.5, 3], [3.55, -4.3, 3]];
@@ -1484,6 +1540,8 @@ export function buildSaloon(recipeIn = {}, env = {}) {
         return { centre: P3(CB.x, FL + 1.5, CB.z), faces: CB.face, teacher: { x: +(teacher[0] + OX).toFixed(3), y: FL, z: +(teacher[1] + OZ).toFixed(3), rot: +Math.atan2(player[0] - teacher[0], player[1] - teacher[1]).toFixed(3) }, player: { x: +(player[0] + OX).toFixed(3), y: FL, z: +(player[1] + OZ).toFixed(3), rot: +(CB.face + Math.PI).toFixed(3) } };
       })(),
       bar: { top: FL + BH, from: P3(BXF, FL + BH, BZ0), to: P3(BXF, FL + BH, BZ1), keeper: P3(BXF - BD - 0.45, FL, 1.8), customer: P3(BXF + 0.45, FL, 1.8) },
+      // THE CROWD'S PLACES (crowdPlaces above): the seats, the standing spots, the aisles, the ways in, what is in the way
+      crowd: crowdPlaces(props, piano, OX, OZ),
       // THE UPPER FLOOR: the galleries (a U round the hall's well) and the rooms behind them (floor rectangles, metres),
       // each room's door: its hinge, the leaf's width and height, the turn its frame starts at and the turn that swings it
       // open into the room (parts.js's doors turn about the hinge by rotation.y); its parts carry roomDoor: i

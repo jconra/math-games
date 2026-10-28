@@ -40,6 +40,15 @@ both ends and evened to about -18 LUFS (a gentle peak limiter keeps them under -
 | `sheep_baa_2` | a sheep | https://commons.wikimedia.org/wiki/File:Sheep_bleating.ogg | earthcalling | Public domain (Wikimedia Commons) |
 | `sheep_baa_3` | a sheep | https://bigsoundbank.com/sheep-2-s2344.html | Joseph SARDIN | CC0 |
 
+## The fiddle (fiddle/)
+
+The saloon band's fiddle: `fiddle/fiddle_<note>.ogg|.m4a`, twelve notes from G3 to E6 (G, A, C and E of each octave). They
+are the solo violin's held notes with vibrato, played loud (`Strings/Solo Violin/Arco Vib/LLVln_ArcoVib_<note>_f.wav`), from
+**VSCO 2 Community Edition** by Versilian Studios (https://github.com/sgossner/VSCO-2-CE), released under **CC0 1.0**
+(checked 2026-10-28: the repository's LICENSE file is the CC0 1.0 Universal text). Each was made mono, trimmed to its
+first 2.8 s with a fade at the end, and evened in loudness (about -20 dB RMS over its held part). The game plays each
+one a little faster or slower for the notes between (src/audio/stagemusic.js FIDDLE_SAMPLES).
+
 Notes on the licences (from the source pages, checked 2026-10-13):
 
 - BigSoundBank (Joseph SARDIN and contributors): each sound page says "License CC0 (public domain): Free and royalty-free".

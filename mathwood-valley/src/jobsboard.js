@@ -49,7 +49,7 @@ export const BOARD_JOBS = [
   { id: 'pigs', name: 'Loose pigs', pic: 'pig', what: 'Herd the loose pigs into the right pens' },
   { id: 'store', name: 'Mind the store', pic: 'slip', what: "Fill the townsfolk's order slips" },
   { id: 'delivery', name: 'Deliveries', pic: 'crate', what: 'Haul supplies out to the camps', saddle: true },
-  { id: 'wagon', name: 'Protect the wagon', pic: 'wagon', what: 'Rope the gang that jumps the wagon' },
+  { id: 'wagon', name: 'Protect the wagon', pic: 'wagon', what: 'Stop the gang holding up a wagon on the road' },   // (picked: a hold-up is sent for it, src/missions/wagonjob.js)
   { id: 'deer', name: 'Deer photos', pic: 'deer', what: "Take the deer's pictures for Miss Wren" },
   { id: 'range', name: 'Bottle range', pic: 'bottles', what: "Shoot bottles at Miss Opal's range" },
   { id: 'loot', name: 'Loot the gang', pic: 'chest', what: 'Bring back what the gang stole', saddle: true },

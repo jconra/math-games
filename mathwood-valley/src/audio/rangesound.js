@@ -11,6 +11,7 @@
 //
 //   const S = makeRangeSound({ audio })   audio: src/audio/audio.js's (nothing plays until the player has clicked once)
 //   S.shot(), S.cock(), S.reload()        at the shooter (not placed)
+//   S.shotAt(at)                          another's shot, at a place in the world (a hold-up's gang: src/missions/wagonjob.js)
 //   S.clank(at), S.shatter(at), S.ping(at), S.thud(at)   at a place in the world ({ x, y, z }), heard from the camera
 //   S.on(true | false)   keeps the sound awake while the range is in use (audio.need)
 //   S.dispose()
@@ -121,6 +122,7 @@ export function makeRangeSound({ audio = null } = {}) {
     } catch (e) { /* no sound: never mind */ }
   }
   S.shot = () => play('RANGE — SHOT', { gain: RANGE_SOUND.shot * (0.9 + Math.random() * 0.15) });
+  S.shotAt = (at) => play('RANGE — SHOT', { at, gain: RANGE_SOUND.shot * (0.85 + Math.random() * 0.2) });
   S.cock = () => play('RANGE — CLICK', { gain: 0.8, when: 0.12 });
   // six rounds into the cylinder, one click each, then the hammer
   S.reload = () => { for (let k = 0; k < 6; k++) play('RANGE — CLICK', { gain: 0.45 + Math.random() * 0.2, when: 0.25 + k * 0.11 + Math.random() * 0.03 }); play('RANGE — CLICK', { gain: 0.9, when: 1.05 }); };

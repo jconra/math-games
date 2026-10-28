@@ -28,9 +28,9 @@
 //                         slip at the store), 'deliveryMiss', 'deliveryRight', 'deliveryLoaded', 'deliveryArrive',
 //                         'deliveryDone' (data.first), 'deliveryNoSaddle', 'deliveryRobbed'; 'campTip' (said once, after a
 //                         wave, to a rider with a saddle: there's hauling to do for the camps)
-//                         Protect the wagon (missions/wagonjob.js): 'wagonArrive' (the job starts), 'banditCatch',
-//                         'banditMiss', 'banditLoop' (a rider has galloped off round the bend), 'banditsDone' (data.n),
-//                         'wagonStop' ("Done for now")
+//                         Protect the wagon (missions/wagonjob.js: the hold-ups on the road): 'banditCatch',
+//                         'banditMiss', 'banditLoop' (a rider has galloped off round the bend), 'gangDone' (a wave seen
+//                         off), 'banditsDone' (data.n: every wave seen off), 'boxGrabbed' (the wagon's bar ran out)
 //                         The homestead (homestead.js): 'animal' (data.kind, data.name: one bought), 'animalGift' (data.kind,
 //                         data.name, data.unlocked: a thank-you lamb, piglet or calf; unlocked: the first of its kind, so
 //                         the store sells that kind now), 'animalGrew' (data.name), 'goodsCollected' (picked up
@@ -106,8 +106,8 @@ const LINES = {
   donkey: "A donkey! Slow as molasses, but he won't quit on you.",
   hat: ['Now that is a fine hat.', 'Suits you, partner.', 'Look at you! A proper hat for a proper rider.'],
   // the six-shooter for bandits (src/gun.js), bought at the general store
-  revolver: "A six-shooter! Out by the wagon, F fires at the rider you point at. Only the one wearing the right number, mind: the others duck.",
-  revolverTouch: "A six-shooter! Out by the wagon, tap a rider or press Shoot. Only the one wearing the right number, mind: the others duck.",
+  revolver: "A six-shooter! At a hold-up on the road, F fires at the rider you point at. Only the one wearing the right number, mind: the others duck.",
+  revolverTouch: "A six-shooter! At a hold-up on the road, tap a rider or press Shoot. Only the one wearing the right number, mind: the others duck.",
   // the farm north of town: the sick-sheep job
   farmTip: "There's a farm north of town, behind your cabin. The vet out there could use a hand with the sheep, and the pigs got loose.",
   farmTipSheep: "There's a farm north of town, behind your cabin. The vet out there could use a hand with the sheep.",
@@ -140,16 +140,14 @@ const LINES = {
   deliveryFirst: "That's your first delivery! Talk to the foreman again whenever you want the next order.",
   deliveryNoSaddle: "Crates need a saddled horse to carry 'em. The stable sells horses and saddles.",
   deliveryRobbed: "The gang got the crates! Don't fret: ride back to the store and they'll make it up again.",
-  // protect the wagon: the gang wears its numbers; the townsfolk riding along look just the same
-  wagonArrive: "Every bandit wears a number: the card up top says which. Townsfolk ride along too, looking just like the gang: only the number tells. Point at a rider and click, or press F.",
-  wagonArriveTouch: "Every bandit wears a number: the card up top says which. Townsfolk ride along too, looking just like the gang: only the number tells. Tap a rider, or the Rope button.",
+  // protect the wagon (the hold-ups on the road): the gang wears its numbers; the townsfolk riding along look just the same
   banditCatch: "Got him! Once he's caught his breath, he'll walk himself to the sheriff.",
   banditMiss: "That's an honest townsman. No harm done: check the count on the rail, then pick again.",
   banditMissCard: "That's an honest townsman. No harm done: look at the picture, then pick again.",   // (a gang of cards: no rail)
   banditLoop: "One's galloped on ahead. Don't fret: they always come back round the bend.",
-  banditsDone: ['The wagon rolls on safe. More road ahead, and likely more trouble.', "That's the gang seen to. Keep alongside, partner.", 'Fine riding. Eyes on the road.'],
-  wagonStop: "The wagon will wait. Come back any time.",
-  wagonWaits: "A freight driver's waiting with his wagon on the road east of the pasture: follow the wagon on your compass and ride up to him.",
+  banditsDone: ["That wagon's on its way, safe and sound. Fine work, partner.", 'Every wave seen off! That driver won\'t forget you.', 'Those bandits will think twice about this road now.'],
+  boxGrabbed: "They got the box, but nobody's hurt. There'll be other wagons, partner.",
+  wagonWaits: "Gangs hold up wagons out on the long roads. Pick Protect the wagon on the jobs board, and I'll lead you to one.",
   // walking up to the saloon's doors: the band plays on the stage inside (src/stage.js) and takes requests
   saloon: ["Hear that? The band's playing in the saloon. Walk up to the stage and ask for a song!",
     "The saloon band takes requests, partner. Step in and pick a tune."],
@@ -202,7 +200,7 @@ const LINES = {
 const JOB = { arrive: 'roundup', catch: 'roundup', miss: 'roundup', waveDone: 'roundup', farmArrive: 'sheep', sheepHealed: 'sheep', sheepWrong: 'sheep',
   sheepFine: 'sheep', flockDone: 'sheep', pigsArrive: 'pigs', pigPenned: 'pigs', pigWrong: 'pigs', pigsDone: 'pigs', storeStart: 'store',
   storeMiss: 'store', storeEquation: 'store', storeDone: 'store', deliveryWork: 'delivery', deliveryMiss: 'delivery', deliveryRight: 'delivery',
-  deliveryRoundUp: 'delivery', animal: 'home', goodsCollected: 'home', goodsSold: 'store', wagonArrive: 'wagon', banditCatch: 'wagon', banditMiss: 'wagon', banditLoop: 'wagon', banditsDone: 'wagon',
+  deliveryRoundUp: 'delivery', animal: 'home', goodsCollected: 'home', goodsSold: 'store', banditCatch: 'wagon', banditMiss: 'wagon', banditLoop: 'wagon', banditsDone: 'wagon', boxGrabbed: 'wagon',
   deerArrive: 'deer', deerSpooked: 'deer', deerSetup: 'deer', deerFlip: 'deer', deerRight: 'deer', deerWrong: 'deer', deerDone: 'deer',
   lootShare: 'loot', lootMiss: 'loot', lootRight: 'loot', lootGuard: 'loot', lootFled: 'loot', lootCamp: 'loot' };
 const KEEP_JOB = 5;
@@ -335,12 +333,11 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
       case 'deliveryDone': drop('deliveryArrive'); if (data.first && once('deliveryFirst')) B.say(LINES.deliveryFirst, 6000); else B.say(LINES.deliveryDone[(haulN++) % LINES.deliveryDone.length], 3500); break;
       case 'deliveryNoSaddle': if (once('deliveryNoSaddle')) B.say(LINES.deliveryNoSaddle); break;
       case 'deliveryRobbed': B.say(LINES.deliveryRobbed, 6000); break;
-      case 'wagonArrive': if (once('wagonArrive')) B.say(touch() ? LINES.wagonArriveTouch.replace('the Rope button', canShoot(rider) ? 'the Shoot button' : 'the Rope button') : LINES.wagonArrive, 9000); break;
       case 'banditCatch': drop('banditMiss'); if (once('banditCatch')) B.say(LINES.banditCatch); break;
       case 'banditMiss': if (once(data.card ? 'banditMissCard' : 'banditMiss')) B.say(data.card ? LINES.banditMissCard : LINES.banditMiss, 6000); break;
       case 'banditLoop': if (once('banditLoop')) B.say(LINES.banditLoop); break;
       case 'banditsDone': drop('banditMiss', 'banditCatch', 'banditLoop'); B.say(LINES.banditsDone[(wagonN++) % LINES.banditsDone.length], 3500); break;
-      case 'wagonStop': if (once('wagonStop')) B.say(LINES.wagonStop, 3000); break;
+      case 'boxGrabbed': drop('banditMiss', 'banditCatch', 'banditLoop'); B.say(LINES.boxGrabbed, 4500); break;
       case 'near': {
         const L = LINES[data.place], t = performance.now() / 1000;
         if (!Array.isArray(L) || t - (nearAt[data.place] ?? -1e9) < NEAR_AGAIN) break;

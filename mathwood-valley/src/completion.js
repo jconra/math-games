@@ -106,7 +106,7 @@ const JOB_HOW = {
   sheep: 'Heal the sick sheep at the farm north of town.',
   orders: 'Mind the counter at the general store and fill the orders.',
   pigs: 'Pen the loose pigs at the farm.',
-  bandits: 'Ride along with the wagon on the road east of the pasture and rope the gang.',
+  bandits: 'Pick Protect the wagon on the jobs board, ride to the held-up wagon and rope the gang.',
   deliveries: 'Take an order from a camp\'s foreman, make it up at the store and ride the crates out.',
   loot: 'Loot the gang: the deputy outside the sheriff\'s office says where the stash is.',
   targets: 'Shoot bottles and tin cans at the target range on the east edge of town.',

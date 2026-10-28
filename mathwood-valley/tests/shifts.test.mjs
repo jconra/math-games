@@ -61,10 +61,14 @@ test('a shift is 5 to 10 rounds (3 to 5 on the long trips), most riders 6 to 8, 
   assert.equal(S.shiftLength(withPlace('sheep', answers(20, 20), { age: 11 }), 'sheep'), 10, 'eleven: no cap');
   // every length in range, every job, whatever the answers
   for (const j of S.SHIFT_JOBS) for (const k of [0, 5, 10, 15, 20]) for (const age of [null, 4, 6, 8, 12]) {
-    const n = S.shiftLength(withPlace(j.place, answers(k, 20, k), { age }), j.id), [lo, hi] = j.long ? [3, 5] : [5, 10];
+    const n = S.shiftLength(withPlace(j.place, answers(k, 20, k), { age }), j.id), [lo, hi] = j.holdup ? [2, 4] : j.long ? [3, 5] : [5, 10];
     assert.ok(n >= lo && n <= hi, `${j.id} ${k}/20 age ${age}: ${n}`);
   }
   assert.equal(S.shiftLength(r0, 'windmill'), 0, 'no shift for the windmill');
+  // the wagon's: one hold-up of 2 to 4 waves (most riders 3)
+  assert.equal(S.shiftLength(r0, 'wagon'), 3, 'a hold-up, nothing known: 3 waves');
+  assert.equal(S.shiftLength(withPlace('wagon', answers(20, 20)), 'wagon'), 4);
+  assert.equal(S.shiftLength(withPlace('wagon', answers(20, 20), { age: 5 }), 'wagon'), 2);
 });
 
 test('rounds count up to the shift\'s end, then the job is done for the day; a round after that changes nothing', () => {
@@ -258,6 +262,35 @@ test('the keeper: a counter or a slip holds the tip\'s note and Hob back till th
   assert.equal(S.shiftOf(r2, 'wagon').n, before);
   g2.SK.heard('gangDone', {});
   assert.equal(S.shiftOf(r2, 'wagon').n, before + 1);
+});
+
+test('the keeper: the wagon\'s shift is the jobs board\'s hold-up; the driver thanks the player himself; the box grabbed ends it with half the tip', () => {
+  const r = rider({ gold: 0 }), g = game(r), { SK, log } = g;
+  assert.deepEqual(SK.start('wagon'), { day: S.shiftsOf(r).day, n: 0, of: 3, done: false }, 'made when the hold-up is sent: 3 waves');
+  assert.equal(SK.heard('gangDone', { board: true }), false);
+  assert.equal(SK.left('wagon'), 2);
+  assert.equal(SK.heard('gangDone', { board: true }), false);
+  assert.equal(SK.heard('gangDone', { board: true }), true, 'the last wave: the shift ends');
+  assert.equal(log.thanked.length, 0, 'no job person: the held-up wagon\'s driver says his own (recorded)');
+  assert.equal(SK.heard('banditsDone', { board: true }), true, 'the coins just after: the shift\'s ending stands');
+  g.run(KEEPER.toast + 0.2);
+  assert.ok(log.toasts.some((t) => /^Done for today! The driver tips you 15 gold$/.test(t)), log.toasts.join(' | '));
+  g.run(KEEPER.hob);
+  assert.match(log.hob[0], /^The driver is mighty grateful\./);
+  // a new day, the box grabbed on the second wave: done for today as it stands, half the tip
+  const r2 = rider({ gold: 0 }), g2 = game(r2);
+  g2.SK.start('wagon');
+  g2.SK.heard('gangDone', { board: true });
+  assert.equal(g2.SK.heard('boxGrabbed', { ambush: true }), false, 'one on the way is never the shift\'s');
+  assert.ok(g2.SK.open('wagon'));
+  assert.equal(g2.SK.heard('boxGrabbed', { board: true }), true);
+  assert.ok(g2.SK.done('wagon') && !g2.SK.open('wagon'));
+  assert.equal(S.shiftOf(r2, 'wagon').n, 1, 'the count as it stood');
+  assert.equal(r2.gold, Math.round(S.SHIFT_BY.wagon.tip / 2), 'half the tip: nothing taken away');
+  g2.run(KEEPER.toast + 0.2);
+  assert.ok(g2.log.toasts.some((t) => /^Done for today! The driver tips you 8 gold$/.test(t)), g2.log.toasts.join(' | '));
+  assert.equal(S.cutShift(r2, 'wagon').ended, false, 'cut again: nothing more');
+  assert.equal(g2.SK.helloFor('driver'), null, 'no one\'s hello turns into a polite no for it');
 });
 
 test('the keeper: a job turned off has no shift; the fishing rod is put down at the end', () => {

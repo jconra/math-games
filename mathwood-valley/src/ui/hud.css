@@ -119,6 +119,27 @@
   border-radius: 6px; padding: 4px 12px; }
 .bmh-rule-btns button:hover { background: #82593a; }
 
+/* the meter under the rule card: a held-up wagon's health (src/missions/wagonjob.js). Dark like the line under the
+   card, a little wagon, the label, the bar (green; orange when low; it flashes when a shot lands) and "Wave 2 of 3" */
+.bmh-meter { display: flex; align-items: center; gap: 8px; padding: 5px 12px 5px 8px; border-radius: 9px;
+  background: rgba(24, 16, 10, 0.86); border: 1px solid rgba(226, 173, 76, 0.4); box-shadow: 0 3px 12px rgba(0, 0, 0, 0.35);
+  font: 600 14px/1 Bitter, Georgia, serif; color: var(--ink); transition: opacity 0.18s ease-out; }
+.bmh-meter[hidden] { display: none; }
+.bmh-meter-pic svg { width: 32px; height: 24px; display: block; }
+.bmh-meter-label { font-weight: 700; letter-spacing: 0.02em; }
+.bmh-meter-bar { position: relative; width: 190px; height: 14px; border-radius: 7px; overflow: hidden;
+  background: rgba(255, 240, 210, 0.13); box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.55), inset 0 2px 3px rgba(0, 0, 0, 0.35); }
+.bmh-meter-bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; border-radius: 7px;
+  background: linear-gradient(#9be27a, #4f9a35); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35); transition: width 0.35s ease-out; }
+.bmh-meter.is-low .bmh-meter-bar i { background: linear-gradient(#ffc75a, #d9761e); }
+.bmh-meter.is-hit .bmh-meter-bar { box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.55), 0 0 0 2px rgba(255, 214, 140, 0.85); }
+.bmh-meter.is-hit .bmh-meter-pic { transform: translateX(1px) rotate(-3deg); }
+.bmh-meter-sub { color: var(--ink-2); font-size: 13px; white-space: nowrap; }
+.bmh-meter-sub:empty { display: none; }
+/* (clear of the card's "Confusing?" chip, which hangs half under the card's bottom edge: src/ui/flag.js) */
+.bmh-rule:has(.bmfb-flag:not([hidden])) + .bmh-meter { margin-top: 6px; }
+@media (pointer: coarse) { .bmh-rule:has(.bmfb-flag:not([hidden])) + .bmh-meter { margin-top: 12px; } }
+
 .bmh-hint {
   max-width: min(640px, 80vw); padding: 8px 16px 10px; border-radius: 9px; text-align: center;
   background: rgba(24, 16, 10, 0.86); border: 1px solid rgba(224, 133, 102, 0.45); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
@@ -280,6 +301,10 @@
   .bmh-rule-btns { margin-top: 4px; }
   .bmh-rule-btns button { font-size: 13px; padding: 3px 10px; }
   .bmh-hint { max-width: calc(100vw - 24px); padding: 5px 12px 6px; }
+  .bmh-meter { gap: 6px; padding: 4px 9px 4px 6px; font-size: 12.5px; }
+  .bmh-meter-pic svg { width: 26px; height: 20px; }
+  .bmh-meter-bar { width: 108px; height: 12px; }
+  .bmh-meter-sub { font-size: 11.5px; }
   .bmh-hint-say, .bmh-hint-line { display: inline; font-size: 15px; line-height: 1.3; }
   .bmh-hint-say:has(+ .bmh-hint-line)::after { content: ' · '; font-style: normal; color: var(--mute); }
   .bmh-skip { font-size: 17px; margin-top: 2px; }
