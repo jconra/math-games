@@ -8,7 +8,9 @@
 //                   dogs: a Shiba, a Husky or the pug (the cheap joke pick), each named by the kid; more than one can be
 //                   bought, and the one picked follows you while the others wait at home; and hats (src/hats.js): bought
 //                   once, worn at once, swapped back and forth free; and the six-shooter for bandits (src/gun.js),
-//                   greyed with a word for a rider whose grown-up has "Bandits" on lasso only
+//                   greyed with a word for a rider whose grown-up has "Bandits" on lasso only; and treats for the
+//                   horses, apples and carrots by the bag (src/treats.js): picking 1, 2 or 3 bags asks a small money
+//                   question in the row (how much for them all, or the change from a coin), and the right coin buys them
 //   sheriff's desk  open the lock boxes you won, or crack seized boxes for the sheriff's pay (as many as you like)
 //   cabin           your table: open the lock boxes you won
 //
@@ -37,6 +39,9 @@ import { PALETTES } from './actors/folk.js';
 import { PRICES, SADDLES, HORSES, DOGS, DOG_NAMES, LADDER, REVOLVER } from './catalog.js';
 import { gunShop, buyGun } from './gun.js';
 import { ownedHorses, ownsHorse, rideHorse, horseLook, ridden } from './mounts.js';
+import { TREATS, BOND, TREAT_KINDS, treatsOf, countOf, roomOf, addTreats, treatQuestion, answerLine, bondOf, heartsLine, treatWord } from './treats.js';
+import { levelOf } from './math/skill.js';
+import { TREAT_ICON, heartSVG } from './ui/treaticons.js';
 export { PRICES, SADDLES, HORSES, DOGS, DOG_NAMES };
 
 // ── PAY (gold; the prices are in src/catalog.js) ──────────────────────────────────────────────────────────────────
@@ -162,6 +167,39 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
   // a horse's top speed, as a number (Dad: "even little kids know bigger number is better")
   const speedOf = (look) => (look && look.mph ? `<span class="bms-speed" title="Top speed"><b>${look.mph}</b> mph</span>` : '');
   const price = (n) => `<span class="bms-price">${COIN}<b>${n}</b></span>`;
+  // a horse of the rider's own: its hearts (src/treats.js BOND), filled by feeding it treats; full, it comes faster
+  const heartsOf = (id) => {
+    const b = bondOf(rider, id), fills = Array.from({ length: BOND.hearts }, (x, i) => (i < b.hearts ? 1 : i === b.hearts && b.half ? 0.5 : 0));
+    const say = b.full ? `${BOND.hearts} of ${BOND.hearts} hearts: comes faster to your whistle` : `${b.hearts} of ${BOND.hearts} hearts: treats fill them`;
+    return `<span class="bms-hearts" title="${say}" aria-label="${say}" data-hearts="${heartsLine(b.hearts, b.half)}">${fills.map(heartSVG).join('')}${b.full ? '<small>Comes faster to your whistle</small>' : ''}</span>`;
+  };
+  // ── TREATS FOR THE HORSES: the store's rows, and the small money question asked when bags are picked ──
+  // (S.treatQ: the question up, { ...treatQuestion, miss: [coins picked wrong], line: what the last wrong pick was })
+  const treatRows = () => {
+    const room = roomOf(rider), have = treatsOf(rider);
+    let h = `<h3 class="bms-h">Treats for the horses</h3>`;
+    for (const kind of TREAT_KINDS) {
+      const per = TREATS.bag[kind], cost = TREATS.price[kind], q = S.treatQ && S.treatQ.kind === kind ? S.treatQ : null;
+      const line = `${per} ${kind}s in a bag, ${cost} gold a bag. ${kind === 'carrot' ? 'Jasper the donkey likes carrots best.' : 'Every horse loves an apple.'}`;
+      let more;
+      if (q) {
+        more = `<div class="bms-treatq" role="group" aria-label="${esc(q.ask)}"><p>${esc(q.ask)}</p>`
+          + `<div class="bms-kinds bms-coins">${q.choices.map((c) => `<button type="button" data-do="treat-pick" data-id="${c}" class="${q.miss.includes(c) ? 'is-miss' : ''}" ${q.miss.includes(c) ? 'disabled' : ''}>${COIN}<b>${c}</b></button>`).join('')}</div>`
+          + `${q.line ? `<p class="bms-treathelp">${esc(q.line)}</p>` : ''}</div>`;
+      } else {
+        const bags = [];
+        for (let n = 1; n <= TREATS.bagsMost; n++) {
+          const fits = n * per <= room, can = rider.gold >= n * cost;
+          bags.push(`<button type="button" data-do="treat-bags" data-id="${kind}:${n}" ${fits && can ? '' : 'disabled'} title="${!fits ? 'No room in your saddlebags' : !can ? `Need ${n * cost - rider.gold} more gold` : `${n * per} ${kind}s`}">${n === 1 ? '1 bag' : `${n} bags`}</button>`);
+        }
+        more = `<div class="bms-kinds bms-bags">${bags.join('')}</div>`;
+      }
+      h += `<div class="bms-row is-tall"><span class="bms-treatpic">${TREAT_ICON[kind]}</span><div class="bms-what"><b>${kind === 'apple' ? 'Apples' : 'Carrots'}</b><small>${esc(line)}</small>${more}</div>`
+        + `<div class="bms-act">${price(cost)}<span class="bms-tag">${have[kind]} in your bags</span></div></div>`;
+    }
+    const n = countOf(rider);
+    return h + `<p class="bms-tip">Your saddlebags hold ${TREATS.most} treats (${n} in them now${room < TREATS.bag.apple ? ': full up' : ''}). By a horse's head, the apple button${typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches ? '' : ' (or <kbd>G</kbd>)'} gives it one. Wild apples grow by your homestead and along the creek, free to pick.</p>`;
+  };
   const short = (n) => `Need ${n - rider.gold} more`;
 
   function row({ name, line, right, extra = '', pic = '' }) {
@@ -194,7 +232,7 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
       if (mine.length) h += `<h3 class="bms-h">${mine.length > 1 ? 'Your horses' : 'Your horse'}</h3>`;
       for (const x of mine) {
         const right = x.ridden ? `<span class="bms-tag is-on">Riding this one</span>` : `<button type="button" data-do="use-horse" data-id="${esc(x.id)}">Ride this one</button>`;
-        h += row({ name: x.name, line: x.line, right, extra: speedOf(x.look) });
+        h += row({ name: x.name, line: x.line, right, extra: speedOf(x.look) + heartsOf(x.id) });
       }
       const stalls = HORSES.filter((x) => PRICES.horse[x.id] != null && !ownsHorse(rider, x.id));
       if (stalls.length) h += `<h3 class="bms-h">In the stalls</h3>`;
@@ -241,6 +279,7 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
       }
       // hats: the one on your head, the ones you own (put one on), and the rest with a price
       if (extra && extra.store) h += extra.store.html();   // (the farm animals)
+      h += treatRows();   // (apples and carrots for the horses)
       h += `<h3 class="bms-h">Hats</h3>`;
       const hats = hatsOwned(), wearing = hatOf(rider.look);
       for (const x of HATS) {
@@ -295,6 +334,7 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
   // ── opening, drawing, and what the buttons do ──
   S.open = (id, note = '') => {
     if (!COUNTERS[id]) return;
+    S.treatQ = null;   // (a treat question left up last time starts afresh)
     if (panel) panel.close();
     openId = id;
     const c = COUNTERS[id];
@@ -375,6 +415,23 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
     } else if (what === 'open-seized') {
       const back = openId; panel.close();
       onLockbox({ tier: boxTier(rider), from: 'sheriff' }, { own: false, after: (r) => S.open(back, resultNote(r)) });
+    } else if (what === 'treat-bags') {
+      // bags picked: the money question comes up in the row (no gold spent yet)
+      const [kind, nb] = String(id).split(':'), n = Math.round(+nb);
+      if (!TREAT_KINDS.includes(kind) || !(n >= 1)) return;
+      let level = 0; try { level = levelOf(rider, 'money'); } catch (err) { /* (no skill model: the plain question) */ }
+      S.treatQ = { ...treatQuestion({ kind, bags: n, level }), miss: [], line: '' };
+      draw();
+      const b = panel && panel.body.querySelector('[data-do="treat-pick"]'); if (b) b.focus({ preventScroll: true });
+    } else if (what === 'treat-pick') {
+      const q = S.treatQ; if (!q) return;
+      const pick = Math.round(+id);
+      if (pick !== q.answer) { if (!q.miss.includes(pick)) q.miss.push(pick); q.line = answerLine(q, pick); draw(); return; }
+      if (q.bags * TREATS.bag[q.kind] > roomOf(rider)) { S.treatQ = null; draw('No room in your saddlebags for that many.'); return; }
+      if (!spend(rider, q.cost)) { S.treatQ = null; draw('Not enough gold yet.'); return; }
+      const got = addTreats(rider, q.kind, q.bags * TREATS.bag[q.kind]);
+      S.treatQ = null; saveRider(rider); onBuy('treats');
+      draw(`Right${q.form === 'change' ? `: ${q.answer} gold change` : `: ${q.cost} gold`}! ${treatWord(q.kind, got)} in your saddlebags.`);
     } else if (what === 'store-job') {
       panel.close();
       if (onStoreJob) onStoreJob();

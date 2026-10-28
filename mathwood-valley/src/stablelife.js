@@ -11,6 +11,7 @@
 //   const SL = makeStableLife({ W, animals, rider, camera, player: () => P, shops, say, shadows })
 //   SL.update(dt)           each frame (while riding about)
 //   SL.prompt / SL.act()    by a saddle rack: what E does (null: nothing here)
+//   SL.treatSpots()         the stall horses a treat can be given to (src/feeding.js)
 //   SL.state()              for the rigs: the stall horses, the racks
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -143,12 +144,13 @@ export function makeStableLife({ W, animals, rider, camera, player, shops, say =
       const a = st.a;
       st.t -= dt;
       if (st.t <= 0) {
+        st.munch = false;   // (a treat's nodding done)
         let t = Math.random() * IDLES.reduce((q, x) => q + x[1], 0), name = 'Idle';
         for (const [n, w] of IDLES) if ((t -= w) <= 0) { name = n; break; }
         st.idle = a.actions && a.actions[name] ? name : 'Idle';
         st.t = ONCE.has(st.idle) ? a.actions[st.idle].getClip().duration + 0.2 : rnd(3, 8);
       }
-      a.play(st.idle, { fade: 0.4, once: ONCE.has(st.idle) });
+      a.play(st.idle, { fade: 0.4, once: ONCE.has(st.idle) && !st.munch });   // (munching a treat: the nod over and over)
       a.update(dt);
       if (st.h) st.h.look(_cam);
     }
@@ -162,6 +164,20 @@ export function makeStableLife({ W, animals, rider, camera, player, shops, say =
       SL.prompt = have ? `Put the ${S.name.toLowerCase()} on your horse` : `Buy the ${S.name.toLowerCase()} (${PRICES.saddle[R.id]} gold)`;
       SL.rack = R; break;
     }
+  };
+  // THE STALL HORSES A TREAT CAN BE GIVEN (src/feeding.js): each one standing in its stall near the rider; one of the
+  // rider's own fills its hearts. It munches with its head out over the gate: nodding (the stall clip), not grazing,
+  // which would put its head through the gate
+  SL.treatSpots = () => {
+    if (!SL.ready || disposed || !inside) return [];
+    const out = [];
+    for (const st of SL.horses) {
+      if (st.far || !st.a.root.visible) continue;
+      const h = HORSES.find((x) => x.id === st.id), L = LADDER[st.id];
+      out.push({ key: 'stall:' + st.id, id: st.id, name: h ? h.name : st.id, a: st.a, owned: ownsHorse(rider, st.id), donkey: !!L && L.kind === 'donkey',
+        eat: (sec) => { const a = st.a.actions || {}; st.idle = a.Nod && st.a.clip !== 'Nod' ? 'Nod' : a.Idle_Headlow ? 'Idle_Headlow' : 'Idle_2';   /* (a nod already played to its end would stay put: the head-low idle then) */ st.t = sec; st.munch = true; return true; } });
+    }
+    return out;
   };
   SL.act = () => {
     const R = SL.rack; if (!R || !shops) return;

@@ -45,6 +45,7 @@ import { BASE } from './base.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { Forest, FOREST_SPECIES } from './objects/forest.js';
+import { APPLE_TREE } from './objects/appletree.js';
 import { SHAPE_DEFAULTS } from './objects/foliage.js';
 import { makeLowPine } from './objects/lowTrees/cards.js';
 import { stoneFieldSteps, stoneGeometrySteps, useField, STONE_UNIFORMS, STONE_GLSL, STONE_LOD } from './objects/stones.js';
@@ -1600,7 +1601,7 @@ loadSheet(BASE + 'models/props/groundPlants.glb', 4, (parts, m) => { if (LOOK) m
 // wood leaves the trees); a clear stroke clears every sort.
 // ...then the footpath (25: paint a path) and its eraser (26), the town's buildings (30 on) and props (50 on), which live in
 // the town's own layout (the tool reaches them through `town`)
-const PLANT = { tool: null, base: null, LAWN_KIND: KIND_INFO.length, TREE0: KIND_INFO.length + 1, ROCK0: KIND_INFO.length + 5, PATH: KIND_INFO.length + 9, NOPATH: KIND_INFO.length + 10, FENCE: KIND_INFO.length + 11, STONE: KIND_INFO.length + 12, NOSTONE: KIND_INFO.length + 13, BUILD0: 30, PROP0: 50, GATE: 98, ROCKS: 99 };   // (ROCKS: the four rocks mixed, a brush; GATE: a gate put in a fence; both past the props)
+const PLANT = { tool: null, base: null, LAWN_KIND: KIND_INFO.length, TREE0: KIND_INFO.length + 1, ROCK0: KIND_INFO.length + 5, APPLE: APPLE_TREE.kind, PATH: KIND_INFO.length + 9, NOPATH: KIND_INFO.length + 10, FENCE: KIND_INFO.length + 11, STONE: KIND_INFO.length + 12, NOSTONE: KIND_INFO.length + 13, BUILD0: 30, PROP0: 50, GATE: 98, ROCKS: 99 };   // (ROCKS: the four rocks mixed, a brush; GATE: a gate put in a fence; both past the props)
 // the planting as the land reads it: the Build bar's once it's there (it's handed this same planting), else the planting
 // itself, from the start (the first laying of the land already keeps to its paths and clears). In the lab: the one kept in
 // this browser (one from before the land's paths were baked into footpath strokes, landpath1.., gets them, ahead of its
@@ -1610,7 +1611,7 @@ const PLANT = { tool: null, base: null, LAWN_KIND: KIND_INFO.length, TREE0: KIND
   if (kept && baked.length && !kept.strokes.some(isLand)) { kept.strokes.unshift(...baked); savePlanting(kept); }
   const planting = normalisePlanting(kept || PLANTING_FIRST || emptyPlanting()); PLANT.base = { planting, index: new PlantIndex(planting) }; }
 const plantNow = () => PLANT.tool || PLANT.base;
-const SORT = { plant: (k) => k <= PLANT.LAWN_KIND, tree: (k) => k >= PLANT.TREE0 && k < PLANT.ROCK0, rock: (k) => (k >= PLANT.ROCK0 && k < PLANT.ROCK0 + 4) || k === PLANT.ROCKS, path: (k) => k === PLANT.PATH || k === PLANT.NOPATH, fence: (k) => k === PLANT.FENCE || k === PLANT.GATE };
+const SORT = { plant: (k) => k <= PLANT.LAWN_KIND, tree: (k) => (k >= PLANT.TREE0 && k < PLANT.ROCK0) || k === PLANT.APPLE, rock: (k) => (k >= PLANT.ROCK0 && k < PLANT.ROCK0 + 4) || k === PLANT.ROCKS, path: (k) => k === PLANT.PATH || k === PLANT.NOPATH, fence: (k) => k === PLANT.FENCE || k === PLANT.GATE };
 // the planting seen by one sort: its paint strokes and every clear (the land's own plants follow the procedural switch;
 // trees and rocks always), with its own index; made once a change
 const sortParts = new WeakMap();
@@ -1713,9 +1714,27 @@ function withLawnPlanting(spots, at = lawnCentre(), R = lawnRadius(), thin = nul
 function plantedTrees(species) {
   const t = plantNow();
   const tintOf = (sp, x, z) => species[sp].tint === false ? undefined : new THREE.Color().setHSL(...pickTreeKind(x, z, [species[sp].name], { height: 0, slope: 0, wet: 0, dry: 0 }, FAMILY).hsl);
-  const out = [], spOf = (k) => species.findIndex((s) => s.name === TREE_SPECIES[k - PLANT.TREE0].name);
-  for (const p of paintedPlants(paintedOnly(t, 'trees'), null, { sizeOf: () => 1 })) { const sp = spOf(p.sp); if (sp >= 0 && SORT.tree(p.sp) && paintable(p)) out.push({ x: p.x, z: p.z, sp, scale: p.scale, yaw: p.yaw, tint: tintOf(sp, p.x, p.z) }); }
-  for (const it of t.planting.items) if (SORT.tree(it.kind)) { const sp = spOf(it.kind); if (sp >= 0) out.push({ x: it.x, z: it.z, sp, scale: it.sy, yaw: it.ry * Math.PI / 180, tint: tintOf(sp, it.x, it.z) }); }
+  const out = [], spOf = (k) => species.findIndex((s) => s.name === (k === PLANT.APPLE ? APPLE_TREE.species : TREE_SPECIES[k - PLANT.TREE0].name));
+  // (an apple tree: the oak's model, its own height and green: appleTrees below)
+  const size = (k, s) => (k === PLANT.APPLE ? s * appleSize(species) : s), tint = (k, sp, x, z) => (k === PLANT.APPLE ? new THREE.Color().setHSL(...APPLE_TREE.hsl) : tintOf(sp, x, z));
+  for (const p of paintedPlants(paintedOnly(t, 'trees'), null, { sizeOf: () => 1 })) { const sp = SORT.tree(p.sp) ? spOf(p.sp) : -1; if (sp >= 0 && paintable(p)) out.push({ x: p.x, z: p.z, sp, scale: size(p.sp, p.scale), yaw: p.yaw, tint: tint(p.sp, sp, p.x, p.z) }); }
+  for (const it of t.planting.items) if (SORT.tree(it.kind)) { const sp = spOf(it.kind); if (sp >= 0) out.push({ x: it.x, z: it.z, sp, scale: size(it.kind, it.sy), yaw: it.ry * Math.PI / 180, tint: tint(it.kind, sp, it.x, it.z) }); }
+  return out;
+}
+// the apple tree's size against its model's: the oak is FOREST_SPECIES' height at 1, the apple tree APPLE_TREE.height
+const appleSize = (species) => { const s = species.find((x) => x.name === APPLE_TREE.species); return s && s.height ? APPLE_TREE.height / s.height : 0.35; };
+// THE WILD APPLE TREES (world/objects/appletree.js), for the game's apples (src/feeding.js): each placed or painted one,
+// where it stands and how the forest draws it: { id, x, z, y (the trunk's foot, as the forest stands it), yaw, s (the
+// model's units to metres), sp (the forest species, whose root is the model) }. Empty until the forest has its models
+function appleTrees() {
+  const t = plantNow(), sp = treeForest ? treeForest.species.find((x) => x.name === APPLE_TREE.species) : null;
+  if (!t || !sp || !sp.root || !sp.unit) return [];
+  const k = appleSize(treeForest.species), out = [];
+  const one = (id, x, z, scale, yaw) => { const s = scale * k * sp.unit; out.push({ id, x, z, y: treeFoot(x, z, (sp.footR || 0) * s) - (sp.baseY || 0) * s, yaw, s, sp }); };
+  // (each known by where it stands, to the decimetre: a placed plant's id is made afresh at each load when its file has none)
+  const idOf = (x, z) => `${x.toFixed(1)},${z.toFixed(1)}`;
+  for (const it of t.planting.items) if (it.kind === PLANT.APPLE) one(idOf(it.x, it.z), it.x, it.z, it.sy, it.ry * Math.PI / 180);
+  for (const p of paintedPlants(paintedOnly(t, 'trees'), null, { sizeOf: () => 1 })) if (p.sp === PLANT.APPLE && paintable(p)) one(idOf(p.x, p.z), p.x, p.z, p.scale, p.yaw);
   return out;
 }
 // what of the planting the trees and the stones were last laid from, so a change to plants alone doesn't lay them again
@@ -1732,6 +1751,7 @@ function makePlantTool() {
   kinds.push({ id: PLANT.LAWN_KIND, name: 'lawn grass (short tufts, near you)', group: 'Meadow', icon: cv.toDataURL() });
   // trees (drawn by the forest: they stand upright and size evenly; painted fifty times thinner) and rocks (the stones' shapes)
   TREE_SPECIES.forEach((sp, i) => kinds.push({ id: PLANT.TREE0 + i, name: sp.name, group: 'Trees', height: sp.height, upright: true, densityScale: 0.02 }));
+  kinds.push({ id: PLANT.APPLE, name: 'apple tree (wild apples to pick)', group: 'Trees', height: APPLE_TREE.height, upright: true, densityScale: 0.02 });
   const shapes = STONES.shapes || (STONES.shapes = stoneShapes());
   kinds.push({ id: PLANT.ROCKS, name: 'rocks (the four mixed)', group: 'Rocks', densityScale: 0.1, mix: [0, 1, 2, 3].map((i) => PLANT.ROCK0 + i) });   // (a click puts down one of the four)
   ['round boulder', 'flat slab', 'tall rock', 'broken rock'].forEach((n, i) => kinds.push({ id: PLANT.ROCK0 + i, name: n, group: 'Rocks', densityScale: 0.1 }));
@@ -1859,7 +1879,7 @@ function buildFences() {
 // the trees' icons, drawn from the forest's own trees once they are in (a copy each: the forest keeps its own)
 function treeIcons() {
   const go = () => { if (!treeForest || !treeForest.species.every((s) => s.root)) return setTimeout(go, 1000);
-    TREE_SPECIES.forEach((sp, i) => { const s = treeForest.species.find((x) => x.name === sp.name); if (s && s.root) PLANT.tool.iconFrom(PLANT.TREE0 + i, s.root.clone()); }); };
+    TREE_SPECIES.forEach((sp, i) => { const s = treeForest.species.find((x) => x.name === sp.name); if (s && s.root) PLANT.tool.iconFrom(PLANT.TREE0 + i, s.root.clone()); if (s && s.root && sp.name === APPLE_TREE.species) PLANT.tool.iconFrom(PLANT.APPLE, s.root.clone()); }); };
   go();
 }
 let coverForest = null;
@@ -2615,6 +2635,6 @@ return {
   FINE, get LANDF() { return LANDF; }, inFine: (x, z) => !!FINE.h && x > FINE.x0 && x < FINE.x1 && z > FINE.z0 && z < FINE.z1,
   BAKE, bakeData, update, render, settled, heightAt, groundAt, slopeAt, waterAt, coverGround, buildLand, buildHeights, shapeMesh, fastMesh, baseGrid, erodeSteps, smoothErosion, cutRavines, addCrags, findWater, townLand, paintWater,
   placeCover, placeTrees, placeStones, placeLawn, calmCover, buildPaving, applyPave, paveLater, composePathRoad, tex, setAverages, applyWeights, drawPaths, followShadow, followCover, townRebuildNow, beamsReady,
-  get treeForest() { return treeForest; }, get coverForest() { return coverForest; }, get trees() { return trees; }, get pathCanvas() { return pathCanvas; },
+  appleTrees, get treeForest() { return treeForest; }, get coverForest() { return coverForest; }, get trees() { return trees; }, get pathCanvas() { return pathCanvas; },
 };
 }

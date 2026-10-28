@@ -16,6 +16,17 @@
 .bmtl-t b { font: 700 14px Bitter, Georgia, serif; color: var(--brass-hi, #f3c56b); white-space: nowrap; }
 .bmtl-t small { font: 500 12px Bitter, Georgia, serif; color: #dccaa5; white-space: nowrap; }
 .bmtl-t small:empty { display: none; }
+/* the apple button (src/feeding.js): beside the two tools while a horse's head is in reach; the treats left in a small
+   round count at its corner */
+.bmtl-treat { position: relative; border-color: rgba(214, 76, 60, 0.75); background: linear-gradient(rgba(70, 26, 18, 0.88), rgba(40, 18, 12, 0.88)); }
+.bmtl-treat[hidden] { display: none; }
+.bmtl-treat:hover { border-color: #ff8a6e; }
+.bmtl-treat.is-busy { opacity: 0.72; }
+.bmtl-ti svg { width: 28px; height: 28px; }
+.bmtl-tn { position: absolute; right: -6px; top: -7px; min-width: 19px; height: 19px; padding: 0 4px; border-radius: 10px; background: #c8202a;
+  color: #fff; font: 700 12px/19px Bitter, Georgia, serif; font-style: normal; text-align: center; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5); }
+.bmtl-treat:not([hidden]) { animation: bmtl-treat-in 0.25s ease-out; }
+@keyframes bmtl-treat-in { from { transform: scale(0.7); opacity: 0; } }
 /* (Work it out is never dimmed: with no sum on screen it opens the entry to type one, and says so: "Type your own sum") */
 
 /* the level tool: ‹ 27: Odd steps going down ›, a thin bar under the title */

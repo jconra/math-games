@@ -36,6 +36,8 @@
 //   P.horseCameAt  when (performance.now()) a whistled horse last pulled up beside the player
 //   P.horsePickedAt  when another horse was last picked at the stable (it waits there);  P.horseComing  whistled, on its way
 //   P.downAt       when the rider last got down off the horse
+//   P.horseEat(s)  a treat handed over: the standing horse munches for s seconds (false: it isn't standing still)
+//   P.eager        set while the ridden horse has full hearts (src/feeding.js): it comes faster to the whistle
 //   P.throwLasso(target, { good, onCaught, onMissed, onLand, onCancel, hold, lead }) -> true if started (false: a throw
 //                       is already under way). Moving the player away (keys or stick) while they are still walking up
 //                       to a far target, or P.cancelLasso() / P.teleport() before the throw is settled, calls onCancel
@@ -137,6 +139,9 @@ function oldPackOf(look) {
   if (lum < 0.1) return { kind: 'horse', tint: '#615753' };
   return { kind: 'horse' };
 }
+// a horse with full hearts (src/treats.js BOND), whistled: it gallops at its own top speed from this far (m) off, trots
+// from this far, and trots and walks this much faster than the usual come
+const EAGER = { gallopPast: 16, trotPast: 6, trot: 1.25, walk: 1.4 };
 const IDLES = [['Eating', 0.4], ['Idle_Headlow', 0.15], ['Idle_2', 0.12], ['LookLeft', 0.08], ['LookRight', 0.08], ['EarFlick', 0.07], ['Idle', 0.1]];
 const ONCE = new Set(['LookLeft', 'LookRight', 'EarFlick']);
 export const SAY = { saddle: 'You need a saddle - the stable sells them', whistle: 'You whistle for your horse', here: 'Your horse is right here',
@@ -479,6 +484,15 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
     seat.dismount(spot, { onDone: () => { P.mode = 'foot'; P.downAt = performance.now(); pos.copy(spot); P.heading = H.heading; P.speed = 0; person.root.rotation.set(0, P.heading, 0); person.play('Idle', { fade: 0.25 }); } });
     return true;
   };
+  // a treat handed over (src/feeding.js): the horse standing beside the rider lowers its head and munches for `seconds`
+  // (its Eating clip, else its head-low idle), then goes on as before. false: it isn't standing still just now
+  P.horseEat = (seconds = 3) => {
+    if (!H || H.mode !== 'stand' || H.speed > 0.3 || P.mode === 'horse' || P.mode === 'mounting' || P.mode === 'dismounting') return false;
+    const name = H.a.actions.Eating ? 'Eating' : H.a.actions.Idle_Headlow ? 'Idle_Headlow' : 'Idle';
+    H.idle = name; H.idleT = seconds;
+    return true;
+  };
+  P.eager = false;   // (full hearts: comes faster to the whistle; src/feeding.js sets it)
   // the horse left standing (not ridden) moved to (x, z) at once, as it stands
   P.moveHorse = (x, z) => { if (!H || P.mode === 'horse' || P.mode === 'mounting' || P.mode === 'dismounting') return false; H.x = x; H.z = z; H.speed = 0; H.yawRate = 0; placeHorse(0); return true; };
   P.teleport = (x, z, rot = P.heading) => {
@@ -679,7 +693,9 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
         if (W.blocked(H.goal.x, H.goal.z)) { H.goal.x = pos.x - ux * 2.6; H.goal.z = pos.z - uz * 2.6; }
       }
       const dx = H.goal.x - H.x, dz = H.goal.z - H.z, gd = Math.hypot(dx, dz);
-      let target = gd > 30 ? Math.min(C.gallop, pace('gallop')) : gd > 10 ? Math.min(C.trot, pace('trot')) : Math.min(C.walk, pace('walk'), gd * 1.2);
+      // (a horse with full hearts, P.eager (src/feeding.js): at its own top gallop, from nearer, and trots in closer)
+      const E = P.eager ? EAGER : null;
+      let target = gd > (E ? E.gallopPast : 30) ? (E ? pace('gallop') : Math.min(C.gallop, pace('gallop'))) : gd > (E ? E.trotPast : 10) ? Math.min(C.trot * (E ? E.trot : 1), pace('trot') * (E ? E.trot : 1)) : Math.min(C.walk * (E ? E.walk : 1), pace('walk') * (E ? E.walk : 1), gd * 1.2);
       if (gd <= 0.8 || d < 1.6) { target = 0; if (H.speed < 0.3) { H.mode = 'stand'; H.idleT = 6; H.goal = null; P.horseCameAt = performance.now(); } }
       // steer: straight for the player if the way is clear, else the nearest clear heading either side
       const want = Math.atan2(dx, dz); let h = want;

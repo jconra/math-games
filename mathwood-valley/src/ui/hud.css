@@ -33,6 +33,11 @@
 .bmh-gold svg { width: 30px; height: 30px; filter: drop-shadow(0 1px 1px rgba(0,0,0,.4)); }
 .bmh-gold b { font: 700 30px/1 Bitter, Georgia, serif; color: var(--brass-hi); letter-spacing: 0.01em; font-variant-numeric: tabular-nums; }
 .bmh-gold span { font: 400 15px Smokum, Georgia, serif; color: var(--ink-2); letter-spacing: 0.04em; margin-top: 6px; }
+.bmh-gold .bmh-treats { display: inline-flex; align-items: center; gap: 7px; margin: 4px 0 0 4px; padding-left: 9px; border-left: 1px solid rgba(226, 173, 76, 0.3); }
+.bmh-gold .bmh-treats[hidden] { display: none; }
+.bmh-treats i { display: inline-flex; align-items: center; gap: 2px; font-style: normal; }
+.bmh .bmh-treats svg { width: 19px; height: 19px; filter: none; }
+.bmh .bmh-treats b { font: 700 16px/1 Bitter, Georgia, serif; color: var(--ink); }
 .bmh-rank { margin-top: 5px; font-size: 14px; color: var(--ink-2); }
 .bmh-title { font: 400 17px Rye, Georgia, serif; color: var(--ink); letter-spacing: 0.02em; }
 .bmh-next { font-size: 12px; color: var(--mute); margin-top: 1px; }

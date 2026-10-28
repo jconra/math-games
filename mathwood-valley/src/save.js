@@ -61,6 +61,8 @@
 //             chart's green and red; src/math/facts.js keeps it; fixRider reads the old times trainer's misses once)
 //   shifts:   { day, date, jobs: { sheep: { day, n, of, done }, ... } }   each job's shift today: the game day, the
 //             rounds done, the shift's length and whether it is done for the day (src/shifts.js; an old save starts fresh)
+//   treats:   { apple, carrot, trees: { id: { day, left } }, bond: { horseId: { n, day, today } } }   the horses' treats in
+//             the saddlebags (10 at most), the apple trees picked on a game day, each horse's hearts (src/treats.js)
 // }
 
 import { cleanAnimals, cleanGoods } from './math/goods.js';
@@ -70,6 +72,7 @@ import { migrate as migrateSkill, record as recordSkill, readAloud as readsNow }
 import { migrate as migrateLevels, recordLevel, PLACE } from './levels/model.js';
 import { migrate as migrateFacts } from './math/facts.js';
 import { cleanShifts } from './shifts.js';
+import { cleanTreats } from './treats.js';
 
 const VERSION = 1;
 let KEY = 'bandit-math.riders';
@@ -465,6 +468,9 @@ export function fixRider(r) {
   if (r.done !== undefined) out.done = [...new Set((Array.isArray(r.done) ? r.done : []).filter(d => typeof d === 'string'))];
   // each job's shift today (src/shifts.js): well formed, or a fresh start for an old save
   out.shifts = cleanShifts(r.shifts);
+  // the horses' treats in the saddlebags, the apple trees picked today and each horse's hearts (src/treats.js; an old save
+  // starts with none)
+  out.treats = cleanTreats(r.treats);
   // the skill model (src/math/skill.js): filled in, and the first time read from the old topics' progress (the
   // topics themselves are left as they are)
   try { migrateSkill(out); } catch (e) { console.warn('Mathwood Valley: could not read the skill levels', e); out.skill = { v: 1, migrated: 1, strands: {} }; }

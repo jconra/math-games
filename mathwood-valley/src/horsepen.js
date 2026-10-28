@@ -14,6 +14,7 @@
 //   const PN = makeHorsePen({ W, animals, rider, camera, player: () => P, shadows })
 //   PN.update(dt)     each frame (while riding)
 //   PN.shop           the stable counter's extra rows (src/shop.js extra.stable): html(), click(what, id)
+//   PN.treatSpots()   the pen's horses a treat can be given to (src/feeding.js)
 //   PN.dev            { roll(seed) a new few now (rigs; seen or not), visit() a new visit due, state() }
 //   PN.dispose()
 import * as THREE from 'three';
@@ -200,6 +201,18 @@ export function makeHorsePen({ W, animals, rider, camera, player, shadows = true
         const saddled = !!(o.saddle);
         return { note: saddled ? `${d.name} is yours, saddled up by the stable.` : `${d.name} is yours, waiting by the stable. You'll need a saddle to ride.`, bought: 'horse' };
       },
+    },
+    // THE HORSES A TREAT CAN BE GIVEN (src/feeding.js): each one in the pen and awake (near), its animal, and how it munches
+    // (stops where it is, lowers its head: its Eating clip, then back to its ambling)
+    treatSpots() {
+      if (!ready) return [];
+      const out = [];
+      for (const s of slots) {
+        if (s.sold || s.off || s.asleep || !s.data) continue;
+        out.push({ key: 'pen:' + s.i, id: null, name: s.data.name, a: s.h.a, owned: false, donkey: false,
+          eat: (sec) => { s.mode = 'stand'; s.idle = s.h.a.actions.Eating ? 'Eating' : 'Idle_Headlow'; s.t = sec; s.h.a.pace(0); return true; } });
+      }
+      return out;
     },
     dev: {
       roll(s) { if (s) seed = s; if (ready) roll(); return PN.dev.state(); },

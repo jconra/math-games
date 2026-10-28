@@ -40,6 +40,7 @@
 //     onLevel(placeId, view)   the rider's level there was stepped by hand (main.js saves the rider)
 //   T.el (the strip), T.update() (main.js calls it a few times a second: the sum's label, the place and its level),
 //   T.work() (the lock box's and a builder's own Work it out buttons call it too), T.own() (the entry, empty),
+//   T.treat({ kind, n, name, busy } | null) the apple button (busy: dimmed, the horse munching) (src/feeding.js; onTreat() when it is pressed),
 //   T.chart(), T.step(dir) (the level tool's arrows), T.close(), T.busy() (a tool is up), T.state() (for rigs:
 //   { work: the sheet's state, own: the entry's, chart, sum, label, level }), T.dispose()
 
@@ -49,6 +50,7 @@ import { openLongWork } from './longwork.js';
 import { openOwnSum } from './ownsum.js';
 import { showChart, closeChart, isChartOpen, ensureChartCss } from './timeschart.js';
 import { levelTool, stepLevel } from './leveltool.js';
+import { TREAT_ICON } from './treaticons.js';
 
 const CSS_HREF = new URL('./tools.css', import.meta.url).href;
 function ensureCss() {
@@ -73,13 +75,14 @@ export function readSum(s) {
   return isSum(s) ? s : null;
 }
 
-export function makeTools({ hud, rider = () => null, sum = () => null, own = () => false, canOpen = () => true, speak = null, onOpen = () => {}, onClose = () => {}, place = () => null, onLevel = () => {} } = {}) {
+export function makeTools({ hud, rider = () => null, sum = () => null, own = () => false, canOpen = () => true, speak = null, onOpen = () => {}, onClose = () => {}, place = () => null, onLevel = () => {}, onTreat = () => {} } = {}) {
   ensureCss(); ensureChartCss();
   const bar = document.createElement('div');
   bar.className = 'bmtl-bar';
   bar.innerHTML = `<div class="bmtl-pair">
       <button type="button" class="bmtl-b bmtl-work" aria-label="Work it out">${SVG_WORK}<span class="bmtl-t"><b>Work it out</b><small></small></span></button>
       <button type="button" class="bmtl-b bmtl-chart" aria-label="Times chart">${SVG_CHART}<span class="bmtl-t"><b>Times chart</b></span></button>
+      <button type="button" class="bmtl-b bmtl-treat" hidden><span class="bmtl-ti"></span><span class="bmtl-t"><b></b><small></small></span><i class="bmtl-tn"></i></button>
     </div>
     <div class="bmtl-level" hidden>
       <button type="button" class="bmtl-step" data-dir="-1" aria-label="A level down">${ARROW_L}</button>
@@ -215,6 +218,24 @@ export function makeTools({ hud, rider = () => null, sum = () => null, own = () 
     showLevel(pid && r ? levelTool(r, pid) : null);
   };
 
+  // ── THE APPLE BUTTON (src/feeding.js): up beside the two tools while a horse's head is in reach and there's a treat in
+  // the saddlebags; o = { kind: 'apple' | 'carrot', n (how many), name (the horse's) } or null to put it away. A tap or a
+  // click (or G) gives the treat; it never pauses the game
+  const treatBtn = q('.bmtl-treat');
+  const fingers = () => typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
+  T.treat = (o) => {
+    treatBtn.hidden = !o;
+    if (!o) return;
+    treatBtn.classList.toggle('is-busy', !!o.busy);   // (the horse still munching the last one)
+    const word = o.kind === 'carrot' ? 'carrot' : 'apple';
+    treatBtn.dataset.kind = word;
+    treatBtn.querySelector('.bmtl-ti').innerHTML = TREAT_ICON[word];
+    treatBtn.querySelector('b').textContent = `Give ${word === 'apple' ? 'an apple' : 'a carrot'}`;
+    treatBtn.querySelector('small').textContent = `to ${o.name || 'the horse'}${fingers() ? '' : ' · G'}`;
+    treatBtn.querySelector('.bmtl-tn').textContent = String(o.n);
+    treatBtn.setAttribute('aria-label', `Give ${word === 'apple' ? 'an apple' : 'a carrot'} to ${o.name || 'the horse'} (${o.n} left)`);
+  };
+  treatBtn.addEventListener('click', (e) => { e.currentTarget.blur(); try { onTreat(); } catch (err) { console.error(err); } });
   T.close = () => { if (panel) { panel.close(); panel = null; } closeChartNow(); hold(false); };
   T.busy = () => !!(panel || chartOn);
   T.state = () => ({ work: panel && panel.kind !== 'own' ? panel.state() : null, own: panel && panel.kind === 'own' ? panel.state() : null,

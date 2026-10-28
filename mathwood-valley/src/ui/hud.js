@@ -8,8 +8,10 @@
 //     onMenu(): the Menu button (Esc does the same in main.js); onPrompt(): a click or tap on the door prompt
 //     onTouch(code): a touch button ('KeyF' rope, 'KeyH' horse, 'KeyE' on/off)
 //   H.show(on)                 shown while riding, hidden on the title screen
-//   H.purse({ gold, bounty, title, next, badges, boxes, goods })   the purse; gold going up pops a "+n" coin by it;
-//                              goods: the homestead's goods in the saddlebags, as words ('30 eggs · 6 qt milk to sell')
+//   H.purse({ gold, bounty, title, next, badges, boxes, goods, treats })   the purse; gold going up pops a "+n" coin by
+//                              it; goods: the homestead's goods in the saddlebags, as words ('30 eggs · 6 qt milk to sell');
+//                              treats: { apple, carrot } the horses' treats in the saddlebags (src/treats.js), a small
+//                              counter by the gold
 //   H.toast(text, kind)        a short note at the bottom for a couple of seconds (kind: 'good' | 'gold' | 'warn')
 //   H.prompt(text | null)      the door prompt ('E' then the words), or null to hide it
 //   H.rule({ main, sub, kind, buttons, speak }) | H.rule(null)   the rule card under the compass ("Rope the 6-herd");
@@ -43,6 +45,7 @@
 // won there (or in "Just lock boxes", with the HUD put away) shows too. It never takes a click.
 
 import { BUCKLE_NAMES, jobWords } from '../save.js';
+import { TREAT_ICON } from './treaticons.js';
 
 const CSS_HREF = new URL('./hud.css', import.meta.url).href;
 const FONTS_HREF = new URL('./fonts/fonts.css', import.meta.url).href;
@@ -207,7 +210,7 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
   el.className = 'bmh is-hidden';
   el.innerHTML = `
     <div class="bmh-purse" aria-live="polite">
-      <div class="bmh-gold">${ICON.coin}<b class="bmh-gold-n">0</b><span>gold</span></div>
+      <div class="bmh-gold">${ICON.coin}<b class="bmh-gold-n">0</b><span>gold</span><span class="bmh-treats" hidden title="Treats for the horses in your saddlebags"></span></div>
       <div class="bmh-rank"><span class="bmh-title">Greenhorn</span><span class="bmh-bounty"></span></div>
       <div class="bmh-next"></div>
       <div class="bmh-badges"></div>
@@ -262,7 +265,18 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
 
   // ── THE PURSE ─────────────────────────────────────────────────────────────────────────────────────────────────
   let lastGold = null;
-  function purse({ gold = 0, bounty = 0, title = '', next = null, badges = [], boxes = 0, goods = '' } = {}) {
+  const treatsEl = $('.bmh-treats');
+  let treatsKey = '';
+  function purse({ gold = 0, bounty = 0, title = '', next = null, badges = [], boxes = 0, goods = '', treats = null } = {}) {
+    // the horses' treats in the saddlebags, by the gold (src/treats.js): an apple and a carrot with their counts
+    const tk = treats ? `${treats.apple || 0}|${treats.carrot || 0}` : '';
+    if (tk !== treatsKey) {
+      treatsKey = tk;
+      const a = treats ? treats.apple || 0 : 0, c = treats ? treats.carrot || 0 : 0;
+      treatsEl.hidden = !(a || c);
+      treatsEl.innerHTML = (a ? `<i>${TREAT_ICON.apple}<b>${a}</b></i>` : '') + (c ? `<i>${TREAT_ICON.carrot}<b>${c}</b></i>` : '');
+      treatsEl.setAttribute('aria-label', `${a} apples and ${c} carrots for the horses`);
+    }
     goldN.textContent = fmt(gold);
     if (lastGold !== null && gold > lastGold) pop(`+${fmt(gold - lastGold)}`);
     lastGold = gold;

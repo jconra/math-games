@@ -86,6 +86,7 @@ import { makeDof } from './fx/dof.js';
 import { completion, goalsOf } from './completion.js';
 import { graphicsRow } from './ui/graphics.js';
 import { makeShiftKeeper } from './shiftkeeper.js';
+import { makeFeeding } from './feeding.js';
 
 export const BUILD = '1 (2026-10-09)';
 const Q = new URLSearchParams(location.search);
@@ -150,7 +151,8 @@ const TOOLS = makeTools({ hud, rider: () => rider,
   // (from the lock box too: its own button, the HUD being under the box; "Just lock boxes" from the title as well)
   canOpen: () => (state === 'play' || (state === 'boxes' && !!BOX)) && [...pausedBy].every((w) => w === 'tools' || (w === 'box' && !!BOX)),
   speak: (text) => { if (rider && SKILLS.readAloud(rider)) sayLine(text); },
-  onOpen: () => pause('tools'), onClose: () => resume('tools') });
+  onOpen: () => pause('tools'), onClose: () => resume('tools'),
+  onTreat: () => { if (FEEDER && state === 'play' && !paused) FEEDER.feed(); } });   // (the apple button: a treat to the horse in reach, src/feeding.js)
 BM.tools = TOOLS;
 
 // ── LOADING: the world, the people and the cattle, all at once ─────────────────────────────────────────────────────
@@ -212,6 +214,7 @@ let FJ = null;   // fishing: the old fisherman and the dock at the lake south of
 let BRJ = null;  // the bridge: the engineer at the ravine on the west river and the bridge built there (src/bridgejob.js)
 let CM = null;   // the checklist: a toast when an item is checked off, the pinned goals in the corner (src/ui/completion.js)
 let SK = null;   // the shifts: each job ends after a shift of rounds, with a thank-you, till the next sunrise (src/shiftkeeper.js)
+let FEEDER = null;   // the horses' treats: the wild apple trees' apples, the apple button by a horse's head, the hearts (src/feeding.js)
 // may a job deal another round (its day's shift not done); the rounds left today; the job person's polite no
 const shiftOpen = (id) => !SK || SK.open(id);
 const shiftLeft = (id) => (SK ? SK.left(id) : Infinity);
@@ -316,6 +319,7 @@ async function ride(r) {
     onBuy: (what) => { refresh(); if (what === 'saddle' || what === 'horse') P.refreshOwned(); if (what === 'dog') { makeDogIfOwned(); if (cabin) cabin.dogsChanged(); } if (what === 'hat' && P && P.person) { if (!P.person.hat) P.person.hatOn(); P.person.setHat(rider.look.hatStyle); } hob.event(what); },
     onLockbox: (box, o) => openBox(box, o), onStoreJob: jobOn(rider, 'store') ? () => { if (!SJ) return; if (!shiftOpen('store')) { shiftNo('store'); return; } SJ.start(); } : null });   // (the day's shift done: the storekeeper's polite no)   // (no "Mind the counter" when a grown-up turned the store job off)
   STABLE = makeStableLife({ W, animals, rider, camera, player: () => P, shops, say: (t) => hud.toast(t), shadows: !!(W.V && W.V.SHADOW ? W.V.SHADOW.on : true) }); BM.stable = STABLE;
+  FEEDER = makeFeeding({ W, rider, player: () => P, hud, tools: TOOLS, audio: AUD, pen: () => PEN, stable: () => STABLE, refresh });
   cabin = makeCabin({ W, renderer, camera, animals, rider, hud, input: I, audio: AUD, player: () => P, follower: () => D,
     onBuy: () => refresh(), onLockbox: (box, o) => openBox(box, o) });
   // (the round-up's Hob also hears a whole wave roped: now and then a thank-you calf from the rancher)
@@ -459,6 +463,7 @@ function endRide() {
   if (farm) farm.dispose();
   if (HS) { HS.dispose(); HS = null; }
   if (PEN) { PEN.dispose(); PEN = null; }
+  if (FEEDER) { FEEDER.dispose(); FEEDER = null; }
   if (hob) hob.dispose();
   if (D) D.dispose();
   if (P) P.dispose();
@@ -671,7 +676,8 @@ function goodsLine() {
 // the purse on the HUD, from the rider
 function refresh() {
   if (!rider) return;
-  hud.purse({ gold: rider.gold, bounty: rider.bounty, title: titleOf(rider), next: nextTitle(rider), badges: badgesOf(rider), boxes: (rider.lockboxes || []).length, goods: goodsLine() });
+  const tr = rider.treats || {};   // (the horses' treats, by the gold: src/treats.js)
+  hud.purse({ gold: rider.gold, bounty: rider.bounty, title: titleOf(rider), next: nextTitle(rider), badges: badgesOf(rider), boxes: (rider.lockboxes || []).length, goods: goodsLine(), treats: { apple: tr.apple || 0, carrot: tr.carrot || 0 } });
   if (shops && shops.isOpen) shops.redraw();
   if (CM) CM.check();   // (anything bought or done: a checklist item may be checked off)
 }
@@ -888,9 +894,9 @@ function openMenu() {
       <button type="button" data-do="mark">Mark this spot<small>Copies where you are, to paste in a message</small></button>
       <button type="button" data-do="title">Back to the title<small>Your gold is already saved</small></button></div>
     <div class="bms-keys">${I && I.touch
-      ? 'thumb stick on the left to move (push it to the edge to gallop) · drag to look · tap a steer or a rider, or press Rope · Horse calls your horse · On / off gets on and off · tap the prompt at a door'
+      ? 'thumb stick on the left to move (push it to the edge to gallop) · drag to look · tap a steer or a rider, or press Rope · Horse calls your horse · On / off gets on and off · tap the prompt at a door · by a horse\'s head, tap the apple to give a treat'
       : `<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · drag to look · <kbd>Shift</kbd> run or gallop ·
-      click a steer (or <kbd>F</kbd>) to rope it · <kbd>H</kbd> call your horse · <kbd>E</kbd> on and off, or talk at a door`}</div>`;
+      click a steer (or <kbd>F</kbd>) to rope it · <kbd>H</kbd> call your horse · <kbd>E</kbd> on and off, or talk at a door · <kbd>G</kbd> give your horse a treat`}</div>`;
   body.querySelector('.bms-menu').after(volumeRow(AUD), graphicsRow(W && W.governor));   // (Auto, or a tier chosen by hand: src/ui/graphics.js)
   { const m = body.querySelector('.bms-menu'), last = m.querySelector('[data-do="title"]'); for (const x of menuRows({ report: tellReport })) m.insertBefore(x, last); }   // (Tell us, and the share switch)
   let then = null;
@@ -980,6 +986,9 @@ function doors() {
     if (SK && SK.done('fishing') && BS.state().near === 'fishing') { say = 'Talk to the old fisherman'; act = () => shiftNo('fishing'); }
     else { say = BS.prompt; act = () => BS.talk(); }
   }
+  // by a wild apple tree with apples on it, on foot (src/feeding.js): E picks them (unless the horse is nearer, and not
+  // just got down from: then E still gets on)
+  if (!door && !fresh && FEEDER && FEEDER.prompt && (!mount || talkFirst || FEEDER.pickDist < hd)) { say = FEEDER.prompt; act = () => FEEDER.pick(); }
   // at the target range (src/missions/shooting.js): E by Miss Opal takes up her six-shooter
   if (!door && !fresh && SR && SR.prompt) { say = SR.prompt; act = () => SR.start(); }
   // by a saddle rack in the stable's lean-to (src/stablelife.js): E buys it, or puts it on your horse
@@ -1123,6 +1132,10 @@ function step(dt) {
     if (HS) HS.update(dt, P.position);   // (the farm animals behind the cabin; their goods are laid up over play time)
     if (PEN) PEN.update(dt);             // (the horses for sale behind the stable)
     if (STABLE) STABLE.update(dt);       // (the stall horses and the saddle racks in the stable)
+    if (FEEDER) {                        // (the apple trees' apples, a horse's head in reach, the hearts floating up)
+      FEEDER.update(dt, { busy: home || atCounter() });
+      if (I.enabled && I.tap('KeyG')) FEEDER.feed();   // (G: give a treat; E stays on and off)
+    }
     if (SH) SH.update(dt);
     if (PG) PG.update(dt);
     if (SJ) SJ.update(dt);   // (after the player: it places the camera while the counter is open)
@@ -1312,7 +1325,8 @@ Object.defineProperties(BM, { sites: { get: () => BS }, windmill: { get: () => W
 Object.defineProperties(BM, { bridge: { get: () => BRJ } });   // (the bridge job: .builder.handle is the lab's BR handle; .state(), .rating())
 Object.defineProperties(BM, { fishing: { get: () => FJ } });   // (the fishing job: .builder.handle is the lab's FI handle; .state())
 Object.defineProperties(BM, { checklist: { get: () => CM } });   // (the checklist's toasts and goals corner, while riding)
-Object.defineProperties(BM, { shifts: { get: () => SK } });   // (the shifts: BM.shifts.state(), .dev.end(id), .dev.day(): src/shiftkeeper.js)
+Object.defineProperties(BM, { shifts: { get: () => SK } });
+Object.defineProperties(BM, { feeding: { get: () => FEEDER } });   // (the horses' treats: BM.feeding.state(), .feed(), .pick())   // (the shifts: BM.shifts.state(), .dev.end(id), .dev.day(): src/shiftkeeper.js)
 Object.defineProperties(BM, { camps: { get: () => camps }, delivery: { get: () => DL }, homestead: { get: () => HS }, loot: { get: () => LJ } });   // (the camps and their deliveries; DL.rob() is the bandits' hook)
 Object.assign(BM, {
   dev, hud, title: T, camera, renderer, screenOf, prices: PRICES, loading, skills: SKILLS,

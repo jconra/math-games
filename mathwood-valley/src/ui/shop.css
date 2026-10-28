@@ -88,3 +88,17 @@
 /* a thing for sale that a grown-up has turned off for this rider (the six-shooter): greyed, its word still readable */
 .bms-row.is-off > svg, .bms-row.is-off .bms-what b, .bms-row.is-off .bms-act { opacity: 0.5; }
 .bms-row.is-off .bms-what small { color: var(--mute); }
+/* treats for the horses (src/shop.js treatRows): the bags to pick, then the money question with its coins */
+.bms-treatpic svg { width: 40px; height: 40px; flex: none; display: block; }
+.bms-treatq { margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: rgba(246, 237, 214, 0.06); border: 1px solid rgba(226, 173, 76, 0.3); }
+.bms-treatq p { margin: 0; font: 600 15px/1.35 Bitter, Georgia, serif; }
+.bms-coins button { display: inline-flex; align-items: center; gap: 5px; min-width: 64px; justify-content: center; }
+.bms-coins button svg { width: 18px; height: 18px; }
+.bms-coins button b { display: inline; font: 700 17px Bitter, Georgia, serif; }
+.bms-coins button.is-miss { opacity: 0.4; text-decoration: line-through; cursor: default; }
+.bms-treatq .bms-treathelp { margin-top: 7px; font: 500 14px/1.35 Bitter, Georgia, serif; color: #f3d38f; }
+.bms-bags button[disabled] { opacity: 0.45; cursor: default; }
+/* a horse's hearts in the stable's "Your horses" list */
+.bms-hearts { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin-top: 4px; }
+.bms-hearts svg { width: 18px; height: 18px; }
+.bms-hearts small { display: inline; margin-left: 6px; font-size: 13px; color: var(--good); }
