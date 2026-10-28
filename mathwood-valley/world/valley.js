@@ -1749,7 +1749,7 @@ function makePlantTool() {
   kinds.push({ id: PLANT.STONE, name: 'stone road (as wide as the brush ring)', group: 'Paths', icon: stoneIcon(false), road: 'cobbles', clearRoad: 'erase', sliders: ['brush'] }, { id: PLANT.NOSTONE, name: 'stones rubbed out', group: 'Paths', icon: stoneIcon(true), road: 'erase', sliders: ['brush'], hidden: true });
   { const c = document.createElement('canvas'); c.width = c.height = 96; const g = c.getContext('2d'); g.fillStyle = '#7a5a3c';   // a fence: posts and two rails
     for (const x of [14, 40, 66]) g.fillRect(x, 30, 9, 54); g.fillRect(10, 42, 76, 7); g.fillRect(10, 62, 76, 7);
-    kinds.push({ id: PLANT.FENCE, name: 'fence (drag to draw it; Plant size: its height)', group: 'Fences', icon: c.toDataURL() }); }
+    kinds.push({ id: PLANT.FENCE, name: 'fence (drag to draw it; Plant size: its height)', group: 'Fences', icon: c.toDataURL(), sliders: ['size'] }); }   // (drawn a straight segment at a time: no brush, no thickness; Take down still has its brush)
   { const c = document.createElement('canvas'); c.width = c.height = 96; const g = c.getContext('2d'); g.fillStyle = '#7a5a3c';   // a gate: two posts, a braced leaf
     g.fillRect(10, 24, 10, 62); g.fillRect(76, 24, 10, 62); for (const y of [36, 54, 72]) g.fillRect(22, y, 52, 7); g.save(); g.translate(24, 76); g.rotate(-0.62); g.fillRect(0, -3, 62, 7); g.restore();
     kinds.push({ id: PLANT.GATE, name: 'gate (click a fence: a gap with a gate in it, the fence\'s style)', group: 'Fences', icon: c.toDataURL(), sliders: [] }); }
@@ -1834,7 +1834,7 @@ FENCE.make = () => FENCE.maker || (FENCE.maker = new Fences({ scene, heightAt, s
 function buildFences() {
   for (const m of FENCE.meshes) { scene.remove(m); m.dispose(); }
   FENCE.meshes = [];
-  const strokes = plantNow().planting.strokes, posts = [], rails = [], GAP = 2.2;
+  const strokes = plantNow().planting.strokes, posts = [], rails = [], GAP = 2.2, postAt = new Set();
   const plan = FENCE.plan = planFences(strokes, { fence: PLANT.FENCE, gate: PLANT.GATE, inStroke }), runOf = new Map(plan.runs.map((R) => [R.si, R]));
   strokes.forEach((st, si) => {
     if (st.kind !== PLANT.FENCE || st.mode === 'clear' || st.pts.length < 2 || styleOf(st)) return;
@@ -1845,7 +1845,8 @@ function buildFences() {
         while (d <= L) { at.push([ax + (bx - ax) * d / L, az + (bz - az) * d / L]); d += GAP; } left = d - L; }
       const end = line[line.length - 1], last = at[at.length - 1]; if (Math.hypot(end[0] - last[0], end[1] - last[1]) > GAP * 0.35) at.push(end);
       const kept = at.map(([x, z]) => strokes.some((c, ci) => ci > si && c.mode === 'clear' && c.kind === PLANT.FENCE && inStroke(c, x, z)) ? null : [x, heightAt(x, z), z]);   // (taken down by Clear with a fence chosen)
-      kept.forEach((p, i) => { if (!p) return; if (!((i === 0 && part.gateA) || (i === kept.length - 1 && part.gateB))) posts.push([p, h]); if (kept[i + 1]) rails.push([p, kept[i + 1], h]); });
+      kept.forEach((p, i) => { if (!p) return; const key = Math.round(p[0] * 20) + ',' + Math.round(p[2] * 20);   // (one post where two runs meet, or a run closes on its first)
+        if (!((i === 0 && part.gateA) || (i === kept.length - 1 && part.gateB)) && !postAt.has(key)) { postAt.add(key); posts.push([p, h]); } if (kept[i + 1]) rails.push([p, kept[i + 1], h]); });
     }
   });
   // all of it drawn by objects/fences.js: the plain fence's posts and rails (as laid above) as textured boards, the

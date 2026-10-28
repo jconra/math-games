@@ -205,7 +205,11 @@ const P3 = (x, y, z) => [x, y, z];
 // ── the styles ────────────────────────────────────────────────────────────────────────────────────────────────────────
 // each: (B, piece, run, R) with B = { wood, wire, ground, stoneAt }; the piece's line in piece.pts, run.size its height
 // against the style's own; R its random numbers (from the stroke's seed, so a fence always comes back the same)
+// a post where one already stands (two runs drawn from one post, or a run closed back on its first) is left out: B.seen,
+// the posts laid so far, to the 5 cm
+const postTaken = (B, x, z) => { if (!B.seen) return false; const k = Math.round(x * 20) + ',' + Math.round(z * 20); if (B.seen.has(k)) return true; B.seen.add(k); return false; };
 function squarePost(B, x, z, w, top, D, R, f = {}) {
+  if (postTaken(B, x, z)) return;
   const g = B.ground(x, z), N = [-D[2], 0, D[0]], X = leanUp(D, N, (R() - 0.5) * 0.03, (R() - 0.5) * 0.03), Y = norm(sub(D, scl(X, dot(D, X)))), Z = cross(X, Y);
   const y0 = g - 0.12, h = top + 0.12 + (R() - 0.5) * 0.03, paint = f.paint, tint = tintOf(R, f.tint || [1.0, 0.98, 0.96]);
   B.wood.box(add([x, y0, z], X, h / 2), X, Y, Z, h / 2, w / 2, w / 2, { strip: f.strip ?? Math.floor(R() * 12), u0: R() * 3, stretch: 1.5, tint, paint, end: Math.floor(R() * 8), skip: '-x' });
@@ -218,6 +222,7 @@ function log(A, a, b, r, R, tint, o = {}) {
   A.pole(a, b, [r * 1.03, r * (0.85 + 0.05 * R())], o.sides || 7, { round: true, jit: o.jit ?? 0.08, roll: -Math.PI / 2 + (R() - 0.5) * 1.4, strip: Math.floor(R() * 12), u0: R() * 6, stretch: 4 + 2 * R(), tint, caps: o.caps ?? 'log', end: Math.floor(R() * 4), side: o.side }, R);   // (a board strip drawn out 4 to 6 times: its knots and cracks become long checks)
 }
 function roundPost(B, x, z, r, top, D, R, f = {}) {
+  if (postTaken(B, x, z)) return;
   const g = B.ground(x, z), N = [-D[2], 0, D[0]], X = leanUp(D, N, (R() - 0.5) * 0.04, (R() - 0.5) * 0.04);
   log(B.wood, [x, g - 0.12, z], add([x, g - 0.12, z], X, top + 0.12 + (R() - 0.5) * 0.05), r, R, tintOf(R, f.tint || [0.98, 0.96, 0.94]), { sides: f.sides || 7, caps: 'top', side: D, keepEnds: true, jit: 0.1 });
 }
@@ -627,7 +632,7 @@ export class Fences {
       const m = new THREE.Matrix4().compose(new THREE.Vector3((p[0] + q[0]) / 2, hi - 0.05, (p[1] + q[1]) / 2), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(-(q[1] - p[1]), q[0] - p[0])), new THREE.Vector3(L / this.stone.stepLen, S, 1));
       stones.push(this.stone.steps[Math.floor(R() * this.stone.steps.length)].clone().applyMatrix4(m));
     };
-    const B = { wood, wire, ground, stone: this.stone, stoneAt, stepAt };
+    const B = { wood, wire, ground, stone: this.stone, stoneAt, stepAt, seen: new Set() };
     if (plain && plain.posts.length) plainFence(B, plain);
     for (const run of plan.runs) {
       if (!run.style) continue;

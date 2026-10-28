@@ -23,7 +23,7 @@ import { chooseTier } from '../../world/quality.js';
 import { BASE } from '../../world/base.js';
 import { VillageEditor } from '../../world/objects/villageEditor.js';
 import { normalise as normaliseTown } from '../../world/objects/village.js';
-import { normalisePlanting } from '../../world/objects/planting.js';
+import { normalisePlanting, newId, newSeed } from '../../world/objects/planting.js';
 import { applyDecor } from '../../world/objects/decor.js';
 import { PROP_KINDS } from '../../world/objects/townProps.js';
 import { KIND_INFO } from '../../world/objects/growth.js';
@@ -198,7 +198,7 @@ const plantNow = () => (isPlant(bar.state.kind) ? bar.state.kind : Math.max(0, F
 const PICKS = {
   move: () => use({ mode: 'select', gizmo: 'translate' }, 'Click a building or prop, then drag an arrow (or the white ball) to move it.'),
   turn: () => use({ mode: 'select', gizmo: 'rotate' }, 'Click a building or prop, then drag across the green ring to turn it.'),
-  fence: () => use({ mode: 'paint', kind: PLANT.FENCE, size: fenceH }, `Drag along the ground to run a ${(fenceStyle === 'plain' ? PLAIN : FENCE_STYLES[fenceStyle]).name.toLowerCase()} fence; let go to finish it.`),
+  fence: () => use({ mode: 'paint', kind: PLANT.FENCE, size: fenceH }, `Press and drag for a straight ${(fenceStyle === 'plain' ? PLAIN : FENCE_STYLES[fenceStyle]).name.toLowerCase()} fence, let go to put it down; start or end near a post to join it (it lights up).`),
   gate: () => use({ mode: 'paint', kind: PLANT.GATE, brush: 0.6 }, 'Click on a fence to put a gate in it: it takes the fence\'s style (Take down takes it out).'),
   unfence: () => use({ mode: 'clear', kind: PLANT.FENCE, brush: 1.5 }, 'Drag over a fence to take it down.'),
   flowers: () => use({ mode: 'paint', kind: plantNow(), brush: 2.5, density: 5, size: 1 }, 'Drag to paint flowers (the brush size and thickness are on the bar).'),
@@ -262,7 +262,7 @@ function straighten(pts, tol) {   // (Douglas-Peucker: the fewest points within 
       setTimeout(() => { const g = V.FENCE.plan && V.FENCE.plan.gates.find((q) => q.id === s.id); bar.setInfo(g ? `A ${GATES[g.kind].name} put in, ${g.w.toFixed(1)} m wide (Undo takes it out).` : 'No room for a gate there (another gate, or the fence is too short).'); }, 300);
       return r;
     }
-    if (s && s.kind === PLANT.FENCE && s.mode === 'paint' && s.pts.length > 1 && $('tlStraight').checked) {
+    if (s && s.kind === PLANT.FENCE && s.mode === 'paint' && s.pts.length > 1) {   // (a fence that comes through the brush after all: pulled straight)
       let p = straighten(s.pts, 0.8);
       if (snapOn()) p = p.map(([x, z]) => [+(Math.round(x / SNAP.m) * SNAP.m).toFixed(2), +(Math.round(z / SNAP.m) * SNAP.m).toFixed(2)]);
       s.pts = p.filter((q, i) => !i || q[0] !== p[i - 1][0] || q[1] !== p[i - 1][1]);
@@ -309,5 +309,116 @@ makeCodePlaces({ scene: V.scene, heightAt, cabin: () => TOWN.village.item('cabin
   TL.code = cp; setInterval(() => cp.update(), 1000);
   $('tlCode').onclick = () => { cp.show(!cp.shown); $('tlCode').setAttribute('aria-pressed', String(cp.shown)); };
 }).catch((e) => console.error('town lab: the game\'s own things could not be shown', e));
+// ── FENCES DRAWN A STRAIGHT SEGMENT AT A TIME ───────────────────────────────────────────────────────────────────
+// With the fence picked (Draw), a press starts a segment and the drag shows it straight from there to the pointer: its
+// posts as the style spaces them, and its length; letting go puts it down. A press near a fence's post starts from that
+// very post (lit while the pointer is near it), and a segment begun at the end post of a run of the same look and
+// height goes on as that run (one stroke, one post at the corner); let go near a post and it ends on that post (back on
+// its own first post: a closed pen). Free ends snap to the half metre, and the direction to 15°, with Snap on. Esc lets
+// go of a segment being drawn; Undo takes the last one away. (The tool's own brush never sees a fence stroke: these
+// handlers go first and keep the events)
+const FD = { drag: null, mouse: 16, touch: 28, min: 0.4,
+  gap: { plain: 2.2, picketWhite: 2.4, picket: 2.4, corral: 2.45, worm: 3.2, buck: 3, wire: 4, stone: 2, logRail: 2.9, wattle: 1.5 } };
+const fenceOn = () => bar.state.open && bar.state.mode === 'paint' && bar.state.kind === PLANT.FENCE;
+const canvasEl = renderer.domElement;
+// the posts a segment can start or end on: every fence stroke's corners and ends, and the plain fences' posts
+function fencePosts() {
+  const out = [];
+  tool.planting.strokes.forEach((st) => { if (st.kind !== PLANT.FENCE || st.mode !== 'paint') return; st.pts.forEach((p, i) => out.push({ x: p[0], z: p[1], st, i, end: i === 0 || i === st.pts.length - 1 })); });
+  for (const r of V.FENCE.rails || []) if (r[3] == null) for (const p of [r[0], r[1]]) out.push({ x: p[0], z: p[2] });   // (styled runs' lines aren't posts)
+  return out;
+}
+// the post nearest the pointer, within the snap reach on screen (bigger for a finger), or within a metre on the ground
+function postNear(cx, cy, g, touch) {
+  const r = canvasEl.getBoundingClientRect(), V3 = new THREE.Vector3(); let best = null, bd = Infinity;
+  for (const q of fencePosts()) {
+    V3.set(q.x, heightAt(q.x, q.z) + 0.6, q.z).project(camera); if (V3.z > 1) continue;
+    const px = Math.hypot(r.left + (V3.x + 1) / 2 * r.width - cx, r.top + (1 - V3.y) / 2 * r.height - cy), m = g ? Math.hypot(q.x - g.x, q.z - g.z) : Infinity;
+    const d = Math.min(px, m < 1 ? 0 : Infinity); if ((px < (touch ? FD.touch : FD.mouse) || m < 1) && d + px * 1e-3 < bd) { bd = d + px * 1e-3; best = q; }
+  }
+  return best;
+}
+const snapHalf = (v) => +(Math.round(v / SNAP.m) * SNAP.m).toFixed(2);
+// a free end: the pointer's spot; with Snap on, the way from the start turned to 15° and the length to the half metre
+function freeEnd(a, g) {
+  if (!snapOn()) return [+g.x.toFixed(2), +g.z.toFixed(2)];
+  const L = Math.max(SNAP.m, Math.round(Math.hypot(g.x - a[0], g.z - a[1]) / SNAP.m) * SNAP.m), step = SNAP.deg * Math.PI / 180, ang = Math.round(Math.atan2(g.z - a[1], g.x - a[0]) / step) * step;
+  return [+(a[0] + Math.cos(ang) * L).toFixed(2), +(a[1] + Math.sin(ang) * L).toFixed(2)];
+}
+// the preview: the segment, its posts, the post it snaps to, and its length
+const FDV = { line: new THREE.Line(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ color: 0xffe08a, depthTest: false, transparent: true })),
+  posts: new THREE.InstancedMesh(new THREE.CylinderGeometry(0.09, 0.09, 1.2, 6).translate(0, 0.6, 0), new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.75, depthTest: false }), 64),
+  hot: [0, 1].map(() => new THREE.Mesh(new THREE.TorusGeometry(0.45, 0.07, 6, 24).rotateX(Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x5cff9a, depthTest: false, transparent: true }))),
+  label: document.createElement('div') };
+FDV.line.renderOrder = FDV.posts.renderOrder = 30; FDV.hot.forEach((h) => { h.renderOrder = 31; V.scene.add(h); h.visible = false; });
+V.scene.add(FDV.line, FDV.posts); FDV.line.visible = FDV.posts.visible = false; FDV.posts.frustumCulled = false;
+FDV.label.style.cssText = 'position:fixed;z-index:8;pointer-events:none;transform:translate(-50%,-140%);background:rgba(20,14,8,.88);color:#ffe08a;font:600 13px Bitter,Georgia,serif;padding:2px 7px;border-radius:6px;border:1px solid #c9a24a;display:none';
+document.body.appendChild(FDV.label);
+function showHot(k, q) { const h = FDV.hot[k]; h.visible = !!q; if (q) h.position.set(q.x, heightAt(q.x, q.z) + 0.25, q.z); }
+function showSegment(a, b) {
+  if (!a) { FDV.line.visible = FDV.posts.visible = false; FDV.label.style.display = 'none'; return; }
+  const L = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.ceil(L)), pts = [];
+  for (let i = 0; i <= n; i++) { const x = a[0] + (b[0] - a[0]) * i / n, z = a[1] + (b[1] - a[1]) * i / n; pts.push(new THREE.Vector3(x, heightAt(x, z) + 0.25, z)); }
+  FDV.line.geometry.dispose(); FDV.line.geometry = new THREE.BufferGeometry().setFromPoints(pts); FDV.line.visible = true;
+  const gap = FD.gap[fenceStyle] || 2.4, k = Math.max(1, Math.round(L / gap)), M = new THREE.Matrix4(), sc = (styleInfo(fenceStyle === 'plain' ? null : fenceStyle).h * fenceH) / 1.2;
+  let c = 0; for (let i = 0; i <= k && c < 64; i++, c++) { const x = a[0] + (b[0] - a[0]) * i / k, z = a[1] + (b[1] - a[1]) * i / k; FDV.posts.setMatrixAt(c, M.makeScale(1, sc, 1).setPosition(x, heightAt(x, z), z)); }
+  FDV.posts.count = c; FDV.posts.instanceMatrix.needsUpdate = true; FDV.posts.visible = L > 0.05;
+  const mid = new THREE.Vector3((a[0] + b[0]) / 2, 0, (a[1] + b[1]) / 2); mid.y = heightAt(mid.x, mid.z) + 1.4; mid.project(camera);
+  const r = canvasEl.getBoundingClientRect(); FDV.label.textContent = `${L.toFixed(1)} m`; FDV.label.style.left = `${r.left + (mid.x + 1) / 2 * r.width}px`; FDV.label.style.top = `${r.top + (1 - mid.y) / 2 * r.height}px`; FDV.label.style.display = L > 0.05 ? '' : 'none';
+}
+function cancelSegment() { if (!FD.drag) return; try { canvasEl.releasePointerCapture(FD.drag.id); } catch (e) { /* gone */ } FD.drag = null; controls.enabled = true; showSegment(null); showHot(0, null); showHot(1, null); }
+// put it down: going on as the run it began from (its end post, the same look and height), else a run of its own
+function placeSegment(d) {
+  const { a, b, from, to } = d, style = fenceStyle === 'plain' ? undefined : fenceStyle, same = (st) => (st.style || undefined) === style && Math.abs((+st.size || 1) - fenceH) < 1e-6;
+  const S = tool.planting.strokes, at = from && from.st && from.end && same(from.st) ? S.indexOf(from.st) : -1;
+  tool.before();
+  if (at >= 0) {
+    const st = S[at], pts = st.pts.map((p) => [p[0], p[1]]);
+    if (from.i === 0 && pts.length > 1) pts.unshift(b); else pts.push(b);
+    S[at] = { ...st, pts };   // (a new object for the changed run: the planting's index and the fences laid again from it)
+  } else S.push({ id: newId(), mode: 'paint', kind: PLANT.FENCE, r: 1.5, density: 2, size: fenceH, seed: newSeed(), ...(style ? { style } : {}), pts: [a, b] });
+  tool.commit();
+  const closed = to && from && to.st && to.st === from.st && at >= 0 && (to.i === 0 || to.i === from.st.pts.length - 1) && to.i !== from.i;
+  bar.setInfo(`${Math.hypot(b[0] - a[0], b[1] - a[1]).toFixed(1)} m of fence put down${at >= 0 ? ', on from the run it began at' : ''}${closed ? ': the run closed' : ''}. Drag again from its end post for the next side; Undo takes it away.`);
+}
+function fenceEvent(type, e) {
+  if (!fenceOn()) { if (FD.drag) cancelSegment(); if (FDV.hot[0].visible && type === 'pointermove') showHot(0, null); return false; }
+  const touch = e.pointerType !== 'mouse';
+  if (type === 'pointerdown') {
+    if (FD.drag) { if (e.pointerId !== FD.drag.id) cancelSegment(); return false; }   // (a second finger: a pinch, the camera's)
+    if (e.target !== canvasEl || !e.isPrimary || e.button !== 0 || tool.gizmo.hovered || tool.gizmo.dragging) return false;
+    const g = groundAt(e.clientX, e.clientY); if (!g) return false;
+    const from = postNear(e.clientX, e.clientY, g, touch), a = from ? [from.x, from.z] : (snapOn() ? [snapHalf(g.x), snapHalf(g.z)] : [+g.x.toFixed(2), +g.z.toFixed(2)]);
+    FD.drag = { id: e.pointerId, a, b: a, from, to: null };
+    try { canvasEl.setPointerCapture(e.pointerId); } catch (err) { /* fine */ }
+    controls.enabled = false; e.stopPropagation(); e.preventDefault();
+    showHot(0, from); showSegment(a, a); tool.ring.visible = false;
+    return true;
+  }
+  if (type === 'pointermove') {
+    const g = groundAt(e.clientX, e.clientY); tool.ring.visible = false;
+    if (!FD.drag) { showHot(0, e.target === canvasEl && g ? postNear(e.clientX, e.clientY, g, touch) : null); return true; }   // (hovering: the post a press would start from)
+    if (e.pointerId !== FD.drag.id || !g) return true;
+    const to = postNear(e.clientX, e.clientY, g, touch), ok = to && !(FD.drag.from && to.x === FD.drag.from.x && to.z === FD.drag.from.z);
+    FD.drag.to = ok ? to : null; FD.drag.b = ok ? [to.x, to.z] : freeEnd(FD.drag.a, g);
+    showHot(1, FD.drag.to); showSegment(FD.drag.a, FD.drag.b);
+    return true;
+  }
+  if (type === 'pointerup' || type === 'pointercancel') {
+    if (!FD.drag || e.pointerId !== FD.drag.id) return false;
+    const d = FD.drag; cancelSegment();
+    if (type === 'pointerup' && Math.hypot(d.b[0] - d.a[0], d.b[1] - d.a[1]) >= FD.min) placeSegment(d);
+    return true;
+  }
+  return false;
+}
+// (the tool's own handlers taken off the window and put back behind these)
+for (const [type, key] of [['pointerdown', 'onDown'], ['pointermove', 'onMove'], ['pointerup', 'onUp'], ['pointercancel', 'onUp']]) {
+  const own = tool[key]; removeEventListener(type, own, { capture: true });
+  addEventListener(type, (e) => { if (!fenceEvent(type, e)) own(e); }, { capture: true });
+}
+addEventListener('keydown', (e) => { if (e.key === 'Escape' && FD.drag) { e.stopPropagation(); cancelSegment(); bar.setInfo('Fence segment let go.'); } }, true);
+TL.fenceDraw = { posts: () => fencePosts().map((q) => [q.x, q.z]), drag: () => FD.drag && { a: FD.drag.a, b: FD.drag.b, from: !!FD.drag.from, to: !!FD.drag.to }, gap: FD.gap,
+  hot: () => FDV.hot.map((h) => h.visible), label: () => (FDV.label.style.display === 'none' ? '' : FDV.label.textContent) };
 PICKS.move();
 TL.ready = true;

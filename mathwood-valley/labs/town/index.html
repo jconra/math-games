@@ -83,6 +83,7 @@
 <div class="tl-help" id="tlHelp" hidden>
   <p><b>W A S D</b> fly the view forward, left, back and right, along the ground the way it faces; <b>Space</b> up, <b>C</b> down; hold <b>Shift</b> to go faster. Drag the ground to turn the view, right-drag (or two fingers) to slide it, wheel or pinch to zoom.</p>
   <p><b>The bar along the bottom</b> has everything: Select (then Move or Turn, Snap to half metres and 15°), Add, Clear, every building, prop, fence, gate, path, tree and flower, Undo and Redo. Picking a fence or a flower shows its choices just over the bar (a fence's style and height, Gate, Take down; Paint or Rub out).</p>
+  <p><b>Fences</b> go down a straight segment at a time: press, drag to where it ends, let go. Press near a post (it lights up) to start from it, and let go near one to end on it; each new side can start from the last one's end post. <b>Esc</b> lets go of a segment you're drawing.</p>
   <p><b>Ctrl+S</b> saves, <b>Ctrl+Z</b> / <b>Ctrl+Y</b> undo and redo, <b>Delete</b> takes the chosen thing away.</p>
 </div>
 <div class="tl-opts" id="tlOpts" hidden>
@@ -90,7 +91,6 @@
     <span class="tl-what">Fence</span>
     <div class="tl-styles" id="tlStyles" role="radiogroup" aria-label="Fence style"></div>
     <label class="tl-slide" title="The fence's height against its style's usual">Height <input type="range" id="tlFenceH" min="0.6" max="1.5" step="0.05" value="1"> <output id="tlFenceHOut" for="tlFenceH"></output></label>
-    <label title="A dragged fence pulled straight between its corners"><input type="checkbox" id="tlStraight" checked> Straight runs</label>
     <button type="button" data-pick="fence" title="Drag along the ground to run a fence">Draw</button>
     <button type="button" data-pick="gate" title="Click on a fence to put a gate in it (it takes the fence's style)">Gate</button>
     <button type="button" data-pick="unfence" title="Drag over a fence to take it down">Take down</button>
@@ -103,6 +103,6 @@
 </div>
 <div class="tl-hud" id="tlHud"></div>
 <div class="tl-loading" id="tlLoading">Riding into the valley…</div>
-<script type="module" src="main.js?v=6"></script>
+<script type="module" src="main.js?v=7"></script>
 </body>
 </html>
