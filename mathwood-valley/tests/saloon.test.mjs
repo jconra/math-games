@@ -42,7 +42,8 @@ test('the next song: never one of the last two, the band\'s own and the old tune
     assert.ok(!played.slice(-2).includes(s.id), `${s.id} after ${played.slice(-2)}`);
     played.push(s.id); seen.set(s.id, (seen.get(s.id) || 0) + 1); side[groupOf(s)]++;
   }
-  for (const s of SONGS) assert.ok(seen.get(s.id) > 60, `${s.id} came ${seen.get(s.id) || 0} times`);
+  // (every song in turn: at least 60% of its fair share, half the picks spread over its side's songs)
+  for (const s of SONGS) { const fair = 1000 / SONGS.filter((x) => groupOf(x) === groupOf(s)).length; assert.ok(seen.get(s.id) > 0.6 * fair, `${s.id} came ${seen.get(s.id) || 0} times (fair ${fair.toFixed(0)})`); }
   const own = side.own / (side.own + side.old);
   assert.ok(own > 0.38 && own < 0.62, `the band's own ${(own * 100).toFixed(0)}%`);
   // (with no history at all: some song)
@@ -53,12 +54,13 @@ test('the harmonica player names the next song in one short line', () => {
   for (const s of SONGS) { const t = bandLine('next', s); assert.ok(t.includes(s.name) && t.length <= 34, t); }
 });
 
-test('the card: twelve songs in two groups, the number row along for keys, and the break', () => {
+test('the card: twenty-one songs in two groups, the number row along for keys, and the break', () => {
   const rows = bandChoices({ song: 'joeclark' });
+  assert.equal(SONGS.length, 21);
   assert.equal(rows.length, SONGS.length + 1);
   const keys = rows.map((r) => r.key).filter(Boolean);
   assert.equal(new Set(keys).size, keys.length, 'no key twice');
-  assert.equal(keys.length, SONGS.length + 1, 'every song a key');
+  assert.equal(keys.length, Math.min(SONGS.length, 12) + 1, 'the first twelve songs a key (the rest are clicked)');
   assert.ok(rows.filter((r) => r.group === 'own').length === 5 && rows.filter((r) => r.group === 'old').length === SONGS.length - 5);
   assert.equal(rows.find((r) => r.on).id, 'joeclark');
 });

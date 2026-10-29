@@ -1584,6 +1584,10 @@ export function buildSaloon(recipeIn = {}, env = {}) {
         // quarters to the hall toward the piano's side (his bow arm works over the open front of the stage, his fiddle
         // points out toward the piano's end; a critic: he stood at the keyboard, his bow arm along the piano's lid)
         fiddler: { x: +(0.4 + OX).toFixed(3), y: STG, z: +(-3.05 + OZ).toFixed(3), rot: 0.5 },
+        // the banjo player: on his stool at the stage's front right, between the fiddler and the piano's end, turned in
+        // toward the band and the hall's middle (his banjo's neck reaches out to his left along the front, in front of
+        // the right drape; his feet short of the footlights; his back clear of the piano)
+        banjo: { x: +(1.9 + OX).toFixed(3), y: STG, z: +(-3.35 + OZ).toFixed(3), rot: -1.0 },
         floor: STG, front: P3(0, STG, SZ1), rect: { x0: SX0 + OX, x1: SX1 + OX, z0: SZ0 + OZ, z1: SZ1 + OZ }, pianoAt: P3(pianoP.x, STG, pianoP.z), pianoRot: keysRot,
       },
       // THE CHALKBOARD: the board's middle and the way it faces; where the teacher stands (beside it, turned half to the

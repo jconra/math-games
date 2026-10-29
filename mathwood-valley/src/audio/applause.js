@@ -34,7 +34,7 @@ export const CROWD_PATCHES = {
       { id: 'pop-v', type: 'gain', name: 'pop', gain: 0 },
       { id: 'mix', type: 'gain', name: 'mix', gain: 1 },
       { id: 'send', type: 'send', name: 'room', gain: 0.08 },
-      { id: 'out', type: 'out', name: 'output', gain: 0.9 },
+      { id: 'out', type: 'out', name: 'output', gain: 1.4 },   // (0.9 until the fiddle and banjo went up: the crowd follows the band)
     ],
     cables: [
       { from: 'nz', to: 'crack-f' }, { from: 'crack-f', to: 'crack-v' }, { from: 'crack-e', to: 'crack-v', port: 'gain' }, { from: 'crack-v', to: 'mix' },
@@ -55,7 +55,7 @@ export const CROWD_PATCHES = {
       { id: 'amp', type: 'env', name: 'loudness', peak: 1, attack: 0.025, attackCurve: 'lin', decay: 0.04, sustain: 0.85, release: 0.06, hold: 0.16 },
       { id: 'vca', type: 'gain', name: 'loudness', gain: 0 },
       { id: 'send', type: 'send', name: 'room', gain: 0.15 },
-      { id: 'out', type: 'out', name: 'output', gain: 0.1 },
+      { id: 'out', type: 'out', name: 'output', gain: 0.16 },
     ],
     cables: [
       { from: 'sweep', to: 'tone', port: 'freq' }, { from: 'tone', to: 'mix' }, { from: 'air', to: 'air-f' }, { from: 'air-f', to: 'air-g' }, { from: 'air-g', to: 'mix' },

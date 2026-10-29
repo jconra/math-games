@@ -5,7 +5,7 @@
 //   node --test tests/*.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SONGS, makeBoxPart, boxNote, BOX_PATCHES, BOX_THUMP, BOX_SLAP, readAbc, chordOf, FIDDLE_TUNES, OWN_TUNES, fiddleRound, fiddleLead, battleLead } from '../src/audio/stagemusic.js';
+import { SONGS, makeBoxPart, boxNote, BOX_PATCHES, BOX_THUMP, BOX_SLAP, readAbc, chordOf, FIDDLE_TUNES, OWN_TUNES, fiddleRound, fiddleLead, battleLead, banjoChord, banjoThumb, banjoStrum, STRUM } from '../src/audio/stagemusic.js';
 import { bandChoices, choiceForKey, bandLine, soundThrough, BAND } from '../src/bandplan.js';
 
 const lines = (song, seed, n, opts) => { const next = makeBoxPart(song, seed, opts), out = []; for (let i = 0; i < n; i++) out.push(next()); return out; };
@@ -19,8 +19,8 @@ test('every song has a box part, on the beat (within a hair of a half beat, or a
         assert.equal(e.what, 'box');
         assert.ok(['thump', 'slap', 'tap'].includes(e.hit), e.hit);
         assert.ok(e.beat >= i * per - 0.02 && e.beat < (i + 1) * per, `${s.id} line ${i}: ${e.beat}`);
-        const grid = s.swing ? 3 : 2;   // (a shuffle's late "and" is two thirds through the beat)
-        assert.ok(Math.abs(e.beat * grid - Math.round(e.beat * grid)) < 0.04, `${s.id} off the grid: ${e.beat}`);
+        const grid = s.swing ? 3 : s.box === 'gallop' ? 4 : 2;   // (a shuffle's late "and" is two thirds through the beat; a gallop's taps a quarter)
+        assert.ok(Math.abs(e.beat * grid - Math.round(e.beat * grid)) < 0.02 * Math.max(2, grid), `${s.id} off the grid: ${e.beat}`);
         assert.ok(e.vel > 0 && e.vel <= 1 && e.tone > 0.9 && e.tone < 1.1);
       }
     });
@@ -143,8 +143,8 @@ test('the band plays a fiddle tune: the piano alone in the opening line, then th
     // harmonica together; moving on one each time round)
     const bars = [...round, ...round], played = L.slice(1, 1 + 2 * lines);
     bars.forEach((bar, k) => {
-      const time = Math.floor(k / round.length), lead = fiddleLead(bar.pos, time, fiddle), at = (1 + Math.floor(k / 4)) * 16 + (k % 4) * 4;
-      assert.equal(lead, fiddle ? ['fiddle', 'harp', 'piano', 'fiddle+harp'][(bar.pos + time) % 4] : ['harp', 'piano'][(bar.pos + time) % 2], `${id} bar ${k}`);
+      const time = Math.floor(k / round.length), lead = T.leads && fiddle ? T.leads[(bar.pos + time) % T.leads.length] : fiddleLead(bar.pos, time, fiddle), at = (1 + Math.floor(k / 4)) * 16 + (k % 4) * 4;
+      if (!(T.leads && fiddle)) assert.equal(lead, fiddle ? ['fiddle', 'harp', 'piano', 'fiddle+harp'][(bar.pos + time) % 4] : ['harp', 'piano'][(bar.pos + time) % 2], `${id} bar ${k}`);
       const inBar = (what) => played.flat().filter((e) => e.what === what && (what !== 'piano' || e.lead) && e.beat >= at - 1e-9 && e.beat < at + 4 - 1e-9).map((e) => [+(e.beat - at).toFixed(4), e.midi]);
       const tune = bar.notes.filter((n) => n.midi != null), as = (up) => tune.map((n) => [+n.at.toFixed(4), n.midi + T.semi + up]);
       assert.deepEqual(inBar('harp'), lead.includes('harp') ? as(0) : [], `${id} bar ${k}: the harmonica`);
@@ -219,17 +219,125 @@ test('Stagecoach Boogie: two 12-bar blues, swung, the fiddle and harmonica tradi
 test('the banjo: turns in the banjo tunes only when it\'s in the band (with the fiddle: banjo, harmonica, fiddle, piano, banjo and fiddle)', () => {
   assert.deepEqual([0, 1, 2, 3, 4].map((p) => fiddleLead(p, 0, true, true)), ['banjo', 'harp', 'fiddle', 'piano', 'banjo+fiddle']);
   assert.deepEqual([0, 1, 2, 3].map((p) => fiddleLead(p, 0, false, true)), ['banjo', 'harp', 'piano', 'banjo+harp']);
-  for (const id of ['cripple', 'joeclark']) {
+  for (const id of ['cripple', 'joeclark', 'susanna', 'camptown', 'sailor', 'wellerman', 'blowman', 'haulaway']) {
     const s = SONGS.find((x) => x.id === id), T = FIDDLE_TUNES[id], round = fiddleRound(T);
     assert.equal(T.banjo, true, id);
     const L = []; { const next = s.tune(5, { intro: true, fiddle: true, banjo: true }); for (let i = 0; i <= round.length / 4; i++) L.push(next()); }
     const bj = L.flat().filter((e) => e.what === 'banjo');
     assert.ok(bj.length > 10, `${id}: the banjo plays`);
-    assert.ok(bj.every((e) => e.midi >= 48 && e.midi <= 84 && e.lenBeats > 0), `${id}: in its range`);
+    assert.ok(bj.filter((e) => !e.strum).every((e) => e.midi >= 48 && e.midi <= 84 && e.lenBeats > 0), `${id}: in its range`);
+    assert.ok(bj.some((e) => e.strum), `${id}: the strum between turns`);
     const none = s.tune(5, { intro: true, fiddle: true, banjo: false }); for (let i = 0; i < 4; i++) assert.ok(!none().some((e) => e.what === 'banjo'), `${id}: no banjo without its kit`);
   }
   const sj = SONGS.find((x) => x.id === 'soldiers').tune(5, { intro: false, fiddle: true, banjo: true });
   for (let i = 0; i < 8; i++) assert.ok(!sj().some((e) => e.what === 'banjo'), 'not a banjo tune: none');
+});
+
+test('Oh! Susanna and Camptown Races: they read, sixteen four-beat bars a round, every chord a real one', () => {
+  for (const [id, bars] of [['susanna', 16], ['camptown', 16]]) {
+    const T = FIDDLE_TUNES[id], round = fiddleRound(T), s = SONGS.find((x) => x.id === id);
+    assert.ok(s && s.round === bars / 4 && T.banjo, id);
+    assert.equal(round.length, bars, id);
+    for (const b of round) {
+      assert.ok(Math.abs(b.len - 4) < 1e-9, `${id} bar ${b.part}${b.i}: ${b.len} beats`);
+      for (const c of b.chords) { assert.ok(/^[A-G][#b]?m?7?$/.test(c.name), `${id}: chord ${c.name}`); assert.equal(banjoChord(c.name, T.semi).strum.length, 3); }
+      for (const n of b.notes) if (n.midi != null) assert.ok(n.midi + T.semi >= 57 && n.midi + T.semi <= 76, `${id}: ${n.midi} in the harmonica's range`);
+    }
+  }
+  assert.equal(readAbc(FIDDLE_TUNES.susanna.parts.A, { key: 'G' })[0].notes.map((n) => n.midi).join(' '), '71 74 74 76 74 71 67 69');   // I come from Al-a-bam-a
+  assert.equal(readAbc(FIDDLE_TUNES.camptown.parts.A, { key: 'D' })[0].notes.map((n) => n.midi).join(' '), '69 69 66 69 71 69 66');   // Camptown ladies sing this song
+});
+
+test('William Tell and the Mountain King: they read, four-beat bars, real chords, the fiddle the star, the box gallops', () => {
+  for (const id of ['tell', 'mountain']) {
+    const T = FIDDLE_TUNES[id], round = fiddleRound(T), s = SONGS.find((x) => x.id === id);
+    assert.equal(round.length, 16, id); assert.equal(s.round, 4);
+    for (const b of round) {
+      assert.ok(Math.abs(b.len - 4) < 1e-9, `${id} bar ${b.part}${b.i}: ${b.len} beats`);
+      for (const c of b.chords) assert.ok(/^[A-G][#b]?m?7?$/.test(c.name), `${id}: chord ${c.name}`);
+      for (const n of b.notes) if (n.midi != null) assert.ok(n.midi + T.semi >= 57 && n.midi + T.semi <= 76, `${id}: ${n.midi} in the harmonica's range`);
+    }
+  }
+  assert.equal(readAbc(FIDDLE_TUNES.mountain.parts.A, { key: 'Bm' })[0].notes.map((n) => n.midi).join(' '), '59 61 62 64 66 62 66');
+  assert.equal(readAbc(FIDDLE_TUNES.mountain.parts.A, { key: 'Bm' })[1].notes.map((n) => n.midi).join(' '), '65 61 65 64 60 64');
+  assert.equal(readAbc(FIDDLE_TUNES.tell.parts.A, { key: 'G' })[0].notes.map((n) => n.len).join(' '), '0.25 0.25 0.5 0.25 0.25 0.5 0.25 0.25 0.5 0.5 0.5');
+  const tell = SONGS.find((x) => x.id === 'tell'), L = []; { const next = tell.tune(5, { intro: false, fiddle: true }); for (let i = 0; i < 8; i++) L.push(next()); }
+  const ev = L.flat(), fid = ev.filter((e) => e.what === 'fiddle').length, harp = ev.filter((e) => e.what === 'harp').length;
+  assert.ok(fid > harp, `the fiddle the star: ${fid} notes to the harmonica's ${harp}`);
+  assert.equal(tell.box, 'gallop');
+  const box = makeBoxPart('tell', 3, { intro: false })(), taps = box.filter((e) => e.hit === 'tap').length;
+  assert.ok(taps >= 24, `the gallop's quick taps: ${taps}`);
+});
+
+test('the sea shanties: they read, sixteen four-beat bars, minor chords that strum, the box stomps on the beat', () => {
+  for (const id of ['sailor', 'wellerman']) {
+    const T = FIDDLE_TUNES[id], round = fiddleRound(T), s = SONGS.find((x) => x.id === id);
+    assert.equal(round.length, 16, id); assert.ok(T.banjo && s.box === 'stomp', id);
+    for (const b of round) {
+      assert.ok(Math.abs(b.len - 4) < 1e-9, `${id} bar ${b.part}${b.i}: ${b.len} beats`);
+      for (const c of b.chords) { assert.ok(/^[A-G][#b]?m?7?$/.test(c.name), `${id}: chord ${c.name}`); assert.equal(banjoChord(c.name, T.semi).strum.length, 3); }
+      for (const n of b.notes) if (n.midi != null) assert.ok(n.midi + T.semi >= 57 && n.midi + T.semi <= 76, `${id}: ${n.midi}`);
+    }
+    assert.equal(round[0].chords[0].name, 'Dm');
+  }
+  assert.deepEqual(banjoChord('Dm'), { root: 50, fifth: 45, strum: [57, 62, 65] });
+  assert.equal(banjoThumb('Dm'), 69);
+  assert.equal(readAbc(FIDDLE_TUNES.sailor.parts.A, { key: 'Ddor' })[5].notes.map((n) => n.midi).join(' '), '69 71 72 74', 'Dorian: B natural');
+  assert.equal(readAbc(FIDDLE_TUNES.wellerman.parts.A, { key: 'Dm' })[2].notes[0].midi, 70, 'D minor: B flat');
+  const box = makeBoxPart('wellerman', 3, { intro: false })();
+  for (let b = 0; b < 4; b++) assert.ok(box.some((e) => Math.abs(e.beat - b * 4) < 0.02 && e.hit === 'thump' && e.vel > 0.85), 'a big downbeat every bar');
+  assert.ok(!box.some((e) => e.hit === 'tap'), 'no taps: the stomp');
+});
+
+test('three more: Blow the Man Down rolls (thirds of a beat), Haul Away Joe stomps, Shenandoah is slow with the banjo only strumming', () => {
+  for (const id of ['blowman', 'haulaway', 'shenandoah']) {
+    const T = FIDDLE_TUNES[id], round = fiddleRound(T);
+    assert.equal(round.length, 16, id);
+    for (const b of round) {
+      assert.ok(Math.abs(b.len - 4) < 1e-9, `${id} bar ${b.part}${b.i}: ${b.len} beats`);
+      for (const c of b.chords) { assert.ok(/^[A-G][#b]?m?7?$/.test(c.name), `${id}: chord ${c.name}`); assert.equal(banjoChord(c.name, T.semi).strum.length, 3); }
+      for (const n of b.notes) if (n.midi != null) assert.ok(n.midi + T.semi >= 57 && n.midi + T.semi <= 76, `${id}: ${n.midi}`);
+    }
+  }
+  const bm = FIDDLE_TUNES.blowman;
+  assert.ok(fiddleRound(bm).every((b) => b.notes.every((n) => Math.abs(n.at * 3 - Math.round(n.at * 3)) < 1e-9)), 'Blow the Man Down: on the thirds');
+  assert.deepEqual(banjoStrum(0, 'G', 'G', bm, bm.beat).filter((e) => e.strum === 'ty').map((e) => +e.beat.toFixed(4)), [1.6667, 3.6667], 'its ty rolls too');
+  assert.equal(SONGS.find((x) => x.id === 'haulaway').box, 'stomp');
+  const sh = SONGS.find((x) => x.id === 'shenandoah'), T = FIDDLE_TUNES.shenandoah, L = [];
+  assert.ok(sh.beat > 0.8, 'slow');
+  { const next = sh.tune(5, { intro: false, fiddle: true, banjo: true }); for (let i = 0; i < 8; i++) L.push(next()); }
+  const ev = L.flat(), bj = ev.filter((e) => e.what === 'banjo');
+  assert.ok(bj.length > 0 && bj.every((e) => e.strum), 'the banjo only strums');
+  assert.ok(bj.every((e) => e.vel <= STRUM.bum * T.strum + 1e-9), 'softly');
+  assert.ok(ev.some((e) => e.what === 'fiddle' && !e.doubled) && ev.some((e) => e.what === 'harp'), 'the fiddle and the harmonica trade it');
+  assert.ok(!ev.some((e) => e.what === 'piano' && e.lead), 'no piano turns while the fiddle is in');
+});
+
+test('the banjo strum: bum-ditty on the bar\'s chord, the bass root then fifth, the strum high to low, the thumb string', () => {
+  assert.deepEqual(banjoChord('G'), { root: 43, fifth: 50, strum: [55, 59, 62] });
+  assert.deepEqual(banjoChord('C'), { root: 48, fifth: 43, strum: [55, 60, 64] });
+  assert.deepEqual(banjoChord('D'), { root: 50, fifth: 45, strum: [54, 57, 62] });
+  assert.deepEqual(banjoChord('Em').strum, [55, 59, 64]);
+  assert.equal(banjoThumb('G'), 67); assert.equal(banjoThumb('D'), 69); assert.equal(banjoThumb('Amix', -5), 64);
+  const T = FIDDLE_TUNES.susanna, B = T.beat, ev = banjoStrum(8, 'G', 'G', T, B);
+  const bums = ev.filter((e) => e.strum === 'bum'), dits = ev.filter((e) => e.strum === 'dit'), tys = ev.filter((e) => e.strum === 'ty');
+  assert.deepEqual(bums.map((e) => [e.beat, e.midi]), [[8, 43], [10, 50]]);
+  assert.deepEqual(tys.map((e) => [e.beat, e.midi]), [[9.5, 67], [11.5, 67]]);
+  assert.deepEqual(dits.slice(0, 3).map((e) => e.midi), [62, 59, 55], 'high to low');
+  dits.slice(0, 3).forEach((e, j) => assert.ok(Math.abs((e.beat - 9) * B - j * STRUM.gap) < 1e-9, '12 ms apart'));
+  assert.ok(dits.every((e) => e.vel < bums[0].vel && e.lenBeats < bums[0].lenBeats), 'the dit shorter and softer');
+  // (a change on three: the new chord's root, not the fifth)
+  assert.deepEqual(banjoStrum(0, 'G', 'D', T, B).filter((e) => e.strum === 'bum').map((e) => e.midi), [43, 50]);
+  assert.deepEqual(banjoStrum(0, 'C', 'C', T, B).filter((e) => e.strum === 'bum').map((e) => e.midi), [48, 43]);
+  // in the song: only while someone else has the tune
+  const s = SONGS.find((x) => x.id === 'susanna'), next = s.tune(5, { intro: false, banjo: true });
+  for (let i = 0; i < 8; i++) {
+    const L = next();
+    for (let b = 0; b < 4; b++) {
+      const inBar = L.filter((e) => e.what === 'banjo' && e.beat >= i * 16 + b * 4 && e.beat < i * 16 + b * 4 + 4);
+      assert.ok(!(inBar.some((e) => e.strum) && inBar.some((e) => !e.strum)), 'never strum over its own turn');
+    }
+  }
 });
 
 test('the box is noise through filters: no tones in its sounds', () => {
@@ -256,7 +364,7 @@ test('the songs have a few words for the card', () => {
 
 test('the card while the band plays: the songs (the one playing marked), then a break', () => {
   const rows = bandChoices({ song: songOf('waltz'), resting: false });
-  assert.deepEqual(rows.map((r) => r.id), ['easy', 'boots', 'waltz', 'boogie', 'lonesome', 'soldiers', 'joeclark', 'arkansas', 'sally', 'cripple', 'devils', 'fishers', 'break']);
+  assert.deepEqual(rows.map((r) => r.id), ['easy', 'boots', 'waltz', 'boogie', 'lonesome', 'soldiers', 'joeclark', 'arkansas', 'sally', 'cripple', 'devils', 'fishers', 'susanna', 'camptown', 'tell', 'mountain', 'sailor', 'wellerman', 'blowman', 'haulaway', 'shenandoah', 'break']);
   assert.deepEqual(rows.filter((r) => r.on).map((r) => r.id), ['waltz']);
   assert.deepEqual(rows.slice(0, 12).map((r) => r.key), ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0', 'Minus', 'Equal']);
   assert.deepEqual(rows.slice(0, 12).map((r) => r.keyName), ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=']);
@@ -270,7 +378,7 @@ test('the card while the band plays: the songs (the one playing marked), then a 
 
 test('the card on a break: "Play again" first (the song they stopped on), then the songs, none marked playing', () => {
   const rows = bandChoices({ song: 'lonesome', resting: true });
-  assert.deepEqual(rows.map((r) => r.id), ['again', 'easy', 'boots', 'waltz', 'boogie', 'lonesome', 'soldiers', 'joeclark', 'arkansas', 'sally', 'cripple', 'devils', 'fishers']);
+  assert.deepEqual(rows.map((r) => r.id), ['again', 'easy', 'boots', 'waltz', 'boogie', 'lonesome', 'soldiers', 'joeclark', 'arkansas', 'sally', 'cripple', 'devils', 'fishers', 'susanna', 'camptown', 'tell', 'mountain', 'sailor', 'wellerman', 'blowman', 'haulaway', 'shenandoah']);
   assert.equal(rows[0].label, 'Play again'); assert.equal(rows[0].sub, 'Lonesome Trail'); assert.equal(rows[0].key, 'Enter');
   assert.ok(!rows.some((r) => r.on));
 });
@@ -285,6 +393,8 @@ test('keys pick rows: the number keys (and the keypad\'s), B for the break, Ente
   assert.equal(choiceForKey(playing, 'Minus').id, 'devils');
   assert.equal(choiceForKey(playing, 'NumpadSubtract').id, 'devils');
   assert.equal(choiceForKey(playing, 'Equal').id, 'fishers');
+  assert.ok(!choiceForKey(playing, 'BracketLeft'), 'no keys past twelve songs: the card is clicked');
+  assert.ok(playing.filter((r) => r.id !== 'break').slice(12).every((r) => !r.key));
   assert.equal(choiceForKey(playing, 'Enter'), null);
   assert.equal(choiceForKey(resting, 'Enter').id, 'again');
   assert.equal(choiceForKey(resting, 'NumpadEnter').id, 'again');

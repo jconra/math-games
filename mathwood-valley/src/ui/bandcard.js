@@ -46,6 +46,19 @@ export const BAND_PICS = {
   cripple: S('<path d="M3 11q3.5-3 7 0t7 0 7 0 6 0M3 17q3.5-3 7 0t7 0 7 0 6 0M3 23q3.5-3 7 0t7 0 7 0 6 0"/>'),
   devils: S('<path d="M12 5h5v4q4 1.5 4 6t-4 6v4h-5v-4q-4-1.5-4-6t4-6z"/><path d="M14.5 3v24M24 6l4-2M25 11l4 0M24 16l4 2"/>'),
   fishers: S('<path d="M3 16q8-9 18 0-10 9-18 0z"/><path d="M21 16l7-5.5v11z"/><circle cx="8.5" cy="15" r="1.2" fill="currentColor" stroke="none"/>'),
+  // Oh! Susanna: a teardrop ("don't you cry for me"); Camptown Races: a horseshoe
+  susanna: S('<path d="M16 4q-8 11-8 16a8 8 0 0 0 16 0q0-5-8-16z"/><path d="M12.5 21a3.5 3.5 0 0 0 3.5 3.5"/>'),
+  camptown: S('<path d="M9 27V15a7 7 0 0 1 14 0v12"/><path d="M5 27h7M20 27h7M9 18h2M9 23h2M21 18h2M21 23h2"/>'),
+  // William Tell: an arrow through an apple; The Mountain King: a mountain with a crown on it
+  tell: S('<circle cx="16" cy="18" r="8"/><path d="M16 10q1-4 4-5"/><path d="M2 18h28M26 15l4 3-4 3M3 15.5l2 2.5-2 2.5"/>'),
+  // Drunken Sailor: a ship's wheel; Wellerman: a whale's tail over the sea
+  sailor: S('<circle cx="16" cy="16" r="8"/><circle cx="16" cy="16" r="2"/><path d="M16 3v26M3 16h26M6.8 6.8l18.4 18.4M25.2 6.8L6.8 25.2"/>'),
+  wellerman: S('<path d="M16 22V12q-2-5-10-6 2 6 10 6 8 0 10-6-8 1-10 6"/><path d="M2 25q3.5-3 7 0t7 0 7 0 7 0"/>'),
+  // Blow the Man Down: an anchor; Haul Away Joe: a coil of rope; Shenandoah: a river winding off between hills
+  blowman: S('<circle cx="16" cy="6" r="2.5"/><path d="M16 8.5V28M10 13h12M5 19q1 9 11 9t11-9M3 21l2-3 3 2M29 21l-2-3-3 2"/>'),
+  haulaway: S('<circle cx="16" cy="16" r="11"/><circle cx="16" cy="16" r="7.5"/><circle cx="16" cy="16" r="4"/><path d="M27 16q2 6 3 12"/>'),
+  shenandoah: S('<path d="M2 13q6-8 12-2 5-6 16 1"/><path d="M14 30q-3-6 3-9t1-9"/><path d="M20 30q-3-6 3-9t-1-9"/>'),
+  mountain: S('<path d="M2 28l10-14 5 6 4-5 9 13z"/><path d="M8 9V4l3 2.5L13.5 3l2.5 3.5L19 4v5z"/>'),
   fiddle: S('<path d="M12 5h5v4q4 1.5 4 6t-4 6v4h-5v-4q-4-1.5-4-6t4-6z"/><path d="M14.5 3v24M5 26L27 8"/>'),
   // Take a break: a tin cup, steaming
   break: S('<path d="M8 14h13v8a5 5 0 0 1-5 5h-3a5 5 0 0 1-5-5z"/><path d="M21 16h2.5a3 3 0 0 1 0 6H21"/><path d="M11 5q-1.5 2 0 4M15.5 4q-1.5 2.5 0 5"/>'),

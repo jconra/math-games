@@ -25,7 +25,7 @@
 import { voicePatch, playPatch, PATCH_PRESETS } from './patch.js';
 
 export const BANJO = 'STAGE — BANJO';
-export const BANJO_SYNTH_LEVEL = 0.45;   // the level the band plays it at (the sampled banjo's BANJO_LEVEL: the patch is
+export const BANJO_SYNTH_LEVEL = 0.75;   // the level the band plays it at (the sampled banjo's BANJO_LEVEL: the patch is
                                          // as loud as the recordings at vel 1)
 const GROUPS = [['s1', 's1-f', 's1-s'], ['s2', 's2-f', 's2-s'], ['s3', 's3-f', 's3-s'], ['s4', 's4-f', 's4-s']];   // [osc, quick fade, slow fade]
 const RINGERS = ['head-e'];              // (other one-shot envelopes that may ring past a short note)
@@ -67,6 +67,12 @@ export const BANJO_SYNTH = {
     { id: 'damp', type: 'gain', name: 'damper', gain: 0 },
     { id: 'send', type: 'send', name: 'room', gain: 0.03 },
     { id: 'out', type: 'out', name: 'output', gain: 0.5 },
+    // the head's echo: the string's sound back off the drum head a moment later, darker (a low-pass before the delay
+    // and in its repeats); loud on the low strings, gone by the high ones (BANJO_ECHO). Its own branch: dry 0. Set by ear
+    // by the game's maker on a strum (2026-10-29): 25 ms, 65% repeats, 340 Hz, level 5
+    { id: 'echo-lp', type: 'filter', name: 'head echo tone', ftype: 'lowpass', freq: 340, Q: 0.707 },
+    { id: 'echo', type: 'delay', name: 'head echo', time: 0.025, feedback: 0.65, tone: 340, wet: 1, dry: 0 },
+    { id: 'echo-v', type: 'gain', name: 'head echo level', gain: 5 },
   ],
   cables: [
     { from: 'nz', to: 'pick-f' },
@@ -100,8 +106,15 @@ export const BANJO_SYNTH = {
     { from: 'damp-e', to: 'damp', port: 'gain' },
     { from: 'damp', to: 'out' },
     { from: 'damp', to: 'send' },
+    { from: 'damp', to: 'echo-lp' },
+    { from: 'echo-lp', to: 'echo' },
+    { from: 'echo', to: 'echo-v' },
+    { from: 'echo-v', to: 'out' },
+    { from: 'echo-v', to: 'send' },
   ],
 };
+// the head's echo along the neck: from C3 up, its level halves every 1/fall octaves (2^-fall an octave up)
+export const BANJO_ECHO = { from: 48, fall: 1.5 };
 // root: the MIDI note the patch is written at; decay: each overtone group's quick and slow fades last 2^-(k u + sq u^2)
 // as long, u octaves above the root (quick, slow: a k a group, the 1st, the 2nd-3rd, the 4th-7th, the 8th up); attack: the
 // swell 2^-k as long an octave up; share, share2: each group's quick fade's share of the pluck moves (logit) by share u +
@@ -203,11 +216,16 @@ export function banjoNote(n, patch = PATCH_PRESETS[BANJO] || BANJO_SYNTH, P = BA
   // the twang (a quick snap, then a slow slide): the cutoffs follow the note by their own measure (voicePatch moves them
   // exactly with it: undone here), a softer pick is a little darker, the slides quicker up the neck
   const k = Math.pow(r, P.track) * Math.pow(2, -P.velDark * (1 - vel)), gl = Math.pow(2, -(P.glide ?? 0) * u);
-  for (const id of ['lp', 'lp2']) { const x = node(id); if (x) set[id] = { freq: x.freq * k, freqEnd: x.freqEnd * k, glide: (x.glide ?? 0.1) * gl }; }
+  // (kept under 22 kHz: the high notes' cutoffs went past what a 44.1 kHz context takes, which it clamps with a warning)
+  for (const id of ['lp', 'lp2']) { const x = node(id); if (x) set[id] = { freq: Math.min(22000, x.freq * k), freqEnd: Math.min(22000, x.freqEnd * k), glide: (x.glide ?? 0.1) * gl }; }
   // the pick (weaker up the neck) and the head (a fixed drum: it doesn't follow the note)
   const pe = node('pick-e'); if (pe) set['pick-e'] = { peak: pe.peak * Math.pow(2, P.pick * u) * (0.4 + 0.6 * vel) };
   for (const id of ['pick-f', 'head-f']) { const x = node(id); if (x) set[id] = { freq: x.freq }; }
   const he = node('head-e'); if (he) set['head-e'] = { decay: he.decay * Math.pow(fade, 0.5) };
+  // the head's echo: a fixed tone (the drum's, not the note's), quieter up the neck
+  const el = node('echo-lp'); if (el) set['echo-lp'] = { freq: el.freq };
+  const ec = node('echo'); if (ec) set['echo'] = { tone: ec.tone };
+  const ev = node('echo-v'); if (ev) set['echo-v'] = { gain: ev.gain * Math.pow(2, -BANJO_ECHO.fall * Math.max(0, n.midi - BANJO_ECHO.from) / 12) };
   // a held note: the string's fades end with the damper instead of ringing on silent (the voice stops sooner)
   if (n.len != null) {
     const de = node('damp-e'), te = n.len + (de ? de.release ?? 0.1 : 0.1) * 1.5 + 0.05;

@@ -19,6 +19,8 @@
 //                          drummer, the old band); room: where their echo goes;
 //                          song: which of SONGS ('easy', 'boots', 'waltz', 'lonesome', 'soldiers', 'joeclark'; see MORE
 //                          SONGS and OLD FIDDLE TUNES below)
+//                          strumTo: where the banjo's bum-ditty strum goes (left out: with its other notes; a rig's
+//                          way to measure it alone)
 //   M.start(at)            starts the tune at ctx time `at` (the first beat); in an OfflineAudioContext it writes the
 //                          whole render at once
 //   M.stop()               stops making notes (the ones already sounding ring out)
@@ -37,6 +39,7 @@
 //   notePatch(patch, opts) the note as patch data (exported for the render rig)
 //   boxNote(hit, patches)  one hit on the box as patch data: { hit: 'thump' | 'slap' | 'tap', vel, tone }
 //   makeBoxPart(song, seed, { intro }) -> nextLine   the box's part, a line (four bars) at a time, as the tunes are made
+import { playBanjoSynth } from './banjosynth.js';
 import { playPatch, voicePatch, PATCH_PRESETS } from './patch.js';
 
 export const BEAT = 0.75;                 // seconds a beat in the first song (80 a minute); the performers' clips are four beats long
@@ -131,7 +134,7 @@ export const FIDDLE_SAMPLES = [   // [name, MIDI note, cents sharp as measured, 
   ['G3', 55, -1, 15], ['A3', 57, 1, 5], ['C4', 60, 1, 50], ['E4', 64, 2, 25], ['G4', 67, 2, 105], ['A4', 69, 15, 75],
   ['C5', 72, 2, 45], ['E5', 76, 13, 40], ['G5', 79, 4, 85], ['A5', 81, 1, 125], ['C6', 84, -6, 120], ['E6', 88, 14, 145],
 ];
-const FIDDLE_LEVEL = 0.4;                 // the samples' level: about the harmonica's while each plays (measured in a render)
+const FIDDLE_LEVEL = 0.66;                // the samples' level (0.4 measured even with the harmonica; the game's maker heard it at 75%: 4/3 up, then a quarter more)
 const audioExt = () => { try { const el = document.createElement('audio'); if (/^(probably|maybe)$/.test(el.canPlayType('audio/ogg; codecs="vorbis"'))) return '.ogg'; } catch (e) { /* no audio element */ } return '.m4a'; };
 export async function loadFiddle(ctx, { base = new URL('../../sounds/fiddle/', import.meta.url).href, ext = null } = {}) {
   const e = ext || audioExt();
@@ -203,7 +206,7 @@ export function playPiano(ctx, kit, dest, room, n) {
 export const BANJO_SAMPLES = [   // [MIDI note, cents sharp as measured]
   [48, 6], [51, 6], [54, 6], [57, 6], [60, 3], [63, 2], [66, 1], [69, 1], [72, 0], [75, -1], [78, -1], [81, -1], [84, 0],
 ];
-const BANJO_LEVEL = 0.45;                 // against the harmonica and the fiddle
+const BANJO_LEVEL = 0.75;                 // against the harmonica and the fiddle (0.45 sounded about 60%: 5/3 up)
 export async function loadBanjo(ctx, { base = new URL('../../sounds/banjo/', import.meta.url).href, ext = null } = {}) {
   const e = ext || audioExt();
   return Promise.all(BANJO_SAMPLES.map(async ([midi, cents]) => {
@@ -488,7 +491,7 @@ export function makeLonesome(seed = 1, { intro = true } = {}) {
 }
 
 // ── OLD FIDDLE TUNES ─────────────────────────────────────────────────────────────────────────────────────────────────
-// Seven real tunes, old enough that nobody owns them (traditional, public domain), in the band's own arrangement: the
+// Sixteen real tunes, old enough that nobody owns them (traditional, public domain), in the band's own arrangement: the
 // harmonica plays the tune as written, the piano a boom-chick under the chords, the box as in the quick song. Only the
 // notes are taken, from the written tunes; no recording. Where a source had no chords, the chords are the band's own.
 //   soldiers  "Soldier's Joy"      a fiddle tune from the 1700s, played all over the frontier; the notes as the session
@@ -507,6 +510,28 @@ export function makeLonesome(seed = 1, { intro = true } = {}) {
 //                                  them, its first two parts, the chords as thesession.org's setting 259 has them
 //   fishers   "Fisher's Hornpipe"  from the late 1700s; the notes as thesession.org's setting 14043 writes them (its
 //                                  other settings agree on the tune), the triplet kept
+//   susanna   "Oh! Susanna"        Stephen Foster's song (1848); the melody as it's sung, verse and chorus (the
+//                                  two-four bars written two to a bar), in G, the chords the band's own
+//   camptown  "Camptown Races"     Foster again (1850), the doo-dah song; verse and chorus as it's sung, in D, the
+//                                  chords the band's own
+//   tell      "William Tell"       the gallop from the end of Rossini's William Tell Overture (1829), the galloping
+//                                  theme as everyone knows it (A), and the band's own answer to it on the other chords
+//                                  (B); in G, quick, the fiddle the star, the box on a gallop
+//   mountain  "The Mountain King"  Grieg's In the Hall of the Mountain King (1875), the creeping theme in B minor and
+//                                  its turn on F#; a steady brisk beat (the original's speeding up isn't done: the
+//                                  band's beat is one number a song, the saloon's dancers and the song's length keep it)
+//   sailor    "Drunken Sailor"     the sea shanty (traditional), "What shall we do" verse and "Way hay and up she rises"
+//                                  chorus as it's sung, D Dorian, stomping; the chords the band's own
+//   wellerman "Wellerman"          the New Zealand whaling song (traditional, 1860s-70s), verse and "Soon may the
+//                                  Wellerman come" chorus written down from the song as it's sung, in D minor, a stomp
+//                                  with big downbeats; the chords the band's own
+//   blowman   "Blow the Man Down"  the shanty (traditional), the verse and its "Way, hey, blow the man down" answer
+//                                  written down from the song as it's sung; its 6/8 roll kept by writing it in thirds
+//                                  of a beat; in G
+//   haulaway  "Haul Away Joe"      the shanty (traditional), verse and the "Way, haul away, we'll haul away Joe" pull
+//                                  (the box's stomp lands on the Joe), D Dorian
+//   shenandoah "Shenandoah"        the old river song (traditional), slow, in D; the fiddle and the harmonica trade its
+//                                  long lines, the banjo strums softly under them, the box barely there
 // Each part is written in ABC, the plain text folk musicians write tunes in: a letter a note (C..B the octave up from
 // middle C, c..b the one above; ' an octave higher, , lower), a number after it the eighths it lasts (/ halves it),
 // ^ _ = a sharp, flat or natural, z a rest, | a bar line, "D" the chord from there on, (3 three notes in the time of two,
@@ -517,7 +542,7 @@ export function makeLonesome(seed = 1, { intro = true } = {}) {
 //                          at and len in beats (unit: the beats one written note length lasts: 0.5 for an eighth
 //                          with the beat a quarter note)
 //   chordOf(name, semi)    a chord's root and fifth for the piano's left hand and two soft voicings for its right
-const ABC_KEYS = { C: '', G: '^F', D: '^F^C', A: '^F^C^G', Dmix: '^F', Amix: '^F^C', Emix: '^F^C^G', F: '_B' };   // each key's sharps and flats
+const ABC_KEYS = { C: '', G: '^F', D: '^F^C', A: '^F^C^G', Dmix: '^F', Amix: '^F^C', Emix: '^F^C^G', F: '_B', Em: '^F', Bm: '^F^C', Dm: '_B', Ddor: '' };   // each key's sharps and flats
 const STEP = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
 export function readAbc(text, { key = 'D', unit = 0.5 } = {}) {
   const sig = ABC_KEYS[key] ?? '', bars = [];
@@ -621,6 +646,80 @@ export const FIDDLE_TUNES = {
       B: '"C"gece gebg|"F"afcf afba|"C"gece gaba|"C"gfed c2Bc|"Bb"dBFB dBfd|"F"cAFA cAfc|"Bb"dfed "C"cBAG|"F"F2A2 F2 ef',
       B2: '"C"gece gebg|"F"afcf afba|"C"gece gaba|"C"gfed c2Bc|"Bb"dBFB dBfd|"F"cAFA cAfc|"Bb"dfed "C"cBAG|"F"F2A2 F2 c2',
     },
+  },  susanna: {
+    banjo: true,   // (a banjo song: the banjo takes turns, and strums bum-ditty behind the others)
+    key: 'G', semi: 0, beat: 60 / 120, form: ['A', 'A2', 'B', 'B2'],
+    parts: {
+      A: '"G"Bdde dBGA|"G"BBAG "D"A2 GA|"G"Bdde dBGA|"D"BBAA "G"G2 GA',
+      A2: '"G"Bdde dBGA|"G"BBAG "D"A2 GA|"G"Bdde dBGA|"D"BBAA "G"G4',
+      B: '"C"c2c2 e2e2|"G"ddBG "D"A2 GA|"G"Bdde dBGA|"D"BBAA "G"G4',
+      B2: '"C"c2c2 e2e2|"G"ddBG "D"A2 GA|"G"Bdde dBGA|"D"BBAA "G"G2 GA',
+    },
+  },
+  camptown: {
+    banjo: true,   // (a banjo song: the banjo takes turns, and strums bum-ditty behind the others)
+    key: 'D', semi: 0, beat: 60 / 126, form: ['A', 'A', 'B', 'B'],
+    parts: {
+      A: '"D"AAFA BAF2|"D"F2E2 F2E2|"D"AAFA BAF2|"A"EEFE "D"D4',
+      B: '"D"D3/2F/ Ad "G"B4|"G"B3/2d/ BA "D"F4|"D"AAFA BAF2|"A"EEFE "D"D4',
+    },
+  },
+  tell: {
+    // (the fiddle the star: its turns more than the others' when it's in the band)
+    key: 'G', semi: 0, beat: 60 / 152, form: ['A', 'A', 'B', 'A'], leads: ['fiddle', 'fiddle+harp', 'harp', 'fiddle'],
+    parts: {
+      A: '"G"D/D/D D/D/D D/D/G A B|"G"D/D/D D/D/D "D"D/D/A F D|"G"D/D/D D/D/D D/D/G A B|"G"G B "D"A F "G"G2 z2',
+      B: '"C"G/G/G G/G/G G/G/c d e|"G"D/D/D D/D/D D/D/G A B|"D"A/A/A A/A/A A/A/d c A|"D"F A d c "G"B G "D"A F',
+    },
+  },
+  mountain: {
+    key: 'Bm', semi: 0, beat: 60 / 144, form: ['A', 'A', 'B', 'A2'],
+    parts: {
+      A: '"Bm"B,CDE FDF2|"C#"^EC^E2 "C"=E=C=E2|"Bm"B,CDE FDFB|"D"AFDF A4',
+      A2: '"Bm"B,CDE FDF2|"C#"^EC^E2 "C"=E=C=E2|"Bm"B,CDE FDFB|"D"AFDF "Bm"B,4',
+      B: '"F#"F^G^AB c^Ac2|"F#"d^Ad2 c^Ac2|"F#"F^G^AB c^Ac2|"F#"ec^Ac e4',
+    },
+  },
+  sailor: {
+    banjo: true,   // (a banjo song: the banjo takes turns, and strums bum-ditty behind the others)
+    key: 'Ddor', semi: 0, beat: 60 / 132, form: ['A', 'B'],
+    parts: {
+      A: '"Dm"A2 AA A2 AA|"Dm"A2 D2 F2 A2|"C"G2 GG G2 GG|"C"G2 C2 E2 G2|"Dm"A2 AA A2 AA|"Dm"A2 B2 c2 d2|"C"c2 A2 G2 E2|"Dm"D4 D4',
+      B: '"Dm"A4 A4|"Dm"A2 D2 F2 A2|"C"G4 G4|"C"G2 C2 E2 G2|"Dm"A4 A4|"Dm"A2 B2 c2 d2|"C"c2 A2 G2 E2|"Dm"D4 D4',
+    },
+  },
+  wellerman: {
+    banjo: true,   // (a banjo song: the banjo takes turns, and strums bum-ditty behind the others)
+    key: 'Dm', semi: 0, beat: 60 / 112, form: ['A', 'B'],
+    parts: {
+      A: '"Dm"D2 DD F2 A2|"Dm"A2 AA A2 zA|"Gm"B2 GG B2 d2|"Dm"d2 dd d2 zA|"Dm"A2 A2 A2 A2|"C"G2 F2 E2 zA|"Gm"G2 FE "A"F2 E2|"Dm"D4 z2 A2',
+      B: '"Dm"d4 B2 B2|"Gm"G2 B2 d2 z2|"C"c4 A2 A2|"F"F2 A2 c2 z2|"Dm"d4 B2 B2|"Gm"G2 B2 d2 z2|"A"A2 G2 F2 E2|"Dm"D4 z2 A2',
+    },
+  },
+  blowman: {
+    // (rolling: written in thirds of a beat, the 6/8 of the song two bars to a four-beat bar)
+    banjo: true,   // (a banjo song: the banjo takes turns, and strums bum-ditty behind the others)
+    key: 'G', unit: 1 / 3, semi: 0, beat: 60 / 100, form: ['A', 'A'],
+    parts: {
+      A: '"G"G3 G2A B2c d3|"D"c2B A2G A3 z2D|"G"d3 B3 G2A B3|"D"A6 z3 z2D|"G"G3 G2A B2c d3|"D"c2B A2G A3 z2A|"C"c2c B2A "D"A2B c2A|"D"B3 A3 "G"G6',
+    },
+  },
+  haulaway: {
+    banjo: true,   // (a banjo song: the banjo takes turns, and strums bum-ditty behind the others)
+    key: 'Ddor', semi: 0, beat: 60 / 120, form: ['A', 'B'],
+    parts: {
+      A: '"Dm"D2 DE F2 FG|"Dm"A2 AB A2 F2|"C"G2 GA G2 E2|"C"C2 E2 G2 z2|"Dm"D2 DE F2 FG|"Dm"A2 AB c2 A2|"C"G2 E2 C2 E2|"Dm"D4 z4',
+      B: '"Dm"d4 c2 A2|"C"G2 G2 E2 C2|"Dm"D2 F2 A2 d2|"C"c4 z4|"Dm"d4 c2 A2|"C"G2 G2 E2 C2|"Dm"D2 F2 "C"E2 C2|"Dm"D6 z2',
+    },
+  },
+  shenandoah: {
+    // (slow: the fiddle and the harmonica trade the long lines; the banjo only strums, softly)
+    banjo: 'strum', strum: 0.6, leads: ['fiddle', 'harp'],
+    key: 'D', semi: 0, beat: 60 / 72, form: ['A', 'B'],
+    parts: {
+      A: '"D"D3 D D2 E F|"G"G2 B2 A4|"D"d3 c B4|"G"B2 c d2 B A2|"D"F2 A2 A4|"Bm"B2 A2 F4|"A"E2 F2 E2 D2|"D"D4 z2 A,2',
+      B: '"D"D3 D D2 E F|"G"G2 B2 A4|"D"d3 c B4|"Bm"B2 A2 F4|"G"G2 A2 B2 d2|"D"A4 F4|"A"E2 D2 E2 F2|"D"D6 z2',
+    },
   },
 };
 // The band's own written songs (made up for the game, not old tunes), in the same shape.
@@ -680,6 +779,41 @@ export const fiddleLead = (pos, time, fiddle = false, banjo = false) => {
   const L = banjo ? (fiddle ? BANJO_FIDDLE_LEADS : BANJO_LEADS) : fiddle ? FIDDLE_LEADS : LEADS;
   return L[(pos + time) % L.length];
 };
+// The banjo between its turns (a banjo tune, the banjo in the band, someone else with the tune): clawhammer
+// "bum-ditty" on the bar's chord, twice a bar. Bum, on one (and three): a bass note, the chord's root, then its fifth
+// (the new chord's root when the chord changes on three); dit, on two (and four): a quick downstroke across three
+// chord notes, high to low, 12 ms apart, short and soft; ty, on the and of two (and four): the thumb string. The
+// thumb's note is the key's own (G4 for a G tune), or its fifth when that's nearer G4 (A4 in D): the short fifth string
+// retuned or capoed the way banjo players do. Under the lead: the strum's notes softer than a banjo turn's.
+//   banjoChord(name, semi) -> { root, fifth, strum }   the bass G2..F#3, the strum the chord's first three notes from F#3
+//   banjoThumb(key, semi)  -> MIDI note               the thumb string: E4..B4
+//   banjoStrum(at, one, three, T, B) -> events        a bar's bum-ditty (one, three: the chords on one and three)
+export const STRUM = { gap: 0.012, bum: 0.3, dit: 0.18, ty: 0.22, gain: 1.25 };   // (gap: s between the strum's strings; the vels: rendered, the lead
+                                                                   // about 4-7 dB over it)
+export function banjoChord(name, semi = 0) {
+  const m = /^([A-G])([#b]?)(m?)/.exec(name || 'G');
+  const pc = (((STEP[m[1]] + (m[2] === '#' ? 1 : m[2] === 'b' ? -1 : 0) + semi) % 12) + 12) % 12;
+  const root = 43 + ((pc - 7 + 12) % 12), fifth = root + 7 <= 50 ? root + 7 : root - 5;
+  const tones = [0, m[3] ? 3 : 4, 7].map((x) => (pc + x) % 12), strum = [];
+  for (let k = 54; strum.length < 3; k++) if (tones.includes(k % 12)) strum.push(k);
+  return { root, fifth, strum };
+}
+export function banjoThumb(key, semi = 0) {
+  const pc = (((STEP[key[0]] + semi) % 12) + 12) % 12, at = (p) => { for (let k = 64; k <= 71; k++) if (k % 12 === p) return k; return null; };
+  return at(pc) ?? at((pc + 7) % 12);
+}
+export function banjoStrum(at, one, three, T, B) {
+  // (a lilting tune, written in thirds of a beat (T.unit 1/3): the ty two thirds through the beat; T.strum: the strum's
+  // loudness in the tune, 1 when left out)
+  const ev = [], thumb = banjoThumb(T.key, T.semi), ty = T.unit === 1 / 3 ? 2 / 3 : 0.5, soft = T.strum ?? 1;
+  for (const h of [0, 2]) {
+    const name = h ? three : one, C = banjoChord(name, T.semi), bass = h && three === one ? C.fifth : C.root;
+    ev.push({ beat: at + h, what: 'banjo', strum: 'bum', midi: bass, lenBeats: 0.9, vel: STRUM.bum * soft });
+    [...C.strum].reverse().forEach((m, j) => ev.push({ beat: at + h + 1 + j * STRUM.gap / B, what: 'banjo', strum: 'dit', midi: m, lenBeats: 0.45, vel: STRUM.dit * soft * (1 - j * 0.08) }));
+    ev.push({ beat: at + h + 1 + ty, what: 'banjo', strum: 'ty', midi: thumb, lenBeats: 0.45, vel: STRUM.ty * soft });
+  }
+  return ev;
+}
 // A battle (T.battle: { A: 1, B: 2 }, bars a turn in each section): the instruments trade the tune, a turn each, the
 // one who calls changing every time round; the last four bars of a section (the turnaround) all together. With the
 // fiddle in the band: the fiddle calls, the harmonica answers, then both; without it the harmonica calls and the piano's
@@ -697,7 +831,7 @@ function makeFiddle(T) {
   const round = fiddleRound(T), SW = T.swing || 0.5;
   const sw = (x) => { const f = Math.floor(x + 1e-9), u = x - f; return f + (u <= 0.5 ? u / 0.5 * SW : SW + (u - 0.5) / 0.5 * (1 - SW)); };
   return function tune(seed = 1, { intro = true, fiddle = false, banjo: banjoOn = false } = {}) {
-    const banjo = banjoOn && !!T.banjo;
+    const banjo = banjoOn && !!T.banjo, turnsToo = banjo && T.banjo !== 'strum';   // (banjo 'strum': it only strums, no turns)
     const rnd = makeRandom(seed), B = T.beat;
     let line = 0;
     return function nextLine() {
@@ -707,7 +841,7 @@ function makeFiddle(T) {
         const k = opening ? b : n * 4 + b, bar = round[k % round.length], time = Math.floor(k / round.length), at = t0 + b * 4;
         const chordAt = (beat) => { let c = bar.chords[0]; for (const x of bar.chords) if (x.at <= beat + 1e-9) c = x; return c; };
         const one = chordAt(0), three = chordAt(2), C1 = chordOf(one.name, T.semi), C3 = chordOf(three.name, T.semi);
-        const lead = opening ? null : T.battle ? battleLead(T, bar, time, fiddle) : fiddleLead(bar.pos, time, fiddle, banjo);
+        const lead = opening ? null : T.battle ? battleLead(T, bar, time, fiddle) : T.leads && fiddle ? T.leads[(bar.pos + time) % T.leads.length] : fiddleLead(bar.pos, time, fiddle, turnsToo);   // (T.leads: a tune's own turns with the fiddle in the band)
         const has = (w) => !!lead && lead.split('+').includes(w), harp = has('harp'), fid = has('fiddle'), bj = has('banjo'), right = lead === 'piano';
         // the piano's plan for the section (a boogie): 'light' (a bassist's two beats), 'roll' (the boogie line), 'stop'
         // (stop-time: its first four bars just a hit on one, the band quiet behind the tune, then the roll)
@@ -739,6 +873,7 @@ function makeFiddle(T) {
           up.forEach((m, j) => ev.push({ beat: at + 2 + j / 3, what: 'piano', midi: m, len: B * 0.5, vel: 0.36 + j * 0.04 }));
         }
         if (opening) continue;
+        if (banjo && !bj) ev.push(...banjoStrum(at, one.name, three.name, T, B));   // (the banjo between its turns: bum-ditty)
         bar.notes.forEach((nt, j) => {
           if (nt.midi == null) return;
           const prev = bar.notes[j - 1], next = bar.notes[j + 1] || round[(k + 1) % round.length].notes[0], long = nt.len >= 2;
@@ -889,6 +1024,25 @@ const BOX_BARS = {
     if (end && r.chance(0.6)) h.push([3 + L, 'slap', 0.55]); else if (r.chance(0.5)) h.push([3 + L, 'thump', 0.45]);
     return h;
   },
+  // the gallop (William Tell): every beat a hit, the slaps on two and four, and two quick taps before each (ta-ka-DUM)
+  gallop: (r, { first, end }) => {
+    if (first) return [[0, 'thump', 0.7], [2, 'thump', 0.6]];
+    const h = [];
+    for (let k = 0; k < 4; k++) {
+      h.push([k, k % 2 ? 'slap' : 'thump', k === 0 ? 0.95 : k % 2 ? 0.66 : 0.8]);
+      if (!(end && k === 3)) h.push([k + 0.5, 'tap', 0.28], [k + 0.75, 'tap', 0.34]);
+    }
+    if (end) h.push([3.5, 'slap', 0.5], [3.75, 'slap', 0.58]);
+    return h;
+  },
+  // the stomp (the shanties): big downbeats, a heavy thump on one and three and a full slap on two and four, no taps
+  // between (the feet on the deck), a slap pushing into the next line
+  stomp: (r, { first, end }) => {
+    if (first) return [[0, 'thump', 0.7], [2, 'thump', 0.6]];
+    const h = [[0, 'thump', 1], [1, 'slap', 0.78], [2, 'thump', 0.92], [3, 'slap', 0.8]];
+    if (end && r.chance(0.6)) h.push([3.5, 'slap', 0.55]);
+    return h;
+  },
   // the waltz: thump, slap, slap (the oom-pah-pah), the slaps light; now and then a tap before the next bar
   waltz: (r, { first, end }) => {
     if (first) return [[0, 'thump', 0.5]];
@@ -954,7 +1108,16 @@ export const SONGS = [
     ['cripple', 'Cripple Creek', 'Down to Cripple Creek!', 'a banjo tune'],
     ['devils', "Devil's Dream", "The Devil's Dream: hang on!", 'a quick reel'],
     ['fishers', "Fisher's Hornpipe", "Fisher's Hornpipe, nice and easy.", 'a hornpipe'],
-  ].map(([id, name, ask, feel]) => ({ id, name, beat: FIDDLE_TUNES[id].beat, bar: 4, tune: makeFiddle(FIDDLE_TUNES[id]), round: fiddleRound(FIDDLE_TUNES[id]).length / 4, box: 'reel', upbeat: true, ask, feel })),
+    ['susanna', 'Oh! Susanna', "Oh! Susanna! Don't you cry!", 'a Foster song'],
+    ['camptown', 'Camptown Races', 'Camptown Races! Doo-dah!', 'a race song'],
+    ['tell', 'William Tell Gallop', 'William Tell Gallop! Giddy-up!', 'a gallop', 'gallop'],
+    ['mountain', 'The Mountain King', 'The Mountain King: tiptoe now...', 'a sneaky one'],
+    ['sailor', 'Drunken Sailor', 'Drunken Sailor! Way hay!', 'a sea shanty', 'stomp'],
+    ['wellerman', 'Wellerman', 'The Wellerman! Stomp along!', 'a whaling song', 'stomp'],
+    ['blowman', 'Blow the Man Down', 'Blow the Man Down! Roll it!', 'a rolling shanty', 'stomp'],
+    ['haulaway', 'Haul Away Joe', 'Haul Away Joe! Pull, boys!', 'a pulling shanty', 'stomp'],
+    ['shenandoah', 'Shenandoah', 'Shenandoah: a slow one.', 'a slow one', 'lonesome'],
+  ].map(([id, name, ask, feel, box = 'reel']) => ({ id, name, beat: FIDDLE_TUNES[id].beat, bar: 4, tune: makeFiddle(FIDDLE_TUNES[id]), round: fiddleRound(FIDDLE_TUNES[id]).length / 4, box, upbeat: true, ask, feel })),
 ];
 export const songOf = (id) => SONGS.find((s) => s.id === id) || SONGS[0];
 
@@ -962,9 +1125,9 @@ export const songOf = (id) => SONGS.find((s) => s.id === id) || SONGS[0];
 // song: one of SONGS' ids ('easy' when left out: the first tune, as it always was); intro: false starts the harmonica in
 // the first line (a song asked for: the band strikes it up at once) instead of the piano's line alone; box: the
 // drummer's notes go there (none: the band without him)
-export function makeStageMusic(ctx, { harp, piano, box = null, room = null, seed = 1, patches = PATCH_PRESETS, song = 'easy', intro = true, fiddle = null, fiddleKit = null, pianoKit = null, banjo = null, banjoKit = null } = {}) {
+export function makeStageMusic(ctx, { harp, piano, box = null, room = null, seed = 1, patches = PATCH_PRESETS, song = 'easy', intro = true, fiddle = null, fiddleKit = null, pianoKit = null, banjo = null, banjoKit = null, banjoSynth = false, strumTo = null } = {}) {
   const S = songOf(song), BL = S.beat, LINE = S.bar * 4;   // (seconds a beat; beats a line of four bars)
-  const tune = S.tune(seed, { intro, fiddle: !!fiddleKit, banjo: !!banjoKit }), drum = box ? makeBoxPart(S.id, seed, { intro }) : null, queue = [], events = [], harpSpans = [], fiddleSpans = [], voices = [];
+  const tune = S.tune(seed, { intro, fiddle: !!fiddleKit, banjo: !!banjoKit || banjoSynth }), drum = box ? makeBoxPart(S.id, seed, { intro }) : null, queue = [], events = [], harpSpans = [], fiddleSpans = [], voices = [];
   let origin = null, made = 0, timer = null, running = false;
   const offline = typeof ctx.startRendering === 'function';
   const secs = (beat) => origin + beat * BL;
@@ -984,11 +1147,12 @@ export function makeStageMusic(ctx, { harp, piano, box = null, room = null, seed
       if (pianoKit) keep(playPiano(ctx, pianoKit, piano, room, { at, midi: ev.midi, len: ev.len, vel: ev.vel, gain: ev.gain }), at, at + ev.len);   // (the sampled upright)
       else for (const p of pianoNotes({ midi: ev.midi, len: ev.len, vel: ev.vel, gain: ev.gain }, patches[PIANO])) keep(playPatch(ctx, null, piano, room, p, null, { at }), at, at + ev.len);
       events.push({ at, what: 'piano', midi: ev.midi, len: ev.len, vel: ev.vel });
-    } else if (ev.what === 'banjo') {   // (the banjo's notes: only with its kit, else none: the tune gives it turns only then)
-      if (!banjoKit) return;
-      const len = ev.lenBeats * BL;
-      keep(playBanjo(ctx, banjoKit, banjo || harp, room, { at, midi: ev.midi, len, vel: ev.vel }), at, at + len);
-      events.push({ at, what: 'banjo', midi: ev.midi, len });
+    } else if (ev.what === 'banjo') {   // (the banjo's notes: only with its kit or banjoSynth, else none: the tune gives it turns only then)
+      if (!banjoKit && !banjoSynth) return;
+      const len = ev.lenBeats * BL, n = { at, midi: ev.midi, len, vel: ev.vel, gain: ev.strum ? STRUM.gain : 1 };
+      const to = (ev.strum && strumTo) || banjo || harp;   // (strumTo: the strum somewhere of its own, for a rig to measure)
+      keep(banjoSynth ? playBanjoSynth(ctx, to, room, n) : playBanjo(ctx, banjoKit, to, room, n), at, at + len);   // (banjoSynth: the synth banjo, banjosynth.js)
+      events.push({ at, what: 'banjo', midi: ev.midi, len, ...(ev.strum ? { strum: ev.strum } : {}) });
     } else if (ev.what === 'fiddle' && (fiddleKit || ev.doubled)) {
       if (!fiddleKit) return;                // (doubling the harmonica, and no fiddle: the harmonica has it)
       const len = ev.lenBeats * BL;

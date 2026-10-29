@@ -202,8 +202,8 @@ const PL = makePlacing({ scene, camera, controls, canvas, base: GAME, building: 
 // hall's floor: a disc for each seat (blue a chair, violet a bar stool) and standing spot (pink), with a tick the way it
 // faces; the aisles' points (green) and the walks between them; red rings round what is kept clear (the chalkboard and
 // its teacher's and player's spots, the stairs' foot), amber round the doorways' ways in; and on the stage the band's
-// four places (gold, src/stage.js puts its players there): the piano stool, the harmonica player, the drummer's crate,
-// the fiddler
+// five places (gold, src/stage.js puts its players there): the piano stool, the harmonica player, the drummer's crate,
+// the fiddler, the banjo player's stool
 function drawCrowdMarks() {
   for (const m of [...crowdGroup.children]) { crowdGroup.remove(m); m.geometry.dispose(); m.material.dispose(); }
   const C = B && B.anchors && B.anchors.crowd; if (!C) return;
@@ -219,7 +219,7 @@ function drawCrowdMarks() {
   const lines = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0x26b34a, transparent: true, opacity: 0.6 })); lines.renderOrder = 2; crowdGroup.add(lines);
   for (const [x, z, r, walk] of C.keep.circles) flat(new THREE.RingGeometry(r - 0.05, r, 40), walk ? 0xe0a030 : 0xe03030, x, z);
   const S = B.anchors.stage;
-  if (S) for (const k of ['piano', 'harmonica', 'drummer', 'fiddler']) {
+  if (S) for (const k of ['piano', 'harmonica', 'drummer', 'fiddler', 'banjo']) {
     const a = S[k]; if (!a) continue;
     flat(new THREE.CircleGeometry(0.22, 24), 0xffc23a, a.x, a.z, 0, S.floor + 0.015);
     const tick = flat(new THREE.PlaneGeometry(0.06, 0.36), 0xffffff, a.x + Math.sin(a.rot) * 0.26, a.z + Math.cos(a.rot) * 0.26, 0, S.floor + 0.016); tick.rotation.z = a.rot;
@@ -649,7 +649,7 @@ const SHOW = {
     <div class="row check"><label><input type="checkbox" id="doors"> Batwings hooked open</label></div>
     <div class="row check"><label><input type="checkbox" id="lamps"> Lamps lit</label></div>
     <div class="row check"><label><input type="checkbox" id="props"> Props (tables, chairs, stools, the piano, barrels, benches, the hitching rail and trough)</label></div>
-    <div class="row check"><label><input type="checkbox" id="crowdMarks"> The crowd's places (where the townsfolk sit and stand while the band plays, the aisles they walk, what is kept clear) and the band's four on the stage (gold: piano, harmonica, drummer, fiddler)</label></div>`;
+    <div class="row check"><label><input type="checkbox" id="crowdMarks"> The crowd's places (where the townsfolk sit and stand while the band plays, the aisles they walk, what is kept clear) and the band's five on the stage (gold: piano, harmonica, drummer, fiddler, banjo)</label></div>`;
   },
 };
 const HOW = {

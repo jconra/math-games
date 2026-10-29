@@ -215,7 +215,7 @@ function bDelay(ctx, n) {
   const fb = ctx.createGain(); fb.gain.value = Math.min(0.95, Math.max(0, n.feedback ?? 0.4));   // cap < 1 so it can't run away
   const damp = ctx.createBiquadFilter(); damp.type = 'lowpass'; damp.frequency.value = n.tone ?? 4000;   // darkens each repeat (tape feel)
   const wet = ctx.createGain(); wet.gain.value = n.wet ?? 0.5;
-  input.connect(out);                                                 // dry passthrough
+  if ((n.dry ?? 1) > 0) input.connect(out);                          // dry passthrough (dry: 0 for an echo-only branch)
   input.connect(dl); dl.connect(wet).connect(out);                    // wet path
   dl.connect(damp).connect(fb).connect(dl);                          // feedback loop (lowpass-damped) → repeating echoes
   return { in: input, out, params: { time: dl.delayTime, feedback: fb.gain, tone: damp.frequency, wet: wet.gain }, starts: [], at: 0 };

@@ -37,7 +37,7 @@ export const BAND = {
   mix: { other: 0.6, lately: 6, fresh: 2.5 },
 };
 
-// the number row along: 1 .. 9, 0, then the key after it (-)
+// the number row along: 1 .. 9, 0, then the keys after it (- =); songs past twelve are clicked on the card
 const SONG_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0', 'Minus', 'Equal'];
 const KEY_NAMES = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '='];
 
