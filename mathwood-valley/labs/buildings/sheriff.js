@@ -6,8 +6,8 @@
 // jail block (the Stone Lab's wall maker): a flat slab roof, one tiny high barred window at the front, a strap-iron
 // door on a stone step, a tin stovepipe with a rain cap. After the concept picture.
 //
-// Laid out to be walked into: the office (a desk and chair, a gun rack, a pot-belly stove, a safe with lock boxes on
-// it, a map and a calendar on the walls, a rug, a hanging lantern and a lamp on the desk), a back room behind a plank
+// Laid out to be walked into: the office (a desk and chair, seized lock boxes piled on the desk's end and beside it, a
+// gun rack, a pot-belly stove, a safe with lock boxes on it, a map and a calendar on the walls, a rug, a hanging lantern and a lamp on the desk), a back room behind a plank
 // partition (a cot, a wash stand, a trunk, a back door), and through a heavy door in the office's right wall the jail:
 // a corridor with its own little stove, and two cells behind a wall of woven strap-iron bars, each with a plank bunk on
 // chains and a bucket.
@@ -573,7 +573,14 @@ function officeInside(k, lamps) {
   k.board([dw + 0.02, 0.07, 0.03], [dx, y + 0.035, dfz + 0.012], null, { long: 0, tint: vary(k, FURN, 0.7, 0.8), inside: true, skip: '-y' });
   k.solid([dw, dh, dd], [dx, y + dh / 2, dz]);
   pic(A.notices[0], 0.21, 0.27, mul(T(dx + 0.15, y + dh + 0.002, dz - 0.05), RX(-Math.PI / 2), RZ(0.3)));
-  pic(A.notices[2], 0.21, 0.27, mul(T(dx + 0.38, y + dh + 0.003, dz + 0.05), RX(-Math.PI / 2), RZ(-0.2)));
+  pic(A.notices[2], 0.21, 0.27, mul(T(dx + 0.02, y + dh + 0.003, dz + 0.2), RX(-Math.PI / 2), RZ(-0.2)));
+  // THE SEIZED LOCK BOXES waiting to be cracked (the game's "Crack the lock boxes" spot: anchors.spots): a pile on the
+  // desk's end by the sheriff's hand, and more on the floor beside it
+  for (const [bx, by, bz, w, d, h, rot] of [[-0.48, 0, -0.08, 0.36, 0.24, 0.2, 0.1], [-0.5, 0, 0.24, 0.32, 0.22, 0.18, -0.15], [-0.46, 0.2, 0.06, 0.3, 0.22, 0.17, 0.32], [-0.5, 0.37, 0.1, 0.24, 0.17, 0.14, -0.2]])
+    lockBox(k, dx + dw / 2 + bx + 0.17, y + dh + by, dz + bz, w, d, h, rot);
+  const fpx = dx + dw / 2 + 0.33, fpz = dz + 0.12;
+  for (const [by, w, d, h, rot] of [[0, 0.4, 0.28, 0.23, 0.2], [0.23, 0.34, 0.24, 0.2, -0.1], [0.43, 0.27, 0.2, 0.16, 0.35]]) lockBox(k, fpx, y + by, fpz, w, d, h, rot);
+  k.solid([0.42, 0.6, 0.36], [fpx, y + 0.3, fpz]);
   k.prism('iron', ngon(8, 0.03), 0.05, [dx - 0.25, y + dh + 0.025, dz + 0.15], null, { tint: [0.25, 0.25, 0.3], smooth: true });
   lamps.push(deskLamp(k, dx - 0.55, y + dh, dz + 0.05));
   // the sheriff's chair behind it
@@ -936,6 +943,7 @@ export function buildSheriff(recipeIn = {}, env = {}) {
 
   const counts = {}; let parts = 0;
   for (const g in k.parts) { counts[g] = k.parts[g].length; parts += counts[g]; }
+  const P3 = (x, y, z) => [x + OX, y, z + OZ];
   return {
     recipe: r, geos, doors: leaves, lamps, light, occ, props, offset: OX, offsetZ: OZ,
     anchors: {
@@ -946,6 +954,16 @@ export function buildSheriff(recipeIn = {}, env = {}) {
       signPaint: { x0: OXC + 0.05 - 2.8 + OX, y0: 3.6, w: 5.6, h: 1.4, z: ZF + OZ },
       footprint: { w: fx1 - fx0, d: fz1 - fz0, h: STEPS[1][2] + 0.05, x0: fx0 + OX, x1: fx1 + OX, z0: fz0 + OZ, z1: fz1 + OZ },
       street: [fx0 + OX - 1, fx1 + OX + 1, PZ + OZ, PZ + OZ + 8],
+      // THE OFFICE WORKED FROM INSIDE (the game's src/townrooms.js; the Building Lab shows the same): the sheriff stands
+      // behind his desk by his chair, the seized lock boxes piled on its end and beside it
+      desk: { sheriff: P3(-1.9, FL, -0.55), face: 0 },
+      // THE SPOTS E USES (src/usespotsplan.js): the pile of seized boxes along the desk's front, and the safe in the
+      // corner, where the rider's own lock boxes (won on the round-up) are opened
+      floor: FL,   // (the office's floor, over the ground)
+      spots: [
+        { id: 'boxes', at: P3(-1.8, FL + 1.25, 0.2), use: [-3.1 + OX, 0.72 + OZ, -1.05 + OX, 0.72 + OZ], words: 'Crack the lock boxes' },
+        { id: 'own', at: P3(XL + INS + 0.36, FL + 1.45, PART + 0.38), use: [XL + INS + 0.36 + OX, PART + 0.38 + OZ], r: 0.45, words: 'Open your lock boxes' },
+      ],
     },
     jail: { stones: jail.stones, tris: jail.tris },
     counts, parts, msBuild, msBake, ms: performance.now() - t0,

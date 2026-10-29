@@ -1,8 +1,8 @@
 // THE GENERAL STORE: a two-storey timber store behind a tall stepped false front, its lap siding whitewashed and peeling
 // to grey wood, "GENERAL STORE" painted big straight onto the boards with "DRY GOODS · GROCERIES · HARDWARE" under it
 // and the faded red ghost letters of an older sign above and below; two six-pane windows upstairs; a porch roof of
-// corrugated tin on turned posts with knee braces over a raised plank boardwalk on short posts, wide steps right of
-// the middle; two big many-paned display windows full of shelves of tins and jars either side of a double door with
+// corrugated tin on turned posts with knee braces over a raised plank boardwalk on short posts, wide steps centred
+// on the door; two big many-paned display windows full of shelves of tins and jars either side of a double door with
 // glass in its upper half; a lantern on a bracket by the door. On its left, set back, a tall lean-to storeroom of boards
 // and battens with a big Z-braced door that slides along a track, crates stacked inside, its own loading dock carrying
 // the boardwalk on, and a freestanding hoist (a post, an arm, a brace, a pulley and a chain) at the dock's end. A tin
@@ -14,7 +14,8 @@
 // pictures and a flag up high; on the left, hats on pegs, boots, bolts of cloth and books on shelves; a tall pot-belly
 // stove; a plank partition at the back with a door standing open into a narrow back room, and through that into the
 // lean-to storeroom. Lanterns hang over the counter, rope and tin pails from the beams. The floor in front of the counter
-// is kept open (the store's job could happen in here: anchors.counter says where the clerk and the customer stand).
+// is kept open: the store's job happens in here (anchors.counter: where the storekeeper, the rider and the customers
+// stand, the way in and out; anchors.spots: what E does where, src/usespotsplan.js; a dog on its bed in the back corner).
 //
 //   buildStore(recipe, env) -> {
 //     geos      { wood, iron, stone, glow, glass, pane, decal, rope, goods, jar }   one mesh each (goods: everything drawn
@@ -43,6 +44,7 @@ import { T, RX, RY, RZ, mul, vary, smooth01, ngon, wallOf, wallM, boardAndBatten
 import { STORE_ART, regionUV } from './art.js';
 import { galvPail } from './props.js';
 import { Goods } from './goods.js';
+import './saloonprops.js';   // (its props join props.js's makers: the spindle-back chair the store's two round its stove are)
 
 // ── the recipe ───────────────────────────────────────────────────────────────────────────────────────────────────────
 export const PAINTS = {
@@ -83,7 +85,9 @@ const STEPS = [[XL - WING, 0.15, 8.4], [0.15, 3.45, 9.0], [3.45, XR + WING, 8.4]
 // steps up to it (x from, to; three treads)
 const PT = 4.15, PP = 14 * Math.PI / 180, PD = 2.0, PZ = ZF + PD;
 const POSTS = [XL + 0.15, 0.75, 2.65, 4.4, XR - 0.15];
-const STAIR = [2.0, 4.25];
+// (the steps centred on the double door, the game maker: "can you center the stairs that go up to the general store?";
+// a little wider than the gap between the two porch posts either side of the door, which stand at their top corners)
+const STAIR = [0.575, 2.825];
 const PART = -2.9;                                         // the plank partition between the store and the back room
 const INS = 0.12;                                          // the lining: how far in from the outside faces
 // the lean-to: its outer wall, its front (set back), its roof (its underside at the store's wall, its pitch), the dock
@@ -284,8 +288,10 @@ function displayWindow(k, op) {
   const oi = -INS - 0.03, cw = 0.1;
   for (const s of [-1, 1]) k.board([cw, h + cw, 0.02], null, null, { m: wallM(w, ac + s * (wd / 2 + cw / 2), yc + cw / 2, oi), long: 1, tint: vary(k, INNER, 0.8, 0.9), skip: '+z', inside: true });
   k.board([wd + 2 * cw + 0.04, 0.1, 0.022], null, null, { m: wallM(w, ac, op.y1 + cw + 0.05, oi), long: 0, tint: vary(k, INNER, 0.8, 0.9), skip: '+z', inside: true });
-  // the stand: two uprights, three shelves (the lowest the window's stool, deep), goods on each facing out
-  const zb = ZF - 0.48, zf = ZF - 0.08, xs = op.a0 + 0.02, xe = op.a1 - 0.02;
+  // the stand: two uprights, three shelves (the lowest the window's stool, deep), goods on each facing out. Its front
+  // stops 5 cm short of the glass (the game maker: "they just need to not go back so far to touch the glass": at 8 cm in,
+  // the shelves' edges and the uprights' faces sat in the panes' own planes and flickered)
+  const zb = ZF - 0.48, zf = ZF - 0.13, xs = op.a0 + 0.02, xe = op.a1 - 0.02;
   for (const [i, [y, d]] of [[op.y0 - 0.03, zf - zb + 0.06], [1.72, 0.28], [2.3, 0.26]].entries()) {
     k.board([xe - xs, 0.03, d], [ac, y, zf - d / 2 + 0.03], null, { long: 0, tint: vary(k, FURN, 0.85, 1.0), inside: true });
     // (the sill: bolts of cloth stacked at one end; the top shelf: a lamp at the other)
@@ -435,7 +441,7 @@ function porch(k) {
   k.board([X1 - X0 + 0.08, 0.26, 0.06], [(X0 + X1) / 2, FL - 0.14, PZ + 0.03], null, { long: 0, tint: vary(k, FRAME, 0.85, 1.0), strip: 10, cuts: [-2.5, 0, 2.5], segFaces: '+z', outside: true });
   k.board([0.06, 0.26, PD + 0.06], [X1 + 0.03, FL - 0.14, ZF + PD / 2 + 0.03], null, { long: 2, tint: vary(k, FRAME, 0.85, 1.0), strip: 10, outside: true });
   k.board([0.06, 0.26, PZ - DOCKZ], [X0 - 0.03, FL - 0.14, (PZ + DOCKZ) / 2 + 0.02], null, { long: 2, tint: vary(k, FRAME, 0.85, 1.0), strip: 10, outside: true });
-  for (const x of [X0 + 0.15, -0.3, 1.0, 5.0, X1 - 0.15].filter((x) => x < STAIR[0] - 0.2 || x > STAIR[1] + 0.2)) blockPost(k, x, PZ - 0.1);
+  for (const x of [X0 + 0.15, -0.3, 1.0, 3.4, 5.0, X1 - 0.15].filter((x) => x < STAIR[0] - 0.2 || x > STAIR[1] + 0.2)) blockPost(k, x, PZ - 0.1);
   for (const x of [X0 + 0.15, 1.8, X1 - 0.15]) blockPost(k, x, ZF + 0.9);
   k.solid([X1 - X0, FL, PD], [(X0 + X1) / 2, FL / 2, ZF + PD / 2]);
   // the dock before the lean-to, a step lower than nothing: the boardwalk carried on, its own rim and posts
@@ -679,7 +685,9 @@ function storeInside(k, lamps, props) {
   pic(A.checker, 0.36, 0.36, mul(T(cbx + 0.02, FL + 0.876, cbz), RX(-Math.PI / 2), RZ(0.3)));
   k.board([0.4, 0.012, 0.4], [cbx + 0.02, FL + 0.869, cbz], [0, 0.3, 0], { long: 0, tint: vary(k, DARKW, 0.8, 0.9), inside: true });
   for (const [dx, dz] of [[0.04, 0.06], [-0.08, -0.05], [0.1, -0.08], [-0.02, 0.1], [0.12, 0.04]]) k.prism('wood', ngon(8, 0.016), 0.008, [cbx + 0.02 + dx, FL + 0.88, cbz + dz], null, { paint: dx > 0 ? [0.4, 0.05, 0.04] : [0.03, 0.03, 0.03], tint: [0.5, 0.5, 0.5], smooth: true, skip: '-y' });
-  chair(k, cbx - 0.62, cbz + 0.08, Math.PI / 2 + 0.25); chair(k, cbx + 0.05, cbz - 0.62, 0.2);
+  // (the town's one spindle-back chair, saloonprops.js spindleChair: its legs splayed out from under the seat, stretchers,
+  // its back raked back; the store's own old chair had its legs leaning in)
+  props.push({ type: 'spindleChair', x: cbx - 0.62, y: FL, z: cbz + 0.08, rot: Math.PI / 2 + 0.25, inside: true }, { type: 'spindleChair', x: cbx + 0.05, y: FL, z: cbz - 0.62, rot: 0.2, inside: true });
   props.push({ type: 'coalBucket', x: STOVE.x + 0.42, y: FL, z: STOVE.z - 0.45, inside: true });
   // hanging from the beams: coils of rope, tin pails, a lantern over the stove; three over the counter
   for (const [x, z] of [[0.3, -2.25]]) { const n0 = k.parts.rope.length; ropeCoil(k.parts.rope, [x, CEIL - 0.25, z], [0, 0, 1], { r: 0.17, loops: 2, rad: 0.016, tint: [1.05, 0.95, 0.8] }); for (const Rp of k.parts.rope.slice(n0)) Rp.sides = 4; k.board([0.04, 0.04, 0.12], [x, CEIL - 0.24, z - 0.04], null, { long: 2, tint: FRAME, inside: true }); }
@@ -742,8 +750,9 @@ function counter(k, lamps) {
   k.solid([CD, CH, L], [(x0 + x1) / 2, y + CH / 2, zc]);
   // on top, from the near end: the till, the grinder, the candy jars, the scale, a ledger
   till(k, CX + 0.36, top, CZ0 - 0.28);
-  grinder(k, CX + 0.3, top, CZ0 - 0.82);
-  for (let i = 0; i < 5; i++) candyJar(T(CX + 0.2, top, -0.42 - i * 0.2), 0.25 + (i % 2) * 0.03, [A.candy, A.heaps.mints, A.tile.candy, A.candy, A.heaps.beans][i], [[1, 1, 1], [1, 1, 1], [0.8, 0.75, 0.7], [0.9, 1.05, 0.85], [1, 1, 1]][i], 0.62 + 0.25 * k.R());
+  // (between the till and the grinder, room for the six-shooter on its felt: the game lays it there, src/townrooms.js)
+  grinder(k, CX + 0.3, top, CZ0 - 0.97);
+  for (let i = 0; i < 5; i++) candyJar(T(CX + 0.2, top, -0.44 - i * 0.19), 0.25 + (i % 2) * 0.03, [A.candy, A.heaps.mints, A.tile.candy, A.candy, A.heaps.beans][i], [[1, 1, 1], [1, 1, 1], [0.8, 0.75, 0.7], [0.9, 1.05, 0.85], [1, 1, 1]][i], 0.62 + 0.25 * k.R());
   scale(k, CX + 0.3, top, -1.6);
   G.box([0.3, 0.05, 0.4], mul(T(CX + 0.36, top + 0.025, -2.0), RY(0.2)), { '+y': A.tile.leatherBlack, '+x': A.tile.kraft, '-x': A.tile.kraft, '+z': A.tile.kraft, '-z': A.tile.kraft }, [0.9, 0.9, 0.9]);
 }
@@ -922,16 +931,6 @@ function kettle(k, x, y, z) {
   k.box('iron', [0.03, 0.03, 0.14], [x, y + 0.08, z + 0.13], [-0.7, 0, 0], { tint: [1.2, 1.2, 1.25] });
   for (const s of [-1, 1]) k.box('iron', [0.012, 0.08, 0.012], [x + s * 0.075, y + 0.17, z], [0, 0, -s * 0.15], { tint: [0.6, 0.6, 0.6] });
   k.box('iron', [0.15, 0.012, 0.012], [x, y + 0.21, z], null, { tint: [0.6, 0.6, 0.6] });
-}
-function chair(k, x, z, rot) {
-  const M = mul(T(x, FL, z), RY(rot)), C = vary(k, FURN, 0.75, 0.9);
-  const b = (s, p, r, o) => k.board(s, null, null, { ...o, m: mul(M, T(...p), r ? RX(r) : new THREE.Matrix4()), tint: C, inside: true });
-  for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) k.prism('wood', ngon(6, 0.018), 0.45, null, null, { m: mul(M, T(sx * 0.18, 0.225, sz * 0.17), RX(sz * 0.06), RZ(-sx * 0.06)), tint: C, smooth: true, inside: true, skip: '+y-y' });
-  b([0.44, 0.04, 0.42], [0, 0.465, 0], null, { long: 0 });
-  for (const sx of [-1, 1]) b([0.035, 0.52, 0.035], [sx * 0.18, 0.74, -0.2], -0.1, { long: 1 });
-  for (let i = 0; i < 3; i++) k.prism('wood', ngon(4, 0.01), 0.4, null, null, { m: mul(M, T(-0.08 + i * 0.08, 0.72, -0.2), RX(-0.1)), tint: C, smooth: true, inside: true, skip: '+y-y' });
-  b([0.42, 0.06, 0.04], [0, 0.98, -0.23], -0.1, { long: 0 });
-  k.solid([0.44, 0.48, 0.42], null, null, mul(M, T(0, 0.24, 0)));
 }
 // A POT-BELLY STOVE, cast iron, turned on its profile: four splayed cabriole legs under a round plinth, the ash box with
 // its door and a damper wheel, a nickel ring, the fat belly with the fire door and its nickel rim (the fire's glow through
@@ -1116,8 +1115,36 @@ export function buildStore(recipeIn = {}, env = {}) {
     anchors: {
       doorways: [{ name: 'front', centre: P3(OXC, FL + 1.2, ZF), w: 1.5, h: 2.4, out: [0, 0, 1] }, { name: 'storeroom', centre: P3((LDOOR.a0 + LDOOR.a1) / 2, FL + 1.3, ZLF), w: 1.25, h: 2.6, out: [0, 0, 1] }],
       sign: { centre: P3(OXC, 7.05, ZF), w: 6.8, h: 1.2 }, lanterns: lamps.map((L) => L.p),
-      // (the store's job: the clerk stands behind the counter facing -x, the customer in front of it facing +x)
-      counter: { top: FL + CH, from: P3(CX, FL + CH, CZ0), to: P3(CX, FL + CH, CZ1), clerk: P3(CX + CD + 0.35, FL, -0.8), customer: P3(CX - 0.5, FL, -0.8), faces: [-1, 0, 0] },
+      // THE STORE WORKED FROM INSIDE (the game's src/townrooms.js and src/missions/store.js; the Building Lab shows the
+      // same): behind the counter the storekeeper (by the scale, clear of the rolling ladder) and the rider helping him
+      // (at the grinder), both facing -x; the customer in front of the rider facing +x; the next one waiting by the
+      // counter's near end, and the one after out on the boardwalk by the bench. The customers come in through the
+      // doorway's right half and go out through its left (outside it, the doorway, a step in), so two never meet in it
+      counter: { top: FL + CH, from: P3(CX, FL + CH, CZ0), to: P3(CX, FL + CH, CZ1), faces: [-1, 0, 0],
+        clerk: P3(CX + CD + 0.33, FL, -1.62), rider: P3(CX + CD + 0.33, FL, -0.22), customer: P3(CX - 0.45, FL, -0.22),
+        queue: P3(2.45, FL, 0.62), queue2: P3(3.15, FL, ZF + 1.05),
+        wayIn: [P3(2.0, FL, ZF + 1.0), P3(2.0, FL, ZF), P3(2.0, FL, ZF - 0.7)], wayOut: [P3(1.55, FL, 0.15), P3(1.4, FL, ZF - 0.7), P3(1.4, FL, ZF), P3(1.4, FL, ZF + 1.0)],
+        // (the camera while it is worked: from the store's back, by the stove, looking across the room at the pair over
+        // the counter, the door the customers come in by beyond. A phone held upright sees a narrow slice of the room, the
+        // slip over its lower part: over the customer's shoulder at the rider across the counter, the two high in the
+        // picture: ~/pw/bandit-math/rigs/store/counter_cam.cjs)
+        cam: { at: P3(0.15, FL + 1.75, -2.35), look: P3(3.05, FL + 1.05, 0.5) }, camPhone: { at: P3(0.7, FL + 1.7, -1.0), look: P3(4.0, FL + 0.5, -0.1) } },
+      // the dog on its bed (the animals' spot): in the back corner by the counter's far end, facing the room
+      dogbed: { at: P3(2.75, FL, -1.92), rot: -0.7 },
+      // the six-shooter for sale (the rider's grown-up may turn it on): on its felt on the counter between the till and
+      // the grinder, its barrel toward the back
+      gun: { at: P3(CX + 0.32, FL + CH, 0.17), rot: Math.PI },
+      // THE SPOTS E USES (src/usespotsplan.js): the prompt shown over the one most directly in front of the player. The
+      // food at the apple barrel and the crates under the left window; the hats at their pegs; the animals at the dog on
+      // its bed; the six-shooter by the till; the counter along its front (from either side of it)
+      floor: FL,   // (the store room's floor, over the ground)
+      spots: [
+        { id: 'food', at: P3(-0.85, FL + 1.05, 0.85), use: [-0.6 + OX, 0.25 + OZ, -0.1 + OX, 1.15 + OZ], words: 'Buy food' },
+        { id: 'hats', at: P3(XL + INS + 0.3, 2.3, -1.2), use: [-0.85 + OX, -0.55 + OZ, -0.85 + OX, -1.85 + OZ], words: 'Buy a hat' },
+        { id: 'animals', at: P3(2.75, FL + 0.85, -1.92), use: [2.75 + OX, -1.92 + OZ], r: 0.5, words: 'Buy animals' },
+        { id: 'gun', at: P3(CX + 0.32, FL + CH + 0.3, 0.17), use: [CX - 0.08 + OX, 0.2 + OZ], r: 0.15, reach: 2.4, words: 'Buy the six-shooter' },
+        { id: 'counter', at: P3(CX + 0.33, FL + CH + 0.4, -0.85), use: [CX - 0.08 + OX, -0.05 + OZ, CX - 0.08 + OX, -1.5 + OZ], words: 'Work the counter' },
+      ],
       // (the painted sign's picture covers this much of the false front: the board shader lays it on, art.js storeSign)
       signPaint: { x0: XL - WING + OX, y0: 4.3, w: 7.4, h: 4.6, z: ZF + OZ },
       footprint: { w: fx1 - fx0, d: fz1 - fz0, h: STEPS[1][2] + 0.06, x0: fx0 + OX, x1: fx1 + OX, z0: fz0 + OZ, z1: fz1 + OZ },

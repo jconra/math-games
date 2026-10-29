@@ -216,12 +216,14 @@ function layout(r, k) {
   // the foundation's top (the sill logs or the sill beam sit on it), the courses, the floor and the eave
   L.FT = r.foundation === 'sills' ? 0.1 : r.foundation === 'footing' ? 0.34 : log ? 0.3 : 0.36;
   const extra = r.room !== 'none' ? 1 : 0;   // (a lean-to roof hangs under the eave: a course higher, so there's headroom under it)
+  // (the walls a course taller than they were, and the porch roofs higher and flatter: the rider's head hit the porch
+  // beam walking up the steps; the beam now clears about 2 m over the deck, the rider about 1.8 m with a hat)
   if (log) {
-    const C = round ? 0.27 : 0.3, n = (round ? 10 : 9) + extra, ch = Array.from({ length: 40 }, () => k.r(0.88, 1.12));
+    const C = round ? 0.27 : 0.3, n = (round ? 11 : 10) + extra, ch = Array.from({ length: 40 }, () => k.r(0.88, 1.12));
     let s = 0; for (let i = 0; i < n; i++) s += ch[i];
     L.B = [L.FT]; for (let i = 0; i < 40; i++) L.B.push(L.B[i] + (i < n ? ch[i] / s * n * C : ch[i] * C));
     Object.assign(L, { C, nE: n, EAVE: L.B[n], FL: L.B[1] - (round ? 0 : 0.02) });
-  } else { L.FL = L.FT + 0.2; L.EAVE = L.FL + 2.55 + extra * 0.25; }
+  } else { L.FL = L.FT + 0.2; L.EAVE = L.FL + 2.8 + extra * 0.25; }
   L.CEIL = L.EAVE - (log ? 0.03 : 0.14);
   // the pens: the closed rooms of the main block
   const pens = [];
@@ -237,7 +239,7 @@ function layout(r, k) {
   const leanSide = r.room === 'left' || r.room === 'right' ? r.room : null;
   L.GX = [leanSide === 'left' ? 0.22 : r.overhang + 0.05, leanSide === 'right' ? 0.22 : r.overhang + 0.05];   // past the end walls (left, right)
   L.OVB = r.room === 'back' ? 0.06 : r.overhang + 0.1;                                                    // past the back wall
-  L.OVF = r.porch === 'front' || r.porch === 'wrap' ? 0.12 : r.porch === 'partial' ? 0.3 : r.porch === 'shed' ? 0.02 : r.overhang + 0.1;  // past the front wall
+  L.OVF = r.porch === 'front' || r.porch === 'wrap' || r.porch === 'partial' ? 0.12 : r.porch === 'shed' ? 0.02 : r.overhang + 0.1;  // past the front wall
   if (gable) { L.RIDGE = L.EAVE + D / 2 * L.tp; L.roofY = (x, z) => L.RIDGE - Math.abs(z) * L.tp; }
   else {
     // (the front wall's top: a course boundary on a log cabin, so its logs end level under the roof)
@@ -271,7 +273,7 @@ function layout(r, k) {
   // THE PORCH
   if (r.porch !== 'none') {
     const PD = r.porch === 'wrap' ? 2.0 : 1.9, wrapR = r.porch === 'wrap' && r.wrap === 'right', wrapL = r.porch === 'wrap' && r.wrap === 'left';
-    L.porch = { kind: r.porch, depth: PD, deck: L.FL - 0.04, pitch: (r.porch === 'shed' ? 13 : 11) * D2R, top: r.porch === 'shed' ? L.EAVE + 0.035 : r.porch === 'partial' ? L.EAVE - 0.3 : L.EAVE - 0.22,
+    L.porch = { kind: r.porch, depth: PD, deck: L.FL - 0.04, pitch: (r.porch === 'shed' ? 10 : 8) * D2R, top: r.porch === 'shed' ? L.EAVE + 0.035 : L.EAVE - 0.15,
       x0: main.x0 - (wrapL ? PD : 0), x1: main.x1 + (wrapR ? PD : 0), wrap: r.porch === 'wrap' ? r.wrap : null, partial: r.porch === 'partial' };
     // (a wing toward the street: the porch runs along the rest of the front, its end against the wing)
     if (L.wing && L.wing.front) { if (r.wing === 'right') { L.porch.x1 = L.wing.x0 - 0.03; L.porch.abut = 'right'; } else { L.porch.x0 = L.wing.x1 + 0.03; L.porch.abut = 'left'; } }
@@ -1005,7 +1007,7 @@ function porchRun(c, M, P) {
       for (const s of [-1, 1]) if ((s < 0 && x > P.x0 + 0.3) || (s > 0 && x < P.x1 - 0.3)) put([0.56, 0.07, 0.07], [x + s * 0.22, beamY - 0.3, postZ], [0, 0, s * Math.PI / 4], { long: 0, tint: vary(k, FRAME, 0.85, 1.0), strip: 11 });
     }
     k.solid([0.16, hgt, 0.16], null, null, mul(M, T(x, DK + hgt / 2, postZ)));
-    if (DK > 0.25) c.piers.push({ M: mul(M, T(x, 0, postZ)), h: DK - 0.02, w: 0.4 });
+    { const v = new THREE.Vector3(x, 0, postZ).applyMatrix4(M); if (DK > 0.25 || c.gl(v.x, v.z) < -0.03) c.piers.push({ M: mul(M, T(x, 0, postZ)), h: DK - 0.02, w: 0.4 }); }   // (and a low porch's where the ground falls away)
   }
   // rails: a pole (or a sawn rail) at hand height between the posts, uprights between; none across the steps
   if (P.rails && !far) {
@@ -1026,16 +1028,21 @@ function porchRun(c, M, P) {
   }
   // the steps: stringers sloping from the rim to the ground, treads across them, a flat stone at the foot
   for (const st of P.steps) {
-    const n = Math.max(1, Math.round(DK / 0.19)), rise = DK / (n + 0), run = 0.27;
+    // (from the deck down to the ground before them (c.gl): as many as that takes, the run out settled in a few rounds)
+    const run = 0.27, foot = (d) => { let g = Infinity; for (const dx of [-st.w / 2, 0, st.w / 2]) { const v = new THREE.Vector3(st.x + dx, 0, z1 + d).applyMatrix4(M); g = Math.min(g, c.gl(v.x, v.z)); } return Math.min(DK - 0.12, g); };
+    let n = Math.max(1, Math.round(DK / 0.19)), g0 = 0;
+    for (let round = 0; round < 5; round++) { g0 = foot(n * run); const m2 = Math.max(1, Math.round((DK - g0) / 0.19)); if (m2 === n) break; n = m2; }
+    const HT = DK - g0, rise = HT / n;
+    { const v = new THREE.Vector3(st.x, 0, z1 + n * run).applyMatrix4(M); c.feet.push([v.x, v.z, g0 - 0.06]); }   // (the stringers' feet)
     for (let i = 1; i <= n - 0; i++) {
       const ty = DK - i * rise, tz = z1 + (i - 0.5) * run;
-      if (ty < 0.05) break;
+      if (ty < g0 + 0.05) break;
       put([st.w, 0.045, run + 0.02], [st.x + k.r(-0.02, 0.02), ty - 0.02, tz], [0, k.r(-0.02, 0.02), k.r(-0.01, 0.01)], { long: 0, tint: vary(k, DECKW, 1.0, 1.15), lumJit: true, strip: WOOD.shake, skip: '-y' });
     }
-    const sl = Math.hypot(n * run, DK), sa = Math.atan2(DK, n * run);
-    for (const dx of [-st.w / 2 + 0.04, st.w / 2 - 0.04]) put([0.05, 0.2, sl + 0.05], [st.x + dx, DK / 2 - 0.06, z1 + n * run / 2], [sa, 0, 0], { long: 2, tint: DECKW.map((q) => q * 0.8), strip: WOOD.shake });
+    const sl = Math.hypot(n * run, HT), sa = Math.atan2(HT, n * run);
+    for (const dx of [-st.w / 2 + 0.04, st.w / 2 - 0.04]) put([0.05, 0.2, sl + 0.05], [st.x + dx, g0 + HT / 2 - 0.06, z1 + n * run / 2], [sa, 0, 0], { long: 2, tint: DECKW.map((q) => q * 0.8), strip: WOOD.shake });
     c.flats.push({ M: mul(M, T(st.x, 0, z1 + n * run + 0.3)), w: st.w + 0.15, d: 0.42 });
-    k.solid([st.w, DK * 0.6, n * run], null, null, mul(M, T(st.x, DK * 0.3, z1 + n * run / 2)));
+    k.solid([st.w, HT * 0.6, n * run], null, null, mul(M, T(st.x, g0 + HT * 0.3, z1 + n * run / 2)));
   }
 }
 
@@ -1055,8 +1062,8 @@ function porches(c) {
     }
     if (L.breeze) { const b = L.breeze, cx = (b.x0 + b.x1) / 2, bw = b.x1 - b.x0 - 0.3; stoops.push([wallOf(0, b.z1), cx, bw], [wallOf(Math.PI, -b.z0), -cx, bw]); }
     for (const [f, ac, sw] of stoops) {
-      if (L.FL > 0.3) stoop(c, wallM(f, ac, 0, 0), L.FL, sw);
-      c.flats.push({ M: wallM(f, ac, 0, L.FL > 0.3 ? 0.62 + (L.FL > 0.5 ? 0.28 : 0) : 0.32), w: Math.min(1.15, sw + 0.1), d: 0.5 });
+      const out = L.FL > 0.3 || c.gl(...wallP(f, ac, 0, 0.5).filter((_, i) => i !== 1)) < L.FL - 0.35 ? stoop(c, wallM(f, ac, 0, 0), L.FL, sw) : 0;   // (out: how far its steps reach)
+      c.flats.push({ M: wallM(f, ac, 0, out ? out - 0.14 : 0.32), w: Math.min(1.15, sw + 0.1), d: 0.5 });   // (the stone the bottom step: under the stringers' feet)
     }
     return;
   }
@@ -1108,14 +1115,20 @@ function postsFor(a, b, steps, k) {
   return xs;
 }
 // plank steps up to a door with no porch (M: the door's foot on the wall's face, facing out)
+// (down to the ground before them (c.gl), as many as that takes; returns how far out from the wall they reach)
 function stoop(c, M, h, w = 1.05) {
-  const { k } = c, n = Math.max(1, Math.round(h / 0.19)), rise = h / n, run = 0.28;
+  const { k } = c, run = 0.28, foot = (d) => { let g = Infinity; for (const dx of [-w / 2, 0, w / 2]) { const v = new THREE.Vector3(dx, 0, d).applyMatrix4(M); g = Math.min(g, c.gl(v.x, v.z)); } return Math.min(h - 0.12, g); };
+  let n = Math.max(1, Math.round(h / 0.19)), g0 = 0;
+  for (let round = 0; round < 5; round++) { g0 = foot(0.42 + n * run); const m2 = Math.max(1, Math.round((h - g0) / 0.19)); if (m2 === n) break; n = m2; }
+  const HT = h - g0, rise = HT / n;
+  { const v = new THREE.Vector3(0, 0, 0.42 + n * run).applyMatrix4(M); c.feet.push([v.x, v.z, g0 - 0.06]); }   // (the stringers' feet)
   const put = (size, pos, rot, o) => k.board(size, null, null, { ...o, m: mul(M, T(...pos), rot ? new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(...rot, 'YXZ')) : new THREE.Matrix4()) });
   put([w + 0.1, 0.05, 0.42], [0, h - 0.025, 0.21], null, { long: 0, tint: vary(k, DECKW, 0.95, 1.1), strip: WOOD.shake });
   for (let i = 1; i < n; i++) put([w, 0.045, run + 0.02], [k.r(-0.02, 0.02), h - i * rise - 0.02, 0.42 + (i - 0.5) * run], null, { long: 0, tint: vary(k, DECKW, 1.0, 1.15), strip: WOOD.shake, skip: '-y' });
-  const sl = Math.hypot(n * run + 0.42, h), sa = Math.atan2(h, n * run + 0.42);
-  for (const dx of [-w / 2 + 0.04, w / 2 - 0.04]) put([0.05, 0.2, sl], [dx, h / 2 - 0.06, (n * run + 0.42) / 2], [sa, 0, 0], { long: 2, tint: DECKW.map((q) => q * 0.8), strip: WOOD.shake });
-  k.solid([w, h * 0.6, n * run + 0.4], null, null, mul(M, T(0, h * 0.3, (n * run + 0.4) / 2)));
+  const sl = Math.hypot(n * run + 0.42, HT), sa = Math.atan2(HT, n * run + 0.42);
+  for (const dx of [-w / 2 + 0.04, w / 2 - 0.04]) put([0.05, 0.2, sl], [dx, g0 + HT / 2 - 0.06, (n * run + 0.42) / 2], [sa, 0, 0], { long: 2, tint: DECKW.map((q) => q * 0.8), strip: WOOD.shake });
+  k.solid([w, HT * 0.6, n * run + 0.4], null, null, mul(M, T(0, g0 + HT * 0.3, (n * run + 0.4) / 2)));
+  return 0.42 + n * run;
 }
 
 // ── the chimneys ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -1125,7 +1138,7 @@ function stoop(c, M, h, w = 1.05) {
 let shapeN = 0;
 function stoneChimney(c, ch) {
   const { L, r, env } = c, s = ch.side, x0 = s < 0 ? ch.x - ch.cd : ch.x - 0.05, x1 = s < 0 ? ch.x + 0.05 : ch.x + ch.cd;
-  const zc = ch.z, G = -0.12, stick = ch.type === 'stick';
+  const zc = ch.z, G = Math.min(-0.12, lowAlong(c, [[x0, zc - ch.cw / 2], [x1, zc - ch.cw / 2], [x1, zc + ch.cw / 2], [x0, zc + ch.cw / 2]]) - 0.1), stick = ch.type === 'stick';   // (its foot under the ground's lowest round it)
   const top = r.roof === 'gable' ? L.RIDGE + 0.62 : L.EAVE_H + 0.7;
   const yS = L.FL + 1.45, nS = 2, slope = 0.16, level = 0.2;
   // the outline: a rectangle walked with the outside on the right, its face toward the house last (face 3 for the
@@ -1149,7 +1162,6 @@ function stoneChimney(c, ch) {
   SHAPES[key] = { label: 'Cabin chimney', make: () => ({ H: stick ? L.FL + 1.37 : top,
     sections,
     openings: [{ face: houseFace, u: hw, w: 0.98, v0: L.FL + 0.01, v1: L.FL + 0.98, kind: 'door', depth: Math.min(0.62, ch.cd - 0.2) }],
-    steps: [{ face: houseFace, u: hw, w: 1.5, depth: L.T + 0.62, h: L.FL + 0.012 }],
     top: { y: stick ? L.FL + 1.37 : top, t: 0.12, over: stick ? 0.02 : 0.06, rects: [stick ? { x0: Math.min(...at(0).map((p) => p[0])) - 0.02, x1: Math.max(...at(0).map((p) => p[0])) + 0.02, z0: zc - hw - 0.02, z1: zc + hw + 0.02, open: { x0: 1, x1: 1, z0: 1, z1: 1 }, ov: { x0: 0.02, x1: 0.02, z0: 0.02, z1: 0.02 } } : (() => { const q = at(nS), xa = Math.min(...q.map((p) => p[0])), xb = Math.max(...q.map((p) => p[0])); return { x0: xa - 0.06, x1: xb + 0.06, z0: zc - ch.sw / 2 - 0.06, z1: zc + ch.sw / 2 + 0.06, open: { x0: 1, x1: 1, z0: 1, z1: 1 }, ov: { x0: 0.06, x1: 0.06, z0: 0.06, z1: 0.06 } }; })()],
       holes: stick ? undefined : [[(s < 0 ? ch.x - ch.sd / 2 : ch.x + ch.sd / 2) - 0.14, (s < 0 ? ch.x - ch.sd / 2 : ch.x + ch.sd / 2) + 0.14, zc - 0.12, zc + 0.12]] } }) };
   const style = c.far ? 'mortared' : 'mortared';
@@ -1159,6 +1171,8 @@ function stoneChimney(c, ch) {
   if (stick) stickStack(c, ch, L.FL + 1.37, top);
   // the fire in the firebox, and its light
   fire(c, [s < 0 ? ch.x - 0.28 : ch.x + 0.28, L.FL + 0.16, zc], s < 0 ? [1, 0, 0] : [-1, 0, 0]);
+  // the hearth before it, through the wall's opening and out onto the floor; the firebox in it laid for a fire
+  hearth(c, { o: [ch.x - s * 0.05, zc], n: [-s, 0, 0], depth: L.T - 0.05 + 0.62, w: 1.5, box: { depth: Math.min(0.62, ch.cd - 0.2), w: 0.98, h: 0.97 }, face: L.T - 0.05 });
   // the mantel: a hewn beam over the opening inside, a shelf on it
   const w = ch.wall, a = s < 0 ? zc : -zc;
   if (!c.far) {
@@ -1198,31 +1212,86 @@ function stickStack(c, ch, y0, top) {
 // a chimney in the middle, between the two pens: a stone mass standing through the wall between them, a fireplace on
 // each side; its stack comes out at the ridge
 function middleChimney(c, ch) {
-  const { L, r, env } = c, G = -0.12, hx = ch.mw / 2, hz = ch.md / 2, zc = ch.z;
+  const { L, r, env } = c, hx = ch.mw / 2, hz = ch.md / 2, zc = ch.z, G = Math.min(-0.12, lowAlong(c, [[-hx, zc - hz], [hx, zc - hz], [hx, zc + hz], [-hx, zc + hz]]) - 0.1);
   const loop = [[-hx, zc + hz], [hx, zc + hz], [hx, zc - hz], [-hx, zc - hz]];
   const ridge = r.roof === 'gable' ? L.RIDGE : L.roofY(0, zc), top = ridge + 0.7, sl = [[-ch.sw / 2, zc + ch.sd / 2], [ch.sw / 2, zc + ch.sd / 2], [ch.sw / 2, zc - ch.sd / 2], [-ch.sw / 2, zc - ch.sd / 2]];
   const key = 'cabinChimney' + (shapeN++ % 4);
   SHAPES[key] = { label: 'Cabin chimney', make: () => ({ H: top,
     sections: [{ loop0: loop, loop1: loop, y0: G, y1: L.CEIL + 0.1 }, { loop0: loop, loop1: sl, y0: L.CEIL + 0.1, y1: L.CEIL + 0.3 }, { loop0: sl, loop1: sl, y0: L.CEIL + 0.3, y1: top - 0.12 }],
     openings: [{ face: 1, u: hz, w: 0.82, v0: L.FL + 0.01, v1: L.FL + 0.9, kind: 'door', depth: 0.42 }, { face: 3, u: hz, w: 0.82, v0: L.FL + 0.01, v1: L.FL + 0.9, kind: 'door', depth: 0.42 }],
-    steps: [{ face: 1, u: hz, w: 1.15, depth: 0.5, h: L.FL + 0.012 }, { face: 3, u: hz, w: 1.15, depth: 0.5, h: L.FL + 0.012 }],
     top: { y: top, t: 0.12, over: 0.06, rects: [{ x0: -ch.sw / 2 - 0.06, x1: ch.sw / 2 + 0.06, z0: zc - ch.sd / 2 - 0.06, z1: zc + ch.sd / 2 + 0.06, open: { x0: 1, x1: 1, z0: 1, z1: 1 }, ov: { x0: 0.06, x1: 0.06, z0: 0.06, z1: 0.06 } }], holes: [[-0.14, 0.14, zc - 0.12, zc + 0.12]] } }) };
   const sw = buildStoneWall({ style: 'mortared', palette: r.stone, mortar: r.mortar, size: c.far ? 0.6 : 0.42, irregularity: 0.5, colourMix: 0.5, bulge: 0.5, joint: 0.012, shape: key, seed: r.seed * 5 + 9 }, env);
   c.stoneGeos.push(sw.stone, sw.mortar); c.stoneTris += sw.tris.stone + sw.tris.mortar;
   c.k.solid([ch.mw, L.CEIL - G, ch.md], [0, (L.CEIL + G) / 2, zc]); c.k.solid([ch.sw, top - L.CEIL, ch.sd], [0, (top + L.CEIL) / 2, zc]);
-  for (const s of [-1, 1]) fire(c, [s * (hx - 0.24), L.FL + 0.16, zc], [s, 0, 0]);
+  for (const s of [-1, 1]) { fire(c, [s * (hx - 0.24), L.FL + 0.16, zc], [s, 0, 0]); hearth(c, { o: [s * hx, zc], n: [s, 0, 0], depth: 0.5, w: 1.15, box: { depth: 0.42, w: 0.82, h: 0.89 } }); }
   ch.top = top;
 }
-// a fire: a few glowing embers and a flame (glow parts), and its warm light low in the room
+// a fireplace's light, low in the room: out while the fire is cold (strength 0; `hearth`: the player's cabin lights it,
+// src/cabin/hearthfire.js, and turns this up and down with the flames)
 function fire(c, p, face) {
   if (c.far) return;
-  const { k } = c;
-  // (embers a deep orange, two small flames over them: warm, never white)
-  k.parts.glow.push({ size: [0.34, 0.035, 0.2], m: T(p[0], p[1] - 0.11, p[2]), kind: GLOW.flame, col: [1.1, 0.28, 0.04] });
-  k.parts.glow.push({ size: [0.05, 0.13, 0.05], m: mul(T(p[0], p[1] - 0.02, p[2] - 0.04), RZ(0.1)), kind: GLOW.flame, col: [2.2, 0.8, 0.12] });
-  k.parts.glow.push({ size: [0.04, 0.09, 0.04], m: mul(T(p[0] + face[2] * 0.05, p[1] - 0.04, p[2] + 0.06), RZ(-0.15)), kind: GLOW.flame, col: [2.0, 0.65, 0.1] });
-  for (let i = 0; i < 3; i++) k.board([0.42, 0.07, 0.07], [p[0], p[1] - 0.1 + i * 0.02, p[2] + (i - 1) * 0.09], [0, k.r(-0.3, 0.3), k.r(-0.1, 0.1)], { long: 0, tint: [0.25, 0.2, 0.16], strip: 11, ends: 'log', fresh: true });
-  c.lamps.push({ p: [p[0] + face[0] * 0.55, p[1] + 0.4, p[2]], reach: 6.5, strength: 0.75, outdoor: false, noGlow: true, fire: true });
+  c.lamps.push({ p: [p[0] + face[0] * 0.55, p[1] + 0.4, p[2]], reach: 6.5, strength: 0, outdoor: false, noGlow: true, fire: true, hearth: true });
+}
+// THE HEARTH (indoors: clean, square): dressed flat stones laid in rows before the firebox, their joints staggered, on a
+// bed of mortar that shows between them, sooty nearest the fire; and in the firebox its back and sides black with soot,
+// two iron andirons with a couple of split logs laid across them, and grey ash under them (a fire laid, not lit). In a
+// frame o ([x, z]: the chimney's face at the opening's middle, on the floor), n (into the room); depth: the stones out
+// from o; w: across; box: the firebox's { depth, w, h } back from o; face: the wall's depth from o to the room (the
+// stone surround fills the opening through it; null: none, a chimney standing in the room is all stone already)
+function hearth(c, { o, n, depth, w, box, face = null }) {
+  if (c.far) return;
+  const { k, L } = c, y0 = L.FL, a = [n[2], 0, -n[0]];
+  const P = (u, v) => [o[0] + n[0] * u + a[0] * v, o[1] + n[2] * u + a[2] * v];
+  // (a box with sizes along n, up and across, its middle at (u, y, v))
+  const put = (group, du, h, dv, u, y, v, opts) => { const [x, z] = P(u, v), sx = Math.abs(n[0]) > 0.5 ? du : dv, sz = Math.abs(n[0]) > 0.5 ? dv : du; k.box(group, [sx, h, sz], [x, y, z], null, { long: 0, ...opts }); };
+  const J = 0.014, rows = Math.max(2, Math.round(depth / 0.3)), rd = depth / rows, cols = Math.max(2, Math.round(w / 0.5)), cw = w / cols;
+  const mortar = onMean([0.5, 0.47, 0.43], c.env.texMean), stone = c.flatTint, soot = onMean(SOOT, c.env.texMean);
+  put('plaster', depth, 0.04, w, depth / 2, y0 - 0.012, 0, { tint: mortar, mortar: true, skip: '-y' });
+  for (let r = 0; r < rows; r++) {
+    // (each row its stones' joints half a stone over from the last; nearest the fire the smoke has darkened them)
+    const off = r % 2 ? cw / 2 : 0, dark = r === 0 ? 0.55 : r === 1 ? 0.8 : 1;
+    const cuts = [-w / 2]; for (let i = 1; i <= cols; i++) { const v = -w / 2 + i * cw - off; if (v > -w / 2 + 0.12 && v < w / 2 - 0.12) cuts.push(v); }
+    cuts.push(w / 2);
+    for (let i = 0; i < cuts.length - 1; i++) {
+      const v0 = cuts[i] + J / 2, v1 = cuts[i + 1] - J / 2, t = vary(k, stone, 0.9, 1.08).map((q) => q * dark);
+      put('plaster', rd - J, 0.05, v1 - v0, r * rd + rd / 2, y0 - 0.006 + k.r(-0.002, 0.002), (v0 + v1) / 2, { tint: t, skip: '-y' });
+    }
+  }
+  // the firebox lined with brick, back and sides, in courses (the joints between them the backing, dark grey), redder low
+  // down, black with soot higher up and over the fire; its top black. A bed of ash on its floor
+  const fd = box.depth, fw = box.w, fh = box.h, courses = Math.round((fh - 0.02) / 0.075), rh = (fh - 0.02) / courses, joint = onMean([0.2, 0.19, 0.18], c.env.texMean);
+  put('plaster', 0.02, fh - 0.02, fw - 0.02, -fd + 0.012, y0 + fh / 2, 0, { tint: joint });
+  for (const s of [-1, 1]) put('plaster', fd - 0.05, fh - 0.02, 0.02, -fd / 2 - 0.025, y0 + fh / 2, s * (fw / 2 - 0.012), { tint: joint });
+  put('plaster', fd - 0.05, 0.02, fw - 0.02, -fd / 2 - 0.025, y0 + fh - 0.012, 0, { tint: soot });
+  for (let i = 0; i < courses; i++) {
+    const yb = y0 + 0.01 + i * rh + rh / 2, black = Math.min(0.8, Math.max(0, (i / courses - 0.5) * 1.6));
+    const brick = (kk) => onMean([0.42, 0.2, 0.14].map((q, j) => (q * (1 - black) + [0.07, 0.06, 0.055][j] * black) * kk), c.env.texMean);
+    put('plaster', 0.016, rh - 0.009, fw - 0.03, -fd + 0.028, yb, 0, { tint: brick(k.r(0.85, 1.12)) });
+    for (const s of [-1, 1]) put('plaster', fd - 0.06, rh - 0.009, 0.016, -fd / 2 - 0.02, yb, s * (fw / 2 - 0.028), { tint: brick(k.r(0.85, 1.12)) });
+  }
+  // the mouth: a stone surround inside the wood frame, a cheek up each side and a lintel over them (dressed stones, the
+  // hearth's), so the fire's opening is stone, not boards
+  if (face != null) {
+    const cw = 0.17, lh = 0.15, dd = face + 0.02, stone = c.flatTint;
+    for (const s of [-1, 1]) for (const [a0, b0] of [[0, 0.46], [0.46, fh - lh]]) put('plaster', dd, b0 - a0 - 0.012, cw, dd / 2, y0 + (a0 + b0) / 2, s * (fw / 2 - cw / 2), { tint: vary(k, stone, 0.95, 1.12) });
+    for (const [a0, b0] of [[-fw / 2, 0], [0, fw / 2]]) put('plaster', dd, lh - 0.006, b0 - a0 - 0.012, dd / 2, y0 + fh - lh / 2, (a0 + b0) / 2, { tint: vary(k, stone, 0.95, 1.12) });
+  }
+  put('plaster', fd - 0.01, 0.03, fw - 0.03, -fd / 2 - 0.005, y0 + 0.012, 0, { tint: onMean([0.3, 0.29, 0.28], c.env.texMean) });   // (the firebox's floor, sooty, out to its mouth)
+  put('plaster', fd * 0.6, 0.03, fw * 0.62, -fd * 0.55, y0 + 0.022, 0, { tint: onMean([0.47, 0.45, 0.43], c.env.texMean) });   // (the ash, under the logs)
+  // two andirons: a bar back into the firebox on its legs, an upright at the front with a knob
+  const ir = IRON.map((q) => q * 0.32);
+  for (const s of [-1, 1]) {
+    const v = s * Math.min(0.24, fw / 2 - 0.14);
+    put('iron', fd - 0.14, 0.025, 0.025, -fd / 2 - 0.02, y0 + 0.1, v, { tint: ir });
+    put('iron', 0.025, 0.24, 0.025, -0.07, y0 + 0.13, v, { tint: ir });
+    put('iron', 0.045, 0.045, 0.045, -0.07, y0 + 0.27, v, { tint: ir });
+    for (const u of [-0.07, -fd + 0.1]) put('iron', 0.02, 0.1, 0.06, u, y0 + 0.05, v, { tint: ir });
+  }
+  // the logs: two across the andirons, not quite square to the fire, and a third laid slantwise over them
+  for (const [u, y, len, r, yaw] of [[-fd * 0.36, 0.16, 0.62, 0.066, 0.14], [-fd * 0.72, 0.165, 0.58, 0.06, -0.12], [-fd * 0.54, 0.27, 0.5, 0.054, 0.62]]) {
+    const [x, z] = P(u, k.r(-0.03, 0.03)), along = Math.abs(n[0]) > 0.5 ? [Math.PI / 2, 0, 0] : [0, 0, Math.PI / 2];
+    k.prism('wood', ngon(7, r, 0.18, k.R), Math.min(len, fw - 0.12), [x, y0 + y, z], [along[0] + k.r(-0.05, 0.05), yaw, along[2]], { tint: vary(k, [0.36, 0.27, 0.19], 0.8, 1.0), smooth: true, ends: 'log', strip: 11 });
+  }
 }
 // a box stove (cast iron on four legs, a door, a top plate) with its pipe up through the ceiling and the roof
 function stove(c, ch) {
@@ -1257,8 +1326,9 @@ function foundation(c) {
     void ring;
     for (const b of r.plan === 'dogtrot' ? L.pens : [L.main]) {
       const loop = [[b.x0 - 0.03, b.z1 + 0.03], [b.x1 + 0.03, b.z1 + 0.03], [b.x1 + 0.03, b.z0 - 0.03], [b.x0 - 0.03, b.z0 - 0.03]];
-      const key = 'cabinFoot' + (shapeN++ % 4);
-      SHAPES[key] = { label: 'Cabin footing', make: () => ({ H: FT, sections: [{ loop0: loop, loop1: loop, y0: -0.12, y1: FT }], openings: [], top: { y: FT, t: 0, over: 0, rects: [] }, building: {} }) };
+      const key = 'cabinFoot' + (shapeN++ % 4), fy0 = Math.min(-0.12, lowAlong(c, loop) - 0.1);   // (down 0.1 m under the lowest ground along it)
+      for (const [x, z] of loop) c.feet.push([x, z, fy0]);
+      SHAPES[key] = { label: 'Cabin footing', make: () => ({ H: FT, sections: [{ loop0: loop, loop1: loop, y0: fy0, y1: FT }], openings: [], top: { y: FT, t: 0, over: 0, rects: [] }, building: {} }) };
       const sw = buildStoneWall({ style: 'mortared', palette: r.stone, mortar: r.mortar, size: c.far ? 0.6 : 0.4, irregularity: 0.5, colourMix: 0.5, bulge: 0.55, joint: 0.012, shape: key, seed: r.seed * 3 + 1 }, env);
       c.stoneGeos.push(sw.stone, sw.mortar); c.stoneTris += sw.tris.stone + sw.tris.mortar;
       k.solid([b.x1 - b.x0, FT, b.z1 - b.z0], [(b.x0 + b.x1) / 2, FT / 2, (b.z0 + b.z1) / 2]);
@@ -1269,16 +1339,25 @@ function foundation(c) {
   for (const p of [...piers, ...c.piers.map((q) => { const v = new THREE.Vector3().setFromMatrixPosition(q.M); return { x: v.x, z: v.z, h: q.h, w: q.w }; })]) pier(c, p);
   // the crawl space under each block, in deep shadow; the sill logs or beams the walls stand on are the walls' own
   for (const b of blocks) {
-    const h = Math.max(0.05, FT - 0.02);
-    if (r.foundation !== 'footing' || b === L.lean || b === L.wing) k.box('wood', [b.x1 - b.x0 - 0.4, h, b.z1 - b.z0 - 0.4], [(b.x0 + b.x1) / 2, h / 2, (b.z0 + b.z1) / 2], null, { tint: SHADOW, skip: '-y', long: 0 });
+    // (down to under the lowest ground beneath it)
+    const yb = Math.min(0, lowAlong(c, [[b.x0 + 0.2, b.z1 - 0.2], [b.x1 - 0.2, b.z1 - 0.2], [b.x1 - 0.2, b.z0 + 0.2], [b.x0 + 0.2, b.z0 + 0.2]]) - 0.05), h = Math.max(0.05, FT - 0.02 - yb);
+    if (r.foundation !== 'footing' || b === L.lean || b === L.wing) { k.box('wood', [b.x1 - b.x0 - 0.4, h, b.z1 - b.z0 - 0.4], [(b.x0 + b.x1) / 2, yb + h / 2, (b.z0 + b.z1) / 2], null, { tint: SHADOW, skip: '-y', long: 0 }); for (const [x, z] of [[b.x0 + 0.2, b.z0 + 0.2], [b.x1 - 0.2, b.z0 + 0.2], [b.x1 - 0.2, b.z1 - 0.2], [b.x0 + 0.2, b.z1 - 0.2]]) c.feet.push([x, z, yb]); }
     k.solid([b.x1 - b.x0 - 0.2, FT, b.z1 - b.z0 - 0.2], [(b.x0 + b.x1) / 2, FT / 2, (b.z0 + b.z1) / 2]);
   }
   // the flat stones at the foot of the steps
   for (const f of c.flats) {
     const v = new THREE.Vector3().setFromMatrixPosition(f.M), yaw = Math.atan2(f.M.elements[8], f.M.elements[10]);
     const poly = ngon(7, 0.5, 0.3, k.R).map(([x, z]) => [x * f.w, z * f.d]);
-    k.prism('plaster', poly, 0.08, [v.x, 0.025, v.z], [k.r(-0.03, 0.03), yaw + k.r(-0.12, 0.12), k.r(-0.02, 0.02)], { tint: vary(k, c.flatTint.map((q) => q * 0.88), 0.82, 1.05), skip: '-y', taper: 0.12 });
+    c.feet.push([v.x, v.z, c.gl(v.x, v.z) - 0.015]);
+    k.prism('plaster', poly, 0.08, [v.x, c.gl(v.x, v.z) + 0.025, v.z], [k.r(-0.03, 0.03), yaw + k.r(-0.12, 0.12), k.r(-0.02, 0.02)], { tint: vary(k, c.flatTint.map((q) => q * 0.88), 0.82, 1.05), skip: '-y', taper: 0.12 });
   }
+}
+// the lowest ground (c.gl) along a loop of points (its own frame), a sample every 0.4 m
+function lowAlong(c, loop) {
+  let low = Infinity;
+  for (let i = 0; i < loop.length; i++) { const [ax, az] = loop[i], [bx, bz] = loop[(i + 1) % loop.length], n = Math.max(1, Math.ceil(Math.hypot(bx - ax, bz - az) / 0.4));
+    for (let j = 0; j <= n; j++) low = Math.min(low, c.gl(ax + (bx - ax) * j / n, az + (bz - az) * j / n)); }
+  return low;
 }
 function piersFor(b, out, L, low = false) {
   const nx = Math.max(1, Math.round((b.x1 - b.x0) / 2.1)), nz = Math.max(1, Math.round((b.z1 - b.z0) / 2.2)), h = L.FT - 0.01;
@@ -1287,11 +1366,16 @@ function piersFor(b, out, L, low = false) {
 }
 // one pier: two or three flat rocks stacked, each its own ragged outline (six or seven sides), size and turn, a little
 // off the one under it (Kit stones on the rubble picture, a darker warm grey)
+// (its bottom rock set PIER_SINK m into the ground: on a gentle slope, or the cheaper tiers' coarser ground, it still
+// meets the ground)
+const PIER_SINK = 0.1;
 function pier(c, p) {
-  const { k } = c, t = c.flatTint, n = p.h > 0.2 ? 3 : p.h > 0.12 ? 2 : 1;
-  let y = 0;
+  // (from PIER_SINK under the ground where it stands (c.gl: on the land as it is, lower on the downhill side) up to p.h;
+  // a taller one more rocks)
+  const { k } = c, t = c.flatTint, y0 = Math.min(-PIER_SINK, c.gl(p.x, p.z) - PIER_SINK), tall = p.h - y0, n = tall > 0.6 ? 4 : tall > 0.3 ? 3 : tall > 0.16 ? 2 : 1;
+  let y = y0; c.feet.push([p.x, p.z, y0]);
   for (let i = 0; i < n; i++) {
-    const last = i === n - 1, hh = last ? p.h - y : p.h / n * k.r(0.85, 1.15), r = p.w / 2 * (i === 0 ? k.r(1.05, 1.2) : k.r(0.82, 1.0));
+    const last = i === n - 1, hh = last ? p.h - y : tall / n * k.r(0.85, 1.15), r = p.w / 2 * (i === 0 ? k.r(1.05, 1.2) : k.r(0.82, 1.0));
     k.prism('plaster', ngon(k.R() < 0.5 ? 6 : 7, r, 0.38, k.R), hh + 0.01, [p.x + k.r(-0.04, 0.04), y + hh / 2, p.z + k.r(-0.04, 0.04)], [k.r(-0.04, 0.04), k.r(0, 6), k.r(-0.04, 0.04)], { tint: vary(k, t, 0.8, 1.15), skip: '-y', taper: k.r(0.05, 0.18) });
     y += hh;
   }
@@ -1316,7 +1400,7 @@ function inside(c) {
     if (R.lean) { const lx = (R.x0 + R.x1) / 2, lz = (R.z0 + R.z1) / 2, ry = L.lean.y(lx, lz); c.lamps.push(lantern(k, lx, ry - 0.42, lz, { chain: 0.17, strength: 1.0 })); R.lamp = [lx, lz]; continue; }
     plankField(k, mul(T(0, R.ceil, 0), RX(Math.PI / 2)), { u0: R.x0 - 0.03, u1: R.x1 + 0.03, v0: R.z0 - 0.03, v1: R.z1 + 0.03, w: 0.22, t: 0.025, tint: INNER.map((q) => q * 0.9), maxL: 4.4, step: 1.4, extra: { inside: true } });
     k.solid([R.x1 - R.x0 + 0.2, 0.1, R.z1 - R.z0 + 0.2], [(R.x0 + R.x1) / 2, R.ceil + 0.06, (R.z0 + R.z1) / 2]);
-    joists(c, R.x0, R.x1, R.z0, R.z1, R.ceil, !R.wing);
+    R.joists = joists(c, R.x0, R.x1, R.z0, R.z1, R.ceil, !R.wing);   // (where they are: a stove's pipe goes up between them)
     // a lantern hanging from a joist over the middle of the room
     const lx = (R.x0 + R.x1) / 2 + k.r(-0.3, 0.3), lz = (R.z0 + R.z1) / 2 + k.r(-0.2, 0.2);
     c.lamps.push(lantern(k, lx, R.ceil - 0.42, lz, { chain: 0.17, strength: 0.95 }));
@@ -1347,14 +1431,17 @@ function inside(c) {
     for (let a = Math.min(pt.a0, pt.a1) + 0.2; a < Math.max(pt.a0, pt.a1) - 0.2; a += 0.6) if (!(o && a > o.a0 - 0.05 && a < o.a1 + 0.05)) k.solid([0.06, L.CEIL - L.FL, 0.12], null, null, wallM(pt.f, a, (L.CEIL + L.FL) / 2, -0.06));
   }
 }
-// joists under a ceiling, across the room (z), every 80 cm or so: peeled poles in a log house, sawn beams in a frame one
+// joists under a ceiling, across the room (z), every 80 cm or so: peeled poles in a log house, sawn beams in a frame one;
+// returns their x's
 function joists(c, x0, x1, z0, z1, y, poles) {
-  const { k, L } = c, n = Math.max(1, Math.round((x1 - x0) / 0.85));
+  const { k, L } = c, n = Math.max(1, Math.round((x1 - x0) / 0.85)), xs = [];
   for (let i = 0; i < n; i++) {
     const x = x0 + (x1 - x0) * (i + 0.5) / n + k.r(-0.05, 0.05), Lj = z1 - z0 + (L.log ? 0.3 : 0.02);
+    xs.push(x);
     if (L.log && poles) k.prism('wood', ngon(7, k.r(0.07, 0.085), 0.12, k.R), Lj, [x, y - 0.08, (z0 + z1) / 2], [Math.PI / 2, 0, 0], { tint: vary(k, POLE, 0.8, 0.95), smooth: true, skip: '+y-y', strip: [1, 3, 5][Math.floor(k.R() * 3)], inside: true });
     else k.board([0.07, 0.15, Lj], [x, y - 0.075, (z0 + z1) / 2], null, { long: 2, tint: vary(k, FRAME, 0.8, 0.95), strip: 10, skip: '+y-z+z', cuts: cutsFor(Lj, [], 1.2), segFaces: '-y+x-x', inside: true });
   }
+  return xs;
 }
 
 // where each room's furniture can go (the props library puts it there): a bed in the corner farthest from the doors
@@ -1454,11 +1541,25 @@ export function buildCabin(recipeIn = {}, env = {}) {
   k.parts.glow = []; k.parts.plaster = [];
   const L = layout(r, k), paint = CABIN_PAINTS[r.paint].c;
   const c = {
-    k, L, r, far, env, lamps: [], sills: [], panes: [], stoneGeos: [], stoneTris: 0, leaves: [], piers: [], flats: [], rooms: [],
+    k, L, r, far, env, lamps: [], sills: [], panes: [], stoneGeos: [], stoneTris: 0, leaves: [], piers: [], flats: [], rooms: [], feet: [],   // (feet: where it meets the ground, [x, z, its bottom there], for the rigs)
     paint: L.log ? null : paint, doorPaint: L.log ? paint : null, shutterPaint: L.log ? paint : null,
     trimTint: L.log ? DARKW : TRIM, trimPaint: !L.log && r.paint === 'white' ? null : null,
     chink: onMean(CLAY, env.texMean), daub: onMean(DAUB, env.texMean), flatTint: onMean(HEARTH, env.texMean),
   };
+  // ON THE LAND AS IT IS (env.ground(x, z): the ground's height in its own frame, against the ground at its middle; the
+  // game's maker: "foundations and stairs that go deep in the ground and the ground level is natural ... lowered as much
+  // as it can without the ground coming up"): its sill logs or beams (L.FT up) 2 cm over the highest ground under its
+  // walls, its porch's joists clear too; c.sit how far its zero stands over the ground at its middle, c.gl(x, z) the
+  // ground's height in its frame (flat at 0 without env.ground). Its footing, piers, crawl space, chimney's foot, steps
+  // and the stones at their feet reach down to the ground wherever it is (foundation, pier, porchRun, stoop, chimneys)
+  c.sit = 0; c.gl = () => 0;
+  if (env.ground) {
+    let need = -Infinity;
+    const scan = (x0, x1, z0, z1, top) => { for (let x = x0; x <= x1 + 1e-6; x += Math.max(0.2, (x1 - x0) / 16)) for (let z = z0; z <= z1 + 1e-6; z += Math.max(0.2, (z1 - z0) / 16)) need = Math.max(need, env.ground(x, z) - top); };
+    for (const b of [...(r.plan === 'dogtrot' ? L.pens : [L.main]), ...(L.wing ? [L.wing] : []), ...(L.lean ? [L.lean] : [])]) scan(b.x0, b.x1, b.z0, b.z1, L.FT);
+    if (L.porch) scan(L.porch.x0, L.porch.x1, L.main.z1, L.main.z1 + L.porch.depth, L.porch.deck - 0.2);
+    c.sit = need + 0.02; c.gl = (x, z) => env.ground(x, z) - c.sit;
+  }
   const marks = [], mark = (name) => marks.push([name, k.parts.wood.length, k.parts.iron.length]);
   // walls first (the log walls snap their openings to the courses), then everything that hangs on them
   for (const w of L.walls) if (w.kind === 'log') logWall(c, w); else if (w.kind !== 'partition') boardWall(c, w);
@@ -1533,18 +1634,35 @@ export function buildCabin(recipeIn = {}, env = {}) {
   for (const Lf of c.leaves) Lf.hinge = [Lf.hinge[0] + OX, Lf.hinge[1], Lf.hinge[2] + OZ];
   for (const Lp of c.lamps) { Lp.p = [Lp.p[0] + OX, Lp.p[1], Lp.p[2] + OZ]; if (Lp.glow) Lp.glow = [Lp.glow[0] + OX, Lp.glow[1], Lp.glow[2] + OZ]; }
   light.offset = [OX, OZ];
-  const props = far ? [] : yardProps(c); for (const p of props) { p.x += OX; p.z += OZ; }
+  const props = far ? [] : yardProps(c); for (const p of props) { if (p.y == null && !p.inside) p.y = c.gl(p.x, p.z); p.x += OX; p.z += OZ; }   // (outdoors: on the ground where it stands)
 
   // what the town needs: the footprint, the doorways, the rooms and where their furniture goes, the porch
   const f2 = (x) => +x.toFixed(2), sh = (p) => [f2(p[0] + OX), f2(p[1]), f2(p[2] + OZ)];
   const doorways = [];
   for (const w of L.walls) for (const o of w.opens) if (o.kind === 'door') doorways.push({ name: o.name, centre: sh(w.P((o.a0 + o.a1) / 2, (L.FL + o.y1) / 2, o.inner ? -w.t / 2 : 0)), w: f2(o.a1 - o.a0), h: f2(o.y1 - L.FL), out: outN(w.f).map(f2), inner: !!o.inner, door: o.leaf || null });
-  const roomList = c.rooms.map((R2) => ({ name: R2.name, floor: [f2(R2.x0 + OX), f2(R2.x1 + OX), f2(R2.z0 + OZ), f2(R2.z1 + OZ)], y: f2(L.FL), ceiling: f2(R2.ceil), open: !!R2.open,
+  // (for what hangs and stands round the walls: src/cabin/layout.js keeps the player's things off these) the windows:
+  // each one's middle on the wall's inside face, its width, its sill and head, the way out; the fireplaces: the opening's
+  // middle on the room's side, its width and top, the way into the room, the stone hearth before it ([width, depth] out
+  // from the wall), the mantel over it ([width, top]) and the fire's middle in the firebox; blocks: what else stands in a
+  // room (a middle chimney's stone mass, a box stove: its door toward `front`)
+  const windows = [], hearths = [], blocks = [];
+  for (const w of L.walls) for (const o of w.opens) {
+    if (o.kind === 'window') windows.push({ centre: sh(w.P((o.a0 + o.a1) / 2, (o.y0 + o.y1) / 2, -w.t)), w: f2(o.a1 - o.a0), y0: f2(o.y0), y1: f2(o.y1), out: outN(w.f).map(f2) });
+    else if (o.kind === 'hearth') { const ch = o.chim; hearths.push({ centre: sh(w.P((o.a0 + o.a1) / 2, (o.y0 + o.y1) / 2, -w.t)), w: f2(o.a1 - o.a0), y1: f2(o.y1), into: outN(w.f).map((q) => f2(-q) || 0), slab: [1.5, 0.62], mantel: [1.62, f2(L.FL + 1.27)], fire: sh([ch.x + ch.side * 0.28, L.FL + 0.16, ch.z]) }); }
+  }
+  for (const ch of L.chims) {
+    if (ch.type === 'pipe') blocks.push({ x0: f2(ch.x - 0.39 + OX), x1: f2(ch.x + 0.39 + OX), z0: f2(ch.z - 0.27 + OZ), z1: f2(ch.z + 0.27 + OZ), y1: f2(L.FL + 0.67), stove: true, front: [1, 0, 0] });
+    else if (ch.side === 0) {
+      blocks.push({ x0: f2(-ch.mw / 2 + OX), x1: f2(ch.mw / 2 + OX), z0: f2(ch.z - ch.md / 2 + OZ), z1: f2(ch.z + ch.md / 2 + OZ), y1: f2(L.CEIL), mass: true });
+      for (const s of [-1, 1]) hearths.push({ centre: sh([s * ch.mw / 2, L.FL + 0.45, ch.z]), w: 0.82, y1: f2(L.FL + 0.9), into: [s, 0, 0], slab: [1.15, 0.5], mantel: null, fire: sh([s * (ch.mw / 2 - 0.24), L.FL + 0.16, ch.z]) });
+    }
+  }
+  const roomList = c.rooms.map((R2) => ({ name: R2.name, floor: [f2(R2.x0 + OX), f2(R2.x1 + OX), f2(R2.z0 + OZ), f2(R2.z1 + OZ)], y: f2(L.FL), ceiling: f2(R2.ceil), open: !!R2.open, wall: R2.lean || !L.log ? 'boards' : 'logs', ...(R2.joists ? { joists: R2.joists.map((x) => f2(x + OX)) } : {}),
     anchors: R2.open ? {} : (() => { const a = roomAnchors(c, R2); for (const v of Object.values(a)) { v.x = f2(v.x + OX); v.z = f2(v.z + OZ); } return a; })() }));
   const fp = { w: f2(box.max.x - box.min.x), d: f2(box.max.z - box.min.z), h: f2(box.max.y), x0: f2(box.min.x + OX), x1: f2(box.max.x + OX), z0: f2(box.min.z + OZ), z1: f2(box.max.z + OZ) };
   const P = L.porch;
   const anchors = {
-    footprint: fp, doorways, rooms: roomList, floor: f2(L.FL),
+    footprint: fp, doorways, windows, hearths, blocks, rooms: roomList, floor: f2(L.FL),
     porch: P ? { x0: f2(P.x0 + OX), x1: f2(P.x1 + OX), z0: f2(L.main.z1 + OZ), z1: f2(L.main.z1 + P.depth + OZ), y: f2(P.deck), wrap: P.wrap } : null,
     lanterns: c.lamps.filter((q) => !q.fire).map((q) => q.p.map(f2)),
     street: [fp.x0 - 1, fp.x1 + 1, fp.z1 - 0.2, fp.z1 + 6],
@@ -1554,7 +1672,7 @@ export function buildCabin(recipeIn = {}, env = {}) {
   const counts = {}; let parts = 0;
   for (const g in k.parts) { counts[g] = k.parts[g].length; parts += counts[g]; }
   const B = {
-    recipe: r, geos, doors: c.leaves, lamps: c.lamps, light, occ, props, offset: OX, offsetZ: OZ, anchors,
+    recipe: r, geos, doors: c.leaves, lamps: c.lamps, light, occ, props, offset: OX, offsetZ: OZ, anchors: { ...anchors, feet: c.feet.map(([x, z, y]) => [+(x + OX).toFixed(2), +(z + OZ).toFixed(2), +y.toFixed(2)]) }, sit: c.sit, ground: !!env.ground,
     counts, parts, msBuild, msBake, ms: performance.now() - t0, marks, kit: k, stoneTris: c.stoneTris, layout: L,
   };
   B.views = cabinViews(B);

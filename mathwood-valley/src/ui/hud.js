@@ -13,7 +13,8 @@
 //                              treats: { apple, carrot } the horses' treats in the saddlebags (src/treats.js), a small
 //                              counter by the gold
 //   H.toast(text, kind)        a short note at the bottom for a couple of seconds (kind: 'good' | 'gold' | 'warn')
-//   H.prompt(text | null)      the door prompt ('E' then the words), or null to hide it
+//   H.prompt(text | null, at)  the door prompt ('E' then the words), or null to hide it; at: { x, y } on the page, the
+//                              prompt floats just over that point (a spot inside a building: src/usespots.js)
 //   H.rule({ main, sub, kind, buttons, speak }) | H.rule(null)   the rule card under the compass ("Rope the 6-herd");
 //                              buttons: [{ label, onClick }] (a "Show me" for the number line); speak: a function that
 //                              reads the card aloud again (a small speaker button in the card's corner; none without
@@ -349,13 +350,25 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
     toastT = setTimeout(() => { toastEl.classList.remove('is-on'); placeBottom(); }, Math.max(2200, 900 + text.length * 45));
     placeBottom();
   }
-  let promptText = null;
-  function prompt(text) {
-    if (text === promptText) return;
-    promptText = text;
-    promptEl.hidden = !text;
-    if (text) promptEl.innerHTML = `${touchEl.hidden ? '<kbd>E</kbd>' : ''}<span>${esc(text)}</span>`;   // (no key to show on a phone: the prompt is tapped)
-    placeBottom();
+  // (at: a point on the page, { x, y }: the prompt floats just over it, its tail pointing down at it: the spot inside a
+  // building that E uses, src/usespots.js; left out, it sits at the bottom as by a door)
+  // (kept on the screen, an 8 px gutter: its size measured once each time its words change, never every frame)
+  let promptText = null, promptOver = false, promptW = 0, promptH = 0;
+  function prompt(text, at = null) {
+    const over = !!(text && at);
+    if (text !== promptText || over !== promptOver) {
+      promptText = text; promptOver = over;
+      promptEl.classList.toggle('is-over', over);
+      if (!over) promptEl.style.left = promptEl.style.top = '';
+      promptEl.hidden = !text;
+      if (text) promptEl.innerHTML = `${touchEl.hidden ? '<kbd>E</kbd>' : ''}<span>${esc(text)}</span>`;   // (no key to show on a phone: the prompt is tapped)
+      promptW = over ? promptEl.offsetWidth : 0; promptH = over ? promptEl.offsetHeight : 0;
+      placeBottom();
+    }
+    if (over) {
+      const x = Math.max(8 + promptW / 2, Math.min(innerWidth - 8 - promptW / 2, at.x)), y = Math.max(promptH + 18, Math.min(innerHeight - 8, at.y));
+      promptEl.style.left = `${Math.round(x)}px`; promptEl.style.top = `${Math.round(y)}px`;
+    }
   }
   let hobT = 0;
   function caption(text, ms) {
@@ -380,7 +393,7 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
     if (!narrow.matches) { helpEl.style.bottom = ''; hobEl.style.bottom = ''; hobEl.classList.remove('is-tucked'); return; }
     const vh = innerHeight;
     // the door prompt and a note that is showing (they stack in one column) both push the number line box up
-    const low = [promptEl, toastEl].filter((e) => shown(e) && (e !== toastEl || e.classList.contains('is-on')));
+    const low = [promptEl, toastEl].filter((e) => shown(e) && (e !== toastEl || e.classList.contains('is-on')) && !(e === promptEl && promptOver));   // (a prompt floating over a spot isn't in the stack)
     helpEl.style.bottom = '';
     if (low.length) helpEl.style.bottom = `${vh - Math.min(...low.map((e) => e.getBoundingClientRect().top)) + 8}px`;
     let top = vh;

@@ -1,6 +1,8 @@
-// THE BAND: three players on the stage inside the saloon (labs/buildings/saloon.js, a code-built building). A piano
-// player sits at the saloon's upright piano, a harmonica player stands at the front of the stage and a drummer sits on a
-// packing crate at its left and plays the crate with his hands (folk.js people in period colours). The music they play
+// THE BAND: four players on the stage inside the saloon (labs/buildings/saloon.js, a code-built building). A piano
+// player sits at the saloon's upright piano, a harmonica player stands at the front of the stage, a drummer sits on a
+// packing crate at its left and plays the crate with his hands, and a fiddler stands at its front right with a fiddle
+// made in code (src/fiddle.js; it plays the old fiddle tunes' turns with real violin samples, src/audio/stagemusic.js
+// THE FIDDLE) (folk.js people in period colours). The music they play
 // (src/audio/stagemusic.js) comes from where they are: each instrument is its own positioned sound (a PannerNode; the
 // camera is the ears). In the hall it is full and open; outside, it comes through the saloon's walls quiet and muffled,
 // and more of it, brighter, near a doorway and in front of it (src/bandplan.js soundThrough), fading away down the
@@ -10,7 +12,10 @@
 // ~/pw/bandit-math/rigs/clips/build_stage_clips.py, files models/people/clips_stage_m.glb and _f.glb) are four beats of
 // the music long; while the music plays they are kept on its beat (the harmonica player's foot taps with it, the pianist
 // nods with it, the drummer's hands land on it), and the harmonica player lifts the harmonica for each phrase and lowers
-// it between.
+// it between. The fiddler's clips (Play_Fiddle, Fiddle_Rest, Fiddle_Up, Fiddle_Down: rigs/clips/fiddle_clips.py) are
+// made round his fiddle and bow, which ride his wrist bones (src/fiddleplan.js HOLD): he lifts the fiddle a moment before
+// his turn comes so it is under his chin as his first note sounds, bows a stroke a beat while his notes sound, lowers it
+// when his turn has passed, and holds the last chord's note in one long bow when the tune is his.
 //
 // The players follow the saloon's inside (world/objects/codebuildings.js THE INSIDES): made when the player comes within
 // STAGE.make metres of the saloon (before its inside can come in, so they never pop in), drawn and moved only while its
@@ -48,7 +53,7 @@
 //   S.choices()             the band card's rows now (src/bandplan.js bandChoices)
 //   S.song, S.resting       the song the band plays (or will play when the music next starts), and on a break or not
 //   S.music                 the stage music while it plays (or null)
-//   S.players               { pianist, harpist, drummer } once made (or null);  S.spots  their places in the world
+//   S.players               { pianist, harpist, drummer, fiddler } once made (or null);  S.spots  their places in the world
 //   S.state()               for rigs: { near, made, playing, resting, phase, inside, through, gain, hz, distance, clips,
 //                           song, played, next, ... }
 //   S.crowd                 the saloon's crowd (src/saloonfolk.js; main.js sets it): told when a song ends (crowd.applaud)
@@ -69,12 +74,18 @@ import { makeStageMusic, makeRoom, SONGS, loadFiddle } from './audio/stagemusic.
 import { bandChoices, bandLine, soundThrough, songLines, nextSong } from './bandplan.js';
 import { playEnding } from './audio/songend.js';
 import { howdy } from './ui/howdy.js';
+import { makeFiddleModel, makeBowModel, fiddleMaterial } from './fiddle.js';
+import { holdMatrix } from './fiddleplan.js';
 
 export const STAGE = {
   // who plays (folk.js looks)
   pianist: { outfit: 'suit_m', palette: 'townsman', skin: 4, hair: 1 },
-  harpist: { outfit: 'adventurer_f', palette: 'prairie', skin: 1, hair: 5 },
+  // (a riding jacket and trousers: the adventurer's bedroll stood out behind her shoulders and her bare legs shone white
+  // in the footlights, a critic)
+  harpist: { outfit: 'suit_f', palette: 'prairie', skin: 2, hair: 5 },
   drummer: { outfit: 'worker_m', palette: 'rancher', skin: 3, hair: 2 },
+  // (a man: his clips are made on the men's skeleton, models/people/clips_stage_m.glb)
+  fiddler: { outfit: 'casual_m', palette: 'homestead', skin: 2, hair: 4 },
   // the drummer's packing crate (metres: across, front to back, tall; as build_stage_clips.py's BOX, which he sits on)
   crate: { w: 0.5, d: 0.38, h: 0.4 },
   make: 45,               // metres from the saloon's middle within which the players are made (hidden till its inside is in)
@@ -90,10 +101,14 @@ export const STAGE = {
   carry: 0.5,
   level: 3.5,             // the band's loudness (the patches are written quieter, for the Sound Lab)
   boxLevel: 3.2,          // the drummer's crate's loudness
-  // the sampled fiddle (src/audio/stagemusic.js THE FIDDLE): off until the game's maker has heard it and the band has a fiddler on
-  // its stage to play it; on, its samples load when the band is first heard and the old tunes take it into their turns
-  // (heard from the harmonica player's spot meanwhile)
-  fiddle: false,
+  // the sampled fiddle (src/audio/stagemusic.js THE FIDDLE): its samples load when the band is first heard, and then the
+  // old fiddle tunes take it into their turns (the fiddle, the harmonica, the piano, the fiddle and the harmonica
+  // together), heard from the fiddler. Off: the harmonica plays the fiddle's turns and the fiddler only stands with it
+  // (world/governor.js may leave it out on the cheapest tier: S.fiddleOn)
+  fiddle: true,
+  // the fiddler's playing (s): his lift takes `up` (Fiddle_Up, timed to end on his first note); he keeps the fiddle up
+  // while a note sounded within `hold` or the next comes within `gap` (a rest inside his turn), and lowers it after
+  bowing: { up: 0.6, hold: 0.45, gap: 1.6, ending: 0.28 },   // ending: the clip's speed through the last chord's long bow
   room: 0.6,              // how much of the room's echo
   // the positioned sound: full at refDistance metres, softening as 1 / distance past it (rolloff: how fast)
   ref: 3, rolloff: 1.1,
@@ -115,7 +130,7 @@ export const STAGE = {
   between: 1.4,           // s from asking to the next song's first beat (what was sounding rings out meanwhile)
   askAgain: 1.2,          // s after an ask before the prompt comes back (a double tap doesn't skip a song)
   say: 4200,              // ms a player's answer stays up
-  restClip: { pianist: 'Piano_Rest', harpist: 'Idle', drummer: 'Box_Rest' },
+  restClip: { pianist: 'Piano_Rest', harpist: 'Idle', drummer: 'Box_Rest' },   // (the fiddler's: his own course, fiddlerStep)
 };
 const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 const CLIPS = { m: 'clips_stage_m.glb', f: 'clips_stage_f.glb' };
@@ -144,7 +159,9 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
     const at = (p) => new THREE.Vector3(p.x, p.y, p.z).applyMatrix4(frame);
     // (the drummer's spot from an older saloon without one: left of the harmonica player, a little back)
     const dr = A.drummer || { x: A.harmonica.x - 1.1, y: A.harmonica.y, z: A.harmonica.z - 0.4, rot: 0.35 };
-    spots = { piano: at(A.piano), harmonica: at(A.harmonica), drummer: at(dr), yaw, rot: { piano: A.piano.rot, harmonica: A.harmonica.rot, drummer: dr.rot } };
+    // (and the fiddler's, from a saloon without one: right of the harmonica player, toward the piano)
+    const fd = A.fiddler || { x: A.harmonica.x + 1.8, y: A.harmonica.y, z: A.harmonica.z - 0.1, rot: -0.35 };
+    spots = { piano: at(A.piano), harmonica: at(A.harmonica), drummer: at(dr), fiddler: at(fd), yaw, rot: { piano: A.piano.rot, harmonica: A.harmonica.rot, drummer: dr.rot, fiddler: fd.rot } };
     middle = new THREE.Vector3().add(spots.piano).add(spots.harmonica).add(spots.drummer).multiplyScalar(1 / 3);
     // the stage's front edge (for the prompt) and the doorways (for the sound through them), in the world
     const R = A.rect, fz = R ? R.z1 : A.front[2];
@@ -172,7 +189,7 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
   // ── THE PLAYERS ──────────────────────────────────────────────────────────────────────────────────────────────────
   function makePlayers() {
     if (making) return making;
-    const looks = [STAGE.pianist, STAGE.harpist, STAGE.drummer];
+    const looks = [STAGE.pianist, STAGE.harpist, STAGE.drummer, STAGE.fiddler];
     const bodies = [...new Set(looks.map((p) => (folk.byOutfit[p.outfit] || {}).body).filter(Boolean))];
     making = Promise.all(bodies.map((b) => loader.loadAsync(folk.dir + CLIPS[b]).then((g) => folk.addClips(b, g.animations))))
       .then(() => {
@@ -181,7 +198,7 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
           const p = makePerson(folk, look); p.who = who;
           // (no sun shadow cast in the hall: the saloon's inside is lit by its bake, its own parts cast none either)
           p.root.traverse((o) => { if (o.isMesh) o.castShadow = false; });
-          p.play(clip, { fade: 0 });
+          if (!p.play(clip, { fade: 0 })) p.play('Idle', { fade: 0 });
           scene.add(p.root); players.push(p); seat(p);
           return p;
         };
@@ -189,7 +206,9 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
           pianist: add(STAGE.pianist, 'piano', 'Play_Piano'),
           harpist: add(STAGE.harpist, 'harmonica', 'Harmonica_Rest'),
           drummer: add(STAGE.drummer, 'drummer', 'Play_Box'),
+          fiddler: add(STAGE.fiddler, 'fiddler', 'Fiddle_Rest'),
         };
+        holdFiddle(made.fiddler);
         harmonica = makeHarmonica(); scene.add(harmonica);
         crate = makeCrate(); scene.add(crate); seatCrate();
         setVisible(visible);
@@ -198,7 +217,7 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
     return making;
   }
   function seat(p) { if (!spots) return; p.root.position.copy(spots[p.who]); p.root.rotation.y = spots.yaw + spots.rot[p.who]; }
-  function setVisible(on) { visible = on; for (const p of players) p.root.visible = on; if (harmonica) harmonica.visible = on && !resting; if (crate) crate.visible = on; }
+  function setVisible(on) { visible = on; for (const p of players) p.root.visible = on && !(fiddlerOff && p.who === 'fiddler'); if (harmonica) harmonica.visible = on && !resting; if (crate) crate.visible = on; }
   // the harmonica: a little metal box with the wooden comb showing along its front, so the cupped hands read as playing
   // one. Each frame it goes between her hands: along the line between them, its front facing out.
   let harmonica = null;
@@ -208,6 +227,7 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
     const H = STAGE.harp, g = new THREE.Group();
     const metal = new THREE.MeshStandardMaterial({ color: 0xd4d8dc, metalness: 0.35, roughness: 0.3 });   // (the world has no reflections to show, so a fully metal surface would look black)
     const wood = new THREE.MeshStandardMaterial({ color: 0x6b4426, metalness: 0, roughness: 0.8 });
+    metal.userData.indoorLit = wood.userData.indoorLit = true;   // (lit like the room: world/valley.js sunShadeAll)
     const cover = new THREE.Mesh(new THREE.BoxGeometry(H.long, H.tall, H.deep * 0.8), metal); cover.position.z = -H.deep * 0.1;
     const comb = new THREE.Mesh(new THREE.BoxGeometry(H.long * 0.96, H.tall * 0.4, H.deep), wood);
     g.add(cover, comb);
@@ -223,6 +243,19 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
     y.crossVectors(z, x).normalize(); z.crossVectors(x, y);
     m.makeBasis(x, y, z); harmonica.quaternion.setFromRotationMatrix(m);
     harmonica.position.copy(mid).addScaledVector(z, -STAGE.harp.back).addScaledVector(y, STAGE.harp.up);
+  }
+  // THE FIDDLE AND THE BOW (src/fiddle.js), carried on the fiddler's wrist bones where his clips hold them
+  // (src/fiddleplan.js HOLD: the clips are made round the same numbers), so they go wherever his hands go
+  let fiddleProps = null;
+  function holdFiddle(P) {
+    const B = P.bones; if (!B.WristL || !B.WristR) return;
+    const mat = fiddleMaterial(), fiddle = makeFiddleModel({ material: mat }), bow = makeBowModel({ material: mat });
+    mat.userData.indoorLit = true;   // (lit like the room, as the players are: world/valley.js sunShadeAll)
+    for (const [m, bone, which] of [[fiddle, B.WristL, 'fiddle'], [bow, B.WristR, 'bow']]) {
+      m.matrixAutoUpdate = false; m.matrix.fromArray(holdMatrix(which)); m.castShadow = false; m.receiveShadow = false;
+      bone.add(m);
+    }
+    fiddleProps = { fiddle, bow, mat };
   }
   // the drummer's packing crate: rough boards across each face with dark gaps between, a batten up each corner and a
   // stencilled band of darker wood, in plain colours (one mesh, one material)
@@ -277,20 +310,31 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
     const muffle = ctx.createBiquadFilter(); muffle.type = 'lowpass'; muffle.frequency.value = 20000; muffle.Q.value = 0.5;
     fade.connect(muffle).connect(out);
     const harp = panner(spots.harmonica, 1.55), piano = panner(spots.piano, 1.0), box = panner(spots.drummer, 0.3), echo = panner(middle, 1.5);
-    for (const n of [harp, piano, box, echo]) n.connect(fade);
+    const fid = panner(spots.fiddler, 1.45);   // (the fiddle, at the fiddler's chest)
+    for (const n of [harp, piano, box, fid, echo]) n.connect(fade);
     const room = makeRoom(ctx), wet = ctx.createGain(); wet.gain.value = STAGE.room;
     room.output.connect(wet).connect(echo);
     const harpIn = ctx.createGain(), pianoIn = ctx.createGain(), boxIn = ctx.createGain(); harpIn.gain.value = pianoIn.gain.value = STAGE.level; boxIn.gain.value = STAGE.boxLevel;
     harpIn.connect(harp); pianoIn.connect(piano); boxIn.connect(box);
+    const fiddleIn = ctx.createGain(); fiddleIn.gain.value = STAGE.level; fiddleIn.connect(fid);
     const roomIn = ctx.createGain(); roomIn.gain.value = STAGE.level; roomIn.connect(room.input);
-    if (STAGE.fiddle) loadFiddle(ctx).then((kit) => { if (bus && bus.ctx === ctx) bus.fiddleKit = kit; }).catch((e) => console.warn('Mathwood Valley: no fiddle', e));
-    bus = { ctx, fade, muffle, harp, harpIn, pianoIn, boxIn, roomIn, fiddleKit: null, nodes: [fade, muffle, harp, piano, box, echo, wet, harpIn, pianoIn, boxIn, roomIn, room.output], sent: null,
-      at: [[harp, () => spots.harmonica, 1.55], [piano, () => spots.piano, 1.0], [box, () => spots.drummer, 0.3], [echo, () => middle, 1.5]] };
+    bus = { ctx, fade, muffle, harp, harpIn, pianoIn, boxIn, fiddleIn, roomIn, fiddleKit: null, loading: null, nodes: [fade, muffle, harp, piano, box, fid, echo, wet, harpIn, pianoIn, boxIn, fiddleIn, roomIn, room.output], sent: null,
+      at: [[harp, () => spots.harmonica, 1.55], [piano, () => spots.piano, 1.0], [box, () => spots.drummer, 0.3], [fid, () => spots.fiddler, 1.45], [echo, () => middle, 1.5]] };
+    loadKit();
     // when the sound goes to sleep (a pause, a panel, a hidden tab), the band stops and lets its notes go; it starts a
     // fresh line when the sound wakes. (Asleep, the sound's clock stands still while the notes' own timers don't, so the
     // notes made ahead would be cut off by their own timers meanwhile, and leave a gap after the pause.)
     bus.onState = () => { if (ctx.state !== 'running') stopMusic(true); if (bus) bus.sent = null; };
     ctx.addEventListener('statechange', bus.onState);
+  }
+  // the fiddle's samples: loaded once, when the band is first heard with the fiddle in it (STAGE.fiddle, and not left out
+  // by the governor: S.fiddleOn)
+  let fiddleAllowed = true, musicFiddled = false;
+  const fiddleOK = () => STAGE.fiddle && fiddleAllowed;
+  function loadKit() {
+    if (!bus || bus.loading || !fiddleOK()) return;
+    const b = bus, t0 = performance.now();
+    b.loading = loadFiddle(b.ctx).then((kit) => { b.fiddleKit = kit; b.loadMs = Math.round(performance.now() - t0); }).catch((e) => console.warn('Mathwood Valley: no fiddle', e));
   }
   function startMusic(at = null) {
     if (music || !bus || resting || phase !== 'play') return;
@@ -298,7 +342,8 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
     if (left == null) left = songLines(song, { intro }) * lineSecs;   // (a song begun: how long it goes on)
     // (the lines from what is left of it: a written tune to the end of a round, at least once round)
     lines = song.round ? (intro ? 1 : 0) + Math.max(1, Math.round((left - open) / (song.round * lineSecs))) * song.round : Math.max(1, Math.round(left / lineSecs));
-    music = makeStageMusic(bus.ctx, { harp: bus.harpIn, piano: bus.pianoIn, box: bus.boxIn, room: bus.roomIn, seed: 1 + Math.floor(Math.random() * 1e6), song: song.id, intro, fiddle: bus.harpIn, fiddleKit: bus.fiddleKit });
+    const kit = fiddleOK() ? bus.fiddleKit : null; musicFiddled = !!kit;
+    music = makeStageMusic(bus.ctx, { harp: bus.harpIn, piano: bus.pianoIn, box: bus.boxIn, room: bus.roomIn, seed: 1 + Math.floor(Math.random() * 1e6), song: song.id, intro, fiddle: bus.fiddleIn, fiddleKit: kit });
     songT0 = at != null ? at : bus.ctx.currentTime + 0.2;
     music.start(songT0);
   }
@@ -312,7 +357,7 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
   function finish(tEnd) {
     const song = SONGS[songI];
     music.stop({ from: tEnd - 0.004 }); music = null;
-    ending = playEnding(bus.ctx, { harp: bus.harpIn, piano: bus.pianoIn, box: bus.boxIn, room: bus.roomIn, song, at: tEnd });
+    ending = playEnding(bus.ctx, { harp: bus.harpIn, piano: bus.pianoIn, box: bus.boxIn, room: bus.roomIn, song, at: tEnd, fiddle: bus.fiddleIn, fiddleKit: musicFiddled ? bus.fiddleKit : null });
     played.push(song.id); if (played.length > 12) played.shift();
     phase = 'end'; endAt = tEnd; named = false; left = null;
     nextI = Math.max(0, SONGS.indexOf(nextSong({ played })));
@@ -458,9 +503,49 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
       made.pianist.play('Play_Piano', { fade: 0.6 }); made.drummer.play('Play_Box', { fade: 0.5 });
       if (harmonica && !harmonica.visible) harmonica.visible = true;
     }
-    for (const p of players) { if (beat != null && !resting) onBeat(p, beat, music.beatLen); p.update(dt); }
+    fiddlerStep(dt, t, resting || between);
+    for (const p of players) {
+      if (fiddlerOff && p === made.fiddler) continue;
+      // (the fiddler's lift and lowering are his own pace; his bowing and his resting foot keep the beat)
+      if (beat != null && !resting && (p !== made.fiddler || fState === 'play' || fState === 'rest')) onBeat(p, beat, music.beatLen);
+      p.update(dt);
+    }
     if (harmonica && harmonica.visible) { made.harpist.root.updateMatrixWorld(true); placeHarmonica(made.harpist); }
   };
+  // THE FIDDLER'S COURSE, from the fiddle's notes (M.fiddleAt / M.nextFiddle): resting (Fiddle_Rest) -> the lift
+  // (Fiddle_Up, timed to end on his first note) -> playing (Play_Fiddle, a stroke a beat) while his notes sound and
+  // through the short rests inside his turn -> lowering (Fiddle_Down) once it has passed -> resting. At the end of a tune
+  // that was his he holds the last chord's note in one long bow, and lowers the fiddle while the crowd claps.
+  let fState = 'rest', fLeft = 0, fEnding = false, fLifts = 0, fiddlerOff = false;
+  function fiddlerStep(dt, t, off) {
+    const F = made.fiddler, B = STAGE.bowing; if (!F) return;
+    let want = false, next = null;
+    if (!off && music) {
+      next = music.nextFiddle(t);
+      const ahead = fState === 'rest' || fState === 'down' ? B.up + 0.05 : B.gap;
+      want = music.fiddleAt(t) || music.fiddleAt(t - B.hold) || (next != null && next - t < ahead);
+    } else if (!off && phase === 'end' && endAt != null && ending && ending.fiddle) {
+      next = endAt; want = t > endAt - B.up - 0.05 && t < endAt + STAGE.end.rest;
+    }
+    fEnding = want && phase === 'end';
+    fLeft -= dt;
+    if (want && (fState === 'rest' || fState === 'down')) {
+      // (quicker when his note is nearer than the lift takes)
+      const lead = next != null ? Math.max(0.15, next - t) : B.up * 0.5, speed = Math.min(3, Math.max(1, B.up / lead));
+      F.play('Fiddle_Up', { once: true, fade: 0.15, speed }); fState = 'up'; fLeft = B.up / speed; fLifts++;
+    } else if (fState === 'up' && fLeft <= 0 && want) {
+      F.play('Play_Fiddle', { fade: 0.08 }); fState = 'play';
+    } else if (!want && (fState === 'play' || fState === 'up')) {
+      F.play('Fiddle_Down', { once: true, fade: 0.15 }); fState = 'down'; fLeft = B.up;
+    } else if (fState === 'down' && fLeft <= 0) {
+      F.play('Fiddle_Rest', { fade: 0.3 }); fState = 'rest';
+    }
+    // (the last chord: the bow drawn slowly, one long stroke)
+    if (fState === 'play' && F.person && F.person.cur) { if (fEnding) F.person.cur.setEffectiveTimeScale(B.ending); }
+  }
+  // (the governor) the fiddle in the band, or left out: the harmonica then plays its turns and the fiddler only stands
+  // with his fiddle; on, its samples load if they haven't
+  S.fiddleOn = (on) => { fiddleAllowed = !!on; if (fiddleAllowed) loadKit(); };
   // a doorway as heard from the ears: how far, how square in front of it, how open its doors stand (the saloon's batwings
   // rest open: as open as a doorway with no door)
   function throughWay(w, ear) {
@@ -477,13 +562,15 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
     const t = bus.ctx.currentTime;
     if (on && !tone) { tone = bus.ctx.createOscillator(); tone.frequency.value = 440; tone.g = bus.ctx.createGain(); tone.g.gain.value = 0.2; tone.connect(tone.g).connect(bus.harp); tone.start(); }
     if (!on && tone) { tone.stop(); tone.g.disconnect(); tone = null; }
-    for (const g of [bus.harpIn, bus.pianoIn, bus.roomIn]) g.gain.setValueAtTime(on ? 0 : STAGE.level, t);
+    for (const g of [bus.harpIn, bus.pianoIn, bus.fiddleIn, bus.roomIn]) g.gain.setValueAtTime(on ? 0 : STAGE.level, t);
     bus.boxIn.gain.setValueAtTime(on ? 0 : STAGE.boxLevel, t);
     return true;
   };
   S.state = () => ({ near: visible, made: !!made, playing: !!music, resting, inside, through: +through.toFixed(3), gain, hz: Math.round(hz), distance, saloon: !!hall,
     clips: players.map((p) => p.clip), notes: music ? music.played : 0, context: audio && audio.ctx ? audio.ctx.state : 'none', song: SONGS[songI].id, asked,
     prompt: S.prompt, inReach: S.inReach, beatLen: music ? music.beatLen : null, harmonica: !!(harmonica && harmonica.visible),
+    fiddler: fState, fiddleLifts: fLifts, fiddleIn: fiddleOK(), fiddleKit: !!(bus && bus.fiddleKit), fiddleLoadMs: bus ? bus.loadMs || null : null, fiddling: musicFiddled && !!music,
+    endingFiddle: !!(ending && ending.fiddle), fiddleKitMB: bus && bus.fiddleKit ? +(bus.fiddleKit.reduce((n, x) => n + x.buf.length * x.buf.numberOfChannels * 4, 0) / 1048576).toFixed(2) : null,
     phase, played: played.slice(-6), next: phase === 'end' && nextI != null ? SONGS[nextI].id : null, lines, songAt: songT0, endAt, nextAt, left: left == null ? null : +left.toFixed(1),
     duck: +duck.toFixed(3), now: bus ? bus.ctx.currentTime : null });
   // (rigs) the song ends at the end of the line playing now, as it would on its own
@@ -498,8 +585,16 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
   Object.defineProperty(S, 'phase', { get: () => phase });
   Object.defineProperty(S, 'song', { get: () => SONGS[songI] });
   Object.defineProperty(S, 'resting', { get: () => resting });
-  // (rigs) an analyser on the band's own sound, after its fades (what reaches the game's mix from the stage)
-  S.analyser = () => { if (!bus) return null; if (!bus.an) { bus.an = bus.ctx.createAnalyser(); bus.an.fftSize = 4096; bus.muffle.connect(bus.an); bus.nodes.push(bus.an); } return bus.an; };
+  // (rigs) an analyser on the band's own sound, after its fades (what reaches the game's mix from the stage); 'fiddle':
+  // on the fiddle's own input alone (before its panner)
+  S.analyser = (which = null) => {
+    if (!bus) return null;
+    const k = which === 'fiddle' ? 'anF' : 'an';
+    if (!bus[k]) { bus[k] = bus.ctx.createAnalyser(); bus[k].fftSize = 4096; (which === 'fiddle' ? bus.fiddleIn : bus.muffle).connect(bus[k]); bus.nodes.push(bus[k]); }
+    return bus[k];
+  };
+  // (rigs) the band without its fiddler (not drawn or moved, the fiddle left out of the music) while on, to measure him
+  S.setFiddlerOff = (on) => { fiddlerOff = !!on; S.fiddleOn(!on); if (made) made.fiddler.root.visible = visible && !fiddlerOff; };
   Object.defineProperty(S, 'spots', { get: () => spots });
   Object.defineProperty(S, 'music', { get: () => music });
   Object.defineProperty(S, 'players', { get: () => made });
@@ -511,6 +606,7 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
     players.length = 0; made = null;
     for (const o of [harmonica, crate]) if (o) { o.removeFromParent(); o.traverse((m) => { if (m.isMesh) { m.geometry.dispose(); m.material.dispose(); } }); }
     harmonica = crate = null;
+    if (fiddleProps) { for (const m of [fiddleProps.fiddle, fiddleProps.bow]) { m.removeFromParent(); m.geometry.dispose(); } fiddleProps.mat.dispose(); fiddleProps = null; }
   };
   return S;
 }

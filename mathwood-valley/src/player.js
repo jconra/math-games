@@ -339,6 +339,7 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
     return done;
   }
 
+  let fpFaded = false;   // (the body faded for first person: src/camera.js FIRST)
   // ── WHAT THE PLAYER WANTS: from the keys and stick, or walking up to a lasso target ─────────────────────────────
   // -> { dir: world heading wanted (or null), mag 0..1, run }
   function wanted() {
@@ -459,6 +460,7 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
   }
   P.mount = () => {
     if (P.mode === 'foot' && !H) { noHorse(); return false; }
+    if (P.mode === 'foot' && W.codeIndoors && W.codeIndoors(pos.x, pos.y + 1, pos.z)) return false;   // (inside a building: the horse is out beyond its walls)
     if (P.mode !== 'foot' || !H || seat.busy()) return false;
     if (!P.canRide) { tell(SAY.saddle); return false; }
     const d = Math.hypot(H.x - pos.x, H.z - pos.z);
@@ -554,6 +556,9 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
     gunStep(dt);
     lasso.update(dt);
     cam.update(dt, { at: pos, heading: P.mode === 'horse' ? H.heading : P.heading, onHorse: P.mode === 'horse' || P.mode === 'mounting', speed: P.mode === 'horse' ? H.speed : P.speed, seat: H && H.big ? H.a.info.seat.at[1] : null });
+    // (first person, src/camera.js FIRST: the rider's own body gone by half way in, back on the way out; touched only
+    // while it is in or coming back, so a job fading the rider itself (the dock) is left alone)
+    if (cam.fp > 0) { person.fade = Math.max(0, 1 - cam.fp * 2); fpFaded = true; } else if (fpFaded) { person.fade = 1; fpFaded = false; }
     if (H && H.steed) H.steed.look(camera.position);   // (the full or the far look, by how far off it is)
   };
 

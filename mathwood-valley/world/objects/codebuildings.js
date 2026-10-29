@@ -11,8 +11,9 @@
 //                                  potato tier: its pictures small, objects/codebuild.js makeBuildKit); renderer, scene():
 //                                  to build each inside's shaders and take its windows' pictures when it is made
 //   CODE.has(kind, it)             whether a layout kind (and that item, when given: not the player's cabin) is built in code
-//   CODE.make(it) -> Promise<b>    a layout item's building (objects/codebuild.js buildCodeBuilding); the village hangs
-//                                  b.group in the item's group, at scale 1 (its own metres)
+//   CODE.make(it, groundAt) -> Promise<b>   a layout item's building (objects/codebuild.js buildCodeBuilding); the village
+//                                  hangs b.group in the item's group, at scale 1 (its own metres), b.sit m over the ground at its
+//                                  middle: one that doesn't level its ground sits on the land as it is (groundAt(x, z): heights)
 //   CODE.lookKey(it)               what its design hangs on (its preset and seed): when that changes it is built again
 //   CODE.looks()                   the cabins' designs (cabins.js PRESETS names; empty until the first is built)
 //   CODE.attach(o) / detach(o)     the village's object for it ({ group, it, code }), placed, or gone: its lights and its
@@ -20,6 +21,8 @@
 //   CODE.blocked(x, z)             true where a walker can't go (a wall, a counter, a porch's edge)
 //   CODE.heightAt(x, z, ground)    the floor under a point (a floor, the porch, the steps), or ground(x, z) off them
 //   CODE.room(x, y, z)             the building a point is in, under its roof (or null): room.solid(x, y, z) for the camera
+//   CODE.indoors(x, y, z)          the building (its object) a point is inside of: under its roof and behind the wall of
+//                                  its way in (not out on its porch), or null
 //   CODE.update(dt, camera, night, at) each frame (at: the player): see THE INSIDES below; and the whole outside drawn
 //                                  within CODE.range metres of a doorway (the camera's or the player's), past it the
 //                                  far look (codebuild.js FAR TRIM)
@@ -46,16 +49,19 @@
 //   CODE.setProps(on)              its props drawn at all (the governor's Decorations dial)
 //   CODE.ready                     a promise: every code building made
 //   CODE.stats()                   for the rigs: each building's triangles, meshes, build time, near or far
+//   CODE.contact()                 the ground's soft shadow round the buildings' feet (THE CONTACT SHADOWS), for the rigs
 import * as THREE from 'three';
 import { makeDoorKeeper } from './doorkeeper.js';
+import { levels } from './townAssets.js';
+import { makeIndoorLight } from './indoorlight.js';
 
 export const CODE_KINDS = new Set(['stable', 'sheriff', 'generalStore', 'saloon', 'home', 'cabin', 'blacksmith', 'barn', 'windpump']);
 // where each one's way in is along its front (m from its middle, + to the right seen from the street): the stable's big
-// doors (over its barn, not the middle of barn and lean-to), the sheriff's steps, the store's steps (right of its door),
+// doors (over its barn, not the middle of barn and lean-to), the sheriff's steps, the store's steps (centred on its door),
 // the saloon's batwings, the blacksmith's big doors (left of its shoeing shed). A cabin's door is near its middle, the
 // barn's big doors at its middle (the wind pump has none). The game's door spots (src/world.js places) stand out from
 // there (CODE.stats() has each one's doorway as built)
-export const CODE_DOORS = { stable: 1.65, sheriff: 0.05, generalStore: 3.14, saloon: 1.41, blacksmith: -1.47 };
+export const CODE_DOORS = { stable: 1.65, sheriff: 0.05, generalStore: 1.71, saloon: 1.41, blacksmith: -1.47 };
 // the player's own cabin: built in code too (a cabin design, the two-room log house unless its item says another), its
 // furniture the player's own (src/cabin/: bought for its slots), so the design's own furniture is left out of it
 export const isPlayersCabin = (it) => !!it && (it.player === true || (it.kind === 'cabin' && it.id === 'cabin'));
@@ -75,6 +81,9 @@ const LAYER = 7;                                    // (the stand-ins' pictures 
 // wider), the doors shut and it out of view. The governor's Window view dial: 0 the pictures only (potato), 1 the
 // rooms (priority 1), 3 everything (objects/codebuild.js priorities, never past the Inside detail dial)
 export const ARC = { half: 60, reach: 25, cone: 30, stay: 10, out: 5 };
+// (the contact shadows round each building's foot: how dark under it, at its footprint's edge, half a metre out; how far
+// out they fade to nothing (m); how far over the ground they lie (m): CONTACT SHADOWS below)
+export const CONTACT = { core: 0.6, edge: 0.45, mid: 0.22, reach: 1.8, lift: 0.03 };
 // THE FLAT LOOK (the potato tier only): the homes, the cabins, the smithy and the barn (no signs to lose; not the wind
 // pump: its wheel turns) past the outsides' reach, by day, all drawn as ONE mesh in plain colours (the wood its
 // picture's average colour, its tint, its baked shade): a street of houses down the lane is one draw, not two each
@@ -83,6 +92,7 @@ const FLAT_KINDS = new Set(['home', 'cabin', 'blacksmith', 'barn']), FLAT_NIGHT 
 export function makeCodeBuildings({ shade = null, tier = () => 'gaming', renderer = null, scene = () => null } = {}) {
   let kitP = null, mod = null, queue = Promise.resolve(), made = 0, wanted = 0;
   const placed = new Set();                         // the village's objects with a building in them
+  const indoor = makeIndoorLight();                 // (the loaded insides' rooms and lanterns, for people and animals in them)
   const frame = () => new Promise((ok) => (typeof requestAnimationFrame === 'function' ? requestAnimationFrame(() => setTimeout(ok, 0)) : setTimeout(ok, 0)));
   // (the potato tier: the signs' and goods' sheets at half size and one wood sheet for all, the pictures it can spare)
   const kit = () => kitP || (kitP = import('./codebuild.js').then(async (m) => { mod = m; await frame(); const t = tier(); return m.makeBuildKit({ step: frame, small: t === 'potato', oneSheet: t === 'potato' }); }));
@@ -95,17 +105,21 @@ export function makeCodeBuildings({ shade = null, tier = () => 'gaming', rendere
     lookName: (k) => (mod && mod.CABIN_LABELS[k]) || k,
     doorAlong: (kind) => CODE_DOORS[kind] || 0,
     // one building at a time, a frame between each (each is about half a second of baking light)
-    make(it) {
+    make(it, groundAt = null) {
       wanted++;
       const player = isPlayersCabin(it), look = { id: it.id, preset: it.preset || (player ? PLAYER_CABIN : undefined), seed: it.seed };
-      const p = queue.then(async () => { const K = kitNow = await kit(); await K.art(it.kind); await frame(); const b = mod.buildCodeBuilding(K, it.kind, { shade, look, player }); await frame(); return b; });
+      // (a building that doesn't level its ground: the ground under it, in its own frame, against the ground at its
+      // middle (groundAt: the land's heights, the village's): it sits on the land as it is, codebuild.js SITS)
+      const ground = groundAt && !levels(it) ? (() => { const a = (it.rot || 0) * Math.PI / 180, c = Math.cos(a), s = Math.sin(a), g0 = groundAt(it.x, it.z);
+        return (x, z) => groundAt(it.x + c * x + s * z, it.z - s * x + c * z) - g0; })() : null;
+      const p = queue.then(async () => { const K = kitNow = await kit(); await K.art(it.kind); await frame(); const b = mod.buildCodeBuilding(K, it.kind, { shade, look, player, ground }); await frame(); return b; });
       queue = p.catch(() => {});
       p.then(() => { if (++made >= wanted) readyFn(); }, (e) => { console.warn('code building: not built', it.kind, e); if (++made >= wanted) readyFn(); });
       return p;
     },
-    attach(o) { placed.add(o); place(o); flatDirty = true; o.code.setLevel(CODE.detail); try { prepare(o); } catch (e) { console.warn('code building: its inside not made ready', o.it.kind, e); } },
-    detach(o) { placed.delete(o); flatDirty = true; for (const d of o.keep || []) K.remove(d); o.keep = []; if (o.code) o.code.dispose(); },
-    moved(o) { if (placed.has(o)) { place(o); flatDirty = true; } },
+    attach(o) { placed.add(o); place(o); flatDirty = contactDirty = true; o.code.setLevel(CODE.detail); try { prepare(o); } catch (e) { console.warn('code building: its inside not made ready', o.it.kind, e); } },
+    detach(o) { placed.delete(o); flatDirty = contactDirty = true; for (const d of o.keep || []) K.remove(d); o.keep = []; if (o.code) o.code.dispose(); },
+    moved(o) { if (placed.has(o)) { place(o); flatDirty = contactDirty = true; } },
     blocked(x, z) {
       if (K.blocked(x, z)) return true;   // (a shut door)
       for (const f of CODE.blockers) if (f(x, z)) return true;   // (what else stands in a building: the player's cabin's bought furniture)
@@ -126,6 +140,15 @@ export function makeCodeBuildings({ shade = null, tier = () => 'gaming', rendere
         return { o, solid: (px, py, pz) => { const c = cellOf(o, px, pz); if (c < 0) return false; return !!G.wall[c] || py > q.y + G.ceil[c] - 0.12 || py < q.y + G.floor[c] + 0.05; } };
       }
       return null;
+    },
+    // the building a point stands inside of: under its roof AND behind the wall of its way in (in through its door,
+    // not out on its porch under the porch roof), or null. (The camera's first person inside a building, src/camera.js;
+    // the job folk indoors talk to a player in there with them, src/jobfolk.js)
+    indoors(x, y, z) {
+      const R = CODE.room(x, y, z); if (!R) return null;
+      const d = (R.o.keep || []).find((q) => q.way === 0);
+      if (d && (x - d.x) * d.ox + (z - d.z) * d.oz > 0.05) return null;
+      return R.o;
     },
     update(dt, camera, night = 0, at = null) {
       const cx = camera.position.x, cz = camera.position.z, pl = at || camera.position;
@@ -169,6 +192,8 @@ export function makeCodeBuildings({ shade = null, tier = () => 'gaming', rendere
         if (o.lit === undefined) C.lit(night, 1);   // (until the night lights fit it: objects/nightLights.js drives it after)
       }
       if (flatOn()) flatFrame();
+      contactFrame();
+      indoor.update(placed, camera);   // (people and animals inside lit like the room: world/objects/indoorlight.js)
     },
     setRange(m) { CODE.range = +m || 0; },
     setDetail(n) { CODE.detail = n; for (const o of placed) if (o.code && o.code.loaded && (o.byDoor || !o.q.wins.length)) o.code.setLevel(n); },
@@ -258,6 +283,32 @@ export function makeCodeBuildings({ shade = null, tier = () => 'gaming', rendere
       I.needsUpdate = true; flatMesh.geometry.setDrawRange(0, n); flatMesh.visible = n > 0;
     }
   }
+  // THE CONTACT SHADOWS (2026-10-28, the game's maker: "some shadows baked around the bottom of the houses ... It is like
+  // glowing underneath them"): the ground darkened softly under and round each building's foot, where the sky's light
+  // can't reach (under its floor and its eaves, at its walls' foot). One mesh for the whole town (one draw): rings of
+  // corners round each footprint, black, see-through by how dark (CONTACT: under it `core`, at the footprint's edge
+  // `edge`, half a metre out `mid`, nothing `reach` m out), just over its ground. Only a building that levels its ground
+  // has one (on a slope a flat ring would hang over the ground or sink into it)
+  let contactMesh = null, contactDirty = false;
+  function contactFrame() {
+    if (!contactDirty) return; const S = scene(); if (!S) return;
+    contactDirty = false;
+    if (contactMesh) { S.remove(contactMesh); contactMesh.geometry.dispose(); contactMesh = null; }
+    const pos = [], col = [], idx = [], v = new THREE.Vector3();
+    for (const o of placed) {
+      if (!o.code || o.it.level !== true) continue;
+      const F = o.code.B.anchors.footprint, x0 = F.x0 ?? -F.w / 2, x1 = F.x1 ?? F.w / 2, z0 = F.z0 ?? -F.d / 2, z1 = F.z1 ?? F.d / 2, M = o.code.group.matrixWorld, b = pos.length / 3;
+      const rings = [[-Math.min(0.6, (x1 - x0) / 2 - 0.05, (z1 - z0) / 2 - 0.05), CONTACT.core], [0, CONTACT.edge], [0.5, CONTACT.mid], [CONTACT.reach, 0]];
+      for (const [e, a] of rings) for (const [x, z] of [[x0 - e, z0 - e], [x1 + e, z0 - e], [x1 + e, z1 + e], [x0 - e, z1 + e]]) { v.set(x, CONTACT.lift, z).applyMatrix4(M); pos.push(v.x, v.y, v.z); col.push(0, 0, 0, a); }
+      idx.push(b, b + 1, b + 2, b, b + 2, b + 3);
+      for (let r = 0; r < rings.length - 1; r++) for (let i = 0; i < 4; i++) { const a0 = b + r * 4 + i, a1 = b + r * 4 + (i + 1) % 4; idx.push(a0, a0 + 4, a1 + 4, a0, a1 + 4, a1); }
+    }
+    if (!idx.length) return;
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 4)); g.setIndex(idx); g.computeBoundingSphere();
+    const m = new THREE.MeshBasicMaterial({ color: 0xffffff, vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide, forceSinglePass: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 });
+    contactMesh = new THREE.Mesh(g, m); contactMesh.name = 'code contact shadows'; contactMesh.renderOrder = -1; contactMesh.frustumCulled = false; S.add(contactMesh);
+  }
+  CODE.contact = () => contactMesh;   // (for the rigs)
   const inView = (x, y, z, r) => { SPH.center.set(x, y, z); SPH.radius = r; return VIEW.intersectsSphere(SPH); };
   // THE INSIDE MADE READY when the building is made, while the title shows: the stand-ins' pictures taken (each
   // see-through window's, from 1.6 m out from it, of the building alone: its parts and the valley's lights on a layer

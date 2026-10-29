@@ -72,7 +72,8 @@ export const PIGS = {
   show: 2.8,             // seconds a penned pig's sum shows big and green
   big: 1.35,             // ... this much bigger
   labelPx: [40, 58],     // a sum card's height on screen (pixels): about 5.5% of the screen, kept in this range (as the sheep's)
-  labelFull: 40, labelGone: 60,   // the sums show in full within this many metres, and have faded out by this far
+  penIn: 4, penOut: 8,   // the sums show only at the yard: in full inside it or within penIn m of its fence, gone by
+                         // penOut m (the game's maker saw the farm's sums from inside the blacksmith's); none indoors
   stackGap: 6,           // pixels between two sum cards that would overlap on screen
   helpAfter: 15000,      // ms at the yard without a pig penned before the number line is offered for the nearest pig
   hintFor: 12,           // seconds a wrong pen's line stays under the card
@@ -117,7 +118,7 @@ function paintSign({ cv, tex }, pen) {
 }
 
 export function makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, hob, refresh = () => {}, scene = W.scene, open = () => true, left: shiftLeft = () => Infinity }) {
-  const L = farm.layout, Y = L.yard, pens = L.pens;
+  const L = farm.layout, Y = L.yard, pens = L.pens, yardIn = L.area(Y, -PIGS.penIn), yardOut = L.area(Y, -PIGS.penOut);
   ensureNumberLineStyles();
   const fontReady = (document.fonts && document.fonts.load) ? document.fonts.load('800 108px Bitter').catch(() => null) : Promise.resolve();
   // where a loose pig may go: the yard, short of the pens' front fence (a pig only gets past that through a gate)
@@ -539,7 +540,9 @@ export function makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, ho
     spread();
     for (const g of pigs) if (g.showT > 0) g.showT -= dt;
 
-    // the sum cards: over each pig, the same size on screen near or far (as the sheep's)
+    // the sum cards: over each pig, the same size on screen near or far (as the sheep's), only with the player at the yard
+    const CD = W.V && W.V.CODE, indoors = !!(CD && CD.room && CD.room(P.position.x, P.position.y + 1, P.position.z));
+    const atYard = indoors ? 0 : yardIn.contains(P.position.x, P.position.z) ? 1 : yardOut.contains(P.position.x, P.position.z) ? 0.5 : 0;
     const h = canvas.clientHeight || innerHeight, px = Math.max(PIGS.labelPx[0], Math.min(PIGS.labelPx[1], h * 0.055));
     const p5 = camera.projectionMatrix.elements[5];
     camera.getWorldDirection(camFwd);
@@ -548,9 +551,7 @@ export function makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, ho
       const shownDone = inPen && g.showT > 0;
       // (only at the pig yard: from the sheep pasture next door the pigs' sums would mix with the sheep's)
       const show = !!g.item && (!inPen || shownDone) && !(batch && batch.done && !shownDone) && !PG.paused && g.wait <= 0 && PG.near;
-      const dist = Math.hypot(g.root.position.x - P.position.x, g.root.position.z - P.position.z);
-      const fadeK = 1 - Math.max(0, Math.min(1, (dist - PIGS.labelFull) / (PIGS.labelGone - PIGS.labelFull)));
-      const want = show ? fadeK * (shownDone ? Math.min(1, g.showT / 0.6) : 1) : 0;
+      const want = show ? atYard * (shownDone ? Math.min(1, g.showT / 0.6) : 1) : 0;
       g.alpha += (want - g.alpha) * Math.min(1, dt * 6);
       Lb.visible = g.alpha > 0.02;
       if (!Lb.visible) continue;

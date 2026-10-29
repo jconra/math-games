@@ -636,7 +636,9 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
 
     for (let i = herd.length - 1; i >= 0; i--) steerStep(herd[i], dt);
 
-    // the number cards: over each steer, the same size on screen near or far, fading out past ~40 m
+    // the number cards: over each steer, the same size on screen near or far, fading out past ~40 m; none while the
+    // player is inside a building (they'd show through its walls)
+    const CD = W.V && W.V.CODE, indoorsNow = !!(CD && CD.room && CD.room(P.position.x, P.position.y + 1, P.position.z));
     const h = canvas.clientHeight || innerHeight, px = Math.max(ROUNDUP.labelPx[0], Math.min(ROUNDUP.labelPx[1], h * 0.06));
     const p5 = camera.projectionMatrix.elements[5];
     camera.getWorldDirection(camFwd);
@@ -644,7 +646,7 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
       const L = s.label;
       const show = s.n != null && (s.state === 'graze' || s.state === 'throw' || s.state === 'arrive') && !(wave && wave.done);
       const dist = Math.hypot(s.root.position.x - P.position.x, s.root.position.z - P.position.z);
-      const fadeK = 1 - Math.max(0, Math.min(1, (dist - ROUNDUP.labelFull) / (ROUNDUP.labelGone - ROUNDUP.labelFull)));
+      const fadeK = indoorsNow ? 0 : 1 - Math.max(0, Math.min(1, (dist - ROUNDUP.labelFull) / (ROUNDUP.labelGone - ROUNDUP.labelFull)));
       s.alpha += ((show ? fadeK : 0) - s.alpha) * Math.min(1, dt * 6);
       L.visible = s.alpha > 0.02;
       if (!L.visible) continue;

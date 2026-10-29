@@ -16,7 +16,7 @@
 //                         'ride' (riding out; data.range, data.wagon, data.sheep, data.pigs, data.deliveries, data.store ...:
 //                         which jobs are on, false for one a grown-up turned off: its tips aren't said), 'arrive' (at the herd), 'catch', 'miss', 'waveDone' (data.gold),
 //                         'boxWon', 'saddle', 'dog', 'horse', 'title' (data.title), 'near' (data.place: at the saloon's
-//                         doors, nothing behind them yet; said again only after NEAR_AGAIN)
+//                         doors, the store's or the sheriff's: who is inside and what to do; said again only after NEAR_AGAIN)
 //                         The farm (missions/sheep.js): 'farmArrive' (at the sheep pasture), 'sheepHealed', 'sheepWrong' (a
 //                         wrong bottle), 'sheepFine' (medicine for a healthy sheep: a short line, the why is in the hint), 'flockDone'
 //                         The pig yard (missions/pigs.js): 'pigsArrive', 'pigPenned', 'pigWrong' (data.line: why not that pen,
@@ -81,9 +81,10 @@ export const HOB = {
 };
 
 const LINES = {
-  firstDay: "Mornin'! Rancher next door needs a hand with his herd. His trail boss is out by the corral: follow the hoofprints.",
-  back: ["Herd's waiting out in the pasture. The hoofprints know the way.", "Good to see you. The rancher's got more cattle needing a rope.",
-    "Fine day for a round-up. Pasture's east, past the creek."],
+  // (no job leads the way until one is picked on the jobs board: Hob sends a rider there)
+  firstDay: "Mornin'! There's work all over this valley, and it's all pinned up on the jobs board in the square. Pick a job, and my hoofprints show the way.",
+  back: ["Mornin'! The jobs board in the square has work pinned up.", "Good to see you. Pick a job off the board and I'll show you the way.",
+    "Fine day for it. Plenty of work on the board in the square."],
   shoot: "Miss Opal keeps a target range across the creek, east end of town. Bottles and tin cans only, mind: it's still the rope for cattle.",
   arrive: 'Each steer carries a number. Rope the ones the card up top asks for: point at one and click, or press F.',
   arriveTouch: 'Each steer carries a number. Rope the ones the card up top asks for: tap one, or the Rope button.',
@@ -95,7 +96,7 @@ const LINES = {
   waveDonkey: "That's a day's wages! Enough for Jasper the donkey to carry that saddle of yours. The stable's back in town.",
   waveSave: "Good work! Keep at it: sixty gold buys Jasper the donkey and a saddle at the stable, and then you can ride.",
   wave: 'Good work. Another bunch is wandering in.',
-  boxWon: "There's a lock box in your saddlebags. Crack it at the sheriff's desk, or at your cabin table.",
+  boxWon: "There's a lock box in your saddlebags. Crack it at the safe in the sheriff's office, or at your cabin table.",
   saddle: 'Whistle with H and your horse comes running. E gets you up, Shift lets her gallop.',
   saddleDonkey: "Whistle with H and old Jasper comes running. E gets you up, Shift gets him going. Save your gold and the stable has horses that run.",
   saddleNoHorse: "A fine saddle! Now it needs something under it: Jasper the donkey's the cheapest at the stable.",
@@ -151,6 +152,11 @@ const LINES = {
   // walking up to the saloon's doors: the band plays on the stage inside (src/stage.js) and takes requests
   saloon: ["Hear that? The band's playing in the saloon. Walk up to the stage and ask for a song!",
     "The saloon band takes requests, partner. Step in and pick a tune."],
+  // walking up to the general store's door and the sheriff's (the jobs there are worked from inside: src/townrooms.js)
+  store: ["Step inside, partner. Walk up to the barrels, the hats or the dog to shop, or to the counter to help the storekeeper.",
+    'The storekeeper could use a hand at his counter. Food, hats and animals are inside too.'],
+  sheriff: ["The sheriff's inside at his desk, with a pile of seized lock boxes waiting to be cracked.",
+    "Lock boxes are piled up on the sheriff's desk. Step in and crack a few."],
   // the homestead behind your cabin: the first of each kind bought, the thank-yous, the goods
   animal: {
     hen: "A hen of your own! She'll lay eggs in the coop behind your cabin. Walk past to pick them up, and sell them at the store counter.",

@@ -431,7 +431,7 @@ export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, r
       } else lastNear = null;
       // (just after a drop-off, still mounted, the kid most likely wants to get down: E is left to do that)
       if (near && phase === 'none' && P.onHorse && performance.now() - droppedAt < DELIVERY.afterDrop * 1000) near = null;
-      if (near) DL.prompt = phase === 'none' && shiftOpen() ? `Take an order from ${near.foreman.name}` : `Talk to ${near.foreman.name}`;
+      if (near) { DL.prompt = phase === 'none' && shiftOpen() ? `Take an order from ${near.foreman.name}` : `Talk to ${near.foreman.name}`; DL.promptAt = { x: near.foreman.x, z: near.foreman.z }; }   // (promptAt: src/main.js doors)
     }
     // the store: pulling up out front makes up the order (or loads it again after a robbery)
     if (store && (phase === 'ordered' || phase === 'robbed') && !DL.active && P.enabled) {

@@ -15,12 +15,14 @@
 // own place and plays it a touch faster or slower, so two fires never crackle alike. The ears are the camera, which rides
 // several metres behind the player: so the crackle is at full loudness out to `ref` metres (a player standing at the
 // fire) and falls off past that. (It was 2 m with a third of the level: beside a fire, with the camera behind, it was
-// lost under the wind and the birds.) Away from the fire nothing is worked out: the flame isn't sliced or drawn past
+// lost under the wind and the birds; then 6 m at 0.34, and the game's maker standing on a fire still couldn't hear it:
+// now 8 m at 0.9, about 8.5 dB louder.) Away from the fire nothing is worked out: the flame isn't sliced or drawn past
 // CAMPFIRE.near metres or behind the camera, and the sound sleeps.
 //
-//   const F = makeCampfire({ W, scene, camera, x, z, y, width, audio, id })
+//   const F = makeCampfire({ W, scene, camera, x, z, y, width, audio, id, glow })
 //     x, z: the middle of the ring; y: the height of the embers (the flame's foot); width: the flame's width (metres);
-//     audio: the game's sound (src/audio/audio.js), or null for none; id: a name for its need() (one per fire)
+//     audio: the game's sound (src/audio/audio.js), or null for none; id: a name for its need() (one per fire);
+//     glow: false leaves the glow on the ground out (a fire indoors: the cabin's hearth lights its room its own way)
 //   F.update(dt, time)   each frame (time: seconds since the game began)
 //   F.burning            true while the flame is being drawn (near and in view)
 //   F.mesh               the flame's mesh; F.glow the glow's
@@ -38,7 +40,7 @@ export const CAMPFIRE = {
   leanPer: 1.1,          // ... as this many times the camera's angle down onto the fire
   glow: { r: 2.8, strength: 0.42, flicker: 0.22, colour: 0xff8a3a },   // the patch on the ground: reach (m), how bright,
                                                                      // how much it flickers (a share of strength)
-  sound: { hear: 45, level: 0.34, ref: 6, rolloff: 1.6, edge: 0.6 },   // within hear metres (fading out from edge x hear); its
+  sound: { hear: 45, level: 0.9, ref: 8, rolloff: 1.6, edge: 0.6 },   // within hear metres (fading out from edge x hear); its
                          // level within ref metres of the fire, falling off past that (inverse, rolloff)
   bright: 0.9,           // extra brightness for the valley's daylight (the shader's own "flash" punch held on: 0.9 is
                          // nearly twice as bright as the fire lab's night flames, which read pale against a sunlit meadow)
@@ -70,7 +72,7 @@ function glowTexture() {
 const _fax = new THREE.Vector3(), _fq = new THREE.Quaternion(), _fe = new THREE.Euler(), _v = new THREE.Vector3();
 let fireN = 0;
 
-export function makeCampfire({ W, scene = W.scene, camera, x, z, y = null, width = 0.8, audio = null, id = null }) {
+export function makeCampfire({ W, scene = W.scene, camera, x, z, y = null, width = 0.8, audio = null, id = null, glow: glowOn = true }) {
   const C = CAMPFIRE, base = y ?? W.heightAt(x, z), name = id || `campfire-${++fireN}`;
   // THE FLAME: box units scaled so the box is `width` across
   const s = width / C.box[0];
@@ -100,7 +102,7 @@ export function makeCampfire({ W, scene = W.scene, camera, x, z, y = null, width
   const gm = new THREE.MeshBasicMaterial({ map: glowTexture(), color: C.glow.colour, transparent: true, opacity: C.glow.strength,
     blending: THREE.AdditiveBlending, depthWrite: false, fog: false, polygonOffset: true, polygonOffsetFactor: -3, polygonOffsetUnits: -3 });
   const glow = new THREE.Mesh(gg, gm); glow.name = name + '-glow'; glow.renderOrder = 3; glow.visible = false;
-  scene.add(glow);
+  if (glowOn) scene.add(glow);
 
   // THE CRACKLE: made the first time the fire is heard; a panner at the fire, a gain to fade it in and out
   let snd = null;

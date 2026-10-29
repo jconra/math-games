@@ -1,5 +1,6 @@
-// THE STORE COUNTER: a job at the general store. The rider stands at the store's front with the order book, and
-// townsfolk walk up from the square one after another, each with an order slip: a little word problem
+// THE STORE COUNTER: a job at the general store. The rider stands behind the counter inside the store, beside the
+// storekeeper ("you just help him", the game maker), and townsfolk come in through the door one after another, each
+// with an order slip: a little word problem
 // (src/math/wordproblems.js) shown big on a parchment slip (src/ui/storeslip.js). The kid picks a coin; a right one
 // tips gold (the coins fly into the purse and it counts up) and the customer tips their hat and goes, while the next
 // one, already waiting in line, steps up with their slip. A wrong coin shows one plain line about that slip and a picture
@@ -8,8 +9,13 @@
 // that equation to solve it at the rider's own lock-box level (a find-x box below x on both sides, else with moves; the
 // lock box pays as the sheriff's does).
 //
-// Started from the general store's counter (shop.js: "Mind the counter"). Each filled order counts toward the "orders
-// filled" belt buckle (save.js JOBS).
+// Started inside the store, facing its counter: "Work the counter" (src/townrooms.js; the store's spots, src/usespots.js).
+// Where everyone stands and the way in and out are the store recipe's anchors (labs/buildings/store.js anchors.counter):
+// the rider behind the counter at the grinder, the customer across it, the next one waiting by its near end and the
+// one after out on the boardwalk; customers walk in through the doorway's right half (pushing the door open) and out
+// through its left, and the camera looks across the room from its back. A store with no inside (none built): the old
+// way, the rider out front with the order book and the customers walking up from the square. Each filled order counts
+// toward the "orders filled" belt buckle (save.js JOBS).
 //
 // THE STORE'S LEVELS (src/levels/place/store.js, the mixed place): each customer asks the levels model which level the
 // rider is on here (levelFor(rider, 'store')), picks one kind of question from that level's mix (a picture story, a
@@ -39,7 +45,8 @@
 // says, with their own pictures (src/ui/counterpics.js): the lead (the clock to read, the coins to count) above the
 // coins, the help after a miss.
 //
-//   const J = makeStoreJob({ W, folk, P, I, camera, rider, hud, hob, refresh, openBox, onStart, onStop, pay, goods, town, work })
+//   const J = makeStoreJob({ W, folk, P, I, camera, rider, hud, hob, refresh, openBox, onStart, onStop, pay, goods, town, work, room })
+//     room(): the store's room (src/townrooms.js TR.rooms.generalStore: { o, A, F }), or null: the counter outside
 //     work(): opens the tools' Work it out (src/ui/tools.js) on this order's sum: the slip's own button on a phone (the
 //     slip covers the tools strip there), for an order with no worked area of its own
 //     town(): the town's people (src/townpeople.js), or null: the customers are townsfolk borrowed from it (already about,
@@ -103,6 +110,7 @@ export const STORE = {
   // a phone held upright (the slip is a sheet along the bottom): further back, the pair high in the picture
   camPhone: { out: 1.6, side: 6.5, up: 2.6, lookOut: 1.6, lookSide: -1.4, lookUp: -1.2 },
   phoneWidth: 760,     // narrower than this (the slip's own phone layout), the phone framing
+  door: 1.7,           // m from the doorway within which a customer walking through pushes the door open
   longOpen: 1.1,       // seconds after the slip comes up when the worked area opens by itself (the story read first)
   longMost: 4,         // a non-bulk order's numbers may need a long sum up to this many points past the rider's Long work
 };
@@ -113,7 +121,7 @@ const formsOf = (map) => (MAPS[map] ? MAPS[map].ids.map((id, i) => [id, MAPS[map
 const SALE_FORMS = { sales: formsOf('sales'), wool: formsOf('wool') };
 
 export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, refresh = () => {}, openBox = null,
-  onStart = () => {}, onStop = () => {}, pay = { order: 3, orderEvery: 3, orderFirst: 1 }, scene = W.scene, goods = null, fish = null, voice = null, town = null, work = null, open: shiftOpen = () => true }) {
+  onStart = () => {}, onStop = () => {}, pay = { order: 3, orderEvery: 3, orderFirst: 1 }, scene = W.scene, goods = null, fish = null, voice = null, town = null, work = null, open: shiftOpen = () => true, room = null }) {
   // a customer's recorded line (src/audio/shouts.js: the men only; it knows by `male`), from where they stand
   const speak = (kind, c) => { if (voice && c) voice(kind, { at: () => ({ x: c.x, z: c.z }), male: !c.who.she }); };
   const place = W.places.store;
@@ -126,9 +134,42 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
   const door = place ? place.door : { x: 0, z: 0 };
   const out = new THREE.Vector2(Math.sin(rot), Math.cos(rot)), side = new THREE.Vector2(-Math.cos(rot), Math.sin(rot));
   const at = (o, s = 0) => ({ x: door.x + out.x * o + side.x * s, z: door.z + out.y * o + side.y * s });
-  const clerkAt = at(STORE.clerk), frontAt = at(STORE.front), queueAt = at(STORE.queue[0], STORE.queue[1]);
+  const faceOut = rot + Math.PI;   // (a customer at the counter out front faces back toward the store)
+  let clerkAt = at(STORE.clerk), frontAt = at(STORE.front), queueAt = at(STORE.queue[0], STORE.queue[1]), riderYaw = rot;
   // (the second place in line, unless something stands there: then a line of one, as before)
-  const queue2At = (() => { const q = at(STORE.queue2[0], STORE.queue2[1]); return place && W.blocked && W.blocked(q.x, q.z) ? null : q; })();
+  let queue2At = (() => { const q = at(STORE.queue2[0], STORE.queue2[1]); return place && W.blocked && W.blocked(q.x, q.z) ? null : q; })();
+  for (const q of [frontAt, queueAt, queue2At]) if (q) q.face = faceOut;
+  // INSIDE: the store's room (src/townrooms.js), when it is built: everyone's places, the way in and out, the camera.
+  // Worked out as the counter opens (the building may still be being made when the ride starts)
+  let IN = null;
+  function inside() {
+    const R = room ? room() : null, C = R && R.A && R.A.counter;
+    if (!R || !R.F || !C || !C.rider || !C.wayIn) return null;
+    const F = R.F, pt = (q, face) => { const p = F.point(q); return face == null ? { x: p.x, z: p.z } : { x: p.x, z: p.z, face: F.yaw(face) }; };
+    const L = { o: R.o, F, C,
+      rider: pt(C.rider), riderYaw: F.yaw(-Math.PI / 2),
+      front: pt(C.customer, Math.PI / 2), queue: pt(C.queue, Math.PI / 2 + 0.5), queue2: C.queue2 ? pt(C.queue2, Math.PI) : null,
+      wayIn: C.wayIn.map((q) => pt(q)), wayOut: C.wayOut.map((q) => pt(q)) };
+    L.door = L.wayIn[0]; L.doorway = L.wayIn[1];
+    L.front.inside = L.queue.inside = true;
+    return L;
+  }
+  function useInside() {
+    IN = inside();
+    if (!IN) return;
+    clerkAt = IN.rider; riderYaw = IN.riderYaw; frontAt = IN.front; queueAt = IN.queue; queue2At = IN.queue2;
+  }
+  // (a customer in the store's room, through its door)
+  const CODE = W.V && W.V.CODE;
+  const isIn = (c) => !!(IN && CODE && (CODE.indoors ? CODE.indoors(c.x, W.heightAt(c.x, c.z) + 1, c.z) === IN.o : (() => { const R = CODE.room(c.x, W.heightAt(c.x, c.z) + 1, c.z); return R && R.o === IN.o; })()));   // (in through its door: the porch out front is outside)
+  // the way to a spot: from outside to a place inside, through the door; from inside out, through it the other way
+  function wayTo(c, spot) {
+    if (!IN) return null;
+    const cin = isIn(c), sin = !!(spot && spot.inside);
+    if (!cin && sin) return IN.wayIn.map((q) => ({ ...q }));
+    if (cin && !sin) return IN.wayOut.map((q) => ({ ...q }));
+    return null;
+  }
 
   const U = makeStoreSlip(document.body, { onPick: (i) => pick(i), onDone: () => J.stop(), onDraw: () => draw(), onWork: () => (order && !order.long && work ? work() : openLong()) });
   const J = { active: false };
@@ -155,9 +196,11 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
     const T = town ? town() : null;
     if (T) {
       const busy = new Set(busyNames()), names = FOLK.map((f) => f.name).filter((n) => !busy.has(n));
-      const got = T.lend({ to: dest, names: names.length ? names : null, notDoor: 'store' });
+      // (into the store: lent as far as its door, then in through it)
+      const into = IN && dest.inside;
+      const got = T.lend({ to: into ? IN.door : dest, names: names.length ? names : null, notDoor: 'store' });
       if (got) {
-        const c = { p: got.p, who: FOLK.find((f) => f.name === got.name) || got.who, x: got.x, z: got.z, yaw: got.yaw, state: 'come', to: dest, walking: false, via: got.via, lent: got };
+        const c = { p: got.p, who: FOLK.find((f) => f.name === got.name) || got.who, x: got.x, z: got.z, yaw: got.yaw, state: 'come', to: dest, walking: false, via: into ? [...(got.via || []), ...IN.wayIn.map((q) => ({ ...q }))] : got.via, lent: got };
         people.push(c);
         return c;
       }
@@ -173,19 +216,22 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
       const c = at(o, s); if (!W.blocked(c.x, c.z) && W.waterAt(c.x, c.z) < 0.3) start = c;
     }
     if (!start) start = at(near ? 6 : STORE.from, -2);
-    const c = { p, who, x: start.x, z: start.z, yaw: 0, state: 'come', to: dest, walking: false };
+    const c = { p, who, x: start.x, z: start.z, yaw: 0, state: 'come', to: dest, walking: false, via: IN && dest.inside ? IN.wayIn.map((q) => ({ ...q })) : null };
     c.yaw = Math.atan2(dest.x - c.x, dest.z - c.z);
     p.root.position.set(c.x, W.heightAt(c.x, c.z), c.z); p.root.rotation.y = c.yaw;
     scene.add(p.root);
     people.push(c);
     return c;
   }
-  const faceRider = rot + Math.PI;   // (a customer at the counter faces back toward the store)
   // walks c toward c.to; true once there
   function walk(c, dt) {
-    // (a townsperson's way here first: the points of the town's paths, then the spot itself)
-    while (c.via && c.via.length && Math.hypot(c.via[0].x - c.x, c.via[0].z - c.z) < 0.5) c.via.shift();
-    const tg = c.via && c.via.length && c.state !== 'go' ? c.via[0] : c.to;
+    // (a townsperson's way here first: the points of the town's paths, then the spot itself; inside the store, the way
+    // through its door, in or out, walked closely)
+    const close = IN ? 0.18 : 0.5;
+    while (c.via && c.via.length && Math.hypot(c.via[0].x - c.x, c.via[0].z - c.z) < close) c.via.shift();
+    const tg = c.via && c.via.length && (c.state !== 'go' || c.out) ? c.via[0] : c.to;
+    // (going through the doorway: the door pushed open, as the townsfolk do, src/townpeople.js)
+    if (IN && CODE && CODE.doors && Math.hypot(c.x - IN.doorway.x, c.z - IN.doorway.z) < STORE.door) CODE.doors.pass(IN.doorway.x, IN.doorway.z, 1.2);
     const dx = tg.x - c.x, dz = tg.z - c.z, d = Math.hypot(dx, dz);
     if (d < 0.06) {
       if (c.walking) { c.walking = false; c.clip = 'Idle'; c.p.play('Idle', { fade: 0.3 }); }
@@ -218,6 +264,9 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
   }
   let leaveN = 0;
   function leave(c) {
+    // (in the store: out through its door first, then on as below)
+    if (IN && isIn(c) && !c.out) { c.state = 'go'; c.out = true; c.via = IN.wayOut.slice(0, -1).map((q) => ({ ...q })); c.to = IN.wayOut[IN.wayOut.length - 1]; c.walking = false; return; }
+    c.out = false;
     // (a townsperson walks on about the town: home, or wherever they were going)
     if (c.lent && town && town()) { c.state = 'go'; syncBack(c); town().giveBack(c.lent); const i = people.indexOf(c); if (i >= 0) people.splice(i, 1); return; }
     c.state = 'go';
@@ -236,7 +285,8 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
   const atFront = () => people.find((c) => c.state === 'front' || c.state === 'serve');
   // the one in (or on the way to) a place in line
   const inLine = (spot) => (spot ? people.find((c) => (c.state === 'queue' || c.state === 'come') && c.to === spot) : null);
-  const stepTo = (c, spot, state) => { c.state = state; c.to = spot; c.walking = false; };
+  // (in through the door: after what is left of their way here; out through it: at once)
+  const stepTo = (c, spot, state) => { c.state = state; c.to = spot; c.walking = false; const w = wayTo(c, spot); if (w) c.via = spot && spot.inside ? [...(c.via || []), ...w] : w; };
 
   // the line moves up: whichever of the two in line is nearer the counter steps up to it (the first, unless they are
   // still on their way over and the second is already here), the other takes the first place, and somebody new heads
@@ -470,12 +520,13 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
     onStart();
     U.purse(rider.gold);
     U.waiting('Opening up the counter…');
+    useInside();   // (the store's room, if it has one: the counter inside)
     if (P.onHorse) { P.dismount(); phase = 'dismount'; } else open();
     return true;
   };
   function open() {
     phase = 'open';
-    P.teleport(clerkAt.x, clerkAt.z, rot);
+    P.teleport(clerkAt.x, clerkAt.z, riderYaw);
     P.cam.enabled = false;
     if (hob) hob.event('storeStart');
     moveUp();
@@ -507,19 +558,26 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
       if (there) {
         if (c.state === 'front' && J.active && phase === 'open' && !order && !U.busy) serve(c);
         else if (c.state === 'come' && (c.to === queueAt || c.to === queue2At)) c.state = 'queue';
+        else if (c.state === 'go' && c.out) { leave(c); if (!people.includes(c)) continue; }   // (out of the store's door: on about the town)
         else if (c.state === 'go') { removePerson(c); continue; }
         if (c.state === 'serve' && c.hand) handOver(c);
-        if (c.state === 'serve' || c.state === 'queue' || c.state === 'front') turn(c, faceRider, dt);
+        if (c.state === 'serve' || c.state === 'queue' || c.state === 'front') turn(c, (c.to && c.to.face) ?? faceOut, dt);
       }
       placePerson(c, dt);
     }
     if (!J.active || phase !== 'open') return;
     // the "Draw it for me" button after a long think (a wrong pick shows the picture by itself)
     if (order && !missed && !helped && !U.busy && !longPanel && (thinkT += dt) > STORE.think) { U.offerDraw(true); thinkT = -1e9; }
-    // the camera: from the street, the rider and the customer side by side
-    const K = innerWidth < STORE.phoneWidth ? STORE.camPhone : STORE.cam, y0 = W.heightAt(clerkAt.x, clerkAt.z);
-    const cp = at(STORE.clerk + K.out, K.side), lp = at(K.lookOut, K.lookSide);
-    camPos.set(cp.x, y0 + K.up, cp.z); camLook.set(lp.x, W.heightAt(lp.x, lp.z) + K.lookUp, lp.z);
+    // the camera: inside, from the store's back across the room at the pair over the counter (the store recipe's own
+    // framing); out front, from the street, the rider and the customer side by side
+    if (IN) {
+      const K = (innerWidth < STORE.phoneWidth && IN.C.camPhone) || IN.C.cam, a = IN.F.point(K.at), b = IN.F.point(K.look);
+      camPos.set(a.x, a.y, a.z); camLook.set(b.x, b.y, b.z);
+    } else {
+      const K = innerWidth < STORE.phoneWidth ? STORE.camPhone : STORE.cam, y0 = W.heightAt(clerkAt.x, clerkAt.z);
+      const cp = at(STORE.clerk + K.out, K.side), lp = at(K.lookOut, K.lookSide);
+      camPos.set(cp.x, y0 + K.up, cp.z); camLook.set(lp.x, W.heightAt(lp.x, lp.z) + K.lookUp, lp.z);
+    }
     camera.position.copy(camPos); camera.lookAt(camLook);
   };
 
@@ -535,8 +593,10 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
     counter: order.counter || null, lead: order.lead ? order.lead.kind : null, pic: order.pic ? order.pic.kind : null,
     coins: order.coins.map((c) => ({ label: c.label, good: c.good })), equation: order.equation, sale: order.sale || null, credit: order.credit || [], long: order.long ? { op: order.long.op, point: order.long.point, a: order.long.a, b: order.long.b, n: order.long.n, d: order.long.d } : null } : null,
     longOpen: !!longPanel, long: longPanel ? longPanel.state() : null,
-    people: people.map((c) => ({ who: c.who.name, state: c.state, x: +c.x.toFixed(2), z: +c.z.toFixed(2) })), busy: U.busy });
+    people: people.map((c) => ({ who: c.who.name, state: c.state, x: +c.x.toFixed(2), z: +c.z.toFixed(2), inside: IN ? isIn(c) : null })), busy: U.busy, inside: !!IN });
   J.people = people;    // (read each frame by the wagons, which stop for customers: no copies made)
+  // (the end of the line while the counter is open: where the town sends one more to wait, src/townpeople.js)
+  J.lineSpot = () => (IN && J.active ? queue2At : null);
   J.busyNames = busyNames;   // (the town doesn't send these over: src/townpeople.js)
   J.trainer = Q;
   // (rigs: the next customer brings this order: { type, ladder: 'K', step, sum: { op: 'div', n: 112, d: 5 }, longStep,

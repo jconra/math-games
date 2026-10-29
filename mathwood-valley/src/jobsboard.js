@@ -12,8 +12,8 @@
 // panel; picking it there asks for more work (shift.ask: a fresh shift at once) and the hoofprints lead to it as ever.
 //
 // The board: two posts, a shingled roof, a plank backboard with a painted "JOBS" header and the notices pinned on it
-// (one canvas picture: src drawn here in code), a lantern on a post that glows at night (W.night, when the world has
-// it). Three draws, and it blocks walkers at its posts. Only the jobs on for this rider are pinned up.
+// (one canvas picture: src drawn here in code), the town's lantern post beside it. Three draws and the lantern's, and it
+// blocks walkers at its posts. Only the jobs on for this rider are pinned up.
 //
 //   const JB = makeJobsBoard({ W, camera, I, hud, rider, player, jobs, onOpen, onClose, speak, scene, shift })
 //     player(): the player (P); jobs: { roundup, sheep, pigs, store, delivery, wagon, deer, range, loot, farm, camps,
@@ -32,12 +32,14 @@
 //                       asked for first);  JB.picked  the job picked (its id) or null (it stays main.js's
 //                       chosen job after the tracks give way: the card and the trail keep to it, see main.js THE JOB)
 //   JB.where(id), JB.nameOf(id), JB.whatOf(id), JB.wayTo(from, to)   where a job is, its name and line, 'north-east'...
+//   JB.hereOf(id)       the job card's line on arriving there (a job inside a building: step in)
 //   JB.jobs             the jobs on the board now: [{ id, name, what, pic, saddle }]
 //   JB.screenOf(id)     (rigs) where that job's notice is on the page { x, y, on } (the board in view), or null
 //   JB.state(), JB.dispose()
 //   BOARD_JOBS, BOARD, boardSpot(W), drawPic(ctx, kind, x, y, size)
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { makeProp } from '../world/objects/townProps.js';
 import { makePanel } from './shop.js';
 import { HOB } from './hob.js';
 import { forgetPlants } from './missions/loot.js';
@@ -47,7 +49,7 @@ export const BOARD_JOBS = [
   { id: 'roundup', name: 'Round-up', pic: 'steer', what: 'Rope the cattle with the right numbers' },
   { id: 'sheep', name: 'Sick sheep', pic: 'sheep', what: 'Give each sick sheep the right medicine' },
   { id: 'pigs', name: 'Loose pigs', pic: 'pig', what: 'Herd the loose pigs into the right pens' },
-  { id: 'store', name: 'Mind the store', pic: 'slip', what: "Fill the townsfolk's order slips" },
+  { id: 'store', name: 'Mind the store', pic: 'slip', what: "Fill the townsfolk's order slips", here: 'Step inside and help the storekeeper at his counter' },   // (here: the job card at its door, the job inside: src/townrooms.js)
   { id: 'delivery', name: 'Deliveries', pic: 'crate', what: 'Haul supplies out to the camps', saddle: true },
   { id: 'wagon', name: 'Protect the wagon', pic: 'wagon', what: 'Stop the gang holding up a wagon on the road' },   // (picked: a hold-up is sent for it, src/missions/wagonjob.js)
   { id: 'deer', name: 'Deer photos', pic: 'deer', what: "Take the deer's pictures for Miss Wren" },
@@ -56,7 +58,7 @@ export const BOARD_JOBS = [
   { id: 'windmill', name: 'The windmill', pic: 'windmill', what: "Build the miller's tower to stand in the wind" },   // (src/windmilljob.js: where it is from J.where())
   { id: 'bridge', name: 'The bridge', pic: 'bridge', what: "Build the engineer's bridge over the west river" },   // (src/bridgejob.js: where it is from J.where())
   { id: 'fishing', name: 'Fishing', pic: 'fish', what: 'Catch fish off the dock by the lake, sell them at the store' },   // (src/fishingjob.js: where it is from J.where())
-  { id: 'boxes', name: 'Lock boxes', pic: 'lock', what: "Crack the sheriff's seized boxes" },
+  { id: 'boxes', name: 'Lock boxes', pic: 'lock', what: "Crack the sheriff's seized boxes", here: "Step inside: the boxes are piled on the sheriff's desk" },
 ];
 
 export const BOARD = {
@@ -349,10 +351,12 @@ export function makeJobsBoard({ W, camera, I = null, hud = null, rider = null, p
   const face = new THREE.Mesh(new THREE.PlaneGeometry(BOARD.w, BOARD.h).translate(0, BOARD.low + BOARD.h / 2, -0.03), faceMat);
   face.name = 'jobs-board-face';
   for (const m of [woodMesh, roofMesh, face]) { m.castShadow = shadows; m.receiveShadow = shadows; root.add(m); }
-  // a lantern on the left post, glowing at night
-  const lampMat = new THREE.MeshStandardMaterial({ color: 0xffd28a, emissive: 0xffb04a, emissiveIntensity: 0.15, roughness: 0.4 });
-  const lamp = new THREE.Mesh(mergeGeometries([new THREE.BoxGeometry(0.16, 0.22, 0.16).translate(0, 0, 0), new THREE.ConeGeometry(0.13, 0.1, 4).rotateY(Math.PI / 4).translate(0, 0.16, 0)]), lampMat);
-  lamp.position.set(-(half + 0.12), BOARD.low + BOARD.h * 0.55, 0.2); root.add(lamp);
+  // a lantern post at the board's left end, its arm out over the notices: the town's own (world/objects/townProps.js
+  // 'lantern', as the Town Lab puts down), in place of the plain box lantern it had (the game's maker asked what "the
+  // little box with a pyramid on top" was). Its pieces are shared with every lantern post: never disposed here
+  const lamp = makeProp('lantern'); lamp.name = 'jobs-board-lantern'; lamp.userData.shared = true;
+  lamp.position.set(-(half + 0.55), 0, 0.3); root.add(lamp);
+  lamp.traverse((o) => { if (o.isMesh) { o.castShadow = shadows; o.receiveShadow = shadows; } });
   scene.add(root);
   root.updateMatrixWorld(true);
   // the posts block walkers (the board between them doesn't reach the ground: nobody walks through a notice board)
@@ -472,6 +476,8 @@ export function makeJobsBoard({ W, camera, I = null, hud = null, rider = null, p
   };
   JB.nameOf = (id) => { const j = list.find((q) => q.id === id); return j ? j.name : null; };
   JB.whatOf = (id) => { const j = list.find((q) => q.id === id); return j ? j.what : null; };
+  // (on arriving: what to do there; a job worked inside a building, step in: its line says so)
+  JB.hereOf = (id) => { const j = list.find((q) => q.id === id); return j ? j.here || j.what : null; };
   JB.wayTo = wayTo;
 
   // ── THE PANEL: the board big on the screen ──────────────────────────────────────────────────────────────────────
@@ -521,6 +527,7 @@ export function makeJobsBoard({ W, camera, I = null, hud = null, rider = null, p
   JB.update = (dt, pos, { busy = null } = {}) => {
     if (!pos) return;
     JB.prompt = Math.hypot(pos.x - front.x, pos.z - front.z) < BOARD.near && !panel ? 'Read the jobs board' : null;
+    JB.promptAt = B;   // (where the board stands: the one E action's arbitration, src/main.js doors)
     if (picked) {
       picked.t += dt;
       const j = list.find((q) => q.id === picked.id), g = j && !needsSaddle(j) ? goalPlace(j.id) : null;
@@ -530,8 +537,6 @@ export function makeJobsBoard({ W, camera, I = null, hud = null, rider = null, p
       // Miss Wren's camera lent)
       else if (g && (!g.met || g.met()) && (Math.hypot(pos.x - g.x, pos.z - g.z) < BOARD.arrive || (g.hide && Math.hypot(pos.x - g.hide.x, pos.z - g.hide.z) < g.hide.r))) picked = null;
     }
-    const night = Number.isFinite(W.night) ? W.night : 0;
-    lampMat.emissiveIntensity = 0.15 + 2.2 * night;
     if ((stampT -= dt) <= 0) { stampT = 1; restamp(); }   // (a job's shift done, or a new day: the stamps)
   };
   let stampT = 0;
@@ -555,8 +560,8 @@ export function makeJobsBoard({ W, camera, I = null, hud = null, rider = null, p
     if (panel) { const pn = panel; panel = null; pn.close(); }
     offPick(); offTarget(); offBlock(); unmow();
     root.removeFromParent();
-    root.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); } });
-    for (const m of [wood, roofMat, faceMat, lampMat]) m.dispose();
+    root.traverse((o) => { if (o.isMesh && !(o.parent && o.parent.userData.shared)) o.geometry.dispose(); });   // (the lantern post's are the town's)
+    for (const m of [wood, roofMat, faceMat]) m.dispose();
     tex.dispose();
   };
   return JB;

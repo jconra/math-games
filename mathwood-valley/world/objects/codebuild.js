@@ -12,7 +12,8 @@
 //                                              oneSheet: one wood sheet for every building (no calmed copies). The potato
 //                                              tier asks for both (objects/codebuildings.js)
 //   await kit.art(kind)                        a kind's own pictures, made the first time one is wanted (the saloon's)
-//   const b = buildCodeBuilding(kit, kind, { shade, look })   kind: one of CODE_KINDS ('home' is a cabin); shade(sh): a
+//   const b = buildCodeBuilding(kit, kind, { shade, look, ground })   kind: one of CODE_KINDS ('home' is a cabin); ground:
+//                                              the land under it, for one that sits on it as it is (SITS, below); shade(sh): a
 //                                              patch to add after the building's own (the valley's hill shade and
 //                                              street-lamp light); look: the layout item's { id, preset, seed } (a cabin's
 //                                              design: lookOf). Returns {
@@ -183,7 +184,7 @@ export async function makeBuildKit({ step = async () => {}, small = false, oneSh
   kit.art = async (kind) => { if (kind === 'saloon' && !kit.SAA) { kit.SAA = await makeSaloonArt(); if (small) halve(kit.SAA.saloon, 4); } };
   // (the far look's material: plain colours per corner, shared by every building, so nothing of its own to set between
   // two buildings' far trims; the valley gives it the hill shade like any plain lit material)
-  kit.trimMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92 }); kit.trimMat.name = 'code far trim';
+  kit.trimMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92 }); kit.trimMat.name = 'code far trim'; kit.trimMat.shadowSide = THREE.DoubleSide;   // (both sides cast: see materialsFor)
   // THE STAND-INS' PICTURES: one shared sheet of square cells, each a picture of a building's inside taken from just
   // outside one of its see-through windows (or the saloon's open doorways) when the building is made
   // (objects/codebuildings.js); cell 0 is plain dark, what a window shows before its picture is taken. 4 x 4 cells:
@@ -244,6 +245,10 @@ function materialsFor(kit, kind, B, shade) {
     jar: own(lit(new THREE.MeshStandardMaterial({ color: 0xdfeceb, roughness: 0.06, metalness: 0.1, transparent: true, opacity: 0.38, depthWrite: false }), { ao: true })),
   };
   mats.stone.shadowSide = THREE.FrontSide;
+  // (the sun's shadow from both sides of every face: a wall's outside faces are the shell's and its inside faces the
+  // inside's, which casts nothing; with three's default (only the faces turned away from the sun) the walls threw no
+  // shadow, only the roofs did: the ground at a wall's foot lay in full sun)
+  for (const k of ['wood', 'iron', 'plaster', 'hay', 'rope']) mats[k].shadowSide = THREE.DoubleSide;
   return { mats, uni };
 }
 
@@ -376,9 +381,13 @@ const BUILDERS = {
   windpump: (env, look) => buildWindpump(windpumpRecipe(seedOf(look)), env),
 };
 BUILDERS.home = BUILDERS.cabin;
-// (meshes seen only from inside, whole: the goods, the jars, the glass seen from inside, the rope, the plaster; the
-// stable's floor, straw and hay are split like the rest: its doors stand open on the street)
-const ALL_INSIDE = new Set(['goods', 'jar', 'pane', 'rope', 'plaster']);
+// (the kinds that sit on the land as it is when it isn't levelled: their foundations and steps reach down to it)
+export const SITS = new Set(['blacksmith', 'cabin', 'home']);
+// (meshes seen only from inside, whole: the goods, the jars, the glass seen from inside, the rope; the stable's floor,
+// straw and hay are split like the rest: its doors stand open on the street. Not the plaster: the cabins' chinking
+// between the logs, a stick chimney's daub, the piers and the stones at the steps are plaster too, outdoors; whole
+// inside, the walls were slit and the chimneys and porches hollow from outside till the inside was loaded)
+const ALL_INSIDE = new Set(['goods', 'jar', 'pane', 'rope']);
 const NO_SHADOW = new Set(['glow', 'glass', 'spill', 'floor', 'boards', 'decal', 'pane', 'jar']);
 
 // ── THE FAR TRIM: a building's small outside pieces in plain colours, one mesh ─────────────────────────────────────────
@@ -472,7 +481,18 @@ const CARD_FADE = 0.3;   // (s: the stand-in pictures fading out once the room b
 
 export function buildCodeBuilding(kit, kind, o = {}) {
   const t0 = performance.now();
-  const look = lookOf(kind, o.look || {}), B = BUILDERS[kind]({ texMean: kit.RT.mean }, look);
+  const look = lookOf(kind, o.look || {}), env = { texMean: kit.RT.mean };
+  let B = BUILDERS[kind](env, look);
+  // ON THE LAND AS IT IS (o.ground(x, z): the ground's height at a point of its centred frame, against the ground at its
+  // middle; given for a building that doesn't level its ground): a kind that can sit on it (SITS: it sits as low as it
+  // can, its foundation and steps down to the ground, B.sit how far up from the ground at its middle) is built again
+  // with the ground in its own frame (its centring known from the first build)
+  if (o.ground && SITS.has(kind)) {
+    const ox = B.offset || 0, oz = B.offsetZ || 0;
+    for (const g of Object.values(B.geos)) g.dispose(); for (const L of B.doors) for (const g of [L.geo, L.glass, L.iron, L.rope]) if (g) g.dispose();
+    if (B.extra) B.extra.traverse((m) => { if (m.geometry) m.geometry.dispose(); if (m.material) { if (m.material.map) m.material.map.dispose(); m.material.dispose(); } });
+    B = BUILDERS[kind]({ ...env, ground: (x, z) => o.ground(x + ox, z + oz) }, look);
+  }
   const { mats, uni } = materialsFor(kit, kind, B, o.shade);
   const OX = B.offset || 0, OZ = B.offsetZ || 0, inside = B.light.inside;
   // the parts: shell (its outside, always drawn), far (the far look's trim), cards (the stand-ins in its see-through
@@ -593,8 +613,12 @@ export function buildCodeBuilding(kit, kind, o = {}) {
   const cardGeos = [], windows = [], o3 = new THREE.Object3D();
   const card = (w, h, c, n, back) => { o3.position.set(c[0] - n.x * back, c[1], c[2] - n.z * back); o3.lookAt(o3.position.clone().add(n)); o3.updateMatrix(); cardGeos.push(new THREE.PlaneGeometry(w, h).applyMatrix4(o3.matrix)); };
   for (const W of B.anchors.seeThrough || []) { const n = new THREE.Vector3(...W.n).normalize(); card(W.w, W.h, W.c, n, 0.25); windows.push({ w: W.w, h: W.h, c: W.c, n: [n.x, n.y, n.z] }); }
-  if (batwings) for (const D of doorways) { const n = new THREE.Vector3(...D.out).normalize(); card(D.w * 0.98, D.h * 0.98, D.centre, n, 0.6); windows.push({ w: D.w, h: D.h, c: D.centre, n: [n.x, n.y, n.z], door: true }); }
-  else for (const D of doorways) { const n = new THREE.Vector3(...D.out).normalize(); card(D.w * 0.98, D.h * 0.98, D.centre, n, 0.6); }   // (after the pictures' cards: they keep cell 0, the dark)
+  // (the batwings' doorways, and a doorway open for good, with no door to swing (anchors' open: the stable's back doors
+  // stand open, part of its walls): seen into as the windows are, a picture of the inside and a view arc of their own;
+  // a door's doorway its plain dark card, and one shut for good (the sheriff's back door) too)
+  const openWay = (i) => batwings || (!!doorways[i].open && !doors.some((d) => d.way === i));
+  doorways.forEach((D, i) => { if (!openWay(i)) return; const n = new THREE.Vector3(...D.out).normalize(); card(D.w * 0.98, D.h * 0.98, D.centre, n, 0.6); windows.push({ w: D.w, h: D.h, c: D.centre, n: [n.x, n.y, n.z], door: true }); });
+  doorways.forEach((D, i) => { if (openWay(i)) return; const n = new THREE.Vector3(...D.out).normalize(); card(D.w * 0.98, D.h * 0.98, D.centre, n, 0.6); });   // (after the pictures' cards: they keep cell 0, the dark)
   let cardMesh = null, cardUV = null; const nCards = cardGeos.length;
   const cardMat = kit.standMat.clone(); cardMat.transparent = true; cardMat.depthWrite = false;
   let cardA = 1, cardWait = 0;   // (the pictures' opacity; frames the room has been in, to be sure it is on the card first)
@@ -672,7 +696,7 @@ export function buildCodeBuilding(kit, kind, o = {}) {
     up.visible = out.seen;
   };
   const out = {
-    kind, look, group, B, grid, lamps: B.lamps, uni, mats, nightLamps,
+    kind, look, group, B, grid, lamps: B.lamps, uni, mats, nightLamps, sit: B.sit || 0,   // (sit: its zero over the ground at its middle, m)
     full: true, loaded: false, seen: true, level: 3, upstairs: false, hasUpstairs: !!(rooms && up.children.length),
     doors, doorways, windows,
     tris: { shell: tris(shell), inside: ins.reduce((a, g) => a + (g ? tris(g) : 0), 0) + tris(up), props: propTris }, meshes: { shell: 0, inside: 0, props: 0 },

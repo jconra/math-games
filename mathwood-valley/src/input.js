@@ -6,7 +6,8 @@
 //     I.run         true while Shift is held, or the stick is pushed out to its edge (run on foot, gallop on a horse)
 //     I.takeLook()  -> { dx, dy } pixels dragged to look around since last asked (the camera takes them each frame)
 //     I.look        { dx, dy } dragged so far and not yet taken (a look only: it doesn't take them)
-//     I.takeZoom()  -> wheel steps since last asked (+ out, - in)
+//     I.takeZoom()  -> wheel steps since last asked (+ out, - in); a pinch with two fingers on the view counts too
+//                   (spread: in; closer: out)
 //     I.lookedAt    when the view was last dragged (performance.now() ms): the camera swings back behind 1.5 s after
 //     I.tap(code)   true once for each press of a key since it was last asked (KeyE, KeyH, Escape, ...): read it, it's used
 //     I.held(code)  true while a key is down
@@ -38,6 +39,7 @@ const TAP_MS = 450;           // ... and a touch held longer than this isn't a t
 const STICK_R = 56;           // the thumb stick's reach in pixels; past 92% of it is "run"
 const STICK_SIDE = 0.42;      // the left part of the screen (a fraction of its width) where a thumb makes a stick
 const PAD_MOUSE = 10, PAD_TOUCH = 26;   // how far beside a target's outline a click still picks it (pixels)
+const PINCH_PX = 40;          // pixels two fingers spread (or close) for one of the wheel's steps of zoom
 
 export function makeInput(canvas, { camera = null } = {}) {
   const down = new Set();                 // keys held
@@ -86,6 +88,7 @@ export function makeInput(canvas, { camera = null } = {}) {
   // each pointer down on the canvas: what it is doing ('look' drags the view, 'stick' is the thumb stick), where it
   // started, how far it has moved, and when it went down
   const ptrs = new Map();
+  let pinchD = null;   // (two fingers' distance apart while pinching)
   const stick = { id: null, x: 0, y: 0, run: false, el: null, knob: null };
   function showStick(on, x, y) {
     if (!stick.el) {
@@ -122,18 +125,27 @@ export function makeInput(canvas, { camera = null } = {}) {
       I.move.x = sx; I.move.y = sy; I.move.mag = Math.min(1, L);
       stick.run = L > 0.92; I.run = stick.run || down.has('ShiftLeft') || down.has('ShiftRight');
       stick.knob.style.transform = `translate(${sx * STICK_R}px, ${-sy * STICK_R}px)`;
-    } else if (p.moved > DRAG_PX) {
-      look.dx += dx; look.dy += dy; I.lookedAt = performance.now(); I.dragging = true;
+    } else {
+      // (two fingers on the view: a pinch zooms the camera, in to first person and out again; it doesn't look about)
+      const two = p.touch ? [...ptrs.values()].filter((q) => q.mode === 'look' && q.touch) : [];
+      if (two.length >= 2) {
+        const d = Math.hypot(two[0].x - two[1].x, two[0].y - two[1].y);
+        if (pinchD != null) zoom += Math.max(-3, Math.min(3, -(d - pinchD) / PINCH_PX));
+        pinchD = d; for (const q of two) q.pinch = true;
+        return;
+      }
+      if (p.moved > DRAG_PX && !p.pinch) { look.dx += dx; look.dy += dy; I.lookedAt = performance.now(); I.dragging = true; }
     }
   }
   function onUp(e) {
     const p = ptrs.get(e.pointerId); if (!p) return;
     ptrs.delete(e.pointerId);
+    if (p.pinch) pinchD = null;
     if (p.mode === 'stick') { stick.id = null; stick.run = false; showStick(false); readKeys(); }
     if (![...ptrs.values()].some((q) => q.mode === 'look' && q.moved > DRAG_PX)) I.dragging = false;
     // a click: pressed and let go without dragging (a tap: quickly, too); the left mouse button only
     const quick = !p.touch || performance.now() - p.t0 < TAP_MS;
-    if (enabled && e.type === 'pointerup' && p.moved <= DRAG_PX && quick && (p.touch || p.button === 0)) addPick(e.clientX, e.clientY, p.touch);
+    if (enabled && e.type === 'pointerup' && p.moved <= DRAG_PX && quick && !p.pinch && (p.touch || p.button === 0)) addPick(e.clientX, e.clientY, p.touch);
   }
   function onWheel(e) {
     if (!enabled) return; e.preventDefault();
@@ -143,7 +155,7 @@ export function makeInput(canvas, { camera = null } = {}) {
   const noMenu = (e) => e.preventDefault();
   function letGo() {
     down.clear(); taps.clear(); readKeys(); I.move.x = I.move.y = I.move.mag = 0; I.run = false;
-    look.dx = look.dy = 0; zoom = 0; ptrs.clear(); stick.id = null; stick.run = false; showStick(false); I.dragging = false;
+    look.dx = look.dy = 0; zoom = 0; ptrs.clear(); pinchD = null; stick.id = null; stick.run = false; showStick(false); I.dragging = false;
   }
 
   // ── PICKING ─────────────────────────────────────────────────────────────────────────────────────────────────

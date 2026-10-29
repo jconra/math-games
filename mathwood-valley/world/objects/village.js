@@ -178,8 +178,8 @@ export class Village {
     const o = { group, pick, it, kind: it.kind, inner: null };
     // (a building made in code: its own group, at its own metres, its front already toward +z)
     o.isCode = !!(it.type === 'model' && this.code && this.code.has(it.kind, it));
-    if (o.isCode) this.code.make(it).then((b) => { if (this.objs.get(it.id) !== o) { b.dispose(); return; }
-      o.code = b; o.inner = b.group; group.add(b.group); this.place(o); this.code.attach(o); this.onLoaded && this.onLoaded(); }, () => {});
+    if (o.isCode) { o.builtAt = standKey(it); this.code.make(it, this.heightAt).then((b) => { if (this.objs.get(it.id) !== o) { b.dispose(); return; }
+      o.code = b; o.inner = b.group; group.add(b.group); this.place(o); this.code.attach(o); this.onLoaded && this.onLoaded(); }, () => {}); }
     else if (it.type === 'model' && !TOWN_ASSETS[it.kind].code) loadModel((TOWN_ASSETS[it.kind] && TOWN_ASSETS[it.kind].file) || it.kind, this.lo).then(m => { if (this.objs.get(it.id) !== o) return;
       const A = TOWN_ASSETS[it.kind], inner = new THREE.Group(), body = m.scene.clone(true), st = standOf(m, A);
       body.position.copy(st.at); body.rotation.x = st.tilt; inner.add(body); inner.rotation.y = FRONT_YAW[A.front] || 0; o.inner = inner; group.add(inner); this.place(o); this.onLoaded && this.onLoaded(); });
@@ -189,15 +189,21 @@ export class Village {
   }
   place(o) {
     const it = o.it, { w, d, h } = (o.code && o.code.B.anchors.footprint) || footprintOf(it);   // (a code-built one: its own size)
-    o.group.position.set(it.x, this.heightAt(it.x, it.z) + (it.y || 0), it.z); o.group.rotation.y = it.rot * Math.PI / 180;   // (y: raised or sunk from the ground, m)
+    o.group.position.set(it.x, this.heightAt(it.x, it.z) + (o.code ? o.code.sit || 0 : 0) + (it.y || 0), it.z); o.group.rotation.y = it.rot * Math.PI / 180;   // (y: raised or sunk from the ground, m; a code building on the land as it is: its own sit)
     if (o.inner) { if (o.code) o.inner.scale.setScalar(1); else if (it.type === 'model') { const A = TOWN_ASSETS[it.kind]; o.inner.scale.setScalar(it.size / Math.max(A.box[0], A.box[2])); } else o.inner.scale.setScalar(it.size); }
     if (o.code && this.code) this.code.moved(o);   // (its lights, its sign and its ground follow it)
+    // (one built on the land as it is (its foundation and steps down to the ground where it stood), moved or levelled or
+    // not: built again for its new ground once it has stood still a moment (not at every step of a drag))
+    if (o.isCode && o.builtAt !== standKey(it) && (!o.code || o.code.B.ground || o.builtAt.endsWith(',' + !levels(it)))) { clearTimeout(o.rebuild); o.rebuild = setTimeout(() => { if (this.objs.get(it.id) === o && o.builtAt !== standKey(it)) { o.look = null; this.sync(); } }, 700); }
     o.pick.scale.set(w, h, d); o.pick.position.set(0, h / 2, 0);
     o.group.visible = it.type !== 'tree' || !!this.showTreePicks;   // trees are drawn by the forest; their group only holds the pick box
   }
   pickables() { return [...this.objs.values()].map(o => o.pick); }
   item(id) { return this.layout.items.find(i => i.id === id); }
 }
+// where a code building stands and whether it levels its ground: what its foundation was built for (built again when
+// one on the land as it is moves, or when it starts or stops levelling its ground)
+const standKey = (it) => `${it.x},${it.z},${it.rot},${levels(it)}`;
 let nextId = 1;
 export const newId = () => 'i' + (Date.now().toString(36)) + (nextId++).toString(36);
 export function normalise(L) {

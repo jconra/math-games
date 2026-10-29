@@ -25,11 +25,16 @@ import { buildStore, storeRecipe, PAINTS as STORE_PAINTS, RECIPE_DEFAULTS as STO
 import { buildSaloon, saloonRecipe, PAINTS as SALOON_PAINTS, TRIMS as SALOON_TRIMS, RECIPE_DEFAULTS as SALOON_DEFAULTS, makeSaloonArt } from './saloon.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { buildCabin, cabinRecipe, CABIN_PAINTS, CABIN_DEFAULTS, CABIN_VIEW_NAMES, cabinControls, wireCabin } from './cabins.js';
+import { makePlacing } from './placing.js';
 import { buildBlacksmith, blacksmithRecipe, BS_PAINTS, BS_DEFAULTS } from './blacksmith.js';
 import { buildBarn, barnRecipe, BARN_PAINTS, BARN_DEFAULTS } from './barn.js';
 import { buildWindpump, windpumpRecipe, WINDPUMP_DEFAULTS } from './windpump.js';
 import { LU, lit, boardWear, glowMaterial, animalLamps, setLamps, lanternGlow, ropeTexture } from './parts.js';
 import { spotsOf, makeNav } from '../../src/saloonfolkplan.js';
+import { dressStore } from '../../src/townrooms.js';
+import { loadFolk, makePerson } from '../../src/actors/folk.js';
+import { FOLK_BY_ID, dressOf } from '../../src/jobfolkplan.js';
+import { loadWorkClips, handTools } from '../../src/smithy.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const num = (n) => Math.round(n).toLocaleString('en-US');
@@ -58,7 +63,7 @@ scene.add(sun, sun.target, hemi);
 // (the stable's recipe sits on the state itself, as it always has; the sheriff's office keeps its own in state.sh)
 const state = {
   ...RECIPE_DEFAULTS, horses: [...RECIPE_DEFAULTS.horses],
-  doors: true, doorsOpen: true, lamps: true, time: 'day', props: true, showHorses: true, quality: 'gaming', az: 200, crowdMarks: false,
+  doors: true, doorsOpen: true, lamps: true, time: 'day', props: true, showHorses: true, quality: 'gaming', az: 200, crowdMarks: false, roomFolk: true, spotMarks: true,
   owned: { bay: true, donkey: false, chestnut: false, palomino: false, white: false, midnight: false },
   building: ({ stable: 'stable', sheriff: 'sheriff', store: 'store', saloon: 'saloon', cabin: 'cabin', blacksmith: 'blacksmith', barn: 'barn', windpump: 'windpump' })[new URLSearchParams(location.search).get('b')] || 'saloon',   // (the saloon first: the town's showpiece)
   sh: { ...SHERIFF_DEFAULTS }, st: { ...STORE_DEFAULTS }, sa: { ...SALOON_DEFAULTS }, ca: { ...CABIN_DEFAULTS }, bs: { ...BS_DEFAULTS }, bn: { ...BARN_DEFAULTS }, wp: { ...WINDPUMP_DEFAULTS }, jailDoor: false,
@@ -187,14 +192,22 @@ function woodFor(T) { setWood(T, cur().wood); eraseNails(T); if (BLD().calmGrain
 let B = null, P = null, ground = null, groundGeo = null, lib = null;
 const group = new THREE.Group(), propGroup = new THREE.Group(), horseGroup = new THREE.Group(), crowdGroup = new THREE.Group();
 scene.add(group, propGroup, horseGroup, crowdGroup);
+// THE PLAYER'S CABIN'S THINGS (placing.js: the cabins' Place things, the game's own layout and pieces, saved for the game)
+const PL = makePlacing({ scene, camera, controls, canvas, base: GAME, building: () => (state.building === 'cabin' ? B : null), recipe: () => (state.building === 'cabin' ? cabinRecipe(state.ca) : null),
+  view: (name) => view(name), onChange: () => { if (B && P && state.building === 'cabin') rebuildProps(); },
+  lamps: () => state.building === 'cabin' && state.lamps, lampUniform: LU.uLampS,
+  // (Place things' "your cabin in the game": that design, as the panel's preset picker would set one)
+  setDesign: (o) => { Object.assign(state.ca, o, { lineup: false }); delete state.ca.label; Object.assign(state.ca, cabinRecipe(state.ca)); rebuild(); buildPanel(); syncPanel(); view('room'); } });
 // THE SALOON CROWD'S PLACES (the game's src/saloonfolk.js uses them; src/saloonfolkplan.js reads them): flat marks on the
 // hall's floor: a disc for each seat (blue a chair, violet a bar stool) and standing spot (pink), with a tick the way it
 // faces; the aisles' points (green) and the walks between them; red rings round what is kept clear (the chalkboard and
-// its teacher's and player's spots, the stairs' foot), amber round the doorways' ways in
+// its teacher's and player's spots, the stairs' foot), amber round the doorways' ways in; and on the stage the band's
+// four places (gold, src/stage.js puts its players there): the piano stool, the harmonica player, the drummer's crate,
+// the fiddler
 function drawCrowdMarks() {
   for (const m of [...crowdGroup.children]) { crowdGroup.remove(m); m.geometry.dispose(); m.material.dispose(); }
   const C = B && B.anchors && B.anchors.crowd; if (!C) return;
-  const y = C.floor + 0.015, flat = (geo, col, x, z, rot = 0) => { const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.85, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.rotation.z = rot; m.position.set(x, y, z); m.renderOrder = 2; crowdGroup.add(m); return m; };
+  const y = C.floor + 0.015, flat = (geo, col, x, z, rot = 0, at = y) => { const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.85, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.rotation.z = rot; m.position.set(x, at, z); m.renderOrder = 2; crowdGroup.add(m); return m; };
   const nav = makeNav(C);
   for (const s of spotsOf(C)) {
     flat(new THREE.CircleGeometry(0.17, 20), { chair: 0x2f7bff, stool: 0x9a3cff, stand: 0xff4fa3 }[s.kind], s.x, s.z);
@@ -205,6 +218,72 @@ function drawCrowdMarks() {
   const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
   const lines = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: 0x26b34a, transparent: true, opacity: 0.6 })); lines.renderOrder = 2; crowdGroup.add(lines);
   for (const [x, z, r, walk] of C.keep.circles) flat(new THREE.RingGeometry(r - 0.05, r, 40), walk ? 0xe0a030 : 0xe03030, x, z);
+  const S = B.anchors.stage;
+  if (S) for (const k of ['piano', 'harmonica', 'drummer', 'fiddler']) {
+    const a = S[k]; if (!a) continue;
+    flat(new THREE.CircleGeometry(0.22, 24), 0xffc23a, a.x, a.z, 0, S.floor + 0.015);
+    const tick = flat(new THREE.PlaneGeometry(0.06, 0.36), 0xffffff, a.x + Math.sin(a.rot) * 0.26, a.z + Math.cos(a.rot) * 0.26, 0, S.floor + 0.016); tick.rotation.z = a.rot;
+  }
+}
+// THE ROOMS WORKED FROM INSIDE, as the game has them (src/townrooms.js, src/jobfolk.js): the storekeeper behind his
+// counter, the store's dog Rufus asleep on its bed and the six-shooter by the till; the sheriff at his desk by the pile
+// of seized lock boxes. And the spots E uses inside (anchors.spots, src/usespotsplan.js): each one's prompt floating over
+// it (the game shows only the one most in front of the player) and a green mark on the floor where it is aimed at
+const roomGroup = new THREE.Group(), spotGroup = new THREE.Group();
+scene.add(roomGroup, spotGroup);
+let folkP = null, animalsP = null, roomDress = null, roomPeople = [], roomFor = null;
+function clearRoom() {
+  if (roomDress) { roomDress.dispose(); roomDress = null; }
+  for (const r of roomPeople) { if (r.tools) r.tools.dispose(); r.root.removeFromParent(); try { r.dispose(); } catch (e) { /* (gone) */ } }
+  roomPeople = [];
+  for (const m of [...spotGroup.children]) { spotGroup.remove(m); m.geometry.dispose(); if (m.material.map) m.material.map.dispose(); m.material.dispose(); }
+}
+function dressRoom() {
+  clearRoom();
+  const kind = state.building, A = B && B.anchors, my = roomFor = B;
+  // (the smithy: its smith at the anvil, hammering, his tools in his hands, src/smithy.js; no spots there)
+  const SM = kind === 'blacksmith' && A && A.rooms && A.rooms[0] && A.rooms[0].anchors;
+  if (!A || (!A.spots && !SM)) return;
+  if (A.spots) drawSpots(A);
+  const who = kind === 'store' ? [[FOLK_BY_ID.storekeeper, A.counter.clerk, -Math.PI / 2]] : kind === 'sheriff' ? [[FOLK_BY_ID.sheriff, A.desk.sheriff, A.desk.face || 0]]
+    : SM && SM.smith ? [[FOLK_BY_ID.smith, [SM.smith.x, A.rooms[0].y, SM.smith.z], Math.atan2(SM.anvil.x - SM.smith.x, SM.anvil.z - SM.smith.z), 'Hammer']] : [];
+  if (kind === 'store') {
+    if (!animalsP) animalsP = lib ? Promise.resolve(lib) : loadAnimals(GAME, { kinds: [] });
+    animalsP.then((L) => { if (roomFor === my) roomDress = dressStore(roomGroup, A, { animals: L }); }).catch((e) => console.warn('lab: the store\'s dog', e));
+  }
+  if (!folkP) folkP = loadFolk(GAME);
+  folkP.then((F) => {
+    if (roomFor !== my) return;
+    for (const [def, at, face, work] of who) {
+      const p = makePerson(F, { ...dressOf(def), shadows: true }); p.root.position.set(at[0], at[1], at[2]); p.root.rotation.y = face; p.play('Idle', { fade: 0 }); roomGroup.add(p.root); roomPeople.push(p);
+      if (work) { const tools = handTools(p); p.tools = tools; loadWorkClips(F).then((c) => { if (!c || roomFor !== my) return; for (const k of c) if (!p.person.actions[k.name]) p.person.actions[k.name] = p.person.mixer.clipAction(k); p.play(work, { fade: 0.2 }); }); }
+    }
+  }).catch((e) => console.warn('lab: the room\'s people', e));
+}
+// a spot's prompt, as the game draws it (src/ui/hud.css .bmh-prompt): the E key and the words on dark wood, a brass edge
+function promptSprite(words) {
+  const c = document.createElement('canvas'), g = c.getContext('2d'), px = 44, font = `600 ${px}px Bitter, Georgia, serif`;
+  g.font = font; const w = Math.ceil(g.measureText(words).width + px * 2.4), h = Math.round(px * 1.75);
+  c.width = w; c.height = h + 14;
+  const r = 16; g.fillStyle = 'rgba(30, 20, 12, 0.86)'; g.strokeStyle = '#e2ad4c'; g.lineWidth = 3;
+  g.beginPath(); g.roundRect(2, 2, w - 4, h - 4, r); g.fill(); g.stroke();
+  g.beginPath(); g.moveTo(w / 2 - 14, h - 3); g.lineTo(w / 2, h + 12); g.lineTo(w / 2 + 14, h - 3); g.fillStyle = '#e2ad4c'; g.fill();
+  g.fillStyle = '#e8b85a'; g.beginPath(); g.roundRect(14, h / 2 - px * 0.6, px * 1.2, px * 1.2, 8); g.fill();
+  g.fillStyle = '#1d140c'; g.font = `700 ${px * 0.85}px Bitter, Georgia, serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('E', 14 + px * 0.6, h / 2 + 2);
+  g.fillStyle = '#f4e8cf'; g.font = font; g.textAlign = 'left'; g.fillText(words, 14 + px * 1.5, h / 2 + 2);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false })); sp.center.set(0.5, 0); sp.scale.set(0.2 * c.width / c.height, 0.2, 1); sp.renderOrder = 3;
+  return sp;
+}
+function drawSpots(A) {
+  const y = (A.floor ?? 0) + 0.012, mark = (geo, x, z, rot = 0) => { const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: 0x3cc45a, transparent: true, opacity: 0.8, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.rotation.z = rot; m.position.set(x, y, z); m.renderOrder = 2; spotGroup.add(m); };
+  for (const sp of A.spots) {
+    const s = promptSprite(sp.words || sp.id); s.position.set(sp.at[0], sp.at[1], sp.at[2]); spotGroup.add(s);
+    const u = sp.use;
+    if (u.length >= 4) { const L = Math.hypot(u[2] - u[0], u[3] - u[1]); mark(new THREE.PlaneGeometry(0.08, L), (u[0] + u[2]) / 2, (u[1] + u[3]) / 2, -Math.atan2(u[2] - u[0], u[3] - u[1])); }
+    else mark(new THREE.CircleGeometry(0.12, 18), u[0], u[1]);
+  }
+  spotGroup.visible = state.spotMarks;
 }
 const horses = [];
 const stats = { buildMs: 0, bakeMs: 0, propMs: 0, texMs: 0 };
@@ -257,7 +336,8 @@ function rebuild() {
   });
   // the props, baked in the building's light
   const off = B.offset, offZ = B.offsetZ || 0;
-  P = buildProps(B.props, { seed: cur().seed * 7 + 1, bake: (geo) => { geo.translate(-off, 0, -offZ); B.light.bake(geo); B.light.apply(geo, state.doors, 'main', state.jailDoor); geo.translate(off, 0, offZ); } });
+  P = buildProps(propList(), { seed: cur().seed * 7 + 1, bake: (geo) => { geo.translate(-off, 0, -offZ); B.light.bake(geo); B.light.apply(geo, state.doors, 'main', state.jailDoor); geo.translate(off, 0, offZ); } });
+  propsWas = propList().length;
   for (const g of ['wood', 'iron', 'hay', 'goods', 'decal']) { if (!P.geos[g]) continue; const m = new THREE.Mesh(P.geos[g], mats[g]); m.castShadow = g !== 'decal'; m.receiveShadow = true; if (g === 'decal') m.renderOrder = 0.5; propGroup.add(m); }
   // the lanterns: where they are, for the shaders' light, and a soft glow round each (one draw for all of them)
   setLamps(B.lamps);
@@ -273,8 +353,20 @@ function rebuild() {
   placeHorses();
   propGroup.visible = state.props;
   drawCrowdMarks(); crowdGroup.visible = state.crowdMarks;
+  dressRoom(); roomGroup.visible = state.roomFolk;
   const rb = $('#recipe'); if (rb) rb.textContent = JSON.stringify(BLD().recipe());
   updateStats();
+  if (state.building === 'cabin') PL.rebuilt();
+}
+// (the props: with the player's things shown in a cabin, the design's own room furniture left out, as the game does)
+const propList = () => (state.building === 'cabin' && PL.on ? B.props.filter((p) => !p.low) : B.props);
+let propsWas = null;
+function rebuildProps() {
+  const want = propList().length; if (want === propsWas) return; propsWas = want;
+  for (const m of [...propGroup.children]) { propGroup.remove(m); m.geometry.dispose(); }
+  const off = B.offset, offZ = B.offsetZ || 0;
+  P = buildProps(propList(), { seed: cur().seed * 7 + 1, bake: (geo) => { geo.translate(-off, 0, -offZ); B.light.bake(geo); B.light.apply(geo, state.doors, 'main', state.jailDoor); geo.translate(off, 0, offZ); } });
+  for (const g of ['wood', 'iron', 'hay', 'goods', 'decal']) { if (!P.geos[g]) continue; const m = new THREE.Mesh(P.geos[g], mats[g]); m.castShadow = g !== 'decal'; m.receiveShadow = true; if (g === 'decal') m.renderOrder = 0.5; propGroup.add(m); }
 }
 // the doors: the stable's front pair; the sheriff's office door (open) and the jail's (open2)
 function setDoors(open, open2 = state.jailDoor) {
@@ -488,6 +580,7 @@ const VIEWS = {
     jail: [[9.5, 2.6, 9.0], [3.0, 1.9, 1.5]],
     porch: [[-4.6, 1.9, 4.6], [1.0, 1.6, 3.6]],
     office: [[0.2, 1.75, 1.9], [-3.2, 1.2, -1.2]],
+    desk: [[-0.75, 1.85, 2.25], [-2.05, 1.25, -0.1]],
     cells: [[2.3, 1.55, 1.25], [4.0, 0.9, -1.6]],
     back: [[10.5, 4.6, -12.5], [0.0, 2.6, -1.0]],
     roof: [[-3.0, 11.5, -12.0], [-1.6, 4.6, 1.0]],
@@ -498,6 +591,8 @@ const VIEWS = {
     porch: [[-1.2, 1.95, 3.15], [5.0, 2.1, 2.3]],
     leanto: [[-11.0, 2.7, 5.0], [-3.6, 2.6, -0.8]],
     counter: [[1.75, 1.62, 1.5], [2.1, 1.2, -2.9]],
+    room: [[0.15, 2.35, -2.35], [3.35, 1.65, 0.05]],
+    dog: [[1.3, 1.5, -0.6], [2.72, 0.75, -1.98]],
     shelves: [[1.9, 1.75, 0.6], [4.9, 2.2, -1.4]],
     stove: [[2.6, 1.6, -1.9], [-0.9, 1.1, 0.3]],
     back: [[10.0, 4.6, -12.6], [0.6, 3.6, -1.0]],
@@ -523,7 +618,8 @@ const SHOW = {
     <div class="row check"><label><input type="checkbox" id="props"> Props (loose hay, bales, the pitchfork, buckets)</label></div>`,
   // (the wind pump has no doors, lanterns or props: the switches the panel wires are there, out of sight)
   windpump: `<p class="note">Its wheel turns.</p><div hidden><input type="checkbox" id="doors"><input type="checkbox" id="lamps"><input type="checkbox" id="props"></div>`,
-  blacksmith: `<div class="row check"><label><input type="checkbox" id="doors"> Big doors open</label></div>
+  blacksmith: `<div class="row check"><label><input type="checkbox" id="roomFolk"> The blacksmith at his anvil, hammering (as the game has him)</label></div>
+    <div class="row check"><label><input type="checkbox" id="doors"> Big doors open</label></div>
     <div class="row check"><label><input type="checkbox" id="jailDoor"> Shed door open</label></div>
     <div class="row check"><label><input type="checkbox" id="lamps"> Lanterns and the forge lit</label></div>
     <div class="row check"><label><input type="checkbox" id="props"> Props (anvil, quench tub, coal, wheel, trough, hitching rail)</label></div>`,
@@ -535,11 +631,15 @@ const SHOW = {
     <div class="row check"><label><input type="checkbox" id="lamps"> Lanterns lit</label></div>
     <div class="row check"><label><input type="checkbox" id="props"> Props (barrels, trough, crates, bales, wagon)</label></div>
     <div class="row check"><label><input type="checkbox" id="showHorses"> Horses</label></div>`,
-  sheriff: `<div class="row check"><label><input type="checkbox" id="doors"> Office door open</label></div>
+  sheriff: `<div class="row check"><label><input type="checkbox" id="roomFolk"> The sheriff at his desk, by the pile of seized lock boxes (as the game has him)</label></div>
+    <div class="row check"><label><input type="checkbox" id="spotMarks"> The spots E uses inside (the game shows the prompt of the one most in front of the player)</label></div>
+    <div class="row check"><label><input type="checkbox" id="doors"> Office door open</label></div>
     <div class="row check"><label><input type="checkbox" id="jailDoor"> Jail door open</label></div>
     <div class="row check"><label><input type="checkbox" id="lamps"> Lanterns lit</label></div>
     <div class="row check"><label><input type="checkbox" id="props"> Props (bench, barrels, crates, trough, hitching rail, woodpile)</label></div>`,
-  store: `<div class="row check"><label><input type="checkbox" id="doors"> Front doors open</label></div>
+  store: `<div class="row check"><label><input type="checkbox" id="roomFolk"> The storekeeper behind his counter, his dog Rufus asleep on its bed, the six-shooter by the till (as the game has them)</label></div>
+    <div class="row check"><label><input type="checkbox" id="spotMarks"> The spots E uses inside: food, hats, animals, the six-shooter, the counter (the game shows the prompt of the one most in front of the player)</label></div>
+    <div class="row check"><label><input type="checkbox" id="doors"> Front doors open</label></div>
     <div class="row check"><label><input type="checkbox" id="jailDoor"> Storeroom door open</label></div>
     <div class="row check"><label><input type="checkbox" id="lamps"> Lanterns lit</label></div>
     <div class="row check"><label><input type="checkbox" id="props"> Props (barrels of apples and crackers, crates, flour sacks, pails, the bench, shovels, the washtub)</label></div>`,
@@ -549,18 +649,20 @@ const SHOW = {
     <div class="row check"><label><input type="checkbox" id="doors"> Batwings hooked open</label></div>
     <div class="row check"><label><input type="checkbox" id="lamps"> Lamps lit</label></div>
     <div class="row check"><label><input type="checkbox" id="props"> Props (tables, chairs, stools, the piano, barrels, benches, the hitching rail and trough)</label></div>
-    <div class="row check"><label><input type="checkbox" id="crowdMarks"> The crowd's places (where the townsfolk sit and stand while the band plays, the aisles they walk, what is kept clear)</label></div>`;
+    <div class="row check"><label><input type="checkbox" id="crowdMarks"> The crowd's places (where the townsfolk sit and stand while the band plays, the aisles they walk, what is kept clear) and the band's four on the stage (gold: piano, harmonica, drummer, fiddler)</label></div>`;
   },
 };
 const HOW = {
   barn: `<p><b>The barn</b> (barn.js): the farm's barn, 12 by 9 m, board and batten in a faded red ochre (iron-oxide paint, worn back to grey wood) on a fieldstone footing, a gable roof of split shakes. Big X-braced double doors in the front gable swing out (in the game E opens them); over them the hay-loft door under a hoist beam, its pulley and rope. Small four-pane windows down the sides, a louvred vent in the back gable.</p>
     <p><b>Inside</b>: a dirt floor, posts and beams, a hayloft over both sides with the drive floor open to the roof between them, three stalls with plank fronts, half doors and mangers under the right loft, a feed bin, a ladder up to the left loft, a lantern on a post. The loose hay, the bales, the pitchfork and the buckets are props: in the game they are clutter, the last of the inside to load.</p>`,
   windpump: `<p><b>The wind pump</b> (windpump.js): a farm windmill as the 1880s built them, all wood: four legs leaning in, girts and X braces (none on the ladder's side), a platform at the top with the head, a wheel of eighteen slats on two rings, a board tail vane. The pump rod runs down the middle to an iron pump at its foot, its pipe running out past the legs to the stock tank (in the game the town's own trough, put down there). The wheel turns.</p>`,
-  blacksmith: `<p><b>The blacksmith</b> (blacksmith.js): a board-and-batten smithy with big double doors in its gable end, open inside to the rafters, a packed-earth floor; a stone forge against the back wall with a sheet-iron hood and a stone chimney through the roof, leather bellows on a frame, a workbench with a vise, tongs and hammers on a rack, horseshoes over the doors; an open shoeing shed on its right. The forge glows and lights the shop at night. Props (the anvil on its stump, the quench tub, the coal, a wagon wheel, the trough, the hitching rail) are separate pieces.</p>`,
+  blacksmith: `<p><b>The blacksmith</b> (blacksmith.js): a board-and-batten smithy on a mortared fieldstone footing, with big double doors in its gable end up a stone ramp, open inside to the rafters, a packed-earth floor level with its sill; a stone forge against the back wall with a sheet-iron hood and a stone chimney through the roof, leather bellows on a frame, a workbench with a vise, tongs and hammers on a rack, horseshoes over the doors; an open shoeing shed on its right. The forge glows and lights the shop at night. Props (the anvil on its stump, the quench tub, the coal, a wagon wheel, the trough, the hitching rail) are separate pieces.</p>`,
   cabin: `<p><b>Cabins</b> are made from a recipe (cabins.js): hewn or round logs, board and batten or lap siding; a single pen, a double pen, a dogtrot (two pens and an open breezeway under one roof) or an L with a kitchen wing; a lean-to room on the back or an end; a back door; a front, shed or wrap-around porch; a stone, stick-and-mud or stovepipe chimney; a gable or shed roof of split shakes or boards; shuttered or six-pane windows; stone piers, a stone footing or log sills. The presets cover the range; Random makes one up from the seed.</p>
     <p><b>Logs</b> are boxes (hewn, with clay chinking set back between them on both faces) or eight-sided poles (round, scribed tight), their ends running past the corners. Openings take out the courses they cross. Stone chimneys and footings are the Stone Lab's wall maker; piers and hearths are flat stones.</p>
     <p><b>Inside</b>: plank floors, plank ceilings on peeled-pole joists, a fireplace with a mantel or a box stove, doorways between the rooms, a lantern in each room. The furniture comes from the props library: each room lists where its bed, table, stove and shelves go.</p>
-    <p><b>Far look</b>: no inside, the chinking one sheet per wall, wide shakes, two meshes. <b>All presets in a row</b> merges every preset into one set of meshes, as the town would.</p>`,
+    <p><b>Far look</b>: no inside, the chinking one sheet per wall, wide shakes, two meshes. <b>All presets in a row</b> merges every preset into one set of meshes, as the town would.</p>
+    <p><b>The hearth</b>: dressed flat stones laid square on a mortar bed before the firebox, sooty nearest the fire; in the firebox a sooty back, two andirons, logs laid across them and ash. Cold until it's lit: with the lanterns and fires lit, the game's own fire burns in it (its flame, its embers, its light on the walls).</p>
+    <p><b>Place things</b> shows the player's cabin's things (every piece bought, every keepsake earned) where the game puts them, worked out from the design: kept off the windows, the doorways and their floor, the hearth, the walking line between the doors. Drag one to move it; red is a spot the game would never pick. Save puts your spots into the game (models/cabin/placement.json).</p>`,
   stable: `<p><b>Parts</b>: every board, batten, post, rafter and shake is a box from the Material Lab's parts kit, merged into one mesh per material (wood, iron), so the whole barn is a handful of draw calls. The walls are <b>board and batten</b>: upright boards 22 to 32 cm wide with a narrow batten over each joint, cut round the doors and windows. Each board is two skins: the outside one painted, the inside one bare (barns are painted outside only).</p>
     <p><b>Paint</b> is a colour in the recipe. The weathering shader chips it at the edges, and this lab wears it away in streaks down the boards and big soft patches, more of it low down, on the sunny side, by the corners and the doorways, less under the eaves, and board by board; the slider says how much has gone. Small nail heads sit where each board crosses a girt inside.</p>
     <p><b>Inside light</b> is baked once: for every corner indoors, how much of the outdoors it sees through the doorways and windows (each opening's share of its view, with a few rays through a grid of the solid parts so a partition shades the stall behind it), kept in two parts so shutting the front doors darkens it. The lanterns' warm light is worked out per pixel (round pools on the floor and the gates, falling off with the distance squared), times the bake's share of it that gets past the walls. A soft glow sprite hangs round each lantern; two gooseneck lamps light the sign.</p>
@@ -607,6 +709,7 @@ function buildPanel() {
     <div class="picks">${Object.keys(VIEWS[kind]).map((v) => `<button class="btn" data-view="${v}">${v}</button>`).join('')}</div>
     <div class="row two"><label for="s-q">Quality</label><select id="s-q">${opt({ potato: 'Potato', normal: 'Normal', gaming: 'Gaming' }, state.quality)}</select></div>
   </div></details>
+  ${kind === 'cabin' ? PL.panelHTML() : ''}
   <details class="sec"><summary>How it's made</summary><div class="body"><div class="how" style="border:0;margin:0;padding:0">${HOW[kind]}</div></div></details>
   <details class="sec" open><summary>Performance</summary><div class="body"><div class="stats" id="stats" aria-live="polite"></div></div></details>`;
   const recipeText = () => { const rb = $('#recipe'); if (rb) rb.textContent = JSON.stringify(BLD().recipe()); };
@@ -623,6 +726,8 @@ function buildPanel() {
   if ($('#walker')) $('#walker').addEventListener('change', (e) => { if (B && B.walker) B.walker.on = e.target.checked; });
   if ($('#s-trim')) $('#s-trim').addEventListener('change', (e) => { cur().trim = e.target.value; rebuild(); });
   if ($('#crowdMarks')) $('#crowdMarks').addEventListener('change', (e) => { state.crowdMarks = e.target.checked; crowdGroup.visible = state.crowdMarks; });
+  if ($('#roomFolk')) $('#roomFolk').addEventListener('change', (e) => { state.roomFolk = e.target.checked; roomGroup.visible = state.roomFolk; });
+  if ($('#spotMarks')) $('#spotMarks').addEventListener('change', (e) => { state.spotMarks = e.target.checked; spotGroup.visible = state.spotMarks; });
   $('#lamps').addEventListener('change', (e) => { state.lamps = e.target.checked; applyLight(); });
   $('#props').addEventListener('change', (e) => { state.props = e.target.checked; propGroup.visible = state.props; });
   if (kind === 'stable') {
@@ -632,6 +737,7 @@ function buildPanel() {
   $('#s-q').addEventListener('change', (e) => { state.quality = e.target.value; applyQuality(); });
   // (the cabins: their recipe controls; a choice that shows or hides others draws the panel again)
   if (kind === 'cabin') wireCabin(panel, R, (full) => { rebuild(); if (full) buildPanel(); syncPanel(); if (full) view(R.lineup ? 'row0' : 'front34'); });
+  if (kind === 'cabin') PL.wire(panel);
   if (panelWired) return;
   // (once: the panel's clicks, and the phone's panel toggle)
   panelWired = true;
@@ -661,7 +767,7 @@ function nextModel() {
 function syncPanel() {
   const R = cur();
   panel.querySelectorAll('[data-time]').forEach((b) => b.classList.toggle('on', b.dataset.time === state.time));
-  for (const k of ['doors', 'jailDoor', 'lamps', 'props', 'showHorses', 'crowdMarks']) { const c = $('#' + k); if (c) c.checked = !!state[k]; }
+  for (const k of ['doors', 'jailDoor', 'lamps', 'props', 'showHorses', 'crowdMarks', 'roomFolk', 'spotMarks']) { const c = $('#' + k); if (c) c.checked = !!state[k]; }
   const db = $('#doorsBtn'); if (db) { const o = state.doors || state.jailDoor; db.textContent = o ? 'Doors: open' : 'Doors: shut'; db.setAttribute('aria-pressed', String(o)); }
   panel.querySelectorAll('[data-owned]').forEach((c) => { c.checked = !!state.owned[c.dataset.owned]; });
   $('#s-paint').value = R.paint; $('#s-wood').value = R.wood; $('#s-stone').value = R.stone; $('#seed').value = R.seed; $('#s-q').value = state.quality;
@@ -677,6 +783,7 @@ function loadHorses() {
 }
 function setBuilding(kind) {
   if (!BUILDINGS[kind]) return;
+  if (kind !== 'cabin') PL.off();
   state.building = kind;
   state.doors = state.jailDoor = state.doorsOpen;   // (every door as the view's Doors button says: open to begin with)
   woodFor(T);
@@ -688,7 +795,7 @@ function setBuilding(kind) {
 function view(name) {
   const V = VIEWS[state.building][name]; if (!V) return;
   // (a tall, narrow screen, a phone held upright, sees less across: stand further back)
-  const back = ['aisle', 'stall', 'office', 'cells', 'porch', 'counter', 'shelves', 'stove', 'bar', 'stage', 'stairs', 'chalkboard', 'balcony', 'room', 'room2', 'inside', 'forge'].includes(name) ? 1 : Math.min(2.4, Math.max(1, 1.2 / camera.aspect)), t = new THREE.Vector3(...V[1]);
+  const back = ['aisle', 'stall', 'office', 'desk', 'room', 'dog', 'cells', 'porch', 'counter', 'shelves', 'stove', 'bar', 'stage', 'stairs', 'chalkboard', 'balcony', 'room', 'room2', 'inside', 'forge'].includes(name) ? 1 : Math.min(2.4, Math.max(1, 1.2 / camera.aspect)), t = new THREE.Vector3(...V[1]);
   camera.position.copy(t).add(new THREE.Vector3(...V[0]).sub(t).multiplyScalar(back)); controls.target.copy(t); controls.update();
 }
 
@@ -727,7 +834,8 @@ let last = performance.now();
 function loop() {
   requestAnimationFrame(loop);
   const t = performance.now(), dt = Math.min(0.1, (t - last) / 1000); last = t;
-  resize(); controls.update(); tickHorses(dt); if (B && B.tick) B.tick(dt);
+  resize(); PL.tick(dt); controls.update(); tickHorses(dt); if (B && B.tick) B.tick(dt);
+  if (roomGroup.visible) { if (roomDress) roomDress.update(dt); for (const r of roomPeople) r.update(dt); }
   if (B && B.spinning) for (const S of B.spinning) S.pivot.rotateOnAxis(S.axis, -S.speed * dt);
   renderer.render(scene, camera);
   frames++;
@@ -775,7 +883,9 @@ const BL = window.BL = {
   },
   quality(q) { state.quality = q; applyQuality(); syncPanel(); },
   walker(on) { if (B && B.walker) B.walker.on = on; const c = $('#walker'); if (c) c.checked = !!on; return B && B.walker ? B.walker.on : null; },
-  show(o) { for (const k in o) state[k] = o[k]; propGroup.visible = state.props; horseGroup.visible = state.showHorses; crowdGroup.visible = state.crowdMarks; syncPanel(); },
+  show(o) { for (const k in o) state[k] = o[k]; propGroup.visible = state.props; horseGroup.visible = state.showHorses; crowdGroup.visible = state.crowdMarks; roomGroup.visible = state.roomFolk; spotGroup.visible = state.spotMarks; syncPanel(); },
+  get room() { return { people: roomPeople.length, dog: !!(roomDress && roomDress.dog), gun: !!(roomDress && roomDress.gun), spots: spotGroup.children.filter((m) => m.isSprite).length }; },
   render() { renderer.render(scene, camera); },
+  placing: PL,   // (the cabins' Place things: placing.js)
   get renderer() { return renderer; }, get scene() { return scene; }, get camera() { return camera; }, get controls() { return controls; },
 };

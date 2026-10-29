@@ -1030,8 +1030,9 @@ function bar(k, lamps) {
       k.box('iron', [0.022, 0.1, 0.022], [x + 0.05, top + 0.37, z + s * 0.07], null, { tint: [0.3, 0.3, 0.32] });
     }
   }
-  // the glass lamps on the bar's top: a brass foot, a glass font, the chimney glowing
-  for (const z of [1.8, 3.75, -0.2]) { const L = barLamp(k, xm + 0.1, top, z, 1.6); if (z !== -0.2) lamps.push(L); }
+  // the glass lamps on the bar's top: a brass foot, a glass font, the chimney glowing (none right in front of the
+  // barkeep, z 1.8: its glare hid his hands)
+  for (const z of [1.05, 3.75, -0.2]) { const L = barLamp(k, xm + 0.1, top, z, 1.6); if (z !== -0.2) lamps.push(L); }
   // THE BACK-BAR: a cabinet with doors under a counter; above it a mirror under an arch, shelves of bottles either side,
   // pilasters and a cornice; sconces; a pair of antlers over it and the drinks board
   const bx0 = IX0, bx1 = IX0 + BBD, bxc = (bx0 + bx1) / 2, BL = BBZ1 - BBZ0, bzc = (BBZ0 + BBZ1) / 2, ct = FL + 1.0;
@@ -1064,25 +1065,18 @@ function bar(k, lamps) {
   }
   // (the corners over the arch: a panel either side, back from the frame)
   for (const s of [-1, 1]) k.board([0.02, ah + 0.1, ar * 0.55], [bx0 + 0.035, ay + (ah + 0.1) / 2, acz + s * (ar - ar * 0.275 + 0.03)], null, { long: 1, tint: vary(k, DARKW, 0.85, 0.95), ...P, skip: '-x' });
-  // the shelves either side of the mirror, bottles on each (one quad of the bottle picture per shelf)
+  // the shelves either side of the mirror, a row of bottles on each (and on the back counter's top under them): real
+  // ones, the saloon's dark glass (BOTTLES below)
   for (const [z0, z1] of [[BBZ0 + 0.13, MZ0 - 0.14], [MZ1 + 0.14, BBZ1 - 0.13]]) {
     for (const [j, y] of [ct + 0.02, ct + 0.62, ct + 1.18, ct + 1.72].entries()) {
       if (j > 0) k.board([0.26, 0.03, z1 - z0], [bx0 + 0.15, y, (z0 + z1) / 2], null, { long: 2, tint: vary(k, DARKW, 0.9, 1.05), paint: VARN, ...P });
-      {
-        const reg = A.bottles[(j + Math.round(z0)) % 3], bh = j === 0 ? 0.36 : 0.3, wz = z1 - z0 - 0.02;
-        const g = new THREE.PlaneGeometry(wz, bh), [u0, v0, u1, v1] = regionUV(reg), U = g.attributes.uv, fr = Math.min(1, wz / 1.6);
-        for (let n = 0; n < U.count; n++) U.setXY(n, u0 + (u1 - u0) * U.getX(n) * fr, v0 + (v1 - v0) * U.getY(n));
-        g.applyMatrix4(mul(T(bx0 + 0.16, y + 0.015 + bh / 2, (z0 + z1) / 2), RY(Math.PI / 2))); decals.push(g);
-        const g2 = g.clone(); g2.translate(-0.06, 0.0, 0.0); decals.push(g2);   // (a second row behind the first)
-      }
+      bottleRow(k, bx0 + 0.2, y + 0.015, z0 + 0.04, z1 - 0.04, { tall: j === 0 ? 0.36 : 0.5, jugs: j === 0 });
+      if (j > 0) bottleRow(k, bx0 + 0.1, y + 0.015, z0 + 0.08, z1 - 0.04, { tall: 0.5, sparse: 0.45 });   // (a row behind, fewer)
     }
   }
-  // bottles along the back counter's top, under the mirror (a row each side of the till)
-  for (const [z0, z1] of [[MZ0 + 0.04, 1.45], [1.95, MZ1 - 0.04]]) {
-    const g = new THREE.PlaneGeometry(z1 - z0, 0.32), [u0, v0, u1, v1] = regionUV(A.bottles[1]), U = g.attributes.uv;
-    for (let n = 0; n < U.count; n++) U.setXY(n, u0 + (u1 - u0) * U.getX(n) * Math.min(1, (z1 - z0) / 1.6), v0 + (v1 - v0) * U.getY(n));
-    g.applyMatrix4(mul(T(bx0 + 0.32, ct + 0.18, (z0 + z1) / 2), RY(Math.PI / 2))); decals.push(g);
-  }
+  // bottles and jars along the back counter's top, under the mirror (a row each side of the till): pickled eggs and
+  // crackers in glass jars among them
+  for (const [z0, z1] of [[MZ0 + 0.06, 1.45], [1.95, MZ1 - 0.06]]) bottleRow(k, bx0 + 0.3, ct, z0, z1, { tall: 0.4, jars: true });
   // a brass till between them
   k.box('iron', [0.3, 0.2, 0.4], [bx0 + 0.3, ct + 0.12, 1.7], null, { tint: BRASS });
   k.box('iron', [0.24, 0.12, 0.34], [bx0 + 0.27, ct + 0.28, 1.7], [0, 0, 0.35], { tint: BRASS.map((c) => c * 0.9) });
@@ -1093,11 +1087,65 @@ function bar(k, lamps) {
   into(k, mul(T(IX1, 5.95, -2.0), RY(Math.PI)), (t) => antlers(t, 0, 0, 0, 1.2), 811); into(k, mul(T(IX1, 5.8, 1.6), RY(Math.PI)), (t) => antlers(t, 0, 0, 0, 1.0), 813);
   lamps.push(sconce(k, bx0 + 0.1, ct + 1.55, MZ0 - 0.07, 1, 1.8, 'x'));
   sconce(k, bx0 + 0.1, ct + 1.55, MZ1 + 0.07, 1, 0, 'x');
-  // the bottles on the bar's top and glasses: a few short quads standing on it
+  // on the bar's top: a bottle or two and some glasses here and there
   for (const z of [2.3, 0.15]) {
-    const g = new THREE.PlaneGeometry(0.4, 0.3), [u0, v0, u1, v1] = regionUV(A.bottles[2]), U = g.attributes.uv;
-    for (let n = 0; n < U.count; n++) U.setXY(n, u0 + (u1 - u0) * U.getX(n) * 0.25, v0 + (v1 - v0) * U.getY(n));
-    g.applyMatrix4(mul(T(xm - 0.18, top + 0.15, z), RY(Math.PI / 2))); decals.push(g);
+    bottle(k, mul(T(xm - 0.2, top, z), RY(k.R() * 6)), BOTTLES[Math.floor(k.R() * 3)]);
+    for (let i = 0; i < 3; i++) glass(mul(T(xm - 0.12 + k.R() * 0.12, top, z + 0.12 + i * 0.1)), i % 2 ? 'shot' : 'schooner');
+  }
+}
+// THE BOTTLES (the game's maker: "we need some jars or bottles or something behind the counter"): turned like the store's
+// goods (goods.js lathe) from the saloon picture's plain tiles: dark glass (whiskey amber, bitters green and near black),
+// pale aqua gin, square case gin, stoneware jugs, paper labels and corks; glass jars on the counter (pickled eggs,
+// crackers) with tin lids. Each [tile, tint, shape]: the shape's profile [[r, y], ...], sides, label (y, height), neck top
+const BOTTLES = [
+  { glass: 'darkwood', tint: [0.95, 0.8, 0.62], p: [[0.032, 0], [0.034, 0.175], [0.029, 0.195], [0.012, 0.235], [0.011, 0.285]], n: 6, label: [0.06, 0.08], cork: 'darkwood' },        // whiskey
+  { glass: 'glass', tint: [0.16, 0.27, 0.18], p: [[0.03, 0], [0.031, 0.19], [0.022, 0.215], [0.011, 0.25], [0.01, 0.31]], n: 6, label: [0.07, 0.06], cork: 'tin' },              // wine, bitters (green)
+  { glass: 'black', tint: [1.2, 1.15, 1.1], p: [[0.034, 0], [0.035, 0.13], [0.026, 0.155], [0.012, 0.17], [0.011, 0.215]], n: 6, label: [0.04, 0.07], cork: 'darkwood' },        // bitters (near black)
+  { glass: 'glass', tint: [0.5, 0.62, 0.58], p: [[0.029, 0], [0.03, 0.17], [0.024, 0.19], [0.01, 0.225], [0.01, 0.27]], n: 6, label: [0.05, 0.07], cork: 'darkwood' },          // gin (pale aqua)
+  { glass: 'glass', tint: [0.26, 0.32, 0.24], p: [[0.034, 0], [0.036, 0.2], [0.02, 0.22], [0.009, 0.235], [0.009, 0.26]], n: 4, label: [0.07, 0.08], cork: 'darkwood' },           // case gin (square)
+];
+const JUG = { glass: 'cream', tint: [0.92, 0.86, 0.76], p: [[0.05, 0], [0.058, 0.08], [0.052, 0.15], [0.026, 0.19], [0.016, 0.21], [0.017, 0.235]], n: 7, top: 'amber' };   // a stoneware jug, its top dipped brown
+function bottle(k, M, b) {
+  const t = b.tint.map((c) => c * (0.88 + k.R() * 0.24));
+  G.lathe(b.p, M, b.n, A.tile[b.glass], t);
+  const top = b.p[b.p.length - 1];
+  G.disc(top[0], mul(M, T(0, top[1], 0)), 5, A.tile[b.cork || 'darkwood'], [1, 1, 1]);
+  if (b.label && k.R() < 0.85) {
+    const r = b.p[1][0] * 1.04, [ly, lh] = b.label;
+    G.cyl(r, lh, mul(M, T(0, ly + lh / 2, 0)), b.n, A.tile[k.R() < 0.7 ? 'cream' : 'ivory'], null, vary(k, [0.74, 0.68, 0.56], 0.85, 1.05), { arc: b.n === 4 ? [-Math.PI / 4, Math.PI / 4] : [-1.1, 1.1] });
+  }
+}
+function jug(k, M) {
+  G.lathe(JUG.p.slice(0, 4), M, JUG.n, A.tile.cream, JUG.tint.map((c) => c * (0.9 + k.R() * 0.15)));
+  G.lathe(JUG.p.slice(3), M, JUG.n, A.tile[JUG.top], [0.9, 0.75, 0.6]);
+  G.disc(JUG.p[JUG.p.length - 1][0], mul(M, T(0, JUG.p[JUG.p.length - 1][1], 0)), 5, A.tile.darkwood, [1, 1, 1]);
+}
+// a glass jar on the counter: its contents (eggs: ivory; crackers: cream, darker), the glass round them, a tin lid
+function jarOn(k, M, what) {
+  const r = 0.055, h = 0.17, ch = h * (0.6 + k.R() * 0.3);
+  G.cyl(r * 0.88, ch, mul(M, T(0, ch / 2 + 0.006, 0)), 7, A.tile[what === 'eggs' ? 'ivory' : 'cream'], A.tile[what === 'eggs' ? 'ivory' : 'cream'], what === 'eggs' ? [0.78, 0.72, 0.55] : [0.7, 0.56, 0.38]);
+  G.lathe([[r, 0], [r, h * 0.92], [r * 0.85, h]], M, 7, A.tile.glass, [0.5, 0.56, 0.54]);
+  G.disc(r * 0.88, mul(M, T(0, h + 0.004, 0)), 7, A.tile.tin, [0.9, 0.9, 0.9]);
+}
+// a glass on the bar: a shot glass or a schooner (a tall beer glass)
+function glass(M, kind) {
+  const p = kind === 'shot' ? [[0.018, 0], [0.022, 0.055]] : [[0.026, 0], [0.034, 0.15]];
+  G.lathe(p, M, 6, A.tile.glass, [0.3, 0.34, 0.33]);
+  G.disc(p[0][0], mul(M, T(0, 0.004, 0)), 6, A.tile.glass, [0.26, 0.29, 0.28]);
+}
+// a row of bottles standing along z from z0 to z1 at x on y (their bottoms), no taller than `tall`: now and then a gap,
+// two alike side by side; jugs among them (jugs), jars (jars)
+function bottleRow(k, x, y, z0, z1, { tall = 0.5, jugs = false, jars = false, sparse = 0.05 } = {}) {
+  let z = z0;
+  while (z < z1 - 0.04) {
+    const roll = k.R();
+    if (roll < sparse) { z += 0.07; continue; }   // (a gap where one was taken down)
+    if (jars && roll < 0.3 && z + 0.12 < z1) { jarOn(k, mul(T(x, y, z + 0.06)), k.R() < 0.5 ? 'eggs' : 'crackers'); z += 0.13; continue; }
+    if (jugs && roll < 0.22 && z + 0.12 < z1) { jug(k, mul(T(x, y, z + 0.06), RY(k.R() * 6))); z += 0.13; continue; }
+    const b = BOTTLES[Math.floor(k.R() * BOTTLES.length)], h = b.p[b.p.length - 1][1];
+    if (h > tall) { z += 0.02; continue; }
+    const n = k.R() < 0.3 ? 2 : 1;
+    for (let i = 0; i < n && z < z1 - 0.04; i++) { bottle(k, mul(T(x + (k.R() - 0.5) * 0.03, y, z + 0.037), RY(k.R() * 6)), b); z += 0.078 + k.R() * 0.012; }
   }
 }
 // a lamp on a counter or table: a brass foot, a glass font, the glowing chimney, the flame
@@ -1339,8 +1387,11 @@ function propList(piano) {
   for (let i = 0; i < 6; i++) L.push({ type: 'barStool', x: BXF + 0.42, y, z: BZ1 - 0.45 - i * 0.78, rot: i * 0.4 });
   L.push({ type: 'piano', x: piano.x, y: STG, z: piano.z, rot: piano.rot }, { type: 'pianoStool', x: piano.stool[0], y: STG, z: piano.stool[1] });
   L.push({ type: 'spindleChair', x: -0.95, y: STG, z: -4.85, rot: 0.25 }, { type: 'spindleChair', x: -1.65, y: STG, z: -4.6, rot: 0.6 });
-  // barrels by the gallery's posts and under the stairs' high end; a keg on the back counter's end
-  L.push({ type: 'barrel', x: -GPX - 0.45, y, z: ZG + 0.35 }, { type: 'barrel', x: GPX + 0.42, y, z: ZG + 0.4 }, { type: 'barrel', x: STX1 - 0.4, y, z: -1.6 }, { type: 'barrel', x: STX1 - 0.95, y, z: -1.95, h: 0.8 });
+  // barrels: one in the back corner left of the stage (by the left gallery post it narrowed the way behind the bar and
+  // to the stage's steps: a critic); three together under the stairs' high end against the east wall (the stairs
+  // 3 m over them there), so the way between the stage's right corner and the stairs stays clear (the game's maker: the
+  // ones by the stage's right side were "blocking the way"); a keg on the back counter's end
+  L.push({ type: 'barrel', x: XL + 0.47, y, z: ZB + 0.5 }, { type: 'barrel', x: STX1 - 0.38, y, z: ZG + 0.3 }, { type: 'barrel', x: STX1 - 0.4, y, z: -1.5 }, { type: 'barrel', x: STX1 - 0.93, y, z: -1.75, h: 0.8 });
   // outside: barrels between the posts, chairs and a bench on the boardwalk, the hitching rail and the trough on the side
   // street at the far end
   L.push({ type: 'barrel', x: -4.15, y, z: PZ - 0.45 }, { type: 'barrel', x: 2.1, y, z: PZ - 0.45 }, { type: 'barrel', x: PX + 0.45, y, z: 3.25 }, { type: 'barrel', x: PX + 0.5, y, z: -3.3 });
@@ -1529,6 +1580,10 @@ export function buildSaloon(recipeIn = {}, env = {}) {
         piano: { x: +(stool[0] + OX).toFixed(3), y: STG, z: +(stool[1] + OZ).toFixed(3), rot: +Math.atan2(-kdir[0], -kdir[1]).toFixed(4) },
         harmonica: { x: +(-0.35 + OX).toFixed(3), y: STG, z: +(-3.35 + OZ).toFixed(3), rot: 0.12 },
         drummer: { x: +(-1.45 + OX).toFixed(3), y: STG, z: +(-3.75 + OZ).toFixed(3), rot: 0.35 },
+        // the fiddler: standing at the stage's front beside the harmonica player, well clear of the piano, turned three
+        // quarters to the hall toward the piano's side (his bow arm works over the open front of the stage, his fiddle
+        // points out toward the piano's end; a critic: he stood at the keyboard, his bow arm along the piano's lid)
+        fiddler: { x: +(0.4 + OX).toFixed(3), y: STG, z: +(-3.05 + OZ).toFixed(3), rot: 0.5 },
         floor: STG, front: P3(0, STG, SZ1), rect: { x0: SX0 + OX, x1: SX1 + OX, z0: SZ0 + OZ, z1: SZ1 + OZ }, pianoAt: P3(pianoP.x, STG, pianoP.z), pianoRot: keysRot,
       },
       // THE CHALKBOARD: the board's middle and the way it faces; where the teacher stands (beside it, turned half to the

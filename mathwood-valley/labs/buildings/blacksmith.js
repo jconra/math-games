@@ -1,5 +1,5 @@
-// THE BLACKSMITH: a board-and-batten smithy with big double doors in its gable end, open inside to the rafters, a
-// packed-earth floor; a stone forge against the back wall with a sheet-iron hood and a stone chimney up through the
+// THE BLACKSMITH: a board-and-batten smithy on a mortared fieldstone footing, with big double doors in its gable end up
+// two stone steps, open inside to the rafters, a packed-earth floor level with its sill; a stone forge against the back wall with a sheet-iron hood and a stone chimney up through the
 // roof, a pair of leather bellows on a frame beside it, a workbench with a vise under the windows, tongs and hammers on a
 // rack, horseshoes on a board over the doors; on its right an open shoeing shed (a lean-to roof on posts) with a
 // hitching rail. Built from the same parts as the cabins (cabins.js: the roof slopes, the window sashes, the weathering
@@ -41,7 +41,16 @@ export function blacksmithRecipe(r = {}) {
 // ── the sizes ────────────────────────────────────────────────────────────────────────────────────────────────────────
 const W = 7.0, D = 6.6, X0 = -W / 2, X1 = W / 2, Z0 = -D / 2, Z1 = D / 2;
 const EAVE = 3.3, PITCH = 30 * Math.PI / 180, TP = Math.tan(PITCH), RIDGE = EAVE + W / 2 * TP;   // the ridge runs front to back
-const FT = 0.16, FL = 0.15;                     // the sill on flat stones; the earth floor (packed level with the sill)
+const FT = 0.16, FL = 0.15;                     // the sill's foot; the earth floor (packed level with the sill): both before the LIFT
+// THE FOOTING (2026-10-28, the game's maker: "I usually like a foundation"): mortared fieldstone under all four walls, from
+// DIG m into the ground up to FT + LIFT (0.3 m, the sheriff's office's height); the smithy is built as on the ground, then
+// lifted LIFT m onto it (liftAll below), the shoeing shed's posts on stone piers PIER m high on the ground; broad stone
+// steps up to the big doors, a step at the shed door (the Stone Lab's steps: slabs drawn down into the ground)
+// ON THE LAND AS IT IS (env.ground, the game's maker: "foundations and stairs that go deep in the ground and the ground
+// level is natural"): it sits as low as it can, its boards' foot (CLEAR m up) 2 cm over the highest ground under its
+// walls (B.sit: how far its zero is over the ground at its middle); the footing, the piers and the steps go down to the
+// ground wherever it is, SINK m into it; more steps where the ground at a door is lower
+const LIFT = 0.14, DIG = 0.2, PIER = 0.15, CLEAR = FT - 0.04 + LIFT, SINK = 0.1, RISE = 0.135;
 const OVE = 0.45, OVG = 0.4;                    // the roof past the side walls; past the front and back
 const SHED = { x0: X1, x1: X1 + 3.1, top: 3.0, pitch: 12 * Math.PI / 180 };   // the shoeing shed on the right
 const DOOR = { a0: -1.45, a1: 1.45, y1: 2.75 };                                   // the double doors (front)
@@ -50,7 +59,7 @@ const STACK = { x: -1.25, z: Z0 + 0.6, w: 0.62, d: 0.55 };                      
 const roofY = (x) => RIDGE - Math.abs(x) * TP;
 const BARE = [1.1, 1.1, 1.12], INNER = [1.08, 1.02, 0.94], TRIM = [0.95, 0.93, 0.92], FRAME = [1.06, 0.96, 0.84], DARKW = [0.8, 0.77, 0.74];
 const IRON = [0.85, 0.8, 0.76], STRAP = [0.035, 0.032, 0.03], TIN = [5.4, 6.8, 8.4], DOORW = [1.1, 1.05, 1.0];
-const EARTH = [0.34, 0.29, 0.23], FLAT = [0.46, 0.44, 0.41];
+const EARTH = [0.34, 0.29, 0.23];
 
 // ── the props it brings (registered with props.js's makers; nothing else there changes) ──────────────────────────────
 // anvil: on an elm stump (the anvil's foot, waist, face and horn, iron); quench: a cut-down barrel of dark water;
@@ -123,11 +132,77 @@ function horseshoe(k, M, s = 1) {
   }
 }
 
+// everything built so far moved dy m up (the parts, the bake's solids, the window panes, the forge's stone, the lamps)
+function liftAll(c, k, dy) {
+  const M = T(0, dy, 0);
+  for (const g in k.parts) for (const P of k.parts[g]) { if (P.m) P.m.premultiply(M); if (P.pts) for (const p of P.pts) p.y += dy; }
+  for (const S of k.occ) S.m.premultiply(M);
+  for (let i = 0; i < c.panes.length; i += 2) c.panes[i].premultiply(M);
+  for (const g of c.stoneGeos) g.translate(0, dy, 0);
+  for (const L of c.lamps) { L.p = [L.p[0], L.p[1] + dy, L.p[2]]; if (L.glow) L.glow = [L.glow[0], L.glow[1] + dy, L.glow[2]]; }
+}
+// THE FOOTING: mortared fieldstone (the sheriff's tan fieldstone, which sheriff.js adds to the Stone Lab's palettes; the
+// recipe's own stone if it isn't there) round under all four walls, 3 cm proud of the boards, from below the ground (DIG,
+// or SINK under the lowest ground along it) up to the sill; broad steps up to the big doors and one or more at the shed
+// door, stone slabs drawn down into the ground, as many as the ground before the door needs (each about RISE high, the
+// sill the last); a square stone pier under each of the shed's posts, down into the ground under it. Every stone in the
+// building's one stone mesh with the forge's and the chimney's. Its solids (for the bake and the walk grid) stop just
+// under the earth floor, so the floor's own top isn't inside them. gl(x, z): the ground's height in its own frame
+function footing(c, r, env, gl) {
+  const { k } = c, e = 0.03, top = FT + LIFT, loop = [[X0 - e, Z1 + e], [X1 + e, Z1 + e], [X1 + e, Z0 - e], [X0 - e, Z0 - e]];
+  // (the lowest ground along its walls, a sample every 0.4 m)
+  let low = 0;
+  for (let i = 0; i < 4; i++) { const [ax, az] = loop[i], [bx, bz] = loop[(i + 1) % 4], n = Math.ceil(Math.hypot(bx - ax, bz - az) / 0.4);
+    for (let j = 0; j <= n; j++) low = Math.min(low, gl(ax + (bx - ax) * j / n, az + (bz - az) * j / n)); }
+  const y0 = Math.min(-DIG, low - SINK);
+  // (where it meets the ground, for the rigs: B.anchors.feet [x, z, its bottom there])
+  for (const [x, z] of loop) c.feet.push([x, z, y0]);
+  // the steps: up from the lowest ground before the door (across the steps' width, out to where they would end) to the
+  // sill's top, slabs each RISE or so high, the lower ones reaching further out; their skirts down SINK under the ground
+  const SILL = FT + 0.02 + LIFT, steps = [], solids = [];
+  const flight = (face, u, w, at) => {   // at(a, d): the ground a along the face, d out from it (its own frame)
+    // (how many: the lowest ground under where they reach, which depends on how many: settled in a few rounds)
+    let n = 2, g = 0;
+    for (let round = 0; round < 6; round++) {
+      g = Infinity; const run = (n - 1) * 0.42 + 0.1;
+      for (let d = 0.05; d <= run + 1e-6; d += 0.2) for (let a = -w / 2; a <= w / 2 + 1e-6; a += w / 4) g = Math.min(g, at(a, d));
+      const m = Math.max(2, Math.ceil((SILL - g) / RISE)); if (m <= n) break; n = m;
+    }
+    const rise = (SILL - g) / n;
+    for (let i = 1; i < n; i++) { const h = g + rise * i, depth = (n - i) * 0.42; steps.push({ face, u, w: w + (n - 1 - i) * 0.1, depth, h, down: h - g + SINK }); solids.push([face, w, depth, h, g - SINK]); }
+    for (const a of [-w / 2, 0, w / 2]) c.feet.push(face === 0 ? [a, Z1 + e + (n - 1) * 0.42, g - SINK] : [X1 + e + (n - 1) * 0.42, 0.75 + a, g - SINK]);   // (the lowest step's front edge)
+  };
+  flight(0, e - X0, 2.95, (a, d) => gl(a, Z1 + e + d));
+  flight(1, Z1 + e - 0.75, 1.3, (a, d) => gl(X1 + e + d, 0.75 + a));
+  SHAPES.smithyFoot = { label: 'Smithy footing', make: () => ({ H: top, sections: [{ loop0: loop, loop1: loop, y0, y1: top }], steps, openings: [], top: { y: top, t: 0, over: 0, rects: [] }, building: {} }) };
+  const pier = [[-0.2, 0.2], [0.2, 0.2], [0.2, -0.2], [-0.2, -0.2]];
+  const rec = { style: 'mortared', palette: PALETTES.fieldstone ? 'fieldstone' : r.stone, mortar: r.mortar, size: c.far ? 0.6 : 0.4, irregularity: 0.5, colourMix: 0.5, bulge: 0.6, joint: 0.012 };
+  const sw = buildStoneWall({ ...rec, shape: 'smithyFoot', seed: r.seed * 13 + 5 }, env);
+  c.stoneGeos.push(sw.stone, sw.mortar); c.footTris = sw.tris.stone + sw.tris.mortar;
+  c.piers.forEach((p, i) => {
+    const py0 = Math.min(-DIG, gl(p.x, p.z) - SINK); c.feet.push([p.x, p.z, py0]);
+    SHAPES.smithyPier = { label: 'Smithy shed pier', make: () => ({ H: PIER, sections: [{ loop0: pier, loop1: pier, y0: py0, y1: PIER }], openings: [], top: { y: PIER, t: 0, over: 0, rects: [] }, building: {} }) };
+    const q = buildStoneWall({ ...rec, size: 0.3, shape: 'smithyPier', seed: r.seed * 17 + i }, env); for (const g of [q.stone, q.mortar]) { g.translate(p.x, 0, p.z); c.stoneGeos.push(g); } c.footTris += q.tris.stone + q.tris.mortar;
+    k.solid([0.4, PIER - py0, 0.4], [p.x, (PIER + py0) / 2, p.z]);
+  });
+  const h = FL + LIFT - 0.02 - y0, y = (FL + LIFT - 0.02 + y0) / 2, t = 0.3;
+  for (const s of [-1, 1]) { k.solid([W, h, t], [0, y, s < 0 ? Z0 + t / 2 : Z1 - t / 2]); k.solid([t, h, D - 2 * t], [s < 0 ? X0 + t / 2 : X1 - t / 2, y, 0]); }
+  // (the steps: their tops stood on, each down into the ground)
+  for (const [face, w, depth, hTop, yb] of solids) { const hh = hTop - yb;
+    if (face === 0) k.solid([w, hh, depth], [0, yb + hh / 2, Z1 + e + depth / 2]); else k.solid([depth, hh, w], [X1 + e + depth / 2, yb + hh / 2, 0.75]); }
+  c.footLow = low;
+}
+
 export function buildBlacksmith(recipeIn = {}, env = {}) {
   const t0 = performance.now(), r = blacksmithRecipe(recipeIn), far = r.look === 'far', paint = BS_PAINTS[r.paint].c;
   const k = new Kit(r.seed); k.parts.glow = []; k.parts.plaster = [];
-  const c = { k, far, env, r, panes: [], sills: [], lamps: [], stoneGeos: [], trimTint: TRIM, trimPaint: null, L: { log: false, r: { cover: 'shakes' } }, piers: [], flats: [] };
+  const c = { k, far, env, r, panes: [], sills: [], lamps: [], stoneGeos: [], trimTint: TRIM, trimPaint: null, L: { log: false, r: { cover: 'shakes' } }, piers: [], flats: [], feet: [] };
   const leaves = [];
+  // where it sits on the land as it is (env.ground(x, z): the ground's height in its own frame, against the ground at its
+  // middle; none: flat): its boards' foot 2 cm over the highest ground under its walls; gl, the ground in its frame then
+  let sit = 0;
+  if (env.ground) { let hi = -Infinity; for (let x = X0; x <= X1 + 1e-6; x += 0.35) for (let z = Z0; z <= Z1 + 1e-6; z += 0.33) hi = Math.max(hi, env.ground(x, z)); sit = hi - CLEAR + 0.02; }
+  const gl = env.ground ? (x, z) => env.ground(x, z) - sit : () => 0;
   // THE WALLS: board and batten on a sill, up to the roof at the gable ends; their openings
   const top = (a) => roofY(a) - 0.035, topB = (a) => roofY(-a) - 0.035;
   const opens = {
@@ -178,12 +253,14 @@ export function buildBlacksmith(recipeIn = {}, env = {}) {
     const beamTop = SHED.top - (postX - X1) * Math.tan(SHED.pitch) - (0.024 + 0.14) / Math.cos(SHED.pitch);
     k.board([0.16, 0.2, D + 0.5], [postX, beamTop - 0.1, 0], null, { long: 2, tint: vary(k, FRAME, 0.95, 1.05), strip: 10, cuts: cutsFor(D + 0.5, [], 1.6), segFaces: '+x-x-y', ends: 'log' });
     k.solid([0.2, 0.2, D + 0.5], [postX, beamTop - 0.1, 0]);
+    // (the posts stand on their stone piers on the ground (footing below): made longer and lower here by what everything
+    // else is lifted onto the footing, liftAll; their braces up with the beam)
     for (const z of [Z0 + 0.15, 0, Z1 - 0.15]) {
-      const h = beamTop - 0.2;
-      k.board([0.15, h, 0.15], [postX, h / 2, z], [0, k.r(-0.04, 0.04), 0], { long: 1, tint: vary(k, FRAME, 0.9, 1.08), strip: 10, cuts: [-0.6, 0.4], segFaces: '+x-x+z-z', ends: 'log' });
-      k.solid([0.15, h, 0.15], [postX, h / 2, z]);
+      const h = beamTop - 0.2, hp = h + LIFT - PIER;
+      k.board([0.15, hp, 0.15], [postX, PIER + hp / 2 - LIFT, z], [0, k.r(-0.04, 0.04), 0], { long: 1, tint: vary(k, FRAME, 0.9, 1.08), strip: 10, cuts: [-0.6, 0.4], segFaces: '+x-x+z-z', ends: 'log' });
+      k.solid([0.15, hp, 0.15], [postX, PIER + hp / 2 - LIFT, z]);
       for (const s of [-1, 1]) if ((s < 0 && z > Z0 + 0.5) || (s > 0 && z < Z1 - 0.5)) k.board([0.07, 0.07, 0.62], [postX, h - 0.26, z + s * 0.24], [s * Math.PI / 4, 0, 0], { long: 2, tint: vary(k, FRAME, 0.85, 1.0), strip: 11 });
-      c.piers.push({ x: postX, z, h: 0.06, w: 0.36 });
+      c.piers.push({ x: postX, z });
     }
     // the tin flashing where it meets the wall; horseshoes hung on the middle post
     k.box('iron', [0.012, 0.14, D + 0.6], [X1 + 0.03, SHED.top + 0.08, 0], null, { tint: TIN });
@@ -259,19 +336,16 @@ export function buildBlacksmith(recipeIn = {}, env = {}) {
     for (let i = 0; i < 6; i++) horseshoe(k, mul(T(ix + 0.05, 2.2, -1.8 + i * 0.18), RY(Math.PI / 2), RZ(Math.PI)), 1.0);
     c.lamps.push(lantern(k, 0.7, EAVE - 0.75, 0.15, { chain: 0.45, strength: 1.0 }));
   }
-  // flat stones under the sill, at the doors
-  for (const [x, z] of [[X0 + 0.2, Z0 + 0.2], [X1 - 0.2, Z0 + 0.2], [X0 + 0.2, Z1 - 0.2], [X1 - 0.2, Z1 - 0.2], [X0 + 0.2, 0], [X1 - 0.2, 0], [0, Z0 + 0.2], [-2.0, Z1 - 0.2], [2.0, Z1 - 0.2]]) c.piers.push({ x, z, h: FT - 0.02, w: 0.42 });
-  for (const p of c.piers) { k.box('plaster', [p.w, p.h + 0.02, p.w * k.r(0.85, 1.05)], [p.x, (p.h + 0.02) / 2 - 0.01, p.z], [0, k.r(-0.4, 0.4), 0], { tint: vary(k, onMean(FLAT, env.texMean), 0.85, 1.1), skip: '-y' }); }
-  k.box('plaster', [3.2, 0.06, 0.7], [0, 0.0, Z1 + 0.4], [0, 0.02, 0], { tint: vary(k, onMean(FLAT, env.texMean), 0.85, 1.0), skip: '-y' });
   // (the walls' solids, for the light and the walk grid: boardAndBatten adds each board's; the gables' attic none)
-  // THE DOORS: the big double doors swing out (the street side), the door into the shed swings in
+  // THE DOORS: the big double doors swing out (the street side), the door into the shed swings in (their hinges on the
+  // lifted building)
   const leafOf = (f, ha, side, w, h, open, group, xBrace, name) => {
     const seed = r.seed * 31 + leaves.length * 7 + 3, lk = new Kit(seed); lk.parts.glow = [];
     doorLeaf(lk, { w, h, side, tint: paint ? [0.5, 0.42, 0.36] : DOORW, strap: STRAP, handle: true, xBrace, rails: xBrace ? [0.3, h / 2, h - 0.3] : [0.3, h - 0.32] });
     if (paint) for (const P of lk.parts.wood) if (!P.o.paint) P.o.paint = vary(lk, paint, 0.9, 1.06);
     for (const P of lk.parts.wood) P.m.premultiply(RY(f.th));
     const geo = buildGeometry(lk.parts.wood, 'wood', rng(seed + 1), { topAt: () => 9, tintAt });
-    const hinge = wallP(f, ha, FL + 0.01, group === 'main' ? 0.04 : -0.08);
+    const hinge = wallP(f, ha, FL + 0.01 + LIFT, group === 'main' ? 0.04 : -0.08);
     leaves.push({ group, geo, glass: null, hinge, open, closed: 0, parts: lk.parts.wood.length, name });
   };
   if (!far) {
@@ -282,9 +356,13 @@ export function buildBlacksmith(recipeIn = {}, env = {}) {
     wb(k, FRONT, [DOOR.a1 - DOOR.a0 - 0.04, DOOR.y1 - FL, 0.05], 0, (DOOR.y1 + FL) / 2, -0.02, null, { long: 1, tint: DOORW.map((q) => q * 0.8), paint });
     wb(k, RIGHT, [1.06, 2.2 - FL, 0.05], -0.75, (2.2 + FL) / 2, -0.04, null, { long: 1, tint: DOORW.map((q) => q * 0.8), paint });
   }
+  // UP ONTO THE FOOTING: everything so far LIFT m up; then what stands on the ground: the footing itself, its steps, the
+  // shed posts' piers
+  liftAll(c, k, LIFT);
+  footing(c, r, env, gl);
 
   // the meshes, one per material
-  const R = rng(r.seed + 1), geos = {}, topAt = (x, z) => (x > X1 + 0.05 ? SHED.top - (x - X1) * Math.tan(SHED.pitch) : Math.max(EAVE, roofY(x))) - 0.03;
+  const R = rng(r.seed + 1), geos = {}, topAt = (x, z) => (x > X1 + 0.05 ? SHED.top - (x - X1) * Math.tan(SHED.pitch) : Math.max(EAVE, roofY(x))) - 0.03 + LIFT;
   geos.wood = buildGeometry(k.parts.wood, 'wood', R, { topAt, tintAt });
   const of = geos.wood.userData.partOf, Pp = geos.wood.attributes.position, A = new Float32Array(Pp.count * 3), RB = rng(r.seed * 97 + 5);
   const per = k.parts.wood.map(() => (RB() < 0.3 ? 0.15 + 0.2 * RB() : 0.08 * RB()));
@@ -311,13 +389,13 @@ export function buildBlacksmith(recipeIn = {}, env = {}) {
   const occ = new Occlusion(k.occ, 1.6, 0.08, { reach: 2.4, rays: far ? 12 : 20, groundReach: 0.7 });
   const op = (cc, u, v, n, o = {}) => ({ c: cc, u, v, n, ...o });
   const openings = [
-    op([0, (FL + DOOR.y1) / 2, Z1 - 0.05], [1.35, 0, 0], [0, (DOOR.y1 - FL) / 2 - 0.05, 0], [0, 0, 1], { front: true }),
-    op([X1 - 0.05, 1.1, 0.75], [0, 0, 0.48], [0, 1.0, 0], [1, 0, 0], { door2: true }),
-    op([1.85, 1.75, Z0 + 0.05], [0.4, 0, 0], [0, 0.48, 0], [0, 0, -1]),
-    op([X0 + 0.05, 1.75, 1.6], [0, 0, 0.4], [0, 0.48, 0], [-1, 0, 0]), op([X0 + 0.05, 1.75, -0.3], [0, 0, 0.4], [0, 0.48, 0], [-1, 0, 0]),
-    op([X1 - 0.05, 1.75, -1.95], [0, 0, 0.4], [0, 0.48, 0], [1, 0, 0]),
+    op([0, (FL + DOOR.y1) / 2 + LIFT, Z1 - 0.05], [1.35, 0, 0], [0, (DOOR.y1 - FL) / 2 - 0.05, 0], [0, 0, 1], { front: true }),
+    op([X1 - 0.05, 1.1 + LIFT, 0.75], [0, 0, 0.48], [0, 1.0, 0], [1, 0, 0], { door2: true }),
+    op([1.85, 1.75 + LIFT, Z0 + 0.05], [0.4, 0, 0], [0, 0.48, 0], [0, 0, -1]),
+    op([X0 + 0.05, 1.75 + LIFT, 1.6], [0, 0, 0.4], [0, 0.48, 0], [-1, 0, 0]), op([X0 + 0.05, 1.75 + LIFT, -0.3], [0, 0, 0.4], [0, 0.48, 0], [-1, 0, 0]),
+    op([X1 - 0.05, 1.75 + LIFT, -1.95], [0, 0, 0.4], [0, 0.48, 0], [1, 0, 0]),
   ];
-  const inShop = (x, y, z) => x > X0 + 0.08 && x < X1 - 0.08 && z > Z0 + 0.08 && z < Z1 - 0.08 && y > -0.5 && y < roofY(x) - 0.05;
+  const inShop = (x, y, z) => x > X0 + 0.08 && x < X1 - 0.08 && z > Z0 + 0.08 && z < Z1 - 0.08 && y > -0.5 && y < roofY(x) + LIFT - 0.05;
   const fill = (x, y, z, nx, ny, nz) => (inShop(x + nx * 0.08, y + ny * 0.08, z + nz * 0.08) ? 0.06 : 0);
   const light = new Light(occ, { inside: inShop, fill, openings, lamps: c.lamps, base: 0.3, gain: 6.0 });
   const BAKED = ['wood', 'iron', 'stone', 'plaster'];
@@ -343,22 +421,22 @@ export function buildBlacksmith(recipeIn = {}, env = {}) {
     { type: 'barrel', x: 0.9, z: Z0 + 0.45, inside: true },
     { type: 'wheel', x: -2.75, z: Z1 + 0.22, r: 0.62 }, { type: 'anvil', x: 2.85, z: Z1 + 1.35, rot: -0.5 }, { type: 'barrel', x: X1 + 0.5, z: Z0 + 0.45 }, { type: 'trough', x: SHED.x1 - 0.65, z: Z1 - 1.3, rot: Math.PI / 2, len: 1.7 },
     { type: 'hitchrail', x: SHED.x1 + 0.9, z: 0, rot: Math.PI / 2, len: 3.0 }, { type: 'crate', x: X1 + 0.45, z: Z1 - 0.4, rot: 0.2, size: 0.5 },
-  ].map((p) => ({ ...p, y: p.inside ? FL : 0, x: p.x + OX, z: p.z + OZ }));
+  ].map((p) => ({ ...p, y: p.inside ? FL + LIFT : gl(p.x, p.z), x: p.x + OX, z: p.z + OZ }));   // (outdoors: on the ground where it stands)
   const f2 = (x) => +x.toFixed(2);
   const fp = { w: f2(box.max.x - box.min.x), d: f2(box.max.z - box.min.z), h: f2(box.max.y), x0: f2(box.min.x + OX), x1: f2(box.max.x + OX), z0: f2(box.min.z + OZ), z1: f2(box.max.z + OZ) };
   const anchors = {
-    footprint: fp, floor: FL,
-    doorways: [{ name: 'doors', centre: [f2(OX), f2((FL + DOOR.y1) / 2), f2(Z1 + OZ)], w: 2.9, h: f2(DOOR.y1 - FL), out: [0, 0, 1], door: 'main' },
-      { name: 'shed door', centre: [f2(X1 + OX), f2((FL + 2.2) / 2), f2(0.75 + OZ)], w: 1.1, h: f2(2.2 - FL), out: [1, 0, 0], door: 'back' }],
-    rooms: [{ name: 'smithy', floor: [f2(X0 + 0.1 + OX), f2(X1 - 0.1 + OX), f2(Z0 + 0.1 + OZ), f2(Z1 - 0.1 + OZ)], y: FL, ceiling: f2(EAVE - 0.2), anchors: {
-      forge: { x: f2(STACK.x + OX), z: f2(FORGE.z1 + OZ), y: FORGE.h }, anvil: { x: f2(-0.55 + OX), z: f2(Z0 + 1.95 + OZ) }, bench: { x: f2(X0 + 0.45 + OX), z: f2(1.6 + OZ), rot: Math.PI / 2, len: 2.1 }, smith: { x: f2(-0.9 + OX), z: f2(Z0 + 2.4 + OZ), rot: Math.PI } } },
+    footprint: fp, floor: FL + LIFT, feet: c.feet.map(([x, z, y]) => [f2(x + OX), f2(z + OZ), f2(y)]),
+    doorways: [{ name: 'doors', centre: [f2(OX), f2((FL + DOOR.y1) / 2 + LIFT), f2(Z1 + OZ)], w: 2.9, h: f2(DOOR.y1 - FL), out: [0, 0, 1], door: 'main' },
+      { name: 'shed door', centre: [f2(X1 + OX), f2((FL + 2.2) / 2 + LIFT), f2(0.75 + OZ)], w: 1.1, h: f2(2.2 - FL), out: [1, 0, 0], door: 'back' }],
+    rooms: [{ name: 'smithy', floor: [f2(X0 + 0.1 + OX), f2(X1 - 0.1 + OX), f2(Z0 + 0.1 + OZ), f2(Z1 - 0.1 + OZ)], y: FL + LIFT, ceiling: f2(EAVE - 0.2 + LIFT), anchors: {
+      forge: { x: f2(STACK.x + OX), z: f2(FORGE.z1 + OZ), y: FORGE.h + LIFT }, anvil: { x: f2(-0.55 + OX), z: f2(Z0 + 1.95 + OZ) }, bench: { x: f2(X0 + 0.45 + OX), z: f2(1.6 + OZ), rot: Math.PI / 2, len: 2.1 }, smith: { x: f2(-0.9 + OX), z: f2(Z0 + 2.4 + OZ), rot: Math.PI } } },
     { name: 'shoeing shed', open: true, floor: [f2(X1 + OX), f2(SHED.x1 + OX), f2(Z0 + OZ), f2(Z1 + OZ)], y: 0, ceiling: f2(SHED.top - 0.6), anchors: { horse: { x: f2((X1 + SHED.x1) / 2 + OX), z: f2(OZ), rot: 0 } } }],
     lanterns: c.lamps.filter((q) => !q.fire).map((q) => q.p.map(f2)),
     street: [fp.x0 - 1, fp.x1 + 1, fp.z1 - 0.5, fp.z1 + 6],
   };
   const counts = {}; let parts = 0; for (const g in k.parts) { counts[g] = k.parts[g].length; parts += counts[g]; }
-  const extra = far ? null : signAndSmoke(SIGN, [STACK.x + OX, roofY(STACK.x) + 1.95, STACK.z + OZ], [OX, OZ]);
-  const B = { extra, tick: extra ? extra.userData.tick : null, recipe: r, geos, doors: leaves, lamps: c.lamps, light, occ, props, offset: OX, offsetZ: OZ, anchors, counts, parts, msBuild, msBake, ms: performance.now() - t0, marks: [], kit: k };
+  const extra = far ? null : signAndSmoke({ ...SIGN, y: SIGN.y + LIFT }, [STACK.x + OX, roofY(STACK.x) + 1.95 + LIFT, STACK.z + OZ], [OX, OZ]);
+  const B = { sit, ground: !!env.ground, extra, tick: extra ? extra.userData.tick : null, recipe: r, geos, doors: leaves, lamps: c.lamps, light, occ, props, offset: OX, offsetZ: OZ, anchors, counts, parts, msBuild, msBake, ms: performance.now() - t0, marks: [], kit: k };
   const H = fp.h, cx = OX, cz = OZ;
   B.views = {
     front34: [[-11.5, 3.6, 12.5], [0.6, 2.2, 0]], front: [[0.2 + cx, 2.0, 12.5], [cx, 2.2, 0]], back34: [[11.5, H * 0.6, -11.5], [0, 2.4, 0]],

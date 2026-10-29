@@ -154,11 +154,11 @@ const MAKERS = {
   },
   // what goes with the iron stove's model (models/furniture/stove.glb, a pot-belly 1 m tall before `scale`): the fire
   // glowing out through its door's grate, a flickering light, and its pipe carried on from the stub up through the roof
-  stovefire({ power = 2.2, scale: k = 1 } = {}) {
+  stovefire({ power = 2.2, scale: k = 1, pipe = true } = {}) {   // (pipe: false for a cabin's own box stove: it has its own)
     const grp = new THREE.Group(); grp.lights = [];
     const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowPicture(), color: 0xff7a30, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, opacity: 0.6 }));
     glow.scale.set(0.45 * k, 0.32 * k, 1); glow.position.set(0, 0.4 * k, 0.3 * k); grp.add(glow);
-    grp.add(mesh(new THREE.CylinderGeometry(0.064 * k, 0.064 * k, 4.4, 14), std(0x232120, { roughness: 0.55, metalness: 0.55 }), -0.075 * k, 0.99 * k + 2.2, -0.044 * k));
+    if (pipe) grp.add(mesh(new THREE.CylinderGeometry(0.064 * k, 0.064 * k, 4.4, 14), std(0x232120, { roughness: 0.55, metalness: 0.55 }), -0.075 * k, 0.99 * k + 2.2, -0.044 * k));
     const light = lampOf(0xff8a3c, power, 6, 1.6); light.position.set(0, 0.42 * k, 0.5 * k); grp.add(light); grp.lights.push(light);
     grp.tick = (dt, t) => { const f = 1 + 0.12 * Math.sin(t * 9.1) + 0.07 * Math.sin(t * 23.7) + 0.05 * Math.sin(t * 3.3); light.intensity = power * f; glow.material.opacity = 0.5 + 0.1 * f; };
     return grp;
@@ -236,7 +236,9 @@ const KEEP = {
         x.strokeStyle = 'rgba(120,20,10,0.8)'; x.lineWidth = 5; x.beginPath(); x.moveTo(20, 60); x.lineTo(w - 20, 160); x.moveTo(w - 20, 60); x.lineTo(20, 160); x.stroke();
       });
       const p = new THREE.Mesh(new THREE.PlaneGeometry(0.32, 0.44), std(0xffffff, { map: tex, roughness: 1 })); p.receiveShadow = true;
-      p.position.set((i % 2 ? 0.2 : -0.2), i > 1 ? -0.48 : 0, 0.01 + i * 0.002); p.rotation.z = (i % 2 ? -0.04 : 0.05); grp.add(p);
+      // (centred on the spot: one alone, two side by side, a third under them in the middle, a fourth beside it)
+      const row = i > 1 ? 1 : 0, inRow = row ? n - 2 : Math.min(2, n), x = inRow === 1 ? 0 : (i % 2 ? 0.2 : -0.2);
+      p.position.set(x, row ? -0.48 : 0, 0.01 + i * 0.002); p.rotation.z = (i % 2 ? -0.04 : 0.05); grp.add(p);
     }
     return grp;
   },

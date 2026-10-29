@@ -8,28 +8,32 @@
 //     floor(x, z) -> the floor's height there; push(body) keeps a walker { x, y, z } out of the walls (inside only)
 //     lit(material): gives the dog's coat the inside light (its own copy of the coat, so the town's dogs don't change)
 //     others() -> the other dogs in the room (each { x, z }): a dog keeps its distance from them, so none walk into each other
+//     seen(x, z) -> its name tag shows (inside: only with the player in the same room; tags are drawn through walls)
 //   H.update(dt, at)   at: where the player stands { x, z, heading } (or null)
 //   H.greet(k, n)      comes over to say hello (inside): dog k of n greeting, each sitting in its own spot in a row in front
 //                      of you, where you can see it
+//   H.goTo(spot, via)  (inside) gets up and trots to a new spot (by the points in `via` first: a doorway), and lies
+//                      down there: a fire lit in the hearth (cabin.js), and back to its bed when it has burnt down
 //   H.state(), H.dispose()
 import * as THREE from 'three';
 import { makeAnimal } from '../actors/animals.js';
-import { makeTag, BREED, DOG } from '../dog.js';
+import { makeTag, dogSettings } from '../dog.js';
 
 export const HOME = {
   greetFrom: 9,       // the porch dogs get up when you come this close (m)
   greetFor: 6,        // seconds a dog sits in front of you before going back to bed
   greetAhead: 2.1,    // greeting, it sits this far in front of you (nearer is under the bottom of the view) ...
   greetGap: 0.62,     // ... and this far sideways from the next greeting dog
-  space: 0.58,        // two dogs' middles stay at least this far apart
+  gap: 0.05,          // two dogs' middles stay at least half of each one's length (nose to tail) apart, and this:
+                      // lying side by side or nose to tail, a husky never overlaps another (H.r: half its length)
   trot: 1.7,          // m/s it crosses the room at
   followSide: 0.75,   // the dog that follows you: this far to your side and a little behind
 };
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
-export function makeHomeDog({ animals, kind, name, scene, spot, mode = 'bed', floor = () => spot.y, push = null, lit = null, others = () => [] }) {
-  const H = { kind, name, mode, dog: null, x: spot.x, z: spot.z };
-  const C = { ...DOG, ...(BREED[kind] || {}) };
+export function makeHomeDog({ animals, kind, name, scene, spot, mode = 'bed', floor = () => spot.y, push = null, lit = null, others = () => [], seen = () => true }) {
+  const H = { kind, name, mode, dog: null, x: spot.x, z: spot.z, r: 0.5 };   // (r: half its length once loaded; till then a husky's)
+  const C = dogSettings(kind);
   let heading = spot.rot || 0, speed = 0, pose = 'lie', poseT = 99, task = mode === 'follow' ? 'follow' : 'rest', taskT = 0, stillT = 0, headUp = 0;
   let disposed = false, greeted = false, side = 0, going = false, stuckT = 0;
   const tag = makeTag(name); tag.visible = false; scene.add(tag);
@@ -37,6 +41,7 @@ export function makeHomeDog({ animals, kind, name, scene, spot, mode = 'bed', fl
   H.ready = animals.need(kind).then(() => {
     if (disposed) return;
     const a = H.dog = makeAnimal(animals, kind, { tint: lit ? '#ffffff' : null });   // (a tint gives it its own coat to light)
+    if (a.length > 0) H.r = a.length / 2;
     if (lit) lit(a.mesh.material);
     scene.add(a.root);
     a.root.updateMatrixWorld(true); headUp = a.tall - a.root.worldToLocal(a.bones.Head.getWorldPosition(head)).y;   // (in its own frame: the scene may be the cabin's, turned and raised in the valley)
@@ -59,14 +64,17 @@ export function makeHomeDog({ animals, kind, name, scene, spot, mode = 'bed', fl
     for (const o of others()) {
       if (o === H) continue;
       const dx = b.x - o.x, dz = b.z - o.z, d = Math.hypot(dx, dz);
-      if (d >= HOME.space) continue;
-      const nx = d > 1e-4 ? dx / d : 1, nz = d > 1e-4 ? dz / d : 0, by = HOME.space - d;
+      const space = H.r + (o.r ?? 0.5) + HOME.gap;
+      if (d >= space) continue;
+      const nx = d > 1e-4 ? dx / d : 1, nz = d > 1e-4 ? dz / d : 0, by = space - d;
       b.x += nx * by; b.z += nz * by; moved = true;
     }
     return moved;
   }
   const turnTo = (h, k, dt) => { heading += wrap(h - heading) * (1 - Math.exp(-k * dt)); };
 
+  let route = [];   // (the points it trots by on its way to a new spot)
+  H.goTo = (to, via = []) => { if (mode !== 'bed') return; spot = { ...spot, ...to }; route = via.map(([x, z]) => ({ x, z })); task = 'home'; taskT = 0; stuckT = 0; };
   H.greet = (k = 0, n = 1) => { if (mode === 'bed') { task = 'greet'; taskT = 0; side = (k - (n - 1) / 2) * HOME.greetGap; going = true; stuckT = 0; } };
   H.update = (dt, at) => {
     const a = H.dog; if (!a) return;
@@ -90,7 +98,10 @@ export function makeHomeDog({ animals, kind, name, scene, spot, mode = 'bed', fl
       else { want = 'sit'; face = Math.atan2(at.x - H.x, at.z - H.z); stuckT = 0; }
       if (taskT > HOME.greetFor) task = 'home';
     } else if (task === 'home') {
-      if (Math.hypot(spot.x - H.x, spot.z - H.z) > 0.12) target = goal.set(spot.x, 0, spot.z); else { task = 'rest'; face = spot.rot || 0; }
+      while (route.length && Math.hypot(route[0].x - H.x, route[0].z - H.z) < 0.3) route.shift();
+      if (route.length) target = goal.set(route[0].x, 0, route[0].z);
+      // (kept from its spot by another dog or the furniture a while: it lies down where it got to)
+      else if (Math.hypot(spot.x - H.x, spot.z - H.z) > 0.12 && stuckT < 1.5) target = goal.set(spot.x, 0, spot.z); else { task = 'rest'; face = spot.rot || 0; }
     } else if (task === 'follow' && at) {
       // beside you (on your left, a little behind), sitting when you stop
       const h = at.heading || 0, s = Math.sin(h), c = Math.cos(h);
@@ -123,7 +134,7 @@ export function makeHomeDog({ animals, kind, name, scene, spot, mode = 'bed', fl
     a.update(dt);
     a.root.updateMatrixWorld(true);
     scene.worldToLocal(a.bones.Head.getWorldPosition(head));   // (the tag hangs in the same scene as the dog: the cabin's frame or the valley's)
-    tag.position.set(head.x, head.y + headUp + C.tagUp, head.z); tag.visible = true;
+    tag.position.set(head.x, head.y + headUp + C.tagUp, head.z); tag.visible = seen(H.x, H.z);   // (its name drawn through walls: only where it can be seen)
   };
   H.state = () => ({ kind, name, mode, task, pose, x: +H.x.toFixed(2), z: +H.z.toFixed(2), loaded: !!H.dog });
   H.dispose = () => { disposed = true; if (H.dog) H.dog.dispose(); tag.removeFromParent(); tag.material.map.dispose(); tag.material.dispose(); };

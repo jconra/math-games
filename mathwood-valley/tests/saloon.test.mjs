@@ -53,12 +53,13 @@ test('the harmonica player names the next song in one short line', () => {
   for (const s of SONGS) { const t = bandLine('next', s); assert.ok(t.includes(s.name) && t.length <= 34, t); }
 });
 
-test('the card: eleven songs in two groups, the number row along for keys, and the break', () => {
+test('the card: twelve songs in two groups, the number row along for keys, and the break', () => {
   const rows = bandChoices({ song: 'joeclark' });
   assert.equal(rows.length, SONGS.length + 1);
   const keys = rows.map((r) => r.key).filter(Boolean);
   assert.equal(new Set(keys).size, keys.length, 'no key twice');
-  assert.ok(rows.filter((r) => r.group === 'own').length === 4 && rows.filter((r) => r.group === 'old').length === SONGS.length - 4);
+  assert.equal(keys.length, SONGS.length + 1, 'every song a key');
+  assert.ok(rows.filter((r) => r.group === 'own').length === 5 && rows.filter((r) => r.group === 'old').length === SONGS.length - 5);
   assert.equal(rows.find((r) => r.on).id, 'joeclark');
 });
 

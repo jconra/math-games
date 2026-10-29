@@ -29,6 +29,8 @@
 //   M.beat()               the beat the music is on now (counted from the first one; fractions between), or null
 //   M.beatLen, M.bar       the song's seconds a beat and beats a bar;  M.song, M.name   which song
 //   M.harmonicaAt(t)       true while the harmonica is playing (a phrase sounding at ctx time t)
+//   M.nextHarmonica(t)     when the harmonica next starts after t (or null);  M.fiddleAt(t), M.nextFiddle(t): the same
+//                          for the sampled fiddle's notes (none without its kit)
 //   M.events               what has been scheduled (for testing): [{ at, what, midi, len, ... }]; in the game only the
 //                          last EVENTS_KEPT are kept (the band can play for hours), an offline render keeps them all
 //   M.played               how many notes have been scheduled in all
@@ -109,7 +111,7 @@ export function pianoNotes(n, patch = PATCH_PRESETS[PIANO]) {
     const semi = m - PIANO_ROOT, up = Math.max(0, semi / 12), node = (id) => patch.nodes.find((x) => x.id === id);
     const set = {};
     if (up > 0) { set.mid = { level: node('mid').level * Math.pow(10, -3 * up / 20) }; set.high = { level: node('high').level * Math.pow(10, -7 * up / 20) }; }
-    const gain = (0.25 + 0.75 * Math.pow(vel, 1.4)) * (list.length > 1 ? 0.78 : 1);
+    const gain = (0.25 + 0.75 * Math.pow(vel, 1.4)) * (list.length > 1 ? 0.78 : 1) * (n.gain ?? 1);   // (gain: a part played softer than its touch alone makes it)
     const tail = node('damp-b-e');
     if (tail && n.len != null) set['damp-b-e'] = { hold: Math.max(0.01, n.len + TAIL_HANG - (tail.attack ?? 0.01) - (tail.decay ?? 0.2)) };
     return notePatch(patch, { semi, gain, len: n.len, set });
@@ -146,11 +148,79 @@ export function playFiddle(ctx, kit, dest, room, n) {
   const at = n.at, peak = FIDDLE_LEVEL * (0.3 + 0.7 * Math.max(0, Math.min(1, n.vel ?? 0.8)));
   const skip = n.quick ? Math.max(0, s.speak - 0.02) : 0, atk = n.quick ? 0.012 : 0.05, rel = n.release ?? (n.quick ? 0.07 : 0.2);
   const hold = Math.max(atk, Math.min(n.len, (s.buf.duration - skip) / rate - rel - 0.05));
+  g.gain.value = 0;   // (silent before its first event too: a source starting a frame ahead of it let one full sample through, a click)
   g.gain.setValueAtTime(0, at); g.gain.linearRampToValueAtTime(peak, at + atk);
   g.gain.setValueAtTime(peak, at + hold); g.gain.linearRampToValueAtTime(0, at + hold + rel);
   src.connect(g); g.connect(dest);
   if (room) { const sg = ctx.createGain(); sg.gain.value = 0.07; g.connect(sg); sg.connect(room); }
   src.start(at, skip); src.stop(at + hold + rel + 0.02);
+  return { stop(t = 0) { const now = ctx.currentTime; try { g.gain.cancelScheduledValues(now); g.gain.setTargetAtTime(0, now, Math.max(0.004, t / 3)); src.stop(now + Math.max(0.03, t) + 0.05); } catch (e) { /* already gone */ } } };
+}
+
+// ── THE SAMPLED PIANO (kept, not played: the game's maker tried it beside the synth piano and the family chose the
+// synth ("It does have video game vibes. Maybe we can keep the piano around though"); makeStageMusic plays it only when
+// given a pianoKit) ─────────────────────────────────────────────────────────────────────────────────────────────────
+// A real upright, sampled: Upright Piano by Simon Dalzell (Ivy Audio), from VSCO 2 Community Edition (CC0; credit
+// encouraged, given in sounds/CREDITS.md): its louder layer, every fourth key from A1 to A6 (sounds/piano/piano_<MIDI>),
+// each trimmed to 3 s and evened in loudness. A note is the nearest recording played a little faster or slower (two
+// keys at most), held while the key is down, then the damper (a short fade); the touch sets its loudness.
+//   loadPiano(ctx) -> Promise of the kit     playPiano(ctx, kit, dest, room, { at, midi (or a list), len, vel, gain })
+export const PIANO_SAMPLES = [   // [MIDI note, cents sharp as measured]
+  [33, -3], [37, -8], [41, 5], [45, -6], [49, -1], [53, 0], [57, 2], [61, 2], [65, 1], [69, 1], [73, 5], [77, 5], [81, 6], [85, 12], [89, 13], [93, 16],
+];
+const PIANO_LEVEL = 0.5;                  // the samples' level against the harmonica and the fiddle
+export async function loadPiano(ctx, { base = new URL('../../sounds/piano/', import.meta.url).href, ext = null } = {}) {
+  const e = ext || audioExt();
+  return Promise.all(PIANO_SAMPLES.map(async ([midi, cents]) => {
+    const r = await fetch(`${base}piano_${midi}${e}`);
+    if (!r.ok) throw new Error(`piano sample ${midi}: ${r.status}`);
+    return { midi: midi + cents / 100, buf: await ctx.decodeAudioData(await r.arrayBuffer()) };
+  }));
+}
+export function playPiano(ctx, kit, dest, room, n) {
+  const list = Array.isArray(n.midi) ? n.midi : [n.midi], vel = Math.max(0.05, Math.min(1, n.vel ?? 0.6));
+  const peak = PIANO_LEVEL * (0.2 + 0.8 * Math.pow(vel, 1.5)) * (list.length > 1 ? 0.75 : 1) * (n.gain ?? 1);
+  const g = ctx.createGain(), at = n.at, hold = Math.max(0.05, n.len ?? 0.5), rel = TAIL_HANG;
+  g.gain.setValueAtTime(peak, at); g.gain.setValueAtTime(peak, at + hold); g.gain.setTargetAtTime(0, at + hold, rel / 3);
+  g.connect(dest);
+  if (room) { const sg = ctx.createGain(); sg.gain.value = 0.06; g.connect(sg); sg.connect(room); }
+  const srcs = list.map((m) => {
+    const s = kit.reduce((b, x) => (Math.abs(x.midi - m) < Math.abs(b.midi - m) ? x : b), kit[0]), src = ctx.createBufferSource();
+    src.buffer = s.buf; src.playbackRate.value = Math.pow(2, (m - s.midi) / 12); src.connect(g);
+    src.start(at); src.stop(Math.min(at + s.buf.duration / src.playbackRate.value, at + hold + rel * 3 + 0.05));
+    return src;
+  });
+  return { stop(t = 0) { const now = ctx.currentTime; try { g.gain.cancelScheduledValues(now); g.gain.setTargetAtTime(0, now, Math.max(0.004, t / 3)); for (const s of srcs) s.stop(now + Math.max(0.03, t) + 0.05); } catch (e) { /* already gone */ } } };
+}
+
+// ── THE BANJO ────────────────────────────────────────────────────────────────────────────────────────────────────────
+// The game's maker: "So no banjo though? I thought that the popular midi samples had it?" The General MIDI banjo of the
+// Fluid R3 soundfont (Frank Wen), as gleitz/midi-js-soundfonts renders it note by note, under Creative Commons
+// Attribution 3.0 (credited in sounds/CREDITS.md and the README): every third key from C3 to C6 (sounds/banjo/), each
+// trimmed to 2 s. A note is plucked: the nearest recording a little faster or slower, ringing as it does on its own
+// until the next note, then damped quickly. The banjo tunes (a tune's banjo: true) give it turns when it's loaded.
+//   loadBanjo(ctx) -> Promise of the kit     playBanjo(ctx, kit, dest, room, { at, midi, len, vel })
+export const BANJO_SAMPLES = [   // [MIDI note, cents sharp as measured]
+  [48, 6], [51, 6], [54, 6], [57, 6], [60, 3], [63, 2], [66, 1], [69, 1], [72, 0], [75, -1], [78, -1], [81, -1], [84, 0],
+];
+const BANJO_LEVEL = 0.45;                 // against the harmonica and the fiddle
+export async function loadBanjo(ctx, { base = new URL('../../sounds/banjo/', import.meta.url).href, ext = null } = {}) {
+  const e = ext || audioExt();
+  return Promise.all(BANJO_SAMPLES.map(async ([midi, cents]) => {
+    const r = await fetch(`${base}banjo_${midi}${e}`);
+    if (!r.ok) throw new Error(`banjo sample ${midi}: ${r.status}`);
+    return { midi: midi + cents / 100, buf: await ctx.decodeAudioData(await r.arrayBuffer()) };
+  }));
+}
+export function playBanjo(ctx, kit, dest, room, n) {
+  const s = kit.reduce((b, x) => (Math.abs(x.midi - n.midi) < Math.abs(b.midi - n.midi) ? x : b), kit[0]), src = ctx.createBufferSource(), g = ctx.createGain();
+  src.buffer = s.buf; src.playbackRate.value = Math.pow(2, (n.midi - s.midi) / 12);
+  const at = n.at, peak = BANJO_LEVEL * (0.3 + 0.7 * Math.max(0, Math.min(1, n.vel ?? 0.8))), ring = s.buf.duration / src.playbackRate.value;
+  const hold = Math.max(0.05, Math.min(n.len ?? ring, ring - 0.1));
+  g.gain.setValueAtTime(peak, at); g.gain.setValueAtTime(peak, at + hold); g.gain.setTargetAtTime(0, at + hold, 0.03);
+  src.connect(g); g.connect(dest);
+  if (room) { const sg = ctx.createGain(); sg.gain.value = 0.06; g.connect(sg); sg.connect(room); }
+  src.start(at); src.stop(at + hold + 0.2);
   return { stop(t = 0) { const now = ctx.currentTime; try { g.gain.cancelScheduledValues(now); g.gain.setTargetAtTime(0, now, Math.max(0.004, t / 3)); src.stop(now + Math.max(0.03, t) + 0.05); } catch (e) { /* already gone */ } } };
 }
 
@@ -439,10 +509,11 @@ export function makeLonesome(seed = 1, { intro = true } = {}) {
 //                                  other settings agree on the tune), the triplet kept
 // Each part is written in ABC, the plain text folk musicians write tunes in: a letter a note (C..B the octave up from
 // middle C, c..b the one above; ' an octave higher, , lower), a number after it the eighths it lasts (/ halves it),
-// ^ _ = a sharp, flat or natural, z a rest, | a bar line, "D" the chord from there on, (3 three notes in the time of two.
+// ^ _ = a sharp, flat or natural, z a rest, | a bar line, "D" the chord from there on, (3 three notes in the time of two,
+// ~ before a note: bend up into it (a harmonica's blue note; ABC's own ~ is a roll, the nearest thing it has).
 // The key's sharps or flats hold unless a note says otherwise (a note's own lasts to the end of its bar). A section with
 // two endings is written as two sections (A for the first time through, A2 for the second).
-//   readAbc(text, { key, unit }) -> bars [{ notes: [{ at, len, midi (null: a rest) }], chords: [{ at, name }], len }]
+//   readAbc(text, { key, unit }) -> bars [{ notes: [{ at, len, midi (null: a rest), bend }], chords: [{ at, name }], len }]
 //                          at and len in beats (unit: the beats one written note length lasts: 0.5 for an eighth
 //                          with the beat a quarter note)
 //   chordOf(name, semi)    a chord's root and fifth for the piano's left hand and two soft voicings for its right
@@ -450,13 +521,14 @@ const ABC_KEYS = { C: '', G: '^F', D: '^F^C', A: '^F^C^G', Dmix: '^F', Amix: '^F
 const STEP = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
 export function readAbc(text, { key = 'D', unit = 0.5 } = {}) {
   const sig = ABC_KEYS[key] ?? '', bars = [];
-  let bar = { notes: [], chords: [] }, t = 0, held = {}, i = 0, three = 0;
+  let bar = { notes: [], chords: [] }, t = 0, held = {}, i = 0, three = 0, bend = false;
   const close = () => { if (bar.notes.length) bars.push({ ...bar, len: t }); bar = { notes: [], chords: [] }; t = 0; held = {}; };
   while (i < text.length) {
     const ch = text[i];
     if (ch === '"') { const j = text.indexOf('"', i + 1); bar.chords.push({ at: t, name: text.slice(i + 1, j) }); i = j + 1; continue; }
     if (ch === '|') { close(); i++; continue; }
     if (ch === '(' && text[i + 1] === '3') { three = 3; i += 2; continue; }
+    if (ch === '~') { bend = true; i++; continue; }
     let acc = null;
     if (ch === '^' || ch === '_' || ch === '=') { acc = ch === '^' ? 1 : ch === '_' ? -1 : 0; i++; }
     const c = text[i];
@@ -473,8 +545,8 @@ export function readAbc(text, { key = 'D', unit = 0.5 } = {}) {
     if (c === 'z') { bar.notes.push({ at: t, len, midi: null }); t += len; continue; }
     const up = c.toUpperCase(), base = 60 + STEP[up] + (c === up ? 0 : 12) + oct;
     if (acc != null) held[base] = acc;
-    bar.notes.push({ at: t, len, midi: base + (held[base] ?? (sig.includes('^' + up) ? 1 : sig.includes('_' + up) ? -1 : 0)) });
-    t += len;
+    bar.notes.push({ at: t, len, midi: base + (held[base] ?? (sig.includes('^' + up) ? 1 : sig.includes('_' + up) ? -1 : 0)), ...(bend ? { bend: true } : {}) });
+    t += len; bend = false;
   }
   close();
   return bars;
@@ -503,6 +575,7 @@ export const FIDDLE_TUNES = {
     },
   },
   joeclark: {
+    banjo: true,   // (a banjo tune: the banjo takes turns when it's in the band)
     key: 'Amix', semi: -5, beat: 60 / 140, form: ['A', 'A', 'B', 'B'],
     parts: {
       A: '"A"e2 f2 "G"g2 f2|"A"e2 d2 c4|"A"e2 f2 "G"g2 f2|"A"e4 z4|"A"e2 f2 "G"g2 f2|"A"e2 d2 c4|"A"ABcA "G"B2 G2|"A"A4 z4',
@@ -526,6 +599,7 @@ export const FIDDLE_TUNES = {
     },
   },
   cripple: {
+    banjo: true,   // (a banjo tune: the banjo takes turns when it's in the band)
     key: 'A', unit: 1, semi: -5, beat: 60 / 132, form: ['A', 'A', 'B', 'B'],
     parts: {
       A: '"A"aa e/g/f/e/|"D"df "E7"e2|"A"aa e/f/e/d/|"E7"c/A/B "A"A2',
@@ -549,6 +623,31 @@ export const FIDDLE_TUNES = {
     },
   },
 };
+// The band's own written songs (made up for the game, not old tunes), in the same shape.
+//   boogie  "Stagecoach Boogie"  the game's maker asked for "a really high energy song like the ZZ Top song" (Doubleback):
+//                                not that song, an original in its style, a hard-driving shuffle. Two 12-bar blues in A
+//                                (A A A A | D D A A | E D A E): the head, a riff and its bent-note answer, then the
+//                                wail, long bent notes and runs; the piano's left hand rolls a boogie bass, the box drives
+//                                every beat. Written in plain C so every sharp and natural shows (^C, =c, G the blue
+//                                seventh, F against F#).
+export const OWN_TUNES = {
+  boogie: {
+    key: 'C', semi: 0, beat: 60 / 150, swing: 2 / 3, bass: 'boogie', form: ['A', 'A', 'B', 'B'],
+    // (the game's maker: the piano "constantly doing the same thing very repeatedly ... loud and just never takes a
+    // break"; "put the fiddle as the star more or make it battle the harmonica and give the piano some breaks and
+    // flares": the fiddle and harmonica trade the tune (the fiddle an octave up, bright), the piano plays a bassist's
+    // two beats, then rolls, then stop-time, softer than before, with a run up the keys at each section's end)
+    battle: { A: 1, B: 2 }, fiddleUp: 12, pianoPlan: ['light', 'roll', 'stop', 'roll'], flares: true,
+    parts: {
+      A: '"A"E E z E G E ^C A,|"A"~^C3 A, ~^C2 E2|"A"E E z E G E ^C A,|"A"~^C2 E2 G2 A2|'
+       + '"D"A A z A =c A ^F D|"D"~F3 D ~^F2 A2|"A"E E z E G E ^C A,|"A"~^C3 A, E2 A,2|'
+       + '"E"B B z B d B ^G E|"D"A A z A =c A ^F D|"A"E2 ^C2 A,2 ^C E|"E"~^G2 B2 E2 z2',
+      B: '"A"~e4 e ^c A ^c|"A"e2 ^c A G E2 z|"A"~e4 e ^c A ^c|"A"e2 ^c2 A4|'
+       + '"D"~=c4 =c A ^F A|"D"=c2 A ^F D2 z2|"A"~e4 e ^c A ^c|"A"e2 ^c A E2 z2|'
+       + '"E"~B4 B ^G E ^G|"D"A2 ^F D ^F2 A2|"A"E ^C A, ^C E ^C A, z|"E"~^G4 B2 z2',
+    },
+  },
+};
 // The tune once round as bars, each with the chord sounding at its start (a bar without one of its own: the last one's)
 export function fiddleRound(T) {
   const parts = {};
@@ -559,7 +658,7 @@ export function fiddleRound(T) {
     const chords = bar.chords.slice();
     if (!chords.length || chords[0].at > 0) chords.unshift({ at: 0, name: chord });
     chord = chords[chords.length - 1].name;
-    round.push({ ...bar, chords, part: p, i, pos });   // (pos: the section's place in the order)
+    round.push({ ...bar, chords, part: p, i, pos, n: parts[p].length });   // (pos: the section's place in the order; n: its bars)
   }));
   if (round[0].chords[0].name == null) round[0].chords[0].name = chord;
   return round;
@@ -567,17 +666,38 @@ export function fiddleRound(T) {
 // The band playing it: the opening line (when there is one) the piano's alone on the first four bars' chords, then the
 // tune round and round. The harmonica tongues each note short in the quick runs, swells a long note with its pulse
 // (bending into it now and then, more often the second time round), leans on the beat.
-// Who has the tune (the game's maker: the piano should "play some of the higher notes too, like alternate or play along with the
-// harmonica", then "I like it when the piano high end and harmonica switch like that"): the sections take turns down
-// the order, the harmonica, then the piano's right hand (an octave above the harmonica), and so on; each time round it
+// Who has the tune (the game's maker: the piano should "play some of the higher notes too, like alternate or play
+// along with the harmonica", then "I like it when the piano high end and harmonica switch like that"): the sections take
+// turns down the order, the harmonica, then the piano's right hand (an octave above the harmonica), and so on; each time round it
 // moves on one, so every section gets each. With the fiddle in the band (its samples loaded: makeStageMusic says so),
 // the turns are the fiddle, the harmonica, the piano, then the fiddle and the harmonica together. While the right hand
 // has the tune it leaves out the soft chords on two and four; the left hand's bass goes on.
+// (a banjo tune with the banjo in the band: the banjo, the harmonica, the piano, then the banjo and harmonica together;
+// with the fiddle too: the banjo, the harmonica, the fiddle, the piano, then the banjo and fiddle together)
 export const LEADS = ['harp', 'piano'], FIDDLE_LEADS = ['fiddle', 'harp', 'piano', 'fiddle+harp'];
-export const fiddleLead = (pos, time, fiddle = false) => { const L = fiddle ? FIDDLE_LEADS : LEADS; return L[(pos + time) % L.length]; };
+export const BANJO_LEADS = ['banjo', 'harp', 'piano', 'banjo+harp'], BANJO_FIDDLE_LEADS = ['banjo', 'harp', 'fiddle', 'piano', 'banjo+fiddle'];
+export const fiddleLead = (pos, time, fiddle = false, banjo = false) => {
+  const L = banjo ? (fiddle ? BANJO_FIDDLE_LEADS : BANJO_LEADS) : fiddle ? FIDDLE_LEADS : LEADS;
+  return L[(pos + time) % L.length];
+};
+// A battle (T.battle: { A: 1, B: 2 }, bars a turn in each section): the instruments trade the tune, a turn each, the
+// one who calls changing every time round; the last four bars of a section (the turnaround) all together. With the
+// fiddle in the band: the fiddle calls, the harmonica answers, then both; without it the harmonica calls and the piano's
+// right hand answers.
+export function battleLead(T, bar, time, fiddle) {
+  const per = T.battle[bar.part] || 1, last = bar.i >= bar.n - 4, call = Math.floor(bar.i / per) % 2 === time % 2;
+  if (last) return fiddle ? 'fiddle+harp' : 'harp';
+  return call ? (fiddle ? 'fiddle' : 'harp') : (fiddle ? 'harp' : 'piano');
+}
+// A tune may swing (T.swing: the share of a beat its first eighth takes, 2/3 for a shuffle's long-short; every time
+// in a beat is stretched to it) and have a boogie bass (T.bass 'boogie': the left hand rolls the chord's root, third,
+// fifth, sixth, flat seventh, sixth, fifth, third in eighths, starting over where the chord changes in the bar). A note
+// marked ~ is bent up into (a full semitone); others, long ones, now and then a little.
 function makeFiddle(T) {
-  const round = fiddleRound(T);
-  return function tune(seed = 1, { intro = true, fiddle = false } = {}) {
+  const round = fiddleRound(T), SW = T.swing || 0.5;
+  const sw = (x) => { const f = Math.floor(x + 1e-9), u = x - f; return f + (u <= 0.5 ? u / 0.5 * SW : SW + (u - 0.5) / 0.5 * (1 - SW)); };
+  return function tune(seed = 1, { intro = true, fiddle = false, banjo: banjoOn = false } = {}) {
+    const banjo = banjoOn && !!T.banjo;
     const rnd = makeRandom(seed), B = T.beat;
     let line = 0;
     return function nextLine() {
@@ -587,37 +707,56 @@ function makeFiddle(T) {
         const k = opening ? b : n * 4 + b, bar = round[k % round.length], time = Math.floor(k / round.length), at = t0 + b * 4;
         const chordAt = (beat) => { let c = bar.chords[0]; for (const x of bar.chords) if (x.at <= beat + 1e-9) c = x; return c; };
         const one = chordAt(0), three = chordAt(2), C1 = chordOf(one.name, T.semi), C3 = chordOf(three.name, T.semi);
-        const lead = opening ? null : fiddleLead(bar.pos, time, fiddle), harp = lead === 'harp' || lead === 'fiddle+harp', fid = lead === 'fiddle' || lead === 'fiddle+harp', right = lead === 'piano';
+        const lead = opening ? null : T.battle ? battleLead(T, bar, time, fiddle) : fiddleLead(bar.pos, time, fiddle, banjo);
+        const has = (w) => !!lead && lead.split('+').includes(w), harp = has('harp'), fid = has('fiddle'), bj = has('banjo'), right = lead === 'piano';
+        // the piano's plan for the section (a boogie): 'light' (a bassist's two beats), 'roll' (the boogie line), 'stop'
+        // (stop-time: its first four bars just a hit on one, the band quiet behind the tune, then the roll)
+        const plans = T.pianoPlan || ['roll'], plan = opening ? 'light' : plans[bar.pos % plans.length], stop = plan === 'stop' && bar.i < 4;
+        const flare = T.flares && !opening && !right && bar.i === bar.n - 1;   // (a run up the keys to close the section)
         // boom on one (the root) and three (the fifth; the new chord's root when it changes there), chick on two and four
-        // (the bass well under the tune, the chick up a little: the game's maker heard the piano's bass and the harmonica over the rest;
-        // measured, the piano sat about 7 dB over the harmonica while each played)
-        ev.push({ beat: at, what: 'piano', midi: C1.root, len: 0.75 * B * 1.6, vel: rnd.range(0.36, 0.42) });
-        ev.push({ beat: at + 2, what: 'piano', midi: three === one ? C1.fifth : C3.root, len: 0.75 * B * 1.5, vel: rnd.range(0.31, 0.37) });
-        if (!right) for (const q of [1, 3]) ev.push({ beat: at + q, what: 'piano', midi: chordOf(chordAt(q).name, T.semi).voicing[(b + (q === 3 ? 1 : 0)) % 2].slice(1), len: B * 0.42, vel: rnd.range(0.38, 0.46) });
+        // (the bass well under the tune, the chick up a little: the game's maker heard the piano's bass and the harmonica
+        // over the rest; measured, the piano sat about 7 dB over the harmonica while each played)
+        if (T.bass === 'boogie' && stop) {
+          ev.push({ beat: at, what: 'piano', midi: [C1.root, C1.root + 12], len: B * 1.4, vel: 0.5, gain: 0.75 });
+          ev.push({ beat: at, what: 'piano', midi: C1.voicing[1].map((m) => m + 12), len: B * 1.2, vel: 0.46, gain: 0.7 });
+          ev.push({ what: 'hush', beat: at, from: at + 0.25, to: at + 4 });
+        } else if (T.bass === 'boogie' && plan === 'light') {
+          ev.push({ beat: at, what: 'piano', midi: C1.root, len: B * 0.7, vel: rnd.range(0.38, 0.44), gain: 0.7 });
+          ev.push({ beat: at + 2, what: 'piano', midi: three === one ? C1.fifth : C3.root, len: B * 0.6, vel: rnd.range(0.32, 0.38), gain: 0.7 });
+        } else if (T.bass === 'boogie') {
+          const ROLL = [0, 4, 7, 9, 10, 9, 7, 4], turn = three !== one;
+          for (let e = 0; e < 8; e++) {
+            const C = e >= 4 && turn ? C3 : C1, x = e / 2, off = e % 2;
+            ev.push({ beat: at + sw(x), what: 'piano', midi: C.root + ROLL[e >= 4 && turn ? e - 4 : e], len: B * (off ? 1 - SW : SW) * 0.9, vel: e === 0 ? rnd.range(0.46, 0.5) : off ? rnd.range(0.32, 0.37) : rnd.range(0.4, 0.45), gain: 0.62 });
+          }
+        } else {
+          ev.push({ beat: at, what: 'piano', midi: C1.root, len: 0.75 * B * 1.6, vel: rnd.range(0.36, 0.42) });
+          ev.push({ beat: at + 2, what: 'piano', midi: three === one ? C1.fifth : C3.root, len: 0.75 * B * 1.5, vel: rnd.range(0.31, 0.37) });
+        }
+        if (!right && !stop) for (const q of flare ? [1] : [1, 3]) ev.push({ beat: at + (T.swing ? sw(q) : q), what: 'piano', midi: chordOf(chordAt(q).name, T.semi).voicing[(b + (q === 3 ? 1 : 0)) % 2].slice(1), len: B * 0.42, vel: rnd.range(0.38, 0.46), gain: T.bass === 'boogie' ? 0.8 : 1 });
+        if (flare) {   // (the chord's notes up two octaves in triplets over beats three and four, louder as it climbs)
+          const v = C1.voicing[0].map((m) => m + 12), up = [...v, ...v.map((m) => m + 12)];
+          up.forEach((m, j) => ev.push({ beat: at + 2 + j / 3, what: 'piano', midi: m, len: B * 0.5, vel: 0.36 + j * 0.04 }));
+        }
         if (opening) continue;
         bar.notes.forEach((nt, j) => {
           if (nt.midi == null) return;
           const prev = bar.notes[j - 1], next = bar.notes[j + 1] || round[(k + 1) % round.length].notes[0], long = nt.len >= 2;
+          const nAt = sw(nt.at), nLen = sw(nt.at + nt.len) - nAt;   // (swung)
           // the right hand: the tune an octave up, the keys let go a little before the next note (softer when both play)
-          if (right) ev.push({ beat: at + nt.at, what: 'piano', lead: true, midi: nt.midi + T.semi + 12, len: nt.len * B * (long ? 0.95 : 0.85), vel: nt.at % 1 === 0 ? 0.56 : 0.46 });
+          if (right) ev.push({ beat: at + nAt, what: 'piano', lead: true, midi: nt.midi + T.semi + 12, len: nLen * B * (long ? 0.95 : 0.85), vel: nt.at % 1 === 0 ? 0.56 : 0.46 });
           // the fiddle: the tune where the harmonica plays it, bowed nearly joined (a quick note's bow speaks at once);
           // with the harmonica in unison, a little softer (doubled: makeStageMusic leaves it out if there's no fiddle)
           const harpNote = {
-            beat: at + nt.at, what: 'harp', midi: nt.midi + T.semi, lenBeats: Math.max(0.3, nt.len - (long ? 0.25 : 0.12)),
+            beat: at + nAt, what: 'harp', midi: nt.midi + T.semi, lenBeats: Math.max(0.3, nLen - (long ? 0.25 : 0.12)),
             fresh: j === 0 || !prev || prev.midi == null, last: long || !next || next.midi == null,
-            bend: long && rnd.chance(time % 2 ? 0.6 : 0.25) ? Math.round(rnd.range(35, 70)) : 0,
+            bend: nt.bend ? 100 : long && rnd.chance(time % 2 ? 0.6 : 0.25) ? Math.round(rnd.range(35, 70)) : 0,
             style: long ? 'pulse' : 'plain', rate, level: level * (nt.at % 1 === 0 ? 1 : 0.9),
             attack: j === 0 ? 0.04 : 0.025, release: long ? 0.35 : 0.09,
           };
-          if (fid) ev.push({ ...harpNote, what: 'fiddle', lenBeats: nt.len * (long ? 0.97 : 0.92), quick: nt.len < 1, vel: (nt.at % 1 === 0 ? 0.85 : 0.72) * (harp ? 0.8 : 1), doubled: harp });
-          if (!harp) return;
-          ev.push({
-            beat: at + nt.at, what: 'harp', midi: nt.midi + T.semi, lenBeats: Math.max(0.3, nt.len - (long ? 0.25 : 0.12)),
-            fresh: j === 0 || !prev || prev.midi == null, last: long || !next || next.midi == null,
-            bend: long && rnd.chance(time % 2 ? 0.6 : 0.25) ? Math.round(rnd.range(35, 70)) : 0,
-            style: long ? 'pulse' : 'plain', rate, level: level * (nt.at % 1 === 0 ? 1 : 0.9),
-            attack: j === 0 ? 0.04 : 0.025, release: long ? 0.35 : 0.09,
-          });
+          if (fid) ev.push({ ...harpNote, what: 'fiddle', midi: harpNote.midi + (T.fiddleUp || 0), lenBeats: nLen * (long ? 0.97 : 0.92), quick: nLen < 1, vel: (nt.at % 1 === 0 ? 0.85 : 0.72) * (harp ? 0.8 : 1), doubled: harp && !T.fiddleUp });
+          if (bj) ev.push({ beat: at + nAt, what: 'banjo', midi: harpNote.midi, lenBeats: nLen, vel: (nt.at % 1 === 0 ? 0.9 : 0.75) * (harp || fid ? 0.85 : 1), doubled: harp || fid });
+          if (harp) ev.push(harpNote);
         });
       }
       line++;
@@ -742,6 +881,14 @@ const BOX_BARS = {
     if (end && r.chance(0.5)) h.push([3.5, 'slap', 0.5]); else if (r.chance(0.2)) h.push([3.5, 'tap', 0.32]);
     return h;
   },
+  // the boogie (a shuffle): thump on one and three, slap on two and four, and on each beat's late "and" (two thirds of
+  // the way through) a tap or a lighter thump, the train's chug; a slap or a thump pushing into the next bar
+  boogie: (r, { first, end }) => {
+    if (first) return [[0, 'thump', 0.7], [2, 'thump', 0.6]];
+    const L = 2 / 3, h = [[0, 'thump', 0.95], [L, 'tap', 0.34], [1, 'slap', 0.7], [1 + L, 'thump', 0.5], [2, 'thump', 0.85], [2 + L, 'tap', 0.34], [3, 'slap', 0.74]];
+    if (end && r.chance(0.6)) h.push([3 + L, 'slap', 0.55]); else if (r.chance(0.5)) h.push([3 + L, 'thump', 0.45]);
+    return h;
+  },
   // the waltz: thump, slap, slap (the oom-pah-pah), the slaps light; now and then a tap before the next bar
   waltz: (r, { first, end }) => {
     if (first) return [[0, 'thump', 0.5]];
@@ -797,6 +944,7 @@ export const SONGS = [
   { id: 'easy', name: 'Easy Afternoon', beat: BEAT, bar: 4, tune: turns(makeTune, BEAT), make: makeTune, ask: 'Easy Afternoon it is!', feel: 'easy-going', home: 'G' },
   { id: 'boots', name: 'Dusty Boots', beat: 60 / 138, bar: 4, tune: turns(makeBoots, 60 / 138), make: makeBoots, upbeat: true, ask: 'Dusty Boots: a quick one!', feel: 'a quick one', home: 'G' },
   { id: 'waltz', name: 'Prairie Waltz', beat: 0.6, bar: 3, tune: turns(makeWaltz, 0.6), make: makeWaltz, ask: 'A waltz: Prairie Waltz!', feel: 'a waltz', home: 'D' },
+  { id: 'boogie', name: 'Stagecoach Boogie', beat: OWN_TUNES.boogie.beat, bar: 4, tune: makeFiddle(OWN_TUNES.boogie), round: fiddleRound(OWN_TUNES.boogie).length / 4, box: 'boogie', swing: OWN_TUNES.boogie.swing, group: 'own', home: 'A', upbeat: true, ask: 'Stagecoach Boogie! Hold on tight!', feel: 'a stomper' },
   { id: 'lonesome', name: 'Lonesome Trail', beat: 60 / 64, bar: 4, tune: turns(makeLonesome, 60 / 64), make: makeLonesome, ask: 'A slow one: Lonesome Trail.', feel: 'a slow one', home: 'Em' },
   { id: 'soldiers', name: "Soldier's Joy", beat: FIDDLE_TUNES.soldiers.beat, bar: 4, tune: makeFiddle(FIDDLE_TUNES.soldiers), round: fiddleRound(FIDDLE_TUNES.soldiers).length / 4, box: 'reel', upbeat: true, ask: "Soldier's Joy: a fiddle tune!", feel: 'a fiddle tune' },
   { id: 'joeclark', name: 'Old Joe Clark', beat: FIDDLE_TUNES.joeclark.beat, bar: 4, tune: makeFiddle(FIDDLE_TUNES.joeclark), round: fiddleRound(FIDDLE_TUNES.joeclark).length / 4, box: 'reel', upbeat: true, ask: 'Old Joe Clark! Stomp your feet!', feel: 'a hoedown' },
@@ -814,26 +962,40 @@ export const songOf = (id) => SONGS.find((s) => s.id === id) || SONGS[0];
 // song: one of SONGS' ids ('easy' when left out: the first tune, as it always was); intro: false starts the harmonica in
 // the first line (a song asked for: the band strikes it up at once) instead of the piano's line alone; box: the
 // drummer's notes go there (none: the band without him)
-export function makeStageMusic(ctx, { harp, piano, box = null, room = null, seed = 1, patches = PATCH_PRESETS, song = 'easy', intro = true, fiddle = null, fiddleKit = null } = {}) {
+export function makeStageMusic(ctx, { harp, piano, box = null, room = null, seed = 1, patches = PATCH_PRESETS, song = 'easy', intro = true, fiddle = null, fiddleKit = null, pianoKit = null, banjo = null, banjoKit = null } = {}) {
   const S = songOf(song), BL = S.beat, LINE = S.bar * 4;   // (seconds a beat; beats a line of four bars)
-  const tune = S.tune(seed, { intro, fiddle: !!fiddleKit }), drum = box ? makeBoxPart(S.id, seed, { intro }) : null, queue = [], events = [], harpSpans = [], voices = [];
+  const tune = S.tune(seed, { intro, fiddle: !!fiddleKit, banjo: !!banjoKit }), drum = box ? makeBoxPart(S.id, seed, { intro }) : null, queue = [], events = [], harpSpans = [], fiddleSpans = [], voices = [];
   let origin = null, made = 0, timer = null, running = false;
   const offline = typeof ctx.startRendering === 'function';
   const secs = (beat) => origin + beat * BL;
-  const lineOf = () => (drum ? [...tune(), ...drum()] : tune());   // (a line: the tune's notes and the box's)
+  // (a line: the tune's notes and the box's; a tune's 'hush' spans (stop-time: the band hits the first beat and lets
+  // the tune ring alone) take the box's hits out of them)
+  const lineOf = () => {
+    const t = tune(), hush = t.filter((e) => e.what === 'hush'), notes = t.filter((e) => e.what !== 'hush');
+    if (!drum) return notes;
+    return [...notes, ...drum().filter((e) => !hush.some((h) => e.beat >= h.from - 1e-6 && e.beat < h.to - 1e-6))];
+  };
   function play(ev) {
     const at = secs(ev.beat);
     if (ev.what === 'box') {
       keep(playPatch(ctx, null, box, room, boxNote(ev, patches), null, { at }), at, at + 0.35);
       events.push({ at, what: 'box', hit: ev.hit, vel: ev.vel });
     } else if (ev.what === 'piano') {
-      for (const p of pianoNotes({ midi: ev.midi, len: ev.len, vel: ev.vel }, patches[PIANO])) keep(playPatch(ctx, null, piano, room, p, null, { at }), at, at + ev.len);
+      if (pianoKit) keep(playPiano(ctx, pianoKit, piano, room, { at, midi: ev.midi, len: ev.len, vel: ev.vel, gain: ev.gain }), at, at + ev.len);   // (the sampled upright)
+      else for (const p of pianoNotes({ midi: ev.midi, len: ev.len, vel: ev.vel, gain: ev.gain }, patches[PIANO])) keep(playPatch(ctx, null, piano, room, p, null, { at }), at, at + ev.len);
       events.push({ at, what: 'piano', midi: ev.midi, len: ev.len, vel: ev.vel });
+    } else if (ev.what === 'banjo') {   // (the banjo's notes: only with its kit, else none: the tune gives it turns only then)
+      if (!banjoKit) return;
+      const len = ev.lenBeats * BL;
+      keep(playBanjo(ctx, banjoKit, banjo || harp, room, { at, midi: ev.midi, len, vel: ev.vel }), at, at + len);
+      events.push({ at, what: 'banjo', midi: ev.midi, len });
     } else if (ev.what === 'fiddle' && (fiddleKit || ev.doubled)) {
       if (!fiddleKit) return;                // (doubling the harmonica, and no fiddle: the harmonica has it)
       const len = ev.lenBeats * BL;
       keep(playFiddle(ctx, fiddleKit, fiddle || harp, room, { at, midi: ev.midi, len, vel: ev.vel, quick: ev.quick }), at, at + len);
       events.push({ at, what: 'fiddle', midi: ev.midi, len });
+      fiddleSpans.push([at, at + len]);
+      while (fiddleSpans.length > 64) fiddleSpans.shift();
     } else {   // (the harmonica's notes; a fiddle's when its samples aren't there)
       const len = ev.lenBeats * BL;
       keep(playPatch(ctx, null, harp, room, harmonicaNote({ ...ev, len }, patches[HARMONICA]), null, { at }), at, at + len);
@@ -881,10 +1043,10 @@ export function makeStageMusic(ctx, { harp, piano, box = null, room = null, seed
     // after it are let go unheard, and the ones sounding ring out (a song asked to change finishes its notes)
     stop({ now = false, from = null } = {}) {
       running = false; if (timer) clearInterval(timer); timer = null; queue.length = 0;
-      if (now) { for (const v of voices.splice(0)) try { v.h.stop(0.02); } catch (e) { /* already gone */ } harpSpans.length = 0; }
+      if (now) { for (const v of voices.splice(0)) try { v.h.stop(0.02); } catch (e) { /* already gone */ } harpSpans.length = 0; fiddleSpans.length = 0; }
       else if (from != null) {
         for (let i = voices.length - 1; i >= 0; i--) if (voices[i].start >= from) { try { voices[i].h.stop(0.01); } catch (e) { /* already gone */ } voices.splice(i, 1); }
-        for (let i = harpSpans.length - 1; i >= 0; i--) if (harpSpans[i][0] >= from) harpSpans.splice(i, 1);
+        for (const L of [harpSpans, fiddleSpans]) for (let i = L.length - 1; i >= 0; i--) if (L[i][0] >= from) L.splice(i, 1);
       }
     },
     get running() { return running; },
@@ -892,6 +1054,9 @@ export function makeStageMusic(ctx, { harp, piano, box = null, room = null, seed
     harmonicaAt(t = ctx.currentTime) { for (const [a, b] of harpSpans) if (t >= a && t < b) return true; return false; },
     // the next time the harmonica starts after t (or null): the player lifts it to the mouth a moment before
     nextHarmonica(t = ctx.currentTime) { let best = null; for (const [a] of harpSpans) if (a >= t && (best == null || a < best)) best = a; return best; },
+    // the same for the fiddle (its samples' notes): the fiddler plays while one sounds, lifts the fiddle a moment before
+    fiddleAt(t = ctx.currentTime) { for (const [a, b] of fiddleSpans) if (t >= a && t < b) return true; return false; },
+    nextFiddle(t = ctx.currentTime) { let best = null; for (const [a] of fiddleSpans) if (a >= t && (best == null || a < best)) best = a; return best; },
   };
   return M;
 }

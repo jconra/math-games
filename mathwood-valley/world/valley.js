@@ -67,6 +67,7 @@ import { makeLandforms } from './objects/landforms.js';
 import { makeLampUniforms, buildLampMap, lampStandard } from './objects/lampLight.js';
 import { makeNightLights } from './objects/nightLights.js';
 import { makeCodeBuildings } from './objects/codebuildings.js';
+import { indoorPre, indoorPost, INDOOR_KEY } from './objects/indoorlight.js';
 import { IMPOSTER_CLOCK, IMPOSTER_RISE } from './objects/imposter.js';
 import { sunDirection, moonDirection, elevationOf, daylightAt, newDaylight } from './objects/daylight.js';
 import { Sunbeams } from './objects/sunbeams.js';
@@ -2105,7 +2106,11 @@ const sunShadeFrag = (fs, who = 'hill shade') => lampStandard('uniform sampler2D
 function sunShadeAll() {
   scene.traverse((o) => { if (!o.isMesh) return; for (const m of [].concat(o.material)) {
     if (!m || m.userData.sunShade || !(m.isMeshStandardMaterial || m.isMeshLambertMaterial || m.isMeshPhongMaterial) || m.onBeforeCompile !== THREE.Material.prototype.onBeforeCompile) continue;
-    m.userData.sunShade = true; const who = 'hill shade on ' + (m.name || o.name || m.type); m.onBeforeCompile = (sh) => { Object.assign(sh.uniforms, SUNSHADE_U); sh.fragmentShader = sunShadeFrag(sh.fragmentShader, who); }; m.needsUpdate = true; } });
+    m.userData.sunShade = true; const who = 'hill shade on ' + (m.name || o.name || m.type);
+    // (an animal's: also lit like the room round it when it stands indoors, world/objects/indoorlight.js)
+    if (m.userData.indoorLit) { m.onBeforeCompile = (sh) => { Object.assign(sh.uniforms, SUNSHADE_U); indoorPre(sh); sh.fragmentShader = sunShadeFrag(sh.fragmentShader, who); indoorPost(sh); }; m.customProgramCacheKey = () => 'sunshade' + INDOOR_KEY; }
+    else m.onBeforeCompile = (sh) => { Object.assign(sh.uniforms, SUNSHADE_U); sh.fragmentShader = sunShadeFrag(sh.fragmentShader, who); };
+    m.needsUpdate = true; } });
 }
 const paveMat = new THREE.MeshStandardMaterial({ roughness: 0.88, metalness: 0 });
 paveMat.onBeforeCompile = (sh) => {
@@ -2546,6 +2551,7 @@ function dayFrame(dt, quiet = false) {
   lampsFrame();
   NIGHT_LIGHTS.update(dt, LAMPU.lampOn.value);                          // (the windows and lanterns, with the lamps)
   if (CODE) CODE.update(dt, camera, LAMPU.lampOn.value, controls && controls.target);   // (the code buildings' insides drawn near the camera or the player only)
+  eyeFrame(dt);
   folkFrame(dt, quiet);
 }
 // THE STREET LAMPS come on as the sun goes: the lantern glass brightens, a soft halo round it, and a warm pool on the
@@ -2616,8 +2622,16 @@ const settled = () => !!(treeForest && treeForest.ready && coverForest && coverF
   && (!FOLK.on || FOLK.failed || (FOLK.lib && FOLK.town && !FOLK.job && !FOLK.due)));   // (the townsfolk too: their grid made and the people placed)
 // (afterScene, optional: called right after the scene is drawn, before the sunbeams read the screen: a page drawing the
 // scene into a target of its own puts it on screen there, Mathwood Valley's depth of field)
+// THE EYE INDOORS: with the camera inside a code building the exposure opens toward lamplight's (by day the room's
+// lanterns were dimmer on screen than by night, under the day's exposure: a critic found the saloon darker by day than
+// by night), eased over a second or so as eyes adjust, and back outside; out through the doors the day is glare
+const EYE = { inside: 2.0, rate: 1.2, k: 0 };
+function eyeFrame(dt) {
+  const p = camera.position, inside = CODE && CODE.indoors(p.x, p.y, p.z) ? 1 : 0;
+  EYE.k += (inside - EYE.k) * Math.min(1, Math.max(0, dt) * EYE.rate);
+}
 function render(afterScene = null) {
-  renderer.toneMappingExposure = DL.exposure;                         // (the time of day's: set when drawn, so it never changes another scene's)
+  renderer.toneMappingExposure = Math.max(DL.exposure, DL.exposure + (EYE.inside - DL.exposure) * EYE.k);   // (the time of day's, opened indoors: EYE; set when drawn, so it never changes another scene's)
   U.eyePos.value.copy(camera.position);                              // (the paving's 3D stones sink past PAVE.lod from here)
   renderer.render(scene, camera);
   if (afterScene) afterScene();

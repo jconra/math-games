@@ -8,10 +8,19 @@
 //                        with the herd in view and the meadow mown round her (STAND.natAt): E by her lends the camera
 //                        (strapped behind the saddle at once); while it is lent she strolls after the player round her
 //                        herd (never far from her own spot), and once it has been set up, E by her again gives it back
-//   the sheriff          out in front of his office, to one side of the steps (lock boxes at his desk); a gold star on
-//                        his chest and a six-shooter in its holster (folk.js badge and holster), as his deputy
-//   the deputy           the other side of the steps, when "Loot the gang" is ticked: the gang's stash out in the valley;
-//                        carrying the loot back, E by him shares it out (src/missions/loot.js)
+//   the sheriff          inside his office, behind his desk with the pile of seized lock boxes on it (the "Crack the
+//                        lock boxes" spot there is src/townrooms.js's); a gold star on his chest and a six-shooter in
+//                        its holster (folk.js badge and holster), as his deputy. (An office with no inside: out in
+//                        front of it, to one side of the steps, E by him opening his desk)
+//   the deputy           out in front of the office, to one side of the steps, when "Loot the gang" is ticked: the
+//                        gang's stash out in the valley; carrying the loot back, E by him shares it out (src/missions/loot.js)
+//   the storekeeper      behind the general store's counter (the rider helps him there: the store's job; the store's
+//                        spots are src/townrooms.js's), bare-headed indoors
+//   the blacksmith       in his shop at work (src/smithy.js): hammering at the anvil, now and then at the forge; he
+//                        stops and turns to the rider who comes right up to him or while he says hello. No prompt
+//   (the two indoors stand in their building's frame, src/townrooms.js roomFrame, once it is built; each says hello,
+//   shows his tag and turns to the player only while the player is inside with him, and is drawn only while the
+//   building's inside is)
 //   the stable keeper    beside the stable's big doors: E by him opens the stable's counter (saddles and horses), and
 //                        after something is bought there he thanks the player
 //   the camp foremen     already at the camps (src/camps.js): here they get a name tag, a hello and the speech card for
@@ -38,10 +47,11 @@
 //
 //   const JF = makeJobFolk({ W, folk, P, camera, hud, jobs, actions })
 //     folk: the people library; jobs: getters for the jobs and places { roundup, sheep, pigs, wagon, deer, camps, farm,
-//     delivery } (each returns the job or null); actions: { sheriff(), stable() } (open the sheriff's desk, the stable's
-//     counter); onTalk(what, id): a
+//     delivery, rooms } (each returns the job or null; rooms: the town's rooms, src/townrooms.js, where the storekeeper and
+//     the sheriff stand); actions: { sheriff(), stable() } (open the sheriff's desk, the stable's counter); onTalk(what, id): a
 //     person's hello ('hello'), the walking-away toast ('leave') and a person's thank-you ('thanks'), for the player's
 //     own howdy and see-ya and the men's recorded thanks and goodbyes (shouts.js); id: the person; who: { at, male }
+//   onRing(at): the smith's hammer meeting his anvil, at { x, z } (the game rings it: src/audio/ambience.js anvil)
 //   JF.update(dt, { hidden })   each frame while riding, before the doors are looked at (hidden: a panel or the cabin is
 //                       up: the tags and the speech card are put away and the people wait)
 //   JF.prompt           the prompt's words when E by a person does something, else null; JF.talk() does it
@@ -59,8 +69,10 @@
 //   JF.state()          for rigs;  JF.dispose()
 import * as THREE from 'three';
 import { makePerson } from './actors/folk.js';
-import { JOB_FOLK, FOLK_BY_ID, FOREMAN_HELLO, TALK, sayMs, standSpot, makeGreeter, makeLeaveWatch, thanksFor, WORK } from './jobfolkplan.js';
+import { JOB_FOLK, FOLK_BY_ID, FOREMAN_HELLO, TALK, sayMs, standSpot, makeGreeter, makeLeaveWatch, thanksFor, WORK, dressOf } from './jobfolkplan.js';
 import { mowSite } from './buildsite.js';
+import { makeSmithWork } from './smithy.js';
+const SMITH_NEAR = 2.6;   // m: the rider this near the smith (inside with him), he stops work and turns to them
 
 // where each one stands, worked out from the job's own layout (metres)
 export const STAND = {
@@ -100,9 +112,9 @@ export const STAND = {
 const voiceOf = (r) => ({ at: () => ({ x: r.x, z: r.z }), male: !!(r.def && r.def.look && /_m$/.test(r.def.look.outfit || '')) });
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
-const HATS = { boss: 'cattleman', vet: 'bowler', wife: 'straw', naturalist: 'ranger', sheriff: 'white', deputy: 'cowboy', keeper: 'straw' };
 
-export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, scene = W.scene, onTalk = null, onSay = null, helloFor = null }) {
+
+export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, scene = W.scene, onTalk = null, onSay = null, helloFor = null, onRing = null }) {
   const get = (k) => { try { return jobs[k] ? jobs[k]() : null; } catch (e) { return null; } };
   const shadows = !!(W.V && W.V.SHADOW ? W.V.SHADOW.on : true);
   const people = [];
@@ -126,7 +138,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
   function addPerson(def, spot, face, { person = null, kind = 'own', here = null, turn = 0 } = {}) {
     let p = person;
     if (!p) {
-      try { p = makePerson(folk, { ...def.look, hatStyle: HATS[def.id] || null, shadows, badge: !!def.law, holster: !!def.law }); } catch (e) { console.warn('job folk: a person could not be made', def.id, e); return null; }
+      try { p = makePerson(folk, { ...dressOf(def), shadows }); } catch (e) { console.warn('job folk: a person could not be made', def.id, e); return null; }
       p.root.position.set(spot.x, W.heightAt(spot.x, spot.z), spot.z); p.root.rotation.y = face;
       scene.add(p.root);
     }
@@ -161,14 +173,19 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     const at = L.at(STAND.wife.x, STAND.wife.z);
     addPerson(FOLK_BY_ID.wife, at, L.rot - Math.PI / 4);   // (half facing the lane, half the way into the farm)
   }
-  // the sheriff, out in front of his office, to one side of the steps
-  const sh = W.places.sheriff;
+  // the sheriff, out in front of his office, to one side of the steps; or, an office built to be walked into, inside at
+  // his desk (placed once it is built: roomsStep)
+  const sh = W.places.sheriff, CODE = W.V && W.V.CODE;
+  const officeIn = !!(CODE && CODE.has && CODE.has('sheriff') && jobs.rooms);
   if (sh && sh.door) {
     const o = { x: Math.sin(sh.rot), z: Math.cos(sh.rot) }, s = { x: Math.cos(sh.rot), z: -Math.sin(sh.rot) };
     let at = null;
-    for (const k of [1, -1]) { const x = sh.door.x + o.x * STAND.sheriff.out + s.x * STAND.sheriff.side * k, z = sh.door.z + o.z * STAND.sheriff.out + s.z * STAND.sheriff.side * k; if (free(x, z)) { at = { x, z }; break; } }
-    addPerson(FOLK_BY_ID.sheriff, at || { x: sh.door.x + o.x * 3.5, z: sh.door.z + o.z * 3.5 }, sh.rot);
-    // the deputy, the other side of the steps (the loot job is on)
+    if (!officeIn) {
+      for (const k of [1, -1]) { const x = sh.door.x + o.x * STAND.sheriff.out + s.x * STAND.sheriff.side * k, z = sh.door.z + o.z * STAND.sheriff.out + s.z * STAND.sheriff.side * k; if (free(x, z)) { at = { x, z }; break; } }
+      const out = Object.create(FOLK_BY_ID.sheriff); out.hello = FOLK_BY_ID.sheriff.helloOut || FOLK_BY_ID.sheriff.hello;
+      addPerson(out, at || { x: sh.door.x + o.x * 3.5, z: sh.door.z + o.z * 3.5 }, sh.rot);
+    }
+    // the deputy, to one side of the steps (the other side from the sheriff, when he is out here too: the loot job is on)
     if (get('loot')) {
       const k = at && Math.abs((at.x - sh.door.x) * s.x + (at.z - sh.door.z) * s.z - STAND.sheriff.side) < 0.01 ? -1 : 1;
       let dp = null;
@@ -223,6 +240,36 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     const base = FOLK_BY_ID.engineer, def = Object.create(base);
     Object.defineProperty(def, 'hello', { get: () => { const k = J.helloKey ? J.helloKey() : 'start'; return (base.hellos && base.hellos[k]) || base.hello; } });
     engineerRec = addPerson(def, { x: w.x, z: w.z }, e.rotation.y + turn, { person: J.engineer, kind: 'lent', here: () => !J.builder, turn });
+  }
+
+  // the storekeeper behind the general store's counter and the sheriff at his desk, once the rooms are built
+  // (src/townrooms.js): each in his building's frame, facing as its anchors say
+  const indoor = [];
+  let roomsDone = false;
+  function roomsStep() {
+    if (roomsDone) return;
+    const TR = get('rooms'); if (!TR || !TR.frame) { roomsDone = !jobs.rooms; return; }
+    const put = (kind, def, spot, face) => {
+      const F = TR.frame(kind); if (!F || !spot) return false;
+      const [x, z] = F.place(spot[0], spot[2]), r = addPerson(def, { x, z }, F.yaw(face));
+      if (r) { r.room = TR.rooms[kind].o; r.block = true; indoor.push(r); }
+      return true;
+    };
+    const SA = TR.anchors('generalStore'), OA = TR.anchors('sheriff');
+    if (!SA && !OA) return;   // (not built yet)
+    if (SA && SA.counter && SA.counter.clerk) put('generalStore', FOLK_BY_ID.storekeeper, SA.counter.clerk, -Math.PI / 2);
+    if (officeIn && OA && OA.desk) put('sheriff', FOLK_BY_ID.sheriff, OA.desk.sheriff, OA.desk.face || 0);
+    // the blacksmith in his shop, at work (src/smithy.js: his anvil, his forge, the anvil's ring)
+    const BA = TR.anchors('blacksmith'), SA2 = BA && BA.rooms && BA.rooms[0] && BA.rooms[0].anchors;
+    if (SA2 && SA2.smith && SA2.anvil && SA2.forge) {
+      const F = TR.frame('blacksmith'), r = addPerson(FOLK_BY_ID.smith, { x: 0, z: 0 }, 0);
+      if (r) {
+        r.room = TR.rooms.blacksmith.o; r.block = true; indoor.push(r);
+        r.work = makeSmithWork({ rec: r, folk, place: F.place, yaw: F.yaw, A: SA2, ring: (q) => { if (onRing) onRing(q); } });
+        r.p.root.position.set(r.x, W.heightAt(r.x, r.z), r.z); r.p.root.rotation.y = r.face;
+      }
+    }
+    roomsDone = true;
   }
 
   // walkers don't go through a person standing still
@@ -386,7 +433,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
       if (r.p.play(clip, { fade: 0.25, once: true })) { r.clipT = 1.7; r.waved = true; }
     }
   }
-  const JF = { people, prompt: null };
+  const JF = { people, prompt: null, indoor };
   JF.say = (id, text) => { const r = byId(id); if (r) { say(r, text); return true; } return false; };
   JF.speaking = () => !!talking && !card.hidden;   // (a speech card is on the screen: Old Hob waits his turn on a phone)
   // a thank-you waiting its turn (the shift's end): a person, a foreman by his camp, or a speaker with no person
@@ -408,24 +455,27 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     const L = r.def.lend || r.def.hello, last = here && r.def.lendHere ? r.def.lendHere : L[L.length - 1];
     return lent ? [last] : [...L.slice(0, -1), last];
   }
-  let camUsed = false;   // (her camera set up at least once since she last lent it, or this ride when lent on an earlier one)
+  let camUsed = false;   // (her camera set up at least once since she last lent it)
+  let lentNow = false;   // (she lent it on this ride: only then must it be set up first before it goes back. Lent on an earlier
+                         // ride, E by her gives it back at once: the game's maker couldn't return a camera borrowed before)
   function promptStep() {
-    JF.prompt = null; promptFor = null;
+    JF.prompt = null; promptFor = null; JF.promptAt = null;
     if (P.mode !== 'foot' && P.mode !== 'horse') return;
     let best = null, bd = Infinity;
     for (const r of people) {
-      if (!r.p.root.visible || r.kind === 'foreman' || r.kind === 'lent') continue;   // (a foreman's prompt is the delivery job's own; the miller's, the build site's)
+      if (!r.p.root.visible || r.kind === 'foreman' || r.kind === 'lent' || r.def.indoors) continue;   // (a foreman's prompt is the delivery job's own; the miller's, the build site's; the storekeeper's, the store's spots)
       const d = Math.hypot(P.position.x - r.x, P.position.z - r.z) - (P.onHorse ? 1.2 : 0);
       if (d < bd) { bd = d; best = r; }
     }
     if (!best) return;
+    JF.promptAt = { x: best.x, z: best.z };   // (where the person is: the one E action's arbitration, src/main.js doors)
     const DJ = get('deer');
-    // (her camera lent and not set up since (this ride): no handing it back yet. Just lent, a second E would give it
-    // straight back, her "follow the hoofprints to the herd" hardly said; and the jobs board's hoofprints lead to her
-    // first even with it lent on an earlier ride, so E on arriving would end the job before it began. By the herd the
-    // E is the deer job's own, setting it up)
-    if (best.id === 'naturalist' && DJ && bd < TALK.prompt && !DJ.active && !(DJ.lent() && !camUsed)) { const who = best.name.replace(/ Ada/, ''); JF.prompt = DJ.lent() ? `Give ${who} her camera back` : `Borrow ${who}'s camera`; promptFor = best; }
-    else if (best.id === 'sheriff' && actions.sheriff && bd < TALK.prompt) { JF.prompt = 'Crack lock boxes for the sheriff'; promptFor = best; }
+    // (her camera lent on this ride and not set up since: no handing it back yet. Just lent, a second E would give it
+    // straight back, her "follow the hoofprints to the herd" hardly said. Lent on an earlier ride, E gives it back (the
+    // board's hoofprints lead to her only while it isn't lent, main.js trailGoal). By the herd the E is the deer job's
+    // own, setting it up)
+    if (best.id === 'naturalist' && DJ && bd < TALK.prompt && !DJ.active && !(DJ.lent() && lentNow && !camUsed)) { const who = best.name.replace(/ Ada/, ''); JF.prompt = DJ.lent() ? `Give ${who} her camera back` : `Borrow ${who}'s camera`; promptFor = best; }
+    else if (best.id === 'sheriff' && actions.sheriff && !best.room && bd < TALK.prompt) { JF.prompt = 'Crack lock boxes for the sheriff'; promptFor = best; }   // (inside at his desk: the pile's own spot, src/townrooms.js)
     else if (best.id === 'keeper' && actions.stable && bd < TALK.prompt) { JF.prompt = 'Talk to the stable keeper'; promptFor = best; }
     else if (best.id === 'deputy' && bd < TALK.prompt) { const LJ = get('loot'); if (LJ && LJ.canShare) { JF.prompt = 'Share out the loot'; promptFor = best; } }
   }
@@ -434,7 +484,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     if (r.id === 'naturalist') {
       const DJ = get('deer'); if (!DJ) return false;
       // (the camera not lent yet: she hands it over, strapped behind the saddle, and says how it goes)
-      if (!DJ.lent()) { const here = DJ.inReach && DJ.inReach(); DJ.lend(); camUsed = false; say(r, lendLines(r, here, false)); r.greet.update(0, true, false); if (onTalk) onTalk('hello', r.id); return true; }
+      if (!DJ.lent()) { const here = DJ.inReach && DJ.inReach(); DJ.lend(); camUsed = false; lentNow = true; say(r, lendLines(r, here, false)); r.greet.update(0, true, false); if (onTalk) onTalk('hello', r.id); return true; }
       // (given back: off the saddle, her thanks, and the job rests till the player rides off and comes back)
       if (DJ.giveBack()) { say(r, r.def.back || r.def.thanks[0]); if (onTalk) onTalk('thanks', r.id, voiceOf(r)); }
       return true;
@@ -453,6 +503,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     if (WORK[event]) for (const a of areas) { if (a.id === WORK[event]) a.watch.worked(); else a.watch.other(); }
     if (data && data.shiftEnd) return;   // (the shift's own thank-you comes instead: JF.thank)
     if (event === 'deliveryDone' && data && data.camp) { const r = foremen.find((f) => f.camp && (f.camp.short === data.camp || f.camp.id === data.camp)); if (r) pending.push({ r, text: "Right where we need 'em. Come see me for the next order.", t: TALK.keep }); return; }
+    if (event === 'storeDone' && !(data && data.filled)) return;   // (the counter closed with no order filled: nothing to thank)
     const id = thanksFor(event); if (!id) return;
     const r = byId(id); if (!r) return;
     const L = FOLK_BY_ID[id].thanks; const n = thanksN[id] = ((thanksN[id] ?? -1) + 1);
@@ -471,10 +522,18 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
   let hiddenNow = false;
   function hideAll() { for (const r of people) r.tag.hidden = true; card.hidden = true; }
   JF.update = (dt, { hidden = false } = {}) => {
-    if (hidden) { if (!hiddenNow) { hiddenNow = true; hideAll(); } JF.prompt = null; return; }
+    if (hidden) {
+      if (!hiddenNow) { hiddenNow = true; hideAll(); } JF.prompt = null;
+      // (at the store's counter the storekeeper still breathes beside the rider, and the smith keeps at his anvil: the
+      // indoor folk in view go on moving, with no tags, cards or hellos meanwhile)
+      if (dt > 0) for (const r of indoor) if (r.p.root.visible) { if (r.work) r.work.update(dt); r.p.root.position.set(r.x, W.heightAt(r.x, r.z), r.z); r.p.root.rotation.y = r.face; r.p.update(dt); }
+      return;
+    }
     if (hiddenNow) { hiddenNow = false; if (talking) card.hidden = false; }
-    placeNaturalist(); naturalistWalk(dt); foremenStep(); millerStep(); fisherStep(); engineerStep();
+    placeNaturalist(); naturalistWalk(dt); foremenStep(); millerStep(); fisherStep(); engineerStep(); roomsStep();
     const at = P.position;
+    // (the building the player stands in, under its roof: the indoor folk talk only to a player inside with them)
+    const hereO = indoor.length && CODE ? (CODE.indoors ? CODE.indoors(at.x, at.y + 1, at.z) : (CODE.room(at.x, at.y + 1, at.z) || {}).o || null) : null;   // (in through its door, not out on its porch)
     // the area jobs: hellos on arriving, the toast on walking away
     for (const a of areas) {
       const job = get(a.job), m = a.mid(); if (!job || !m) continue;
@@ -494,16 +553,17 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
       // in view or not: riding up to a person from further off keeps them in view all the way in, and waiting for them to
       // be out of view left them undrawn at the very end of the hoofprints (Miss Wren, out by a far herd). A person coming
       // into range is a speck in the haze, TALK.show off)
-      if (r.kind === 'own') { const want = d < TALK.show && (r !== naturalist || naturalist.placed); if (want !== r.p.root.visible && (want || !inView(r.x, W.heightAt(r.x, r.z), r.z))) r.p.root.visible = want; }
+      if (r.kind === 'own') { const want = d < TALK.show && (r !== naturalist || naturalist.placed) && (!r.room || (r.room.code && r.room.code.loaded !== false)); if (want !== r.p.root.visible && (want || !inView(r.x, W.heightAt(r.x, r.z), r.z))) r.p.root.visible = want; }   // (indoors: drawn while the building's inside is)
+      const inWith = !r.room || r.room === hereO;   // (indoors: the player is in there with him)
       const shown = r.p.root.visible;
       if (!shown) { r.tag.hidden = true; r.greet.update(dt, false, true); continue; }   // (out of sight is away: the 'hello again' clock keeps running)
       // the hello: walking or riding up, or arriving at the person's job
       const area = areas.find((a) => a.id === r.id);
-      let near = d < TALK.greet;
+      let near = d < TALK.greet && inWith;
       if (area && area.near) near = true;
       if (r.id === 'naturalist') { const DJ = get('deer'); near = near && !(DJ && DJ.active); }
       if (r.kind === 'foreman') { const DL = get('delivery'); near = near && !(DL && DL.phase !== 'none'); }
-      const away = d > TALK.away && !(area && area.near);
+      const away = (d > TALK.away || (r.room && !inWith && d > TALK.prompt)) && !(area && area.near);   // (indoors: gone out of his building counts as away)
       // (Miss Wren with her camera already lent (an earlier ride; the jobs board's hoofprints lead to her all the same):
       // not "borrow my camera", but on to the herd, as when she lends it)
       const DJn = r.id === 'naturalist' ? get('deer') : null;
@@ -513,9 +573,13 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
       // idle about, turn to the player when close (the camps turn their own foremen)
       if (r.kind === 'own' || r.kind === 'lent') {
         if (d < TALK.awake) {
+          // (one at work, the smith at his anvil: his work moves and plays him, src/smithy.js, except while he talks to
+          // the rider or the rider stands right by him: then he turns to them)
+          const working = r.work && !(inWith && (d < SMITH_NEAR || (talking && talking.r === r))) && r.work.update(dt);
+          if (r.work && !working) r.work.stop();
           // (the naturalist walking after the player: facing the way she goes, the Walk clip on; naturalistWalk)
-          if (!r.walking) {
-            const want = d < TALK.face ? Math.atan2(at.x - r.x, at.z - r.z) : r.home;
+          if (!r.walking && !working) {
+            const want = d < TALK.face && inWith ? Math.atan2(at.x - r.x, at.z - r.z) : r.home;
             r.face += wrapA(want - r.face) * Math.min(1, dt * 4);
             if (r.clipT > 0 && (r.clipT -= dt) <= 0) r.p.play('Idle', { fade: 0.4 });
             else if (r.clipT <= 0 && (r.t -= dt) <= 0) { r.t = 6 + Math.random() * 9; r.p.play(Math.random() < 0.5 ? 'Idle_Neutral' : 'Idle', { fade: 0.6 }); }
@@ -525,7 +589,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
         }
       }
       // the name tag
-      const tagOn = d < TALK.tag && !(talking && talking.r === r);
+      const tagOn = d < TALK.tag && inWith && !(talking && talking.r === r);
       if (tagOn && place(r, r.tag, 0)) r.tag.hidden = false; else r.tag.hidden = true;
     }
     // a thank-you waiting its turn: said once nothing else is being said
@@ -618,7 +682,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     if (natHerd) natHerd.keepNear = null;
     unmowNat();
     offBlock();
-    for (const r of people) { r.tag.remove(); if (r.kind === 'own') { r.p.root.removeFromParent(); try { r.p.dispose(); } catch (e) { /* (gone) */ } } }
+    for (const r of people) { if (r.work) r.work.dispose(); r.tag.remove(); if (r.kind === 'own') { r.p.root.removeFromParent(); try { r.p.dispose(); } catch (e) { /* (gone) */ } } }
     box.remove();
   };
   return JF;

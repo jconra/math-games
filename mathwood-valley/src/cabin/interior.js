@@ -39,8 +39,11 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { SLOTS } from './slots.js';
-import { cabinLayout } from './layout.js';
-import { makePiece, makeKeepsake, disposeTree, disposeShared } from './pieces.js';
+import { cabinLayout, placementKey } from './layout.js';
+import { loadPlacement, spotsFor } from './placement.js';
+import { PRESETS as CABIN_PRESETS } from '../../labs/buildings/cabins.js';
+import { disposeTree, disposeShared } from './pieces.js';
+import { makeThings } from './things.js';
 import { isPlayersCabin } from '../../world/objects/codebuildings.js';
 
 export const LIGHT = {
@@ -51,7 +54,8 @@ export const LIGHT = {
   skyNight: 0.85,                         // and the moonlit sky's light inside, taken down this much more at full night (the
                                           // room is the lamps' then: warm, not the moon's blue)
   sunNoShadow: 0.12,                      // the sun's direct light on the inside surfaces where the valley has no shadows
-  lamps: 3,                               // the most lamps the inside works out (two lanterns and the stove)
+  lamps: 4,                               // the most lamps the inside works out (two lanterns, the stove, a fire in the
+                                          // hearth: hearthfire.js); the potato tier 3 (the hearth fire's left to the walls)
 };
 export const NEAR = { show: 26, hide: 30 };   // m from the cabin: the inside's things are drawn within `show`, left out past `hide`
 const loader = new GLTFLoader();
@@ -103,9 +107,13 @@ export async function makeHome({ W, renderer, base = new URL('../../', import.me
   const CODE = W.V && W.V.CODE;
   if (!CODE) throw new Error('no code-built buildings');
   await CODE.ready;
-  const o = [...W.V.TOWN.village.objs.values()].find((q) => q.code && isPlayersCabin(q.it));
+  // (built again, the Town Lab's New look: the new one is made a frame or two later; waited for, a while)
+  const find = () => [...W.V.TOWN.village.objs.values()].find((q) => q.code && isPlayersCabin(q.it));
+  let o = find();
+  for (let i = 0; i < 400 && !o; i++) { await new Promise((ok) => setTimeout(ok, 50)); o = find(); }
   if (!o) throw new Error('no player\'s cabin built');
-  const B = o.code, Lay = cabinLayout(B.B.anchors);
+  // (where its things go: worked out from its design, the game maker's own spots from the lab's Place things winning)
+  const B = o.code, placed = await loadPlacement(base), Lay = cabinLayout(B.B.anchors, { saved: spotsFor(placed, placementKey(B.look || {}, CABIN_PRESETS)) });
   const group = new THREE.Group(); group.name = 'player-cabin';
   const inner = new THREE.Group(); inner.name = 'cabin-inside'; group.add(inner);
   B.group.add(group);
@@ -114,17 +122,18 @@ export async function makeHome({ W, renderer, base = new URL('../../', import.me
   const KEEP = Lay.keepsakes;
 
   // ── THE INSIDE LIGHT (shared by every patched material) ──
+  const LAMPS = W.tier === 'potato' ? LIGHT.lamps - 1 : LIGHT.lamps;
   const U = {
     insideSky: { value: LIGHT.skyInside }, insideFill: { value: new THREE.Color(...LIGHT.fillBare) },
     insideSun: { value: 1 },
-    lampAt: { value: Array.from({ length: LIGHT.lamps }, () => new THREE.Vector3()) },
-    lampCol: { value: Array.from({ length: LIGHT.lamps }, () => new THREE.Vector3()) },
-    lampFall: { value: Array.from({ length: LIGHT.lamps }, () => new THREE.Vector2(9, 1.4)) },
+    lampAt: { value: Array.from({ length: LAMPS }, () => new THREE.Vector3()) },
+    lampCol: { value: Array.from({ length: LAMPS }, () => new THREE.Vector3()) },
+    lampFall: { value: Array.from({ length: LAMPS }, () => new THREE.Vector2(9, 1.4)) },
   };
   // (the valley's sun casts shadows only on the tiers that have them: else the inside would be sunlit through the roof)
   const sunCasts = () => { let on = false; W.scene.traverse((o) => { if (o.isDirectionalLight && o.castShadow) on = true; }); return on && renderer.shadowMap.enabled; };
   if (!sunCasts()) U.insideSun.value = LIGHT.sunNoShadow;
-  const N = LIGHT.lamps;
+  const N = LAMPS;
   const patched = new WeakSet();
   function lit(m) {
     if (!m || patched.has(m) || !m.isMeshStandardMaterial) return m;
@@ -167,6 +176,7 @@ export async function makeHome({ W, renderer, base = new URL('../../', import.me
   const blocker = (x, z) => { if (!boxes.size) return false; toLocal(x, 0, z, _l); for (const list of boxes.values()) for (const b of list) if (inBox(b, _l.x, _l.z, 0.2)) return true; return false; };
   CODE.blockers.push(blocker);
   // a dog walking about inside: out of the furniture's boxes, and back from a wall toward the room's middle
+  const innerDoors = (B.B.anchors.doorways || []).filter((d) => d.inner);
   function pushOut(body, { radius = 0.26 } = {}) {
     let moved = false;
     for (const list of boxes.values()) for (const b of list) {
@@ -176,40 +186,24 @@ export async function makeHome({ W, renderer, base = new URL('../../', import.me
       if (d < 1e-5) { let nx = lx, nz = lz; if (b.hw - Math.abs(lx) < b.hd - Math.abs(lz)) nx = (Math.sign(lx) || 1) * (b.hw + radius); else nz = (Math.sign(lz) || 1) * (b.hd + radius); body.x = b.x + b.c * nx + b.s * nz; body.z = b.z - b.s * nx + b.c * nz; moved = true; continue; }
       const k = (radius - d + 0.002) / d, px = ox * k, pz = oz * k; body.x += b.c * px + b.s * pz; body.z += -b.s * px + b.c * pz; moved = true;
     }
+    // (in the doorway between two rooms: free to go through it, kept off its sides)
+    for (const d of innerDoors) {
+      const o = d.out, ax = Math.abs(o[0]) > 0.5, along = ax ? body.x - d.centre[0] : body.z - d.centre[2], across = ax ? body.z - d.centre[2] : body.x - d.centre[0], half = d.w / 2 - radius;
+      if (Math.abs(along) < 0.75 && Math.abs(across) < d.w / 2 + 0.05) {
+        const c = Math.max(-half, Math.min(half, across)); if (c !== across) { if (ax) body.z = d.centre[2] + c; else body.x = d.centre[0] + c; moved = true; }
+        return moved;
+      }
+    }
     const r = Lay.rooms.find((q) => body.x > q.x0 - 0.5 && body.x < q.x1 + 0.5 && body.z > q.z0 - 0.5 && body.z < q.z1 + 0.5);
     if (r) { const cx = Math.max(r.x0 + radius, Math.min(r.x1 - radius, body.x)), cz = Math.max(r.z0 + radius, Math.min(r.z1 - radius, body.z)); if (cx !== body.x || cz !== body.z) { body.x = cx; body.z = cz; moved = true; } }
     return moved;
   }
 
-  // ── THE FURNISHINGS ──
-  const files = new Map();     // file -> Promise<template scene>
-  const TINT = { chair: 0x9a7150 };   // the chairs come painted white: stained to a warm wood brown to match the room
-  const loadFile = (file) => {
-    if (!files.has(file)) files.set(file, loader.loadAsync(`${base}models/furniture/${file}.glb`).then((g) => {
-      const s = g.scene; s.traverse((o) => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; for (const m of [].concat(o.material)) { for (const t of [m.map, m.normalMap]) if (t) t.anisotropy = Math.min(8, maxAniso); if (TINT[file]) m.color.setHex(TINT[file]); } } });
-      s.updateMatrixWorld(true); s.userData.box = new THREE.Box3().setFromObject(s); return s;
-    }));
-    return files.get(file);
-  };
-  // one placed copy of a file, fitted to its spot: in a group stood at the spot (or hung on the wall), turned by rot
-  async function placeFile(spec, wallPiece) {
-    const tpl = await loadFile(spec.file), b = tpl.userData.box, size = b.getSize(new THREE.Vector3()), mid = b.getCenter(new THREE.Vector3());
-    const s = spec.fitH ? spec.fitH / size.y : spec.fit ? spec.fit / Math.max(size.x, size.z) : 1;
-    const piece = tpl.clone(); piece.scale.setScalar(s);
-    if (wallPiece) piece.position.set(-mid.x * s, -mid.y * s, -b.min.z * s); else piece.position.set(-mid.x * s, -b.min.y * s, -mid.z * s);
-    const g = new THREE.Group(); g.add(piece); return g;
-  }
-  function stand(g, spec) {
-    const [x, y, z] = spec.at;
-    if (spec.wall) {   // (on the wall's face: layout.js puts `at` there; just off it, facing into the room)
-      const w = spec.wall;
-      g.position.set(x - w[0] * 0.03, y, z - w[2] * 0.03); g.rotation.set(0, Math.atan2(-w[0], -w[2]), 0);
-    } else {
-      g.position.set(x, y == null ? floorUnder(x, z) : y, z); g.rotation.set(0, THREE.MathUtils.degToRad(spec.rot || 0), 0);
-    }
-  }
+  // ── THE FURNISHINGS (made and stood by things.js, the Building Lab's too; the light, the fewer draws and the boxes
+  // a walker bumps into are the game's own, here) ──
+  const TH = makeThings({ base, maxAniso, floorUnder, loader });
+  const stand = TH.stand;
   const boxOf = (spec) => { const a = THREE.MathUtils.degToRad(spec.rot || 0); return { x: spec.at[0], z: spec.at[2], c: Math.cos(a), s: Math.sin(a), hw: spec.box[0] / 2, hd: spec.box[1] / 2 }; };
-  const made = (o) => { o.userData.made = true; return o; };   // (made here: freed on its own; a file's copies share the file's)
   const BED_SPOTS = Lay.bedSpots;
   // a slot's piece: a group with everything it shows (made in code, or its files placed); built once, kept
   const pieces = new Map();    // id -> Promise<group>
@@ -218,37 +212,7 @@ export async function makeHome({ W, renderer, base = new URL('../../', import.me
     if (pieces.has(k)) return pieces.get(k);
     const spec = SPEC[id];
     const p = (async () => {
-      const g = new THREE.Group(); g.name = 'slot-' + id;
-      if (spec.made === 'lanterns') {
-        // the lantern model (cut from camp 3's tent) hung at each spot, 0.34 m tall, its glass round the flame; the lamp,
-        // the glow and the cord made in code. Its tin glows a little warm from the flame inside.
-        const tpl = spec.file ? await loadFile(spec.file) : null;
-        g.add(made(makePiece('lanterns', { at: spec.looks, body: !tpl })));
-        if (tpl) {
-          tpl.traverse((o) => { if (o.isMesh && !o.material.userData.warm) { o.material.userData.warm = true; o.material.emissive.set(0xff9a40); o.material.emissiveMap = o.material.map; o.material.emissiveIntensity = 0.35; } });
-          const b = tpl.userData.box, k = 0.34 / (b.max.y - b.min.y), mid = b.getCenter(new THREE.Vector3());
-          for (const [x, y, z] of spec.looks) { const c = tpl.clone(); c.scale.setScalar(k); c.position.set(x - mid.x * k, y - 0.156 - b.min.y * k, z - mid.z * k); g.add(c); }
-        }
-      } else if (spec.made === 'dogbeds') {
-        const n = Math.max(1, Math.min(BED_SPOTS.length, opts.dogs || 1)), tints = ['#8e3b30', '#3f5a78', '#5f6e3a'];
-        for (let i = 0; i < n; i++) { const b = made(makePiece('dogbed', { tint: tints[i] })), s = BED_SPOTS[i]; b.position.set(s.x, floorUnder(s.x, s.z), s.z); b.rotation.y = s.rot; g.add(b); }
-      } else if (spec.made === 'rifles') {
-        // the rifle and the shotgun (models/guns, as the riders' own: guns.json says each one's scale and which way its
-        // barrel points), laid along the rack, muzzles opposite ways, each centred on it
-        const facts = await fetch(`${base}models/guns/guns.json`).then((r) => r.json()).then((j) => j.guns).catch(() => null);
-        const guns = facts && (await Promise.all(['Rifle', 'Shotgun'].map(async (name, i) => {
-          const f = facts[name], gun = (await loader.loadAsync(`${base}models/guns/${f.file}`)).scene;
-          gun.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
-          const turn = new THREE.Group(); turn.add(gun); gun.scale.setScalar(f.scale);
-          turn.rotation.y = Math.atan2(-f.forward[0], -f.forward[2]) + (i ? -1 : 1) * Math.PI / 2;   // (barrel along -x, then +x)
-          turn.updateMatrixWorld(true); const mid = new THREE.Box3().setFromObject(turn).getCenter(new THREE.Vector3());
-          const lay = new THREE.Group(); turn.position.sub(mid); lay.add(turn); return lay;
-        })).catch(() => null));
-        const m = made(makePiece('rifles', { guns })); stand(m, spec); g.add(m);
-      } else if (spec.made) { const m = made(makePiece(spec.made)); stand(m, spec); g.add(m); }
-      else { const m = await placeFile(spec, !!spec.wall); stand(m, spec); g.add(m); }
-      if (spec.also) { const m = made(makePiece(spec.also, { scale: spec.fitH || 1 })); stand(m, spec); g.add(m); }
-      for (const ex of spec.extra || []) { const m = await placeFile(ex, false); stand(m, ex); g.add(m); }
+      const g = await TH.build(id, spec, { dogs: opts.dogs, bedSpots: BED_SPOTS });
       // (made in code: slimmed to a few shapes; the room's things cast no shadows: the valley's sun only reaches in
       // through the windows, and their shadows would double their draws)
       { const mk = []; g.traverse((o) => { if (o.userData.made) mk.push(o); }); mk.forEach(slim); }
@@ -305,10 +269,7 @@ export async function makeHome({ W, renderer, base = new URL('../../', import.me
       const spot = KEEP[k.job];
       if (kept.has(k.job) || !spot) continue;
       // (one that stands on the table sits on a crate as high as the table till there is one)
-      const g = makeKeepsake(k.job, k.tier, spot.table ? { raise: table ? 0 : spot.table } : undefined); if (!g) continue;
-      if (spot.wall) stand(g, spot);
-      else if (spot.table) { const [x, , z] = spot.at; g.position.set(x, floorUnder(x, z) + (table ? spot.table : 0), z); g.rotation.set(0, THREE.MathUtils.degToRad(spot.rot || 0), 0); }
-      else { g.position.set(spot.at[0], floorUnder(spot.at[0], spot.at[2]), spot.at[2]); g.rotation.set(-0.18, THREE.MathUtils.degToRad(spot.rot || 0), 0); }
+      const g = TH.keepsake(k.job, k.tier, spot, { table }); if (!g) continue;
       slim(g); g.traverse((o) => { if (o.isMesh) o.castShadow = false; });
       litTree(g); inner.add(g); kept.set(k.job, { key: keyOf(k.job, k.tier), g });
     }
@@ -335,9 +296,9 @@ export async function makeHome({ W, renderer, base = new URL('../../', import.me
     }
     // the lamps' light: where each lamp is in the valley, and how bright now (its flicker), turned down by the valley's
     // night exposure (the lamps are tuned for the day's exposure of 1)
-    const ex = 1 / Math.max(1, renderer.toneMappingExposure || 1);
+    const ex = 1 / Math.max(1, renderer.toneMappingExposure || 1), list = home.extraLamps.length ? [...home.extraLamps, ...lamps] : lamps;   // (a fire in the hearth first)
     for (let i = 0; i < N; i++) {
-      const L = lamps[i];
+      const L = list[i];
       if (!L) { U.lampCol.value[i].set(0, 0, 0); continue; }
       L.getWorldPosition(lw); U.lampAt.value[i].copy(lw);
       U.lampCol.value[i].set(L.color.r, L.color.g, L.color.b).multiplyScalar(L.intensity * ex);
@@ -405,19 +366,23 @@ export async function makeHome({ W, renderer, base = new URL('../../', import.me
     Promise.all([...pieces.values()]).then((gs) => {
       for (const g of gs) { const mine = []; g.traverse((q) => { if (q.userData.made) mine.push(q); }); for (const m of mine) disposeTree(m); g.removeFromParent(); }
     }).catch(() => {});
-    Promise.all([...files.values()]).then((ts) => { for (const t of ts) disposeTree(t); }).catch(() => {});
-    pieces.clear(); files.clear(); shown.clear(); boxes.clear();
+    Promise.all([...TH.files.values()]).then((ts) => { for (const t of ts) disposeTree(t); }).catch(() => {});
+    pieces.clear(); TH.files.clear(); shown.clear(); boxes.clear();
     group.removeFromParent();
     disposeShared();
   }
 
-  return {
+  const home = {
+    extraLamps: [],   // (lamps of the cabin's own besides the pieces': a fire in the hearth, hearthfire.js)
     group, inner, code: B, layout: Lay, lit, floorUnder, pushOut, inside, furnish, ghost, pop, keepsakes, update, dispose, toWorld, toLocal,
     near: setNear, get yaw() { return yawOf(); }, uniforms: U, spec: (id) => SPEC[id],
     keepLook: (job) => { const k = KEEP[job]; if (!k) return null; return [k.at[0] - (k.wall ? k.wall[0] * 0.15 : 0), k.at[1] == null ? floorUnder(k.at[0], k.at[2]) + (k.table ? 0.95 : 0.35) : k.at[1], k.at[2] - (k.wall ? k.wall[2] * 0.15 : 0)]; },
-    bedSpots: (n) => BED_SPOTS.slice(0, Math.max(1, n)).map((q) => ({ ...q, y: floorUnder(q.x, q.z) })),
-    stale: () => !o.code || o.code !== B || !B.group.parent,
+    // (a cabin with room for fewer beds than dogs: they share, the second a little to one side)
+    bedSpots: (n) => Array.from({ length: Math.max(1, n) }, (_, i) => { const q = BED_SPOTS[i % BED_SPOTS.length], k = Math.floor(i / BED_SPOTS.length), x = q.x + k * 0.22, z = q.z + k * 0.12; return { ...q, x, z, rot: q.rot + k * 1.2, y: floorUnder(x, z) }; }),
+    // (built again: the village has another object for it now, or this one another building)
+    stale: () => !o.code || o.code !== B || !B.group.parent || W.V.TOWN.village.objs.get(o.it.id) !== o,
     openings, portals,
     get owned() { return owned.slice(); }, get shown() { return [...shown.keys()]; }, get nearOn() { return nearOn; }, boxes,
   };
+  return home;
 }

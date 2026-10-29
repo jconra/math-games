@@ -26,8 +26,10 @@ export const TOWN_ASSETS = {
   // (src/townpeople.js knows their doors: people go in and out of them, and their windows light up at night)
   home: { name: 'Home', file: 'cabin', box: [0.944, 0.897, 1.0], front: '+Z', size: 8.6, category: 'home', sink: 0.006 },
   // BUILT IN CODE ONLY (code: true, no model file: objects/codebuildings.js builds it, labs/buildings/blacksmith.js): the
-  // smithy, board and batten, its big doors in its gable end, a shoeing shed on its right; box: its own 11.1 x 5.6 x 7.8 m
-  blacksmith: { name: 'Blacksmith', code: true, box: [1.0, 0.505, 0.703], front: '+Z', size: 11.1, category: 'work' },
+  // smithy, board and batten on a fieldstone footing, its big doors in its gable end up stone steps (as many as the ground
+  // before them needs), a shoeing shed on its right; box: its own 11.1 x 6.7 x 8.3 m where it stands (the steps and the
+  // roof's overhangs: the ground kept clear of plants under all of it)
+  blacksmith: { name: 'Blacksmith', code: true, box: [1.0, 0.6, 0.75], front: '+Z', size: 11.1, category: 'work' },
   // the farm's, built in code only too (labs/buildings/barn.js, windpump.js; src/farm.js puts them at the farm, and the
   // Town Lab can put more about): the barn, board and batten, its big doors in its front gable; box: its walls with the
   // roof's overhangs, 12.9 x 7.4 x 9.8 m. The wind pump: a wooden tower and wheel, 3 m across its legs' feet, 12.2 m to

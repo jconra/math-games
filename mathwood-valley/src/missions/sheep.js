@@ -55,8 +55,9 @@ export const SHEEP = {
                          // pasture from its fence, since walking up to each sheep is work, not play
   walkAway: 40,          // the bottles are put away when the player is this far from that sheep
   labelPx: [40, 58],     // a one-line sum card's height on screen (pixels): about 5.5% of the screen, kept in this range
-  labelFull: 36,         // the sums show in full within this many metres of the player (a little past the reach) ...
-  labelGone: 48,         // ... and have faded out by this far (so they don't hang over the meadow seen from town)
+  // the sums show only at the pen (the game's maker saw them from inside the blacksmith's): in full with the player
+  // in the pasture or within penIn m of its fence, fading out by penOut m; none while the player is indoors
+  penIn: 4, penOut: 8,
   tieAfter: 14,          // pixels: a card moved farther than this from its own sheep gets a thin line down to her
   stackGap: 6,           // pixels kept between two sum cards that would overlap on screen (the farther one moves up)
   pay: { heal: 3, helped: 1, flock: 6 },   // gold: a sheep cured with the first bottle tried, one cured after a wrong one, a whole flock
@@ -138,7 +139,7 @@ const BOTTLE = (n) => `<svg viewBox="0 0 40 64" aria-hidden="true"><rect x="14" 
   <path d="M11 22c2-2 4-3 6-3" stroke="rgba(255,255,255,0.45)" stroke-width="2" fill="none" stroke-linecap="round"/></svg>`;
 
 export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hud, hob, refresh = () => {}, scene = W.scene, defer = () => false, open = () => true, left: shiftLeft = () => Infinity }) {
-  const L = farm.layout, PA = L.sheep, area = L.area(PA, 2.2);
+  const L = farm.layout, PA = L.sheep, area = L.area(PA, 2.2), penIn = L.area(PA, -SHEEP.penIn), penOut = L.area(PA, -SHEEP.penOut);
   const R = makeTargetRing({ scene, camera, canvas, W });
   ensureCss(); ensureChartCss(); ensureNumberLineStyles();
   const fontReady = (document.fonts && document.fonts.load) ? document.fonts.load('700 84px Bitter').catch(() => null) : Promise.resolve();
@@ -433,7 +434,9 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
       if (s.showT > 0) s.showT -= dt;
     }
 
-    // the sum cards: over each sheep, the same size on screen near or far, fading out past ~42 m
+    // the sum cards: over each sheep, the same size on screen near or far, only with the player at the pen
+    const CD = W.V && W.V.CODE, indoors = !!(CD && CD.room && CD.room(P.position.x, P.position.y + 1, P.position.z));
+    const atPen = indoors ? 0 : penIn.contains(P.position.x, P.position.z) ? 1 : penOut.contains(P.position.x, P.position.z) ? 0.5 : 0;
     const h = canvas.clientHeight || innerHeight, px = Math.max(SHEEP.labelPx[0], Math.min(SHEEP.labelPx[1], h * 0.055));
     const p5 = camera.projectionMatrix.elements[5];
     camera.getWorldDirection(camFwd);
@@ -441,9 +444,7 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
       const Lb = s.label;
       const curedShow = s.healed && s.showT > 0;
       const show = !!s.item && (!s.healed || curedShow) && !(cur && cur.done && !curedShow) && !SH.paused && !away;
-      const dist = Math.hypot(s.root.position.x - P.position.x, s.root.position.z - P.position.z);
-      const fadeK = 1 - Math.max(0, Math.min(1, (dist - SHEEP.labelFull) / (SHEEP.labelGone - SHEEP.labelFull)));
-      const want = show ? fadeK * (curedShow ? Math.min(1, s.showT / 0.6) : 1) : 0;
+      const want = show ? atPen * (curedShow ? Math.min(1, s.showT / 0.6) : 1) : 0;
       s.alpha += (want - s.alpha) * Math.min(1, dt * 6);
       Lb.visible = s.alpha > 0.02;
       if (!Lb.visible) continue;

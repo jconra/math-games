@@ -162,7 +162,7 @@ export function makeStableLife({ W, animals, rider, camera, player, shops, say =
       const S = SADDLES.find((x) => x.id === R.id), have = (ow.saddles || []).includes(R.id);
       if (have && ow.saddle === R.id) continue;
       SL.prompt = have ? `Put the ${S.name.toLowerCase()} on your horse` : `Buy the ${S.name.toLowerCase()} (${PRICES.saddle[R.id]} gold)`;
-      SL.rack = R; break;
+      SL.rack = R; SL.promptAt = { x: _w.x, z: _w.z }; break;   // (promptAt: where the rack is, src/main.js doors)
     }
   };
   // THE STALL HORSES A TREAT CAN BE GIVEN (src/feeding.js): each one standing in its stall near the rider; one of the

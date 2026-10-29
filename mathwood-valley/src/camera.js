@@ -15,11 +15,40 @@
 //                stepped together); update() then leaves the swing out for that frame
 //   C.yaw, C.pitch     where it looks from (yaw as heading: yaw = heading is straight behind); pitch: radians down
 //   C.zoom             the wheel's zoom (1: the usual distance)
+//   C.first            first person wanted (the wheel or a pinch on in past the nearest distance; or walking into a
+//                      building of FIRST.rooms); C.fp how far in it is, 0 (the chase camera) .. 1 (the rider's eyes):
+//                      src/player.js hides the rider's own body as it goes in
+//   C.setFirst(on)     first person on or off by hand (as the wheel does)
+//
+// FIRST PERSON (the game maker: "Scrolling moves the camera in and out, Just let it zoom in to 1st person"; "the camera
+// should go to first person any time the player goes into the building"): the wheel, or a pinch on a phone, on in past
+// the chase camera's nearest point eases the view into the rider's own eyes (on foot, or over the saddle on a horse:
+// the horse's neck and ears ahead), looking where a drag looks, with a little wider view, as the player's cabin's first
+// person does (src/cabin/cabin.js FP: the same numbers, FIRST); out again comes back to the chase camera. Walking in
+// through the door of a building (FIRST.rooms: the store, the sheriff's, the saloon ...) goes into first person by itself, and
+// walking out comes back (unless the player zoomed in by hand: then it stays; zooming out inside keeps the chase camera
+// there until the next time in). In first person the view never swings round by itself: it stays where it is looked.
 //   C.snap()           behind the player at once (after a jump to another place; off to the side if a building is behind)
 //   C.shift(dx, dy, dz)   moved with the player as it stands (the way round at the valley's ends: nothing jumps)
 //   C.enabled          false: the game moves the camera itself (a close-up); update() then only keeps W.camTarget
 import * as THREE from 'three';
 
+// the first person's numbers (the player's cabin uses the same: src/cabin/cabin.js FP)
+export const FIRST = {
+  eye: 1.62, fov: 68, ease: 0.38,     // m over the feet; degrees (the chase camera's is 55); s to ease all the way in or out
+  pitch: 1.3,                         // how far a drag tilts the view up and down (the chase camera's tilt, scaled)
+  horseEye: 0.84,                     // m over the saddle, on a horse
+  rise: 12,                           // how fast the eyes follow up and down (a step up the porch: no jolt)
+  // walked into: first person by itself (the game maker: "any time the player goes into the building"): the store, the
+  // sheriff's, the saloon and its band, the smithy, the stable and its horses, the farm's barn, the townsfolk's homes (the
+  // player's own cabin has its own first person: src/cabin/cabin.js)
+  rooms: ['generalStore', 'sheriff', 'saloon', 'blacksmith', 'stable', 'barn', 'home'],
+  // in there, in first person, with none of its doorways or windows in view, the valley beyond its walls is left
+  // undrawn (the far plane brought in to `far` m), as in the player's cabin (src/cabin/cabin.js INDOOR): the room is all
+  // there is to see. margin: how far past the screen's edge an opening still counts as in view (1: the edge); doorway:
+  // the eyes this near a doorway see out through it whichever way they look
+  indoor: { far: 26, margin: 1.25, doorway: 1.4 },
+};
 export const CAM = {
   dist: 6, horseDist: 9,            // metres behind
   eye: 1.55, horseEye: 2.35,        // the point it looks at: this high over the player's feet (the horse's back + a head)
@@ -58,8 +87,27 @@ export function makeCamera({ camera, W, input = null }) {
     return Math.abs(b.c * dx - b.s * dz) < b.hw && Math.abs(b.s * dx + b.c * dz) < b.hd && y < W.heightAt(b.x, b.z) + b.h; }));
   const C = {
     yaw: 0, pitch: CAM.pitch, zoom: 1, enabled: true, dist: CAM.dist, eye: CAM.eye, reach: 1,
-    started: false,
+    started: false, first: false, fp: 0,
   };
+  // first person: by hand (the wheel, a pinch) or by the room walked into; the eyes' height eased; the view's width
+  let fpHand = false, fpRoom = false, roomWas = null, fpEye = FIRST.eye, fpY = null, fovBase = null, farBase = null;
+  const _o = new THREE.Vector3();
+  // (any doorway or see-through window of building o in view, or the eyes in a doorway: world/objects/codebuildings.js o.q)
+  function openingSeen(o) {
+    const q = o && o.q, I = FIRST.indoor; if (!q) return true;
+    camera.updateMatrixWorld();
+    for (let i = 0; i < q.doors.length; i += 2) {
+      if (Math.hypot(camera.position.x - q.doors[i], camera.position.z - q.doors[i + 1]) < I.doorway) return true;
+      _o.set(q.doors[i], q.y + 1.2, q.doors[i + 1]).project(camera); if (_o.z < 1 && Math.abs(_o.x) < I.margin && Math.abs(_o.y) < I.margin) return true;
+    }
+    for (const w of q.wins) { _o.set(w.x, w.y, w.z).project(camera); if (_o.z < 1 && Math.abs(_o.x) < I.margin && Math.abs(_o.y) < I.margin) return true; }
+    return false;
+  }
+  function farTo(f) { if (Math.abs(camera.far - f) > 1e-3) { camera.far = f; camera.updateProjectionMatrix(); } }
+  const eyeP = new THREE.Vector3(), eyeQ = new THREE.Quaternion(), chaseQ = new THREE.Quaternion(), eul = new THREE.Euler(0, 0, 0, 'YXZ');
+  const smooth = (t) => t * t * (3 - 2 * t);
+  C.setFirst = (on) => { fpHand = !!on; if (!on) fpRoom = false; C.first = fpHand || fpRoom; if (!on) C.zoom = Math.max(C.zoom, CAM.zoomMin); };
+  function fovTo(f) { if (Math.abs(camera.fov - f) > 1e-3) { camera.fov = f; camera.updateProjectionMatrix(); } }
   let lastDragAt = -1e9, lastHeading = 0;
   const lastAim = new THREE.Vector3();                               // (where the focus was making for last frame)
   C.snap = () => { C.started = false; };
@@ -88,21 +136,29 @@ export function makeCamera({ camera, W, input = null }) {
     C.yaw = wrap(C.yaw); lastHeading = heading;
   }
   C.swing = (dt, { heading = 0, onHorse = false, speed = 0 }) => {
-    if (!C.enabled || !C.started) return;
+    if (!C.enabled || !C.started || C.first) return;
     swingBack(Math.min(dt, 0.1), heading, onHorse, speed); swung = true;
   };
   C.update = (dt, { at, heading = 0, onHorse = false, speed = 0, seat = null }) => {
     dt = Math.min(dt, 0.1);
     W.camTarget.copy(at);
-    if (!C.enabled) return;
+    // (a close-up has the camera: out of first person at once, the view's width as it was)
+    if (!C.enabled) { if (C.fp > 0 || fovBase != null) { C.fp = 0; if (fovBase != null) fovTo(fovBase); fovBase = null; } if (farBase != null) { farTo(farBase); farBase = null; } return; }
     room = W.codeRoom ? W.codeRoom(at.x, at.y + 1, at.z) : null;
-    // what the player did: dragged to look, or the wheel
+    // (walked in through the door of one of FIRST.rooms: first person; walked out: back, unless zoomed in by hand)
+    const ins = !onHorse && W.codeIndoors ? W.codeIndoors(at.x, at.y + 1, at.z) : null, here = ins && ins.it && FIRST.rooms.includes(ins.it.kind) ? ins : null;
+    if (here !== roomWas) { fpRoom = !!here; roomWas = here; }
+    // what the player did: dragged to look, or the wheel (on in past the nearest point: first person; out: back)
     if (input && input.enabled) {
       const l = input.takeLook();
       if (l.dx || l.dy) { C.yaw -= l.dx * CAM.turn; C.pitch = Math.max(CAM.pitchMin, Math.min(CAM.pitchMax, C.pitch + l.dy * CAM.tilt)); lastDragAt = performance.now(); }
-      const z = input.takeZoom(); if (z) C.zoom = Math.max(CAM.zoomMin, Math.min(CAM.zoomMax, C.zoom * Math.pow(1.12, z)));
+      const z = input.takeZoom();
+      if (z < 0 && (C.first || C.zoom <= CAM.zoomMin * 1.001)) fpHand = true;
+      else if (z > 0 && C.first) { fpHand = false; fpRoom = false; C.zoom = CAM.zoomMin; }
+      else if (z) C.zoom = Math.max(CAM.zoomMin, Math.min(CAM.zoomMax, C.zoom * Math.pow(1.12, z)));
       if (input.lookedAt > lastDragAt) lastDragAt = input.lookedAt;
     }
+    C.first = fpHand || fpRoom;
     const baseDist = onHorse ? CAM.horseDist : CAM.dist, eye = onHorse ? CAM.horseEye + (seat > 0 ? seat - CAM.horseSeat : 0) : CAM.eye;
     if (!C.started) {                                                // (the first frame, or after snap(): straight behind)
       C.started = true; C.yaw = heading; C.pitch = onHorse ? CAM.horsePitch : CAM.pitch; C.dist = baseDist; C.eye = eye; C.reach = 1;
@@ -116,7 +172,8 @@ export function makeCamera({ camera, W, input = null }) {
         }
       }
     }
-    if (!swung) swingBack(dt, heading, onHorse, speed);
+    if (!swung && !C.first) swingBack(dt, heading, onHorse, speed);   // (first person: it stays where it is looked)
+    if (C.first) lastHeading = heading;
     swung = false;
     C.dist = damp(C.dist, baseDist, 3, dt); C.eye = damp(C.eye, eye, 4, dt);
     // the point it looks at: the player's head, followed closely sideways and more gently up and down
@@ -147,7 +204,25 @@ export function makeCamera({ camera, W, input = null }) {
     pos.copy(want);
     camera.position.copy(pos);
     camera.lookAt(focus);
+    // FIRST PERSON: from the chase camera's pose to the rider's eyes (and its wider view), eased in and out
+    C.fp = Math.max(0, Math.min(1, C.fp + (C.first ? 1 : -1) * dt / FIRST.ease));
+    const eyeH = onHorse ? (seat > 0 ? seat : CAM.horseSeat) + FIRST.horseEye : FIRST.eye;
+    fpEye = damp(fpEye, eyeH, 4, dt);
+    fpY = fpY == null || Math.abs(fpY - (at.y + fpEye)) > 3 ? at.y + fpEye : damp(fpY, at.y + fpEye, FIRST.rise, dt);
+    if (C.fp > 0) {
+      if (fovBase == null) fovBase = camera.fov;
+      const k = smooth(C.fp), base = onHorse ? CAM.horsePitch : CAM.pitch;
+      chaseQ.copy(camera.quaternion);
+      eyeP.set(at.x, fpY, at.z);
+      eul.set(Math.max(-1.25, Math.min(1.25, (base - C.pitch) * FIRST.pitch)), C.yaw + Math.PI, 0, 'YXZ'); eyeQ.setFromEuler(eul);
+      camera.position.lerpVectors(pos, eyeP, k); camera.quaternion.slerpQuaternions(chaseQ, eyeQ, k);
+      fovTo(fovBase + (FIRST.fov - fovBase) * k);
+    } else if (fovBase != null) { fovTo(fovBase); fovBase = null; }
     camera.updateMatrixWorld();
+    // (in first person inside a building, no way out of it in view: the valley beyond its walls left undrawn)
+    const shut = C.fp > 0.95 && ins && !(ins.it && ins.it.kind === 'cabin') && !openingSeen(ins);   // (the player's cabin does its own)
+    if (shut) { if (farBase == null) farBase = camera.far; farTo(Math.min(farBase, FIRST.indoor.far)); }
+    else if (farBase != null) { farTo(farBase); farBase = null; }
   };
   return C;
 }

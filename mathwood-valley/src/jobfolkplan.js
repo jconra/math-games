@@ -6,8 +6,11 @@
 //                       (look: a folk.js look; hello: what is going on and what to do; start: said as the
 //                       job gets going, if the job starts from a talk; thanks: one is said after a job's batch is done,
 //                       in turn; leave: the toast when the player walks away from the job, for the jobs that end that
-//                       way; law: the sheriff and his deputy wear the gold star and a holstered six-shooter)
+//                       way; law: the sheriff and his deputy wear the gold star and a holstered six-shooter; indoors: he
+//                       stands inside a building, bare-headed (the storekeeper); helloOut: the sheriff's hello when he
+//                       stands out in front of an office with no inside)
 //   FOREMAN_HELLO       a camp foreman's two lines while no order is under way (by camp id; the delivery job has the rest)
+//   FOLK_HATS, dressOf(def)   each one's hat; how a person is dressed from his entry (folk.js makePerson's options)
 //   TALK                distances and times: how close a person greets the player, offers E, shows a name tag ...
 //   sayMs(text)         how long a line stays up (ms): longer lines stay longer
 //   standSpot({ x, z, face, tries, step, ok })   the first spot round (x, z) that ok(x, z) accepts, trying a little to
@@ -63,8 +66,11 @@ export const JOB_FOLK = [
     lendHere: "There's the herd, right over there! Set the camera up from here, and photograph the deer whose tag makes the equation true.",
     back: ['Thank you kindly! Your pictures go straight in my book.', 'Come and borrow it again any time.'],
     thanks: ['Lovely pictures! They go straight in my book.', 'What a fine roll of pictures. Thank you!', 'Splendid! Let them settle, and take some more.'] },
+  // (inside his office, behind his desk with the pile of seized boxes on it: src/townrooms.js; out in front of it where
+  // the office has no inside)
   { id: 'sheriff', job: 'boxes', name: 'Sheriff Boone', role: 'sheriff', law: true, look: { outfit: 'suit_m', palette: 'mustard', skin: 4, hair: 1 },
-    hello: ['Seized lock boxes keep piling up on my desk.', "Crack 'em open and I'll pay you for every one. Step inside."],
+    hello: ['Seized lock boxes keep piling up on my desk.', "Crack 'em open and I'll pay you for every one."],
+    helloOut: ['Seized lock boxes keep piling up on my desk.', "Crack 'em open and I'll pay you for every one. Step inside."],
     thanks: ['Fine work on those boxes. Come back any time.', "That's a few less on my desk. Obliged!", 'Good safecracking, partner.'] },
   // (out front of the sheriff's office too, the other side of the steps: only when "Loot the gang" is ticked)
   { id: 'deputy', job: 'loot', name: 'Deputy Mills', role: 'deputy', law: true, look: { outfit: 'adventurer_m', palette: 'rancher', skin: 2, hair: 3 },
@@ -104,12 +110,28 @@ export const JOB_FOLK = [
     hello: ['The fish are biting off the end of my dock. Help yourself to a rod.',
       'Keep the big ones, throw the little ones back. The general store buys what you keep.'],
     thanks: ['Now that is a fine fish!', 'You have a knack for this, partner.'] },
+  // (behind the general store's counter: the store's keeper. The rider helps him at the counter, the store's job; his
+  // dog Rufus sleeps on its bed in the back corner, src/townrooms.js. Bare-headed indoors, in shirtsleeves and a
+  // waistcoat; the shift's thank-you is his: src/shiftkeeper.js)
+  { id: 'storekeeper', job: 'store', name: 'Ezra Platt', role: 'storekeeper', indoors: true, look: { outfit: 'suit_m', palette: ['#d8ccb0', '#3f3a33', '#2a2420', '#3a332c'], skin: 2, hair: 9 },
+    hello: ["Welcome in! Food's by the barrels, hats on the pegs, and Rufus there minds the animals.",
+      'When folks bring their orders, come round the counter and lend me a hand.'],
+    thanks: ['Much obliged for the help at the counter!', 'Folks went home happy. Thank you kindly.', 'You have a head for figures, partner.'] },
+  // (in his shop at work: hammering at the anvil, now and then at the forge, src/smithy.js; bare-headed, in his leather
+  // bib apron over a work shirt. Nothing to do at his shop yet: no prompt, just his hello)
+  { id: 'smith', job: 'smithy', name: 'Jonas Kell', role: 'blacksmith', indoors: true, look: { outfit: 'farmer_m', palette: ['#8a6f52', '#4a3020', '#2a2018', '#3a332c'], skin: 4, hair: 1 },
+    hello: ['Mind the sparks, partner! Iron shapes best while it glows red.', 'Every horseshoe in this valley came off my anvil.'],
+    thanks: ['Obliged, partner.', 'Come by any time.'] },
   // (beside the stable's big doors: the one who sells the saddles and horses; E by him opens the stable's counter)
   { id: 'keeper', job: 'stable', name: 'Hank Dawson', role: 'stable keeper', look: { outfit: 'worker_m', palette: 'drifter', skin: 3, hair: 4 },
     hello: ['Welcome to the stable! I look after the horses round here.', 'Need a saddle or a new horse? Come and see what I have.'],
     thanks: ['She suits you, partner. Ride safe!', 'Treat that horse kindly, now.', 'Come back any time.'] },
 ];
 export const FOLK_BY_ID = Object.fromEntries(JOB_FOLK.map((f) => [f.id, f]));
+// each one's hat (src/hats.js), and how a person is dressed from his entry: what folk.js makePerson takes (the Building
+// Lab dresses the storekeeper and the sheriff the same way: labs/buildings/main.js)
+export const FOLK_HATS = { boss: 'cattleman', vet: 'bowler', wife: 'straw', naturalist: 'ranger', sheriff: 'white', deputy: 'cowboy', keeper: 'straw' };
+export const dressOf = (def) => ({ ...def.look, hatStyle: FOLK_HATS[def.id] || null, hat: !def.indoors, badge: !!def.law, holster: !!def.law });
 
 // a camp foreman's hello while no order is under way (the delivery job says the rest: the order, the thank-you)
 export const FOREMAN_HELLO = {
@@ -119,7 +141,7 @@ export const FOREMAN_HELLO = {
 };
 
 // which person thanks the player for which job event (the game's Hob events: src/hob.js)
-const THANKS = { waveDone: 'boss', flockDone: 'vet', pigsDone: 'wife', deerDone: 'naturalist', sheriffDone: 'sheriff', lootDone: 'deputy',
+const THANKS = { waveDone: 'boss', flockDone: 'vet', pigsDone: 'wife', deerDone: 'naturalist', sheriffDone: 'sheriff', lootDone: 'deputy', storeDone: 'storekeeper',
   saddle: 'keeper', horse: 'keeper' };   // (a saddle or a horse bought at the stable: the keeper's thank-you once its counter closes)
 export const thanksFor = (event) => THANKS[event] || null;
 // the job events that count as working at an area job (a pick, right or wrong), by the area's person

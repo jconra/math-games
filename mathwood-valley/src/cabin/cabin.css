@@ -16,3 +16,47 @@
 .bmc-price svg { width: 17px; height: 17px; }
 @keyframes bmc-in { from { opacity: 0; transform: translate(-50%, 4px); } to { opacity: 1; transform: translateX(-50%); } }
 @media (max-width: 520px) { .bmc-card { top: calc(50% + 24px); font-size: 14px; } .bmc-card b { font-size: 15px; } .bmc-card small, .bmc-card em { font-size: 13px; } }
+
+/* The fire's card (firecard.js): the fireside sums before a fire is lit, low on the screen so the fireplace stays in
+   view; one sum at a time, its answers as wide buttons with the key under each (never inside it), the helper's picture
+   under them. Lit: it fades down into the fire. */
+.bmc-fire { position: fixed; left: 50%; bottom: max(14px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 28;
+  width: min(560px, calc(100vw - 24px)); max-height: calc(100vh - 28px); overflow: auto; box-sizing: border-box; padding: 12px 16px 12px;
+  border-radius: 12px; background: rgba(30, 20, 12, 0.9); border: 1px solid rgba(226, 173, 76, 0.6); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  color: #f3e6c8; font: 16px/1.35 Bitter, Georgia, serif; pointer-events: auto; animation: bmcf-up 0.22s ease-out; }
+.bmc-fire.is-next .bmcf-sum, .bmc-fire.is-next .bmcf-answers { animation: bmcf-slide 0.25s ease-out; }
+.bmc-fire.is-lit { animation: bmcf-down 0.45s ease-in forwards; }
+.bmcf-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.bmcf-title { font-weight: 700; font-size: 17px; color: #f6dc9c; letter-spacing: 0.02em; }
+.bmcf-dots { display: inline-flex; gap: 6px; }
+.bmcf-dots i { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid rgba(243, 197, 107, 0.7); }
+.bmcf-dots i.is-now { background: rgba(243, 197, 107, 0.35); }
+.bmcf-dots i.is-done { background: #e8742a; border-color: #ffb066; box-shadow: 0 0 6px rgba(255, 140, 50, 0.7); }
+.bmcf-lead { margin: 4px 0 2px; font-size: 14px; color: #dccbaa; }
+.bmcf-sum { text-align: center; font-size: 38px; font-weight: 700; color: #fff3d6; margin: 4px 0 8px; letter-spacing: 0.03em; }
+.bmcf-answers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.bmcf-a { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.bmcf-a button { width: 100%; min-height: 52px; border-radius: 9px; border: 1px solid #6b4a2a; background: linear-gradient(#7a5533, #5e3f24);
+  color: #fff3d6; font: 700 26px/1 Bitter, Georgia, serif; cursor: pointer; touch-action: manipulation; }
+.bmcf-a button:hover:not(:disabled) { background: linear-gradient(#8a6038, #6b482a); }
+.bmcf-a button.is-right { background: linear-gradient(#4f8a3a, #3b6a2b); border-color: #8fd06a; }
+.bmcf-a button.is-right::after { content: ' \2713'; }
+.bmcf-a button.is-wrong, .bmcf-a button:disabled { opacity: 0.45; cursor: default; }
+.bmcf-a kbd { font: 12px/1 Bitter, Georgia, serif; color: #b8a27e; border: 1px solid rgba(184, 162, 126, 0.5); border-radius: 4px; padding: 2px 6px; }
+.bmcf-line { min-height: 1.35em; margin: 8px 0 4px; font-size: 15px; color: #f0d9a8; }
+.bmcf-line:empty { min-height: 0; margin: 4px 0 0; }
+.bmcf-help:empty { display: none; }
+.bmcf-help { margin: 4px 0 6px; }
+.bmcf-foot { display: flex; justify-content: space-between; gap: 10px; margin-top: 6px; }
+.bmcf-foot button { border-radius: 8px; border: 1px solid rgba(226, 173, 76, 0.45); background: rgba(0, 0, 0, 0.25); color: #f3e6c8;
+  font: 15px Bitter, Georgia, serif; padding: 7px 14px; cursor: pointer; touch-action: manipulation; }
+@keyframes bmcf-up { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translateX(-50%); } }
+@keyframes bmcf-down { to { opacity: 0; transform: translate(-50%, 18px) scale(0.97); } }
+@keyframes bmcf-slide { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }
+@media (max-width: 520px), (max-height: 480px) {
+  .bmc-fire { padding: 9px 12px 10px; font-size: 15px; }
+  .bmcf-sum { font-size: 30px; margin: 2px 0 6px; }
+  .bmcf-a button { min-height: 46px; font-size: 22px; }
+  .bmcf-lead { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .bmc-fire, .bmc-fire.is-next .bmcf-sum, .bmc-fire.is-next .bmcf-answers { animation: none; } }

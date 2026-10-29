@@ -32,6 +32,8 @@ export const BAND_PICS = {
   boots: S('<path d="M11 4h8v12l7 3.5q3 1.5 3 4.5v2H8l1-9z"/><path d="M8 26h21M11 9h8"/>'),
   // Prairie Waltz: two notes turning round each other
   waltz: S('<path d="M9 22V9l12-3v13"/><circle cx="7" cy="22" r="2.6" fill="currentColor" stroke="none"/><circle cx="19" cy="19" r="2.6" fill="currentColor" stroke="none"/><path d="M5 28q11 3 22-4"/>'),
+  // Stagecoach Boogie: a stagecoach wheel, spinning (the spokes and the speed lines behind it)
+  boogie: S('<circle cx="18" cy="17" r="9"/><circle cx="18" cy="17" r="1.8" fill="currentColor" stroke="none"/><path d="M18 8v18M9 17h18M11.6 10.6l12.8 12.8M24.4 10.6L11.6 23.4M2 12h5M1 17h5M2 22h5"/>'),
   // Lonesome Trail: the moon over a hill
   lonesome: S('<path d="M20 5a8 8 0 1 0 7 11 6.5 6.5 0 0 1-7-11z"/><path d="M3 27q8-7 15-3t11 1"/>'),
   // the old fiddle tunes: Soldier's Joy, a drum and its sticks; Old Joe Clark, a banjo; Arkansas Traveler, the road

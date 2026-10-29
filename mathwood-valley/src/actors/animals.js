@@ -8,7 +8,8 @@
 //
 //   loadAnimals(base, { kinds }) -> Promise<lib>   base: the game's folder (default: found from this file), its models/
 //                                                  folder, or the animals folder itself. kinds: only these (default: all)
-//   lib.need(kind) -> Promise                       loads one more kind later
+//   lib.need(kind) -> Promise                       loads one more kind later (or a dog breed, dogbreeds.js: the dog it's
+//                                                  made from loaded, reshaped and its coat painted, dogkind.js)
 //   makeAnimal(lib, kind, { shadows, tint, size }) -> animal
 //                tint: a colour laid over the whole coat (multiplied: '#e8dccb' a shade paler and warmer, '#b0a49a' darker),
 //                so a herd isn't all one cow. Without it every animal of a kind shares one material
@@ -49,6 +50,7 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { softShade } from './shading.js';
 import { prepareHorse } from './horsecoat.js';
 import { buildHair } from './horsehair.js';
+import { needBreed } from './dogkind.js';
 
 // steed: the new horse (the Horse Lab's), a coat kind (animals.json "coat": true): see loadAnimals and makeAnimal
 export const KINDS = ['horse', 'horseWhite', 'steed', 'donkey', 'cow', 'bull', 'deer', 'stag', 'shiba', 'husky', 'wolf'];
@@ -109,7 +111,8 @@ export async function loadAnimals(base, { kinds = null } = {}) {
   const info = (await res.json()).kinds;
   const lib = { dir, info, kinds: {}, loading: {} };
   lib.need = (kind) => {
-    if (!info[kind]) return Promise.reject(new Error('no such animal: ' + kind));
+    // (a dog breed: one of the dogs, reshaped and with its own coat, made here the first time it's asked for: dogkind.js)
+    if (!info[kind]) return lib.loading[kind] || (lib.loading[kind] = needBreed(lib, kind).catch((e) => { delete lib.loading[kind]; throw e; }));
     return lib.loading[kind] || (lib.loading[kind] = loader.loadAsync(dir + info[kind].file).then((g) => {
       if (info[kind].coat) {
         // a coat kind (the new horse): its colours are worked out in the shader, per horse (horsecoat.js, horses.js), so
@@ -123,7 +126,9 @@ export async function loadAnimals(base, { kinds = null } = {}) {
         return lib.kinds[kind];
       }
       // a shared material for every animal of a kind: the colours are in the vertices
-      g.scene.traverse((o) => { if (o.isMesh && o.material) { o.material.vertexColors = true; o.material.roughness = 0.75; o.geometry = softShade(o.geometry); } });
+      // (indoorLit: under a roof it is lit like the room round it, world/objects/indoorlight.js: the valley's shade patch
+      // adds it, world/valley.js sunShadeAll)
+      g.scene.traverse((o) => { if (o.isMesh && o.material) { o.material.vertexColors = true; o.material.roughness = 0.75; o.material.userData.indoorLit = true; o.geometry = softShade(o.geometry); } });
       lib.kinds[kind] = { scene: g.scene, clips: g.animations, info: info[kind] };
       return lib.kinds[kind];
     }, (e) => { delete lib.loading[kind]; throw e; }));   // (a failed load is forgotten: the next need tries again)

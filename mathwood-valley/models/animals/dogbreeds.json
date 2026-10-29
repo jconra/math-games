@@ -1,0 +1,5 @@
+{
+  "v": 1,
+  "note": "The Dog Lab's saved breeds (labs/dogs): each one here is used over src/actors/dogbreeds.js's own; a breed not here is as written there.",
+  "breeds": {}
+}

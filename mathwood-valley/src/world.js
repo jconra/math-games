@@ -240,6 +240,7 @@ export async function makeWorld({ renderer, camera, quality = null, look = 'gree
     heightAt: V.CODE ? (x, z) => V.CODE.heightAt(x, z, V.heightAt) : V.heightAt, waterAt: V.waterAt, settled: V.settled,
     // the code-built building a point is in, under its roof, or null: its walls and ceilings (room.solid) stop the camera
     codeRoom: V.CODE ? (x, y, z) => V.CODE.room(x, y, z) : null,
+    codeIndoors: V.CODE ? (x, y, z) => V.CODE.indoors(x, y, z) : null,   // (inside a building's walls, not on its porch: its object)
     update: (dt) => { V.update(Math.min(dt, 0.1)); warmLater(dt); },   // (a long pause, a tab come back, counts as a tenth of a second)
     render: (afterScene) => V.render(afterScene),   // (afterScene: src/fx/dof.js puts its picture on screen there)
     loadedIn: 0,                                                         // (seconds to settled, for the record)

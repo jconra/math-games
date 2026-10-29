@@ -49,6 +49,7 @@
 //        indoor: in the cabin; music 0..1: how loud the action music is; voice: true while a voice speaks (the player's
 //        shouts, src/audio/shouts.js)
 //   A.state()     for rigs: what has played, how many sound at once, the creek, the hooves, the bus level
+//   A.anvil(at)   the blacksmith's hammer on his anvil at { x, z } (src/smithy.js, in time with his blows)
 //   A.dispose()
 //   Pure helpers for tests: clipExt(canPlayType), pickClip(list, last, now, lastAt, rand, repeat), crossed(last, now,
 //   at), duckOf({ music, voice, indoor }), airCut(d), burstPlan(n, rand), CLIPS, SOURCES, BURST, AMB, HOOVES,
@@ -104,6 +105,7 @@ export const SOURCES = {
   pug:       { far: 90, ref: 3, level: 0.8, first: [['dog_woof', 1]], then: [['dog_woof', 1]] },
   pigs:      { every: [7, 18],   far: 45,  ref: 3,  level: 0.8 },      // (made in the browser: TOWN — GRUNT)
   work:      { far: 95, ref: 6, level: 0.8 },                        // (the Windmill lab's saw and hammer)
+  anvil:     { far: 55, ref: 4, level: 0.75 },                       // (the blacksmith's hammer on his anvil: src/smithy.js)
   creek:     { far: 70, near: 8, level: 0.5 },                       // (TOWN — CREEK)
 };
 
@@ -707,6 +709,25 @@ export function makeAmbience({ audio, W, tier = W && W.tier, base = GAME }) {
     creek: { on: !!creek, d: Number.isFinite(creekD) ? +creekD.toFixed(1) : null, squares: wet.size }, bus: bus ? +bus.gain.value.toFixed(3) : 0, work, stable });
   // (for rigs: a burst now)
   A.dev = { cows: () => { cowT = 0; }, dog: () => { dogT = 0; }, work: () => { workT = 0; }, out: () => cut };
+  // THE BLACKSMITH'S HAMMER ON HIS ANVIL (src/smithy.js rings it as each blow lands, in time with his clip): iron on
+  // iron, a crack of noise like the hammer's out back but higher and harder, with a short bright second burst and the
+  // anvil's dull knock under it; no tone in it (the game maker's rule: a hammer is a clap-like crack, never ringing
+  // sine tones). Heard near the shop only (SOURCES.anvil.far); through its walls, as everything is, when it's shut.
+  // at: { x, z } -> true when played
+  A.anvil = (at) => {
+    const S = SOURCES.anvil;
+    if (!ctx || !noiseBuf || !alive || !at || dist(at) > S.far || voices >= most) return false;
+    const p = panner(S.ref, { x: at.x, y: yAt(at.x, at.z, 0.9), z: at.z }), g = ctx.createGain(); g.gain.value = S.level; g.connect(p);
+    const t = ctx.currentTime + 0.01, f = 3300 * rnd(0.93, 1.07), k = rnd(0.85, 1.05);
+    hiss(g, t, 0.028, { freq: f, q: 1.1, gain: 0.8 * k, attack: 0.0005 });
+    hiss(g, t + 0.003, 0.05, { freq: f * 1.45, q: 1.4, gain: 0.32 * k, attack: 0.0005 });
+    hiss(g, t + rnd(0.007, 0.011), 0.02, { freq: f * 0.7, q: 0.8, gain: 0.25 * k, attack: 0.0005 });
+    hiss(g, t, 0.06, { type: 'lowpass', freq: 420, gain: 0.45 * k, attack: 0.001 });
+    made.anvil = (made.anvil || 0) + 1;
+    voices++;
+    setTimeout(() => { voices--; try { g.disconnect(); } catch (e) { /* gone */ } unpan(p); }, 400);
+    return true;
+  };
   A.dispose = () => {
     alive = false; audio.need('ambience', false);
     // (every node this made is let go: the bus, the indoor filter on the master, the hooves' and the creek's)

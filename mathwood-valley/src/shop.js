@@ -1,5 +1,7 @@
-// THE SHOPS: walk up to a building's door and press E (or tap the prompt) to open its counter as a simple panel over the
-// paused game. There is no inside in 3D: each counter is a panel.
+// THE SHOPS: a counter's panel over the paused game. The stable's opens with E by its keeper at its door; the general
+// store and the sheriff's office are walked into, and each spot inside opens its own part (src/townrooms.js: the
+// store's food, hats and animals cards; the sheriff's lock boxes straight away). A building with no inside to walk into
+// opens its whole panel at its door, as all of them once did.
 //   stable          saddles (any one lets you ride; the horse wears the one you pick) and horses: "Your horses" (every
 //                   one the rider owns, src/mounts.js: Ride this one) and "In the stalls" (the stable's ladder not owned
 //                   yet: catalog.js HORSES, LADDER), each with its top speed as a number (mph); every rider starts on
@@ -25,8 +27,12 @@
 //     onOpen() / onClose(): the game pauses and resumes; onBuy(what): something was bought (the player looks at
 //     rider.owned again, the HUD's purse is redrawn); onLockbox(box, { own, after }): open a lock box (main.js
 //     does it: it pays, records and calls after(result) when the box closes); say(text, kind): a short note
-//   S.door(position) -> { id, prompt } for the door the player stands at (within PRICES.doorReach), or null
-//   S.open(id), S.close(), S.isOpen
+//   S.door(position) -> { id, prompt } for the door the player stands at (within PRICES.doorReach), or null; a counter
+//     marked `inside` (the general store, the sheriff's desk) has none while indoors(id) says it is worked from inside
+//     (src/townrooms.js: its spots)
+//   S.open(id), S.close(), S.isOpen   (ids: COUNTERS; the store's areas storeFood, storeHats, storeAnimals are opened
+//     at their spots inside the store)
+//   S.buyGun() -> { ok, note }   the six-shooter bought at its spot by the store's till
 //
 //   makePanel({ title, sub, body, onClose, wide }) -> { el, body, close() }: the plain panel the counters use (the
 //   pause menu in main.js uses it too). Esc, the x, or a click on the dimmed backdrop closes it.
@@ -63,9 +69,15 @@ export const DOOR_REACH = 3.4;   // metres from a door's spot where its prompt s
 
 // which door is which, and what its prompt says
 export const COUNTERS = {
-  stable: { place: 'stable', prompt: 'Talk to the stable keeper', title: 'The Stable', sub: 'Saddles and horses' },
-  store: { place: 'store', prompt: 'Visit the general store', title: 'General Store', sub: 'Orders, dogs, farm animals and hats' },
-  sheriff: { place: 'sheriff', prompt: "Sheriff's desk", title: "Sheriff's Office", sub: 'Lock boxes and bounties' },
+  // (inside: worked elsewhere when there is someone for it: the stable keeper beside its doors opens it, src/jobfolk.js,
+  // so its doors open with E there: the game maker couldn't open them for "Talk to the stable keeper")
+  stable: { place: 'stable', prompt: 'Talk to the stable keeper', title: 'The Stable', sub: 'Saddles and horses', inside: true },
+  store: { place: 'store', prompt: 'Visit the general store', title: 'General Store', sub: 'Orders, dogs, farm animals and hats', inside: true },
+  sheriff: { place: 'sheriff', prompt: "Sheriff's desk", title: "Sheriff's Office", sub: 'Lock boxes and bounties', inside: true },
+  // the general store's areas, each opened at its own spot inside (src/townrooms.js: no door of their own)
+  storeFood: { title: 'Food', sub: 'Apples and carrots for your horses' },
+  storeHats: { title: 'Hats', sub: 'Bought once, worn as you like' },
+  storeAnimals: { title: 'Animals', sub: 'Dogs and farm animals' },
   cabin: { place: 'cabin', prompt: 'Sit at your cabin table', title: 'Your Cabin', sub: 'Open your lock boxes at the table' },
 };
 
@@ -128,21 +140,24 @@ export function makePanel({ title = '', sub = '', body = '', onClose = () => {},
 export const anyPanelOpen = () => openPanels > 0;
 
 // ── THE COUNTERS ─────────────────────────────────────────────────────────────────────────────────────────────────
-export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onBuy = () => {}, onLockbox = () => {}, onStoreJob = null, say = () => {}, extra = null }) {
+export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onBuy = () => {}, onLockbox = () => {}, onStoreJob = null, say = () => {}, extra = null, indoors = () => false }) {
   let panel = null, openId = null;
   const S = { get isOpen() { return !!panel; }, get openId() { return openId; } };
 
   S.door = (pos) => {
     let best = null, bd = DOOR_REACH;
     for (const [id, c] of Object.entries(COUNTERS)) {
-      const pl = W.places[c.place]; if (!pl || !pl.door) continue;
+      if (c.inside && indoors(id)) continue;   // (worked from inside now: its spots, src/townrooms.js)
+      const pl = c.place && W.places[c.place]; if (!pl || !pl.door) continue;
       const d = Math.hypot(pos.x - pl.door.x, pos.z - pl.door.z);
-      if (d < bd) { bd = d; best = { id, prompt: c.prompt, dist: d }; }
+      if (d < bd) { bd = d; best = { id, prompt: c.prompt, dist: d, at: { x: pl.door.x, z: pl.door.z } }; }
     }
     return best;
   };
 
   const owned = () => rider.owned || (rider.owned = {});
+  // (another module's rows for a counter: the store's farm animals show on its Animals card too)
+  const extraOf = (id) => (extra ? extra[id] || (id === 'storeAnimals' ? extra.store : null) || null : null);
   const saddlesOwned = () => {
     const o = owned();
     const list = Array.isArray(o.saddles) ? o.saddles.filter((s) => PRICES.saddle[s] != null) : [];
@@ -215,6 +230,64 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
   // the old hat's colour: the rider's palette's hat colour, as the title screen draws it
   const palHat = () => (PALETTES[rider.look && rider.look.palette] || PALETTES.drifter)[3];
 
+  // ── the store's rows, by area ──
+  // the dogs: the ones you own (the one with you renamed, the others taken along), and a breed not owned yet to buy and
+  // name; then the farm animals for the yard behind the cabin (src/homestead.js)
+  function animalRows() {
+    const mine = dogsOwned(), dog = owned().dog;
+    let h = `<h3 class="bms-h">${mine.length > 1 ? 'Your dogs' : 'A dog to ride with'}</h3>`;
+    for (const d of mine) {
+      if (dog && d.kind === dog.kind) {
+        h += `<div class="bms-row"><div class="bms-what"><b>${esc(d.name)} the ${esc(breedName(d.kind))}</b><small>Follows you everywhere. Want a new name?</small>
+          <div class="bms-name"><input type="text" maxlength="12" value="${esc(d.name)}" aria-label="Your dog's name" data-name="rename"></div></div>
+          <div class="bms-act"><button type="button" data-do="rename">Rename</button></div></div>`;
+      } else {
+        h += row({ name: `${d.name} the ${breedName(d.kind)}`, line: 'Waiting at home.', right: `<button type="button" data-do="take-dog" data-id="${d.kind}">Take ${esc(d.name)}</button>` });
+      }
+    }
+    // the breeds not owned yet: one row, pick a breed and name it (the first one the rider can afford is picked)
+    const left = DOGS.filter((d) => !mine.some((m) => m.kind === d.id));
+    if (left.length) {
+      if (!left.some((d) => d.id === S.dogKind)) S.dogKind = (left.find((d) => rider.gold >= PRICES.dog[d.id]) || left[0]).id;
+      const pick = DOGS.find((d) => d.id === S.dogKind), cost = PRICES.dog[pick.id];
+      h += `<div class="bms-row is-tall"><div class="bms-what"><b>${mine.length ? 'Another dog' : 'A dog'}</b><small>${esc(pick.line)}</small>
+        <div class="bms-kinds" role="radiogroup" aria-label="Which dog">${left.map((d) => `<button type="button" role="radio" aria-checked="${pick.id === d.id}" data-do="kind" data-id="${d.id}" class="${pick.id === d.id ? 'is-on' : ''}">${d.name}</button>`).join('')}</div>
+        <div class="bms-name"><input type="text" maxlength="12" placeholder="Name your dog" value="${esc(S.dogName || '')}" aria-label="Your new dog's name" data-name="new"></div></div>
+        <div class="bms-act">${price(cost)}<button type="button" data-do="buy-dog" ${rider.gold < cost ? 'disabled' : ''}>${rider.gold < cost ? short(cost) : 'Buy'}</button></div></div>`;
+    }
+    if (extra && extra.store) h += extra.store.html();   // (the farm animals)
+    return h;
+  }
+  // hats: the one on your head, the ones you own (put one on), and the rest with a price
+  function hatRows() {
+    let h = `<h3 class="bms-h">Hats</h3>`;
+    const hats = hatsOwned(), wearing = hatOf(rider.look);
+    for (const x of HATS) {
+      const cost = PRICES.hat[x.id] || 0;
+      let right;
+      if (wearing === x.id) right = `<span class="bms-tag is-on">On your head</span>`;
+      else if (hats.includes(x.id)) right = `<button type="button" data-do="wear-hat" data-id="${x.id}">Wear it</button>`;
+      else right = `${price(cost)}<button type="button" data-do="buy-hat" data-id="${x.id}" ${rider.gold < cost ? 'disabled' : ''}>${rider.gold < cost ? short(cost) : 'Buy'}</button>`;
+      h += row({ name: x.name, line: x.line, right, pic: hatIcon(x.id, x.colour || palHat()) });
+    }
+    return h;
+  }
+  // the six-shooter for bandits (src/gun.js): shown to every rider; greyed, with a word, while the rider's grown-up has
+  // "Bandits" on lasso only. (Inside the store it is bought at its own spot by the till: src/townrooms.js)
+  function gunRows() {
+    const g = gunShop(rider);
+    let h = `<h3 class="bms-h">Hardware</h3>`;
+    if (g.state === 'off') {
+      h += `<div class="bms-row is-off">${GUN_PIC}<div class="bms-what"><b>${esc(REVOLVER.name)}</b><small>For bringing in bandits. It's off for this rider: a grown-up can turn it on in the rider's settings (Grown-ups, on the title screen).</small></div>
+        <div class="bms-act">${price(g.price)}<button type="button" disabled>Turned off</button></div></div>`;
+    } else {
+      const right = g.state === 'owned' ? `<span class="bms-tag is-on">In your holster</span>`
+        : `${price(g.price)}<button type="button" data-do="buy-gun" ${g.state === 'short' ? 'disabled' : ''}>${g.state === 'short' ? short(g.price) : 'Buy'}</button>`;
+      h += row({ name: REVOLVER.name, line: g.state === 'owned' ? 'Near the bandits, F (or Shoot) fires instead of the rope. Cattle are still roped.' : REVOLVER.line, right, pic: GUN_PIC });
+    }
+    return h;
+  }
+
   // ── each counter's content ──
   const BUILD = {
     stable(note) {
@@ -248,8 +321,8 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
         : `<p class="bms-tip"><kbd>H</kbd> whistles your horse over · <kbd>E</kbd> gets on and off · <kbd>Shift</kbd> gallops</p>`;
       return note + h;
     },
+    // (the whole store in one panel: only where it has no inside to walk into; inside, each area has its own card, below)
     store(note) {
-      const mine = dogsOwned(), dog = owned().dog;
       let h = '';
       // the job at the counter: townsfolk bring order slips (word problems), each one filled tips gold
       if (onStoreJob) {
@@ -258,53 +331,14 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
           line: `Read each order slip and pick the right coin. Every order filled earns a tip.${n ? ` ${n} filled so far.` : ''}`,
           right: `<button type="button" data-do="store-job" class="is-main">Mind the counter</button>` });
       }
-      h += `<h3 class="bms-h">${mine.length > 1 ? 'Your dogs' : 'A dog to ride with'}</h3>`;
-      for (const d of mine) {
-        if (dog && d.kind === dog.kind) {
-          h += `<div class="bms-row"><div class="bms-what"><b>${esc(d.name)} the ${esc(breedName(d.kind))}</b><small>Follows you everywhere. Want a new name?</small>
-            <div class="bms-name"><input type="text" maxlength="12" value="${esc(d.name)}" aria-label="Your dog's name" data-name="rename"></div></div>
-            <div class="bms-act"><button type="button" data-do="rename">Rename</button></div></div>`;
-        } else {
-          h += row({ name: `${d.name} the ${breedName(d.kind)}`, line: 'Waiting at home.', right: `<button type="button" data-do="take-dog" data-id="${d.kind}">Take ${esc(d.name)}</button>` });
-        }
-      }
-      // the breeds not owned yet: one row, pick a breed and name it (the first one the rider can afford is picked)
-      const left = DOGS.filter((d) => !mine.some((m) => m.kind === d.id));
-      if (left.length) {
-        if (!left.some((d) => d.id === S.dogKind)) S.dogKind = (left.find((d) => rider.gold >= PRICES.dog[d.id]) || left[0]).id;
-        const pick = DOGS.find((d) => d.id === S.dogKind), cost = PRICES.dog[pick.id];
-        h += `<div class="bms-row is-tall"><div class="bms-what"><b>${mine.length ? 'Another dog' : 'A dog'}</b><small>${esc(pick.line)}</small>
-          <div class="bms-kinds" role="radiogroup" aria-label="Which dog">${left.map((d) => `<button type="button" role="radio" aria-checked="${pick.id === d.id}" data-do="kind" data-id="${d.id}" class="${pick.id === d.id ? 'is-on' : ''}">${d.name}</button>`).join('')}</div>
-          <div class="bms-name"><input type="text" maxlength="12" placeholder="Name your dog" value="${esc(S.dogName || '')}" aria-label="Your new dog's name" data-name="new"></div></div>
-          <div class="bms-act">${price(cost)}<button type="button" data-do="buy-dog" ${rider.gold < cost ? 'disabled' : ''}>${rider.gold < cost ? short(cost) : 'Buy'}</button></div></div>`;
-      }
-      // hats: the one on your head, the ones you own (put one on), and the rest with a price
-      if (extra && extra.store) h += extra.store.html();   // (the farm animals)
-      h += treatRows();   // (apples and carrots for the horses)
-      h += `<h3 class="bms-h">Hats</h3>`;
-      const hats = hatsOwned(), wearing = hatOf(rider.look);
-      for (const x of HATS) {
-        const cost = PRICES.hat[x.id] || 0;
-        let right;
-        if (wearing === x.id) right = `<span class="bms-tag is-on">On your head</span>`;
-        else if (hats.includes(x.id)) right = `<button type="button" data-do="wear-hat" data-id="${x.id}">Wear it</button>`;
-        else right = `${price(cost)}<button type="button" data-do="buy-hat" data-id="${x.id}" ${rider.gold < cost ? 'disabled' : ''}>${rider.gold < cost ? short(cost) : 'Buy'}</button>`;
-        h += row({ name: x.name, line: x.line, right, pic: hatIcon(x.id, x.colour || palHat()) });
-      }
-      // the six-shooter for bandits (src/gun.js): shown to every rider; greyed, with a word, while the rider's grown-up
-      // has "Bandits" on lasso only
-      const g = gunShop(rider);
-      h += `<h3 class="bms-h">Hardware</h3>`;
-      if (g.state === 'off') {
-        h += `<div class="bms-row is-off">${GUN_PIC}<div class="bms-what"><b>${esc(REVOLVER.name)}</b><small>For bringing in bandits. It's off for this rider: a grown-up can turn it on in the rider's settings (Grown-ups, on the title screen).</small></div>
-          <div class="bms-act">${price(g.price)}<button type="button" disabled>Turned off</button></div></div>`;
-      } else {
-        const right = g.state === 'owned' ? `<span class="bms-tag is-on">In your holster</span>`
-          : `${price(g.price)}<button type="button" data-do="buy-gun" ${g.state === 'short' ? 'disabled' : ''}>${g.state === 'short' ? short(g.price) : 'Buy'}</button>`;
-        h += row({ name: REVOLVER.name, line: g.state === 'owned' ? 'Near the bandits, F (or Shoot) fires instead of the rope. Cattle are still roped.' : REVOLVER.line, right, pic: GUN_PIC });
-      }
-      return note + h;
+      return note + h + animalRows() + treatRows() + hatRows() + gunRows();
     },
+    // THE STORE'S AREAS (the game maker: "Instead of having one massive menu I think there should be an area to buy food
+    // where the barrels of food are. An area to buy hats where they are, and an area to buy animals"): each card only
+    // that area's goods. Food: apples and carrots for the horses; hats; animals: the dogs and the farm animals
+    storeFood(note) { return note + treatRows(); },
+    storeHats(note) { return note + hatRows(); },
+    storeAnimals(note) { return note + animalRows(); },
     sheriff(note) {
       const mine = rider.lockboxes || [];
       const tier = boxTier(rider);
@@ -345,7 +379,7 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
     draw(note);
     panel.body.addEventListener('click', onClick);
     panel.body.addEventListener('input', (e) => { if (e.target.matches('[data-name="new"]')) S.dogName = e.target.value; });
-    for (const t of ['input', 'keydown']) panel.body.addEventListener(t, (e) => { const x = extra && extra[openId]; if (x && x[t]) x[t](e, panel.body); });
+    for (const t of ['input', 'keydown']) panel.body.addEventListener(t, (e) => { const x = extraOf(openId); if (x && x[t]) x[t](e, panel.body); });
     panel.body.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.matches('[data-name]')) { const b = panel.body.querySelector(e.target.dataset.name === 'rename' ? '[data-do="rename"]' : '[data-do="buy-dog"]'); if (b && !b.disabled) b.click(); } });
   };
   S.close = () => { if (panel) panel.close(); };
@@ -362,7 +396,7 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
     const b = e.target.closest('button[data-do]'); if (!b || b.disabled) return;
     const what = b.dataset.do, id = b.dataset.id, o = owned();
     // (another counter's rows: their buttons are theirs)
-    const x = extra && extra[openId] && extra[openId].click ? extra[openId].click(what, id, panel.body) : undefined;
+    const xo = extraOf(openId), x = xo && xo.click ? xo.click(what, id, panel.body) : undefined;
     if (x !== undefined) { if (x && x.bought) onBuy(x.bought); draw((x && x.note) || ''); return; }
     if (what === 'buy-saddle') {
       // (the counter's own note says it: no toast on top of it, as at the sheriff's desk)
@@ -454,6 +488,8 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
     const sn = SADDLES.find((s) => s.id === id).name.toLowerCase();
     return { ok: true, note: ridden(rider) ? `The ${sn} is on your horse. Press H to whistle for it.` : `The ${sn} is yours. Now it needs a horse under it: Jasper the donkey is the cheapest.` };
   };
+  // THE SIX-SHOOTER bought at its spot in the store, by the till (src/townrooms.js): -> { ok, note }
+  S.buyGun = () => { const r = buyGun(rider); if (r.ok) onBuy('revolver'); return r; };
   S.useSaddle = (id) => { const o = owned(); o.saddle = id; saveRider(rider); onBuy('saddle'); return { ok: true, note: '' }; };
   S.saddlesOwned = () => saddlesOwned();
   S.redraw = () => draw();

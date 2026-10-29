@@ -49,7 +49,7 @@ export const KEEPER = {
 // who thanks the rider for each job, by the giver's id (src/shifts.js SHIFT_JOBS giver): the name for the toast and
 // Hob's line
 const NAMES = { boss: 'Cal Wheeler', vet: 'Doc Pruitt', wife: 'Mrs. Haskell', driver: 'The driver', naturalist: 'Miss Wren', deputy: 'Deputy Mills',
-  fisherman: 'Old Walt', marksman: 'Miss Opal', storekeeper: 'The storekeeper', foreman: 'The foreman' };
+  fisherman: 'Old Walt', marksman: 'Miss Opal', storekeeper: 'Mr. Platt', foreman: 'The foreman' };
 // a job person's id (src/jobfolkplan.js) to the job they give (the held-up wagons' drivers are the traffic's, no one's)
 const PERSON_JOB = { boss: 'roundup', vet: 'sheep', wife: 'pigs', naturalist: 'deer', deputy: 'loot', fisherman: 'fishing' };
 
@@ -113,7 +113,8 @@ export function makeShiftKeeper({ W, rider, hud, hob, audio = null, folk = () =>
   }
   function thank(id, text, data) {
     const JF = folk(), j = SHIFT_BY[id];
-    if (j.giver === 'storekeeper') { const s = store(); return !!(JF && s && JF.thank({ id: 'storekeeper', name: NAMES.storekeeper, x: s.x, z: s.z }, text)); }
+    // (the storekeeper behind his counter, src/jobfolk.js; a store with no inside: a card over its door)
+    if (j.giver === 'storekeeper') { if (JF && JF.thank('storekeeper', text)) return true; const s = store(); return !!(JF && s && JF.thank({ id: 'storekeeper', name: NAMES.storekeeper, x: s.x, z: s.z }, text)); }
     return !!(JF && JF.thank(giverOf(id, data), text));
   }
   // Old Hob's next job: one still open today, not started yet if there is one, else the nearest; the sheriff's lock
@@ -160,7 +161,7 @@ export function makeShiftKeeper({ W, rider, hud, hob, audio = null, folk = () =>
     const j = SHIFT_BY[id], L = declineLines(id), JF = folk();
     if (far) { hud.toast(`${NAMES[j.giver] || 'They'}: ${L.join(' ')}`); return true; }
     if (j.giver === 'marksman') { const SR = range(); if (SR && SR.say) SR.say(L); return true; }
-    if (j.giver === 'storekeeper') { const s = store(); if (JF && s) JF.thank({ id: 'storekeeper', name: NAMES.storekeeper, x: s.x, z: s.z }, L.join(' ')); return true; }
+    if (j.giver === 'storekeeper') { if (JF && JF.say('storekeeper', L)) return true; const s = store(); if (JF && s) JF.thank({ id: 'storekeeper', name: NAMES.storekeeper, x: s.x, z: s.z }, L.join(' ')); return true; }
     if (JF) JF.say(who || j.giver, L);
     return true;
   };

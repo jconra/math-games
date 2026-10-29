@@ -37,6 +37,7 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { loadPeople, Person, STRIDE } from '../../world/objects/people.js';
 import { softShade } from './shading.js';
 import { hatPiece } from './hatshapes.js';
+import { indoorPre, indoorPost, INDOOR_KEY } from '../../world/objects/indoorlight.js';
 
 export const OUTFITS = ['farmer_m', 'adventurer_m', 'adventurer_f', 'casual_m', 'casual_f', 'worker_m', 'suit_m', 'suit_f', 'formal_f'];
 // period colours (sRGB, as a picker shows them): [top, bottom, shoes, hat / pack]
@@ -173,9 +174,12 @@ function folkMaterial(u, shade, key) {
       .replace('#include <begin_vertex>', '#include <begin_vertex>\n#ifdef USE_SKINNING\n  if (fkHide > 0.5 && _kind > 5.5 && dot(skinWeight, vec4(equal(skinIndex, vec4(fkHead)))) > 0.5) transformed = vec3(0.0);\n#endif');
     sh.fragmentShader = FOLK_FS + sh.fragmentShader
       .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\n  if (fkFade < 0.999 && fkBayer(gl_FragCoord.xy) >= fkFade) discard;');
+    // (lit like the room round them when they stand inside a building: world/objects/indoorlight.js)
+    indoorPre(sh);
     if (shade) shade(sh);
+    indoorPost(sh);
   };
-  mat.customProgramCacheKey = () => 'folk-2-' + key + (shade ? '-shaded' : '');
+  mat.customProgramCacheKey = () => 'folk-2-' + key + (shade ? '-shaded' : '') + INDOOR_KEY;
   return mat;
 }
 

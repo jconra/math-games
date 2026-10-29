@@ -111,6 +111,10 @@ export function makeTownPeople({ W, folk, camera, player = () => null, jobs = {}
   fitDoors(); if (CODE && CODE.ready) CODE.ready.then(fitDoors);
   const push = (d) => { if (d && d.code && CODE && CODE.doors) CODE.doors.pass(d.code.x, d.code.z, TOWN.doorWalk + 0.4); };
   const doorOf = (id) => TP.doors.find((d) => d.id === id) || null;
+  // (a door nobody else uses while the player is inside its building: the store's, the sheriff's)
+  let playerIn = null;
+  const QUIET_DOORS = new Set(['store', 'sheriff']);
+  const shutTo = (d) => !!(d && playerIn && QUIET_DOORS.has(d.id) && d.item === playerIn);
   const nearDoor = (x, z, d) => TP.doors.some((q) => Math.hypot(q.x - x, q.z - z) < d);
   // the places people gather
   // (keep: how far from the road's middle; a porch's people stand along the building's front, the second a step along
@@ -271,7 +275,8 @@ export function makeTownPeople({ W, folk, camera, player = () => null, jobs = {}
     let target = null, then = null;
     if (nx.go === 'spot') { const pt = take(r, nx.spot); target = pt; then = { kind: 'spot', spot: nx.spot }; }
     else if (nx.go === 'home' || nx.go === 'door') {
-      const d = doorOf(nx.go === 'home' ? r.home : nx.door) || doorOf('saloon');
+      let d = doorOf(nx.go === 'home' ? r.home : nx.door) || doorOf('saloon');
+      if (shutTo(d)) d = doorOf(r.home !== d.id && !shutTo(doorOf(r.home)) ? r.home : 'saloon');   // (the player is in there: elsewhere)
       if (d) { target = { x: d.x, z: d.z }; then = { kind: 'door', door: d }; }
     }
     if (!target) {   // (off up the road: their own road's end, else the nearer one)
@@ -496,8 +501,8 @@ export function makeTownPeople({ W, folk, camera, player = () => null, jobs = {}
     // (the counter open: one more waiting at the end of its line, along the store's front away from the camera, so a
     // quick answer never waits on somebody walking over from a door across the town: src/missions/store.js's line)
     if (SJ && SJ.active && P.store) {
-      const { o, s } = frame(P.store);
-      TP.expect({ key: 'storeLine', to: { x: P.store.door.x + o.x * 2.9 + s.x * 4.2, z: P.store.door.z + o.z * 2.9 + s.z * 4.2 }, n: 1, names: storeNames(SJ), notDoor: 'store', exact: true });
+      const { o, s } = frame(P.store), end = SJ.lineSpot ? SJ.lineSpot() : null;   // (the counter inside: the line's end out on the boardwalk)
+      TP.expect({ key: 'storeLine', to: end ? { x: end.x, z: end.z } : { x: P.store.door.x + o.x * 2.9 + s.x * 4.2, z: P.store.door.z + o.z * 2.9 + s.z * 4.2 }, n: 1, names: storeNames(SJ), notDoor: 'store', exact: true });
     }
     const LJ = job('loot'), want = LJ && LJ.wanted ? LJ.wanted() : null;
     if (want && want.names && want.names.length) {
@@ -558,6 +563,9 @@ export function makeTownPeople({ W, folk, camera, player = () => null, jobs = {}
     predict();
     for (const [k, e] of TP.expecting) if (now() > e.until) TP.expecting.delete(k);
     const pl = player(), cam = camera.position, cap = outCap(outMost, n);
+    // (the player inside the store or the sheriff's office: nobody else goes in or comes out by its door meanwhile, as
+    // they'd melt away or out of the air just inside it, in plain view; the store's customers are the store job's own)
+    { const pin = pl && pl.position && CODE && CODE.indoors ? CODE.indoors(pl.position.x, pl.position.y + 1, pl.position.z) : null; playerIn = pin && pin.it ? pin.it.id : null; }
     let out = outCount();
     for (const r of TP.people) {
       if (r.lent) { if (r.p && r.fade < 1) { r.fade = Math.min(1, r.fade + dt / TOWN.door); r.p.fade = r.fade; } continue; }
@@ -574,6 +582,7 @@ export function makeTownPeople({ W, folk, camera, player = () => null, jobs = {}
           const edge = TP.edges.find((e) => e.id === r.in);
           if (edge) { if (!seen(edge.x, edge.z)) { if (fromRoad(r, edge)) out++; } else r.until = rnd(2, 5); break; }
           const d = doorOf(r.in) || doorOf(r.home) || doorOf('saloon');
+          if (shutTo(d)) { r.until = rnd(3, 7); break; }   // (the player is in there: they wait to come out)
           // (nobody steps out of a door the player is looking at, unless they have waited a good while: then through
           // the door, dissolving in)
           if (d && (!seen(d.x, d.z) || (r.held = (r.held || 0) + 1) > 6)) { r.held = 0; if (emerge(r, d)) { out++; r.after = { kind: 'think' }; } } else r.until = rnd(3, 7);

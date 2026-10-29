@@ -38,8 +38,8 @@ export const BAND = {
 };
 
 // the number row along: 1 .. 9, 0, then the key after it (-)
-const SONG_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0', 'Minus'];
-const KEY_NAMES = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-'];
+const SONG_KEYS = ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0', 'Minus', 'Equal'];
+const KEY_NAMES = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '='];
 
 export function bandChoices({ song = null, resting = false, songs = SONGS } = {}) {
   const now = songs.find((s) => s.id === (song && song.id ? song.id : song)) || songs[0];
@@ -48,8 +48,9 @@ export function bandChoices({ song = null, resting = false, songs = SONGS } = {}
   return [...list, { id: 'break', label: 'Take a break', sub: 'the band rests', key: 'KeyB', keyName: 'B' }];
 }
 
-// a song's side of the card: a written tune (it has a round) is one of the old fiddle tunes, the rest the band's own
-export const groupOf = (s) => (s && s.round ? 'old' : 'own');
+// a song's side of the card: as the song says (group), else a written tune (it has a round) is one of the old fiddle
+// tunes and the rest the band's own
+export const groupOf = (s) => (s && (s.group || (s.round ? 'old' : 'own')));
 
 export function choiceForKey(rows, code) {
   if (!code) return null;

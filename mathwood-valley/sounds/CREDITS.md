@@ -49,6 +49,24 @@ are the solo violin's held notes with vibrato, played loud (`Strings/Solo Violin
 first 2.8 s with a fade at the end, and evened in loudness (about -20 dB RMS over its held part). The game plays each
 one a little faster or slower for the notes between (src/audio/stagemusic.js FIDDLE_SAMPLES).
 
+## The upright piano (piano/), kept but not played
+
+`piano/piano_<MIDI>.ogg|.m4a`, sixteen notes from A1 to A6 (every fourth key): **Upright Piano** sampled by Simon Dalzell
+of **Ivy Audio**, from **VSCO 2 Community Edition** by Versilian Studios (https://github.com/sgossner/VSCO-2-CE,
+`Keys/Upright Piano/Player_dyn2_rr1_<n>.wav`, the louder layer), released under **CC0 1.0** ("Credit to both original
+author and Versilian Studios is encouraged", its Info.txt). Each made mono, trimmed to 3 s with a fade, evened in
+loudness. The band plays its own synthesized piano; this one is kept for a song or a later choice
+(src/audio/stagemusic.js THE SAMPLED PIANO, makeStageMusic's pianoKit).
+
+## The banjo (banjo/), kept but not played yet
+
+`banjo/banjo_<MIDI>.ogg|.m4a`, thirteen notes from C3 to C6 (every third key): the General MIDI banjo of the **Fluid R3**
+soundfont by **Frank Wen**, as rendered note by note in **midi-js-soundfonts** by Benjamin Gleitzman
+(https://github.com/gleitz/midi-js-soundfonts, `FluidR3_GM/banjo-mp3/`), released under the **Creative Commons
+Attribution 3.0** licence (https://creativecommons.org/licenses/by/3.0/us/), as its README states (checked 2026-10-28).
+Each was trimmed to 2 s with a fade at the end and turned up 4 dB. The band doesn't play it yet: a synthesized banjo
+matched to these notes (src/audio/banjosynth.js) and this one are waiting on the game's maker's ears.
+
 Notes on the licences (from the source pages, checked 2026-10-13):
 
 - BigSoundBank (Joseph SARDIN and contributors): each sound page says "License CC0 (public domain): Free and royalty-free".

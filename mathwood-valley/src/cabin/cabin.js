@@ -43,13 +43,15 @@
 //   C.dispose()
 import * as THREE from 'three';
 import { makeHome, NEAR } from './interior.js';
-import { makeHomeDog } from './homedogs.js';
+import { makeHomeDog, HOME } from './homedogs.js';
 import { makeSaleSign } from './forsale.js';
 import { makeCamp } from './camp.js';
+import { makeHearthFire } from './hearthfire.js';
+import { openFireCard } from './firecard.js';
 import { SLOTS, ownedPieces, nextPiece, buyPiece, homeDogs } from './slots.js';
 import { spend, saveRider, KEEPSAKES, BUCKLES, BUCKLE_NAMES, buckleOf, jobWords, JOBS } from '../save.js';
 import { PRICES } from '../catalog.js';
-import { CAM } from '../camera.js';
+import { CAM, FIRST } from '../camera.js';
 
 // FIRST PERSON inside: the eyes over the feet, the field of view, how fast the camera eases in and out; what E reaches
 // INDOORS, THE VALLEY LEFT UNDRAWN WHEN NO OPENING IS IN VIEW: facing a log wall the whole valley behind it would be
@@ -63,11 +65,14 @@ import { CAM } from '../camera.js';
 // opening's four edges), and every outdoor thing whose bounds fall outside all of those views is left out of the frame
 // (its layer 0 put off, so nothing else's own showing and hiding is touched; back on the moment it can be seen, and as
 // soon as the player is out). The things looked at are gathered again every PORTAL.every seconds.
-export const INDOOR = { margin: 1.25, far: 14, shadowEvery: 0.4 };
+// (in a doorway, the eyes within `doorway` m of its middle, nothing is left out: the views through the openings turn
+// inside out as the eyes pass through one, and would leave out the ground, then the sky, for a moment)
+export const INDOOR = { margin: 1.25, far: 14, shadowEvery: 0.4, doorway: 1.3 };
 export const PORTAL = { every: 1, grow: 0.15, skinned: 1.2 };   // (s; m added round each opening; m added to a body's bounds)
+// (the eyes, the view's width, the easing and the tilt are the town's own first person's: src/camera.js FIRST)
 export const FP = {
-  eye: 1.62, fov: 68, ease: 0.38,     // m; degrees (the town's is 55); s to ease all the way in or out
-  pitch: 1.3,                         // how far a drag tilts the view up and down (the chase camera's tilt, scaled)
+  eye: FIRST.eye, fov: FIRST.fov, ease: FIRST.ease,   // m; degrees (the town's is 55); s to ease all the way in or out
+  pitch: FIRST.pitch,                 // how far a drag tilts the view up and down (the chase camera's tilt, scaled)
   reach: 3.0, aim: 0.36,              // how far off and how far from the middle of the view (radians) E picks a slot
 };
 const BASE = new URL('../../', import.meta.url).href;
@@ -111,12 +116,14 @@ export function makeCabin({ W, renderer, camera, animals, rider, hud, input: I, 
 
   // ── STANDING IN THE VALLEY: the pieces in the code-built cabin (made again if the Town Lab gives it a new look) ──
   let sign = null, camp = null, clock = 0;
+  // the fires in the hearths (hearthfire.js: lit with the fire's card, firecard.js), one a fireplace; the card while it's up
+  let fires = [], fireCard = null;
   function build() {
     if (building) return building;
     building = makeHome({ W, renderer, base: BASE }).then((home) => {
       building = null;
       if (disposed) { home.dispose(); return; }
-      if (R) { clearDogs(); if (sign) { sign.dispose(); sign = null; } R.dispose(); }
+      if (R) { clearDogs(); if (sign) { sign.dispose(); sign = null; } for (const F of fires) if (F) F.dispose(); fires = []; if (fireCard) fireCard.close(); R.dispose(); }
       R = home;
       // (its spot in the valley: before the porch's steps, where the buy prompt and the compass point)
       const st = R.toWorld(R.layout.steps.x, 0, R.layout.steps.z); pl.door = { x: st.x, z: st.z };
@@ -153,8 +160,11 @@ export function makeCabin({ W, renderer, camera, animals, rider, hud, input: I, 
     const where = whereDogs();
     if (where === 'beds') {
       const spots = R.bedSpots(home.length);
-      home.forEach((d, i) => { const q = spots[i]; dogs.push(makeHomeDog({ animals, kind: d.kind, name: d.name, scene: R.inner, spot: { x: q.x, y: q.y, z: q.z, rot: q.rot + Math.PI * 0.5 }, mode: 'bed', floor: (x, z) => R.floorUnder(x, z), push: (b) => R.pushOut(b, { radius: 0.24 }), lit: R.lit, others: () => dogs })); });
+      // (kept 42 cm off the walls and the furniture: a dog is longer than it is wide; its name only in the player's room)
+      home.forEach((d, i) => { const q = spots[i]; dogs.push(makeHomeDog({ animals, kind: d.kind, name: d.name, scene: R.inner, spot: { x: q.x, y: q.y, z: q.z, rot: q.rot + Math.PI * 0.5 }, mode: 'bed', floor: (x, z) => R.floorUnder(x, z), push: (b) => R.pushOut(b, { radius: 0.42 }), lit: R.lit, others: () => dogs, seen: (x, z) => inRoom && roomHere(x, z) === roomHere(atL.x, atL.z) })); });
       dogs.frame = 'cabin';
+      // (a fire going: they get up and go and lie by it)
+      fires.forEach((F, i) => { if (F && (F.phase === 'catching' || F.phase === 'burning')) setTimeout(() => fireDogs(i, true), 600); });
     } else if (where === 'porch') {
       home.forEach((d, i) => { const [x, z, turn] = R.layout.porchDogs[i % R.layout.porchDogs.length], y = R.floorUnder(x, z); dogs.push(makeHomeDog({ animals, kind: d.kind, name: d.name, scene: R.group, spot: { x, y, z, rot: turn }, mode: 'porch', floor: () => y })); });
       dogs.frame = 'cabin';
@@ -213,6 +223,7 @@ export function makeCabin({ W, renderer, camera, animals, rider, hud, input: I, 
     if (wasOwned !== ownsHome()) { wasOwned = ownsHome(); lights(); }
     if (sign) sign.update(dt, clock);
     if (camp && d < 160) camp.update(dt, clock);
+    fireTick(dt);
     if ((townT -= dt) < 0) {
       townT = 0.5;
       // bought: the sign (with its SOLD board) and the camp are taken away once out of sight
@@ -310,10 +321,19 @@ export function makeCabin({ W, renderer, camera, animals, rider, hud, input: I, 
     if (on) { renderer.shadowMap.autoUpdate = false; if ((shadowT -= dt) <= 0) { shadowT = INDOOR.shadowEvery; renderer.shadowMap.needsUpdate = true; } }
     else if (shadowWas != null) { renderer.shadowMap.autoUpdate = shadowWas; shadowWas = null; }
     let seen = !on;
-    if (on) { camera.updateMatrixWorld(); for (const p of R.openings()) { R.toWorld(p[0], p[1], p[2], hv).project(camera); if (hv.z < 1 && Math.abs(hv.x) < INDOOR.margin && Math.abs(hv.y) < INDOOR.margin) { seen = true; break; } } }
+    const door = on && inDoorway();
+    if (door) seen = true;
+    else if (on) { camera.updateMatrixWorld(); for (const p of R.openings()) { R.toWorld(p[0], p[1], p[2], hv).project(camera); if (hv.z < 1 && Math.abs(hv.x) < INDOOR.margin && Math.abs(hv.y) < INDOOR.margin) { seen = true; break; } } }
     if (!seen) { if (farWas == null) farWas = camera.far; if (camera.far !== INDOOR.far) { camera.far = INDOOR.far; camera.updateProjectionMatrix(); } }
     else if (farWas != null) { camera.far = farWas; farWas = null; camera.updateProjectionMatrix(); }
-    if (on && seen) portalCull(dt); else uncull();
+    if (on && seen && !door) portalCull(dt); else uncull();
+  }
+  const dv = new THREE.Vector3();
+  function inDoorway() {
+    const D = R.code && R.code.doorways;   // (the doorways as R.openings has them, in the cabin's frame)
+    if (!D) return false;
+    for (const d of D) { if (d.inner) continue; R.toWorld(d.centre[0], d.centre[1], d.centre[2], dv); if (dv.distanceTo(camera.position) < INDOOR.doorway) return true; }
+    return false;
   }
   // ── THE PORTALS (above) ──
   const culled = new Set(), sph = new THREE.Sphere(), views = [], pv = [0, 1, 2, 3].map(() => new THREE.Vector3()), pc = new THREE.Vector3(), cw = new THREE.Vector3();
@@ -375,16 +395,18 @@ export function makeCabin({ W, renderer, camera, animals, rider, hud, input: I, 
     R.toLocal(camera.position.x, camera.position.y, camera.position.z, eye);
     camera.getWorldDirection(fwd); qInv.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -R.yaw); fwd.applyQuaternion(qInv);
     let best = null, bestS = Infinity;
-    const consider = (kind, id, p, reach = FP.reach) => {
+    const consider = (kind, id, p, reach = FP.reach, first = 0) => {
       tmp.set(p[0], p[1], p[2]).sub(eye); const d = tmp.length(); if (d > reach || d < 0.05) return;
       const ang = tmp.angleTo(fwd); if (ang > FP.aim) return;
-      const s = ang + d * 0.04; if (s < bestS) { bestS = s; best = { kind, id }; }
+      const s = ang + d * 0.04 - first; if (s < bestS) { bestS = s; best = { kind, id }; }
     };
     const have = owned();
     // (the porch's rockers: looked at out through the open front door, from just inside)
     for (const s of SLOTS) { const q = R.spec(s.id); for (const p of q.looks) consider(have.includes(s.id) ? 'piece' : 'slot', s.id, p, s.id === 'porch' ? 4.2 : FP.reach); }
     // (the counter bell stands on the table: once there is one, looking there is the table's, for its lock boxes)
     for (const k of keepsakesOf(rider)) { const p = R.keepLook(k.job); if (p && !(k.job === 'orders' && have.includes('table'))) consider('keepsake', k.job, p, 3.6); }
+    // (the fireplaces: looked at, E lights a fire in one)
+    (R.layout.hearths || []).forEach((h, i) => { for (const p of h.looks || [h.look]) consider('hearth', i, p, 3.4, 0.1); });   // (first: over what hangs over it)
     return best;
   }
   // (the card and the prompt are drawn again only when what you look at changes, or the gold does)
@@ -405,6 +427,12 @@ export function makeCabin({ W, renderer, camera, animals, rider, hud, input: I, 
     } else if (f.kind === 'keepsake') {
       const kk = KEEPSAKES[f.id], b = buckleOf(rider, f.id);
       card = `<b>${esc(kk.name)}</b><small>${esc(BUCKLE_NAMES[b.tier] || '')} buckle: ${esc(jobWords(f.id, b.count))}</small>`;
+    } else if (f.kind === 'hearth') {
+      // (the fireplace: a fire to light (a few fireside sums first), or one going)
+      const ph = firePhase(f.id);
+      if (ph === 'cold') prompt = 'Light a fire';
+      else if (ph === 'dying' || ph === 'embers') prompt = 'Light the fire again';
+      else card = '<b>The fire\'s going</b><small>It burns a good while, then dies down to embers.</small>';
     }
     cardEl.innerHTML = card; cardEl.hidden = !card; cardEl.classList.remove('is-door');
     hud.prompt(prompt);
@@ -425,10 +453,59 @@ export function makeCabin({ W, renderer, camera, animals, rider, hud, input: I, 
       showFocus(pickFocus(), true);
       return;
     }
+    if (f.kind === 'hearth') { openFire(f.id); return; }
     if (f.kind === 'piece' && f.id === 'table') {
       const bx = (rider.lockboxes || [])[0]; if (!bx) return;
       onLockbox({ tier: bx.tier, from: 'loot' }, { own: true, after: () => showFocus(focus, true) });
     }
+  }
+  // ── A FIRE IN THE HEARTH: the fire's card (a few fireside sums, firecard.js), then the fire catches (hearthfire.js),
+  // and the dogs at home come and lie by it ──
+  const firePhase = (i) => (fires[i] ? fires[i].phase : 'cold');
+  // (the room a spot of the cabin's frame is in)
+  const roomHere = (x, z) => (R ? R.layout.rooms.find((r) => x > r.x0 - 0.15 && x < r.x1 + 0.15 && z > r.z0 - 0.15 && z < r.z1 + 0.15) || null : null);
+  function openFire(i) {
+    if (fireCard || !R || !R.layout.hearths[i]) return;
+    hud.prompt(null); cardEl.hidden = true;
+    fireCard = openFireCard({ parent: ui, rider, save: saveRider,
+      onLit: () => { fireCard = null; lightFire(i); },
+      onClose: () => { fireCard = null; showFocus(pickFocus(), true); } });
+  }
+  function lightFire(i) {
+    const h = R && R.layout.hearths[i]; if (!h) return;
+    if (!fires[i]) fires[i] = makeHearthFire({ W, R, camera, audio, hearth: h, index: i });
+    if (fires[i].light()) { hud.toast('The fire\'s caught. Warm as toast.', 'good'); fireDogs(i, true); }
+    showFocus(pickFocus(), true);
+  }
+  // the dogs on their beds get up and lie by the fire (through the doorway between the rooms if the fire's in the other
+  // room), and go back to bed once it has burnt down
+  function fireDogs(i, on) {
+    if (!R || dogs.frame !== 'cabin' || whereDogs() !== 'beds') return;
+    const h = R.layout.hearths[i]; if (!h) return;
+    const n = h.into, side = [n[2], -n[0]], out = h.stand ? Math.hypot(h.stand[0] - h.centre[0], h.stand[1] - h.centre[2]) - 0.2 : 1.0;
+    const beds = R.bedSpots(dogs.length), roomOf = (x, z) => R.layout.rooms.find((r) => x > r.x0 - 0.05 && x < r.x1 + 0.05 && z > r.z0 - 0.05 && z < r.z1 + 0.05);
+    const door = (R.code.B.anchors.doorways || []).find((d) => d.inner), face = Math.atan2(-n[0], -n[2]);
+    // (side by side before it, each the next one's length off (half of each, homedogs.js HOME.gap between): none lies
+    // in another, the husky's length or the pug's)
+    const rr = dogs.map((d) => d.r || 0.5), acr = [];
+    dogs.forEach((d, k) => { acr[k] = k ? acr[k - 1] + rr[k - 1] + rr[k] + HOME.gap : -(rr[0] + (rr[1] ?? 0) + HOME.gap) / 2; });
+    dogs.forEach((d, k) => {
+      const across = acr[k], depth = out;
+      const to = on ? { x: h.centre[0] + n[0] * depth + side[0] * across, z: h.centre[2] + n[2] * depth + side[1] * across, rot: face + (k % 2 ? 0.5 : -0.5) } : { x: beds[k].x, z: beds[k].z, rot: beds[k].rot + Math.PI * 0.5 };
+      // (into the other room by the doorway between them: a step either side of it)
+      const from = roomOf(d.x, d.z), there = roomOf(to.x, to.z), via = [];
+      if (door && from && there && from !== there) { const c = door.centre, o = door.out, s0 = (d.x - c[0]) * o[0] + (d.z - c[2]) * o[2] > 0 ? 1 : -1; via.push([c[0] + o[0] * 0.55 * s0, c[2] + o[2] * 0.55 * s0], [c[0] - o[0] * 0.55 * s0, c[2] - o[2] * 0.55 * s0]); }
+      d.goTo({ ...to, y: R.floorUnder(to.x, to.z) }, via);
+    });
+  }
+  let fireWas = [];
+  function fireTick(dt) {
+    fires.forEach((F, i) => {
+      if (!F) return;
+      F.update(dt, clock);
+      // (burnt down to embers: the dogs back to bed)
+      if (fireWas[i] !== F.phase) { if (F.phase === 'embers') fireDogs(i, false); fireWas[i] = F.phase; }
+    });
   }
   function sync() {
     if (!R) return;
@@ -439,18 +516,22 @@ export function makeCabin({ W, renderer, camera, animals, rider, hud, input: I, 
   }
 
   // ── EACH FRAME WHILE THE PLAYER IS INSIDE (or the camera still easing out): the player's own walking, then the eyes ──
-  let gold = rider.gold;
+  let gold = rider.gold, fireShown = '', lookHold = null;
   C.update = (dt) => {
     const P = player(); if (!P || !R) return;
+    // (a rig's look held a few frames: a teleport starts the camera afresh, and its start may turn it off a wall)
+    if (lookHold && P.cam) { P.cam.yaw = lookHold.yaw; P.cam.pitch = lookHold.pitch; if (--lookHold.n <= 0) lookHold = null; }
     const e = I.enabled && I.tap('KeyE');   // (E read before the player's own update, which would take it for the horse)
+    // (the fire's card up: the rider stands still at the hearth, the eyes on it, till it's done or put away)
+    if (fireCard) { firstPerson(P, dt); indoors(dt); dotEl.hidden = true; return; }
     P.update(dt);
     firstPerson(P, dt);
     indoors(dt);
     const fp = fpT > 0.6;
     dotEl.hidden = !fp;
     // what E does: a slot, the table, a keepsake (looked at); else the door at hand (the keeper's), open or shut
-    const f = fp ? pickFocus() : null;
-    showFocus(f, gold !== rider.gold);
+    const f = fp ? pickFocus() : null, fireNow = fires.map((F) => (F ? F.phase : '')).join();
+    showFocus(f, gold !== rider.gold || fireNow !== fireShown); fireShown = fireNow;
     if (!f) {
       const DK = CODE && CODE.doors, kd = DK && P.mode === 'foot' ? DK.near(P.position.x, P.position.z) : null;
       hud.prompt(kd ? (kd.open ? 'Close the door' : 'Open the door') : null);
@@ -465,21 +546,26 @@ export function makeCabin({ W, renderer, camera, animals, rider, hud, input: I, 
     at: R ? { x: +atL.x.toFixed(2), z: +atL.z.toFixed(2) } : null,
     focus: focus ? { ...focus } : null, owned: owned(), shown: R ? R.shown : [], keepsakes: keepsakesOf(rider).map((k) => k.job + ':' + k.tier),
     dogs: dogs.map((d) => d.state()), dogsAt: dogsWhere.split(':')[0], sign: sign ? (sign.isSold ? 'sold' : 'for sale') : null, camp: camp ? { x: +camp.spot.x.toFixed(1), z: +camp.spot.z.toFixed(1), local: camp.spot.local } : null,
-    near: nearOn, ready: !!R, preset: R ? R.code.look.preset : null });
+    near: nearOn, ready: !!R, preset: R ? R.code.look.preset : null,
+    fires: fires.map((F) => (F ? F.state() : null)), fireCard: fireCard ? fireCard.state() : null, hearths: R ? (R.layout.hearths || []).length : 0 });
   C.dev = {
     // (stand inside at a spot of its frame, looking yaw (its frame: 0 toward +z) and pitch up)
-    look(x, z, yaw = 0, pitch = 0) { const P = player(); if (!P || !R) return; const w = R.toWorld(x, 0, z); P.teleport(w.x, w.z, yaw + R.yaw); if (P.cam) { P.cam.yaw = yaw + R.yaw; P.cam.pitch = CAM.pitch - pitch / FP.pitch; } },
+    look(x, z, yaw = 0, pitch = 0) { const P = player(); if (!P || !R) return; const w = R.toWorld(x, 0, z); P.teleport(w.x, w.z, yaw + R.yaw); if (P.cam) { P.cam.yaw = yaw + R.yaw; P.cam.pitch = CAM.pitch - pitch / FP.pitch; lookHold = { yaw: P.cam.yaw, pitch: P.cam.pitch, n: 20 }; } },
     give(id) { const o = rider.owned || (rider.owned = {}); o.cabin = [...new Set([...ownedPieces(rider), id])]; saveRider(rider); sync(); if (id === 'dogbeds') dogsDirty = true; },
     own(on = true) { const o = rider.owned || (rider.owned = {}); if (on) o.home = 'cabin'; else delete o.home; saveRider(rider); if (!on) { putSign(); putCamp(); } dogsDirty = true; lights(); },
     buy(id) { focus = { kind: 'slot', id }; act(); },
     moveDogs() { placeDogs(); },
     get interior() { return R; }, get camp() { return camp; }, get sign() { return sign; },
+    // (the fire: its card opened as E at the fireplace would; lit at once, no sums; the card's answers picked)
+    fireCard(i = 0) { openFire(i); return !!fireCard; }, lightFire(i = 0) { lightFire(i); }, pickFire(k) { if (fireCard) fireCard.pick(k); }, get fire() { return fires; },
   };
   C.dispose = () => {
     disposed = true;
     if (inRoom) wallsHide(false);
     settle(player());
     clearDogs();
+    if (fireCard) fireCard.close();
+    for (const F of fires) if (F) F.dispose(); fires = [];
     if (sign) { sign.dispose(); sign = null; }
     if (camp) { camp.dispose(); camp = null; }
     if (R) R.dispose();

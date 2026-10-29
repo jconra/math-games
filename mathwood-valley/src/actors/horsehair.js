@@ -16,6 +16,7 @@
 //                                                     which way is behind it, and where the tail's root is (world)
 import * as THREE from 'three';
 import { COMMON, LIGHT_HOOK } from './horsecoat.js';
+import { indoorPre, indoorPost, INDOOR_KEY } from '../../world/objects/indoorlight.js';
 
 export const HAIR = {
   // the mane: rooted on one line along the top of the neck (the crest, smoothed), 1.5 cm inside the skin, from just
@@ -516,8 +517,9 @@ export function hairMaterial(shape, coatU, renderer, { cut = null } = {}) {
       // nothing to work with: put the hair's own back)
       .replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a = hairAlpha;')
       .replace('#include <clipping_planes_fragment>', '#include <clipping_planes_fragment>\n  if ( uFade < 0.999 && horseBayer( gl_FragCoord.xy ) >= uFade ) discard;');
+    indoorPre(sh); indoorPost(sh);   // (lit like the room round it indoors: world/objects/indoorlight.js)
   };
-  m.customProgramCacheKey = () => 'horsehair:' + shape.key;
+  m.customProgramCacheKey = () => 'horsehair:' + shape.key + INDOOR_KEY;
   m.hair = { uniforms: u, cut };
   return m;
 }

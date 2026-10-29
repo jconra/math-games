@@ -10,7 +10,8 @@ import { JOB_FOLK, FOLK_BY_ID, FOREMAN_HELLO, TALK, sayMs, standSpot, makeGreete
 test('a person at every outdoor job, the sheriff and the stable keeper, each with a name, a role and a look', () => {
   const jobs = JOB_FOLK.map((f) => f.job).sort();
   // (no one for the wagon: a hold-up's driver is the traffic's own, src/missions/wagonjob.js)
-  assert.deepEqual(jobs, ['boxes', 'bridge', 'deer', 'fishing', 'loot', 'pigs', 'roundup', 'sheep', 'stable', 'windmill'].sort());
+  assert.deepEqual(jobs, ['boxes', 'bridge', 'deer', 'fishing', 'loot', 'pigs', 'roundup', 'sheep', 'smithy', 'stable', 'store', 'windmill'].sort());
+  assert.ok(FOLK_BY_ID.storekeeper.indoors, 'the storekeeper stands inside, behind his counter');
   assert.equal(FOLK_BY_ID.driver, undefined, 'the old job wagon\'s driver is gone');
   assert.deepEqual(JOB_FOLK.filter((f) => f.law).map((f) => f.id).sort(), ['deputy', 'sheriff'], 'the lawmen wear the star and the gun');
   assert.equal(new Set(JOB_FOLK.map((f) => f.id)).size, JOB_FOLK.length, 'ids are different');
@@ -41,7 +42,7 @@ test('the hello is two short lines: the problem, then what to do', () => {
 });
 
 test('thank-yous: each job event goes to its own person, who has a few to take turns with', () => {
-  const pairs = { waveDone: 'boss', flockDone: 'vet', pigsDone: 'wife', deerDone: 'naturalist', sheriffDone: 'sheriff', lootDone: 'deputy', saddle: 'keeper', horse: 'keeper' };
+  const pairs = { waveDone: 'boss', flockDone: 'vet', pigsDone: 'wife', deerDone: 'naturalist', sheriffDone: 'sheriff', lootDone: 'deputy', saddle: 'keeper', horse: 'keeper', storeDone: 'storekeeper' };
   for (const [ev, id] of Object.entries(pairs)) { assert.equal(thanksFor(ev), id); assert.ok(FOLK_BY_ID[id].thanks.length >= 2, id); }
   assert.equal(thanksFor('catch'), null);
   assert.equal(thanksFor('banditsDone'), null, 'a hold-up\'s driver thanks the player himself (src/missions/wagonjob.js)');

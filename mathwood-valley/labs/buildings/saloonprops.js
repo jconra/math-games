@@ -261,16 +261,18 @@ function drawBottles(g, [x0, y0, w, h], seed) {
 // blurred shapes of the room in it (the lamps as warm smudges, the dark band of the bar), faint streaks in the glass, the
 // silver gone in grey-black flecks round the edges and a brighter sheen across one corner
 function drawMirror(g, [x0, y0, w, h]) {
-  const blobs = [[0.22, 0.3, 0.06, 0.6], [0.72, 0.24, 0.05, 0.5], [0.5, 0.5, 0.1, 0.35]];
-  pixels(g, [x0, y0, w, h], (u, v, x, y) => {
-    let l = 0.42 + 0.22 * (1 - v) + 0.08 * fbm(u * 2, v * 3, 3, 977);
-    let r = 150 * l, gg = 152 * l, b = 146 * l;
-    for (const [bu, bv, sz, k0] of blobs) { const d = Math.hypot((u - bu) * 1.3, v - bv) / sz, k = Math.exp(-d * d) * k0; r += 120 * k; gg += 90 * k; b += 40 * k; }
-    if (v > 0.68) { const f = 0.7; r *= f; gg *= f; b *= f; }                                  // (the bar's dark band)
-    const sheen = sstep(0.25, 0.0, Math.abs(u - v * 0.7 - 0.05)) * 0.18, streak = 0.95 + 0.05 * Math.sin(u * 40 + v * 4);
-    const edge = Math.min(u, 1 - u, v, 1 - v), fleck = fbm(u * 14, v * 14, 3, 981) + 0.4 * sstep(0.1, 0.0, edge) > 0.86 ? 0.25 : 1;
-    const f = streak * fleck;
-    return [Math.min(255, (r + 255 * sheen) * f), Math.min(255, (gg + 255 * sheen) * f), Math.min(255, (b + 250 * sheen) * f)];
+  // (old glass: the room dim in it, lighter toward the top, two lamps' glow; its silvering gone a little grey-brown and
+  // soft toward the edges, never black holes)
+  const blobs = [[0.22, 0.3, 0.07, 0.75], [0.72, 0.24, 0.06, 0.65], [0.5, 0.5, 0.12, 0.25]];
+  pixels(g, [x0, y0, w, h], (u, v) => {
+    let l = 0.3 + 0.36 * Math.pow(1 - v, 1.4) + 0.06 * fbm(u * 2, v * 3, 3, 977);
+    let r = 146 * l, gg = 152 * l, b = 150 * l;
+    for (const [bu, bv, sz, k0] of blobs) { const d = Math.hypot((u - bu) * 1.3, v - bv) / sz, k = Math.exp(-d * d) * k0; r += 130 * k; gg += 92 * k; b += 40 * k; }
+    if (v > 0.68) { const f = 0.72 - 0.1 * sstep(0.68, 1, v); r *= f; gg *= f; b *= f; }      // (the bar's dark band)
+    const sheen = sstep(0.22, 0.0, Math.abs(u - v * 0.7 - 0.05)) * 0.16 + sstep(0.06, 0.0, Math.abs(u - v * 0.7 - 0.32)) * 0.07;
+    const edge = Math.min(u, 1 - u, v, 1 - v), wear = sstep(0.62, 0.95, fbm(u * 6, v * 6, 3, 981) + 0.3 * sstep(0.12, 0.0, edge)) * 0.1;
+    const f = 1 - wear;
+    return [Math.min(255, (r + 255 * sheen) * f + 18 * wear), Math.min(255, (gg + 255 * sheen) * f + 8 * wear), Math.min(255, (b + 250 * sheen) * f)];
   });
 }
 // THREE PICTURES (paint; their frames are wood, in the building): a horse on a ridge at sunset, mountains over a lake,
@@ -435,7 +437,16 @@ const put = (k, M) => ({
   b: (size, pos, rot, o) => k.board(size, null, null, { ...o, m: mul(M, T(...pos), rot ? new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(...rot, 'YXZ')) : new THREE.Matrix4()) }),
   x: (group, size, pos, rot, o = {}) => k.box(group, size, null, null, { ...o, m: mul(M, T(...pos), rot ? new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(...rot, 'YXZ')) : new THREE.Matrix4()) }),
   p: (group, poly, len, pos, rot, o = {}) => k.prism(group, poly, len, null, null, { ...o, m: mul(M, T(...pos), rot ? new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(...rot, 'YXZ')) : new THREE.Matrix4()) }),
+  // a square board from point a to point b (its ends on them: a leg from under a seat to the floor, a stretcher from one
+  // leg's middle to another's), w thick
+  rod: (w, a, b, o = {}) => {
+    const d = new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), L = d.length();
+    const R = new THREE.Matrix4().makeRotationFromQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()));
+    return k.board([w, L, w], null, null, { long: 1, ...o, m: mul(M, T((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2), R) });
+  },
 });
+// a point up a leg running from its top `t` (under the seat) to its foot `f` (on the floor), at height y
+const upLeg = (t, f, y) => { const u = (y - f[1]) / (t[1] - f[1]); return [f[0] + (t[0] - f[0]) * u, y, f[2] + (t[2] - f[2]) * u]; };
 const SALOON_MAKERS = {
   // a round pedestal table: a round top (12 sides) with a thin apron under its edge, a turned column, four feet
   roundTable(k, M, o) {
@@ -443,28 +454,40 @@ const SALOON_MAKERS = {
     q.p('wood', ngon(12, r), 0.035, [0, H - 0.0175, 0], null, { tint, smooth: true, long: 0, strip: 3 });
     q.p('wood', ngon(12, r - 0.03), 0.06, [0, H - 0.065, 0], null, { tint: tint.map((c) => c * 0.8), smooth: true, skip: '+y-y' });
     q.p('wood', ngon(6, 0.05), 0.3, [0, 0.52, 0], null, { tint, smooth: true, taper: 0.25, skip: '+y-y' });
-    q.p('wood', ngon(6, 0.065), 0.22, [0, 0.27, 0], null, { tint, smooth: true, taper: -0.3, skip: '+y-y' });
+    q.p('wood', ngon(6, 0.065), 0.32, [0, 0.22, 0], null, { tint, smooth: true, taper: -0.3, skip: '+y-y' });   // (down into the feet)
     for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + Math.PI / 4; q.b([0.06, 0.06, 0.34], [Math.sin(a) * 0.15, 0.06, Math.cos(a) * 0.15], [0.12, a, 0], { long: 2, tint: tint.map((c) => c * 0.85) }); }
     k.solid([r * 1.6, 0.05, r * 1.6], null, null, mul(M, T(0, H - 0.03, 0)));
     k.solid([0.14, H, 0.14], null, null, mul(M, T(0, H / 2, 0)));
   },
-  // a spindle-back chair facing +z (its back at -z): splayed legs, a round seat, two posts, a bent top rail, spindles
+  // a spindle-back chair facing +z (its back at -z): legs from under the seat splayed out to the floor, stretchers
+  // between them (one each side and one across the front, their ends in the legs), a round seat, two back posts and three
+  // spindles standing on the seat, a top rail bent round the back from post to post
   spindleChair(k, M, o) {
-    const q = put(k, M), tint = vary(k, FURN, 0.85, 1.12), S = 0.45;
-    for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) q.b([0.035, S, 0.035], [sx * 0.17, S / 2, sz * 0.16], [sz * 0.06, 0, -sx * 0.06], { long: 1, tint, skip: '-y+y' });
-    q.b([0.34, 0.02, 0.02], [0, 0.18, 0.165], null, { long: 0, tint, skip: '+x-x-y' });
-    q.p('wood', ngon(8, 0.22), 0.035, [0, S + 0.017, 0.01], null, { tint: tint.map((c) => c * 1.05), smooth: true, long: 0, skip: '-y' });
-    for (const sx of [-1, 1]) q.b([0.035, 0.5, 0.035], [sx * 0.16, S + 0.26, -0.17], [-0.1, 0, 0], { long: 1, tint, skip: '-y' });
-    // the top rail: two pieces bent round the back; three spindles
-    for (const [x, a] of [[-0.075, -0.25], [0.075, 0.25]]) q.b([0.17, 0.07, 0.025], [x, S + 0.5, -0.205 + Math.abs(x) * 0.15], [-0.1, a, 0], { long: 0, tint });
-    for (let i = 0; i < 3; i++) q.b([0.018, 0.42, 0.018], [-0.07 + i * 0.07, S + 0.24, -0.185], [-0.1, 0, 0], { long: 1, tint, skip: '-y+y' });
+    const q = put(k, M), tint = vary(k, FURN, 0.85, 1.12), S = 0.45, cz = 0.01;
+    const leg = (sx, sz) => ({ t: [sx * 0.115, S + 0.006, sz * 0.11 + cz], f: [sx * 0.172, 0, sz * 0.168 + cz] });
+    const L = { lb: leg(-1, -1), rb: leg(1, -1), rf: leg(1, 1), lf: leg(-1, 1) };
+    for (const g of Object.values(L)) q.rod(0.035, g.t, g.f, { tint, skip: '-y+y' });
+    for (const [a, b, y] of [[L.lb, L.lf, 0.2], [L.rb, L.rf, 0.2], [L.lf, L.rf, 0.15]]) q.rod(0.02, upLeg(a.t, a.f, y), upLeg(b.t, b.f, y), { tint, skip: '-y+y' });
+    q.p('wood', ngon(8, 0.22), 0.035, [0, S + 0.017, cz], null, { tint: tint.map((c) => c * 1.05), smooth: true, long: 0, skip: '-y' });
+    // (the back: posts and spindles from the seat's back up and leaning back 10 degrees, away from the sitter, the rail
+    // across their tops bowed back between them: the game's maker saw the old one's rail point into the sitter's back)
+    const top = S + 0.52, rake = Math.tan(10 * Math.PI / 180) * 0.5, z0 = -0.14 + cz, post = (sx) => [[sx * 0.13, S + 0.02, z0], [sx * 0.15, top, z0 - rake]];
+    for (const sx of [-1, 1]) { const [a, b] = post(sx); q.rod(0.035, a, b, { tint, skip: '-y' }); }
+    for (let i = 0; i < 3; i++) { const x = -0.065 + i * 0.065; q.rod(0.018, [x, S + 0.02, z0 - 0.01], [x, top - 0.03, z0 - 0.01 - rake - (0.02 - Math.abs(x) * 0.15)], { tint, skip: '-y+y' }); }
+    for (const sx of [-1, 1]) {
+      const a = [sx * 0.15, top, z0 - rake], b = [0, top, z0 - rake - 0.025], mid = [(a[0] + b[0]) / 2, top, (a[2] + b[2]) / 2], len = Math.hypot(b[0] - a[0], b[2] - a[2]) + 0.03;
+      q.b([len, 0.07, 0.025], mid, [0, Math.atan2(-(b[2] - a[2]), b[0] - a[0]), 0], { long: 0, tint });
+    }
     k.solid([0.42, S, 0.4], null, null, mul(M, T(0, S / 2, 0)));
   },
   // a tall bar stool: four legs, a footring, a round seat with a leather top (brass tacks round it)
   barStool(k, M, o) {
     const q = put(k, M), tint = vary(k, DARKF, 0.9, 1.1), H = 0.76;
-    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + Math.PI / 4; q.b([0.04, H, 0.04], [Math.sin(a) * 0.15, H / 2, Math.cos(a) * 0.15], [-Math.cos(a) * 0.06, 0, Math.sin(a) * 0.06], { long: 1, tint, skip: '-y+y' }); }
-    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2; q.b([0.24, 0.025, 0.025], [Math.sin(a) * 0.12, 0.26, Math.cos(a) * 0.12], [0, a + Math.PI / 2, 0], { long: 0, tint }); }
+    // (each leg from under the seat's edge out to the floor; the footring: a stretcher from each leg to the next, its ends
+    // in them)
+    const legs = [0, 1, 2, 3].map((i) => { const a = i * Math.PI / 2 + Math.PI / 4, sa = Math.sin(a), ca = Math.cos(a); return { t: [sa * 0.127, H + 0.004, ca * 0.127], f: [sa * 0.173, 0, ca * 0.173] }; });
+    for (const g of legs) q.rod(0.04, g.t, g.f, { tint, skip: '-y+y' });
+    for (let i = 0; i < 4; i++) { const a = legs[i], b = legs[(i + 1) % 4]; q.rod(0.025, upLeg(a.t, a.f, 0.26), upLeg(b.t, b.f, 0.26), { tint, skip: '-y+y' }); }
     q.p('wood', ngon(10, 0.19), 0.05, [0, H + 0.025, 0], null, { tint, smooth: true, long: 0 });
     q.p('wood', ngon(10, 0.175), 0.04, [0, H + 0.07, 0], null, { paint: [0.16, 0.05, 0.03], tint: [0.5, 0.45, 0.4], smooth: true, taper: 0.12, long: 0 });
     k.solid([0.36, H + 0.1, 0.36], null, null, mul(M, T(0, (H + 0.1) / 2, 0)));

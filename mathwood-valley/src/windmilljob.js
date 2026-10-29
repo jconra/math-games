@@ -59,9 +59,12 @@ export const MILL = {
   // the stones), turned so its porch (the model's +Z) looks at the tower; its ground the lowest under its corners, sunk
   // a little (its stone footing takes up the slope)
   // (scale: the model as made was a little small for a person (its door reached a rider's shoulder): drawn 1.5 times
-  // its size, set back from the tower to keep the same room in front of its porch)
-  house: { x: -7.2, z: -5.2, half: [3.7, 2.9], sink: 0.09, mow: 6.0, block: 0.25, scale: 1.5 },
-  pickup: { x: 0.45, z: 4.0 },          // in the mill's own frame: in front of the porch, where the sacks are picked up
+  // its size, set back from the tower to keep the same room in front of its porch; then grown again, `grow` [across,
+  // up]: the game's maker still felt like a giant beside it, "at least 20% bigger, especially taller". half, mow, the
+  // pickup and the sacks' spots are as at 1.5 and grow with it; it stands `back` m further from the tower for its
+  // deeper porch)
+  house: { x: -7.2, z: -5.2, half: [3.7, 2.9], sink: 0.09, mow: 6.0, block: 0.25, scale: 1.5, grow: [1.2, 1.35], back: 0.35 },
+  pickup: { x: 0.45, z: 4.0 },          // in the mill's own frame (at 1.5): in front of the porch, where the sacks are picked up
   clear: 3.6,                          // m: the mill fades out while it stands this near the line from the builder's
                                        // camera to the tower (or the camera is inside it), and back when it doesn't
   fade: 3,                             // how quickly it fades (a whole fade in a third of a second)
@@ -139,7 +142,9 @@ export function makeWindmillJob({ W, folk, rider, sites, player = () => null, hu
   showTower();
 
   // ── the mill house ──────────────────────────────────────────────────────────────────────────────────────────────
-  const H = MILL.house, rot = Math.atan2(-H.x, -H.z), hc = Math.cos(rot), hs = Math.sin(rot);
+  const H0 = MILL.house, [GX, GY] = H0.grow || [1, 1], hd = Math.hypot(H0.x, H0.z) || 1, back = (H0.back || 0) / hd;
+  const H = { ...H0, x: H0.x * (1 + back), z: H0.z * (1 + back), half: [H0.half[0] * GX, H0.half[1] * GX], mow: H0.mow * GX };
+  const rot = Math.atan2(-H.x, -H.z), hc = Math.cos(rot), hs = Math.sin(rot);
   // the mill's own frame -> the world (metres), and back
   const millAt = (lx, lz) => ({ x: MILL.x + H.x + hc * lx + hs * lz, z: MILL.z + H.z - hs * lx + hc * lz });
   const millLocal = (x, z) => { const dx = x - MILL.x - H.x, dz = z - MILL.z - H.z; return { x: hc * dx - hs * dz, z: hs * dx + hc * dz }; };
@@ -153,7 +158,7 @@ export function makeWindmillJob({ W, folk, rider, sites, player = () => null, hu
   loadMill(W.tier !== 'gaming').then((scn) => {
     if (disposed) return;
     const m = scn.clone(); m.name = 'mill-model';
-    m.scale.setScalar(H.scale || 1);
+    m.scale.set((H.scale || 1) * GX, (H.scale || 1) * GY, (H.scale || 1) * GX);
     m.traverse((o) => {
       if (!o.isMesh) return;
       o.castShadow = o.receiveShadow = shadows;
@@ -180,7 +185,7 @@ export function makeWindmillJob({ W, folk, rider, sites, player = () => null, hu
   house.add(sacks);
   // (each spot's sack grows into place one after another as the miller pays or the mill grinds, and shrinks away as
   // it is picked up: nothing pops on the porch. grow[i]: 0 gone .. 1 there; shownSacks: how many are wanted there now)
-  const grow = new Float32Array(FLOUR.porch), spots = stackSpots(FLOUR.porch);
+  const grow = new Float32Array(FLOUR.porch), spots = stackSpots(FLOUR.porch).map((q) => ({ ...q, x: q.x * GX, y: q.y * GY, z: q.z * GX }));   // (the porch grown with the mill; the sacks their own size)
   let shownSacks = -1, sackAnim = false;
   const M4 = new THREE.Matrix4(), q4 = new THREE.Quaternion(), e4 = new THREE.Euler(), p4 = new THREE.Vector3(), s4 = new THREE.Vector3();
   function stackSacks(now = false) {
@@ -337,7 +342,7 @@ export function makeWindmillJob({ W, folk, rider, sites, player = () => null, hu
   function pickUp(P) {
     const b = saved() || rec(), n = Math.floor((b.porch || 0) + 1e-6);
     if (!P || J.builder || n <= 0 || !P.position) return;
-    const pk = millAt(MILL.pickup.x, MILL.pickup.z);
+    const pk = millAt(MILL.pickup.x * GX, MILL.pickup.z * GX);
     if (Math.hypot(P.position.x - pk.x, P.position.z - pk.z) > FLOUR.reach) { pickWarned = false; return; }
     const g = homestead(rider).goods, room = GOODS.flour.bag - (g.flour || 0), take = Math.min(n, room);
     if (take <= 0) { if (!pickWarned && hud) hud.toast('Your saddlebags are full of flour: sell some at the general store', 'warn'); pickWarned = true; return; }
@@ -362,7 +367,7 @@ export function makeWindmillJob({ W, folk, rider, sites, player = () => null, hu
       saved: b ? { boards: b.tower.boards.length, height: b.height, lumber: b.lumber } : null,
       flour: { paid: +r.paid || 0, stood: r.stood || null, porch: +(+r.porch || 0).toFixed(3), shown: Math.max(0, shownSacks), bags: homestead(rider).goods.flour || 0 },
       sails, mill: { loaded: !!houseMesh, fade: +fadeK.toFixed(3), visible: house.visible, x: house.position.x, z: house.position.z, rot },
-      pickup: millAt(MILL.pickup.x, MILL.pickup.z),
+      pickup: millAt(MILL.pickup.x * GX, MILL.pickup.z * GX),
       miller: miller && { x: miller.root.position.x, z: miller.root.position.z, parent: miller.root.parent && miller.root.parent.name } };
   };
   // (for rigs: sacks on the porch now; a test stood at h feet, as if the wind had been called)

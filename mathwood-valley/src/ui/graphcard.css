@@ -1,0 +1,88 @@
+/* THE GRAPH CARD (src/ui/graphcard.js): the Professor's chalkboard questions. The game's dark card (the fire card's and
+   the band card's look), at the right of the screen; along the bottom, the width of the screen, on a phone. */
+.bm-graph { position: fixed; right: 16px; top: 50%; transform: translateY(-50%); z-index: 30; box-sizing: border-box;
+  width: min(450px, calc(100vw - 24px)); max-height: calc(100vh - 24px); overflow: auto; padding: 12px 14px;
+  border-radius: 12px; background: rgba(30, 20, 12, 0.96); border: 1px solid rgba(226, 173, 76, 0.6); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  color: #f3e6c8; font: 16px/1.35 Bitter, Georgia, serif; pointer-events: auto; animation: bmg-up 0.22s ease-out; }
+.bm-graph.is-next .bmg-ask, .bm-graph.is-next .bmg-answers { animation: bmg-slide 0.25s ease-out; }
+.bm-graph.is-gone { animation: bmg-down 0.4s ease-in forwards; }
+.bmg-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.bmg-title { font-weight: 700; font-size: 16px; color: #f6dc9c; letter-spacing: 0.02em; }
+.bmg-dots { display: inline-flex; gap: 6px; flex: none; }
+.bmg-dots i { width: 11px; height: 11px; border-radius: 50%; border: 1.5px solid rgba(243, 197, 107, 0.7); }
+.bmg-dots i.is-now { background: rgba(243, 197, 107, 0.35); }
+.bmg-dots i.is-done { background: #d9a43a; border-color: #ffd27a; }
+.bmg-ask { text-align: center; font-size: 30px; font-weight: 700; color: #fff3d6; margin: 4px 0 6px; letter-spacing: 0.02em; }
+.bm-graph.is-done .bmg-ask { font-size: 21px; color: #f6dc9c; margin: 10px 0; }
+.bmg-board { border: 3px solid #6b4a2a; border-radius: 8px; background: #6b4a2a; }
+.bmg-board svg { display: block; width: 100%; height: auto; max-height: min(58vh, 440px); margin: 0 auto; touch-action: none; user-select: none; -webkit-user-select: none; }
+.bm-graph.is-find .bmg-board svg { cursor: pointer; }
+/* the chalkboard: slate green, chalk lines and numbers */
+.bmg-bg { fill: #24342c; }
+.bmg-gl { stroke: rgba(236, 232, 214, 0.2); stroke-width: 1.3; }
+.bmg-ax { stroke: #efe9d6; stroke-width: 2.6; stroke-linecap: round; }
+.bmg-ah { fill: #efe9d6; }
+.bmg-an { fill: #efe9d6; font: italic 700 19px Bitter, Georgia, serif; }
+.bmg-num { fill: rgba(236, 232, 214, 0.85); font: 15px Bitter, Georgia, serif; paint-order: stroke; stroke: #24342c; stroke-width: 4px; }
+.bmg-pt { fill: #ffd34d; stroke: #24342c; stroke-width: 2; }
+.bmg-ghost { fill: rgba(255, 211, 77, 0.35); pointer-events: none; }
+.bmg-tap { fill: none; stroke: #ff8a75; stroke-width: 3; }
+.bmg-ok { fill: #9be37a; stroke: #24342c; stroke-width: 2; }
+.bmg-lab { font: 700 17px Bitter, Georgia, serif; paint-order: stroke; stroke: #24342c; stroke-width: 5px; }
+.bmg-lab.is-tap { fill: #ff8a75; }
+.bmg-lab.is-ok { fill: #c9f5b0; }
+.bmg-lab.is-lit { fill: #ffd34d; }
+.bmg-burst { fill: none; stroke: #c9f5b0; stroke-width: 3; transform-box: fill-box; transform-origin: center; animation: bmg-burst 0.7s ease-out forwards; }
+/* the walk: the x arrow in blue chalk, the y arrow in orange, each step counted, the point lit at the end */
+.bmg-w { fill: none; stroke-width: 4.5; stroke-linecap: round; stroke-dasharray: 1; stroke-dashoffset: 1; animation: bmg-draw 0.6s linear forwards; }
+.bmg-w.is-x { stroke: #8fd0ff; }
+.bmg-w.is-y { stroke: #ffb35c; }
+.bmg-wh.is-x { fill: #8fd0ff; } .bmg-wh.is-y { fill: #ffb35c; }
+.bmg-step { font: 700 15px Bitter, Georgia, serif; stroke: none; }
+.bmg-step.is-x { fill: #8fd0ff; } .bmg-step.is-y { fill: #ffb35c; }
+.bmg-wh, .bmg-step, .bmg-lit, .bmg-lab.is-lit { opacity: 0; animation: bmg-in 0.2s ease-out forwards; }
+.bmg-lit { fill: rgba(255, 211, 77, 0.25); stroke: #ffd34d; stroke-width: 3; animation: bmg-in 0.2s ease-out forwards, bmg-pulse 1.1s ease-in-out 0.2s infinite alternate; }
+.bm-graph.is-still .bmg-w { animation: none; stroke-dashoffset: 0; }
+.bm-graph.is-still .bmg-wh, .bm-graph.is-still .bmg-step, .bm-graph.is-still .bmg-lit, .bm-graph.is-still .bmg-lab.is-lit { animation: none; opacity: 1; }
+.bmg-rule { margin: 6px 0 0; font-size: 14px; color: #e6d6b4; min-height: 0; }
+.bmg-rule:empty { display: none; }
+.bmg-rule b.is-x { color: #8fd0ff; } .bmg-rule b.is-y { color: #ffb35c; }
+.bmg-answers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 8px; }
+.bmg-answers:empty { display: none; }
+.bmg-a { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.bmg-a button { width: 100%; min-height: 50px; border-radius: 9px; border: 1px solid #6b4a2a; background: linear-gradient(#7a5533, #5e3f24);
+  color: #fff3d6; font: 700 20px/1 Bitter, Georgia, serif; cursor: pointer; touch-action: manipulation; white-space: nowrap; padding: 0 4px; }
+.bmg-a button:hover:not(:disabled) { background: linear-gradient(#8a6038, #6b482a); }
+.bmg-a button.is-right { background: linear-gradient(#4f8a3a, #3b6a2b); border-color: #8fd06a; }
+.bmg-a button.is-wrong, .bmg-a button:disabled { opacity: 0.45; cursor: default; }
+.bmg-a kbd { font: 12px/1 Bitter, Georgia, serif; color: #b8a27e; border: 1px solid rgba(184, 162, 126, 0.5); border-radius: 4px; padding: 2px 6px; }
+.bmg-line { min-height: 1.35em; margin: 8px 0 2px; font-size: 15px; color: #f0d9a8; }
+.bmg-line:empty { min-height: 0; margin: 4px 0 0; }
+.bmg-foot { display: flex; justify-content: space-between; gap: 10px; margin-top: 6px; }
+.bm-graph.is-done .bmg-foot, .bm-graph.is-done .bmg-board { display: none; }
+.bmg-foot button { border-radius: 8px; border: 1px solid rgba(226, 173, 76, 0.45); background: rgba(0, 0, 0, 0.25); color: #f3e6c8;
+  font: 15px Bitter, Georgia, serif; padding: 8px 16px; cursor: pointer; touch-action: manipulation; }
+.bmg-show { font-weight: 700 !important; }
+.bmg-show.is-glow { border-color: #ffd34d; box-shadow: 0 0 10px rgba(255, 211, 77, 0.7); animation: bmg-glow 1.2s ease-in-out infinite alternate; }
+@keyframes bmg-up { from { opacity: 0; transform: translateY(calc(-50% + 12px)); } to { opacity: 1; transform: translateY(-50%); } }
+@keyframes bmg-down { to { opacity: 0; transform: translateY(calc(-50% + 18px)) scale(0.97); } }
+@keyframes bmg-slide { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }
+@keyframes bmg-draw { to { stroke-dashoffset: 0; } }
+@keyframes bmg-in { to { opacity: 1; } }
+@keyframes bmg-pulse { from { stroke-width: 2; } to { stroke-width: 5; } }
+@keyframes bmg-burst { from { transform: scale(0.6); opacity: 1; } to { transform: scale(2.4); opacity: 0; } }
+@keyframes bmg-glow { from { box-shadow: 0 0 4px rgba(255, 211, 77, 0.4); } to { box-shadow: 0 0 14px rgba(255, 211, 77, 0.9); } }
+/* a phone: along the bottom, the width of the screen, the grid as wide as it goes (every point 32 px or more apart) */
+@media (max-width: 560px) {
+  .bm-graph { left: 6px; right: 6px; top: auto; bottom: max(6px, env(safe-area-inset-bottom)); transform: none; width: auto; padding: 8px 7px 9px; animation-name: bmg-upp; }
+  .bm-graph.is-gone { animation-name: bmg-downp; }
+  .bmg-board { border-width: 1px; }
+  .bmg-board svg { max-height: none; }
+  .bmg-ask { font-size: 25px; margin: 2px 0 5px; }
+  .bmg-answers { grid-template-columns: repeat(2, 1fr); gap: 6px 10px; }
+  .bmg-a button { min-height: 44px; font-size: 21px; }
+  .bmg-title { font-size: 15px; }
+}
+@keyframes bmg-upp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes bmg-downp { to { opacity: 0; transform: translateY(18px) scale(0.97); } }
+@media (prefers-reduced-motion: reduce) { .bm-graph, .bm-graph.is-next .bmg-ask, .bm-graph.is-next .bmg-answers, .bmg-burst, .bmg-lit, .bmg-show.is-glow { animation: none; } }

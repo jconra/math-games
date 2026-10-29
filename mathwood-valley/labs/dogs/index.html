@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Dog Lab</title>
+<meta name="description" content="A Mathwood Valley lab: dog breeds made from the game's dogs. Every bone's length and girth, the head, snout, ears and tail reshaped once so every clip still plays, and coats painted in code: tuxedo, saddle, tricolour, spots, merle, ticking, brindle. The Boston terrier first.">
+<!-- the on-screen error box comes first, so a crash shows on screen instead of a blank page -->
+<script src="../../oops.js"></script>
+<link rel="stylesheet" href="../../src/ui/fonts/fonts.css">
+<link rel="stylesheet" href="dogs.css?v=1">
+<script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/" } }</script>
+</head>
+<body>
+<canvas id="c" aria-label="A dog standing on the grass"></canvas>
+<div class="dl-top">
+  <h1>Dog Lab</h1><a href="../">All labs</a>
+  <span class="dl-hud" id="hud" aria-live="polite"></span>
+</div>
+<div class="dl-tags" id="tags" aria-hidden="true"></div>
+<!-- ONE MENU: the bar along the bottom (the breeds, then the tabs); a tab's controls open just over it -->
+<div class="dl-drawer" id="drawer" hidden></div>
+<nav class="dl-bar" id="bar" aria-label="Dog Lab menu">
+  <div class="dl-breeds" id="breeds" role="listbox" aria-label="Breeds"></div>
+  <div class="dl-tabs" id="tabs" role="tablist"></div>
+</nav>
+<div class="dl-loading" id="loading">Whistling up the dogs…</div>
+<script type="module" src="main.js?v=1"></script>
+</body>
+</html>

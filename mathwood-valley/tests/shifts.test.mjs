@@ -242,14 +242,19 @@ test('the keeper: a counter or a slip holds the tip\'s note and Hob back till th
   const g = game(r), { SK, log } = g;
   g.setBusy(true);
   SK.dev.end('store');
-  assert.deepEqual(log.thanked[0].who, { id: 'storekeeper', name: 'The storekeeper', x: 1, z: 2 }, 'the storekeeper\'s card over the store\'s door');
+  assert.equal(log.thanked[0].who, 'storekeeper', 'the storekeeper himself, behind his counter (src/jobfolk.js)');
   g.run(6);
   assert.equal(log.hob.length, 0, 'at the counter still: Hob waits');
   assert.ok(!log.toasts.some((t) => /^Done for today/.test(t)));
   g.setBusy(false);
   g.run(1); assert.ok(!log.toasts.some((t) => /^Done for today/.test(t)), 'the counter\'s own note first');
-  g.run(2); assert.ok(log.toasts.some((t) => /^Done for today! The storekeeper tips you/.test(t)));
+  g.run(2); assert.ok(log.toasts.some((t) => /^Done for today! Mr\. Platt tips you/.test(t)));
   g.run(1); assert.equal(log.hob.length, 1);
+  // (a store with no storekeeper standing in it: his card over the store's door)
+  const g1 = game(rider()), JF1 = { thank: (who, text) => { if (typeof who === 'string') return false; g1.log.thanked.push({ who, text }); return true; }, say: () => false };
+  const SK1 = makeShiftKeeper({ W: g1.W, rider: rider(), hud: { toast() {}, buckle() {}, shift() {} }, hob: { say() {} }, folk: () => JF1, store: () => ({ x: 1, z: 2 }) });
+  SK1.dev.end('store');
+  assert.deepEqual(g1.log.thanked[0].who, { id: 'storekeeper', name: 'Mr. Platt', x: 1, z: 2 }, 'the storekeeper\'s card over the store\'s door');
   // a delivery's last: the camp's own foreman thanks the rider
   const r2 = rider(), g2 = game(r2);
   const of = S.shiftOf(r2, 'delivery').of;

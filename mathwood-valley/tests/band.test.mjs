@@ -5,13 +5,13 @@
 //   node --test tests/*.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SONGS, makeBoxPart, boxNote, BOX_PATCHES, BOX_THUMP, BOX_SLAP, readAbc, chordOf, FIDDLE_TUNES, fiddleRound, fiddleLead } from '../src/audio/stagemusic.js';
+import { SONGS, makeBoxPart, boxNote, BOX_PATCHES, BOX_THUMP, BOX_SLAP, readAbc, chordOf, FIDDLE_TUNES, OWN_TUNES, fiddleRound, fiddleLead, battleLead } from '../src/audio/stagemusic.js';
 import { bandChoices, choiceForKey, bandLine, soundThrough, BAND } from '../src/bandplan.js';
 
 const lines = (song, seed, n, opts) => { const next = makeBoxPart(song, seed, opts), out = []; for (let i = 0; i < n; i++) out.push(next()); return out; };
 const songOf = (id) => SONGS.find((s) => s.id === id);
 
-test('every song has a box part, on the beat (within a hair of a half beat), inside its own line', () => {
+test('every song has a box part, on the beat (within a hair of a half beat, or a third in a shuffle), inside its own line', () => {
   for (const s of SONGS) {
     const L = lines(s.id, 9, 12), per = s.bar * 4;
     L.forEach((ev, i) => {
@@ -19,7 +19,8 @@ test('every song has a box part, on the beat (within a hair of a half beat), ins
         assert.equal(e.what, 'box');
         assert.ok(['thump', 'slap', 'tap'].includes(e.hit), e.hit);
         assert.ok(e.beat >= i * per - 0.02 && e.beat < (i + 1) * per, `${s.id} line ${i}: ${e.beat}`);
-        assert.ok(Math.abs(e.beat * 2 - Math.round(e.beat * 2)) < 0.03, `${s.id} off the grid: ${e.beat}`);
+        const grid = s.swing ? 3 : 2;   // (a shuffle's late "and" is two thirds through the beat)
+        assert.ok(Math.abs(e.beat * grid - Math.round(e.beat * grid)) < 0.04, `${s.id} off the grid: ${e.beat}`);
         assert.ok(e.vel > 0 && e.vel <= 1 && e.tone > 0.9 && e.tone < 1.1);
       }
     });
@@ -178,6 +179,59 @@ test('the band\'s own songs take turns: every other line the harmonica plays goe
   }
 });
 
+test('Stagecoach Boogie: two 12-bar blues, swung, the fiddle and harmonica trading, the piano light, rolling, stop-time, flares', () => {
+  const T = OWN_TUNES.boogie, round = fiddleRound(T), s = SONGS.find((x) => x.id === 'boogie');
+  assert.equal(round.length, 48); assert.ok(round.every((b) => b.len === 4 && b.n === 12));
+  const blues = ['A', 'A', 'A', 'A', 'D', 'D', 'A', 'A', 'E', 'D', 'A', 'E'];
+  assert.deepEqual(round.slice(0, 12).map((b) => b.chords[0].name), blues); assert.deepEqual(round.slice(24, 36).map((b) => b.chords[0].name), blues);
+  assert.ok(round.flatMap((b) => b.notes).filter((n) => n.bend).length >= 12, 'bent notes');
+  assert.equal(s.group, 'own'); assert.equal(s.home, 'A'); assert.equal(s.round, 12);
+  const L = []; { const next = s.tune(3, { intro: true, fiddle: true }); for (let i = 0; i < 14; i++) L.push(next()); }
+  const bassIn = (line, bar) => L[line].filter((e) => e.what === 'piano' && !e.lead && !Array.isArray(e.midi) && e.beat >= line * 16 + bar * 4 && e.beat < line * 16 + bar * 4 + 4 && e.midi < 60);
+  // the first A: a bassist's two beats, softer; the second A: the roll, A C# E F# G F# E C#, swung (two thirds, a third)
+  assert.deepEqual(bassIn(1, 0).map((e) => e.midi), [45, 40]);
+  const roll = bassIn(4, 0);
+  assert.deepEqual(roll.map((e) => e.midi), [45, 49, 52, 54, 55, 54, 52, 49]);
+  assert.deepEqual(roll.map((e) => +(e.beat - 64).toFixed(3)), [0, 0.667, 1, 1.667, 2, 2.667, 3, 3.667]);
+  assert.ok(roll.every((e) => e.gain < 1), 'the roll softer than a full touch');
+  // the first B: stop-time over its first four bars (a hit on one, a hush), then the roll
+  const B1 = 1 + 6;   // (line 7: the B's first four bars)
+  const hush = L[B1].filter((e) => e.what === 'hush');
+  assert.equal(hush.length, 4); assert.ok(hush.every((h) => h.to - h.from > 3.5));
+  assert.equal(bassIn(B1, 0).length, 0, 'no roll under stop-time (the hit is an octave pair)');
+  // the battle: in the A, the fiddle calls (bar 1), the harmonica answers (bar 2), both in the turnaround
+  const who = (line, bar) => [...new Set(L[line].filter((e) => (e.what === 'harp' || e.what === 'fiddle' || (e.what === 'piano' && e.lead)) && e.beat >= line * 16 + bar * 4 && e.beat < line * 16 + bar * 4 + 4).map((e) => e.what))].sort().join('+');
+  assert.equal(who(1, 0), 'fiddle'); assert.equal(who(1, 1), 'harp'); assert.equal(who(3, 0), 'fiddle+harp');
+  assert.equal(battleLead(T, round[0], 1, true), 'harp', 'the next time round the harmonica calls');
+  assert.equal(battleLead(T, round[0], 0, false), 'harp'); assert.equal(battleLead(T, round[1], 0, false), 'piano', 'no fiddle: the piano answers');
+  assert.ok(L[1].filter((e) => e.what === 'fiddle').every((e) => e.midi >= 69), 'the fiddle an octave up');
+  // the flares: a run up the keys in the last bar of each section
+  const flare = L[3].filter((e) => e.what === 'piano' && !e.lead && !Array.isArray(e.midi) && e.midi >= 60 && e.beat >= 3 * 16 + 12 + 2);
+  assert.ok(flare.length >= 6 && flare.every((e, i, a) => i === 0 || e.midi > a[i - 1].midi), JSON.stringify(flare.map((e) => e.midi)));
+  const harp = L[1].filter((e) => e.what === 'harp');
+  assert.ok(harp.some((e) => e.bend === 100) || L[2].some((e) => e.what === 'harp' && e.bend === 100), 'a bent note in the head');
+  const box = makeBoxPart('boogie', 3)(); assert.ok(box.length === 0 || box.every((e) => e.hit === 'thump'));
+  const drive = makeBoxPart('boogie', 3); drive(); const bar = drive().filter((e) => e.beat < 20);
+  for (const b of [0, 2]) assert.ok(bar.some((e) => e.hit === 'thump' && Math.abs(e.beat - 16 - b) < 0.02));
+  for (const b of [1, 3]) assert.ok(bar.some((e) => e.hit === 'slap' && Math.abs(e.beat - 16 - b) < 0.02));
+});
+
+test('the banjo: turns in the banjo tunes only when it\'s in the band (with the fiddle: banjo, harmonica, fiddle, piano, banjo and fiddle)', () => {
+  assert.deepEqual([0, 1, 2, 3, 4].map((p) => fiddleLead(p, 0, true, true)), ['banjo', 'harp', 'fiddle', 'piano', 'banjo+fiddle']);
+  assert.deepEqual([0, 1, 2, 3].map((p) => fiddleLead(p, 0, false, true)), ['banjo', 'harp', 'piano', 'banjo+harp']);
+  for (const id of ['cripple', 'joeclark']) {
+    const s = SONGS.find((x) => x.id === id), T = FIDDLE_TUNES[id], round = fiddleRound(T);
+    assert.equal(T.banjo, true, id);
+    const L = []; { const next = s.tune(5, { intro: true, fiddle: true, banjo: true }); for (let i = 0; i <= round.length / 4; i++) L.push(next()); }
+    const bj = L.flat().filter((e) => e.what === 'banjo');
+    assert.ok(bj.length > 10, `${id}: the banjo plays`);
+    assert.ok(bj.every((e) => e.midi >= 48 && e.midi <= 84 && e.lenBeats > 0), `${id}: in its range`);
+    const none = s.tune(5, { intro: true, fiddle: true, banjo: false }); for (let i = 0; i < 4; i++) assert.ok(!none().some((e) => e.what === 'banjo'), `${id}: no banjo without its kit`);
+  }
+  const sj = SONGS.find((x) => x.id === 'soldiers').tune(5, { intro: false, fiddle: true, banjo: true });
+  for (let i = 0; i < 8; i++) assert.ok(!sj().some((e) => e.what === 'banjo'), 'not a banjo tune: none');
+});
+
 test('the box is noise through filters: no tones in its sounds', () => {
   for (const name of [BOX_THUMP, BOX_SLAP]) {
     const P = BOX_PATCHES[name];
@@ -202,20 +256,21 @@ test('the songs have a few words for the card', () => {
 
 test('the card while the band plays: the songs (the one playing marked), then a break', () => {
   const rows = bandChoices({ song: songOf('waltz'), resting: false });
-  assert.deepEqual(rows.map((r) => r.id), ['easy', 'boots', 'waltz', 'lonesome', 'soldiers', 'joeclark', 'arkansas', 'sally', 'cripple', 'devils', 'fishers', 'break']);
+  assert.deepEqual(rows.map((r) => r.id), ['easy', 'boots', 'waltz', 'boogie', 'lonesome', 'soldiers', 'joeclark', 'arkansas', 'sally', 'cripple', 'devils', 'fishers', 'break']);
   assert.deepEqual(rows.filter((r) => r.on).map((r) => r.id), ['waltz']);
-  assert.deepEqual(rows.slice(0, 11).map((r) => r.key), ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0', 'Minus']);
-  assert.deepEqual(rows.slice(0, 11).map((r) => r.keyName), ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-']);
-  assert.deepEqual(rows.slice(0, 11).map((r) => r.group), ['own', 'own', 'own', 'own', 'old', 'old', 'old', 'old', 'old', 'old', 'old']);
+  assert.deepEqual(rows.slice(0, 12).map((r) => r.key), ['Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9', 'Digit0', 'Minus', 'Equal']);
+  assert.deepEqual(rows.slice(0, 12).map((r) => r.keyName), ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=']);
+  assert.deepEqual(rows.slice(0, 12).map((r) => r.group), ['own', 'own', 'own', 'own', 'own', 'old', 'old', 'old', 'old', 'old', 'old', 'old']);
   assert.equal(rows[rows.length - 1].key, 'KeyB');
   assert.equal(rows[0].label, 'Easy Afternoon');
-  assert.equal(rows[4].label, "Soldier's Joy");
+  assert.equal(rows[3].label, 'Stagecoach Boogie');
+  assert.equal(rows[5].label, "Soldier's Joy");
   assert.equal(rows[rows.length - 1].label, 'Take a break');
 });
 
 test('the card on a break: "Play again" first (the song they stopped on), then the songs, none marked playing', () => {
   const rows = bandChoices({ song: 'lonesome', resting: true });
-  assert.deepEqual(rows.map((r) => r.id), ['again', 'easy', 'boots', 'waltz', 'lonesome', 'soldiers', 'joeclark', 'arkansas', 'sally', 'cripple', 'devils', 'fishers']);
+  assert.deepEqual(rows.map((r) => r.id), ['again', 'easy', 'boots', 'waltz', 'boogie', 'lonesome', 'soldiers', 'joeclark', 'arkansas', 'sally', 'cripple', 'devils', 'fishers']);
   assert.equal(rows[0].label, 'Play again'); assert.equal(rows[0].sub, 'Lonesome Trail'); assert.equal(rows[0].key, 'Enter');
   assert.ok(!rows.some((r) => r.on));
 });
@@ -223,11 +278,13 @@ test('the card on a break: "Play again" first (the song they stopped on), then t
 test('keys pick rows: the number keys (and the keypad\'s), B for the break, Enter to play again', () => {
   const playing = bandChoices({ song: 'easy' }), resting = bandChoices({ song: 'easy', resting: true });
   assert.equal(choiceForKey(playing, 'Digit2').id, 'boots');
-  assert.equal(choiceForKey(playing, 'Numpad4').id, 'lonesome');
+  assert.equal(choiceForKey(playing, 'Numpad4').id, 'boogie');
+  assert.equal(choiceForKey(playing, 'Digit5').id, 'lonesome');
   assert.equal(choiceForKey(playing, 'KeyB').id, 'break');
-  assert.equal(choiceForKey(playing, 'Digit0').id, 'devils');
-  assert.equal(choiceForKey(playing, 'Minus').id, 'fishers');
-  assert.equal(choiceForKey(playing, 'NumpadSubtract').id, 'fishers');
+  assert.equal(choiceForKey(playing, 'Digit0').id, 'cripple');
+  assert.equal(choiceForKey(playing, 'Minus').id, 'devils');
+  assert.equal(choiceForKey(playing, 'NumpadSubtract').id, 'devils');
+  assert.equal(choiceForKey(playing, 'Equal').id, 'fishers');
   assert.equal(choiceForKey(playing, 'Enter'), null);
   assert.equal(choiceForKey(resting, 'Enter').id, 'again');
   assert.equal(choiceForKey(resting, 'NumpadEnter').id, 'again');

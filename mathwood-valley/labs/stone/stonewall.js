@@ -1269,10 +1269,11 @@ export function buildStoneWall(recipe = {}, env = {}) {
     Object.assign(L, T.rough ? { r0: r0 - 0.01 * R(), rMin: r0 - 0.03, rMax: r0 + 0.03, hB: 0.025 + 0.03 * R() } : { r0, rMin: r0 - 0.012, rMax: r0 + 0.012, tu: L.tu * 0.5, tv: L.tv * 0.5, hB: 0.008 + 0.012 * R() }, { ring: null, shadow: null });
     addStone(M.stone, f, { y: T.y, flip: true }, L); count++;
   }
-  // STEPS: a stone stoop in front of a door: one or two slabs, their front and ends drawn down into the ground
+  // STEPS: a stone stoop in front of a door: one or two slabs, their front and ends drawn down into the ground (down:
+  // how far below its top, metres: on a slope the ground under a step can be lower than the building's foot)
   for (const S0 of spec.steps || []) {
     const sec = secs[0], A = sec.loop0[S0.face], B = sec.loop0[(S0.face + 1) % sec.n], wl = Math.hypot(B[0] - A[0], B[1] - A[1]);
-    const U = [(B[0] - A[0]) / wl, (B[1] - A[1]) / wl], N = [U[1], -U[0]].map((x) => -x), lipS = skirtDown(S0.h + 0.12, 0);
+    const U = [(B[0] - A[0]) / wl, (B[1] - A[1]) / wl], N = [U[1], -U[0]].map((x) => -x), lipS = skirtDown(S0.down ?? S0.h + 0.12, 0);
     const n2 = S0.w > 1.1 ? 2 : 1, cut = S0.u - S0.w / 2 + S0.w * (n2 === 2 ? 0.42 + 0.16 * R() : 1);
     const parts = n2 === 2 ? [[S0.u - S0.w / 2, cut], [cut, S0.u + S0.w / 2]] : [[S0.u - S0.w / 2, S0.u + S0.w / 2]];
     parts.forEach(([a, b], i) => {

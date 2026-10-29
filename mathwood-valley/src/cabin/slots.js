@@ -26,6 +26,7 @@
 //   buyPiece(rider, id, spend)  -> 'bought' | 'owned' | 'short' | 'unknown'   (spend: save.js spend; saves on a buy)
 
 import { PRICES } from '../catalog.js';
+import { isBreed } from '../actors/dogbreeds.js';
 
 export const SLOTS = [
   { id: 'rug', name: 'Rag rug', price: PRICES.furniture.rug, made: 'rug', line: 'A braided rag rug for the middle of the floor. Warm on the feet.',
@@ -79,8 +80,10 @@ export function buyPiece(rider, id, spend, save = () => {}) {
 }
 
 // The rider's dogs (the same reading as the general store's: owned.dogs, one of each breed, plus owned.dog, the one
-// that follows you; a save from before the list has only owned.dog). following: true for the one out with you.
-const BREEDS = ['shiba', 'husky', 'pug'];
+// that follows you; a save from before the list has only owned.dog). following: true for the one out with you. A Dog Lab
+// breed (actors/dogbreeds.js; not sold yet) counts too.
+const DOGS = ['shiba', 'husky', 'pug'];
+const BREEDS = { includes: (k) => DOGS.includes(k) || isBreed(k) };
 export function homeDogs(rider) {
   const o = (rider && rider.owned) || {};
   const list = Array.isArray(o.dogs) ? o.dogs.filter((d) => d && typeof d === 'object' && BREEDS.includes(d.kind) && d.name) : [];

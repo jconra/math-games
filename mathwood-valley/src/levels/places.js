@@ -46,6 +46,7 @@ import { PLACE as loot } from './place/loot.js';
 import { PLACE as store } from './place/store.js';
 import { PLACE as deliveries } from './place/deliveries.js';
 import { PLACE as building } from './place/building.js';
+import { PLACE as graphs } from './place/graphs.js';
 
 export const PROBLEMS = [];
 const bad = (why) => { PROBLEMS.push(why); try { console.error('Mathwood Valley levels: ' + why); } catch (e) { /* */ } };
@@ -70,7 +71,7 @@ function check(P) {
 }
 
 export const PLACES = [];
-for (const P of [roundup, wagon, lockbox, deer, fishing, sheep, pigs, range, loot, store, deliveries, building]) {
+for (const P of [roundup, wagon, lockbox, deer, fishing, sheep, pigs, range, loot, store, deliveries, building, graphs]) {
   const why = check(P);
   if (why) { bad(`place left out: ${why}`); continue; }
   if (PLACES.some((x) => x.id === P.id)) { bad(`place ${P.id} is listed twice`); continue; }

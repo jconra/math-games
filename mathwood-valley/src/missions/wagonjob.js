@@ -1550,6 +1550,8 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
     const h = canvas.clientHeight || innerHeight, px = Math.max(WAGONJOB.labelPx[0], Math.min(WAGONJOB.labelPx[1], h * 0.06));
     const p5 = camera.projectionMatrix.elements[5];
     camera.getWorldDirection(camFwd);
+    // (none while the player is inside a building: they'd show through its walls)
+    const CD = W.V && W.V.CODE, indoorsNow = !!(CD && CD.room && CD.room(P.position.x, P.position.y + 1, P.position.z));
     const size = (L, at, k = 1) => {
       L.position.copy(at);
       const depth = Math.max(0.5, lp.copy(at).sub(camera.position).dot(camFwd)), hw = px * k * 2 * depth / (p5 * h);
@@ -1561,7 +1563,7 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
       if (rec.say > 0 && (rec.say -= dt) <= 0) { rec.say = 0; setNumber(rec, rec.n != null ? { n: rec.n, good: rec.good, trap: rec.trap } : null); }
       const shown = rec.say > 0 || (rec.n != null && (rec.state === 'ride' || rec.state === 'arrive' || rec.state === 'throw' || rec.state === 'away') && r.mode === 'ride' && wave && !wave.done && rec.wave === wave);
       const dist = Math.hypot(r.x - P.position.x, r.z - P.position.z);
-      const fadeK = 1 - Math.max(0, Math.min(1, (dist - WAGONJOB.labelFull) / (WAGONJOB.labelGone - WAGONJOB.labelFull)));
+      const fadeK = indoorsNow ? 0 : 1 - Math.max(0, Math.min(1, (dist - WAGONJOB.labelFull) / (WAGONJOB.labelGone - WAGONJOB.labelFull)));
       rec.alpha += ((shown && WJ.near ? fadeK : 0) - rec.alpha) * Math.min(1, dt * 6);
       L.visible = rec.alpha > 0.02;
       if (!L.visible) continue;

@@ -39,6 +39,7 @@ import { makePerson } from './actors/folk.js';
 import { SALOON_FOLK, crowdMost, spotsOf, pickSpot, makeNav, faceTo, lookAt } from './saloonfolkplan.js';
 import { applausePlan, makeApplause } from './audio/applause.js';
 import { howdy } from './ui/howdy.js';
+import { makeBarkeep } from './barkeep.js';
 
 // the clapping's sound: its level into the band's sound path (as STAGE.level is for the band), and each person's own
 // positioned sound (as the band's: full at `ref` m, softening past it), at the height of their hands
@@ -56,6 +57,7 @@ export function makeSaloonFolk({ W, folk, TP, stage, camera = null, scene = W.sc
   let applause = null, clapping = false, makeT = 0;
   const offGov = W.governor && W.governor.on ? W.governor.on('saloon', (v) => { most = v; }) : null;
   const recs = [], away = new Map(), sayQ = [];
+  const keep = makeBarkeep({ folk, scene });   // (the barkeep behind the bar: src/barkeep.js; made and drawn with the crowd)
   const t = () => performance.now() / 1000;
   // (the sound's clock as it is heard: the output's own delay taken off, so hands meet with their claps)
   const ctxNow = () => { const io = stage && stage.soundIn ? stage.soundIn() : null; return io ? io.ctx.currentTime - (io.ctx.outputLatency || 0) : null; };
@@ -215,6 +217,7 @@ export function makeSaloonFolk({ W, folk, TP, stage, camera = null, scene = W.sc
       if (!on) continue;
       pose(q, dt, ct, beat, M);
     }
+    keep.update(dt, { hall, frame, frameYaw, show: shown, make: near && clipsOk, pos });
     // what someone calls out (a speech bubble at its moment in the applause)
     if (ct != null) for (let i = sayQ.length - 1; i >= 0; i--) if (ct >= sayQ[i].at) { const s = sayQ.splice(i, 1)[0]; const q = recs.find((x) => x.name === s.name); if (q && q.body && shown) howdy(q.body, s.text, { ms: 2200, key: 'crowd' }); }
     C.people = recs.map((q) => ({ name: q.name, kind: q.spot.kind, state: q.state, x: q.x, z: q.z }));
@@ -355,10 +358,10 @@ export function makeSaloonFolk({ W, folk, TP, stage, camera = null, scene = W.sc
   };
   // (rigs) the hall without its crowd for a while (none drawn, moved or heard): the perf rig's A/B
   let off = false;
-  C.setOff = (on) => { off = !!on; if (off) for (const q of recs) if (q.body) q.body.root.visible = false; };
+  C.setOff = (on) => { off = !!on; if (off) { for (const q of recs) if (q.body) q.body.root.visible = false; keep.update(0, {}); } };
   // (rigs) n people placed at once, up to the most
   C.fill = (n = most) => { let k = 0; while (k < n && recs.filter((q) => q.state !== 'gone').length < most) { const r = candidate(); if (!r || !arrive(r, { placed: true })) break; k++; } filled = true; return k; };
-  C.state = () => ({ saloon: !!hall, most, shown, near, clipsOk, clapping, spots: spots.length,
+  C.state = () => ({ saloon: !!hall, most, shown, near, clipsOk, clapping, spots: spots.length, barkeep: keep.state(),
     people: recs.map((q) => ({ name: q.name, kind: q.spot.kind, seat: q.spot.i, state: q.state, clip: q.body ? q.body.clip : null, fade: +q.fade.toFixed(2), x: +q.x.toFixed(2), z: +q.z.toFixed(2),
       drawn: !!(q.body && q.body.root.visible), wait: +q.wait.toFixed(2), look: +(q.look || 0).toFixed(2), turn: q.turn == null ? null : +q.turn.toFixed(2), clap: q.clap ? { c0: +q.clap.c0.toFixed(2), to: +q.clap.to.toFixed(2), rate: +q.clap.rate.toFixed(2) } : null })) });
   // (rigs) where someone is, in the world, and their body
@@ -366,6 +369,7 @@ export function makeSaloonFolk({ W, folk, TP, stage, camera = null, scene = W.sc
   C.dispose = () => {
     disposed = true; if (offGov) offGov(); if (applause) applause.stop();
     for (const q of [...recs]) { if (q.r && q.r.state === 'inside') q.r.busyIn = 0; drop(q); }
+    keep.dispose();
   };
   return C;
 }

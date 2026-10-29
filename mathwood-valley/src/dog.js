@@ -6,7 +6,7 @@
 // farm_dogclips.py there: its lie is a sploot, back legs stretched out behind). Its legs keep to the ground at
 // every pace (gaitFor in actors/animals.js). Its name is on a small tag above its head.
 //
-//   const D = makeDog({ W, scene, animals, kind: 'shiba' | 'husky' | 'pug', name, follow: () => P.position })
+//   const D = makeDog({ W, scene, animals, kind: 'shiba' | 'husky' | 'pug' | a breed id ('boston'...), name, follow: () => P.position })
 //     follow(): where the one it follows is (a Vector3 on the ground). animals: the loaded library (the kind is loaded
 //     here if it isn't yet: D.ready is a promise)
 //   D.update(dt)       every frame;  D.shift({ dx, dz }): moved with the player as it stands (the valley's ends)
@@ -17,6 +17,7 @@
 //   makeTag(name)      the name tag on its own (a sprite with .setText(name)), for the dogs waiting at the cabin
 import * as THREE from 'three';
 import { makeAnimal } from './actors/animals.js';
+import { isBreed, BREEDS } from './actors/dogbreeds.js';
 
 export const DOG = {
   side: 1.5, back: 1.6,          // where it keeps to: this far to the side and behind the one it follows (m)
@@ -33,9 +34,13 @@ export const DOG = {
 // it: actors/animals.js FARM_KINDS) is small and slow: its short legs trot where the others walk, and past about 4 m/s
 // they can't keep up, so it falls behind a running horse and is brought round. dogKind(kind): a saved dog's kind as one
 // the game can load (an unknown one, from an old or edited save, is a Shiba).
+// A dog can also be one of the Dog Lab's breeds (actors/dogbreeds.js: a Boston terrier, a beagle...: one of these three
+// reshaped, with its own coat, made by the animal library the first time it's asked for); it moves as the dog it's made
+// from (dogSettings). The store doesn't sell those yet.
 export const DOG_KINDS = ['shiba', 'husky', 'pug'];
 export const BREED = { pug: { top: 4, side: 1.15, back: 1.2, near: 0.9, tagUp: 0.14 } };
-export const dogKind = (kind) => (DOG_KINDS.includes(kind) ? kind : 'shiba');
+export const dogKind = (kind) => (DOG_KINDS.includes(kind) || isBreed(kind) ? kind : 'shiba');
+export const dogSettings = (kind) => ({ ...DOG, ...(BREED[kind] || (isBreed(kind) && BREED[BREEDS[kind].base]) || {}) });
 const damp = (a, b, k, dt) => b + (a - b) * Math.exp(-k * dt);
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
@@ -63,7 +68,7 @@ export function makeTag(name) {
 
 export function makeDog({ W, scene, animals, kind = 'shiba', name = 'Dog', follow }) {
   kind = dogKind(kind);
-  const C = { ...DOG, ...(BREED[kind] || {}) };      // (this breed's settings)
+  const C = dogSettings(kind);                      // (this breed's settings)
   const D = { dog: null, kind, name, position: new THREE.Vector3(), tagOn: true };
   const tag = D.tag = makeTag(name); tag.visible = false; scene.add(tag);   // (shown once the dog is there)
   let x = 0, z = 0, heading = 0, speed = 0, stillT = 0, side = 1, lead = null, leadSpeed = 0;

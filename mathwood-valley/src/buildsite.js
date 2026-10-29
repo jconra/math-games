@@ -195,7 +195,7 @@ export function makeBuildSites({ W, camera, canvas, player = () => null, obstacl
         const d = Math.hypot(m.x - P.position.x, m.z - P.position.z);
         if (d < (s.reach || SITE.meet) && d < bd) { bd = d; near = s; }
       }
-      if (near) S.prompt = near.prompt;
+      if (near) { S.prompt = near.prompt; S.promptAt = near.meet(); }   // (promptAt: where its person is, src/main.js doors)
     }
     // the glide back behind the rider, after a builder was put away (the rider's camera has placed itself by now)
     if (back) {

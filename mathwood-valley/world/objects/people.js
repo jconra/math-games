@@ -15,6 +15,7 @@ import { BASE } from '../base.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
+import { indoorPre, indoorPost, INDOOR_KEY } from './indoorlight.js';
 
 // how fast each skeleton's walk and run go at their own speed (m/s: the planted foot's speed backward, measured in the
 // People Lab), so a clip's speed can match how fast its person moves
@@ -84,9 +85,12 @@ export class Person {
     mat.onBeforeCompile = (sh) => {
       Object.assign(sh.uniforms, u);
       sh.vertexShader = PERSON_VS + sh.vertexShader.replace('#include <color_vertex>', '#include <color_vertex>\n  vColor.rgb = fkColour(vColor.rgb, _kind);');
+      // (lit like the room round them when they stand inside a building: world/objects/indoorlight.js)
+      indoorPre(sh);
       if (shade) shade(sh);
+      indoorPost(sh);
     };
-    mat.customProgramCacheKey = () => 'person-1' + (shade ? '-shaded' : '');
+    mat.customProgramCacheKey = () => 'person-1' + (shade ? '-shaded' : '') + INDOOR_KEY;
     this.mesh.material = mat; this.mesh.castShadow = shadows; this.mesh.receiveShadow = shadows;
     if (look) this.setLook(look);
     // a child: smaller, with a bigger head for its size

@@ -180,7 +180,7 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
     if (state !== 'idle' || J.paused || (P.mode !== 'foot' && P.mode !== 'horse') || busy()) return;
     const at = P.position, st = R.layout.stand;
     const d = Math.min(Math.hypot(at.x - K.x, at.z - K.z), Math.hypot(at.x - st.x, at.z - st.z)) - (P.onHorse ? 1.2 : 0);
-    if (d < TALK.prompt) J.prompt = shiftOpen() ? KEEPER.stand : 'Talk to Miss Opal';   // (the day's shift done: just a word)
+    if (d < TALK.prompt) { J.prompt = shiftOpen() ? KEEPER.stand : 'Talk to Miss Opal'; J.promptAt = { x: K.x, z: K.z }; }   // (the day's shift done: just a word; promptAt: where she is, src/main.js doors)
   }
   J.start = () => {
     if (state !== 'idle' || !J.prompt || J.paused) return false;

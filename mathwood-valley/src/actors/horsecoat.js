@@ -24,6 +24,7 @@
 // The recipe (horsecoats.js): base colour, black points, mane and tail colour and length, a face marking, a marking per
 // leg, greying and dapples, a dun's stripe down the back, a pinto pattern, a seed.
 import * as THREE from 'three';
+import { indoorPre, indoorPost, INDOOR_KEY } from '../../world/objects/indoorlight.js';
 
 // ── the noise: one small random picture, read so it gives smooth 3D noise in a single lookup ─────────────────────────
 // Red is random; green is red moved 37 across and 17 down, so one read gives two neighbouring "layers" of noise and the
@@ -980,8 +981,10 @@ export function coatMaterial(shape, recipe, { px = null, lite = false, uniforms 
       .replace('#include <aomap_fragment>', '#include <aomap_fragment>\n' + FRAG_AO)
       .replace('#include <opaque_fragment>', FRAG_RIM + '#include <opaque_fragment>')
       .replace('#include <clipping_planes_fragment>', FADE_DISCARD);
+    // (lit like the room round it inside a building, its stall's lanterns and all: world/objects/indoorlight.js)
+    indoorPre(sh); indoorPost(sh);
   };
-  m.customProgramCacheKey = () => shape.key + (lite ? ':lite' : '');
+  m.customProgramCacheKey = () => shape.key + (lite ? ':lite' : '') + INDOOR_KEY;
   m.coat = { uniforms: u, lite, set: (r) => applyRecipe(u, r) };
   if (recipe) applyRecipe(u, recipe);
   return m;
@@ -1029,8 +1032,9 @@ export function eyeMaterial(shape, base, { fade = null } = {}) {
   col = mix( col, vec3( 0.010, 0.008, 0.007 ), vLash );
   diffuseColor.rgb = col;
 }`);
+    indoorPre(sh); indoorPost(sh);   // (indoors: the room's light: world/objects/indoorlight.js)
   };
-  m.customProgramCacheKey = () => 'horseeye2:' + shape.key + (lash ? ':lash' : '');
+  m.customProgramCacheKey = () => 'horseeye2:' + shape.key + (lash ? ':lash' : '') + INDOOR_KEY;
   m.eye = { uniforms: u };
   return m;
 }

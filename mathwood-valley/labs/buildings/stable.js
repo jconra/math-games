@@ -656,7 +656,7 @@ export function buildStable(recipeIn = {}, env = {}) {
   return {
     recipe: r, geos, doors: leaves, stalls: stallList, lamps, light, occ, props: propList(OX),
     anchors: {
-      doorways: [{ name: 'front', centre: [OX, DH / 2, D / 2], w: DW, h: DH, out: [0, 0, 1] }, { name: 'back', centre: [OX, DH / 2, -D / 2], w: DW, h: DH, out: [0, 0, -1] }],
+      doorways: [{ name: 'front', centre: [OX, DH / 2, D / 2], w: DW, h: DH, out: [0, 0, 1] }, { name: 'back', centre: [OX, DH / 2, -D / 2], w: DW, h: DH, out: [0, 0, -1], open: true }],   // (open: its doors stand open for good, part of the walls: seen into from outside)
       sign: { centre: [OX, 3.93, D / 2 + 0.074], w: 4.6, h: 0.86 }, boards: boardList, lanterns: lamps.map((L) => L.p),
       // (the saddle racks on the lean-to's back wall: where a saddle sits on each, which way it faces, where its price
       // board hangs; the game puts its own saddles and boards there)
