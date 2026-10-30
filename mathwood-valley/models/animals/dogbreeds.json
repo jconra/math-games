@@ -1,5 +1,58 @@
 {
-  "v": 1,
-  "note": "The Dog Lab's saved breeds (labs/dogs): each one here is used over src/actors/dogbreeds.js's own; a breed not here is as written there.",
-  "breeds": {}
+ "v": 1,
+ "note": "The Dog Lab's saved breeds (labs/dogs): each one here is used over src/actors/dogbreeds.js's own; a breed not here is as written there.",
+ "breeds": {
+  "boston": {
+   "label": "Boston terrier",
+   "base": "shiba",
+   "ears": "bat",
+   "morph": {
+    "size": 0.96,
+    "legFront": 1.04,
+    "legBack": 1.08,
+    "legThick": 1.12,
+    "legSet": 0.25,
+    "body": 1.22,
+    "chestDepth": 1.02,
+    "chestWidth": 0.96,
+    "girth": 1.15,
+    "tuck": 0.8,
+    "neck": 0.62,
+    "neckThick": 0.89,
+    "neckTilt": 0.56,
+    "head": 1.39,
+    "skull": 0.9,
+    "snout": 0.5,
+    "muzzle": 1.37,
+    "jaw": 1.15,
+    "eyes": 1.8,
+    "headTilt": -0.15,
+    "earWidth": 0.7,
+    "tailLength": 0.2,
+    "tailThick": 1.3,
+    "tailCarry": -0.2,
+    "tailCurl": -0.6
+   },
+   "coat": {
+    "base": "#141110",
+    "white": "#f2efe8",
+    "shade": 0.1,
+    "blaze": 0.13,
+    "blazeTop": 1,
+    "muzzle": 0.51,
+    "chest": 0.85,
+    "collar": 0.27,
+    "socksF": 0.3,
+    "socksB": 0.12
+   },
+   "collar": null,
+   "fur": {
+    "length": 0.3,
+    "softness": 0.35,
+    "strength": 0.55,
+    "sheen": 0.5
+   },
+   "note": "On the shiba: its snout pulled in, the head, skull and eyes grown, big wide-set bat ears, a short thick neck carried forward, a deep wide chest, a tucked belly, a stub tail."
+  }
+ }
 }

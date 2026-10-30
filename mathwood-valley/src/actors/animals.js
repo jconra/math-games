@@ -50,7 +50,9 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { softShade } from './shading.js';
 import { prepareHorse } from './horsecoat.js';
 import { buildHair } from './horsehair.js';
-import { needBreed } from './dogkind.js';
+import { needBreed, furPlain, savedBreeds } from './dogkind.js';
+import { BASES, baseFur } from './dogbreeds.js';
+import { furMaterial } from './dogfur.js';
 
 // steed: the new horse (the Horse Lab's), a coat kind (animals.json "coat": true): see loadAnimals and makeAnimal
 export const KINDS = ['horse', 'horseWhite', 'steed', 'donkey', 'cow', 'bull', 'deer', 'stag', 'shiba', 'husky', 'wolf'];
@@ -130,6 +132,8 @@ export async function loadAnimals(base, { kinds = null } = {}) {
       // adds it, world/valley.js sunShadeAll)
       g.scene.traverse((o) => { if (o.isMesh && o.material) { o.material.vertexColors = true; o.material.roughness = 0.75; o.material.userData.indoorLit = true; o.geometry = softShade(o.geometry); } });
       lib.kinds[kind] = { scene: g.scene, clips: g.animations, info: info[kind] };
+      // (the plain dogs get the fur too, dogfur.js, with the Dog Lab's saved numbers over their own)
+      if (BASES.includes(kind)) return savedBreeds(dir).then((saved) => { furPlain(lib.kinds[kind], baseFur(kind, saved)); return lib.kinds[kind]; });
       return lib.kinds[kind];
     }, (e) => { delete lib.loading[kind]; throw e; }));   // (a failed load is forgotten: the next need tries again)
   };
@@ -161,7 +165,7 @@ export function makeAnimal(lib, kind, { shadows = true, tint = null, size = 1 } 
       if (eyeName && o.material && o.material.name === eyeName) { eye = o; o.castShadow = false; o.receiveShadow = shadows; o.frustumCulled = false; return; }
       if (!mesh || o.geometry.attributes.position.count > mesh.geometry.attributes.position.count) mesh = o;
       o.castShadow = shadows; o.receiveShadow = shadows;
-      if (tint !== null && tint !== undefined) { o.material = o.material.clone(); o.material.color.set(tint); }
+      if (tint !== null && tint !== undefined) { const m0 = o.material; o.material = m0.clone(); o.material.color.set(tint); if (m0.userData.furU) furMaterial(o.material, m0.userData.fur); }
     }
     if (o.isBone) bones[o.name] = o;
   });

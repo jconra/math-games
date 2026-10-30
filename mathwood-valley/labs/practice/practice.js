@@ -8,6 +8,9 @@ import { PLACES, PLACE } from '../../src/levels/places.js';
 import { levelFor, recordLevel, stateOf, pctOf } from '../../src/levels/model.js';
 import { STRAND } from '../../src/math/strands.js';
 import { makeCard, cardText, LAB_CHOICES } from './cards.js';
+import { makeQuestion } from '../../src/math/graphs.js';
+import { openGraphCard } from '../../src/ui/graphcard.js';
+import { seeded } from '../../src/levels/kit.js';
 
 const $ = (sel, el = document) => el.querySelector(sel);
 const h = (tag, attrs = {}, ...kids) => {
@@ -193,6 +196,22 @@ function renderPart(p, num, done) {
   };
 }
 
+// ---- the Professor's chalkboard (graphs): the game's own graph card in the card column ---------------------------------
+// The grid is tapped, not answered from a list, so the card is the game's (src/ui/graphcard.js), a sitting of five as at
+// the saloon's chalkboard, placed in the page instead of over the valley. Put away or finished: a fresh sitting.
+let GC = null;   // the graph card up now (closed quietly before the page is drawn again)
+function graphSitting(host, { gen, seed, title, record = () => {}, onClose = () => {} }) {
+  const rand = seeded(seed >>> 0), avoid = new Set();
+  host.classList.add('graphhost');
+  const C = openGraphCard({ parent: host, title,
+    next: (i) => { const q = makeQuestion(gen(), rand, { i, avoid }); avoid.add(`${q.x},${q.y}`); return q; },
+    record: (q, right) => record(right),
+    onDone: () => 'Splendid! Five done.',
+    onClose: () => { if (GC !== C) return; GC = null; onClose(); } });
+  GC = C;
+  return C;
+}
+
 // ---- the levels mode --------------------------------------------------------------------------------------------------
 
 function levelRow(P, L, i, onPick, current) {
@@ -214,6 +233,12 @@ function renderLevels(root, P) {
   cols.append(list, right);
   root.append(cols);
   if (!S.level) { right.append(h('div', { class: 'paper empty' }, 'Pick a level to see its questions.')); return; }
+  if (P.id === 'graphs') {
+    const L = P.levels.find((x) => x.id === S.level), li = P.levels.indexOf(L), host = h('div', {});
+    right.append(host, h('p', { class: 'how' }, `${li + 1}. ${L.title}: five a sitting, as at the saloon's chalkboard. "Show me" walks the grid; "Not now" starts a fresh five.`));
+    graphSitting(host, { gen: () => L.gen, seed: S.seed, title: `${li + 1}. ${L.title}`, onClose: () => { S.seed++; render(); } });
+    return;
+  }
   let c;
   try { c = makeCard(P.id, S.level, S.seed, { into: S.into }); }
   catch (e) { console.error(e); right.append(h('div', { class: 'paper empty' }, `This level failed to make a question: ${e.message}`)); return; }
@@ -281,6 +306,22 @@ function renderAdaptive(root, P) {
   if (R.log.length) panel.append(log);
 
   const right = h('div', { id: 'cardcol' });
+  if (P.id === 'graphs') {
+    // (each first answer moves the rider at once, as in the game; the panel catches up when the five are done)
+    const host = h('div', {});
+    right.append(host, h('p', { class: 'how' }, 'Five a sitting: each first answer moves the throwaway rider (a "Show me" first is not counted). The panel updates after the five.'));
+    graphSitting(host, { seed: R.seed, title: 'Graph practice',
+      gen: () => levelFor(R.rider, P.id, { now: T0 + R.clock * 60000 }).level.gen,
+      record: (right) => {
+        const before = levelFor(R.rider, P.id, { now: T0 + R.clock * 60000 });
+        const res = recordLevel(R.rider, P.id, { right, level: before.id, now: now() });
+        const after = P.levels[res.i];
+        R.log.unshift({ right, at: before.i + 1, title: before.level.title, moved: res.moved > 0 ? `up to ${res.i + 1}. ${after.title}` : res.moved < 0 ? `down to ${res.i + 1}. ${after.title}` : 'stays', placed: res.justPlaced, how: 'card', placing: before.placing });
+      },
+      onClose: () => { R.seed++; render(); } });
+    cols.append(panel, right); root.append(cols);
+    return;
+  }
   let c;
   try { c = makeCard(P.id, q.id, R.seed, { into: Math.floor(q.into), count: q.count }); }
   catch (e) { console.error(e); right.append(h('div', { class: 'paper empty' }, `This level failed to make a question: ${e.message}`)); }
@@ -298,6 +339,7 @@ function renderAdaptive(root, P) {
 // ---- the page ---------------------------------------------------------------------------------------------------------
 
 function render() {
+  if (GC) { const g = GC; GC = null; g.close(); }   // (its key listeners go with it)
   renderTabs();
   const P = PLACE[S.place];
   const root = $('#main'); root.textContent = '';

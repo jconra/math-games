@@ -59,6 +59,7 @@ export const BOARD_JOBS = [
   { id: 'bridge', name: 'The bridge', pic: 'bridge', what: "Build the engineer's bridge over the west river" },   // (src/bridgejob.js: where it is from J.where())
   { id: 'fishing', name: 'Fishing', pic: 'fish', what: 'Catch fish off the dock by the lake, sell them at the store' },   // (src/fishingjob.js: where it is from J.where())
   { id: 'boxes', name: 'Lock boxes', pic: 'lock', what: "Crack the sheriff's seized boxes", here: "Step inside: the boxes are piled on the sheriff's desk" },
+  { id: 'graphs', name: 'Graph practice', pic: 'graph', what: "Plot points on Professor Lowell's chalkboard", here: "Step inside the saloon: the Professor's chalkboard is on the wall" },   // (src/graphteacher.js)
 ];
 
 export const BOARD = {
@@ -171,6 +172,16 @@ export function drawPic(ctx, kind, x, y, size) {
       fill('#5a3a22', rect(10, 44, 58, 40, 2)); fill('#6a4428', () => { c.moveTo(10, 44); c.quadraticCurveTo(39, 26, 68, 44); c.closePath(); });
       for (const bx of [20, 58]) line([[bx, 36], [bx, 84]], 5, '#3a3836');
       fill('#d1a542', rect(33, 52, 12, 14, 2)); dot(39, 58, 2);
+      break;
+    }
+    case 'graph': {   // a chalkboard in its wooden frame, a grid with its two axes and four chalk points on a line
+      fill('#6b4a2c', rect(8, 12, 84, 70, 3)); fill('#2f3b34', rect(14, 18, 72, 58, 1));
+      for (let k = 1; k < 6; k++) { line([[14 + k * 12, 18], [14 + k * 12, 76]], 0.8, '#5d6b63'); }
+      for (let k = 1; k < 5; k++) { line([[14, 18 + k * 11.6], [86, 18 + k * 11.6]], 0.8, '#5d6b63'); }
+      line([[26, 76], [26, 18]], 2.4, '#e9e6dc'); line([[14, 64.4], [86, 64.4]], 2.4, '#e9e6dc');
+      line([[30, 66], [82, 20.2]], 1.6, '#c9d7cf');
+      for (const [px, py] of [[38, 59], [50, 48.4], [62, 37.8], [74, 27.2]]) dot(px, py, 3.4, '#f2d36b');
+      line([[30, 82], [30, 92]], 4, '#6b4a2c'); line([[70, 82], [70, 92]], 4, '#6b4a2c');
       break;
     }
     case 'lock': {   // a padlock, and the sheriff's star
@@ -316,7 +327,7 @@ export function makeJobsBoard({ W, camera, I = null, hud = null, rider = null, p
   // the jobs on the board: those this rider has (a grown-up may have turned some off); the round-up and the sheriff's
   // lock boxes always
   const on = { roundup: () => !!get('roundup'), sheep: () => !!get('sheep'), pigs: () => !!get('pigs'), store: () => !!get('store'), delivery: () => !!get('delivery'),
-    wagon: () => !!get('wagon'), deer: () => !!get('deer'), range: () => !!get('range'), loot: () => !!get('loot'), boxes: () => true };
+    wagon: () => !!get('wagon'), deer: () => !!get('deer'), range: () => !!get('range'), loot: () => !!get('loot'), boxes: () => true, graphs: () => !!get('graphs') };
   // (a job with no line here, a builders' job: on while main.js hands the board the job, as `jobs[id]`)
   const list = BOARD_JOBS.filter((j) => (on[j.id] ? on[j.id]() : !!get(j.id)));
   const B = boardSpot(W), c = Math.cos(B.rot), s = Math.sin(B.rot);
@@ -400,6 +411,7 @@ export function makeJobsBoard({ W, camera, I = null, hud = null, rider = null, p
       case 'pigs': { const f = get('farm'), g = f && f.layout && f.layout.yard && f.layout.yard.gate; return g ? { x: g.out.x, z: g.out.z } : null; }
       case 'store': return door('store');
       case 'boxes': return door('sheriff');
+      case 'graphs': return door('saloon');
       case 'delivery': {
         const DL = get('delivery'); const m = DL && first(DL.marks()); if (m) return m;
         // (no order yet: the nearest camp's foreman)

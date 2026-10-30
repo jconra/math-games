@@ -5,12 +5,16 @@
 //
 //   BREEDS            id -> { label, base, morph, ears (EAR_SETS id, laid under the morph's own ear numbers), coat,
 //                     collar (null, or { colour, studs }), note }
-//   BREED_ORDER       the order the lab and the line-up show them in
+//   BREED_ORDER       the order the lab and the line-up show them in (the keepers)
+//   NOT_KEEPERS       breeds kept in the code but shown nowhere (not good enough yet)
 //   LATER             breeds noted for later (not made yet)
 //   isBreed(id)       one of these ids
 //   breedOf(id, saved)  the breed as the game makes it: the saved one (models/animals/dogbreeds.json's) over this one,
 //                     every field filled; null for an id that isn't a breed
 //   cleanBreed(b)     a breed as it is saved (only known fields, numbers in range)
+//   FUR / FUR_KEYS / fillFur(f)   the fur's numbers (dogfur.js draws it): length, softness, strength, sheen, 0..1
+//   FUR_BASES         the plain dogs' fur (the shiba, the husky, the pug as the game has them)
+//   baseFur(id, saved)  a plain dog's fur: the saved file's (its `fur` block) over FUR_BASES
 import { fillMorph, EAR_SETS } from './morphplan.js';
 import { fillCoat } from './dogcoat.js';
 
@@ -107,7 +111,46 @@ export const BREEDS = {
     note: 'White with round black spots (from the pattern picture: the faces are too big to paint spots on).',
   },
 };
-export const BREED_ORDER = ['boston', 'bostonFamily', 'bostonPug', 'bostonBrindle', 'borderCollie', 'cattleDog', 'labYellow', 'labBlack', 'labChocolate', 'beagle', 'dalmatian'];
+// (not keepers, the game's maker 2026-10-29: the Boston on the pug, "the ears aren't connected to the body", and the
+// brindle, "very unnatural waves on it": kept here as made, but out of the lab's line-up and not for sale)
+// THE FUR (a shader over the painted coat, no extra geometry: dogfur.js). [default, min, max, step, label]
+//   length    how long the strands look: short (a Boston's, a Lab's) .. long and loose (a collie's, a husky's)
+//   softness  how soft the light falls over it (wrapped round the sides) and how blurred the strands are
+//   strength  how much the strands break up the flat colour (0: the painted coat as it was)
+//   sheen     the light catching the fur's edge at grazing angles
+export const FUR = {
+  length:   [0.3, 0, 1, 0.01, 'Length'],
+  softness: [0.35, 0, 1, 0.01, 'Softness'],
+  strength: [0.55, 0, 1, 0.01, 'Strength'],
+  sheen:    [0.5, 0, 1, 0.01, 'Sheen'],
+};
+export const FUR_KEYS = Object.keys(FUR);
+export function fillFur(f = {}) {
+  const o = {};
+  for (const k of FUR_KEYS) { const [d, lo, hi] = FUR[k], v = f && Number.isFinite(+f[k]) && f[k] !== null && f[k] !== '' ? +f[k] : d; o[k] = +Math.min(hi, Math.max(lo, v)).toFixed(3); }
+  return o;
+}
+const SHORT = { length: 0.12, softness: 0.25, strength: 0.5, sheen: 0.45 };
+const FUR_OF = {
+  boston: SHORT, bostonPug: SHORT, bostonFamily: SHORT, bostonBrindle: SHORT, beagle: SHORT, dalmatian: { ...SHORT, strength: 0.45 },
+  labYellow: { length: 0.22, softness: 0.35, strength: 0.5, sheen: 0.5 }, labBlack: { length: 0.22, softness: 0.35, strength: 0.5, sheen: 0.55 },
+  labChocolate: { length: 0.22, softness: 0.35, strength: 0.5, sheen: 0.5 },
+  cattleDog: { length: 0.3, softness: 0.35, strength: 0.55, sheen: 0.45 },
+  borderCollie: { length: 0.85, softness: 0.75, strength: 0.7, sheen: 0.6 },
+};
+for (const [id, f] of Object.entries(FUR_OF)) if (BREEDS[id]) BREEDS[id].fur = { ...f };
+export const FUR_BASES = {
+  shiba: { length: 0.5, softness: 0.6, strength: 0.6, sheen: 0.5 },
+  husky: { length: 0.7, softness: 0.7, strength: 0.65, sheen: 0.55 },
+  pug: { ...SHORT },
+};
+export function baseFur(id, saved = null) {
+  const own = FUR_BASES[id] || {}, file = saved && saved.fur && saved.fur[id];
+  return fillFur({ ...own, ...(file || {}) });
+}
+
+export const NOT_KEEPERS = ['bostonPug', 'bostonBrindle'];
+export const BREED_ORDER = ['boston', 'bostonFamily', 'borderCollie', 'cattleDog', 'labYellow', 'labBlack', 'labChocolate', 'beagle', 'dalmatian'];
 export const LATER = ['German shepherd (saddle, black mask, big pricked ears)', 'Corgi (very short legs, long body, big ears)', 'Dachshund (very short legs, very long body, drop ears)',
   'Greyhound (long legs, deep chest, tucked belly, thin tail)', 'Basset hound (short legs, long ears, heavy head)', 'Coonhound (black and tan, long ears)', 'Bloodhound (long ears, loose skin: the face a morph cannot fold)'];
 export const isBreed = (id) => Object.prototype.hasOwnProperty.call(BREEDS, id);
@@ -129,6 +172,7 @@ export function cleanBreed(b = {}, fallback = {}) {
   return {
     label: String(own('label') || 'Dog').slice(0, 60), base, ears, morph, coat,
     collar: cleanCollar(own('collar')),
+    fur: fillFur(own('fur') || {}),
     note: String(own('note') ?? '').slice(0, 600),
   };
 }
@@ -136,5 +180,5 @@ export function breedOf(id, saved = null) {
   const own = BREEDS[id], file = saved && saved.breeds && saved.breeds[id];
   if (!own && !file) return null;
   const b = cleanBreed(file || own, file ? own || {} : {});
-  return { id, ...b, morphFull: fillMorph({ ...earBase(b.ears), ...b.morph }), coatFull: fillCoat(b.coat) };
+  return { id, ...b, morphFull: fillMorph({ ...earBase(b.ears), ...b.morph }), coatFull: fillCoat(b.coat), furFull: b.fur };
 }

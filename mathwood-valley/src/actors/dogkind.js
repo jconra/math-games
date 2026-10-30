@@ -11,11 +11,15 @@
 //   setSavedBreeds(file)                      (the lab, after saving: the file as it now is)
 //   paintBreed(geometry, shape, coat, ...)    the coat onto a morphed geometry (for the lab: a coat change without
 //                                             a new morph)
+//   furAttrs(shape) -> { P, D }               the fur's measures of each corner at rest (dogfur.js reads them)
+//   furPlain(K, fur)                          a plain dog (the shiba, the husky, the pug as animals.json has them)
+//                                             given the fur: its two attributes and the patched material
 import * as THREE from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { morphKind, analyseKind } from './morph.js';
 import { paintFace, patternPixels, hexToLinear, rng } from './dogcoat.js';
 import { breedOf } from './dogbreeds.js';
+import { furMaterial } from './dogfur.js';
 
 let SAVED = null, SAVING = null;
 export function savedBreeds(dir, { fresh = false } = {}) {
@@ -66,6 +70,47 @@ function chains(shape) {
   }
   return along;
 }
+// THE FUR'S MEASURES (dogfur.js), per corner of the base at rest: P where it sits, in withers heights; D the way the
+// hair lies (head to tail over the body, neck and head; down the legs; out along the tail and the ears from their
+// roots), laid flat on the surface there, and in w how much the corner faces down (darker roots under the belly and
+// the chin). The eyes and the nose (the model's own features) get no fur: D zero.
+export function furAttrs(shape) {
+  if (shape.furA) return shape.furA;
+  const { X, N, dom, feat, n, rig, idx, W, L } = shape, part = partsOf(shape), H = (L.withers - L.ground) || 1;
+  const root = new Map();
+  for (const chain of [rig.tail, ...(rig.ears ? Object.values(rig.ears) : [])].filter(Boolean)) {
+    const r = new THREE.Vector3().setFromMatrixPosition(W[idx[chain[0]]]);
+    for (const c of chain) root.set(idx[c], r);
+  }
+  const P = new Float32Array(n * 3), D = new Float32Array(n * 4), d = new THREE.Vector3(), nn = new THREE.Vector3(), alt = new THREE.Vector3();
+  const flat = (v, nv) => v.addScaledVector(nv, -nv.dot(v));
+  for (let i = 0; i < n; i++) {
+    P[i * 3] = X[i * 3] / H; P[i * 3 + 1] = X[i * 3 + 1] / H; P[i * 3 + 2] = X[i * 3 + 2] / H;
+    if (feat[i]) continue;
+    const pt = part[dom[i]], r = root.get(dom[i]);
+    nn.fromArray(N, i * 3);
+    if (pt === 'legF' || pt === 'legB' || pt === 'pawF' || pt === 'pawB') { d.set(0, -1, 0); alt.set(0, 0, -1); }
+    else if ((pt === 'tail' || pt === 'ear') && r) { d.set(X[i * 3] - r.x, X[i * 3 + 1] - r.y, X[i * 3 + 2] - r.z); if (d.lengthSq() < 1e-12) d.set(0, 0, -1); d.normalize(); alt.set(0, -1, 0); }
+    else { d.set(0, pt === 'neck' ? -0.35 : 0, -1).normalize(); alt.set(0, -1, 0); }
+    // (where the hair would point straight out of the surface, the chest's front, the rump: it falls down instead)
+    flat(d, nn); flat(alt, nn);
+    const k = Math.min(1, Math.max(0, (d.length() - 0.1) / 0.3));
+    if (alt.lengthSq() > 1e-8) alt.normalize();
+    if (d.lengthSq() > 1e-8) d.normalize();
+    d.multiplyScalar(k).addScaledVector(alt, 1 - k); if (d.lengthSq() < 1e-8) d.set(0, 0, -1); d.normalize();
+    const under = pt === 'tail' || pt === 'ear' ? 0 : Math.pow(Math.max(0, -nn.y), 1.5);
+    D[i * 4] = d.x; D[i * 4 + 1] = d.y; D[i * 4 + 2] = d.z; D[i * 4 + 3] = under;
+  }
+  return (shape.furA = { P, D });
+}
+export function furPlain(K, fur) {
+  const shape = analyseKind(K), { P, D } = furAttrs(shape), mesh = shape.mesh, g = mesh.geometry;
+  if (g.attributes.position.count !== shape.n) return false;
+  g.setAttribute('furP', new THREE.BufferAttribute(P, 3)); g.setAttribute('furD', new THREE.BufferAttribute(D, 4));
+  furMaterial(mesh.material, fur);
+  return true;
+}
+
 // smooth 3D value noise (0..1) for the patches
 function noise3(seed) {
   const R = rng(seed), P = new Float32Array(512); for (let i = 0; i < 512; i++) P[i] = R();
@@ -133,6 +178,7 @@ export function paintBreed(geometry, shape, coat, { seed = coat.seed, parts = []
   const pos = geometry.attributes.position, nor = geometry.attributes.normal, si = geometry.attributes.skinIndex, sw = geometry.attributes.skinWeight, col0 = shape.mesh.geometry.attributes.color;
   const nc = faces.length * 3 + parts.reduce((s, p) => s + p.count, 0);
   const P = new Float32Array(nc * 3), N = new Float32Array(nc * 3), C = new Float32Array(nc * 3), UV = new Float32Array(nc * 2);
+  const fa = furAttrs(shape), FP = new Float32Array(nc * 3), FD = new Float32Array(nc * 4);   // (the fur's: parts added get none)
   const SI = new si.array.constructor(nc * 4), SW = new sw.array.constructor(nc * 4);
   const tex = coat.pattern !== 'none' ? patternTexture(coat) : null, white = tex ? tex.userData.white : [0, 0];
   const tile = H * (0.35 + 1.3 * coat.patternScale), psz = 1 / tile;
@@ -145,6 +191,7 @@ export function paintBreed(geometry, shape, coat, { seed = coat.seed, parts = []
   for (const f of faces) {
     f.rand = R();
     const paint = paintFace(f, coat);
+    const furless = paint.layer === 'eye' || paint.layer === 'nose' || paint.layer === 'shine';
     layers[paint.layer] = (layers[paint.layer] || 0) + 1;
     // (which way the pattern's picture is laid on this face: along the face's most nearly facing axis)
     const ax = Math.abs(f.n[0]) >= Math.abs(f.n[1]) && Math.abs(f.n[0]) >= Math.abs(f.n[2]) ? 0 : Math.abs(f.n[1]) >= Math.abs(f.n[2]) ? 1 : 2;
@@ -158,6 +205,8 @@ export function paintBreed(geometry, shape, coat, { seed = coat.seed, parts = []
         UV[k * 2] = (ax === 0 ? z : x) * psz; UV[k * 2 + 1] = (ax === 1 ? z : y) * psz;
       } else { UV[k * 2] = white[0]; UV[k * 2 + 1] = white[1]; }
       for (let j = 0; j < 4; j++) { SI[k * 4 + j] = si.array[q * 4 + j]; SW[k * 4 + j] = sw.array[q * 4 + j]; }
+      FP[k * 3] = fa.P[q * 3]; FP[k * 3 + 1] = fa.P[q * 3 + 1]; FP[k * 3 + 2] = fa.P[q * 3 + 2];
+      if (!furless) for (let j = 0; j < 4; j++) FD[k * 4 + j] = fa.D[q * 4 + j];
       k++;
     }
   }
@@ -173,6 +222,8 @@ export function paintBreed(geometry, shape, coat, { seed = coat.seed, parts = []
   g.setAttribute('normal', new THREE.BufferAttribute(N, 3));
   g.setAttribute('color', new THREE.BufferAttribute(C, 3));
   if (tex) g.setAttribute('uv', new THREE.BufferAttribute(UV, 2));
+  g.setAttribute('furP', new THREE.BufferAttribute(FP, 3));
+  g.setAttribute('furD', new THREE.BufferAttribute(FD, 4));
   g.setAttribute('skinIndex', new THREE.BufferAttribute(SI, 4, sw.normalized && false));
   g.setAttribute('skinWeight', new THREE.BufferAttribute(SW, 4, sw.normalized));
   const merged = mergeVertices(g, 1e-5);
@@ -357,6 +408,7 @@ export function makeBreedKind(K, breed) {
   const src = K.scene.getObjectByProperty('isSkinnedMesh', true) || mesh;
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.75, metalness: 0, map: painted.map || null });
   mat.name = 'animal'; mat.userData.indoorLit = true; mat.userData.breed = breed.id;
+  furMaterial(mat, breed.furFull || breed.fur);
   mesh.material = mat;
   mesh.name = breed.id || mesh.name;
   morphed.scene.name = breed.id || morphed.scene.name;

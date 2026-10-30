@@ -2105,11 +2105,14 @@ const sunShadeFrag = (fs, who = 'hill shade') => lampStandard('uniform sampler2D
 // for again now and then)
 function sunShadeAll() {
   scene.traverse((o) => { if (!o.isMesh) return; for (const m of [].concat(o.material)) {
-    if (!m || m.userData.sunShade || !(m.isMeshStandardMaterial || m.isMeshLambertMaterial || m.isMeshPhongMaterial) || m.onBeforeCompile !== THREE.Material.prototype.onBeforeCompile) continue;
+    // (a material with a patch of its own is left alone, unless it asks for the shade on top: shadeChain, a dog's fur)
+    const own = m && m.onBeforeCompile !== THREE.Material.prototype.onBeforeCompile;
+    if (!m || m.userData.sunShade || !(m.isMeshStandardMaterial || m.isMeshLambertMaterial || m.isMeshPhongMaterial) || (own && !m.userData.shadeChain)) continue;
     m.userData.sunShade = true; const who = 'hill shade on ' + (m.name || o.name || m.type);
+    const pre = own ? m.onBeforeCompile : null, preKey = own ? m.customProgramCacheKey.bind(m) : () => '';
     // (an animal's: also lit like the room round it when it stands indoors, world/objects/indoorlight.js)
-    if (m.userData.indoorLit) { m.onBeforeCompile = (sh) => { Object.assign(sh.uniforms, SUNSHADE_U); indoorPre(sh); sh.fragmentShader = sunShadeFrag(sh.fragmentShader, who); indoorPost(sh); }; m.customProgramCacheKey = () => 'sunshade' + INDOOR_KEY; }
-    else m.onBeforeCompile = (sh) => { Object.assign(sh.uniforms, SUNSHADE_U); sh.fragmentShader = sunShadeFrag(sh.fragmentShader, who); };
+    if (m.userData.indoorLit) { m.onBeforeCompile = (sh, r) => { if (pre) pre(sh, r); Object.assign(sh.uniforms, SUNSHADE_U); indoorPre(sh); sh.fragmentShader = sunShadeFrag(sh.fragmentShader, who); indoorPost(sh); }; m.customProgramCacheKey = () => preKey() + 'sunshade' + INDOOR_KEY; }
+    else { m.onBeforeCompile = (sh, r) => { if (pre) pre(sh, r); Object.assign(sh.uniforms, SUNSHADE_U); sh.fragmentShader = sunShadeFrag(sh.fragmentShader, who); }; if (own) m.customProgramCacheKey = () => preKey() + 'sunshade'; }
     m.needsUpdate = true; } });
 }
 const paveMat = new THREE.MeshStandardMaterial({ roughness: 0.88, metalness: 0 });

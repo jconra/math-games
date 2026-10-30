@@ -6,7 +6,10 @@
 //   Save: served from this machine, sent to the little save script (~/pw/bandit-math/rigs/town/save_server.cjs, port
 //   8998, POST /dogbreeds), which writes models/animals/dogbreeds.json; anywhere else (or with the script not running)
 //   downloaded, to hand over. Only breeds that differ from dogbreeds.js are written.
-// ONE MENU: the bar along the bottom: the breeds, then the tabs (Breed, Body, Head, Ears and tail, Coat, Motion, View,
+// FUR (src/actors/dogfur.js): the Fur tab's switch shows every dog with it or without it; its sliders (length, softness,
+// strength, sheen) are the breed's own, saved with it; the plain dogs (the shiba, the husky, the pug, at the end of the
+// breeds) can have only their fur tuned here, saved in the file's `fur` block.
+// ONE MENU: the bar along the bottom: the breeds, then the tabs (Breed, Body, Head, Ears and tail, Coat, Fur, Motion, View,
 // Save); a tab's controls open in a drawer just over the bar. FLYING THE VIEW: W A S D along the ground the way the
 // view faces, Space up, C down, Shift faster; the mouse (or a finger) turns and zooms round the dog (OrbitControls).
 // For rigs: window.DL = { ready, state, breeds, pick(id), set(morph), coat(c), collar(c|null), view(name), cam(name),
@@ -16,7 +19,8 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { loadAnimals, makeAnimal } from '../../src/actors/animals.js';
 import { makeBreedKind, savedBreeds, setSavedBreeds } from '../../src/actors/dogkind.js';
-import { BREEDS, BREED_ORDER, BASES, LATER, breedOf, cleanBreed } from '../../src/actors/dogbreeds.js';
+import { BREEDS, BREED_ORDER, NOT_KEEPERS, BASES, LATER, breedOf, cleanBreed, FUR, fillFur, FUR_BASES, baseFur } from '../../src/actors/dogbreeds.js';
+import { FUR_SWITCH, setFur } from '../../src/actors/dogfur.js';
 import { MORPH, MORPH_GROUPS, EAR_SETS, fillMorph } from '../../src/actors/morphplan.js';
 import { COAT, COAT_GROUPS, PATTERNS, PATTERN_ON, EAR_COLOURS, fillCoat } from '../../src/actors/dogcoat.js';
 
@@ -72,16 +76,19 @@ track.position.set(0, 0.003, TRACK_Z); track.receiveShadow = true; scene.add(tra
 let lib = null, SAVED = { v: 1, breeds: {} };
 const work = {};                    // id -> { label, base, ears, morph (full), coat (full), collar, note }
 let ORDER = [...BREED_ORDER];
-function fromBreed(b) { return { label: b.label, base: b.base, ears: b.ears, morph: { ...b.morphFull }, coat: { ...b.coatFull }, collar: b.collar ? { ...b.collar } : null, note: b.note }; }
-function asBreed(id) { const w = work[id]; return { id, label: w.label, base: w.base, ears: w.ears, collar: w.collar, note: w.note, morphFull: fillMorph(w.morph), coatFull: fillCoat(w.coat) }; }
+function fromBreed(b) { return { label: b.label, base: b.base, ears: b.ears, morph: { ...b.morphFull }, coat: { ...b.coatFull }, collar: b.collar ? { ...b.collar } : null, note: b.note, fur: fillFur(b.fur) }; }
+const furWork = {};                 // a plain dog's fur (BASES): id -> { length, softness, strength, sheen }
+const furOf = (id) => (BASES.includes(id) ? furWork[id] : work[id] && work[id].fur);
+function asBreed(id) { const w = work[id]; return { id, label: w.label, base: w.base, ears: w.ears, collar: w.collar, note: w.note, morphFull: fillMorph(w.morph), coatFull: fillCoat(w.coat), furFull: fillFur(w.fur) }; }
 // a breed as dogbreeds.js keeps it (only what differs from its ear set and the defaults), to compare and to save
-const stored = (id) => cleanBreed({ label: work[id].label, base: work[id].base, ears: work[id].ears, morph: work[id].morph, coat: work[id].coat, collar: work[id].collar, note: work[id].note });
-const sameAsCode = (id) => BREEDS[id] && JSON.stringify(stored(id)) === JSON.stringify(cleanBreed(BREEDS[id]));
+const stored = (id) => cleanBreed({ label: work[id].label, base: work[id].base, ears: work[id].ears, morph: work[id].morph, coat: work[id].coat, collar: work[id].collar, note: work[id].note, fur: work[id].fur });
+const sameAsCode = (id) => (BASES.includes(id) ? JSON.stringify(fillFur(furWork[id])) === JSON.stringify(baseFur(id)) : BREEDS[id] && JSON.stringify(stored(id)) === JSON.stringify(cleanBreed(BREEDS[id])));
 const savedText = { now: '' };
 function fileOf() {
   const breeds = {};
   for (const id of ORDER) if (!sameAsCode(id)) breeds[id] = stored(id);
-  return { v: 1, note: "The Dog Lab's saved breeds (labs/dogs): each one here is used over src/actors/dogbreeds.js's own; a breed not here is as written there.", breeds };
+  const fur = {}; for (const id of BASES) if (furWork[id] && !sameAsCode(id)) fur[id] = fillFur(furWork[id]);
+  return { v: 1, note: "The Dog Lab's saved breeds (labs/dogs): each one here is used over src/actors/dogbreeds.js's own; a breed not here is as written there. fur: the plain dogs' fur.", breeds, ...(Object.keys(fur).length ? { fur } : {}) };
 }
 const fileText = () => JSON.stringify(fileOf(), null, 1).replace(/\n {2,}/g, ' ').replace(/\n \}/g, ' }') + '\n';
 const edited = () => fileText() !== savedText.now;
@@ -91,14 +98,20 @@ const made = new Map();             // id -> { sig, kind }
 const plain = (id) => BASES.includes(id);
 function kindOf(id) {
   if (plain(id)) return lib.kinds[id];
-  const sig = JSON.stringify(asBreed(id)), m = made.get(id);
+  const { furFull, ...rest } = asBreed(id), sig = JSON.stringify(rest), m = made.get(id);   // (the fur alone: no rebuild, applyFur)
   if (m && m.sig === sig) return m.kind;
   const kind = makeBreedKind(lib.kinds[work[id].base], asBreed(id));
   made.set(id, { sig, kind });
   lib.kinds['lab:' + id] = kind;
   return kind;
 }
+// the fur's numbers onto the kind's material (shared by every dog made of it)
+function applyFur(id) {
+  const kind = kindOf(id); if (!kind) return;
+  kind.scene.traverse((o) => { if (o.isSkinnedMesh && o.material && o.material.userData.furU) setFur(o.material, fillFur(furOf(id))); });
+}
 function makeDog(id) {
+  applyFur(id);
   const kind = kindOf(id), key = plain(id) ? id : 'lab:' + id;
   lib.kinds[key] = kind;
   const a = makeAnimal(lib, key, { shadows: true });
@@ -118,7 +131,7 @@ function playOn(d, name = state.clip) {
   const a = d.a, clip = a.actions[name] ? name : 'Idle';
   a.play(clip, { fade: 0, speed: state.speed, once: /_Down$|Death|Jump_toIdle/.test(clip) });
 }
-const BASE_ROW = ['shiba', 'boston', 'bostonFamily', 'bostonPug', 'pug'];
+const BASE_ROW = ['shiba', 'boston', 'bostonFamily', 'pug'];   // (the Boston on the pug is not a keeper: dogbreeds.js NOT_KEEPERS)
 function setView(v, { keepCam = false } = {}) {
   state.view = v;
   const t0 = performance.now();
@@ -129,7 +142,7 @@ function setView(v, { keepCam = false } = {}) {
     lightAt(0, d.z, 2.5);
     if (!keepCam) camTo(v === 'run' ? 'run' : 'q34');
   } else {
-    // a line-up: every breed (compare: two rows, the second behind), or the Boston on both bases beside the plain dogs
+    // a line-up: every breed (compare: two rows, the second behind), or the Bostons beside the plain dogs
     // (bases: one row); a narrow screen gets more rows
     const ids = v === 'bases' ? BASE_ROW : [...ORDER], aspect = innerWidth / innerHeight;
     const rows = v === 'bases' ? (aspect < 0.8 ? 2 : 1) : aspect < 0.8 ? 4 : 2, per = Math.ceil(ids.length / rows);
@@ -203,9 +216,11 @@ function fly(dt) {
 }
 
 // ── the menu: breeds along the bar, tabs under them, a drawer over the bar ────────────────────────────────────────
-const TABS = [['breed', 'Breed'], ['body', 'Body'], ['head', 'Head'], ['ears', 'Ears & tail'], ['coat', 'Coat'], ['motion', 'Motion'], ['view', 'View'], ['save', 'Save']];
+const TABS = [['breed', 'Breed'], ['body', 'Body'], ['head', 'Head'], ['ears', 'Ears & tail'], ['coat', 'Coat'], ['fur', 'Fur'], ['motion', 'Motion'], ['view', 'View'], ['save', 'Save']];
+const PLAIN_LABEL = (id) => id[0].toUpperCase() + id.slice(1) + ' (as the game has it)';
+const PLAIN_SWATCH = { shiba: '#c07a3c', husky: '#6d7178', pug: '#cfae7c' };
 function fillBreeds() {
-  $('breeds').innerHTML = ORDER.map((id) => { const w = work[id];
+  $('breeds').innerHTML = [...ORDER, ...BASES].map((id) => { const w = work[id] || { label: PLAIN_LABEL(id), coat: { base: PLAIN_SWATCH[id] || '#8a6a4a' } };
     return `<button class="chip${id === state.id ? ' on' : ''}${sameAsCode(id) ? '' : ' edited'}" role="option" aria-selected="${id === state.id}" data-breed="${id}"><i style="background:${w.coat.base}"></i>${w.label}</button>`; }).join('');
 }
 function markTabs() { $('tabs').querySelectorAll('[data-tab]').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === state.tab))); }
@@ -218,7 +233,7 @@ function openTab(t) {
   if (!t) { d.hidden = true; d.innerHTML = ''; return; }
   d.hidden = false; d.innerHTML = drawerHTML(t); wire(d); fillHead(); syncDrawer();
 }
-const R = (key, src) => { const [lo, hi, step, , label] = src === 'morph' ? MORPH[key] : [COAT[key][2], COAT[key][3], COAT[key][4], 0, COAT[key][5]];
+const R = (key, src) => { const [lo, hi, step, , label] = src === 'morph' ? MORPH[key] : src === 'fur' ? [FUR[key][1], FUR[key][2], FUR[key][3], 0, FUR[key][4]] : [COAT[key][2], COAT[key][3], COAT[key][4], 0, COAT[key][5]];
   return `<div class="row" data-key="${key}" data-src="${src}"><label for="r-${key}">${label}</label><input type="range" id="r-${key}" min="${lo}" max="${hi}" step="${step}"><output></output></div>`; };
 const C = (key, label = COAT[key][5]) => `<div class="row two" data-key="${key}" data-src="coat"><label for="c-${key}">${label}</label><input type="color" id="c-${key}"></div>`;
 const S = (key, label, opts, src = 'coat') => `<div class="row two" data-key="${key}" data-src="${src}"><label for="s-${key}">${label}</label><select id="s-${key}">${opts.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select></div>`;
@@ -233,6 +248,11 @@ function drawerHTML(t) {
       <div class="btnrow"><button class="btn" data-act="reset">Back to as written</button><button class="btn" data-act="resetSaved">Back to saved</button><button class="btn" data-act="copy">Copy as a new breed</button></div>
       <p class="note">Every breed is one of the game's three dogs (the shiba, the husky, the pug) reshaped and painted. The Boston terrier is shown on two of them: on the shiba (its snout pulled in) and on the pug (already short-faced; the farm pack's pug has no eyes or ear bones, so those are added).</p>
       <p class="note"><b>Later:</b> ${LATER.join(' · ')}</p></div>`;
+  if (plain(state.id) && ['breed', 'body', 'head', 'ears', 'coat'].includes(t)) return head + `<p class="note">${PLAIN_LABEL(state.id)}: the dog as its model comes, not a breed. Only its fur can be tuned here (the Fur tab); make a breed from it with a breed's "Made from".</p>`;
+  if (t === 'fur') return head + `<div class="grid">
+      <div class="row check"><label><input type="checkbox" id="k-fur"> Fur (on every dog)</label></div>
+      ${Object.keys(FUR).map((k) => R(k, 'fur')).join('')}
+      <div class="btnrow"><button class="btn" data-act="furReset">Back to as written</button></div></div>${HOW.fur}`;
   if (t === 'body') return head + `<div class="grid">${morphRows('body')}</div>${HOW.body}`;
   if (t === 'head') return head + `<div class="grid">${morphRows('head')}</div>${HOW.head}`;
   if (t === 'ears') return head + `<div class="grid">${S('ears', 'Ear set', Object.entries(EAR_SETS).map(([k, v]) => [k, v.label]), 'breed')}${morphRows('ears')}<div class="sub">Tail</div>${morphRows('tail')}</div>${HOW.ears}`;
@@ -249,7 +269,7 @@ function drawerHTML(t) {
       <div class="btnrow"><button class="btn" data-act="run">Run along the track</button></div>
       <p class="note" id="m-gait"></p></div>${HOW.motion}`;
   if (t === 'view') return head + `<div class="grid">
-      <div class="btnrow"><button class="btn" data-view="one">One dog</button><button class="btn" data-view="compare">All the breeds</button><button class="btn" data-view="bases">The Boston, both ways</button><button class="btn" data-view="run">Running</button></div>
+      <div class="btnrow"><button class="btn" data-view="one">One dog</button><button class="btn" data-view="compare">All the breeds</button><button class="btn" data-view="bases">The Bostons and their bases</button><button class="btn" data-view="run">Running</button></div>
       <div class="btnrow"><button class="btn" data-cam="side">Side</button><button class="btn" data-cam="front">Front</button><button class="btn" data-cam="q34">Three-quarter</button><button class="btn" data-cam="top">Top</button><button class="btn" data-cam="head">Head</button><button class="btn" data-cam="back">Back</button></div>
       <div class="row check"><label><input type="checkbox" id="k-spin"> Turntable (spin slowly)</label></div>
       <div class="row check"><label><input type="checkbox" id="k-shadows" checked> Shadows</label></div>
@@ -263,6 +283,7 @@ function drawerHTML(t) {
   return head;
 }
 const HOW = {
+  fur: `<details class="how"><summary>How it works</summary><p>The fur is in the shader, over the painted coat: no extra shells or geometry, still one draw a dog, and the facets stay as they are. Fine strands (2 to 5 mm on a dog this size) run the way the hair lies: head to tail over the body, down the legs, out along the tail and the ears. They only lighten and darken the coat's own colour, so a blaze or a sock keeps its crisp edge; each strand is darker at the root and lighter at the tip, and the underside a little darker. The sun's light wraps softly round the sides and catches the fur's edge where it turns away from you (the sheen). Far off, where a strand is smaller than a pixel, the strands fade out. On the game's lowest quality setting the dogs have no fur.</p><p><b>Length</b>: short (a Boston's, a Lab's) to long and loose (a collie's, a husky's). <b>Softness</b>: how far the light wraps round and how soft the strands are. <b>Strength</b>: how much the strands show. <b>Sheen</b>: the light on the edge.</p></details>`,
   body: `<details class="how"><summary>How it works</summary><p>Each slider stretches some of the dog's bones: its own stretch of the body grows along the dog (side, up, forward) or along the bone, and the bones hanging off it sit that much further away. That gives a new standing pose; the mesh is laid out again in it and bound to it afresh, so each bone carries its reshaped piece of the dog.</p><p>The clips are copied for the breed and changed to match, once: the paws hang on bones of their own that the clips place, so every frame (30 a second) each paw is moved to where its new leg now ends; and the body is lowered or raised, and tipped, so whatever touched the ground in the original frame (the paws standing, the rump sitting, the belly lying) touches it again. Nothing is worked out while it plays: a breed costs what its plain dog costs.</p></details>`,
   head: `<details class="how"><summary>How it works</summary><p>The head is one bone, so the snout is reshaped corner by corner: everything in front of the stop (just in front of the eyes) is pulled in or pushed out, made wider and deeper, eased in over the muzzle's first third so there's no crease. The eyes (the model's own dark faces) grow round their middles and stand out a touch. The neck can be carried further forward; the head turns back to keep the nose level, and can be tipped up or down after.</p></details>`,
   ears: `<details class="how"><summary>How it works</summary><p>The ears are four bones each: grown all over, longer or wider; turned out (all the way out and down, a drop ear) and forward at the root; the tips folded over at the second, third and fourth bones. The turns ride on every key of the clips, so an ear flick still flicks the folded ear. An ear set (pricked, bat, tipped, rose, drop) is a starting point for the sliders. The tail's three bones: length, thickness, carried up or down at the root, curled along the rest.</p></details>`,
@@ -276,6 +297,7 @@ function wire(d) {
       const v = inp.type === 'range' ? +inp.value : inp.value;
       if (src === 'morph') { work[state.id].morph[k] = v; changed(); }
       else if (src === 'coat') { work[state.id].coat[k] = v; changed(); }
+      else if (src === 'fur') { furOf(state.id)[k] = v; applyFur(state.id); fillBreeds(); syncSaveSay(); }
       else if (src === 'breed') {
         if (k === 'ears') { const set = EAR_SETS[v] || {}; work[state.id].ears = v; for (const [mk, mv] of Object.entries(set)) if (mk in MORPH) work[state.id].morph[mk] = mv; changed(); syncDrawer(); }
         else if (k === 'base') { work[state.id].base = v; lib.need(v).then(() => changed()); }
@@ -290,6 +312,7 @@ function wire(d) {
   on('c-studs', 'input', (e) => { if (work[state.id].collar) { work[state.id].collar.studs = e.target.value; changed(); } });
   on('k-studs', 'change', (e) => { const c = work[state.id].collar; if (c) { c.studs = e.target.checked ? (c.studs || '#d8d2c4') : null; changed(); } });
   on('k-spin', 'change', (e) => { state.spin = e.target.checked; });
+  on('k-fur', 'change', (e) => { FUR_SWITCH.value = e.target.checked ? 1 : 0; });
   on('k-shadows', 'change', (e) => { state.shadows = e.target.checked; sun.castShadow = state.shadows; });
   on('s-clip', 'change', (e) => clip(e.target.value));
   d.addEventListener('click', (e) => {
@@ -304,6 +327,7 @@ function wire(d) {
     if (act === 'reset') { if (BREEDS[state.id]) { work[state.id] = fromBreed(breedOf(state.id)); changed(); syncDrawer(); } }
     if (act === 'resetSaved') { const b2 = breedOf(state.id, SAVED); if (b2) { work[state.id] = fromBreed(b2); changed(); syncDrawer(); } }
     if (act === 'copy') copyBreed();
+    if (act === 'furReset') { const f = plain(state.id) ? FUR_BASES[state.id] : BREEDS[state.id] ? breedOf(state.id).fur : null; if (f) { Object.assign(furOf(state.id), fillFur(f)); applyFur(state.id); fillBreeds(); syncDrawer(); syncSaveSay(); } }
     if (act === 'save') save();
     if (act === 'download') download();
     if (act === 'reload') reload();
@@ -312,10 +336,10 @@ function wire(d) {
 const fmt = (k, v) => (k === 'speed' ? (+v).toFixed(2) + 'x' : k === 'pace' ? (+v).toFixed(1) : k === 'seed' ? String(Math.round(v)) : (+v).toFixed(2));
 function syncDrawer() {
   const d = $('drawer'); if (d.hidden) return;
-  const w = work[state.id];
+  const w = work[state.id] || {};
   d.querySelectorAll('.row[data-key]').forEach((row) => {
     const k = row.dataset.key, src = row.dataset.src, inp = row.querySelector('input,select');
-    const v = src === 'morph' ? w.morph[k] : src === 'coat' ? w.coat[k] : src === 'breed' ? w[k] : state[k];
+    const v = src === 'morph' ? w.morph[k] : src === 'coat' ? w.coat[k] : src === 'fur' ? furOf(state.id)[k] : src === 'breed' ? w[k] : state[k];
     if (v === undefined) return;
     inp.value = v; const o = row.querySelector('output'); if (o) o.textContent = fmt(k, v);
   });
@@ -327,6 +351,7 @@ function syncDrawer() {
   set('c-studs', (el) => { el.value = w.collar && w.collar.studs ? w.collar.studs : '#d8d2c4'; el.disabled = !w.collar; });
   set('k-studs', (el) => { el.checked = !!(w.collar && w.collar.studs); el.disabled = !w.collar; });
   set('k-spin', (el) => { el.checked = state.spin; });
+  set('k-fur', (el) => { el.checked = FUR_SWITCH.value > 0.5; });
   set('s-clip', (el) => { const a = dogs[0] && dogs[0].a; const names = a ? Object.keys(a.actions) : ['Idle']; el.innerHTML = names.map((n) => `<option>${n}</option>`).join(''); el.value = state.clip; });
   set('fileText', (el) => { el.textContent = fileText(); });
   const pb = d.querySelector('[data-act="play"]'); if (pb) pb.textContent = state.playing ? 'Pause' : 'Play';
@@ -349,7 +374,7 @@ function changed() {
   rebuildT = setTimeout(() => { setView(state.view, { keepCam: true }); syncSaveSay(); }, 90);
 }
 function pick(id) {
-  if (!work[id]) return;
+  if (!work[id] && !plain(id)) return;
   state.id = id; fillBreeds();
   setView(state.view === 'compare' || state.view === 'bases' ? 'one' : state.view);
   syncDrawer();
@@ -393,8 +418,9 @@ async function reload() {
   loadWork(); savedText.now = fileText(); fillBreeds(); setView(state.view, { keepCam: true }); syncDrawer(); syncSaveSay('Read the saved file again.', 'ok');
 }
 function loadWork() {
-  ORDER = [...BREED_ORDER, ...Object.keys(SAVED.breeds || {}).filter((id) => !BREED_ORDER.includes(id))];
+  ORDER = [...BREED_ORDER, ...Object.keys(SAVED.breeds || {}).filter((id) => !BREED_ORDER.includes(id) && !NOT_KEEPERS.includes(id))];
   for (const id of ORDER) work[id] = fromBreed(breedOf(id, SAVED));
+  for (const id of BASES) furWork[id] = baseFur(id, SAVED);
 }
 
 // ── measuring: the breed against its plain dog, one and twenty-four of each ─────────────────────────────────────
@@ -500,7 +526,7 @@ function frame() {
     lib = await loadAnimals(GAME, { kinds: BASES });
     SAVED = await savedBreeds(lib.dir, { fresh: true });
     loadWork(); savedText.now = fileText();
-    if (Q.get('breed') && work[Q.get('breed')]) state.id = Q.get('breed');
+    if (Q.get('breed') && (work[Q.get('breed')] || BASES.includes(Q.get('breed')))) state.id = Q.get('breed');
     fillBreeds();
     setView(Q.get('view') || 'one');
     if (Q.get('tab')) openTab(Q.get('tab'));
@@ -515,6 +541,9 @@ Object.defineProperties(DL, Object.getOwnPropertyDescriptors({
   state, get breeds() { return work; }, get order() { return ORDER; }, pick, view: setView, cam: camTo, camAt, clip, run, measure, kindOf, tab: openTab,
   set(m) { Object.assign(work[state.id].morph, m); changed(); syncDrawer(); },
   coat(c) { Object.assign(work[state.id].coat, c); changed(); syncDrawer(); },
+  // the fur: fur({ length, softness, strength, sheen }) on the dog in view; furOn(false) shows every dog without it
+  fur(f) { Object.assign(furOf(state.id), f); applyFur(state.id); fillBreeds(); syncDrawer(); },
+  furOn(on) { FUR_SWITCH.value = on ? 1 : 0; syncDrawer(); },
   collar(c) { work[state.id].collar = c; changed(); syncDrawer(); },
   // the breed made now (not after the short wait a slider has)
   now() { clearTimeout(rebuildT); setView(state.view, { keepCam: true }); },

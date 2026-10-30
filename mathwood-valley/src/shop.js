@@ -7,7 +7,8 @@
 //                   yet: catalog.js HORSES, LADDER), each with its top speed as a number (mph); every rider starts on
 //                   foot and buys a horse (the donkey, 30, first) and a saddle; the one picked is ridden
 //   general store   "Mind the counter": the word-problem job (src/missions/store.js: townsfolk bring order slips); and
-//                   dogs: a Shiba, a Husky or the pug (the cheap joke pick), each named by the kid; more than one can be
+//                   dogs: a Shiba, a Husky, the pug (the cheap joke pick) or a breed (catalog.js DOGS), each named by the kid,
+//                   each dearer by the dogs already owned (catalog.js dogPrice); more than one can be
 //                   bought, and the one picked follows you while the others wait at home; and hats (src/hats.js): bought
 //                   once, worn at once, swapped back and forth free; and the six-shooter for bandits (src/gun.js),
 //                   greyed with a word for a rider whose grown-up has "Bandits" on lasso only; and treats for the
@@ -42,7 +43,7 @@ import { TIER_NAME, TIER_GOLD } from './lockbox/index.js';
 import { RUNG_IDS, RUNG } from './lockbox/generate.js';
 import { HATS, hatOf, hatIcon } from './hats.js';
 import { PALETTES } from './actors/folk.js';
-import { PRICES, SADDLES, HORSES, DOGS, DOG_NAMES, LADDER, REVOLVER, handsOf, handsText } from './catalog.js';
+import { PRICES, SADDLES, HORSES, DOGS, DOG_NAMES, LADDER, REVOLVER, handsOf, handsText, dogPrice } from './catalog.js';
 import { gunShop, buyGun } from './gun.js';
 import { ownedHorses, ownsHorse, rideHorse, horseLook, ridden } from './mounts.js';
 import { TREATS, BOND, TREAT_KINDS, treatsOf, countOf, roomOf, addTreats, treatQuestion, answerLine, bondOf, heartsLine, treatWord } from './treats.js';
@@ -248,9 +249,10 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
     // the breeds not owned yet: one row, pick a breed and name it (the first one the rider can afford is picked)
     const left = DOGS.filter((d) => !mine.some((m) => m.kind === d.id));
     if (left.length) {
-      if (!left.some((d) => d.id === S.dogKind)) S.dogKind = (left.find((d) => rider.gold >= PRICES.dog[d.id]) || left[0]).id;
-      const pick = DOGS.find((d) => d.id === S.dogKind), cost = PRICES.dog[pick.id];
-      h += `<div class="bms-row is-tall"><div class="bms-what"><b>${mine.length ? 'Another dog' : 'A dog'}</b><small>${esc(pick.line)}</small>
+      // (each dog costs more the more dogs the rider has: catalog.js dogPrice)
+      if (!left.some((d) => d.id === S.dogKind)) S.dogKind = (left.find((d) => rider.gold >= dogPrice(d.id, mine.length)) || left[0]).id;
+      const pick = DOGS.find((d) => d.id === S.dogKind), cost = dogPrice(pick.id, mine.length);
+      h += `<div class="bms-row is-tall"><div class="bms-what"><b>${mine.length ? 'Another dog' : 'A dog'}</b><small>${esc(pick.line)}${mine.length ? ` Each dog you have puts the price up.` : ''}</small>
         <div class="bms-kinds" role="radiogroup" aria-label="Which dog">${left.map((d) => `<button type="button" role="radio" aria-checked="${pick.id === d.id}" data-do="kind" data-id="${d.id}" class="${pick.id === d.id ? 'is-on' : ''}">${d.name}</button>`).join('')}</div>
         <div class="bms-name"><input type="text" maxlength="12" placeholder="Name your dog" value="${esc(S.dogName || '')}" aria-label="Your new dog's name" data-name="new"></div></div>
         <div class="bms-act">${price(cost)}<button type="button" data-do="buy-dog" ${rider.gold < cost ? 'disabled' : ''}>${rider.gold < cost ? short(cost) : 'Buy'}</button></div></div>`;
@@ -428,7 +430,7 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
     } else if (what === 'kind') {
       S.dogKind = id; draw();
     } else if (what === 'buy-dog') {
-      const kind = S.dogKind, cost = PRICES.dog[kind]; if (cost == null) return;
+      const kind = S.dogKind, cost = dogPrice(kind, dogsOwned().length); if (cost == null) return;
       const input = panel.body.querySelector('[data-name="new"]');
       const name = cleanName(input && input.value) || DOG_NAMES[Math.floor(Math.random() * DOG_NAMES.length)];
       if (!spend(rider, cost)) { draw('Not enough gold yet.'); return; }

@@ -17,7 +17,7 @@ test('the prices as decided on 2026-10-19: every one doubled, the cabin 600 (the
   // (Dad, 2026-10-27: every rider starts on foot; the price goes up with the speed, the donkey 30 to Midnight 400)
   assert.deepEqual(PRICES.horse, { donkey: 30, chestnut: 45, bay: 60, palomino: 200, white: 300, midnight: 400 });
   assert.deepEqual(PRICES.hat, { white: 40, straw: 60, bowler: 100, ranger: 160, cattleman: 240, sombrero: 400 });
-  assert.deepEqual(PRICES.dog, { shiba: 120, husky: 120, pug: 50 });
+  assert.deepEqual(PRICES.dog, { shiba: 120, husky: 120, pug: 50, boston: 120, borderCollie: 140, cattleDog: 140, labYellow: 130, labBlack: 130, labChocolate: 130, beagle: 100, dalmatian: 160 });
   assert.deepEqual(PRICES.animal, { hen: 30, pig: 70, sheep: 100, cow: 240 });
   assert.deepEqual(PRICES.furniture, { rug: 30, lanterns: 60, picture: 80, dogbeds: 90, table: 120, porch: 160, bed: 200, rifles: 240, stove: 440 });
   assert.equal(PRICES.cabin, 600);
@@ -30,8 +30,8 @@ test('one table: the furniture and the farm animals sell at the catalog\'s price
   const buy = completion(S.newRider('Sam')).items.filter((i) => i.group === 'buy');
   const all = buy.reduce((a, i) => a + i.need, 0);
   const sum = (o) => Object.values(o).reduce((a, b) => a + b, 0);
-  assert.equal(all, PRICES.cabin + sum(PRICES.saddle) + sum(PRICES.horse) + sum(PRICES.hat) + sum(PRICES.dog) + sum(PRICES.animal) + sum(PRICES.furniture));
-  assert.equal(all, 5235, 'everything to buy (5,260 before the horses changed on 2026-10-27)');
+  assert.equal(all, PRICES.cabin + sum(PRICES.saddle) + sum(PRICES.horse) + sum(PRICES.hat) + Math.min(...Object.values(PRICES.dog)) + sum(PRICES.animal) + sum(PRICES.furniture));
+  assert.equal(all, 4995, 'everything to buy at base prices, one dog the cheapest (6,285 with every breed; 5,235 before the dog breeds were sold on 2026-10-29; 5,260 before the horses changed on 2026-10-27)');
   assert.ok(buy.every((i) => i.live), 'the cabin is for sale (COMING.cabin on)');
 });
 
@@ -72,4 +72,14 @@ test('the buckle counts came down; a rider who earned a buckle under the old cou
       assert.ok(S.BUCKLES.indexOf(now) >= was, `${id} at ${n}`);
     }
   }
+});
+
+test('a dog costs more for each dog the rider has (the game maker, 2026-10-29): half as much again each, to 5 gold', async () => {
+  const { dogPrice, DOGS } = await import('../src/catalog.js');
+  assert.deepEqual([0, 1, 2, 3].map((n) => dogPrice('shiba', n)), [120, 180, 240, 300]);
+  assert.deepEqual([0, 1, 2].map((n) => dogPrice('pug', n)), [50, 75, 100]);
+  assert.equal(dogPrice('labBlack', 1), 195);
+  assert.equal(dogPrice('nope', 0), null);
+  for (const d of DOGS) assert.ok(PRICES.dog[d.id] > 0, d.id);
+  for (const id of ['bostonPug', 'bostonBrindle', 'bostonFamily']) assert.ok(!DOGS.some((d) => d.id === id), id + ' is not sold');
 });

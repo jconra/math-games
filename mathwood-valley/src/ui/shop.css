@@ -53,7 +53,7 @@
 .bms-act button[disabled] { opacity: 0.55; cursor: default; font-weight: 600 !important; font-size: 14px; }
 .bms-tag { font-size: 14px; color: var(--mute); padding: 4px 10px; border-radius: 999px; border: 1px solid rgba(226, 173, 76, 0.25); white-space: nowrap; }
 .bms-tag.is-on { color: var(--good); border-color: rgba(169, 214, 127, 0.45); }
-.bms-kinds { display: flex; gap: 8px; margin-top: 8px; }
+.bms-kinds { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }   /* (a dozen breeds: they wrap) */
 .bms-kinds button { min-width: 0; padding: 6px 14px; }
 .bms-kinds button.is-on { background: linear-gradient(#e2ad4c, #b47f2c); color: #1d140c; border-color: #7a5524; }
 .bms-name { margin-top: 8px; }

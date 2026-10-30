@@ -30,6 +30,7 @@ import { makeWorld } from './world.js';
 import { chooseTier, wantAntialias } from '../world/quality.js';
 import { loadFolk, checkFades } from './actors/folk.js';
 import { loadAnimals } from './actors/animals.js';
+import { FUR_TIER } from './actors/dogfur.js';
 import { warmHorses, horseRenderer } from './actors/horses.js';
 import { makeHorsePen } from './horsepen.js';
 import { makeStableLife } from './stablelife.js';
@@ -114,6 +115,7 @@ if (PERF) renderer.info.autoReset = false;
 const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 5000);
 howdyCamera(camera);   // (the Howdy bubbles over the townsfolk and the wagon drivers are placed with it: src/ui/howdy.js)
 const quality = chooseTier(renderer);
+FUR_TIER.on = quality.tier !== 'potato';   // (the dogs' fur shader: off on the lowest tier, src/actors/dogfur.js; set before any dog is made)
 
 // ── THE TITLE SCREEN (shown at once; the valley loads behind it) ───────────────────────────────────────────────────
 const T = showTitle($('title-root'), { riders: loadRiders(), build: BUILD, onRide: (r) => ride(r), onLockboxes: (r) => justBoxes(r) });
@@ -373,7 +375,7 @@ async function ride(r) {
     } }); BM.rooms = TR;
   // the graph teacher at the saloon's chalkboard: E at the board opens his card (the keys let go while it is up)
   GT = makeGraphTeacher({ W, folk, rider, uses: US, hud, canOpen: () => !paused,
-    onOpen: () => { I.enabled = false; hud.prompt(null); }, onClose: () => { I.enabled = !paused; } });
+    onOpen: () => { I.enabled = false; hud.prompt(null); chooseJob('graphs'); }, onClose: () => { I.enabled = !paused; } });
   camps = makeCamps({ W, folk, camera, audio: AUD });
   // the build sites: a lab's builder opened right there in the valley (the windmill's at the mill hill); while one is up
   // the rider stands by, the keys and the HUD are the builder's, and the valley goes on round it
@@ -425,7 +427,7 @@ async function ride(r) {
   saloonFolk = makeSaloonFolk({ W, folk, TP, stage, camera });   // (the townsfolk in the saloon: listening, clapping)
   if (stage) stage.crowd = saloonFolk;
   JB = makeJobsBoard({ W, camera, I, hud, rider, player: () => P, onOpen: () => pause('board'), onClose: () => resume('board'),
-    jobs: { roundup: () => RU, sheep: () => SH, pigs: () => PG, store: () => SJ, delivery: () => DL, wagon: () => WJ, deer: () => DJ, range: () => SR, loot: () => LJ, farm: () => farm, camps: () => camps, jobfolk: () => JF, windmill: () => (WMJ && WMJ.on ? WMJ : null), bridge: () => (BRJ && jobOn(rider, 'bridge') ? BRJ : null), fishing: () => (FJ && FJ.on ? FJ : null) },
+    jobs: { roundup: () => RU, sheep: () => SH, pigs: () => PG, store: () => SJ, delivery: () => DL, wagon: () => WJ, deer: () => DJ, range: () => SR, loot: () => LJ, farm: () => farm, camps: () => camps, jobfolk: () => JF, windmill: () => (WMJ && WMJ.on ? WMJ : null), bridge: () => (BRJ && jobOn(rider, 'bridge') ? BRJ : null), fishing: () => (FJ && FJ.on ? FJ : null), graphs: () => GT },
     speak: (text) => { if (rider && SKILLS.readAloud(rider)) sayLine(text); },   // (a job picked there is read out to a rider who can't read yet)
     shift: { done: (id) => !!(SK && SK.done(id)), ask: (id) => !!(SK && SK.ask(id)) } });   // (a job done for today: stamped on the board; picked there, more work)
   // (made before anything can be bought or done: its first look takes what an old save already has as announced)
@@ -641,7 +643,7 @@ const JOB_OF_EVENT = {
   deerSetup: 'deer', deerRight: 'deer', deerWrong: 'deer',
   lootGuard: 'loot', lootLoaded: 'loot', lootMiss: 'loot', lootRight: 'loot', lootShare: 'loot',
 };
-const JOB_NOW = { roundup: () => RU, sheep: () => SH, pigs: () => PG, store: () => SJ, delivery: () => DL, wagon: () => WJ, deer: () => DJ, range: () => SR, loot: () => LJ, boxes: () => true, windmill: () => !!(WMJ && WMJ.on), bridge: () => !!(BRJ && jobOn(rider, 'bridge')), fishing: () => !!(FJ && FJ.on) };
+const JOB_NOW = { roundup: () => RU, sheep: () => SH, pigs: () => PG, store: () => SJ, delivery: () => DL, wagon: () => WJ, deer: () => DJ, range: () => SR, loot: () => LJ, boxes: () => true, windmill: () => !!(WMJ && WMJ.on), bridge: () => !!(BRJ && jobOn(rider, 'bridge')), fishing: () => !!(FJ && FJ.on), graphs: () => !!GT };
 function chooseJob(id) {
   if (!id || id === theJob || !JOB_NOW[id] || !JOB_NOW[id]()) return;
   theJob = id; jobCardKey = ''; worked = true;

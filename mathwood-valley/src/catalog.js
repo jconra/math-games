@@ -18,7 +18,9 @@ export const PRICES = {
   // free, but have a progression"), so the first ride is the donkey and a plain saddle, 60 in all
   horse: { donkey: 30, chestnut: 45, bay: 60, palomino: 200, white: 300, midnight: 400 },
   hat: { white: 40, straw: 60, bowler: 100, ranger: 160, cattleman: 240, sombrero: 400 },   // the old cowboy hat comes free
-  dog: { shiba: 120, husky: 120, pug: 50 },          // the pug is the cheap joke pick
+  // the dogs' base prices: the pug is the cheap joke pick; the breeds (src/actors/dogbreeds.js) by size and how fancy.
+  // A rider pays more for each dog already owned (dogPrice below)
+  dog: { shiba: 120, husky: 120, pug: 50, boston: 120, borderCollie: 140, cattleDog: 140, labYellow: 130, labBlack: 130, labChocolate: 130, beagle: 100, dalmatian: 160 },
   // the farm animals for the yard behind the cabin (src/math/goods.js ANIMALS): a hen cheap, a milk cow dear
   animal: { hen: 30, pig: 70, sheep: 100, cow: 240 },
   // the cabin's furnishings (src/cabin/slots.js SLOTS), a ladder from a cheap rug to a costly stove
@@ -80,5 +82,23 @@ export const DOGS = [
   { id: 'shiba', name: 'Shiba', line: 'Quick and clever. Keeps up on foot and on the trail.' },
   { id: 'husky', name: 'Husky', line: 'Strong and tireless. Keeps up with a galloping horse.' },
   { id: 'pug', name: 'Pug', line: 'He won\'t herd anything, but he\'s loyal.' },
+  // the breeds (src/actors/dogbreeds.js: the family's own Boston stays the family's, and the ones that aren't keepers
+  // yet, NOT_KEEPERS, aren't sold)
+  { id: 'boston', name: 'Boston terrier', line: 'Small, square and full of beans, in a black and white tuxedo.' },
+  { id: 'borderCollie', name: 'Border collie', line: 'The best herder there is. Watches every steer.' },
+  { id: 'cattleDog', name: 'Cattle dog', line: 'Tough as boots. Nips at the heels of a stray steer.' },
+  { id: 'labYellow', name: 'Yellow Lab', line: 'Big, gentle and happy. Loves the lake.' },
+  { id: 'labBlack', name: 'Black Lab', line: 'Big, gentle and happy. Loves the lake.' },
+  { id: 'labChocolate', name: 'Chocolate Lab', line: 'Big, gentle and happy. Loves the lake.' },
+  { id: 'beagle', name: 'Beagle', line: 'A nose for anything. Bays when he finds it.' },
+  { id: 'dalmatian', name: 'Dalmatian', line: 'Spots all over. Runs beside a horse all day.' },
 ];
+// what a dog costs a rider who owns `owned` dogs already: its base price, half as much again for each dog owned, to the
+// nearest 5 gold (the game's maker, 2026-10-29: "Maybe the price should go up each dog they get"). A Shiba: 120 for a first
+// dog, 180 for a second, 240 for a third
+export const DOG_RISE = 0.5;
+export function dogPrice(kind, owned = 0) {
+  const b = PRICES.dog[kind]; if (b == null) return null;
+  return Math.round(b * (1 + DOG_RISE * Math.max(0, owned)) / 5) * 5;
+}
 export const DOG_NAMES = ['Biscuit', 'Dusty', 'Scout', 'Pepper', 'Rusty', 'Bandit', 'Maple', 'Boots'];

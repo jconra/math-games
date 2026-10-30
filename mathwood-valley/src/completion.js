@@ -200,7 +200,9 @@ function allItems(rider) {
     if (PRICES.hat[h.id] == null) continue;     // (the old cowboy hat comes free)
     buy('Hats', 'hat', h.id, h.name, PRICES.hat[h.id], `The general store sells it for ${PRICES.hat[h.id]} gold.`, own.hats.has(h.id));
   }
-  for (const d of DOGS) buy('Dogs', 'dog', d.id, `A ${d.name}`, PRICES.dog[d.id], `The general store has one for ${PRICES.dog[d.id]} gold. You name it.`, own.dogs.has(d.id));
+  // a dog: one counts (any breed); more are the rider's own choice (the game's maker: "just 1 dog. More are optional")
+  const cheap = DOGS.filter((d) => PRICES.dog[d.id] != null).sort((x, y) => PRICES.dog[x.id] - PRICES.dog[y.id])[0];
+  if (cheap) buy('Dogs', 'dog', 'any', 'A dog of your own', PRICES.dog[cheap.id], `The general store has dogs from ${PRICES.dog[cheap.id]} gold. Pick any; you name it.`, own.dogs.size > 0);
   // (a pig or a sheep is for sale once its job's thank-you has come: with that job turned off and the kind not unlocked
   // yet, it can't be had)
   const FARM_JOB = { pig: 'pigs', sheep: 'sheep' };
