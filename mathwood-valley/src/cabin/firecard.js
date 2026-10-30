@@ -1,8 +1,8 @@
 // THE FIRE'S CARD: the few fireside sums before a fire is lit in the cabin's hearth (firemath.js deals them), low on the
 // screen so the fireplace stays in view. One sum at a time with its answers (a key under each: 1 to 4); a wrong pick
 // gets the topic's plain line and its picture (ten-frames, a number line: src/ui/counthelp.js) and costs nothing, the
-// kid just picks again; "Show me" brings the picture up any time, and it comes up by itself when the kid has been
-// stuck a while. A right pick ticks green and the next sum slides in; after the last the card goes and the fire
+// kid just picks again; "Show me" brings the picture up any time (stuck a while, it glows: the picture never comes up
+// by itself). A right pick ticks green and the next sum slides in; after the last the card goes and the fire
 // catches (the reward is the fire itself: no result screen). "Not now" or Esc puts it away.
 //
 //   const K = openFireCard({ parent, rider, save, onLit, onClose })
@@ -23,7 +23,7 @@ export function openFireCard({ parent, rider, save = () => {}, onLit = () => {},
     <div class="bmcf-answers"></div>
     <p class="bmcf-line" aria-live="polite"></p>
     <div class="bmcf-help"></div>
-    <div class="bmcf-foot"><button type="button" class="bmcf-show">Show me</button><button type="button" class="bmcf-close">Not now</button></div>`;
+    <div class="bmcf-foot"><button type="button" class="bmcf-show" data-askhelp>Show me</button><button type="button" class="bmcf-close">Not now</button></div>`;
   parent.appendChild(el);
   const $ = (s) => el.querySelector(s);
   let i = 0, help = null, stuckT = 0, closed = false, busy = false, line = '';
@@ -37,7 +37,7 @@ export function openFireCard({ parent, rider, save = () => {}, onLit = () => {},
     $('.bmcf-answers').querySelectorAll('button').forEach((b) => { b.onclick = () => pick(+b.dataset.k); });
     line = ''; $('.bmcf-line').textContent = '';
     if (help) { help.remove(); help = null; }
-    stuckT = 0;
+    stuckT = 0; $('.bmcf-show').classList.remove('is-glow');
     el.classList.remove('is-next'); void el.offsetWidth; el.classList.add('is-next');
   }
   function pick(k) {
@@ -61,13 +61,13 @@ export function openFireCard({ parent, rider, save = () => {}, onLit = () => {},
       draw();
     }, 520);
   }
-  // stuck a while: a nudge and the picture, the answer kept hidden
+  // stuck a while: a nudge in words and the Show me button glows (the picture is the rider's to ask for: src/ui/askhelp.js)
   const tick = setInterval(() => {
     if (closed) return;
     stuckT += 0.5;
-    if (stuckT >= FIRE_MATH.stuck && !help) { line = nudgeLine(set, card()); $('.bmcf-line').textContent = line; showHelp({ reveal: false }); }
+    if (stuckT >= FIRE_MATH.stuck && !help) { stuckT = -999; line = nudgeLine(set, card()); $('.bmcf-line').textContent = line; $('.bmcf-show').classList.add('is-glow'); }
   }, 500);
-  $('.bmcf-show').onclick = () => { if (!help) { showHelp({ reveal: false }); const n = nudgeLine(set, card()); if (n && !line) $('.bmcf-line').textContent = n; } };
+  $('.bmcf-show').onclick = () => { $('.bmcf-show').classList.remove('is-glow'); if (!help) { showHelp({ reveal: false }); const n = nudgeLine(set, card()); if (n && !line) $('.bmcf-line').textContent = n; } };
   const close = () => { if (closed) return; closed = true; el.remove(); detach(); onClose(); };
   $('.bmcf-close').onclick = close;
   // the keys: 1 to 4 pick, Esc puts it away (before the game's own Esc opens its menu)

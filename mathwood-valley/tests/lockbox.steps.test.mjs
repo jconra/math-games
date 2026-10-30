@@ -95,7 +95,7 @@ test('following the card on 3(x + 2) = 18: each step ticks off as the moves do i
   B.keyResult(true);
   const f = B.finish();
   assert.equal(f.moves, 3);
-  assert.equal(f.stars, 3, 'following the rules earns every star');
+  assert.ok(f.moves <= f.par, 'following the rules is at par');
   assert.ok(f.clean);
 });
 
@@ -115,7 +115,7 @@ test('the shortcut (divide first in 3(x + 2) = 18) is still accepted, and ticks 
   assert.ok(B.solved);
   st = B.steps();
   assert.deepEqual(ids(st, 'done'), [1, 4, 5]);
-  assert.equal(B.finish().stars, 3);
+  assert.ok(B.moves <= B.par);
 });
 
 test('a skipped step comes back when a move makes the line need it; undo un-ticks', () => {
@@ -174,7 +174,7 @@ test('the card never gives a vault box away: step 5 stays in, and a verdict line
       B.makeButtons();
     }
     assert.ok(B.solved, lineText(p.start));
-    assert.equal(B.finish().stars, 3, `${lineText(p.start)} (${p.kind}) took ${B.moves} for par ${B.par}`);
+    assert.ok(B.moves <= B.par, `${lineText(p.start)} (${p.kind}) took ${B.moves} for par ${B.par}`);
   }
 });
 
@@ -212,7 +212,7 @@ for (const rung of MOVE_RUNGS) {
         assert.ok(B.solved, `${lineText(p.start)} by the card`);
         assert.equal(B.moves, route.length);
         const f = B.finish();
-        assert.equal(f.stars, 3);
+        assert.ok(f.moves <= f.par);
         // the card is in step: nothing left but the check
         const st = B.steps();
         assert.ok(st.every((s) => s.state !== 'todo'), `${lineText(p.start)}: ${JSON.stringify(st.map((s) => s.state))}`);

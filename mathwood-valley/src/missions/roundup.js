@@ -18,9 +18,10 @@
 // series blank on a table, a multiple roped) goes to the times chart (facts.js recordFact). The rider works in a RANGE
 // of levels (series.js RANGE): one card a wave, and now and then a whole herd, comes from below the rider's level (the
 // levels just below, the earlier tables with red or yellow facts), recorded at the level it was made at.
-// When the kid is stuck (8 s without a pick) or right after a miss, help appears: the series' number line with a hop
-// for each step (src/ui/counthelp.js; a fraction, decimal or growing rule gets its plain line instead), or the times
-// chart's "Peek" button for a herd.
+// Help comes when the rider asks (the tools strip's Help, Q, or the card's Show me; src/ui/askhelp.js): the series'
+// number line with a hop for each step (src/ui/counthelp.js; a fraction, decimal or growing rule gets its plain line
+// instead), or the times chart for a herd. Stuck (8 s without a pick) or right after a miss, the Help button only glows
+// (a herd's small "Peek" button comes up under the card); the picture after a miss marks that miss.
 // With read-aloud on (src/audio/readaloud.js), a young level's card ("1, 2, 3, what comes next", "what comes after 7")
 // reads itself out when it appears at the herd (a speaker on the card says it again), and a right or wrong pick may
 // get a word ("That's right!", "Not that one.").
@@ -52,6 +53,7 @@ import { showGroups } from '../ui/groups.js';
 import { showCountHelp } from '../ui/counthelp.js';
 import { makeTargetRing } from '../targetring.js';
 import { offerChart, closeChart, chartOptions, watchHesitation as watchChart, ensureChartCss } from '../ui/timeschart.js';
+import { nudgeHelp } from '../ui/askhelp.js';
 import { showNumberLine, ensureNumberLineStyles, watchHesitation as watchLine } from '../ui/numberline.js';
 import { recordAnswer, earn, saveRider, countJob } from '../save.js';
 import { PAY, PRICES, boxTier } from '../shop.js';
@@ -65,7 +67,8 @@ export const ROUNDUP = {
   spread: 0.82,          // the herd grazes within this share of the pasture's radius
   roam: 6,               // ... and a steer ambles at most this far from its own spot (m)
   gap: 4.2,              // steers start at least this far apart (m)
-  near: 46,              // the player is "at the herd" within this of the pasture's middle (m): the card and help show
+  near: 2,               // the player is "at the herd" within this of the pasture's edge (m, its radius): the card and help show
+  nearOut: 5,            // ... and stays there till this far out (no flicker at the edge); farther, the small travel card
   labelPx: [44, 64],     // the number card's height on screen (pixels): about 6% of the screen's height, kept in this range
   labelFull: 40,         // the numbers show in full within this many metres of the player ...
   labelGone: 58,         // ... and have faded out by this far
@@ -393,7 +396,7 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
     if (wave.kind === 'card') {
       const c = wave.card, readable = !!(c.say && canRead(c));
       hud.rule({ main: c.rule, sub: `${c.sub} · card ${wave.cardNo} of ${wave.cards}${finding()}`,
-        buttons: [{ label: 'Show me', onClick: () => showLine(wave.T.help(c), { asked: true }) }],
+        buttons: [{ label: 'Show me', onClick: () => askHelp() }],
         speak: readable ? () => sayCard(c) : null });
       if (readable && readFor !== c.id) { readFor = c.id; sayCard(c); }
     } else {
@@ -406,7 +409,23 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
   function startHelp() {
     if (!wave || wave.done || RU.paused || hes) return;
     if (wave.topic === 'times') hes = watchChart({ after: ROUNDUP.helpAfter, onShow: () => chartHelp() });
-    else hes = watchLine({ after: ROUNDUP.helpAfter, onShow: () => showLine(wave.T.help(wave.card)) });
+    // (a card: stuck a while, only the Help buttons glow; its picture comes when the rider asks, src/ui/askhelp.js. A
+    // herd's Peek is a small button under the card, the chart itself opening only when it is pressed)
+    else hes = watchLine({ after: ROUNDUP.helpAfter, onShow: () => nudgeHelp() });
+  }
+  // HELP, when the rider asks (the tools strip's Help, Q, or the card's Show me): the card's picture (after a miss on
+  // this card, that miss marked and the answer shown), or a herd's times chart, opened
+  let missed = null;
+  function askHelp() {
+    nudgeHelp(false);
+    if (!wave || wave.done || !RU.near || RU.paused) return false;
+    if (wave.kind === 'card') {
+      if (missed && missed.card === wave.card.id) showLine(missed.opts);
+      else showLine(wave.T.help(wave.card), { asked: true });
+      return true;
+    }
+    chartHelp(); if (offer) offer.openChart();
+    return true;
   }
   function chartHelp(missed) {
     if (!wave || wave.topic !== 'times') return;
@@ -442,6 +461,7 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
   }
   function endHelp() {
     if (hes) { hes.cancel(); hes = null; }
+    nudgeHelp(false); missed = null;
     closeChart();
     if (offer) { offer.remove(); offer = null; }
     hideLine();
@@ -534,8 +554,10 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
         // the reason is written once, under the number line's picture (it is the line's own caption); the box under
         // the card just says it wasn't that one. (Without a picture, the box says the reason.)
         const ex = T.explain(w.card, s.n), pic = ex.numberLine && ex.numberLine.helper === 'count' && ex.numberLine.reason;
-        hint({ say: 'Not me, partner', line: pic ? '' : ex.line });
-        if (pic) showLine({ ...ex.numberLine });
+        hint({ say: 'Not me, partner', line: pic || ex.line });
+        // (the picture is the rider's to ask for: Help glows and opens it with this miss marked; one already up is
+        // brought up to date)
+        if (pic) { missed = { card: w.card.id, opts: { ...ex.numberLine } }; if (nl && nl.el && nl.el.isConnected) showLine(missed.opts); nudgeHelp(); }
         // (a rider who can't read yet hears the reason, in the browser's voice, after the "not that one" clip)
         if (readAloud(rider)) sayLine(pic || ex.line, { now: true, after: 900 });
       } else {
@@ -614,7 +636,7 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
   RU.update = (dt) => {
     time += dt;
     const d = Math.hypot(P.position.x - PA.x, P.position.z - PA.z);
-    RU.near = d < ROUNDUP.near;
+    RU.near = d < (PA.r || 30) + (wasNear ? ROUNDUP.nearOut : ROUNDUP.near);
     if (RU.near !== wasNear) {
       wasNear = RU.near;
       if (RU.near) { hob.event('arrive'); startHelp(); }
@@ -726,6 +748,11 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
   });
 
   RU.newWave = (at = null) => { for (const s of herd) if (free(s)) s.state = 'graze'; newWave(at); };   // (at: a level id, or 'times' for a herd: dev and rigs)
+  RU.help = () => askHelp();
+  RU.canHelp = () => !!(RU.near && wave && !wave.done && !RU.paused);
+  // the rider moved the level (the tools strip's arrows): the steers still loose get a new card or herd at the new level
+  // now (the roped ones stay in the corral)
+  RU.relevel = () => { if (!wave || wave.done || !open()) return false; RU.newWave(); return true; };
   RU.start = () => { stock(); if (open()) newWave(); else showCard(); };
   RU.trainer = () => trainer();   // the times trainer (shared with the wagon's gangs: main.js)
   RU.state = () => ({

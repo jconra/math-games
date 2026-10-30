@@ -3,11 +3,12 @@
 // up, but not too close: within SNAP.setMax metres (and no nearer than SNAP.setMin) E sets the camera up. The rider gets
 // down, the tripod's legs swing out, and the view goes under the focusing cloth: the ground glass, pointed at the herd's
 // middle. Dragging the view (or A / D, the arrow keys; W / S tilt it) turns the camera on its tripod.
-// Done with the job, E by Miss Wren gives the camera back: it comes off the saddle and the job rests (no card, no
-// trail) until the player has ridden well away from the herd and comes back; walking up to the herd still offers the
-// camera all the same (setting it up borrows it again).
-// The job is never over for good: whatever ended it ("Done for now", a full roll, the camera given back), the camera
-// can be set up again by the job's herd. It has one herd for good (SNAP.herd, the nearest to town, with Miss Wren
+// Signing up is talking to her (she stands by the wagon road, src/jobfolk.js): she lends the camera and the job's card
+// shows at any distance while it is lent (the herd may be anywhere round its home). The job ends, the camera coming off
+// the saddle and the card going for good till she is talked to again, when E by her gives it back, or when at least
+// one picture has been taken and the rider is more than SNAP.near from the herd (taken back with a friendly line, no
+// penalty). A camera still lent from an earlier ride is taken back the same way: E by her, or away from the herd.
+// "Done for now" or a full roll only packs the camera back onto the horse: it can be set up again by the job's herd. It has one herd for good (SNAP.herd, the nearest to town, with Miss Wren
 // standing by it): the valley's other herds are wildlife to come across while exploring, never the job's (no card, no
 // prompt, no trail to them).
 //
@@ -28,7 +29,8 @@
 // and the facts asked are picked for the rider, easy tables first across a level (levelbox.js factTables).
 // After SNAP.per pictures the herd has had enough and drifts a little way off; the camera folds back onto the horse,
 // and once the herd settles the camera can be set up again (the compass and the card lead to it). "Done for now" (or Esc) packs the camera away early. Stuck for a while
-// without a pick, the steps card shows by itself (the last line left for the kid), sooner for a two-step equation.
+// without a pick, the bar's Help button glows (sooner for a two-step equation); pressed (or Q), the steps card shows
+// (the last line left for the kid). It never opens by itself (src/ui/askhelp.js).
 //
 // No shooting here: deer are only ever photographed (the only guns are at the bottle range, on bottles and cans).
 //
@@ -65,13 +67,15 @@ import { recordAnswer, earn, countJob, saveRider } from '../save.js';
 import { flagCard } from '../ui/flag.js';
 import { addPrint, prints } from '../ui/album.js';
 import { deerSum } from '../math/jobsums.js';
+import { nudgeHelp, HELP_KEY, HELP_KEY_LABEL } from '../ui/askhelp.js';
 
 export const SNAP = {
   per: 3,                // pictures of one herd before it drifts off
   pay: { photo: 3, levelEvery: 3, outing: 5 },  // gold: each picture (+1 for every 3 levels up the deer's ladder), a
                                                 // whole outing; the same whether or not a wrong deer was tried first
   herd: 'creek',         // the job's one herd (src/deer.js DEER.herds: south of the pasture, the nearest to town)
-  near: 75,              // m from the job's herd where its card shows
+  near: 75,              // m from the job's herd: once a picture is taken, further than this ends the job (the camera taken back)
+  takenLine: 'Miss Wren has her camera back. Thank you for the pictures!',   // (said as it goes back by itself)
   setMin: 12, setMax: 50,   // m from the herd's middle where the camera can be set up
   shy: { alert: 18, flee: 11, calm: true },   // the job's herd keeps still for a photographer creeping up (on foot; a
                          // horse x1.35); calm: it bolts only from a player still coming on inside the flee distance
@@ -93,8 +97,7 @@ export const SNAP = {
   tilt: 0.3,             // ... and tilts up or down (drag, W / S)
   turnRate: 1.1,         // radians a second a held key turns it
   dragRate: 0.0045,      // radians a pixel of drag turns it
-  rest: 150,             // m from the herd: the camera given back, the job's card comes back past this
-  helpAfter: 14,         // s without a pick before the steps card shows by itself
+  helpAfter: 14,         // s without a pick before the Help button glows
   helpAfterTwo: 6,       // ... sooner for a two-step equation (worked in the head, with no solver to move things)
   nextHerd: 5,           // s after the job is made before it picks a herd, if the deer weren't ready yet
   printShow: 1.9,        // s the print shows before it slides into the album
@@ -142,23 +145,23 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
   // ── TRAVEL: the card and the prompt near the herd ─────────────────────────────────────────────────────────────
   function travel(dt) {
     const c = where(), d = Math.hypot(P.position.x - c.x, P.position.z - c.z);
-    if (resting && d > SNAP.rest) resting = false;
+    // (a camera lent on an earlier ride: taken back once away from the herd; the job over, pictures taken and gone off)
+    if (rider.cameraLent && !signed && d > SNAP.near) takeBack(false);
+    if (signed && took > 0 && d > SNAP.near) takeBack(true);
+    if (!signed) {
+      DJ.prompt = null; DJ.near = false;
+      if (DJ.card) { DJ.card = false; cardKey = ''; hud.rule(null); }
+      return;
+    }
     if (!shiftOpen()) {
       // (the day's shift done: no camera set up here today; by the herd the card says so)
       DJ.prompt = null; DJ.near = d < SNAP.near;
-      if (DJ.near && !busy() && !resting) {
+      if (!busy()) {
         const key = 'deer|done';
         if (key !== cardKey) { cardKey = key; hud.rule({ main: 'Deer photographs', sub: "Done for today: Miss Wren has the pictures she needs · back at sunrise, or ask for more work at the jobs board", kind: 'job' }); }
         DJ.card = true;
       } else if (DJ.card) { DJ.card = false; cardKey = ''; hud.rule(null); }
       return;
-    }
-    if (resting) {
-      // (the camera given back: no card and no trail, but walking up to the herd still offers it: setting it up
-      // borrows it again)
-      const calm = herd.state === 'calm' || herd.state === 'alert';
-      DJ.prompt = !busy() && calm && d >= SNAP.setMin && d <= SNAP.setMax && (P.mode === 'foot' || P.mode === 'horse') ? 'Set up the camera' : null;
-      DJ.near = false; return;
     }
     const near = d < SNAP.near;
     if (near && !DJ.near) hob.event('deerArrive');
@@ -170,13 +173,10 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
     const other = !!busy();
     const ok = !other && settled && d >= SNAP.setMin && d <= SNAP.setMax && (P.mode === 'foot' || P.mode === 'horse');
     DJ.prompt = ok ? 'Set up the camera' : null;
-    if (near && !other) {
-      // (a travel card while there is still a way to go, so Old Hob's hoofprints lead on: to Miss Wren first while her
-      // camera isn't lent yet, then to the herd)
-      const lend = !rider.cameraLent && !ok;
-      const kind = lend || d > SNAP.setMax ? 'travel' : 'job';
-      const sub = lend ? 'First borrow Miss Wren\'s camera: follow the hoofprints to her'
-        : herd.state === 'leave' ? 'They\'re moving on a little way: let them settle, then set up again'
+    if (!other) {
+      // (signed up: the card at any distance, a travel card while there is still a way to go to the herd)
+      const kind = d > SNAP.setMax ? 'travel' : 'job';
+      const sub = herd.state === 'leave' ? 'They\'re moving on a little way: let them settle, then set up again'
         : !settled ? 'They bolted! Let them settle, then try again from further off'
         : d > SNAP.setMax ? `${Math.round(d)} m to the herd: get within ${SNAP.setMax} m`
         : d < SNAP.setMin ? 'Too close: they\'ll bolt. Back off a few steps'
@@ -189,31 +189,40 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
 
   // Miss Wren lends the camera (E by her, src/jobfolk.js): it goes behind the saddle at once
   DJ.lent = () => !!rider.cameraLent;
+  // (signed: lent by her on this ride, so the card shows; took: pictures since; ended: the job over since she last lent it)
+  let signed = false, took = 0, ended = false;
   DJ.lend = () => {
     if (!rider.cameraLent) { rider.cameraLent = true; saveRider(rider); }
-    resting = false;
+    signed = true; took = 0; ended = false;
     if (state === 'travel') stowPack(true);
     return true;
   };
+  DJ.signed = () => signed;
 
-  // the camera given back (E by her, src/jobfolk.js): off the saddle, and the job rests till the player has gone off
-  let resting = false;
+  // the job over: the camera off the saddle and back with her, and no card till she lends it again (friendly: it went
+  // back by itself, the rider gone off with pictures taken: a short line says so)
+  function takeBack(friendly) {
+    const had = !!rider.cameraLent;
+    if (had) { rider.cameraLent = false; saveRider(rider); }
+    stowPack(false);
+    if (signed) ended = true;
+    signed = false; took = 0; DJ.prompt = null; DJ.near = false;
+    if (DJ.card) { DJ.card = false; cardKey = ''; hud.rule(null); }
+    if (friendly && had) hud.toast(SNAP.takenLine);
+  }
+  // the camera given back (E by her, src/jobfolk.js; her thanks are hers)
   DJ.giveBack = () => {
     if (state !== 'travel' || !rider.cameraLent) return false;
-    rider.cameraLent = false; saveRider(rider);
-    stowPack(false);
-    resting = true; DJ.prompt = null; DJ.near = false;
-    if (DJ.card) { DJ.card = false; cardKey = ''; hud.rule(null); }
+    takeBack(false);
     return true;
   };
-  DJ.resting = () => resting;
+  DJ.resting = () => ended;
 
   DJ.setUp = () => {
     if (state !== 'travel' || !DJ.prompt || DJ.paused) return false;
     if (!shiftOpen()) { decline(); return false; }
     DJ.prompt = null; state = 'setting'; t = 0; waitT = 0;
     if (!rider.cameraLent) { rider.cameraLent = true; saveRider(rider); }
-    resting = false;
     if (DJ.card) { DJ.card = false; cardKey = ''; hud.rule(null); }
     hud.prompt(null);
     DJ.active = true;
@@ -356,6 +365,7 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
       <div class="bmd-tags"></div>
       <div class="bmd-help" hidden></div>
       <div class="bmd-bar"><span class="bmd-keys">${keysHint()}</span><span class="bmd-dots"></span><span class="bmd-album"><i></i> in the album</span>
+        <button type="button" class="bmd-done bmd-helpb" data-askhelp>Help<small>${touch() ? '' : HELP_KEY_LABEL}</small></button>
         <button type="button" class="bmd-done">Done for now<small>${touch() ? '' : 'Esc'}</small></button></div>
       <div class="bmd-flash"></div>`;
     // (just after the valley's canvas, so the HUD's purse and Old Hob's captions stay on top of the dark frame)
@@ -365,7 +375,8 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
     vf.eqEl = el.querySelector('.bmd-eq b'); vf.wordsEl = el.querySelector('.bmd-eq i'); vf.flashEl = el.querySelector('.bmd-flash');
     flagCard(el.querySelector('.bmd-eq'), () => (vf && vf.shot ? { choices: vf.shot.values.map(numText), right: numText(vf.shot.values[vf.shot.right]) } : {}));   // ("Confusing?": src/ui/flag.js)
     vf.pics = 0; vf.missed = false; vf.busy = false; vf.idle = 0; vf.helped = false; vf.hover = -1; vf.ready = false; vf.typed = '';
-    el.querySelector('.bmd-done').addEventListener('click', (e) => { e.stopPropagation(); DJ.done(); });
+    el.querySelector('.bmd-done:not(.bmd-helpb)').addEventListener('click', (e) => { e.stopPropagation(); DJ.done(); });
+    el.querySelector('.bmd-helpb').addEventListener('click', (e) => { e.stopPropagation(); e.currentTarget.blur(); askHelp(); });
     el.addEventListener('pointerdown', onDown); el.addEventListener('pointermove', onMove); el.addEventListener('pointerup', onUp);
     addEventListener('keydown', onKey, true);
     // the ground glass: the right way up from the start, pointed at the herd's middle
@@ -506,7 +517,8 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
   function onBlur() { if (vf && vf.keys) vf.keys.clear(); }
   function onKey(e) {
     if (document.querySelector('.bml:not(.is-out), .tch:not(.out)')) return;   // (a tool is up over the viewfinder, Work it out or the times chart: its keys, its Esc)
-    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); DJ.done(); return; }
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); if (vf && vf.helpEl && !vf.helpEl.hidden) help(null); else DJ.done(); return; }
+    if (e.code === HELP_KEY && !e.repeat && vf) { e.preventDefault(); e.stopPropagation(); askHelp(); return; }
     if (vf && vf.keys && AIM_KEYS.includes(e.code)) { e.preventDefault(); e.stopPropagation(); vf.keys.add(e.code); return; }
     if (!vf || !vf.items || !vf.shot) return;
     const k = e.key === '\u2212' ? '-' : e.key;
@@ -558,7 +570,7 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
     vf.flashEl.classList.remove('is-on'); void vf.flashEl.offsetWidth; vf.flashEl.classList.add('is-on');
     const gold = SNAP.pay.photo + Math.floor(Math.max(0, shot.li || 0) / SNAP.pay.levelEvery);
     const e = earn(rider, gold);
-    countJob(rider, 'photos');   // (counted for a belt buckle to come: there's no photographs buckle yet)
+    countJob(rider, 'photos'); took++;   // (counted for a belt buckle to come: there's no photographs buckle yet)
     addPrint(rider, { eq: shot.young ? shot.solved : shot.eq, x: shot.young ? '' : numText(shot.x), img, rung: shot.level });   // (a kindergarten box's print: filled in, "4 + 1 = 5")
     refresh();
     if (e.newTitle) setTimeout(() => hud.toast(`You're a ${e.newTitle} now!`, 'gold'), 2200);
@@ -663,6 +675,16 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
   }
 
   // ── THE HELP CARD: the balance for a wrong deer, and the steps that solve it ──────────────────────────────────
+  // HELP, when the rider asks (the bar's Help, Q): the steps card, the last line left for the kid; pressed again, it goes
+  function askHelp() {
+    nudgeHelp(false);
+    if (!vf || !vf.shot || !vf.ready || !vf.helpEl) return false;
+    if (!vf.helpEl.hidden) { help(null); return true; }
+    vf.helped = true; help({});
+    return true;
+  }
+  DJ.help = () => askHelp();
+  DJ.canHelp = () => !!(vf && vf.shot && vf.ready);
   function help(o) {
     const el = vf && vf.helpEl; if (!el) return;
     clearTimeout(vf.revealT);
@@ -679,7 +701,9 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
         <p class="bmd-help-p">${esc(b.leftValue)} and ${esc(b.rightValue)} don't balance, so ${esc(numText(o.v))} isn't it.</p>`;
     } else top = '<div class="bmd-help-h">Here\'s how it goes</div>';
     el.innerHTML = `${top}<div class="bmd-steps">${shot.young ? '' : '<div class="bmd-steps-h">Whatever you do to one side, do to the other</div>'}
-      ${steps.map((s, k) => `<div class="bmd-step${k === steps.length - 1 ? ' is-last' : ''}">${s.note ? `<small>${esc(s.note)}</small>` : ''}<span>${k === steps.length - 1 ? '<i class="bmd-hide">' + esc(s.text) + '</i>' : esc(s.text)}</span></div>`).join('')}</div>`;
+      ${steps.map((s, k) => `<div class="bmd-step${k === steps.length - 1 ? ' is-last' : ''}">${s.note ? `<small>${esc(s.note)}</small>` : ''}<span>${k === steps.length - 1 ? '<i class="bmd-hide">' + esc(s.text) + '</i>' : esc(s.text)}</span></div>`).join('')}</div>
+      <button type="button" class="bmd-help-x" title="Close (Esc)" aria-label="Close the help">×</button>`;
+    el.querySelector('.bmd-help-x').addEventListener('click', (e) => { e.stopPropagation(); help(null); });
     el.hidden = false;
     // (after a wrong pick the last line shows a moment later; stuck with no pick, it is left for the kid to work out)
     if (o.v != null) vf.revealT = setTimeout(() => { const h = el.querySelector('.bmd-hide'); if (h) h.classList.add('is-shown'); }, 2600);
@@ -725,7 +749,7 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
       camera.updateMatrixWorld();
       K.root.visible = false;   // (seen from inside it: the box would fill the view)
       placeTags();
-      if (vf.ready && !vf.busy && !vf.helped && vf.helpEl.hidden && (vf.idle += dt) > (vf.shot && !vf.shot.young && vf.shot.steps.length > 2 ? SNAP.helpAfterTwo : SNAP.helpAfter)) { vf.helped = true; help({}); }
+      if (vf.ready && !vf.busy && !vf.helped && vf.helpEl.hidden && (vf.idle += dt) > (vf.shot && !vf.shot.young && vf.shot.steps.length > 2 ? SNAP.helpAfterTwo : SNAP.helpAfter)) { vf.helped = true; nudgeHelp(); }   // (stuck: the Help button glows; the steps come when asked, src/ui/askhelp.js)
     }
   };
   function packing(dt) {
@@ -740,7 +764,7 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
   }
 
   // (the herd's deer where they are now; the trail is laid again once they have moved on more than 20 m, src/hob.js)
-  DJ.marks = () => { if (!herd || state !== 'travel' || !herd.deer.length || resting) return []; const c = where(); return [{ id: 'deer', icon: 'job', x: c.x, z: c.z, label: 'Deer photographs' }]; };
+  DJ.marks = () => { if (!herd || state !== 'travel' || !herd.deer.length || !signed) return []; const c = where(); return [{ id: 'deer', icon: 'job', x: c.x, z: c.z, label: 'Deer photographs' }]; };
   DJ.tags = () => (vf && vf.items ? vf.items.map((it) => ({ value: vf.shot.values[it.i], x: Math.round(it.x), y: Math.round(it.y), key: String(vf.shot.values[it.i]), on: it.on && vf.ready, right: it.i === vf.shot.right })) : []);
   DJ.pick = (value) => { if (!vf || !vf.shot) return false; const i = vf.shot.values.indexOf(value); if (i < 0) return false; shoot(i); return true; };
   DJ.workSum = () => (DJ.active && vf && vf.shot ? deerSum(vf.shot) : null);   // (the tools' Work it out: src/math/jobsums.js)
@@ -754,7 +778,7 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
   DJ.flash = () => K.flash();   // (for rigs: the flash and smoke seen from outside)
   DJ.state = () => ({ state, herd: herd && herd.id, herdState: herd && herd.state, near: DJ.near, prompt: DJ.prompt, active: DJ.active,
     shot: vf && vf.shot ? { eq: vf.shot.eq, x: vf.shot.x, values: vf.shot.values, level: vf.shot.level, kind: vf.shot.kind, placing: vf.shot.placing } : null, pics: vf ? vf.pics : 0,
-    ready: !!(vf && vf.ready), busy: !!(vf && vf.busy), album: prints(rider).length, fov: +camera.fov.toFixed(1), turn: vf && vf.turn != null ? +vf.turn.toFixed(3) : null, tilt: vf && vf.tilt != null ? +vf.tilt.toFixed(3) : null, resting, lent: !!rider.cameraLent, easier });
+    ready: !!(vf && vf.ready), busy: !!(vf && vf.busy), album: prints(rider).length, fov: +camera.fov.toFixed(1), turn: vf && vf.turn != null ? +vf.turn.toFixed(3) : null, tilt: vf && vf.tilt != null ? +vf.tilt.toFixed(3) : null, resting: ended, signed, took, lent: !!rider.cameraLent, easier });
   DJ.camera = K;
   DJ.dispose = () => {
     disposed = true;
@@ -856,6 +880,9 @@ body.bmd-viewing .bmh-top, body.bmd-viewing .bmh-touch, body.bmd-viewing .bmh-pr
   cursor: default; animation: bmd-help 0.35s ease-out; }
 @keyframes bmd-help { from { opacity: 0; transform: translate(12px, -50%); } }
 .bmd-help[hidden] { display: none; }
+.bmd-help-x { position: absolute; top: 4px; right: 4px; width: 28px; height: 28px; padding: 0; border-radius: 50%; cursor: pointer;
+  font: 700 19px/1 Bitter, Georgia, serif; color: #f1e6cc; background: rgba(60, 40, 22, 0.95); border: 2px solid #c99a4a; }
+.bmd-helpb { margin-left: auto; }
 .bmd-help-h { font: 400 17px Rye, Georgia, serif; color: #6b3f12; }
 .bmd-help-p { font: 500 14px/1.35 Bitter, Georgia, serif; margin: 2px 0 8px; }
 .bmd-balance { display: block; width: 100%; max-width: 260px; margin: 4px auto 0; }

@@ -594,6 +594,15 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
     coins: order.coins.map((c) => ({ label: c.label, good: c.good })), equation: order.equation, sale: order.sale || null, credit: order.credit || [], long: order.long ? { op: order.long.op, point: order.long.point, a: order.long.a, b: order.long.b, n: order.long.n, d: order.long.d } : null } : null,
     longOpen: !!longPanel, long: longPanel ? longPanel.state() : null,
     people: people.map((c) => ({ who: c.who.name, state: c.state, x: +c.x.toFixed(2), z: +c.z.toFixed(2), inside: IN ? isIn(c) : null })), busy: U.busy, inside: !!IN });
+  // the level was moved by hand (the tools strip's arrows): the order at the counter, not yet answered, is made again at
+  // the new level for the same customer (a sale of the rider's goods or fish, or a rig's order, stays as it is)
+  J.relevel = () => {
+    if (!J.active || !order || order.picked || order.sale || order.fixed || longPanel || U.busy || eqPending) return false;
+    const c = people.find((x) => x.state === 'serve'); if (!c) return false;
+    if (served[served.length - 1] === c.who.name) served.pop();
+    serve(c);
+    return true;
+  };
   J.people = people;    // (read each frame by the wagons, which stop for customers: no copies made)
   // (the end of the line while the counter is open: where the town sends one more to wait, src/townpeople.js)
   J.lineSpot = () => (IN && J.active ? queue2At : null);

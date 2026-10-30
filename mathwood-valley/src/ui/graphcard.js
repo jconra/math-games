@@ -211,8 +211,10 @@ export function openGraphCard({ parent = document.body, title = 'Graph practice'
   draw();
   // (for rigs: where grid point (x, y) is on the page, and how far apart the grid's points are, in px)
   const where = (x, y) => { const r = svg.getBoundingClientRect(); return F ? { x: r.left + (F.X(x) / F.w) * r.width, y: r.top + (F.Y(y) / F.h) * r.height, px: (U / F.w) * r.width } : null; };
+  // the level was moved by hand (the tools strip's arrows): the question up, not yet tried, is made again at the new level
+  const redeal = () => { if (closed || done || busy || tried || peeked || walked || !q) return false; draw(); return true; };
   return {
-    el, tap, pick, show, close, where,
+    el, tap, pick, show, close, where, redeal,
     get open() { return !closed; },
     state: () => ({ index: i, of: GRAPH.n, kind: q && q.kind, x: q && q.x, y: q && q.y, text: q && q.text, choices: q && q.choices ? q.choices.map((c) => c.label) : null,
       good: q && q.choices ? q.choices.findIndex((c) => c.good) : null, line, walk: walked, lit, tapped, done, rule: RULE }),

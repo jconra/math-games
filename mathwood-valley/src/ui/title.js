@@ -581,7 +581,7 @@ export function showTitle(root, opts = {}) {
     const range = accuracyOf(r, 'shoot');
     const split = range.of > 0 ? ` (bottle range ${range.pct}%)` : '';
     const badges = badgesOf(r);
-    const boxes = `${fmt(r.stats.boxes)} solved, ${fmt(r.stats.parBoxes)} in the fewest moves` +
+    const boxes = `${fmt(r.stats.boxes)} solved` +
       (r.lockboxes.length ? ` · ${r.lockboxes.length} waiting in the saddlebags` : '');
     const math = statRows(r);   // (the kinds of math the rider has shown something in, as on the stats page)
     const mathText = math.length

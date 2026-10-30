@@ -10,8 +10,8 @@
 //             furniture (src/cabin/slots.js); the cabin itself once it can be bought (COMING.cabin); the six-shooter
 //             only for a rider with "Bandits: lasso or revolver" on (src/gun.js) or who has bought it
 //   collect   deer photographs (rider.stats.jobs.photos, or the album), the keepsakes in the cabin (a job's tin buckle,
-//             then seen at home: rider.found.keepsake), the gang's hideouts (reached: rider.found.hideout, or the loot
-//             brought back from them: rider.topics.loot.trips)
+//             then seen at home: rider.found.keepsake), the gang's loot caches (the loot handed back: rider.topics.loot
+//             trips, and an old save's woods; or an old hideout reached: rider.found.hideout)
 //   places    the camps out in the valley (ridden up to: rider.found.place), and the places still to come (COMING): the
 //             windmill (done at an 18 ft tower standing), the bridge, the fishing hole
 // An entry for something the game doesn't have yet waits in COMING: it isn't shown or counted until its switch is on,
@@ -231,11 +231,13 @@ function allItems(rider) {
       : `Win the ${(BUCKLE_NAMES[k.from] || 'first').toLowerCase()} buckle for ${lower(j.name)}, then go into your cabin to see it ${KEEP_WHERE[j.id] || ''}.`.replace(/ \.$/, '.');
     add('collect', 'Keepsakes', `collect:keepsake:${j.id}`, k.name, how, won ? at : n, at, won && seen, true, j.by);
   }
-  const trips = whole(obj(rider && rider.topics && rider.topics.loot).trips);
+  // (the gang's caches, counted by the loot handed back: each cache is somewhere new, so the rows keep the old hideouts'
+  // ids for old saves and their goals, and a hideout an old save reached still counts as its row)
+  const L = obj(rider && rider.topics && rider.topics.loot), trips = whole(L.trips) + whole(L.woods);
   HIDEOUTS.forEach((h, i) => {
     const done = F.hideout.includes(h.id) || trips > i;
-    add('collect', 'Gang hideouts', `collect:hideout:${h.id}`, h.name,
-      'Loot the gang: the deputy outside the sheriff\'s office sends you to the gang\'s hideouts, one after another.', done ? 1 : 0, 1, done, true, ['loot']);
+    add('collect', 'Loot caches', `collect:hideout:${h.id}`, i === 0 ? 'A cache of loot handed back' : `${i + 1} caches of loot handed back`,
+      'Loot the gang: their caches are hidden in camps well out of town. Hand the loot back at the sheriff\'s office.', done ? 1 : 0, 1, done, true, ['loot']);
   });
 
   // places: the camps, then the ones still to come
@@ -280,7 +282,7 @@ function goalList(rider) {
 const COLLECT_GOALS = [
   { kind: 'photos', name: 'Deer photographs', line: 'A full album of deer photographs' },
   { kind: 'keepsake', name: 'Keepsakes', line: 'Every keepsake in the cabin', hint: 'Win a job\'s first buckle, then go into your cabin to see its keepsake.' },
-  { kind: 'hideout', name: 'Gang hideouts', line: 'Every gang hideout' },
+  { kind: 'hideout', name: 'Loot caches', line: `${HIDEOUTS.length} caches of loot handed back` },
 ];
 // every goal the picker has, each with the checklist items it holds (buckles: every tier, a job turned off included,
 // so a goal pinned on it still reads; the rest: what is on the list now)

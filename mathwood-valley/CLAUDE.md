@@ -50,3 +50,23 @@ He shows them to people, so a lab showing last week's version looks like a bug.
   - **Practice**: the math levels and lockboxes.
   - **Props Lab** (planned, ~/pw/bandit-math/PROPS.md): the props.
 - If a new part of the game has no lab, say so in its plan file. Whether it gets one is the game maker's call.
+
+## Help is asked for, never pushed
+
+The game's maker (2026-10-29), after a ten-frame helper opened by itself in the middle of the sheep job, for another
+sheep, with no way to close it: "I'm not really a fan of things just showing up in the middle of my screen uninvited."
+The old rule ("every topic gets a helper that pops up when the kid is stuck") is replaced by: **a helper is always one
+click away, and never pops up uninvited.**
+
+- Every job with questions has a helper the rider can open: the tools strip's **Help** (key Q, shown in a tab on the
+  button's corner), the job's own Help or "Show me". It shows the help for the question the rider is on (the sheep being dosed or
+  ringed, the nearest pig, the card up), not some other one.
+- Stuck a while, or just wrong, a job may only nudge: `nudgeHelp()` in src/ui/askhelp.js makes the Help buttons glow
+  (any button marked `data-askhelp`). A one-line "why" under the card after a wrong pick is fine; a panel is not. A
+  small offer button (the times chart's "Peek") is fine; the chart itself opens only when pressed.
+  (One exception kept for now, an open question for the game's maker: the range's and the deer camera's card saying why
+  the bottle just shot or the deer just photographed was wrong comes up beside the view as that answer's feedback, with
+  an X.)
+- Every helper that opens has a visible X, and Esc closes it (the HUD's help box adds the X itself: src/ui/hud.js).
+- Moving the level by hand (the tools strip's arrows) re-deals the questions out at that place straight away, at the new
+  level (main.js `relevel` calls the job's `relevel()`); what was already answered or healed stays.

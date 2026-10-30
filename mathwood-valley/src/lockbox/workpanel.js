@@ -20,13 +20,13 @@
 // part of the strand's own skill was right the first time with no more than the first hint; timed until solved.
 //
 //   mountWorkBox(kit, ctx) -> the box's controller (the same shape as panel.js mountBox's)
-//     kit: { HOB_SVG, STAR, STAR_PAY? }  the panel's drawings
+//     kit: { HOB_SVG }  the panel's drawings
 //     ctx: { info, tier, problem, plan, top, bodies, opts, session, skillRider, finished, nextLabel(), where, K }
 
 import { workCredit, recordPart } from './strand.js';
 import { recordPlan } from './levelplan.js';
 import { ORDER_RULES, toText } from './workout.js';
-import { TIER_NAME, starsFor, goldFor } from './box.js';
+import { TIER_NAME, goldFor } from './box.js';
 import { answerTimer } from '../ui/answertimer.js';
 import { showNumberLine } from '../ui/numberline.js';
 import { partSum } from '../math/jobsums.js';
@@ -104,18 +104,8 @@ export function mountWorkBox(kit, ctx) {
     say.classList.remove('fresh'); void say.offsetWidth; say.classList.add('fresh');
   }
 
-  // ----- the top strip: one tumbler per step, the stars as they stand -----
-  function renderTop() {
-    if (gone) return;
-    const tum = top.querySelector('.lbx-tumblers');
-    if (tum.children.length !== steps.length) tum.innerHTML = steps.map(() => '<i class="tum"></i>').join('');
-    [...tum.children].forEach((t, i) => t.classList.toggle('down', i < si));
-    top.querySelector('.lbx-par').textContent = `step ${Math.min(si + 1, steps.length)} of ${steps.length}`;
-    const s = starsFor(steps.length + wrongs, steps.length, hintLevel);
-    const starsEl = top.querySelector('.lbx-stars');
-    starsEl.innerHTML = [1, 2, 3].map((i) => kit.STAR(i <= s)).join('');
-    starsEl.setAttribute('aria-label', `${s} stars`);
-  }
+  // ----- the top strip: the box name and the gold only (the panel fills them), so nothing to draw per step -----
+  function renderTop() {}
 
   // ----- the steps card: the order of operations (or the rung's rule), and a worked example -----
   let cardShown = 'open';
@@ -417,8 +407,7 @@ export function mountWorkBox(kit, ctx) {
   function result({ left = false } = {}) {
     const ok = solved && !left;
     const par = steps.length, moves = par + wrongs;
-    const stars = ok ? starsFor(moves, par, hintLevel) : 0;
-    return { solved: ok, stars, gold: ok ? goldFor(tier, stars) : 0, moves, par, rung: problem.rung, clean: ok && xSlips === 0 && hintLevel <= 1,
+    return { solved: ok, gold: ok ? goldFor(tier) : 0, moves, par, rung: problem.rung, clean: ok && xSlips === 0 && hintLevel <= 1,
       hints: hintLevel, left, traps: [], tools: [], arith: [], wrongPicks: wrongs, productSlips: 0, partSlips: 0 };
   }
   let credited = false;

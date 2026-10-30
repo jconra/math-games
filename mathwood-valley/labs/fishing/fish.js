@@ -60,7 +60,9 @@ function fishGeometry(kind, L) {
       if (up > -0.3 && h < 0.16) c = C(S.spot); else if (sideOn && h > 0.95) c = C(S.red);
     }
     if (kind === 'bass' && Math.abs(up) < 0.32 && s > 0.12 && s < 0.9 && hash(s * 13, 1, id) < 0.7) c = C(S.band);
-    if (kind === 'catfish' && up > -0.4 && hash(s * 23, a * 7, id) < 0.12) c = C(S.speck);
+    // (a speck is a whole facet on a fish this coarse: few of them, and only a shade darker than the skin, so they read as
+    // mottling, not holes)
+    if (kind === 'catfish' && up > -0.4 && hash(s * 23, a * 7, id) < 0.06) c = C(S.speck).lerp(c, 0.6);
     return c;
   }
   // the body: quads between rings, split into two triangles; the nose closed with a fan
@@ -72,7 +74,14 @@ function fishGeometry(kind, L) {
     // the eyes: the triangles high on the side, just behind the nose
     const eye = i === 1 && (k === 2 || k === R - 3);
     const cc = eye ? dark : skin(sMid, ang, i * R + k);
-    tri(a, c, b, eye ? dark : cc); tri(b, c, d, eye ? (kind === 'catfish' ? dark : white) : cc);
+    tri(a, c, b, eye ? skin(sMid, ang, i * R + k) : cc); tri(b, c, d, eye ? skin(sMid, ang, i * R + k) : cc);
+    // the eye: a tiny dark triangle standing just off the middle of that patch of skin (a whole facet is far too big)
+    if (eye) {
+      const m = a.clone().add(b).add(c).add(d).multiplyScalar(0.25), u = b.clone().sub(a), v = c.clone().sub(a);
+      const r = Math.min(u.length(), v.length()) * 0.42, n = v.clone().cross(u).normalize();
+      u.normalize(); v.normalize(); m.addScaledVector(n, -0.0015 * L);
+      tri(m.clone().addScaledVector(u, -r).addScaledVector(v, -r * 0.6), m.clone().addScaledVector(u, r), m.clone().addScaledVector(v, r), dark);
+    }
   }
   // the tail end closed, and the tail fin: two lobes (forked deeper on the catfish and trout)
   const last = ring[ring.length - 1], zT = -BODY * L, cT = new THREE.Vector3(0, last[0].y * 0.2, zT);

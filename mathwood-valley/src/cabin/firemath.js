@@ -21,7 +21,7 @@ export const FIRE_MATH = {
   maps: ['counting', 'adding', 'taking'],   // the skill model's makers the fire deals from
   cards: 3,                                 // sums before the fire catches
   answers: 4,                               // answers on a card (one right)
-  stuck: 9,                                 // s without a pick before the helper comes up by itself
+  stuck: 9,                                 // s without a pick before the Show me button glows (the helper comes when asked)
 };
 const SPECS = { counting: COUNTING, adding: ADDING, taking: TAKING };
 // (the fireside words over the sums: what the numbers are, as the topic's)

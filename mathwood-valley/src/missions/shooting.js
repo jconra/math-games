@@ -19,7 +19,7 @@
 //        and the streak grows (a bonus every five in a row; the rider's best streak is kept)
 //   wrong: the shot glances off with a spark and a zing, the target rocks on the plank, and a card says why in one plain
 //        line with a number line to look at (for rounding, the halfway marks); pick again, nothing is taken off
-//   stuck: after a while without a shot, the card's number line shows by itself (with no answer marked)
+//   stuck: after a while without a shot, the bar's Help button glows; pressed (or Q), the card's number line shows (no answer marked)
 // Six shots, then a quick reload by itself. Five cards make a string: a bonus, and Miss Opal says a word. Then the
 // next string straight away; "Done for now" (or Esc) puts the gun back. Every right target counts toward the
 // "Targets hit" belt buckle, and every pick counts among the rider's answers.
@@ -55,12 +55,13 @@ import { makeGreeter, sayMs, TALK } from '../jobfolkplan.js';
 import { recordAnswer, earn, countJob, saveRider, JOBS } from '../save.js';
 import { flagCard } from '../ui/flag.js';
 import { rangeSum } from '../math/jobsums.js';
+import { nudgeHelp, HELP_KEY, HELP_KEY_LABEL } from '../ui/askhelp.js';
 
 export const SHOOT = {
   string: 5,               // cards in a string
   pay: { from: 2, target: 1, every: 4, streak: 5, streakBonus: 2, string: 4 },   // gold: each right target (+1 for every 4 steps up
                            // the ladder), a bonus every 5 right in a row, and a whole string
-  helpAfter: 12,           // s on a card without a shot before its number line shows by itself
+  helpAfter: 12,           // s on a card without a shot before the Help button glows (its picture comes only when asked)
   nextCard: 0.85,          // s between a card cleared and the next one's targets popping up
   resolve: 0.05,           // s from the shot to the target breaking (the bullet's flight, near enough)
   reach: { mouse: 46, touch: 64 },   // px: a shot this near a target's tag (or its body, scaled with its size) counts for it
@@ -277,6 +278,7 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
       <div class="bsr-bar">
         <div class="bsr-gun"><svg class="bsr-cyl" viewBox="-25 -25 50 50" aria-hidden="true"></svg><span class="bsr-gunwords"></span></div>
         <div class="bsr-score"><span class="bsr-streak">Streak <b>0</b></span><span class="bsr-best">Best <b>${REC.best}</b></span><span class="bsr-dots"></span></div>
+        <button type="button" class="bsr-done bsr-helpb" data-askhelp>Help<small>${touch() ? '' : HELP_KEY_LABEL}</small></button>
         <button type="button" class="bsr-done">Done for now<small>${touch() ? '' : 'Esc'}</small></button>
       </div>`;
     canvas.after(el);   // (just after the valley's canvas: the HUD's purse, its Menu button and the toasts stay on top)
@@ -284,7 +286,8 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
     const q = (s) => el.querySelector(s);
     ui = { el, cardEl: q('.bsr-card'), picEl: q('.bsr-cardpic'), ruleEl: q('.bsr-rule'), subEl: q('.bsr-sub'), stepEl: q('.bsr-step'), sayEl: q('.bsr-say'), tagsEl: q('.bsr-tags'), crossEl: q('.bsr-cross'),
       helpEl: q('.bsr-help'), barEl: q('.bsr-bar'), cylEl: q('.bsr-cyl'), gunWords: q('.bsr-gunwords'), streakEl: q('.bsr-streak b'), bestEl: q('.bsr-best b'), dotsEl: q('.bsr-dots'), tagEls: [], sayT: 0 };
-    q('.bsr-done').addEventListener('click', (e) => { e.stopPropagation(); J.done(); });
+    q('.bsr-done:not(.bsr-helpb)').addEventListener('click', (e) => { e.stopPropagation(); J.done(); });
+    q('.bsr-helpb').addEventListener('click', (e) => { e.stopPropagation(); e.currentTarget.blur(); askHelp(); });
     flagCard(ui.cardEl, () => (card ? { choices: card.targets.map((x) => String(x.n)), right: rightNow(card, gone).map((i) => String(card.targets[i].n)).join(', ') } : {}));   // ("Confusing?": src/ui/flag.js)
     el.addEventListener('pointerdown', onDown); el.addEventListener('pointermove', onMove); el.addEventListener('pointerup', onUp); el.addEventListener('pointercancel', () => { down = null; });
     addEventListener('keydown', onKey, true);
@@ -327,6 +330,7 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
     // (a level made to be read out: the card's rule in the browser's voice, for a rider who is read to)
     if (card.q.level.read && readAloud(rider)) sayLine(sayCard(card), { now: true });
     gone = new Set(); tried = new Set(); wrong = 0; idle = 0; helped = false; between = false; held = null;
+    nudgeHelp(false);
     R.setCard(card.targets.map(() => ({ kind: card.what })), { narrow: innerWidth < innerHeight * 0.8 });
     if (!ui) return;
     ui.ruleEl.textContent = card.rule;
@@ -400,7 +404,7 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
     if (T.kind === 'bottle') SND.shatter(at); else SND.clank(at);
     gone.add(i);
     if (ui) for (const k of rightNow(card, gone)) { const t = ui.tagEls[k]; if (t) t.classList.remove('is-wrong'); }   // (the ones to shoot now never look struck out)
-    // (the card cleared clean, with no number line come up by itself: the card's right answer for the skill model)
+    // (the card cleared clean, with no number line asked for: the card's right answer for the skill model)
     const sk = isDone(card, gone) && wrong === 0 && !helped ? skillOf(card) : null;
     if (choice || sk) { const rec = recordAnswer(rider, true, { ...(sk || {}), range: true }); if (rec && rec.badge) hud.toast(`You earned the ${rec.badge} badge!`, 'gold'); }   // (range: the Sharpshooter's answers)
     streak++;
@@ -467,6 +471,16 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
   }
 
   // ── THE HELP CARD: why not that one, and a number line to look at ─────────────────────────────────────────────
+  // HELP, when the rider asks (the bar's Help, Q): the card's picture, the answer hidden; pressed again, it goes
+  function askHelp() {
+    nudgeHelp(false);
+    if (!ui || !card || between || state !== 'aim') return false;
+    if (!ui.helpEl.hidden) { help(null); return true; }
+    help({});
+    return true;
+  }
+  J.help = () => askHelp();
+  J.canHelp = () => !!(ui && card && !between && state === 'aim');
   function help(o) {
     if (!ui) return;
     const el = ui.helpEl;
@@ -475,7 +489,9 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
     const spec = lineFor(card, { pick: hint ? null : o.pick, gone, hint });
     const why = hint ? tipFor(card) : whyNot(card, o.pick, gone);
     el.innerHTML = `<div class="bsr-help-h">${hint ? 'Stuck? Here’s a way to see it' : `Not ${esc(numText(card.targets[o.pick].n))}`}</div>
-      <p class="bsr-help-p">${esc(why)}</p><div class="bsr-line"></div>${!hint && spec.caption ? `<p class="bsr-help-c">${esc(spec.caption)}</p>` : ''}`;
+      <p class="bsr-help-p">${esc(why)}</p><div class="bsr-line"></div>${!hint && spec.caption ? `<p class="bsr-help-c">${esc(spec.caption)}</p>` : ''}
+      <button type="button" class="bsr-help-x" title="Close (Esc)" aria-label="Close the help">×</button>`;
+    el.querySelector('.bsr-help-x').addEventListener('click', (e) => { e.stopPropagation(); help(null); });
     el.hidden = false;
     el.classList.remove('is-in'); void el.offsetWidth; el.classList.add('is-in');
     // (a rider who can't read yet hears the why, in the browser's voice, after the miss's own sound)
@@ -509,8 +525,9 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
   }
   function onKey(e) {
     if (document.querySelector('.bml:not(.is-out), .tch:not(.out)')) return;   // (a tool is up over the range, Work it out or the times chart: its keys, its Esc)
-    if (e.key === 'Escape') { if (document.querySelector('.bms')) return; e.preventDefault(); e.stopPropagation(); J.done(); return; }
+    if (e.key === 'Escape') { if (document.querySelector('.bms')) return; e.preventDefault(); e.stopPropagation(); if (ui && !ui.helpEl.hidden) help(null); else J.done(); return; }
     if (state !== 'aim' || J.paused) return;
+    if (e.code === HELP_KEY && !e.repeat) { e.preventDefault(); e.stopPropagation(); askHelp(); return; }
     if ((e.code === 'Space' || e.code === 'KeyF') && !e.repeat) { e.preventDefault(); e.stopPropagation(); fire(cross.x, cross.y); }
     else if (e.code === 'KeyR' && !e.repeat) { e.preventDefault(); e.stopPropagation(); if (G && G.reload()) { SND.reload(); gunWords(); } }
   }
@@ -568,7 +585,8 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
     if (state === 'aim') {
       placeTags();
       if (cross.on && ui) ui.crossEl.classList.toggle('is-on', targetAt(cross.x, cross.y) >= 0);
-      if (card && !between && !helped && ui && ui.helpEl.hidden && (idle += dt) > SHOOT.helpAfter) help({});
+      // (stuck a while on a card: the Help button glows; its picture comes when the rider asks, src/ui/askhelp.js)
+      if (card && !between && !helped && ui && ui.helpEl.hidden && (idle += dt) > SHOOT.helpAfter) { idle = -1e9; nudgeHelp(); }
     }
   };
   J.draw = () => { if (G && (state === 'aim' || state === 'in' || state === 'out')) G.render(renderer); };
@@ -735,6 +753,9 @@ body.bsr-aiming .bmh-top, body.bsr-aiming .bmh-touch, body.bsr-aiming .bmh-promp
 .bsr-help { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); width: min(380px, 34vw); cursor: default; pointer-events: auto;
   background: #f1e6cc; color: #2b1d12; border: 1px solid #8a6a3a; border-radius: 10px; padding: 9px 14px 10px; box-shadow: 0 6px 22px rgba(0,0,0,0.5); }
 .bsr-help[hidden] { display: none; }
+.bsr-help-x { position: absolute; top: -10px; right: -10px; width: 30px; height: 30px; padding: 0; border-radius: 50%; cursor: pointer;
+  font: 700 20px/1 Bitter, Georgia, serif; color: #f1e6cc; background: rgba(60, 40, 22, 0.95); border: 2px solid #c99a4a; }
+.bsr-helpb + .bsr-done { margin-left: 0; }
 .bsr-help.is-in { animation: bsr-help 0.35s ease-out; }
 @keyframes bsr-help { from { opacity: 0; transform: translate(12px, -50%); } }
 .bsr-help-h { font: 400 18px Rye, Georgia, serif; color: #6b3f12; }

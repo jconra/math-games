@@ -189,7 +189,7 @@ const LINES = {
   // loot the gang: the gang's cache out in the valley, handed back at the sheriff's office
   lootTip: "The deputy says the gang stashed what they stole out in the valley. It's on your compass: bring it back and share it out fair.",
   lootGuard: "Got him! He'll keep there till the sheriff collects him.",
-  lootFled: "Let him run, partner. It's the loot that counts.",
+  lootFled: "Let 'em run, partner. It's the loot that counts.",
   lootLoaded: "Loot's on your horse. Take it back to the sheriff's office: the folks it was taken from will be waiting.",
   lootNoSaddle: "That's too much to carry by hand. You'll want a saddled horse: the stable sells horses and saddles.",
   lootShare: "Read who lost what, then pick the coin that shares it out fair. Whatever won't go round is the leftover.",
@@ -198,8 +198,8 @@ const LINES = {
   lootWord: "Word is the gang hid more loot out at {place}. It's on your compass.",
   // the gang's camps in the back woods (missions/loot.js): found by riding near, looted like the hideout
   boardTip: "There's a jobs board in the square, with every job in town pinned up on it. Pick one and my hoofprints show the way.",
-  lootWoodsTip: "The gang's got camps all over the back woods too: out west past the cow camp, south-west of town, and out east past the wagon road. Keep an eye out for their fires.",
-  lootCamp: "A gang camp! Rope the guard if he's about, or ride straight in and load their loot. It's on your compass now.",
+  lootWoodsTip: "The gang's got more loot hid in camps all over the back woods: out west past the cow camp, south-west of town, and out east past the wagon road. Keep an eye out for their fires.",
+  lootCamp: "A gang camp! Ride on in and load their loot. If they stand and fight, rope two and the rest'll run.",
 };
 // which job each line belongs to. A line still waiting its turn is dropped once the player is at another job, or once it
 // has waited longer than KEEP_JOB seconds: said late it would be about a moment that has passed.
@@ -390,7 +390,7 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
       case 'lootDone': drop('lootMiss', 'lootShare'); B.say(LINES.lootDone[(lootN++) % LINES.lootDone.length], 3500); break;
       case 'lootWord': B.say(LINES.lootWord.replace('{place}', data.place || 'another spot'), 6000); break;
       case 'lootWoodsTip': if (once('lootWoodsTip')) B.say(LINES.lootWoodsTip, 8000); break;
-      case 'lootCamp': if (once('lootCamp')) B.say(canShoot(rider) ? LINES.lootCamp.replace('Rope the guard', 'Bring in the guard') : LINES.lootCamp, 6500); break;
+      case 'lootCamp': if (once('lootCamp')) B.say(canShoot(rider) ? LINES.lootCamp.replace('rope two', 'bring in two') : LINES.lootCamp, 6500); break;
       default: break;
     }
   }

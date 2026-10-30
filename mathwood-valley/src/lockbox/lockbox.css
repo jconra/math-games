@@ -79,10 +79,10 @@
 .lbx-body.entering { transform: translateX(104%); opacity: 0.4; transition: none; }
 .lbx-body.leaving { transform: translateX(-104%); opacity: 0; pointer-events: none; }
 
-/* ---- top strip: box name, the tumblers (one per move of par), stars -------------------------------------------- */
+/* ---- top strip: box name, the gold, Done for now ----------------------------------------------------------------- */
 .lbx-top {
   flex: none; position: relative; z-index: 2;
-  display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 16px;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px;
   padding: 10px 22px;
   background: linear-gradient(180deg, #3e2a18, #271a0f);
   border-bottom: 2px solid var(--brass-lo);
@@ -94,24 +94,7 @@
 .lbx-tier-tin .lbx-tier { color: #dfe3e6; text-shadow: 0 2px 0 #3e4448; }
 .lbx-tier-brass .lbx-tier { color: var(--brass-hi); }
 .lbx-tier-vault .lbx-tier { color: #f0c9b0; text-shadow: 0 2px 0 #5a1c12; }
-.lbx-lock { display: flex; align-items: center; gap: 12px; justify-self: center; }
-.lbx-tumblers {
-  display: flex; gap: 7px; padding: 6px 10px 4px; min-height: 46px; align-items: flex-start;
-  background: linear-gradient(#0d0804, #1a110a); border-radius: 9px;
-  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(226, 173, 76, 0.35);
-}
-.lbx-tumblers .tum {
-  display: block; width: 15px; height: 30px; border-radius: 8px 8px 4px 4px;
-  background: linear-gradient(90deg, #a8742a, #f3c56b 45%, #c08a35);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.25) inset, 0 2px 3px rgba(0, 0, 0, 0.6);
-  transition: transform calc(0.22s * var(--k)) cubic-bezier(.3, 1.6, .5, 1), filter 0.2s;
-}
-.lbx-tumblers .tum.down { transform: translateY(8px); filter: brightness(0.62) saturate(0.8); }
-.lbx-par { font: 400 15px/1.2 Bitter, serif; color: var(--ink-2); white-space: nowrap; }
 .lbx-right { display: flex; align-items: center; justify-content: flex-end; gap: 14px; min-width: 0; }
-.lbx-stars { display: flex; gap: 4px; justify-self: end; align-items: center; }
-.lbx-stars svg { width: 30px; height: 30px; fill: #3d2e20; stroke: #7a6040; stroke-width: 1; transition: fill 0.2s; }
-.lbx-stars svg.on { fill: var(--brass-hi); stroke: #8a5f22; }
 /* "Skip this box" sits in the top-right corner of the leather mat, on every screen */
 .lbx-leave {
   position: absolute; right: 14px; top: 14px; z-index: 6;
@@ -513,11 +496,6 @@
 .opened .lbx-work, .opened .lbx-calcs, .opened .lbx-hob { opacity: 0; transition: opacity 0.2s; }
 /* no buttons while the check plays and the lid opens */
 .checking .lbx-tray, .opened .lbx-tray { opacity: 0.22; transition: opacity 0.3s; }
-.rw-stars { display: flex; gap: 6px; margin-bottom: 14px; }
-.rw-stars svg { width: 46px; height: 46px; fill: #3d2e20; stroke: #7a6040; stroke-width: 1; }
-.rw-stars svg.on { fill: var(--brass-hi); stroke: #8a5f22; animation: lbx-star 0.45s cubic-bezier(.2, 1.6, .4, 1) both; animation-delay: 0.25s; }
-.rw-stars svg.on:nth-child(2) { animation-delay: 0.38s; }
-.rw-stars svg.on:nth-child(3) { animation-delay: 0.51s; }
 .rw-gold { font: 700 30px/1.1 Bitter, serif; color: var(--brass-hi); animation: lbx-fade 0.3s ease-out 0.35s both; }
 .rw-note { font: 500 18px/1.3 Bitter, serif; color: var(--ink); animation: lbx-fade 0.3s ease-out 0.55s both; text-align: center; padding: 0 12px; }
 .lbx-chest { width: min(220px, 40%); max-height: 46%; height: auto; flex: none; overflow: visible; }
@@ -614,8 +592,6 @@
   .lbx-body { gap: 10px; padding: 10px 12px 12px; }
   .lbx-top { padding: 7px 18px; }
   .lbx-tier { font-size: 22px; }
-  .lbx-tumblers { min-height: 40px; }
-  .lbx-tumblers .tum { height: 26px; }
   .lbx-work { padding: 46px 4px 38px; }
   .lbx-workwrap { min-height: 120px; }
   .lbx-move { min-height: 66px; font-size: 30px; }
@@ -631,7 +607,6 @@
   .st-n { width: 20px; height: 20px; font-size: 11.5px; }
   .st-note { font-size: 12.5px; }
   .ck-line { font-size: 34px; }
-  .rw-stars svg { width: 40px; height: 40px; }
 }
 @media (min-width: 1600px) and (min-height: 950px) { .lbx { --work-max: 48px; } }
 /* a narrow window on a computer: the folded bar's dots give way to the step's words */
@@ -649,24 +624,16 @@
   }
   .lbx-body.no-steps { grid-template-rows: auto minmax(0, 1fr) auto; grid-template-areas: "paper" "stage" "tray"; }
   .lbx { --work-max: 40px; }
-  /* the top strip takes two rows: the box and the gold; the tumblers and "Done for now" */
-  .lbx-top { padding: 6px 12px 7px; gap: 4px 10px; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "name stars purse" "lock lock done"; }
+  /* the top strip: one row, the box, the gold and "Done for now" (two rows once The rules or Tools join it) */
+  .lbx-top { padding: 6px 12px 7px; gap: 4px 10px; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "name purse done"; }
   .lbx-right { display: contents; }
   .lbx-name { grid-area: name; }
-  .lbx-stars { grid-area: stars; }
   .lbx-purse { grid-area: purse; justify-self: end; font-size: 17px; padding: 3px 10px 3px 4px; }
   .lbx-purse-coin { width: 20px; height: 20px; }
-  .lbx-lock { grid-area: lock; justify-self: start; }
   .lbx-done { grid-area: done; justify-self: end; padding: 5px 11px; font-size: 14px; }
   .lbx-done kbd { display: none; }
   .lbx-tier { font-size: 19px; }
   .lbx-rung { display: none; }
-  .lbx-lock { gap: 8px; }
-  .lbx-par { display: block; font-size: 12px; color: var(--mute); }
-  .lbx-tumblers { min-height: 26px; padding: 3px 6px 1px; gap: 4px; }
-  .lbx-tumblers .tum { width: 9px; height: 17px; }
-  .lbx-tumblers .tum.down { transform: translateY(5px); }
-  .lbx-stars svg { width: 22px; height: 22px; }
   .lbx-leave { top: 8px; right: 8px; font-size: 13px; padding: 4px 9px; }
   .lbx-paper { height: 24vh; height: 24dvh; }   /* a fixed height, so the working line never moves as the ledger fills */
   .lbx-start { padding: 6px 12px 5px 46px; font-size: 16px; }
@@ -727,7 +694,6 @@
   .ck-side { min-width: 0; padding: 0.15em 0.35em; }
   .ck-nls { gap: 6px; }
   .lbx-chest { width: min(150px, 40%); }
-  .rw-stars svg { width: 34px; height: 34px; }
   .rw-gold { font-size: 24px; }
   .rw-note { font-size: 15px; }
 }
@@ -744,14 +710,10 @@
     gap: 8px; padding: 6px 10px 10px;
   }
   .lbx-body.no-steps { grid-template-areas: "stage tray" "stage tray" "paper tray"; }
-  .lbx-top { padding: 4px 12px; grid-template-columns: minmax(0, 1fr) auto auto auto auto; grid-template-areas: "name lock stars purse done"; gap: 12px; }
+  .lbx-top { padding: 4px 12px; grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "name purse done"; gap: 12px; }
   .lbx-rung { display: none; }
   .lbx-tier { font-size: 17px; }
   .lbx-rung { font-size: 11px; }
-  .lbx-par { display: none; }
-  .lbx-tumblers { min-height: 28px; padding: 3px 6px 1px; }
-  .lbx-tumblers .tum { width: 10px; height: 18px; }
-  .lbx-stars svg { width: 20px; height: 20px; }
   .lbx-purse { font-size: 16px; padding: 2px 9px 2px 4px; }
   .lbx-purse-coin { width: 19px; height: 19px; }
   .lbx-done { padding: 4px 10px; font-size: 13px; }
@@ -795,7 +757,6 @@
   .ck-key b { min-width: 32px; height: 32px; font-size: 17px; }
   .ck-line { font-size: 24px; }
   .lbx-chest { width: 110px; }
-  .rw-stars svg { width: 30px; height: 30px; }
   .rw-gold { font-size: 22px; }
   .rw-note { font-size: 14px; }
 }
@@ -837,7 +798,6 @@
 @keyframes lbx-hopflash { 0% { opacity: 0; transform: translateY(6px); } 12%, 82% { opacity: 1; transform: none; } 100% { opacity: 0.85; } }
 @keyframes lbx-tick { 0% { transform: scale(0.4); } 100% { transform: scale(1); } }
 @keyframes lbx-steplit { 0%, 100% { box-shadow: inset 3px 0 0 var(--brass-hi), 0 0 0 0 rgba(243, 197, 107, 0); } 50% { box-shadow: inset 3px 0 0 var(--brass-hi), 0 0 0 4px rgba(243, 197, 107, 0.55); } }
-@keyframes lbx-star { from { transform: scale(0.3) rotate(-30deg); opacity: 0; } to { transform: none; opacity: 1; } }
 
 /* the times dot is tiny in most fonts; a heavier one so ·(−4) never reads as (−4) */
 .lbx b.dot { font-weight: inherit; }
@@ -1342,7 +1302,7 @@
 }
 .rl-go kbd { font-size: 12px; padding: 2px 6px; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(43, 29, 16, 0.5); }
 @media (max-width: 900px) {
-  .lbx-top { grid-template-areas: "name stars purse" "lock rules done"; }
+  .lbx-top:has(.lbx-rules:not([hidden])) { grid-template-areas: "name name purse" ". rules done"; }
   .lbx-rules { grid-area: rules; justify-self: end; padding: 5px 11px; font-size: 14px; }
   .lbx-now { font-size: 19px; padding: 4px 10px 5px; margin: 0 2px; }
   .rl-box { padding: 14px 14px 12px; }
@@ -1351,7 +1311,7 @@
   .rl-line { font-size: 20px; } .rl-move { font-size: 13px; } .rl-stl { font-size: 14.5px; } .rl-go kbd { display: none; }
 }
 @media (max-height: 520px) and (orientation: landscape) {
-  .lbx-top { grid-template-columns: minmax(0, 1fr) auto auto auto auto auto; grid-template-areas: "name lock stars purse rules done"; }
+  .lbx-top:has(.lbx-rules:not([hidden])) { grid-template-columns: minmax(0, 1fr) auto auto auto; grid-template-areas: "name purse rules done"; }
   .lbx-rules { grid-area: rules; padding: 4px 10px; font-size: 13px; }
   .lbx-now { font-size: 17px; padding: 3px 10px 4px; }
   .rl-box { width: min(760px, 100%); }
@@ -1369,12 +1329,12 @@
 .lbx-work svg { width: 22px; height: 22px; }
 .lbx-tools:hover { background: rgba(226, 173, 76, 0.22); box-shadow: inset 0 0 0 1px var(--brass-hi); }
 @media (max-width: 900px) {
-  .lbx-top { grid-template-columns: minmax(0, 1fr) auto auto auto; grid-template-areas: "name name stars purse" "lock rules tools done"; }
+  .lbx-top:has(.lbx-tools:not([hidden])) { grid-template-columns: minmax(0, 1fr) auto auto auto; grid-template-areas: "name name name purse" ". rules tools done"; }
   .lbx-tools { grid-area: tools; justify-self: end; padding: 5px 9px; font-size: 14px; }
   .lbx-tools span { display: none; }
   .lbx-work svg { width: 24px; height: 24px; }
 }
 @media (max-height: 520px) and (orientation: landscape) {
-  .lbx-top { grid-template-columns: minmax(0, 1fr) auto auto auto auto auto auto; grid-template-areas: "name lock stars purse rules tools done"; }
+  .lbx-top:has(.lbx-tools:not([hidden])) { grid-template-columns: minmax(0, 1fr) auto auto auto auto; grid-template-areas: "name purse rules tools done"; }
   .lbx-tools { grid-area: tools; padding: 4px 9px; font-size: 13px; }
 }

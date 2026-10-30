@@ -6,8 +6,8 @@
 //   aim with the green ring (point at a sheep, or it settles on the one ahead), press F (or click it, or the Rope button
 //   on a touch screen): two or three medicine bottles come up, each a fix ("should be 56"); pick one (a click, or 1 2 3)
 //   the cure: the sheep hops, perks up, and her sum shows big and right for a moment; gold
-//   a wrong bottle on a sick sheep: it is crossed out, one plain line says why, and the helper for the topic shows (the
-//     times chart, the number line, the golden rule of solving); pick again. With one bottle left the cure goes in by
+//   a wrong bottle on a sick sheep: it is crossed out, one plain line says why, and the Help button glows: pressed, the
+//     helper for the topic shows that bottle (the times chart, the number line, the golden rule of solving); pick again. With one bottle left the cure goes in by
 //     itself (no one-choice button), for less gold
 //   a bottle for a healthy sheep: Old Hob says she's fine and why her sum is right. No penalty, nothing taken off
 // When every sick sheep is healed the flock is paid (like a round-up wave), and after a few seconds the same flock shows
@@ -31,6 +31,9 @@
 //   SH.open(sheep)      bring up the bottles for this sheep (as F does on the ringed one)
 //   SH.give(i)          give bottle i of the open picker (as a click or the 1-3 keys do)
 //   SH.newFlock({ sick })   a new set of sums now (dev; sick: how many are sick, else 1 or 2)
+//   SH.help()           the helper for the sheep in view, when the rider asks (src/ui/askhelp.js: it never opens by itself;
+//                       stuck a while, or a wrong bottle, only makes the Help buttons glow); SH.canHelp()
+//   SH.relevel()        the level was moved by hand: the unhealed sheep's sums are made again at the new level
 //   SH.workSum()        the sum for the tools' Work it out: the sheep picked or ringed (src/math/jobsums.js), or null
 //   SH.state()          for rigs
 //   SH.dispose()
@@ -48,6 +51,7 @@ import { flagCard } from '../ui/flag.js';
 import { sheepSum } from '../math/jobsums.js';
 import { readAloud } from '../math/skill.js';
 import { speakLine } from '../ui/storeslip.js';
+import { nudgeHelp } from '../ui/askhelp.js';
 
 export const SHEEP = {
   near: 44,              // the job's card shows within this many metres of the sheep pasture's middle
@@ -58,6 +62,10 @@ export const SHEEP = {
   // the sums show only at the pen (the game's maker saw them from inside the blacksmith's): in full with the player
   // in the pasture or within penIn m of its fence, fading out by penOut m; none while the player is indoors
   penIn: 4, penOut: 8,
+  // the job's card (and the help, the F key) only in the pen: the player in the pasture or within cardIn m of its fence,
+  // put away once farther than cardOut m (the gap keeps it from flickering at the fence). The game's maker: "like just a
+  // couple meters from the npc or inside the pen", not from the road outside
+  cardIn: 2, cardOut: 5,
   tieAfter: 14,          // pixels: a card moved farther than this from its own sheep gets a thin line down to her
   stackGap: 6,           // pixels kept between two sum cards that would overlap on screen (the farther one moves up)
   pay: { heal: 3, helped: 1, flock: 6 },   // gold: a sheep cured with the first bottle tried, one cured after a wrong one, a whole flock
@@ -139,7 +147,7 @@ const BOTTLE = (n) => `<svg viewBox="0 0 40 64" aria-hidden="true"><rect x="14" 
   <path d="M11 22c2-2 4-3 6-3" stroke="rgba(255,255,255,0.45)" stroke-width="2" fill="none" stroke-linecap="round"/></svg>`;
 
 export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hud, hob, refresh = () => {}, scene = W.scene, defer = () => false, open = () => true, left: shiftLeft = () => Infinity }) {
-  const L = farm.layout, PA = L.sheep, area = L.area(PA, 2.2), penIn = L.area(PA, -SHEEP.penIn), penOut = L.area(PA, -SHEEP.penOut);
+  const L = farm.layout, PA = L.sheep, area = L.area(PA, 2.2), penIn = L.area(PA, -SHEEP.penIn), penOut = L.area(PA, -SHEEP.penOut), cardIn = L.area(PA, -SHEEP.cardIn), cardOut = L.area(PA, -SHEEP.cardOut);
   const R = makeTargetRing({ scene, camera, canvas, W });
   ensureCss(); ensureChartCss(); ensureNumberLineStyles();
   const fontReady = (document.fonts && document.fonts.load) ? document.fonts.load('700 84px Bitter').catch(() => null) : Promise.resolve();
@@ -188,7 +196,7 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
     cur = flockAt(q.level.gen, { size: flock.length, sick });
     cur.healed = 0; cur.done = false; cur.q = q;
     SH.flock = cur;
-    flock.forEach((s, i) => { s.item = cur.sheep[i]; s.healed = false; s.tried = false; s.crossed = new Set(); s.showT = 0; s.state = 'graze'; card(s); });
+    flock.forEach((s, i) => { s.item = cur.sheep[i]; s.healed = false; s.tried = false; s.miss = null; s.crossed = new Set(); s.showT = 0; s.state = 'graze'; card(s); });
     nextT = -1;
     showCard();
     if (SH.near) startHelp();
@@ -209,10 +217,9 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
   // the help on the card: the number line for the ringed sheep's sum (answer hidden), or the golden rule of solving
   function helpButton() {
     if (!cur) return null;
-    if (cur.topic === 'columns') return { label: 'Show me', onClick: () => { const s = R.target || flock.find((x) => !x.healed); if (s && s.item && s.item.help) hint({ say: 'Work it in columns', line: s.item.help.line }); } };
-    if (cur.topic === 'negatives' || cur.topic === 'counting' || cur.topic === 'adding' || cur.topic === 'taking') return { label: 'Show me', onClick: () => { const s = R.target || flock.find((x) => !x.healed); if (s && s.item) lineFor(s.item, null, false); } };
-    if (cur.topic === 'algebra') return { label: 'The rule', onClick: () => hint({ say: 'Check her step', line: 'Whatever you do to one side, do to the other. To undo + 5, take 5 from both sides; to undo × 3, divide both sides by 3.' }) };
-    return null;   // (times tables: the Peek button comes up under the card when the kid is stuck)
+    if (cur.topic === 'columns' || cur.topic === 'negatives' || cur.topic === 'counting' || cur.topic === 'adding' || cur.topic === 'taking') return { label: 'Show me', onClick: () => askHelp() };
+    if (cur.topic === 'algebra') return { label: 'The rule', onClick: () => askHelp() };
+    return null;   // (times tables: the tools strip's Help opens the chart for the sheep in view)
   }
 
   // ── HELP ───────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -233,17 +240,29 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
   }
   function startHelp() {
     if (!cur || cur.done || SH.paused || hes) return;
-    hes = watchHesitation({ after: SHEEP.helpAfter, onShow: () => {
-      const s = (R.target && !R.target.healed && R.target) || flock.find((x) => x.item && !x.healed);
-      if (!s) return;
-      if (cur.topic === 'times' || (s.item.help && s.item.help.kind === 'chart')) chartFor(s.item, null);
-      else if (cur.topic === 'negatives' || (s.item.help && s.item.help.kind === 'count')) lineFor(s.item, null, false);
-      else if (s.item.help && s.item.help.kind === 'rule' && cur.topic !== 'algebra') hint({ say: 'Take your time', line: s.item.help.line });
-      else hint({ say: 'Take your time', line: 'Read each step: was the same thing done to both sides, and the right way?' });
-    } });
+    // (stuck a while: only the Help buttons glow; the helper itself comes when the rider asks, src/ui/askhelp.js)
+    hes = watchHesitation({ after: SHEEP.helpAfter, onShow: () => nudgeHelp() });
+  }
+  // HELP, when the rider asks (the tools strip's Help, Q, or the card's Show me): the helper for the sheep being dosed,
+  // else the ringed one (the sheep in view), else the first still sick-or-unchecked; after a wrong bottle on her, the
+  // picture marks that bottle and shows the answer
+  const helpSheep = () => (picker && picker.s && !picker.s.healed ? picker.s : null) || (R.target && !R.target.healed && R.target.item ? R.target : null)
+    || flock.find((x) => x.item && !x.healed) || null;
+  function askHelp() {
+    nudgeHelp(false);
+    if (!SH.near || !cur || cur.done || SH.paused) return false;
+    const s = helpSheep(); if (!s) return false;
+    const h = s.item.help || {}, miss = s.miss ?? null;
+    if (h.kind === 'chart') { chartFor(s.item, miss); if (offer) offer.openChart(); return true; }
+    if (h.kind === 'line' || h.kind === 'count') { lineFor(s.item, miss, miss != null); return true; }
+    if (cur.topic === 'algebra') { hint({ say: 'Check her step', line: 'Whatever you do to one side, do to the other. To undo + 5, take 5 from both sides; to undo × 3, divide both sides by 3.' }); return true; }
+    if (h.line) { hint({ say: cur.topic === 'columns' ? 'Work it in columns' : 'Take your time', line: h.line }); return true; }
+    hint({ say: 'Take your time', line: 'Read each step: was the same thing done to both sides, and the right way?' });
+    return true;
   }
   function endHelp() {
     if (hes) { hes.cancel(); hes = null; }
+    nudgeHelp(false);
     closeChart();
     if (offer) { offer.remove(); offer = null; }
     if (nl) { nl.remove(); nl = null; }
@@ -335,8 +354,11 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
     s.crossed.add(i);
     const btn = picker.el.querySelector(`button[data-i="${i}"]`); if (btn) { btn.classList.add('is-crossed', 'is-shake'); btn.disabled = true; }
     hint({ say: 'Not that bottle', line: b.why });
-    if (it.help.kind === 'line' || it.help.kind === 'count') lineFor(it, b.value, true, '');
-    else if (it.help.kind === 'chart') chartFor(it, it.answer === b.value ? null : b.value);
+    // (the picture is the rider's to ask for: Help glows, and opens it with this bottle marked; one already up for her
+    // is brought up to date)
+    s.miss = it.help.kind === 'chart' && it.answer === b.value ? null : b.value;
+    if (nl && nl.el && nl.el.isConnected && (it.help.kind === 'line' || it.help.kind === 'count')) lineFor(it, b.value, true, '');   // (not one closed with its X)
+    nudgeHelp();
     hob.event('sheepWrong');
     const left = it.bottles.filter((x, k) => !s.crossed.has(k));
     // (the cure doesn't wait on the tray: put away or not, she is cured; while the game is paused it waits, and opening
@@ -398,7 +420,7 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
     time += dt;
     const d = Math.hypot(P.position.x - PA.x, P.position.z - PA.z);
     const away = defer(P.position);   // (at another farm job: the sheep's sums and the ring step aside too, so two jobs' sums don't mix)
-    SH.near = d < SHEEP.near && !away;
+    SH.near = d < SHEEP.near && !away && (wasNear ? cardOut : cardIn).contains(P.position.x, P.position.z);
     if (SH.near !== wasNear) {
       wasNear = SH.near;
       if (SH.near) { hob.event('farmArrive'); startHelp(); showCard(); }
@@ -553,6 +575,23 @@ export function makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hu
   SH.open = (s) => openPicker(s);
   SH.give = (i) => give(i);
   SH.newFlock = (o) => newFlock(o);   // (o.sick: how many sick, for a rig)
+  SH.help = () => askHelp();
+  SH.canHelp = () => !!(SH.near && cur && !cur.done && !SH.paused);
+  // the rider moved the level (the tools strip's arrows): the sheep not yet healed get new sums at the new level, as
+  // many sick among them as there were; the healed keep theirs. (A flock between sets is made at the new level anyway.)
+  SH.relevel = () => {
+    if (disposed || !cur || cur.done || !flock.length) return false;
+    const left = flock.filter((s) => !s.healed), sick = sickLeft();
+    if (!left.length || !sick) return false;
+    closePicker(); endHelp(); hint(null);
+    const q = levelFor(rider, 'sheep'); saveRider(rider);
+    const f = flockAt(q.level.gen, { size: left.length, sick });
+    cur.topic = f.topic; cur.q = q; cur.renew = false; cur.sheep = flock.map((s) => s.item);
+    left.forEach((s, i) => { s.item = f.sheep[i]; s.tried = false; s.miss = null; s.crossed = new Set(); s.showT = 0; if (s.state === 'dose') s.state = 'graze'; card(s); cur.sheep[flock.indexOf(s)] = s.item; });
+    showCard();
+    if (SH.near) startHelp();
+    return true;
+  };
   // the sum for the tools' Work it out (src/math/jobsums.js): the sheep with its bottles up, else the ringed one, else
   // the first not healed yet (the sum as written; which sheep is wrong stays the kid's)
   SH.workSum = () => {

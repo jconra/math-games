@@ -46,12 +46,15 @@ import { earn, countJob, recordAnswer, saveRider } from '../save.js';
 import { readAloud } from '../math/skill.js';
 import { speakLine } from '../ui/storeslip.js';
 import { pigSum } from '../math/jobsums.js';
+import { nudgeHelp } from '../ui/askhelp.js';
 
 export const PIGS = {
   near: 24,              // the job's card shows within this many metres of the pig yard's middle ...
-  yardReach: 8,          // ... and this close to the yard's fence, and nearer the yard's fence than the sheep pasture's (so
+  yardReach: 2,          // ... and this close to the yard's fence (in the yard, or a couple of metres off it; once in, the card stays
+                         // till yardOut m off, so it doesn't flicker at the fence), and nearer the yard's fence than the sheep pasture's (so
                          // the lane up the middle by the barn stays the sheep job's: the medicine reaches 34 m)
-  byWife: { x: 6.8, z: 3.5, r: 5 },   // ... or this close to the farmer's wife, who asks for help with the pigs (where she
+  yardOut: 5,
+  byWife: { x: 6.8, z: 3.5, r: 3.5 },   // ... or this close to the farmer's wife, who asks for help with the pigs (where she
                          // stands in the farm's frame: STAND.wife in jobfolk.js), so her hello comes with the pigs' card
   scare: 6.5,            // a pig runs from a player on foot within this many metres ...
   scareHorse: 9,         // ... and from a rider within this many
@@ -251,7 +254,7 @@ export function makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, ho
     hud.rule({
       main: innerWidth < 480 ? 'Pen each pig by answer' : 'Pen each pig by its answer',
       sub: `${short ? '' : 'They run from you: drive them in from behind · '}${penned ? `${penned} penned · ` : ''}${n} to go`,
-      buttons: [{ label: 'Show me', onClick: () => { const g = nearestLoose(); if (g) lineFor(g, null, false); } }],
+      buttons: [{ label: 'Show me', onClick: () => askHelp() }],
     });
   }
   function nearestLoose() {
@@ -284,10 +287,23 @@ export function makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, ho
   }
   function startHelp() {
     if (!batch || batch.done || PG.paused || hes) return;
-    hes = watchHesitation({ after: PIGS.helpAfter, onShow: () => { const g = nearestLoose(); if (g && PG.near) lineFor(g, null, false); } });
+    // (stuck a while: only the Help buttons glow; the number line comes when the rider asks, src/ui/askhelp.js)
+    hes = watchHesitation({ after: PIGS.helpAfter, onShow: () => { if (PG.near) nudgeHelp(); } });
+  }
+  // HELP, when the rider asks (the tools strip's Help, Q, or the card's Show me): the pig that just went in the wrong pen
+  // (its hop and that pen marked, while it is still loose), else the nearest loose pig, its answer hidden
+  let missed = null;
+  function askHelp() {
+    nudgeHelp(false);
+    if (!PG.near || !batch || batch.done || PG.paused) return false;
+    if (missed && missed.g.item === missed.item && missed.g.state !== 'penned') { lineFor(missed.g, missed.picked, true); return true; }
+    const g = nearestLoose(); if (!g) return false;
+    lineFor(g, null, false);
+    return true;
   }
   function endHelp() {
     if (hes) { hes.cancel(); hes = null; }
+    nudgeHelp(false);
     if (nl) { nl.remove(); nl = null; }
   }
 
@@ -339,7 +355,9 @@ export function makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, ho
     // On a narrow screen Hob's caption would sit on top of the number line, so the why goes in the box instead)
     const narrow = innerWidth < 700;
     hint({ say: `Not the ${batch.pens[i].label} pen`, line: narrow ? j.line : '' });
-    lineFor(g, j.picked, true);
+    // (the number line is the rider's to ask for: Help glows and opens it with this pen's number marked)
+    missed = { g, item: g.item, picked: j.picked };
+    nudgeHelp();
     if (!narrow) hob.event('pigWrong', { line: j.line });
     if (hes) hes.restart();
   }
@@ -511,19 +529,19 @@ export function makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, ho
     if (s < y - 0.35) lookingAtSheep = true; else if (y < s - 0.35) lookingAtSheep = false;
     return lookingAtSheep;
   }
-  PG.wants = (at) => {
+  PG.wants = (at, reach = PIGS.yardReach) => {
     const p = L.local(at.x, at.z), bw = PIGS.byWife;
     if (Math.hypot(p.x - bw.x, p.z - bw.z) < bw.r) return true;
     if (Math.hypot(at.x - yardAt.x, at.z - yardAt.z) >= PIGS.near) return false;
     const dy = fromEdge(p, Y.box);
-    if (!(dy < PIGS.yardReach && dy < fromEdge(p, sheepAt.box))) return false;
+    if (!(dy < reach && dy < fromEdge(p, sheepAt.box))) return false;
     return dy === 0 || !facing(at);
   };
   const camFwd = new THREE.Vector3(), lp = new THREE.Vector3();
   let wasNear = false;
   PG.update = (dt) => {
     time += dt;
-    PG.near = PG.wants(P.position);
+    PG.near = PG.wants(P.position, wasNear ? PIGS.yardOut : PIGS.yardReach);
     if (PG.near !== wasNear) {
       wasNear = PG.near;
       if (PG.near) { hob.event('pigsArrive'); startHelp(); showCard(); sayPens(); }
@@ -626,6 +644,11 @@ export function makePigJob({ W, animals, farm, P, camera, canvas, rider, hud, ho
     set(on) { paused = !!on; if (paused) endHelp(); else if (PG.near) startHelp(); },
   });
   PG.newBatch = () => newBatch();
+  PG.help = () => askHelp();
+  PG.canHelp = () => !!(PG.near && batch && !batch.done && !PG.paused);
+  // the rider moved the level (the tools strip's arrows): a new batch at the new level now. The pens' signs change with
+  // the level, so the pigs already penned come back out with the rest (they were sorted by the old signs)
+  PG.relevel = () => { if (!batch || batch.done) return false; missed = null; newBatch(); return true; };
   // the sum for the tools' Work it out (src/math/jobsums.js): the nearest loose pig's (which pen stays the kid's)
   PG.workSum = () => { if (!PG.near || !batch || batch.done) return null; const g = nearestLoose(); return g ? pigSum(g.item) : null; };
   PG.drive = (g, i) => { if (g && g.state === 'loose' && pens[i]) { const gt = pens[i].gate; g.root.position.set(gt.out.x, W.heightAt(gt.out.x, gt.out.z), gt.out.z); into(g, i); return true; } return false; };

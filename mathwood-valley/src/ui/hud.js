@@ -25,7 +25,8 @@
 //   H.hintEl                   that line's element (the times chart keeps clear of it)
 //   H.jobEl                    the rule card and the line under it together: the times chart's "Peek" button goes
 //                              under it (so it never covers the line) and the chart keeps it in view
-//   H.helpEl                   a box at the bottom middle for the number line (the negatives topic)
+//   H.helpEl                   a box at the bottom middle for the number line (the negatives topic); each helper in it
+//                              gets an X, and Esc closes it. H.closeHelp(), H.helpOpen()
 //   H.compass(yaw, marks)      marks: [{ id, icon: 'cabin'|'job'|'horse'|'dog', bearing, dist, label }] (radians,
 //                              as three's rotation.y: facing (sin, cos))
 //   H.caption(text, ms) | H.caption(null)   Old Hob's caption (hob.js says what)
@@ -408,6 +409,25 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
     hobEl.classList.toggle('is-tucked', vh - bottom - hobEl.offsetHeight < vh * 0.14);
   }
   new ResizeObserver(() => placeBottom()).observe(helpEl);
+  // Every helper in the box (the number line, the ten-frames: what a job shows when the rider asks for help) gets an X in
+  // its corner, and Esc puts the box away (before the game's own Esc opens the menu). The rule (src/ui/askhelp.js): a
+  // helper only ever comes when asked, and it always goes when asked.
+  const closeHelp = (box) => { for (const c of box ? [box] : [...helpEl.children]) c.remove(); };
+  new MutationObserver(() => {
+    for (const c of helpEl.children) {
+      if (c.querySelector(':scope > .bmh-help-x')) continue;
+      const x = document.createElement('button');
+      x.type = 'button'; x.className = 'bmh-help-x'; x.title = 'Close (Esc)'; x.setAttribute('aria-label', 'Close the help');
+      x.innerHTML = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>';
+      for (const ev of ['pointerdown', 'pointerup', 'mousedown', 'touchstart']) x.addEventListener(ev, (e) => e.stopPropagation());
+      x.addEventListener('click', (e) => { e.stopPropagation(); closeHelp(c); });
+      c.classList.add('bmh-help-box'); c.appendChild(x);
+    }
+  }).observe(helpEl, { childList: true });
+  addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || !helpEl.children.length || el.classList.contains('is-hidden')) return;
+    e.preventDefault(); e.stopImmediatePropagation(); closeHelp();
+  }, true);
   // (a note sliding in is measured where it is mid-slide, lower than where it stops: Hob's line is placed again once it
   // has settled, or grown to two lines, so a pay note arriving with his line never covers it)
   { const ro = new ResizeObserver(() => placeBottom()); ro.observe(toastEl); ro.observe(promptEl); }
@@ -539,6 +559,7 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
 
   const H = {
     el, ruleEl, hintEl, helpEl, meterEl, jobEl: $('.bmh-job'),
+    closeHelp: () => closeHelp(), helpOpen: () => helpEl.children.length > 0,
     show(on) { el.classList.toggle('is-hidden', !on); if (!on) { prompt(null); caption(null); if (quiet()) { buckleQ.length = 0; if (buckleBusy && buckleWatch) endBuckle(); } } },
     purse, toast, prompt, caption, rule, hint, compass, buckle, shift, meter,
     // the big touch button's word: 'Rope', or 'Shoot' while the six-shooter is the tool (src/gun.js)

@@ -61,7 +61,8 @@
 //     day's shift isn't done (src/shiftkeeper.js); left(): the waves it has left (fixing the shift's length)
 //   WJ.update(dt)     each frame after P.update
 //   WJ.paused = true  a panel is open (help put away, ring hidden)
-//   WJ.near           the player is with a held-up wagon (its card is up: the round-up's card stands aside)
+//   WJ.near           the player is with a held-up wagon (WAGONJOB.near: the round-up's card stands aside)
+//   WJ.cardNear       ... and close enough for the gang's card (WAGONJOB.card; farther, the "Help!" card says how far)
 //   WJ.on             a hold-up's gang is riding and the player is with it
 //   WJ.where()        the held-up wagon's place { x, z } (the compass, the hoofprints, the jobs board), or null
 //   WJ.spot()         (dev) beside the held-up wagon, facing along the road { x, z, rot }, or null
@@ -99,7 +100,7 @@ import { canShoot, GUNPLAY } from '../gun.js';
 import { makeSights } from '../sixgun.js';
 import { makeRangeSound } from '../audio/rangesound.js';
 import { makeDust } from '../fx/dust.js';
-import { makeGunfire } from '../fx/gunfire.js';
+import { makeGangGuns } from '../fx/gangguns.js';
 import { offerChart, closeChart, chartOptions, watchHesitation as watchChart, ensureChartCss } from '../ui/timeschart.js';
 import { recordAnswer, earn, saveRider, countJob } from '../save.js';
 import { boxTier } from '../shop.js';
@@ -114,7 +115,9 @@ import { SLOTS, gangLine, sacksFor, makeOpenRoad, AMBUSH, HOLDUP, gangSize, choo
 export { SLOTS, gangLine, sacksFor };
 
 export const WAGONJOB = {
-  near: 60,               // m from the held-up wagon: the gang's card shows within this (the round-up's card stands aside)
+  near: 60,               // m from the held-up wagon: the player is with it (the gang rides, the fight's on; the round-up's card stands aside)
+  card: 30, cardOff: 34,  // m: the gang's card shows within `card` of the wagon, and goes again past `cardOff` (farther, the
+                          // "Help!" card says how far: the game's maker wants a job's card only at the job)
   spawnBehind: 70,        // m back along the road a rider who galloped off rides in again from (out past where the numbers show)
   labelPx: [44, 64],      // the number card's height on screen (pixels), as the cattle's
   labelFull: 40, labelGone: 58,   // the numbers show in full within this many metres, and are gone by this far
@@ -294,7 +297,7 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
   const R = makeTargetRing({ scene, camera, canvas, W });
   ensureChartCss();
   const fontReady = (document.fonts && document.fonts.load) ? document.fonts.load('700 84px Bitter').catch(() => null) : Promise.resolve();
-  const WJ = { near: false, on: false, away: false, targets: [], tookTrainer: false, music: null };
+  const WJ = { near: false, cardNear: false, on: false, away: false, targets: [], tookTrainer: false, music: null };
   const recs = WJ.targets, downs = [];
   let kit = null, wagon = null, disposed = false;
   // state: 'loading' | 'waiting' (the wagon not drawn yet: the player is far off) | 'on' (a wave on, or the quiet
@@ -550,7 +553,7 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
   function showCard() {
     if (state === 'loading' || retired) return;
     const gun = canShoot(rider);
-    if (!WJ.near) {
+    if (!WJ.near || !WJ.cardNear) {
       if ((state === 'on' || state === 'waiting') && !grab && !quiet()) {
         const w = wagonAtNow(), d = Math.round(Math.hypot(P.position.x - w.x, P.position.z - w.z));
         const far = d > 100 ? Math.round(d / 10) * 10 : d;
@@ -1349,11 +1352,9 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
   // (a glance off an iron tyre now and then), fires, holds a moment and lowers it. The more of the gang still out, the
   // more shots (they come in shooting). Never toward the player: a shot whose line passes near the player, or that
   // would land by them, goes into the air instead; never at the driver's seat or the team.
-  let F = null, shots = 0;
-  const SHOT = { raise: 0.2, hold: 0.45, lower: 0.45 };
-  const fists = [];
-  for (let i = 0; i < 12; i++) fists.push({ pos: new THREE.Vector3(), dir: new THREE.Vector3(), side: new THREE.Vector3() });
-  const _hq = new THREE.Quaternion(), _hl = new THREE.Vector3(), _hp = new THREE.Vector3(), _mz = new THREE.Vector3(), _seg = new THREE.Vector3();
+  // (the guns in their fists and the shots themselves: src/fx/gangguns.js, shared with the gang's loot camps)
+  const GG = makeGangGuns({ scene, W, camera, sound: () => snd() });
+  const _hl = new THREE.Vector3(), _hp = new THREE.Vector3(), _mz = new THREE.Vector3(), _seg = new THREE.Vector3();
   // a mark on the wagon for a shot from this rider, or null: { at, out (the board's face, outward), what: 'board' |
   // 'dirt' | 'ping' }
   function hitPoint(rec) {
@@ -1396,7 +1397,7 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
     const rec = list[Math.floor(Math.random() * list.length)], r = rec.r, H = HOLDUP.shots;
     let kind = 'air';
     if (Math.random() >= H.air && Math.hypot(r.x - wagon.pos.x, r.z - wagon.pos.z) < H.near && hitPoint(rec)) kind = 'wagon';
-    rec.shot = { t: 0, kind, fired: false, boom: false };
+    GG.start(rec, kind);
   }
   // (rigs) a shot now from the rider nearest the player: into the air, or at the wagon (what: 'board' | 'dirt' | 'ping')
   WJ.fireNow = (kind = 'air', what = null) => {
@@ -1404,55 +1405,28 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
     for (const rec of recs) if (!rec.shot && rec.gunIx >= 0 && rec.r.gunK > 0.8 && rec.r.mode === 'ride') { const d = Math.hypot(rec.r.x - P.position.x, rec.r.z - P.position.z); if (d < bd) { bd = d; best = rec; } }
     if (!best || !wagon) return false;
     if (kind === 'wagon') {
-      for (let k = 0; k < 16; k++) { const h = hitPoint(best); if (h && (!what || h.what === what)) { best.shot = { t: 0, kind, fired: false, boom: false }; return true; } }
+      for (let k = 0; k < 16; k++) { const h = hitPoint(best); if (h && (!what || h.what === what)) { GG.start(best, kind); return true; } }
       return false;
     }
-    best.shot = { t: 0, kind: 'air', fired: false, boom: false };
+    GG.start(best, 'air');
     return true;
   };
-  // a shot under way: the gun up (or out at the mark), fired, held a moment, lowered
-  function stepShot(rec, dt) {
-    const sh = rec.shot, g = rec.r.gun;
-    sh.t += dt;
-    const up = Math.min(1, sh.t / SHOT.raise), down = Math.max(0, Math.min(1, (sh.t - SHOT.raise - SHOT.hold) / SHOT.lower)), k = up * (1 - down);
-    if (sh.kind === 'air') g.up = k; else { g.aim = k; g.at.copy(rec.hit.at); }
-    if (!sh.fired && sh.t >= SHOT.raise) { sh.fired = true; sh.boom = rec.r.mode === 'ride'; }
-    if (sh.t >= SHOT.raise + SHOT.hold + SHOT.lower || rec.r.mode !== 'ride') { g.up = 0; g.aim = 0; rec.shot = null; }
-  }
-  // fired: the flash and the smoke at his muzzle, the shot heard from there, and where it lands
-  function boom(rec) {
-    if (rec.gunIx < 0) return;
-    shots++;
-    F.muzzle(rec.gunIx, _mz);
-    F.flash(_mz, fists[rec.gunIx].dir, camera.position.distanceTo(_mz));
-    snd().shotAt(_mz);
+  // where a shot at the wagon lands
+  function shotLanded(rec) {
     if (rec.shot.kind !== 'wagon') return;
-    const h = rec.hit;
+    const h = rec.hit, F = GG.gunfire;
     if (h.what === 'board') { F.splinters(h.at, h.out); F.dust(h.at); snd().thud(h.at); if (WJ.near && hud.meter && hud.meter.hit) hud.meter.hit(); }   // (and a puff of wood dust: it reads from further off)
     else if (h.what === 'dirt') { F.dust(h.at); snd().thud(h.at); }
     else snd().ping(h.at);
   }
   function guns(dt) {
-    if (!F) { if (!recs.length) return; F = makeGunfire({ scene, tier: W.tier, W }); F.ground((x, z) => W.heightAt(x, z)); }
-    let n = 0;
-    for (const rec of recs) {
-      rec.gunIx = -1;
-      if (WJ.away && !rec.dev) continue;
-      if (rec.shot) stepShot(rec, dt);
-      const r = rec.r, f = fists[n];
-      if (n < fists.length && !rec.fade && r.gunHand(f.pos, f.dir)) {
-        r.person.root.getWorldQuaternion(_hq); f.side.set(1, 0, 0).applyQuaternion(_hq);
-        rec.gunIx = n++;
-      }
-    }
-    F.guns(fists, n);
-    for (const rec of recs) if (rec.shot && rec.shot.boom) { rec.shot.boom = false; boom(rec); }
+    GG.frame(recs, dt, { skip: (rec) => WJ.away && !rec.dev, noGun: (rec) => !!rec.fade, onBoom: shotLanded });
+    if (!GG.gunfire) return;
     if (state === 'on' && wave && !wave.done && !grab && !WJ.away && (shotT -= dt) <= 0) {
       const out = wave.goods - wave.caught;
       shotT = shotGap(out);
       if (out > 0) fire();
     }
-    F.update(dt);
   }
 
   // ── EACH FRAME ─────────────────────────────────────────────────────────────────────────────────────────────────
@@ -1464,12 +1438,13 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
     if (!wagon) {
       // (the wagon not drawn yet, far off: the card says how far, and the gang rides in once it is: begin)
       begin();
-      if (!wagon) { WJ.near = false; if (state === 'waiting' && (cardT -= dt) <= 0) { cardT = 1; showCard(); } return; }
+      if (!wagon) { WJ.near = false; WJ.cardNear = false; if (state === 'waiting' && (cardT -= dt) <= 0) { cardT = 1; showCard(); } return; }
     }
     wagon.update();
     s = wagon.s; v = wagon.v;
     const wp = wagon.pos, dW = Math.hypot(P.position.x - wp.x, P.position.z - wp.z);
     WJ.near = dW < WAGONJOB.near;
+    const cardWas = WJ.cardNear; WJ.cardNear = WJ.near && dW < (WJ.cardNear ? WAGONJOB.cardOff : WAGONJOB.card);
     // the first time the player comes, how it goes (once a ride); the driver shouting for help till the player is
     // close; a player who never comes to one on the way, or rides far off once there: the driver makes a run for it
     // (the jobs board's waits for the player: it is the job picked)
@@ -1486,9 +1461,10 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
         startHelp();
       } else { endHelp(); unsee(); hud.hint(null); hud.rule(null); }
       showCard();
-    } else if ((cardT -= dt) <= 0) {
+    } else if (WJ.cardNear !== cardWas) showCard();
+    else if ((cardT -= dt) <= 0) {
       cardT = 1;
-      if (!WJ.near && state === 'on' && !quiet()) showCard();
+      if (!WJ.cardNear && state === 'on' && !quiet()) showCard();
     }
     if (hintT > 0 && (hintT -= dt) <= 0) hint(null);
     // the next gang, after the quiet between two (counted while the player is with the wagon)
@@ -1630,7 +1606,7 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
   Object.defineProperty(WJ, 'phase', { get: () => state });
   Object.defineProperty(WJ, 'met', { get: () => met });
   WJ.state = () => ({
-    state, on: WJ.on, near: WJ.near, loaded: !!kit, met, ended, board: !!hold.board, held: !!hold.t.held, number: hold.t.number,
+    state, on: WJ.on, near: WJ.near, cardNear: WJ.cardNear, loaded: !!kit, met, ended, board: !!hold.board, held: !!hold.t.held, number: hold.t.number,
     waves: { n: waveN, of: wavesOf, brought, between: nextWaveT > 0 ? +nextWaveT.toFixed(1) : 0 },
     health: +health.toFixed(1), loose: looseNow(), rate: +rate.toFixed(4), grab: grab ? { phase: grab.phase, t: +grab.t.toFixed(1), rider: grab.rec ? grab.rec.n : null } : null,
     box: box ? (box.parent && box.parent.name === 'cargo' ? 'wagon' : box.parent ? 'rider' : 'gone') : null,
@@ -1640,7 +1616,7 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
     riders: recs.map((x) => ({ n: x.n, good: x.good, state: x.state, mode: x.r.mode, x: +x.r.x.toFixed(1), z: +x.r.z.toFixed(1), speed: +x.r.speed.toFixed(2), clip: x.r.horse.clip, label: x.label.visible, gun: +x.r.gunK.toFixed(2), shot: x.shot ? x.shot.kind : null,
       hit: x.shot && x.shot.kind === 'wagon' && x.hit ? { x: +x.hit.at.x.toFixed(2), y: +x.hit.at.y.toFixed(2), z: +x.hit.at.z.toFixed(2), ox: +x.hit.out.x.toFixed(2), oz: +x.hit.out.z.toFixed(2), what: x.hit.what } : null, heading: +x.r.heading.toFixed(2) })),
     downs: downs.length, sacks: downs.map((d) => ({ k: d.bags.length, got: d.got, per: d.per, x: +d.at.x.toFixed(1), z: +d.at.z.toFixed(1), at: d.bags.filter((b) => !b.st).map((b) => ({ x: +b.x.toFixed(2), z: +b.z.toFixed(2) })) })), walkers: walkers.map((k) => ({ phase: k.phase, x: +k.x.toFixed(1), z: +k.z.toFixed(1), fade: +k.fade.toFixed(2), path: k.path ? k.path.length : 0 })),
-    music: music ? music.state() : null, rail: railT > 0, shots, gunfire: F ? F.state() : null,
+    music: music ? music.state() : null, rail: railT > 0, shots: GG.shots, gunfire: GG.state(),
   });
   // a hold-up all over: seen off, grabbed or run off, its riders gone, the roped ones walked off and their sacks left behind
   WJ.over = () => (state === 'done' || state === 'stopped') && !recs.length && !walkers.length && !downs.length;
@@ -1663,7 +1639,7 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
     rail.dispose(); R.dispose();
     if (sights) { sights.dispose(); sights = null; }
     if (dust) { dust.dispose(); dust = null; }
-    if (F) { F.dispose(); F = null; }
+    GG.dispose();
     if (music) music.stop({ now: true });
     if (audio) audio.need('ambush', false);
     if (bus) { bus.ctx.removeEventListener('statechange', bus.onState); const g = bus.g; g.gain.setTargetAtTime(0, bus.ctx.currentTime, 0.05); setTimeout(() => { try { g.disconnect(); } catch (e) { /* gone */ } }, 400); bus = null; }

@@ -477,7 +477,7 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
   function resultNote(r) {
     if (!r) return '';
     if (r.solved && r.boxes > 1) return `Cracked ${r.boxes} boxes, +${r.gold} gold.`;
-    if (r.solved) return `Cracked it! ${r.stars} star${r.stars === 1 ? '' : 's'}, +${r.gold} gold.`;
+    if (r.solved) return `Cracked it! +${r.gold} gold.`;
     return 'You left that box. It will keep.';
   }
   // A SADDLE BOUGHT, or put on (the counter's rows, and the saddle racks in the stable: src/stabletack.js): -> { ok, note }

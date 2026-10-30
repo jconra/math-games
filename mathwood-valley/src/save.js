@@ -43,7 +43,8 @@
 //   stats:    { answered, right, recent: [1,0,...],          every answer, recent = the last 50 (1 right, 0 wrong)
 //               byMode: { lasso: {...}, shoot: {...} },      the same, split: shoot = the bottle range's answers, lasso =
 //                                                            every other job's (the Sharpshooter and Top Hand badges)
-//               boxes, parBoxes,                             lock boxes solved, and solved in the fewest moves
+//               boxes, parBoxes,                             lock boxes opened (Safecracker counts these), and opened in
+//                                                            the fewest moves (kept as a quiet stat, never shown)
 //               jobs: { cattle, boxes, sheep, orders, pigs, bandits, deliveries } }   how much of each job was done (the
 //                                                            belt buckles come from these; see JOBS below)
 //   badges:   ['Top Hand', ...]   badges once earned stay earned
@@ -81,8 +82,8 @@ let KEY = 'bandit-math.riders';
 export const RECENT = 50;
 export const BADGE_MIN = 30;
 export const BADGE_PCT = 0.9;
-// Lock boxes solved in the fewest possible moves before the Safecracker badge.
-export const SAFECRACKER_BOXES = 10;
+// Lock boxes opened before the Safecracker badge (any box opened counts, however many moves or hints it took).
+export const SAFECRACKER_BOXES = 25;
 // The lock-box tiers (lockbox/box.js TIER_GOLD). A saved box of any other tier (an old or hand-edited save) is read
 // as an iron one, so the box the panel opens is the one taken out of the saddlebags when it is solved.
 export const BOX_TIERS = ['tin', 'iron', 'brass', 'vault'];
@@ -566,7 +567,7 @@ function earnedNow(rider) {
   };
   if (sharp(byMode.lasso)) out.push('Top Hand');
   if (sharp(byMode.shoot)) out.push('Sharpshooter');
-  if (whole(st.parBoxes) >= SAFECRACKER_BOXES) out.push('Safecracker');
+  if (whole(st.boxes) >= SAFECRACKER_BOXES) out.push('Safecracker');
   return out;
 }
 
@@ -732,9 +733,9 @@ export function recordAnswer(rider, right, skill = null) {
   return { pct: accuracyOf(rider).pct, badge: fresh[0] || null, skill: sk, level: lv };
 }
 
-// Records a finished lock box. result = the lock-box panel's onDone result: { solved, stars, moves, par }.
-// A box counts "at par" when it was solved in the fewest possible moves (moves <= par; or 3 stars if the
-// move counts are missing). Ten at par earn the Safecracker badge. A solved box is also the lock-box job's count
+// Records a finished lock box. result = the lock-box panel's onDone result: { solved, moves, par }.
+// Every opened box counts toward the Safecracker badge (SAFECRACKER_BOXES of them). A box opened in the fewest
+// possible moves (moves <= par) is also counted in parBoxes, a quiet stat nothing shows. A solved box is also the lock-box job's count
 // (stats.jobs.boxes), so it can win a belt buckle. Saves.  -> { atPar, badge, buckle }
 export function recordLockbox(rider, result) {
   result = obj(result);
@@ -745,7 +746,7 @@ export function recordLockbox(rider, result) {
     buckle = bumpJob(rider, 'boxes', 1);   // (before stats.boxes goes up: an old save's count starts from it)
     st.boxes = whole(st.boxes) + 1;
     const moves = num(result.moves, NaN), par = num(result.par, NaN);
-    atPar = Number.isFinite(moves) && Number.isFinite(par) ? moves <= par : num(result.stars) >= 3;
+    atPar = Number.isFinite(moves) && Number.isFinite(par) && moves <= par;
     if (atPar) st.parBoxes = whole(st.parBoxes) + 1;
   }
   const fresh = stampBadges(rider);

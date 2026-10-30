@@ -511,7 +511,9 @@ const SALOON_MAKERS = {
       q.p('wood', ngon(6, 0.012), 0.12, [s * (W / 2 - 0.22), 1.16, D / 2 + 0.08], null, { paint: [0.8, 0.76, 0.66], tint: [1, 1, 1], smooth: true });
     }
     q.b([W - 0.06, 0.06, 0.28], [0, KY - 0.03, D / 2 + 0.1], null, { long: 0, ...lac });                               // the key bed
-    q.b([W - 0.12, 0.08, 0.04], [0, KY + 0.04, D / 2 + 0.22], null, { long: 0, ...lac });                              // its rail
+    // the key slip: a thin strip along the keys' fronts, its top just under theirs (it stood 6 cm above them once, a board
+    // between the keys and the pianist's hands)
+    q.b([W - 0.12, 0.045, 0.02], [0, KY - 0.0175, D / 2 + 0.205], null, { long: 0, ...lac });
     if (o.gd) o.gd.box([W - 0.14, 0.02, 0.15], mul(M, T(0, KY + 0.01, D / 2 + 0.12)), { '+y': SALOON_ART.keys, '+z': SALOON_ART.tile.ivory }, [1, 1, 1]);
     q.b([W - 0.12, 0.2, 0.03], [0, KY + 0.16, D / 2 + 0.04], [-0.12, 0, 0], { long: 0, ...lac });                     // the fallboard
     q.b([W * 0.5, 0.03, 0.08], [0, 0.98, D / 2 + 0.02], null, { long: 0, ...lac });                                    // the music desk's ledge

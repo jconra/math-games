@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import * as E from '../src/lockbox/engine.js';
 import { generate, makeRng, RUNGS, RUNG, verdictOf, VERDICT } from '../src/lockbox/generate.js';
 import { buildButtons } from '../src/lockbox/buttons.js';
-import { makeBox, starsFor, goldFor } from '../src/lockbox/box.js';
+import { makeBox, goldFor } from '../src/lockbox/box.js';
 import { makeAlgebra, ARITH_LEVEL, NUMBER_LINE_SHOWS } from '../src/lockbox/algebra.js';
 import { tidyChoices, slipLine, sumsOf } from '../src/lockbox/tidy.js';
 import { makeIneqBox } from '../src/lockbox/ineqbox.js';
@@ -337,7 +337,7 @@ test('kid’s favourite trap shows up when asked for', () => {
   assert.ok(part > 80, `part trap ${part}/100`);
 });
 
-// ---------- a box played through: undo, jam rewind, hints, stars, the check ----------
+// ---------- a box played through: undo, jam rewind, hints, the check ----------
 
 test('undo restores the exact line; the press still counts', () => {
   const p = { rung: 'R13', mode: 'moves', kind: 'one', start: line([xt(4), num(-6)], [xt(-8), num(18)]), x: 2, par: 3 };
@@ -409,22 +409,14 @@ test('jam guard keeps progress made after an earlier slip', () => {
   assert.equal(lineText(B.line), keep);
 });
 
-test('stars and gold follow the table, never 0 for a finish', () => {
-  assert.equal(starsFor(3, 3), 3);
-  assert.equal(starsFor(4, 3), 2);
-  assert.equal(starsFor(5, 3), 2);
-  assert.equal(starsFor(6, 3), 1);
-  assert.equal(starsFor(20, 3), 1);
-  assert.equal(starsFor(3, 3, 2), 2);
-  assert.equal(starsFor(3, 3, 3), 1);
-  assert.equal(goldFor('tin', 3), 10);
-  assert.equal(goldFor('iron', 2), 16);
-  assert.equal(goldFor('brass', 1), 21);
-  assert.equal(goldFor('vault', 3), 60);
-  assert.equal(goldFor('vault', 2), 48);
+test('an opened box pays its tier in full', () => {
+  assert.equal(goldFor('tin'), 10);
+  assert.equal(goldFor('iron'), 20);
+  assert.equal(goldFor('brass'), 35);
+  assert.equal(goldFor('vault'), 60);
 });
 
-test('hints climb Look → Rule → Show and cap the stars', () => {
+test('hints climb Look → Rule → Show, and every one is free', () => {
   const p = { rung: 'R7', mode: 'moves', kind: 'one', start: line([xt(5), num(-4)], [num(-19)]), x: -3, par: 2 };
   const B = makeBox(p, { stage: RUNG.R7.stage, level: 3, rng: makeRng(4) });
   const h1 = B.hint();
@@ -438,7 +430,7 @@ test('hints climb Look → Rule → Show and cap the stars', () => {
   assert.ok(B.buttons.slots.some((b) => b && b.key === h3.key));
   B.press(addNum(4)); B.press(divBy(5));
   assert.ok(B.solved);
-  assert.equal(B.finish().stars, 1);
+  assert.equal(B.finish().gold, goldFor('iron'), 'Show still pays the box in full');
   assert.equal(B.finish().clean, false);
 });
 
@@ -463,7 +455,7 @@ test('the check works out both sides of the ORIGINAL line', () => {
   }
 });
 
-test('a whole box played by the best route: 3 stars, clean, key passes', () => {
+test('a whole box played by the best route: at par, clean, key passes', () => {
   const rng = makeRng(12);
   for (const rung of MOVE_RUNGS.filter((r) => r.id !== 'R15')) {
     for (let i = 0; i < 30; i++) {
@@ -483,7 +475,7 @@ test('a whole box played by the best route: 3 stars, clean, key passes', () => {
       assert.equal(kt.left[kt.left.length - 1], kt.right[kt.right.length - 1]);
       B.keyResult(true);
       const f = B.finish();
-      assert.equal(f.stars, 3);
+      assert.ok(f.moves <= f.par);
       assert.equal(f.gold, 20);
       // the box's par is the fewest moves, or the steps card's count where that is longer (3(x + 2) = 18 opens the
       // brackets first); a productive button never needs more than that
@@ -509,7 +501,7 @@ test('R15 vault boxes: verdicts and the x = 0 box', () => {
       B.makeButtons();
     }
     assert.ok(B.solved, `${lineText(p.start)} ${p.kind}`);
-    assert.equal(B.finish().stars, 3, `${lineText(p.start)} took ${B.moves} for par ${p.par}`);
+    assert.ok(B.moves <= B.par, `${lineText(p.start)} took ${B.moves} for par ${p.par}`);
     if (p.kind === 'all') all++; else if (p.kind === 'none') none++; else one++;
   }
   assert.ok(all && none && one);
@@ -535,7 +527,8 @@ test('warm-up rungs: balance the wagon and which key fits', () => {
         const B = makeBox(p, {});
         assert.equal(B.choose(p.choices.find((c) => c !== p.answer)).ok, false);
         assert.equal(B.choose(p.answer).ok, true);
-        assert.equal(B.finish().stars, 2);
+        assert.equal(B.finish().clean, false);
+        assert.equal(B.finish().gold, goldFor('iron'), 'a wrong pick still pays in full');
       }
     }
   }
@@ -543,7 +536,7 @@ test('warm-up rungs: balance the wagon and which key fits', () => {
 
 // ---------- the ladder ----------
 
-const result = (rung, clean) => ({ rung, clean, solved: true, stars: clean ? 3 : 1, moves: 1, par: 1, traps: [] });
+const result = (rung, clean) => ({ rung, clean, solved: true, moves: 1, par: 1, traps: [] });
 
 test('first visit climbs one rung per clean box', () => {
   const A = makeAlgebra({}, { rng: makeRng(1) });
@@ -690,7 +683,7 @@ function playKid(A, rng, { skill = 0.85, tier = 'iron', boxes = 300 } = {}) {
       assert.ok(kt.ok, `the check on ${Q.stateText(p.start)}`);
       B.keyResult(true);
       const f = B.finish();
-      assert.ok(f.solved && f.stars >= 1 && f.stars <= 3 && f.gold > 0);
+      assert.ok(f.solved && f.gold > 0);
       A.record(f);
       seen.results.push(f);
       continue;
@@ -726,7 +719,7 @@ function playKid(A, rng, { skill = 0.85, tier = 'iron', boxes = 300 } = {}) {
       B.keyResult(true);
     }
     const f = B.finish();
-    assert.ok(f.solved && f.stars >= 1 && f.stars <= 3 && f.gold > 0);
+    assert.ok(f.solved && f.gold > 0);
     A.record(f);
     seen.results.push(f);
   }
@@ -861,7 +854,7 @@ test('a wrong tidied line costs no move but the box is not clean, and the slip i
   B.keyResult(true);
   const f = B.finish();
   assert.equal(f.moves, 2);
-  assert.equal(f.stars, 3);
+  assert.ok(f.moves <= f.par);
   assert.equal(f.clean, false);
   assert.deepEqual(f.arith, [wrong.tag]);
   // the ladder counts it: twice makes it this kid's slip, and earns more number lines

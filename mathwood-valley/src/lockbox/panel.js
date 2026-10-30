@@ -10,9 +10,9 @@
 //   onBox(result)   (optional) runs as each box finishes, solved or set aside: the caller pays the gold and records
 //                   it right then (save.js earn + recordLockbox), so gold is saved the moment it is earned. It may
 //                   return { newTitle, badge } for the panel to show on the coin animation.
-//                   result = { solved, stars, gold, moves, par, rung, tier, clean, left, hints }
+//                   result = { solved, gold, moves, par, rung, tier, clean, left, hints }
 //   onDone(totals)  runs once, when the kid presses "Done for now" (or Esc), or the saddlebags run out:
-//                   { solved (any box solved), boxes (how many), played, gold (all of it), stars, moves, par, rung,
+//                   { solved (any box solved), boxes (how many), played, gold (all of it), moves, par, rung,
 //                     tier, clean, left, hints (the last box's), results: [each box], paid (true when onBox ran) }.
 //                   With no onBox, the caller pays totals.gold here instead. A box already solved whose check or
 //                   lid is still playing when the kid stops is paid first (onBox), so stopping never loses gold;
@@ -21,8 +21,8 @@
 //                   sheriff is followed by another forever; boxes from the saddlebags (from 'loot') go through what
 //                   is in rider.lockboxes, then the panel closes by itself.
 //
-// One box, top to bottom: the top strip (box name, one brass tumbler per move of par, the stars, the gold, "Done for
-// now"), the steps card (the six rules, the step being worked lit; open on a wide screen, a compact strip on a
+// One box, top to bottom: the top strip (box name, the gold, "Done for now"; moves and par are kept inside for the
+// ladder and the jam guard, never shown: an opened box pays its tier in full), the steps card (the six rules, the step being worked lit; open on a wide screen, a compact strip on a
 // phone), the pinned start line and the ledger on ruled paper, the big working line (numbers are round coins,
 // x-terms are cards; "=" is a brass hinge pin), Old Hob's caption, and the button tray (keys 1-4, U undo, H hint).
 //
@@ -31,7 +31,7 @@
 // (the focus): lines run from the chips it comes from to the sum, "5x − 4x = ?", in the largest type on the screen,
 // with four answers in the tray. A sum of two numbers shows a number line as a picture (where it starts and which
 // way it goes, not where it lands). A wrong answer shakes, Hob gives a one-line nudge, and the right one stays to
-// pick; it costs no move and no star. Opening brackets asks each product the same way (products.js).
+// pick; it costs no move. Opening brackets asks each product the same way (products.js).
 // When x stands alone the check is a review that stays on screen: the beginning equation with the solution put in,
 // each side worked out, the number lines drawn finished, both sides matching. ONE button, "Next problem" (Enter),
 // opens the lid, pays, and the next box slides in. No timer anywhere.
@@ -197,8 +197,6 @@ const KEY_SVG = `<svg viewBox="0 0 120 48" aria-hidden="true"><circle cx="24" cy
 
 const SPEAKER_SVG = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4z" fill="currentColor"/>
 <path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
-
-const STAR = (on) => `<svg viewBox="0 0 24 24" class="${on ? 'on' : ''}" aria-hidden="true"><path d="M12 2.2l2.9 6.3 6.9.7-5.2 4.6 1.5 6.8L12 17.1l-6 3.5 1.5-6.8L2.3 9.2l6.9-.7z"/></svg>`;
 
 // (Work it out's own picture, as on the tools strip: a sheet of paper with a sum on it)
 const WORK_SVG = '<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="5" y="4" width="22" height="25" rx="2" fill="#f6edd6" stroke="#6b4614" stroke-width="1.6"/><path d="M9 11h9M9 16h9M9 21h13" stroke="#8a7558" stroke-width="1.4"/><path d="M9 23.5h13" stroke="#2b2219" stroke-width="1.6"/></svg>';
@@ -391,8 +389,7 @@ export function openLockbox(root = document.body, opts = {}) {
   el.appendChild(panel);
   const top = h('header', 'lbx-top');
   top.innerHTML = `<div class="lbx-name"><span class="lbx-tier"></span><span class="lbx-rung"></span></div>
-    <div class="lbx-lock" title="One tumbler per move of par"><div class="lbx-tumblers"></div><div class="lbx-par"></div></div>
-    <div class="lbx-right"><div class="lbx-stars" aria-label="stars"></div>
+    <div class="lbx-right">
       <div class="lbx-purse" title="Your gold"><span class="lbx-purse-coin">${COIN_SVG}</span><b class="lbx-purse-n">0</b></div>
       <button class="lbx-rules" type="button" hidden>The rules</button>
       <button class="lbx-tools lbx-work" type="button" title="Work it out: the part being asked, in columns" aria-label="Work it out" hidden>${WORK_SVG}<span>Work it out</span></button>
@@ -498,7 +495,7 @@ export function openLockbox(root = document.body, opts = {}) {
       const more = info.from === 'loot' && typeof next !== 'function'
         ? (bag.length ? ` · ${bag.length} more` : skippedNow ? ` · last one · ${skippedNow} skipped` : ' · the last one') : '';
       rulesBtn.hidden = true;
-      return mountWorkBox({ HOB_SVG, STAR }, { info, tier, problem, plan, top, bodies, opts, session, skillRider, finished,
+      return mountWorkBox({ HOB_SVG }, { info, tier, problem, plan, top, bodies, opts, session, skillRider, finished,
         where: where + more, nextLabel: () => (own && typeof next !== 'function' && !bag.length ? 'Finish' : 'Next problem') });
     }
     const rung = RUNG[problem.rung] || K_RUNG[problem.rung];
@@ -609,7 +606,6 @@ export function openLockbox(root = document.body, opts = {}) {
     const more = info.from === 'loot' && typeof next !== 'function'
       ? (bag.length ? ` · ${bag.length} more` : skippedNow ? ` · last one · ${skippedNow} skipped` : ' · the last one') : '';
     top.querySelector('.lbx-rung').innerHTML = `${esc(where + more)} · ${esc(plan && plan.title ? plan.title : rung.name)}${opts.dev || opts.debug ? ` <small>${esc(plan && plan.id ? plan.id : problem.rung)}</small>` : ''}`;
-    top.querySelector('.lbx-tumblers').innerHTML = '';
 
     // ----- state -----
     let phase = 'play';          // play | anim | parts | brackets | review | open | done
@@ -635,16 +631,6 @@ export function openLockbox(root = document.body, opts = {}) {
     // ----- top strip -----
     function renderTop() {
       if (gone) return;
-      const tum = top.querySelector('.lbx-tumblers');
-      const par = B.par;
-      const down = pickMode ? (B.solved ? 1 : 0) : Math.max(0, Math.min(par, par - B.togo));
-      if (tum.children.length !== par) tum.innerHTML = Array.from({ length: par }, () => '<i class="tum"></i>').join('');
-      [...tum.children].forEach((t, i) => t.classList.toggle('down', i < down));
-      top.querySelector('.lbx-par').textContent = pickMode ? 'one try for 3 stars' : `par ${par} · moves ${B.moves}`;
-      const s = pickMode ? Math.max(1, 3 - B.wrongPicks) : B.starsNow();
-      const starsEl = top.querySelector('.lbx-stars');
-      starsEl.innerHTML = [1, 2, 3].map((i) => STAR(i <= s)).join('');
-      starsEl.setAttribute('aria-label', `${s} stars`);
       leaveBtn.hidden = !(B.canLeave((performance.now() - openedAt) / 1000) || opts.dev) || !WORKING.includes(phase);
     }
 
@@ -1355,8 +1341,8 @@ export function openLockbox(root = document.body, opts = {}) {
     // ----- open the brackets by hand -----
     // A line runs from the number outside the brackets to each term inside, with "5·x" and "5·8" written under them;
     // the product being asked is written big in the focus, with four answers in the tray. A right pick fills the
-    // product in; a wrong one shakes, Hob gives a nudge and the right answer stays to pick. Wrong picks cost no move and
-    // no stars. Resolves once every product is in.
+    // product in; a wrong one shakes, Hob gives a nudge and the right answer stays to pick. Wrong picks cost no move.
+    // Resolves once every product is in.
     function bracketStage(qs) {
       return new Promise((resolve) => {
         phase = 'brackets';
@@ -2016,7 +2002,7 @@ export function openLockbox(root = document.body, opts = {}) {
     // (and, for the model only: no trap move on the way, even one undone within par + 1. While the strand is still
     // finding its level a box isn't climbed on when a number part was missed: a slip on a part with a negative in it
     // makes it a miss, so a kid weak at negatives isn't climbed onto boxes full of them; any other slip leaves the box out
-    // of the baseline (no climb, no miss: the part counts in its own strand). Gold and stars still go by clean.)
+    // of the baseline (no climb, no miss: the part counts in its own strand). The gold is the box's tier in full either way.)
     let credited = false;
     function credit(result) {
       if (credited) return;
@@ -2210,7 +2196,7 @@ export function openLockbox(root = document.body, opts = {}) {
   // ===================================================================================================================
 
   // what the caller sees for one box
-  const publicResult = (r) => ({ solved: r.solved, stars: r.stars, gold: r.gold, moves: r.moves, par: r.par, rung: r.rung,
+  const publicResult = (r) => ({ solved: r.solved, gold: r.gold, moves: r.moves, par: r.par, rung: r.rung,
     tier: r.tier, clean: r.clean, left: r.left, hints: r.hints });
 
   // a finished box joins the session's results and is paid (onBox), or kept for onDone to pay -> onBox's note
@@ -2229,11 +2215,11 @@ export function openLockbox(root = document.body, opts = {}) {
   async function boxFinished(result, ctrl) {
     if (closed) return;
     const before = purseNow();
-    const parBefore = whole(rider?.stats?.parBoxes);
+    const boxesBefore = whole(rider?.stats?.boxes);
     const { pub, note } = payOut(result);
     const after = purseNow();
     const nx = nextInfo(pub);
-    if (result.solved) await reward(ctrl, result, { before, after, parBefore, note, last: !nx });
+    if (result.solved) await reward(ctrl, result, { before, after, boxesBefore, note, last: !nx });
     else await sleep(500);
     if (closed) return;
     if (!nx) { end(own ? 'empty' : 'done'); return; }
@@ -2249,24 +2235,22 @@ export function openLockbox(root = document.body, opts = {}) {
   }
 
   // After "Next problem": the lid opens on the mat, the coins fly from the box into the gold and it counts up; the
-  // stars and the Safecracker count show for a moment (about a second). Enter, Space or a tap hurries it.
-  function reward(ctrl, result, { before, after, parBefore, note, last }) {
+  // gold and the Safecracker count show for a moment (about a second). Enter, Space or a tap hurries it.
+  function reward(ctrl, result, { before, after, boxesBefore, note, last }) {
     return new Promise((resolve) => {
       const stageEl = ctrl.stageEl;
       const q = session.solved > QUICK_AFTER ? QUICK : 1;   // (this box is counted already: the same boxes as the check)
-      const atPar = result.moves <= result.par;
-      const parNow = whole(rider?.stats?.parBoxes);
+      // every opened box counts toward the Safecracker badge (save.js recordLockbox has counted this one already)
+      const boxesNow = whole(rider?.stats?.boxes);
       let safe = '';
-      if (atPar && rider?.stats) {
-        if (parBefore < SAFECRACKER_BOXES && parNow >= SAFECRACKER_BOXES) safe = 'Safecracker badge!';
-        else if (parNow < SAFECRACKER_BOXES) safe = `At par · Safecracker ${parNow} / ${SAFECRACKER_BOXES}`;
-        else safe = 'At par';
-      } else if (atPar) safe = 'At par';
+      if (rider?.stats && boxesNow > boxesBefore) {
+        if (boxesBefore < SAFECRACKER_BOXES && boxesNow >= SAFECRACKER_BOXES) safe = 'Safecracker badge!';
+        else if (boxesNow < SAFECRACKER_BOXES) safe = `Safecracker ${boxesNow} / ${SAFECRACKER_BOXES}`;
+      }
       const lines = [safe, note?.newTitle ? `You’re a ${note.newTitle} now!` : '', note?.badge && !/Safecracker/.test(safe) ? `${note.badge} badge!` : '',
         last && own ? lastBagNote() : ''].filter(Boolean);
       const wrap = h('div', 'lbx-reward');
-      wrap.innerHTML = `<div class="rw-stars">${[1, 2, 3].map((i) => STAR(i <= result.stars)).join('')}</div>
-        ${chestSVG()}
+      wrap.innerHTML = `${chestSVG()}
         <div class="rw-gold">+${result.gold} gold</div>
         ${lines.map((t) => `<div class="rw-note">${esc(t)}</div>`).join('')}`;
       stageEl.appendChild(wrap);
@@ -2337,10 +2321,8 @@ export function openLockbox(root = document.body, opts = {}) {
   function totals(why) {
     const rs = session.results;
     const last = rs[rs.length - 1] || null;
-    const lastSolved = [...rs].reverse().find((r) => r.solved) || null;
     return {
       solved: session.solved > 0, boxes: session.solved, played: rs.length, gold: session.gold,
-      stars: lastSolved ? lastSolved.stars : 0,
       moves: last ? last.moves : 0, par: last ? last.par : 0, rung: last ? last.rung : null,
       tier: last ? last.tier : (TIER_NAME[firstInfo.tier] ? firstInfo.tier : 'iron'),
       clean: last ? last.clean : false, left: session.solved === 0, hints: last ? last.hints : 0,

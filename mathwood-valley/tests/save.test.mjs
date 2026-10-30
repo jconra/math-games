@@ -126,16 +126,26 @@ test('Sharpshooter counts only the bottle range\'s answers, below 90% earns noth
   assert.equal(S.accuracyOf(q, 'lasso').pct, null);
 });
 
-test('Safecracker after 10 lock boxes solved at par', () => {
+test('Safecracker after 25 lock boxes opened, however many moves or hints', () => {
   fresh();
   const r = S.newRider('Gus');
-  for (let i = 0; i < 9; i++) S.recordLockbox(r, { solved: true, moves: 3, par: 3, stars: 3 });
-  S.recordLockbox(r, { solved: true, moves: 5, par: 3, stars: 2 });   // over par: solved, not at par
-  S.recordLockbox(r, { solved: false, moves: 2, par: 3 });            // left unsolved: not counted
-  assert.equal(r.stats.boxes, 10); assert.equal(r.stats.parBoxes, 9);
+  for (let i = 0; i < 20; i++) S.recordLockbox(r, { solved: true, moves: 3, par: 3 });
+  for (let i = 0; i < 4; i++) S.recordLockbox(r, { solved: true, moves: 9, par: 3, hints: 3 });   // the long way, with Show: still counts
+  S.recordLockbox(r, { solved: false, moves: 2, par: 3 });            // left unopened: not counted
+  assert.equal(r.stats.boxes, 24); assert.equal(r.stats.parBoxes, 20);
   assert.deepEqual(S.badgesOf(r), []);
-  const res = S.recordLockbox(r, { solved: true, stars: 3 });          // no move counts: 3 stars means par
-  assert.equal(res.atPar, true); assert.equal(res.badge, 'Safecracker');
+  const res = S.recordLockbox(r, { solved: true, moves: 7, par: 2 });
+  assert.equal(res.atPar, false); assert.equal(res.badge, 'Safecracker');
+  assert.deepEqual(S.badgesOf(r), ['Safecracker']);
+});
+
+test('a rider who earned Safecracker the old way (10 at par) keeps it', () => {
+  fresh();
+  const r = S.newRider('Old Hand');
+  for (let i = 0; i < 10; i++) S.recordLockbox(r, { solved: true, moves: 2, par: 2 });
+  r.badges = ['Safecracker'];   // stamped under the old rule
+  S.recordLockbox(r, { solved: true, moves: 2, par: 2 });
+  assert.ok(r.stats.boxes < S.SAFECRACKER_BOXES);
   assert.deepEqual(S.badgesOf(r), ['Safecracker']);
 });
 

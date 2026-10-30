@@ -155,10 +155,25 @@ const JOB_SUM = { store: () => SJ && SJ.workSum(), delivery: () => DL && DL.work
   build: () => builderSum(), boxes: () => (BOX ? BOX.workSum() : null) };
 // the levels place the rider is at, for the level tool: the job asking (or the one the rider chose), the lock boxes' place
 const toolsPlace = () => { const j = jobNow(); return j === 'boxes' ? 'lockbox' : placeOfJob(j); };
+// HELP on the tools strip (src/ui/askhelp.js: a helper is always one press away and never opens by itself): the job
+// asking's own help for the question the rider is on. Only these jobs have a helper to show; elsewhere the button hides.
+const JOB_HELP = { sheep: () => SH, pigs: () => PG, roundup: () => RU, range: () => SR, deer: () => DJ };
+const helpJob = () => { const f = JOB_HELP[workJob()]; const J = f && f(); return J && J.help && (!J.canHelp || J.canHelp()) ? J : null; };
+// THE LEVEL MOVED BY HAND (the level tool's arrows): the questions out at that place now, not yet answered, are made
+// again at the new level straight away (the healed sheep, the penned steers, an answered part stay as they are). Each
+// job's relevel() does its own; the lock box's place is its own panel's (src/lockbox/), not changed from here.
+const RELEVEL = { sheep: () => SH, pigs: () => PG, roundup: () => RU, store: () => SJ, deliveries: () => DL, graphs: () => GT };
+function relevel(placeId) {
+  const f = RELEVEL[placeId], J = f && f();
+  if (!J || !J.relevel) return false;
+  try { return !!J.relevel(); } catch (e) { console.error(e); return false; }
+}
 const TOOLS = makeTools({ hud, rider: () => rider,
   sum: () => { const f = JOB_SUM[workJob()]; return f ? f() || null : null; },
   place: () => (state === 'play' ? toolsPlace() : null),
-  onLevel: () => { if (rider) saveRider(rider); },
+  onLevel: (placeId) => { if (rider) saveRider(rider); relevel(placeId); },
+  help: () => { const J = helpJob(); return J ? J.help() : false; },
+  canHelp: () => state === 'play' && !!helpJob(),
   own: () => (SJ && SJ.active ? !!SJ.openLong() : DL && DL.active ? !!DL.openLong() : false),   // (false: already up: the entry instead)
   // (from the lock box too: its own button, the HUD being under the box; "Just lock boxes" from the title as well)
   canOpen: () => (state === 'play' || (state === 'boxes' && !!BOX)) && [...pausedBy].every((w) => w === 'tools' || (w === 'box' && !!BOX)),
@@ -265,6 +280,7 @@ const FOUND_NEAR = { camp: 28, hideout: 30 };
 
 function pause(why) {
   pausedBy.add(why);
+  AUD.hold('pause', pausedBy.has('menu'));   // (only the menu silences the game: the band plays on behind a lock box or any other card, the game's maker's wish)
   if (bandCard) bandCard.close();   // (the band's card never stays up under a panel)
   if (paused) return;
   paused = true;
@@ -278,10 +294,10 @@ function pause(why) {
   if (SR) SR.paused = true;
   if (LJ) LJ.paused = true;
   hud.prompt(null);
-  AUD.hold('pause', true);
 }
 function resume(why) {
   pausedBy.delete(why);
+  AUD.hold('pause', pausedBy.has('menu'));
   if (pausedBy.size || !paused) return;
   paused = false;
   if (P) P.enabled = !atCounter();
@@ -293,7 +309,6 @@ function resume(why) {
   if (DJ) DJ.paused = false;
   if (SR) SR.paused = false;
   if (LJ) LJ.paused = false;
-  AUD.hold('pause', false);
   last = performance.now();
 }
 
@@ -415,7 +430,8 @@ async function ride(r) {
   LJ = jobOn(rider, 'loot') ? makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud: tagHud('loot'), hob, refresh, audio: AUD, town: () => TP,   // (audio: a gang camp's fire crackles; town: the townsfolk come for their goods)
     voice: (k, who) => { if (SHOUT) SHOUT.say(k, who); },   // (a townsman's recorded lines: "Is that my stuff?", a thank-you)
     quiet: () => !!((RU && RU.near) || (SH && SH.near) || (PG && PG.near) || atCounter() || (WJ && WJ.near) || (DL && DL.card) || (DJ && DJ.card)),
-    open: () => shiftOpen('loot'), decline: () => shiftNo('loot', { far: true }) }) : null;
+    open: () => shiftOpen('loot'), decline: () => shiftNo('loot', { far: true }),
+    picked: () => theJob === 'loot' || !!(JB && JB.picked === 'loot') }) : null;   // (the compass leads to a cache only for the job picked)
   JF = makeJobFolk({ W, folk, P, camera, hud,
     jobs: { roundup: () => RU, sheep: () => SH, pigs: () => PG, wagon: () => WJ, deer: () => DJ, camps: () => camps, farm: () => farm, delivery: () => DL, loot: () => LJ, windmill: () => (WMJ && WMJ.on ? WMJ : null), fishing: () => (FJ && FJ.on ? FJ : null), bridge: () => (BRJ && jobOn(rider, 'bridge') ? BRJ : null), rooms: () => TR },   // (rooms: the storekeeper behind his counter, the sheriff at his desk)
     actions: { sheriff: () => openCounter('sheriff'), stable: () => openCounter('stable') }, onTalk: (what, id, who) => { if (SHOUT) SHOUT.talk(what, who && { id, ...who }); },
@@ -538,7 +554,7 @@ function endRide() {
 // them, so the round-up's own (its travel card, counting the metres to the pasture) is held back there
 function roundupHud() {
   const base = tagHud('roundup'), h = Object.create(base);
-  const atFarm = () => !!((SH && SH.near) || (PG && PG.near) || (DL && DL.card && !(RU && RU.near)) || (WJ && (WJ.near || (WJ.on && !(RU && RU.near)))) || (DJ && DJ.card) || (LJ && LJ.card && !(RU && RU.near)));   // (and a delivery's card)   // (the sheep pasture or the pig yard)
+  const atFarm = () => !!((SH && SH.near) || (PG && PG.near) || (DL && DL.card && !(RU && RU.near)) || (WJ && (WJ.near || (WJ.on && !(RU && RU.near)))) || (DJ && DJ.card && !(RU && RU.near)) || (LJ && LJ.card && !(RU && RU.near)));   // (and a delivery's card)   // (the sheep pasture or the pig yard)
   // (nor at the store's counter; a card held back is still its latest, for THE JOB to put up: arriving at the herd
   // straight from the range, the six-shooter is put away only later that frame)
   h.rule = (o) => { if (!atFarm() && !atCounter()) return base.rule(o); lastCard.roundup = o || null; return hud.ruleEl; };
@@ -669,7 +685,7 @@ function jobStep() {
   if (atWork && !(a === 'wagon' && WJ && WJ.ambush)) chooseJob(a);
   if (a === 'build' && BS && BS.active) chooseJob(BS.active.id);   // (a builder opened at its site: that site's job)
   if (!theJob) return;
-  if (!JOB_NOW[theJob]() || (theJob === 'deer' && DJ && DJ.resting && DJ.resting())) { theJob = null; return; }   // (turned off; or Miss Wren has her camera back)
+  if (!JOB_NOW[theJob]() || (theJob === 'deer' && DJ && DJ.resting && DJ.resting() && !(JB && JB.picked === 'deer'))) { theJob = null; return; }   // (turned off; or Miss Wren has her camera back, unless the board's pick sends the rider to her again)
   // (left behind, unless it is the jobs board's pick or under way (crates on the horse, the camera lent): no longer the
   // job, and its card comes down; it is THE job again on coming back to it)
   if (theJob !== (JB && JB.picked) && !underWay(theJob) && a !== theJob && leftJob(theJob)) {
@@ -686,6 +702,15 @@ function jobStep() {
   const now = askingJob(); if (now === 'panel') return;
   if (now === theJob && !own) return;   // (a question of its own is up, the camera's: its card is its own to put up)
   if (own) { const was = ruleBy; ruleBy = theJob; try { hud.rule(own); } finally { ruleBy = was; } return; }   // (its own card, put back up)
+  // (the Professor's graph practice: its card only within 5 m of his chalkboard, the game's maker's wish; the hoofprints
+  // still lead there from the board)
+  if (theJob === 'graphs') {
+    const gd = GT && GT.distance ? GT.distance(P.position.x, P.position.z) : null;
+    if (gd == null || gd > 5) {
+      if (cardBy && cardBy.id === 'graphs' && !cardBy.urgent) { const was = ruleBy; ruleBy = 'graphs'; jobCardNow = true; try { hud.rule(null); } finally { ruleBy = was; jobCardNow = false; } }
+      jobCardKey = ''; return;
+    }
+  }
   // its own card isn't up: a plain one, where it is and which way
   const g = JB && JB.where ? JB.where(theJob) : null, name = JB && JB.nameOf ? JB.nameOf(theJob) : null;
   if (!name) return;
@@ -1192,7 +1217,12 @@ function step(dt) {
   if (state === 'play') {
     // (a horse picked at the stable stays "just picked" while the stable's panel is open: E after closing it gets on)
     if (paused && P && P.horsePickedAt > performance.now() - 8000) P.horsePickedAt = performance.now();
-    if (paused) { hud.callHorse(false); if (needDraw) { needDraw = false; if (home) cabin.render(); else W.render(); } return; }
+    if (paused) {
+      hud.callHorse(false);
+      if (!pausedBy.has('menu')) { if (stage) stage.update(dt, P.position); if (saloonFolk) saloonFolk.update(dt, P.position); }   // (the band plays on behind a card)
+      if (needDraw) { needDraw = false; if (home) cabin.render(); else W.render(); }
+      return;
+    }
     if (home) { hud.callHorse(false); door = null; cabin.update(dt); }   // (no town door while inside: E and the prompt are the cabin's; it moves the player)
     else { if (atCounter()) hud.prompt(null); else doors(); P.update(dt); }
     if (!home && W.wrap) { const w = W.wrap(P.position, camera.position); if (w) { P.shift(w); if (D) D.shift(w); } }   // (rode on into the mist at an end of the valley: out of the other end's, src/world.js)

@@ -1,13 +1,13 @@
 // One inequality box being worked (ineq.js): the same shape as an equation box (box.js makeBox), so the panel can
-// play it the same way: moves on every room, undo, the jam guard, hints, stars and gold.
+// play it the same way: moves on every room, undo, the jam guard, hints and gold.
 // What is different:
 //   - the line is a state of one or two chains ("or"); a move is done to every room of the chain being worked, and
 //     once that chain reads x < 4 the next one (if any) is worked;
 //   - once every chain has x alone, the answer is picked from four number lines (lineChoices / pickLine): a wrong
-//     picture is counted (the box is no longer clean) but, like every working-out pick, it costs no star;
+//     picture is counted (the box is no longer clean) but, like every working-out pick, it costs nothing;
 //   - the check (keyTest) puts a number from the shaded part into the beginning inequality.
 
-import { starsFor, goldFor } from './box.js';
+import { goldFor } from './box.js';
 import { moveLabel } from './engine.js';
 import { trapTag } from './buttons.js';
 import { ARITH_OF } from './parts.js';
@@ -189,11 +189,6 @@ export function makeIneqBox(problem, { stage, level = 4, rng, fav = null, tier =
     });
   };
 
-  B.starsNow = function () {
-    const finish = B.chainsSolved ? B.moves : B.moves + (Number.isFinite(B.d) ? B.d : 0);
-    return starsFor(finish, par, B.hintLevel);
-  };
-
   // the check: a number from the shaded part, in the beginning inequality
   B.keyTest = function () {
     const set = B.answerSet();
@@ -203,7 +198,7 @@ export function makeIneqBox(problem, { stage, level = 4, rng, fav = null, tier =
   };
   B.keyResult = function (ok) { if (!ok) B.keyFailed = true; B.keyOk = B.keyOk === false ? false : ok; };
 
-  // the working-out picks are gentle (counted, no move, no star; the box stays clean), as box.js
+  // the working-out picks are gentle (counted, no move; the box stays clean), as box.js
   B.productPick = function (right) { if (!right) B.productSlips++; return right; };
   B.partPick = function (right, q = null, choice = null) {
     if (right) return true;
@@ -216,10 +211,9 @@ export function makeIneqBox(problem, { stage, level = 4, rng, fav = null, tier =
   B.finish = function ({ left = false } = {}) {
     B.left = left;
     const solved = B.solved && !left;
-    const stars = solved ? starsFor(B.moves, par, B.hintLevel) : 0;
-    const gold = solved ? goldFor(tier, stars) : 0;
+    const gold = solved ? goldFor(tier) : 0;
     const clean = solved && B.moves <= par + 1 && B.hintLevel <= 1 && !B.keyFailed && !B.jammed && B.wrongPicks === 0;
-    return { solved, stars, gold, moves: B.moves, par, rung: problem.rung, clean, hints: B.hintLevel,
+    return { solved, gold, moves: B.moves, par, rung: problem.rung, clean, hints: B.hintLevel,
       jammed: B.jammed, keyFailed: B.keyFailed, left, traps: [...B.traps], tools: [...B.tools], arith: [...B.arith],
       wrongPicks: B.wrongPicks, productSlips: B.productSlips, partSlips: B.partSlips, lineSlips: B.lineSlips };
   };

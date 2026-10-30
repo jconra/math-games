@@ -17,6 +17,9 @@
 //                 sheet that read one has a small "Type my own sum" too, for a different one.
 //   THE TIMES CHART   12 x 12, every fact the rider has answered anywhere coloured: red missed, yellow right once since,
 //                 green known (src/math/facts.js chart: red ones come back soon); src/ui/timeschart.js draws it.
+//   HELP          the helper for the question the rider is on (src/ui/askhelp.js: never uninvited, always one press
+//                 away; Q, shown in a tab on its corner). It shows while the job here has help, and glows when the job sees
+//                 the rider stuck. help() / canHelp() are main.js's: the job asking's own help.
 //   THE LEVEL TOOL   for the place the rider is at: "‹ 27: Odd steps going down ›". The arrows step the rider's level
 //                 there down and up (what the levels page's "Start here" did), each level's title showing as they go;
 //                 the small bar under it fills with right answers toward the next level (src/ui/leveltool.js). A rider
@@ -51,6 +54,7 @@ import { openOwnSum } from './ownsum.js';
 import { showChart, closeChart, isChartOpen, ensureChartCss } from './timeschart.js';
 import { levelTool, stepLevel } from './leveltool.js';
 import { TREAT_ICON } from './treaticons.js';
+import { HELP_KEY, HELP_KEY_LABEL, nudgeHelp } from './askhelp.js';
 
 const CSS_HREF = new URL('./tools.css', import.meta.url).href;
 function ensureCss() {
@@ -75,13 +79,14 @@ export function readSum(s) {
   return isSum(s) ? s : null;
 }
 
-export function makeTools({ hud, rider = () => null, sum = () => null, own = () => false, canOpen = () => true, speak = null, onOpen = () => {}, onClose = () => {}, place = () => null, onLevel = () => {}, onTreat = () => {} } = {}) {
+export function makeTools({ hud, rider = () => null, sum = () => null, own = () => false, canOpen = () => true, speak = null, onOpen = () => {}, onClose = () => {}, place = () => null, onLevel = () => {}, onTreat = () => {}, help = () => false, canHelp = () => false } = {}) {
   ensureCss(); ensureChartCss();
   const bar = document.createElement('div');
   bar.className = 'bmtl-bar';
   bar.innerHTML = `<div class="bmtl-pair">
       <button type="button" class="bmtl-b bmtl-work" aria-label="Work it out">${SVG_WORK}<span class="bmtl-t"><b>Work it out</b><small></small></span></button>
       <button type="button" class="bmtl-b bmtl-chart" aria-label="Times chart">${SVG_CHART}<span class="bmtl-t"><b>Times chart</b></span></button>
+      <span class="bmtl-helpw" hidden><button type="button" class="bmtl-b bmtl-help" data-askhelp aria-label="Help with this question">${SVG_HELP}<span class="bmtl-t"><b>Help</b></span></button><kbd class="bmtl-key">${HELP_KEY_LABEL}</kbd></span>
       <button type="button" class="bmtl-b bmtl-treat" hidden><span class="bmtl-ti"></span><span class="bmtl-t"><b></b><small></small></span><i class="bmtl-tn"></i></button>
     </div>
     <div class="bmtl-level" hidden>
@@ -172,6 +177,24 @@ export function makeTools({ hud, rider = () => null, sum = () => null, own = () 
     return true;
   };
 
+  // ── HELP: the helper for the question the rider is on (the ringed sheep, the nearest pig, the card up), only when asked
+  // (src/ui/askhelp.js). It opens over the game without pausing it, as the job's own "Show me" does; pressed again (or
+  // its X, or Esc) it goes. The button shows only while the job here has help to give; it glows when the job sees the
+  // rider stuck.
+  const helpW = q('.bmtl-helpw'), helpBtn = q('.bmtl-help');
+  T.help = () => {
+    nudgeHelp(false);
+    if (!canOpen()) return false;
+    try { return !!help(); } catch (e) { console.error(e); return false; }
+  };
+  const onHelpKey = (e) => {
+    if (e.code !== HELP_KEY || e.repeat || e.ctrlKey || e.metaKey || e.altKey || helpW.hidden) return;
+    const t = e.target; if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+    if (!bar.offsetParent) return;   // (the strip hidden with the HUD: a panel or the title is up)
+    e.preventDefault(); T.help();
+  };
+  addEventListener('keydown', onHelpKey);
+
   // ── THE LEVEL TOOL ───────────────────────────────────────────────────────────────────────────────────────────────
   function showLevel(v) {
     lvView = v;
@@ -212,6 +235,9 @@ export function makeTools({ hud, rider = () => null, sum = () => null, own = () 
       workBtn.title = `Work it out: ${k}`;
     }
     if (held) return;
+    let can = false;
+    try { can = !!canHelp(); } catch (e) { console.warn(e); }
+    if (helpW.hidden === can) { helpW.hidden = !can; if (!can) nudgeHelp(false); }
     let pid = null;
     try { pid = place(); } catch (e) { console.warn(e); }
     const r = rider();
@@ -240,11 +266,12 @@ export function makeTools({ hud, rider = () => null, sum = () => null, own = () 
   T.busy = () => !!(panel || chartOn);
   T.state = () => ({ work: panel && panel.kind !== 'own' ? panel.state() : null, own: panel && panel.kind === 'own' ? panel.state() : null,
     chart: chartOn, sum: safeSum(), label: sumLabel(safeSum()), level: lvView });
-  T.dispose = () => { T.close(); bar.remove(); };
+  T.dispose = () => { T.close(); removeEventListener('keydown', onHelpKey); bar.remove(); };
   // (a tap on a tool never reaches the valley: the round-up's rope and the range's six-shooter listen there)
   bar.addEventListener('pointerdown', (e) => e.stopPropagation());
   workBtn.addEventListener('click', (e) => { e.currentTarget.blur(); T.work(); });
   chartBtn.addEventListener('click', (e) => { e.currentTarget.blur(); T.chart(); });
+  helpBtn.addEventListener('click', (e) => { e.currentTarget.blur(); T.help(); });
   for (const b of [downBtn, upBtn]) b.addEventListener('click', (e) => { e.currentTarget.blur(); T.step(+b.dataset.dir); });
   // (no long sums the job can't name: needsLong is the job's business, kept here only so a rig can ask)
   T.needsLong = needsLong;
@@ -254,4 +281,5 @@ export function makeTools({ hud, rider = () => null, sum = () => null, own = () 
 const ARROW_L = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5 7.5 12l7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const ARROW_R = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 5 7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const SVG_WORK = '<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="5" y="4" width="22" height="25" rx="2" fill="#f6edd6" stroke="#6b4614" stroke-width="1.6"/><path d="M9 11h9M9 16h9M9 21h13" stroke="#8a7558" stroke-width="1.4"/><path d="M9 23.5h13" stroke="#2b2219" stroke-width="1.6"/></svg>';
+const SVG_HELP = '<svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="12.5" fill="#f6edd6" stroke="#6b4614" stroke-width="1.6"/><path d="M12.2 12.6c0-2.3 1.7-3.8 3.9-3.8s3.9 1.4 3.9 3.5c0 2.9-3.6 3.2-3.6 6.1" fill="none" stroke="#2b2219" stroke-width="2.4" stroke-linecap="round"/><circle cx="16.4" cy="22.6" r="1.6" fill="#2b2219"/></svg>';
 const SVG_CHART = '<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="4" width="24" height="24" rx="2" fill="#f6edd6" stroke="#6b4614" stroke-width="1.6"/><path d="M12 4v24M20 4v24M4 12h24M4 20h24" stroke="#8a7558" stroke-width="1"/><rect x="12.5" y="12.5" width="7" height="7" fill="#629640" opacity="0.8"/><rect x="20.5" y="12.5" width="7" height="7" fill="#c45238" opacity="0.8"/><rect x="4.5" y="20.5" width="7" height="7" fill="#629640" opacity="0.8"/></svg>';

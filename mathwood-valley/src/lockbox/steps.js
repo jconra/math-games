@@ -20,7 +20,7 @@
 //
 // "Following the card" always counts as getting closer, even where a shortcut is shorter: on 3(x + 2) = 18 the card
 // opens the brackets (3 moves: open, −6, ÷3) while dividing first takes 2 (÷3, −2). Both are accepted, and the box's
-// par is the card's count, so a kid who follows the rules still earns every star.
+// par is the card's count, so a kid who follows the rules is never over it.
 
 import { applyMove, hasBracket, hasOver, isOver, hasLike, isSolved, xSide, lineFits, lineKey, F, DIST, COMB, FLIP, mulBy, divBy } from './engine.js';
 

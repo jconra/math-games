@@ -315,15 +315,20 @@ export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, r
     newOrder(c);
     return true;
   };
-  function newOrder(c) {
-    camp = c; lastCamp = c;
-    // the rider's level here (src/levels/place/deliveries.js): a small order, or a row of the supplies ladder
+  // the order for a camp at the rider's level here (src/levels/place/deliveries.js): a small order, or a row of the
+  // supplies ladder
+  function makeOrder(c) {
     const q = levelFor(rider, 'deliveries'), g = q.level.gen || {};
     saveRider(rider);   // (the first time: the deliveries have just been met)
     const at = { camp: { id: c.id, short: c.short }, who: c.foreman.name, step: g.small ? 1 : g.step || 1, small: !!g.small, longMost: q.level.grade + DELIVERY.longMost };
     order = forced ? forcedOrder(at) : S.next(at);
     Object.assign(order, { levelId: q.id, placing: !!q.placing, grade: q.level.grade });
-    part = 0; clean = true; away = true; storyClean = true; orderMs = 0; orderOut = false;
+    part = 0; clean = true; storyClean = true; orderMs = 0; orderOut = false;
+  }
+  function newOrder(c) {
+    camp = c; lastCamp = c;
+    makeOrder(c);
+    away = true;
     phase = 'ordered';
     if (c.foreman.person) { c.foreman.person.p.play('Interact', { fade: 0.2, once: true }); setTimeout(() => { const h = c.foreman.person; if (h && !h.busy) h.p.play('Idle', { fade: 0.4 }); }, 1500); }
     speak(c, `Could you haul us some ${order.load.goods}? Work the order out at the general store.`, 'good');
@@ -331,6 +336,20 @@ export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, r
     emit('order', { camp: c.id, order });
     cardKey = '';
   }
+
+  // the level was moved by hand (the tools strip's arrows): an order not yet started on (no part answered, nothing
+  // loaded) is made again at the new level for the same camp; on the slip, its first part shows straight away
+  DL.relevel = () => {
+    if (!order || !camp || (phase !== 'ordered' && phase !== 'working') || longPanel || U.busy) return false;
+    if (order.parts.some((p) => p.picked)) return false;
+    clearTimeout(longT);
+    if (timer) { timer.cancel(); timer = null; }
+    makeOrder(camp);
+    emit('order', { camp: camp.id, order });
+    cardKey = '';
+    if (DL.active) showPart();
+    return true;
+  };
 
   // ── THE ROBBERS' HOOK ──────────────────────────────────────────────────────────────────────────────────────────
   DL.rob = () => {

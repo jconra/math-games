@@ -78,7 +78,7 @@ test('brackets: a wrong product costs no move, no star and keeps the box clean',
   assert.ok(B.solved);
   const r = B.finish();
   assert.equal(r.moves, 3);
-  assert.equal(r.stars, 3);
+  assert.ok(r.moves <= r.par);
   assert.equal(r.clean, true);
   assert.equal(r.productSlips, 2);
 });
@@ -147,7 +147,7 @@ test('another right way solves at par: always pressing the right button that is 
         if (!B.solved) { assert.ok(B.steps().some((s) => s.state === 'now')); assert.ok(B.hintAt(1).text); assert.ok(B.hintAt(3).move); }
       }
       assert.ok(B.solved, lineText(p.start));
-      assert.equal(B.finish().stars, 3, `${lineText(p.start)}: ${B.moves} moves for par ${B.par}`);
+      assert.ok(B.moves <= B.par, `${lineText(p.start)}: ${B.moves} moves for par ${B.par}`);
     }
     assert.ok(alt > 20, `${rung}: an alternative was pressed only ${alt} times`);
   }
@@ -171,13 +171,13 @@ test('the vault rung: about 1 box in 10 is a verdict box, never two in a row, ne
       prevVerdict = v;
       // a clean box most of the time, so the level climbs (and drops) now and then
       const clean = rng.chance(0.8);
-      alg.record({ rung: 'R15', solved: true, clean, stars: 3, moves: 3, par: 3 });
+      alg.record({ rung: 'R15', solved: true, clean, moves: 3, par: 3 });
       // (the inequalities come after the vault now: stamping it would move this kid on, so they stay on the vault)
       if (state.rung !== 'R15') { state.rung = 'R15'; state.stamped = state.stamped.filter((r) => r !== 'R15'); }
       if (state.levels.R15 > before) {
         const q = alg.next('iron');
         if (q.rung === 'R15') { assert.equal(q.kind, 'one', 'a verdict box right after a level-up'); n++; prevVerdict = false; }
-        alg.record({ rung: q.rung, solved: true, clean: true, stars: 3, moves: 3, par: 3 });
+        alg.record({ rung: q.rung, solved: true, clean: true, moves: 3, par: 3 });
       }
     }
     const share = verdicts / n;
@@ -262,7 +262,7 @@ test('R9b: (5x − 10)/2 = 10 and its variants solve by the card, with the right
     let guard = 0;
     while (!B.solved && guard++ < 6) { B.press(B.buttons.slots.find((b) => b && b.card)?.move || B.buttons.goods[0].move); B.makeButtons(); }
     assert.ok(B.solved && E.solvedValue(B.line).eq(F(x)), lineText(B.line));
-    assert.equal(B.finish().stars, 3);
+    assert.ok(B.moves <= B.par);
     // the check puts x into the whole top
     const k = E.keySteps(start.L.some(E.isOver) ? start.L : start.R, x);
     assert.match(k[0], /^\(.*\)\/\d+$/);

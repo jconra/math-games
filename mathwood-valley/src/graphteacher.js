@@ -115,11 +115,15 @@ export function makeGraphTeacher({ W, folk, rider, uses = null, hud = null, scen
       onClose: () => { T.card = null; onClose(); },
     });
   };
+  T.relevel = () => !!(T.card && T.card.redeal && T.card.redeal());   // (the level moved by hand: the question up is made again)
   T.state = () => ({ saloon: !!hall, made: !!body, shown, x: at && +at.x.toFixed(2), z: at && +at.z.toFixed(2), open: !!T.card, said });
   T.dispose = () => {
     if (T.card) T.card.close();
     if (offSpot) offSpot(); if (offBlock) offBlock(); offSpot = offBlock = null;
     if (body) { body.root.removeFromParent(); body.dispose(); body = null; }
   };
+  // how far the rider is from him at the chalkboard (null before the saloon is built): his job's card shows only close by
+  T.distance = (x, z) => (at ? Math.hypot(x - at.x, z - at.z) : null);
+  T.spot = () => at;   // (his place, for rigs)
   return T;
 }

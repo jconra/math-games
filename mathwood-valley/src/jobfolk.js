@@ -4,10 +4,11 @@
 //   the trail boss       by the corral's gate: his brand's cattle are mixed in with the big herd (the round-up)
 //   the veterinarian     by the sheep pasture's gate at the farm: a sickness went through the flock (the sick sheep)
 //   the farmer's wife    in the farm's lane by the pig yard: the wind blew the gate open (the loose pigs)
-//   the naturalist       at her one spot, a good way off the deer job's one herd on the town's side, in the open
-//                        with the herd in view and the meadow mown round her (STAND.natAt): E by her lends the camera
-//                        (strapped behind the saddle at once); while it is lent she strolls after the player round her
-//                        herd (never far from her own spot), and once it has been set up, E by her again gives it back
+//   the naturalist       beside the wagon road where it passes nearest the deer job's herd, where riders see her
+//                        (STAND.natRoad), the meadow mown round her; she stays there. E by her lends the camera
+//                        (strapped behind the saddle at once: signed up for the job, its card at any distance), and
+//                        once it has been set up, E by her again gives it back (src/missions/deerjob.js ends the job
+//                        by itself too). The herd keeps round STAND.natAt
 //   the sheriff          inside his office, behind his desk with the pile of seized lock boxes on it (the "Crack the
 //                        lock boxes" spot there is src/townrooms.js's); a gold star on his chest and a six-shooter in
 //                        its holster (folk.js badge and holster), as his deputy. (An office with no inside: out in
@@ -86,7 +87,11 @@ export const STAND = {
                                       // side where the player's horse waits, player.js homeSpot: +4 along the front)
   naturalist: 40,                     // m from the deer herd's home, toward the town square (outside a rider's alert
                                       // range of the job's herd, 18 x 1.35 = 24 m, plus the 6 m the deer graze from it)
-  natAt: { x: 128.6, z: -244.8 },     // her one spot, by the deer job's herd (the creek herd, home 168, -256: 41 m off it
+  natRoad: { x: 103.9, z: -202.3, look: { x: 99.5, z: -199.0 } },   // where she stands: 5.5 m off the middle of the
+                                      // wagon road where it passes nearest the herd (~84 m off its home), on the herd's
+                                      // side, in the open, facing the road (look: the road's middle by her). Not free or
+                                      // flat: she stands at natAt
+  natAt: { x: 128.6, z: -244.8 },     // the herd's keeping spot (her old one), by the deer job's herd (the creek herd, home 168, -256: 41 m off it
                                       // toward town, in the open, and the hoofprints from the jobs board come straight at
                                       // her with the herd beyond her: ~/pw/bandit-math/rigs/deertracks/spot.cjs). Should
                                       // the land there ever change under it, the spot is looked for round the herd's home
@@ -103,9 +108,7 @@ export const STAND = {
                                       // way to the herd is under crowns, open ground all the way to `herd` m from its middle
   anchor: 0.48,                       // m above the head bone the name tag sits (over the hat)
   trail: 3.5,                         // m a person stands at least from the middle of the trail to the pasture
-  natWalk: { pace: 1.5, start: 16, near: 7, roam: 60 },   // the naturalist with her camera lent: strolls (m/s) after a
-                                      // player more than `start` m off, to `near` m short of them, never more than `roam`
-                                      // m from her own spot
+  natWalk: { pace: 1.5 },             // m/s she walks back to her spot (she no longer follows the player)
 };
 
 // a person as a voice: where they stand, and whether he is a man (the recorded voices are the game maker's: men only)
@@ -353,14 +356,16 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     }
     // (STAND.natAt, by the creek herd, while it is still open ground in reach of that herd's home; else looked for)
     const A = STAND.natAt, dA = A ? Math.hypot(A.x - H.home.x, A.z - H.home.z) : 0;
-    const at = A && dA >= STAND.natBand[0] - 6 && dA <= STAND.natBand[1] && flatAt(A.x, A.z) ? { x: A.x, z: A.z } : naturalistSpot(H);
-    if (!at) return;
+    const keep = A && dA >= STAND.natBand[0] - 6 && dA <= STAND.natBand[1] && flatAt(A.x, A.z) ? { x: A.x, z: A.z } : naturalistSpot(H);
+    if (!keep) return;
+    // (she stands by the road, where riders pass; the herd keeps round `keep`)
+    const Rd = STAND.natRoad, road = !!(Rd && flatAt(Rd.x, Rd.z)), at = road ? { x: Rd.x, z: Rd.z } : keep;
     const fresh = H !== natHerd;
     if (natHerd && fresh) natHerd.keepNear = null;
     natHerd = H; naturalist.placed = true;
-    H.keepNear = { x: at.x, z: at.z, min: STAND.natBand[0], max: STAND.natBand[1] };
+    H.keepNear = { x: keep.x, z: keep.z, min: STAND.natBand[0], max: STAND.natBand[1] };
     naturalist.x = at.x; naturalist.z = at.z; naturalist.spot = { x: at.x, z: at.z }; naturalist.walking = false;
-    naturalist.home = naturalist.face = Math.atan2(H.home.x - at.x, H.home.z - at.z);   // (looking at the herd)
+    naturalist.spotFace = naturalist.home = naturalist.face = road ? Math.atan2(Rd.look.x - at.x, Rd.look.z - at.z) : Math.atan2(H.home.x - at.x, H.home.z - at.z);   // (looking at the road, else the herd)
     naturalist.p.root.position.set(at.x, W.heightAt(at.x, at.z), at.z); naturalist.p.root.rotation.y = naturalist.face;
     naturalist.p.root.visible = true;
     // (the meadow mown round her, as round the jobs board: she stands clear of the tall grass, easy to see)
@@ -369,23 +374,11 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
   }
   let unmowNat = () => {};
 
-  // With her camera lent she strolls after the player round her herd, loosely (a player further than natWalk.start off,
-  // to natWalk.near short of them), never further than natWalk.roam from her spot; she stands while she talks and while
-  // the camera is up (never walking into the picture), and goes back to her spot once it is given back
+  // She stays on her spot by the road (should she ever be off it, she walks back); she stands while she talks
   function naturalistWalk(dt) {
     if (!naturalist || !naturalist.placed || !naturalist.spot) return;
-    const DJ = get('deer'), N = STAND.natWalk, sp = naturalist.spot, at = P.position;
-    const dP = Math.hypot(at.x - naturalist.x, at.z - naturalist.z);
-    let to = sp;
-    if (DJ && DJ.lent() && !(DJ.resting && DJ.resting())) {
-      if (DJ.active || dP > 150) to = null;   // (stays put: the camera is up, or the player has gone off)
-      else if (dP > (naturalist.walking ? N.near : N.start)) {
-        const k = (dP - N.near) / dP;
-        let x = naturalist.x + (at.x - naturalist.x) * k, z = naturalist.z + (at.z - naturalist.z) * k;
-        const ds = Math.hypot(x - sp.x, z - sp.z); if (ds > N.roam) { x = sp.x + (x - sp.x) / ds * N.roam; z = sp.z + (z - sp.z) / ds * N.roam; }
-        to = { x, z };
-      } else to = null;
-    }
+    const N = STAND.natWalk, sp = naturalist.spot;
+    const to = sp;
     const busy = naturalist.clipT > 0 || (talking && talking.r === naturalist);   // (waving or talking: she stands)
     const dx = to ? to.x - naturalist.x : 0, dz = to ? to.z - naturalist.z : 0, dl = Math.hypot(dx, dz);
     const go = !busy && to && dl > (naturalist.walking ? 0.3 : 2);
@@ -398,7 +391,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     }
     if (stepped && !naturalist.walking) { naturalist.walking = true; naturalist.p.play('Walk', { fade: 0.25, speed: N.pace / ((naturalist.p.stride && naturalist.p.stride.Walk) || 1.2) }); }
     else if (!stepped && naturalist.walking) { naturalist.walking = false; naturalist.block = true; naturalist.p.play('Idle', { fade: 0.3 }); naturalist.t = 3 + Math.random() * 4; }
-    if (!naturalist.walking) naturalist.home = Math.hypot(naturalist.x - sp.x, naturalist.z - sp.z) < 1 && natHerd ? Math.atan2(natHerd.mid.x - sp.x, natHerd.mid.z - sp.z) : naturalist.face;
+    if (!naturalist.walking) naturalist.home = Math.hypot(naturalist.x - sp.x, naturalist.z - sp.z) < 1 && naturalist.spotFace != null ? naturalist.spotFace : naturalist.face;
   }
 
   // ── THE CAMP FOREMEN (name tags and hellos only: the camps move them) ──────────────────────────────────────────
@@ -455,9 +448,8 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     const L = r.def.lend || r.def.hello, last = here && r.def.lendHere ? r.def.lendHere : L[L.length - 1];
     return lent ? [last] : [...L.slice(0, -1), last];
   }
-  let camUsed = false;   // (her camera set up at least once since she last lent it)
-  let lentNow = false;   // (she lent it on this ride: only then must it be set up first before it goes back. Lent on an earlier
-                         // ride, E by her gives it back at once: the game's maker couldn't return a camera borrowed before)
+  let camUsed = false;   // (her camera set up at least once since she last lent it. Lent on an earlier ride (not signed up
+                         // on this one), E by her gives it back at once: the game's maker couldn't return a camera borrowed before)
   function promptStep() {
     JF.prompt = null; promptFor = null; JF.promptAt = null;
     if (P.mode !== 'foot' && P.mode !== 'horse') return;
@@ -474,7 +466,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     // straight back, her "follow the hoofprints to the herd" hardly said. Lent on an earlier ride, E gives it back (the
     // board's hoofprints lead to her only while it isn't lent, main.js trailGoal). By the herd the E is the deer job's
     // own, setting it up)
-    if (best.id === 'naturalist' && DJ && bd < TALK.prompt && !DJ.active && !(DJ.lent() && lentNow && !camUsed)) { const who = best.name.replace(/ Ada/, ''); JF.prompt = DJ.lent() ? `Give ${who} her camera back` : `Borrow ${who}'s camera`; promptFor = best; }
+    if (best.id === 'naturalist' && DJ && bd < TALK.prompt && !DJ.active && !(DJ.lent() && DJ.signed() && !camUsed)) { const who = best.name.replace(/ Ada/, ''); JF.prompt = DJ.lent() ? `Give ${who} her camera back` : `Borrow ${who}'s camera`; promptFor = best; }
     else if (best.id === 'sheriff' && actions.sheriff && !best.room && bd < TALK.prompt) { JF.prompt = 'Crack lock boxes for the sheriff'; promptFor = best; }   // (inside at his desk: the pile's own spot, src/townrooms.js)
     else if (best.id === 'keeper' && actions.stable && bd < TALK.prompt) { JF.prompt = 'Talk to the stable keeper'; promptFor = best; }
     else if (best.id === 'deputy' && bd < TALK.prompt) { const LJ = get('loot'); if (LJ && LJ.canShare) { JF.prompt = 'Share out the loot'; promptFor = best; } }
@@ -484,7 +476,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     if (r.id === 'naturalist') {
       const DJ = get('deer'); if (!DJ) return false;
       // (the camera not lent yet: she hands it over, strapped behind the saddle, and says how it goes)
-      if (!DJ.lent()) { const here = DJ.inReach && DJ.inReach(); DJ.lend(); camUsed = false; lentNow = true; say(r, lendLines(r, here, false)); r.greet.update(0, true, false); if (onTalk) onTalk('hello', r.id); return true; }
+      if (!DJ.lent()) { const here = DJ.inReach && DJ.inReach(); DJ.lend(); camUsed = false; say(r, lendLines(r, here, false)); r.greet.update(0, true, false); if (onTalk) onTalk('hello', r.id); return true; }
       // (given back: off the saddle, her thanks, and the job rests till the player rides off and comes back)
       if (DJ.giveBack()) { say(r, r.def.back || r.def.thanks[0]); if (onTalk) onTalk('thanks', r.id, voiceOf(r)); }
       return true;

@@ -68,7 +68,7 @@ try {
   const out = $('#out');
   const log = (s) => { out.textContent = `${s}\n${out.textContent}`.slice(0, 4000); };
 
-  let rider = { id: 'test', name: 'Test Rider', gold: 0, bounty: 0, topics: { algebra: {} }, stats: { parBoxes: 0 }, lockboxes: [] };
+  let rider = { id: 'test', name: 'Test Rider', gold: 0, bounty: 0, topics: { algebra: {} }, stats: { boxes: 0 }, lockboxes: [] };
   try { const saved = JSON.parse(localStorage.getItem(KEY) || 'null'); if (saved && saved.topics) rider = saved; } catch (e) { /* storage blocked: keep it in memory */ }
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(rider)); } catch (e) { /* storage blocked */ } };
   const showLevel = () => {
@@ -89,7 +89,7 @@ try {
     if (window.__lockbox && document.querySelector('.lbx')) return window.__lockbox;
     const rung = $('#rung').value || undefined;
     const bags = Number(q.get('bags')) || 0;
-    rider.stats = rider.stats || { parBoxes: 0 };
+    rider.stats = rider.stats || { boxes: 0 };
     rider.lockboxes = Array.from({ length: bags }, () => ({ tier: $('#tier').value }));
     window.__boxes = [];
     const opts = {
@@ -98,7 +98,7 @@ try {
       onBox: q.has('nopay') ? null : (r) => {
         const note = {};
         if (r.solved && r.gold) { rider.gold += r.gold; rider.bounty += r.gold; }
-        if (r.solved && r.moves <= r.par) { rider.stats.parBoxes = (rider.stats.parBoxes || 0) + 1; if (rider.stats.parBoxes === 10) note.badge = 'Safecracker'; }
+        if (r.solved) { rider.stats.boxes = (rider.stats.boxes || 0) + 1; if (rider.stats.boxes === 25) note.badge = 'Safecracker'; }
         if (r.solved && bags) { const i = rider.lockboxes.findIndex((b) => b.tier === r.tier); if (i >= 0) rider.lockboxes.splice(i, 1); }
         save();
         window.__boxes.push(r);

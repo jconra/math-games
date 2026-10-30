@@ -1,25 +1,25 @@
-// One lock box being worked: the lines so far, undo, the jam guard, hints, stars and gold.
+// One lock box being worked: the lines so far, undo, the jam guard, hints and gold.
 // The panel draws it; nothing here touches the page, so the node tests can play a whole box.
 //
 // The rules:
 //   - A press is "closer" when the fewest moves left drops, or when it follows the steps card (steps.js): the card's
 //     own order can be longer than the shortest route (opening the brackets on 3(x + 2) = 18 before dividing), and a
 //     kid who follows the rules is never told "not closer". A legal press that isn't closer plays out honestly; it
-//     just costs a step against par.
-//   - Par is the fewest moves, or the card's count when that is longer, so following the card earns every star and a
-//     shortcut still counts.
+//     just costs a step.
+//   - Par (kept inside, never shown) is the fewest moves, or the card's count when that is longer, so a kid who follows
+//     the card is clean and a shortcut still counts. It feeds the jam guard and the ladder's clean count, not the pay.
 //   - Undo is free, but the undone press still counts as a move (so tapping and undoing to probe doesn't pay).
 //   - Jam guard: after 3 not-closer presses in a row, or once the moves go past par + 3, the lock jams and
 //     rewinds to the last line that was still on a good path (the line with the most progress), keeping what was
 //     earned; hint 1 opens on its own.
-//   - Hints: 1 Look (free), 2 Rule (caps the box at 2 stars), 3 Show (caps it at 1 star).
+//   - Hints: 1 Look, 2 Rule, 3 Show, all free: they never cut the pay.
 //   - −x = 7 is not solved.
-//   - Stars: 3 at par, 2 at par + 1 or + 2, 1 for any finish; a finish never earns 0.
-//   - Gold by box tier: tin 10, iron 20, brass 35, vault 60; 3 stars pays in full, 2 stars 80%, 1 star 60%.
+//   - Gold by box tier: tin 10, iron 20, brass 35, vault 60. An opened box pays its tier in full, whatever the moves or
+//     hints; a box not opened pays nothing.
 //   - Clean (for the ladder): solved within par + 1, no hint past the first, the check passed, no jam, and no wrong
 //     pick (a warm-up coin, or a tidied line on the do-the-arithmetic level). Working out the parts of a move
 //     (parts.js) and the products of brackets is gentle: a wrong answer there is counted but costs nothing.
-//   - B.togo: moves still to go on par's scale (the tumblers); B.steps(): the steps card's state on the current line;
+//   - B.togo: moves still to go on par's scale; B.steps(): the steps card's state on the current line;
 //     a press result's shortcut flag: not one of the card's moves, and fewer moves to go than the card's own route
 //     (dividing first in 3(x + 2) = 18).
 
@@ -36,16 +36,8 @@ import { findHint } from './findx.js';
 
 export const TIER_GOLD = { tin: 10, iron: 20, brass: 35, vault: 60 };
 export const TIER_NAME = { tin: 'Tin lockbox', iron: 'Iron strongbox', brass: 'Brass express safe', vault: 'Vault car' };
-const STAR_PAY = { 3: 1, 2: 0.8, 1: 0.6 };
-
-export function starsFor(moves, par, hintLevel = 0) {
-  let s = moves <= par ? 3 : moves <= par + 2 ? 2 : 1;
-  if (hintLevel >= 2) s = Math.min(s, 2);
-  if (hintLevel >= 3) s = Math.min(s, 1);
-  return s;
-}
-
-export function goldFor(tier, stars) { return Math.round((TIER_GOLD[tier] ?? TIER_GOLD.iron) * (STAR_PAY[stars] ?? 0)); }
+// An opened box's pay: its tier's gold in full.
+export function goldFor(tier) { return TIER_GOLD[tier] ?? TIER_GOLD.iron; }
 
 // makeBox(problem, { stage, level, rng, fav, tier }) -> B
 export function makeBox(problem, { stage, level = 4, rng, fav = null, tier = 'iron' } = {}) {
@@ -76,7 +68,7 @@ export function makeBox(problem, { stage, level = 4, rng, fav = null, tier = 'ir
     get line() { return this.entry.line; },
     get d() { return this.entry.d; },
     get trail() { return active.map((i) => ledger[i]); },
-    // moves still to go, on par's scale (for the tumblers): the card's count, or the shortest route plus however
+    // moves still to go, on par's scale: the card's count, or the shortest route plus however
     // much longer the card's route was at the start, whichever is less
     get togo() {
       if (this.solved) return 0;
@@ -229,11 +221,6 @@ export function makeBox(problem, { stage, level = 4, rng, fav = null, tier = 'ir
     return stepsStatus(B.line, B.plan, { solved: B.solved, checked, verdictShown: verdictRung && !!verdictOf(B.line) });
   };
 
-  B.starsNow = function () {
-    const finish = B.solved ? B.moves : B.moves + (Number.isFinite(B.d) ? B.d : 0);
-    return starsFor(finish, par, B.hintLevel);
-  };
-
   // The check: put x into the ORIGINAL line, side by side (the panel plays it as an animation).
   B.keyTest = function () {
     const x = problem.kind === 'one' ? (problem.mode === 'moves' ? solvedValue(B.line) : F(problem.answer)) : null;
@@ -242,11 +229,11 @@ export function makeBox(problem, { stage, level = 4, rng, fav = null, tier = 'ir
   };
   B.keyResult = function (ok) { if (!ok) B.keyFailed = true; B.keyOk = B.keyOk === false ? false : ok; };
 
-  // Opening the brackets by hand (products.js): a wrong product costs no move, no star and doesn't spoil a clean box;
+  // Opening the brackets by hand (products.js): a wrong product costs no move and doesn't spoil a clean box;
   // it is only counted, so a grown-up can see it.
   B.productPick = function (right) { if (!right) B.productSlips++; return right; };
 
-  // Working out each part of a move (parts.js), gentle in the same way: a wrong answer costs no move and no star and
+  // Working out each part of a move (parts.js), gentle in the same way: a wrong answer costs no move and
   // keeps the box clean. It is counted (partSlips), and a slip adding two numbers is also counted by its kind for the
   // ladder (algebra.js ARITH_TAGS: the Grown-ups corner names the adding slip a kid makes most).
   B.partPick = function (right, q = null, choice = null) {
@@ -269,10 +256,9 @@ export function makeBox(problem, { stage, level = 4, rng, fav = null, tier = 'ir
   B.finish = function ({ left = false } = {}) {
     B.left = left;
     const solved = B.solved && !left;
-    const stars = solved ? starsFor(B.moves, par, B.hintLevel) : 0;
-    const gold = solved ? goldFor(tier, stars) : 0;
+    const gold = solved ? goldFor(tier) : 0;
     const clean = solved && B.moves <= par + 1 && B.hintLevel <= 1 && !B.keyFailed && !B.jammed && B.wrongPicks === 0;
-    return { solved, stars, gold, moves: B.moves, par, rung: problem.rung, clean, hints: B.hintLevel,
+    return { solved, gold, moves: B.moves, par, rung: problem.rung, clean, hints: B.hintLevel,
       jammed: B.jammed, keyFailed: B.keyFailed, left, traps: [...B.traps], tools: [...B.tools], arith: [...B.arith],
       wrongPicks: B.wrongPicks, productSlips: B.productSlips, partSlips: B.partSlips };
   };

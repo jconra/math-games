@@ -123,7 +123,7 @@ export function makeAlgebra(state = {}, { rng = makeRng(), now = () => Date.now(
     return { ...p, level, size, review, tier };
   }
 
-  // record({ rung, clean, solved, stars, moves, par, hints, jammed, keyFailed, left, traps: [tags], tools: [kinds],
+  // record({ rung, clean, solved, moves, par, hints, jammed, keyFailed, left, traps: [tags], tools: [kinds],
   //   arith: [arithmetic slip tags] })
   function record(r) {
     s.lastAt = now();

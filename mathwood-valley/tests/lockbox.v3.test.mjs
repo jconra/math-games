@@ -166,7 +166,7 @@ test('every move asks the right parts with valid distractors, and the answers re
 
 // ---------- a whole box worked part by part ----------
 
-test('a full solve by right answers ends on the same ledger, and wrong answers are gentle on the stars', () => {
+test('a full solve by right answers ends on the same ledger, and wrong answers are gentle on the pay', () => {
   for (const id of ['R6', 'R7', 'R8', 'R9', 'R9b', 'R10', 'R11', 'R12', 'R13', 'R14']) {
     const rng = makeRng(31);
     for (let i = 0; i < 12; i++) {
@@ -198,7 +198,7 @@ test('a full solve by right answers ends on the same ledger, and wrong answers a
       // the ledger is line for line what a box pressed the same way without the parts writes
       assert.deepEqual(A.ledger.map((e) => lineText(e.line)), B.ledger.map((e) => lineText(e.line)));
       const ra = A.finish(), rb = B.finish();
-      assert.equal(ra.stars, rb.stars);
+      assert.equal(ra.gold, rb.gold);
       assert.equal(ra.clean, rb.clean);
       assert.equal(ra.gold, rb.gold);
       assert.ok(ra.partSlips > 0 || route.every((s) => !partsOf(p.start, s.move)?.qs.length));
@@ -218,7 +218,7 @@ test('a wrong answer adding two numbers is counted by its kind for the ladder', 
   B.press(addNum(10)); B.press(divBy(3));
   const r = B.finish();
   assert.equal(r.clean, true);
-  assert.equal(r.stars, 3);
+  assert.ok(r.moves <= r.par);
   assert.equal(r.partSlips, 1);
   assert.deepEqual(r.arith, ['sign']);
 });
@@ -340,7 +340,7 @@ test('"or": x + 2 < 0 or 2x > 8 is worked one part at a time and ends x < −2 o
   assert.ok(kt.ok && Q.inSet(p.set, kt.x));
   const res = B.finish();
   assert.equal(res.solved, true);
-  assert.equal(res.stars, 3);
+  assert.ok(res.moves <= res.par);
   assert.equal(res.clean, false);   // (a wrong number line: the ladder sees it)
   assert.equal(res.lineSlips, 1);
 });
@@ -411,7 +411,7 @@ test('a whole inequality box worked part by part: the answers rebuild every room
       const kt = B.keyTest();
       assert.ok(kt.ok && Q.inSet(p.set, kt.x), `${id}: test value ${kt.x}`);
       const res = B.finish();
-      assert.ok(res.solved && res.clean && res.stars === 3, `${id} ${Q.stateText(p.start)}: ${JSON.stringify(res)}`);
+      assert.ok(res.solved && res.clean && res.moves <= res.par, `${id} ${Q.stateText(p.start)}: ${JSON.stringify(res)}`);
       assert.ok(B.steps({ checked: true }).every((s) => s.state === 'done' || s.state === 'skip'));
     }
   }
@@ -420,7 +420,7 @@ test('a whole inequality box worked part by part: the answers rebuild every room
 test('the ladder opens the inequalities once the vault is stamped, like any other rung', () => {
   const s = { rung: 'R15', placing: false, levels: { R15: 4 }, hist: { R15: [1, 1, 1, 1] }, stamped: ['R13', 'R14'], streak: {} };
   const alg = makeAlgebra(s, { rng: makeRng(4) });
-  alg.record({ rung: 'R15', clean: true, solved: true, stars: 3, moves: 3, par: 3 });
+  alg.record({ rung: 'R15', clean: true, solved: true, moves: 3, par: 3 });
   assert.equal(s.rung, 'I1');
   assert.ok(s.stamped.includes('R15'));
   const p = alg.next('vault');

@@ -1,9 +1,10 @@
 // THE BANJO AND THE BANJO PLAYER'S STOOL, made in code (their numbers: src/banjoplan.js). An open-back banjo of the
-// 1880s: a dark walnut rim under a pale calfskin head held by a nickel hoop, the neck with its black fingerboard, the
-// slotted peghead with four friction pegs, the short fifth string's peg on the neck's side at the fifth fret, a maple
-// bridge, a dark tailpiece and the strings as one pale strip. A plain three-legged stool for him to sit on. Each is one
-// mesh (its parts merged, coloured by their vertices) and they share one material: about 480 triangles for the banjo,
-// 150 for the stool.
+// 1880s: a nickel-clad rim (walnut inside) under an aged calfskin head held by a nickel hoop and twelve hooks, the neck
+// with its dark rosewood fingerboard, nickel frets, pearl dots and a bone nut, the slotted peghead with four friction
+// pegs, the short fifth string's peg on the neck's side at the fifth fret, a maple bridge, a dark tailpiece, and five
+// thin steel strings (the fifth ending at its peg). A plain three-legged stool for him to sit on. Each is one mesh (its
+// parts merged, coloured by their vertices) and they share one material: about 880 triangles for the banjo, 150 for
+// the stool.
 //
 //   makeBanjoModel({ material }) -> THREE.Mesh    in the banjo's own frame (src/banjoplan.js: the head's middle at the
 //                                                 origin, the neck along +x, the head facing +y)
@@ -17,12 +18,13 @@ import { BANJO, STOOL, fret } from './banjoplan.js';
 
 // period colours (sRGB, as a picker shows them)
 const C = {
-  head: '#e6d8b8', hoop: '#8d877c', rim: '#3a2313', rimIn: '#4a2f1a',
-  neck: '#5c3a20', board: '#1c1612', peg: '#191411', bridge: '#cdb58c', tail: '#2a2420', strings: '#d9d2bf',
+  head: '#dccba3', hoop: '#a69f90', rim: '#7d7568', rimIn: '#4a2f1a',
+  neck: '#5c3a20', board: '#2e1c13', peg: '#191411', bridge: '#d8c7a0', tail: '#2a2420', strings: '#cfcbc2',
+  fret: '#b9b3a6', pearl: '#ebe4d2', hook: '#8f897d',
   stool: '#6e4b2c', stoolTop: '#7d5634',
 };
 export const BANJO_PROPS = [
-  { id: 'banjo', name: 'Banjo', category: 'Music', size: [+BANJO.length.toFixed(3), 0.09, 0.28], tris: 476, make: 'makeBanjoModel' },
+  { id: 'banjo', name: 'Banjo', category: 'Music', size: [+BANJO.length.toFixed(3), 0.09, 0.28], tris: 880, make: 'makeBanjoModel' },
   { id: 'banjo-stool', name: 'Stool', category: 'Furniture', size: [0.4, STOOL.h, 0.4], tris: 152, make: 'makeStoolModel' },
 ];
 const col = new THREE.Color();
@@ -44,13 +46,28 @@ function inward(g) {
 }
 const M = (x, y, z, rx = 0, ry = 0, rz = 0) => new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), new THREE.Vector3(1, 1, 1));
 const box = (sx, sy, sz, hex, m) => ready(new THREE.BoxGeometry(sx, sy, sz), hex, m);
+// a flat strip facing up: `long` along x round x, `wide` along z round z, at height y
+const flat = (x, long, wide, y, z, hex) => ready(new THREE.PlaneGeometry(long, wide), hex, M(x, y, z, -Math.PI / 2));
+// a string: a flat ribbon facing up through the points, `h` its half width
+function strand(pts, h, hex) {
+  const pos = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [a, b] = [pts[i], pts[i + 1]], dx = b[0] - a[0], dz = b[2] - a[2], L = Math.hypot(dx, dz), nx = -dz / L * h, nz = dx / L * h;
+    pos.push(a[0] - nx, a[1], a[2] - nz, a[0] + nx, a[1], a[2] + nz, b[0] + nx, b[1], b[2] + nz, a[0] - nx, a[1], a[2] - nz, b[0] + nx, b[1], b[2] + nz, b[0] - nx, b[1], b[2] - nz);
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  const n = new Float32Array(pos.length); for (let i = 1; i < n.length; i += 3) n[i] = 1;
+  g.setAttribute('normal', new THREE.BufferAttribute(n, 3));
+  g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(pos.length / 3 * 2), 2));
+  return ready(g, hex);
+}
 
 export function banjoGeometry() {
   const B = BANJO, P = B.pot, parts = [], seg = 20;
   // THE POT: the rim's outside and inside (open at the back), its back edge, the head and the hoop round it
   parts.push(ready(new THREE.CylinderGeometry(P.r, P.r, P.depth, seg, 1, true), C.rim, M(0, -P.depth / 2, 0)));
   parts.push(inward(ready(new THREE.CylinderGeometry(P.r - P.rim, P.r - P.rim, P.depth, seg, 1, true), C.rimIn, M(0, -P.depth / 2, 0))));
-  parts.push(ready(new THREE.RingGeometry(P.r - P.rim, P.r, seg, 1), C.rim, M(0, -P.depth, 0, Math.PI / 2)));
+  parts.push(ready(new THREE.RingGeometry(P.r - P.rim, P.r, seg, 1), C.rimIn, M(0, -P.depth, 0, Math.PI / 2)));   // (the wood shows at the back edge)
   parts.push(ready(new THREE.CircleGeometry(P.r - 0.004, seg), C.head, M(0, B.head, 0, -Math.PI / 2)));
   parts.push(ready(new THREE.CylinderGeometry(P.r + 0.003, P.r + 0.003, 0.012, seg, 1, true), C.hoop, M(0, B.head - 0.003, 0)));
   parts.push(ready(new THREE.RingGeometry(P.r - 0.006, P.r + 0.003, seg, 1), C.hoop, M(0, B.head + 0.003, 0, -Math.PI / 2)));
@@ -71,19 +88,32 @@ export function banjoGeometry() {
   const x5 = fret(B.peg5);
   parts.push(ready(new THREE.CylinderGeometry(0.0035, 0.0035, 0.022, 6, 1), C.peg, M(x5, top - 0.012, -(N.w0 / 2 + 0.009), Math.PI / 2)));
   parts.push(box(0.013, 0.005, 0.012, C.peg, M(x5, top - 0.012, -(N.w0 / 2 + 0.024))));
-  // the bridge, the tailpiece, and the strings (one pale strip, from the tailpiece over the bridge to the nut)
+  // THE FINGERBOARD'S FACE: nickel frets across it (flat lines, from the nut down to where the board meets the pot), the
+  // pearl dots between the 5th, 7th, 10th, 12th, 15th and 17th frets' wires, and the bone nut
+  const bw = (N.w0 + N.w1) / 2;
+  for (let n = 1; fret(n) > x0 + 0.012; n++) parts.push(flat(fret(n), 0.0012, bw, top + 0.0004, 0, C.fret));
+  for (const n of [5, 7, 10, 12, 15, 17]) {
+    const x = (fret(n - 1) + fret(n)) / 2;
+    if (x > x0 + 0.01) parts.push(ready(new THREE.CircleGeometry(0.0026, 8), C.pearl, M(x, top + 0.0003, 0, -Math.PI / 2)));
+  }
+  parts.push(box(0.004, 0.003, bw, C.bridge, M(B.nut - 0.002, top + 0.0015, 0)));
+  // THE HOOKS round the pot: a nickel bracket every 30 degrees down the rim's outside, from the hoop (none on the neck)
+  for (let i = 0; i < 12; i++) {
+    const t = (i + 0.5) / 12 * Math.PI * 2;
+    parts.push(box(0.003, 0.034, 0.006, C.hook, M(Math.cos(t) * (P.r + 0.004), B.head - 0.02, -Math.sin(t) * (P.r + 0.004), 0, t, 0)));
+    parts.push(box(0.008, 0.006, 0.009, C.hook, M(Math.cos(t) * (P.r + 0.005), -0.036, -Math.sin(t) * (P.r + 0.005), 0, t, 0)));
+  }
+  // the bridge and the tailpiece
   parts.push(box(0.008, 0.013, 0.036, C.bridge, M(B.bridge, B.head + 0.0065, 0)));
   const T = B.tail; parts.push(box(T.long, 0.006, T.w, C.tail, M(-P.r + T.long / 2 + 0.006, B.head + 0.008, 0, 0, 0, -0.08)));
-  const sY = (x) => (x < B.bridge ? B.head + 0.011 + (x - B.bridge) * 0.08 : B.head + 0.014 + (x - B.bridge) / (B.nut - B.bridge) * (top + 0.002 - B.head - 0.014));
-  const sW = (x) => (x < B.bridge ? 0.02 : 0.026 + (x - B.bridge) / (B.nut - B.bridge) * (0.02 - 0.026)) / 2;
-  const xs = [-P.r + T.long + 0.006, B.bridge, B.nut], pos = [];
-  for (let i = 0; i < 2; i++) {
-    const a = xs[i] + (i ? 0.004 : 0), b = xs[i + 1] - (i ? 0 : 0.004), ya = sY(a), yb = sY(b), wa = sW(a), wb = sW(b);
-    pos.push(a, ya, -wa, a, ya, wa, b, yb, wb, a, ya, -wa, b, yb, wb, b, yb, -wb);
+  // THE STRINGS: five thin steel ones (flat ribbons facing up, like the fiddle's), from the tailpiece's end over the
+  // bridge; four on to the nut and the short fifth (on the -z side, by its peg) to its pip at the fifth fret
+  const xT = -P.r + T.long + 0.004, yB = B.head + 0.0135;
+  for (let i = 0; i < 5; i++) {
+    const zB = -0.012 + i * 0.006, zT = zB * 0.6;
+    const end = i ? [B.nut, top + 0.003, -0.0075 + (i - 1) * 0.005] : [fret(B.peg5), top + 0.0018, -(bw / 2 - 0.0025)];
+    parts.push(strand([[xT, B.head + 0.0115, zT], [B.bridge, yB, zB], end], i ? 0.0005 : 0.00045, C.strings));
   }
-  const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  sg.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(pos.length / 3 * 2), 2)); sg.computeVertexNormals();
-  parts.push(ready(sg, C.strings));
   const geo = mergeGeometries(parts); for (const g of parts) g.dispose();
   geo.computeBoundingSphere();
   return geo;

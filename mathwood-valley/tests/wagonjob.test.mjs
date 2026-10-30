@@ -181,7 +181,7 @@ test('the driver\'s thanks: the game maker\'s recorded takes, the bubble saying 
 test('the hold-ups hold up the traffic\'s wagons and let them go; the old job wagon is gone', () => {
   const src = fs.readFileSync(new URL('../src/missions/wagonjob.js', import.meta.url), 'utf8');
   for (const name of ['T.holdUp(t)', 'A.T.letGo(A.t)', 'ambushPick(', 'boardPick(', 'makeOpenRoad(', 'howdy(d, t ? t.says : AMBUSH.words.help', 'AMBUSH.helpTakes',
-    "hob.event('gangDone'", "hob.event('banditsDone'", "hob.event('boxGrabbed'", "countJob(rider, 'bandits'", 'makeGunfire(', 'hud.meter(', 'wearStep(', 'makeActionMusic', 'makeRider', 'sacksFor', 'gangLine'])
+    "hob.event('gangDone'", "hob.event('banditsDone'", "hob.event('boxGrabbed'", "countJob(rider, 'bandits'", 'makeGangGuns(', 'hud.meter(', 'wearStep(', 'makeActionMusic', 'makeRider', 'sacksFor', 'gangLine'])
     assert.ok(src.includes(name), name);
   for (const gone of ['makeRealWagon', 'makeStandInWagon', 'tripLeft', 'ROAD_POINTS', 'nextSpeed', 'Gus', 'Ride along']) assert.ok(!src.includes(gone), `${gone} is gone`);
   // a wave seen off is a round of the jobs board's shift; the end is the coins and the driver's own thanks
