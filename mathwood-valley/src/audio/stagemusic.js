@@ -218,7 +218,7 @@ export async function loadBanjo(ctx, { base = new URL('../../sounds/banjo/', imp
 export function playBanjo(ctx, kit, dest, room, n) {
   const s = kit.reduce((b, x) => (Math.abs(x.midi - n.midi) < Math.abs(b.midi - n.midi) ? x : b), kit[0]), src = ctx.createBufferSource(), g = ctx.createGain();
   src.buffer = s.buf; src.playbackRate.value = Math.pow(2, (n.midi - s.midi) / 12);
-  const at = n.at, peak = BANJO_LEVEL * (0.3 + 0.7 * Math.max(0, Math.min(1, n.vel ?? 0.8))), ring = s.buf.duration / src.playbackRate.value;
+  const at = n.at, peak = BANJO_LEVEL * (0.3 + 0.7 * Math.max(0, Math.min(1, n.vel ?? 0.8))) * (n.gain ?? 1), ring = s.buf.duration / src.playbackRate.value;
   const hold = Math.max(0.05, Math.min(n.len ?? ring, ring - 0.1));
   g.gain.setValueAtTime(peak, at); g.gain.setValueAtTime(peak, at + hold); g.gain.setTargetAtTime(0, at + hold, 0.03);
   src.connect(g); g.connect(dest);

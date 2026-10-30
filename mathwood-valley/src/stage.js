@@ -75,7 +75,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makePerson } from './actors/folk.js';
-import { makeStageMusic, makeRoom, SONGS, loadFiddle } from './audio/stagemusic.js';
+import { makeStageMusic, makeRoom, SONGS, loadFiddle, loadBanjo } from './audio/stagemusic.js';
 import { bandChoices, bandLine, soundThrough, songLines, nextSong } from './bandplan.js';
 import { playEnding } from './audio/songend.js';
 import { howdy } from './ui/howdy.js';
@@ -363,6 +363,9 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
     if (!bus || bus.loading || !fiddleOK()) return;
     const b = bus, t0 = performance.now();
     b.loading = loadFiddle(b.ctx).then((kit) => { b.fiddleKit = kit; b.loadMs = Math.round(performance.now() - t0); }).catch((e) => console.warn('Mathwood Valley: no fiddle', e));
+    // the banjo: the recorded one for now (the synth banjo cost the sound thread about as much again as the rest of the band:
+    // crackle on slower machines; banjosynth.js stays, to be played from recordings of its own notes later)
+    if (STAGE.banjo) loadBanjo(b.ctx).then((kit) => { b.banjoKit = kit; }).catch((e) => console.warn('Mathwood Valley: no banjo', e));
   }
   function startMusic(at = null) {
     if (music || !bus || resting || phase !== 'play') return;
@@ -372,7 +375,7 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
     lines = song.round ? (intro ? 1 : 0) + Math.max(1, Math.round((left - open) / (song.round * lineSecs))) * song.round : Math.max(1, Math.round(left / lineSecs));
     const kit = fiddleOK() ? bus.fiddleKit : null; musicFiddled = !!kit;
     music = makeStageMusic(bus.ctx, { harp: bus.harpIn, piano: bus.pianoIn, box: bus.boxIn, room: bus.roomIn, seed: 1 + Math.floor(Math.random() * 1e6), song: song.id, intro, fiddle: bus.fiddleIn, fiddleKit: kit,
-      banjo: bus.banjoIn, banjoSynth: STAGE.banjo });
+      banjo: bus.banjoIn, banjoKit: STAGE.banjo ? bus.banjoKit || null : null });
     songT0 = at != null ? at : bus.ctx.currentTime + 0.2;
     music.start(songT0);
   }
