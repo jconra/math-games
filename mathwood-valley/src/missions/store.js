@@ -63,7 +63,8 @@
 //     open(): false once the day's shift is done (src/shifts.js): the order that finished it is the last, the counter
 //     closes by itself after it and no new customer steps up (main.js keeps "Mind the counter" from opening it again)
 //   J.start()   to the counter (off the horse first, if riding)
-//   J.stop()    "Done for now": the customers wander off, the camera comes back to the rider
+//   J.stop()    "Done for now": the customers wander off, the camera comes back to the rider (inside: the rider round on the
+//               customers' side of the counter, facing it)
 //   J.update(dt)   each frame (also after stopping: the last customers walk away)
 //   J.active, J.state() (for rigs), J.people (the customers about, live: each has x, z), J.dispose()
 import * as THREE from 'three';
@@ -151,6 +152,11 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
       front: pt(C.customer, Math.PI / 2), queue: pt(C.queue, Math.PI / 2 + 0.5), queue2: C.queue2 ? pt(C.queue2, Math.PI) : null,
       wayIn: C.wayIn.map((q) => pt(q)), wayOut: C.wayOut.map((q) => pt(q)) };
     L.door = L.wayIn[0]; L.doorway = L.wayIn[1];
+    // where the rider is put when the job ends: out on the customers' side, a little back from where they stand and
+    // toward the room's back (off the way out and the line), facing the counter (or, if something stands there, the
+    // customer's own spot)
+    const off = [C.customer[0] - 0.7, C.customer[1], C.customer[2] - 0.8], offAt = pt(off, Math.PI / 2);
+    L.after = W.blocked && W.blocked(offAt.x, offAt.z) ? pt(C.customer, Math.PI / 2) : offAt;
     L.front.inside = L.queue.inside = true;
     return L;
   }
@@ -533,6 +539,7 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
   }
   J.stop = () => {
     if (!J.active) return;
+    const wasOpen = phase === 'open';
     J.active = false; phase = 'off'; order = null; eqPending = false;
     clearTimeout(longT);
     if (longPanel) { longPanel.close(); longPanel = null; }
@@ -540,6 +547,9 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
     try { if (globalThis.speechSynthesis) speechSynthesis.cancel(); } catch (e) { /* (no voice) */ }
     U.hide();
     for (const c of [...people]) if (c.state !== 'go') leave(c);
+    // (inside, the rider steps round to the customers' side of the counter, facing it: behind it, the storekeeper and
+    // the shelves hem them in)
+    if (wasOpen && IN && IN.after) P.teleport(IN.after.x, IN.after.z, IN.after.face);
     P.cam.enabled = true; P.cam.snap();
     P.enabled = true;
     onStop();

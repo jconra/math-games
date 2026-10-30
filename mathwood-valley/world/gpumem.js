@@ -60,6 +60,7 @@ export function watchGpuMemory(renderer) {
   wrap('renderbufferStorage', (target, fmt, w, h) => { if (rbBound) rb.set(rbBound, w * h * bppOf(fmt)); });
   wrap('renderbufferStorageMultisample', (target, samples, fmt, w, h) => { if (rbBound) rb.set(rbBound, w * h * bppOf(fmt) * Math.max(1, samples)); });
   const M = {
+    reset() { tex.clear(); rb.clear(); bind.clear(); unitOf.clear(); rbBound = null; },   // (the context lost and back: every old handle is gone)
     total() {
       let t = 0; for (const r of tex.values()) { let s = 0; for (const b of r.levels.values()) s += b; if (r.mip && r.levels.size <= 6) s *= 4 / 3; t += s; }   // (one level given and its mipmaps made: a third more)
       let b = 0; for (const v of rb.values()) b += v;

@@ -54,6 +54,7 @@ import { buildProps } from '../../labs/buildings/props.js';
 import { makeArt, makeSheriffArt, makeStoreArt } from '../../labs/buildings/art.js';
 import { LAMP_MAX, lit, boardWear, glowMaterial, lanternGlow, ropeTexture } from '../../labs/buildings/parts.js';
 import { softenGrain, eraseNails } from '../../labs/buildings/woodlook.js';
+import { roomLight } from './indoorlight.js';
 
 // each building's look, as the Building Lab shows it (labs/buildings/main.js BUILDINGS): the wood sheet's grain (calm:
 // calmed; straight: the store's straight streaks), how bumpy, how much less paint goes under a porch roof, the wood under
@@ -662,6 +663,8 @@ export function buildCodeBuilding(kit, kind, o = {}) {
     ...doorways.map((D) => ({ at: [D.centre[0] + D.out[0] * 1.2, 1.4, D.centre[2] + D.out[2] * 1.2], reach: 5.5, strength: 0.45 }))];
   // (the stable's stalls: how much sky and lantern fill each horse gets, from the bake, now: the bake's grid goes after)
   for (const S of B.stalls || []) { const x = S.frontX + S.side * 0.9; S.shade = B.light.skyAt(x, 1.5, S.z) * 1.15; S.fill = B.light.fillAt(x, 1.3, S.z) * 1.3; }
+  // (the rooms' own light for the people and animals in them, from the bake likewise: world/objects/indoorlight.js)
+  try { B.inLight = roomLight(B); } catch (e) { B.inLight = null; }
   B.occ = null; B.light.occ = null; B.kit = null;   // (the voxels of the bake, a few MB, no longer wanted)
   const tris = (o3) => { let t = 0; o3.traverse((m) => { if (m.isMesh && m.geometry.index) t += m.geometry.index.count / 3; }); return t; };
 

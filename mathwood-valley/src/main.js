@@ -23,6 +23,7 @@
 //   module), levels (src/levels/model.js), facts (src/math/facts.js), feedback (src/feedback.js),
 //   roundup, hud, shops, title, input, camera, renderer, fps(s), frameMs(n), screenOf(steer or object), checklist, ready }
 import * as THREE from 'three';
+import { watchGraphics, openGfxCheck, gfxReport } from './gfxcheck.js';   // (first: its load retries and counts go on before anything loads)
 import { FB } from './feedback.js';
 import { flagCard, rateJob, menuRows } from './ui/flag.js';   // (first: its key guard for the note boxes goes on before any of the game's key listeners)
 import './curvetangent.js';   // (the roads' per-frame curve sums without the garbage)
@@ -92,6 +93,7 @@ import { makeDof } from './fx/dof.js';
 import { completion, goalsOf } from './completion.js';
 import { graphicsRow } from './ui/graphics.js';
 import { makeShiftKeeper } from './shiftkeeper.js';
+import { makeUnstick } from './unstick.js';
 import { makeFeeding } from './feeding.js';
 import { makeUseSpots } from './usespots.js';
 import { makeTownRooms } from './townrooms.js';
@@ -109,6 +111,8 @@ addEventListener('error', (e) => BM.errors.push(String(e.message)));
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: wantAntialias(), powerPreference: 'high-performance' });   // (off where the tier will be potato: forced, chosen, remembered for this card, or detected: world/quality.js)
 renderer.setSize(innerWidth, innerHeight);
+watchGraphics(renderer, { scenes: () => [W && W.scene] });   // (context lost and restored, shader errors: the menu's Graphics check, src/gfxcheck.js)
+BM.gfxReport = () => gfxReport({ renderer, quality, scenes: [W && W.scene], errors: BM.errors });   // (the Copy text, for rigs)
 // (?perf counts every pass of a frame: the valley, then the six-shooter over it. Left to itself each render() would wipe
 // the count, and the readout would show only the gun's pass)
 if (PERF) renderer.info.autoReset = false;
@@ -234,6 +238,7 @@ let camps = null, DL = null;   // the camps out in the valley (src/camps.js) and
 let deer = null;   // the wild deer herds out in the valley (src/deer.js)
 let DJ = null;   // deer photographs with Miss Wren's box camera (src/missions/deerjob.js), unless a grown-up turned it off
 let SR = null;   // target shooting at the range on the east edge of town (src/missions/shooting.js), for every rider
+let UNST = null;   // the menu's "I'm stuck: move me": a short trail of good spots the rider stood at (src/unstick.js)
 let JF = null;   // a person at each job who says what's going on, and thanks you after (src/jobfolk.js)
 let TP = null;   // the townsfolk going about the town, in and out of doors; the jobs borrow them (src/townpeople.js)
 let LJ = null;   // loot the gang: the gang's cache out in the valley, handed back at the sheriff's office (src/missions/loot.js), unless a grown-up turned it off
@@ -323,6 +328,7 @@ async function ride(r) {
   canvas.classList.add('is-on');
   I.enabled = true;
   P = makePlayer({ W, folk, animals, rider, input: I, camera, say: (t) => hud.toast(t) });
+  UNST = makeUnstick({ blocked: W.blocked, wet: (x, z) => W.waterAt(x, z) > 0.3 });
   if (W.V && W.V.FENCE) W.V.FENCE.near = trafficThings;   // (the town's gates swing open for the rider, the horse, the dog, the cattle, the townsfolk)
   makeDogIfOwned();
   cardBy = null; theJob = null; shownCard = null; jobCardObj = null; jobCardKey = ''; worked = false; for (const k in lastCard) delete lastCard[k];
@@ -948,6 +954,27 @@ function tellReport() {
 
 // the levels page reads a place's name and line out when its tab is picked, for a rider who is read to
 const levelsSpeak = (text) => { if (rider && SKILLS.readAloud(rider)) sayLine(text); };
+// "I'm stuck: move me" (the menu): the rider, and the horse if ridden, to the last good spot they stood at, else the
+// nearest building's door, else the town square (src/unstick.js). No penalty. In the cabin: out at its door
+function unstick() {
+  if (!P || !W) return null;
+  if (SJ && SJ.active) SJ.stop();   // (behind the counter: round to the customers' side, which is all it takes)
+  if (cabin && cabin.inside) { const c = W.places.cabin, to = c && c.door ? { x: c.door.x, z: c.door.z, rot: c.rot } : W.places.spawn; cabin.leave({ to }); return { from: 'cabin' }; }
+  const doors = [], sq = W.places.spawn;
+  for (const k in W.places) { const q = W.places[k]; if (q && q.door && Number.isFinite(q.door.x)) doors.push({ x: q.door.x, z: q.door.z, rot: q.rot }); }
+  const s = UNST ? UNST.pick(P.position, { doors, square: sq, room: P.onHorse ? 1.6 : 0.8 }) : { x: sq.x, z: sq.z, rot: sq.rot, from: 'square' };
+  if (!s) return null;
+  P.teleport(s.x, s.z, s.rot ?? P.heading);
+  return s;
+}
+// the storekeeper behind the general store's counter lets the rider by: the way behind it is too narrow to step round
+// him, so he doesn't block (only the rider goes back there; the customers stay out front)
+let keeperRec = null;
+function passKeeper() {
+  if (!JF || !JF.people) return;
+  if (!keeperRec || !JF.people.includes(keeperRec)) keeperRec = JF.people.find((r) => r.id === 'storekeeper') || null;
+  if (keeperRec && keeperRec.block) keeperRec.block = false;
+}
 // ── THE MENU (Esc) ───────────────────────────────────────────────────────────────────────────────────────────────
 function openMenu() {
   if (state !== 'play' || menu || boxOpen || (shops && shops.isOpen) || (BS && BS.active)) return;   // (a builder's own Esc puts it away)
@@ -963,8 +990,10 @@ function openMenu() {
       <button type="button" data-do="levels">Levels<small>Each place's levels, and where you are</small></button>
       <button type="button" data-do="stats">Your stats<small>Each place and kind of math, and how it's going</small></button>
       <button type="button" data-do="read" aria-pressed="${readMode(rider) !== false}">${readWords()}</button>
+      <button type="button" data-do="unstick">I'm stuck: move me<small>Back to the last open spot you stood at</small></button>
       <button type="button" data-do="home">Go back to town<small>Straight to the town square</small></button>
       <button type="button" data-do="mark">Mark this spot<small>Copies where you are, to paste in a message</small></button>
+      <button type="button" data-do="gfx">Graphics check<small>What this screen can do, and anything that didn't load</small></button>
       <button type="button" data-do="title">Back to the title<small>Your gold is already saved</small></button></div>
     <div class="bms-keys">${I && I.touch
       ? 'thumb stick on the left to move (push it to the edge to gallop) · drag to look · tap a steer or a rider, or press Rope · Horse calls your horse · On / off gets on and off · tap the prompt at a door · by a horse\'s head, tap the apple to give a treat'
@@ -999,7 +1028,9 @@ function openMenu() {
       return;
     }
     if (what === 'home') then = () => { if (SJ) SJ.stop(); const s = W.places.spawn; if (cabin && cabin.inside) cabin.leave({ to: s }); else P.teleport(s.x, s.z, s.rot); };
+    if (what === 'unstick') then = () => unstick();
     if (what === 'title') then = () => endRide();
+    if (what === 'gfx') then = () => { pause('gfx'); openGfxCheck({ renderer, quality, scenes: [W && W.scene], errors: BM.errors, panel: makePanel, copy: copyLine, onClose: () => resume('gfx') }); };
     if (what === 'box') then = () => { const bx = rider.lockboxes[0]; if (bx) openBox({ tier: bx.tier, from: 'loot' }, { own: true }); };
     if (what === 'left') then = () => { pause('left'); openWhatsLeft(document.body, rider, { onClose: () => resume('left') }); };
     if (what === 'stats') then = () => { pause('stats'); openStats(document.body, rider, { face: faceSVG(rider.look), speak: levelsSpeak, onClose: () => resume('stats') }); };
@@ -1225,7 +1256,9 @@ function step(dt) {
     }
     if (home) { hud.callHorse(false); door = null; cabin.update(dt); }   // (no town door while inside: E and the prompt are the cabin's; it moves the player)
     else { if (atCounter()) hud.prompt(null); else doors(); P.update(dt); }
-    if (!home && W.wrap) { const w = W.wrap(P.position, camera.position); if (w) { P.shift(w); if (D) D.shift(w); } }   // (rode on into the mist at an end of the valley: out of the other end's, src/world.js)
+    if (!home && W.wrap) { const w = W.wrap(P.position, camera.position); if (w) { P.shift(w); if (D) D.shift(w); if (UNST) UNST.clear(); } }
+    if (UNST) UNST.update(dt, P.position, !home && !atCounter() && (P.mode === 'foot' || P.mode === 'horse'));   // (a good spot to go back to)
+    passKeeper();   // (rode on into the mist at an end of the valley: out of the other end's, src/world.js)
     if (D) D.update(dt);
     if (cabin) cabin.town(dt);
     // (the wagon's gang took the shared times trainer's wave: back at the herd, the round-up deals its own afresh, but
@@ -1352,7 +1385,9 @@ const dev = {
   },
   dof(on = true) { if (!DOFX) DOFX = makeDof({ renderer, camera }); DOFX.on = !!on; return DOFX.state(); },   // (the close-ups' depth of field: src/fx/dof.js)
   lockbox(tier) { if (!rider) return false; if (state === 'play') openBox({ tier: tier || boxTier(rider), from: 'sheriff' }); return true; },
-  spot() { return spotNote(); },   // (the menu's "Mark this spot" line, for rigs)
+  spot() { return spotNote(); },
+  unstick() { return unstick(); },   // (the menu's "I'm stuck: move me"; BM.dev.unstickTrail() its trail)
+  unstickTrail() { return UNST ? UNST.trail.map((q) => ({ ...q })) : []; },   // (the menu's "Mark this spot" line, for rigs)
   saddle(kind = 'plain') { if (!rider) return; const o = rider.owned; o.saddles = [...new Set([...(o.saddles || []), kind])]; o.saddle = kind; saveRider(rider); if (P) P.refreshOwned(); refresh(); },
   // a wagon on the road coming toward the player (from about 70 m up the road)
   wagon(dir, kind, o = {}) { if (!traffic || !P) return null; return traffic.sendNear(P.position, { dir, kind, ...o }); },
