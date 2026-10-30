@@ -106,6 +106,7 @@ const SLIDE_MS = 480;            // the next box sliding in
 const QUICK_AFTER = 3;           // once this many boxes are open in one sitting, the kid has seen the coins fly:
 const QUICK = 0.7;               // ...they run at this share of their time
 const WIDE_SCREEN = '(min-width: 901px) and (min-height: 521px)';   // a screen with room for the steps card open
+const DRAWER_SCREEN = '(max-width: 900px) and (min-height: 521px)';  // a phone held upright: the steps card is a drawer at the side
 const ROOM_NAME = { L: 'left side', R: 'right side' };
 const WORKING = ['play', 'parts', 'brackets'];   // the phases where the kid is working the box (Skip shows)
 
@@ -135,8 +136,8 @@ export function findIntro(problem, plan) {
   const xs = [...problem.start.L, ...problem.start.R].find((t) => t.t === 'x');
   if (problem.find === 'ax=b' && xs) return `A number stuck to x means times: ${Math.abs(xs.v.n)}x is ${Math.abs(xs.v.n)} times x. Which key fits?`;
   if (problem.find === 'x/a=b' && xs) return `x/${xs.v.d} means x divided by ${xs.v.d}. Which key fits?`;
-  if (problem.find === 'ax+b=c' || problem.find === 'ax-b=c') return 'Two steps: which key makes both sides the same?';
-  return 'Which number for x makes both sides the same?';
+  if (problem.find === 'ax+b=c' || problem.find === 'ax-b=c') return 'What is x?';   // (not "two steps": a teacher's word, the game's maker)
+  return 'What is x?';
 }
 
 // The sums worth a number line: the number already there is negative (−10 + 18) or the answer crosses zero (5 − 8).
@@ -367,7 +368,7 @@ export function openLockbox(root = document.body, opts = {}) {
   }
 
   // ----- the session: boxes back to back until "Done for now" -----
-  const session = { results: [], gold: 0, solved: 0, unpaid: 0, cardPref: null, n: 0 };
+  const session = { results: [], gold: 0, solved: 0, unpaid: 0, cardPref: null, drawerOpen: false, n: 0 };
   const own = firstInfo.from === 'loot';
   // the rest of the saddlebags, after the first box (each is opened in turn; one set aside stays in the bags)
   const bag = own && rider && Array.isArray(rider.lockboxes) ? rider.lockboxes.filter((b) => b && typeof b === 'object').map((b) => ({ tier: b.tier })) : [];
@@ -656,6 +657,32 @@ export function openLockbox(root = document.body, opts = {}) {
           <ol class="st-list">${CARD.map((s) => `<li class="st-row" data-n="${s.n}"><span class="st-n">${s.n}</span>
             <span class="st-txt">${wordsHTML(s.label)}</span><span class="st-note"></span></li>`).join('')}</ol>
         </div>`;
+      // On a phone held upright the card is a drawer: a thin "Steps" tab at the screen's left edge slides it out over
+      // the box (tap or drag); the tab again, its X, a tap outside it or a swipe back closes it. Closed, the mat's
+      // caption is the one place the step being worked shows.
+      stepsEl.insertAdjacentHTML('afterbegin', `<div class="st-head"><span class="st-title">Steps</span>
+        <button class="st-x" type="button" aria-label="Close the steps">×</button></div>`);
+      const tab = h('button', 'st-tab');
+      tab.type = 'button';
+      tab.innerHTML = '<span class="st-tablbl">Steps</span> <span class="st-tabn"></span>';
+      stepsEl.appendChild(tab);
+      const scrim = h('div', 'st-scrim');
+      body.appendChild(scrim);
+      tab.addEventListener('click', () => { if (!tab.dataset.dragged) setDrawer(!session.drawerOpen); delete tab.dataset.dragged; });
+      stepsEl.querySelector('.st-x').addEventListener('click', () => setDrawer(false));
+      scrim.addEventListener('pointerdown', (e) => { e.preventDefault(); setDrawer(false); });
+      // a drag: out from the tab opens, back across the drawer closes
+      let dragX = null;
+      stepsEl.addEventListener('pointerdown', (e) => { dragX = e.clientX; });
+      stepsEl.addEventListener('pointerup', (e) => {
+        if (dragX === null) return;
+        const dx = e.clientX - dragX;
+        dragX = null;
+        if (dx > 30 && !session.drawerOpen) { tab.dataset.dragged = '1'; setDrawer(true); }
+        else if (dx < -30 && session.drawerOpen) { tab.dataset.dragged = '1'; setDrawer(false); }
+        setTimeout(() => delete tab.dataset.dragged, 0);
+      });
+      stepsEl.addEventListener('pointercancel', () => { dragX = null; });
       stepsEl.querySelector('.st-bar').addEventListener('click', () => {
         const open = !stepsEl.classList.contains('open');
         cardShown = open ? 'open' : 'folded';
@@ -663,9 +690,18 @@ export function openLockbox(root = document.body, opts = {}) {
         setCard();
       });
       // on a phone the open card shows only the step being worked; a tap shows all six
-      stepsEl.querySelector('.st-card').addEventListener('click', () => stepsEl.classList.toggle('all'));
+      stepsEl.querySelector('.st-card').addEventListener('click', () => { if (!isDrawer()) stepsEl.classList.toggle('all'); });
       setCard();
+      setDrawer(session.drawerOpen);
       renderSteps();
+    }
+    const isDrawer = () => typeof matchMedia === 'function' && matchMedia(DRAWER_SCREEN).matches;
+    function setDrawer(open) {
+      session.drawerOpen = !!open;
+      stepsEl.classList.toggle('dopen', session.drawerOpen);
+      body.classList.toggle('drawer-open', session.drawerOpen);
+      const tab = stepsEl.querySelector('.st-tab');
+      if (tab) { tab.setAttribute('aria-expanded', String(session.drawerOpen)); tab.classList.remove('lit'); }
     }
     function setCard() {
       const open = cardShown !== 'folded';
@@ -692,6 +728,12 @@ export function openLockbox(root = document.body, opts = {}) {
       }
       const now = currentStep(st);
       stepsEl.querySelector('.st-nowtxt').innerHTML = now ? `<b>${now.n}</b> ${wordsHTML(now.short)}` : '';
+      const tabN = stepsEl.querySelector('.st-tabn');
+      if (tabN) {
+        // (numbered as the card and the mat's caption number it: "Step 4" over the mat is 4/6 here)
+        tabN.textContent = now ? `${now.n}/${st.length}` : '✓';
+        stepsEl.querySelector('.st-tab').setAttribute('aria-label', now ? `Steps: step ${now.n} of ${st.length}` : 'Steps: all done');
+      }
       stepsEl.classList.toggle('alldone', !now);
       // the step being worked, in big type over the equation (the rule to follow now)
       const key = now ? `${now.n}|${now.label}|${now.note || ''}` : '';
@@ -728,6 +770,8 @@ export function openLockbox(root = document.body, opts = {}) {
     // hint 1 lights the step being worked (and opens the card if it was folded)
     function lightStep(n) {
       if (pickMode || !n) return;
+      // (a phone's closed drawer stays closed: its tab glows instead of the card sliding over the box)
+      if (isDrawer() && !session.drawerOpen) { const tab = stepsEl.querySelector('.st-tab'); if (tab) { tab.classList.remove('lit'); void tab.offsetWidth; tab.classList.add('lit'); } }
       if (cardShown === 'folded') { cardShown = 'open'; setCard(); }
       stepsEl.classList.remove('faded');
       const row = stepsEl.querySelector(`.st-row[data-n="${n}"]`);

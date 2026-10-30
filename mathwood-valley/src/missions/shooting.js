@@ -56,6 +56,7 @@ import { recordAnswer, earn, countJob, saveRider, JOBS } from '../save.js';
 import { flagCard } from '../ui/flag.js';
 import { rangeSum } from '../math/jobsums.js';
 import { nudgeHelp, HELP_KEY, HELP_KEY_LABEL } from '../ui/askhelp.js';
+import { placeBubble } from '../ui/bubble.js';
 
 export const SHOOT = {
   string: 5,               // cards in a string
@@ -135,15 +136,14 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
     if (head.z > 1 || Math.abs(head.x) > 1.05 || Math.abs(head.y) > 1.05) return false;
     const x = (head.x + 1) / 2 * innerWidth, y = (1 - head.y) / 2 * innerHeight;
     if (!lift) { el.style.left = `${x}px`; el.style.top = `${y}px`; return true; }
-    el.style.left = '0px'; el.style.top = '0px';
-    const w = el.offsetWidth, h = el.offsetHeight, left = Math.max(12, Math.min(innerWidth - w - 12, x - w / 2));
-    let floor = 70;
-    for (const e of [hud.ruleEl, hud.hintEl]) { if (!e || e.hidden || !e.offsetParent) continue; const q = e.getBoundingClientRect(); if (q.height && q.top < innerHeight * 0.5 && q.right > left - 6 && q.left < left + w + 6) floor = Math.max(floor, q.bottom + 10); }
-    const want = Math.min(innerHeight * 0.72 - h, y - h - 30), top = Math.max(floor, want);
-    el.classList.toggle('is-low', want < floor && floor > 70);
-    el.style.transform = `translate(${Math.round(left)}px, ${Math.round(top)}px)`;
-    el.style.setProperty('--tail', `${Math.max(16, Math.min(w - 16, x - left))}px`);
-    return true;
+    return false;
+  }
+  // her speech bubble over her head, in 3D (src/ui/bubble.js): faded with distance, hidden while she's out of view
+  function bubbleOver(el, d) {
+    if (!K.p) return false;
+    const b = K.p.bones && K.p.bones.Head;
+    if (b) { b.getWorldPosition(head); head.y += 0.48; } else head.set(K.x, W.heightAt(K.x, K.z) + 2.2, K.z);
+    return placeBubble(el, head, camera, { dist: d, avoid: [hud.ruleEl, hud.hintEl] });
   }
   // she says a line: over her head (a hello stops once the player has gone off), or in the gun's card while it's up
   function keeperSay(lines, { ms = null } = {}) {
@@ -171,7 +171,7 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
     tag.hidden = !(d < TALK.tag && !K.talking && overHead(tag, 0));
     if (K.talking) {
       if ((K.talking.t -= dt) <= 0 || d > TALK.away + 8) { K.talking = null; say.hidden = true; }
-      else { say.classList.toggle('is-out', K.talking.t < 0.5); say.hidden = false; if (!overHead(say, 1)) say.hidden = true; }
+      else { say.classList.toggle('is-out', K.talking.t < 0.5); say.hidden = false; if (!bubbleOver(say, d)) say.hidden = true; }
     }
   }
 

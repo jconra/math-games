@@ -33,7 +33,7 @@ export const TALK = {
   away: 22,            // m: further than this from a person (and away from the job) counts as having left
   again: 180,          // s before a person who has said hello says it again (after the player has been away)
   againArea: 600,      // ... the people at the herd, the sheep and the pigs (said on every arrival, it would wear thin)
-  thanksNear: 90,      // m: a thank-you is said over the person within this; farther off it shows as a card of its own
+  thanksNear: 90,      // m: (no longer used: a line is a bubble over the speaker within src/ui/bubble.js BUBBLE.far, else a small marker on the screen's edge)
   keep: 25,            // s a thank-you waits to be said while a panel is open over the game (then it is let go)
   awake: 90,           // m within which a person's clips play
   show: 170,           // m within which a person is drawn

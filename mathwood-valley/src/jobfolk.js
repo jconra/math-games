@@ -35,7 +35,8 @@
 //                        standing in the bridge's turned frame): his name tag and hello; his prompt is the build site's
 // Each stands with the idle clips, shows a name tag when the player is near, and turns to face the player close by.
 //
-// Talking: walking or riding up, the person says their two lines in a speech card over their head (no button). At an
+// Talking: walking or riding up, the person says their two lines in a speech bubble over their head (no button;
+// placed in 3D, src/ui/bubble.js: hidden while they're off the screen or far off: a small marker on the screen's edge nearest them then). At an
 // area job (the herd, the sheep, the pigs) the job is already running as you arrive, so the hello is said on arriving.
 // Where a job waits to be started, E (or a tap on the prompt) by the person starts it: the naturalist's camera is set
 // up, the sheriff's desk opens. Riding into the job as before still starts it too. (Protect the wagon has no person of
@@ -61,17 +62,18 @@
 //   JF.say(id, text)    a person (an id of JOB_FOLK, or a camp's id for its foreman) says a line now
 //   JF.thank(who, text)  a thank-you waiting its turn, as the jobs' own (the shift's end: src/shiftkeeper.js): who is a
 //                       person's id, a camp's id or short name (its foreman), or { id, name, x, z } for a speaker
-//                       with no person of their own (the storekeeper, inside the store: the card shows over that spot)
+//                       with no person of their own (the storekeeper, inside the store: the bubble shows over that spot)
 //   helloFor(id)        (an option) lines a person says in place of their hello, or null: the shift done for the day,
 //                       their polite no (src/shifts.js)
 //   (an event's data with shiftEnd: true: the shift's own thank-you takes the place of the job's usual one)
-//   JF.speaking()       true while a speech card is on the screen
+//   JF.speaking()       true while a speech bubble is on the screen (over the speaker's head: src/ui/bubble.js)
 //   JF.people           the records: { id, name, role, p (the person), x, z, face }
 //   JF.state()          for rigs;  JF.dispose()
 import * as THREE from 'three';
 import { makePerson } from './actors/folk.js';
 import { JOB_FOLK, FOLK_BY_ID, FOREMAN_HELLO, TALK, sayMs, standSpot, makeGreeter, makeLeaveWatch, thanksFor, WORK, dressOf } from './jobfolkplan.js';
 import { mowSite } from './buildsite.js';
+import { placeBubble, bubbleParts, partAt, placeMarker, markerName } from './ui/bubble.js';
 import { makeSmithWork } from './smithy.js';
 const SMITH_NEAR = 2.6;   // m: the rider this near the smith (inside with him), he stops work and turns to them
 
@@ -136,6 +138,8 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
   ensureCss();
   const box = document.createElement('div'); box.className = 'bjf'; document.body.appendChild(box);
   const card = document.createElement('div'); card.className = 'bjf-say'; card.hidden = true; box.appendChild(card);
+  // (a line said out of view: a small marker on the screen's edge nearest the speaker, src/ui/bubble.js placeMarker)
+  const mark = document.createElement('div'); mark.className = 'bjf-mark'; mark.hidden = true; mark.innerHTML = '<i></i><b></b>'; box.appendChild(mark);
 
   // ── THE PEOPLE ─────────────────────────────────────────────────────────────────────────────────────────────────
   function addPerson(def, spot, face, { person = null, kind = 'own', here = null, turn = 0 } = {}) {
@@ -416,8 +420,9 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
     if (!r) return;
     const L = (Array.isArray(lines) ? lines : [lines]).filter(Boolean);
     if (!L.length) return;
-    talking = { r, lines: L, pin, hello, t: (ms || sayMs(L.join(' '))) / 1000 };
-    card.innerHTML = `<b>${esc(r.name)}</b>${L.map((l) => `<p>${esc(l)}</p>`).join('')}`;
+    const T = (ms || sayMs(L.join(' '))) / 1000;
+    talking = { r, lines: L, pin, hello, t: T, T, parts: bubbleParts(L), part: -1 };
+    sayPart(0); mark.lastChild.textContent = markerName(r.name);
     card.hidden = false; card.classList.remove('is-out'); card.style.opacity = '';
     if (onSay) { try { onSay(r.name, L); } catch (e) { console.error(e); } }   // (main.js: read out to a rider who can't read yet)
     // (a wave the first time, a nod of the head after; a speaker with no person of their own just talks)
@@ -425,6 +430,12 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
       const clip = r.greet.said && r.waved ? 'Interact' : 'Wave';
       if (r.p.play(clip, { fade: 0.25, once: true })) { r.clipT = 1.7; r.waved = true; }
     }
+  }
+  // (a long two-line speech is said in two parts, one after the other, in the same bubble)
+  function sayPart(i) {
+    if (!talking || talking.part === i) return;
+    talking.part = i;
+    card.innerHTML = `<b>${esc(talking.r.name)}</b>${talking.parts[i].map((l) => `<p>${esc(l)}</p>`).join('')}`;
   }
   const JF = { people, prompt: null, indoor };
   JF.say = (id, text) => { const r = byId(id); if (r) { say(r, text); return true; } return false; };
@@ -512,7 +523,7 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
   // ── EACH FRAME ─────────────────────────────────────────────────────────────────────────────────────────────────
   const head = new THREE.Vector3();
   let hiddenNow = false;
-  function hideAll() { for (const r of people) r.tag.hidden = true; card.hidden = true; }
+  function hideAll() { for (const r of people) r.tag.hidden = true; card.hidden = true; mark.hidden = true; }
   JF.update = (dt, { hidden = false } = {}) => {
     if (hidden) {
       if (!hiddenNow) { hiddenNow = true; hideAll(); } JF.prompt = null;
@@ -582,93 +593,71 @@ export function makeJobFolk({ W, folk, P, camera, hud, jobs = {}, actions = {}, 
       }
       // the name tag
       const tagOn = d < TALK.tag && inWith && !(talking && talking.r === r);
-      if (tagOn && place(r, r.tag, 0)) r.tag.hidden = false; else r.tag.hidden = true;
+      if (tagOn && place(r, r.tag)) r.tag.hidden = false; else r.tag.hidden = true;
     }
     // a thank-you waiting its turn: said once nothing else is being said
     for (let i = pending.length - 1; i >= 0; i--) if ((pending[i].t -= dt) <= 0) pending.splice(i, 1);
     if (pending.length && (!talking || talking.t < 0.6)) { const q = pending.shift(); say(q.r, q.text, { pin: true }); if (onTalk && q.r.p) onTalk('thanks', q.r.id, voiceOf(q.r)); }
-    // the speech card: over the speaker's head, or a card of its own in the middle when the speaker is out of sight
+    // the speech bubble: over the speaker's head in 3D, faded with distance; hidden while the speaker is off the screen,
+    // far off or in a building the player isn't in. Out of view (or far off), a small marker on the screen's edge nearest
+    // them says someone is talking; it goes once their bubble shows, or when the line's time is up
     if (talking) {
-      if ((talking.t -= dt) <= 0) { talking = null; card.hidden = true; }
+      if ((talking.t -= dt) <= 0) { talking = null; card.hidden = true; mark.hidden = true; }
       else {
         const r = talking.r, d = Math.hypot(at.x - r.x, at.z - r.z);
         card.classList.toggle('is-out', talking.t < 0.5);
+        sayPart(talking.parts.length > 1 ? partAt(talking.parts, 1 - talking.t / talking.T) : 0);
         // (a hello stops once the player has gone off: further than the job's area for the area jobs' people, a few
         // steps for the rest; a thank-you is seen through)
         const far = talking.hello ? (areas.some((a) => a.id === r.id) ? 70 : TALK.away) + 8 : Infinity;
+        const walled = !!r.room && r.room !== hereO;   // (in his building, the player outside it)
         card.hidden = false;   // (shown before it is measured)
-        if (d > far) { talking = null; card.hidden = true; }
-        else if (d < TALK.thanksNear && (card.classList.remove('is-pinned'), place(r, card, 1))) { /* over the speaker's head */ }
-        else if (talking.pin || talking.hello) pinCard();   // (a hello always shows: on a phone's narrow view the person met is often just off its edge)
-        else card.hidden = true;   // (just out of view: back when the speaker is)
+        if (d > far) { talking = null; card.hidden = true; mark.hidden = true; }
+        else if (!walled && placeBubble(overHead(r), head, camera, { dist: d, avoid: avoidEls(), below: helpTop() })) mark.hidden = true;
+        else {   // (back over the speaker when they are in view)
+          card.hidden = true; mark.hidden = walled;
+          if (!walled) { overHead(r); placeMarker(mark, head, camera); mark.classList.toggle('is-out', talking.t < 0.5); }
+        }
       }
     }
     promptStep();
   };
 
-  // The page's own boxes the speech card keeps clear of: the job's card up top (with the hint line under it and the times
-  // chart's "Peek" offer under those), and the help box at the bottom (the number line, the ten-frames: what a stuck kid
-  // is looking at). topFloor(left, w): the lowest bottom of the top ones over that stretch of the screen; helpTop(): the
-  // top of the help's pictures (Infinity when none is up).
-  function topFloor(left, w, least) {
-    let floor = least;
-    for (const e of [hud.ruleEl, hud.hintEl, ...document.querySelectorAll('.tch-offer')]) {
-      if (!e || e.hidden || !e.offsetParent) continue;
-      const q = e.getBoundingClientRect();
-      if (q.height && q.top < innerHeight * 0.5 && q.right > left - 6 && q.left < left + w + 6) floor = Math.max(floor, q.bottom + 10);
-    }
-    return floor;
-  }
+  // The page's own boxes the speech bubble keeps out from under: the job's card up top, the hint line under it and the
+  // times chart's "Peek" offer under those; and the help box at the bottom (helpTop(): the top of its pictures, Infinity
+  // when none is up)
+  function avoidEls() { return [hud.ruleEl, hud.hintEl, ...document.querySelectorAll('.tch-offer')]; }
   function helpTop() {
     let top = Infinity;
     for (const e of (hud.helpEl ? hud.helpEl.children : [])) { const q = e.getBoundingClientRect(); if (q.height) top = Math.min(top, q.top); }
     return top;
   }
-  // a card of its own, the speaker out of sight: low in the middle (on a phone, near the top), moved down off the job's
-  // card and up off the help box (where there's room for both: a hello is short, the help comes first)
-  function pinCard() {
-    card.classList.add('is-pinned'); card.style.left = '50%'; card.style.top = ''; card.style.bottom = ''; card.style.transform = '';
-    const c = card.getBoundingClientRect(), floor = topFloor(c.left, c.width, 0), help = helpTop();
-    let top = Math.max(c.top, floor);
-    if (top + c.height > help - 10) top = Math.max(floor, help - 10 - c.height);
-    if (Math.abs(top - c.top) > 0.5) { card.style.top = `${Math.round(top)}px`; card.style.bottom = 'auto'; }
+  // the point over a person's head (in `head`), for the bubble; returns the card
+  function overHead(r) {
+    const b = r.p && r.p.bones && r.p.bones.Head;
+    if (b) { b.getWorldPosition(head); head.y += STAND.anchor; } else head.set(r.x, W.heightAt(r.x, r.z) + 2.3, r.z);
+    return card;
   }
 
-  // a page element over a person's head (lift 0: the name tag; 1: the speech card above it); false when out of sight
-  function place(r, el, lift) {
+  // the name tag over a person's head; false when out of sight
+  function place(r, el) {
     const b = r.p && r.p.bones && r.p.bones.Head;
     if (b) { b.getWorldPosition(head); head.y += STAND.anchor; } else head.set(r.x, W.heightAt(r.x, r.z) + 2.2, r.z);
     head.project(camera);
     if (head.z > 1 || Math.abs(head.x) > 1.05 || Math.abs(head.y) > 1.05) return false;
     const x = (head.x + 1) / 2 * innerWidth, y = (1 - head.y) / 2 * innerHeight;
-    // (the tag kept on the screen with an 8 px gutter: a person at the edge of a phone's narrow view still shows whose
-    // tag it is. Its width is measured once, the first frame it is shown (its words never change), so placing the tags
-    // never makes the page lay itself out again every frame)
-    if (lift === 0) {
-      if (!el._half && !el.hidden) el._half = el.offsetWidth / 2;
-      const half = el._half || 0;
-      el.style.left = `${Math.max(8 + half, Math.min(innerWidth - 8 - half, x))}px`; el.style.top = `${y}px`; return true;
-    }
-    // (the card above the tag, kept on the screen with a 12 px gutter; its tail points down at the speaker)
-    el.style.left = '0px'; el.style.top = '0px';
-    const w = el.offsetWidth, h = el.offsetHeight;
-    const left = Math.max(12, Math.min(innerWidth - w - 12, x - w / 2));
-    // (never over the job's card up top: below it when they would overlap; the tail is dropped then, as the card may sit
-    // below the speaker's head)
-    // (the job card, the hint line under it, and the times chart's "Peek" offer that sits under those; and not down over
-    // the help box)
-    const floor = topFloor(left, w, 70);
-    const want = Math.min(innerHeight * 0.72 - h, y - h - 30, helpTop() - 10 - h), top = Math.max(floor, want);
-    el.classList.toggle('is-low', want < floor && floor > 70);
-    el.style.transform = `translate(${Math.round(left)}px, ${Math.round(top)}px)`;
-    el.style.setProperty('--tail', `${Math.max(16, Math.min(w - 16, x - left))}px`);
-    return true;
+    // (kept on the screen with an 8 px gutter: a person at the edge of a phone's narrow view still shows whose tag it
+    // is. Its width is measured once, the first frame it is shown (its words never change), so placing the tags never
+    // makes the page lay itself out again every frame)
+    if (!el._half && !el.hidden) el._half = el.offsetWidth / 2;
+    const half = el._half || 0;
+    el.style.left = `${Math.max(8 + half, Math.min(innerWidth - 8 - half, x))}px`; el.style.top = `${y}px`; return true;
   }
 
   JF.state = () => ({
     people: people.map((r) => ({ id: r.id, name: r.name, kind: r.kind, x: +r.x.toFixed(2), z: +r.z.toFixed(2), y: r.p.root.visible ? +r.p.root.getWorldPosition(new THREE.Vector3()).y.toFixed(2) : null,
       ground: +W.heightAt(r.x, r.z).toFixed(2), visible: r.p.root.visible, tag: !r.tag.hidden, clip: r.p.clip })),
-    talking: talking ? { id: talking.r.id, lines: talking.lines, pinned: card.classList.contains('is-pinned') } : null, prompt: JF.prompt, pending: pending.length,
+    talking: talking ? { id: talking.r.id, lines: talking.lines, part: talking.part, parts: talking.parts.length, shown: !card.hidden, marker: mark.hidden || !mark.offsetParent ? null : (({ left, top }) => ({ left: Math.round(left), top: Math.round(top) }))(mark.getBoundingClientRect()), box: card.hidden ? null : (({ left, top, width, height }) => ({ left: Math.round(left), top: Math.round(top), width: Math.round(width), height: Math.round(height) }))(card.getBoundingClientRect()) } : null, prompt: JF.prompt, pending: pending.length,
   });
   JF.dispose = () => {
     if (natHerd) natHerd.keepNear = null;
@@ -690,17 +679,25 @@ function ensureCss() {
   background: rgba(30, 20, 12, 0.72); border: 1px solid rgba(226, 173, 76, 0.4); color: #f4e8cf; line-height: 1.15; }
 .bjf-tag b { display: block; font: 700 14px Bitter, Georgia, serif; }
 .bjf-tag small { display: block; font: 500 11px Bitter, Georgia, serif; color: #dccaa5; }
-.bjf-say { position: absolute; left: 0; top: 0; width: max-content; max-width: min(340px, calc(100vw - 24px)); padding: 9px 13px 10px; border-radius: 10px;
+.bjf-say { position: absolute; left: 0; top: 0; width: max-content; max-width: min(320px, calc(100vw - 40px)); padding: 8px 12px 9px; border-radius: 12px;
   background: #f6edd6; color: #2b2219; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.42), inset 0 0 0 2px rgba(122, 85, 48, 0.3);
-  transition: opacity 0.4s ease; --tail: 50%; }
+  opacity: var(--fade, 1); transition: opacity 0.4s ease; --tail: 50%; }
 .bjf-say::after { content: ''; position: absolute; left: var(--tail); bottom: -9px; margin-left: -9px; border: 9px solid transparent; border-bottom: 0; border-top-color: #f6edd6; }
-.bjf-say b { display: block; font: 700 13px Bitter, Georgia, serif; color: #7a5530; letter-spacing: 0.02em; margin-bottom: 2px; }
+.bjf-say b { display: block; font: 700 12px Bitter, Georgia, serif; color: #7a5530; letter-spacing: 0.02em; margin-bottom: 2px; }
 .bjf-say p { margin: 0; font: 500 16px/1.32 Bitter, Georgia, serif; }
 .bjf-say p + p { margin-top: 4px; }
 .bjf-say.is-out { opacity: 0; }
-.bjf-say.is-pinned { top: auto; bottom: 15vh; transform: translateX(-50%); }
-.bjf-say.is-pinned::after, .bjf-say.is-low::after { display: none; }
-@media (max-width: 600px) { .bjf-say { max-width: calc(100vw - 32px); } .bjf-say.is-pinned { top: 156px; bottom: auto; } .bjf-say p { font-size: 15px; } .bjf-tag b { font-size: 13px; } }
+.bjf-say.is-low::after { display: none; }
+.bjf-mark { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 4px; padding: 3px 8px 4px 6px; border-radius: 12px;
+  background: #f6edd6; color: #7a5530; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), inset 0 0 0 2px rgba(122, 85, 48, 0.3); opacity: 0.92; transition: opacity 0.4s ease; --a: 0rad; }
+.bjf-mark b { font: 700 12px Bitter, Georgia, serif; white-space: nowrap; }
+.bjf-mark i { width: 12px; height: 10px; border-radius: 5px; background: #7a5530; position: relative; }
+.bjf-mark i::after { content: ''; position: absolute; left: 2px; bottom: -4px; border: 3px solid transparent; border-left-color: #7a5530; border-top-color: #7a5530; }
+.bjf-mark::before { content: ''; position: absolute; left: 50%; top: 50%; margin: -6px 0 0 -6px; border: 6px solid transparent; border-left: 9px solid #f6edd6;
+  transform: rotate(var(--a)) translateX(40px); filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.5)); }
+.bjf-mark.is-out { opacity: 0; }
+.bjf-mark[hidden] { display: none; }
+@media (max-width: 600px) { .bjf-say { max-width: min(270px, calc(100vw - 40px)); } .bjf-say p { font-size: 15px; } .bjf-tag b { font-size: 13px; } }
 `;
   document.head.appendChild(s);
 }
