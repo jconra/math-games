@@ -32,7 +32,7 @@ export function octDecode(u, v, hemi) {
 // cells, each `cell` pixels. Returns { colour, normal, radius, centre, grid, hemi }. Done in one go;
 // bakeImposterSteps below does the same a row of views at a time, for baking across frames.
 export function bakeImposter(renderer, object, opts) { const it = bakeImposterSteps(renderer, object, opts); for (;;) { const s = it.next(); if (s.done) return s.value; } }   // (for..of drops a generator's return value)
-export function* bakeImposterSteps(renderer, object, { grid = 12, cell = 128, hemi = true, upNormals = false, floor = null } = {}) {   // upNormals: foliage lit like the ground, both sides of a card
+export function* bakeImposterSteps(renderer, object, { grid = 12, cell = 128, hemi = true, upNormals = false, floor = null, into = null } = {}) {   // into: [colour, normal] render targets to bake into again (a graphics restore), not new ones   // upNormals: foliage lit like the ground, both sides of a card
   object.updateMatrixWorld(true);
   const box = new THREE.Box3().setFromObject(object), centre = box.getCenter(new THREE.Vector3()), ext = box.getSize(new THREE.Vector3());
   const radius = ext.length() / 2;
@@ -44,7 +44,7 @@ export function* bakeImposterSteps(renderer, object, { grid = 12, cell = 128, he
   // mipmaps keep far imposters from shimmering (a pre-filtered picture); WebGL1 needs a power-of-two edge for them
   const mips = renderer.capabilities.isWebGL2 || (size & (size - 1)) === 0;
   const mk = () => new THREE.WebGLRenderTarget(size, size, { minFilter: mips ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter, magFilter: THREE.LinearFilter, generateMipmaps: mips, format: THREE.RGBAFormat, depthBuffer: true, stencilBuffer: false });
-  const colourRT = mk(), normalRT = mk();
+  const [colourRT, normalRT] = into || [mk(), mk()];
   const scene = new THREE.Scene();
   const holder = new THREE.Group(); holder.position.copy(centre).negate();    // the tree centred on the origin
   scene.add(holder);
@@ -102,7 +102,7 @@ export function* bakeImposterSteps(renderer, object, { grid = 12, cell = 128, he
   done = true;
   } finally {
     renderer.localClippingEnabled = oldLocal;
-    if (!done) { for (const [o, m] of materials) o.material = m; renderer.setRenderTarget(oldTarget); renderer.setClearColor(oldClear, oldAlpha); holder.remove(object); if (parent) parent.add(object); colourRT.dispose(); normalRT.dispose(); }
+    if (!done) { for (const [o, m] of materials) o.material = m; renderer.setRenderTarget(oldTarget); renderer.setClearColor(oldClear, oldAlpha); holder.remove(object); if (parent) parent.add(object); if (!into) { colourRT.dispose(); normalRT.dispose(); } }
   }
   for (const [o, m] of materials) o.material = m;
   renderer.setRenderTarget(oldTarget); renderer.setClearColor(oldClear, oldAlpha);

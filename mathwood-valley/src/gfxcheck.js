@@ -4,7 +4,13 @@
 //     on the network is tried twice more (a short wait between) before giving up. What loads, and when, is unchanged:
 //     the retries live inside fetch and three's ImageLoader, so every loader in the game gets them.
 //   - the graphics card's context lost (a phone short of memory, or a driver reset) is kept for a restore, and on the
-//     restore every picture in the scene is marked to go up to the card again; both are logged.
+//     restore every picture in the scene is marked to go up to the card again, and what the game drew on the card
+//     itself is made again (world/gfxrestore.js: the land's shade, the trees' atlases, the shadow map, the GPU timer);
+//     all logged.
+//   - the pictures painted on 2D canvases (the code-built buildings' wood, stone and signs) are kept in main memory: on
+//     a phone the browser can wipe a canvas held on the graphics card when the card resets (going to another app and
+//     back), and a building re-sent from a wiped canvas came back black. If one is wiped anyway, the rider is saved
+//     and the page reloads at a quiet moment (GFX.onReload, set by main.js).
 // Installed on import (main.js imports this first, before anything starts loading).
 //   watchGraphics(renderer, { scenes }) -> GFX   (once the renderer is made)
 //   openGfxCheck({ renderer, quality, scenes, errors, panel, copy, onClose })   the panel (panel: shop.js makePanel, passed
@@ -14,8 +20,9 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { gpuMemory } from '../world/gpumem.js';
+import { runRestored } from '../world/gfxrestore.js';
 
-export const GFX = { failed: [], retries: 0, recovered: [], lost: [], restored: [], shaderErrors: [], uploads: [] };
+export const GFX = { failed: [], retries: 0, recovered: [], lost: [], restored: [], shaderErrors: [], uploads: [], rebuilt: [], canvasLost: 0, onReload: null, reloading: false };
 const TRIES = 2, WAIT = (n) => 350 * n * n;   // (two more tries: after 0.35 s, then 1.4 s)
 const now = () => +(performance.now() / 1000).toFixed(1);
 const short = (u) => { try { const x = new URL(String(u), location.href); return x.origin === location.origin ? x.pathname + x.search : x.href; } catch (e) { return String(u); } };
@@ -45,6 +52,20 @@ const kindOf = (u) => /\.(png|jpe?g|webp|gif|ktx2|avif)(\?|$)/i.test(u) ? 'pictu
       }
       GFX.retries++; await sleep(WAIT(n + 1));
     }
+  };
+}
+// ── the 2D canvases: kept in main memory (willReadFrequently), unless the caller says otherwise or it is already on the
+// page (a canvas shown on screen keeps the browser's choice). A canvas on the graphics card can be wiped when the card
+// resets; its 'contextlost' is counted, and a texture made from one can't be sent up again (see remark) ──────────────
+const LOST_CANVAS = new WeakSet(), SEEN_CANVAS = new WeakSet();
+if (typeof HTMLCanvasElement !== 'undefined') {
+  const P = HTMLCanvasElement.prototype, get = P.getContext;
+  P.getContext = function (type, opts) {
+    if (type !== '2d' || SEEN_CANVAS.has(this)) return get.call(this, type, opts);
+    SEEN_CANVAS.add(this);
+    const o = this.isConnected || (opts && 'willReadFrequently' in opts) ? opts : { ...(opts || {}), willReadFrequently: true };
+    this.addEventListener('contextlost', () => { LOST_CANVAS.add(this); GFX.canvasLost++; });
+    return get.call(this, type, o);
   };
 }
 // ── three's ImageLoader: every TextureLoader picture (the ground, the stamps, the rocks, the models' pictures where
@@ -106,7 +127,9 @@ export function watchGraphics(renderer, { scenes = () => [] } = {}) {
     const mem = gpuMemory(renderer); if (mem && mem.reset) mem.reset();
     const r = remark(scenes());
     GFX.restored.push(now()); GFX.uploads.push(r);
-    console.warn(`graphics: the context is back; ${r.marked} pictures marked to go up again${r.gone ? `, ${r.gone} with no pixels left` : ''}`);
+    GFX.rebuilt = runRestored();
+    console.warn(`graphics: the context is back; ${r.marked} pictures marked to go up again${r.gone ? `, ${r.gone} with no pixels left` : ''}${r.wiped ? `, ${r.wiped} wiped canvases` : ''}; made again: ${GFX.rebuilt.join(', ') || 'nothing'}`);
+    if (r.wiped && !GFX.reloading && GFX.onReload) { GFX.reloading = true; GFX.onReload(); }   // (pictures that can't come back: the page reloads, quietly)
   }, false);
   window.BM && (window.BM.gfx = GFX);
   return GFX;
@@ -126,15 +149,16 @@ function eachTexture(scenes, fn) {
   }
 }
 function remark(scenes) {
-  let marked = 0, gone = 0;
+  let marked = 0, gone = 0, wiped = 0;
   eachTexture(scenes, (t) => {
     if (t.isRenderTargetTexture) return;
     const im = t.image;
+    if (im && LOST_CANVAS.has(im)) wiped++;
     const has = im && (im.data || im.width > 0 || im.naturalWidth > 0 || (Array.isArray(im) && im.length) || (t.mipmaps && t.mipmaps.length));
     if (!has) { if (t.version > 0) gone++; return; }
     t.needsUpdate = true; marked++;
   });
-  return { marked, gone };
+  return { marked, gone, wiped };
 }
 
 // ── the shaders: samplers and uniform vectors each one uses, against the card's limits ──────────────────────────
@@ -204,6 +228,7 @@ export function gfxReport(o) {
   L.push(`Failed loads: ${GFX.failed.length}`); for (const f of GFX.failed) L.push(`  ${f.kind} ${f.url} : ${f.why} (after ${f.tries} retries, ${f.t}s)`);
   L.push(`Retries: ${GFX.retries}, recovered ${GFX.recovered.length}`); for (const f of GFX.recovered) L.push(`  ${f.kind} ${f.url} (try ${f.tries + 1})`);
   L.push(`Context lost: ${GFX.lost.length ? GFX.lost.join('s, ') + 's' : 'never'} · restored: ${GFX.restored.length ? GFX.restored.map((t, i) => `${t}s (${GFX.uploads[i].marked} pictures up again${GFX.uploads[i].gone ? ', ' + GFX.uploads[i].gone + ' with no pixels' : ''})`).join(', ') : 'never'}`);
+  L.push(`Made again after the restore: ${GFX.rebuilt.length ? GFX.rebuilt.join(', ') : GFX.restored.length ? 'nothing' : '-'} · canvases wiped: ${GFX.canvasLost}${GFX.reloading ? ' (reloading)' : ''}`);
   L.push(`Shader errors: ${GFX.shaderErrors.length}`); for (const s of GFX.shaderErrors) L.push(`  ${s.t}s ${s.text}`);
   L.push(`Game errors: ${F.errors.length}`); for (const e of F.errors.slice(-12)) L.push('  ' + String(e).slice(0, 200));
   L.push('Shaders (fragment samplers/vectors, vertex samplers/vectors):');
@@ -243,7 +268,7 @@ export function openGfxCheck({ renderer, quality, scenes = [], errors = [], onCl
   el.innerHTML = `<dl>${F.card.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>
     <h3 class="${GFX.failed.length ? 'bad' : ''}">Failed loads: ${GFX.failed.length}</h3>${list(GFX.failed, (f) => `${esc(f.kind)} ${esc(f.url)}: ${esc(f.why)}`, 'none')}
     <h3>Tried again: ${GFX.retries}, came good: ${GFX.recovered.length}</h3>${list(GFX.recovered, (f) => `${esc(f.url)} (try ${f.tries + 1})`, '')}
-    <h3 class="${GFX.lost.length ? 'bad' : ''}">Graphics lost: ${GFX.lost.length}, back: ${GFX.restored.length}</h3>
+    <h3 class="${GFX.lost.length ? 'bad' : ''}">Graphics lost: ${GFX.lost.length}, back: ${GFX.restored.length}</h3>${GFX.restored.length ? `<div class="ok">Made again: ${esc(GFX.rebuilt.join(', ') || 'nothing')}${GFX.canvasLost ? ` · <b>${GFX.canvasLost} canvases wiped</b>` : ''}</div>` : ''}
     <h3 class="${GFX.shaderErrors.length ? 'bad' : ''}">Shader errors: ${GFX.shaderErrors.length}</h3>${list(GFX.shaderErrors, (s) => esc(s.text.slice(0, 160)), '')}
     <h3 class="${errors.length ? 'bad' : ''}">Game errors: ${errors.length}</h3>${list(errors.slice(-6), (e) => esc(String(e).slice(0, 160)), '')}
     <h3>Busiest shaders (pictures / uniform vectors)</h3>${list(F.shaders.slice(0, 5), (s) => `<span class="${over(s, F.lim) ? 'bad' : ''}">${s.frag.samplers} / ${s.frag.vectors}</span>${!over(s, F.lim) && s.frag.samplers >= 16 ? ' <b>(at a phone\'s limit of 16)</b>' : ''} ${esc(s.name)}${s.used ? ' · ' + esc(s.used) : ''}`, 'none yet')}

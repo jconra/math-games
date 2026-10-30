@@ -181,13 +181,27 @@ export class Forest {
     const todo = this.species.slice();
     const self = this;
     const steps = (function* () { for (const sp of todo) { if (sp.bake) continue;   // brought already baked
- const it = bakeImposterSteps(self.renderer, sp.root, { grid: self.light ? Math.min(8, sp.grid || self.grid) : (sp.grid || self.grid), cell: sp.cell || self.cell, hemi: true, upNormals: !!(sp.upNormals || sp.soften || sp.shape), floor: sp.sink ? sp.baseY : null }); try { for (;;) { const s = it.next(); if (s.done) { sp.bake = s.value; break; } yield; } } finally { if (!sp.bake) it.return(); } } })();   // (abandoned: the half-done bake cleans up)
+ const it = bakeImposterSteps(self.renderer, sp.root, self.bakeOpts(sp)); try { for (;;) { const s = it.next(); if (s.done) { sp.bake = s.value; break; } yield; } } finally { if (!sp.bake) it.return(); } } })();   // (abandoned: the half-done bake cleans up)
     this.baking = steps;
+  }
+  bakeOpts(sp) { return { grid: this.light ? Math.min(8, sp.grid || this.grid) : (sp.grid || this.grid), cell: sp.cell || this.cell, hemi: true, upNormals: !!(sp.upNormals || sp.soften || sp.shape), floor: sp.sink ? sp.baseY : null }; }
+  // after a graphics restore (world/valley.js registers it): the atlases were pictures on the card, gone with it; baked
+  // again from the same models into the same render targets (so every material keeps its atlas), a little a frame in
+  // update. -> how many kinds are being baked again
+  rebake() {
+    if (this.disposed) return 0;
+    const todo = this.species.filter((sp) => sp.bake && sp.bake.targets && sp.root && !sp.rebaking);
+    if (!todo.length) return 0;
+    for (const sp of todo) sp.rebaking = true;
+    const self = this;
+    this.rebaking = (function* () { for (const sp of todo) { try { yield* bakeImposterSteps(self.renderer, sp.root, { ...self.bakeOpts(sp), into: sp.bake.targets }); } finally { sp.rebaking = false; } } })();
+    return todo.length;
   }
   get progress() { return this.species.filter(s => s.bake).length / this.species.length; }
 
   // called every frame; bakes a little, then keeps the tiles around `at` and the near/far split
   update(camera, target, at, dt) {
+    if (this.rebaking) { const t0 = performance.now(); while (performance.now() - t0 < 6) if (this.rebaking.next().done) { this.rebaking = null; break; } }
     if (this.baking) {
       const t0 = performance.now();
       while (performance.now() - t0 < 10) { if (this.baking.next().done) { this.baking = null; this.buildDraws(); this.ready = true; break; } }

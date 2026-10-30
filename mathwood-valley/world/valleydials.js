@@ -33,8 +33,9 @@ export function bindValley(G, { V, renderer }) {
     if (most < L.length - 1) G.limit('ratio', most, `this screen has ${dpr}x its pixels`); }
 
   // ── SHADOWS ──
-  const SH = V.SHADOW, sun = V.sun, map = renderer.shadowMap;
-  const canShadow = !!(SH && SH.on && map.enabled && sun.castShadow);
+  // (renderer.shadowMap read each time: three makes a new one when the graphics context is restored)
+  const SH = V.SHADOW, sun = V.sun;
+  const canShadow = !!(SH && SH.on && renderer.shadowMap.enabled && sun.castShadow);
   if (!canShadow) G.limit('shadows', 0, 'no shadow map in this load (the potato band): a reload brings it', true);
   let plantsCast = null;
   function plantShadows(on) {
@@ -51,12 +52,12 @@ export function bindValley(G, { V, renderer }) {
       // light is), then it isn't drawn again: every receiver falls outside that view, and three counts that as lit. The
       // light keeps following the sun (world/valley.js followShadow, paused)
       const c = sun.shadow.camera; c.left = -1; c.right = 1; c.top = 1; c.bottom = -1; c.near = 1; c.far = 1.001; c.updateProjectionMatrix();
-      map.autoUpdate = false; map.needsUpdate = true;
+      renderer.shadowMap.autoUpdate = false; renderer.shadowMap.needsUpdate = true;
       V.U.shadowRange.value = 0;   // (the trees' and plants' eased shadow edge off: all lit, as with no shadows)
       plantShadows(false);
       return;
     }
-    SH.paused = false; SH.range = v.range; map.autoUpdate = true;
+    SH.paused = false; SH.range = v.range; renderer.shadowMap.autoUpdate = true;
     if (sun.shadow.mapSize.x !== v.size) {
       sun.shadow.mapSize.set(v.size, v.size);
       if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }   // (made again at the new size when next drawn)

@@ -48,6 +48,7 @@
 // the loaded tier), ?auto (with ?q=: start at that tier but let the governor walk), ?govlog (each change in the console).
 import { TIERS, gpuName, recall, remember, saveTier, savedTier } from './quality.js';
 import { gpuMemory } from './gpumem.js';
+import { onGraphicsRestored } from './gfxrestore.js';
 
 // ── THE DIALS ────────────────────────────────────────────────────────────────────────────────────────────────────
 // lane: 'people' (live, out of sight) or 'scenery' (at a curtain); live: 'live', or 'hook' (the system that owns it
@@ -285,10 +286,17 @@ export function makeGovernor({ renderer, quality, W = null } = {}) {
   // draws, read back a few frames later; none where the browser doesn't offer them (most, for privacy)
   const gl = renderer.getContext(), gl2 = typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext;
   let tq = null;
-  try {
-    const ext = gl2 ? gl.getExtension('EXT_disjoint_timer_query_webgl2') : gl.getExtension('EXT_disjoint_timer_query');
-    if (ext) tq = { ext, open: [], q: null };
-  } catch (e) { tq = null; }
+  const timer = () => {
+    try {
+      const ext = gl2 ? gl.getExtension('EXT_disjoint_timer_query_webgl2') : gl.getExtension('EXT_disjoint_timer_query');
+      tq = ext ? { ext, open: [], q: null } : null;
+    } catch (e) { tq = null; }
+  };
+  timer();
+  // (a context lost takes its queries and the extension with it: asked of the new context they were INVALID_OPERATION
+  // and INVALID_ENUM, the Graphics check's error flag; dropped, and the extension fetched again once it is back)
+  const onLost = () => { tq = null; }, offRestored = onGraphicsRestored('GPU timer', () => { timer(); return !!tq; });
+  renderer.domElement.addEventListener('webglcontextlost', onLost, false);
   function gpuBegin() {
     if (!tq || tq.q || tq.open.length > 4) return;
     try { const { ext } = tq; tq.q = gl2 ? gl.createQuery() : ext.createQueryEXT(); if (gl2) gl.beginQuery(ext.TIME_ELAPSED_EXT, tq.q); else ext.beginQueryEXT(ext.TIME_ELAPSED_EXT, tq.q); } catch (e) { tq = null; }
@@ -532,7 +540,7 @@ export function makeGovernor({ renderer, quality, W = null } = {}) {
     paint();
   }
 
-  G.dispose = () => { disposed = true; clearTimeout(boxT); if (box) box.remove(); document.removeEventListener('visibilitychange', onVis); subs.clear(); };
+  G.dispose = () => { disposed = true; clearTimeout(boxT); if (box) box.remove(); document.removeEventListener('visibilitychange', onVis); renderer.domElement.removeEventListener('webglcontextlost', onLost, false); offRestored(); subs.clear(); };
   // (W.governor; only the frames W.render draws are measured, and the GPU's time for each)
   G.attach = (w) => { W = w; w.governor = G; const r0 = w.render; w.render = (...a) => { G.drew(); gpuBegin(); try { return r0(...a); } finally { gpuEnd(); } }; return G; };
   if (W) G.attach(W);

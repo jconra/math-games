@@ -67,6 +67,7 @@ import { makeLandforms } from './objects/landforms.js';
 import { makeLampUniforms, buildLampMap, lampStandard } from './objects/lampLight.js';
 import { makeNightLights } from './objects/nightLights.js';
 import { makeCodeBuildings } from './objects/codebuildings.js';
+import { onGraphicsRestored } from './gfxrestore.js';
 import { indoorPre, indoorPost, INDOOR_KEY } from './objects/indoorlight.js';
 import { IMPOSTER_CLOCK, IMPOSTER_RISE } from './objects/imposter.js';
 import { sunDirection, moonDirection, elevationOf, daylightAt, newDaylight } from './objects/daylight.js';
@@ -2531,6 +2532,12 @@ function shadeFrame(dt) {
   }
   SHADE.f = f;
 }
+// AFTER A GRAPHICS RESTORE (world/gfxrestore.js, run by src/gfxcheck.js): what was drawn on the card made again. The
+// shade blend drawn into its render target on the next frame; the shadow map drawn again (a paused one, the shadows dial
+// off, is drawn only when asked); the trees' and plants' atlases baked again into the same targets, a little a frame
+onGraphicsRestored('land shade', () => { if (!SHADE.pass || !SHADE.live) return false; SHADE.shown = -1; return true; });
+onGraphicsRestored('shadow map', () => { if (!renderer.shadowMap.enabled) return false; renderer.shadowMap.needsUpdate = true; return true; });
+onGraphicsRestored('tree atlases', () => { let n = 0; for (const f of [treeForest, coverForest]) if (f && f.rebake) n += f.rebake(); return n ? `${n} kinds` : false; });
 function dayFrame(dt, quiet = false) {
   if (DAY.auto) { const h = dt * 24 / (DAY.dayMin * 60); DAY.hour = (DAY.hour + h) % 24; DAY.t += h; DAY.dirty = true; }
   if (DAY.dirty) { DAY.dirty = false; applyDay(); if (DAY.show) DAY.show(); }

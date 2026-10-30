@@ -111,7 +111,16 @@ addEventListener('error', (e) => BM.errors.push(String(e.message)));
 const canvas = $('game');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: wantAntialias(), powerPreference: 'high-performance' });   // (off where the tier will be potato: forced, chosen, remembered for this card, or detected: world/quality.js)
 renderer.setSize(innerWidth, innerHeight);
-watchGraphics(renderer, { scenes: () => [W && W.scene] });   // (context lost and restored, shader errors: the menu's Graphics check, src/gfxcheck.js)
+const GFX = watchGraphics(renderer, { scenes: () => [W && W.scene] });   // (context lost and restored, shader errors: the menu's Graphics check, src/gfxcheck.js)
+// (pictures wiped with the graphics card that can't be sent up again: the rider saved, a short note, and the page loaded
+// again once no question is up)
+GFX.onReload = () => {
+  if (rider) saveRider(rider);
+  try { hud.toast('The graphics restarted, so the valley is reloading'); } catch (e) { /* (no HUD yet) */ }
+  const busy = () => state === 'boxes' || boxOpen || !!(BS && BS.active) || (state === 'play' && !!askingJob() && askingJob() !== 'panel');
+  const go = () => { if (busy()) return setTimeout(go, 1500); if (rider) saveRider(rider); location.reload(); };
+  setTimeout(go, 2500);
+};
 BM.gfxReport = () => gfxReport({ renderer, quality, scenes: [W && W.scene], errors: BM.errors });   // (the Copy text, for rigs)
 // (?perf counts every pass of a frame: the valley, then the six-shooter over it. Left to itself each render() would wipe
 // the count, and the readout would show only the gun's pass)
