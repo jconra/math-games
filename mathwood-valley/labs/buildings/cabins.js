@@ -1391,7 +1391,7 @@ function inside(c) {
   const half = L.partition ? (log ? T0 / 2 : 0.06) : 0;
   for (const [i, p] of L.pens.entries()) rooms.push({ name: p.name, x0: p.x0 + (L.partition && i === 1 ? half : T0), x1: p.x1 - (L.partition && i === 0 ? half : T0), z0: p.z0 + T0, z1: p.z1 - T0, ceil: L.CEIL, pen: p });
   if (L.wing) { const g = L.wing; rooms.push({ name: g.name, x0: g.x0 + T0, x1: g.x1 - T0, z0: g.front ? g.z0 - 0.02 : g.z0 + T0, z1: g.front ? g.z1 - T0 : g.z1 + 0.02, ceil: L.CEIL, wing: true }); }
-  if (L.lean) { const lt = L.lean; rooms.push({ name: lt.name, x0: lt.side === 'right' ? lt.x0 + 0.02 : lt.x0 + 0.1, x1: lt.side === 'left' ? lt.x1 - 0.02 : lt.x1 - 0.1, z0: lt.z0 + 0.1, z1: lt.side === 'back' ? lt.z1 + 0.02 : lt.z1 - 0.1, ceil: lt.low - 0.12, lean: true }); }
+  if (L.lean) { const lt = L.lean; rooms.push({ name: lt.name, x0: lt.side === 'right' ? lt.x0 + 0.02 : lt.x0 + 0.1, x1: lt.side === 'left' ? lt.x1 - 0.02 : lt.x1 - 0.1, z0: lt.z0 + 0.1, z1: lt.side === 'back' ? lt.z1 + 0.02 : lt.z1 - 0.1, ceil: lt.low - 0.12, lean: true, roofY: lt.y }); }
   for (const R of rooms) {
     // (a room's floor runs out under the walls' feet a little, so no gap shows along them)
     plankField(k, mul(T(0, L.FL, 0), RX(-Math.PI / 2)), { u0: R.x0 - 0.04, u1: R.x1 + 0.04, v0: -R.z1 - 0.04, v1: -R.z0 + 0.04, w: 0.17, t: 0.03, tint: FLOOR, nails: true, maxL: 4.2, step: 1.2, extra: { inside: true } });
@@ -1612,8 +1612,11 @@ export function buildCabin(recipeIn = {}, env = {}) {
     lightOpen.push({ c: ctr, u: al.map((q) => q * hw), v: [0, hh, 0], n: on, front: o.leaf === 'main', door2: o.leaf === 'back' });
   }
   // (a dogtrot's pens' doors open onto the breezeway, which is outdoors; a lean-to's room is indoors)
+  // (a lean-to's room reaches up under its sloping roof, to the roof's line there and no higher: the roof's top faces
+  // are the shell's, drawn always; a flat limit over the whole room once put the whole lean-to roof indoors, drawn only
+  // while the inside was loaded, so it came and went as the camera moved)
   const rooms = c.rooms.filter((q) => !q.open);
-  const inRoom = (x, y, z) => rooms.some((q) => x > q.x0 - 0.02 && x < q.x1 + 0.02 && z > q.z0 - 0.02 && z < q.z1 + 0.02 && y > L.FL - 0.6 && y < q.ceil + (q.lean ? 0.6 : 0.03));
+  const inRoom = (x, y, z) => rooms.some((q) => x > q.x0 - 0.02 && x < q.x1 + 0.02 && z > q.z0 - 0.02 && z < q.z1 + 0.02 && y > L.FL - 0.6 && y < (q.roofY ? q.roofY(x, z) - 0.02 : q.ceil + 0.03));
   const fill = (x, y, z, nx, ny, nz) => (inRoom(x + nx * 0.08, y + ny * 0.08, z + nz * 0.08) ? 0.15 * (1 - 0.3 * smooth01(y + ny * 0.08, 1.6, 3.0)) : 0);
   const light = new Light(occ, { inside: inRoom, fill, openings: lightOpen, lamps: c.lamps, base: 0.36, gain: 7.0 });
   const BAKED = ['wood', 'iron', 'stone', 'plaster'];
