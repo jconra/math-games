@@ -27,8 +27,8 @@ test('the tiers start where they always looked; potato starts bare', () => {
   for (const k of Object.keys(DIALS)) assert.equal(at('potato')[k], 0, `potato: ${k} bare`);
   // (world/valley.js TIER_SET, as it was)
   assert.equal(name('normal', 'ratio'), 1.5); assert.equal(name('gaming', 'ratio'), 2);
-  assert.deepEqual(name('normal', 'shadows'), { size: 1024, range: 80, plants: false });
-  assert.deepEqual(name('gaming', 'shadows'), { size: 2048, range: 150, plants: true });
+  assert.deepEqual(name('normal', 'shadows'), { size: 1024, range: 60, plants: false });
+  assert.deepEqual(name('gaming', 'shadows'), { size: 2048, range: 70, plants: true });
   assert.deepEqual(name('normal', 'grass'), { count: 7000, near: 70, radius: 140, farX: 3.1 });
   assert.deepEqual(name('gaming', 'grass'), { count: 30000, near: 100, radius: 290, farX: 3.1 });
   assert.deepEqual(name('normal', 'lawn'), { radius: 40, density: 1 }); assert.deepEqual(name('gaming', 'lawn'), { radius: 60, density: 1 });

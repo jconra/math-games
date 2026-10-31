@@ -159,9 +159,9 @@ const NIGHT_GRADE = { x: 1, y: 1, z: 1, w: 0 };
 export const TIER_SET = {
   potato: { ratio: 0.5, lite: true, paving3D: false, people: 6, coverFarX: 1.8, lawn: { radius: 0, density: 0 }, stones: 1500, treeShare: 0.45, shadow: null, forest: { imposterAt: 0, band: 0, grid: 8, cell: 192, detail: 'sparse' }, cover: { count: 2900, near: 0, radius: 90 },
             u: { wWaveOn: 0, stampFar: 12 }, checks: { stampOn: false, hexOn: false, farOn: false, wWaveOn: false, cloudsOn: false, beamsOn: false } },
-  normal: { ratio: 1.5, paving3D: true, people: 14, coverFarX: 3.1, lawn: { radius: 40, density: 1 }, stones: 14000, shadow: { range: 80, size: 1024, cover: false }, forest: { imposterAt: 150, band: 120, grid: 12, cell: 192, detail: 'sparse' }, cover: { count: 7000, near: 70, radius: 140 },
+  normal: { ratio: 1.5, paving3D: true, people: 14, coverFarX: 3.1, lawn: { radius: 40, density: 1 }, stones: 14000, shadow: { range: 60, size: 1024, cover: false }, forest: { imposterAt: 150, band: 120, grid: 12, cell: 192, detail: 'sparse' }, cover: { count: 7000, near: 70, radius: 140 },
             u: { wWaveOn: 1, stampFar: 30 }, checks: { stampOn: true, hexOn: true, farOn: false, wWaveOn: true, cloudsOn: true, beamsOn: true } },
-  gaming: { ratio: 2, paving3D: true, people: 22, coverFarX: 3.1, lawn: { radius: 60, density: 1 }, stones: 26000, shadow: { range: 150, size: 2048, cover: true }, forest: { imposterAt: 260, band: 140, grid: 14, cell: 192, detail: 'coarse' }, cover: { count: 30000, near: 100, radius: 290 },
+  gaming: { ratio: 2, paving3D: true, people: 22, coverFarX: 3.1, lawn: { radius: 60, density: 1 }, stones: 26000, shadow: { range: 70, size: 2048, cover: true }, forest: { imposterAt: 260, band: 140, grid: 14, cell: 192, detail: 'coarse' }, cover: { count: 30000, near: 100, radius: 290 },
             u: { wWaveOn: 1, stampFar: 73 }, checks: { stampOn: true, hexOn: true, farOn: true, wWaveOn: true, cloudsOn: true, beamsOn: true } },
 };
 
@@ -243,6 +243,7 @@ sky.uniforms.cloudCover.value = 0.64; sky.uniforms.cloudSoft.value = 0.39; sky.u
 const hemi = new THREE.HemisphereLight(0xcfe3ff, 0x6b5a44, 0.9); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff1dc, 2.4); sun.position.set(-300, 400, -200); scene.add(sun);
 const SHADOW = { on: !!TS.shadow, range: TS.shadow ? TS.shadow.range : 0 };
+const SHADOW_PUSH = { normal: 1.5, depth: 1.5 };   // how far shadows are pushed off a surface, in map pixels
 if (TS.shadow) {
   renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   sun.castShadow = true; sun.shadow.mapSize.set(TS.shadow.size, TS.shadow.size); sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.4;
@@ -265,6 +266,9 @@ function followShadow() {
   at.addScaledVector(SUN_X, Math.round(px / texel) * texel - px).addScaledVector(SUN_Y, Math.round(py / texel) * texel - py);
   c.left = -R; c.right = R; c.top = R; c.bottom = -R; c.near = 1; c.far = 2000; c.updateProjectionMatrix();
   sun.target.position.copy(at); sun.position.copy(at).addScaledVector(SUN_AT, 900);
+  // (the pushes that stop a surface shadowing itself, in step with a map pixel's size: fixed at 0.4 m and about 1.2 m along the
+  // sun's line, they started every shadow well clear of what cast it: the bright gap at a rock's or a tree's foot)
+  sun.shadow.normalBias = texel * SHADOW_PUSH.normal; sun.shadow.bias = -texel * SHADOW_PUSH.depth / (c.far - c.near);
   U.shadowRange.value = R; U.shadowAt.value.copy(at);
 }
 
