@@ -164,7 +164,8 @@ function indexFor(planting, index) {
 // Each paint stroke lays a grid over the ground, one plant a grid square (squares 1 / sqrt(density) m across), each
 // plant somewhere at random inside its square, kept if it is under the brush's path. So a path that crosses itself
 // still has one plant a square, not two. Everything about a plant comes from (the stroke's seed, its grid square).
-// A plant is dropped where a LATER clear stroke went over it, or inside a placed item's cleared circle.
+// A plant is dropped where a LATER clear stroke went over it. (A placed item's cleared circle keeps out only what grows by
+// itself: what is planted by hand goes where it was put, the game's maker's rule.)
 // at { x, z }, radius: only the plants within radius (the whole planting when `at` is left out); far (>= 1): past radius
 // they carry on out to radius x far, thinning like the plants that grow by themselves (kept with chance (radius / d)^2,
 // each one bigger by the square root of that, at most 3x, standing in for the ones left out).
@@ -213,7 +214,7 @@ export function paintedPlants(planting, index, { at = null, radius = Infinity, f
     const base = bases[s];
     // how thinned the nearest plants here are, as a level: only the picks of blocks that big need looking at
     const m = n2 > R2 ? Math.min(LEVELS, Math.floor(Math.log2(n2 / R2) / 2)) : 0;
-    const segs = e.segs, clears = c.clears, items = c.items;
+    const segs = e.segs, clears = c.clears;
     const I0 = Math.floor(bx0 / h) >> m, I1 = Math.floor(bx1 / h) >> m, J0 = Math.floor(bz0 / h) >> m, J1 = Math.floor(bz1 / h) >> m;
     tries += (I1 - I0 + 1) * (J1 - J0 + 1) * (m + 1);
     if (tries > MAX_TRIES) { console.warn('planting: too many plants to look at (' + Math.round(tries) + '); the ' + (at ? 'farthest' : 'rest') + ' left out'); return out; }
@@ -239,7 +240,6 @@ export function paintedPlants(planting, index, { at = null, radius = Infinity, f
       if (best > r2 || (best > rc2 && draw(hh, 4) >= edgeKeep(Math.sqrt(best), r))) continue;
       let gone = false;
       for (let k = clears.length - 1; k >= 0 && clears[k].s > s; k--) if (dist2(clears[k], x, z) <= clears[k].r2) { gone = true; break; }
-      if (!gone) for (let k = 0; k < items.length; k++) { const it = items[k], ix = x - it.x, iz = z - it.z; if (ix * ix + iz * iz <= it.c2) { gone = true; break; } }
       if (gone) continue;
       out.push({ x, z, sp, scale: base * (0.75 + 0.5 * draw(hh, 5)) * grow, yaw: draw(hh, 6) * Math.PI * 2 });
       if (out.length >= PLANT_CAP) { console.warn('planting: over ' + PLANT_CAP + ' painted plants; the ' + (at ? 'farthest' : 'rest') + ' left out'); return out; }
