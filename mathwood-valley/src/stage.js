@@ -76,6 +76,7 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makePerson } from './actors/folk.js';
 import { makeStageMusic, makeRoom, SONGS, loadFiddle, loadBanjo } from './audio/stagemusic.js';
+import { bakedBand } from './audio/bake.js';
 import { bandChoices, bandLine, soundThrough, songLines, nextSong } from './bandplan.js';
 import { playEnding } from './audio/songend.js';
 import { howdy } from './ui/howdy.js';
@@ -123,6 +124,7 @@ export const STAGE = {
   // while a note sounded within `hold` or the next comes within `gap` (a rest inside his turn), and lowers it after
   bowing: { up: 0.6, hold: 0.45, gap: 1.6, ending: 0.28 },   // ending: the clip's speed through the last chord's long bow
   room: 0.6,              // how much of the room's echo
+  baked: true,            // the piano's and the box's notes from src/audio/bake.js (false: every note live, for a rig to compare)
   // the positioned sound: full at refDistance metres, softening as 1 / distance past it (rolloff: how fast)
   ref: 3, rolloff: 1.1,
   muffle: { from: 20, to: 250, hz: 1500 },   // the far sound loses its highs (air, the buildings): open at `from` m, down
@@ -153,7 +155,7 @@ const PROMPT = 'Ask the band for a song';
 export function makeStage({ W, folk, audio, camera = null, scene = W.scene, speak = null }) {
   let disposed = false, made = null, making = null, visible = false, music = null, gain = 0, hz = 20000, distance = Infinity;
   let hall = null, findT = 0, frame = null, unframe = null, walls = null, spots = null, middle = null, front = null, ways = [], hear = false, inside = false, through = 0;
-  let songI = 0, intro = true, asked = 0, askT = 0, resting = false;   // (which of SONGS; a song asked for starts without the piano's intro line)
+  let songI = Math.max(0, SONGS.indexOf(nextSong({ played: [] }))), intro = true, asked = 0, askT = 0, resting = false;   // (which of SONGS; a song asked for starts without the piano's intro line)
   // a song's course: when it began (ctx time of its first beat), how many lines it goes on, the seconds of it still to
   // play (kept over a pause), the songs played (for the next pick); its end: the phase, the last chord's time, the next
   // song and when it starts, whether it has been named yet
@@ -350,6 +352,7 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
     bus = { ctx, fade, muffle, harp, harpIn, pianoIn, boxIn, fiddleIn, banjoIn, roomIn, fiddleKit: null, loading: null, nodes: [fade, muffle, harp, piano, box, fid, ban, echo, wet, harpIn, pianoIn, boxIn, fiddleIn, banjoIn, roomIn, room.output], sent: null,
       at: [[harp, () => spots.harmonica, 1.55], [piano, () => spots.piano, 1.0], [box, () => spots.drummer, 0.3], [fid, () => spots.fiddler, 1.45], [ban, () => spots.banjo, 0.75], [echo, () => middle, 1.5]] };
     loadKit();
+    if (STAGE.baked && typeof OfflineAudioContext !== 'undefined') try { bus.baked = bakedBand(ctx.sampleRate); } catch (e) { console.warn('Mathwood Valley: no baked notes', e); }
     // when the sound goes to sleep (a pause, a panel, a hidden tab), the band stops and lets its notes go; it starts a
     // fresh line when the sound wakes. (Asleep, the sound's clock stands still while the notes' own timers don't, so the
     // notes made ahead would be cut off by their own timers meanwhile, and leave a gap after the pause.)
@@ -375,8 +378,9 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
     // (the lines from what is left of it: a written tune to the end of a round, at least once round)
     lines = song.round ? (intro ? 1 : 0) + Math.max(1, Math.round((left - open) / (song.round * lineSecs))) * song.round : Math.max(1, Math.round(left / lineSecs));
     const kit = fiddleOK() ? bus.fiddleKit : null; musicFiddled = !!kit;
+    if (bus.baked) try { bus.baked.start(song.id); } catch (e) { console.warn('Mathwood Valley: baking the notes', e); }
     music = makeStageMusic(bus.ctx, { harp: bus.harpIn, piano: bus.pianoIn, box: bus.boxIn, room: bus.roomIn, seed: 1 + Math.floor(Math.random() * 1e6), song: song.id, intro, fiddle: bus.fiddleIn, fiddleKit: kit,
-      banjo: bus.banjoIn, banjoKit: STAGE.banjo ? bus.banjoKit || null : null });
+      banjo: bus.banjoIn, banjoKit: STAGE.banjo ? bus.banjoKit || null : null, baked: bus.baked || null });
     songT0 = at != null ? at : bus.ctx.currentTime + 0.2;
     music.start(songT0);
   }
@@ -610,7 +614,7 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
     fiddler: fState, fiddleLifts: fLifts, banjoist: made ? made.banjo.clip : null, banjoIn: STAGE.banjo, fiddleIn: fiddleOK(), fiddleKit: !!(bus && bus.fiddleKit), fiddleLoadMs: bus ? bus.loadMs || null : null, fiddling: musicFiddled && !!music,
     endingFiddle: !!(ending && ending.fiddle), fiddleKitMB: bus && bus.fiddleKit ? +(bus.fiddleKit.reduce((n, x) => n + x.buf.length * x.buf.numberOfChannels * 4, 0) / 1048576).toFixed(2) : null,
     phase, played: played.slice(-6), next: phase === 'end' && nextI != null ? SONGS[nextI].id : null, lines, songAt: songT0, endAt, nextAt, left: left == null ? null : +left.toFixed(1),
-    duck: +duck.toFixed(3), now: bus ? bus.ctx.currentTime : null });
+    duck: +duck.toFixed(3), now: bus ? bus.ctx.currentTime : null, baked: bus && bus.baked ? bus.baked.stats() : null });
   // (rigs) the song ends at the end of the line playing now, as it would on its own
   S.endSong = () => {
     if (!music || !bus || phase !== 'play') return false;

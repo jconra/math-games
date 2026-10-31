@@ -360,6 +360,7 @@ export function voicePatch(patch, { semi = 0, gain = 1, len = null } = {}) {
   return { ...patch, nodes };
 }
 
+export const rigSwitches = { offlineLifetimes: false };
 // opts.at — absolute ctx time to start at, for SCHEDULED playback. Web Audio can place a note on
 // the sample; a JS timer cannot, and a sequencer driven by timers audibly wobbles. Everything
 // downstream already derives its timing from t0, so this is the only place it needs to know.
@@ -434,6 +435,11 @@ export function playPatch(ctx, noise, dest, reverbInput, patch, onEnded, opts = 
       if (p && typeof p.setTargetAtTime === 'function') { try { p.setTargetAtTime(v, ctx.currentTime, 0.05); } catch (e) {} }
     },
   };
+  // (a rig's switch: an offline render ends each voice when a live one would end, so its cost means what it does live)
+  if (rigSwitches.offlineLifetimes && typeof ctx.startRendering === 'function') {
+    const autoT = patchAutoStopTime(patch);
+    if (autoT != null) sources.forEach(src => { try { src.stop(t0 + autoT + 0.27); } catch (e) {} });
+  }
   // finite (one-shot) patches tear themselves down after the last envelope — live ctx only
   // (offline render contexts have startRendering(); they must play the full render length)
   if (typeof ctx.startRendering !== 'function') {

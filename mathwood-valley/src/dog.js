@@ -24,7 +24,7 @@ export const DOG = {
   sitAfter: 1.2,                 // seconds after the player stops before it sits
   lieAfter: 14,                  // ... and before it lies down (counted from when it stopped)
   near: 1.1,                     // it stops this close to its spot
-  giveUp: 0.7, headway: 0.35,    // seconds of getting nowhere (nearer by under this share of its pace) before it gives up and sits
+  giveUp: 1.2, wake: 1.5,        // seconds of getting no nearer to its spot before it gives up and sits; m the one it follows must move to wake it
   top: 16,                       // its fastest (m/s: a horse at full gallop is 13; past about 4.6 m/s for the shiba and
                                  // 6.8 for the husky its legs can't keep up, so its feet slide a little)
   lost: 70,                      // further than this behind: brought round out of sight
@@ -75,7 +75,7 @@ export function makeDog({ W, scene, animals, kind = 'shiba', name = 'Dog', follo
   let x = 0, z = 0, heading = 0, speed = 0, stillT = 0, side = 1, lead = null, leadSpeed = 0;
   let pose = 'stand', poseT = 0, headUp = 0;            // pose: standing (or moving), sitting or lying; poseT: how long
   const last = new THREE.Vector3(), tmp = new THREE.Vector3(), head = new THREE.Vector3();
-  let flipT = 0, stuckT = 0, gaveUp = false;
+  let flipT = 0, stuckT = 0, gaveUp = false, bestD = Infinity, upX = 0, upZ = 0;
   let started = false, disposed = false;   // (disposed: the ride ended while the dog was still loading; it never arrives)
   D.ready = animals.need(kind).then(() => {
     if (disposed) return;
@@ -144,8 +144,13 @@ export function makeDog({ W, scene, animals, kind = 'shiba', name = 'Dog', follo
     if (d > C.near) target = Math.min(C.top, leadSpeed * (d > 3 ? 1.15 : 0.95) + Math.max(0, d - C.near) * 1.4);
     if (leadSpeed < 0.3 && d < C.near + 0.8) target = 0;
     // given up on a spot it can't reach (a chair in the way): it stays and sits until the one it follows moves off
-    if (leadSpeed > 0.5) { gaveUp = false; stuckT = 0; }
+    if (gaveUp && Math.hypot(L.x - upX, L.z - upZ) > C.wake) gaveUp = false;   // (only a real move wakes it: not a jiggle)
     if (gaveUp) target = 0;
+    // the one it follows standing still, and the dog getting no nearer than its best so far: it gives up. (Its best, not this
+    // moment's headway: sliding to and fro along a counter makes headway every other moment, for ever.)
+    if (leadSpeed >= 0.3 || target === 0) { stuckT = 0; bestD = d; }
+    else if (d < bestD - 0.2) { bestD = d; stuckT = 0; }
+    else { stuckT += dt; if (stuckT > C.giveUp) { gaveUp = true; upX = L.x; upZ = L.z; stuckT = 0; target = 0; } }
     // somewhere to go: up it gets (the clips blend from sitting or lying into its pace)
     if (target > 0) { stillT = 0; pose = 'stand'; poseT = 0; }
     speed = target > speed ? Math.min(target, speed + 14 * dt) : Math.max(target, speed - 12 * dt);
@@ -155,9 +160,6 @@ export function makeDog({ W, scene, animals, kind = 'shiba', name = 'Dog', follo
       for (const t of [0, 0.5, -0.5, 1, -1, 1.6, -1.6]) { const g = want + t; if (!W.blocked(x + Math.sin(g) * 1, z + Math.cos(g) * 1)) { h = g; break; } }
       heading += wrap(h - heading) * (1 - Math.exp(-9 * dt));
       walk(heading, speed * dt);
-      // no headway toward its spot while the one it follows stands still: never walking on the spot
-      const nearer = d - Math.hypot(goal.x - x, goal.z - z);
-      if (leadSpeed < 0.3 && target > 0) { stuckT = nearer < speed * dt * C.headway ? stuckT + dt : Math.max(0, stuckT - dt); if (stuckT > C.giveUp) { gaveUp = true; stuckT = 0; speed = 0; } }
     } else if (toLead > 0.6 && pose === 'stand') {                         // stopped: turned toward the one it follows
       heading += wrap(Math.atan2(L.x - x, L.z - z) - heading) * (1 - Math.exp(-3 * dt));
     }

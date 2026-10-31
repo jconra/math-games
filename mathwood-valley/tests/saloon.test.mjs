@@ -75,7 +75,6 @@ test('the last chord: the home note in the harmonica\'s range, on the home chord
     if (H.under != null) assert.ok(H.harp - H.under >= 3 && H.harp - H.under <= 5);
   }
   assert.equal(homeOf('easy').harp % 12, 7, 'Easy Afternoon ends on G');
-  assert.equal(homeOf('lonesome').root % 12, 4, 'Lonesome Trail on E');
   assert.equal(homeOf('soldiers').root % 12, 9, "Soldier's Joy (in D, played down a fourth) on A");
 });
 
