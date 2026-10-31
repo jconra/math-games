@@ -7,7 +7,7 @@ loads whichever the browser can play (src/audio/ambience.js). Each was trimmed, 
 through a low-pass so it sounds far off. Everything else the game sounds like (hooves,
 hammering, sawing, the creek, a pig's grunt, the music) is made in the browser, no recordings. The voice clips in voice/ (the player's hyah, whoa, yeehaw,
 howdy and the rest, and the men's thank-yous, the bandits' lines and the store customers' words) were recorded by the
-game's maker. So were the read-aloud clips in read/ (the numbers 0 to 20, the tens, the tens and ones cut from numbers
+game's maker. The women's voices there (w_*: a woman rider's shouts; t_*: a townswoman's lines; 52 clips, about 520 KB as .ogg, 390 KB as .m4a) were made with ElevenLabs (designed voices), the game maker's plan. So were the read-aloud clips in read/ (the numbers 0 to 20, the tens, the tens and ones cut from numbers
 like "thirty-two", "one hundred" and "and", the card words such as "what comes after", "take away" and "how many
 dots?", and "That's right!", "Not that one." and "Count 'em again."): src/audio/readaloud.js joins them into each
 Counting, Adding and Taking away card's line. Each was cut tight, had the rumble below 90 Hz taken off, was faded at

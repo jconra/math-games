@@ -33,7 +33,7 @@
 //   const LJ = makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, refresh, voice, quiet, open, decline, picked })
 //     open(): false once the day's shift is done (src/shifts.js): no loot is loaded till it is true again (decline():
 //     the deputy's polite no, main.js; the card by a camp says so)
-//     voice(kind, who): a recorded line from a townsman ('mystuff', 'thanks': src/audio/shouts.js S.say; who: { at,
+//     voice(kind, who): a recorded line from a townsperson ('mystuff', 'thanks': src/audio/shouts.js S.say; who: { at,
 //     male, id }); quiet(): true while another job has the HUD's card (this job's card stays down then); town(): the
 //     town's people (src/townpeople.js) or null: the folks are townsfolk borrowed from it (already walking over, or out
 //     of the nearest door) and given back to walk home
@@ -600,7 +600,7 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
     if (!c) return;
     bubble = { c, t: Math.max(2.8, 1.2 + text.length * 0.05) };
     card.innerHTML = `<b>${esc(c.who.rep)}</b><p>${esc(text)}</p>`; card.hidden = false;
-    if (clip && voice && !c.who.she) voice(clip, { at: () => ({ x: c.x, z: c.z }), male: true, id: c.who.rep });
+    if (clip && voice) voice(clip, { at: () => ({ x: c.x, z: c.z }), male: !c.who.she, id: c.who.rep });
   }
   function hideBubble() { bubble = null; card.hidden = true; }
   const head = new THREE.Vector3();

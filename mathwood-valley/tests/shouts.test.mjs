@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { SHOUTS, VOICE_CLIPS, JINGLE, makeShoutBrain, pickShout, isMale } from '../src/audio/shouts.js';
+import { SHOUTS, VOICE_CLIPS, JINGLE, makeShoutBrain, pickShout, isMale, isWoman, clipsToLoad } from '../src/audio/shouts.js';
 import { JOB_FOLK } from '../src/jobfolkplan.js';
 import { FOLK } from '../src/math/wordproblems.js';
 import { CLIP_SLOTS, slotFiles } from '../src/audio/clipslots.js';
@@ -16,8 +16,8 @@ const MAN = { male: true, at: { x: 0, z: 0 } }, WOMAN = { male: false, at: { x: 
 test('every voice clip is in sounds/voice as .ogg and .m4a; every clip but the ones kept for later is played; nothing else is shipped', () => {
   for (const name of Object.keys(VOICE_CLIPS)) for (const ext of ['.ogg', '.m4a']) assert.ok(fs.existsSync(new URL(name + ext, VOICE)), name + ext);
   const used = new Set();
-  for (const [k, K] of Object.entries(SHOUTS.kinds)) for (const [n] of K.clips) { assert.ok(VOICE_CLIPS[n], k + ': ' + n); used.add(n); }
-  for (const [n] of SHOUTS.morning.clips) { assert.ok(VOICE_CLIPS[n], n); used.add(n); }
+  for (const [k, K] of Object.entries(SHOUTS.kinds)) for (const [n] of [...K.clips, ...(K.her || [])]) { assert.ok(VOICE_CLIPS[n], k + ': ' + n); used.add(n); }
+  for (const [n] of [...SHOUTS.morning.clips, ...SHOUTS.morning.her]) { assert.ok(VOICE_CLIPS[n], n); used.add(n); }
   for (const n of Object.keys(VOICE_CLIPS)) assert.ok(used.has(n) !== SHOUTS.unused.includes(n), n + (used.has(n) ? ' is played' : ' is played somewhere, or listed as kept for later'));
   assert.deepEqual(SHOUTS.unused, []);   // (mystuff_1 is Loot the gang's now)
   assert.ok(SHOUTS.kinds.mystuff.him && SHOUTS.kinds.mystuff.clips[0][0] === 'mystuff_1');
@@ -30,7 +30,7 @@ test('every voice clip is in sounds/voice as .ogg and .m4a; every clip but the o
 test('the voice files are small', () => {
   let bytes = 0;
   for (const f of fs.readdirSync(VOICE)) if (f.endsWith('.ogg')) bytes += fs.statSync(new URL(f, VOICE)).size;
-  assert.ok(bytes < 1200 * 1024, `the .ogg set is ${Math.round(bytes / 1024)} KB`);
+  assert.ok(bytes < 1600 * 1024, `the .ogg set is ${Math.round(bytes / 1024)} KB`);
 });
 
 test('pickShout never picks what it is told to avoid, unless nothing else is left', () => {
@@ -134,11 +134,12 @@ test('the first hello of a ride is sometimes a good morning, the rest are howdie
   const C = makeShoutBrain(dice(0, 0.9, 0)); C.ask('hello', 0); const c = C.next(1); assert.match(c.name, /^(howdy|howyado)/);
 });
 
-test("other people's lines are the maker's voice: only a man says them, from where he is", () => {
+test("other people's lines: a man's or a woman's by who says them, from where they are", () => {
   for (const k of ['gotme', 'huh', 'thanks', 'thanksStore', 'niceday', 'whatchagot']) {
     assert.ok(SHOUTS.kinds[k].him, k + ' is said by another person');
     const B = makeShoutBrain(dice(0));
-    assert.equal(B.ask(k, 0, { who: WOMAN, sure: true }), false, k + ': never a woman');
+    assert.equal(B.ask(k, 0, { who: WOMAN, sure: true }), k !== 'gotme', k + (k === 'gotme' ? ": the bandit's line is the men's" : ': a woman too'));
+    B.queue.length = 0;
     assert.equal(B.ask(k, 0, { who: null, sure: true }), false, k + ': never nobody');
     assert.equal(B.ask(k, 0, { who: MAN, sure: true }), true, k + ': a man');
   }
@@ -171,4 +172,32 @@ test('thanks: nearly always at a job end, about half the time at the store with 
   assert.equal(SHOUTS.kinds.thanks.clips.length, 8);
   const B = makeShoutBrain(dice(0)); B.ask('thanks', 0, { who: MAN }); const a = B.next(0.3); B.ended(1);
   B.ask('thanksStore', 60, { who: MAN }); const b = B.next(60.3); assert.notEqual(a.name, b.name);
+});
+
+test("the women's voices: a woman rider's clips are the w_ set and exist, a man's are as they were, none from a rejected voice", () => {
+  assert.equal(isWoman({ outfit: 'casual_f' }), true); assert.equal(isWoman({ outfit: 'suit_m' }), false); assert.equal(isWoman(null), false);
+  const hers = [], his = [];
+  for (const K of Object.values(SHOUTS.kinds)) if (!K.him) { assert.ok(K.her.length); hers.push(...K.her); his.push(...K.clips); }
+  hers.push(...SHOUTS.morning.her); his.push(...SHOUTS.morning.clips);
+  for (const [n] of hers) { assert.match(n, /^w_/); for (const ext of ['.ogg', '.m4a']) assert.ok(fs.existsSync(new URL(n + ext, VOICE)), n + ext); }
+  for (const [n] of his) assert.doesNotMatch(n, /^[wt]_/);
+  // each rider's game fetches only that rider's shouts; both hear the townswomen and the men
+  const her = clipsToLoad(true), him = clipsToLoad(false);
+  assert.ok(!him.some((n) => n.startsWith('w_')), "a man doesn't fetch the woman rider's clips");
+  assert.ok(!her.includes('hyah_1') && her.includes('w_hyah_1'), "a woman doesn't fetch the man's shouts");
+  for (const L of [her, him]) assert.ok(L.includes('t_thankya_1') && L.includes('thankya_kindly_1'));
+  // the rig's sources: voice A3 for the rider, C2 for the townswoman, nothing else
+  const rig = new URL('file:///home/bitwizard/pw/elevenlabs/rig/womenclips.json');
+  if (fs.existsSync(rig)) for (const { name, src } of JSON.parse(fs.readFileSync(rig))) {
+    assert.match(src, name.startsWith('w_') ? /_A3_\d$/ : /_C2_\d$/, name + ' from ' + src);
+  }
+  // the brain: a woman rider's spur, hello and thanks; a man's unchanged; a townswoman in a man rider's game
+  const W = makeShoutBrain(dice(0)); W.woman = true; W.ask('spur', 0, { sure: true }); assert.match(W.next(1).name, /^w_/);
+  const M = makeShoutBrain(dice(0)); M.ask('spur', 0, { sure: true }); assert.doesNotMatch(M.next(1).name, /^[wt]_/);
+  const T = makeShoutBrain(dice(0)); T.ask('thanks', 0, { who: WOMAN, sure: true }); assert.match(T.next(1).name, /^t_/);
+  const N = makeShoutBrain(dice(0)); N.ask('thanks', 0, { who: MAN, sure: true }); assert.doesNotMatch(N.next(1).name, /^[wt]_/);
+  // a phrase's first take about twice as often
+  const first = SHOUTS.kinds.spur.her.find(([n]) => n === 'w_hyah_1'), next = SHOUTS.kinds.spur.her.find(([n]) => n === 'w_hyah_2');
+  assert.equal(first[1], next[1] * 2);
+  assert.ok(VOICE_CLIPS.w_easynow_1 < VOICE_CLIPS.w_hyah_1, 'the whisper is quieter');
 });

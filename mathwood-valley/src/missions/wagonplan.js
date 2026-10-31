@@ -116,6 +116,7 @@ export const AMBUSH = {
   // take's words; then helpRest s of quiet before the next. With no sound the bubble shows "Help!" alone
   helpClips: slotFiles('helpBandits'),
   helpTakes: slotTakes('helpBandits'),
+  helpTakesHer: slotTakes('helpWoman'),   // (a woman driving)
   helpRest: 2.5,
   spawn: [70, 190],   // m along the road from the wagon the gang rides in from (the nearest out of the player's sight)
   hold: 26,           // m: wagons and travellers coming up behind (or toward) a held-up wagon wait this far short of it
@@ -126,8 +127,7 @@ export const AMBUSH = {
   // square (riding there is part of the job: not too long); none on the road just then: one is sent there, out of
   // sight, at one of `send` m out from the square (either side); `again`: s after one ends before the next is sent
   boardFar: 330, send: [210, 240, 270, 300, 190], again: 20,
-  // the driver's shout in his bubble with no recorded take to go with it (no sound, or a woman driving: the game maker's voice
-  // is a man's, src/audio/shouts.js)
+  // the driver's shout in the bubble with no recorded take to go with it (no sound)
   words: { help: 'Help!' },
 };
 // how many riders ride up for a gang
@@ -185,16 +185,20 @@ export const HOLDUP = {
   // picked at random; `air` of them into the air; `ping`: a shot at the wagon that glances off the iron tyre instead
   shots: { every: 4.5, air: 0.55, near: 26, ping: 0.2, clear: 3 },
   // the driver's thank-you at the end: one of the game maker's recorded takes (src/audio/shouts.js VOICE_CLIPS), its own words in
-  // his bubble, never the same words twice running. A woman driving: the words alone
+  // his bubble, never the same words twice running. A woman driving: thanksHer
   thanks: [
     { clip: 'thankya_kindly_1', says: 'Thank ya kindly!' }, { clip: 'thankya_kindly_2', says: 'Thank ya kindly!' },
     { clip: 'thankya_kindly_3', says: 'Thank ya kindly!' }, { clip: 'thankya_partner_1', says: 'Aw, thank ya, partner!' },
     { clip: 'obliged_1', says: 'Aw, much obliged!' }, { clip: 'obliged_2', says: 'Much obliged!' },
     { clip: 'obliged_partner_1', says: 'Much obliged, partner!' }, { clip: 'lifesaver_1', says: "You're a real life saver!" },
   ],
+  thanksHer: [
+    { clip: 't_thankya_1', says: 'Thank ya kindly.' }, { clip: 't_obliged_1', says: 'Much obliged.' }, { clip: 't_lifesaver_1', says: "You're a real life saver!" },
+  ],
   // the box grabbed: he's all right and says so (no take of this: the words alone), then his recorded thanks for trying
   grabbed: "I'm all right, partner! They only got the strongbox.",
   grabbedThanks: { clip: 'obliged_partner_1', says: 'Much obliged, partner!' },
+  grabbedThanksHer: { clip: 't_obliged_1', says: 'Much obliged.' },
 };
 // how many waves a hold-up has, for this rider (the shifts' pace: 2 to 4)
 export const holdUpWaves = (rider) => shiftLength(rider, 'wagon');
@@ -209,8 +213,8 @@ export function wearRate(per, waves) {
 // the health after dt seconds with `loose` bandits loose (never under 0)
 export const wearStep = (health, loose, rate, dt) => Math.max(0, health - Math.max(0, loose) * rate * Math.max(0, dt));
 // the driver's thank-you take: never the same words as the last one (last: the words said last time)
-export function pickThanks(last = null, rand = Math.random) {
-  const L = HOLDUP.thanks, ok = L.filter((t) => t.says !== last);
+export function pickThanks(last = null, rand = Math.random, L = HOLDUP.thanks) {
+  const ok = L.filter((t) => t.says !== last);
   const from = ok.length ? ok : L;
   return from[Math.floor(rand() * from.length) % from.length];
 }

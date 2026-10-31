@@ -52,7 +52,7 @@
 //     delivery, rooms } (each returns the job or null; rooms: the town's rooms, src/townrooms.js, where the storekeeper and
 //     the sheriff stand); actions: { sheriff(), stable() } (open the sheriff's desk, the stable's counter); onTalk(what, id): a
 //     person's hello ('hello'), the walking-away toast ('leave') and a person's thank-you ('thanks'), for the player's
-//     own howdy and see-ya and the men's recorded thanks and goodbyes (shouts.js); id: the person; who: { at, male }
+//     own howdy and see-ya and the person's recorded thanks and goodbyes (shouts.js); id: the person; who: { at, male }
 //   onRing(at): the smith's hammer meeting his anvil, at { x, z } (the game rings it: src/audio/ambience.js anvil)
 //   JF.update(dt, { hidden })   each frame while riding, before the doors are looked at (hidden: a panel or the cabin is
 //                       up: the tags and the speech card are put away and the people wait)
@@ -114,7 +114,7 @@ export const STAND = {
 };
 
 // a person as a voice: where they stand, and whether he is a man (the recorded voices are the game maker's: men only)
-const voiceOf = (r) => ({ at: () => ({ x: r.x, z: r.z }), male: !!(r.def && r.def.look && /_m$/.test(r.def.look.outfit || '')) });
+const voiceOf = (r) => { const o = (r.def && r.def.look && r.def.look.outfit) || ''; return /_[mf]$/.test(o) ? { at: () => ({ x: r.x, z: r.z }), male: /_m$/.test(o) } : null; };
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 

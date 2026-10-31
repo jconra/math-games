@@ -1,6 +1,7 @@
-// THE VOICES: short spoken clips recorded by the game's maker (sounds/voice/<name>.ogg|.m4a, each cut tight, rumble
-// taken off below 90 Hz, made about as loud as the town's clips: -18 LUFS, peaks under -3 dBFS). Small and now and
-// then, never busy.
+// THE VOICES: short spoken clips (sounds/voice/<name>.ogg|.m4a, each cut tight, rumble taken off below 90 Hz, made about
+// as loud as the town's clips: -18 LUFS, peaks under -3 dBFS). Small and now and then, never busy. Recorded by the game's
+// maker, but for the women's: w_* a woman rider's, t_* a townswoman's (made with ElevenLabs; each kind's `her` list).
+// The rider's look says which set the rider shouts, and only that set is fetched (clipsToLoad).
 //
 // THE PLAYER'S OWN SHOUTS (from the rider's head):
 //   spurring the horse from a walk or a stand into a gallop     Hyah / Giddy-up / Let's go / Come on, let's go / Hup
@@ -15,8 +16,9 @@
 //   standing by while it comes or goes; or letting the reins
 //   go from a trot
 //   a bandit roped right (now and then)                         You better sit down (and he answers, below)
-// OTHER PEOPLE (the maker's voice too, so only ever the MEN: never Mrs. Haskell, Miss Wren, Ma Hollis, a woman at the
-// store counter or a woman riding with the wagon; each from where that person is):
+// OTHER PEOPLE (each from where that person is; a man in the maker's voice, a woman, male: false, in the t_ clip of the
+// same kind where there is one: Mrs. Haskell, Miss Wren, Ma Hollis, a woman at the store counter or riding with the wagon;
+// the bandit's "you got me" has none, and a held-up wagon's "Help!" is the wagon job's, src/audio/clipslots.js):
 //   a bandit after "you better sit down"                        Alright, alright, you got me
 //   an innocent rider roped by mistake ("Not me, partner")      What in tarnation / What are you doin' / Who are you
 //   a job person's thank-you after a job, a camp foreman's      Aw, thank ya partner / You're a real life saver /
@@ -35,8 +37,9 @@
 // (the bigger moment first: a "you better sit down", then the thank-you). Everything goes through the game's master volume, so
 // the Menu's Volume, the title's silence and a pause all hold it (audio.js). No switch of its own: the volume covers it.
 //
-//   const S = makeShouts({ audio, base, hush })   audio: makeAudio(); base: the game's folder URL; hush(): true while
-//                            another voice talks (a card being read aloud, src/audio/readaloud.js): no clip starts
+//   const S = makeShouts({ audio, base, hush, woman })   audio: makeAudio(); base: the game's folder URL; hush(): true while
+//                            another voice talks (a card being read aloud, src/audio/readaloud.js): no clip starts;
+//                            woman: the rider's look is a woman's (isWoman)
 //   S.update(dt, { P, I, horses })   each frame of play (P: the player, I: the input; horses(): other horses about,
 //                            [{ x, z, speed }], for "easy now"): watches the horse for a spur, a long gallop or a pull-up,
 //                            and lets out a clip that is due
@@ -51,7 +54,11 @@
 //   S.speaking               true while a clip plays (the town's sounds dip a little under it)
 //   S.state()                for rigs: what has played, what is waiting, each kind's moments (said or not)
 //   S.dispose()
-//   Pure, for tests: SHOUTS, VOICE_CLIPS, JINGLE, makeShoutBrain(rand), pickShout(list, avoid, rand), isMale(look)
+//   Pure, for tests: SHOUTS, VOICE_CLIPS, JINGLE, makeShoutBrain(rand), pickShout(list, avoid, rand), isMale(look),
+//   isWoman(look), clipsToLoad(woman)
+
+const range = (pre, n) => Array.from({ length: n }, (_, i) => `${pre}_${i + 1}`);
+const levels = (pre, n, level = 1) => Object.fromEntries(range(pre, n).map((name) => [name, level]));
 
 // every clip, with a level for the ones that measured a little quieter after their peaks were held down
 export const VOICE_CLIPS = {
@@ -72,10 +79,20 @@ export const VOICE_CLIPS = {
   thankya_partner_1: 1.25, lifesaver_1: 1, obliged_1: 1.1, obliged_2: 1.3, thankya_kindly_1: 1.25, thankya_kindly_2: 1.3,
   thankya_kindly_3: 1.24, obliged_partner_1: 1.27, niceday_1: 1.13, whatchagot_1: 1,
   mystuff_1: 1.3,   // ("Loot the gang": a townsman sees his goods)
+  // a woman rider's (each phrase's first take is the game maker's pick)
+  ...levels('w_hyah', 6), ...levels('w_hyah_x2', 2), ...levels('w_giddyup', 2), ...levels('w_letsgo', 2), ...levels('w_comeon', 2), ...levels('w_hup', 2),
+  ...levels('w_whoa', 2), ...levels('w_whoa_x2', 2), ...levels('w_yeehaw', 2), ...levels('w_whoohee', 2),
+  ...levels('w_howdy_partner', 2), ...levels('w_howdy', 2), ...levels('w_howyado', 2), ...levels('w_goodmorning', 2),
+  ...levels('w_seeya_later', 2), ...levels('w_seeya_nexttime', 2), ...levels('w_getalong', 2), ...levels('w_sitdown', 2),
+  ...levels('w_easynow', 2, 0.6),   // (a whisper: quieter than the shouts)
+  // a townswoman's
+  t_thankya_1: 1.07, t_obliged_1: 1, t_lifesaver_1: 1, t_tarnation_1: 1.06, t_mystuff_1: 1, t_niceday_1: 1, t_whatchagot_1: 1, t_whatareyoudoin_1: 1, t_whoareyou_1: 1,
 };
 const W = (names, w = 1) => names.map((n) => [n, w]);
-const range = (pre, n) => Array.from({ length: n }, (_, i) => `${pre}_${i + 1}`);
+// a phrase's takes, its first about twice as often as each of the others
+const takes = (pre, n, w = 1) => range(pre, n).map((name, i) => [name, i ? w : w * 2]);
 const THANKS = W(['thankya_partner_1', 'lifesaver_1', 'obliged_1', 'obliged_2', 'thankya_kindly_1', 'thankya_kindly_2', 'thankya_kindly_3', 'obliged_partner_1']);
+const THANKS_HER = W(['t_thankya_1', 't_obliged_1', 't_lifesaver_1']);
 
 export const SHOUTS = {
   level: 0.9,             // into the game's master volume
@@ -85,6 +102,7 @@ export const SHOUTS = {
   // the other men's voices (see voiceOf): a speed/pitch from these (none near the player's own 1.0), a nasal or chesty
   // bump somewhere in peak Hz by up to +-peakDb, the top darker or brighter by up to top dB, the chest by up to low dB
   voices: { rates: [0.84, 0.88, 0.92, 1.08, 1.12, 1.16], peak: [650, 2600], peakDb: 6, top: 9, low: 4 },
+  herVoices: { rates: [0.94, 0.97, 1.03, 1.06], peak: [900, 3000], peakDb: 3, top: 4, low: 2 },   // (the townswomen's: one recorded voice, coloured gently)
   loud: [0.9, 1.05],      // ... and a touch louder or softer
   gap: 3,                 // s at least from the end of one clip to the start of the next (an answer: its own delay)
   most: 3,                // clips waiting their turn at most
@@ -100,28 +118,30 @@ export const SHOUTS = {
   // each kind: who says it (the player, or a man nearby: 'him'), the chance it is said when it may be, the wait (s, at
   // random between) after one before the next of its kind, how much it matters (prio: the bigger waits in front), how
   // long after the moment it starts (delay) and how long it may wait its turn (wait), a group sharing "not the same
-  // clip twice running", and its clips [name, weight] (the doubles "Hyah! Hyah!" a little less often)
+  // clip twice running", and its clips [name, weight] (the doubles "Hyah! Hyah!" a little less often); her: the clips
+  // when a woman says it (none: a woman doesn't)
   kinds: {
     spur:  { chance: 0.6, cool: [15, 25], prio: 2, delay: 0.05, wait: 1.2, clips: [
       ...W(range('hyah', 8)), ...W(range('hyah_x2', 5), 0.5), ...W(range('giddyup', 6)), ...W(['giddyup_x2_1'], 0.5),
-      ...W(range('letsgo', 5)), ...W(['letsgo_x2_1', 'comeon_letsgo_1'], 0.5), ...W(['hup_1'])] },
-    whoa:  { chance: 0.7, cool: [12, 20], prio: 2, delay: 0.05, wait: 1.2, clips: [...W(range('whoa', 6)), ...W(range('whoa_x2', 2), 0.5)] },
-    yeehaw: { chance: 0.6, cool: [35, 70], prio: 2, delay: 0.1, wait: 4, clips: [...W(range('yeehaw', 5)), ...W(['whoohee_1'])] },
-    hello: { chance: 0.75, cool: [20, 35], prio: 2, delay: 0.8, wait: 3, clips: W(['howdy_1', 'howdy_2', 'howdy_partner_1', 'howyado_1']) },
-    bye:   { chance: 0.7, cool: [25, 40], prio: 2, delay: 0.3, wait: 3, clips: W(['seeya_later_1', 'seeya_nexttime_1']) },
-    along: { chance: 0.18, cool: [45, 90], prio: 1, delay: 0.5, wait: 1.5, clips: [...W(['getalong_1', 'getalong_2', 'getalong_3']), ...W(['getalong_x2_1', 'getalong_ho_1'], 0.5)] },
-    easy:  { chance: 0.3, cool: [60, 120], prio: 1, delay: 0.3, wait: 2, clips: W(['easynow_1', 'easynow_2']) },
-    sitdown: { chance: 0.5, cool: [30, 60], prio: 2, delay: 1.2, wait: 3, clips: W(['sitdown_1']) },
-    // other people (men only)
+      ...W(range('letsgo', 5)), ...W(['letsgo_x2_1', 'comeon_letsgo_1'], 0.5), ...W(['hup_1'])],
+      her: [...takes('w_hyah', 6), ...takes('w_hyah_x2', 2, 0.5), ...takes('w_giddyup', 2), ...takes('w_letsgo', 2), ...takes('w_comeon', 2), ...takes('w_hup', 2)] },
+    whoa:  { chance: 0.7, cool: [12, 20], prio: 2, delay: 0.05, wait: 1.2, clips: [...W(range('whoa', 6)), ...W(range('whoa_x2', 2), 0.5)], her: [...takes('w_whoa', 2), ...takes('w_whoa_x2', 2, 0.5)] },
+    yeehaw: { chance: 0.6, cool: [35, 70], prio: 2, delay: 0.1, wait: 4, clips: [...W(range('yeehaw', 5)), ...W(['whoohee_1'])], her: [...takes('w_yeehaw', 2), ...takes('w_whoohee', 2)] },
+    hello: { chance: 0.75, cool: [20, 35], prio: 2, delay: 0.8, wait: 3, clips: W(['howdy_1', 'howdy_2', 'howdy_partner_1', 'howyado_1']), her: [...takes('w_howdy_partner', 2), ...takes('w_howdy', 2), ...takes('w_howyado', 2)] },
+    bye:   { chance: 0.7, cool: [25, 40], prio: 2, delay: 0.3, wait: 3, clips: W(['seeya_later_1', 'seeya_nexttime_1']), her: [...takes('w_seeya_later', 2), ...takes('w_seeya_nexttime', 2)] },
+    along: { chance: 0.18, cool: [45, 90], prio: 1, delay: 0.5, wait: 1.5, clips: [...W(['getalong_1', 'getalong_2', 'getalong_3']), ...W(['getalong_x2_1', 'getalong_ho_1'], 0.5)], her: takes('w_getalong', 2) },
+    easy:  { chance: 0.3, cool: [60, 120], prio: 1, delay: 0.3, wait: 2, clips: W(['easynow_1', 'easynow_2']), her: takes('w_easynow', 2) },
+    sitdown: { chance: 0.5, cool: [30, 60], prio: 2, delay: 1.2, wait: 3, clips: W(['sitdown_1']), her: takes('w_sitdown', 2) },
+    // other people
     gotme: { him: true, chance: 1, cool: [0, 0], prio: 2, delay: 0.35, wait: 3, clips: W(['yougotme_1']) },
-    huh:   { him: true, chance: 0.6, cool: [12, 25], prio: 2, delay: 0.4, wait: 2, clips: W(['tarnation_1', 'whatareyoudoin_1', 'whoareyou_1']) },
-    thanks: { him: true, chance: 0.9, cool: [6, 6], prio: 2, delay: 0.2, wait: 8, group: 'thanks', clips: THANKS },
-    thanksStore: { him: true, chance: 0.5, cool: [25, 45], prio: 2, delay: 0.2, wait: 3, group: 'thanks', clips: THANKS },
-    niceday: { him: true, chance: 0.35, cool: [60, 120], prio: 1, delay: 0.4, wait: 5, clips: W(['niceday_1']) },
-    whatchagot: { him: true, chance: 0.6, cool: [60, 90], prio: 2, delay: 0.6, wait: 3, clips: W(['whatchagot_1']) },
-    mystuff: { him: true, chance: 1, cool: [20, 30], prio: 2, delay: 0.2, wait: 4, clips: W(['mystuff_1']) },
+    huh:   { him: true, chance: 0.6, cool: [12, 25], prio: 2, delay: 0.4, wait: 2, clips: W(['tarnation_1', 'whatareyoudoin_1', 'whoareyou_1']), her: [['t_whatareyoudoin_1', 2], ...W(['t_tarnation_1', 't_whoareyou_1'])] },
+    thanks: { him: true, chance: 0.9, cool: [6, 6], prio: 2, delay: 0.2, wait: 8, group: 'thanks', clips: THANKS, her: THANKS_HER },
+    thanksStore: { him: true, chance: 0.5, cool: [25, 45], prio: 2, delay: 0.2, wait: 3, group: 'thanks', clips: THANKS, her: THANKS_HER },
+    niceday: { him: true, chance: 0.35, cool: [60, 120], prio: 1, delay: 0.4, wait: 5, clips: W(['niceday_1']), her: W(['t_niceday_1']) },
+    whatchagot: { him: true, chance: 0.6, cool: [60, 90], prio: 2, delay: 0.6, wait: 3, clips: W(['whatchagot_1']), her: W(['t_whatchagot_1']) },
+    mystuff: { him: true, chance: 1, cool: [20, 30], prio: 2, delay: 0.2, wait: 4, clips: W(['mystuff_1']), her: W(['t_mystuff_1']) },
   },
-  morning: { chance: 0.5, clips: W(['goodmorning_1', 'goodmorning_2']) },   // the first hello of a ride, sometimes
+  morning: { chance: 0.5, clips: W(['goodmorning_1', 'goodmorning_2']), her: takes('w_goodmorning', 2) },   // the first hello of a ride, sometimes
   // the Hob events that are each kind's moment (banditCatch and banditMiss: below, they need the rider)
   events: { catch: 'along', pigPenned: 'along', wagonStop: 'bye', deerStop: 'bye' },
   // the Hob events that are a whole job's end: the coin jingle (no voice)
@@ -131,6 +151,17 @@ export const SHOUTS = {
 
 // a man, by his folk.js look (the outfits end _m or _f)
 export const isMale = (look) => !!(look && /_m$/.test(look.outfit || ''));
+export const isWoman = (look) => !!(look && /_f$/.test(look.outfit || ''));
+
+// what a rider's game may play, so all that is fetched: the rider's own shouts (her set or his, never both) and other
+// people's lines, the men's and the townswomen's
+export function clipsToLoad(woman = false, S = SHOUTS) {
+  const out = new Set();
+  const add = (list) => { for (const [n] of list || []) if (!S.unused.includes(n)) out.add(n); };
+  for (const K of Object.values(S.kinds)) { if (K.him) { add(K.clips); add(K.her); } else add(woman ? K.her : K.clips); }
+  add(woman ? S.morning.her : S.morning.clips);
+  return [...out];
+}
 
 // a clip from [name, weight]: never one in `avoid` (unless nothing else is left)
 export function pickShout(list, avoid = [], rand = Math.random) {
@@ -144,22 +175,23 @@ export function pickShout(list, avoid = [], rand = Math.random) {
 
 // THE DECIDING, without sound (the tests drive it with their own clock and dice):
 //   B.ask(kind, now, { who, then, sure, clip })   the moment for a kind: true if it will be said (its chance came up,
-//                         its wait is over, it isn't waiting already). who: the man saying it ({ male, at }; a 'him'
-//                         kind without a man is never said); then: { kind, who, sure } said right after this one; sure:
+//                         its wait is over, it isn't waiting already). who: the person saying it ({ male, at }; a 'him'
+//                         kind with nobody, or with a woman when it has no `her` clips, is never said); then: { kind, who, sure } said right after this one; sure:
 //                         no dice; clip: this take of the kind's, not one picked at random
 //   B.ride(now, { onHorse, speed, push, run })   the horse each frame: asks for a spur or a whoa when one happens
 //   B.next(now, busy)       the clip to start now, or null: { kind, name, who }; busy: one is still playing
 //   B.ended(now)            the clip playing has just ended (its answer, if any, is asked for now)
 //   B.queue, B.last, B.lastOf, B.coolUntil, B.moments (how many times each kind's moment came, said or not)
+//   B.woman                 the rider is a woman: her clips for the rider's own kinds
 export function makeShoutBrain(rand = Math.random, S = SHOUTS) {
   const B = { queue: [], last: null, lastOf: {}, coolUntil: {}, greeted: false, endedAt: -1e9, wantG: false, galloped: false, moments: {}, follow: null,
-    runFrom: null, whooped: false, pushed: false, met: false, lastD: null };
+    runFrom: null, whooped: false, pushed: false, met: false, lastD: null, woman: false };
   B.rand = rand;   // (a rig may set it: dice that always say yes)
   const between = ([a, b]) => a + B.rand() * (b - a);
   B.ask = (kind, now, { who = null, then = null, sure = false, answer = false, clip = null } = {}) => {
     const K = S.kinds[kind]; if (!K) return false;
     B.moments[kind] = (B.moments[kind] || 0) + 1;
-    if (K.him && !(who && who.male)) return false;   // (the maker's voice: only a man says it)
+    if (K.him && !(who && (who.male || K.her))) return false;   // (no clips of a woman's for this kind: only a man says it)
     if (now < (B.coolUntil[kind] ?? -1e9)) return false;
     if (B.queue.some((q) => q.kind === kind) || B.queue.length >= S.most) return false;
     if (!sure && B.rand() >= K.chance) return false;
@@ -198,8 +230,9 @@ export function makeShoutBrain(rand = Math.random, S = SHOUTS) {
     if (!q) return null;
     B.queue.splice(B.queue.indexOf(q), 1);
     const K = S.kinds[q.kind], group = K.group || q.kind;
-    let list = K.clips;
-    if (q.kind === 'hello' && !B.greeted && S.morning && B.rand() < S.morning.chance) list = S.morning.clips;
+    const her = K.him ? !!(q.who && !q.who.male) : B.woman;
+    let list = (her && K.her) || K.clips;
+    if (q.kind === 'hello' && !B.greeted && S.morning && B.rand() < S.morning.chance) list = (her && S.morning.her) || S.morning.clips;
     if (q.kind === 'hello') B.greeted = true;
     const name = q.clip && VOICE_CLIPS[q.clip] ? q.clip : pickShout(list, [B.last, B.lastOf[group]].filter(Boolean), B.rand);
     if (!name) return null;
@@ -236,8 +269,10 @@ export const JINGLE = {
   tick: 0.006,                  // s: the knock of noise at its start
 };
 
-export function makeShouts({ audio, base = GAME, hush = () => false }) {
+export function makeShouts({ audio, base = GAME, hush = () => false, woman = false }) {
   const B = makeShoutBrain();
+  B.woman = woman;
+  const toLoad = clipsToLoad(woman);
   let ctx = null, bus = null, alive = true, clock = 0, now = null, nowWho = null, panner = null, src = null, me = null;
   const buffers = {}, played = {}; let asked = 0;
   const S = { speaking: false };
@@ -247,8 +282,7 @@ export function makeShouts({ audio, base = GAME, hush = () => false }) {
     bus = ctx.createGain(); bus.gain.value = SHOUTS.level; bus.connect(audio.out);
     const ext = clipExt(); let b = String(base); if (!b.endsWith('/')) b += '/';
     const c = ctx;
-    for (const name of Object.keys(VOICE_CLIPS)) {
-      if (SHOUTS.unused.includes(name)) continue;   // (kept for later: not fetched)
+    for (const name of toLoad) {
       fetch(b + 'sounds/voice/' + name + ext).then((r) => { if (!r.ok) throw new Error(r.status + ' ' + r.url); return r.arrayBuffer(); })
         .then((ab) => (alive ? c.decodeAudioData(ab) : null)).then((buf) => { if (alive && buf) buffers[name] = buf; })
         .catch((e) => { if (alive) console.warn('shouts: a clip could not load', name, e && e.message); });
@@ -256,7 +290,7 @@ export function makeShouts({ audio, base = GAME, hush = () => false }) {
   }
   audio.ready(() => { if (alive) build(); });
 
-  // where a voice is: the player's head, or the man saying it (his spot, at a standing man's head height)
+  // where a voice is: the player's head, or the person saying it (the spot, at a standing man's head height)
   const where = (who) => {
     if (!who || !who.at) return me;
     const a = typeof who.at === 'function' ? who.at() : who.at;
@@ -264,8 +298,9 @@ export function makeShouts({ audio, base = GAME, hush = () => false }) {
     return { x: a.x, y: a.y ?? (me ? me.ground + SHOUTS.head.foot : SHOUTS.head.foot), z: a.z };
   };
   const place = (p) => { if (!panner || !p) return; if (panner.positionX) { panner.positionX.value = p.x; panner.positionY.value = p.y; panner.positionZ.value = p.z; } else panner.setPosition(p.x, p.y, p.z); };
-  // other men are all the maker's voice: each gets his own colour so they don't sound like one guy. A man with an id (a
-  // job person's name, a bandit's number, a customer's name) always gets the same voice; one without gets a fresh one.
+  // other men are all the maker's voice: each gets his own colour so they don't sound like one guy (the townswomen, one
+  // voice too, a gentler one). A person with an id (a job person's name, a bandit's number, a customer's name) always
+  // gets the same voice; one without gets a fresh one.
   // The player's own lines stay as recorded.
   const voices = new Map();
   function voiceOf(who) {
@@ -274,7 +309,7 @@ export function makeShouts({ audio, base = GAME, hush = () => false }) {
     if (key && voices.has(key)) return voices.get(key);
     let h = 2166136261; for (const ch of key || String(Math.random())) { h ^= ch.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; }
     const r = (k) => ((h = Math.imul(h ^ (h >>> 15), 2246822519 + k) >>> 0) / 4294967296);
-    const v = SHOUTS.voices, rate = v.rates[Math.floor(r(1) * v.rates.length)];
+    const v = who.male ? SHOUTS.voices : SHOUTS.herVoices, rate = v.rates[Math.floor(r(1) * v.rates.length)];
     const deep = rate < 1;   // (a deeper, slower man is usually darker on top too)
     const out = { rate, peakHz: v.peak[0] * Math.pow(v.peak[1] / v.peak[0], r(2)), peakDb: (r(3) * 2 - 1) * v.peakDb,
       top: deep ? -v.top * (0.4 + 0.6 * r(4)) : (r(4) * 2 - 1) * v.top * 0.5, low: (r(5) * 2 - 1) * v.low };
@@ -368,14 +403,14 @@ export function makeShouts({ audio, base = GAME, hush = () => false }) {
     else if (what === 'thanks') ask('thanks', { who: w, clip, sure: !!clip });
     else if (what === 'leave') {
       // the player's see-ya, and the person's "have a nice day" after it now and then (or on its own)
-      const nice = w && w.male && B.rand() < SHOUTS.kinds.niceday.chance ? { kind: 'niceday', who: w, sure: true } : null;
+      const nice = w && B.rand() < SHOUTS.kinds.niceday.chance ? { kind: 'niceday', who: w, sure: true } : null;
       const before = asked; ask('bye', { then: nice });
       if (asked === before && nice) ask('niceday', { who: w, sure: true });
     }
   };
   S.say = (kind, who = null) => { if (SHOUTS.kinds[kind] && SHOUTS.kinds[kind].him) ask(kind, { who: him(who) }); };
   S.brain = B;   // (for rigs)
-  S.state = () => ({ on: !!ctx, loaded: Object.keys(buffers).length, clips: Object.keys(VOICE_CLIPS).length - SHOUTS.unused.length, speaking: S.speaking, now, asked, jingles,
+  S.state = () => ({ on: !!ctx, loaded: Object.keys(buffers).length, clips: toLoad.length, woman, speaking: S.speaking, now, asked, jingles,
     queue: B.queue.map((q) => ({ kind: q.kind, at: q.at, until: q.until })), moments: { ...B.moments }, played: { ...played }, clock });
   S.dispose = () => {
     alive = false;

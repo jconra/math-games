@@ -123,7 +123,7 @@ const SALE_FORMS = { sales: formsOf('sales'), wool: formsOf('wool') };
 
 export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, refresh = () => {}, openBox = null,
   onStart = () => {}, onStop = () => {}, pay = { order: 3, orderEvery: 3, orderFirst: 1 }, scene = W.scene, goods = null, fish = null, voice = null, town = null, work = null, open: shiftOpen = () => true, room = null }) {
-  // a customer's recorded line (src/audio/shouts.js: the men only; it knows by `male`), from where they stand
+  // a customer's recorded line (src/audio/shouts.js: a man's or a woman's, by `male`), from where they stand
   const speak = (kind, c) => { if (voice && c) voice(kind, { at: () => ({ x: c.x, z: c.z }), male: !c.who.she }); };
   const place = W.places.store;
   if (!rider.topics || typeof rider.topics !== 'object') rider.topics = {};

@@ -17,6 +17,8 @@ export const CLIP_SLOTS = {
   helpBandits: { file: 'help_1', says: 'Help! Ah, bandits!', recorded: true, takes: [
     { file: 'help_1', says: 'Help! Ah, bandits!' }, { file: 'help_2', says: 'Heelp! Bandits!' },
     { file: 'help_3', says: "Help! They're trying to rob me!" }, { file: 'help_4', says: 'Stay back! Heeeelp!' }] },
+  // a woman driving a held-up wagon
+  helpWoman: { file: 't_help_1', says: 'Help!', recorded: true },
 };
 
 export function slotFiles(id) { return slotTakes(id).map((t) => t.file); }

@@ -75,7 +75,7 @@ import { makeHomestead } from './homestead.js';
 import { makeAudio, volumeRow } from './audio/audio.js';
 import { makeAmbience } from './audio/ambience.js';
 import { makeDoorSound } from './audio/doorsound.js';
-import { makeShouts } from './audio/shouts.js';
+import { makeShouts, isWoman } from './audio/shouts.js';
 import { makeReadAloud } from './audio/readaloud.js';
 import { sayLine, talking, hush as hushVoice } from './audio/sayline.js';
 import { openLockbox, TIER_NAME } from './lockbox/index.js';
@@ -358,7 +358,7 @@ async function ride(r) {
   AMBI = makeAmbience({ audio: AUD, W }); BM.ambience = AMBI;
   if (W.V && W.V.CODE) W.V.CODE.onDoor = makeDoorSound({ audio: AUD }).play;   // (the town's doors' creak, thunk and flap: src/audio/doorsound.js)
   // (one voice at a time: a shout waits while a card is read, and a card waits for a shout to finish)
-  SHOUT = makeShouts({ audio: AUD, hush: () => !!(READ && READ.speaking) }); BM.shouts = SHOUT;
+  SHOUT = makeShouts({ audio: AUD, hush: () => !!(READ && READ.speaking), woman: isWoman(rider.look) }); BM.shouts = SHOUT;
   // (a card's clips wait while the browser's voice says a line: Hob's directions, a why)
   READ = makeReadAloud({ audio: AUD, on: () => !!(rider && rider.readAloud !== false), busy: () => !!(SHOUT && SHOUT.speaking) || talking() }); BM.read = READ;
   AUD.hold('pause', false); AUD.hold('title', false);

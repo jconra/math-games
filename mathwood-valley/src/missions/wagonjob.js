@@ -1696,7 +1696,7 @@ export function makeWagonJob(opts) {
     const x = (_h.x + 1) / 2 * innerWidth, y = (1 - _h.y) / 2 * innerHeight;
     return !(y - 48 < r.bottom + 6 && x > r.left - 70 && x < r.right + 70);
   }
-  // his words in his bubble: and with a recorded take (a man driving) his voice says the same words
+  // the driver's words in the bubble: and with a recorded take the voice says the same words
   function say(take, ms = 4500) {
     const d = driverOf(); if (!d || !A) return;
     howdy(d, take.says, { ms, key: 'holdup' + A.n });
@@ -1705,24 +1705,26 @@ export function makeWagonJob(opts) {
   }
   // the end: every wave seen off, his thank-you (never the same words twice running); the box grabbed, he's all right
   // and says so, and thanks the player for trying
-  function thanks() { const t = pickThanks(lastThanks); lastThanks = t.says; say(t); }
+  const sheDrives = () => !!(A && A.voice && !A.voice.male);
+  function thanks() { const t = pickThanks(lastThanks, Math.random, sheDrives() ? HOLDUP.thanksHer : HOLDUP.thanks); lastThanks = t.says; say(t); }
   function allRight() {
     const d = driverOf(); if (!d || !A) return;
     const key = 'holdup' + A.n;
     howdy(d, HOLDUP.grabbed, { ms: 3400, key });
-    setTimeout(() => { if (A && A.n + '' === key.slice(6)) say(HOLDUP.grabbedThanks, 3600); }, 3500);
+    setTimeout(() => { if (A && A.n + '' === key.slice(6)) say(sheDrives() ? HOLDUP.grabbedThanksHer : HOLDUP.grabbedThanks, 3600); }, 3500);
   }
   // his recorded shouts: the takes loaded the first time he calls (the bubble alone meanwhile); then one at a time at
   // random, never the same twice running, with AMBUSH.helpRest s of quiet after each. -> { says, ms } for the take he
   // shouts now, false while one is ringing or resting, null with no take to play (no sound, none loaded)
-  const helpBufs = new Map(); let helpLoading = false, helpLast = null, helpUntil = 0;
+  const helpBufs = new Map(), helpAsked = new Set(); let helpLast = null, helpUntil = 0;
   function helpVoice() {
-    const takes = AMBUSH.helpTakes || [];
+    const takes = (sheDrives() ? AMBUSH.helpTakesHer : AMBUSH.helpTakes) || [];
     if (!takes.length || !audio || !audio.ctx || !audio.running) return null;
-    if (!helpLoading) {
-      helpLoading = true;
+    const todo = takes.filter((t) => !helpAsked.has(t.file));
+    if (todo.length) {
+      for (const t of todo) helpAsked.add(t.file);
       const ext = clipExt((n) => document.createElement('audio').canPlayType(n)), ctx = audio.ctx;
-      for (const t of takes) fetch(GAME + 'sounds/voice/' + t.file + ext).then((r) => { if (!r.ok) throw new Error(r.status + ''); return r.arrayBuffer(); })
+      for (const t of todo) fetch(GAME + 'sounds/voice/' + t.file + ext).then((r) => { if (!r.ok) throw new Error(r.status + ''); return r.arrayBuffer(); })
         .then((ab) => ctx.decodeAudioData(ab)).then((b) => helpBufs.set(t.file, b)).catch((e) => console.warn('wagon job: a "Help!" clip could not load', t.file, e && e.message));
       return null;
     }
@@ -1812,11 +1814,11 @@ export function makeWagonJob(opts) {
     M.why = (board ? 'the jobs board: ' : '') + 'holding up wagon ' + t.number;
     return true;
   }
-  // (the driver as a voice for the shouts, once his wagon is drawn: only a man's, the game maker's voice being a man's)
+  // (the driver as a voice for the shouts, once the wagon is drawn: a man's or a woman's, by the outfit)
   function voiceStep() {
     if (!A || A.voice || !A.t.wg) return;
     const d = A.t.wg.driver, t = A.t;
-    if (d && /_m$/.test(d.outfit || '')) A.voice = { id: 'holdup-driver-' + t.number, male: true, at: () => (t.wg ? { x: t.wg.pos.x, z: t.wg.pos.z } : null) };
+    if (d && /_[mf]$/.test(d.outfit || '')) A.voice = { id: 'holdup-driver-' + t.number, male: /_m$/.test(d.outfit), at: () => (t.wg ? { x: t.wg.pos.x, z: t.wg.pos.z } : null) };
   }
   function finished(how) {
     if (!A) return;
