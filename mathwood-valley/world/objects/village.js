@@ -78,6 +78,7 @@ export function drawStroke(g, r, SIZE, P = 2048, from = 0) {
 // metre's pad and a 5 m yard, where the Terrain Lab has 2 m and 14 m: the meadow grows up close round a western town)
 export function blockGrid(layout, roadCanvas, N, SIZE, TEX, pad = 1, yardM = 5) {
   const B = new Float32Array(N * N), road = new Float32Array(N * N), yard = new Float32Array(N * N), bridge = new Float32Array(N * N);
+  const built = new Float32Array(N * N);   // (the buildings alone, without the props' and trees' ground: what keeps painted lawn tufts out)
   for (const it of layout.items) {
     if (it.type === 'prop' && it.kind === 'stateMap') continue;        // (a state's outline: a garden, its border planted; nothing to keep clear)
     if (it.type === 'model' && it.kind === 'bridge') {                  // a bridge is a way across, not in the way: its deck counts as road
@@ -96,6 +97,7 @@ export function blockGrid(layout, roadCanvas, N, SIZE, TEX, pad = 1, yardM = 5) 
       const x = (i + 0.5) * TEX - SIZE / 2 - it.x, z = (j + 0.5) * TEX - SIZE / 2 - it.z, lx = c * x - s * z, lz = s * x + c * z;
       const out = Math.hypot(Math.max(0, Math.abs(lx) - hw), Math.max(0, Math.abs(lz) - hd));
       const v = it.type === 'tree' ? 0.6 * Math.max(0, 1 - out / TEX) : Math.max(0, 1 - out / TEX); if (v > B[j * N + i]) B[j * N + i] = v;
+      if (it.type === 'model' && v > built[j * N + i]) built[j * N + i] = v;
       if (Y) { const t = Math.min(1, out / Y), y = 1 - t * t * (3 - 2 * t); if (y > yard[j * N + i]) yard[j * N + i] = y; }
     }
   }
@@ -111,7 +113,7 @@ export function blockGrid(layout, roadCanvas, N, SIZE, TEX, pad = 1, yardM = 5) 
     for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { let m = 0; for (let d = -2; d <= 2; d++) { const jj = j + d; if (jj >= 0 && jj < N) m = Math.max(m, tmp[jj * N + i] * (1 - Math.abs(d) * 0.3)); } if (m > yard[j * N + i]) yard[j * N + i] = m; }
   }
   for (let k = 0; k < N * N; k++) if (bridge[k] > road[k]) road[k] = bridge[k];
-  return { block: B, road, yard, bridge };
+  return { block: B, road, yard, bridge, built };
 }
 
 // ── the things themselves ───────────────────────────────────────────────────────────────────────────────────────

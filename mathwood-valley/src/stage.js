@@ -136,6 +136,7 @@ export const STAGE = {
   end: { ahead: 1.5, clap: 0.18, name: 2.4, next: 5.6, rest: 1.6, back: 0.9 },
   awayNew: 90,            // s out of earshot after which the band is on another song when the player comes back
   lift: 0.6,              // s before a harmonica phrase that the player lifts it to the mouth (and after, keeps it there)
+  keepUp: 2.5,            // s: a gap shorter than this to her next phrase, she keeps the harmonica up (no down-and-up in a breath)
   // the harmonica in her hands (metres: long, tall, deep; how far it sits behind the middle of her hands, toward her, and
   // above it: at the lips while she plays)
   harp: { long: 0.105, tall: 0.026, deep: 0.028, back: 0.035, up: 0.022 },
@@ -529,7 +530,9 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
     if (resting || between) {
       for (const [who, clip] of Object.entries(STAGE.restClip)) made[who].play(between && who === 'harpist' ? 'Harmonica_Rest' : clip, { fade: 0.8 });
     } else {
-      const playing = music ? (music.harmonicaAt(t + STAGE.lift) || music.harmonicaAt(t) || music.harmonicaAt(t - STAGE.lift * 0.5))
+      const nextH = music && music.nextHarmonica ? music.nextHarmonica(t) : null;
+      const playing = music ? (music.harmonicaAt(t + STAGE.lift) || music.harmonicaAt(t) || music.harmonicaAt(t - STAGE.lift * 0.5)
+        || (nextH != null && nextH - t < STAGE.keepUp && [0.5, 1, 1.5, 2, 2.5].some((k) => k <= STAGE.keepUp && music.harmonicaAt(t - k))))   // (a short gap between two phrases: held up)
         : phase === 'end' && endAt != null && t > endAt - STAGE.lift && t < endAt + 2.0;   // (the last chord's held note)
       made.harpist.play(playing ? 'Play_Harmonica' : 'Harmonica_Rest', { fade: 0.45 });
       made.pianist.play('Play_Piano', { fade: 0.6 }); made.drummer.play('Play_Box', { fade: 0.5 });

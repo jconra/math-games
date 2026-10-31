@@ -896,7 +896,7 @@ function markTree(tree, x, z) {
 function* landSteps({ light = false, pads = true } = {}) {
   const layout = TOWN.village ? TOWN.village.layout : TOWN.layout;
   if (!light) paintRoads(TOWN.canvas, layout, SIZE);
-  ({ block: TOWN.block, road: TOWN.road, yard: TOWN.yard, bridge: TOWN.bridge } = blockGrid(layout, TOWN.canvas, N, SIZE, TEX));
+  ({ block: TOWN.block, road: TOWN.road, yard: TOWN.yard, bridge: TOWN.bridge, built: TOWN.built } = blockGrid(layout, TOWN.canvas, N, SIZE, TEX));
   yield;
   const same = light && !pads && MAPS.wet;                              // (the ground's shape as it was: its wet, dry and steep too)
   if (!same) Hb = blur(Hg, 12);
@@ -977,6 +977,7 @@ function* landSteps({ light = false, pads = true } = {}) {
   COVER.cache = {}; LAWN_GO.cache = {};               // the land changed: the remembered tiles are stale
   placeTrees(); yield; yield* placeStonesSteps(); yield;
   if (COVER.parts) { if (light && COVER.at && coverForest && coverForest.ready) COVER.job = moveCover(COVER.at.clone()); else placeCover(); }   // (light: laid again a few ms a frame, the old plants up meanwhile)
+  LAWN_GO.at.set(1e9, 0, 1e9);                        // (and the lawn's tufts laid again next frame: a painted lawn shows at once, not when the camera next moves far enough)
   if (same && shadeTex) { DAY.baked = SUN_DIR.clone(); DAY.bake = sunShadeSteps(SUN_DIR, 0.4); DAY.reshade = true; }   // (after the slices above, not alongside them)
   TOWN.sig = townSigs(layout);
   MAPS.gen = (MAPS.gen || 0) + 1;                                       // (the land made again: the townsfolk's walking grid follows)
@@ -1635,10 +1636,9 @@ const keepWild = (sort, x, z) => { const v = plantingFor(sort); return keepProce
 // a painted plant stays out of the water (the wet-ground kinds may stand in it), off the paved roads (where the road
 // picture lays stones) and out of the buildings, as the land's own plants do; a placed plant goes wherever it is put
 function paintable(p) {
+  // (planted by hand: it grows where it was put, on a road's edge, by a prop or up against a building, the game's maker's
+  // rule; only the land's own growth keeps off the town's ground. The water's rule stays: a dry-land plant in the pond)
   if (waterAt(p.x, p.z) > 0.05 && !SORT.rock(p.sp) && !(KIND_INFO[p.sp] && (KIND_INFO[p.sp].hab === 'wet' || KIND_INFO[p.sp].hab === 'waterside'))) return false;   // (rocks may stand in the water)
-  const P = 2048, i = Math.floor((p.x / SIZE + 0.5) * P), j = Math.floor((p.z / SIZE + 0.5) * P);
-  if (i >= 0 && j >= 0 && i < P && j < P && Math.max(PATHROAD[(j * P + i) * 4 + 2], PATHROAD[(j * P + i) * 4 + 3]) > 128) return false;
-  if (TOWN.block && TOWN.road) { const k = Math.min(N - 1, Math.max(0, Math.floor((p.z + SIZE / 2) / TEX))) * N + Math.min(N - 1, Math.max(0, Math.floor((p.x + SIZE / 2) / TEX))); if (TOWN.block[k] - TOWN.road[k] > 0.5) return false; }
   return true;
 }
 // the plants and the lawn's tufts are laid apart, so each is worked out from only its own paint strokes (the others
@@ -1832,6 +1832,7 @@ function makePlantTool() {
       clearTimeout(relay); relay = setTimeout(() => {
         const sp = sortSig('path'); if (sp !== lastSig.path) { lastSig.path = sp; drawPaths(true); }   // (footpaths first: the plants and stones keep off them)
         COVER.job = moveCover(COVER.at.clone());                        // (the plants laid again round where they are, a few ms a frame)
+        LAWN_GO.at.set(1e9, 0, 1e9);                                   // (the lawn's tufts too, next frame: a painted lawn shows at once)
         const st = sortSig('tree'), sr = sortSig('rock'), sf = sortSig('fence');   // (the trees, stones and fences only when their part changed)
         if (sf !== lastSig.fence) { lastSig.fence = sf; buildFences(); }
         if (st !== lastSig.tree) { lastSig.tree = st; placeTrees(); }
