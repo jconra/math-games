@@ -152,7 +152,7 @@ flagCard(hud.ruleEl, () => fieldQuestion(), { show: () => !hud.ruleEl.hidden && 
 // for now"; nothing to read: the entry to type a sum by hand), the times chart (the rider's facts, green and red) and the
 // level tool for the place the rider is at (its arrows step the level by hand, unless the rider was made with "Let the
 // rider pick levels" off). The game waits while a tool is open.
-const workJob = () => (BOX ? 'boxes' : SJ && SJ.active ? 'store' : DL && DL.active ? 'delivery' : askingJob());
+const workJob = () => (BOX ? 'boxes' : cabin && cabin.fireSum && cabin.fireSum() ? 'fire' : SJ && SJ.active ? 'store' : DL && DL.active ? 'delivery' : askingJob());
 // a builder's card (the windmill's or the bridge's: their handles give its kind and answer, the card's line on the page
 // gives its numbers; the fishing's: its own sum)
 function builderSum() {
@@ -165,7 +165,7 @@ function builderSum() {
 const JOB_SUM = { store: () => SJ && SJ.workSum(), delivery: () => DL && DL.workSum(), range: () => SR && SR.workSum(),
   roundup: () => RU && RU.near ? waveSum(RU.wave) : null, sheep: () => SH && SH.workSum(), pigs: () => PG && PG.workSum(),
   deer: () => DJ && DJ.workSum(), wagon: () => WJ && WJ.workSum(), loot: () => LJ && LJ.workSum(),
-  build: () => builderSum(), boxes: () => (BOX ? BOX.workSum() : null) };
+  build: () => builderSum(), boxes: () => (BOX ? BOX.workSum() : null), fire: () => (cabin && cabin.fireSum ? cabin.fireSum() : null) };
 // the levels place the rider is at, for the level tool: the job asking (or the one the rider chose), the lock boxes' place
 const toolsPlace = () => { const j = jobNow(); return j === 'boxes' ? 'lockbox' : placeOfJob(j); };
 // HELP on the tools strip (src/ui/askhelp.js: a helper is always one press away and never opens by itself): the job

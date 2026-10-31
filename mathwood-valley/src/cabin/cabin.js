@@ -542,6 +542,7 @@ export function makeCabin({ W, renderer, camera, animals, rider, hud, input: I, 
   C.render = () => W.render();
 
   // ── for rigs and the dev buttons ──
+  C.fireSum = () => (fireCard ? fireCard.workSum() : null);   // (the fire's sum, for the tools' Work it out)
   C.state = () => ({ inside: C.inside, inRoom, fp: +fpT.toFixed(2), home: ownsHome(), door: R ? R.code.doors.map((q) => +q.t.toFixed(2)) : [],
     at: R ? { x: +atL.x.toFixed(2), z: +atL.z.toFixed(2) } : null,
     focus: focus ? { ...focus } : null, owned: owned(), shown: R ? R.shown : [], keepsakes: keepsakesOf(rider).map((k) => k.job + ':' + k.tier),

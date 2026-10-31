@@ -78,7 +78,7 @@ export function drawStroke(g, r, SIZE, P = 2048, from = 0) {
 // metre's pad and a 5 m yard, where the Terrain Lab has 2 m and 14 m: the meadow grows up close round a western town)
 export function blockGrid(layout, roadCanvas, N, SIZE, TEX, pad = 1, yardM = 5) {
   const B = new Float32Array(N * N), road = new Float32Array(N * N), yard = new Float32Array(N * N), bridge = new Float32Array(N * N);
-  const built = new Float32Array(N * N);   // (the buildings alone, without the props' and trees' ground: what keeps painted lawn tufts out)
+  const built = [];   // (the buildings' own footprints, no margin: painted plants grow up to their walls, never through their floors)
   for (const it of layout.items) {
     if (it.type === 'prop' && it.kind === 'stateMap') continue;        // (a state's outline: a garden, its border planted; nothing to keep clear)
     if (it.type === 'model' && it.kind === 'bridge') {                  // a bridge is a way across, not in the way: its deck counts as road
@@ -90,6 +90,7 @@ export function blockGrid(layout, roadCanvas, N, SIZE, TEX, pad = 1, yardM = 5) 
         }
       continue;
     }
+    { const f = footprintOf(it), q = it.rot * Math.PI / 180; if (it.type === 'model' && f.w * f.d >= 16) built.push({ x: it.x, z: it.z, c: Math.cos(q), s: Math.sin(q), hw: f.w / 2, hd: f.d / 2 }); }   // (a room's size: not a wagon or a trough)
     const { w, d } = footprintOf(it), a = it.rot * Math.PI / 180, c = Math.cos(a), s = Math.sin(a), hw = w / 2 + pad, hd = d / 2 + pad, Y = it.type === 'model' ? yardM : it.type === 'prop' ? 4 : 0, R = Math.hypot(hw, hd) + Math.max(TEX, Y);
     const i0 = Math.max(0, Math.floor((it.x - R + SIZE / 2) / TEX)), i1 = Math.min(N - 1, Math.ceil((it.x + R + SIZE / 2) / TEX));
     const j0 = Math.max(0, Math.floor((it.z - R + SIZE / 2) / TEX)), j1 = Math.min(N - 1, Math.ceil((it.z + R + SIZE / 2) / TEX));
@@ -97,7 +98,6 @@ export function blockGrid(layout, roadCanvas, N, SIZE, TEX, pad = 1, yardM = 5) 
       const x = (i + 0.5) * TEX - SIZE / 2 - it.x, z = (j + 0.5) * TEX - SIZE / 2 - it.z, lx = c * x - s * z, lz = s * x + c * z;
       const out = Math.hypot(Math.max(0, Math.abs(lx) - hw), Math.max(0, Math.abs(lz) - hd));
       const v = it.type === 'tree' ? 0.6 * Math.max(0, 1 - out / TEX) : Math.max(0, 1 - out / TEX); if (v > B[j * N + i]) B[j * N + i] = v;
-      if (it.type === 'model' && v > built[j * N + i]) built[j * N + i] = v;
       if (Y) { const t = Math.min(1, out / Y), y = 1 - t * t * (3 - 2 * t); if (y > yard[j * N + i]) yard[j * N + i] = y; }
     }
   }

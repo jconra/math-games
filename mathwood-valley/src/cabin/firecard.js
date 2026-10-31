@@ -11,6 +11,7 @@
 //   K.close()
 import { fireCards, wrongLine, nudgeLine, helpPicture, FIRE_MATH } from './firemath.js';
 import { showCountHelp } from '../ui/counthelp.js';
+import { plainSum } from '../math/jobsums.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -82,6 +83,7 @@ export function openFireCard({ parent, rider, save = () => {}, onLit = () => {},
   draw();
   return {
     el, pick, close,
+    workSum: () => (card() && !closed ? plainSum(card().text) : null),   // (the sum for the tools' Work it out)
     get open() { return !closed; },
     state: () => ({ map: set.map, step: set.step, card: card() ? card().text : null, answer: card() ? card().answer : null, index: i, of: set.cards.length, helper: !!help, line, answers: card() ? card().targets.map((t) => t.n) : [] }),
   };

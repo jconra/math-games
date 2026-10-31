@@ -1636,9 +1636,11 @@ const keepWild = (sort, x, z) => { const v = plantingFor(sort); return keepProce
 // a painted plant stays out of the water (the wet-ground kinds may stand in it), off the paved roads (where the road
 // picture lays stones) and out of the buildings, as the land's own plants do; a placed plant goes wherever it is put
 function paintable(p) {
-  // (planted by hand: it grows where it was put, on a road's edge, by a prop or up against a building, the game's maker's
-  // rule; only the land's own growth keeps off the town's ground. The water's rule stays: a dry-land plant in the pond)
+  // (painted by hand: it grows where it was put, on a road's edge, by a prop, right up against a building's wall, the game's
+  // maker's rule; only the land's own growth keeps off the town's ground. Not through a building's floor: a wide stroke
+  // can pass over one. The water's rule stays: a dry-land plant in the pond)
   if (waterAt(p.x, p.z) > 0.05 && !SORT.rock(p.sp) && !(KIND_INFO[p.sp] && (KIND_INFO[p.sp].hab === 'wet' || KIND_INFO[p.sp].hab === 'waterside'))) return false;   // (rocks may stand in the water)
+  if (TOWN.built) for (const b of TOWN.built) { const x = p.x - b.x, z = p.z - b.z; if (x * x + z * z > (b.hw + b.hd) ** 2) continue; if (Math.abs(b.c * x - b.s * z) < b.hw && Math.abs(b.s * x + b.c * z) < b.hd) return false; }
   return true;
 }
 // the plants and the lawn's tufts are laid apart, so each is worked out from only its own paint strokes (the others
@@ -2661,7 +2663,7 @@ function bakeData() {
     hashes: { heights: fnvBytes([hpre]), cells: fnvBytes([wd, pond, gully, fan]), water: fnvBytes([waterRgba], 61), paths: fnvBytes([MAPS.path], 61) } };
 }
 return {
-  scene, sky, sun, hemi, ground, mat, lawn, LAWN_SKIP, U, MAPS, TOWN, PLANT, COVER, GROW, PLANT_KINDS, FAMILY, FOREST, LEAF, LAND, VALLEY, SHAPE, WATER, PAVE, DAY, DL, SHADE, NIGHT, NIGHT_GRADE, NIGHT_LIGHTS, STONES, LAWN, LAWN_GO, CALM, FOLK, SHOW, BEAMS, RAIN, FENCE, SHADOW, FOG_EDGE: FOG_DIR.edge,
+  scene, sky, sun, hemi, ground, mat, lawn, LAWN_SKIP, paintable, U, MAPS, TOWN, PLANT, COVER, GROW, PLANT_KINDS, FAMILY, FOREST, LEAF, LAND, VALLEY, SHAPE, WATER, PAVE, DAY, DL, SHADE, NIGHT, NIGHT_GRADE, NIGHT_LIGHTS, STONES, LAWN, LAWN_GO, CALM, FOLK, SHOW, BEAMS, RAIN, FENCE, SHADOW, FOG_EDGE: FOG_DIR.edge,
   TS, QUAL, TEXTURES, LAYERS, TREE_SPECIES, TOWN_DEFAULT, PLANTING_FIRST, weights, FLOW, SETTLE, WDEPTH, ACC, POND, OUTLETS, Hg, N, SIZE, TEX, SEG, groundTiles, SUN_NOW, FOG_DIR, LAMPU, CODE,
   FINE, get LANDF() { return LANDF; }, inFine: (x, z) => !!FINE.h && x > FINE.x0 && x < FINE.x1 && z > FINE.z0 && z < FINE.z1,
   BAKE, bakeData, update, render, settled, heightAt, groundAt, slopeAt, waterAt, coverGround, buildLand, buildHeights, shapeMesh, fastMesh, baseGrid, erodeSteps, smoothErosion, cutRavines, addCrags, findWater, townLand, paintWater,

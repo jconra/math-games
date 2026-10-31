@@ -20,7 +20,7 @@
 /* The fire's card (firecard.js): the fireside sums before a fire is lit, low on the screen so the fireplace stays in
    view; one sum at a time, its answers as wide buttons with the key under each (never inside it), the helper's picture
    under them. Lit: it fades down into the fire. */
-.bmc-fire { position: fixed; left: 50%; bottom: max(14px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 28;
+.bmc-fire { position: fixed; left: 50%; bottom: calc(76px + env(safe-area-inset-bottom));   /* (above the tools strip: Work it out stays in reach) */ transform: translateX(-50%); z-index: 28;
   width: min(560px, calc(100vw - 24px)); max-height: calc(100vh - 28px); overflow: auto; box-sizing: border-box; padding: 12px 16px 12px;
   border-radius: 12px; background: rgba(30, 20, 12, 0.9); border: 1px solid rgba(226, 173, 76, 0.6); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
   color: #f3e6c8; font: 16px/1.35 Bitter, Georgia, serif; pointer-events: auto; animation: bmcf-up 0.22s ease-out; }
@@ -54,7 +54,7 @@
 @keyframes bmcf-down { to { opacity: 0; transform: translate(-50%, 18px) scale(0.97); } }
 @keyframes bmcf-slide { from { opacity: 0; transform: translateX(18px); } to { opacity: 1; transform: none; } }
 @media (max-width: 520px), (max-height: 480px) {
-  .bmc-fire { padding: 9px 12px 10px; font-size: 15px; }
+  .bmc-fire { padding: 9px 12px 10px; font-size: 15px; bottom: calc(156px + env(safe-area-inset-bottom)); }   /* (a phone's tools strip sits above its action buttons) */
   .bmcf-sum { font-size: 30px; margin: 2px 0 6px; }
   .bmcf-a button { min-height: 46px; font-size: 22px; }
   .bmcf-lead { display: none; }
