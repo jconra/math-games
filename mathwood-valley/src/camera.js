@@ -220,7 +220,9 @@ export function makeCamera({ camera, W, input = null }) {
     } else if (fovBase != null) { fovTo(fovBase); fovBase = null; }
     camera.updateMatrixWorld();
     // (in first person inside a building, no way out of it in view: the valley beyond its walls left undrawn)
-    const shut = C.fp > 0.95 && ins && !(ins.it && ins.it.kind === 'cabin') && !openingSeen(ins);   // (the player's cabin does its own)
+    // (not the saloon: its many doors and windows are nearly always in view, so it saved little, and walking out of its side door
+    // the valley flashed away to bare sky)
+    const shut = C.fp > 0.95 && ins && !(ins.it && (ins.it.kind === 'cabin' || ins.it.kind === 'saloon')) && !openingSeen(ins);   // (the player's cabin does its own)
     if (shut) { if (farBase == null) farBase = camera.far; farTo(Math.min(farBase, FIRST.indoor.far)); }
     else if (farBase != null) { farTo(farBase); farBase = null; }
   };

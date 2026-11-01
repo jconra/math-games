@@ -127,6 +127,7 @@ export const FOREST_SPECIES = [
   { name: 'bush',  file: 'bush',  height: 5,  weight: 0.5, soften: 0.5 },
 ];
 
+const FOREST_CLOSE = 40;   // m round the camera where a plant is whole whichever way it looks (each at its own distance: spread)
 export class Forest {
   // `clear(x, z)` says whether a spot is kept free of trees (the town); `light` is the weak-GPU mode
   // `species`: a list like FOREST_SPECIES; an entry may bring its own `root` (an Object3D, already
@@ -397,6 +398,8 @@ export class Forest {
     // SPREAD: each tree switches at its own distance, D * (1 - spread / 2 .. 1 + spread / 2), so the change
     // comes a tree at a time instead of as one line across the wood
     const S = THREE.MathUtils.clamp(this.spread || 0, 0, 1.5);
+    // (nearK: at the close distance even the earliest-changing plant still counts as inside its crossfade, so it's whole)
+    const eye = camera.position, nearK = D > 0 ? Math.max(1, (D * (1 - S / 2) - B) / Math.min(FOREST_CLOSE, D * 0.25)) : 1;
     const reach = D * (1 + S / 2) + B, reach2 = reach * reach, cx = camP.x, cy = camP.y, cz = camP.z;
     for (const b of this.built) {
       const { sp, imposter, meshes, trees } = b, iFade = imposter.geometry.attributes.iFade, aFade = iFade.array;
@@ -412,10 +415,14 @@ export class Forest {
         if (hide && hide(p.x, p.z, t, sp)) { aFade[k] = 0; b.near.push(k); if (k < lo) lo = k; if (k > hi) hi = k; continue; }   // (hidden for now: see setHide)
         if (d2 >= reach2) continue;
         if (t.sw === undefined) t.sw = switchHash(p.x, p.z);              // (0..1, fixed by where the tree stands)
-        const Dk = D * (1 + S * (t.sw - 0.5)), d = Math.sqrt(d2);
-        if (d < Dk + B) cand.push([k, d, Dk]); }
+        const Dk = D * (1 + S * (t.sw - 0.5));
+        // how far it counts as being: from the circle pushed ahead of the view, but close to the camera itself, whichever way
+        // it looks, it counts as well inside (a tree at your elbow was out in the crossfade, or beaten to a slot). Smooth, so
+        // turning hands trees over one by one, at each one's own distance, as moving does.
+        const rx = p.x - eye.x, ry = p.y - eye.y, rz = p.z - eye.z, dCam = Math.sqrt(rx * rx + ry * ry + rz * rz), d = Math.min(Math.sqrt(d2), dCam * nearK);
+        if (d < Dk + B) cand.push([k, d, Dk, dCam - 0.4 * (rx * fwd.x + rz * fwd.z)]); }
       const cap = meshes[0].instanceMatrix.count;
-      if (cand.length > cap) cand.sort((p, q) => (p[1] - p[2]) - (q[1] - q[2]));   // more than fit: the deepest inside their own distance win (past the cap the imposter stays whole)
+      if (cand.length > cap) cand.sort((p, q) => p[3] - q[3]);   // more than fit: the nearest the camera win, those ahead over those behind (past the cap the imposter stays whole)
       const n = Math.min(cap, cand.length);
       for (let i = 0; i < n; i++) {
         const [k, d, Dk] = cand[i], t = trees[k];
