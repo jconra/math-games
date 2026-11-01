@@ -2,7 +2,11 @@
 // on, and the fallback to the live patch. The sound itself is proved in a browser: ~/pw/bandit-math/rigs/band/bake_proof.cjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { BAKE, bakedBand, hashText, nearest, noteKey, openNote, storeOpen } from '../src/audio/bake.js';
+import { BAKE, bakedBand, bakedSecs, hashText, nearest, noteKey, openNote, storeOpen, wetNote } from '../src/audio/bake.js';
+import { ACTION_BAKE, actionShots, makeActionTune } from '../src/audio/actionmusic.js';
+import { ACTION_PATCHES } from '../src/audio/actionpatches.js';
+import { hoofShots } from '../src/audio/ambience.js';
+import { wagonShots } from '../src/audio/wagonsound.js';
 import { SONGS, CANDIDATES, pianoNotes, boxNote, makeBoxPart, makeStageMusic, PIANO } from '../src/audio/stagemusic.js';
 import { PATCH_PRESETS } from '../src/audio/patch.js';
 
@@ -92,4 +96,34 @@ test('the band asks the bakery first and uses a baked note instead of building o
 
 test('no IndexedDB here: the store just isn\'t there', async () => {
   assert.equal(await storeOpen(50), null);
+});
+
+test('the action music: every note the tune plays has its bake, and a key stays the same from visit to visit', () => {
+  const names = new Set(actionShots().map((x) => x.name));
+  for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+    const next = makeActionTune(seed);
+    for (let i = 0; i < 40; i++) for (const e of next()) {
+      if (e.what === 'bass') assert.ok(names.has(`bass|${e.midi}|0`), `bass ${e.midi}`);
+      else if (e.what === 'twang') assert.ok(names.has(`twang|${e.midi}|${nearest(ACTION_BAKE.twangVels, e.vel)}`), `twang ${e.midi} ${e.vel}`);
+      else if (e.what === 'whistle') { assert.ok(names.has(`whistle|${e.midi}`), `whistle ${e.midi}`); assert.ok(e.len <= ACTION_BAKE.whistleBeats, 'held no longer than its bake'); }
+    }
+  }
+  const keys = (list) => list.map((x) => { const m = x.make(); return noteKey(m.patch, m.secs, 48000, m.take || 0); });
+  for (const f of [actionShots, hoofShots, wagonShots]) {
+    assert.deepEqual(keys(f()), keys(f()), 'nothing random in what is baked');
+    const list = f(); assert.equal(new Set(list.map((x) => x.name)).size, list.length, 'one name each');
+    assert.equal(new Set(keys(list)).size, list.length, 'each its own key');
+    for (const x of list) { const m = x.make(); assert.ok(m.secs > 0.05 && m.secs < 4, x.name + ' ' + m.secs); assert.ok(!m.patch.nodes.some((n) => n.type === 'send'), x.name + ' sends nothing'); }
+  }
+});
+
+test("wetNote: what a note sends to its room, and nothing that only goes out", () => {
+  const rim = ACTION_PATCHES['ACTION — RIM'], w = wetNote(rim);
+  assert.ok(!w.nodes.some((n) => n.id === 'wood'), 'the rim\'s wood goes out only');
+  assert.ok(w.nodes.some((n) => n.id === 'nz'));
+  assert.equal(w.nodes.filter((n) => n.type === 'out').length, 1);
+  assert.equal(w.nodes.find((n) => n.type === 'out').gain, 1);
+  const ids = new Set(w.nodes.map((n) => n.id));
+  for (const c of w.cables) assert.ok(ids.has(c.from) && ids.has(c.to));
+  assert.ok(bakedSecs(rim) > 0.05);
 });

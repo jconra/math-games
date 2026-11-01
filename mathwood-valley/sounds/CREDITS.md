@@ -1,7 +1,8 @@
 # Animal sounds: credits
 
 The recorded animal and bird clips in this folder. Every one is CC0 or public domain (attribution is not required; it is
-given here as a courtesy). Each comes as `.ogg` (Ogg Vorbis) and `.m4a` (AAC, for Safari, which can't play Ogg); the game
+given here as a courtesy), but for the horse sounds marked ElevenLabs below: the game maker's picks of sound effects made with
+ElevenLabs (cut tight, faded and evened to the other horse clips' loudness, about -19 LUFS; the munch low-passed twice at 1800 Hz). Each comes as `.ogg` (Ogg Vorbis) and `.m4a` (AAC, for Safari, which can't play Ogg); the game
 loads whichever the browser can play (src/audio/ambience.js). Each was trimmed, faded at both ends and evened in loudness
 (about -18 LUFS) from the source recording; a few loud-cracking ones went through a gentle limiter, and the far herd
 through a low-pass so it sounds far off. Everything else the game sounds like (hooves,
@@ -36,6 +37,20 @@ both ends and evened to about -18 LUFS (a gentle peak limiter keeps them under -
 | `horse_snort` | a horse snorting | https://bigsoundbank.com/breath-of-a-horse-2-s0286.html | DenisChardonnet | CC0 |
 | `horse_whinny_1` | a horse whinnying | https://bigsoundbank.com/horse-neighing-3-s0863.html | Joseph SARDIN | CC0 |
 | `horse_whinny_2` | a horse whinnying | https://bigsoundbank.com/neighing-of-a-horse-1-s0284.html | DenisChardonnet | CC0 |
+| `horse_nicker` | a horse nickering | https://elevenlabs.io/sound-effects | ElevenLabs (sound effects), chosen by the game's maker | ElevenLabs |
+| `horse_whinny_3` | a horse whinnying | https://elevenlabs.io/sound-effects | ElevenLabs (sound effects), chosen by the game's maker | ElevenLabs |
+| `horse_whinny_4` | a horse whinnying | https://elevenlabs.io/sound-effects | ElevenLabs (sound effects), chosen by the game's maker | ElevenLabs |
+| `horse_whinny_5` | a horse whinnying | https://elevenlabs.io/sound-effects | ElevenLabs (sound effects), chosen by the game's maker | ElevenLabs |
+| `horse_snort_2` | a horse snorting | https://elevenlabs.io/sound-effects | ElevenLabs (sound effects), chosen by the game's maker | ElevenLabs |
+| `horse_snort_3` | a horse snorting | https://elevenlabs.io/sound-effects | ElevenLabs (sound effects), chosen by the game's maker | ElevenLabs |
+| `horse_snort_4` | a horse snorting | https://elevenlabs.io/sound-effects | ElevenLabs (sound effects), chosen by the game's maker | ElevenLabs |
+| `horse_shake` | a horse shaking its head, the tack rattling | https://elevenlabs.io/sound-effects | ElevenLabs (sound effects), chosen by the game's maker | ElevenLabs |
+| `horse_stomp_1` | a hoof stomped | https://elevenlabs.io/sound-effects | ElevenLabs (sound effects), chosen by the game's maker | ElevenLabs |
+| `horse_stomp_2` | a hoof stomped | https://elevenlabs.io/sound-effects | ElevenLabs (sound effects), chosen by the game's maker | ElevenLabs |
+| `horse_stomp_3` | a hoof stomped | https://elevenlabs.io/sound-effects | ElevenLabs (sound effects), chosen by the game's maker | ElevenLabs |
+| `horse_munch_1` | a horse munching a treat | https://elevenlabs.io/sound-effects | ElevenLabs (sound effects), chosen by the game's maker | ElevenLabs |
+| `horse_munch_2` | a horse munching a treat | https://elevenlabs.io/sound-effects | ElevenLabs (sound effects), chosen by the game's maker | ElevenLabs |
+| `horse_munch_3` | a horse munching a treat | https://elevenlabs.io/sound-effects | ElevenLabs (sound effects), chosen by the game's maker | ElevenLabs |
 | `sheep_baa_1` | a sheep | https://opengameart.org/content/sheep-baa | AntumDeluge (from a recording by mikewest) | CC0 (OpenGameArt.org) |
 | `sheep_baa_2` | a sheep | https://commons.wikimedia.org/wiki/File:Sheep_bleating.ogg | earthcalling | Public domain (Wikimedia Commons) |
 | `sheep_baa_3` | a sheep | https://bigsoundbank.com/sheep-2-s2344.html | Joseph SARDIN | CC0 |

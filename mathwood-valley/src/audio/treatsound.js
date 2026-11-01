@@ -1,4 +1,6 @@
-// THE HORSES' TREATS' SOUNDS (src/feeding.js), made in the browser as Sound Lab patches (src/audio/patch.js), all noise
+// THE HORSES' TREATS' SOUNDS (src/feeding.js). A horse's munch and nicker are RECORDED clips (sounds/horse_munch_*, horse_nicker,
+// made with ElevenLabs, listed in sounds/CREDITS.md), loaded when first wanted (S.prime); until one has come, and for the other
+// animals' crunch, the sounds are made in the browser as Sound Lab patches (src/audio/patch.js), all noise
 // through filters, never a ringing tone (the game's rule: a crunch or a knock is a crack of noise; a ringing sine
 // sounds like glass). Each play is a little different (a few random draws: the bites' timing, their brightness).
 //   CRUNCH   a horse munching an apple or a carrot: a handful of bites, each a bright crack of noise (the apple
@@ -8,16 +10,24 @@
 //   PICK     an apple pulled off a branch: a leafy rustle and the stalk's small snap
 //
 //   const S = makeTreatSound({ audio })   audio: src/audio/audio.js's (nothing plays until the player has clicked once)
-//   S.play(kind, at)     kind 'crunch' | 'nicker' | 'pick'; at: { x, y, z } in the world, heard from the camera (the
-//                        listener) and only within TREAT_SOUND.earshot metres; through the game's volume (audio.out)
+//   S.play(kind, at, o)  kind 'crunch' | 'munch' | 'nicker' | 'pick'; at: { x, y, z } in the world, heard from the camera (the
+//                        listener) and only within TREAT_SOUND.earshot metres; through the game's volume (audio.out);
+//                        o: { after: seconds before it plays }
+//   S.prime()            a horse is near: its clips on their way
+//   S.state()            for rigs: { clips loaded, last clips played }
 //   TREAT_PATCHES        one of each, at the middle of its variation (for the Sound Lab)
 import { playPatch } from './patch.js';
+import { CLIPS, clipExt, pickClip } from './ambience.js';
 
 export const TREAT_SOUND = {
   level: 0.85,      // loudness (a near, small sound)
   ref: 2.5,         // m: full loudness out to this far
   earshot: 26,      // m: past this from the camera nothing is played
+  // each recording (the first munch is the favourite); level: on the patches' scale
+  clips: { munch: [['horse_munch_1', 2], ['horse_munch_2', 1], ['horse_munch_3', 1]], nicker: [['horse_nicker', 1]] },
+  clipLevel: { munch: 0.45, nicker: 0.4 },   // (a little over the patches they replace: rigs/band/bake_more.cjs levels)
 };
+const GAME = new URL('../../', import.meta.url).href;     // (src/audio/ -> the game's folder)
 
 const WHITE = { type: 'noise', freq: 600, steps: 256, loopLen: 1, rate: 1, level: 1 };   // (white hiss: a fresh value every sample)
 // a burst of `src` through one filter, shaped by its own envelope, into `to` (the output, or a flutter)
@@ -69,15 +79,37 @@ export function pickPatch(r = Math.random) {
     burst('snap', 'n', 'bandpass', v(r, 1800, 0.15), 2.2, v(r, 0.8, 0.2), 0.001, 0.018, v(r, 0.11, 0.2)),
   ]);
 }
-const MAKERS = { crunch: crunchPatch, nicker: nickerPatch, pick: pickPatch };
+const MAKERS = { crunch: crunchPatch, munch: crunchPatch, nicker: nickerPatch, pick: pickPatch };
 export const TREAT_PATCHES = { 'HORSES — CRUNCH': crunchPatch(() => 0.5), 'HORSES — NICKER': nickerPatch(() => 0.5), 'HORSES — PICK': pickPatch(() => 0.5) };
 
-export function makeTreatSound({ audio = null } = {}) {
+export function makeTreatSound({ audio = null, base = GAME } = {}) {
   const S = { played: [] };   // (played: the last few kinds, for the rigs)
   const ok = () => !!(audio && audio.ctx && audio.out && audio.running);
-  S.play = (kind, at) => {
+  const buffers = {}, last = {}, clipsPlayed = []; let asked = false, alive = true;
+  S.prime = () => {
+    if (asked || !audio || !audio.ctx) return; asked = true;
+    const c = audio.ctx, ext = clipExt((n) => document.createElement('audio').canPlayType(n));
+    (async () => {
+      for (const list of Object.values(TREAT_SOUND.clips)) for (const [name] of list) {
+        if (!alive) return;
+        try { const r = await fetch(String(base).replace(/\/?$/, '/') + 'sounds/' + name + ext); if (!r.ok) throw new Error(r.status + ' ' + r.url); const buf = await c.decodeAudioData(await r.arrayBuffer()); if (alive) buffers[name] = buf; }
+        catch (e) { console.warn('treat sound: a clip could not load', name, e && e.message); }
+      }
+    })();
+  };
+  S.state = () => ({ loaded: Object.keys(buffers).length, clips: clipsPlayed.slice() });
+  S.dispose = () => { alive = false; };
+  // the clip for a kind, if there's one here yet
+  function clipFor(kind) {
+    const list = TREAT_SOUND.clips[kind]; if (!list) return null;
+    const name = pickClip(list.filter(([n]) => buffers[n]), last[kind]);
+    if (name) last[kind] = name;
+    return name;
+  }
+  S.play = (kind, at, { after = 0 } = {}) => {
     const make = MAKERS[kind]; if (!make || !at) return;
     S.played.push(kind); if (S.played.length > 8) S.played.shift();
+    S.prime();
     if (!ok()) return;
     const ctx = audio.ctx, L = ctx.listener;
     const lx = L.positionX ? L.positionX.value : 0, lz = L.positionZ ? L.positionZ.value : 0;
@@ -88,7 +120,17 @@ export function makeTreatSound({ audio = null } = {}) {
       p.refDistance = TREAT_SOUND.ref; p.rolloffFactor = 1; p.maxDistance = 10000;
       if (p.positionX) { p.positionX.value = at.x; p.positionY.value = at.y; p.positionZ.value = at.z; } else p.setPosition(at.x, at.y, at.z);
       g.connect(p); p.connect(audio.out);
-      playPatch(ctx, null, g, null, make(), () => { try { g.disconnect(); p.disconnect(); } catch (e) { /* gone */ } }, { at: ctx.currentTime + 0.005 });
+      const when = ctx.currentTime + 0.005 + after, name = clipFor(kind);
+      if (name) {
+        const src = ctx.createBufferSource(); src.buffer = buffers[name];
+        src.playbackRate.value = 0.96 + Math.random() * 0.08;
+        g.gain.value *= TREAT_SOUND.clipLevel[kind] * CLIPS[name].level;
+        src.connect(g); src.onended = () => { try { src.disconnect(); g.disconnect(); p.disconnect(); } catch (e) { /* gone */ } };
+        src.start(when);
+        clipsPlayed.push(name); if (clipsPlayed.length > 16) clipsPlayed.shift();
+        return;
+      }
+      playPatch(ctx, null, g, null, make(), () => { try { g.disconnect(); p.disconnect(); } catch (e) { /* gone */ } }, { at: when });
     } catch (e) { /* no sound: never mind */ }
   };
   return S;

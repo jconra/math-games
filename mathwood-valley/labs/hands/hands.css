@@ -1,15 +1,23 @@
-/* The Hands Lab: the Dog Lab's bar and drawer (dogs.css), and a warning along the top when an elbow bends too far. */
-.ha-warn { position: fixed; left: 50%; top: 40px; transform: translateX(-50%); z-index: 6; max-width: calc(100% - 20px); padding: 6px 12px; border-radius: 8px; background: rgba(150, 44, 20, 0.92); border: 1px solid #e0792c; color: #fff3e0; font-size: 14px; text-align: center; }
-.ha-warn[hidden] { display: none; }
-.ha-row { display: grid; grid-template-columns: 150px 1fr 58px; gap: 8px; align-items: center; margin: 3px 0; }
-.ha-row input[type=range] { width: 100%; accent-color: var(--brass); }
-.ha-row output { text-align: right; font-variant-numeric: tabular-nums; color: var(--ink-2); }
-.ha-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 2px 18px; }
-.ha-h { font: 400 14px Smokum, Georgia, serif; letter-spacing: .05em; color: var(--brass-hi); margin: 6px 0 1px; }
+/* The Hands Lab: the Dog Lab's bar and drawer (dogs.css), the pose editor's rows, and room for the view on a phone. */
+.ha-row { display: grid; grid-template-columns: minmax(96px, 150px) 1fr 62px; gap: 8px; align-items: center; margin: 4px 0; }
+.ha-row > span { font-size: 13px; color: var(--ink-2); line-height: 1.15; }
+.ha-row input[type=range] { width: 100%; min-width: 0; height: 26px; accent-color: var(--brass); }
+.ha-row input[type=number] { width: 100%; min-width: 0; padding: 3px 4px; border-radius: 5px; background: #24170d; border: 1px solid #5a4024; text-align: right; font-size: 14px; font-variant-numeric: tabular-nums; }
+.ha-h { font: 400 14px Smokum, Georgia, serif; letter-spacing: .05em; color: var(--brass-hi); margin: 6px 0 2px; }
 .ha-btns { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
-.ha-btn { padding: 5px 10px; border-radius: 7px; background: var(--wood-2); border: 1px solid var(--edge); cursor: pointer; }
+.ha-btn { padding: 5px 9px; min-height: 30px; border-radius: 7px; background: var(--wood-2); border: 1px solid var(--edge); cursor: pointer; font-size: 13px; }
 .ha-btn.on { background: var(--brass); color: #2a1a08; }
-.ha-bend { font-variant-numeric: tabular-nums; color: var(--ink-2); margin: 4px 0; }
-.ha-bend b.over { color: var(--warn); }
 .ha-note { color: var(--mute); font-size: 13px; margin: 4px 0; }
-@media (max-width: 700px) { .ha-row { grid-template-columns: 104px 1fr 48px; font-size: 13px; } }
+.ha-now { color: var(--ink-2); font-size: 13px; font-variant-numeric: tabular-nums; margin: 2px 0; }
+.ha-hand { display: grid; grid-template-columns: 54px repeat(4, 1fr); gap: 3px; margin: 4px 0; align-items: center; font-size: 12px; color: var(--mute); }
+.ha-hand button { padding: 4px 0; min-height: 28px; border-radius: 5px; background: var(--wood-2); border: 1px solid var(--edge); cursor: pointer; font-size: 12px; color: var(--ink-2); }
+.ha-hand button.on { background: var(--brass); color: #2a1a08; }
+.ha-hand button.set, .ha-btn.set { box-shadow: inset 0 -3px 0 var(--warn); }
+.ha-sel { width: 100%; padding: 5px; border-radius: 5px; background: #24170d; border: 1px solid #5a4024; }
+#drawer h2 { font-size: 15px; }
+@media (min-width: 900px) { .dl-drawer { right: auto; width: 470px; max-height: calc(100vh - var(--bar-h) - 56px); } }
+@media (max-width: 700px) {
+  .dl-drawer { left: 4px; right: 4px; padding: 6px 8px; max-height: 37vh; }
+  .ha-row { grid-template-columns: 92px 1fr 56px; gap: 5px; }
+  .ha-row > span { font-size: 12px; }
+}

@@ -110,7 +110,8 @@ import { offerChart, closeChart, chartOptions, watchHesitation as watchChart, en
 import { recordAnswer, earn, saveRider, countJob } from '../save.js';
 import { boxTier } from '../shop.js';
 import { TIER_NAME } from '../lockbox/index.js';
-import { makeActionMusic } from '../audio/actionmusic.js';
+import { makeActionMusic, ACTION } from '../audio/actionmusic.js';
+import { bakedBand } from '../audio/bake.js';
 import { inWagons, wagonAt, fadeAll, unfade } from '../wagon.js';
 import { clipExt } from '../audio/ambience.js';
 import { howdy } from '../ui/howdy.js';
@@ -1332,7 +1333,7 @@ function makeGang({ W, folk, animals, P, I, camera, canvas, rider, hud, hob, aud
       ctx.addEventListener('statechange', bus.onState);
     }
     if (!music && audio.running) {
-      music = WJ.music = makeActionMusic(bus.ctx, { out: bus.g, seed: 1 + Math.floor(Math.random() * 1e6) });
+      music = WJ.music = makeActionMusic(bus.ctx, { out: bus.g, seed: 1 + Math.floor(Math.random() * 1e6), baked: ACTION.baked && typeof OfflineAudioContext !== 'undefined' ? bakedBand(bus.ctx.sampleRate) : null });
       music.start(bus.ctx.currentTime + 0.15, { action: !!(wave && !wave.done) });
     }
   }

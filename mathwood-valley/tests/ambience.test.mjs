@@ -4,6 +4,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { CLIPS, SOURCES, BURST, AMB, HOOVES, TOWN_PATCHES, clipExt, pickClip, crossed, duckOf, airCut, burstPlan } from '../src/audio/ambience.js';
 
+import { TREAT_SOUND } from '../src/audio/treatsound.js';
+
 const SOUNDS = new URL('../sounds/', import.meta.url);
 
 test('every clip the game plays is in sounds/ as .ogg and .m4a, with a credit; nothing unplayed is shipped', () => {
@@ -13,7 +15,7 @@ test('every clip the game plays is in sounds/ as .ogg and .m4a, with a credit; n
     const row = credits.split('\n').find((l) => l.startsWith('| `' + name + '`'));
     assert.ok(row, name + ' has a row in sounds/CREDITS.md');
     assert.match(row, /https?:\/\//, name + ': source page');
-    assert.match(row, /CC0|[Pp]ublic domain/, name + ': licence');
+    assert.match(row, /CC0|[Pp]ublic domain|ElevenLabs/, name + ': licence');
   }
   const files = fs.readdirSync(SOUNDS).filter((f) => /\.(ogg|m4a)$/.test(f));
   for (const f of files) assert.ok(CLIPS[f.replace(/\.(ogg|m4a)$/, '')], f + ' is played by the game');
@@ -54,11 +56,12 @@ test('a clip is never the same twice running (unless asked), and a rare one wait
   for (let k = 0; k < 200; k++) { const n = pickClip(list, last); assert.notEqual(n, last); last = n; }
   assert.equal(pickClip([['cow_moo_1', 1]], 'cow_moo_1'), 'cow_moo_1', 'the only one may repeat');
   assert.equal(pickClip([['dog_bark_1', 1], ['dog_woof', 1]], 'dog_bark_1', 0, {}, () => 0, true), 'dog_bark_1', 'a burst may repeat a bark');
-  // a common clip may follow itself, so the rare ones keep their weighted share (the horse: snort 4, each whinny 1)
+  // a common clip may follow itself, so the rare ones keep their weighted share (a whinny's weight of 1 among the rest)
   { let l = null; const n = {}; let k = 0; const rand = () => ((k = (k * 1103515245 + 12345) % 2147483648) / 2147483648);
     for (let i = 0; i < 6000; i++) { l = pickClip(SOURCES.horses.clips, l, 0, {}, rand); n[l] = (n[l] || 0) + 1; }
     const whinny = ((n.horse_whinny_1 || 0) + (n.horse_whinny_2 || 0)) / 6000;
-    assert.ok(whinny > 0.24 && whinny < 0.38, `whinnies ${(whinny * 100).toFixed(1)}% of horse calls (weighted 33%)`); }
+    const W = Object.fromEntries(SOURCES.horses.clips), share = (W.horse_whinny_1 + W.horse_whinny_2) / SOURCES.horses.clips.reduce((a, [, w]) => a + w, 0);
+    assert.ok(Math.abs(whinny - share) < 0.06, `whinnies ${(whinny * 100).toFixed(1)}% of horse calls (weighted ${(share * 100).toFixed(0)}%)`); }
   const hawk = [['bird_hawk', 1]];
   assert.equal(pickClip(hawk, null, 100, { bird_hawk: 50 }), null, 'the hawk waits');
   assert.equal(pickClip(hawk, null, 50 + CLIPS.bird_hawk.rare + 1, { bird_hawk: 50 }), 'bird_hawk');
@@ -103,4 +106,23 @@ test('the made sounds are noise, never ringing tones; the Sound Lab has them too
   assert.ok(!/createOscillator\(\)[^;]*;\s*\w+\.type = 'sine'/.test(src), 'no sine oscillator for a hit');
   const lab = new URL('../../../sound-lab/patch.js', import.meta.url);
   if (fs.existsSync(lab)) { const s = fs.readFileSync(lab, 'utf8'); for (const name of Object.keys(TOWN_PATCHES)) assert.ok(s.includes(`'${name}'`), name + ' is in ~/sound-lab'); }
+});
+
+test("the horse set: every chosen clip is there, loud enough, heard where it's meant to be, and the old clips stay in", () => {
+  const set = ['horse_nicker', 'horse_whinny_3', 'horse_whinny_4', 'horse_whinny_5', 'horse_snort_2', 'horse_snort_3', 'horse_snort_4', 'horse_shake', 'horse_stomp_1', 'horse_stomp_2', 'horse_stomp_3', 'horse_munch_1', 'horse_munch_2', 'horse_munch_3'];
+  const credits = fs.readFileSync(new URL('CREDITS.md', SOUNDS), 'utf8');
+  for (const n of set) {
+    for (const ext of ['.ogg', '.m4a']) { const f = new URL(n + ext, SOUNDS); assert.ok(fs.existsSync(f), n + ext); assert.ok(fs.statSync(f).size > 3000, n + ext + ' has sound in it'); }
+    assert.ok(CLIPS[n] && CLIPS[n].lazy, n + ' waits until a horse is about');
+    assert.match(credits.split('\n').find((l) => l.startsWith('| `' + n + '`')), /ElevenLabs/);
+  }
+  const names = (k) => SOURCES[k].clips.map(([n]) => n);
+  for (const k of ['horses', 'myHorse']) for (const n of ['horse_snort', 'horse_whinny_1', 'horse_whinny_2', 'horse_snort_2', 'horse_snort_3', 'horse_snort_4', 'horse_shake', 'horse_stomp_1', 'horse_stomp_2', 'horse_stomp_3']) assert.ok(names(k).includes(n), k + ' has ' + n);
+  for (const k of ['whistled', 'farHorse']) for (const n of ['horse_whinny_1', 'horse_whinny_2', 'horse_whinny_3', 'horse_whinny_4', 'horse_whinny_5']) assert.ok(names(k).includes(n), k + ' has ' + n);
+  assert.ok(SOURCES.farHorse.every[0] >= 60, 'far off is now and then');
+  for (const n of ['horse_shake', 'horse_stomp_1', 'horse_stomp_2', 'horse_stomp_3']) assert.ok(CLIPS[n].rare >= 20, n + ' is rare');
+  const idle = (name, l) => pickClip(SOURCES.myHorse.clips, l, 0, {}, () => 0.01);
+  let l = null; for (let i = 0; i < 40; i++) { const n = idle(0, l); assert.ok(n); l = n; }
+  assert.ok(TREAT_SOUND.clips.munch[0][0] === 'horse_munch_1' && TREAT_SOUND.clips.munch[0][1] > TREAT_SOUND.clips.munch[1][1], 'munch_1 is the favourite');
+  assert.deepEqual(TREAT_SOUND.clips.nicker.map(([n]) => n), ['horse_nicker']);
 });

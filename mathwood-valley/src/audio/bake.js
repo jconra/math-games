@@ -15,6 +15,10 @@
 //   the banjo   velocity changes its brightness: a few velocities baked for each note asked for. The head's echo comes
 //               after its damper, so it stays live, one shared echo for all the notes (the same sound: it's linear)
 //   the harmonica is not baked: its bends and its wobble change with every phrase, and it's a voice or two at a time.
+//   the rest    the action music's notes (actionmusic.js), a horse's hooves and splashes (ambience.js), a wagon's hooves and
+//               creaks (wagonsound.js): each of those files says what it wants baked, as a family of "shots", and plays them
+//               with B.playShot. A family goes off the shelf and is kept up on its own (a family only asked for on a wagon
+//               job isn't thrown away by a visit that never takes one).
 //
 //   bakedBand(sampleRate, { patches, store }) -> B       the one bakery for a sample rate (AudioBuffers outlive contexts)
 //   B.start(songId)        starts on the notes in the background, the song's own first; again later: that song's come next
@@ -23,8 +27,14 @@
 //                          baked yet, or held longer than the bake rings: play it live)
 //   B.playBox(ctx, dest, room, hit, note, at) -> { stop(s) } or null           hit: { hit, vel, tone }; note: from boxNote
 //   B.playBanjo(ctx, dest, room, n) -> { stop(s) } or null                     n as playBanjoSynth takes it (asks for it, baked for next time)
-//   B.stats()              { wanted, baked, fromStore, bakeMs, MB, played: {piano, box, banjo}, live: {piano, box, banjo} }
-//   noteKey(patch, secs, sr, take), nearest(list, v), openNote(patch), storeOpen()   the plain parts, for the tests
+//   B.shots(family, list)  asks for a family's sounds, list: [{ name, make() -> { patch (full level, nothing sent: openNote), secs, take, lead } }]; lead: samples of silence
+//                          it's baked after and played from: a sine with a falling pitch starts at a phase that depends on where in a
+//                          128-sample render block it starts, so takes at different leads have the spread of starts a live note has
+//   B.playShot(ctx, dest, room, family, name, o, at) -> { stop(fade) } or null   null: not baked yet, play it live. o: { gain (its
+//                          output), send (its share to the room), wet (a second shot's name, when what goes to the room isn't what
+//                          goes out: wetNote), let: a time and time constant it's let go with, { at, tc, tail } }
+//   B.stats()              { wanted, baked, fromStore, bakeMs, MB, played: {piano, box, banjo, ...families}, live: {the same} }
+//   noteKey(patch, secs, sr, take), nearest(list, v), openNote(patch), wetNote(patch), bakedSecs(patch), storeOpen()   the plain parts, for the tests
 import { playPatch, patchAutoStopTime, BUILDERS, PATCH_PRESETS } from './patch.js';
 import { pianoNotes, boxNote, songOf, PIANO } from './stagemusic.js';
 import { banjoNote, BANJO_SYNTH_LEVEL, BANJO, BANJO_SYNTH } from './banjosynth.js';
@@ -57,6 +67,16 @@ export function openNote(patch, drop = []) {
   const gone = new Set([...patch.nodes.filter((n) => n.type === 'send').map((n) => n.id), ...drop]);
   return { ...patch, nodes: patch.nodes.filter((n) => !gone.has(n.id)).map((n) => (n.type === 'out' ? { ...n, gain: 1 } : n)), cables: patch.cables.filter((c) => !gone.has(c.from) && !gone.has(c.to)) };
 }
+
+// what a note sends to its room, as a note of its own (for a patch where that isn't simply a share of what goes out)
+export function wetNote(patch) {
+  const send = patch.nodes.find((n) => n.type === 'send'), out = patch.nodes.find((n) => n.type === 'out');
+  const fed = new Set(), grow = (id) => { if (fed.has(id)) return; fed.add(id); for (const c of patch.cables) if (c.to === id) grow(c.from); };
+  grow(send.id);
+  return { ...patch, nodes: patch.nodes.filter((n) => fed.has(n.id) && n !== out).map((n) => (n === send ? { ...n, type: 'out', gain: 1 } : n)), cables: patch.cables.filter((c) => fed.has(c.from) && fed.has(c.to) && c.to !== out.id) };
+}
+// how long a one-shot patch's bake runs: as long as its voice is heard live
+export const bakedSecs = (patch) => +((patchAutoStopTime(patch) - 0.2 + 0.05).toFixed(3));
 
 // ── THE STORE (IndexedDB; anything going wrong just means baking again) ──────────────────────────────────────────────
 const DB = 'mathwood-baked-notes', OS = 'notes';
@@ -96,23 +116,23 @@ export function bakedBand(sampleRate, opts = {}) {
 }
 
 function makeBakery(sr, { patches = PATCH_PRESETS, store = true } = {}) {
-  const P = BAKE, jobs = new Map(), queue = [], done = new Map(), turn = new Map(), echoes = new WeakMap();
+  const P = BAKE, jobs = new Map(), queue = [], done = new Map(), turn = new Map(), echoes = new WeakMap(), pruned = new Set();
   const stats = { wanted: 0, baked: 0, fromStore: 0, bakeMs: 0, storeMs: 0, played: { piano: 0, box: 0, banjo: 0 }, live: { piano: 0, box: 0, banjo: 0 } };
-  let dbP = null, running = false, whenDone = null, primed = false;
+  let dbP = null, running = false, whenDone = null, boxAsked = false;
   const db = () => { if (!store) return Promise.resolve(null); if (!dbP) dbP = storeOpen(); return dbP; };
 
   // a job: a note's name here, its patch as baked, how long
-  function want(name, make, urgent = false) {
+  function want(name, make, urgent = false, family = '') {
     if (jobs.has(name)) {
       if (urgent && !done.has(name)) { const i = queue.findIndex((j) => j.name === name); if (i > 0) queue.unshift(...queue.splice(i, 1)); }
       return;
     }
-    const j = { name, make, patch: null, key: null, secs: 0 };
+    const j = { name, make, family, patch: null, key: null, secs: 0 };
     jobs.set(name, j); stats.wanted++;
     if (urgent) queue.unshift(j); else queue.push(j);
     run();
   }
-  const prepare = (j) => { if (j.patch) return; const m = j.make(); j.patch = m.patch; j.secs = m.secs; j.key = noteKey(m.patch, m.secs, sr, m.take || 0); };
+  const prepare = (j) => { if (j.patch) return; const m = j.make(); j.patch = m.patch; j.secs = m.secs; j.lead = m.lead || 0; j.key = (j.family ? j.family + '|' : '') + noteKey(m.patch, m.secs, sr, m.take || 0); };
 
   const pianoName = (m) => `piano|${m}`;
   function wantPiano(m, urgent) {
@@ -156,7 +176,7 @@ function makeBakery(sr, { patches = PATCH_PRESETS, store = true } = {}) {
         if (rest.length) await bakeBatch(rest, d);
         await later(P.gap);
       }
-      if (d && !primed && stats.baked === stats.wanted) { primed = true; prune(d); }
+      if (d && stats.baked === stats.wanted) for (const j of jobs.values()) if (!pruned.has(j.family)) { pruned.add(j.family); prune(d, j.family); }
     } catch (e) { console.warn('Mathwood Valley: baking the notes stopped; they play live', e); queue.length = 0; }
     running = false;
     if (queue.length) run();
@@ -169,7 +189,7 @@ function makeBakery(sr, { patches = PATCH_PRESETS, store = true } = {}) {
     merge.connect(oc.destination);
     for (let i = 0; i < list.length; i++) {
       const g = oc.createGain(); g.connect(merge, 0, i);
-      playPatch(oc, null, g, null, list[i].patch, null, { at: 0 });
+      playPatch(oc, null, g, null, list[i].patch, null, { at: list[i].lead / sr });
       if ((i + 1) % P.buildPerStep === 0) { spent += performance.now() - mark; await later(P.gap); mark = performance.now(); }
     }
     spent += performance.now() - mark;
@@ -183,18 +203,19 @@ function makeBakery(sr, { patches = PATCH_PRESETS, store = true } = {}) {
     }
     stats.bakeMs += performance.now() - t0; stats.buildMs = (stats.buildMs || 0) + spent;
   }
-  // (old notes off the shelf: a patch changed, an old way of baking)
-  async function prune(d) {
+  // (a family's old notes off the shelf: a patch changed, an old way of baking; the band's keys have no family before them)
+  const familyOf = (k) => { const i = String(k).indexOf('|'); return i < 0 ? '' : String(k).slice(0, i); };
+  async function prune(d, family) {
     const keep = new Set(); for (const j of jobs.values()) if (j.key) keep.add(j.key);
     const keys = await asked(d, 'readonly', (s) => s.getAllKeys());
     if (!keys) return;
-    for (const k of keys) if (!keep.has(k) && String(k).split(':')[3] === String(sr)) asked(d, 'readwrite', (s) => s.delete(k));
+    for (const k of keys) if (familyOf(k) === family && !keep.has(k) && String(k).split(':')[3] === String(sr)) asked(d, 'readwrite', (s) => s.delete(k));
   }
 
-  function play(ctx, buf, head, nodes, at, stopAt) {
+  function play(ctx, buf, head, nodes, at, stopAt, lead = 0) {
     const src = ctx.createBufferSource(); src.buffer = buf;
     src.connect(head);
-    src.start(at); if (stopAt != null) src.stop(stopAt);
+    src.start(at, lead / sr); if (stopAt != null) src.stop(stopAt);
     src.onended = () => { for (const n of nodes) try { n.disconnect(); } catch (e) { /* gone */ } };
     return src;
   }
@@ -208,7 +229,7 @@ function makeBakery(sr, { patches = PATCH_PRESETS, store = true } = {}) {
   const B = {
     get ready() { return stats.wanted > 0 && stats.baked >= stats.wanted; },
     start(song = null) {
-      if (!primed && jobs.size === 0) wantBox();
+      if (!boxAsked) { boxAsked = true; wantBox(); }
       const order = [];
       if (song) {   // (the keys of the song about to play first: a few of its lines, as the dice might make them)
         try {
@@ -281,6 +302,36 @@ function makeBakery(sr, { patches = PATCH_PRESETS, store = true } = {}) {
       const src = play(ctx, buf, damper, nodes, at, rt + P.tail);
       stats.played.banjo++;
       return { stop(t = 0) { const now = ctx.currentTime, f = Math.max(0.004, t / 3); try { g.cancelScheduledValues(now); if (now < at) { src.stop(now); return; } g.setTargetAtTime(0, now, Math.max(f, tc)); src.stop(now + P.tail); } catch (e) { /* gone */ } } };
+    },
+    shots(family, list) {
+      for (const { name, make } of list) want(family + '/' + name, make, false, family);
+    },
+    has: (family, name) => done.has(family + '/' + name),
+    playShot(ctx, dest, room, family, name, o, at) {
+      const job = jobs.get(family + '/' + name), lead = job ? job.lead || 0 : 0;
+      const buf = done.get(family + '/' + name), wet = o.wet && room ? done.get(family + '/' + o.wet) : null;
+      if (!buf || ctx.sampleRate !== sr || (o.wet && room && !wet)) { stats.live[family] = (stats.live[family] || 0) + 1; return null; }
+      const head = ctx.createGain(), g = head.gain, out = ctx.createGain(); out.gain.value = o.gain ?? 1;
+      head.connect(out); out.connect(dest);
+      const nodes = [head, out];
+      let stopAt = null;
+      if (o.let) { g.value = 1; g.setValueAtTime(1, at); g.setTargetAtTime(0, o.let.at, o.let.tc); stopAt = Math.min(o.let.at + o.let.tail, at + buf.duration); }
+      let w = null;
+      if (room && o.send) {
+        const s = ctx.createGain(); s.gain.value = o.send; s.connect(room); nodes.push(s);
+        if (wet) { w = play(ctx, wet, s, [], at, stopAt); } else head.connect(s);
+      }
+      const src = play(ctx, buf, head, nodes, at, stopAt, lead);
+      stats.played[family] = (stats.played[family] || 0) + 1;
+      return { stop(fade = 0.02) {
+        const now = ctx.currentTime;
+        try {
+          if (now < at) { src.stop(now); if (w) w.stop(now); return; }
+          g.cancelScheduledValues(now); g.setTargetAtTime(0, now, Math.max(0.002, fade));
+          const end = now + Math.max(0.002, fade) * 5 + 0.02;
+          src.stop(end); if (w) { nodes[2].gain.setTargetAtTime(0, now, Math.max(0.002, fade)); w.stop(end); }
+        } catch (e) { /* gone */ }
+      } };
     },
     stats() {
       let bytes = 0; for (const b of done.values()) bytes += b.length * 4;

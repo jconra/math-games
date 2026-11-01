@@ -20,7 +20,9 @@
 //                     toward its hearts.
 //   THE HEARTS OVER AN ANIMAL  of the rider's own, a row of 5 over its head while the rider is near it or has just fed it;
 //                     every animal's hearts are in the menu's "Your animals" (src/ui/animals.js)
-//   FULL HEARTS       the horse nickers when the rider walks up to it (from a way off), and comes faster to the whistle
+//   NICKERS           the rider's own horse nickers when the rider walks up to it from a way off (always at full hearts,
+//                     now and then before that: FEED.nickerOdds), and when its hearts fill up
+//   FULL HEARTS       the horse comes faster to the whistle
 //                     (P.eager: src/player.js)
 //
 //   const F = makeFeeding({ W, rider, player, hud, tools, audio, pen, stable, refresh, dog, homestead, farm, bark })
@@ -49,9 +51,11 @@ export const FEED = {
   look: 7,             // m: horses farther off than this (their middle) aren't looked at for a head
   munch: 3.4,          // s a horse munches
   pickReach: 3.6,      // m from an apple tree's trunk where E picks
-  nickerNear: 7,       // m: a horse with full hearts nickers when the rider comes this near its head...
+  nickerOdds: 0.4,     // a horse with its hearts not yet full nickers this share of the times the rider walks up
+  nickerNear: 7,       // m: a horse nickers when the rider comes this near its head...
   nickerAway: 14,      // ...having been at least this far off since it last did
   nickerGap: 25,       // s at least between two nickers of one horse
+  nickerAfter: 1.6,    // s into the munch a horse whose hearts just filled nickers
   heartRise: 1.5,      // m a heart floats up
   heartTime: 1.9,      // s it takes
   heartSize: 0.42,     // m across
@@ -287,10 +291,12 @@ export function makeFeeding({ W, rider, player, hud, tools = null, audio = null,
     if (!takeTreat(rider, kind)) return false;
     munching.set(s.key, performance.now() + FEED.munch * 1000);
     headOf(s, _h);
-    sound.play('crunch', _h);
+    const horse = !s.dog && !s.species;
+    sound.play(horse ? 'munch' : 'crunch', _h);
     const r = feedHorse(rider, { horseId: s.id, owned: s.owned, donkey: s.donkey, loves: s.loves, kind, day: day() });
     floatHearts(_h.clone(), r.hearts, s.species ? 0.6 : 1);
     save();
+    if (horse && r.counted && r.full && r.after > r.before) { sound.play('nicker', _h, { after: FEED.nickerAfter }); nickerNoted(s); }   // (its hearts just filled)
     if (s.dog) { wagTail(s.a, FEED.munch); bark(dog()); F.barked = performance.now(); }
     if (s.id) shownUntil.set(s.key, performance.now() + FEED.heartsAfter * 1000);
     const who = short(s.name), what = kind === 'carrot' ? 'the carrot' : kind === 'jerky' ? 'the jerky' : 'the apple';
@@ -336,6 +342,7 @@ export function makeFeeding({ W, rider, player, hud, tools = null, audio = null,
       const r = petAnimal(rider, { id: q.s.id, owned: q.s.owned, day: day() });
       floatHearts(_hp.clone(), r.hearts, q.s.species ? 0.6 : 1);
       if (q.s.id) shownUntil.set(q.s.key, performance.now() + (FEED.petTime + FEED.heartsAfter) * 1000);
+      if (r.full && !q.s.species && !q.s.dog) { sound.play('nicker', _hp); nickerNoted(q.s); }   // (its hearts just filled)
       save();
       const who = short(q.s.name);
       hud.toast(r.full ? `${who} loves you all the way: ${BOND.hearts} of ${BOND.hearts} hearts!` : r.counted && r.after > r.before ? `${who} loves that! ${r.after} of ${BOND.hearts} hearts` : `${who} loves that!`, 'good');
@@ -374,23 +381,29 @@ export function makeFeeding({ W, rider, player, hud, tools = null, audio = null,
 
   // ── A NICKER, AT FULL HEARTS ─────────────────────────────────────────────────────────────────────────────────────
   const nick = new Map();   // key -> { armed, last }
+  function nickerNoted(s) { const now = performance.now(); F.nickered = { key: s.key, at: now }; const n = nick.get(s.key); if (n) { n.armed = false; n.last = now; } else nick.set(s.key, { armed: false, last: now }); }
   function nickerStep(p) {
     if (!p || p.mode !== 'foot') return;
     const now = performance.now();
     for (const s of allSpots) {
-      if (!s.owned || !s.id || s.species || !bondOf(rider, s.id).full) continue;
+      if (!s.owned || !s.id || s.species || s.dog) continue;
       headOf(s, _h);
       const d = Math.hypot(_h.x - p.position.x, _h.z - p.position.z);
       // (met for the first time this ride: armed only if the rider is a way off, so a horse right there doesn't nicker)
       let n = nick.get(s.key); if (!n) nick.set(s.key, n = { armed: d > FEED.nickerAway, last: -1e9 });
       if (d > FEED.nickerAway) n.armed = true;
-      else if (n.armed && d < FEED.nickerNear && now - n.last > FEED.nickerGap * 1000) { n.armed = false; n.last = now; sound.play('nicker', _h); F.nickered = { key: s.key, at: now }; }
+      else if (d < FEED.nickerAway) sound.prime();   // (its clips on their way before it's reached)
+      if (n.armed && d < FEED.nickerNear && now - n.last > FEED.nickerGap * 1000) {
+        n.armed = false; n.last = now;
+        if (bondOf(rider, s.id).full || Math.random() < FEED.nickerOdds) { sound.play('nicker', _h); F.nickered = { key: s.key, at: now }; }
+      }
     }
   }
 
   // ── EACH FRAME ───────────────────────────────────────────────────────────────────────────────────────────────────
   F.update = (dt, { busy = false } = {}) => {
     const p = busy ? null : P();   // (busy: inside the cabin or at a counter: no tree to pick, no horse to feed)
+    if (F.target) sound.prime();   // (a horse in reach: its clips on their way)
     treesStep(dt);
     treePrompt(p);
     targetStep(p);
@@ -406,7 +419,9 @@ export function makeFeeding({ W, rider, player, hud, tools = null, audio = null,
   F.state = () => ({ trees: trees.map((t) => ({ id: t.id, x: +t.x.toFixed(1), z: +t.z.toFixed(1), apples: t.shown, left: applesLeft(rider, t.id, day()) })), drawn: mesh ? mesh.count : 0,
     target: F.target ? { key: F.target.key, name: F.target.name, kind: F.target.kind, dist: +F.target.dist.toFixed(2) } : null, petTarget: F.petTarget ? { key: F.petTarget.key, name: F.petTarget.name, dist: +F.petTarget.dist.toFixed(2) } : null, petting: !!petting, petted: F.petted || null, barked: F.barked || null, rows: F.rowsUp || [], spots: allSpots.map((s) => s.key), prompt: F.prompt, hearts: hearts.length,
     fed: F.fed || null, nickered: F.nickered || null, sounds: sound.played.slice(), near: nearSpots.map((x) => ({ key: x.s.key, d: +x.d.toFixed(2) })) });
+  F.soundState = () => sound.state();   // (for rigs)
   F.dispose = () => {
+    sound.dispose();
     if (tools && tools.treat) tools.treat(null);
     if (tools && tools.pet) tools.pet(null);
     if (petMake) petMake.stop();

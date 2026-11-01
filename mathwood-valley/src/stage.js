@@ -80,7 +80,7 @@ import { bakedBand } from './audio/bake.js';
 import { bandChoices, bandLine, soundThrough, songLines, nextSong } from './bandplan.js';
 import { playEnding } from './audio/songend.js';
 import { howdy } from './ui/howdy.js';
-import { makeHarmonicaModel, placeHarmonicaOn, holdFiddleOn, holdBanjoOn } from './bandgear.js';
+import { makeHarmonicaModel, holdFiddleOn, holdBanjoOn } from './bandgear.js';
 import { banjoPlaying } from './banjoplan.js';
 import { loadHands, makeHandPose } from './handpose.js';
 
@@ -229,8 +229,10 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
         };
         holdFiddle(made.fiddler); holdBanjo(made.banjo);
         // (the hands set by hand in the Hands Lab, models/people/hands.json: laid over the clips each frame)
-        made.fiddler.hands = makeHandPose(made.fiddler, 'fiddler', { props: fiddleProps }); made.banjo.hands = makeHandPose(made.banjo, 'banjo'); made.harpist.hands = makeHandPose(made.harpist, 'harpist');
         harmonica = makeHarmonica(); scene.add(harmonica);
+        made.fiddler.hands = makeHandPose(made.fiddler, 'fiddler', { props: { fiddle: fiddleProps && fiddleProps.fiddle, bow: fiddleProps && fiddleProps.bow } });
+        made.banjo.hands = makeHandPose(made.banjo, 'banjo', { props: { banjo: banjoProps && banjoProps.banjo, stool: banjoProps && banjoProps.stool } });
+        made.harpist.hands = makeHandPose(made.harpist, 'harpist', { props: { harmonica }, harp: STAGE.harp });
         crate = makeCrate(); scene.add(crate); seatCrate();
         setVisible(visible);
       })
@@ -242,7 +244,6 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
   // the harmonica, the fiddle and bow, the banjo and his stool: src/bandgear.js (the Hands Lab shows the same ones)
   let harmonica = null, fiddleProps = null, banjoProps = null;
   const makeHarmonica = () => makeHarmonicaModel(STAGE.harp);
-  const placeHarmonica = (P) => placeHarmonicaOn(P, harmonica, STAGE.harp);
   function holdFiddle(P) { fiddleProps = holdFiddleOn(P); }
   function holdBanjo(P) { banjoProps = holdBanjoOn(P); }
   // the drummer's packing crate: rough boards across each face with dark gaps between, a batten up each corner and a
@@ -511,7 +512,6 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
       p.update(dt);
       if (p.hands) p.hands.after();
     }
-    if (harmonica && harmonica.visible) { made.harpist.root.updateMatrixWorld(true); placeHarmonica(made.harpist); }
   };
   // THE BANJO PLAYER: picking while a banjo note sounds (or comes within STAGE.banjoHold), from the music's notes
   const banjoAt = (t) => !!music && banjoPlaying(music.events, t, STAGE.banjoHold);

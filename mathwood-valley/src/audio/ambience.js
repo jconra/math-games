@@ -1,8 +1,8 @@
 // THE TOWN'S SOUNDS: the animals, the birds, somebody at work out back, the creek, and the player's own horse's hooves,
 // so the town and the valley sound lived in. Quiet and now and then, never busy.
 //
-// The animals and the birds are short RECORDED clips (CC0 / public domain, listed with their sources in
-// sounds/CREDITS.md; each comes as .ogg and .m4a, and the browser gets the one it can play). Everything else is made
+// The animals and the birds are short RECORDED clips (CC0 / public domain, or made with ElevenLabs for the horses chosen by
+// the game's maker, listed with their sources in sounds/CREDITS.md; each comes as .ogg and .m4a, and the browser gets the one it can play). Everything else is made
 // in the browser: the hammer and the hand saw are the Windmill lab's (labs/windmill/sound.js, played the same way here),
 // a pig's grunt and a hoof on dirt or splashing through water are Sound Lab patches (TOWN_PATCHES below, the same in
 // ~/sound-lab/patch.js so they can be tuned by ear there), and the creek is a loop made sample by sample (nature.js;
@@ -26,8 +26,10 @@
 //   the yard's sheep, the farm's flock (missions/sheep.js)                  baas
 //   the yard's cows, the farm's paddock, the round-up herd, the corral     moo bursts; from far off, the whole herd lowing
 //   the yard's pigs and the farm's pig yard (missions/pigs.js)             soft grunts (made in the browser: no clip)
-//   the teams of the standing and stopped wagons (traffic.js), the farm's   snorts and the odd whinny
+//   the teams of the standing and stopped wagons (traffic.js), the farm's   snorts, a shake of the head, a stomp, the odd whinny
 //     horse, a horse in the stable, the player's own horse standing still
+//   the player's horse, whistled for                                        a whinny, from wherever it is
+//   a horse somewhere off in the valley                                     now and then, a far whinny
 //   the meadows, the woods' edge, the sky                                   a meadowlark, crows and ravens, a hawk far up
 //   the player's dog (dog.js)                                               the shiba's and the husky's bark (the husky
 //                                                                         also talks, and rarely howls), the pug's small
@@ -48,6 +50,7 @@
 //        homestead; farm, SH, PG: the farm and its sheep and pig jobs (or null); RU: the round-up; traffic: the wagons;
 //        indoor: in the cabin; music 0..1: how loud the action music is; voice: true while a voice speaks (the player's
 //        shouts, src/audio/shouts.js)
+//   The newer horse clips (lazy in CLIPS) come only once a horse is about; the munch and the nicker are src/audio/treatsound.js's.
 //   A.state()     for rigs: what has played, how many sound at once, the creek, the hooves, the bus level
 //   A.anvil(at)   the blacksmith's hammer on his anvil at { x, z } (src/smithy.js, in time with his blows)
 //   A.dispose()
@@ -56,6 +59,7 @@
 //   TOWN_PATCHES, brookSamples(rate, settings, rand) and BROOK (from nature.js)
 import { playPatch } from './patch.js';
 import { brookSamples } from './nature.js';
+import { bakedBand, openNote, bakedSecs } from './bake.js';
 
 // ── THE CLIPS (sounds/<name>.ogg|.m4a): each one's level (they are all made about as loud: -18 LUFS; the two marked
 // quieter were left a few dB softer rather than squashed) and, for a rare one, the seconds before it may play again
@@ -64,6 +68,13 @@ export const CLIPS = {
   cow_moo_1: { level: 1 }, cow_herd_distant: { level: 1, rare: 70 },
   sheep_baa_1: { level: 0.9 }, sheep_baa_2: { level: 0.9 }, sheep_baa_3: { level: 0.9 },
   horse_snort: { level: 0.9 }, horse_whinny_1: { level: 0.85, rare: 40 }, horse_whinny_2: { level: 0.85, rare: 40 },
+  // (ones that couldn't reach the others' loudness without their peaks clipping in the file have the rest as their level)
+  horse_snort_2: { level: 0.9, lazy: true }, horse_snort_3: { level: 0.9, lazy: true }, horse_snort_4: { level: 0.9, lazy: true },
+  horse_shake: { level: 1.5, rare: 45, lazy: true },
+  horse_stomp_1: { level: 1.5, rare: 30, lazy: true }, horse_stomp_2: { level: 1.8, rare: 30, lazy: true }, horse_stomp_3: { level: 1.6, rare: 30, lazy: true },
+  horse_whinny_3: { level: 0.85, rare: 12, lazy: true }, horse_whinny_4: { level: 0.85, rare: 12, lazy: true }, horse_whinny_5: { level: 0.85, rare: 12, lazy: true },
+  horse_nicker: { level: 1, lazy: true, own: true },   // (own: src/audio/treatsound.js plays and loads it)
+  horse_munch_1: { level: 1.75, lazy: true, own: true }, horse_munch_2: { level: 2.25, lazy: true, own: true }, horse_munch_3: { level: 2.5, lazy: true, own: true },
   bird_meadowlark_1: { level: 0.8 }, bird_meadowlark_2: { level: 0.8 },
   bird_crow_1: { level: 0.8 }, bird_crow_2: { level: 0.8 }, bird_raven_1: { level: 0.8 }, bird_raven_2: { level: 0.8 },
   bird_hawk: { level: 0.75, rare: 150 },
@@ -85,6 +96,10 @@ export const AMB = {
   panner: 'equalpower',
 };
 
+// a standing horse's idle sounds (four snorts of a weight, so one never follows itself; a shake and stomps now and then; the
+// older whinnies still in), and the whinnies, the whistle's answer and the far-off call
+const IDLE_HORSE = [['horse_snort', 3], ['horse_snort_2', 3], ['horse_snort_3', 3], ['horse_snort_4', 3], ['horse_shake', 1.5], ['horse_stomp_1', 1], ['horse_stomp_2', 1], ['horse_stomp_3', 1], ['horse_whinny_1', 1], ['horse_whinny_2', 1]];
+const WHINNIES = [['horse_whinny_1', 1], ['horse_whinny_2', 1], ['horse_whinny_3', 1], ['horse_whinny_4', 1], ['horse_whinny_5', 1]];
 // Who calls, how often (seconds between, at random), the clips [name, weight], how far off it can be heard at all (far,
 // metres from the player) and how near it is at full loudness (ref: softer as 1 / distance past it)
 export const SOURCES = {
@@ -94,8 +109,10 @@ export const SOURCES = {
   sheep:     { every: [9, 22],   far: 75,  ref: 5,  level: 0.85, clips: [['sheep_baa_1', 1], ['sheep_baa_2', 1], ['sheep_baa_3', 1]] },
   cows:      { far: 130, ref: 8, level: 0.95, clips: [['cow_moo_1', 1]] },               // (in bursts: BURST.cows)
   herd:      { every: [70, 160], far: 420, near: 110, ref: 70, level: 0.7, clips: [['cow_herd_distant', 1]] },
-  horses:    { every: [14, 34],  far: 60,  ref: 4,  level: 0.8, clips: [['horse_snort', 4], ['horse_whinny_1', 1], ['horse_whinny_2', 1]] },
-  myHorse:   { every: [20, 50],  far: 40,  ref: 3,  level: 0.75, clips: [['horse_snort', 4], ['horse_whinny_1', 1], ['horse_whinny_2', 1]] },
+  horses:    { every: [14, 34],  far: 60,  ref: 4,  level: 0.8, clips: IDLE_HORSE },
+  myHorse:   { every: [20, 50],  far: 40,  ref: 3,  level: 0.75, clips: IDLE_HORSE },
+  whistled:  { far: 999, ref: 16, level: 0.85, clips: WHINNIES },     // (the player's horse answering the whistle: after: seconds before it does)
+  farHorse:  { every: [80, 200], far: 999, ref: 45, level: 0.7, clips: WHINNIES },
   meadowlark:{ every: [12, 30],  far: 999, ref: 14, level: 0.7, clips: [['bird_meadowlark_1', 1], ['bird_meadowlark_2', 1]] },
   crows:     { every: [20, 55],  far: 999, ref: 16, level: 0.7, clips: [['bird_crow_1', 1], ['bird_crow_2', 1], ['bird_raven_1', 1], ['bird_raven_2', 1]] },
   hawk:      { every: [120, 260], far: 999, ref: 45, level: 0.7, clips: [['bird_hawk', 1]] },
@@ -126,6 +143,8 @@ export const HOOVES = {
   farmHorse: { Walk: [0.16, 0.51, 0.67, 0.9], Gallop: [0.14, 0.29, 0.49, 0.66] },
   level: { Walk: 0.7, Gallop: 1.5 },     // a hoof at a walk, and at a gallop (a trot is the Walk clip, sped up: between)
   far: 50,
+  baked: true,           // from src/audio/bake.js (false: every hoof live, for a rig to compare)
+  takes: { hoof: 16, splash: 6 },
 };
 
 // ── THE PATCHES (Sound Lab format: paste one into the lab to tune it, then paste it back) ──────────────────────────
@@ -214,6 +233,20 @@ export const TOWN_PATCHES = {
   },
 };
 
+// what a horse's hooves bake: hoofs with the thump's and the knock's middles spread as the live ones draw them (fixed values, a
+// patch's key must not change between visits), splashes in a few takes of their noise
+const spreadOf = (i, seed, a, b) => a + ((i * seed) % 1) * (b - a);
+export function hoofShots() {
+  const out = [], T = HOOVES.takes;
+  for (let i = 0; i < T.hoof; i++) out.push({ name: `hoof|${i}`, make: () => {
+    const k = spreadOf(i, 0.618034, 0.8, 1.25), th = spreadOf(i, 0.754878, 0.85, 1.15), P = TOWN_PATCHES['TOWN — HOOF'];
+    const n = { ...P, nodes: P.nodes.map((x) => (x.id === 'knock-f' ? { ...x, freq: x.freq * k } : x.id === 'thump-f' ? { ...x, freq: x.freq * th } : x)) };
+    return { patch: openNote(n), secs: bakedSecs(n), take: i };
+  } });
+  for (let i = 0; i < T.splash; i++) out.push({ name: `splash|${i}`, make: () => { const n = TOWN_PATCHES['TOWN — HOOF SPLASH']; return { patch: openNote(n), secs: bakedSecs(n), take: i }; } });
+  return out;
+}
+
 // ── PURE HELPERS ─────────────────────────────────────────────────────────────────────────────────────────────────
 // the file kind this browser can play: Ogg Vorbis where it can (Chrome, Firefox, Edge), else AAC in .m4a (Safari)
 export function clipExt(canPlayType) {
@@ -272,7 +305,7 @@ const GAME = new URL('../../', import.meta.url).href;     // (src/audio/ -> the 
 
 export function makeAmbience({ audio, W, tier = W && W.tier, base = GAME }) {
   const T = AMB.voices[tier] ? tier : 'normal', slow = AMB.slower[T], most = AMB.voices[T];
-  let ctx = null, bus = null, cut = null, noiseBuf = null, alive = true, voices = 0, clock = 0, lastAny = -99, ext = '.ogg', here = null;
+  let ctx = null, bus = null, cut = null, noiseBuf = null, alive = true, voices = 0, clock = 0, lastAny = -99, ext = '.ogg', here = null, baked = null, clipBase = '', lazyAsked = false;
   const buffers = {}, last = {}, lastAt = {}, played = {}, made = { hammer: 0, saw: 0, grunt: 0, hoof: 0, splash: 0 };
   const bursts = { cows: 0, dogs: 0, cowCalls: 0, dogCalls: 0 };
   const timers = {};
@@ -291,12 +324,20 @@ export function makeAmbience({ audio, W, tier = W && W.tier, base = GAME }) {
     ext = clipExt((n) => { const el = document.createElement('audio'); return el.canPlayType(n); });
     let b = String(base); if (!b.endsWith('/')) b += '/';
     // (the context is held here: leaving the ride clears ctx while clips may still be on their way, and those just stop)
+    clipBase = b;
+    for (const name of Object.keys(CLIPS)) if (!CLIPS[name].lazy) loadClip(name);
+    if (HOOVES.baked && typeof OfflineAudioContext !== 'undefined') try { baked = bakedBand(ctx.sampleRate); baked.shots('hooves', hoofShots()); } catch (e) { baked = null; }
+  }
+  const loadClip = (name) => {
     const c = ctx;
-    for (const name of Object.keys(CLIPS)) {
-      fetch(b + 'sounds/' + name + ext).then((r) => { if (!r.ok) throw new Error(r.status + ' ' + r.url); return r.arrayBuffer(); })
-        .then((ab) => (alive ? c.decodeAudioData(ab) : null)).then((buf) => { if (alive && buf) buffers[name] = buf; })
-        .catch((e) => { if (alive) console.warn('ambience: a clip could not load', name, e && e.message); });
-    }
+    return fetch(clipBase + 'sounds/' + name + ext).then((r) => { if (!r.ok) throw new Error(r.status + ' ' + r.url); return r.arrayBuffer(); })
+      .then((ab) => (alive ? c.decodeAudioData(ab) : null)).then((buf) => { if (alive && buf) buffers[name] = buf; })
+      .catch((e) => { if (alive) console.warn('ambience: a clip could not load', name, e && e.message); });
+  };
+  // the newer horse clips: the first time a horse is about, one after another
+  function horseClips() {
+    if (lazyAsked || !ctx) return; lazyAsked = true;
+    (async () => { for (const name of Object.keys(CLIPS)) if (CLIPS[name].lazy && !CLIPS[name].own && alive) await loadClip(name); })();
   }
   audio.ready(() => { if (alive) build(); });
 
@@ -539,10 +580,12 @@ export function makeAmbience({ audio, W, tier = W && W.tier, base = GAME }) {
       for (let i = 0; i < lands.length; i++) {
         if (!crossed(hoofLast, ph, lands[i])) continue;
         // (louder at a gallop, and a little with the clip's speed: a trot is the Walk clip played faster)
-        const g = lv * Math.min(1.2, 0.7 + 0.3 * sp) * rnd(0.75, 1);
+        const g = lv * Math.min(1.2, 0.7 + 0.3 * sp) * rnd(0.75, 1), when = ctx.currentTime + 0.01 + i * 0.002;
+        const kind = isWet ? 'splash' : 'hoof', base = TOWN_PATCHES[isWet ? 'TOWN — HOOF SPLASH' : 'TOWN — HOOF'].nodes.find((x) => x.type === 'out').gain;
+        if (baked && baked.playShot(ctx, hoofP, null, 'hooves', `${kind}|${(Math.random() * HOOVES.takes[kind]) | 0}`, { gain: base * g }, when)) { if (isWet) splashes++; else hooves++; continue; }
         const P2 = withNodes(isWet ? 'TOWN — HOOF SPLASH' : 'TOWN — HOOF', (x) => (x.type === 'out' ? { ...x, gain: x.gain * g }
           : x.id === 'knock-f' ? { ...x, freq: x.freq * rnd(0.8, 1.25) } : x.id === 'thump-f' ? { ...x, freq: x.freq * rnd(0.85, 1.15) } : null));
-        playPatch(ctx, null, hoofP, null, P2, null, { at: ctx.currentTime + 0.01 + i * 0.002 });
+        playPatch(ctx, null, hoofP, null, P2, null, { at: when });
         if (isWet) splashes++; else hooves++;
       }
     }
@@ -604,6 +647,7 @@ export function makeAmbience({ audio, W, tier = W && W.tier, base = GAME }) {
 
   // ── EACH FRAME ───────────────────────────────────────────────────────────────────────────────────────────────
   const chickState = new WeakMap();
+  let lastWhistle = undefined;
   let squawkAt = -99, barkBack = false, dogAt = -99;
   const A = {};
   A.update = (dt, { at, flock = null, P = null, D = null, HS = null, farm = null, RU = null, SH = null, PG = null, traffic = null, indoor = false, music = 0, voice = false } = {}) => {
@@ -662,7 +706,21 @@ export function makeAmbience({ audio, W, tier = W && W.tier, base = GAME }) {
       }
       for (const w of (farm && farm.herd) || []) if (w.a && /Horse/i.test(w.a.kind)) { const p = spotOf(w); if (p) horses.push(p); }
       if (stable) horses.push(stable);
+      if (horses.some((h) => dist(h) < SOURCES.horses.far)) horseClips();
       tryAt('horses', horses.map((h) => ({ x: h.x, z: h.z, y: yAt(h.x, h.z, 1.6) })));
+    }
+    if (P && P.horse) horseClips();
+    // the player's horse answering the whistle
+    if (P && P.whistledAt !== lastWhistle) {
+      lastWhistle = P.whistledAt; horseClips();
+      const r = P.horse && P.horse.root;
+      if (lastWhistle && r) playClip('whistled', { x: r.position.x, z: r.position.z, y: r.position.y + 1.6 }, { force: true, when: rnd(0.45, 0.9) });
+    }
+    // a horse somewhere far off, away from the town's noise (none from indoors)
+    if (due('farHorse')) {
+      horseClips();
+      const a = Math.random() * Math.PI * 2, r = rnd(110, 190);
+      if (indoor || !playClip('farHorse', { x: at.x + Math.sin(a) * r, z: at.z + Math.cos(a) * r, y: yAt(at.x, at.z, 2) })) retry('farHorse', 15);
     }
     if (due('myHorse')) {
       const h = P && P.horse, still = h && h.root && !/Walk|Gallop/.test(h.clip || '');
@@ -709,7 +767,7 @@ export function makeAmbience({ audio, W, tier = W && W.tier, base = GAME }) {
     creek: { on: !!creek, d: Number.isFinite(creekD) ? +creekD.toFixed(1) : null, squares: wet.size }, bus: bus ? +bus.gain.value.toFixed(3) : 0, work, stable });
   // (for rigs: a burst now)
   A.happyBark = (D) => { if (!D || !D.position || !D.dog) return false; const ok = dogBurst(D, true); if (ok) { dogAt = clock; dogT = Math.max(dogT, BURST.dogs.quiet[0] * 0.5); } return ok; };   // (a treat: a short, happy bark)
-  A.dev = { cows: () => { cowT = 0; }, dog: () => { dogT = 0; }, work: () => { workT = 0; }, out: () => cut };
+  A.dev = { cows: () => { cowT = 0; }, dog: () => { dogT = 0; }, work: () => { workT = 0; }, out: () => cut, timer: (k) => { timers[k] = 0; }, baked: () => baked };
   // THE BLACKSMITH'S HAMMER ON HIS ANVIL (src/smithy.js rings it as each blow lands, in time with his clip): iron on
   // iron, a crack of noise like the hammer's out back but higher and harder, with a short bright second burst and the
   // anvil's dull knock under it; no tone in it (the game maker's rule: a hammer is a clap-like crack, never ringing

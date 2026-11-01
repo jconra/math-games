@@ -33,6 +33,7 @@
 //   P.onHorse, P.canRide (owns a saddle and a horse), P.horse (the horse, from makeAnimal; null until loaded, and while
 //   the rider has none: every rider starts on foot), P.person, P.cam
 //   P.mount(), P.dismount(), P.callHorse()     as E and H do
+//   P.whistledAt   when (performance.now()) the rider last whistled for the horse
 //   P.horseCameAt  when (performance.now()) a whistled horse last pulled up beside the player
 //   P.horsePickedAt  when another horse was last picked at the stable (it waits there);  P.horseComing  whistled, on its way
 //   P.downAt       when the rider last got down off the horse
@@ -446,7 +447,7 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
     if (P.onHorse) return;
     const d = Math.hypot(H.x - pos.x, H.z - pos.z);
     if (d < MOVE.horse.come.near + 1) { tell(SAY.here); H.mode = 'stand'; return; }
-    tell(SAY.whistle);
+    tell(SAY.whistle); P.whistledAt = performance.now();   // (the horse's answer: src/audio/ambience.js)
     if (d > MOVE.horse.come.far) bringRound(40);
     H.mode = 'come'; H.stuck = 0; H.best = Infinity; H.comeT = 0; H.goal = null;
   };

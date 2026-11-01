@@ -12,7 +12,10 @@
 // The tempo is the stage music's (80 beats a minute, BEAT from stagemusic.js) and the key is its key's own minor (E
 // minor: the same notes as the stage's G major), four-bar lines a chord a bar, so it sits with the town's music.
 //
-//   const M = makeActionMusic(ctx, { out, seed, patches })   out: where it plays (the game gives a gain into the master)
+// The notes are baked (src/audio/bake.js) once a job first wants the music: a note not baked yet plays live, as it always did.
+//
+//   const M = makeActionMusic(ctx, { out, seed, patches, baked })   out: where it plays (the game gives a gain into the master);
+//                             baked: the bakery (null: every note live)
 //   M.start(at, { action })   starts at ctx time `at` (the first beat); in an OfflineAudioContext it writes the whole
 //                             render at once (then action() and hit() take a time: M.action(true, 8))
 //   M.stop({ now })           stops making notes (now: also silences the ones already made)
@@ -24,9 +27,11 @@
 //   M.events                  what has been scheduled (testing): [{ at, what, layer, midi }]; live, only the last 256
 //   ACTION                    the levels and timings
 //   makeActionTune(seed)      the plan, a line at a time (tested in tests/actionmusic.test.mjs)
+//   actionShots(patches)      what's baked, for the bakery;  ACTION_BAKE: how many takes of what
 import { playPatch, PATCH_PRESETS } from './patch.js';
 import { notePatch, makeRandom, makeRoom, BEAT } from './stagemusic.js';
 import { ACTION_PATCHES } from './actionpatches.js';
+import { openNote, wetNote, bakedSecs, nearest } from './bake.js';
 
 export const ACTION = {
   level: 0.6,             // the whole action music's level into the game's master volume (the loudest catch peaks near -2 dBFS)
@@ -37,6 +42,7 @@ export const ACTION = {
   lookahead: 2.5,         // seconds of notes made ahead
   kept: 256,              // events listed while playing live
   duck: 0.5,              // the music's level for a moment under a gunshot (about 6 dB down)
+  baked: true,            // its notes from src/audio/bake.js (false: every note live, for a rig to compare)
 };
 const NAMES = { gallop: 'ACTION — GALLOP', rim: 'ACTION — RIM', big: 'ACTION — BIG DRUM', whip: 'ACTION — WHIP', twang: 'ACTION — TWANG', whistle: 'ACTION — WHISTLE', bass: 'ACTION — BASS' };
 const ROOT = { twang: 52, whistle: 88, bass: 40 };   // the MIDI notes the patches are written at
@@ -141,8 +147,71 @@ function noteOf(ev, patches) {
   return notePatch(p, { gain: vel });
 }
 
+// ── THE BAKE ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+// What changes a note's sound, not just its level: the drums and the whip, only the noise (live, each draws one of the patch
+// runtime's four noise buffers) and where in a render block they start (bake.js playShot's lead): a few takes. The bass: its
+// pitch, and the same three starts. The guitar: its pitch, and its velocity moves the pick's
+// brightness, in three families of velocities that never mix (the trail's soft picking, the riff's run, the riff's last
+// note), so each is baked at its own. The whistle: its pitch, held as long as any note is held and let go at play time with
+// its own release. The rim and the whip send only part of themselves to the room, so what they send is baked too.
+export const ACTION_BAKE = {
+  takes: { gallop: 4, rim: 6, big: 2, whip: 3 },
+  twangVels: [0.27, 0.7, 0.85],
+  bassTakes: 3,
+  bass: [36, 38, 40, 43, 45, 47, 48, 50, 52, 55, 57],
+  twang: [40, 43, 45, 47, 48, 50, 52, 54, 55, 57, 59, 60, 62, 64],
+  whistle: [83, 84, 86, 88, 90, 91, 93, 95],
+  whistleBeats: 4,        // the longest note the tune holds
+  wetToo: ['rim', 'whip'],
+};
+const LEADS = [17, 53, 89, 121];   // (samples into a render block: bake.js playShot)
+const actionTail = 0.35;   // s a whistled note runs on after it's let go
+export function actionShots(patches = PATCH_PRESETS) {
+  const out = [], B = ACTION_BAKE;
+  for (const what of Object.keys(B.takes)) for (let k = 0; k < B.takes[what]; k++) {
+    out.push({ name: `${what}|${k}`, make: () => { const n = noteOf({ what, vel: 1 }, patches); return { patch: openNote(n), secs: bakedSecs(n) + 0.003, take: `${k}@${LEADS[k % LEADS.length]}`, lead: LEADS[k % LEADS.length] }; } });
+    if (B.wetToo.includes(what)) out.push({ name: `${what}|wet|${k}`, make: () => { const n = noteOf({ what, vel: 1 }, patches); return { patch: wetNote(n), secs: bakedSecs(n), take: k }; } });
+  }
+  for (const midi of B.bass) for (let k = 0; k < B.bassTakes; k++) out.push({ name: `bass|${midi}|${k}`, make: () => { const n = noteOf({ what: 'bass', midi, vel: 1 }, patches); return { patch: openNote(n), secs: bakedSecs(n) + 0.003, take: `${k}@${LEADS[k]}`, lead: LEADS[k] }; } });
+  for (const midi of B.twang) for (const vel of B.twangVels) {
+    // (the trail plays only the chords' notes, the riff's run only the scale's: what the tune can't play isn't baked)
+    if (vel === 0.7 ? !RIFF.includes(midi) : !GTR.has(midi)) continue;
+    out.push({ name: `twang|${midi}|${vel}`, make: () => { const n = noteOf({ what: 'twang', midi, vel }, patches); return { patch: openNote(n), secs: bakedSecs(n) }; } });
+  }
+  const held = B.whistleBeats * BEAT + actionTail;
+  for (const midi of B.whistle) out.push({ name: `whistle|${midi}`, make: () => { const n = noteOf({ what: 'whistle', midi, vel: 1, len: held + 1 }, patches); return { patch: openNote(n), secs: +held.toFixed(3) }; } });
+  return out;
+}
+const GTR = new Set(Object.values(CHORDS).flatMap((c) => c.gtr));
+const nodeIn = (note, id) => note.nodes.find((n) => n.id === id);
+// a note out of the bakery, or null (not baked yet: it plays live)
+function playBaked(B, ctx, dry, send, ev, note, at) {
+  const out = nodeIn(note, 'out').gain, sn = nodeIn(note, 'send'), o = { gain: out, send: sn ? sn.gain : 0 };
+  let name;
+  if (ev.what === 'bass') name = `bass|${ev.midi}|${(Math.random() * ACTION_BAKE.bassTakes) | 0}`;
+  else if (ev.what === 'twang') {
+    const vel = nearest(ACTION_BAKE.twangVels, ev.vel ?? 1);
+    name = `twang|${ev.midi}|${vel}`;
+  } else if (ev.what === 'whistle') {
+    const a = nodeIn(note, 'amp');
+    if (ev.len * BEAT > ACTION_BAKE.whistleBeats * BEAT) return null;
+    const rt = at + (a.attack ?? 0.01) + (a.decay ?? 0.2) + a.hold;
+    o.let = { at: rt, tc: Math.max(0.005, (a.release ?? 0.3) / 3), tail: actionTail };
+    name = `whistle|${ev.midi}`;
+  } else {
+    const k = (Math.random() * ACTION_BAKE.takes[ev.what]) | 0;
+    name = `${ev.what}|${k}`;
+    if (ACTION_BAKE.wetToo.includes(ev.what)) o.wet = `${ev.what}|wet|${k}`;
+  }
+  return B.playShot(ctx, dry, send, 'action', name, o, at);
+}
+
+export const noteForRig = (ev, patches = PATCH_PRESETS) => noteOf(ev, patches);   // (the proof rig: rigs/band/bake_more.cjs)
+export const playBakedForRig = playBaked;
+
 // ── PLAYING IT ───────────────────────────────────────────────────────────────────────────────────────────────────────
-export function makeActionMusic(ctx, { out = ctx.destination, seed = 1, patches = PATCH_PRESETS } = {}) {
+export function makeActionMusic(ctx, { out = ctx.destination, seed = 1, patches = PATCH_PRESETS, baked = null } = {}) {
+  if (baked) try { baked.shots('action', actionShots(patches)); } catch (e) { console.warn('Mathwood Valley: baking the action music', e); baked = null; }
   const tune = makeActionTune(seed), queue = [], events = [], voices = [];
   const offline = typeof ctx.startRendering === 'function';
   let origin = null, made = 0, timer = null, running = false, actionOn = false;
@@ -162,7 +231,7 @@ export function makeActionMusic(ctx, { out = ctx.destination, seed = 1, patches 
   function play(ev, at = secs(ev.beat)) {
     const note = noteOf(ev, patches); if (!note) return;
     const l = L[ev.layer] || L.action;
-    const h = playPatch(ctx, null, l.dry, l.send, note, null, { at });
+    const h = (baked && playBaked(baked, ctx, l.dry, l.send, ev, note, at)) || playPatch(ctx, null, l.dry, l.send, note, null, { at });
     if (h) voices.push({ h, end: at + (ev.len || 1) * BEAT + 3 });
     if (!offline) { const now = ctx.currentTime; while (voices.length && voices[0].end < now) voices.shift(); }
     events.push({ at, what: ev.what, layer: ev.layer, midi: ev.midi });

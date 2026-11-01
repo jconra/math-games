@@ -5,6 +5,7 @@
 //   WAGON — CREAK   the wood and the iron: now and then a short creak, a different pitch each time
 //   WAGON — HOOF    one hoof coming down on the dirt: a dull thud with a small knock; played for every hoof of the team
 //                   as it lands in the horses' Walk or Gallop (four a stride, each horse a little out of time with the other)
+// The hooves and the creaks are baked (src/audio/bake.js): a note not baked yet plays live; the rumble, a drone, stays live.
 // Each wagon's sound comes from where it is (a PannerNode at the wagon and one at the team; the camera is the ears,
 // as for the stage band), quiet, and off altogether past WAGON_SOUND.far metres.
 //
@@ -12,7 +13,9 @@
 //   S.update(dt, ears)    each frame after the wagon's update: ears = where the listener is (the camera's position)
 //   S.state()             for rigs: { on, d, level, rumble, creaks, hooves }
 //   S.dispose()
+//   wagonShots(): what's baked, for the bakery
 import { playPatch } from './patch.js';
+import { bakedBand, openNote, bakedSecs } from './bake.js';
 
 export const WAGON_PATCHES = {
   'WAGON — RUMBLE': {
@@ -86,12 +89,24 @@ export const WAGON_SOUND = {
   ref: 4, rolloff: 1.2,     // the panners: full at ref metres, softening as 1 / distance past it
 };
 const rnd = (a, b) => a + Math.random() * (b - a);
+// the bake: hooves with the knock's brightness spread as the live ones draw it (fixed values: a patch's key must not change
+// between visits), creaks at each whole semitone of the live range
+export const WAGON_BAKE = { baked: true, hooves: 8, creak: [-5, 6] };
+const shiftNodes = (p, fn) => ({ ...p, nodes: p.nodes.map((x) => fn(x) || x) });
+const spread = (i, a, b) => a + ((i * 0.618034) % 1) * (b - a);
+const creakAt = (semi) => shiftNodes(WAGON_PATCHES['WAGON — CREAK'], (x) => (x.type === 'osc' && x.id === 'wood' ? { ...x, freq: x.freq * Math.pow(2, semi / 12) } : null));
+export function wagonShots() {
+  const out = [], H = WAGON_PATCHES['WAGON — HOOF'], B = WAGON_BAKE;
+  for (let i = 0; i < B.hooves; i++) out.push({ name: `hoof|${i}`, make: () => { const k = spread(i, 0.8, 1.25), n = shiftNodes(H, (x) => (x.id === 'knock-f' ? { ...x, freq: x.freq * k } : null)); return { patch: openNote(n), secs: bakedSecs(n) + 0.003, take: `${i}@${17 + (i * 36) % 108}`, lead: 17 + (i * 36) % 108 }; } });
+  for (let s = B.creak[0]; s <= B.creak[1]; s++) out.push({ name: `creak|${s}`, make: () => { const n = creakAt(s); return { patch: openNote(n), secs: bakedSecs(n) }; } });
+  return out;
+}
 
 let count = 0;
 export function makeWagonSound(audio, wg) {
   const who = 'wagon' + (count++);
   let ctx = null, bus = null, pW = null, pT = null, rumble = null, rumbleGain = null, alive = true, on = false;
-  let nextCreak = rnd(...WAGON_SOUND.creak), dist = Infinity, hooves = 0, creaks = 0;
+  let nextCreak = rnd(...WAGON_SOUND.creak), dist = Infinity, hooves = 0, creaks = 0, baked = null;
   const last = wg.team.map(() => -1), lastClip = wg.team.map(() => '');
   const panner = () => {
     const n = ctx.createPanner(); n.panningModel = 'equalpower'; n.distanceModel = 'inverse';
@@ -100,6 +115,7 @@ export function makeWagonSound(audio, wg) {
   };
   function build() {
     ctx = audio.ctx;
+    if (WAGON_BAKE.baked && !baked && typeof OfflineAudioContext !== 'undefined') try { baked = bakedBand(ctx.sampleRate); baked.shots('wagon', wagonShots()); } catch (e) { baked = null; }
     bus = ctx.createGain(); bus.gain.value = 0; bus.connect(audio.out);
     pW = panner(); pW.connect(bus); pT = panner(); pT.connect(bus);
     rumbleGain = ctx.createGain(); rumbleGain.gain.value = 0; rumbleGain.connect(pW);
@@ -133,9 +149,13 @@ export function makeWagonSound(audio, wg) {
         nextCreak -= dt;
         if (nextCreak <= 0) {
           nextCreak = rnd(...WAGON_SOUND.creak) / Math.min(1.5, Math.max(0.6, pace / 1.8));
-          const semi = rnd(-5, 6), p = WAGON_PATCHES['WAGON — CREAK'];
-          const n = p.nodes.map((x) => (x.type === 'osc' && x.id === 'wood' ? { ...x, freq: x.freq * Math.pow(2, semi / 12) } : x.type === 'out' ? { ...x, gain: x.gain * rnd(0.5, 1) } : x));
-          playPatch(ctx, null, pW, null, { ...p, nodes: n }, null); creaks++;
+          const semi = rnd(-5, 6), p = WAGON_PATCHES['WAGON — CREAK'], lv = rnd(0.5, 1);
+          const outG = p.nodes.find((x) => x.type === 'out').gain * lv;
+          if (!(baked && baked.playShot(ctx, pW, null, 'wagon', `creak|${Math.round(semi)}`, { gain: outG }, ctx.currentTime))) {
+            const n = p.nodes.map((x) => (x.type === 'osc' && x.id === 'wood' ? { ...x, freq: x.freq * Math.pow(2, semi / 12) } : x.type === 'out' ? { ...x, gain: x.gain * lv } : x));
+            playPatch(ctx, null, pW, null, { ...p, nodes: n }, null);
+          }
+          creaks++;
         }
       }
       // the hooves: each time a horse's Walk (or Gallop) clip passes a hoof's landing
@@ -148,8 +168,12 @@ export function makeWagonSound(audio, wg) {
           const crossed = last[i] <= ph ? at > last[i] && at <= ph : at > last[i] || at <= ph;
           if (crossed) {
             const p = WAGON_PATCHES['WAGON — HOOF'];
-            const n = p.nodes.map((x) => (x.type === 'out' ? { ...x, gain: x.gain * WAGON_SOUND.hoof * rnd(0.7, 1) } : x.id === 'knock-f' ? { ...x, freq: x.freq * rnd(0.8, 1.25) } : x));
-            playPatch(ctx, null, pT, null, { ...p, nodes: n }, null, { at: t + 0.01 + i * 0.004 }); hooves++;
+            const lv = WAGON_SOUND.hoof * rnd(0.7, 1), when = t + 0.01 + i * 0.004, outG = p.nodes.find((x) => x.type === 'out').gain * lv;
+            if (!(baked && baked.playShot(ctx, pT, null, 'wagon', `hoof|${(Math.random() * WAGON_BAKE.hooves) | 0}`, { gain: outG }, when))) {
+              const n = p.nodes.map((x) => (x.type === 'out' ? { ...x, gain: x.gain * lv } : x.id === 'knock-f' ? { ...x, freq: x.freq * rnd(0.8, 1.25) } : x));
+              playPatch(ctx, null, pT, null, { ...p, nodes: n }, null, { at: when });
+            }
+            hooves++;
           }
         }
         last[i] = ph;
