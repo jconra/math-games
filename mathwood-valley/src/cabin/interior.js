@@ -20,7 +20,7 @@
 //   R.floorUnder(x, z)                   the floor's height under a spot (its frame: the floor, the porch, or the ground)
 //   R.pushOut(body, { radius })          pushes body { x, y, z } (its frame) out of the walls and the furniture; -> moved
 //   R.inside(x, z)                       a point (its frame) is in one of its rooms
-//   R.furnish(owned, { dogs })           shows the pieces owned (slot ids) and hides the rest; dogs: how many dog beds
+//   R.furnish(owned, { dogs, rifles })   shows the pieces owned (slot ids) and hides the rest; dogs: how many dog beds; rifles: the ones on the rack
 //   R.spec(id)                           a slot as it stands in this cabin: slots.js's piece, at layout.js's place
 //   R.ghost(id | null)                   a see-through look at a slot's piece, in its place, before it is bought
 //   R.pop(id)                            a piece just bought grows into place
@@ -208,11 +208,11 @@ export async function makeHome({ W, renderer, base = new URL('../../', import.me
   // a slot's piece: a group with everything it shows (made in code, or its files placed); built once, kept
   const pieces = new Map();    // id -> Promise<group>
   function pieceOf(id, opts = {}) {
-    const k = id + (id === 'dogbeds' ? ':' + opts.dogs : '');
+    const k = id + (id === 'dogbeds' ? ':' + opts.dogs : id === 'rifles' ? ':' + (opts.rifles || []).join() : '');
     if (pieces.has(k)) return pieces.get(k);
     const spec = SPEC[id];
     const p = (async () => {
-      const g = await TH.build(id, spec, { dogs: opts.dogs, bedSpots: BED_SPOTS });
+      const g = await TH.build(id, spec, { dogs: opts.dogs, bedSpots: BED_SPOTS, rifles: opts.rifles || [] });
       // (made in code: slimmed to a few shapes; the room's things cast no shadows: the valley's sun only reaches in
       // through the windows, and their shadows would double their draws)
       { const mk = []; g.traverse((o) => { if (o.userData.made) mk.push(o); }); mk.forEach(slim); }
@@ -231,12 +231,12 @@ export async function makeHome({ W, renderer, base = new URL('../../', import.me
     if (!ghostMats.has(cut)) ghostMats.set(cut, new THREE.MeshBasicMaterial({ color: 0xffd9a0, transparent: true, opacity: 0.32, depthWrite: false, alphaMap: null, map: cut, alphaTest: cut ? 0.1 : 0 }));
     return ghostMats.get(cut);
   };
-  async function furnish(list, { dogs = 0 } = {}) {
+  async function furnish(list, { dogs = 0, rifles = ['lever', 'single'] } = {}) {
     owned = list.slice(); dogsN = dogs; const my = ++gen;
     for (const s0 of SLOTS) {
       const s = SPEC[s0.id], want = owned.includes(s.id);
       if (!want) { const g = shown.get(s.id); if (g) { g.removeFromParent(); shown.delete(s.id); } boxes.delete(s.id); continue; }
-      const g = await pieceOf(s.id, { dogs });
+      const g = await pieceOf(s.id, { dogs, rifles });
       if (my !== gen) return;                       // (a newer call took over)
       const was = shown.get(s.id); if (was && was !== g) was.removeFromParent();
       if (!g.parent) (s.id === 'porch' ? group : inner).add(g); shown.set(s.id, g);   // (the porch's rockers are outside: always drawn)

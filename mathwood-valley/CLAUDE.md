@@ -43,12 +43,13 @@ He shows them to people, so a lab showing last week's version looks like a bug.
   - **Building Lab** (labs/buildings): the code-built buildings, their doors and insides, the stable's horses.
   - **Town Lab** (labs/town): the town's layout and decor.json (plants, props, fences, footpaths).
   - **Horse Lab** (labs/horse): horse coats, manes and the new horse.
+  - **Hands Lab** (labs/hands): the band's hands over their clips (models/people/hands.json; src/handpose.js, src/bandgear.js).
   - **Dog Lab** (labs/dogs): the dog breeds (src/actors/dogbreeds.js, morph.js, dogcoat.js, dogkind.js; saved to
     models/animals/dogbreeds.json), reshaped from the game's dogs, and the dogs as the game has them.
   - **Material Lab** and **Stone Lab**: the wood, weather and stone the buildings wear.
   - **Windmill Tower Lab**, **Bridge Lab** and **Fishing Lab**: those places and their questions.
   - **Practice**: the math levels and lockboxes.
-  - **Props Lab** (planned, ~/pw/bandit-math/PROPS.md): the props.
+  - **Props Lab** (labs/props; plan ~/pw/bandit-math/PROPS.md): the props library (world/props/). A first slice; more props move over a category at a time.
 - If a new part of the game has no lab, say so in its plan file. Whether it gets one is the game maker's call.
 
 ## Help is asked for, never pushed

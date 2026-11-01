@@ -55,7 +55,7 @@ test('the bands follow the scenery rung; past gaming there is more of everything
   assert.ok(START.scenery.gaming < TOP.scenery && START.people.gaming < TOP.people);
   const g = levelsAt(START.scenery.gaming, START.people.gaming), top = levelsAt(TOP.scenery, TOP.people);
   for (const k of ['grass', 'lawn', 'trees', 'travellers', 'townsfolk', 'crowd', 'horse']) assert.ok(top[k] > g[k], k);
-  assert.ok(DIALS.travellers.levels.at(-1).v.most >= 100, 'hundreds on the road at the top');
+  assert.ok(DIALS.travellers.levels.at(-1).v.most >= 50, 'a busy road at the top (the game\'s maker, 2026-10-31: a bit fewer people, and the real ones farther out)');
   assert.ok(DIALS.grass.levels.at(-1).v.count > 30000, 'more grass than gaming had');
   // (the two ladders compared in bands: at a tier's start both lanes sit at the same place)
   for (const [t, b] of [['potato', 0], ['normal', 1], ['gaming', 2]]) for (const lane of LANES) assert.equal(bandPos(lane, START[lane][t]), b, `${lane} ${t}`);

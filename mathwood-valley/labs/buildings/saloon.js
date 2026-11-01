@@ -59,6 +59,7 @@ import { T, RX, RY, RZ, mul, vary, smooth01, ngon, wallOf, wallM, boardAndBatten
 import { regionUV } from './art.js';
 import { Goods } from './goods.js';
 import { SALOON_ART as A, makeSaloonArt } from './saloonprops.js';
+import { STAG_HEAD } from './staghead.js';
 export { makeSaloonArt };
 
 // ── the recipe ───────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -293,6 +294,7 @@ function trimCase(k, w, op, TR, o = {}) {
   const dep = o.depth ?? 0.2;
   for (const [a, s] of [[op.a0, 1], [op.a1, -1]]) k.board([0.025, h, dep], null, null, { m: wallM(w, a - s * 0.0125, (op.y0 + op.y1) / 2, 0.05 - dep / 2), long: 1, tint: vary(k, TRIMW, 0.8, 0.95), paint: trimP(k, TR), skip: '-y+y-z' + (s > 0 ? '-x' : '+x') });
   k.board([wd, 0.025, dep], null, null, { m: wallM(w, ac, op.y1 + 0.0125, 0.05 - dep / 2), long: 0, tint: vary(k, TRIMW, 0.8, 0.95), paint: trimP(k, TR), skip: '+y-z+x-x' });
+  if (!op.door) k.board([wd, 0.025, dep + 0.1], null, null, { m: wallM(w, ac, op.y0 - 0.0125, 0.05 - (dep + 0.1) / 2), long: 0, tint: vary(k, TRIMW, 0.8, 0.95), paint: trimP(k, TR), skip: '-y-z+x-x' });   // (under the sash: seen from above, the sky came in below the glass)
   // (the sheathing behind the siding round it: the rows cut away over its top and foot leave a strip; this fills it)
   const bw = wd + 0.26;
   k.board([bw, 0.27, 0.015], null, null, { m: wallM(w, ac, op.y1 + 0.135, -0.012), long: 0, tint: vary(k, BARE, 0.7, 0.8), outside: true, skip: '+x-x+y-y-z' });
@@ -327,9 +329,10 @@ function windowIn(k, w, op, TR, o = {}) {
   // inside: the casing on the lining, a stool and an apron
   const oi = -INS - 0.03, cw = 0.09;
   for (const s of [-1, 1]) k.board([cw, h + cw, 0.02], null, null, { m: wallM(w, ac + s * (wd / 2 + cw / 2), yc + cw / 2, oi), long: 1, tint: vary(k, WAIN, 0.85, 1.0), skip: '+z', inside: true });
-  k.board([wd + 2 * cw + 0.04, 0.1, 0.022], null, null, { m: wallM(w, ac, op.y1 + cw + 0.05, oi), long: 0, tint: vary(k, WAIN, 0.85, 1.0), skip: '+z', inside: true });
+  // (the head from the opening's top up: no gap over the frame)
+  k.board([wd + 2 * cw + 0.04, cw + 0.1, 0.022], null, null, { m: wallM(w, ac, op.y1 + (cw + 0.1) / 2, oi), long: 0, tint: vary(k, WAIN, 0.85, 1.0), skip: '+z', inside: true });
   k.board([wd + 2 * cw + 0.1, 0.032, 0.13], null, null, { m: wallM(w, ac, op.y0 - 0.016, oi - 0.03), long: 0, tint: vary(k, WAIN, 0.9, 1.05), inside: true });
-  k.board([wd + 2 * cw, 0.08, 0.02], null, null, { m: wallM(w, ac, op.y0 - 0.08, oi), long: 0, tint: vary(k, WAIN, 0.85, 1.0), skip: '+z', inside: true });
+  k.board([wd + 2 * cw, 0.14, 0.02], null, null, { m: wallM(w, ac, op.y0 - 0.07, oi), long: 0, tint: vary(k, WAIN, 0.85, 1.0), skip: '+z', inside: true });   // (up to the stool: the wallpaper stops short of it)
 }
 // A DISPLAY WINDOW: wide and tall, a transom of small panes over a bar, two big panes under it, "SALOON" in gold leaf on
 // the glass, a lace cafe curtain behind its lower half; a deep stool inside
@@ -355,8 +358,9 @@ function displayWindow(k, w, op, TR) {
   pane(wd - 0.04, h - 0.04, mul(wallM(w, ac, yc, -0.06), RY(Math.PI)));
   const oi = -INS - 0.03, cw = 0.1;
   for (const s of [-1, 1]) k.board([cw, h + cw, 0.02], null, null, { m: wallM(w, ac + s * (wd / 2 + cw / 2), yc + cw / 2, oi), long: 1, tint: vary(k, WAIN, 0.85, 1.0), skip: '+z', inside: true });
-  k.board([wd + 2 * cw + 0.04, 0.1, 0.022], null, null, { m: wallM(w, ac, op.y1 + cw + 0.05, oi), long: 0, tint: vary(k, WAIN, 0.85, 1.0), skip: '+z', inside: true });
+  k.board([wd + 2 * cw + 0.04, cw + 0.1, 0.022], null, null, { m: wallM(w, ac, op.y1 + (cw + 0.1) / 2, oi), long: 0, tint: vary(k, WAIN, 0.85, 1.0), skip: '+z', inside: true });
   k.board([wd + 2 * cw + 0.1, 0.035, 0.3], null, null, { m: wallM(w, ac, op.y0 - 0.017, oi - 0.1), long: 0, tint: vary(k, WAIN, 0.9, 1.05), inside: true });
+  k.board([wd + 2 * cw, 0.14, 0.02], null, null, { m: wallM(w, ac, op.y0 - 0.07, oi), long: 0, tint: vary(k, WAIN, 0.85, 1.0), skip: '+z', inside: true });
 }
 // A DOORWAY for the batwings: the trim, a threshold, a transom of three panes over the doors' head
 function doorway(k, w, op, TR) {
@@ -370,7 +374,7 @@ function doorway(k, w, op, TR) {
   // the inside casing
   const oi = -INS - 0.03, cw = 0.1, h = DH - FL;
   for (const s of [-1, 1]) k.board([cw, h + cw, 0.02], null, null, { m: wallM(w, ac + s * (wd / 2 + cw / 2), FL + (h + cw) / 2, oi), long: 1, tint: vary(k, WAIN, 0.85, 1.0), skip: '+z', inside: true });
-  k.board([wd + 2 * cw + 0.04, 0.12, 0.022], null, null, { m: wallM(w, ac, DH + cw + 0.06, oi), long: 0, tint: vary(k, WAIN, 0.85, 1.0), skip: '+z', inside: true });
+  k.board([wd + 2 * cw + 0.04, cw + 0.12, 0.022], null, null, { m: wallM(w, ac, DH + (cw + 0.12) / 2, oi), long: 0, tint: vary(k, WAIN, 0.85, 1.0), skip: '+z', inside: true });
 }
 
 // THE SIGN, PAINTED ON THE BOARDS: "SALOON" laid over each lap board's own face (the exposed part of it, tilted as the
@@ -708,6 +712,8 @@ function face(k, x0, z0, x1, z1, n, y0, y1, holes, o) {
 //                   across the front (z GZF..RZ0, over the doors)
 //   the rooms       seven, behind the galleries' walls, each with a door off a gallery and a window or two on the street
 const RX1 = -2.4, GXW = -1.35, GZF = 2.1, RZ0 = 3.25;
+// (the middles of the well's east wall either side of its window (z = -0.5, with its casing -1.07 .. 0.07))
+const WELL_SPACES = [(ZG - 1.07) / 2, (0.07 + GZF) / 2];
 export const ROOMS = [
   { id: 'front1', x0: IX0, x1: -1.2, z0: RZ0, z1: IZ1, door: { ax: 'z', at: RZ0, c: -1.8, into: 1 } },
   { id: 'front2', x0: -1.2, x1: 1.7, z0: RZ0, z1: IZ1, door: { ax: 'z', at: RZ0, c: 0.25, into: 1 } },
@@ -779,9 +785,11 @@ function insideRoom(k, ku, kr, GU, lamps) {
   beam([IX1 - IX0, 0.24, 0.18], [0, UJ - 0.12, ZG - 0.07], 0);
   beam([0.18, 0.24, GZF - ZG + 0.1], [GXW - 0.09, UJ - 0.12, (ZG + GZF) / 2], 2);
   beam([IX1 - GXW + 0.1, 0.24, 0.18], [(GXW + IX1) / 2, UJ - 0.12, GZF + 0.09], 0);
-  k.board([IX1 - GXW, 0.12, 0.03], [(GXW + IX1) / 2, U1 - 0.04, ZG + 0.015], null, { long: 0, tint: vary(k, WAIN, 0.8, 0.95), inside: true, skip: '-z' });
-  k.board([0.03, 0.12, GZF - ZG], [GXW + 0.015, U1 - 0.04, (ZG + GZF) / 2], null, { long: 2, tint: vary(k, WAIN, 0.8, 0.95), inside: true, skip: '-x' });
-  k.board([IX1 - GXW, 0.12, 0.03], [(GXW + IX1) / 2, U1 - 0.04, GZF - 0.015], null, { long: 0, tint: vary(k, WAIN, 0.8, 0.95), inside: true, skip: '+z' });
+  // (from the beams' top up to the floor: the bays between the joists closed, the sky showed through them)
+  const fh = U1 + 0.02 - UJ, fy = (U1 + 0.02 + UJ) / 2;
+  k.board([IX1 - GXW, fh, 0.03], [(GXW + IX1) / 2, fy, ZG + 0.015], null, { long: 0, tint: vary(k, WAIN, 0.8, 0.95), inside: true, skip: '-z' });
+  k.board([0.03, fh, GZF - ZG], [GXW + 0.015, fy, (ZG + GZF) / 2], null, { long: 2, tint: vary(k, WAIN, 0.8, 0.95), inside: true, skip: '-x' });
+  k.board([IX1 - GXW, fh, 0.03], [(GXW + IX1) / 2, fy, GZF - 0.015], null, { long: 0, tint: vary(k, WAIN, 0.8, 0.95), inside: true, skip: '+z' });
   const post = (x, z, dirs) => {
     k.board([0.2, UJ - 0.24 - FL, 0.2], [x, (FL + UJ - 0.24) / 2, z], null, { long: 1, tint: vary(k, WAIN, 0.92, 1.05), strip: 10, cuts: [-1, 0.5], segFaces: '+x-x+z-z', skip: '-y', ends: 'log', inside: true });
     k.board([0.26, 0.25, 0.26], [x, FL + 0.125, z], null, { long: 1, tint: vary(k, WAIN, 0.8, 0.9), inside: true, skip: '-y' });
@@ -829,15 +837,13 @@ function insideRoom(k, ku, kr, GU, lamps) {
   // sconces and a picture on the galleries' walls (one of them a lamp)
   lamps.push(sconce(ku, 0.7, U1 + 1.75, ZP + t2 + 0.012, 1, 2.0)); sconce(ku, -2.05, U1 + 1.75, ZP + t2 + 0.012, 1, 0);
   sconce(ku, 2.4, U1 + 1.75, RZ0 - t2 - 0.012, -1, 0); sconce(ku, RX1 + t2 + 0.012, U1 + 1.75, 0.6, 1, 0, 'x');
-  pic(A.pictures[1], 0.62, 0.48, T(0.0, U1 + 1.3, ZP + t2 + 0.02)); frame(ku, 0.0, U1 + 1.3, ZP + t2 + 0.015, 0.62, 0.48, 'z');
-  pic(A.pictures[0], 0.6, 0.46, mul(T(1.45, U1 + 1.35, RZ0 - t2 - 0.02), RY(Math.PI)));
   // THE WALLS: wainscot and wallpaper on the four outer walls downstairs; the well's part of the east wall up to the
   // ceiling; upstairs, the rooms' paper and the galleries' ends
-  wallInside(k, FRONT, IX0, IX1, FL, UJ, [DOOR_A, WA1, WA2]);
-  wallInside(k, WEST, IZ0, IZ1, FL, UJ, [DOOR_B, WB1, WB3], { skip: [[BBZ0 - 0.05, BBZ1 + 0.05, FL - 1, UJ + 1]] });
-  wallInside(k, EAST, -IZ1, -GZF, FL, UJ, [WE1]); wallInside(k, EAST, -ZG, -IZ0, FL, UJ, [WE2]);
+  wallInside(k, FRONT, IX0, IX1, FL, U1 + 0.01, [DOOR_A, WA1, WA2]);   // (up behind the joists to the floor over them: no sky between them)
+  wallInside(k, WEST, IZ0, IZ1, FL, U1 + 0.01, [DOOR_B, WB1, WB3], { skip: [[BBZ0 - 0.05, BBZ1 + 0.05, FL - 1, UJ - 0.2]] });
+  wallInside(k, EAST, -IZ1, -GZF, FL, U1 + 0.01, [WE1]); wallInside(k, EAST, -ZG, -IZ0, FL, U1 + 0.01, [WE2]);
   wallInside(k, EAST, -GZF, -ZG, FL, CEIL, [UE[1]]);
-  wallInside(k, BACK, -IX1, -IX0, FL, UJ, [WK1], { skip: [[-SX1 - 0.05, -SX0 + 0.05, FL - 1, UJ + 1]] });
+  wallInside(k, BACK, -IX1, -IX0, FL, U1 + 0.01, [WK1], { skip: [[-SX1 + 0.5, -SX0 - 0.5, FL - 1, U1 + 1]] });   // (left out only well behind the curtain: past the curtain's edge the wall shows)
   wallInside(ku, FRONT, IX0, IX1, U1, CEIL, UA, RP);
   wallInside(ku, WEST, IZ0, IZ1, U1, CEIL, UB, RP);
   wallInside(ku, EAST, -IZ1, -RZ0, U1, CEIL, [UE[0]], RP); wallInside(ku, EAST, -RZ0, -GZF, U1, CEIL, [], HP); wallInside(ku, EAST, -ZG, -ZP, U1, CEIL, [], HP);
@@ -991,7 +997,7 @@ function stairs(k, lamps) {
 
 // THE BAR down the left: the counter (a moulded top in dark varnish, carved panels between pilasters, a kick board, a
 // brass foot rail on brackets), brass tap towers and glass lamps on its top; the back-bar against the wall (a cabinet
-// under a counter, an arched mirror between shelves of bottles under a cornice, sconces, antlers over it)
+// under a counter, an arched mirror between shelves of bottles under a cornice, sconces)
 function bar(k, lamps) {
   const x0 = BXF - BD, xm = BXF - BD / 2, top = FL + BH, L = BZ1 - BZ0, zc = (BZ0 + BZ1) / 2;
   const P = { inside: true };
@@ -1034,7 +1040,7 @@ function bar(k, lamps) {
   // barkeep, z 1.8: its glare hid his hands)
   for (const z of [1.05, 3.75, -0.2]) { const L = barLamp(k, xm + 0.1, top, z, 1.6); if (z !== -0.2) lamps.push(L); }
   // THE BACK-BAR: a cabinet with doors under a counter; above it a mirror under an arch, shelves of bottles either side,
-  // pilasters and a cornice; sconces; a pair of antlers over it and the drinks board
+  // pilasters and a cornice; sconces; the drinks board
   const bx0 = IX0, bx1 = IX0 + BBD, bxc = (bx0 + bx1) / 2, BL = BBZ1 - BBZ0, bzc = (BBZ0 + BBZ1) / 2, ct = FL + 1.0;
   k.board([BBD, 1.0 - 0.04, BL], [bxc, FL + 0.48, bzc], null, { long: 2, tint: vary(k, DARKW, 0.85, 1.0), ...P, skip: '-y-x' });
   k.board([BBD + 0.06, 0.05, BL + 0.04], [bxc + 0.03, ct - 0.02, bzc], null, { long: 2, tint: DARKW, paint: VARN, ...P });
@@ -1080,11 +1086,12 @@ function bar(k, lamps) {
   // a brass till between them
   k.box('iron', [0.3, 0.2, 0.4], [bx0 + 0.3, ct + 0.12, 1.7], null, { tint: BRASS });
   k.box('iron', [0.24, 0.12, 0.34], [bx0 + 0.27, ct + 0.28, 1.7], [0, 0, 0.35], { tint: BRASS.map((c) => c * 0.9) });
-  // the drinks board on the crest, the antlers over it, the sconces on the pilasters
+  // the drinks board on the crest, the sconces on the pilasters
   pic(A.menu, 0.62, 0.23, mul(T(bx0 + 0.1, ut + 0.18, (MZ0 + MZ1) / 2), RY(Math.PI / 2)));
   frame(k, bx0 + 0.09, ut + 0.18, (MZ0 + MZ1) / 2, 0.62, 0.23, 'x', 1);
-  // (the antlers on the well's wall over the stairs, where the heads in the concept hang high)
-  into(k, mul(T(IX1, 5.95, -2.0), RY(Math.PI)), (t) => antlers(t, 0, 0, 0, 1.2), 811); into(k, mul(T(IX1, 5.8, 1.6), RY(Math.PI)), (t) => antlers(t, 0, 0, 0, 1.0), 813);
+  // (the stags' heads on the well's wall over the stairs, one in the middle of the wall space either side of its window,
+  // high, over that space's picture)
+  for (const z of WELL_SPACES) stagMount(k, mul(T(IX1 - 0.012, 6.3, z), RY(-Math.PI / 2)));
   lamps.push(sconce(k, bx0 + 0.1, ct + 1.55, MZ0 - 0.07, 1, 1.8, 'x'));
   sconce(k, bx0 + 0.1, ct + 1.55, MZ1 + 0.07, 1, 0, 'x');
   // on the bar's top: a bottle or two and some glasses here and there
@@ -1129,9 +1136,13 @@ function jarOn(k, M, what) {
 }
 // a glass on the bar: a shot glass or a schooner (a tall beer glass)
 function glass(M, kind) {
-  const p = kind === 'shot' ? [[0.018, 0], [0.022, 0.055]] : [[0.026, 0], [0.034, 0.15]];
-  G.lathe(p, M, 6, A.tile.glass, [0.3, 0.34, 0.33]);
-  G.disc(p[0][0], mul(M, T(0, 0.004, 0)), 6, A.tile.glass, [0.26, 0.29, 0.28]);
+  // a real tumbler: its outside, over the rim and down its inside to a thick base; the drink in it (beer under a head of
+  // foam in the tall one, whiskey in the shot) seen from above
+  const shot = kind === 'shot', h = shot ? 0.055 : 0.15, r0 = shot ? 0.018 : 0.026, r1 = shot ? 0.022 : 0.034, t = 0.0035, base = 0.01, GLASS = [0.62, 0.68, 0.66];
+  G.lathe([[r0, 0], [r1, h], [r1 - t, h], [r0 - t, base]], M, 8, A.tile.glass, GLASS, { flat: true });
+  G.disc(r0 - t, mul(M, T(0, base, 0)), 8, A.tile.glass, GLASS);
+  const dh = shot ? 0.6 : 0.82, rd = r0 - t + (r1 - r0) * dh;
+  G.disc(rd, mul(M, T(0, h * dh, 0)), 8, A.tile.cream, shot ? [0.42, 0.2, 0.05] : [1.05, 1.0, 0.9]);
 }
 // a row of bottles standing along z from z0 to z1 at x on y (their bottoms), no taller than `tall`: now and then a gap,
 // two alike side by side; jugs among them (jugs), jars (jars)
@@ -1155,21 +1166,14 @@ function barLamp(k, x, y, z, strength) {
   chimney(k, x, y + 0.11, z);
   return { p: [x, y + 0.2, z], reach: 6.5, strength };
 }
-// a pair of antlers on a shield-shaped plaque on the wall (x = the wall, facing +x)
-function antlers(k, x, y, z, s) {
-  k.board([0.04, 0.32 * s, 0.24 * s], [x + 0.02, y, z], null, { long: 1, tint: [0.45, 0.3, 0.2], paint: [0.14, 0.08, 0.04], inside: true });
-  k.prism('wood', ngon(6, 0.05 * s), 0.12 * s, null, null, { m: mul(T(x + 0.09 * s, y + 0.02, z), RZ(-Math.PI / 2)), tint: [0.7, 0.6, 0.5], paint: [0.4, 0.32, 0.24], smooth: true, inside: true });
-  const ANT = [0.85, 0.78, 0.66];
-  for (const sd of [-1, 1]) {
-    // the beam: three pieces curving up and out, tines off it
-    let px = x + 0.12 * s, py = y + 0.05, pz = z, ang = 0.6;
-    for (let i = 0; i < 4; i++) {
-      const L = 0.2 * s, dx = Math.cos(ang) * L * 0.25, dy = Math.sin(ang) * L, dz = sd * Math.cos(ang) * L * 0.85;
-      k.prism('wood', ngon(5, 0.018 * s * (1 - i * 0.15)), Math.hypot(dx, dy, dz), null, null, { m: mul(T(px + dx / 2, py + dy / 2, pz + dz / 2), RX(sd * -Math.atan2(dz, dy)), RZ(-Math.atan2(dx, Math.hypot(dy, dz)))), tint: ANT, paint: [0.55, 0.48, 0.38], smooth: true, inside: true });
-      if (i > 0) k.prism('wood', ngon(4, 0.012 * s), 0.13 * s, null, null, { m: mul(T(px + 0.02, py + 0.07 * s, pz), RX(-sd * 0.2)), tint: ANT, paint: [0.6, 0.53, 0.42], smooth: true, inside: true });
-      px += dx; py += dy; pz += dz; ang += 0.22;
-    }
-  }
+// A STAG'S HEAD on a shield-shaped plaque (the game's own stag: labs/buildings/staghead.js), in the frame M: the wall's
+// face at z = 0, looking out along +z
+const TILE_CREAM = [0.76, 0.66, 0.43];   // (the picture's cream tile, linear: the head's colours are given over it)
+function stagMount(k, M) {
+  k.board([0.46, 0.62, 0.035], null, null, { m: mul(M, T(0, 0, 0.018)), long: 1, tint: [0.45, 0.3, 0.2], paint: [0.14, 0.08, 0.04], inside: true });
+  k.board([0.34, 0.74, 0.03], null, null, { m: mul(M, T(0, 0, 0.015)), long: 1, tint: [0.45, 0.3, 0.2], paint: [0.14, 0.08, 0.04], inside: true });
+  // (the neck into the plaque, the head lifted to look out over the room)
+  G.mesh(STAG_HEAD, mul(M, T(0, -0.2, 0.0), RX(-0.62)), A.tile.cream, TILE_CREAM.map((c) => c * 0.55));
 }
 // THE CHALKBOARD on its easel: three legs (two in front, one behind), a ledge the board stands on, a chalk tray; the
 // board in a wooden frame (the saloon's picture: a bar graph and a line graph); a stub of chalk and a cloth
@@ -1409,6 +1413,10 @@ function propList(piano) {
     L.push({ type: 'bed', x: bed[0], z: bed[1], rot: bed[2], room, ...U }, { type: 'washstand', x: wash[0], z: wash[1], rot: wash[2], room, ...U },
       { type: 'spindleChair', x: chair[0], z: chair[1], rot: chair[2], room, ...U }, { type: 'ragRug', x: rug[0], z: rug[1], rot: rug[2], room, ...U });
   }
+  // THE FRAMED PICTURES (the props library's: the game's own people and views, world/props/sheet.js), each clear of the
+  // windows: downstairs by the stage, on the side wall over the stairs, on the galleries' walls
+  for (const [pic, x, y, z, w, h, rot, up] of [['lake', IX0 + 0.02, 2.5, -3.84, 0.6, 0.45, Math.PI / 2], ['band', IX1 - 0.02, 5.5, WELL_SPACES[0], 0.7, 0.55, -Math.PI / 2], ['barkeep', IX1 - 0.02, 5.5, WELL_SPACES[1], 0.45, 0.6, -Math.PI / 2],
+    ['valley', 0.0, U1 + 1.3, ZP + 0.075, 0.62, 0.48, 0, true], ['horse', 1.7, U1 + 1.35, RZ0 - 0.075, 0.6, 0.46, Math.PI, true]]) L.push({ type: 'framedPicture', pic, x, y, z, w, h, rot, inside: true, upstairs: !!up });
   return L;
 }
 
@@ -1461,10 +1469,6 @@ export function buildSaloon(recipeIn = {}, env = {}) {
   lamps.push(sconce(k, IX0, FL + 2.0, -3.2, 1, 1.6, 'x'));
   // little lamps on the tables (their glow only: the chandelier and the fill light the room)
   for (const [x, z] of TABLES) barLamp(k, x + 0.12, FL + 0.76, z - 0.08, 0);
-  // the pictures on the walls: the side wall over the stairs and under the gallery, the back wall by the stage
-  for (const [reg, x, y, z, w, h, ax, face] of [[A.pictures[0], IX1 - 0.04, 5.6, -1.4, 0.7, 0.55, 'x', -1], [A.pictures[2], IX1 - 0.04, 5.6, 0.75, 0.45, 0.6, 'x', -1], [A.pictures[1], IX0 + 0.04, 2.5, -4.5, 0.6, 0.45, 'x', 1]]) {
-    pic(reg, w, h, mul(T(x, y, z), RY(face > 0 ? Math.PI / 2 : -Math.PI / 2))); frame(k, x - face * 0.005, y, z, w, h, 'x', face);
-  }
   mark('pictures');
 
   // THE STAGE'S SPOTS (the piano, keys toward the stage's middle and the audience, as the town's stage has it)
@@ -1605,6 +1609,8 @@ export function buildSaloon(recipeIn = {}, env = {}) {
       // each room's door: its hinge, the leaf's width and height, the turn its frame starts at and the turn that swings it
       // open into the room (parts.js's doors turn about the hinge by rotation.y); its parts carry roomDoor: i
       upstairs: {
+        // (stairs: where a walker climbs: from y0 at the foot (z1) up to y1 at the top (z0), along the treads' nosing)
+        stairs: { x0: STX0 + 0.1 + OX, x1: STX1 - 0.06 + OX, z0: ZG + OZ, z1: STZ0 + OZ, y0: FL + RISE / 2, y1: U1 - RISE / 2 },
         floor: U1, ceiling: CEIL, well: { x0: GXW + OX, x1: IX1 + OX, z0: ZG + OZ, z1: GZF + OZ },
         galleries: [{ name: 'back', x0: RX1 + OX, x1: IX1 + OX, z0: ZP + OZ, z1: ZG + OZ }, { name: 'side', x0: RX1 + OX, x1: GXW + OX, z0: ZG + OZ, z1: GZF + OZ }, { name: 'front', x0: RX1 + OX, x1: IX1 + OX, z0: GZF + OZ, z1: RZ0 + OZ }],
         rooms: ROOMS.map((R) => ({ id: R.id, x0: +(R.x0 + OX).toFixed(3), x1: +(R.x1 + OX).toFixed(3), z0: +(R.z0 + OZ).toFixed(3), z1: +(R.z1 + OZ).toFixed(3), w: +(R.x1 - R.x0).toFixed(2), d: +(R.z1 - R.z0).toFixed(2) })),

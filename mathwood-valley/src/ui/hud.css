@@ -102,6 +102,8 @@
 .bmh-rule-main { font: 700 30px/1.15 Bitter, Georgia, serif; letter-spacing: 0.01em; }
 .bmh-rule-sub { font: 500 14px/1.3 Bitter, Georgia, serif; color: #5d4a36; margin-top: 2px; }
 .bmh-rule-sub:empty { display: none; }
+/* (every job's card: the sum large, the instruction on its own line below; a desktop has room to make both easy to read) */
+@media (min-width: 900px) and (pointer: fine) { .bmh-rule-main { font-size: 36px; } .bmh-rule-sub { font-size: 18px; margin-top: 3px; } }
 .bmh-rule.is-travel .bmh-rule-main { font-size: 21px; }
 /* the card's "read it again" speaker, in its top right corner (the card keeps room for it) */
 .bmh-rule.has-say { padding-right: 46px; padding-left: 46px; }

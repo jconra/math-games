@@ -80,10 +80,9 @@ import { bakedBand } from './audio/bake.js';
 import { bandChoices, bandLine, soundThrough, songLines, nextSong } from './bandplan.js';
 import { playEnding } from './audio/songend.js';
 import { howdy } from './ui/howdy.js';
-import { makeFiddleModel, makeBowModel, fiddleMaterial } from './fiddle.js';
-import { holdMatrix } from './fiddleplan.js';
-import { makeBanjoModel, makeStoolModel, banjoMaterial } from './banjo.js';
-import { placeMatrix, banjoPlaying } from './banjoplan.js';
+import { makeHarmonicaModel, placeHarmonicaOn, holdFiddleOn, holdBanjoOn } from './bandgear.js';
+import { banjoPlaying } from './banjoplan.js';
+import { loadHands, makeHandPose } from './handpose.js';
 
 export const STAGE = {
   // who plays (folk.js looks)
@@ -141,7 +140,7 @@ export const STAGE = {
   keepUp: 2.5,            // s: a gap shorter than this to her next phrase, she keeps the harmonica up (no down-and-up in a breath)
   // the harmonica in her hands (metres: long, tall, deep; how far it sits behind the middle of her hands, toward her, and
   // above it: at the lips while she plays)
-  harp: { long: 0.105, tall: 0.026, deep: 0.028, back: 0.035, up: 0.022 },
+  harp: { long: 0.105, tall: 0.026, deep: 0.028, back: 0.06, up: 0.03 },
   ask: 3.2,               // metres from the stage's front edge where the band can be asked
   between: 1.4,           // s from asking to the next song's first beat (what was sounding rings out meanwhile)
   askAgain: 1.2,          // s after an ask before the prompt comes back (a double tap doesn't skip a song)
@@ -150,6 +149,7 @@ export const STAGE = {
 };
 const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 const CLIPS = { m: 'clips_stage_m.glb', f: 'clips_stage_f.glb' };
+const GAME_DIR = new URL('../', import.meta.url).href;
 const PROMPT = 'Ask the band for a song';
 
 export function makeStage({ W, folk, audio, camera = null, scene = W.scene, speak = null }) {
@@ -209,7 +209,7 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
     if (making) return making;
     const looks = [STAGE.pianist, STAGE.harpist, STAGE.drummer, STAGE.fiddler, STAGE.banjoist];
     const bodies = [...new Set(looks.map((p) => (folk.byOutfit[p.outfit] || {}).body).filter(Boolean))];
-    making = Promise.all(bodies.map((b) => loader.loadAsync(folk.dir + CLIPS[b]).then((g) => folk.addClips(b, g.animations))))
+    making = Promise.all([loadHands(GAME_DIR), ...bodies.map((b) => loader.loadAsync(folk.dir + CLIPS[b]).then((g) => folk.addClips(b, g.animations)))])
       .then(() => {
         if (disposed) return;
         const add = (look, who, clip) => {
@@ -228,6 +228,8 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
           banjo: add(STAGE.banjoist, 'banjo', 'Banjo_Rest'),
         };
         holdFiddle(made.fiddler); holdBanjo(made.banjo);
+        // (the hands set by hand in the Hands Lab, models/people/hands.json: laid over the clips each frame)
+        made.fiddler.hands = makeHandPose(made.fiddler, 'fiddler', { props: fiddleProps }); made.banjo.hands = makeHandPose(made.banjo, 'banjo'); made.harpist.hands = makeHandPose(made.harpist, 'harpist');
         harmonica = makeHarmonica(); scene.add(harmonica);
         crate = makeCrate(); scene.add(crate); seatCrate();
         setVisible(visible);
@@ -237,55 +239,12 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
   }
   function seat(p) { if (!spots) return; p.root.position.copy(spots[p.who]); p.root.rotation.y = spots.yaw + spots.rot[p.who]; }
   function setVisible(on) { visible = on; for (const p of players) p.root.visible = on && !(fiddlerOff && p.who === 'fiddler'); if (harmonica) harmonica.visible = on && !resting; if (crate) crate.visible = on; }
-  // the harmonica: a little metal box with the wooden comb showing along its front, so the cupped hands read as playing
-  // one. Each frame it goes between her hands: along the line between them, its front facing out.
-  let harmonica = null;
-  const HB = { a: new THREE.Vector3(), b: new THREE.Vector3(), c: new THREE.Vector3(), d: new THREE.Vector3(), x: new THREE.Vector3(),
-    y: new THREE.Vector3(), z: new THREE.Vector3(), m: new THREE.Matrix4() };
-  function makeHarmonica() {
-    const H = STAGE.harp, g = new THREE.Group();
-    const metal = new THREE.MeshStandardMaterial({ color: 0xd4d8dc, metalness: 0.35, roughness: 0.3 });   // (the world has no reflections to show, so a fully metal surface would look black)
-    const wood = new THREE.MeshStandardMaterial({ color: 0x6b4426, metalness: 0, roughness: 0.8 });
-    metal.userData.indoorLit = wood.userData.indoorLit = true;   // (lit like the room: world/valley.js sunShadeAll)
-    const cover = new THREE.Mesh(new THREE.BoxGeometry(H.long, H.tall, H.deep * 0.8), metal); cover.position.z = -H.deep * 0.1;
-    const comb = new THREE.Mesh(new THREE.BoxGeometry(H.long * 0.96, H.tall * 0.4, H.deep), wood);
-    g.add(cover, comb);
-    return g;
-  }
-  function placeHarmonica(P) {
-    const B = P.bones; if (!B.WristL || !B.WristR || !B.Index1L || !B.Index1R) return;
-    const { a, b, c, d, x, y, z, m } = HB;
-    B.WristL.getWorldPosition(a); B.WristR.getWorldPosition(b); B.Index1L.getWorldPosition(c); B.Index1R.getWorldPosition(d);
-    const mid = c.add(d).add(a).add(b).multiplyScalar(0.25);
-    x.subVectors(B.Index1L.getWorldPosition(a), B.Index1R.getWorldPosition(d)).normalize();   // (toward her left hand)
-    z.set(Math.sin(P.root.rotation.y), 0, Math.cos(P.root.rotation.y));                        // (the way she faces)
-    y.crossVectors(z, x).normalize(); z.crossVectors(x, y);
-    m.makeBasis(x, y, z); harmonica.quaternion.setFromRotationMatrix(m);
-    harmonica.position.copy(mid).addScaledVector(z, -STAGE.harp.back).addScaledVector(y, STAGE.harp.up);
-  }
-  // THE FIDDLE AND THE BOW (src/fiddle.js), carried on the fiddler's wrist bones where his clips hold them
-  // (src/fiddleplan.js HOLD: the clips are made round the same numbers), so they go wherever his hands go
-  let fiddleProps = null;
-  function holdFiddle(P) {
-    const B = P.bones; if (!B.WristL || !B.WristR) return;
-    const mat = fiddleMaterial(), fiddle = makeFiddleModel({ material: mat }), bow = makeBowModel({ material: mat });
-    mat.userData.indoorLit = true;   // (lit like the room, as the players are: world/valley.js sunShadeAll)
-    for (const [m, bone, which] of [[fiddle, B.WristL, 'fiddle'], [bow, B.WristR, 'bow']]) {
-      m.matrixAutoUpdate = false; m.matrix.fromArray(holdMatrix(which)); m.castShadow = false; m.receiveShadow = false;
-      bone.add(m);
-    }
-    fiddleProps = { fiddle, bow, mat };
-  }
-  // THE BANJO AND HIS STOOL (src/banjo.js): the banjo rests on his lap, so it rides his root where his clips have it
-  // (src/banjoplan.js PLACE: the clips are made round the same numbers); the stool stands under him
-  let banjoProps = null;
-  function holdBanjo(P) {
-    const mat = banjoMaterial(), banjo = makeBanjoModel({ material: mat }), stool = makeStoolModel({ material: mat });
-    mat.userData.indoorLit = true;   // (lit like the room, as the players are: world/valley.js sunShadeAll)
-    banjo.matrixAutoUpdate = false; banjo.matrix.fromArray(placeMatrix());
-    for (const m of [banjo, stool]) { m.castShadow = false; m.receiveShadow = false; P.root.add(m); }
-    banjoProps = { banjo, stool, mat };
-  }
+  // the harmonica, the fiddle and bow, the banjo and his stool: src/bandgear.js (the Hands Lab shows the same ones)
+  let harmonica = null, fiddleProps = null, banjoProps = null;
+  const makeHarmonica = () => makeHarmonicaModel(STAGE.harp);
+  const placeHarmonica = (P) => placeHarmonicaOn(P, harmonica, STAGE.harp);
+  function holdFiddle(P) { fiddleProps = holdFiddleOn(P); }
+  function holdBanjo(P) { banjoProps = holdBanjoOn(P); }
   // the drummer's packing crate: rough boards across each face with dark gaps between, a batten up each corner and a
   // stencilled band of darker wood, in plain colours (one mesh, one material)
   let crate = null;
@@ -548,7 +507,9 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
       if (fiddlerOff && p === made.fiddler) continue;
       // (the fiddler's lift and lowering are his own pace; his bowing and his resting foot keep the beat)
       if (beat != null && !resting && (p !== made.fiddler || fState === 'play' || fState === 'rest')) onBeat(p, beat, music.beatLen);
+      if (p.hands) p.hands.before();   // (the hands' bends taken off first: the clips don't write what didn't change)
       p.update(dt);
+      if (p.hands) p.hands.after();
     }
     if (harmonica && harmonica.visible) { made.harpist.root.updateMatrixWorld(true); placeHarmonica(made.harpist); }
   };

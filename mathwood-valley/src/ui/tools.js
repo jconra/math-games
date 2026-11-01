@@ -24,6 +24,9 @@
 //                 there down and up (what the levels page's "Start here" did), each level's title showing as they go;
 //                 the small bar under it fills with right answers toward the next level (src/ui/leveltool.js). A rider
 //                 made with "Let the rider pick levels" off has no arrows: the title and the bar still show.
+// Finished, the sheet stays as a small note beside whatever is to answer (src/ui/longwork.js stay), and goes with its X or
+// Esc or when the sum on screen changes (the question answered). A long multiplication's rows are added in columns, or
+// all at once for a rider high on adding (src/math/longwork.js addColumns).
 // Work it out from a field job's card is help only: nothing is counted (the job's own answer still is). The game waits
 // while a tool is open (onOpen / onClose: main.js pauses), and Esc or the close button puts it away. Opened over the lock
 // box (its own Work it out button: the HUD is under the box), the sheet goes over the box.
@@ -44,15 +47,17 @@
 //   T.el (the strip), T.update() (main.js calls it a few times a second: the sum's label, the place and its level),
 //   T.work() (the lock box's and a builder's own Work it out buttons call it too), T.own() (the entry, empty),
 //   T.treat({ kind, n, name, busy } | null) the apple button (busy: dimmed, the horse munching) (src/feeding.js; onTreat() when it is pressed),
+//   T.pet({ name, busy } | null) the hand button beside it (src/feeding.js; onPet() when it is pressed),
 //   T.chart(), T.step(dir) (the level tool's arrows), T.close(), T.busy() (a tool is up), T.state() (for rigs:
 //   { work: the sheet's state, own: the entry's, chart, sum, label, level }), T.dispose()
 
-import { workOf, needsLong, sumWords } from '../math/longwork.js';
+import { workOf, needsLong, sumWords, addColumns } from '../math/longwork.js';
+import { levelOf } from '../math/skill.js';
 import { chart as factChart } from '../math/facts.js';
 import { openLongWork } from './longwork.js';
 import { openOwnSum } from './ownsum.js';
 import { showChart, closeChart, isChartOpen, ensureChartCss } from './timeschart.js';
-import { levelTool, stepLevel } from './leveltool.js';
+import { makeLevelPicker } from './levelpicker.js';
 import { TREAT_ICON } from './treaticons.js';
 import { HELP_KEY, HELP_KEY_LABEL, nudgeHelp } from './askhelp.js';
 
@@ -79,7 +84,7 @@ export function readSum(s) {
   return isSum(s) ? s : null;
 }
 
-export function makeTools({ hud, rider = () => null, sum = () => null, own = () => false, canOpen = () => true, speak = null, onOpen = () => {}, onClose = () => {}, place = () => null, onLevel = () => {}, onTreat = () => {}, help = () => false, canHelp = () => false } = {}) {
+export function makeTools({ hud, rider = () => null, sum = () => null, own = () => false, canOpen = () => true, speak = null, onOpen = () => {}, onClose = () => {}, place = () => null, onLevel = () => {}, onTreat = () => {}, onPet = () => {}, help = () => false, canHelp = () => false } = {}) {
   ensureCss(); ensureChartCss();
   const bar = document.createElement('div');
   bar.className = 'bmtl-bar';
@@ -88,19 +93,17 @@ export function makeTools({ hud, rider = () => null, sum = () => null, own = () 
       <button type="button" class="bmtl-b bmtl-chart" aria-label="Times chart">${SVG_CHART}<span class="bmtl-t"><b>Times chart</b></span></button>
       <span class="bmtl-helpw" hidden><button type="button" class="bmtl-b bmtl-help" data-askhelp aria-label="Help with this question">${SVG_HELP}<span class="bmtl-t"><b>Help</b></span></button><kbd class="bmtl-key">${HELP_KEY_LABEL}</kbd></span>
       <button type="button" class="bmtl-b bmtl-treat" hidden><span class="bmtl-ti"></span><span class="bmtl-t"><b></b><small></small></span><i class="bmtl-tn"></i></button>
-    </div>
-    <div class="bmtl-level" hidden>
-      <button type="button" class="bmtl-step" data-dir="-1" aria-label="A level down">${ARROW_L}</button>
-      <div class="bmtl-lv"><span class="bmtl-lvt"></span><span class="bmtl-lvbar"><i></i></span></div>
-      <button type="button" class="bmtl-step" data-dir="1" aria-label="A level up">${ARROW_R}</button>
+      <button type="button" class="bmtl-b bmtl-treat bmtl-pet" hidden><span class="bmtl-ti">${TREAT_ICON.hand}</span><span class="bmtl-t"><b>Pet</b><small></small></span></button>
     </div>`;
+  const picker = makeLevelPicker({ rider, place, onLevel });   // (the same picker a job's own bar has: src/ui/levelpicker.js)
+  bar.appendChild(picker.el);
   const root = hud && hud.el ? hud.el : document.body;
   root.appendChild(bar);
   const q = (sel) => bar.querySelector(sel);
   const workBtn = q('.bmtl-work'), chartBtn = q('.bmtl-chart'), workSmall = q('.bmtl-work small');
-  const levelEl = q('.bmtl-level'), lvText = q('.bmtl-lvt'), lvFill = q('.bmtl-lvbar i'), lvBox = q('.bmtl-lv');
-  const downBtn = q('.bmtl-step[data-dir="-1"]'), upBtn = q('.bmtl-step[data-dir="1"]');
-  let panel = null, chartOn = false, held = false, lastSum = null, lvKey = '', lvView = null, sumKey = null;
+  let panel = null, chartOn = false, held = false, lastSum = null, sumKey = null;
+  let note = null, noteFor;   // (the finished sheet still up as a note; the sum on screen it belongs to, read once the game has gone on)
+  const closeNote = () => { if (note) { const n = note; note = null; n.close(); } };
   const T = { el: bar };
 
   function hold(on) {
@@ -113,6 +116,7 @@ export function makeTools({ hud, rider = () => null, sum = () => null, own = () 
   // ── WORK IT OUT ──────────────────────────────────────────────────────────────────────────────────────────────────
   // (the sum is read before the game waits: a paused game has no question up)
   T.work = () => {
+    closeNote();
     if (panel) { panel.close(); panel = null; hold(false); return false; }
     if (!canOpen() && !chartOn) return false;
     const s = safeSum();
@@ -129,6 +133,7 @@ export function makeTools({ hud, rider = () => null, sum = () => null, own = () 
     return s ? openWork(s) : openOwn();
   };
   T.own = () => {
+    closeNote();
     if (panel) { panel.close(); panel = null; }
     if (!canOpen() && !chartOn) return false;
     if (chartOn) closeChartNow();
@@ -141,18 +146,20 @@ export function makeTools({ hud, rider = () => null, sum = () => null, own = () 
   // the columns for a sum (or sums in steps); mine: one the kid typed
   function openWork(s, mine = false) {
     let work = null, chain = null;
+    const r = rider(), how = { columns: addColumns(r ? levelOf(r, 'add') : 0) };
     try {
-      if (s.chain) chain = s.chain.map((x) => ({ work: workOf(x), sum: x, say: x.say || '', carried: x.carried || null }));
-      else work = workOf(s);
+      if (s.chain) chain = s.chain.map((x) => ({ work: workOf(x, how), sum: x, say: x.say || '', carried: x.carried || null }));
+      else work = workOf(s, how);
     } catch (e) { console.warn(e); }
     if (chain ? chain.some((x) => !x.work) : !work) return openOwn();   // (nothing the columns can do with it: the entry)
     panel = openLongWork(document.body, {
-      work, chain, title: 'Work it out', ask: mine ? 'Your own sum' : s.ask || '', closeLabel: 'Close', ...placing(), speak,
+      work, chain, title: 'Work it out', ask: mine ? 'Your own sum' : s.ask || '', closeLabel: 'Close', ...placing(), speak, stay: true,
       onOwn: () => { const p = panel; panel = null; if (p) p.close(); openOwn(); },
-      onDone: () => { setTimeout(() => { panel = null; hold(false); }, 0); },
+      // (finished: the sheet is a note now, and the game goes on under it)
+      onDone: () => { setTimeout(() => { closeNote(); note = panel; noteFor = undefined; panel = null; hold(false); }, 0); },
       onClose: () => { panel = null; hold(false); },
+      onGone: () => { note = null; },
     });
-    // (the panel goes by itself after the last line: its onDone above lets the game go on)
     return true;
   }
   // the entry to type a sum by hand; "Work it out" on it opens that sum's columns
@@ -196,37 +203,19 @@ export function makeTools({ hud, rider = () => null, sum = () => null, own = () 
   addEventListener('keydown', onHelpKey);
 
   // ── THE LEVEL TOOL ───────────────────────────────────────────────────────────────────────────────────────────────
-  function showLevel(v) {
-    lvView = v;
-    const key = v ? `${v.place}|${v.id}|${v.into}|${v.placing}|${v.pick}|${v.canDown}|${v.canUp}` : '';
-    if (key === lvKey) return;
-    lvKey = key;
-    levelEl.hidden = !v;
-    if (!v) return;
-    lvText.textContent = v.words;
-    lvBox.title = `${v.name}: ${v.note}`;
-    lvBox.setAttribute('aria-label', `${v.name}, level ${v.words}. ${v.note}`);
-    lvFill.style.width = `${Math.round(v.fill * 100)}%`;
-    levelEl.classList.toggle('is-placing', v.placing);
-    levelEl.classList.toggle('is-fixed', !v.pick);
-    downBtn.hidden = upBtn.hidden = !v.pick;
-    downBtn.disabled = !v.canDown; upBtn.disabled = !v.canUp;
-  }
-  T.step = (dir) => {
-    const r = rider(), id = lvView && lvView.place;
-    if (!r || !id) return null;
-    const v = stepLevel(r, id, dir);
-    if (!v) return null;
-    showLevel(v);
-    levelEl.classList.remove('is-moved'); void levelEl.offsetWidth; levelEl.classList.add('is-moved');
-    try { onLevel(id, v); } catch (e) { console.error(e); }
-    return v;
-  };
+  T.step = (dir) => picker.step(dir);
 
   // the strip now: the sum's label on Work it out, the place's level (cheap: only what changed is written)
   T.update = () => {
     const s = held ? lastSum : safeSum();
     lastSum = s;
+    // the note goes when the question it was worked for has gone (answered, or the rider rode off), and keeps clear of
+    // whatever buttons have come up since
+    if (note && !held) {
+      const k = JSON.stringify(s);
+      if (noteFor === undefined) noteFor = k; else if (k !== noteFor) closeNote();
+      if (note) note.place();
+    }
     const k = sumLabel(s);
     if (k !== sumKey) {
       sumKey = k;
@@ -238,10 +227,7 @@ export function makeTools({ hud, rider = () => null, sum = () => null, own = () 
     let can = false;
     try { can = !!canHelp(); } catch (e) { console.warn(e); }
     if (helpW.hidden === can) { helpW.hidden = !can; if (!can) nudgeHelp(false); }
-    let pid = null;
-    try { pid = place(); } catch (e) { console.warn(e); }
-    const r = rider();
-    showLevel(pid && r ? levelTool(r, pid) : null);
+    picker.update();
   };
 
   // ── THE APPLE BUTTON (src/feeding.js): up beside the two tools while a horse's head is in reach and there's a treat in
@@ -253,33 +239,42 @@ export function makeTools({ hud, rider = () => null, sum = () => null, own = () 
     treatBtn.hidden = !o;
     if (!o) return;
     treatBtn.classList.toggle('is-busy', !!o.busy);   // (the horse still munching the last one)
-    const word = o.kind === 'carrot' ? 'carrot' : 'apple';
+    const word = o.kind === 'carrot' ? 'carrot' : o.kind === 'jerky' ? 'jerky' : 'apple';
+    const say = word === 'apple' ? 'an apple' : word === 'carrot' ? 'a carrot' : 'some jerky';
     treatBtn.dataset.kind = word;
     treatBtn.querySelector('.bmtl-ti').innerHTML = TREAT_ICON[word];
-    treatBtn.querySelector('b').textContent = `Give ${word === 'apple' ? 'an apple' : 'a carrot'}`;
+    treatBtn.querySelector('b').textContent = `Give ${say}`;
     treatBtn.querySelector('small').textContent = `to ${o.name || 'the horse'}${fingers() ? '' : ' · G'}`;
     treatBtn.querySelector('.bmtl-tn').textContent = String(o.n);
-    treatBtn.setAttribute('aria-label', `Give ${word === 'apple' ? 'an apple' : 'a carrot'} to ${o.name || 'the horse'} (${o.n} left)`);
+    treatBtn.setAttribute('aria-label', `Give ${say} to ${o.name || 'the horse'} (${o.n} left)`);
   };
+  // THE HAND BUTTON (src/feeding.js): up beside it while an animal is in reach of the rider's hand; o = { name, busy } or
+  // null. A tap or a click (or P) pets it
+  const petBtn = q('.bmtl-pet');
+  T.pet = (o) => {
+    petBtn.hidden = !o;
+    if (!o) return;
+    petBtn.classList.toggle('is-busy', !!o.busy);
+    petBtn.querySelector('small').textContent = `${o.name || 'the animal'}${fingers() ? '' : ' · P'}`;
+    petBtn.setAttribute('aria-label', `Pet ${o.name || 'the animal'}`);
+  };
+  petBtn.addEventListener('click', (e) => { e.currentTarget.blur(); try { onPet(); } catch (err) { console.error(err); } });
   treatBtn.addEventListener('click', (e) => { e.currentTarget.blur(); try { onTreat(); } catch (err) { console.error(err); } });
-  T.close = () => { if (panel) { panel.close(); panel = null; } closeChartNow(); hold(false); };
+  T.close = () => { closeNote(); if (panel) { panel.close(); panel = null; } closeChartNow(); hold(false); };
   T.busy = () => !!(panel || chartOn);
-  T.state = () => ({ work: panel && panel.kind !== 'own' ? panel.state() : null, own: panel && panel.kind === 'own' ? panel.state() : null,
-    chart: chartOn, sum: safeSum(), label: sumLabel(safeSum()), level: lvView });
+  T.state = () => ({ note: note ? { line: note.state().sums[0] && note.el.querySelector('.bml-title b').textContent, rect: (({ left, top, right, bottom }) => ({ left, top, right, bottom }))(note.el.getBoundingClientRect()) } : null, work: panel && panel.kind !== 'own' ? panel.state() : null, own: panel && panel.kind === 'own' ? panel.state() : null,
+    chart: chartOn, sum: safeSum(), label: sumLabel(safeSum()), level: picker.view });
   T.dispose = () => { T.close(); removeEventListener('keydown', onHelpKey); bar.remove(); };
   // (a tap on a tool never reaches the valley: the round-up's rope and the range's six-shooter listen there)
   bar.addEventListener('pointerdown', (e) => e.stopPropagation());
   workBtn.addEventListener('click', (e) => { e.currentTarget.blur(); T.work(); });
   chartBtn.addEventListener('click', (e) => { e.currentTarget.blur(); T.chart(); });
   helpBtn.addEventListener('click', (e) => { e.currentTarget.blur(); T.help(); });
-  for (const b of [downBtn, upBtn]) b.addEventListener('click', (e) => { e.currentTarget.blur(); T.step(+b.dataset.dir); });
   // (no long sums the job can't name: needsLong is the job's business, kept here only so a rig can ask)
   T.needsLong = needsLong;
   return T;
 }
 
-const ARROW_L = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 5 7.5 12l7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-const ARROW_R = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 5 7 7-7 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const SVG_WORK = '<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="5" y="4" width="22" height="25" rx="2" fill="#f6edd6" stroke="#6b4614" stroke-width="1.6"/><path d="M9 11h9M9 16h9M9 21h13" stroke="#8a7558" stroke-width="1.4"/><path d="M9 23.5h13" stroke="#2b2219" stroke-width="1.6"/></svg>';
 const SVG_HELP = '<svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="12.5" fill="#f6edd6" stroke="#6b4614" stroke-width="1.6"/><path d="M12.2 12.6c0-2.3 1.7-3.8 3.9-3.8s3.9 1.4 3.9 3.5c0 2.9-3.6 3.2-3.6 6.1" fill="none" stroke="#2b2219" stroke-width="2.4" stroke-linecap="round"/><circle cx="16.4" cy="22.6" r="1.6" fill="#2b2219"/></svg>';
 const SVG_CHART = '<svg viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="4" width="24" height="24" rx="2" fill="#f6edd6" stroke="#6b4614" stroke-width="1.6"/><path d="M12 4v24M20 4v24M4 12h24M4 20h24" stroke="#8a7558" stroke-width="1"/><rect x="12.5" y="12.5" width="7" height="7" fill="#629640" opacity="0.8"/><rect x="20.5" y="12.5" width="7" height="7" fill="#c45238" opacity="0.8"/><rect x="4.5" y="20.5" width="7" height="7" fill="#629640" opacity="0.8"/></svg>';

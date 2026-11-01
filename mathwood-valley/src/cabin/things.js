@@ -11,17 +11,37 @@
 //   TH.stand(group, spec)                stands (or hangs) a group at a spec's spot
 //   TH.files                             the model files' templates (Promises), for freeing
 import * as THREE from 'three';
+import { makeRifleModel } from '../rifles.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { makePiece, makeKeepsake } from './pieces.js';
+import { loadSheet, pictureRegion } from '../../world/props/sheet.js';
 
-const TINT = { chair: 0x9a7150 };   // the chairs come painted white: stained to a warm wood brown to match the room
+// THE ROOM'S LIGHT ON THE BOUGHT FURNITURE (the game's maker: "It's in the corner which should be darker. It just seems to
+// glow too much"): these models and the rug don't carry the walls' baked shade (the corners' dark, the room's own share of
+// the sky), so each is taken down to where the room's boards sit under the same light. A share of the picture's colour
+const SHADE = { table: 0.42, chair: 0.42, rug: 0.28 };
+
+// the painting's frame keeps its gilt; its canvas shows one of the town's rendered pictures (world/props/sheet.js). Its model
+// has the canvas in the middle of a grey square: [x0, y0, x1, y1] of 512
+const CANVAS = [10, 58, 502, 428];
+async function framedPhoto(scene, pic = 'mill') {
+  const sheet = await loadSheet(), [x, y, w, h] = pictureRegion(pic, (CANVAS[2] - CANVAS[0]) / (CANVAS[3] - CANVAS[1]));
+  const c = document.createElement('canvas'); c.width = c.height = 512; const g = c.getContext('2d'); g.fillStyle = '#2a2018'; g.fillRect(0, 0, 512, 512);
+  g.drawImage(sheet.image, x, y, w, h, CANVAS[0], CANVAS[1], CANVAS[2] - CANVAS[0], CANVAS[3] - CANVAS[1]);
+  scene.traverse((o) => {
+    if (!o.isMesh || !/canvas/.test(o.material.name || '')) return;
+    const m = o.material, t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.flipY = m.map.flipY; t.anisotropy = m.map.anisotropy;
+    m.map.dispose(); m.map = t; if (m.normalMap) { m.normalMap.dispose(); m.normalMap = null; } m.needsUpdate = true;
+  });
+}
 
 export function makeThings({ base = new URL('../../', import.meta.url).href, maxAniso = 8, floorUnder = () => 0, loader = new GLTFLoader() } = {}) {
   const files = new Map();     // file -> Promise<template scene>
   const loadFile = (file) => {
     if (!files.has(file)) files.set(file, loader.loadAsync(`${base}models/furniture/${file}.glb`).then((g) => {
-      const s = g.scene; s.traverse((o) => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; for (const m of [].concat(o.material)) { for (const t of [m.map, m.normalMap]) if (t) t.anisotropy = Math.min(8, maxAniso); if (TINT[file]) m.color.setHex(TINT[file]); } } });
-      s.updateMatrixWorld(true); s.userData.box = new THREE.Box3().setFromObject(s); return s;
+      const s = g.scene; s.traverse((o) => { if (o.isMesh) { o.castShadow = o.receiveShadow = true; for (const m of [].concat(o.material)) { for (const t of [m.map, m.normalMap]) if (t) t.anisotropy = Math.min(8, maxAniso); if (SHADE[file]) m.color.setScalar(SHADE[file]); } } });
+      s.updateMatrixWorld(true); s.userData.box = new THREE.Box3().setFromObject(s);
+      return file === 'picture' ? framedPhoto(s).then(() => s) : s;
     }));
     return files.get(file);
   };
@@ -45,7 +65,7 @@ export function makeThings({ base = new URL('../../', import.meta.url).href, max
   const made = (o) => { o.userData.made = true; return o; };   // (made here: freed on its own; a file's copies share the file's)
 
   // a slot's piece: a group with everything it shows (made in code, or its files placed)
-  async function build(id, spec, { dogs = 1, bedSpots = [] } = {}) {
+  async function build(id, spec, { dogs = 1, bedSpots = [], rifles = ['lever', 'single'] } = {}) {
     const g = new THREE.Group(); g.name = 'slot-' + id;
     if (spec.made === 'lanterns') {
       // the lantern model (cut from camp 3's tent) hung at each spot, 0.34 m tall, its glass round the flame; the lamp,
@@ -61,19 +81,18 @@ export function makeThings({ base = new URL('../../', import.meta.url).href, max
       const n = Math.max(1, Math.min(bedSpots.length, dogs || 1)), tints = ['#8e3b30', '#3f5a78', '#5f6e3a'];
       for (let i = 0; i < n; i++) { const b = made(makePiece('dogbed', { tint: tints[i] })), s = bedSpots[i]; b.position.set(s.x, floorUnder(s.x, s.z), s.z); b.rotation.y = s.rot; g.add(b); }
     } else if (spec.made === 'rifles') {
-      // the rifle and the shotgun (models/guns, as the riders' own: guns.json says each one's scale and which way its
-      // barrel points), laid along the rack, muzzles opposite ways, each centred on it
-      const facts = await fetch(`${base}models/guns/guns.json`).then((r) => r.json()).then((j) => j.guns).catch(() => null);
-      const guns = facts && (await Promise.all(['Rifle', 'Shotgun'].map(async (name, i) => {
-        const f = facts[name], gun = (await loader.loadAsync(`${base}models/guns/${f.file}`)).scene;
+      // the rifles bought at the general store (src/rifles.js, src/gun.js), each laid along the rack, muzzles opposite
+      // ways, centred on it; none bought yet: the empty pegs waiting
+      const guns = rifles.map((kind, i) => {
+        const { gun } = makeRifleModel(kind);
         gun.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
-        const turn = new THREE.Group(); turn.add(gun); gun.scale.setScalar(f.scale);
-        turn.rotation.y = Math.atan2(-f.forward[0], -f.forward[2]) + (i ? -1 : 1) * Math.PI / 2;   // (barrel along -x, then +x)
+        const turn = new THREE.Group(); turn.add(gun); turn.scale.setScalar(0.92);
+        turn.rotation.y = (i ? -1 : 1) * Math.PI / 2;
         turn.updateMatrixWorld(true); const mid = new THREE.Box3().setFromObject(turn).getCenter(new THREE.Vector3());
         const lay = new THREE.Group(); turn.position.sub(mid); lay.add(turn); return lay;
-      })).catch(() => null));
+      });
       const m = made(makePiece('rifles', { guns })); stand(m, spec); if (spec.scale) m.scale.setScalar(spec.scale); g.add(m);   // (a smaller rack where the walls have no room: layout.js)
-    } else if (spec.made) { const m = made(makePiece(spec.made, spec.size ? { size: spec.size } : undefined)); stand(m, spec); g.add(m); }   // (size: a smaller rug where the room has no space for the whole one: layout.js)
+    } else if (spec.made) { const m = made(makePiece(spec.made, spec.size ? { size: spec.size } : undefined)); if (SHADE[spec.made]) m.traverse((o) => { if (o.isMesh && o.material.color) o.material.color.setScalar(SHADE[spec.made]); }); stand(m, spec); g.add(m); }   // (size: a smaller rug where the room has no space for the whole one: layout.js)
     else if (!spec.builtIn) { const m = await placeFile(spec, !!spec.wall); stand(m, spec); if (spec.scale) m.scale.setScalar(spec.scale); g.add(m); }
     if (spec.also && spec.builtIn) {
       // (a cabin with its own box stove: the one bought is that one, its fire lit at its door; its own pipe stays)

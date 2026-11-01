@@ -27,6 +27,8 @@
 //
 //   workMul(a, b, { lead })   -> Work   (lead: { a, b, ask }: a first fact before the long sum, "One day first: 8 × 2";
 //                                       a and b are then that fact's answer and the other number: workMul(16, 7, ...))
+//                                       columns: true: the rows are added a column at a time (ones, tens, hundreds,
+//                                       the carries written by the board), for a rider low on adding: addColumns(level)
 //   workDiv(n, d)             -> Work
 //   Work = { op, a, b | n, d, answer (product, or { q, r }), point, line ('16 × 7 = 112'), steps: [Step], board,
 //            first (the index of the first step the board shows from) }
@@ -70,7 +72,11 @@ export const LONG = {
   COMFORT: 12,   // a rider whose Long work level is this far past a sum's point gets the coins first, the worked area
                  // offered with a button (below that, it opens by itself)
   CHOICES: 4,    // answers to tap at each step
+  ADD_ALL: 45,   // a rider's Adding level (src/math/skill.js) at this or past it adds a long multiplication's rows all at
+                 // once; under it the rows are added a column at a time, the same as the rest of the sheet
 };
+// a long multiplication's rows added column by column for this rider? (their Adding level, 0..100)
+export const addColumns = (addLevel) => !(Number(addLevel) >= LONG.ADD_ALL);
 
 // ---- small helpers ---------------------------------------------------------------------------------------------
 export function seeded(seed = 1) {
@@ -198,6 +204,24 @@ export function noCarry(a, b) {
     total += row * 10 ** j;
   });
   return total;
+}
+
+// the rows of a long multiplication ({ v, shift: the 0s holding its places }) added a column at a time, the ones first:
+// for each column its digits (first row first, null for a row with no digit there), what is carried in, the sum, whether
+// it is the last column, and the question (none when a lone digit just comes straight down). A 0 that only holds a place
+// is no digit to add.
+function addPlan(rows) {
+  const total = rows.reduce((a, r) => a + r.v, 0), w = len(total), out = [];
+  let carry = 0;
+  for (let p = 0; p < w; p++) {
+    const digits = rows.map((r) => (r.v >= 10 ** p && p >= r.shift ? Math.floor(r.v / 10 ** p) % 10 : null));
+    const nums = digits.filter((d) => d != null), sum = nums.reduce((a, b) => a + b, 0) + carry, last = p === w - 1 || total < 10 ** (p + 1);
+    const plus = carry ? `, plus the ${carry} carried` : '';
+    const ask = nums.length + (carry ? 1 : 0) < 2 ? null : `${nums.length ? nums.join(' + ') : carry}${nums.length ? plus : ''} = ?`;
+    out.push({ digits, carry, sum, last, ask, v: sum });
+    carry = last ? 0 : Math.floor(sum / 10);
+  }
+  return out;
 }
 
 // ---- the choices for a step ------------------------------------------------------------------------------------
@@ -337,7 +361,7 @@ const done = (B) => { delete B.put; delete B.num; delete B.rule; return B; };
 // more step puts the point back: the digits after the point in the two numbers are counted (1 in 2.6, none in 6) and
 // "Where does the point go in 156?" has 4 answers (0.156, 1.56, 15.6, 156). Money: the dollars' cents count (6 pounds at
 // $0.80: 80 × 6 = 480, two places, $4.80). money: dollars and cents; cash: which of x and y are dollars ('a', 'b').
-export function workMul(x, y, { lead = null, money = false, cash = '' } = {}) {
+export function workMul(x, y, { lead = null, money = false, cash = '', columns = false } = {}) {
   const [ca, cb] = cashOf({ op: 'mul', a: x, b: y, money, cash });
   const px = ca ? 2 : placesOf(x), py = cb ? 2 : placesOf(y);
   const X = scale(x, px), Y = scale(y, py);
@@ -351,7 +375,9 @@ export function workMul(x, y, { lead = null, money = false, cash = '' } = {}) {
   const wt = pt ? Math.max(len(top), pt + 1) : len(top), wb = pb ? Math.max(len(bot), pb + 1) : len(bot), wp = P ? Math.max(len(product), P + 1) : len(product);
   const W = Math.max(wp + $p, wt + $t, wb + $b + 1) + 1;   // (+1: room for the × sign)
   const nCarry = A.length > 1 ? 1 : 0;   // (one row of carries over the top number: a row's carries go when the next row starts)
-  const rA = nCarry, rB = rA + 1, rP = rB + 1, rS = rP + Bd.length;
+  // (the rows' addition worked in columns: its carries get a row of their own, just over the first row)
+  const colRows = Bd.map((d, j) => ({ v: rowsVal[j], shift: j, j })).filter((x) => Bd[x.j] !== 0 || x.j === 0), colPlan = multi && columns ? addPlan(colRows) : null, addCarries = !!(colPlan && colPlan.some((c) => c.carry));
+  const rA = nCarry, rB = rA + 1, rC = rB + 1, rP = rC + (addCarries ? 1 : 0), rS = rP + Bd.length;
   const B = board(multi ? rS + 1 : rP + 1, W);
   const col = (place) => W - 1 - place;
   const steps = [];
@@ -411,10 +437,34 @@ export function workMul(x, y, { lead = null, money = false, cash = '' } = {}) {
     const s = steps.length;
     const plain = Bd.reduce((a, bj) => a + top * bj, 0);
     B.rule(rS - 1, col(len(product) - 1), col(0), s);
+    if (colPlan) {
+      // THE ROWS ADDED A COLUMN AT A TIME: every column's sum asked; a column with one digit and nothing carried comes
+      // straight down by itself; the last column's whole sum is written
+      const rowsAt = (place) => colRows.filter((_, k) => colPlan[place].digits[k] != null).map((x) => [rP + x.j, col(place)]);
+      let said = 'Now add the rows, the ones column first.', pending = '';
+      colPlan.forEach((c, place) => {
+        const t = steps.length;
+        if (!c.ask) {
+          B.put(rS, col(place), c.v, 'work', t);
+          const line = ` The ${c.v} comes straight down.`;
+          if (t > s) steps[t - 1].done += line; else pending += line;
+          return;
+        }
+        const w = c.last ? len(c.sum) : 1, nums = c.digits.filter((d) => d != null);
+        steps.push({ kind: 'add', ask: c.ask, answer: c.sum, choices: addChoices(nums[0], nums.slice(1).reduce((a, b) => a + b, 0), c.carry), intro: t === s ? said + pending : '',
+          done: c.last ? `Write ${c.sum}.` : c.sum >= 10 ? `Write the ${c.sum % 10}, carry the ${Math.floor(c.sum / 10)}.` : `Write the ${c.sum}.`,
+          fact: pointOf('add', nums[0], nums.slice(1).reduce((a, b) => a + b, 0) + c.carry), slot: { r: rS, c: col(place) - (w - 1), w },
+          focus: [...rowsAt(place), ...(c.carry ? [[rC, col(place)]] : [])] });
+        B.num(rS, col(place), c.last ? c.sum : c.sum % 10, 'kid', t + 1);
+        if (!c.last && c.sum >= 10) B.put(rC, col(place + 1), Math.floor(c.sum / 10), 'carry', t + 1);
+      });
+      if (steps.length > s) steps[steps.length - 1].done += ` ${top} ${TIMES} ${bot} = ${product}.`;
+    } else {
     steps.push({ kind: 'sum', ask: `Add the rows: ${rowsVal.filter((v, j) => Bd[j] !== 0 || j === 0).join(' + ')} = ?`, answer: product,
       choices: sumChoices(rowsVal, plain), intro: 'Now add the rows, the ones column first.', done: `${top} ${TIMES} ${bot} = ${product}.`,
       fact: pointOf('add', rowsVal[0], rowsVal.slice(1).reduce((a, b) => a + b, 0)), slot: { r: rS, c: col(len(product) - 1), w: len(product) }, focus: Bd.map((_, j) => [rP + j, col(0)]) });
     B.num(rS, col(0), product, 'kid', s + 1);
+    }
   }
   // the carries of a row fade when the next row starts (they belong to that row only)
   const rowFirst = []; let k = first;

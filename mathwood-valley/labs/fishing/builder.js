@@ -9,8 +9,9 @@
 //
 // How it goes: tap (or click) the water to cast there; hold and drag first to aim, let go to cast. The bobber floats;
 // a fish swims up, nibbles, then bites (the bobber goes under, a splash, "A bite!"). The bite waits for you: hold the
-// Reel button (or hold anywhere on the water, or Space) to reel in. Now and then the fish runs: the line tightens; ease
-// off and it calms (hold on and the drag lets out a little line: the fish is never lost). Up it comes, hanging from the
+// Reel button (or hold anywhere on the water, or Space) to reel in, keeping the line's tension in the green (reel.js):
+// holding tightens it, letting go slackens it. Too slack and the fish takes line; too tight too long and the line snaps,
+// which costs only that fish (its question was never asked). Up it comes, hanging from the
 // rod, with its length and weight, and a question (questions.js). Keep or throw back against the keeper limit, line it
 // up with fish from your creel, add the weights, or a ratio about the catch. Right: it goes on the stringer (or back in
 // the lake). Wrong: a nudge with a picture (a ruler, fraction bars, a weight bar, a ratio table) and the right call;
@@ -41,7 +42,7 @@
 //     under           optional: water drawn solid (the game's): fish.js makeFish's `under`
 //     deep            optional: how deep the fish swim, times the lab's (the game's shallow lake: 0.5)
 //     lift            optional: a fish held up (and the stringer's) gets this much light of its own (fish.js setLift; the
-//                     game's sun may stand behind it)
+//                     game's sun may stand behind it): a number, or a function for the light now (by night, little)
 //     swimmers        optional: how many fish go about under the water (3)
 //     escape()        optional: Esc with the fish book shut (the game: leave the dock)
 //     changed()       optional: a fish kept or thrown back (the game saves)
@@ -55,6 +56,7 @@
 //   B.ready           a promise: the angler is made;  B.busy() a fish on the line, a cast or a card up;  B.panel (the
 //                     top bar's tools: where the game puts "Done for now");  B.handle (FI below)
 //   B.cardView(L)     world { pos, look } of the camera for a question card (a host readies that view ahead)
+//   B.relevel()       the rider's level was moved by hand: the fish coming and the question not yet answered are dealt again
 //
 // B.handle (window.FI on the lab page), a handle for test scripts: FI.state(), FI.question() -> { answer, choices,
 //   labels, topic, key, level, from, action, answered } or null, FI.toScreen(x, y, z) -> page pixels, FI.waterSpot(x, z) ->
@@ -69,6 +71,7 @@ import { ladderQuestion, questionOf, stepLadder, readLadder, freshLadder, LADDER
   beatsRecord, readRecord, readBook, addToBook, bookCount, BOOK_TOTAL, RECORD_KEY, BOOK_KEY, RECENT, label, feet, TOPICS_AT } from './questions.js';
 import { value } from './frac.js';
 import { fishSvg } from './pics.js';
+import { reelStart, reelStep } from './reel.js';
 
 export const MARKUP = `
   <div class="fi-view" id="view"></div>
@@ -86,7 +89,7 @@ export const MARKUP = `
   <div class="hint-line" id="hint"></div>
   <div class="reel" id="reel" hidden>
     <div class="gauges">
-      <div class="gauge tension"><small>Line</small><div class="track"><i id="tension"></i></div></div>
+      <div class="gauge tension"><small>Line</small><div class="track"><span class="zone" id="zone"></span><i id="tension"></i></div></div>
       <div class="gauge reeled"><small>Reeled in</small><div class="track"><i id="reeled"></i></div></div>
     </div>
     <button class="btn go reel-btn" id="reel-btn">Hold to reel</button>
@@ -214,6 +217,8 @@ export function mountFishing(host) {
   const swimmers = [];       // a few fish going about their business under the water
   const fishOpts = host.under ? { under: host.under } : {};
   const newFish = (kind, L) => makeFish(kind, L, fishOpts);
+  // the light of its own a fish held up gets, now
+  const liftNow = () => (typeof host.lift === 'function' ? host.lift() : host.lift || 0);
 
   // ── the aim ring on the water ────────────────────────────────────────────────────────────────────────────────────
   const aimRing = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.56, 32).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xfff3c8, transparent: true, opacity: 0.85, depthWrite: false }));
@@ -252,12 +257,14 @@ export function mountFishing(host) {
     ready: touchy ? 'Tap the water to cast. Hold and drag to aim.' : 'Click the water to cast. Hold and drag to aim.',
     wait: 'Watch the bobber…',
     bite: touchy ? 'A bite! Hold the Reel button.' : 'A bite! Hold the mouse button (or Space) to reel.',
-    reel: 'Reel it in. Ease off when it runs!',
-    run: 'It\'s running! Ease off a moment.',
+    green: 'Keep the line in the green.',
+    slack: 'Too slack! It\'s taking line. Hold to reel.',
+    red: 'Too tight! Let go a moment.',
+    warn: 'Let go! The line\'s about to snap!',
   };
   let hintKey = '';
   function hint(key, text = HINTS[key] || '') { if (hintKey === key && $('hint').textContent === text) return; hintKey = key; const h = $('hint'); h.textContent = text; h.classList.toggle('is-bite', key === 'bite'); }
-  const reelUI = { box: $('reel'), btn: $('reel-btn'), tension: $('tension'), reeled: $('reeled') };
+  const reelUI = { box: $('reel'), btn: $('reel-btn'), tension: $('tension'), reeled: $('reeled'), zone: $('zone') };
 
   // ── casting ──────────────────────────────────────────────────────────────────────────────────────────────────────
   function cast(to) {
@@ -290,33 +297,25 @@ export function mountFishing(host) {
   function clearHooked() { if (S.hooked) { leaving.push({ F: S.hooked.F, t: 0, dir: new THREE.Vector3(rnd(-1, 1), -0.2, -1).normalize() }); S.hooked = null; } S.q = null; }
 
   // ── reeling ──────────────────────────────────────────────────────────────────────────────────────────────────────
-  const holding = () => S.holding || S.keyHold || S.btnHold;
+  let snaps = 0, autoHand = false;
+  const holding = () => (autoHand && S.reel ? S.reel.T < (S.reel.lo + S.reel.hi) / 2 : S.holding || S.keyHold || S.btnHold);
   function startReel() {
     S.phase = 'reel'; S.t = 0;
-    const strength = clamp(value(S.q.fish.lb), 0.15, 4);
-    const to = new THREE.Vector3(ANGLER.x + 0.6, 0, ANGLER.z - 1.6);
-    S.reel = { p: 0, T: 0.25, runLeft: 0, nextRun: rnd(0.6, 1.4), side: 0, sideT: 0, strength, from: S.bob.clone().setY(0), to, click: 0, gave: 0 };
+    const R = S.reel = reelStart(value(S.q.fish.lb));
+    Object.assign(R, { from: S.bob.clone().setY(0), to: new THREE.Vector3(ANGLER.x + 0.6, 0, ANGLER.z - 1.6), side: 0, sideT: 0, click: 0, wasRun: false });
+    reelUI.zone.style.left = (R.lo * 100).toFixed(1) + '%'; reelUI.zone.style.width = ((R.hi - R.lo) * 100).toFixed(1) + '%';
     reelUI.btn.classList.remove('is-calling');
-    hint('reel');
+    hint('green');
   }
   function updateReel(dt) {
-    const R = S.reel, F = S.hooked.F;
-    // the fish runs now and then, bigger fish harder and longer
-    if (R.runLeft > 0) R.runLeft -= dt;
-    else if ((R.nextRun -= dt) <= 0) {
-      R.runLeft = rnd(0.6, 1.0) + R.strength * 0.15; R.nextRun = rnd(1.4, 2.8);
-      R.sideT = (Math.random() < 0.5 ? -1 : 1) * rnd(1, 2.6) * (1 - R.p * 0.7);
-      water.ripple(F.root.position.x, F.root.position.z, 0.7); sound.splash(0.25);
-    }
-    const run = R.runLeft > 0, hold = holding();
-    if (hold) {
-      R.p += dt * (run ? 0.06 : 0.24) / (0.85 + R.strength * 0.12);
-      R.T += dt * (run ? 0.85 : -0.4); R.T = Math.max(R.T, 0.28);
-      if ((R.click -= dt) <= 0) { sound.click(run ? 0.3 : 1); R.click = run ? 0.12 : 0.06; }
-    } else { R.T -= dt * 1.1; if (run) R.p -= dt * 0.04; }
-    R.T = clamp(R.T, 0, 1);
-    if (R.T >= 1) { R.p -= 0.05; R.T = 0.68; R.gave++; sound.drag(450); }
-    R.p = clamp(R.p, 0, 1);
+    const R = S.reel, F = S.hooked.F, hold = holding();
+    const end = reelStep(R, dt, hold), run = R.running;
+    // a run's start: a ring on the water where it pulls, and a swing out to one side
+    if (run && !R.wasRun) { R.sideT = (Math.random() < 0.5 ? -1 : 1) * rnd(1, 2.6) * (1 - R.p * 0.7); water.ripple(F.root.position.x, F.root.position.z, 0.7); }
+    R.wasRun = run;
+    // the reel's ratchet: quick while reeling, slow while the fish takes line
+    if (hold || R.zone === 'slack') { if ((R.click -= dt) <= 0) { sound.click(hold ? 1 : 0.3); R.click = hold ? 0.06 : 0.14; } }
+    if (end === 'snapped') { snapLine(); return; }
     R.side += ((run ? R.sideT : R.sideT * 0.25) - R.side) * dt * (run ? 2.5 : 1);
     // where the fish is: drawn in from where it bit toward the dock, swinging out to the side when it runs
     const base = R.from.clone().lerp(R.to, ease(R.p)), d = R.to.clone().sub(R.from).setY(0).normalize(), perp = new THREE.Vector3(-d.z, 0, d.x);
@@ -325,11 +324,22 @@ export function mountFishing(host) {
     F.root.rotation.set(0, Math.atan2(R.to.x - base.x, R.to.z - base.z) + (run ? Math.sign(R.sideT) * 0.7 : 0), 0);
     F.wiggle = run ? 0.9 : hold ? 0.5 : 0.3; F.speed = run ? 16 : 10;
     S.bob.set(base.x, run ? -0.03 : 0.005 + Math.sin(S.t * 8) * 0.01, base.z);
-    hint(run ? 'run' : 'reel');
-    reelUI.tension.style.width = (R.T * 100).toFixed(0) + '%';
-    reelUI.tension.parentElement.parentElement.classList.toggle('is-high', R.T > 0.75);
+    hint(R.warn ? 'warn' : R.zone);
+    reelUI.tension.style.left = (R.T * 100).toFixed(1) + '%';
+    const g = reelUI.tension.parentElement.parentElement;
+    g.classList.toggle('is-high', R.zone === 'red'); g.classList.toggle('is-low', R.zone === 'slack'); g.classList.toggle('is-warn', R.warn);
     reelUI.reeled.style.width = (R.p * 100).toFixed(0) + '%';
-    if (R.p >= 1) startLift();
+    if (end === 'landed') startLift();
+  }
+  // the line snaps: that fish swims off and the rod is ready again. It costs nothing else: its question was never asked
+  function snapLine() {
+    snaps++;
+    water.ripple(S.hooked.F.root.position.x, S.hooked.F.root.position.z, 1); sound.splash(0.3);
+    clearHooked();
+    S.reel = null; S.phase = 'ready'; S.t = 0; S.pulling = false;
+    angler.play(HOLD, { fade: 0.3 });
+    reelUI.box.hidden = true;
+    showToast('The line snapped!', 'That one got away. Cast again.');
   }
 
   // ── up it comes ──────────────────────────────────────────────────────────────────────────────────────────────────
@@ -358,7 +368,7 @@ export function mountFishing(host) {
   // answered: null or { pick, right }; practice: the "Try it" question is up
   const C = { catchQ: null, q: null, answered: null, practice: false, catchAnswered: false };
   const PRAISE = ['Right!', 'Right! Nice work.', 'Right! Sharp eye.', 'Right! You have it.'];
-  const ACTION = { keep: 'Into the creel', throw: 'Throw it back' };
+  const ACTION = { keep: 'Keep the fish', throw: 'Throw it back' };
   function stars() {
     const s = asker.stars();
     if (!s || !s.n) return s && s.note ? `<div class="steps"><span class="lvl">${s.note}</span></div>` : '';
@@ -444,7 +454,7 @@ export function mountFishing(host) {
   const stringerSpot = (i) => stringerAt(STRINGER, i);
   const STRINGER_YAW = stringerYaw(STRINGER);
   function hangOnStringer(F, data) {
-    if (host.lift) F.setLift(host.lift * 0.6);
+    F.setLift(liftNow() * 0.6);
     stringer.push({ F, data });
     if (stringer.length > 8) { const old = stringer.shift(); old.F.dispose(); stringer.forEach((s, i) => s.F.root.position.copy(stringerSpot(i))); }
   }
@@ -580,7 +590,8 @@ export function mountFishing(host) {
       if (l.t > 3) { l.F.dispose(); leaving.splice(i, 1); }
     }
     // the stringer's fish hang nose up, their sides to where the camera usually stands, turning a little on the rope
-    stringer.forEach((s, i) => { s.F.update(dt); s.F.root.rotation.set(-Math.PI / 2 + Math.sin(S.t * 0.9 + i) * 0.05, STRINGER_YAW + Math.sin(S.t * 0.7 + i * 2) * 0.25, 0, 'YXZ'); });
+    const hung = liftNow() * 0.6;
+    stringer.forEach((s, i) => { s.F.update(dt); s.F.setLift(hung); s.F.root.rotation.set(-Math.PI / 2 + Math.sin(S.t * 0.9 + i) * 0.05, STRINGER_YAW + Math.sin(S.t * 0.7 + i * 2) * 0.25, 0, 'YXZ'); });
     // the camera glides to where it wants to be (the scene's frame turned into the world's)
     const k = 1 - Math.exp(-dt * 3);
     cam.pos.lerp(cam.wantPos, k); cam.look.lerp(cam.wantLook, k);
@@ -638,7 +649,7 @@ export function mountFishing(host) {
         cam.wantLook.x += (S.bob.x - cam.wantLook.x) * 0.25;
         if (t >= S.biteAt) {
           S.phase = 'bite'; S.t = 0; sound.bite(); water.ripple(S.bob.x, S.bob.z, 1.3);
-          reelUI.box.hidden = false; reelUI.btn.classList.add('is-calling'); reelUI.tension.style.width = '25%'; reelUI.reeled.style.width = '0%';
+          reelUI.box.hidden = false; reelUI.btn.classList.add('is-calling'); reelUI.tension.style.left = '42%'; reelUI.zone.style.width = '0'; reelUI.reeled.style.width = '0%';
           hint('bite');
           if (holding()) startReel();
         }
@@ -660,9 +671,9 @@ export function mountFishing(host) {
         if (S.phase !== 'reel') break;
         const F = S.hooked.F; F.update(dt);
         const Rr = S.reel, hold = holding();
-        want = { yaw: Math.atan2(-(F.root.position.x - ANGLER.x), -(F.root.position.z - ANGLER.z)) * 0.8, pitch: 0.75 + Rr.T * 0.25, bend: 0.12 + Rr.T * 0.55 };
+        want = { yaw: Math.atan2(-(F.root.position.x - ANGLER.x), -(F.root.position.z - ANGLER.z)) * 0.8, pitch: 0.75 + Rr.T * 0.25, bend: 0.1 + Rr.T * 0.6 };
         pull = F.root.position.clone().sub(angler.tip);
-        spin = hold ? (Rr.runLeft > 0 ? 0.6 : 2.4) : 0;
+        spin = hold ? 2.4 : Rr.zone === 'slack' ? -0.8 : 0;   // (the fish taking line turns the handle back)
         bobber.position.copy(S.bob);
         drawLine(S.bob.clone().add(tmpV.set(0, 0.04, 0)), (1 - Rr.T) * 0.4 + 0.03, F.root.position);
         if (hold && !S.pulling) { angler.play(REEL_CLIP, { fade: 0.25 }); S.pulling = true; } else if (!hold && S.pulling) { angler.play(HOLD, { fade: 0.3 }); S.pulling = false; }
@@ -681,13 +692,13 @@ export function mountFishing(host) {
         bobber.position.copy(angler.tip).lerp(F.root.position, 0.12);
         angler.setLine([angler.tip.clone(), F.root.position.clone()]);
         fishFrame(cam.wantPos, cam.wantLook, target, S.hooked.L);
-        if (host.lift) F.setLift(host.lift * u);
-        if (S.t > 1.0) { S.phase = 'card'; S.t = 0; openCard(S.q); }
+        F.setLift(liftNow() * u);
+        if (S.t > 1.0) { if (S.redealDue) redeal(); S.phase = 'card'; S.t = 0; openCard(S.q); }
         break;
       }
       case 'card': {
         want = { yaw: -0.55, pitch: 0.55, bend: 0.26 };
-        const F = S.hooked.F; hangFish(dt);
+        const F = S.hooked.F; hangFish(dt); F.setLift(liftNow());
         // a flop now and then
         F.wiggle = (S.t % 3.2) < 0.5 ? 0.9 : 0.12; F.speed = 13; F.update(dt);
         bobber.position.copy(angler.tip).lerp(F.root.position, 0.12);
@@ -713,7 +724,7 @@ export function mountFishing(host) {
         const F = S.hooked.F, u = clamp(S.t / 0.6, 0, 1);
         F.root.position.copy(S.relFrom).lerp(S.relTo, u); F.root.position.y += Math.sin(u * Math.PI) * 0.6; F.root.rotation.x = -Math.PI / 2 + u * Math.PI; F.wiggle = 1; F.update(dt);
         bobber.position.copy(angler.tip).add(tmpV.set(0, -0.55, 0)); angler.setLine([angler.tip.clone(), bobber.position.clone()]);
-        if (host.lift) F.setLift(host.lift * (1 - u));
+        F.setLift(liftNow() * (1 - u));
         if (u >= 1) {
           sound.splash(0.8); water.ripple(S.relTo.x, S.relTo.z, 1.2);
           leaving.push({ F, t: 0, dir: new THREE.Vector3(rnd(-0.5, 0.5), -0.25, -1).normalize() });
@@ -755,6 +766,26 @@ export function mountFishing(host) {
     angler = a; angler.update(0, S.rod);
   });
 
+  // THE LEVEL MOVED BY HAND: a new question at the new level, its own fish in place of the old one. The fish on its way up
+  // keeps swimming and is dealt again as it comes up (a new fish mid-fight would change the fight); a card already answered
+  // stays, the next fish is at the new level anyway.
+  function redeal() {
+    S.redealDue = false;
+    const q = asker.question({ creel: records.creel(), counts }, recent);
+    recent.push(q.key); if (recent.length > RECENT) recent.shift();
+    const L = value(feet(q.fish.len)) * 0.3048, was = S.hooked.F, F = newFish(q.fish.kind, L);
+    F.root.position.copy(was.root.position); F.root.rotation.copy(was.root.rotation); F.wiggle = was.wiggle; F.speed = was.speed; F.setLift(S.phase === 'card' ? liftNow() : 0);
+    scene.add(F.root); was.dispose();
+    S.hooked = { F, L }; S.q = q;
+  }
+  function relevel() {
+    if (!S.hooked || !S.q) return false;
+    if (S.phase === 'card') { if (C.catchAnswered || C.practice) return false; redeal(); openCard(S.q); return true; }
+    if (S.phase === 'wait') { redeal(); return true; }
+    if (S.phase === 'bite' || S.phase === 'reel' || S.phase === 'lift') { S.redealDue = true; return true; }
+    return false;
+  }
+
   // the fish on the card when the builder goes: counted as it was answered (kept or thrown back), else let go
   function settle() {
     const q = C.catchQ; if (!q || !S.hooked) return;
@@ -766,17 +797,18 @@ export function mountFishing(host) {
   // ── a handle for test scripts ────────────────────────────────────────────────────────────────────────────────────
   const toScreen = (x, y, z) => { scene.updateMatrixWorld(); const v = scene.localToWorld(new THREE.Vector3(x, y, z)).project(camera), r = host.canvasRect(); return { x: r.left + (v.x + 1) / 2 * r.width, y: r.top + (1 - v.y) / 2 * r.height, behind: v.z > 1 }; };
   const handle = {
-    state: () => ({ phase: S.phase, ladder: asker.state ? asker.state() : null, kept, back, creel: records.creel().length, stringer: stringer.length, record, book: bookCount(book), card: !card.hidden, teach: card.classList.contains('teach'), practice: C.practice, hint: $('hint').textContent, reel: S.reel ? { p: S.reel.p, T: S.reel.T, gave: S.reel.gave } : null, ready: !!angler && !walking }),
+    state: () => ({ phase: S.phase, ladder: asker.state ? asker.state() : null, kept, back, creel: records.creel().length, stringer: stringer.length, record, book: bookCount(book), card: !card.hidden, teach: card.classList.contains('teach'), practice: C.practice, hint: $('hint').textContent, reel: S.reel ? { p: S.reel.p, T: S.reel.T, lo: S.reel.lo, hi: S.reel.hi, zone: S.reel.zone, danger: S.reel.danger, t: S.reel.t } : null, snaps, ready: !!angler && !walking }),
     question: () => (!card.hidden && C.q ? { answer: C.q.answer, answerIndex: C.q.choices.indexOf(C.q.answer), choices: C.q.choices, labels: C.q.labels, topic: C.q.topic, key: C.q.key, level: C.q.level, from: C.q.from, action: C.catchQ.action, answered: C.answered, practice: C.practice } : null),
     toScreen, waterSpot: (x, z) => toScreen(x, 0, z), bobber: () => toScreen(S.bob.x, S.bob.y, S.bob.z),
     setStep: (n) => { if (asker.setStep) asker.setStep(n); },
     topics: () => TOPICS_AT,
     view: (from, to) => { viewOverride = from ? [new THREE.Vector3(...from), new THREE.Vector3(...to)] : null; },
     near: () => [camera.near, camera.far],
+    autoReel: (on) => { autoHand = !!on; },   // (for rigs: a steady hand on the reel)
   };
 
   return {
-    frame, resize, ready, handle, app: root, panel: $('tools'),
+    frame, resize, ready, handle, app: root, panel: $('tools'), relevel,
     busy: () => !['ready', 'wait'].includes(S.phase) || !card.hidden,
     // the game's angler walks on: nothing to cast with until there (walk(false))
     walk(on) { walking = !!on; },

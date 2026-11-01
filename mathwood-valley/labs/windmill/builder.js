@@ -1346,5 +1346,12 @@ function dispose() {
   root.innerHTML = '';
 }
 const busy = () => app.phase !== 'build' || !!app.held || showMe.playing;
-return { frame, resize, dispose, snapshot, settle, busy, handle, app, cam, towerView, get phase() { return app.phase; }, startTest, ask: handle.ask, showMe };
+// the level was moved by hand: the question up, not yet answered, dealt again at the new level
+const relevel = () => {
+  const c = $('question'), w = c && c.querySelector('.why');
+  if (app.phase !== 'question' || !curQ || !curQ.topic || c.hidden || !w || !w.hidden) return false;
+  const T = stepNow(); ask({ ...questionOf(curQ.topic, T), topic: curQ.topic, level: T }, true);
+  return true;
+};
+return { relevel, frame, resize, dispose, snapshot, settle, busy, handle, app, cam, towerView, get phase() { return app.phase; }, startTest, ask: handle.ask, showMe };
 }

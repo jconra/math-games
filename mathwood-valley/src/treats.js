@@ -1,3 +1,8 @@
+// TREATS AND HEARTS: for the rider's horses, dogs and farm animals. Jerky by the bag for the dogs (a dog takes nothing
+// else); apples and carrots for the rest: pigs love apples and sheep love carrots (two hearts float up, as from the donkey
+// for a carrot). A heart key is the horse's id, 'dog:shiba' for a dog, 'pig:Hamlet' for a farm animal (src/feeding.js).
+// Petting fills the same hearts: the first pet of a game day counts as a feed (petAnimal), every other pet still floats a
+// heart. Only the rider's own fill hearts.
 // TREATS FOR THE HORSES: apples picked off the wild apple trees (by the homestead and along the creek), and apples and
 // carrots bought by the bag at the general store, carried in the saddlebags (up to TREATS.most, the two together) and fed
 // to any horse: the rider's own, the pen's, the stable's stall horses, the donkey. A horse fed lowers its head and
@@ -32,8 +37,8 @@
 
 export const TREATS = {
   most: 10,                          // treats the saddlebags hold, apples and carrots together
-  bag: { apple: 3, carrot: 3 },      // treats in one of the store's bags
-  price: { apple: 2, carrot: 3 },    // gold for a bag
+  bag: { apple: 3, carrot: 3, jerky: 3 },      // treats in one of the store's bags
+  price: { apple: 2, carrot: 3, jerky: 2 },    // gold for a bag
   bagsMost: 3,                       // bags bought at one go
   perTree: 4,                        // apples a tree gives a day (they grow back the next morning in the game)
 };
@@ -42,8 +47,10 @@ export const BOND = {
   perHeart: 2,                       // feeds that count toward one heart
   perDay: 3,                         // feeds a day that count, each horse
 };
-export const TREAT_KINDS = ['apple', 'carrot'];
-export const TREAT_NAMES = { apple: ['apple', 'apples'], carrot: ['carrot', 'carrots'] };
+export const TREAT_KINDS = ['apple', 'carrot', 'jerky'];
+export const TREAT_NAMES = { apple: ['apple', 'apples'], carrot: ['carrot', 'carrots'], jerky: ['strip of jerky', 'strips of jerky'] };
+// each kind of animal's favourite (two hearts float up for it)
+export const LOVES = { pig: 'apple', sheep: 'carrot', donkey: 'carrot', dog: 'jerky' };
 export const treatWord = (kind, n) => `${n} ${(TREAT_NAMES[kind] || ['treat', 'treats'])[n === 1 ? 0 : 1]}`;
 
 const isObj = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -52,19 +59,19 @@ const whole = (v, most = Infinity) => { const n = Math.floor(+v); return Number.
 // a rider's treats made safe: counts whole and within the saddlebags, trees and bonds well formed (an old save: none)
 export function cleanTreats(v) {
   const o = isObj(v) ? v : {};
-  const apple = whole(o.apple, TREATS.most), carrot = whole(o.carrot, TREATS.most - apple);
+  const apple = whole(o.apple, TREATS.most), carrot = whole(o.carrot, TREATS.most - apple), jerky = whole(o.jerky, TREATS.most - apple - carrot);
   const trees = {}, bond = {};
   for (const [id, t] of Object.entries(isObj(o.trees) ? o.trees : {})) if (id && isObj(t)) trees[id] = { day: whole(t.day), left: whole(t.left, TREATS.perTree) };
-  for (const [id, b] of Object.entries(isObj(o.bond) ? o.bond : {})) if (id && isObj(b)) bond[id] = { n: whole(b.n, BOND.hearts * BOND.perHeart), day: whole(b.day), today: whole(b.today, BOND.perDay) };
-  return { ...o, apple, carrot, trees, bond };
+  for (const [id, b] of Object.entries(isObj(o.bond) ? o.bond : {})) if (id && isObj(b)) bond[id] = { n: whole(b.n, BOND.hearts * BOND.perHeart), day: whole(b.day), today: whole(b.today, BOND.perDay), ...(whole(b.petted) ? { petted: whole(b.petted) } : {}) };
+  return { ...o, apple, carrot, jerky, trees, bond };
 }
 export function treatsOf(rider) {
   if (!rider) return cleanTreats(null);
   const t = rider.treats;
-  if (!isObj(t) || !isObj(t.trees) || !isObj(t.bond) || !Number.isFinite(t.apple) || !Number.isFinite(t.carrot)) rider.treats = cleanTreats(t);
+  if (!isObj(t) || !isObj(t.trees) || !isObj(t.bond) || !Number.isFinite(t.apple) || !Number.isFinite(t.carrot) || !Number.isFinite(t.jerky)) rider.treats = cleanTreats(t);
   return rider.treats;
 }
-export const countOf = (rider) => { const t = treatsOf(rider); return t.apple + t.carrot; };
+export const countOf = (rider) => { const t = treatsOf(rider); return t.apple + t.carrot + t.jerky; };
 export const roomOf = (rider) => Math.max(0, TREATS.most - countOf(rider));
 export const haveOf = (rider, kind) => (TREAT_KINDS.includes(kind) ? treatsOf(rider)[kind] : 0);
 
@@ -81,8 +88,11 @@ export function takeTreat(rider, kind) {
   return true;
 }
 // the treat a feed gives: the donkey gets a carrot when there is one (his favourite), every other horse an apple first
-export function whichTreat(rider, { donkey = false } = {}) {
-  const t = treatsOf(rider), order = donkey ? ['carrot', 'apple'] : ['apple', 'carrot'];
+// (loves: its favourite first; a dog takes only jerky, and nobody else is given it)
+export function whichTreat(rider, { donkey = false, dog = false, loves = null } = {}) {
+  const t = treatsOf(rider);
+  if (dog) return t.jerky > 0 ? 'jerky' : null;
+  const first = loves || (donkey ? 'carrot' : 'apple'), order = first === 'carrot' ? ['carrot', 'apple'] : ['apple', 'carrot'];
   return order.find((k) => t[k] > 0) || null;
 }
 
@@ -109,8 +119,8 @@ export function bondOf(rider, horseId) {
 // carrot); day: the game day (src/shifts.js today). Returns how many hearts float up, whether the feed counted toward
 // the bond, the hearts before and after, full (all hearts filled) and plenty (fed past today's count: the hearts grow
 // again tomorrow)
-export function feedHorse(rider, { horseId = null, owned = false, donkey = false, kind = 'apple', day = 0 } = {}) {
-  const float = donkey && kind === 'carrot' ? 2 : 1;
+export function feedHorse(rider, { horseId = null, owned = false, donkey = false, loves = null, kind = 'apple', day = 0 } = {}) {
+  const float = (donkey && kind === 'carrot') || (loves && loves === kind) ? 2 : 1;
   if (!owned || !horseId) return { hearts: float, counted: false, before: 0, after: 0, full: false, plenty: false };
   const bonds = treatsOf(rider).bond, before = bondOf(rider, horseId);
   const b = bonds[horseId] || (bonds[horseId] = { n: 0, day, today: 0 });
@@ -120,6 +130,19 @@ export function feedHorse(rider, { horseId = null, owned = false, donkey = false
   const after = bondOf(rider, horseId);
   return { hearts: float, counted, before: before.hearts, after: after.hearts, full: after.full, plenty: room && !counted };
 }
+// an animal petted: a heart floats up every time (two for the pet that counts); the first pet of a game day counts as a
+// feed toward its hearts, while they aren't full
+export function petAnimal(rider, { id = null, owned = false, day = 0 } = {}) {
+  if (!owned || !id) return { hearts: 1, counted: false, before: 0, after: 0, full: false };
+  const bonds = treatsOf(rider).bond, before = bondOf(rider, id);
+  const b = bonds[id] || (bonds[id] = { n: 0, day, today: 0, petted: 0 });
+  const counted = b.n < BOND.hearts * BOND.perHeart && b.petted !== day + 1;
+  if (counted) { b.n++; b.petted = day + 1; }
+  const after = bondOf(rider, id);
+  return { hearts: counted ? 2 : 1, counted, before: before.hearts, after: after.hearts, full: after.full && !before.full };
+}
+// all the hearts an id list has filled: for "your animals" (src/ui/animals.js)
+export const heartsTotal = (rider, ids) => ids.reduce((a, id) => a + bondOf(rider, id).hearts, 0);
 // the hearts as text ('♥♥♥♡♡'): for the rigs and a screen reader
 export const heartsLine = (hearts, half = false) => Array.from({ length: BOND.hearts }, (x, i) => (i < hearts ? '♥' : i === hearts && half ? '❥' : '♡')).join('');
 

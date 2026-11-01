@@ -26,9 +26,13 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Kit, buildGeometry } from '../materials/cabin.js';
 import { rng } from '../materials/textures.js';
 import { makeBarrel } from '../materials/barrel.js';
-import { T, RX, RY, RZ, mul, vary, ngon } from './parts.js';
+import { T, RX, RY, RZ, mul, vary, ngon, glowGeometry } from './parts.js';
 import { Goods } from './goods.js';
 import { STORE_ART, regionUV } from './art.js';
+import { SHEET } from '../../world/props/sheet.js';
+import { FURNITURE } from '../../world/props/makers/furniture.js';
+import { GOODS } from '../../world/props/makers/goods.js';
+import { LIGHTS } from '../../world/props/makers/lights.js';
 
 const PLANK = [1.04, 0.98, 0.92], DARKW = [0.78, 0.72, 0.66], IRON = [0.85, 0.8, 0.76], TWINE = [0.62, 0.5, 0.36];
 
@@ -214,6 +218,28 @@ export const MAKERS = {
   // sagging its own way, gathered to a neck tied with twine and a ruffle above the tie; oval in section. Its label is
   // printed on its front only (a patch of the lathe a little proud of it, the label's picture laid once across it).
   // Standing, or lying on its side (lie: its turn), its label up
+  // the farm goods' bins by the store's counter (labs/buildings/store.js goodsBins): a milk can, a burlap sack of wool with
+  // the fleece puffing from its top, a crate of eggs
+  milkCan(k, M, o) {
+    if (!o.gd) return;
+    const h = o.h ?? 0.58, r = 0.14, f = h / 0.58, tin = STORE_ART.tile.tin;
+    o.gd.lathe([[0, 0], [r, 0], [r + 0.012, 0.02], [r, 0.04], [r, 0.36 * f], [0.07, 0.46 * f], [0.065, 0.53 * f], [0.09, 0.54 * f], [0.09, 0.565 * f], [0.06, 0.58 * f], [0, 0.585 * f]], M, 14, tin, [1.5, 1.52, 1.5]);
+    k.solid([r * 2, h, r * 2], null, null, mul(M, T(0, h / 2, 0)));
+  },
+  woolSack(k, M, o) {
+    if (!o.gd) return;
+    const h = o.h ?? 0.62, prof = [[0, 0], [0.2, 0], [0.25, 0.04], [0.26, 0.2], [0.24, h * 0.7], [0.21, h * 0.86], [0.2, h * 0.9], [0, h * 0.9]];
+    o.gd.lathe(prof, M, 10, STORE_ART.burlap, [1, 1, 1], { oval: [1, 0.72] });
+    for (const [x, z, r] of [[0, 0, 0.15], [0.09, 0.05, 0.1], [-0.09, 0.04, 0.1], [0.04, -0.07, 0.1]]) o.gd.dome(r, r * 0.9, mul(M, T(x, h * 0.88, z)), 8, STORE_ART.tile.cotton, [1.08, 1.05, 0.98], 2);
+    k.solid([0.48, h, 0.36], null, null, mul(M, T(0, h / 2, 0)));
+  },
+  eggCrate(k, M, o) {
+    MAKERS.crate(k, M, { ...o, fill: 'eggs', gd: null });   // (open: the eggs go in on their straw)
+    if (!o.gd) return;
+    const s = o.size ?? 0.44;
+    o.gd.dome(s / 2 - 0.03, 0.03, mul(M, T(0, s - 0.03, 0)), 8, STORE_ART.tile.crate, [1.2, 1.0, 0.55], 2);
+    for (let i = 0; i < 7; i++) { const a = i * 2.4, q = i ? 0.13 : 0; o.gd.dome(0.04, 0.055, mul(M, T(Math.cos(a) * q, s - 0.012, Math.sin(a) * q)), 10, STORE_ART.tile.cotton, [1.1, 1.0, 0.86], 4); }
+  },
   sack(k, M, o) {
     if (!o.gd) return;
     const h = o.h ?? 0.62, f = h / 0.67, print = o.print || 'flour', cloth = print === 'flour' ? STORE_ART.tile.cotton : STORE_ART.burlap;
@@ -236,6 +262,8 @@ export const MAKERS = {
 };
 // a galvanized pail turned on a lathe: tapered sides, a rolled rim, its dark inside and floor, two ears and a wire bail
 // laid down over one side (its frame M at its foot)
+// (the props library's makers join in: world/props/makers/)
+Object.assign(MAKERS, FURNITURE, GOODS, LIGHTS);
 export function galvPail(k, gd, M, h = 0.24, shade = 1, bailUp = false) {
   const zinc = [0.98, 0.97, 0.95].map((c) => c * shade), f = h / 0.244;
   gd.lathe([[0, 0], [0.098, 0], [0.102, 0.012 * f], [0.122, 0.222 * f], [0.131, 0.232 * f], [0.127, 0.244 * f]], M, 12, STORE_ART.tile.tin, zinc);
@@ -271,11 +299,11 @@ function wheel(k, M, rad) {
 }
 
 // a list of props into meshes: { geos: { wood, iron, hay, goods?, decal? }, tris, ms }. bake(geo): the building's light, if any
-export function buildProps(list, { seed = 5, bake = null } = {}) {
+export function buildProps(list, { seed = 5, bake = null, glow: o_glow = false } = {}) {
   const t0 = performance.now(), k = new Kit(seed); k.parts.hay = []; k.parts.glow = [];
-  const counts = {}, gd = new Goods(STORE_ART.w, STORE_ART.h), decals = [];
+  const counts = {}, gd = new Goods(STORE_ART.w, STORE_ART.h), pa = new Goods(SHEET.w, SHEET.h), decals = [];
   for (const p0 of list) {
-    const p = { ...p0, gd, decals }, M = mul(T(p.x, p.y || 0, p.z), RY(p.rot || 0));
+    const p = { ...p0, gd, pa, decals }, M = mul(T(p.x, p.y || 0, p.z), RY(p.rot || 0));
     if (p.type === 'barrel' || p.type === 'keg') {
       // (a keg: a small barrel; a barrel with a fill stands open, heaped with it, a hand's width below its rim)
       const h = p.type === 'keg' ? 0.5 : p.h ?? 0.86, r = p.type === 'keg' ? 0.2 : 0.3;
@@ -290,8 +318,10 @@ export function buildProps(list, { seed = 5, bake = null } = {}) {
   geos.iron = buildGeometry(k.parts.iron, 'iron', R, { topAt: () => 1.2 });
   geos.hay = buildGeometry(k.parts.hay, 'stone', R, {});
   const goods = gd.build(); if (goods) geos.goods = goods;
+  const paper = pa.build(); if (paper) geos.paper = paper;   // (the props' paper sheet: framed pictures, round tops)
   if (decals.length) { geos.decal = mergeGeometries(decals); for (const g of decals) g.dispose(); }
-  if (bake) for (const g in geos) bake(geos[g]);
-  let tris = 0; for (const g in geos) tris += geos[g].index.count / 3;
+  if (o_glow && k.parts.glow.length) geos.glow = glowGeometry(k.parts.glow);   // (a lantern's light, when asked for: the Props Lab)
+  if (bake) for (const g in geos) if (g !== 'glow') bake(geos[g]);
+  let tris = 0; for (const g in geos) if (geos[g].index) tris += geos[g].index.count / 3;
   return { geos, counts, tris, solids: k.occ, ms: performance.now() - t0 };
 }

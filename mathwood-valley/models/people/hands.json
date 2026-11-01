@@ -1,0 +1,22 @@
+{ "v": 1, "players": {
+  "fiddler": {
+    "Play_Fiddle": {
+      "L": {"off":[0,-7,-2],"rot":[30,0,0],"elbow":0,"curl":{"fingers":15,"thumb":10}},
+      "R": {"off":[0,0,0],"rot":[0,0,0],"elbow":-15,"curl":{"fingers":0,"thumb":0}}
+    }
+  },
+  "banjo": {
+    "Play_Banjo": {
+      "L": {"off":[0,-1.5,-1],"rot":[90,0,0],"elbow":0,"curl":{"fingers":20,"thumb":0}}
+    },
+    "Banjo_Rest": {
+      "L": {"off":[0,-1.5,-1],"rot":[90,0,0],"elbow":0,"curl":{"fingers":20,"thumb":0}}
+    }
+  },
+  "harpist": {
+    "Play_Harmonica": {
+      "L": {"off":[1.5,-2.5,5.5],"rot":[0,0,0],"elbow":0,"curl":{"fingers":0,"thumb":0}},
+      "R": {"off":[-1.5,-2.5,5.5],"rot":[0,0,0],"elbow":0,"curl":{"fingers":0,"thumb":0}}
+    }
+  }
+} }

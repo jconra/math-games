@@ -290,7 +290,7 @@ test('unlocks: hens from the start; pigs, sheep and cows once their young one is
   assert.equal(G.earnLine(r, 'hen'), '');
   assert.equal(G.earnLine(r, 'pig'), `Pen ${G.GIFT.sure.pig} whole batches of pigs at the farm to earn your first piglet. Then the store sells pigs.`);
   assert.match(G.earnLine(r, 'sheep'), /flocks of sick sheep .* first lamb\. Then the store sells sheep\.$/);
-  assert.match(G.earnLine(r, 'cow'), /^Rope 3 whole waves at the round-up to earn your first calf\. Then the store sells milk cows\.$/);
+  assert.match(G.earnLine(r, 'cow'), /^Rope 3 whole bunches at the round-up to earn your first calf\. Then the store sells milk cows\.$/);
   for (const k of ['pig', 'sheep', 'cow']) assert.equal(G.buyAnimal(r, k, '', S.spend), 'locked');
   assert.equal(r.gold, 1000, 'nothing paid for a locked kind');
   // unlucky every time: the job count still brings the first one for sure

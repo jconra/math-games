@@ -60,8 +60,8 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makePerson } from '../actors/folk.js';
 import { loadRiderKit, makeRider } from '../actors/riders.js';
 import { makeTargetRing } from '../targetring.js';
-import { canShoot, GUNPLAY } from '../gun.js';
-import { makeSights } from '../sixgun.js';
+import { canShoot, gunInHand } from '../gun.js';
+import { makeGunAim } from '../ui/gunaim.js';
 import { makeRangeSound } from '../audio/rangesound.js';
 import { crateParts } from '../camps.js';
 import { makeCampfire } from '../fire/campfire.js';
@@ -373,13 +373,23 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
   const R = makeTargetRing({ scene, camera, canvas, W });
   let curTarget = null;
   // a bandit brought in: roped (pulled down and hogtied) or, with the six-shooter, shot (knocked down, hands up)
-  let SND = null, sights = null;
-  const snd = () => SND || (SND = makeRangeSound({ audio }));
+  let SND = null;
+  // (a gun with a mouse: aimed by hand, src/ui/gunaim.js; the shot goes where the crosshair is, and nobody there is just a shot)
+  const aim = makeGunAim({ canvas, camera, W });
+  const guardPts = (g, pts) => { g.tgt.root.getWorldPosition(pts[0]); pts[1].copy(pts[0]); pts[2].copy(pts[0]); pts[0].y += 1.2; pts[1].y += 0.4; pts[2].y += 1.8; return 3; };
+  function fireAt() {
+    const G = gunInHand(rider); if (!G || P.gunBusy || P.lassoBusy || !aim.at) return false;
+    if (aim.target && aim.inReach) return throwAt(aim.target);
+    const at = aim.groundAt(aim.at.x, aim.at.y, G.reach);
+    return P.shoot({ position: at }, { good: false, gun: G.id, reach: 1e6, onFire: () => { snd().shot(); } });
+  }
+  const snd = () => SND || (SND = makeRangeSound({ audio, fight: true }));
   function throwAt(g) {
     if (!g || !g.st || !g.st.gang.includes(g) || g.state !== 'fight' || LJ.paused) return false;
     if (canShoot(rider)) {
+      const G = gunInHand(rider);
       const ok = P.shoot(g.tgt, {
-        good: true,
+        good: true, gun: G.id, reach: G.reach,
         onFire: () => { snd().shot(); },
         onLand: () => { curTarget = null; if (g.state === 'throw') caught(g, true); },
         onCancel: () => { curTarget = null; if (g.state === 'throw') g.state = 'fight'; },
@@ -413,6 +423,7 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
   }
   const offPick = I.onPick((p) => {
     if (LJ.paused || !fightS || !loose(fightS).length) return;
+    if (!p.touch && canShoot(rider)) { fireAt(); return; }   // (by hand: the crosshair)
     const t = p.touch ? R.pick(p.x, p.y) : R.click(p.x, p.y);
     if (t) throwAt(t);
   });
@@ -890,12 +901,11 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
     for (const g of all) gangStep(g, dt);
     GG.frame(gangAll().filter((g) => g.st.fight), dt, { onBoom: landed });
     const ring = fightS ? loose(fightS) : [];
-    if (ring.length && I.enabled && P.enabled && (I.tap('KeyF') || (!P.onHorse && I.tap('Space')))) throwAt(R.target);
+    if (ring.length && I.enabled && P.enabled && (I.tap('KeyF') || (!P.onHorse && I.tap('Space')))) { if (canShoot(rider) && !I.touch) fireAt(); else throwAt(R.target); }
     const ringOn = ring.length > 0;
-    const gun = canShoot(rider);
-    R.update(dt, { targets: ring, player: P, can: (t) => t.state === 'fight', hold: P.lassoBusy, busy: P.lasso.busy, ...(gun ? { reach: GUNPLAY.reach } : {}) });
-    // with the six-shooter: the range's sights over the one ringed (src/sixgun.js), gold in its reach
-    if (gun || sights) { if (!sights) sights = makeSights(); sights.place(gun && ringOn && R.target && R.screen && !LJ.paused && !P.gunBusy ? R.screen : null, R.inReach); }
+    const G = gunInHand(rider), byHand = !!G && !I.touch;
+    R.update(dt, { targets: byHand ? [] : ring, player: P, can: (t) => t.state === 'fight', hold: P.lassoBusy, busy: P.lasso.busy, ...(G ? { reach: G.reach } : {}) });
+    aim.update(dt, { on: byHand && ringOn && !LJ.paused, gun: G, targets: ring.filter((t) => t.state === 'fight'), points: guardPts, player: P });
     LJ.guardUp = ringOn;
     tryLoad();
     // keep the load on the horse (a horse bought or swapped on the way carries it on)
@@ -980,7 +990,7 @@ export function makeLootJob({ W, folk, animals, P, I, camera, canvas, rider, hud
   LJ.dispose = () => {
     stopShare();
     removeEventListener('keydown', onKey, true);
-    offPick(); R.dispose(); GG.dispose(); if (sights) sights.dispose();
+    offPick(); R.dispose(); GG.dispose(); aim.dispose();
     for (const st of [...stashes]) dropStash(st);
     for (const c of [...people]) removePerson(c);
     load.removeFromParent();

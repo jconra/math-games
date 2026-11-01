@@ -50,8 +50,8 @@ import * as THREE from 'three';
 import { makeSupplies, makeSupplyOrder, picture } from '../math/supplies.js';
 import { makeStoreSlip, speakLine } from '../ui/storeslip.js';
 import { openLongWork } from '../ui/longwork.js';
-import { workMul, workDiv, LONG } from '../math/longwork.js';
-import { readAloud, record } from '../math/skill.js';
+import { workMul, workDiv, LONG, addColumns } from '../math/longwork.js';
+import { readAloud, record, levelOf } from '../math/skill.js';
 import { levelFor } from '../levels/model.js';
 import { factFrom } from '../math/longwork.js';
 import { sumOf, workFrom } from '../math/jobsums.js';
@@ -131,7 +131,7 @@ export function makeDeliveryJob({ W, camps, P, camera, rider, hud, hob = null, r
     if (!DL.active || !p || !p.long || longPanel || U.busy) return false;   // (false: not opened, e.g. already up: the tools open their entry instead)
     const already = !!p.picked;   // (opened after a coin was picked: it helps, but the part's answer is already counted)
     clearTimeout(longT);
-    const L = p.long, work = L.op === 'mul' ? workMul(L.a, L.b, L.lead ? { lead: L.lead } : {}) : workDiv(L.n, L.d);
+    const L = p.long, work = L.op === 'mul' ? workMul(L.a, L.b, { ...(L.lead ? { lead: L.lead } : {}), columns: addColumns(levelOf(rider, 'add')) }) : workDiv(L.n, L.d);
     let firstRight = true;
     longPanel = openLongWork(document.body, {
       work, final: L.final, ask: p.ask, speak: readAloud(rider) ? speakLine : null,

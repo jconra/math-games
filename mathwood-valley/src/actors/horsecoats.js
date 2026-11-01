@@ -20,9 +20,13 @@
 export const FACES = [['none', 'None'], ['star', 'Star'], ['stripe', 'Star and stripe'], ['blaze', 'Blaze'], ['bald', 'Bald face'], ['snip', 'Snip']];
 export const LEGS = [['none', 'None'], ['coronet', 'Coronet'], ['pastern', 'Pastern'], ['sock', 'Sock'], ['stocking', 'Stocking']];
 export const PINTOS = [['none', 'None'], ['tobiano', 'Tobiano'], ['overo', 'Overo'], ['sabino', 'Sabino']];
+// dapples: about 14 cm and up as the game's maker likes them, a random coat's never under 10 (a share 0..1 of random in,
+// metres out: its square root leans toward the big end, about 14 on average)
+export const DAPPLE = { least: 0.1, most: 0.2, usual: 0.14 };
+export const dappleSizeFrom = (u) => DAPPLE.least + 0.06 * Math.sqrt(u);
 const NO_LEGS = { FL: 'none', FR: 'none', HL: 'none', HR: 'none' };
 
-const BASE = { mane: '#16110e', points: 'none', belly: 0.6, sooty: 0.25, bloom: 0, muzzle: 0.82, grey: 0, dapples: 0, dappleSize: 0.1, greyLegs: 0.6,
+const BASE = { mane: '#16110e', points: 'none', belly: 0.6, sooty: 0.25, bloom: 0, muzzle: 0.82, grey: 0, dapples: 0, dappleSize: 0.14, greyLegs: 0.6,
   face: 'none', faceSize: 1, ragged: 0.5, star: false, legs: NO_LEGS, pinto: 'none', white: 0.5, roan: 0.6, seed: 1,
   dorsal: 0, dorsalWidth: 0.03, barring: 0,
   bump: 1, streakColor: 1, sheen: 1, shine: 1, roots: 0.35, tips: 0.3, strands: 0.5, maneShine: 0.6, maneLength: 0.85, tailLength: 0.9 };
@@ -32,7 +36,7 @@ export const PRESETS = {
   chestnut: { label: 'Chestnut', game: 'chestnut', base: '#a65a2a', mane: '#4e2615', bloom: 0.5, face: 'blaze', legs: { FL: 'none', FR: 'none', HL: 'sock', HR: 'sock' },
     muzzle: 0.45, roots: 0.25, tips: 0.45, sooty: 0.12, seed: 11 },
   palomino: { label: 'Palomino', game: 'palomino', base: '#c99a52', mane: '#eee2c4', face: 'snip', muzzle: 0.75, belly: 0.35, sooty: 0.1, roots: 0.2, tips: 0.25, seed: 5 },
-  white: { label: 'White', game: 'white', base: '#4a4544', mane: '#d9d6d2', grey: 0.88, dapples: 0.7, dappleSize: 0.09, greyLegs: 0.6,
+  white: { label: 'White', game: 'white', base: '#4a4544', mane: '#d9d6d2', grey: 0.88, dapples: 0.7, dappleSize: 0.14, greyLegs: 0.6,
     muzzle: 0.85, belly: 0.1, sooty: 0, face: 'none', strands: 0.9, roots: 0.45, tips: 0.25, seed: 7 },
   midnight: { label: 'Midnight', game: 'midnight', base: '#1d1918', mane: '#110e0d', points: 'none', face: 'star', faceSize: 0.6, belly: 0.25, sooty: 0,
     muzzle: 0.5, shine: 1.3, seed: 9 },
@@ -81,7 +85,7 @@ export function randomCoat(seed) {
   const C = COLOURS[key];
   const r = { ...BASE, ...C, base: jitter(R, C.base, 0.22), mane: jitter(R, C.mane, 0.15), seed, name: 'random', label: 'Random', game: key === 'grey' ? 'white' : key === 'palomino' ? 'palomino' : key === 'black' ? 'midnight' : /chestnut|liver/.test(key) ? 'chestnut' : 'bay' };
   delete r.w;
-  if (key === 'grey') { r.grey = 0.45 + R() * 0.55; r.dapples = R() < 0.8 ? 0.4 + R() * 0.5 : 0; r.dappleSize = 0.07 + R() * 0.05; }
+  if (key === 'grey') { r.grey = 0.45 + R() * 0.55; r.dapples = R() < 0.8 ? 0.4 + R() * 0.5 : 0; r.dappleSize = dappleSizeFrom(R()); }
   r.sooty = (r.sooty ?? 0.15) * (0.5 + R());
   r.belly = (r.belly ?? 0.45) * (0.6 + R() * 0.8);
   r.face = pick(R, [['none', 30], ['star', 26], ['stripe', 12], ['blaze', 18], ['snip', 6], ['bald', 4]]);
@@ -104,7 +108,7 @@ export function randomCoat(seed) {
 // every field filled from the defaults, numbers kept to their ranges, colours to #rrggbb, the kinds of marking to the
 // ones the shader knows; fields it doesn't know are kept as they are (a newer build's)
 const HEX = /^#[0-9a-f]{6}$/i;
-const RANGE = { belly: [0, 1], sooty: [0, 1], muzzle: [0, 1], bloom: [0, 1], grey: [0, 1], dapples: [0, 1], dappleSize: [0.05, 0.16], greyLegs: [0, 1],
+const RANGE = { belly: [0, 1], sooty: [0, 1], muzzle: [0, 1], bloom: [0, 1], grey: [0, 1], dapples: [0, 1], dappleSize: [DAPPLE.least, DAPPLE.most], greyLegs: [0, 1],
   faceSize: [0.5, 1.6], ragged: [0, 1], white: [0, 1], roan: [0, 1], seed: [1, 99999], bump: [0, 3], streakColor: [0, 3], sheen: [0, 3], shine: [0, 3],
   roots: [0, 0.8], tips: [0, 1], strands: [0, 1.5], maneShine: [0, 2], maneLength: [0.3, 1], tailLength: [0.3, 1], dorsal: [0, 1], dorsalWidth: [0.015, 0.06], barring: [0, 1] };
 const ids = (list) => list.map(([k]) => k);

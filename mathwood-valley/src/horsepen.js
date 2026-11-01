@@ -211,7 +211,8 @@ export function makeHorsePen({ W, animals, rider, camera, player, shadows = true
       for (const s of slots) {
         if (s.sold || s.off || s.asleep || !s.data) continue;
         out.push({ key: 'pen:' + s.i, id: null, name: s.data.name, a: s.h.a, owned: false, donkey: false,
-          eat: (sec) => { s.mode = 'stand'; s.idle = s.h.a.actions.Eating ? 'Eating' : 'Idle_Headlow'; s.t = sec; s.h.a.pace(0); return true; } });
+          eat: (sec) => { s.mode = 'stand'; s.idle = s.h.a.actions.Eating ? 'Eating' : 'Idle_Headlow'; s.t = sec; s.h.a.pace(0); return true; },
+          hold: (sec) => { s.mode = 'stand'; s.idle = 'Idle'; s.t = sec; s.h.a.pace(0); } });
       }
       return out;
     },

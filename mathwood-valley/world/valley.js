@@ -1228,7 +1228,7 @@ mat.onBeforeCompile = (sh) => {
       #else
       vec3 dryC = lay(layDry, uv, vec2(0.13, 0.71)), lushC = lay(layLush, uv, vec2(0.61, 0.27)), forC = lay(layForest, uv * 1.3, vec2(0.37, 0.93));
       // mud: the dirt picture, darker and wetter (a picture of its own would be one too many for a real GPU)
-      vec3 pathC = lay(layPath, uv * 1.6, vec2(0.29, 0.17)), wetC = lay(layPath, uv * 1.1, vec2(0.83, 0.41)) * vec3(0.55, 0.5, 0.42), shoreC = lay(layShore, uv * 3.0, vec2(0.53, 0.07));
+      vec3 pathC = lay(layPath, uv * 1.6, vec2(0.29, 0.17)), wetC = lay(layPath, uv * 1.1, vec2(0.83, 0.41)) * vec3(0.55, 0.5, 0.42), shoreC = lay(layShore, uv * 4.5, vec2(0.53, 0.07));
       #endif
       // the rock of a steep face: read from the side, in horizontal strata (bands of lighter and
       // darker, warmer and greyer layers that wander a little), darker in the overhanging parts
@@ -2589,7 +2589,7 @@ function lampsFrame() {
   // reaches as far as its pool on the ground, 4.5 of its size
   if (TOWN.village && ((LAMP.tick = (LAMP.tick || 0) + 1) % 10 === 1)) {
     const lamps = TOWN.village.layout.items.filter((i) => i.type === 'prop' && i.kind === 'lamp').map((i) => ({ x: i.x, z: i.z, y: heightAt(i.x, i.z) + (i.y || 0) + 3.17 * i.size, reach: 4.5 * i.size, strength: 1 }));
-    lamps.push(...NIGHT_LIGHTS.lamps());                                 // (Mathwood Valley: the lanterns and the lit windows)
+    lamps.push(...NIGHT_LIGHTS.lamps(), ...(TOWN.extraLamps || []));                                 // (Mathwood Valley: the lanterns and the lit windows)
     const sig = lamps.map((l) => `${l.x},${l.z},${l.y.toFixed(2)},${l.reach}`).join('|') + NIGHT_LIGHTS.sig;   // (the light's own height in it: the land reshaped or levelled under a lamp moves its light too)
     if (sig !== LAMP.mapSig) { LAMP.mapSig = sig; buildLampMap(LAMPU, lamps); }
   }

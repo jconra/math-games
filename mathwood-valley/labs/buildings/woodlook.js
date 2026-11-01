@@ -19,6 +19,10 @@ export function softenGrain(T, o = {}) {
     for (let s = 0; s < rows; s++) {
       const y0 = s * S; tg.clearRect(0, 0, W, S); tg.drawImage(c, 0, y0, W, S, 0, 0, W, S);
       const img = tg.getImageData(0, 0, W, S), d = img.data, src = d.slice();
+      // (straight: the two rough-sawn strips' saw marks cross the board in even ripples, which on a post or a floor board
+      // read as sine waves, the game's maker: "I have never seen wood that looks like a bunch of sine waves". Blurred
+      // along the board, so only what runs along it is left)
+      if (o.straight && s >= 10) { const Rb = 26, from = d.slice(); for (let y = 0; y < S; y++) for (let ch = 0; ch < 3; ch++) { let acc = 0; for (let q = -Rb; q <= Rb; q++) acc += from[(y * W + ((q % W) + W) % W) * 4 + ch]; for (let x = 0; x < W; x++) { src[(y * W + x) * 4 + ch] = acc / (2 * Rb + 1); acc += from[(y * W + (x + Rb + 1) % W) * 4 + ch] - from[(y * W + ((x - Rb) % W + W) % W) * 4 + ch]; } } }
       // (straight: the two rough-sawn strips keep a few broad soft streaks, as their saw marks across them and fine lines
       // along them made a grid close up)
       const fine = o.straight && s < 10, bands = fine ? 9 + Math.floor(R(s * 3 + 1) * 5) : 3 + Math.floor(R(s * 3 + 1) * 3);

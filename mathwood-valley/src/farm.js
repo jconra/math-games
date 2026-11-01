@@ -24,6 +24,7 @@
 //   F.ready           a promise: the paddock animals are in
 //   F.update(dt, at)  each frame: at = the player's position (the animals only move within FARM.awake metres of it)
 //   F.blocked(x, z)   true where the farm's fences block (also in W.blocked)
+//   F.treatSpots()    the paddock's cows, for a treat or a pet (src/feeding.js)
 //   F.state()         for rigs
 //   F.dispose()
 //
@@ -221,6 +222,8 @@ export function makeFarm({ W, animals = null, scene = W.scene }) {
       if (d > FARM.awake) return;
       for (const w of herd) wanderStep(w, dt);
     },
+    // (the paddock's cows take a treat or a pet too, src/feeding.js; not the rider's: no hearts)
+    treatSpots: () => herd.filter((w) => w.a.kind !== 'farmHorse').map((w, i) => ({ key: 'paddock:' + i, id: null, name: 'The cow', a: w.a, owned: false, species: 'cow', hold: (sec) => { w.goal = null; w.t = Math.max(w.t, sec); w.a.play('Idle'); } })),
     state: () => ({ at: { x: L.x, z: L.z }, posts: posts.length, rails: rails.length, animals: herd.map((w) => ({ kind: w.a.kind, x: +w.a.root.position.x.toFixed(1), z: +w.a.root.position.z.toFixed(1), clip: w.a.clip })) }),
     dispose() {
       disposed = true; offBlock(); unmow(); unlawn();

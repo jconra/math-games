@@ -28,6 +28,7 @@
 //   const r = makeRider(kit, { W, folk, scene, look, horse, coat, saddle, kerchief, shadows })
 //     look: { outfit, palette, skin, hair } (folk.js); horse: 'horse' | 'horseWhite'; coat: a tint ('#c9b6a0'); saddle:
 //     0 or 1 (plain, tooled); kerchief: a colour. Leave them out for a random pick from the shared pool (RIDER_LOOKS)
+//     ride: a horse chosen beforehand (pickRide below), so a far figure can wear its colour
 //   r.x, r.z, r.heading (radians, facing (sin, cos)), r.speed (m/s): where it is; move it with r.steer or set them
 //   r.steer(gx, gz, v, dt)   turn toward a point and go at v m/s (a horse's turning limits; steps round what blocks)
 //   r.update(dt)             each frame after moving it: the horse's clip, the seat, the poses
@@ -49,6 +50,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { makePerson } from './folk.js';
 import { makeAnimal, saddleOn, gaitFor, COATS } from './animals.js';
+import { recipe as coatRecipe, fill as fillCoat } from './horsecoats.js';
 import { makeHorse as makeSteed, horseDial } from './horses.js';
 import { rollPenHorse } from '../horsepenplan.js';
 import { seatRider } from './seat.js';
@@ -280,7 +282,7 @@ export function handsUp(person, k, H = HANDS_UP) {
 }
 
 // ── A RIDER ──────────────────────────────────────────────────────────────────────────────────────────────────────────
-export function makeRider(kit, { W, folk, scene = W.scene, look = null, horse = null, coat = null, saddle = null, kerchief = null, shadows = true } = {}) {
+export function makeRider(kit, { W, folk, scene = W.scene, look = null, horse = null, coat = null, saddle = null, kerchief = null, shadows = true, ride = null } = {}) {
   const L = RIDER_LOOKS;
   const lk = { outfit: pick(L.outfits), palette: pick(L.palettes), skin: Math.floor(Math.random() * 8), hair: Math.floor(Math.random() * 11), ...(look || {}) };
   const person = makePerson(folk, { ...lk, shadows });
@@ -288,8 +290,8 @@ export function makeRider(kit, { W, folk, scene = W.scene, look = null, horse = 
   // less common coat from the pen's pool, one pool for bandits and townsfolk alike so a coat never gives the answer away;
   // else the pack's horses, tinted, as always. It only changes at a hiding moment, and riders are made out of sight)
   const dial = !horse && W ? horseDial(W) : null;
-  const st = dial && dial.every && kit.animals.kinds && kit.animals.kinds.steed ? makeSteed(kit.animals, { recipe: roadCoat(), size: 1, tier: dial.look, shadows }) : null;
-  const a = st ? st.a : makeAnimal(kit.animals, horse || pick(L.horses), { shadows, tint: coat || pick(COATS) });
+  const st = dial && dial.every && kit.animals.kinds && kit.animals.kinds.steed ? makeSteed(kit.animals, { recipe: ride ? ride.recipe : roadCoat(), size: 1, tier: dial.look, shadows }) : null;
+  const a = st ? st.a : makeAnimal(kit.animals, horse || (ride && ride.horse) || pick(L.horses), { shadows, tint: coat || (ride && ride.tint) || pick(COATS) });
   // (the new horse's coat has its own dissolve, which fadeAll (src/wagon.js) can't reach: it fades with its rider)
   if (st) { const d = Object.getOwnPropertyDescriptor(person, 'fade'); if (d && d.set) Object.defineProperty(person, 'fade', { configurable: true, enumerable: true, get: d.get, set(f) { d.set.call(person, f); st.fade = f; } }); }
   const sad = kit.saddles[saddle ?? Math.floor(Math.random() * kit.saddles.length)] || kit.saddles.find(Boolean);
@@ -686,3 +688,16 @@ function roadCoat() {
   for (let k = 0; k < 24; k++) { const h = rollPenHorse(1 + Math.floor(Math.random() * 1e6)); if (h.rarity === 'common' || h.rarity === 'less') return h.recipe; }
   return 'bay';
 }
+// A TRAVELLER'S HORSE, chosen before it is made, so its far figure (src/crowd.js) and the real one are the same colour:
+//   pickRide() -> { recipe, horse, tint, ... }   for makeRider's `ride`
+//   rideCoat(W, ride) -> the colour its far figure wears: the new horse's coat (a grey's whiteness in it), or the old
+//                        pack horse's own brown or white under its tint, whichever the horse dial draws just now
+const OLD_HORSE = { horse: [0.42, 0.28, 0.17], horseWhite: [0.85, 0.82, 0.77] };
+const hex = (c) => '#' + c.map((v) => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, '0')).join('');
+const rgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255);
+export function pickRide() {
+  const L = RIDER_LOOKS, r = roadCoat(), R = fillCoat(typeof r === 'string' ? coatRecipe(r) : r), g = R.grey || 0, b = rgb(R.base), w = 0.84;
+  const horse = pick(L.horses), tint = pick(COATS), t = rgb(tint), o = OLD_HORSE[horse] || OLD_HORSE.horse;
+  return { recipe: r, horse, tint, newCoat: hex(b.map((v) => v + (w - v) * g)), oldCoat: hex(o.map((v, i) => v * t[i])) };
+}
+export const rideCoat = (W, ride) => { const d = W ? horseDial(W) : null; return d && d.every ? ride.newCoat : ride.oldCoat; };

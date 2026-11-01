@@ -8,7 +8,7 @@
 //   buy       everything for sale: the saddles and horses at the stable (every coat), the hats and dogs at the general
 //             store, one of each farm animal (bought, or a thank-you lamb, piglet or calf) and each piece of cabin
 //             furniture (src/cabin/slots.js); the cabin itself once it can be bought (COMING.cabin); the six-shooter
-//             only for a rider with "Bandits: lasso or revolver" on (src/gun.js) or who has bought it
+//             only for a rider with "Lasso or guns" on (src/gun.js) or who has bought it
 //   collect   deer photographs (rider.stats.jobs.photos, or the album), the keepsakes in the cabin (a job's tin buckle,
 //             then seen at home: rider.found.keepsake), the gang's loot caches (the loot handed back: rider.topics.loot
 //             trips, and an old save's woods; or an old hideout reached: rider.found.hideout)
@@ -60,7 +60,8 @@
 // (saddle, horse, hat, dog, animal, furniture, cabin, gun), 'collect:<kind>:<id>' (photos, keepsake, hideout), 'place:<id>'.
 import { JOBS, BUCKLES, BUCKLE_NAMES, KEEPSAKES, jobCount, jobOn, goalIdOf, upgradeGoals } from './save.js';
 import { PRICES, SADDLES, HORSES, DOGS, REVOLVER } from './catalog.js';
-import { gunOn, ownsGun } from './gun.js';
+import { offeredPieces } from './cabin/slots.js';
+import { gunOn, ownsGun, GUNS } from './gun.js';
 import { HATS } from './hats.js';
 import { SLOTS } from './cabin/slots.js';
 import { ANIMALS, KINDS } from './math/goods.js';
@@ -125,7 +126,7 @@ const FARM_HOW = {
   hen: (p) => `The general store sells hens for ${p} gold.`,
   pig: (p) => `Pen a whole batch of pigs at the farm and the farmer thanks you with a piglet. Then the store sells pigs (${p} gold).`,
   sheep: (p) => `Heal a whole flock at the farm and the farmer thanks you with a lamb. Then the store sells sheep (${p} gold).`,
-  cow: (p) => `Rope whole waves at the round-up and the rancher thanks you with a calf. Then the store sells milk cows (${p} gold).`,
+  cow: (p) => `Rope whole bunches at the round-up and the rancher thanks you with a calf. Then the store sells milk cows (${p} gold).`,
 };
 
 const whole = (v) => { v = Number(v); return Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0; };
@@ -210,11 +211,13 @@ function allItems(rider) {
     const A = ANIMALS[k], by = FARM_JOB[k] && !own.unlocked.has(k) ? [FARM_JOB[k]] : null;
     buy('Farm animals', 'animal', k, k === 'cow' ? 'A milk cow' : `A ${A.name.toLowerCase()}`, A.price, FARM_HOW[k](A.price), own.animals.has(k), true, by);
   }
-  for (const s of SLOTS) buy('Cabin furniture', 'furniture', s.id, s.name, s.price, `In your cabin, look at its empty spot and press E: ${s.price} gold.`, own.furniture.has(s.id));
-  // the six-shooter: on the list only for a rider whose grown-up set "Bandits: lasso or revolver" (src/gun.js), or who
+  for (const s of offeredPieces(rider || {})) buy('Cabin furniture', 'furniture', s.id, s.name, s.price, `In your cabin, look at its empty spot and press E: ${s.price} gold.`, own.furniture.has(s.id));
+  // the six-shooter: on the list only for a rider whose grown-up set "Lasso or guns" (src/gun.js), or who
   // has it already (nothing bought leaves the list)
   buy('The six-shooter', 'gun', REVOLVER.id, REVOLVER.name, PRICES.revolver, `The general store sells it for ${PRICES.revolver} gold.`, ownsGun(rider));
   if (!ownsGun(rider) && !gunOn(rider)) out[out.length - 1].off = true;
+  // the rifles: on the list only with guns allowed, or already bought
+  for (const id of ['lever', 'single']) if (gunOn(rider) || ownsGun(rider, id)) buy('The six-shooter', 'gun', id, GUNS[id].name, GUNS[id].price, `The general store sells it for ${GUNS[id].price} gold.`, ownsGun(rider, id));
 
   // collections: deer photographs, the keepsakes, the gang's hideouts
   const album = Array.isArray(rider && rider.album) ? rider.album.length : 0;

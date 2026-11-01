@@ -34,7 +34,7 @@ test('a bad save is made safe: counts whole, never past the saddlebags, trees an
   assert.deepEqual(c.bond, { bay: { n: BOND.hearts * BOND.perHeart, day: 2, today: BOND.perDay } });
   assert.equal(c.extra, 1);   // (a newer build's field kept)
   assert.deepEqual(T.cleanTreats({ apple: -3, carrot: 'lots' }).apple, 0);
-  assert.deepEqual(T.cleanTreats('nonsense'), { apple: 0, carrot: 0, trees: {}, bond: {} });
+  assert.deepEqual(T.cleanTreats('nonsense'), { apple: 0, carrot: 0, jerky: 0, trees: {}, bond: {} });
 });
 
 test('the saddlebags hold ten treats, apples and carrots together', () => {
@@ -156,4 +156,23 @@ test('the save: treats, trees picked and hearts come back as they were', () => {
   assert.equal(back.treats.apple, 3 + 3); assert.equal(back.treats.carrot, 4);   // (three picked: room for three)
   assert.deepEqual(back.treats.trees, { t1: { day: 5, left: TREATS.perTree - 3 } });
   assert.deepEqual(back.treats.bond, { bay: { n: 1, day: 5, today: 1 } });
+});
+
+test('jerky is for dogs; a favourite floats two hearts; a pet counts once a game day, and hearts never go down', () => {
+  const r = { };
+  T.addTreats(r, 'jerky', 3); T.addTreats(r, 'carrot', 1);
+  assert.equal(T.whichTreat(r, { dog: true }), 'jerky');
+  assert.equal(T.whichTreat(r, {}), 'carrot', 'a horse is never given jerky');
+  assert.equal(T.whichTreat({ treats: { jerky: 2 } }, {}), null);
+  assert.equal(T.whichTreat({ treats: { apple: 1 } }, { dog: true }), null, 'a dog takes only jerky');
+  assert.equal(T.whichTreat({ treats: { apple: 1, carrot: 1 } }, { loves: T.LOVES.sheep }), 'carrot');
+  assert.equal(T.whichTreat({ treats: { apple: 1, carrot: 1 } }, { loves: T.LOVES.pig }), 'apple');
+  assert.equal(T.feedHorse(r, { horseId: 'sheep:Clover', owned: true, loves: 'carrot', kind: 'carrot', day: 1 }).hearts, 2);
+  assert.equal(T.feedHorse(r, { horseId: 'sheep:Clover', owned: true, loves: 'carrot', kind: 'apple', day: 1 }).hearts, 1);
+  const a = T.petAnimal(r, { id: 'dog:shiba', owned: true, day: 4 }), b = T.petAnimal(r, { id: 'dog:shiba', owned: true, day: 4 }), c = T.petAnimal(r, { id: 'dog:shiba', owned: true, day: 5 });
+  assert.deepEqual([a.counted, b.counted, c.counted], [true, false, true]);
+  assert.deepEqual([a.hearts, b.hearts], [2, 1]);
+  assert.equal(T.bondOf(r, 'dog:shiba').n, 2);
+  assert.equal(T.petAnimal(r, { id: null, owned: false, day: 5 }).counted, false, 'not the rider\'s: a heart floats, nothing is filled');
+  assert.equal(T.cleanTreats(r.treats).bond['dog:shiba'].petted, 6, 'kept in the save');
 });

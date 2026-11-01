@@ -32,6 +32,18 @@ export class Goods {
   constructor(W = 1024, H = 1024) { this.W = W; this.H = H; this.P = []; this.N = []; this.UV = []; this.C = []; this.I = []; this.n = 0; this.tris = 0; }
   // the u, v of a spot (fu across, fv up, 0..1) in a region, inset a pixel so the smaller copies don't bleed
   uv(reg, fu, fv) { const [x, y, w, h] = reg; return [(x + 1 + fu * (w - 2)) / this.W, 1 - (y + 1 + (1 - fv) * (h - 2)) / this.H]; }
+  // a ready-made mesh on one plain spot of the picture: corners p, normals n, each corner's colour c (flat arrays of 3s),
+  // over the spot's own colour base; triangles i; through the matrix M
+  mesh({ p, n, c, i }, M, reg, base = [1, 1, 1]) {
+    _nm.getNormalMatrix(M);
+    const b0 = this.n, [u, v] = this.uv(reg, 0.5, 0.5);
+    for (let q = 0; q < p.length / 3; q++) {
+      _v.set(p[q * 3], p[q * 3 + 1], p[q * 3 + 2]).applyMatrix4(M); _n.set(n[q * 3], n[q * 3 + 1], n[q * 3 + 2]).applyMatrix3(_nm).normalize();
+      this.P.push(_v.x, _v.y, _v.z); this.N.push(_n.x, _n.y, _n.z); this.UV.push(u, v); this.C.push(c[q * 3] / base[0], c[q * 3 + 1] / base[1], c[q * 3 + 2] / base[2], 0); this.n++;
+    }
+    for (const t of i) this.I.push(b0 + t);
+    this.tris += i.length / 3;
+  }
   // a grid of corners: P(i, j) its place (local), Nf(i, j) its normal (local; else worked out from its neighbours),
   // F(i, j) -> [fu, fv] where it falls in the region
   grid(nu, nv, P, F, reg, tint, M, o = {}) {

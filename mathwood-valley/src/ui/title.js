@@ -13,7 +13,7 @@
 // list where a grown-up can turn some jobs off (every job is on by default); RIDE OUT; "Just lock boxes"; a small
 // build number; and a folded Grown-ups corner (each rider's math, age and progress, the bandits switch; delete a rider).
 // No math topics or missions to tick: every rider gets every job, the bottle range included, at their own level.
-// THE BANDITS SWITCH (src/gun.js): "Bandits: lasso only / lasso or revolver", on the new-rider form and on each rider's
+// THE BANDITS SWITCH (src/gun.js): "Lasso only / Lasso or guns", on the new-rider form and on each rider's
 // row in the Grown-ups corner, shown plainly and set to lasso only at the start. It is the rider's saved mode
 // ('lasso' | 'shoot'): on, the general store sells the rider a six-shooter for bringing in bandits.
 //
@@ -609,7 +609,7 @@ export function showTitle(root, opts = {}) {
         <dt>Pick levels</dt><dd><button class="bmt-chip" aria-pressed="${r.pickLevels !== false}" data-act="picklv" data-id="${esc(r.id)}" data-k="picklv:${esc(r.id)}">${ICON.ladder}${r.pickLevels !== false ? 'On' : 'Off'}</button>
           <small>the arrows by the level at the bottom of the screen</small></dd>
         <dt>Bandits</dt><dd>${banditPick(gunOn(r) ? 'shoot' : 'lasso', 'bandits', `${esc(r.name)}'s bandits`, r.id)}
-          <small>${gunOn(r) ? (ownsGun(r) ? 'the six-shooter is bought: F shoots at bandits' : `a six-shooter can be bought at the general store (${PRICES.revolver} gold)`) : (ownsGun(r) ? 'the six-shooter bought is put away: bandits are roped' : 'bandits are roped; the six-shooter shows in the store, greyed')}</small></dd>
+          <small>${gunOn(r) ? (ownsGun(r) ? 'the six-shooter is bought: choose it at the bandits with the buttons on the right' : `a six-shooter can be bought at the general store (${PRICES.revolver} gold)`) : (ownsGun(r) ? 'the six-shooter bought is put away: bandits are roped' : 'bandits are roped; the six-shooter shows in the store, greyed')}</small></dd>
         <dt>Jobs</dt><dd>${off.length ? `turned off: ${off.map((m) => esc(m.name)).join(', ')}` : 'every job on'}</dd>
         ${c ? `<dt>Completion</dt><dd>${c.pct}%${c.goals.length ? ` · goals: ${c.goals.map((g) => esc(g.name)).join(', ')}` : ''}</dd>` : ''}
         <dt>Lock boxes</dt><dd>${boxes}</dd>

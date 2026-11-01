@@ -4,7 +4,7 @@
 // worked area and sits at its step's point on the Long work strand.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { workMul, workDiv, makeLong, LADDER, LONG, longPoint, needsLong, pointOf, mulAt, divAt, addAt, subAt, noCarry, digitsOf, seeded } from '../src/math/longwork.js';
+import { addColumns, workMul, workDiv, makeLong, LADDER, LONG, longPoint, needsLong, pointOf, mulAt, divAt, addAt, subAt, noCarry, digitsOf, seeded } from '../src/math/longwork.js';
 import { MAPS, maxOf, stepAt } from '../src/math/skill.js';
 
 // the board as text rows, every cell that shows once the step being asked is `at`
@@ -182,4 +182,23 @@ test('a nudge never gives the answer away for a times step', () => {
     if (!needsLong('mul', a, b)) continue;
     for (const s of workMul(a, b).steps) for (const c of s.choices) if (!c.good) assert.ok(!new RegExp(`(=|makes) ${s.answer}([^0-9]|$)`).test(c.why), `${a} × ${b}: "${s.ask}" nudge for ${c.v} says ${s.answer}: ${c.why}`);
   }
+});
+
+test('the rows added a column at a time for a rider low on adding: every column asked, the carries written, the same answer', () => {
+  const w = workMul(18, 14, { columns: true }), add = w.steps.filter((s) => s.kind === 'add');
+  assert.equal(w.steps.filter((s) => s.kind === 'sum').length, 0, 'never the whole sum at once');
+  assert.deepEqual(add.map((s) => s.ask), ['7 + 8 = ?', '1, plus the 1 carried = ?']);
+  assert.deepEqual(add.map((s) => s.answer), [15, 2]);
+  assert.match(add[0].intro, /2 comes straight down/);
+  for (const s of add) assert.ok(s.choices.filter((c) => c.good).length === 1 && s.choices.some((c) => c.good && c.v === s.answer));
+  for (const [a, b] of [[18, 14], [99, 99], [124, 36], [105, 203], [64, 57], [408, 25]]) {
+    const W = workMul(a, b, { columns: true }), r = W.board.rows;
+    assert.equal(W.answer, a * b);
+    // (what is on the sum's row at the end reads as the product)
+    const row = W.board.cells.filter((c) => c.r === r - 1).sort((p, q) => p.c - q.c).map((c) => c.ch).join('');
+    assert.equal(row, String(a * b), `${a} x ${b}`);
+    for (const s of W.steps) assert.ok(s.ask && Number.isFinite(s.answer));
+  }
+  assert.equal(workMul(18, 14).steps.filter((s) => s.kind === 'sum').length, 1, 'without it, all at once');
+  assert.equal(addColumns(10), true); assert.equal(addColumns(LONG.ADD_ALL), false); assert.equal(addColumns(undefined), true);
 });

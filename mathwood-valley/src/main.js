@@ -44,12 +44,15 @@ import { openStats } from './ui/stats.js';
 import { openLevels, placeOfJob } from './ui/levels.js';
 import { makeHud } from './ui/hud.js';
 import { makeTools } from './ui/tools.js';
+import { makeLevelPicker } from './ui/levelpicker.js';
 import { waveSum, buildSum } from './math/jobsums.js';
 import { makeRoundup } from './missions/roundup.js';
 import { makeFarm } from './farm.js';
 import { makeSheepJob } from './missions/sheep.js';
 import { makePigJob } from './missions/pigs.js';
 import { makeStoreJob } from './missions/store.js';
+import { makeGoodsDeal } from './missions/sellgoods.js';
+import { openAnimals } from './ui/animals.js';
 import { makeCamps } from './camps.js';
 import { makeDeer } from './deer.js';
 import { makeDeerJob } from './missions/deerjob.js';
@@ -81,6 +84,7 @@ import { sayLine, talking, hush as hushVoice } from './audio/sayline.js';
 import { openLockbox, TIER_NAME } from './lockbox/index.js';
 import { loadRiders, saveRider, earn, recordLockbox, titleOf, nextTitle, badgesOf, cleanBoxes, BOX_TIERS, jobOn, readMode, nextReadMode, readModeWords } from './save.js';
 import { canShoot } from './gun.js';
+import { makeWeaponButtons } from './ui/weapons.js';
 import * as SKILLS from './math/skill.js';
 import * as LEVELS from './levels/model.js';
 import * as FACTS from './math/facts.js';
@@ -152,7 +156,7 @@ flagCard(hud.ruleEl, () => fieldQuestion(), { show: () => !hud.ruleEl.hidden && 
 // for now"; nothing to read: the entry to type a sum by hand), the times chart (the rider's facts, green and red) and the
 // level tool for the place the rider is at (its arrows step the level by hand, unless the rider was made with "Let the
 // rider pick levels" off). The game waits while a tool is open.
-const workJob = () => (BOX ? 'boxes' : cabin && cabin.fireSum && cabin.fireSum() ? 'fire' : SJ && SJ.active ? 'store' : DL && DL.active ? 'delivery' : askingJob());
+const workJob = () => (BOX ? 'boxes' : cabin && cabin.fireSum && cabin.fireSum() ? 'fire' : SJ && SJ.active ? 'store' : GD && GD.active ? 'sell' : DL && DL.active ? 'delivery' : askingJob());
 // a builder's card (the windmill's or the bridge's: their handles give its kind and answer, the card's line on the page
 // gives its numbers; the fishing's: its own sum)
 function builderSum() {
@@ -162,7 +166,7 @@ function builderSum() {
   return q && !q.teach ? buildSum(q, line ? line.textContent : '') : null;
 }
 // (the round-up's sum is worked out here from its wave, as the wagon's own is: src/missions/roundup.js is left as it is)
-const JOB_SUM = { store: () => SJ && SJ.workSum(), delivery: () => DL && DL.workSum(), range: () => SR && SR.workSum(),
+const JOB_SUM = { store: () => SJ && SJ.workSum(), sell: () => GD && GD.workSum(), delivery: () => DL && DL.workSum(), range: () => SR && SR.workSum(),
   roundup: () => RU && RU.near ? waveSum(RU.wave) : null, sheep: () => SH && SH.workSum(), pigs: () => PG && PG.workSum(),
   deer: () => DJ && DJ.workSum(), wagon: () => WJ && WJ.workSum(), loot: () => LJ && LJ.workSum(),
   build: () => builderSum(), boxes: () => (BOX ? BOX.workSum() : null), fire: () => (cabin && cabin.fireSum ? cabin.fireSum() : null) };
@@ -192,8 +196,8 @@ const TOOLS = makeTools({ hud, rider: () => rider,
   canOpen: () => (state === 'play' || (state === 'boxes' && !!BOX)) && [...pausedBy].every((w) => w === 'tools' || (w === 'box' && !!BOX)),
   speak: (text) => { if (rider && SKILLS.readAloud(rider)) sayLine(text); },
   onOpen: () => pause('tools'), onClose: () => resume('tools'),
-  onTreat: () => { if (FEEDER && state === 'play' && !paused) FEEDER.feed(); } });   // (the apple button: a treat to the horse in reach, src/feeding.js)
-BM.tools = TOOLS;
+  onTreat: () => { if (FEEDER && state === 'play' && !paused) FEEDER.feed(); }, onPet: () => { if (FEEDER && state === 'play' && !paused) FEEDER.pet(); } });   // (the apple button: a treat to the horse in reach, src/feeding.js)
+BM.tools = TOOLS; BM.camera = camera;
 
 // ── LOADING: the world, the people and the cattle, all at once ─────────────────────────────────────────────────────
 let W = null, folk = null, animals = null, I = null;
@@ -239,7 +243,9 @@ let cabin = null;   // the player's cabin: walk in through its door (src/cabin/c
 let farm = null, SH = null;   // the farm north of town (src/farm.js) and its sick-sheep job (src/missions/sheep.js)
 let PG = null;   // the farm's loose-pigs job (src/missions/pigs.js)
 let SJ = null;   // the general store's counter: word problems on order slips (src/missions/store.js)
+let weaponBtns = null;   // (made once riding: the rider's own)
 let WJ = null;   // protect the wagon: the hold-ups on the road, sent by the jobs board or met on the way (src/missions/wagonjob.js), unless a grown-up turned it off
+let GD = null;   // selling the rider's goods to the clerk at the store's bins (src/missions/sellgoods.js)
 let HS = null;   // the rider's own farm animals in a yard behind the cabin, and their goods (src/homestead.js)
 let PEN = null;  // the pen of horses for sale behind the stable, new ones after each trip out of town (src/horsepen.js)
 let STABLE = null;  // the stable's stall horses and its saddle racks (src/stablelife.js: the code-built stable)
@@ -265,7 +271,7 @@ let TR = null;   // the general store and the sheriff's office, worked from insi
 const shiftOpen = (id) => !SK || SK.open(id);
 const shiftLeft = (id) => (SK ? SK.left(id) : Infinity);
 const shiftNo = (id, o) => { if (SK) SK.decline(id, o); };
-const atCounter = () => !!(SJ && SJ.active) || !!(DL && DL.active) || !!(DJ && DJ.active) || !!(SR && SR.active) || !!(BS && BS.active);   // (a builder up at its site, too)   // (or making up a camp's order on the slip)   // (working the counter: the rider stands still, the store's camera)
+const atCounter = () => !!(SJ && SJ.active) || !!(GD && GD.active) || !!(DL && DL.active) || !!(DJ && DJ.active) || !!(SR && SR.active) || !!(BS && BS.active);   // (a builder up at its site, too)   // (or making up a camp's order on the slip)   // (working the counter: the rider stands still, the store's camera)
 // a question is up (the checklist's toast waits till it's answered): a panel or a lock box, a counter or a slip, the
 // camera or the six-shooter up, the loot's slip, or a wave of a job under way where the player is
 const asking = () => state !== 'play' || paused || boxOpen || atCounter() || !!(cabin && cabin.busy) || !!(LJ && LJ.active)
@@ -277,6 +283,7 @@ function askingJob() {
   if (state !== 'play' || paused || boxOpen || !!(cabin && cabin.busy)) return 'panel';
   if (BS && BS.active) return 'build';   // (a builder up at its site: its own questions)
   if (SJ && SJ.active) return 'store';
+  if (GD && GD.active) return 'sell';
   if (DL && DL.active) return 'delivery';
   if (DJ && DJ.active) return 'deer';
   if (LJ && LJ.active) return 'loot';
@@ -372,7 +379,7 @@ async function ride(r) {
     onBuy: (what) => { refresh(); if (what === 'saddle' || what === 'horse') P.refreshOwned(); if (what === 'dog') { makeDogIfOwned(); if (cabin) cabin.dogsChanged(); } if (what === 'hat' && P && P.person) { if (!P.person.hat) P.person.hatOn(); P.person.setHat(rider.look.hatStyle); } hob.event(what); },
     onLockbox: (box, o) => openBox(box, o), onStoreJob: jobOn(rider, 'store') ? () => { if (!SJ) return; if (!shiftOpen('store')) { shiftNo('store'); return; } SJ.start(); } : null });   // (the day's shift done: the storekeeper's polite no)   // (no "Mind the counter" when a grown-up turned the store job off)
   STABLE = makeStableLife({ W, animals, rider, camera, player: () => P, shops, say: (t) => hud.toast(t), shadows: !!(W.V && W.V.SHADOW ? W.V.SHADOW.on : true) }); BM.stable = STABLE;
-  FEEDER = makeFeeding({ W, rider, player: () => P, hud, tools: TOOLS, audio: AUD, pen: () => PEN, stable: () => STABLE, refresh });
+  FEEDER = makeFeeding({ W, rider, player: () => P, hud, tools: TOOLS, audio: AUD, pen: () => PEN, stable: () => STABLE, refresh, dog: () => D, homestead: () => HS, farm: () => farm, bark: (d) => !!(AMBI && AMBI.happyBark(d)) });
   cabin = makeCabin({ W, renderer, camera, animals, rider, hud, input: I, audio: AUD, player: () => P, follower: () => D,
     onBuy: () => refresh(), onLockbox: (box, o) => openBox(box, o) });
   // (the round-up's Hob also hears a whole wave roped: now and then a thank-you calf from the rancher)
@@ -385,11 +392,16 @@ async function ride(r) {
   SH = !jobOn(rider, 'sheep') ? null : makeSheepJob({ W, animals, farm, P, I, camera, canvas, rider, hud: tagHud('sheep'), hob: farmHob, refresh, defer: (at) => !!(PG && PG.wants(at)),
     open: () => shiftOpen('sheep'), left: () => shiftLeft('sheep') });
   PG = !jobOn(rider, 'pigs') ? null : makePigJob({ W, animals, farm, P, camera, canvas, rider, hud: tagHud('pigs'), hob: farmHob, refresh, open: () => shiftOpen('pigs'), left: () => shiftLeft('pigs') });
-  SJ = !jobOn(rider, 'store') ? null : makeStoreJob({ W, folk, P, I, camera, rider, hud: tagHud('store'), hob, refresh, pay: PAY, goods: HS, fish: () => FJ, voice: (k, who) => { if (SHOUT) SHOUT.say(k, who); }, town: () => TP, work: () => TOOLS.work(),
+  SJ = !jobOn(rider, 'store') ? null : makeStoreJob({ W, folk, P, I, camera, rider, hud: tagHud('store'), hob, refresh, pay: PAY, voice: (k, who) => { if (SHOUT) SHOUT.say(k, who); }, town: () => TP, work: () => TOOLS.work(),
     openBox: (problem, after) => !paused && openBox({ tier: problem.tier, from: 'store' }, { problem, after }),   // (false: not now, the store tries again)
     onStart: () => { I.enabled = false; if (RU) RU.paused = true; hud.prompt(null); hud.rule(null); hud.hint(null); },
     onStop: () => { I.enabled = !paused; if (RU) RU.paused = paused; }, open: () => shiftOpen('store'),
     room: () => (TR && TR.rooms.generalStore) || null });   // (the counter inside the store, once it is built)
+  // the rider's goods and fish sold to the clerk at the bins by the counter, whether or not the counter's job is on
+  GD = makeGoodsDeal({ rider, P, I, hud, hob, refresh, goods: HS, fish: () => FJ, pay: PAY, work: () => TOOLS.work(),
+    say: (t) => { if (!(JF && JF.say('storekeeper', t))) hud.toast(t); }, voice: () => { if (SHOUT && TR && TR.rooms.generalStore) { const p = TR.rooms.generalStore.F.point(TR.rooms.generalStore.A.counter.clerk); SHOUT.say('whatchagot', { at: () => ({ x: p.x, z: p.z }), male: true }); } },
+    onStart: () => { I.enabled = false; if (RU) RU.paused = true; hud.prompt(null); hud.rule(null); hud.hint(null); },
+    onStop: () => { I.enabled = !paused; if (RU) RU.paused = paused; } }); BM.goodsDeal = GD;
   // THE INSIDES: the spots E uses in the store and the sheriff's office (src/usespots.js, src/townrooms.js): the store's
   // food, hats and animals cards, its six-shooter, its counter (the store's job); the sheriff's pile of lock boxes, and
   // the safe where the rider's own boxes are opened
@@ -400,6 +412,7 @@ async function ride(r) {
       card: (id) => { if (shops && !shops.isOpen && !paused) shops.open(id); },
       gun: () => { if (!shops) return; const r = shops.buyGun(); if (r && r.note) hud.toast(r.note, r.ok ? 'gold' : ''); },
       counter: () => { if (!SJ || paused) return; if (!shiftOpen('store')) { shiftNo('store'); return; } SJ.start(); },   // (the day's shift done: the storekeeper's polite no)
+      sell: () => { if (GD && !paused) GD.start(); },   // (the clerk's deal: src/missions/sellgoods.js)
       boxes: () => { if (paused) return; if (openBox({ tier: boxTier(rider), from: 'sheriff' }, { own: false })) chooseJob('boxes'); },
       own: () => { if (paused) return; const bx = (rider.lockboxes || [])[0]; if (bx) openBox({ tier: bx.tier, from: 'loot' }, { own: true }); },
     } }); BM.rooms = TR;
@@ -411,6 +424,7 @@ async function ride(r) {
   // the rider stands by, the keys and the HUD are the builder's, and the valley goes on round it
   let siteJob = null;   // (the build site open: its job, for the thumbs up or down as it is put away)
   BS = makeBuildSites({ W, camera, canvas, player: () => P, onWork: () => TOOLS.work(),
+    levelPicker: (site, moved) => (placeOfJob(site.id) ? makeLevelPicker({ rider: () => rider, place: () => placeOfJob(site.id), onLevel: () => { if (rider) saveRider(rider); moved(); } }) : null),   // (the HUD and its tools strip are away while a builder is up: the same picker in the builder's bar)
     obstacles: () => [P && P.person && !(BS && BS.active && BS.active.id === 'fishing') && P.person.root, P && P.horse && P.horse.root, D && D.dog && D.dog.root],   // (at the dock the rider fades away by itself: src/fishingjob.js)
     onStart: () => { siteJob = BS && BS.active ? BS.active.id : null; P.enabled = false; I.enabled = false; if (RU) RU.paused = true; hud.prompt(null); hud.rule(null); hud.hint(null); hud.show(false); },
     onStop: () => { P.enabled = !paused; I.enabled = !paused; if (RU) RU.paused = paused; hud.show(true); jobOver(siteJob, { sat: true }); } });
@@ -521,6 +535,7 @@ function endRide() {
   if (SJ) SJ.dispose();
   if (DL) DL.dispose();
   if (WJ) { WJ.dispose(); WJ = null; }
+  if (weaponBtns) { weaponBtns.dispose(); weaponBtns = null; }
   if (camps) camps.dispose();
   if (DJ) { DJ.dispose(); DJ = null; }
   if (SR) { SR.dispose(); SR = null; }
@@ -537,6 +552,7 @@ function endRide() {
   if (FJ) { FJ.dispose(); FJ = null; }
   DL = camps = null;
   if (farm) farm.dispose();
+  if (GD) { GD.dispose(); GD = BM.goodsDeal = null; }
   if (HS) { HS.dispose(); HS = null; }
   if (PEN) { PEN.dispose(); PEN = null; }
   if (FEEDER) { FEEDER.dispose(); FEEDER = null; }
@@ -995,6 +1011,7 @@ function openMenu() {
       <button type="button" class="is-main" data-do="resume">Keep riding<small>${I && I.touch ? 'Back to the game' : 'Esc'}</small></button>
       ${boxes ? `<button type="button" data-do="box">Open a lock box<small>${boxes} in your saddlebags</small></button>` : ''}
       ${prints(rider).length ? `<button type="button" data-do="album">Photo album<small>${prints(rider).length} deer photographs</small></button>` : ''}
+      <button type="button" data-do="animals">Your animals<small>Their hearts, and how to fill them</small></button>
       <button type="button" data-do="left">What's left<small>${leftWords()}</small></button>
       <button type="button" data-do="levels">Levels<small>Each place's levels, and where you are</small></button>
       <button type="button" data-do="stats">Your stats<small>Each place and kind of math, and how it's going</small></button>
@@ -1005,9 +1022,9 @@ function openMenu() {
       <button type="button" data-do="gfx">Graphics check<small>What this screen can do, and anything that didn't load</small></button>
       <button type="button" data-do="title">Back to the title<small>Your gold is already saved</small></button></div>
     <div class="bms-keys">${I && I.touch
-      ? 'thumb stick on the left to move (push it to the edge to gallop) · drag to look · tap a steer or a rider, or press Rope · Horse calls your horse · On / off gets on and off · tap the prompt at a door · by a horse\'s head, tap the apple to give a treat'
+      ? 'thumb stick on the left to move (push it to the edge to gallop) · drag to look · tap a steer or a rider, or press Rope · Horse calls your horse · On / off gets on and off · tap the prompt at a door · by an animal, tap the treat to give it, or the hand to pet it'
       : `<kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> move · drag to look · <kbd>Shift</kbd> run or gallop ·
-      click a steer (or <kbd>F</kbd>) to rope it · <kbd>H</kbd> call your horse · <kbd>E</kbd> on and off, or talk at a door · <kbd>G</kbd> give your horse a treat`}</div>`;
+      click a steer (or <kbd>F</kbd>) to rope it · <kbd>H</kbd> call your horse · <kbd>E</kbd> on and off, or talk at a door · <kbd>G</kbd> give an animal a treat · <kbd>P</kbd> pet it`}</div>`;
   body.querySelector('.bms-menu').after(volumeRow(AUD), graphicsRow(W && W.governor));   // (Auto, or a tier chosen by hand: src/ui/graphics.js)
   { const m = body.querySelector('.bms-menu'), last = m.querySelector('[data-do="title"]'); for (const x of menuRows({ report: tellReport })) m.insertBefore(x, last); }   // (Tell us, and the share switch)
   let then = null;
@@ -1016,6 +1033,7 @@ function openMenu() {
   body.addEventListener('click', (e) => {
     const b = e.target.closest('button[data-do]'); if (!b) return;
     const what = b.dataset.do;
+    if (what === 'animals') { openAnimals(document.body, rider); return; }   // (over the menu; it closes back to it)
     if (what === 'read') {   // (the switch flips here and the menu stays open)
       rider.readAloud = nextReadMode(rider); saveRider(rider);
       b.setAttribute('aria-pressed', String(readMode(rider) !== false)); b.innerHTML = readWords();
@@ -1283,6 +1301,7 @@ function step(dt) {
     if (FEEDER) {                        // (the apple trees' apples, a horse's head in reach, the hearts floating up)
       FEEDER.update(dt, { busy: home || atCounter() });
       if (I.enabled && I.tap('KeyG')) FEEDER.feed();   // (G: give a treat; E stays on and off)
+      if (I.enabled && I.tap('KeyP')) FEEDER.pet();    // (P: pet the animal in reach)
     }
     if (SH) SH.update(dt);
     if (PG) PG.update(dt);
@@ -1296,6 +1315,9 @@ function step(dt) {
     if (LJ) LJ.update(dt);
     // the big touch button says Shoot near the bandits once the six-shooter is the rider's tool (src/gun.js)
     hud.fireWord(canShoot(rider) && ((WJ && WJ.near) || (LJ && LJ.guardUp)) ? 'Shoot' : 'Rope');
+    // the weapon buttons down the right, at the bandits and the range (src/ui/weapons.js)
+    if (!weaponBtns) weaponBtns = makeWeaponButtons({ rider });
+    if (SR && SR.active) weaponBtns.show(true, { lasso: false }); else weaponBtns.show(!!((WJ && WJ.near && WJ.wave) || (LJ && LJ.guardUp)));
     if (WMJ) WMJ.update(dt);
     if (BRJ) BRJ.update(dt, P.position);
     if (FJ) FJ.update(dt);   // (the rider and the double at the end of the dock fading)

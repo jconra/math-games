@@ -22,22 +22,25 @@ export const HAIR = {
   // the mane: rooted on one line along the top of the neck (the crest, smoothed), 1.5 cm inside the skin, from just
   // behind the ears to the withers, neighbours overlapping by well over half; shortest at the poll and longest mid-neck;
   // most of it down the near (left) side, some over to the far side. Narrow at the root, widest a third of the way down
-  mane: { cards: 34, rows: 6, length: 0.42, width: [0.115, 0.085], lift: [-0.015, 0.028], farShare: 0.1 },
-  crest: { cards: 10, rows: 3, length: 0.08, width: [0.09, 0.08], lift: [-0.012, 0.01] },   // a short fringe on the far side
+  mane: { cards: 34, rows: 6, length: 0.42, width: [0.115, 0.085], lift: [-0.015, 0.028], farShare: 0 },
+  // the far side: an even fringe falling from the top line itself, no patches, its neighbours overlapping (rooted a
+  // little inside the crest and out of the skin in the first quarter of its length, so no top edge shows); each its own
+  // length between `length` and longer times that
+  crest: { cards: 22, rows: 4, length: 0.13, longer: 2.0, width: [0.1, 0.085], lift: [-0.006, 0.012], rise: 0.25 },
   // the forelock: a parted tuft from between the ears to about the eyes' level (reach: a share of the way to the eyes);
   // 12 long locks and 6 shorter ones under them, about 290 triangles
   forelock: { width: [0.036, 0.012], part: 0.003, layers: [{ cards: 12, rows: 10, reach: 1.68, lift: 0.12, spread: 0.0058 }, { cards: 6, rows: 7, reach: 1.1, lift: 0.06, spread: 0.008 }] },
   // the tail: a bundle of cards crossed round its middle line (full from every angle) and a light fan round it, held off
   // the rump, narrow at the dock and fanning a little toward the end, which reaches the middle of the hind cannons
-  tail: { crossed: 4, fan: 12, rows: 10, end: 0.36, radius: [0.035, 0.085, 0.115], off: 0.06 },
+  tail: { crossed: 4, fan: 12, rows: 14, end: 0.36, radius: [0.035, 0.085, 0.115], off: 0.06, into: 0.09 },
 };
 // THE FAR LOOK's hair (buildHair(shape, { lite: true })): about a third of the cards, each wider, fewer rows: 12 mane
 // cards, a 4-card fringe, 6 forelock locks, the tail's 4 crossed cards and no fan
 export const HAIR_LITE = {
   mane: { ...HAIR.mane, cards: 12, rows: 5, width: [0.19, 0.14] },
-  crest: { ...HAIR.crest, cards: 4, rows: 2, width: [0.13, 0.11] },
+  crest: { ...HAIR.crest, cards: 8, rows: 3, width: [0.2, 0.17] },
   forelock: { width: [0.07, 0.025], part: 0.004, layers: [{ cards: 6, rows: 6, reach: 1.5, lift: 0.1, spread: 0.011 }] },
-  tail: { ...HAIR.tail, fan: 0, rows: 8 },
+  tail: { ...HAIR.tail, fan: 0, rows: 9 },
 };
 const KIND = { mane: 0, forelock: 1, tail: 2, crest: 3, tailFan: 2.25 };   // (the fan: a tail card, drawn lighter)
 const V = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -118,7 +121,7 @@ export function buildHair(shape, { lite = false } = {}) {
       }
       let v = S.nearest(p, filter); if (v < 0) v = rows.length ? rows[rows.length - 1].v : S.nearest(p);
       const n = S.nor(v), sp = S.pos(v);
-      const lift = cfg.lift[0] + (cfg.lift[1] - cfg.lift[0]) * s;
+      const lift = cfg.lift[0] + (cfg.lift[1] - cfg.lift[0]) * (cfg.rise ? Math.min(1, s / cfg.rise) : s);
       p.addScaledVector(n, lift - p.clone().sub(sp).dot(n));
       // (hair hangs: a row never sits higher than the one before it, wherever the surface leads; but never under the skin)
       if (hang && rows.length) {
@@ -180,7 +183,8 @@ export function buildHair(shape, { lite = false } = {}) {
   for (let i = 0; i < HC.crest.cards; i++) {
     // (the fringe starts a little behind the poll and stops short of the withers, where the top line flattens)
     const t = tPoll - 0.04 + (tWith + 0.12 - tPoll + 0.04) * (i + 0.5) / HC.crest.cards;
-    card(drape(crestAt(t), HC.crest, { side: -1, push: 1.0, back: 0.1 }), 'crest', skinBody);
+    const C = HC.crest, len = C.length * (1 + (C.longer - 1) * R()) * THREE.MathUtils.smoothstep((i + 1) / C.cards, 0, 0.3);
+    card(drape(crestAt(t), C, { side: -1, push: 1.0, back: 0.1, len: Math.max(len, C.length * 0.5) }), 'crest', skinBody);
   }
   // THE FORELOCK: a tuft from between the ears falling over the forehead to about the eyes' level, parted in the middle
   // (so a star or a blaze shows through), its locks a little off the face, fanning apart and thinning out at their tips:
@@ -243,9 +247,10 @@ export function buildHair(shape, { lite = false } = {}) {
     const dir = D.end.clone().sub(D.start).normalize();
     const B0 = D.start.clone().addScaledVector(dir, (D.start.z - D.zEnd) / Math.max(0.2, -dir.z) * 0.92);   // (just short of the end cap)
     const down = V(0, -Math.sin(0.84), -Math.cos(0.84));                                                         // (48 degrees down, back)
-    const C1 = B0.clone().addScaledVector(dir.clone().add(down).normalize(), 0.06), C2 = C1.clone().addScaledVector(down, 0.07);
-    keys = [D.start.clone(), B0, C1, C2];
-    dockLen = D.start.distanceTo(B0);
+    const C1 = B0.clone().addScaledVector(dir.clone().multiplyScalar(0.8).add(down).normalize(), 0.11), C2 = C1.clone().addScaledVector(down.clone().add(V(0, -0.5, 0.1)).normalize(), 0.13);   // (a wide, easy turn over the dock's end)
+    // (its first key well inside the rump, so the tail's root is in the body at every swing of the clips)
+    keys = [D.start.clone().addScaledVector(dir, -T.into), D.start.clone(), B0, C1, C2];
+    dockLen = keys[0].distanceTo(B0);
   } else {
     keys = chain.slice(0, 3);
   }
@@ -274,16 +279,19 @@ export function buildHair(shape, { lite = false } = {}) {
     const rows = [], N = T.rows;
     for (let k = 0; k < N; k++) {
       // (rows closer together near the root, where the curve turns over the end of the dock)
-      const a = Math.pow(k / (N - 1), 1.5), s = Math.min(1, s0 + (1 - s0) * a * endJit);
+      const a = Math.pow(k / (N - 1), 1.35), s = Math.min(1, s0 + (1 - s0) * a * endJit);
       const p = curve.getPointAt(s), dir = curve.getTangentAt(s);
       const b1 = new THREE.Vector3().crossVectors(X, dir).normalize();   // (on top along the dock, behind where it hangs)
       const radial = b1.clone().multiplyScalar(Math.cos(phi)).addScaledVector(X, Math.sin(phi));
       const r = rad(s);
       // a crossed card lies through the middle, as wide as the bundle; a fan card lies round its outside (on the dock's
       // own surface along the dock)
-      const c = crossed ? p.clone() : p.clone().addScaledVector(radial, s <= sDock ? r : r * 0.85);
+      // (over the root's first stretch a card narrows to a point and sinks under the skin: no flat end, no edge to see;
+      // past the dock it eases from wrapping the dock to hanging, with no step for the strands to kink at)
+      const grow = THREE.MathUtils.smoothstep(s, s0, s0 + sDock * 0.8), past = THREE.MathUtils.smoothstep(s, sDock * 0.85, sDock * 1.5);
+      const c = crossed ? p.clone() : p.clone().addScaledVector(radial, r * (1 - 0.15 * past) * (0.45 + 0.55 * grow));
       const across = crossed ? radial.clone() : new THREE.Vector3().crossVectors(radial, dir).normalize();
-      const w = crossed ? r * 2 : r * (s <= sDock ? 1.6 : 1.1) * wJit;   // (wider along the dock, so they wrap it)
+      const w = (crossed ? r * 2 : r * (1.6 - 0.5 * past) * wJit) * (0.2 + 0.8 * grow);   // (wider along the dock, so they wrap it)
       rows.push({ c, n: crossed ? b1 : radial, across, w, sk: skinAt(p), axis: p.clone() });
     }
     card(rows, crossed ? 'tail' : 'tailFan', (r) => r.sk);
@@ -444,7 +452,7 @@ float hFore = step( 0.5, vHairV.w ) * step( vHairV.w, 1.5 );
 float hFan = step( 2.1, vHairV.w ) * step( vHairV.w, 2.4 );
 float hPx = length( vViewPosition ) * uPx;
 float hA = tx.a * mix( 1.0, hEdge, 0.9 + 0.1 * hAlong ) * ( 1.0 - smoothstep( 0.8 + 0.17 * tx.r, 1.0, hv ) );
-hA *= smoothstep( 0.0, mix( 0.16, 0.05, hTail ), hAlong );                 // (and fade in from the root: no straight top edge)
+hA *= smoothstep( 0.0, mix( 0.16, 0.1, hTail ), hAlong );                 // (and fade in from the root: no straight top edge)
 hA *= 1.0 - hFore * smoothstep( 0.72, 1.0, hAlong );                      // (the forelock thins out at its tips)
 hA *= 1.0 - 0.35 * hFan;                                                   // (the tail's outer fan: lighter)
 hA = clamp( hA * ( 1.0 + 2.0 * smoothstep( 0.002, 0.02, hPx ) ), 0.0, 1.0 );   // (far off, the picture's smaller copies thin the hair out: thicken it back)

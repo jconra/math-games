@@ -5,8 +5,10 @@
 //   wrong: the rope tangles, "Not me, partner", one plain line (and the series' number line with a hop for each step,
 //          or the herd's skip-count 6 · 12 · 18 · 24 · (27) · 30 under the card); a series card stays up to be roped
 //          right, a herd's wrong number comes back a few answers later
-// When every right one is roped (a herd), or the wave's cards are done (3 series cards), the wave pays a bonus and puts
-// a lock box in the saddlebags, and a new bunch wanders in. There is no game over and no timer.
+// When every right one is roped (a herd), or a bunch's cards are done (3 series cards), the bunch pays a bonus and puts
+// a lock box in the saddlebags, and the next card comes straight on: to the kid there are no waves, the cattle just keep
+// coming and the counter counts the steers roped (src/shifts.js: a shift is 10 to 15 of them; the game's maker: "I'm not
+// even sure we need waves for round up"). There is no game over and no timer.
 //
 // ONE KIND OF MATH HERE: SERIES (src/levels/place/roundup.js is the ladder, from "1, 2, 3, ?" through counting by 10s,
 // 5s and 2s, every times table to 12 as a series, the multiples herds, going down, odd steps and rules, to below zero,
@@ -76,7 +78,7 @@ export const ROUNDUP = {
   run: 3.6,              // m/s a roped steer gallops to the corral (the Gallop clip at about its own speed: its hooves
                          // keep to the ground; slower, a gallop looks like slow motion)
   pen: 12,               // the corral holds this many; older ones are sold off (they fade away)
-  nextWave: 5,           // seconds after a wave before the next bunch comes in
+  nextWave: 0.7,         // seconds after a bunch before the next one's numbers are out
   helpAfter: 8000,       // ms without a pick before help is offered
   hintFor: 12,           // seconds the "not me, partner" line stays up (or until the next pick)
   stackGap: 6,           // pixels kept between two number cards that would overlap on screen (the farther one moves up)
@@ -392,10 +394,10 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
       hud.rule({ kind: 'travel', main: 'Round-up: the herd is in the pasture', sub: `${d} m east of here, past the creek` });
       return;
     }
-    if (wave.done) { hud.rule({ main: 'Wave done!', sub: 'Another bunch is wandering in…' }); return; }
+    if (wave.done) { hud.rule({ main: 'More cattle coming', sub: 'They are wandering in…' }); return; }
     if (wave.kind === 'card') {
       const c = wave.card, readable = !!(c.say && canRead(c));
-      hud.rule({ main: c.rule, sub: `${c.sub} · card ${wave.cardNo} of ${wave.cards}${finding()}`,
+      hud.rule({ main: c.rule, sub: `${c.sub}${finding()}`,
         buttons: [{ label: 'Show me', onClick: () => askHelp() }],
         speak: readable ? () => sayCard(c) : null });
       if (readable && readFor !== c.id) { readFor = c.id; sayCard(c); }
@@ -572,6 +574,9 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
       refresh();
     }
 
+    // (that steer finished the day's shift, src/shifts.js: what is left of this bunch puts its numbers away)
+    if (right && !open()) { w.done = true; endHelp(); hint(null); for (const x of herd) if (free(x)) { setNumber(x, null); x.state = 'idle'; } showCard(); return; }
+
     // what's next
     if (w.kind === 'card') {
       const next = r.waveDone ? null : T.card();   // (a right pick: the next card, made at the level the answer left)
@@ -609,7 +614,7 @@ export function makeRoundup({ W, animals, P, I, camera, canvas, rider, hud, hob,
     rider.lockboxes.push({ tier, from: 'loot' });
     saveRider(rider);
     const e = earn(rider, bonus);
-    hud.toast(`Wave done! +${bonus} gold${first ? ' (first-day bonus)' : ''} and a ${TIER_NAME[tier].toLowerCase()}`, 'gold');
+    hud.toast(`A good bunch! +${bonus} gold${first ? ' (first-day bonus)' : ''} and a ${TIER_NAME[tier].toLowerCase()}`, 'gold');
     if (e.newTitle) setTimeout(() => hud.toast(`You're a ${e.newTitle} now!`, 'gold'), 2400);
     refresh();
     hob.event('waveDone', { gold: rider.gold, saddle: PRICES.saddle.plain });

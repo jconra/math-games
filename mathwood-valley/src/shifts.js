@@ -8,12 +8,14 @@
 // This file is the plain logic and the words (no page, no three.js: the tests load it as it is). The game's side (the
 // thank-you, the tip, the board, Hob) is src/shiftkeeper.js.
 //
-// A ROUND is one go at the job, as the kid sees it: a bunch of cattle corralled, a sheep healed, a pig penned, an order
+// A ROUND is one go at the job, as the kid sees it: a steer roped, a sheep healed, a pig penned, an order
 // filled, a card of bottles shot, a photo taken, a fish landed; on the long trips a delivery made, a stash of loot
 // handed back; at a hold-up on the road (the wagon), a wave of the gang seen off. Each job says which game event counts
 // a round (`round`).
 //
-// HOW LONG A SHIFT IS (shiftLength): the regular jobs run 5 to 10 rounds, most riders 6 to 8; the long trips 3 to 5;
+// HOW LONG A SHIFT IS (shiftLength): the regular jobs run 5 to 10 rounds, most riders 6 to 8; the round-up 10 to 15 steers
+// roped, one a question (its own `rounds`: the game's maker, 2026-10-31: "I think it should be more like 10-15");
+// the long trips 3 to 5;
 // the wagon's is one hold-up of 2 to 4 waves (most riders 3: src/missions/wagonjob.js deals a hold-up's waves by the
 // same rule whether the jobs board sent it or it happened on the way).
 // Younger or slower riders get the short end, quick riders the long end. "Pace" (0 short .. 1 long) comes from:
@@ -64,9 +66,9 @@ export const SHIFT = {
 // round's pay; giver: who thanks the rider (a job person's id in src/jobfolkplan.js, 'marksman' for Miss Opal at the
 // range, 'storekeeper' for the store, 'foreman' for the camp's own, 'driver' for the held-up wagon's driver, who says
 // his own thank-you: `own`); label: the HUD's counter ("Sheep healed 4/7"); holdup: its rounds are a hold-up's waves
-// (SHIFT.holdup); cut: an event that ends the shift early (the hold-up's strongbox grabbed: half the tip, no penalty).
+// (SHIFT.holdup); rounds: its own [short end, long end], when it has one; cut: an event that ends the shift early (the hold-up's strongbox grabbed: half the tip, no penalty).
 export const SHIFT_JOBS = [
-  { id: 'roundup', place: 'roundup', round: 'waveDone', batch: 'waveDone', buckle: 'cattle', credit: 5, tip: 12, giver: 'boss', label: 'Bunches corralled', name: 'the round-up' },
+  { id: 'roundup', place: 'roundup', round: 'catch', batch: null, rounds: [10, 15], buckle: 'cattle', credit: 3, tip: 12, giver: 'boss', label: 'Steers roped', name: 'the round-up' },
   { id: 'sheep', place: 'sheep', round: 'sheepHealed', batch: 'flockDone', buckle: 'sheep', credit: 1, tip: 5, giver: 'vet', label: 'Sheep healed', name: 'the sick sheep' },
   { id: 'pigs', place: 'pigs', round: 'pigPenned', batch: 'pigsDone', buckle: 'pigs', credit: 1, tip: 4, giver: 'wife', label: 'Pigs penned', name: 'the loose pigs' },
   { id: 'store', place: 'store', round: 'storeFilled', batch: 'storeDone', buckle: 'orders', credit: 1, tip: 5, giver: 'storekeeper', label: 'Orders filled', name: 'the store counter', sit: true },
@@ -164,7 +166,7 @@ export function pace(rider, id) {
 }
 export function shiftLength(rider, id) {
   const j = SHIFT_BY[id]; if (!j) return 0;
-  const [lo, hi] = j.holdup ? SHIFT.holdup : j.long ? SHIFT.long : SHIFT.regular;
+  const [lo, hi] = j.rounds || (j.holdup ? SHIFT.holdup : j.long ? SHIFT.long : SHIFT.regular);
   return lo + Math.round((hi - lo) * pace(rider, id));
 }
 

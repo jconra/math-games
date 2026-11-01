@@ -31,7 +31,7 @@
 //   J.where()           { x, z } of the fisherman (the jobs board, the trail)
 //   J.workSum()         the question card's sum for the tools' Work it out, or null
 //   J.creel()           the fish in the saddlebags;  J.fishLine() '3 fish' (the HUD) or ''
-//   J.saleOrder({ who, grade })   a fish sale for the store's counter now and then (null: not this customer, or no fish)
+//   J.saleOrder({ who, grade, force })   a fish sale for the clerk's deal, src/missions/sellgoods.js (null: no fish)
 //   J.sold(order)       a sale's right coin: those fish out of the saddlebags
 //   J.state(), J.dispose()
 import * as THREE from 'three';
@@ -79,7 +79,7 @@ export function makeFishingJob({ W, folk, rider, sites, player = () => null, aud
   const site = J.site = sites.add({
     id: 'fishing', x: DOCK.x, z: endZ, prompt: 'Fish off the dock', reach: DOCK.reach,
     meet: () => { if (!keeper || J.builder || !J.on || fadeOut) return null; const p = keeper.root.position; return { x: p.x, z: p.z }; },
-    css: ['labs/fishing/fishing.css?v=10'],
+    css: ['labs/fishing/fishing.css?v=13'],
     mount, closed,
   });
   const { group, origin } = site;
@@ -207,7 +207,7 @@ export function makeFishingJob({ W, folk, rider, sites, player = () => null, aud
     catch (e) { console.warn('fishing: the rider\'s double could not be made', e); }
     const B = J.builder = mountFishing({
       root: ctx.root, scene: frame, camera: ctx.camera, fit: () => ctx.fit(null), canvasRect: ctx.canvasRect,
-      dock, water, asker, records, person, under, deep: 0.5, keepAngler: true, low, lift: 0.35,
+      dock, water, asker, records, person, under, deep: 0.5, keepAngler: true, low, lift: () => 0.35 * (1 - (W.night || 0)),   // (a fish held up reads whatever the sun does; by night it follows the dark)
       sound: audio && audio.ready ? { ready: (fn) => audio.ready(fn) } : null,
       escape: () => ctx.leave('esc'),
       changed: () => { saveT = DOCK.saveAfter; },
@@ -314,16 +314,16 @@ export function makeFishingJob({ W, folk, rider, sites, player = () => null, aud
   let sinceSale = 0;
   J.creel = () => F().creel;
   J.fishLine = () => { const n = F().creel.length; return n ? `${n} fish` : ''; };
-  J.saleOrder = ({ who = null, grade = null } = {}) => {
+  J.saleOrder = ({ who = null, grade = null, force = false } = {}) => {   // (force: the clerk's deal, src/missions/sellgoods.js: his own question, whatever the level)
     const f = F(); if (!f.creel.length) return null;
-    if (!(f.fresh && CREEL.sellFirst) && ++sinceSale < CREEL.every) return null;
+    if (!force && !(f.fresh && CREEL.sellFirst) && ++sinceSale < CREEL.every) return null;
     // the form of sale: with the store's level (grade: its school year, as the eggs' and the wool's sales go), the
     // hardest form at or under it, and none under the easiest (a kindergartner isn't asked 3 gold a fish times 4);
     // without it (old callers), the skill model's way
     let map, q, form0;
     if (grade != null) {
       const forms = Object.entries(SALE_FORMS).flatMap(([m, list]) => list.map((form, i) => ({ form, m, at: pctAt(m, i + 1) }))).sort((a, b) => a.at - b.at);
-      const fit = forms.filter((x) => x.at <= grade).pop();
+      const fit = forms.filter((x) => x.at <= grade).pop() || (force ? forms[0] : null);
       if (!fit) return null;
       map = fit.m; form0 = fit.form; q = { at: fit.at };
     } else {

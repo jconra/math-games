@@ -12,7 +12,7 @@
 // panel; picking it there asks for more work (shift.ask: a fresh shift at once) and the hoofprints lead to it as ever.
 //
 // The board: two posts, a shingled roof, a plank backboard with a painted "JOBS" header and the notices pinned on it
-// (one canvas picture: src drawn here in code), the town's lantern post beside it. Three draws and the lantern's, and it
+// (one canvas picture: src drawn here in code), two lanterns hanging from its roof. Five draws, and it
 // blocks walkers at its posts. Only the jobs on for this rider are pinned up.
 //
 //   const JB = makeJobsBoard({ W, camera, I, hud, rider, player, jobs, onOpen, onClose, speak, scene, shift })
@@ -39,7 +39,6 @@
 //   BOARD_JOBS, BOARD, boardSpot(W), drawPic(ctx, kind, x, y, size)
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { makeProp } from '../world/objects/townProps.js';
 import { makePanel } from './shop.js';
 import { HOB } from './hob.js';
 import { forgetPlants } from './missions/loot.js';
@@ -362,12 +361,48 @@ export function makeJobsBoard({ W, camera, I = null, hud = null, rider = null, p
   const face = new THREE.Mesh(new THREE.PlaneGeometry(BOARD.w, BOARD.h).translate(0, BOARD.low + BOARD.h / 2, -0.03), faceMat);
   face.name = 'jobs-board-face';
   for (const m of [woodMesh, roofMesh, face]) { m.castShadow = shadows; m.receiveShadow = shadows; root.add(m); }
-  // a lantern post at the board's left end, its arm out over the notices: the town's own (world/objects/townProps.js
-  // 'lantern', as the Town Lab puts down), in place of the plain box lantern it had (the game's maker asked what "the
-  // little box with a pyramid on top" was). Its pieces are shared with every lantern post: never disposed here
-  const lamp = makeProp('lantern'); lamp.name = 'jobs-board-lantern'; lamp.userData.shared = true;
-  lamp.position.set(-(half + 0.55), 0, 0.3); root.add(lamp);
-  lamp.traverse((o) => { if (o.isMesh) { o.castShadow = shadows; o.receiveShadow = shadows; } });
+  // TWO LANTERNS hanging from the roof, one each side, in front of the board (the game's maker: "a lantern on both sides of
+  // the job board hanging from the top"), and their light on it: at night the notices show by their own picture over a warm
+  // pool under each lantern, the frame warms a little, and the ground and whoever stands there are lit through the street
+  // lamps' picture (TOWN.extraLamps)
+  const LAMPX = half + 0.02, LAMPZ = 0.42, HOOK = BOARD.post - 0.05, DROP = 0.3;
+  const ironParts = [], glassParts = [];
+  for (const sx of [-1, 1]) {
+    const y = HOOK - DROP - 0.1, tr = (g) => g.translate(sx * LAMPX, 0, LAMPZ);
+    ironParts.push(tr(new THREE.BoxGeometry(0.012, DROP, 0.012).translate(0, HOOK - DROP / 2, 0)));               // the chain
+    ironParts.push(tr(new THREE.CylinderGeometry(0.04, 0.095, 0.07, 6).translate(0, y + 0.13, 0)));              // the cap
+    ironParts.push(tr(new THREE.CylinderGeometry(0.085, 0.085, 0.03, 6).translate(0, y - 0.105, 0)));            // the foot
+    for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) ironParts.push(tr(new THREE.BoxGeometry(0.012, 0.2, 0.012).translate(dx * 0.055, y, dz * 0.055)));
+    glassParts.push(tr(new THREE.CylinderGeometry(0.065, 0.07, 0.19, 6).translate(0, y, 0)));
+  }
+  const ironMat = new THREE.MeshStandardMaterial({ color: 0x2a2622, roughness: 0.6, metalness: 0.3 });
+  const glassMat = new THREE.MeshStandardMaterial({ color: 0x7a5c34, emissive: 0xffb25e, emissiveIntensity: 0.2, roughness: 0.3 });
+  const lampIron = new THREE.Mesh(mergeGeometries(ironParts), ironMat), lampGlass = new THREE.Mesh(mergeGeometries(glassParts), glassMat);
+  ironParts.concat(glassParts).forEach((g) => g.dispose());
+  lampIron.name = 'jobs-board-lanterns'; lampIron.castShadow = shadows; root.add(lampIron, lampGlass);
+  // the notices as the lanterns light them: the board's picture, brightest under each lantern
+  const glowCv = document.createElement('canvas');
+  const glowTex = new THREE.CanvasTexture(glowCv); glowTex.colorSpace = THREE.SRGBColorSpace;
+  function paintGlow() {
+    const S = painted.canvas, w = glowCv.width = S.width, h = glowCv.height = S.height, g = glowCv.getContext('2d');
+    g.drawImage(S, 0, 0); g.globalCompositeOperation = 'multiply'; g.fillStyle = '#000'; g.fillRect(0, 0, w, h); g.globalCompositeOperation = 'source-over';
+    const pool = document.createElement('canvas'); pool.width = w; pool.height = h; const q = pool.getContext('2d');
+    q.fillStyle = 'rgba(255,255,255,0.3)'; q.fillRect(0, 0, w, h);
+    q.globalCompositeOperation = 'lighter';
+    for (const x of [0.03, 0.97]) { const r = q.createRadialGradient(x * w, 0.05 * h, 0, x * w, 0.05 * h, 0.72 * w); r.addColorStop(0, 'rgba(255,255,255,0.85)'); r.addColorStop(1, 'rgba(255,255,255,0)'); q.fillStyle = r; q.fillRect(0, 0, w, h); }
+    g.drawImage(S, 0, 0); g.globalCompositeOperation = 'multiply'; g.drawImage(pool, 0, 0); g.globalCompositeOperation = 'source-over';
+    glowTex.needsUpdate = true;
+  }
+  paintGlow();
+  faceMat.emissive = new THREE.Color(0xffd9a8); faceMat.emissiveMap = glowTex; faceMat.emissiveIntensity = 0;
+  wood.emissive = new THREE.Color(0xff9a4a); wood.emissiveIntensity = 0;
+  const lightBoard = () => {
+    const n = Math.max(0, Math.min(1, W.night || 0));
+    faceMat.emissiveIntensity = 0.62 * n; wood.emissiveIntensity = 0.022 * n; glassMat.emissiveIntensity = 0.2 + 1.5 * n;
+  };
+  lightBoard();
+  const TOWN = W.V && W.V.TOWN, myLamps = [-1, 1].map((sx) => { const q = at(sx * LAMPX, LAMPZ); return { x: q.x, z: q.z, y: y0 + HOOK - DROP - 0.1, reach: 7, strength: 0.75 }; });
+  if (TOWN) TOWN.extraLamps = myLamps;
   scene.add(root);
   root.updateMatrixWorld(true);
   // the posts block walkers (the board between them doesn't reach the ground: nobody walks through a notice board)
@@ -537,6 +572,7 @@ export function makeJobsBoard({ W, camera, I = null, hud = null, rider = null, p
   const SITDOWN = new Set(['store', 'delivery', 'deer', 'loot', 'range']);
   JB.heard = (name) => { if (picked && picked.t > 0.5 && WORKING.has(name)) picked = null; };
   JB.update = (dt, pos, { busy = null } = {}) => {
+    lightBoard();
     if (!pos) return;
     JB.prompt = Math.hypot(pos.x - front.x, pos.z - front.z) < BOARD.near && !panel ? 'Read the jobs board' : null;
     JB.promptAt = B;   // (where the board stands: the one E action's arbitration, src/main.js doors)
@@ -557,7 +593,7 @@ export function makeJobsBoard({ W, camera, I = null, hud = null, rider = null, p
     if (key === doneKey) return;
     doneKey = key;
     painted = paintBoard(list, [TW, TH], doneNow());
-    tex.image = painted.canvas; tex.needsUpdate = true;
+    tex.image = painted.canvas; tex.needsUpdate = true; paintGlow();
   }
 
   const _s = new THREE.Vector3();
@@ -572,9 +608,10 @@ export function makeJobsBoard({ W, camera, I = null, hud = null, rider = null, p
     if (panel) { const pn = panel; panel = null; pn.close(); }
     offPick(); offTarget(); offBlock(); unmow();
     root.removeFromParent();
-    root.traverse((o) => { if (o.isMesh && !(o.parent && o.parent.userData.shared)) o.geometry.dispose(); });   // (the lantern post's are the town's)
-    for (const m of [wood, roofMat, faceMat]) m.dispose();
-    tex.dispose();
+    if (TOWN) TOWN.extraLamps = null;
+    root.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
+    for (const m of [wood, roofMat, faceMat, ironMat, glassMat]) m.dispose();
+    tex.dispose(); glowTex.dispose();
   };
   return JB;
 }

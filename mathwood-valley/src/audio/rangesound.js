@@ -1,15 +1,16 @@
 // THE TARGET RANGE'S SOUNDS (src/missions/shooting.js), made in the browser as Sound Lab patches (RANGE_PATCHES below,
 // the same in the Sound Lab's RANGE group, ~/sound-lab/patch.js: tune one there by ear, then paste it back here). Every
 // one is noise through filters, never a ringing tone (the rule for hits and knocks):
-//   SHOT     the six-shooter: a sharp crack of bright noise, a short bark in the middle, and a low thump of dark noise,
-//            with a little of the open air after it (kept well under the music and the town: it is heard a lot)
+//   SHOT     the six-shooter: a sharp crack of bright noise, a bark in the middle, and a low thump of dark noise, with
+//            the open air ringing after it
 //   CLANK    a bullet knocking a tin can off the plank: a hard tick and two short bands of tinny noise
 //   SHATTER  a bottle bursting: a crack and a scatter of tiny bright ticks, the glass falling
 //   PING     a shot glancing off: a tick and a quick falling zing of narrow noise
 //   THUD     a shot into the hay or the dirt: a soft dull thump and a little hiss
 //   CLICK    the hammer cocked (and each round going into the cylinder on a reload): a small dry tick
 //
-//   const S = makeRangeSound({ audio })   audio: src/audio/audio.js's (nothing plays until the player has clicked once)
+//   const S = makeRangeSound({ audio, fight })   audio: src/audio/audio.js's (nothing plays until the player has clicked
+//                                         once); fight: true at a hold-up or a camp, over the action music
 //   S.shot(), S.cock(), S.reload()        at the shooter (not placed)
 //   S.shotAt(at)                          another's shot, at a place in the world (a hold-up's gang: src/missions/wagonjob.js)
 //   S.clank(at), S.shatter(at), S.ping(at), S.thud(at)   at a place in the world ({ x, y, z }), heard from the camera
@@ -18,7 +19,12 @@
 import { playPatch } from './patch.js';
 
 export const RANGE_SOUND = {
-  shot: 0.55,      // the gunshot's level (it is right at the ears)
+  shot: 0.6,       // the gunshot's level at the range (right at the ears; no music there)
+  // ... and in a fight, over the action music. MEASURED (~/pw/bandit-math/rigs/traffic/level.cjs: the loudest 50 ms in dB, peak
+  // in brackets): the action music -12 (-3); at the old 0.55 the player's shot -29 (-10), a gang's at 20 m -45 (-23): 17 and
+  // 33 dB under the music, which is why nobody heard them. Now see the rig's numbers in TOWN.md; the music dips as one fires
+  fight: 1.7,
+  fightRef: 16,    // m: a gang's shot in a fight keeps its full loudness out to this far
   hits: 1.0,       // the hits' level (they are 8 or 9 metres off: the distance takes some off)
   ref: 4,          // m: a placed sound's full loudness out to this far
 };
@@ -33,13 +39,13 @@ const wire = (id) => [{ from: 'n', to: `${id}-f` }, { from: `${id}-f`, to: `${id
 
 export const RANGE_PATCHES = {
   'RANGE — SHOT': {
-    name: 'Six-shooter', group: 'RANGE', kind: 'perc', dur: 0.7,
+    name: 'Six-shooter', group: 'RANGE', kind: 'perc', dur: 1.0,
     nodes: [
       { id: 'n', name: 'noise', ...WHITE },
       ...burst('crack', 'crack', 'highpass', 2200, 0.7, 1.6, 0.035),
-      ...burst('bark', 'bark', 'bandpass', 700, 0.9, 1.2, 0.13),
-      ...burst('thump', 'thump', 'lowpass', 170, 0.8, 2.2, 0.22),
-      ...burst('air', 'open air', 'bandpass', 1300, 0.5, 0.12, 0.45, 0.03),
+      ...burst('bark', 'bark', 'bandpass', 800, 0.8, 1.6, 0.2),
+      ...burst('thump', 'thump', 'lowpass', 190, 0.8, 2.2, 0.3),
+      ...burst('air', 'open air', 'bandpass', 1300, 0.5, 0.3, 0.7, 0.03),
       { id: 'out', type: 'out', name: 'output', gain: 0.5 },
     ],
     cables: [...wire('crack'), ...wire('bark'), ...wire('thump'), ...wire('air')],
@@ -102,11 +108,11 @@ export const RANGE_PATCHES = {
   },
 };
 
-export function makeRangeSound({ audio = null } = {}) {
+export function makeRangeSound({ audio = null, fight = false } = {}) {
   const S = {};
   const ok = () => !!(audio && audio.ctx && audio.out && audio.running);
   // a patch now (or after `when` seconds), at the ears or at a place
-  function play(name, { at = null, gain = 1, when = 0 } = {}) {
+  function play(name, { at = null, gain = 1, when = 0, ref = RANGE_SOUND.ref } = {}) {
     if (!ok()) return;
     const ctx = audio.ctx, P = RANGE_PATCHES[name];
     try {
@@ -114,15 +120,16 @@ export function makeRangeSound({ audio = null } = {}) {
       let tail = g;
       if (at) {
         const p = ctx.createPanner(); p.panningModel = 'equalpower'; p.distanceModel = 'inverse';
-        p.refDistance = RANGE_SOUND.ref; p.rolloffFactor = 1; p.maxDistance = 10000;
+        p.refDistance = ref; p.rolloffFactor = 1; p.maxDistance = 10000;
         if (p.positionX) { p.positionX.value = at.x; p.positionY.value = at.y; p.positionZ.value = at.z; } else p.setPosition(at.x, at.y, at.z);
         g.connect(p); p.connect(audio.out); tail = p;
       } else g.connect(audio.out);
       playPatch(ctx, null, g, null, P, () => { try { g.disconnect(); if (tail !== g) tail.disconnect(); } catch (e) { /* gone */ } }, { at: ctx.currentTime + 0.005 + when });
     } catch (e) { /* no sound: never mind */ }
   }
-  S.shot = () => play('RANGE — SHOT', { gain: RANGE_SOUND.shot * (0.9 + Math.random() * 0.15) });
-  S.shotAt = (at) => play('RANGE — SHOT', { at, gain: RANGE_SOUND.shot * (0.85 + Math.random() * 0.2) });
+  const lvl = fight ? RANGE_SOUND.fight : RANGE_SOUND.shot;
+  S.shot = () => play('RANGE — SHOT', { gain: lvl * (0.9 + Math.random() * 0.15) });
+  S.shotAt = (at) => play('RANGE — SHOT', { at, ref: fight ? RANGE_SOUND.fightRef : RANGE_SOUND.ref, gain: lvl * (0.85 + Math.random() * 0.2) });
   S.cock = () => play('RANGE — CLICK', { gain: 0.8, when: 0.12 });
   // six rounds into the cylinder, one click each, then the hammer
   S.reload = () => { for (let k = 0; k < 6; k++) play('RANGE — CLICK', { gain: 0.45 + Math.random() * 0.2, when: 0.25 + k * 0.11 + Math.random() * 0.03 }); play('RANGE — CLICK', { gain: 0.9, when: 1.05 }); };

@@ -1,6 +1,5 @@
 // SOUNDS at the lake, all made on the spot with Web Audio (no sound files): water lapping at the dock, now and then a
-// bird or a frog, the bobber's plop (a cast is silent until it lands), the nibble and the bite, the reel's ratchet, the drag
-// buzzing when a fish runs, splashes, a friendly chime for a right answer and a soft note for a wrong one. Splashes,
+// bird or a frog, the bobber's plop (a cast is silent until it lands), the nibble and the bite, the reel's ratchet, splashes, a friendly chime for a right answer and a soft note for a wrong one. Splashes,
 // clicks and plops are shaped noise (they ring like glass when made from tones); only the chime, the soft note and the
 // birds are tones. Nothing plays until the first tap or click (browsers keep sound off until then).
 // The lab page has its own sound (audioOn: its own context, its own volume in the top bar). The game lends its own
@@ -124,8 +123,6 @@ export function splash(big = 1, delay = 0) {
 }
 // one click of the reel's ratchet (the page calls it as the handle turns)
 export function click(speed = 1) { if (!ok()) return; const t = A.ctx.currentTime; noise(t, 0.022, { type: 'highpass', freq: 2600 + speed * 900, gain: 0.07, attack: 0.001 }); }
-// the drag buzzing as the fish takes line: quick clicks running together
-export function drag(ms = 500) { if (!ok()) return; const t = A.ctx.currentTime; for (let i = 0; i < ms / 18; i++) noise(t + i * 0.018, 0.016, { type: 'highpass', freq: 3600, gain: 0.06, attack: 0.001 }); }
 export function landed() { if (!ok()) return; splash(1.2); }
 // a fish slapping into the creel, wet
 export function slap() { if (!ok()) return; const t = A.ctx.currentTime; noise(t, 0.09, { type: 'lowpass', freq: 1400, gain: 0.35, attack: 0.002 }); noise(t + 0.01, 0.05, { freq: 2500, q: 2, gain: 0.08 }); }

@@ -30,8 +30,8 @@ test('one table: the furniture and the farm animals sell at the catalog\'s price
   const buy = completion(S.newRider('Sam')).items.filter((i) => i.group === 'buy');
   const all = buy.reduce((a, i) => a + i.need, 0);
   const sum = (o) => Object.values(o).reduce((a, b) => a + b, 0);
-  assert.equal(all, PRICES.cabin + sum(PRICES.saddle) + sum(PRICES.horse) + sum(PRICES.hat) + Math.min(...Object.values(PRICES.dog)) + sum(PRICES.animal) + sum(PRICES.furniture));
-  assert.equal(all, 4995, 'everything to buy at base prices, one dog the cheapest (6,285 with every breed; 5,235 before the dog breeds were sold on 2026-10-29; 5,260 before the horses changed on 2026-10-27)');
+  assert.equal(all, PRICES.cabin + sum(PRICES.saddle) + sum(PRICES.horse) + sum(PRICES.hat) + Math.min(...Object.values(PRICES.dog)) + sum(PRICES.animal) - PRICES.furniture.rifles + sum(PRICES.furniture));
+  assert.equal(all, 4755, 'everything to buy at base prices (the rifle rack only with guns allowed), one dog the cheapest (6,285 with every breed; 5,235 before the dog breeds were sold on 2026-10-29; 5,260 before the horses changed on 2026-10-27)');
   assert.ok(buy.every((i) => i.live), 'the cabin is for sale (COMING.cabin on)');
 });
 

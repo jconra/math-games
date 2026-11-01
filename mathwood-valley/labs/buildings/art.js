@@ -752,33 +752,6 @@ function storePosters(g, A) {
     printLines(pg, w * 0.16, h * 0.88, w * 0.68, 2, rng(2613), 7);
   });
 }
-function storePictures(g, A) {
-  const [a, b] = A.pictures;
-  // a sepia print of a horse, in a dark frame; a mountain scene
-  for (const [r, kind] of [[a, 'horse'], [b, 'hills']]) {
-    const [x0, y0, w, h] = r;
-    g.fillStyle = '#3a2a1c'; g.fillRect(x0, y0, w, h); g.fillStyle = '#c9a66a'; g.fillRect(x0 + 6, y0 + 6, w - 12, h - 12);
-    pixels(g, [x0 + 10, y0 + 10, w - 20, h - 20], (u, v) => { const l = 0.8 + 0.25 * (fbm(u, v, 4, 3, 3, 2701) - 0.5); return kind === 'horse' ? [220 * l, 200 * l, 160 * l] : [180 * l, 200 * l, 214 * l]; });
-    g.save(); g.beginPath(); g.rect(x0 + 10, y0 + 10, w - 20, h - 20); g.clip();
-    if (kind === 'horse') {
-      g.fillStyle = 'rgba(70,46,26,0.9)'; const cx = x0 + w / 2, cy = y0 + h * 0.56;
-      g.beginPath(); g.ellipse(cx, cy, 26, 11, 0, 0, 7); g.fill(); g.beginPath(); g.moveTo(cx + 20, cy - 4); g.lineTo(cx + 34, cy - 22); g.lineTo(cx + 42, cy - 18); g.lineTo(cx + 28, cy + 2); g.fill();
-      for (const dx of [-20, -12, 14, 22]) g.fillRect(cx + dx, cy + 6, 3, 20);
-      g.fillRect(x0 + 10, y0 + h * 0.8, w - 20, 2);
-    } else {
-      g.fillStyle = 'rgba(80,96,110,0.9)'; g.beginPath(); g.moveTo(x0 + 10, y0 + h * 0.7); g.lineTo(x0 + w * 0.35, y0 + h * 0.25); g.lineTo(x0 + w * 0.55, y0 + h * 0.5); g.lineTo(x0 + w * 0.75, y0 + h * 0.3); g.lineTo(x0 + w - 10, y0 + h * 0.65); g.lineTo(x0 + w - 10, y0 + h - 10); g.lineTo(x0 + 10, y0 + h - 10); g.fill();
-      g.fillStyle = 'rgba(240,244,246,0.9)'; g.beginPath(); g.moveTo(x0 + w * 0.35, y0 + h * 0.25); g.lineTo(x0 + w * 0.3, y0 + h * 0.34); g.lineTo(x0 + w * 0.4, y0 + h * 0.33); g.fill();
-      g.fillStyle = 'rgba(60,90,50,0.9)'; g.fillRect(x0 + 10, y0 + h * 0.78, w - 20, h * 0.22);
-    }
-    g.restore();
-  }
-  // the flag: thirteen stripes, a blue field with rows of white stars, a little faded
-  const [fx, fy, fw, fh] = A.flag;
-  pixels(g, A.flag, (u, v) => { const l = 0.88 + 0.12 * fbm(u, v, 4, 3, 2, 2711); if (u < 0.42 && v < 0.54) { const sx = (u / 0.42) * 8, sy = (v / 0.54) * 5; const star = Math.hypot(sx - Math.floor(sx) - 0.5, sy - Math.floor(sy) - 0.5) < 0.2; return star ? [236 * l, 232 * l, 220 * l] : [44 * l, 54 * l, 104 * l]; } return (Math.floor(v * 13) % 2 ? [236, 228, 214] : [170, 44, 40]).map((q) => q * l); });
-  // the checkerboard: dark red and black squares in a wooden border
-  const [cx, cy, cw] = A.checker;
-  pixels(g, A.checker, (u, v, x, y) => { const b = 8; if (x < b || y < b || x >= cw - b || y >= cw - b) return [120, 82, 50]; const i = Math.floor((x - b) / ((cw - 2 * b) / 8)), j = Math.floor((y - b) / ((cw - 2 * b) / 8)); const l = 0.9 + 0.1 * hash(i, j, 2721); return ((i + j) & 1 ? [30, 26, 24] : [170, 40, 34]).map((q) => q * l); });
-}
 const LABELS = ['COFFEE', 'TEA', 'RICE', 'BEANS', 'SPICE', 'OATS', 'SALT', 'SODA', 'NUTMEG', 'CLOVES', 'PEPPER', 'GINGER', 'BARLEY', 'BUTTONS', 'THREAD', 'CANDLES'];
 function drawerLabels(g, A) {
   A.labels.forEach((r, i) => {
@@ -860,9 +833,9 @@ export async function makeStoreArt(signLayout) {
   try { await Promise.all([document.fonts.load('64px Rye'), document.fonts.load('900 64px Bitter'), document.fonts.load('800 40px Bitter'), document.fonts.load('700 16px Bitter')]); } catch (e) { /* the fonts are optional */ }
   const t0 = performance.now(), A = STORE_ART, c = canvasOf(A.w, A.h), g = c.getContext('2d', { willReadFrequently: true });
   sackPrints(g, A); clothPatterns(g, A); tinLabels(g, A); boxLabels(g, A); tiles(g, A); heaps(g, A);
-  priceBoard(g, A.board); storePosters(g, A); storePictures(g, A); drawerLabels(g, A); registerKeys(g, A.keys);
+  priceBoard(g, A.board); storePosters(g, A); drawerLabels(g, A); registerKeys(g, A.keys);
   // (everything printed faded toward the paper's own grey-cream: labels, sacks' prints, cloth, posters, pictures)
-  for (const r of [[0, 256, 1024, 256], A.flour, A.coffee, ...A.cloth, A.posters[1], ...A.pictures, A.flag]) mute(g, r, 0.35);
+  for (const r of [[0, 256, 1024, 256], A.flour, A.coffee, ...A.cloth, A.posters[1], A.flag]) mute(g, r, 0.35);
   const t = tex(c, { repeat: false, aniso: 8 });
   const signPaint = storeSign(signLayout);
   return { store: t, signPaint, bytes: gpuBytes(A.w, A.h) + gpuBytes(STORE_SIGN.w, STORE_SIGN.h), ms: performance.now() - t0 };

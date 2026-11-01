@@ -10,6 +10,7 @@
 //     follow(): where the one it follows is (a Vector3 on the ground). animals: the loaded library (the kind is loaded
 //     here if it isn't yet: D.ready is a promise)
 //   D.update(dt)       every frame;  D.shift({ dx, dz }): moved with the player as it stands (the valley's ends)
+//   D.hold(seconds, at)   stays put for that long, sitting up and facing at ({ x, z }): being fed or petted
 //   D.setName(name)    a new name on the tag;  D.tagOn = false hides the tag (D.tag: the sprite; it fades out far off)
 //   D.dog              the animal (from makeAnimal; null until loaded);  D.position: where it is
 //   D.state()          what it is doing, for a HUD or a test: { x, z, speed, gait, pose: 'stand'|'sit'|'lie', sit, ... }
@@ -73,6 +74,7 @@ export function makeDog({ W, scene, animals, kind = 'shiba', name = 'Dog', follo
   const D = { dog: null, kind, name, position: new THREE.Vector3(), tagOn: true };
   const tag = D.tag = makeTag(name); tag.visible = false; scene.add(tag);   // (shown once the dog is there)
   let x = 0, z = 0, heading = 0, speed = 0, stillT = 0, side = 1, lead = null, leadSpeed = 0;
+  let holdT = 0, holdAt = null;
   let pose = 'stand', poseT = 0, headUp = 0;            // pose: standing (or moving), sitting or lying; poseT: how long
   const last = new THREE.Vector3(), tmp = new THREE.Vector3(), head = new THREE.Vector3();
   let flipT = 0, stuckT = 0, gaveUp = false, bestD = Infinity, upX = 0, upZ = 0;
@@ -132,6 +134,13 @@ export function makeDog({ W, scene, animals, kind = 'shiba', name = 'Dog', follo
     last.copy(L);
     const a = D.dog;
     if (!a) return;
+    if (holdT > 0) {   // (being fed or petted: it sits up and faces the rider, and goes on after)
+      holdT -= dt; speed = 0; stillT = 0; stuckT = 0;
+      if (holdAt) heading += wrap(Math.atan2(holdAt.x - x, holdAt.z - z) - heading) * (1 - Math.exp(-6 * dt));
+      if (a.actions.Sit) settle(a, 'sit', dt); else a.pace(0);
+      placeDog(a, dt);
+      return;
+    }
     const goal = spot(L, tmp);
     // (its spot blocked: the other side, if that's free, and not more than once a second: with both sides blocked it swapped
     // every frame, and its picture shook)
@@ -168,6 +177,9 @@ export function makeDog({ W, scene, animals, kind = 'shiba', name = 'Dog', follo
     if (stillT > C.lieAfter && a.actions.Lie) settle(a, 'lie', dt);
     else if (stillT > C.sitAfter && a.actions.Sit && pose !== 'lie') settle(a, 'sit', dt);
     else if (pose === 'stand') a.pace(speed);
+    placeDog(a, dt);
+  };
+  function placeDog(a, dt) {
     const y = W.heightAt(x, z);
     a.root.position.set(x, y, z);
     a.root.rotation.set(0, heading, 0);
@@ -179,7 +191,8 @@ export function makeDog({ W, scene, animals, kind = 'shiba', name = 'Dog', follo
     tag.position.set(head.x, head.y + headUp + C.tagUp, head.z);
     const camD = W.camTarget ? tag.position.distanceTo(W.camTarget) : 0;
     tag.material.opacity = camD > 40 ? Math.max(0, 1 - (camD - 40) / 15) : 1; tag.visible = tag.material.opacity > 0.02 && D.tagOn;
-  };
+  }
+  D.hold = (seconds, at = null) => { holdT = seconds; holdAt = at; };
   // moved with the player as it stands (the way round at the valley's ends: src/world.js W.wrap)
   D.shift = ({ dx = 0, dz = 0 }) => { x += dx; z += dz; last.x += dx; last.z += dz; if (D.dog) { D.dog.root.position.x += dx; D.dog.root.position.z += dz; D.dog.root.position.y = W.heightAt(x, z); } };
   D.state = () => ({ x: +x.toFixed(2), z: +z.toFixed(2), speed: +speed.toFixed(2), gait: D.dog ? D.dog.clip : 'Idle', pose,

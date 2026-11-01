@@ -48,7 +48,8 @@ import { makeSaleSign } from './forsale.js';
 import { makeCamp } from './camp.js';
 import { makeHearthFire } from './hearthfire.js';
 import { openFireCard } from './firecard.js';
-import { SLOTS, ownedPieces, nextPiece, buyPiece, homeDogs } from './slots.js';
+import { offeredPieces, ownedPieces, nextPiece, buyPiece, homeDogs } from './slots.js';
+import { gunOn, ownsGun } from '../gun.js';
 import { spend, saveRider, KEEPSAKES, BUCKLES, BUCKLE_NAMES, buckleOf, jobWords, JOBS } from '../save.js';
 import { PRICES } from '../catalog.js';
 import { CAM, FIRST } from '../camera.js';
@@ -271,6 +272,7 @@ export function makeCabin({ W, renderer, camera, animals, rider, hud, input: I, 
   let greetDone = false;
   function arrived() {
     if (!R) return;
+    sync();   // (a rifle bought since: on the rack)
     R.keepsakes(keepsakesOf(rider));
     greetDone = false; greet();
     if (!told) { told = true; const n = nextPiece(rider); if (n) hud.toast(n.price <= rider.gold ? `Look round: there's room for ${a(n.name)}.` : `Saving up? Next for the cabin: ${n.name.toLowerCase()}, ${n.price} gold.`, 'gold'); }
@@ -402,7 +404,7 @@ export function makeCabin({ W, renderer, camera, animals, rider, hud, input: I, 
     };
     const have = owned();
     // (the porch's rockers: looked at out through the open front door, from just inside)
-    for (const s of SLOTS) { const q = R.spec(s.id); for (const p of q.looks) consider(have.includes(s.id) ? 'piece' : 'slot', s.id, p, s.id === 'porch' ? 4.2 : FP.reach); }
+    for (const s of offeredPieces(rider)) { const q = R.spec(s.id); for (const p of q.looks) consider(have.includes(s.id) ? 'piece' : 'slot', s.id, p, s.id === 'porch' ? 4.2 : FP.reach); }
     // (the counter bell stands on the table: once there is one, looking there is the table's, for its lock boxes)
     for (const k of keepsakesOf(rider)) { const p = R.keepLook(k.job); if (p && !(k.job === 'orders' && have.includes('table'))) consider('keepsake', k.job, p, 3.6); }
     // (the fireplaces: looked at, E lights a fire in one)
@@ -511,7 +513,7 @@ export function makeCabin({ W, renderer, camera, animals, rider, hud, input: I, 
     if (!R) return;
     // (the pieces' shaders built as they come, for the valley's lights: the first look in through the door doesn't stall)
     const home = R;
-    R.furnish(owned(), { dogs: homeDogs(rider).filter((d) => !d.following).length }).then(() => { if (R === home && W.warmFor) W.warmFor(home.group); }).catch(() => {});
+    R.furnish(owned(), { dogs: homeDogs(rider).filter((d) => !d.following).length, rifles: gunOn(rider) ? ['lever', 'single'].filter((id) => ownsGun(rider, id)) : [] }).then(() => { if (R === home && W.warmFor) W.warmFor(home.group); }).catch(() => {});
     R.keepsakes(keepsakesOf(rider));
   }
 

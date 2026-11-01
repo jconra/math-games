@@ -58,6 +58,71 @@ const GROUPS = {   // bone names as three.js gives them (the dots dropped: Front
   tail: /^Tail/,
 };
 
+// A DEEPER NECK: the game's maker wanted the neck thicker under the throat, the head, the mane and the top line left where
+// they are. Only the underside moves, straight out from the neck's middle line: the most at the throat-latch, tapering
+// to nothing at the chest and under the jaw. It is the skinned corners' rest positions that move, so every clip still
+// works. deep: metres at the throat (the Horse Lab's "Neck depth" slider sets it by eye: setNeckDeep).
+export const NECK = { deep: 0.04, chest: [0.2, 0.44], throat: [0.46, 0.56], jaw: [0.1, 0.42], under: [0.12, 0.9] };
+function fitNeck({ B, rest, n, W, g, M }) {
+  const O = B.Neck1, A = B.Head.clone().sub(O).normalize(), up = new THREE.Vector3().crossVectors(V(1, 0, 0), A).normalize();
+  if (up.y < 0) up.negate();
+  // how low and high the neck reaches at each place along it (its own skin: not the jaw's, the legs', the ears')
+  const C = 0.03, lo = new Map(), hi = new Map(), bin = (t) => Math.round(t / C), TT = new Float32Array(n), HH = new Float32Array(n), q = new THREE.Vector3();
+  for (let i = 0; i < n; i++) {
+    q.set(rest[i * 3], rest[i * 3 + 1], rest[i * 3 + 2]).sub(O);
+    const t = q.dot(A), h = q.dot(up); TT[i] = t; HH[i] = h;
+    if (W.legs[i] > 0.3 || W.ear[i] > 0.2 || W.head[i] > 0.3 || W.tail[i] > 0.1 || t < -0.3 || rest[i * 3 + 2] < 0) continue;
+    const k = bin(t); if (!lo.has(k) || h < lo.get(k)) lo.set(k, h); if (!hi.has(k) || h > hi.get(k)) hi.set(k, h);
+  }
+  const at = (m, t) => { const u = t / C, a = Math.floor(u), f = u - a, c0 = m.get(a), c1 = m.get(a + 1); return c0 === undefined ? c1 : c1 === undefined ? c0 : c0 + (c1 - c0) * f; };
+  const idx = [], wt = [];
+  for (let i = 0; i < n; i++) {
+    const t = TT[i], l = at(lo, t), u = at(hi, t);
+    if (l === undefined || u === undefined || u - l < 0.02 || rest[i * 3 + 2] < 0.2 || W.tail[i] > 0.1) continue;
+    const mid = (l + u) / 2, below = (mid - HH[i]) / (mid - l);
+    const w = sstep(below, NECK.under[0], NECK.under[1]) * sstep(t, NECK.chest[0], NECK.chest[1]) * (1 - sstep(t, NECK.throat[0], NECK.throat[1])) * (1 - sstep(W.head[i], NECK.jaw[0], NECK.jaw[1])) * (1 - sstep(W.ear[i], 0, 0.1));
+    if (w > 0.001) { idx.push(i); wt.push(w); }
+  }
+  const P = g.attributes.position, Nm = g.attributes.normal, Minv = M.clone().invert();
+  const fit = { idx, wt, dir: up.clone().negate(), rest, rest0: idx.map((i) => [rest[i * 3], rest[i * 3 + 1], rest[i * 3 + 2]]), P, Nm, Minv, M, tri: [], nearTo: null };
+  // the triangles round the corners that move, and every corner at the same spot (a seam's copies share their normal)
+  const moved = new Uint8Array(n); for (const i of idx) moved[i] = 1;
+  const I = g.index ? g.index.array : null, nT = (I ? I.length : n) / 3, keyOf = (i) => Math.round(rest[i * 3] * 2000) + ',' + Math.round(rest[i * 3 + 1] * 2000) + ',' + Math.round(rest[i * 3 + 2] * 2000);
+  const same = new Map(); for (let i = 0; i < n; i++) { const k = keyOf(i); let a = same.get(k); if (!a) same.set(k, (a = [])); a.push(i); }
+  const near = new Uint8Array(n); for (const i of idx) for (const j of same.get(keyOf(i))) near[j] = 1;
+  for (let f = 0; f < nT; f++) { const a = I ? I[f * 3] : f * 3, b = I ? I[f * 3 + 1] : f * 3 + 1, c = I ? I[f * 3 + 2] : f * 3 + 2; if (near[a] || near[b] || near[c]) fit.tri.push(a, b, c); }
+  const group = new Map(), touched = new Set(fit.tri); for (const i of touched) group.set(i, same.get(keyOf(i)));
+  fit.group = group;
+  return fit;
+}
+function applyNeck(fit, deep) {
+  const { idx, wt, dir, rest, rest0, P, Nm, Minv, M, tri, group } = fit, v = new THREE.Vector3();
+  for (let k = 0; k < idx.length; k++) {
+    const i = idx[k], r = rest0[k];
+    rest[i * 3] = r[0] + dir.x * deep * wt[k]; rest[i * 3 + 1] = r[1] + dir.y * deep * wt[k]; rest[i * 3 + 2] = r[2] + dir.z * deep * wt[k];
+    v.set(rest[i * 3], rest[i * 3 + 1], rest[i * 3 + 2]).applyMatrix4(Minv); P.setXYZ(i, v.x, v.y, v.z);
+  }
+  // the normals round what moved, worked out again (a corner and its copies at the same spot together)
+  const sum = new Map(), a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  for (let f = 0; f < tri.length; f += 3) {
+    const [i, j, k] = [tri[f], tri[f + 1], tri[f + 2]];
+    a.set(rest[i * 3], rest[i * 3 + 1], rest[i * 3 + 2]); b.set(rest[j * 3], rest[j * 3 + 1], rest[j * 3 + 2]).sub(a); c.set(rest[k * 3], rest[k * 3 + 1], rest[k * 3 + 2]).sub(a);
+    b.cross(c);
+    for (const m of [i, j, k]) { const G = group.get(m), key = G ? G[0] : m; let s = sum.get(key); if (!s) sum.set(key, (s = new THREE.Vector3())); s.add(b); }
+  }
+  const nrmM = new THREE.Matrix3().getNormalMatrix(Minv);
+  const moved = new Set(); for (const i of idx) for (const m of group.get(i) || [i]) moved.add(m);
+  for (const i of moved) {
+    const s = sum.get((group.get(i) || [i])[0]); if (!s || s.lengthSq() < 1e-14) continue;
+    v.copy(s).applyMatrix3(nrmM).normalize(); Nm.setXYZ(i, v.x, v.y, v.z);
+    if (fit.nrm) { const w = v.copy(s).normalize(); fit.nrm[i * 3] = w.x; fit.nrm[i * 3 + 1] = w.y; fit.nrm[i * 3 + 2] = w.z; }
+  }
+  (P.data || P).needsUpdate = true; (Nm.data || Nm).needsUpdate = true;
+  fit.deep = deep;
+}
+// the Horse Lab's slider: the neck's depth now (the baked shade stays as it was measured at load)
+export function setNeckDeep(shape, deep) { if (shape.neckFit) applyNeck(shape.neckFit, deep); return deep; }
+
 export function prepareHorse(scene, scale) {
   let body = null, eye = null;
   scene.traverse((o) => {
@@ -89,6 +154,11 @@ export function prepareHorse(scene, scale) {
     const j = SI.getComponent(i, c), w = SW.getComponent(i, c);
     if (w > 0) for (const k of inGroup[j]) W[k][i] += w;
   }
+
+  // the neck's underside, deeper (before anything below measures the body)
+  const neckFit = fitNeck({ B, rest, n, W, g, M });
+  neckFit.nrm = nrm;
+  applyNeck(neckFit, NECK.deep);
 
   // landmarks (metres)
   const eyeC = [];
@@ -252,7 +322,7 @@ export function prepareHorse(scene, scale) {
   const shape = {
     body, eye, M, poll, nose, faceA, faceF, faceL, eyeL: eyeC[0], eyeR: eyeC[1], eyeR0: eyeC.r, midX, mid0, mid1,
     knee, hock, fetlock, hoofTop, legSplit, neckO, neckA, neckL, up, AX, verts: n, tris: (g.index ? g.index.count : n) / 3,
-    attrBytes: n * 16, msAO, sculptedHair, crestAt, withersT, dock,
+    attrBytes: n * 16, msAO, sculptedHair, crestAt, withersT, dock, neckFit,
     // (for the hair cards: the body at rest, its parts and its bones)
     rest, nrm, W, bones: B, boneNames: names, skinIndex: SI, skinWeight: SW,
   };
@@ -405,17 +475,18 @@ vec3 hash33( vec3 p ) {
   p += dot( p, p.yxz + 33.33 );
   return fract( ( p.xxy + p.yxx ) * p.zyx );
 }
-// the distance to the nearest of a scatter of points (cells about 1 apart), and (y) that point's own random 0..1
-vec2 cells( vec3 x ) {
-  vec3 i = floor( x ); vec3 f = fract( x ); float d = 8.0; float id = 0.0;
+// round spots at a scatter of points (cells about 1 apart), each with its own radius (r0 + rv * its random, + wob: a
+// wobble for the edge), soft over rad - inner .. rad + outer. Every spot in reach is counted and they join softly (1 less
+// the product of what each leaves): taking only the nearest point's spot cut each one off along straight lines where two met
+float softSpots( vec3 x, float r0, float rv, float wob, float inner, float outer ) {
+  vec3 i = floor( x ); vec3 f = fract( x ); float keep = 1.0;
   for ( int a = -1; a <= 1; a ++ ) for ( int b = -1; b <= 1; b ++ ) for ( int c = -1; c <= 1; c ++ ) {
     vec3 o = vec3( float( a ), float( b ), float( c ) );
     vec3 h = hash33( i + o );
-    vec3 r = o + h * 0.8 + 0.1 - f;
-    float dd = dot( r, r );
-    if ( dd < d ) { d = dd; id = h.z; }
+    float rad = r0 + rv * h.z + wob;
+    keep *= smoothstep( rad - inner, rad + outer, length( o + h * 0.8 + 0.1 - f ) );
   }
-  return vec2( sqrt( d ), id );
+  return 1.0 - keep;
 }
 // fine and coarse streaks along the hair: noise squeezed along axis A. Returns (fine here, fine one step across,
 // coarse here, coarse one step across)
@@ -675,9 +746,8 @@ if ( uGrey.x > 0.001 ) {
     float spot = smoothstep( 0.4, 0.56, vnoise( cP / uGrey.z * 1.5 + uSeed ) );
     #else
     vec3 warp = vec3( vnoise( cP * 6.0 ), vnoiseB( cP * 6.0 + 4.0 ), vnoise( cP * 6.0 + 9.0 ) ) - 0.5;
-    vec2 c = cells( cP / uGrey.z + uSeed + warp * 0.5 );
-    float rad = 0.44 + 0.16 * c.y + ( vnoise( cP * 9.0 ) - 0.5 ) * 0.12;    // each dapple its own size, not quite round,
-    float spot = 1.0 - smoothstep( rad - 0.16, rad + 0.06, c.x + ( vnoise( cP * 45.0 ) - 0.5 ) * 0.06 );   // close packed
+    // (each dapple its own size, not quite round, close packed)
+    float spot = softSpots( cP / uGrey.z + uSeed + warp * 0.5, 0.44, 0.16, ( vnoise( cP * 9.0 ) - 0.5 ) * 0.12 - ( vnoise( cP * 45.0 ) - 0.5 ) * 0.06, 0.16, 0.06 );
     #endif
     g += ( spot - 0.68 ) * uGrey.y * body * 0.5;
   }
@@ -693,8 +763,7 @@ if ( uPinto.w > 0.001 && uGrey.x < 0.001 ) {
   float region = max( hip, sho ) * ( 1.0 - cLegs ) * ( 1.0 - cNeck * 0.7 ) * ( 1.0 - cHead ) * smoothstep( 0.15, 0.55, abs( cN.x ) );
   if ( region > 0.01 ) {
     vec3 warp = vec3( vnoise( cP * 6.0 ), vnoiseB( cP * 6.0 + 4.0 ), vnoise( cP * 6.0 + 9.0 ) ) - 0.5;
-    vec2 c = cells( cP / 0.1 + uSeed + warp * 0.5 );
-    float spot = 1.0 - smoothstep( 0.32 + 0.12 * c.y, 0.55 + 0.12 * c.y, c.x );
+    float spot = softSpots( cP / 0.1 + uSeed + warp * 0.5, 0.435, 0.12, 0.0, 0.115, 0.115 );
     col *= 1.0 + ( spot - 0.5 ) * 0.17 * uPinto.w * region;
   }
 }

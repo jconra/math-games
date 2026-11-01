@@ -14,7 +14,7 @@
 //   penPrice(size, rarity), sizeWords(size)
 //   PENPLAN              how many horses (by tier), the distances that make a new visit, how far off they sleep
 import { LADDER, PEN, HORSES, mphOf } from './catalog.js';
-import { fill } from './actors/horsecoats.js';
+import { fill, dappleSizeFrom } from './actors/horsecoats.js';
 
 export const PENPLAN = {
   horses: { potato: 3, normal: 4, gaming: 4 },
@@ -94,7 +94,7 @@ export function rollPenHorse(seed, { taken = [] } = {}) {
   }
   r.base = jitter(R, r.base, 0.18); r.mane = jitter(R, r.mane, 0.12);
   r.sooty = (r.sooty ?? 0.15) * (0.5 + R()); r.belly = (r.belly ?? 0.45) * (0.6 + R() * 0.8);
-  if (id === 'grey') { r.grey = 0.5 + R() * 0.45; r.dapples = 0.5 + R() * 0.45; r.dappleSize = 0.07 + R() * 0.05; }
+  if (id === 'grey') { r.grey = 0.5 + R() * 0.45; r.dapples = 0.5 + R() * 0.45; r.dappleSize = dappleSizeFrom(R()); }
   r.face = pick(R, [['none', 30], ['star', 26], ['stripe', 12], ['blaze', 18], ['snip', 6], ['bald', r.pinto === 'overo' ? 30 : 3]]);
   r.star = r.face === 'snip' && R() < 0.5;
   r.faceSize = 0.7 + R() * 0.6;

@@ -15,7 +15,10 @@
 // up by itself after a long think. The board never shows an answer before it is picked.
 // The sum is on the board from the start: the sheet never asks which sum it is, it teaches it. After the board: the word
 // answer from the story ("23 crates"), when the job asks it (final). Then the finished sum stays a moment and the sheet
-// goes by itself.
+// goes by itself; or, opened with stay (Work it out from the tools: the kid still has the question to answer), it shrinks
+// to a small note, the finished board and its answer, off to one side and clear of any answer buttons, and the game goes
+// on under it: the game's maker, "Then it just disappears, and if you didn't memorize it then you are out of luck". The
+// note goes with its X, or Esc, or when the tools see the question has changed (src/ui/tools.js).
 // DECIMALS (src/math/longwork.js): a point is drawn at the corner of the digit in front of it, as on squared paper (the
 // answer's in the kid's ink once it's placed), a $ in front of dollars, a 0 put on the end to line the points up in its
 // own colour (brass). The step that puts the point back in a product rings the whole answer row (its digits stay in
@@ -32,6 +35,7 @@
 //     work      src/math/longwork.js workMul / workDiv / workAdd / workSub (workOf)
 //     chain     [{ work, sum, say, carried }] in place of work: sums in steps (src/math/jobsums.js: sum is the step as
 //               the question puts it, say what it finds, carried: { a?: k, b?: k } its numbers that are sum k's answer)
+//     stay      true: the finished sheet stays as a note (above); onDone is called as it shrinks, onGone when it goes
 //     top       true: over the lock box (z-index 70; the keys are the sheet's even with the box under it)
 //     onOwn     () => void, or null: a small "Type my own sum" button in the top strip (the tools open their entry)
 //     closeLabel   the close button's words ('Back to the slip'; the tools say 'Close')
@@ -73,10 +77,11 @@ export const LONGWORK = {
   helpMs: 10000,    // ms without a pick before the helper strip comes up by itself
   cellMost: 54,     // px: the biggest a board square gets (it shrinks to fit the sheet)
   cellLeast: 24,    // ...and the smallest
+  noteCell: [19, 27],   // px: a board square on the finished sheet's small note (a phone, a window)
 };
 
 export function openLongWork(root = document.body, { work, chain = null, final = null, title = 'Work it out', ask = '', speak = null,
-  closeLabel = 'Back to the slip', free = false, top = false, onOwn = null, onTap = () => {}, onDone = () => {}, onClose = () => {} } = {}) {
+  closeLabel = 'Back to the slip', free = false, top = false, stay = false, onOwn = null, onTap = () => {}, onDone = () => {}, onClose = () => {}, onGone = () => {} } = {}) {
   ensureCss();
   // the sums worked here: one, or a sum in steps (each its own board, in turn)
   const works = chain && chain.length ? chain.map((x) => ({ ...x })) : [{ work, sum: null, say: '', carried: null }];
@@ -111,7 +116,7 @@ export function openLongWork(root = document.body, { work, chain = null, final =
   const firstTried = new Set();
   const helpedAt = new Set();   // (the steps the helper strip was shown on before their first tap)
   const whole = answerTimer(), tap = answerTimer();
-  let helpT = null, finalPick = -1;
+  let helpT = null, finalPick = -1, noted = false;
 
   // ── THE STRIP OF SUMS (sums in steps): each as the question puts it, a number still to be found a ? ────────────────
   const chainEl = $('.bml-chain');
@@ -367,15 +372,49 @@ export function openLongWork(root = document.body, { work, chain = null, final =
     $('.bml-count').textContent = work_.line;
     const t = whole.stop();
     try { onDone({ clean, taps, misses, ms: t.ms, hidden: t.hidden, idle: t.idle, final: finalPick }); } catch (e) { console.error(e); }
+    if (stay) { toNote(); return; }
     await sleep(LONGWORK.doneMs);
     close(false);
+  }
+  // THE NOTE: the finished sheet, small, out of the way of anything to answer. (Its class is no longer .bml: the jobs ask
+  // for ".bml:not(.is-out)" to know a sheet has the keys and the screen, and a note has neither.)
+  function toNote() {
+    noted = true;
+    el.classList.remove('bml', 'is-free', 'is-top'); el.classList.add('bmln');
+    el.removeAttribute('role');
+    $('.bml-title b').textContent = work_.line;
+    lineEl.textContent = ''; lineEl.className = 'bml-line';
+    const cell = Math.min(innerWidth, innerHeight) < 560 ? LONGWORK.noteCell[0] : LONGWORK.noteCell[1];
+    boardEl.style.setProperty('--cell', cell + 'px');
+    removeEventListener('resize', onResize);
+    placeNote();
+  }
+  // where it goes: of the places round the edge of the screen, the first that covers the least of the buttons up now
+  function placeNote() {
+    if (!noted || closed) return;
+    const r = el.getBoundingClientRect(), w = r.width, h = r.height, m = 10, cx = (innerWidth - w) / 2, my = Math.max(m, (innerHeight - h) / 2);
+    const spots = [[m, my], [innerWidth - w - m, my], [m, 64], [innerWidth - w - m, 64], [m, innerHeight - h - m], [innerWidth - w - m, innerHeight - h - m], [cx, 64]];
+    const hit = [...document.querySelectorAll('button, .hud-card, .bmh-rule')].filter((b) => !el.contains(b) && b.offsetParent).map((b) => b.getBoundingClientRect());
+    let best = spots[0], least = Infinity;
+    for (const [x, y] of spots) {
+      let n = 0;
+      for (const b of hit) n += Math.max(0, Math.min(x + w, b.right) - Math.max(x, b.left)) * Math.max(0, Math.min(y + h, b.bottom) - Math.max(y, b.top));
+      if (n < least - 1) { least = n; best = [x, y]; }
+    }
+    el.style.left = Math.round(best[0]) + 'px'; el.style.top = Math.round(best[1]) + 'px';
   }
 
   choicesEl.addEventListener('click', (e) => { const b = e.target.closest('.bml-choice'); if (b) pick(Number(b.dataset.i)); });
   $('.bml-x').addEventListener('click', () => close(true));
+  // (a tap on the note's X never reaches the valley: the round-up's rope listens there)
+  $('.bml-x').addEventListener('pointerdown', (e) => e.stopPropagation());
   if (onOwn) $('.bml-own').addEventListener('click', (e) => { e.currentTarget.blur(); if (!closed && !finished) { try { onOwn(); } catch (err) { console.error(err); } } });
   const onKey = (e) => {
     if (closed || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (noted) {   // (the keys are the game's again; a helper or a panel up gets its Esc first)
+      if (e.key === 'Escape' && !document.querySelector('.bms, .tch:not(.out)')) { e.preventDefault(); e.stopPropagation(); close(false); }
+      return;
+    }
     if (!top && document.querySelector('.bms, .lbx')) return;   // (a counter's panel or the lock box is over it; opened over the box, the keys are the sheet's)
     if (topSheet() !== el) return;   // (another sheet over this one, the entry to type a sum: its keys)
     // (the tools' sheet, in the middle of the screen or over the box: no key reaches what is under it, a builder's
@@ -399,6 +438,7 @@ export function openLongWork(root = document.body, { work, chain = null, final =
     whole.cancel(); tap.cancel();
     el.classList.remove('is-in'); el.classList.add('is-out');
     setTimeout(() => el.remove(), 260);
+    if (noted) { try { onGone(); } catch (e) { console.error(e); } }
     if (byKid && !finished) { try { onClose(); } catch (e) { console.error(e); } }
   }
 
@@ -409,6 +449,8 @@ export function openLongWork(root = document.body, { work, chain = null, final =
   return {
     el,
     close: () => close(false),
+    place: () => placeNote(),
+    noted: () => noted,
     state: () => {
       const p = parts[k];
       return { part: p.part, i: p.i, k, of: parts.length, ask: p.ask, choices: p.choices.map((c) => ({ label: c.label, good: !!c.good })), busy, done: finished, closed,

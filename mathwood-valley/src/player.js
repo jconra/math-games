@@ -77,7 +77,7 @@ import { pushFromWagons } from './wagon.js';
 
 export const MOVE = {
   walk: 1.6, run: 4.6,              // on foot, m/s (a brisk walk; Shift: a run)
-  footAccel: 9, footTurn: 10,       // m/s each second; radians a second
+  stepRate: 5, footAccel: 9, footTurn: 10,       // m/s each second; radians a second
   horse: {
     walk: 2, trot: 6, gallop: 13,   // m/s
     accel: 3.2, gallopAccel: 4.5, brake: 6,   // m/s each second
@@ -340,6 +340,7 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
   }
 
   let fpFaded = false;   // (the body faded for first person: src/camera.js FIRST)
+  const walkAs = (y, on) => { if (W.walkAs) W.walkAs(y, on); };   // (who is walking: a building's upper floor, a porch's edge)
   // ── WHAT THE PLAYER WANTS: from the keys and stick, or walking up to a lasso target ─────────────────────────────
   // -> { dir: world heading wanted (or null), mag 0..1, run }
   function wanted() {
@@ -376,7 +377,9 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
   function startShot() {
     job.thrown = true;
     gunS.phase = 'draw'; gunS.t = 0; gunS.fired = false; gunS.target = job.target; gunS.up = GUNPLAY.draw + GUNPLAY.hold;
-    if (!held) held = P.held = makeHeldGun({ scene });
+    const kind = job.opts.gun || 'revolver';
+    if (held && held.kind !== kind) { held.dispose(); held = null; }   // (another gun chosen since the last shot)
+    if (!held) held = P.held = makeHeldGun({ scene, kind });
   }
   // each frame after the body is posed: the gun into the hand once the gun clip is fully in, the shot, the bullet
   function gunStep(dt) {
@@ -391,6 +394,7 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
       if (held) held.fire();
       const tp = targetPos(job.target, tmp);
       gunS.fly = Math.hypot(tp.x - pos.x, tp.z - pos.z) / GUNPLAY.bullet;
+      if (job.opts.onFlash) job.opts.onFlash();
       if (job.opts.onFire) job.opts.onFire();
     } else if (gunS.phase === 'fly' && (gunS.fly -= dt) <= 0) {
       gunS.phase = 'idle';
@@ -414,11 +418,11 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
     job.t += dt;
     const tp = targetPos(job.target, tmp), d = Math.hypot(tp.x - pos.x, tp.z - pos.z), dir = Math.atan2(tp.x - pos.x, tp.z - pos.z);
     if (!job.thrown) {
-      if (want.mag > 0.3 && job.t > 0.25 && d > (job.gun ? GUNPLAY.reach : MOVE.reach)) { const f = job.opts.onCancel; job = null; if (f) f(); return null; }   // (walked away from it)
+      if (want.mag > 0.3 && job.t > 0.25 && d > (job.gun ? job.opts.reach || GUNPLAY.reach : MOVE.reach)) { const f = job.opts.onCancel; job = null; if (f) f(); return null; }   // (walked away from it)
       // getting no nearer (a fence or a building in the way)? given up, with a word, rather than running on the spot
       if (d < (job.best ?? Infinity) - 0.5) { job.best = d; job.stuckT = 0; } else job.stuckT = (job.stuckT || 0) + dt;
       if (job.t > 20 || job.stuckT > 2.5) { const f = job.opts.onCancel; job = null; tell(SAY.unreachable); if (f) f(); return null; }
-      const reach = job.gun ? GUNPLAY.reach : MOVE.reach, from = job.gun ? GUNPLAY.from : MOVE.throwFrom;
+      const reach = job.gun ? job.opts.reach || GUNPLAY.reach : MOVE.reach, from = job.gun ? (job.opts.reach ? job.opts.reach * 0.85 : GUNPLAY.from) : MOVE.throwFrom;
       if (d > reach || (job.closing && d > from)) { job.closing = true;
         return { dir, mag: 1, run: P.onHorse ? d > 40 : d > 8, approach: true }; }
       if (job.gun) startShot(); else startThrow();
@@ -539,9 +543,11 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
       let want = wanted();
       if (pendingMount && want.mag > 0.3) pendingMount = false;         // (walked off: not waiting to get on any more)
       const lc = lassoControl(h, want); if (lc) want = lc;
-      if (P.mode === 'foot') footStep(h, want);
-      else if (P.mode === 'horse') rideStep(h, want);
+      if (P.mode === 'foot') { walkAs(pos.y); footStep(h, want); }
+      else if (P.mode === 'horse') { walkAs(null, true); rideStep(h, want); }
+      walkAs(null, true);
       if (H && H.mode !== 'ridden') horseAlone(h);
+      walkAs();
       if (H && (P.mode === 'horse' || P.mode === 'mounting')) { pos.x = H.x; pos.z = H.z; }
       if (P.mode === 'horse' || P.mode === 'foot') cam.swing(h, { heading: P.mode === 'horse' ? H.heading : P.heading, onHorse: P.mode === 'horse', speed: P.mode === 'horse' ? H.speed : P.speed });
     }
@@ -595,7 +601,8 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
     }
     // not through a wagon or its team either: out to its edge (src/wagon.js pushFromWagons)
     { const o = pushFromWagons(pos.x, pos.z, WAGON_R.foot, W); if (o) { const nx = o.x - pos.x, nz = o.z - pos.z; pos.x = o.x; pos.z = o.z; slideRound(pos, nx, nz, P.heading, v * dt, WAGON_R.foot); } }
-    pos.y = W.heightAt(pos.x, pos.z);
+    // (up or down a porch's edge the feet take a moment, not a frame; a long way off is a move, not a step)
+    { const gy = W.heightAt(pos.x, pos.z), dy = gy - pos.y, most = MOVE.stepRate * dt; pos.y = Math.abs(dy) <= most || Math.abs(dy) > 1.5 ? gy : pos.y + Math.sign(dy) * most; }
   }
 
   function rideStep(dt, want) {

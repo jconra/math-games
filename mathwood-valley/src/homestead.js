@@ -11,10 +11,11 @@
 // round, a ranch gate in its east side); the pig pen and the coop stand outside it, to the east.
 // The animals potter about inside their own home (a walk, a stand, the hens peck), feet on the ground (each clip at
 // its own pace over its stride), and their names (typed at the store, as the dog's are) float over them when you walk
-// near. Goods are laid up over play time (src/math/goods.js: eggs, wool, milk) and wait at the yard (a basket of eggs
-// by the coop, a milk can and a bundle of wool by the pasture's gate); walking past picks them up into the saddlebags,
-// with a small note ("+6 eggs"), no button. They are sold at the general store counter as word problems
-// (missions/store.js asks H.saleOrder now and then).
+// near. Goods are laid up over play time (src/math/goods.js: eggs, wool, milk) and wait along the back of the house, in
+// a row clear of the plants (a basket of eggs, a milk can, a sack of wool; the game's maker: "the models that we can pick
+// up should be right along the back of the house instead of inside that bush"), with a small label saying where they
+// sell; walking past picks them up into the saddlebags, with a small note ("+6 eggs"), no button, and Old Hob says what
+// they're for. They are sold to the clerk at the general store's bins (src/missions/sellgoods.js: H.sale).
 //
 // Bought at the general store (shop.js: the "Farm animals" rows come from H.shop): the store already has the
 // counter where goods are sold and the dogs' buy-and-name row, so the animals sit beside them (simpler than a new
@@ -29,11 +30,13 @@
 //   H.update(dt, at)        each frame of play (not while paused or inside the cabin): at = the player's position
 //   H.changed()             the rider's animals changed (one bought, a thank-you): the homes and animals are made again
 //   H.jobDone(event)        a whole job finished ('flockDone', 'pigsDone', 'waveDone'): maybe a thank-you lamb, piglet or calf
-//   H.saleOrder({ step, who }) -> a sale order for the store counter, or null (not this time, or nothing to sell)
+//   H.sale(plan, who) -> a sale order for the clerk's deal, or null (nothing he can buy at this plan's forms)
 //   H.sold(order)           a sale's right coin: the goods come out of the saddlebags
 //   H.goodsLine()           the saddlebags' goods for the HUD ('30 eggs · 6 qt milk to sell', or '')
 //   H.shop                  the general store's rows: { store: { html(), click(what, id, body), input(e) } } (shop.js)
 //   H.layout                the yard in the world: { at(lx, lz), local(x, z), homes: { coop, pen, corral } }
+//   H.treatSpots()          the rider's animals a treat or a hand can reach (src/feeding.js)
+//   H.callOver(at)          the nearest of each home walks over to the fence by the rider (at, on foot with something to give)
 //   H.state(), H.dev: { give(kind, name, young), goods(n), lay(seconds), gift(event), unlock(kind) }, H.dispose()
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -43,7 +46,7 @@ import { makeTag } from './dog.js';
 import { saveRider, spend } from './save.js';
 import {
   ANIMALS, KINDS, GOODS, GOODS_IDS, GROW, homestead, animalsOf, countOf, hasRoom, buyAnimal, thankYou, lay, waiting, collect,
-  gotLine, goodsLine, makeSale, sold, SELL, cleanName, YOUNG, GIFT, unlocked, earnLine,
+  gotLine, goodsLine, makeSale, sold, cleanName, YOUNG, GIFT, unlocked, earnLine,
 } from './math/goods.js';
 
 export const YARD = {
@@ -58,7 +61,6 @@ export const YARD = {
   // own. Its east side and the gate in it: models/town/decor.json)
   corral: { x0: -3.9, x1: 15.5, z0: 3.75, z1: 37.5, fenced: false, gate: { x: -3.9, z: 6.6 } },
   inset: { coop: 0.45, pen: 0.9, corral: 1.9 },   // how far inside its fence an animal keeps (its middle; the buck-and-rail spreads 0.55 m)
-  collect: 4,          // metres from any home's fence where the goods waiting are picked up as you walk past
   tagNear: 7,          // the names show within this many metres (fading out to tagFar)
   tagFar: 10,
   tagsAtOnce: 3,       // only the nearest few show their names (six hens in a small run would pile their names up)
@@ -66,6 +68,10 @@ export const YARD = {
   room: { hen: 0.55, pig: 1.6, sheep: 1.3, cow: 2.4 },   // how far apart animals of a home keep
   young: 0.6,          // a just-given lamb or piglet's size (it grows to 1 over GROW seconds of play)
   youngOf: { cow: 0.5 },   // (a calf starts smaller: a grown milk cow is far bigger than a sheep or a pig)
+  // the goods waiting, along the back wall (x across it, z just off it: inside the pasture's strip behind the house)
+  goods: { eggs: [0.25, 4.25], milk: [1.25, 4.3], wool: [2.25, 4.3] },   // (under the back window, clear of the back door)
+  goodsReach: 6,       // metres from the row where walking past picks them up (from the fence's corner too)
+  labelFar: 16,        // the label shows within this many metres of the row
   saveEvery: 30,       // seconds between saves while goods are being laid up
   retry: 20,           // seconds before an animal whose model failed to load is tried again
   shadowNear: 25,      // metres from the camera's target within which an animal casts a shadow
@@ -171,6 +177,7 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
   // (pieces are laid in the yard's own frame; the group is turned into the world)
   root.position.set(L.x, 0, L.z); root.rotation.y = L.rot;
 
+  let goodsTag = null, goodsBlock = null;
   let built = '', mesh = null, wire = null, offBlock = () => {}, unmow = () => {}, disposed = false;
   const marks = {};   // the goods waiting: { eggs, milk, wool } little shapes, shown while there is some to pick up
   const H = { layout: L };
@@ -299,8 +306,7 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
     boxes.push([wx - 1.2, wz - 0.45, wx + 1.2, wz + 0.45, 'corral'], [hx - 0.9, hz - 0.8, hx + 0.9, hz + 0.8, 'corral']);
   }
 
-  // the little shapes for goods waiting at the yard: a basket of eggs by the coop, a milk can and a bundle of wool
-  // by the corral's gate (outside the fences, where you walk past: the big pasture's, by the cabin's back corner)
+  // the little shapes for goods waiting: a basket of eggs, a milk can and a sack of wool in a row along the back wall
   function goodsMarks() {
     for (const k of Object.keys(marks)) { marks[k].removeFromParent(); marks[k].geometry.dispose(); delete marks[k]; }
     const add = (id, parts, lx, lz) => {
@@ -308,32 +314,33 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
       const m = new THREE.Mesh(g, mat); m.position.set(lx, y, lz); m.castShadow = shadows; m.visible = false; m.name = 'homestead-' + id;
       root.add(m); marks[id] = m;
     };
-    if (built.includes('coop')) {
+    const G = YARD.goods;
+    {
       const parts = [piece(new THREE.CylinderGeometry(0.2, 0.15, 0.16, 10), COL.basket, { at: [0, 0.08, 0], plain: true, shade: 0.2 }),
         piece(new THREE.TorusGeometry(0.17, 0.015, 4, 12, Math.PI), COL.basket, { at: [0, 0.16, 0], plain: true })];
       for (const [x, z] of [[-0.07, 0], [0.07, 0.03], [0, -0.08], [0.02, 0.08]]) parts.push(piece(new THREE.SphereGeometry(0.045, 8, 6).scale(1, 1.3, 1), COL.egg, { at: [x, 0.19, z], plain: true }));
-      add('eggs', parts, YARD.coop.x0 + 1.0, YARD.coop.z0 - 0.6);
+      add('eggs', parts, G.eggs[0], G.eggs[1]);
     }
-    if (built.includes('corral')) {
-      // (outside the near side, either side of its gate; the big pasture's gate is in its side by the cabin: the two
-      // by the cabin's back corner, short of it)
-      const C = YARD.corral, goodsAt = (i) => (C.fenced === false ? [C.x0 - 1.7 - 1.2 * i, C.z0 - 0.75 + 0.3 * i] : [i ? -1.9 : 1.9, C.z0 - 0.7]);
+    {
       add('milk', [piece(new THREE.CylinderGeometry(0.14, 0.16, 0.5, 12), COL.can, { at: [0, 0.25, 0], plain: true }),
         piece(new THREE.CylinderGeometry(0.08, 0.12, 0.12, 12), COL.can, { at: [0, 0.56, 0], plain: true }),
-        piece(new THREE.CylinderGeometry(0.1, 0.1, 0.04, 12), COL.dark, { at: [0, 0.63, 0], plain: true })], ...goodsAt(0));
+        piece(new THREE.CylinderGeometry(0.1, 0.1, 0.04, 12), COL.dark, { at: [0, 0.63, 0], plain: true })], G.milk[0], G.milk[1]);
       // (a burlap wool sack, stuffed full, the fleece puffing out of its open top)
       const fleece = [piece(new THREE.CylinderGeometry(0.2, 0.24, 0.5, 12), '#b39466', { at: [0, 0.25, 0], plain: true, shade: 0.15 }),
         piece(new THREE.TorusGeometry(0.205, 0.02, 4, 16).rotateX(Math.PI / 2), COL.twine, { at: [0, 0.44, 0], plain: true })];
       for (const [x, z, r] of [[0, 0, 0.15], [0.09, 0.07, 0.11], [-0.09, 0.06, 0.11], [0.05, -0.1, 0.11], [-0.07, -0.08, 0.1]]) fleece.push(piece(new THREE.SphereGeometry(r, 14, 10), '#f6f1e4', { at: [x, 0.52 + r * 0.25, z], plain: true }));
-      add('wool', fleece, ...goodsAt(1));
+      add('wool', fleece, G.wool[0], G.wool[1]);
     }
+    // the label over the row (shown while there are goods waiting and the rider is near)
+    if (!goodsTag) { goodsTag = makeTag('Your goods: sell them at the general store'); goodsTag.visible = false; const p = L.at(G.milk[0], G.milk[1]); goodsTag.position.set(p.x, ground(G.milk[0], G.milk[1]) + 1.15, p.z); scene.add(goodsTag); }
+    goodsBlock = [G.eggs[0] - 0.4, Math.min(G.eggs[1], G.milk[1]) - 0.4, G.wool[0] + 0.4, G.wool[1] + 0.4, 'corral'];
   }
 
   // ── THE HOMES (made again whenever the set of homes changes) ──────────────────────────────────────────────────────
   const boxes = [], segs = [];
   function buildHomes() {
     const want = homesWanted().join(',');
-    if (want === built) return;
+    if (want === built && goodsTag) return;
     built = want;
     if (mesh) { mesh.removeFromParent(); mesh.geometry.dispose(); mesh = null; }
     if (wire) { wire.removeFromParent(); wire.geometry.dispose(); wire = null; }
@@ -353,6 +360,7 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
       for (const g of wires) g.dispose();
     }
     goodsMarks();
+    boxes.push(goodsBlock);   // (the animals keep off the goods)
     if (built) { offBlock = W.addBlocker ? W.addBlocker(blocked) : () => {}; unmow = mow(); }
   }
   // what blocks a walker: the fences (a little either side of each line) and the hen house, the trough, the hay
@@ -463,6 +471,7 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
   // an animal pottering in its home: stands a while (a hen pecks too), walks a few steps to a free spot, stands again
   function step(h, dt) {
     const a = h.a, r = a.root;
+    if (h.still > 0) { h.still -= dt; return; }   // (being fed or petted)
     if (!h.goal) {
       if ((h.t -= dt) <= 0) {
         if (h.hen && h.state !== 'peck' && Math.random() < 0.45) { h.state = 'peck'; h.t = 1.4 * Math.ceil(rnd(1.01, 3)); a.play('Peck', 0.2); return; }
@@ -486,7 +495,7 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
         ? Math.hypot(o.a.root.position.x - nx, o.a.root.position.z - nz) < YARD.room[h.kind] * 0.7 * Math.max(h.size, 0.7)
         : closer(h, nx, nz, r.rotation.y, o, yaw0)));
       if (bump && !h.hen) r.rotation.y = yaw0;   // (nor does it swing its rump into a neighbour turning)
-      if (d < 0.08 || bump || !clearFor(h.home, nx, nz) || !L.inside(h.home, hx, hz, h.hen ? 0.12 : 0.3)) { h.goal = null; h.state = 'stand'; h.t = h.hen ? rnd(1.5, 5) : rnd(4, 12); idle(h); }
+      if (d < 0.08 || bump || (h.come ? !L.inside(h.home, nx, nz, 0.5) : !clearFor(h.home, nx, nz)) || !L.inside(h.home, hx, hz, h.hen ? 0.12 : 0.3)) { h.goal = null; h.come = false; h.state = 'stand'; h.t = h.hen ? rnd(1.5, 5) : rnd(4, 12); idle(h); }
       else {
         r.position.set(nx, W.heightAt(nx, nz), nz);
         // (the clip at the pace over its stride: feet planted)
@@ -544,8 +553,10 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
       const w = waiting(rider);
       for (const k of GOODS_IDS) if (marks[k]) marks[k].visible = w[k] > 0;
       // (near any of the homes, everything waiting is picked up: walking past the yard is enough)
-      const near = built && built.split(',').some((home) => L.off(home, at.x, at.z) < YARD.collect);
+      const row = L.local(at.x, at.z), toRow = Math.hypot(row.x - YARD.goods.milk[0], row.z - YARD.goods.milk[1]);
+      const near = toRow < YARD.goodsReach;
       const got = near ? collect(rider) : null;
+      if (goodsTag) goodsTag.visible = toRow < YARD.labelFar && !near && GOODS_IDS.some((k) => marks[k] && w[k] > 0);
       if (got) {
         saveRider(rider); refresh();
         hud.toast(gotLine(got), 'good');
@@ -553,7 +564,7 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
         for (const k of GOODS_IDS) if (marks[k]) marks[k].visible = waiting(rider)[k] > 0;
         // (the saddlebags full: said once a ride)
         const full = GOODS_IDS.filter((k) => homestead(rider).goods[k] >= GOODS[k].bag);
-        if (full.length && !toldGot) { toldGot = true; hud.toast('Your saddlebags are full of goods: sell some at the store counter', 'warn'); }
+        if (full.length && !toldGot) { toldGot = true; hud.toast('Your saddlebags are full of goods: sell some to Ezra at the general store', 'warn'); }
       }
       // (the nearest few may show their names)
       const byNear = herd.map((h) => [h, Math.hypot(h.a.root.position.x - at.x, h.a.root.position.z - at.z)]).sort((a, b) => a[1] - b[1]);
@@ -606,6 +617,22 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
     }
   }
 
+  // ── A TREAT OR A HAND (src/feeding.js) ────────────────────────────────────────────────────────────────────────
+  H.treatSpots = () => herd.map((h) => ({ key: `farm:${h.kind}:${h.rec.name}`, id: `${h.kind}:${h.rec.name}`, name: h.rec.name, a: h.a, owned: true, species: h.kind, hen: h.hen,
+    size: h.size * h.base, hold: (sec) => { h.still = sec; h.goal = null; h.come = false; h.state = 'stand'; idle(h); },
+    peck: h.hen ? (sec) => { h.a.play('Peck', 0.2); setTimeout(() => { if (!disposed) idle(h); }, sec * 1000); } : null }));
+  // (an animal fenced in comes to the rail by the rider with something to give, so its head can be reached over it)
+  H.callOver = (at) => {
+    const p = L.local(at.x, at.z);
+    for (const home of ['coop', 'pen', 'corral']) {
+      if (L.off(home, at.x, at.z) > 3.5) continue;
+      const R = YARD[home], x = Math.max(R.x0 + 0.55, Math.min(R.x1 - 0.55, p.x)), z = Math.max(R.z0 + 0.55, Math.min(R.z1 - 0.55, p.z)), g = L.at(x, z);
+      let best = null, bd = 12;
+      for (const h of herd) { if (h.home !== home || h.still > 0) continue; const d = Math.hypot(h.a.root.position.x - g.x, h.a.root.position.z - g.z); if (d < bd) { bd = d; best = h; } }
+      if (best && bd > 0.5 && !best.come) { best.goal = g; best.come = true; best.state = 'walk'; best.v = best.hen ? CHICKEN.walk[1] : best.a.stride.WalkSlow; }
+    }
+  };
+
   // ── CHANGES, THANK-YOUS, SALES ─────────────────────────────────────────────────────────────────────────────
   H.changed = () => { homestead(rider); buildHomes(); syncAnimals(); refresh(); };
   // (who sends the young one: the settler at the farm, the rancher whose cattle are rounded up)
@@ -626,16 +653,8 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
     if (hob) hob.event('animalGift', { kind: a.kind, name: a.name, unlocked: !!a.unlocked });
     return a;
   };
-  // the store asks at every new customer: now and then (never twice within SELL.every orders) one buys your goods.
-  // The first sale of a ride comes on the first, second or third customer (by chance), so a ride with goods in the
-  // saddlebags doesn't always open with a sale.
-  let sinceSale = Math.floor(Math.random() * SELL.every);
-  H.saleOrder = ({ step = 1, who = null } = {}) => {
-    if (++sinceSale < SELL.every) return null;
-    const o = makeSale(homestead(rider).goods, { step, who });
-    if (o) sinceSale = 0;
-    return o;
-  };
+  // the clerk's deal at the store's bins asks for one sale at a time (src/missions/sellgoods.js)
+  H.sale = (plan, who = null) => (plan && (plan.sales || plan.wool) ? makeSale(homestead(rider).goods, { step: plan, who }) : null);
   H.sold = (order) => { sold(rider, order); saveRider(rider); refresh(); if (hob) hob.event('goodsSold', { goods: order.sale && order.sale.goods }); };
   H.goodsLine = () => goodsLine(rider);
 
@@ -654,7 +673,7 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
         return `${list.length} ${list.length === 1 ? A.name.toLowerCase() : A.many} (${list.map((a) => esc(a.name) + (a.young ? `, a ${YOUNG[k]}` : '')).join(', ')})`;
       });
       const g = goodsLine(rider);
-      h += `<div class="bms-row"><div class="bms-what"><b>Your animals</b><small>${by.join(' · ')}. They live behind your cabin.${g ? ` In your saddlebags: ${esc(g.replace(/ to sell$/, ''))}. Townsfolk buy them at the counter.` : ''}</small></div><div class="bms-act"></div></div>`;
+      h += `<div class="bms-row"><div class="bms-what"><b>Your animals</b><small>${by.join(' · ')}. They live behind your cabin.${g ? ` In your saddlebags: ${esc(g.replace(/ to sell$/, ''))}. Ezra buys them at the bins by his counter.` : ''}</small></div><div class="bms-act"></div></div>`;
     }
     // (the kinds the store sells this rider: hens from the start, the others once earned; a locked kind gets a row of
     // its own below with the one line saying what earns it, and no button)
@@ -725,6 +744,7 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
     for (const h of herd) dropAnimal(h);
     herd.length = 0;
     for (const k of Object.keys(marks)) marks[k].geometry.dispose();
+    if (goodsTag) { goodsTag.removeFromParent(); goodsTag.material.map.dispose(); goodsTag.material.dispose(); }
     root.removeFromParent();
     if (mesh) mesh.geometry.dispose(); if (wire) wire.geometry.dispose();
     mat.dispose(); wmat.dispose(); tex.dispose(); wtex.dispose();

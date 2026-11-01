@@ -24,7 +24,7 @@ test('the switch: lasso only for a new rider, two plain settings, and it is save
   const r = S.newRider('Kit');
   assert.equal(r.mode, 'lasso');
   assert.equal(G.gunOn(r), false); assert.equal(G.ownsGun(r), false); assert.equal(G.canShoot(r), false);
-  assert.deepEqual(G.BANDIT_MODES.map((m) => [m.id, m.words]), [['lasso', 'Lasso only'], ['shoot', 'Lasso or revolver']]);
+  assert.deepEqual(G.BANDIT_MODES.map((m) => [m.id, m.words]), [['lasso', 'Lasso only'], ['shoot', 'Lasso or guns']]);
   G.setBandits(r, 'shoot');
   assert.equal(r.mode, 'shoot'); assert.equal(G.gunOn(r), true);
   S.saveRider(r);
@@ -55,7 +55,12 @@ test('the store: greyed while off, a price while on, kept once bought', () => {
   assert.equal(G.gunShop(r).state, 'buy');
   b = G.buyGun(r);
   assert.equal(b.ok, true); assert.equal(r.gold, 10); assert.equal(r.owned.revolver, true);
-  assert.equal(G.canShoot(r), true);
+  assert.equal(G.canShoot(r), false, 'bought, but nothing changes in the hand by itself');
+  assert.equal(G.weaponOf(r), 'lasso');
+  assert.deepEqual(G.weapons(r), ['lasso', 'revolver']);
+  assert.equal(G.setWeapon(r, 'lever'), false, 'not one not bought');
+  assert.equal(G.setWeapon(r, 'revolver'), true);
+  assert.equal(G.canShoot(r), true); assert.equal(G.gunInHand(r).id, 'revolver');
   assert.equal(G.gunShop(r).state, 'owned');
   assert.equal(G.buyGun(r).ok, false, 'never bought twice'); assert.equal(r.gold, 10);
   // saved, and it survives a reload with the rest of what is owned
@@ -79,12 +84,33 @@ test('the checklist counts it only for a rider with the switch on (or who has it
   const before = completion(r).total;
   G.setBandits(r, 'shoot'); r.gold = 60;
   const item = completion(r).items.find((i) => i.id === 'buy:gun:revolver');
-  assert.ok(item, 'on: on the list'); assert.equal(completion(r).total, before + 1);
+  assert.ok(item, 'on: on the list'); assert.equal(completion(r).total, before + 4, 'with it: the two rifles and the rack that holds them');
   assert.equal(item.done, false); assert.equal(item.have, 60); assert.equal(item.need, 150); assert.equal(item.group, 'buy');
   r.gold = 150; G.buyGun(r);
   assert.equal(completion(r).items.find((i) => i.id === 'buy:gun:revolver').done, true);
   G.setBandits(r, 'lasso');
   assert.equal(completion(r).items.find((i) => i.id === 'buy:gun:revolver').done, true, 'bought stays done, even switched back');
+});
+
+test('the rifles: only with guns allowed, farther and steadier, on the list, chosen by hand', () => {
+  fresh();
+  const r = S.newRider('Ida'); r.gold = 5000;
+  assert.equal(G.buyGun(r, 'lever').ok, false, 'off: not sold');
+  assert.ok(!completion(r).items.some((i) => i.id === 'buy:gun:lever'), 'off: not on the list');
+  assert.ok(!completion(r).items.some((i) => i.id === 'buy:furniture:rifles'), 'off: the rack is not on the list');
+  G.setBandits(r, 'shoot');
+  assert.ok(completion(r).items.some((i) => i.id === 'buy:gun:lever'), 'on: on the list');
+  assert.ok(G.GUNS.lever.reach > G.GUNS.revolver.reach && G.GUNS.single.reach > G.GUNS.lever.reach);
+  assert.ok(G.GUNS.lever.sway < G.GUNS.revolver.sway && G.GUNS.single.sway < G.GUNS.lever.sway);
+  assert.equal(G.nextGun(r), 'revolver');
+  assert.equal(G.buyGun(r, 'lever').ok, true); assert.equal(G.ownsGun(r, 'lever'), true);
+  assert.equal(G.weaponOf(r), 'lasso', 'no auto-switch');
+  assert.equal(G.setWeapon(r, 'lever'), true); assert.equal(G.gunInHand(r).reach, G.GUNS.lever.reach);
+  const back = S.loadRiders().find((x) => x.id === r.id);
+  back.owned.weapon = 'lever';
+  G.setBandits(back, 'lasso');
+  assert.equal(G.weaponOf(back), 'lasso', 'the switch off: the guns put away');
+  assert.equal(G.ownsGun(back, 'lever'), true, 'kept');
 });
 
 test('a shot picks as the rope does: the right one is hit, a wrong one ducks, out of reach rides closer first', () => {

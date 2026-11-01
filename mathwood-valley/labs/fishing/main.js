@@ -15,6 +15,7 @@
 import * as THREE from 'three';
 import { makeLake } from './scene.js';
 import { mountFishing, ladderAsker, localRecords } from './builder.js';
+import { REEL } from './reel.js';
 
 const $ = (id) => document.getElementById(id);
 const params = new URLSearchParams(location.search);
@@ -41,6 +42,32 @@ const B = mountFishing({
   asker, records: localRecords(), fast: params.has('fast'),
 });
 addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight, false); B.resize(); });
+
+// ── the reel's dials (reel.js): to try a feel on this page; the game plays the numbers written in reel.js. Kept for this
+// browser; "Back to the game's" puts them back ───────────────────────────────────────────────────────────────────────
+const DIAL_KEY = 'bm-fishing-reel', DIALS = [
+  ['rise', 'Tension up (holding)', 0.15, 1.2, 0.01], ['fall', 'Tension down (letting go)', 0.15, 1.2, 0.01],
+  ['low', 'Green starts', 0.05, 0.5, 0.01], ['high', 'Green ends', 0.55, 0.95, 0.01], ['narrow', 'Biggest fish: green narrower by', 0, 0.15, 0.01],
+  ['landSmall', 'Seconds in, smallest fish', 2, 12, 0.5], ['landBig', 'Seconds in, biggest fish', 2, 15, 0.5],
+  ['slack', 'Line taken when slack', 0, 0.25, 0.01],
+  ['snapSmall', 'Seconds in red to snap, smallest', 0.8, 6, 0.1], ['snapBig', 'Seconds in red to snap, biggest', 0.8, 6, 0.1],
+  ['surge', 'A run pulls', 0, 1, 0.01], ['surgeBig', 'Biggest fish pulls more', 0, 0.6, 0.01],
+];
+const GAME_REEL = { ...REEL };
+try { Object.assign(REEL, JSON.parse(localStorage.getItem(DIAL_KEY)) || {}); } catch (e) { /* no storage: the game's numbers */ }
+{
+  const d = document.createElement('details'); d.className = 'reel-dials'; d.innerHTML = '<summary>Reel dials</summary><div class="rows"></div><button class="btn" type="button">Back to the game\'s</button>';
+  const rows = d.querySelector('.rows');
+  const paint = () => { for (const [k] of DIALS) { const i = rows.querySelector(`[data-k="${k}"]`); i.value = REEL[k]; i.nextElementSibling.textContent = (+REEL[k]).toFixed(2); } };
+  for (const [k, label, min, max, step] of DIALS) {
+    const r = document.createElement('label'); r.innerHTML = `<span>${label}</span><input type="range" data-k="${k}" min="${min}" max="${max}" step="${step}"><output></output>`;
+    r.querySelector('input').addEventListener('input', (e) => { REEL[k] = +e.target.value; e.target.nextElementSibling.textContent = REEL[k].toFixed(2); try { localStorage.setItem(DIAL_KEY, JSON.stringify(REEL)); } catch (err) { /* lasts the visit */ } });
+    rows.appendChild(r);
+  }
+  d.querySelector('button').addEventListener('click', () => { Object.assign(REEL, GAME_REEL); try { localStorage.removeItem(DIAL_KEY); } catch (e) { /* fine */ } paint(); });
+  paint();
+  $('app').appendChild(d);
+}
 
 // ── the loop ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 const perf = params.has('perf');

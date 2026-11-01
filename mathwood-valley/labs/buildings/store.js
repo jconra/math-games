@@ -42,6 +42,7 @@ import { makeBarrel } from '../materials/barrel.js';
 import { buildStoneWall, SHAPES, PALETTES, MORTARS } from '../stone/stonewall.js';
 import { T, RX, RY, RZ, mul, vary, smooth01, ngon, wallOf, wallM, boardAndBatten, lapSiding, plankField, roofSlope, stovepipe, casing, lantern, glowGeometry, Light, GLOW, ropeCoil, ropeGeometry, doorLeaf } from './parts.js';
 import { STORE_ART, regionUV } from './art.js';
+import { makeBoots, BOOT_TINT } from '../../world/props/makers/goods.js';
 import { galvPail } from './props.js';
 import { Goods } from './goods.js';
 import './saloonprops.js';   // (its props join props.js's makers: the spindle-back chair the store's two round its stove are)
@@ -89,6 +90,7 @@ const POSTS = [XL + 0.15, 0.75, 2.65, 4.4, XR - 0.15];
 // a little wider than the gap between the two porch posts either side of the door, which stand at their top corners)
 const STAIR = [0.575, 2.825];
 const PART = -2.9;                                         // the plank partition between the store and the back room
+const PDOOR = { x0: 0.45, x1: 1.3, y1: FL + 2.15 };         // the door in it
 const INS = 0.12;                                          // the lining: how far in from the outside faces
 // the lean-to: its outer wall, its front (set back), its roof (its underside at the store's wall, its pitch), the dock
 const XLT = -4.4, ZLF = -0.5, LT_HI = 5.25, LPITCH = 28 * Math.PI / 180, DOCKZ = 1.9;
@@ -96,6 +98,16 @@ const ltUnder = (x) => LT_HI + 0.14 - (XL - x) * Math.tan(LPITCH);   // (its roo
 const LDOOR = { a0: -4.2, a1: -2.95, y1: 3.2 };            // its doorway (x), its top; the sliding door runs on a track over it
 // the counter (down the right side, its customer face toward -x) and the shelves behind it
 const CX = 3.3, CD = 0.66, CZ0 = 0.8, CZ1 = -2.2, CH = 0.98;
+// THE BINS BY THE COUNTER, where the rider sells goods to the clerk (anchors.spots 'sell', src/missions/sellgoods.js):
+// milk cans, a crate of eggs and a wool sack against the counter's front, between the customer's place and the dog's bed
+const BINS = { x: 3.02, z: -1.05 };
+function goodsBins(props, FL) {
+  const { x, z } = BINS;
+  props.push({ type: 'milkCan', x: x + 0.05, y: FL, z: z + 0.38, inside: true });
+  props.push({ type: 'milkCan', x: x - 0.16, y: FL, z: z + 0.2, h: 0.5, inside: true });
+  props.push({ type: 'eggCrate', x: x + 0.03, y: FL, z: z - 0.08, rot: 0.08, size: 0.44, inside: true });
+  props.push({ type: 'woolSack', x: x + 0.02, y: FL, z: z - 0.47, h: 0.62, inside: true });
+}
 const SHX = XR - INS - 0.46;                               // the front edge of the shelves on the right wall
 export const STORE = { XL, XR, ZF, ZB, FL, EAVE, RIDGE, CEIL, PZ, XLT, ZLF, PART };
 
@@ -670,7 +682,7 @@ function storeInside(k, lamps, props) {
   casing(k, wallOf(Math.PI / 2, XL + INS + 0.02), { a0: -PASS.a1, a1: -PASS.a0, y0: FL, y1: PASS.y1, door: true }, { tint: TRIM, depth: 0.25, width: 0.1 });
   partition(k, props);
   counter(k, lamps);
-  shelvesRight(k);
+  shelvesRight(k, props);
   leftWall(k, props);
   // THE STOVE: a tall pot-belly on four legs, its pipe up through the ceiling (and out of the roof), a kettle on it
   potBelly(k, STOVE.x, FL, STOVE.z, Math.PI * 0.3);
@@ -701,7 +713,7 @@ function storeInside(k, lamps, props) {
 // the partition across the back: planks up to the ceiling, a door in it standing open into the back room, shelves of
 // tins and kegs either side on the store's side; in the back room, shelves along its back wall
 function partition(k, props) {
-  const ix0 = XL + INS, ix1 = XR - INS, pd = { x0: 0.45, x1: 1.3, y1: FL + 2.15 };
+  const ix0 = XL + INS, ix1 = XR - INS, pd = PDOOR;
   for (const [a, b, y0] of [[ix0, pd.x0, FL], [pd.x0, pd.x1, pd.y1], [pd.x1, ix1, FL]]) for (let x = a; x < b - 0.02;) {
     let bw = Math.min(k.r(0.18, 0.26), b - x); if (b - x - bw < 0.07) bw = b - x;
     k.board([bw + 0.003, CEIL - y0, 0.025], [x + bw / 2, (CEIL + y0) / 2, PART], null, { long: 1, tint: vary(k, INNER, 0.82, 1.1), skip: '+x-x+y' + (y0 > FL ? '' : '-y'), cuts: y0 > FL ? [] : [0.0], segFaces: '+z-z', inside: true });
@@ -714,8 +726,7 @@ function partition(k, props) {
   }
   for (const [x0, x1] of [[ix0, pd.x0], [pd.x1, ix1]]) k.solid([x1 - x0, CEIL - FL, 0.06], [(x0 + x1) / 2, (CEIL + FL) / 2, PART]);
   k.solid([pd.x1 - pd.x0, CEIL - pd.y1, 0.06], [(pd.x0 + pd.x1) / 2, (CEIL + pd.y1) / 2, PART]);
-  // the door, planks on battens, standing open into the back room
-  into(k, mul(T(pd.x0 + 0.02, FL + 0.01, PART - 0.03), RY(1.75)), (t) => doorLeaf(t, { w: pd.x1 - pd.x0 - 0.04, h: pd.y1 - FL - 0.03, side: 1, tint: DOORW, rails: [0.3, pd.y1 - FL - 0.33], strap: STRAP, handle: true, braceFit: true }), 5113);
+  // (the door in it, planks on battens: a real one that E works, hung with the others below)
   props.push({ type: 'broom', x: pd.x1 + 0.28, y: FL, z: PART + 0.06, rot: 0, inside: true });
   // shelves either side of the door on the store's side: tins, kegs on the bottom
   const shelf = (x0, x1, ys, depth, mix) => {
@@ -728,6 +739,7 @@ function partition(k, props) {
   for (let i = 0; i < 2; i++) keg(T(pd.x1 + 0.7 + i * 0.5, FL, PART + 0.24), 0.18, 0.46, k);
   // the back room: shelves of stock along its back wall, sacks on the floor
   const bz = ZB + INS;
+  k.solid([3.66, 2.35, 0.42], [0.5, FL + 1.17, bz + 0.2]);
   for (const x of [-1.3, 0.5, 2.3]) k.board([0.03, 2.3, 0.36], [x, FL + 1.15, bz + 0.18], null, { long: 1, tint: vary(k, FURN, 0.75, 0.9), inside: true });
   for (const y of [FL + 0.45, FL + 0.95, FL + 1.45, FL + 1.95]) { k.board([3.6, 0.03, 0.36], [0.5, y, bz + 0.18], null, { long: 0, tint: vary(k, FURN, 0.8, 0.95), inside: true, cuts: [-1, 1], skip: '-z' }); if (y > FL + 0.6 && y < FL + 1.0) stock(T(-0.4, y + 0.015, bz + 0.36), 2.0, 0.33, k, { mix: 'boxes', tall: 0.45, spread: 1.8 }); }
 }
@@ -818,7 +830,7 @@ function scale(k, x, y, z) {
 }
 // THE SHELVES behind the counter: floor to ceiling down the right wall, a bank of drawers along their foot (brass card
 // labels, knobs), six shelves of tins, jars and packets, a rolling ladder on a rail, framed pictures and a flag on top
-function shelvesRight(k) {
+function shelvesRight(k, props) {
   const xw = XR - INS, z0 = PART + 0.04, z1 = ZF - INS - 0.35, L = z1 - z0, xf = SHX, d = xw - xf;
   // uprights
   const nU = Math.round(L / 1.1);
@@ -845,10 +857,9 @@ function shelvesRight(k) {
     if (i < ys.length - 3) stock(mul(T(xf, y + 0.015, z0 + 0.04), RY(-Math.PI / 2)), L - 0.08, d - 0.04, k, { mix: i === 2 ? 'jars' : i === 4 ? 'boxes' : 'grocery', tall: 0.34, spread: 2.9 });
   }
   stock(mul(T(xf, dy1 + 0.02, z0 + 0.04), RY(-Math.PI / 2)), L - 0.08, d - 0.04, k, { mix: 'crocks', tall: 0.36, spread: 2.4 });
-  // pictures and the flag up on the top
+  // pictures (the props library's frames: the game's own views) and the flag up on the top
   const yt = ys[ys.length - 1] + 0.015;
-  pic(A.pictures[0], 0.46, 0.32, mul(T(xw - 0.1, yt + 0.16, -1.9), RY(-Math.PI / 2), RX(-0.12)));
-  pic(A.pictures[1], 0.46, 0.32, mul(T(xw - 0.1, yt + 0.16, 0.3), RY(-Math.PI / 2), RX(-0.12)));
+  for (const [pic, z] of [['square', -1.9], ['stag', 0.3]]) props.push({ type: 'framedPicture', pic, x: xw - 0.1, y: yt + 0.16, z, w: 0.46, h: 0.32, rot: -Math.PI / 2, tilt: -0.12, inside: true });
   pic(A.flag, 0.5, 0.34, mul(T(xw - 0.03, yt + 0.0 + 0.2, -0.8), RY(-Math.PI / 2)));
   // the rolling ladder: two rails, rungs, its top hooked over a rod along the shelves, its feet out on the floor
   k.prism('iron', ngon(6, 0.013), L, null, null, { m: mul(T(xf - 0.05, CEIL - 0.32, (z0 + z1) / 2), RX(Math.PI / 2)), tint: BRASS, smooth: true });
@@ -872,6 +883,7 @@ function leftWall(k, props) {
     for (let i = 0; i < 3; i++) boots(k, xw + 0.2, y + 0.015, hz0 - 0.16 - i * 0.4, i + (y > 1 ? 5 : 0));
   }
   for (const z of [hz0 + 0.14, hz1 - 0.14]) k.board([0.36, 0.86, 0.03], [xw + 0.18, FL + 0.6, z], null, { long: 1, tint: vary(k, FURN, 0.75, 0.9), inside: true });
+  k.solid([0.42, 1.2, hz0 - hz1 + 0.34], [xw + 0.2, FL + 0.6, (hz0 + hz1) / 2]);   // (the boots' shelves stop a walker)
   // the cloth and book shelves further back
   const cz0 = -1.98, cz1 = -2.84;
   for (const z of [cz0, cz1]) k.board([d, 2.6, 0.03], [xw + d / 2, FL + 1.3, z], null, { long: 1, tint: vary(k, FURN, 0.8, 0.95), inside: true });
@@ -898,13 +910,12 @@ function leftWall(k, props) {
   props.push({ type: 'barrel', x: xw + 0.38, y: FL, z: 1.15, fill: 'apples', inside: true });
   props.push({ type: 'crate', x: xw + 0.4, y: FL, z: 0.45, rot: 0.1, size: 0.5, fill: 'apples', inside: true });
   props.push({ type: 'crate', x: xw + 0.95, y: FL, z: 1.2, rot: -0.2, size: 0.45, fill: 'potatoes', inside: true });
+  goodsBins(props, FL);
 }
-// a pair of boots: each its side outline (a heel, the sole, a rounded toe, the instep, the leg) drawn out to its width,
-// the toes toward the room
-const BOOT = [[-0.12, 0], [0.13, 0], [0.155, 0.022], [0.14, 0.05], [0.06, 0.075], [-0.005, 0.1], [-0.02, 0.3], [-0.112, 0.305], [-0.12, 0.17], [-0.135, 0.04]];
+// a pair of boots: the props library's (world/props/makers/goods.js), the toes toward the room
 function boots(k, x, y, z, i) {
-  const reg = i % 3 === 1 ? A.tile.leatherBlack : A.tile.leather, t = vary(k, [0.8, 0.74, 0.7], 0.85, 1.1);
-  for (const s of [-1, 1]) G.extrude(BOOT, 0.085, mul(T(x + 0.02, y, z + s * 0.055), RY(s * 0.06)), reg, reg, t);
+  const reg = i % 3 === 1 ? A.tile.leatherBlack : A.tile.leather, t = vary(k, BOOT_TINT, 0.85, 1.1);
+  makeBoots(G, T(x + 0.02, y, z), reg, t);
 }
 // a hat turned on a lathe: the brim's underside out from the crown's opening, its rolled edge, its top back in, the crown
 // up and over with a crease in its top; the dark inside of the crown, seen from below. Hung tilted on its peg
@@ -982,7 +993,7 @@ function propList(extra) {
     { type: 'crate', x: -3.75, y, z: -1.0, size: 0.6, rot: 0.04 }, { type: 'crate', x: -3.75, y: y + 0.6, z: -1.02, size: 0.56, rot: -0.06 },
     { type: 'crate', x: -3.75, y: y + 1.16, z: -1.0, size: 0.5, rot: 0.1 }, { type: 'crate', x: -3.2, y, z: -1.1, size: 0.55, rot: -0.12 },
     { type: 'crate', x: -3.2, y: y + 0.55, z: -1.12, size: 0.5, rot: 0.05, stencil: 'CRACKERS' }, { type: 'sack', x: -2.4, y, z: -1.5, print: 'flour', h: 0.6, rot: 0.3 },
-    { type: 'barrel', x: -2.3, y, z: -3.4 }, { type: 'barrel', x: -2.95, y, z: -3.55, fill: 'pickles' },
+    { type: 'barrel', x: XLT + 0.46, y, z: -2.25 }, { type: 'barrel', x: -2.95, y, z: -3.55, fill: 'pickles' },
     { type: 'sack', x: -4.0, y, z: -3.2, print: 'flour', lie: 0.1, rot: 1.4 }, { type: 'sack', x: -4.0, y: y + 0.28, z: -3.0, print: 'burlap', lie: 1.2, rot: 1.6 },
     ...extra,
   ];
@@ -1036,6 +1047,7 @@ export function buildStore(recipeIn = {}, env = {}) {
   leafOf('front', [DOOR.a1 - 0.01, FL + 0.005, ZF - 0.06], -1, lw, lh, -100 * Math.PI / 180, storeDoor, r.seed * 19 + 2);
   const sdw = LDOOR.a1 - LDOOR.a0 + 0.12;
   leafOf('loading', [LDOOR.a0 - 0.06, FL + 0.02, ZLF + 0.09], 1, sdw, LDOOR.y1 + 0.05 - FL, 0, (t, o) => slidingDoor(t, o), r.seed * 19 + 3, [1.28, 0, 0]);
+  leafOf('backroom', [PDOOR.x0 + 0.02, FL + 0.01, PART - 0.03], 1, PDOOR.x1 - PDOOR.x0 - 0.04, PDOOR.y1 - FL - 0.03, -1.6, (t, o) => doorLeaf(t, { w: o.w, h: o.h, side: 1, tint: DOORW, rails: [0.3, o.h - 0.3], strap: STRAP, handle: true, braceFit: true }), r.seed * 19 + 4);
 
   // the kit's parts into meshes, one per material
   const R = rng(r.seed + 1), geos = {};
@@ -1113,7 +1125,9 @@ export function buildStore(recipeIn = {}, env = {}) {
   return {
     recipe: r, geos, doors: leaves, lamps, light, occ, props, offset: OX, offsetZ: OZ,
     anchors: {
-      doorways: [{ name: 'front', centre: P3(OXC, FL + 1.2, ZF), w: 1.5, h: 2.4, out: [0, 0, 1] }, { name: 'storeroom', centre: P3((LDOOR.a0 + LDOOR.a1) / 2, FL + 1.3, ZLF), w: 1.25, h: 2.6, out: [0, 0, 1] }],
+      doorways: [{ name: 'front', centre: P3(OXC, FL + 1.2, ZF), w: 1.5, h: 2.4, out: [0, 0, 1] }, { name: 'storeroom', centre: P3((LDOOR.a0 + LDOOR.a1) / 2, FL + 1.3, ZLF), w: 1.25, h: 2.6, out: [0, 0, 1] },
+        // (indoor: a door between two rooms that E works like the others; no night glow or dark card of its own)
+        { name: 'backroom', centre: P3((PDOOR.x0 + PDOOR.x1) / 2, FL + 1.05, PART), w: PDOOR.x1 - PDOOR.x0, h: 2.15, out: [0, 0, 1], indoor: true }],
       sign: { centre: P3(OXC, 7.05, ZF), w: 6.8, h: 1.2 }, lanterns: lamps.map((L) => L.p),
       // THE STORE WORKED FROM INSIDE (the game's src/townrooms.js and src/missions/store.js; the Building Lab shows the
       // same): behind the counter the storekeeper (by the scale, clear of the rolling ladder) and the rider helping him
@@ -1143,7 +1157,8 @@ export function buildStore(recipeIn = {}, env = {}) {
         { id: 'hats', at: P3(XL + INS + 0.3, 2.3, -1.2), use: [-0.85 + OX, -0.55 + OZ, -0.85 + OX, -1.85 + OZ], words: 'Buy a hat' },
         { id: 'animals', at: P3(2.75, FL + 0.85, -1.92), use: [2.75 + OX, -1.92 + OZ], r: 0.5, words: 'Buy animals' },
         { id: 'gun', at: P3(CX + 0.32, FL + CH + 0.3, 0.17), use: [CX - 0.08 + OX, 0.2 + OZ], r: 0.15, reach: 2.4, words: 'Buy the six-shooter' },
-        { id: 'counter', at: P3(CX + 0.33, FL + CH + 0.4, -0.85), use: [CX - 0.08 + OX, -0.05 + OZ, CX - 0.08 + OX, -1.5 + OZ], words: 'Work the counter' },
+        { id: 'counter', at: P3(CX + 0.33, FL + CH + 0.4, -0.2), use: [CX - 0.08 + OX, 0.7 + OZ, CX - 0.08 + OX, -0.5 + OZ], words: 'Work the counter' },
+        { id: 'sell', at: P3(BINS.x, FL + 1.0, BINS.z), use: [BINS.x - 0.3 + OX, BINS.z + OZ], r: 0.45, words: 'Sell my goods' },
       ],
       // (the painted sign's picture covers this much of the false front: the board shader lays it on, art.js storeSign)
       signPaint: { x0: XL - WING + OX, y0: 4.3, w: 7.4, h: 4.6, z: ZF + OZ },

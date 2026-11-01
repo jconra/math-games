@@ -18,6 +18,7 @@
 //   M.stop({ now })           stops making notes (now: also silences the ones already made)
 //   M.action(on, at)          the action layer in or out, from the next bar line after `at` (default now)
 //   M.hit(at)                 the big drum (and a whip just after) on the next sixteenth: a catch
+//   M.duck(at)                the music dips a moment under a gunshot
 //   M.beat()                  the beat it is on now (fractions between), or null
 //   M.state()                 { beat, trail, action (the layers' volumes now, 0..1), actionOn, played }
 //   M.events                  what has been scheduled (testing): [{ at, what, layer, midi }]; live, only the last 256
@@ -35,6 +36,7 @@ export const ACTION = {
   trail: 1.4,             // the trail layer's level (about 13 dB under the action: quiet road music)
   lookahead: 2.5,         // seconds of notes made ahead
   kept: 256,              // events listed while playing live
+  duck: 0.5,              // the music's level for a moment under a gunshot (about 6 dB down)
 };
 const NAMES = { gallop: 'ACTION — GALLOP', rim: 'ACTION — RIM', big: 'ACTION — BIG DRUM', whip: 'ACTION — WHIP', twang: 'ACTION — TWANG', whistle: 'ACTION — WHISTLE', bass: 'ACTION — BASS' };
 const ROOT = { twang: 52, whistle: 88, bass: 40 };   // the MIDI notes the patches are written at
@@ -228,6 +230,8 @@ export function makeActionMusic(ctx, { out = ctx.destination, seed = 1, patches 
       play({ what: 'big', layer: 'hit', vel: 1 }, Math.max(at, t));
       play({ what: 'whip', layer: 'hit', vel: 0.8 }, Math.max(at, t) + BEAT / 4);
     },
+    // a gunshot just fired: the music dips a moment, so the shot stands out of it
+    duck(at = ctx.currentTime, k = ACTION.duck) { try { mix.gain.cancelScheduledValues(at); mix.gain.setTargetAtTime(ACTION.level * k, at, 0.008); mix.gain.setTargetAtTime(ACTION.level, at + 0.12, 0.18); } catch (e) { /* closed */ } },
     get running() { return running; },
     beat() { return origin == null ? null : (ctx.currentTime - origin) / BEAT; },
     state() {

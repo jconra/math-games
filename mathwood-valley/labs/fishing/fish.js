@@ -92,9 +92,12 @@ function fishGeometry(kind, L) {
   const tf = fin.clone().lerp(back, 0.35);
   tri(t0, up, mid, tf); tri(t1, mid, dn, tf); tri(t0, mid, t1, tf);
   // the fin on the back (two on the perch: the front one spiny and tall)
-  const topAt = (s) => lerpTable(P.h, s) * H / 2 + 0.05 * lerpTable(P.h, s) * H / 2;
+  // (the top of the back as the rings are built, and the fin's foot well inside it: a straight foot across a curved back
+  // otherwise stands clear of it)
+  const topAt = (s) => { const h = lerpTable(P.h, s) * H / 2; return h + (kind === 'catfish' ? -0.15 : 0.05) * h; };
   const dorsal = (s0, s1, hgt, c) => {
-    const a = new THREE.Vector3(0, topAt(s0) * 0.95, -s0 * BODY * L), b = new THREE.Vector3(0, topAt(s1) * 0.95, -s1 * BODY * L);
+    const foot = Math.min(topAt(s0), topAt(s1)) - 0.14 * H;
+    const a = new THREE.Vector3(0, foot, -s0 * BODY * L), b = new THREE.Vector3(0, foot, -s1 * BODY * L);
     const tip = new THREE.Vector3(0, topAt((s0 + s1) / 2) + hgt * H, -(s0 + (s1 - s0) * 0.35) * BODY * L);
     tri(a, tip, b, c);
   };
@@ -114,14 +117,16 @@ function fishGeometry(kind, L) {
   }
   const aBase = (s) => new THREE.Vector3(0, -lerpTable(P.h, s) * H / 2 * 0.95, -s * BODY * L);
   tri(aBase(0.66), new THREE.Vector3(0, -lerpTable(P.h, 0.72) * H / 2 - 0.22 * H, -0.74 * BODY * L), aBase(0.84), fin);
-  // the catfish's whiskers: four long thin ones from the corners of its mouth, two short ones underneath
+  // the catfish's whiskers, pale: two long thin ones from low on the corners of its mouth (well under the eye, so they
+  // never line up with it), two short ones under the chin
   if (kind === 'catfish') {
+    const pale = C('#c9bda6');
     for (const sx of [1, -1]) {
-      const m = new THREE.Vector3(sx * 0.03 * L, -0.02 * H, 0), m2 = m.clone().add(new THREE.Vector3(0, -0.012 * L, 0));
-      const tip = new THREE.Vector3(sx * 0.16 * L, -0.08 * H, -0.12 * L);
-      tri(m, tip, m2, dark); tri(m, m2, tip, dark);
-      const c0 = new THREE.Vector3(sx * 0.012 * L, -0.12 * H, -0.01 * L), c1 = c0.clone().add(new THREE.Vector3(0, 0, -0.01 * L)), ct = new THREE.Vector3(sx * 0.03 * L, -0.38 * H, 0.02 * L);
-      tri(c0, ct, c1, dark); tri(c0, c1, ct, dark);
+      const m = new THREE.Vector3(sx * 0.03 * L, -0.16 * H, 0), m2 = m.clone().add(new THREE.Vector3(0, -0.012 * L, 0));
+      const tip = new THREE.Vector3(sx * 0.16 * L, -0.34 * H, -0.12 * L);
+      tri(m, tip, m2, pale); tri(m, m2, tip, pale);
+      const c0 = new THREE.Vector3(sx * 0.012 * L, -0.18 * H, -0.01 * L), c1 = c0.clone().add(new THREE.Vector3(0, 0, -0.01 * L)), ct = new THREE.Vector3(sx * 0.03 * L, -0.5 * H, 0.02 * L);
+      tri(c0, ct, c1, pale); tri(c0, c1, ct, pale);
     }
   }
   const g = new THREE.BufferGeometry();

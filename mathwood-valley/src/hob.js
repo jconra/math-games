@@ -107,8 +107,8 @@ const LINES = {
   donkey: "A donkey! Slow as molasses, but he won't quit on you.",
   hat: ['Now that is a fine hat.', 'Suits you, partner.', 'Look at you! A proper hat for a proper rider.'],
   // the six-shooter for bandits (src/gun.js), bought at the general store
-  revolver: "A six-shooter! At a hold-up on the road, F fires at the rider you point at. Only the one wearing the right number, mind: the others duck.",
-  revolverTouch: "A six-shooter! At a hold-up on the road, tap a rider or press Shoot. Only the one wearing the right number, mind: the others duck.",
+  revolver: "A six-shooter! At a hold-up on the road, choose it with the buttons on the right and aim by hand. Only the ones wearing the right number, mind: the others duck.",
+  revolverTouch: "A six-shooter! At a hold-up on the road, choose it with the buttons on the right, then tap a rider. Only the ones wearing the right number, mind: the others duck.",
   // the farm north of town: the sick-sheep job
   farmTip: "There's a farm north of town, behind your cabin. The vet out there could use a hand with the sheep, and the pigs got loose.",
   farmTipSheep: "There's a farm north of town, behind your cabin. The vet out there could use a hand with the sheep.",
@@ -159,10 +159,10 @@ const LINES = {
     "Lock boxes are piled up on the sheriff's desk. Step in and crack a few."],
   // the homestead behind your cabin: the first of each kind bought, the thank-yous, the goods
   animal: {
-    hen: "A hen of your own! She'll lay eggs in the coop behind your cabin. Walk past to pick them up, and sell them at the store counter.",
+    hen: "A hen of your own! She'll lay eggs behind your cabin. Walk along the back of the house to pick them up, then sell them to Ezra at the bins in the general store.",
     pig: "A pig! Pigs don't lay a blessed thing, partner. They're just good company.",
-    sheep: "A sheep! Her wool grows slow and steady. Pick it up by the corral: townsfolk at the store buy a share of it, a half or a third or so.",
-    cow: "A milk cow! Pick up the milk by the corral. The store buys it by the gallon, and four quarts make a gallon.",
+    sheep: "A sheep! Her wool grows slow and steady. Pick it up along the back of the house, and Ezra at the store buys a share of it, a half or a third or so.",
+    cow: "A milk cow! Pick up the milk along the back of the house. Ezra at the store buys it by the gallon, and four quarts make a gallon.",
   },
   animalAgain: ['{name} settles right in.', '{name} looks happy out back.', 'Another mouth to feed. {name} will earn their keep.'],
   animalGift: {
@@ -173,9 +173,8 @@ const LINES = {
   // (said after the thank-you line when it is the first of its kind: the store sells that kind from now on)
   animalUnlock: { pig: 'And the store will sell you pigs now.', sheep: 'And the store will sell you sheep now.', cow: 'And the store will sell you milk cows now.' },
   animalGrew: '{name} is all grown up now.',
-  goodsCollected: "Those go in your saddlebags. The townsfolk at the general store will buy them: mind the counter.",
-  goodsKept: "Those go in your saddlebags.",   // (the store's counter job is turned off: nobody to sell them to)
-  goodsSold: "Sold! That's how a homestead pays its way: a little figuring at the counter.",
+  goodsCollected: "Those go in your saddlebags. Take them to Ezra at the general store: look for the bins by his counter and pick \"Sell my goods\".",
+  goodsSold: "Sold! That's how a homestead pays its way: a little figuring with Ezra, and more than wages.",
   // deer photographs: the naturalist's box camera, the herds out in the valley
   deerTip: "There's a naturalist out by the deer, making a book of the valley's animals. She'll lend you her camera: follow the compass to the herd.",
   deerArrive: "Easy now. Deer bolt if you crowd 'em. Set the camera up a good ways off: the card up top says when you're close enough.",
@@ -368,7 +367,7 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
         break;
       }
       case 'animalGrew': B.say(LINES.animalGrew.replace('{name}', data.name || 'Your little one'), 3500); break;
-      case 'goodsCollected': if (once('goodsCollected')) B.say(on.store === false ? LINES.goodsKept : LINES.goodsCollected, 6500); break;
+      case 'goodsCollected': if (once('goodsCollected')) B.say(LINES.goodsCollected, 7500); break;
       case 'goodsSold': if (once('goodsSold')) B.say(LINES.goodsSold, 4500); break;
       // deer photographs (missions/deerjob.js)
       case 'deerArrive': if (once('deerArrive')) B.say(LINES.deerArrive, 7000); break;

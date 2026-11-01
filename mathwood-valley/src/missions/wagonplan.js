@@ -5,26 +5,27 @@
 // levels rigs).
 
 import { pickFact, pickTable } from '../math/facts.js';
+import { gangProduct } from '../math/factors.js';
 import { TABLE_ORDER } from '../math/series.js';
 import { isOn } from '../levels/model.js';
 import { slotFiles, slotTakes } from '../audio/clipslots.js';
 import { shiftLength, pace } from '../shifts.js';
 
 // ── WHICH GANG RIDES NEXT ────────────────────────────────────────────────────────────────────────────────────────────
-// From the rider's level here (q: src/levels/model.js levelFor 'wagon'): odds and evens, a table's gang, or a
-// missing-number card. A gang level's own table, but once placed every third gang (n: gangs dealt this ride, counting
+// From the rider's level here (q: src/levels/model.js levelFor 'wagon'): odds and evens, a table's gang, or all the
+// factors of a number: always several bandits among the riders. A gang level's own table, but once placed every third gang (n: gangs dealt this ride, counting
 // this one) is an earlier table the rider has met on the way (the weak ones more: src/math/facts.js pickTable),
 // recorded at that table's own level; the any-table level picks every gang that way. A table's first two gangs reach
 // up to x10 (met: the times trainer's gangs of it so far), then x12.
 //   chooseGang(rider, q, { n, lastTable, lastFact, met }) -> { kind: 'parity', want, top, level, count }
-//     | { kind: 'rule', table, reach, level, count } | { kind: 'missing', fact: { t, a, upTo }, key, level, count }
+//     | { kind: 'rule', table, reach, level, count } | { kind: 'factors', product, upTo, key, level, count }
 export const GANG = { riders: 8, reviewEvery: 3 };   // riders in a gang (a hold-up's own count: gangSize); a review every 3rd
 export function chooseGang(rider, q, { n = 1, lastTable = null, lastFact = null, met = () => 0, rand = Math.random } = {}) {
   const g = q.level.gen, count = GANG.riders;
   if (g.kind === 'parity') return { kind: 'parity', want: g.want, top: g.top, level: q.id, count };
-  if (g.kind === 'missing') {
+  if (g.kind === 'factors') {
     const f = pickFact(rider, { tables: TABLE_ORDER.filter((t) => t <= g.upTo), upTo: g.upTo, from: 2, last: lastFact, rand });
-    return { kind: 'missing', fact: { t: f ? f.a : 7, a: f ? f.b : 8, upTo: g.upTo }, key: f ? f.key : null, level: q.id, count };
+    return { kind: 'factors', product: gangProduct(f ? f.a : 6, f ? f.b : 8, g.upTo), upTo: g.upTo, key: f ? f.key : null, level: q.id, count };
   }
   let t = g.table, level = q.id;
   if (!t) t = pickTable(rider, g.open, { last: lastTable, rand }) || g.open[0];
@@ -44,12 +45,12 @@ export const SLOTS = [[1, 6, 5], [-1, 6.5, 3], [1, 9, -3], [-1, 9.5, -5], [1, 6,
 // "not in the 6-herd" from the times trainer reads "not in the 6-Gang" out here
 export const gangLine = (line) => String(line || '').replace(/(\d+)-herd/g, '$1-Gang');
 
-// the sacks a roped bandit drops for his number: 24 in the 6-Gang drops 4 sacks of 6 (on a missing-number card the
-// number IS how many sacks of the table); an odds-and-evens bandit drops his number in pairs (8: 4 sacks of 2; 7: 3,
+// the sacks a roped bandit drops for his number: 24 in the 6-Gang drops 4 sacks of 6 (a factor of 48: for the 6, 8 sacks
+// of 6: pass the product as table); an odds-and-evens bandit drops his number in pairs (8: 4 sacks of 2; 7: 3,
 // the odd one kept), none past 24 (too many to lay out)
 export function sacksFor(n, table, kind = 'rule') {
   if (!table) return { sacks: 0, per: 0 };
-  if (kind === 'missing') return { sacks: n, per: table };
+  if (kind === 'factors') return n && table % n === 0 ? { sacks: table / n, per: n } : { sacks: 0, per: n };
   if (kind === 'parity') return { sacks: n <= 24 ? Math.floor(n / 2) : 0, per: 2 };
   return n % table === 0 ? { sacks: n / table, per: table } : { sacks: 0, per: table };
 }
@@ -109,8 +110,8 @@ export const AMBUSH = {
                       // (one the jobs board sent waits for the player: it is the job picked)
   far: 240,           // m: the player further than this from the hold-up (once they have been there): the driver makes
                       // a run for it
-  helpEvery: 3.5,     // s between the driver's shouts of "Help!" ...
-  helpNear: 20,       // ... till the player is this close (m)
+  helpEvery: 3.5,     // s between the driver's shouts of "Help!" while the player is on the way ...
+  helpNear: 7,        // ... this often once the player has come (s): he keeps shouting while it's under fire
   // the driver's recorded shouts (src/audio/clipslots.js, slot helpBandits: the game maker's four takes, sounds/voice/help_1..4 .ogg
   // and .m4a): one at a time at random (never the same twice running), positioned at the wagon, his bubble saying that
   // take's words; then helpRest s of quiet before the next. With no sound the bubble shows "Help!" alone
@@ -175,7 +176,16 @@ export const HOLDUP = {
   health: 100,         // the wagon's health at the start of a hold-up (it carries on from wave to wave)
   perArrest: [18, 9],  // s an arrest takes, as expected: at the slow end of the pace (a young or slower kid) .. the quick end
                        // (reading the numbers, picking, riding into reach, the throw and the fall)
-  wear: 0.3,           // the share of the bar a whole hold-up at that pace wears off (three times as slow still gets through)
+  wear: 0.3,           // the share of the bar a whole hold-up at that pace wears off by the bandits being loose ...
+  hit: 0.25,           // ... and every shot into its boards knocks this many points off as well, with the bar flashing
+  // THE WAGON RUNS FOR IT: with the player there and a wave on, the driver whips up the team and trots on along the road,
+  // the gang riding with it (m/s; a slower trot in the quiet between waves), till the gang's beaten or the box is
+  // grabbed. So it never reaches town or the road's end: `stopOut` m from the square, or `stopEnd` from the road's end,
+  // it slows and stands, and the riders circle it
+  flee: { run: 3.8, quiet: 2.5, stopOut: 120, stopEnd: 40 },
+  // riders ride round a standing wagon on this oval: m along the road and out from it (a bigger one per row), radians a second
+  circle: { along: 15, out: 8, row: 3.5, rows: 3, speed: 0.26 },
+  apart: 3,            // m: two riders never closer than about a horse's length
   bandits: 4,          // bandits in a wave, as the wear is worked out (a wave has 3 to 5)
   low: 0.3,            // the bar under this share: it goes orange and the driver's shouts come again
   pay: { grabbed: 4 }, // gold the driver pays when the box was grabbed (AMBUSH.bonus when the wagon got through safe)
@@ -183,7 +193,7 @@ export const HOLDUP = {
   // Now and then one fires: into the air, or into the wagon's boards or the dirt by its wheels (never toward the
   // player). The more bandits loose, the more shots: each loose one's worth every `every` s (at random), from a rider
   // picked at random; `air` of them into the air; `ping`: a shot at the wagon that glances off the iron tyre instead
-  shots: { every: 4.5, air: 0.55, near: 26, ping: 0.2, clear: 3 },
+  shots: { every: 3.6, air: 0.4, near: 40, ping: 0.2, clear: 3 },
   // the driver's thank-you at the end: one of the game maker's recorded takes (src/audio/shouts.js VOICE_CLIPS), its own words in
   // his bubble, never the same words twice running. A woman driving: thanksHer
   thanks: [

@@ -8,7 +8,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { loadAnimals, makeAnimal } from '../../src/actors/animals.js';
-import { coatMaterial, eyeMaterial, noiseTexture } from '../../src/actors/horsecoat.js';
+import { coatMaterial, eyeMaterial, noiseTexture, NECK, setNeckDeep } from '../../src/actors/horsecoat.js';
 import { hairMaterial, attachHair, hairTexture } from '../../src/actors/horsehair.js';
 import { PRESETS, PRESET_ORDER, recipe, fill, FACES, LEGS, PINTOS } from '../../src/actors/horsecoats.js';
 
@@ -46,6 +46,7 @@ const state = {
   preset: 'bay', r: recipe('bay'), view: 'turntable', old: false, mask: 'off',
   clip: 'Idle', playing: true, speed: 1, spin: false,
   az: 200, hour: 15.5, shadows: true,
+  neckDeep: NECK.deep,
   lite: false, size: 1, fade: 1, aa0: !AA,   // (the far look; the horse's size; its fade; no screen smoothing)
 };
 
@@ -269,12 +270,12 @@ const SECTIONS = [
   { id: 'coat', title: 'Coat', open: true, rows: [
       C('Body colour', 'base'), S('Points', 'points', [['none', 'None'], ['black', 'Black legs and ear tips']]),
       R('Lighter belly', 'belly', 0, 1, 0.01, pct), R('Darker top line', 'sooty', 0, 1, 0.01, pct), R('Dark muzzle', 'muzzle', 0, 1, 0.01, pct), R('Dapple bloom', 'bloom', 0, 1, 0.01, pct),
-      R('Greying', 'grey', 0, 1, 0.01, pct), R('Dapples', 'dapples', 0, 1, 0.01, pct), R('Dapple size', 'dappleSize', 0.05, 0.16, 0.005, (v) => Math.round(v * 100) + ' cm'), R('Grey legs', 'greyLegs', 0, 1, 0.01, pct),
+      R('Greying', 'grey', 0, 1, 0.01, pct), R('Dapples', 'dapples', 0, 1, 0.01, pct), R('Dapple size', 'dappleSize', 0.1, 0.2, 0.005, (v) => Math.round(v * 100) + ' cm'), R('Grey legs', 'greyLegs', 0, 1, 0.01, pct),
       R('Dun stripe', 'dorsal', 0, 1, 0.01, pct), R('Stripe width', 'dorsalWidth', 0.015, 0.06, 0.001, (v) => (v * 200).toFixed(1) + ' cm'), R('Leg bars', 'barring', 0, 1, 0.01, pct)],
     how: `<p>Nothing is painted into a picture. Every pixel of the horse asks <b>where it sits on the horse standing at rest</b>: the model's own corner positions before the bones move them, in metres (feet on the ground, nose toward +Z). That spot rides along with the bones, so a marking stays put however the horse moves, from a nod to a gallop.</p>
 <p>From that spot it works out its colour: the body colour with a big soft mottle (no coat is one flat colour), a <b>darker top line</b> where the surface faces up along the back, a <b>lighter belly</b> and inside of the legs where it faces down or inward, <b>points</b> (black from the hooves to just over the knees and hocks, black ear tips) for a bay or buckskin, a darker muzzle, dark skin round the eyes and an almond-shaped dark lid.</p>
 <p>A <b>dapple bloom</b> (a well-fed bay or chestnut's faint dapples) puts rounded spots a few per cent lighter, in a slightly darker net, on the hip and the shoulder.</p>
-<p><b>Greying</b> takes the colour out first, then lightens the grey toward white: lighter on the head, darker on the legs. <b>Dapples</b> are round lighter spots with mid-grey gaps between them, over the whole body and neck: the distance to the nearest of a scatter of points ("cell noise"), each spot its own size.</p>
+<p><b>Greying</b> takes the colour out first, then lightens the grey toward white: lighter on the head, darker on the legs. <b>Dapples</b> are round lighter spots with mid-grey gaps between them, over the whole body and neck: each of a scatter of points makes a soft round spot of its own size, and spots that touch join softly, with no line between them at any size. The size is about 14 cm; a random coat's is never under 10.</p>
 <p>A <b>dun</b> has a dark <b>stripe</b> down the top line from the withers to the dock (a little uneven along its edges) and faint dark <b>bars</b> across the upper legs, above the knees and hocks.</p>
 <p>A <b>baked shade</b> (worked out once at load: rays from each corner of the body at rest, to see how much sky it sees) dims the sky light under the belly and between the legs, and darkens the creases: behind the elbow, the girth, the stifle, the throat.</p>` },
   { id: 'manetail', title: 'Mane and tail', open: true, rows: [
@@ -306,6 +307,8 @@ streak = noise(q * 380)
 normal += across * (streak(p + across*e) - streak(p)) / e * height</pre>
 <p>The light on the hair: a narrow <b>velvet sheen</b> where light grazes the coat, and a <b>hair highlight</b> (Kajiya-Kay) that runs across the hairs as a band, both in the coat's own colour (a black coat's: a cool blue-grey), with most of the plain, plastic-white highlight taken out. The outline is a touch lighter, as short hair standing off the skin catches the light. Hooves are matte, with faint growth stripes.</p>
 <p>All the noise comes from one 256 x 256 random picture, read so a single lookup gives smooth 3D noise.</p>` },
+  { id: 'shape', title: 'Shape', open: true, rows: [R('Neck depth', 'neckDeep', 0, 0.12, 0.005, (v) => (v * 100).toFixed(1) + ' cm')],
+    how: `<p><b>Neck depth</b> thickens the neck from underneath: only the corners on the bottom of the neck move, straight out from its middle line, the most at the throat-latch and tapering to nothing at the chest and under the jaw. The head, the mane and the top line stay put. They move in the model's rest pose, so every clip still works. The game's own number is NECK.deep in src/actors/horsecoat.js; the slider tries others here (the baked shade stays as it was measured at load).</p>` },
   { id: 'motion', title: 'Motion', open: true, rows: [{ t: 'clip' }, R('Speed', 'speed', 0, 2, 0.05, (v) => (+v).toFixed(2) + 'x'), K('Turntable (spin slowly)', 'spin')],
     how: `<p>The game's own horse clips (Idle, Walk, Gallop, Eating...) and five new ones for standing in a stall: LookLeft, LookRight, Nod, HeadShake, EarFlick. The coat is drawn from the rest pose, so nothing slides as the body bends; the mane and tail stream with the clip's speed.</p>` },
   { id: 'view', title: 'View', open: true, rows: [{ t: 'views' }, K('Show the old horse', 'old'), K('Far look (lite)', 'lite'),
@@ -324,6 +327,7 @@ function setField(k, v) {
   else {
     state[k] = v;
     if (k === 'speed') horses.forEach(playOn);
+    if (k === 'neckDeep' && shape) setNeckDeep(shape, v);
     if (k === 'old') { if (v) needOld().then(() => { horses.forEach((h) => showOld(h, true)); fillStats(); }); else horses.forEach((h) => showOld(h, !!h.isOld)); }
     if (k === 'az' || k === 'hour' || k === 'shadows') applyLight();
     if (k === 'lite' || k === 'size' || k === 'fade') { horses.forEach((h) => dress(h)); fillStats(); }
@@ -593,6 +597,7 @@ window.HL = {
   get renderer() { return renderer; },
   get scene() { return scene; },
   // the far look, the size and the fade (as the panel's View rows)
+  neck(m) { setField('neckDeep', +m); },
   lite(on) { setField('lite', !!on); }, size(s) { setField('size', +s); }, fade(f) { setField('fade', +f); },
   get hairInfo() { return { full: { tris: hair.tris, cards: hair.cards }, lite: { tris: hairLite.tris, cards: hairLite.cards }, cut: horses[0] ? horses[0].hairMat.hair.cut : null }; },
   get camera() { return camera; },

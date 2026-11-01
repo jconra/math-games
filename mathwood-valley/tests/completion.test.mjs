@@ -37,7 +37,7 @@ test('the items: every job\'s four buckles, everything for sale, the collections
   assert.equal(c.items.filter((i) => i.group === 'buckles').length, jobs.length * BUCKLES.length, 'four buckles a job');
   assert.ok(all.includes('buckle:targets:gold'), 'the target range counts for every rider (no shooting mode)');
   const buy = all.filter((i) => i.startsWith('buy:'));
-  assert.equal(buy.length, 1 + SADDLES.length + HORSES.length + (HATS.length - 1) + 1 + KINDS.length + SLOTS.length,
+  assert.equal(buy.length, 1 + SADDLES.length + HORSES.length + (HATS.length - 1) + 1 + KINDS.length + SLOTS.length - 1 /* the rifle rack: only with guns allowed */,
     'the cabin, every saddle, every horse (none free: every rider starts on foot), every hat but the free one, one dog (any breed: more are optional), one of each farm animal, every piece of furniture');
   assert.equal(c.items.find((i) => i.id === 'buy:cabin:home').need, PRICES.cabin, 'the cabin is for sale');
   for (const h of HORSES) assert.ok(all.includes(`buy:horse:${h.id}`), h.id);

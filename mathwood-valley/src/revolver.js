@@ -25,6 +25,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makePerson } from './actors/folk.js';
+import { makeRifleModel } from './rifles.js';
 
 export const GUN = {
   rounds: 6,
@@ -207,7 +208,7 @@ export function makeGunModel({ metal = null, matte = null } = {}) {
   return { gun, cylinder, hammerPin, muzzle, metal, matte };
 }
 
-export function makeRevolver({ look = {}, folk = null } = {}) {
+export function makeRevolver({ look = {}, folk = null, kind = 'revolver', rounds = GUN.rounds } = {}) {
   const scene = new THREE.Scene();
   const camera = new THREE.PerspectiveCamera(GUN.fov, innerWidth / innerHeight, 0.02, 20);
   const hemi = new THREE.HemisphereLight(0xdfe8ff, 0x6a5a40, 1.1); scene.add(hemi);
@@ -220,7 +221,9 @@ export function makeRevolver({ look = {}, folk = null } = {}) {
   // ── THE GUN (in its own frame: +Z the muzzle's way, +Y up, the trigger at the origin) ─────────────────────────
   const aimer = new THREE.Group(); scene.add(aimer);            // turned to the aim
   const kicker = new THREE.Group(); aimer.add(kicker);          // the kick and the reload's tip
-  const model = makeGunModel({ metal, matte }), gun = model.gun, cylinder = model.cylinder, hammerPin = model.hammerPin, muzzle = model.muzzle;
+  // (a rifle chosen, src/rifles.js: the same hand and kick; it has no cylinder or hammer to turn)
+  const model = kind === 'revolver' ? makeGunModel({ metal, matte }) : { cylinder: new THREE.Object3D(), hammerPin: new THREE.Object3D(), ...makeRifleModel(kind) };
+  const gun = model.gun, cylinder = model.cylinder, hammerPin = model.hammerPin, muzzle = model.muzzle;
   kicker.add(gun);
   const HELD = new THREE.Vector3(0, 0.02, -0.03);              // (the gun's place from where the hand holds it: GUN.at)
   // the rider's own right hand round the grip, and their forearm back to the corner of the view
@@ -243,7 +246,7 @@ export function makeRevolver({ look = {}, folk = null } = {}) {
   }
 
   // ── STATE ──────────────────────────────────────────────────────────────────────────────────────────────────────
-  const G = { scene, camera, arm, rounds: GUN.rounds, reloading: false, get ready() { return !G.reloading && wait <= 0 && shown > 0.9; } };
+  const G = { scene, camera, arm, kind, most: rounds, rounds, reloading: false, get ready() { return !G.reloading && wait <= 0 && shown > 0.9; } };
   let wait = 0, kick = 0, kickV = 0, back = 0, flashT = 0, reloadT = 0, cylTurn = 0, cylTo = 0, cock = 1, want = 1, shown = 0, showTo = 0;
   const aimAt = new THREE.Vector3(0, 0, -10), aimNow = new THREE.Vector3(0, 0, -10), _v = new THREE.Vector3(), _q = new THREE.Quaternion();
   const ref = new THREE.Object3D();   // (where the hand holds it, turned to the middle of the screen: the gun held straight out)
@@ -269,7 +272,7 @@ export function makeRevolver({ look = {}, folk = null } = {}) {
     return true;
   };
   G.reload = () => {
-    if (G.reloading || G.rounds >= GUN.rounds) return false;
+    if (G.reloading || G.rounds >= G.most) return false;
     G.reloading = true; reloadT = 0;
     return true;
   };
@@ -295,7 +298,7 @@ export function makeRevolver({ look = {}, folk = null } = {}) {
       const f = Math.min(1, reloadT / GUN.reload), tip = Math.sin(Math.min(1, f * 1.25) * Math.PI);   // (over and back)
       roll = tip * 1.0; dip = tip * 0.35;
       cylTurn += dt * 18 * tip;                                    // (spun as the rounds go in)
-      if (reloadT >= GUN.reload) { G.reloading = false; G.rounds = GUN.rounds; cylTo = cylTurn = Math.round(cylTurn / (Math.PI / 3)) * Math.PI / 3; }
+      if (reloadT >= GUN.reload) { G.reloading = false; G.rounds = G.most; cylTo = cylTurn = Math.round(cylTurn / (Math.PI / 3)) * Math.PI / 3; }
     }
     kicker.rotation.set(-kick - dip, 0, roll);
     kicker.position.set(0, 0, back);

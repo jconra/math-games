@@ -497,6 +497,7 @@ function officeDoor(k, { w, h, side }) {
 // window, a ring to pull it by
 function jailDoor(k, { w, h, side }) {
   const t = 0.06, X = (x) => side * x, np = 4;
+  k.board([w - 0.004, h - 0.004, t * 0.3], [X(w / 2), h / 2, 0], null, { long: 1, tint: [0.25, 0.22, 0.2], skip: '+y-y' });   // (behind the seams: no light between the planks)
   for (let i = 0; i < np; i++) k.board([w / np - 0.004, h, t], [X(w * (i + 0.5) / np), h / 2, 0], [0, 0, k.r(-0.003, 0.003)], { long: 1, tint: vary(k, DARKW, 0.75, 1.0), cuts: [-0.6, 0.6], segFaces: '+z-z', skip: '+x-x' });
   for (const s of [-1, 1]) k.board([0.012, h, t], [X(s > 0 ? w - 0.006 : 0.006), h / 2, 0], null, { long: 1, tint: DARKW, skip: '+z-z' });
   // (the window's hole: dark behind its bars)
@@ -617,15 +618,16 @@ function officeInside(k, lamps) {
   k.board([0.6, 0.08, 0.02], [-1.25, 1.95, ZF - INS - 0.03], null, { long: 0, tint: vary(k, FURN, 0.9, 1.0), inside: true });
   for (const x of [-1.45, -1.25, -1.05]) k.board([0.025, 0.025, 0.09], [x, 1.94, ZF - INS - 0.08], [-0.3, 0, 0], { long: 2, tint: FURN, inside: true });
   hat(k, -1.45, 1.86, ZF - INS - 0.15);
+  k.solid([0.62, 0.8, 0.34], [-1.25, 1.7, ZF - INS - 0.2]);
   // THE BACK ROOM: a cot under the window, a wash stand, a trunk, a lantern on the wall
   cot(k, ix0 + 0.42, FL, -4.3);
   washStand(k, -2.65, FL, iz0 + 0.27);
+  k.solid([0.62, 1.2, 0.42], [-2.65, FL + 0.6, iz0 + 0.27]);
   trunk(k, -1.0, FL, iz0 + 0.3);
   lamps.push(lantern(k, ix0 + 0.2, 2.2, -2.6, { bracket: [-0.18, 0], strength: 1.6 }));
-  // the back door, shut: Z-braced planks
-  const bd = DOOR_B;
-  // (a little bigger than its opening, flush with the wall's face: it fills its frame)
-  doorPlanks(k, mul(T(-bd.a0 + 0.02, FL - 0.1, ZB + 0.028), RY(Math.PI)), bd.a1 - bd.a0 + 0.04, bd.y1 - FL + 0.12);
+  // (the back door: a real one, hung with the others below; a sill under each door: no daylight at their feet)
+  k.board([DOOR_B.a1 - DOOR_B.a0 + 0.06, 0.03, 0.24], [-(DOOR_B.a0 + DOOR_B.a1) / 2, FL - 0.012, ZB + 0.1], null, { long: 0, tint: vary(k, FLOOR, 0.75, 0.85), inside: true });
+  k.board([DOOR.a1 - DOOR.a0 + 0.06, 0.03, 0.24], [(DOOR.a0 + DOOR.a1) / 2, FL - 0.012, ZF - 0.1], null, { long: 0, tint: vary(k, FLOOR, 0.75, 0.85), inside: true });
   // and the hanging lantern over the desk
   lamps.push(lantern(k, -1.6, CEIL - 0.62, 0.55, { chain: 0.23, strength: 1.9 }));
 }
@@ -709,6 +711,7 @@ function doorPlanks(k, M, w, h) {
   into(k, M, (t) => {
     const np = Math.max(3, Math.round(w / 0.2)), pw = w / np;
     for (let i = 0; i < np; i++) t.board([pw - 0.004, h, 0.045], [pw * (i + 0.5), h / 2, 0], null, { long: 1, tint: vary(t, DOORW, 0.85, 1.1), skip: '+x-x', cuts: [0], segFaces: '+z-z' });
+    t.board([w - 0.004, h - 0.004, 0.012], [w / 2, h / 2, 0], null, { long: 1, tint: [0.3, 0.27, 0.24], skip: '+y-y' });   // (a dark board behind the seams: no daylight between the planks)
     for (const sgn of [1, -1]) for (const y of [0.3, h - 0.3]) t.board([w - 0.06, 0.14, 0.03], [w / 2, y, sgn * 0.0375], null, { long: 0, tint: vary(t, DOORW, 0.85, 1.0), skip: sgn > 0 ? '-z' : '+z' });
     for (const sgn of [1, -1]) { const ang = Math.atan2(h - 0.74, w - 0.2); t.board([Math.hypot(h - 0.74, w - 0.2) - 0.1, 0.13, 0.03], [w / 2, h / 2, sgn * 0.0375], [0, 0, ang], { long: 0, tint: vary(t, DOORW, 0.85, 1.0), skip: sgn > 0 ? '-z' : '+z' }); }
     for (const y of [0.3, h - 0.3]) t.board([w * 0.55, 0.045, 0.008], [w * 0.275, y, 0.06], null, { long: 0, paint: STRAP, tint: [0.4, 0.38, 0.36] });
@@ -739,16 +742,17 @@ function jailInside(k, lamps, props) {
     k.box('iron', [0.01, 0.07, b - a], [XR + 0.06, yy, (a + b) / 2], null, { tint: [0.5, 0.46, 0.43], skip: '-x' });
   }
   k.board([0.4, 0.1, dz1 - dz0], [XR + 0.25, FL - 0.15, (dz0 + dz1) / 2], null, { long: 2, tint: vary(k, DARKW, 0.85, 1.0), inside: true });   // the step down
-  // (the heavy door, hinged at the doorway's front side, stood open along the corridor)
-  into(k, mul(T(XR + 0.08, FL - 0.02, dz1 - 0.02), RY(0.3)), (t) => jailDoor(t, { w: dz1 - dz0 - 0.04, h: dTop - FL - 0.02, side: 1 }), 4111);
+  // (the heavy door in it: a real one, hung with the others below; the wall either side of it solid)
+  for (const [a, b] of [[z0, dz0], [dz1, z1]]) k.solid([0.16, JCEIL - FL, b - a], [XR, (JCEIL + FL) / 2, (a + b) / 2]);
   // the stone walls inside: lime-washed (the stone skin's openings come through them)
   const W0 = JX0 + JWIN.u - JWIN.w / 2, W1 = JX0 + JWIN.u + JWIN.w / 2;
   plasterWall(k, 'x', z1, -1, x0, x1, JFL, JCEIL + 0.13, [[JDX - JDOOR.w / 2, JDX + JDOOR.w / 2, JFL - 0.01, JDOOR.h], [W0, W1, JWIN.v0, JWIN.v1]]);
   plasterWall(k, 'z', x1, -1, z0, z1, JFL, JCEIL + 0.13, []);
   plasterWall(k, 'x', z0, 1, x0, x1, JFL, JCEIL + 0.13, JBACK.map((x) => [x - 0.2, x + 0.2, 2.25, 2.6]));
   // THE CELLS: a wall of iron bars across the jail behind the corridor, another between the two cells: round rods
-  // 2.5 cm thick every 14 cm, flat straps across them on the corridor side; a door in each cell's front (the left one
-  // standing open), a plank bunk on chains in each, a bucket. (The bars don't stop the light: no solid for the bake)
+  // 2.5 cm thick every 14 cm, flat straps across them on the corridor side; a door in each cell's front (both shut, the
+  // cells locked), a plank bunk on chains in each, a bucket. (The bars don't stop the light: no solid for the bake, but
+  // they do stop a walker: walkSolids)
   const rod = (h, pos) => k.prism('iron', ngon(6, 0.0125), h, pos, null, { tint: STRAPI, smooth: true, skip: '+y-y' });
   // (the flat bars: 4 cm by 6 mm, a round rivet head where each crosses an upright)
   const FLAT = STRAPI.map((c) => c * 0.7);
@@ -770,20 +774,21 @@ function jailInside(k, lamps, props) {
   const doors = [[1.55, 2.3], [3.2, 3.95]];
   bars('x', x0 + 0.04, x1 - 0.02, BARS, doors);
   bars('z', z0 + 0.02, BARS - 0.02, CELLX, []);
+  k.walkSolids.push({ size: [x1 - x0, JCEIL - JFL, 0.08], m: T((x0 + x1) / 2, (JFL + JCEIL) / 2, BARS) }, { size: [0.08, JCEIL - JFL, BARS - z0], m: T(CELLX, (JFL + JCEIL) / 2, (z0 + BARS) / 2) });
   for (const [p, q] of doors) {
     // the door's frame: flat bars up each side and across the top
     for (const xx of [p - 0.03, q + 0.03]) k.box('iron', [0.05, 2.2 - JFL, 0.02], [xx, (2.2 + JFL) / 2, BARS + 0.005], null, { tint: STRAPI.map((c) => c * 0.85), skip: '-y' });
     k.box('iron', [q - p + 0.11, 0.05, 0.02], [(p + q) / 2, 2.2, BARS + 0.005], null, { tint: STRAPI.map((c) => c * 0.85) });
   }
-  // the doors themselves: rods in a frame of flat bar; the left one open into the corridor, the right one shut, a
-  // padlock on it
+  // the doors themselves: rods in a frame of flat bar, shut, a padlock on each
   const cellDoor = (M, w) => {
     const h = 2.17 - JFL - 0.04;
     for (let a = 0.08; a < w - 0.04; a += 0.14) k.prism('iron', ngon(6, 0.0115), h - 0.04, null, null, { m: mul(M, T(a, h / 2, 0)), tint: STRAPI, smooth: true, skip: '+y-y' });
     for (const y of [0.06, h / 2, h - 0.06]) k.box('iron', [w, 0.04, 0.006], null, null, { m: mul(M, T(w / 2, y, 0.0155)), tint: FLAT });
     for (const a of [0.015, w - 0.015]) k.box('iron', [0.03, h, 0.02], null, null, { m: mul(M, T(a, h / 2, 0.006)), tint: FLAT, skip: '-y' });
   };
-  cellDoor(mul(T(doors[0][0], JFL + 0.03, BARS + 0.02), RY(-1.25)), doors[0][1] - doors[0][0]);
+  cellDoor(T(doors[0][0], JFL + 0.03, BARS + 0.02), doors[0][1] - doors[0][0]);
+  k.box('iron', [0.07, 0.09, 0.03], [doors[0][1] - 0.06, 1.15, BARS + 0.05], null, { tint: [0.9, 0.85, 0.8] });
   cellDoor(T(doors[1][0], JFL + 0.03, BARS + 0.02), doors[1][1] - doors[1][0]);
   k.box('iron', [0.07, 0.09, 0.03], [doors[1][1] - 0.06, 1.15, BARS + 0.05], null, { tint: [0.9, 0.85, 0.8] });
   // the bunks: a plank shelf against the side wall, hung on two chains from the wall, a blanket on it
@@ -858,23 +863,30 @@ export function buildSheriff(recipeIn = {}, env = {}) {
   SILLS.length = 0; decals.length = 0; panes.length = 0;
   const lamps = [], extraProps = [];
   const marks = [], mark = (name) => marks.push([name, k.parts.wood.length, k.parts.iron.length]);
+  k.walkSolids = [];   // (what stops a walker and not the light, in the same frame as the solids)
   walls(k, paint); mark('walls'); falseFront(k); mark('falseFront'); roofs(k); mark('roofs'); porch(k); mark('porch');
   frontThings(k, lamps); mark('front'); officeInside(k, lamps); mark('office'); jailParts(k); mark('jailParts'); jailInside(k, lamps, extraProps); mark('jail');
 
   // the two doors that swing: the office's (hinged on its right, opening in) and the jail's (hinged on its left,
   // opening out); each its own kit and meshes
   const leaves = [];
-  const leafOf = (group, hinge, side, w, h, open, build, seed) => {
+  const leafOf = (group, hinge, side, w, h, open, build, seed, solidM = null) => {
     const lk = new Kit(seed); lk.parts.glow = [];
     build(lk, { w, h, side });
     const g = buildGeometry(lk.parts.wood, 'wood', rng(seed + 1), { topAt: () => 9, tintAt: (x, y, z, t, o) => tintAt(x, y, z, t, { ...o, outside: true }) });
     leaves.push({ group, geo: g, glass: glowGeometry(lk.parts.glow), hinge, open, closed: 0, parts: lk.parts.wood.length });
-    k.solid([w, h, 0.08], null, null, mul(T(...hinge), RY(open), T(side * w / 2, h / 2, 0)));
+    k.solid([w, h, 0.08], null, null, solidM || mul(T(...hinge), RY(open), T(side * w / 2, h / 2, 0)));
   };
   // (half open, as in the concept; in a town it is walked through: env.inTown swings it right back to the wall)
   leafOf('office', [DOOR.a1 - 0.01, FL + 0.005, ZF - 0.05], -1, DOOR.a1 - DOOR.a0 - 0.02, 2.19, (env.inTown ? -100 : -58) * Math.PI / 180, officeDoor, r.seed * 19 + 1);
   const jw = JDOOR.w - 0.15;
   leafOf('jail', [JDX - jw / 2, JFL + 0.005, ZJF - 0.09], 1, jw, JDOOR.h - 0.1 - JFL - 0.01, -100 * Math.PI / 180, jailDoor, r.seed * 19 + 2);
+  // the back door (hinged on its right seen from inside, opening in) and the heavy door between the office and the jail
+  // (hinged at the doorway's front side, opening into the corridor; built turned along the wall, its shut place)
+  const bdw = DOOR_B.a1 - DOOR_B.a0 + 0.04;
+  leafOf('back', [-DOOR_B.a0 + 0.02, FL - 0.1, ZB + 0.028], -1, bdw, DOOR_B.y1 - FL + 0.12, 100 * Math.PI / 180, (t, o) => doorPlanks(t, RY(Math.PI), o.w, o.h), r.seed * 19 + 3);
+  const idw = DOOR_J.a1 - DOOR_J.a0 - 0.04, idh = DOOR_J.y1 - FL - 0.02, idh0 = [XR + 0.08, FL - 0.02, -DOOR_J.a0 - 0.02], ida = -100 * Math.PI / 180;
+  leafOf('cellblock', idh0, 1, idw, idh, ida, (t, o) => into(t, RY(Math.PI / 2), (q) => jailDoor(q, o), 4111), r.seed * 19 + 4, mul(T(...idh0), RY(ida), RY(Math.PI / 2), T(idw / 2, idh / 2, 0)));
 
   // the kit's parts into meshes, one per material
   const R = rng(r.seed + 1), geos = {};
@@ -945,10 +957,12 @@ export function buildSheriff(recipeIn = {}, env = {}) {
   for (const g in k.parts) { counts[g] = k.parts[g].length; parts += counts[g]; }
   const P3 = (x, y, z) => [x + OX, y, z + OZ];
   return {
-    recipe: r, geos, doors: leaves, lamps, light, occ, props, offset: OX, offsetZ: OZ,
+    recipe: r, geos, doors: leaves, lamps, light, occ, props, offset: OX, offsetZ: OZ, walkSolids: k.walkSolids,
     anchors: {
       doorways: [{ name: 'office', centre: [OX, FL + 1.1, ZF + OZ], w: 1.0, h: 2.2, out: [0, 0, 1] }, { name: 'jail', centre: [JDX + OX, 1.1, ZJF + OZ], w: JDOOR.w, h: JDOOR.h, out: [0, 0, 1] },
-        { name: 'back', centre: [0.5 + OX, FL + 1.0, ZB + OZ], w: 0.9, h: 2.1, out: [0, 0, -1] }],
+        { name: 'back', centre: [0.5 + OX, FL + 1.0, ZB + OZ], w: 0.9, h: 2.1, out: [0, 0, -1] },
+        // (indoor: a door between two rooms that E works like the others; no night glow or dark card of its own)
+        { name: 'cellblock', centre: [XR + OX, FL + 1.05, -(DOOR_J.a0 + DOOR_J.a1) / 2 + OZ], w: DOOR_J.a1 - DOOR_J.a0, h: 2.1, out: [-1, 0, 0], indoor: true }],
       sign: { centre: [OXC + 0.05 + OX, 4.27, ZF + OZ], w: 5.2, h: 1.14 }, lanterns: lamps.map((L) => L.p),
       // (the painted sign's picture covers this much of the false front: the board shader lays it on, art.js paintedSign)
       signPaint: { x0: OXC + 0.05 - 2.8 + OX, y0: 3.6, w: 5.6, h: 1.4, z: ZF + OZ },

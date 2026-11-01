@@ -33,7 +33,7 @@
 //     (src/townrooms.js: its spots)
 //   S.open(id), S.close(), S.isOpen   (ids: COUNTERS; the store's areas storeFood, storeHats, storeAnimals are opened
 //     at their spots inside the store)
-//   S.buyGun() -> { ok, note }   the six-shooter bought at its spot by the store's till
+//   S.buyGun() -> { ok, note }   the next gun (the six-shooter, then the rifles) bought at its spot by the store's till
 //
 //   makePanel({ title, sub, body, onClose, wide }) -> { el, body, close() }: the plain panel the counters use (the
 //   pause menu in main.js uses it too). Esc, the x, or a click on the dimmed backdrop closes it.
@@ -44,7 +44,7 @@ import { RUNG_IDS, RUNG } from './lockbox/generate.js';
 import { HATS, hatOf, hatIcon } from './hats.js';
 import { PALETTES } from './actors/folk.js';
 import { PRICES, SADDLES, HORSES, DOGS, DOG_NAMES, LADDER, REVOLVER, handsOf, handsText, dogPrice } from './catalog.js';
-import { gunShop, buyGun } from './gun.js';
+import { gunShop, buyGun, nextGun, GUNS } from './gun.js';
 import { ownedHorses, ownsHorse, rideHorse, horseLook, ridden } from './mounts.js';
 import { TREATS, BOND, TREAT_KINDS, treatsOf, countOf, roomOf, addTreats, treatQuestion, answerLine, bondOf, heartsLine, treatWord } from './treats.js';
 import { levelOf } from './math/skill.js';
@@ -76,7 +76,7 @@ export const COUNTERS = {
   store: { place: 'store', prompt: 'Visit the general store', title: 'General Store', sub: 'Orders, dogs, farm animals and hats', inside: true },
   sheriff: { place: 'sheriff', prompt: "Sheriff's desk", title: "Sheriff's Office", sub: 'Lock boxes and bounties', inside: true },
   // the general store's areas, each opened at its own spot inside (src/townrooms.js: no door of their own)
-  storeFood: { title: 'Food', sub: 'Apples and carrots for your horses' },
+  storeFood: { title: 'Food', sub: 'Treats for your horses, dogs and farm animals' },
   storeHats: { title: 'Hats', sub: 'Bought once, worn as you like' },
   storeAnimals: { title: 'Animals', sub: 'Dogs and farm animals' },
   cabin: { place: 'cabin', prompt: 'Sit at your cabin table', title: 'Your Cabin', sub: 'Open your lock boxes at the table' },
@@ -194,10 +194,10 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
   // (S.treatQ: the question up, { ...treatQuestion, miss: [coins picked wrong], line: what the last wrong pick was })
   const treatRows = () => {
     const room = roomOf(rider), have = treatsOf(rider);
-    let h = `<h3 class="bms-h">Treats for the horses</h3>`;
+    let h = `<h3 class="bms-h">Treats for your animals</h3>`;
     for (const kind of TREAT_KINDS) {
       const per = TREATS.bag[kind], cost = TREATS.price[kind], q = S.treatQ && S.treatQ.kind === kind ? S.treatQ : null;
-      const line = `${per} ${kind}s in a bag, ${cost} gold a bag. ${kind === 'carrot' ? 'Jasper the donkey likes carrots best.' : 'Every horse loves an apple.'}`;
+      const line = `${kind === 'jerky' ? `${per} strips` : `${per} ${kind}s`} in a bag, ${cost} gold a bag. ${kind === 'jerky' ? 'Dogs go wild for it.' : kind === 'carrot' ? 'The donkey and the sheep like carrots best.' : 'Every horse loves an apple, and pigs love them best.'}`;
       let more;
       if (q) {
         more = `<div class="bms-treatq" role="group" aria-label="${esc(q.ask)}"><p>${esc(q.ask)}</p>`
@@ -207,15 +207,15 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
         const bags = [];
         for (let n = 1; n <= TREATS.bagsMost; n++) {
           const fits = n * per <= room, can = rider.gold >= n * cost;
-          bags.push(`<button type="button" data-do="treat-bags" data-id="${kind}:${n}" ${fits && can ? '' : 'disabled'} title="${!fits ? 'No room in your saddlebags' : !can ? `Need ${n * cost - rider.gold} more gold` : `${n * per} ${kind}s`}">${n === 1 ? '1 bag' : `${n} bags`}</button>`);
+          bags.push(`<button type="button" data-do="treat-bags" data-id="${kind}:${n}" ${fits && can ? '' : 'disabled'} title="${!fits ? 'No room in your saddlebags' : !can ? `Need ${n * cost - rider.gold} more gold` : `${n * per} ${kind === 'jerky' ? 'strips' : `${kind}s`}`}">${n === 1 ? '1 bag' : `${n} bags`}</button>`);
         }
         more = `<div class="bms-kinds bms-bags">${bags.join('')}</div>`;
       }
-      h += `<div class="bms-row is-tall"><span class="bms-treatpic">${TREAT_ICON[kind]}</span><div class="bms-what"><b>${kind === 'apple' ? 'Apples' : 'Carrots'}</b><small>${esc(line)}</small>${more}</div>`
+      h += `<div class="bms-row is-tall"><span class="bms-treatpic">${TREAT_ICON[kind]}</span><div class="bms-what"><b>${kind === 'apple' ? 'Apples' : kind === 'jerky' ? 'Jerky' : 'Carrots'}</b><small>${esc(line)}</small>${more}</div>`
         + `<div class="bms-act">${price(cost)}<span class="bms-tag">${have[kind]} in your bags</span></div></div>`;
     }
     const n = countOf(rider);
-    return h + `<p class="bms-tip">Your saddlebags hold ${TREATS.most} treats (${n} in them now${room < TREATS.bag.apple ? ': full up' : ''}). By a horse's head, the apple button${typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches ? '' : ' (or <kbd>G</kbd>)'} gives it one. Wild apples grow by your homestead and along the creek, free to pick.</p>`;
+    return h + `<p class="bms-tip">Your saddlebags hold ${TREATS.most} treats (${n} in them now${room < TREATS.bag.apple ? ': full up' : ''}). By an animal's head, the treat button${typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches ? '' : ' (or <kbd>G</kbd>)'} gives it one. Wild apples grow by your homestead and along the creek, free to pick.</p>`;
   };
   const short = (n) => `Need ${n - rider.gold} more`;
 
@@ -285,7 +285,14 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
     } else {
       const right = g.state === 'owned' ? `<span class="bms-tag is-on">In your holster</span>`
         : `${price(g.price)}<button type="button" data-do="buy-gun" ${g.state === 'short' ? 'disabled' : ''}>${g.state === 'short' ? short(g.price) : 'Buy'}</button>`;
-      h += row({ name: REVOLVER.name, line: g.state === 'owned' ? 'Near the bandits, F (or Shoot) fires instead of the rope. Cattle are still roped.' : REVOLVER.line, right, pic: GUN_PIC });
+      h += row({ name: REVOLVER.name, line: g.state === 'owned' ? 'Near the bandits, choose it with the buttons on the right and aim by hand. Cattle are still roped.' : REVOLVER.line, right, pic: GUN_PIC });
+      // the two rifles (only with guns allowed): farther and steadier, on the cabin's rack once bought
+      for (const id of ['lever', 'single']) {
+        const G = GUNS[id], r = gunShop(rider, id);
+        const act = r.state === 'owned' ? `<span class="bms-tag is-on">${esc(G.where)}</span>`
+          : `${price(r.price)}<button type="button" data-do="buy-gun" data-id="${id}" ${r.state === 'short' ? 'disabled' : ''}>${r.state === 'short' ? short(r.price) : 'Buy'}</button>`;
+        h += row({ name: G.name, line: G.line, right: act, pic: GUN_PIC });
+      }
     }
     return h;
   }
@@ -422,8 +429,8 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
       onBuy('hat');
       draw(`The ${HATS.find((x) => x.id === id).name.toLowerCase()} is on your head. It suits you!`);
     } else if (what === 'buy-gun') {
-      const r = buyGun(rider);
-      if (r.ok) onBuy('revolver');
+      const gid = GUNS[id] ? id : 'revolver', r = buyGun(rider, gid);
+      if (r.ok) onBuy(gid);
       draw(r.note);
     } else if (what === 'wear-hat') {
       rider.look = { ...(rider.look || {}), hatStyle: id, hat: true }; saveRider(rider); onBuy('hat'); draw();
@@ -491,7 +498,7 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
     return { ok: true, note: ridden(rider) ? `The ${sn} is on your horse. Press H to whistle for it.` : `The ${sn} is yours. Now it needs a horse under it: Jasper the donkey is the cheapest.` };
   };
   // THE SIX-SHOOTER bought at its spot in the store, by the till (src/townrooms.js): -> { ok, note }
-  S.buyGun = () => { const r = buyGun(rider); if (r.ok) onBuy('revolver'); return r; };
+  S.buyGun = () => { const gid = nextGun(rider) || 'revolver', r = buyGun(rider, gid); if (r.ok) onBuy(gid); return r; };
   S.useSaddle = (id) => { const o = owned(); o.saddle = id; saveRider(rider); onBuy('saddle'); return { ok: true, note: '' }; };
   S.saddlesOwned = () => saddlesOwned();
   S.redraw = () => draw();

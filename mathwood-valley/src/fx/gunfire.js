@@ -30,11 +30,11 @@ import { makeDust, DUST } from './dust.js';
 export const GUNFIRE = {
   guns: 12,          // revolvers drawn at most (a hold-up's bunch is 9 at most, a few more riding in)
   scale: 1.8,        // drawn this much bigger than life, so it reads from the saddle at 10 to 40 m
-  flash: 0.07,       // s a muzzle flash shows
-  flashSize: 0.5,    // m across (at least `flashFar` of the distance from the camera)
-  flashFar: 0.028,
-  flashes: 4,        // in the pool
-  smoke: { n: 8, life: 1.2, size: 0.55 },   // puffs in the pool, s each lasts, m across at its biggest
+  flash: 0.11,       // s a muzzle flash shows
+  flashSize: 1.0,    // m across (at least `flashFar` of the distance from the camera)
+  flashFar: 0.05,
+  flashes: 6,        // in the pool
+  smoke: { n: 12, life: 1.6, size: 1.0 },   // puffs in the pool, s each lasts, m across at its biggest
   slivers: { n: 48, per: 10, life: 1.8, speed: [1.5, 3.5] },   // in the pool, a shot's worth, s each lasts, m/s out
   potato: { per: 5, smoke: 1 },               // the potato tier: fewer slivers a shot, one puff of smoke
 };

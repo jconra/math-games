@@ -96,7 +96,8 @@ import * as Q from './ineq.js';
 import { setLineSVG } from './setline.js';
 import { GOLDEN_RULE, STEPS, SKIP_WORD, cardMode, currentStep } from './steps.js';
 import { showNumberLine, layoutNumberLine } from '../ui/numberline.js';
-import { SAFECRACKER_BOXES } from '../save.js';
+import { SAFECRACKER_BOXES, saveRider as saveRiderNow } from '../save.js';
+import { levelTool, stepLevel } from '../ui/leveltool.js';
 import { partSum, blankWork } from '../math/jobsums.js';
 
 const PART_RIGHT_MS = 650;       // a part answered right: the answer sits in its slot this long before the next part
@@ -389,7 +390,8 @@ export function openLockbox(root = document.body, opts = {}) {
   const panel = h('div', 'lbx-panel');
   el.appendChild(panel);
   const top = h('header', 'lbx-top');
-  top.innerHTML = `<div class="lbx-name"><span class="lbx-tier"></span><span class="lbx-rung"></span></div>
+  top.innerHTML = `<div class="lbx-name"><span class="lbx-tier"></span><span class="lbx-rung"></span>
+      <span class="lbx-lv" hidden><button type="button" data-dir="-1" aria-label="A level down">‹</button><span class="lbx-lvt"></span><button type="button" data-dir="1" aria-label="A level up">›</button></span></div>
     <div class="lbx-right">
       <div class="lbx-purse" title="Your gold"><span class="lbx-purse-coin">${COIN_SVG}</span><b class="lbx-purse-n">0</b></div>
       <button class="lbx-rules" type="button" hidden>The rules</button>
@@ -397,6 +399,7 @@ export function openLockbox(root = document.body, opts = {}) {
       <button class="lbx-tools" type="button" title="Tools: the times chart" hidden>${TOOLS_SVG}<span>Tools</span></button>
       <button class="lbx-done" type="button">Done for now<kbd>Esc</kbd></button></div>`;
   panel.appendChild(top);
+  const levelEl = top.querySelector('.lbx-lv');
   const bodies = h('div', 'lbx-bodies');
   panel.appendChild(bodies);
   const flyLayer = h('div', 'lbx-fly');
@@ -464,12 +467,14 @@ export function openLockbox(root = document.body, opts = {}) {
 
   let closed = false;
   let cur = null;   // the box being worked (mountBox's controller)
+  let infoNow = null, forcedNow = false;   // (what it was dealt from: the level picker deals it again)
 
   // ===================================================================================================================
   // One box: its page (steps card, paper, mat, tray), its moves and hints, the check and the lid.
   // finished(result, ctrl) is called once when it is solved and checked, or set aside.
   // ===================================================================================================================
   function mountBox(info, { problem: forced = null, finished }) {
+    infoNow = info; forcedNow = !!forced;
     const tier = TIER_NAME[info.tier] ? info.tier : 'iron';
     // plan: the strand this box is recorded in, and the point it was made at (strand.js)
     let problem, plan;
@@ -606,7 +611,8 @@ export function openLockbox(root = document.body, opts = {}) {
     const skippedNow = session.results.filter((r) => !r.solved).length;   // (skipped boxes stay in the bags)
     const more = info.from === 'loot' && typeof next !== 'function'
       ? (bag.length ? ` · ${bag.length} more` : skippedNow ? ` · last one · ${skippedNow} skipped` : ' · the last one') : '';
-    top.querySelector('.lbx-rung').innerHTML = `${esc(where + more)} · ${esc(plan && plan.title ? plan.title : rung.name)}${opts.dev || opts.debug ? ` <small>${esc(plan && plan.id ? plan.id : problem.rung)}</small>` : ''}`;
+    showLevel();
+    top.querySelector('.lbx-rung').innerHTML = `${esc(where + more)}${levelEl.hidden ? ` · ${esc(plan && plan.title ? plan.title : rung.name)}` : ''}${opts.dev || opts.debug ? ` <small>${esc(plan && plan.id ? plan.id : problem.rung)}</small>` : ''}`;
 
     // ----- state -----
     let phase = 'play';          // play | anim | parts | brackets | review | open | done
@@ -2348,6 +2354,26 @@ export function openLockbox(root = document.body, opts = {}) {
       setTimeout(tickWait, 50);
     });
   }
+
+  // THE LEVEL PICKER, in the box's own top strip (the tools strip is under the box): the arrows step the rider's level on
+  // the lock boxes' ladder (src/ui/leveltool.js), and the box up now is dealt again at the new level straight away. Only a
+  // box the levels dealt: not a store order's equation, a rig's chosen rung, or a rider whose grown-up turned picking off.
+  function showLevel() {
+    const v = rider && opts.levels !== false && !opts.rung && !forcedNow ? levelTool(rider, 'lockbox') : null;
+    levelEl.hidden = !v;
+    if (!v) return;
+    levelEl.querySelector('.lbx-lvt').textContent = v.words;
+    for (const b of levelEl.querySelectorAll('button')) { b.hidden = !v.pick; b.disabled = +b.dataset.dir < 0 ? !v.canDown : !v.canUp; }
+  }
+  levelEl.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-dir]'); if (!b || closed) return;
+    b.blur();
+    if (!cur || !stepLevel(rider, 'lockbox', +b.dataset.dir)) return;
+    try { saveRiderNow(rider); } catch (err) { console.warn(err); }
+    const ph = cur.phase();
+    if (ph === 'open' || ph === 'done') { showLevel(); return; }   // (a box being opened: the next one comes at the new level)
+    slideTo(infoNow);
+  });
 
   // the next box slides in from the right while this one slides out to the left
   function slideTo(info) {

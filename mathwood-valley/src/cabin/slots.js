@@ -21,6 +21,7 @@
 //                         looks: the points you look at to pick it (as E picks); also: a piece made in code that goes
 //                         with the file (the stove's fire and pipe)
 //   ownedPieces(rider)    -> the slot ids this rider owns (from rider.owned.cabin; anything unknown dropped)
+//   offeredPieces(rider)  -> the slots this rider can have (the rifle rack only with guns allowed)
 //   nextPiece(rider)      -> the cheapest slot not owned yet, or null when the cabin is full
 //   homeDogs(rider)       -> the rider's dogs as { kind, name, following }: the one following you and the ones at home
 //   buyPiece(rider, id, spend)  -> 'bought' | 'owned' | 'short' | 'unknown'   (spend: save.js spend; saves on a buy)
@@ -33,7 +34,7 @@ export const SLOTS = [
     at: [0.35, null, -1.2], rot: 0, size: [2.1, 1.4], box: null, looks: [[0.35, 0.82, -1.2]] },
   { id: 'lanterns', name: 'Two lanterns', price: PRICES.furniture.lanterns, made: 'lanterns', file: 'lantern', line: 'Two oil lanterns hung from the beams. The room glows at night.',
     at: [0, 0, 0], rot: 0, box: null, looks: [[-0.69, 2.84, -1.75], [1.44, 2.84, -1.0]] },
-  { id: 'picture', name: 'A painting', price: PRICES.furniture.picture, file: 'picture', line: 'A painting of a farm by a river, in a gilt frame, over the bed.',
+  { id: 'picture', name: 'A framed picture', price: PRICES.furniture.picture, file: 'picture', line: 'A picture of the town from the mill hill, in a gilt frame, over the bed.',
     at: [-1.35, 2.35, -2.9], wall: [0, 0, -1], rot: 0, fit: 0.75, box: null, looks: [[-1.35, 2.35, -2.75]] },
   { id: 'dogbeds', name: 'Dog beds', price: PRICES.furniture.dogbeds, made: 'dogbeds', line: 'A soft bed for every dog you own. Dogs at home sleep inside on them.',
     at: [-1.9, null, -0.3], rot: 0, box: null, looks: [[-1.9, 0.9, -0.3], [-1.9, 0.9, -1.25], [-0.98, 0.9, -0.42]] },   // (a bed is 0.86 m across: the spots stay over 0.9 m apart)
@@ -48,7 +49,7 @@ export const SLOTS = [
   // stand in the clear floor between, on either side of the way in, facing out to the yard (the chair's front is +z))
   { id: 'bed', name: 'Quilted bed', price: PRICES.furniture.bed, file: 'bed', line: 'A log bed with a patchwork quilt, under the painting.',
     at: [-1.38, null, -2.25], rot: 90, fit: 1.9, box: [1.06, 1.9], looks: [[-1.35, 1.3, -2.25]] },   // (head to the left wall)
-  { id: 'rifles', name: 'Rifle rack', price: PRICES.furniture.rifles, made: 'rifles', line: 'A rack on the wall with two rifles, like any ranch house.',
+  { id: 'rifles', name: 'Rifle rack', price: PRICES.furniture.rifles, made: 'rifles', guns: true, line: 'A rack on the wall for the rifles you buy at the general store.',
     at: [-2.4, 2.0, -0.45], wall: [-1, 0, 0], rot: 90, box: null, looks: [[-2.25, 2.0, -0.45]] },
   { id: 'stove', name: 'Iron stove', price: PRICES.furniture.stove, file: 'stove', also: 'stovefire', fitH: 1.05, line: 'A cast-iron wood stove with a fire in it. The heart of a home.',
     at: [2.45, null, -2.3], rot: -45, box: [0.85, 0.85], looks: [[2.45, 1.4, -2.3]] },
@@ -61,9 +62,12 @@ export function ownedPieces(rider) {
   return SLOTS.filter((s) => list.includes(s.id)).map((s) => s.id);
 }
 
+// what the cabin offers this rider: everything, but the rifle rack only with guns allowed (src/gun.js) or already bought
+export const offeredPieces = (rider) => { const have = ownedPieces(rider); return SLOTS.filter((s) => !s.guns || rider.mode === 'shoot' || have.includes(s.id)); };
+
 export function nextPiece(rider) {
   const have = ownedPieces(rider);
-  return SLOTS.filter((s) => !have.includes(s.id)).sort((a, b) => a.price - b.price)[0] || null;
+  return offeredPieces(rider).filter((s) => !have.includes(s.id)).sort((a, b) => a.price - b.price)[0] || null;
 }
 
 // Buys a piece: spend(rider, price) takes the gold and saves (save.js spend); the piece is added to rider.owned.cabin

@@ -10,11 +10,13 @@
 // Each keeps to the right-hand edge of the road, outside the wagons' lane, so the wagons roll past them; where the
 // edge is blocked (a fence post, a thicket) they come in toward the middle and a wagon behind waits for them. They slow
 // behind someone slower going their way (riders step out round walkers when the way is clear), stop for the
-// player, the horse and the dog (and step round them after a moment), and wait short of a wagon a gang has held up.
+// player, the horse and the dog, and after a moment go round them (a side picked once and kept to, single file: never a
+// step back and forth), and wait short of a wagon a gang has held up. Their legs go by how they really move, and no two
+// of a party are in step. Fewer at night (byNight): the rest leave only out of sight.
 // Coming close, each says hello (src/ui/howdy.js): a walker stops a moment and waves, a rider tips his hat.
 // They cost little far away: one is only made (a person, or a horse with its saddle and rider) within `show` metres of
-// the player, the nearest few at most; past that it is a far figure (src/crowd.js), the two crossfading as one takes
-// over from the other, or, past the figures' reach, just a number moving along the road.
+// the player, the nearest few at most; past that it is a far figure (src/crowd.js) in its horse's colours, one fully in
+// before the other goes (crossReal), or, past the figures' reach, just a number moving along the road.
 // HOW MANY, live: the governor's 'travellers' dial (world/governor.js; else ROADFOLK by the tier). NOTHING POPS IN VIEW:
 // a new party sets off only where the player can't see it (a road's end, a stretch of road out of view: src/sight.js);
 // when the governor wants fewer, a party leaves only once it is out of sight (it waits its turn), and fewer drawn as
@@ -37,13 +39,13 @@
 //   F.dispose()
 import * as THREE from 'three';
 import { makePerson, SKINS, HAIRS, PALETTES } from './actors/folk.js';
-import { loadRiderKit, makeRider } from './actors/riders.js';
+import { loadRiderKit, makeRider, pickRide, rideCoat } from './actors/riders.js';
 import { wagonAt, fadeAll, unfade } from './wagon.js';
 import { howdy, makeHowdyWatch } from './ui/howdy.js';
-import { ROADFOLK, TRAVELLER_LOOKS, pickParty, paceFor, edgeOf, startFor, seedSpots, slotFor, hikerKit, spacing } from './roadfolkplan.js';
+import { ROADFOLK, TRAVELLER_LOOKS, pickParty, paceFor, edgeOf, startFor, seedSpots, slotFor, hikerKit, spacing, byNight } from './roadfolkplan.js';
 import { AMBUSH } from './missions/wagonplan.js';
 import { makeSight } from './sight.js';
-import { COATS } from './crowd.js';
+import { crossReal, crossFigure, farEdge } from './crowd.js';
 
 const rnd = (a, b) => a + Math.random() * (b - a);
 const pick = (list) => list[Math.floor(Math.random() * list.length)];
@@ -154,6 +156,7 @@ export function makeRoadFolk({ W, scene = W.scene, folk, animals, road, square =
     const t = {
       id: count++, kind, dir, u, speed: party.speed, pace: 0, k: null, shift: 0, shiftLeft: 0, passing: null, party, rank,
       // (the kit its far figure shows: a pack with the adventurers' outfits, whoever wears one, and the bedroll on top)
+      ride: kind === 'rider' ? pickRide() : null, legs: 1 + (Math.random() * 2 - 1) * ROADFOLK.legs, seed: Math.random() * 100,
       slot: slotFor(kind, rank), kit: kind !== 'walker' ? 0 : kit && kit.bedroll ? 2 : /^adventurer_/.test(look.outfit) ? 1 : 0, look,
       made: null, mem: null, gear: null, fade: 1, fadeTo: 1, fadeRate: 1, ending: false, gone: false, why: '', stopT: 0, waveT: 0,
       hw: makeHowdyWatch(), pos: new THREE.Vector3(), h: 0, dist: Infinity, lastX: null, lastZ: null,
@@ -164,7 +167,7 @@ export function makeRoadFolk({ W, scene = W.scene, folk, animals, road, square =
     return t;
   }
   function addParty(kind, size, dir, u) {
-    const P = { id: pid++, kind, size, dir, speed: paceFor(kind), members: [], coat: COATS[Math.floor(Math.random() * COATS.length)] };
+    const P = { id: pid++, kind, size, dir, speed: paceFor(kind), members: [] };
     for (let i = 0; i < size; i++) P.members.push(add(kind, dir, u - dir * slotFor(kind, i).du, P, i));
     F.parties.push(P);
     return P;
@@ -187,8 +190,8 @@ export function makeRoadFolk({ W, scene = W.scene, folk, animals, road, square =
   function make(t, inSight) {
     if (t.kind === 'rider') {
       if (!F.kit) return false;
-      const r = makeRider(F.kit, { W, folk, scene, look: t.look, shadows });
-      r.place(t.pos.x, t.pos.z, t.h); r.speed = t.pace; r.update(0);
+      const r = makeRider(F.kit, { W, folk, scene, look: t.look, shadows, ride: t.ride });
+      r.place(t.pos.x, t.pos.z, t.h); r.speed = t.pace; r.update(Math.random());   // (its stride from its own place)
       t.made = r;
     } else {
       const p = makePerson(folk, { ...t.look, shadows });
@@ -202,9 +205,10 @@ export function makeRoadFolk({ W, scene = W.scene, folk, animals, road, square =
     if (t.k == null) t.k = edgeHere(t);
     // (made where its far figure stands: the two crossfade; with no figures there, made in sight it comes in out of the
     // haze, else it is simply there)
-    if (crowd && t.dist < crowd.far) { t.fade = 0; t.fadeTo = 1; t.fadeRate = 1 / ROADFOLK.fade.in; }
+    t.cross = false;
+    if (crowd && t.dist < crowd.far) { t.fade = 0; t.fadeTo = 1; t.fadeRate = 1 / ROADFOLK.fade.in; t.cross = true; }
     else if (inSight) { t.fade = 0; t.fadeTo = 1; t.fadeRate = 1 / ROADFOLK.fade.in; } else { t.fade = 1; t.fadeTo = 1; }
-    fadeAll(roots(t), t.fade, t.mem, [personOf(t)]);
+    fadeAll(roots(t), t.cross ? crossReal(t.fade) : t.fade, t.mem, [personOf(t)]);
     t.hw.reset();
     return true;
   }
@@ -214,7 +218,7 @@ export function makeRoadFolk({ W, scene = W.scene, folk, animals, road, square =
     if (t.gear) { t.gear.removeFromParent(); t.gear = null; }
     if (t.kind === 'rider') t.made.dispose();
     else { t.made.root.removeFromParent(); t.made.dispose(); }
-    t.made = null; t.fade = 1; t.fadeTo = 1;
+    t.made = null; t.fade = 1; t.fadeTo = 1; t.cross = false;
   }
   // put away: in sight, it dissolves first (then `then`: 'away' unmade, 'gone' taken off the road)
   function fadeOut(t, rate, then) { t.fadeTo = 0; t.fadeRate = 1 / rate; t.then = then; }
@@ -222,31 +226,32 @@ export function makeRoadFolk({ W, scene = W.scene, folk, animals, road, square =
   // the player can't see it; else not now (false: it waits its turn)
   function handBack(t) {
     if (!t.made || t.fadeTo <= 0) return true;
-    if (crowd && t.dist < crowd.far) { fadeOut(t, ROADFOLK.fade.out, 'away'); return true; }
+    if (crowd && t.dist < crowd.far) { t.cross = true; fadeOut(t, ROADFOLK.fade.out, 'away'); return true; }
     if (hidden(t.pos.x, t.pos.z, sight ? sight.far : 0)) { unmake(t); return true; }
     return false;
   }
 
   // ── RIDING OUT: a few already on the road ──────────────────────────────────────────────────────────────────────
-  let seeded = false;
+  let seeded = false, clock = 0;
   function seed(at) {
     seeded = true;
     here.copy(at);
-    const n = Math.round(most * ROADFOLK.seed / 1.8);
+    const n = Math.round(dayMost() * ROADFOLK.seed / 1.8);
     for (const s of seedSpots(n, { L, apart: sp.apart, dist: (u) => { spot(u, 1, 0, _g); return Math.hypot(_g.x - at.x, _g.z - at.z); } })) { const p = pickParty(Math.random, W.night || 0); addParty(p.kind, p.size, s.dir, s.u); }
   }
   // THE GOVERNOR'S MORE AND FEWER (every half second): well short of the most, a party joins the road where the player
   // can't see it (rather than waiting for the ends to send them); over it, a party out of sight leaves
   let tidyT = 0, makeT = 0;
+  const dayMost = () => byNight(most, W.night);   // (fewer after dark)
   function tidy(at) {
     if (F.hold) return;
-    if (F.list.length < most * 0.6) {
+    if (F.list.length < dayMost() * 0.6) {
       const dist = (u) => { spot(u, 1, 0, _g); return Math.hypot(_g.x - at.x, _g.z - at.z); };
       for (const s of seedSpots(3, { L, apart: sp.apart, away: show + 40, others: F.list, dist })) {
         if (!hiddenU(s.u, s.dir)) continue;
         const p = pickParty(Math.random, W.night || 0); note('join', 'more wanted', addParty(p.kind, p.size, s.dir, s.u)); break;
       }
-    } else if (F.list.length > most + 2) {
+    } else if (F.list.length > dayMost() + 2) {
       let best = null;
       for (const P of F.parties) {
         const ms = membersOf(P);
@@ -283,7 +288,7 @@ export function makeRoadFolk({ W, scene = W.scene, folk, animals, road, square =
     let block = Infinity, by = null;
     for (const m of ms) {
       if (!m.made) continue;
-      for (const q of list) {
+      if (!(t.ignore > 0)) for (const q of list) {
         const p = posOf(q); if (p.x === undefined) continue;
         if (Math.abs(p.x - m.pos.x) > la + 3 || Math.abs(p.z - m.pos.z) > la + 3) continue;
         for (let d = 0.4; d <= la + 0.01; d += 0.7) { spot(m.u + m.dir * d, m.dir, m.k, _a); if (Math.hypot(p.x - _a.x, p.z - _a.z) < wide) { if (d < block) { block = d; by = p; } break; } }
@@ -292,7 +297,7 @@ export function makeRoadFolk({ W, scene = W.scene, folk, animals, road, square =
     }
     if (block < Infinity) {
       v = Math.min(v, block < 1.0 ? 0 : (block - 1.0) * 1.2);
-      if (by) { t.why = 'stopped for someone'; if (v < 0.05) stepRound(t, by, dt); }
+      if (by) { t.why = t.round ? 'going round' : 'stopped for someone'; if (v < 0.05 && !t.round) startRound(t, by, dt); }
     } else t.stopT = 0;
     return v;
   }
@@ -303,18 +308,28 @@ export function makeRoadFolk({ W, scene = W.scene, folk, animals, road, square =
     for (let d = 0; d <= 8; d += 2) { spot(t.u + t.dir * d, t.dir, k, _a); if (W.blocked(_a.x, _a.z) || wagonAt(_a.x, _a.z, 0.5)) return false; }
     return true;
   }
-  // stopped a while for someone standing in the way: a step to one side of them (away from where they stand)
-  function stepRound(t, p, dt) {
+  // stopped for someone standing in the way: a side picked once, the nearer that's clear, and kept to till past them
+  function startRound(t, p, dt) {
     t.stopT += dt;
-    if (t.stopT < ROADFOLK.stepAfter) return;
+    if (t.stopT < ROADFOLK.round.after) return;
     t.stopT = 0;
+    const R = ROADFOLK.round, wide = ROADFOLK.wide[t.kind];
     spot(t.u, t.dir, 0, _q);
-    const side = (p.x - _q.x) * -_t.z * t.dir + (p.z - _q.z) * _t.x * t.dir;   // (how far right of the middle they are)
-    for (const s of side > t.k ? [-1, 1] : [1, -1]) {
-      const k = t.k + s * ROADFOLK.sideStep;
-      if (k < ROADFOLK.least || k > edgeOf(t.kind, laneAt(t.u, t.dir)) + 1.5) continue;
-      if (clearAt(t.u + t.dir * 1.5, t.dir, k)) { t.shift = k - edgeHere(t); t.shiftLeft = 6; return; }
+    const nx = -_t.z * t.dir, nz = _t.x * t.dir, pk = (p.x - _q.x) * nx + (p.z - _q.z) * nz;   // (how far right of the middle they stand)
+    const way = [pk + wide + R.clear, pk - wide - R.clear].sort((a, b) => Math.abs(a - t.k) - Math.abs(b - t.k));
+    for (const k of way) {
+      if (Math.abs(k - t.k) > R.most) continue;
+      let ok = true;
+      for (let d = 0; d <= 7 && ok; d += 1) { spot(t.u + t.dir * d, t.dir, k, _a); if (W.blocked(_a.x, _a.z) || wagonAt(_a.x, _a.z, 0.5)) ok = false; }
+      if (ok) { t.round = { k, until: t.u + t.dir * (Math.max(0, (p.x - _q.x) * _t.x + (p.z - _q.z) * _t.z) * t.dir + ROADFOLK.look[t.kind] + R.past) }; F.rounds = (F.rounds || 0) + 1; return; }
     }
+  }
+  // the time-out on no progress, like the dog's "best so far": stuck too long behind someone, it minds nobody for a moment
+  function progress(t, dt) {
+    const S = ROADFOLK.stuck;
+    if (t.best == null || (t.u - t.best) * t.dir >= S.gain || t.why === 'saying hello' || t.why === 'waiting: a hold-up' || t.dist > show) { t.best = t.u; t.bestT = 0; }
+    else if ((t.bestT = (t.bestT || 0) + dt) > S.after) { t.ignore = S.ignore; t.bestT = 0; F.timeouts = (F.timeouts || 0) + 1; }
+    if (t.ignore > 0) t.ignore -= dt;
   }
   // the leader: its pace, along the road, and its line (its edge, and any step aside easing back to it)
   function lead(t, dt, list, held) {
@@ -325,27 +340,32 @@ export function makeRoadFolk({ W, scene = W.scene, folk, animals, road, square =
     t.pace = t.pace < v ? Math.min(v, t.pace + acc * dt) : Math.max(v, t.pace - brk * dt);
     t.u += t.dir * t.pace * dt;
     if (t.shiftLeft < Infinity && t.shift) { t.shiftLeft -= t.pace * dt; if (t.shiftLeft <= 0) t.shift = 0; }
-    const want = Math.max(ROADFOLK.least, edge + t.shift);
-    t.k += Math.max(-0.9 * dt, Math.min(0.9 * dt, want - t.k));
+    // (going round: off to the side it picked, even over the road's middle, till it is past them)
+    if (t.round && (t.u - t.round.until) * t.dir > 0) t.round = null;
+    const want = t.round ? t.round.k : Math.max(ROADFOLK.least, edge + t.shift), side = t.round ? ROADFOLK.round.side : 0.9;
+    t.k += Math.max(-side * dt, Math.min(side * dt, want - t.k));
+    progress(t, dt);
   }
   // the others: alongside the leader, further out (or behind it, in single file: passing, stepping round, a tight edge)
   function follow(t, L0, rank, dt) {
     const side = ROADFOLK.abreast[t.kind] ?? ROADFOLK.abreast.walker;
-    const single = !!L0.passing || L0.shift < -0.05 || L0.stopT > 0 || ((t.made || L0.made) && !(clearAt(L0.u, L0.dir, L0.k + side) && clearAt(L0.u + L0.dir * 2, L0.dir, L0.k + side)));
+    const single = !!L0.passing || !!L0.round || L0.shift < -0.05 || ((t.made || L0.made) && !(clearAt(L0.u, L0.dir, L0.k + side) && clearAt(L0.u + L0.dir * 2, L0.dir, L0.k + side)));
     const want = slotFor(t.kind, rank, single ? 0 : Infinity), e = ROADFOLK.ease * dt;
     const ddu = Math.max(-e * 1.5, Math.min(e * 1.5, want.du - t.slot.du));
     t.slot = { du: t.slot.du + ddu, dk: t.slot.dk + Math.max(-e, Math.min(e, want.dk - t.slot.dk)) };
-    t.dir = L0.dir; t.u = L0.u - L0.dir * t.slot.du; t.k = Math.max(ROADFOLK.least, (L0.k ?? edgeOf(t.kind, laneAt(t.u, t.dir))) + t.slot.dk);
+    // (each his own wander about his place: two side by side are never a matched pair)
+    const W_ = ROADFOLK.wander, ph = clock / W_.every * 6.283 + t.seed, far = single ? 0 : 1;
+    t.dir = L0.dir; t.u = L0.u - L0.dir * (t.slot.du + far * Math.sin(ph) * W_.along); t.k = Math.max(L0.round ? -9 : ROADFOLK.least, (L0.k ?? edgeOf(t.kind, laneAt(t.u, t.dir))) + t.slot.dk + far * Math.sin(ph * 1.7) * W_.out);
     t.pace = Math.max(0, L0.pace - ddu / Math.max(dt, 1e-3)); t.why = L0.why; t.passing = L0.passing;
   }
 
   F.update = (dt, at) => {
     if (disposed || !at) return;
-    here.copy(at);
+    here.copy(at); clock += dt;
     if (!seeded) seed(at);
     lookNow();
     // a new party now and then (from out of sight)
-    if ((timer -= dt) <= 0) { timer = rnd(...sp.every); if (!F.hold && F.list.length < most) send(); }
+    if ((timer -= dt) <= 0) { timer = rnd(...sp.every); if (!F.hold && F.list.length < dayMost()) send(); }
     if ((tidyT -= dt) <= 0) { tidyT = 0.5; tidy(at); }
     // which are made: the nearest few within `show` (one made a frame: making one is the costly part), a party together
     let live = 0, far = null;
@@ -398,9 +418,9 @@ export function makeRoadFolk({ W, scene = W.scene, folk, animals, road, square =
   function figures() {
     for (const t of F.list) {
       if (t.gone || t.ending || t.then === 'gone' || t.dist > crowd.far) continue;
-      const a = t.made ? 1 - t.fade : 1; if (a <= 0.01) continue;
+      const a = (t.made ? (t.cross ? crossFigure(t.fade) : 0) : 1) * farEdge(t.dist, crowd.far); if (a <= 0.01) continue;
       const pal = PALETTES[t.look.palette] || PALETTES.drifter;
-      if (t.kind === 'rider') crowd.rider(t.pos.x, t.pos.z, t.h, t.pace, { coat: t.party.coat, shirt: pal[0], hat: pal[3], seed: t.id }, a);
+      if (t.kind === 'rider') crowd.rider(t.pos.x, t.pos.z, t.h, t.pace, { coat: rideCoat(W, t.ride), shirt: pal[0], hat: pal[3], seed: t.id }, a);
       else crowd.walker(t.pos.x, t.pos.z, t.h, t.pace, { shirt: pal[0], pants: pal[1], hat: pal[3], kit: t.kit, seed: t.id }, a);
     }
   }
@@ -414,6 +434,8 @@ export function makeRoadFolk({ W, scene = W.scene, folk, animals, road, square =
     spot(t.u, t.dir, t.k ?? edgeOf(t.kind, laneAt(t.u, t.dir)), _m);
     // facing the way it goes (and a little across while it steps aside)
     const mx = _m.x - t.pos.x, mz = _m.z - t.pos.z;
+    // (how fast it really goes, sideways too: the legs go by this, never a slide with the legs still)
+    if (dt > 0) t.real = (t.real || 0) + (Math.min(8, Math.hypot(mx, mz) / dt) - (t.real || 0)) * Math.min(1, dt * 8);
     let face = t.h;
     if (mx * mx + mz * mz > 1e-6) face = Math.atan2(mx, mz);
     else { spot(t.u + t.dir, t.dir, t.k ?? 0, _a); face = Math.atan2(_a.x - _m.x, _a.z - _m.z); }
@@ -425,7 +447,7 @@ export function makeRoadFolk({ W, scene = W.scene, folk, animals, road, square =
     // fading in or out
     if (t.fade !== t.fadeTo) {
       t.fade = t.fade < t.fadeTo ? Math.min(t.fadeTo, t.fade + t.fadeRate * dt) : Math.max(t.fadeTo, t.fade - t.fadeRate * dt);
-      fadeAll(roots(t), t.fade, t.mem, [personOf(t)]);
+      fadeAll(roots(t), t.cross ? crossReal(t.fade) : t.fade, t.mem, [personOf(t)]);
       if (t.fade <= 0 && t.fadeTo <= 0) { if (t.then === 'gone') t.gone = true; else unmake(t); return; }
     }
     // saying hello as the player comes close
@@ -439,7 +461,7 @@ export function makeRoadFolk({ W, scene = W.scene, folk, animals, road, square =
     if (t.kind === 'rider') {
       const r = t.made;
       r.yawRate = dt > 0 ? yaw / dt : 0;
-      r.x = t.pos.x; r.z = t.pos.z; r.heading = t.h; r.speed = t.pace;
+      r.x = t.pos.x; r.z = t.pos.z; r.heading = t.h; r.speed = Math.max(t.pace, t.real > 0.25 ? t.real : 0) * t.legs;
       r.update(dt);
       return;
     }
@@ -454,9 +476,10 @@ export function makeRoadFolk({ W, scene = W.scene, folk, animals, road, square =
       t.wh = null;
       p.root.rotation.set(0, t.h, 0);
       const stride = (p.stride && p.stride.Walk) || 1.4;
-      if (t.pace > 0.08) {
-        if (t.clip !== 'Walk') { p.play('Walk', { fade: 0.3, speed: t.pace / stride }); t.clip = 'Walk'; }
-        if (p.person && p.person.cur) p.person.cur.setEffectiveTimeScale(Math.max(0.3, t.pace / stride));
+      const goes = Math.max(t.pace, t.real > 0.2 ? t.real : 0) * t.legs;
+      if (goes > 0.08) {
+        if (t.clip !== 'Walk') { p.play('Walk', { fade: 0.3, speed: goes / stride }); t.clip = 'Walk'; }
+        if (p.person && p.person.cur) p.person.cur.setEffectiveTimeScale(Math.max(0.3, goes / stride));
       } else if (t.clip !== 'Idle') { p.play('Idle', { fade: 0.4 }); t.clip = 'Idle'; }
     }
     p.update(dt);
@@ -470,10 +493,10 @@ export function makeRoadFolk({ W, scene = W.scene, folk, animals, road, square =
     return inLane;
   };
   F.state = () => ({
-    n: F.list.length, made: F.list.filter((t) => t.made).length, most, madeMost, show, kit: !!F.kit, parties: F.parties.length,
+    rounds: F.rounds || 0, timeouts: F.timeouts || 0, n: F.list.length, made: F.list.filter((t) => t.made).length, most, madeMost, show, kit: !!F.kit, parties: F.parties.length,
     sizes: F.parties.reduce((o, P) => { const k = `${P.kind}${P.members.length}`; o[k] = (o[k] || 0) + 1; return o; }, {}),
     list: F.list.map((t) => ({ id: t.id, kind: t.kind, dir: t.dir, u: +t.u.toFixed(1), pace: +t.pace.toFixed(2), k: t.k == null ? null : +t.k.toFixed(2), party: t.party.id, rank: t.party.members.indexOf(t), kit: t.kit,
-      made: !!t.made, why: t.why, dist: Number.isFinite(t.dist) ? +t.dist.toFixed(1) : null, fade: +t.fade.toFixed(2), x: +t.pos.x.toFixed(1), z: +t.pos.z.toFixed(1), ending: t.ending })),
+      made: !!t.made, why: t.why, round: !!t.round, real: +(t.real || 0).toFixed(2), legs: +t.legs.toFixed(3), dist: Number.isFinite(t.dist) ? +t.dist.toFixed(1) : null, fade: +t.fade.toFixed(2), x: +t.pos.x.toFixed(1), z: +t.pos.z.toFixed(1), ending: t.ending })),
   });
   F.dispose = () => {
     disposed = true;

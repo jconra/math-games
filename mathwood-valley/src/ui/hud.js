@@ -280,13 +280,13 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
   let treatsKey = '';
   function purse({ gold = 0, bounty = 0, title = '', next = null, badges = [], boxes = 0, goods = '', treats = null } = {}) {
     // the horses' treats in the saddlebags, by the gold (src/treats.js): an apple and a carrot with their counts
-    const tk = treats ? `${treats.apple || 0}|${treats.carrot || 0}` : '';
+    const tk = treats ? `${treats.apple || 0}|${treats.carrot || 0}|${treats.jerky || 0}` : '';
     if (tk !== treatsKey) {
       treatsKey = tk;
-      const a = treats ? treats.apple || 0 : 0, c = treats ? treats.carrot || 0 : 0;
-      treatsEl.hidden = !(a || c);
-      treatsEl.innerHTML = (a ? `<i>${TREAT_ICON.apple}<b>${a}</b></i>` : '') + (c ? `<i>${TREAT_ICON.carrot}<b>${c}</b></i>` : '');
-      treatsEl.setAttribute('aria-label', `${a} apples and ${c} carrots for the horses`);
+      const a = treats ? treats.apple || 0 : 0, c = treats ? treats.carrot || 0 : 0, j = treats ? treats.jerky || 0 : 0;
+      treatsEl.hidden = !(a || c || j);
+      treatsEl.innerHTML = (a ? `<i>${TREAT_ICON.apple}<b>${a}</b></i>` : '') + (c ? `<i>${TREAT_ICON.carrot}<b>${c}</b></i>` : '') + (j ? `<i>${TREAT_ICON.jerky}<b>${j}</b></i>` : '');
+      treatsEl.setAttribute('aria-label', `${a} apples, ${c} carrots and ${j} strips of jerky for your animals`);
     }
     goldN.textContent = fmt(gold);
     if (lastGold !== null && gold > lastGold) pop(`+${fmt(gold - lastGold)}`);

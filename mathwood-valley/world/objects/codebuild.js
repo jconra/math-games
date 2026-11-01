@@ -51,6 +51,7 @@ import { buildBlacksmith, blacksmithRecipe } from '../../labs/buildings/blacksmi
 import { buildBarn, barnRecipe } from '../../labs/buildings/barn.js';
 import { buildWindpump, windpumpRecipe } from '../../labs/buildings/windpump.js';
 import { buildProps } from '../../labs/buildings/props.js';
+import { loadSheet } from '../props/sheet.js';
 import { makeArt, makeSheriffArt, makeStoreArt } from '../../labs/buildings/art.js';
 import { LAMP_MAX, lit, boardWear, glowMaterial, lanternGlow, ropeTexture } from '../../labs/buildings/parts.js';
 import { softenGrain, eraseNails } from '../../labs/buildings/woodlook.js';
@@ -76,6 +77,7 @@ const LOOKS = {
 LOOKS.home = LOOKS.cabin;
 // (weathered: the cabins' and the smithy's old boards gone silver, labs/buildings/woodlook.js weatherGrain)
 const SHEETS = { calm: {}, straight: { straight: true }, weathered: { weathered: true } };
+const FROST = 0xd2dbe0, FROST_C = new THREE.Color(FROST);   // (the windows' frost, seen from inside: materialsFor)
 const PAINT_DEFAULT = { uPaintGrain: 0, uPeelSoft: 0.08, uEdgePeel: 0, uLapShadow: 0.42, uLapLip: 0, uNail: 1, uSignKeep: 0.25, uStreakW: 1, uFlake: 0, uLapUnder: 1 };
 export const CODE_KINDS = ['stable', 'sheriff', 'generalStore', 'saloon', 'home', 'cabin', 'blacksmith', 'barn', 'windpump'];
 
@@ -180,7 +182,9 @@ export async function makeBuildKit({ step = async () => {}, small = false, oneSh
   U.uAOAmt.value = 1.0; U.uAOSun.value = 0.2; U.uEaveDark.value = 0.3; U.uBleach.value = 0; U.uDirtBand.value = 0.8; U.uSkyGrey.value = 0.6;
   U.uEdgeDark.value = 0.45; U.uEdgeDarkW.value = 0.03; U.uBevel.value = 0.55;
   U.uShadeDir.value.set(0, 0, -1);
-  const kit = { T, woods, RT, ART, SART, STA, SAA: null, rope: ropeTexture(), small, ms: { ...ms, total: Math.round(performance.now() - t0) } };
+  // (the props' paper sheet: the framed pictures and the round tops, world/props/sheet.js)
+  const paper = await loadSheet(); if (small) halve(paper, 2);
+  const kit = { T, woods, RT, ART, SART, STA, SAA: null, paper, rope: ropeTexture(), small, ms: { ...ms, total: Math.round(performance.now() - t0) } };
   // (a kind's own pictures, made the first time one is built: the saloon's sign, its gold lettering, its bar's goods)
   kit.art = async (kind) => { if (kind === 'saloon' && !kit.SAA) { kit.SAA = await makeSaloonArt(); if (small) halve(kit.SAA.saloon, 4); } };
   // (the far look's material: plain colours per corner, shared by every building, so nothing of its own to set between
@@ -238,11 +242,13 @@ function materialsFor(kit, kind, B, shade) {
     spill: own(lit(new THREE.MeshStandardMaterial({ map: ART.spill, roughness: 1, alphaTest: 0.5 }), { ao: true })),
     boards: own(lit(new THREE.MeshStandardMaterial({ map: ART.boards, roughness: 0.82 }), { ao: true })),
     plaster: own(lit(new THREE.MeshStandardMaterial({ map: RT.map, normalMap: RT.normalMap, normalScale: new THREE.Vector2(0.5, 0.5), roughness: 0.97 }), { ao: true, tint: true })),
-    pane: new THREE.MeshBasicMaterial({ color: 0x8fa4b4, transparent: true, opacity: 0.12, depthWrite: false }),
+    // (the glass from inside: a light frost, as it looks frosted from the street; dimmed with the night, lit()
+    pane: new THREE.MeshBasicMaterial({ color: FROST, transparent: true, opacity: 0.3, depthWrite: false }),
     decal: own(lit(new THREE.MeshStandardMaterial({ map: saloon ? kit.SAA.saloon : kind === 'generalStore' ? STA.store : SART.sheriff, roughness: 0.9, transparent: true, depthWrite: false, alphaTest: 0.01, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }), { ao: true })),
     glow: own(glowMaterial(), false), glass: own(glowMaterial({ panes: true }), false),
     rope: own(lit(new THREE.MeshStandardMaterial({ map: kit.rope, roughness: 0.92 }), { ao: true, tint: true })),
     goods: own(lit(new THREE.MeshStandardMaterial({ map: saloon ? kit.SAA.saloon : STA.store, roughness: 0.78 }), { ao: true, tint: true })),
+    paper: own(lit(new THREE.MeshStandardMaterial({ map: kit.paper, roughness: 0.74 }), { ao: true, tint: true })),
     jar: own(lit(new THREE.MeshStandardMaterial({ color: 0xdfeceb, roughness: 0.06, metalness: 0.1, transparent: true, opacity: 0.38, depthWrite: false }), { ao: true })),
   };
   mats.stone.shadowSide = THREE.FrontSide;
@@ -301,17 +307,21 @@ function withDoors(base, extra) {
 // under 1.05 m), what it meets at a walker's height blocks it, the lowest thing over 2 m is the ceiling. Then a porch's
 // edge with no steps (a rise of more than 0.42 m to the cell beside it) blocked, and every block widened by a walker's
 // half-width (0.18 m), so nobody stands in a wall.
-const CELL = 0.1, WALK = [0.62, 1.75], PAD = 0.18, LEDGE = 0.42;
+const CELL = 0.1, THIN = 0.075, WALK = [0.62, 1.75], PAD = 0.18, LEDGE = 0.42, PORCH = 1.3;
 // (base: the building's own floor's height, a cabin's raised on its footing: its floor's boards are stood on, not a
 // counter's top, though they are up off the ground)
-function walkGrid(solids, foot, ox, oz, base = 0) {
+// opt.ground(x, z): the land's height in the building's frame, where it isn't flat under it; opt.plan(x, z): only here can
+// be walked (the saloon's upper floor: UPPER FLOOR below); opt.stairs: the rectangle of its stairs, open whatever its solids
+function walkGrid(solids, foot, ox, oz, base = 0, opt = {}) {
   const x0 = -foot.w / 2 - 1.2, z0 = -foot.d / 2 - 1.2, nx = Math.ceil((foot.w + 2.4) / CELL), nz = Math.ceil((foot.d + 2.4) / CELL), n = nx * nz;
   const blocked = new Uint8Array(n), floor = new Float32Array(n), ceil = new Float32Array(n).fill(99);
   const inv = new THREE.Matrix4(), o = new THREE.Vector3(), d = new THREE.Vector3(), bb = new THREE.Box3(), h = new THREE.Vector3();
   for (const S of solids) {
-    bb.setFromCenterAndSize(new THREE.Vector3(), h.set(...S.size)).applyMatrix4(S.m);
+    bb.setFromCenterAndSize(new THREE.Vector3(), h.set(Math.max(S.size[0], THIN * 2), S.size[1], Math.max(S.size[2], THIN * 2))).applyMatrix4(S.m);
     if (bb.max.y < 0.02) continue;
-    inv.copy(S.m).invert(); const hx = S.size[0] / 2, hy = S.size[1] / 2, hz = S.size[2] / 2;
+    // (a solid thinner than a cell could fall between two cells' middle lines and block nothing: a 6 cm partition was
+    // walked straight through. Its thin sides count as THIN, so it always covers a line)
+    inv.copy(S.m).invert(); const hx = Math.max(S.size[0] / 2, THIN), hy = S.size[1] / 2, hz = Math.max(S.size[2] / 2, THIN);
     const i0 = Math.max(0, Math.floor((bb.min.x + ox - x0) / CELL)), i1 = Math.min(nx - 1, Math.floor((bb.max.x + ox - x0) / CELL));
     const j0 = Math.max(0, Math.floor((bb.min.z + oz - z0) / CELL)), j1 = Math.min(nz - 1, Math.floor((bb.max.z + oz - z0) / CELL));
     for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
@@ -347,25 +357,51 @@ function walkGrid(solids, foot, ox, oz, base = 0) {
       if (a > 0 && b > 0) floor[k] = Math.max(floor[k], Math.min(a, b));
     }
   }
-  // a porch's edge with no steps: higher than the cell beside it by more than a step
-  const ledge = new Uint8Array(n);
+  // (the upper floor: only its plan can be walked; what the solids alone say stays for the camera, wall below)
+  const raw = opt.plan ? blocked.slice() : blocked;
+  if (opt.plan) for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+    const k = j * nx + i, x = x0 + (i + 0.5) * CELL, z = z0 + (j + 0.5) * CELL, st = opt.stairs;
+    if (st && x > st.x0 && x < st.x1 && z > st.z0 && z < st.z1) { blocked[k] = 0; floor[k] = 0; } else if (!opt.plan(x, z)) blocked[k] = 1;
+  }
+  // an edge with no steps: higher than the cell beside it by more than a step. Inside a building (a stage) a walker goes
+  // round. A porch's edge over the ground can be stepped up on or off anywhere (the game's maker: "going up or down a
+  // porch is fine even if theres no stairs"), up to PORCH high; only a rider is kept to the steps (soft)
+  const ledge = new Uint8Array(n), soft = new Uint8Array(n), landAt = opt.ground || (() => 0);
   for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
     const k = j * nx + i; if (blocked[k]) continue;
     for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
       const a = i + di, b = j + dj, f = a < 0 || b < 0 || a >= nx || b >= nz ? 0 : blocked[b * nx + a] ? floor[k] : floor[b * nx + a];
-      if (floor[k] - f > LEDGE) { ledge[k] = 1; break; }
+      if (opt.plan || floor[k] - f <= LEDGE) continue;
+      if (f < 0.05 && floor[k] - landAt(x0 + (a + 0.5) * CELL, z0 + (b + 0.5) * CELL) <= PORCH) { soft[k] = 1; continue; }
+      ledge[k] = 1; break;
     }
   }
   // widened by a walker's half-width
-  const r = Math.round(PAD / CELL), wide = new Uint8Array(n);
+  const r = Math.round(PAD / CELL), wide = new Uint8Array(n), edge = new Uint8Array(n);
   for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
-    if (!blocked[j * nx + i] && !ledge[j * nx + i]) continue;
-    for (let b = Math.max(0, j - r); b <= Math.min(nz - 1, j + r); b++) for (let a = Math.max(0, i - r); a <= Math.min(nx - 1, i + r); a++) if ((a - i) ** 2 + (b - j) ** 2 <= r * r + 0.5) wide[b * nx + a] = 1;
+    const hard = blocked[j * nx + i] || ledge[j * nx + i]; if (!hard && !soft[j * nx + i]) continue;
+    for (let b = Math.max(0, j - r); b <= Math.min(nz - 1, j + r); b++) for (let a = Math.max(0, i - r); a <= Math.min(nx - 1, i + r); a++) if ((a - i) ** 2 + (b - j) ** 2 <= r * r + 0.5) (hard ? wide : edge)[b * nx + a] = 1;
   }
   return {
-    x0, z0, nx, nz, cell: CELL, blocked: wide, wall: blocked, floor, ceil,
+    x0, z0, nx, nz, cell: CELL, blocked: wide, edge, wall: raw, floor, ceil,
     at: (x, z) => { const i = Math.floor((x - x0) / CELL), j = Math.floor((z - z0) / CELL); return i < 0 || j < 0 || i >= nx || j >= nz ? -1 : j * nx + i; },
   };
+}
+
+// THE UPPER FLOOR (the saloon's): a second grid for a walker up there, its heights in the building's frame. Walkable: the
+// galleries and the stairs; floor: the storey's top, or the stairs' slope; wall: the solids at that height, for the camera.
+// entry: the bottom of the stairs, walked onto from the ground floor's grid; over sw (m) a walker is on this grid
+function upperGrid(solids, foot, ox, oz, U) {
+  const down = new THREE.Matrix4().makeTranslation(0, -U.floor, 0), S = U.stairs;
+  const open = (x, z) => U.galleries.some((g) => x > g.x0 && x < g.x1 && z > g.z0 && z < g.z1);
+  const G = walkGrid(solids.map((q) => ({ size: q.size, m: down.clone().multiply(q.m) })), foot, ox, oz, 0, { plan: open, stairs: S });
+  const n = G.nx * G.nz, stair = new Uint8Array(n), entry = new Uint8Array(n), floor = new Float32Array(n).fill(U.floor), sw = S.y0 + 0.3, slope = (S.y1 - S.y0) / (S.z1 - S.z0);
+  for (let j = 0; j < G.nz; j++) for (let i = 0; i < G.nx; i++) {
+    const k = j * G.nx + i, x = G.x0 + (i + 0.5) * CELL, z = G.z0 + (j + 0.5) * CELL;
+    if (x > S.x0 && x < S.x1 && z > S.z0 && z < S.z1) { stair[k] = 1; floor[k] = S.y0 + (S.z1 - z) * slope; if (floor[k] < sw + 0.5) entry[k] = 1; }
+    else if (x > S.x0 && x < S.x1 && z >= S.z1 && z < S.z1 + 0.35) { entry[k] = 1; floor[k] = S.y0 - 0.1; }   // (the last step up to the first tread: the walker's width off the riser)
+  }
+  return { blocked: G.blocked, wall: G.wall, floor, stair, entry, sw, level: U.floor, ceil: U.ceiling };
 }
 
 // ── build one ────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -388,7 +424,7 @@ export const SITS = new Set(['blacksmith', 'cabin', 'home']);
 // straw and hay are split like the rest: its doors stand open on the street. Not the plaster: the cabins' chinking
 // between the logs, a stick chimney's daub, the piers and the stones at the steps are plaster too, outdoors; whole
 // inside, the walls were slit and the chimneys and porches hollow from outside till the inside was loaded)
-const ALL_INSIDE = new Set(['goods', 'jar', 'pane', 'rope']);
+const ALL_INSIDE = new Set(['goods', 'paper', 'jar', 'pane', 'rope']);
 const NO_SHADOW = new Set(['glow', 'glass', 'spill', 'floor', 'boards', 'decal', 'pane', 'jar']);
 
 // ── THE FAR TRIM: a building's small outside pieces in plain colours, one mesh ─────────────────────────────────────────
@@ -400,7 +436,7 @@ const NO_SHADOW = new Set(['glow', 'glass', 'spill', 'floor', 'boards', 'decal',
 // their own glowing mesh is drawn again and the trim leaves its copy of them out (they come last in it: its draw range)
 const TRIM = new Set(['iron', 'stone', 'plaster', 'hay', 'spill', 'floor', 'rope', 'glow']);
 const TINTED = new Set(['stone', 'plaster', 'hay', 'rope', 'wood']);   // (their pictures take the tint each corner carries)
-const GLOW_NIGHT = 0.08;                                         // (night past this: the windows begin to glow)
+const GLOW_NIGHT = 0.01;                                         // (night past this: the windows begin to glow)
 const CARD = new THREE.Color(0x150e09);
 function farTrim(mats, meshes, cardGeos) {
   const parts = [];
@@ -457,7 +493,7 @@ function farTrim(mats, meshes, cardGeos) {
 // 3 clutter: buckets, brooms, tools, rugs, the posters and pictures on the walls
 const PROP_PRI = { bed: 1, roundTable: 1, spindleChair: 1, bench: 1, piano: 1, pianoStool: 1, barStool: 1, washstand: 1, anvil: 1, quench: 1, hearth: 1, stone: 1, wagon: 1,
   bucket: 3, coalBucket: 3, broom: 3, shovel: 3, spade: 3, fork: 3, plank: 3, pipe: 3, coal: 3, ragRug: 3 };   // (any other: 2)
-const partPri = (g) => (g === 'goods' || g === 'jar' ? 2 : g === 'decal' ? 3 : 1);
+const partPri = (g) => (g === 'goods' || g === 'paper' || g === 'jar' ? 2 : g === 'decal' ? 3 : 1);
 // a geometry's triangles split by whether their middle stands in one of the rooms (rectangles in the building's frame,
 // above y0): the saloon's rooms upstairs, apart from its galleries
 function splitRooms(geo, rooms, y0) {
@@ -495,6 +531,8 @@ export function buildCodeBuilding(kit, kind, o = {}) {
     B = BUILDERS[kind]({ ...env, ground: (x, z) => o.ground(x + ox, z + oz) }, look);
   }
   const { mats, uni } = materialsFor(kit, kind, B, o.shade);
+  // (each building's own moment in the dusk: how much night its windows and lanterns wait for)
+  const lag = (hashOf((o.look && o.look.id) || kind) % 100) / 100 * 0.14; uni.uGlowLag = { value: lag };
   const OX = B.offset || 0, OZ = B.offsetZ || 0, inside = B.light.inside;
   // the parts: shell (its outside, always drawn), far (the far look's trim), cards (the stand-ins in its see-through
   // windows), props (its outdoor props), doors (the leaves, while they can swing). The insides (a group for each
@@ -518,6 +556,9 @@ export function buildCodeBuilding(kit, kind, o = {}) {
   // when somebody passes through
   const batwings = kind === 'saloon', rest = batwings ? 1 : 0;
   B.light.setDoors(true, true);
+  // (a door that hangs shut has the light of a shut door: lit as it would be standing open, it shone against the dark wall
+  // round it at night)
+  if (!batwings) for (const L of B.doors) if (!L.slide) for (const g of [L.geo, L.iron]) if (g && g.userData.bakes && g.userData.bakes.closed) B.light.apply(g, true, 'closed', true);
   const leafParts = { wood: [], glass: [], iron: [], rope: [] };
   for (const L of B.doors) {
     const M = new THREE.Matrix4().makeTranslation(L.hinge[0] + (batwings && L.slide ? L.slide[0] : 0), L.hinge[1], L.hinge[2]);
@@ -584,7 +625,7 @@ export function buildCodeBuilding(kit, kind, o = {}) {
     if (!list.length) continue;
     const P = buildProps(list, { seed: B.recipe.seed * 7 + 1, bake });
     const to = key === 'out' ? props : key === 'up' ? up : ins[key];
-    for (const g of ['wood', 'iron', 'hay', 'goods', 'decal']) { if (!P.geos[g]) continue; const m = add(to, P.geos[g], mats[g], g); m.castShadow = key === 'out' && g !== 'decal'; }
+    for (const g of ['wood', 'iron', 'hay', 'goods', 'paper', 'decal']) { if (!P.geos[g]) continue; const m = add(to, P.geos[g], mats[g], g); m.castShadow = key === 'out' && g !== 'decal'; }
     propSolidsRaw.push(...(P.solids || [])); propTris += P.tris;
   }
   // the lanterns' glow sprites (the inside ones with the inside; the outdoor ones on the shell, out by day)
@@ -619,7 +660,7 @@ export function buildCodeBuilding(kit, kind, o = {}) {
   // a door's doorway its plain dark card, and one shut for good (the sheriff's back door) too)
   const openWay = (i) => batwings || (!!doorways[i].open && !doors.some((d) => d.way === i));
   doorways.forEach((D, i) => { if (!openWay(i)) return; const n = new THREE.Vector3(...D.out).normalize(); card(D.w * 0.98, D.h * 0.98, D.centre, n, 0.6); windows.push({ w: D.w, h: D.h, c: D.centre, n: [n.x, n.y, n.z], door: true }); });
-  doorways.forEach((D, i) => { if (openWay(i)) return; const n = new THREE.Vector3(...D.out).normalize(); card(D.w * 0.98, D.h * 0.98, D.centre, n, 0.6); });   // (after the pictures' cards: they keep cell 0, the dark)
+  doorways.forEach((D, i) => { if (openWay(i) || D.indoor) return; const n = new THREE.Vector3(...D.out).normalize(); card(D.w * 0.98, D.h * 0.98, D.centre, n, 0.6); });   // (after the pictures' cards: they keep cell 0, the dark)
   let cardMesh = null, cardUV = null; const nCards = cardGeos.length;
   const cardMat = kit.standMat.clone(); cardMat.transparent = true; cardMat.depthWrite = false;
   let cardA = 1, cardWait = 0;   // (the pictures' opacity; frames the room has been in, to be sure it is on the card first)
@@ -645,7 +686,8 @@ export function buildCodeBuilding(kit, kind, o = {}) {
   // where a walker can stand
   // (the props' solids stand where the props do, in the centred frame: moved back to the build's own)
   const back = new THREE.Matrix4().makeTranslation(-OX, 0, -OZ), propSolids = propSolidsRaw.map((S) => ({ size: S.size, m: back.clone().multiply(S.m) }));
-  const foot = B.anchors.footprint, grid = walkGrid([...B.kit.occ, ...propSolids], foot, OX, OZ, B.anchors.floor || 0);
+  const foot = B.anchors.footprint, grid = walkGrid([...B.kit.occ, ...(B.walkSolids || []), ...propSolids], foot, OX, OZ, B.anchors.floor || 0, { ground: o.ground && SITS.has(kind) ? (x, z) => o.ground(x, z) - (B.sit || 0) : null });   // (walkSolids: what stops a walker and not the light: the jail's bars)
+  if (B.anchors.upstairs && B.anchors.upstairs.stairs) grid.up = upperGrid(B.kit.occ, foot, OX, OZ, B.anchors.upstairs);
   // every way in can be walked through: a doorway's own width, from just inside to just outside, cleared and its floor
   // eased from the room's down to what is outside (a back door with only stair stones under it read as a ledge)
   for (const D of (B.anchors.doorways || []).filter((q) => !q.inner)) {
@@ -655,12 +697,12 @@ export function buildCodeBuilding(kit, kind, o = {}) {
     for (let o2 = -0.6; o2 <= 1.0; o2 += 0.05) for (let a2 = -half; a2 <= half; a2 += 0.05) {
       const k = grid.at(D.centre[0] + ox * o2 + sx * a2, D.centre[2] + oz * o2 + sz * a2); if (k < 0) continue;
       const t = (o2 + 0.6) / 1.6, e = t * t * (3 - 2 * t);
-      grid.blocked[k] = 0; grid.wall[k] = 0; grid.floor[k] = fin + (fout - fin) * e;
+      grid.blocked[k] = 0; grid.edge[k] = 0; grid.wall[k] = 0; grid.floor[k] = fin + (fout - fin) * e;
     }
   }
   // the light it throws out at night: its outdoor lanterns, and a warm pool before each doorway and each window
   const nightLamps = [...outLamps.map((L) => ({ at: L.p, reach: 8, strength: 1 })),
-    ...doorways.map((D) => ({ at: [D.centre[0] + D.out[0] * 1.2, 1.4, D.centre[2] + D.out[2] * 1.2], reach: 5.5, strength: 0.45 }))];
+    ...doorways.filter((D) => !D.indoor).map((D) => ({ at: [D.centre[0] + D.out[0] * 1.2, 1.4, D.centre[2] + D.out[2] * 1.2], reach: 5.5, strength: 0.45 }))];
   // (the stable's stalls: how much sky and lantern fill each horse gets, from the bake, now: the bake's grid goes after)
   for (const S of B.stalls || []) { const x = S.frontX + S.side * 0.9; S.shade = B.light.skyAt(x, 1.5, S.z) * 1.15; S.fill = B.light.fillAt(x, 1.3, S.z) * 1.3; }
   // (the rooms' own light for the people and animals in them, from the bake likewise: world/objects/indoorlight.js)
@@ -769,11 +811,14 @@ export function buildCodeBuilding(kit, kind, o = {}) {
     // night 0 (day) .. 1; on: how lit (0 shut up, 1 open): the lanterns inside lit by day and night while it's open, the
     // outdoor ones and the window panes' glow with the night
     lit(night, on = 1) {
-      uni.uNight.value = night; uni.uLamp.value = on > 0.02 ? on : 0; uni.uOutLamp.value = night > 0.3 ? 1 : 0;
+      // (the outdoor lanterns: lit one by one through the dusk and up gradually, each building at its own moment)
+      const outOn = THREE.MathUtils.smoothstep(night - lag, 0.1, 0.45);
+      uni.uNight.value = night; uni.uLamp.value = on > 0.02 ? on : 0; uni.uOutLamp.value = outOn;
+      mats.pane.color.copy(FROST_C).multiplyScalar(1 - 0.92 * night);
       { const was = nightNow > GLOW_NIGHT; nightNow = night; if (was !== night > GLOW_NIGHT) show(); }   // (the far look's windows: FAR TRIM)
-      B.lamps.forEach((L, i) => { if (i < LAMP_MAX) uni.uLampS.value[i] = L.outdoor && night <= 0.3 ? 0 : L.strength; });
+      B.lamps.forEach((L, i) => { if (i < LAMP_MAX) uni.uLampS.value[i] = L.outdoor ? L.strength * outOn : L.strength; });
       if (glowIn) { glowIn.visible = on > 0.02; glowIn.material.opacity = 0.5 + 0.5 * night; }
-      if (glowOut) { glowOut.visible = on > 0.02 && night > 0.3; glowOut.material.opacity = 0.5 + 0.5 * night; }
+      if (glowOut) { glowOut.visible = on > 0.02 && outOn > 0.01; glowOut.material.opacity = (0.5 + 0.5 * night) * outOn; }
     },
     // the stable's stall boards: [{ slot, owned, label, price, plate }] (a price in chalk, or the brass name plate of a
     // horse that's yours), drawn again in place

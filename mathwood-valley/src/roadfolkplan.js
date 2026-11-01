@@ -8,7 +8,7 @@ export const ROADFOLK = {
   most: { gaming: 10, normal: 8, potato: 3 },         // travellers on the road at once (the far ones are only numbers,
                                                       // or far figures: src/crowd.js)
   made: { gaming: 5, normal: 4, potato: 2 },          // ... at most this many made and drawn at once (the nearest)
-  show: { gaming: 190, normal: 160, potato: 120 },    // m from the player within which one is made
+  show: { gaming: 240, normal: 160, potato: 120 },    // m from the player within which one is made
   hide: 25,             // m further than `show` before one is put away again
   makeEvery: 0.25,      // s between one made (a real model) and the next, at the least
   always: 40,           // m: a party this close is always made, over the most if need be (no far figure beside the player)
@@ -26,6 +26,7 @@ export const ROADFOLK = {
   packs: 0.7,           // the share of hikers in the outfits that carry a pack (the adventurers': src/actors/folk.js) ...
   bedroll: 0.65,        // ... and of those, the share with a bedroll strapped on top of it
   nightWalk: 0.6,       // at night (W.night 1) this share of the walkers stay home: fewer set off
+  night: 0.25,          // at night the road has this share of the day's travellers (and wagons: src/traffic.js), easing with the dusk and the dawn; the rest leave only out of sight
   walk: [1.15, 1.45],   // m/s: a walker's pace
   ride: [2.0, 3.6],     // m/s: a rider's (a walk or an easy trot)
   edge: { walker: 1.9, rider: 1.4 },   // m out past the middle of the wagons' lane each keeps to (the road's edge)
@@ -34,11 +35,17 @@ export const ROADFOLK = {
   look: { walker: 2.6, rider: 4.5 },   // m ahead each looks for something in the way
   wide: { walker: 0.85, rider: 1.15 }, // ... and how close to its path a thing is in its way
   pass: 1.15,           // m a rider steps in toward the middle to go round a walker ahead
-  sideStep: 1.5,        // m one steps aside round the player (or a horse, the dog) ...
-  stepAfter: 2.2,       // ... after this many seconds stopped for them
+  // GOING ROUND someone standing in the way (the player, a horse, the dog): stopped this long, a party picks a side once and
+  // keeps to it till past them (single file), as the wagons do; it never steps back and forth
+  round: { after: 0.8, clear: 1.1, past: 3, side: 1.6, most: 6 },   // s stopped; m clear of them; m past them; m/s sideways; m off its line at most
+  // the time-out on no progress: this many s without `gain` m along the road (not saying hello, not held for a hold-up): it
+  // stops minding whoever stands there for `ignore` s and rides on by
+  stuck: { after: 14, gain: 2, ignore: 6 },
+  // no two in step: each rider's own legs (a share faster or slower), and a slow wander in its place in the party (m, s)
+  legs: 0.08, wander: { along: 0.9, out: 0.25, every: 21 },
   reach: 360,           // m from the square: one also sets off from out here (out of sight of the town), as the wagons do
   apart: 30,            // m from another going the same way, at the least, where a new one sets off
-  fade: { in: 1.2, out: 1.2, end: 1.8 },   // s: fading in (made in sight), out (put away in sight), at the road's end
+  fade: { in: 1.6, out: 1.6, end: 1.8 },   // s: fading in (made in sight), out (put away in sight), at the road's end
   wave: 1.6,            // s a walker stops to wave, saying hello
   turn: 3,              // radians a second a traveller turns, at most
   accel: { walker: 0.9, rider: 1.6 },  // m/s each second, speeding up ...
@@ -123,3 +130,5 @@ export function seedSpots(n, { L, dist, away = ROADFOLK.seedAway, rand = Math.ra
   }
   return out;
 }
+// how many on the road at this much night (0..1): the day's most, down to ROADFOLK.night's share after dark (at least one)
+export const byNight = (most, night = 0) => Math.max(1, Math.round(most * (1 - (1 - ROADFOLK.night) * Math.max(0, Math.min(1, night || 0)))));

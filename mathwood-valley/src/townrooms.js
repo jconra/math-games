@@ -5,7 +5,8 @@
 //   the general store   food at the apple barrel and the crates (apples and carrots for the horses), hats at their pegs,
 //                       animals at the store's dog asleep on its bed in the back corner (dogs and farm animals: one card
 //                       each, src/shop.js), the six-shooter on its felt by the till (bought there and then, as the
-//                       stable's saddles are), and "Work the counter" along the counter (the store's job, src/missions/
+//                       stable's saddles are), "Sell my goods" at the bins by the counter (a deal with the clerk,
+//                       src/missions/sellgoods.js), and "Work the counter" along the counter (the store's job, src/missions/
 //                       store.js: the rider helps the storekeeper behind it, src/jobfolk.js)
 //   the sheriff's office   "Crack the lock boxes" at the pile of seized boxes on and by his desk (the sheriff stands
 //                       behind it: src/jobfolk.js), and the rider's own lock boxes (won on the round-up) at the safe
@@ -20,7 +21,7 @@
 //                         the store's dog on its bed and the six-shooter on its felt, added to `group` (the building's
 //                         own frame: the game's building object, or the lab's)
 //   const TR = makeTownRooms({ W, animals, rider, uses, camera, shadows, act, words })
-//     uses: the look-to-use spots (src/usespots.js); act: { card(id), gun(), counter(), boxes(), own() } what each spot's
+//     uses: the look-to-use spots (src/usespots.js); act: { card(id), gun(), counter(), sell(), boxes(), own() } what each spot's
 //     E does; words: { counter() } the counter's words now, or null (the store job turned off)
 //   TR.update(dt)          each frame (the dog breathing, the six-shooter shown while it is for sale)
 //   TR.frame(kind)         the frame of 'generalStore', 'sheriff' or 'blacksmith' (null until built);  TR.anchors(kind)
@@ -31,13 +32,15 @@ import { inFrame } from './usespotsplan.js';
 import { makeAnimal } from './actors/animals.js';
 import { makePiece } from './cabin/pieces.js';
 import { makeGunModel } from './revolver.js';
-import { gunShop } from './gun.js';
+import { gunShop, nextGun, GUNS, gunOn } from './gun.js';
+import { makeRifleModel } from './rifles.js';
 import { PRICES } from './catalog.js';
 
 export const ROOMS = {
   dog: 'shiba',        // the store's own dog, asleep on its bed (the breeds for sale: src/catalog.js DOGS)
   bedR: 0.38,          // the dog bed's size (m, its cushion's radius: the cabin's bed, src/cabin/pieces.js), roomy for a dog lying
   near: 30,            // m from the camera within which the dog breathes (its clip runs)
+  gunIn: 0.32, gunAlong: 1.35,   // m: from the six-shooter's felt to the counter's face, and along it to where the rifles hang
   gunTurn: Math.PI / 2,   // the six-shooter lies on its side on the felt
 };
 
@@ -85,12 +88,22 @@ export function dressStore(group, A, { animals = null, shadows = true } = {}) {
     // (lying on its side: the frame's thickness up, its grip's lowest point on the felt)
     holder.position.set(G.at[0], G.at[1] + 0.03, G.at[2]); holder.rotation.y = G.rot || 0;
     group.add(holder);
+    // the two rifles hung on the counter's customer face, one over the other, where they can be seen from the shop floor
+    // (the six-shooter's felt is ROOMS.gunIn m back from that face)
+    out.rifles = {};
+    [['lever', -0.17], ['single', -0.36]].forEach(([id, down]) => {
+      const m = makeRifleModel(id).gun; m.name = 'store ' + id; m.visible = false;
+      m.rotation.set(0, Math.PI, 0);
+      m.position.set(G.at[0] - ROOMS.gunIn - 0.04, G.at[1] + down, G.at[2] - ROOMS.gunAlong);
+      m.traverse((o) => { if (o.isMesh) { o.castShadow = shadows; o.receiveShadow = true; } });
+      group.add(m); out.rifles[id] = m;
+    });
   }
   out.update = (dt) => { if (out.dog) out.dog.update(dt); };
   out.showGun = (on) => { if (out.gun) out.gun.visible = !!on; };
   out.dispose = () => {
     out.disposed = true;
-    for (const x of [out.bed, out.gun, out.dog && out.dog.root]) if (x) { x.removeFromParent(); x.traverse((m) => { if (m.isMesh && !m.isSkinnedMesh) m.geometry.dispose(); }); }
+    for (const x of [out.bed, out.gun, out.dog && out.dog.root, ...Object.values(out.rifles || {})]) if (x) { x.removeFromParent(); x.traverse((m) => { if (m.isMesh && !m.isSkinnedMesh) m.geometry.dispose(); }); }
     if (out.dog && out.dog.dispose) out.dog.dispose();
   };
   return out;
@@ -108,14 +121,15 @@ export function makeTownRooms({ W, animals, rider, uses, camera, shadows = true,
     food: () => 'Buy food',
     hats: () => 'Buy a hat',
     animals: () => 'Buy animals',
-    gun: () => { const g = gunShop(rider); return g.state === 'off' || g.state === 'owned' ? null : `Buy the six-shooter (${PRICES.revolver} gold)`; },
+    gun: () => { const id = nextGun(rider); if (!id) return null; const g = gunShop(rider, id); return g.state === 'off' || g.state === 'owned' ? null : `Buy the ${GUNS[id].name.toLowerCase()} (${GUNS[id].price} gold)`; },
     counter: () => (words.counter ? words.counter() : 'Work the counter'),
+    sell: () => (words.sell ? words.sell() : 'Sell my goods'),
     boxes: () => 'Crack the lock boxes',
     own: () => { const n = lockN(); return n ? `Open your lock box${n > 1 ? `es (${n})` : ''}` : null; },
   };
   const DO = {
     food: () => call(act.card, 'storeFood'), hats: () => call(act.card, 'storeHats'), animals: () => call(act.card, 'storeAnimals'),
-    gun: () => call(act.gun), counter: () => call(act.counter), boxes: () => call(act.boxes), own: () => call(act.own),
+    gun: () => call(act.gun), counter: () => call(act.counter), sell: () => call(act.sell), boxes: () => call(act.boxes), own: () => call(act.own),
   };
   function setUp(kind) {
     const o = CODE && CODE.find(kind); if (!o || !o.code) return null;
@@ -141,7 +155,9 @@ export function makeTownRooms({ W, animals, rider, uses, camera, shadows = true,
     if (!store) return;
     const o = TR.rooms.generalStore.o, inside = o.code.loaded !== false;
     for (const x of [store.bed, store.dog && store.dog.root]) if (x && x.visible !== inside) x.visible = inside;
-    if (store.gun) { const g = gunShop(rider).state, on = inside && g !== 'owned'; if (store.gun.visible !== on) store.gun.visible = on; }
+    if (store.gun) { const next = nextGun(rider), on = inside && next === 'revolver'; if (store.gun.visible !== on) store.gun.visible = on; }
+    // (the rifles for sale lie along the counter by the six-shooter's spot: only with guns allowed, till each is bought)
+    if (store.rifles) for (const [id, m] of Object.entries(store.rifles)) { const on = inside && gunOn(rider) && gunShop(rider, id).state !== 'owned'; if (m.visible !== on) m.visible = on; }
     // (the dog breathes only while the store is near the camera and its inside is in)
     if (inside && store.dog && camera && camera.getWorldPosition(_c).distanceTo(o.group.getWorldPosition(_w)) < ROOMS.near) store.update(dt);
   };

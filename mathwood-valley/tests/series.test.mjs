@@ -153,7 +153,7 @@ test('the deck: a card at a time from the rider\'s level, the first try is the a
   assert.equal(d2.wave({ cards: 3 }), null);
 });
 
-test('the levels page examples come from the same makers (series, herds, parity, gangs, missing numbers)', () => {
+test('the levels page examples come from the same makers (series, herds, parity, gangs, factors)', () => {
   for (const P of [RU, WA]) for (const L of P.levels) {
     const ex = examplesOf(P.id, L.id, { n: 3, seed: 7 });
     assert.equal(ex.length, 3);
@@ -162,7 +162,7 @@ test('the levels page examples come from the same makers (series, herds, parity,
   assert.match(examplesOf('roundup', 'herdC', { n: 1, seed: 3 })[0].q, /^Rope the [678]-herd: /);
   assert.match(examplesOf('wagon', 'odd10', { n: 1, seed: 3 })[0].q, /^Rope the odds: /);
   assert.match(examplesOf('wagon', 'g7', { n: 1, seed: 3 })[0].q, /^The 7-Gang: /);
-  assert.match(examplesOf('wagon', 'miss12', { n: 1, seed: 3 })[0].q, /\?.* = \d+/);
+  assert.match(examplesOf('wagon', 'miss12', { n: 1, seed: 3 })[0].q, /^All the factors of \d+/);
 });
 
 test('odds and evens: about half the riders are the gang, the slips are next-door numbers and tens look-alikes', () => {
@@ -213,7 +213,7 @@ test('the times trainer told the table or the fact: that wave, its step untouche
   for (let k = 0; k < 20; k++) assert.ok(T2.wave({ count: 8, table: 7, reach: 10 }).targets.filter((x) => x.good).every((x) => x.n <= 70));
 });
 
-test('the wagon\'s gangs: the level\'s table, every 3rd gang an earlier table at ITS level once placed, facts for missing numbers', () => {
+test('the wagon\'s gangs: the level\'s table, every 3rd gang an earlier table at ITS level once placed, facts for the factors gangs', () => {
   const r = { skill: { v: 1, migrated: 1, strands: {} } };
   M.setLevelAt(r, 'wagon', 'g7', { now: T0 });
   const q = M.levelFor(r, 'wagon', { now: T0 });
@@ -238,8 +238,8 @@ test('the wagon\'s gangs: the level\'s table, every 3rd gang an earlier table at
   for (let k = 0; k < 4; k++) recordFact(s, 2, 2, true);
   assert.equal(colourOf(s, 7, 8), 'red');
   const c = chooseGang(s, M.levelFor(s, 'wagon', { now: T0 }), { n: 1 });
-  assert.equal(c.kind, 'missing');
-  assert.deepEqual([c.fact.t, c.fact.a].sort((x, y) => x - y), [7, 8]);
+  assert.equal(c.kind, 'factors');
+  assert.ok(c.product % 7 === 0 || c.product % 8 === 0, 'the number shares the fact that is due');
   // the young levels: odds and evens
   const y = { skill: { v: 1, migrated: 1, strands: {} } };
   const cy = chooseGang(y, M.levelFor(y, 'wagon', { now: T0 }), { n: 1 });

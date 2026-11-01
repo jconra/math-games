@@ -3,7 +3,7 @@
 // a horse, a wagon with its team, each a handful of boxes (60 to 600 triangles), all of a kind in one draw (three draws
 // for the whole road), lit by the valley's sun and sky and lost in its haze like everything else. Their legs swing at
 // their pace (in the vertex shader), and each dissolves in or out (the folk's 4 x 4 pattern) as its real model takes
-// over or hands back: the real one fading in while its figure fades out.
+// over or hands back: one fully in before the other goes (crossReal, crossFigure).
 // A figure at 200 m is 8 pixels tall: past the drawn ones (ROADFOLK.show, TRAFFIC.show) no one can tell. Costs nothing
 // to speak of: three draws and a matrix each a frame (a road of 120 travellers: ~30,000 triangles).
 //
@@ -165,5 +165,12 @@ export function makeCrowd({ W, scene = W.scene }) {
   C.tris = () => Object.fromEntries(Object.entries(C.meshes).map(([k, m]) => [k, m.geometry.attributes.position.count / 3]));
   return C;
 }
+// THE HAND-OVER between a real model and its far figure, by x (0 all figure .. 1 all real): each one comes fully in BEFORE
+// the other starts to go. (Both dissolve by the same 4 x 4 pattern, so two half-faded ones keep the same pixels and let the
+// same ones through: at the old crossfade's middle, half of each, a see-through ghost.)
+export const crossReal = (x) => Math.min(1, x * 2);
+export const crossFigure = (x) => Math.min(1, (1 - x) * 2);
+// the figures' far edge: thinning out over the last bit of their reach rather than popping
+export const farEdge = (d, far) => Math.max(0, Math.min(1, (far - d) / 25));
 // a horse's coat for a far rider or a team, from a number (the same one each time for the same traveller)
 export const COATS = ['#5a3b26', '#3b2a1e', '#7a5634', '#8c6a46', '#2a2420', '#a08060', '#6b4a2e', '#d8d0c0'];

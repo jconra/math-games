@@ -124,20 +124,34 @@ export function makeCodeBuildings({ shade = null, tier = () => 'gaming', rendere
       if (K.blocked(x, z)) return true;   // (a shut door)
       for (const f of CODE.blockers) if (f(x, z)) return true;   // (what else stands in a building: the player's cabin's bought furniture)
       for (const o of placed) { const q = o.q; if (!q || Math.abs(x - q.x) > q.r || Math.abs(z - q.z) > q.r) continue;
-        const k = cellOf(o, x, z); if (k >= 0 && o.code.grid.blocked[k]) return true; }
+        const k = cellOf(o, x, z); if (k < 0) continue;
+        const G = o.code.grid, U = G.up;
+        if (U && walkY != null) { if (walkY - q.y > U.sw) { if (U.blocked[k]) return true; continue; } if (U.entry[k]) continue; }   // (up on its upper floor or stairs: that floor's own grid)
+        if (G.blocked[k] || (mounted && G.edge[k])) return true; }
       return false;
     },
     heightAt(x, z, ground) {
       const g = ground(x, z);
       for (const o of placed) { const q = o.q; if (!q || Math.abs(x - q.x) > q.r || Math.abs(z - q.z) > q.r) continue;
-        const k = cellOf(o, x, z); if (k >= 0) { const f = o.code.grid.floor[k]; if (f > 0.01) return Math.max(g, q.y + f); } }
+        const k = cellOf(o, x, z); if (k >= 0) {
+          const U = o.code.grid.up;
+          if (U && walkY != null && (walkY - q.y > U.sw || U.entry[k])) return q.y + U.floor[k];
+          const f = o.code.grid.floor[k]; if (f > 0.01) return Math.max(g, q.y + f); } }
       return g;
     },
+    // who is walking, for blocked and heightAt: y, the height they are at (a building's upper floor is walked only by
+    // someone up there: the player, src/player.js), mounted (a rider keeps to a porch's steps); walkAs() when done
+    walkAs(y = null, on = false) { walkY = y; mounted = on; },
     // the building a point stands in, under its roof: its walls and ceilings (not its whole box) stop the camera
     room(x, y, z) {
       for (const o of placed) { const q = o.q; if (!q || Math.abs(x - q.x) > q.r || Math.abs(z - q.z) > q.r) continue;
-        const G = o.code.grid, k = cellOf(o, x, z); if (k < 0 || G.ceil[k] > 50 || G.wall[k]) continue;
-        return { o, solid: (px, py, pz) => { const c = cellOf(o, px, pz); if (c < 0) return false; return !!G.wall[c] || py > q.y + G.ceil[c] - 0.12 || py < q.y + G.floor[c] + 0.05; } };
+        const G = o.code.grid, U = G.up, k = cellOf(o, x, z); if (k < 0) continue;
+        // (the saloon: over its upper floor's height, or above its stairs: that floor's walls and ceiling)
+        const above = (c, h) => U && (h - q.y > U.level - 0.1 || (U.stair[c] && h - q.y > U.floor[c] + 0.1));
+        if (above(k, y) ? U.wall[k] && !U.stair[k] : G.ceil[k] > 50 || G.wall[k]) continue;
+        return { o, solid: (px, py, pz) => { const c = cellOf(o, px, pz); if (c < 0) return false;
+          if (above(c, py)) return (!!U.wall[c] && !U.stair[c]) || py > q.y + U.ceil - 0.12;
+          return !!G.wall[c] || py > q.y + G.ceil[c] - 0.12 || py < q.y + G.floor[c] + 0.05; } };
       }
       return null;
     },
@@ -202,6 +216,8 @@ export function makeCodeBuildings({ shade = null, tier = () => 'gaming', rendere
     setProps(on) { CODE.propsOn = !!on; },
     // for the rigs: a building's walk grid at a point in its own frame
     probe(kind, lx, lz) { for (const o of placed) if (o.it.kind === kind) { const G = o.code.grid, k = G.at(lx, lz); return k < 0 ? null : { blocked: G.blocked[k], wall: G.wall[k], floor: +G.floor[k].toFixed(2), ceil: +G.ceil[k].toFixed(2) }; } return null; },
+    // for the rigs: every placed building's object
+    list: () => [...placed],
     // a made building of a kind, and the village's object it stands in ({ group (its place and turn), code })
     find(kind) { for (const o of placed) if (o.it.kind === kind) return o; return null; },
     // a made building's group of a kind (the Build bar's icon is drawn from a copy of it)
@@ -211,6 +227,7 @@ export function makeCodeBuildings({ shade = null, tier = () => 'gaming', rendere
       at: o.q && [o.q.x, o.q.y, o.q.z], foot: o.code.B.anchors.footprint, doorways: o.code.B.anchors.doorways })),
     get kitMs() { return kitP && mod ? true : false; },
   };
+  let walkY = null, mounted = false;   // (CODE.walkAs)
   const VIEW = new THREE.Frustum(), PM = new THREE.Matrix4(), SPH = new THREE.Sphere();
   let last = null, speed = 0, kitNow = null;   // (kitNow: the kit, once the first building has asked for it)
   const TINT = new THREE.Color(1, 1, 1), FWD = new THREE.Vector3(), LOADS = [];

@@ -14,7 +14,7 @@
 //             (outfit = a people model file; the fields match the actors' makePerson options)
 //   gold,     spending money
 //   bounty,   all the gold ever earned; it never goes down, and the rider's title comes from it
-//   mode:     'lasso' | 'shoot'    the grown-ups' "Bandits: lasso only / lasso or revolver" switch (src/gun.js): 'shoot'
+//   mode:     'lasso' | 'shoot'    the grown-ups' "Lasso only / Lasso or guns" switch (src/gun.js): 'shoot'
 //             lets the rider buy the six-shooter at the general store and shoot bandits with it (the bottle range is
 //             for every rider either way). The same field the old title's lasso-or-shooting choice kept
 //   (owned.revolver: true once the six-shooter is bought: src/gun.js)

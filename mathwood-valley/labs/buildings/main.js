@@ -19,6 +19,7 @@ import { buildStable, stableRecipe, PAINTS, RECIPE_DEFAULTS, STABLE } from './st
 import { buildSheriff, sheriffRecipe, PAINTS as SHERIFF_PAINTS, RECIPE_DEFAULTS as SHERIFF_DEFAULTS } from './sheriff.js';
 import { MORTARS } from '../stone/stonewall.js';
 import { buildProps } from './props.js';
+import { loadSheet } from '../../world/props/sheet.js';
 import { makeArt, makeSheriffArt, makeStoreArt } from './art.js';
 import { softenGrain, eraseNails } from './woodlook.js';
 import { buildStore, storeRecipe, PAINTS as STORE_PAINTS, RECIPE_DEFAULTS as STORE_DEFAULTS, SIGN_LAYOUT } from './store.js';
@@ -145,7 +146,7 @@ function applyQuality() {
 }
 
 // ── materials ────────────────────────────────────────────────────────────────────────────────────────────────────────
-let T, RT, ART, SART, STA, SAA;
+let T, RT, ART, SART, STA, SAA, PAPER;
 const mats = {};
 function makeMaterials() {
   // (the Material Lab's frontier-cabin weathering, a little softer: moss mostly on what faces up and on the shady side,
@@ -168,12 +169,13 @@ function makeMaterials() {
   // its edges; drawn after the boards and pulled toward the camera a hair so it never fights them)
   // (the jail's whitewashed walls: the rubble picture under a lime wash; glass seen from inside: faintly tinted)
   mats.plaster = lit(new THREE.MeshStandardMaterial({ map: RT.map, normalMap: RT.normalMap, normalScale: new THREE.Vector2(0.5, 0.5), roughness: 0.97 }), { ao: true, tint: true });
-  mats.pane = new THREE.MeshBasicMaterial({ color: 0x8fa4b4, transparent: true, opacity: 0.12, depthWrite: false });
+  mats.pane = new THREE.MeshBasicMaterial({ color: 0xd2dbe0, transparent: true, opacity: 0.3, depthWrite: false });   // (a light frost from inside, as the game's)
   mats.decal = lit(new THREE.MeshStandardMaterial({ map: SART.sheriff, roughness: 0.9, transparent: true, depthWrite: false, alphaTest: 0.01, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -4 }), { ao: true });
   mats.glow = glowMaterial(); mats.glass = glowMaterial({ panes: true });
   mats.rope = lit(new THREE.MeshStandardMaterial({ map: ropeTexture(), roughness: 0.92 }), { ao: true, tint: true });
   // (the general store's goods: one picture of labels, prints, cloth and heaps, each corner its own tint; glass jars)
   mats.goods = lit(new THREE.MeshStandardMaterial({ map: STA.store, roughness: 0.78 }), { ao: true, tint: true });
+  mats.paper = lit(new THREE.MeshStandardMaterial({ map: PAPER, roughness: 0.74 }), { ao: true, tint: true });
   mats.jar = lit(new THREE.MeshStandardMaterial({ color: 0xdfeceb, roughness: 0.06, metalness: 0.1, transparent: true, opacity: 0.38, depthWrite: false }), { ao: true });
   T.ground.repeat.set(15, 15);
   mats.ground = lit(weather(new THREE.MeshStandardMaterial({ map: T.ground, roughness: 0.97 }), { ground: true, tint: true, ao: true }));
@@ -338,7 +340,7 @@ function rebuild() {
   const off = B.offset, offZ = B.offsetZ || 0;
   P = buildProps(propList(), { seed: cur().seed * 7 + 1, bake: (geo) => { geo.translate(-off, 0, -offZ); B.light.bake(geo); B.light.apply(geo, state.doors, 'main', state.jailDoor); geo.translate(off, 0, offZ); } });
   propsWas = propList().length;
-  for (const g of ['wood', 'iron', 'hay', 'goods', 'decal']) { if (!P.geos[g]) continue; const m = new THREE.Mesh(P.geos[g], mats[g]); m.castShadow = g !== 'decal'; m.receiveShadow = true; if (g === 'decal') m.renderOrder = 0.5; propGroup.add(m); }
+  for (const g of ['wood', 'iron', 'hay', 'goods', 'paper', 'decal']) { if (!P.geos[g]) continue; const m = new THREE.Mesh(P.geos[g], mats[g]); m.castShadow = g !== 'decal'; m.receiveShadow = true; if (g === 'decal') m.renderOrder = 0.5; propGroup.add(m); }
   // the lanterns: where they are, for the shaders' light, and a soft glow round each (one draw for all of them)
   setLamps(B.lamps);
   // (outdoor lanterns' glow apart, so it can go out by day)
@@ -366,7 +368,7 @@ function rebuildProps() {
   for (const m of [...propGroup.children]) { propGroup.remove(m); m.geometry.dispose(); }
   const off = B.offset, offZ = B.offsetZ || 0;
   P = buildProps(propList(), { seed: cur().seed * 7 + 1, bake: (geo) => { geo.translate(-off, 0, -offZ); B.light.bake(geo); B.light.apply(geo, state.doors, 'main', state.jailDoor); geo.translate(off, 0, offZ); } });
-  for (const g of ['wood', 'iron', 'hay', 'goods', 'decal']) { if (!P.geos[g]) continue; const m = new THREE.Mesh(P.geos[g], mats[g]); m.castShadow = g !== 'decal'; m.receiveShadow = true; if (g === 'decal') m.renderOrder = 0.5; propGroup.add(m); }
+  for (const g of ['wood', 'iron', 'hay', 'goods', 'paper', 'decal']) { if (!P.geos[g]) continue; const m = new THREE.Mesh(P.geos[g], mats[g]); m.castShadow = g !== 'decal'; m.receiveShadow = true; if (g === 'decal') m.renderOrder = 0.5; propGroup.add(m); }
 }
 // the doors: the stable's front pair; the sheriff's office door (open) and the jail's (open2)
 function setDoors(open, open2 = state.jailDoor) {
@@ -375,7 +377,7 @@ function setDoors(open, open2 = state.jailDoor) {
   B.light.setDoors(open, open2);
   // (the jail's door and the store's storeroom door go with open2; a sliding door slides along its track instead)
   B.doorMeshes.forEach((m, i) => {
-    const L = B.doors[i], o = L.group === 'jail' || L.group === 'loading' || L.group === 'back' ? open2 : open;
+    const L = B.doors[i], o = L.group === 'jail' || L.group === 'loading' || L.group === 'back' || L.group === 'cellblock' || L.group === 'backroom' ? open2 : open;
     if (L.slide) m.position.set(L.hinge[0] + (o ? L.slide[0] : 0), L.hinge[1] + (o ? L.slide[1] : 0), L.hinge[2] + (o ? L.slide[2] : 0)); else m.rotation.y = o ? L.open : 0;
   });
   const oz = B.offsetZ || 0;
@@ -847,7 +849,7 @@ function loop() {
     buildPanel();
     const t0 = performance.now();
     $('#loading').textContent = BLD().loading;
-    T = await makeTextures({ wood: cur().wood }); woodFor(T); RT = makeRubbleTexture(); ART = await makeArt(); SART = await makeSheriffArt(); STA = await makeStoreArt(SIGN_LAYOUT); SAA = await makeSaloonArt();
+    PAPER = await loadSheet(); T = await makeTextures({ wood: cur().wood }); woodFor(T); RT = makeRubbleTexture(); ART = await makeArt(); SART = await makeSheriffArt(); STA = await makeStoreArt(SIGN_LAYOUT); SAA = await makeSaloonArt();
     state.doors = state.jailDoor = state.doorsOpen;   // (every door as the view's Doors button says: open to begin with)
     stats.texMs = performance.now() - t0;
     U.uNoise.value = T.noise; LU.uPaintWear.value = cur().wear;

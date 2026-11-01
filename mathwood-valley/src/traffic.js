@@ -42,6 +42,7 @@
 //                      picture: they hold short of the stretch of road it sees, and one already in it when the counter
 //                      opens is hidden until it is out of it again; null lets them through
 //   T.holdUp(t) / T.letGo(t)   a gang holds the traveller t up (it stands; it is kept made) / lets it drive on
+//   T.flee(t, v)       the wagon held up runs for it at v m/s along the road (0: it stands); it stands short of town and the road's end
 //   T.folk             the riders and walkers on the road (src/roadfolk.js)
 //   T.state()          for rigs: { loaded, wagons: [{ kind, dir, u, pace, made, why, park, held }], spots, standing, folk }
 //   T.dispose()
@@ -49,10 +50,11 @@ import * as THREE from 'three';
 import { loadWagons, makeWagon, standWagon, roadCurve, wagonAt, WAGON_KINDS } from './wagon.js';
 import { makeWagonSound } from './audio/wagonsound.js';
 import { makeRoadFolk } from './roadfolk.js';
-import { makeCrowd } from './crowd.js';
+import { makeCrowd, crossReal, crossFigure, farEdge } from './crowd.js';
+import { byNight } from './roadfolkplan.js';
 import { makeSight } from './sight.js';
 import { howdy, makeHowdyWatch } from './ui/howdy.js';
-import { AMBUSH } from './missions/wagonplan.js';
+import { AMBUSH, HOLDUP } from './missions/wagonplan.js';
 
 export const TRAFFIC = {
   most: { gaming: 7, normal: 6, potato: 4 },    // wagons on the road at once (the far ones are only numbers). Fewer
@@ -70,10 +72,15 @@ export const TRAFFIC = {
                             // sees them come from the road's ends and go off to them, as before)
   speed: [1.5, 2.1],        // m/s: an easy walk for a loaded team
   lane: 1.3,                // m right of the road's middle each wagon keeps to (so two can pass)
-  show: 230,                // m from the player within which a wagon is made and drawn
+  show: 230,                // m from the player within which a wagon is made and drawn (gaming: `showMore` farther)
+  showMore: 50,
   hide: 260,                // ... and past which it is put away again
   look: 4,                  // m beyond its stopping distance a driver looks ahead of the team
   wide: 1.7,                // m either side of its lane it looks
+  // pulling out from a spot, it waits for this much clear lane: m behind the place it joins (what comes up meanwhile: a walking
+  // team takes about 15 s to get back on) and m ahead of it (a wagon and its team, horses and all); halfway out, it
+  // stops short of the lane for anything that came along since
+  join: { behind: 70, ahead: 16, hold: 5 },
   gap: 3,                   // m it stops short of what is in its way (from the lead horses' noses)
   wait: 1.2,                // s the way must be clear before it moves off again
   oncoming: 70,             // m ahead a driver looks for a wagon coming the other way, where the road narrows to one lane
@@ -97,7 +104,7 @@ export const TRAFFIC = {
   view: { far: 45, near: 9, pad: 7 },
   swap: 20,                 // m: with the drawn ones at their most, a wagon this much nearer than the farthest drawn one
                             // takes its place (that one is put away)
-  fade: { in: 1.2, out: 1.2, end: 2 },   // s: dissolving in (made in sight), out (put away in sight), at the road's end
+  fade: { in: 1.6, out: 1.6, end: 2 },   // s: dissolving in (made in sight), out (put away in sight), at the road's end
   hello: 6.5,               // m from the wagon's middle at which its driver says hello
   // going round something that stands in its way (the player stood in the road, a horse, a customer): after `after`
   // seconds stopped for it the driver steers the team round it, on whichever side is open, keeping `clear` metres from
@@ -155,7 +162,9 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
   let most = TRAFFIC.most[tier], madeMost = TRAFFIC.made[tier];
   // (the governor's 'wagons' dial, live: more or fewer set off, and the drawn ones over the new most are put away)
   const offGov = W.governor ? W.governor.on('wagons', (v) => { most = v.most; madeMost = v.made; }) : null;
-  const T = { road, wagons: [], standing: [], lib: null, ready: null, square, hold: false };
+  const T = { road, wagons: [], standing: [], lib: null, ready: null, square, hold: false, merges: 0 };
+  const SHOW = TRAFFIC.show + (tier === 'gaming' ? TRAFFIC.showMore : 0), HIDE = TRAFFIC.hide + (tier === 'gaming' ? TRAFFIC.showMore : 0);
+  const dayMost = () => byNight(most, W.night);   // (fewer after dark; a hold-up's or the board's wagon is sent regardless)
   const spots = SPOTS.map((S) => ({ ...S }));   // (this ride's own: which wagon has each, and the way to it)
   // in the player's sight (the camera's view, a little round each wagon): what dissolves in and out rather than popping
   const _sf = new THREE.Frustum(), _sm = new THREE.Matrix4(), _ss = new THREE.Sphere(), _sc = new THREE.Vector3();
@@ -178,7 +187,7 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
   // a drawn wagon handed back to its far figure: crossfading where a figure is drawn, at once out of sight; else it waits
   function handBack(t) {
     if (!t.wg || t.fadeTo <= 0) return true;
-    if (!t.ghost && t.dist < T.crowd.far) { fadeOut(t, TRAFFIC.fade.out, 'away'); return true; }
+    if (!t.ghost && t.dist < T.crowd.far) { t.cross = true; fadeOut(t, TRAFFIC.fade.out, 'away'); return true; }
     if (t.ghost || hidden(t.wg.pos.x, t.wg.pos.z, sight ? sight.far : 0)) { unmake(t); return true; }
     return false;
   }
@@ -285,7 +294,8 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
     if (view && inStretch(t)) { t.ghost = true; wg.root.visible = false; }   // (made inside the counter's picture: unseen there)
     // (made where its far figure is drawn: the two crossfade; else made in the player's sight it comes in out of the
     // haze, and out of sight it is simply there)
-    if (!t.ghost && (t.dist < T.crowd.far || inSight(wg.pos.x, wg.pos.z))) { t.fade = 0; t.fadeTo = 1; t.fadeRate = 1 / TRAFFIC.fade.in; wg.fade(0); } else { t.fade = 1; t.fadeTo = 1; }
+    t.cross = !t.ghost && t.dist < T.crowd.far;
+    if (!t.ghost && (t.cross || inSight(wg.pos.x, wg.pos.z))) { t.fade = 0; t.fadeTo = 1; t.fadeRate = 1 / TRAFFIC.fade.in; wg.fade(0); } else { t.fade = 1; t.fadeTo = 1; }
     t.chores = null;
     if (t.way && !t.left && t.du >= t.way.park - 0.4) t.stoodAt = -1e9;   // (made standing: the driver is down already)
     t.sound = audio ? makeWagonSound(audio, wg) : null;
@@ -293,11 +303,12 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
   function unmake(t) {
     if (t.sound) { t.sound.dispose(); t.sound = null; }
     if (t.wg) { t.wg.dispose(); t.wg = null; }
-    t.ghost = false; t.fade = 1; t.fadeTo = 1; t.then = null;
+    t.ghost = false; t.fade = 1; t.fadeTo = 1; t.then = null; t.cross = false;
   }
   // ── HOLD-UPS (a gang on the long roads: src/missions/wagonjob.js) ───────────────────────────────────────────────
   T.holdUp = (t) => { if (!t || t.held || !T.wagons.includes(t)) return false; t.held = true; t.clearFor = 0; return true; };
-  T.letGo = (t) => { if (!t) return; t.held = false; t.clearFor = 0; };
+  T.letGo = (t) => { if (!t) return; t.held = false; t.fleeV = 0; t.clearFor = 0; };
+  T.flee = (t, v) => { if (t && t.held) t.fleeV = v; };
 
   // ── THE STORE COUNTER'S PICTURE ─────────────────────────────────────────────────────────────────────────────────
   // While the general store's counter is worked its camera stands out in the street, looking across at the rider and
@@ -370,7 +381,7 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
     const seeds = [{ dir: -d0, m: [90, 130] }, { dir: d0, m: [160, 200] }, { dir: -d0, m: [230, 280] }, { dir: d0, m: [300, TRAFFIC.reach] },
       { dir: away, m: [70, 150], out: true }, { dir: -away, m: [200, 300], out: true }];
     for (const { dir, m, out } of seeds) {
-      if (T.wagons.length >= most - 1) break;
+      if (T.wagons.length >= byNight(most, W.night) - 1) break;
       const u = Math.min(L - 2, Math.max(2, square + (out ? dir : -dir) * rnd(...m)));
       if (T.wagons.some((o) => o.dir === dir && Math.abs(o.u - u) < 40)) continue;
       T.send(dir, null, u);
@@ -396,11 +407,23 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
     return Infinity;
   }
   // off the road at a spot (pulling in, standing, pulling out): the wagons on the road don't wait behind it
-  const offRoad = (t) => !!t.way && t.du > t.way.off && t.du < t.way.on;
+  // (off it by the whole wagon: pulling in till its tail is clear of the lane, pulling out till its team's noses come to it)
+  const offRoad = (t) => !!t.way && t.du - (t.wg ? t.wg.tail : 5) > t.way.off && t.du + (t.wg ? t.wg.nose : 7) < t.way.on;
   // standing at a spot: a wagon on the road coming up behind, near enough that pulling out now would cut in front of it
   function pullOutBlocked(t) {
     const w = t.way;
-    for (const o of T.wagons) if (o !== t && o.dir === t.dir && !offRoad(o) && ((w.uOut - o.u) * t.dir) > -10 && ((w.uOut - o.u) * t.dir) < TRAFFIC.park.clear) return true;
+    const J = TRAFFIC.join;
+    for (const o of T.wagons) {
+      if (o === t || offRoad(o)) continue;
+      if (o.dir === t.dir) {
+        const e = (w.uOut - o.u) * t.dir;
+        if (e > -J.ahead && e < (o.pace < 0.05 ? J.ahead + 8 : J.behind)) return true;   // (one standing well back for something else is not waited for)
+      } else for (const n of narrows) {
+        // (where the lanes squeeze together, one coming the other way has the road: it is in the tight stretch, or near it)
+        if (w.uOut < n[0] - J.ahead || w.uOut > n[1] + J.ahead) continue;
+        if (o.u > n[0] - J.behind && o.u < n[1] + J.behind) return true;
+      }
+    }
     return false;
   }
   // where the way ahead of a wagon is, s metres along whatever it is driving (the road at its lane, or a spot's way)
@@ -413,7 +436,14 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
   function want(t, now, things, dt) {
     let v = t.speed; t.why = '';
     // held up by a gang: it stands (src/missions/wagonjob.js); one coming up behind a held-up wagon waits well back
-    if (t.held) { t.why = 'held up'; return 0; }
+    if (t.held) {
+      if (!t.fleeV) { t.why = 'held up'; return 0; }
+      // (running for it: up to where it must stand, and the usual care for what's ahead below)
+      const F = HOLDUP.flee, toEnd = (t.dir > 0 ? L - t.u : t.u) - F.stopEnd, side = t.u - square, toTown = side * t.dir < 0 ? Math.abs(side) - F.stopOut : Infinity, left = Math.min(toEnd, toTown);
+      v = Math.min(t.fleeV, Math.sqrt(2 * 0.8 * Math.max(0, left)));
+      if (v < 0.1) { t.why = 'held up'; return 0; }
+      t.why = 'running for it';
+    }
     for (const o of T.wagons) if (o.held && o !== t && o.dir === t.dir && !t.way) { const e = (o.u - t.u) * t.dir; if (e > 0 && e < AMBUSH.hold + 8) { t.why = 'waiting: a hold-up'; return 0; } }
     if (t.way) {
       // standing at its spot: wait, then (when the road behind the place it joins is clear) drive on
@@ -429,6 +459,11 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
         t.left = true; t.until = 0; if (t.wg) t.wg.parked = false;
       }
       if (!t.left) { const left = Math.max(0, w.park - t.du); v = Math.min(v, Math.max(0.35, Math.sqrt(2 * 0.6 * left))); }
+      // (on the way back out: it stops short of the lane while something is coming along it, or just ahead)
+      else if (t.du < w.on) {
+        const edge = w.on - t.du - (t.wg ? t.wg.nose : 7);
+        if (edge > -2 && edge < TRAFFIC.join.hold && pullOutBlocked(t)) { v = Math.min(v, Math.sqrt(2 * 0.8 * Math.max(0, edge - 1))); if (v < 0.1) { t.why = 'waiting for a gap'; return 0; } }
+      }
     } else if (t.stop != null && (t.dir > 0 ? t.u >= t.stop - 0.5 : t.u <= t.stop + 0.5)) {
       // a stop in the square: drive up to it, wait, drive on
       if (!t.until) t.until = now + rnd(...TRAFFIC.stop.time);
@@ -442,7 +477,12 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
     // coming the other way is in it, or will get to it first (nearer its own end of it; just as near: the one that set
     // off first goes). A wagon already in one carries on.
     const way = t.way ? Infinity : giveWay(t);
-    if (!t.wg) { if (way < 8) { t.why = 'giving way'; return 0; } return v; }
+    if (!t.wg) {
+      if (way < 8) { t.why = 'giving way'; return 0; }
+      // (not drawn, only a number: it still keeps behind the one in front, so none comes into view inside another)
+      if (!offRoad(t)) for (const o of T.wagons) { if (o === t || o.dir !== t.dir || offRoad(o)) continue; const gap = (o.u - t.u) * t.dir; if (gap > 0 && gap < 22) v = gap < 14 ? 0 : Math.min(v, o.pace); }
+      return v;
+    }
     let block = way < Infinity ? Math.max(0, way - t.wg.nose) : Infinity;
     if (block < Infinity) t.giveWay = true;
     // the store counter's picture ahead: it holds short of it (not one already inside, hidden: that drives on out)
@@ -556,7 +596,7 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
   function driverAt(t, now, dt) {
     const wg = t.wg, w = t.way;
     const standing = w && !t.left && t.du >= w.park - 0.4 && wg.pace < 0.05 && t.until && t.until - now > 2.5;
-    wg.idle = !!(standing || t.held || (t.why === 'stopped in town'));
+    wg.idle = !!(standing || (t.held && wg.pace < 0.2) || (t.why === 'stopped in town'));
     if (standing && !wg.driverDown && now - (t.stoodAt || (t.stoodAt = now)) > 1.5) {
       const s = Math.sin(wg.heading), c = Math.cos(wg.heading);
       spot(w.us, t.dir, _dp);
@@ -683,7 +723,7 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
         }
         if (u != null) break;
       }
-      if (!T.hold && u != null && T.wagons.length < most) T.send(dir, null, u);
+      if (!T.hold && u != null && T.wagons.length < dayMost()) T.send(dir, null, u);
     }
     setView(T.keepView || null);
     // which are made: the nearest few within TRAFFIC.show. At most one is made a frame (making one is the costly
@@ -694,14 +734,14 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
       spot(t.u, t.dir, _f); t.dist = Math.hypot(_f.x - at.x, _f.z - at.z);
       if (t.wg) {
         // (well off: put away, dissolving first if the player can see it; never one a gang holds up)
-        if (t.dist > TRAFFIC.hide && !t.held && t.fadeTo > 0) handBack(t);
+        if (t.dist > HIDE && !t.held && t.fadeTo > 0) handBack(t);
         if (t.wg) made++;
       }
       if (t.ghost && !inStretch(t)) { t.ghost = false; if (t.wg) t.wg.root.visible = true; }   // (out of the counter's picture)
     }
     if (T.lib) {
       let next = null;
-      for (const t of T.wagons) if (!t.wg && !t.ended && t.dist < TRAFFIC.show && (!next || t.dist < next.dist)) next = t;
+      for (const t of T.wagons) if (!t.wg && !t.ended && t.dist < SHOW && (!next || t.dist < next.dist)) next = t;
       if (next && made >= madeMost) {
         let far = null;
         for (const t of T.wagons) if (t.wg && !t.held && t.fadeTo > 0 && (!far || t.dist > far.dist)) far = t;
@@ -713,11 +753,11 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
       let live = 0; for (const t of T.wagons) if (t.wg && t.fadeTo > 0) live++;
       if (live > madeMost) {
         let far = null;
-        for (const t of T.wagons) if (t.wg && !t.held && t.fadeTo > 0 && (t.ghost || hidden(t.wg.pos.x, t.wg.pos.z, sight ? sight.far : 0) || t.dist > TRAFFIC.show * 0.8) && (!far || t.dist > far.dist)) far = t;
+        for (const t of T.wagons) if (t.wg && !t.held && t.fadeTo > 0 && (t.ghost || hidden(t.wg.pos.x, t.wg.pos.z, sight ? sight.far : 0) || t.dist > SHOW * 0.8) && (!far || t.dist > far.dist)) far = t;
         if (far) handBack(far);
       }
       // (more on the road than the most now: one out of sight leaves it, not drawn, not stopping or held up, the farthest first)
-      if (T.wagons.length > most + 1 && !T.hold) {
+      if (T.wagons.length > dayMost() + 1 && !T.hold) {
         let far = null;
         for (const t of T.wagons) if (!t.wg && !t.held && !t.way && !t.park && hidden(...(spot(t.u, t.dir, _f), [_f.x, _f.z])) && (!far || t.dist > far.dist)) far = t;
         if (far) far.gone = true;
@@ -747,7 +787,7 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
         // dissolving in or out
         if (t.fade !== t.fadeTo) {
           t.fade = t.fade < t.fadeTo ? Math.min(t.fadeTo, t.fade + t.fadeRate * dt) : Math.max(t.fadeTo, t.fade - t.fadeRate * dt);
-          t.wg.fade(t.fade);
+          t.wg.fade(t.cross ? crossReal(t.fade) : t.fade);
           if (t.fade <= 0 && t.fadeTo <= 0) { if (t.then === 'gone') t.gone = true; unmake(t); }
         }
       } else {
@@ -779,7 +819,7 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
     const C = T.crowd;
     for (const t of T.wagons) {
       if (t.ghost || t.gone || (t.ended && !t.wg) || t.then === 'gone' || t.dist > C.far) continue;
-      const a = t.wg ? 1 - t.fade : 1; if (a <= 0.01) continue;
+      const a = (t.wg ? (t.cross ? crossFigure(t.fade) : 0) : 1) * farEdge(t.dist, C.far); if (a <= 0.01) continue;
       let x, z, h;
       if (t.wg) { x = t.wg.pos.x; z = t.wg.pos.z; h = t.wg.heading; }
       else if (t.way) { const c = t.way.curve, k = Math.min(1, Math.max(0, t.du / t.way.L)); c.getPointAt(k, _f); c.getTangentAt(k, _fh); x = _f.x; z = _f.z; h = Math.atan2(_fh.x, _fh.z); }

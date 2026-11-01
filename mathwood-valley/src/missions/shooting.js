@@ -44,6 +44,7 @@ import * as THREE from 'three';
 import { makePerson } from '../actors/folk.js';
 import { makeRange, RANGE } from '../range.js';
 import { makeRevolver } from '../revolver.js';
+import { gunInHand, GUNS } from '../gun.js';
 import { makeRangeSound } from '../audio/rangesound.js';
 import { makeNumberSense, rightNow, isDone, whyNot, lineFor, tipFor, numText, cardAt, sayCard } from '../math/numbersense.js';
 import { levelFor } from '../levels/model.js';
@@ -183,6 +184,15 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
     const d = Math.min(Math.hypot(at.x - K.x, at.z - K.z), Math.hypot(at.x - st.x, at.z - st.z)) - (P.onHorse ? 1.2 : 0);
     if (d < TALK.prompt) { J.prompt = shiftOpen() ? KEEPER.stand : 'Talk to Miss Opal'; J.promptAt = { x: K.x, z: K.z }; }   // (the day's shift done: just a word; promptAt: where she is, src/main.js doors)
   }
+  // the gun in the rider's hand: a rifle chosen with the weapon buttons (src/gun.js), else the six-shooter she keeps here
+  // (the hand round it: the rider's own, from the people already loaded)
+  const rangeGun = () => gunInHand(rider) || GUNS.revolver;
+  function takeGun() {
+    const g = rangeGun();
+    if (G && G.kind === g.id) return;
+    if (G) G.dispose();
+    G = makeRevolver({ look: rider.look || {}, folk, kind: g.id, rounds: g.rounds });
+  }
   J.start = () => {
     if (state !== 'idle' || !J.prompt || J.paused) return false;
     if (!shiftOpen()) { decline(); return false; }
@@ -204,8 +214,8 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
     fitNow.fov = null; fitNow.dx = fitNow.dy = 0;
     state = 'in';
     SND.on(true);
-    if (!G) G = makeRevolver({ look: rider.look || {}, folk });   // (the hand round it: the rider's own, from the people already loaded)
-    G.show(false); G.reloading = false; G.rounds = 6;   // (handed over loaded: "six in the gun")
+    takeGun();
+    G.show(false); G.reloading = false; G.rounds = G.most;   // (handed over loaded: "six in the gun")
     openUi();
     keeperSay(touch() ? KEEPER.startTouch : KEEPER.start, { ms: touch() ? 4600 : 3800 });
   }
@@ -306,7 +316,8 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
     const n = G.reloading ? 0 : G.rounds;
     ui.cylEl.innerHTML = Array.from({ length: 6 }, (x, k) => { const a = -Math.PI / 2 + k * Math.PI / 3; return `<circle cx="${(Math.cos(a) * 13).toFixed(1)}" cy="${(Math.sin(a) * 13).toFixed(1)}" r="5.6" class="${k < n ? 'is-in' : ''}"/>`; }).join('') + '<circle r="3" class="bsr-pin"/>';
     ui.cylEl.style.transform = `rotate(${(6 - n) * 60}deg)`;
-    ui.gunWords.textContent = G.reloading ? 'Reloading' : touch() ? 'Tap a target to shoot' : 'Click a target to shoot · R reloads';
+    ui.cylEl.style.display = G.kind === 'revolver' ? '' : 'none';
+    ui.gunWords.textContent = G.reloading ? 'Reloading' : G.kind !== 'revolver' ? `${n} in the rifle · ${touch() ? 'Tap a target to shoot' : 'Click a target to shoot'}` : touch() ? 'Tap a target to shoot' : 'Click a target to shoot · R reloads';
     ui.el.classList.toggle('is-reloading', G.reloading);
   }
   function dots() { if (ui) ui.dotsEl.innerHTML = Array.from({ length: SHOOT.string }, (x, k) => `<i class="${k < inString ? 'is-on' : ''}"></i>`).join(''); }
@@ -361,7 +372,7 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
   // which target a shot at (x, y) means: the nearest tag or body within a generous reach, or -1
   function targetAt(x, y) {
     if (!card) return -1;
-    const reach = touch() ? SHOOT.reach.touch : SHOOT.reach.mouse;
+    const reach = (touch() ? SHOOT.reach.touch : SHOOT.reach.mouse) * (rangeGun().aimPx / GUNS.revolver.aimPx);   // (a rifle: steadier, so more forgiving)
     const pxPerM = innerHeight / 2 / Math.tan(camera.fov * Math.PI / 360) / Math.max(1, camera.position.distanceTo(R.layout.look));
     let best = -1, bs = Infinity;
     R.targets.forEach((T, i) => {
@@ -581,6 +592,8 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
     const k = placeView(dt);
     if (P.person) P.person.root.visible = state === 'in' && k < 0.6;
     if (state === 'in' && k >= 1) { blend = null; state = 'aim'; G.show(true); newCard(); }
+    // (another gun chosen with the buttons: taken up)
+    if (state === 'aim' && G && G.kind !== rangeGun().id) { takeGun(); G.show(true); gunWords(); }
     if (G) { G.update(dt, { camera, W }); if (ui && (G.reloading !== ui.el.classList.contains('is-reloading') || G.rounds !== ui.lastRounds)) { ui.lastRounds = G.rounds; gunWords(); } }
     if (state === 'aim') {
       placeTags();

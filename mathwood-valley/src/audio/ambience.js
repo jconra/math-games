@@ -708,6 +708,7 @@ export function makeAmbience({ audio, W, tier = W && W.tier, base = GAME }) {
     bursts: { ...bursts }, next: { cows: +cowT.toFixed(1), dog: +dogT.toFixed(1) },
     creek: { on: !!creek, d: Number.isFinite(creekD) ? +creekD.toFixed(1) : null, squares: wet.size }, bus: bus ? +bus.gain.value.toFixed(3) : 0, work, stable });
   // (for rigs: a burst now)
+  A.happyBark = (D) => { if (!D || !D.position || !D.dog) return false; const ok = dogBurst(D, true); if (ok) { dogAt = clock; dogT = Math.max(dogT, BURST.dogs.quiet[0] * 0.5); } return ok; };   // (a treat: a short, happy bark)
   A.dev = { cows: () => { cowT = 0; }, dog: () => { dogT = 0; }, work: () => { workT = 0; }, out: () => cut };
   // THE BLACKSMITH'S HAMMER ON HIS ANVIL (src/smithy.js rings it as each blow lands, in time with his clip): iron on
   // iron, a crack of noise like the hammer's out back but higher and harder, with a short bright second burst and the

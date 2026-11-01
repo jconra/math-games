@@ -119,10 +119,9 @@ const MAKERS = {
     const pad = mesh(new THREE.CylinderGeometry(r, r * 0.97, 0.08, 28), std(0xb9a98c, { roughness: 1 }), 0, 0.045, 0);
     const grp = new THREE.Group(); grp.add(rim, pad); return grp;
   },
-  // a rack on the wall: a pine backboard with a shaped top, a darker frame, two pairs of pegs and two long guns across
-  // them. guns: the guns to lay on it (from models/guns, each lying along x, centred, real size: interior.js), the top
-  // one first; without them, two plain rifles made here stand in.
-  rifles({ guns = null } = {}) {
+  // a rack on the wall: a pine backboard with a shaped top, a darker frame, two pairs of pegs and the long guns across
+  // them. guns: the guns to lay on it (src/rifles.js, each lying along x, centred, real size: things.js), the top one first
+  rifles({ guns = [] } = {}) {
     // (the board's grain: long streaks across, a few knots; the extruded face's UVs are its own metres, so it repeats per metre)
     const grain = canvasTex(256, 256, (x, w, h) => {
       x.fillStyle = '#8a5c34'; x.fillRect(0, 0, w, h);
@@ -140,16 +139,7 @@ const MAKERS = {
     const peg = new THREE.CylinderGeometry(0.016, 0.018, 0.13, 10).rotateX(Math.PI / 2), lip = new THREE.CylinderGeometry(0.015, 0.016, 0.05, 10);
     const rows = [0.12, -0.2];
     for (const px of [-0.4, 0.4]) for (const py of rows) grp.add(mesh(peg, dark, px, py, 0.095), mesh(lip, dark, px, py + 0.02, 0.15));
-    if (guns) guns.forEach((g, i) => { g.position.set(0, rows[i] + 0.03, 0.105); grp.add(g); });   // (down in the hooks)
-    else for (const [y, flip] of [[rows[0] + 0.045, 1], [rows[1] + 0.045, -1]]) {
-      const r = new THREE.Group(); r.position.set(0, y, 0.105); r.scale.x = flip;
-      const stock = new THREE.Shape(); stock.moveTo(-0.62, -0.06); stock.lineTo(-0.62, 0.035); stock.lineTo(-0.3, 0.02); stock.lineTo(-0.2, 0.02); stock.lineTo(-0.2, -0.02); stock.lineTo(-0.36, -0.03); stock.lineTo(-0.5, -0.07); stock.lineTo(-0.62, -0.06);
-      r.add(mesh(new THREE.ExtrudeGeometry(stock, { depth: 0.035, bevelEnabled: false }).translate(0, 0, -0.0175), wood));
-      r.add(mesh(new THREE.BoxGeometry(0.2, 0.05, 0.04), steel, -0.1, 0.005, 0));          // the action
-      r.add(mesh(new THREE.CylinderGeometry(0.011, 0.011, 0.68, 8).rotateZ(Math.PI / 2), steel, 0.34, 0.015, 0));   // the barrel
-      r.add(mesh(new THREE.BoxGeometry(0.42, 0.035, 0.034), wood, 0.2, -0.012, 0));        // the fore-end
-      grp.add(r);
-    }
+    guns.forEach((g, i) => { g.position.set(0, rows[i] - 0.03, 0.105); grp.add(g); });   // (down in the hooks)
     return grp;
   },
   // what goes with the iron stove's model (models/furniture/stove.glb, a pot-belly 1 m tall before `scale`): the fire

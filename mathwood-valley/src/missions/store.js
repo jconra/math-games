@@ -26,8 +26,7 @@
 // counts in (order.credit: groups in Multiplication at half weight ...), timed as a sit-down answer
 // (src/ui/answertimer.js; a fast right one counts double from the level the ladder names, dollars and cents). While the
 // levels model is still finding the rider's level here, the slip's corner says so, quietly.
-// A sale of the rider's goods counts only in its own strand (Word problems for eggs and milk, Fractions for wool), at
-// the form that fits the store's level; it never moves the level.
+// Customers no longer buy the rider's goods or fish: those are sold to the clerk at the bins (src/missions/sellgoods.js).
 // A sum too big for the head (16 × 7 hands-days, 13 tins at $6) opens THE WORKED AREA (src/ui/longwork.js) by itself a
 // moment after the slip comes up, unless the store's level is well past it (then Work it out, from the tools button,
 // src/ui/tools.js, or the slip's own button, opens it): the sum worked a step at a time (it opens on the sum itself,
@@ -45,21 +44,16 @@
 // says, with their own pictures (src/ui/counterpics.js): the lead (the clock to read, the coins to count) above the
 // coins, the help after a miss.
 //
-//   const J = makeStoreJob({ W, folk, P, I, camera, rider, hud, hob, refresh, openBox, onStart, onStop, pay, goods, town, work, room })
+//   const J = makeStoreJob({ W, folk, P, I, camera, rider, hud, hob, refresh, openBox, onStart, onStop, pay, town, work, room })
 //     room(): the store's room (src/townrooms.js TR.rooms.generalStore: { o, A, F }), or null: the counter outside
 //     work(): opens the tools' Work it out (src/ui/tools.js) on this order's sum: the slip's own button on a phone (the
 //     slip covers the tools strip there), for an order with no worked area of its own
 //     town(): the town's people (src/townpeople.js), or null: the customers are townsfolk borrowed from it (already about,
 //     or out of the nearest door, walking the town's paths; given back when they go), else made here as before
-//     fish(): the fishing job (src/fishingjob.js), or null: a customer buys the fish kept at the dock (its saleOrder:
-//     src/math/fishsale.js, a sale slip in Fractions, Ratios or Word problems; sold(order) takes them out of the saddlebags)
-//     goods: the homestead (src/homestead.js), or null: now and then a customer buys the rider's own eggs, wool or milk
-//     instead of bringing an order (goods.saleOrder: a sale slip, levelled by this job's ladder step; it pays the gold
-//     the answer comes to, and doesn't move the ladder); goods.sold(order) takes them out of the saddlebags
 //     openBox(problem, after(result)): opens the lock-box panel on that problem (main.js pays and pauses); false when it
 //     can't just then (paused, or a box already open), and it is asked again shortly; pay: { order,
 //     orderEvery, orderFirst } (shop.js PAY); onStart / onStop: the game puts the round-up and the keys away meanwhile;
-//     voice(kind, { at, male }): a customer's recorded line ('whatchagot', 'thanksStore', 'niceday': src/audio/shouts.js)
+//     voice(kind, { at, male }): a customer's recorded line ('thanksStore', 'niceday': src/audio/shouts.js)
 //     open(): false once the day's shift is done (src/shifts.js): the order that finished it is the last, the counter
 //     closes by itself after it and no new customer steps up (main.js keeps "Mind the counter" from opening it again)
 //   J.start()   to the counter (off the horse first, if riding)
@@ -73,13 +67,11 @@ import { makeWordProblems, makeOrder, lockboxProblem, FOLK, seeded } from '../ma
 import { picture } from '../ui/storepics.js';
 import { makeStoreSlip, speakLine } from '../ui/storeslip.js';
 import { openLongWork } from '../ui/longwork.js';
-import { workMul, workDiv, LONG, factFrom } from '../math/longwork.js';
+import { workMul, workDiv, LONG, factFrom, addColumns } from '../math/longwork.js';
 import { sumOf, workFrom } from '../math/jobsums.js';
 import { recordFact } from '../math/facts.js';
-import { homestead } from '../math/goods.js';
 import { counterPicture } from '../ui/counterpics.js';
-import { readAloud, record } from '../math/skill.js';
-import { MAPS } from '../math/strands.js';
+import { readAloud, record, levelOf } from '../math/skill.js';
 import { levelFor, stateOf } from '../levels/model.js';
 import { isAlgebra } from '../lockbox/levelplan.js';
 import { storeOrder, pickAsk, askAt } from '../levels/place/store.js';
@@ -116,13 +108,8 @@ export const STORE = {
   longMost: 4,         // a non-bulk order's numbers may need a long sum up to this many points past the rider's Long work
 };
 
-// the forms a sale of the rider's own goods comes in, with their points (src/math/strands.js MAPS sales and wool): the
-// highest form at or under the store level's school year is the one a customer asks for
-const formsOf = (map) => (MAPS[map] ? MAPS[map].ids.map((id, i) => [id, MAPS[map].anchors[i]]) : []);
-const SALE_FORMS = { sales: formsOf('sales'), wool: formsOf('wool') };
-
 export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, refresh = () => {}, openBox = null,
-  onStart = () => {}, onStop = () => {}, pay = { order: 3, orderEvery: 3, orderFirst: 1 }, scene = W.scene, goods = null, fish = null, voice = null, town = null, work = null, open: shiftOpen = () => true, room = null }) {
+  onStart = () => {}, onStop = () => {}, pay = { order: 3, orderEvery: 3, orderFirst: 1 }, scene = W.scene, voice = null, town = null, work = null, open: shiftOpen = () => true, room = null }) {
   // a customer's recorded line (src/audio/shouts.js: a man's or a woman's, by `male`), from where they stand
   const speak = (kind, c) => { if (voice && c) voice(kind, { at: () => ({ x: c.x, z: c.z }), male: !c.who.she }); };
   const place = W.places.store;
@@ -330,20 +317,6 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
       o.own = { strand: 'words', at: askAt({ maker: K ? 'wordsK' : 'words', step }) };
       return mark(o, { fixed: true, longAt: o.long ? o.long.point : null });
     }
-    // the fish kept at the dock: the first customer after a catch buys some, then one in a few (src/fishingjob.js), in
-    // the form that fits the store's level (none under its easiest)
-    { const FJ = fish && fish(), s = FJ && FJ.saleOrder ? FJ.saleOrder({ who, grade: q.level.grade }) : null; if (s) return s; }
-    // now and then a customer buys the rider's own goods: eggs, milk and flour (Word problems), wool (Fractions), at the
-    // form that fits the store's level (a form past it isn't bought)
-    if (goods) {
-      const carried = homestead(rider).goods, g = q.level.grade, plan = { step: payOf(q), sales: null, wool: null };
-      const formAt = (map) => { let id = null, at = null; for (const [k, p] of SALE_FORMS[map]) if (p <= g) { id = k; at = p; } return id ? { id, at } : null; };
-      const sf = (carried.eggs || carried.milk || carried.flour) ? formAt('sales') : null, wf = carried.wool ? formAt('wool') : null;
-      if (sf) Object.assign(plan, { sales: sf.id, salesAt: sf.at });
-      if (wf) Object.assign(plan, { wool: wf.id, woolAt: wf.at });
-      const sale = (plan.sales || plan.wool) ? goods.saleOrder({ step: plan, who }) : null;
-      if (sale) return sale;
-    }
     const ask = pickAsk(q.level.gen.mix, Math.random, lastAsk);
     lastAsk = ask;
     // (a word problem's numbers stay inside the level's school year: no long sum past it)
@@ -366,15 +339,11 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
     // a sum too big for the head: the worked area opens by itself, unless the store's level is well past it
     clearTimeout(longT);
     if (order.long && (order.grade ?? 0) < order.long.point + LONG.COMFORT) { const o = order; longT = setTimeout(() => { if (order === o) openLong(); }, STORE.longOpen * 1000); }
-    if (order.sale) speak('whatchagot', c);   // (come to buy the rider's own goods)
     if (c.walking) c.hand = true; else handOver(c);
   }
-  // the strand an order is about, at the point it was asked: Word problems, or the sale's (Word problems or
-  // Fractions), or the counter question's own (money, time, dec, pct, ratio)
-  function ownOf(o) {
-    if (o.sale) return o.sale.at != null ? { strand: o.sale.strand || (o.sale.map === 'wool' ? 'frac' : 'words'), at: o.sale.at } : null;   // (a fish sale says its own strand)
-    return o.own || null;
-  }
+  // the strand an order is about, at the point it was asked: Word problems, or the counter question's own (money, time,
+  // dec, pct, ratio)
+  const ownOf = (o) => o.own || null;
   // what an answer to this order counts in: its own strand at the point asked, and the order's extra strands (a
   // Long work credit is left out when the worked area ran: it counted the sum itself)
   function strandsOf(o, { worked = false } = {}) {
@@ -387,10 +356,10 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
     if (o.recorded) return;
     o.recorded = true;
     const tm = t || (timer ? timer.stop() : {});
-    // (an order made at a store level moves that level once; a sale counts only in its own strand)
-    const lv = o.levelId && !o.sale ? { place: 'store', level: o.levelId } : {};
+    // (an order made at a store level moves that level once)
+    const lv = o.levelId ? { place: 'store', level: o.levelId } : {};
     // (a times fact in the order's working, 4 pies × 3 pounds or 24 nails ÷ 4 kegs, goes on the times chart too)
-    const fact = o.equation || o.sale ? null : factFrom(o.rightWhy || '');
+    const fact = o.equation ? null : factFrom(o.rightWhy || '');
     if (fact) { try { recordFact(rider, fact.a, fact.b, right); } catch (e) { console.warn(e); } }
     const rec = recordAnswer(rider, right, { ...lv, strands: strandsOf(o, { worked }), sitDown: true, size: o.size || 1, ms: tm.ms, hidden: tm.hidden, idle: tm.idle });
     if (rec && rec.badge) news.push(`You earned the ${rec.badge} badge!`);
@@ -405,7 +374,7 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
     if (!order || U.busy || eqPending) return;
     if (longPanel && !worked) return;   // (the worked area is up: its answers count)
     const o = order, c = o.coins[i]; if (!c) return;
-    const res = o.sale || o.counter ? { first: !o.picked } : Q.answer(o, c, { helped });   // (a sale, or a counter question: not this ladder's)
+    const res = o.counter ? { first: !o.picked } : Q.answer(o, c, { helped });   // (a counter question: not this ladder's)
     o.picked = true;
     clearTimeout(longT);
     // (a badge won by this first pick is told on the slip with the tip)
@@ -440,11 +409,6 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
         if (opened === false) setTimeout(toBox, 500);
       };
       setTimeout(toBox, STORE.eqWait * 1000);
-      return;
-    }
-    if (o.sale) {   // (your goods sold: the gold the answer comes to)
-      if (o.sale.goods === 'fish') { const FJ = fish && fish(); if (FJ) FJ.sold(o); } else if (goods) goods.sold(o);
-      await finishOrder(o, front, { line: o.rightWhy, gold: o.sale.gold, first: !missed, paid: `+${o.sale.gold} gold for your ${o.sale.goods}` });
       return;
     }
     await finishOrder(o, front, { line: o.rightWhy, gold: tip() + (missed ? 0 : pay.orderFirst), first: !missed });
@@ -491,7 +455,7 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
     if (!o || !o.long || longPanel || U.busy || !J.active) return false;   // (false: not opened, e.g. already up: the tools open their entry instead)
     const already = !!o.recorded;   // (opened after a coin was picked: it helps, but the order's answer is already counted)
     clearTimeout(longT);
-    const L = o.long, work = L.op === 'mul' ? workMul(L.a, L.b, L.lead ? { lead: L.lead } : {}) : workDiv(L.n, L.d);
+    const L = o.long, work = L.op === 'mul' ? workMul(L.a, L.b, { ...(L.lead ? { lead: L.lead } : {}), columns: addColumns(levelOf(rider, 'add')) }) : workDiv(L.n, L.d);
     let firstRight = true;
     longPanel = openLongWork(document.body, {
       work, final: L.final, ask: o.ask, speak: readAloud(rider) ? speakLine : null,
@@ -605,9 +569,9 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
     longOpen: !!longPanel, long: longPanel ? longPanel.state() : null,
     people: people.map((c) => ({ who: c.who.name, state: c.state, x: +c.x.toFixed(2), z: +c.z.toFixed(2), inside: IN ? isIn(c) : null })), busy: U.busy, inside: !!IN });
   // the level was moved by hand (the tools strip's arrows): the order at the counter, not yet answered, is made again at
-  // the new level for the same customer (a sale of the rider's goods or fish, or a rig's order, stays as it is)
+  // the new level for the same customer (a rig's order stays as it is)
   J.relevel = () => {
-    if (!J.active || !order || order.picked || order.sale || order.fixed || longPanel || U.busy || eqPending) return false;
+    if (!J.active || !order || order.picked || order.fixed || longPanel || U.busy || eqPending) return false;
     const c = people.find((x) => x.state === 'serve'); if (!c) return false;
     if (served[served.length - 1] === c.who.name) served.pop();
     serve(c);

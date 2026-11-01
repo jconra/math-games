@@ -15,22 +15,24 @@
 //   S.dispose()
 import * as THREE from 'three';
 import { makeGunModel, fistFrame, puffPicture, GRIP } from './revolver.js';
+import { makeRifleModel } from './rifles.js';
 
 export const HELD = {
   scale: 1.5,       // drawn this much bigger than life (about the grip, so it stays in the fist)
-  flash: 0.07,      // s the muzzle flash shows
-  flashSize: 0.32,  // m across
+  flash: 0.09,      // s the muzzle flash shows
+  flashSize: 0.6,   // m across (big: it has to read from behind the rider, in daylight)
   smoke: 1.3,       // s a puff of smoke lasts
 };
 
 let flashMap = null, smokeMap = null;
 
-export function makeHeldGun({ scene }) {
-  const model = makeGunModel();
+export function makeHeldGun({ scene, kind = 'revolver' }) {
+  const model = kind === 'revolver' ? makeGunModel() : makeRifleModel(kind);
   const holder = new THREE.Group(); holder.name = 'sixgun'; holder.matrixAutoUpdate = false; holder.visible = false;
   // (sized about the grip's middle, as the range's hand is: the grip stays in the fist)
-  const sized = new THREE.Group(); sized.scale.setScalar(HELD.scale);
-  sized.position.fromArray(GRIP.at).multiplyScalar(1 - HELD.scale);
+  const big = kind === 'revolver' ? HELD.scale : 1.05;   // (a rifle is long enough to read as it is)
+  const sized = new THREE.Group(); sized.scale.setScalar(big);
+  sized.position.fromArray(GRIP.at).multiplyScalar(1 - big);
   sized.add(model.gun); holder.add(sized);
   holder.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.frustumCulled = false; } });
   if (!flashMap) { flashMap = puffPicture('rgba(255,250,220,1)', 'rgba(255,170,60,0.85)'); smokeMap = puffPicture('rgba(235,232,225,0.75)', 'rgba(200,196,188,0.35)'); }
@@ -41,7 +43,7 @@ export function makeHeldGun({ scene }) {
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: smokeMap, depthWrite: false, transparent: true, opacity: 0 }));
     s.visible = false; scene.add(s); puffs.push({ s, t: 9, v: new THREE.Vector3() });
   }
-  const S = { fitted: null };
+  const S = { fitted: null, kind };
   let flashT = 0;
   const _m = new THREE.Matrix4(), _v = new THREE.Vector3(), _j = new THREE.Vector3(), _d = new THREE.Vector3(), _q = new THREE.Quaternion();
 
@@ -92,15 +94,15 @@ export function makeHeldGun({ scene }) {
   S.dispose = () => {
     holder.removeFromParent();
     holder.traverse((o) => { if (o.geometry) o.geometry.dispose(); });
-    model.metal.dispose(); model.matte.dispose();
+    model.metal.dispose(); model.matte.dispose(); if (model.brass) model.brass.dispose();
     flash.removeFromParent(); flash.material.dispose();
     for (const p of puffs) { p.s.removeFromParent(); p.s.material.dispose(); }
   };
   return S;
 }
 
-// THE SIGHTS out on the trail: the bottle range's sights (the same ring with its four ticks, src/missions/shooting.js)
-// over the ringed rider while the six-shooter is the rider's tool, gold when he is in its reach.
+// THE SIGHTS out on the trail: the bottle range's sights (the same ring with its four ticks, src/missions/shooting.js),
+// the crosshair a gun is aimed with by hand (src/ui/gunaim.js), gold over a rider in its reach.
 //   const G = makeSights();  G.place({ x, y, r } | null, hot);  G.dispose()
 export function makeSights() {
   if (!document.getElementById('bsg-css')) {

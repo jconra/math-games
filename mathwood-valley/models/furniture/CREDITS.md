@@ -8,7 +8,7 @@ re-encoded as WebP (colour 1024 or 512, the rest 512) by ~/pw/bandit-math/rigs/c
 | File | Model | Page | Licence |
 | --- | --- | --- | --- |
 | table.glb | Wooden Table 02 | <https://polyhaven.com/a/wooden_table_02> | CC0 |
-| chair.glb | Painted Wooden Chair 01 | <https://polyhaven.com/a/painted_wooden_chair_01> | CC0 |
+| chair.glb | Painted Wooden Chair 01, repainted in plain wood from table.glb's picture | <https://polyhaven.com/a/painted_wooden_chair_01> | CC0 |
 | picture.glb | Fancy Picture Frame 01 | <https://polyhaven.com/a/fancy_picture_frame_01> | CC0 |
 | porch_chair.glb | Rocking Chair 01 | <https://polyhaven.com/a/Rockingchair_01> | CC0 |
 

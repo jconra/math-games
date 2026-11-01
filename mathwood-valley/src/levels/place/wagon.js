@@ -1,7 +1,7 @@
 // Protect the wagon (and the hold-ups on the road): ODDS AND EVENS, then THE TIMES TABLES, then MISSING FACTORS (the
 // agreed design, 2026-10-21). A gang rides alongside the wagon and every bandit wears a number that fits the card
-// ("Rope the evens", "The 7-Gang"); the townsfolk riding with them wear numbers that don't. Then the missing-number
-// cards ("7 × ? = 56": one rider wears the answer). Each gang level brings one new table in the difficulty order
+// ("Rope the evens", "The 7-Gang"); the townsfolk riding with them wear numbers that don't. Then all the factors of a
+// number ("All the factors of 48": several bandits, never one among a crowd). Each gang level brings one new table in the difficulty order
 // (src/math/series.js TABLE_ORDER, the same as the round-up's series); once a level is placed, every third gang is an
 // earlier table (picked by src/math/facts.js pickTable: the weak ones more), recorded at that table's own level.
 // The evens up to 100 lead straight into the 2-Gang (the evens up to 24): no big jump between the two halves.
@@ -12,12 +12,14 @@
 //                                                               (src/math/parity.js)
 //   { kind: 'gang', table, open: [tables met so far] }          the table-Gang: its multiples up to x12 (the times
 //                                                               trainer, src/math/times.js; table null: any open one)
-//   { kind: 'missing', upTo: 10 | 12 }                          "7 × ? = 56": the fact from pickFact (red ones first)
+//   { kind: 'factors', upTo: 10 | 12 }                          "All the factors of 48": the number from pickFact (red
+//                                                               ones first), one with enough factors for a gang (src/math/factors.js)
 
 import { TIMES } from '../kit.js';
 import { TABLE_ORDER } from '../../math/series.js';
 import { parityExample } from '../../math/parity.js';
 import { makeTimes } from '../../math/times.js';
+import { makeFactors, gangProduct } from '../../math/factors.js';
 
 const GRADE = { 2: 20, 10: 21, 5: 22, 3: 24, 4: 26, 9: 32, 6: 35, 8: 37, 7: 41, 11: 43, 12: 45 };
 const gang = (t) => ({
@@ -40,10 +42,10 @@ export const PLACE = {
     ...TABLE_ORDER.map(gang),
     { id: 'gmix', title: 'Any gang', line: 'Every table up to 12, the ones you miss more often', grade: 50, strand: 'mul', count: 8,
       gen: { kind: 'gang', table: null, open: TABLE_ORDER } },
-    { id: 'miss10', title: `7 ${TIMES} ? = 56`, line: 'One rider wears the missing number, tables up to 10', grade: 52, strand: 'mul', count: 5,
-      gen: { kind: 'missing', upTo: 10 } },
-    { id: 'miss12', title: `? ${TIMES} 12 = 96`, line: 'The missing number on either side, tables up to 12', grade: 54, strand: 'mul', count: 5,
-      gen: { kind: 'missing', upTo: 12 } },
+    { id: 'miss10', title: 'All the factors of 40', line: 'Every bandit wears a number that goes into it, tables up to 10', grade: 52, strand: 'mul', count: 5,
+      gen: { kind: 'factors', upTo: 10 } },
+    { id: 'miss12', title: 'All the factors of 96', line: 'Every bandit wears a number that goes into it, tables up to 12', grade: 54, strand: 'mul', count: 5,
+      gen: { kind: 'factors', upTo: 12 } },
   ],
   example: (L, rand) => wagonExample(L.gen, rand),
 };
@@ -58,10 +60,10 @@ export function wagonExample(g, rand) {
     const w = T.wave({ count: 8, table: t, reach: 12 });
     return { q: `The ${t}-Gang: ${w.targets.map((x) => x.n).join(' · ')}`, a: w.targets.filter((x) => x.good).map((x) => x.n).sort((a, b) => a - b).join(', ') };
   }
-  if (g.kind === 'missing') {
+  if (g.kind === 'factors') {
     const t = TABLE_ORDER[Math.floor(rand() * TABLE_ORDER.length)], a = 2 + Math.floor(rand() * (g.upTo - 1));
-    const w = T.wave({ count: 6, fact: { t: Math.min(t, g.upTo), a, upTo: g.upTo } });
-    return { q: `${w.rule}  (riders: ${w.targets.map((x) => x.n).join(' · ')})`, a: String(w.targets.find((x) => x.good).n) };
+    const w = makeFactors({ rand }).wave({ count: 8, product: gangProduct(Math.min(t, g.upTo), a, g.upTo), upTo: g.upTo });
+    return { q: `${w.rule}  (riders: ${w.targets.map((x) => x.n).join(' · ')})`, a: w.targets.filter((x) => x.good).map((x) => x.n).sort((x, y) => x - y).join(', ') };
   }
   throw new Error('wagon: no maker for ' + g.kind);
 }

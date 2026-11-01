@@ -84,7 +84,7 @@ export const PRESETS = {
   homestead: { label: "Homesteader's double pen", walls: 'hewn', plan: 'double', w: 3.7, d: 4.4, doors2: true, room: 'none', backDoor: false, porch: 'front', chimney: 'stone', chimneyAt: 'left', roof: 'gable', cover: 'shakes', pitch: 36, overhang: 0.4, windows: 'glass', winFront: 1, winSide: 1, winBack: 1, foundation: 'piers', logTone: 'brown', paint: 'none', lantern: true, seed: 11 },
   dogtrot: { label: 'Dogtrot (open breezeway)', walls: 'hewn', plan: 'dogtrot', w: 3.5, d: 4.2, breeze: 2.6, porch: 'none', chimney: 'stone', chimneyAt: 'both', roof: 'gable', cover: 'shakes', pitch: 31, overhang: 0.45, windows: 'shutters', winFront: 1, winSide: 0, winBack: 1, foundation: 'piers', backDoor: true, logTone: 'grey', paint: 'none', seed: 21 },
   kitchen: { label: 'Board-and-batten house with a lean-to kitchen', walls: 'batten', plan: 'single', w: 5.6, d: 4.4, room: 'back', backDoor: true, porch: 'front', chimney: 'pipe', chimneyAt: 'leanto', roof: 'gable', cover: 'shakes', pitch: 34, overhang: 0.4, windows: 'glass', winFront: 2, winSide: 1, winBack: 1, foundation: 'piers', paint: 'red', wear: 0.6, lantern: true, seed: 7 },
-  tworoom: { label: 'Two-room log house (back door, stone chimney)', walls: 'hewn', plan: 'double', w: 3.5, d: 4.6, doors2: false, backDoor: true, porch: 'partial', chimney: 'stone', chimneyAt: 'right', roof: 'gable', cover: 'shakes', pitch: 41, overhang: 0.35, windows: 'glass', winFront: 1, winSide: 1, winBack: 1, foundation: 'footing', logTone: 'dark', paint: 'none', seed: 5 },
+  tworoom: { label: 'Two-room log house (back door, stone chimney)', walls: 'hewn', plan: 'double', w: 3.5, d: 4.6, doors2: false, backDoor: true, porch: 'partial', lantern: true, chimney: 'stone', chimneyAt: 'right', roof: 'gable', cover: 'shakes', pitch: 41, overhang: 0.35, windows: 'glass', winFront: 1, winSide: 1, winBack: 1, foundation: 'footing', logTone: 'dark', paint: 'none', seed: 5 },
   frame: { label: 'Whitewashed frame house', walls: 'lap', plan: 'single', w: 5.6, d: 4.6, room: 'left', backDoor: true, porch: 'wrap', wrap: 'right', chimney: 'pipe', chimneyAt: 'middle', roof: 'gable', cover: 'shakes', pitch: 32, overhang: 0.35, windows: 'glass', winFront: 2, winSide: 1, winBack: 1, foundation: 'footing', paint: 'white', wear: 0.55, lantern: true, seed: 9 },
   ell: { label: 'Log house with a wing toward the street', walls: 'hewn', plan: 'ell', wing: 'right', wingAt: 'front', w: 6.0, d: 4.4, backDoor: true, porch: 'partial', chimney: 'stone', chimneyAt: 'left', roof: 'gable', cover: 'shakes', pitch: 38, overhang: 0.4, windows: 'glass', winFront: 1, winSide: 1, winBack: 1, foundation: 'piers', logTone: 'grey', paint: 'none', seed: 13 },
   shanty: { label: 'Claim shanty', walls: 'batten', plan: 'single', w: 4.6, d: 3.8, room: 'none', porch: 'none', chimney: 'pipe', chimneyAt: 'right', roof: 'shed', cover: 'boards', pitch: 14, overhang: 0.3, windows: 'shutters', winFront: 1, winSide: 1, winBack: 0, foundation: 'sills', paint: 'none', backDoor: false, seed: 17 },
@@ -1017,6 +1017,7 @@ function porchRun(c, M, P) {
       const a = ps[i], b = ps[i + 1];
       if (gaps.some(([g0, g1]) => g0 < b && g1 > a)) continue;
       const y = DK + 0.86 + k.r(-0.03, 0.03), Lr = b - a, tint = vary(k, log ? POLE : FRAME, 0.9, 1.05);
+      k.solid([Lr, y - DK + 0.1, 0.1], null, null, mul(M, T((a + b) / 2, DK + (y - DK + 0.1) / 2, postZ)));   // (a rail stops a walker: a porch's open edges can be stepped off, not its rails)
       if (log) prism(ngon(6, k.r(0.05, 0.06), 0.15, k.R), Lr + 0.06, [(a + b) / 2, y, postZ], [0, 0, Math.PI / 2 + k.r(-0.02, 0.02)], { tint, smooth: true, skip: '+y-y', strip: [1, 3, 5, 9][Math.floor(k.R() * 4)], taper: 0.05 });
       else put([Lr, 0.06, 0.08], [(a + b) / 2, y, postZ], null, { long: 0, tint, strip: 10 });
       for (const f of log ? [0.36, 0.68] : Array.from({ length: Math.max(1, Math.floor(Lr / 0.14)) - 1 }, (_, q) => (q + 1) / Math.max(1, Math.floor(Lr / 0.14)))) {
@@ -1067,8 +1068,8 @@ function porches(c) {
     }
     return;
   }
-  // (a small porch: only before the first door, about 2.7 m wide)
-  if (P.partial && fronts.length) { const dc = (fronts[0].a0 + fronts[0].a1) / 2; P.x0 = Math.max(P.x0, dc - 1.35); P.x1 = Math.min(P.x1, dc + 1.35); }
+  // (a small porch: only before the first door, about 4.2 m wide: room for a rocker each side of the door)
+  if (P.partial && fronts.length) { const dc = (fronts[0].a0 + fronts[0].a1) / 2; P.x0 = Math.max(P.x0, dc - 2.1); P.x1 = Math.min(P.x1, dc + 2.1); }
   const PD = P.depth, steps = fronts.map((o) => ({ x: (o.a0 + o.a1) / 2, w: Math.min(1.3, Math.max(1.0, o.a1 - o.a0 + 0.25)) })).filter((st) => st.x > P.x0 && st.x < P.x1);
   const front = mul(T(0, 0, main.z1), new THREE.Matrix4());
   const xs = postsFor(P.x0, P.x1, steps, k);

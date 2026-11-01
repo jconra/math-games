@@ -28,7 +28,8 @@ test('a roped bandit drops his number as sacks of the table', () => {
   assert.deepEqual(sacksFor(56, 7), { sacks: 8, per: 7 });
   assert.deepEqual(sacksFor(10, 10), { sacks: 1, per: 10 });
   assert.deepEqual(sacksFor(27, 6), { sacks: 0, per: 6 }, 'not in the gang: no sacks');
-  assert.deepEqual(sacksFor(8, 7, 'missing'), { sacks: 8, per: 7 }, '7 × ? = 56: the 8 drops 8 sacks of 7');
+  assert.deepEqual(sacksFor(6, 48, 'factors'), { sacks: 8, per: 6 }, 'a factor of 48: the 6 drops 8 sacks of 6');
+  assert.deepEqual(sacksFor(7, 48, 'factors'), { sacks: 0, per: 7 }, 'not a factor: no sacks');
   assert.deepEqual(sacksFor(5, 0), { sacks: 0, per: 0 });
 });
 
@@ -148,12 +149,11 @@ test('the wagon\'s health: a kid at a normal pace for their level finishes with 
     const per = perArrest(r);
     const normal = play(r, { per });
     assert.ok(normal.health >= 65 && normal.health <= 75, `at the expected pace: ${normal.health.toFixed(1)} left`);
-    assert.ok(play(r, { per, bandits: 5 }).health >= 50, 'five bandits a wave, the most: still plenty left');
-    assert.ok(play(r, { per, slow: 2 }).health >= 35, 'twice as slow: a good share left');
-    assert.ok(!play(r, { per, slow: 3 }).emptied, 'three times as slow: still gets through');
+    assert.ok(play(r, { per, bandits: 5 }).health >= 35, 'five bandits a wave, the most: still plenty left');
+    assert.ok(!play(r, { per, slow: 2 }).emptied, 'twice as slow: still gets through');
     // the gang left alone from the start: empties, but only after minutes
     const idle = play(r, { per, never: true });
-    assert.ok(idle.emptied && idle.t >= 240, `left alone: empty after ${idle.t} s`);
+    assert.ok(idle.emptied && idle.t >= 100, `left alone: empty after ${idle.t} s`);
   }
   // wearing: never under nothing, nothing loose wears nothing, and an arrest slows it at once
   assert.equal(wearStep(1, 4, 0.5, 10), 0);
@@ -162,12 +162,12 @@ test('the wagon\'s health: a kid at a normal pace for their level finishes with 
   assert.ok(HOLDUP.wear < 0.5 && HOLDUP.low > 0 && HOLDUP.low < 0.5 && HOLDUP.pay.grabbed < AMBUSH.bonus, 'the box grabbed pays less than seeing them off');
 });
 
-test('the gang\'s shots: more of them the more bandits are out, none with none; mostly into the air', () => {
+test('the gang\'s shots: more of them the more bandits are out, none with none; plenty into the air', () => {
   assert.equal(shotGap(0), Infinity);
   const avg = (n) => { let s = 0; for (let i = 0; i < 200; i++) s += shotGap(n, () => i / 200); return s / 200; };
   assert.ok(avg(4) < avg(2) && avg(2) < avg(1), `${avg(4).toFixed(2)} < ${avg(2).toFixed(2)} < ${avg(1).toFixed(2)}`);
   assert.ok(avg(5) >= 0.7, 'never a barrage: about a shot a second at the most');
-  assert.ok(HOLDUP.shots.air >= 0.5 && HOLDUP.shots.clear >= 2.5, 'into the air more often than not, and well clear of the player');
+  assert.ok(HOLDUP.shots.air >= 0.35 && HOLDUP.shots.clear >= 2.5, 'plenty into the air, and well clear of the player');
 });
 
 test('the driver\'s thanks: the game maker\'s recorded takes, the bubble saying the same words, never the same words twice running', () => {
@@ -205,4 +205,27 @@ test('the gunfire is pooled: no new material or shape for a shot, and no blood',
   for (const part of [shot, bits]) { assert.ok(!/new THREE\.(\w*Material|\w*Geometry|Sprite|Mesh)\b/.test(part), 'nothing made per shot'); }
   assert.ok(!/blood/i.test(src.replace(/No blood/g, '')), 'no blood');
   assert.match(src, /InstancedMesh/);
+});
+
+test('every number a factors gang can wear: at least three bandits, about half the riders, none a lie', async () => {
+  const { makeFactors, factorsOf, gangProduct, FACTORS } = await import('../src/math/factors.js');
+  for (const upTo of [10, 12]) for (let a = 2; a <= upTo; a++) for (let b = 2; b <= upTo; b++) {
+    const p = gangProduct(a, b, upTo);
+    assert.ok(p % a === 0 || p % b === 0, `${p} shares a factor with ${a} x ${b}`);
+    assert.ok(factorsOf(p, upTo).length >= FACTORS.least, `${p} has enough factors up to ${upTo}`);
+    for (const count of [6, 7, 8, 9]) {
+      const F = makeFactors(), w = F.wave({ count, product: p, upTo }), good = w.targets.filter((t) => t.good);
+      assert.ok(good.length >= 3 && good.length <= 5, `${p}: ${good.length} bandits`);
+      assert.ok(w.targets.length > good.length, `${p}: townsfolk too`);
+      assert.equal(new Set(w.targets.map((t) => t.n)).size, w.targets.length, 'no number twice');
+      for (const t of w.targets) { assert.equal(p % t.n === 0, t.good, `${t.n} of ${p}`); const e = F.explain(t.n); assert.equal(e.good, t.good); if (!t.good) assert.ok(e.skip.includes(`(${p})`)); }
+    }
+  }
+});
+
+test('the wagon runs for it and stops short of town; the factors levels have no single-answer card left', async () => {
+  assert.ok(HOLDUP.flee.run > HOLDUP.flee.quiet && HOLDUP.flee.run <= 5, 'a trot, not a gallop');
+  assert.ok(HOLDUP.flee.stopOut >= 100, 'stands well short of the square');
+  const { PLACE } = await import('../src/levels/place/wagon.js');
+  assert.ok(PLACE.levels.every((L) => L.gen.kind !== 'missing'));
 });

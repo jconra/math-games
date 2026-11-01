@@ -1,4 +1,4 @@
-// FEEDING THE HORSES, in the valley (the plain rules are src/treats.js):
+// FEEDING AND PETTING THE ANIMALS, in the valley (the plain rules are src/treats.js):
 //   THE APPLE TREES   the wild apple trees the Town Lab puts down (world/objects/appletree.js; the forest draws the tree)
 //                     carry red apples in their crowns, drawn here. On foot by one, E picks what's on it ("Pick apples",
 //                     main.js puts the prompt up); a tree picked bare fills again the next morning in the game.
@@ -9,22 +9,36 @@
 //                     on and off: feeding never takes it.
 //   ANY HORSE         the rider's own (with them, or in its stall), the pen's (src/horsepen.js), the stable's stall horses
 //                     (src/stablelife.js) and the donkey. Only the rider's own fill hearts (src/treats.js BOND).
+//   THE OTHER ANIMALS the dog with the rider: jerky (src/treats.js) from the store; it sits up, takes it, gives a happy bark
+//                     and wags. The rider's own hens, pigs, sheep and milk cows (src/homestead.js; pigs love apples, sheep
+//                     love carrots: two hearts; those in a fence walk over to the rider by the rail), and the farm's
+//                     paddock cows (no hearts: not the rider's). None of them has an eating clip: the head nods down
+//                     (src/petting.js), a hen pecks.
+//   PETTING           by any of them, a hand button beside the treat button (or P): the rider reaches for it, the hand at the
+//                     height the animal sets (crouched for a dog, an arm raised to a horse's neck: src/petting.js), strokes
+//                     it a moment, a heart or two float up, a dog wags. The day's first pet of each of the rider's own counts
+//                     toward its hearts.
+//   THE HEARTS OVER AN ANIMAL  of the rider's own, a row of 5 over its head while the rider is near it or has just fed it;
+//                     every animal's hearts are in the menu's "Your animals" (src/ui/animals.js)
 //   FULL HEARTS       the horse nickers when the rider walks up to it (from a way off), and comes faster to the whistle
 //                     (P.eager: src/player.js)
 //
-//   const F = makeFeeding({ W, rider, player, hud, tools, audio, pen, stable, refresh })
+//   const F = makeFeeding({ W, rider, player, hud, tools, audio, pen, stable, refresh, dog, homestead, farm, bark })
+//     dog(): the dog following (src/dog.js), or null; homestead(), farm(): each has treatSpots(); bark(D): a happy bark
 //     player() the player (src/player.js); tools: src/ui/tools.js's (its apple button); pen(), stable(): the horse pen and
 //     the stable life (each has treatSpots()); refresh(): the HUD's purse again (the treat counter)
 //   F.update(dt, { busy })   each frame of play (not paused); busy: in the cabin or at a counter (nothing to pick or feed)
 //   F.prompt          'Pick apples' by an apple tree with apples on it (on foot), else null;  F.pickDist: how far its trunk is
 //   F.pick()          E by the tree: picks what the saddlebags have room for
 //   F.feed()          G or the apple button: the treat to the horse whose head is nearest (within FEED.reach)
-//   F.target          the horse that would be fed now ({ key, name, kind }) or null
+//   F.target          the animal that would be fed now ({ key, name, kind }) or null
+//   F.pet()           P or the hand button: pets the animal in reach;  F.petTarget  the one that would be petted, or null
 //   F.state()         for the rigs: trees and their apples, the target, hearts in the air, the sounds played
 //   F.dispose()
 import * as THREE from 'three';
 import { APPLE_TREE, appleSpots } from '../world/objects/appletree.js';
-import { TREATS, BOND, countOf, whichTreat, takeTreat, applesLeft, pickApples, feedHorse, bondOf, treatWord, haveOf } from './treats.js';
+import { TREATS, BOND, LOVES, countOf, whichTreat, takeTreat, applesLeft, pickApples, feedHorse, petAnimal, bondOf, treatWord, haveOf } from './treats.js';
+import { makePet, wagTail, headDown, PET } from './petting.js';
 import { today } from './shifts.js';
 import { saveRider } from './save.js';
 import { horseLook, ridden } from './mounts.js';
@@ -41,6 +55,14 @@ export const FEED = {
   heartRise: 1.5,      // m a heart floats up
   heartTime: 1.9,      // s it takes
   heartSize: 0.42,     // m across
+  petReach: 2.6,       // m (along the ground) from the rider to the spot on an animal the hand goes to (they step closer; a
+                       // dog waiting at heel sits about 2.2 m off)
+  petTime: 2.9,        // s a pet lasts
+  heartsNear: 6,       // m: the rider's own animal shows its row of hearts within this of the rider...
+  heartsAfter: 4,      // ...and for this long after a treat or a pet
+  heartRows: 3,        // at most this many rows up at once (the nearest)
+  rowH: 0.03,          // a row's height on screen (a share of the view's height, as the name tags are)
+  callEvery: 2.5,      // s between calling a fenced animal over to the rider by the rail
 };
 
 // a heart, drawn once: red, a shine, a dark edge (read against the sky and the grass)
@@ -58,7 +80,31 @@ function heartTexture() {
   return heartTex;
 }
 
-export function makeFeeding({ W, rider, player, hud, tools = null, audio = null, pen = () => null, stable = () => null, refresh = () => {} }) {
+// a row of 5 hearts as a sprite (always the same size on screen, as the name tags are), redrawn when its hearts change
+const HEART_PATH = 'M12 20.6C6 16.4 2.6 13 2.6 9.2 2.6 6.4 4.8 4.2 7.4 4.2c1.9 0 3.6 1 4.6 2.6 1-1.6 2.7-2.6 4.6-2.6 2.6 0 4.8 2.2 4.8 5 0 3.8-3.4 7.2-9.4 11.4z';
+function makeHeartRow() {
+  const cv = document.createElement('canvas'); cv.width = 240; cv.height = 48;
+  const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, depthTest: false, toneMapped: false, fog: false, sizeAttenuation: false }));
+  s.name = 'heart-row'; s.renderOrder = 11; s.center.set(0.5, 0); s.visible = false; s.scale.set(FEED.rowH * 5, FEED.rowH, 1);
+  let was = '';
+  s.setHearts = (n, half) => {
+    const key = n + '|' + half; if (key === was) return; was = key;
+    const g = cv.getContext('2d'), P = new Path2D(HEART_PATH);
+    g.clearRect(0, 0, 240, 48);
+    for (let i = 0; i < 5; i++) {
+      g.save(); g.translate(i * 48, 0); g.scale(2, 2);
+      g.lineWidth = 2.2; g.strokeStyle = 'rgba(50, 8, 14, 0.9)'; g.stroke(P);
+      g.fillStyle = 'rgba(246, 232, 205, 0.9)'; g.fill(P);
+      if (i < n || (i === n && half)) { if (i >= n) { g.beginPath(); g.rect(0, 0, 12, 24); g.clip(); } g.fillStyle = '#e8384e'; g.fill(P); }
+      g.restore();
+    }
+    tex.needsUpdate = true;
+  };
+  return s;
+}
+
+export function makeFeeding({ W, rider, player, hud, tools = null, audio = null, pen = () => null, stable = () => null, refresh = () => {}, dog = () => null, homestead = () => null, farm = () => null, bark = () => false }) {
   const scene = W.scene, sound = makeTreatSound({ audio });
   const F = { prompt: null, pickDist: Infinity, target: null };
   const P = () => player && player();
@@ -132,8 +178,8 @@ export function makeFeeding({ W, rider, player, hud, tools = null, audio = null,
   };
 
   // ── THE HORSES' HEADS ────────────────────────────────────────────────────────────────────────────────────────────
-  // every horse that could be fed: { key, id (the rider's horse id, when it's the rider's), name, a (the animal),
-  // owned, donkey, eat(seconds) -> true if it munches now }
+  // every animal that could be fed or petted: { key, id (its hearts' key, when it's the rider's), name, a (the animal), owned,
+  // donkey, species (none: a horse), dog, loves, eat(seconds) -> true if it munches now, hold(seconds): stands for a pet }
   function spots(p) {
     const out = [];
     if (p && p.horse && p.horseId && !p.onHorse) {
@@ -143,31 +189,56 @@ export function makeFeeding({ W, rider, player, hud, tools = null, audio = null,
     const PN = pen(), SL = stable();
     if (PN && PN.treatSpots) out.push(...PN.treatSpots());
     if (SL && SL.treatSpots) out.push(...SL.treatSpots());
+    const D = dog && dog();
+    if (D && D.dog) {
+      const key = D.kind;
+      out.push({ key: 'dog:' + key, id: 'dog:' + key, name: D.name, a: D.dog, owned: true, dog: true, species: 'dog', loves: LOVES.dog,
+        hold: (sec) => { D.hold(sec, p && p.position); }, wag: true, eat: (sec) => { D.hold(sec, p && p.position); return true; } });
+    }
+    const HS = homestead && homestead();
+    if (HS && HS.treatSpots) for (const s of HS.treatSpots()) out.push({ ...s, loves: LOVES[s.species] || null, eat: (sec) => { s.hold(sec); if (s.peck) s.peck(sec); else headDown(s.a, sec); return true; } });
+    const FM = farm && farm();
+    if (FM && FM.treatSpots) for (const s of FM.treatSpots()) out.push({ ...s, eat: (sec) => { s.hold(sec); headDown(s.a, sec); return true; } });
     return out;
+  }
+  const _h2 = new THREE.Vector3();
+  // where a hand goes on it: the neck (a horse, a cow), the head and neck (a dog), the back (a hen)
+  function handOn(s, into) {
+    const b = s.a.bones;
+    if (s.dog && b && b.Head) { b.Head.getWorldPosition(into); into.y += 0.08; return into; }
+    // (a horse: halfway up its long neck, since its first neck bone starts down in the chest; an arm raised to it)
+    if (!s.species && b && (b.Neck || b.Neck1) && b.Head) { (b.Neck1 || b.Neck).getWorldPosition(into); b.Head.getWorldPosition(_h2); return into.lerp(_h2, 0.55); }
+    if (b && b.Neck) { b.Neck.getWorldPosition(into); into.y += 0.12; return into; }
+    return into.copy(s.a.root.position).setY(s.a.root.position.y + (s.hen ? 0.32 * (s.size || 1) : 0.8));
   }
   const _h = new THREE.Vector3();
   const headOf = (s, into) => { const b = s.a.bones && s.a.bones.Head; return b ? b.getWorldPosition(into) : into.copy(s.a.root.position).setY(s.a.root.position.y + 1.4); };
   const munching = new Map();   // key -> until (performance.now() ms)
   let nearSpots = [], allSpots = [];
   function targetStep(p) {
-    F.target = null; nearSpots = []; allSpots = [];
+    F.target = null; F.petTarget = null; nearSpots = []; allSpots = [];
     const onFoot = !!p && p.mode === 'foot' && p.enabled !== false;
     if (!onFoot) return;
     const at = p.position, list = allSpots = spots(p);
-    let best = null, bd = FEED.reach;
+    let best = null, bd = FEED.reach, bestPet = null, pd = FEED.petReach;
     for (const s of list) {
       const r = s.a.root.getWorldPosition(_v);
       if (Math.hypot(r.x - at.x, r.z - at.z) > FEED.look) continue;
       headOf(s, _h);
       const d = Math.hypot(_h.x - at.x, _h.z - at.z);
       nearSpots.push({ s, d });
-      if (d < bd) { bd = d; best = s; }
+      // (the one that would be given a treat: the nearest head with a treat it takes)
+      if (d < bd && whichTreat(rider, { donkey: s.donkey, dog: !!s.dog, loves: s.loves })) { bd = d; best = s; }
+      handOn(s, _h);
+      const dh = Math.hypot(_h.x - at.x, _h.z - at.z);
+      if (dh < pd) { pd = dh; bestPet = s; }
     }
     if (best) {
       // (still munching the last one: the button stays up, dimmed, and a press waits for it to finish)
-      const kind = whichTreat(rider, { donkey: best.donkey }), busy = (munching.get(best.key) || 0) > performance.now();
+      const kind = whichTreat(rider, { donkey: best.donkey, dog: !!best.dog, loves: best.loves }), busy = (munching.get(best.key) || 0) > performance.now();
       if (kind) F.target = { key: best.key, name: best.name, kind, spot: best, dist: bd, busy };
     }
+    if (bestPet) F.petTarget = { key: bestPet.key, name: bestPet.name, spot: bestPet, dist: pd, busy: !!petting };
   }
   // the apple button: up with the treat it would give, while there is a horse to give it to
   let buttonKey = '';
@@ -177,16 +248,23 @@ export function makeFeeding({ W, rider, player, hud, tools = null, audio = null,
     buttonKey = key;
     if (tools && tools.treat) tools.treat(t ? { kind: t.kind, n: haveOf(rider, t.kind), name: short(t.name), busy: !!t.busy } : null);
   }
+  let petKey = '';
+  function petButton() {
+    const t = F.petTarget, key = t ? `${short(t.name)}|${t.busy ? 1 : 0}` : '';
+    if (key === petKey) return;
+    petKey = key;
+    if (tools && tools.pet) tools.pet(t ? { name: short(t.name), busy: t.busy } : null);
+  }
 
   // ── HEARTS FLOATING UP ───────────────────────────────────────────────────────────────────────────────────────────
   const hearts = [];
-  function floatHearts(at, n) {
+  function floatHearts(at, n, big = 1) {
     for (let i = 0; i < n; i++) {
       const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: heartTexture(), transparent: true, depthWrite: false, opacity: 0 }));
       sp.renderOrder = 5; sp.name = 'heart';
       const side = n > 1 ? (i - (n - 1) / 2) * 0.42 : 0;
       sp.position.copy(at); scene.add(sp);
-      hearts.push({ sp, from: at.clone().add(new THREE.Vector3(side, 0.3, 0)), t: -i * 0.28, wob: Math.random() * 6 });
+      hearts.push({ sp, from: at.clone().add(new THREE.Vector3(side, 0.3, 0)), t: -i * 0.28, wob: Math.random() * 6, big });
     }
   }
   function heartsStep(dt) {
@@ -194,7 +272,7 @@ export function makeFeeding({ W, rider, player, hud, tools = null, audio = null,
       const h = hearts[i]; h.t += dt;
       const u = Math.max(0, h.t) / FEED.heartTime;
       if (u >= 1) { h.sp.removeFromParent(); h.sp.material.dispose(); hearts.splice(i, 1); continue; }
-      const up = 1 - (1 - u) * (1 - u), pop = Math.min(1, Math.max(0, h.t) / 0.22), size = FEED.heartSize * (0.5 + 0.5 * pop) * (1 + 0.08 * Math.sin(h.t * 9));
+      const up = 1 - (1 - u) * (1 - u), pop = Math.min(1, Math.max(0, h.t) / 0.22), size = FEED.heartSize * h.big * (0.5 + 0.5 * pop) * (1 + 0.08 * Math.sin(h.t * 9));
       h.sp.position.set(h.from.x + Math.sin(h.wob + h.t * 3) * 0.08, h.from.y + up * FEED.heartRise, h.from.z);
       h.sp.scale.set(size, size, 1);
       h.sp.material.opacity = h.t < 0 ? 0 : u < 0.6 ? 1 : 1 - (u - 0.6) / 0.4;
@@ -210,14 +288,17 @@ export function makeFeeding({ W, rider, player, hud, tools = null, audio = null,
     munching.set(s.key, performance.now() + FEED.munch * 1000);
     headOf(s, _h);
     sound.play('crunch', _h);
-    const r = feedHorse(rider, { horseId: s.id, owned: s.owned, donkey: s.donkey, kind, day: day() });
-    floatHearts(_h.clone(), r.hearts);
+    const r = feedHorse(rider, { horseId: s.id, owned: s.owned, donkey: s.donkey, loves: s.loves, kind, day: day() });
+    floatHearts(_h.clone(), r.hearts, s.species ? 0.6 : 1);
     save();
-    const who = short(s.name), what = kind === 'carrot' ? 'the carrot' : 'the apple';
+    if (s.dog) { wagTail(s.a, FEED.munch); bark(dog()); F.barked = performance.now(); }
+    if (s.id) shownUntil.set(s.key, performance.now() + FEED.heartsAfter * 1000);
+    const who = short(s.name), what = kind === 'carrot' ? 'the carrot' : kind === 'jerky' ? 'the jerky' : 'the apple';
     let line;
-    if (s.donkey && kind === 'carrot') line = `${who} LOVES carrots!`;
+    if ((s.donkey && kind === 'carrot') || (s.loves && s.loves === kind && !s.dog)) line = `${who} LOVES ${kind}s!`;
+    else if (s.dog) line = `${who} gobbles the jerky. Good dog!`;
     else line = `${who} munches ${what}. Yum!`;
-    if (r.counted && r.after > r.before) line += r.full ? ` ${who} loves you all the way: ${BOND.hearts} of ${BOND.hearts} hearts! Now ${who} comes faster to your whistle` : ` ${r.after} of ${BOND.hearts} hearts`;
+    if (r.counted && r.after > r.before) line += r.full ? ` ${who} loves you all the way: ${BOND.hearts} of ${BOND.hearts} hearts!${s.species ? '' : ` Now ${who} comes faster to your whistle`}` : ` ${r.after} of ${BOND.hearts} hearts`;
     else if (r.plenty) line += ` ${who} has had plenty of treats today: the hearts grow again tomorrow`;
     hud.toast(line, 'good');
     F.fed = { key: s.key, kind, hearts: r.hearts, counted: r.counted, after: r.after, at: performance.now() };
@@ -225,13 +306,79 @@ export function makeFeeding({ W, rider, player, hud, tools = null, audio = null,
     return true;
   };
 
+  // ── A PET ──────────────────────────────────────────────────────────────────────────────────────────────────────────
+  // the rider steps in to arm's length if there's room, turns to it, and the hand goes to the spot the animal sets
+  let petting = null, petMake = null, petPerson = null;
+  const _hp = new THREE.Vector3(), _along = new THREE.Vector3();
+  F.pet = () => {
+    const t = F.petTarget, pl = P();
+    if (!t || t.busy || !pl) return false;
+    const s = t.spot;
+    if (petPerson !== pl.person) { petPerson = pl.person; petMake = makePet({ person: pl.person }); }
+    if (s.hold) s.hold(FEED.petTime);
+    const started = petMake.start({ at: (v) => { handOn(s, v); return v; }, along: _along.set(0, 0, 1).transformDirection(s.a.root.matrixWorld).setY(0).normalize().clone() }, FEED.petTime);
+    if (!started) return false;
+    petting = { s, t: 0, gave: false, from: pl.position.clone() };
+    if (s.wag) wagTail(s.a, FEED.petTime);
+    return true;
+  };
+  function petStep(dt, pl) {
+    if (!petting) return;
+    const q = petting; q.t += dt;
+    if (!pl || !q.s.a.root.parent || q.t > FEED.petTime || pl.mode !== 'foot' || pl.speed > 0.6) { if (petMake) petMake.stop(); petting = null; return; }
+    // turned to it, one step closer if it is out of reach
+    handOn(q.s, _hp);
+    const dx = _hp.x - pl.position.x, dz = _hp.z - pl.position.z, d = Math.hypot(dx, dz);
+    pl.heading += Math.atan2(Math.sin(Math.atan2(dx, dz) - pl.heading), Math.cos(Math.atan2(dx, dz) - pl.heading)) * Math.min(1, 7 * dt);
+    if (d > PET.reachNear + 0.05) { const st = Math.min(d - PET.reachNear, 1.4 * dt), nx = pl.position.x + dx / d * st, nz = pl.position.z + dz / d * st; if (!W.blocked(nx, nz)) { pl.position.x = nx; pl.position.z = nz; pl.position.y = W.heightAt(nx, nz); } }
+    if (!q.gave && q.t > 0.9) {
+      q.gave = true;
+      const r = petAnimal(rider, { id: q.s.id, owned: q.s.owned, day: day() });
+      floatHearts(_hp.clone(), r.hearts, q.s.species ? 0.6 : 1);
+      if (q.s.id) shownUntil.set(q.s.key, performance.now() + (FEED.petTime + FEED.heartsAfter) * 1000);
+      save();
+      const who = short(q.s.name);
+      hud.toast(r.full ? `${who} loves you all the way: ${BOND.hearts} of ${BOND.hearts} hearts!` : r.counted && r.after > r.before ? `${who} loves that! ${r.after} of ${BOND.hearts} hearts` : `${who} loves that!`, 'good');
+      F.petted = { key: q.s.key, counted: r.counted, hearts: r.hearts, at: performance.now(), hand: petMake.hand ? { y: +petMake.hand.y.toFixed(2) } : null, drop: +(petMake.drop || 0).toFixed(2), lean: +(petMake.lean || 0).toFixed(2), gap: +(petMake.gap ?? 9).toFixed(2) };
+    }
+  }
+
+  // ── THE HEARTS OVER AN ANIMAL: the rider's own, near or just fed ─────────────────────────────────────────────────
+  const shownUntil = new Map(), rows = [];
+  function rowsStep(pl) {
+    if (!rows.length) for (let i = 0; i < FEED.heartRows; i++) { const r = makeHeartRow(); scene.add(r); rows.push(r); }
+    const now = performance.now(), at = pl && pl.position, list = [];
+    if (at && pl.mode === 'foot') for (const s of allSpots) {
+      if (!s.owned || !s.id || !s.a.root.visible) continue;
+      const r = s.a.root.position, d = Math.hypot(r.x - at.x, r.z - at.z);
+      if (d < FEED.heartsNear || (shownUntil.get(s.key) || 0) > now) list.push({ s, d });
+    }
+    list.sort((a, b) => a.d - b.d);
+    rows.forEach((sp, i) => {
+      const x = list[i]; sp.visible = !!x;
+      if (!x) return;
+      const b = bondOf(rider, x.s.id), r = x.s.a.root.position, top = x.s.hen ? 0.5 * (x.s.size || 1) : (x.s.a.tall || 1.2) * (x.s.size || 1);
+      sp.setHearts(b.hearts, b.half);
+      sp.position.set(r.x, r.y + top + (x.s.hen ? 0.32 : x.s.dog ? 0.42 : 0.42), r.z);
+    });
+    F.rowsUp = list.slice(0, FEED.heartRows).map((x) => x.s.key);
+  }
+  // (with something to give, on foot by a fence: the nearest animal in it walks over)
+  let callT = 0;
+  function callStep(dt, pl) {
+    if ((callT -= dt) > 0 || !pl || pl.mode !== 'foot') return;
+    callT = FEED.callEvery;
+    const HS = homestead && homestead();
+    if (HS && HS.callOver) HS.callOver(pl.position);
+  }
+
   // ── A NICKER, AT FULL HEARTS ─────────────────────────────────────────────────────────────────────────────────────
   const nick = new Map();   // key -> { armed, last }
   function nickerStep(p) {
     if (!p || p.mode !== 'foot') return;
     const now = performance.now();
     for (const s of allSpots) {
-      if (!s.owned || !s.id || !bondOf(rider, s.id).full) continue;
+      if (!s.owned || !s.id || s.species || !bondOf(rider, s.id).full) continue;
       headOf(s, _h);
       const d = Math.hypot(_h.x - p.position.x, _h.z - p.position.z);
       // (met for the first time this ride: armed only if the rider is a way off, so a horse right there doesn't nicker)
@@ -248,15 +395,22 @@ export function makeFeeding({ W, rider, player, hud, tools = null, audio = null,
     treePrompt(p);
     targetStep(p);
     button();
+    petButton();
     nickerStep(p);
     heartsStep(dt);
+    petStep(dt, P());
+    rowsStep(p);
+    callStep(dt, p);
     const pl = P(); if (pl) { const id = ridden(rider); pl.eager = !!id && bondOf(rider, id).full; }   // (full hearts: comes faster to the whistle)
   };
   F.state = () => ({ trees: trees.map((t) => ({ id: t.id, x: +t.x.toFixed(1), z: +t.z.toFixed(1), apples: t.shown, left: applesLeft(rider, t.id, day()) })), drawn: mesh ? mesh.count : 0,
-    target: F.target ? { key: F.target.key, name: F.target.name, kind: F.target.kind, dist: +F.target.dist.toFixed(2) } : null, prompt: F.prompt, hearts: hearts.length,
+    target: F.target ? { key: F.target.key, name: F.target.name, kind: F.target.kind, dist: +F.target.dist.toFixed(2) } : null, petTarget: F.petTarget ? { key: F.petTarget.key, name: F.petTarget.name, dist: +F.petTarget.dist.toFixed(2) } : null, petting: !!petting, petted: F.petted || null, barked: F.barked || null, rows: F.rowsUp || [], spots: allSpots.map((s) => s.key), prompt: F.prompt, hearts: hearts.length,
     fed: F.fed || null, nickered: F.nickered || null, sounds: sound.played.slice(), near: nearSpots.map((x) => ({ key: x.s.key, d: +x.d.toFixed(2) })) });
   F.dispose = () => {
     if (tools && tools.treat) tools.treat(null);
+    if (tools && tools.pet) tools.pet(null);
+    if (petMake) petMake.stop();
+    for (const r of rows) { r.removeFromParent(); r.material.map.dispose(); r.material.dispose(); }
     for (const h of hearts) { h.sp.removeFromParent(); h.sp.material.dispose(); }
     hearts.length = 0;
     if (mesh) { mesh.removeFromParent(); mesh.dispose(); }

@@ -247,6 +247,8 @@ export function casing(k, w, op, o = {}) {
   const dep = o.depth ?? 0.12;
   for (const [a, s] of [[op.a0, 1], [op.a1, -1]]) k.board([0.025, h, dep], null, null, { m: wallM(w, a - s * 0.0125, (op.y0 + op.y1) / 2, out + 0.03 - dep / 2), long: 1, tint: vary(k, tint, 0.8, 0.95), skip: '-y+y' });
   k.board([wd, 0.025, dep], null, null, { m: wallM(w, ac, op.y1 + 0.0125, out + 0.03 - dep / 2), long: 0, tint: vary(k, tint, 0.8, 0.95), skip: '+y' });
+  // (and under a window's sash: seen from above, the sky came in below the glass)
+  if (!op.door) k.board([wd, 0.025, dep], null, null, { m: wallM(w, ac, op.y0 - 0.0125, out + 0.03 - dep / 2), long: 0, tint: vary(k, tint, 0.8, 0.95), skip: '-y' });
 }
 
 // ── a roof slope ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -784,14 +786,17 @@ export function glowMaterial(o = {}) {
   if (o.panes) Object.assign(mat, { transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
   return chain(mat, 'glow' + (o.panes ? 'panes' : ''), (sh) => {
     sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nattribute vec4 aGlow, aGlowC; varying vec4 vGlow, vGlowC; varying vec3 vGP;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = aGlow; vGlowC = aGlowC; vGP = (modelMatrix * vec4(position, 1.0)).xyz;');
-    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uLamp, uNight, uOutLamp; varying vec4 vGlow, vGlowC; varying vec3 vGP;')
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform float uLamp, uNight, uOutLamp, uGlowLag; varying vec4 vGlow, vGlowC; varying vec3 vGP;')
       .replace('#include <color_fragment>', `#include <color_fragment>
       {
         // (a kind over 10 is an outdoor lantern's: out by day, uOutLamp)
         float gOut = step(9.5, vGlow.a), gK = vGlow.a - 10.0 * gOut;
         float kWin = step(gK, 1.5);
         vec3 off = mix(vec3(0.16, 0.14, 0.11), vec3(0.035, 0.042, 0.05), kWin);
-        float on = mix(uLamp, uLamp * uNight * 0.3, kWin) * mix(1.0, uOutLamp, gOut);
+        // (a window's lamp comes up early in the dusk and keeps brightening into the night, each building a little
+        // after the last: uGlowLag, how much night it waits for)
+        float gWin = sqrt(clamp((uNight - uGlowLag) / (1.0 - uGlowLag), 0.0, 1.0));
+        float on = mix(uLamp, uLamp * gWin * 0.3, kWin) * mix(1.0, uOutLamp, gOut);
         vec3 lit = vGlow.rgb;
         // (lantern glass: the flame's hot spot behind it, fading to a deep orange at its edges)
         if (gK > 1.5 && gK < 2.5) { float r = length(vGP - vGlowC.xyz) / vGlowC.w; lit *= mix(1.6, 0.18, smoothstep(0.05, 0.75, r)); off = vec3(0.04, 0.035, 0.03); }

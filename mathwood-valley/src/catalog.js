@@ -29,11 +29,12 @@ export const PRICES = {
   // a rider who already had any cabin furniture gets it as bought (save.js fixRider)
   cabin: 600,
   // the six-shooter for bringing in bandits (src/gun.js): sold at the general store, only to a rider whose grown-up
-  // set "Bandits: lasso or revolver" (rider.mode 'shoot'); above the first saddle and horse, so it is a goal
+  // set "Lasso or guns" (rider.mode 'shoot'); above the first saddle and horse, so it is a goal
   revolver: 150,
+  lever: 340, single: 620,   // (the two rifles, 1880s: src/gun.js GUNS; on sale only with "Lasso or guns" on)
 };
 // the six-shooter as the general store shows it (src/shop.js; src/gun.js has its rules)
-export const REVOLVER = { id: 'revolver', name: 'Six-shooter', line: 'Bring in bandits from thirty paces. F (or Shoot) fires instead of the rope; cattle are still roped.' };
+export const REVOLVER = { id: 'revolver', name: 'Six-shooter', line: 'Bring in bandits from thirty paces. Choose it with the buttons on the right and aim by hand; cattle are still roped.' };
 export const SADDLES = [
   { id: 'plain', name: 'Plain saddle', line: 'Plain brown leather. Any saddle lets you ride.' },
   { id: 'tooled', name: 'Tooled saddle', line: 'Black leather, tooled by hand.' },

@@ -11,8 +11,8 @@
 // already owns one of a kind (an older save) has that kind unlocked.
 //
 // The goods only turn into gold through the math: they are laid up while the kid plays (never while the game is shut),
-// a little at a time, collected by walking past the yard, and sold to the townsfolk at the store's counter, where each
-// sale is an order slip like the others (src/missions/store.js) and the kid picks the coin with the answer. Each of the
+// a little at a time, collected by walking past the yard, and sold to the clerk at the store's bins, where each sale is
+// a slip like the counter's (src/missions/sellgoods.js) and the kid picks the coin with the answer. Each of the
 // goods has its own kind of problem:
 //   eggs and milk  by the dozen / the gallon: "You bring 30 eggs. Mrs. Abernathy pays 2 gold a dozen, whole dozens
 //                  only..." The wrong coins are the real slips: paid for every egg instead of every dozen, stopped at the
@@ -65,7 +65,7 @@ export const ANIMALS = {
   pig: { id: 'pig', name: 'Pig', many: 'pigs', price: PRICES.animal.pig, most: 3, home: 'pen', goods: null,
     line: 'Lays nothing at all, but grunts happily in the mud. Pure company.' },
   sheep: { id: 'sheep', name: 'Sheep', many: 'sheep', price: PRICES.animal.sheep, most: 3, home: 'corral', goods: 'wool', every: 260,
-    line: 'Grows wool. Townsfolk buy a share of it: a half, a third, three quarters. Lives in a little corral.' },
+    line: 'Grows wool. The store buys a share of it: a half, a third, three quarters. Lives in a little corral.' },
   cow: { id: 'cow', name: 'Milk cow', many: 'milk cows', price: PRICES.animal.cow, most: 2, home: 'corral', goods: 'milk', every: 80,
     line: 'Gives milk by the quart. Shares the corral with the sheep.' },
 };
@@ -109,7 +109,7 @@ const chanceOf = (kind) => (GIFT.chanceOf[kind] != null ? GIFT.chanceOf[kind] : 
 const EARN = {
   pig: ['Pen a whole batch of pigs at the farm', (n) => `Pen ${n} whole batches of pigs at the farm`],
   sheep: ['Heal a whole flock of sick sheep at the farm', (n) => `Heal ${n} whole flocks of sick sheep at the farm`],
-  cow: ['Rope a whole wave at the round-up', (n) => `Rope ${n} whole waves at the round-up`],
+  cow: ['Rope a whole bunch at the round-up', (n) => `Rope ${n} whole bunches at the round-up`],
 };
 const whole = (v) => { v = Number(v); return Number.isFinite(v) && v > 0 ? Math.floor(v) : 0; };
 const amount = (v) => { v = Number(v); return Number.isFinite(v) && v > 0 ? v : 0; };
@@ -252,9 +252,6 @@ export const SALE_FORMS = [
   { upTo: 6, forms: ['leftover', 'leftover', 'half'] },
   { upTo: 99, forms: ['unit', 'leftover'] },
 ];
-export const SELL = {
-  every: 3,         // a customer buys goods once in this many orders (the first sale of a ride: any of the first this many)
-};
 const formsFor = (step) => (SALE_FORMS.find((s) => step <= s.upTo) || SALE_FORMS[SALE_FORMS.length - 1]).forms;
 // what else an egg or milk sale counts in (src/math/skill.js), by its form: lots of a dozen at a price is times; the
 // rest is dividing into dozens or gallons (with a leftover from 'leftover' on)

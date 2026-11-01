@@ -61,7 +61,7 @@ test('a shift is 5 to 10 rounds (3 to 5 on the long trips), most riders 6 to 8, 
   assert.equal(S.shiftLength(withPlace('sheep', answers(20, 20), { age: 11 }), 'sheep'), 10, 'eleven: no cap');
   // every length in range, every job, whatever the answers
   for (const j of S.SHIFT_JOBS) for (const k of [0, 5, 10, 15, 20]) for (const age of [null, 4, 6, 8, 12]) {
-    const n = S.shiftLength(withPlace(j.place, answers(k, 20, k), { age }), j.id), [lo, hi] = j.holdup ? [2, 4] : j.long ? [3, 5] : [5, 10];
+    const n = S.shiftLength(withPlace(j.place, answers(k, 20, k), { age }), j.id), [lo, hi] = j.rounds || (j.holdup ? [2, 4] : j.long ? [3, 5] : [5, 10]);
     assert.ok(n >= lo && n <= hi, `${j.id} ${k}/20 age ${age}: ${n}`);
   }
   assert.equal(S.shiftLength(r0, 'windmill'), 0, 'no shift for the windmill');
@@ -313,4 +313,12 @@ test('the keeper: a job turned off has no shift; the fishing rod is put down at 
   for (const j of S.SHIFT_JOBS) g3.SK.dev.end(j.id);
   g3.run(KEEPER.hob + 0.5);
   assert.equal(g3.log.picked.at(-1).id, 'boxes');
+});
+
+test("the round-up's shift is 10 to 15 steers roped, with no waves to count", () => {
+  assert.equal(S.SHIFT_BY.roundup.round, 'catch');
+  assert.equal(S.shiftLength(rider(), 'roundup'), 12, 'nothing known yet: the middle');
+  assert.equal(S.shiftLength(withPlace('roundup', answers(10, 20)), 'roundup'), 10);
+  assert.equal(S.shiftLength(withPlace('roundup', answers(20, 20)), 'roundup'), 15);
+  assert.match(S.counterText('roundup', { n: 4, of: 12, done: false }), /^Steers roped 4\/12/);
 });

@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Hands Lab</title>
+<meta name="description" content="A Mathwood Valley lab: the band's hands. The fiddler, the banjo player and the harmonica player with their instruments, a clip frozen on any frame, and each hand moved, turned and curled by sliders over the clip, saved to a file the game reads.">
+<!-- the on-screen error box comes first, so a crash shows on screen instead of a blank page -->
+<script src="../../oops.js"></script>
+<link rel="stylesheet" href="../../src/ui/fonts/fonts.css">
+<link rel="stylesheet" href="../dogs/dogs.css?v=2">
+<link rel="stylesheet" href="hands.css?v=1">
+<script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.160.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/" } }</script>
+</head>
+<body>
+<canvas id="c" aria-label="A band player with an instrument on a plain floor"></canvas>
+<div class="dl-top">
+  <h1>Hands Lab</h1><a href="../">All labs</a>
+  <span class="dl-hud" id="hud" aria-live="polite"></span>
+</div>
+<div class="ha-warn" id="warn" hidden></div>
+<!-- ONE MENU: the bar along the bottom (the players, then the tabs); a tab's controls open just over it -->
+<div class="dl-drawer" id="drawer" hidden></div>
+<nav class="dl-bar" id="bar" aria-label="Hands Lab menu">
+  <div class="dl-breeds" id="who" role="listbox" aria-label="Players"></div>
+  <div class="dl-tabs" id="tabs" role="tablist"></div>
+</nav>
+<div class="dl-loading" id="loading">Tuning up…</div>
+<script type="module" src="main.js?v=2"></script>
+</body>
+</html>

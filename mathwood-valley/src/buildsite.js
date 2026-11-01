@@ -11,7 +11,9 @@
 //     player's person and horse, the dog); onStart() / onStop(): the game holds itself still while a builder is up
 //     (the player and the keys let go, the HUD put away; main.js) and lets go again after; onWork(): the tools' Work it
 //     out (src/ui/tools.js), or null: a "Work it out" button goes above "Done for now" (the HUD and its tools strip are
-//     put away while a builder is up), for the card being asked (main.js reads the builder's question)
+//     put away while a builder is up), for the card being asked (main.js reads the builder's question);
+//     levelPicker(site, moved) -> a level picker for the site (src/ui/levelpicker.js) or null: it goes in the builder's
+//     panel, as the tools strip's is away with the HUD; moved(): its level was stepped, the session's relevel() runs
 //   S.add(site) -> the site's record { id, origin, group, groundY }
 //     site = { id, x, z (the middle of what is built: the site's own frame has its 0, 0 here, not turned: +Z is south),
 //              prompt (the words by the person: 'Help the miller build his tower'), meet() -> { x, z } (where the
@@ -34,7 +36,8 @@
 //   origin (THREE.Vector3, world metres), groundY, camera, fit(viewRect) (the builder's view changed shape: the lens
 //   follows), canvasRect() (the game's canvas on the page), leave(how) }
 // session, from mount: { frame(dt) (points the camera), dispose(), busy() (a board in hand, a question or a test up:
-//   walking away waits), panel (optional: the element "Done for now" goes at the foot of), resize() (optional) }
+//   walking away waits), panel (optional: the element "Done for now" goes at the foot of), resize() (optional),
+//   relevel() (optional: the level was stepped by hand, the question up is dealt again) }
 //
 // THE CAMERA while a builder is up: the builder points it and sets its lens's width (fov). The view a builder draws in
 // is the part of the screen right of its panel; the game's canvas still fills the screen, so the picture's middle is
@@ -63,7 +66,7 @@ export const SITE = {
 const GAME = new URL('../', import.meta.url).href;
 const ease = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 
-export function makeBuildSites({ W, camera, canvas, player = () => null, obstacles = () => [], onStart = () => {}, onStop = () => {}, onWork = null }) {
+export function makeBuildSites({ W, camera, canvas, player = () => null, obstacles = () => [], onStart = () => {}, onStop = () => {}, onWork = null, levelPicker = null }) {
   const S = { prompt: null, active: null };
   const sites = new Map();
   let near = null;            // the site whose person the player is by
@@ -139,6 +142,11 @@ export function makeBuildSites({ W, camera, canvas, player = () => null, obstacl
         work.onclick = (e) => { e.currentTarget.blur(); try { onWork(); } catch (err) { console.error(err); } };
         panel.appendChild(work); me.work = work;
       }
+      // (and the level picker: the tools strip's is away with the HUD)
+      if (typeof levelPicker === 'function') {
+        const lp = levelPicker(site, () => { const s = me.session; try { return !!(s && s.relevel && s.relevel()); } catch (e) { console.error(e); return false; } });
+        if (lp) { lp.el.classList.add('bsite-level'); panel.appendChild(lp.el); lp.update(); me.picker = lp; me.pickerT = 0; }
+      }
       panel.appendChild(done); me.done = done;
     });
   }
@@ -184,6 +192,7 @@ export function makeBuildSites({ W, camera, canvas, player = () => null, obstacl
   // ── each frame ───────────────────────────────────────────────────────────────────────────────────────────────
   const qa = new THREE.Quaternion();
   S.update = (dt) => {
+    if (open && open.picker && (open.pickerT += dt) > 0.25) { open.pickerT = 0; open.picker.update(); }
     clock += dt;
     const P = player();
     // by a site's person: the prompt
@@ -334,7 +343,13 @@ function ensureCss() {
   font: 700 15px Bitter, Georgia, serif; }
 .bsite-work svg { width: 24px; height: 24px; flex: none; }
 .bsite-work:hover { border-color: #e2ad4c; background: rgba(48, 32, 18, 0.9); }
-.bsite-work + .bsite-done { margin-top: 6px; }
+.bsite-work + .bsite-done, .bsite-level + .bsite-done { margin-top: 6px; }
+.bsite-work + .bsite-level { margin-top: 6px; }
+.bsite-level { flex: none; align-self: stretch; }
+.bsite-level .bmtl-lv { flex: 1; }
+.fi-hosted .tools .bsite-level { align-self: center; min-height: 36px; }
+.fi-hosted .tools .bsite-level .bmtl-lvt { max-width: 190px; }
+@media (max-width: 700px) { .fi-hosted .tools .bsite-level .bmtl-lvt { max-width: 26vw; font-size: 12px; } .fi-hosted .tools .bsite-level .bmtl-step { width: 28px; } .fi-hosted .tools .bsite-level .bmtl-lv { padding: 0 3px; } }
 @media (max-width: 700px) { .bsite-work { font-size: 13px; padding: 6px 4px; } .bsite-work svg { width: 20px; height: 20px; } }
 `;
   document.head.appendChild(st);

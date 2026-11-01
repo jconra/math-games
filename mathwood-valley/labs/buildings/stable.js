@@ -303,8 +303,9 @@ function stalls(k, r) {
     }
     k.board([0.07, 0.08, z1 - z0], [fx, rail, (z0 + z1) / 2], null, { long: 2, tint: vary(k, STALLW, 0.9, 1.05), inside: true });
     k.board([0.08, 0.1, z1 - z0], [fx, 2.27, (z0 + z1) / 2], null, { long: 2, tint: vary(k, STALLW, 0.9, 1.05), inside: true });
-    // the half door (closed), hinged at one side, a latch at the other
+    // the half door (closed), hinged at one side, a latch at the other; it stops a walker, not the light
     const hz = zc - sx * 0.55;
+    k.walkSolids.push({ size: [0.08, gateH + 0.9, 1.14], m: T(sx * (SF + 0.02), (gateH + 0.9) / 2, zc) });
     into(k, mul(T(sx * (SF + 0.02), 0.06, hz), RY(-sx * Math.PI / 2)), (t) => doorLeaf(t, { w: 1.1, h: gateH, side: 1, tint: STALLW, rails: [0.2, gateH - 0.2], strap: STRAP }), r.seed * 31 + i + (sx > 0 ? 0 : 7));
     k.box('iron', [0.03, 0.03, 0.16], [sx * (SF - 0.06), gateH - 0.28, zc + sx * 0.5], null, { tint: IRON });
     // the horse eating: a heap of hay on the floor just inside its gate
@@ -549,7 +550,7 @@ function boardAttr(geo, parts, seed) {
 // ── build it all ─────────────────────────────────────────────────────────────────────────────────────────────────────
 export function buildStable(recipeIn = {}, env = {}) {
   const t0 = performance.now(), r = stableRecipe(recipeIn), paint = PAINTS[r.paint].c;
-  const k = new Kit(r.seed); k.parts.glow = []; k.parts.hay = []; k.parts.rope = [];
+  const k = new Kit(r.seed); k.parts.glow = []; k.parts.hay = []; k.parts.rope = []; k.walkSolids = [];
   SILLS.length = 0;
   const lamps = [];
   const marks = [], mark = (name) => marks.push([name, k.parts.wood.length, k.parts.iron.length]);
@@ -654,7 +655,7 @@ export function buildStable(recipeIn = {}, env = {}) {
   const counts = {}; let parts = 0;
   for (const g in k.parts) { counts[g] = k.parts[g].length; parts += counts[g]; }
   return {
-    recipe: r, geos, doors: leaves, stalls: stallList, lamps, light, occ, props: propList(OX),
+    recipe: r, geos, doors: leaves, stalls: stallList, lamps, light, occ, walkSolids: k.walkSolids, props: propList(OX),
     anchors: {
       doorways: [{ name: 'front', centre: [OX, DH / 2, D / 2], w: DW, h: DH, out: [0, 0, 1] }, { name: 'back', centre: [OX, DH / 2, -D / 2], w: DW, h: DH, out: [0, 0, -1], open: true }],   // (open: its doors stand open for good, part of the walls: seen into from outside)
       sign: { centre: [OX, 3.93, D / 2 + 0.074], w: 4.6, h: 0.86 }, boards: boardList, lanterns: lamps.map((L) => L.p),
