@@ -83,6 +83,7 @@ const VIEWS = {
   'Down the street': () => look(SQ.x - 14, 2.2, SQ.z - 10, SQ.x + 20, SQ.z + 22, 1.6),
 };
 for (const name of Object.keys(VIEWS)) $('tlView').add(new Option(name, name));
+$('tlHour').onchange = () => { const h = +$('tlHour').value; if (h) { V.DAY.hour = h; V.DAY.dirty = true; } $('tlHour').blur(); };   // (the time of day, to see the fog at its hours)
 $('tlView').onchange = () => { const v = $('tlView').value; if (VIEWS[v]) VIEWS[v](); $('tlView').value = ''; $('tlView').blur(); };
 TL.view = (n) => VIEWS[n] && VIEWS[n]();
 TL.look = look; TL.camera = camera; TL.renderer = renderer; TL.controls = controls;

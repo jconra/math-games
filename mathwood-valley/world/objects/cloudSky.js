@@ -78,13 +78,24 @@ export function makeCloudSky({ horizon = 0xa9c8e4, zenith = 0x4f86c6, radius = 4
     moonDir: { value: new THREE.Vector3(0, -1, 0) }, moonAmt: { value: 0 },
     // (Mathwood Valley) the mist at the valley's ends (the valley's FOG_DIR bank0, bank1, bankCol: off unless it hands them on)
     skyBank0: { value: { x: 500, y: 680, z: 540, w: 700 } }, skyBank1: { value: { x: 0, y: 0, z: 0, w: 0 } }, skyBankCol: { value: { x: 0.7, y: 0.78, z: 0.85 } },
+    // (Mathwood Valley) the low valley fog (the valley's FOG_DIR low0, low1, lowCol: off unless it hands them on)
+    skyLow0: { value: { x: 0, y: 0, z: 1, w: 0 } }, skyLow1: { value: { x: 0, y: 0, z: 1, w: 2 } }, skyLowCol: { value: { x: 0.8, y: 0.8, z: 0.8, w: 1 } },
   };
   const material = new THREE.ShaderMaterial({
     uniforms, side: THREE.BackSide, depthWrite: false, fog: false,
     vertexShader: `varying vec3 vDir; void main() { vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
     fragmentShader: SKY_GLSL + `
       varying vec3 vDir;
-      uniform vec4 skyBank0, skyBank1; uniform vec3 skyBankCol;
+      uniform vec4 skyBank0, skyBank1, skyLow0, skyLow1, skyLowCol; uniform vec3 skyBankCol;
+      // (Mathwood Valley) the low valley fog along the way to the sky, as the valley's fogLowDepth for a pixel 2.5 km off,
+      // so a ridge's top and the sky just above it have the same fog in front of them
+      float skyLow(vec3 c, vec3 dir) {
+        if (skyLow0.w <= 0.0) return 0.0;
+        vec3 p = c + dir * 2500.0;
+        float hc = max(c.y - skyLow0.x - skyLow0.y * c.x, 0.0), hp = max(p.y - skyLow0.x - skyLow0.y * p.x, 0.0), a = exp(-hc * skyLow0.z), b = exp(-hp * skyLow0.z), dh = (hp - hc) * skyLow0.z;
+        float town = 0.5 * (smoothstep(skyLow1.z, skyLow1.w, length(c.xz - skyLow1.xy)) + 1.0);
+        return skyLow0.w * mix(skyLowCol.w, 1.0, town) * (abs(dh) > 0.01 ? (a - b) / dh : 0.5 * (a + b)) * 2500.0;
+      }
       // (Mathwood Valley) the mist at the valley's ends along the way to the sky: added up at 12 points over 2.5 km (nearer
       // ones closer together), each by how far out it is and how high (as the valley's fogBankDepth)
       float skyBank(vec3 from, vec3 dir) {
@@ -93,13 +104,14 @@ export function makeCloudSky({ horizon = 0xa9c8e4, zenith = 0x4f86c6, radius = 4
         for (int i = 0; i < 12; i++) { float u = (float(i) + 0.5) / 12.0, t = u * u * 2500.0, dt = 2.0 * u * 2500.0 / 12.0; vec3 q = from + dir * t;
           float rho = q.x < 0.0 ? clamp((-q.x - skyBank0.x) / (skyBank0.y - skyBank0.x), 0.0, 1.0) : clamp((q.x - skyBank0.z) / (skyBank0.w - skyBank0.z), 0.0, 1.0);
           float top = q.x < 0.0 ? skyBank1.y : skyBank1.z;
-          sum += rho * (1.0 - smoothstep(top, top + 110.0, q.y)) * dt; }
+          float k = 1.0 - smoothstep(top, top + 170.0, q.y); sum += rho * k * k * k * dt; }
         return 1.0 - exp(-sum * skyBank1.x * skyBank1.w);
       }
       void main() { vec3 dir = normalize(vDir); gl_FragColor = vec4(skyAt(cameraPosition, dir), 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
         float mist = skyBank(cameraPosition, dir); if (mist > 0.0) gl_FragColor.rgb = mix(gl_FragColor.rgb, skyBankCol, mist);
+        float low = skyLow(cameraPosition, dir); if (low > 0.0) gl_FragColor.rgb = mix(gl_FragColor.rgb, mix(skyLowCol.rgb, gl_FragColor.rgb, 0.3), min(1.0 - exp(-low), 0.93));
       }`,
   });
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(radius, 32, 16), material);

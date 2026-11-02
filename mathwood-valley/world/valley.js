@@ -95,41 +95,72 @@ import { KIND_INFO, LIT_SOFTEN, GROW_DEFAULTS, FAMILY_DEFAULTS, COVER_DEFAULTS, 
 // is found from its depth and its direction (fogView), so no geometry stands in the way
 // fogBank0, fogBank1, fogBankCol (Mathwood Valley): THE FOG AT THE VALLEY'S ENDS (BANK below), a bank of mist across each end:
 // its thickness rises from nothing at `a` metres out from the middle (along x: the west end below -a, the east above +a)
-// to full at `b`, and it thins out over 110 m above a height over each end's floor; how much hides a pixel is the mist's
+// to full at `b`, and it thins out over 170 m above a height over each end's floor; how much hides a pixel is the mist's
 // thickness added up along the way from the camera to it (worked out exactly along x, the heights taken at both ends), so
 // standing in it the near ground fades in metres and from the town it is a soft wall far off. fogBank0: west a, b, east
 // a, b; fogBank1: thickness at full (per metre), the west and east tops (m), on; fogBankCol: its colour (the haze's,
 // as shown). The sky dome takes the same mist (cloudSky.js skyBank)
+// THE LOW VALLEY FOG (Mathwood Valley; LOW_FOG below). The game's maker, of the old haze: "It just looks like the mountain gets
+// painted pale blue ... the fog needs to end down low so you can actually see the mountains true colors". So:
+// fogHaze: the distance haze thins with a pixel's height over the valley floor: from nothing at x metres to leaving only z
+// of it at y (w on). fogLow0, fogLow1, fogLowCol: a layer lying on the valley floor (a plane along the floor's rise, y =
+// fogLow0.x + fogLow0.y * x), thinning exponentially upward (no top edge to see); how much hides a pixel is the
+// layer's thickness added up exactly from the camera to it. fogLow0.z: 1 / the height it halves-and-a-bit over; w: thickness
+// on the floor per metre (0 off). fogLow1: the town's middle (x, z) and the radii where it thins; fogLowCol: colour, and in w
+// the share of the fog left in town. On potato the layer's code isn't compiled at all (the haze still thins); the sky
+// dome takes the same layer (cloudSky.js skyLow), and everything with fog shares this one chunk: land, water, far trees, cut objects.
 const FOG_DIR = { view: { x: 0, y: 0, z: 1, w: 1 }, sun: { x: 0, y: 0, z: -1 }, col: { x: 0, y: 0, z: 0 }, sun3: { x: 0, y: 1, z: 0 }, glow: { x: 0, y: 0, z: 0 }, edge: { x: 650, y: 790, z: 1, w: 0 }, zen: { x: 0, y: 0, z: 0 },
-  bank0: { x: 500, y: 680, z: 540, w: 700 }, bank1: { x: 0.22, y: 30, z: 96, w: 0 }, bankCol: { x: 0.7, y: 0.78, z: 0.85 } };
+  bank0: { x: 500, y: 680, z: 540, w: 700 }, bank1: { x: 0.22, y: 30, z: 96, w: 0 }, bankCol: { x: 0.7, y: 0.78, z: 0.85 },
+  haze: { x: 30, y: 240, z: 0.12, w: 1 }, low0: { x: -10, y: 0.05, z: 1 / 16, w: 0 }, low1: { x: -15, y: -205, z: 90, w: 170 }, lowCol: { x: 0.8, y: 0.82, z: 0.84, w: 0.25 } };
+// how thick (of `thick`) by the clock: thickest round sunrise, gone by late morning, a little from dusk, building through the night
+const LOW_FOG = { thick: 0.0065, k: 1, cap: 0.93, hours: [[0, 0.45], [4, 0.8], [5.5, 1], [7, 0.9], [8.5, 0.45], [10, 0.08], [11, 0], [17, 0], [18.5, 0.08], [20, 0.3], [24, 0.45]] };
+const FOG_Q = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('fog') : null;   // (?fog=0: the old sky-coloured haze alone, to compare)
+if (FOG_Q === '0') { LOW_FOG.k = 0; FOG_DIR.haze.w = 0; }
+const lowFogAt = (h) => { const T = LOW_FOG.hours; for (let i = 1; i < T.length; i++) if (h <= T[i][0]) { const u = (h - T[i - 1][0]) / (T[i][0] - T[i - 1][0]); return T[i - 1][1] + (T[i][1] - T[i - 1][1]) * u * u * (3 - 2 * u); } return T[0][1]; };
 const FOG_BANK_GLSL = `
   float fogBankG(float x) { float u = abs(x), a = x < 0.0 ? fogBank0.x : fogBank0.z, b = x < 0.0 ? fogBank0.y : fogBank0.w;
     float F = u < a ? 0.0 : u < b ? (u - a) * (u - a) / (2.0 * (b - a)) : (b - a) * 0.5 + (u - b); return x < 0.0 ? -F : F; }
   float fogBankRho(float x) { return x < 0.0 ? clamp((-x - fogBank0.x) / (fogBank0.y - fogBank0.x), 0.0, 1.0) : clamp((x - fogBank0.z) / (fogBank0.w - fogBank0.z), 0.0, 1.0); }
-  float fogBankH(float y, float x) { float top = x < 0.0 ? fogBank1.y : fogBank1.z; return 1.0 - smoothstep(top, top + 110.0, y); }
+  float fogBankH(float y, float x) { float top = x < 0.0 ? fogBank1.y : fogBank1.z; float k = 1.0 - smoothstep(top, top + 170.0, y); return k * k * k; }   // (cubed over a deep span: the bank is so thick that a plain ramp still read as a hard line from afar)
   float fogBankDepth(vec3 c, vec3 p) {
     if (fogBank1.w <= 0.0 || (c.x > -fogBank0.x && c.x < fogBank0.z && p.x > -fogBank0.x && p.x < fogBank0.z)) return 0.0;
     float L = length(p - c), dx = p.x - c.x, side = abs(p.x) > abs(c.x) ? p.x : c.x;
     float m = abs(dx) > 0.01 ? (fogBankG(p.x) - fogBankG(c.x)) / dx : fogBankRho(c.x);
-    return fogBank1.x * m * L * 0.5 * (fogBankH(c.y, side) + fogBankH(p.y, side)) * fogBank1.w; }
+    float e = side < 0.0 ? -1.0 : 1.0, cx = c.x * e, t = cx >= (side < 0.0 ? fogBank0.x : fogBank0.z) ? 0.0 : clamp(((side < 0.0 ? fogBank0.x : fogBank0.z) - cx) / max(p.x * e - cx, 0.01), 0.0, 1.0);   // (the height where the ray ENTERS the bank, not the camera's: taken at the camera, a low rider saw whole mountains past the bank painted in mist, up to a hard line against the dome, which is added up properly)
+    float yq = mix(c.y, p.y, t);   // (Simpson over the stretch inside: the ray's height changes a lot in there)
+    return fogBank1.x * m * L * (fogBankH(yq, side) + 4.0 * fogBankH(0.5 * (yq + p.y), side) + fogBankH(p.y, side)) / 6.0 * fogBank1.w; }
+`;
+const FOG_LOW_GLSL = `#ifdef FOG_LOW_ON
+  float fogLowDepth(vec3 c, vec3 p) {
+    float hc = max(c.y - fogLow0.x - fogLow0.y * c.x, 0.0), hp = max(p.y - fogLow0.x - fogLow0.y * p.x, 0.0), a = exp(-hc * fogLow0.z), b = exp(-hp * fogLow0.z), dh = (hp - hc) * fogLow0.z;
+    vec2 m = (c.xz + p.xz) * 0.5;                                                    // (a slow unevenness, so it isn't one flat sheet)
+    float town = 0.5 * (smoothstep(fogLow1.z, fogLow1.w, length(c.xz - fogLow1.xy)) + smoothstep(fogLow1.z, fogLow1.w, length(p.xz - fogLow1.xy)));
+    return fogLow0.w * mix(fogLowCol.w, 1.0, town) * (1.0 + 0.25 * sin(m.x * 0.017) * sin(m.y * 0.013)) * (abs(dh) > 0.01 ? (a - b) / dh : 0.5 * (a + b)) * length(p - c); }
+  #endif
 `;
 { const add = (u) => { u.fogView = { value: FOG_DIR.view }; u.fogSunV = { value: FOG_DIR.sun }; u.fogSunCol = { value: FOG_DIR.col }; u.fogSun3 = { value: FOG_DIR.sun3 }; u.fogGlow = { value: FOG_DIR.glow }; u.fogEdge = { value: FOG_DIR.edge }; u.fogZen = { value: FOG_DIR.zen };
-    u.fogBank0 = { value: FOG_DIR.bank0 }; u.fogBank1 = { value: FOG_DIR.bank1 }; u.fogBankCol = { value: FOG_DIR.bankCol }; };
+    u.fogBank0 = { value: FOG_DIR.bank0 }; u.fogBank1 = { value: FOG_DIR.bank1 }; u.fogBankCol = { value: FOG_DIR.bankCol };
+    u.fogHaze = { value: FOG_DIR.haze }; u.fogLow0 = { value: FOG_DIR.low0 }; u.fogLow1 = { value: FOG_DIR.low1 }; u.fogLowCol = { value: FOG_DIR.lowCol }; };
   add(THREE.UniformsLib.fog); for (const k of Object.keys(THREE.ShaderLib)) if (THREE.ShaderLib[k].uniforms && THREE.ShaderLib[k].uniforms.fogColor) add(THREE.ShaderLib[k].uniforms);
-  THREE.ShaderChunk.fog_pars_fragment += '\n#ifdef USE_FOG\nuniform vec4 fogView, fogEdge, fogBank0, fogBank1; uniform vec3 fogSunV, fogSunCol, fogSun3, fogGlow, fogZen, fogBankCol;\n' + FOG_BANK_GLSL + '#endif\n';
+  THREE.ShaderChunk.fog_pars_fragment += '\n#ifdef USE_FOG\nuniform vec4 fogView, fogEdge, fogBank0, fogBank1, fogHaze, fogLow0, fogLow1, fogLowCol; uniform vec3 fogSunV, fogSunCol, fogSun3, fogGlow, fogZen, fogBankCol;\n' + FOG_BANK_GLSL + FOG_LOW_GLSL + '#endif\n';
   const was = 'gl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor, fogFactor );';
   if (!THREE.ShaderChunk.fog_fragment.includes(was)) console.warn('valley: no fog line found; the haze stays one colour');
-  THREE.ShaderChunk.fog_fragment = THREE.ShaderChunk.fog_fragment.replace(was, `if (fogEdge.w > 0.0 && fogView.z > 0.0) { vec3 fogV = vec3((gl_FragCoord.xy * fogView.xy * 2.0 - 1.0) * fogView.zw, -1.0) * vFogDepth;
-		vec3 fogW = cameraPosition + (vec4(fogV, 0.0) * viewMatrix).xyz; fogFactor = max(fogFactor, smoothstep(fogEdge.x, fogEdge.y, max(abs(fogW.x), abs(fogW.z))) * fogEdge.z); }
+  THREE.ShaderChunk.fog_fragment = THREE.ShaderChunk.fog_fragment.replace(was, `vec3 fogW = cameraPosition + (vec4(vec3((gl_FragCoord.xy * fogView.xy * 2.0 - 1.0) * fogView.zw, -1.0) * vFogDepth, 0.0) * viewMatrix).xyz;   // (this pixel's place in the world)
+	if (fogHaze.w > 0.0) fogFactor *= mix(1.0, fogHaze.z, smoothstep(fogHaze.x, fogHaze.y, fogW.y - fogLow0.x - fogLow0.y * fogW.x));
+	if (fogEdge.w > 0.0 && fogView.z > 0.0) { fogFactor = max(fogFactor, smoothstep(fogEdge.x, fogEdge.y, max(abs(fogW.x), abs(fogW.z))) * fogEdge.z); }
 	vec3 fogC = fogColor;
 	if (fogSunCol.x + fogSunCol.y + fogSunCol.z > 0.0) { vec3 fd = normalize(vec3((gl_FragCoord.xy * fogView.xy * 2.0 - 1.0) * fogView.zw, -1.0));
 		float sd = max(dot(fd, fogSun3), 0.0);
 		fogC = mix(fogColor, fogSunCol, pow(clamp(dot(fd, fogSunV) * 0.5 + 0.5, 0.0, 1.0), 3.0)) + fogGlow * (pow(sd, 5.0) * 0.333 + pow(sd, 48.0) * 0.667); }
 	if (fogEdge.w > 0.0 && fogZen.x + fogZen.y + fogZen.z > 0.0) { vec3 fogU = normalize((vec4(vec3((gl_FragCoord.xy * fogView.xy * 2.0 - 1.0) * fogView.zw, -1.0), 0.0) * viewMatrix).xyz);
 		fogC = mix(fogC, fogZen, pow(clamp(fogU.y, 0.0, 1.0), 0.55)); }   // (the edge fog's: land lost in it above the horizon takes the sky's colour there, as the dome rises to its zenith)
-	if (fogBank1.w > 0.0 && fogView.z > 0.0) { vec3 bankV = vec3((gl_FragCoord.xy * fogView.xy * 2.0 - 1.0) * fogView.zw, -1.0) * vFogDepth;
-		float bankF = 1.0 - exp(-fogBankDepth(cameraPosition, cameraPosition + (vec4(bankV, 0.0) * viewMatrix).xyz));   // (the valley's ends: the mist along the way)
+	if (fogBank1.w > 0.0 && fogView.z > 0.0) {
+		float bankF = 1.0 - exp(-fogBankDepth(cameraPosition, fogW));   // (the valley's ends: the mist along the way)
 		if (bankF > 0.0) { fogC = mix(fogC, fogBankCol, bankF); fogFactor = 1.0 - (1.0 - fogFactor) * (1.0 - bankF); } }
+	#ifdef FOG_LOW_ON
+	if (fogLow0.w > 0.0) { float lowF = min(1.0 - exp(-fogLowDepth(cameraPosition, fogW)), ${LOW_FOG.cap.toFixed(3)});   // (the low valley fog: leaning to the sky's colour that way, so a sunrise warms it on its side)
+		fogC = mix(fogC, mix(fogLowCol.rgb, fogC, 0.3), lowF); fogFactor = 1.0 - (1.0 - fogFactor) * (1.0 - lowF); }
+	#endif
 	gl_FragColor.rgb = mix( gl_FragColor.rgb, fogC, fogFactor );`); }
 // THE NIGHT'S LOOK (Mathwood Valley): by moonlight colours fade, as an eye sees them at night: every lit material's own light
 // (three's lights_fragment_end, before its glow and the street lamps' warm light are added, so those keep their colour)
@@ -232,13 +263,14 @@ const PAVE = { build: 'C', size: 0.92, jitter: 0.47, variety: 0.25, gap: 0.018, 
     E: { name: "Stone's own corners", top: 0, per: 1, round: 0, bevel: 0.06, height: 0.03, dome: 0, soft: true, uneven: 0.3 } } };
 const $ = (id) => (lab ? document.getElementById(id) : null);   // (the lab's panel: its readouts, written when it's there)
 const QUAL = quality, TS = TIER_SET[QUAL.tier];
+if (!TS.lite && !THREE.ShaderChunk.fog_pars_fragment.startsWith('#define FOG_LOW_ON')) THREE.ShaderChunk.fog_pars_fragment = '#define FOG_LOW_ON\n' + THREE.ShaderChunk.fog_pars_fragment;   // (the low valley fog's code: left out altogether on potato)
 const GL2 = renderer.capabilities.isWebGL2;
 
 const scene = new THREE.Scene();
 const SKY = new THREE.Color(0xa9c8e4); scene.background = SKY; scene.fog = new THREE.Fog(SKY, 150, 1400);   // the haze does its share of hiding the repeat far off
 // the sky: blue deepening overhead, clouds drifting; the water reflects the same sky (potato: plain colour)
 const sky = makeCloudSky({ horizon: SKY }); scene.add(sky.mesh);
-sky.uniforms.skyBank0.value = FOG_DIR.bank0; sky.uniforms.skyBank1.value = FOG_DIR.bank1; sky.uniforms.skyBankCol.value = FOG_DIR.bankCol;   // (the mist at the valley's ends, on the dome too)
+sky.uniforms.skyBank0.value = FOG_DIR.bank0; sky.uniforms.skyBank1.value = FOG_DIR.bank1; sky.uniforms.skyBankCol.value = FOG_DIR.bankCol; sky.uniforms.skyLow0.value = FOG_DIR.low0; sky.uniforms.skyLow1.value = FOG_DIR.low1; sky.uniforms.skyLowCol.value = FOG_DIR.lowCol;   // (the mist at the valley's ends, on the dome too)
 sky.uniforms.cloudCover.value = 0.64; sky.uniforms.cloudSoft.value = 0.39; sky.uniforms.cloudScale.value = 850; sky.uniforms.cloudSpeed.value = 0.064;   // (Jacob's sky)
 const hemi = new THREE.HemisphereLight(0xcfe3ff, 0x6b5a44, 0.9); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff1dc, 2.4); sun.position.set(-300, 400, -200); scene.add(sun);
@@ -2557,8 +2589,12 @@ function dayFrame(dt, quiet = false) {
   const dome = sky.mesh.visible ? 1 : 0;                                 // (no dome, as on potato or with the clouds off: the background is one colour, so the haze is too)
   FOG_DIR.col.x = SHOWN.toward.x * dome; FOG_DIR.col.y = SHOWN.toward.y * dome; FOG_DIR.col.z = SHOWN.toward.z * dome;
   FOG_DIR.zen.x = SHOWN.zen.x * dome; FOG_DIR.zen.y = SHOWN.zen.y * dome; FOG_DIR.zen.z = SHOWN.zen.z * dome;
-  { const A = SHOWN.away, l = 0.2126 * A.x + 0.7152 * A.y + 0.0722 * A.z, k = 0.65 * NIGHT_GRADE.w / (NIGHT.grade || 1);   // (the mist at the valley's ends: the haze's own colour, away from the sun; by night greyed, as the night fades colours, or it glows deep blue)
+  { const A = SHOWN.away, l = 0.2126 * A.x + 0.7152 * A.y + 0.0722 * A.z, k = 0.65 * NIGHT_GRADE.w / (NIGHT.grade || 1) * (sky.mesh.visible ? 1 : 0);   // (the mist at the valley's ends: the haze's own colour, away from the sun; by night greyed, as the night fades colours, or it glows deep blue)
     FOG_DIR.bankCol.x = A.x + (l * 0.92 - A.x) * k; FOG_DIR.bankCol.y = A.y + (l * 0.98 - A.y) * k; FOG_DIR.bankCol.z = A.z + (l * 1.12 - A.z) * k; }
+  // the low fog: how much by the clock, and its colour: the sky's far colour greyed and, as the day lights it, whitened; at night it stays under that dark sky's own brightness, never glowing
+  { const A = SHOWN.away, C = FOG_DIR.lowCol, l = 0.2126 * A.x + 0.7152 * A.y + 0.0722 * A.z, lit = THREE.MathUtils.smoothstep(DAY.elev, -3, 10), g = (a, m) => (a + (l * m - a) * 0.6) * (0.72 + 0.28 * lit);
+    FOG_DIR.low0.w = !TS.lite ? LOW_FOG.thick * LOW_FOG.k * lowFogAt(((DAY.hour % 24) + 24) % 24) : 0;
+    C.x = g(A.x, 1); C.y = g(A.y, 1.01); C.z = g(A.z, 1.03); C.x += (1 - C.x) * 0.45 * lit; C.y += (1 - C.y) * 0.45 * lit; C.z += (1 - C.z) * 0.45 * lit; }
   FOG_DIR.glow.x = Math.max(0, SHOWN.glowAt.x - SHOWN.toward.x) * dome; FOG_DIR.glow.y = Math.max(0, SHOWN.glowAt.y - SHOWN.toward.y) * dome; FOG_DIR.glow.z = Math.max(0, SHOWN.glowAt.z - SHOWN.toward.z) * dome;
   DAY_F.copy(SUN_NOW).transformDirection(camera.matrixWorldInverse); FOG_DIR.sun3.x = DAY_F.x; FOG_DIR.sun3.y = DAY_F.y; FOG_DIR.sun3.z = DAY_F.z;
   renderer.getDrawingBufferSize(DAY_V2); const th = Math.tan(camera.fov * Math.PI / 360) / camera.zoom;
@@ -2668,7 +2704,7 @@ function bakeData() {
 }
 return {
   scene, sky, sun, hemi, ground, mat, lawn, LAWN_SKIP, paintable, U, MAPS, TOWN, PLANT, COVER, GROW, PLANT_KINDS, FAMILY, FOREST, LEAF, LAND, VALLEY, SHAPE, WATER, PAVE, DAY, DL, SHADE, NIGHT, NIGHT_GRADE, NIGHT_LIGHTS, STONES, LAWN, LAWN_GO, CALM, FOLK, SHOW, BEAMS, RAIN, FENCE, SHADOW, FOG_EDGE: FOG_DIR.edge,
-  TS, QUAL, TEXTURES, LAYERS, TREE_SPECIES, TOWN_DEFAULT, PLANTING_FIRST, weights, FLOW, SETTLE, WDEPTH, ACC, POND, OUTLETS, Hg, N, SIZE, TEX, SEG, groundTiles, SUN_NOW, FOG_DIR, LAMPU, CODE,
+  TS, QUAL, TEXTURES, LAYERS, TREE_SPECIES, TOWN_DEFAULT, PLANTING_FIRST, weights, FLOW, SETTLE, WDEPTH, ACC, POND, OUTLETS, Hg, N, SIZE, TEX, SEG, groundTiles, SUN_NOW, FOG_DIR, LOW_FOG, LAMPU, CODE,
   FINE, get LANDF() { return LANDF; }, inFine: (x, z) => !!FINE.h && x > FINE.x0 && x < FINE.x1 && z > FINE.z0 && z < FINE.z1,
   BAKE, bakeData, update, render, settled, heightAt, groundAt, slopeAt, waterAt, coverGround, buildLand, buildHeights, shapeMesh, fastMesh, baseGrid, erodeSteps, smoothErosion, cutRavines, addCrags, findWater, townLand, paintWater,
   placeCover, placeTrees, placeStones, placeLawn, calmCover, buildPaving, applyPave, paveLater, composePathRoad, tex, setAverages, applyWeights, drawPaths, followShadow, followCover, townRebuildNow, beamsReady,

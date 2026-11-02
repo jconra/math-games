@@ -101,7 +101,7 @@ const SOLID_PROPS = { hitchingPost: 'box', trough: 'box', signpost: 0.3, lamp: 0
 // m either side of the road's end (along z) within which a rider wrapping comes out by the other end of the road (W.wrap)
 const WRAP_ROAD = 45;
 const ENDS = { west: { a: 580, b: 680, wrap: 720 },   // (west a: past the upriver crossing at x -525, so its water and road are clear)
-   east: { a: 540, b: 700, wrap: 740 }, thick: 0.22, top: 70 };
+   east: { a: 540, b: 700, wrap: 740 }, thick: 0.22, top: 40 };
 // where a rider comes out of the mist: clear of the trees' crowns (CROWN m round a tree of scale 1) over them and the
 // camera, WRAP_CLEAR m behind (W.wrap)
 const CROWN = 5, WRAP_CLEAR = 12;

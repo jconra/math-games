@@ -74,6 +74,7 @@
   <button type="button" id="tlLoad" title="Open a decor.json file">Open…</button>
   <button type="button" id="tlRevert" title="Throw away the changes since the last save">Back to saved</button>
   <span class="tl-sep"></span>
+  <select id="tlHour" aria-label="Time of day" title="The time of day, with its fog (thickest at sunrise, gone by midday)"><option value="">Time…</option><option value="6.5">Morning fog</option><option value="12.5">Midday</option><option value="19">Dusk</option><option value="23">Night</option></select>
   <select id="tlView" aria-label="Look at" title="Take the view to a part of the town"><option value="">Look at…</option></select>
   <button type="button" id="tlCode" aria-pressed="true" title="Show or hide the outlines of what the game puts down itself: the farm, your homestead, the mill hill, the range, the jobs board">Game's things</button>
   <button type="button" id="tlHelpBtn" aria-expanded="false" aria-controls="tlHelp" title="How to fly the view and build">?</button>
@@ -103,6 +104,6 @@
 </div>
 <div class="tl-hud" id="tlHud"></div>
 <div class="tl-loading" id="tlLoading">Riding into the valley…</div>
-<script type="module" src="main.js?v=15"></script>
+<script type="module" src="main.js?v=16"></script>
 </body>
 </html>
