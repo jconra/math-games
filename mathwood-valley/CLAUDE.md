@@ -43,7 +43,7 @@ He shows them to people, so a lab showing last week's version looks like a bug.
   - **Building Lab** (labs/buildings): the code-built buildings, their doors and insides, the stable's horses.
   - **Town Lab** (labs/town): the town's layout and decor.json (plants, props, fences, footpaths).
   - **Horse Lab** (labs/horse): horse coats, manes and the new horse.
-  - **Hands Lab** (labs/hands): the whole band's hands over their clips, hand sizes, the pianist's keys from a song's notes (models/people/hands.json; src/handplan.js, src/handpose.js, src/pianohands.js, src/pianoplan.js, src/bandgear.js), and the drummer's kit and strokes from a song's hits (src/drums.js, src/drumplan.js, src/drumhands.js), and the players' playing motions (src/playhands.js, src/playplan.js).
+  - **Hands Lab** (labs/hands): the whole band's hands over their clips, hand sizes, the pianist's keys from a song's notes (models/people/hands.json; src/handplan.js, src/handpose.js, src/pianohands.js, src/pianoplan.js, src/bandgear.js), and the drummer's kit and strokes from a song's hits (src/drums.js, src/drumplan.js, src/drumhands.js), the players' playing motions (src/playhands.js, src/playplan.js), the lifts (src/handplan.js LIFTS), the upright bass and its player (src/bass.js, src/bassplan.js) and the fret hands from a song's notes (src/fretplan.js, src/frethands.js).
   - **Dog Lab** (labs/dogs): the dog breeds (src/actors/dogbreeds.js, morph.js, dogcoat.js, dogkind.js; saved to
     models/animals/dogbreeds.json), reshaped from the game's dogs, and the dogs as the game has them.
   - **Material Lab** and **Stone Lab**: the wood, weather and stone the buildings wear.

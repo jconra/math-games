@@ -51,6 +51,7 @@ both ends and evened to about -18 LUFS (a gentle peak limiter keeps them under -
 | `horse_munch_1` | a horse munching a treat | https://elevenlabs.io/sound-effects | ElevenLabs (sound effects), chosen by the game's maker | ElevenLabs |
 | `horse_munch_2` | a horse munching a treat | https://elevenlabs.io/sound-effects | ElevenLabs (sound effects), chosen by the game's maker | ElevenLabs |
 | `horse_munch_3` | a horse munching a treat | https://elevenlabs.io/sound-effects | ElevenLabs (sound effects), chosen by the game's maker | ElevenLabs |
+| `stage_crash` | the saloon drummer's crash cymbal (1.3 s, the last 0.3 faded, mono) | https://elevenlabs.io/sound-effects | ElevenLabs (sound effects), chosen by the game's maker | ElevenLabs |
 | `sheep_baa_1` | a sheep | https://opengameart.org/content/sheep-baa | AntumDeluge (from a recording by mikewest) | CC0 (OpenGameArt.org) |
 | `sheep_baa_2` | a sheep | https://commons.wikimedia.org/wiki/File:Sheep_bleating.ogg | earthcalling | Public domain (Wikimedia Commons) |
 | `sheep_baa_3` | a sheep | https://bigsoundbank.com/sheep-2-s2344.html | Joseph SARDIN | CC0 |

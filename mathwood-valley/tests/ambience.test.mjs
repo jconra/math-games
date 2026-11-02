@@ -17,8 +17,14 @@ test('every clip the game plays is in sounds/ as .ogg and .m4a, with a credit; n
     assert.match(row, /https?:\/\//, name + ': source page');
     assert.match(row, /CC0|[Pp]ublic domain|ElevenLabs/, name + ': licence');
   }
+  // The saloon drummer's crash is the one clip that isn't the town's: src/audio/stagemusic.js loads it.
+  const STAGE = ['stage_crash'];
+  for (const name of STAGE) {
+    for (const ext of ['.ogg', '.m4a']) assert.ok(fs.existsSync(new URL(name + ext, SOUNDS)), name + ext);
+    assert.ok(credits.split('\n').find((l) => l.startsWith('| `' + name + '`')), name + ' has a row in sounds/CREDITS.md');
+  }
   const files = fs.readdirSync(SOUNDS).filter((f) => /\.(ogg|m4a)$/.test(f));
-  for (const f of files) assert.ok(CLIPS[f.replace(/\.(ogg|m4a)$/, '')], f + ' is played by the game');
+  for (const f of files) { const n = f.replace(/\.(ogg|m4a)$/, ''); assert.ok(CLIPS[n] || STAGE.includes(n), f + ' is played by the game'); }
 });
 
 test("picks by ear: one moo for every cow, no whine, the pug's woof, the grating bark rare", () => {

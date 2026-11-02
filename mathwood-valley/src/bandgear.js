@@ -9,6 +9,8 @@ import { holdMatrix } from './fiddleplan.js';
 import { makeBanjoModel, makeStoolModel, banjoMaterial } from './banjo.js';
 import { placeMatrix } from './banjoplan.js';
 import { makeDrumKit, makeStick, drumMaterial } from './drums.js';
+import { makeBassModel, bassMaterial } from './bass.js';
+import { placeMatrix as bassPlace } from './bassplan.js';
 
 // a little metal box with the wooden comb showing along its front, so the cupped hands read as playing one
 export function makeHarmonicaModel(H) {
@@ -59,5 +61,17 @@ export function holdDrumsOn(P) {
   const mat = drumMaterial(), kit = makeDrumKit({ material: mat }), stool = makeStoolModel({ material: banjoMaterial() }), stickL = makeStick({ material: mat }), stickR = makeStick({ material: mat });
   stool.material.userData.indoorLit = true; stool.castShadow = stool.receiveShadow = false;
   P.root.add(kit, stool, stickL, stickR);
-  return { kit, stool, stickL, stickR, mat };
+  return { kit, stool, stickL, stickR, mat, parts: kit.parts };
+}
+// the upright bass stands where his root has it, leaning back on him; he has no clips of his own yet: the fiddler's standing ones
+// (his foot keeps the beat, his weight shifts) under the numbers of models/people/hands.json
+export function addBassClips(folk, body = 'm') {
+  const base = folk.clips[body].find((c) => c.name === 'Fiddle_Rest'); if (!base) return;
+  folk.addClips(body, ['Play_Bass', 'Bass_Rest'].map((name) => { const c = base.clone(); c.name = name; return c; }));
+}
+export function holdBassOn(P) {
+  const mat = bassMaterial(), bass = makeBassModel({ material: mat });
+  bass.matrixAutoUpdate = false; bass.matrix.fromArray(bassPlace());
+  P.root.add(bass);
+  return { bass, mat };
 }

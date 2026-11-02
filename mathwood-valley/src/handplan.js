@@ -22,6 +22,18 @@ export const PLAYERS = {
   fiddler: { name: 'The fiddler', clips: ['Play_Fiddle', 'Fiddle_Rest'], ramps: { Fiddle_Up: ['Fiddle_Rest', 'Play_Fiddle'], Fiddle_Down: ['Play_Fiddle', 'Fiddle_Rest'] }, props: { fiddle: 'The fiddle', bow: 'The bow' } },
   banjo: { name: 'The banjo player', clips: ['Play_Banjo', 'Banjo_Rest'], props: { banjo: 'The banjo', stool: 'The stool' } },
   harpist: { name: 'The harmonica player', clips: ['Play_Harmonica', 'Harmonica_Rest'], props: { harmonica: 'The harmonica' } },
+  bassist: { name: 'The bass player', clips: ['Play_Bass', 'Bass_Rest'], props: { bass: 'The bass' } },
+};
+// THE LIFTS: an instrument stays in the hand that holds it from the player's side to the mouth or the chin. carries: the prop
+// rides that wrist all the way, its hold turning from the rest clip's to the play clip's; joins: that hand comes to the prop
+// where it now is, in the last part of the lift. share: how far through the whole lift each arm starts and ends (the
+// fiddle up first, the bow only once it's near the chin); mid: the arm half way, as turns on top of its rest (the elbow forward and
+// close, never swung out to the side). src/handpose.js H.setLift does it.
+export const LIFTS = {
+  harpist: { rest: 'Harmonica_Rest', play: 'Play_Harmonica', carries: [{ prop: 'harmonica', hand: 'R' }], joins: [{ prop: 'harmonica', hand: 'L' }], share: { R: [0, 1], L: [0, 1] }, turn: [0.5, 1],
+    mid: { R: { UpperArm: { forward: 35, raise: 0, roll: 0 }, LowerArm: { bend: 75, twist: 0 } }, L: { UpperArm: { forward: 35, raise: 0, roll: 0 }, LowerArm: { bend: 95, twist: 0 } } } },
+  fiddler: { rest: 'Fiddle_Rest', play: 'Play_Fiddle', carries: [{ prop: 'fiddle', hand: 'L' }, { prop: 'bow', hand: 'R' }], joins: [], share: { L: [0, 0.68], R: [0.5, 1] }, turn: [0.2, 1],
+    mid: { L: { UpperArm: { forward: -40, raise: 0, roll: 0 }, LowerArm: { bend: 80, twist: 0 } }, R: { UpperArm: { forward: -25, raise: 0, roll: 0 }, LowerArm: { bend: 60, twist: 0 } } } },
 };
 export const HAND_CM = { min: 14, max: 32 };   // what a hand's size may be set to, cm
 export const ELBOW_MOST = 150;   // the most an elbow bends, degrees from straight, the clip and the turn added together

@@ -6,13 +6,15 @@
 // top of it by src/handpose.js, the game's own code; Save writes models/people/hands.json.
 //   Save: served from this machine, sent to the little save script (rigs/town/save_server.cjs, POST /hands); else a download.
 // window.HA for the rigs: see the end of this file.
+import { accentDue } from '../../src/drumplan.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { loadFolk, makePerson } from '../../src/actors/folk.js';
 import { STAGE } from '../../src/stage.js';
-import { makeHarmonicaModel, holdFiddleOn, holdBanjoOn, holdDrumsOn } from '../../src/bandgear.js';
+import { makeHarmonicaModel, holdFiddleOn, holdBanjoOn, holdDrumsOn, holdBassOn, addBassClips } from '../../src/bandgear.js';
+import { makeFretHands, makeBassPluck } from '../../src/frethands.js';
 import { makePianoHands } from '../../src/pianohands.js';
 import { makeDrumHands } from '../../src/drumhands.js';
 import { makePlayHands } from '../../src/playhands.js';
@@ -21,7 +23,7 @@ import { SONGS, makeBoxPart } from '../../src/audio/stagemusic.js';
 import { buildProps } from '../buildings/props.js';
 import { makeSaloonArt } from '../buildings/saloonprops.js';
 import { loadHands, setHands, getHands, makeHandPose } from '../../src/handpose.js';
-import { PLAYERS, ELBOW_MOST, FINGERS, BONE_GROUPS, cleanHands, handsText, jointsOf, boneWord, setJoint, getJoint, resetBones, resetPlayer, resetAll, copyPose, copyClip, handBones, armBones, HAND_CM, getSize, setSize } from '../../src/handplan.js';
+import { PLAYERS, LIFTS, ELBOW_MOST, FINGERS, BONE_GROUPS, cleanHands, handsText, jointsOf, boneWord, setJoint, getJoint, resetBones, resetPlayer, resetAll, copyPose, copyClip, handBones, armBones, HAND_CM, getSize, setSize } from '../../src/handplan.js';
 
 const $ = (id) => document.getElementById(id);
 const GAME = new URL('../../', import.meta.url).href;
@@ -38,6 +40,7 @@ const camera = new THREE.PerspectiveCamera(35, 1, 0.03, 60);
 const controls = new OrbitControls(camera, canvas); controls.enableDamping = true; controls.minDistance = 0.12;
 
 const state = { who: 'pianist', clip: 'Play_Piano', frozen: true, time: 0.6, speed: 1, tab: 'bones', open: true, group: 'handL', bone: 'WristL', prop: null, overlay: true, dirty: false, hat: true };
+const FRET_OF = { bassist: 'bass', fiddler: 'fiddle', banjo: 'banjo' };
 const made = {};   // who -> { p (the person), H (the pose's layer) }
 let DATA = cleanHands({}), saveWord = '';
 const cur = () => made[state.who], action = () => cur().p.person.actions[state.clip], clipLen = () => { const a = action(); return a ? a.getClip().duration : 1; };
@@ -46,17 +49,21 @@ async function build() {
   const folk = await loadFolk(GAME + 'models/people/');
   const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
   await Promise.all([['m', 'clips_stage_m.glb'], ['f', 'clips_stage_f.glb']].map(([b, f]) => loader.loadAsync(folk.dir + f).then((g) => folk.addClips(b, g.animations))));
+  addBassClips(folk);
   await loadHands(GAME); DATA = cleanHands(getHands()); setHands(DATA);
-  const looks = { pianist: STAGE.pianist, drummer: STAGE.drummer, fiddler: STAGE.fiddler, banjo: STAGE.banjoist, harpist: STAGE.harpist };
+  const looks = { pianist: STAGE.pianist, drummer: STAGE.drummer, fiddler: STAGE.fiddler, banjo: STAGE.banjoist, harpist: STAGE.harpist, bassist: STAGE.bassist };
   for (const who of Object.keys(PLAYERS)) {
     const p = makePerson(folk, looks[who]); p.root.traverse((o) => { if (o.isMesh) o.castShadow = false; });
     let props = {}, harp = null;
     if (who === 'fiddler') { const g = holdFiddleOn(p); props = { fiddle: g.fiddle, bow: g.bow }; }
     if (who === 'banjo') { const g = holdBanjoOn(p); props = { banjo: g.banjo, stool: g.stool }; }
     if (who === 'harpist') { const h = makeHarmonicaModel(STAGE.harp); scene.add(h); props = { harmonica: h }; harp = STAGE.harp; }
-    if (who === 'drummer') { const g = holdDrumsOn(p); props = { stool: g.stool, stickL: g.stickL, stickR: g.stickR }; }
+    if (who === 'drummer') { const g = holdDrumsOn(p); props = { stool: g.stool, stickL: g.stickL, stickR: g.stickR }; var drumParts = g.parts; }
+    if (who === 'bassist') { const g = holdBassOn(p); props = { bass: g.bass }; }
     made[who] = { p, H: makeHandPose(p, who, { props, harp }), props };
-    if (who === 'drummer') made[who].drums = makeDrumHands(p, made[who].H);
+    if (FRET_OF[who]) made[who].fret = makeFretHands(p, made[who].H, FRET_OF[who]);
+    if (who === 'bassist') made[who].pluck = makeBassPluck(p, made[who].H, made[who].fret);
+    if (who === 'drummer') made[who].drums = makeDrumHands(p, made[who].H, drumParts);
     made[who].play = makePlayHands(p, made[who].H, who);
     if (who === 'pianist') { p.root.add(await makePiano()); made[who].keys = makePianoHands(p, made[who].H); }
     p.root.visible = false; scene.add(p.root);
@@ -72,7 +79,7 @@ async function makePiano() {
 }
 function showWho(who, clip = PLAYERS[who].clips[0]) {
   for (const k of Object.keys(made)) { made[k].p.root.visible = k === who; if (made[k].props.harmonica) made[k].props.harmonica.visible = k === who; }
-  state.who = who; state.prop = Object.keys(PLAYERS[who].props)[0]; showClip(clip); look('whole'); paintMenu();
+  state.lift = null; state.who = who; state.prop = Object.keys(PLAYERS[who].props)[0]; showClip(clip); look('whole'); paintMenu();
 }
 function showClip(name) {
   state.clip = name; const P = cur().p.person;
@@ -83,26 +90,39 @@ function showClip(name) {
 function pose(dt) {
   const m = cur(), a = action();
   m.H.before();
-  if (state.frozen) { a.paused = false; a.time = state.time; m.p.update(0); }
+  const songOn = song.on && !state.frozen;
+  if (m.fret && songOn) { song.tick(dt * state.speed); m.fret.before(song.now, dt * state.speed, song.events, 1); if (m.pluck) m.pluck.before(song.now, dt * state.speed, song.events, 1); }
+  else if (m.fret) m.fret.before(0, 0, null, 0);
+  if (state.lift != null && LIFTS[state.who]) {   // (the lift, by how far through it is: as the stage does it, src/stage.js between2)
+    const L = LIFTS[state.who], u = state.lift * state.lift * (3 - 2 * state.lift), A = m.p.person.actions;
+    if (!m.lifted) { m.lifted = true; m.H.captureLift(); m.H.before(); }
+    for (const n of [L.rest, L.play]) { A[n].play(); A[n].stopFading(); A[n].paused = false; A[n].setEffectiveWeight(n === L.play ? u : 1 - u); A[n].time = A[n].getClip().duration * 0.15; }
+    m.H.setLift(state.lift); m.p.update(0);
+  } else if (state.frozen) { a.paused = false; a.time = state.time; m.p.update(0); }
   else { a.paused = false; m.p.update(dt * state.speed); state.time = a.time; }
   m.H.after();
   if (m.play && !state.frozen) m.play.update();
+  if (state.lift == null) m.H.setLift(null);
+  if (m.fret) { m.fret.after(song.now); if (m.pluck && songOn) m.pluck.after(song.now); }
   if (m.keys) { if (song.on && !state.frozen) { song.tick(dt * state.speed); } m.keys.update(song.now, song.on ? dt * state.speed : 0, song.on ? song.events : null, song.on ? 1 : 0); }
   // (frozen with no song: the file's pose itself, the stick on the skin, so a slider or a rig works on the numbers as they are)
   if (m.drums && (song.on || !state.frozen)) { if (song.on && !state.frozen) song.tick(dt * state.speed); const A = action(); m.drums.update(song.now, song.on ? song.events : null, state.clip === 'Play_Box' ? 1 : 0, !song.on); }
+  else if (m.drums) m.drums.foot(0, true, 1);
   m.p.root.updateMatrixWorld(true);
   paintOverlay();
 }
 // THE SONG'S NOTES, no sound: the stage music's own tune for the song, on a clock of the lab's, into the same hands
 const song = {
   on: false, id: SONGS[0].id, now: 0, events: [], tune: null, made: 0, beat: 1, line: 16,
-  start(id) { const S = SONGS.find((x) => x.id === id) || SONGS[0]; song.id = S.id; song.tune = S.tune(7, { intro: true, fiddle: true, banjo: true }); song.drum = makeBoxPart(S.id, 7); song.events = []; song.now = 0; song.made = 0; song.beat = S.beat; song.line = S.bar * 4; song.on = true; song.tick(0); },
+  start(id) { const S = SONGS.find((x) => x.id === id) || SONGS[0]; song.id = S.id; song.tune = S.tune(7, { intro: true, fiddle: true, banjo: true }); song.drum = makeBoxPart(S.id, 7); song.events = []; song.accents = { cym: 0 }; song.now = 0; song.made = 0; song.bar = S.bar; song.beat = S.beat; song.line = S.bar * 4; song.on = true; song.tick(0); },
   stop() { song.on = false; song.events = []; },
   tick(dt) {
     song.now += dt;
     while (song.made * song.line * song.beat < song.now + 3) {
-      for (const e of song.tune()) if (e.what === 'piano') song.events.push({ at: e.beat * song.beat, what: 'piano', midi: e.midi, len: e.len });
-      for (const e of song.drum()) song.events.push({ at: e.beat * song.beat, what: 'box', hit: e.hit, vel: e.vel });
+      const T = song.tune();
+      for (const e of T) if (e.what === 'piano') song.events.push({ at: e.beat * song.beat, what: 'piano', midi: e.midi, len: e.len });
+        else if (e.what === 'fiddle' || e.what === 'banjo') song.events.push({ at: e.beat * song.beat, what: e.what, midi: e.midi, len: (e.lenBeats || 1) * song.beat, ...(e.strum ? { strum: e.strum } : {}) });
+      for (const e of song.drum()) { const at = e.beat * song.beat; song.events.push({ at, what: 'box', hit: e.hit, vel: e.vel, cymbal: accentDue({ hit: e.hit, vel: e.vel, at }, song.accents) }); }
       song.made++; song.events.sort((a, b) => a.at - b.at);
       if (song.events.length > 400) song.events.splice(0, song.events.length - 400);
     }
@@ -326,7 +346,8 @@ function clipPane() {
     <div class="ha-now" id="frameNow"></div>
     ${row('time', 'Time (s)', 0, +len.toFixed(2), 0.01, +state.time.toFixed(2))}${row('speed', 'Playing speed', 0.1, 1.5, 0.05, state.speed)}
     <div class="ha-h">Look at</div><div class="ha-btns">${[['whole', 'The player'], ...(state.who === 'pianist' ? [['keys', 'The keys']] : []), ['L', 'Left hand'], ['R', 'Right hand'], ['head', 'The head'], ['back', 'From behind']].map(([k, l]) => `<button class="ha-btn" data-look="${k}">${l}</button>`).join('')}${btn('toggleBones', state.overlay ? 'Hide the bones' : 'Show the bones')}${btn('toggleHat', state.hat ? 'Hide the hat' : 'Show the hat')}</div>
-    ${state.who === 'pianist' || state.who === 'drummer' ? `<div class="ha-h">${state.who === 'pianist' ? 'His hands on the keys' : 'His sticks on the drums'}, from a song's notes</div><label class="ha-row"><span>Song</span><select class="ha-sel" id="songPick" style="grid-column: 2 / -1">${SONGS.map((s) => `<option value="${s.id}"${s.id === song.id ? ' selected' : ''}>${s.name}</option>`).join('')}</select></label><div class="ha-btns">${btn('songGo', song.on ? 'Stop the notes' : 'Play the notes')}${''}</div>` : ''}
+    ${LIFTS[state.who] ? `<div class="ha-h">The lift: side to ${state.who === 'harpist' ? 'mouth' : 'chin'}</div>${row('lift', 'How far (off: the clip)', 0, 1, 0.02, state.lift == null ? 0 : state.lift)}<div class="ha-btns">${btn('liftOff', 'Off')}</div>` : ''}
+    ${state.who === 'pianist' || state.who === 'drummer' || FRET_OF[state.who] ? `<div class="ha-h">${state.who === 'pianist' ? 'His hands on the keys' : state.who === 'drummer' ? 'His sticks on the drums' : 'His fret hand'}, from a song's notes</div><label class="ha-row"><span>Song</span><select class="ha-sel" id="songPick" style="grid-column: 2 / -1">${SONGS.map((s) => `<option value="${s.id}"${s.id === song.id ? ' selected' : ''}>${s.name}</option>`).join('')}</select></label><div class="ha-btns">${btn('songGo', song.on ? 'Stop the notes' : 'Play the notes')}${''}</div>` : ''}
     <div class="ha-h">Use this clip's pose on</div><div class="ha-btns">${others.map((c) => `<button class="ha-btn" data-copyto="${c}">${c.replace(/_/g, ' ')}</button>`).join('')}</div>
     <p class="ha-note">Each clip keeps its own numbers, added on top of it. Drag to turn the view, W A S D to fly, Space up, C down.</p>`;
 }
@@ -360,6 +381,7 @@ function refreshValues() {
 function setK(k, v) {
   const [a, b] = k.split(':');
   if (a === 'time') { state.time = Math.max(0, Math.min(clipLen(), v)); pose(0); refreshValues(); return; }
+  if (a === 'lift') { state.lift = v; pose(0); return; }
   if (a === 'speed') { state.speed = v; return; }
   beginEdit();
   if (a === 'size') setSize(DATA, state.who, v);
@@ -402,6 +424,7 @@ document.addEventListener('click', async (e) => {
   const ct = t.closest('[data-copyto]'); if (ct) { edit(() => copyClip(DATA, state.who, state.clip, ct.dataset.copyto)); return; }
   const side = state.bone.slice(-1);
   switch (t.id) {
+    case 'liftOff': state.lift = null; showClip(state.clip); paintDrawer(); return;
     case 'songGo': if (song.on) song.stop(); else { song.start(song.id); state.frozen = false; } pose(0); paintDrawer(); return;
     case 'freeze': state.frozen = !state.frozen; if (state.frozen) state.time = action().time; paintDrawer(); return;
     case 'prev': case 'next': state.frozen = true; state.time = (state.time + (t.id === 'next' ? FRAME : -FRAME) + clipLen()) % clipLen(); pose(0); paintDrawer(); return;
@@ -486,7 +509,7 @@ window.HA = {
     return { near: +moved[0].toFixed(4), mid: +moved[1].toFixed(4), far: +moved[2].toFixed(4), counts: ids.map((l) => l.length), ok: moved[0] < moved[1] && moved[1] < moved[2] };
   },
   size: (cm) => { const v = setSize(DATA, state.who, cm); changed(); return v; }, handCm: () => cur().H.handLength() * cur().H.handScale(), fullCm: () => cur().H.handLength(),
-  rootMatrix: () => cur().p.root.matrixWorld.toArray(), keyX, keyWidth, KEYBOARD, song, keys: () => cur().keys, drums: () => cur().drums,
+  rootMatrix: () => cur().p.root.matrixWorld.toArray(), keyX, keyWidth, KEYBOARD, song, keys: () => cur().keys, drums: () => cur().drums, fret: () => cur().fret, pluck: () => cur().pluck,
   pin: (S, prop) => { const c = DATA.players[state.who]?.[state.clip]; if (c?.pins?.[S]) pinHand(S); if (prop) pinHand(S, prop); changed(); },
   // a prop into a place: world matrix (16 numbers), held by a bone, or riding another prop
   placeProp: (name, M16, { bone = null, on = null, slide = 0 } = {}) => {
@@ -495,6 +518,7 @@ window.HA = {
     else if (on) { e.on = on; if (slide) e.slide = slide; e.at = new THREE.Matrix4().copy(m.H.propWorld(on)).invert().multiply(W).toArray(); }
     changed();
   },
+  lift: (k) => { state.lift = k; if (k == null) showClip(state.clip); else pose(0); },
   step: (dt) => pose(dt),
   hat: (on) => setHat(on),
   look, cam: (p, t) => { camera.position.set(...p); controls.target.set(...t); controls.update(); }, overlay: (on) => { state.overlay = on; paintOverlay(); }, open: (on) => { state.open = on; paintMenu(); }, tab: (t) => { state.tab = t; state.open = true; paintMenu(); }, pick: (b) => { pick(b); paintDrawer(); },

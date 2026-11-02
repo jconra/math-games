@@ -27,10 +27,14 @@ function plank(g, x, y, w, h, base, R) {
   for (let i = 0; i < 3; i++) { const kx = x + R() * w, ky = y + R() * h; g.fillStyle = 'rgba(30,18,10,0.35)'; g.beginPath(); g.ellipse(kx, ky, 4 + R() * 7, 2 + R() * 3, 0, 0, 7); g.fill(); }   // knots
 }
 // burnt in with an iron, letter by letter: each a little off the line, dark at its middle, a scorch round it
-function burnt(g, text, x, y, w, h, R) {
+const TAIL = -0.1, POINT = 0.17, POST_CLEAR = 0.1;   // (a board's tail behind the post, its point, and how far out the post stops hiding it)
+// where a board's lettering sits along its strip (0..1): past the post and short of the point. Both faces use this same stretch of
+// the board, so the post hides no letters from behind
+const textSpan = (L) => [(POST_CLEAR - TAIL) / (L - TAIL), (L - POINT - TAIL) / (L - TAIL)];
+function burnt(g, text, x, y, w, h, R, from, to) {
   const size = h * 0.56; g.font = `400 ${size}px Rye, Bitter, Georgia, serif`; g.textBaseline = 'middle'; g.textAlign = 'left';
-  const gap = size * 0.08, width = [...text].reduce((n, c) => n + g.measureText(c).width + gap, -gap), k = Math.min(1, (w * 0.86) / width);
-  let cx = x + w * 0.1;
+  const gap = size * 0.08, width = [...text].reduce((n, c) => n + g.measureText(c).width + gap, -gap), room = (to - from) * w, k = Math.min(1, room / width);
+  let cx = x + from * w + (room - width * k) / 2;
   for (const c of text) {
     const dy = (R() - 0.5) * size * 0.07, a = (R() - 0.5) * 0.05;
     g.save(); g.translate(cx, y + h / 2 + dy); g.rotate(a); g.scale(k, 1);
@@ -41,7 +45,7 @@ function burnt(g, text, x, y, w, h, R) {
 export function signTexture(boards = SIGN_BOARDS) {
   const S = 512, cv = document.createElement('canvas'); cv.width = cv.height = S; const g = cv.getContext('2d'), R = rnd(23);
   const tones = ['#a8957c', '#9c8a72', '#b09c82', '#a39078'];
-  boards.slice(0, POST_ROW).forEach((b, i) => { plank(g, 0, i * ROW, S, ROW, tones[i % 4], R); burnt(g, b.text, 0, i * ROW, S, ROW, R); });
+  boards.slice(0, POST_ROW).forEach((b, i) => { plank(g, 0, i * ROW, S, ROW, tones[i % 4], R); burnt(g, b.text, 0, i * ROW, S, ROW, R, ...textSpan(b.len || 0.9)); });
   plank(g, 0, POST_ROW * ROW, S, S - POST_ROW * ROW, '#7a6a57', R);
   const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; t.wrapS = THREE.RepeatWrapping; return t;
 }
@@ -50,11 +54,11 @@ const stripV = (row, f) => 1 - (row * ROW + 2 + f * (ROW - 4)) / 512;
 // one board: a plank with a sawn tail and a rough point, as a slab (front, back and edge), its uvs in its strip; lettering reads
 // from either side
 function boardGeo(b, row, R) {
-  const L = b.len || 0.9, H = 0.17, D = 0.028, tail = -0.1, out = [[tail + (R() - 0.5) * 0.02, -H / 2], [L - 0.17, -H / 2 + (R() - 0.5) * 0.01], [L, (R() - 0.5) * 0.02], [L - 0.17, H / 2 + (R() - 0.5) * 0.01], [tail + (R() - 0.5) * 0.02, H / 2]];
+  const L = b.len || 0.9, H = 0.17, D = 0.028, tail = TAIL, [from, to] = textSpan(L), out = [[tail + (R() - 0.5) * 0.02, -H / 2], [L - POINT, -H / 2 + (R() - 0.5) * 0.01], [L, (R() - 0.5) * 0.02], [L - POINT, H / 2 + (R() - 0.5) * 0.01], [tail + (R() - 0.5) * 0.02, H / 2]];
   const P = [], N = [], UV = [], I = [], uOf = (x) => (x - tail) / (L - tail);
   const add = (x, y, z, nx, ny, nz, u, v) => { P.push(x, y, z); N.push(nx, ny, nz); UV.push(u, v); return P.length / 3 - 1; };
   for (const s of [1, -1]) {
-    const v0 = out.map(([x, y]) => add(x, y, s * D / 2, 0, 0, s, s > 0 ? uOf(x) : 1 - uOf(x), stripV(row, 0.5 - y / H)));
+    const v0 = out.map(([x, y]) => add(x, y, s * D / 2, 0, 0, s, s > 0 ? uOf(x) : from + to - uOf(x), stripV(row, 0.5 - y / H)));
     for (let i = 1; i < out.length - 1; i++) I.push(...(s > 0 ? [v0[0], v0[i], v0[i + 1]] : [v0[0], v0[i + 1], v0[i]]));
   }
   for (let i = 0; i < out.length; i++) {

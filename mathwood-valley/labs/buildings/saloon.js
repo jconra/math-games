@@ -5,7 +5,7 @@
 // blocks wraps the corner under one continuous balcony, which sits on the porch roof: turned posts with curved knee
 // brackets below, a railing of turned balusters and ball-topped newel posts above. On each street face a wide doorway
 // with a pair of louvred batwing doors and a lantern hung over it, and big display windows with SALOON in gold leaf on
-// the glass. After Dad's concept pictures (outside and inside).
+// the glass. After the game's maker's concept pictures (outside and inside).
 //
 // Laid out to be walked into: a double-height hall. A long dark bar down the left (the side street's wall) with a brass
 // foot rail, stools, brass tap towers and glass lamps on its top; behind it a tall back-bar with an arched mirror,
@@ -1472,7 +1472,7 @@ export function buildSaloon(recipeIn = {}, env = {}) {
   mark('pictures');
 
   // THE STAGE'S SPOTS (the piano, keys toward the stage's middle and the audience, as the town's stage has it)
-  const keysRot = -1.091, pianoP = { x: 1.55, z: -4.25 }, kd = [Math.sin(keysRot), Math.cos(keysRot)];
+  const keysRot = -1.091, pianoP = { x: 1.55, z: -4.65 }, kd = [Math.sin(keysRot), Math.cos(keysRot)];
   const stool = [pianoP.x + kd[0] * 0.82, pianoP.z + kd[1] * 0.82];   // (close enough for elbows that bend: src/pianoplan.js KEYBOARD.front)
   const piano = { x: pianoP.x, z: pianoP.z, rot: keysRot, stool };
 
@@ -1582,17 +1582,20 @@ export function buildSaloon(recipeIn = {}, env = {}) {
       // little back from her and turned toward the middle), in the saloon's own centred frame
       stage: {
         piano: { x: +(stool[0] + OX).toFixed(3), y: STG, z: +(stool[1] + OZ).toFixed(3), rot: +Math.atan2(-kdir[0], -kdir[1]).toFixed(4) },
-        harmonica: { x: +(-0.55 + OX).toFixed(3), y: STG, z: +(-3.35 + OZ).toFixed(3), rot: 0.12 },
-        drummer: { x: +(-1.45 + OX).toFixed(3), y: STG, z: +(-3.75 + OZ).toFixed(3), rot: 0.35 },
+        harmonica: { x: +(-1.55 + OX).toFixed(3), y: STG, z: +(-3.0 + OZ).toFixed(3), rot: 0.25 },
+        // (side-on at the back, facing across the stage toward the fiddler: from the hall, left to right, the harmonica player, him, his bass drum, the fiddler, each in a gap of their own)
+        drummer: { x: +(-1.85 + OX).toFixed(3), y: STG, z: +(-4.9 + OZ).toFixed(3), rot: 1.3 },
         // the fiddler: standing at the stage's front beside the harmonica player, well clear of the piano, turned three
         // quarters to the hall toward the piano's side (his bow arm works over the open front of the stage, his fiddle
         // points out toward the piano's end; a critic: he stood at the keyboard, his bow arm along the piano's lid)
         // (a critic: his scroll overlapped the pianist's head from the floor: moved about half a metre clear, the harmonica player a step over to make room)
-        fiddler: { x: +(-0.02 + OX).toFixed(3), y: STG, z: +(-3.0 + OZ).toFixed(3), rot: 0.38 },
+        fiddler: { x: +(-0.62 + OX).toFixed(3), y: STG, z: +(-3.0 + OZ).toFixed(3), rot: 0.8 },
         // the banjo player: on his stool at the stage's front right, between the fiddler and the piano's end, turned in
         // toward the band and the hall's middle (his banjo's neck reaches out to his left along the front, in front of
         // the right drape; his feet short of the footlights; his back clear of the piano)
-        banjo: { x: +(1.9 + OX).toFixed(3), y: STG, z: +(-3.35 + OZ).toFixed(3), rot: -1.0 },
+        banjo: { x: +(1.9 + OX).toFixed(3), y: STG, z: +(-3.75 + OZ).toFixed(3), rot: -1.0 },
+        // the bass player: at the back of the stage (the game's maker: "I was imagining the bass player in the back"), seen from the hall between the fiddler and the pianist
+        bass: { x: +(0.02 + OX).toFixed(3), y: STG, z: +(-4.75 + OZ).toFixed(3), rot: 0.15 },
         floor: STG, front: P3(0, STG, SZ1), rect: { x0: SX0 + OX, x1: SX1 + OX, z0: SZ0 + OZ, z1: SZ1 + OZ }, pianoAt: P3(pianoP.x, STG, pianoP.z), pianoRot: keysRot,
       },
       // THE CHALKBOARD: the board's middle and the way it faces; where the teacher stands (beside it, turned half to the

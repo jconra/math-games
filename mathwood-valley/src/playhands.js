@@ -18,7 +18,7 @@ export function makePlayHands(person, H, who) {
     const dur = a.getClip().duration, beat = (a.time / dur) * 4, beatLen = dur / 4 / Math.max(0.05, a.getEffectiveTimeScale() || 1);
     if (who === 'harpist') {
       const k = harpOpen(beat) * w, P = PLAY.harp;
-      for (const s of ['R', 'L']) { turn('Wrist' + s, 'tip', -P.wrist[s] * k); for (const f of ['Index', 'Middle', 'Ring', 'Pinky']) curl(s, f, -P.curl[s] * k); }
+      for (const s of ['R', 'L']) { turn('Wrist' + s, 'tip', -P.wrist[s] * k); for (const f of ['Index', 'Middle']) curl(s, f, -P.curl[s] * P.onBar * k); for (const f of ['Ring', 'Pinky']) curl(s, f, -P.curl[s] * k); }
     } else if (who === 'banjo') {
       const k = strike(beat, beatLen) * w, P = PLAY.banjo;
       turn('WristR', 'tip', P.wrist * (k - 0.5));

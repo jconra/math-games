@@ -10,7 +10,7 @@
 // resting over the others. Nothing in it is taken from any recording: only the SOUND of the two instruments was measured
 // (overtones, swell and fade times, wobble rates, breath; see ~/pw/bandit-math/sound/REPORT.md).
 //
-// Since the band moved into the saloon a drummer plays with them (the part's still called the box, its first instrument: he has drums now, src/drums.js, but the sound's as the crate's) (THE BOX below:
+// Since the band moved into the saloon a drummer plays with them (the part's still called the box, its first instrument: he has drums now, src/drums.js, but the sound's as the crate's, and the crash on an accent) (THE BOX below:
 // a thump in the middle of its face, a slap at its top edge, a light finger tap between), noise through filters, no
 // tones. Each song has its own box part, made by dice of its own, so the piano and the harmonica play just as they did.
 //
@@ -38,9 +38,11 @@
 //                          last EVENTS_KEPT are kept (the band can play for hours), an offline render keeps them all
 //   M.played               how many notes have been scheduled in all
 //   notePatch(patch, opts) the note as patch data (exported for the render rig)
+//   loadCrash(ctx) -> buffer; crash: () => that buffer or null: the crash on the accents, see THE CRASH
 //   boxNote(hit, patches)  one hit on the box as patch data: { hit: 'thump' | 'slap' | 'tap', vel, tone }
 //   makeBoxPart(song, seed, { intro }) -> nextLine   the box's part, a line (four bars) at a time, as the tunes are made
 import { playBanjoSynth } from './banjosynth.js';
+import { accentDue } from '../drumplan.js';
 import { playPatch, voicePatch, PATCH_PRESETS } from './patch.js';
 
 export const BEAT = 0.75;                 // seconds a beat in the first song (80 a minute); the performers' clips are four beats long
@@ -137,6 +139,22 @@ export const FIDDLE_SAMPLES = [   // [name, MIDI note, cents sharp as measured, 
 ];
 const FIDDLE_LEVEL = 0.66;                // the samples' level (0.4 measured even with the harmonica; the game's maker heard it at 75%: 4/3 up, then a quarter more)
 const audioExt = () => { try { const el = document.createElement('audio'); if (/^(probably|maybe)$/.test(el.canPlayType('audio/ogg; codecs="vorbis"'))) return '.ogg'; } catch (e) { /* no audio element */ } return '.m4a'; };
+// THE CRASH: one recording (sounds/stage_crash, credited in sounds/CREDITS.md), mono so it can share the box's bus without lifting the hits under it, on the
+// accents only (src/drumplan.js ACCENT), when his right stick strikes the cymbal. Not there yet: no crash, the song doesn't wait for it.
+export const CRASH = { gain: 0.25, send: 0.03, len: 1.3 };   // (as loud as the stereo recording 8 dB down from 0.32 in the take chosen: going mono through a stereo panner takes 5.8 dB off, so this adds it back; worked out from the recording and the panner's formula)
+export async function loadCrash(ctx, { base = new URL('../../sounds/', import.meta.url).href, ext = null } = {}) {
+  const r = await fetch(`${base}stage_crash${ext || audioExt()}`);
+  if (!r.ok) throw new Error(`crash: ${r.status}`);
+  return ctx.decodeAudioData(await r.arrayBuffer());
+}
+function playCrash(ctx, buf, dest, room, at) {
+  const src = ctx.createBufferSource(), g = ctx.createGain(); src.buffer = buf; g.gain.value = CRASH.gain;
+  src.connect(g).connect(dest);
+  let se = null; if (room) { se = ctx.createGain(); se.gain.value = CRASH.send; g.connect(se).connect(room); }
+  src.start(at);
+  src.onended = () => { g.disconnect(); if (se) se.disconnect(); };
+  return { stop: (t) => { try { src.stop(t); } catch (e) { /* already over */ } } };
+}
 export async function loadFiddle(ctx, { base = new URL('../../sounds/fiddle/', import.meta.url).href, ext = null } = {}) {
   const e = ext || audioExt();
   return Promise.all(FIDDLE_SAMPLES.map(async ([name, midi, cents, speak]) => {
@@ -1230,10 +1248,11 @@ export const songOf = (id) => SONGS.find((s) => s.id === id) || CANDIDATES.find(
 // song: one of SONGS' ids ('easy' when left out: the first tune, as it always was); intro: false starts the harmonica in
 // the first line (a song asked for: the band strikes it up at once) instead of the piano's line alone; box: the
 // drummer's notes go there (none: the band without him)
-export function makeStageMusic(ctx, { harp, piano, box = null, room = null, seed = 1, patches = PATCH_PRESETS, song = 'easy', intro = true, fiddle = null, fiddleKit = null, pianoKit = null, banjo = null, banjoKit = null, banjoSynth = false, strumTo = null, baked = null, fiddleComing = false } = {}) {
+export function makeStageMusic(ctx, { harp, piano, box = null, room = null, seed = 1, patches = PATCH_PRESETS, song = 'easy', intro = true, fiddle = null, fiddleKit = null, pianoKit = null, banjo = null, banjoKit = null, banjoSynth = false, strumTo = null, baked = null, fiddleComing = false, crash = null } = {}) {
   const S = songOf(song), BL = S.beat, LINE = S.bar * 4;   // (seconds a beat; beats a line of four bars)
   const tune = S.tune(seed, { intro, fiddle: !!fiddleKit || fiddleComing, banjo: !!banjoKit || banjoSynth }), drum = box ? makeBoxPart(S.id, seed, { intro }) : null, queue = [], events = [], harpSpans = [], fiddleSpans = [], voices = [];
   let origin = null, made = 0, timer = null, running = false;
+  const accents = {};
   const offline = typeof ctx.startRendering === 'function';
   const secs = (beat) => origin + beat * BL;
   // (a line: the tune's notes and the box's; a tune's 'hush' spans (stop-time: the band hits the first beat and lets
@@ -1248,7 +1267,10 @@ export function makeStageMusic(ctx, { harp, piano, box = null, room = null, seed
     if (ev.what === 'box') {
       const hit = boxNote(ev, patches);
       keep((baked && baked.playBox(ctx, box, room, ev, hit, at)) || playPatch(ctx, null, box, room, hit, null, { at }), at, at + 0.35);
-      events.push({ at, what: 'box', hit: ev.hit, vel: ev.vel });
+      if (accents.cym == null) accents.cym = origin;   // (none in the song's first half minute: on his first hit he has only just taken up his sticks and can't be at the cymbal)
+      const cymbal = accentDue({ hit: ev.hit, vel: ev.vel, at }, accents), buf = cymbal && crash && crash();   // (crash: () => the recording, or nothing yet)
+      if (buf) keep(playCrash(ctx, buf, box, room, at), at, at + CRASH.len);
+      events.push({ at, what: 'box', hit: ev.hit, vel: ev.vel, cymbal, crashed: !!buf });
     } else if (ev.what === 'piano') {
       if (pianoKit) keep(playPiano(ctx, pianoKit, piano, room, { at, midi: ev.midi, len: ev.len, vel: ev.vel, gain: ev.gain }), at, at + ev.len);   // (the sampled upright)
       else {
@@ -1328,10 +1350,11 @@ export function makeStageMusic(ctx, { harp, piano, box = null, room = null, seed
     beat() { return origin == null ? null : (ctx.currentTime - origin) / BL; },
     harmonicaAt(t = ctx.currentTime) { for (const [a, b] of harpSpans) if (t >= a && t < b) return true; return false; },
     // the next time the harmonica starts after t (or null): the player lifts it to the mouth a moment before
-    nextHarmonica(t = ctx.currentTime) { let best = null; for (const [a] of harpSpans) if (a >= t && (best == null || a < best)) best = a; return best; },
+    // (the notes not made yet count too, so the player knows a whole line ahead)
+    nextHarmonica(t = ctx.currentTime) { let best = null; for (const [a] of harpSpans) if (a >= t && (best == null || a < best)) best = a; if (best == null) for (const e of queue) if ((e.what === 'harp' || (e.what === 'fiddle' && !fiddleKit && !e.doubled)) && secs(e.beat) >= t) { best = secs(e.beat); break; } return best; },
     // the same for the fiddle (its samples' notes): the fiddler plays while one sounds, lifts the fiddle a moment before
     fiddleAt(t = ctx.currentTime) { for (const [a, b] of fiddleSpans) if (t >= a && t < b) return true; return false; },
-    nextFiddle(t = ctx.currentTime) { let best = null; for (const [a] of fiddleSpans) if (a >= t && (best == null || a < best)) best = a; return best; },
+    nextFiddle(t = ctx.currentTime) { let best = null; for (const [a] of fiddleSpans) if (a >= t && (best == null || a < best)) best = a; if (best == null && fiddleKit) for (const e of queue) if (e.what === 'fiddle' && secs(e.beat) >= t) { best = secs(e.beat); break; } return best; },
   };
   return M;
 }

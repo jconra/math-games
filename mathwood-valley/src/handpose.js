@@ -19,12 +19,15 @@
 // A HAND'S SIZE (the file's sizes, cm): the Wrist bones scaled, so the palm and fingers shrink together round the wrist
 // joint; anything the wrist carries (the fiddle, the bow) has the scale taken back off, so it stays its own size and place.
 //   for the lab: H.elbow(side) -> { clip, now } degrees from straight; H.axis(bone, joint) -> its axis in the bone's frame;
+//   H.captureLift() (once the clips are in: the arms as the rest and play clips have them); H.setLift(k or null): 0 at the side
+//   .. 1 up at the mouth or chin, the arms worked through by src/handplan.js LIFTS with the instrument in the hand all the way;
+//   H.pinShift[S] = [x, y, z]: that hand's pin moved along its prop (a fret hand going up the neck), set before after()
 //   H.twistAxis(side); H.reach(side, target, clip) the wrist to a world point (writes the shoulder and the elbow's numbers);
 //   H.propWorld(name) -> Matrix4; H.props; H.handLength() -> the model's hand in cm at full size; H.handScale()
 // A THUMB'S LENGTH: the model's thumbs nearly reach the fingertips of their own hand. THUMB_K shortens the band's, bone scale
 // on Thumb1 (a real thumb reaches about the middle of the index finger's first segment).
 import * as THREE from 'three';
-import { PLAYERS, ELBOW_MOST, FINGERS, cleanHands, jointsOf, setJoint, getJoint } from './handplan.js';
+import { PLAYERS, LIFTS, ELBOW_MOST, FINGERS, cleanHands, jointsOf, setJoint, getJoint } from './handplan.js';
 import { placeHarmonicaOn } from './bandgear.js';
 
 let DATA = { v: 2, players: {} }, LOADING = null;
@@ -40,7 +43,7 @@ const TWISTS = [0.2, 0.4, 0.6, 0.8, 1];   // how much of the twist each twist bo
 const A = v3(), B = v3(), C = v3(), D = v3(), Q = new THREE.Quaternion(), Q2 = new THREE.Quaternion(), Q3 = new THREE.Quaternion(), M = new THREE.Matrix4(), M2 = new THREE.Matrix4(), EU = new THREE.Euler();
 const F = new THREE.Vector3(0, 0, 1), U = new THREE.Vector3(0, 1, 0), X = new THREE.Vector3(1, 0, 0);
 const DEG = Math.PI / 180;
-export const THUMB_K = 0.8, THUMB_OWN = { harpist: 0.95 };   // (the harmonica player's reach under the instrument from the far side of a cupped hand)
+export const THUMB_K = 0.8, THUMB_OWN = { harpist: 1.25, fiddler: 0.95 };   // (the harmonica player's reach under the instrument from the far side of a cupped hand; the fiddler's under the bow's stick)
 
 // the skin's share of the forearm over the twist bones (this player's own copy of the two skin attributes)
 function addTwistBones(person, sides) {
@@ -225,7 +228,8 @@ export function makeHandPose(person, who, { props = {}, harp = null } = {}) {
       // (the share no clip spoke for stays at home; the rest blended, way and place)
       let sum = 0; for (const x of parts) sum += x.w;
       p.world.decompose(BP, BQ, A);
-      let got = Math.max(0, 1 - sum), used = false;
+      // (the harmonica has no home of its own, it hangs from the scene: while her Idle clip fades out, that share took it across the room. The clips that speak for it get the whole say.)
+      let got = name === 'harmonica' ? 0 : Math.max(0, 1 - sum), used = false;
       if (got > 0.001) used = true; else got = 0;
       for (const x of parts) {
         placePart(name, x, p.world, PW); PW.decompose(PP, PQ, A);
@@ -238,8 +242,71 @@ export function makeHandPose(person, who, { props = {}, harp = null } = {}) {
   }
   let lastWant = null;
   const PT = v3(), PQ2 = new THREE.Quaternion(), PQ3 = new THREE.Quaternion();
+  // THE LIFT: what each arm's bones are at either end, kept once; k: how far through (null: not lifting, the clips and pins as they are)
+  const LIFT = LIFTS[who] || null, CHAIN = (s) => ['Shoulder', 'UpperArm', 'LowerArm', 'Wrist'].map((n) => n + s).concat(FINGERS.flatMap((f) => [1, 2, 3, 4].map((i) => f + i + s)), [1, 2, 3].map((i) => 'Thumb' + i + s)).map((n) => Bn[n]).filter(Boolean);
+  const chains = {}, ends = { rest: {}, play: {}, mid: {} }; let liftK = null, liftReady = false;
+  for (const s of Object.keys(arms)) chains[s] = CHAIN(s);
+  const sm = (a, b, x) => { const u = Math.max(0, Math.min(1, (x - a) / (b - a))); return u * u * (3 - 2 * u); };
+  const armK = (s) => { const r = LIFT.share[s]; return Math.max(0, Math.min(1, (liftK - r[0]) / (r[1] - r[0]))); };
+  const RELP = v3(), RELQ = new THREE.Quaternion(), REL2 = v3(), RELQ2 = new THREE.Quaternion();
+  const fileClip = (clip) => { const pl = DATA.players && DATA.players[who]; return pl && pl[clip]; };
+  // the prop's play place: on its bone, or riding the prop before it
+  const playPlace = (name, out, refs) => {
+    const e = fileClip(LIFT.play).props[name];
+    if (e.on && refs[e.on]) { out.copy(refs[e.on]).multiply(M.fromArray(e.at)); const a = inner.actions[LIFT.play]; if (e.slide && a) out.multiply(M.makeTranslation(e.slide * Math.cos(a.time / a.getClip().duration * Math.PI * 4), 0, 0)); }
+    else H.holdFrame(e.bone, out).multiply(M.fromArray(e.at));
+    return out;
+  };
+  // an arm between its two ends, on top of the numbers just laid on: the turn from the live pose fades in and out at the ends, so a clip's own sway doesn't jump
+  function liftArm(s) {
+    const k = armK(s), u = k * k * (3 - 2 * k), f = Math.min(1, k * 8, (1 - k) * 8), R = ends.rest[s], Pl = ends.play[s], a = arms[s];
+    const Mi = ends.mid[s];
+    if (f > 0) chains[s].forEach((b, i) => { if (Mi && i < 3) { if (u < 0.5) Q.copy(R.q[i]).slerp(Mi[i], u * 2); else Q.copy(Mi[i]).slerp(Pl.q[i], u * 2 - 1); } else Q.copy(R.q[i]).slerp(Pl.q[i], u); b.quaternion.slerp(Q, f); });
+    const deg = R.twist + (Pl.twist - R.twist) * u, now = (fileClip(k > 0.5 ? LIFT.play : LIFT.rest)?.bones?.['LowerArm' + s]?.twist) || 0, d = now + (deg - now) * f;
+    for (const t of a.twists) t.b.quaternion.setFromAxisAngle(a.twistAxis, d * t.f * DEG);
+  }
+  function liftProps() {
+    const refs = {}, restE = fileClip(LIFT.rest).props, pins = fileClip(LIFT.play).pins, T = LIFT.turn;
+    for (const c of LIFT.carries) {
+      const k = armK(c.hand), a = arms[c.hand], pin = pins[c.hand], p = P[c.prop], ref = refs[c.prop] = new THREE.Matrix4();
+      playPlace(c.prop, ref, refs);
+      PP.fromArray(pin.at).applyMatrix4(ref); ref.decompose(BP, PQ, A); PQ.multiply(PQ2.fromArray(pin.q));
+      solveArm(a.up, a.lo, a.wr, PP, { qHand: PQ, weight: sm(0.55, 1, k) });
+      // the prop in the hand: its hold at the side turning into the hold at the top (the pin's own numbers, the other way about)
+      M.fromArray(restE[c.prop].at).decompose(RELP, RELQ, A);
+      RELQ2.fromArray(pin.q).invert(); REL2.fromArray(pin.at).negate().applyQuaternion(RELQ2);
+      const g = sm(T[0], T[1], k);
+      RELP.lerp(REL2, g); RELQ.slerp(RELQ2, g);
+      H.holdFrame('Wrist' + c.hand, p.world).multiply(M.compose(RELP, RELQ, ONE)); seat(p);
+    }
+    for (const c of LIFT.joins) {
+      const k = armK(c.hand), a = arms[c.hand], pin = pins[c.hand], pw = P[c.prop].world;
+      PP.fromArray(pin.at).applyMatrix4(pw); pw.decompose(BP, PQ, A); PQ.multiply(PQ2.fromArray(pin.q));
+      solveArm(a.up, a.lo, a.wr, PP, { qHand: PQ, weight: sm(0.45, 1, k) });
+    }
+  }
+  const lifting = () => liftReady && liftK != null && liftK > 0.001 && liftK < 0.999;
   const H = {
-    props: P,
+    props: P, pinShift: {},
+    // (once the clips are in) the arms' bones as the rest clip has them with its numbers, and as the play clip does
+    captureLift() {
+      if (!LIFT || !fileClip(LIFT.rest) || !fileClip(LIFT.play) || !inner.actions[LIFT.rest] || !inner.actions[LIFT.play]) return false;
+      liftK = null; const was = inner.curName;
+      for (const [end, clip] of [['rest', LIFT.rest], ['play', LIFT.play]]) {
+        H.before();
+        for (const n of [LIFT.rest, LIFT.play]) { const a = inner.actions[n]; a.play(); a.stopFading(); a.setEffectiveWeight(n === clip ? 1 : 0); a.time = a.getClip().duration * 0.15; a.paused = false; }
+        inner.mixer.update(0); H.after();
+        for (const s of Object.keys(arms)) {
+          ends[end][s] = { q: chains[s].map((b) => b.quaternion.clone()), twist: (fileClip(clip).bones?.['LowerArm' + s]?.twist) || 0 };
+          const m = end === 'rest' && LIFT.mid && LIFT.mid[s];
+          if (m) ends.mid[s] = ['UpperArm', 'LowerArm'].reduce((out, n) => { const i = n === 'UpperArm' ? 1 : 2, q = ends.rest[s].q[i].clone(), o = m[n] || {}; for (const j of Object.keys(o)) { if (!o[j]) continue; const ax = n === 'LowerArm' ? arms[s].hinge : axes.get(n + s)[j]; q.multiply(Q.setFromAxisAngle(ax, o[j] * DEG)); } out[i] = q; return out; }, [ends.rest[s].q[0].clone()]);
+        }
+      }
+      for (const n of [LIFT.rest, LIFT.play]) { const a = inner.actions[n]; a.setEffectiveWeight(n === was ? 1 : 0); if (n !== was) a.stop(); }
+      H.before(); inner.mixer.update(0);
+      liftReady = true; return true;
+    },
+    setLift(k) { liftK = k; },
     before() { if (!have) return; for (let i = 0; i < list.length; i++) list[i].quaternion.copy(saved[i]); },
     after() {
       for (let i = 0; i < list.length; i++) saved[i].copy(list[i].quaternion);
@@ -256,7 +323,9 @@ export function makeHandPose(person, who, { props = {}, harp = null } = {}) {
         A.subVectors(B, A); C.sub(B);   // (bendOf's shoulder, elbow, wrist: the upper arm's way, the forearm's way)
         D.crossVectors(A, C);
         if (a.clipBend > 8 && D.lengthSq() > 1e-8) a.hinge.copy(D.normalize().applyQuaternion(a.lo.getWorldQuaternion(Q).invert()));
-        else a.hinge.copy(axes.get('LowerArm' + s).bend);
+        // (near straight the arm's own plane says little: the hinge it last had stays. Going back to the file's axis here made the elbow leap across the arm whenever a clip's elbow crossed this line: the bass player's right arm, twice a loop)
+        else if (!a.hingeSet) a.hinge.copy(axes.get('LowerArm' + s).bend);
+        if (a.clipBend > 8) a.hingeSet = true;
       }
       for (const n of Object.keys(want.bones)) {
         const b = Bn[n], ax = axes.get(n); if (!b || !ax) continue;
@@ -274,6 +343,8 @@ export function makeHandPose(person, who, { props = {}, harp = null } = {}) {
         for (const t of a.twists) t.b.quaternion.setFromAxisAngle(a.twistAxis, deg * t.f * DEG);
         if (deg) a.wr.quaternion.premultiply(Q.setFromAxisAngle(a.twistAxis, deg * DEG));
       }
+      const lift = lifting();
+      if (lift) for (const s of Object.keys(arms)) liftArm(s);
       root.updateMatrixWorld(true);
       // the props: those on other props after those they ride
       const names = Object.keys(P);
@@ -282,18 +353,20 @@ export function makeHandPose(person, who, { props = {}, harp = null } = {}) {
         if (rides === (pass === 1)) placeProp(name, want);
       }
       // the hands kept on their instruments
-      for (const S of Object.keys(want.pins)) {
+      if (lift) liftProps();
+      else for (const S of Object.keys(want.pins)) {
         const a = arms[S]; if (!a) continue;
         let w = 0, got = false;
         for (const x of want.pins[S]) {
           const pr = P[x.pin.prop]; if (!pr) continue;
-          PW.copy(pr.world); PP.fromArray(x.pin.at).applyMatrix4(PW); PW.decompose(BP, PQ, A); PQ.multiply(PQ2.fromArray(x.pin.q));
+          const sh = H.pinShift[S];
+          PW.copy(pr.world); PP.fromArray(x.pin.at); if (sh) { PP.x += sh[0]; PP.y += sh[1]; PP.z += sh[2]; } PP.applyMatrix4(PW); PW.decompose(BP, PQ, A); PQ.multiply(PQ2.fromArray(x.pin.q));
           if (!got) { PT.copy(PP); PQ3.copy(PQ); got = true; w = x.w; } else { w += x.w; PT.lerp(PP, x.w / w); PQ3.slerp(PQ, x.w / w); }
         }
         if (got) solveArm(a.up, a.lo, a.wr, PT, { qHand: PQ3, weight: Math.min(1, w) });
       }
       lastWant = want;
-      H.placeHeld();
+      if (!lift) H.placeHeld();
       // (a prop's mesh may hang from a wrist the pins just moved: it stays where the numbers put it in the world)
       for (const name of names) seat(P[name]);
     },
