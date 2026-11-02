@@ -1,4 +1,4 @@
-// THE HANDS LAB: a pose editor for the band. The fiddler, the banjo player and the harmonica player with their instruments,
+// THE HANDS LAB: a pose editor for the whole band. The pianist at his piano, the drummer on his crate, the fiddler, the banjo player and the harmonica player with their instruments,
 // made as the stage makes them (src/stage.js looks, src/bandgear.js what they hold), each playing the game's own clips.
 // Pick a bone in the list or in the view; it offers only the joints it really has (src/handplan.js), each with a slider, a
 // typed number and a ring to drag in the view. The wrist also has a ball to drag: the arm follows and the shoulder's and
@@ -12,9 +12,16 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { loadFolk, makePerson } from '../../src/actors/folk.js';
 import { STAGE } from '../../src/stage.js';
-import { makeHarmonicaModel, holdFiddleOn, holdBanjoOn } from '../../src/bandgear.js';
+import { makeHarmonicaModel, holdFiddleOn, holdBanjoOn, holdDrumsOn } from '../../src/bandgear.js';
+import { makePianoHands } from '../../src/pianohands.js';
+import { makeDrumHands } from '../../src/drumhands.js';
+import { makePlayHands } from '../../src/playhands.js';
+import { keyX, keyWidth, KEYBOARD } from '../../src/pianoplan.js';
+import { SONGS, makeBoxPart } from '../../src/audio/stagemusic.js';
+import { buildProps } from '../buildings/props.js';
+import { makeSaloonArt } from '../buildings/saloonprops.js';
 import { loadHands, setHands, getHands, makeHandPose } from '../../src/handpose.js';
-import { PLAYERS, ELBOW_MOST, FINGERS, BONE_GROUPS, cleanHands, handsText, jointsOf, boneWord, setJoint, getJoint, resetBones, resetPlayer, resetAll, copyPose, copyClip, handBones, armBones } from '../../src/handplan.js';
+import { PLAYERS, ELBOW_MOST, FINGERS, BONE_GROUPS, cleanHands, handsText, jointsOf, boneWord, setJoint, getJoint, resetBones, resetPlayer, resetAll, copyPose, copyClip, handBones, armBones, HAND_CM, getSize, setSize } from '../../src/handplan.js';
 
 const $ = (id) => document.getElementById(id);
 const GAME = new URL('../../', import.meta.url).href;
@@ -30,7 +37,7 @@ scene.add(new THREE.Mesh(new THREE.CircleGeometry(6, 40).rotateX(-Math.PI / 2), 
 const camera = new THREE.PerspectiveCamera(35, 1, 0.03, 60);
 const controls = new OrbitControls(camera, canvas); controls.enableDamping = true; controls.minDistance = 0.12;
 
-const state = { who: 'fiddler', clip: 'Play_Fiddle', frozen: true, time: 0.6, speed: 1, tab: 'bones', open: true, group: 'handL', bone: 'WristL', prop: null, overlay: true, dirty: false };
+const state = { who: 'pianist', clip: 'Play_Piano', frozen: true, time: 0.6, speed: 1, tab: 'bones', open: true, group: 'handL', bone: 'WristL', prop: null, overlay: true, dirty: false, hat: true };
 const made = {};   // who -> { p (the person), H (the pose's layer) }
 let DATA = cleanHands({}), saveWord = '';
 const cur = () => made[state.who], action = () => cur().p.person.actions[state.clip], clipLen = () => { const a = action(); return a ? a.getClip().duration : 1; };
@@ -40,16 +47,28 @@ async function build() {
   const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
   await Promise.all([['m', 'clips_stage_m.glb'], ['f', 'clips_stage_f.glb']].map(([b, f]) => loader.loadAsync(folk.dir + f).then((g) => folk.addClips(b, g.animations))));
   await loadHands(GAME); DATA = cleanHands(getHands()); setHands(DATA);
-  const looks = { fiddler: STAGE.fiddler, banjo: STAGE.banjoist, harpist: STAGE.harpist };
+  const looks = { pianist: STAGE.pianist, drummer: STAGE.drummer, fiddler: STAGE.fiddler, banjo: STAGE.banjoist, harpist: STAGE.harpist };
   for (const who of Object.keys(PLAYERS)) {
     const p = makePerson(folk, looks[who]); p.root.traverse((o) => { if (o.isMesh) o.castShadow = false; });
     let props = {}, harp = null;
     if (who === 'fiddler') { const g = holdFiddleOn(p); props = { fiddle: g.fiddle, bow: g.bow }; }
     if (who === 'banjo') { const g = holdBanjoOn(p); props = { banjo: g.banjo, stool: g.stool }; }
     if (who === 'harpist') { const h = makeHarmonicaModel(STAGE.harp); scene.add(h); props = { harmonica: h }; harp = STAGE.harp; }
+    if (who === 'drummer') { const g = holdDrumsOn(p); props = { stool: g.stool, stickL: g.stickL, stickR: g.stickR }; }
     made[who] = { p, H: makeHandPose(p, who, { props, harp }), props };
+    if (who === 'drummer') made[who].drums = makeDrumHands(p, made[who].H);
+    made[who].play = makePlayHands(p, made[who].H, who);
+    if (who === 'pianist') { p.root.add(await makePiano()); made[who].keys = makePianoHands(p, made[who].H); }
     p.root.visible = false; scene.add(p.root);
   }
+}
+// the saloon's own piano and stool, built by its own code, where the saloon has them from him (0.82 m before the stool's
+// middle, the keys toward him). Plain wood here: this is for placing hands against, the Building Lab shows its finish.
+async function makePiano() {
+  const g = new THREE.Group(), P = buildProps([{ type: 'piano', x: 0, y: 0, z: 0.82, rot: Math.PI }, { type: 'pianoStool', x: 0, y: 0, z: 0 }], { seed: 5 }), art = await makeSaloonArt();
+  const mat = { wood: new THREE.MeshStandardMaterial({ color: 0x4a2c1a, roughness: 0.7 }), iron: new THREE.MeshStandardMaterial({ color: 0xb08a4a, roughness: 0.5 }), hay: new THREE.MeshStandardMaterial({ color: 0x6a3a2a }), goods: new THREE.MeshStandardMaterial({ map: art.saloon, roughness: 0.7 }) };
+  for (const k of Object.keys(mat)) { const geo = P.geos[k]; if (geo && (!geo.index || geo.index.count)) { const m = new THREE.Mesh(geo, mat[k]); m.name = k; g.add(m); } }
+  return g;
 }
 function showWho(who, clip = PLAYERS[who].clips[0]) {
   for (const k of Object.keys(made)) { made[k].p.root.visible = k === who; if (made[k].props.harmonica) made[k].props.harmonica.visible = k === who; }
@@ -67,11 +86,31 @@ function pose(dt) {
   if (state.frozen) { a.paused = false; a.time = state.time; m.p.update(0); }
   else { a.paused = false; m.p.update(dt * state.speed); state.time = a.time; }
   m.H.after();
+  if (m.play && !state.frozen) m.play.update();
+  if (m.keys) { if (song.on && !state.frozen) { song.tick(dt * state.speed); } m.keys.update(song.now, song.on ? dt * state.speed : 0, song.on ? song.events : null, song.on ? 1 : 0); }
+  // (frozen with no song: the file's pose itself, the stick on the skin, so a slider or a rig works on the numbers as they are)
+  if (m.drums && (song.on || !state.frozen)) { if (song.on && !state.frozen) song.tick(dt * state.speed); const A = action(); m.drums.update(song.now, song.on ? song.events : null, state.clip === 'Play_Box' ? 1 : 0, !song.on); }
   m.p.root.updateMatrixWorld(true);
   paintOverlay();
 }
+// THE SONG'S NOTES, no sound: the stage music's own tune for the song, on a clock of the lab's, into the same hands
+const song = {
+  on: false, id: SONGS[0].id, now: 0, events: [], tune: null, made: 0, beat: 1, line: 16,
+  start(id) { const S = SONGS.find((x) => x.id === id) || SONGS[0]; song.id = S.id; song.tune = S.tune(7, { intro: true, fiddle: true, banjo: true }); song.drum = makeBoxPart(S.id, 7); song.events = []; song.now = 0; song.made = 0; song.beat = S.beat; song.line = S.bar * 4; song.on = true; song.tick(0); },
+  stop() { song.on = false; song.events = []; },
+  tick(dt) {
+    song.now += dt;
+    while (song.made * song.line * song.beat < song.now + 3) {
+      for (const e of song.tune()) if (e.what === 'piano') song.events.push({ at: e.beat * song.beat, what: 'piano', midi: e.midi, len: e.len });
+      for (const e of song.drum()) song.events.push({ at: e.beat * song.beat, what: 'box', hit: e.hit, vel: e.vel });
+      song.made++; song.events.sort((a, b) => a.at - b.at);
+      if (song.events.length > 400) song.events.splice(0, song.events.length - 400);
+    }
+  },
+};
 const LOOK = {
   whole: () => [[0.9, 1.25, 2.6], [0, 0.95, 0]],
+  keys: () => [[0.1, 1.55, -0.1], [0, 0.74, 0.45]],
   L: () => boneLook('WristL', 0.65), R: () => boneLook('WristR', 0.65),
   head: () => boneLook('Head', 0.9),
   back: () => [[-0.6, 1.4, -2.2], [0, 1, 0]],
@@ -81,6 +120,8 @@ function boneLook(bone, dist) {
   const at = b.getWorldPosition(new THREE.Vector3());
   return [[at.x + 0.35 * dist * (bone.endsWith('L') ? 1 : bone.endsWith('R') ? -1 : 0.6), at.y + 0.3 * dist, at.z + dist], at.toArray()];
 }
+// the hat off to see the hands from above or the chin on the fiddle (the lab's own view only; the game keeps it on)
+function setHat(on) { state.hat = on; for (const k of Object.keys(made)) made[k].p.root.traverse((o) => { if (o.name === 'hat') o.visible = on; }); }
 function look(name) { const [p, t] = LOOK[name] ? LOOK[name]() : LOOK.whole(); camera.position.set(...p); controls.target.set(...t); controls.update(); }
 
 // ── flying the view from the keyboard: W A S D along the way it faces, Space up, C down ───────────────────────────────
@@ -252,27 +293,40 @@ function bonesPane() {
   const elbow = P.startsWith('LowerArm') ? '<div class="ha-now" id="elbowNow"></div>' : '';
   const hs = P.slice(-1), sided = hs === 'L' || hs === 'R';
   return `<h2>${boneWord(P)} <small>${state.clip.replace(/_/g, ' ')}</small></h2>${joints}${elbow}
+    <div class="ha-h">This player's hands, wrist to fingertip (cm)</div>${row('size', 'Hand size', HAND_CM.min, HAND_CM.max, 0.5, shownSize())}
     <div class="ha-btns">${groups}</div>${list}
     <div class="ha-h">Reset</div><div class="ha-btns">${btn('rBone', 'This bone')}${sided && !/Leg|Foot|PT/.test(P) ? btn('rHand', 'This hand') + btn('rArm', 'This arm') : ''}${btn('rPlayer', 'This player')}${btn('rAll', 'Everything')}${btn('undo', 'Undo')}</div>
     <div class="ha-h">Copy this clip's arm and hand</div><div class="ha-btns">${btn('copyLR', 'Left to right')}${btn('copyRL', 'Right to left')}</div>`;
 }
+// (no number set: as the model has them)
+const shownSize = () => getSize(DATA, state.who) || +cur().H.handLength().toFixed(1);
+const pinOf = (S) => { const c = DATA.players[state.who] && DATA.players[state.who][state.clip]; return c && c.pins && c.pins[S]; };
+function pinHand(S, prop = state.prop) {
+  const pl = DATA.players[state.who] || (DATA.players[state.who] = {}), c = pl[state.clip] || (pl[state.clip] = {});
+  if (c.pins && c.pins[S]) { delete c.pins[S]; if (!Object.keys(c.pins).length) delete c.pins; return false; }
+  (c.pins || (c.pins = {}))[S] = cur().H.pinNow(S, prop); return true;
+}
 function propsPane() {
   const names = PLAYERS[state.who].props, e = propEntry(false) || {};
+  if (!Object.keys(names).length) return '<p class="ha-note">The piano is part of the saloon, so it stays put; he moves to it. The Bones tab has his arms and hands, the Clip tab has a song to play through.</p>';
   const options = [`<option value="">Where its clip has it</option>`, ...BONE_GROUPS.flatMap((g) => g.bones.filter((n) => cur().H.hasJoints(n)).map((n) => `<option value="${n}"${e.bone === n ? ' selected' : ''}>${boneWord(n)}</option>`))].join('');
   const pos = e.pos || [0, 0, 0], rot = e.rot || [0, 0, 0];
   return `<div class="ha-btns">${Object.entries(names).map(([k, l]) => `<button class="ha-btn${k === state.prop ? ' on' : ''}" data-prop="${k}">${l}</button>`).join('')}</div>
     <label class="ha-row"><span>Held by</span><select class="ha-sel" id="holder" style="grid-column: 2 / -1">${options}</select></label>
     <div class="ha-h">Move it (cm, or drag the ball)</div>${row('p:0', 'To his left', -40, 40, 0.1, pos[0])}${row('p:1', 'Up', -40, 40, 0.1, pos[1])}${row('p:2', 'Forward', -40, 40, 0.1, pos[2])}
     <div class="ha-h">Turn it (or drag a ring)</div>${row('r:0', 'About its length', -180, 180, 1, rot[0])}${row('r:1', 'About its height', -180, 180, 1, rot[1])}${row('r:2', 'About its width', -180, 180, 1, rot[2])}
+    <div class="ha-h">Keep a hand on it, however the clip moves (the arm follows; to move that hand again, let go first)</div>
+    <div class="ha-btns">${['L', 'R'].map((S) => btn('pin' + S, (pinOf(S) ? 'Let go: ' : 'Keep on: ') + (S === 'L' ? 'left hand' : 'right hand'), pinOf(S) ? 'on' : '')).join('')}</div>
     <div class="ha-btns">${btn('rProp', 'Reset this one')}${btn('undo', 'Undo')}</div>`;
 }
 function clipPane() {
   const P = PLAYERS[state.who], len = clipLen(), others = P.clips.filter((c) => c !== state.clip);
-  return `<div class="ha-btns">${P.clips.map((c) => `<button class="ha-btn${c === state.clip ? ' on' : ''}" data-clip="${c}">${c.replace(/_/g, ' ')}</button>`).join('')}</div>
+  return `<div class="ha-btns">${[...P.clips, ...Object.keys(P.ramps || {})].map((c) => `<button class="ha-btn${c === state.clip ? ' on' : ''}" data-clip="${c}">${c.replace(/_/g, ' ')}</button>`).join('')}</div>
     <div class="ha-btns">${btn('freeze', state.frozen ? 'Play it' : 'Freeze it', state.frozen ? '' : 'on')}${btn('prev', 'Frame back')}${btn('next', 'Frame on')}</div>
     <div class="ha-now" id="frameNow"></div>
     ${row('time', 'Time (s)', 0, +len.toFixed(2), 0.01, +state.time.toFixed(2))}${row('speed', 'Playing speed', 0.1, 1.5, 0.05, state.speed)}
-    <div class="ha-h">Look at</div><div class="ha-btns">${[['whole', 'The player'], ['L', 'Left hand'], ['R', 'Right hand'], ['head', 'The head'], ['back', 'From behind']].map(([k, l]) => `<button class="ha-btn" data-look="${k}">${l}</button>`).join('')}${btn('toggleBones', state.overlay ? 'Hide the bones' : 'Show the bones')}</div>
+    <div class="ha-h">Look at</div><div class="ha-btns">${[['whole', 'The player'], ...(state.who === 'pianist' ? [['keys', 'The keys']] : []), ['L', 'Left hand'], ['R', 'Right hand'], ['head', 'The head'], ['back', 'From behind']].map(([k, l]) => `<button class="ha-btn" data-look="${k}">${l}</button>`).join('')}${btn('toggleBones', state.overlay ? 'Hide the bones' : 'Show the bones')}${btn('toggleHat', state.hat ? 'Hide the hat' : 'Show the hat')}</div>
+    ${state.who === 'pianist' || state.who === 'drummer' ? `<div class="ha-h">${state.who === 'pianist' ? 'His hands on the keys' : 'His sticks on the drums'}, from a song's notes</div><label class="ha-row"><span>Song</span><select class="ha-sel" id="songPick" style="grid-column: 2 / -1">${SONGS.map((s) => `<option value="${s.id}"${s.id === song.id ? ' selected' : ''}>${s.name}</option>`).join('')}</select></label><div class="ha-btns">${btn('songGo', song.on ? 'Stop the notes' : 'Play the notes')}${''}</div>` : ''}
     <div class="ha-h">Use this clip's pose on</div><div class="ha-btns">${others.map((c) => `<button class="ha-btn" data-copyto="${c}">${c.replace(/_/g, ' ')}</button>`).join('')}</div>
     <p class="ha-note">Each clip keeps its own numbers, added on top of it. Drag to turn the view, W A S D to fly, Space up, C down.</p>`;
 }
@@ -294,7 +348,8 @@ function refreshValues() {
   for (const el of d.querySelectorAll('[data-k]')) {
     if (el === document.activeElement && el.type === 'number') continue;
     const [a, b] = el.dataset.k.split(':'); let v = null;
-    if (a === 'j') v = getJoint(DATA, state.who, state.clip, state.bone, b);
+    if (a === 'size') v = shownSize();
+    else if (a === 'j') v = getJoint(DATA, state.who, state.clip, state.bone, b);
     else if (a === 'p') v = (e.pos || [0, 0, 0])[+b]; else if (a === 'r') v = (e.rot || [0, 0, 0])[+b];
     else if (a === 'time') v = state.time; else if (a === 'speed') v = state.speed;
     if (v != null) el.value = Math.round(v * 100) / 100;
@@ -307,7 +362,8 @@ function setK(k, v) {
   if (a === 'time') { state.time = Math.max(0, Math.min(clipLen(), v)); pose(0); refreshValues(); return; }
   if (a === 'speed') { state.speed = v; return; }
   beginEdit();
-  if (a === 'j') setJoint(DATA, state.who, state.clip, state.bone, b, v);
+  if (a === 'size') setSize(DATA, state.who, v);
+  else if (a === 'j') setJoint(DATA, state.who, state.clip, state.bone, b, v);
   else { const e = propEntry(); const f = a === 'p' ? 'pos' : 'rot'; e[f] = e[f] || [0, 0, 0]; e[f][+b] = v; }
   changed();
 }
@@ -317,9 +373,10 @@ $('drawer').addEventListener('input', (e) => {
   for (const el of e.currentTarget.querySelectorAll(`[data-k="${k}"]`)) if (el !== e.target) el.value = v;
 });
 $('drawer').addEventListener('change', (e) => {
+  if (e.target.id === 'songPick') { song.id = e.target.value; if (song.on) song.start(song.id); return; }
   if (e.target.id !== 'holder') return;
   beginEdit(); const m = cur(), en = propEntry(), bone = e.target.value;
-  if (bone) { en.bone = bone; en.at = new THREE.Matrix4().copy(m.p.bones[bone].matrixWorld).invert().multiply(m.H.propWorld(state.prop)).toArray(); delete en.pos; delete en.rot; }
+  if (bone) { en.bone = bone; en.at = m.H.holdFrame(bone, new THREE.Matrix4()).invert().multiply(m.H.propWorld(state.prop)).toArray(); delete en.pos; delete en.rot; }
   else { delete en.bone; delete en.at; }
   changed(); paintDrawer();
 });
@@ -345,14 +402,17 @@ document.addEventListener('click', async (e) => {
   const ct = t.closest('[data-copyto]'); if (ct) { edit(() => copyClip(DATA, state.who, state.clip, ct.dataset.copyto)); return; }
   const side = state.bone.slice(-1);
   switch (t.id) {
+    case 'songGo': if (song.on) song.stop(); else { song.start(song.id); state.frozen = false; } pose(0); paintDrawer(); return;
     case 'freeze': state.frozen = !state.frozen; if (state.frozen) state.time = action().time; paintDrawer(); return;
     case 'prev': case 'next': state.frozen = true; state.time = (state.time + (t.id === 'next' ? FRAME : -FRAME) + clipLen()) % clipLen(); pose(0); paintDrawer(); return;
+    case 'toggleHat': setHat(!state.hat); paintDrawer(); return;
     case 'toggleBones': state.overlay = !state.overlay; paintOverlay(); paintDrawer(); return;
     case 'rBone': edit(() => resetBones(DATA, state.who, state.clip, [state.bone])); return;
     case 'rHand': edit(() => resetBones(DATA, state.who, state.clip, handBones(side))); return;
     case 'rArm': edit(() => resetBones(DATA, state.who, state.clip, armBones(side))); return;
     case 'rPlayer': edit(() => resetPlayer(DATA, state.who)); return;
     case 'rAll': edit(() => resetAll(DATA)); return;
+    case 'pinL': case 'pinR': edit(() => pinHand(t.id.slice(-1))); return;
     case 'rProp': edit(() => { const c = DATA.players[state.who] && DATA.players[state.who][state.clip]; if (c && c.props) delete c.props[state.prop]; }); return;
     case 'copyLR': edit(() => copyPose(DATA, state.who, state.clip, 'L')); return;
     case 'copyRL': edit(() => copyPose(DATA, state.who, state.clip, 'R')); return;
@@ -378,7 +438,7 @@ function loop(t) {
   requestAnimationFrame(loop);
   const dt = Math.min(0.05, (t - last) / 1000); last = t;
   fly(dt); controls.update();
-  if (!state.frozen) { pose(dt); }
+  if (!state.frozen && !state.manual) { pose(dt); }
   else if (state.overlay) paintHandles();   // (the rings keep their size as the view moves)
   renderer.render(scene, camera);
   if (++n >= 30) { $('hud').textContent = `${Math.round(n * 1000 / (t - tFps))} fps`; n = 0; tFps = t; if (!state.frozen) refreshValues(); }
@@ -386,7 +446,7 @@ function loop(t) {
 (async () => {
   try {
     await build();
-    state.group = 'handL'; state.bone = 'WristL'; showWho('fiddler'); state.open = innerWidth >= 900;
+    state.group = 'handL'; state.bone = 'WristL'; showWho('pianist'); state.open = innerWidth >= 900;
     paintMenu();
     $('loading').classList.add('gone'); $('loading').hidden = true;
     requestAnimationFrame(loop);
@@ -394,15 +454,17 @@ function loop(t) {
   } catch (e) { console.error(e); if (window.oops) window.oops(e); }
 })();
 // for the rigs (what the panel does, by name)
+window.__songs = SONGS.map((x) => x.id);
 window.HA = {
-  ready: false, state, PLAYERS,
+  ready: false, state, PLAYERS, scene,
   who: (id, clip) => showWho(id, clip), clip: (c) => { showClip(c); paintDrawer(); }, freeze: (t) => { state.frozen = true; state.time = t; pose(0); paintDrawer(); },
   joint: (bone, joint, v) => { const r = setJoint(DATA, state.who, state.clip, bone, joint, v); changed(); return r; }, get: (bone, joint) => getJoint(DATA, state.who, state.clip, bone, joint),
   prop: (name, { pos, rot } = {}) => { state.prop = name; const e = propEntry(); if (pos) e.pos = pos; if (rot) e.rot = rot; changed(); },
-  hold: (name, bone) => { state.prop = name; const sel = { target: { id: 'holder', value: bone } }; const m = cur(), en = propEntry(); if (bone) { en.bone = bone; en.at = new THREE.Matrix4().copy(m.p.bones[bone].matrixWorld).invert().multiply(m.H.propWorld(name)).toArray(); delete en.pos; delete en.rot; } else { delete en.bone; delete en.at; } changed(); return sel; },
+  hold: (name, bone) => { state.prop = name; const sel = { target: { id: 'holder', value: bone } }; const m = cur(), en = propEntry(); if (bone) { en.bone = bone; en.at = m.H.holdFrame(bone, new THREE.Matrix4()).invert().multiply(m.H.propWorld(name)).toArray(); delete en.pos; delete en.rot; } else { delete en.bone; delete en.at; } changed(); return sel; },
   reach: (side, p) => { const r = cur().H.reach(side, new THREE.Vector3(...p), state.clip); changed(); return r; },
   // a finger's tip: past its last bone by that bone's own length (the rig has no bone at the tip)
   tip: (f) => { const b = cur().p.bones[f], p = b.parent.getWorldPosition(new THREE.Vector3()), q = b.getWorldPosition(new THREE.Vector3()); return q.clone().add(q.clone().sub(p)).toArray(); },
+  // (the bone's own twist counts: a list of world points on the fitted fingers, for the piano's clearance)
   world: (bone) => cur().p.bones[bone].getWorldPosition(new THREE.Vector3()).toArray(),
   propAt: (name) => new THREE.Vector3().setFromMatrixPosition(cur().H.propWorld(name)).toArray(),
   propMatrix: (name) => cur().H.propWorld(name).toArray(),
@@ -423,6 +485,18 @@ window.HA = {
     setJoint(DATA, state.who, state.clip, 'LowerArmR', 'twist', 0); changed();
     return { near: +moved[0].toFixed(4), mid: +moved[1].toFixed(4), far: +moved[2].toFixed(4), counts: ids.map((l) => l.length), ok: moved[0] < moved[1] && moved[1] < moved[2] };
   },
+  size: (cm) => { const v = setSize(DATA, state.who, cm); changed(); return v; }, handCm: () => cur().H.handLength() * cur().H.handScale(), fullCm: () => cur().H.handLength(),
+  rootMatrix: () => cur().p.root.matrixWorld.toArray(), keyX, keyWidth, KEYBOARD, song, keys: () => cur().keys, drums: () => cur().drums,
+  pin: (S, prop) => { const c = DATA.players[state.who]?.[state.clip]; if (c?.pins?.[S]) pinHand(S); if (prop) pinHand(S, prop); changed(); },
+  // a prop into a place: world matrix (16 numbers), held by a bone, or riding another prop
+  placeProp: (name, M16, { bone = null, on = null, slide = 0 } = {}) => {
+    state.prop = name; const e = propEntry(); delete e.pos; delete e.rot; delete e.bone; delete e.on; delete e.slide; const m = cur(), W = new THREE.Matrix4().fromArray(M16);
+    if (bone) { e.bone = bone; e.at = m.H.holdFrame(bone, new THREE.Matrix4()).invert().multiply(W).toArray(); }
+    else if (on) { e.on = on; if (slide) e.slide = slide; e.at = new THREE.Matrix4().copy(m.H.propWorld(on)).invert().multiply(W).toArray(); }
+    changed();
+  },
+  step: (dt) => pose(dt),
+  hat: (on) => setHat(on),
   look, cam: (p, t) => { camera.position.set(...p); controls.target.set(...t); controls.update(); }, overlay: (on) => { state.overlay = on; paintOverlay(); }, open: (on) => { state.open = on; paintMenu(); }, tab: (t) => { state.tab = t; state.open = true; paintMenu(); }, pick: (b) => { pick(b); paintDrawer(); },
   data: () => DATA, text: () => handsText(DATA), setData: (d) => { DATA = cleanHands(d); changed(); }, save, clean: () => { DATA = cleanHands(DATA); setHands(DATA); },
   render: () => renderer.render(scene, camera),

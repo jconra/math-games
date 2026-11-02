@@ -30,7 +30,7 @@ import { T, RX, RY, RZ, mul, vary, ngon, glowGeometry } from './parts.js';
 import { Goods } from './goods.js';
 import { STORE_ART, regionUV } from './art.js';
 import { SHEET } from '../../world/props/sheet.js';
-import { FURNITURE } from '../../world/props/makers/furniture.js';
+import { FURNITURE, lidOfBoards } from '../../world/props/makers/furniture.js';
 import { GOODS } from '../../world/props/makers/goods.js';
 import { LIGHTS } from '../../world/props/makers/lights.js';
 
@@ -57,10 +57,12 @@ export const MAKERS = {
   },
   crate(k, M, o) {
     const q = placer(k, M), s = o.size ?? 0.6, n = 3, sh = (s - 0.04) / n;
-    q.x('wood', [s - 0.06, s - 0.06, s - 0.06], [0, s / 2, 0], null, { tint: [0.15, 0.13, 0.11], skip: '-y' });
+    // (the dark inside: a box right up to the slats and the lid, closed underneath)
+    const coreH = o.fill ? s - 0.06 : s - 0.052;
+    q.x('wood', [s - 0.045, coreH, s - 0.045], [0, 0.03 + coreH / 2, 0], null, { tint: [0.15, 0.13, 0.11] });
     for (let f = 0; f < 4; f++) {
       const a = f * Math.PI / 2, dx = Math.sin(a) * (s / 2 - 0.012), dz = Math.cos(a) * (s / 2 - 0.012);
-      for (let i = 0; i < n; i++) q.b([s - 0.1, sh - 0.025, 0.022], [dx, 0.03 + (i + 0.5) * sh, dz], [0, a, 0], { long: 0, tint: vary(k, PLANK, 0.85, 1.15), skip: '-z+x-x' });
+      for (let i = 0; i < n; i++) q.b([s - 0.08, sh - 0.025, 0.022], [dx, 0.03 + (i + 0.5) * sh, dz], [0, a, 0], { long: 0, tint: vary(k, PLANK, 0.85, 1.15), skip: o.fill && i === n - 1 ? '+x-x' : '-z+x-x' });   // (an open crate's top slat shows its inside)
     }
     if (!o.fill) for (let i = 0; i < 3; i++) q.b([s - 0.02, 0.022, (s - 0.04) / 3 - 0.02], [0, s - 0.011, -s / 2 + 0.02 + (i + 0.5) * (s - 0.04) / 3], null, { long: 0, tint: vary(k, PLANK, 0.85, 1.1), skip: '-y' });
     for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) q.b([0.05, s - 0.02, 0.05], [sx * (s / 2 - 0.02), (s - 0.02) / 2, sz * (s / 2 - 0.02)], null, { long: 1, tint: vary(k, DARKW, 0.9, 1.1), skip: '-y' });
@@ -75,7 +77,7 @@ export const MAKERS = {
     const q = placer(k, M), L = 0.9, H = 0.4, Wd = 0.46;
     q.hay([L, H - 0.01, Wd], [0, H / 2, 0], [0, 0, 0]);
     for (const x of [-0.22, 0.22]) {
-      q.b([0.018, 0.008, Wd + 0.012], [x, H + 0.0, 0], null, { long: 2, tint: TWINE, strip: 13, skip: '-y+z-z' });
+      q.b([0.018, 0.008, Wd + 0.012], [x, H - 0.008, 0], null, { long: 2, tint: TWINE, strip: 13, skip: '-y+z-z' });
       for (const s of [-1, 1]) q.b([0.018, H - 0.02, 0.008], [x, H / 2, s * (Wd / 2 + 0.002)], null, { long: 1, tint: TWINE, strip: 13, skip: '-y+y' + (s > 0 ? '-z' : '+z') });
     }
     k.solid([L, H, Wd], null, null, mul(M, T(0, H / 2, 0)));
@@ -91,13 +93,13 @@ export const MAKERS = {
     q.p('hay', lump(0.24, 0.3), h * 0.42, [0, h * 0.68, 0], [0, k.r(0, 3), 0], { taper: 0.7, tint: vary(k, HAY, 0.92, 1.08) });
     k.solid([w * 0.8, h, d * 0.8], null, null, mul(M, T(0, h / 2, 0)));
   },
+  // a wooden bucket: staves wider at the top, a real rim, water a hand below it, two iron hoops, and a hoop of iron for a
+  // handle, up from two ears on the rim
   bucket(k, M, o) {
-    const q = placer(k, M), h = 0.3, r = 0.14;
-    q.p('wood', ngon(10, r * 0.85), h, [0, h / 2, 0], null, { tint: vary(k, PLANK, 0.85, 1.05), taper: -0.2, skip: '+y' });
-    q.p('iron', ngon(10, r * 0.95), 0.012, [0, h - 0.06, 0], null, { tint: [0.25, 0.3, 0.32], skip: '-y' });   // water
-    for (const [y, rr] of [[0.06, 0.9], [h - 0.05, 1.04]]) q.p('iron', ngon(10, r * rr + 0.006), 0.03, [0, y, 0], null, { tint: IRON, skip: '+y-y', smooth: true });
-    for (const s of [-1, 1]) q.x('iron', [0.008, 0.16, 0.008], [s * (r * 1.1), h + 0.06, 0], [0, 0, -s * 0.35], { tint: IRON });
-    q.x('iron', [0.16, 0.008, 0.008], [0, h + 0.13, 0], null, { tint: IRON });
+    const q = placer(k, M), h = 0.3, r0 = 0.119, r1 = 0.143, th = 0.012, water = h - 0.07, at = (y) => r0 + (r1 - r0) * y / h, tint = vary(k, PLANK, 0.85, 1.05);
+    tub(q, 'wood', 10, r0, r1, h, th, { tint, floorAt: water, floor: { group: 'iron', tint: [0.25, 0.3, 0.32] } });
+    for (const y of [0.06, h - 0.05]) { const top = at(y + 0.015) + 0.001; q.p('iron', ngon(10, top + 0.006), 0.03, [0, y, 0], null, { tint: IRON, skip: '+y-y', smooth: true, taper: 0.006 / (top + 0.006) }); }
+    ears(q, r1, h - 0.035, IRON); bail(k, M, r1 + 0.006, h - 0.03, 1, 6, 0.009, [1, 0.95, 0.9]);
   },
   wagon(k, M, o) {
     const q = placer(k, M), bl = 3.1, bw = 1.05, fy = 0.92;
@@ -141,19 +143,20 @@ export const MAKERS = {
   woodpile(k, M, o) {
     const q = placer(k, M), L = o.len ?? 1.1, rows = o.rows ?? 4;
     for (const s of [-1, 1]) q.b([L + 0.1, 0.07, 0.07], [0, 0.035, s * 0.16], null, { long: 0, tint: DARKW, strip: 10 });
-    const SPLIT = [1.1, 0.92, 0.74];
+    const SPLIT = [1.1, 0.92, 0.74], R = 0.1, up = R * 1.58, n0 = Math.max(2, Math.round(L / (R * 1.84)));
+    // (rows lying in each other's hollows, each log touching its neighbours; a row with one fewer sits between the last)
     for (let row = 0; row < rows; row++) {
-      const n = Math.max(2, Math.round(L / 0.2) - (row > 2 ? 1 : 0));
+      const n = Math.max(2, n0 - (row % 2)), dx = L / n0;
       for (let i = 0; i < n; i++) {
-        const x = -L / 2 + (L / n) * (i + 0.5) + (row % 2 ? 0.05 : 0) + k.r(-0.02, 0.02), y = 0.13 + row * 0.15;
+        const x = (i - (n - 1) / 2) * dx + k.r(-0.004, 0.004), y = 0.07 + R * 0.88 + row * up;
         // (most of them rounds of a small log, bark on, the rings on their ends; one in three split in half or thirds,
         // turned its own way round its length; all lying along z, so their ends face out)
-        const r = k.r(0.065, 0.085), ph = k.r(0, 6.28), c = Math.cos(ph), sn = Math.sin(ph), split = k.R() < 0.35;
-        const poly = (split ? [[r, 0], [-r * 0.6, r * k.r(0.75, 0.95)], [-r * 0.6, -r * k.r(0.75, 0.95)]] : ngon(7, r, 0.12, k.R)).map(([a, b]) => [a * c - b * sn, a * sn + b * c]);
-        q.p('wood', poly, k.r(0.42, 0.5), [x, y - (split ? 0 : 0.01), k.r(-0.03, 0.03)], [Math.PI / 2, 0, 0], split ? { tint: vary(k, SPLIT, 0.78, 1.05), strip: 2, fresh: true } : { tint: vary(k, [0.8, 0.72, 0.62], 0.8, 1.05), strip: 10, smooth: true, ends: 'log' });
+        const r = R * k.r(0.98, 1.08), ph = k.r(0, 6.28), c = Math.cos(ph), sn = Math.sin(ph), split = k.R() < 0.35;
+        const poly = (split ? [[r * 1.02, 0], [-r * 0.66, r * k.r(0.86, 1.0)], [-r * 0.66, -r * k.r(0.86, 1.0)]] : ngon(7, r, 0.06, k.R)).map(([a, b]) => [a * c - b * sn, a * sn + b * c]);
+        q.p('wood', poly, k.r(0.42, 0.5), [x, y, k.r(-0.03, 0.03)], [Math.PI / 2, 0, 0], split ? { tint: vary(k, SPLIT, 0.78, 1.05), strip: 2, fresh: true } : { tint: vary(k, [0.8, 0.72, 0.62], 0.8, 1.05), strip: 10, smooth: true, ends: 'log', endTint: vary(k, [1.16, 1.1, 1.02], 0.92, 1.06) });
       }
     }
-    k.solid([L, rows * 0.15 + 0.05, 0.46], null, null, mul(M, T(0, (rows * 0.15 + 0.05) / 2, 0)));
+    k.solid([L, rows * 0.158 + 0.08, 0.46], null, null, mul(M, T(0, (rows * 0.158 + 0.08) / 2, 0)));
   },
   hitchrail(k, M, o) {
     const q = placer(k, M), L = o.len ?? 2.6, H = 0.98, LOG = [0.95, 0.88, 0.8];
@@ -178,12 +181,12 @@ export const MAKERS = {
     if (o.gd) galvPail(k, o.gd, M, o.h ?? 0.24, k.r(0.85, 1.05));
     k.solid([0.26, o.h ?? 0.24, 0.26], null, null, mul(M, T(0, (o.h ?? 0.24) / 2, 0)));
   },
+  // a coal scuttle: an iron pail heaped with coal, a real rim round the heap, a wire bail up from two ears
   coalBucket(k, M, o) {
-    const q = placer(k, M), h = 0.34, r = 0.15;
-    q.p('iron', ngon(12, r), h, [0, h / 2, 0], null, { tint: [0.9, 0.86, 0.84], smooth: true, taper: -0.15, skip: '+y' });
-    if (o.gd) o.gd.dome(r * 1.05, 0.07, mul(M, T(0, h - 0.02, 0)), 9, STORE_ART.tile.coal, [1, 1, 1], 2);
-    q.x('iron', [0.3, 0.01, 0.01], [0, h + 0.07, 0], null, { tint: [0.5, 0.48, 0.46] });
-    for (const s of [-1, 1]) q.x('iron', [0.01, 0.1, 0.01], [s * 0.15, h + 0.02, 0], null, { tint: [0.5, 0.48, 0.46] });
+    const q = placer(k, M), h = 0.34, r0 = 0.15, r1 = 0.172, th = 0.008;
+    tub(q, 'iron', 10, r0, r1, h, th, { tint: [1.7, 1.62, 1.55], smooth: true, floorAt: h - 0.05, floor: { tint: [0.2, 0.2, 0.2] } });
+    if (o.gd) o.gd.dome(r1 - th - 0.002, 0.07, mul(M, T(0, h - 0.05, 0)), 9, STORE_ART.tile.coal, [1, 1, 1], 2);
+    ears(q, r1, h - 0.03, [0.5, 0.48, 0.46]); bail(k, M, r1 + 0.006, h - 0.025, 0.85, 5, 0.008, [0.5, 0.48, 0.46]);
   },
   // a galvanized washtub: wide and shallow, two handles; hung: on a nail on the wall, its bottom against it
   // a galvanized oval washtub, 0.7 m long and a quarter of a metre deep, a rolled rim, a handle at each end; hung: on a
@@ -191,12 +194,13 @@ export const MAKERS = {
   washtub(k, M, o) {
     if (!o.gd) return;
     const h = 0.26, z = [1.9, 1.88, 1.84], W = o.hung ? mul(M, T(0, 0, h + 0.03), RX(-Math.PI / 2)) : M;
-    o.gd.lathe([[0, 0], [0.26, 0], [0.275, 0.014], [0.33, 0.22], [0.345, 0.236], [0.35, 0.252], [0.338, 0.262], [0.322, 0.258]], W, 16, STORE_ART.tile.tin, z, { oval: [1, 0.74], flat: true });
+    o.gd.lathe([[0, 0], [0.26, 0], [0.275, 0.014], [0.33, 0.22], [0.345, 0.236], [0.35, 0.252], [0.338, 0.262], [0.322, 0.258]], W, 14, STORE_ART.tile.tin, z, { oval: [1, 0.74], flat: true });
+    o.gd.lathe([[0.322, 0.258], [0.262, 0.024], [0, 0.024]], W, 14, STORE_ART.tile.tin, z.map((c) => c * 0.72), { oval: [1, 0.74], flat: true });   // (its inside and floor)
     // (the handles: a strap bent into a loop at each end, riveted under the rim)
-    for (const s of [-1, 1]) for (const [dx, dy, w, hh] of [[0.03, 0.2, 0.06, 0.018], [0.058, 0.2, 0.018, 0.07], [0.03, 0.2, 0.06, 0.018]].map((q, i) => [q[0], q[1] + (i - 1) * 0.026, q[2], q[3]])) {
+    for (const s of [-1, 1]) for (const [dx, dy, w, hh] of [[0.012, 0.2, 0.096, 0.018], [0.058, 0.2, 0.018, 0.07], [0.012, 0.2, 0.096, 0.018]].map((q, i) => [q[0], q[1] + (i - 1) * 0.026, q[2], q[3]])) {
       o.gd.box([w, hh, 0.07], mul(W, T(s * (0.35 + dx), dy, 0)), { '+x': STORE_ART.tile.tin, '-x': STORE_ART.tile.tin, '+y': STORE_ART.tile.tin, '-y': STORE_ART.tile.tin, '+z': STORE_ART.tile.tin, '-z': STORE_ART.tile.tin }, z.map((c) => c * 0.85));
     }
-    if (o.hung) k.box('iron', [0.012, 0.012, 0.07], null, null, { m: mul(M, T(0, 0.35 * 0.74 * 0.62 + 0.24, 0.035)), tint: [0.4, 0.38, 0.36] });
+    if (o.hung) k.box('iron', [0.012, 0.012, 0.07], null, null, { m: mul(M, T(0, 0.35 * 0.74 - 0.015, 0.035)), tint: [0.4, 0.38, 0.36] });
   },
   // a shovel (rounded blade), a spade (square) or a fork, its handle leaning back to the wall: its foot `lean` out
   shovel(k, M, o) {
@@ -211,7 +215,23 @@ export const MAKERS = {
   broom(k, M, o) {
     const lean = o.lean ?? 0.18, L = 1.4, a = Math.asin(lean / L), S = mul(M, T(0, 0, lean), RX(-a));
     k.prism('wood', ngon(6, 0.015), L - 0.3, null, null, { m: mul(S, T(0, 0.3 + (L - 0.3) / 2, 0)), tint: [1.1, 0.95, 0.8], smooth: true, strip: 2 });
-    if (o.gd) o.gd.cyl(0.13, 0.34, mul(S, T(0, 0.17, 0), new THREE.Matrix4().makeScale(1, 1, 0.3)), 8, STORE_ART.tile.rope, null, [1.2, 1.1, 0.8], { taper: 0.25 });
+    if (!o.gd) return;
+    // a flat broom: thin straws fanning down from a flattened shoulder (each a three-sided sliver, ending in a point), a few
+    // shorter ones behind for body, the shoulder tied off with two rows of stitching
+    const STRAW = [1.0, 0.82, 0.5], reg = STORE_ART.tile.cotton, p = [], n = [], c = [], i = [], N = 34, TOP = 0.27;
+    for (let q = 0; q < N; q++) {
+      const u = (q + 0.5) / N * 2 - 1 + k.r(-0.02, 0.02), side = q % 2 ? 1 : -1, b = p.length / 3, w = 0.0042, x0 = u * 0.05, z0 = side * 0.011;
+      const x1 = u * 0.125 + k.r(-0.006, 0.006), y1 = k.r(0, 0.022) + (q % 5 === 0 ? 0.03 : 0), z1 = side * k.r(0.012, 0.03), l = k.r(0.72, 1.08);
+      p.push(x0 - w, TOP, z0 - w * 0.6, x0 + w, TOP, z0 - w * 0.6, x0, TOP, z0 + w, x1, y1, z1);
+      n.push(-0.8, 0, -0.6, 0.8, 0, -0.6, 0, 0, 1, 0, -1, 0);
+      for (let j = 0; j < 4; j++) c.push(STRAW[0] * l, STRAW[1] * l, STRAW[2] * l);
+      i.push(b, b + 3, b + 2, b + 2, b + 3, b + 1, b + 1, b + 3, b);
+    }
+    o.gd.mesh({ p, n, c, i }, S, reg);
+    const oval = { oval: [1, 0.3] }, tint = STRAW.map((v) => v * 0.8);
+    o.gd.lathe([[0, 0.11], [0.058, 0.11], [0.058, 0.26]], S, 6, reg, tint.map((v) => v * 0.55), oval);   // (the darker body among the straws)
+    o.gd.lathe([[0, 0.25], [0.066, 0.25], [0.07, 0.29], [0.038, 0.335], [0, 0.345]], S, 6, reg, tint, oval);
+    for (const y of [0.268, 0.295]) { const r = y < 0.28 ? 0.07 : 0.066; o.gd.lathe([[r, y - 0.004], [r, y + 0.004]], S, 6, STORE_ART.tile.rope, [0.5, 0.42, 0.34], { oval: [1.01, 0.31] }); }
   },
   // a sack, stuffed: a box whose sides bulge and whose top is gathered and tied; standing, or lying on its side (lie)
   // a sack turned on a lathe, plain cloth all round (cream cotton for flour, burlap else): slumped, widest low down and
@@ -234,11 +254,11 @@ export const MAKERS = {
     k.solid([0.48, h, 0.36], null, null, mul(M, T(0, h / 2, 0)));
   },
   eggCrate(k, M, o) {
-    MAKERS.crate(k, M, { ...o, fill: 'eggs', gd: null });   // (open: the eggs go in on their straw)
-    if (!o.gd) return;
     const s = o.size ?? 0.44;
+    MAKERS.crate(k, M, { ...o, size: s, fill: 'eggs', gd: null });   // (open: the eggs go in on their straw)
+    if (!o.gd) return;
     o.gd.dome(s / 2 - 0.03, 0.03, mul(M, T(0, s - 0.03, 0)), 8, STORE_ART.tile.crate, [1.2, 1.0, 0.55], 2);
-    for (let i = 0; i < 7; i++) { const a = i * 2.4, q = i ? 0.13 : 0; o.gd.dome(0.04, 0.055, mul(M, T(Math.cos(a) * q, s - 0.012, Math.sin(a) * q)), 10, STORE_ART.tile.cotton, [1.1, 1.0, 0.86], 4); }
+    for (let i = 0; i < 7; i++) { const a = i * 2.4, q = i ? 0.13 : 0; o.gd.dome(0.04, 0.055, mul(M, T(Math.cos(a) * q, s - 0.012, Math.sin(a) * q)), 6, STORE_ART.tile.cotton, [1.1, 1.0, 0.86], 2); }
   },
   sack(k, M, o) {
     if (!o.gd) return;
@@ -253,24 +273,39 @@ export const MAKERS = {
     o.gd.lathe(prof, S, 10, cloth, tint, { oval: ov, bump, lift, turn });
     if (label) {
       // (the label: from a third up to three quarters, a quarter of the way round, 1 cm proud)
-      const lp = prof.filter(([, y]) => y > 0.24 * h && y < 0.66 * h), lab = [[prof[3][0], 0.24 * h], ...lp, [prof[5][0] * 0.98, 0.66 * h]].map(([r, y]) => [r * 1.03, y]);
-      o.gd.lathe(lab, S, 5, label, tint, { oval: ov, bump, lift, turn, arc: [Math.PI - 0.75, Math.PI + 0.75] });
+      const lp = prof.filter(([, y]) => y > 0.24 * h && y < 0.66 * h), lab = [[prof[3][0] * 0.97, 0.24 * h], ...lp.map(([r, y]) => [r * 1.012, y]), [prof[5][0] * 0.95, 0.66 * h]];   // (its top and bottom edges sunk into the cloth)
+      const labBump = (a, y) => bump(a, y) - (Math.abs(a - turn - Math.PI) > 0.74 ? 0.04 : 0);   // (its sides sunk in too)
+      o.gd.lathe(lab, S, 5, label, tint, { oval: ov, bump: labBump, lift, turn, arc: [Math.PI - 0.75, Math.PI + 0.75] });
     }
     if (!o.lie) o.gd.lathe([[0.05, 0.596 * f], [0.052, 0.61 * f], [0.046, 0.62 * f]], S, 8, STORE_ART.tile.rope, [0.8, 0.7, 0.55], { flat: true, oval: [1, 0.62] });
     k.solid([0.48, o.lie ? 0.34 : h, o.lie ? h : 0.34], null, null, mul(M, T(0, (o.lie ? 0.34 : h) / 2, 0)));
   },
 };
+// a round thing open at the top, wider there (r0 at the foot, r1 at the rim, h tall, a wall th thick): its outside and
+// underneath, a real rim, its inside down to floorAt, where its floor is. o: tint, smooth; floor: { group, tint }
+function tub(q, group, n, r0, r1, h, th, o) {
+  const inner = (y) => r0 + (r1 - r0) * y / h - th, f = o.floorAt ?? 0.02;
+  q.p(group, ngon(n, r0), h, [0, h / 2, 0], null, { tint: o.tint, smooth: o.smooth ?? true, taper: 1 - r1 / r0, capIn: (r1 - th) / r1 });
+  q.p(group, ngon(n, inner(f)), h - f, [0, (h + f) / 2, 0], null, { tint: (o.inTint || o.tint).map((c) => c * 0.8), smooth: true, taper: 1 - inner(h) / inner(f), inward: true, skip: '+y-y' });
+  q.p(o.floor?.group || group, ngon(n, inner(f) + 0.002), 0, [0, f, 0], null, { tint: o.floor?.tint || o.tint, noSides: true, skip: '-y' });
+}
+// two little iron ears at the rim's sides, for a bail
+function ears(q, r, y, tint) { for (const s of [-1, 1]) q.x('iron', [0.012, 0.04, 0.024], [s * (r + 0.002), y, 0], null, { tint }); }
+// a wire bail, ear to ear across x (rx each side, its ends at height y): up 1 stands straight up, less lies over toward +z
+function bail(k, M, rx, y, up, segs, w, tint) {
+  const pts = []; for (let i = 0; i <= segs; i++) { const t = i / segs * Math.PI; pts.push([rx * Math.cos(t), y + rx * Math.sin(t) * up, rx * Math.sin(t) * Math.sqrt(1 - up * up)]); }
+  for (let i = 0; i < segs; i++) { const [a, b] = [pts[i], pts[i + 1]], d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], L = Math.hypot(...d), m = new THREE.Matrix4().lookAt(new THREE.Vector3(...a), new THREE.Vector3(...b), new THREE.Vector3(0, 1, 0)); m.setPosition((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2); k.box('iron', [w, w, L + w], null, null, { m: mul(M, m), tint }); }
+}
 // a galvanized pail turned on a lathe: tapered sides, a rolled rim, its dark inside and floor, two ears and a wire bail
 // laid down over one side (its frame M at its foot)
 // (the props library's makers join in: world/props/makers/)
 Object.assign(MAKERS, FURNITURE, GOODS, LIGHTS);
 export function galvPail(k, gd, M, h = 0.24, shade = 1, bailUp = false) {
   const zinc = [0.98, 0.97, 0.95].map((c) => c * shade), f = h / 0.244;
-  gd.lathe([[0, 0], [0.098, 0], [0.102, 0.012 * f], [0.122, 0.222 * f], [0.131, 0.232 * f], [0.127, 0.244 * f]], M, 12, STORE_ART.tile.tin, zinc);
-  gd.lathe([[0.119, 0.244 * f], [0.099, 0.03 * f], [0, 0.03 * f]], M, 10, STORE_ART.tile.tin, zinc.map((c) => c * 0.42));
+  gd.lathe([[0, 0], [0.098, 0], [0.102, 0.012 * f], [0.122, 0.222 * f], [0.131, 0.232 * f], [0.127, 0.244 * f], [0.119, 0.244 * f]], M, 12, STORE_ART.tile.tin, zinc);
+  gd.lathe([[0.119, 0.244 * f], [0.099, 0.03 * f], [0, 0.03 * f]], M, 12, STORE_ART.tile.tin, zinc.map((c) => c * 0.42));
   for (const s of [-1, 1]) k.box('iron', [0.012, 0.035, 0.02], null, null, { m: mul(M, T(s * 0.128, 0.215 * f, 0)), tint: [1.6, 1.6, 1.7] });
-  const pts = [], up = bailUp ? 1 : 0.45; for (let i = 0; i <= 6; i++) { const t = i / 6 * Math.PI; pts.push([0.13 * Math.cos(t), 0.215 * f + 0.13 * Math.sin(t) * up, 0.13 * Math.sin(t) * Math.sqrt(1 - up * up)]); }
-  for (let i = 0; i < 6; i++) { const [a, b] = [pts[i], pts[i + 1]], d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], L = Math.hypot(...d); const m = new THREE.Matrix4().lookAt(new THREE.Vector3(...a), new THREE.Vector3(...b), new THREE.Vector3(0, 1, 0)); m.setPosition((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2); k.box('iron', [0.006, 0.006, L + 0.006], null, null, { m: mul(M, m), tint: [1.2, 1.2, 1.25], skip: '+z-z' }); }
+  bail(k, M, 0.13, 0.215 * f, bailUp ? 1 : 0.45, 6, 0.006, [1.2, 1.2, 1.25]);
 }
 // real apples heaped on a heap (a dome of radius r, its top hd over the frame M): n low-poly apples, each its own shade
 export function heapApples(gd, M, r, hd, n, R) {
@@ -307,9 +342,11 @@ export function buildProps(list, { seed = 5, bake = null, glow: o_glow = false }
     if (p.type === 'barrel' || p.type === 'keg') {
       // (a keg: a small barrel; a barrel with a fill stands open, heaped with it, a hand's width below its rim)
       const h = p.type === 'keg' ? 0.5 : p.h ?? 0.86, r = p.type === 'keg' ? 0.2 : 0.3;
-      makeBarrel(k, { x: p.x, y: p.y || 0, z: p.z, h, r, tint: [1.12, 1.06, 1.0], staves: p.type === 'keg' ? 10 : 12, hoops: 2, lid: !p.fill });
-      if (p.fill) gd.dome(r * 0.86 - 0.025, 0.1, mul(M, T(0, h - 0.07, 0)), 12, STORE_ART.heaps[p.fill], [1, 1, 1], 3);
-      if (p.fill === 'apples') heapApples(gd, mul(M, T(0, h - 0.07, 0)), r * 0.86 - 0.025, 0.1, 9, k.R);
+      // (shut: a solid round lid of tight boards, the round table's top, just inside the rim)
+      const lidY = h - 0.018, shape = makeBarrel(k, { x: p.x, y: p.y || 0, z: p.z, h, r, tint: [1.12, 1.06, 1.0], staves: p.type === 'keg' ? 10 : 12, hoops: 2, lid: false, coreTo: p.fill ? h - 0.075 : lidY - 0.002 });
+      if (!p.fill) lidOfBoards(k, pa, mul(M, T(0, lidY, 0)), shape.lidR);
+      if (p.fill) gd.dome(shape.lidR + 0.002, 0.1, mul(M, T(0, h - 0.07, 0)), 12, STORE_ART.heaps[p.fill], [1, 1, 1], 3);
+      if (p.fill === 'apples') heapApples(gd, mul(M, T(0, h - 0.07, 0)), shape.lidR, 0.1, 9, k.R);
     } else if (MAKERS[p.type]) MAKERS[p.type](k, M, p);
     counts[p.type] = (counts[p.type] || 0) + 1;
   }

@@ -25,7 +25,7 @@ renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.outputColorSpace
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.shadowMap.enabled = q.get('q') !== 'potato'; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(38, 1, 0.03, 200);
 const controls = new OrbitControls(camera, canvas); controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.62;
-const sun = new THREE.DirectionalLight(0xfff3e2, 2.6), hemi = new THREE.HemisphereLight(0x9cbbe0, 0x6a563c, 1.3);
+const sun = new THREE.DirectionalLight(0xfff3e2, 2.6), hemi = new THREE.HemisphereLight(0x9cbbe0, 0x8a7558, 2.3);   // (a strong sky light: the game's shade sides have the hills' and walls' bounce, which this bare floor doesn't)
 sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
 Object.assign(sun.shadow.camera, { left: -7, right: 7, top: 7, bottom: -7, near: 1, far: 40 }); sun.position.set(-5, 9, 6); scene.add(sun, hemi);
 
@@ -54,13 +54,16 @@ function makeMaterials(Tx, ART, PAPER) {
   mats.goods = lit(new THREE.MeshStandardMaterial({ map: STA.store, roughness: 0.78 }), { ao: true, tint: true });
   mats.saloonGoods = lit(new THREE.MeshStandardMaterial({ map: SAA.saloon, roughness: 0.78 }), { ao: true, tint: true });
   mats.decal = lit(new THREE.MeshStandardMaterial({ map: STA.store, roughness: 0.9, transparent: true, depthWrite: false, alphaTest: 0.01, polygonOffset: true, polygonOffsetFactor: -2 }), { ao: true });
+  mats.saloonDecal = lit(new THREE.MeshStandardMaterial({ map: SAA.saloon, roughness: 0.9, transparent: true, depthWrite: false, alphaTest: 0.01, polygonOffset: true, polygonOffsetFactor: -2 }), { ao: true });
   mats.paper = lit(new THREE.MeshStandardMaterial({ map: PAPER, roughness: 0.74 }), { ao: true, tint: true });
   mats.glow = glowMaterial();
 }
 // (out of a building there is no bake: the sky's whole light, and each lantern's light reaching everything)
 function bake(geo) {
   const n = geo.attributes.position.count;
-  if (!geo.attributes.aAO) geo.setAttribute('aAO', new THREE.BufferAttribute(new Float32Array(n).fill(1), 1));
+  // (always: the kit's meshes come with an aAO of zeros, waiting for a bake; left so, they get no sky light at all and
+  // anything the sun doesn't reach is black)
+  geo.setAttribute('aAO', new THREE.BufferAttribute(new Float32Array(n).fill(1), 1));
   if (!geo.attributes.aLamp) { const a = new Float32Array(n * 2).fill(1); geo.setAttribute('aLamp', new THREE.BufferAttribute(a, 2)); }
 }
 
@@ -75,7 +78,7 @@ function addBuilt(list) {
     out.tris += P.tris; out.ms += P.ms;
     for (const g of ['wood', 'iron', 'hay', 'goods', 'paper', 'decal', 'glow']) {
       const geo = P.geos[g]; if (!geo || (geo.index && !geo.index.count)) continue;
-      const m = new THREE.Mesh(geo, g === 'goods' && saloon ? mats.saloonGoods : mats[g]); m.userData.own = true; m.castShadow = !['decal', 'glow'].includes(g); m.receiveShadow = g !== 'glow'; m.name = g; GROUP.add(m); out.draws++;
+      const m = new THREE.Mesh(geo, g === 'goods' && saloon ? mats.saloonGoods : g === 'decal' && saloon ? mats.saloonDecal : mats[g]); m.userData.own = true; m.castShadow = !['decal', 'glow'].includes(g); m.receiveShadow = g !== 'glow'; m.name = g; GROUP.add(m); out.draws++;
     }
   }
   return out;
@@ -125,7 +128,7 @@ function view(name) {
 }
 function night(on) {
   state.night = on;
-  hemi.intensity = on ? 0.5 : 1.3; hemi.color.set(on ? 0x2c3e66 : 0x9cbbe0); sun.intensity = on ? 0.5 : 2.6; sun.color.set(on ? 0x9bb2e6 : 0xfff3e2);
+  hemi.intensity = on ? 0.5 : 2.3; hemi.color.set(on ? 0x2c3e66 : 0x9cbbe0); sun.intensity = on ? 0.5 : 2.6; sun.color.set(on ? 0x9bb2e6 : 0xfff3e2);
   scene.background = new THREE.Color(on ? 0x0d1526 : 0xa9c0d6); renderer.toneMappingExposure = on ? 1.2 : 1;
   LU.uNight.value = on ? 1 : 0; LU.uLamp.value = 1; LU.uLampGain.value = on ? 1.7 : 0; LU.uOutLamp.value = 1;
   setLamps([{ p: [0.9, 1.9, 0.9], strength: on ? 1.4 : 0.15 }]); chipsOn();

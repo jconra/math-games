@@ -23,10 +23,10 @@ export function makeBoot(gd, M, reg, tint) {
   };
   gd.grid(SIDES, rows, at, (i, j) => [i / SIDES, j / rows], reg, tint, M, { wrap: true });
   // (the toe's tip closed; the sole and heel a shade darker; the shaft's inside dark; a strap each side of the top)
-  const tipX = UPPER[rows][0], tipY = UPPER[rows][1], pts = []; for (let i = 0; i < SIDES; i++) pts.push(at(SIDES - i, rows));
+  const tipX = UPPER[rows][0], tipY = UPPER[rows][1], pts = []; for (let i = 0; i < SIDES; i++) pts.push(at(i, rows));
   gd.fan(pts, [1, 0, 0], () => [0.5, 0.5], reg, tint, M);
   gd.extrude(SOLE, 0.07, M, STORE_ART.tile.leatherBlack, STORE_ART.tile.leatherBlack, tint.map((c) => c * 0.7));
-  gd.disc(0.046, mul(M, T(UPPER[0][0], 0.305, 0)), 8, STORE_ART.tile.coal, [0.5, 0.45, 0.4]);
+  gd.lathe([[UPPER[0][2], UPPER[0][1]], [0.05, 0.25], [0, 0.25]], mul(M, T(UPPER[0][0], 0, 0)), SIDES, STORE_ART.tile.coal, [0.5, 0.45, 0.4], { oval: [1, UPPER[0][3] / UPPER[0][2]] });
   for (const s of [-1, 1]) gd.box([0.022, 0.028, 0.006], mul(M, T(UPPER[0][0], 0.318, s * 0.046)), { all: reg, '-y': null }, tint.map((c) => c * 0.8));
   return { tipX, tipY };
 }

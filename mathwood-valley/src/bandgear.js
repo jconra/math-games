@@ -2,12 +2,13 @@
 // fiddler's wrist bones where his clips hold them (src/fiddleplan.js HOLD), the banjo on the banjo player's lap and his
 // stool under him (src/banjoplan.js PLACE). One piece of code for the stage (src/stage.js) and the Hands Lab (labs/hands).
 //   makeHarmonicaModel(H), placeHarmonicaOn(P, harmonica, H)   H: STAGE.harp's sizes
-//   holdFiddleOn(P) -> { fiddle, bow, mat }, holdBanjoOn(P) -> { banjo, stool, mat }
+//   holdFiddleOn(P) -> { fiddle, bow, mat }, holdBanjoOn(P) -> { banjo, stool, mat }, holdDrumsOn(P) -> { kit, stool, stickL, stickR, mat }
 import * as THREE from 'three';
 import { makeFiddleModel, makeBowModel, fiddleMaterial } from './fiddle.js';
 import { holdMatrix } from './fiddleplan.js';
 import { makeBanjoModel, makeStoolModel, banjoMaterial } from './banjo.js';
 import { placeMatrix } from './banjoplan.js';
+import { makeDrumKit, makeStick, drumMaterial } from './drums.js';
 
 // a little metal box with the wooden comb showing along its front, so the cupped hands read as playing one
 export function makeHarmonicaModel(H) {
@@ -52,4 +53,11 @@ export function holdBanjoOn(P) {
   banjo.matrixAutoUpdate = false; banjo.matrix.fromArray(placeMatrix());
   for (const m of [banjo, stool]) { m.castShadow = false; m.receiveShadow = false; P.root.add(m); }
   return { banjo, stool, mat };
+}
+// the drummer's drums (src/drums.js) ride his root, his stool under him; a stick in each hand (the file's numbers place them)
+export function holdDrumsOn(P) {
+  const mat = drumMaterial(), kit = makeDrumKit({ material: mat }), stool = makeStoolModel({ material: banjoMaterial() }), stickL = makeStick({ material: mat }), stickR = makeStick({ material: mat });
+  stool.material.userData.indoorLit = true; stool.castShadow = stool.receiveShadow = false;
+  P.root.add(kit, stool, stickL, stickR);
+  return { kit, stool, stickL, stickR, mat };
 }

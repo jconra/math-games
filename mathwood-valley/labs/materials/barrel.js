@@ -27,21 +27,26 @@ export function makeBarrel(k, o = {}) {
   const wts = Array.from({ length: n }, () => k.r(0.8, 1.2)), sum = wts.reduce((p, q) => p + q, 0);
   // the bow: 1 at the middle, 0 at the ends; at the ends a stave is pulled in to rEnd and narrowed to match
   const bow = (ly) => 1 - (2 * ly / h) ** 2, dr = rMid - rEnd;
-  const shape = (lx, ly, lz) => { const f = bow(ly); return [lx * (rEnd + dr * f) / rMid, ly, lz - dr * (1 - f)]; };
+  const shape = (lx, ly, lz, sideP = 1, sideN = 1) => { const f = bow(ly); return [lx * (lx > 0 ? sideP : sideN) * (rEnd + dr * f) / rMid, ly, lz - dr * (1 - f)]; };
   const cuts = [-0.32, -0.14, 0.14, 0.32].map((c) => c * h);
   let a = turn, maxDa = 0;
   for (let i = 0; i < n; i++) {
-    const da = wts[i] / sum * Math.PI * 2, ac = a + da / 2, w = 2 * rMid * Math.sin(da / 2) + 0.004;
+    const da = wts[i] / sum * Math.PI * 2, ac = a + da / 2, w = 2 * rMid * Math.tan(da / 2);
+    // (flats on a round: each edge runs out exactly to where this stave's face meets its neighbour's, so no slit between)
+    const dPrev = wts[(i + n - 1) % n] / sum * Math.PI * 2, dNext = wts[(i + 1) % n] / sum * Math.PI * 2;
+    const sP = rMid * Math.tan((da + dPrev) / 4) / (w / 2), sN = rMid * Math.tan((da + dNext) / 4) / (w / 2);
     maxDa = Math.max(maxDa, da);
     const shade = tint.map((c) => c * k.r(0.88, 1.12)), strip = Math.floor(k.R() * 12);
     // its outside face on the barrel's skin at the bulge; the inside face is left flat (it shows only above the lid)
     const m = mul(base, RY(Math.PI / 2 - ac), T(0, h / 2, rMid - th / 2));
-    k.board([w, h, th], null, null, { m, long: 1, strip, uShift: k.r(0, 1.2), tint: shade, shape, cuts, segFaces: '+z', skip: '-y+x-x' });
+    k.board([w, h, th], null, null, { m, long: 1, strip, uShift: k.r(0, 1.2), tint: shade, shape: (lx, ly, lz) => shape(lx, ly, lz, sP, sN), cuts, segFaces: '+z', skip: '-y+x-x' });
     a += da;
   }
   // the dark inside, where the staves part at the bulge
-  const core = Array.from({ length: 12 }, (_, i) => { const t = (i + 0.5) / 12 * Math.PI * 2; return [Math.cos(t) * (rEnd - th), Math.sin(t) * (rEnd - th)]; });
-  k.prism('wood', core, h - 0.04, null, null, { m: mul(base, T(0, h / 2, 0)), tint: [0.08, 0.07, 0.06], smooth: true, skip: '+y-y' });
+  const core = Array.from({ length: 12 }, (_, i) => { const t = (i + 0.5) / 12 * Math.PI * 2; const rc = (rEnd - th) / Math.cos(Math.PI / 12) + 0.003; return [Math.cos(t) * rc, Math.sin(t) * rc]; });   // (its flats just outside the staves' inner faces, so a seam shows only the dark)
+  // (o.coreTo: where it stops, under what closes the top; else above it the core's far side would show its back)
+  const coreTop = o.coreTo ?? h - 0.02;
+  k.prism('wood', core, coreTop - 0.02, null, null, { m: mul(base, T(0, (coreTop + 0.02) / 2, 0)), tint: [0.08, 0.07, 0.06], smooth: true, skip: '+y-y' });
   // the lid: boards across, just below the stave tops, each cut to the round
   const nl = o.lidBoards ?? 3 + Math.floor(k.R() * 2), rl = rEnd - th - 0.002, lw = 2 * rl / nl;
   if (o.lid !== false) for (let j = 0; j < nl; j++) {
@@ -51,11 +56,15 @@ export function makeBarrel(k, o = {}) {
   }
   // the hoops: near each end, and one above the bulge. A flat stave's edges stand further from the middle than its
   // centre line, and the hoop's own sixteen flats sit inside its corners: the hoop goes round outside both
+  // (each narrows to the staves along its upper edge, so from above there's no slit to look through)
   const at = o.hoops === 2 ? [0.08, 0.92] : [0.08, 0.62, 0.92];
   for (const f of at) {
     const rs = rEnd + dr * bow((f - 0.5) * h), r = (rs / Math.cos(maxDa / 2) + 0.01) / Math.cos(Math.PI / 16), rusty = k.R() < 0.4;
     const ring = Array.from({ length: 16 }, (_, i) => { const t = (i + 0.5) / 16 * Math.PI * 2; return [Math.cos(t) * r, Math.sin(t) * r]; });
-    k.prism('iron', ring, 0.045, null, null, { m: mul(base, T(0, h * f, 0)), smooth: true, skip: '+y-y', tint: rusty ? [1.7, 1.05, 0.7] : [0.85, 0.82, 0.8] });
+    const rTop = (rEnd + dr * bow((f - 0.5) * h + 0.0225)) * (1 + 0.5 * (1 / Math.cos(maxDa / 2) - 1)) + 0.001;
+    k.prism('iron', ring, 0.045, null, null, { m: mul(base, T(0, h * f, 0)), smooth: true, skip: '+y-y', tint: rusty ? [1.7, 1.05, 0.7] : [0.85, 0.82, 0.8], taper: Math.max(0, 1 - rTop / r) });
   }
   k.solid([2 * rMid, h, 2 * rMid], [x, y0 + h / 2, z]);
+  // (how wide a round lid must be for its edge to run inside the staves all the way round)
+  return { lidR: Math.min((rEnd - th) / Math.cos(maxDa / 2) + 0.001, rEnd - 0.004) };
 }

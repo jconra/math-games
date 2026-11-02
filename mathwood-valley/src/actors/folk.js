@@ -18,6 +18,7 @@
 //              suit_f, formal_f
 //     palette  a name from PALETTES, or four colours [top, bottom, shoes, hat/pack]
 //     skin, hair   a colour ('#c68d62', 0xc68d62, a THREE.Color) or a number: an index into SKINS / HAIRS
+//     bareHands    true: the farmer's gloves (his _kind 6, on his hands) in the skin's colour, for hands that play an instrument
 //     hat      true: the cowboy hat on the Head bone (hair that would poke through tucked in); false: bare-headed.
 //              Default: on, but for the formal dress (her piled-up hair won't go under it). hatColour: the hat apart
 //              from the palette's fourth colour. hatStyle: which hat (an id from src/hats.js: the cowboy hat when
@@ -190,7 +191,7 @@ const toColour = (c, list, fallback) => {
   return new THREE.Color(fallback);
 };
 
-export function makePerson(lib, { outfit = 'farmer_m', palette = 'drifter', skin = 2, hair = 2, hat, hatColour = null, hatStyle = null, shadows = true, kid = false, badge = false, holster = false } = {}) {
+export function makePerson(lib, { outfit = 'farmer_m', palette = 'drifter', skin = 2, hair = 2, hat, hatColour = null, hatStyle = null, shadows = true, kid = false, badge = false, holster = false, bareHands = false } = {}) {
   const kind = lib.byOutfit[outfit];
   if (!kind) throw new Error('no such outfit: ' + outfit + ' (have ' + Object.keys(lib.byOutfit).join(', ') + ')');
   if (hat === undefined) hat = !BARE[outfit];
@@ -253,10 +254,11 @@ export function makePerson(lib, { outfit = 'farmer_m', palette = 'drifter', skin
     setPalette(pal) {
       const c = Array.isArray(pal) ? pal : PALETTES[pal] || PALETTES.drifter;
       u.fkTop.value.set(c[0]); u.fkBottom.value.set(c[1]); u.fkShoes.value.set(c[2]); u.fkHat.value.set(hatColour || c[3]);
+      if (bareHands) u.fkHat.value.copy(u.fkSkin.value);
       if (hatU) hatU.fkHat.value.set(hatColour || (piece && piece.colour) || c[3]);
       person.palette = pal;
     },
-    setSkin(c) { u.fkSkin.value.copy(toColour(c, SKINS, SKINS[2])); },
+    setSkin(c) { u.fkSkin.value.copy(toColour(c, SKINS, SKINS[2])); if (bareHands) u.fkHat.value.copy(u.fkSkin.value); },
     setHair(c) { u.fkHair.value.copy(toColour(c, HAIRS, HAIRS[2])); },
     // another hat of src/hats.js (its id; the cowboy hat for an unknown one), in its own colour (or the palette's)
     setHat(style) {

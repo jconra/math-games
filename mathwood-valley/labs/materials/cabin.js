@@ -56,6 +56,10 @@ export class Kit {
   //    shakeE  a roof shake: how much of it shows below the next course (m); the shader draws that course's shadow
   //    laid    (stone) a stone laid in a wall: its top, seen only in the joint over it, is shaded
   //    taper   (a prism) how much narrower its top end is (0.1: a tenth)
+  //    inward  (a prism) drawn from inside: its sides and its -y end face in (a tub's inner wall and floor)
+  //    capIn   (a prism) its +y end is a ring, its hole this share of the radius (the rim of a tub)
+  //    noSides (a prism) only its ends
+  //    endTint (a prism) its ends' own tint (cut wood lighter than the bark)
   //    lumJit  (board) vary the tint's brightness only, not its hue
   //    shape   (x, y, z) => [x, y, z]: bends the box's corners in its own frame before it is placed (a bowed barrel
   //          stave: give it cuts along its length so it has corners to bend)
@@ -363,8 +367,8 @@ function stepsAlong(o, F, axis, half, long) {
 function countPart(P) {
   const { o, size } = P, skip = o.skip || '';
   if (o.poly) {
-    const n = o.poly.length; let nv = n * 4, ni = n * 6;
-    for (const k of ['+y', '-y']) if (!skip.includes(k)) { nv += n; ni += (n - 2) * 3; }
+    const n = o.poly.length; let nv = o.noSides ? 0 : n * 4, ni = o.noSides ? 0 : n * 6;
+    for (const k of ['+y', '-y']) if (!skip.includes(k)) { if (k === '+y' && o.capIn) { nv += n * 2; ni += n * 6; } else { nv += n; ni += (n - 2) * 3; } }
     return [nv, ni];
   }
   const half = size.map((x) => x / 2), long = longAxis(P);
@@ -404,6 +408,7 @@ export function buildGeometry(parts, group, R, opts = {}) {
     // the tint's fourth number tells the shader what kind of part this is: 1 painted, 2 a round log, 3 mortar or
     // chinking, 4 a stone laid in a wall, below 0 a roof shake (minus how much of it shows)
     const tint0 = o.paint || o.tint || [1, 1, 1], painted = o.paint ? 1 : o.round ? 2 : o.mortar ? 3 : o.laid ? 4 : o.shakeE ? -o.shakeE : 0;
+    let capTint = null;
     // one corner: (lx, ly, lz) where it is drawn in the part's frame; el, eh the numbers edge wear works from
     const put = (lx, ly, lz, U, V, el, eh) => {
       // (a part with o.shape is bent in its own frame first: a barrel stave bowed out at the middle. The edge numbers
@@ -416,7 +421,7 @@ export function buildGeometry(parts, group, R, opts = {}) {
       uv[v * 2] = U; uv[v * 2 + 1] = V;
       lt[v * 4] = el[0]; lt[v * 4 + 1] = el[1]; lt[v * 4 + 2] = el[2]; lt[v * 4 + 3] = o.top ?? top(_v.x, _v.z, _v.y);
       hf[v * 4] = eh[0]; hf[v * 4 + 1] = eh[1]; hf[v * 4 + 2] = eh[2]; hf[v * 4 + 3] = 1;
-      const t = tintAt ? tintAt(_v.x, _v.y, _v.z, tint0, o) : tint0;
+      const t = capTint || (tintAt ? tintAt(_v.x, _v.y, _v.z, tint0, o) : tint0);
       tp[v * 4] = t[0]; tp[v * 4 + 1] = t[1]; tp[v * 4 + 2] = t[2]; tp[v * 4 + 3] = painted;
       partOf[v] = pi; mortar[v] = o.mortar ? 1 : 0;
       return v++;
@@ -439,15 +444,17 @@ export function buildGeometry(parts, group, R, opts = {}) {
       let cx = 0, cz = 0, bx = Infinity, bz = Infinity; for (const [x, z] of poly) { cx += x / np; cz += z / np; bx = Math.min(bx, x); bz = Math.min(bz, z); }
       const cum = [0]; for (let q = 0; q < np; q++) { const [x0, z0] = poly[q], [x1, z1] = poly[(q + 1) % np]; cum.push(cum[q] + Math.hypot(x1 - x0, z1 - z0)); }
       const perim = cum[np];
-      for (let q = 0; q < np; q++) {
+      const facing = o.inward ? -1 : 1;
+      if (!o.noSides) for (let q = 0; q < np; q++) {
         const [x0, z0] = poly[q], [x1, z1] = poly[(q + 1) % np], fw = Math.hypot(x1 - x0, z1 - z0);
         let fx = z1 - z0, fz = -(x1 - x0); const fl = Math.hypot(fx, fz) || 1; fx /= fl; fz /= fl;
         if (fx * ((x0 + x1) / 2 - cx) + fz * ((z0 + z1) / 2 - cz) < 0) { fx = -fx; fz = -fz; }
+        fx *= facing; fz *= facing;
         const b0 = v;
         for (const [t, sy] of [[0, -1], [1, -1], [1, 1], [0, 1]]) {
           const tp = o.taper && sy > 0 ? 1 - o.taper : 1;   // a tapered pole: its top end narrower
           const lx = (x0 + (x1 - x0) * t) * tp, lz = (z0 + (z1 - z0) * t) * tp, ly = sy * hL;
-          if (o.smooth) { const rx = lx - cx, rz = lz - cz, rl = Math.hypot(rx, rz) || 1; _n.set(rx / rl, 0, rz / rl); } else _n.set(fx, 0, fz);
+          if (o.smooth) { const rx = lx - cx, rz = lz - cz, rl = Math.hypot(rx, rz) || 1; _n.set(facing * rx / rl, 0, facing * rz / rl); } else _n.set(fx, 0, fz);
           _n.applyMatrix3(nm).normalize();
           let U = 0, V = 0;
           // (round, it wraps the middle of its strip twice round itself: the strip's dark edges would draw a seam down
@@ -461,9 +468,10 @@ export function buildGeometry(parts, group, R, opts = {}) {
         const out = -(z1 - z0) * fx + (x1 - x0) * fz > 0;
         idx.set(out ? [b0, b0 + 1, b0 + 2, b0, b0 + 2, b0 + 3] : [b0, b0 + 3, b0 + 2, b0, b0 + 2, b0 + 1], ii); ii += 6;
       }
+      capTint = o.endTint || null;
       for (const sy of [1, -1]) {
         if (skip.includes(sy > 0 ? '+y' : '-y')) continue;
-        _n.set(0, sy, 0).applyMatrix3(nm).normalize();
+        _n.set(0, sy * facing, 0).applyMatrix3(nm).normalize();
         const b0 = v;
         const tp = o.taper && sy > 0 ? 1 - o.taper : 1;
         for (const [px, pz] of poly) {
@@ -474,7 +482,16 @@ export function buildGeometry(parts, group, R, opts = {}) {
           put(lx, sy * hL, lz, U, V, [0, sy * hL, 0], [1, hL, 1]);
         }
         const [ax, az] = poly[0], [bx1, bz1] = poly[1], [cx1, cz1] = poly[2];
-        const up = ((bz1 - az) * (cx1 - ax) - (bx1 - ax) * (cz1 - az)) * sy > 0;
+        const up = ((bz1 - az) * (cx1 - ax) - (bx1 - ax) * (cz1 - az)) * sy * facing > 0;
+        if (sy > 0 && o.capIn) {   // (a ring: the same corners again, drawn in toward the middle)
+          for (const [px, pz] of poly) {
+            const lx = cx + (px * tp - cx) * o.capIn, lz = cz + (pz * tp - cz) * o.capIn; let U = 0, V = 0;
+            if (group === 'wood') [U, V] = endUV((lx - bx) / (size[0] || 1), (lz - bz) / (size[2] || 1));
+            put(lx, hL, lz, U, V, [0, hL, 0], [1, hL, 1]);
+          }
+          for (let q = 0; q < np; q++) { const a = b0 + q, b = b0 + (q + 1) % np, c = b + np, d = a + np; idx.set(up ? [a, b, c, a, c, d] : [a, c, b, a, d, c], ii); ii += 6; }
+          continue;
+        }
         for (let q = 1; q < np - 1; q++) { idx.set(up ? [b0, b0 + q, b0 + q + 1] : [b0, b0 + q + 1, b0 + q], ii); ii += 3; }
       }
       continue;

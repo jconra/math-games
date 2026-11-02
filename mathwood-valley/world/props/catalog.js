@@ -38,24 +38,24 @@ const LIST = [
   { kind: 'washstand', name: 'Wash stand', cat: 'Furniture', foot: [0.6, 0.45], h: 0.85, tris: 260, rank: 2, flags: [], art: 'saloon', fields: [] },
   { kind: 'ragRug', name: 'Rag rug', cat: 'Furniture', foot: [1.6, 1.0], h: 0.02, tris: 20, rank: 2, flags: [], art: 'saloon', fields: [] },
   // goods
-  { kind: 'boots', name: 'Pair of boots', cat: 'Goods', foot: [0.32, 0.2], h: 0.32, tris: 450, rank: 2, flags: [], fields: [pick('leather', 'Leather', ['brown', 'black'], 'brown')] },
+  { kind: 'boots', name: 'Pair of boots', cat: 'Goods', foot: [0.32, 0.2], h: 0.32, tris: 470, rank: 2, flags: [], fields: [pick('leather', 'Leather', ['brown', 'black'], 'brown')] },
   // containers
   { kind: 'barrel', name: 'Barrel', cat: 'Containers', foot: [0.6, 0.6], h: 0.86, tris: 340, rank: 2, flags: [], fields: [num('h', 'Height (m)', 0.6, 1.1, 0.01, 0.86), pick('fill', 'Heaped with', ['', 'apples', 'crackers', 'pickles'], '')] },
   { kind: 'keg', name: 'Keg', cat: 'Containers', foot: [0.4, 0.4], h: 0.5, tris: 260, rank: 2, flags: [], fields: [] },
   { kind: 'crate', name: 'Crate', cat: 'Containers', foot: [0.5, 0.5], h: 0.5, tris: 180, rank: 2, flags: [], fields: [num('size', 'Size (m)', 0.3, 0.8, 0.01, 0.5)] },
-  { kind: 'bucket', name: 'Wooden bucket', cat: 'Containers', foot: [0.3, 0.3], h: 0.3, tris: 140, rank: 3, flags: [], fields: [] },
-  { kind: 'pail', name: 'Tin pail', cat: 'Containers', foot: [0.28, 0.28], h: 0.26, tris: 240, rank: 3, flags: [], fields: [] },
+  { kind: 'bucket', name: 'Wooden bucket', cat: 'Containers', foot: [0.3, 0.3], h: 0.3, tris: 215, rank: 3, flags: [], fields: [] },
+  { kind: 'pail', name: 'Tin pail', cat: 'Containers', foot: [0.28, 0.28], h: 0.26, tris: 290, rank: 3, flags: [], fields: [] },
   { kind: 'sack', name: 'Sack', cat: 'Containers', foot: [0.4, 0.3], h: 0.62, tris: 270, rank: 2, flags: [], fields: [pick('print', 'Sack', ['flour', 'coffee', 'burlap'], 'flour'), check('lie', 'Lying down', false)] },
-  { kind: 'coalBucket', name: 'Coal scuttle', cat: 'Containers', foot: [0.3, 0.3], h: 0.4, tris: 120, rank: 3, flags: [], fields: [] },
-  { kind: 'washtub', name: 'Washtub', cat: 'Containers', foot: [0.6, 0.6], h: 0.3, tris: 300, rank: 3, flags: [], fields: [] },
-  { kind: 'milkCan', name: 'Milk can', cat: 'Containers', foot: [0.3, 0.3], h: 0.6, tris: 250, rank: 2, flags: [], fields: [] },
+  { kind: 'coalBucket', name: 'Coal scuttle', cat: 'Containers', foot: [0.3, 0.3], h: 0.4, tris: 205, rank: 3, flags: [], fields: [] },
+  { kind: 'washtub', name: 'Washtub', cat: 'Containers', foot: [0.6, 0.6], h: 0.3, tris: 340, rank: 3, flags: [], fields: [] },
+  { kind: 'milkCan', name: 'Milk can', cat: 'Containers', foot: [0.3, 0.3], h: 0.6, tris: 280, rank: 2, flags: [], fields: [] },
   { kind: 'woolSack', name: 'Wool sack', cat: 'Containers', foot: [0.6, 0.4], h: 0.5, tris: 300, rank: 2, flags: [], fields: [] },
-  { kind: 'eggCrate', name: 'Egg crate', cat: 'Containers', foot: [0.5, 0.4], h: 0.3, tris: 360, rank: 2, flags: [], fields: [] },
+  { kind: 'eggCrate', name: 'Egg crate', cat: 'Containers', foot: [0.5, 0.4], h: 0.3, tris: 370, rank: 2, flags: [], fields: [] },
   // tools
   { kind: 'shovel', name: 'Shovel', cat: 'Tools', foot: [0.25, 0.1], h: 1.3, tris: 100, rank: 3, flags: [], fields: [] },
-  { kind: 'broom', name: 'Broom', cat: 'Tools', foot: [0.25, 0.1], h: 1.4, tris: 40, rank: 3, flags: [], fields: [] },
+  { kind: 'broom', name: 'Broom', cat: 'Tools', foot: [0.25, 0.1], h: 1.4, tris: 220, rank: 3, flags: [], fields: [] },
   // lights
-  { kind: 'hangingLantern', name: 'Hanging lantern', cat: 'Lights', foot: [0.2, 0.2], h: 0.5, tris: 140, rank: 0, flags: ['used', 'lit'], fields: [num('drop', 'Chain (m)', 0.05, 1.2, 0.01, 0.25)] },
+  { kind: 'hangingLantern', name: 'Hanging lantern', cat: 'Lights', foot: [0.2, 0.2], h: 0.5, tris: 160, rank: 0, flags: ['used', 'lit'], fields: [num('drop', 'Chain (m)', 0.05, 1.2, 0.01, 0.25)] },
   // yard
   { kind: 'trough', name: 'Water trough', cat: 'Yard', foot: [1.6, 0.6], h: 0.5, tris: 150, rank: 0, flags: ['used'], fields: [] },
   { kind: 'hitchrail', name: 'Hitching rail', cat: 'Yard', foot: [2.4, 0.2], h: 1.05, tris: 280, rank: 0, flags: ['used'], fields: [] },

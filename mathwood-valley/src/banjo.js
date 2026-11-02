@@ -19,7 +19,7 @@ import { BANJO, STOOL, fret } from './banjoplan.js';
 // period colours (sRGB, as a picker shows them)
 const C = {
   head: '#dccba3', hoop: '#a69f90', rim: '#7d7568', rimIn: '#4a2f1a',
-  neck: '#5c3a20', board: '#2e1c13', peg: '#191411', bridge: '#d8c7a0', tail: '#2a2420', strings: '#cfcbc2',
+  neck: '#5c3a20', board: '#2e1c13', peg: '#191411', bridge: '#6b4526', tail: '#2a2420', strings: '#8d8a84',
   fret: '#b9b3a6', pearl: '#ebe4d2', hook: '#8f897d',
   stool: '#6e4b2c', stoolTop: '#7d5634',
 };

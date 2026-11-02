@@ -33,6 +33,7 @@ import { T, RX, RY, RZ, mul, vary, ngon } from './parts.js';
 import { MAKERS } from './props.js';
 import { put, FURN, DARKF } from '../../world/props/makers/furniture.js';
 import { gpuBytes, regionUV } from './art.js';
+import { KEYBOARD } from '../../src/pianoplan.js';
 
 // ── the picture ──────────────────────────────────────────────────────────────────────────────────────────────────────
 export const SALOON_ART = {
@@ -363,10 +364,12 @@ function drawRug(g, [x0, y0, w, h]) {
   });
 }
 function drawKeys(g, [x0, y0, w, h]) {
+  // (a real piano's 52 white keys, from A: src/pianoplan.js, which the pianist's fingers go by)
+  const N = KEYBOARD.whites, pat = [1, 0, 1, 1, 0, 1, 1];   // (a black key after A, not B, C, D, not E, F, G)
   pixels(g, [x0, y0, w, h], (u, v, x) => {
-    const kw = w / 36, k = Math.floor(x / kw), f = (x - k * kw) / kw;
-    const white = f > 0.06 ? [236, 228, 206] : [120, 110, 96];
-    const pat = [1, 1, 0, 1, 1, 1, 0], o = k % 7, black = pat[o] && v < 0.62 && f > 0.68;
+    const kw = w / N, k = Math.floor(x / kw), f = (x - k * kw) / kw, o = k % 7;
+    const white = f > 0.09 ? [236, 228, 206] : [120, 110, 96];
+    const black = k < N - 1 && pat[o] && v < 0.62 && f > 0.68;
     const blackL = k > 0 && pat[(k - 1) % 7] && v < 0.62 && f < 0.32;
     return black || blackL ? [24, 20, 18] : white;
   });
@@ -472,11 +475,11 @@ Object.assign(SALOON_MAKERS, {
     for (const [sx, sz, h] of [[-1, -1, 1.12], [1, -1, 1.12], [-1, 1, 0.78], [1, 1, 0.78]]) q.p('wood', ngon(6, 0.035), h, [sx * (W / 2 - 0.035), h / 2, sz * (L / 2 - 0.035)], null, { tint, smooth: true, skip: '-y' });
     q.b([W - 0.07, 0.55, 0.03], [0, 0.78, -L / 2 + 0.035], null, { long: 0, tint });
     q.b([W - 0.07, 0.3, 0.03], [0, 0.56, L / 2 - 0.035], null, { long: 0, tint });
-    for (const sd of [-1, 1]) q.b([0.03, 0.15, L - 0.07], [sd * (W / 2 - 0.035), 0.3, 0], null, { long: 2, tint, skip: '-y' });
+    for (const sd of [-1, 1]) q.b([0.03, 0.15, L - 0.07], [sd * (W / 2 - 0.035), 0.3, 0], null, { long: 2, tint });
     if (o.gd) {
       const A = SALOON_ART;
-      o.gd.box([W - 0.06, 0.17, L - 0.08], mul(M, T(0, H, 0)), { '+y': A.quilt, '+x': A.quilt, '-x': A.quilt, '+z': A.ticking }, vary(k, [1, 1, 1], 0.92, 1.05));
-      o.gd.box([W - 0.3, 0.1, 0.34], mul(M, T(0, H + 0.12, -L / 2 + 0.26), RX(0.15)), { '+y': A.tile.cream, '+z': A.tile.cream, '+x': A.tile.cream, '-x': A.tile.cream }, [1, 1, 1]);
+      o.gd.box([W - 0.06, 0.17, L - 0.08], mul(M, T(0, H, 0)), { '+y': A.quilt, '+x': A.quilt, '-x': A.quilt, '+z': A.ticking, '-z': A.ticking, '-y': A.ticking }, vary(k, [1, 1, 1], 0.92, 1.05));
+      o.gd.box([W - 0.3, 0.1, 0.34], mul(M, T(0, H + 0.12, -L / 2 + 0.26), RX(0.15)), { all: A.tile.cream }, [1, 1, 1]);
     }
     k.solid([W, 0.6, L], null, null, mul(M, T(0, 0.3, 0)));
   },
@@ -484,9 +487,9 @@ Object.assign(SALOON_MAKERS, {
   // and pitcher on it
   washstand(k, M, o) {
     const q = put(k, M), tint = vary(k, FURN, 0.85, 1.05), EN = [1.6, 1.58, 1.5];
-    q.b([0.62, 0.7, 0.4], [0, 0.35, 0], null, { long: 0, tint, skip: '-y-z' });
+    q.b([0.62, 0.7, 0.4], [0, 0.35, 0], null, { long: 0, tint, skip: '-y' });
     q.b([0.66, 0.03, 0.44], [0, 0.715, 0.01], null, { long: 0, tint });
-    q.b([0.62, 0.16, 0.02], [0, 0.81, -0.19], null, { long: 0, tint, skip: '-z' });
+    q.b([0.62, 0.16, 0.02], [0, 0.81, -0.19], null, { long: 0, tint });
     q.b([0.48, 0.5, 0.012], [0, 0.34, 0.205], null, { long: 1, tint: tint.map((c) => c * 1.1), skip: '-z' });
     q.p('iron', ngon(8, 0.16), 0.07, [0, 0.765, 0.03], null, { tint: EN, smooth: true, taper: -0.3 });
     q.p('iron', ngon(8, 0.065), 0.16, [0.03, 0.88, 0.03], null, { tint: EN, smooth: true, taper: -0.2, skip: '-y' });

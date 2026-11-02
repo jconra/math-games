@@ -10,7 +10,7 @@
 // resting over the others. Nothing in it is taken from any recording: only the SOUND of the two instruments was measured
 // (overtones, swell and fade times, wobble rates, breath; see ~/pw/bandit-math/sound/REPORT.md).
 //
-// Since the band moved into the saloon a drummer plays with them: a packing crate played with the hands (THE BOX below:
+// Since the band moved into the saloon a drummer plays with them (the part's still called the box, its first instrument: he has drums now, src/drums.js, but the sound's as the crate's) (THE BOX below:
 // a thump in the middle of its face, a slap at its top edge, a light finger tap between), noise through filters, no
 // tones. Each song has its own box part, made by dice of its own, so the piano and the harmonica play just as they did.
 //
@@ -601,6 +601,7 @@ export const FIDDLE_TUNES = {
     },
   },
   joeclark: {
+    along: true,
     banjo: true,   // (a banjo tune: the banjo takes turns when it's in the band)
     key: 'Amix', semi: -5, beat: 60 / 140, form: ['A', 'A', 'B', 'B'],
     parts: {
@@ -682,6 +683,7 @@ export const FIDDLE_TUNES = {
     },
   },
   sailor: {
+    along: true,
     banjo: true,   // (a banjo song: the banjo takes turns, and strums bum-ditty behind the others)
     key: 'Ddor', semi: 0, beat: 60 / 132, form: ['A', 'B'],
     parts: {
@@ -690,6 +692,7 @@ export const FIDDLE_TUNES = {
     },
   },
   wellerman: {
+    along: true,
     banjo: true,   // (a banjo song: the banjo takes turns, and strums bum-ditty behind the others)
     key: 'Dm', semi: 0, beat: 60 / 112, form: ['A', 'B'],
     parts: {
@@ -698,6 +701,7 @@ export const FIDDLE_TUNES = {
     },
   },
   blowman: {
+    along: true,
     // (rolling: written in thirds of a beat, the 6/8 of the song two bars to a four-beat bar)
     banjo: true,   // (a banjo song: the banjo takes turns, and strums bum-ditty behind the others)
     key: 'G', unit: 1 / 3, semi: 0, beat: 60 / 100, form: ['A', 'A'],
@@ -706,6 +710,7 @@ export const FIDDLE_TUNES = {
     },
   },
   haulaway: {
+    along: true,
     banjo: true,   // (a banjo song: the banjo takes turns, and strums bum-ditty behind the others)
     key: 'Ddor', semi: 0, beat: 60 / 120, form: ['A', 'B'],
     parts: {
@@ -893,6 +898,8 @@ function makeFiddle(T) {
           if (fid) ev.push({ ...harpNote, what: 'fiddle', midi: harpNote.midi + (T.fiddleUp || 0), lenBeats: nLen * (long ? 0.97 : 0.92), quick: nLen < 1, vel: (nt.at % 1 === 0 ? 0.85 : 0.72) * (harp ? 0.8 : 1), doubled: harp && !T.fiddleUp });
           if (bj) ev.push({ beat: at + nAt, what: 'banjo', midi: harpNote.midi, lenBeats: nLen, vel: (nt.at % 1 === 0 ? 0.9 : 0.75) * (harp || fid ? 0.85 : 1), doubled: harp || fid });
           if (harp) ev.push(harpNote);
+          // (T.along: a song whose fiddle turn comes late: it doubles the harmonica's turn too, softer)
+          if (T.along && fiddle && harp && !fid) ev.push({ ...harpNote, what: 'fiddle', lenBeats: nLen * (long ? 0.97 : 0.92), quick: nLen < 1, vel: FIDDLE_ALONG * (nt.at % 1 === 0 ? 1 : 0.88), doubled: true });
         });
       }
       line++;
@@ -1165,13 +1172,23 @@ export function makeBoxPart(song, seed = 1, { intro = true } = {}) {
 // every other one goes to the piano's right hand instead, his notes an octave up, the right hand leaving out its soft
 // chords meanwhile (the left hand's bass goes on). The dice are the same, so each song's notes are as they were; only
 // who plays them changes. `beat`: the song's seconds a beat (the piano's lengths are in seconds).
-export function turns(make, beat) {
+// With the fiddle in the band it doubles every other harmonica line (`along` 4: of the turns; the slow song's few lines: `along` 2, each harmonica line after its first), softly (the game's maker: some fiddle in every song,
+// not constant): the tune's top note where the harmonica plays two, bowed as written; no bends (the harmonica has those).
+export const FIDDLE_ALONG = 0.6;
+function fiddleDoubles(ev) {
+  const top = new Map();
+  for (const e of ev) if (e.what === 'harp') { const o = top.get(e.beat); if (!o || e.midi > o.midi) top.set(e.beat, e); }
+  return [...top.values()].map((e) => ({ beat: e.beat, what: 'fiddle', midi: e.midi, lenBeats: e.lenBeats, quick: e.lenBeats < 1, vel: FIDDLE_ALONG, doubled: true }));
+}
+export function turns(make, beat, along = 4) {
   return (seed, opts) => {
     const next = make(seed, opts);
     let k = 0;
     return function nextLine() {
       const ev = next();
-      if (!ev.some((e) => e.what === 'harp') || k++ % 2 === 0) return ev;
+      if (!ev.some((e) => e.what === 'harp')) return ev;
+      const turn = k++;
+      if (turn % 2 === 0) return opts && opts.fiddle && turn > 0 && turn % along === (along === 2 ? 0 : 2) ? [...ev, ...fiddleDoubles(ev)].sort((a, b) => a.beat - b.beat) : ev;
       return ev.filter((e) => !(e.what === 'piano' && Array.isArray(e.midi) && Math.min(...e.midi) >= 50)).map((e) => (e.what !== 'harp' ? e
         : { beat: e.beat, what: 'piano', lead: true, midi: e.midi + 12, len: e.lenBeats * beat * 0.95, vel: 0.5 * (e.level ?? 1) }));
     };
@@ -1179,7 +1196,7 @@ export function turns(make, beat) {
 }
 
 export const SONGS = [
-  { id: 'easy', name: 'Easy Afternoon', beat: BEAT, bar: 4, tune: turns(makeTune, BEAT), make: makeTune, ask: 'Easy Afternoon it is!', feel: 'easy-going', home: 'G' },
+  { id: 'easy', name: 'Easy Afternoon', beat: BEAT, bar: 4, tune: turns(makeTune, BEAT, 2), make: makeTune, ask: 'Easy Afternoon it is!', feel: 'easy-going', home: 'G' },
   { id: 'boots', name: 'Dusty Boots', beat: 60 / 138, bar: 4, tune: turns(makeBoots, 60 / 138), make: makeBoots, upbeat: true, ask: 'Dusty Boots: a quick one!', feel: 'a quick one', home: 'G' },
   { id: 'waltz', name: 'Prairie Waltz', beat: 0.6, bar: 3, tune: turns(makeWaltz, 0.6), make: makeWaltz, ask: 'A waltz: Prairie Waltz!', feel: 'a waltz', home: 'D' },
   { id: 'boogie', name: 'Stagecoach Boogie', beat: OWN_TUNES.boogie.beat, bar: 4, tune: makeFiddle(OWN_TUNES.boogie), round: fiddleRound(OWN_TUNES.boogie).length / 4, box: 'boogie', swing: OWN_TUNES.boogie.swing, group: 'own', home: 'A', upbeat: true, ask: 'Stagecoach Boogie! Hold on tight!', feel: 'a stomper' },
@@ -1213,9 +1230,9 @@ export const songOf = (id) => SONGS.find((s) => s.id === id) || CANDIDATES.find(
 // song: one of SONGS' ids ('easy' when left out: the first tune, as it always was); intro: false starts the harmonica in
 // the first line (a song asked for: the band strikes it up at once) instead of the piano's line alone; box: the
 // drummer's notes go there (none: the band without him)
-export function makeStageMusic(ctx, { harp, piano, box = null, room = null, seed = 1, patches = PATCH_PRESETS, song = 'easy', intro = true, fiddle = null, fiddleKit = null, pianoKit = null, banjo = null, banjoKit = null, banjoSynth = false, strumTo = null, baked = null } = {}) {
+export function makeStageMusic(ctx, { harp, piano, box = null, room = null, seed = 1, patches = PATCH_PRESETS, song = 'easy', intro = true, fiddle = null, fiddleKit = null, pianoKit = null, banjo = null, banjoKit = null, banjoSynth = false, strumTo = null, baked = null, fiddleComing = false } = {}) {
   const S = songOf(song), BL = S.beat, LINE = S.bar * 4;   // (seconds a beat; beats a line of four bars)
-  const tune = S.tune(seed, { intro, fiddle: !!fiddleKit, banjo: !!banjoKit || banjoSynth }), drum = box ? makeBoxPart(S.id, seed, { intro }) : null, queue = [], events = [], harpSpans = [], fiddleSpans = [], voices = [];
+  const tune = S.tune(seed, { intro, fiddle: !!fiddleKit || fiddleComing, banjo: !!banjoKit || banjoSynth }), drum = box ? makeBoxPart(S.id, seed, { intro }) : null, queue = [], events = [], harpSpans = [], fiddleSpans = [], voices = [];
   let origin = null, made = 0, timer = null, running = false;
   const offline = typeof ctx.startRendering === 'function';
   const secs = (beat) => origin + beat * BL;
@@ -1282,6 +1299,8 @@ export function makeStageMusic(ctx, { harp, piano, box = null, room = null, seed
     }
   }
   const M = {
+    // (the fiddle's samples, arriving after the song began: its notes sound from here on, the harmonica having covered till now)
+    setFiddleKit(kit) { fiddleKit = kit; },
     events, played: 0, song: S.id, name: S.name, beatLen: BL, bar: S.bar,
     start(at = ctx.currentTime + 0.1) {
       if (running) return;

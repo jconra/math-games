@@ -401,9 +401,11 @@ export function lantern(k, x, y, z, o = {}) {
   const iron = [0.85, 0.8, 0.76];
   k.box('iron', [0.15, 0.025, 0.15], [x, y - 0.11, z], null, { tint: iron });
   k.prism('iron', ngon(6, 0.1), 0.06, [x, y + 0.115, z], null, { tint: iron, taper: 0.55, smooth: true });
-  for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) k.box('iron', [0.014, 0.2, 0.014], [x + dx * 0.062, y, z + dz * 0.062], null, { tint: iron, skip: '+y-y' });
+  for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) k.box('iron', [0.014, 0.186, 0.014], [x + dx * 0.062, y - 0.007, z + dz * 0.062], null, { tint: iron, skip: '-y' });
   // the bail: a wire loop over the cap (a thin tube, when the kit has a rope list), on a short stem
-  k.box('iron', [0.014, 0.05, 0.014], [x, y + 0.165, z], null, { tint: iron });
+  // (with no wire loop to meet it, the stem runs on up to the bar the chain hangs from)
+  if (k.parts.rope) k.box('iron', [0.014, 0.05, 0.014], [x, y + 0.165, z], null, { tint: iron });
+  else k.box('iron', [0.014, 0.09, 0.014], [x, y + 0.185, z], null, { tint: iron });
   if (k.parts.rope) {
     const pts = []; for (let i = 0; i <= 8; i++) { const a = i / 8 * Math.PI; pts.push(new THREE.Vector3(x + Math.cos(a) * 0.065, y + 0.16 + Math.sin(a) * 0.09, z)); }
     k.parts.rope.push({ pts, closed: false, rad: 0.0045, sides: 4, tint: [0.12, 0.11, 0.1] });

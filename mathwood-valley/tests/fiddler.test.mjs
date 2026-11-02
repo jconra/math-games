@@ -122,10 +122,12 @@ test('the music says when the fiddle plays: M.fiddleAt over each of its notes, M
   M2.start(0.2);
   assert.equal(M2.events.filter((e) => e.what === 'fiddle').length, 0);
   assert.equal(M2.nextFiddle(0), null); assert.equal(M2.fiddleAt(5), false);
-  // the band's own songs have no fiddle in them yet
+  // the band's own made-up songs: the fiddle only doubles the harmonica, softly, on some of its lines
   const M3 = makeStageMusic(fakeCtx({ offline: 40 }), { harp: stub({}), piano: stub({}), fiddle: stub({}), fiddleKit: fakeKit(), song: 'easy', intro: false, seed: 3 });
   M3.start(0.2);
-  assert.equal(M3.events.filter((e) => e.what === 'fiddle').length, 0);
+  const f3 = M3.events.filter((e) => e.what === 'fiddle');
+  assert.ok(f3.length > 0);
+  for (const e of f3) assert.ok(M3.events.some((h) => h.what === 'harp' && Math.abs(h.at - e.at) < 1e-6), 'doubling a harmonica note');
   assert.ok(S.round > 0);
 });
 

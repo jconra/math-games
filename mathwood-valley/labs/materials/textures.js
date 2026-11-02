@@ -439,8 +439,9 @@ function drawEnds(put) {
     const [ox, oy, sz] = WOOD.ends[k], sc = sz / 128, seed = 950 + k * 13, log = k < WOOD.logEnds;
     // (worked out on a 128 plan, whatever the square's size)
     const inside = log || k < WOOD.logEnds + 3, ang = R() * Math.PI * 2;
-    const cx = log ? 64 + (R() - 0.5) * 50 : inside ? 64 + (R() - 0.5) * 50 : 64 + Math.cos(ang) * (95 + R() * 70);
-    const cy = log ? 64 + (R() - 0.5) * 50 : inside ? 64 + (R() - 0.5) * 50 : 64 + Math.sin(ang) * (95 + R() * 70);
+    const jx = R(), jy = R();   // (a log's heart at the middle of its end, within a whisker; board ends anywhere)
+    const cx = log ? 64 + (jx - 0.5) * 6 : inside ? 64 + (jx - 0.5) * 50 : 64 + Math.cos(ang) * (95 + R() * 70);
+    const cy = log ? 64 + (jy - 0.5) * 6 : inside ? 64 + (jy - 0.5) * 50 : 64 + Math.sin(ang) * (95 + R() * 70);
     const ringW = 3.2 + R() * 2.2, heart = inside ? 24 + R() * 18 : 0, sap = inside ? heart + 14 + R() * 10 : 999;
     const rad = 55 + R() * 3;                                   // a log's round end (on the 128 plan): about 90% of the square
     const cracks = []; const ncr = log ? Math.floor(R() * 4) : inside ? 1 + Math.floor(R() * 1.8) : Math.floor(R() * 1.6);

@@ -519,7 +519,7 @@ function barrel(k) {
   for (let i = 0; i <= 8; i++) { const t = i / 8; pts.push(new THREE.Vector2(R0 + (R1 - R0) * Math.sin(Math.PI * t), t * H)); }
   k.add('matte', new THREE.LatheGeometry(pts, 14), (x, y, z) => new THREE.Color(C.wood).multiplyScalar(0.86 + 0.18 * ((Math.floor((Math.atan2(x, z) / Math.PI + 1) * 7) % 2))));   // (the staves, every other one lighter)
   for (const t of [0.1, 0.5, 0.9]) { const r = R0 + (R1 - R0) * Math.sin(Math.PI * t) + 0.008; k.add('iron', place(cyl(r, r, 0.045, 14, true), [0, t * H, 0]), k.tone(C.ironDark, 0.03)); }
-  k.add('matte', place(cyl(R0 - 0.01, R0 - 0.01, 0.02, 14), [0, H - 0.015, 0]), C.woodDark);
+  k.add('matte', place(cyl(R0 + 0.002, R0 + 0.002, 0.02, 14), [0, H - 0.015, 0]), C.woodDark);   // (its edge inside the staves: no slit round it)
 }
 // Crate: a box of boards with a frame round each face and a brace across the front and back.
 function crate(k) {

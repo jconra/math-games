@@ -9,11 +9,21 @@
 // same number meaning the same movement on either side, so a pose copies across (copyPose).
 // A prop's pos is cm in the player's own frame (x to his left, y up, z the way he faces), its rot degrees about its own
 // axes; bone and at: which bone holds it and where in that bone's frame (no bone: it stays where its clip has it).
+// A prop may also ride another prop (on: 'fiddle', at: its frame in that one's) and slide along its own length with the
+// clip's beat (slide: metres each way: the bow on the strings). pins: { L: { prop, at: [x, y, z], q: [x, y, z, w] } }: that
+// hand's wrist kept at this place on the prop, however the clip moves, the arm following.
+// ramps: a clip that only carries him between two others has no numbers of its own: its numbers are those two's, shared
+// out by how far through it is, so the fiddle goes up to his chin and comes down with the clip.
+// sizes (beside players): { fiddler: 21 }, how long each player's hands are, cm, wrist to the middle finger's tip (no
+// number: as the model has them, about 28). The hand's bone is scaled with what hangs from it, so nothing pulls apart.
 export const PLAYERS = {
-  fiddler: { name: 'The fiddler', clips: ['Play_Fiddle', 'Fiddle_Rest', 'Fiddle_Up', 'Fiddle_Down'], props: { fiddle: 'The fiddle', bow: 'The bow' } },
+  pianist: { name: 'The pianist', clips: ['Play_Piano', 'Piano_Rest'], props: {} },
+  drummer: { name: 'The drummer', clips: ['Play_Box', 'Box_Rest'], props: { stool: 'The stool', stickL: 'Left stick', stickR: 'Right stick' } },
+  fiddler: { name: 'The fiddler', clips: ['Play_Fiddle', 'Fiddle_Rest'], ramps: { Fiddle_Up: ['Fiddle_Rest', 'Play_Fiddle'], Fiddle_Down: ['Play_Fiddle', 'Fiddle_Rest'] }, props: { fiddle: 'The fiddle', bow: 'The bow' } },
   banjo: { name: 'The banjo player', clips: ['Play_Banjo', 'Banjo_Rest'], props: { banjo: 'The banjo', stool: 'The stool' } },
   harpist: { name: 'The harmonica player', clips: ['Play_Harmonica', 'Harmonica_Rest'], props: { harmonica: 'The harmonica' } },
 };
+export const HAND_CM = { min: 14, max: 32 };   // what a hand's size may be set to, cm
 export const ELBOW_MOST = 150;   // the most an elbow bends, degrees from straight, the clip and the turn added together
 export const FINGERS = ['Index', 'Middle', 'Ring', 'Pinky'];
 const FINGER_WORD = { Index: 'index finger', Middle: 'middle finger', Ring: 'ring finger', Pinky: 'little finger', Thumb: 'thumb' };
@@ -79,13 +89,21 @@ function cleanProp(p) {
   const pos = trip(p.pos, 100), rot = trip(p.rot, 180), out = {};
   if (pos.some(Boolean)) out.pos = pos;
   if (rot.some(Boolean)) out.rot = rot;
-  if (typeof p.bone === 'string' && ALL_BONES.includes(p.bone) && Array.isArray(p.at) && p.at.length === 16 && p.at.every((v) => Number.isFinite(+v))) { out.bone = p.bone; out.at = p.at.map((v) => round(+v, 1e5)); }
+  if (typeof p.on === 'string' && Array.isArray(p.at) && p.at.length === 16) { out.on = p.on; out.at = p.at.map((v) => round(+v, 1e5)); if (+p.slide) out.slide = round(+p.slide, 1e3); }
+  else if (typeof p.bone === 'string' && ALL_BONES.includes(p.bone) && Array.isArray(p.at) && p.at.length === 16 && p.at.every((v) => Number.isFinite(+v))) { out.bone = p.bone; out.at = p.at.map((v) => round(+v, 1e5)); }
   return Object.keys(out).length ? out : null;
+}
+function cleanPin(p) {
+  if (!p || typeof p.prop !== 'string' || !Array.isArray(p.at) || p.at.length !== 3 || !Array.isArray(p.q) || p.q.length !== 4) return null;
+  return { prop: p.prop, at: p.at.map((v) => round(+v, 1e4)), q: p.q.map((v) => round(+v, 1e4)) };
 }
 // a file read or about to be saved: the known players, clips, bones and joints only, numbers in range, nothing kept that
 // does nothing. (Version 1's whole-hand numbers meant something else and aren't read.)
 export function cleanHands(d) {
   const out = { v: 2, players: {} }, P = d && d.v === 2 && d.players && typeof d.players === 'object' ? d.players : {};
+  const sizes = {};
+  for (const who of Object.keys(PLAYERS)) { const cm = d && d.v === 2 && d.sizes && +d.sizes[who]; if (cm) sizes[who] = num(cm, HAND_CM.min, HAND_CM.max); }
+  if (Object.keys(sizes).length) out.sizes = sizes;
   for (const [who, def] of Object.entries(PLAYERS)) {
     const pl = {};
     for (const clip of def.clips) {
@@ -94,6 +112,8 @@ export function cleanHands(d) {
       for (const name of ALL_BONES) { const b = cleanBone(name, c.bones && c.bones[name]); if (Object.keys(b).length) bones[name] = b; }
       for (const name of Object.keys(def.props)) { const p = cleanProp(c.props && c.props[name]); if (p) props[name] = p; }
       const e = {}; if (Object.keys(bones).length) e.bones = bones; if (Object.keys(props).length) e.props = props;
+      const pins = {}; for (const S of ['L', 'R']) { const n = cleanPin(c.pins && c.pins[S]); if (n && def.props[n.prop]) pins[S] = n; }
+      if (Object.keys(pins).length) e.pins = pins;
       if (Object.keys(e).length) pl[clip] = e;
     }
     if (Object.keys(pl).length) out.players[who] = pl;
@@ -102,7 +122,7 @@ export function cleanHands(d) {
 }
 // the file's text: one line a bone, one line a prop, so it reads and diffs cleanly
 export function handsText(d) {
-  const c = cleanHands(d), lines = ['{ "v": 2, "players": {'], comma = (i, a) => (i < a.length - 1 ? ',' : '');
+  const c = cleanHands(d), lines = [`{ "v": 2,${c.sizes ? ` "sizes": ${JSON.stringify(c.sizes)},` : ''} "players": {`], comma = (i, a) => (i < a.length - 1 ? ',' : '');
   Object.keys(c.players).forEach((w, i, W) => {
     lines.push(`  ${JSON.stringify(w)}: {`);
     Object.keys(c.players[w]).forEach((cl, j, C) => {
@@ -133,8 +153,15 @@ export function setJoint(d, who, clip, bone, joint, value) {
 }
 export const getJoint = (d, who, clip, bone, joint) => { const c = d.players[who] && d.players[who][clip]; return (c && c.bones && c.bones[bone] && c.bones[bone][joint]) || 0; };
 export function resetBones(d, who, clip, names) { const c = d.players[who] && d.players[who][clip]; if (c && c.bones) for (const n of names) delete c.bones[n]; }
-export function resetPlayer(d, who) { delete d.players[who]; }
-export function resetAll(d) { d.players = {}; }
+export function resetPlayer(d, who) { delete d.players[who]; if (d.sizes) delete d.sizes[who]; }
+export function resetAll(d) { d.players = {}; delete d.sizes; }
+// a player's hand size, cm (0: as the model has them)
+export const getSize = (d, who) => (d.sizes && d.sizes[who]) || 0;
+export function setSize(d, who, cm) {
+  const v = cm ? num(cm, HAND_CM.min, HAND_CM.max) : 0;
+  if (v) (d.sizes || (d.sizes = {}))[who] = v; else if (d.sizes) delete d.sizes[who];
+  return v;
+}
 // a pose copied to the other side, this clip's arm and hand: the numbers mean the same movement on either side
 export function copyPose(d, who, clip, from) {
   const c = d.players[who] && d.players[who][clip]; if (!c || !c.bones) return;

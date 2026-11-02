@@ -8,7 +8,7 @@ import { SHEET, tableTop, chairSeat, pictureRegion } from '../sheet.js';
 
 export const FURN = [0.62, 0.42, 0.3], DARKF = [0.46, 0.3, 0.2];
 // the boards' picture is lit as the room lights it: a little under its own colour, each top its own shade
-const BOARD_TINT = [0.66, 0.6, 0.55];
+const BOARD_TINT = [0.66, 0.6, 0.55], LID_TINT = [0.5, 0.74, 1.05];
 const euler = (rot) => (rot ? new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(...rot, 'YXZ')) : new THREE.Matrix4());
 export const put = (k, M) => ({
   b: (size, pos, rot, o) => k.board(size, null, null, { ...o, m: mul(M, T(...pos), euler(rot)) }),
@@ -30,14 +30,20 @@ function roundOfBoards(k, pa, M, r, th, reg, n) {
   pa.cyl(r, th, mul(M, RY(k.r(0, Math.PI * 2))), n, SHEET.edge, reg, tint, { bottom: reg, uSpan: 2 });
 }
 
+// the same boards as a lid: just the face (its edge is hidden inside whatever it closes)
+export function lidOfBoards(k, pa, M, r, n = 16) {
+  const shade = k.r(0.9, 1.08), tint = LID_TINT.map((c) => c * shade);
+  pa.cyl(r, 0.0001, mul(M, RY(k.r(0, Math.PI * 2))), n, null, tableTop(Math.floor(k.r(0, 2))), tint);
+}
+
 export const FURNITURE = {
   // a round pedestal table: a top of boards with a thin apron under its edge, a turned column, four feet
   roundTable(k, M, o) {
     const q = put(k, M), r = o.r ?? 0.46, H = 0.76, tint = vary(k, DARKF, 0.95, 1.1);
     roundOfBoards(k, o.pa, mul(M, T(0, H - 0.0175, 0)), r, 0.035, tableTop(Math.floor(k.r(0, 2))), 16);
-    q.p('wood', ngon(12, r - 0.03), 0.06, [0, H - 0.065, 0], null, { tint: tint.map((c) => c * 0.8), smooth: true, skip: '+y-y' });
+    q.p('wood', ngon(12, r - 0.03), 0.06, [0, H - 0.065, 0], null, { tint: tint.map((c) => c * 0.8), smooth: true, skip: '+y' });
     q.p('wood', ngon(6, 0.05), 0.3, [0, 0.52, 0], null, { tint, smooth: true, taper: 0.25, skip: '+y-y' });
-    q.p('wood', ngon(6, 0.065), 0.32, [0, 0.22, 0], null, { tint, smooth: true, taper: -0.3, skip: '+y-y' });   // (down into the feet)
+    q.p('wood', ngon(6, 0.065), 0.32, [0, 0.22, 0], null, { tint, smooth: true, taper: -0.3, skip: '-y' });   // (down into the feet)
     for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + Math.PI / 4; q.b([0.06, 0.06, 0.34], [Math.sin(a) * 0.15, 0.06, Math.cos(a) * 0.15], [0.12, a, 0], { long: 2, tint: tint.map((c) => c * 0.85) }); }
     k.solid([r * 1.6, 0.05, r * 1.6], null, null, mul(M, T(0, H - 0.03, 0)));
     k.solid([0.14, H, 0.14], null, null, mul(M, T(0, H / 2, 0)));

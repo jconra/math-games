@@ -6,7 +6,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { PLAYERS, ELBOW_MOST, BONE_GROUPS, jointsOf, boneWord, cleanHands, handsText, setJoint, getJoint, resetBones, resetPlayer, resetAll, copyPose, copyClip, handBones, armBones } from '../src/handplan.js';
+import { PLAYERS, ELBOW_MOST, BONE_GROUPS, jointsOf, boneWord, cleanHands, handsText, setJoint, getJoint, resetBones, resetPlayer, resetAll, copyPose, copyClip, handBones, armBones, HAND_CM, getSize, setSize } from '../src/handplan.js';
 
 const ids = (n) => jointsOf(n).map((j) => j.id);
 test('each bone has only the joints it really has', () => {
@@ -54,5 +54,24 @@ test('editing: a joint set and cleared, kept in its limits; left copies to right
 test('the game\'s file: every player set, and clean as it stands', () => {
   const d = JSON.parse(readFileSync(new URL('../models/people/hands.json', import.meta.url)));
   assert.deepEqual(cleanHands(d), d);
-  for (const who of Object.keys(PLAYERS)) assert.ok(d.players[who], who);
+  for (const who of Object.keys(PLAYERS)) assert.ok(d.sizes[who] >= 18 && d.sizes[who] <= 23, who);   // (the hands' size, a real hand's about)
+  for (const who of ['pianist', 'fiddler', 'banjo', 'harpist']) assert.ok(d.players[who], who);
+  assert.equal(d.players.fiddler.Play_Fiddle.props.fiddle.bone, 'Chest');           // (the fiddle at his chin)
+  assert.equal(d.players.fiddler.Play_Fiddle.props.bow.on, 'fiddle');               // (the bow on its strings)
+  assert.ok(d.players.fiddler.Play_Fiddle.pins.L && d.players.banjo.Play_Banjo.pins.L);   // (the fret hands stay on the necks)
+});
+test('a hand\'s size: in range, kept by the file, gone with a reset', () => {
+  const d = cleanHands({});
+  assert.equal(setSize(d, 'banjo', 99), HAND_CM.max); assert.equal(setSize(d, 'banjo', 21), 21); assert.equal(getSize(d, 'banjo'), 21); assert.equal(getSize(d, 'fiddler'), 0);
+  assert.deepEqual(JSON.parse(handsText(d)).sizes, { banjo: 21 });
+  assert.equal(cleanHands({ v: 2, players: {}, sizes: { nobody: 20, banjo: 2 } }).sizes.banjo, HAND_CM.min); assert.ok(!cleanHands({ v: 2, players: {}, sizes: { nobody: 20 } }).sizes);
+  resetPlayer(d, 'banjo'); assert.equal(getSize(d, 'banjo'), 0);
+});
+test('a hand kept on an instrument, a bow riding the fiddle: kept by the file, nonsense dropped', () => {
+  const pin = { prop: 'fiddle', at: [0.1, 0.2, 0.3], q: [0, 0, 0, 1] }, at = new Array(16).fill(0);
+  const c = cleanHands({ v: 2, players: { fiddler: { Play_Fiddle: { pins: { L: pin, R: { prop: 'nope', at: [0, 0, 0], q: [0, 0, 0, 1] } }, props: { bow: { on: 'fiddle', at, slide: 0.1 } } } } } });
+  assert.deepEqual(c.players.fiddler.Play_Fiddle.pins, { L: pin });
+  assert.equal(c.players.fiddler.Play_Fiddle.props.bow.slide, 0.1);
+  assert.deepEqual(JSON.parse(handsText(c)), c);
+  assert.ok(PLAYERS.pianist && PLAYERS.drummer && PLAYERS.fiddler.ramps.Fiddle_Up);
 });

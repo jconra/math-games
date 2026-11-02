@@ -148,7 +148,7 @@ test('the band plays a fiddle tune: the piano alone in the opening line, then th
       const inBar = (what) => played.flat().filter((e) => e.what === what && (what !== 'piano' || e.lead) && e.beat >= at - 1e-9 && e.beat < at + 4 - 1e-9).map((e) => [+(e.beat - at).toFixed(4), e.midi]);
       const tune = bar.notes.filter((n) => n.midi != null), as = (up) => tune.map((n) => [+n.at.toFixed(4), n.midi + T.semi + up]);
       assert.deepEqual(inBar('harp'), lead.includes('harp') ? as(0) : [], `${id} bar ${k}: the harmonica`);
-      assert.deepEqual(inBar('fiddle'), lead.includes('fiddle') ? as(0) : [], `${id} bar ${k}: the fiddle`);
+      assert.deepEqual(inBar('fiddle'), lead.includes('fiddle') || (T.along && fiddle && lead.includes('harp')) ? as(0) : [], `${id} bar ${k}: the fiddle (T.along: doubling the harmonica's turn too)`);
       assert.deepEqual(inBar('piano'), lead === 'piano' ? as(12) : [], `${id} bar ${k}: the piano's right hand`);
       const chick = played.flat().filter((e) => e.what === 'piano' && Array.isArray(e.midi) && e.beat >= at && e.beat < at + 4).length;
       assert.equal(chick, lead === 'piano' ? 0 : 2, `${id} bar ${k}: the soft chords only while the right hand is free`);
@@ -441,5 +441,13 @@ test('the candidate waltzes: three beats a bar, every bar full, on no card yet, 
     lines.forEach((ev, i) => ev.forEach((e) => assert.ok(e.beat >= i * 12 && e.beat < (i + 1) * 12, `${s.id}: note inside its line`)));
     const who = new Set(lines.slice(1).flatMap((ev) => ev.filter((e) => e.lead || e.what === 'harp' || e.what === 'fiddle').map((e) => (e.lead ? 'piano' : e.what))));
     assert.deepEqual([...who].sort(), ['fiddle', 'harp', 'piano']);
+  }
+});
+
+test('some fiddle in every song on the card, the band\'s own too, and none of it without the fiddle in the band', () => {
+  for (const s of SONGS) {
+    const count = (fiddle) => { const next = s.tune(7, { intro: true, fiddle }); let n = 0; for (let i = 0; i < 16; i++) n += next().filter((e) => e.what === 'fiddle').length; return n; };
+    assert.ok(count(true) > 0, `${s.id}: the fiddle has a part`);
+    if (!s.round) assert.equal(count(false), 0, `${s.id}: no fiddle, no part`);
   }
 });

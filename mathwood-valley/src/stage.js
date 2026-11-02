@@ -1,6 +1,7 @@
-// THE BAND: four players on the stage inside the saloon (labs/buildings/saloon.js, a code-built building). A piano
+// THE BAND: five players on the stage inside the saloon (labs/buildings/saloon.js, a code-built building). A piano
 // player sits at the saloon's upright piano, a harmonica player stands at the front of the stage, a drummer sits on a
-// packing crate at its left and plays the crate with his hands, and a fiddler stands at its front right with a fiddle
+// stool at its left and double-drums, a bass drum with a cymbal on top and a snare on a stand, two sticks (src/drums.js,
+// src/drumhands.js: his strokes from the music's own box hits), and a fiddler stands at its front right with a fiddle
 // made in code (src/fiddle.js; it plays the old fiddle tunes' turns with real violin samples, src/audio/stagemusic.js
 // THE FIDDLE), and a banjo player sits on a stool at its right front with a banjo made in code (src/banjo.js; it plays
 // the banjo tunes' turns and their bum-ditty strum with the synth banjo, src/audio/banjosynth.js) (folk.js people in
@@ -70,6 +71,7 @@
 //   S.dispose()
 // With no saloon in the town (W.V.CODE has none, or it has no stage) the handle waits for one, quiet: no players, no
 // music and no prompt.
+import { makePlayHands } from './playhands.js';
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
@@ -80,9 +82,11 @@ import { bakedBand } from './audio/bake.js';
 import { bandChoices, bandLine, soundThrough, songLines, nextSong } from './bandplan.js';
 import { playEnding } from './audio/songend.js';
 import { howdy } from './ui/howdy.js';
-import { makeHarmonicaModel, holdFiddleOn, holdBanjoOn } from './bandgear.js';
+import { makeHarmonicaModel, holdFiddleOn, holdBanjoOn, holdDrumsOn } from './bandgear.js';
 import { banjoPlaying } from './banjoplan.js';
 import { loadHands, makeHandPose } from './handpose.js';
+import { makePianoHands } from './pianohands.js';
+import { makeDrumHands } from './drumhands.js';
 
 export const STAGE = {
   // who plays (folk.js looks)
@@ -94,9 +98,7 @@ export const STAGE = {
   // (a man: his clips are made on the men's skeleton, models/people/clips_stage_m.glb)
   fiddler: { outfit: 'casual_m', palette: 'homestead', skin: 2, hair: 4 },
   // (a man too: his clips are on the men's skeleton; the farmer's work clothes in mustard, unlike the others)
-  banjoist: { outfit: 'farmer_m', palette: 'mustard', skin: 5, hair: 0 },
-  // the drummer's packing crate (metres: across, front to back, tall; as build_stage_clips.py's BOX, which he sits on)
-  crate: { w: 0.5, d: 0.38, h: 0.4 },
+  banjoist: { outfit: 'farmer_m', palette: 'mustard', skin: 5, hair: 0, bareHands: true },
   make: 45,               // metres from the saloon's middle within which the players are made (hidden till its inside is in)
   near: 16,               // metres from the stage: the sound's own distance only, as near things are
   fade: 130,              // metres: from here the band fades out ...
@@ -109,7 +111,7 @@ export const STAGE = {
   // made up by (distance / near) ^ k, so it falls about 3 dB a doubling of the distance instead of 6
   carry: 0.5,
   level: 3.5,             // the band's loudness (the patches are written quieter, for the Sound Lab)
-  boxLevel: 3.2,          // the drummer's crate's loudness
+  boxLevel: 3.2,          // the drums' loudness
   // the sampled fiddle (src/audio/stagemusic.js THE FIDDLE): its samples load when the band is first heard, and then the
   // old fiddle tunes take it into their turns (the fiddle, the harmonica, the piano, the fiddle and the harmonica
   // together), heard from the fiddler. Off: the harmonica plays the fiddle's turns and the fiddler only stands with it
@@ -121,7 +123,7 @@ export const STAGE = {
   banjoHold: 0.35,        // s: he keeps picking this long after a banjo note (the strum's gaps), and starts this far ahead
   // the fiddler's playing (s): his lift takes `up` (Fiddle_Up, timed to end on his first note); he keeps the fiddle up
   // while a note sounded within `hold` or the next comes within `gap` (a rest inside his turn), and lowers it after
-  bowing: { up: 0.6, hold: 0.45, gap: 1.6, ending: 0.28 },   // ending: the clip's speed through the last chord's long bow
+  bowing: { up: 0.9, hold: 0.45, gap: 1.6, ending: 0.28 },   // ending: the clip's speed through the last chord's long bow
   room: 0.6,              // how much of the room's echo
   baked: true,            // the piano's and the box's notes from src/audio/bake.js (false: every note live, for a rig to compare)
   // the positioned sound: full at refDistance metres, softening as 1 / distance past it (rolloff: how fast)
@@ -136,15 +138,17 @@ export const STAGE = {
   // from `rest` until a moment before
   end: { ahead: 1.5, clap: 0.18, name: 2.4, next: 5.6, rest: 1.6, back: 0.9 },
   awayNew: 90,            // s out of earshot after which the band is on another song when the player comes back
-  lift: 0.6,              // s before a harmonica phrase that the player lifts it to the mouth (and after, keeps it there)
+  lift: 1.0,              // s before a harmonica phrase that the player lifts it from her side to the mouth (and after, keeps it there)
+  liftFade: 0.85,         // s the lift's blend takes (arms hanging at the sides to the instrument up)
   keepUp: 2.5,            // s: a gap shorter than this to her next phrase, she keeps the harmonica up (no down-and-up in a breath)
   // the harmonica in her hands (metres: long, tall, deep; how far it sits behind the middle of her hands, toward her, and
   // above it: at the lips while she plays)
-  harp: { long: 0.105, tall: 0.026, deep: 0.028, back: 0.06, up: 0.03 },
+  harp: { long: 0.09, tall: 0.024, deep: 0.026, back: 0.06, up: 0.03 },
   ask: 3.2,               // metres from the stage's front edge where the band can be asked
   between: 1.4,           // s from asking to the next song's first beat (what was sounding rings out meanwhile)
   askAgain: 1.2,          // s after an ask before the prompt comes back (a double tap doesn't skip a song)
   say: 4200,              // ms a player's answer stays up
+  keys: { far: 22 },      // metres from the band's middle within which the pianist's hands follow the notes (src/pianohands.js)
   restClip: { pianist: 'Piano_Rest', harpist: 'Idle', drummer: 'Box_Rest', banjo: 'Banjo_Rest' },   // (the fiddler's: his own course, fiddlerStep)
 };
 const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
@@ -191,7 +195,6 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
       return { i, x: c.x, z: c.z, nx: n.x, nz: n.z };
     });
     for (const p of players) seat(p);
-    if (crate) seatCrate();
     if (bus) for (const [n, p, y] of bus.at) setPos(n, p(), y);
   }
   // a point in the saloon's hall (not out on its boardwalk under the balcony)
@@ -230,49 +233,27 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
         holdFiddle(made.fiddler); holdBanjo(made.banjo);
         // (the hands set by hand in the Hands Lab, models/people/hands.json: laid over the clips each frame)
         harmonica = makeHarmonica(); scene.add(harmonica);
+        drumGear = holdDrumsOn(made.drummer);
+        made.pianist.hands = makePianistPose(made.pianist);
+        made.drummer.hands = makeHandPose(made.drummer, 'drummer', { props: { stool: drumGear.stool, stickL: drumGear.stickL, stickR: drumGear.stickR } }); drumHands = makeDrumHands(made.drummer, made.drummer.hands);
         made.fiddler.hands = makeHandPose(made.fiddler, 'fiddler', { props: { fiddle: fiddleProps && fiddleProps.fiddle, bow: fiddleProps && fiddleProps.bow } });
         made.banjo.hands = makeHandPose(made.banjo, 'banjo', { props: { banjo: banjoProps && banjoProps.banjo, stool: banjoProps && banjoProps.stool } });
         made.harpist.hands = makeHandPose(made.harpist, 'harpist', { props: { harmonica }, harp: STAGE.harp });
-        crate = makeCrate(); scene.add(crate); seatCrate();
+        for (const P of [made.harpist, made.banjo, made.fiddler]) P.playLayer = makePlayHands(P, P.hands, P === made.harpist ? 'harpist' : P === made.banjo ? 'banjo' : 'fiddler');
         setVisible(visible);
       })
       .catch((e) => console.error('stage: the players could not be made', e));
     return making;
   }
   function seat(p) { if (!spots) return; p.root.position.copy(spots[p.who]); p.root.rotation.y = spots.yaw + spots.rot[p.who]; }
-  function setVisible(on) { visible = on; for (const p of players) p.root.visible = on && !(fiddlerOff && p.who === 'fiddler'); if (harmonica) harmonica.visible = on && !resting; if (crate) crate.visible = on; }
+  function setVisible(on) { visible = on; for (const p of players) p.root.visible = on && !(fiddlerOff && p.who === 'fiddler'); if (harmonica) harmonica.visible = on && !resting;  }
   // the harmonica, the fiddle and bow, the banjo and his stool: src/bandgear.js (the Hands Lab shows the same ones)
-  let harmonica = null, fiddleProps = null, banjoProps = null;
+  let harmonica = null, fiddleProps = null, banjoProps = null, drumGear = null, drumHands = null, pianoHands = null, keysAllowed = true;
   const makeHarmonica = () => makeHarmonicaModel(STAGE.harp);
+  // (the pianist: the same pose layer, and his hands going to the keys of the music's own notes, src/pianohands.js)
+  function makePianistPose(P) { const H = makeHandPose(P, 'pianist'); pianoHands = makePianoHands(P, H); return H; }
   function holdFiddle(P) { fiddleProps = holdFiddleOn(P); }
   function holdBanjo(P) { banjoProps = holdBanjoOn(P); }
-  // the drummer's packing crate: rough boards across each face with dark gaps between, a batten up each corner and a
-  // stencilled band of darker wood, in plain colours (one mesh, one material)
-  let crate = null;
-  function makeCrate() {
-    const { w, d, h } = STAGE.crate, parts = [], col = new THREE.Color();
-    const board = (sx, sy, sz, x, y, z, tone) => {
-      const g = new THREE.BoxGeometry(sx, sy, sz).toNonIndexed(); g.translate(x, y, z);
-      col.setRGB(0.25 * tone, 0.15 * tone, 0.075 * tone);   // (linear: a weathered pine brown)
-      const c = new Float32Array(g.attributes.position.count * 3); for (let i = 0; i < c.length; i += 3) c.set([col.r, col.g, col.b], i);
-      g.setAttribute('color', new THREE.BufferAttribute(c, 3)); parts.push(g);
-    };
-    // (a dark core, so the gaps between the boards show)
-    board(w - 0.03, h - 0.03, d - 0.03, 0, h / 2, 0, 0.35);
-    const n = 4, bh = h / n, tones = [1.0, 0.86, 0.95, 0.8, 1.05, 0.9];
-    for (let i = 0; i < n; i++) {
-      const y = bh * (i + 0.5), t = tones[i % tones.length];
-      board(w, bh - 0.012, 0.018, 0, y, d / 2 - 0.009, t); board(w, bh - 0.012, 0.018, 0, y, -d / 2 + 0.009, t * 0.95);
-      board(0.018, bh - 0.012, d - 0.036, w / 2 - 0.009, y, 0, t * 0.92); board(0.018, bh - 0.012, d - 0.036, -w / 2 + 0.009, y, 0, t * 0.97);
-    }
-    for (let i = 0; i < 3; i++) board(w - 0.01, 0.018, d / 3 - 0.01, 0, h - 0.009, -d / 2 + d / 3 * (i + 0.5), tones[i + 2]);
-    for (const sx of [-1, 1]) for (const sz of [-1, 1]) board(0.04, h, 0.04, sx * (w / 2 - 0.012), h / 2, sz * (d / 2 - 0.012), 0.7);
-    const geo = mergeGeometries(parts); for (const g of parts) g.dispose();
-    const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, metalness: 0 }));
-    m.castShadow = false; m.receiveShadow = true; m.name = 'band crate';
-    return m;
-  }
-  function seatCrate() { if (!spots) return; crate.position.copy(spots.drummer); crate.rotation.y = spots.yaw + spots.rot.drummer; }
   // keep a clip on the music's beat: its time set from the beat (the clips are four beats long, made for the first
   // song's beat: a quicker song plays them quicker, a slower one slower)
   function onBeat(p, beat, beatLen) {
@@ -326,7 +307,7 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
   function loadKit() {
     if (!bus || bus.loading || !fiddleOK()) return;
     const b = bus, t0 = performance.now();
-    b.loading = loadFiddle(b.ctx).then((kit) => { b.fiddleKit = kit; b.loadMs = Math.round(performance.now() - t0); }).catch((e) => console.warn('Mathwood Valley: no fiddle', e));
+    b.loading = loadFiddle(b.ctx).then((kit) => { b.fiddleKit = kit; b.loadMs = Math.round(performance.now() - t0); if (music && music.setFiddleKit && fiddleOK()) { music.setFiddleKit(kit); musicFiddled = true; } }).catch((e) => console.warn('Mathwood Valley: no fiddle', e));
     // the banjo: the recorded one for now (the synth banjo cost the sound thread about as much again as the rest of the band:
     // crackle on slower machines; banjosynth.js stays, to be played from recordings of its own notes later)
     if (STAGE.banjo) loadBanjo(b.ctx).then((kit) => { b.banjoKit = kit; }).catch((e) => console.warn('Mathwood Valley: no banjo', e));
@@ -339,7 +320,7 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
     lines = song.round ? (intro ? 1 : 0) + Math.max(1, Math.round((left - open) / (song.round * lineSecs))) * song.round : Math.max(1, Math.round(left / lineSecs));
     const kit = fiddleOK() ? bus.fiddleKit : null; musicFiddled = !!kit;
     if (bus.baked) try { bus.baked.start(song.id); } catch (e) { console.warn('Mathwood Valley: baking the notes', e); }
-    music = makeStageMusic(bus.ctx, { harp: bus.harpIn, piano: bus.pianoIn, box: bus.boxIn, room: bus.roomIn, seed: 1 + Math.floor(Math.random() * 1e6), song: song.id, intro, fiddle: bus.fiddleIn, fiddleKit: kit,
+    music = makeStageMusic(bus.ctx, { harp: bus.harpIn, piano: bus.pianoIn, box: bus.boxIn, room: bus.roomIn, seed: 1 + Math.floor(Math.random() * 1e6), song: song.id, intro, fiddle: bus.fiddleIn, fiddleKit: kit, fiddleComing: !kit && fiddleOK(),
       banjo: bus.banjoIn, banjoKit: STAGE.banjo ? bus.banjoKit || null : null, baked: bus.baked || null });
     songT0 = at != null ? at : bus.ctx.currentTime + 0.2;
     music.start(songT0);
@@ -489,7 +470,7 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
     // their own rest clips at their own pace
     const beat = music && bus ? music.beat() - (bus.ctx.outputLatency || 0) / music.beatLen : null;
     const t = bus ? bus.ctx.currentTime : 0;
-    // (between two songs: a breather while the crowd claps, the harmonica held at the chest)
+    // (between two songs: a breather while the crowd claps, the harmonica in her right hand at her side)
     const between = phase === 'end' && endAt != null && t > endAt + STAGE.end.rest && t < nextAt - STAGE.end.back;
     if (resting || between) {
       for (const [who, clip] of Object.entries(STAGE.restClip)) made[who].play(between && who === 'harpist' ? 'Harmonica_Rest' : clip, { fade: 0.8 });
@@ -498,7 +479,7 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
       const playing = music ? (music.harmonicaAt(t + STAGE.lift) || music.harmonicaAt(t) || music.harmonicaAt(t - STAGE.lift * 0.5)
         || (nextH != null && nextH - t < STAGE.keepUp && [0.5, 1, 1.5, 2, 2.5].some((k) => k <= STAGE.keepUp && music.harmonicaAt(t - k))))   // (a short gap between two phrases: held up)
         : phase === 'end' && endAt != null && t > endAt - STAGE.lift && t < endAt + 2.0;   // (the last chord's held note)
-      made.harpist.play(playing ? 'Play_Harmonica' : 'Harmonica_Rest', { fade: 0.45 });
+      made.harpist.play(playing ? 'Play_Harmonica' : 'Harmonica_Rest', { fade: STAGE.liftFade });
       made.pianist.play('Play_Piano', { fade: 0.6 }); made.drummer.play('Play_Box', { fade: 0.5 });
       if (harmonica && !harmonica.visible) harmonica.visible = true;
     }
@@ -511,6 +492,17 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
       if (p.hands) p.hands.before();   // (the hands' bends taken off first: the clips don't write what didn't change)
       p.update(dt);
       if (p.hands) p.hands.after();
+      if (p.playLayer && W.tier !== 'potato' && distance < STAGE.keys.far) p.playLayer.update();
+      if (pianoHands && p === made.pianist) {
+        const on = keysAllowed && W.tier !== 'potato' && distance < STAGE.keys.far && p.person.actions.Play_Piano;
+        const w = on ? p.person.actions.Play_Piano.getEffectiveWeight() : 0;
+        const now = bus ? bus.ctx.currentTime - (bus.ctx.outputLatency || 0) : 0;
+        pianoHands.update(now, dt, music ? music.events : null, w);
+      }
+      if (drumHands && p === made.drummer) {
+        const near = keysAllowed && W.tier !== 'potato' && distance < STAGE.keys.far, A = p.person.actions.Play_Box, w = A ? A.getEffectiveWeight() : 0;
+        drumHands.update(bus ? bus.ctx.currentTime - (bus.ctx.outputLatency || 0) : 0, music ? music.events : null, w, !near);
+      }
     }
   };
   // THE BANJO PLAYER: picking while a banjo note sounds (or comes within STAGE.banjoHold), from the music's notes
@@ -534,12 +526,12 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
     fLeft -= dt;
     if (want && (fState === 'rest' || fState === 'down')) {
       // (quicker when his note is nearer than the lift takes)
-      const lead = next != null ? Math.max(0.15, next - t) : B.up * 0.5, speed = Math.min(3, Math.max(1, B.up / lead));
-      F.play('Fiddle_Up', { once: true, fade: 0.15, speed }); fState = 'up'; fLeft = B.up / speed; fLifts++;
+      const lead = next != null ? Math.max(0.15, Math.min(B.up, next - t)) : B.up * 0.5, dur = F.person.actions.Fiddle_Up.getClip().duration, speed = dur / lead;
+      F.play('Fiddle_Up', { once: true, fade: 0.15, speed }); fState = 'up'; fLeft = lead; fLifts++;
     } else if (fState === 'up' && fLeft <= 0 && want) {
       F.play('Play_Fiddle', { fade: 0.08 }); fState = 'play';
     } else if (!want && (fState === 'play' || fState === 'up')) {
-      F.play('Fiddle_Down', { once: true, fade: 0.15 }); fState = 'down'; fLeft = B.up;
+      F.play('Fiddle_Down', { once: true, fade: 0.15, speed: F.person.actions.Fiddle_Down.getClip().duration / B.up }); fState = 'down'; fLeft = B.up;
     } else if (fState === 'down' && fLeft <= 0) {
       F.play('Fiddle_Rest', { fade: 0.3 }); fState = 'rest';
     }
@@ -548,6 +540,10 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
   }
   // (the governor) the fiddle in the band, or left out: the harmonica then plays its turns and the fiddler only stands
   // with his fiddle; on, its samples load if they haven't
+  // (the lowest tier) the pianist's hands left to his clip and his set pose
+  S.keysOn = (on) => { keysAllowed = !!on; };
+  S.pianoHands = () => pianoHands;
+  S.drumHands = () => drumHands;
   S.fiddleOn = (on) => { fiddleAllowed = !!on; if (fiddleAllowed) loadKit(); };
   // a doorway as heard from the ears: how far, how square in front of it, how open its doors stand (the saloon's batwings
   // rest open: as open as a doorway with no door)
@@ -607,8 +603,9 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
     if (bus) { const b = bus; bus = null; b.ctx.removeEventListener('statechange', b.onState); b.fade.gain.setTargetAtTime(0, b.ctx.currentTime, 0.05); setTimeout(() => { for (const n of b.nodes) try { n.disconnect(); } catch (e) { /* gone */ } }, 400); }
     for (const p of players) { p.root.removeFromParent(); p.dispose(); }
     players.length = 0; made = null;
-    for (const o of [harmonica, crate]) if (o) { o.removeFromParent(); o.traverse((m) => { if (m.isMesh) { m.geometry.dispose(); m.material.dispose(); } }); }
-    harmonica = crate = null;
+    for (const o of [harmonica, drumGear && drumGear.kit, drumGear && drumGear.stool, drumGear && drumGear.stickL, drumGear && drumGear.stickR]) if (o) { o.removeFromParent(); o.traverse((m) => { if (m.isMesh) { m.geometry.dispose(); m.material.dispose(); } }); }
+    harmonica = drumGear = drumHands = null;
+    if (pianoHands) { pianoHands.dispose(); pianoHands = null; }
     if (banjoProps) { for (const m of [banjoProps.banjo, banjoProps.stool]) { m.removeFromParent(); m.geometry.dispose(); } banjoProps.mat.dispose(); banjoProps = null; }
     if (fiddleProps) { for (const m of [fiddleProps.fiddle, fiddleProps.bow]) { m.removeFromParent(); m.geometry.dispose(); } fiddleProps.mat.dispose(); fiddleProps = null; }
   };
