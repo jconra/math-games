@@ -170,10 +170,14 @@ export function makeTownPeople({ W, folk, camera, player = () => null, jobs = {}
   // ── THE WALKING GRID (laid a few milliseconds a frame) ───────────────────────────────────────────────────────────
   const xs = [...TP.doors.map((d) => d.x), ...TP.spots.map((s) => s.x), ...TP.edges.map((e) => e.x)], zs = [...TP.doors.map((d) => d.z), ...TP.spots.map((s) => s.z), ...TP.edges.map((e) => e.z)];
   const box = { x0: Math.min(...xs) - 18, x1: Math.max(...xs) + 18, z0: Math.min(...zs) - 18, z1: Math.max(...zs) + 18 };
-  // the dirt: the planting's paths (the square, the trail, the stable's walk ...): their strokes' radius x 0.55 is metres
-  const dirt = ((W.V && W.V.PLANTING_FIRST && W.V.PLANTING_FIRST.strokes) || []).filter((st) => st.kind === 25 && st.mode !== 'clear').map((st) => ({ r: (st.r || 2) * 0.55, pts: st.pts }));
-  const onDirt = (x, z) => { for (const d of dirt) { const p = d.pts; if (p.length === 1) { if (Math.hypot(x - p[0][0], z - p[0][1]) < d.r) return true; continue; }
-    for (let i = 1; i < p.length; i++) { const ax = p[i - 1][0], az = p[i - 1][1], vx = p[i][0] - ax, vz = p[i][1] - az, t = Math.max(0, Math.min(1, ((x - ax) * vx + (z - az) * vz) / (vx * vx + vz * vz || 1))); if (Math.hypot(ax + vx * t - x, az + vz * t - z) < d.r) return true; } } return false; };
+  // the dirt: the planting's paths (the square, the trail, the stable's walk ...): their strokes' radius x 0.55 is metres;
+  // a rubbed-out stroke (the brush's whole radius) takes the dirt under it away, in the order made, as the land draws them
+  // (world/valley.js drawPaths). The last stroke over a spot says whether it's dirt.
+  const dirt = ((W.V && W.V.PLANTING_FIRST && W.V.PLANTING_FIRST.strokes) || []).filter((st) => (st.kind === 25 && st.mode !== 'clear') || st.kind === 26)
+    .map((st) => ({ r: (st.r || 2) * (st.kind === 25 ? 0.55 : 1), pts: st.pts, on: st.kind === 25 }));
+  const over = (d, x, z) => { const p = d.pts; if (p.length === 1) return Math.hypot(x - p[0][0], z - p[0][1]) < d.r;
+    for (let i = 1; i < p.length; i++) { const ax = p[i - 1][0], az = p[i - 1][1], vx = p[i][0] - ax, vz = p[i][1] - az, t = Math.max(0, Math.min(1, ((x - ax) * vx + (z - az) * vz) / (vx * vx + vz * vz || 1))); if (Math.hypot(ax + vx * t - x, az + vz * t - z) < d.r) return true; } return false; };
+  const onDirt = (x, z) => { for (let i = dirt.length - 1; i >= 0; i--) if (over(dirt[i], x, z)) return dirt[i].on; return false; };
   let townBlock = false;   // (the town's own people don't count as walls in the grid)
   const ground = (x, z) => { townBlock = true; const b = W.blocked(x, z); townBlock = false; if (b) return 0; const wet = W.waterAt(x, z), path = onDirt(x, z); if (wet > 0.25 && !(path && wet < 0.7)) return 0; return path ? COST.ROAD : COST.GRASS; };
   let G = null; const laying = gridSteps({ ...box, cell: 1, ground });
