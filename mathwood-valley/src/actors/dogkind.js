@@ -14,12 +14,13 @@
 //   furAttrs(shape) -> { P, D }               the fur's measures of each corner at rest (dogfur.js reads them)
 //   furPlain(K, fur)                          a plain dog (the shiba, the husky, the pug as animals.json has them)
 //                                             given the fur: its two attributes and the patched material
+//   furAnimal(K, fur)                         a farm animal given the fur (dogfur.js ANIMAL_FUR), the same way
 import * as THREE from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { morphKind, analyseKind } from './morph.js';
 import { paintFace, patternPixels, hexToLinear, rng } from './dogcoat.js';
 import { breedOf } from './dogbreeds.js';
-import { furMaterial } from './dogfur.js';
+import { furMaterial, FUR_TIER } from './dogfur.js';
 
 let SAVED = null, SAVING = null;
 export function savedBreeds(dir, { fresh = false } = {}) {
@@ -106,6 +107,53 @@ export function furAttrs(shape) {
 export function furPlain(K, fur) {
   const shape = analyseKind(K), { P, D } = furAttrs(shape), mesh = shape.mesh, g = mesh.geometry;
   if (g.attributes.position.count !== shape.n) return false;
+  g.setAttribute('furP', new THREE.BufferAttribute(P, 3)); g.setAttribute('furD', new THREE.BufferAttribute(D, 4));
+  furMaterial(mesh.material, fur);
+  return true;
+}
+
+// A FARM ANIMAL'S MEASURES: as furAttrs reads a dog's, with what differs. P is in metres times fur.fine, not withers
+// heights: a strand has about the same width on anything. What's bare goes by the painted colours and the hoof bones, not
+// by the dogs' test of dark and light corners (a black bull is nearly the colour of its eyes, a sheep nearly of their
+// shine; the hoof bones only on the farm pack, where a hoof has its leg's colour: the other pack's carry a stretch of shin).
+// The hair's way runs back along the body and turns down the legs by height, smoothly, not laid flat face by face nor
+// switched bone by bone: these models' faces are big, and a way that turns sharply across one face fades its strands out
+// there and leaves it bare. Along a tail it runs out from its first bone, however many it has (the rig names three, or none).
+// The wool's corners are D twice its length, and all one way: the shader tells them apart by that, and a corner's
+// direction turning across a face would shorten D and lose the mark (a rump's bare patch).
+const onList = (list, r, g, b) => !!list && list.some((c) => Math.abs(c[0] - r) + Math.abs(c[1] - g) + Math.abs(c[2] - b) < 0.012);
+function animalAttrs(shape, K, fur) {
+  const { X, N, dom, n, rig, idx, W, L, names, mesh } = shape, part = partsOf(shape), col = mesh.geometry.attributes.color;
+  const k = (K.info.height / ((L.withers - L.ground) || 1)) * fur.fine;   // (mesh units to metres, to the strands' scale)
+  const tails = names.map((b, i) => (/^Tail\d/.test(b) ? i : -1)).filter((i) => i >= 0), tailSet = new Set(tails);
+  const tailRoot = tails.length ? new THREE.Vector3().setFromMatrixPosition(W[tails[0]]) : null;
+  const earRoot = new Map();
+  for (const chain of rig.ears ? Object.values(rig.ears) : []) if (chain.every((c) => idx[c] !== undefined)) {
+    const r = new THREE.Vector3().setFromMatrixPosition(W[idx[chain[0]]]);
+    for (const c of chain) earRoot.set(idx[c], r);
+  }
+  const P = new Float32Array(n * 3), D = new Float32Array(n * 4), d = new THREE.Vector3(), nn = new THREE.Vector3();
+  const H = (L.withers - L.ground) || 1, belly = L.ground + H * 0.55;
+  for (let i = 0; i < n; i++) {
+    P[i * 3] = X[i * 3] * k; P[i * 3 + 1] = X[i * 3 + 1] * k; P[i * 3 + 2] = X[i * 3 + 2] * k;
+    const b = dom[i], pt = part[b], r = col.getX(i), g = col.getY(i), bl = col.getZ(i);
+    const paw = pt === 'pawF' || pt === 'pawB';
+    if ((paw && rig.id === 'farm') || onList(fur.bare, r, g, bl)) continue;
+    nn.fromArray(N, i * 3);
+    if (onList(fur.woolOn, r, g, bl)) { D[i * 4 + 2] = -2; D[i * 4 + 3] = Math.pow(Math.max(0, -nn.y), 1.5); continue; }
+    const out = tailSet.has(b) ? tailRoot : earRoot.get(b);
+    if (out) { d.set(X[i * 3] - out.x, X[i * 3 + 1] - out.y, X[i * 3 + 2] - out.z); if (d.lengthSq() < 1e-12) d.set(0, 0, -1); }
+    else { const leg = Math.min(1, Math.max(0, (belly - X[i * 3 + 1]) / (H * 0.3))); d.set(0, -0.2 - 0.9 * leg, -(1 - leg)); }
+    d.normalize();
+    D[i * 4] = d.x; D[i * 4 + 1] = d.y; D[i * 4 + 2] = d.z; D[i * 4 + 3] = out ? 0 : Math.pow(Math.max(0, -nn.y), 1.5);
+  }
+  return { P, D };
+}
+export function furAnimal(K, fur) {
+  if (!FUR_TIER.on) return false;   // (the lowest tier: nothing measured, nothing added, the material as it was)
+  const shape = analyseKind(K), mesh = shape.mesh, g = mesh.geometry;
+  if (g.attributes.position.count !== shape.n || !g.attributes.color) return false;
+  const { P, D } = animalAttrs(shape, K, fur);
   g.setAttribute('furP', new THREE.BufferAttribute(P, 3)); g.setAttribute('furD', new THREE.BufferAttribute(D, 4));
   furMaterial(mesh.material, fur);
   return true;

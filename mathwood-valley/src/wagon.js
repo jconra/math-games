@@ -61,6 +61,7 @@
 //                         from the middle a wagon going dir keeps its lane there; .narrowAt(s): no room for two to pass;
 //                         .narrows: the one-way stretches, [[from, to], ...] metres along
 import * as THREE from 'three';
+import { furMaterial } from './actors/dogfur.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -359,12 +360,17 @@ const FADE_FS = `
 `;
 function dissolving(m, u) {
   const c = m.clone();
-  c.onBeforeCompile = (sh) => {
+  // (a furred coat, a team's horses or a drive's cattle: src/actors/dogfur.js. The copy needs the fur's patch of its own,
+  // the dissolve on top: a clone doesn't carry a patch)
+  const fur = m.userData.furU ? m.userData.fur : null, pre = fur ? furMaterial(c, fur).onBeforeCompile : null;
+  c.onBeforeCompile = (sh, r) => {
+    if (pre) pre(sh, r);
     sh.uniforms.bmFade = u;
     sh.fragmentShader = FADE_FS + sh.fragmentShader.replace('#include <clipping_planes_fragment>',
       '#include <clipping_planes_fragment>\n  if (bmFade < 0.999 && bmBayer(gl_FragCoord.xy) >= bmFade) discard;');
   };
-  c.customProgramCacheKey = () => 'bm-fade-1';
+  const key = fur ? 'bm-fade-1' + c.customProgramCacheKey() : 'bm-fade-1';
+  c.customProgramCacheKey = () => key;
   return c;
 }
 export function fadeAll(roots, a, mem, people = []) {
@@ -374,7 +380,7 @@ export function fadeAll(roots, a, mem, people = []) {
     for (const root of [].concat(roots)) root.traverse((o) => {
       if (!o.isMesh || !o.material || Array.isArray(o.material)) return;
       const m = o.material;
-      if (Object.prototype.hasOwnProperty.call(m, 'onBeforeCompile')) return;   // (a person's own: faded by the person)
+      if (Object.prototype.hasOwnProperty.call(m, 'onBeforeCompile') && !m.userData.furU) return;   // (a person's own: faded by the person)
       let c = mem.copies.get(m); if (!c) { c = dissolving(m, mem.u); mem.copies.set(m, c); }
       mem.meshes.push([o, m, o.castShadow]); o.material = c;
     });

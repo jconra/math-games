@@ -132,7 +132,7 @@ if (PERF) renderer.info.autoReset = false;
 const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 5000);
 howdyCamera(camera);   // (the Howdy bubbles over the townsfolk and the wagon drivers are placed with it: src/ui/howdy.js)
 const quality = chooseTier(renderer);
-FUR_TIER.on = quality.tier !== 'potato';   // (the dogs' fur shader: off on the lowest tier, src/actors/dogfur.js; set before any dog is made)
+FUR_TIER.on = quality.tier !== 'potato';   // (the fur shader, dogs' and farm animals': off on the lowest tier, src/actors/dogfur.js; set before any animal is made)
 
 // ── THE TITLE SCREEN (shown at once; the valley loads behind it) ───────────────────────────────────────────────────
 const T = showTitle($('title-root'), { riders: loadRiders(), build: BUILD, onRide: (r) => ride(r), onLockboxes: (r) => justBoxes(r) });
