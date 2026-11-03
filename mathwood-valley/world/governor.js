@@ -34,7 +34,8 @@
 //   NO FLAPPING: a rung that fails soon after it came up is a ceiling for a while (GOV.backoff; for the scenery, that rung
 //     and all above it, GOV.sceneryBackoff), and a band that falls soon
 //     after it came up isn't tried again for half an hour, doubling each time, kept with the machine's memory across loads
-//     (GOV.bandProbe, bandHold); one that held a good while and then fell (a hot phone) rests GOV.bandRest. A choice made by
+//     (GOV.bandProbe, bandHold); one that held a good while and then fell (a hot phone) rests GOV.bandRest (a band
+//     fallen back into counts from when it, or the band above, came up: passing through it on the way down isn't a try). A choice made by
 //     hand or in the address pins it all: no climbing, nothing remembered.
 //
 // THE DIALS: everything the governor can turn, each with its levels (lowest first) and what a level costs (GOVERNOR.md).
@@ -210,7 +211,6 @@ export const GOV = {
   sceneryEvery: 15, // s of riding between two steps of the slow lane (so each is measured before the next)
   ahead: 0.35,      // the people lane may be this far behind the scenery's (in bands: bandPos) before the scenery gives way
   mist: 0.85,       // how thick the mist at the valley's ends must be round the camera to hide a change
-  phoneTop: START.scenery.gaming - 1,   // phones and tablets: the scenery climbs no higher (battery and heat: GOVERNOR.md, Questions for Dad)
   climbEvery: 10,   // s of smooth riding for each step of the climb back up (from the bottom of the potato band to normal: about 4 minutes)
   curtainMost: 8,   // the most of those steps one curtain takes, so what comes next is measured before the rest (one, after a rung has failed)
   sceneryBackoff: [90, 1200],   // s: a scenery rung that failed isn't tried again for this long, doubling each time, up to 20 minutes
@@ -226,7 +226,9 @@ export function makeGovernor({ renderer, quality, W = null } = {}) {
   const Q = new URLSearchParams(location.search), log = Q.has('govlog');
   const gpu = gpuName(renderer), loadBand = TIERS.includes(quality && quality.tier) ? quality.tier : 'normal';
   const mobile = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && Math.min(screen.width, screen.height) < 900);
-  const top = { scenery: mobile ? GOV.phoneTop : TOP.scenery, people: TOP.people };
+  // (phones and tablets climb as high as any machine: the game's maker, "Theres no reason to hold a phone back"; a hot
+  // phone's frames fall and the governor steps down, GOV.bandRest)
+  const top = { scenery: TOP.scenery, people: TOP.people };
   const clampL = (lane, r) => Math.max(0, Math.min(top[lane], Math.round(+r || 0)));
   // pinned: a tier forced in the address or chosen by hand (no governor then)
   let pinned = quality && (quality.source === 'forced' || quality.source === 'saved') ? quality.tier : null;
@@ -245,6 +247,9 @@ export function makeGovernor({ renderer, quality, W = null } = {}) {
   // (the bands not to go back to yet: { normal: { until (Date.now()), n (failures in a row) }, gaming }; kept in the memory)
   const holds = (rec && rec.hold && typeof rec.hold === 'object') ? { ...rec.hold } : {};
   let memBand = bandOf(rung.scenery), memBandAt = Date.now();
+  // (when each band was last come up to; a band fallen back into counts from then, or from when the band above came up:
+  // a machine holding a band above held this one too, so passing through it on the way down isn't trying it)
+  const cameUp = { [memBand]: memBandAt };
   const subs = new Map(), limits = {}, journal = [];
   let levels = levelsAt(rung.scenery, rung.people), last = null, disposed = false;
   const changed = { scenery: performance.now(), people: performance.now(), any: performance.now() };
@@ -557,12 +562,15 @@ export function makeGovernor({ renderer, quality, W = null } = {}) {
     if (pinned) return;
     const s = Math.max(want, goal), b = bandOf(s), now = Date.now();
     if (b !== memBand) {
-      if (TIERS.indexOf(b) < TIERS.indexOf(memBand)) {
+      const fell = TIERS.indexOf(b) < TIERS.indexOf(memBand);
+      if (fell) {
         const soon = (now - memBandAt) / 1000 < GOV.bandProbe, n = soon ? ((holds[memBand] && holds[memBand].n) || 0) + 1 : 0;
         holds[memBand] = { n, until: now + (soon ? Math.min(GOV.bandHold[1], GOV.bandHold[0] * 2 ** (n - 1)) : GOV.bandRest) * 1000 };
         if (log) console.log(`governor: the ${memBand} band fell after ${Math.round((now - memBandAt) / 1000)} s: not again for ${Math.round((holds[memBand].until - now) / 60000)} min`);
       }
-      memBand = b; memBandAt = now;
+      memBandAt = fell ? Math.min(cameUp[b] ?? memBandAt, memBandAt) : now;
+      if (!fell) cameUp[b] = now;
+      memBand = b;
     }
     remember(gpu, { v: LADDER_V, scenery: s, people: rung.people, band: b, hz: hz || null, hold: holds });
   }

@@ -82,7 +82,7 @@ test('a curtain takes the steps waiting a few at a time; the climb reaches the b
   G.dispose();
 });
 
-test('drops under load, climbs back when the load ends; a phone stops short of the gaming band', () => {
+test('drops under load, climbs back when the load ends; a phone climbs on into the gaming band', () => {
   fresh(); store.delete('mathwood.governor');
   const G = load({ tier: 'normal', source: 'detected' }), s0 = G.scenery;
   ride(G, 60, () => 5, { curtainEvery: 20 });
@@ -99,10 +99,9 @@ test('drops under load, climbs back when the load ends; a phone stops short of t
   assert.ok(G.goal < START.scenery.normal);
   ride(G, 35 * 60, () => 5, { curtainEvery: 30 });
   assert.ok(G.scenery >= START.scenery.normal, `back in normal: ${G.scenery}`);
-  assert.equal(recall(CARD).band, 'normal');
+  assert.ok(['normal', 'gaming'].includes(recall(CARD).band), JSON.stringify(recall(CARD)));
   ride(G, 30 * 60, () => 2, { curtainEvery: 30 });
-  assert.ok(G.scenery <= GOV.phoneTop, 'a phone stops short of the gaming band');
-  assert.equal(bandOf(G.goal), 'normal');
+  assert.ok(G.goal > START.scenery.normal, `a phone isn't kept out of the gaming band: goal ${G.goal}`);
   G.dispose();
 });
 
@@ -150,6 +149,20 @@ test('a band that held a good while and then fell (a hot phone) rests a little a
   G.dispose();
 });
 
+test('falling from the gaming band through normal isn\'t normal failing: both rest a little, neither is held half an hour', () => {
+  fresh(); seed(START.scenery.gaming, 10);
+  const G = load({ tier: 'gaming' });
+  ride(G, GOV.bandProbe + 60, () => 3, { curtainEvery: 30 });
+  ride(G, 180, () => 60, { curtainEvery: 20 });   // (the phone hot: down to potato)
+  const rec = recall(CARD);
+  assert.equal(rec.band, 'potato', JSON.stringify(rec));
+  for (const b of ['gaming', 'normal']) {
+    const h = rec.hold[b];
+    assert.ok(h && h.n === 0 && h.until - Date.now() <= GOV.bandRest * 1000, `${b}: ${JSON.stringify(h)}`);
+  }
+  G.dispose();
+});
+
 test('a card with no WebGL 2 stays in the potato band at load, but its live dials go on climbing', () => {
   fresh(); seed(5, 0);
   const G = load({ tier: 'potato', gl2: false });
@@ -169,7 +182,7 @@ test('a tier chosen by hand is never passed, and nothing is remembered', () => {
   G.dispose();
 });
 
-test('a desktop\'s climb isn\'t kept to the phone\'s top, and ends at the ladder\'s', () => {
+test('a desktop\'s climb ends at the ladder\'s top', () => {
   fresh(); seed(START.scenery.gaming, 10);
   const ua = navigator.userAgent, tp = navigator.maxTouchPoints;
   Object.defineProperty(globalThis, 'navigator', { value: { userAgent: 'Mozilla/5.0 (Windows NT 10.0)', maxTouchPoints: 0 }, configurable: true });

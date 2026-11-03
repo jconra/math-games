@@ -325,7 +325,9 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
     {
       add('milk', [piece(new THREE.CylinderGeometry(0.14, 0.16, 0.5, 12), COL.can, { at: [0, 0.25, 0], plain: true }),
         piece(new THREE.CylinderGeometry(0.08, 0.12, 0.12, 12), COL.can, { at: [0, 0.56, 0], plain: true }),
-        piece(new THREE.CylinderGeometry(0.1, 0.1, 0.04, 12), COL.dark, { at: [0, 0.63, 0], plain: true })], G.milk[0], G.milk[1]);
+        piece(new THREE.CylinderGeometry(0.1, 0.1, 0.04, 12), COL.dark, { at: [0, 0.63, 0], plain: true }),
+        // (its two handles: a rod bent into a loop on each side, both ends on the shoulder's slope)
+        ...[0, Math.PI].map((s) => piece(new THREE.TorusGeometry(0.042, 0.009, 4, 6, Math.PI).rotateZ(Math.atan2(0.04, 0.12) - Math.PI / 2).translate(0.1, 0.56, 0).rotateY(s), COL.can, { plain: true }))], G.milk[0], G.milk[1]);
       // (a burlap wool sack, stuffed full, the fleece puffing out of its open top)
       const fleece = [piece(new THREE.CylinderGeometry(0.2, 0.24, 0.5, 12), '#b39466', { at: [0, 0.25, 0], plain: true, shade: 0.15 }),
         piece(new THREE.TorusGeometry(0.205, 0.02, 4, 16).rotateX(Math.PI / 2), COL.twine, { at: [0, 0.44, 0], plain: true })];

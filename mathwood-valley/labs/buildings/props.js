@@ -246,6 +246,12 @@ export const MAKERS = {
     if (!o.gd) return;
     const h = o.h ?? 0.58, r = 0.14, f = h / 0.58, tin = STORE_ART.tile.tin;
     o.gd.lathe([[0, 0], [r, 0], [r + 0.012, 0.02], [r, 0.04], [r, 0.36 * f], [0.07, 0.46 * f], [0.065, 0.53 * f], [0.09, 0.54 * f], [0.09, 0.565 * f], [0.06, 0.58 * f], [0, 0.585 * f]], M, 14, tin, [1.5, 1.52, 1.5]);
+    // (its two handles: a strap rod bent into a loop, both ends riveted to the shoulder, one each side, as the shipping
+    // cans had them for lifting onto a wagon; each loop stands off the shoulder's slope and stays inside the can's width)
+    const ang = Math.atan2(0.07, 0.1 * f), ear = new THREE.TorusGeometry(0.042, 0.008, 4, 6, Math.PI).rotateZ(ang - Math.PI / 2);
+    const mesh = { p: ear.attributes.position.array, n: ear.attributes.normal.array, i: ear.index.array, c: new Float32Array(ear.attributes.position.count * 3).fill(1.3) };
+    for (const s of [0, Math.PI]) o.gd.mesh(mesh, mul(M, RY(s), T(0.105, 0.41 * f, 0)), tin);
+    ear.dispose();
     k.solid([r * 2, h, r * 2], null, null, mul(M, T(0, h / 2, 0)));
   },
   woolSack(k, M, o) {

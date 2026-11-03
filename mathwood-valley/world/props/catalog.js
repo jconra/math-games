@@ -48,7 +48,7 @@ const LIST = [
   { kind: 'sack', name: 'Sack', cat: 'Containers', foot: [0.4, 0.3], h: 0.62, tris: 270, rank: 2, flags: [], fields: [pick('print', 'Sack', ['flour', 'coffee', 'burlap'], 'flour'), check('lie', 'Lying down', false)] },
   { kind: 'coalBucket', name: 'Coal scuttle', cat: 'Containers', foot: [0.3, 0.3], h: 0.4, tris: 205, rank: 3, flags: [], fields: [] },
   { kind: 'washtub', name: 'Washtub', cat: 'Containers', foot: [0.6, 0.6], h: 0.3, tris: 340, rank: 3, flags: [], fields: [] },
-  { kind: 'milkCan', name: 'Milk can', cat: 'Containers', foot: [0.3, 0.3], h: 0.6, tris: 280, rank: 2, flags: [], fields: [] },
+  { kind: 'milkCan', name: 'Milk can', cat: 'Containers', foot: [0.3, 0.3], h: 0.6, tris: 376, rank: 2, flags: [], fields: [] },
   { kind: 'woolSack', name: 'Wool sack', cat: 'Containers', foot: [0.6, 0.4], h: 0.5, tris: 300, rank: 2, flags: [], fields: [] },
   { kind: 'eggCrate', name: 'Egg crate', cat: 'Containers', foot: [0.5, 0.4], h: 0.3, tris: 370, rank: 2, flags: [], fields: [] },
   // tools
