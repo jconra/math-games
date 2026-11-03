@@ -29,6 +29,7 @@
 //   C.dispose()
 //   crateParts()      the crate's shape and material (shared): { geometry, material, size }, for a load on a horse
 import * as THREE from 'three';
+import { SITES } from '../world/objects/sites.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { makePerson } from './actors/folk.js';
@@ -68,13 +69,13 @@ export const CAMP_KINDS = {
 // The camps in the valley. spot: the middle (metres, world); the camp turns to face the town square. People: the
 // foreman and the hands (folk.js outfits and palettes, in drab period colours; none in the outlaw black).
 export const CAMPS = [
-  { id: 'cow', kind: 'camp1', name: 'The Bar T cow camp', short: 'the cow camp', spot: { x: -184, z: -176 }, mow: 12,   // (its tent is low: a wider mown patch lets it show over the meadow)
+  { id: 'cow', kind: 'camp1', name: 'The Bar T cow camp', short: 'the cow camp', spot: { ...SITES.cowCamp }, mow: 12,   // (its tent is low: a wider mown patch lets it show over the meadow)
     foreman: { name: 'Dusty', look: { outfit: 'worker_m', palette: 'drifter' } },
     hands: [{ outfit: 'adventurer_m', palette: 'rancher' }, { outfit: 'casual_m', palette: 'mustard' }] },
-  { id: 'hollis', kind: 'camp2', name: 'The Hollis family camp', short: 'the Hollis camp', spot: { x: 256, z: -192 },
+  { id: 'hollis', kind: 'camp2', name: 'The Hollis family camp', short: 'the Hollis camp', spot: { ...SITES.hollisCamp },
     foreman: { name: 'Ma Hollis', look: { outfit: 'adventurer_f', palette: 'sage' } },
     hands: [{ outfit: 'casual_f', palette: 'prairie' }, { outfit: 'casual_m', palette: 'homestead' }] },
-  { id: 'survey', kind: 'camp3', name: 'The surveyors\' camp', short: 'the surveyors\' camp', spot: { x: 56, z: -304 },
+  { id: 'survey', kind: 'camp3', name: 'The surveyors\' camp', short: 'the surveyors\' camp', spot: { ...SITES.surveyCamp },
     foreman: { name: 'Mr. Crane', look: { outfit: 'suit_m', palette: 'mustard' } },   // (not the dark townsman: all dark reads as the gang)
     hands: [{ outfit: 'worker_m', palette: 'sage' }] },
 ];

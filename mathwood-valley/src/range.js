@@ -25,9 +25,10 @@
 //   R.update(dt)   each frame while riding;  R.dispose()
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { SITES } from '../world/objects/sites.js';
 
 export const RANGE = {
-  x: 60, z: -193, rot: 0,       // the firing line's middle (the range's frame starts here), and the way it faces (as
+  x: SITES.range.x, z: SITES.range.z, rot: 0,       // the firing line's middle (the range's frame starts here), and the way it faces (as
                                 // three's rotation.y: 0 is +z, south, away from the road; measured with
                                 // ~/pw/bandit-math/rigs/shooting/map.cjs: east of the creek, 8 m off the road's middle)
   shelf: 8.5,                   // m downrange to the shelf

@@ -10,6 +10,7 @@ import { BASE } from '../base.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeProp, PROP_KINDS } from './townProps.js';
+import { boardsFor, boardsKey } from './signplaces.js';
 import { TOWN_ASSETS, modelFootprint, levels, levelPads } from './townAssets.js';
 export { TOWN_ASSETS, levels, levelPads };   // (the buildings' data and the ground pads live in townAssets.js, with no three.js)
 
@@ -185,11 +186,17 @@ export class Village {
     else if (it.type === 'model' && !TOWN_ASSETS[it.kind].code) loadModel((TOWN_ASSETS[it.kind] && TOWN_ASSETS[it.kind].file) || it.kind, this.lo).then(m => { if (this.objs.get(it.id) !== o) return;
       const A = TOWN_ASSETS[it.kind], inner = new THREE.Group(), body = m.scene.clone(true), st = standOf(m, A);
       body.position.copy(st.at); body.rotation.x = st.tilt; inner.add(body); inner.rotation.y = FRONT_YAW[A.front] || 0; o.inner = inner; group.add(inner); this.place(o); this.onLoaded && this.onLoaded(); });
+    else if (it.kind === 'signpost') { const B = boardsFor(it, this.layout); o.signKey = boardsKey(B); o.inner = makeProp(it.kind, B); group.add(o.inner); }   // (its boards aimed from where it stands)
     else if (it.type === 'prop') { o.inner = makeProp(it.kind); group.add(o.inner); }
     this.group.add(group); this.objs.set(it.id, o);
     return o;
   }
   place(o) {
+    // (a sign post moved or turned, or a place it points at moved, in the Town Lab: its boards aimed again once things stand still)
+    if (o.signKey != null && boardsKey(boardsFor(o.it, this.layout)) !== o.signKey) { clearTimeout(o.reaim); o.reaim = setTimeout(() => {
+      if (this.objs.get(o.it.id) !== o) return;
+      const B = boardsFor(o.it, this.layout); o.signKey = boardsKey(B); o.group.remove(o.inner); o.inner = makeProp(o.it.kind, B); o.group.add(o.inner); o.inner.scale.setScalar(o.it.size);
+    }, 200); }
     const it = o.it, { w, d, h } = (o.code && o.code.B.anchors.footprint) || footprintOf(it);   // (a code-built one: its own size)
     o.group.position.set(it.x, this.heightAt(it.x, it.z) + (o.code ? o.code.sit || 0 : 0) + (it.y || 0), it.z); o.group.rotation.y = it.rot * Math.PI / 180;   // (y: raised or sunk from the ground, m; a code building on the land as it is: its own sit)
     if (o.inner) { if (o.code) o.inner.scale.setScalar(1); else if (it.type === 'model') { const A = TOWN_ASSETS[it.kind]; o.inner.scale.setScalar(it.size / Math.max(A.box[0], A.box[2])); } else o.inner.scale.setScalar(it.size); }
@@ -209,7 +216,7 @@ const standKey = (it) => `${it.x},${it.z},${it.rot},${levels(it)}`;
 let nextId = 1;
 export const newId = () => 'i' + (Date.now().toString(36)) + (nextId++).toString(36);
 export function normalise(L) {
-  const out = { v: 1, items: [], roads: [] };
+  const out = { v: 1, items: [], roads: [], ...(L && L.game ? { game: L.game } : {}) };   // (game: the places that aren't buildings, which the sign posts point at too)
   for (const it of (L && L.items) || []) {
     if (!['model', 'prop', 'tree'].includes(it.type)) continue;
     if (it.type === 'model' && !TOWN_ASSETS[it.kind]) continue;
@@ -219,7 +226,7 @@ export function normalise(L) {
       size: +it.size || (it.type === 'model' ? TOWN_ASSETS[it.kind].size : 1), ...(it.level === true ? { level: true } : {}), ...(+it.y ? { y: +(+it.y).toFixed(2) } : {}),
       // (a code-built building's design: a cabin's preset, a seed; the player's cabin marked player: true)
       ...(it.type === 'model' && typeof it.preset === 'string' && it.preset ? { preset: it.preset } : {}), ...(it.type === 'model' && +it.seed > 0 ? { seed: Math.round(+it.seed) } : {}),
-      ...(it.type === 'model' && it.player === true ? { player: true } : {}) });
+      ...(it.type === 'model' && it.player === true ? { player: true } : {}), ...(it.kind === 'signpost' && Array.isArray(it.boards) ? { boards: it.boards.filter((b) => typeof b === 'string') } : {}) });
   }
   for (const r of (L && L.roads) || []) if (r && r.pts && r.pts.length) out.roads.push({ mat: r.mat || 'cobbles', w: +r.w || 4, pts: r.pts.map(p => [+(+p[0]).toFixed(2), +(+p[1]).toFixed(2)]) });
   return out;

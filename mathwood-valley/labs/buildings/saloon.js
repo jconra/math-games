@@ -1401,7 +1401,7 @@ function propList(piano) {
   L.push({ type: 'barrel', x: -4.15, y, z: PZ - 0.45 }, { type: 'barrel', x: 2.1, y, z: PZ - 0.45 }, { type: 'barrel', x: PX + 0.45, y, z: 3.25 }, { type: 'barrel', x: PX + 0.5, y, z: -3.3 });
   L.push({ type: 'bench', x: 3.15, y, z: ZF + 0.32, len: 1.6, back: true }, { type: 'spindleChair', x: -2.75, y, z: ZF + 0.55, rot: 2.6 }, { type: 'spindleChair', x: -3.55, y, z: ZF + 0.62, rot: 3.6 });
   L.push({ type: 'bench', x: XL - 0.32, y, z: 0.8, len: 1.5, rot: -Math.PI / 2 });
-  L.push({ type: 'hitchrail', x: PX - 1.15, z: -4.2, len: 2.8, rot: Math.PI / 2 }, { type: 'trough', x: PX - 1.75, z: -4.3, len: 1.8, rot: Math.PI / 2 });
+  L.push({ type: 'hitchrail', x: PX - 1.15, z: -4.2, len: 2.8, rot: Math.PI / 2 }, { type: 'trough', x: PX - 1.75, z: -4.3, len: 1.8, rot: Math.PI / 2, waterTile: A.tile.tin });
   // the rooms upstairs: in each a bed, a washstand with its basin and pitcher, a chair, a rag rug (marked upstairs, so the
   // game can leave them out from far off)
   const H = Math.PI / 2, U = { y: U1, upstairs: true };

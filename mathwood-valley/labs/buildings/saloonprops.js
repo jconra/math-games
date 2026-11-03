@@ -486,15 +486,20 @@ Object.assign(SALOON_MAKERS, {
   // a washstand, its back to the wall (at -z): a cupboard with a door, a top and a splashback; a white ironstone basin
   // and pitcher on it
   washstand(k, M, o) {
-    const q = put(k, M), tint = vary(k, FURN, 0.85, 1.05), EN = [1.6, 1.58, 1.5];
+    const q = put(k, M), tint = vary(k, FURN, 0.85, 1.05);
     q.b([0.62, 0.7, 0.4], [0, 0.35, 0], null, { long: 0, tint, skip: '-y' });
     q.b([0.66, 0.03, 0.44], [0, 0.715, 0.01], null, { long: 0, tint });
     q.b([0.62, 0.16, 0.02], [0, 0.81, -0.19], null, { long: 0, tint });
     q.b([0.48, 0.5, 0.012], [0, 0.34, 0.205], null, { long: 1, tint: tint.map((c) => c * 1.1), skip: '-z' });
-    q.p('iron', ngon(8, 0.16), 0.07, [0, 0.765, 0.03], null, { tint: EN, smooth: true, taper: -0.3 });
-    q.p('iron', ngon(8, 0.065), 0.16, [0.03, 0.88, 0.03], null, { tint: EN, smooth: true, taper: -0.2, skip: '-y' });
-    q.p('iron', ngon(8, 0.058), 0.08, [0.03, 1.0, 0.03], null, { tint: EN, smooth: true, taper: 0.25 });
-    k.solid([0.62, 0.8, 0.4], null, null, mul(M, T(0, 0.4, 0)));
+    // (the ironstone is the picture's ivory, a warm old white: on the kit's iron, a dark paint with a metal's shine, it came out black)
+    if (o.gd) {
+      const white = SALOON_ART.tile.ivory, tone = [0.82, 0.82, 0.8], BASIN = mul(M, T(0, 0.73, 0.03)), JUG = mul(M, T(0.02, 0.745, 0.03));   // (tone: a room's lamps don't wash it out flat)
+      o.gd.lathe([[0, 0], [0.085, 0], [0.165, 0.075], [0.15, 0.075], [0.06, 0.02], [0, 0.016]], BASIN, 10, white, tone);   // (hollow: out to the rim and back down inside)
+      o.gd.lathe([[0, 0], [0.058, 0], [0.07, 0.055], [0.048, 0.125], [0.058, 0.18], [0, 0.12]], JUG, 8, white, tone, { bump: (a, y) => (y > 0.15 ? 0.3 * Math.max(0, Math.cos(a)) ** 4 : 0) });   // (its lip drawn out to a spout, toward the room)
+      o.gd.box([0.016, 0.014, 0.05], mul(JUG, T(0, 0.15, -0.075)), { all: white }, tone);   // (the handle, behind)
+      o.gd.box([0.016, 0.1, 0.014], mul(JUG, T(0, 0.105, -0.095), RX(-0.12)), { all: white }, tone);
+    }
+    k.solid([0.62, 0.73, 0.4], null, null, mul(M, T(0, 0.365, 0)));
   },
   // a braided rag rug on the floor: an oval (the saloon's picture), see-through round it
   ragRug(k, M, o) {

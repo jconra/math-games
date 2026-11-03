@@ -23,7 +23,7 @@
 //     maker handed in, so this file needs neither (the node tests read it)
 
 // props that stay one object each, with the town's own (lit at night, turning, walked on, or a loaded model)
-const ALONE = new Set(['lamp', 'valehexGlobe', 'stateMap', 'obelisk', 'dock', 'farmWagon', 'freightWagon', 'coveredWagon', 'chuckWagon']);   // (the wagons: loaded models, filled in when they come)
+const ALONE = new Set(['signpost', 'lamp', 'valehexGlobe', 'stateMap', 'obelisk', 'dock', 'farmWagon', 'freightWagon', 'coveredWagon', 'chuckWagon']);   // (the wagons: loaded models, filled in when they come)
 const num = (v, d = 0) => (Number.isFinite(+v) ? +v : d);
 // (a code-built building's design and the player's-cabin mark, from a moved or placed entry: only what is there and sound)
 const design = (m) => ({ ...(typeof m.preset === 'string' && m.preset ? { preset: m.preset } : {}), ...(+m.seed > 0 ? { seed: Math.round(+m.seed) } : {}), ...(m.player === true ? { player: true } : {}) });

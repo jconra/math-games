@@ -71,6 +71,7 @@
 //   W.V          the valley itself (advanced use only: its tunings, maps and forests)
 import * as THREE from 'three';
 import { makeValley, TIER_SET } from '../world/valley.js';
+import { SITES } from '../world/objects/sites.js';
 import { BACKWOODS } from './missions/backwoods.js';
 import { chooseTier, TIERS } from '../world/quality.js';
 import { makeGovernor } from '../world/governor.js';
@@ -147,7 +148,7 @@ export async function makeWorld({ renderer, camera, quality = null, look = 'gree
   // troughs and hay go into the town's layout as the valley is made (src/farmplan.js farmItems): built, levelled and drawn
   // as the town's own
   const farm = GAME.farm ? { ...xz(GAME.farm, true), r: +GAME.farm.r || 34, w: +GAME.farm.w || 56, d: +GAME.farm.d || 48 }
-    : { x: -6, z: -278, rot: 0, r: 34, w: 56, d: 48 };
+    : { ...SITES.farm, rot: 0, r: 34, w: 56, d: 48 };
   const V = await makeValley({ renderer, camera, controls, quality: QUAL, look, live, slice: true, showcase: false, folk: false, treeClear: campWays(GAME), extra: farmItems(farm) });
   // THE GOVERNOR (world/governor.js): the dials turned up and down by how fast this machine really runs; the valley's own
   // wired here (world/valleydials.js), the game's in their own files (W.governor.on)

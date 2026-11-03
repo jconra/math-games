@@ -1,19 +1,20 @@
 // THE WESTERN SIGNPOST: rough-sawn boards with hand-burnt lettering on a rough-hewn post, stones at its foot. Its own file,
 // needing only three.js, so any world can take it (a Terrain Lab, a portfolio site): hand signpostParts its own `boards`.
 //
-//   SIGN_BOARDS                       Mathwood's: { text, y (height m), ang (radians about the post; 0 points along +x) }
-//   signTexture(boards)               -> the boards' picture (a canvas texture, 512 x 512: a strip a board, the post's bark)
+//   SIGN_BOARDS                       a post on its own, for a lab: { text, y (height m), ang (radians about the post; 0 points along
+//                                     +x), len, row (its strip in the picture; default: its place in the list) }
+//   signTexture(rows)                 -> the boards' one picture (a canvas texture, 512 x 1024: a strip for each name in rows, up to
+//                                     twelve, then the post's bark), shared by every post; drawn again when the font arrives
 //   signpostParts(boards, rand)       -> [{ mat: 'sign' | 'matte', geo, colour }]: geometry in the post's own frame, its foot at
 //                                     y = 0; 'sign' wears signTexture, 'matte' takes a colour per part
+// (Mathwood's posts aim their boards from where each one stands: world/objects/signplaces.js)
 import * as THREE from 'three';
 
-// (each pointing at the place: from the square's post (it stands turned 45 degrees) to the lake, the mill's hill, the pasture
-// out east and the bridge out west)
 export const SIGN_BOARDS = [
   { text: 'MILL HILL', y: 2.12, ang: 2.72, len: 0.98 }, { text: 'PASTURE', y: 1.9, ang: -1.0, len: 0.9 },
   { text: 'THE LAKE', y: 1.68, ang: -2.54, len: 0.94 }, { text: 'BRIDGE', y: 1.46, ang: 2.78, len: 0.84 },
 ];
-const ROW = 96, POST_ROW = 4;   // (a board's strip's height in the picture, and where the bark's strip starts)
+const ROW = 80, POST_ROW = 12, PIC_H = 1024;   // (a board's strip's height in the picture, where the bark's strip starts, the picture's height)
 
 function rnd(seed) { let s = seed >>> 0 || 1; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }
 // a strip of old grey-brown sawn plank, its grain running along it, saw marks across
@@ -42,14 +43,21 @@ function burnt(g, text, x, y, w, h, R, from, to) {
     g.restore(); cx += (g.measureText(c).width + gap) * k;
   }
 }
-export function signTexture(boards = SIGN_BOARDS) {
-  const S = 512, cv = document.createElement('canvas'); cv.width = cv.height = S; const g = cv.getContext('2d'), R = rnd(23);
+export function signTexture(rows = SIGN_BOARDS) {
+  const S = 512, cv = document.createElement('canvas'); cv.width = S; cv.height = PIC_H; const g = cv.getContext('2d');
   const tones = ['#a8957c', '#9c8a72', '#b09c82', '#a39078'];
-  boards.slice(0, POST_ROW).forEach((b, i) => { plank(g, 0, i * ROW, S, ROW, tones[i % 4], R); burnt(g, b.text, 0, i * ROW, S, ROW, R, ...textSpan(b.len || 0.9)); });
-  plank(g, 0, POST_ROW * ROW, S, S - POST_ROW * ROW, '#7a6a57', R);
-  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; t.wrapS = THREE.RepeatWrapping; return t;
+  const draw = () => {
+    const R = rnd(23);
+    rows.slice(0, POST_ROW).forEach((b, i) => { plank(g, 0, i * ROW, S, ROW, tones[i % 4], R); burnt(g, b.text, 0, i * ROW, S, ROW, R, ...textSpan(b.len || 0.9)); });
+    plank(g, 0, POST_ROW * ROW, S, PIC_H - POST_ROW * ROW, '#7a6a57', R);
+  };
+  draw();
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 8; t.wrapS = THREE.RepeatWrapping;
+  // (a canvas drawn before the lettering's font has come uses the next one down: drawn again once it has)
+  if (document.fonts && !document.fonts.check('400 40px Rye')) document.fonts.load('400 40px Rye').then((f) => { if (f.length) { draw(); t.needsUpdate = true; } }, () => {});
+  return t;
 }
-const stripV = (row, f) => 1 - (row * ROW + 2 + f * (ROW - 4)) / 512;
+const stripV = (row, f) => 1 - (row * ROW + 2 + f * (ROW - 4)) / PIC_H;
 
 // one board: a plank with a sawn tail and a rough point, as a slab (front, back and edge), its uvs in its strip; lettering reads
 // from either side
@@ -62,7 +70,7 @@ function boardGeo(b, row, R) {
     for (let i = 1; i < out.length - 1; i++) I.push(...(s > 0 ? [v0[0], v0[i], v0[i + 1]] : [v0[0], v0[i + 1], v0[i]]));
   }
   for (let i = 0; i < out.length; i++) {
-    const [ax, ay] = out[i], [bx, by] = out[(i + 1) % out.length], l = Math.hypot(bx - ax, by - ay), nx = (by - ay) / l, ny = -(bx - ax) / l, v0 = 1 - (POST_ROW * ROW + 8) / 512, v1 = v0 - 0.02;
+    const [ax, ay] = out[i], [bx, by] = out[(i + 1) % out.length], l = Math.hypot(bx - ax, by - ay), nx = (by - ay) / l, ny = -(bx - ax) / l, v0 = 1 - (POST_ROW * ROW + 8) / PIC_H, v1 = v0 - 0.02;
     const a = add(ax, ay, D / 2, nx, ny, 0, 0, v0), c = add(bx, by, D / 2, nx, ny, 0, l, v0), d = add(bx, by, -D / 2, nx, ny, 0, l, v1), e = add(ax, ay, -D / 2, nx, ny, 0, 0, v1);
     I.push(a, e, d, a, d, c);
   }
@@ -72,7 +80,7 @@ function boardGeo(b, row, R) {
 // the post: hewn with an axe, seven uneven sides, a slanted top, sunk in the ground
 function postGeo(R) {
   const n = 7, H = 2.42, g = new THREE.CylinderGeometry(0.072, 0.088, H + 0.2, n, 3), P = g.attributes.position, UV = g.attributes.uv, off = Array.from({ length: n }, () => 0.9 + R() * 0.22);
-  const v0 = 1 - (POST_ROW * ROW + 2) / 512, vs = (512 - POST_ROW * ROW - 4) / 512;
+  const v0 = 1 - (POST_ROW * ROW + 2) / PIC_H, vs = (PIC_H - POST_ROW * ROW - 4) / PIC_H;
   for (let i = 0; i < P.count; i++) {
     const x = P.getX(i), z = P.getZ(i), y = P.getY(i), a = (Math.atan2(x, z) + Math.PI * 2) % (Math.PI * 2), k = off[Math.round(a / (Math.PI * 2) * n) % n];
     P.setXYZ(i, x * k, y + (H - 0.2) / 2 + (y > 0 ? -z * 0.45 : 0), z * k);   // (a slant on top: cut with the saw)
@@ -82,7 +90,7 @@ function postGeo(R) {
 }
 export function signpostParts(boards = SIGN_BOARDS, rand = Math.random) {
   const R = rnd(11), parts = [{ mat: 'sign', geo: postGeo(R), colour: 0xffffff }];
-  boards.slice(0, POST_ROW).forEach((b, i) => parts.push({ mat: 'sign', geo: boardGeo(b, i, R), colour: 0xffffff }));
+  boards.slice(0, POST_ROW).forEach((b, i) => parts.push({ mat: 'sign', geo: boardGeo(b, b.row ?? i, R), colour: 0xffffff }));
   // the stones at its foot: field stone, muted
   for (const [x, z, r] of [[0.15, 0.05, 0.11], [-0.13, 0.1, 0.09], [0.03, -0.16, 0.12], [-0.12, -0.11, 0.08], [0.1, 0.17, 0.07]]) {
     const g = new THREE.DodecahedronGeometry(r, 0); g.scale(1.25, 0.62, 1.05); g.rotateY(rand() * 6); g.translate(x, r * 0.28, z);

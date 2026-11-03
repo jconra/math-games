@@ -26,7 +26,7 @@ test('the spots keep clear of the bridge\'s river, the camps, the hideouts, the 
     let r = Infinity; for (let i = 1; i < RIVER.length; i++) r = Math.min(r, segD(b, RIVER[i - 1], RIVER[i]));
     assert.ok(r >= 90, `${b.x},${b.z} is ${r.toFixed(0)} m from the western river`);
   }
-  const camps = [...read('src/camps.js').matchAll(/spot: \{ x: (-?\d+), z: (-?\d+) \}/g)].map((m) => ({ x: +m[1], z: +m[2] }));
+  const camps = [...read('world/objects/sites.js').matchAll(/Camp: \{ x: (-?\d+), z: (-?\d+) \}/g)].map((m) => ({ x: +m[1], z: +m[2] }));
   assert.equal(camps.length, 3);
   const caches = [...read('src/missions/loot.js').match(/export const CACHES = \[([\s\S]*?)\n\];/)[1].matchAll(/x: (-?\d+), z: (-?\d+)/g)].map((m) => ({ x: +m[1], z: +m[2] }));
   assert.equal(caches.length, 5);

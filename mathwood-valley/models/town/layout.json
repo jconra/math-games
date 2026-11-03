@@ -105,10 +105,51 @@
    "id": "signpost1",
    "type": "prop",
    "kind": "signpost",
-   "x": 5.32,
-   "z": -209.6,
+   "x": 9,
+   "z": -212,
    "rot": 45,
-   "size": 1
+   "size": 1,
+   "boards": ["mill", "farm", "pasture", "lake"]
+  },
+  {
+   "id": "signpost-lane",
+   "type": "prop",
+   "kind": "signpost",
+   "x": -17,
+   "z": -183,
+   "rot": 200,
+   "size": 1,
+   "boards": ["square", "lake", "homes"]
+  },
+  {
+   "id": "signpost-east",
+   "type": "prop",
+   "kind": "signpost",
+   "x": 95,
+   "z": -196,
+   "rot": 120,
+   "size": 1,
+   "boards": ["square", "range", "pasture", "hollis"]
+  },
+  {
+   "id": "signpost-west",
+   "type": "prop",
+   "kind": "signpost",
+   "x": -188,
+   "z": -141,
+   "rot": 300,
+   "size": 1,
+   "boards": ["square", "cow", "lake", "bridge"]
+  },
+  {
+   "id": "signpost-bridge",
+   "type": "prop",
+   "kind": "signpost",
+   "x": -341,
+   "z": -141,
+   "rot": 20,
+   "size": 1,
+   "boards": ["bridge", "ford", "square"]
   },
   {
    "id": "picnicTable2",

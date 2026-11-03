@@ -35,6 +35,7 @@
 //   J.sold(order)       a sale's right coin: those fish out of the saddlebags
 //   J.state(), J.dispose()
 import * as THREE from 'three';
+import { SITES } from '../world/objects/sites.js';
 import { makePerson } from './actors/folk.js';
 import { saveRider, recordAnswer, countJob } from './save.js';
 import { flagAsker } from './ui/flag.js';
@@ -55,7 +56,7 @@ import { fishingOf, keepFish, sayable, saleMap, CREEL } from './fishrecords.js';
 import { fishSum } from './math/jobsums.js';
 
 export const DOCK = {
-  x: -4.4, foot: -95.3,      // the dock's shore end (world, metres): where the town's dirt path meets the water
+  x: SITES.dock.x, foot: SITES.dock.z,      // the dock's shore end (world, metres): where the town's dirt path meets the water
   len: 12,                   // it runs this far straight out (south, +Z) over the lake
   deck: 0.5,                 // its planks this high over the water (the bank here is low and flat)
   keeper: { x: -6.6, z: -96.5 },   // where the old fisherman stands: on the bank by the foot of the dock, west of it

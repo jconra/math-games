@@ -17,6 +17,7 @@ import { makeStateMap } from './stateMap.js';
 import { makeObelisk } from './obelisk.js';
 import { hayTexture } from '../../labs/buildings/art.js';
 import { signpostParts, signTexture, SIGN_BOARDS } from './signpost.js';
+import { SIGN_ROWS, boardsKey } from './signplaces.js';
 
 // footprint is [width along x, depth along z] in metres. The signpost's is its post and the stones
 // round it: it turns about the post, and its arrows reach out 0.8 m above head height.
@@ -82,7 +83,7 @@ function materials() {
     glow: new THREE.MeshStandardMaterial({ color: 0x8a6a40, emissive: 0xffcf80, emissiveIntensity: 1.5, roughness: 0.4 }),
     paint: new THREE.MeshStandardMaterial({ map: paintingTexture(), roughness: 0.92 }),
     bloom: new THREE.MeshStandardMaterial({ map: bloomTexture(), roughness: 0.95 }),
-    sign: new THREE.MeshStandardMaterial({ map: signTexture(), roughness: 0.96 }),
+    sign: new THREE.MeshStandardMaterial({ map: signTexture(SIGN_ROWS), roughness: 0.96 }),
     // (the hay: the Building Lab's hay picture, shared with the buildings' bales and mangers (labs/buildings/art.js),
     // under each corner's colour: bleached on top, darker low down. The picture is dark, drawn for a barn's lantern-lit
     // inside: brought up to sunlit straw by the material's own colour, over 1)
@@ -468,8 +469,9 @@ function stall(k) {
   });
 }
 
-// Signpost: the western one, its own file so other worlds can take it: objects/signpost.js
-function signpost(k) { for (const p of signpostParts(SIGN_BOARDS, k.r)) k.add(p.mat, p.geo, p.colour, { shade: p.mat === 'matte' }); }
+// Signpost: the western one, its own file so other worlds can take it: objects/signpost.js. boards: this post's own, aimed from where
+// it stands (objects/signplaces.js); none: a post on its own, for a lab
+function signpost(k, boards) { for (const p of signpostParts(boards || SIGN_BOARDS, k.r)) k.add(p.mat, p.geo, p.colour, { shade: p.mat === 'matte' }); }
 
 // Flower bed: a ring of cream cobbles round a disc of soil, a low dome of foliage thick with
 // drifts of flowers (each colour in its own patch, as a gardener plants them) - painted on, with
@@ -669,8 +671,9 @@ function wagonProp(kind) {
 }
 const CACHE = new Map();
 
-// A new Group for the prop: meshes sharing the cached geometry and materials.
-export function makeProp(kind) {
+// A new Group for the prop: meshes sharing the cached geometry and materials. boards (a signpost): its own, from
+// objects/signplaces.js boardsFor; its post and boards are its own geometry, its stones the same as every post's
+export function makeProp(kind, boards = null) {
   if (WAGON_PROPS[kind]) return wagonProp(kind);
   if (kind === 'valehexGlobe') return makeValehexGlobe();
   if (kind === 'stateMap') return makeStateMap();
@@ -678,13 +681,12 @@ export function makeProp(kind) {
   const make = BUILDERS[kind];
   if (!make) throw new Error(`townProps: no prop called "${kind}"`);
   const M = materials();
-  if (!CACHE.has(kind)) {
-    const k = new Kit(Object.keys(BUILDERS).indexOf(kind) * 131 + 17);
-    make(k);
-    CACHE.set(kind, k.build({ centre: kind !== 'signpost' }));   // a signpost turns about its post
-  }
+  const key = kind === 'signpost' && boards ? `signpost@${boardsKey(boards)}` : kind;
+  const build = (b) => { const k = new Kit(Object.keys(BUILDERS).indexOf(kind) * 131 + 17); make(k, b); return k.build({ centre: kind !== 'signpost' }); };   // a signpost turns about its post
+  if (!CACHE.has(kind)) CACHE.set(kind, build(null));
+  if (!CACHE.has(key)) { const stones = CACHE.get(kind).find((p) => p.mat === 'matte'); CACHE.set(key, build(boards).map((p) => { if (p.mat !== 'matte') return p; p.geo.dispose(); return stones; })); }
   const group = new THREE.Group(); group.name = kind; group.userData.kind = kind;
-  for (const { mat, geo } of CACHE.get(kind)) {
+  for (const { mat, geo } of CACHE.get(key)) {
     const m = new THREE.Mesh(geo, M[mat]); m.castShadow = true; m.receiveShadow = true; m.name = `${kind}:${mat}`;
     group.add(m);
   }

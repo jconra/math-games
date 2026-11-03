@@ -52,8 +52,10 @@ export const MAKERS = {
     q.b([L - 0.1, 0.05, w - 0.1], [0, 0.17, 0], null, { long: 0, tint: DARKW });
     for (const s of [-1, 1]) q.b([0.1, 0.13, w + 0.14], [s * (L / 2 - 0.25), 0.065, 0], null, { long: 2, tint: DARKW, strip: 10 });
     for (const s of [-1, 1]) q.x('iron', [0.035, 0.43, w + 0.012], [s * (L / 2 - 0.12), 0.34, 0], null, { tint: [1.5, 1.0, 0.72], skip: '-y' });
-    q.x('iron', [L - 0.12, 0.012, w - 0.12], [0, 0.47, 0], null, { tint: [0.3, 0.36, 0.38] });    // the water
-    k.solid([L, h, w], null, null, mul(M, T(0, h / 2, 0)));
+    // the water: a dark still blue-green, a hand below the rim (a building's own picture, the saloon's or the store's: on the kit's
+    // iron it came out black, with the weather's moss growing on it)
+    if (o.gd) o.gd.box([L - 0.1, 0.004, w - 0.1], mul(M, T(0, 0.47, 0)), { '+y': o.waterTile || STORE_ART.tile.tin }, o.waterTint || [0.3, 0.46, 0.52]);
+    k.solid([L, 0.46, w], null, null, mul(M, T(0, 0.23, 0)));    // (only up to the water, so it isn't baked dark as inside something)
   },
   crate(k, M, o) {
     const q = placer(k, M), s = o.size ?? 0.6, n = 3, sh = (s - 0.04) / n;
@@ -351,8 +353,11 @@ export function buildProps(list, { seed = 5, bake = null, glow: o_glow = false }
     counts[p.type] = (counts[p.type] || 0) + 1;
   }
   const R = rng(seed + 3), geos = {};
-  geos.wood = buildGeometry(k.parts.wood, 'wood', R, { topAt: () => 1.2 });
-  geos.iron = buildGeometry(k.parts.iron, 'iron', R, { topAt: () => 1.2 });
+  // (the rain's drip edge over a prop: never below its own corner. Streaks stop dead above the edge, and a tall prop, a leaning
+  // plank, wore that as a ruled line across it at this height)
+  const dripEdge = (x, z, y) => Math.max(1.2, y);
+  geos.wood = buildGeometry(k.parts.wood, 'wood', R, { topAt: dripEdge });
+  geos.iron = buildGeometry(k.parts.iron, 'iron', R, { topAt: dripEdge });
   geos.hay = buildGeometry(k.parts.hay, 'stone', R, {});
   const goods = gd.build(); if (goods) geos.goods = goods;
   const paper = pa.build(); if (paper) geos.paper = paper;   // (the props' paper sheet: framed pictures, round tops)
