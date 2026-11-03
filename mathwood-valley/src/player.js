@@ -97,6 +97,8 @@ export const MOVE = {
 // how big the player and the horse are to a wagon (m; src/wagon.js pushFromWagons): on foot, round the feet; the horse,
 // circles along it (at these metres ahead of its middle: from the head to the rump)
 export const WAGON_R = { foot: 0.35, horse: 0.45, along: [1.2, 0.3, -0.6, -1.0] };
+// a walker found inside a blocker looks for free ground in rings this far apart (m), this many points round each, this far
+const OUT = { ring: 0.1, ways: 16, most: 1.5 };
 // which clip, how fast, at a speed. On foot: exact (speed / STRIDE). The horse: the animals' own rule (gaitFor in
 // actors/animals.js): Walk, then Gallop, each played at speed / its stride, so a hoof that is down stays put. The pack's
 // gallop is short-strided (4.55 m/s at speed 1, times the horse's size), so the trot (6 m/s x size) is its gallop at
@@ -327,6 +329,9 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
   // move a walker (or the horse) by step along direction h, in short steps; it slides along what blocks it.
   // front: also keep this far ahead clear (a horse's nose). Returns how far it got
   function walk(o, h, step, front = 0) {
+    // (standing where a walker can't: something closed on them, a townsperson stopping on the spot, say. No step from in
+    // there lands on free ground, so every key would do nothing until it moved off: pushing any way walks them out)
+    if (step !== 0 && W.blocked(o.x, o.z)) return walkOut(o, h, Math.abs(step));
     const s = Math.sin(h), c = Math.cos(h); let done = 0;
     const n = Math.max(1, Math.ceil(Math.abs(step) / 0.25)), d = step / n;
     const free = (x, z) => !W.blocked(x, z) && (!front || !W.blocked(x + s * front, z + c * front));
@@ -338,6 +343,21 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
       break;
     }
     return done;
+  }
+
+  // from inside a blocker to the nearest free ground (the nearest ring of points that has any; on it, the point most the
+  // way they're pushing), by step. Nothing near enough: they stay put, for the menu's "I'm stuck"
+  function walkOut(o, h, step) {
+    const hx = Math.sin(h), hz = Math.cos(h);
+    for (let r = OUT.ring; r <= OUT.most + 1e-6; r += OUT.ring) {
+      let bx = 0, bz = 0, best = -2;
+      for (let k = 0; k < OUT.ways; k++) {
+        const a = k * Math.PI * 2 / OUT.ways, ux = Math.sin(a), uz = Math.cos(a), d = ux * hx + uz * hz;
+        if (d > best && !W.blocked(o.x + ux * r, o.z + uz * r)) { best = d; bx = ux; bz = uz; }
+      }
+      if (best > -2) { const m = Math.min(step, r); o.x += bx * m; o.z += bz * m; return m; }
+    }
+    return 0;
   }
 
   let fpFaded = false;   // (the body faded for first person: src/camera.js FIRST)

@@ -382,6 +382,18 @@ function walkGrid(solids, foot, ox, oz, base = 0, opt = {}) {
     const hard = blocked[j * nx + i] || ledge[j * nx + i]; if (!hard && !soft[j * nx + i]) continue;
     for (let b = Math.max(0, j - r); b <= Math.min(nz - 1, j + r); b++) for (let a = Math.max(0, i - r); a <= Math.min(nx - 1, i + r); a++) if ((a - i) ** 2 + (b - j) ** 2 <= r * r + 0.5) (hard ? wide : edge)[b * nx + a] = 1;
   }
+  // a free cell shut in on three sides or more is no place to stand: widening two blocks that nearly meet leaves a notch a
+  // cell wide, and a walker who pushes on into one can only come straight back out (the stable's front corner kept a rider
+  // pressing forward and to the sides for good). Filled in, and what that shuts in next, so a dead end goes back to where it
+  // opens out. A way through, however narrow, has two open sides all along and stays
+  for (let more = true; more;) {
+    more = false;
+    for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) {
+      const k = j * nx + i; if (wide[k]) continue;
+      let shut = 0; for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const a = i + di, b = j + dj; if (a >= 0 && b >= 0 && a < nx && b < nz && wide[b * nx + a]) shut++; }
+      if (shut >= 3) { wide[k] = 1; more = true; }
+    }
+  }
   return {
     x0, z0, nx, nz, cell: CELL, blocked: wide, edge, wall: raw, floor, ceil,
     at: (x, z) => { const i = Math.floor((x - x0) / CELL), j = Math.floor((z - z0) / CELL); return i < 0 || j < 0 || i >= nx || j >= nz ? -1 : j * nx + i; },
