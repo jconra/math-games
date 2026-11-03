@@ -18,7 +18,9 @@
 // lab alone (kept in this browser; the game's own choice is left as it is). It reloads the lab: the work in hand is kept.
 // PAINTED LAWN always shows here, whatever the tier and however high the view (the lawn's tufts are drawn only near the camera,
 // and never on potato): the tufts round the brush while the lawn is picked, and a faint green tint over it (lawnmap.js).
-// SAVE TIDIES UP: strokes that do nothing are left out of the file and out of the work in hand (tidy.js; Undo brings them back).
+// SAVE TIDIES UP: strokes that do nothing are left out of the file and out of the work in hand (tidy.js); then strokes of one
+// sort that overlap are made one and each stroke keeps only the points it needs, the ground coming out close (merge.js:
+// a little may change at the edges, never on a building, prop, placed plant or in front of a door). Undo brings them back.
 // For rigs: window.TL = { ready, V, tool, text(), savedText(), save(), open(decor), view(name), look(..), screen(x, y, z), camera, fps,
 //   fences: { style(), setStyle(id), height(v), stats(), icons }, pick(name), fly: { keys(), speed() } }
 import * as THREE from 'three';
@@ -27,7 +29,7 @@ import { makeValley, TIER_SET } from '../../world/valley.js';
 import { chooseTier, wantAntialias, TIERS } from '../../world/quality.js';
 import { BASE } from '../../world/base.js';
 import { VillageEditor } from '../../world/objects/villageEditor.js';
-import { normalise as normaliseTown } from '../../world/objects/village.js';
+import { normalise as normaliseTown, footprintOf } from '../../world/objects/village.js';
 import { normalisePlanting, newId, newSeed } from '../../world/objects/planting.js';
 import { applyDecor } from '../../world/objects/decor.js';
 import { PROP_KINDS } from '../../world/objects/townProps.js';
@@ -37,6 +39,7 @@ import { makeDecor, decorText } from './decorfile.js';
 import { FENCE_STYLES, PLAIN, GATES, styleInfo, nearestFence } from '../../world/objects/fenceplan.js';
 import { makeCodePlaces } from './codeplaces.js';
 import { tidyStrokes } from './tidy.js';
+import { mergeStrokes, makeGuard } from './merge.js';
 import { makeLawnMap } from './lawnmap.js';
 
 const $ = (id) => document.getElementById(id);
@@ -176,14 +179,32 @@ if (TL.text() !== SAVED) say('This browser kept changes from last time that aren
 
 // Save: to the game's folder through the local save script, else downloaded
 const download = (text) => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' })); a.download = 'decor.json'; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000); };
-// (the tidy-up: the strokes that do nothing go, one step for Undo; the town comes out the same: tidy.js)
+// what the merge may not paint over (merge.js makeGuard): the buildings and props as they stand now (the code-built ones'
+// walls, rooms and porches too), the town's trees and the placed plants, and the ground in front of every door
+const SPOT = { plant: 0.5, tree: 1 };   // (m round a placed plant, a placed tree or rock, a town tree)
+TL.guardData = () => {
+  const rects = [], spots = [], C = V.CODE;
+  for (const it of TOWN.village.layout.items) {
+    if (it.type === 'tree') { spots.push({ x: it.x, z: it.z, r: SPOT.tree * (it.size || 1) }); continue; }
+    const f = footprintOf(it); rects.push({ x: it.x, z: it.z, rot: (it.rot || 0) * Math.PI / 180, w: f.w, d: f.d });
+  }
+  for (const i of tool.planting.items) spots.push({ x: i.x, z: i.z, r: i.kind >= PLANT.TREE0 ? SPOT.tree : SPOT.plant });
+  const doors = C && C.doors ? C.doors.list.map((d) => ({ x: d.x, z: d.z, ox: d.ox || 0, oz: d.oz || 0, half: d.half || 0.5 })) : [];
+  return { rects, spots, doors };
+};
+const townGuard = () => { const C = V.CODE; return makeGuard({ ...TL.guardData(), inside: C ? (x, z) => C.blocked(x, z) || !!C.room(x, heightAt(x, z) + 0.6, z) : null }); };
+// (the tidy-up: the strokes that do nothing go (tidy.js: the town comes out the same), then the overlapping ones are made
+// one and the lines kept simple (merge.js: the town comes out close); one step for Undo)
 TL.tidy = () => {
-  const { strokes, dropped } = tidyStrokes(tool.planting, { PLANT, keep: new Set(SHIPPED.planting.strokes.map((s) => s.id)) });
-  if (dropped.length) { tool.before(); tool.planting.strokes = strokes; tool.commit(); }
-  return dropped;
+  const keep = new Set(SHIPPED.planting.strokes.map((s) => s.id)), { strokes, dropped } = tidyStrokes(tool.planting, { PLANT, keep });
+  const M = mergeStrokes({ ...tool.planting, strokes }, { PLANT, keep, guard: townGuard() });
+  if (dropped.length || M.merged.length) { tool.before(); tool.planting.strokes = M.strokes; tool.commit(); }
+  return { dropped, merged: M.merged, joined: M.groups.reduce((a, g) => a + g.from.length, 0), into: M.groups.length, simpler: M.merged.filter((m) => m.what === 'points').length };
 };
 TL.save = async ({ downloadOnly = false } = {}) => {
-  const n = TL.tidy().length, tidied = n ? ` ${n} stroke${n === 1 ? '' : 's'} that did nothing left out.` : '', text = TL.text();
+  say('Saving: tidying the strokes…'); await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0)));   // (said, and drawn, before the tidy-up's second or so)
+  const T = TL.tidy(), n = T.dropped.length, s = (k) => (k === 1 ? '' : 's'), text = TL.text();
+  const tidied = (n ? ` ${n} stroke${s(n)} that did nothing left out.` : '') + (T.into ? ` ${T.joined} overlapping strokes made into ${T.into}.` : '') + (T.simpler ? ` ${T.simpler} stroke${s(T.simpler)} made simpler.` : '');
   if (LOCAL && !downloadOnly) {
     try { const r = await fetch(SAVE_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: text });
       if (r.ok) { SAVED = text; say(`Saved into the game (models/town/decor.json).${tidied} Reload the game to see it.`, 'saved'); return 'server'; } } catch (e) { /* not running: downloaded instead */ }
