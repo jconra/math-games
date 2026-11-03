@@ -50,9 +50,9 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { softShade } from './shading.js';
 import { prepareHorse } from './horsecoat.js';
 import { buildHair } from './horsehair.js';
-import { needBreed, furPlain, savedBreeds } from './dogkind.js';
+import { needBreed, furPlain, furAnimal, savedBreeds } from './dogkind.js';
 import { BASES, baseFur } from './dogbreeds.js';
-import { furMaterial } from './dogfur.js';
+import { furMaterial, ANIMAL_FUR } from './dogfur.js';
 
 // steed: the new horse (the Horse Lab's), a coat kind (animals.json "coat": true): see loadAnimals and makeAnimal
 export const KINDS = ['horse', 'horseWhite', 'steed', 'donkey', 'cow', 'bull', 'deer', 'stag', 'shiba', 'husky', 'wolf'];
@@ -134,6 +134,8 @@ export async function loadAnimals(base, { kinds = null } = {}) {
       lib.kinds[kind] = { scene: g.scene, clips: g.animations, info: info[kind] };
       // (the plain dogs get the fur too, dogfur.js, with the Dog Lab's saved numbers over their own)
       if (BASES.includes(kind)) return savedBreeds(dir).then((saved) => { furPlain(lib.kinds[kind], baseFur(kind, saved)); return lib.kinds[kind]; });
+      // (the farm animals get it too, each with its own numbers: dogfur.js ANIMAL_FUR)
+      if (ANIMAL_FUR[kind]) furAnimal(lib.kinds[kind], ANIMAL_FUR[kind]);
       return lib.kinds[kind];
     }, (e) => { delete lib.loading[kind]; throw e; }));   // (a failed load is forgotten: the next need tries again)
   };
@@ -202,7 +204,9 @@ export function makeAnimal(lib, kind, { shadows = true, tint = null, size = 1 } 
     // material drawn with a program throws the program away, and the next horse would build it again, a long frame.
     // A material holds nothing else on the graphics card. The geometry is the kind's, shared: never freed here)
     dispose() {
-      mixer.stopAllAction(); mixer.uncacheRoot(model); if (tint !== null && tint !== undefined) mesh.material.dispose();
+      // (a tinted coat is its own material. A furred one is let go, not disposed, as a coat kind's: the last of a herd
+      // gone would throw the fur's program away, and the next steer would build it again, a long frame)
+      mixer.stopAllAction(); mixer.uncacheRoot(model); if (tint !== null && tint !== undefined && !mesh.material.userData.furU) mesh.material.dispose();
       model.traverse((o) => { if (o.isSkinnedMesh && o.skeleton) o.skeleton.dispose(); });
       root.removeFromParent();
     },
