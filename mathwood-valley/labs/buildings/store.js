@@ -524,6 +524,8 @@ function leanTo(k, paint) {
   k.board([2.3, 0.04, 0.4], [-3.15, FL + 1.25, ZB + 0.3], null, { long: 0, tint: vary(k, FURN, 0.7, 0.8), inside: true });
   for (const x of [-4.1, -2.2]) k.board([0.05, 1.25, 0.4], [x, FL + 0.625, ZB + 0.3], null, { long: 1, tint: vary(k, FURN, 0.7, 0.8), inside: true });
   for (let i = 0; i < 3; i++) keg(T(-3.8 + i * 0.6, FL + 1.27, ZB + 0.32), 0.17, 0.42, k);
+  // (a walker stops at the shelf's edge, from the floor up, not with its board and kegs through them; only for a walker)
+  k.walkSolids.push({ size: [2.3, 1.3, 0.44], m: T(-3.15, FL + 0.65, ZB + 0.3) });
 }
 // the lean-to's sliding door: Z-braced planks, two iron hangers with wheels on the track, a handle (built round its
 // left edge at x = 0, running +x, its middle at z = 0)
@@ -1022,7 +1024,7 @@ function boardAttr(geo, parts, seed) {
 // ── build it all ─────────────────────────────────────────────────────────────────────────────────────────────────────
 export function buildStore(recipeIn = {}, env = {}) {
   const t0 = performance.now(), r = storeRecipe(recipeIn), paint = PAINTS[r.paint].c;
-  const k = new Kit(r.seed); k.parts.glow = []; k.parts.rope = [];
+  const k = new Kit(r.seed); k.parts.glow = []; k.parts.rope = []; k.walkSolids = [];   // (walkSolids: what stops a walker and not the light)
   SILLS.length = 0; decals.length = 0; panes.length = 0;
   G = new Goods(A.w, A.h); J = new Goods(A.w, A.h); STOCK.tris = 0; SR = rng(r.seed * 31 + 7);
   const lamps = [], extraProps = [];
@@ -1123,7 +1125,7 @@ export function buildStore(recipeIn = {}, env = {}) {
   counts.goodsTris = goodsTris; counts.stockTris = STOCK.tris;
   const P3 = (x, y, z) => [x + OX, y, z + OZ];
   return {
-    recipe: r, geos, doors: leaves, lamps, light, occ, props, offset: OX, offsetZ: OZ,
+    recipe: r, geos, doors: leaves, lamps, light, occ, props, offset: OX, offsetZ: OZ, walkSolids: k.walkSolids,
     anchors: {
       doorways: [{ name: 'front', centre: P3(OXC, FL + 1.2, ZF), w: 1.5, h: 2.4, out: [0, 0, 1] }, { name: 'storeroom', centre: P3((LDOOR.a0 + LDOOR.a1) / 2, FL + 1.3, ZLF), w: 1.25, h: 2.6, out: [0, 0, 1] },
         // (indoor: a door between two rooms that E works like the others; no night glow or dark card of its own)

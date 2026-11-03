@@ -97,6 +97,11 @@ export function buildWindpump(recipeIn = {}, env = {}) {
   k.box('iron', [1.85, 0.06, 0.06], [1.02, 0.66, 0], [0, 0, -0.05], { tint: IRON.map((c) => c * 0.75) });   // (the pipe out to the stock tank, just past the legs)
   k.box('iron', [0.05, 0.6, 0.05], [-0.12, 1.1, 0], [0, 0, 0.5], { tint: IRON.map((c) => c * 0.75) });   // the handle, for a still day
   k.solid([1.2, 0.06, 1.2], [0, 0.03, 0]); k.solid([0.24, 1.0, 0.24], [0, 0.5, 0]);
+  // (a walker goes round the tower's foot: its girts at the knee, the X braces and the ladder's rungs between the legs.
+  // Its faces' boards and no further: the stock tank stands just off the pipe's side. Only for a walker: the light isn't
+  // baked round it)
+  const footW = 2 * (BASE + 0.06);
+  k.walkSolids = [{ size: [footW, 2.0, footW], m: T(0, 1.0, 0) }];
 
   // THE WHEEL, in its own frame (the axle along z, its face toward +z): a hub, six arms, an inner and an outer ring of
   // short boards, eighteen slats between them each turned to the wind
@@ -133,7 +138,7 @@ export function buildWindpump(recipeIn = {}, env = {}) {
   // (the footprint as the town lays it out: the legs' spread at the foot; the wheel and the tail are high overhead)
   const anchors = { footprint: { w: sp, d: sp, h: f2(AXLE[1] + WHEEL), x0: -sp / 2, x1: sp / 2, z0: -sp / 2, z1: sp / 2 }, floor: 0, doorways: [], rooms: [], pipe: [1.95, 0.61, 0] };   // (pipe: where the pump's pipe ends, over the stock tank)
   const counts = { wood: k.parts.wood.length, iron: k.parts.iron.length, wheel: w.parts.wood.length };
-  const B = { recipe: r, geos, spins: [{ geos: { wood: wheel }, at: AXLE.slice(), axis: [0, 0, 1], speed: TURN }], doors: [], lamps: [], light, occ, props: [], offset: 0, offsetZ: 0,
+  const B = { recipe: r, geos, spins: [{ geos: { wood: wheel }, at: AXLE.slice(), axis: [0, 0, 1], speed: TURN }], doors: [], lamps: [], light, occ, props: [], offset: 0, offsetZ: 0, walkSolids: k.walkSolids,
     anchors, counts, parts: counts.wood + counts.iron + counts.wheel, msBuild, msBake, ms: performance.now() - t0, marks: [], kit: k };
   B.views = {
     front: [[-6, 5, 16], [0, 6, 0]], front34: [[-11, 4, 11], [0, 6, 0]], head: [[-2.6, TALL + 1.4, 4.2], [0, TALL + 0.3, 0]],
