@@ -1,0 +1,36 @@
+/* The Kit Lab: a clean station look, dark glass and a blue edge. ONE MENU: the bar along the bottom. A slim strip at
+   the top names the lab and shows what the view costs. */
+:root { --ink: #e8eef5; --ink-2: #b9c6d4; --mute: #8193a6; --blue: #4fb6ff; --blue-hi: #9fdcff; --amber: #f2b547;
+  --glass: rgba(12, 18, 26, 0.88); --edge: rgba(79, 182, 255, 0.35); --chip: #1c2633; --chip-2: #263244; }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; overflow: hidden; background: #070a0f; color: var(--ink); font: 500 14px/1.4 system-ui, "Segoe UI", Roboto, "DejaVu Sans", sans-serif; -webkit-tap-highlight-color: transparent; }
+button, select { font: inherit; color: inherit; }
+#c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.kl-top { position: fixed; left: 0; top: 0; z-index: 6; display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 6px 12px; max-width: min(100%, 720px);
+  background: var(--glass); border: 1px solid var(--edge); border-width: 0 1px 1px 0; border-radius: 0 0 10px 0; }
+.kl-top h1 { font: 700 17px/1 system-ui, "Segoe UI", sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: var(--blue-hi); }
+.kl-top a { color: var(--ink-2); font-size: 13px; }
+.kl-hud { color: var(--ink-2); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.kl-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 8; background: var(--glass); border-top: 1px solid var(--edge);
+  padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 6px; }
+.kl-row { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: thin; scrollbar-color: rgba(79, 182, 255, .5) transparent; align-items: center; }
+.kl-row::-webkit-scrollbar { height: 4px; } .kl-row::-webkit-scrollbar-thumb { background: rgba(79, 182, 255, .45); border-radius: 2px; }
+.chip { flex: none; border: 1px solid #2f3d50; border-radius: 15px; padding: 4px 11px; background: linear-gradient(var(--chip-2), var(--chip)); color: var(--ink); font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.chip:hover { border-color: var(--blue); }
+.chip.on { background: linear-gradient(var(--blue-hi), var(--blue)); color: #06121d; border-color: var(--blue-hi); }
+.chip.sub { font-weight: 500; color: var(--ink-2); }
+.chip.sub.on { color: #06121d; }
+.kl-sep { flex: none; width: 1px; align-self: stretch; background: rgba(79, 182, 255, .25); margin: 2px 2px; }
+.kl-label { flex: none; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--mute); }
+.kl-row select { flex: none; border: 1px solid #2f3d50; border-radius: 15px; padding: 3px 8px; background: var(--chip); font-size: 13px; }
+.kl-loading { position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center; font: 600 22px system-ui, "Segoe UI", sans-serif; letter-spacing: 0.06em; color: var(--blue-hi); background: #070a0f; }
+.kl-loading.soft { background: rgba(7, 10, 15, 0.55); pointer-events: none; }
+.kl-loading[hidden] { display: none; }
+/* touch controls */
+.kl-stick, .kl-updown { display: none; }
+.touch .kl-stick { display: block; position: fixed; left: 14px; bottom: calc(var(--bar, 90px) + 14px); z-index: 7; width: 112px; height: 112px; border-radius: 50%; background: rgba(12, 18, 26, 0.45); border: 1px solid var(--edge); touch-action: none; }
+.kl-knob { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; background: rgba(79, 182, 255, 0.55); border: 1px solid var(--blue-hi); }
+.touch .kl-updown { display: flex; flex-direction: column; gap: 10px; position: fixed; right: 14px; bottom: calc(var(--bar, 90px) + 14px); z-index: 7; }
+.kl-updown button { width: 52px; height: 52px; border-radius: 50%; border: 1px solid var(--edge); background: rgba(12, 18, 26, 0.55); color: var(--blue-hi); font-size: 18px; touch-action: none; }
+.kl-updown button.on { background: rgba(79, 182, 255, 0.5); }
+@media (max-height: 430px) { .touch .kl-stick { width: 96px; height: 96px; } .kl-updown button { width: 44px; height: 44px; } .kl-top { padding: 4px 10px; } }

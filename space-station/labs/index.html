@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Space Station Labs</title>
+<meta name="description" content="Prototypes and experiments for the space station math game.">
+<style>
+  :root { --bg: #070a0f; --card: #111925; --edge: rgba(79, 182, 255, 0.35); --blue: #4fb6ff; --blue-hi: #9fdcff; --text: #e8eef5; --dim: #a9b8c8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 400 16px/1.5 system-ui, "Segoe UI", Roboto, "DejaVu Sans", sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 32px 16px 48px; }
+  h1 { font: 700 34px/1.1 system-ui, "Segoe UI", sans-serif; letter-spacing: 0.06em; text-transform: uppercase; color: var(--blue-hi); margin: 0 0 6px; }
+  .lede { color: var(--dim); margin: 0 0 28px; }
+  .labs { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 18px; }
+  .lab { display: flex; flex-direction: column; background: var(--card); border: 1px solid var(--edge); border-radius: 12px; overflow: hidden; color: inherit; text-decoration: none; }
+  .lab img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; background: #000; }
+  .lab .txt { padding: 12px 14px 16px; }
+  .lab h2 { font: 700 20px/1.2 system-ui, "Segoe UI", sans-serif; color: var(--blue-hi); margin: 0 0 6px; }
+  .lab p { margin: 0; color: var(--dim); font-size: 15px; }
+  a.lab:hover, a.lab:focus-visible { border-color: var(--blue-hi); outline: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Space Station Labs</h1>
+  <p class="lede">Prototypes for the space game, tried out on their own before they go in.</p>
+  <div class="labs">
+    <a class="lab" href="kit/">
+      <img src="kit/thumb.jpg" alt="A station corridor: off-white panels between black ribs with light strips, a grated walkway, an arched hatch">
+      <div class="txt">
+        <h2>Kit Lab</h2>
+        <p>The station's building pieces, built in code: floor and ceiling tiles, wall panels, ribs, the arched hatch, pipes, screens and the rest. Look round each one, then walk the test rooms built from them; the doors open as you come near.</p>
+      </div>
+    </a>
+  </div>
+</main>
+</body>
+</html>
