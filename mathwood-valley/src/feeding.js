@@ -18,7 +18,7 @@
 //                     height the animal sets (crouched for a dog, an arm raised to a horse's neck: src/petting.js), strokes
 //                     it a moment, a heart or two float up, a dog wags. The day's first pet of each of the rider's own counts
 //                     toward its hearts.
-//   THE HEARTS OVER AN ANIMAL  of the rider's own, a row of 5 over its head while the rider is near it or has just fed it;
+//   THE HEARTS OVER AN ANIMAL  of the rider's own, a row of 5 over its head for a few seconds after a treat or a pet;
 //                     every animal's hearts are in the menu's "Your animals" (src/ui/animals.js)
 //   NICKERS           the rider's own horse nickers when the rider walks up to it from a way off (always at full hearts,
 //                     now and then before that: FEED.nickerOdds), and when its hearts fill up
@@ -62,8 +62,9 @@ export const FEED = {
   petReach: 2.6,       // m (along the ground) from the rider to the spot on an animal the hand goes to (they step closer; a
                        // dog waiting at heel sits about 2.2 m off)
   petTime: 2.9,        // s a pet lasts
-  heartsNear: 6,       // m: the rider's own animal shows its row of hearts within this of the rider...
-  heartsAfter: 4,      // ...and for this long after a treat or a pet
+  heartsAfter: 4,      // s: the rider's own animal shows its row of hearts this long after a treat or a pet, and only then
+                       // (the game's maker, 2026-11-03: "I don't really like how you see the dogs hearts constantly. I want the
+                       // screen to be clean"; they used to show whenever the rider stood within 6 m)
   heartRows: 3,        // at most this many rows up at once (the nearest)
   rowH: 0.03,          // a row's height on screen (a share of the view's height, as the name tags are)
   callEvery: 2.5,      // s between calling a fenced animal over to the rider by the rail
@@ -358,7 +359,7 @@ export function makeFeeding({ W, rider, player, hud, tools = null, audio = null,
     if (at && pl.mode === 'foot') for (const s of allSpots) {
       if (!s.owned || !s.id || !s.a.root.visible) continue;
       const r = s.a.root.position, d = Math.hypot(r.x - at.x, r.z - at.z);
-      if (d < FEED.heartsNear || (shownUntil.get(s.key) || 0) > now) list.push({ s, d });
+      if ((shownUntil.get(s.key) || 0) > now) list.push({ s, d });
     }
     list.sort((a, b) => a.d - b.d);
     rows.forEach((sp, i) => {

@@ -543,20 +543,41 @@ export function showTitle(root, opts = {}) {
     paintLoad();
   }
 
+  // THE BAR NEVER STANDS STILL (the game's maker, 2026-11-03, on a slow connection: "it would be best if it was always
+  // creeping forward, even if artificially. Or if it could measure progress at a finer detail. It seems pretty jumpy and
+  // stays in one spot for a while right now"). What is shown eases up to the real figure, then creeps on slowly toward a
+  // little short of where the next step is likely to put it (it slows as it nears that, so it never runs ahead of the
+  // work); each file that finishes downloading (nudge) moves it a little more. It never goes back, except for a new start
+  // (the ride's warm-up, after the valley's load).
+  const BAR = { shown: 0, nudges: 0, raf: 0, last: 0 };
+  const room = (f) => Math.min(0.12, (1 - f) * 0.6);
+  function barStep(now) {
+    BAR.raf = 0;
+    const dt = BAR.last ? Math.min(0.1, (now - BAR.last) / 1000) : 1 / 60; BAR.last = now;
+    const f = Math.max(0, Math.min(1, S.load.f));
+    if (f >= 1) BAR.shown = 1;
+    else if (BAR.shown < f) BAR.shown += (f - BAR.shown) * Math.min(1, dt * 6);   // (catching up with the work)
+    else { const cap = f + room(f); BAR.shown += (cap - BAR.shown) * Math.min(1, dt * 0.09); }   // (creeping on)
+    paintLoad();
+    if (BAR.shown < 1 && S.visible) BAR.raf = requestAnimationFrame(barStep);
+    else BAR.last = 0;
+  }
+  function barGo() { if (!BAR.raf && S.load.known && S.visible) BAR.raf = requestAnimationFrame(barStep); }
+
   // Updates just the loading bar and its words (called often while the world loads).
   let doneTimer = 0;
   function paintLoad() {
-    const f = Math.max(0, Math.min(1, S.load.f));
-    const pct = Math.round(f * 100);
+    const f = Math.max(0, Math.min(1, S.load.f)), at = f >= 1 ? 1 : Math.min(0.99, Math.max(0, BAR.shown));
+    const pct = Math.floor(at * 100), wide = (at * 100).toFixed(1) + '%';
     const load = actionsEl.querySelector('.bmt-load');
     const fill = actionsEl.querySelector('.bmt-fill');
-    if (fill) fill.style.width = S.waiting ? pct + '%' : '0';
+    if (fill) fill.style.width = S.waiting ? wide : '0';
     if (!load) return;
     const bar = load.querySelector('.bmt-bar i'), horse = load.querySelector('.bmt-bar svg'), text = load.querySelector('.bmt-loadtext');
     if (!S.load.known) { load.style.display = 'none'; return; }
     load.style.display = '';
-    bar.style.width = pct + '%';
-    horse.style.left = pct + '%';
+    bar.style.width = wide;
+    horse.style.left = wide;
     if (f >= 1) {
       text.textContent = 'The valley is ready';
       if (!doneTimer) doneTimer = setTimeout(() => { const l = actionsEl.querySelector('.bmt-load'); if (l) l.classList.add('is-done'); }, 1400);
@@ -927,8 +948,16 @@ export function showTitle(root, opts = {}) {
       S.load.known = true;
       S.load.f = Number.isFinite(f) ? Math.max(0, Math.min(1, f)) : 0;
       if (text != null) S.load.text = String(text);
-      paintLoad();
+      if (S.load.f < BAR.shown - 0.3) BAR.shown = S.load.f;   // (a new start: the ride's warm-up after the valley's load)
+      paintLoad(); barGo();
       if (S.load.f >= 1 && S.waiting) rideNow();
+    },
+    // A file finished downloading, or some other small piece of the work is done: the bar moves on a little (never past
+    // what the next step is likely to show).
+    nudge() {
+      const f = S.load.f; if (!S.load.known || f >= 1) return;
+      const cap = f + room(f); if (BAR.shown < cap) BAR.shown += (cap - BAR.shown) * 0.05;
+      barGo();
     },
     // The rider whose card is picked (or null).
     rider: () => current(),

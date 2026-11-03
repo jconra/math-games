@@ -75,6 +75,7 @@ import { SITES } from '../world/objects/sites.js';
 import { BACKWOODS } from './missions/backwoods.js';
 import { chooseTier, TIERS } from '../world/quality.js';
 import { makeGovernor } from '../world/governor.js';
+import { guardDraws } from '../world/drawguard.js';
 import { bindValley } from '../world/valleydials.js';
 import { footprintOf } from '../world/objects/village.js';
 import { farmItems } from './farmplan.js';
@@ -153,6 +154,10 @@ export async function makeWorld({ renderer, camera, quality = null, look = 'gree
   // THE GOVERNOR (world/governor.js): the dials turned up and down by how fast this machine really runs; the valley's own
   // wired here (world/valleydials.js), the game's in their own files (W.governor.on)
   const GOVERN = makeGovernor({ renderer, quality: QUAL }); bindValley(GOVERN, { V, renderer });
+  // THE DRAW GUARD (world/drawguard.js): a thing whose shader isn't built yet is left out of the frame while it builds in
+  // the background, instead of the frame waiting on it (0.1-3 s a shader in Chrome on Windows). ?noguard: off, to compare
+  const GUARD = guardDraws(renderer, { scene: V.scene, camera });
+  if (new URLSearchParams(location.search).has('noguard')) GUARD.on = false;
   say(0.45, 'The land is laid');
 
   // ── THE PLACES ─────────────────────────────────────────────────────────────────────────────────────────
@@ -244,7 +249,8 @@ export async function makeWorld({ renderer, camera, quality = null, look = 'gree
     walkAs: V.CODE ? (y, mounted) => V.CODE.walkAs(y, mounted) : () => {},   // (whoever is about to walk: a building's upper floor, a rider and a porch's edge)
     codeIndoors: V.CODE ? (x, y, z) => V.CODE.indoors(x, y, z) : null,   // (inside a building's walls, not on its porch: its object)
     update: (dt) => { V.update(Math.min(dt, 0.1)); warmLater(dt); },   // (a long pause, a tab come back, counts as a tenth of a second)
-    render: (afterScene) => V.render(afterScene),   // (afterScene: src/fx/dof.js puts its picture on screen there)
+    render: (afterScene) => { V.render(afterScene); GUARD.flush(); },   // (afterScene: src/fx/dof.js puts its picture on screen there; then what the draw guard held back starts building)
+    guard: GUARD,
     loadedIn: 0,                                                         // (seconds to settled, for the record)
     dayStart: (() => { const q = new URLSearchParams(location.search), h = parseFloat(q.get('hour')); return Number.isFinite(h) ? ((h % 24) + 24) % 24 : DAY_START; })(),   // (?hour=21 in the address: start there, to see the night)
     // the town's lit windows at night (world/objects/nightLights.js): how lit a building is, by its layout id ('saloon',
@@ -386,6 +392,36 @@ export async function makeWorld({ renderer, camera, quality = null, look = 'gree
   W.warmFor = (root) => {
     try { return renderer.compileAsync ? renderer.compileAsync(root, camera, V.scene).catch((e) => console.warn('world: shader warm-up', e)) : (renderer.compile(root, camera, V.scene), Promise.resolve()); }
     catch (e) { console.warn('world: shader warm-up', e); return Promise.resolve(); }
+  };
+  // EVERYTHING AT ONCE, behind a curtain (RIDE OUT keeps the title's loading bar up for it, src/main.js): every shader
+  // the scene needs and hasn't built, built side by side in the background (three's compileAsync; the graphics card
+  // works on them together while the page goes on, so the bar keeps moving), then every picture sent, then one draw
+  // through a single pixel (what a compile can't do: the shadows' shaders, the shapes sent). What RIDE OUT makes (the
+  // townsfolk, the band, the stable, the store's goods, the jobs) had none of its shaders built, so each one froze a
+  // frame the first time it came into view. onProgress(0..1, words); gives back what it did, for the record.
+  W.warmAll = async ({ onProgress = () => {}, max = 45000 } = {}) => {
+    const t0 = performance.now(), tell = (f) => { try { onProgress(f); } catch (e) { /* (the bar is only a picture) */ } };
+    const frame = () => new Promise((r) => requestAnimationFrame(() => r()));
+    let mats = [];
+    try { mats = [...renderer.compile(V.scene, camera)]; } catch (e) { console.warn('world: shader warm-up', e); }
+    const progs = new Set();
+    for (const m of mats) { const p = renderer.properties.get(m).currentProgram; if (p) progs.add(p); }
+    let left = [...progs].filter((p) => !p.isReady());
+    const n = left.length;
+    while (left.length && performance.now() - t0 < max) {
+      tell(0.05 + 0.75 * (1 - left.length / n));
+      await new Promise((r) => setTimeout(r, 40));
+      left = left.filter((p) => !p.isReady());
+    }
+    const tex = texturesOf(V.scene), t1 = performance.now();
+    for (let i = 0; i < tex.length; i++) {
+      const t = tex[i]; SENT.add(t); try { renderer.initTexture(t); } catch (e) { /* (still loading: sent when drawn) */ }
+      if (performance.now() - t1 > 30) { tell(0.8 + 0.15 * (i + 1) / tex.length); await frame(); }
+    }
+    { const sc = renderer.getScissorTest(), px = 1 / renderer.getPixelRatio(); GUARD.off++;
+      try { renderer.setScissorTest(true); renderer.setScissor(0, 0, px, px); V.render(); } finally { GUARD.off--; renderer.setScissorTest(sc); } }
+    tell(1);
+    return { shaders: n, waited: left.length, pictures: tex.length, ms: Math.round(performance.now() - t0) };
   };
   function sendSome() {   // (a few pictures a frame, not all at once)
     const t0 = performance.now();

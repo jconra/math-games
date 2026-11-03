@@ -341,6 +341,7 @@ export function makeCodeBuildings({ shade = null, tier = () => 'gaming', rendere
     const keep = { rt: R.getRenderTarget(), vp: R.getViewport(new THREE.Vector4()), sc: R.getScissor(new THREE.Vector4()), st: R.getScissorTest(), cc: R.getClearColor(new THREE.Color()), ca: R.getClearAlpha(), up: R.shadowMap.autoUpdate };
     const gl = R.getContext(), pr = R.getPixelRatio(), A = kitNow.atlas, cell = A.cell, cam = new THREE.PerspectiveCamera(50, 1, 0.1, 40);
     cam.layers.set(LAYER);
+    const G = R.__drawGuard; if (G) G.off++;   // (the pictures need every part drawn now, built or not: world/drawguard.js stands aside)
     try {
       R.setRenderTarget(null); R.shadowMap.autoUpdate = false; R.setScissorTest(true); R.setClearColor(0x150e09, 1);
       // the pictures: the inside as it will load (this priority), the stand-ins themselves away
@@ -371,6 +372,7 @@ export function makeCodeBuildings({ shade = null, tier = () => 'gaming', rendere
       R.render(S, cam);
       for (const [m, f] of culled) m.frustumCulled = f;
     } finally {
+      if (G) G.off--;
       R.setRenderTarget(keep.rt); R.setViewport(keep.vp); R.setScissor(keep.sc); R.setScissorTest(keep.st); R.setClearColor(keep.cc, keep.ca); R.shadowMap.autoUpdate = keep.up;
       C.setLevel(had.level); C.setUpstairs(had.up); C.load(had.loaded); C.setFull(had.full); C.setSeen(had.seen); C.group.cards.visible = !(C.loaded && C.seen);
     }

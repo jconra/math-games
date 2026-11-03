@@ -203,6 +203,9 @@ BM.tools = TOOLS; BM.camera = camera;
 let W = null, folk = null, animals = null, I = null;
 let worldP = 0, libsDone = 0;
 const progress = (text) => T.setProgress(Math.min(0.97, worldP * 0.9 + libsDone * 0.035), text);
+// (each file that finishes downloading moves the title's bar on a little, so a slow connection still shows it working:
+// src/ui/title.js nudge; nothing once the bar is full)
+try { new PerformanceObserver((l) => { for (let i = l.getEntries().length; i > 0; i--) T.nudge(); }).observe({ type: 'resource' }); } catch (e) { /* (an older browser: the bar still creeps) */ }
 const loading = Promise.all([
   makeWorld({ renderer, camera, quality, look: LOOK, onProgress: (p, text) => { worldP = p; progress(text); } }),
   loadFolk().then((f) => { libsDone++; progress(); return f; }),
@@ -228,7 +231,7 @@ const loading = Promise.all([
 
 // ── THE GAME'S STATE ─────────────────────────────────────────────────────────────────────────────────────────────
 // state: 'loading' | 'title' | 'play' | 'boxes' (just lock boxes, from the title)
-let state = 'loading', paused = false, pausedBy = new Set();
+let state = 'loading', paused = false, pausedBy = new Set(), warming = false;   // (warming: RIDE OUT's warm-up, the clock stopped behind the title: warmRide)
 let rider = null, P = null, D = null, RU = null, hob = null, shops = null, door = null, menu = null, boxOpen = false;
 let BOX = null;   // the lock box open (its handle: src/lockbox/panel.js), for the tools' Work it out on its part being asked
 let stage = null;   // the band on the saloon's stage and its music (src/stage.js)
@@ -340,9 +343,8 @@ async function ride(r) {
   rider = r;
   state = 'play'; pausedBy.clear(); paused = false;
   W.timeRuns = true;   // (the sun moves while riding: a day in 24 minutes of play, src/world.js)
-  T.hide();
   canvas.classList.add('is-on');
-  I.enabled = true;
+  warming = true; I.enabled = false;   // (the title stays up, its bar moving, the valley's clock stopped, until what the ride makes is ready to draw: warmRide below)
   P = makePlayer({ W, folk, animals, rider, input: I, camera, say: (t) => hud.toast(t) });
   UNST = makeUnstick({ blocked: W.blocked, wet: (x, z) => W.waterAt(x, z) > 0.3 });
   if (W.V && W.V.FENCE) W.V.FENCE.near = trafficThings;   // (the town's gates swing open for the rider, the horse, the dog, the cattle, the townsfolk)
@@ -488,11 +490,31 @@ async function ride(r) {
     ends: { fishing: () => { if (BS && BS.active && BS.active.id === 'fishing') BS.close('done'); } } });   // (the rod put down once the day's fish are landed)
   RU.start();
   hob.trail(true);
+  P.cam.snap();
+  await warmRide();
+  T.hide();
   hud.show(true); hud.touch(I.touch);
   refresh();
   hob.event('ride', { range: !!SR, wagon: !!WJ, deer: !!DJ, loot: !!LJ, sheep: !!SH, pigs: !!PG, deliveries: !!DL, store: !!SJ });   // (a job turned off: Hob doesn't send the rider there)
   P.cam.snap();
+  warming = false; I.enabled = true;
   last = performance.now();
+}
+// EVERYTHING THE RIDE MADE, READY TO DRAW before the title lifts (the game's maker, 2026-11-03: "When I start Mathwood
+// it is always very laggy for the first 10 seconds ... it seems like it would be better to do it with the loading screen
+// up and the progress bar letting the player know it is getting ready"). RIDE OUT makes the townsfolk, the band, the
+// stable, the store's goods and the jobs, and none of their shaders were built: in Chrome on Windows each froze a frame
+// for 0.1-3 s the first time it came into view. A few frames at a standstill first (what is made on its first update:
+// the townsfolk, the chickens, the job folk), then all of it built together (src/world.js warmAll), the bar moving.
+async function warmRide() {
+  const t0 = performance.now(), frame = () => new Promise((r) => requestAnimationFrame(() => r()));
+  const words = 'Saddling up';
+  T.setProgress(0.02, words);
+  for (let i = 0; i < 3; i++) await frame();
+  let r = null;
+  try { r = await W.warmAll({ onProgress: (f) => T.setProgress(Math.min(0.99, f), words) }); } catch (e) { console.warn('the ride\'s warm-up', e); }
+  T.setProgress(1, 'Ready to ride');
+  BM.rideWarm = { ...(r || {}), total: Math.round(performance.now() - t0) };
 }
 // what a wagon on the road slows and stops for: the player, the player's horse, the dog, the round-up's cattle, the
 // general store's customers walking to and from the square, the roped bandits walking to the sheriff's office
@@ -1265,6 +1287,7 @@ let last = performance.now(), frames = 0, fpsT = last, fpsNow = 0, needDraw = fa
 let toolsT = 0, fadesT = 1;
 function step(dt) {
   if (!W) return;
+  if (warming) dt = 0;   // (RIDE OUT's warm-up: everything updates once, so what is made on its first update is made, but nothing moves)
   // (the cabin has the player: walking in or out, or inside. It stands in the valley, so the valley goes on round it:
   // the townsfolk, the wagons and the band are seen through its windows; only the player is the cabin's to move)
   const home = !!(cabin && cabin.inside);
@@ -1493,7 +1516,7 @@ function screenOf(o) {
   return { x: r.left + (_v.x + 1) / 2 * r.width, y: r.top + (1 - _v.y) / 2 * r.height, on: _v.z < 1 && Math.abs(_v.x) < 1 && Math.abs(_v.y) < 1 };
 }
 Object.defineProperties(BM, {
-  world: { get: () => W }, player: { get: () => P }, rider: { get: () => rider }, state: { get: () => (state === 'play' && paused ? 'paused' : state) },
+  world: { get: () => W }, player: { get: () => P }, rider: { get: () => rider }, state: { get: () => (state === 'play' && (paused || warming) ? 'paused' : state) },
   roundup: { get: () => RU }, traffic: { get: () => traffic }, sheep: { get: () => SH }, pigs: { get: () => PG }, wagon: { get: () => WJ }, farm: { get: () => farm }, shops: { get: () => shops }, dog: { get: () => D }, input: { get: () => I }, hob: { get: () => hob },
   door: { get: () => door }, store: { get: () => SJ }, paused: { get: () => paused }, cabin: { get: () => cabin },
 });
