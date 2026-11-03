@@ -25,6 +25,17 @@
 //     slow lane takes one step from what the last stretch of riding showed: up when the frame had spare time and the
 //     people lane is as far along as the scenery; down when it was too slow and the people lane is already low (people
 //     first). With no curtain for a while, the step it wants is remembered for the next load.
+//   AUTO CLIMBS BACK UP (the game's maker, 2026-10-30: "If auto can move the setting down, then I would think it would be
+//     able to move it back up again also, as long as it's not a selected choice"): smooth riding raises the scenery rung the
+//     game is heading for (GOAL) a step every GOV.climbEvery s, with no curtain needed, as far as the start of the band above
+//     this load's (one band a load: the load after is what measures that band). The goal is what's remembered, so the band
+//     and its reload-only settings follow on the next load; nothing heavy is reloaded in the middle of play. A curtain takes
+//     up to GOV.curtainMost of the steps waiting. Too slow again: the steps not yet taken are forgotten at once.
+//   NO FLAPPING: a rung that fails soon after it came up is a ceiling for a while (GOV.backoff; for the scenery, that rung
+//     and all above it, GOV.sceneryBackoff), and a band that falls soon
+//     after it came up isn't tried again for half an hour, doubling each time, kept with the machine's memory across loads
+//     (GOV.bandProbe, bandHold); one that held a good while and then fell (a hot phone) rests GOV.bandRest. A choice made by
+//     hand or in the address pins it all: no climbing, nothing remembered.
 //
 // THE DIALS: everything the governor can turn, each with its levels (lowest first) and what a level costs (GOVERNOR.md).
 // THE LADDERS: one order for each lane. Each step turns one dial up one level; going up the next step is added, going down
@@ -200,6 +211,13 @@ export const GOV = {
   ahead: 0.35,      // the people lane may be this far behind the scenery's (in bands: bandPos) before the scenery gives way
   mist: 0.85,       // how thick the mist at the valley's ends must be round the camera to hide a change
   phoneTop: START.scenery.gaming - 1,   // phones and tablets: the scenery climbs no higher (battery and heat: GOVERNOR.md, Questions for Dad)
+  climbEvery: 10,   // s of smooth riding for each step of the climb back up (from the bottom of the potato band to normal: about 4 minutes)
+  curtainMost: 8,   // the most of those steps one curtain takes, so what comes next is measured before the rest (one, after a rung has failed)
+  sceneryBackoff: [90, 1200],   // s: a scenery rung that failed isn't tried again for this long, doubling each time, up to 20 minutes
+  probeScenery: 120,   // s: a scenery rung that fails this soon after it was taken is a ceiling (its verdict waits for a curtain, so longer than GOV.probe)
+  bandProbe: 300,   // s: a band that falls this soon after it came up has failed on this machine ...
+  bandHold: [1800, 172800],   // ... and isn't tried again for half an hour, doubling each time it fails, up to two days
+  bandRest: 600,    // s: a band that held longer and then fell (a hot phone, a flat battery) rests this long
 };
 const HZ = [30, 48, 50, 60, 72, 75, 85, 90, 100, 120, 144, 165, 170, 180, 200, 240];
 const pct = (arr, q) => { if (!arr.length) return null; const a = arr.slice().sort((x, y) => x - y); return a[Math.min(a.length - 1, Math.floor(a.length * q))]; };
@@ -221,18 +239,25 @@ export function makeGovernor({ renderer, quality, W = null } = {}) {
   else if (gq && /^\d+,\d+$/.test(gq)) { const [a, b] = gq.split(',').map(Number); rung = { scenery: a, people: b }; }
   else if (quality && quality.source === 'remembered' && rec && rec.v === LADDER_V) rung = { scenery: rec.scenery ?? rung.scenery, people: rec.people ?? rung.people };
   rung = { scenery: clampL('scenery', rung.scenery), people: clampL('people', rung.people) };
-  // (the scenery rung waiting for a curtain; remembered for the next load meanwhile)
-  let want = rung.scenery, wantWhy = '';
+  // (the scenery rung waiting for a curtain; remembered for the next load meanwhile. goal: where smooth riding says it could
+  // be, want or above; a curtain takes up to GOV.curtainMost of the way there, the next load all of it)
+  let want = rung.scenery, wantWhy = '', goal = rung.scenery, goalWhy = '', goalAt = -1e9;
+  // (the bands not to go back to yet: { normal: { until (Date.now()), n (failures in a row) }, gaming }; kept in the memory)
+  const holds = (rec && rec.hold && typeof rec.hold === 'object') ? { ...rec.hold } : {};
+  let memBand = bandOf(rung.scenery), memBandAt = Date.now();
   const subs = new Map(), limits = {}, journal = [];
   let levels = levelsAt(rung.scenery, rung.people), last = null, disposed = false;
   const changed = { scenery: performance.now(), people: performance.now(), any: performance.now() };
   const fails = new Map(), ceiling = new Map(); let upAt = -1e9, upTo = null;
+  // (the scenery's ceiling: nothing from this rung up while it lasts. The climb can come up several rungs at a curtain, so
+  // one rung's own ceiling, as the people's have, would let it go round the rungs either side of it; n: failures in a row)
+  const sCeil = { at: Infinity, until: 0, n: 0, to: null, upAt: -1e9 };   // (to, upAt: the last rung it came up to, and when)
   const over = {};   // (rigs: a dial held at a level of its own, G.dev.dial)
   const wait = {};   // (a dial waiting at its level for the right curtain: the resolution, for the title or the mist)
   const eff = (k, l = levels[k]) => (over[k] != null ? over[k] : wait[k] != null ? wait[k] : Math.min(l, limits[k] ? limits[k].most : Infinity));
   const value = (k) => DIALS[k].levels[eff(k)].v;
   const G = {
-    get scenery() { return rung.scenery; }, get people() { return rung.people; }, get wanted() { return want; }, top, get auto() { return !pinned; }, get pinned() { return pinned; }, loadBand, gpu,
+    get scenery() { return rung.scenery; }, get people() { return rung.people; }, get wanted() { return want; }, get goal() { return goal; }, top, get auto() { return !pinned; }, get pinned() { return pinned; }, loadBand, gpu,
     level: (k) => eff(k), value,
     scene: () => 'play',
     on(k, fn) {
@@ -263,12 +288,12 @@ export function makeGovernor({ renderer, quality, W = null } = {}) {
     if (log) console.log(`governor: ${kind} ${lane} to ${s},${p} (${why})`, moved.join('; '));
     return moved;
   }
-  G.set = (s, p = rung.people, why = 'asked') => { want = clampL('scenery', s); const w = Object.keys(wait); for (const k of w) delete wait[k]; const out = set(s, p, why); for (const k of w) tell(k); return out; };
+  G.set = (s, p = rung.people, why = 'asked') => { want = goal = clampL('scenery', s); const w = Object.keys(wait); for (const k of w) delete wait[k]; const out = set(s, p, why); for (const k of w) tell(k); return out; };
   G.pin = (tier) => {
     // (the people at once; the scenery now too, behind the menu, but for the resolution, which waits for the title or the
     // mist: a paused screen would go blank)
-    if (tier && TIERS.includes(tier)) { pinned = tier; saveTier(tier); want = START.scenery[tier]; wantWhy = 'chosen by hand'; set(rung.scenery, START.people[tier], 'chosen by hand', 'pin', 'people'); applyWanted(sceneNow()); }
-    else { pinned = null; saveTier(null); last = { kind: 'auto', lane: 'any', scenery: rung.scenery, people: rung.people, why: 'Auto again', moved: [], at: Date.now() }; journal.push(last); changed.any = performance.now(); }
+    if (tier && TIERS.includes(tier)) { pinned = tier; saveTier(tier); want = goal = START.scenery[tier]; wantWhy = 'chosen by hand'; set(rung.scenery, START.people[tier], 'chosen by hand', 'pin', 'people'); applyWanted(sceneNow()); }
+    else { pinned = null; saveTier(null); goal = want; last = { kind: 'auto', lane: 'any', scenery: rung.scenery, people: rung.people, why: 'Auto again', moved: [], at: Date.now() }; journal.push(last); changed.any = performance.now(); }
     return G.state();
   };
 
@@ -403,6 +428,8 @@ export function makeGovernor({ renderer, quality, W = null } = {}) {
     sig = spare(f);
     ride.push([t, sig.ok, !!(fd && fd.fps < lo), fd ? fd.fps : 0]); while (ride.length && ride[0][0] < t - 30000) ride.shift();
     const since = (t - changed.people) / 1000;
+    // (too slow again: the climb's steps not yet taken are forgotten)
+    if (fd && fd.fps < lo && goal > want) { goal = want; rememberNow(); }
     if (since >= GOV.downAfter && fd && fd.fps < lo) {
       if (rung.people > 0) {
         markCeiling(t, 'people');
@@ -410,7 +437,7 @@ export function makeGovernor({ renderer, quality, W = null } = {}) {
         let p = rung.people - steps; while (p > 0 && !changesAt(rung.scenery, rung.people, rung.scenery, p).length) p--;
         set(rung.scenery, p, `${fd.fps.toFixed(0)} fps for ${GOV.downWin} s (under ${lo.toFixed(0)})`, 'down', 'people');
         heldSince = t; rememberNow();
-      } else wantScenery(-1, `${fd.fps.toFixed(0)} fps with the people already at their fewest`, fallBy(fd.fps));
+      } else wantDown(`${fd.fps.toFixed(0)} fps with the people already at their fewest`, fallBy(fd.fps));
       return;
     }
     if (since >= GOV.upAfter && sig.ok && rung.people < top.people) {
@@ -419,8 +446,31 @@ export function makeGovernor({ renderer, quality, W = null } = {}) {
       set(rung.scenery, p, sig.why, 'up', 'people');
       upAt = t; upTo = 'people:' + p; heldSince = t;
     }
-    // (spare time with the people at their most: the scenery may come up at the next curtain)
-    if (sig.ok && rung.people >= top.people) wantScenery(+1, 'spare time with the people at their most');
+    // (spare time with the people as far along as the scenery would be, or at their most: the climb goes on)
+    if (sig.ok && (rung.people >= top.people || bandPos('people', rung.people) >= bandPos('scenery', goal))) climb(t, `spare time riding (${sig.why})`);
+  }
+  // THE CLIMB: the goal up a step, at most every GOV.climbEvery s; as far as the start of the band above this load's, and
+  // short of a band still held back
+  function heldLimit() {
+    let lim = top.scenery; const now = Date.now();
+    for (const b of ['normal', 'gaming']) if (holds[b] && now < holds[b].until) lim = Math.min(lim, START.scenery[b] - 1);
+    return lim;
+  }
+  // (a card with no WebGL 2 stays in the potato band however far it climbs: its live dials just go on: GOVERNOR.md, Questions)
+  const climbLimit = () => Math.min(heldLimit(), !gl2 ? top.scenery : loadBand === 'potato' ? START.scenery.normal : loadBand === 'normal' ? START.scenery.gaming : TOP.scenery);
+  function climb(t, why) {
+    if ((t - goalAt) / 1000 < GOV.climbEvery) return;
+    // (a step down still waiting for a curtain, and the riding is smooth now: it isn't wanted any more)
+    if (want < rung.scenery) { want = goal = rung.scenery; goalAt = t; rememberNow(); return; }
+    // (the rung that failed has held at last: the machine's better now, so the slow tries are over)
+    if (sCeil.n && sCeil.to != null && sCeil.to >= sCeil.at && (t - sCeil.upAt) / 1000 >= GOV.probeScenery) sCeil.n = 0;
+    if (goal < want) goal = want;
+    const lim = climbLimit(); if (goal >= lim) return;
+    let s = goal + 1; while (s < lim && !changesAt(goal, rung.people, s, rung.people).length) s++;
+    if (t < sCeil.until && s >= sCeil.at) return;
+    goal = s; goalAt = t; goalWhy = why;
+    if (log) console.log(`governor: the climb to ${s} (${why}), ${bandOf(s)} on the next load`);
+    rememberNow();
   }
   // ON THE TITLE: the slow lane moves by the same signals (the town's backdrop is the valley without its people)
   function titleLane(t) {
@@ -434,31 +484,36 @@ export function makeGovernor({ renderer, quality, W = null } = {}) {
       want = s; wantWhy = `${fd.fps.toFixed(0)} fps on the title (under ${lo.toFixed(0)})`; applyWanted('title');
       return;
     }
-    if (since >= GOV.upAfter && sig.ok && rung.scenery < top.scenery && rung.scenery >= want) {
-      let s = rung.scenery + 1; while (s < top.scenery && !changesAt(rung.scenery, rung.people, s, rung.people).length) s++;
-      const c = ceiling.get('scenery:' + s); if (c && t < c) return;
+    const most = heldLimit();
+    if (since >= GOV.upAfter && sig.ok && rung.scenery < most && rung.scenery >= want) {
+      let s = rung.scenery + 1; while (s < most && !changesAt(rung.scenery, rung.people, s, rung.people).length) s++;
+      if (t < sCeil.until && s >= sCeil.at) return;
       want = s; wantWhy = sig.why + ' (on the title)'; applyWanted('title');
     }
   }
   // how many steps a frame rate this far under the line takes away at once
   function fallBy(fps) { const lo = downAt(); return Math.max(1, Math.min(GOV.fallMost, Math.round((lo / Math.max(1, fps) - 1) * GOV.fall))); }
   function markCeiling(t, lane) {
+    if (lane === 'scenery') {
+      if (sCeil.to != null && (t - sCeil.upAt) / 1000 < GOV.probeScenery) { sCeil.at = sCeil.to; sCeil.n++; sCeil.until = t + Math.min(GOV.sceneryBackoff[1], GOV.sceneryBackoff[0] * 2 ** (sCeil.n - 1)) * 1000; }
+      sCeil.to = null; return;
+    }
     if (upTo && upTo.startsWith(lane) && (t - upAt) / 1000 < GOV.probe) {
       const n = (fails.get(upTo) || 0) + 1; fails.set(upTo, n);
       ceiling.set(upTo, t + Math.min(GOV.backoff[1], GOV.backoff[0] * 2 ** (n - 1)) * 1000);
     }
     upTo = null;
   }
-  // the slow lane's next step, from the last stretch of riding (one step, at most every GOV.sceneryEvery s); taken at the
-  // next curtain, and remembered for the next load meanwhile
-  function wantScenery(dir, why, steps = 1) {
+  // the slow lane's next step DOWN, from the last stretch of riding (at most every GOV.sceneryEvery s); taken at the next
+  // curtain, and remembered for the next load meanwhile (up: the climb)
+  function wantDown(why, steps = 1) {
     const t = performance.now();
     if ((t - sceneryAt) / 1000 < GOV.sceneryEvery || want !== rung.scenery) return;
     let s = want;
-    for (let n = 0; n < steps; n++) { s += dir; while (s > 0 && s < top.scenery && !changesAt(want, rung.people, s, rung.people).length) s += dir; }
+    for (let n = 0; n < steps; n++) { s--; while (s > 0 && !changesAt(want, rung.people, s, rung.people).length) s--; }
     s = clampL('scenery', s); if (s === want) return;
-    const c = ceiling.get('scenery:' + s); if (dir > 0 && c && t < c) return;
-    want = s; sceneryAt = t; wantWhy = why;
+    markCeiling(t, 'scenery');
+    want = goal = s; sceneryAt = t; wantWhy = why;
     if (log) console.log(`governor: the scenery wants ${s} (${why}), at the next curtain`);
     rememberNow();
   }
@@ -469,10 +524,12 @@ export function makeGovernor({ renderer, quality, W = null } = {}) {
       const spareShare = recent.filter((r) => r[1]).length / recent.length, slow = recent.filter((r) => r[2]).length / recent.length;
       const pN = bandPos('people', rung.people), sN = bandPos('scenery', want);
       const fr = recent.filter((r) => r[3]).map((r) => r[3]), fpsR = fr.length ? fr.reduce((a, b) => a + b, 0) / fr.length : downAt();
-      if (slow > 0.3 && (rung.people === 0 || pN < sN - GOV.ahead)) wantScenery(-1, `too slow riding (${Math.round(slow * 100)}% of the last stretch, ${fpsR.toFixed(0)} fps) with the people lane low`, fallBy(fpsR));
-      else if (spareShare > 0.8 && (rung.people === top.people || pN >= sN)) wantScenery(+1, `spare time riding (${Math.round(spareShare * 100)}% of the last stretch)`);
-      else if (spareShare < 0.2 && pN < sN - GOV.ahead * 2) wantScenery(-1, 'the people lane well behind the scenery: room made for people');
+      if (slow > 0.3 && (rung.people === 0 || pN < sN - GOV.ahead)) wantDown(`too slow riding (${Math.round(slow * 100)}% of the last stretch, ${fpsR.toFixed(0)} fps) with the people lane low`, fallBy(fpsR));
+      else if (spareShare > 0.8 && (rung.people === top.people || pN >= sN)) climb(t, `spare time riding (${Math.round(spareShare * 100)}% of the last stretch)`);
+      else if (spareShare < 0.2 && pN < sN - GOV.ahead * 2) wantDown('the people lane well behind the scenery: room made for people');
     }
+    // (the climb's steps waiting: up to GOV.curtainMost of them now)
+    if (want === rung.scenery && goal > want) { want = Math.min(goal, want + (sCeil.n ? 1 : GOV.curtainMost)); wantWhy = goalWhy; }
     applyWanted(scene);
   }
   function applyWanted(scene) {
@@ -487,16 +544,27 @@ export function makeGovernor({ renderer, quality, W = null } = {}) {
     if (held && wait.ratio == null) wait.ratio = eff('ratio');
     const up = want > rung.scenery;
     set(want, rung.people, `${wantWhy || 'asked'} (at a curtain: ${scene}${held ? '; the resolution waits for the title or the mist' : ''})`, up ? 'up' : 'down', 'scenery');
-    if (up) { upAt = performance.now(); upTo = 'scenery:' + want; }
+    if (up) { sCeil.to = want; sCeil.upAt = performance.now(); }
+    if (!up || goal < want) goal = want;
     rememberNow();
   }
   function note(k, a, scene) {
     last = { kind: eff(k) > a ? 'up' : 'down', lane: 'scenery', scenery: rung.scenery, people: rung.people, why: `its turn (${scene})`, moved: [`${k} ${DIALS[k].levels[a].name} → ${DIALS[k].levels[eff(k)].name}`], at: Date.now() };
     journal.push(last); if (journal.length > 40) journal.shift(); changed.any = changed.scenery = performance.now();
   }
+  // WHAT THE NEXT LOAD STARTS FROM: the goal and its band (a band falling here is held back: see NO FLAPPING above)
   function rememberNow() {
     if (pinned) return;
-    remember(gpu, { v: LADDER_V, scenery: want, people: rung.people, band: bandOf(want), hz: hz || null });
+    const s = Math.max(want, goal), b = bandOf(s), now = Date.now();
+    if (b !== memBand) {
+      if (TIERS.indexOf(b) < TIERS.indexOf(memBand)) {
+        const soon = (now - memBandAt) / 1000 < GOV.bandProbe, n = soon ? ((holds[memBand] && holds[memBand].n) || 0) + 1 : 0;
+        holds[memBand] = { n, until: now + (soon ? Math.min(GOV.bandHold[1], GOV.bandHold[0] * 2 ** (n - 1)) : GOV.bandRest) * 1000 };
+        if (log) console.log(`governor: the ${memBand} band fell after ${Math.round((now - memBandAt) / 1000)} s: not again for ${Math.round((holds[memBand].until - now) / 60000)} min`);
+      }
+      memBand = b; memBandAt = now;
+    }
+    remember(gpu, { v: LADDER_V, scenery: s, people: rung.people, band: b, hz: hz || null, hold: holds });
   }
   G.forget = () => remember(gpu, null);
   // (rigs: one dial held at a level, whatever the rungs say (null lets it go); the governor itself held still meanwhile)
@@ -507,8 +575,9 @@ export function makeGovernor({ renderer, quality, W = null } = {}) {
     const dials = {};
     for (const k of Object.keys(DIALS)) dials[k] = { lane: DIALS[k].lane, level: eff(k), want: levels[k], waiting: wait[k] != null, name: DIALS[k].levels[eff(k)].name, of: DIALS[k].levels.length, limit: limits[k] ? limits[k].most : null, why: limits[k] ? limits[k].why : '', reload: !!(limits[k] && limits[k].reload), live: DIALS[k].live, heard: G.listening(k) };
     const c = []; for (const [r, until] of ceiling) if (until > performance.now()) c.push({ rung: r, for: Math.round((until - performance.now()) / 1000) });
+    if (sCeil.until > performance.now()) c.push({ rung: 'scenery:' + sCeil.at + ' and up', for: Math.round((sCeil.until - performance.now()) / 1000) });
     const H = hz || 60;
-    return { auto: !pinned, pinned, scenery: rung.scenery, people: rung.people, want, top: { ...top }, start: { scenery: { ...START.scenery }, people: { ...START.people } }, band: bandOf(rung.scenery), wantBand: bandOf(want), loadBand, gpu, mobile,
+    return { auto: !pinned, pinned, scenery: rung.scenery, people: rung.people, want, goal, nextBand: bandOf(Math.max(want, goal)), holds: { ...holds }, top: { ...top }, start: { scenery: { ...START.scenery }, people: { ...START.people } }, band: bandOf(rung.scenery), wantBand: bandOf(want), loadBand, gpu, mobile,
       scene: sceneNow(), fps: +fpsNow.toFixed(1), hz: hz || null, work: workNow != null ? +workNow.toFixed(2) : null, gpuMs: gpuNow != null ? +gpuNow.toFixed(2) : null, timer: !!tq, hitches,
       add: H > 65 ? `over ${GOV.addFps} fps for ${GOV.addWin} s` : `at ${H} fps with the frame's work${tq ? ' and the GPU\'s' : ''} under ${(GOV.spare * 1000 / H).toFixed(1)} ms (70% of ${(1000 / H).toFixed(1)}) for ${GOV.addWin} s`,
       takeAway: `under ${downAt().toFixed(0)} fps for ${GOV.downWin} s`, signal: sig, dials, last, log: journal.slice(-12), ceilings: c, remembered: recall(gpu),
@@ -530,7 +599,7 @@ export function makeGovernor({ renderer, quality, W = null } = {}) {
       const row = (lane) => Object.keys(DIALS).filter((k) => DIALS[k].lane === lane).map((k) => `${short[k]} ${d[k].name}${d[k].reload && d[k].want > d[k].limit ? '*' : ''}${d[k].waiting ? '~' : ''}${d[k].heard ? '' : '°'}`).join(' · ');
       const mem = s.memory ? ` · card memory ~${s.memory.mb} MB (pictures ${s.memory.textures}, screen ${s.memory.screen}, buffers ${s.memory.buffers})` : '';
       box.textContent = `${s.auto ? 'AUTO' : 'pinned ' + s.pinned} · ${s.fps} fps${s.hz ? ` (${s.hz} Hz)` : ''} · work ${s.work ?? '-'} ms${s.timer ? ` · GPU ${s.gpuMs ?? '-'} ms` : ''} · ${s.scene}${mem}\n`
-        + `scenery ${s.scenery}/${s.top.scenery}${s.want !== s.scenery ? ` (wants ${s.want} at a curtain)` : ''} · people ${s.people}/${s.top.people} · band ${s.band} (loaded ${s.loadBand})\n`
+        + `scenery ${s.scenery}/${s.top.scenery}${s.want !== s.scenery ? ` (wants ${s.want} at a curtain)` : ''}${s.goal > s.want ? ` (climbing to ${s.goal}: ${s.nextBand} on the next load)` : ''} · people ${s.people}/${s.top.people} · band ${s.band} (loaded ${s.loadBand})\n`
         + `add: ${s.add}  [${s.signal.ok ? 'yes' : 'no'}: ${s.signal.why}]\ntake away: ${s.takeAway}\n`
         + (s.last ? `${s.last.kind === 'up' ? '▲' : s.last.kind === 'down' ? '▼' : '•'} ${s.last.lane} ${s.last.moved.join('; ') || '-'}  (${s.last.why}) ${ago}s ago\n` : '')
         + (s.ceilings.length ? `ceiling: ${s.ceilings.map((c) => `${c.rung} for ${c.for}s`).join(', ')}\n` : '')

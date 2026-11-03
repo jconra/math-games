@@ -14,12 +14,17 @@
 // flower is picked on the bar, its choices in a small row just over it (the fence's style pictures, height, Straight
 // runs, Draw, Gate, Take down; Paint, Rub out). FLYING THE VIEW: W A S D along the ground the way the view faces, Space
 // up, C down, Shift faster (quicker the higher up); the mouse drags and zooms as before (OrbitControls).
+// GRAPHICS: a choice on the Build bar, showing the tier in use: Auto (the game's own answer for this computer) or a tier for this
+// lab alone (kept in this browser; the game's own choice is left as it is). It reloads the lab: the work in hand is kept.
+// PAINTED LAWN always shows here, whatever the tier and however high the view (the lawn's tufts are drawn only near the camera,
+// and never on potato): the tufts round the brush while the lawn is picked, and a faint green tint over it (lawnmap.js).
+// SAVE TIDIES UP: strokes that do nothing are left out of the file and out of the work in hand (tidy.js; Undo brings them back).
 // For rigs: window.TL = { ready, V, tool, text(), savedText(), save(), open(decor), view(name), look(..), screen(x, y, z), camera, fps,
 //   fences: { style(), setStyle(id), height(v), stats(), icons }, pick(name), fly: { keys(), speed() } }
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { makeValley, TIER_SET } from '../../world/valley.js';
-import { chooseTier } from '../../world/quality.js';
+import { chooseTier, wantAntialias, TIERS } from '../../world/quality.js';
 import { BASE } from '../../world/base.js';
 import { VillageEditor } from '../../world/objects/villageEditor.js';
 import { normalise as normaliseTown } from '../../world/objects/village.js';
@@ -31,6 +36,8 @@ import { BACKWOODS } from '../../src/missions/backwoods.js';
 import { makeDecor, decorText } from './decorfile.js';
 import { FENCE_STYLES, PLAIN, GATES, styleInfo, nearestFence } from '../../world/objects/fenceplan.js';
 import { makeCodePlaces } from './codeplaces.js';
+import { tidyStrokes } from './tidy.js';
+import { makeLawnMap } from './lawnmap.js';
 
 const $ = (id) => document.getElementById(id);
 const Q = new URLSearchParams(location.search);
@@ -40,8 +47,11 @@ const TL = window.TL = { ready: false, fps: 0 };
 const say = (text, cls = '') => { const s = $('tlStatus'); s.textContent = text; s.className = 'tl-status' + (cls ? ' ' + cls : ''); };
 
 // ── the renderer and camera, as the game makes them (src/main.js, src/world.js) ───────────────────────────────────
-const renderer = new THREE.WebGLRenderer({ antialias: Q.get('q') !== 'potato', powerPreference: 'high-performance' });
-const QUAL = chooseTier(renderer), TS = TIER_SET[QUAL.tier];
+const GFX_KEY = 'mathwood.townlab.quality';   // (this lab's own Graphics choice: the game's is left alone)
+const labTier = (() => { try { const s = localStorage.getItem(GFX_KEY); return TIERS.includes(s) ? s : null; } catch (e) { return null; } })();
+const qTier = TIERS.includes(Q.get('q')) ? Q.get('q') : null, pickTier = qTier || labTier;
+const renderer = new THREE.WebGLRenderer({ antialias: pickTier ? pickTier !== 'potato' : wantAntialias(), powerPreference: 'high-performance' });
+const QUAL = !qTier && labTier ? { tier: labTier, why: 'chosen in this lab', source: 'saved' } : chooseTier(renderer), TS = TIER_SET[QUAL.tier];
 renderer.setPixelRatio(Math.min(devicePixelRatio, TS.ratio)); renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1;
 document.body.prepend(renderer.domElement);
@@ -64,6 +74,8 @@ say('Laying the land…');
 const V = await makeValley({ renderer, camera, controls, quality: QUAL, lab: true, slice: true, showcase: false, folk: false, look: Q.get('look') === 'summer' ? 'summer' : 'green', treeClear });
 TL.V = V;
 const { TOWN, PLANT, heightAt, groundAt } = V;
+// (the painted lawn shows on every tier here: on potato the land's own lawn stays off, density 0, and only what's painted is laid)
+if (!(V.LAWN.radius > 0)) { V.LAWN.radius = 40; V.LAWN.density = 0; }
 // the town editor the Build bar edits the town through (its history, the copy kept in this browser); after a change and
 // a short pause only what it touched is laid again
 let townTimer = 0;
@@ -125,11 +137,13 @@ TL.fly = { keys: () => [...FLYING.keys], speed: () => FLYING.vel.length(), set: 
 const fit = () => { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); renderer.getDrawingBufferSize(V.U.res.value); };
 addEventListener('resize', fit); fit();
 let last = performance.now(), frames = 0, fpsT = last;
+let lawnNearBrush = () => {};   // (set once the Build bar is up: painted lawn, always to be seen, below)
 renderer.info.autoReset = false;
 renderer.setAnimationLoop(() => {
   const now = performance.now(), dt = Math.min(0.1, (now - last) / 1000); last = now; frames++;
   renderer.info.reset();
   fly(dt);
+  lawnNearBrush();
   V.update(dt, () => controls.update());
   if (PLANT.tool) PLANT.tool.update();
   V.render();
@@ -162,13 +176,19 @@ if (TL.text() !== SAVED) say('This browser kept changes from last time that aren
 
 // Save: to the game's folder through the local save script, else downloaded
 const download = (text) => { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' })); a.download = 'decor.json'; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000); };
+// (the tidy-up: the strokes that do nothing go, one step for Undo; the town comes out the same: tidy.js)
+TL.tidy = () => {
+  const { strokes, dropped } = tidyStrokes(tool.planting, { PLANT, keep: new Set(SHIPPED.planting.strokes.map((s) => s.id)) });
+  if (dropped.length) { tool.before(); tool.planting.strokes = strokes; tool.commit(); }
+  return dropped;
+};
 TL.save = async ({ downloadOnly = false } = {}) => {
-  const text = TL.text();
+  const n = TL.tidy().length, tidied = n ? ` ${n} stroke${n === 1 ? '' : 's'} that did nothing left out.` : '', text = TL.text();
   if (LOCAL && !downloadOnly) {
     try { const r = await fetch(SAVE_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: text });
-      if (r.ok) { SAVED = text; say('Saved into the game (models/town/decor.json). Reload the game to see it.', 'saved'); return 'server'; } } catch (e) { /* not running: downloaded instead */ }
+      if (r.ok) { SAVED = text; say(`Saved into the game (models/town/decor.json).${tidied} Reload the game to see it.`, 'saved'); return 'server'; } } catch (e) { /* not running: downloaded instead */ }
   }
-  download(text); SAVED = text; say('Downloaded decor.json: hand it over to put it in the game.', 'saved'); return 'download';
+  download(text); SAVED = text; say(`Downloaded decor.json: hand it over to put it in the game.${tidied}`, 'saved'); return 'download';
 };
 $('tlSave').onclick = () => TL.save();
 $('tlDownload').onclick = () => TL.save({ downloadOnly: true });
@@ -222,6 +242,15 @@ function syncOpts() {
 // Snap on the bar, beside Move / Turn / Size: a thing moved snaps to the half metre, turned to 15°, put down on the half metre
 { const l = document.createElement('label'); l.className = 'pb-check tl-snap'; l.title = 'Moving: to the half metre; turning: to 15°; putting down: on the half metre';
   l.innerHTML = '<input type="checkbox" id="tlSnap" checked> Snap'; bar.el.querySelector('.pb-gizmo').after(l); }
+// Graphics on the bar too: the tier in use, or one for this lab alone (a tier can't change without a reload; the work in hand is kept)
+{ const l = document.createElement('label'); l.className = 'pb-check tl-gfx'; l.title = `The graphics this lab draws with. Auto: what the game would pick on this computer. In use now: ${QUAL.tier}`;
+  const on = qTier || labTier || 'auto', name = (t) => t.charAt(0).toUpperCase() + t.slice(1);
+  l.innerHTML = `Graphics <select id="tlGfx" aria-label="Graphics"><option value="auto">Auto${on === 'auto' ? ` (${name(QUAL.tier)})` : ''}</option>${TIERS.map((t) => `<option value="${t}">${name(t)}</option>`).join('')}</select>`;
+  bar.el.querySelector('.tl-snap').after(l);
+  const pick = l.querySelector('select'); pick.value = on;
+  pick.onchange = () => { try { if (pick.value === 'auto') localStorage.removeItem(GFX_KEY); else localStorage.setItem(GFX_KEY, pick.value); } catch (e) { /* no storage */ }
+    Q.delete('q'); const qs = Q.toString(); location.href = location.pathname + (qs ? '?' + qs : ''); };
+  TL.gfx = { tier: QUAL.tier, on }; }
 // the row over the bar keeps clear of it (and goes with it when it hides)
 new ResizeObserver(() => { const r = bar.el.querySelector('.pb-bar').getBoundingClientRect(); document.documentElement.style.setProperty('--bar-room', (r.height ? r.height + 12 : 0) + 'px'); syncOpts(); }).observe(bar.el);
 // the top strip: a click lets go of the keyboard (Space flies up, it doesn't press Save again); help opens and shuts
@@ -421,5 +450,22 @@ for (const [type, key] of [['pointerdown', 'onDown'], ['pointermove', 'onMove'],
 addEventListener('keydown', (e) => { if (e.key === 'Escape' && FD.drag) { e.stopPropagation(); cancelSegment(); bar.setInfo('Fence segment let go.'); } }, true);
 TL.fenceDraw = { posts: () => fencePosts().map((q) => [q.x, q.z]), drag: () => FD.drag && { a: FD.drag.a, b: FD.drag.b, from: !!FD.drag.from, to: !!FD.drag.to }, gap: FD.gap,
   hot: () => FDV.hot.map((h) => h.visible), label: () => (FDV.label.style.display === 'none' ? '' : FDV.label.textContent) };
+// ── painted lawn, always to be seen ─────────────────────────────────────────────────────────────────────────────
+// With the lawn picked and the view further off than the tufts are drawn, their circle stands round the brush; the stroke being
+// painted shows its tufts as it goes; and the green tint shows all the painted lawn from any height
+const lawnMap = makeLawnMap({ THREE, scene: V.scene, heightAt, PLANT });
+TL.lawnMap = lawnMap;
+let lawnKey = '', liveT = 0;
+const brushAt = { x: 0, z: 0 };   // (where the brush's ring was last drawn: the ring's own points are in the world, the line itself stays at the origin)
+{ const show = tool.showRing.bind(tool); tool.showRing = (p, r, clear) => { brushAt.x = p.x; brushAt.z = p.z; show(p, r, clear); }; }
+lawnNearBrush = () => {
+  const s = bar.state, on = s.open && s.kind === PLANT.LAWN_KIND && s.mode !== 'select', G = V.LAWN_GO, st = tool.stroke, painting = on && st && st.mode === 'paint';
+  const brush = on && tool.ring.visible ? brushAt : null, far = brush && Math.hypot(brush.x - camera.position.x, heightAt(brush.x, brush.z) - camera.position.y, brush.z - camera.position.z) > V.LAWN.radius * G.wide * 0.5;
+  if (far) { if (!G.over) G.over = { x: brush.x, z: brush.z }; if (Math.hypot(brush.x - G.over.x, brush.z - G.over.z) > 4) { G.over.x = brush.x; G.over.z = brush.z; } } else if (G.over && (!on || brush)) { G.over = null; G.at.set(1e9, 0, 1e9); }   // (the pointer off the ground for a moment, over the bar: the tufts stay where they were)
+  const now = performance.now();
+  if (painting && now - liveT > 300) { liveT = now; G.live = { procedural: false, items: [], strokes: [{ ...st, pts: st.pts.slice() }] }; G.at.set(1e9, 0, 1e9); lawnMap.update(tool.planting.strokes, st); lawnKey = ''; }
+  else if (!painting && G.live) { G.live = null; G.at.set(1e9, 0, 1e9); }
+  if (!painting) { const k = tool.planting.strokes.length + '|' + tool.planting.strokes.reduce((a, q) => a + (q.kind === PLANT.LAWN_KIND || q.mode === 'clear' ? q.pts.length : 0), 0); if (k !== lawnKey) { lawnKey = k; lawnMap.update(tool.planting.strokes); } }
+};
 PICKS.move();
 TL.ready = true;

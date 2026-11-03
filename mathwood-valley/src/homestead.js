@@ -42,6 +42,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeAnimal } from './actors/animals.js';
 import { preloadChickens, makeChicken, CHICKEN } from './townlife.js';
+import { makeBlobs } from './blobshadow.js';
 import { makeTag } from './dog.js';
 import { saveRider, spend } from './save.js';
 import {
@@ -408,6 +409,7 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
   }
 
   // ── THE ANIMALS ──────────────────────────────────────────────────────────────────────────────────────────────
+  let henBlobs = null;
   const herd = [];    // { rec (the rider's record), kind, home, a (animal or chicken), hen, tag, goal, t, state, size }
   // (the hens are clones of the town flock's chickens: one set of files loaded once for the whole visit, never per ride)
   let view = null;    // (the camera the names were last drawn for)
@@ -591,6 +593,13 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
         h.tag.position.set(p.x, p.y + top * h.size * h.base + 0.18, p.z); h.tag.material.opacity = o;
       }
     }
+    // (the hens' soft blobs, as the town flock's: one draw, made when the first hen comes)
+    if (herd.some((h) => h.hen) || henBlobs) {
+      if (!henBlobs) henBlobs = makeBlobs({ scene, most: 24 });
+      henBlobs.begin();
+      for (const h of herd) if (h.hen) { const p = h.a.root.position; henBlobs.put(p.x, p.y, p.z, CHICKEN.blob * h.size * h.base, (W.heightAt(p.x + 0.25, p.z) - p.y) * 4, (W.heightAt(p.x, p.z + 0.25) - p.y) * 4); }
+      henBlobs.end();
+    }
     unstack(at);
   };
   // names that would cover each other on screen (hens side by side in the run) are stacked one above the other:
@@ -739,7 +748,7 @@ export function makeHomestead({ W, animals, rider, hud, hob = null, refresh = ()
   const onHide = () => { if (document.visibilityState === 'hidden') keep(); };
   addEventListener('pagehide', keep); document.addEventListener('visibilitychange', onHide);
   H.dispose = () => {
-    disposed = true; offBlock(); unmow();
+    disposed = true; offBlock(); unmow(); if (henBlobs) { henBlobs.dispose(); henBlobs = null; }
     removeEventListener('pagehide', keep); document.removeEventListener('visibilitychange', onHide);
     for (const h of herd) dropAnimal(h);
     herd.length = 0;

@@ -23,6 +23,7 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { WAGONS_OUT, inWagons, pushFromWagons } from './wagon.js';
 import { howdyCam } from './ui/howdy.js';
 import { makeSight } from './sight.js';
+import { makeBlobs } from './blobshadow.js';
 
 export const CHICKEN = {
   count: 12,
@@ -43,6 +44,8 @@ export const CHICKEN = {
   calm: [1.0, 1.8],            // seconds it runs before it settles (it keeps running while the mover is still close)
   ruffleAt: 1.8,               // seconds into its Idle clip just before it ruffles its wings (2.0 to 2.5 s)
   settle: [1.2, 2.6],          // seconds it stands (and shakes its feathers) after a scare, counted from when it stops
+  blob: 0.27,                  // m: the soft dark blob under each one, middle to edge (src/blobshadow.js; one draw for the flock, every tier)
+  blobFar: 60,                 // not drawn past this far from the camera's target (m): a few pixels by then
   shadowNear: 15,              // only the chickens this close to the camera's target cast a shadow (m): a 0.4 m bird's
                                // shadow can't be seen further off, and each one is another thing to draw
   turn: { walk: 5, run: 10 },  // radians a second it turns
@@ -132,6 +135,7 @@ export function makeTownLife({ W, scene = W.scene, count = W.governor ? CHICKEN.
   const offGov = W.governor ? W.governor.on('chickens', (v) => { T.active = v; }) : null;
   const shadows = W.tier !== 'potato';
   const S = spots || spotsOf(W);
+  const blobs = makeBlobs({ scene, most: count });
   // the movers that scare chickens: their places and how fast they go (kept from frame to frame, made once)
   const movers = [0, 1, 2].map(() => ({ on: false, x: 0, z: 0, px: 0, pz: 0, vx: 0, vz: 0, v: 0, scare: 0, seen: false }));
   T.ready = preloadChickens().then((lib) => {
@@ -309,7 +313,10 @@ export function makeTownLife({ W, scene = W.scene, count = W.governor ? CHICKEN.
     c.n++;
     animate(c);
     const r = c.ch.root;
-    r.position.set(c.x, W.heightAt(c.x, c.z), c.z); r.rotation.y = c.h;
+    const y = W.heightAt(c.x, c.z);
+    r.position.set(c.x, y, c.z); r.rotation.y = c.h;
+    // (the ground's rise under it, for its blob: only worked out when it has moved)
+    if (c.bx !== c.x || c.bz !== c.z) { c.bx = c.x; c.bz = c.z; c.dx = W.heightAt(c.x + 0.25, c.z) - y; c.dz = W.heightAt(c.x, c.z + 0.25) - y; c.dx *= 4; c.dz *= 4; }
   }
 
   const target = new THREE.Vector3();
@@ -328,6 +335,7 @@ export function makeTownLife({ W, scene = W.scene, count = W.governor ? CHICKEN.
     flock(dt);
     readMovers(dt, P, D);
     if (W.camTarget) target.copy(W.camTarget); else if (P && P.position) target.copy(P.position);
+    blobs.begin();
     for (let i = 0; i < T.chickens.length; i++) {
       const c = T.chickens[i], d = Math.hypot(c.x - target.x, c.z - target.z);
       if (!c.about) { c.ch.root.visible = false; continue; }   // (not about just now: the governor's dial)
@@ -336,14 +344,18 @@ export function makeTownLife({ W, scene = W.scene, count = W.governor ? CHICKEN.
       // near ones every frame; further ones a few times a second (each in its own time, so they don't all go at once)
       c.acc += dt;
       const every = d < CHICKEN.near ? 0 : d < CHICKEN.far ? 0.12 : 0.6;
-      if (c.acc < every) continue;
-      const step = Math.min(c.acc, 0.6); c.acc = 0;
-      think(c, step);
-      if (c.ch.root.visible) c.ch.update(step);
+      if (c.acc >= every) {
+        const step = Math.min(c.acc, 0.6); c.acc = 0;
+        think(c, step);
+        if (c.ch.root.visible) c.ch.update(step);
+      }
+      if (d < CHICKEN.blobFar && c.dx !== undefined) { const r = c.ch.root; blobs.put(c.x, r.position.y, c.z, CHICKEN.blob * r.scale.x, c.dx, c.dz); }
     }
+    blobs.end();
   };
+  T.blobs = blobs;
   T.state = () => T.chickens.map((c) => ({ kind: c.ch.kind, state: c.state, clip: c.ch.clip, v: +c.v.toFixed(2), x: +c.x.toFixed(2), z: +c.z.toFixed(2) }));
-  T.dispose = () => { if (offGov) offGov(); for (const c of T.chickens) { c.ch.mixer.stopAllAction(); c.ch.root.removeFromParent(); } T.chickens.length = 0; };
+  T.dispose = () => { if (offGov) offGov(); blobs.dispose(); for (const c of T.chickens) { c.ch.mixer.stopAllAction(); c.ch.root.removeFromParent(); } T.chickens.length = 0; };
   return T;
 }
 

@@ -61,7 +61,8 @@ import { PROP_KINDS, makeProp } from './objects/townProps.js';
 import { savedLayout as savedTown, forgetLayout as forgetTown } from './objects/villageEditor.js';
 import { textHash } from './objects/changes.js';
 import { applyDecor, drawDecor } from './objects/decor.js';
-import { planFences, styleOf, FENCE_STYLES } from './objects/fenceplan.js';
+import { planFences, plainLines, FENCE_STYLES } from './objects/fenceplan.js';
+import { plantSorts, wildView, paintedView } from './objects/plantviews.js';
 import { Fences } from './objects/fences.js';
 import { makeLandforms } from './objects/landforms.js';
 import { makeLampUniforms, buildLampMap, lampStandard } from './objects/lampLight.js';
@@ -210,7 +211,9 @@ const DAY = { hour: 9 + 40 / 60, t: 9 + 40 / 60, auto: false, dayMin: 12, season
 const CODE = typeof location !== 'undefined' && new URLSearchParams(location.search).has('tripo') ? null : makeCodeBuildings({ shade: (sh) => FOLK_SHADE(sh), tier: () => QUAL.tier,
   renderer, scene: () => scene });   // (renderer: the insides made ready and the windows' pictures taken)
 // (Mathwood Valley) the lawn following the camera: see lawnFrame (made here, before anything can lay the lawn)
-const LAWN_GO = { ahead: 0.2, wide: 1.3, near: 0.45, edge: 0.3, step: 0.08, job: null, at: new THREE.Vector3(1e9, 0, 0), cam: new THREE.Vector3(1e9, 0, 0), cache: {}, born: new Map(), lays: 0, ms: 0 };
+// (over, live: for the Town Lab: { x, z } the lawn's circle stands round that spot, not the camera; a planting of the stroke being
+// painted, its tufts shown before it's let go. Null in the game)
+const LAWN_GO = { over: null, live: null, ahead: 0.2, wide: 1.3, near: 0.45, edge: 0.3, step: 0.08, job: null, at: new THREE.Vector3(1e9, 0, 0), cam: new THREE.Vector3(1e9, 0, 0), cache: {}, born: new Map(), lays: 0, ms: 0 };
 const lawnKey = (x, z) => Math.round(x * 16) * 65536 + Math.round(z * 16);
 // THE TOWN's layout: in the lab the one saved in this browser, else the first town (models/town/layout.json); likewise the
 // Build bar's hand planting, the one saved in this browser, else models/town/planting.json. Anywhere else, the shipped ones
@@ -1623,7 +1626,7 @@ function bakeCoverMap() {
   coverTex.needsUpdate = true;
 }
 function placeLawn() {
-  const at = lawnCentre(), cam = camera.position, R = lawnRadius(), thin = lawnThin(cam, R);   // (laid at once, grown: Mathwood Valley's LAWN_GO)
+  const at = lawnCentre(), cam = lawnEye(), R = lawnRadius(), thin = lawnThin(cam, R);   // (laid at once, grown: Mathwood Valley's LAWN_GO)
   const spots = withLawnPlanting(LAWN.radius > 0 ? lawnSpots({ ground: coverGround, at, radius: R, density: LAWN.density, grow: GROW, spread: FOREST.spread, cache: LAWN_GO.cache, thin }) : [], at, R, thin);
   LAWN_GO.job = null; LAWN_GO.at.copy(at); LAWN_GO.cam.set(cam.x, 0, cam.z); LAWN_GO.born = new Map();
   for (const t of spots) { t.y = heightAt(t.x, t.z); t.born = -1e6; LAWN_GO.born.set(lawnKey(t.x, t.z), -1e6); }
@@ -1656,14 +1659,14 @@ const PLANT = { tool: null, base: null, LAWN_KIND: KIND_INFO.length, TREE0: KIND
   if (kept && baked.length && !kept.strokes.some(isLand)) { kept.strokes.unshift(...baked); savePlanting(kept); }
   const planting = normalisePlanting(kept || PLANTING_FIRST || emptyPlanting()); PLANT.base = { planting, index: new PlantIndex(planting) }; }
 const plantNow = () => PLANT.tool || PLANT.base;
-const SORT = { plant: (k) => k <= PLANT.LAWN_KIND, tree: (k) => (k >= PLANT.TREE0 && k < PLANT.ROCK0) || k === PLANT.APPLE, rock: (k) => (k >= PLANT.ROCK0 && k < PLANT.ROCK0 + 4) || k === PLANT.ROCKS, path: (k) => k === PLANT.PATH || k === PLANT.NOPATH, fence: (k) => k === PLANT.FENCE || k === PLANT.GATE };
+const SORT = plantSorts(PLANT);   // (who heeds which strokes: objects/plantviews.js, which the Town Lab's save tidy-up reads too)
 // the planting seen by one sort: its paint strokes and every clear (the land's own plants follow the procedural switch;
 // trees and rocks always), with its own index; made once a change
 const sortParts = new WeakMap();
 function plantingFor(sort) {
   const t = plantNow(), P = t.planting; let m = sortParts.get(t.index); if (!m) sortParts.set(t.index, m = {});
-  if (!m[sort]) {   // (a placed plant's clear circle keeps the meadow back, not the trees: trees and rocks heed only their own sort's)
-    const pl = { ...P, procedural: sort === 'plant' ? P.procedural : true, strokes: P.strokes.filter((st) => (st.mode === 'clear' && !SORT.fence(st.kind) && (sort === 'rock' || !SORT.rock(st.kind))) || SORT[sort](st.kind)), items: sort === 'plant' ? P.items : P.items.filter((i) => SORT[sort](i.kind)) };   // (Clear with a fence chosen takes down fences only; with a rock chosen, rocks only)
+  if (!m[sort]) {
+    const pl = wildView(P, sort, SORT);
     m[sort] = { planting: pl, index: new PlantIndex(pl) };
   }
   return m[sort];
@@ -1686,7 +1689,7 @@ const plantingParts = new WeakMap();
 function paintedOnly(t, lawn) {   // (lawn: false the plants, true the lawn, or 'trees' / 'rocks')
   let v = plantingParts.get(t.index);
   if (!v) {
-    const P = t.planting, part = (want) => ({ ...P, strokes: P.strokes.filter((s) => !(s.mode === 'clear' && (SORT.fence(s.kind) || (SORT.rock(s.kind) && !want(s.kind))))).map((s) => s.mode !== 'clear' && !want(s.kind) ? { ...s, density: 0 } : s) });
+    const P = t.planting, part = (want) => paintedView(P, want, SORT);
     v = { plants: part((k) => k < PLANT.LAWN_KIND), lawn: part((k) => k === PLANT.LAWN_KIND), trees: part(SORT.tree), rocks: part(SORT.rock) }; plantingParts.set(t.index, v);
   }
   return typeof lawn === 'string' ? v[lawn] : lawn ? v.lawn : v.plants;
@@ -1708,7 +1711,9 @@ function withPlanting(list, at) {
 // lawn fills in a tuft at a time); laid again once the camera has gone `step` of the radius; a tuft new to a lay rises
 // out of the ground (lawn.js RISE). cache: the 10 m tiles' tufts remembered (lawnSpotsSteps)
 const lawnRadius = () => LAWN.radius * LAWN_GO.wide;
+const lawnEye = () => LAWN_GO.over || camera.position;
 function lawnCentre() {
+  if (LAWN_GO.over) return new THREE.Vector3(LAWN_GO.over.x, 0, LAWN_GO.over.z);
   const fwd = new THREE.Vector3().subVectors(controls.target, camera.position).setY(0);
   const c = camera.position.clone().addScaledVector(fwd.lengthSq() > 1e-6 ? fwd.normalize() : fwd, lawnRadius() * LAWN_GO.ahead); c.y = 0;
   return c;
@@ -1735,7 +1740,7 @@ function lawnFrame(dt) {
   lawn.uniforms.lawnTime.value += Math.min(dt, 0.1); IMPOSTER_CLOCK.value += Math.min(dt, 0.1);   // (the clocks the lawn and the plants rise in by)
   if (!(LAWN.radius > 0) || !coverForest) return;
   if (LAWN_GO.job) { const t0 = performance.now(), budget = Math.min(2.5, Math.max(0.8, dt * 1000 * 0.12)); while (performance.now() - t0 < budget) if (LAWN_GO.job.next().done) { LAWN_GO.job = null; break; } return; }
-  const at = lawnCentre(), cam = camera.position, step = lawnRadius() * LAWN_GO.step;
+  const at = lawnCentre(), cam = lawnEye(), step = lawnRadius() * LAWN_GO.step;
   if (Math.hypot(at.x - LAWN_GO.at.x, at.z - LAWN_GO.at.z) > step || Math.hypot(cam.x - LAWN_GO.cam.x, cam.z - LAWN_GO.cam.z) > step) {
     LAWN_GO.at.copy(at); LAWN_GO.cam.set(cam.x, 0, cam.z); LAWN_GO.job = lawnSteps(at.clone(), LAWN_GO.cam.clone());
   }
@@ -1748,6 +1753,7 @@ function withLawnPlanting(spots, at = lawnCentre(), R = lawnRadius(), thin = nul
   const t = plantNow();
   const kept = spots.filter((p) => keepWild('plant', p.x, p.z) && !(LAWN_SKIP.length && lawnSkip(p))), R2 = R * R;
   const painted = paintedPlants(paintedOnly(t, true), null, { at, radius: R, far: 1, sizeOf: () => 1 });
+  if (LAWN_GO.live) painted.push(...paintedPlants(LAWN_GO.live, null, { at, radius: R, far: 1, sizeOf: () => 1 }));
   const own = (p) => { const e = Math.sin(p.x * 39.346 + p.z * 11.135) * 24634.6345; return (1 - FOREST.spread * 0.5 * (e - Math.floor(e))) ** 2; };   // (each tuft's own edge, as the land's lawn)
   for (const p of painted) if (p.sp === PLANT.LAWN_KIND && (p.x - at.x) ** 2 + (p.z - at.z) ** 2 < R2 * own(p) && paintable(p) && !(LAWN_SKIP.length && lawnSkip(p))) {
     const h = Math.sin(p.x * 12.9898 + p.z * 78.233) * 43758.5453, r = h - Math.floor(h);
@@ -1901,21 +1907,13 @@ FENCE.make = () => FENCE.maker || (FENCE.maker = new Fences({ scene, heightAt, s
 function buildFences() {
   for (const m of FENCE.meshes) { scene.remove(m); m.dispose(); }
   FENCE.meshes = [];
-  const strokes = plantNow().planting.strokes, posts = [], rails = [], GAP = 2.2, postAt = new Set();
-  const plan = FENCE.plan = planFences(strokes, { fence: PLANT.FENCE, gate: PLANT.GATE, inStroke }), runOf = new Map(plan.runs.map((R) => [R.si, R]));
-  strokes.forEach((st, si) => {
-    if (st.kind !== PLANT.FENCE || st.mode === 'clear' || st.pts.length < 2 || styleOf(st)) return;
-    const R = runOf.get(si), parts = R && R.gaps.length ? R.pieces : [{ pts: st.pts }];
-    for (const part of parts) {
-      const line = part.pts, h = 1.1 * (st.size || 1), at = [line[0]]; let left = GAP;   // (posts every GAP along the line: left is how far to the next)
-      for (let i = 1; i < line.length; i++) { const [ax, az] = line[i - 1], [bx, bz] = line[i], L = Math.hypot(bx - ax, bz - az); let d = left;
-        while (d <= L) { at.push([ax + (bx - ax) * d / L, az + (bz - az) * d / L]); d += GAP; } left = d - L; }
-      const end = line[line.length - 1], last = at[at.length - 1]; if (Math.hypot(end[0] - last[0], end[1] - last[1]) > GAP * 0.35) at.push(end);
-      const kept = at.map(([x, z]) => strokes.some((c, ci) => ci > si && c.mode === 'clear' && c.kind === PLANT.FENCE && inStroke(c, x, z)) ? null : [x, heightAt(x, z), z]);   // (taken down by Clear with a fence chosen)
-      kept.forEach((p, i) => { if (!p) return; const key = Math.round(p[0] * 20) + ',' + Math.round(p[2] * 20);   // (one post where two runs meet, or a run closes on its first)
-        if (!((i === 0 && part.gateA) || (i === kept.length - 1 && part.gateB)) && !postAt.has(key)) { postAt.add(key); posts.push([p, h]); } if (kept[i + 1]) rails.push([p, kept[i + 1], h]); });
-    }
-  });
+  const strokes = plantNow().planting.strokes, posts = [], rails = [], postAt = new Set(), FOPTS = { fence: PLANT.FENCE, gate: PLANT.GATE, inStroke };
+  const plan = FENCE.plan = planFences(strokes, FOPTS);
+  for (const { part, h, kept: spots } of plainLines(strokes, plan, FOPTS)) {
+    const kept = spots.map((q) => (q ? [q[0], heightAt(q[0], q[1]), q[1]] : null));
+    kept.forEach((p, i) => { if (!p) return; const key = Math.round(p[0] * 20) + ',' + Math.round(p[2] * 20);   // (one post where two runs meet, or a run closes on its first)
+      if (!((i === 0 && part.gateA) || (i === kept.length - 1 && part.gateB)) && !postAt.has(key)) { postAt.add(key); posts.push([p, h]); } if (kept[i + 1]) rails.push([p, kept[i + 1], h]); });
+  }
   // all of it drawn by objects/fences.js: the plain fence's posts and rails (as laid above) as textured boards, the
   // styled fences and the gates (the plain fence was flat boxes before: two instanced draws, untextured)
   const styled = posts.length || plan.gates.length || plan.runs.some((R) => R.style) ? FENCE.make().build(plan, { posts, rails }) : (FENCE.maker ? FENCE.maker.build(plan) : []);

@@ -13,7 +13,7 @@ export function graphicsRow(G) {
   if (!G) return row;
   const paint = () => {
     const s = G.state(), on = s.auto ? 'auto' : s.pinned;
-    const note = s.auto ? `Finding what this computer can do: now ${rungWords(s.scenery)}`
+    const note = s.auto ? `Finding what this computer can do: now ${rungWords(s.scenery)}${s.nextBand !== s.loadBand ? `; ${NAMES[s.nextBand]} when the game next loads` : ''}`
       : s.pinned !== s.loadBand ? `${NAMES[s.pinned]} in full the next time the game loads` : `${NAMES[s.pinned]}, chosen by hand`;
     row.innerHTML = `<span>Graphics</span><div class="bm-gfx-opts" role="radiogroup" aria-label="Graphics">${Object.entries(NAMES).map(([k, n]) =>
       `<button type="button" role="radio" aria-checked="${on === k}" data-gfx="${k}">${n}</button>`).join('')}</div><small>${note}</small>`;

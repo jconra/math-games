@@ -227,6 +227,8 @@ test('the banjo: turns in the banjo tunes only when it\'s in the band (with the 
     assert.ok(bj.length > 10, `${id}: the banjo plays`);
     assert.ok(bj.filter((e) => !e.strum).every((e) => e.midi >= 48 && e.midi <= 84 && e.lenBeats > 0), `${id}: in its range`);
     assert.ok(bj.some((e) => e.strum), `${id}: the strum between turns`);
+    // (a turn carries what the harmonica needs to play it while the banjo's samples are still on their way: banjoComing)
+    assert.ok(bj.filter((e) => !e.strum).every((e) => e.style && e.attack && e.release && 'bend' in e), `${id}: a turn the harmonica can cover`);
     const none = s.tune(5, { intro: true, fiddle: true, banjo: false }); for (let i = 0; i < 4; i++) assert.ok(!none().some((e) => e.what === 'banjo'), `${id}: no banjo without its kit`);
   }
   const sj = SONGS.find((x) => x.id === 'soldiers').tune(5, { intro: false, fiddle: true, banjo: true });

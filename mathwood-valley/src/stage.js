@@ -330,7 +330,9 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
     b.loading = loadFiddle(b.ctx).then((kit) => { b.fiddleKit = kit; b.loadMs = Math.round(performance.now() - t0); if (music && music.setFiddleKit && fiddleOK()) { music.setFiddleKit(kit); musicFiddled = true; } }).catch((e) => console.warn('Mathwood Valley: no fiddle', e));
     // the banjo: the recorded one for now (the synth banjo cost the sound thread about as much again as the rest of the band:
     // crackle on slower machines; banjosynth.js stays, to be played from recordings of its own notes later)
-    if (STAGE.banjo) loadBanjo(b.ctx).then((kit) => { b.banjoKit = kit; }).catch((e) => console.warn('Mathwood Valley: no banjo', e));
+    // (a song begun before the samples came is written with the banjo in it (banjoComing): it joins as they come. Fetched on the
+    // side: the song never waits, so the box's hits and the crash keep their times whichever comes first)
+    if (STAGE.banjo) { b.banjoLoading = true; loadBanjo(b.ctx).then((kit) => { b.banjoKit = kit; if (music && music.setBanjoKit && bus === b) music.setBanjoKit(kit); }).catch((e) => console.warn('Mathwood Valley: no banjo', e)).finally(() => { b.banjoLoading = false; }); }
   }
   function startMusic(at = null) {
     if (music || !bus || resting || phase !== 'play') return;
@@ -341,7 +343,7 @@ export function makeStage({ W, folk, audio, camera = null, scene = W.scene, spea
     const kit = fiddleOK() ? bus.fiddleKit : null; musicFiddled = !!kit;
     if (bus.baked) try { bus.baked.start(song.id); } catch (e) { console.warn('Mathwood Valley: baking the notes', e); }
     music = makeStageMusic(bus.ctx, { harp: bus.harpIn, piano: bus.pianoIn, box: bus.boxIn, room: bus.roomIn, seed: 1 + Math.floor(Math.random() * 1e6), song: song.id, intro, fiddle: bus.fiddleIn, fiddleKit: kit, fiddleComing: !kit && fiddleOK(),
-      banjo: bus.banjoIn, banjoKit: STAGE.banjo ? bus.banjoKit || null : null, baked: bus.baked || null, crash: crashNow });
+      banjo: bus.banjoIn, banjoKit: STAGE.banjo ? bus.banjoKit || null : null, banjoComing: !!(STAGE.banjo && !bus.banjoKit && bus.banjoLoading), baked: bus.baked || null, crash: crashNow });
     songT0 = at != null ? at : bus.ctx.currentTime + 0.2;
     music.start(songT0);
   }

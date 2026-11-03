@@ -167,7 +167,7 @@ function addStyle() {
 export class PlantBar {
   constructor({ kinds = [], onChange, onAction, container = document.body, title = 'Plants' } = {}) {   // title: the round button's word
     this.kinds = kinds; this.onChange = onChange; this.onAction = onAction; this.shown = true; this.sure = null; this.title = title;
-    this.state = { open: true, mode: 'select', kind: kinds.length ? kinds[0].id : null, gizmo: 'translate', brush: 6, density: 2, size: 1, clearRadius: 1.5, procedural: true, level: true };
+    this.state = { open: true, mode: 'select', kind: kinds.length ? kinds[0].id : null, gizmo: 'translate', brush: 2, density: 2, size: 1, clearRadius: 1.5, procedural: true, level: true };
     this.levelShown = null; this.lookShown = false; this.sure = null; this.sureAct = null;
     addStyle(); this.build(container); this.render();
   }

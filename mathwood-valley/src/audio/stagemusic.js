@@ -914,7 +914,7 @@ function makeFiddle(T) {
             attack: j === 0 ? 0.04 : 0.025, release: long ? 0.35 : 0.09,
           };
           if (fid) ev.push({ ...harpNote, what: 'fiddle', midi: harpNote.midi + (T.fiddleUp || 0), lenBeats: nLen * (long ? 0.97 : 0.92), quick: nLen < 1, vel: (nt.at % 1 === 0 ? 0.85 : 0.72) * (harp ? 0.8 : 1), doubled: harp && !T.fiddleUp });
-          if (bj) ev.push({ beat: at + nAt, what: 'banjo', midi: harpNote.midi, lenBeats: nLen, vel: (nt.at % 1 === 0 ? 0.9 : 0.75) * (harp || fid ? 0.85 : 1), doubled: harp || fid });
+          if (bj) ev.push({ ...harpNote, what: 'banjo', lenBeats: nLen, vel: (nt.at % 1 === 0 ? 0.9 : 0.75) * (harp || fid ? 0.85 : 1), doubled: harp || fid });
           if (harp) ev.push(harpNote);
           // (T.along: a song whose fiddle turn comes late: it doubles the harmonica's turn too, softer)
           if (T.along && fiddle && harp && !fid) ev.push({ ...harpNote, what: 'fiddle', lenBeats: nLen * (long ? 0.97 : 0.92), quick: nLen < 1, vel: FIDDLE_ALONG * (nt.at % 1 === 0 ? 1 : 0.88), doubled: true });
@@ -1248,9 +1248,9 @@ export const songOf = (id) => SONGS.find((s) => s.id === id) || CANDIDATES.find(
 // song: one of SONGS' ids ('easy' when left out: the first tune, as it always was); intro: false starts the harmonica in
 // the first line (a song asked for: the band strikes it up at once) instead of the piano's line alone; box: the
 // drummer's notes go there (none: the band without him)
-export function makeStageMusic(ctx, { harp, piano, box = null, room = null, seed = 1, patches = PATCH_PRESETS, song = 'easy', intro = true, fiddle = null, fiddleKit = null, pianoKit = null, banjo = null, banjoKit = null, banjoSynth = false, strumTo = null, baked = null, fiddleComing = false, crash = null } = {}) {
+export function makeStageMusic(ctx, { harp, piano, box = null, room = null, seed = 1, patches = PATCH_PRESETS, song = 'easy', intro = true, fiddle = null, fiddleKit = null, pianoKit = null, banjo = null, banjoKit = null, banjoSynth = false, strumTo = null, baked = null, fiddleComing = false, banjoComing = false, crash = null } = {}) {
   const S = songOf(song), BL = S.beat, LINE = S.bar * 4;   // (seconds a beat; beats a line of four bars)
-  const tune = S.tune(seed, { intro, fiddle: !!fiddleKit || fiddleComing, banjo: !!banjoKit || banjoSynth }), drum = box ? makeBoxPart(S.id, seed, { intro }) : null, queue = [], events = [], harpSpans = [], fiddleSpans = [], voices = [];
+  const tune = S.tune(seed, { intro, fiddle: !!fiddleKit || fiddleComing, banjo: !!banjoKit || banjoSynth || banjoComing }), drum = box ? makeBoxPart(S.id, seed, { intro }) : null, queue = [], events = [], harpSpans = [], fiddleSpans = [], voices = [];
   let origin = null, made = 0, timer = null, running = false;
   const accents = {};
   const offline = typeof ctx.startRendering === 'function';
@@ -1278,7 +1278,7 @@ export function makeStageMusic(ctx, { harp, piano, box = null, room = null, seed
         pianoNotes({ midi: ev.midi, len: ev.len, vel: ev.vel, gain: ev.gain }, patches[PIANO]).forEach((p, i) => keep((baked && baked.playPiano(ctx, piano, room, p, keys[i], at, ev.len)) || playPatch(ctx, null, piano, room, p, null, { at }), at, at + ev.len));
       }
       events.push({ at, what: 'piano', midi: ev.midi, len: ev.len, vel: ev.vel });
-    } else if (ev.what === 'banjo') {   // (the banjo's notes: only with its kit or banjoSynth, else none: the tune gives it turns only then)
+    } else if (ev.what === 'banjo' && (banjoKit || banjoSynth || ev.strum || ev.doubled)) {   // (the banjo's notes: with its kit or banjoSynth; samples still on the way (banjoComing): the harmonica plays a turn of its own, below, and a strum or a doubled note waits)
       if (!banjoKit && !banjoSynth) return;
       const len = ev.lenBeats * BL, n = { at, midi: ev.midi, len, vel: ev.vel, gain: ev.strum ? STRUM.gain : 1 };
       const to = (ev.strum && strumTo) || banjo || harp;   // (strumTo: the strum somewhere of its own, for a rig to measure)
@@ -1291,7 +1291,7 @@ export function makeStageMusic(ctx, { harp, piano, box = null, room = null, seed
       events.push({ at, what: 'fiddle', midi: ev.midi, len });
       fiddleSpans.push([at, at + len]);
       while (fiddleSpans.length > 64) fiddleSpans.shift();
-    } else {   // (the harmonica's notes; a fiddle's when its samples aren't there)
+    } else {   // (the harmonica's notes; a fiddle's or a banjo's turn when its samples aren't there)
       const len = ev.lenBeats * BL;
       keep(playPatch(ctx, null, harp, room, harmonicaNote({ ...ev, len }, patches[HARMONICA]), null, { at }), at, at + len);
       events.push({ at, what: 'harp', midi: ev.midi, len, bend: ev.bend, style: ev.style, fresh: ev.fresh });
@@ -1323,6 +1323,8 @@ export function makeStageMusic(ctx, { harp, piano, box = null, room = null, seed
   const M = {
     // (the fiddle's samples, arriving after the song began: its notes sound from here on, the harmonica having covered till now)
     setFiddleKit(kit) { fiddleKit = kit; },
+    // (the banjo's samples, the same: a song that began before they came (banjoComing) has its banjo from here on)
+    setBanjoKit(kit) { banjoKit = kit; },
     events, played: 0, song: S.id, name: S.name, beatLen: BL, bar: S.bar,
     start(at = ctx.currentTime + 0.1) {
       if (running) return;

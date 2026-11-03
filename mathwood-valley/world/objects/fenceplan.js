@@ -133,6 +133,24 @@ export function planFences(strokes, { fence, gate, inStroke }) {
   return { runs, gates };
 }
 
+// the plain fence's lines, post by post (world/valley.js buildFences draws them; the Town Lab's tidy-up compares them):
+// [{ st, part, h, kept: [[x, z] or null (taken down by Clear with a fence chosen)] }]; posts every `gap` along each line
+export function plainLines(strokes, plan, { fence, inStroke, gap = 2.2 }) {
+  const runOf = new Map(plan.runs.map((R) => [R.si, R])), out = [];
+  strokes.forEach((st, si) => {
+    if (st.kind !== fence || st.mode === 'clear' || st.pts.length < 2 || styleOf(st)) return;
+    const R = runOf.get(si), parts = R && R.gaps.length ? R.pieces : [{ pts: st.pts }];
+    for (const part of parts) {
+      const line = part.pts, h = 1.1 * (st.size || 1), at = [line[0]]; let left = gap;   // (left: how far to the next post)
+      for (let i = 1; i < line.length; i++) { const [ax, az] = line[i - 1], [bx, bz] = line[i], L = Math.hypot(bx - ax, bz - az); let d = left;
+        while (d <= L) { at.push([ax + (bx - ax) * d / L, az + (bz - az) * d / L]); d += gap; } left = d - L; }
+      const end = line[line.length - 1], last = at[at.length - 1]; if (Math.hypot(end[0] - last[0], end[1] - last[1]) > gap * 0.35) at.push(end);
+      out.push({ st, part, h, kept: at.map(([x, z]) => (strokes.some((c, ci) => ci > si && c.mode === 'clear' && c.kind === fence && inStroke(c, x, z)) ? null : [x, z])) });
+    }
+  });
+  return out;
+}
+
 // ── a zigzag (worm) fence: its corners, swinging amp either side of the line turn about, both ends on the line. The
 // corners are a whole panel apart and the end panels half one, so every panel runs at the same slant off the line
 // (atan(2 amp / panel): about 28 degrees), however short the run
