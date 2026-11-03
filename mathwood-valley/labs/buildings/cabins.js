@@ -1179,6 +1179,9 @@ function stoneChimney(c, ch) {
   if (!c.far) {
     wb(c.k, w, [1.5, 0.16, 0.14], a, L.FL + 1.14, -L.T - 0.07, null, { long: 0, tint: vary(c.k, FRAME, 0.7, 0.85), strip: 10, ends: 'log', inside: true });
     wb(c.k, w, [1.62, 0.045, 0.24], a, L.FL + 1.245, -L.T - 0.11, null, { long: 0, tint: vary(c.k, FRAME, 0.8, 0.95), inside: true });
+    // (the shelf is at chest height and deeper than the room the wall keeps: a walker stops at its edge, from the floor
+    // up, rather than standing with it through them. Only for a walker: the light isn't baked round it)
+    c.k.walkSolids.push({ size: [1.62, 1.27, 0.25], m: wallM(w.f, a, L.FL + 0.635, -L.T - 0.115) });
   }
   ch.top = top;
 }
@@ -1208,6 +1211,10 @@ function stickStack(c, ch, y0, top) {
     const px = xIn + s * (dep0 + 1.6), base = new THREE.Vector3(px, 0, ch.z + 0.3), tip = new THREE.Vector3(xIn + s * (dep1 + 0.04), y0 + H * 0.62, ch.z + 0.1);
     const d = tip.clone().sub(base), Lp = d.length(), q = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.clone().normalize());
     k.prism('wood', ngon(6, 0.055, 0.15, k.R), Lp, null, null, { m: new THREE.Matrix4().compose(base.clone().addScaledVector(d, 0.5), q, new THREE.Vector3(1, 1, 1)), tint: vary(k, POLE, 0.8, 0.95), smooth: true, taper: 0.2 });
+    // (a walker goes round its foot, where it is under head height, rather than through it; under its high end, by the
+    // stack, there is room. Only for a walker: the light isn't baked round it)
+    const f = Math.min(1, 1.9 / Math.max(0.1, tip.y)), hx = d.x * f, hz = d.z * f, run = Math.hypot(hx, hz);
+    k.walkSolids.push({ size: [0.16, 1.9, run + 0.16], m: new THREE.Matrix4().compose(new THREE.Vector3(base.x + hx / 2, 0.95, base.z + hz / 2), new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), Math.atan2(hx, hz)), new THREE.Vector3(1, 1, 1)) });
   }
 }
 // a chimney in the middle, between the two pens: a stone mass standing through the wall between them, a fireplace on
@@ -1539,7 +1546,7 @@ export function buildCabin(recipeIn = {}, env = {}) {
   if (r0.lineup) return buildLineup(r0, env);
   const r = seedVariety(r0);
   const far = r.look === 'far', k = new Kit(r.seed);
-  k.parts.glow = []; k.parts.plaster = [];
+  k.parts.glow = []; k.parts.plaster = []; k.walkSolids = [];   // (walkSolids: what stops a walker and not the light)
   const L = layout(r, k), paint = CABIN_PAINTS[r.paint].c;
   const c = {
     k, L, r, far, env, lamps: [], sills: [], panes: [], stoneGeos: [], stoneTris: 0, leaves: [], piers: [], flats: [], rooms: [], feet: [],   // (feet: where it meets the ground, [x, z, its bottom there], for the rigs)
@@ -1676,7 +1683,7 @@ export function buildCabin(recipeIn = {}, env = {}) {
   const counts = {}; let parts = 0;
   for (const g in k.parts) { counts[g] = k.parts[g].length; parts += counts[g]; }
   const B = {
-    recipe: r, geos, doors: c.leaves, lamps: c.lamps, light, occ, props, offset: OX, offsetZ: OZ, anchors: { ...anchors, feet: c.feet.map(([x, z, y]) => [+(x + OX).toFixed(2), +(z + OZ).toFixed(2), +y.toFixed(2)]) }, sit: c.sit, ground: !!env.ground,
+    recipe: r, geos, doors: c.leaves, lamps: c.lamps, light, occ, props, offset: OX, offsetZ: OZ, walkSolids: k.walkSolids, anchors: { ...anchors, feet: c.feet.map(([x, z, y]) => [+(x + OX).toFixed(2), +(z + OZ).toFixed(2), +y.toFixed(2)]) }, sit: c.sit, ground: !!env.ground,
     counts, parts, msBuild, msBake, ms: performance.now() - t0, marks, kit: k, stoneTris: c.stoneTris, layout: L,
   };
   B.views = cabinViews(B);
@@ -1782,6 +1789,9 @@ const CABIN_MAKERS = {
     }
     k.prism('iron', ngon(8, 0.08), 0.2, null, null, { m: mul(M, T(-Ln / 4, 1.365, -0.08)), tint: [2.6, 2.3, 1.9], smooth: true, taper: 0.25 });
     for (const dx of [0.12, 0.28]) k.prism('iron', ngon(8, 0.05), 0.12, null, null, { m: mul(M, T(dx, 1.695, -0.08)), tint: TIN.map((q) => q * 0.5), smooth: true });
+    // (a walker stops at its edge, from the floor up: the boards are at chest and head height, deeper than the room a
+    // wall keeps; a prop's solid only stops a walker, the light isn't baked round it)
+    k.solid([Ln, 1.66, 0.27], null, null, mul(M, T(0, 0.83, -0.08)));
   },
   cabinTub(k, M) {
     // (a dark galvanized washtub hung on a nail, its bottom to the wall at -z)

@@ -81,6 +81,10 @@ export const TRAFFIC = {
   // team takes about 15 s to get back on) and m ahead of it (a wagon and its team, horses and all); halfway out, it
   // stops short of the lane for anything that came along since
   join: { behind: 70, ahead: 16, hold: 5 },
+  // m: a wagon on a spot's way is off the road where its way's middle line is its own half width and this much more from
+  // the lane's middle: half the widest wagon or team that passes in the lane (1 m) and a little room, with the corners
+  // of one swinging off or back on
+  beside: 1.3,
   gap: 3,                   // m it stops short of what is in its way (from the lead horses' noses)
   wait: 1.2,                // s the way must be clear before it moves off again
   oncoming: 70,             // m ahead a driver looks for a wagon coming the other way, where the road narrows to one lane
@@ -147,6 +151,16 @@ export const STANDING = [
   { kind: 'covered', x: -355, z: -67.1, heading: 2.86 },         // the bridge engineer's, at his camp on the west river's north bank (src/bridgejob.js), beside his tent
 ];
 const rnd = (a, b) => a + Math.random() * (b - a);
+// a spot's way (wayTo below) keeps how far it is from its lane every LAT metres; a wagon not made counts NOSE metres
+// ahead of its middle and TAIL behind (a wagon's lengths and a little)
+const LAT = 0.25, NOSE = 7, TAIL = 5;
+// whether a wagon on the way w, its middle du metres along it (hw: half its width; nose, tail: metres before and behind
+// its middle), is clear of the lane all along it
+function clearOf(w, du, hw, nose, tail) {
+  const need = hw + TRAFFIC.beside, a = Math.max(0, Math.floor((du - tail - 0.3) / LAT)), b = Math.min(w.lat.length - 1, Math.ceil((du + nose + 0.3) / LAT));
+  for (let i = a; i <= b; i++) if (w.lat[i] < need) return false;
+  return true;
+}
 const turnTo = (a, b, most) => a + Math.max(-most, Math.min(most, Math.atan2(Math.sin(b - a), Math.cos(b - a))));
 const NOWHERE = { x: 1e6, y: 0, z: 1e6 };   // (ears too far off to hear a wagon)
 
@@ -246,6 +260,18 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
     }
     // the road's metres for each metre along it (for keeping the wagons in order)
     way.roadU = (du) => (du <= run ? u0 + dir * du : du >= Ld - run ? u1 - dir * (Ld - du) : uA + (uB - uA) * ((du - run) / Math.max(1, Ld - 2 * run)));
+    // how far its middle line is from the middle of the lane it leaves and comes back to, every LAT metres along it: a
+    // wagon on it is off the road only where all of it is far enough from the lane for another to pass (offRoad)
+    const lanePts = [];
+    for (let s = Math.min(u0, u1) - 10; s <= Math.max(u0, u1) + 10; s += 0.5) { spot(s, dir, P); lanePts.push(P.x, P.z); }
+    way.lat = new Float32Array(Math.floor(Ld / LAT) + 1);
+    for (let i = 0; i < way.lat.length; i++) {
+      curve.getPointAt(Math.min(1, (i * LAT) / Ld), P); let b = Infinity;
+      for (let j = 0; j < lanePts.length; j += 2) b = Math.min(b, (P.x - lanePts[j]) ** 2 + (P.z - lanePts[j + 1]) ** 2);
+      way.lat[i] = Math.sqrt(b);
+    }
+    // (a wagon standing at the spot must be off the road, or the spot is left out)
+    if (!clearOf(way, way.park, 1, NOSE, TAIL)) return (S.ways[dir] = null);
     return (S.ways[dir] = way);
   }
   // a free spot ahead for a wagon going `dir` from u (not one it has passed), or null
@@ -406,9 +432,19 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
     }
     return Infinity;
   }
-  // off the road at a spot (pulling in, standing, pulling out): the wagons on the road don't wait behind it
-  // (off it by the whole wagon: pulling in till its tail is clear of the lane, pulling out till its team's noses come to it)
-  const offRoad = (t) => !!t.way && t.du - (t.wg ? t.wg.tail : 5) > t.way.off && t.du + (t.wg ? t.wg.nose : 7) < t.way.on;
+  // off the road at a spot (pulling in, standing, pulling out): the wagons on the road pass it instead of waiting behind
+  // it. Only where the whole of it, tailboard to the lead horses' noses, is clear of the lane, its way's middle line its
+  // own half width and TRAFFIC.beside from the lane's middle: going by where along its way it was (its middle past where
+  // the way leaves the lane, its noses short of where it comes back), a wagon held short of the lane still had its team
+  // in it, and the one coming along drove through it (the game's maker saw two merge in front of the sheriff's)
+  const offRoad = (t) => !!t.way && clearOf(t.way, t.du, t.wg ? t.wg.width / 2 : 1, t.wg ? t.wg.nose : NOSE, t.wg ? t.wg.tail : TAIL);
+  // how far along its way t can go and still be off the road (its noses short of where the way comes near the lane)
+  function clearTo(t) {
+    const w = t.way, need = (t.wg ? t.wg.width / 2 : 1) + TRAFFIC.beside, nose = (t.wg ? t.wg.nose : NOSE) + 0.3;
+    let i = Math.max(0, Math.ceil((t.du + nose) / LAT));
+    while (i < w.lat.length && w.lat[i] >= need) i++;
+    return (i - 1) * LAT - nose;
+  }
   // standing at a spot: a wagon on the road coming up behind, near enough that pulling out now would cut in front of it
   function pullOutBlocked(t) {
     const w = t.way;
@@ -459,10 +495,11 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
         t.left = true; t.until = 0; if (t.wg) t.wg.parked = false;
       }
       if (!t.left) { const left = Math.max(0, w.park - t.du); v = Math.min(v, Math.max(0.35, Math.sqrt(2 * 0.6 * left))); }
-      // (on the way back out: it stops short of the lane while something is coming along it, or just ahead)
-      else if (t.du < w.on) {
-        const edge = w.on - t.du - (t.wg ? t.wg.nose : 7);
-        if (edge > -2 && edge < TRAFFIC.join.hold && pullOutBlocked(t)) { v = Math.min(v, Math.sqrt(2 * 0.8 * Math.max(0, edge - 1))); if (v < 0.1) { t.why = 'waiting for a gap'; return 0; } }
+      // (on the way back out: while all of it is still clear of the lane it stops short of it for anything coming along
+      // it, or just ahead; once any of it is in the lane it carries on, and what comes along waits for it)
+      else if (t.du < w.on && offRoad(t)) {
+        const edge = clearTo(t) - t.du;
+        if (edge < TRAFFIC.join.hold && pullOutBlocked(t)) { v = Math.min(v, Math.sqrt(2 * 0.8 * Math.max(0, edge - 0.4))); if (v < 0.1) { t.why = 'waiting for a gap'; return 0; } }
       }
     } else if (t.stop != null && (t.dir > 0 ? t.u >= t.stop - 0.5 : t.u <= t.stop + 0.5)) {
       // a stop in the square: drive up to it, wait, drive on
@@ -503,11 +540,13 @@ export function makeTraffic({ W, scene = W.scene, animals, folk, audio = null, o
         if (Math.hypot(p.x - _a.x, p.z - _a.z) < TRAFFIC.wide) { block = Math.min(block, d); if (d < byD) { byD = d; by = p; } break; }
       }
     }
-    // the wagon in front, going the same way (not one standing off the road; and none while this one is off it)
+    // the wagon in front, going the same way (not one standing off the road; and none while this one is off it). One
+    // whose middle is ahead counts however near: two that have come to overlap part again, the one behind waiting,
+    // instead of driving on through each other as one
     if (!offRoad(t)) for (const o of T.wagons) {
       if (o === t || o.dir !== t.dir || offRoad(o)) continue;
-      const gap = (o.u - t.u) * t.dir - (o.wg ? o.wg.tail + wg.nose : 7);
-      if (gap > 0 && gap < reach + 2) block = Math.min(block, gap - 2);
+      const ahead = (o.u - t.u) * t.dir, gap = ahead - (o.wg ? o.wg.tail + wg.nose : 7);
+      if (ahead > 0 && gap < reach + 2) block = Math.min(block, gap - 2);
     }
     // stopped a while for something standing in the road (nothing else holding it up): steer round it
     if (by && byD <= block && wg.pace < 0.05 && !t.way) {

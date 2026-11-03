@@ -477,12 +477,17 @@ function inside(k) {
   const lz = 4.25, bx = -1.12, tx = -1.5, ty = 3.95, L = Math.hypot(tx - bx, ty), ang = Math.atan2(tx - bx, ty);
   for (const dz of [-0.21, 0.21]) k.board([0.06, L, 0.045], [(bx + tx) / 2, ty / 2, lz + dz], [0, 0, -ang], { long: 1, tint: vary(k, LOFTW, 0.9, 1.05), cuts: [-1, 0, 1], inside: true });
   for (let y = 0.35; y < ty - 0.1; y += 0.35) k.board([0.035, 0.035, 0.46], [bx + (tx - bx) * y / ty, y, lz], null, { long: 2, tint: vary(k, LOFTW, 0.85, 1.0), inside: true });
+  // (a walker goes round it, not between its rungs: where it is under head height. Only for a walker, as the bin's below)
+  { const x1 = bx + (tx - bx) * Math.min(1, 1.9 / ty), xa = Math.min(bx, x1) - 0.04, xb = Math.max(bx, x1) + 0.04; k.walkSolids.push({ size: [xb - xa, 1.9, 0.5], m: T((xa + xb) / 2, 0.95, lz) }); }
   // a feed bin against the right front wall: a plank box with a lid, a scoop hung on it
   const fx = 3.55, fz = D / 2 - 0.62, fw = 1.3, fd = 0.75, fh = 0.85;
   for (let j = 0; j < 4; j++) k.board([fw, 0.2, 0.035], [fx, 0.1 + j * 0.205 + 0.0, fz - fd / 2], null, { long: 0, tint: vary(k, STALLW, 0.8, 1.0), inside: true, skip: '+y-y' });
   for (const s of [-1, 1]) k.board([0.035, fh, fd], [fx + s * fw / 2, fh / 2, fz], null, { long: 2, tint: vary(k, STALLW, 0.8, 0.95), inside: true });
   for (const q of [-1, 1]) k.board([fw + 0.06, 0.035, fd / 2 + 0.03], [fx, fh + 0.03 + (q > 0 ? 0.0 : 0.0), fz + q * fd / 4], [q * 0.02, 0, 0], { long: 0, tint: vary(k, STALLW, 0.85, 1.0), inside: true });
   k.solid([fw, fh, fd], [fx, fh / 2, fz]);
+  // (for a walker its lid and all, and a little taller than its solid: at 0.85 m its top read as a porch's, stepped up on
+  // from the aisle, the walker passing through its side to stand on it)
+  k.walkSolids.push({ size: [fw + 0.1, 0.95, fd + 0.1], m: T(fx, 0.475, fz) });
   // tack on the aisle faces of the posts (under the lanterns): coiled ropes and bridles; a saddle blanket over the right
   // front stall's partition
   coil(k, [AX - 0.1, 1.45, 2.6], [-1, 0, 0]); coil(k, [-AX + 0.1, 1.5, 0], [1, 0, 0]);
