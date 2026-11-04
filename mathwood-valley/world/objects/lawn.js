@@ -103,6 +103,9 @@ export function makeLawn({ cap = 60000, shade = null, lamps = null } = {}) {   /
         #endif   // (a page drawing with a logarithmic depth buffer, as the jconra.com film does: depth as everything else writes it; three's chunk, for a perspective camera)
         #ifdef USE_FOG
         vFogDepth = -mv.z;
+        #ifdef FOG_FOOT
+        vFogFoot = iPos.y;   // (Mathwood Valley: the ground fog at the valley's ends reads how high over its foot)
+        #endif
         #endif
       }`,
     fragmentShader: `

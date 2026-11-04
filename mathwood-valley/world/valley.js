@@ -17,6 +17,10 @@
 //     out 2026-10-26: only a bridge crosses there) and the engineer's camp's room) laid over the land as made, before the town's pads (townLand, shapeLand); the ground
 //     drawn finer where their banks are too steep for the land's grid (FINE, buildFine), heightAt and meshAt reading it;
 //     nothing grows or lies on its steep banks (fineDrop); no leaves and twigs painted on a cliff
+//   - (2026-11-03) the valley's ends (objects/ends.js): one band of woods the same at both ends (the east's a copy of the
+//     west's: shapeEnds, endsCopy, and the trees', plants', lawn's and rocks' laying, the ground's own patterns), the
+//     mountains eased down toward it, a low ground fog in it (fogEnd*, in place of the bank of mist), and V.jumped for
+//     the way round; the bake keeps the land as made (ENDS_RAW)
 // The land's own code (every function landKey and pathKey read, below) is left exactly as it was: the land's bake
 // (models/town/land) is keyed by its text, so a change there and the land is worked out again at every load (slowly).
 //
@@ -80,6 +84,7 @@ import { tickGlobes } from './objects/valehexGlobe.js';
 import { stateOutline } from './objects/stateMap.js';
 import { makeLawn } from './objects/lawn.js';
 import { KIND_INFO, LIT_SOFTEN, GROW_DEFAULTS, FAMILY_DEFAULTS, COVER_DEFAULTS, defaultKinds, growPlants, growPlantsSteps, lawnSpots, lawnSpotsSteps, patchAt, pickTree as pickTreeKind } from './objects/growth.js';
+import { ENDS, alias as endsAlias, canon as endsCanon, shapeEnd, floorCells, fogSeen, ENDS_FOG_GLSL } from './objects/ends.js';
 
 // DIRECTIONAL HAZE (for the time of day): three's fog is one colour; here every material's fog leans toward the sky's own
 // colour the way that pixel looks: warm toward a low sun, cool away from it, by the same amount as the sky dome
@@ -94,13 +99,14 @@ import { KIND_INFO, LIT_SOFTEN, GROW_DEFAULTS, FAMILY_DEFAULTS, COVER_DEFAULTS, 
 // fogEdge (the film's, off in the lab): the land's own edges lost in thick haze, so nobody flies off the world: past x
 // metres from the middle (along either axis) everything fades into the fog, wholly by y; z how much; w on. Each pixel's place
 // is found from its depth and its direction (fogView), so no geometry stands in the way
-// fogBank0, fogBank1, fogBankCol (Mathwood Valley): THE FOG AT THE VALLEY'S ENDS (BANK below), a bank of mist across each end:
-// its thickness rises from nothing at `a` metres out from the middle (along x: the west end below -a, the east above +a)
-// to full at `b`, and it thins out over 170 m above a height over each end's floor; how much hides a pixel is the mist's
-// thickness added up along the way from the camera to it (worked out exactly along x, the heights taken at both ends), so
-// standing in it the near ground fades in metres and from the town it is a soft wall far off. fogBank0: west a, b, east
-// a, b; fogBank1: thickness at full (per metre), the west and east tops (m), on; fogBankCol: its colour (the haze's,
-// as shown). The sky dome takes the same mist (cloudSky.js skyBank)
+// fogEnd0, fogEnd1, fogEndCol (Mathwood Valley): THE GROUND FOG AT THE VALLEY'S ENDS (objects/ends.js), a low layer on the
+// ground in the woods at each end: thickest on the ground, thinning by e every few metres up, coming in over the last
+// ~120 m before each end's band. (It replaces a bank of mist across each end, which from beside it stood up as a wall from
+// the grass to the sky.) How much hides a pixel is its thickness added up along the way from the eye to it, from how high
+// each is over the ground under it: the eye's over the ground there (fogEnd1.y, set each frame), the pixel's over its
+// thing's foot (vFogFoot: the ground's own height for the ground, the foot of a tree, a plant, a person). fogEnd0: in from
+// |x|, full by |x|, the metres it thins by e over, thickness a metre on the ground; fogEnd1: on, the ground under the eye,
+// the land's half size; fogEndCol: its colour (the haze's, as shown). The sky dome takes the same fog (cloudSky.js skyEnd)
 // THE LOW VALLEY FOG (Mathwood Valley; LOW_FOG below). The game's maker, of the old haze: "It just looks like the mountain gets
 // painted pale blue ... the fog needs to end down low so you can actually see the mountains true colors". So:
 // fogHaze: the distance haze thins with a pixel's height over the valley floor: from nothing at x metres to leaving only z
@@ -111,26 +117,13 @@ import { KIND_INFO, LIT_SOFTEN, GROW_DEFAULTS, FAMILY_DEFAULTS, COVER_DEFAULTS, 
 // the share of the fog left in town. On potato the layer's code isn't compiled at all (the haze still thins); the sky
 // dome takes the same layer (cloudSky.js skyLow), and everything with fog shares this one chunk: land, water, far trees, cut objects.
 const FOG_DIR = { view: { x: 0, y: 0, z: 1, w: 1 }, sun: { x: 0, y: 0, z: -1 }, col: { x: 0, y: 0, z: 0 }, sun3: { x: 0, y: 1, z: 0 }, glow: { x: 0, y: 0, z: 0 }, edge: { x: 650, y: 790, z: 1, w: 0 }, zen: { x: 0, y: 0, z: 0 },
-  bank0: { x: 500, y: 680, z: 540, w: 700 }, bank1: { x: 0.22, y: 30, z: 96, w: 0 }, bankCol: { x: 0.7, y: 0.78, z: 0.85 },
+  end0: { x: ENDS.fog.from, y: ENDS.fog.to, z: ENDS.fog.deep, w: ENDS.fog.thick }, end1: { x: 1, y: 0, z: ENDS.SIZE / 2, w: 0 }, endCol: { x: 0.7, y: 0.78, z: 0.85 },
   haze: { x: 30, y: 240, z: 0.12, w: 1 }, low0: { x: -10, y: 0.05, z: 1 / 16, w: 0 }, low1: { x: -15, y: -205, z: 90, w: 170 }, lowCol: { x: 0.8, y: 0.82, z: 0.84, w: 0.25 } };
 // how thick (of `thick`) by the clock: thickest round sunrise, gone by late morning, a little from dusk, building through the night
 const LOW_FOG = { thick: 0.0065, k: 1, cap: 0.93, hours: [[0, 0.45], [4, 0.8], [5.5, 1], [7, 0.9], [8.5, 0.45], [10, 0.08], [11, 0], [17, 0], [18.5, 0.08], [20, 0.3], [24, 0.45]] };
 const FOG_Q = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('fog') : null;   // (?fog=0: the old sky-coloured haze alone, to compare)
 if (FOG_Q === '0') { LOW_FOG.k = 0; FOG_DIR.haze.w = 0; }
 const lowFogAt = (h) => { const T = LOW_FOG.hours; for (let i = 1; i < T.length; i++) if (h <= T[i][0]) { const u = (h - T[i - 1][0]) / (T[i][0] - T[i - 1][0]); return T[i - 1][1] + (T[i][1] - T[i - 1][1]) * u * u * (3 - 2 * u); } return T[0][1]; };
-const FOG_BANK_GLSL = `
-  float fogBankG(float x) { float u = abs(x), a = x < 0.0 ? fogBank0.x : fogBank0.z, b = x < 0.0 ? fogBank0.y : fogBank0.w;
-    float F = u < a ? 0.0 : u < b ? (u - a) * (u - a) / (2.0 * (b - a)) : (b - a) * 0.5 + (u - b); return x < 0.0 ? -F : F; }
-  float fogBankRho(float x) { return x < 0.0 ? clamp((-x - fogBank0.x) / (fogBank0.y - fogBank0.x), 0.0, 1.0) : clamp((x - fogBank0.z) / (fogBank0.w - fogBank0.z), 0.0, 1.0); }
-  float fogBankH(float y, float x) { float top = x < 0.0 ? fogBank1.y : fogBank1.z; float k = 1.0 - smoothstep(top, top + 170.0, y); return k * k * k; }   // (cubed over a deep span: the bank is so thick that a plain ramp still read as a hard line from afar)
-  float fogBankDepth(vec3 c, vec3 p) {
-    if (fogBank1.w <= 0.0 || (c.x > -fogBank0.x && c.x < fogBank0.z && p.x > -fogBank0.x && p.x < fogBank0.z)) return 0.0;
-    float L = length(p - c), dx = p.x - c.x, side = abs(p.x) > abs(c.x) ? p.x : c.x;
-    float m = abs(dx) > 0.01 ? (fogBankG(p.x) - fogBankG(c.x)) / dx : fogBankRho(c.x);
-    float e = side < 0.0 ? -1.0 : 1.0, cx = c.x * e, t = cx >= (side < 0.0 ? fogBank0.x : fogBank0.z) ? 0.0 : clamp(((side < 0.0 ? fogBank0.x : fogBank0.z) - cx) / max(p.x * e - cx, 0.01), 0.0, 1.0);   // (the height where the ray ENTERS the bank, not the camera's: taken at the camera, a low rider saw whole mountains past the bank painted in mist, up to a hard line against the dome, which is added up properly)
-    float yq = mix(c.y, p.y, t);   // (Simpson over the stretch inside: the ray's height changes a lot in there)
-    return fogBank1.x * m * L * (fogBankH(yq, side) + 4.0 * fogBankH(0.5 * (yq + p.y), side) + fogBankH(p.y, side)) / 6.0 * fogBank1.w; }
-`;
 const FOG_LOW_GLSL = `#ifdef FOG_LOW_ON
   float fogLowDepth(vec3 c, vec3 p) {
     float hc = max(c.y - fogLow0.x - fogLow0.y * c.x, 0.0), hp = max(p.y - fogLow0.x - fogLow0.y * p.x, 0.0), a = exp(-hc * fogLow0.z), b = exp(-hp * fogLow0.z), dh = (hp - hc) * fogLow0.z;
@@ -140,10 +133,14 @@ const FOG_LOW_GLSL = `#ifdef FOG_LOW_ON
   #endif
 `;
 { const add = (u) => { u.fogView = { value: FOG_DIR.view }; u.fogSunV = { value: FOG_DIR.sun }; u.fogSunCol = { value: FOG_DIR.col }; u.fogSun3 = { value: FOG_DIR.sun3 }; u.fogGlow = { value: FOG_DIR.glow }; u.fogEdge = { value: FOG_DIR.edge }; u.fogZen = { value: FOG_DIR.zen };
-    u.fogBank0 = { value: FOG_DIR.bank0 }; u.fogBank1 = { value: FOG_DIR.bank1 }; u.fogBankCol = { value: FOG_DIR.bankCol };
+    u.fogEnd0 = { value: FOG_DIR.end0 }; u.fogEnd1 = { value: FOG_DIR.end1 }; u.fogEndCol = { value: FOG_DIR.endCol };
     u.fogHaze = { value: FOG_DIR.haze }; u.fogLow0 = { value: FOG_DIR.low0 }; u.fogLow1 = { value: FOG_DIR.low1 }; u.fogLowCol = { value: FOG_DIR.lowCol }; };
   add(THREE.UniformsLib.fog); for (const k of Object.keys(THREE.ShaderLib)) if (THREE.ShaderLib[k].uniforms && THREE.ShaderLib[k].uniforms.fogColor) add(THREE.ShaderLib[k].uniforms);
-  THREE.ShaderChunk.fog_pars_fragment += '\n#ifdef USE_FOG\nuniform vec4 fogView, fogEdge, fogBank0, fogBank1, fogHaze, fogLow0, fogLow1, fogLowCol; uniform vec3 fogSunV, fogSunCol, fogSun3, fogGlow, fogZen, fogBankCol;\n' + FOG_BANK_GLSL + FOG_LOW_GLSL + '#endif\n';
+  THREE.ShaderChunk.fog_pars_fragment += '\n#ifdef USE_FOG\nuniform vec4 fogView, fogEdge, fogEnd0, fogEnd1, fogHaze, fogLow0, fogLow1, fogLowCol; uniform vec3 fogSunV, fogSunCol, fogSun3, fogGlow, fogZen, fogEndCol; varying float vFogFoot;\n' + ENDS_FOG_GLSL + FOG_LOW_GLSL + '#endif\n';
+  // (the foot of each thing, for the ground fog at the ends: its own origin, or each copy's when drawn many times; a shader
+  // that places its own copies sets vFogFoot itself: the ground, the imposters, the lawn)
+  THREE.ShaderChunk.fog_pars_vertex += '\n#ifdef USE_FOG\n#define FOG_FOOT\nvarying float vFogFoot;\n#endif\n';
+  THREE.ShaderChunk.fog_vertex += '\n#ifdef USE_FOG\n{ vec4 fogO = vec4(0.0, 0.0, 0.0, 1.0);\n#ifdef USE_INSTANCING\nfogO = instanceMatrix * fogO;\n#endif\nvFogFoot = (modelMatrix * fogO).y; }\n#endif\n';
   const was = 'gl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor, fogFactor );';
   if (!THREE.ShaderChunk.fog_fragment.includes(was)) console.warn('valley: no fog line found; the haze stays one colour');
   THREE.ShaderChunk.fog_fragment = THREE.ShaderChunk.fog_fragment.replace(was, `vec3 fogW = cameraPosition + (vec4(vec3((gl_FragCoord.xy * fogView.xy * 2.0 - 1.0) * fogView.zw, -1.0) * vFogDepth, 0.0) * viewMatrix).xyz;   // (this pixel's place in the world)
@@ -155,9 +152,9 @@ const FOG_LOW_GLSL = `#ifdef FOG_LOW_ON
 		fogC = mix(fogColor, fogSunCol, pow(clamp(dot(fd, fogSunV) * 0.5 + 0.5, 0.0, 1.0), 3.0)) + fogGlow * (pow(sd, 5.0) * 0.333 + pow(sd, 48.0) * 0.667); }
 	if (fogEdge.w > 0.0 && fogZen.x + fogZen.y + fogZen.z > 0.0) { vec3 fogU = normalize((vec4(vec3((gl_FragCoord.xy * fogView.xy * 2.0 - 1.0) * fogView.zw, -1.0), 0.0) * viewMatrix).xyz);
 		fogC = mix(fogC, fogZen, pow(clamp(fogU.y, 0.0, 1.0), 0.55)); }   // (the edge fog's: land lost in it above the horizon takes the sky's colour there, as the dome rises to its zenith)
-	if (fogBank1.w > 0.0 && fogView.z > 0.0) {
-		float bankF = 1.0 - exp(-fogBankDepth(cameraPosition, fogW));   // (the valley's ends: the mist along the way)
-		if (bankF > 0.0) { fogC = mix(fogC, fogBankCol, bankF); fogFactor = 1.0 - (1.0 - fogFactor) * (1.0 - bankF); } }
+	if (fogEnd1.x > 0.0 && fogView.z > 0.0) {
+		float endF = 1.0 - exp(-fogEndDepth(cameraPosition, fogW, cameraPosition.y - fogEnd1.y, fogW.y - vFogFoot));   // (the valley's ends: the ground fog along the way)
+		if (endF > 0.0) { fogC = mix(fogC, fogEndCol, endF); fogFactor = 1.0 - (1.0 - fogFactor) * (1.0 - endF); } }
 	#ifdef FOG_LOW_ON
 	if (fogLow0.w > 0.0) { float lowF = min(1.0 - exp(-fogLowDepth(cameraPosition, fogW)), ${LOW_FOG.cap.toFixed(3)});   // (the low valley fog: leaning to the sky's colour that way, so a sunrise warms it on its side)
 		fogC = mix(fogC, mix(fogLowCol.rgb, fogC, 0.3), lowF); fogFactor = 1.0 - (1.0 - fogFactor) * (1.0 - lowF); }
@@ -273,7 +270,7 @@ const scene = new THREE.Scene();
 const SKY = new THREE.Color(0xa9c8e4); scene.background = SKY; scene.fog = new THREE.Fog(SKY, 150, 1400);   // the haze does its share of hiding the repeat far off
 // the sky: blue deepening overhead, clouds drifting; the water reflects the same sky (potato: plain colour)
 const sky = makeCloudSky({ horizon: SKY }); scene.add(sky.mesh);
-sky.uniforms.skyBank0.value = FOG_DIR.bank0; sky.uniforms.skyBank1.value = FOG_DIR.bank1; sky.uniforms.skyBankCol.value = FOG_DIR.bankCol; sky.uniforms.skyLow0.value = FOG_DIR.low0; sky.uniforms.skyLow1.value = FOG_DIR.low1; sky.uniforms.skyLowCol.value = FOG_DIR.lowCol;   // (the mist at the valley's ends, on the dome too)
+sky.uniforms.fogEnd0.value = FOG_DIR.end0; sky.uniforms.fogEnd1.value = FOG_DIR.end1; sky.uniforms.fogEndCol.value = FOG_DIR.endCol; sky.uniforms.skyLow0.value = FOG_DIR.low0; sky.uniforms.skyLow1.value = FOG_DIR.low1; sky.uniforms.skyLowCol.value = FOG_DIR.lowCol;   // (the ground fog at the valley's ends, on the dome too)
 sky.uniforms.cloudCover.value = 0.64; sky.uniforms.cloudSoft.value = 0.39; sky.uniforms.cloudScale.value = 850; sky.uniforms.cloudSpeed.value = 0.064;   // (Jacob's sky)
 const hemi = new THREE.HemisphereLight(0xcfe3ff, 0x6b5a44, 0.9); scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff1dc, 2.4); sun.position.set(-300, 400, -200); scene.add(sun);
@@ -676,7 +673,65 @@ function buildHeights() {
 }
 // the land as made is kept (Hland: what the bake saves); the landforms are laid over it (shapeLand), and that is kept
 // too (Hpre); the town's pads are laid on a copy of it, so moving a building puts the old ground back
-function townLand() { TOWN.Hland = Float32Array.from(Hg); shapeLand(); TOWN.Hpre = Float32Array.from(Hg); levelPads(Hg, TOWN.Hpre, TOWN.village ? TOWN.village.layout : TOWN.layout, N, SIZE, TEX); }
+function townLand() { TOWN.Hland = Float32Array.from(Hg); shapeEnds(); shapeLand(); TOWN.Hpre = Float32Array.from(Hg); levelPads(Hg, TOWN.Hpre, TOWN.village ? TOWN.village.layout : TOWN.layout, N, SIZE, TEX); }
+// (Mathwood Valley) THE VALLEY'S ENDS (objects/ends.js): one band of woods, the same at both ends. Here, on the land as
+// made (or baked), every load: the mountains beside each end eased down toward it (shapeEnd), then the east end's band
+// made a copy of the west's (its heights DY higher; its water too), the east's own land easing into the copy over
+// ENDS.blend m west of it and ENDS.blendZ m north of it; and the river, which comes in at the east band's edge, run on
+// down a short channel into the creek that feeds the lake. The land's maps, trees, plants and rocks are copied the same
+// way as they are made (landSteps and the rest: endsCopy). ENDS_RAW keeps what the bake saves: the land as made.
+const ENDC = floorCells(N, TEX), ENDS_RAW = {};
+// a grid's east band made a copy of its west band (`stride` values a cell; `add` onto the first: the heights' DY)
+function endsCopy(A, stride = 1, add = 0) {
+  const { band, di, dj } = ENDC;
+  for (let j = dj; j < N; j++) for (let i = N - band; i < N; i++) {
+    const to = (j * N + i) * stride, from = ((j - dj) * N + (i - di)) * stride;
+    for (let c = 0; c < stride; c++) A[to + c] = A[from + c] + (c === 0 ? add : 0);
+  }
+}
+// the same for a picture of the land (P x P pixels, four bytes each) and its canvas, if given
+function endsCopyPic(data, P, canvas = null) {
+  const k = P / SIZE, band = Math.round(ENDS.band * k), di = Math.round(ENDS.P * k), dj = Math.round(ENDS.Q * k);
+  for (let j = dj; j < P; j++) data.copyWithin((j * P + P - band) * 4, ((j - dj) * P + P - band - di) * 4, ((j - dj) * P + P - di) * 4);
+  if (!canvas) return;
+  const out = new ImageData(band, P - dj);
+  for (let j = dj; j < P; j++) out.data.set(data.subarray((j * P + P - band) * 4, (j * P + P) * 4), (j - dj) * band * 4);
+  canvas.getContext('2d').putImageData(out, P - band, dj);
+}
+const ENDS_LINK = { from: [ENDS.east0 + 1.5, -125 + ENDS.Q], to: [563, 430], half: 1.6 };   // (the river's way on, from the band's edge to the creek's head)
+function shapeEnds() {
+  ENDS_RAW.wd = Float32Array.from(WDEPTH); ENDS_RAW.pond = Uint8Array.from(POND); ENDS_RAW.water = MAPS.water ? Uint8Array.from(MAPS.water) : null;
+  // the mountains eased down toward the band, at both ends
+  for (let i = 0; i < N; i++) { const x = cellX(i); if (Math.abs(x) < ENDS.shape.from) continue; for (let j = 0; j < N; j++) { const k = j * N + i; Hg[k] = shapeEnd(Hg[k], x); } }
+  // the east band a copy of the west's (DY higher), and the east's own land eased into it
+  endsCopy(Hg, 1, ENDS.DY); endsCopy(WDEPTH); endsCopy(POND);
+  const { band, dj } = ENDC, i0 = N - band, nb = Math.round(ENDS.blend / TEX), nz = Math.round(ENDS.blendZ / TEX);
+  const sm = (t) => { t = Math.min(1, Math.max(0, t)); return t * t * (3 - 2 * t); };
+  for (let j = Math.max(0, dj - nz); j < N; j++) for (let i = i0 - nb; i < N; i++) {
+    if (i >= i0 && j >= dj) continue;                                     // (the copy itself)
+    const w = sm((i - (i0 - nb) + 0.5) / nb) * sm((j - (dj - nz) + 0.5) / nz); if (w <= 0) continue;
+    const k = j * N + i, t = Hg[Math.max(j, dj) * N + Math.max(i, i0)];   // (the copy's nearest edge, carried on)
+    Hg[k] += (t - Hg[k]) * w;
+  }
+  // the river's way on into the creek: a channel down from the copy's river bed to the creek's, and its water
+  { const [ax, az] = ENDS_LINK.from, [bx, bz] = ENDS_LINK.to, ha = gridAt(Hg, ax, az), hb = Math.min(gridAt(Hg, bx, bz), ha - 0.3), L = Math.hypot(bx - ax, bz - az), half = ENDS_LINK.half;
+    for (let j = 0; j < N; j++) { const z = cellX(j); if (z < Math.min(az, bz) - 14 || z > Math.max(az, bz) + 14) continue;
+      for (let i = 0; i < N; i++) { const x = cellX(i); if (x < bx - 14 || x > ENDS.east0) continue;   // (the copy itself left as it is)
+        const t = Math.min(1, Math.max(0, ((x - ax) * (bx - ax) + (z - az) * (bz - az)) / (L * L))), d = Math.hypot(ax + (bx - ax) * t - x, az + (bz - az) * t - z);
+        const bed = ha + (hb - ha) * t, k = j * N + i, h = bed + Math.max(0, d - half) * 0.9;   // (banks rising about 40 degrees from the bed)
+        if (Hg[k] > h) Hg[k] = h;
+        if (d < half + 1.2 && !POND[k]) WDEPTH[k] = Math.max(WDEPTH[k], 0.6); } }
+    if (waterCanvas && MAPS.water) {
+      const P = MAPS.WP, k = P / SIZE, px = (x) => (x + SIZE / 2) * k, g = waterCanvas.getContext('2d', { willReadFrequently: true });
+      endsCopyPic(MAPS.water, P, waterCanvas);
+      g.save(); g.lineCap = 'round'; g.strokeStyle = 'rgb(255,112,0)'; g.lineWidth = 4.2 * WATER.width * k; g.filter = 'blur(1.5px)';
+      g.save(); g.beginPath(); g.rect(0, 0, px(ENDS.east0), P); g.clip();   // (up to the copy's edge, not over it)
+      g.beginPath(); g.moveTo(px(ax + 3), px(az)); g.lineTo(px(bx), px(bz)); g.stroke(); g.restore(); g.restore();
+      const x0 = Math.floor(px(bx) - 12), y0 = Math.floor(Math.min(px(az), px(bz)) - 12), w = Math.ceil(px(ENDS.east0) - x0), h = Math.ceil(Math.abs(px(az) - px(bz)) + 24);
+      const d = g.getImageData(x0, y0, w, h).data; for (let r = 0; r < h; r++) MAPS.water.set(d.subarray(r * w * 4, (r + 1) * w * 4), ((y0 + r) * P + x0) * 4);
+      if (waterTex) waterTex.needsUpdate = true;
+    } }
+}
 // (Mathwood Valley) THE LANDFORMS (objects/landforms.js): the mill hill, the bridge crossing's level shelf and its ravine, and
 // the engineer's camp's room, laid over the land's grid. Where the ravine's banks are steeper
 // than the grid's 3 m can draw, the ground is drawn finer there (FINE, below), and heightAt reads that
@@ -881,6 +936,7 @@ function bakeShade(canopy, wide) {
     out[k * 4] = vis * 255; out[k * 4 + 1] = Math.max(0, 1 - open / 8 * 1.6) * 255;
     out[k * 4 + 2] = Math.min(1, ts) * 255; out[k * 4 + 3] = 255;
   }
+  endsCopy(out, 4);   // (the east end's band in the west's light and shade: objects/ends.js)
   if (!shadeTex) { shadeTex = new THREE.DataTexture(out, N, N, THREE.RGBAFormat); shadeTex.magFilter = shadeTex.minFilter = THREE.LinearFilter; shadeTex.generateMipmaps = false; U.shadeMap.value = shadeTex; }
   else shadeTex.image.data.set(out);
   shadeTex.needsUpdate = true;
@@ -910,6 +966,7 @@ function* sunShadeSteps(dir, budget = 3, into = null) {   // (into: the picture 
     }
     if (performance.now() - t0 > budget) { yield; t0 = performance.now(); }
   }
+  endsCopy(R); endsCopy(B);   // (the east end's band in the west's light and shade)
   const tex = into || shadeTex, d = tex.image.data; for (let k = 0; k < N * N; k++) { d[k * 4] = R[k]; d[k * 4 + 2] = B[k]; }
   tex.needsUpdate = true;
 }
@@ -942,9 +999,12 @@ function* landSteps({ light = false, pads = true } = {}) {
   // wet and dry: how far below or above its surroundings each spot is
   const wet = same ? MAPS.wet : new Float32Array(N * N), dry = same ? MAPS.dry : new Float32Array(N * N), steep = same ? MAPS.steep : new Float32Array(N * N);
   if (!same) { for (let k = 0; k < N * N; k++) { const d = Hb[k] - Hg[k]; wet[k] = Math.min(1, Math.max(0, d / LAND.wetDepth)); dry[k] = Math.min(1, Math.max(0, -d / LAND.dryHeight)); }
-    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) steep[j * N + i] = THREE.MathUtils.smoothstep(slopeAt(i, j), 0.36, 0.7); }   // bare from about 20 deg, fully by 35
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) steep[j * N + i] = THREE.MathUtils.smoothstep(slopeAt(i, j), 0.36, 0.7);   // bare from about 20 deg, fully by 35
+    endsCopy(wet); endsCopy(dry); endsCopy(steep); }   // (the east end's band the west's: objects/ends.js)
   // trees: clumps from slow noise, thinned on wet and steep ground; one candidate every 6 m
-  trees = []; const tree = new Float32Array(N * N);
+  // (Mathwood Valley) and the woods at the valley's ends: the west end's band all woods, thickening over the 90 m before
+  // it (the east end's band is its copy, below), so the way round is in among the trees
+  trees = []; const tree = new Float32Array(N * N), endWood = (x) => 0.95 * THREE.MathUtils.smoothstep(-x, ENDS.east0 - ENDS.blend, ENDS.east0);
   const clump = (x, z) => { let n = 0, a = 1, f = 1 / 230; for (let o = 0; o < 3; o++) { n += (vnoise(x * f + 40, z * f + 17) - 0.5) * a; a *= 0.5; f *= 2.2; } return n + 0.5; };
   for (let z = -SIZE / 2 + 3; z < SIZE / 2; z += 6) { yield; for (let x = -SIZE / 2 + 3; x < SIZE / 2; x += 6) {
     const jx = x + (hash(x, z) - 0.5) * 5, jz = z + (hash(z, x) - 0.5) * 5;
@@ -952,7 +1012,7 @@ function* landSteps({ light = false, pads = true } = {}) {
     // on the hills: groves up the slopes (more of them on a slope than on the flat), none past ~40 deg,
     // thinning out over the last 40 m below the treeline
     const sl = slopeAt(i, j), hill = THREE.MathUtils.smoothstep(sl, 0.15, 0.55) * LAND.hillForest;
-    const F = THREE.MathUtils.smoothstep(clump(jx, jz) + hill, 1 - LAND.forest * 0.6, 1.05 - LAND.forest * 0.6) * (1 - wet[k] * 0.9)
+    const F = Math.max(THREE.MathUtils.smoothstep(clump(jx, jz) + hill, 1 - LAND.forest * 0.6, 1.05 - LAND.forest * 0.6), jx < 0 ? endWood(jx) : 0) * (1 - wet[k] * 0.9)
       * (1 - THREE.MathUtils.smoothstep(sl, 0.75, 1.0)) * (1 - THREE.MathUtils.smoothstep(Hg[k], LAND.treeline - 40, LAND.treeline)) * (1 - TOWN.block[k]);   // (none in the town's buildings and roads)
     // (potato keeps under half of them: treeShare)
     if (waterAt(jx, jz) < 0.05 && hash(jx * 1.3, jz * 0.7) < F * 0.85 * (TS.treeShare || 1)) { trees.push([jx, heightAt(jx, jz), jz, 0.8 + hash(jx, jz * 2) * 0.5]); tree[k] = 1; }
@@ -969,6 +1029,10 @@ function* landSteps({ light = false, pads = true } = {}) {
       if (hash(t[0] * 0.37 + 5.1, t[2] * 0.53 - 2.7) < LAND.giants * THREE.MathUtils.smoothstep(d, 0.7, 0.95)) t[3] *= LAND.giantSize;
     }
   }
+  // (Mathwood Valley) the east end's band: the west band's trees, moved there as they stand, sizes and all; the tree map too
+  trees = trees.filter((t) => !endsAlias(t[0], t[2]));
+  for (let n = trees.length - 1; n >= 0; n--) { const t = trees[n]; if (t[0] < -ENDS.east0 && t[2] + ENDS.Q < SIZE / 2) trees.push([t[0] + ENDS.P, t[1] + ENDS.DY, t[2] + ENDS.Q, t[3]]); }
+  endsCopy(tree);
   // (Mathwood Valley) the trees placed by hand (the planting's, and the town's own) count as wood too: the ground under
   // them darkens and takes the shade and the shade plants, as it does under the land's own trees. (Marked after the
   // sizing above, so the land's own trees keep the sizes they had: a placed tree doesn't make its neighbours giants.)
@@ -976,11 +1040,13 @@ function* landSteps({ light = false, pads = true } = {}) {
   for (const it of layout.items) if (it.type === 'tree') markTree(tree, it.x, it.z);
   const canopy = blur(tree, 1), wide = blur(tree, LAND.shadeReach);
   for (let k = 0; k < N * N; k++) canopy[k] = Math.min(1, canopy[k] * 3.2);
+  endsCopy(canopy); endsCopy(wide);
   MAPS.wet = wet; MAPS.dry = dry; MAPS.canopy = canopy; MAPS.wide = wide; MAPS.steep = steep;
   yield;
   // where the water ran (gullies) and where it laid soil down (fans), from the erosion, softened
   if (!light || !MAPS.shore) {
     if (!MAPS.gullyB) ({ gully: MAPS.gullyB, fan: MAPS.fanB } = erosionBytes());   // (baked: the bake's)
+    if (ENDS_RAW.gullyOf !== MAPS.gullyB) { ENDS_RAW.gullyOf = MAPS.gullyB; ENDS_RAW.gully = Uint8Array.from(MAPS.gullyB); ENDS_RAW.fan = Uint8Array.from(MAPS.fanB); endsCopy(MAPS.gullyB); endsCopy(MAPS.fanB); }   // (the east end's band the west's; the bake keeps them as made)
     // the shore: a band of stones round every pond and stream (and under the shallows), `shore` cells wide
     const wetCells = new Float32Array(N * N); for (let q = 0; q < N * N; q++) wetCells[q] = WDEPTH[q] > 0 ? 1 : 0;
     MAPS.shore = LAND.shore > 0 ? blur(wetCells, LAND.shore) : wetCells.fill(0);
@@ -988,7 +1054,8 @@ function* landSteps({ light = false, pads = true } = {}) {
     const rim = MAPS.rim = new Float32Array(N * N);
     for (let j = 2; j < N - 2; j++) for (let i = 2; i < N - 2; i++) { const k = j * N + i; if (!POND[k]) continue; let m = 9;
       for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) if (!POND[k + dj * N + di]) m = Math.min(m, Math.hypot(di, dj));
-      rim[k] = m <= 1 ? 1 : m <= 1.5 ? 0.6 : m <= 2 ? 0.25 : 0; } }
+      rim[k] = m <= 1 ? 1 : m <= 1.5 ? 0.6 : m <= 2 ? 0.25 : 0; }
+    endsCopy(MAPS.shore); endsCopy(rim); }
   const er = MAPS.gullyB ? { gully: MAPS.gullyB, fan: MAPS.fanB } : erosionBytes(), shore = MAPS.shore, dataB = new Uint8Array(N * N * 4);   // (none: the land shaped again meanwhile, by the rain)
   for (let q = 0; q < N * N; q++) {
     const sh = Math.min(1, Math.max(0, wide[q] * 2.2 - canopy[q] * 0.8)), open = 1 - Math.min(1, canopy[q] + sh);
@@ -1011,6 +1078,7 @@ function* landSteps({ light = false, pads = true } = {}) {
   if (!light) { const P = 2048;
     if (bp) { pathCanvas = bp.canvas; MAPS.path = bp.data; }            // (baked: its nearness already in G)
     else { MAPS.path = pathCanvas.getContext('2d').getImageData(0, 0, P, P).data; nearFromCore(MAPS.path, P); }
+    ENDS_RAW.path = Uint8Array.from(MAPS.path); endsCopyPic(MAPS.path, P, pathCanvas);   // (the east end's band the west's; the bake keeps them as drawn)
     MAPS.P = P; composePathRoad(); PAVE.job = null; yield* buildPavingSteps(); }   // (the paving in steps too: laid all at once by buildLand)
   yield;
   COVER.cache = {}; LAWN_GO.cache = {};               // the land changed: the remembered tiles are stale
@@ -1074,6 +1142,8 @@ const U = {
   avgGround: { value: new THREE.Color(0x6b8a3a) }, avgDry: { value: new THREE.Color(0x8a8a4a) }, avgLush: { value: new THREE.Color(0x5b7a2a) }, avgForest: { value: new THREE.Color(0x4a4a2a) }, avgWet: { value: new THREE.Color(0x4a3a2a) }, avgPath: { value: new THREE.Color(0x6a5238) }, avgSteep: { value: new THREE.Color(0x7a7a7a) }, avgShore: { value: new THREE.Color(0x77706a) }, shoreStr: { value: 1 }, layShore: { value: null },
   layDry: { value: null }, layLush: { value: null }, layForest: { value: null }, layPath: { value: null }, laySteep: { value: null },
   spotAmt: { value: 1.6 }, spotSize: { value: 0.8 }, spotSize2: { value: 8 }, spotReach: { value: 0.3 }, mixSharp: { value: 4.5 }, mixHeight: { value: 1.4 }, mixBreak: { value: 1 }, mixBreakSize: { value: 13.7 }, steepFrom: { value: 0.265 },
+  // (Mathwood Valley) the east end's band a copy of the west's: its ground's own patterns too (groundPattern in the shader)
+  endMove: { value: new THREE.Vector4(ENDS.P, ENDS.DY, ENDS.Q, ENDS.east0) }, endBand: { value: new THREE.Vector4(ENDS.copyZ0, ENDS.blend, ENDS.blendZ, 1) },
 };
 for (const [k, v] of Object.entries(TS.u)) if (U[k]) U[k].value = v;
 for (const [k, on] of Object.entries(TS.checks)) if (U[k]) U[k].value = on ? 1 : 0;   // (the tier's switches: the shader's)
@@ -1090,7 +1160,8 @@ const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95, m
 mat.defines = {}; if (GL2) mat.defines.HEX_GRAD = ''; if (TS.lite) mat.defines.LITE = '';        // WebGL 2 can give each turned read its own true gradients (no seams); WebGL 1 lets the blend hide them
 mat.onBeforeCompile = (sh) => {
   Object.assign(sh.uniforms, U, sky.uniforms); setTimeout(() => { mat.userData.fs = sh.fragmentShader; });   // (kept for the test rigs)
-  sh.vertexShader = 'varying vec3 vW; varying vec3 vWN;\n' + sh.vertexShader.replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvW = (modelMatrix * vec4(transformed, 1.0)).xyz; vWN = normalize(mat3(modelMatrix) * objectNormal);');
+  sh.vertexShader = 'varying vec3 vW; varying vec3 vWN;\n' + sh.vertexShader.replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvW = (modelMatrix * vec4(transformed, 1.0)).xyz; vWN = normalize(mat3(modelMatrix) * objectNormal);')
+    .replace('#include <fog_vertex>', '#include <fog_vertex>\n#ifdef FOG_FOOT\nvFogFoot = vW.y;\n#endif');   // (the ground is its own foot: the ground fog at the ends reads its height over the ground as nothing)
   sh.fragmentShader = SKY_GLSL + STONE_GLSL + `
     uniform float tile, split; uniform vec2 res;   // (the base ground picture is the lush layer, layLush: a real GPU allows 16 pictures a shader)
     uniform float hexOn, hexSize, hexRot, hexSharp, hexBright, macroOn, macroStr, macroSize, macroHue, farOn, farFrom, grid;
@@ -1102,10 +1173,21 @@ mat.onBeforeCompile = (sh) => {
     uniform vec3 meadowTint;   // (Mathwood Valley's look: the open meadow's own ground and its dry grass tinted; white: as the lab is)
     varying vec3 vWN;
     varying vec3 vW;
+    uniform vec4 endMove, endBand;
     float h1(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
     vec2 h2(vec2 p) { return fract(sin(vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)))) * 43758.5453); }
     float vn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
       return mix(mix(h1(i), h1(i + vec2(1, 0)), f.x), mix(h1(i + vec2(0, 1)), h1(i + vec2(1, 1)), f.x), f.y); }
+    // (Mathwood Valley) THE GROUND'S OWN PATTERNS at the valley's ends (objects/ends.js): the east end's band is a copy of
+    // the west's, so there its patterns (the pictures' tiling, the noise, the leaves and twigs) are the west band's own spot's
+    // (endMove: the move east, P, DY, Q, and where the band starts); in the stretch where the east's own land eases into
+    // the copy (endBand.y m west of it, endBand.z m north of it) a patchwork of the two, more of the copy the nearer. The
+    // land's maps are still read where the ground really is (vW)
+    vec3 groundPattern(vec3 w) {
+      if (endBand.w <= 0.0 || w.x < endMove.w - endBand.y || w.z < endBand.x - endBand.z) return w;
+      float k = smoothstep(endMove.w - endBand.y, endMove.w, w.x) * smoothstep(endBand.x - endBand.z, endBand.x, w.z);
+      if (k < 1.0 && vn(w.xz / 3.7 + 17.0) * 0.98 + 0.01 > k) return w;
+      return w - endMove.xyz; }
     #ifdef LITE
     float fbm(vec2 p) { return 0.06 + 0.88 * vn(p); }   // one read, about the same spread
     #else
@@ -1219,11 +1301,12 @@ mat.onBeforeCompile = (sh) => {
       return c1 * W.x + c2 * W.y + c3 * W.z;
     }
   ` + sh.fragmentShader.replace('#include <map_fragment>', `
-    vec2 uv = vW.xz / tile;
+    vec3 vP = groundPattern(vW);   // (the ground's own patterns: at the east end's band, the west's)
+    vec2 uv = vP.xz / tile;
     bool plain = gl_FragCoord.x < split * res.x;
     vec3 g;
     #ifdef LITE
-    g = avgLush * (0.9 + 0.2 * vn(vW.xz / 5.0));                       // flat colour, a little mottled
+    g = avgLush * (0.9 + 0.2 * vn(vP.xz / 5.0));                       // flat colour, a little mottled
     #else
     if (plain || hexOn < 0.5) g = texture2D(layLush, uv).rgb; else g = hexTile(uv);
     #endif
@@ -1232,8 +1315,8 @@ mat.onBeforeCompile = (sh) => {
       // the land's maps here, each edge roughened by a little noise
       vec2 luv = vW.xz / landSize + 0.5;
       vec4 m = texture2D(maskA, luv); vec4 pr = texture2D(pathRoad, luv); vec2 pth = pr.rg; vec4 er = texture2D(maskB, luv); float wAt = texture2D(waterMap, luv).r;
-      float bn = (fbm(vW.xz / mixBreakSize) - 0.5) * mixBreak, bn2 = (fbm(vW.xz / (mixBreakSize * 3.1) + 13.0) - 0.5) * mixBreak;
-      float steep = smoothstep(steepFrom, steepFrom + 0.12, 1.0 - vWN.y + (fbm(vW.xz / 6.0) - 0.5) * 0.08);   // patchy toward its edge
+      float bn = (fbm(vP.xz / mixBreakSize) - 0.5) * mixBreak, bn2 = (fbm(vP.xz / (mixBreakSize * 3.1) + 13.0) - 0.5) * mixBreak;
+      float steep = smoothstep(steepFrom, steepFrom + 0.12, 1.0 - vWN.y + (fbm(vP.xz / 6.0) - 0.5) * 0.08);   // patchy toward its edge
       float wWet = clamp(m.r * 1.5 + bn, 0.0, 1.0), wMud = clamp(m.r * 2.2 - 1.3 + bn, 0.0, 1.0), wDry = clamp(m.g * 1.3 - 0.15 - m.b - m.a * 0.6 + bn2, 0.0, 1.0);
       float wLush = clamp(m.a * 1.4 + bn, 0.0, 1.0), wForest = clamp(m.b * 1.3 + bn2 * 0.7, 0.0, 1.0);
       float dryLand = 1.0 - smoothstep(0.25, 0.45, wAt);                      // never paint path over water
@@ -1243,20 +1326,20 @@ mat.onBeforeCompile = (sh) => {
       // path, 1 on the dirt down to 0 twelve metres out; spotReach of that, wandering). The same in every tier.
       float wSpot = 0.0, spotTone = 1.0;
       if (pth.g > 0.004 && spotAmt > 0.0) {
-        float slow = vn(vW.xz / 28.0 + 3.1);                                  // (the stretches: tens of metres)
+        float slow = vn(vP.xz / 28.0 + 3.1);                                  // (the stretches: tens of metres)
         float reach = spotReach * (0.55 + 0.9 * slow);
         float pNear = clamp((pth.g - 1.0 + reach) / max(reach, 0.01), 0.0, 1.0);
-        vec2 sp = mat2(0.8, -0.6, 0.6, 0.8) * vW.xz / spotSize;              // (turned, so the noise's grid never lines up with the world)
+        vec2 sp = mat2(0.8, -0.6, 0.6, 0.8) * vP.xz / spotSize;              // (turned, so the noise's grid never lines up with the world)
         float sn = 0.6 * vn(sp + 41.7) + 0.28 * vn(mat2(0.6, 0.8, -0.8, 0.6) * sp * 2.3 + 5.3) + 0.12 * vn(sp * 5.1 + 9.9);   // lumps with ragged edges
         sn = smoothstep(0.27, 0.69, sn);                                      // (spread by its real range, about 0..1: the share above a cut is then about 1 - cut)
         if (spotSize2 > 0.0) {                                                // a second size: big patches among the small spots (either makes dirt)
-          vec2 sq = mat2(0.6, 0.8, -0.8, 0.6) * vW.xz / spotSize2;
+          vec2 sq = mat2(0.6, 0.8, -0.8, 0.6) * vP.xz / spotSize2;
           float sn2 = 0.6 * vn(sq + 17.3) + 0.28 * vn(mat2(0.8, -0.6, 0.6, 0.8) * sq * 2.3 + 2.9) + 0.12 * vn(sq * 5.1 + 3.7);
           sn = max(sn, smoothstep(0.27, 0.69, sn2));
         }
         float share = min(0.7, spotAmt * (0.45 * pNear * pNear * pNear + 0.25 * pNear) * mix(0.2, 1.3, slow));   // how much of the ground is dirt here: thick at the edge, a long sparse tail of lone spots
         wSpot = smoothstep(1.0 - share - 0.08, 1.0 - share + 0.08, sn) * dryLand * (1.0 - steep * 0.8);   // (a soft edge either side of the cut, so lone spots are whole; slopes keep their own scrub)
-        spotTone = 0.9 + 0.2 * vn(vW.xz / 1.7);
+        spotTone = 0.9 + 0.2 * vn(vP.xz / 1.7);
       }
       #ifdef LITE
       vec3 dryC = avgDry, lushC = avgLush, forC = avgForest, wetC = avgWet, pathC = avgPath, shoreC = avgShore;
@@ -1270,9 +1353,9 @@ mat.onBeforeCompile = (sh) => {
       #ifdef LITE
       vec3 steepC = avgSteep;
       #else
-      vec3 steepC = lay3(laySteep, vW, normalize(vWN), tile * 0.8);
+      vec3 steepC = lay3(laySteep, vP, normalize(vWN), tile * 0.8);
       #endif
-      float band = vW.y / strataSize + (fbm(vW.xz / 30.0) - 0.5) * 2.5;
+      float band = vP.y / strataSize + (fbm(vP.xz / 30.0) - 0.5) * 2.5;
       float layer = fbm(vec2(band * 1.7, 3.1)), fine = vn(vec2(band * 9.0, 1.3));
       steepC *= mix(vec3(1.0), mix(vec3(0.78, 0.74, 0.7), vec3(1.12, 1.05, 0.95), layer) * (0.85 + 0.3 * fine), strataStr);
       g = over(g, dryC * meadowTint, wDry);
@@ -1285,15 +1368,15 @@ mat.onBeforeCompile = (sh) => {
       g = over(g, mix(pathC, mix(pathC, dryC, 0.4), wDry) * spotTone, wSpot * (1.0 - wForest * 0.6));   // dirt spots round the paths (paler on dry ground)
       g = over(g, pathC, wPath);
       g = over(g, shoreC, clamp(er.a * shoreStr + bn * 0.8, 0.0, 1.0) * (1.0 - smoothstep(0.3, 0.6, 1.0 - vWN.y)));   // stones round the water's edge
-      vec3 scrubC = mix(lushC * slopeTint, pathC * vec3(0.95, 0.9, 0.85), smoothstep(0.62, 0.8, vn(vW.xz / 7.0)) * 0.8);   // slopes: dark green scrub, bare dirt showing in patches
+      vec3 scrubC = mix(lushC * slopeTint, pathC * vec3(0.95, 0.9, 0.85), smoothstep(0.62, 0.8, vn(vP.xz / 7.0)) * 0.8);   // slopes: dark green scrub, bare dirt showing in patches
       g = over(g, scrubC, steep);
-      float rock = smoothstep(rockFrom, rockFrom + 0.1, 1.0 - vWN.y + (fbm(vW.xz / 9.0) - 0.5) * 0.1);
+      float rock = smoothstep(rockFrom, rockFrom + 0.1, 1.0 - vWN.y + (fbm(vP.xz / 9.0) - 0.5) * 0.1);
       g = over(g, steepC, rock);                                                 // cliffs: rock in strata
       // FAR COVER: past where the real plants stop, the ground carries clumps and specks where they
       // would grow (from the same map), so the plants thin into it instead of ending at a line
       float far = smoothstep(coverR * 0.7, coverR * 1.05, length(vW.xz - coverAt.xz));
       if (far > 0.001 && coverFar > 0.5) {
-        float clump = fbm(vW.xz / 7.0), speck = vn(vW.xz / 0.9) * 0.6 + vn(vW.xz / 0.35 + 7.0) * 0.4;
+        float clump = fbm(vP.xz / 7.0), speck = vn(vP.xz / 0.9) * 0.6 + vn(vP.xz / 0.35 + 7.0) * 0.4;
         // what grows there (the cover map: the winning patch kind's colour, the lawn's on bare ground, alpha how
         // thick), in clumps and specks, so the far ground carries on the near plants' patches
         vec4 cv = texture2D(coverMap, luv);
@@ -1306,7 +1389,7 @@ mat.onBeforeCompile = (sh) => {
       // THE TOWN'S ROADS: where the road picture says (B, A: either brush), the paving's stones (PAVE, stones.js),
       // each its own shade and grain, dark soil and moss in the gaps; a stone near enough to stand in 3D leaves
       // its spot as gap (the 3D stone covers it)
-      { float rn = (vn(vW.xz / 0.8) - 0.5) * 0.35;
+      { float rn = (vn(vP.xz / 0.8) - 0.5) * 0.35;
         float roadAny = max(pr.b, pr.a);
         gRoad = smoothstep(0.3, 0.65, roadAny + rn);
         if (roadAny > 0.004) {   // (a little past the road picture's own edge: the dirt edging follows the stones, not that line)
@@ -1362,10 +1445,10 @@ mat.onBeforeCompile = (sh) => {
       }
       if (stampOn > 0.5) {
         float stD = length(vW - cameraPosition), fade = stD < stampFar ? (1.0 - gRoad) * (1.0 - smoothstep(0.3, 0.45, 1.0 - normalize(vWN).y)) : 0.0;   // (no leaves and twigs on the roads, nor on a cliff, where they'd be drawn down its face in streaks; each fades out by itself, in stamps)
-        if (fade > 0.001) g = mix(g, stamps(g, vW.xz, stD), fade);
+        if (fade > 0.001) g = mix(g, stamps(g, vP.xz, stD), fade);
       }
       if (macroOn > 0.5) {
-        float n = fbm(vW.xz / macroSize), n2 = fbm(vW.xz / (macroSize * 1.7) + 31.0);
+        float n = fbm(vP.xz / macroSize), n2 = fbm(vP.xz / (macroSize * 1.7) + 31.0);
         vec3 tint = mix(vec3(1.12, 1.02, 0.78), vec3(0.82, 1.06, 0.84), smoothstep(0.3, 0.7, n2));   // dry and yellow to green and lush
         g *= mix(vec3(1.0), tint, macroHue * macroStr) * mix(1.0, 0.62 + 0.76 * n, macroStr);
       }
@@ -1373,7 +1456,7 @@ mat.onBeforeCompile = (sh) => {
       vec3 sd = texture2D(shadeMap, vW.xz / landSize + 0.5).rgb;
       // inside the real shadows' square they throw the trees' shade; toward its edge the baked shade takes over, over a round,
       // ragged band (the trees and plants ease theirs over the same band, each its own start: Forest's shadowEdge)
-      float baked = shadowRange > 0.0 ? smoothstep(edgeFrom, edgeTo, length(vW.xz - shadowAt.xz) / max(shadowRange, 1.0) + vn(vW.xz / 6.0) * edgeJitter) : 1.0; gShadowFade = baked;
+      float baked = shadowRange > 0.0 ? smoothstep(edgeFrom, edgeTo, length(vW.xz - shadowAt.xz) / max(shadowRange, 1.0) + vn(vP.xz / 6.0) * edgeJitter) : 1.0; gShadowFade = baked;
       // the hill's shadow and the trees' (past the real shadows) are sun shadows: they take the sun's light only (gSun, in the
       // light loop below), so a valley the sun has left is lit by the sky, bluish at dusk, not a dimmer orange. The hollows,
       // and some of the trees' shade, darken it all (the sky sees less of it there)
@@ -1385,7 +1468,7 @@ mat.onBeforeCompile = (sh) => {
     // glints and sky reflection laid on after the lighting
     if (!plain && waterOn > 0.5 && view < 0.5) {
       vec2 wuv = vW.xz / landSize + 0.5; vec3 wd = texture2D(waterMap, wuv).rgb;
-      float edge = (fbm(vW.xz / 1.5) - 0.5) * 0.35;
+      float edge = (fbm(vP.xz / 1.5) - 0.5) * 0.35;
       gWater = smoothstep(0.35, 0.6, wd.r + edge);
       // water lies flat: on ground that tilts (a channel's walls) it goes, except where the froth says
       // the stream itself is falling steeply (falls and cascades)
@@ -1396,10 +1479,10 @@ mat.onBeforeCompile = (sh) => {
         // WHITE WATER: where a river falls steeply, froth in streaks that run downhill
         gFoam = smoothstep(0.1, 0.6, wd.b) * wFroth * gWater;
         if (gFoam > 0.0) {
-          float st = vn(vec2((vW.x + vW.z) * 0.9, vW.y * 0.8 + time * 3.0)) * 0.6 + vn(vec2((vW.x - vW.z) * 2.1, vW.y * 2.0 + time * 5.0)) * 0.4;
+          float st = vn(vec2((vP.x + vP.z) * 0.9, vP.y * 0.8 + time * 3.0)) * 0.6 + vn(vec2((vP.x - vP.z) * 2.1, vP.y * 2.0 + time * 5.0)) * 0.4;
           g = mix(g, vec3(0.86, 0.92, 0.95) * (0.78 + 0.32 * st) * gLit, clamp(gFoam * (0.6 + 0.5 * st), 0.0, 1.0));
         }
-        vec2 p = vW.xz / wWave, t = vec2(time * wSpeed, time * wSpeed * 0.7) * wWaveOn;
+        vec2 p = vP.xz / wWave, t = vec2(time * wSpeed, time * wSpeed * 0.7) * wWaveOn;
         float e = 0.15, hA = vn(p + t) + 0.5 * vn(p * 2.3 - t * 1.3);
         float hX = vn(p + t + vec2(e, 0.0)) + 0.5 * vn((p + vec2(e, 0.0)) * 2.3 - t * 1.3), hZ = vn(p + t + vec2(0.0, e)) + 0.5 * vn((p + vec2(0.0, e)) * 2.3 - t * 1.3);
         gWaterN = normalize(vec3(-(hX - hA) / e * 0.12 * wWaveOn, 1.0, -(hZ - hA) / e * 0.12 * wWaveOn));
@@ -1452,10 +1535,12 @@ function meshAt(x, z) {
 function treeFoot(x, z, r = 0) { const d = r > 0 ? r : TREE_FOOT; let y = meshAt(x, z); for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; y = Math.min(y, meshAt(x + Math.cos(a) * d, z + Math.sin(a) * d)); } return y; }
 // STRIPS KEPT CLEAR OF TREES: along a land path stroke where x > `from` (each tree whose crown, CROWN_M a metre of its
 // scale, would reach within `half` m of the path's line is left out). Mathwood Valley's road runs out along landpath1 into
-// the east end's mist and on to the way round (src/wagon.js ROAD.through, src/world.js W.wrap): its last stretch ran under
-// the woods' crowns, and a rider coming out of the mist there came out with the camera in the leaves
+// the woods at the east end (src/wagon.js ROAD.through): its last stretch ran under the woods' crowns, and a rider coming
+// round there came out with the camera in the leaves
 // (makeValley's treeClear adds the game's own strips, as plain lines)
-const TREE_CLEAR = [{ stroke: 'landpath1', from: 580, half: 4 }];
+// (and through the woods at the valley's ends, where the road runs on through the west end's band: `to`, where x < to;
+// the east end's band is its copy, objects/ends.js, so the same strip is kept clear there)
+const TREE_CLEAR = [{ stroke: 'landpath1', from: 580, half: 4 }, { stroke: 'landpath4', to: -600, half: 4 }];
 const CROWN_M = 5;
 let treeClearSegs = null;
 function treeCleared(x, z, s = 1) {
@@ -1464,7 +1549,7 @@ function treeCleared(x, z, s = 1) {
     const list = (PLANTING_FIRST && PLANTING_FIRST.strokes) || [];
     for (const c of TREE_CLEAR) {
       const st = list.find((q) => q.id === c.stroke); if (!st || !st.pts) continue;
-      const pts = st.pts.filter((q) => q[0] > c.from);
+      const pts = st.pts.filter((q) => (c.from == null || q[0] > c.from) && (c.to == null || q[0] < c.to));
       for (let i = 1; i < pts.length; i++) treeClearSegs.push([pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], c.half]);
     }
     // (and the game's own strips: [{ ax, az, bx, bz, half }], e.g. the way into each back-woods camp, makeValley's treeClear)
@@ -1518,7 +1603,12 @@ function placeTrees() {
     ? { ...sp, soften: LEAF.soften, shape: { lump: LEAF.lump, mix: LEAF.mix, dark: LEAF.dark, tip: LEAF.tip, olive: LEAF.olive, branchDark: LEAF.branchDark, under: LEAF.under, glow: LEAF.glow } } : { ...sp }));
   FOREST.rebake = false; freshPicks(species);
   treeForest = new Forest(renderer, scene, { species, lamps: LAMPU, shadows: SHADOW.on, detail: FOREST.detail, grid: FOREST.grid, cell: FOREST.cell, imposterAt: FOREST.imposterAt, band: FOREST.band, ahead: FOREST.ahead, spread: FOREST.spread, sunDir: SUN_DIR, heightAt: treeFoot, nearCap: 600, shadowEdge: { at: U.shadowAt, range: U.shadowRange, from: U.edgeFrom, to: U.edgeTo, shade: U.edgeShade, jitter: U.edgeJitter },
-    fixed: [...trees.filter(([x, , z, s]) => keepTree(x, z, s)).map(([x, , z, s]) => { const [sp, tint] = pickTree(x, z, species); return { x, z, sp, scale: s, tint: species[sp].tint === false ? undefined : tint }; }), ...townTrees(species), ...plantedTrees(species)] });
+    fixed: [...trees.filter(([x, , z, s]) => { const [cx, cz] = endsCanon(x, z); return keepTree(cx, cz, s); }).map(([x, , z, s]) => {
+      // (the valley's ends' band, both ends: each tree's kind, colour and turn from the west band's spot it stands for, so
+      // the two ends' copies are the same tree; elsewhere the forest turns each by its place in the list)
+      const [cx, cz] = endsCanon(x, z), sp_ = pickTree(cx, cz, species), sp = sp_[0], band = Math.abs(x) >= ENDS.east0;
+      const tint = species[sp].tint === false ? (band ? new THREE.Color(1, 1, 1).multiplyScalar(0.85 + hash(cx * 0.61 + 3.3, cz * 0.47 - 1.9) * 0.3) : undefined) : sp_[1];
+      return band ? { x, z, sp, scale: s, tint, yaw: hash(cx * 0.37 + 11.1, cz * 0.71 - 3.7) * Math.PI * 2 } : { x, z, sp, scale: s, tint }; }), ...townTrees(species), ...plantedTrees(species)] });
   treeForest.group.visible = $('treesOn') ? $('treesOn').checked : true;
   if ($('landInfo')) $('landInfo').textContent = `${trees.length.toLocaleString()} trees`;
 }
@@ -1621,16 +1711,17 @@ function bakeCoverMap() {
     col.copy(kc[a.kind]).lerp(lawnC, a.bare * (GROW.lawn ?? 1)); const thick = a.thick * (1 - a.bare * (1 - (GROW.lawn ?? 1) * 0.7));
     const c = col.clone().convertLinearToSRGB(); data[o] = c.r * 255; data[o + 1] = c.g * 255; data[o + 2] = c.b * 255; data[o + 3] = Math.min(1, thick) * 255;
   }
+  if (M === N) endsCopy(data, 4);   // (the east end's band painted as the west's)
   if (!coverTex) { coverTex = new THREE.DataTexture(data, M, M, THREE.RGBAFormat); coverTex.colorSpace = THREE.SRGBColorSpace; coverTex.magFilter = coverTex.minFilter = THREE.LinearFilter; U.coverMap.value = coverTex; }
   else coverTex.image.data.set(data);
   coverTex.needsUpdate = true;
 }
 function placeLawn() {
   const at = lawnCentre(), cam = lawnEye(), R = lawnRadius(), thin = lawnThin(cam, R);   // (laid at once, grown: Mathwood Valley's LAWN_GO)
-  const spots = withLawnPlanting(LAWN.radius > 0 ? lawnSpots({ ground: coverGround, at, radius: R, density: LAWN.density, grow: GROW, spread: FOREST.spread, cache: LAWN_GO.cache, thin }) : [], at, R, thin);
+  const spots = withLawnPlanting(LAWN.radius > 0 ? lawnSpots({ ground: coverGround, at, radius: R, density: LAWN.density, grow: GROW, spread: FOREST.spread, cache: LAWN_GO.cache, thin, alias: endsAlias }) : [], at, R, thin);
   LAWN_GO.job = null; LAWN_GO.at.copy(at); LAWN_GO.cam.set(cam.x, 0, cam.z); LAWN_GO.born = new Map();
   for (const t of spots) { t.y = heightAt(t.x, t.z); t.born = -1e6; LAWN_GO.born.set(lawnKey(t.x, t.z), -1e6); }
-  LAWN.count = lawn.set(spots);
+  LAWN.count = lawn.set(spots); LAWN_GO.spots = spots;
   const a = U.layLush.value && U.layLush.value.userData.avg, base = (a ? a.clone() : new THREE.Color(0.25, 0.33, 0.1)).multiply(U.lushTint.value);
   lawn.colours(base.clone().multiplyScalar(0.8 * LAWN_DARK), base.clone().multiply(new THREE.Color(1.15, 1.12, 0.85)).multiplyScalar(LAWN_DARK));   // darker at the root, lighter and yellower at the tips
 }
@@ -1727,14 +1818,14 @@ function lawnThin(cam, R) {
 // new ones rise from the moment they go in
 function* lawnSteps(at, cam) {
   const R = lawnRadius(), t0 = performance.now();
-  const spots = withLawnPlanting(yield* lawnSpotsSteps({ ground: coverGround, at, radius: R, density: LAWN.density, grow: GROW, budget: 1, spread: FOREST.spread, cache: LAWN_GO.cache, thin: lawnThin(cam, R) }), at, R, lawnThin(cam, R));
+  const spots = withLawnPlanting(yield* lawnSpotsSteps({ ground: coverGround, at, radius: R, density: LAWN.density, grow: GROW, budget: 1, spread: FOREST.spread, cache: LAWN_GO.cache, thin: lawnThin(cam, R), alias: endsAlias }), at, R, lawnThin(cam, R));
   const old = LAWN_GO.born, born = new Map(), fresh = [];
   for (let i = 0; i < spots.length; i++) { const t = spots[i], k = lawnKey(t.x, t.z), b = old.get(k);
     t.y = heightAt(t.x, t.z); if (b === undefined) fresh.push(t); else { t.born = b; born.set(k, b); }
     if ((i & 1023) === 0) yield; }
   yield;
   const now = lawn.uniforms.lawnTime.value; for (const t of fresh) { t.born = now; born.set(lawnKey(t.x, t.z), now); }
-  LAWN_GO.born = born; LAWN.count = lawn.set(spots); LAWN_GO.lays++; LAWN_GO.ms = performance.now() - t0;
+  LAWN_GO.born = born; LAWN.count = lawn.set(spots); LAWN_GO.spots = spots; LAWN_GO.lays++; LAWN_GO.ms = performance.now() - t0;
 }
 function lawnFrame(dt) {
   lawn.uniforms.lawnTime.value += Math.min(dt, 0.1); IMPOSTER_CLOCK.value += Math.min(dt, 0.1);   // (the clocks the lawn and the plants rise in by)
@@ -2039,6 +2130,10 @@ function* placeStonesSteps() {
     per[Math.floor(r(t, 51.7) * 4) % 4].push([x, heightAt(x, z) - size * 0.22, z, size, r(t, 53.3) * 6.283, r(t, 57.1)]);
     placed++;
   }
+  // (Mathwood Valley) the east end's band: the west band's stones, moved there as they lie (objects/ends.js)
+  for (let v = 0; v < per.length; v++) { const own = per[v].filter((s) => !endsAlias(s[0], s[2]));
+    for (const s of per[v]) if (s[0] < -ENDS.east0 && s[2] + ENDS.Q < SIZE / 2) own.push([s[0] + ENDS.P, s[1] + ENDS.DY, s[2] + ENDS.Q, s[3], s[4], s[5]]);
+    per[v] = own; }
   let painted = 0;
   for (const p of paintedPlants(paintedOnly(plantNow(), 'rocks'), null, { sizeOf: () => STONES.size * 1.2 })) {   // the planting's painted rocks
     if (!SORT.rock(p.sp) || !paintable(p)) continue;
@@ -2060,6 +2155,31 @@ function* placeStonesSteps() {
   if ($('stoneInfo')) $('stoneInfo').textContent = `${placed.toLocaleString()} stones` + (painted ? ` and ${painted.toLocaleString()} painted by hand` : '');
 }
 const GROW = { ...GROW_DEFAULTS }, PLANT_KINDS = defaultKinds();
+// (Mathwood Valley) THE WAY ROUND AT THE VALLEY'S ENDS (objects/ends.js): the game has just moved the camera by (dx, dy,
+// dz), from one end's band to the other's, which is its copy. The plants and the lawn laid round the camera are moved
+// with it at once (each one in the band has its twin there, so nothing changes in view; any that would come out past the
+// land's edge are left out), keeping their ages, and the plants are laid again round the new spot straight after (the
+// ones that stay keep their ages: only the ones new to the far side of the circle grow in, out in the fog). Laid afresh
+// the usual way, the circle round the rider stood empty for a moment and then grew in.
+function jumped(dx, dy, dz) {
+  const D = new THREE.Vector3(dx, dy, dz), on = (x) => Math.abs(x) < SIZE / 2 - 1;
+  if (coverForest && coverForest.ready && coverForest.fixed) {
+    const laid = coverForest.tilesLaid.get('fixed') || [], list = [], out = [], born = new Map();
+    coverForest.fixed.forEach((p, i) => { const L = laid[i]; if (!L || !on(p.x + dx)) return;
+      list.push({ ...p, x: p.x + dx, z: p.z + dz }); out.push({ ...L, pos: L.pos.clone().add(D) }); born.set(lawnKey(p.x + dx, p.z + dz), L.born || 0); });
+    COVER.job = null; coverForest.setFixed(list, out); COVER.born = born;
+    COVER.at.set(1e9, 0, 1e9);                                           // (laid again round the new spot from the next frame)
+    U.coverAt.value.x += dx; U.coverAt.value.z += dz;                   // (the ground's far paint of the plants starts past them, where they now are)
+  }
+  sky.uniforms.cloudShift.value.x += dx; sky.uniforms.cloudShift.value.y += dz;   // (the clouds overhead: the same ones)
+  WIND.uniforms.windShift.value.x += dx; WIND.uniforms.windShift.value.y += dz;  // (and the wind's waves: the plants round the eye sway as they did)
+  if (LAWN_GO.spots) {
+    const spots = LAWN_GO.spots.filter((t) => on(t.x + dx)).map((t) => ({ ...t, x: t.x + dx, y: t.y + dy, z: t.z + dz })), born = new Map();
+    for (const t of spots) born.set(lawnKey(t.x, t.z), t.born ?? -1e6);
+    LAWN_GO.job = null; LAWN.count = lawn.set(spots); LAWN_GO.spots = spots; LAWN_GO.born = born;
+    LAWN_GO.at.x += dx; LAWN_GO.at.z += dz; LAWN_GO.cam.x += dx; LAWN_GO.cam.z += dz;
+  }
+}
 // the plants' circle follows where you look: once its centre (a little ahead of the camera, on the
 // ground) has moved a quarter of the circle, they are laid again round the new spot (the tiles that
 // stay keep their plants, so nothing near you shuffles)
@@ -2078,7 +2198,7 @@ function followCover() {
 // them over
 function* moveCover(at) {
   const B = 6;
-  const list = withPlanting(yield* growPlantsSteps({ ground: coverGround, cache: COVER.cache, at, radius: COVER.radius, far: COVER.farX, count: COVER.on ? COVER.count : 0, size: COVER.size, kinds: PLANT_KINDS, grow: GROW, budget: B }), at);
+  const list = withPlanting(yield* growPlantsSteps({ ground: coverGround, cache: COVER.cache, at, radius: COVER.radius, far: COVER.farX, count: COVER.on ? COVER.count : 0, size: COVER.size, kinds: PLANT_KINDS, grow: GROW, budget: B, alias: endsAlias }), at);
   const laid = yield* coverForest.layFixedSteps(list, B);
   // (Mathwood Valley) a plant new to this lay rises out of the ground (imposter.js IMPOSTER_CLOCK): the far fields fill in
   // gradually as the circle moves instead of appearing; one in the last lay keeps its age
@@ -2104,7 +2224,7 @@ function placeCover(ready = null) {
 
   // where they go: src/objects/growth.js (shared with the Growth Lab)
   if (!ready) COVER.job = null;                       // laid now: any job in flight is stale
-  const fixed = ready || withPlanting(growPlants({ ground, cache: COVER.cache, at: COVER.at, radius: COVER.radius, far: COVER.farX, count: COVER.on ? COVER.count : 0, size: COVER.size, kinds: PLANT_KINDS, grow: GROW }), COVER.at), placed = fixed.length;
+  const fixed = ready || withPlanting(growPlants({ ground, cache: COVER.cache, at: COVER.at, radius: COVER.radius, far: COVER.farX, count: COVER.on ? COVER.count : 0, size: COVER.size, kinds: PLANT_KINDS, grow: GROW, alias: endsAlias }), COVER.at), placed = fixed.length;
   // one Forest for all of them: meshes out to COVER.near, imposters beyond, crossfaded
   // the drawer is kept and handed the new list (a rebuild cost ~0.1 s a move); only rebuilt when its range changed
   if (coverForest && coverForest.ready && coverForest.imposterAt === COVER.near) {
@@ -2587,12 +2707,14 @@ function dayFrame(dt, quiet = false) {
   const dome = sky.mesh.visible ? 1 : 0;                                 // (no dome, as on potato or with the clouds off: the background is one colour, so the haze is too)
   FOG_DIR.col.x = SHOWN.toward.x * dome; FOG_DIR.col.y = SHOWN.toward.y * dome; FOG_DIR.col.z = SHOWN.toward.z * dome;
   FOG_DIR.zen.x = SHOWN.zen.x * dome; FOG_DIR.zen.y = SHOWN.zen.y * dome; FOG_DIR.zen.z = SHOWN.zen.z * dome;
-  { const A = SHOWN.away, l = 0.2126 * A.x + 0.7152 * A.y + 0.0722 * A.z, k = 0.65 * NIGHT_GRADE.w / (NIGHT.grade || 1) * (sky.mesh.visible ? 1 : 0);   // (the mist at the valley's ends: the haze's own colour, away from the sun; by night greyed, as the night fades colours, or it glows deep blue)
-    FOG_DIR.bankCol.x = A.x + (l * 0.92 - A.x) * k; FOG_DIR.bankCol.y = A.y + (l * 0.98 - A.y) * k; FOG_DIR.bankCol.z = A.z + (l * 1.12 - A.z) * k; }
   // the low fog: how much by the clock, and its colour: the sky's far colour greyed and, as the day lights it, whitened; at night it stays under that dark sky's own brightness, never glowing
   { const A = SHOWN.away, C = FOG_DIR.lowCol, l = 0.2126 * A.x + 0.7152 * A.y + 0.0722 * A.z, lit = THREE.MathUtils.smoothstep(DAY.elev, -3, 10), g = (a, m) => (a + (l * m - a) * 0.6) * (0.72 + 0.28 * lit);
     FOG_DIR.low0.w = !TS.lite ? LOW_FOG.thick * LOW_FOG.k * lowFogAt(((DAY.hour % 24) + 24) % 24) : 0;
-    C.x = g(A.x, 1); C.y = g(A.y, 1.01); C.z = g(A.z, 1.03); C.x += (1 - C.x) * 0.45 * lit; C.y += (1 - C.y) * 0.45 * lit; C.z += (1 - C.z) * 0.45 * lit; }
+    C.x = g(A.x, 1); C.y = g(A.y, 1.01); C.z = g(A.z, 1.03); C.x += (1 - C.x) * 0.45 * lit; C.y += (1 - C.y) * 0.45 * lit; C.z += (1 - C.z) * 0.45 * lit;
+    // (the ground fog at the valley's ends: between that and the haze's own colour, a little dimmed: it lies in the woods' shade)
+    const E = FOG_DIR.endCol; E.x = (C.x * 0.5 + A.x * 0.5) * 0.88; E.y = (C.y * 0.5 + A.y * 0.5) * 0.88; E.z = (C.z * 0.5 + A.z * 0.5) * 0.88; }
+  FOG_DIR.end1.y = heightAt(camera.position.x, camera.position.z);   // (the ground under the eye: the fog is read from how high over it)
+  FOG_DIR.end1.w = fogSeen(camera.position.x);                        // (and only shown in among the trees at the ends)
   FOG_DIR.glow.x = Math.max(0, SHOWN.glowAt.x - SHOWN.toward.x) * dome; FOG_DIR.glow.y = Math.max(0, SHOWN.glowAt.y - SHOWN.toward.y) * dome; FOG_DIR.glow.z = Math.max(0, SHOWN.glowAt.z - SHOWN.toward.z) * dome;
   DAY_F.copy(SUN_NOW).transformDirection(camera.matrixWorldInverse); FOG_DIR.sun3.x = DAY_F.x; FOG_DIR.sun3.y = DAY_F.y; FOG_DIR.sun3.z = DAY_F.z;
   renderer.getDrawingBufferSize(DAY_V2); const th = Math.tan(camera.fov * Math.PI / 360) / camera.zoom;
@@ -2692,13 +2814,15 @@ function render(afterScene = null) {
 function bakeData() {
   if (BAKE.from !== 'live' || !MAPS.gullyB || !MAPS.path || !MAPS.water) return { from: BAKE.from };
   const b64 = (u) => { u = new Uint8Array(u.buffer, u.byteOffset, u.byteLength); let s = ''; for (let i = 0; i < u.length; i += 32768) s += String.fromCharCode.apply(null, u.subarray(i, i + 32768)); return btoa(s); };
-  const gully = MAPS.gullyB, fan = MAPS.fanB;                          // (as landSteps worked them out, and wrote them into maskB)
+  // (as made: the valley's ends are shaped over them at every load, shapeEnds; ENDS_RAW keeps them as they were)
+  const gully = ENDS_RAW.gully || MAPS.gullyB, fan = ENDS_RAW.fan || MAPS.fanB;   // (as landSteps worked them out, and wrote them into maskB)
   const rgb = (rgba) => { const out = new Uint8Array(rgba.length / 4 * 3); for (let i = 0, j = 0; i < rgba.length; i += 4) { out[j++] = rgba[i]; out[j++] = rgba[i + 1]; out[j++] = rgba[i + 2]; } return out; };
-  const waterRgba = Uint8Array.from(MAPS.water); for (let i = 3; i < waterRgba.length; i += 4) waterRgba[i] = 255;   // (opaque: its soft edge's alpha isn't read)
-  const hpre = TOWN.Hland, pond = Uint8Array.from(POND), wd = Float32Array.from(WDEPTH);   // (the land as made: the landforms are laid over it at every load)
+  const waterRgba = Uint8Array.from(ENDS_RAW.water || MAPS.water); for (let i = 3; i < waterRgba.length; i += 4) waterRgba[i] = 255;   // (opaque: its soft edge's alpha isn't read)
+  const hpre = TOWN.Hland, pond = Uint8Array.from(ENDS_RAW.pond || POND), wd = Float32Array.from(ENDS_RAW.wd || WDEPTH);   // (the land as made: the landforms are laid over it at every load)
+  const paths = ENDS_RAW.path || MAPS.path;
   return { from: 'live', N, SIZE, P: MAPS.P, key: landKey(), pathKey: pathKey(), outlets: OUTLETS.map((o) => [...o]),
-    hpre: b64(hpre), wdepth: b64(wd), pond: b64(pond), gully: b64(gully), fan: b64(fan), water: b64(rgb(waterRgba)), paths: b64(rgb(MAPS.path)),
-    hashes: { heights: fnvBytes([hpre]), cells: fnvBytes([wd, pond, gully, fan]), water: fnvBytes([waterRgba], 61), paths: fnvBytes([MAPS.path], 61) } };
+    hpre: b64(hpre), wdepth: b64(wd), pond: b64(pond), gully: b64(gully), fan: b64(fan), water: b64(rgb(waterRgba)), paths: b64(rgb(paths)),
+    hashes: { heights: fnvBytes([hpre]), cells: fnvBytes([wd, pond, gully, fan]), water: fnvBytes([waterRgba], 61), paths: fnvBytes([paths], 61) } };
 }
 return {
   scene, sky, sun, hemi, ground, mat, lawn, LAWN_SKIP, paintable, U, MAPS, TOWN, PLANT, COVER, GROW, PLANT_KINDS, FAMILY, FOREST, LEAF, LAND, VALLEY, SHAPE, WATER, PAVE, DAY, DL, SHADE, NIGHT, NIGHT_GRADE, NIGHT_LIGHTS, STONES, LAWN, LAWN_GO, CALM, FOLK, SHOW, BEAMS, RAIN, FENCE, SHADOW, FOG_EDGE: FOG_DIR.edge,
@@ -2706,6 +2830,7 @@ return {
   FINE, get LANDF() { return LANDF; }, inFine: (x, z) => !!FINE.h && x > FINE.x0 && x < FINE.x1 && z > FINE.z0 && z < FINE.z1,
   BAKE, bakeData, update, render, settled, heightAt, groundAt, slopeAt, waterAt, coverGround, buildLand, buildHeights, shapeMesh, fastMesh, baseGrid, erodeSteps, smoothErosion, cutRavines, addCrags, findWater, townLand, paintWater,
   placeCover, placeTrees, placeStones, placeLawn, calmCover, buildPaving, applyPave, paveLater, composePathRoad, tex, setAverages, applyWeights, drawPaths, followShadow, followCover, townRebuildNow, beamsReady,
+  jumped, ENDS,
   appleTrees, get treeForest() { return treeForest; }, get coverForest() { return coverForest; }, get trees() { return trees; }, get pathCanvas() { return pathCanvas; },
 };
 }

@@ -9,15 +9,18 @@
 import * as THREE from 'three';
 
 export const WIND_GLSL = `
-  uniform float windTime, windAmp, windFreq, windSpeed;
+  uniform float windTime, windAmp, windFreq, windSpeed; uniform vec2 windShift;
   vec2 windAt(vec2 p) {
+    p -= windShift;
     float ph  = p.x * windFreq + p.y * windFreq * 0.85 + windTime * windSpeed;
     float ph2 = p.x * windFreq * 0.42 - p.y * windFreq * 0.55 + windTime * windSpeed * 0.6;
     return windAmp * vec2(sin(ph) + 0.5 * sin(ph2), 0.8 * (cos(ph * 0.9) + 0.5 * sin(ph2)));
   }
 `;
 // amp: lean per metre of height at the strongest; freq: how close the waves are (per metre); speed: how fast they roll
-export const WIND = { on: true, uniforms: { windTime: { value: 0 }, windAmp: { value: 0.12 }, windFreq: { value: 0.16 }, windSpeed: { value: 1.6 } } };
+// windShift (Mathwood Valley): m the waves are carried along with the eye by the way round at the valley's ends, so the
+// plants round it sway the same before and after
+export const WIND = { on: true, uniforms: { windTime: { value: 0 }, windAmp: { value: 0.12 }, windFreq: { value: 0.16 }, windSpeed: { value: 1.6 }, windShift: { value: new THREE.Vector2() } } };
 export const tickWind = (dt) => { WIND.uniforms.windTime.value += dt; };
 
 // for a three material made by the engine (MeshStandard/Lambert, instanced): bend its vertices in the wind.

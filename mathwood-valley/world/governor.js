@@ -20,8 +20,9 @@
 //     through a door; until then it waits its turn (each system keeps to it: src/sight.js).
 //   SCENERY (resolution, shadows, grass and plants, lawn, stones, trees, ground, clouds, sunbeams, decorations, the horse's
 //     look, fences): the slow lane. It can't come in through a door, so it changes only at a moment that hides the change
-//     (a CURTAIN): the title screen, a menu or counter open (the game paused), inside the cabin, deep in the mist at the
-//     valley's ends. The resolution only on the title and in the mist (a paused screen would go blank). At a curtain the
+//     (a CURTAIN): the title screen, a menu or counter open (the game paused), inside the cabin, deep in the woods at the
+//     valley's ends ('mist': in among the trees there, in the ground fog, where the view is short; it was a bank of mist
+//     there that hid everything). The resolution only on the title and there (a paused screen would go blank). At a curtain the
 //     slow lane takes one step from what the last stretch of riding showed: up when the frame had spare time and the
 //     people lane is as far along as the scenery; down when it was too slow and the people lane is already low (people
 //     first). With no curtain for a while, the step it wants is remembered for the next load.
@@ -210,7 +211,7 @@ export const GOV = {
   hold: 20,         // s a pair of rungs must hold (while riding) before it is remembered for this machine
   sceneryEvery: 15, // s of riding between two steps of the slow lane (so each is measured before the next)
   ahead: 0.35,      // the people lane may be this far behind the scenery's (in bands: bandPos) before the scenery gives way
-  mist: 0.85,       // how thick the mist at the valley's ends must be round the camera to hide a change
+  mist: 0.85,       // how deep in the woods' ground fog at the valley's ends the camera must be to count as a curtain (W.fogAt)
   climbEvery: 10,   // s of smooth riding for each step of the climb back up (from the bottom of the potato band to normal: about 4 minutes)
   curtainMost: 8,   // the most of those steps one curtain takes, so what comes next is measured before the rest (one, after a rung has failed)
   sceneryBackoff: [90, 1200],   // s: a scenery rung that failed isn't tried again for this long, doubling each time, up to 20 minutes
@@ -409,7 +410,7 @@ export function makeGovernor({ renderer, quality, W = null } = {}) {
     decide(t, scene);
   }
   requestAnimationFrame(tick);
-  // where the game is: its own word (G.scene), and deep in the mist at the valley's ends
+  // where the game is: its own word (G.scene), and deep in the woods' ground fog at the valley's ends (W.fogAt)
   function sceneNow() {
     let s = 'play'; try { s = G.scene() || 'play'; } catch (e) { /* (the game's word, if it can't say: playing) */ }
     if (s === 'play' && W && W.fogAt && W.camTarget && W.fogAt(W.camTarget.x, W.camTarget.z) >= GOV.mist) s = 'mist';

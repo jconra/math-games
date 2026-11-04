@@ -67,6 +67,7 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makeAnimal } from './actors/animals.js';
 import { makePerson } from './actors/folk.js';
+import { ENDS } from '../world/objects/ends.js';
 
 export const WAGON_KINDS = ['covered', 'chuck', 'farm', 'freight'];
 export const WAGON = {
@@ -179,16 +180,18 @@ function thin(pts, every = 8) {
 }
 export const ROAD = {
   // the road through the valley, in order (each a stroke of the planting, reversed where marked, only the points `keep`
-  // says yes to): in from the west out of the mist at the valley's west end (src/world.js W.ends: the land's west path,
-  // about 700 m out of town, deep in the bank; further west it turns south through the trees to the land's edge),
-  // along the town's west trail, across the square, out along the trail to where the land's north-east path leaves it
-  // (past the corral's north side and the pasture's), and up that path toward the north-east hills, on into the mist
-  // at the east end (to x 705, where it is full; the wrap line is at 740). So the travellers and the wagons come in
-  // out of the mist and go off into it, and a rider coming round the valley's ends comes out near the road. (It keeps
-  // clear of the open land south-east of the pasture, where the "Protect the wagon" job has its own road.) Surveyed
-  // with ~/pw/bandit-math/rigs/wagons/road_survey.cjs and rigs/town/roads/probe_east.cjs.
-  through: [['landpath4', { reverse: true, keep: (x) => x > -700 }], ['westtrail'], ['trail', { keep: (x) => x <= 94 }],
-    ['landpath2'], ['landpath1', { keep: (x) => x < 705 }]],
+  // says yes to): in from the woods at the valley's west end (world/objects/ends.js: the
+  // land's west path, from `end` m out of town, in among the trees where the ground fog lies), along the town's west
+  // trail, across the square, out along the trail to where the land's north-east path leaves it (past the corral's
+  // north side and the pasture's), and up that path toward the north-east hills, into the woods at the east end, to
+  // `end` m out. The road itself runs on through the band of woods at each end and round (the ends' copy), but the
+  // travellers and the wagons come and go short of it, in the woods: one in the band, beside a rider as they were moved
+  // round, was left behind at the other end, and vanished from beside them. (It keeps clear of the open land south-east
+  // of the pasture, where the "Protect the wagon" job has its own road.) Surveyed with
+  // ~/pw/bandit-math/rigs/wagons/road_survey.cjs and rigs/town/roads/probe_east.cjs.
+  end: ENDS.wall,
+  through: [['landpath4', { reverse: true, keep: (x) => x > -ENDS.wall }], ['westtrail'], ['trail', { keep: (x) => x <= 94 }],
+    ['landpath2'], ['landpath1', { keep: (x) => x < ENDS.wall }]],
   every: 8,                 // m between the points the curve passes through
   half: 1.2,                // m either side of the middle a wagon needs clear
   aside: 6,                 // m the road may step aside round something at its edge (the thicket on the land's west path,

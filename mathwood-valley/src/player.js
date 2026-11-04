@@ -528,8 +528,8 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
     else { pos.set(x, y, z); P.speed = 0; person.root.position.copy(pos); person.root.rotation.set(0, rot, 0); }
     P.heading = rot; cam.snap(); pendingMount = false; P.cancelLasso();
   };
-  // moved as it stands, by (dx, dy, dz), the horse and the camera with it (out of the mist at one end of the valley and
-  // into the other's: src/world.js W.wrap): nothing about the view or the gait changes, so nothing jumps. The horse
+  // moved as it stands, by (dx, dy, dz), the horse and the camera with it (from the band of woods at one end of the valley
+  // to the same band at the other: src/world.js W.wrap): nothing about the view or the gait changes, so nothing jumps. The horse
   // comes too only with the rider on it (or getting on or off): a horse left standing in town stays where it was left
   P.shift = ({ dx = 0, dy = 0, dz = 0 }) => {
     pos.x += dx; pos.y += dy; pos.z += dz;

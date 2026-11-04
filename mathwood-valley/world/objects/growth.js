@@ -132,10 +132,24 @@ export function patchAt(x, z, ground, kinds, grow) {
 // its spot.
 // far (>= 1): past `radius` the plants carry on out to radius x far, ever sparser but bigger (each standing in for
 // the several it replaces, up to 3x), fading out over the last fifth: cheap, they are all imposters out there
+// alias (optional, Mathwood Valley): (x, z) -> null, or [x, z] of another spot whose ground this one shows (the valley's
+// ends: the east end's band is a copy of the west's, world/objects/ends.js): there the plants are that spot's own, moved
+// over, so the two are the same plant for plant
 export function growPlants(opts) { const it = growPlantsSteps(opts); let n; while (!(n = it.next()).done); return n.value; }
+// (a tile some of whose ground shows another spot's: its own things where its ground is its own, and where it isn't, the
+// things of the tiles it shows, moved over; own(tx, tz) -> a tile's things; xz(p) -> [x, z]; moved(p, dx, dz) -> p there)
+function aliasTile(tx, tz, TILE, alias, own, xz, moved) {
+  const x0 = tx * TILE, z0 = tz * TILE; let a = null, ax = 0, az = 0;
+  for (const [x, z] of [[x0 + 0.01, z0 + 0.01], [x0 + TILE - 0.01, z0 + 0.01], [x0 + 0.01, z0 + TILE - 0.01], [x0 + TILE - 0.01, z0 + TILE - 0.01]]) { const q = alias(x, z); if (q) { a = q; ax = x; az = z; break; } }
+  if (!a) return own(tx, tz);
+  const dx = ax - a[0], dz = az - a[1], out = own(tx, tz).filter((p) => { const [x, z] = xz(p); return !alias(x, z); });
+  for (let sz = Math.floor((z0 - dz) / TILE); sz <= Math.floor((z0 + TILE - dz - 1e-6) / TILE); sz++) for (let sx = Math.floor((x0 - dx) / TILE); sx <= Math.floor((x0 + TILE - dx - 1e-6) / TILE); sx++)
+    for (const p of own(sx, sz)) { const [x, z] = xz(p), X = x + dx, Z = z + dz; if (X >= x0 && X < x0 + TILE && Z >= z0 && Z < z0 + TILE && alias(X, Z)) out.push(moved(p, dx, dz)); }
+  return out;
+}
 // the same, a little at a time: yields whenever `budget` ms have gone (so a page can spread it over frames),
 // and returns the list at the end
-export function* growPlantsSteps({ ground, at, radius, count, size = 1, kinds, grow, far = 1, cache = null, budget = Infinity }) {
+export function* growPlantsSteps({ ground, at, radius, count, size = 1, kinds, grow, far = 1, cache = null, budget = Infinity, alias = null }) {
   let t0 = performance.now();
   const out = [], G = grow, K = kinds; longClear = G.longClear ?? 0;
   const TILE = 30, C = at, R = radius, RF = R * Math.max(1, far);
@@ -226,8 +240,9 @@ export function* growPlantsSteps({ ground, at, radius, count, size = 1, kinds, g
     // a tile grown denser than it now needs is reused (its plants thinned further below); grown again only when
     // it needs to be denser, i.e. as you come toward it
     let list, lv = level; const key = tx * 100003 + tz;
-    if (cache) { const e = cache.tiles.get(key); if (e && e.level >= level) { list = e.list; lv = e.level; cache.hits = (cache.hits || 0) + 1; } else { list = growTile(tx, tz, level); cache.tiles.set(key, { level, list }); cache.misses = (cache.misses || 0) + 1; } }
-    else list = growTile(tx, tz, level);
+    const grown = alias ? (x, z) => aliasTile(x, z, TILE, alias, (a, b) => growTile(a, b, level), (p) => [p.x, p.z], (p, dx, dz) => ({ ...p, x: p.x + dx, z: p.z + dz })) : (x, z) => growTile(x, z, level);
+    if (cache) { const e = cache.tiles.get(key); if (e && e.level >= level) { list = e.list; lv = e.level; cache.hits = (cache.hits || 0) + 1; } else { list = grown(tx, tz); cache.tiles.set(key, { level, list }); cache.misses = (cache.misses || 0) + 1; } }
+    else list = grown(tx, tz);
     if (performance.now() - t0 > budget) { yield; t0 = performance.now(); }
     for (const p of list) {
       const d = Math.hypot(p.x - C.x, p.z - C.z); if (d > RF) continue;
@@ -248,7 +263,7 @@ export function* growPlantsSteps({ ground, at, radius, count, size = 1, kinds, g
 // only the tiles new to it are worked out. thin (optional): (x, z) -> the share of the tufts kept there (0..1), each tuft
 // by its own draw, so the lawn thins out gradually with distance and a tuft comes and goes one at a time
 export function lawnSpots(opts) { const it = lawnSpotsSteps(opts); let n; while (!(n = it.next()).done); return n.value; }
-export function* lawnSpotsSteps({ ground, at, radius, density, grow, budget = Infinity, spread = 0, cache = null, thin = null }) {   // spread: each tuft keeps to its own radius, radius * (1 - spread / 2 .. 1), so the lawn thins out toward its edge instead of stopping at a circle
+export function* lawnSpotsSteps({ ground, at, radius, density, grow, budget = Infinity, spread = 0, cache = null, thin = null, alias = null }) {   // alias: as growPlants'   // spread: each tuft keeps to its own radius, radius * (1 - spread / 2 .. 1), so the lawn thins out toward its edge instead of stopping at a circle
   const out = [], G = grow; let t0 = performance.now(); if (!(G.lawn > 0) || !(density > 0)) return out;
   const TILE = 10, C = at, R = radius, per = Math.round(density * TILE * TILE);
   if (cache) { const sig = JSON.stringify([G, density]); if (cache.sig !== sig || !cache.tiles) { cache.tiles = new Map(); cache.sig = sig; } cache.used = new Set(); }
@@ -278,8 +293,9 @@ export function* lawnSpotsSteps({ ground, at, radius, density, grow, budget = In
   for (let tz = Math.floor((C.z - R) / TILE); tz <= Math.floor((C.z + R) / TILE); tz++) for (let tx = Math.floor((C.x - R) / TILE); tx <= Math.floor((C.x + R) / TILE); tx++) {
     if (Math.hypot((tx + 0.5) * TILE - C.x, (tz + 0.5) * TILE - C.z) > R + TILE) continue;
     let list;
-    if (cache) { const k = tx * 100003 + tz; list = cache.tiles.get(k); if (!list) { list = tileTufts(tx, tz); cache.tiles.set(k, list); } cache.used.add(k); }
-    else list = tileTufts(tx, tz);
+    const tufts = alias ? (x, z) => aliasTile(x, z, TILE, alias, tileTufts, (q) => [q[0], q[1]], (q, dx, dz) => { const m = q.slice(); m[0] += dx; m[1] += dz; return m; }) : tileTufts;
+    if (cache) { const k = tx * 100003 + tz; list = cache.tiles.get(k); if (!list) { list = tufts(tx, tz); cache.tiles.set(k, list); } cache.used.add(k); }
+    else list = tufts(tx, tz);
     for (const q of list) {
       const x = q[0], z = q[1];
       if (Math.hypot(x - C.x, z - C.z) > R * (1 - spread * 0.5 * q[6])) continue;

@@ -356,14 +356,6 @@ async function ride(r) {
   { const heard = hob.event; hob.event = (n, d) => { const own = !!(SK && SK.heard(n, d)); heard(n, d); if (JF) JF.heard(n, own ? { ...(d || {}), shiftEnd: true } : d); if (SHOUT) SHOUT.heard(n, d); if (JB) JB.heard(n); jobHeard(n, d); if (JOB_ENDS[n]) jobOver(JOB_ENDS[n]); }; }   // (the job folk hear the jobs too: their thank-yous; and the player's yeehaw at a job's end; the jobs board: at work at a job, its tracks give way; the shifts first: a round counted, and at a shift's end its own thank-you in place of the job's usual one)
   stage = makeStage({ W, folk, audio: AUD, camera, speak: (text) => { if (rider && SKILLS.readAloud(rider)) sayLine(text); } });   // (camera: the ears; speak: the band's answer read out to a rider who can't read yet)
   traffic = makeTraffic({ W, animals, folk, audio: AUD, obstacles: trafficThings, camps: () => camps, camera, riding: () => !!(P && P.onHorse) });   // (camera: wagons and travellers dissolve in and out of sight)
-  { let ends = null; W.roadEnds = () => {   // (the road's two ends: riding on past one into the mist comes out by the other, src/world.js W.wrap)
-    const c = traffic && traffic.road; if (!c) return null;
-    if (!ends || ends.c !== c) {
-      const a = c.getPoint(0), b = c.getPoint(1), ta = c.getTangent(0), tb = c.getTangent(1);
-      const A = { x: a.x, z: a.z, dx: -ta.x, dz: -ta.z }, B = { x: b.x, z: b.z, dx: tb.x, dz: tb.z };   // (dx, dz: out past the end)
-      ends = a.x < b.x ? { c, west: A, east: B } : { c, west: B, east: A };
-    }
-    return ends; }; }
   AMBI = makeAmbience({ audio: AUD, W }); BM.ambience = AMBI;
   if (W.V && W.V.CODE) W.V.CODE.onDoor = makeDoorSound({ audio: AUD }).play;   // (the town's doors' creak, thunk and flap: src/audio/doorsound.js)
   // (one voice at a time: a shout waits while a card is read, and a card waits for a shout to finish)
@@ -1306,9 +1298,9 @@ function step(dt) {
     }
     if (home) { hud.callHorse(false); door = null; cabin.update(dt); }   // (no town door while inside: E and the prompt are the cabin's; it moves the player)
     else { if (atCounter()) hud.prompt(null); else doors(); P.update(dt); }
-    if (!home && W.wrap) { const w = W.wrap(P.position, camera.position); if (w) { P.shift(w); if (D) D.shift(w); if (UNST) UNST.clear(); } }
+    if (!home && W.wrap) { const w = W.wrap(P.position); if (w) { P.shift(w); if (D) D.shift(w); if (UNST) UNST.clear(); if (W.jumped) W.jumped(w); BM.wraps = (BM.wraps || 0) + 1; } }   // (the way round at the valley's ends: src/world.js)
     if (UNST) UNST.update(dt, P.position, !home && !atCounter() && (P.mode === 'foot' || P.mode === 'horse'));   // (a good spot to go back to)
-    passKeeper();   // (rode on into the mist at an end of the valley: out of the other end's, src/world.js)
+    passKeeper();   // (the storekeeper lets the rider by behind his counter)
     if (D) D.update(dt);
     if (cabin) cabin.town(dt);
     // (the wagon's gang took the shared times trainer's wave: back at the herd, the round-up deals its own afresh, but
