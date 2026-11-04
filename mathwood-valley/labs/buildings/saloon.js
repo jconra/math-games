@@ -1389,8 +1389,8 @@ function propList(piano) {
     for (let i = 0; i < n; i++) { const a = (i / n) * Math.PI * 2 + x * 1.3 + z, d = 0.72; L.push({ type: 'spindleChair', x: x + Math.sin(a) * d, y, z: z + Math.cos(a) * d, rot: a + Math.PI + (((i * 7 + x * 3) % 3) - 1) * 0.15 }); }
   }
   for (let i = 0; i < 6; i++) L.push({ type: 'barStool', x: BXF + 0.42, y, z: BZ1 - 0.45 - i * 0.78, rot: i * 0.4 });
+  // (the stage's two spindle chairs, from before the band came, went: they stood in the drummer and his bass drum)
   L.push({ type: 'piano', x: piano.x, y: STG, z: piano.z, rot: piano.rot }, { type: 'pianoStool', x: piano.stool[0], y: STG, z: piano.stool[1] });
-  L.push({ type: 'spindleChair', x: -0.95, y: STG, z: -4.85, rot: 0.25 }, { type: 'spindleChair', x: -1.65, y: STG, z: -4.6, rot: 0.6 });
   // barrels: one in the back corner left of the stage (by the left gallery post it narrowed the way behind the bar and
   // to the stage's steps: a critic); three together under the stairs' high end against the east wall (the stairs
   // 3 m over them there), so the way between the stage's right corner and the stairs stays clear (the game's maker: the
