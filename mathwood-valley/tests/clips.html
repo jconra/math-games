@@ -24,8 +24,10 @@
 <div id="info">loading...</div>
 <script type="module">
 // A test page for the clips made in Blender for this game (models/people/clips_m.glb and clips_f.glb): lassoing
-// (Lasso_Swing, Lasso_Throw, Lasso_Pull) and riding (Ride, Ride_Gallop). The farmer plays each one; the riding clips put
-// him on a horse that walks or gallops in step, wearing a saddle. A red dot marks where a rope leaves the right hand.
+// (Lasso_Swing, Lasso_Throw, Lasso_Pull), riding (Ride, Ride_Gallop) and getting on and off (Mount, Mount_R, Dismount,
+// Dismount_R: made in the riding clips' frame, so they are seated the same way, the horse standing still). The farmer
+// plays each one; the riding clips put him on a horse that walks or gallops in step, wearing a saddle. A red dot marks
+// where a rope leaves the right hand.
 //   ?clip=Lasso_Swing   ?outfit=farmer_m | adventurer_f | ...   ?view=front | side | back | chase | top   ?shot (no buttons)
 //   ?saddle=basic | battle | fancy | none   ?seat=offset | siton   ?marks (where the seat of the trousers is and should be)
 // window.CLIPS for the rigs: { ready, names, durations, play(name), at(t), pause(on), view(name), info(), crotchAt(name, t),
@@ -39,10 +41,11 @@ import { loadAnimals, makeAnimal, saddleOn, sitOn } from '../src/actors/animals.
 
 const Q = new URLSearchParams(location.search);
 if (Q.has('shot')) document.body.classList.add('shot');
-const NEW = ['Lasso_Swing', 'Lasso_Throw', 'Lasso_Pull', 'Ride', 'Ride_Gallop'];
-const ONCE = { Lasso_Throw: true };
-// the horse's clip under each riding clip (both loops are as long as the horse's own, so they play at the same speed)
-const HORSE = { Ride: 'Walk', Ride_Gallop: 'Gallop' };
+const NEW = ['Lasso_Swing', 'Lasso_Throw', 'Lasso_Pull', 'Ride', 'Ride_Gallop', 'Mount', 'Mount_R', 'Dismount', 'Dismount_R'];
+const ONCE = { Lasso_Throw: true, Mount: true, Mount_R: true, Dismount: true, Dismount_R: true };
+// the horse's clip under each riding clip (both loops are as long as the horse's own, so they play at the same speed);
+// getting on and off, it stands
+const HORSE = { Ride: 'Walk', Ride_Gallop: 'Gallop', Mount: 'Idle', Mount_R: 'Idle', Dismount: 'Idle', Dismount_R: 'Idle' };
 const C = window.CLIPS = { ready: false, names: [], durations: {}, errors: [] };
 
 const R = new THREE.WebGLRenderer({ antialias: true });

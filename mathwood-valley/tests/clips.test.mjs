@@ -1,4 +1,5 @@
-// Checks the clips made in Blender for this game (models/people/clips_m.glb and clips_f.glb: lassoing and riding) agree
+// Checks the clips made in Blender for this game (models/people/clips_m.glb and clips_f.glb: lassoing, riding, getting
+// on and off) agree
 // with the people they are played on: the exact names, the lengths, only the skeleton (no body of their own), every bone
 // the people's own clips move, and no scale tracks. (How the poses look is checked by eye on tests/clips.html.)
 //   node --test tests/*.test.mjs
@@ -15,15 +16,17 @@ function glb(path) {
 }
 
 // the clips, how long each lasts (seconds) and whether it loops. The riding loops are exactly as long as the horse's
-// Walk and Gallop, so the rider and the horse play at one speed and stay in step.
-const WANT = { Lasso_Swing: [1.0, 'loop'], Lasso_Throw: [0.8, 'once'], Lasso_Pull: [1.2, 'loop'], Ride: [35 / 30, 'loop'], Ride_Gallop: [0.6, 'loop'] };
+// Walk and Gallop, so the rider and the horse play at one speed and stay in step. Getting on and off: as long as
+// src/actors/mountplan.js says (the game reads the clips' weights on those clocks).
+const WANT = { Lasso_Swing: [1.0, 'loop'], Lasso_Throw: [0.8, 'once'], Lasso_Pull: [1.2, 'loop'], Ride: [35 / 30, 'loop'], Ride_Gallop: [0.6, 'loop'],
+  Mount: [60 / 30, 'once'], Mount_R: [60 / 30, 'once'], Dismount: [54 / 30, 'once'], Dismount_R: [54 / 30, 'once'] };
 const length = (g, a) => Math.max(...a.samplers.map((s) => g.accessors[s.input].max[0]));
 const clip = (g, name) => g.animations.find((a) => a.name === name);
 // "node.path" for every channel of a clip
 const channels = (g, a) => a.channels.map((c) => g.nodes[c.target.node].name + '.' + c.target.path);
 
 for (const body of ['m', 'f']) {
-  test(`clips_${body}.glb: the five clips, their lengths, the skeleton only`, () => {
+  test(`clips_${body}.glb: the nine clips, their lengths, the skeleton only`, () => {
     const g = glb(`people/clips_${body}.glb`);
     assert.deepEqual(g.animations.map((a) => a.name).sort(), Object.keys(WANT).sort(), 'exactly these clip names');
     for (const [name, [secs]] of Object.entries(WANT)) {

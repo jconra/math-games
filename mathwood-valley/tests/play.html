@@ -69,7 +69,7 @@ const [W, folk, animals] = await Promise.all([
   loadFolk(),
   loadAnimals(undefined, { kinds: ['horse', 'cow', Q.get('dog') === 'husky' ? 'husky' : 'shiba'] }),
 ]);
-if (Q.has('noclips')) for (const body of Object.keys(folk.clips)) folk.clips[body] = folk.clips[body].filter((c) => !/^(Lasso_|Ride)/.test(c.name));
+if (Q.has('noclips')) for (const body of Object.keys(folk.clips)) folk.clips[body] = folk.clips[body].filter((c) => !/^(Lasso_|Ride|Mount|Dismount)/.test(c.name));
 $('load').remove();
 
 // the rider, as save.js keeps one (only what the player reads)

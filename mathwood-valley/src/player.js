@@ -6,8 +6,10 @@
 // trunks, cliffs and deep water stop them (the world's blocked()), tested in short steps so nothing is walked through.
 //
 // The horse: H whistles it over (it trots, or gallops from far off, and stops beside you). E gets on when the rider owns a
-// saddle (else a short message says where to get one), and off again. Riding: a walk (2 m/s on the bay, a light push on
-// the stick), a trot (6 m/s on the bay: the Gallop clip played slowly, as the pack has no trot) and, with Shift, a gallop
+// saddle (else a short message says where to get one), and off again: a few steps to the horse's left shoulder (round
+// it, or to its right if the left has no room), the left foot in the stirrup and the right leg swung over (the Mount
+// clip: actors/seat.js), and off the same way backward (Dismount), to whichever side has room. Riding: a walk (2 m/s on
+// the bay, a light push on the stick), a trot (6 m/s on the bay: the Gallop clip played slowly, as the pack has no trot) and, with Shift, a gallop
 // (13 m/s on the bay; each of the stable's horses has its own paces and size: src/catalog.js LADDER). A horse turns
 // like a horse: it can turn tighter slow than fast, eases into and out of a turn, leans into it, slows for a sharp one,
 // and pitches with the slope under it. The rider is seated every frame at a fixed offset from the saddle on the horse's
@@ -68,6 +70,7 @@ import { makeAnimal, saddleOn, gaitFor, GAIT } from './actors/animals.js';
 import { makeHorse as makeSteed, HORSE_KIND, onHorseDial } from './actors/horses.js';
 import { PRESETS } from './actors/horsecoats.js';
 import { makeSeat, sideOf } from './actors/seat.js';
+import { sidesFor, cornersFor } from './actors/mountplan.js';
 import { LADDER } from './catalog.js';
 import { horseLook, ridden } from './mounts.js';
 import { makeCamera } from './camera.js';
@@ -204,7 +207,7 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
   }
   function setPerson(p) {
     if (person) person.dispose();
-    person = P.person = p; seat = makeSeat(person); layer = null; layerName = '';
+    person = P.person = p; seat = makeSeat(person, { ground: (x, z) => W.heightAt(x, z) }); layer = null; layerName = '';
     if (held) { held.show(false); held.fitted = null; }   // (the six-shooter goes into the new body's hand the next time it is up)
   }
   setPerson(makeRider(rider && rider.look));
@@ -493,14 +496,124 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
     if (job && !job.thrown) P.cancelLasso();
     pendingMount = false; H.mode = 'ridden'; H.speed = 0; H.yawRate = 0; P.horsePickedAt = 0;
     P.mode = 'mounting'; P.speed = 0;
-    person.play(has('Ride') ? 'Ride' : 'Idle', { fade: 0.25, speed: 0.2 });
-    seat.mount(H.a, { time: Math.min(0.75, 0.42 + d * 0.07), onDone: () => { P.mode = 'horse'; P.heading = H.heading; } });   // (a longer hop from further off)
+    // with the getting-on clips: a few steps to the stirrup first (on the side the rider is on, or the other if there is
+    // no room there), then Mount
+    const route = seat.canClip ? mountRoute() : null;
+    if (route) { walkUp = { ...route, t: 0, still: 0, best: Infinity, stuckT: 0 }; return true; }
+    hopUp(d);
     return true;
   };
+  // the old hop up (a person without the clips, or no room by the horse on either side)
+  function hopUp(d) {
+    person.play(has('Ride') ? 'Ride' : 'Idle', { fade: 0.25, speed: 0.2 });
+    seat.mount(H.a, { time: Math.min(0.75, 0.42 + d * 0.07), onDone: () => { P.mode = 'horse'; P.heading = H.heading; } });   // (a longer hop from further off)
+  }
+  // ── WALKING UP TO THE STIRRUP ────────────────────────────────────────────────────────────────────────────────
+  // walkUp: { side, path: [[across, along], ...] (in the horse's own frame, metres: the corners to go round it by), t,
+  // still: how long it has stood at the spot, best/stuckT: getting no nearer } while walking up to where Mount starts
+  // (seat.spot: by the horse's shoulder, facing its side); then the clip
+  let walkUp = null;
+  const hopping = () => P.mode === 'mounting' && !walkUp && !seat.clip;   // (the old hop up)
+  const upSpot = new THREE.Vector3(), upWay = new THREE.Vector3();
+  const hx = () => ({ s: Math.sin(H.heading), c: Math.cos(H.heading) });
+  const toWorld = (across, along, v) => { const { s, c } = hx(); return v.set(H.x + c * across + s * along, 0, H.z - s * across + c * along); };
+  const toLocal = (x, z) => { const { s, c } = hx(), dx = x - H.x, dz = z - H.z; return [c * dx - s * dz, s * dx + c * dz]; };
+  // somewhere a person can stand to get on or off: free ground, and not a steep drop from the horse's own footing
+  const roomAt = (v) => !W.blocked(v.x, v.z) && Math.abs(W.heightAt(v.x, v.z) - H.a.root.position.y) < 0.6;
+  // (on a slope, the uphill side first: standing on the downhill side the ground is that much further under the saddle,
+  // and on the biggest horse the blind critics saw the hands short of the saddle and the foot short of the stirrup.
+  // UPHILL: how much higher the other side's spot must be, metres)
+  const UPHILL = 0.08;
+  function uphillFirst(order) {
+    const a = new THREE.Vector3(), b = new THREE.Vector3(); seat.spot(H.a, order[0], a); seat.spot(H.a, order[1], b);
+    return b.y - a.y > UPHILL ? [order[1], order[0]] : order;
+  }
+  function mountRoute() {
+    const [lx, lz] = toLocal(pos.x, pos.z), B = BODY;
+    // (the side the rider is on, the horse's left when it's all the same: as riders mount; the uphill side on a slope)
+    for (const side of uphillFirst(sidesFor(lx, B))) {
+      const spot = new THREE.Vector3(); seat.spot(H.a, side, spot);
+      if (!roomAt(spot)) continue;
+      const out = toWorld(side * 1.1 * B, toLocal(spot.x, spot.z)[1], new THREE.Vector3());
+      if (W.blocked(out.x, out.z)) continue;                           // (no room to step in beside the horse)
+      // (on the other side, or in front of or behind it: round its nearer end, by its corners)
+      const path = cornersFor(lx, lz, side, B);
+      if (path.some(([a, b]) => { const v = toWorld(a, b, new THREE.Vector3()); return W.blocked(v.x, v.z); })) continue;
+      return { side, path };
+    }
+    return null;
+  }
+  // (near: close enough to stand on the spot itself; settle: standing there in Idle until the walk's last stride has
+  // faded out of the legs, so the clip, whose first frame is Idle, takes over without a twitch; turnRate: radians a
+  // second, half the stick's (at the stick's own rate the blind critics saw a person turn on the spot like a tank, three
+  // times); corner: how near a corner round the horse before heading for the next (the walk bends round it); home: how
+  // near the spot before walking straight at it)
+  const WALK_UP = { near: 0.05, turn: 0.05, settle: 0.25, stuck: 1.2, most: 6, turnRate: 5, corner: 0.5, home: 0.5 };   // m, radians, s, s, s, rad/s, m, m
+  function walkUpStep(dt, want) {
+    const U = walkUp;
+    U.t += dt;
+    // (walked off: not getting on after all)
+    if (want.mag > 0.3 && U.t > 0.3) { walkUp = null; P.mode = 'foot'; H.mode = 'stand'; H.idleT = 2; return; }
+    const spot = upSpot, face = seat.spot(H.a, U.side, spot);
+    let tx = spot.x, tz = spot.z, last = !U.path.length;
+    if (!last) { toWorld(U.path[0][0], U.path[0][1], upWay); tx = upWay.x; tz = upWay.z; }
+    const dx = tx - pos.x, dz = tz - pos.z, d = Math.hypot(dx, dz);
+    if (!last && d < WALK_UP.corner) { U.path.shift(); return; }
+    // (getting no nearer, or too long at it: the old hop from here instead)
+    if (d < U.best - 0.05) { U.best = d; U.stuckT = 0; } else U.stuckT += dt;
+    if ((U.stuckT > WALK_UP.stuck && d > 0.2) || U.t > WALK_UP.most) { walkUp = null; hopUp(Math.hypot(H.x - pos.x, H.z - pos.z)); return; }
+    // facing the way it goes, turning at a walker's pace, and at the spot the way the clip starts
+    const head = last && d < 0.35 ? face : Math.atan2(dx, dz), diff = wrap(head - P.heading);
+    P.heading = wrap(P.heading + Math.sign(diff) * Math.min(Math.abs(diff), WALK_UP.turnRate * dt));
+    // (at a walking pace right up to the spot, slowing only in the last stride: creeping the last few steps at a crawl
+    // played the walk so slowly its feet slid; slowed while turned right round, as the stick's walking is)
+    const off = Math.abs(wrap(Math.atan2(dx, dz) - P.heading));
+    const far = U.path.length > 0 || d > 2.5, want2 = (last ? Math.min(far ? 3.2 : 1.6, 0.7 + d * 4) : (far ? 3.2 : 1.6)) * (off > 1.8 && d > WALK_UP.home ? 0.3 : 1);
+    const v0 = P.speed;
+    P.speed = want2 > P.speed ? Math.min(want2, P.speed + MOVE.footAccel * dt) : Math.max(want2, P.speed - MOVE.footAccel * 1.5 * dt);
+    // (the way it goes: the way it faces, so the path bends as the walker turns; straight for the spot in the last half
+    // metre, to stop on it. Going straight at the spot while still turned away from it read as sliding sideways)
+    const step = Math.min(d, (v0 + P.speed) / 2 * dt), way = last && d < WALK_UP.home ? Math.atan2(dx, dz) : P.heading;
+    if (step > 1e-5) { const o = { x: pos.x, z: pos.z }; walk(o, way, step); groundV = damp(groundV, Math.hypot(o.x - pos.x, o.z - pos.z) / Math.max(dt, 1e-4), 25, dt); pos.x = o.x; pos.z = o.z; }
+    else groundV = damp(groundV, 0, 25, dt);
+    pos.y = W.heightAt(pos.x, pos.z);
+    // there, turned, and the legs come to a stand: Mount from here (the spot exactly, so the clip's first frame, which is
+    // the game's Idle standing just there, takes over without a jump)
+    if (last && d < WALK_UP.near && Math.abs(wrap(face - P.heading)) < WALK_UP.turn) {
+      pos.x = spot.x; pos.z = spot.z; pos.y = spot.y; P.heading = face; P.speed = 0; groundV = 0;
+      if ((U.still += dt) >= WALK_UP.settle) startMount(U.side);
+    }
+  }
+  function startMount(side) {
+    walkUp = null; P.speed = 0;
+    seat.mountClip(H.a, { side, onDone: () => { P.mode = 'horse'; P.heading = H.heading; person.play('Ride', { fade: 0, speed: 0.2 }); } });
+  }
+  // getting off with the clips: the horse's left, else its right, where there is room to stand (the uphill side first on
+  // a slope); null: the old hop
+  function dismountSide() {
+    if (!seat.canClip) return 0;
+    for (const side of uphillFirst([1, -1])) {
+      const spot = new THREE.Vector3(); seat.spot(H.a, side, spot);
+      const [, along] = toLocal(spot.x, spot.z), out = toWorld(side * 1.0 * BODY, along, new THREE.Vector3());
+      if (roomAt(spot) && !W.blocked(out.x, out.z)) return side;
+    }
+    return 0;
+  }
   P.dismount = () => {
     if (P.mode !== 'horse' || seat.busy()) return false;
     if (H.speed > 2.5) { pendingDismount = true; return false; }     // (reined in first: off when it has slowed)
     pendingDismount = false; setLayer(null);
+    const side = dismountSide();
+    if (side) {
+      P.mode = 'dismounting'; H.mode = 'stand'; H.speed = 0; H.yawRate = 0; H.idleT = 3; dismountSpot = null;
+      seat.dismountClip({ side, onDone: (feet, heading) => {
+        // (on foot just where the clip left the feet, facing as it left them, in the game's Idle: its last frame. The
+        // body is drawn this frame as the clip left it; the next frame stands it there in Idle, so it doesn't move)
+        P.mode = 'foot'; P.downAt = performance.now(); pos.copy(feet); P.heading = heading; P.speed = 0; groundV = 0;
+        person.play('Idle', { fade: 0 });
+      } });
+      return true;
+    }
     let spot = null;
     // (beside it, clear of its body: further out from a bigger horse)
     for (const side of [1, -1]) { const v = sideOf(H.a, new THREE.Vector3(), side, 1.25 * BODY); if (!W.blocked(v.x, v.z)) { spot = v; break; } }
@@ -524,6 +637,7 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
   P.moveHorse = (x, z) => { if (!H || P.mode === 'horse' || P.mode === 'mounting' || P.mode === 'dismounting') return false; H.x = x; H.z = z; H.speed = 0; H.yawRate = 0; placeHorse(0); return true; };
   P.teleport = (x, z, rot = P.heading) => {
     const y = W.heightAt(x, z);
+    if (walkUp) { walkUp = null; P.mode = 'foot'; if (H) H.mode = 'stand'; }   // (walking up to get on: not any more)
     if (P.onHorse && H) { H.x = x; H.z = z; H.heading = rot; H.speed = 0; H.yawRate = 0; placeHorse(0); }
     else { pos.set(x, y, z); P.speed = 0; person.root.position.copy(pos); person.root.rotation.set(0, rot, 0); }
     P.heading = rot; cam.snap(); pendingMount = false; P.cancelLasso();
@@ -541,7 +655,11 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
     cam.shift(dx, dy, dz); P.cancelLasso();
   };
   P.setLook = (look) => {
-    const riding = P.mode === 'horse'; if (riding) P.mode = 'foot';
+    // (a new body part way through getting on is put in the saddle; part way through getting off, on the ground where
+    // the clip would have left them)
+    if (P.mode === 'dismounting' && H) { const v = new THREE.Vector3(), side = seat.clip ? seat.clip.side : 1, h = seat.spot(H.a, side, v); if (seat.clip) { pos.copy(v); P.heading = h; } else if (dismountSpot) pos.copy(dismountSpot); P.mode = 'foot'; }
+    walkUp = null;
+    const riding = P.mode === 'horse' || P.mode === 'mounting'; if (riding) P.mode = 'foot';
     setPerson(makeRider(look));
     if (riding) { P.mode = 'mounting'; person.play(has('Ride') ? 'Ride' : 'Idle', { fade: 0 }); seat.mount(H.a, { time: 0.01, onDone: () => { P.mode = 'horse'; } }); }
   };
@@ -565,11 +683,12 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
       if (pendingMount && want.mag > 0.3) pendingMount = false;         // (walked off: not waiting to get on any more)
       const lc = lassoControl(h, want); if (lc) want = lc;
       if (P.mode === 'foot') { walkAs(pos.y); footStep(h, want); }
+      else if (walkUp) { walkAs(pos.y); walkUpStep(h, want); }
       else if (P.mode === 'horse') { walkAs(null, true); rideStep(h, want); }
       walkAs(null, true);
       if (H && H.mode !== 'ridden') horseAlone(h);
       walkAs();
-      if (H && (P.mode === 'horse' || P.mode === 'mounting')) { pos.x = H.x; pos.z = H.z; }
+      if (H && (P.mode === 'horse' || hopping())) { pos.x = H.x; pos.z = H.z; }
       if (P.mode === 'horse' || P.mode === 'foot') cam.swing(h, { heading: P.mode === 'horse' ? H.heading : P.heading, onHorse: P.mode === 'horse', speed: P.mode === 'horse' ? H.speed : P.speed });
     }
     if (H) placeHorse(dt);
@@ -577,12 +696,13 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
     if (H) H.a.update(dt);
     person.update(dt);
     syncRide();
-    if (P.mode === 'foot') { person.root.position.copy(pos); person.root.rotation.set(0, P.heading, 0); person.root.updateMatrixWorld(true); }
+    if (P.mode === 'foot' || walkUp) { person.root.position.copy(pos); person.root.rotation.set(0, P.heading, 0); person.root.updateMatrixWorld(true); }
     else { seat.update(dt); turnToThrow(dt); }
-    if (P.mode === 'horse' || P.mode === 'mounting') { pos.set(H.x, H.a.root.position.y, H.z); }
+    if (P.mode === 'horse' || hopping()) { pos.set(H.x, H.a.root.position.y, H.z); }
+    else if (seat.clip) pos.copy(seat.at);        // (getting on or off: from the feet on the ground to the horse as they go up)
     gunStep(dt);
     lasso.update(dt);
-    cam.update(dt, { at: pos, heading: P.mode === 'horse' ? H.heading : P.heading, onHorse: P.mode === 'horse' || P.mode === 'mounting', speed: P.mode === 'horse' ? H.speed : P.speed, seat: H && H.big ? H.a.info.seat.at[1] : null });
+    cam.update(dt, { at: pos, heading: P.mode === 'horse' ? H.heading : P.heading, onHorse: P.mode === 'horse' || (P.mode === 'mounting' && !walkUp), speed: P.mode === 'horse' ? H.speed : P.speed, seat: H && H.big ? H.a.info.seat.at[1] : null });
     // (first person, src/camera.js FIRST: the rider's own body gone by half way in, back on the way out; touched only
     // while it is in or coming back, so a job fading the rider itself (the dock) is left alone)
     if (cam.fp > 0) { person.fade = Math.max(0, 1 - cam.fp * 2); fpFaded = true; } else if (fpFaded) { person.fade = 1; fpFaded = false; }
@@ -590,6 +710,7 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
   };
 
   function footStep(dt, want) {
+    const fromX = pos.x, fromZ = pos.z;   // (where they stood before this step)
     let target = 0;
     if (want.dir !== null) {
       const diff = wrap(want.dir - P.heading);
@@ -613,11 +734,12 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
     // water stands still rather than walking on the spot, and sliding along a fence walks at the pace it goes
     groundV = damp(groundV, got / Math.max(dt, 1e-4), 25, dt);
     // not through the horse standing there: out to the edge of its body (a line from its rump to its chest, 0.7 m round,
-    // for the bay; times its size)
+    // for the bay; times its size). Someone already nearer than that (just down off it: the dismount leaves them by its
+    // shoulder, where they got on) isn't shoved out; they only can't go any nearer
     if (H && H.mode !== 'ridden') {
-      const B = BODY, rr = 0.7 * B, s = Math.sin(H.heading), c = Math.cos(H.heading), ax = H.x - s * 1.0 * B, az = H.z - c * 1.0 * B, bx = H.x + s * 0.9 * B, bz = H.z + c * 0.9 * B;
-      const t = Math.max(0, Math.min(1, ((pos.x - ax) * (bx - ax) + (pos.z - az) * (bz - az)) / (3.61 * B * B)));
-      const qx = ax + (bx - ax) * t, qz = az + (bz - az) * t, dx = pos.x - qx, dz = pos.z - qz, d = Math.hypot(dx, dz);
+      const B = BODY, s = Math.sin(H.heading), c = Math.cos(H.heading), ax = H.x - s * 1.0 * B, az = H.z - c * 1.0 * B, bx = H.x + s * 0.9 * B, bz = H.z + c * 0.9 * B;
+      const off = (x, z) => { const t = Math.max(0, Math.min(1, ((x - ax) * (bx - ax) + (z - az) * (bz - az)) / (3.61 * B * B))); return [x - (ax + (bx - ax) * t), z - (az + (bz - az) * t)]; };
+      const [dx, dz] = off(pos.x, pos.z), d = Math.hypot(dx, dz), rr = Math.min(0.7 * B, Math.hypot(...off(fromX, fromZ)) + 1e-4);
       if (d < rr) { const k = d > 1e-4 ? (rr - d) / d : 0, nx = pos.x + (d > 1e-4 ? dx * k : c * rr), nz = pos.z + (d > 1e-4 ? dz * k : -s * rr); if (!W.blocked(nx, nz)) { pos.x = nx; pos.z = nz; } }
     }
     // not through a wagon or its team either: out to its edge (src/wagon.js pushFromWagons)
@@ -792,7 +914,7 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
     if (H) horseGait();
     if (P.mode === 'foot' && gunS.up > 0 && gunS.phase === 'idle' && personGait()[0] !== 'Idle') gunS.up = 0;
     const lc = lassoClip() || gunClip();
-    if (P.mode === 'foot') {
+    if (P.mode === 'foot' || walkUp) {
       const [g, s] = personGait();
       if (lc && (g === 'Idle' || lasso.phase !== 'held')) person.play(lc[0], { fade: 0.2, once: lc[1] });
       else person.play(g, { fade: 0.25, speed: s });
@@ -835,6 +957,7 @@ export function makePlayer({ W, scene = W.scene, folk, animals, rider = {}, inpu
 
   P.state = () => ({
     mode: P.mode, speed: +P.speed.toFixed(2), heading: +P.heading.toFixed(3), x: +pos.x.toFixed(2), z: +pos.z.toFixed(2), clip: person.clip,
+    mounting: walkUp ? { walk: walkUp.side, t: +walkUp.t.toFixed(2), corners: walkUp.path.length } : seat.clip ? { clip: seat.clip.name, t: +seat.clip.t.toFixed(3), up: seat.up, on: seat.clip.up, side: seat.clip.side } : hopping() || (P.mode === 'dismounting' && !seat.clip) ? { hop: true } : null,
     layer: layerName, lasso: lasso.phase, job: job ? (job.thrown ? 'thrown' : 'approach') : null, gun: gunS.phase, gunUp: +gunS.up.toFixed(2),
     horse: H ? { id: horseId, kind: H.a.kind, size: H.a.size || 1, cap: +((H.a.info.gait && H.a.info.gait.most && H.a.info.gait.most.Gallop) || GAIT.most.Gallop).toFixed(2), look: H.steed ? H.steed.lookNow.coat : null, mode: H.mode, x: +H.x.toFixed(2), z: +H.z.toFixed(2), speed: +H.speed.toFixed(2), gait: H.gait, clip: H.a.clip, clipSpeed: +(H.clipSpeed || 0).toFixed(2), saddle: saddleKind, dist: +Math.hypot(H.x - pos.x, H.z - pos.z).toFixed(2) } : null,
     canRide: P.canRide, cam: { yaw: +cam.yaw.toFixed(3), pitch: +cam.pitch.toFixed(3), zoom: +cam.zoom.toFixed(2) },
