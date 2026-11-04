@@ -163,6 +163,8 @@ function wallSide(p, v) {
     // a window to space in the upper half: a black frame through the wall, the glass, and nothing behind but stars
     const cy = 1.98, ww = 1.12, wh = 0.68;
     backing(p, -1, -0.62, 0, H); backing(p, 0.62, 1, 0, H); backing(p, -0.62, 0.62, 0, 1.56); backing(p, -0.62, 0.62, 2.4, H);
+    // (the hole's square corners, hidden behind the frame's rounded ones, so no sky shows round the frame)
+    for (const sx of [-1, 1]) for (const [y0, y1] of [[1.56, 1.66], [2.3, 2.4]]) backing(p, sx > 0 ? 0.5 : -0.62, sx > 0 ? 0.62 : -0.5, y0, y1);
     slabRow(p, X0, X1, 0.15, BAND[0], [[-0.35, 0.06]], 'white', [0, 0.025]); band(p, X0, X1);
     slabRow(p, X0, -0.62, BAND[1], TOP, [], 'white', [0.02]); slabRow(p, 0.62, X1, BAND[1], TOP, [], 'white', [0.02]);
     slabRow(p, -0.62, 0.62, 2.4, TOP);
