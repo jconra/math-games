@@ -129,7 +129,12 @@ test('breeds: every one is made from a dog the game has, the Boston terrier firs
   // the first slice: the Boston (on both bases, the family's dog), a border collie, a heeler, labradors, a beagle, a dalmatian
   for (const id of ['boston', 'bostonPug', 'bostonFamily', 'borderCollie', 'cattleDog', 'labYellow', 'labBlack', 'labChocolate', 'beagle', 'dalmatian']) assert.ok(BREEDS[id], id);
   assert.equal(BREEDS.boston.ears, 'bat'); assert.equal(BREEDS.bostonPug.base, 'pug'); assert.ok(BREEDS.bostonFamily.collar);
-  assert.ok(LATER.length >= 7);
+  // (a Dachshund made in the Dog Lab, 2026-11-04: in the line-up and for sale, and off the list for later)
+  assert.ok(BREED_ORDER.includes('dachshund') && BREEDS.dachshund.base === 'husky');
+  assert.ok(!LATER.some((l) => l.startsWith('Dachshund')));
+  assert.ok(LATER.length >= 6);
+  // (the family's Boston out of the line-up, 2026-11-04: the Boston with a collar, the only real difference)
+  assert.ok(!BREED_ORDER.includes('bostonFamily'));
   // the saved file: v 1, every breed in it cleans to itself
   const file = JSON.parse(fs.readFileSync(new URL('animals/dogbreeds.json', MODELS)));
   assert.equal(file.v, 1); assert.equal(typeof file.breeds, 'object');

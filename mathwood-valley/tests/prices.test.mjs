@@ -17,7 +17,7 @@ test('the prices as decided on 2026-10-19: every one doubled, the cabin 600 (the
   // (Dad, 2026-10-27: every rider starts on foot; the price goes up with the speed, the donkey 30 to Midnight 400)
   assert.deepEqual(PRICES.horse, { donkey: 30, chestnut: 45, bay: 60, palomino: 200, white: 300, midnight: 400 });
   assert.deepEqual(PRICES.hat, { white: 40, straw: 60, bowler: 100, ranger: 160, cattleman: 240, sombrero: 400 });
-  assert.deepEqual(PRICES.dog, { shiba: 120, husky: 120, pug: 50, boston: 120, borderCollie: 140, cattleDog: 140, labYellow: 130, labBlack: 130, labChocolate: 130, beagle: 100, dalmatian: 160 });
+  assert.deepEqual(PRICES.dog, { shiba: 120, husky: 120, pug: 50, boston: 120, borderCollie: 140, cattleDog: 140, labYellow: 130, labBlack: 130, labChocolate: 130, beagle: 100, dachshund: 110, dalmatian: 160 });
   assert.deepEqual(PRICES.animal, { hen: 30, pig: 70, sheep: 100, cow: 240 });
   assert.deepEqual(PRICES.furniture, { rug: 30, lanterns: 60, picture: 80, dogbeds: 90, table: 120, porch: 160, bed: 200, rifles: 240, stove: 440 });
   assert.equal(PRICES.cabin, 600);

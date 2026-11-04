@@ -120,7 +120,7 @@ function makeDog(id) {
 }
 
 // ── the dogs in the scene, by view ───────────────────────────────────────────────────────────────────────────────
-const state = { id: 'bostonFamily', view: 'one', clip: 'Idle', speed: 1, playing: true, spin: false, pace: 3, shadows: true, tab: null };
+const state = { id: 'boston', view: 'one', clip: 'Idle', speed: 1, playing: true, spin: false, pace: 3, shadows: true, tab: null };
 const dogs = [];                    // { a, id, x, z, rot }
 const group = new THREE.Group(); scene.add(group);
 let tags = [];
@@ -131,7 +131,7 @@ function playOn(d, name = state.clip) {
   const a = d.a, clip = a.actions[name] ? name : 'Idle';
   a.play(clip, { fade: 0, speed: state.speed, once: /_Down$|Death|Jump_toIdle/.test(clip) });
 }
-const BASE_ROW = ['shiba', 'boston', 'bostonFamily', 'pug'];   // (the Boston on the pug is not a keeper: dogbreeds.js NOT_KEEPERS)
+const BASE_ROW = ['shiba', 'boston', 'pug'];   // (the Boston on the pug and the family's are not keepers: dogbreeds.js NOT_KEEPERS)
 function setView(v, { keepCam = false } = {}) {
   state.view = v;
   const t0 = performance.now();
@@ -142,7 +142,7 @@ function setView(v, { keepCam = false } = {}) {
     lightAt(0, d.z, 2.5);
     if (!keepCam) camTo(v === 'run' ? 'run' : 'q34');
   } else {
-    // a line-up: every breed (compare: two rows, the second behind), or the Bostons beside the plain dogs
+    // a line-up: every breed (compare: two rows, the second behind), or the Boston beside the plain dogs
     // (bases: one row); a narrow screen gets more rows
     const ids = v === 'bases' ? BASE_ROW : [...ORDER], aspect = innerWidth / innerHeight;
     const rows = v === 'bases' ? (aspect < 0.8 ? 2 : 1) : aspect < 0.8 ? 4 : 2, per = Math.ceil(ids.length / rows);
@@ -269,7 +269,7 @@ function drawerHTML(t) {
       <div class="btnrow"><button class="btn" data-act="run">Run along the track</button></div>
       <p class="note" id="m-gait"></p></div>${HOW.motion}`;
   if (t === 'view') return head + `<div class="grid">
-      <div class="btnrow"><button class="btn" data-view="one">One dog</button><button class="btn" data-view="compare">All the breeds</button><button class="btn" data-view="bases">The Bostons and their bases</button><button class="btn" data-view="run">Running</button></div>
+      <div class="btnrow"><button class="btn" data-view="one">One dog</button><button class="btn" data-view="compare">All the breeds</button><button class="btn" data-view="bases">The Boston and the plain dogs</button><button class="btn" data-view="run">Running</button></div>
       <div class="btnrow"><button class="btn" data-cam="side">Side</button><button class="btn" data-cam="front">Front</button><button class="btn" data-cam="q34">Three-quarter</button><button class="btn" data-cam="top">Top</button><button class="btn" data-cam="head">Head</button><button class="btn" data-cam="back">Back</button></div>
       <div class="row check"><label><input type="checkbox" id="k-spin"> Turntable (spin slowly)</label></div>
       <div class="row check"><label><input type="checkbox" id="k-shadows" checked> Shadows</label></div>

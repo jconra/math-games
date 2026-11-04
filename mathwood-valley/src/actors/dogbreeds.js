@@ -103,6 +103,17 @@ export const BREEDS = {
     coat: { base: '#b26a2f', white: WHITE, dark: '#161312', blaze: 0.3, blazeTop: 0.5, muzzle: 0.85, chest: 0.85, belly: 0.8, socksF: 0.5, socksB: 0.45, tailTip: 0.3, saddle: 0.75, shade: 0.1 },
     note: 'Tricolour: a black saddle, tan head and ears, white blaze, muzzle, chest, legs and tail tip; long drop ears, the tail up.',
   },
+  // THE DACHSHUND: designed in the Dog Lab by one of the game's young testers (2026-11-04), reshaped from the chocolate
+  // Lab, and kept as it was made
+  dachshund: {
+    label: 'Dachshund', base: 'husky', ears: 'drop',
+    morph: { size: 0.79, legFront: 0.57, legBack: 0.45, legThick: 1.18, legSet: 0.03, body: 1.49, chestDepth: 1.01, chestWidth: 1.51, girth: 0.7,
+      neck: 0.79, neckThick: 0.94, neckTilt: -0.46, head: 1.05, skull: 1.47, snout: 1.23, muzzle: 0.7, jaw: 0.96, eyes: 1.71, headTilt: -0.08,
+      ears: 0.95, earLength: 1.44, earWidth: 1.25, earSplay: 2.6, earTilt: 0.39, earFold: 0, tailLength: 0.98, tailThick: 0.91, tailCarry: -1.4, tailCurl: -0.84 },
+    coat: { base: '#0d0602', white: '#5e340d', tan: '#612d00', dark: '#ffc5a8', nose: '#3a2419', shade: 0.08, blazeTop: 0.89, muzzle: 0.34, belly: 0.32,
+      socksF: 0.2, socksB: 0.59, points: 0.18, patternAmount: 0.66 },
+    note: 'Black and tan: very short legs under a long low body, a deep wide chest, a long head, big eyes, long drop ears, a smooth coat; the tan on the muzzle, the feet and the belly.',
+  },
   dalmatian: {
     label: 'Dalmatian', base: 'husky', ears: 'drop',
     morph: { size: 0.98, legFront: 1.05, legBack: 1.05, body: 1.02, chestDepth: 1.05, girth: 0.95, tuck: 0.4, neck: 1.1, head: 0.98, snout: 1.05,
@@ -135,6 +146,7 @@ const FUR_OF = {
   boston: SHORT, bostonPug: SHORT, bostonFamily: SHORT, bostonBrindle: SHORT, beagle: SHORT, dalmatian: { ...SHORT, strength: 0.45 },
   labYellow: { length: 0.22, softness: 0.35, strength: 0.5, sheen: 0.5 }, labBlack: { length: 0.22, softness: 0.35, strength: 0.5, sheen: 0.55 },
   labChocolate: { length: 0.22, softness: 0.35, strength: 0.5, sheen: 0.5 },
+  dachshund: { length: 0, softness: 0.23, strength: 0.5, sheen: 0.55 },
   cattleDog: { length: 0.3, softness: 0.35, strength: 0.55, sheen: 0.45 },
   borderCollie: { length: 0.85, softness: 0.75, strength: 0.7, sheen: 0.6 },
 };
@@ -149,9 +161,11 @@ export function baseFur(id, saved = null) {
   return fillFur({ ...own, ...(file || {}) });
 }
 
-export const NOT_KEEPERS = ['bostonPug', 'bostonBrindle'];
-export const BREED_ORDER = ['boston', 'bostonFamily', 'borderCollie', 'cattleDog', 'labYellow', 'labBlack', 'labChocolate', 'beagle', 'dalmatian'];
-export const LATER = ['German shepherd (saddle, black mask, big pricked ears)', 'Corgi (very short legs, long body, big ears)', 'Dachshund (very short legs, very long body, drop ears)',
+// (and the family's Boston, the game's maker 2026-11-04: "We can have an option for collar maybe. But that is basically
+// the only difference")
+export const NOT_KEEPERS = ['bostonPug', 'bostonBrindle', 'bostonFamily'];
+export const BREED_ORDER = ['boston', 'borderCollie', 'cattleDog', 'labYellow', 'labBlack', 'labChocolate', 'beagle', 'dachshund', 'dalmatian'];
+export const LATER = ['German shepherd (saddle, black mask, big pricked ears)', 'Corgi (very short legs, long body, big ears)',
   'Greyhound (long legs, deep chest, tucked belly, thin tail)', 'Basset hound (short legs, long ears, heavy head)', 'Coonhound (black and tan, long ears)', 'Bloodhound (long ears, loose skin: the face a morph cannot fold)'];
 export const isBreed = (id) => Object.prototype.hasOwnProperty.call(BREEDS, id);
 

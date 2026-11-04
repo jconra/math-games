@@ -20,7 +20,7 @@ export const PRICES = {
   hat: { white: 40, straw: 60, bowler: 100, ranger: 160, cattleman: 240, sombrero: 400 },   // the old cowboy hat comes free
   // the dogs' base prices: the pug is the cheap joke pick; the breeds (src/actors/dogbreeds.js) by size and how fancy.
   // A rider pays more for each dog already owned (dogPrice below)
-  dog: { shiba: 120, husky: 120, pug: 50, boston: 120, borderCollie: 140, cattleDog: 140, labYellow: 130, labBlack: 130, labChocolate: 130, beagle: 100, dalmatian: 160 },
+  dog: { shiba: 120, husky: 120, pug: 50, boston: 120, borderCollie: 140, cattleDog: 140, labYellow: 130, labBlack: 130, labChocolate: 130, beagle: 100, dachshund: 110, dalmatian: 160 },
   // the farm animals for the yard behind the cabin (src/math/goods.js ANIMALS): a hen cheap, a milk cow dear
   animal: { hen: 30, pig: 70, sheep: 100, cow: 240 },
   // the cabin's furnishings (src/cabin/slots.js SLOTS), a ladder from a cheap rug to a costly stove
@@ -92,6 +92,7 @@ export const DOGS = [
   { id: 'labBlack', name: 'Black Lab', line: 'Big, gentle and happy. Loves the lake.' },
   { id: 'labChocolate', name: 'Chocolate Lab', line: 'Big, gentle and happy. Loves the lake.' },
   { id: 'beagle', name: 'Beagle', line: 'A nose for anything. Bays when he finds it.' },
+  { id: 'dachshund', name: 'Dachshund', line: 'Long and low, with a big bark for a little dog.' },
   { id: 'dalmatian', name: 'Dalmatian', line: 'Spots all over. Runs beside a horse all day.' },
 ];
 // what a dog costs a rider who owns `owned` dogs already: its base price, half as much again for each dog owned, to the
