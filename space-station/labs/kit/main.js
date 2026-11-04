@@ -17,13 +17,14 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { makeMaterials, U } from '../../kit/materials.js';
 import { createSky, SKY_VIEWS } from '../../world/sky.js';
 import { PIECES, GROUPS, pieceList } from '../../kit/catalog.js';
-import { buildRoom, updateDoors, setDoors, loadRoom, roomBounds } from '../../kit/layout.js';
+import { buildRoom, updateDoors, setDoors, loadRoom, roomBounds, updateZones } from '../../kit/layout.js';
+import { loadBake, packBake } from '../../kit/bakefile.js';
 import { plane, put } from '../../kit/geo.js';
 import { Piece } from '../../kit/piece.js';
 import { makeDust } from '../../kit/dust.js';
 
 const $ = (s) => document.querySelector(s), q = new URLSearchParams(location.search);
-const ROOMS = [['corridor', 'Corridor'], ['junction', 'Junction + room']];
+const ROOMS = [['corridor', 'Corridor'], ['junction', 'Junction + room'], ['station', 'The station']];
 const QUALITY = {
   low: { ratio: 1, bloom: false, shadowMap: false, bake: { voxel: 0.09, rays: 20, shadows: false }, probe: 64 },
   medium: { ratio: 1.5, bloom: true, shadowMap: true, bake: { voxel: 0.07, rays: 28, shadows: true }, probe: 128 },
@@ -199,13 +200,14 @@ async function showRoom(id = state.room) {
   state.tab = 'rooms'; state.room = id;
   loading('Lighting the ' + (ROOMS.find((r) => r[0] === id)?.[1] || id).toLowerCase() + '…', !!built); await frame();
   if (!roomData[id]) roomData[id] = await loadRoom(new URL(`../../kit/rooms/${id}.json`, import.meta.url));
-  const R = roomData[id];
+  const R = roomData[id], more = await stationOpts(R);
   clearStage();
-  built = buildRoom(R, mats, { bake: QUALITY[state.quality].bake });
+  built = buildRoom(R, mats, { bake: QUALITY[state.quality].bake, ...more });
   STAGE.add(built.group);
   if (built.stats.problems.length) console.warn('kit lab: the room has problems', built.stats.problems);
   setDoors(built.doors, state.doors === 'open' ? 1 : 0);
-  dust.visible = false; setEnv('room', R.probe || R.views?.start?.at || [0, 1.6, 0]); dust.visible = state.quality !== 'low';
+  dust.visible = false; if (R.rooms) updateZones(built, new THREE.Vector3(...(R.views?.start?.at || [0, 1.6, 0])), 0.01);
+  setEnv('room', R.probe || R.views?.start?.at || [0, 1.6, 0]); if (R.rooms) zoneProbes(built); dust.visible = state.quality !== 'low';
   if (!(state.view in (R.views || {}))) state.view = 'start';
   view(state.view); loading(''); menu(); readout();
 }
@@ -307,6 +309,7 @@ function draw(dt = 1 / 60) {
 let last = performance.now();
 function loop(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
+  if (stationTick(now)) return;
   resize(); fly(dt); if (dust.visible) dust.userData.update(dt, camera.position); sky.update(dt);
   if (built && built.doors.length && state.doors === 'auto' && updateDoors(built.doors, camera.position, dt, 'auto')) renderer.shadowMap.needsUpdate = true;
   if (renderer.shadowMap.enabled) renderer.shadowMap.autoUpdate = false;
@@ -316,6 +319,138 @@ function loop(now) {
   fps.n++; if (now - fps.t > 500) { fps.v = fps.n * 1000 / (now - fps.t); fps.ms = (now - fps.t) / fps.n; fps.n = 0; fps.t = now; readout(); }
 }
 
+// ── the station: one room file holding many rooms ────────────────────────────────────────────────────────────────
+// Each room of it (a zone) is merged into its own meshes, with its own picture of itself for reflections and bounce
+// (the lit materials are the room's own; glass, glows, screens and the shield are shared by all). A room is drawn when
+// the eye is in it, or when an opening into it (the room file's portals) is on screen; the light probes, which look
+// all round, use `range` instead. Its light comes from the saved bake beside the room file when that still matches
+// the pieces (bake=live in the address works it all out instead).
+const station = { range: 34, saved: false, bakeBytes: 0, times: { moduleAt: Math.round(performance.now()) } }, zoneSets = new Map();
+let frozen = false;
+async function stationOpts(R) {
+  if (!R.rooms) return {};
+  station.times.roomFetchedAt = Math.round(performance.now());
+  const t0 = performance.now(), saved = R.bake && q.get('bake') !== 'live' ? await loadBake(new URL(`../../kit/rooms/${R.bake}`, import.meta.url)) : null;
+  station.times.bakeFetch = Math.round(performance.now() - t0);
+  station.saved = !!saved; station.bakeBytes = +(saved?.bytes || 0);
+  return { saved, zoneMats: zoneMaterials, compact: q.get('compact') !== '0' };
+}
+function zoneMaterials(id) {
+  if (!zoneSets.has(id)) { const m = makeMaterials(); zoneSets.set(id, { ...mats, solid: m.solid, floor: m.floor, decal: m.decal, solidInst: mats.solidInst, floorInst: mats.floorInst, decalInst: mats.decalInst }); }
+  return zoneSets.get(id);
+}
+// each room's picture of itself, from its probe point (or its middle at eye height): twice, so the second sees the
+// first's bounce
+function zoneProbes(b) {
+  const t0 = performance.now();
+  const rt = new THREE.WebGLCubeRenderTarget(QUALITY[state.quality].probe, { type: THREE.HalfFloatType }), cc = new THREE.CubeCamera(0.05, 90, rt);
+  scene.add(cc); const bg = scene.background; scene.background = null;
+  for (let pass = 0; pass < 2; pass++) {
+    const envs = b.zones.map((z) => {
+      if (z.with) return null;   // (a door's zone uses its room's picture)
+      const c = z.box.getCenter(new THREE.Vector3()); cc.position.set(...(z.probe || [c.x, z.box.min.y + 1.6, c.z]));
+      updateZones(b, cc.position, station.range); cc.update(renderer, scene); return pmrem.fromCubemap(rt.texture).texture;
+    });
+    b.zones.forEach((z, i) => {
+      if (z.with) return;
+      const set = zoneSets.get(z.id); if (set.env) set.env.dispose(); set.env = envs[i];
+      // (a big room's own picture of itself is mostly its bright walls: a little less of it, so its lights make pools)
+      for (const k of ['solid', 'floor', 'decal']) { set[k].envMap = envs[i]; set[k].envMapIntensity = mats[k].envMapIntensity * (z.sky ? 0.7 : 1); set[k].needsUpdate = true; }
+    });
+  }
+  scene.background = bg; scene.remove(cc); rt.dispose();
+  station.times.probes = Math.round(performance.now() - t0);
+}
+// every frame: the shield's time, which rooms are near enough to draw; true while a rig holds the picture still
+function stationTick(now) {
+  U.time.value = now / 1000;
+  if (built?.zones?.length > 1 && !frozen) updateZones(built, camera.position, station.range, camera, roomData[state.room]?.portals);
+  return frozen;
+}
+// a plan from above (x to the right, z down the page), everything above `y` cut away; returns the plan's edges in metres
+const planCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200);
+function plan({ y = 2.6, box = null } = {}) {
+  frozen = true;
+  const b = box ? new THREE.Box3(new THREE.Vector3(box[0], -1, box[1]), new THREE.Vector3(box[2], 10, box[3])) : roomBounds(roomData[state.room]);
+  const cx = (b.min.x + b.max.x) / 2, cz = (b.min.z + b.max.z) / 2, aspect = canvas.width / canvas.height;
+  let hw = (b.max.x - b.min.x) / 2 * 1.03, hh = (b.max.z - b.min.z) / 2 * 1.03; if (hw / hh > aspect) hh = hw / aspect; else hw = hh * aspect;
+  planCam.left = -hw; planCam.right = hw; planCam.top = hh; planCam.bottom = -hh; planCam.updateProjectionMatrix();
+  planCam.position.set(cx, 80, cz); planCam.up.set(0, 0, -1); planCam.lookAt(cx, 0, cz);
+  for (const z of built?.zones || []) z.group.visible = true;
+  const fog = scene.fog, bg = scene.background, dv = dust.visible; scene.fog = null; scene.background = new THREE.Color(0x0b0f14); dust.visible = false;
+  renderer.clippingPlanes = [new THREE.Plane(new THREE.Vector3(0, -1, 0), y)];
+  renderer.setRenderTarget(null); renderer.render(scene, planCam);
+  renderer.clippingPlanes = []; scene.fog = fog; scene.background = bg; dust.visible = dv;
+  return { left: cx - hw, right: cx + hw, top: cz - hh, bottom: cz + hh };
+}
+// holes to outside: from each point, a look all round (six views) with the background bright magenta and the glass
+// and shield painted solid (they are meant to show outside); every magenta pixel is somewhere the eye sees out
+function leaks(points, res = 48) {
+  frozen = true;
+  const rt = new THREE.WebGLRenderTarget(res, res), cam = new THREE.PerspectiveCamera(90, 1, 0.05, 200), px = new Uint8Array(res * res * 4), swaps = [], solidPaint = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+  scene.traverse((o) => { if (o.isMesh && (o.material === mats.glass || o.material === mats.shield)) { swaps.push([o, o.material]); o.material = solidPaint; } });
+  const fog = scene.fog, bg = scene.background, dv = dust.visible; scene.fog = null; scene.background = new THREE.Color(1, 0, 1); dust.visible = false;
+  const dirs = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]], out = [];
+  for (const at of points) {
+    cam.position.set(...at);
+    const per = dirs.map((d) => {
+      cam.up.set(...(d[1] ? [0, 0, 1] : [0, 1, 0])); cam.lookAt(at[0] + d[0], at[1] + d[1], at[2] + d[2]);
+      if (built?.zones?.length > 1) updateZones(built, cam.position, station.range, cam, roomData[state.room]?.portals);
+      renderer.setRenderTarget(rt); renderer.render(scene, cam); renderer.readRenderTargetPixels(rt, 0, 0, res, res, px);
+      let c = 0; for (let i = 0; i < px.length; i += 4) if (px[i] > 200 && px[i + 1] < 60 && px[i + 2] > 200) c++; return c;
+    });
+    out.push({ at, magenta: per.reduce((a, c) => a + c, 0), per });
+  }
+  renderer.setRenderTarget(null); for (const [o, m] of swaps) o.material = m; solidPaint.dispose(); rt.dispose();
+  scene.fog = fog; scene.background = bg; dust.visible = dv; frozen = false;
+  return out;
+}
+// walk a route (cells [x, z] on the grid) through the room's voxels (bake=live): under each step the floor; whether
+// anything stands in a body's way (0.22 m round, from 0.35 m to 1.85 m over the floor); the clear width across
+function walk(cells, { step = 0.2, r = 0.22 } = {}) {
+  const V = built?.voxels; if (!V) return { error: 'no voxels: load with bake=live' };
+  const pts = cells.map(([x, z]) => [x * 2, z * 2]), out = { samples: 0, blocked: [], minWidth: [], floors: [] };
+  let floor = 0;
+  for (let s = 0; s < pts.length - 1; s++) {
+    const [ax, az] = pts[s], [bx, bz] = pts[s + 1], len = Math.hypot(bx - ax, bz - az), n = Math.max(1, Math.ceil(len / step)), dx = (bx - ax) / len, dz = (bz - az) / len;
+    let minW = Infinity;
+    for (let i = 0; i <= n; i++) {
+      const x = ax + (bx - ax) * i / n, z = az + (bz - az) * i / n;
+      // the floor: the first full voxel down from a step above the last floor
+      let f = null; for (let y = floor + 1.0; y > floor - 1.2; y -= V.s * 0.5) if (V.full(x, y, z)) { f = y; break; }
+      if (f !== null) floor = f;
+      let hits = 0;
+      for (let h = floor + 0.35; h <= floor + 1.85; h += 0.1) for (let k = 0; k <= 8; k++) { const a = k / 8 * Math.PI * 2, rr = k === 8 ? 0 : r; if (V.full(x + Math.cos(a) * rr, h, z + Math.sin(a) * rr)) hits++; }
+      if (hits) out.blocked.push({ seg: s, at: [+x.toFixed(2), +floor.toFixed(2), +z.toFixed(2)], hits });
+      // the clear width across the way at hip and head height
+      for (const h of [1.0, 1.6]) {
+        let w = 0; for (const sg of [-1, 1]) { let t = 0; while (t < 8 && !V.full(x - dz * t * sg, floor + h, z + dx * t * sg)) t += V.s * 0.5; w += t; }
+        minW = Math.min(minW, w);
+      }
+      out.samples++; if (i === 0) out.floors.push(+floor.toFixed(2));
+    }
+    out.minWidth.push(+minW.toFixed(2));
+  }
+  return out;
+}
+// (the same paint as leaks(), left on so a picture shows where the holes are)
+let leakSwaps = null;
+function leakPaint(on) {
+  if (on && !leakSwaps) {
+    const paint = new THREE.MeshBasicMaterial({ color: 0x00ff00 }); leakSwaps = { list: [], fog: scene.fog, bg: scene.background, paint };
+    scene.traverse((o) => { if (o.isMesh && (o.material === mats.glass || o.material === mats.shield)) { leakSwaps.list.push([o, o.material]); o.material = paint; } });
+    scene.fog = null; scene.background = new THREE.Color(1, 0, 1);
+  } else if (!on && leakSwaps) {
+    for (const [o, m] of leakSwaps.list) o.material = m; scene.fog = leakSwaps.fog; scene.background = leakSwaps.bg; leakSwaps.paint.dispose(); leakSwaps = null;
+  }
+}
+async function packBakeB64() {
+  const zones = built.zones.map((z) => ({ id: z.id, meshes: Object.fromEntries(['solid', 'floor', 'decal'].filter((k) => z.merged[k]).map((k) => [k, z.merged[k]])) }));
+  const bytes = await packBake(zones, { room: state.room, quality: state.quality });
+  let s = ''; for (let i = 0; i < bytes.length; i += 32768) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 32768));
+  return { b64: btoa(s), bytes: bytes.length };
+}
+
 const KL = window.KL = {
   ready: false, part: (id, v) => showPart(id, v), room: (id) => showRoom(id), view, quality, doors, stats, bench,
   cam: (at, look, fov) => lookFrom(at, look, fov), orbit: (yaw, pitch, dist) => { cam.mode = 'orbit'; cam.yaw = yaw; cam.pitch = pitch; if (dist) cam.dist = dist; applyCam(); },
@@ -323,6 +458,8 @@ const KL = window.KL = {
   get roomData() { return roomData; }, renderer, scene, camera, mats, state,
   sky: (name) => showSky(name), skyTurn, theSky: sky, skyViews: () => Object.keys(SKY_VIEWS),
 };
+// (the station's tools, for rigs: a plan, holes to outside, a walk along a route, the saved bake)
+Object.assign(KL, { plan, leaks, leakPaint, walk, packBake: packBakeB64, station, unfreeze: () => { frozen = false; }, zones: () => (built?.zones || []).map((z) => ({ id: z.id, tris: Math.round(z.tris), visible: z.group.visible, from: z.bakedFrom })) });
 (async () => {
   touchControls(); setupPost(); resize(true);
   if (q.get('sky')) showSky(q.get('sky'));

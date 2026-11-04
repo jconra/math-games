@@ -9,16 +9,16 @@ import { WALL_FACE as WF, RIB_FACE as RF, ROOM_H as H } from './grid.js';
 import { rrect, arch, doorPath, rectLoop, line, plane, put, MeshData, bevelBox, circle, fixWinding } from './geo.js';
 import { FLOOR_RECT } from './tex.js';
 
-const G = 0.007;          // half the seam between two panels
-const Z0 = 0.07;          // the back of a wall slab (the dark backing sits behind it, the door pocket behind that)
-const BAND = [1.22, 1.52];// the dark band across a wall
-const TOP = 2.52;         // where the cornice starts (a big slant from here up to the ceiling)
+export const G = 0.007;          // half the seam between two panels
+export const Z0 = 0.07;          // the back of a wall slab (the dark backing sits behind it, the door pocket behind that)
+export const BAND = [1.22, 1.52];// the dark band across a wall
+export const TOP = 2.52;         // where the cornice starts (a big slant from here up to the ceiling)
 const PI = Math.PI;
 
 // ── floor tiles ───────────────────────────────────────────────────────────────────────────────────────────────────
 // a floor quad, x0..x1 by z0..z1 at height y, mapped onto a region of the floor atlas. `along` = 'x' (default) or 'z'
 // says which way the texture's long bars run; `flipV` mirrors it across
-function floorQuad(p, region, x0, x1, z0, z1, y = 0, { along = 'x', v0 = 0, v1 = 1, u0 = 0, u1 = 1 } = {}) {
+export function floorQuad(p, region, x0, x1, z0, z1, y = 0, { along = 'x', v0 = 0, v1 = 1, u0 = 0, u1 = 1 } = {}) {
   const [a, b, c, d] = FLOOR_RECT[region], inset = 1.5 / 1024, m = new MeshData();
   const U = (t) => a + inset + (c - a - 2 * inset) * t, V = (t) => b + inset + (d - b - 2 * inset) * t;
   const nx = Math.max(1, Math.ceil((x1 - x0) / 0.34)), nz = Math.max(1, Math.ceil((z1 - z0) / 0.34));
@@ -31,15 +31,17 @@ function floorQuad(p, region, x0, x1, z0, z1, y = 0, { along = 'x', v0 = 0, v1 =
   for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) { const q = j * (nx + 1) + i; m.quad(q, q + nx + 1, q + nx + 2, q + 1); }
   return p.add('floor', m.geometry());
 }
-function floorSkirt(p) { // the tile's edge, down into the floor void (seen only at openings)
+export function floorSkirt(p) { // the tile's edge, down into the floor void (seen only at openings)
   for (const [w, at, ry] of [[2, [0, -0.04, 1], 0], [2, [0, -0.04, -1], PI], [2, [1, -0.04, 0], PI / 2], [2, [-1, -0.04, 0], -PI / 2]]) {
     const g = plane(w, 0.08, { uv: [0.75, 0.25, 0.76, 0.26], cell: 9 }); put(g, at, [0, ry, 0]); p.add('floor', g);
   }
+  // a dark plate under the whole tile, so a hairline where two of its parts meet shows dark, never the space below
+  const u = plane(2, 2, { uv: [0.75, 0.25, 0.76, 0.26], cell: 9 }); put(u, [0, -0.06, 0], [-PI / 2, 0, 0]); p.add('floor', u);
 }
 // the edge of a walkway: where the grating stops at `e`, a bare-metal rail, then a black channel with the light strip
 // in it. The strip runs in segments that stop short of each tile's ends, a brighter fleck at each end. `along` is
 // 'x' or 'z' (which way the edge runs), u0..u1 how far.
-function walkEdge(p, along, u0, u1, e) {
+export function walkEdge(p, along, u0, u1, e) {
   const S = (surf, a0, a1, y0, y1, w0, w1, o) => (along === 'x' ? p.slab(surf, a0, a1, y0, y1, w0, w1, o) : p.slab(surf, w0, w1, y0, y1, a0, a1, o));
   const L = (name, a0, a1, y0, y1, w0, w1) => (along === 'x' ? p.glowSlab(name, a0, a1, y0, y1, w0, w1) : p.glowSlab(name, w0, w1, y0, y1, a0, a1));
   S('rail', u0, u1, -0.012, 0.012, e, e + 0.04, { r: 0.006, cell: 0.5 });
@@ -115,13 +117,14 @@ export function ceilingTile(p, v) {
 // a row of off-white slabs between y0 and y1 (from x0 to x1), split at `cuts`: a cut is an x (a hairline seam) or
 // [x, width] (a recessed dark channel). `depth` sets each slab proud of the wall face by so much, so a wall steps in
 // and out the way plated machinery does
-function slabRow(p, x0, x1, y0, y1, cuts = [], surf = 'white', depth = []) {
+export function slabRow(p, x0, x1, y0, y1, cuts = [], surf = 'white', depth = [], opts = {}) {
   const C = cuts.map((c) => (Array.isArray(c) ? c : [c, 2 * G])), xs = [[x0, 0], ...C, [x1, 0]];
-  for (let i = 0; i < xs.length - 1; i++) p.slab(surf, xs[i][0] + xs[i][1] / 2, xs[i + 1][0] - xs[i + 1][1] / 2, y0 + G, y1 - G, Z0, WF + (depth[i] || 0), { r: 0.007, skip: ['-z'] });
-  for (const [x, w] of C) if (w > 0.03) p.slab('dark', x - w / 2, x + w / 2, y0, y1, Z0, WF - 0.045, { r: 0.004, skip: ['-z'] });
+  // (opts.cell: a coarser step across big slabs, for the two-storey walls)
+  for (let i = 0; i < xs.length - 1; i++) p.slab(surf, xs[i][0] + xs[i][1] / 2, xs[i + 1][0] - xs[i + 1][1] / 2, y0 + G, y1 - G, Z0, WF + (depth[i] || 0), { r: 0.007, skip: ['-z'], ...opts });
+  for (const [x, w] of C) if (w > 0.03) p.slab('dark', x - w / 2, x + w / 2, y0, y1, Z0, WF - 0.045, { r: 0.004, skip: ['-z'], ...opts });
 }
-function band(p, x0, x1) { p.slab('band', x0, x1, BAND[0] + G, BAND[1] - G, Z0, WF - 0.03, { r: 0.008, skip: ['-z'] }); }
-function backing(p, x0, x1, y0, y1, z0 = 0.03, z1 = Z0) { p.slab('dark', x0, x1, y0, y1, z0, z1, { r: 0, skip: ['-z'], cell: 0.5 }); }
+export function band(p, x0, x1) { p.slab('band', x0, x1, BAND[0] + G, BAND[1] - G, Z0, WF - 0.03, { r: 0.008, skip: ['-z'] }); }
+export function backing(p, x0, x1, y0, y1, z0 = 0.03, z1 = Z0) { p.slab('dark', x0, x1, y0, y1, z0, z1, { r: 0, skip: ['-z'], cell: 0.5 }); }
 // one side of a wall, x from -1 to 1 (G in from each end): which panels it has
 function wallSide(p, v) {
   const X0 = -1 + G, X1 = 1 - G;
@@ -170,22 +173,25 @@ function wallSide(p, v) {
     slabRow(p, -0.62, 0.62, 2.4, TOP);
     p.sweep('black', rrect(0.1, 0.26, 0.014, 2, 0.05, 0.13), rectLoop(ww, wh, 0.14, { cy }), { closed: true });
     p.glass(ww + 0.02, wh + 0.02, [0, cy, 0.1]);
+    // (the frame's corners are round and the hole in the wall is square: a dark fillet behind each corner)
+    for (const sx of [-1, 1]) for (const sy of [-1, 1]) { const x = sx * 0.59, y = cy + sy * 0.38; p.slab('dark', x - 0.035, x + 0.035, y - 0.045, y + 0.045, 0.03, Z0, { r: 0, cell: 9 }); }
     slabRow(p, X0, X1, TOP, H, [], 'white2');
   }
 }
 export function wallPanel(p, v) {
-  if (v !== 'door') return wallSide(p, v);
+  if (v !== 'door' && v !== 'locked') return wallSide(p, v);
   // a doorway into a room: a wall with a face on both sides, a black frame through it, and two leaves that slide
-  // apart into the wall (between the two faces) as someone comes near
-  const X0 = -1 + G, X1 = 1 - G, hw = 0.55, top = 2.25;
+  // apart into the wall (between the two faces) as someone comes near. 'locked': the same doorway shut for good (a
+  // red light over it, and leaves with a dark panel where the open door's little windows are, so nobody sees past it)
+  const X0 = -1 + G, X1 = 1 - G, hw = 0.55, top = 2.25, locked = v === 'locked';
   for (const s of [0, 1]) {
     const q = new (p.constructor)();
     backing(q, -1, -0.6, 0, H); backing(q, 0.6, 1, 0, H); backing(q, -0.6, 0.6, 2.3, H);
     slabRow(q, X0, -0.62, 0.15, BAND[0], [], 'white', [0.02]); band(q, X0, -0.62); slabRow(q, X0, -0.62, BAND[1], TOP, [], 'white', [0.02]);
     slabRow(q, 0.62, X1, 0.15, BAND[0], [], 'white', [0.02]); band(q, 0.62, X1); slabRow(q, 0.62, X1, BAND[1], TOP, [], 'white', [0.02]);
     slabRow(q, -0.62, 0.62, 2.32, TOP); slabRow(q, X0, X1, TOP, H, [], 'white2');
-    q.slab('black', -0.3, 0.3, 2.4, 2.47, WF, WF + 0.02, { r: 0.008 }); q.glowSlab('green', -0.26, 0.26, 2.42, 2.45, WF + 0.02, WF + 0.024);
-    q.light([0, 2.43, WF + 0.12], 0.35, [0.3, 1, 0.5], [0, 0, 1], 3);
+    q.slab('black', -0.3, 0.3, 2.4, 2.47, WF, WF + 0.02, { r: 0.008 }); q.glowSlab(locked ? 'red' : 'green', -0.26, 0.26, 2.42, 2.45, WF + 0.02, WF + 0.024);
+    q.light([0, 2.43, WF + 0.12], 0.35, locked ? [1, 0.2, 0.15] : [0.3, 1, 0.5], [0, 0, 1], 3);
     for (const part of q.parts) { if (s) put(part.geo, [0, 0, 0], [0, PI, 0]); p.parts.push(part); }
     for (const L of q.lights) p.lights.push(s ? { ...L, at: [-L.at[0], L.at[1], -L.at[2]], dir: L.dir && [-L.dir[0], L.dir[1], -L.dir[2]] } : L);
   }
@@ -197,17 +203,19 @@ export function wallPanel(p, v) {
     q.slab('black', -0.014, 0, 0.01, h, -0.027, 0.027, { r: 0.004 });
     q.slab('band', -w + 0.05, -0.06, BAND[0], BAND[1], -0.028, 0.028, { r: 0.006 });
     q.slab('black', -w + 0.1, -0.11, 1.7, 2.05, -0.026, 0.026, { r: 0.01 });
-    for (const z of [0.0262, -0.0262]) q.glass(w - 0.24, 0.3, [(-w + 0.1 - 0.11) / 2, 1.875, z], z < 0 ? [0, PI, 0] : null);
+    if (locked) q.slab('dark', -w + 0.12, -0.13, 1.725, 2.025, -0.0275, 0.0275, { r: 0.006 });
+    else for (const z of [0.0262, -0.0262]) q.glass(w - 0.24, 0.3, [(-w + 0.1 - 0.11) / 2, 1.875, z], z < 0 ? [0, PI, 0] : null);
   };
-  p.leaf('door-leaf', leaf, { slide: [-(hw + 0.06), 0, 0], door: 0 });
-  p.leaf('door-leaf', leaf, { rot: [0, PI, 0], slide: [hw + 0.06, 0, 0], door: 0 });
-  p.door(0, [0, 1.2, 0], 2.4);
+  const key = locked ? 'door-leaf-locked' : 'door-leaf';
+  p.leaf(key, leaf, { slide: [-(hw + 0.06), 0, 0], door: 0 });
+  p.leaf(key, leaf, { rot: [0, PI, 0], slide: [hw + 0.06, 0, 0], door: 0 });
+  if (!locked) p.door(0, [0, 1.2, 0], 2.4);
 }
 
 // ── ribs and beams ────────────────────────────────────────────────────────────────────────────────────────────────
 // the slant from the top of the wall up to the ceiling, as a box of thickness t sitting on the line from (y0, z0) at
 // 45 degrees up and out to the ceiling
-function slant(p, surf, x0, x1, y0, z0, t, opts = {}) {
+export function slant(p, surf, x0, x1, y0, z0, t, opts = {}) {
   const len = (H - y0) * Math.SQRT2, ny = -Math.SQRT1_2, nz = Math.SQRT1_2;
   const my = (y0 + H) / 2 - ny * t / 2, mz = z0 + (H - y0) / 2 - nz * t / 2;
   return p.box(surf, [x1 - x0, t, len + 0.04], [(x0 + x1) / 2, my, mz], [3 * PI / 4, 0, 0], { r: 0.01, ...opts });
@@ -259,13 +267,15 @@ function slant2(p) { // the corner post's top: up to the ceiling, out along both
 // ── the bulkhead with an arched hatch ─────────────────────────────────────────────────────────────────────────────
 // It stands across a corridor on a grid point (the corridor's middle), 4 m wide: an off-white surround, a black rim
 // with bolt flanges and tick marks round the arch, a yellow stripe inside the rim, dark latch blocks either side, and
-// two leaves that slide apart into the bulkhead. variant 'arch' (a hatch) or 'blind' (no opening: a corridor's end)
+// two leaves that slide apart into the bulkhead. variant 'arch' (a hatch), 'wide' (a broader arch, 1.6 m: two people
+// pass each other in it, for the main ways through a station) or 'blind' (no opening: a corridor's end)
 export const HATCH = { hw: 0.56, spring: 1.66, half: 2, skin: 0.25, core: 0.06 };
-function skinFace(p, z, holeR) {
+export const HATCH_WIDE = { ...HATCH, hw: 0.8, spring: 1.5 };
+function skinFace(p, z, holeR, D = HATCH) {
   // the surround's face at depth z: rings of quads from the arch hole out to the 4 x 3 m edge (denser near the hole).
   // Each point round the hole is joined to the point straight out from the arch's centre on the edge, and the two top
   // corners get a ray of their own so the rings reach right into them.
-  const { spring, half } = HATCH, m = new MeshData(), T = [0, 0.04, 0.12, 0.26, 0.48, 0.74, 1], inner = [], outer = [];
+  const { spring, half } = D, m = new MeshData(), T = [0, 0.04, 0.12, 0.26, 0.48, 0.74, 1], inner = [], outer = [];
   const nUp = Math.ceil(spring / 0.25), ac = Math.atan2(H - spring, half), angles = [];
   for (let i = 0; i <= 20; i++) angles.push(Math.PI - Math.PI * i / 20);
   angles.push(Math.PI - ac, ac); angles.sort((a, b) => b - a);
@@ -281,7 +291,7 @@ function skinFace(p, z, holeR) {
   return fixWinding(m.geometry());
 }
 export function hatch(p, v) {
-  const { hw, spring, half, skin, core } = HATCH;
+  const D = v === 'wide' ? HATCH_WIDE : HATCH, { hw, spring, half, skin, core } = D;
   if (v === 'blind') {
     for (const s of [1, -1]) { p.slab('white', -half, half, 0, H, s > 0 ? core : -skin, s > 0 ? skin : -core, { r: 0.01, skip: [s > 0 ? '-z' : '+z'], cell: 0.45 }); }
     p.slab('black', -1.0, 1.0, 1.0, 2.6, -skin - 0.04, skin + 0.04, { r: 0.04 });
@@ -292,7 +302,7 @@ export function hatch(p, v) {
   // round the opening, from the inside out (as the reference has it): the dark jamb, its face a broad dark ring; the
   // yellow stripe; a cream band with the bolts; the charcoal outer ring; tick marks on the wall beyond
   const J = 0.13, Y = [0.125, 0.153], B = [0.15, 0.28], O = [0.275, 0.39], holeR = hw + 0.14;
-  for (const z of [skin, -skin]) p.add('solid', skinFace(p, z, holeR), 'white');
+  for (const z of [skin, -skin]) p.add('solid', skinFace(p, z, holeR, D), 'white');
   // the bulkhead's own edges, closing the pocket between the two faces (hidden in a corridor, seen on its own)
   for (const s of [-1, 1]) p.slab('white', s > 0 ? half - 0.02 : -half, s > 0 ? half : -half + 0.02, 0, H, -skin, skin, { r: 0.004, cell: 0.6 });
   p.slab('white', -half, half, H - 0.02, H, -skin, skin, { r: 0.004, cell: 0.6 });
@@ -321,7 +331,7 @@ export function hatch(p, v) {
     q.slab('black', ox + 0.17, ox + 0.21, 1.42, 1.46, skin + 0.12, skin + 0.125, { r: 0.002 }); q.glowSlab('amber', ox + 0.175, ox + 0.205, 1.425, 1.455, skin + 0.125, skin + 0.128);
     q.box('black', [0.16, 0.05, 0.05], [ox + 0.24 + 0.07, 1.29, skin + 0.06], null, { r: 0.012 });
     // thin level rods standing out from the outer ring, each with a little end cap
-    for (const [sx, y] of [[-1, 0.45], [-1, 1.29], [1, 0.45], [1, 0.9], [1, 1.68]]) { const x0 = hw + O[1] - 0.01, x1 = sx > 0 ? x0 + 0.2 : x0 + 0.42; q.box('black', [x1 - x0, 0.024, 0.024], [sx * (x0 + x1) / 2, y, skin + 0.035], null, { r: 0 }); q.box('dark', [0.03, 0.04, 0.04], [sx * x1, y, skin + 0.035], null, { r: 0 }); }
+    for (const [sx, y] of [[-1, 0.45], [-1, 1.29], [1, 0.45], [1, 0.9], [1, 1.68]]) { const x0 = hw + O[1] - 0.01, x1 = Math.min(sx > 0 ? x0 + 0.2 : x0 + 0.42, half - 0.56); q.box('black', [x1 - x0, 0.024, 0.024], [sx * (x0 + x1) / 2, y, skin + 0.035], null, { r: 0 }); q.box('dark', [0.03, 0.04, 0.04], [sx * x1, y, skin + 0.035], null, { r: 0 }); }
     q.light([ox + 0.17, 1.42, skin + 0.18], 0.12, [1, 0.75, 0.35], [0, 0, 1], 2);
     for (const part of q.parts) { if (s < 0) put(part.geo, [0, 0, 0], [0, PI, 0]); p.parts.push(part); }
     for (const L of q.lights) p.lights.push(s < 0 ? { ...L, at: [-L.at[0], L.at[1], -L.at[2]], dir: L.dir && [-L.dir[0], L.dir[1], -L.dir[2]] } : L);
@@ -339,8 +349,9 @@ export function hatch(p, v) {
     q.slab('band', -w + 0.04, -0.05, 1.02, 1.3, -0.03, 0.03, { r: 0.006 });
     q.slab('dark', -w + 0.06, -0.07, 1.7, 1.74, -0.029, 0.029, { r: 0.004 });
   };
-  p.leaf('hatch-leaf', leaf, { slide: [-(hw + 0.1), 0, 0], door: 0 });
-  p.leaf('hatch-leaf', leaf, { rot: [0, PI, 0], slide: [hw + 0.1, 0, 0], door: 0 });
+  const key = v === 'wide' ? 'hatch-leaf-wide' : 'hatch-leaf';
+  p.leaf(key, leaf, { slide: [-(hw + 0.1), 0, 0], door: 0 });
+  p.leaf(key, leaf, { rot: [0, PI, 0], slide: [hw + 0.1, 0, 0], door: 0 });
   p.door(0, [0, 1.2, 0], 2.8);
 }
 // charcoal posts and a lintel framing the bulkhead's faces, so the corridor closes in round the hatch

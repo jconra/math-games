@@ -113,14 +113,18 @@ export function floorAtlas(seed = 11) {
 }
 
 // ── decals: white on clear, in cells of 256 x 64 px (8 across... 4 across, 16 down) ───────────────────────────────
-export const LABELS = ['BUS-C', 'AIR-2', 'DECK 1', 'LAB-3', 'HAB-A', 'O2', 'GALLEY', 'DOCK-4', 'BUS-D', 'CREW', 'BRIDGE', 'ENG-1'];
+export const LABELS = ['BUS-C', 'AIR-2', 'DECK 1', 'LAB-3', 'HAB-A', 'O2', 'GALLEY', 'DOCK-4', 'BUS-D', 'CREW', 'BRIDGE', 'ENG-1',
+  'PAD 1', 'CARGO', 'HANGAR', 'TERMINAL', 'QUARTERS', 'DECK 2', 'KESTREL', 'FUEL'];
+// (the first twelve labels fill cells 0-11; cells 12-15 hold the breaker tags, stripes, arrow and swatch; the rest
+// of the labels carry on from cell 16)
+const labelCell = (i) => (i < 12 ? i : i + 4);
 export function decalAtlas() {
   const S = 1024, c = canvas(S), g = c.getContext('2d'), rect = {};
   const cell = (i) => { const col = i % 4, row = Math.floor(i / 4); return [col * 256, row * 64]; };
   const uvOf = (x, y, w, h) => [x / S, 1 - (y + h) / S, (x + w) / S, 1 - y / S];
   // stencil lettering: bold capitals with the stencil's bridges cut through them
   LABELS.forEach((txt, i) => {
-    const [x, y] = cell(i);
+    const [x, y] = cell(labelCell(i));
     g.save(); g.beginPath(); g.rect(x, y, 256, 64); g.clip();
     g.fillStyle = '#fff'; g.font = 'bold 46px "DejaVu Sans Mono", "Consolas", "Menlo", monospace'; g.textAlign = 'center'; g.textBaseline = 'middle';
     const w = g.measureText(txt).width, sx = Math.min(1, 236 / w);
@@ -143,10 +147,21 @@ export function decalAtlas() {
   return { map: t, rect };
 }
 
-// ── screens: glowing blue faces, each 512 x 256 in a 1024 x 512 sheet ────────────────────────────────────────────
-export const SCREEN_RECT = { math: [0, 0.5, 0.5, 1], status: [0.5, 0.5, 1, 1], terminal: [0, 0, 0.5, 0.5], radar: [0.5, 0, 1, 0.5] };
+// ── screens: glowing faces in a 1024 x 1024 sheet ────────────────────────────────────────────────────────────────
+//   the top half: four wall screens, 512 x 256 each (math station, status, terminal, radar)
+//   the bottom half: the jobs board (640 x 256), the galley's menu and the drinks panel beside it; a captain's card for
+//   each kind of crew (192 x 128) and the fuel pump's screen; then two rows of lit signs (256 x 64)
+const SUV = (x, y, w, h) => [x / 1024, 1 - (y + h) / 1024, (x + w) / 1024, 1 - y / 1024];
+export const SIGNS = ['TERMINAL', 'HANGAR', 'QUARTERS', 'GALLEY', 'JOBS', 'DOCK', 'DECK 2', 'EXIT'];
+export const CREWS = { medic: ['MEDIC', 'CAPT. R. VANCE', '#ff6a5a'], mining: ['MINING', 'CAPT. D. HOLLIS', '#ffa53a'], explore: ['EXPLORER', 'CAPT. I. NAKAMURA', '#5fe08a'], security: ['SECURITY', 'CAPT. B. ADAIR', '#5aa8ff'] };
+export const SCREEN_RECT = {
+  math: SUV(0, 0, 512, 256), status: SUV(512, 0, 512, 256), terminal: SUV(0, 256, 512, 256), radar: SUV(512, 256, 512, 256),
+  jobs: SUV(0, 512, 640, 256), menu: SUV(640, 512, 384, 160), drinks: SUV(640, 672, 384, 96), fuel: SUV(768, 768, 192, 128),
+  ...Object.fromEntries(Object.keys(CREWS).map((k, i) => ['crew:' + k, SUV(i * 192, 768, 192, 128)])),
+  ...Object.fromEntries(SIGNS.map((n, i) => ['sign:' + n, SUV((i % 4) * 256, 896 + Math.floor(i / 4) * 64, 256, 64)])),
+};
 export function screenAtlas() {
-  const c = canvas(1024, 512), g = c.getContext('2d'), R = rng(5);
+  const c = canvas(1024, 1024), g = c.getContext('2d'), R = rng(5);
   const panel = (x, y) => {
     const gr = g.createLinearGradient(x, y, x, y + 256); gr.addColorStop(0, '#24627f'); gr.addColorStop(1, '#173f57'); g.fillStyle = gr; g.fillRect(x, y, 512, 256);
     g.strokeStyle = 'rgba(120,200,255,0.14)'; g.lineWidth = 1; for (let k = 0; k < 512; k += 32) { g.beginPath(); g.moveTo(x + k, y); g.lineTo(x + k, y + 256); g.stroke(); } for (let k = 0; k < 256; k += 32) { g.beginPath(); g.moveTo(x, y + k); g.lineTo(x + 512, y + k); g.stroke(); }
@@ -169,5 +184,67 @@ export function screenAtlas() {
   g.fillStyle = 'rgba(89,195,255,0.35)'; g.beginPath(); g.moveTo(768, 384); g.arc(768, 384, 110, -0.9, -0.3); g.fill();
   for (let k = 0; k < 7; k++) { const a = R() * 6.28, r = 20 + R() * 85; g.fillStyle = k === 2 ? '#ffd35a' : '#d8f1ff'; g.beginPath(); g.arc(768 + Math.cos(a) * r, 384 + Math.sin(a) * r, 5, 0, 7); g.fill(); }
   g.fillStyle = '#d8f1ff'; g.font = 'bold 24px "DejaVu Sans", Arial, sans-serif'; g.fillText('SECTOR 7', 900, 290);
+  bigScreens(g);
   const t = tex(c, true, false); return { map: t };
+}
+
+// the bottom half of the screen sheet: the jobs board, the galley's boards, the captains' cards, the lit signs
+function bigScreens(g) {
+  const F = (px, bold = true) => (bold ? 'bold ' : '') + px + 'px "DejaVu Sans", Arial, sans-serif';
+  const bg = (x, y, w, h, a = '#1d5573', b = '#123448', edge = '#59c3ff') => {
+    const gr = g.createLinearGradient(x, y, x, y + h); gr.addColorStop(0, a); gr.addColorStop(1, b); g.fillStyle = gr; g.fillRect(x, y, w, h);
+    g.strokeStyle = edge; g.lineWidth = 3; g.strokeRect(x + 5, y + 5, w - 10, h - 10);
+  };
+  g.textBaseline = 'middle';
+  // the jobs board: captains hiring, one row each (the colour of the crew, the job, the captain, the pay)
+  bg(0, 512, 640, 256, '#163f5a', '#0d2638');
+  g.fillStyle = '#ffffff'; g.font = F(34); g.textAlign = 'left'; g.fillText('JOBS BOARD', 26, 548);
+  g.fillStyle = '#9fd8ff'; g.font = F(18, false); g.textAlign = 'right'; g.fillText('CAPTAINS HIRING TODAY', 614, 550);
+  g.fillStyle = 'rgba(89,195,255,0.5)'; g.fillRect(22, 572, 596, 2);
+  const rows = [['medic', 'RESCUE THE STASIS PODS', '120'], ['mining', 'ZAP THE ORE ASTEROIDS', '150'], ['explore', 'MAP THE BLUE NEBULA', '100'], ['security', 'GUARD A CARGO HAULER', '130']];
+  rows.forEach(([k, job, pay], i) => {
+    const y = 600 + i * 42, [crew, capt, col] = CREWS[k];
+    g.fillStyle = i % 2 ? 'rgba(89,195,255,0.06)' : 'rgba(89,195,255,0.12)'; g.fillRect(22, y - 18, 596, 38);
+    g.fillStyle = col; g.fillRect(26, y - 13, 10, 28);
+    g.textAlign = 'left'; g.fillStyle = col; g.font = F(17); g.fillText(crew, 46, y - 4);
+    g.fillStyle = '#cfeaff'; g.font = F(13, false); g.fillText(capt, 46, y + 12);
+    g.fillStyle = '#ffffff'; g.font = F(19); g.fillText(job, 210, y + 1);
+    g.textAlign = 'right'; g.fillStyle = '#ffe3a0'; g.font = F(22); g.fillText(pay + ' CR', 612, y + 1);
+  });
+  // the galley's menu, and the drinks panel under it
+  bg(640, 512, 384, 160, '#3a2a18', '#221810', '#ffb347');
+  g.textAlign = 'left'; g.fillStyle = '#ffd59a'; g.font = F(28); g.fillText('GALLEY', 664, 544);
+  g.fillStyle = '#ffeeda'; g.font = F(16, false); g.textAlign = 'right'; g.fillText('OPEN ALL CYCLE', 1000, 546);
+  [['NOODLE BOWL', '4'], ['ORBIT STEW', '5'], ['MOON PIE', '2'], ['FRUIT CUP', '2']].forEach(([n, c], i) => {
+    const y = 578 + i * 23; g.textAlign = 'left'; g.fillStyle = '#ffffff'; g.font = F(17); g.fillText(n, 668, y);
+    g.textAlign = 'right'; g.fillStyle = '#ffd59a'; g.fillText(c + ' CR', 1000, y);
+  });
+  bg(640, 672, 384, 96, '#173f57', '#0d2638');
+  [['WATER', '#59c3ff'], ['JUICE', '#ffa53a'], ['COCOA', '#c98a5a']].forEach(([n, col], i) => {
+    const x = 660 + i * 120; g.fillStyle = col; g.beginPath(); g.arc(x + 20, 720, 16, 0, 7); g.fill();
+    g.fillStyle = '#ffffff'; g.textAlign = 'left'; g.font = F(17); g.fillText(n, x + 42, 720);
+  });
+  // a captain's card for each crew: the crew's colour, a head and shoulders, the name
+  Object.values(CREWS).forEach(([crew, capt, col], i) => {
+    const x = i * 192, y = 768; bg(x, y, 192, 128, '#173f57', '#0d2638', col);
+    g.fillStyle = col; g.fillRect(x + 10, y + 10, 172, 22);
+    g.fillStyle = '#0d2638'; g.font = F(15); g.textAlign = 'center'; g.fillText(crew, x + 96, y + 22);
+    g.fillStyle = 'rgba(207,234,255,0.85)'; g.beginPath(); g.arc(x + 44, y + 68, 15, 0, 7); g.fill();
+    g.beginPath(); g.ellipse(x + 44, y + 108, 28, 18, 0, Math.PI, 0); g.fill();
+    const nm = capt.replace('CAPT. ', ''); g.fillStyle = '#ffffff'; g.textAlign = 'left'; g.font = F(20); const sw = Math.min(1, 100 / g.measureText(nm).width); g.save(); g.translate(x + 80, y + 66); g.scale(sw, 1); g.fillText(nm, 0, 0); g.restore();
+    g.fillStyle = '#9fd8ff'; g.font = F(15); g.fillText('CAPTAIN', x + 80, y + 92);
+  });
+  // the fuel pump's screen
+  bg(768, 768, 192, 128, '#2e2a12', '#1b190b', '#ffd35a');
+  g.fillStyle = '#ffe9a0'; g.font = F(22); g.textAlign = 'left'; g.fillText('FUEL', 786, 800);
+  g.fillStyle = 'rgba(255,211,90,0.25)'; g.fillRect(786, 828, 154, 20); g.fillStyle = '#ffd35a'; g.fillRect(786, 828, 126, 20);
+  g.fillStyle = '#ffffff'; g.font = F(16); g.fillText('82%  READY', 786, 870);
+  // lit signs: white capitals on a deep blue panel
+  SIGNS.forEach((n, i) => {
+    const x = (i % 4) * 256, y = 896 + Math.floor(i / 4) * 64;
+    g.fillStyle = '#0b1d2c'; g.fillRect(x, y, 256, 64); g.strokeStyle = '#3aa0e0'; g.lineWidth = 3; g.strokeRect(x + 4, y + 4, 248, 56);
+    g.fillStyle = '#eaf6ff'; g.font = F(34); g.textAlign = 'center';
+    const w = g.measureText(n).width, sx = Math.min(1, 220 / w); g.save(); g.translate(x + 128, y + 33); g.scale(sx, 1); g.fillText(n, 0, 0); g.restore();
+  });
+  g.textAlign = 'left';
 }

@@ -1,13 +1,14 @@
 // THE SKY outside every window: the game's one sky, for the station's rooms now and a ship's cockpit later.
 // It sits at infinity, centred on whatever camera draws it and fixed to the world's directions, so the landmarks
 // always hang in the same places and help you find your way (up is +y; "level" means the floor's plane):
-//   +x           the ringed planet, large, a little above level; its moon up to its left (toward -z), half lit; a comet
-//                to its right (toward +z)
-//   -x           the Rose: a pink and violet nebula with a bright heart and a curved lane of dust
-//   +z           the Blue Veil: a blue crescent of gas with bright threads along its edge
-//   -z           the Amber Eye: a gold ring of gas round a dying star, at level
-//   -x and -z    the sun, low (between the Rose and the Eye), behind you as you look at the planet
-//   all round    stars of many sizes and colours, a faint band of the galaxy, a far galaxy (high, toward -z)
+//   +z           the ringed planet, large, a little above level (out of the terminal's long window); its moon up to
+//                its left (toward +x), half lit; a comet to its right (toward -x)
+//   -z (to +x)   the Rose: a pink and violet nebula with a bright heart and a curved lane of dust
+//   -x           the Blue Veil: a blue crescent of gas with bright threads along its edge
+//   +x (to +z)   the Amber Eye: a gold ring of gas round a dying star, at level
+//   +x and -z    the sun, low, behind you as you look at the planet
+//   all round    stars of many sizes and colours, a faint band of the galaxy, a far galaxy (high, toward +x)
+//   (the bearings are set before THE SKY'S TURN below, which turns them all together)
 // How it is drawn, cheaply:
 //   still sky  the nebulae, the galaxy band, the far galaxy and the comet are worked out ONCE on the GPU into a cube
 //              map when the sky is made (and again only when the Graphics setting changes)
@@ -36,11 +37,14 @@ function frameAt(f, roll = 0) {
 }
 const basis = (F) => new THREE.Matrix3().set(F.r.x, F.u.x, F.f.x, F.r.y, F.u.y, F.f.y, F.r.z, F.u.z, F.f.z); // columns r, u, f
 
+// THE SKY'S TURN: every bearing below is turned by this many degrees (toward +z), so the planet stands where the
+// station's big window looks: the terminal's long rounded window faces +z (kit/rooms/station.json)
+const TURN = 112, at = (az, el) => skyDir(az + TURN, el);
 // ── where everything is ──────────────────────────────────────────────────────────────────────────────────────────
 export const DIR = {
-  planet: skyDir(-22, 11), moon: skyDir(-46, 23), sun: skyDir(-145, 12),
-  rose: skyDir(182, 9), veil: skyDir(95, 14), eye: skyDir(-68, -1),
-  farGalaxy: skyDir(-95, 40), comet: skyDir(22, 9),
+  planet: at(-22, 11), moon: at(-46, 23), sun: at(-145, 12),
+  rose: at(182, 9), veil: at(95, 14), eye: at(-68, -1),
+  farGalaxy: at(-95, 40), comet: at(22, 9),
 };
 const SIZE = { planet: 12.5, moon: 2.7, sun: 0.55, rose: 21, veil: 20, eye: 5.2, farGalaxy: 1.7 }; // angular radii, degrees
 // the planet: its spin axis tipped toward us (so the rings open out) and leaning, the sun a little behind us (so more
@@ -57,7 +61,7 @@ const MAG1 = new THREE.Vector3().crossVectors(MAG, PF.f).normalize(), MAG2 = new
 const RING = [1.28, 2.42];              // the rings' inner and outer edge, in planet radii
 const AURORA_COLAT = 0.3;              // the auroras' ring, radians from the magnetic pole
 // the galaxy band runs through the Rose and climbs high over the north; its bright middle lies between them
-const GAL_UP = skyDir(110, 42), GAL_N = new THREE.Vector3().crossVectors(DIR.rose, GAL_UP).normalize(), GAL_C = DIR.rose.clone().add(GAL_UP).normalize();
+const GAL_UP = at(110, 42), GAL_N = new THREE.Vector3().crossVectors(DIR.rose, GAL_UP).normalize(), GAL_C = DIR.rose.clone().add(GAL_UP).normalize();
 
 // named looks (for the lab): a direction and a field of view
 function onPlanet(n) { return DIR.planet.clone().addScaledVector(n, Math.sin(SIZE.planet * D2R)).normalize(); }
@@ -381,7 +385,7 @@ function starGeometry(n) {
   for (let i = 0; i < 90; i++) add(B() < 0.4 ? inBand(B, 0.12) : anywhere(B), 0.7 + 5.5 * Math.pow(B(), 3), starColour(B));
   // a tight cluster of young blue stars, and a few hot stars lighting the Rose
   const R = rng(4242);
-  for (let i = 0; i < 28; i++) add(near(R, skyDir(60, 33), 0.011), 0.15 + 1.6 * Math.pow(R(), 3), [0.72, 0.82, 1.12]);
+  for (let i = 0; i < 28; i++) add(near(R, at(60, 33), 0.011), 0.15 + 1.6 * Math.pow(R(), 3), [0.72, 0.82, 1.12]);
   for (let i = 0; i < 14; i++) add(near(R, DIR.rose, 0.06), 0.3 + 2.0 * Math.pow(R(), 2), [0.7, 0.8, 1.15]);
   add(DIR.eye, 1.6, [0.75, 0.85, 1.15]);                                  // the Eye's dying star, in its middle
   add(DIR.comet, 1.3, [0.85, 1.0, 0.95]);                                 // the comet's head
