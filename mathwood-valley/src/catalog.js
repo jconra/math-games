@@ -21,6 +21,9 @@ export const PRICES = {
   // the dogs' base prices: the pug is the cheap joke pick; the breeds (src/actors/dogbreeds.js) by size and how fancy.
   // A rider pays more for each dog already owned (dogPrice below)
   dog: { shiba: 120, husky: 120, pug: 50, boston: 120, borderCollie: 140, cattleDog: 140, labYellow: 130, labBlack: 130, labChocolate: 130, beagle: 100, dachshund: 110, dalmatian: 160 },
+  // a collar for a dog of the rider's own (src/actors/collars.js), picked at the store's animals counter: free for now,
+  // put on and changed as often as liked; more than 0 and each new collar put on costs that (taking one off is free)
+  collar: 0,
   // the farm animals for the yard behind the cabin (src/math/goods.js ANIMALS): a hen cheap, a milk cow dear
   animal: { hen: 30, pig: 70, sheep: 100, cow: 240 },
   // the cabin's furnishings (src/cabin/slots.js SLOTS), a ladder from a cheap rug to a costly stove

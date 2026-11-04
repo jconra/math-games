@@ -23,6 +23,7 @@ import { BREEDS, BREED_ORDER, NOT_KEEPERS, BASES, LATER, breedOf, cleanBreed, FU
 import { FUR_SWITCH, setFur } from '../../src/actors/dogfur.js';
 import { MORPH, MORPH_GROUPS, EAR_SETS, fillMorph } from '../../src/actors/morphplan.js';
 import { COAT, COAT_GROUPS, PATTERNS, PATTERN_ON, EAR_COLOURS, fillCoat } from '../../src/actors/dogcoat.js';
+import { COLLARS, STUDS } from '../../src/actors/collars.js';
 
 const $ = (id) => document.getElementById(id);
 const GAME = new URL('../../', import.meta.url).href;
@@ -258,6 +259,7 @@ function drawerHTML(t) {
   if (t === 'ears') return head + `<div class="grid">${S('ears', 'Ear set', Object.entries(EAR_SETS).map(([k, v]) => [k, v.label]), 'breed')}${morphRows('ears')}<div class="sub">Tail</div>${morphRows('tail')}</div>${HOW.ears}`;
   if (t === 'coat') return head + `<div class="grid">${Object.entries(COAT_GROUPS).map(([g, l]) => `<div class="sub">${l}</div>${coatRows(g)}${g === 'marks' ? S('ears', 'Ears', EAR_COLOURS) : ''}${g === 'pattern' ? S('pattern', 'Pattern', PATTERNS) + S('patternOn', 'Pattern over', PATTERN_ON) : ''}`).join('')}
       <div class="sub">Collar</div><div class="row check"><label><input type="checkbox" id="k-collar"> A collar</label></div>
+      <div class="row two"><label for="s-collar">The store's collars</label><select id="s-collar">${COLLARS.map((c) => `<option value="${c.colour}">${c.name}</option>`).join('')}<option value="">Its own colour</option></select></div>
       <div class="row two"><label for="c-collar">Collar colour</label><input type="color" id="c-collar"></div><div class="row two"><label for="c-studs">Studs</label><input type="color" id="c-studs"></div>
       <div class="row check"><label><input type="checkbox" id="k-studs"> Studs on it</label></div></div>${HOW.coat}`;
   if (t === 'motion') return head + `<div class="grid">
@@ -287,7 +289,7 @@ const HOW = {
   body: `<details class="how"><summary>How it works</summary><p>Each slider stretches some of the dog's bones: its own stretch of the body grows along the dog (side, up, forward) or along the bone, and the bones hanging off it sit that much further away. That gives a new standing pose; the mesh is laid out again in it and bound to it afresh, so each bone carries its reshaped piece of the dog.</p><p>The clips are copied for the breed and changed to match, once: the paws hang on bones of their own that the clips place, so every frame (30 a second) each paw is moved to where its new leg now ends; and the body is lowered or raised, and tipped, so whatever touched the ground in the original frame (the paws standing, the rump sitting, the belly lying) touches it again. Nothing is worked out while it plays: a breed costs what its plain dog costs.</p></details>`,
   head: `<details class="how"><summary>How it works</summary><p>The head is one bone, so the snout is reshaped corner by corner: everything in front of the stop (just in front of the eyes) is pulled in or pushed out, made wider and deeper, eased in over the muzzle's first third so there's no crease. The eyes (the model's own dark faces) grow round their middles and stand out a touch. The neck can be carried further forward; the head turns back to keep the nose level, and can be tipped up or down after.</p></details>`,
   ears: `<details class="how"><summary>How it works</summary><p>The ears are four bones each: grown all over, longer or wider; turned out (all the way out and down, a drop ear) and forward at the root; the tips folded over at the second, third and fourth bones. The turns ride on every key of the clips, so an ear flick still flicks the folded ear. An ear set (pricked, bat, tipped, rose, drop) is a starting point for the sliders. The tail's three bones: length, thickness, carried up or down at the root, curled along the rest.</p></details>`,
-  coat: `<details class="how"><summary>How it works</summary><p>The coat is painted into the corners' colours, face by face, from where each face sits on the dog standing at rest (before any reshaping, so a marking stays put on the same faces), which part of the dog it is (from the bones that move it) and which way it faces. In order: the base colour, tan points, a dark saddle, patches, the white markings, a dark mask; the model's own eyes and nose are kept.</p><p>Spots, ticking, brindle and merle are smaller than the faces (a dalmatian's spot is 2 to 3 cm, a face 4 to 8), so they come from a small pattern picture laid over the faces, which only darkens; a face it mustn't touch points at a plain white spot of it. Still one draw a dog.</p></details>`,
+  coat: `<details class="how"><summary>How it works</summary><p>The coat is painted into the corners' colours, face by face, from where each face sits on the dog standing at rest (before any reshaping, so a marking stays put on the same faces), which part of the dog it is (from the bones that move it) and which way it faces. In order: the base colour, tan points (and the tan eyebrows and chest marks, each its own slider: a dot over each eye, a patch each side of the breastbone), a dark saddle, patches, the white markings, a dark mask; the model's own eyes and nose are kept.</p><p>The collar's colours start from the general store's, the ones a rider can pick for a dog of their own.</p><p>Spots, ticking, brindle and merle are smaller than the faces (a dalmatian's spot is 2 to 3 cm, a face 4 to 8), so they come from a small pattern picture laid over the faces, which only darkens; a face it mustn't touch points at a plain white spot of it. Still one draw a dog.</p></details>`,
   motion: `<details class="how"><summary>How it works</summary><p>Running, the dog moves along the track at the pace and plays the clip the game picks for it (walk, trot, gallop) at the speed that keeps its paws still on the ground: the breed's strides are measured again from how far its paws now swing.</p></details>`,
 };
 function wire(d) {
@@ -307,10 +309,12 @@ function wire(d) {
   });
   const on = (id, ev, fn) => { const el = d.querySelector('#' + id); if (el) el.addEventListener(ev, fn); };
   on('t-label', 'input', (e) => { work[state.id].label = e.target.value || 'Dog'; fillBreeds(); });
-  on('k-collar', 'change', (e) => { work[state.id].collar = e.target.checked ? { colour: '#c4302b', studs: '#d8d2c4' } : null; changed(); syncDrawer(); });
-  on('c-collar', 'input', (e) => { if (work[state.id].collar) { work[state.id].collar.colour = e.target.value; changed(); } });
+  // (the collar: the general store's colours, src/actors/collars.js, the same the riders pick from; or any colour)
+  on('k-collar', 'change', (e) => { work[state.id].collar = e.target.checked ? { colour: COLLARS[0].colour, studs: STUDS } : null; changed(); syncDrawer(); });
+  on('s-collar', 'change', (e) => { if (work[state.id].collar && e.target.value) { work[state.id].collar.colour = e.target.value; changed(); syncDrawer(); } });
+  on('c-collar', 'input', (e) => { if (work[state.id].collar) { work[state.id].collar.colour = e.target.value; changed(); syncDrawer(); } });
   on('c-studs', 'input', (e) => { if (work[state.id].collar) { work[state.id].collar.studs = e.target.value; changed(); } });
-  on('k-studs', 'change', (e) => { const c = work[state.id].collar; if (c) { c.studs = e.target.checked ? (c.studs || '#d8d2c4') : null; changed(); } });
+  on('k-studs', 'change', (e) => { const c = work[state.id].collar; if (c) { c.studs = e.target.checked ? (c.studs || STUDS) : null; changed(); } });
   on('k-spin', 'change', (e) => { state.spin = e.target.checked; });
   on('k-fur', 'change', (e) => { FUR_SWITCH.value = e.target.checked ? 1 : 0; });
   on('k-shadows', 'change', (e) => { state.shadows = e.target.checked; sun.castShadow = state.shadows; });
@@ -347,8 +351,9 @@ function syncDrawer() {
   set('t-label', (el) => { el.value = w.label; });
   set('t-note', (el) => { el.textContent = w.note || ''; });
   set('k-collar', (el) => { el.checked = !!w.collar; });
-  set('c-collar', (el) => { el.value = w.collar ? w.collar.colour : '#c4302b'; el.disabled = !w.collar; });
-  set('c-studs', (el) => { el.value = w.collar && w.collar.studs ? w.collar.studs : '#d8d2c4'; el.disabled = !w.collar; });
+  set('s-collar', (el) => { const c = w.collar && COLLARS.find((x) => x.colour === w.collar.colour.toLowerCase()); el.value = c ? c.colour : ''; el.disabled = !w.collar; });
+  set('c-collar', (el) => { el.value = w.collar ? w.collar.colour : COLLARS[0].colour; el.disabled = !w.collar; });
+  set('c-studs', (el) => { el.value = w.collar && w.collar.studs ? w.collar.studs : STUDS; el.disabled = !w.collar; });
   set('k-studs', (el) => { el.checked = !!(w.collar && w.collar.studs); el.disabled = !w.collar; });
   set('k-spin', (el) => { el.checked = state.spin; });
   set('k-fur', (el) => { el.checked = FUR_SWITCH.value > 0.5; });

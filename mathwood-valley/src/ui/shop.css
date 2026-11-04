@@ -56,6 +56,13 @@
 .bms-kinds { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }   /* (a dozen breeds: they wrap) */
 .bms-kinds button { min-width: 0; padding: 6px 14px; }
 .bms-kinds button.is-on { background: linear-gradient(#e2ad4c, #b47f2c); color: #1d140c; border-color: #7a5524; }
+/* a dog's collar: none or a colour (round swatches), then plain or studded */
+.bms-collar { margin-top: 10px; }
+.bms-collar > small { display: block; }
+.bms-collar-row { display: flex; flex-wrap: wrap; align-items: center; column-gap: 16px; }
+.bms-collar .bms-kinds { margin-top: 5px; }
+.bms-kinds button.bms-cbtn { padding: 5px 7px; line-height: 0; }
+.bms-swatch { display: inline-block; width: 22px; height: 22px; border-radius: 50%; box-shadow: 0 0 0 2px rgba(243, 230, 200, 0.6); }
 .bms-name { margin-top: 8px; }
 .bms-name input { width: min(240px, 100%); padding: 7px 10px; border-radius: 7px; border: 1px solid rgba(226, 173, 76, 0.45);
   background: rgba(0, 0, 0, 0.3); font-size: 17px; }

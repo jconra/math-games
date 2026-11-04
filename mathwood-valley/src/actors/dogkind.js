@@ -4,8 +4,13 @@
 // and keeps it as lib.kinds.boston. One mesh, one material, one draw a dog, as the base.
 //
 //   needBreed(lib, id) -> Promise<kind>       (animals.js lib.need calls this for an id animals.json hasn't got)
+//                                             id: a breed, or a dog of the rider's own wearing a collar from the
+//                                             general store (collars.js collarKind: 'boston+red-studs', 'shiba+blue'):
+//                                             a kind of its own, the collar in the dog's mesh (still one draw)
 //   makeBreedKind(K, breed) -> kind           K: the base kind, loaded; breed: breedOf(id) (dogbreeds.js)
 //                                             kind: { scene, clips, info, breed, report }
+//   plainWithCollar(K, id, collar) -> kind    a plain dog (the shiba, the husky, the pug as animals.json has them) with
+//                                             a collar on: its own shape and colours kept, the collar added
 //   savedBreeds(dir, { fresh }) -> Promise<{ v: 1, breeds }>   models/animals/dogbreeds.json (the Dog Lab's saves),
 //                                             read once ({} if it isn't there); fresh: read it again
 //   setSavedBreeds(file)                      (the lab, after saving: the file as it now is)
@@ -21,8 +26,9 @@ import * as THREE from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { morphKind, analyseKind } from './morph.js';
-import { paintFace, patternPixels, hexToLinear, rng } from './dogcoat.js';
-import { breedOf } from './dogbreeds.js';
+import { paintFace, patternPixels, hexToLinear, rng, fillCoat } from './dogcoat.js';
+import { breedOf, BASES } from './dogbreeds.js';
+import { splitKind, collarLook } from './collars.js';
 import { furMaterial, FUR_TIER } from './dogfur.js';
 
 let SAVED = null, SAVING = null;
@@ -37,8 +43,15 @@ export function setSavedBreeds(file) { SAVED = file; SAVING = null; }
 
 export async function needBreed(lib, id) {
   const saved = await savedBreeds(lib.dir);
-  const b = breedOf(id, saved);
+  // (a dog of the rider's own with a collar on: the dog it is, and the collar the rider picked at the store)
+  const { kind: of, pick } = splitKind(id), collar = collarLook(pick);
+  if (collar && BASES.includes(of)) {
+    await lib.need(of);
+    return (lib.kinds[id] = plainWithCollar(lib.kinds[of], id, collar));
+  }
+  const b = breedOf(of, saved);
   if (!b) throw new Error('no such animal: ' + id);
+  if (collar) b.collar = collar;
   await lib.need(b.base);
   const kind = makeBreedKind(lib.kinds[b.base], b);
   lib.kinds[id] = kind;   // (not in lib.info: that stays animals.json's own list)
@@ -223,8 +236,9 @@ function patternTexture(coat) {
   return tex;
 }
 // the morphed geometry (one corner a vertex, shared by faces) painted face by face: every face its own three corners
-// (so a colour stops at its edge), then corners that agree in everything shared again
-export function paintBreed(geometry, shape, coat, { seed = coat.seed, parts = [] } = {}) {
+// (so a colour stops at its edge), then corners that agree in everything shared again. keep: the model's own colours
+// on every face, not the coat's (a plain dog given only a collar)
+export function paintBreed(geometry, shape, coat, { seed = coat.seed, parts = [], keep = false } = {}) {
   const faces = facesOf(shape), H = shape.H, nz = noise3(seed * 7 + 3), R = rng(seed * 13 + 1);
   const pos = geometry.attributes.position, nor = geometry.attributes.normal, si = geometry.attributes.skinIndex, sw = geometry.attributes.skinWeight, col0 = shape.mesh.geometry.attributes.color;
   const nc = faces.length * 3 + parts.reduce((s, p) => s + p.count, 0);
@@ -241,7 +255,7 @@ export function paintBreed(geometry, shape, coat, { seed = coat.seed, parts = []
   const rank = raw.map((v, i) => i).sort((a, b) => raw[a] - raw[b]); rank.forEach((fi, r) => { faces[fi].noise = r / Math.max(1, faces.length - 1); });
   for (const f of faces) {
     f.rand = R();
-    const paint = paintFace(f, coat);
+    const paint = keep ? { rgb: null, layer: f.feature === 1 ? 'eye' : f.feature === 2 ? 'shine' : 'base', pattern: false } : paintFace(f, coat);
     const furless = paint.layer === 'eye' || paint.layer === 'nose' || paint.layer === 'shine';
     layers[paint.layer] = (layers[paint.layer] || 0) + 1;
     // (which way the pattern's picture is laid on this face: along the face's most nearly facing axis)
@@ -343,8 +357,10 @@ function collarTris(c, a, u, w, ru, rw, hh, th, rgb, studRgb) {
 function collarPart(shape, morphed, breed) {
   const { rig, idx, W, X, dom, n, L } = shape;
   const neck = new Set(rig.neck.map((b) => idx[b])), r0 = new THREE.Vector3().setFromMatrixPosition(W[idx[rig.neck[0]]]), r1 = new THREE.Vector3().setFromMatrixPosition(W[idx[rig.head]]);
-  // where it sits: a third of the way up the neck, round the corners near that point
-  const at = r0.clone().lerp(r1, rig.neck.length > 1 ? 0.2 : 0.3), axis = r1.clone().sub(r0).normalize();
+  // where it sits: a third of the way up the neck, round the corners near that point (the pug's one short neck bone: at
+  // its root, by the shoulders, where the collar shows round the front and the sides and tucks under the back of the
+  // big head; further up the head hid it all but a corner)
+  const at = r0.clone().lerp(r1, rig.neck.length > 1 ? 0.2 : 0), axis = r1.clone().sub(r0).normalize();
   const side = new THREE.Vector3(1, 0, 0), up = new THREE.Vector3().crossVectors(axis, side).normalize().negate();
   if (up.y < 0) up.negate();
   const slab = r1.distanceTo(r0) * 0.12; let ru = 0, rw0 = 0, rw1 = 0, cy = 0, cn = 0;
@@ -505,4 +521,20 @@ export function makeBreedKind(K, breed) {
   const info = { ...morphed.info, from: K.info.file, breed: breed.id, base: breed.base, label: breed.label, tris: painted.geometry.index ? painted.geometry.index.count / 3 : 0 };
   const report = { ...morphed.report, coat: painted.layers, coatMs: Math.round(performance.now() - t1), ms: Math.round(performance.now() - t0), verts: painted.geometry.attributes.position.count, parts: parts.length, src: src.name };
   return { scene: morphed.scene, clips: morphed.clips, info, breed, report, map: painted.map, geometry: painted.geometry };
+}
+// A PLAIN DOG WITH A COLLAR (a rider's shiba, husky or pug, with a collar from the general store): not reshaped and not
+// painted from a coat. Its own colours stay, face by face, and the collar joins its mesh. Its mesh is laid out in the
+// model's bind pose, not at rest as a breed's is, so the collar is carried back there from the rest pose it is made in.
+// Its material is the plain dog's own (shared, with its fur). The pug, which has no eyes of its own, gets the eyes it
+// wears plain (plainEyes) in the same way.
+export function plainWithCollar(K, id, collar) {
+  const t0 = performance.now(), shape = analyseKind(K), mesh0 = shape.mesh, inv = mesh0.skeleton.boneInverses;
+  const toBind = { T: shape.W.map((w, i) => new THREE.Matrix4().multiplyMatrices(w, inv[i]).invert()) };
+  const c = collarPart(shape, toBind, { collar }), parts = c ? [c] : [];
+  if (!shape.L.eyeL) parts.push(eyeParts(shape, toBind, 1));
+  const painted = paintBreed(mesh0.geometry, shape, fillCoat({}), { parts, keep: true });
+  const scene = cloneSkinned(K.scene), mesh = skinnedOf(scene);
+  mesh.geometry = painted.geometry; mesh.name = id; scene.name = id;
+  const report = { parts: parts.length, ms: Math.round(performance.now() - t0), verts: painted.geometry.attributes.position.count };
+  return { scene, clips: K.clips, info: K.info, breed: { id, base: splitKind(id).kind, collar }, report, geometry: painted.geometry };
 }

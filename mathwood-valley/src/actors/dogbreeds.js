@@ -104,15 +104,17 @@ export const BREEDS = {
     note: 'Tricolour: a black saddle, tan head and ears, white blaze, muzzle, chest, legs and tail tip; long drop ears, the tail up.',
   },
   // THE DACHSHUND: designed in the Dog Lab by one of the game's young testers (2026-11-04), reshaped from the chocolate
-  // Lab, and kept as it was made
+  // Lab, and kept as it was made. The same day he asked for chest and eyebrow markings, from a photo of a black and tan
+  // dachshund: a tan dot over each eye, and two tan patches on the front of the chest with black between them (the
+  // coat's eyebrows and chest marks, in his own tan; nothing else changed)
   dachshund: {
     label: 'Dachshund', base: 'husky', ears: 'drop',
     morph: { size: 0.79, legFront: 0.57, legBack: 0.45, legThick: 1.18, legSet: 0.03, body: 1.49, chestDepth: 1.01, chestWidth: 1.51, girth: 0.7,
       neck: 0.79, neckThick: 0.94, neckTilt: -0.46, head: 1.05, skull: 1.47, snout: 1.23, muzzle: 0.7, jaw: 0.96, eyes: 1.71, headTilt: -0.08,
       ears: 0.95, earLength: 1.44, earWidth: 1.25, earSplay: 2.6, earTilt: 0.39, earFold: 0, tailLength: 0.98, tailThick: 0.91, tailCarry: -1.4, tailCurl: -0.84 },
     coat: { base: '#0d0602', white: '#5e340d', tan: '#612d00', dark: '#ffc5a8', nose: '#3a2419', shade: 0.08, blazeTop: 0.89, muzzle: 0.34, belly: 0.32,
-      socksF: 0.2, socksB: 0.59, points: 0.18, patternAmount: 0.66 },
-    note: 'Black and tan: very short legs under a long low body, a deep wide chest, a long head, big eyes, long drop ears, a smooth coat; the tan on the muzzle, the feet and the belly.',
+      socksF: 0.2, socksB: 0.59, points: 0.18, brows: 0.9, chestMarks: 0.45, patternAmount: 0.66 },
+    note: 'Black and tan: very short legs under a long low body, a deep wide chest, a long head, big eyes, long drop ears, a smooth coat; the tan on the muzzle, the feet and the belly, a tan dot over each eye and two tan marks on the chest.',
   },
   dalmatian: {
     label: 'Dalmatian', base: 'husky', ears: 'drop',

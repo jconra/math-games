@@ -6,9 +6,10 @@
 // farm_dogclips.py there: its lie is a sploot, back legs stretched out behind). Its legs keep to the ground at
 // every pace (gaitFor in actors/animals.js). Its name is on a small tag above its head.
 //
-//   const D = makeDog({ W, scene, animals, kind: 'shiba' | 'husky' | 'pug' | a breed id ('boston'...), name, follow: () => P.position })
+//   const D = makeDog({ W, scene, animals, kind: 'shiba' | 'husky' | 'pug' | a breed id ('boston'...), name, collar, follow: () => P.position })
 //     follow(): where the one it follows is (a Vector3 on the ground). animals: the loaded library (the kind is loaded
-//     here if it isn't yet: D.ready is a promise)
+//     here if it isn't yet: D.ready is a promise). collar: the rider's pick from the general store (actors/collars.js:
+//     { colour, studs }), or none; D.look is the animal library's id for the dog wearing it
 //   D.update(dt)       every frame;  D.shift({ dx, dz }): moved with the player as it stands (the valley's ends)
 //   D.hold(seconds, at)   stays put for that long, sitting up and facing at ({ x, z }): being fed or petted
 //   D.setName(name)    a new name on the tag;  D.tagOn = false hides the tag (D.tag: the sprite; it fades out far off)
@@ -19,6 +20,7 @@
 import * as THREE from 'three';
 import { makeAnimal } from './actors/animals.js';
 import { isBreed, BREEDS } from './actors/dogbreeds.js';
+import { collarKind } from './actors/collars.js';
 
 export const DOG = {
   side: 1.5, back: 1.6,          // where it keeps to: this far to the side and behind the one it follows (m)
@@ -68,10 +70,11 @@ export function makeTag(name) {
   return s;
 }
 
-export function makeDog({ W, scene, animals, kind = 'shiba', name = 'Dog', follow }) {
+export function makeDog({ W, scene, animals, kind = 'shiba', name = 'Dog', collar = null, follow }) {
   kind = dogKind(kind);
   const C = dogSettings(kind);                      // (this breed's settings)
-  const D = { dog: null, kind, name, position: new THREE.Vector3(), tagOn: true };
+  const look = collarKind(kind, collar);            // (the dog with its collar on: a kind of its own, still one draw)
+  const D = { dog: null, kind, look, name, position: new THREE.Vector3(), tagOn: true };
   const tag = D.tag = makeTag(name); tag.visible = false; scene.add(tag);   // (shown once the dog is there)
   let x = 0, z = 0, heading = 0, speed = 0, stillT = 0, side = 1, lead = null, leadSpeed = 0;
   let holdT = 0, holdAt = null;
@@ -79,9 +82,9 @@ export function makeDog({ W, scene, animals, kind = 'shiba', name = 'Dog', follo
   const last = new THREE.Vector3(), tmp = new THREE.Vector3(), head = new THREE.Vector3();
   let flipT = 0, stuckT = 0, gaveUp = false, bestD = Infinity, upX = 0, upZ = 0;
   let started = false, disposed = false;   // (disposed: the ride ended while the dog was still loading; it never arrives)
-  D.ready = animals.need(kind).then(() => {
+  D.ready = animals.need(look).then(() => {
     if (disposed) return;
-    const a = D.dog = makeAnimal(animals, kind); scene.add(a.root);
+    const a = D.dog = makeAnimal(animals, look); scene.add(a.root);
     // how far the top of its head is above the head bone (the tag goes over the head wherever the clips put it)
     a.root.updateMatrixWorld(true); headUp = a.tall - a.bones.Head.getWorldPosition(head).y;
   }).catch((e) => console.warn('dog: no', kind, e));

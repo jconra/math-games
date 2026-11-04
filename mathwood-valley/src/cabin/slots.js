@@ -23,11 +23,12 @@
 //   ownedPieces(rider)    -> the slot ids this rider owns (from rider.owned.cabin; anything unknown dropped)
 //   offeredPieces(rider)  -> the slots this rider can have (the rifle rack only with guns allowed)
 //   nextPiece(rider)      -> the cheapest slot not owned yet, or null when the cabin is full
-//   homeDogs(rider)       -> the rider's dogs as { kind, name, following }: the one following you and the ones at home
+//   homeDogs(rider)       -> the rider's dogs as { kind, name, following, collar? }: the one following you and the ones at home
 //   buyPiece(rider, id, spend)  -> 'bought' | 'owned' | 'short' | 'unknown'   (spend: save.js spend; saves on a buy)
 
 import { PRICES } from '../catalog.js';
 import { isBreed } from '../actors/dogbreeds.js';
+import { cleanPick } from '../actors/collars.js';
 
 export const SLOTS = [
   { id: 'rug', name: 'Rag rug', price: PRICES.furniture.rug, made: 'rug', line: 'A braided rag rug for the middle of the floor. Warm on the feet.',
@@ -85,18 +86,18 @@ export function buyPiece(rider, id, spend, save = () => {}) {
 
 // The rider's dogs (the same reading as the general store's: owned.dogs, one of each breed, plus owned.dog, the one
 // that follows you; a save from before the list has only owned.dog). following: true for the one out with you. A Dog Lab
-// breed (actors/dogbreeds.js; not sold yet) counts too.
+// breed (actors/dogbreeds.js) counts too. collar: the one picked for it at the store (actors/collars.js), when it has one.
 const DOGS = ['shiba', 'husky', 'pug'];
 const BREEDS = { includes: (k) => DOGS.includes(k) || isBreed(k) };
 export function homeDogs(rider) {
   const o = (rider && rider.owned) || {};
   const list = Array.isArray(o.dogs) ? o.dogs.filter((d) => d && typeof d === 'object' && BREEDS.includes(d.kind) && d.name) : [];
-  const out = list.map((d) => ({ kind: d.kind, name: String(d.name) }));
-  if (o.dog && BREEDS.includes(o.dog.kind) && !out.some((d) => d.kind === o.dog.kind)) out.unshift({ kind: o.dog.kind, name: String(o.dog.name || 'Dog') });
+  const out = list.map((d) => ({ kind: d.kind, name: String(d.name), collar: cleanPick(d.collar) }));
+  if (o.dog && BREEDS.includes(o.dog.kind) && !out.some((d) => d.kind === o.dog.kind)) out.unshift({ kind: o.dog.kind, name: String(o.dog.name || 'Dog'), collar: null });
   const seen = new Set();
   return out.filter((d) => (seen.has(d.kind) ? false : seen.add(d.kind))).map((d) => {
     const following = !!(o.dog && o.dog.kind === d.kind);
-    return { kind: d.kind, name: following && o.dog.name ? String(o.dog.name) : d.name, following };
+    return { kind: d.kind, name: following && o.dog.name ? String(o.dog.name) : d.name, following, ...(d.collar ? { collar: d.collar } : {}) };
   });
 }
 

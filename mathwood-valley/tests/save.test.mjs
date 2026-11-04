@@ -365,3 +365,22 @@ test('read aloud: only while the rider\'s math is young, and the grown-ups\' swi
   kid.readAloud = false;
   assert.equal(S.readAloudLevel(kid), true, 'the level says read; the switch is the grown-ups\' (skill.js readAloud reads it)');
 });
+
+test('a dog\'s collar (picked at the store) is kept with that dog; an old save loads with none; junk is taken off', () => {
+  fresh();
+  // an old save: the dogs, no collars, as they were (and no list at all stays no list)
+  const old = S.fixRider({ name: 'Old', owned: { dog: { kind: 'shiba', name: 'Biscuit' }, dogs: [{ kind: 'shiba', name: 'Biscuit' }, { kind: 'husky', name: 'Ghost' }] } });
+  assert.deepEqual(old.owned.dogs, [{ kind: 'shiba', name: 'Biscuit' }, { kind: 'husky', name: 'Ghost' }]);
+  assert.equal(S.fixRider({ owned: { dog: { kind: 'pug', name: 'Tater' } } }).owned.dogs, undefined);
+  // a collar saved and loaded again, each dog its own
+  const r = S.newRider('Ada');
+  r.owned.dogs = [{ kind: 'boston', name: 'Rosie', collar: { colour: 'red', studs: true } }, { kind: 'beagle', name: 'Bo', collar: { colour: 'green', studs: false } }];
+  r.owned.dog = { kind: 'boston', name: 'Rosie' };
+  S.saveRider(r);
+  const back = S.loadRiders().find((x) => x.id === r.id);
+  assert.deepEqual(back.owned.dogs, r.owned.dogs);
+  // tidied: studs a yes or no; a collar that isn't one taken off; a newer build's colour kept (worn as none here);
+  // anything else on the dog kept as it is
+  const t = S.cleanDogs([{ kind: 'boston', name: 'A', collar: { colour: 'red', studs: 'yes' } }, { kind: 'beagle', name: 'B', collar: 'red' }, { kind: 'pug', name: 'C', collar: { colour: 'purple', studs: true } }, { kind: 'shiba', name: 'D', collar: null, toy: 'ball' }, 'junk']);
+  assert.deepEqual(t, [{ kind: 'boston', name: 'A', collar: { colour: 'red', studs: false } }, { kind: 'beagle', name: 'B' }, { kind: 'pug', name: 'C', collar: { colour: 'purple', studs: true } }, { kind: 'shiba', name: 'D', toy: 'ball' }, 'junk']);
+});

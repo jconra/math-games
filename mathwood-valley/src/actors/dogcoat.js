@@ -7,7 +7,8 @@
 // Face by face, so a marking's edge follows the model's own facets, the low-poly look the game's animals have.
 //
 // What a face can be, in the order they're laid on: the BASE colour; TAN points (eyebrows, cheeks, the lower legs,
-// under the tail); a dark SADDLE over the back; PATCHES (big blobs of the dark colour, from smooth noise); the WHITE
+// under the tail, all by one amount), and tan EYEBROWS and CHEST MARKS by their own amounts (a black and tan's dot over
+// each eye, and its two patches on the front of the chest with the black between them); a dark SADDLE over the back; PATCHES (big blobs of the dark colour, from smooth noise); the WHITE
 // markings (blaze, muzzle, chest bib, collar, belly, socks, tail tip); a dark MASK over the muzzle and round the eyes;
 // and the model's own eyes and nose (kept, the nose in the recipe's nose colour).
 //
@@ -52,6 +53,8 @@ export const COAT = {
   socksB:   ['range', 0, 0, 1, 0.01, 'Back socks', 'white'],
   tailTip:  ['range', 0, 0, 1, 0.01, 'Tail tip', 'white'],
   points:   ['range', 0, 0, 1, 0.01, 'Tan points', 'marks'],
+  brows:    ['range', 0, 0, 1, 0.01, 'Eyebrow dots', 'marks'],       // (a tan dot over each eye)
+  chestMarks: ['range', 0, 0, 1, 0.01, 'Chest marks', 'marks'],    // (two tan patches, black between)
   saddle:   ['range', 0, 0, 1, 0.01, 'Saddle (dark back)', 'marks'],
   mask:     ['range', 0, 0, 1, 0.01, 'Dark mask', 'marks'],
   eyePatch: ['range', 0, 0, 1, 0.01, 'Dark eye patches', 'marks'],
@@ -142,8 +145,27 @@ function isWhite(f, c) {
   if (f.part === 'tail' && c.tailTip > 0 && f.along > 1 - c.tailTip) return true;
   return false;
 }
-// tan points: a spot over each eye, the cheeks and the sides of the muzzle, the lower legs, under the tail
+// the eyebrows (brows, its size): a round dot over each eye, on the brow just above it; it grows up and round more than
+// down beside the eye (a face lower than the dot's middle counts as further off). Never in over the forehead (on the
+// husky that is one long face from the crown down to the stop: a stripe, not a dot) nor across its middle (the two stay
+// apart), and an eye's own faces are its own (features, never painted)
+function isBrow(f, k) {
+  const H = f.head; if (f.part !== 'head' || !H || Math.abs(H.x) < Math.max(0.15, H.eyeX * 0.6)) return false;
+  const dx = Math.abs(H.x) - H.eyeX * 0.78, dv = H.v - (H.eyeV + 0.08), du = H.u - (H.eyeU + 0.05);
+  return Math.hypot(dx, dv * (dv < 0 ? 4 : 1.2), du * 1.2) < 0.02 + 0.16 * k;
+}
+// the chest marks (chestMarks, their size): a patch each side of the breastbone on the front of the chest, under the
+// throat and over the front legs (the neck's lowest faces and the chest's, facing forward); a band down the middle stays
+// dark, so the two never meet
+function isChestMark(f, k) {
+  if ((f.part !== 'chest' && f.part !== 'neck') || f.head || f.u < 0.85 || f.n[2] < 0.3 || f.s < 0.3) return false;
+  return Math.hypot((f.h - 0.78) / 0.1, (f.s - 0.4) / 0.2) < 0.25 + 1.3 * k;
+}
+// tan: the eyebrows and the chest marks by their own numbers; the points, by one number: a spot over each eye, the
+// cheeks and the sides of the muzzle, the lower legs, under the tail
 function isTan(f, c) {
+  if (c.brows > 0 && isBrow(f, c.brows)) return true;
+  if (c.chestMarks > 0 && isChestMark(f, c.chestMarks)) return true;
   const p = c.points; if (p <= 0) return false;
   const H = f.head;
   if (f.part === 'head' && H) {

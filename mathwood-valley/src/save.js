@@ -29,6 +29,8 @@
 //             one on by default; a grown-up can turn some off on the title (jobOn)
 //   missionsV: 2   the jobs were all switched on once (riders from before every job was on by default)
 //   owned:    { saddle: null|'plain'|'tooled'|'silver', horse: null|'donkey'|..., dog: null|{ kind, name }, horsesV: 2 }
+//             (+ dogs: [{ kind, name, collar? }] every dog owned, one of each breed (dog is the one following you); collar:
+//               { colour, studs } picked at the general store, src/actors/collars.js; a dog without one has no collar)
 //             (every rider starts on foot: horse null until one is bought; the bay was every rider's free horse until
 //               2026-10-27 and is bought now: a rider from before (no horsesV) keeps it, put in owned.horses once)
 //             (+ horses: ['donkey', 'white', ...] the stable's horses bought; mounts: { 'pen-3': { name, line, coat, size,
@@ -74,6 +76,7 @@ import { migrate as migrateLevels, recordLevel, PLACE } from './levels/model.js'
 import { migrate as migrateFacts } from './math/facts.js';
 import { cleanShifts } from './shifts.js';
 import { cleanTreats } from './treats.js';
+import { cleanPick } from './actors/collars.js';
 
 const VERSION = 1;
 let KEY = 'bandit-math.riders';
@@ -343,6 +346,18 @@ function jobsFor(stats) {
   return out;
 }
 
+// The dogs owned: each one kept as it is, its collar tidied (the store's own: { colour, studs }). A collar that isn't a
+// collar at all (an edited save's) is taken off; one of a colour this build doesn't know (a newer build's) is kept, and
+// worn as none here. Anything in the list that isn't a dog is left for the readers to skip, as before.
+export function cleanDogs(list) {
+  return (Array.isArray(list) ? list : []).map((d) => {
+    if (!d || typeof d !== 'object' || !('collar' in d)) return d;
+    const { collar, ...rest } = d, c = cleanPick(collar);
+    if (c) return { ...rest, collar: c };
+    return collar && typeof collar === 'object' && typeof collar.colour === 'string' ? d : rest;
+  });
+}
+
 function makeId() {
   return 'r' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36);
 }
@@ -415,6 +430,9 @@ export function fixRider(r) {
       saddle: owned.saddle == null ? null : String(owned.saddle),
       horse: typeof owned.horse === 'string' ? owned.horse : owned.horsesV === 2 ? null : 'bay',
       dog: owned.dog && typeof owned.dog === 'object' ? owned.dog : null,
+      // the dogs owned (each { kind, name }, and its collar once one is picked at the store: src/actors/collars.js), only
+      // when the rider has the list
+      ...(owned.dogs !== undefined ? { dogs: cleanDogs(owned.dogs) } : {}),
       // the cabin's furnishings bought (slot ids, src/cabin/slots.js), only when the rider has any
       ...(owned.cabin !== undefined ? { cabin: [...new Set((Array.isArray(owned.cabin) ? owned.cabin : []).filter(c => typeof c === 'string'))] } : {}),
       // the homestead's animals and their goods (src/math/goods.js), only when the rider has any

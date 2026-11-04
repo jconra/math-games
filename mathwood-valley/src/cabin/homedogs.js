@@ -3,7 +3,8 @@
 // a while and go back to bed; on the porch they get up when you come near and sit watching you. The dog that follows you
 // comes in with you, keeps beside you and sits when you stop. Each has its name tag, as the dog that follows you does.
 //
-//   const H = makeHomeDog({ animals, kind, name, scene, spot: { x, y, z, rot }, mode, floor, push, lit, others })
+//   const H = makeHomeDog({ animals, kind, name, collar, scene, spot: { x, y, z, rot }, mode, floor, push, lit, others })
+//     collar: the rider's pick for it from the general store (actors/collars.js), or none
 //     mode: 'bed' (inside, on its bed), 'porch' (out on the town cabin's porch: it never walks off it), 'follow'
 //     floor(x, z) -> the floor's height there; push(body) keeps a walker { x, y, z } out of the walls (inside only)
 //     lit(material): gives the dog's coat the inside light (its own copy of the coat, so the town's dogs don't change)
@@ -18,6 +19,7 @@
 import * as THREE from 'three';
 import { makeAnimal } from '../actors/animals.js';
 import { makeTag, dogSettings } from '../dog.js';
+import { collarKind } from '../actors/collars.js';
 
 export const HOME = {
   greetFrom: 9,       // the porch dogs get up when you come this close (m)
@@ -31,16 +33,17 @@ export const HOME = {
 };
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
-export function makeHomeDog({ animals, kind, name, scene, spot, mode = 'bed', floor = () => spot.y, push = null, lit = null, others = () => [], seen = () => true }) {
-  const H = { kind, name, mode, dog: null, x: spot.x, z: spot.z, r: 0.5 };   // (r: half its length once loaded; till then a husky's)
+export function makeHomeDog({ animals, kind, name, collar = null, scene, spot, mode = 'bed', floor = () => spot.y, push = null, lit = null, others = () => [], seen = () => true }) {
+  const look = collarKind(kind, collar);   // (wearing its collar: a kind of its own, dogkind.js)
+  const H = { kind, look, name, mode, dog: null, x: spot.x, z: spot.z, r: 0.5 };   // (r: half its length once loaded; till then a husky's)
   const C = dogSettings(kind);
   let heading = spot.rot || 0, speed = 0, pose = 'lie', poseT = 99, task = mode === 'follow' ? 'follow' : 'rest', taskT = 0, stillT = 0, headUp = 0;
   let disposed = false, greeted = false, side = 0, going = false, stuckT = 0;
   const tag = makeTag(name); tag.visible = false; scene.add(tag);
   const head = new THREE.Vector3(), body = { x: spot.x, y: spot.y, z: spot.z }, goal = new THREE.Vector3();
-  H.ready = animals.need(kind).then(() => {
+  H.ready = animals.need(look).then(() => {
     if (disposed) return;
-    const a = H.dog = makeAnimal(animals, kind, { tint: lit ? '#ffffff' : null });   // (a tint gives it its own coat to light)
+    const a = H.dog = makeAnimal(animals, look, { tint: lit ? '#ffffff' : null });   // (a tint gives it its own coat to light)
     if (a.length > 0) H.r = a.length / 2;
     if (lit) lit(a.mesh.material);
     scene.add(a.root);
@@ -136,7 +139,7 @@ export function makeHomeDog({ animals, kind, name, scene, spot, mode = 'bed', fl
     scene.worldToLocal(a.bones.Head.getWorldPosition(head));   // (the tag hangs in the same scene as the dog: the cabin's frame or the valley's)
     tag.position.set(head.x, head.y + headUp + C.tagUp, head.z); tag.visible = seen(H.x, H.z);   // (its name drawn through walls: only where it can be seen)
   };
-  H.state = () => ({ kind, name, mode, task, pose, x: +H.x.toFixed(2), z: +H.z.toFixed(2), loaded: !!H.dog });
+  H.state = () => ({ kind, look, name, mode, task, pose, x: +H.x.toFixed(2), z: +H.z.toFixed(2), loaded: !!H.dog });
   H.dispose = () => { disposed = true; if (H.dog) H.dog.dispose(); tag.removeFromParent(); tag.material.map.dispose(); tag.material.dispose(); };
   return H;
 }

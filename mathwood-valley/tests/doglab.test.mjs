@@ -6,10 +6,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import zlib from 'node:zlib';
+import crypto from 'node:crypto';
 import { MORPH, MORPH_KEYS, EAR_SETS, RIGS, rigFor, rigBones, fillMorph, planMorph, growthOf } from '../src/actors/morphplan.js';
 import { COAT, COAT_KEYS, fillCoat, paintFace, patternPixels, hexToLinear, linearToHex, PATTERNS } from '../src/actors/dogcoat.js';
 import { BREEDS, BREED_ORDER, BASES, LATER, isBreed, breedOf, cleanBreed } from '../src/actors/dogbreeds.js';
 import { homeDogs } from '../src/cabin/slots.js';
+import { COLLARS, cleanPick, collarLook, collarKind, splitKind } from '../src/actors/collars.js';
+import { PRICES } from '../src/catalog.js';
 
 const MODELS = new URL('../models/', import.meta.url);
 const glbNodes = (path) => { const b = fs.readFileSync(new URL(path, MODELS)); const j = JSON.parse(b.toString('utf8', 20, 20 + b.readUInt32LE(12))); return (j.nodes || []).map((n) => String(n.name || '').replace(/[.]/g, '')); };
@@ -104,6 +108,76 @@ test('coats: a saddle on the back, tan points on the legs, a white tail tip, a f
   assert.ok(!paintFace(face({}), breedOf('boston').coatFull).pattern);
 });
 
+// the shiba's, the husky's and the pug's faces at rest, as dogkind.js measures them (written out from the Dog Lab by
+// ~/pw/bandit-math/rigs/dogmarks/faces.cjs), and every breed's coat as it painted them before the eyebrows and the
+// chest marks (fixture.mjs there, with the coat code from before)
+const FACES = (() => {
+  const all = JSON.parse(zlib.gunzipSync(fs.readFileSync(new URL('fixtures/dogfaces.json.gz', import.meta.url))));
+  return Object.values(all).flatMap((B) => B.faces.map(([part, h, u, s, n0, n1, n2, side, feature, along, noise, rand, hu, hv, hx]) => ({
+    part, h, u, s, n: [n0, n1, n2], side, feature, along, noise, rand, noseRule: B.noseRule,
+    head: hu === undefined ? null : { u: hu, v: hv, x: hx, ...B.eye, nose: hu } })));
+})();
+const paintDigest = (coat) => crypto.createHash('sha256').update(FACES.map((f) => { const r = paintFace(f, coat); return `${r.layer}:${r.rgb ? r.rgb.map((x) => x.toFixed(6)).join(',') : '-'}:${r.pattern ? 1 : 0}`; }).join('\n')).digest('hex');
+
+test('coats: with the eyebrows and the chest marks at 0, every breed paints every face as it did before them', () => {
+  const before = JSON.parse(fs.readFileSync(new URL('fixtures/dogcoats-before.json', import.meta.url)));
+  assert.equal(FACES.length, before.faces);
+  assert.ok(FACES.length > 4000 && FACES.some((f) => f.head) && FACES.some((f) => f.part === 'chest'));
+  // (each breed as it was, the lab's saved one too: filled today, the new fields come in at 0)
+  for (const [id, { coat, digest }] of Object.entries(before.coats)) {
+    const now = fillCoat(coat);
+    assert.equal(now.brows, 0, id); assert.equal(now.chestMarks, 0, id);
+    assert.equal(paintDigest(now), digest, id);
+    assert.equal(paintDigest({ ...now, brows: 0, chestMarks: 0 }), digest, id);
+  }
+  // (and every breed the code has now, the new marks taken back to 0, is one of those: the rest of its coat as it was)
+  for (const id of Object.keys(BREEDS)) assert.equal(paintDigest({ ...breedOf(id).coatFull, brows: 0, chestMarks: 0 }), before.coats[id].digest, id);
+  // the defaults: off
+  assert.equal(COAT.brows[1], 0); assert.equal(COAT.chestMarks[1], 0);
+  assert.equal(COAT.brows[6], 'marks'); assert.equal(COAT.chestMarks[6], 'marks');
+});
+
+test('coats: the eyebrows and the chest marks land where they should, and grow with their numbers', () => {
+  const c = (o) => fillCoat({ base: '#101010', tan: '#a5642c', ...o });
+  const at = (f, o) => paintFace(f, c(o)).layer;
+  // the eyebrows: on the brow just above each eye and a little in (both sides), not between the eyes, not on the eye
+  const H = head({}), brow = (o) => face({ part: 'head', n: [0.5, 0.3, 0.8], head: head({ u: H.eyeU + 0.05, v: H.eyeV + 0.08, x: H.eyeX * 0.78, ...o }) });
+  assert.equal(at(brow({}), { brows: 0.5 }), 'tan');
+  assert.equal(at({ ...brow({}), side: -1, head: { ...brow({}).head, x: -H.eyeX * 0.78 } }, { brows: 0.5 }), 'tan');
+  assert.equal(at(brow({}), { brows: 0 }), 'base');
+  assert.equal(at(brow({ x: 0.05 }), { brows: 1 }), 'base');                       // (the middle of the forehead)
+  assert.equal(at(brow({ v: H.eyeV - 0.1 }), { brows: 1 }), 'base');               // (under the eye)
+  assert.equal(paintFace({ ...brow({}), feature: 1 }, c({ brows: 1 })).layer, 'eye');   // (the eye itself)
+  // ... a face a little off the middle of the dot is tan only with a bigger number
+  assert.equal(at(brow({ x: H.eyeX * 0.78 + 0.1 }), { brows: 0.3 }), 'base');
+  assert.equal(at(brow({ x: H.eyeX * 0.78 + 0.1 }), { brows: 0.8 }), 'tan');
+  assert.equal(at(brow({ x: H.eyeX * 0.5 }), { brows: 1 }), 'base');             // (not in over the forehead: a stripe)
+  // the chest marks: each side of the breastbone on the front of the chest; the middle dark; not the throat, the legs
+  // or the chest's sides
+  const chest = (o) => face({ part: 'neck', u: 1.12, h: 0.8, s: 0.4, n: [0.5, -0.4, 0.7], ...o });
+  assert.equal(at(chest({}), { chestMarks: 0.4 }), 'tan');
+  assert.equal(at(chest({ side: -1 }), { chestMarks: 0.4 }), 'tan');
+  assert.equal(at(chest({ part: 'chest', h: 0.74, u: 1.0 }), { chestMarks: 0.5 }), 'tan');
+  assert.equal(at(chest({}), { chestMarks: 0 }), 'base');
+  assert.equal(at(chest({ s: 0.1 }), { chestMarks: 1 }), 'base');                 // (black between them ...
+  assert.equal(at(chest({ s: 0.25 }), { chestMarks: 1 }), 'base');                // ... a band of it, so they never meet)
+  assert.equal(at(chest({ h: 1.0 }), { chestMarks: 1 }), 'base');                 // (the throat)
+  assert.equal(at(chest({ part: 'legF', h: 0.4 }), { chestMarks: 1 }), 'base');   // (the front legs)
+  assert.equal(at(chest({ n: [1, 0, 0] }), { chestMarks: 1 }), 'base');           // (the chest's side)
+  assert.equal(at(chest({ h: 0.7 }), { chestMarks: 0.2 }), 'base');
+  assert.equal(at(chest({ h: 0.7 }), { chestMarks: 0.6 }), 'tan');
+  // a white bib over them wins, as over the tan points
+  assert.equal(at(chest({}), { chestMarks: 1, chest: 1 }), 'white');
+  // the dogs' own faces: more of them tan as the numbers grow, and on both sides alike
+  const tanOf = (o) => FACES.filter((f) => paintFace(f, c(o)).layer === 'tan');
+  for (const k of ['brows', 'chestMarks']) {
+    const n = [0, 0.3, 0.6, 1].map((v) => tanOf({ [k]: v }).length);
+    assert.ok(n[0] === 0 && n[1] > 0 && n[1] <= n[2] && n[2] < n[3], `${k}: ${n}`);
+    const t = tanOf({ [k]: 0.7 }), left = t.filter((f) => f.side > 0).length;
+    assert.ok(Math.abs(left * 2 - t.length) <= 2, `${k}: both sides (${left} of ${t.length})`);
+  }
+});
+
 test('pattern pictures: the same every time for a seed, a clear white spot, about the right cover', () => {
   for (const [kind] of PATTERNS) {
     if (kind === 'none') continue;
@@ -159,4 +233,47 @@ test('the game takes a breed for a dog: makeDog, the cabin and the animal librar
   assert.deepEqual(home.map((d) => d.kind), ['boston', 'shiba']);
   // not in the store yet (the game's maker decides once he's seen them)
   assert.doesNotMatch(source('../src/shop.js'), /boston/i);
+});
+
+test("collars: the store's colours, a rider's pick cleaned, the dog wearing it a kind of its own; the lab offers the same", () => {
+  assert.deepEqual(COLLARS.map((c) => c.id), ['red', 'brown', 'black', 'blue', 'green']);
+  for (const c of COLLARS) assert.match(c.colour, /^#[0-9a-f]{6}$/);
+  // the family's Boston's collar is one pick: red, studded
+  assert.deepEqual(collarLook({ colour: 'red', studs: true }), BREEDS.bostonFamily.collar);
+  assert.deepEqual(collarLook({ colour: 'brown', studs: false }), { colour: COLLARS[1].colour, studs: null });
+  assert.equal(cleanPick({ colour: 'purple', studs: true }), null); assert.equal(cleanPick('red'), null); assert.equal(cleanPick(null), null);
+  assert.deepEqual(cleanPick({ colour: 'blue', studs: 1 }), { colour: 'blue', studs: false });
+  // the animal library's id for the dog wearing it, and back
+  assert.equal(collarKind('boston', null), 'boston');
+  assert.equal(collarKind('boston', { colour: 'red', studs: true }), 'boston+red-studs');
+  assert.equal(collarKind('shiba', { colour: 'green', studs: false }), 'shiba+green');
+  assert.deepEqual(splitKind('boston+red-studs'), { kind: 'boston', pick: { colour: 'red', studs: true } });
+  assert.deepEqual(splitKind('pug+blue'), { kind: 'pug', pick: { colour: 'blue', studs: false } });
+  assert.deepEqual(splitKind('beagle'), { kind: 'beagle', pick: null });
+  assert.deepEqual(splitKind('beagle+mauve'), { kind: 'beagle', pick: null });
+  // every collar kind is a breed or a plain dog the library can make
+  for (const id of [...BREED_ORDER, ...BASES]) assert.equal(splitKind(collarKind(id, { colour: 'black', studs: true })).kind, id);
+  // the dogs at home carry theirs; the store, the cabin, the game's dog and the lab all read the one list
+  const home = homeDogs({ owned: { dog: { kind: 'boston', name: 'Rosie' }, dogs: [{ kind: 'boston', name: 'Rosie', collar: { colour: 'red', studs: true } }, { kind: 'shiba', name: 'Biscuit', collar: { colour: 'teal' } }] } });
+  assert.deepEqual(home, [{ kind: 'boston', name: 'Rosie', following: true, collar: { colour: 'red', studs: true } }, { kind: 'shiba', name: 'Biscuit', following: false }]);
+  assert.match(source('../src/shop.js'), /from '\.\/actors\/collars\.js'/);
+  assert.match(source('../src/main.js'), /collarKind\(dogKind\(dog\.kind\), collar\)/);
+  assert.match(source('../src/cabin/homedogs.js'), /collarKind\(kind, collar\)/);
+  assert.match(source('../src/actors/dogkind.js'), /splitKind\(id\)/);
+  const lab = source('../labs/dogs/main.js');
+  assert.match(lab, /import \{ COLLARS, STUDS \} from '\.\.\/\.\.\/src\/actors\/collars\.js'/);
+  assert.doesNotMatch(lab, /#c4302b|#d8d2c4/i);   // (no copy of the colours)
+  // free, for now (catalog.js: an open question for the game's maker)
+  assert.equal(PRICES.collar, 0);
+});
+
+test('the Dachshund: black and tan as it was made, with the tan eyebrow dots and chest marks of the photo', () => {
+  const d = breedOf('dachshund').coatFull;
+  assert.ok(d.brows > 0 && d.chestMarks > 0);
+  // everything else as the young designer made it
+  assert.equal(d.base, '#0d0602'); assert.equal(d.tan, '#612d00'); assert.equal(d.white, '#5e340d'); assert.equal(d.points, 0.18);
+  assert.equal(BREEDS.dachshund.morph.legBack, 0.45); assert.equal(BREEDS.dachshund.ears, 'drop');
+  // the marks paint in the coat's own tan (no new, brighter colour), on the faces it is made from
+  const tan = FACES.filter((f) => paintFace(f, d).layer === 'tan'), was = new Set(FACES.filter((f) => paintFace(f, { ...d, brows: 0, chestMarks: 0 }).layer === 'tan'));
+  assert.ok(tan.some((f) => f.part === 'head' && !was.has(f)) && tan.some((f) => (f.part === 'neck' || f.part === 'chest') && !was.has(f)));
 });

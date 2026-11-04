@@ -44,6 +44,7 @@
 import * as THREE from 'three';
 import { makeHome, NEAR } from './interior.js';
 import { makeHomeDog, HOME } from './homedogs.js';
+import { collarKey } from '../actors/collars.js';
 import { makeSaleSign } from './forsale.js';
 import { makeCamp } from './camp.js';
 import { makeHearthFire } from './hearthfire.js';
@@ -156,21 +157,21 @@ export function makeCabin({ W, renderer, camera, animals, rider, hud, input: I, 
   function placeDogs() {
     clearDogs(); dogsDirty = false;
     const home = homeDogs(rider).filter((d) => !d.following);
-    dogsWhere = whereDogs() + ':' + home.map((d) => d.kind + d.name).join(',');
+    dogsWhere = whereDogs() + ':' + home.map((d) => d.kind + d.name + collarKey(d.collar)).join(',');
     if (!R || !home.length) return;
     const where = whereDogs();
     if (where === 'beds') {
       const spots = R.bedSpots(home.length);
       // (kept 42 cm off the walls and the furniture: a dog is longer than it is wide; its name only in the player's room)
-      home.forEach((d, i) => { const q = spots[i]; dogs.push(makeHomeDog({ animals, kind: d.kind, name: d.name, scene: R.inner, spot: { x: q.x, y: q.y, z: q.z, rot: q.rot + Math.PI * 0.5 }, mode: 'bed', floor: (x, z) => R.floorUnder(x, z), push: (b) => R.pushOut(b, { radius: 0.42 }), lit: R.lit, others: () => dogs, seen: (x, z) => inRoom && roomHere(x, z) === roomHere(atL.x, atL.z) })); });
+      home.forEach((d, i) => { const q = spots[i]; dogs.push(makeHomeDog({ animals, kind: d.kind, name: d.name, collar: d.collar, scene: R.inner, spot: { x: q.x, y: q.y, z: q.z, rot: q.rot + Math.PI * 0.5 }, mode: 'bed', floor: (x, z) => R.floorUnder(x, z), push: (b) => R.pushOut(b, { radius: 0.42 }), lit: R.lit, others: () => dogs, seen: (x, z) => inRoom && roomHere(x, z) === roomHere(atL.x, atL.z) })); });
       dogs.frame = 'cabin';
       // (a fire going: they get up and go and lie by it)
       fires.forEach((F, i) => { if (F && (F.phase === 'catching' || F.phase === 'burning')) setTimeout(() => fireDogs(i, true), 600); });
     } else if (where === 'porch') {
-      home.forEach((d, i) => { const [x, z, turn] = R.layout.porchDogs[i % R.layout.porchDogs.length], y = R.floorUnder(x, z); dogs.push(makeHomeDog({ animals, kind: d.kind, name: d.name, scene: R.group, spot: { x, y, z, rot: turn }, mode: 'porch', floor: () => y })); });
+      home.forEach((d, i) => { const [x, z, turn] = R.layout.porchDogs[i % R.layout.porchDogs.length], y = R.floorUnder(x, z); dogs.push(makeHomeDog({ animals, kind: d.kind, name: d.name, collar: d.collar, scene: R.group, spot: { x, y, z, rot: turn }, mode: 'porch', floor: () => y })); });
       dogs.frame = 'cabin';
     } else if (camp) {
-      camp.dogSpots(home.length).forEach((q, i) => { const d = home[i]; dogs.push(makeHomeDog({ animals, kind: d.kind, name: d.name, scene: W.scene, spot: q, mode: 'porch', floor: () => q.y })); });
+      camp.dogSpots(home.length).forEach((q, i) => { const d = home[i]; dogs.push(makeHomeDog({ animals, kind: d.kind, name: d.name, collar: d.collar, scene: W.scene, spot: q, mode: 'porch', floor: () => q.y })); });
       dogs.frame = 'valley';
     }
   }
@@ -182,7 +183,7 @@ export function makeCabin({ W, renderer, camera, animals, rider, hud, input: I, 
     return where === 'beds' ? R.toWorld((m.x0 + m.x1) / 2, 1.2, (m.z0 + m.z1) / 2) : R.toWorld(s.x, 1.2, s.z);
   }
   function maybeMoveDogs(force = false) {
-    const key = whereDogs() + ':' + homeDogs(rider).filter((d) => !d.following).map((d) => d.kind + d.name).join(',');
+    const key = whereDogs() + ':' + homeDogs(rider).filter((d) => !d.following).map((d) => d.kind + d.name + collarKey(d.collar)).join(',');
     if (!dogsDirty && key === dogsWhere) return;
     if (!force && dogs.length) {
       const was = dogSpotOf(dogsWhere.split(':')[0]), now = dogSpotOf(whereDogs());

@@ -9,7 +9,9 @@
 //   general store   "Mind the counter": the word-problem job (src/missions/store.js: townsfolk bring order slips); and
 //                   dogs: a Shiba, a Husky, the pug (the cheap joke pick) or a breed (catalog.js DOGS), each named by the kid,
 //                   each dearer by the dogs already owned (catalog.js dogPrice); more than one can be
-//                   bought, and the one picked follows you while the others wait at home; and hats (src/hats.js): bought
+//                   bought, and the one picked follows you while the others wait at home; each dog owned can wear a
+//                   collar (src/actors/collars.js: none, or a colour, plain or studded), put on with one press and
+//                   changed as often as you like (PRICES.collar: free); and hats (src/hats.js): bought
 //                   once, worn at once, swapped back and forth free; and the six-shooter for bandits (src/gun.js),
 //                   greyed with a word for a rider whose grown-up has "Bandits" on lasso only; and treats for the
 //                   horses, apples and carrots by the bag (src/treats.js): picking 1, 2 or 3 bags asks a small money
@@ -48,6 +50,7 @@ import { gunShop, buyGun, nextGun, GUNS } from './gun.js';
 import { ownedHorses, ownsHorse, rideHorse, horseLook, ridden } from './mounts.js';
 import { TREATS, BOND, TREAT_KINDS, treatsOf, countOf, roomOf, addTreats, treatQuestion, answerLine, bondOf, heartsLine, treatWord } from './treats.js';
 import { levelOf } from './math/skill.js';
+import { COLLARS, cleanPick, collarKey } from './actors/collars.js';
 import { TREAT_ICON, heartSVG } from './ui/treaticons.js';
 export { PRICES, SADDLES, HORSES, DOGS, DOG_NAMES };
 
@@ -165,13 +168,15 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
     if (o.saddle && !list.includes(o.saddle)) list.push(o.saddle);
     return list;
   };
-  // the dogs a rider owns, one of each breed: owned.dogs [{ kind, name }] (a save from before there was a list has only
-  // owned.dog, the one that follows you, so the list is made from it); the one with you carries its latest name
+  // the dogs a rider owns, one of each breed: owned.dogs [{ kind, name, collar? }] (a save from before there was a list
+  // has only owned.dog, the one that follows you, so the list is made from it); the one with you carries its latest name;
+  // a collar picked here (src/actors/collars.js) stays with its dog
   const dogsOwned = () => {
     const o = owned();
     const list = Array.isArray(o.dogs) ? o.dogs.filter((d) => d && typeof d === 'object' && PRICES.dog[d.kind] != null && d.name) : [];
     if (o.dog && o.dog.kind && !list.some((d) => d.kind === o.dog.kind)) list.unshift({ kind: o.dog.kind, name: o.dog.name });
-    return list.map((d) => (o.dog && d.kind === o.dog.kind ? { kind: d.kind, name: o.dog.name } : { kind: d.kind, name: d.name }));
+    const keep = (d) => (d.collar !== undefined ? { collar: d.collar } : {});
+    return list.map((d) => ({ kind: d.kind, name: o.dog && d.kind === o.dog.kind ? o.dog.name : d.name, ...keep(d) }));
   };
   const breedName = (kind) => (DOGS.find((d) => d.id === kind) || DOGS[0]).name;
   // the stable's horses bought (owned.horses); ids this build doesn't know are kept
@@ -232,18 +237,30 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
   const palHat = () => (PALETTES[rider.look && rider.look.palette] || PALETTES.drifter)[3];
 
   // ── the store's rows, by area ──
-  // the dogs: the ones you own (the one with you renamed, the others taken along), and a breed not owned yet to buy and
-  // name; then the farm animals for the yard behind the cabin (src/homestead.js)
+  // a dog's collar (src/actors/collars.js): no collar or a colour, and once it has one, plain or studded. A press puts it
+  // on (studded the first time: the family's red with its pale studs is one press), and it stays picked in the row
+  // (the colours as round swatches, named when pointed at or read out, so a dog's row stays one line on a wide screen)
+  const collarPicker = (d) => {
+    const c = cleanPick(d.collar), on = c ? c.colour : 'none', nm = esc(d.name), cost = PRICES.collar || 0;
+    const btn = (what, id, label, isOn, swatch = '') => `<button type="button" role="radio" aria-checked="${isOn}" data-do="${what}" data-id="${d.kind}:${id}" class="${isOn ? 'is-on' : ''}${swatch ? ' bms-cbtn' : ''}"${swatch ? ` aria-label="${label}" title="${label}"><i class="bms-swatch" style="background:${swatch}" aria-hidden="true"></i>` : `>${label}`}</button>`;
+    let h = `<div class="bms-collar"><small>Collar${cost > 0 ? ` (${cost} gold to put a new one on)` : ''}</small><div class="bms-collar-row">`
+      + `<div class="bms-kinds" role="radiogroup" aria-label="${nm}'s collar">${btn('collar', 'none', 'None', on === 'none')}${COLLARS.map((x) => btn('collar', x.id, x.name, on === x.id, x.colour)).join('')}</div>`;
+    if (c) h += `<div class="bms-kinds" role="radiogroup" aria-label="Studs on ${nm}'s collar">${btn('collar-studs', 'plain', 'Plain', !c.studs)}${btn('collar-studs', 'studs', 'Studded', c.studs)}</div>`;
+    return h + '</div></div>';
+  };
+  // the dogs: the ones you own (the one with you renamed, the others taken along, each one's collar), and a breed not
+  // owned yet to buy and name; then the farm animals for the yard behind the cabin (src/homestead.js)
   function animalRows() {
     const mine = dogsOwned(), dog = owned().dog;
     let h = `<h3 class="bms-h">${mine.length > 1 ? 'Your dogs' : 'A dog to ride with'}</h3>`;
     for (const d of mine) {
       if (dog && d.kind === dog.kind) {
-        h += `<div class="bms-row"><div class="bms-what"><b>${esc(d.name)} the ${esc(breedName(d.kind))}</b><small>Follows you everywhere. Want a new name?</small>
-          <div class="bms-name"><input type="text" maxlength="12" value="${esc(d.name)}" aria-label="Your dog's name" data-name="rename"></div></div>
+        h += `<div class="bms-row is-tall"><div class="bms-what"><b>${esc(d.name)} the ${esc(breedName(d.kind))}</b><small>Follows you everywhere. Want a new name?</small>
+          <div class="bms-name"><input type="text" maxlength="12" value="${esc(d.name)}" aria-label="Your dog's name" data-name="rename"></div>${collarPicker(d)}</div>
           <div class="bms-act"><button type="button" data-do="rename">Rename</button></div></div>`;
       } else {
-        h += row({ name: `${d.name} the ${breedName(d.kind)}`, line: 'Waiting at home.', right: `<button type="button" data-do="take-dog" data-id="${d.kind}">Take ${esc(d.name)}</button>` });
+        h += `<div class="bms-row is-tall"><div class="bms-what"><b>${esc(d.name)} the ${esc(breedName(d.kind))}</b><small>Waiting at home.</small>${collarPicker(d)}</div>
+          <div class="bms-act"><button type="button" data-do="take-dog" data-id="${d.kind}">Take ${esc(d.name)}</button></div></div>`;
       }
     }
     // the breeds not owned yet: one row, pick a breed and name it (the first one the rider can afford is picked)
@@ -397,7 +414,8 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
     const keep = document.activeElement && panel.el.contains(document.activeElement) ? document.activeElement.dataset.do + ':' + (document.activeElement.dataset.id || '') : null;
     const n = note ? `<div class="bms-note">${esc(note)}</div>` : '';
     panel.body.innerHTML = `<div class="bms-purse">${COIN}<b>${rider.gold}</b> gold</div>` + BUILD[openId](n);
-    if (keep) { const [d, i] = keep.split(':'); const b = panel.body.querySelector(`[data-do="${d}"]${i ? `[data-id="${i}"]` : ''}`); if (b && !b.disabled) b.focus({ preventScroll: true }); }
+    // (an id can have a colon in it: a collar's 'labBlack:red', a treat's 'apple:2')
+    if (keep) { const at = keep.indexOf(':'), d = keep.slice(0, at), i = keep.slice(at + 1); const b = panel.body.querySelector(`[data-do="${d}"]${i ? `[data-id="${i}"]` : ''}`); if (b && !b.disabled) b.focus({ preventScroll: true }); }
     // (on a small screen the panel scrolls: a note just said, "Snowy is yours!", is brought into view)
     const ne = note && panel.body.querySelector('.bms-note'); if (ne && ne.scrollIntoView) ne.scrollIntoView({ block: 'nearest' });
   }
@@ -451,7 +469,18 @@ export function makeShops({ W, rider, onOpen = () => {}, onClose = () => {}, onB
     } else if (what === 'rename') {
       const input = panel.body.querySelector('[data-name="rename"]');
       const name = cleanName(input && input.value); if (!name || !o.dog) return;
-      o.dogs = dogsOwned().map((x) => (x.kind === o.dog.kind ? { kind: x.kind, name } : x)); o.dog = { ...o.dog, name }; saveRider(rider); onBuy('dog'); draw(`Your dog answers to ${name} now.`);
+      o.dogs = dogsOwned().map((x) => (x.kind === o.dog.kind ? { ...x, name } : x)); o.dog = { ...o.dog, name }; saveRider(rider); onBuy('dog'); draw(`Your dog answers to ${name} now.`);
+    } else if (what === 'collar' || what === 'collar-studs') {
+      // a collar put on, changed or taken off (saved with the dog, worn at once: main.js makes the dog again with it)
+      const [kind, v] = String(id).split(':'), list = dogsOwned(), d = list.find((x) => x.kind === kind); if (!d) return;
+      const was = cleanPick(d.collar);
+      const pick = what === 'collar' ? (v === 'none' ? null : cleanPick({ colour: v, studs: was ? was.studs : true })) : was && { ...was, studs: v === 'studs' };
+      if (what === 'collar' ? v !== 'none' && !pick : !was) return;
+      if (collarKey(pick) === collarKey(was)) { draw(); return; }
+      const cost = pick ? PRICES.collar || 0 : 0;
+      if (cost > 0 && !spend(rider, cost)) { draw('Not enough gold yet.'); return; }
+      o.dogs = list.map((x) => { if (x.kind !== kind) return x; const { collar, ...rest } = x; return pick ? { ...rest, collar: pick } : rest; });
+      saveRider(rider); onBuy('collar'); draw();
     } else if (what === 'open-own') {
       const box = (rider.lockboxes || [])[0]; if (!box) return;
       const back = openId; panel.close();

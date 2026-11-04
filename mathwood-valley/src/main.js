@@ -38,6 +38,7 @@ import { makeStableLife } from './stablelife.js';
 import { makeInput } from './input.js';
 import { makePlayer, MOVE } from './player.js';
 import { makeDog, dogKind } from './dog.js';
+import { cleanPick, collarKind } from './actors/collars.js';
 import { townLife, townLifeNow, preloadChickens } from './townlife.js';
 import { showTitle, faceSVG } from './ui/title.js';
 import { openStats } from './ui/stats.js';
@@ -370,7 +371,7 @@ async function ride(r) {
     // their doors, so E there opens the door)
     indoors: (id) => (id === 'stable' ? !!(JF && JF.people && JF.people.some((r) => r.id === 'keeper')) : !!(TR && TR.frame(id === 'store' ? 'generalStore' : id))),
     onOpen: () => pause('counter'), onClose: () => resume('counter'),
-    onBuy: (what) => { refresh(); if (what === 'saddle' || what === 'horse') P.refreshOwned(); if (what === 'dog') { makeDogIfOwned(); if (cabin) cabin.dogsChanged(); } if (what === 'hat' && P && P.person) { if (!P.person.hat) P.person.hatOn(); P.person.setHat(rider.look.hatStyle); } hob.event(what); },
+    onBuy: (what) => { refresh(); if (what === 'saddle' || what === 'horse') P.refreshOwned(); if (what === 'dog' || what === 'collar') { makeDogIfOwned(); if (cabin) cabin.dogsChanged(); } if (what === 'hat' && P && P.person) { if (!P.person.hat) P.person.hatOn(); P.person.setHat(rider.look.hatStyle); } hob.event(what); },
     onLockbox: (box, o) => openBox(box, o), onStoreJob: jobOn(rider, 'store') ? () => { if (!SJ) return; if (!shiftOpen('store')) { shiftNo('store'); return; } SJ.start(); } : null });   // (the day's shift done: the storekeeper's polite no)   // (no "Mind the counter" when a grown-up turned the store job off)
   STABLE = makeStableLife({ W, animals, rider, camera, player: () => P, shops, say: (t) => hud.toast(t), shadows: !!(W.V && W.V.SHADOW ? W.V.SHADOW.on : true) }); BM.stable = STABLE;
   FEEDER = makeFeeding({ W, rider, player: () => P, hud, tools: TOOLS, audio: AUD, pen: () => PEN, stable: () => STABLE, refresh, dog: () => D, homestead: () => HS, farm: () => farm, bark: (d) => !!(AMBI && AMBI.happyBark(d)) });
@@ -531,9 +532,11 @@ function trafficThings() {
 function makeDogIfOwned() {
   const dog = rider && rider.owned && rider.owned.dog;
   if (!dog || !P) return;
-  if (D && D.kind === dog.kind) { D.setName(dog.name); return; }
+  // (its collar, picked at the general store, is kept with it in the list of dogs owned: src/actors/collars.js)
+  const own = Array.isArray(rider.owned.dogs) ? rider.owned.dogs.find((d) => d && d.kind === dog.kind) : null, collar = cleanPick(own && own.collar);
+  if (D && D.kind === dog.kind && D.look === collarKind(dogKind(dog.kind), collar)) { D.setName(dog.name); return; }
   if (D) D.dispose();
-  D = makeDog({ W, scene: W.scene, animals, kind: dogKind(dog.kind), name: dog.name, follow: () => (cabin && cabin.dogWait) || P.position });   // (it waits by the porch steps while you're in the cabin)
+  D = makeDog({ W, scene: W.scene, animals, kind: dogKind(dog.kind), name: dog.name, collar, follow: () => (cabin && cabin.dogWait) || P.position });   // (it waits by the porch steps while you're in the cabin)
   D.kind = dog.kind;
 }
 function endRide() {
