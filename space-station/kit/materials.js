@@ -5,11 +5,11 @@
 //   decal   stencil labels and marks, tinted by the piece
 //   screen  the glowing blue screens
 //   glow    the light strips (bright enough for the bloom to catch)
-//   glass   windows
+//   glass   windows (faintly reflecting the room; the sky behind them is world/sky.js)
 // Light: each vertex carries a baked corner darkening (aAO, 0..1) and the strip light that reaches it (aBake, the
 // light's irradiance, in the same units as a three.js point light), worked out once when a room is built (bake.js).
 import * as THREE from 'three';
-import { wearTexture, floorAtlas, decalAtlas, screenAtlas, starSky } from './tex.js';
+import { wearTexture, floorAtlas, decalAtlas, screenAtlas } from './tex.js';
 
 // the surfaces: [colour (sRGB), roughness, metalness, wear]
 export const SURF = {
@@ -105,10 +105,9 @@ varying vec3 vRMW;
 let SHARED = null;
 // the textures are drawn once and shared by every material
 export function kitTextures() {
-  if (!SHARED) SHARED = { wear: wearTexture(), floor: floorAtlas(), decal: decalAtlas(), screen: screenAtlas(), stars: null };
+  if (!SHARED) SHARED = { wear: wearTexture(), floor: floorAtlas(), decal: decalAtlas(), screen: screenAtlas() };
   return SHARED;
 }
-export function stars() { const T = kitTextures(); if (!T.stars) T.stars = starSky(); return T.stars; }
 
 export function makeMaterials() {
   const T = kitTextures(), M = {};

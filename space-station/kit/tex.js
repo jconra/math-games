@@ -4,7 +4,7 @@
 //           deck, each a 2 x 2 m square
 //   decal   stencil labels, breaker labels, hazard stripes (white on clear, tinted by the piece)
 //   screen  the glowing blue screens (a math station, a status board, a terminal, a radar)
-//   stars   the view out of a window: an equirectangular sky of stars, a faint band of the galaxy and a planet
+// (the sky outside the windows is world/sky.js)
 import * as THREE from 'three';
 
 const canvas = (w, h = w) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
@@ -170,32 +170,4 @@ export function screenAtlas() {
   for (let k = 0; k < 7; k++) { const a = R() * 6.28, r = 20 + R() * 85; g.fillStyle = k === 2 ? '#ffd35a' : '#d8f1ff'; g.beginPath(); g.arc(768 + Math.cos(a) * r, 384 + Math.sin(a) * r, 5, 0, 7); g.fill(); }
   g.fillStyle = '#d8f1ff'; g.font = 'bold 24px "DejaVu Sans", Arial, sans-serif'; g.fillText('SECTOR 7', 900, 290);
   const t = tex(c, true, false); return { map: t };
-}
-
-// ── the stars outside ────────────────────────────────────────────────────────────────────────────────────────────
-export function starSky(w = 2048) {
-  const h = w / 2, c = canvas(w, h), g = c.getContext('2d'), R = rng(23);
-  g.fillStyle = '#020309'; g.fillRect(0, 0, w, h);
-  // a faint band of the galaxy across the sky
-  for (let i = 0; i < 900; i++) { const x = R() * w, y = h * 0.5 + Math.sin(x / w * Math.PI * 2) * h * 0.18 + (R() - 0.5) * h * 0.16, r = 8 + R() * 40, gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, `rgba(${90 + R() * 60},${80 + R() * 50},${140 + R() * 80},0.05)`); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(x - r, y - r, r * 2, r * 2); }
-  for (let i = 0; i < 5200; i++) { const x = R() * w, y = R() * h, b = R(), s = b > 0.995 ? 1.8 : b > 0.96 ? 1.1 : 0.6; g.fillStyle = `rgba(${215 + R() * 40},${215 + R() * 40},255,${0.25 + b * 0.75})`; g.fillRect(x, y, s, s); }
-  // a small grey moon off along +x (where side corridors' windows look)
-  { const mx = w * 0.574, my = h * 0.436, mr = h * 0.035, mg = g.createRadialGradient(mx + mr * 0.35, my - mr * 0.3, mr * 0.1, mx, my, mr); mg.addColorStop(0, '#e8e6e0'); mg.addColorStop(0.7, '#8d8a84'); mg.addColorStop(1, '#2b2a28');
-    g.fillStyle = mg; g.beginPath(); g.arc(mx, my, mr, 0, Math.PI * 2); g.fill(); g.fillStyle = 'rgba(60,58,55,0.35)'; for (let k = 0; k < 7; k++) { g.beginPath(); g.arc(mx + (R() - 0.5) * mr * 1.2, my + (R() - 0.5) * mr * 1.2, mr * (0.08 + R() * 0.15), 0, 7); g.fill(); } }
-  // a blue-green planet just above the horizon: soft seas and lands, blurred clouds, a night side and a thin
-  // glowing rim of air
-  const px = w * 0.75, py = h * 0.45, pr = h * 0.12;
-  g.save(); g.shadowColor = 'rgba(120,190,255,0.9)'; g.shadowBlur = pr * 0.25; g.fillStyle = '#2a6fae'; g.beginPath(); g.arc(px, py, pr, 0, Math.PI * 2); g.fill(); g.restore();
-  g.save(); g.beginPath(); g.arc(px, py, pr, 0, Math.PI * 2); g.clip();
-  const sea = g.createRadialGradient(px - pr * 0.3, py - pr * 0.3, pr * 0.1, px, py, pr); sea.addColorStop(0, '#5fb0e8'); sea.addColorStop(1, '#1d4f86'); g.fillStyle = sea; g.fillRect(px - pr, py - pr, pr * 2, pr * 2);
-  g.filter = `blur(${Math.round(pr * 0.05)}px)`;
-  for (let k = 0; k < 26; k++) { g.fillStyle = `rgba(${90 + R() * 50},${120 + R() * 40},${70 + R() * 30},0.55)`; g.beginPath(); g.ellipse(px + (R() - 0.5) * pr * 1.8, py + (R() - 0.5) * pr * 1.6, pr * (0.08 + R() * 0.2), pr * (0.05 + R() * 0.12), R() * 3, 0, 7); g.fill(); }
-  g.filter = `blur(${Math.round(pr * 0.03)}px)`;
-  for (let k = 0; k < 40; k++) { g.fillStyle = `rgba(245,250,255,${0.25 + R() * 0.35})`; g.beginPath(); g.ellipse(px + (R() - 0.5) * pr * 1.9, py + (R() - 0.5) * pr * 1.8, pr * (0.1 + R() * 0.3), pr * (0.015 + R() * 0.04), (R() - 0.5) * 0.4, 0, 7); g.fill(); }
-  g.filter = 'none';
-  const night = g.createRadialGradient(px - pr * 0.55, py - pr * 0.35, pr * 0.2, px - pr * 0.2, py - pr * 0.1, pr * 1.45); night.addColorStop(0, 'rgba(0,0,0,0)'); night.addColorStop(0.55, 'rgba(0,0,0,0.15)'); night.addColorStop(1, 'rgba(1,3,10,0.94)');
-  g.fillStyle = night; g.fillRect(px - pr, py - pr, pr * 2, pr * 2);
-  g.restore();
-  g.strokeStyle = 'rgba(150,210,255,0.55)'; g.lineWidth = pr * 0.025; g.beginPath(); g.arc(px, py, pr * 1.005, Math.PI * 0.75, Math.PI * 1.75); g.stroke();
-  const t = tex(c, true, false); t.mapping = THREE.EquirectangularReflectionMapping; return t;
 }
