@@ -32,7 +32,7 @@ export const SURF = {
 // the glows: linear colours, well over 1 so the bloom picks them out
 export const GLOW = { white: [4.6, 4.6, 4.6], strip: [3.0, 3.0, 2.95], flare: [7, 7, 6.9], soft: [1.7, 1.75, 1.85], blue: [1.2, 3.2, 7.0], orange: [7.0, 2.6, 0.6], green: [0.8, 5.0, 1.6], red: [6.5, 0.5, 0.35], amber: [6.5, 4.2, 1.0] };
 
-export const U = { aoDirect: { value: 0.6 }, bakeGain: { value: 1 }, aoStrength: { value: 1 } };
+export const U = { aoDirect: { value: 0.6 }, bakeGain: { value: 1 }, aoStrength: { value: 1 }, time: { value: 0 } };
 
 function patch(mat, { rmw = false, inst = false, wear = null } = {}) {
   mat.defines = { ...(mat.defines || {}), ...(rmw ? { KIT_RMW: '' } : {}), ...(inst ? { KIT_INST: '' } : {}) };
@@ -124,10 +124,42 @@ export function makeMaterials() {
   M.glowInst = M.glow;
   M.glass = new THREE.MeshStandardMaterial({ color: 0x0b141d, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.12, depthWrite: false, envMapIntensity: 0.35 });
   M.glassInst = M.glass;
+  M.shield = shieldMaterial(); M.shieldInst = M.shield;
   for (const [k, m] of Object.entries(M)) m.name = k;
   return M;
 }
 // the materials a piece can draw with, in the order the batch draws them
-export const MAT_KEYS = ['solid', 'floor', 'decal', 'screen', 'glow', 'glass'];
+export const MAT_KEYS = ['solid', 'floor', 'decal', 'screen', 'glow', 'glass', 'shield'];
 // which ones take the baked light (the rest glow on their own or are see-through)
 export const BAKED = new Set(['solid', 'floor', 'decal']);
+
+// THE SHIELD across the hangar's open door: a sheet of faint blue light that holds the air in. Added on top of what is
+// behind it (space shows through), a fine hexagon mesh, slow ripples running across it, brighter toward its edges
+// (where its emitters are). Its pattern follows the world (metres), so any sheet of it matches. One draw.
+function shieldMaterial() {
+  return new THREE.ShaderMaterial({
+    uniforms: { uTime: U.time, uColor: { value: new THREE.Color(0.18, 0.55, 1.0) } },
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false,
+    vertexShader: `varying vec3 vW; varying vec2 vUv;
+void main() { vUv = uv; vec4 w = modelMatrix * vec4( position, 1.0 ); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: `uniform float uTime; uniform vec3 uColor; varying vec3 vW; varying vec2 vUv;
+#include <common>
+float hexLine( vec2 p ) {
+  // distance to the nearest edge of a hexagon grid (cells 0.5 m across)
+  p /= 0.5; vec2 r = vec2( 1.0, 1.7320508 ), h = r * 0.5;
+  vec2 a = mod( p, r ) - h, b = mod( p - h, r ) - h, g = dot( a, a ) < dot( b, b ) ? a : b;
+  vec2 q = abs( g ); return 0.5 - max( dot( q, normalize( vec2( 1.0, 1.7320508 ) ) ), q.x );
+}
+void main() {
+  vec2 p = vec2( vW.x + vW.z, vW.y );
+  float edge = min( min( vUv.x, 1.0 - vUv.x ) * 14.0, min( vUv.y, 1.0 - vUv.y ) * 5.6 );
+  float rim = exp( -edge * 2.2 ), hex = 1.0 - smoothstep( 0.0, 0.06, hexLine( p ) );
+  float wave = 0.5 + 0.5 * sin( p.x * 0.9 - uTime * 1.3 + sin( p.y * 0.7 + uTime * 0.4 ) * 1.5 );
+  float scan = smoothstep( 0.0, 0.25, 0.25 - abs( fract( p.y * 0.08 - uTime * 0.12 ) - 0.5 ) );
+  float a = 0.015 + hex * ( 0.03 + 0.09 * wave ) + scan * 0.04 + rim * 0.75;
+  gl_FragColor = vec4( uColor * a, 1.0 );
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`,
+  });
+}

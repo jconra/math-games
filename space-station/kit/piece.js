@@ -19,8 +19,11 @@ function fill(g, name, size, val) {
   g.setAttribute(name, new THREE.BufferAttribute(a, size));
 }
 
+// (a COARSE piece is the same piece with bigger steps between the vertices on its big faces: big rooms use it to keep
+// their triangles down; small parts keep their detail. Pieces made while Piece.coarse is set are coarse.)
+const coarsen = (size, o) => (Math.max(...size) < 0.5 ? o : { ...o, cell: Math.max(o.cell ?? 0.4, 1.5), loops: o.loops ?? [] });
 export class Piece {
-  constructor() { this.parts = []; this.lights = []; this.movers = []; this.doors = []; }
+  constructor() { this.parts = []; this.lights = []; this.movers = []; this.doors = []; this.coarse = Piece.coarse; }
   // any geometry, as a material: solid takes a surface name, glow a glow name, decal/screen a tint
   add(mat, g, look) {
     if (!g.index) throw new Error('kit: a piece part must be indexed');
@@ -34,11 +37,12 @@ export class Piece {
   }
   // a bevelled box from its two corners: x0..x1, y0..y1, z0..z1
   slab(surf, x0, x1, y0, y1, z0, z1, opts = {}) {
-    return this.add('solid', bevelBox([x1 - x0, y1 - y0, z1 - z0], [(x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2], opts), surf);
+    const size = [x1 - x0, y1 - y0, z1 - z0];
+    return this.add('solid', bevelBox(size, [(x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2], this.coarse ? coarsen(size, opts) : opts), surf);
   }
   // a bevelled box of a size, centred at `at`, turned by rot [rx, ry, rz]
   box(surf, size, at, rot, opts = {}) {
-    const g = bevelBox(size, [0, 0, 0], opts); put(g, at, rot || [0, 0, 0]); return this.add('solid', g, surf);
+    const g = bevelBox(size, [0, 0, 0], this.coarse ? coarsen(size, opts) : opts); put(g, at, rot || [0, 0, 0]); return this.add('solid', g, surf);
   }
   glowSlab(name, x0, x1, y0, y1, z0, z1, opts = {}) {
     return this.add('glow', bevelBox([x1 - x0, y1 - y0, z1 - z0], [(x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2], { r: 0.003, seg: 1, cell: 9, ...opts }), name);
@@ -70,4 +74,5 @@ export class Piece {
   }
   door(id, sense, near = 2.6, speed = 1.6) { this.doors.push({ id, sense, near, speed }); }
 }
+Piece.coarse = false;
 
