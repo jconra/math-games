@@ -112,7 +112,8 @@ export function makeCamera({ camera, W, input = null }) {
   const lastAim = new THREE.Vector3();                               // (where the focus was making for last frame)
   C.snap = () => { C.started = false; };
   // moved with the player, as it stands (the way round at the valley's ends): every point it keeps, by the same
-  C.shift = (dx, dy, dz) => { for (const v of [focus, want, pos, lastAim]) { v.x += dx; v.y += dy; v.z += dz; } camera.position.x += dx; camera.position.y += dy; camera.position.z += dz; camera.updateMatrixWorld(); };
+  C.shift = (dx, dy, dz) => { for (const v of [focus, want, pos, lastAim]) { v.x += dx; v.y += dy; v.z += dz; } camera.position.x += dx; camera.position.y += dy; camera.position.z += dz; camera.updateMatrixWorld();
+    if (W.camTarget) { W.camTarget.x += dx; W.camTarget.y += dy; W.camTarget.z += dz; } };   // (the point the valley's circles follow, too)
   // how much of the way back the view would get at this yaw before a building's wall (1: all of it)
   function clearFor(yaw) {
     const d = C.dist * C.zoom, cp = Math.cos(C.pitch), sp = Math.sin(C.pitch);

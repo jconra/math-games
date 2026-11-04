@@ -8,7 +8,8 @@
 //   S.view()                  once a frame (the camera's view as it is now)
 //   S.seen(x, z, y?, r?, reach?)   true when a thing standing there (y: its feet, the ground by default; r: its margin, m)
 //                             can be seen (reach: how far counts, instead of `far`: the far figures' own reach, for
-//                             what comes onto or leaves the road among them); deep in the end mist nothing is seen
+//                             what comes onto or leaves the road among them); a thing lost in the ground fog at the
+//                             valley's ends (W.fogHides, seen from the camera) is not seen
 //   S.unseen(x, z, y?, r?)    the opposite
 import * as THREE from 'three';
 import { TOWN } from './townpeopleplan.js';
@@ -40,7 +41,7 @@ export function makeSight({ W, camera, far = TOWN.seenFar, pad = TOWN.seenPad })
     if (performance.now() - frame > 8) view();   // (not looked at yet this frame)
     const c = camera.position, d = Math.hypot(x - c.x, z - c.z);
     if (d > reach) return false;
-    if (W.fogAt && W.fogAt(x, z) > 0.92) return false;   // (deep in the mist at the valley's ends)
+    if (W.fogHides && W.fogHides(c, x, y + 1.2, z) > 0.92) return false;   // (lost in the ground fog at the valley's ends)
     S.center.set(x, y + 0.9, z); S.radius = r;
     if (!fr.intersectsSphere(S)) return false;
     if (d > 6 && (building(x, y + 1.85, z) && building(x, y + 0.2, z))) return false;

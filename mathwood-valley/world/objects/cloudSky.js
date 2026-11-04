@@ -15,9 +15,10 @@
 // calling skyAt to leave the sun's disc and glare out (water the sun can't reach mirrors the sky without it). With LITE defined
 // (the Terrain Lab's potato ground) the haze, stars, moon and disc are left out: there the dome isn't drawn, only mirrored.
 import * as THREE from 'three';
+import { ENDS_FOG_GLSL } from './ends.js';
 
 export const SKY_GLSL = `
-  uniform vec3 skyHorizon, skyZenith; uniform float cloudOn, cloudCover, cloudSoft, cloudScale, cloudHeight, cloudSpeed, skyTime;
+  uniform vec3 skyHorizon, skyZenith; uniform float cloudOn, cloudCover, cloudSoft, cloudScale, cloudHeight, cloudSpeed, skyTime; uniform vec2 cloudShift;
   uniform vec3 sunDirSky, skyToward, glowCol, sunDisc, cloudLit, cloudLitAway, moonDir; uniform float starAmt, moonAmt;
   float skyDiscK = 1.0;
   // how much a direction looks toward the sun (0 away .. 1 toward): broad, so a sunset warms half the sky. The Terrain
@@ -30,7 +31,7 @@ export const SKY_GLSL = `
   // x: how much cloud looking along dir from a point, y: its shade (lit edges, greyer middles)
   vec2 skyCloud(vec3 from, vec3 dir) {
     if (cloudOn < 0.5 || dir.y < 0.01) return vec2(0.0, 1.0);
-    vec2 p = (from.xz + dir.xz * (cloudHeight - from.y) / dir.y) / cloudScale + vec2(1.0, 0.4) * skyTime * cloudSpeed;
+    vec2 p = (from.xz - cloudShift + dir.xz * (cloudHeight - from.y) / dir.y) / cloudScale + vec2(1.0, 0.4) * skyTime * cloudSpeed;
     vec2 w = vec2(skyF(p * 0.5 + 3.1), skyF(p * 0.5 + 7.7));          // warped, so the shapes billow instead of blotch
     float d = skyF(p + w * 0.8), lit = skyF(p + w * 0.8 + vec2(0.06, 0.04));
     float c = smoothstep(1.0 - cloudCover, 1.0 - cloudCover + cloudSoft, d);
@@ -73,11 +74,12 @@ export function makeCloudSky({ horizon = 0xa9c8e4, zenith = 0x4f86c6, radius = 4
     skyHorizon: { value: new THREE.Color(horizon) }, skyZenith: { value: new THREE.Color(zenith) },
     cloudOn: { value: 1 }, cloudCover: { value: 0.42 }, cloudSoft: { value: 0.18 }, cloudScale: { value: 900 },
     cloudHeight: { value: 1500 }, cloudSpeed: { value: 0.015 }, skyTime: { value: 0 },
+    cloudShift: { value: new THREE.Vector2() },   // (Mathwood Valley: m the clouds are carried along with the eye, by the way round at the valley's ends)
     sunDirSky: { value: new THREE.Vector3(0, 1, 0) }, skyToward: { value: new THREE.Color(horizon) }, glowCol: { value: new THREE.Color(0, 0, 0) },
     sunDisc: { value: new THREE.Color(0, 0, 0) }, cloudLit: { value: new THREE.Color(1.0, 0.99, 0.97) }, cloudLitAway: { value: new THREE.Color(1.0, 0.99, 0.97) }, starAmt: { value: 0 },
     moonDir: { value: new THREE.Vector3(0, -1, 0) }, moonAmt: { value: 0 },
-    // (Mathwood Valley) the mist at the valley's ends (the valley's FOG_DIR bank0, bank1, bankCol: off unless it hands them on)
-    skyBank0: { value: { x: 500, y: 680, z: 540, w: 700 } }, skyBank1: { value: { x: 0, y: 0, z: 0, w: 0 } }, skyBankCol: { value: { x: 0.7, y: 0.78, z: 0.85 } },
+    // (Mathwood Valley) the ground fog at the valley's ends (the valley's FOG_DIR end0, end1, endCol: off unless it hands them on)
+    fogEnd0: { value: { x: 530, y: 650, z: 2.6, w: 0 } }, fogEnd1: { value: { x: 0, y: 0, z: 800, w: 0 } }, fogEndCol: { value: { x: 0.7, y: 0.78, z: 0.85 } },
     // (Mathwood Valley) the low valley fog (the valley's FOG_DIR low0, low1, lowCol: off unless it hands them on)
     skyLow0: { value: { x: 0, y: 0, z: 1, w: 0 } }, skyLow1: { value: { x: 0, y: 0, z: 1, w: 2 } }, skyLowCol: { value: { x: 0.8, y: 0.8, z: 0.8, w: 1 } },
   };
@@ -86,7 +88,8 @@ export function makeCloudSky({ horizon = 0xa9c8e4, zenith = 0x4f86c6, radius = 4
     vertexShader: `varying vec3 vDir; void main() { vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
     fragmentShader: SKY_GLSL + `
       varying vec3 vDir;
-      uniform vec4 skyBank0, skyBank1, skyLow0, skyLow1, skyLowCol; uniform vec3 skyBankCol;
+      uniform vec4 fogEnd0, fogEnd1, skyLow0, skyLow1, skyLowCol; uniform vec3 fogEndCol;
+      ${ENDS_FOG_GLSL}
       // (Mathwood Valley) the low valley fog along the way to the sky, as the valley's fogLowDepth for a pixel 2.5 km off,
       // so a ridge's top and the sky just above it have the same fog in front of them
       float skyLow(vec3 c, vec3 dir) {
@@ -96,21 +99,18 @@ export function makeCloudSky({ horizon = 0xa9c8e4, zenith = 0x4f86c6, radius = 4
         float town = 0.5 * (smoothstep(skyLow1.z, skyLow1.w, length(c.xz - skyLow1.xy)) + 1.0);
         return skyLow0.w * mix(skyLowCol.w, 1.0, town) * (abs(dh) > 0.01 ? (a - b) / dh : 0.5 * (a + b)) * 2500.0;
       }
-      // (Mathwood Valley) the mist at the valley's ends along the way to the sky: added up at 12 points over 2.5 km (nearer
-      // ones closer together), each by how far out it is and how high (as the valley's fogBankDepth)
-      float skyBank(vec3 from, vec3 dir) {
-        if (skyBank1.w <= 0.0) return 0.0;
-        float sum = 0.0;
-        for (int i = 0; i < 12; i++) { float u = (float(i) + 0.5) / 12.0, t = u * u * 2500.0, dt = 2.0 * u * 2500.0 / 12.0; vec3 q = from + dir * t;
-          float rho = q.x < 0.0 ? clamp((-q.x - skyBank0.x) / (skyBank0.y - skyBank0.x), 0.0, 1.0) : clamp((q.x - skyBank0.z) / (skyBank0.w - skyBank0.z), 0.0, 1.0);
-          float top = q.x < 0.0 ? skyBank1.y : skyBank1.z;
-          float k = 1.0 - smoothstep(top, top + 170.0, q.y); sum += rho * k * k * k * dt; }
-        return 1.0 - exp(-sum * skyBank1.x * skyBank1.w);
+      // (Mathwood Valley) the ground fog at the valley's ends along the way to the sky, as the valley's fogEndDepth, the
+      // way taken over ground as high as the ground under the eye (it stops at the land's edge): low in the woods, looking
+      // out level, the sky just over the trees takes the fog the trees there have
+      float skyEnd(vec3 c, vec3 dir) {
+        if (fogEnd1.x <= 0.0) return 0.0;
+        float hc = c.y - fogEnd1.y;
+        return 1.0 - exp(-fogEndDepth(c, c + dir * 2000.0, hc, hc + dir.y * 2000.0));
       }
       void main() { vec3 dir = normalize(vDir); gl_FragColor = vec4(skyAt(cameraPosition, dir), 1.0);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
-        float mist = skyBank(cameraPosition, dir); if (mist > 0.0) gl_FragColor.rgb = mix(gl_FragColor.rgb, skyBankCol, mist);
+        float mist = skyEnd(cameraPosition, dir); if (mist > 0.0) gl_FragColor.rgb = mix(gl_FragColor.rgb, fogEndCol, mist);
         float low = skyLow(cameraPosition, dir); if (low > 0.0) gl_FragColor.rgb = mix(gl_FragColor.rgb, mix(skyLowCol.rgb, gl_FragColor.rgb, 0.3), min(1.0 - exp(-low), 0.93));
       }`,
   });

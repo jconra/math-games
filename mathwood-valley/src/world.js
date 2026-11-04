@@ -53,17 +53,19 @@
 //   W.dayStart   the hour each ride starts at (DAY_START, or ?hour=21 in the address)
 //   W.lights.set(id, v), .get(id)   how lit a building's windows are at night, by its layout id ('saloon', 'home2',
 //                'cabin'), 0..1 (eased over a second): the shops and homes 1, the player's cabin 0 (src/cabin lights it)
-//   THE VALLEY'S ENDS: a bank of mist across each end (thin from W.ends.west.a / east.a metres out along x, full by .b);
-//   riding on into it, at .wrap, the rider comes out of the other end's mist, riding back toward the town:
-//   W.wrap(position, cameraAt)   null, or { x, z, dx, dy, dz, from } where a rider past a wrap line comes out (the game moves the
-//                      rider, the horse, the camera and the dog by dx, dy, dz: src/main.js)
-//   W.fogAt(x, z)      how thick the mist is there, 0..1 (things to fade into it, or keep out of it: camps, wagons)
-//   W.roadEnds         set by the game: () -> { west: {x, z, dx, dz}, east: {...} } the road's two ends (dx, dz: the way
-//                      out along it there), or null; a rider wrapping near one comes out by the other (on its line)
-//   W.ends             { west, east: { a, b, wrap, floor, lo, hi (the band of walkable ground across the end) }, ... }
+//   THE VALLEY'S ENDS (world/objects/ends.js): the land's last 150 m at each end is one band of woods, the same at both
+//   ends (the east's a copy of the west's, moved by W.ends.P along x, Q along z and DY up), with a wrap line down its
+//   middle (|x| = W.ends.wrap); a low ground fog lies in the woods there. Riding on past a wrap line, the rider is moved by
+//   exactly that move to the other end's band, where everything round them is the same:
+//   W.wrap(position)   null, or { x, z, dx, dy, dz, from } where a rider past a wrap line comes out (the game moves the
+//                      rider, the horse, the camera and the dog by dx, dy, dz, then calls W.jumped: src/main.js)
+//   W.jumped(w)        the valley told the camera was moved so (the plants and the lawn round it go with it at once)
+//   W.fogAt(x, z)      how thick the ground fog at the ends is there, 0..1 (things to keep out of it: wagons held up)
+//   W.fogHides(from, x, y, z)   how much of a thing at (x, y, z) the ground fog hides seen from `from` (a Vector3), 0..1
+//   W.ends             the ends' numbers (world/objects/ends.js ENDS)
 //   W.warmFor(root)   the shaders of things not in the scene yet built in the background, for the valley's lights
 //   W.warm()     the scene's shaders not built yet built ahead, a couple a frame: done by itself a few seconds into the
-//                ride, later, and in the mist before the way round; call it after adding new kinds of things
+//                ride, later, and in the woods at the ends before the way round; call it after adding new kinds of things
 //   W.tier       'potato' | 'normal' | 'gaming': the band this load was made for (what needs a reload follows it)
 //   W.governor   the dials, turned up and down by how fast the machine runs (world/governor.js): W.governor.on(dial, fn)
 //   W.camTarget  a THREE.Vector3 the game keeps on the player: the plants' and trees' circles and the sun's shadows
@@ -80,6 +82,7 @@ import { bindValley } from '../world/valleydials.js';
 import { footprintOf } from '../world/objects/village.js';
 import { farmItems } from './farmplan.js';
 import { BASE } from '../world/base.js';
+import { ENDS, walkable as endsWalkable, wrapOf, fogShare, fogHides } from '../world/objects/ends.js';
 
 // the buildings by the names the game uses
 const PLACE_OF = { cabin: 'cabin', stable: 'stable', generalStore: 'store', sheriff: 'sheriff', saloon: 'saloon', stage: 'stage' };
@@ -97,16 +100,6 @@ const STEEP = 0.8, DEEP = 0.9, EDGE = 780, FENCE_HALF = 0.35, WALL_PAD = 0.5, TR
 // (A horse whistled up along the main street stood in a hitching rail, and the townsfolk walked through the troughs)
 const SOLID_PROPS = { hitchingPost: 'box', trough: 'box', signpost: 0.3, lamp: 0.3, chickenCoop: 'box', hayBales: 'box', haystack: 'box',
   farmWagon: 'box', freightWagon: 'box', coveredWagon: 'box', chuckWagon: 'box' }, PROP_PAD = 0.15;   // (the parked wagons and the coops: the town's props now)
-// THE VALLEY'S ENDS: the mist banks across them (the valley's FOG_DIR.bank0/1: thin from `a` metres out along x, full by
-// `b`; topping out `top` metres over each end's floor) and the line in the full mist where a rider comes out of the
-// other end's (`wrap`, inside the land's edge at EDGE). West -x, east +x (the valley's floor runs out west and south-east)
-// m either side of the road's end (along z) within which a rider wrapping comes out by the other end of the road (W.wrap)
-const WRAP_ROAD = 45;
-const ENDS = { west: { a: 580, b: 680, wrap: 720 },   // (west a: past the upriver crossing at x -525, so its water and road are clear)
-   east: { a: 540, b: 700, wrap: 740 }, thick: 0.22, top: 40 };
-// where a rider comes out of the mist: clear of the trees' crowns (CROWN m round a tree of scale 1) over them and the
-// camera, WRAP_CLEAR m behind (W.wrap)
-const CROWN = 5, WRAP_CLEAR = 12;
 // THE DAY: minutes of play a whole day takes, and the hour a ride starts at (mid-morning, as the Terrain Lab opens)
 const DAY_MIN = 24, DAY_START = 9 + 40 / 60;
 const nightOf = (elev) => THREE.MathUtils.smoothstep(-elev, -3, 8);   // (0 with the sun 3° up or higher, 1 once it is 8° down)
@@ -223,6 +216,7 @@ export async function makeWorld({ renderer, camera, quality = null, look = 'gree
   const EXTRA = V.CODE ? [(x, z) => V.CODE.blocked(x, z)] : [];
   function blocked(x, z) {
     if (!(Math.abs(x) < EDGE && Math.abs(z) < EDGE)) return true;
+    if (!endsWalkable(x, z)) return true;   // (the woods at the valley's ends past their floor: world/objects/ends.js)
     for (let i = 0; i < EXTRA.length; i++) if (EXTRA[i](x, z)) return true;
     { const cells = trunks(), ci = Math.floor(x / 8), cj = Math.floor(z / 8);
       for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) { const c = cells.get((ci + di) + ',' + (cj + dj)); if (c) for (const [tx, tz, r] of c) if ((x - tx) ** 2 + (z - tz) ** 2 < r * r) return true; } }
@@ -259,88 +253,20 @@ export async function makeWorld({ renderer, camera, quality = null, look = 'gree
     setHour: (h) => { const D = V.DAY; h = ((+h % 24) + 24) % 24; if (!Number.isFinite(h)) return; D.hour = D.t = h; D.dirty = true; D.reshade = true; },
   };
   GOVERN.attach(W);   // (W.governor; only frames W.render draws are measured)
-  // ── THE VALLEY'S ENDS: the mist and the way round ──────────────────────────────────────────────────────
-  // each end's floor (the lowest ground across it, near the wrap line) and the band of ground a rider can be on there
-  // (the run of walkable ground round the floor), so a rider coming out of the other end's mist comes out at the same
-  // share of the way across it
-  for (const [k, E] of Object.entries(ENDS)) {
-    if (k === 'thick' || k === 'top') continue;
-    const sx = k === 'west' ? -1 : 1, x = sx * (E.wrap - 3);
-    let low = null; for (let z = -760; z <= 760; z += 4) { const h = V.heightAt(x, z); if (!low || h < low.h) low = { z, h }; }
-    const ok = (z) => !blocked(x, z) && V.heightAt(x, z) < low.h + 60;
-    let lo = low.z, hi = low.z; while (lo - 2 > -770 && ok(lo - 2)) lo -= 2; while (hi + 2 < 770 && ok(hi + 2)) hi += 2;
-    Object.assign(E, { side: sx, floor: low.h, floorZ: low.z, lo, hi });
-  }
-  { const B = V.FOG_DIR.bank0, B1 = V.FOG_DIR.bank1;
-    B.x = ENDS.west.a; B.y = ENDS.west.b; B.z = ENDS.east.a; B.w = ENDS.east.b;
-    B1.x = ENDS.thick; B1.y = ENDS.west.floor + ENDS.top; B1.z = ENDS.east.floor + ENDS.top; B1.w = 1; }
-  // how thick the mist is at a spot, 0 (none) .. 1 (full): for things that should fade into it, or keep out of it
-  W.fogAt = (x, z = 0) => { const E = x < 0 ? ENDS.west : ENDS.east, u = Math.abs(x); return Math.min(1, Math.max(0, (u - E.a) / (E.b - E.a))); };
+  // ── THE VALLEY'S ENDS: the band of woods and the way round (world/objects/ends.js) ──────────────────────────
+  // how thick the ground fog at the ends is at a spot, 0 (none) .. 1 (full): for things to keep out of it
+  W.fogAt = (x) => fogShare(x);
+  // how much of a thing standing at (x, y, z) the ground fog hides, seen from `from` (the camera): 0 .. 1
+  W.fogHides = (from, x, y, z) => fogHides(from, { x, y, z }, from.y - V.heightAt(from.x, from.z), y - V.heightAt(x, z));
   W.ends = ENDS;
-  // how clear of the trees' crowns a spot is (m to spare, below 0: under one), along the stretch from it WRAP_CLEAR m
-  // out toward the land's edge (sx: that way along x), where the camera follows a rider riding in
-  // (sz: that way along z too, for a stretch on a slant: out along the road past its end)
-  function crownClear(x, z, sx, sz = 0) {
-    const cells = trunks(); let worst = Infinity;
-    const l = Math.hypot(sx, sz) || 1, ux = sx / l, uz = sz / l;
-    for (let u = 0; u <= WRAP_CLEAR; u += 3) {
-      const px = x + ux * u, pz = z + uz * u, ci = Math.floor(px / 8), cj = Math.floor(pz / 8);
-      for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) { const c = cells.get((ci + di) + ',' + (cj + dj)); if (c) for (const [tx, tz, r] of c) worst = Math.min(worst, Math.hypot(px - tx, pz - tz) - CROWN * r / TRUNK - 1.5); }
-    }
-    return worst;
-  }
-  // THE WAY ROUND: a spot past an end's wrap line -> where it comes out at the other end, just inside that end's line
-  // (deep in its mist too, so nothing seen changes), the same share of the way across the valley there, on ground a
-  // walker can stand on: { x, z, dx, dy, dz } (dy: the ground's change), or null where it doesn't
-  W.crownClear = crownClear;   // (rigs: how clear of the crowns a spot and the stretch behind it are)
-  W.wrap = (p, cam = null) => {   // (cam: where the camera is now: the stretch kept clear is the way it trails the rider)
-    const x = p.x, z = p.z, from = x <= -ENDS.west.wrap ? ENDS.west : x >= ENDS.east.wrap ? ENDS.east : null; if (!from) return null;
-    const to = from === ENDS.west ? ENDS.east : ENDS.west, past = Math.abs(x) - from.wrap;
-    let nx = to.side * (to.wrap - 0.5 - past);
-    const t = Math.min(1, Math.max(0, (z - from.lo) / Math.max(1, from.hi - from.lo)));
-    let want = to.lo + t * (to.hi - to.lo), back = [to.side, 0], road = null;   // (back: the way the camera trails the rider; road: spots by the other road end)
-    // (riding on along the road through the valley, past its end in the mist: out by the other end of the road, as far
-    // to the side of it as before, so the rider comes out on the road and rides it back to town. The road can run out
-    // of the band of ground the share is worked across: the west road ends north of it)
-    const R = typeof W.roadEnds === 'function' ? W.roadEnds() : null;
-    if (R && R.west && R.east) {
-      // (each road end's line carried on out the way the road was going: how far the rider is to the side of it, at
-      // the same x, is kept)
-      const fr = from === ENDS.west ? R.west : R.east, tr = from === ENDS.west ? R.east : R.west;
-      const lineZ = (e, atX) => e.z + (Math.abs(e.dx) > 0.2 ? (e.dz / e.dx) * (atX - e.x) : 0);
-      const side = z - lineZ(fr, x);
-      if (Math.abs(side) < WRAP_ROAD) {
-        // (by the other end of the road, where the mist is still about full: just past its end, else a little way in
-        // along it, where the trees are cleared for the road and the camera trailing behind comes out of no leaves)
-        road = [3, -4, -10, -16].map((k) => tr.x + to.side * k).filter((rx) => W.fogAt(rx) >= 0.9 && Math.abs(rx) < to.wrap - 1)
-          .map((rx) => ({ x: rx, z: lineZ(tr, rx) + side }));
-        if (road.length) { nx = road[0].x; want = road[0].z; }
-        back = [tr.dx, tr.dz];
-      }
-    }
-    if (cam) { const bx = cam.x - x, bz = cam.z - z, bl = Math.hypot(bx, bz); if (bl > 0.5) back = [bx / bl, bz / bl]; }
-    // out on either side of that, the nearest spot with ground to stand on and no tree's crown over the rider or over
-    // the camera behind them (a stretch WRAP_CLEAR m back toward the land's edge): else the view comes out in leaves
-    const search = (sx, sz, reach) => {
-      let best = null;
-      for (let k = 0; k <= reach; k++) {
-        const z1 = sz + (k % 2 ? 1 : -1) * 2 * Math.ceil(k / 2);
-        if (blocked(sx, z1)) continue;
-        const c = crownClear(sx, z1, back[0], back[1]); if (c >= 0) return { z: z1, clear: true };
-        if (!best || c > best.c) best = { z: z1, c };
-      }
-      return best || { z: sz };
-    };
-    let nz = want, got = null;
-    // (by the road: within 8 m of its line at each spot along it in turn where that is clear of the crowns)
-    if (road) for (const r of road) { const f = search(r.x, r.z, 8); if (f.clear) { nx = r.x; nz = f.z; got = f; break; } }
-    // (else on the road's line itself, under whatever the road itself runs under: the east end's last 120 m run through
-    // the woods' crowns, and every rider on it rides there)
-    if (road && !got) for (let k = 0; k <= 4 && !got; k++) { const z1 = road[0].z + (k % 2 ? 1 : -1) * Math.ceil(k / 2); if (!blocked(road[0].x, z1)) { nx = road[0].x; nz = z1; got = true; } }
-    if (!got) nz = search(nx, want, 80).z;
-    const y0 = V.heightAt(x, z), y1 = V.heightAt(nx, nz);
-    return { x: nx, z: nz, dx: nx - x, dy: y1 - y0, dz: nz - z, from: from === ENDS.west ? 'west' : 'east' };
+  // THE WAY ROUND: a spot past a wrap line -> where it comes out: moved by the whole of the ends' move (the band at the
+  // other end is the same land, so everything round it is the same): { x, z, dx, dy, dz, from }, or null where it doesn't
+  W.wrap = (p) => {
+    const m = wrapOf(p.x); if (!m) return null;
+    return { x: p.x + m.dx, z: p.z + m.dz, dx: m.dx, dy: m.dy, dz: m.dz, from: p.x > 0 ? 'east' : 'west' };
   };
+  // (moved: the plants and the lawn round the camera go with it at once, the valley's own way, world/valley.js jumped)
+  W.jumped = (w) => { if (w && V.jumped) V.jumped(w.dx, w.dy, w.dz); };
   Object.defineProperties(W, {
     hour: { get: () => V.DAY.hour, enumerable: true },
     night: { get: () => nightOf(V.DAY.elev), enumerable: true },
@@ -351,11 +277,12 @@ export async function makeWorld({ renderer, camera, quality = null, look = 'gree
 
   // ── THE SHADERS, WARMED AGAIN LATER ──────────────────────────────────────────────────────────────────────
   // what the game adds after loading (the homes, the cabin's pieces, camps) is first drawn when it first comes into
-  // view, and a material never drawn has its shader built then, stalling that frame (riding out of the far end's mist
-  // and looking back down the valley the first time: ~250 ms). So the shaders of everything in the scene not built yet
-  // are built ahead, a few seconds into the ride, again later, and each time the rider is deep in an end's mist (where
-  // nothing shows) before the way round. A FEW A FRAME (WARM.per new ones at most): the graphics card links each one
-  // while it draws, and fifteen handed over in one frame held the next one up ~130 ms.
+  // view, and a material never drawn has its shader built then, stalling that frame (riding round from the far end and
+  // looking back down the valley the first time: ~250 ms). So the shaders of everything in the scene not built yet
+  // are built ahead, a few seconds into the ride, again later, and each time the rider comes into the woods at an end
+  // (the draw guard, world/drawguard.js, keeps a frame from waiting on one meanwhile) before the way round. A FEW A FRAME
+  // (WARM.per new ones at most): the graphics card links each one while it draws, and fifteen handed over in one frame
+  // held the next one up ~130 ms.
   const WARM = { t: 0, at: [4, 15, 45], next: 0, mistAt: -1e9, n: 0, tex: null, queue: null, per: 2, built: 0 };
   // and the pictures: three sends a material's textures to the graphics card the first time it is drawn (a big tree
   // bark or a roof, ~90 ms in one frame); each one in the scene not sent yet is sent here, a few a frame (warmLater)

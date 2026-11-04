@@ -196,6 +196,9 @@ const VERTEX = `
         #include <logdepthbuf_vertex>
         #ifdef USE_FOG
         vFogDepth = - mv.z;
+        #ifdef FOG_FOOT
+        vFogFoot = (modelMatrix * vec4(iPos, 1.0)).y;   // (Mathwood Valley: the ground fog at the valley's ends reads how high over its foot)
+        #endif
         #endif
         vec4 worldPosition = vec4(world, 1.0); vec3 transformedNormal = vToCamView;
         #include <shadowmap_vertex>
