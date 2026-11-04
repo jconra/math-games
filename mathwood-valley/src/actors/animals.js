@@ -50,7 +50,7 @@ import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { softShade } from './shading.js';
 import { prepareHorse } from './horsecoat.js';
 import { buildHair } from './horsehair.js';
-import { needBreed, furPlain, furAnimal, savedBreeds } from './dogkind.js';
+import { needBreed, furPlain, furAnimal, savedBreeds, plainEyes } from './dogkind.js';
 import { BASES, baseFur } from './dogbreeds.js';
 import { furMaterial, ANIMAL_FUR } from './dogfur.js';
 
@@ -133,7 +133,8 @@ export async function loadAnimals(base, { kinds = null } = {}) {
       g.scene.traverse((o) => { if (o.isMesh && o.material) { o.material.vertexColors = true; o.material.roughness = 0.75; o.material.userData.indoorLit = true; o.geometry = softShade(o.geometry); } });
       lib.kinds[kind] = { scene: g.scene, clips: g.animations, info: info[kind] };
       // (the plain dogs get the fur too, dogfur.js, with the Dog Lab's saved numbers over their own)
-      if (BASES.includes(kind)) return savedBreeds(dir).then((saved) => { furPlain(lib.kinds[kind], baseFur(kind, saved)); return lib.kinds[kind]; });
+      // (and a plain dog without eyes of its own, the pug, the breeds' eyes: dogkind.js plainEyes, on the copy that is drawn)
+      if (BASES.includes(kind)) return savedBreeds(dir).then((saved) => { furPlain(lib.kinds[kind], baseFur(kind, saved)); try { plainEyes(lib.kinds[kind]); } catch (e) { console.warn('animals: the plain dog\'s eyes', kind, e); } return lib.kinds[kind]; });
       // (the farm animals get it too, each with its own numbers: dogfur.js ANIMAL_FUR)
       if (ANIMAL_FUR[kind]) furAnimal(lib.kinds[kind], ANIMAL_FUR[kind]);
       return lib.kinds[kind];
@@ -158,7 +159,7 @@ export function makeAnimal(lib, kind, { shadows = true, tint = null, size = 1 } 
   size = +size > 0 ? +size : 1;
   const info = sizedInfo(base, size);
   const root = new THREE.Group(); root.name = kind;
-  const model = cloneSkinned(k.scene); model.scale.setScalar(base.scale * size); root.add(model);
+  const model = cloneSkinned(k.look || k.scene); model.scale.setScalar(base.scale * size); root.add(model);   // (k.look: the plain pug with eyes)
   // (the body: the biggest skinned mesh; a coat kind's eye is a mesh of its own, small and glossy: it casts no shadow, and
   // it is never dropped at the screen's edge by itself, its bounds being the standing eye's)
   let mesh = null, eye = null; const bones = {};

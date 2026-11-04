@@ -15,8 +15,11 @@
 //   furPlain(K, fur)                          a plain dog (the shiba, the husky, the pug as animals.json has them)
 //                                             given the fur: its two attributes and the patched material
 //   furAnimal(K, fur)                         a farm animal given the fur (dogfur.js ANIMAL_FUR), the same way
+//   plainEyes(K)                              a plain dog without eyes of its own (the pug) given the breeds' eyes, on
+//                                             K.look (the copy makeAnimal draws); K.scene left as it was
 import * as THREE from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
+import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { morphKind, analyseKind } from './morph.js';
 import { paintFace, patternPixels, hexToLinear, rng } from './dogcoat.js';
 import { breedOf } from './dogbreeds.js';
@@ -365,7 +368,9 @@ function sphereTris(c, r, rgb, front, frontRgb, shineRgb) {
     const a = P(i, j), b = P(i + 1, j), cc = P(i + 1, j + 1), d = P(i, j + 1);
     const mid = [0, 1, 2].map((k) => (a[k] + cc[k]) / 2 - c[k]), facing = (mid[0] * front[0] + mid[1] * front[1] + mid[2] * front[2]) / r;
     const col = facing > 0.75 ? frontRgb : rgb;
-    if (j > 0) T.push([[a, cc, b], col]); if (j < ring - 1) T.push([[a, d, cc], col]);
+    // (wound to face out: they were wound in, so the near half was culled and only the far half's inside showed round
+    // the face, a ring)
+    if (j > 0) T.push([[a, b, cc], col]); if (j < ring - 1) T.push([[a, cc, d], col]);
   }
   // a shine: a small light triangle up and to the side of the pupil
   const s = [0, 1, 2].map((k) => c[k] + front[k] * r * 1.01), up = [0, r * 0.32, 0], sd = [r * 0.25 * Math.sign(front[0] || 1), 0, 0];
@@ -399,6 +404,43 @@ function eyeParts(shape, morphed, size = 1) {
   }
   return partFrom(shape, morphed, tris, (i) => dom[i] === idx[rig.head], idx[rig.head]);
 }
+// THE PLAIN PUG'S EYES (the game's maker's son, 2026-11-04: "The pug has no eyes"): the farm pack's pug has none, and only
+// the breeds made on it got them. The plain pug is given the same eyes, on a copy of its scene that makeAnimal draws
+// (K.look), so the base the breeds are reshaped from (K.scene, its corners as analyseKind read them) is left as it was.
+// Its own colours and fur are kept; the eyes get no fur. Still one mesh, one draw. -> true when it was given them
+export function plainEyes(K) {
+  const shape = analyseKind(K);
+  if (shape.L.eyeL) return false;
+  const nb = shape.names.length, still = { T: Array.from({ length: nb }, () => new THREE.Matrix4()) };   // (no morph: the rest pose as it is)
+  const part = eyeParts(shape, still, 1);
+  const look = cloneSkinned(K.scene), mesh = skinnedOf(look), g0 = mesh.geometry;
+  // the eyes are made in the mesh's space at rest; the geometry holds its corners as bound, so each goes back through the
+  // head bone's rest move (as analyseKind reads it: the bone at rest times its inverse bind)
+  look.updateMatrixWorld(true);
+  const h = shape.idx[shape.rig.head], bone = mesh.skeleton.bones[h];
+  const BM = mesh.matrixWorld.clone().invert().multiply(bone.matrixWorld).multiply(mesh.skeleton.boneInverses[h]), inv = BM.clone().invert(), nInv = new THREE.Matrix3().getNormalMatrix(inv);
+  const n0 = g0.attributes.position.count, n = n0 + part.count, v = new THREE.Vector3();
+  const g = new THREE.BufferGeometry();
+  for (const [name, a] of Object.entries(g0.attributes)) {
+    // (the bone indices and weights as they are, the eyes' made to match them; the rest as plain numbers: the pack's
+    // positions, normals and colours are packed small integers (meshopt), which the eyes' own numbers don't fit)
+    const raw = name === 'skinIndex' || name === 'skinWeight', s = a.itemSize;
+    const arr = raw ? new a.array.constructor(n * s) : new Float32Array(n * s);
+    if (raw) arr.set(a.array.subarray(0, n0 * s)); else for (let i = 0; i < n0; i++) for (let j = 0; j < s; j++) arr[i * s + j] = a.getComponent(i, j);
+    const add = name === 'position' ? part.position : name === 'normal' ? part.normal : name === 'color' && s === 3 ? part.color : name === 'skinIndex' ? part.skinIndex : name === 'skinWeight' ? part.skinWeight : null;
+    if (add) arr.set(add, n0 * s);
+    if (name === 'position') for (let i = n0; i < n; i++) { v.fromArray(arr, i * 3).applyMatrix4(inv); v.toArray(arr, i * 3); }
+    if (name === 'normal') for (let i = n0; i < n; i++) { v.fromArray(arr, i * 3).applyMatrix3(nInv).normalize(); v.toArray(arr, i * 3); }
+    g.setAttribute(name, new THREE.BufferAttribute(arr, s, raw ? a.normalized : false));   // (fur and anything else: zero on the eyes)
+  }
+  if (g0.index) { const ix = new Uint32Array(g0.index.count + part.count); ix.set(g0.index.array); for (let i = 0; i < part.count; i++) ix[g0.index.count + i] = n0 + i; g.setIndex(new THREE.BufferAttribute(ix, 1)); }
+  g.computeBoundingBox(); g.computeBoundingSphere();
+  mesh.geometry = g;
+  K.look = look;
+  return true;
+}
+const skinnedOf = (scene) => { let m = null; scene.traverse((o) => { if (o.isSkinnedMesh && (!m || o.geometry.attributes.position.count > m.geometry.attributes.position.count)) m = o; }); return m; };
+
 // bat ears for a base without ear bones: a broad cupped triangle each side of the top of the head, its hollow facing
 // forward and a little out, its base running across the head
 function earParts(shape, morphed, m, outRgb, inRgb) {
