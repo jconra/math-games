@@ -1,0 +1,16 @@
+{
+  "name": "A ship's corridor and rooms (a sample of the cabin's parts)",
+  "about": "The cabin's parts at a ship's size (kit/shipparts/cabin/sample.js): a 1 m corridor with a bunk room and a washroom through two doorways, rooms 2.5 m to the ceiling. One piece; open it in the Kit Lab with ?room=ship-sample.",
+  "pieces": [
+    {"piece": "cabinSample", "cell": [0, 0], "turn": 0, "variant": "closed"}
+  ],
+  "probe": [0, 1.6, -0.5],
+  "views": {
+    "start": {"at": [-2.15, 1.62, -0.5], "look": [2.5, 1.4, -0.5], "fov": 70},
+    "back": {"at": [2.15, 1.62, -0.45], "look": [-2.5, 1.4, -0.5], "fov": 70},
+    "door": {"at": [-0.9, 1.62, -0.8], "look": [0.5, 1.1, 0], "fov": 70},
+    "bunks": {"at": [2.1, 1.62, 0.3], "look": [-0.3, 1.0, 2.4], "fov": 72},
+    "lockers": {"at": [-0.3, 1.62, 1.3], "look": [2.5, 1.0, 1.0], "fov": 72},
+    "wash": {"at": [-1.5, 1.62, -1.05], "look": [-1.5, 0.8, -2.5], "fov": 74}
+  }
+}

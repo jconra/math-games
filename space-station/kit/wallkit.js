@@ -2,6 +2,9 @@
 // bottom (or middle, for the pipes) at y = 0; a layout lifts it to its height and slides it along with `off`.
 //   breaker panel, junction box, extinguisher, wall screen, stencil label, pipe run (straight, elbow, flange clamp),
 //   cable tray
+// Sizes (an optional last argument; left out, each is the station's): breaker and jbox { conduit: how far the conduit
+// runs up the wall before it turns in (1.3, 1.2) }, pipe 'straight' and cableTray { len: how long (2) }. The ships
+// (kit/shipparts/cabin) use them for their lower rooms.
 import * as THREE from 'three';
 import { rrect, circle, line, bend } from './geo.js';
 import { SCREEN_RECT } from './tex.js';
@@ -9,7 +12,7 @@ import { SCREEN_RECT } from './tex.js';
 const PI = Math.PI;
 
 // a breaker panel: a grey box, a dark face with a row of orange switches, label tags, a status light, a conduit up
-export function breaker(p) {
+export function breaker(p, v, s) {
   p.slab('grey', -0.21, 0.21, 0, 0.56, 0, 0.11, { r: 0.016 });
   p.slab('white2', -0.215, 0.215, 0.44, 0.565, 0, 0.116, { r: 0.016 });
   p.slab('dark', -0.175, 0.175, 0.08, 0.4, 0.1, 0.118, { r: 0.006 });
@@ -20,12 +23,12 @@ export function breaker(p) {
   }
   p.decal('breakerTags', 0.32, 0.08, [0, 0.355, 0.1185]);
   p.slab('black', 0.13, 0.19, 0.47, 0.53, 0.116, 0.124, { r: 0.004, seg: 1 }); p.glowSlab('green', 0.145, 0.175, 0.485, 0.515, 0.124, 0.128);
-  conduit(p, [-0.12, 0.565, 0.055], 1, 1.3, 0.022);   // (up the wall into the ceiling's slant, out of sight)
+  conduit(p, [-0.12, 0.565, 0.055], 1, s?.conduit ?? 1.3, 0.022);   // (up the wall into the ceiling's slant, out of sight)
   p.light([0.16, 0.5, 0.2], 0.08, [0.4, 1, 0.5], [0, 0, 1], 1.5);
 }
 
 // a junction box: a white box with cut corners, a dark side panel, an orange light, a conduit down
-export function jbox(p) {
+export function jbox(p, v, s) {
   // a dark body with cut corners, a white face plate on the front, a dark hatch panel on the face
   const oct = (w, h, c) => [[-w + c, -h], [w - c, -h], [w, -h + c], [w, h - c], [w - c, h], [-w + c, h], [-w, h - c], [-w, -h + c]];
   p.extrude('dark', oct(0.19, 0.22, 0.05), 0.13, 0.014).translate(0, 0.22, 0);
@@ -34,7 +37,7 @@ export function jbox(p) {
   p.slab('black', -0.17, 0.17, 0.315, 0.322, 0.15, 0.156, { r: 0.002, seg: 1 });
   p.slab('black', -0.15, -0.09, 0.355, 0.4, 0.15, 0.162, { r: 0.006 }); p.glowSlab('orange', -0.138, -0.102, 0.365, 0.39, 0.162, 0.166);
   for (const x of [0.1, -0.1]) for (const y of [0.06, 0.38]) p.cyl('grey', 0.011, 0.008, [x + 0.04, y, 0.153], [PI / 2, 0, 0], 8);
-  conduit(p, [0.1, 0.43, 0.07], 1, 1.2, 0.02);
+  conduit(p, [0.1, 0.43, 0.07], 1, s?.conduit ?? 1.2, 0.02);
   p.light([-0.12, 0.38, 0.25], 0.12, [1, 0.5, 0.15], [0, 0, 1], 1.5);
 }
 
@@ -104,8 +107,8 @@ function collar(p, at, axis) {
   p.cyl('dark', PR + 0.016, 0.05, at, rot, 20);
   p.cyl('black', PR + 0.022, 0.014, at, rot, 20);
 }
-export function pipe(p, v) {
-  if (v === 'straight') { p.sweep('white2', circle(PR, 18), line([-1, 0, 0], [1, 0, 0], [0, 1, 0], 0.4), { caps: true }); return; }
+export function pipe(p, v, s) {
+  if (v === 'straight') { const L = (s?.len ?? 2) / 2; p.sweep('white2', circle(PR, 18), line([-L, 0, 0], [L, 0, 0], [0, 1, 0], 0.4), { caps: true }); return; }
   if (v === 'sleeve') {
     // where a pipe passes through a wall: a broad dark ring, bolted to the wall
     p.cyl('dark', PR + 0.045, 0.05, [0, 0, 0], [0, 0, PI / 2], 24); p.cyl('black', PR + 0.012, 0.07, [0, 0, 0], [0, 0, PI / 2], 20);
@@ -147,15 +150,16 @@ export function pipe(p, v) {
 }
 
 // a cable tray along a wall (2 m along x): a black tray on brackets, four cables in it, one of them orange
-export function cableTray(p) {
-  p.slab('black', -1, 1, 0, 0.016, 0, 0.22, { r: 0.004, seg: 1, cell: 0.6 });
-  p.slab('black', -1, 1, 0, 0.07, 0.205, 0.222, { r: 0.004, seg: 1, cell: 0.6 });
-  p.slab('black', -1, 1, -0.02, 0.18, 0, 0.012, { r: 0.003, seg: 1, cell: 0.6 });
-  for (const x of [-0.75, 0.25]) { p.slab('dark', x - 0.02, x + 0.02, -0.06, 0.02, 0, 0.23, { r: 0.006 }); }
+export function cableTray(p, v, s) {
+  const L = (s?.len ?? 2) / 2;
+  p.slab('black', -L, L, 0, 0.016, 0, 0.22, { r: 0.004, seg: 1, cell: 0.6 });
+  p.slab('black', -L, L, 0, 0.07, 0.205, 0.222, { r: 0.004, seg: 1, cell: 0.6 });
+  p.slab('black', -L, L, -0.02, 0.18, 0, 0.012, { r: 0.003, seg: 1, cell: 0.6 });
+  for (let x = -L + 0.25; x < L; x += 1) { p.slab('dark', x - 0.02, x + 0.02, -0.06, 0.02, 0, 0.23, { r: 0.006 }); }
   const cab = [[0.04, 0.03, 'cable'], [0.095, 0.026, 'cable'], [0.145, 0.022, 'gun'], [0.185, 0.013, 'orange'], [0.07, 0.018, 'cable']];
   cab.forEach(([z, r, s], i) => {
     const y = 0.016 + r + (i === 4 ? 0.05 : 0), pts = [];
-    for (let k = 0; k <= 10; k++) { const x = -1 + k * 0.2; pts.push(v3(x, y + Math.sin(k * 1.3 + i) * 0.004 * (i === 4 ? 2 : 1), z + Math.sin(k * 0.9 + i * 2) * 0.008)); }
+    for (let k = 0; k <= 10; k++) { const x = -L + k * 0.2 * L; pts.push(v3(x, y + Math.sin(k * 1.3 + i) * 0.004 * (i === 4 ? 2 : 1), z + Math.sin(k * 0.9 + i * 2) * 0.008)); }
     const path = pts.map((q) => ({ p: q, x: v3(0, 0, 1), y: v3(0, 1, 0) })); fixFrames(path);
     p.sweep(s, circle(r, 10), path);
   });
