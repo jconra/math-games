@@ -6,26 +6,26 @@
 //
 // THE OUTSIDE is not the grid's hull plates but a shell of its own, after the game's maker's word that the first one
 // "looks like a school bus": one lofted skin whose cross-section changes along the ship (a big dark shroud swelling
-// round the engines, the body round the cabin, a step down behind the canopy to a narrower, lower nose, the canopy
-// rising out of it to a low point), with plates, blocks and housings layered on it at different depths. Every outside
-// part is drawn in the ship's own metres: m_x (port +x) from the middle line, h up from the deck, m_z forward from the
-// old hull's tail line (engineering's aft wall is at 0.5, the cockpit's bulkhead at 11.0); the layout places each at
-// (m_x 0, m_z 0), level 0.
-//   exShell     'hull': the shell (shellSection() gives its cross-section anywhere along it): its canopy smoked panes
-//               in heavy dark frames (the windscreen split down the middle, three panes along each side, panes over
-//               the top); the side door's opening in its port side (its lining, sill and frame)
+// round the engines, the body round the cabin, a step down behind the canopy to a narrower, lower nose falling to a low
+// point, the canopy a bubble of flat panes standing out of it), with plates, blocks and housings layered on it at
+// different depths. Every outside part is drawn in the ship's own metres: m_x (port +x) from the middle line, h up
+// from the deck, m_z forward from the old hull's tail line (engineering's aft wall is at 0.5, the cockpit's bulkhead at
+// 11.0); the layout places each at (m_x 0, m_z 0), level 0.
+//   exShell     'hull': the shell (shellSection() gives its cross-section anywhere along it) and its canopy: smoked flat
+//               panes in light grey frames (the windscreen two panes either side of a centre bar, three panes along
+//               each side, a roof strip each side); the side door's opening in its port side (its lining and sill)
 //   exArmour    'port' / 'starboard': the plates and housings on a flank: the lower forward cheek with its blue strip,
-//               the plates over the side, the door's deep dark frame (port), the wing glove (a bulky dark housing at the
-//               wing's root, a blue lamp in its front), the shroud's ribs and the amber lamp on the pod
-//   exRoof      'modules': the stacked roof modules stepping down toward the tail (white blocks, dark vents and
-//               intakes), the dark shroud's top
+//               the plates over the side, the door's deep dark frame (port), the shoulder pod (blue lights in its
+//               front), the wing glove (a bulky dark housing at the wing's root, a blue lamp in its front), the
+//               shroud's ribs and the amber lamp on the pod
+//   exRoof      'modules': three stacked roof modules stepping down toward the tail (white blocks, dark vents between),
+//               the dark shroud's top
 //   exEngines   'three': the main engine (2.8 m across) high in the middle of the shroud's back and a side engine (1.9
 //               m) low each side, nearly filling it
 //   exFin       'port' / 'starboard': a tail fin on a dark root housing on the pod, leaning out
 //   exWing      'port' / 'starboard': his swept wing (4.5 m root, 1.0 m tip, 3.15 m out, its tip 4.4 m back), drooped
 //               8 degrees, a dark fairing along its root; red light on the port tip, green on the starboard
-//   exNoseLamps 'lamps': his nose lamps: a pair on the nose's dark point, a pair low on its cheeks, blue lights either
-//               side of the canopy on the body's front
+//   exNoseLamps 'lamps': his nose lamps: two pairs on the nose's small dark point, a pair low on its cheeks
 //   exCockpit   'three seats': the sample cockpit's three seats abreast (the engineer in the middle), its dashboard's
 //               deck run on to this ship's windscreen (45 degrees, 1.2 m up 1.55 m ahead of the seats); its side
 //               consoles, pedals and locker; no overhead panels (the canopy is the roof over the seats)
@@ -52,7 +52,7 @@ import { wing, tailFin } from '../shipparts/outside/wings.js';
 import { mainEngine } from '../shipparts/outside/engines.js';
 import { floodlight } from '../shipparts/outside/details.js';
 import { Acc, facet, lining, orient, THICK } from '../shipparts/outside/facet.js';
-import { box, bar, latheZ } from '../shipparts/outside/shapes.js';
+import { box, latheZ } from '../shipparts/outside/shapes.js';
 import { SHIP, GLOW_SHIP } from '../shipparts/palette.js';
 import { cockpitPlan, BUILDS } from '../shipparts/cockpit/set.js';
 import { bunkBed } from '../shipparts/cabin/quarters.js';
@@ -69,9 +69,10 @@ export const EXPLORER = {
   // main one high in the middle, a side one low each side; their fronts just inside the shroud's back
   engine: { r: 1.3, len: 2.0, sides: 24, glow: 0.5 }, side: { r: 0.95, len: 1.6, sides: 24, glow: 0.5 }, engineZ: 0.45, lip: [0.4, 0.35],
   engineAt: [0, 1.5], sideAt: [2.25, 0.8],
-  // the canopy's glass: this many of the kit's faint panes deep (smoked, the lit seats still showing through; the
-  // station's own windows are six), in heavy frames this wide (a dark band flat on the facet, a raised frame inside it)
-  smoke: 12, pillar: 0.03, frame: 0.045, frameLook: { c: '#4a4f57', r: 0.38, m: 0.5, w: 0.35 },
+  // the canopy's glass: this many of the kit's faint panes deep (smoked, light enough that the lit seats show through;
+  // the station's own windows are six), in light grey metal frames standing 5 cm out of it: 12 cm round the canopy's
+  // outline (the sill, the windscreen's edge, the back), 8 cm for the posts between panes and the centre bar
+  smoke: 10, frameW: [0.12, 0.08], frameLook: { c: '#a3a8ae', r: 0.34, m: 0.55, w: 0.3 },
   // (the windscreen's lower row falls 1 m in 1.5 m: it is 1.2 m over the deck 1.45 m ahead of the seats; a 2.6 m dash,
   // as the windscreen narrows to its foot, its deck 0.6 m deep so its corners stay under the glass, bowed 0.12 m so its
   // ends keep the three-seat dash's distance from the outer seats and their pedals)
@@ -80,57 +81,112 @@ export const EXPLORER = {
   seatsZ: 12.25, doorZ: 9.5,
 };
 
-// ── THE SHELL ──
+// ── THE CANOPY (his "3 different windows to make the shape"): flat panes, each in its own plane, so together they make
+// the curve; a rounded bubble narrower than the body and the highest thing at the front, the windscreen sweeping down
+// into the nose's low point. Its corners (port, m_x, h, m_z):
+//   the windscreen, a pane each side of one centre bar: C0 its foot's middle, F its foot's corner (its foot level, on
+//   the nose), E1 its top corner (wider than its foot: from above the canopy narrows to the nose), K1 and C1 its top
+//   rail (level across)
+//   along each side, from the nose: a small front pane (F, S1, E1), the big middle pane over the seats (S1, S2, E2, E1),
+//   the rear pane (S2, SR, ER, E2), its back corner (SR, ER, Q) white plating so its back edge slopes forward; the side
+//   panes nearly upright, so the canopy is near its widest at the eaves
+//   over the top, the roof glass: a steep strip each side down to the eaves (E1, E2, ER, KR, K1) and one pane across
+//   the top (C1, K1, KR, CR and its mirror; the centre bar ends at the windscreen's top rail), rising from the rail to
+//   the canopy's highest point at its back: in profile the windscreen, the roof and the collar, three slopes
+// Some corners are given; the rest are solved so that every pane is flat (the windscreen's top rail, the strips' back
+// corners, the sill's widths at S2 and SR). The sill (F, S1, S2, SR) is where the cockpit hull's white ledge meets the
+// glass, curving up from the nose toward the rear.
 const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
+const CANOPY_KEY = { F: [1.3, 0.9, 14.95], C0: [0, 0.9, 14.95], E1: [1.62, 2.48, 13.3], k1: [1.05, 3.02], CR: [0, 3.44, 11.45], E2: [1.82, 2.64, 12.05], er: [1.72, 11.45], S1: [1.62, 1.1, 13.95], s2: [1.42, 12.15], sr: [1.6, 11.45], q: 0.4 };
+const planeN = (A, B, C) => B.clone().sub(A).cross(C.clone().sub(A));
+// the point on plane ABC with two of its coordinates given, the third solved: its width (onPlaneX: height h, m_z z),
+// its height (onPlaneH: width x, m_z z), its m_z (onPlaneZ: width x, height h); and the point at m_z z on two planes
+function onPlaneX(A, B, C, h, z) { const n = planeN(A, B, C); return V3(A.x - (n.y * (h - A.y) + n.z * (z - A.z)) / n.x, h, z); }
+function onPlaneH(A, B, C, x, z) { const n = planeN(A, B, C); return V3(x, A.y - (n.x * (x - A.x) + n.z * (z - A.z)) / n.y, z); }
+function onPlaneZ(A, B, C, x, h) { const n = planeN(A, B, C); return V3(x, h, A.z - (n.x * (x - A.x) + n.y * (h - A.y)) / n.z); }
+function onPlanes(P1, P2, z) {
+  const n = planeN(...P1), m = planeN(...P2), r1 = n.dot(P1[0]) - n.z * z, r2 = m.dot(P2[0]) - m.z * z, det = n.x * m.y - n.y * m.x;
+  return V3((r1 * m.y - n.y * r2) / det, (n.x * r2 - r1 * m.x) / det, z);
+}
+export const CANOPY_GEO = (() => {
+  const k = CANOPY_KEY, v = (a) => V3(...a), F = v(k.F), C0 = v(k.C0), E1 = v(k.E1), E2 = v(k.E2), CR = v(k.CR), S1 = v(k.S1);
+  const K1 = onPlaneZ(F, C0, E1, ...k.k1), C1 = onPlaneZ(F, C0, E1, 0, k.k1[1]), ER = onPlaneH(E1, E2, K1, ...k.er), KR = onPlanes([E1, E2, K1], [K1, C1, CR], CR.z);
+  const S2 = onPlaneX(S1, E1, E2, ...k.s2), SR = onPlaneX(S2, E2, ER, ...k.sr), Q = E2.clone().lerp(ER, (E2.z - ER.z - k.q) / (E2.z - ER.z));
+  return { F, C0, E1, K1, C1, E2, ER, KR, CR, S1, S2, SR, Q };
+})();
+// the port panes (each a flat polygon; the rear one's whole outline, its glass short of the plating) and the frames
+// along their edges ([a, b, the panes either side]; an edge with one pane is the canopy's outline, its frame heavier)
+const PANES = (() => { const g = CANOPY_GEO; return { wind: [g.C0, g.F, g.E1, g.K1, g.C1], front: [g.F, g.S1, g.E1], mid: [g.S1, g.S2, g.E2, g.E1], rear: [g.S2, g.SR, g.ER, g.E2], strip: [g.E1, g.E2, g.ER, g.KR, g.K1], top: [g.C1, g.K1, g.KR, g.CR] }; })();
+const FRAMES = (() => { const g = CANOPY_GEO; return [[g.F, g.S1, ['front']], [g.S1, g.S2, ['mid']], [g.S2, g.SR, ['rear']], [g.F, g.E1, ['wind', 'front']], [g.S1, g.E1, ['front', 'mid']], [g.S2, g.E2, ['mid', 'rear']],
+  [g.E1, g.E2, ['mid', 'strip']], [g.E2, g.ER, ['rear', 'strip']], [g.E1, g.K1, ['wind', 'strip']], [g.K1, g.C1, ['wind', 'top']], [g.K1, g.KR, ['strip', 'top']], [g.F, g.C0, ['wind']], [g.ER, g.KR, ['strip']], [g.KR, g.CR, ['top']], [g.SR, g.Q, ['rear']]]; })();
+// m_z of the canopy's back (the collar from the bulkhead's face runs forward and in to it) and of its foot; `back`: the
+// cabin's side of the bulkhead (the roof's modules and the shoulder pods end just short of it)
+export const CANOPY = { collar: [11.035, CANOPY_GEO.ER.z], rear: CANOPY_GEO.ER.z, foot: CANOPY_GEO.F.z, back: 11.0 };
+// a pane's outward normal (away from the canopy's middle)
+function paneN(pts) { const n = newell(pts).normalize(), c = pts.reduce((s, q) => s.add(q), V3(0, 0, 0)).multiplyScalar(1 / pts.length); return n.dot(V3(c.x, c.y - 1.3, 0)) < 0 ? n.negate() : n; }
+// the canopy's port cross-section at m_z (where that plane cuts its panes), from the sill up to the top's middle, as
+// five points (the outline's own corners, the longest runs split to make up five)
+function canopySection(z) {
+  const pts = [];
+  for (const P of Object.values(PANES)) for (let i = 0; i < P.length; i++) {
+    const a = P[i], b = P[(i + 1) % P.length], fa = a.z - z, fb = b.z - z;
+    if (Math.abs(fa) < 1e-7) pts.push([a.x, a.y]); else if (fa * fb < 0) { const t = fa / (fa - fb); pts.push([a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t]); }
+  }
+  const u = []; for (const p of pts) if (!u.some((q) => Math.hypot(q[0] - p[0], q[1] - p[1]) < 1e-6)) u.push(p);
+  u.sort((p, q) => Math.atan2(p[1] - 0.3, p[0]) - Math.atan2(q[1] - 0.3, q[0]));   // (round from the sill, low and out, to the top's middle)
+  while (u.length < 5) { let j = 0, L = -1; for (let i = 0; i < u.length - 1; i++) { const d = Math.hypot(u[i + 1][0] - u[i][0], u[i + 1][1] - u[i][1]); if (d > L) { L = d; j = i; } } u.splice(j + 1, 0, [(u[j][0] + u[j + 1][0]) / 2, (u[j][1] + u[j + 1][1]) / 2]); }
+  return u.slice(0, 5);
+}
+
+// ── THE SHELL ──
 // A SECTION is the port half of a cross-section (m_x, h), from the keel up to the top's middle, ten points: K the keel,
 // B the belly's edge, C the lower chamfer's top, L0 the side's foot, L1 its top, S the sill (the canopy's foot; on the
-// body a crease), P1, P2, P3 up and over the shoulder (the canopy's side, shoulder and crown; on the body the upper side
-// leaning in and the roof's two edges), T the top's middle. So nine bands round each half:
+// body a crease), P1, P2, P3 up and over (on the body the upper side leaning in and the roof's two edges; over the
+// cockpit the canopy's own cross-section), T the top's middle. So nine bands round each half:
 export const BAND = { belly: 0, chamfer: 1, lower: 2, side: 3, ledge: 4, upper: 5, shoulder: 6, crown: 7, top: 8 };
 const SEC = {
   // the shroud's back, drawn in round the three engines it hugs (the main one 1.3 m round at h 1.5; the side ones
-  // 0.95 m round at m_x 2.45, h 0.55): a lobed outline, the body flowing into them
+  // 0.95 m round at m_x 2.25, h 0.8): a lobed outline, the body flowing into them
   back: [[0, -0.1], [1.1, -0.2], [2.25, -0.27], [3.0, 0.05], [3.32, 0.8], [3.0, 1.56], [2.0, 2.05], [1.2, 2.55], [0.55, 2.86], [0, 2.92]],
   // the stern: its lower sides rounded out into lobes round the side engines (their housings, the pods), a waist over
   // them, the upper side and a domed top round the main engine; its top falling toward the engines
   stern: [[0, -0.42], [1.1, -0.42], [2.55, -0.38], [3.2, -0.1], [3.42, 0.8], [3.15, 1.5], [2.75, 2.75], [2.3, 2.96], [1.4, 3.03], [0, 3.06]],
   stern2: [[0, -0.3], [1.1, -0.3], [2.55, -0.3], [3.2, -0.06], [3.42, 0.8], [3.15, 1.5], [2.75, 2.75], [2.45, 2.88], [1.3, 2.9], [0, 2.92]],
   // the body round the cabin (its rooms reach 2.55 m out and 2.75 m up): a dark chamfer under a side wall, a crease,
-  // the upper side leaning in, the roof's two edges (eight-sided)
-  body: [[0, -0.5], [1.0, -0.5], [2.5, -0.32], [3.0, 0.0], [3.0, 2.12], [2.97, 2.2], [2.62, 2.85], [2.2, 3.08], [1.45, 3.16], [0, 3.18]],
+  // the upper side leaning in, the roof's two edges (eight-sided); its roof as low as the rooms allow, so its shoulders
+  // sit under the canopy's eaves
+  body: [[0, -0.5], [1.0, -0.5], [2.5, -0.32], [3.0, 0.0], [3.0, 2.12], [2.97, 2.2], [2.62, 2.85], [2.2, 2.93], [1.45, 3.0], [0, 3.04]],
 };
-// THE COCKPIT AND NOSE: the lower hull narrower than the body (its side, a ledge in to the sill), the canopy a faceted
-// dome on it (side, shoulder, crown, top) whose top line curves down from the roof's height to the windscreen's foot
-// at the nose; the sill rising a little toward the rear. Each station: [m_z, the lower hull (K..L1), the canopy (S..T)]
+// THE COCKPIT'S HULL AND THE NOSE: the lower hull narrower than the body (its side, a white ledge in to the canopy's
+// sill), stations where the sill bends (the canopy's own panes over it); then the nose, its top falling from the
+// windscreen's foot and its chin rising to a low point. Each station: [m_z, the lower hull (K..L1), the top (S..T), or
+// none for the canopy's own cross-section]
 const NOSE = [
-  [11.45, [[0, -0.5], [0.9, -0.5], [2.15, -0.28], [2.7, 0.12], [2.7, 1.0]], [[1.5, 1.48], [1.48, 2.05], [1.3, 2.7], [0.8, 3.18], [0, 3.32]]],
-  [12.25, [[0, -0.47], [0.85, -0.47], [2.05, -0.24], [2.6, 0.13], [2.6, 0.98]], [[1.5, 1.34], [1.47, 1.92], [1.28, 2.56], [0.78, 3.0], [0, 3.14]]],
-  [13.0, [[0, -0.38], [0.78, -0.38], [1.9, -0.16], [2.4, 0.16], [2.4, 0.95]], [[1.62, 1.2], [1.57, 1.66], [1.32, 2.16], [0.78, 2.5], [0, 2.6]]],
-  [13.8, [[0, -0.28], [0.68, -0.28], [1.62, -0.1], [2.08, 0.22], [2.08, 0.9]], [[1.48, 1.06], [1.42, 1.4], [1.18, 1.72], [0.7, 1.88], [0, 1.95]]],
-  // the canopy's foot: the glass comes down to the nose's top
-  [14.8, [[0, 0.0], [0.5, 0.0], [1.05, 0.1], [1.3, 0.3], [1.3, 0.86]], [[0.9, 0.98], [0.86, 1.0], [0.72, 1.02], [0.44, 1.04], [0, 1.05]]],
-  // the nose: a faceted wedge, its chin rising to a deep flat face (lamps at its lower corners, a dark jaw under it)
-  [15.65, [[0, 0.04], [0.48, 0.04], [0.64, 0.12], [0.74, 0.26], [0.74, 0.74]], [[0.64, 0.84], [0.54, 0.88], [0.38, 0.9], [0.2, 0.91], [0, 0.92]]],
+  [CANOPY_GEO.SR.z, [[0, -0.5], [0.9, -0.5], [2.15, -0.28], [2.7, 0.12], [2.7, 1.0]]],
+  [CANOPY_GEO.S2.z, [[0, -0.47], [0.86, -0.47], [2.07, -0.24], [2.62, 0.13], [2.62, 0.98]]],
+  [13.0, [[0, -0.38], [0.78, -0.38], [1.9, -0.16], [2.4, 0.16], [2.4, 0.95]]],
+  [CANOPY_GEO.S1.z, [[0, -0.24], [0.65, -0.24], [1.53, -0.07], [1.96, 0.23], [1.96, 0.89]]],
+  [CANOPY_GEO.F.z, [[0, 0.0], [0.5, 0.0], [1.02, 0.09], [1.32, 0.29], [1.32, 0.78]]],
+  [15.35, [[0, 0.04], [0.44, 0.04], [0.8, 0.11], [0.98, 0.27], [0.98, 0.56]], [[0.86, 0.62], [0.7, 0.66], [0.5, 0.69], [0.26, 0.705], [0, 0.71]]],
+  // (its point: a small dark face low down, lamps along its foot)
+  [15.8, [[0, 0.08], [0.42, 0.08], [0.58, 0.15], [0.66, 0.24], [0.66, 0.36]], [[0.6, 0.4], [0.5, 0.42], [0.36, 0.435], [0.18, 0.445], [0, 0.45]]],
 ];
 const mix = (a, b, t) => a.map((p, i) => [p[0] + (b[i][0] - p[0]) * t, p[1] + (b[i][1] - p[1]) * t]);
-// the canopy: its glass from the collar (11.45) to its foot (15.0); full frames at its ribs (rear panes, the big middle
-// ones, the front-quarter ones narrowing to the foot), soft creases between at the other stations; the windscreen and
-// the roof panes over the top, a frame down the middle. The collar: the body's section at the bulkhead's face (11.035)
-// running forward and in to the canopy's rear edge, its white armour wrapped round it
-export const CANOPY = { z: [10.4, 12.25, 13.8, 14.8], soft: [11.035, 11.45, 13.0], top: [10.4, 12.25, 14.8], collar: [11.035, 11.45], foot: 14.8, back: 10.4 };
 // the stations, tail to nose: the shroud's back, the stern, the body (stations at the door's edges, so its opening
-// and inside faces fall on them), the collar to the cockpit's section, the canopy, the nose's point
+// and inside faces fall on them), the collar to the canopy's back, the cockpit's hull under the canopy, the nose
 export const SHELL = [
   [0.0, SEC.back], [0.44, SEC.stern2], [0.55, SEC.stern2], [3.0, SEC.stern], [3.6, mix(SEC.stern, SEC.body, 0.5)], [4.2, SEC.body],
   [7.8, SEC.body], [9.0, SEC.body], [10.0, SEC.body], [10.4, SEC.body], [CANOPY.collar[0], SEC.body],
-  ...NOSE.map(([z, lo, up]) => [z, [...lo, ...up]]),
+  ...NOSE.map(([z, lo, up]) => [z, [...lo, ...(up || canopySection(z))]]),
 ].map(([z, pts]) => ({ z, pts }));
 export const SHELL_Z = [SHELL[0].z, SHELL[SHELL.length - 1].z];
-// the port half-section at m_z (between two stations, each point on the straight run between them, as the facets are)
+// the port half-section at m_z (between two stations, each point on the straight run between them, as the facets are;
+// over the sill, under the canopy, the canopy's own)
 export function shellSection(z) {
-  if (z <= SHELL[0].z) return SHELL[0].pts;
-  for (let i = 1; i < SHELL.length; i++) if (z <= SHELL[i].z) { const A = SHELL[i - 1], B = SHELL[i], t = (z - A.z) / (B.z - A.z || 1); return mix(A.pts, B.pts, t); }
-  return SHELL[SHELL.length - 1].pts;
+  let sec = SHELL[SHELL.length - 1].pts;
+  if (z <= SHELL[0].z) sec = SHELL[0].pts;
+  else for (let i = 1; i < SHELL.length; i++) if (z <= SHELL[i].z) { const A = SHELL[i - 1], B = SHELL[i], t = (z - A.z) / (B.z - A.z || 1); sec = mix(A.pts, B.pts, t); break; }
+  return z >= CANOPY.rear - 1e-9 && z <= CANOPY.foot + 1e-9 ? [...sec.slice(0, BAND.upper), ...canopySection(z)] : sec;
 }
 // the whole cross-section at m_z as a loop (m_x, h), counter-clockwise seen from the nose
 export function shellLoop(z) { const h = shellSection(z); return [...h.slice(0, -1), ...h.slice(1).reverse().map(([x, y]) => [-x, y])]; }
@@ -145,39 +201,6 @@ function insetBy(P, n, ds) {
   }
   return out;
 }
-// A PANE of the canopy: glass in a heavy dark frame (a dark band flat on the facet, a raised frame inside it), the glass
-// sunk a little, `smoke` panes deep; seen from inside too (the frame's back dark, the glass both ways). o.soft: pairs
-// of points; an edge between such a pair has no frame (the glass runs on into the next facet: one pane over a crease)
-function pane(acc, pts, out, o = {}) {
-  const oo = orient(pts, out); if (!oo) return; const { n } = oo, P = oo.pts, F = EXPLORER.frameLook, L = P.length;
-  const pil = o.pillar ?? EXPLORER.pillar, fw = o.frame ?? EXPLORER.frame, layers = o.smoke ?? EXPLORER.smoke;
-  const same = (a, b) => a.distanceTo(b) < 1e-5, soft = P.map((q, i) => (o.soft || []).some(([a, b]) => (same(a, q) && same(b, P[(i + 1) % L])) || (same(b, q) && same(a, P[(i + 1) % L]))));
-  // (at a soft crease the frames stop square on the crease, an end cap closing each; the glass alone runs on a little past
-  // it, so two bent facets' glass overlaps: no crack)
-  const mid = insetBy(P, n, soft.map((t) => (t ? 0 : pil))), inner = insetBy(mid, n, soft.map((t) => (t ? 0 : fw))), glassAt = insetBy(P, n, soft.map((t) => (t ? -0.008 : pil + fw)));
-  // (a facet too small or thin for glass in its frame is all frame)
-  for (let i = 0; i < L; i++) { const j = (i + 1) % L; if (!soft[i] && inner[j].clone().sub(inner[i]).dot(P[j].clone().sub(P[i])) <= 1e-6) return facet(acc, P, n, { paint: F, inner: o.inner !== false }); }
-  const lift = 0.025, sink = -0.02, back = sink - 0.006 * layers - 0.004, bn = n.clone().negate(), at = (q, d) => q.clone().addScaledVector(n, d);
-  for (let i = 0; i < L; i++) {
-    if (soft[i]) continue;
-    const j = (i + 1) % L, so = n.clone().cross(P[j].clone().sub(P[i])).normalize().negate();   // (outward from the pane, across this edge)
-    acc.poly([P[i], P[j], mid[j], mid[i]], n, F);                                                   // the dark band on the facet
-    if (o.inner !== false) { acc.poly([P[i], mid[i], mid[j], P[j]].map((q) => at(q, -THICK)), bn, F); acc.poly([P[i], P[j], at(P[j], -THICK), at(P[i], -THICK)], so, F); }
-    acc.poly([at(mid[i], lift), at(mid[j], lift), at(inner[j], lift), at(inner[i], lift)], n, F);  // the raised frame
-    acc.poly([mid[i], mid[j], at(mid[j], lift), at(mid[i], lift)], so, F);
-    acc.poly([at(inner[i], lift), at(inner[j], lift), at(inner[j], back), at(inner[i], back)], so.clone().negate(), F);
-    acc.poly([mid[i], inner[i], inner[j], mid[j]].map((q) => at(q, back)), bn, F);                  // (its back, seen from inside)
-    acc.poly([at(mid[i], 0), at(mid[j], 0), at(mid[j], back), at(mid[i], back)], so, F);
-  }
-  for (let i = 0; i < L; i++) {
-    // (a frame's end where it meets a soft crease: its pillar's end and its raised frame's end, both ways)
-    const prev = (i - 1 + L) % L, capAt = (v) => { const quads = [[P[v], mid[v], at(mid[v], -THICK), at(P[v], -THICK)], [at(mid[v], lift), at(inner[v], lift), at(inner[v], back), at(mid[v], back)]];
-      for (const q of quads) { const o2 = orient(q, newell(q)); if (o2) { acc.poly(o2.pts, o2.n, F); acc.poly(o2.pts.slice().reverse(), o2.n.clone().negate(), F); } } };
-    if (!soft[i] && soft[prev]) capAt(i);
-    if (!soft[i] && soft[(i + 1) % L]) capAt((i + 1) % L);
-  }
-  for (let k = 0; k < layers; k++) { const g = glassAt.map((q) => at(q, sink - 0.006 * k)); acc.poly(g, n, null, 'glass', 9); acc.poly(g.slice().reverse(), bn, null, 'glass', 9); }
-}
 // the Newell normal of a polygon (its corners in order)
 function newell(q) { const n = V3(0, 0, 0); for (let i = 0; i < q.length; i++) { const a = q[i], b = q[(i + 1) % q.length]; n.x += (a.y - b.y) * (a.z + b.z); n.y += (a.z - b.z) * (a.x + b.x); n.z += (a.x - b.x) * (a.y + b.y); } return n; }
 // a polygon cut by a level plane: the part over h (above true) or under it
@@ -187,77 +210,80 @@ function cutY(pts, h, above) {
   return out;
 }
 // LOFT: stations [{ z, pts }] joined facet by facet, both halves; look(k, i, s) the look of band k between stations i
-// and i + 1 on side s (+1 port, -1 starboard): a facet's look ({ paint, seams, inner, ... }), { glass: true, soft } for
-// a pane (soft(k, i, edge) true where its edge 'a' (station i), 'b' (station i + 1), 'lo' (point k) or 'hi' (point
-// k + 1) has no frame), { above: h } to draw only the part over h (a door's opening under it), or null for none
+// and i + 1 on side s (+1 port, -1 starboard): a facet's look ({ paint, seams, inner, ... }), { above: h } to draw only
+// the part over h (a door's opening under it), or null for none
 function loft(acc, st, look) {
   for (let i = 0; i < st.length - 1; i++) {
     const A = st[i], B = st[i + 1];
     for (let k = 0; k < A.pts.length - 1; k++) for (const s of [1, -1]) {
       const lk = look(k, i, s); if (!lk) continue;
       const P = (pt, z) => V3(s * pt[0], pt[1], z);
-      const a0 = P(A.pts[k], A.z), a1 = P(A.pts[k + 1], A.z), b1 = P(B.pts[k + 1], B.z), b0 = P(B.pts[k], B.z);
-      let q = [a0, a1, b1, b0];
+      let q = [P(A.pts[k], A.z), P(A.pts[k + 1], A.z), P(B.pts[k + 1], B.z), P(B.pts[k], B.z)];
       const out = newell(q).multiplyScalar(s); if (out.lengthSq() < 1e-10) continue;
       if (lk.above != null) { q = cutY(q, lk.above, true); if (q.length < 3) continue; }
-      if (!lk.glass) { facet(acc, q, out, lk); continue; }
-      const soft = [['a', a0, a1], ['b', b0, b1], ['lo', a0, b0], ['hi', a1, b1]].filter(([e]) => lk.soft?.(e)).map(([, p, r]) => [p, r]);
-      pane(acc, q, out, { ...lk, soft });
-      if (lk.backing) {
-        const n = out.clone().normalize(), bq = q.map((p) => p.clone().addScaledVector(n, -0.11));
-        facet(acc, bq, out, { paint: SHIP.frame, inner: false }); facet(acc, bq, out.clone().negate(), { paint: SHIP.frame, inner: false });
-        // (its rear edge closed to the shell: a strip across from the glass's frame to the backing, facing forward)
-        if (Math.abs(A.z - CANOPY.back) < 1e-6) facet(acc, [a0, a1, a1.clone().addScaledVector(n, -0.11), a0.clone().addScaledVector(n, -0.11)], V3(0, 0, 1), { paint: SHIP.frame, inner: false });
-      }
+      facet(acc, q, out, lk);
     }
   }
 }
 
 // the shell's paint, band by band along it (his: off-white panels over a dark lower chamfer and a grey belly; the
-// stern's shroud dark, ribbed; dark frames round the canopy; the nose's point and its chin band dark)
+// stern's shroud dark, ribbed; the nose's point and its chin band dark)
 const W = SHIP.hull, W2 = SHIP.hull2, D = SHIP.trim, G = SHIP.grey;
-const isAt = (z, list) => list.some((q) => Math.abs(q - z) < 1e-6);
 function shellLook(k, i, s) {
   const za = SHELL[i].z, zb = SHELL[i + 1].z, zm = (za + zb) / 2, { belly, chamfer, lower, side, ledge, upper, shoulder, crown, top } = BAND;
-  // (inside faces: round the side door, where the airlock's porch and the door leaf's pocket look out at the hull, and
-  // the collar, which the cockpit looks back into)
+  // (inside faces: round the side door, where the airlock's porch and the door leaf's pocket look out at the hull; the
+  // cockpit's hull under the canopy, and the collar it looks back into)
   const doorSeg = s > 0 && za >= 7.8 - 1e-6 && zb <= 10.4 + 1e-6, door = s > 0 && Math.abs(za - 9.0) < 1e-6, collar = Math.abs(za - CANOPY.collar[0]) < 1e-6;
-  const canopy = za >= CANOPY.z[0] - 1e-6 && zb <= CANOPY.foot + 1e-6, cockpit = za >= CANOPY.collar[0] - 1e-6 && zb <= CANOPY.foot + 1e-6, overCabin = canopy && zb <= CANOPY.collar[0] + 1e-6;
-  // (glass: the side panes are one pane up over the shoulder to the crown, framed at the ribs, over the cockpit; the
-  // windscreen and the roof glass over the top, the roof glass running back over the collar and the cabin to the door
-  // (a dark backing under it over the cabin); framed down the middle; a frame wherever glass meets plating)
-  const glassBands = overCabin ? [crown, top] : collar ? [shoulder, crown, top] : [upper, shoulder, crown, top];
-  if (canopy && glassBands.includes(k)) {
-    const ribs = { [top]: [10.4, 12.25, 14.8], [crown]: [10.4, 14.8], [shoulder]: [11.035, 14.8], [upper]: [11.45, 14.8] }[k];
-    return { glass: true, backing: overCabin, soft: (e) => (e === 'a' ? !isAt(za, ribs) : e === 'b' ? !isAt(zb, ribs) : e === 'lo' ? (k === shoulder || k === crown) && glassBands.includes(k - 1) : e === 'hi' ? (k === upper || k === shoulder) && glassBands.includes(k + 1) : false) };
-  }
-  // (and the body under the canopy's rear panes, seen from the cockpit through the collar's glass)
-  const inner = (cockpit && k >= chamfer && k <= ledge) || (collar && k > ledge) || (doorSeg && k >= lower && k <= upper) || (overCabin && k >= side && k <= shoulder);
+  const canopy = za >= CANOPY.rear - 1e-6 && zb <= CANOPY.foot + 1e-6, cockpit = canopy || collar;
+  if (canopy && k >= upper) return null;                                                     // (the canopy's own panes)
+  const inner = (cockpit && k >= chamfer && k <= ledge) || (collar && k > ledge) || (doorSeg && k >= lower && k <= upper);
   const look = (paint, more = {}) => ({ paint, inner, seams: null, ...more });
-  if (collar) return look(k <= lower ? D : k === ledge || k === upper ? W : W2, { seams: k >= side ? 'all' : null });   // the collar's sides: white armour round the canopy's rear
+  // (the collar: its white ledge meeting the canopy at its sill (his white shoulders, under the glass); its faces beside
+  // the canopy's sides dark, a valley between the bubble and the shoulder pods; its top white, the canopy's back)
+  if (collar) return look(k <= lower || k === upper || k === shoulder ? D : k === ledge ? W : W2, { seams: k >= side ? 'all' : null });
   if (zm < 3.6) return look(k === belly || k === side ? G : D, { seams: 'all' });            // the shroud (the pods' sides grey, so their ribs read)
-  if (zm > CANOPY.foot) return look(k === side || k === ledge || k === upper || k === shoulder ? W : D, { seams: k === side ? 'all' : null, inner: k >= side });   // the nose's point: white cheeks, a dark band down its middle (seen from inside past the cover)
+  if (zm > CANOPY.foot) return look(k === side || k === ledge || k === upper || k === shoulder ? W : D, { seams: k === side ? 'all' : null, inner: k >= side });   // the nose: white cheeks, a dark band down its middle (seen from inside past the cover)
   switch (k) {
     case belly: return look(G);
     case chamfer: case lower: return look(D);
     case side: return door ? look(W, { above: 2.0, seams: 'all' }) : look(W2, { seams: 'all' });
-    case ledge: return look(cockpit ? W : D, { seams: cockpit ? 'all' : null });   // (beside the canopy, his white armour cheeks)
+    case ledge: return look(cockpit ? W : D, { seams: cockpit ? 'all' : null });   // (under the canopy, his white cheeks, below its glass)
     case upper: return look(W2, { seams: 'all' });
     case shoulder: return look(W);
     case crown: return look(W2);
     default: return look(W, { seams: 'all' });
   }
 }
-// THE CANOPY'S PILLARS (his raked frames): a bar on the side glass from the sill (S) at m_z z0 up and back over the
-// side, shoulder and crown to their top (P3) at z1, standing a little off the glass; on side s
-function pillar(acc, s, z0, z1, w = 0.11) {
-  const N = 8, pts = [];
-  for (let i = 0; i <= N; i++) {
-    const t = i / N, z = z0 + (z1 - z0) * t, sec = shellSection(z), u = t * 3, k = Math.min(2, Math.floor(u)), f = u - k, a = sec[BAND.upper + k], b = sec[BAND.upper + k + 1];
-    const x = a[0] + (b[0] - a[0]) * f, y = a[1] + (b[1] - a[1]) * f, n = V3(s * (b[1] - a[1]), -(b[0] - a[0]), 0).normalize();
-    pts.push(V3(s * x, y, z).addScaledVector(n, 0.035));
+// a frame: a light grey metal bar along a canopy edge from a to b, w wide across the glass, standing o out of it and d
+// into it (its inside seen from the cockpit, deeper than the shell's skin, so it closes the skin's edge), n the glass's
+// outward normal there; run a little past its ends, so the frames close at their joins
+function frameBar(acc, a, b, n, w = EXPLORER.frameW[1], o = 0.05, d = THICK + 0.015, ext = 0.015) {
+  const e = b.clone().sub(a).normalize(), A = a.clone().addScaledVector(e, -ext), B = b.clone().addScaledVector(e, ext);
+  const nn = n.clone().addScaledVector(e, -n.dot(e)).normalize(), u = nn.clone().cross(e).normalize();
+  const P = (p, su, out) => p.clone().addScaledVector(u, su * w / 2).addScaledVector(nn, out ? o : -d);
+  const c = [P(A, -1, 0), P(A, 1, 0), P(A, 1, 1), P(A, -1, 1), P(B, -1, 0), P(B, 1, 0), P(B, 1, 1), P(B, -1, 1)], F = EXPLORER.frameLook;
+  for (const [ix, dir] of [[[0, 1, 2, 3], e.clone().negate()], [[4, 5, 6, 7], e], [[3, 2, 6, 7], nn], [[0, 1, 5, 4], nn.clone().negate()], [[1, 5, 6, 2], u], [[0, 4, 7, 3], u.clone().negate()]]) {
+    const q = orient(ix.map((j) => c[j]), dir); if (q) acc.poly(q.pts, q.n, F);
   }
-  for (let i = 0; i < N; i++) bar(acc, EXPLORER.frameLook, pts[i].toArray(), pts[i + 1].toArray(), w, 0.07);
+}
+// THE CANOPY: its panes (smoked glass, `smoke` faint panes deep, seen both ways), the light frames round each pane, the
+// windscreen's centre bar running on over the roof, the white plating in each rear pane's back corner
+function canopy(acc) {
+  const layers = EXPLORER.smoke, g = CANOPY_GEO;
+  const glass = (P, n) => { for (let k = 0; k < layers; k++) { const q = orient(P.map((v) => v.clone().addScaledVector(n, -0.012 - 0.006 * k)), n); acc.poly(q.pts, q.n, null, 'glass', 9); acc.poly(q.pts.slice().reverse(), q.n.clone().negate(), null, 'glass', 9); } };
+  for (const s of [1, -1]) {
+    const m = (v) => V3(s * v.x, v.y, v.z), N = {};
+    for (const [name, P0] of Object.entries(PANES)) {
+      const P = P0.map(m), n = paneN(P); N[name] = n;
+      glass(name === 'rear' ? [g.S2, g.SR, g.Q, g.E2].map(m) : P, n);
+    }
+    for (const [a, b, ps] of FRAMES) frameBar(acc, m(a), m(b), ps.reduce((t, k) => t.add(N[k]), V3(0, 0, 0)).normalize(), EXPLORER.frameW[ps.length === 1 || ps.includes('wind') ? 0 : 1]);
+    facet(acc, [g.SR, g.ER, g.Q].map(m), N.rear, { paint: W, inner: true, seams: null });
+    if (s > 0) {
+      // (the windscreen's centre bar, up to its top rail; the level roof pane runs across without one)
+      frameBar(acc, V3(0, g.C0.y, g.C0.z), V3(0, g.C1.y, g.C1.z), V3(0, N.wind.y, N.wind.z).normalize());
+    }
+  }
 }
 // a flat face over a loop (convex outline) with round holes, both drawn from the side n faces
 function faceHoles(acc, outline, holes, n, paint) {
@@ -267,19 +293,31 @@ function faceHoles(acc, outline, holes, n, paint) {
   acc.tris(tri.map((tr) => tr.map((i) => all[i])), n, paint);
 }
 const circle = (cx, cy, z, r, n = 24) => Array.from({ length: n }, (_, i) => V3(cx + Math.cos(i / n * PI * 2) * r, cy + Math.sin(i / n * PI * 2) * r, z));
-// THE SHELL: the loft, the shroud's back face round the engines (their collars cover the holes), the nose's dark point,
-// the side door's opening (port, its middle at m_z 9.5: 1.0 x 2.0 m from the deck) lined 0.3 m deep, a grey sill (its
-// deep dark frame is the flank's armour)
+// THE SHELL: the loft, the canopy, the shroud's back face round the engines (their collars cover the holes), the nose's
+// dark point, the side door's opening (port, its middle at m_z 9.5: 1.0 x 2.0 m from the deck) lined 0.3 m deep, a
+// grey sill (its deep dark frame is the flank's armour)
 function exShell(p) {
   const acc = new Acc();
   loft(acc, SHELL, shellLook);
+  canopy(acc);
   const back = shellLoop(SHELL[0].z).map(([x, y]) => V3(x, y, SHELL[0].z)), [ex, ey] = EXPLORER.engineAt, [sx, sy] = EXPLORER.sideAt;
   const bz = SHELL[0].z; faceHoles(acc, back, [circle(ex, ey, bz, EXPLORER.engine.r * 0.97), circle(sx, sy, bz, EXPLORER.side.r * 0.97), circle(-sx, sy, bz, EXPLORER.side.r * 0.97)], V3(0, 0, -1), D);
-  // the canopy's raked pillars: the front-quarter pane's (the A-pillar), between the big middle pane and the rear one
-  for (const s of [1, -1]) for (const [z0, z1] of [[14.05, 13.15], [12.55, 11.75]]) pillar(acc, s, z0, z1);
   const tip = SHELL[SHELL.length - 1], face = shellLoop(tip.z).map(([x, y]) => V3(x, y, tip.z));
   facet(acc, face, V3(0, 0, 1), { paint: D, inner: true });   // (its inside too: seen past the cockpit's cover)
-  // the door's opening: the lining through the hull, a grey sill along its foot, a raised dark frame round it
+  // the bulkhead's edge, seen from the cockpit: a dark ring at its face from the skin in past the closing plate's edge;
+  // and the collar's skin closed at its back edge, from the skin to its inside face (seen looking back from the seats,
+  // where the collar rises steeply to the canopy)
+  { const zb = CANOPY.collar[0] + 0.002, o0 = orient(shellLoop(zb).map(([x, y]) => V3(x, y, zb)), V3(0, 0, 1)), inn = insetBy(o0.pts, o0.n, o0.pts.map(() => 0.1));
+    for (let i = 0; i < o0.pts.length; i++) { const j = (i + 1) % o0.pts.length, q = orient([o0.pts[i], o0.pts[j], inn[j], inn[i]], V3(0, 0, 1)); if (q) acc.poly(q.pts, q.n, D); }
+    const ci = SHELL.findIndex((st) => Math.abs(st.z - CANOPY.collar[0]) < 1e-6), A = SHELL[ci], B = SHELL[ci + 1];
+    for (let k = BAND.side; k < A.pts.length - 1; k++) for (const s of [1, -1]) {
+      const P = (pt, z) => V3(s * pt[0], pt[1], z), a0 = P(A.pts[k], A.z), a1 = P(A.pts[k + 1], A.z), n = newell([a0, a1, P(B.pts[k + 1], B.z), P(B.pts[k], B.z)]).multiplyScalar(s);
+      if (n.lengthSq() < 1e-10) continue; n.normalize();
+      // (just behind the plate's own rim there, a little longer and deeper than it, so no crack along its edges shows)
+      const e = a1.clone().sub(a0).normalize().multiplyScalar(0.02), sh = V3(0, 0, -0.004), b0 = a0.clone().sub(e).add(sh), b1 = a1.clone().add(e).add(sh);
+      const q = orient([b0, b1, b1.clone().addScaledVector(n, -THICK - 0.03), b0.clone().addScaledVector(n, -THICK - 0.03)], V3(0, 0, -1)); if (q) acc.poly(q.pts, q.n, D);
+    } }
+  // the door's opening: the lining through the hull, a grey sill along its foot
   const dz = EXPLORER.doorZ, hole = [V3(3.0, 0, dz - 0.5), V3(3.0, 0, dz + 0.5), V3(3.0, 2.0, dz + 0.5), V3(3.0, 2.0, dz - 0.5)], nx = V3(1, 0, 0), ho = orient(hole, nx).pts;
   lining(acc, ho, nx, 0.3, D, true);
   acc.poly([V3(3.035, 0.004, dz - 0.5), V3(3.035, 0.004, dz + 0.5), V3(2.7, 0.004, dz + 0.5), V3(2.7, 0.004, dz - 0.5)], V3(0, 1, 0), G);
@@ -361,22 +399,27 @@ function exArmour(p, side) {
   }
   // the plates over the body's side: a big one aft of the door (his "Explorer-3" panel, the yellow slashes on it), one
   // forward of the door over the cheek, a small one at the stern's end
-  plateOn(acc, s, SIDE, 4.9, dz - 1.32, 0.42, 0.68, 0.13, { paint: W, seams: 'all', slash: SHIP.yellow }, { c: 0.05, edge: D, slashZ: 8.0, slant0: 0.4, slant1: 0 });
+  plateOn(acc, s, SIDE, 4.9, dz - 1.32, 0.5, 0.7, 0.13, { paint: W, seams: 'all', slash: SHIP.yellow }, { c: 0.05, edge: D, slashZ: 8.0, slant0: 0.4, slant1: 0 });
   if (s < 0) plateOn(acc, s, SIDE, 8.85, 10.2, 0.42, 0.68, 0.13, { paint: W, seams: 'all' }, { c: 0.05, edge: D, slant0: 0.3 });
   plateOn(acc, s, SIDE, s > 0 ? 10.46 : 10.3, c0 - 0.02, 0.42, 0.68, 0.1, { paint: W2, seams: 'all' }, { c: 0.04, edge: D, slant1: -0.3 });
   plateOn(acc, s, SIDE, 3.7, 4.75, 0.42, 0.68, 0.08, { paint: W2, seams: 'all' }, { c: 0.03, edge: D, slant1: -0.35 });
-  // the shoulders: bulky armour along the crease, standing a third of a metre proud, white over a dark underside,
-  // sloping in at each end (broken by the door's frame on the port side)
-  for (const [z0, z1] of s > 0 ? [[3.1, dz - 1.0]] : [[3.1, CANOPY.back - 0.05]]) sponson(acc, s, z0, z1);
+  // the shoulder pod (his: a lobe each side, beyond the dark valley beside the canopy, under the fin and below the
+  // canopy's top): bulky armour along the crease from the shroud to just short of the bulkhead, its crest over the
+  // body's shoulder; deep aft of the door, shallower over it (on both sides, so the two match from the front), two blue
+  // lamps in its sloping front
+  pod(acc, s, 3.1, dz - 1.0, POD.deep, { eb: 0 });
+  const front = pod(acc, s, dz - 1.0, CANOPY.back - 0.05, POD.over, { ea: 0 });
+  for (const [k, w] of [[1, 0.28], [3, 0.3]]) { const L = front(k); placeInto(p, part(lampBar, { w, h: 0.07, glow: 'blue' }), { at: L.at.toArray(), rot: faceRot(L.n) }); }
   // white armour carried back over the front of the dark engine section (the colour break not one vertical cut)
   plateOn(acc, s, UP, 2.7, 4.3, 0.08, 0.92, 0.07, { paint: W, seams: 'all' }, { c: 0.04, edge: D, slant0: -0.5 });
-  // the wing glove: a bulky dark housing at the wing's root, from just aft of the door's frame back into the pod, its
-  // front sloping, a blue lamp in its front
-  const g = plateOn(acc, s, SIDE, 3.6, 8.62, -0.05, 0.38, 0.55, { paint: D, seams: 'all' }, { d0: 0.33, c: 0.09, cz1: 0.8, cz0: 0, cf0: 0.16, edge: D });
-  plateOn(acc, s, SIDE, 4.2, 7.5, 0.08, 0.3, 0.05, { paint: G, seams: 'all' }, { off: 0.55, c: 0.03 });
-  { const f = g[g.length - 1], a = f.t0.clone().lerp(f.t1, 0.25), b = f.t0.clone().lerp(f.t1, 0.75), mid = a.clone().lerp(b, 0.5).add(V3(0, 0, 0.37)), n = V3(0, 0, 1).addScaledVector(f.nrm, 0.75).normalize();
-    // (a blue lamp low in its sloping front, facing forward and out)
-    placeInto(p, part(lampBar, { w: 0.5, h: 0.09, glow: 'blue' }), { at: mid.toArray(), rot: faceRot(n) }); }
+  // the wing's pod (his pod with blue lights, carrying the wing, and running back into the stern's pod that carries the
+  // fin): a bulky housing at the wing's root from just aft of the door's frame back into the stern, white over its
+  // dark edges, its front sloping and dark with two blue lamps in it
+  const g = plateOn(acc, s, SIDE, 3.6, 8.62, -0.05, 0.46, 0.58, { paint: W2, seams: 'all' }, { d0: 0.36, c: 0.09, cz1: 0.8, cz0: 0, cf0: 0.16, cf1: 0.12, edge: D });
+  plateOn(acc, s, SIDE, 4.2, 7.5, 0.06, 0.24, 0.05, { paint: D, seams: 'all' }, { off: 0.58, c: 0.03 });
+  { const f = g[g.length - 1], n = newell([f.b0, f.t0, f.t1, f.b1]).normalize(); if (n.z < 0) n.negate();
+    // (the lamps on its sloping front, facing as it does: forward and out)
+    for (const t of [0.3, 0.72]) { const at = f.t0.clone().lerp(f.t1, t).lerp(f.b0.clone().lerp(f.b1, t), 0.45).addScaledVector(n, 0.01); placeInto(p, part(lampBar, { w: 0.3, h: 0.08, glow: 'blue' }), { at: at.toArray(), rot: faceRot(n) }); } }
   // a dark keel along the belly, in two steps (deeper aft)
   plateOn(acc, s, BAND.belly, 4.2, 10.4, 0, 0.55, 0.14, { paint: SHIP.frame, seams: 'all' }, { c: 0.04, cz0: 0.3, open: ['f0'] });
   plateOn(acc, s, BAND.belly, 10.4, 13.9, 0, 0.45, 0.08, { paint: SHIP.frame }, { c: 0.03, cz1: 0.3, open: ['f0'] });
@@ -387,21 +430,26 @@ function exArmour(p, side) {
   glowOn(acc, s, SIDE, 1.2, 2.9, 0.86, 0.9, 0.004, GLOW_SHIP.strip);
   return acc.flush(p);
 }
-// A SHOULDER (his bulky armour along the crease): a small loft along the side from z0 to z1 on side s, its section
-// (m_x, h) from the side below the crease, out and up over it onto the upper side; its ends sloping in to the hull
-// (his coffin shoulders: a hard edge at the widest point, the armour over it sloping steeply up to the roof's edge)
-const SPONSON = { full: [[2.99, 1.55], [3.26, 1.68], [3.4, 2.02], [3.3, 2.22], [2.58, 2.87]], foot: [[2.99, 1.55], [3.0, 1.7], [3.0, 2.0], [2.97, 2.2], [2.58, 2.87]] };
-function sponson(acc, s, z0, z1) {
-  const L = z1 - z0, ea = Math.min(0.45, L * 0.35), eb = Math.min(0.6, L * 0.4);   // (its sloping ends, shorter on a short run)
-  // (its line rising toward the bow: the edge and the underside up to 0.16 m higher at the front, the top's foot fixed)
-  const lift = (pts, z) => pts.map(([x, y], i) => [x, i < 4 ? y + 0.16 * (z - 3.1) / 6.3 : y]);
-  const st = [[z0, SPONSON.foot], [z0 + ea, SPONSON.full], [z1 - eb, SPONSON.full], [z1, SPONSON.foot]].map(([z, pts]) => ({ z, pts: lift(pts, z) }));
-  const looks = [{ paint: W2, seams: null }, { paint: W, seams: 'all' }, { paint: D, seams: null }, { paint: W, seams: 'all' }];
-  for (let i = 0; i < st.length - 1; i++) for (let k = 0; k < 4; k++) {
-    const A = st[i], B = st[i + 1], P = (pt, z) => V3(s * pt[0], pt[1], z), q = [P(A.pts[k], A.z), P(A.pts[k + 1], A.z), P(B.pts[k + 1], B.z), P(B.pts[k], B.z)];
-    const out = newell(q).multiplyScalar(s); if (out.lengthSq() < 1e-10) continue;
-    facet(acc, q, out, { ...looks[k], paint: i === 1 ? looks[k].paint : k === 0 ? D : W2, inner: false });
+// A SHOULDER POD (his bulky armour along the crease): a small loft along the side from z0 to z1 on side s, its section
+// (m_x, h) from the shell, out round a hard outer face and up over a crest higher than the body's shoulder, down onto
+// the roof's edge: a dark underside, a white face, a dark edge, a white crest. Its ends slope in to the hull over ea
+// and eb metres (0: square; the aft one's square front closed). Returns where a lamp goes on band k of its front.
+const POD = {
+  deep: { full: [[2.99, 1.55], [3.28, 1.66], [3.44, 1.98], [3.44, 2.72], [3.24, 3.06], [2.9, 3.2], [2.45, 2.88]], foot: [[2.99, 1.55], [3.0, 1.7], [3.0, 2.0], [2.97, 2.2], [2.86, 2.4], [2.7, 2.7], [2.45, 2.88]] },
+  // (over the door: its underside clear of the door's frame)
+  over: { full: [[2.825, 2.47], [3.28, 2.54], [3.44, 2.66], [3.44, 2.8], [3.24, 3.06], [2.9, 3.2], [2.45, 2.88]], foot: [[2.825, 2.47], [2.8, 2.52], [2.776, 2.56], [2.728, 2.65], [2.68, 2.74], [2.62, 2.85], [2.45, 2.88]] },
+};
+function pod(acc, s, z0, z1, sec, o = {}) {
+  const L = z1 - z0, ea = o.ea ?? Math.min(0.45, L * 0.35), eb = o.eb ?? Math.min(0.6, L * 0.4), P = (pt, z) => V3(s * pt[0], pt[1], z);
+  const st = [...(ea > 0 ? [[z0, sec.foot]] : []), [z0 + ea, sec.full], [z1 - eb, sec.full], ...(eb > 0 ? [[z1, sec.foot]] : [])].map(([z, pts]) => ({ z, pts }));
+  const looks = [[D, null], [W2, null], [W, 'all'], [D, null], [W, 'all'], [W2, null]], run = ea > 0 ? 1 : 0, quad = (A, B, k) => [P(A.pts[k], A.z), P(A.pts[k + 1], A.z), P(B.pts[k + 1], B.z), P(B.pts[k], B.z)];
+  for (let i = 0; i < st.length - 1; i++) for (let k = 0; k < sec.full.length - 1; k++) {
+    const q = quad(st[i], st[i + 1], k), out = newell(q).multiplyScalar(s); if (out.lengthSq() < 1e-10) continue;
+    facet(acc, q, out, { paint: i === run ? looks[k][0] : k === 0 ? D : W2, seams: i === run ? looks[k][1] : null, inner: false });
   }
+  if (eb === 0) facet(acc, sec.full.map((q) => P(q, z1)), V3(0, 0, 1), { paint: D, inner: false });
+  // (a lamp on band k of its sloping front: the facet's middle, a little off it, facing as it does)
+  return (k) => { const q = quad(st[st.length - 2], st[st.length - 1], k), n = newell(q).multiplyScalar(s).normalize(), c = q.reduce((t, v) => t.add(v), V3(0, 0, 0)).multiplyScalar(0.25); return { at: c.addScaledVector(n, 0.012), n }; };
 }
 // a lamp bar: a dark bezel with a glowing face (blue or warm), facing +z
 function lampBar(p, o) {
@@ -441,20 +489,25 @@ function block(acc, [x0, x1], [y0, y1], [z0, z1], o = {}) {
     for (const f of [-0.5, 0, 0.5]) { const y = ym + f * h; acc.poly(orient([q(y - 0.012, za + 0.05, 0.012), q(y - 0.012, zb - 0.05, 0.012), q(y + 0.012, zb - 0.05, 0.012), q(y + 0.012, za + 0.05, 0.012)], n).pts, n, SHIP.grey); }
   }
 }
-// THE ROOF: his stacked modules from behind the canopy toward the tail, each lower and narrower than the one before:
-// the first stepping up behind the canopy (its front sloping toward it, dark vents along its sides, a dark hood with a
-// lamp over the canopy), then a white one with dark covers, then the dark shroud's top over the engines
-// its section (port half, m_x and h over the roof's foot y0): its foot, the lower layer's side and top, a ledge, the
-// dark recess along the upper layer's side, the upper layer's top; at its ends drawn in to its foot
-const SPINE = (y0, t1, t2) => [[0, y0], [1.15, y0], [1.02, t1 - 0.06], [0.92, t1], [0.68, t1], [0.6, t2 - 0.05], [0.48, t2], [0, t2 + 0.02]];
+// THE ROOF: his stacked modules behind the canopy, three of them stepping down toward the tail, each lower and narrower
+// than the one before and all under the canopy's top, a dark vent between each two (grey slats across it); then the
+// dark shroud's top over the engines. A module's section (port half, m_x and h over the roof's foot y0): its foot, the
+// lower layer's side and top, a ledge, the dark recess along the upper layer's side, the upper layer's top; at its ends
+// drawn in to its foot
+const SPINE = (y0, t1, t2, w) => [[0, y0], [1.15 * w, y0], [1.02 * w, t1 - 0.06], [0.92 * w, t1], [0.68 * w, t1], [0.6 * w, t2 - 0.05], [0.48 * w, t2], [0, t2 + 0.02]];
+const MODULES = [[8.4, CANOPY.back - 0.08, 0.28, 0.42, 1.3, 0.5], [5.75, 8.1, 0.26, 0.38, 1.2, 0.3], [3.3, 5.45, 0.2, 0.3, 1.08, 0.3]];
 function exRoof(p) {
-  const acc = new Acc(), z1 = CANOPY.back - 0.05, roof = (z) => shellSection(z)[BAND.top][1] - 0.04;
-  const at = (z, t1, t2) => ({ z, pts: SPINE(roof(z), roof(z) + t1, roof(z) + t2) }), foot = (z) => ({ z, pts: SPINE(roof(z), roof(z), roof(z)).map(([x, y], i) => [i < 2 ? x : x * 0.9, y]) });
-  const st = [foot(z1), at(z1 - 0.55, 0.22, 0.3), at(9.0, 0.32, 0.5), at(7.2, 0.38, 0.62), at(5.6, 0.36, 0.56), at(4.2, 0.3, 0.42), at(3.1, 0.22, 0.28), foot(2.5)].reverse();
-  const D2 = SHIP.frame;
-  loft(acc, st, (k) => (k === 0 ? null : { paint: k === 4 ? D2 : k === 2 || k === 5 ? W2 : k === 1 ? W2 : W, inner: false, seams: k === 3 || k === 6 ? 'all' : null }));
-  // (a dark intake either side, low on the roof's edge by its front)
-  for (const sx of [-1, 1]) block(acc, sx > 0 ? [1.45, 1.9] : [-1.9, -1.45], [3.08, 3.3], [8.6, 10.0], { front: 0.3, back: 0.1, c: 0.05, top: D, side: D });
+  const acc = new Acc(), roof = (z) => shellSection(z)[BAND.top][1] - 0.04, D2 = SHIP.frame;
+  for (const [z0, z1, t1, t2, w, fr] of MODULES) {
+    const at = (z) => ({ z, pts: SPINE(roof(z), roof(z) + t1, roof(z) + t2, w) }), foot = (z) => ({ z, pts: SPINE(roof(z), roof(z), roof(z), w).map(([x, y], i) => [i < 2 ? x : x * 0.9, y]) });
+    loft(acc, [foot(z0), at(z0 + 0.3), at(z1 - fr), foot(z1)], (k) => (k === 0 ? null : { paint: k === 4 ? D2 : k === 2 || k === 5 ? W2 : k === 1 ? W2 : W, inner: false, seams: k === 3 || k === 6 ? 'all' : null }));
+  }
+  // (the vents between: a dark well, grey slats across it)
+  for (let i = 0; i < MODULES.length - 1; i++) {
+    const za = MODULES[i + 1][1] - 0.05, zb = MODULES[i][0] + 0.05, y = roof((za + zb) / 2), hw = 1.0 * MODULES[i + 1][4];
+    block(acc, [-hw, hw], [y - 0.02, y + 0.12], [za, zb], { front: 0, back: 0, c: 0.03, top: D2, side: D2, ends: D2 });
+    for (const f of [0.25, 0.5, 0.75]) { const z = za + (zb - za) * f; box(acc, SHIP.grey, [-hw + 0.08, hw - 0.08], [y + 0.12, y + 0.15], [z - 0.014, z + 0.014]); }
+  }
   // the shroud's top: dark, ribbed, falling to the main engine
   block(acc, [-0.85, 0.85], [2.86, 3.15], [0.9, 3.3], { front: 0.45, back: 0.4, c: 0.1, lean: 0.12, top: D, side: D, chamfer: SHIP.frame, vents: true });
   return acc.flush(p);
@@ -506,13 +559,12 @@ function fairing(acc, out, h, len) {
   for (let i = 0; i < 5; i++) { const n = A[i + 1].clone().sub(A[i]).cross(P(0, 0, 1)).normalize().negate(); facet(acc, [A[i], A[i + 1], B[i + 1], B[i]], n, { paint: D, inner: false, seams: 'all' }); }
   for (const [S, n] of [[A, P(0, 0, 1)], [B, P(0, 0, -1)]]) facet(acc, S, n, { paint: D, inner: false });
 }
-// THE NOSE'S LAMPS, as his: a pair on the nose's dark point, a pair low on its cheeks (facing forward and out), and
-// blue lights either side of the canopy on the dark step of the body's front
+// THE NOSE'S LAMPS, as his: two pairs on the nose's small dark point, a pair low on its cheeks (facing forward and out)
 function exNoseLamps(p) {
   const tip = SHELL[SHELL.length - 1];
   for (const s of [-1, 1]) {
-    // (two levels: a pair high on the face, a pair low at the chin's corners)
-    for (const [x, y, w] of [[0.44, 0.3, 0.2], [0.44, 0.5, 0.2]]) placeInto(p, part(floodlight, { w, h: 0.1, warm: true }), { at: [s * x, y, tip.z + 0.002], rot: [0, 0, 0] });
+    // (a pair along the foot of the point's face, at each corner)
+    for (const [x, y, w] of [[0.2, 0.24, 0.18], [0.45, 0.24, 0.18]]) placeInto(p, part(floodlight, { w, h: 0.1, warm: true }), { at: [s * x, y, tip.z + 0.002], rot: [0, 0, 0] });
     // (the angled facets back from the point: a pair high on its cheeks, a pair low on its chin)
     for (const [k, z, f, w] of [[BAND.side, 15.15, 0.55, 0.26]]) {
       const L = onBand(s, k, z, f, 0.01), n = L.n.clone().add(V3(0, 0, 0.9)).normalize();
@@ -560,16 +612,17 @@ function exCockpitDeck(p) {
   p.slab('black', -1.45, 1.45, 2.22, 2.34, zb, zb + 0.09, { r: 0.01, cell: 0.8 }); p.glowSlab('soft', -1.4, 1.4, 2.22, 2.225, zb + 0.02, zb + 0.08);
   for (const x of [-1.0, 0, 1.0]) p.light([x, 2.2, z0 + 0.4], 1.0, [1, 0.95, 0.88], [0, -0.6, 0.8], 4.5);
   for (const x of [-1.1, 0, 1.1]) p.light([x, 2.1, 12.8], 1.3, [1.3, 0.8, 0.42], [0, -1, -0.4], 3.5);   // (warm, over the seats)
-  // the cover forward of the dash: an apron down the dash's front, then a dark plate at the sill out to the glass
+  // the cover forward of the dash: an apron down the dash's front, then a grey plate at the sill out to the glass (no
+  // dark band along the windscreen's foot from outside)
   const acc = new Acc(), zd = EXPLORER.seatsZ + EXPLORER.cockpit.canopy.z + 0.01, y1 = EXPLORER.cockpit.canopy.y - 0.02, zf = CANOPY.foot - 0.1;
   const sillIn = (z) => { const S = shellSection(z)[BAND.upper]; return [S[0] - THICK - 0.05, S[1] - 0.005]; };
   const [w0, ys0] = sillIn(zd), [wm, ysm] = sillIn(14.3), [w1, ys1] = sillIn(zf);
   // (the apron a wall from the deck up to the dash's height, so nothing shows under the cover into the nose; seen past the
   // dash's edge from the seats, and through the windscreen from outside)
   const wd = insideAtDeck(zd), ap = [V3(-wd, 0, zd), V3(wd, 0, zd), V3(w0, ys0, zd), V3(w0, y1, zd), V3(-w0, y1, zd), V3(-w0, ys0, zd)];
-  for (const dir of [1, -1]) facet(acc, ap, V3(0, 0, dir), { paint: SHIP.frame, inner: false });
-  facet(acc, [V3(-w0, ys0, zd), V3(w0, ys0, zd), V3(wm, ysm, 14.3), V3(-wm, ysm, 14.3)], V3(0, 1, 0), { paint: SHIP.frame, inner: false });
-  facet(acc, [V3(-wm, ysm, 14.3), V3(wm, ysm, 14.3), V3(w1, ys1, zf), V3(-w1, ys1, zf)], V3(0, 1, 0), { paint: SHIP.frame, inner: false });
+  for (const dir of [1, -1]) facet(acc, ap, V3(0, 0, dir), { paint: SHIP.grey, inner: false });
+  facet(acc, [V3(-w0, ys0, zd), V3(w0, ys0, zd), V3(wm, ysm, 14.3), V3(-wm, ysm, 14.3)], V3(0, 1, 0), { paint: SHIP.grey, inner: false });
+  facet(acc, [V3(-wm, ysm, 14.3), V3(wm, ysm, 14.3), V3(w1, ys1, zf), V3(-w1, ys1, zf)], V3(0, 1, 0), { paint: SHIP.grey, inner: false });
   // the bulkhead round the cabin's walls (which stand 2.5 m tall to m_x 2.5, the cockpit's door between them): the
   // body's section on the walls' faces, less those walls: its top over 2.35 m and a strip each side beyond m_x 2.45
   // (the hull's short ring from here to the canopy's step has its inside faces)
