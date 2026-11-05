@@ -63,7 +63,6 @@ export function parseLook(words) {
 const PAINT_WORDS = new Set([...Object.keys(PAINTS), ...Object.keys(STRIPES), ...Object.keys(SLASHES), 'edged', 'framed', 'seam', 'seams', 'glass', 'bare']);
 const ratio = (s, d = [1, 1]) => { const m = /^(\d+):(\d+)$/.exec(s || ''); return m ? [+m[1], +m[2]] : d; };
 const num = (words, k, d) => { const w = words.find((x) => new RegExp('^' + k + '\\d+$').test(x)); return w ? +w.slice(k.length) : d; };
-const RATIOS = ['1:1', '1:2', '2:1'];
 
 // ── flat panels ──
 export function hullPanel(p, variant = 'x1') {
@@ -256,4 +255,3 @@ export const ACCEPTS = {
   hullCap: (s) => { const ws = s.split(' ').filter((w) => !PAINT_WORDS.has(w)); return ['nose', 'tail'].includes(ws[0]) && !!SECTIONS[ws[1]] && !!CAP_STYLES[ws[2]] && (ws.length === 3 || (ws[3] === 'mouth' && /^\d+x\d+$/.test(ws[4] || ''))); },
   hullOpening: (s) => /^(door( x[24])?( h[45])?|window x[24]|porthole|mouth \d+x\d+|hatch [23])$/.test(s.split(' ').filter((w) => !PAINT_WORDS.has(w)).join(' ')),
 };
-export { RATIOS };

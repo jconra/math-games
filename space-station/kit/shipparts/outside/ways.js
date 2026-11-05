@@ -19,8 +19,7 @@
 //       lights on its two posts; the shaft's lining between the deck and the belly. size 1.4 (the platform, metres)
 import * as THREE from 'three';
 import { SHIP, GLOW_SHIP } from '../palette.js';
-import { GLOW } from '../../materials.js';
-import { kitTextures } from '../../materials.js';
+import { GLOW, kitTextures } from '../../materials.js';
 import { plane, put } from '../../geo.js';
 import { SHIP_GRID } from '../../grid.js';
 import { Acc } from './facet.js';

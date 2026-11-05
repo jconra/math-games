@@ -13,7 +13,7 @@
 //                       span 0.9 (keep a ship under 5.3 m: the hangar's 5.6 m door with 0.3 m to spare), sweep 1.4,
 //                       thick 0.18, light 'white'
 import * as THREE from 'three';
-import { SHIP, GLOW_SHIP } from '../palette.js';
+import { SHIP } from '../palette.js';
 import { GLOW } from '../../materials.js';
 import { Acc, facet } from './facet.js';
 import { box } from './shapes.js';
@@ -72,4 +72,3 @@ export function tailFin(p, o = {}) {
   for (const L of q.lights) p.lights.push({ ...L, at: new THREE.Vector3(...L.at).applyMatrix4(M).toArray(), dir: L.dir && new THREE.Vector3(...L.dir).transformDirection(M).toArray() });
   return p;
 }
-void GLOW_SHIP;
