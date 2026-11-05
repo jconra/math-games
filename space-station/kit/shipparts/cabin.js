@@ -33,7 +33,9 @@
 //                           spring (1.5), k (0.5), skin (0.06) }
 //   onWall(dst, src, o)     a station wall-kit piece (breaker, extinguisher, screen...) hung on a ship wall:
 //                           { at: [x, y, z] (a point on the wall LINE, at the height the piece hangs from), face
-//                           ('+z', '-z', '+x', '-x': which way the wall faces) }. FACING has the turns.
+//                           ('+z', '-z', '+x', '-x': which way the wall faces) }. FACING has the turns. A ship wall's
+//                           panels stand up to 1 cm proud in places (the lower bay left of a pilaster, the upper bay
+//                           right of it): a label or other flat decal goes on one of the flat bays.
 import { wallPanel, rib, trim, corner as stationCorner, floorTile, ceilingTile, hatch, slabRow, band, backing, zOf, G, BAND } from '../shell.js';
 import { Piece } from '../piece.js';
 import { put } from '../geo.js';

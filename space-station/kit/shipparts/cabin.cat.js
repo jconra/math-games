@@ -28,7 +28,7 @@ const WALLKIT = {
   breaker: [(p, s) => breaker(p, 'switches', s), { conduit: 0.55 }, [0, 1.0]],
   'junction box': [(p, s) => jbox(p, 'plain', s), { conduit: 0.7 }, [0, 1.15]],
   screen: [wallScreen, 'math', [0, 1.15]],
-  label: [label, 'CREW dark', [0, 1.75]],
+  label: [label, 'CREW dark', [-0.25, 1.75]],   // (a label goes on a flat bay: the upper bay left of the pilaster)
   'pipe on hangers': [null, null, [0, 2.08]],
   'cable tray': [(p, s) => cableTray(p, 'cables', s), { len: 1 }, [0, 2.0]],
 };

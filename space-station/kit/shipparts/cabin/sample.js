@@ -64,7 +64,7 @@ export function sampleRoom(p, o = {}) {
 
   // ── the station's wall kit on the corridor's walls ──
   hang(part(extinguisher, 'red'), 0, 0.5, 0.25, '+x');                                    // (on the corridor's end wall, out of the way)
-  hang(part(label, 'CREW dark'), 4.2, 1.75, 0.5, '-z');
+  hang(part(label, 'CREW dark'), 4.65, 1.75, 0.5, '-z');                                // (on a flat bay: the panel faces -z, so its upper left bay is at +x)
   hang(part(shortBreaker, { conduit: 0.55 }), 4.0, 1.0, -0.5, '+z');
   placeInto(p, part(handhold, { upright: true, len: 0.5 }), { at: at(3.6, 0, 0.5), rot: [0, PI, 0] });
   // a pipe along the washroom side, under the cornice, on hangers into it
