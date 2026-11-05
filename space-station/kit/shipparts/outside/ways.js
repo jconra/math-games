@@ -75,7 +75,7 @@ export function sideDoor(p, o = {}) {
       if (fold) {
         // (the cladding: a plate under the treads along the flight, a charcoal edge down each side)
         const at = (x, t, off) => [x, -DECK * t + below[0] * off, len * t + below[1] * off];
-        bar(s, SHIP.hull, at(0, 0.03, 0.175), at(0, 0.78, 0.175), 0.86, 0.015);
+        bar(s, SHIP.grey, at(0, 0.03, 0.175), at(0, 0.78, 0.175), 0.86, 0.015);   // (grey, as his dark doors)
         for (const x of [-0.43, 0.43]) bar(s, SHIP.trim, at(x, 0.03, 0.17), at(x, 0.78, 0.17), 0.04, 0.03);
       }
       box(s, SHIP.frame, [-hw, hw], [-DECK, -DECK + 0.04], fold ? [len - 0.14, len + 0.02] : [len - 0.1, len + 0.12]);   // (a folding flight's foot plate stays under its line, clear of the leaf when folded)
@@ -132,7 +132,7 @@ export function ramp(p, o = {}) {
   // hazard stripe down each edge, a dark edge beam
   const section = (L, first) => (q) => {
     const a = new Acc();
-    box(a, SHIP.gun, [-w / 2, w / 2], [-t, 0], [0, L]);   // (dark metal, as his)
+    box(a, SHIP.trim, [-w / 2, w / 2], [-t, 0], [0, L]);   // (dark, as his)
     box(a, SHIP.trim, [-w / 2, -w / 2 + 0.08], [-t - 0.06, 0.02], [0, L]); box(a, SHIP.trim, [w / 2 - 0.08, w / 2], [-t - 0.06, 0.02], [0, L]);
     for (let z = 0.25; z < L - 0.1; z += 0.3) box(a, SHIP.grey, [-w / 2 + 0.3, w / 2 - 0.3], [0, 0.015], [z, z + 0.05]);
     // (the underside, which is the outside when shut: off-white panels like the hull, with a seam)

@@ -11,7 +11,7 @@ import { SHIP } from '../palette.js';
 
 export const THICK = 0.06;     // the hull plate: its inside face this far in
 export const STEP = 0.6;       // the longest edge of a triangle (the bake lights each corner)
-const SEAM_W = 0.022, SEAM_UP = 0.003, FRAME_W = 0.06;
+const SEAM_W = 0.022, SEAM_UP = 0.003, FRAME_W = 0.1;
 const v = (x, y, z) => new THREE.Vector3(x, y, z);
 
 // the normal of a polygon (Newell's), not normalised
@@ -142,7 +142,7 @@ export function facet(acc, pts, out, look, opts = {}) {
 // a window: dark glass in a charcoal frame, set into a band of the panel's own paint round it (the off-white panels
 // his canopy's windows sit in), the glass sunk a little into the facet
 export const PANES = 6;   // (the kit's glass is faint: a ship's windows are six panes deep, smoked dark, still see-through)
-const PILLAR = 0.16;   // (the off-white round each window: his canopy windows are set into panels)
+const PILLAR = 0.1;   // (the off-white round each window: his canopy windows are set into panels)
 function glassPane(acc, P, n, look) {
   const fw = look.frameW ?? FRAME_W, mid = inset(P, n, PILLAR), inner = inset(mid, n, fw), lift = 0.02, sink = -0.02, back = sink - 0.006 * PANES - 0.004, F = look.frame || SHIP.frame;
   // (a facet too small or thin to hold a window stays a plain panel)

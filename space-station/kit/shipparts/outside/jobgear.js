@@ -8,9 +8,9 @@
 //       striped black down each side. pose 'folded' (back along the hull's side: the upper arm back along -z, the
 //       forearm forward along its outside, +x, the head beside the shoulder) or 'working' (reaching forward and down
 //       past the nose). upper 2.6, fore 2.0 (metres). Drawn for the hull's +x side ('mirrored' in the catalog: -x)
-//   scoop(p, { w })                         the ore scoop under a miner's nose: a dark wedge with a comb of tines
-//       reaching forward, a hazard-striped lip. Frame: its back top edge at the origin (against the belly), reaching
-//       +z and down. w 2.4
+//   scoop(p, { w })                         the ore scoop under a miner's nose: a sloping grille of ribs between two
+//       dark cheeks, a heavy lip striped yellow and black, teeth under it. Frame: its back top edge at the origin
+//       (against the belly), reaching +z and down. w 2.4
 //   medicMark(p, { w, h, kind })            the medical mark (no red cross, which is a protected symbol): a teal pulse
 //       line. kind 'plate' (a pale plate with a teal frame and the pulse across it, w 1.6 x h 0.6) or 'stripe' (a
 //       long teal band with a pale pulse through it, w 3.0 x h 0.3). Facing +z, its middle at the origin, on a flat
@@ -100,15 +100,17 @@ export function laserArm(p, o = {}) {
   return p;
 }
 export function scoop(p, o = {}) {
-  const w = o.w ?? 2.4, acc = new Acc(), n = Math.max(5, Math.round(w / 0.3));
-  // the wedge: a dark plate from the belly down and forward, cheeks each side, a lip
-  bar(acc, SHIP.trim, [0, 0, 0], [0, -0.5, 1.0], w, 0.12);
-  for (const s of [-1, 1]) { const x = s * (w / 2 - 0.05); box(acc, SHIP.trim, [x - 0.05, x + 0.05], [-0.55, 0], [0, 1.1]); }
-  box(acc, SHIP.gun, [-w / 2, w / 2], [-0.6, -0.48], [0.9, 1.1]);
-  // the tines, reaching forward from the lip
-  for (let i = 0; i < n; i++) { const x = -w / 2 + 0.16 + (w - 0.32) * i / (n - 1); bar(acc, SHIP.gun, [x, -0.54, 1.05], [x, -0.62, 1.75], 0.07, 0.06); }
+  const w = o.w ?? 2.4, acc = new Acc(), n = Math.max(6, Math.round(w / 0.24));
+  // a sloping grille (his miner's), from a beam under the belly down and forward to a heavy lip: a dark cheek each
+  // side, ribs down the slope with gaps between them, the lip striped yellow and black along its front, short teeth
+  // under it
+  box(acc, SHIP.trim, [-w / 2, w / 2], [-0.14, 0], [-0.12, 0.12]);
+  for (const s of [-1, 1]) { const x = s * (w / 2 - 0.06); bar(acc, SHIP.trim, [x, -0.05, 0], [x, -0.6, 1.1], 0.12, 0.3); }
+  for (let i = 0; i < n; i++) { const x = -w / 2 + 0.2 + (w - 0.4) * i / (n - 1); bar(acc, SHIP.gun, [x, -0.08, 0.05], [x, -0.58, 1.02], 0.07, 0.12); }
+  box(acc, SHIP.trim, [-w / 2, w / 2], [-0.72, -0.5], [1.0, 1.16]);
+  for (let i = 0; i < n - 1; i++) { const x = -w / 2 + 0.3 + (w - 0.6) * i / (n - 2); box(acc, SHIP.gun, [x - 0.04, x + 0.04], [-0.8, -0.72], [1.06, 1.14]); }
   acc.flush(p);
-  const g = plane(w - 0.2, 0.16, { uv: kitTextures().decal.rect.hazard, cell: 9 }); put(g, [0, -0.476, 1.0], [-PI / 2, 0, 0]); p.add('decal', g, '#d9a21e');
+  const g = plane(w - 0.1, 0.18, { uv: kitTextures().decal.rect.hazard, cell: 9 }); put(g, [0, -0.61, 1.163]); p.add('decal', g, '#d9a21e');
   return p;
 }
 // the pulse line (an ECG trace): points [x, y] across -0.5..0.5 by -0.5..0.5
