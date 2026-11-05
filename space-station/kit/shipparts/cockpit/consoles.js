@@ -78,7 +78,7 @@ export function dashboard(p, o = {}) {
   for (const sg of [-1, 1]) {
     const g = new THREE.ShapeGeometry(shape), P = g.attributes.position, N = g.attributes.normal, th = sg * T, nx = sg * Math.cos(th), nz = Math.sin(T);
     for (let i = 0; i < P.count; i++) { const [x, y, z] = arcAt(R, P.getX(i), P.getY(i), th); P.setXYZ(i, x, y, z); N.setXYZ(i, nx, 0, nz); }
-    p.add('solid', g, 'white2');
+    p.add('solid', g, CHAR);   // (charcoal ends, so the dash runs into the side consoles)
   }
   // the ends' edges: a charcoal trim along the deck's end
   for (const sg of [-1, 1]) { const th = sg * T, a = arcAt(R, S.fe + 0.06, S.h + 0.06, th), b = arcAt(R, S.depth, S.deckY, th); bar(p, 'black', a.map((v, i) => v + (i === 0 ? sg * 0.006 : 0)), b.map((v, i) => v + (i === 0 ? sg * 0.006 : 0)), [0.012, 0.03]); }

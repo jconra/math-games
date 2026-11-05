@@ -9,7 +9,7 @@
 //                      legend ('a' | 'b': which set of names)
 //   knobRow(p, o)      a row of rotary knobs over printed tick rings. o: n (3), pitch (0.06)
 // The bigger ones stand in the room:
-//   overheadPanel(p, o)  a shallow console hung from the ceiling on four bars, between the seats: its face underneath
+//   overheadPanel(p, o)  a console closed up to the ceiling by a charcoal fairing, between the seats: its face underneath
 //                        looks down and back (toward +z) at the seats, lower at its far end (-z). It hangs from y = ceil,
 //                        centred on x = 0 and z = 0. A lamp along its far end lights the dashboard; amber strips run
 //                        along its sides. o: w (0.4), d (0.75 along z),
@@ -24,7 +24,7 @@
 //                        on the other side)
 //   faceOf               where each one's face is (for checks and for placing more on it)
 import { part } from '../place.js';
-import { LEAN, LIT, CHAR, mfd, glowBox, mount, bar, turn, local } from './look.js';
+import { LEAN, LIT, CHAR, CHAR2, mfd, glowBox, mount, bar, turn, local } from './look.js';
 
 const PI = Math.PI, FIRM = { r: 0.008, seg: 1, cell: 9, loops: [] };
 function rng(seed) { let s = (seed * 2654435761) >>> 0 || 1; return () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; }; }
@@ -92,7 +92,8 @@ export function overheadPanel(p, o = {}) {
   const { w = 0.4, d = 0.75, ceil = 2.5, drop = 0.62, body = CHAR } = o, yf = ceil - drop, yn = ceil - drop * 0.45, F = faceOf.overhead({ d, ceil, drop });
   const th = Math.min(0.14, ceil - yn - 0.01), top = (z) => yf + th + (z + d / 2) * (yn - yf) / d;   // (a shallow housing, never through the ceiling)
   across(p, body, [[-d / 2, yf + th], [-d / 2, yf + 0.03], [-d / 2 + 0.03, yf], [d / 2, yn], [d / 2, yn + th]], w, 0.012);
-  for (const x of [-w / 2 + 0.06, w / 2 - 0.06]) for (const z of [-d / 4, d / 4]) { bar(p, 'black', [x, top(z) - 0.01, z], [x, ceil, z], 0.04); p.slab('black', x - 0.05, x + 0.05, ceil - 0.012, ceil, z - 0.05, z + 0.05, { r: 0 }); }
+  // (a charcoal fairing closes it up to the ceiling, so it reads as part of the roof, not a sign on rods)
+  across(p, CHAR2, [[-d / 2 + 0.02, top(-d / 2 + 0.02) - 0.01], [d / 2 - 0.02, top(d / 2 - 0.02) - 0.01], [d / 2 - 0.02, ceil], [-d / 2 + 0.02, ceil]], w - 0.04, 0.008);
   // the dark face plate, then (from the far end) a lamp strip, two switch rows, a button grid, a knob row
   p.box('dark', [w - 0.03, F.len - 0.04, 0.012], F.at(F.len / 2, 0.004), F.rot, FIRM);
   const put = (src, u, off = 0.01) => mount(p, src, { at: F.at(u, off), rot: F.rot }, 'overhead ' + u);
