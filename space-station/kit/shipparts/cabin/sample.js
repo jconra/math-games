@@ -66,15 +66,17 @@ export function sampleRoom(p, o = {}) {
   // ── the station's wall kit on the corridor's walls ──
   hang(part(extinguisher, 'red'), 0, 0.5, 0.25, '+x');                                    // (on the corridor's end wall, out of the way)
   hang(part(label, 'CREW dark'), 4.65, 1.75, 0.5, '-z');                                // (on a flat bay: the panel faces -z, so its upper left bay is at +x)
-  hang(part(shortBreaker, { conduit: 0.55 }), 4.0, 1.0, -0.5, '+z');
-  placeInto(p, part(handhold, { upright: true, len: 0.5 }), { at: at(3.6, 0, 0.5), rot: [0, PI, 0] });
-  // a pipe along the washroom side, under the cornice, on hangers into it: in through the far end wall, along to
-  // just short of the washroom's doorway (clear of its status light), where an elbow turns it up into the ceiling
+  hang(part(shortBreaker, { conduit: 0.55 }), 4.5, 1.0, -0.5, '+z');                    // (between the frame at x 4 and the end wall)
+  placeInto(p, part(handhold, { upright: true, len: 0.5 }), { at: at(3.7, 0, 0.5), rot: [0, PI, 0] });
+  // a pipe along the washroom side, under the cornice, on hangers into it: in through the far end wall (a sleeve flush
+  // on it), along between the portal frames, where an elbow turns it up into the ceiling's corner, a collar where it
+  // meets the cornice; it stops well short of the washroom's doorway, so it hides neither door's light
   const py = 2.08, pz = -0.5 + 0.176;   // (clear of the portal frames' ribs, 0.104 out from the wall line)
-  const ex = 2.0;   // (the elbow: its straight leg x 2.0..3.0, its upright at x 1.8, clear of the frame's rib and beam at x 2)
+  const ex = 2.75;   // (the elbow: its straight leg x 2.75..3.75, its upright at x 2.55, halfway between the frames)
   placeInto(p, part(pipe, 'elbow-r'), { at: at(ex, py, pz), rot: [PI, 0, 0] });   // (turned over: it turns up, not down)
   placeInto(p, part(longPipe, { len: 5 - ex - 1 }), { at: at((5 + ex + 1) / 2, py, pz) });
-  for (const x of [2.6, 4.25]) placeInto(p, part(pipe, 'flange'), { at: at(x, py, pz) });
-  placeInto(p, part(pipe, 'sleeve'), { at: at(5 - FACE - 0.035, py, pz) });   // (where it comes through the end wall)
+  placeInto(p, part(pipe, 'flange'), { at: at(4.3, py, pz) });
+  placeInto(p, part(pipe, 'sleeve'), { at: at(ex - 0.2, 2.34, pz), rot: [0, 0, PI / 2] });   // (the collar under the cornice)
+  placeInto(p, part(pipe, 'sleeve'), { at: at(5 - FACE - 0.025, py, pz) });   // (where it comes through the end wall)
   return p;
 }
