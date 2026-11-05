@@ -16,21 +16,27 @@ export const SECTIONS = {
 // CAP STYLES (the hull's ends): steps in toward the end, each `len` cells long, bringing the sides in `w` cells, the
 // roof down `r` steps and the belly up `b` steps (the chamfers keep their slope); `glass` makes a step's roof and upper
 // chamfers a canopy (dark glass in frames); `paint` paints a step's facets by name ({ belly, lo, side, up, roof });
-// `face` paints the flat end face
+// `face` paints the flat end face. A nose as his: a long canopy sloping down over the cockpit to a low dark chin.
 export const CAP_STYLES = {
   flat: { stages: [], face: 'white' },                                                                    // a flat end (engines go here)
-  blunt: { stages: [{ len: 1, w: 1, r: 1, b: 1, paint: { belly: 'dark', lo: 'dark' } }], face: 'dark' },  // one 45 degree band all round
-  canopy: { stages: [{ len: 4, w: 1, r: 2, b: 0, glass: true }, { len: 1, w: 1, r: 1, b: 1, paint: { belly: 'dark', lo: 'dark', side: 'dark' } }], face: 'dark' },
-  wedge: { stages: [{ len: 3, w: 1, r: 3, b: 0, glass: true }, { len: 2, w: 1, r: 0, b: 1, paint: { belly: 'dark', lo: 'dark' } }], face: 'dark' },
+  blunt: { stages: [{ len: 2, w: 1, r: 1, b: 1, paint: { belly: 'dark', lo: 'dark' } }], face: 'dark' },  // a short band all round
+  canopy: { stages: [{ len: 4, w: 1, r: 2, b: 0, glass: true }, { len: 3, w: 1, r: 2, b: 1, glass: true, paint: { lo: 'dark' } }, { len: 1, w: 1, r: 0, b: 0, paint: { belly: 'dark', lo: 'dark', side: 'dark', up: 'dark' } }], face: 'dark' },
+  wedge: { stages: [{ len: 3, w: 1, r: 3, b: 0, glass: true }, { len: 3, w: 1, r: 1, b: 1, paint: { belly: 'dark', lo: 'dark' } }], face: 'dark' },
   taper: { stages: [{ len: 2, w: 1, r: 1, b: 1 }], face: 'dark' },
 };
+// a chamfer half the size, the same slope (or null): a step too tight for a big chamfer takes a smaller one
+const halve = (c) => (c[0] % 2 === 0 && c[1] % 2 === 0 && c[0] > 0 ? [c[0] / 2, c[1] / 2] : null);
+const roomy = (n) => n.w - n.lo[0] >= 0 && n.w - n.up[0] >= 0 && n.r - n.up[1] >= n.b + n.lo[1];
 // the sections a cap steps through, from the hull's own (z 0) to its end face; throws if a step leaves no room
 export function capRings(S, style) {
   const rings = [{ S, z: 0 }];
   let cur = S, z = 0;
   for (const st of style.stages) {
     const n = { ...cur, w: cur.w - st.w, r: cur.r - st.r, b: cur.b + st.b };
-    if (n.w - n.lo[0] < 0 || n.w - n.up[0] < 0 || n.r - n.up[1] < n.b + n.lo[1]) throw new Error('kit: a cap step leaves no room for its chamfers');
+    while (!roomy(n)) {
+      const u = halve(n.up), l = halve(n.lo);
+      if (u) n.up = u; else if (l) n.lo = l; else throw new Error('kit: a cap step leaves no room for its chamfers');
+    }
     z += st.len; cur = n; rings.push({ S: n, z, st });
   }
   return rings;

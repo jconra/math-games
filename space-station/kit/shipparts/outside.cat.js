@@ -12,11 +12,26 @@ import { landingLeg } from './outside/legs.js';
 import { sideDoor, airlockHatch, ramp, bellyLift } from './outside/ways.js';
 import { navLight, floodlight, lightStrip, antenna, sensorDish, vent, greeble } from './outside/details.js';
 import { canister, laserArm, scoop, medicMark } from './outside/jobgear.js';
+import { Piece } from '../piece.js';
+import { placeInto } from './place.js';
 
-// a variant's words as options: 'r1.4 len2.2 round dark parked' -> { r: 1.4, len: 2.2, sides: 24, band: null, lit: false }
+// a variant's words as options: 'miner parked' -> { r: 1.35, len: 2.2, sides: 24, band: 'grey', lit: false }
 const ENGINE_V = { 'medic': { r: 1.1, len: 1.9 }, 'miner': { r: 1.35, len: 2.2, sides: 24, band: 'grey' }, 'explorer': { r: 0.95, len: 1.7, sides: 24 }, 'parked': { lit: false }, 'dark': { band: null }, 'yellow': { band: 'yellow' } };
 const optsOf = (v, table) => v.split(' ').reduce((o, w) => ({ ...o, ...(table[w] || {}) }), {});
 const THRUSTER_V = { top: { mount: 'top' }, side: { mount: 'side' }, under: { mount: 'under' }, jet: { plume: true }, 'left': { yaw: 90 }, 'right': { yaw: -90 }, 'back': { yaw: 180 }, 'up': { pitch: 60 }, 'down': { pitch: -60 }, 'tilt': { yaw: 35, pitch: 25 } };
+
+// parts drawn for the hull's +x side (wings, pylons, arms, canister feet): ' mirrored' after any variant is the same
+// part for the -x side (place.js turns its faces back the right way out); a wing's or fin's red light turns green
+const mirrorable = (def) => {
+  const build = def.build, base = def.variants;
+  def.build = (p, v) => {
+    if (!/ mirrored$/.test(v)) return build(p, v, false);
+    const q = new Piece(); build(q, v.replace(/ mirrored$/, ''), true); return placeInto(p, q, { scale: [-1, 1, 1] });
+  };
+  def.accepts = (v) => base.includes(v.replace(/ mirrored$/, ''));
+  def.variants = [...base, base[0] + ' mirrored'];
+  return def;
+};
 
 const G = 'Ship outside';
 export const OUTSIDE = {
@@ -35,16 +50,16 @@ export const OUTSIDE = {
   // engines: the main engine's front face goes against the tail (the drum runs back along -z)
   mainEngine: { name: 'Main engine', group: G, at: 'free', foot: [2.4, 2.4, 2], build: (p, v) => mainEngine(p, optsOf(v, ENGINE_V)), accepts: (v) => v.split(' ').every((w) => ENGINE_V[w]),
     variants: ['medic', 'medic parked', 'miner', 'explorer', 'medic yellow'] },
-  enginePod: { name: 'Engine pod', group: G, at: 'free', foot: [1.4, 1.2, 2.7], build: (p, v) => enginePod(p, { ...optsOf(v, { yellow: { band: 'yellow' }, parked: { lit: false }, big: { r: 0.8, len: 3.2 }, round: { sides: 24 } }), pylon: v.includes('pylon') ? { side: -1, len: 0.6 } : null }),
-    variants: ['plain', 'pylon', 'yellow pylon', 'big round', 'parked'] },
+  enginePod: mirrorable({ name: 'Engine pod', group: G, at: 'free', foot: [1.4, 1.2, 2.7], build: (p, v) => enginePod(p, { ...optsOf(v, { yellow: { band: 'yellow' }, parked: { lit: false }, big: { r: 0.8, len: 3.2 }, round: { sides: 24 } }), pylon: v.includes('pylon') ? { side: -1, len: 0.6 } : null }),
+    variants: ['pylon', 'plain', 'yellow pylon', 'big round', 'parked'] }),
   // manoeuvring thrusters: a pod on a mount, the pod turned on its pivot (yaw, pitch), its jet on or off
   thruster: { name: 'Thruster', group: G, at: 'free', foot: [0.8, 1.2, 1], build: (p, v) => thruster(p, optsOf(v, THRUSTER_V)), accepts: (v) => v.split(' ').every((w) => THRUSTER_V[w]),
     variants: ['top', 'top jet', 'top left jet', 'top back', 'top up jet', 'top tilt jet', 'side', 'side down jet', 'under', 'under right jet'] },
   thrusterPod: { name: 'Thruster pod', group: G, at: 'free', foot: [0.6, 0.5, 0.7], build: (p, v) => thrusterPod(p, { plume: v === 'jet' }), variants: ['off', 'jet'] },
   // wings and fins (drawn for the +x side; the -x side is the same part mirrored, with its own light)
-  wing: { name: 'Wing', group: G, at: 'free', foot: [3.4, 0.4, 3.6], variants: ['swept', 'swept green', 'delta', 'red stripe'],
-    build: (p, v) => wing(p, { ...(v.includes('delta') ? { root: 3.4, tip: 0.5, span: 2.6, sweep: 2.8 } : {}), ...(v.includes('green') ? { light: 'green' } : {}), ...(v.includes('red stripe') ? { stripe: 'red' } : {}) }) },
-  stubWing: { name: 'Stub wing', group: G, at: 'free', foot: [1.4, 0.5, 2], variants: ['plain', 'red stripe'], build: (p, v) => stubWing(p, v === 'red stripe' ? { stripe: 'red' } : {}) },
+  wing: mirrorable({ name: 'Wing', group: G, at: 'free', foot: [3.4, 0.4, 3.6], variants: ['swept', 'delta', 'red stripe'],
+    build: (p, v, m) => wing(p, { ...(v.includes('delta') ? { root: 3.4, tip: 0.5, span: 2.6, sweep: 2.8 } : {}), ...(m ? { light: 'green' } : {}), ...(v.includes('red stripe') ? { stripe: 'red' } : {}) }) }),
+  stubWing: mirrorable({ name: 'Stub wing', group: G, at: 'free', foot: [1.4, 0.5, 2], variants: ['plain', 'red stripe'], build: (p, v) => stubWing(p, v === 'red stripe' ? { stripe: 'red' } : {}) }),
   tailFin: { name: 'Tail fin', group: G, at: 'free', foot: [0.3, 1.1, 2.2], variants: ['tall', 'twin', 'red stripe'],
     build: (p, v) => tailFin(p, v === 'twin' ? { root: 1.5, tip: 0.6, span: 0.9, sweep: 0.9 } : v === 'red stripe' ? { stripe: 'red' } : {}) },
   landingLeg: { name: 'Landing leg', group: G, at: 'free', foot: [0.8, 1.3, 0.8], variants: ['short', 'long', 'wide pad'],
@@ -63,8 +78,8 @@ export const OUTSIDE = {
   hullVent: { name: 'Vent', group: G, at: 'free', foot: [0.8, 0.4, 0.1], variants: ['small', 'wide'], build: (p, v) => vent(p, v === 'wide' ? { w: 1.2, h: 0.24 } : {}) },
   hullGreeble: { name: 'Machinery panel', group: G, at: 'free', foot: [0.9, 0.5, 0.2], variants: ['box', 'pipes', 'panel'], build: (p, v) => greeble(p, { kind: v }) },
   // each job's gear
-  canister: { name: 'Ore canister', group: G, at: 'free', foot: [2.2, 4, 4.6], variants: ['stack', 'single'], build: (p, v) => canister(p, { stack: v === 'stack' ? 2 : 1 }) },
-  laserArm: { name: 'Laser arm', group: G, at: 'free', foot: [1.5, 2, 4], variants: ['folded', 'working'], build: (p, v) => laserArm(p, { pose: v }) },
+  canister: mirrorable({ name: 'Ore canister', group: G, at: 'free', foot: [2.2, 4, 4.6], variants: ['stack', 'single'], build: (p, v) => canister(p, { stack: v === 'stack' ? 2 : 1 }) }),
+  laserArm: mirrorable({ name: 'Laser arm', group: G, at: 'free', foot: [1.5, 2, 4], variants: ['folded', 'working'], build: (p, v) => laserArm(p, { pose: v }) }),
   scoop: { name: 'Ore scoop', group: G, at: 'free', foot: [2.5, 0.7, 1.8], variants: ['scoop'], build: (p) => scoop(p) },
   medicMark: { name: 'Medical mark', group: G, at: 'free', foot: [1.7, 0.7, 0.1], variants: ['plate', 'stripe'], build: (p, v) => medicMark(p, { kind: v }) },
 };

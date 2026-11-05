@@ -24,14 +24,14 @@
 //               with an N-cell square hatch: a belly lift's or an airlock's)
 // Paint, on any of them (words after the shape): white (the default off-white), white2, grey, dark, yellow, red,
 // teal; a stripe across the middle third: ystripe, rstripe, tstripe, dstripe; two slanting bars: yslash, rslash; a dark
-// edge along its top and bottom: edged; seam (a seam line where the run starts),
+// edge along its top and bottom: edged, or all round: framed; seam (a seam line where the run starts),
 // seams (round it); glass (the facet is a window: dark glass in a frame); bare (no inside face).
 // Each panel is a plate 6 cm thick: the outside painted, the inside the station's off-white (where no cabin wall
 // covers it). Openings have a lining 0.3 m deep (the hull's depth) and a charcoal frame outside.
 import * as THREE from 'three';
 import { SHIP_GRID } from '../../grid.js';
 import { SHIP, PAINTS, STRIPES, SLASHES } from '../palette.js';
-import { Acc, facet, ringFrame, lining, orient, inset, rim, THICK } from './facet.js';
+import { Acc, facet, ringFrame, lining, orient, inset, rim, THICK, PANES } from './facet.js';
 import { SECTIONS, CAP_STYLES, capRings } from './sections.js';
 export { SECTIONS, CAP_STYLES };
 
@@ -50,6 +50,7 @@ export function parseLook(words) {
     else if (STRIPES[w]) look.stripe = STRIPES[w];
     else if (SLASHES[w]) look.slash = SLASHES[w];
     else if (w === 'edged') look.edged = true;
+    else if (w === 'framed') look.framed = true;
     else if (w === 'seam') look.seams = 'left';
     else if (w === 'seams') look.seams = 'all';
     else if (w === 'glass') look.glass = true;
@@ -58,7 +59,7 @@ export function parseLook(words) {
   }
   return { look, rest };
 }
-const PAINT_WORDS = new Set([...Object.keys(PAINTS), ...Object.keys(STRIPES), ...Object.keys(SLASHES), 'edged', 'seam', 'seams', 'glass', 'bare']);
+const PAINT_WORDS = new Set([...Object.keys(PAINTS), ...Object.keys(STRIPES), ...Object.keys(SLASHES), 'edged', 'framed', 'seam', 'seams', 'glass', 'bare']);
 const ratio = (s, d = [1, 1]) => { const m = /^(\d+):(\d+)$/.exec(s || ''); return m ? [+m[1], +m[2]] : d; };
 const num = (words, k, d) => { const w = words.find((x) => new RegExp('^' + k + '\\d+$').test(x)); return w ? +w.slice(k.length) : d; };
 const RATIOS = ['1:1', '1:2', '2:1'];
@@ -191,8 +192,8 @@ function holedPanel(acc, w, h, hole, look, kind) {
     // glass in the middle of the hull's depth, a charcoal frame outside and a pale one in
     lining(acc, loop, v(0, 0, 1), THICK + 0.04, SHIP.frame);
     ringFrame(acc, inset(loop, v(0, 0, 1), -0.045), loop, v(0, 0, 1), 0.02, 0, SHIP.frame);
-    const g = loop.map((q) => q.clone().setZ(-0.03));
-    acc.poly(g, v(0, 0, 1), null, 'glass', 9); acc.poly(g.slice().reverse(), v(0, 0, -1), null, 'glass', 9);
+    for (let k = 0; k < PANES; k++) { const g = loop.map((q) => q.clone().setZ(-0.02 - 0.006 * k));
+      acc.poly(g, v(0, 0, 1), null, 'glass', 9); acc.poly(g.slice().reverse(), v(0, 0, -1), null, 'glass', 9); }
   } else openingTrim(acc, loop, v(0, 0, 1), kind === 'door');
 }
 export function hullOpening(p, variant = 'door') {
@@ -240,8 +241,8 @@ function facetsRoundHole(acc, look) {
     acc.poly([circ(a0, R, 0.02), circ(a1, R, 0.02), circ(a1, R, -THICK - 0.04), circ(a0, R, -THICK - 0.04)], v(-Math.cos((a0 + a1) / 2), -Math.sin((a0 + a1) / 2), 0), SHIP.frame);
   }
   if (look.inner !== false) rim(acc, [v(-U / 2, 0, 0), v(U / 2, 0, 0), v(U / 2, U, 0), v(-U / 2, U, 0)], out, 0, -THICK, SHIP.inner);
-  const disc = []; for (let i = 0; i < N; i++) disc.push(circ(i / N * PI * 2, R, -0.03));
-  acc.poly(disc, out, null, 'glass', 9); acc.poly(disc.slice().reverse(), v(0, 0, -1), null, 'glass', 9);
+  for (let k = 0; k < PANES; k++) { const disc = []; for (let i = 0; i < N; i++) disc.push(circ(i / N * PI * 2, R, -0.02 - 0.006 * k));
+    acc.poly(disc, out, null, 'glass', 9); acc.poly(disc.slice().reverse(), v(0, 0, -1), null, 'glass', 9); }
 }
 
 // ── which variants a layout may ask for (any shape word with any paint words) ──

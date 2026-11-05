@@ -10,7 +10,7 @@
 //   stubWing(p, opts)   a short thick wing (his medic's small swept fins): root 1.9, tip 0.9, span 1.2, sweep 1.0,
 //                       thick 0.3, and a hard point under its tip
 //   tailFin(p, opts)    a fin standing up: the same, with its span up +y and its root on y = 0; root 2.0, tip 0.9,
-//                       span 0.9 (keep a ship under 5.3 m: the hangar's 5.6 m door with 0.3 m to spare), sweep 1.0,
+//                       span 0.9 (keep a ship under 5.3 m: the hangar's 5.6 m door with 0.3 m to spare), sweep 1.4,
 //                       thick 0.18, light 'white'
 import * as THREE from 'three';
 import { SHIP, GLOW_SHIP } from '../palette.js';
@@ -24,7 +24,7 @@ const STRIPES = { yellow: SHIP.yellow, red: SHIP.red, teal: SHIP.teal };
 // dark nose), a ridge 40% back, the trailing edge; facets between the two ends; bands across the span painted
 function planform(acc, o) {
   const c0 = o.root, c1 = o.tip, S = o.span, sw = o.sweep, t0 = o.thick, t1 = t0 * 0.5;
-  const sec = (x, le, c, t) => ({ le: v(x, t * 0.25, le), leT: v(x, t * 0.7, le - c * 0.08), rid: v(x, t, le - c * 0.4), te: v(x, t * 0.3, le - c), teB: v(x, 0, le - c * 0.97), leB: v(x, 0, le - c * 0.05) });
+  const sec = (x, le, c, t) => ({ le: v(x, t * 0.25, le), leT: v(x, t * 0.7, le - c * 0.16), rid: v(x, t, le - c * 0.4), te: v(x, t * 0.3, le - c), teB: v(x, 0, le - c * 0.97), leB: v(x, 0, le - c * 0.05) });
   const at = (f) => { const x = S * f, le = c0 / 2 - sw * f, c = c0 + (c1 - c0) * f, t = t0 + (t1 - t0) * f; return sec(x, le, c, t); };
   const stripe = STRIPES[o.stripe] ? [0.7, 0.8] : null, cuts = [0, ...(stripe || []), 1];
   const look = (s) => ({ paint: s, inner: false });
@@ -64,7 +64,7 @@ export function stubWing(p, o = {}) {
   return acc.flush(p);
 }
 export function tailFin(p, o = {}) {
-  o = { root: 2.0, tip: 0.9, span: 0.9, sweep: 1.0, thick: 0.18, stripe: 'yellow', light: 'white', ...o };
+  o = { root: 2.0, tip: 0.9, span: 0.9, sweep: 1.4, thick: 0.18, stripe: 'yellow', light: 'white', ...o };
   const q = new (p.constructor)(); wing(q, o);
   // (the wing turned up: its span along +y, its underside facing -x, its middle on x = 0)
   const M = new THREE.Matrix4().makeRotationZ(Math.PI / 2).premultiply(new THREE.Matrix4().makeTranslation(o.thick * 0.5, 0, 0));

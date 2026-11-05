@@ -11,7 +11,7 @@ import { SHIP } from '../palette.js';
 
 export const THICK = 0.06;     // the hull plate: its inside face this far in
 export const STEP = 0.6;       // the longest edge of a triangle (the bake lights each corner)
-const SEAM_W = 0.022, SEAM_UP = 0.003, FRAME_W = 0.05;
+const SEAM_W = 0.022, SEAM_UP = 0.003, FRAME_W = 0.085;
 const v = (x, y, z) => new THREE.Vector3(x, y, z);
 
 // the normal of a polygon (Newell's), not normalised
@@ -110,7 +110,8 @@ export function facet(acc, pts, out, look, opts = {}) {
   const { n } = o; let P = o.pts;
   if (look.glass) return glassPane(acc, P, n, look);
   // the paint, region by region: a band across the middle third (stripe), two slanting bars across its middle
-  // (slash, as the yellow marks on his hulls), a dark edge along its top and bottom (edged)
+  // (slash, as the yellow marks on his hulls), a dark edge along its top and bottom (edged) or all round (framed: his
+  // charcoal framing between the off-white panels)
   const r = riseOf(n), ts = P.map((q) => q.dot(r)), [lo, hi] = opts.range || [Math.min(...ts), Math.max(...ts)];
   let regions = [[P, look.paint]];
   const split = (axis, a, b, surf, only) => { const outR = []; for (const [Q, s] of regions) { if (only && s !== only) { outR.push([Q, s]); continue; } outR.push([clip(Q, axis, a, true), s], [clip(clip(Q, axis, a, false), axis, b, true), surf], [clip(Q, axis, b, false), s]); } regions = outR.filter(([Q]) => Q.length > 2); };
@@ -119,7 +120,8 @@ export function facet(acc, pts, out, look, opts = {}) {
     const d = r.clone().add(n.clone().cross(r)).normalize(), c = P.reduce((s, q) => s + q.dot(d), 0) / P.length;
     for (const [a, b] of [[c - 0.2, c - 0.06], [c + 0.06, c + 0.2]]) split(d, a, b, look.slash, look.paint);
   }
-  if (look.edged) { split(r, lo - 1, lo + 0.06, SHIP.trim); split(r, hi - 0.06, hi + 1, SHIP.trim); }
+  if (look.edged || look.framed) { split(r, lo - 1, lo + 0.09, SHIP.trim); split(r, hi - 0.09, hi + 1, SHIP.trim); }
+  if (look.framed) { const t = n.clone().cross(r), us = P.map((q) => q.dot(t)), u0 = Math.min(...us), u1 = Math.max(...us); split(t, u0 - 1, u0 + 0.09, SHIP.trim); split(t, u1 - 0.09, u1 + 1, SHIP.trim); }
   for (const [Q, s] of regions) acc.poly(Q, n, s);
   if (look.inner !== false) {
     acc.poly(P.map((q) => q.clone().addScaledVector(n, -THICK)).reverse(), n.clone().negate(), SHIP.inner);
@@ -137,17 +139,18 @@ export function facet(acc, pts, out, look, opts = {}) {
     }
   }
 }
-// a window: glass sunk a little into the facet, in a charcoal frame round its edge
+// a window: glass sunk a little into the facet, in a heavy charcoal frame round its edge (his canopies' frames)
+export const PANES = 4;   // (the kit's glass is faint: a ship's windows are four panes deep, a dark tint, still see-through)
 function glassPane(acc, P, n, look) {
-  const fw = look.frameW ?? FRAME_W, inner = inset(P, n, fw), lift = 0.014, sink = -0.022;
-  ringFrame(acc, P, inner, n, lift, sink - 0.014, look.frame || SHIP.frame);
-  // (the frame seen from inside: its back, level with the glass)
-  const back = n.clone().negate();
-  for (let i = 0; i < P.length; i++) { const j = (i + 1) % P.length; acc.poly([P[i], inner[i], inner[j], P[j]].map((q) => q.clone().addScaledVector(n, sink - 0.014)), back, look.frame || SHIP.frame); }
-  rim(acc, P, n, 0, sink - 0.014, look.frame || SHIP.frame);
-  // (two panes a little apart, each with a face each way: the kit's glass is faint, a canopy's is darker)
-  for (const d of [sink, sink - 0.012]) {
-    const pane = inner.map((q) => q.clone().addScaledVector(n, d));
+  const fw = look.frameW ?? FRAME_W, inner = inset(P, n, fw), lift = 0.02, sink = -0.02, back = sink - 0.006 * PANES - 0.004, F = look.frame || SHIP.frame;
+  ringFrame(acc, P, inner, n, lift, back, F);
+  // (the frame seen from inside: its back, behind the glass)
+  const bn = n.clone().negate();
+  for (let i = 0; i < P.length; i++) { const j = (i + 1) % P.length; acc.poly([P[i], inner[i], inner[j], P[j]].map((q) => q.clone().addScaledVector(n, back)), bn, F); }
+  rim(acc, P, n, 0, back, F);
+  // (the panes a little apart, each with a face each way)
+  for (let k = 0; k < PANES; k++) {
+    const pane = inner.map((q) => q.clone().addScaledVector(n, sink - 0.006 * k));
     acc.poly(pane, n, null, 'glass', 9); acc.poly(pane.slice().reverse(), n.clone().negate(), null, 'glass', 9);
   }
 }

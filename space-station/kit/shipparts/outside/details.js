@@ -5,7 +5,8 @@
 //   floodlight(p, { w, h, warm })     a lamp in a dark bezel (his ships' headlights, yellow-white): w 0.42, h 0.16;
 //                                     warm true (yellow-white) or false (white); lights the floor in front of it
 //   lightStrip(p, { len })            a dark housing with a blue strip of light (along his hulls): len 1.0
-//   antenna(p, { h })                 a mast standing up (+y) off a roof: a base, a whip, a red light on top; h 1.0
+//   antenna(p, { h })                 a dark mast standing up (+y) off a roof: a base, a stout mast, a whip, stacked
+//                                     rings, a red light on top; h 1.0
 //   sensorDish(p, { r })              a small dish on a short post off a roof (+y), turned up and forward; r 0.32
 //   vent(p, { w, h })                 a grille: a dark frame and slats; w 0.6, h 0.3
 //   greeble(p, { kind, w, h })        a raised panel of machinery: 'box' (a block with a cover and bolts), 'pipes' (two
@@ -43,9 +44,11 @@ export function lightStrip(p, o = {}) {
 }
 export function antenna(p, o = {}) {
   const h = o.h ?? 1.0, acc = new Acc();
+  // a dark mast as his: a base block, a stout lower mast, a thin upper whip, stacked rings up it, a red light on top
   box(acc, SHIP.trim, [-0.1, 0.1], [0, 0.08], [-0.14, 0.14]);
-  latheZ(acc, [[0, h * 0.25], [0.035, h * 0.25], [0.035, 0.08], [0, 0.08]], 8, () => SHIP.gun, { axis: 'y' });
-  latheZ(acc, [[0, h], [0.012, h], [0.012, h * 0.25], [0, h * 0.25]], 6, () => SHIP.chrome, { axis: 'y' });
+  latheZ(acc, [[0, h * 0.35], [0.04, h * 0.35], [0.04, 0.08], [0, 0.08]], 8, () => SHIP.trim, { axis: 'y' });
+  latheZ(acc, [[0, h], [0.016, h], [0.016, h * 0.35], [0, h * 0.35]], 6, () => SHIP.gun, { axis: 'y' });
+  for (const f of [0.2, 0.3, 0.45, 0.6, 0.75]) { const y = h * f, r = f < 0.35 ? 0.07 : 0.045; latheZ(acc, [[0.01, y + 0.025], [r, y + 0.02], [r, y - 0.02], [0.01, y - 0.025]], 8, () => SHIP.frame, { axis: 'y' }); }
   latheZ(acc, [[0, h + 0.05], [0.025, h + 0.03], [0.025, h], [0, h]], 8, () => ({ glow: GLOW.red }), { axis: 'y', flat: false });
   return acc.flush(p);
 }
@@ -56,7 +59,7 @@ export function sensorDish(p, o = {}) {
   // the dish: a shallow bowl facing +z, a feed on struts in front of it; turned up 30 degrees and set on the post
   latheZ(sub, [[0, 0.02], [r * 0.5, 0.0], [r, -0.09 * r / 0.32], [r * 1.02, -0.06 * r / 0.32], [r * 0.5, 0.03], [0, 0.05]].map(([q, z]) => [q, z]), 16, (i) => (i < 2 ? SHIP.hull : SHIP.hull2), { flat: false });
   latheZ(sub, [[0, r * 0.75], [0.03, r * 0.73], [0.03, r * 0.6], [0, r * 0.6]], 6, () => SHIP.trim);
-  for (const a of [0, 2.1, 4.2]) bar(sub, SHIP.gun, [Math.cos(a) * r * 0.8, Math.sin(a) * r * 0.8, -0.06], [0, 0, r * 0.62], 0.015, 0.015);
+  for (const a of [0, 2.1, 4.2]) bar(sub, SHIP.gun, [Math.cos(a) * r * 0.8, Math.sin(a) * r * 0.8, -0.054 * r / 0.32 + 0.025], [0, 0, r * 0.62], 0.015, 0.015);   // (from the bowl's face, not through it)
   const M = new THREE.Matrix4().makeRotationX(-0.52).setPosition(0, 0.36 + r * 0.5, 0);
   putInto(acc, sub, M);
   return acc.flush(p);

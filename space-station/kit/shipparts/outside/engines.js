@@ -11,14 +11,14 @@
 //       at z = -len. r 0.55, len 2.6, pylon { side: -1, len: 0.6 } a flat strut from its side toward -x (or +x) to the
 //       hull or a wing (null: none).
 //   thrusterPod(p, { plume, size })
-//       A manoeuvring thruster's pod alone (his miner's corner pods): a chunky block, dark with off-white panels, a
-//       square blue-lit nozzle on its +z face, a swivel boss under it; plume (a short glowing jet out of the nozzle).
-//       Its origin, the middle of the block, is the pivot it turns on. size 1 (a 0.5 x 0.42 x 0.6 m block).
+//       A manoeuvring thruster's pod alone (his miner's corner pods): a low, long, flat charcoal block, a pale panel on
+//       top, a yellow band by its blue-lit nozzle (on its +z face), a swivel boss under it; plume (a short blue jet).
+//       Its origin, the middle of the block, is the pivot it turns on. size 1 (a 0.44 x 0.26 x 0.76 m block).
 //   thruster(p, { mount, arm, yaw, pitch, plume, size })
 //       A pod on its mount. Frame: the mount's foot at the origin, on the hull. mount 'top' (a pylon standing up off
 //       the roof), 'side' (an arm out along +z from a side wall, the pod sitting on its end: turn the part to face out
-//       of the hull), 'under' (hanging from the belly, the pod upside down); arm its length (0.45 m). The pod turns on
-//       a cradle at the arm's end: yaw (degrees round the up axis; 0 points its jet along +z, 90 toward +x), pitch
+//       of the hull), 'under' (hanging from the belly, the pod upside down); arm its length (0.2 m, a short stub). The pod
+//       turns on a cradle at the arm's end: yaw (degrees round the up axis; 0 points its jet along +z, 90 toward +x), pitch
 //       (degrees; up is positive).
 //   thrusterPivot(o)          where that pod's pivot is, in the thruster's frame
 //   swivelRot(yaw, pitch, under)   the rot [rx, ry, rz] (place.js's order) that turns a thrusterPod piece by that
@@ -90,28 +90,30 @@ export function enginePod(p, o = {}) {
 function rotZ(e, a) { const c = Math.cos(a), s = Math.sin(a), pp = e.m.p, nn = e.m.n; for (let i = 0; i < pp.length; i += 3) { const x = pp[i], y = pp[i + 1]; pp[i] = x * c - y * s; pp[i + 1] = x * s + y * c; const nx = nn[i], ny = nn[i + 1]; nn[i] = nx * c - ny * s; nn[i + 1] = nx * s + ny * c; } }
 
 // ── the manoeuvring thrusters ──
+// (the pod's half sizes: a low, long, flat block, as his circled pods)
+const POD = { w: 0.22, h: 0.13, d: 0.38 };
 export function thrusterPod(p, o = {}) {
-  const k = o.size ?? 1, acc = new Acc(), T = SHIP.trim, w = 0.25 * k, h = 0.21 * k, d = 0.3 * k;
-  // the block (its middle is the pivot): dark, an off-white panel on top and one down each side, a swivel boss
-  // under it, its nozzle on the +z face
+  const k = o.size ?? 1, acc = new Acc(), T = SHIP.trim, w = POD.w * k, h = POD.h * k, d = POD.d * k;
+  // the block (its middle is the pivot): charcoal, a pale panel on top toward the back, a yellow band round it by the
+  // nozzle, a swivel boss under it
   box(acc, T, [-w, w], [-h, h], [-d, d - 0.05 * k]);
-  box(acc, SHIP.hull, [-w * 0.86, w * 0.86], [h, h + 0.03 * k], [-d + 0.06 * k, d - 0.16 * k]);
-  for (const s of [-1, 1]) box(acc, SHIP.hull2, s < 0 ? [-w - 0.02 * k, -w] : [w, w + 0.02 * k], [-h * 0.6, h * 0.7], [-d + 0.08 * k, d - 0.2 * k]);
-  box(acc, SHIP.frame, [-w * 0.8, w * 0.8], [-h * 0.25, -h * 0.1], [-d - 0.015 * k, -d]);   // (a vent slot on its back)
-  box(acc, SHIP.gun, [-0.075 * k, 0.075 * k], [-h - 0.07 * k, -h], [-0.075 * k, 0.075 * k]);
-  // the nozzle: a heavy square bezel, a dark throat, the glowing square in it
+  box(acc, SHIP.hull, [-w * 0.8, w * 0.8], [h, h + 0.025 * k], [-d + 0.06 * k, d * 0.2]);
+  box(acc, SHIP.yellow, [-w - 0.012 * k, w + 0.012 * k], [-h - 0.012 * k, h + 0.012 * k], [d * 0.38, d * 0.5]);
+  for (let i = 0; i < 3; i++) { const z = -d + 0.1 * k + i * 0.07 * k; box(acc, SHIP.frame, [-w - 0.01 * k, -w], [-h * 0.5, h * 0.5], [z, z + 0.035 * k]); box(acc, SHIP.frame, [w, w + 0.01 * k], [-h * 0.5, h * 0.5], [z, z + 0.035 * k]); }   // (vents down each side)
+  box(acc, SHIP.gun, [-0.07 * k, 0.07 * k], [-h - 0.07 * k, -h], [-0.07 * k, 0.07 * k]);
+  // the nozzle: a heavy bezel round a recessed throat, the throat lit blue
   const zf = d - 0.05 * k;
-  for (const [x0, x1, y0, y1] of [[-w, w, h * 0.62, h], [-w, w, -h, -h * 0.62], [-w, -w * 0.62, -h * 0.62, h * 0.62], [w * 0.62, w, -h * 0.62, h * 0.62]]) box(acc, SHIP.frame, [x0, x1], [y0, y1], [zf, d]);
-  box(acc, SHIP.gun, [-w * 0.62, w * 0.62], [-h * 0.62, h * 0.62], [zf - 0.04 * k, zf - 0.03 * k]);
-  box(acc, GLOW_SHIP.engine, [-w * 0.5, w * 0.5], [-h * 0.5, h * 0.5], [zf - 0.03 * k, zf - 0.02 * k], 'glow');
+  for (const [x0, x1, y0, y1] of [[-w, w, h * 0.55, h], [-w, w, -h, -h * 0.55], [-w, -w * 0.7, -h * 0.55, h * 0.55], [w * 0.7, w, -h * 0.55, h * 0.55]]) box(acc, SHIP.frame, [x0, x1], [y0, y1], [zf, d]);
+  box(acc, GLOW_SHIP.engine.map((c) => c * 0.7), [-w * 0.7, w * 0.7], [-h * 0.55, h * 0.55], [zf - 0.03 * k, zf - 0.02 * k], 'glow');
+  box(acc, GLOW_SHIP.engine, [-w * 0.4, w * 0.4], [-h * 0.3, h * 0.3], [zf - 0.02 * k, zf - 0.015 * k], 'glow');
   if (o.plume) {
-    // the jet: a short glowing plume out of the nozzle, flaring a little and then narrowing to a point
+    // the jet: a short blue plume out of the nozzle, flaring a little and narrowing to a point
     const q = new Acc();
-    latheZ(q, [[0, 0], [0.1 * k, 0], [0.13 * k, 0.15 * k], [0.08 * k, 0.4 * k], [0.02 * k, 0.6 * k], [0, 0.64 * k]].map(([r, z]) => [r, -z]), 10, () => ({ glow: GLOW_SHIP.jet.map((c) => c * 0.45) }), { flat: false });
+    latheZ(q, [[0, 0], [0.09 * k, 0], [0.11 * k, 0.12 * k], [0.07 * k, 0.34 * k], [0.02 * k, 0.52 * k], [0, 0.56 * k]].map(([r, z]) => [r, -z]), 16, () => ({ glow: GLOW_SHIP.jet }), { flat: false });
     for (const e of q.by.values()) { const pp = e.m.p, nn = e.m.n; for (let i = 0; i < pp.length; i += 3) { pp[i + 2] = zf - pp[i + 2]; nn[i + 2] = -nn[i + 2]; } merge(acc, e); }
   }
   acc.flush(p);
-  if (o.plume) p.light([0, 0, d + 0.4 * k], 0.6, [0.35, 0.75, 1.6], [0, 0, 1], 2.5);
+  if (o.plume) p.light([0, 0, d + 0.4 * k], 0.6, [0.3, 0.7, 1.6], [0, 0, 1], 2.5);
   return p;
 }
 // the matrix that turns a pod on its pivot: yaw round the up axis, then pitch up (and, hung under a belly, upside down)
@@ -123,20 +125,21 @@ function swivel(yaw = 0, pitch = 0, under = false) {
 export function swivelRot(yaw = 0, pitch = 0, under = false) { return new THREE.Euler().setFromQuaternion(swivel(yaw, pitch, under), 'XYZ').toArray().slice(0, 3); }
 // where a thruster's pod turns, in the thruster's frame
 export function thrusterPivot(o = {}) {
-  const k = o.size ?? 1, arm = o.arm ?? 0.45, mount = o.mount ?? 'top', up = 0.21 * k + 0.07 * k;
+  const k = o.size ?? 1, arm = o.arm ?? 0.2, mount = o.mount ?? 'top', up = POD.h * k + 0.07 * k;
   return mount === 'side' ? [0, 0, arm] : mount === 'under' ? [0, -(arm + up), 0] : [0, arm + up, 0];
 }
 export function thruster(p, o = {}) {
-  const k = o.size ?? 1, arm = o.arm ?? 0.45, mount = o.mount ?? 'top', acc = new Acc(), T = SHIP.trim, up = 0.21 * k + 0.07 * k, pivot = thrusterPivot(o);
+  const k = o.size ?? 1, arm = o.arm ?? 0.2, mount = o.mount ?? 'top', acc = new Acc(), T = SHIP.trim, up = POD.h * k + 0.07 * k, pivot = thrusterPivot(o);
   // the mount: a foot plate on the hull, a pylon, a round cradle at its end that the pod's boss turns in
   if (mount === 'side') {
-    const ya = -up - 0.05;   // (the arm runs out under the pod, so the pod sits on its end)
-    box(acc, T, [-0.16, 0.16], [ya - 0.16, ya + 0.16], [0, 0.05]); box(acc, SHIP.hull2, [-0.08, 0.08], [ya - 0.07, ya + 0.05], [0.05, arm]);
-    box(acc, T, [-0.12, 0.12], [ya + 0.05, -up], [arm - 0.12, arm + 0.12]);
+    // (a short arm out from the wall, under the pod, a cradle on its end that the pod's boss turns in)
+    const ya = -up - 0.05;
+    box(acc, T, [-0.16, 0.16], [ya - 0.14, ya + 0.1], [0, 0.05]); box(acc, T, [-0.08, 0.08], [ya - 0.07, ya + 0.05], [0.05, arm]);
+    box(acc, SHIP.gun, [-0.1, 0.1], [ya + 0.05, -up], [arm - 0.1, arm + 0.1]);
   } else {
     const s = mount === 'under' ? -1 : 1, Y = (a, b) => (s > 0 ? [a, b] : [-b, -a]);
-    box(acc, T, [-0.16, 0.16], Y(0, 0.05), [-0.16, 0.16]); box(acc, SHIP.hull2, [-0.07, 0.07], Y(0.05, arm - 0.04), [-0.09, 0.09]);
-    box(acc, T, [-0.12, 0.12], Y(arm - 0.04, arm), [-0.12, 0.12]);
+    box(acc, T, [-0.16, 0.16], Y(0, 0.05), [-0.18, 0.18]); box(acc, T, [-0.07, 0.07], Y(0.05, arm - 0.04), [-0.09, 0.09]);
+    box(acc, SHIP.gun, [-0.1, 0.1], Y(arm - 0.04, arm), [-0.1, 0.1]);
   }
   acc.flush(p);
   // the pod, turned on its pivot

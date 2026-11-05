@@ -3,9 +3,10 @@
 // hinges (ramps, fold-down steps). Frame: the opening's foot (the deck's level, y = 0) at its middle on the hull's
 // outer face, facing out (+z): the same point the opening piece is placed on, so a ship places both alike.
 //
-//   sideDoor(p, { steps })      fits 'door' (1.0 x 2.0 m): a pale leaf with a window that slides into the hull wall
-//       (+x), a light over it, and steps: 'fold' (seven steps of 0.18 m, as the station's boarding stair, that swing
-//       down to the ground as the door opens and fold up over it as it shuts), 'fixed' (always down), or 'none'
+//   sideDoor(p, { steps })      fits 'door' (1.0 x 2.0 m): a pale leaf with a window at the back of the opening that
+//       slides into the hull wall (+x), a light over it, and steps: 'fold' (an airstair of seven 0.18 m steps that
+//       stands folded up in the opening in front of the leaf, its clad underside outward, and swings down and out to
+//       the ground as the door opens), 'fixed' (the boarding stair's gentler steps, with rails, always down), or 'none'
 //   airlockHatch(p)             fits 'door' too: a heavy outer airlock door, a ring of yellow and black blocks round
 //       it, a thick leaf with a porthole that slides into the wall, a red or green light over it; no steps (a boarding
 //       stair or a gangway comes up to it)
@@ -25,7 +26,7 @@ import { SHIP_GRID } from '../../grid.js';
 import { Acc } from './facet.js';
 import { box, bar, latheZ } from './shapes.js';
 
-const PI = Math.PI, DECK = SHIP_GRID.deck, RISE = 0.18, GO = 0.27, NSTEPS = 7;
+const PI = Math.PI, DECK = SHIP_GRID.deck, RISE = 0.18, NSTEPS = 7;
 // a hazard-striped strip (the kit's decal) w x h facing `dir` ('up' or +z) at `at`
 function hazard(p, w, h, at, up = true, tint = '#d9a21e') {
   const g = plane(w, h, { uv: kitTextures().decal.rect.hazard, cell: 9 });
@@ -33,44 +34,57 @@ function hazard(p, w, h, at, up = true, tint = '#d9a21e') {
 }
 
 // ── the side door ──
+// (the fold-down steps are an airstair, steeper than the station's boarding stair: seven 0.18 m steps, 0.22 m deep, so
+// folded up the flight is just under 2 m and stands inside the door's 0.3 m deep opening, its clad underside to the
+// outside: shut, it is the door's outer face. The fixed steps keep the boarding stair's 0.27 m and have rails.)
+const GO_FOLD = 0.22;
 export function sideDoor(p, o = {}) {
-  const steps = o.steps ?? 'fold', W = 1.0, H = 2.0;
-  // the leaf: pale, a dark band low across it, a small window (dark glass), a yellow handle, a charcoal edge
+  const steps = o.steps ?? 'fold', W = 1.0, H = 2.0, fold = steps === 'fold';
+  // the leaf, at the back of the opening: pale, a dark band low across it, a small window, a yellow handle (all flat:
+  // folded steps stand just in front of it)
   p.leaf('ship-door-leaf', (q) => {
     const a = new Acc();
-    box(a, SHIP.hull, [-W / 2 - 0.03, W / 2 + 0.03], [-0.02, H + 0.03], [-0.03, 0.03]);   // (a little over the hole all round: its edges hide in the lining)
-    box(a, SHIP.trim, [-W / 2 + 0.12, W / 2 - 0.12], [0.55, 0.7], [0.03, 0.034]);
-    box(a, SHIP.frame, [-0.2, 0.2], [1.3, 1.62], [0.03, 0.04]);
-    box(a, SHIP.yellow, [W / 2 - 0.16, W / 2 - 0.1], [0.9, 1.15], [0.03, 0.06]);
-    box(a, SHIP.trim, [-W / 2 - 0.03, -W / 2], [-0.02, H + 0.03], [-0.035, 0.035]);
+    box(a, SHIP.hull, [-W / 2 - 0.03, W / 2 + 0.03], [-0.02, H + 0.03], [-0.0125, 0.0125]);   // (a little over the hole all round: its edges hide in the lining)
+    box(a, SHIP.trim, [-W / 2 + 0.12, W / 2 - 0.12], [0.55, 0.7], [0.0125, 0.017]);
+    box(a, SHIP.frame, [-0.2, 0.2], [1.3, 1.62], [0.0125, 0.02]);
+    box(a, SHIP.yellow, [W / 2 - 0.16, W / 2 - 0.1], [0.9, 1.15], [0.0125, 0.02]);
+    box(a, SHIP.trim, [-W / 2 - 0.03, -W / 2], [-0.02, H + 0.03], [-0.016, 0.016]);
     a.flush(q);
-    q.glass(0.34, 0.26, [0, 1.46, 0.042]);
-  }, { at: [0, 0, -0.16], slide: [W + 0.05, 0, 0], door: 0 });
+    q.glass(0.34, 0.26, [0, 1.46, 0.021]);
+  }, { at: [0, 0, -0.2875], slide: [W + 0.05, 0, 0], door: 0 });
   // a light over it (green), and the light it gives
   const a = new Acc();
   box(a, SHIP.trim, [-0.3, 0.3], [H + 0.12, H + 0.2], [0, 0.05]);
   box(a, GLOW.green, [-0.26, 0.26], [H + 0.135, H + 0.185], [0.05, 0.055], 'glow');
-  // the steps
   if (steps !== 'none') {
-    // (drawn going down and out from the sill, their top at the leaf piece's origin)
-    // (rails only on fixed steps: folded up, a rail would stand into the door)
+    // the flight, drawn going down and out from its top at the origin: treads with yellow nosings, two stringers, a
+    // foot plate; folding ones are clad underneath (off-white, framed: the door's face when folded up), fixed ones have
+    // rails
+    const go = fold ? GO_FOLD : 0.27, len = NSTEPS * go, L = Math.hypot(DECK, len), below = [-len / L, -DECK / L];
     const flight = (q) => {
-      const s = new Acc(), len = NSTEPS * GO, hw = 0.45;
-      for (let i = 0; i < NSTEPS - 1; i++) { const y = -(i + 1) * RISE, z = (i + 1) * GO; box(s, SHIP.gun, [-hw + 0.04, hw - 0.04], [y - 0.03, y], [z - GO + 0.02, z + 0.02]); box(s, SHIP.yellow, [-hw + 0.04, hw - 0.04], [y - 0.006, y + 0.001], [z - 0.02, z + 0.02]); }
+      const s = new Acc(), hw = 0.45;
+      for (let i = 0; i < NSTEPS - 1; i++) { const y = -(i + 1) * RISE, z = (i + 1) * go; box(s, SHIP.gun, [-hw + 0.04, hw - 0.04], [y - 0.03, y], [z - go + 0.02, z + 0.02]); box(s, SHIP.yellow, [-hw + 0.04, hw - 0.04], [y - 0.006, y + 0.001], [z - 0.02, z + 0.02]); }
       for (const x of [-hw, hw]) {
-        bar(s, SHIP.trim, [x, -0.05, 0.01], [x, -DECK + 0.08, len - 0.06], 0.05, 0.16);   // (its foot on the ground, its head at the sill)
-        if (steps === 'fixed') {
+        bar(s, SHIP.trim, [x, -0.05, 0.01], [x, -DECK + 0.08, len - 0.06], 0.05, fold ? 0.1 : 0.16);   // (its foot on the ground, its head at the sill)
+        if (!fold) {
           bar(s, SHIP.trim, [x, 0.95, 0.15], [x, -DECK + 0.95, len - 0.05], 0.04, 0.04);
           for (let k = 0; k <= 2; k++) { const t = 0.15 + 0.75 * k / 2, P = [x, -DECK * t, len * t]; bar(s, SHIP.trim, P, [x, P[1] + 0.95, P[2] + 0.02], 0.035, 0.035); }
         }
       }
+      if (fold) {
+        // (the cladding: a plate under the treads along the flight, a charcoal edge down each side)
+        const at = (x, t, off) => [x, -DECK * t + below[0] * off, len * t + below[1] * off];
+        bar(s, SHIP.hull, at(0, 0.03, 0.175), at(0, 0.78, 0.175), 0.86, 0.015);
+        for (const x of [-0.43, 0.43]) bar(s, SHIP.trim, at(x, 0.03, 0.17), at(x, 0.78, 0.17), 0.04, 0.03);
+      }
       box(s, SHIP.frame, [-hw, hw], [-DECK, -DECK + 0.04], [len - 0.1, len + 0.12]);
       s.flush(q);
     };
-    if (steps === 'fixed') { const q = new (p.constructor)(); flight(q); for (const part of q.parts) { part.geo.translate(0, 0, 0.02); p.parts.push(part); } }
+    if (!fold) { const q = new (p.constructor)(); flight(q); for (const part of q.parts) { part.geo.translate(0, 0, 0.02); p.parts.push(part); } }
     else {
-      // folded up over the shut door (turned about the sill's edge until the flight stands up), swung down to open
-      const down = Math.atan2(DECK, NSTEPS * GO), shut = -(PI / 2 + down) + 0.05, at = [0, 0, 0.06];
+      // folded up inside the opening, in front of the leaf (turned about a hinge across the opening's floor until the
+      // flight stands up), swung down and out to open
+      const down = Math.atan2(DECK, len), shut = -(PI / 2 + down), at = [0, 0, -0.195];
       p.leaf('ship-door-steps', flight, { at, rot: [shut, 0, 0], hinge: { at, axis: [1, 0, 0], angle: -shut }, door: 0 });
     }
   }
@@ -87,7 +101,7 @@ export function airlockHatch(p) {
   const blocks = [];
   for (let y = 0.1; y < H; y += 0.25) blocks.push([-W / 2 - 0.2, -W / 2 - 0.08, y, y + 0.23], [W / 2 + 0.08, W / 2 + 0.2, y, y + 0.23]);
   for (let x = -W / 2 - 0.2; x < W / 2 + 0.2 - 0.01; x += 0.25) blocks.push([x, Math.min(x + 0.23, W / 2 + 0.2), H + 0.08, H + 0.2]);
-  blocks.forEach(([x0, x1, y0, y1], i) => box(a, i % 2 ? SHIP.trim : SHIP.yellow, [x0, x1], [y0, y1], [0.03, 0.06]));
+  blocks.forEach(([x0, x1, y0, y1]) => box(a, Math.round((x0 + y0) / 0.25) % 2 ? SHIP.trim : SHIP.yellow, [x0, x1], [y0, y1], [0.03, 0.06]));   // (yellow and black by turns up each side and across)
   box(a, SHIP.trim, [-0.34, 0.34], [H + 0.26, H + 0.34], [0, 0.05]);
   box(a, GLOW.red, [-0.3, 0.3], [H + 0.275, H + 0.325], [0.05, 0.055], 'glow');
   // a keypad beside it
