@@ -71,9 +71,11 @@ export const PRESETS = {
 };
 const num = '(\\d+(?:\\.\\d+)?)';
 const PARSE = {
-  cabinWall: (v) => { const m = new RegExp(`^(?:(dark|ribs|glow) )?${num} m$`).exec(v); return m && { len: +m[2], ...(m[1] === 'dark' ? { v: 'dark' } : m[1] === 'ribs' ? { ribs: true } : m[1] === 'glow' ? { glow: true } : {}) }; },
+  // (a run may say its panels' width: '3 m in 3 m panels' is one panel, which costs about what a 2 m one does)
+  cabinWall: (v) => { const m = new RegExp(`^(?:(dark|ribs|glow) )?${num} m(?: in ${num} m panels)?$`).exec(v); return m && { len: +m[2], ...(m[3] ? { panel: +m[3] } : {}), ...(m[1] === 'dark' ? { v: 'dark' } : m[1] === 'ribs' ? { ribs: true } : m[1] === 'glow' ? { glow: true } : {}) }; },
   cabinFloor: (v) => { const m = new RegExp(`^(walk|deck|tread|grating|vent) ${num} x ${num}$`).exec(v); return m && { v: m[1], len: +m[2], wid: +m[3] }; },
-  cabinCeiling: (v) => { const m = new RegExp(`^(?:(unlit|every tile lit) )?${num} x ${num}$`).exec(v); return m && { len: +m[2], wid: +m[3], lights: m[1] === 'unlit' ? 0 : m[1] ? 1 : 2 }; },
+  // (and a ceiling its tiles' size: '5 x 2 in 2 m tiles', the station's own size, a third of the 1 m tiles' triangles)
+  cabinCeiling: (v) => { const m = new RegExp(`^(?:(unlit|every tile lit) )?${num} x ${num}(?: in ${num} m tiles)?$`).exec(v); return m && { len: +m[2], wid: +m[3], ...(m[4] ? { tile: +m[4] } : {}), lights: m[1] === 'unlit' ? 0 : m[1] ? 1 : 2 }; },
 };
 const entry = (id, name, mount, foot, fn) => ({ name, group: 'Ship cabin', at: 'free', mount, variants: Object.keys(PRESETS[id]), foot,
   build: (p, v) => fn(p, PRESETS[id][v] ?? PARSE[id]?.(v) ?? {}), ...(PARSE[id] ? { accepts: (v) => v in PRESETS[id] || !!PARSE[id](v) } : {}) });

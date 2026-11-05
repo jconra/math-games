@@ -9,7 +9,8 @@
 export const SECTIONS = {
   sample: { w: 4.5, b: -1, r: 6, lo: [1, 1], up: [2, 2] },     // 4.5 m wide, from 0.76 m to 4.26 m off the ground, broad shoulders
   medic: { w: 6.5, b: -1, r: 6, lo: [1, 1], up: [2, 2] },      // 6.5 m wide, broad shoulders
-  miner: { w: 5.5, b: -1, r: 6, lo: [1, 1], up: [2, 1] },      // 5.5 m, a shallow upper chamfer
+  miner: { w: 6, b: -1, r: 6, lo: [1, 1], up: [1, 2] },        // Miner A's crew hull: 6.0 m (its middle line on a cell edge, so a 1 m corridor runs down it with 2 m rooms each side), a steep upper chamfer
+  minerRear: { w: 5, b: -1, r: 6, lo: [1, 1], up: [1, 1] },    // Miner A's body between the canisters, back to the engine: 5.0 m (the stacks stand out beside its cab)
   explorer: { w: 5.5, b: -1, r: 6, lo: [2, 1], up: [2, 2] },   // 5.5 m, deep chamfers top and bottom
   hauler: { w: 5.5, b: -1, r: 6, lo: [1, 1], up: [1, 1] },     // 5.5 m, boxy
 };
@@ -25,6 +26,10 @@ export const CAP_STYLES = {
   canopy: { stages: [{ len: 4, w: 1, r: 2, b: 0, glass: ['up'] }, { len: 3, w: 1, r: 2, b: 1, glass: true, paint: { lo: 'dark' } }, { len: 1, w: 1, r: 0, b: 0, paint: { belly: 'dark', lo: 'dark' } }], face: 'white2' },
   wedge: { stages: [{ len: 5, w: 2, r: 2, b: 0, glass: ['up'] }, { len: 4, w: 1, r: 2, b: 1, glass: true, paint: { lo: 'dark' } }, { len: 2, w: 1, r: 0, b: 0, paint: { belly: 'dark', lo: 'dark' } }], face: 'white2' },   // longer, its sides coming in to a narrow point (his explorer's)
   taper: { stages: [{ len: 2, w: 1, r: 1, b: 1 }], face: 'dark' },
+  // his miner's: a cab two thirds of the hull's width on charcoal shoulders, side windows under a roof that drops a
+  // step, a big windscreen sloping down to a tall blunt face (its foot 1.5 m over the deck, over a cockpit's
+  // dashboard), the chin rising under it (where the scoop hangs), a dark band round the face
+  bluff: { stages: [{ len: 2, w: 2, r: 1, b: 0, glass: ['up'], paint: { belly: 'dark', lo: 'dark', side: 'dark' } }, { len: 3, w: 0, r: 2, b: 1, glass: ['roof'], paint: { belly: 'dark', lo: 'dark' } }, { len: 1, w: 1, r: 0, b: 0, paint: { belly: 'dark', lo: 'dark', side: 'dark', up: 'dark' } }], face: 'white2' },
 };
 // a chamfer for a step too tight for it: half the size at the same slope if it halves evenly, else a 1:1, else none
 const shrink = (c) => (c[0] % 2 === 0 && c[1] % 2 === 0 && c[0] > 0 ? [c[0] / 2, c[1] / 2] : c[0] > 1 || c[1] > 1 ? [1, 1] : c[0] || c[1] ? [0, 0] : null);

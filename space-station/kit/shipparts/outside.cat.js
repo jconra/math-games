@@ -19,6 +19,10 @@ import { placeInto } from './place.js';
 const ENGINE_V = { 'medic': { r: 1.1, len: 1.9 }, 'miner': { r: 1.35, len: 2.2, sides: 24, band: 'grey' }, 'explorer': { r: 0.95, len: 1.7, sides: 24 }, 'parked': { lit: false }, 'pale': { band: 'hull' }, 'yellow': { band: 'yellow' } };
 const optsOf = (v, table) => v.split(' ').reduce((o, w) => ({ ...o, ...(table[w] || {}) }), {});
 const THRUSTER_V = { top: { mount: 'top' }, side: { mount: 'side' }, under: { mount: 'under' }, jet: { plume: true }, 'left': { yaw: 90 }, 'right': { yaw: -90 }, 'back': { yaw: 180 }, 'up': { pitch: 45 }, 'down': { pitch: -45 }, 'tilt': { yaw: 35, pitch: 25 } };
+// (any swivel too, in degrees: 'top yaw-20 pitch10'; a ship turns each pod a little as if in use; a size, 'size1.5';
+// an arm's length, 'arm0.6')
+const ANGLE = /^(yaw|pitch|size|arm)(-?\d+(?:\.\d+)?)$/;
+const thrusterOpts = (v) => v.split(' ').reduce((o, w) => { const m = ANGLE.exec(w); return { ...o, ...(m ? { [m[1]]: +m[2] } : THRUSTER_V[w] || {}) }; }, {});
 
 // parts drawn for the hull's +x side (wings, pylons, arms, canister feet): ' mirrored' after any variant is the same
 // part for the -x side (place.js turns its faces back the right way out); a wing's or fin's red light turns green
@@ -32,6 +36,12 @@ const mirrorable = (def) => {
   def.variants = [...base, base[0] + ' mirrored'];
   return def;
 };
+
+// a laser arm's pose and its lengths (metres) as words: 'working upper3.4 fore2.6'
+const ARM = /^(folded|working)(?: upper(\d+(?:\.\d+)?))?(?: fore(\d+(?:\.\d+)?))?$/;
+const armOpts = (v) => { const m = ARM.exec(v) || []; return { pose: m[1] || v, ...(m[2] ? { upper: +m[2] } : {}), ...(m[3] ? { fore: +m[3] } : {}) }; };
+// (a mirrorable part that also takes words its variants list doesn't: mirrored or not)
+const withWords = (def, re) => { const acc = def.accepts; def.accepts = (v) => acc(v) || re.test(v.replace(/ mirrored$/, '')); return def; };
 
 const G = 'Ship outside';
 export const OUTSIDE = {
@@ -53,7 +63,7 @@ export const OUTSIDE = {
   enginePod: mirrorable({ name: 'Engine pod', group: G, at: 'free', foot: [1.4, 1.2, 2.7], build: (p, v) => enginePod(p, { ...optsOf(v, { yellow: { band: 'yellow' }, parked: { lit: false }, big: { r: 0.8, len: 3.2 }, round: { sides: 24 } }), pylon: v.includes('pylon') ? { side: -1, len: 0.6 } : null }),
     variants: ['pylon', 'plain', 'yellow pylon', 'big round', 'parked'] }),
   // manoeuvring thrusters: a pod on a mount, the pod turned on its pivot (yaw, pitch), its jet on or off
-  thruster: { name: 'Thruster', group: G, at: 'free', foot: [0.8, 1.2, 1], build: (p, v) => thruster(p, optsOf(v, THRUSTER_V)), accepts: (v) => v.split(' ').every((w) => THRUSTER_V[w]),
+  thruster: { name: 'Thruster', group: G, at: 'free', foot: [0.8, 1.2, 1], build: (p, v) => thruster(p, thrusterOpts(v)), accepts: (v) => v.split(' ').every((w) => THRUSTER_V[w] || ANGLE.test(w)),
     variants: ['top', 'top jet', 'top left jet', 'top back', 'top up jet', 'top tilt jet', 'side', 'side down jet', 'under', 'under right jet'] },
   thrusterPod: { name: 'Thruster pod', group: G, at: 'free', foot: [0.6, 0.5, 0.7], build: (p, v) => thrusterPod(p, { plume: v === 'jet' }), variants: ['off', 'jet'] },
   // wings and fins (drawn for the +x side; the -x side is the same part mirrored, with its own light)
@@ -79,7 +89,12 @@ export const OUTSIDE = {
   hullGreeble: { name: 'Machinery panel', group: G, at: 'free', foot: [0.9, 0.5, 0.2], variants: ['box', 'pipes', 'panel'], build: (p, v) => greeble(p, { kind: v }) },
   // each job's gear
   canister: mirrorable({ name: 'Ore canister', group: G, at: 'free', foot: [2.2, 4, 4.6], variants: ['stack', 'single'], build: (p, v) => canister(p, { stack: v === 'stack' ? 2 : 1 }) }),
-  laserArm: mirrorable({ name: 'Laser arm', group: G, at: 'free', foot: [1.5, 2, 4], variants: ['folded', 'working'], build: (p, v) => laserArm(p, { pose: v }) }),
+  // (a ship may give its arm's lengths: 'working upper3.4 fore2.6')
+  laserArm: withWords(mirrorable({ name: 'Laser arm', group: G, at: 'free', foot: [1.5, 2, 4], variants: ['folded', 'working'], build: (p, v) => laserArm(p, armOpts(v)) }), ARM),
   scoop: { name: 'Ore scoop', group: G, at: 'free', foot: [2.5, 0.7, 1.8], variants: ['scoop'], build: (p) => scoop(p) },
   medicMark: { name: 'Medical mark', group: G, at: 'free', foot: [1.7, 0.7, 0.1], variants: ['plate', 'stripe'], build: (p, v) => medicMark(p, { kind: v }) },
 };
+// THE SHIPS' OWN PARTS (kit/ships/<id>.js): parts only one ship uses, made from the parts above at its sizes, in the
+// catalog so the ship's layout file can place them by name (group 'Ships': on no tab of the lab)
+import { MINER } from '../ships/ship-miner.js';
+Object.assign(OUTSIDE, MINER);
