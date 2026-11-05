@@ -18,7 +18,7 @@
 //               side (its tall edge at x 0); 'down' for any of them below (lower chamfers)
 //   hullCap     'nose <section> <style>' / 'tail <section> <style>' the end of a hull of that section (SECTIONS): facets
 //               stepping in to a flat end face; 'mouth WxH' cuts a ramp's mouth in a tail's end face
-//   hullOpening 'door' (1.0 x 2.0 m, from the deck), 'door x4' (in a 2 m panel), 'window x2' / 'window x4' (a band:
+//   hullOpening 'door' (1.0 x 2.0 m, from the deck, in a panel 5 steps tall; 'h4' 4 steps), 'door x4' (in a 2 m panel), 'window x2' / 'window x4' (a band:
 //               windows 0.8 x 0.34 m in 1 m and 2 m panels), 'porthole' (round, in one cell), 'mouth WxH' (the lining
 //               and frame of a W cells by H steps hole left between panels: a ramp's mouth), 'hatch N' (a belly panel
 //               with an N-cell square hatch: a belly lift's or an airlock's)
@@ -200,7 +200,7 @@ export function hullOpening(p, variant = 'door') {
   const { look, rest } = parseLook(variant.split(' ')), acc = new Acc(), kind = rest[0], n = num(rest, 'x', 0);
   if (kind === 'door') {
     // a 1.0 x 2.0 m door from the deck, in a panel 5 steps tall: 2 cells wide (its own width), or 4 (a cell each side)
-    const w = (n || 2) * U; holedPanel(acc, w, 5 * U, [-0.5, 0.5, 0, 2.0], look, 'door');
+    const w = (n || 2) * U, h = Math.max(4, num(rest, 'h', 5)) * U; holedPanel(acc, w, h, [-0.5, 0.5, 0, 2.0], look, 'door');   // (h4: a side wall only 4 steps tall, the door its full height)
   } else if (kind === 'window') {
     // a band of windows: one window 0.8 x 0.34 m in each 2 cells, in a panel one step tall
     const cells = n || 2, w = cells * U;
@@ -253,6 +253,6 @@ export const ACCEPTS = {
   hullAngle: (s) => /^(1:1|1:2|2:1)( h[1-6])?( [LR])?$/.test(s.split(' ').filter((w) => !PAINT_WORDS.has(w)).join(' ')),
   hullCorner: (s) => /^((hip|valley) (up|down) (1:1|1:2|2:1)(\/(1:1|2:1))?|gable (up|down) (1:1|1:2|2:1)( [LR])?)$/.test(s.split(' ').filter((w) => !PAINT_WORDS.has(w)).join(' ')),
   hullCap: (s) => { const ws = s.split(' ').filter((w) => !PAINT_WORDS.has(w)); return ['nose', 'tail'].includes(ws[0]) && !!SECTIONS[ws[1]] && !!CAP_STYLES[ws[2]] && (ws.length === 3 || (ws[3] === 'mouth' && /^\d+x\d+$/.test(ws[4] || ''))); },
-  hullOpening: (s) => /^(door( x[24])?|window x[24]|porthole|mouth \d+x\d+|hatch [23])$/.test(s.split(' ').filter((w) => !PAINT_WORDS.has(w)).join(' ')),
+  hullOpening: (s) => /^(door( x[24])?( h[45])?|window x[24]|porthole|mouth \d+x\d+|hatch [23])$/.test(s.split(' ').filter((w) => !PAINT_WORDS.has(w)).join(' ')),
 };
 export { RATIOS };

@@ -11,7 +11,7 @@ import { SHIP } from '../palette.js';
 
 export const THICK = 0.06;     // the hull plate: its inside face this far in
 export const STEP = 0.6;       // the longest edge of a triangle (the bake lights each corner)
-const SEAM_W = 0.022, SEAM_UP = 0.003, FRAME_W = 0.085;
+const SEAM_W = 0.022, SEAM_UP = 0.003, FRAME_W = 0.06;
 const v = (x, y, z) => new THREE.Vector3(x, y, z);
 
 // the normal of a polygon (Newell's), not normalised
@@ -139,15 +139,23 @@ export function facet(acc, pts, out, look, opts = {}) {
     }
   }
 }
-// a window: glass sunk a little into the facet, in a heavy charcoal frame round its edge (his canopies' frames)
-export const PANES = 4;   // (the kit's glass is faint: a ship's windows are four panes deep, a dark tint, still see-through)
+// a window: dark glass in a charcoal frame, set into a band of the panel's own paint round it (the white pillars
+// between his canopy's panes), the glass sunk a little into the facet
+export const PANES = 6;   // (the kit's glass is faint: a ship's windows are six panes deep, smoked dark, still see-through)
+const PILLAR = 0.09;
 function glassPane(acc, P, n, look) {
-  const fw = look.frameW ?? FRAME_W, inner = inset(P, n, fw), lift = 0.02, sink = -0.02, back = sink - 0.006 * PANES - 0.004, F = look.frame || SHIP.frame;
-  ringFrame(acc, P, inner, n, lift, back, F);
-  // (the frame seen from inside: its back, behind the glass)
+  const fw = look.frameW ?? FRAME_W, mid = inset(P, n, PILLAR), inner = inset(mid, n, fw), lift = 0.02, sink = -0.02, back = sink - 0.006 * PANES - 0.004, F = look.frame || SHIP.frame;
+  // (a facet too small or thin to hold a window stays a plain panel)
+  const L = P.length, same = (A, B) => { for (let i = 0; i < L; i++) { const j = (i + 1) % L; if (A[j].clone().sub(A[i]).dot(B[j].clone().sub(B[i])) <= 1e-6) return false; } return true; };
+  if (!same(P, inner)) return facet(acc, P, n, { ...look, glass: false });
+  // the pillar band, flat on the facet (the hull's paint), its back the inside off-white, its edges closed
+  for (let i = 0; i < P.length; i++) { const j = (i + 1) % P.length; acc.poly([P[i], P[j], mid[j], mid[i]], n, look.paint); acc.poly([P[i], mid[i], mid[j], P[j]].map((q) => q.clone().addScaledVector(n, -THICK)), n.clone().negate(), SHIP.inner); }
+  rim(acc, P, n, 0, -THICK, SHIP.inner);
+  // the frame, raised, its back behind the glass
+  ringFrame(acc, mid, inner, n, lift, back, F);
   const bn = n.clone().negate();
-  for (let i = 0; i < P.length; i++) { const j = (i + 1) % P.length; acc.poly([P[i], inner[i], inner[j], P[j]].map((q) => q.clone().addScaledVector(n, back)), bn, F); }
-  rim(acc, P, n, 0, back, F);
+  for (let i = 0; i < mid.length; i++) { const j = (i + 1) % mid.length; acc.poly([mid[i], inner[i], inner[j], mid[j]].map((q) => q.clone().addScaledVector(n, back)), bn, F); }
+  rim(acc, mid, n, 0, back, F);
   // (the panes a little apart, each with a face each way)
   for (let k = 0; k < PANES; k++) {
     const pane = inner.map((q) => q.clone().addScaledVector(n, sink - 0.006 * k));

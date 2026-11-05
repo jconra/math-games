@@ -18,7 +18,7 @@ import { placeInto } from './place.js';
 // a variant's words as options: 'miner parked' -> { r: 1.35, len: 2.2, sides: 24, band: 'grey', lit: false }
 const ENGINE_V = { 'medic': { r: 1.1, len: 1.9 }, 'miner': { r: 1.35, len: 2.2, sides: 24, band: 'grey' }, 'explorer': { r: 0.95, len: 1.7, sides: 24 }, 'parked': { lit: false }, 'dark': { band: null }, 'yellow': { band: 'yellow' } };
 const optsOf = (v, table) => v.split(' ').reduce((o, w) => ({ ...o, ...(table[w] || {}) }), {});
-const THRUSTER_V = { top: { mount: 'top' }, side: { mount: 'side' }, under: { mount: 'under' }, jet: { plume: true }, 'left': { yaw: 90 }, 'right': { yaw: -90 }, 'back': { yaw: 180 }, 'up': { pitch: 60 }, 'down': { pitch: -60 }, 'tilt': { yaw: 35, pitch: 25 } };
+const THRUSTER_V = { top: { mount: 'top' }, side: { mount: 'side' }, under: { mount: 'under' }, jet: { plume: true }, 'left': { yaw: 90 }, 'right': { yaw: -90 }, 'back': { yaw: 180 }, 'up': { pitch: 45 }, 'down': { pitch: -45 }, 'tilt': { yaw: 35, pitch: 25 } };
 
 // parts drawn for the hull's +x side (wings, pylons, arms, canister feet): ' mirrored' after any variant is the same
 // part for the -x side (place.js turns its faces back the right way out); a wing's or fin's red light turns green
@@ -46,7 +46,7 @@ export const OUTSIDE = {
   hullCap: { name: 'Nose and tail', group: G, at: 'edge', foot: [5, 4, 3], build: hullCap, accepts: ACCEPTS.hullCap,
     variants: ['nose sample canopy', 'nose sample blunt', 'nose sample wedge', 'tail sample flat', 'tail sample taper', 'nose medic canopy', 'nose explorer wedge', 'nose miner blunt', 'tail hauler flat mouth 9x5'] },
   hullOpening: { name: 'Hull opening', group: G, at: 'edge', foot: [2, 2.5, 0.5], build: hullOpening, accepts: ACCEPTS.hullOpening,
-    variants: ['door', 'door x4', 'window x2', 'window x4', 'porthole', 'mouth 6x5', 'hatch 2', 'hatch 3'] },
+    variants: ['door', 'door h4', 'door x4', 'window x2', 'window x4', 'porthole', 'mouth 6x5', 'hatch 2', 'hatch 3'] },
   // engines: the main engine's front face goes against the tail (the drum runs back along -z)
   mainEngine: { name: 'Main engine', group: G, at: 'free', foot: [2.4, 2.4, 2], build: (p, v) => mainEngine(p, optsOf(v, ENGINE_V)), accepts: (v) => v.split(' ').every((w) => ENGINE_V[w]),
     variants: ['medic', 'medic parked', 'miner', 'explorer', 'medic yellow'] },

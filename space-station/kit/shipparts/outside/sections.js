@@ -7,7 +7,7 @@
 //   lo  the lower chamfer [cells across, steps up]; up the upper chamfer [cells across, steps up]
 // The side wall runs from level b + lo[1] to r - up[1].
 export const SECTIONS = {
-  sample: { w: 4.5, b: -1, r: 6, lo: [1, 1], up: [1, 1] },     // 4.5 m wide, from 0.76 m to 4.26 m off the ground
+  sample: { w: 4.5, b: -1, r: 6, lo: [1, 1], up: [2, 2] },     // 4.5 m wide, from 0.76 m to 4.26 m off the ground, broad shoulders
   medic: { w: 6.5, b: -1, r: 6, lo: [1, 1], up: [2, 2] },      // 6.5 m wide, broad shoulders
   miner: { w: 5.5, b: -1, r: 6, lo: [1, 1], up: [2, 1] },      // 5.5 m, a shallow upper chamfer
   explorer: { w: 5.5, b: -1, r: 6, lo: [2, 1], up: [2, 2] },   // 5.5 m, deep chamfers top and bottom
@@ -21,7 +21,7 @@ export const CAP_STYLES = {
   flat: { stages: [], face: 'white' },                                                                    // a flat end (engines go here)
   blunt: { stages: [{ len: 2, w: 1, r: 1, b: 1, paint: { belly: 'dark', lo: 'dark' } }], face: 'dark' },  // a short band all round
   canopy: { stages: [{ len: 4, w: 1, r: 2, b: 0, glass: true }, { len: 3, w: 1, r: 2, b: 1, glass: true, paint: { lo: 'dark' } }, { len: 1, w: 1, r: 0, b: 0, paint: { belly: 'dark', lo: 'dark', side: 'dark', up: 'dark' } }], face: 'dark' },
-  wedge: { stages: [{ len: 3, w: 1, r: 3, b: 0, glass: true }, { len: 3, w: 1, r: 1, b: 1, paint: { belly: 'dark', lo: 'dark' } }], face: 'dark' },
+  wedge: { stages: [{ len: 5, w: 1, r: 2, b: 0, glass: true }, { len: 4, w: 1, r: 2, b: 1, glass: true, paint: { lo: 'dark' } }, { len: 1, w: 1, r: 0, b: 0, paint: { belly: 'dark', lo: 'dark', side: 'dark', up: 'dark' } }], face: 'dark' },   // a longer, lower canopy
   taper: { stages: [{ len: 2, w: 1, r: 1, b: 1 }], face: 'dark' },
 };
 // a chamfer half the size, the same slope (or null): a step too tight for a big chamfer takes a smaller one

@@ -17,7 +17,7 @@
 //   thruster(p, { mount, arm, yaw, pitch, plume, size })
 //       A pod on its mount. Frame: the mount's foot at the origin, on the hull. mount 'top' (a pylon standing up off
 //       the roof), 'side' (an arm out along +z from a side wall, the pod sitting on its end: turn the part to face out
-//       of the hull), 'under' (hanging from the belly, the pod upside down); arm its length (0.2 m, a short stub). The pod
+//       of the hull), 'under' (hanging from the belly, the pod upside down); arm its length (0.3 m, a short stub, long enough that the pod clears the hull turned any way). The pod
 //       turns on a cradle at the arm's end: yaw (degrees round the up axis; 0 points its jet along +z, 90 toward +x), pitch
 //       (degrees; up is positive).
 //   thrusterPivot(o)          where that pod's pivot is, in the thruster's frame
@@ -34,8 +34,8 @@ const BAND = { hull: SHIP.hull, yellow: SHIP.yellow, white2: SHIP.hull2, grey: S
 
 export function mainEngine(p, o = {}) {
   const R = o.r ?? 1.1, L = o.len ?? 1.9, n = o.sides ?? 8, lit = o.lit ?? true, band = BAND[o.band ?? 'hull'] || SHIP.trim;
-  const glow = { glow: lit ? GLOW_SHIP.engine : GLOW_SHIP.engineDim }, core = { glow: lit ? GLOW_SHIP.engine.map((c) => c * 1.25) : GLOW_SHIP.engineDim };
-  const halo = { glow: (lit ? GLOW_SHIP.engine : GLOW_SHIP.engineDim).map((c) => c * 0.45) };
+  const glow = { glow: lit ? GLOW_SHIP.engine : GLOW_SHIP.engineDim }, core = { glow: lit ? GLOW_SHIP.hot : GLOW_SHIP.engineDim };   // (a cyan ring, a white-hot middle)
+  const halo = { glow: lit ? GLOW_SHIP.halo : GLOW_SHIP.engineDim.map((c) => c * 0.6) };
   const acc = new Acc(), T = SHIP.trim;
   // the profile, front to back: a collar against the hull, a chamfer, the drum (a pale band, then dark), a seam,
   // the glowing band in a groove, a heavy rear rim, the back face stepping into a recess, the nozzle ring, the core
@@ -50,6 +50,8 @@ export function mainEngine(p, o = {}) {
     [[0.42 * R, z(L - 0.1)], halo], [[0.36 * R, z(L - 0.2)], core], [[0, z(L - 0.2)], null],
   ];
   latheZ(acc, pts.map((q) => q[0]), n, (i) => pts[i][1] ?? T);
+  // dark vanes across the glowing ring at the back, as his engines' cross-hairs
+  for (let k = 0; k < 6; k++) { const q = new Acc(); box(q, SHIP.frame, [-0.025 * R, 0.025 * R], [0.36 * R, 0.52 * R], [z(L - 0.1), z(L - 0.2)]); rotZ([...q.by.values()][0], k * PI / 3); merge(acc, [...q.by.values()][0]); }
   // four mounting blocks round the collar, and a rib along the drum at each of them
   for (let k = 0; k < 4; k++) {
     const a = PI / 4 + k * PI / 2, c = Math.cos(a), s = Math.sin(a), q = new Acc();
@@ -73,7 +75,8 @@ export function enginePod(p, o = {}) {
     [R, z(0.5)], [R, z(0.52)], [R, z(L - 0.62)], [0.94 * R, z(L - 0.58)], [0.94 * R, z(L - 0.3)], [1.05 * R, z(L - 0.26)], [1.05 * R, z(L - 0.05)], [0.98 * R, z(L)],
     [0.74 * R, z(L)], [0.74 * R, z(L - 0.14)], [0.5 * R, z(L - 0.02)], [0.4 * R, z(L - 0.02)], [0.38 * R, z(L - 0.1)], [0, z(L - 0.1)],
   ];
-  const paint = [G, T, T, T, band, T, T, T, glow, T, T, T, T, T, G, G, { glow: glow.glow.map((c) => c * 1.2) }, { glow: glow.glow.map((c) => c * 1.2) }];
+  const hot = { glow: lit ? GLOW_SHIP.hot : GLOW_SHIP.engineDim }, halo = { glow: lit ? GLOW_SHIP.halo : GLOW_SHIP.engineDim };
+  const paint = [G, T, T, T, band, T, T, T, glow, T, T, T, T, T, G, halo, hot, hot];
   latheZ(acc, prof, n, (i) => paint[i] ?? T);
   // the intake's fan: four dark vanes across the mouth
   for (let k = 0; k < 4; k++) { const a = k * PI / 4, q = new Acc(); box(q, SHIP.frame, [-0.6 * R, 0.6 * R], [-0.025, 0.025], [z(0.3), z(0.2)]); for (const e of q.by.values()) { rotZ(e, a); merge(acc, e); } }
@@ -104,12 +107,13 @@ export function thrusterPod(p, o = {}) {
   // the nozzle: a heavy bezel round a recessed throat, the throat lit blue
   const zf = d - 0.05 * k;
   for (const [x0, x1, y0, y1] of [[-w, w, h * 0.55, h], [-w, w, -h, -h * 0.55], [-w, -w * 0.7, -h * 0.55, h * 0.55], [w * 0.7, w, -h * 0.55, h * 0.55]]) box(acc, SHIP.frame, [x0, x1], [y0, y1], [zf, d]);
-  box(acc, GLOW_SHIP.engine.map((c) => c * 0.7), [-w * 0.7, w * 0.7], [-h * 0.55, h * 0.55], [zf - 0.03 * k, zf - 0.02 * k], 'glow');
+  box(acc, GLOW_SHIP.halo, [-w * 0.7, w * 0.7], [-h * 0.55, h * 0.55], [zf - 0.03 * k, zf - 0.02 * k], 'glow');   // (always lit, as his: a blue throat, a bright middle)
   box(acc, GLOW_SHIP.engine, [-w * 0.4, w * 0.4], [-h * 0.3, h * 0.3], [zf - 0.02 * k, zf - 0.015 * k], 'glow');
   if (o.plume) {
     // the jet: a short blue plume out of the nozzle, flaring a little and narrowing to a point
     const q = new Acc();
-    latheZ(q, [[0, 0], [0.09 * k, 0], [0.11 * k, 0.12 * k], [0.07 * k, 0.34 * k], [0.02 * k, 0.52 * k], [0, 0.56 * k]].map(([r, z]) => [r, -z]), 16, () => ({ glow: GLOW_SHIP.jet }), { flat: false });
+    const jet = [GLOW_SHIP.engine, GLOW_SHIP.engine, GLOW_SHIP.jet, GLOW_SHIP.jet, GLOW_SHIP.halo.map((c) => c * 0.7), GLOW_SHIP.halo.map((c) => c * 0.5)];   // (bright at the nozzle, darker blue to its tip)
+    latheZ(q, [[0, 0], [0.11 * k, 0], [0.15 * k, 0.08 * k], [0.13 * k, 0.2 * k], [0.08 * k, 0.34 * k], [0.03 * k, 0.46 * k], [0, 0.5 * k]].map(([r, z]) => [r, -z]), 16, (i) => ({ glow: jet[i] }), { flat: false });
     for (const e of q.by.values()) { const pp = e.m.p, nn = e.m.n; for (let i = 0; i < pp.length; i += 3) { pp[i + 2] = zf - pp[i + 2]; nn[i + 2] = -nn[i + 2]; } merge(acc, e); }
   }
   acc.flush(p);
@@ -125,11 +129,11 @@ function swivel(yaw = 0, pitch = 0, under = false) {
 export function swivelRot(yaw = 0, pitch = 0, under = false) { return new THREE.Euler().setFromQuaternion(swivel(yaw, pitch, under), 'XYZ').toArray().slice(0, 3); }
 // where a thruster's pod turns, in the thruster's frame
 export function thrusterPivot(o = {}) {
-  const k = o.size ?? 1, arm = o.arm ?? 0.2, mount = o.mount ?? 'top', up = POD.h * k + 0.07 * k;
+  const k = o.size ?? 1, arm = o.arm ?? 0.3, mount = o.mount ?? 'top', up = POD.h * k + 0.07 * k;
   return mount === 'side' ? [0, 0, arm] : mount === 'under' ? [0, -(arm + up), 0] : [0, arm + up, 0];
 }
 export function thruster(p, o = {}) {
-  const k = o.size ?? 1, arm = o.arm ?? 0.2, mount = o.mount ?? 'top', acc = new Acc(), T = SHIP.trim, up = POD.h * k + 0.07 * k, pivot = thrusterPivot(o);
+  const k = o.size ?? 1, arm = o.arm ?? 0.3, mount = o.mount ?? 'top', acc = new Acc(), T = SHIP.trim, up = POD.h * k + 0.07 * k, pivot = thrusterPivot(o);
   // the mount: a foot plate on the hull, a pylon, a round cradle at its end that the pod's boss turns in
   if (mount === 'side') {
     // (a short arm out from the wall, under the pod, a cradle on its end that the pod's boss turns in)

@@ -56,6 +56,8 @@ export function sideDoor(p, o = {}) {
   const a = new Acc();
   box(a, SHIP.trim, [-0.3, 0.3], [H + 0.12, H + 0.2], [0, 0.05]);
   box(a, GLOW.green, [-0.26, 0.26], [H + 0.135, H + 0.185], [0.05, 0.055], 'glow');
+  // warm strip lights down the inside of the doorway, each side
+  for (const s of [-1, 1]) box(a, GLOW_SHIP.warm.map((c) => c * 0.6), s < 0 ? [-0.497, -0.49] : [0.49, 0.497], [0.15, 1.85], [-0.12, -0.05], 'glow');
   if (steps !== 'none') {
     // the flight, drawn going down and out from its top at the origin: treads with yellow nosings, two stringers, a
     // foot plate; folding ones are clad underneath (off-white, framed: the door's face when folded up), fixed ones have
@@ -63,7 +65,7 @@ export function sideDoor(p, o = {}) {
     const go = fold ? GO_FOLD : 0.27, len = NSTEPS * go, L = Math.hypot(DECK, len), below = [-len / L, -DECK / L];
     const flight = (q) => {
       const s = new Acc(), hw = 0.45;
-      for (let i = 0; i < NSTEPS - 1; i++) { const y = -(i + 1) * RISE, z = (i + 1) * go; box(s, SHIP.gun, [-hw + 0.04, hw - 0.04], [y - 0.03, y], [z - go + 0.02, z + 0.02]); box(s, SHIP.yellow, [-hw + 0.04, hw - 0.04], [y - 0.006, y + 0.001], [z - 0.02, z + 0.02]); }
+      for (let i = 0; i < NSTEPS - 1; i++) { const y = -(i + 1) * RISE, z = (i + 1) * go; box(s, SHIP.gun, [-hw + 0.04, hw - 0.04], [y - 0.03, y], [z - go + 0.02, z + 0.02]); box(s, GLOW_SHIP.warm.map((c) => c * 0.45), [-hw + 0.04, hw - 0.04], [y - 0.006, y + 0.001], [z - 0.02, z + 0.02], 'glow'); }   // (lit step edges, as his)
       for (const x of [-hw, hw]) {
         bar(s, SHIP.trim, [x, -0.05, 0.01], [x, -DECK + 0.08, len - 0.06], 0.05, fold ? 0.1 : 0.16);   // (its foot on the ground, its head at the sill)
         if (!fold) {
@@ -165,10 +167,15 @@ export function bellyLift(p, o = {}) {
     const b = new Acc();
     box(b, SHIP.gun, [-hs, hs], [-0.12, 0], [-hs, hs]);
     box(b, SHIP.trim, [-hs, hs], [-0.32, -0.12], [-hs, hs]);
-    // a rail round three sides, open toward +z; two posts at the back with lights
-    for (const x of [-hs + 0.04, hs - 0.04]) { bar(b, SHIP.trim, [x, 0, -hs + 0.04], [x, 1.0, -hs + 0.04], 0.05, 0.05); bar(b, SHIP.trim, [x, 0, hs - 0.1], [x, 1.0, hs - 0.1], 0.04, 0.04); bar(b, SHIP.yellow, [x, 1.0, -hs + 0.04], [x, 1.0, hs - 0.1], 0.04, 0.04); }
-    bar(b, SHIP.yellow, [-hs + 0.04, 1.0, -hs + 0.04], [hs - 0.04, 1.0, -hs + 0.04], 0.04, 0.04);
-    for (const x of [-hs + 0.04, hs - 0.04]) box(b, GLOW_SHIP.warm, [x - 0.012, x + 0.012], [0.3, 0.9], [-hs + 0.066, -hs + 0.07], 'glow');
+    // two lit pillars at the back (his lift's), a waist-high yellow rail down each side to a short post at the front,
+    // the front open
+    for (const x of [-hs + 0.07, hs - 0.07]) {
+      box(b, SHIP.trim, [x - 0.07, x + 0.07], [0, 2.0], [-hs + 0.02, -hs + 0.16]);
+      box(b, GLOW_SHIP.warm, [x - 0.02, x + 0.02], [0.3, 1.8], [-hs + 0.16, -hs + 0.165], 'glow');
+      bar(b, SHIP.trim, [x, 0, hs - 0.1], [x, 0.95, hs - 0.1], 0.05, 0.05);
+      bar(b, SHIP.yellow, [x, 0.95, -hs + 0.16], [x, 0.95, hs - 0.1], 0.05, 0.05);
+      bar(b, SHIP.yellow, [x, 0.5, -hs + 0.16], [x, 0.5, hs - 0.1], 0.035, 0.035);
+    }
     b.flush(q);
     hazard(q, s - 0.1, 0.2, [0, 0.003, hs - 0.14], true);
   }, { at: [0, 0, 0], slide: [0, -DECK, 0], door: 0 });

@@ -18,11 +18,11 @@ import { SURF } from '../materials.js';
 
 const s = (c, r, m, w) => ({ c, r, m, w });
 export const SHIP = {
-  hull: s('#cdc8b9', 0.55, 0.04, 0.9),
+  hull: s('#cdc8b9', 0.55, 0.04, 0.55),
   hull2: s('#bdbab0', 0.56, 0.05, 0.8),
   trim: s('#3a3d42', 0.42, 0.4, 0.7),
   grey: s('#6f7379', 0.5, 0.25, 0.6),
-  yellow: s('#d9a21e', 0.45, 0.02, 0.5),
+  yellow: s('#e6b81f', 0.45, 0.02, 0.4),
   red: s('#b3352b', 0.42, 0.03, 0.4),
   teal: s('#1f9c86', 0.42, 0.03, 0.3),
   canister: s('#a8a088', 0.45, 0.35, 0.9),
@@ -33,7 +33,7 @@ export const SHIP = {
   chrome: s(SURF.chrome[0], SURF.chrome[1], SURF.chrome[2], SURF.chrome[3]),
 };
 export const GLOW_SHIP = {
-  engine: [0.1, 0.85, 2.7], engineDim: [0.05, 0.3, 1.0], strip: [0.15, 0.9, 3.0], jet: [0.1, 0.6, 2.3],
+  engine: [0.3, 2.7, 6.0], engineDim: [0.05, 0.3, 1.0], strip: [0.3, 2.4, 5.6], jet: [0.1, 0.7, 2.6], halo: [0.08, 0.8, 2.4], hot: [3.2, 5.0, 7.0],
   warm: [3.6, 2.2, 0.6], cutter: [6.0, 2.2, 0.4],
 };
 // the paint names a hull piece's variant may carry (kit/shipparts/outside/hull.js), and the surface each stands for
