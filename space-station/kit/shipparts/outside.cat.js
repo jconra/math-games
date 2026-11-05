@@ -100,3 +100,5 @@ import { MINER } from '../ships/ship-miner.js';
 Object.assign(OUTSIDE, MINER);
 import { MEDIC } from '../ships/ship-medic.js';
 Object.assign(OUTSIDE, MEDIC);
+import { SHIP_EXPLORER } from '../ships/ship-explorer.js';
+Object.assign(OUTSIDE, SHIP_EXPLORER);

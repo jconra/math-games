@@ -13,6 +13,10 @@ export const SECTIONS = {
   minerRear: { w: 5, b: -1, r: 6, lo: [1, 1], up: [1, 1] },    // Miner A's body between the canisters, back to the engine: 5.0 m (the stacks stand out beside its cab)
   explorer: { w: 5.5, b: -1, r: 6, lo: [2, 1], up: [2, 2] },   // 5.5 m, deep chamfers top and bottom
   hauler: { w: 5.5, b: -1, r: 6, lo: [1, 1], up: [1, 1] },     // 5.5 m, boxy
+  // Explorer C (kit/rooms/ship-explorer.json): 6.0 m, an even number of cells across (its middle line a cell edge, mid
+  // 0.5, so its 1 m corridor runs down the middle with 2 m rooms each side); a shallow upper chamfer from the ceiling's
+  // height, so its rooms' walls stand straight up to the ceiling a cell in from the hull
+  explorerC: { w: 6, b: -1, r: 6, lo: [2, 1], up: [2, 1] },
 };
 // CAP STYLES (the hull's ends): steps in toward the end, each `len` cells long, bringing the sides in `w` cells, the
 // roof down `r` steps and the belly up `b` steps (the chamfers keep their slope); `glass` makes a step's roof and upper
@@ -34,6 +38,12 @@ export const CAP_STYLES = {
   // roof, a 45 degree windscreen wrapping round into its corners down to a low dark chin (the end face) for the lamps
   medic: { stages: [{ len: 3, w: 2, r: 2, b: 0, glass: ['up'] }, { len: 2, w: 1, r: 2, b: 1, glass: true, paint: { belly: 'dark' } }], face: 'dark' },
   stern: { stages: [], face: 'dark' },   // a flat end in dark charcoal, the armour round big engines (his medical pictures')
+  // Explorer C's: a long canopy, two rows of glass from the roof down to a metre over the deck (wide enough at its foot
+  // for three seats' dashboard): the back row wrapping round the sides, the front row only the windscreen between the
+  // hull's cheeks; then a short chin with a dark belly sloping to a small point (its lamps on the chin's sides); and a
+  // flat grey tail for its engines
+  longcanopy: { stages: [{ len: 3, w: 1, r: 2, b: 0, glass: true, paint: { lo: 'dark' } }, { len: 3, w: 1, r: 2, b: 0, glass: ['roof'], paint: { lo: 'dark' } }, { len: 2, w: 3, r: 1, b: 1, paint: { belly: 'dark', lo: 'dark', side: 'dark' } }], face: 'white2' },
+  flatgrey: { stages: [], face: 'grey' },
 };
 // a chamfer for a step too tight for it: half the size at the same slope if it halves evenly, else a 1:1, else none
 const shrink = (c) => (c[0] % 2 === 0 && c[1] % 2 === 0 && c[0] > 0 ? [c[0] / 2, c[1] / 2] : c[0] > 1 || c[1] > 1 ? [1, 1] : c[0] || c[1] ? [0, 0] : null);
