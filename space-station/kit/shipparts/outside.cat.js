@@ -75,7 +75,7 @@ export const OUTSIDE = {
   landingLeg: { name: 'Landing leg', group: G, at: 'free', foot: [0.8, 1.3, 0.8], variants: ['short', 'long', 'wide pad'],
     build: (p, v) => landingLeg(p, v === 'long' ? { len: 1.3, out: 0.45 } : v === 'wide pad' ? { pad: 1.1 } : {}) },
   // ways in: each fits a hull opening, placed on the same point as it
-  sideDoor: { name: 'Side door', group: G, at: 'free', foot: [1.2, 2.3, 2], variants: ['fold', 'fixed', 'none'], build: (p, v) => sideDoor(p, { steps: v }) },
+  sideDoor: { name: 'Side door', group: G, at: 'free', foot: [1.2, 2.3, 2], variants: ['fold', 'fixed', 'none', 'fold, pocket -x'], build: (p, v) => sideDoor(p, { steps: v.split(',')[0], pocket: v.endsWith('pocket -x') ? -1 : 1 }) },
   airlockHatch: { name: 'Airlock hatch', group: G, at: 'free', foot: [1.6, 2.5, 0.4], variants: ['outer'], build: (p) => airlockHatch(p) },
   shipRamp: { name: 'Ramp', group: G, at: 'free', foot: [4.5, 2.5, 4.2], variants: ['back', 'side'], build: (p, v) => ramp(p, v === 'side' ? { w: 2.9 } : { w: 4.4 }) },
   bellyLift: { name: 'Belly lift', group: G, at: 'free', foot: [1.6, 1.3, 1.6], variants: ['lift'], build: (p) => bellyLift(p) },
@@ -102,3 +102,5 @@ import { MEDIC } from '../ships/ship-medic.js';
 Object.assign(OUTSIDE, MEDIC);
 import { SHIP_EXPLORER } from '../ships/ship-explorer.js';
 Object.assign(OUTSIDE, SHIP_EXPLORER);
+import { SHIP_HAULER } from '../ships/ship-hauler.js';
+Object.assign(OUTSIDE, SHIP_HAULER);

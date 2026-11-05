@@ -17,6 +17,7 @@ export const SECTIONS = {
   // 0.5, so its 1 m corridor runs down the middle with 2 m rooms each side); a shallow upper chamfer from the ceiling's
   // height, so its rooms' walls stand straight up to the ceiling a cell in from the hull
   explorerC: { w: 6, b: -1, r: 6, lo: [2, 1], up: [2, 1] },
+  mule: { w: 5.5, b: -1, r: 7, lo: [1, 1], up: [2, 2] },       // Hauler A: 5.5 m wide, 4 m tall, broad shoulders (his hauler picture's tall boxy body)
 };
 // CAP STYLES (the hull's ends): steps in toward the end, each `len` cells long, bringing the sides in `w` cells, the
 // roof down `r` steps and the belly up `b` steps (the chamfers keep their slope); `glass` makes a step's roof and upper
@@ -44,6 +45,11 @@ export const CAP_STYLES = {
   // flat grey tail for its engines
   longcanopy: { stages: [{ len: 3, w: 1, r: 2, b: 0, glass: true, paint: { lo: 'dark' } }, { len: 3, w: 1, r: 2, b: 0, glass: ['roof'], paint: { lo: 'dark' } }, { len: 2, w: 3, r: 1, b: 1, paint: { belly: 'dark', lo: 'dark', side: 'dark' } }], face: 'white2' },
   flatgrey: { stages: [], face: 'grey' },
+  // Hauler A's (his CH-47): a blunt, armoured nose. The cockpit lower and narrower than the body (its roof stepping down
+  // 1 m to a flat roof with side windows), a windscreen at 56 degrees wrapping round its corners, the belly rising
+  // under it in a charcoal chin, then a short box ahead of the windscreen's foot whose flat face, 1 m tall and
+  // off-white, carries the lamps
+  mule: { stages: [{ len: 2, w: 1, r: 2, b: 0 }, { len: 2, w: 0, r: 0, b: 0, glass: ['up'] }, { len: 2, w: 0, r: 3, b: 1, glass: true, paint: { belly: 'dark', lo: 'dark' } }, { len: 1, w: 1, r: 0, b: 0, paint: { belly: 'dark', lo: 'dark' } }], face: 'white2' },
 };
 // a chamfer for a step too tight for it: half the size at the same slope if it halves evenly, else a 1:1, else none
 const shrink = (c) => (c[0] % 2 === 0 && c[1] % 2 === 0 && c[0] > 0 ? [c[0] / 2, c[1] / 2] : c[0] > 1 || c[1] > 1 ? [1, 1] : c[0] || c[1] ? [0, 0] : null);

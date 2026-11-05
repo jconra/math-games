@@ -9,7 +9,8 @@
 //   enginePod(p, { r, len, sides, band, lit, pylon })
 //       A smaller nacelle with an intake at the front. Frame: its axis along z, the intake's lip at z = 0, its nozzle
 //       at z = -len. r 0.55, len 2.6, pylon { side: -1, len: 0.6 } a flat strut from its side toward -x (or +x) to the
-//       hull or a wing (null: none).
+//       hull or a wing (null: none); body the paint of the drum between the band and the glow (null: dark, the
+//       default; 'hull' off-white, as his hauler's)
 //   thrusterPod(p, { plume, size })
 //       A manoeuvring thruster's pod alone (his miner's corner pods): a low, long, flat charcoal block, a pale panel on
 //       top, a yellow band by its blue-lit nozzle (on its +z face), a swivel boss under it; plume (a short blue jet).
@@ -76,7 +77,8 @@ export function enginePod(p, o = {}) {
     [0.74 * R, z(L)], [0.74 * R, z(L - 0.14)], [0.5 * R, z(L - 0.02)], [0.4 * R, z(L - 0.02)], [0.38 * R, z(L - 0.1)], [0, z(L - 0.1)],
   ];
   const hot = { glow: lit ? GLOW_SHIP.hot : GLOW_SHIP.engineDim }, halo = { glow: lit ? GLOW_SHIP.halo : GLOW_SHIP.engineDim };
-  const paint = [G, T, T, T, band, T, T, T, glow, T, T, T, T, T, G, halo, hot, hot];
+  const body = BAND[o.body ?? null] || T;
+  const paint = [G, T, T, T, band, T, body, T, glow, T, T, T, T, T, G, halo, hot, hot];
   latheZ(acc, prof, n, (i) => paint[i] ?? T);
   // the intake's fan: four dark vanes across the mouth
   for (let k = 0; k < 4; k++) { const a = k * PI / 4, q = new Acc(); box(q, SHIP.frame, [-0.6 * R, 0.6 * R], [-0.025, 0.025], [z(0.3), z(0.2)]); for (const e of q.by.values()) { rotZ(e, a); merge(acc, e); } }

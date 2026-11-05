@@ -7,6 +7,8 @@
 //       slides into the hull wall (+x), a light over it, and steps: 'fold' (an airstair of seven 0.18 m steps that
 //       stands folded up in the opening in front of the leaf, its clad underside outward, and swings down and out to
 //       the ground as the door opens), 'fixed' (the boarding stair's gentler steps, with rails, always down), or 'none'
+//       pocket (1: the leaf slides into the hull wall toward +x, as before; -1 toward -x, for a door with its room's end
+//       wall on that side)
 //   airlockHatch(p)             fits 'door' too: a heavy outer airlock door, a ring of yellow and black blocks round
 //       it, a thick leaf with a porthole that slides into the wall, a red or green light over it; no steps (a boarding
 //       stair or a gangway comes up to it)
@@ -14,6 +16,8 @@
 //       stands up in the mouth and its second part folds down inside behind it; open, both unfold into one ramp down
 //       to the ground (len 4.2 m: 17.5 degrees from the deck at 1.26 m). Hazard stripes along its edges, treads.
 //       The back cargo ramp is { w: 4.4 } (the tail cap's 'mouth 9x5'), the side ramp { w: 2.9 } ('mouth 6x5').
+//       outer: the face that is the outside when shut: 'hull' (off-white, the default) or 'ribbed' (grey, with
+//       raised charcoal ribs across it and yellow and black stripes down its edges: a cargo door's face)
 //   bellyLift(p, { size })      fits 'hatch 3': a platform that is the floor of the room above when up (y = 0, the
 //       deck) and sinks to the ground (1.26 m down) to let people on, with a rail round three sides (open toward +z),
 //       lights on its two posts; the shaft's lining between the deck and the belly. size 1.4 (the platform, metres)
@@ -38,7 +42,7 @@ function hazard(p, w, h, at, up = true, tint = '#d9a21e') {
 // outside: shut, it is the door's outer face. The fixed steps keep the boarding stair's 0.27 m and have rails.)
 const GO_FOLD = 0.22;
 export function sideDoor(p, o = {}) {
-  const steps = o.steps ?? 'fold', W = 1.0, H = 2.0, fold = steps === 'fold';
+  const steps = o.steps ?? 'fold', W = 1.0, H = 2.0, fold = steps === 'fold', pocket = o.pocket ?? 1;
   // the leaf, at the back of the opening: pale, a dark band low across it, a small window, a yellow handle (all flat:
   // folded steps stand just in front of it)
   p.leaf('ship-door-leaf', (q) => {
@@ -50,7 +54,7 @@ export function sideDoor(p, o = {}) {
     box(a, SHIP.trim, [-W / 2 - 0.03, -W / 2], [-0.02, H + 0.03], [-0.0125, 0.0125]);
     a.flush(q);
     q.glass(0.34, 0.26, [0, 1.46, 0.021]);
-  }, { at: [0, 0, -0.284], slide: [W + 0.05, 0, 0], door: 0 });
+  }, { at: [0, 0, -0.284], slide: [pocket * (W + 0.05), 0, 0], door: 0 });
   // a light over it (green), and the light it gives
   const a = new Acc();
   box(a, SHIP.trim, [-0.3, 0.3], [H + 0.12, H + 0.2], [0, 0.05]);
@@ -126,7 +130,7 @@ export function airlockHatch(p) {
 
 // ── ramps ──
 export function ramp(p, o = {}) {
-  const w = o.w ?? 4.4, h = o.h ?? 2.5, len = o.len ?? 4.2, t = 0.1, l1 = h - 0.05, l2 = len - l1;
+  const w = o.w ?? 4.4, h = o.h ?? 2.5, len = o.len ?? 4.2, t = 0.1, l1 = h - 0.05, l2 = len - l1, ribbed = o.outer === 'ribbed';
   const slope = Math.asin(DECK / len);   // (17.5 degrees for 4.2 m)
   // a section of ramp, drawn lying flat from its hinge (z 0) out along +z, its top at y 0: a plate, a tread, a
   // hazard stripe down each edge, a dark edge beam
@@ -136,19 +140,22 @@ export function ramp(p, o = {}) {
     box(a, SHIP.trim, [-w / 2, -w / 2 + 0.08], [-t - 0.06, 0.02], [0, L]); box(a, SHIP.trim, [w / 2 - 0.08, w / 2], [-t - 0.06, 0.02], [0, L]);
     for (let z = 0.25; z < L - 0.1; z += 0.3) box(a, SHIP.grey, [-w / 2 + 0.3, w / 2 - 0.3], [0, 0.015], [z, z + 0.05]);
     // (the underside, which is the outside when shut: off-white panels like the hull, with a seam)
-    box(a, SHIP.hull, [-w / 2 + 0.02, w / 2 - 0.02], [-t - 0.005, -t], [0.02, L - 0.02]);
+    if (!ribbed) box(a, SHIP.hull, [-w / 2 + 0.02, w / 2 - 0.02], [-t - 0.005, -t], [0.02, L - 0.02]);
+    else { box(a, SHIP.grey, [-w / 2 + 0.02, w / 2 - 0.02], [-t - 0.005, -t], [0.02, L - 0.02]); for (let z = 0.2; z < L - 0.15; z += 0.4) box(a, SHIP.trim, [-w / 2 + 0.25, w / 2 - 0.25], [-t - 0.045, -t - 0.005], [z, z + 0.1]); }   // (charcoal ribs across a grey face)
     if (!first) box(a, SHIP.frame, [-w / 2, w / 2], [-t, 0.01], [L - 0.06, L]);
     a.flush(q);
     for (const x of [-w / 2 + 0.2, w / 2 - 0.2]) hazard(q, 0.22, L - 0.1, [x, 0.017, L / 2], true);
+    // (a ribbed face's yellow and charcoal stripes down its edges)
+    if (ribbed) { const b = new Acc(); for (const x of [-w / 2 + 0.13, w / 2 - 0.13]) { box(b, SHIP.yellow, [x - 0.08, x + 0.08], [-t - 0.02, -t], [0.05, L - 0.05]); for (let z = 0.15; z < L - 0.2; z += 0.3) box(b, SHIP.trim, [x - 0.08, x + 0.08], [-t - 0.024, -t - 0.02], [z, z + 0.12]); } b.flush(q); }
   };
   // shut, the first section stands up in the mouth (turned up about the sill, its treads facing in, its off-white
   // underside out); opening turns it down and out about the sill until it meets the ground
   const sill = [0, 0, -0.12], open = PI / 2 + slope;
-  p.leaf('ship-ramp-a' + [w, h, len].join('/'), section(l1, true), { at: sill, rot: [-PI / 2, 0, 0], hinge: { at: sill, axis: [1, 0, 0], angle: open }, door: 0 });
+  p.leaf('ship-ramp-a' + [w, h, len].join('/') + (ribbed ? 'r' : ''), section(l1, true), { at: sill, rot: [-PI / 2, 0, 0], hinge: { at: sill, axis: [1, 0, 0], angle: open }, door: 0 });
   // the second section, folded down inside behind the first from the fold at its top (treads to treads); opening
   // unfolds it about that fold (where the fold is when shut, swinging in through the bay), as the whole ramp turns
   const fold = [0, l1, sill[2]];
-  p.leaf('ship-ramp-b' + [w, h, len].join('/'), section(l2, false), { at: fold, rot: [PI / 2, 0, 0], hinge: [{ at: sill, axis: [1, 0, 0], angle: open }, { at: fold, axis: [1, 0, 0], angle: PI }], door: 0 });
+  p.leaf('ship-ramp-b' + [w, h, len].join('/') + (ribbed ? 'r' : ''), section(l2, false), { at: fold, rot: [PI / 2, 0, 0], hinge: [{ at: sill, axis: [1, 0, 0], angle: open }, { at: fold, axis: [1, 0, 0], angle: PI }], door: 0 });
   // lights in the mouth's top corners
   for (const x of [-w / 2 + 0.25, w / 2 - 0.25]) p.light([x, h - 0.2, 0.4], 0.8, [1.3, 1.1, 0.8], [0, -0.6, 1], 4);
   p.door(0, [0, 1.0, 3.2], 3.6, 0.7);
