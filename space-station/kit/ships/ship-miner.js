@@ -79,8 +79,8 @@ export function minerMullion(p, o = {}) {
   const len = o.len ?? 1.8, slope = o.slope ?? Math.atan2(1.0, 1.5), a = new Acc(), c = Math.cos(slope), sn = Math.sin(slope);
   const end = [0, -len * sn, len * c], n = [0, c, sn];   // (the glass's outward normal)
   const off = (q, k) => [q[0] + n[0] * k, q[1] + n[1] * k, q[2] + n[2] * k];
-  bar(a, SHIP.frame, off([0, 0, 0], 0.03), off(end, 0.03), 0.16, 0.06);
-  bar(a, SHIP.hull, off([0, 0, 0], 0.065), off(end, 0.065), 0.1, 0.02);
+  bar(a, SHIP.frame, off([0, 0, 0], 0.03), off(end, 0.03), 0.09, 0.06);
+  bar(a, SHIP.hull, off([0, 0, 0], 0.065), off(end, 0.065), 0.05, 0.02);
   return a.flush(p);
 }
 // his bold black-and-yellow hazard plate on the crew hull's side: the kit's hazard stripes on a charcoal backing.
