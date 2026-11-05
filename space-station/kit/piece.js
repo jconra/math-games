@@ -2,7 +2,8 @@
 // standing on y = 0) and kept; the layout then copies it into place. It records:
 //   parts   geometry for each material, already carrying its surface (colour, roughness, metalness, wear) per vertex
 //   lights  where its glowing strips light the room from (for the bake): position, strength, colour, facing
-//   movers  door leaves: drawn in their own frame, with where they sit when shut and how far they slide to open
+//   movers  door leaves: drawn in their own frame, with where they sit when shut and how far they slide (or swing, on
+//           hinges) to open
 import * as THREE from 'three';
 import { bevelBox, sweep, extrude, lathe, plane, put, cylinder, fixWinding } from './geo.js';
 import { SURF, GLOW, kitTextures } from './materials.js';
@@ -66,11 +67,16 @@ export class Piece {
   // a door leaf: `build(leafPiece)` draws it in its own frame; `at` and `rot` place it shut; `slide` is how far it
   // moves (in the piece's frame) when fully open. `door` groups the leaves that open together; `sense` is where
   // someone has to come near to open it, and how near.
-  leaf(key, build, { at = [0, 0, 0], rot = [0, 0, 0], slide, door = 0 }) {
+  // A leaf may swing instead of (or as well as) sliding: hinge { at, axis, angle } turns it by `angle` (radians, fully
+  // open) about `axis` through the point `at` (both in the piece's frame, where the leaf is when shut). A list of hinges
+  // folds as it opens: the first turns everything, the next (given where it is when shut) turns on the way, and so on.
+  leaf(key, build, { at = [0, 0, 0], rot = [0, 0, 0], slide = [0, 0, 0], door = 0, hinge = null }) {
     let lp = this._leafCache?.get(key);
     if (!lp) { lp = new Piece(); build(lp); (this._leafCache ||= new Map()).set(key, lp); }
     const base = new THREE.Matrix4().compose(new THREE.Vector3(...at), new THREE.Quaternion().setFromEuler(new THREE.Euler(...rot)), new THREE.Vector3(1, 1, 1));
-    this.movers.push({ key, piece: lp, base, slide: new THREE.Vector3(...slide), door });
+    const mv = { key, piece: lp, base, slide: new THREE.Vector3(...slide), door };
+    if (hinge) mv.hinge = (Array.isArray(hinge) ? hinge : [hinge]).map((H) => ({ at: [...H.at], axis: new THREE.Vector3(...H.axis).normalize().toArray(), angle: H.angle }));
+    this.movers.push(mv);
   }
   door(id, sense, near = 2.6, speed = 1.6) { this.doors.push({ id, sense, near, speed }); }
 }

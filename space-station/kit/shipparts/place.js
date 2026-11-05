@@ -9,6 +9,7 @@
 //       mirrors it (a left wing from a right one): its faces are turned back the right way out. (A part with door leaves
 //       isn't mirrored: its leaves would show inside out.)
 //       id: a prefix for src's door ids, so two copies of one part keep their doors apart (needed when src has doors)
+//       (leaves that swing on hinges, piece.js, keep their hinges, placed with them)
 //   placeAll(dst, src, list)      placeInto for each { at, rot, scale, id } in list
 import * as THREE from 'three';
 import { Piece } from '../piece.js';
@@ -38,7 +39,12 @@ export function placeInto(dst, src, { at = [0, 0, 0], rot = [0, 0, 0], scale = 1
   // (a leaf moves as M * slide * base in the piece that holds it: placed by P, that is M * (R slide) * (P base))
   _lin.setFromMatrix4(_m);
   const kind = src.kind || 'part';
-  for (const mv of src.movers) dst.movers.push({ key: kind + '|' + mv.key, piece: mv.piece, base: _m.clone().multiply(mv.base), slide: mv.slide.clone().applyMatrix3(_lin), door: id + mv.door });
+  for (const mv of src.movers) {
+    const m = { key: kind + '|' + mv.key, piece: mv.piece, base: _m.clone().multiply(mv.base), slide: mv.slide.clone().applyMatrix3(_lin), door: id + mv.door };
+    // (a hinge goes with it: its point placed, its axis turned)
+    if (mv.hinge) m.hinge = mv.hinge.map((H) => ({ at: new THREE.Vector3(...H.at).applyMatrix4(_m).toArray(), axis: new THREE.Vector3(...H.axis).applyMatrix3(_lin).normalize().toArray(), angle: H.angle }));
+    dst.movers.push(m);
+  }
   for (const d of src.doors) dst.doors.push({ ...d, id: id + d.id, sense: new THREE.Vector3(...d.sense).applyMatrix4(_m).toArray(), near: d.near * grow });
   return dst;
 }

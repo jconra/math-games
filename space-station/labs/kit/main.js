@@ -24,7 +24,7 @@ import { Piece } from '../../kit/piece.js';
 import { makeDust } from '../../kit/dust.js';
 
 const $ = (s) => document.querySelector(s), q = new URLSearchParams(location.search);
-const ROOMS = [['corridor', 'Corridor'], ['junction', 'Junction + room'], ['station', 'The station']];
+const ROOMS = [['corridor', 'Corridor'], ['junction', 'Junction + room'], ['station', 'The station'], ['shipsample', 'A sample hull']];
 const QUALITY = {
   low: { ratio: 1, bloom: false, shadowMap: false, bake: { voxel: 0.09, rays: 20, shadows: false }, probe: 64 },
   medium: { ratio: 1.5, bloom: true, shadowMap: true, bake: { voxel: 0.07, rays: 28, shadows: true }, probe: 128 },

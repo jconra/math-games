@@ -35,7 +35,7 @@ export function expand(pieces, problems = []) {
   const rec = (pl, parent) => {
     const def = PIECES[pl.piece]; if (!def) { problems.push('no piece called ' + pl.piece); return; }
     const variant = pl.variant ?? def.variants[0];
-    if (!def.variants.includes(variant)) problems.push(`${pl.piece} has no variant ${variant}`);
+    if (!def.variants.includes(variant) && !def.accepts?.(variant)) problems.push(`${pl.piece} has no variant ${variant}`);
     let placed = { ...pl, variant };
     if (parent) { const [rx, rz] = turnCell(pl.cell || [0, 0], parent.turn || 0); placed = { ...placed, cell: [parent.cell[0] + rx, parent.cell[1] + rz], turn: ((pl.turn || 0) + (parent.turn || 0)) % 4, deck: parent.deck }; }
     if (!onGrid(placed)) problems.push(`${pl.piece} at ${JSON.stringify(pl.cell)} is off the grid`);
@@ -107,6 +107,8 @@ function mergePlaced(items) {
 //   opts.saved: a saved bake (bakefile.js): zones whose geometry still matches take their light from it;
 //   opts.zoneMats(id): the material set for a zone (default: mats for all)
 export function zonesOf(room) { return room.rooms ? room.rooms : [{ id: room.id || 'room', name: room.name, probe: room.probe, sky: room.sky, coarse: room.coarse, pieces: room.pieces || [] }]; }
+// the grid a zone's pieces are placed on: its own, its room's, or (none given) the station's
+const gridOf = (zd, room) => zd.grid || room.grid || null;
 export function buildRoom(room, mats, opts = {}) {
   const t0 = performance.now(), problems = [], lights = [], doors = [], leafGroups = new Map(), zones = [];
   let pieceCount = 0;
@@ -116,7 +118,7 @@ export function buildRoom(room, mats, opts = {}) {
     for (const pl of list) {
       const def = PIECES[pl.piece], p = builtPiece(pl.piece, pl.variant, zd.coarse), off = [...(pl.off || [0, 0, 0])];
       if (def.at === 'wall') off[2] += WALL_FACE;
-      placeMatrix({ ...pl, off }, _m);
+      placeMatrix({ ...pl, off }, _m, gridOf(zd, room));
       const e = _m.elements.slice(); for (const [k, g] of Object.entries(pieceByMat(p))) lists[k].push({ geo: g, e });
       for (const L of p.lights) lights.push({ ...L, at: _v.set(...L.at).applyMatrix4(_m).toArray(), dir: L.dir ? _d.set(...L.dir).transformDirection(_m).toArray() : null });
       const mine = new Map();
@@ -124,6 +126,7 @@ export function buildRoom(room, mats, opts = {}) {
       for (const mv of p.movers) {
         if (!leafGroups.has(mv.key)) leafGroups.set(mv.key, { piece: mv.piece, list: [] });
         const leaf = { M: _m.clone(), base: mv.base, slide: mv.slide, door: mine.get(mv.door) };
+        if (mv.hinge) leaf.hinge = mv.hinge;
         leafGroups.get(mv.key).list.push(leaf); if (leaf.door) leaf.door.leaves.push(leaf);
       }
     }
@@ -229,9 +232,17 @@ export function zoneAt(built, eye) {
 }
 
 const ease = (t) => t * t * (3 - 2 * t);
+const _h = new THREE.Matrix4(), _hp = new THREE.Vector3(), _ha = new THREE.Vector3();
 function setLeaf(leaf, t) {
   _t.makeTranslation(leaf.slide.x * ease(t), leaf.slide.y * ease(t), leaf.slide.z * ease(t));
-  _m.copy(leaf.M).multiply(_t).multiply(leaf.base);
+  _m.copy(leaf.M).multiply(_t);
+  // (a leaf that swings: each hinge in turn, outermost first, turns it by its angle about its axis through its point;
+  // a ramp's fold is a hinge on the ramp, given where it is when shut. Sliding leaves have none.)
+  if (leaf.hinge) for (const H of leaf.hinge) {
+    _hp.fromArray(H.at); _ha.fromArray(H.axis);
+    _m.multiply(_h.makeTranslation(_hp.x, _hp.y, _hp.z)).multiply(_h.makeRotationAxis(_ha, H.angle * ease(t))).multiply(_h.makeTranslation(-_hp.x, -_hp.y, -_hp.z));
+  }
+  _m.multiply(leaf.base);
   for (const im of leaf.meshes) { im.setMatrixAt(leaf.index, _m); im.instanceMatrix.needsUpdate = true; }
 }
 // doors open by themselves as someone comes near (mode 'auto'), or stay 'open' or 'shut'; returns whether any moved
@@ -252,10 +263,10 @@ export function setDoors(doors, t) { for (const D of doors) { D.t = D.target = t
 // the box a room's pieces fill (their own parts and door leaves, as placed)
 export function roomBounds(room) {
   const box = new THREE.Box3(), b = new THREE.Box3();
-  for (const pl of expand(zonesOf(room).flatMap((z) => z.pieces || []))) {
+  for (const zd of zonesOf(room)) for (const pl of expand(zd.pieces || [])) {
     const def = PIECES[pl.piece], p = builtPiece(pl.piece, pl.variant), off = [...(pl.off || [0, 0, 0])];
     if (def.at === 'wall') off[2] += WALL_FACE;
-    placeMatrix({ ...pl, off }, _m);
+    placeMatrix({ ...pl, off }, _m, gridOf(zd, room));
     for (const part of p.parts) { part.geo.computeBoundingBox(); box.union(b.copy(part.geo.boundingBox).applyMatrix4(_m)); }
     for (const mv of p.movers) for (const part of mv.piece.parts) { part.geo.computeBoundingBox(); box.union(b.copy(part.geo.boundingBox).applyMatrix4(mv.base).applyMatrix4(_m)); }
   }

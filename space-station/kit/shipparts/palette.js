@@ -1,0 +1,41 @@
+// THE SHIP PALETTE: the outsides of the ships, from the game's maker's pictures. Surfaces in piece.js's form
+// ({ c: colour (sRGB), r: roughness, m: metalness, w: wear }), so they ride in the one painted material like the
+// station's own (kit/materials.js SURF); glows as linear colours well over 1, for the bloom.
+//   hull     the off-white panels (a little warmer than the station's: his ships are cream-white, scuffed)
+//   hull2    a second, greyer off-white for panels beside it
+//   trim     the dark charcoal grey round the edges, the creases, the frames and the engines
+//   grey     a mid grey (bellies, mechanisms)
+//   yellow   the safety yellow of his stripes, fins and clamps
+//   red      the medic's red stripe (a stripe only: no cross, which is a protected symbol)
+//   teal     the medical mark's colour (sheet 2's pulse line)
+//   canister the miner's ore canisters (a dusty tan) and canBand, their orange bands
+//   inner    the hull's inside face, where no cabin wall covers it (the station's own off-white)
+//   frame    window and canopy frames
+// Glows (GLOW_SHIP): engine (the blue-white ring and nozzle), engineDim (a parked engine's low glow), strip (the blue
+// light strips along his hulls), jet (a thruster's plume), warm (the yellow-white floodlights), cutter (the laser
+// heads' orange).
+import { SURF } from '../materials.js';
+
+const s = (c, r, m, w) => ({ c, r, m, w });
+export const SHIP = {
+  hull: s('#cdc8b9', 0.55, 0.04, 0.9),
+  hull2: s('#bdbab0', 0.56, 0.05, 0.8),
+  trim: s('#3a3d42', 0.42, 0.4, 0.7),
+  grey: s('#6f7379', 0.5, 0.25, 0.6),
+  yellow: s('#d9a21e', 0.45, 0.02, 0.5),
+  red: s('#b3352b', 0.42, 0.03, 0.4),
+  teal: s('#1f9c86', 0.42, 0.03, 0.3),
+  canister: s('#b8ab90', 0.5, 0.2, 0.8),
+  canBand: s('#d27a1f', 0.45, 0.05, 0.5),
+  inner: s(SURF.white[0], SURF.white[1], SURF.white[2], SURF.white[3]),
+  frame: s('#2c2f34', 0.35, 0.5, 0.4),
+  gun: s(SURF.gun[0], SURF.gun[1], SURF.gun[2], SURF.gun[3]),
+  chrome: s(SURF.chrome[0], SURF.chrome[1], SURF.chrome[2], SURF.chrome[3]),
+};
+export const GLOW_SHIP = {
+  engine: [1.4, 4.6, 9.5], engineDim: [0.35, 1.2, 2.6], strip: [0.9, 3.0, 7.5], jet: [1.6, 4.2, 9.0],
+  warm: [7.0, 5.6, 3.0], cutter: [8.0, 3.4, 0.7],
+};
+// the paint names a hull piece's variant may carry (kit/shipparts/outside/hull.js), and the surface each stands for
+export const PAINTS = { white: SHIP.hull, white2: SHIP.hull2, grey: SHIP.grey, dark: SHIP.trim, yellow: SHIP.yellow, red: SHIP.red, teal: SHIP.teal };
+export const STRIPES = { ystripe: SHIP.yellow, rstripe: SHIP.red, tstripe: SHIP.teal, dstripe: SHIP.trim };
