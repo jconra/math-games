@@ -30,7 +30,7 @@ import { Acc } from './facet.js';
 import { latheZ, box } from './shapes.js';
 
 const PI = Math.PI;
-const BAND = { hull: SHIP.hull, yellow: SHIP.yellow, white2: SHIP.hull2, grey: SHIP.grey };
+const BAND = { hull: SHIP.hull, yellow: SHIP.yellow, white2: SHIP.hull2, grey: SHIP.grey, red: SHIP.red };
 
 export function mainEngine(p, o = {}) {
   const R = o.r ?? 1.1, L = o.len ?? 1.9, n = o.sides ?? 8, lit = o.lit ?? true, band = BAND[o.band ?? null] || SHIP.trim;
