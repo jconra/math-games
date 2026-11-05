@@ -42,6 +42,10 @@ export const bunkBed = lean(function bunkBed(p, o = {}) {
   if (light) {
     p.glowSlab('soft', -hl + e + 0.06, hl - e - 0.06, top - 0.045, top - 0.04, depth - 0.2, depth - 0.12);
     p.light([0, top - 0.12, depth - 0.3], 0.5, [1, 0.93, 0.82], [0, -1, 0], 2.4);
+    // and one along the underside of the top bunk, over the lower one (the station bunk's top base starts at 1.32)
+    const zf = FACE + (depth - FACE - 0.01) * 0.85;
+    p.slab('black', -hl + e + 0.06, hl - e - 0.06, 1.3, 1.32, zf - 0.05, zf, { r: 0.004 }); p.glowSlab('soft', -hl + e + 0.08, hl - e - 0.08, 1.296, 1.3, zf - 0.04, zf - 0.01);
+    p.light([0, 1.2, zf - 0.2], 0.4, [1, 0.93, 0.82], [0, -1, 0], 2);
   }
   return p;
 });

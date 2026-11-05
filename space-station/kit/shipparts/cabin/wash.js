@@ -45,13 +45,13 @@ export function basin(p, o = {}) {
   p.slab('black', -hw, hw, 0.4, 0.43, FACE, front - 0.02, { r: 0.006 });
   p.slab('white2', -hw, hw, top - 0.03, top, FACE, depth, { r: 0.012 });
   sinkTop(p, 0, top, (FACE + depth) / 2 + 0.04, Math.min(0.34, w - 0.1), Math.min(0.26, depth - 0.16));
-  // the mirror in a charcoal frame, a strip light over it
-  const mw = Math.min(0.44, w - 0.04) / 2;
-  p.slab('black', -mw - 0.02, mw + 0.02, 1.08, 1.67, FACE, FACE + 0.02, { r: 0.008 });
-  p.slab(STEEL, -mw, mw, 1.1, 1.65, FACE + 0.02, FACE + 0.026, { r: 0.002, seg: 1, cell: 9 });
-  p.slab('chrome', -mw + 0.01, mw - 0.01, 1.11, 1.64, FACE + 0.026, FACE + 0.029, { r: 0.001, seg: 1, cell: 9 });
-  p.slab('black', -mw - 0.02, mw + 0.02, 1.7, 1.75, FACE, FACE + 0.07, { r: 0.01 }); p.glowSlab('soft', -mw, mw, 1.694, 1.7, FACE + 0.02, FACE + 0.055);
-  p.light([0, 1.6, FACE + 0.3], 0.35, [1, 0.96, 0.9], [0, -0.5, 0.86], 2);
+  // the mirror in a charcoal frame, at a 1.75 m person's face (1.30 to 1.92 m), a strip light over it
+  const mw = Math.min(0.44, w - 0.04) / 2, m0 = 1.3, m1 = 1.92;
+  p.slab('black', -mw - 0.02, mw + 0.02, m0 - 0.02, m1 + 0.02, FACE, FACE + 0.02, { r: 0.008 });
+  p.slab(STEEL, -mw, mw, m0, m1, FACE + 0.02, FACE + 0.026, { r: 0.002, seg: 1, cell: 9 });
+  p.slab('chrome', -mw + 0.01, mw - 0.01, m0 + 0.01, m1 - 0.01, FACE + 0.026, FACE + 0.029, { r: 0.001, seg: 1, cell: 9 });
+  p.slab('black', -mw - 0.02, mw + 0.02, m1 + 0.05, m1 + 0.1, FACE, FACE + 0.07, { r: 0.01 }); p.glowSlab('soft', -mw, mw, m1 + 0.044, m1 + 0.05, FACE + 0.02, FACE + 0.055);
+  p.light([0, m1 - 0.1, FACE + 0.3], 0.35, [1, 0.96, 0.9], [0, -0.5, 0.86], 2);
 }
 
 export function shower(p, o = {}) {

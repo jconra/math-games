@@ -19,7 +19,7 @@ export const PRESETS = {
   cabinScanner: { hood: {} },
   cabinPharmacy: { '2 m': {}, '1.5 m': { len: 1.5 }, '1 m': { len: 1.0, shelves: 3 } },
   cabinStretcher: { trolley: {}, low: { top: 0.5 } },
-  cabinReactor: { upright: {}, drum: { form: 'drum' }, 'big drum': { form: 'drum', w: 1.8, len: 2.6 }, 'no pipes': { pipes: 0 } },
+  cabinReactor: { upright: {}, drum: { form: 'drum' }, 'big drum': { form: 'drum', w: 2.0, len: 2.6 }, 'no pipes': { pipes: 0 } },
   cabinHolo: { terrain: {}, planet: { show: 'planet' }, console: { form: 'console' } },
 };
 const entry = (id, name, mount, foot, fn) => ({ name, group: 'Ship cabin', at: 'free', mount, variants: Object.keys(PRESETS[id]), foot, build: (p, v) => fn(p, PRESETS[id][v] ?? {}) });

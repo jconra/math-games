@@ -74,7 +74,7 @@ export function lean(build) {
 // one panel of wall, its skirting and its cornice (as parts, so a run of them draws each size once)
 const panel = lean((p, o) => wallPanel(p, o.v, shipSizes(o)));
 const trimOf = lean((p, o) => trim(p, o.v, shipSizes(o)));
-const ribOf = lean((p, o) => rib(p, o.v, shipSizes(o)));
+const ribOf = lean((p, o) => rib(p, o.v, shipSizes(o)));   // (o.h: where its knee ends, the ceiling or a beam's underside)
 // a run's panels: whole panels of `panel` and what is left over (both on the grid), centred on x = 0
 function panels(len, w) {
   const n = Math.floor(len / w + 1e-6), rest = +(len - n * w).toFixed(3), out = [];
@@ -117,7 +117,7 @@ export const corner = lean(function corner(p, o = {}) { stationCorner(p, o.v || 
 // ── portal frames ───────────────────────────────────────────────────────────────────────────────────────────────────
 const beamOf = lean((p, o) => beam(p, 'plain', { w: o.w, h: ROOM }));
 export const frame = lean(function frame(p, o = {}) {
-  const { wid = 1, strip = true, top = TOP } = o, r = part(ribOf, { v: strip ? 'strip' : 'plain', top });
+  const { wid = 1, strip = true, top = TOP } = o, r = part(ribOf, { v: strip ? 'strip' : 'plain', top, h: ROOM - 0.1 });   // (its knees end under the beam)
   placeInto(p, r, { at: [0, 0, -wid / 2] }); placeInto(p, r, { at: [0, 0, wid / 2], rot: [0, PI, 0] });
   placeInto(p, part(beamOf, { w: wid }), { rot: [0, PI / 2, 0] });
   return p;

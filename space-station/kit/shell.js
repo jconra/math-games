@@ -332,7 +332,8 @@ export function corner(p, v, s) {
     p.extrude('black', [[0, 0], [Z(0.36), 0], [Z(0.36), -Z(0.17)], [Z(0.17), -Z(0.36)], [0, -Z(0.36)]], TOP, 0.012).rotateX(-PI / 2);
     slant2(p, h, TOP, Z);
     const sh = sized ? TOP - 0.07 - 0.75 : 1.7, sy = sized ? 0.75 + sh / 2 : 1.6;
-    const g = bevelBox([0.05, sh, 0.012], [0, 0, 0], { r: 0.004, seg: 1, cell: 9 }); put(g, [Z(0.265), sy, Z(0.265)], [0, PI / 4, 0]); p.add('glow', g, 'white');
+    const fc = sized ? (Z(0.36) + Z(0.17)) / 2 : 0.265;   // (the middle of its 45-degree face)
+    const g = bevelBox([0.05, sh, 0.012], [0, 0, 0], { r: 0.004, seg: 1, cell: 9 }); put(g, [fc, sy, fc], [0, PI / 4, 0]); p.add('glow', g, 'white');
     for (const y of sized ? [1.0, 1.6, TOP - 0.3] : [1.0, 1.6, 2.2]) p.light([Z(0.32), y, Z(0.32)], 0.9, [0.93, 0.96, 1], [Math.SQRT1_2, 0, Math.SQRT1_2], 6);
     p.slab('black', 0, Z(0.38), 0, 0.13, 0, Z(0.38), { r: 0.012, skip: ['-y'] });
   } else {

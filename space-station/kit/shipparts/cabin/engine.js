@@ -5,7 +5,8 @@
 //                       charcoal base housing and a top housing whose collar meets the ceiling; 'drum': a long drum
 //                       lying along x on two cradles, heavy charcoal rings with a lit seam in each, a white pipe and
 //                       two copper ones up from it into the ceiling (his engineering pictures' drum, as big as the room
-//                       takes: o.w 1.8 gives a drum 1.4 m across)
+//                       takes: its depth o.w, 1.6 by default, less 0.7 m: o.w 2.0 gives a drum 1.3 m across), its rail
+//                       0.3 m clear of its rings
 //     o.w 1.2           the footprint (upright: w x w; drum: its depth along z)
 //     o.len 2.0         the drum's length along x
 //     o.h 2.5           the ceiling (the upright's collar and the drum's pipe reach it, no further)
@@ -82,7 +83,7 @@ export function reactor(p, o = {}) {
 
 // the drum: lying along x, rings round it, glowing bands between, end caps, cradles, a pipe up and runs out each end
 function drum(p, o) {
-  const len = o.len ?? 2.0, w = o.w ?? 1.2, h = o.h ?? 2.5, out = o.pipes ?? 0.4, R = Math.min(0.75, w / 2 - 0.2), cy = R + 0.25, hl = len / 2;
+  const len = o.len ?? 2.0, w = o.w ?? 1.6, h = o.h ?? 2.5, out = o.pipes ?? 0.4, R = Math.min(0.75, w / 2 - 0.35), cy = R + 0.25, hl = len / 2;   // (0.35: its rings, and its rail 0.3 m clear of them)
   const along = (g, x) => { put(g, [x, cy, 0], [0, 0, PI / 2]); return g; };
   // the shell in segments, a glowing band between each, a charcoal ring over each joint
   const n = Math.max(2, Math.round((len - 0.5) / 0.4)), L = (len - 0.5) / n;
@@ -110,7 +111,7 @@ function drum(p, o) {
   if (out > 0) for (const sx of [-1, 1]) { run(p, sx * (hl - 0.05), sx * (hl + out), cy, 0); placeInto(p, part(pipe, sx > 0 ? 'valve' : 'sleeve'), { at: [sx * (hl + (sx > 0 ? 0.15 : 0.04)), cy, 0] }); }
   // a straight rail along the front (+z), on posts
   if (o.rail ?? true) {
-    const z = w / 2 - 0.06, x0 = -hl + 0.3, x1 = hl - 0.3;
+    const z = R + 0.06 + 0.25, x0 = -hl + 0.3, x1 = hl - 0.3;
     for (const y of [0.55, 1.05]) p.sweep('yellow', circle(0.02, 8), [{ p: v3(x0, y, z), x: v3(0, 0, -1), y: v3(0, 1, 0) }, { p: v3(x1, y, z), x: v3(0, 0, -1), y: v3(0, 1, 0) }], { caps: true });
     for (let k = 0; k <= 2; k++) { const x = x0 + (x1 - x0) * k / 2; p.cyl('yellow', 0.022, 1.05, [x, 0.525, z], null, 10); p.cyl('black', 0.045, 0.02, [x, 0.01, z], null, 12); }
   }

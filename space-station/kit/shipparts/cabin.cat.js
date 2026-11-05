@@ -65,7 +65,7 @@ export const PRESETS = {
   cabinRollers: { 'with a pallet': { len: 2.5, pallet: true }, 'lane 5.5 m': { len: 5.5 } },
   cabinTieDown: { '2 m': { len: 2 }, '5.5 m': { len: 5.5 } },
   cabinHandhold: { along: {}, upright: { upright: true, len: 0.5 } },
-  cabinLadder: { 'to the ceiling': {}, 'up to a deck': { h: 1.3 } },
+  cabinLadder: { 'to the ceiling': {}, 'ground to the deck (1.3 m)': { h: 1.3 } },
   cabinWallKit: Object.fromEntries(Object.keys(WALLKIT).map((k) => [k, { item: k }])),
   cabinSample: { open: { ceiling: false }, closed: { ceiling: true } },
 };

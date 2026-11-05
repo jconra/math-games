@@ -16,7 +16,7 @@ import { extinguisher, wallScreen, breaker, label, pipe } from '../../wallkit.js
 import { FACE } from './ship.js';
 
 const PI = Math.PI;
-// (wall-kit pieces at a ship's sizes: the breaker's conduit shorter, the pipe as long as the corridor)
+// (wall-kit pieces at a ship's sizes: the breaker's conduit shorter, a pipe as long as it needs)
 const shortBreaker = (p, s) => breaker(p, 'switches', s), longPipe = (p, s) => pipe(p, 'straight', s);
 export const SAMPLE_AT = [-2.5, 0, -0.5];
 // the sample's rooms in grid metres (before SAMPLE_AT), for the rigs: [x0, z0, x1, z1]
@@ -68,10 +68,13 @@ export function sampleRoom(p, o = {}) {
   hang(part(label, 'CREW dark'), 4.65, 1.75, 0.5, '-z');                                // (on a flat bay: the panel faces -z, so its upper left bay is at +x)
   hang(part(shortBreaker, { conduit: 0.55 }), 4.0, 1.0, -0.5, '+z');
   placeInto(p, part(handhold, { upright: true, len: 0.5 }), { at: at(3.6, 0, 0.5), rot: [0, PI, 0] });
-  // a pipe along the washroom side, under the cornice, on hangers into it
+  // a pipe along the washroom side, under the cornice, on hangers into it: in through the far end wall, along to
+  // just short of the washroom's doorway (clear of its status light), where an elbow turns it up into the ceiling
   const py = 2.08, pz = -0.5 + 0.176;   // (clear of the portal frames' ribs, 0.104 out from the wall line)
-  placeInto(p, part(longPipe, { len: 5 }), { at: at(2.5, py, pz) });
-  for (const x of [0.75, 2.5, 4.25]) placeInto(p, part(pipe, 'flange'), { at: at(x, py, pz) });
-  for (const x of [FACE + 0.035, 5 - FACE - 0.035]) placeInto(p, part(pipe, 'sleeve'), { at: at(x, py, pz) });   // (where it goes through each end wall)
+  const ex = 2.0;   // (the elbow: its straight leg x 2.0..3.0, its upright at x 1.8, clear of the frame's rib and beam at x 2)
+  placeInto(p, part(pipe, 'elbow-r'), { at: at(ex, py, pz), rot: [PI, 0, 0] });   // (turned over: it turns up, not down)
+  placeInto(p, part(longPipe, { len: 5 - ex - 1 }), { at: at((5 + ex + 1) / 2, py, pz) });
+  for (const x of [2.6, 4.25]) placeInto(p, part(pipe, 'flange'), { at: at(x, py, pz) });
+  placeInto(p, part(pipe, 'sleeve'), { at: at(5 - FACE - 0.035, py, pz) });   // (where it comes through the end wall)
   return p;
 }
