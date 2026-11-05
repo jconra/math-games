@@ -15,14 +15,15 @@ export const SECTIONS = {
 };
 // CAP STYLES (the hull's ends): steps in toward the end, each `len` cells long, bringing the sides in `w` cells, the
 // roof down `r` steps and the belly up `b` steps (the chamfers keep their slope); `glass` makes a step's roof and upper
-// chamfers a canopy (dark glass in frames); `paint` paints a step's facets by name ({ belly, lo, side, up, roof });
+// chamfers a canopy (dark glass in frames), or a list names which (['up']: side windows under an off-white roof);
+// `paint` paints a step's facets by name ({ belly, lo, side, up, roof });
 // `face` paints the flat end face. A nose as his: a long canopy sloping down over the cockpit to a low off-white tip,
 // dark only in a band along its underside.
 export const CAP_STYLES = {
   flat: { stages: [], face: 'white' },                                                                    // a flat end (engines go here)
   blunt: { stages: [{ len: 2, w: 1, r: 1, b: 1, paint: { belly: 'dark', lo: 'dark' } }], face: 'white2' },  // a short band all round
-  canopy: { stages: [{ len: 4, w: 1, r: 2, b: 0, glass: true }, { len: 3, w: 1, r: 2, b: 1, glass: true, paint: { lo: 'dark' } }, { len: 1, w: 1, r: 0, b: 0, paint: { belly: 'dark', lo: 'dark' } }], face: 'white2' },
-  wedge: { stages: [{ len: 5, w: 2, r: 2, b: 0, glass: true }, { len: 4, w: 1, r: 2, b: 1, glass: true, paint: { lo: 'dark' } }, { len: 2, w: 1, r: 0, b: 0, paint: { belly: 'dark', lo: 'dark' } }], face: 'white2' },   // longer, its sides coming in to a narrow point (his explorer's)
+  canopy: { stages: [{ len: 4, w: 1, r: 2, b: 0, glass: ['up'] }, { len: 3, w: 1, r: 2, b: 1, glass: true, paint: { lo: 'dark' } }, { len: 1, w: 1, r: 0, b: 0, paint: { belly: 'dark', lo: 'dark' } }], face: 'white2' },
+  wedge: { stages: [{ len: 5, w: 2, r: 2, b: 0, glass: ['up'] }, { len: 4, w: 1, r: 2, b: 1, glass: true, paint: { lo: 'dark' } }, { len: 2, w: 1, r: 0, b: 0, paint: { belly: 'dark', lo: 'dark' } }], face: 'white2' },   // longer, its sides coming in to a narrow point (his explorer's)
   taper: { stages: [{ len: 2, w: 1, r: 1, b: 1 }], face: 'dark' },
 };
 // a chamfer for a step too tight for it: half the size at the same slope if it halves evenly, else a 1:1, else none

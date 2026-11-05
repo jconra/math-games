@@ -103,6 +103,7 @@
 {"piece":"cabinWall","cell":[-2,2.5],"turn":2,"level":0,"variant":"1 m"},
 {"piece":"cabinWall","cell":[2,2.5],"turn":0,"level":0,"variant":"1 m"},
 {"piece":"cabinWall","cell":[2,2.5],"turn":2,"level":0,"variant":"1 m"},
+{"piece":"cabinWall","cell":[3.5,-2],"turn":3,"level":0,"variant":"1.5 m"},
 {"piece":"hullPanel","cell":[4.5,-2.5],"turn":1,"level":0,"variant":"x4 h2 grey seam"},
 {"piece":"hullPanel","cell":[4.5,-2.5],"turn":1,"level":2,"variant":"x4 h1 ystripe seams"},
 {"piece":"hullPanel","cell":[4.5,-2.5],"turn":1,"level":3,"variant":"x4 h1 framed"},

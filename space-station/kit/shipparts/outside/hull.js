@@ -141,7 +141,8 @@ export function hullCap(p, variant = 'nose sample canopy') {
     for (let k = 0; k < 8; k++) {
       const k1 = (k + 1) % 8, quad = [P(A[k], za), P(A[k1], za), P(B[k1], zb), P(B[k], zb)], name = FACETS[k];
       const c = quad.reduce((s, q) => s.add(q), v(0, 0, 0)).multiplyScalar(0.25), out = c.clone().sub(v(0, yc, c.z)).setZ(0).normalize().add(v(0, 0, dir * 0.6));
-      const lk = { ...look, glass: !!st.glass && (name === 'roof' || name === 'up'), paint: st.paint?.[name] ? PAINTS[st.paint[name]] : look.paint };
+      const gl = st.glass === true ? ['roof', 'up'] : st.glass || [];   // (glass: true for the roof and the upper chamfers, or a list of facet names)
+      const lk = { ...look, glass: gl.includes(name), paint: st.paint?.[name] ? PAINTS[st.paint[name]] : look.paint };
       facet(acc, quad, out, lk);
     }
   }
