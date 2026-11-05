@@ -11,7 +11,7 @@ import { SHIP } from '../palette.js';
 
 export const THICK = 0.06;     // the hull plate: its inside face this far in
 export const STEP = 0.6;       // the longest edge of a triangle (the bake lights each corner)
-const SEAM_W = 0.022, SEAM_UP = 0.003, FRAME_W = 0.1;
+const SEAM_W = 0.032, SEAM_UP = 0.003, FRAME_W = 0.1;
 const v = (x, y, z) => new THREE.Vector3(x, y, z);
 
 // the normal of a polygon (Newell's), not normalised
