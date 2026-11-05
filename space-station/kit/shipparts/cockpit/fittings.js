@@ -14,6 +14,8 @@ export function cockpitLocker(p, o = {}) {
   if (y < 0.05) p.slab('black', -w / 2 + 0.02, w / 2 - 0.02, 0, 0.06, 0.02, d - 0.04, LEAN);
   const y0 = y < 0.05 ? 0.06 : y;
   p.slab('white', -w / 2, w / 2, y0, y0 + h - 0.06, 0, d - 0.025, { ...FIRM, cell: 0.6 });
+  for (const s of [-1, 1]) p.slab('black', s * w / 2 - 0.006, s * w / 2 + 0.006, y0, y0 + h - 0.06, d - 0.06, d - 0.02, { r: 0 });   // (charcoal edges down its front)
+  p.slab('black', -w / 2, w / 2, y0 + h - 0.072, y0 + h - 0.056, 0.02, d - 0.02, { r: 0 });   // (and along its top)
   p.slab('white2', -w / 2 + 0.02, w / 2 - 0.02, y0 + 0.02, y0 + h - 0.08, d - 0.025, d - 0.008, LEAN);
   p.slab('band', -w / 2 + 0.05, w / 2 - 0.05, y0 + h * 0.36, y0 + h * 0.36 + 0.05, d - 0.008, d - 0.004, { r: 0 });
   p.slab('black', -0.05, 0.05, y0 + h - 0.16, y0 + h - 0.13, d - 0.008, d + 0.012, { r: 0 });   // (the latch)

@@ -155,14 +155,13 @@ export function decalAtlas() {
 function cockpitPrint(g, cell, uvOf, rect) {
   const F = (px) => `bold ${px}px "DejaVu Sans", Arial, sans-serif`, fit = (t, x, y, mw) => { const w = g.measureText(t).width, s = Math.min(1, mw / w); g.save(); g.translate(x, y); g.scale(s, 1); g.fillText(t, 0, 0); g.restore(); };
   const clip = (x, y, w, h, fn) => { g.save(); g.beginPath(); g.rect(x, y, w, h); g.clip(); g.fillStyle = '#fff'; g.strokeStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'; fn(); g.restore(); };
-  // (names spelled out; for a row of six, short ones so they don't run together)
+  // (names spelled out in full, for children reading them)
   const NAMES = { a: ['ENGINE 1', 'ENGINE 2', 'PUMP', 'NAV', 'RADIO', 'LIGHTS'], b: ['HEAT', 'AIR', 'SHIELD', 'GEAR', 'DOCK', 'BEACON'], c: ['VOLUME', 'BRIGHT', 'TEMP', 'FAN', 'MAP', 'ZOOM'] };
-  const SHORT = { a: ['ENG1', 'ENG2', 'PUMP', 'NAV', 'RADIO', 'LITE'], b: ['HEAT', 'AIR', 'SHLD', 'GEAR', 'DOCK', 'BCN'], c: ['VOL', 'DIM', 'TEMP', 'FAN', 'MAP', 'ZOOM'] };
   ['a', 'b', 'c'].forEach((k, j) => {
     const [x, y] = cell(j < 2 ? 56 + j : 62);
     for (let n = 3; n <= 6; n++) {
       const yy = y + (n - 3) * 16;
-      clip(x, yy, 256, 16, () => { g.font = F(11); for (let i = 0; i < n; i++) fit((n === 6 ? SHORT : NAMES)[k][i], x + 256 * (i + 0.5) / n, yy + 8.5, 256 / n - 12); });
+      clip(x, yy, 256, 16, () => { g.font = F(11); for (let i = 0; i < n; i++) fit(NAMES[k][i], x + 256 * (i + 0.5) / n, yy + 8.5, 256 / n - 12); });
       rect[`cp:lg${n}${k}`] = uvOf(x, yy, 256, 16);
     }
   });

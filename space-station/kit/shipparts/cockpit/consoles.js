@@ -1,13 +1,13 @@
 // COCKPIT CONSOLES: the curved dashboard, the engineer's station and a small wall console. Their screens are the
 // station's screen sheet (look.js's MFD crops, and the station's own wall screen), their panels panels.js's.
-//   dashboard(p, o)  the curved dashboard across the front of the cockpit, for two or three seats: screens edge to edge
-//                    in two rows, switches on the shelf, and the maths on a hero screen raised on its own hood. Its near edge (the
+//   dashboard(p, o)  the curved dashboard across the front of the cockpit, for two or three seats: a row of big framed
+//                    screens filling its face (the biggest, in the middle, shows the maths), switches on the shelf. Its near edge (the
 //                    seats' side) runs along an arc whose ends come back toward the seats; it faces +z, its near edge's
 //                    middle at x = 0, z = 0, reaching forward (-z) toward the nose. Its section, from the seats: a
 //                    padded lip over the knees, a shelf of switches, a sloped face of screens (two before each seat), a
 //                    hood, a top deck under the windscreen; under the lip, room for the knees and the feet, closed by a
 //                    toe board. o: seats (2 | 3), w (the near edge's width: 2.0 for two, 3.0 for three), bow (how far its
-//                    ends come back, 0.17: clear of the seats' outer armrests), depth (0.7), h (the top of the face of screens, 1.08; the hood stands 0.06
+//                    ends come back, 0.17: clear of the seats' outer armrests), depth (0.7), h (the top of the face of screens, 1.12; the hood stands 0.06
 //                    over it), knee (the lip's underside, 0.66), toe (the toe board, 0.45 forward of the edge), seatsAt (the
 //                    seats' x, in its own frame: [-0.5, 0.5] or [-1, 0, 1]), deckY (the top deck's height at its far
 //                    end, h: give depth and deckY to run the deck on to a windscreen's foot)
@@ -30,7 +30,7 @@ const PI = Math.PI, FIRM = { r: 0.01, seg: 1, cell: 9, loops: [] };
 // the dashboard's shape for options o: its arc and its section (a closed outline in (s, y), s forward from the near
 // edge, counter-clockwise; each point names the surface of the edge that ends there: null, the floor, isn't drawn)
 function dashShape(o = {}) {
-  const seats = o.seats === 3 ? 3 : 2, w = o.w ?? (seats === 3 ? 3.0 : 2.0), bow = o.bow ?? 0.17, depth = o.depth ?? 0.7, h = o.h ?? 1.08, knee = o.knee ?? 0.66, toe = o.toe ?? 0.45, deckY = o.deckY ?? h;
+  const seats = o.seats === 3 ? 3 : 2, w = o.w ?? (seats === 3 ? 3.0 : 2.0), bow = o.bow ?? 0.17, depth = o.depth ?? 0.7, h = o.h ?? 1.12, knee = o.knee ?? 0.66, toe = o.toe ?? 0.45, deckY = o.deckY ?? h;
   const R = (w * w / 4 + bow * bow) / (2 * bow), T = Math.asin(w / 2 / R);
   const seatsAt = o.seatsAt || (seats === 3 ? [-1, 0, 1] : [-0.5, 0.5]);
   const fs = 0.12, fe = fs + (h - 0.02 - knee - 0.12);   // (the face of screens rises at 45 degrees from the shelf to the hood)
@@ -92,40 +92,31 @@ export function dashboard(p, o = {}) {
   for (let i = 1; i < n; i += 2) { const th = -T + 2 * T * i / n, c = arcAt(R, -0.033, S.knee + 0.055, th), g = new THREE.BoxGeometry(0.03, 0.012, 0.004); g.rotateY(-th); g.translate(...c); p.add('glow', g, i % 4 === 1 ? LIT.green : LIT.blue); }   // (lamps along the lip)
   strip(S.toe - 0.004, 0.33, S.toe - 0.004, 0.345, [1, 0], LIT.blue);                 // (a footwell light along the toe board)
   for (let i = 1; i < n; i += 2) { const th = -T + 2 * T * i / n, c = arcAt(R, S.toe - 0.005, 0.27, th), g = new THREE.BoxGeometry(0.03, 0.02, 0.004); g.rotateY(-th); g.translate(...c); p.add('glow', g, i % 4 === 1 ? LIT.amber : LIT.green); }   // (lamps down the toe board)
-  // the face: screens edge to edge in two rows, as the wall of screens in his pictures (two columns before each seat,
-  // one between two seats, a narrower one at each end); a row of switches on the shelf before each seat; and the maths
-  // on a hero screen twice their size, raised on its own hood over the middle (with three abreast, over the gap on the
-  // first seat's side), out of every flier's own window
-  const len = Math.hypot(S.fe - S.fs, S.h - S.knee - 0.14), faceR = R + (S.fs + S.fe) / 2, two = len >= 0.39;
+  // the face: one row of big screens, each in its own charcoal frame, filling the face as the bays of screens in his
+  // pictures: the biggest in the middle shows the maths; a large one before each flier (with three abreast, the
+  // engineer's is the big one, and the gaps get one each); a small one at each end; nothing stands above the face, so
+  // the windscreen is clear. A row of switches on the shelf before each seat.
+  const len = Math.hypot(S.fe - S.fs, S.h - S.knee - 0.14), faceR = R + (S.fs + S.fe) / 2;
   const nudge = o.nudge || 0;   // (for the checks only: every panel pushed out of its face by this much)
   const at = (x, run, src, u) => { const q = run === 'shelf' ? F.shelf(x, u, 0.002 + nudge) : F.screens(x, u, 0.002 + nudge); mount(p, src, { at: q.at, rot: q.rot }, run + ' ' + x.toFixed(2)); return q; };
-  const rowsU = two ? [0.109, 0.307] : [len / 2 + 0.022];
-  const column = (x, faces, w = 0.3) => rowsU.forEach((u, r) => at(x, 'face', part(mfd, { face: faces[r % faces.length], w }), u));
-  const COLS = [['radar', 'bars', 'text', 'radar'], ['bars', 'radar', 'radar', 'text'], ['radar', 'text', 'bars', 'radar']];
+  const screen = (x, face, w) => at(x, 'face', part(mfd, { face, w, frame: true }), len / 2 + 0.011);   // (its frame centred up the face)
+  const big = 0.6, mid = 0.5, half = (w) => w / 2 + 0.034;   // (the maths the widest; the others about as tall)
+  screen(0, 'sum', big);
+  const MAIN = ['bars', 'text', 'radar'];
   S.seatsAt.forEach((xs, i) => {
-    const f = COLS[i % 3];
-    column(xs - 0.165, [f[0], f[2]]); column(xs + 0.165, [f[1], f[3]]);
+    if (Math.abs(xs) > 0.01) screen(xs + Math.sign(xs) * (half(big) + half(mid) + 0.03 - Math.abs(xs) > 0 ? half(big) + half(mid) + 0.03 - Math.abs(xs) : 0), MAIN[i % 3], mid);
     at(xs, 'shelf', part(switchRow, { n: 5, pitch: 0.045, covers: i === 0 ? 1 : 0, legend: i % 2 ? 'b' : 'a' }));
     const q = F.screens(xs, len / 2, 0.25); p.light(q.at, 0.4, [0.35, 0.65, 1], [Math.sin(-q.th), 0.2, Math.cos(q.th)], 2.4);
   });
-  if (S.seats === 2) { column(0, ['text', 'bars']); at(0, 'shelf', part(buttonGrid, { cols: 6, rows: 2, pitch: 0.036, seed: 2 })); }
-  else for (const s of [-1, 1]) at(s * 0.5, 'shelf', part(knobRow, { n: 3, pitch: 0.06 }));
-  const xo = Math.max(...S.seatsAt.map(Math.abs)) + 0.335, room = Math.sin(T) * faceR - xo;
-  if (room > 0.12) for (const s of [-1, 1]) {
-    const x = s * (xo + room / 2);
-    if (room > 0.2) column(x - s * 0.012, ['text', 'bars'], Math.min(0.24, room - 0.06));   // (clear of the trim at the face's end)
-    else { at(x, 'face', part(knobRow, { n: 2, pitch: 0.06 }), 0.09); at(x, 'face', part(buttonGrid, { cols: 3, rows: 3, pitch: 0.034, seed: s < 0 ? 9 : 10 }), 0.25); }
-    at(x, 'shelf', part(buttonGrid, { cols: 3, rows: 2, pitch: 0.034, seed: s < 0 ? 11 : 12 }));
-  }
-  // the hero: a housing standing on the deck just behind the hood, a hood of its own over the screen with an amber lip
-  {
-    const x = S.seats === 2 ? 0 : (S.seatsAt[0] < 0 ? -0.5 : 0.5), sd = S.fe + 0.17, th = Math.asin(x / (R + sd)), base = arcAt(R, sd, S.h + 0.04, th);
-    const rot = turn(-th, 0.18), c = [base[0], S.h + 0.2, base[2]], W = 0.56, H = 0.27;
-    p.box('black', [W - 0.08, 0.16, 0.14], local([base[0], S.h + 0.1, base[2]], turn(-th, 0), 0, 0, -0.03), turn(-th, 0), { r: 0.01, seg: 1, cell: 9, loops: [] });   // (its foot on the deck)
-    p.box('black', [W, H, 0.07], c, rot, { r: 0.012, seg: 1, cell: 9, loops: [] });
-    p.box('black', [W + 0.02, 0.025, 0.1], local(c, rot, 0, H / 2 + 0.006, 0.02), rot, { r: 0.006, seg: 1, cell: 9, loops: [] });   // (its hood)
-    glowBox(p, LIT.amber, [W - 0.02, 0.006, 0.006], local(c, rot, 0, H / 2 - 0.006, 0.072), rot);
-    mount(p, part(mfd, { face: 'sum', w: 0.5 }), { at: local(c, rot, 0, 0.004, 0.035 + 0.002 + nudge), rot }, 'hero sum');
+  if (S.seats === 3) for (const s of [-1, 1]) { screen(s * 0.53, s < 0 ? 'radar' : 'bars', 0.3); at(s * 0.5, 'shelf', part(buttonGrid, { cols: 5, rows: 2, pitch: 0.036, seed: s < 0 ? 4 : 6 })); }
+  else at(0, 'shelf', part(buttonGrid, { cols: 6, rows: 2, pitch: 0.036, seed: 2 }));
+  // the ends: past the outer screens, a small screen if one fits, else knobs and a grid
+  const outer = Math.max(...S.seatsAt.map(Math.abs)), oc = S.seats === 3 ? outer : Math.max(outer, half(big) + half(mid) + 0.03);
+  const x0 = oc + half(mid) + 0.02, room = Math.sin(T) * faceR - 0.02 - x0;
+  for (const s of [-1, 1]) {
+    if (room >= 0.2) screen(s * (x0 + room / 2), 'text', room - 0.07);
+    else if (room > 0.15) { at(s * (x0 + room / 2), 'face', part(knobRow, { n: 2, pitch: 0.05 }), 0.12); at(s * (x0 + room / 2), 'face', part(buttonGrid, { cols: 2, rows: 3, pitch: 0.034, seed: s < 0 ? 9 : 10 }), 0.28); }
+    at(s * Math.min(x0 + Math.max(0, room) / 2, Math.sin(T) * R - 0.12), 'shelf', part(buttonGrid, { cols: 3, rows: 2, pitch: 0.034, seed: s < 0 ? 11 : 12 }));
   }
   // a dark trim and an amber line up each end, where the face meets the off-white cap
   for (const sg of [-1, 1]) { const th = sg * T * 0.995, a = arcAt(R, S.fs, S.knee + 0.12, th), b = arcAt(R, S.fe, S.h - 0.02, th); bar(p, 'black', a, b, [0.03, 0.012]); glowBox(p, LIT.amber, [0.006, 0.006, Math.hypot(...b.map((v, i) => v - a[i])) - 0.02], a.map((v, i) => (v + b[i]) / 2 + (i === 1 ? 0.004 : 0)), turn(-th, -Math.PI / 4)); }
@@ -154,6 +145,7 @@ export function engineerStation(p, o = {}) {
   // the hood with its lamp, lighting the desk
   p.slab('white2', -w / 2, w / 2, back - 0.04, back, 0, 0.2, { ...FIRM, r: 0.014 });
   glowBox(p, 'soft', [w - 0.1, 0.006, 0.03], [0, back - 0.043, 0.16]);
+  glowBox(p, LIT.amber, [w - 0.06, 0.006, 0.006], [0, h - 0.05, d + 0.012]);   // (an amber line under the desk's lip)
   p.light([0, back - 0.15, 0.3], 0.45, [0.95, 0.97, 1], [0, -0.8, 0.6], 2.2);
   // screens across the back panel, switches under them, a grid and knobs on the desk's front
   const faces = ['bars', 'text', 'scope', 'radar'], ns = Math.max(1, Math.floor((w - 0.08) / 0.4)), pitch = (w - 0.08) / ns;
@@ -179,4 +171,5 @@ export function wallConsole(p, o = {}) {
   mount(p, part(buttonGrid, { cols: 4, rows: 2, pitch: 0.036, seed: 14 }), { at: [-0.1, ...kp(0, 0.007)], rot: [0.5 - PI / 2, 0, 0] }, 'keypad');
   mount(p, part(knobRow, { n: 2, pitch: 0.06 }), { at: [0.16, ...kp(0, 0.007)], rot: [0.5 - PI / 2, 0, 0] }, 'knobs');
   for (const s of [-1, 1]) p.glowSlab(s < 0 ? LIT.green : LIT.amber, s * (w / 2 - 0.05) - 0.008, s * (w / 2 - 0.05) + 0.008, y + 0.05, y + 0.066, 0.036, 0.04);
+  glowBox(p, LIT.blue, [w - 0.12, 0.006, 0.006], [0, y + 0.145, 0.205]);   // (a blue line under the keypad shelf)
 }

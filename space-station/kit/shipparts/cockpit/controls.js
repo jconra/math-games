@@ -40,7 +40,7 @@ export function flightStick(p, o = {}) {
     p.lathe('rubber', [[0.001, 0.018], [0.075, 0.018], [0.07, 0.04], [0.045, 0.09], [0.034, 0.13], [0.001, 0.13]], 10);
     bar(p, 'gun', [0, 0.1, 0.01], [0, F.at[1] - 0.06, F.at[2] - 0.005], 0.06, { ...LEAN, r: 0.012 });
     p.lathe('rubber', [[0.001, F.at[1] - 0.09], [0.05, F.at[1] - 0.09], [0.045, F.at[1] - 0.06], [0.03, F.at[1] - 0.035], [0.001, F.at[1] - 0.035]], 10, [0, 0, F.at[2]]);
-    const ring = new THREE.CylinderGeometry(0.085, 0.085, 0.006, 16, 1, true); ring.translate(0, 0.021, 0); p.add('glow', ring, LIT.blue);   // (a lit ring round its foot)
+    const ring = new THREE.CylinderGeometry(0.085, 0.085, 0.006, 12, 1, true); ring.translate(0, 0.021, 0); p.add('glow', ring, LIT.blue);   // (a lit ring round its foot)
   } else {
     p.slab('black', -0.036, 0.036, 0, 0.012, -0.05, 0.05, { r: 0 });
   }
@@ -96,7 +96,9 @@ export function throttle(p, o = {}) {
   const L = Math.hypot(d, 0.08);
   p.box('dark', [0.27, 0.03, L + 0.01], [0, h - 0.015, 0], [T.a, 0, 0], FIRM);
   for (const s of [-1, 1]) { glowBox(p, LIT.blue, [0.006, 0.006, L - 0.04], [s * 0.133, h - 0.006, 0], [T.a, 0, 0]); p.box('white2', [0.008, 0.03, L - 0.02], [s * 0.131, h - 0.045, 0], [T.a, 0, 0], { r: 0 }); }
-  p.glowSlab(LIT.amber, -0.05, 0.05, h - 0.12, h - 0.108, d / 2, d / 2 + 0.003);   // (a lamp across its near end, lit buttons under it)
+  p.glowSlab(LIT.amber, -0.05, 0.05, h - 0.12, h - 0.108, d / 2, d / 2 + 0.003);   // (a lamp across its near end, a lit strip down it, a small grid)
+  p.glowSlab(LIT.blue, -0.006, 0.006, 0.1, h - 0.16, d / 2, d / 2 + 0.003);
+  setOn(p, part(buttonGrid, { cols: 3, rows: 2, pitch: 0.036, seed: 19 }), { at: [0, h - 0.24, d / 2 + 0.001] }, 'end buttons');
   for (const s of [-1, 1]) setOn(p, part(buttonGrid, { cols: 3, rows: 3, pitch: 0.04, seed: 17 + s }), { at: [s * 0.131, h - 0.2, d / 2 - 0.12], rot: [0, s * PI / 2, 0] }, 'side buttons');   // (on each side, facing a seat)
   const onTop = (z, off) => [0, T.y(z) + Math.cos(T.a) * off, z + Math.sin(T.a) * off], flat = [T.a - PI / 2, 0, 0];
   setOn(p, part(mfd, { face: 'text', w: 0.17 }), { at: onTop(-d / 2 + 0.12, 0.001), rot: flat }, 'screen');

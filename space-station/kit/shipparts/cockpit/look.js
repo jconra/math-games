@@ -31,7 +31,7 @@ export const SEAT_LOOK = {
   grey: { pad: pad('#aeaaa0', 0.78), seam: pad('#8d897f', 0.8), shell: pad('#7f7b72', 0.66), arm: pad('#8d897f', 0.8), frame: 'gun', strap: pad('#232529', 0.9) },
   station: { pad: pad('#2d3036', 0.85), seam: pad('#24272c', 0.88), shell: 'white', arm: pad('#2d3036', 0.85), frame: 'black', strap: 'yellow' },
 };
-export const LIT = { blue: [0.25, 1.1, 3.4], amber: [3.4, 1.5, 0.12], green: [0.2, 2.8, 0.45], white: [2.2, 2.2, 2.3], red: [3.4, 0.18, 0.12], off: null };
+export const LIT = { blue: [0.06, 0.75, 3.2], amber: [3.2, 1.05, 0.04], green: [0.06, 2.6, 0.2], white: [2.0, 2.0, 2.1], red: [3.2, 0.06, 0.04], off: null };
 
 // a crop of a screen-sheet face: fractions across it from its top left (the sheet's rects run bottom to top in v)
 function crop(r, x0, y0, x1, y1) { const [u0, v0, u1, v1] = r, du = u1 - u0, dv = v1 - v0; return [u0 + du * x0, v1 - dv * y1, u0 + du * x1, v1 - dv * y0]; }

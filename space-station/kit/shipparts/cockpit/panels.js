@@ -131,13 +131,13 @@ export function sidePanel(p, o = {}) {
     if (!pod) put(part(buttonGrid, { cols: 4, rows: 4, pitch: 0.034, seed: 8 }), len / 2 - 0.16, 0.18);
   }
   if (pod) {
-    // a raised pod on the +x end, up to 1.12 m, turned 35 degrees toward the seats: a screen, a grid, a lit top edge
-    const top = 1.18, rot = turn(-0.785, 0.1), c = [len / 2 - 0.19, (h - 0.02 + top) / 2, d - 0.175], H = top + 0.02 - h, on = (x, y, off) => local(c, rot, x, y, 0.07 + off);
-    p.box(body, [0.38, H, 0.14], c, rot, { r: 0.012, seg: 1, cell: 9, loops: [] });
-    p.box('black', [0.39, 0.02, 0.15], local(c, rot, 0, H / 2 - 0.01, 0), rot, { r: 0 });
-    glowBox(p, LIT.amber, [0.36, 0.006, 0.006], on(0, H / 2 - 0.025, 0.003), rot);
-    mount(p, part(mfd, { face: 'bars', w: 0.32 }), { at: on(0, H / 2 - 0.14, 0.002), rot }, 'pod screen');
-    mount(p, part(buttonGrid, { cols: 7, rows: 2, pitch: 0.04, seed: 16 }), { at: on(0, -H / 2 + 0.19, 0.002), rot }, 'pod buttons');   // (above where the pod sinks into the console's top)
+    // a raised pod on the +x end, up to 1.18 m, turned 35 degrees toward the seats: a screen, a grid, a lit top edge
+    const top = 1.18, rot = turn(-0.61, 0.1), c = [len / 2 - 0.2, (h - 0.02 + top) / 2, d - 0.17], H = top + 0.02 - h, on = (x, y, off) => local(c, rot, x, y, 0.07 + off);
+    p.box(body, [0.34, H, 0.14], c, rot, { r: 0.012, seg: 1, cell: 9, loops: [] });
+    p.box('black', [0.345, 0.02, 0.145], local(c, rot, 0, H / 2 - 0.01, 0), rot, { r: 0 });
+    glowBox(p, LIT.amber, [0.32, 0.006, 0.006], on(0, H / 2 - 0.025, 0.003), rot);
+    mount(p, part(mfd, { face: 'bars', w: 0.29 }), { at: on(0, H / 2 - 0.13, 0.002), rot }, 'pod screen');
+    mount(p, part(buttonGrid, { cols: 7, rows: 2, pitch: 0.038, seed: 16 }), { at: on(0, -H / 2 + 0.19, 0.002), rot }, 'pod buttons');   // (above where the pod sinks into the console's top)
   }
   p.light([0, h + 0.15, d + 0.1], 0.25, [0.4, 0.65, 1], [0, 0.3, 1], 1.8);
 }
