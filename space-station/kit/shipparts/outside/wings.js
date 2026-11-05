@@ -10,7 +10,7 @@
 //   stubWing(p, opts)   a short thick wing (his medic's small swept fins): root 1.9, tip 0.9, span 1.2, sweep 1.0,
 //                       thick 0.3, and a hard point under its tip
 //   tailFin(p, opts)    a fin standing up: the same, with its span up +y and its root on y = 0; root 2.0, tip 0.9,
-//                       span 1.0 (keep a ship under 5.3 m: the hangar's 5.6 m door with 0.3 m to spare), sweep 1.0,
+//                       span 0.9 (keep a ship under 5.3 m: the hangar's 5.6 m door with 0.3 m to spare), sweep 1.0,
 //                       thick 0.18, light 'white'
 import * as THREE from 'three';
 import { SHIP, GLOW_SHIP } from '../palette.js';
@@ -35,7 +35,7 @@ function planform(acc, o) {
     facet(acc, [A.le, B.le, B.leT, A.leT], v(0, 0.5, 1), look(SHIP.trim));           // the leading edge, dark
     facet(acc, [A.leB, B.leB, B.le, A.le], v(0, -0.6, 1), look(SHIP.trim));
     facet(acc, [A.te, B.te, B.teB, A.teB], v(0, 0.2, -1), look(SHIP.trim));          // the trailing edge
-    facet(acc, [A.leB, B.leB, B.teB, A.teB], v(0, -1, 0), look(SHIP.hull2));         // the underside
+    facet(acc, [A.leB, B.leB, B.teB, A.teB], v(0, -1, 0), look(band === SHIP.hull ? SHIP.hull2 : band));   // the underside (the stripe goes round)
   }
   // the ends: the root (against the hull) and the tip
   for (const [f, out] of [[0, v(-1, 0, 0)], [1, v(1, 0, 0)]]) { const E = at(f); facet(acc, [E.leB, E.le, E.leT, E.rid, E.te, E.teB], out, look(f ? SHIP.trim : SHIP.hull2)); }
@@ -64,7 +64,7 @@ export function stubWing(p, o = {}) {
   return acc.flush(p);
 }
 export function tailFin(p, o = {}) {
-  o = { root: 2.0, tip: 0.9, span: 1.0, sweep: 1.0, thick: 0.18, stripe: 'yellow', light: 'white', ...o };
+  o = { root: 2.0, tip: 0.9, span: 0.9, sweep: 1.0, thick: 0.18, stripe: 'yellow', light: 'white', ...o };
   const q = new (p.constructor)(); wing(q, o);
   // (the wing turned up: its span along +y, its underside facing -x, its middle on x = 0)
   const M = new THREE.Matrix4().makeRotationZ(Math.PI / 2).premultiply(new THREE.Matrix4().makeTranslation(o.thick * 0.5, 0, 0));

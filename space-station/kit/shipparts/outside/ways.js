@@ -38,11 +38,11 @@ export function sideDoor(p, o = {}) {
   // the leaf: pale, a dark band low across it, a small window (dark glass), a yellow handle, a charcoal edge
   p.leaf('ship-door-leaf', (q) => {
     const a = new Acc();
-    box(a, SHIP.hull, [-W / 2, W / 2], [0, H], [-0.03, 0.03]);
+    box(a, SHIP.hull, [-W / 2 - 0.03, W / 2 + 0.03], [-0.02, H + 0.03], [-0.03, 0.03]);   // (a little over the hole all round: its edges hide in the lining)
     box(a, SHIP.trim, [-W / 2 + 0.12, W / 2 - 0.12], [0.55, 0.7], [0.03, 0.034]);
     box(a, SHIP.frame, [-0.2, 0.2], [1.3, 1.62], [0.03, 0.04]);
     box(a, SHIP.yellow, [W / 2 - 0.16, W / 2 - 0.1], [0.9, 1.15], [0.03, 0.06]);
-    box(a, SHIP.trim, [-W / 2, -W / 2 + 0.03], [0, H], [-0.035, 0.035]);
+    box(a, SHIP.trim, [-W / 2 - 0.03, -W / 2], [-0.02, H + 0.03], [-0.035, 0.035]);
     a.flush(q);
     q.glass(0.34, 0.26, [0, 1.46, 0.042]);
   }, { at: [0, 0, -0.16], slide: [W + 0.05, 0, 0], door: 0 });
@@ -58,7 +58,7 @@ export function sideDoor(p, o = {}) {
       const s = new Acc(), len = NSTEPS * GO, hw = 0.45;
       for (let i = 0; i < NSTEPS - 1; i++) { const y = -(i + 1) * RISE, z = (i + 1) * GO; box(s, SHIP.gun, [-hw + 0.04, hw - 0.04], [y - 0.03, y], [z - GO + 0.02, z + 0.02]); box(s, SHIP.yellow, [-hw + 0.04, hw - 0.04], [y - 0.006, y + 0.001], [z - 0.02, z + 0.02]); }
       for (const x of [-hw, hw]) {
-        bar(s, SHIP.trim, [x, 0, 0], [x, -DECK, len], 0.05, 0.16);
+        bar(s, SHIP.trim, [x, -0.05, 0.01], [x, -DECK + 0.08, len - 0.06], 0.05, 0.16);   // (its foot on the ground, its head at the sill)
         if (steps === 'fixed') {
           bar(s, SHIP.trim, [x, 0.95, 0.15], [x, -DECK + 0.95, len - 0.05], 0.04, 0.04);
           for (let k = 0; k <= 2; k++) { const t = 0.15 + 0.75 * k / 2, P = [x, -DECK * t, len * t]; bar(s, SHIP.trim, P, [x, P[1] + 0.95, P[2] + 0.02], 0.035, 0.035); }
@@ -96,7 +96,7 @@ export function airlockHatch(p) {
   a.flush(p);
   p.leaf('ship-hatch-leaf', (q) => {
     const b = new Acc();
-    box(b, SHIP.hull2, [-W / 2, W / 2], [0, H], [-0.05, 0.05]);
+    box(b, SHIP.hull2, [-W / 2 - 0.03, W / 2 + 0.03], [-0.02, H + 0.03], [-0.05, 0.05]);
     for (const y of [0.35, H - 0.35]) box(b, SHIP.trim, [-W / 2 + 0.08, W / 2 - 0.08], [y - 0.06, y + 0.06], [0.05, 0.06]);
     box(b, SHIP.yellow, [-W / 2 + 0.08, W / 2 - 0.08], [0.9, 0.96], [0.05, 0.058]);
     latheZ(b, [[0.2, 0.08], [0.2, 0.05], [0.14, 0.05], [0.14, 0.08]], 16, () => SHIP.frame, { at: [0, 1.4, 0] });

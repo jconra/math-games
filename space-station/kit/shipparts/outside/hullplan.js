@@ -12,6 +12,7 @@
 //              ('door', 'window x4'); null for the plain wall
 //   hullEnds({ section, mid, z0, z1, nose, tail, mouth })  the nose cap at z1 and the tail cap at z0 (cap styles)
 //   splitRuns(len)  4s, then a 2, then a 1
+//   mountOn({ section, face, z, s, level, x })  the placement for a free part on a face of the hull (below)
 // Turns: a piece faces +z at turn 0; the +x side wall is turn 1, the -x side turn 3.
 import { SECTIONS, capLength } from './sections.js';
 
@@ -58,5 +59,19 @@ export function hullEnds({ section = 'sample', mid = 0, z0, z1, nose = 'canopy',
   if (nose) out.push({ piece: 'hullCap', cell: [mid, z1], turn: 0, level: 0, variant: words(`nose ${name} ${nose}`, paint.nose) });
   if (tail) out.push({ piece: 'hullCap', cell: [mid, z0], turn: 0, level: 0, variant: words(`tail ${name} ${tail}${mouth ? ' mouth ' + mouth : ''}`, paint.tail) });
   return out;
+}
+// WHERE A PART GOES ON THE HULL (the grid's answer to "a point on the hull and its normal"): the placement that puts a
+// free part's origin on a face of a hull of that section, facing out of it (a part faces +z in its own frame).
+//   face 'side' (s +1 or -1; at `level`), 'roof' or 'belly' (at cell x across from the middle line; the part stays
+//   upright, its +z toward the nose), 'tail' (the flat end at z; level), 'nose' (the end face of a nose cap of that
+//   style starting at z; level, x); z the cell z along the hull; off a nudge in metres (the part's own frame)
+export function mountOn({ section = 'sample', mid = 0, face, z, s = 1, level = 0, x = 0, style = 'canopy', off }) {
+  const S = typeof section === 'string' ? SECTIONS[section] : section, o = off ? { off } : {};
+  if (face === 'side') return { cell: [mid + s * S.w, z], turn: s > 0 ? 1 : 3, level, ...o };
+  if (face === 'roof') return { cell: [mid + x, z], turn: 0, level: S.r, ...o };
+  if (face === 'belly') return { cell: [mid + x, z], turn: 0, level: S.b, ...o };
+  if (face === 'tail') return { cell: [mid + x, z], turn: 2, level, ...o };
+  if (face === 'nose') return { cell: [mid + x, z + capLength(style)], turn: 0, level, ...o };
+  throw new Error('hullplan: no face ' + face);
 }
 export { capLength };

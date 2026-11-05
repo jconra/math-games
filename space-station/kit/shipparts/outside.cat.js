@@ -21,9 +21,9 @@ const THRUSTER_V = { top: { mount: 'top' }, side: { mount: 'side' }, under: { mo
 const G = 'Ship outside';
 export const OUTSIDE = {
   hullPanel: { name: 'Hull panel', group: G, at: 'edge', foot: [2, 1, 0.5], build: hullPanel, accepts: ACCEPTS.hullPanel,
-    variants: ['x1', 'x2', 'x4', 'x4 h2', 'x4 ystripe', 'x4 rstripe', 'x4 tstripe', 'x4 grey', 'x4 dark', 'x4 h2 seams', 'roof x4', 'belly x4 grey', 'roof tri 1:1', 'roof tri 2:1'] },
+    variants: ['x1', 'x2', 'x4', 'x4 h2', 'x4 ystripe', 'x4 rstripe', 'x4 tstripe', 'x4 h2 yslash', 'x4 grey', 'x4 dark', 'x4 h2 seams', 'x4 h2 edged', 'roof x4', 'belly x4 grey', 'roof tri 1:1', 'roof tri 2:1'] },
   hullSlope: { name: 'Hull slope', group: G, at: 'edge', foot: [2, 1, 1], build: hullSlope, accepts: ACCEPTS.hullSlope,
-    variants: ['up 1:1 x4', 'up 1:2 x4', 'up 2:1 x4', 'down 1:1 x4', 'down 1:2 x4', 'down 2:1 x4', 'up 1:1 x4 ystripe', 'up 2:1 x4 glass', 'dslope up 1:1 plan 1:1', 'dslope down 1:1 plan 1:1'] },
+    variants: ['up 1:1 x4', 'up 1:1 x4 edged', 'up 1:2 x4', 'up 2:1 x4', 'down 1:1 x4', 'down 1:2 x4', 'down 2:1 x4', 'up 1:1 x4 ystripe', 'up 2:1 x4 glass', 'dslope up 1:1 plan 1:1', 'dslope down 1:1 plan 1:1'] },
   hullAngle: { name: 'Angled side', group: G, at: 'edge', foot: [1, 1, 1], build: hullAngle, accepts: ACCEPTS.hullAngle,
     variants: ['1:1 h1', '1:2 h1', '2:1 h1', '1:1 h2 ystripe', '1:1 h1 L'] },
   hullCorner: { name: 'Hull corner', group: G, at: 'point', foot: [1, 1, 1], build: hullCorner, accepts: ACCEPTS.hullCorner,
@@ -52,7 +52,7 @@ export const OUTSIDE = {
   // ways in: each fits a hull opening, placed on the same point as it
   sideDoor: { name: 'Side door', group: G, at: 'free', foot: [1.2, 2.3, 2], variants: ['fold', 'fixed', 'none'], build: (p, v) => sideDoor(p, { steps: v }) },
   airlockHatch: { name: 'Airlock hatch', group: G, at: 'free', foot: [1.6, 2.5, 0.4], variants: ['outer'], build: (p) => airlockHatch(p) },
-  ramp: { name: 'Ramp', group: G, at: 'free', foot: [4.5, 2.5, 4.2], variants: ['back', 'side'], build: (p, v) => ramp(p, v === 'side' ? { w: 2.9 } : { w: 4.4 }) },
+  shipRamp: { name: 'Ramp', group: G, at: 'free', foot: [4.5, 2.5, 4.2], variants: ['back', 'side'], build: (p, v) => ramp(p, v === 'side' ? { w: 2.9 } : { w: 4.4 }) },
   bellyLift: { name: 'Belly lift', group: G, at: 'free', foot: [1.6, 1.3, 1.6], variants: ['lift'], build: (p) => bellyLift(p) },
   // details on the hull
   navLight: { name: 'Nav light', group: G, at: 'free', foot: [0.3, 0.2, 0.2], variants: ['red', 'green', 'white'], build: (p, v) => navLight(p, { color: v }) },
@@ -60,8 +60,8 @@ export const OUTSIDE = {
   lightStrip: { name: 'Light strip', group: G, at: 'free', foot: [1, 0.2, 0.1], variants: ['1 m', '2 m'], build: (p, v) => lightStrip(p, { len: parseFloat(v) }) },
   antenna: { name: 'Antenna', group: G, at: 'free', foot: [0.3, 1.1, 0.3], variants: ['mast', 'short'], build: (p, v) => antenna(p, { h: v === 'short' ? 0.5 : 1.0 }) },
   sensorDish: { name: 'Sensor dish', group: G, at: 'free', foot: [0.8, 0.9, 0.8], variants: ['small', 'big'], build: (p, v) => sensorDish(p, { r: v === 'big' ? 0.5 : 0.32 }) },
-  vent: { name: 'Vent', group: G, at: 'free', foot: [0.8, 0.4, 0.1], variants: ['small', 'wide'], build: (p, v) => vent(p, v === 'wide' ? { w: 1.2, h: 0.24 } : {}) },
-  greeble: { name: 'Machinery panel', group: G, at: 'free', foot: [0.9, 0.5, 0.2], variants: ['box', 'pipes', 'panel'], build: (p, v) => greeble(p, { kind: v }) },
+  hullVent: { name: 'Vent', group: G, at: 'free', foot: [0.8, 0.4, 0.1], variants: ['small', 'wide'], build: (p, v) => vent(p, v === 'wide' ? { w: 1.2, h: 0.24 } : {}) },
+  hullGreeble: { name: 'Machinery panel', group: G, at: 'free', foot: [0.9, 0.5, 0.2], variants: ['box', 'pipes', 'panel'], build: (p, v) => greeble(p, { kind: v }) },
   // each job's gear
   canister: { name: 'Ore canister', group: G, at: 'free', foot: [2.2, 4, 4.6], variants: ['stack', 'single'], build: (p, v) => canister(p, { stack: v === 'stack' ? 2 : 1 }) },
   laserArm: { name: 'Laser arm', group: G, at: 'free', foot: [1.5, 2, 4], variants: ['folded', 'working'], build: (p, v) => laserArm(p, { pose: v }) },

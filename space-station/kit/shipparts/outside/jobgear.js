@@ -36,13 +36,13 @@ export function canister(p, o = {}) {
     for (const s of [-1, 1]) latheZ(acc, s > 0 ? [[0, L / 2 + 0.16], [0.09, L / 2 + 0.16], [0.09, L / 2], [0, L / 2]] : [[0, -L / 2], [0.09, -L / 2], [0.09, -L / 2 - 0.16], [0, -L / 2 - 0.16]], 8, () => SHIP.gun, { at: [0, y, 0] });
   }
   // the bands: heavy orange straps round the stack, square-cornered, each with a foot toward -x
-  const top = (stack - 1) * (2 * r + 0.06) + r + 0.08, bot = -r - 0.08, hw = r + 0.08;
+  const top = (stack - 1) * (2 * r + 0.06) + r + 0.12, bot = -r - 0.12, hw = r + 0.12;
   for (let i = 0; i < nb; i++) {
-    const z = -L / 2 + bandEnd(L, r) + (L - 2 * bandEnd(L, r)) * (nb > 1 ? i / (nb - 1) : 0.5), bw = 0.22;
-    box(acc, SHIP.canBand, [-hw, hw], [top - 0.08, top], [z - bw / 2, z + bw / 2]);
-    box(acc, SHIP.canBand, [-hw, hw], [bot, bot + 0.08], [z - bw / 2, z + bw / 2]);
-    box(acc, SHIP.canBand, [hw - 0.08, hw], [bot, top], [z - bw / 2, z + bw / 2]);
-    box(acc, SHIP.canBand, [-hw, -hw + 0.08], [bot, top], [z - bw / 2, z + bw / 2]);
+    const z = -L / 2 + bandEnd(L, r) + (L - 2 * bandEnd(L, r)) * (nb > 1 ? i / (nb - 1) : 0.5), bw = 0.3;
+    box(acc, SHIP.canBand, [-hw, hw], [top - 0.12, top], [z - bw / 2, z + bw / 2]);
+    box(acc, SHIP.canBand, [-hw, hw], [bot, bot + 0.12], [z - bw / 2, z + bw / 2]);
+    box(acc, SHIP.canBand, [hw - 0.12, hw], [bot, top], [z - bw / 2, z + bw / 2]);
+    box(acc, SHIP.canBand, [-hw, -hw + 0.12], [bot, top], [z - bw / 2, z + bw / 2]);
     box(acc, SHIP.trim, [-hw - 0.3, -hw], [(bot + top) / 2 - 0.2, (bot + top) / 2 + 0.2], [z - bw / 2 - 0.04, z + bw / 2 + 0.04]);
     for (const y of [top, bot]) box(acc, SHIP.gun, [-0.12, 0.12], y === top ? [top, top + 0.04] : [bot - 0.04, bot], [z - 0.06, z + 0.06]);
   }
@@ -55,27 +55,32 @@ function joint(acc, at, r, w) {
   latheZ(acc, [[0, w / 2], [r, w / 2], [r, -w / 2], [0, -w / 2]], 10, () => SHIP.trim, { axis: 'x', at });
   latheZ(acc, [[0, w / 2 + 0.04], [r * 0.5, w / 2 + 0.04], [r * 0.5, -w / 2 - 0.04], [0, -w / 2 - 0.04]], 8, () => SHIP.gun, { axis: 'x', at });
 }
-// an arm segment from a to b: a dark box with a yellow-and-black striped panel on its outer side (+x)
+// an arm segment from a to b: a dark box with a yellow plate down each side, black hazard stripes across it, as his
+// picture's arms
 function segment(p, acc, a, b, w, d) {
   bar(acc, SHIP.trim, a, b, w, d);
   const A = v(...a), B = v(...b), L = A.distanceTo(B), mid = A.clone().add(B).multiplyScalar(0.5), dir = B.clone().sub(A).normalize();
-  const g = plane(L * 0.62, d * 0.62, { uv: kitTextures().decal.rect.hazard, cell: 9 });
-  // (the stripe lies on the segment's +x side, along it)
-  const yAx = dir, xAx = Math.abs(yAx.y) > 0.99 ? v(1, 0, 0) : v(0, 1, 0).cross(yAx).normalize(), zAx = xAx.clone().cross(yAx);
-  const M = new THREE.Matrix4().makeBasis(yAx, zAx, xAx).setPosition(mid.clone().addScaledVector(xAx, w / 2 + 0.004));
-  g.applyMatrix4(M); p.add('decal', g, '#d9a21e');
+  const xAx = Math.abs(dir.y) > 0.99 ? v(1, 0, 0) : v(0, 1, 0).cross(dir).normalize(), zAx = xAx.clone().cross(dir);
+  for (const s of [1, -1]) {
+    const side = xAx.clone().multiplyScalar(s);
+    bar(acc, SHIP.yellow, A.clone().addScaledVector(dir, 0.2).addScaledVector(side, w / 2).toArray(), B.clone().addScaledVector(dir, -0.2).addScaledVector(side, w / 2).toArray(), 0.012, d * 0.8);
+    const g = plane(L - 0.5, d * 0.62, { uv: kitTextures().decal.rect.hazard, cell: 9 });
+    // (the decal faces out of that side: its x along the arm, its normal the side)
+    const M = new THREE.Matrix4().makeBasis(dir.clone().multiplyScalar(s), zAx, side).setPosition(mid.clone().addScaledVector(side, w / 2 + 0.01));
+    g.applyMatrix4(M); p.add('decal', g, '#26282c');
+  }
 }
 export function laserArm(p, o = {}) {
   const pose = o.pose || 'folded', U = o.upper ?? 2.8, F = o.fore ?? 2.4, acc = new Acc();
   // the shoulder: a mount block against the hull (-x) and the joint
   box(acc, SHIP.trim, [-0.5, -0.15], [-0.35, 0.35], [-0.4, 0.4]);
-  joint(acc, [0, 0, 0], 0.32, 0.5);
+  joint(acc, [0, 0, 0], 0.4, 0.6);
   let elbow, head;
   if (pose === 'working') { elbow = [0.35, -0.6, U * 0.92]; head = [0.4, -1.5, U * 0.92 + F * 0.86]; }
   else { elbow = [0.25, -0.15, -U]; head = [0.75, -0.3, -U + F]; }
-  segment(p, acc, [0, 0, 0], elbow, 0.34, 0.4);
-  joint(acc, elbow, 0.26, 0.42);
-  segment(p, acc, elbow, head, 0.28, 0.34);
+  segment(p, acc, [0, 0, 0], elbow, 0.46, 0.52);
+  joint(acc, elbow, 0.34, 0.56);
+  segment(p, acc, elbow, head, 0.38, 0.44);
   // the cutting head: a toothed wheel (facing along the forearm) round a glowing orange core
   const sub = new Acc(), R = 0.38;
   latheZ(sub, [[0, 0.1], [R * 0.45, 0.1], [R * 0.45, 0.06], [R, 0.06], [R, -0.08], [0, -0.08]], 12, (i) => (i === 0 ? { glow: GLOW_SHIP.cutter } : SHIP.trim));

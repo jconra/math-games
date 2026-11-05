@@ -25,8 +25,8 @@ export const SHIP = {
   yellow: s('#d9a21e', 0.45, 0.02, 0.5),
   red: s('#b3352b', 0.42, 0.03, 0.4),
   teal: s('#1f9c86', 0.42, 0.03, 0.3),
-  canister: s('#b8ab90', 0.5, 0.2, 0.8),
-  canBand: s('#d27a1f', 0.45, 0.05, 0.5),
+  canister: s('#a8a088', 0.45, 0.35, 0.9),
+  canBand: s('#d8951c', 0.45, 0.05, 0.6),
   inner: s(SURF.white[0], SURF.white[1], SURF.white[2], SURF.white[3]),
   frame: s('#2c2f34', 0.35, 0.5, 0.4),
   gun: s(SURF.gun[0], SURF.gun[1], SURF.gun[2], SURF.gun[3]),
@@ -39,3 +39,4 @@ export const GLOW_SHIP = {
 // the paint names a hull piece's variant may carry (kit/shipparts/outside/hull.js), and the surface each stands for
 export const PAINTS = { white: SHIP.hull, white2: SHIP.hull2, grey: SHIP.grey, dark: SHIP.trim, yellow: SHIP.yellow, red: SHIP.red, teal: SHIP.teal };
 export const STRIPES = { ystripe: SHIP.yellow, rstripe: SHIP.red, tstripe: SHIP.teal, dstripe: SHIP.trim };
+export const SLASHES = { yslash: SHIP.yellow, rslash: SHIP.red };

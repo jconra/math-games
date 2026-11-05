@@ -23,19 +23,21 @@
 //               and frame of a W cells by H steps hole left between panels: a ramp's mouth), 'hatch N' (a belly panel
 //               with an N-cell square hatch: a belly lift's or an airlock's)
 // Paint, on any of them (words after the shape): white (the default off-white), white2, grey, dark, yellow, red,
-// teal; a stripe across the middle third: ystripe, rstripe, tstripe, dstripe; seam (a seam line where the run starts),
+// teal; a stripe across the middle third: ystripe, rstripe, tstripe, dstripe; two slanting bars: yslash, rslash; a dark
+// edge along its top and bottom: edged; seam (a seam line where the run starts),
 // seams (round it); glass (the facet is a window: dark glass in a frame); bare (no inside face).
 // Each panel is a plate 6 cm thick: the outside painted, the inside the station's off-white (where no cabin wall
 // covers it). Openings have a lining 0.3 m deep (the hull's depth) and a charcoal frame outside.
 import * as THREE from 'three';
 import { SHIP_GRID } from '../../grid.js';
-import { SHIP, PAINTS, STRIPES } from '../palette.js';
-import { Acc, facet, ringFrame, lining, orient, inset, THICK } from './facet.js';
+import { SHIP, PAINTS, STRIPES, SLASHES } from '../palette.js';
+import { Acc, facet, ringFrame, lining, orient, inset, rim, THICK } from './facet.js';
 import { SECTIONS, CAP_STYLES, capRings } from './sections.js';
 export { SECTIONS, CAP_STYLES };
 
 const U = SHIP_GRID.cell, PI = Math.PI;
 export const DEPTH = 0.3;   // an opening's lining: the hull's depth
+const THICK_RIM = new THREE.Vector3(0, 0, 1);
 const v = (x, y, z) => new THREE.Vector3(x, y, z);
 const u3 = (x, y, z) => v(x * U, y * U, z * U);   // a lattice point, in cells and steps
 
@@ -46,6 +48,8 @@ export function parseLook(words) {
   for (const w of words) {
     if (PAINTS[w]) look.paint = PAINTS[w];
     else if (STRIPES[w]) look.stripe = STRIPES[w];
+    else if (SLASHES[w]) look.slash = SLASHES[w];
+    else if (w === 'edged') look.edged = true;
     else if (w === 'seam') look.seams = 'left';
     else if (w === 'seams') look.seams = 'all';
     else if (w === 'glass') look.glass = true;
@@ -54,7 +58,7 @@ export function parseLook(words) {
   }
   return { look, rest };
 }
-const PAINT_WORDS = new Set([...Object.keys(PAINTS), ...Object.keys(STRIPES), 'seam', 'seams', 'glass', 'bare']);
+const PAINT_WORDS = new Set([...Object.keys(PAINTS), ...Object.keys(STRIPES), ...Object.keys(SLASHES), 'edged', 'seam', 'seams', 'glass', 'bare']);
 const ratio = (s, d = [1, 1]) => { const m = /^(\d+):(\d+)$/.exec(s || ''); return m ? [+m[1], +m[2]] : d; };
 const num = (words, k, d) => { const w = words.find((x) => new RegExp('^' + k + '\\d+$').test(x)); return w ? +w.slice(k.length) : d; };
 const RATIOS = ['1:1', '1:2', '2:1'];
@@ -165,7 +169,7 @@ function faceWithHole(acc, outline, hole, n, look) {
 // grey plate along its foot
 function openingTrim(acc, hole, n, sill, fw = 0.07) {
   const o = orient(hole, n);
-  lining(acc, o.pts, n, DEPTH, SHIP.trim);
+  lining(acc, o.pts, n, DEPTH, SHIP.trim, true);
   ringFrame(acc, inset(o.pts, n, -fw), o.pts, n, 0.03, 0.0, SHIP.trim);
   if (sill) { const [a, b] = o.pts; acc.poly([a.clone().addScaledVector(n, 0.035), b.clone().addScaledVector(n, 0.035), b.clone().addScaledVector(n, -DEPTH), a.clone().addScaledVector(n, -DEPTH)].map((q) => q.add(v(0, 0.004, 0))), v(0, 1, 0), SHIP.grey); }
 }
@@ -180,7 +184,8 @@ function holedPanel(acc, w, h, hole, look, kind) {
   if (y1 < h - 1e-6) parts.push(rect(X0, X1, y1, h));
   if (x0 > X0 + 1e-6) parts.push(rect(X0, x0, y0, y1));
   if (x1 < X1 - 1e-6) parts.push(rect(x1, X1, y0, y1));
-  for (const q of parts) facet(acc, q, v(0, 0, 1), look, { range });
+  for (const q of parts) facet(acc, q, v(0, 0, 1), look, { range, noRim: true });
+  if (look.inner !== false) rim(acc, rect(X0, X1, 0, h), THICK_RIM, 0, -THICK, SHIP.inner);   // (the plate's own rim, round its outside only)
   const loop = rect(x0, x1, y0, y1);
   if (kind === 'window') {
     // glass in the middle of the hull's depth, a charcoal frame outside and a pale one in
@@ -214,7 +219,8 @@ export function hullOpening(p, variant = 'door') {
   } else if (kind === 'hatch') {
     // a belly panel (facing down) with a square hatch N cells across, a cell of panel round it
     const N = +(rest[1] || 2), h = N * U / 2, w = h + U, rect = (a, b, c, d) => [v(a, 0, c), v(b, 0, c), v(b, 0, d), v(a, 0, d)], dn = v(0, -1, 0);
-    for (const q of [rect(-w, w, -w, -h), rect(-w, w, h, w), rect(-w, -h, -h, h), rect(h, w, -h, h)]) facet(acc, q, dn, look);
+    for (const q of [rect(-w, w, -w, -h), rect(-w, w, h, w), rect(-w, -h, -h, h), rect(h, w, -h, h)]) facet(acc, q, dn, look, { noRim: true });
+    if (look.inner !== false) rim(acc, orient(rect(-w, w, -w, w), dn).pts, dn, 0, -THICK, SHIP.inner);
     openingTrim(acc, rect(-h, h, -h, h), dn, false);
   } else throw new Error('kit: no hull opening ' + kind);
   return acc.flush(p);
@@ -226,13 +232,14 @@ function facetsRoundHole(acc, look) {
   const circ = (a, r, z = 0) => v(Math.cos(a) * r, cy + Math.sin(a) * r, z);
   for (let i = 0; i < N; i++) {
     const a0 = i / N * PI * 2, a1 = (i + 1) / N * PI * 2;
-    facet(acc, [circ(a0, R), circ(a1, R), sq(a1), sq(a0)], out, { ...look, seams: null });
+    facet(acc, [circ(a0, R), circ(a1, R), sq(a1), sq(a0)], out, { ...look, seams: null }, { noRim: true });
     // the rim: a raised ring, its lining into the hull
     const r0 = R + 0.045;
     acc.poly([circ(a0, R, 0.02), circ(a1, R, 0.02), circ(a1, r0, 0.02), circ(a0, r0, 0.02)], out, SHIP.frame);
     acc.poly([circ(a0, r0, 0), circ(a1, r0, 0), circ(a1, r0, 0.02), circ(a0, r0, 0.02)], v(Math.cos((a0 + a1) / 2), Math.sin((a0 + a1) / 2), 0), SHIP.frame);
     acc.poly([circ(a0, R, 0.02), circ(a1, R, 0.02), circ(a1, R, -THICK - 0.04), circ(a0, R, -THICK - 0.04)], v(-Math.cos((a0 + a1) / 2), -Math.sin((a0 + a1) / 2), 0), SHIP.frame);
   }
+  if (look.inner !== false) rim(acc, [v(-U / 2, 0, 0), v(U / 2, 0, 0), v(U / 2, U, 0), v(-U / 2, U, 0)], out, 0, -THICK, SHIP.inner);
   const disc = []; for (let i = 0; i < N; i++) disc.push(circ(i / N * PI * 2, R, -0.03));
   acc.poly(disc, out, null, 'glass', 9); acc.poly(disc.slice().reverse(), v(0, 0, -1), null, 'glass', 9);
 }

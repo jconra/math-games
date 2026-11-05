@@ -35,7 +35,8 @@ const BAND = { hull: SHIP.hull, yellow: SHIP.yellow, white2: SHIP.hull2, grey: S
 export function mainEngine(p, o = {}) {
   const R = o.r ?? 1.1, L = o.len ?? 1.9, n = o.sides ?? 8, lit = o.lit ?? true, band = BAND[o.band ?? 'hull'] || SHIP.trim;
   const glow = { glow: lit ? GLOW_SHIP.engine : GLOW_SHIP.engineDim }, core = { glow: lit ? GLOW_SHIP.engine.map((c) => c * 1.25) : GLOW_SHIP.engineDim };
-  const acc = new Acc(), T = SHIP.trim, G = SHIP.gun;
+  const halo = { glow: (lit ? GLOW_SHIP.engine : GLOW_SHIP.engineDim).map((c) => c * 0.45) };
+  const acc = new Acc(), T = SHIP.trim;
   // the profile, front to back: a collar against the hull, a chamfer, the drum (a pale band, then dark), a seam,
   // the glowing band in a groove, a heavy rear rim, the back face stepping into a recess, the nozzle ring, the core
   // (each point with the paint of the band that starts at it)
@@ -44,7 +45,9 @@ export function mainEngine(p, o = {}) {
     [[0, 0], T], [[0.8 * R, 0], T], [[0.8 * R, z(0.12)], T], [[0.92 * R, z(0.12)], T],
     [[R, z(0.3)], band], [[R, z(b1)], T], [[0.975 * R, z(b1 + 0.03)], T], [[0.975 * R, z(b1 + 0.05)], T], [[R, z(b1 + 0.08)], T],
     [[R, z(g0)], T], [[0.95 * R, z(g0 + 0.04)], glow], [[0.95 * R, z(g1)], T], [[1.05 * R, z(g1 + 0.04)], T], [[1.05 * R, z(L - 0.06)], T], [[0.99 * R, z(L)], T],
-    [[0.8 * R, z(L)], G], [[0.8 * R, z(L - 0.2)], G], [[0.64 * R, z(L - 0.2)], G], [[0.52 * R, z(L - 0.04)], G], [[0.42 * R, z(L - 0.04)], core], [[0.4 * R, z(L - 0.12)], core], [[0, z(L - 0.12)], null],
+    // (the back, as his rear views: a dark rim, a step in to a lighter ring, a dark ring, a halo, the bright core)
+    [[0.86 * R, z(L)], T], [[0.86 * R, z(L - 0.08)], SHIP.grey], [[0.7 * R, z(L - 0.08)], SHIP.grey], [[0.7 * R, z(L - 0.16)], T], [[0.5 * R, z(L - 0.16)], halo],
+    [[0.42 * R, z(L - 0.1)], halo], [[0.36 * R, z(L - 0.2)], core], [[0, z(L - 0.2)], null],
   ];
   latheZ(acc, pts.map((q) => q[0]), n, (i) => pts[i][1] ?? T);
   // four mounting blocks round the collar, and a rib along the drum at each of them
@@ -67,7 +70,7 @@ export function enginePod(p, o = {}) {
   // and the nozzle
   const prof = [
     [0, z(0.32)], [0.62 * R, z(0.32)], [0.7 * R, z(0.02)], [0.86 * R, 0], [R, z(0.16)],
-    [R, z(0.16 + L * 0.28)], [R, z(0.18 + L * 0.28)], [R, z(L - 0.62)], [0.94 * R, z(L - 0.58)], [0.94 * R, z(L - 0.3)], [1.05 * R, z(L - 0.26)], [1.05 * R, z(L - 0.05)], [0.98 * R, z(L)],
+    [R, z(0.5)], [R, z(0.52)], [R, z(L - 0.62)], [0.94 * R, z(L - 0.58)], [0.94 * R, z(L - 0.3)], [1.05 * R, z(L - 0.26)], [1.05 * R, z(L - 0.05)], [0.98 * R, z(L)],
     [0.74 * R, z(L)], [0.74 * R, z(L - 0.14)], [0.5 * R, z(L - 0.02)], [0.4 * R, z(L - 0.02)], [0.38 * R, z(L - 0.1)], [0, z(L - 0.1)],
   ];
   const paint = [G, T, T, T, band, T, T, T, glow, T, T, T, T, T, G, G, { glow: glow.glow.map((c) => c * 1.2) }, { glow: glow.glow.map((c) => c * 1.2) }];
@@ -100,7 +103,7 @@ export function thrusterPod(p, o = {}) {
   const zf = d - 0.05 * k;
   for (const [x0, x1, y0, y1] of [[-w, w, h * 0.62, h], [-w, w, -h, -h * 0.62], [-w, -w * 0.62, -h * 0.62, h * 0.62], [w * 0.62, w, -h * 0.62, h * 0.62]]) box(acc, SHIP.frame, [x0, x1], [y0, y1], [zf, d]);
   box(acc, SHIP.gun, [-w * 0.62, w * 0.62], [-h * 0.62, h * 0.62], [zf - 0.04 * k, zf - 0.03 * k]);
-  box(acc, GLOW_SHIP.jet, [-w * 0.5, w * 0.5], [-h * 0.5, h * 0.5], [zf - 0.03 * k, zf - 0.02 * k], 'glow');
+  box(acc, GLOW_SHIP.engine, [-w * 0.5, w * 0.5], [-h * 0.5, h * 0.5], [zf - 0.03 * k, zf - 0.02 * k], 'glow');
   if (o.plume) {
     // the jet: a short glowing plume out of the nozzle, flaring a little and then narrowing to a point
     const q = new Acc();

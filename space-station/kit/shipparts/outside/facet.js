@@ -109,14 +109,23 @@ export function facet(acc, pts, out, look, opts = {}) {
   const o = orient(pts, out); if (!o) return;
   const { n } = o; let P = o.pts;
   if (look.glass) return glassPane(acc, P, n, look);
-  const r = riseOf(n);
-  if (look.stripe) {
-    const ts = P.map((q) => q.dot(r)), [lo, hi] = opts.range || [Math.min(...ts), Math.max(...ts)], c0 = lo + (hi - lo) * 0.36, c1 = lo + (hi - lo) * 0.64;
-    acc.poly(clip(P, r, c0, true), n, look.paint);
-    acc.poly(clip(clip(P, r, c0, false), r, c1, true), n, look.stripe);
-    acc.poly(clip(P, r, c1, false), n, look.paint);
-  } else acc.poly(P, n, look.paint);
-  if (look.inner !== false) acc.poly(P.map((q) => q.clone().addScaledVector(n, -THICK)).reverse(), n.clone().negate(), SHIP.inner);
+  // the paint, region by region: a band across the middle third (stripe), two slanting bars across its middle
+  // (slash, as the yellow marks on his hulls), a dark edge along its top and bottom (edged)
+  const r = riseOf(n), ts = P.map((q) => q.dot(r)), [lo, hi] = opts.range || [Math.min(...ts), Math.max(...ts)];
+  let regions = [[P, look.paint]];
+  const split = (axis, a, b, surf, only) => { const outR = []; for (const [Q, s] of regions) { if (only && s !== only) { outR.push([Q, s]); continue; } outR.push([clip(Q, axis, a, true), s], [clip(clip(Q, axis, a, false), axis, b, true), surf], [clip(Q, axis, b, false), s]); } regions = outR.filter(([Q]) => Q.length > 2); };
+  if (look.stripe) split(r, lo + (hi - lo) * 0.36, lo + (hi - lo) * 0.64, look.stripe);
+  if (look.slash) {
+    const d = r.clone().add(n.clone().cross(r)).normalize(), c = P.reduce((s, q) => s + q.dot(d), 0) / P.length;
+    for (const [a, b] of [[c - 0.2, c - 0.06], [c + 0.06, c + 0.2]]) split(d, a, b, look.slash, look.paint);
+  }
+  if (look.edged) { split(r, lo - 1, lo + 0.06, SHIP.trim); split(r, hi - 0.06, hi + 1, SHIP.trim); }
+  for (const [Q, s] of regions) acc.poly(Q, n, s);
+  if (look.inner !== false) {
+    acc.poly(P.map((q) => q.clone().addScaledVector(n, -THICK)).reverse(), n.clone().negate(), SHIP.inner);
+    // (the plate's rim round its edge, so no crack shows between two plates at a crease, seen from inside)
+    if (!opts.noRim) rim(acc, P, n, 0, -THICK, SHIP.inner);
+  }
   if (look.seams) {
     const minX = Math.min(...P.map((q) => q.x));
     for (let i = 0; i < P.length; i++) {
@@ -131,11 +140,22 @@ export function facet(acc, pts, out, look, opts = {}) {
 // a window: glass sunk a little into the facet, in a charcoal frame round its edge
 function glassPane(acc, P, n, look) {
   const fw = look.frameW ?? FRAME_W, inner = inset(P, n, fw), lift = 0.014, sink = -0.022;
-  ringFrame(acc, P, inner, n, lift, sink, look.frame || SHIP.frame);
+  ringFrame(acc, P, inner, n, lift, sink - 0.014, look.frame || SHIP.frame);
+  // (the frame seen from inside: its back, level with the glass)
+  const back = n.clone().negate();
+  for (let i = 0; i < P.length; i++) { const j = (i + 1) % P.length; acc.poly([P[i], inner[i], inner[j], P[j]].map((q) => q.clone().addScaledVector(n, sink - 0.014)), back, look.frame || SHIP.frame); }
+  rim(acc, P, n, 0, sink - 0.014, look.frame || SHIP.frame);
   // (two panes a little apart, each with a face each way: the kit's glass is faint, a canopy's is darker)
   for (const d of [sink, sink - 0.012]) {
     const pane = inner.map((q) => q.clone().addScaledVector(n, d));
     acc.poly(pane, n, null, 'glass', 9); acc.poly(pane.slice().reverse(), n.clone().negate(), null, 'glass', 9);
+  }
+}
+// the edge of a plate: round a polygon (counter-clockwise seen from n), from d0 to d1 along n, facing out of it
+export function rim(acc, P, n, d0, d1, surf) {
+  for (let i = 0; i < P.length; i++) {
+    const a = P[i], b = P[(i + 1) % P.length], so = n.clone().cross(b.clone().sub(a)).normalize().negate();
+    acc.poly([a.clone().addScaledVector(n, d0), b.clone().addScaledVector(n, d0), b.clone().addScaledVector(n, d1), a.clone().addScaledVector(n, d1)], so, surf, 'solid', 9);
   }
 }
 // a frame between an outer loop and an inner loop (both counter-clockwise seen from n, the same count): its face
@@ -152,10 +172,13 @@ export function ringFrame(acc, outer, inner, n, lift, depth, surf) {
 }
 // the lining of a hole: each side of the loop (counter-clockwise seen from n) from the outer face to `depth` in,
 // facing into the hole
-export function lining(acc, loop, n, depth, surf) {
+// (both: its back too, so nothing is seen through it from inside the ship, past a door's leaf at a slant)
+export function lining(acc, loop, n, depth, surf, both = false) {
   const L = loop.length;
   for (let i = 0; i < L; i++) {
     const a = loop[i], b = loop[(i + 1) % L], inw = n.clone().cross(b.clone().sub(a)).normalize();
-    acc.poly([a.clone(), b.clone(), b.clone().addScaledVector(n, -depth), a.clone().addScaledVector(n, -depth)], inw, surf);
+    const q = [a.clone(), b.clone(), b.clone().addScaledVector(n, -depth), a.clone().addScaledVector(n, -depth)];
+    acc.poly(q, inw, surf);
+    if (both) acc.poly(q.map((p) => p.clone().addScaledVector(inw, -0.004)).reverse(), inw.clone().negate(), surf);
   }
 }
