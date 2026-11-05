@@ -1540,7 +1540,9 @@ function treeFoot(x, z, r = 0) { const d = r > 0 ? r : TREE_FOOT; let y = meshAt
 // (makeValley's treeClear adds the game's own strips, as plain lines)
 // (and through the woods at the valley's ends, where the road runs on through the west end's band: `to`, where x < to;
 // the east end's band is its copy, objects/ends.js, so the same strip is kept clear there)
-const TREE_CLEAR = [{ stroke: 'landpath1', from: 580, half: 4 }, { stroke: 'landpath4', to: -600, half: 4 }];
+// (both from 440 m out, 2026-11-04: the game's maker found trees standing in the road where it goes into the woods at
+// each end; the woods thicken from about 450 m out, and the strips began only at 580 and 600)
+const TREE_CLEAR = [{ stroke: 'landpath1', from: 440, half: 4 }, { stroke: 'landpath4', to: -440, half: 4 }];
 const CROWN_M = 5;
 let treeClearSegs = null;
 function treeCleared(x, z, s = 1) {
