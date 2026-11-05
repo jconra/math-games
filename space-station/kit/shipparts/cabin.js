@@ -45,6 +45,7 @@ import { Piece } from '../piece.js';
 import { put } from '../geo.js';
 import { part, placeInto } from './place.js';
 import { ROOM, FACE, DEPTH } from './cabin/ship.js';
+import { SURF } from '../materials.js';
 
 const PI = Math.PI;
 export const TOP = 2.25;     // a ship wall's cornice starts here: a 0.25 m slant up to the 2.5 m ceiling
@@ -175,8 +176,15 @@ export const hullSlope = lean(function hullSlope(p, o = {}) {
 
 // ── a bulkhead with the station's arched hatch, at a ship's size ─────────────────────────────────────────────────────
 export const bulkhead = lean(function bulkhead(p, o = {}) {
-  const { w = 2, clear = 0.9, spring = 1.5, k = 0.5, skin = 0.06, near = 1.8 } = o;
-  hatch(p, 'arch', { hw: clear / 2, spring, half: w / 2, h: ROOM, skin, core: 0.02, k, near, portal: false, lean: true });
+  const { w = 2, clear = 0.9, spring = 1.5, k = 0.5, skin = 0.06, near = 1.8 } = o, half = w / 2;
+  hatch(p, 'arch', { hw: clear / 2, spring, half, h: ROOM, skin, core: 0.02, k, near, portal: false, lean: true });
+  // an airlock's marks on both faces: the station's dark band across the surround either side of the hatch, and the
+  // kit's hazard stripes up its outer edges
+  const edge = clear / 2 + 0.39 * k + 0.13;
+  for (const s of [1, -1]) {
+    for (const sx of [-1, 1]) p.slab('band', sx > 0 ? edge : -half + 0.02, sx > 0 ? half - 0.02 : -edge, BAND[0], BAND[1], s > 0 ? skin : -skin - 0.006, s > 0 ? skin + 0.006 : -skin, { r: 0.003 });
+    for (const sx of [-1, 1]) for (const y of [0.55, 2.05]) p.decal('hazard', 0.6, 0.12, [sx * (half - 0.1), y, s * (skin + 0.008)], [0, s > 0 ? 0 : PI, PI / 2], SURF.yellow[0]);
+  }
   return p;
 });
 
