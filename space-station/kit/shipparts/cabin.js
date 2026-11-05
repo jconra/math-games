@@ -59,7 +59,7 @@ export function shipSizes(o = {}) {
 // makes on the way included (the doorway's two faces, its leaves): while it runs, a Piece's slabs, boxes and glow
 // strips are drawn without those rows unless asked for them.)
 export function lean(build) {
-  return (p, o) => {
+  const drawn = (p, o) => {
     const P = Piece.prototype, was = { coarse: Piece.coarse, slab: P.slab, box: P.box, glowSlab: P.glowSlab };
     Piece.coarse = true; p.coarse = true;
     P.slab = function (s, x0, x1, y0, y1, z0, z1, opts = {}) { return was.slab.call(this, s, x0, x1, y0, y1, z0, z1, { loops: [], ...opts }); };
@@ -67,6 +67,7 @@ export function lean(build) {
     P.glowSlab = function (n, x0, x1, y0, y1, z0, z1, opts = {}) { return was.glowSlab.call(this, n, x0, x1, y0, y1, z0, z1, { loops: [], ...opts }); };
     try { return build(p, o); } finally { Piece.coarse = was.coarse; P.slab = was.slab; P.box = was.box; P.glowSlab = was.glowSlab; }
   };
+  return Object.defineProperty(drawn, 'name', { value: build.name || 'lean' });   // (place.js names a part's leaves by it)
 }
 // ── walls ───────────────────────────────────────────────────────────────────────────────────────────────────────────
 // one panel of wall, its skirting and its cornice (as parts, so a run of them draws each size once)
