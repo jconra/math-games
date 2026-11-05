@@ -3,16 +3,18 @@
 // ~/pw/space-math/rigs/ships/ship-medic/make.mjs).
 //   medicCockpit(p, o)   the flight deck's fittings, under the medic's nose (hullCap 'nose medic medic'): the cockpit
 //                        family's two-seat cockpit (cockpit/set.js cockpitPlan) fitted to this nose. Its windscreen's
-//                        foot is 1.0 m up and 1.5 m ahead of the seats, sloping at 45 degrees; the dashboard's deck
-//                        runs on to just under it and stops short of the nose's rising belly. The engineer sits
-//                        outboard on the port side, beside the pilots, facing aft to the station on the aft wall (as
-//                        sheet 2 draws it), clear of the doorway from the corridor, the side consoles the short ones so
-//                        there is a way past the port one to his seat; a locker on the aft wall to starboard. No overhead panel (the roof comes down to 2.3 m over the seats), no handholds (no
-//                        side walls here: the hull is the cockpit's wall) and no pedals (out of sight under the dash:
-//                        the triangles go to the rooms).
+//                        foot is 1.0 m up and 1.5 m ahead of the seats, sloping at 45 degrees; the dashboard reaches 0.6 m
+//                        toward it and stops short of the nose's rising belly. The whole set stands o.shift (0.25 m) to
+//                        port, so the doorway from the corridor (a quarter metre to port of the middle) opens on the
+//                        throttle pedestal between the seats. The engineer sits outboard on the port side, beside the
+//                        pilots, facing aft to the station on the aft wall (as sheet 2 draws it); that side's console is
+//                        left out, so his seat is open to the cabin; the starboard one is the short console. A locker on
+//                        the aft wall to starboard. No overhead panel (the roof comes down to 2.3 m over the seats), no
+//                        handholds (no side walls here: the hull is the cockpit's wall) and no pedals (out of sight
+//                        under the dash: the triangles go to the rooms).
 //     Frame: the flight deck's aft wall line at z = 0 (the nose cap's start), the hull's middle line at x = 0, the deck
 //     at y = 0, the nose toward +z (port, the ship's left, is +x). The seats' middles are 1.0 m ahead of the wall.
-//     o.engX (1.75: the engineer's station and seat, across), o.seatZ (1.0)
+//     o.engX (2.0: the engineer's station and seat, across), o.seatZ (1.0), o.shift (0.25)
 //   jamb(p, o)           a hull opening's lining carried on from the back of the hull's own (0.3 m deep) to the face of
 //                        the cabin wall one cell in (0.53 m from the hull's face), so a doorway or a ramp's mouth reads
 //                        as one opening through hull and wall. Charcoal sides and head like the hull's lining, a grey
@@ -22,8 +24,8 @@
 //     runs back into the ship (-z). o.w (the opening's width), o.h (its height), o.top (the room's height, 2.5), o.lip
 //     (a lip round its sides and head at the hull's lining, that wide: 'mouth' has 0.07 m, over the shut ramp's edges)
 //     (The hull's door leaf slides into the hull 0.27 to 0.3 m in, in front of this lining: the two never meet.)
-//   tanks(p, o)          the engine room's two upright tanks (sheet 2's), piped up into the ceiling and along to the
-//                        reactor drum's pipe (below)
+//   tanks(p, o)          the engine room's two upright tanks (sheet 2's), piped up into the ceiling and down into the
+//                        deck, as the reactor drum's open pipe end is (the two joined under the floor, not across it)
 import { part, placeInto } from '../shipparts/place.js';
 import { cockpitPlan, BUILDS } from '../shipparts/cockpit/set.js';
 import { lean, shipSizes, TOP } from '../shipparts/cabin.js';
@@ -37,12 +39,12 @@ export const DECK_TO_FOOT = { y: 1.0, z: 1.5 };   // the medic nose's windscreen
 
 // ── the flight deck ──
 export function medicPlan(o = {}) {
-  const seatZ = o.seatZ ?? 1.0, engX = o.engX ?? 1.75;
-  const plan = cockpitPlan({ seats: 2, canopy: { y: DECK_TO_FOOT.y, z: DECK_TO_FOOT.z, slope: PI / 4 }, dash: { depth: 0.8, deckY: 1.15 }, side: { len: 0.5 } });   // (short side consoles: a way past the port one to the engineer's seat)
+  const seatZ = o.seatZ ?? 1.0, engX = o.engX ?? 2.0, shift = o.shift ?? 0.25;
+  const plan = cockpitPlan({ seats: 2, canopy: { y: DECK_TO_FOOT.y, z: DECK_TO_FOOT.z, slope: PI / 4 }, dash: { depth: 0.6, deckY: 1.15 }, side: { len: 0.5, pod: false } });
   const items = [];
   for (const it of plan.items) {
-    if (/^overhead|^handhold|^pedals/.test(it.name)) continue;
-    const at = [it.at[0], it.at[1], it.at[2] + seatZ];
+    if (/^overhead|^handhold|^pedals|^side port/.test(it.name)) continue;
+    const at = [it.at[0] + shift, it.at[1], it.at[2] + seatZ];
     if (it.name === 'engineer') { at[0] = engX; at[2] = 1.0; }   // (beside the pilots, 0.5 m from the station's front)
     if (it.name === 'engineer station') { at[0] = engX; at[2] = 0; }
     if (it.name === 'locker') { items.push({ ...it, at: [-1.75, 0, 0], rot: [0, 0, 0] }); continue; }
@@ -82,10 +84,10 @@ export const jamb = lean(function jamb(p, o = {}) {
 
 // ── the engine room's tanks (sheet 2's: two upright tanks beside the reactor) ──
 // two pale upright tanks on a charcoal plinth, charcoal domed ends, two dark bands and a yellow one each, a gauge; a
-// pipe up from each into the ceiling, and a run along at the reactor drum's pipe height out toward -x to meet the
-// drum's open pipe end (o.reach metres from the tanks' middle). Frame: free-standing, centred, on the deck; the
+// pipe up from each into the ceiling; a stub out of the first tank's side turning down into the deck, and a drop from
+// the reactor drum's open pipe end (o.reach metres from the tanks' middle, at its height) down into the deck: the two
+// are joined under the floor, so the walkway between them stays clear. Frame: free-standing, centred, on the deck; the
 // tanks side by side along x.
-const pipeStraight = (p, s) => pipe(p, 'straight', s);
 export const tanks = lean(function tanks(p, o = {}) {
   const { r = 0.38, h = 1.9, gap = 0.9, ceil = ROOM, pipeY = 0.7, reach = 1.6 } = o;
   p.slab('gun', -gap / 2 - r - 0.08, gap / 2 + r + 0.08, 0, 0.1, -r - 0.08, r + 0.08, { r: 0.012 });
@@ -99,10 +101,15 @@ export const tanks = lean(function tanks(p, o = {}) {
     placeInto(p, part(pipe, 'straight'), { at: [x, (h + ceil) / 2, 0], rot: [0, 0, PI / 2], scale: [(ceil - h) / 2, 1, 1] });
     placeInto(p, part(pipe, 'sleeve'), { at: [x, h + 0.02, 0], rot: [0, 0, PI / 2] });
   }
-  // (the run along to the reactor's pipe: from the first tank's side out to -x)
-  const x0 = -gap / 2 - r + 0.02, x1 = -reach;
-  placeInto(p, part(pipeStraight), { at: [(x0 + x1) / 2, pipeY, 0], scale: [Math.abs(x1 - x0) / 2, 1, 1] });
+  // (down into the deck: from the drum's pipe end, and from a short stub out of the first tank's side; a collar where
+  // each meets the deck)
+  const x0 = -gap / 2 - r + 0.02, xs = x0 - 0.25, drop = (x) => {
+    placeInto(p, part(pipe, 'straight'), { at: [x, pipeY / 2, 0], rot: [0, 0, PI / 2], scale: [pipeY / 2, 1, 1] });
+    placeInto(p, part(pipe, 'sleeve'), { at: [x, 0.03, 0], rot: [0, 0, PI / 2] });
+  };
+  placeInto(p, part(pipe, 'straight'), { at: [(x0 + xs) / 2, pipeY, 0], scale: [Math.abs(xs - x0) / 2, 1, 1] });
   placeInto(p, part(pipe, 'flange'), { at: [x0 - 0.05, pipeY, 0] });
+  drop(xs); drop(-reach);
   return p;
 });
 

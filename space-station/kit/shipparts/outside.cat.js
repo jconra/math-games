@@ -92,7 +92,7 @@ export const OUTSIDE = {
   // (a ship may give its arm's lengths: 'working upper3.4 fore2.6')
   laserArm: withWords(mirrorable({ name: 'Laser arm', group: G, at: 'free', foot: [1.5, 2, 4], variants: ['folded', 'working'], build: (p, v) => laserArm(p, armOpts(v)) }), ARM),
   scoop: { name: 'Ore scoop', group: G, at: 'free', foot: [2.5, 0.7, 1.8], variants: ['scoop'], build: (p) => scoop(p) },
-  medicMark: { name: 'Medical mark', group: G, at: 'free', foot: [1.7, 0.7, 0.1], variants: ['plate', 'stripe', 'big plate'], build: (p, v) => medicMark(p, v === 'big plate' ? { kind: 'plate', w: 2.4, h: 0.9 } : { kind: v }) },
+  medicMark: { name: 'Medical mark', group: G, at: 'free', foot: [1.7, 0.7, 0.1], variants: ['plate', 'stripe', 'badge'], build: (p, v) => medicMark(p, v === 'badge' ? { kind: 'plate', w: 1.8, h: 1.2 } : { kind: v }) },   // ('badge': a taller plate)
 };
 // THE SHIPS' OWN PARTS (kit/ships/<id>.js): parts only one ship uses, made from the parts above at its sizes, in the
 // catalog so the ship's layout file can place them by name (group 'Ships': on no tab of the lab)
