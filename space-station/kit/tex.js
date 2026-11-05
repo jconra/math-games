@@ -143,8 +143,35 @@ export function decalAtlas() {
   { const [x, y] = cell(14); g.fillStyle = '#fff'; g.beginPath(); g.moveTo(x + 20, y + 24); g.lineTo(x + 150, y + 24); g.lineTo(x + 150, y + 10); g.lineTo(x + 200, y + 32); g.lineTo(x + 150, y + 54); g.lineTo(x + 150, y + 40); g.lineTo(x + 20, y + 40); g.fill(); rect.arrow = uvOf(x, y, 256, 64); }
   // a solid white swatch (for painted marks that only need the tint)
   { const [x, y] = cell(15); g.fillStyle = '#fff'; g.fillRect(x + 4, y + 4, 248, 56); rect.solid = uvOf(x + 8, y + 8, 240, 48); }
+  cockpitPrint(g, cell, uvOf, rect);
   const t = tex(c, true, false); t.generateMipmaps = true;
   return { map: t, rect };
+}
+
+// the ship cockpit's panel print (kit/shipparts/cockpit), in the sheet's last eight cells (56-63; the station's pieces
+// use none of them): switch and knob legends (strips of 256 x 16, one name per switch, for rows of 3 to 6: sets 'a' and
+// 'b' for switches, 'c' for knobs), a throttle scale, a knob's tick ring, a STORAGE stencil, a CAUTION plate and the
+// seats' role badges
+function cockpitPrint(g, cell, uvOf, rect) {
+  const F = (px) => `bold ${px}px "DejaVu Sans", Arial, sans-serif`, fit = (t, x, y, mw) => { const w = g.measureText(t).width, s = Math.min(1, mw / w); g.save(); g.translate(x, y); g.scale(s, 1); g.fillText(t, 0, 0); g.restore(); };
+  const clip = (x, y, w, h, fn) => { g.save(); g.beginPath(); g.rect(x, y, w, h); g.clip(); g.fillStyle = '#fff'; g.strokeStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'; fn(); g.restore(); };
+  // (names spelled out; for a row of six, short ones so they don't run together)
+  const NAMES = { a: ['ENGINE 1', 'ENGINE 2', 'PUMP', 'NAV', 'RADIO', 'LIGHTS'], b: ['HEAT', 'AIR', 'SHIELD', 'GEAR', 'DOCK', 'BEACON'], c: ['VOLUME', 'BRIGHT', 'TEMP', 'FAN', 'MAP', 'ZOOM'] };
+  const SHORT = { a: ['ENG1', 'ENG2', 'PUMP', 'NAV', 'RADIO', 'LITE'], b: ['HEAT', 'AIR', 'SHLD', 'GEAR', 'DOCK', 'BCN'], c: ['VOL', 'DIM', 'TEMP', 'FAN', 'MAP', 'ZOOM'] };
+  ['a', 'b', 'c'].forEach((k, j) => {
+    const [x, y] = cell(j < 2 ? 56 + j : 62);
+    for (let n = 3; n <= 6; n++) {
+      const yy = y + (n - 3) * 16;
+      clip(x, yy, 256, 16, () => { g.font = F(11); for (let i = 0; i < n; i++) fit((n === 6 ? SHORT : NAMES)[k][i], x + 256 * (i + 0.5) / n, yy + 8.5, 256 / n - 12); });
+      rect[`cp:lg${n}${k}`] = uvOf(x, yy, 256, 16);
+    }
+  });
+  { const [x, y] = cell(58); clip(x, y, 256, 64, () => { g.lineWidth = 3; for (let i = 0; i <= 20; i++) { const tx = x + 12 + i * 11.6; g.fillRect(tx - 1.5, y + 6, 3, i % 5 ? 12 : 22); } g.font = F(16); ['0', '25', '50', '75', 'MAX'].forEach((t, i) => fit(t, x + 12 + i * 58, y + 46, 50)); }); rect['cp:scale'] = uvOf(x, y, 256, 64); }
+  { const [x, y] = cell(59); clip(x, y, 64, 64, () => { for (let i = 0; i <= 10; i++) { const a = Math.PI * (0.75 + i * 0.15); g.save(); g.translate(x + 32, y + 32); g.rotate(a); g.fillRect(19, -1.5, i % 5 ? 8 : 12, 3); g.restore(); } }); rect['cp:ticks'] = uvOf(x, y, 64, 64); }
+  { const [x, y] = cell(60); clip(x, y, 256, 64, () => { g.font = F(44); fit('STORAGE', x + 128, y + 34, 236); g.save(); g.globalCompositeOperation = 'destination-out'; for (let k = 0; k < 2; k++) g.fillRect(x, y + 22 + k * 19, 256, 2.5); g.restore(); }); rect['cp:stow'] = uvOf(x, y, 256, 64); }
+  { const [x, y] = cell(61); clip(x, y, 256, 64, () => { g.lineWidth = 4; g.strokeRect(x + 6, y + 6, 244, 52); g.font = F(36); fit('CAUTION', x + 128, y + 33, 220); }); rect['cp:caution'] = uvOf(x, y, 256, 64); }
+  // the seats' role badges: four 128 x 32 tags in cell 63, white capitals in a thin frame
+  { const [x, y] = cell(63); ['PILOT', 'CO-PILOT', 'ENGINEER', 'CREW'].forEach((t, i) => { const bx = x + (i % 2) * 128, by = y + Math.floor(i / 2) * 32; clip(bx, by, 128, 32, () => { g.lineWidth = 2; g.strokeRect(bx + 3, by + 3, 122, 26); g.font = F(19); fit(t, bx + 64, by + 17, 110); }); rect['cp:badge:' + t.toLowerCase()] = uvOf(bx, by, 128, 32); }); }
 }
 
 // ── screens: glowing faces in a 1024 x 1024 sheet ────────────────────────────────────────────────────────────────
