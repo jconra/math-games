@@ -33,6 +33,7 @@ export const CAP_STYLES = {
   // the medic's (his medical pictures'): shorter than the canopy and narrowing faster, side windows under an off-white
   // roof, a 45 degree windscreen wrapping round into its corners down to a low dark chin (the end face) for the lamps
   medic: { stages: [{ len: 3, w: 2, r: 2, b: 0, glass: ['up'] }, { len: 2, w: 1, r: 2, b: 1, glass: true, paint: { belly: 'dark' } }], face: 'dark' },
+  stern: { stages: [], face: 'dark' },   // a flat end in dark charcoal, the armour round big engines (his medical pictures')
 };
 // a chamfer for a step too tight for it: half the size at the same slope if it halves evenly, else a 1:1, else none
 const shrink = (c) => (c[0] % 2 === 0 && c[1] % 2 === 0 && c[0] > 0 ? [c[0] / 2, c[1] / 2] : c[0] > 1 || c[1] > 1 ? [1, 1] : c[0] || c[1] ? [0, 0] : null);

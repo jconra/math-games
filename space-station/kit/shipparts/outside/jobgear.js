@@ -11,10 +11,10 @@
 //   scoop(p, { w })                         the ore scoop under a miner's nose: a sloping grille of ribs between two
 //       dark cheeks, a heavy lip striped yellow and black, teeth under it. Frame: its back top edge at the origin
 //       (against the belly), reaching +z and down. w 2.4
-//   medicMark(p, { w, h, kind })            the medical mark (no red cross, which is a protected symbol): a teal pulse
+//   medicMark(p, { w, h, kind, line })      the medical mark (no red cross, which is a protected symbol): a teal pulse
 //       line. kind 'plate' (a pale plate with a teal frame and the pulse across it, w 1.6 x h 0.6) or 'stripe' (a
-//       long teal band with a pale pulse through it, w 3.0 x h 0.3). Facing +z, its middle at the origin, on a flat
-//       hull panel
+//       long teal band with a pale pulse through it, w 3.0 x h 0.3); line, the pulse's width (0.05 on a plate, 0.035
+//       on a band). Facing +z, its middle at the origin, on a flat hull panel
 import * as THREE from 'three';
 import { SHIP, GLOW_SHIP } from '../palette.js';
 import { kitTextures } from '../../materials.js';
@@ -129,12 +129,12 @@ export function medicMark(p, o = {}) {
   if (kind === 'stripe') {
     const w = o.w ?? 3.0, h = o.h ?? 0.3;
     box(acc, SHIP.teal, [-w / 2, w / 2], [-h / 2, h / 2], [0, 0.006]);
-    ribbon(acc, PULSE.map(([x, y]) => [x * w * 0.4, y * h * 0.9]), 0.035, 0.008, SHIP.hull);
+    ribbon(acc, PULSE.map(([x, y]) => [x * w * 0.4, y * h * 0.9]), o.line ?? 0.035, 0.008, SHIP.hull);
   } else {
     const w = o.w ?? 1.6, h = o.h ?? 0.6, f = 0.05;
     box(acc, SHIP.hull, [-w / 2, w / 2], [-h / 2, h / 2], [0, 0.006]);
     for (const [x0, x1, y0, y1] of [[-w / 2, w / 2, h / 2 - f, h / 2], [-w / 2, w / 2, -h / 2, -h / 2 + f], [-w / 2, -w / 2 + f, -h / 2, h / 2], [w / 2 - f, w / 2, -h / 2, h / 2]]) box(acc, SHIP.teal, [x0, x1], [y0, y1], [0.006, 0.008]);
-    ribbon(acc, PULSE.map(([x, y]) => [x * (w - 0.2), y * (h - 0.16)]), 0.05, 0.008, SHIP.teal);
+    ribbon(acc, PULSE.map(([x, y]) => [x * (w - 0.2), y * (h - 0.16)]), o.line ?? 0.05, 0.008, SHIP.teal);
   }
   return acc.flush(p);
 }
