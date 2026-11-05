@@ -8,7 +8,7 @@
 // to 5, z 0.5 to 3.0), the washroom on -z (x 0 to 2, z -2 to -0.5). The whole is moved by SAMPLE_AT so its middle
 // sits on the origin.
 import { part, placeInto } from '../place.js';
-import { wallRun, doorway, corner, floorRun, ceilingRun, onWall, FACING } from '../cabin.js';
+import { wallRun, doorway, corner, frame, floorRun, ceilingRun, onWall, FACING } from '../cabin.js';
 import { bunkBed, lockers } from './quarters.js';
 import { handhold } from './climb.js';
 import { toilet, basin, shower } from './wash.js';
@@ -39,8 +39,9 @@ export function sampleRoom(p, o = {}) {
   wall(0, -0.5, 0.5, -0.5, '+z'); door(1.0, -0.5, '+z'); wall(1.5, -0.5, 5, -0.5, '+z');     // its washroom side
   wall(0, -0.5, 0, 0.5, '+x'); wall(5, -0.5, 5, 0.5, '-x');                                  // its two ends
   placeInto(p, part(floorRun, { len: 5, wid: 1, v: 'walk' }), { at: at(2.5, 0, 0) });
-  if (ceiling) placeInto(p, part(ceilingRun, { len: 5, wid: 1, lights: 2 }), { at: at(2.5, 0, 0) });
+  if (ceiling) placeInto(p, part(ceilingRun, { len: 5, wid: 1, lights: 1 }), { at: at(2.5, 0, 0) });   // (a corridor lit in every tile)
   for (const [x, z, t] of [[0, -0.5, 0], [5, -0.5, 3], [5, 0.5, 2], [0, 0.5, 1]]) cornerAt(x, z, t);
+  for (const x of [2, 4]) placeInto(p, part(frame, { wid: 1 }), { at: at(x, 0, 0) });   // portal frames, the station's rhythm
 
   // ── the bunk room: x 1.5..5, z 0.5..3.0 ──
   wall(1.5, 0.5, 2.5, 0.5, '+z'); wall(3.5, 0.5, 5, 0.5, '+z');                               // (the doorway is two-faced)
@@ -49,7 +50,7 @@ export function sampleRoom(p, o = {}) {
   if (ceiling) placeInto(p, part(ceilingRun, { len: 3.5, wid: 2.5, lights: 2 }), { at: at(3.25, 0, 1.75) });
   for (const [x, z, t] of [[1.5, 0.5, 0], [5, 0.5, 3], [5, 3.0, 2], [1.5, 3.0, 1]]) cornerAt(x, z, t);
   placeInto(p, part(bunkBed, {}), { at: at(2.75, 0, 3.0), rot: [0, PI, 0] });               // along the far wall
-  placeInto(p, part(lockers, { n: 2 }), { at: at(5, 0, 1.5), rot: [0, -PI / 2, 0] });       // on the end wall
+  placeInto(p, part(lockers, { n: 3 }), { at: at(5, 0, 1.5), rot: [0, -PI / 2, 0] });       // on the end wall, one each
   hang(part(wallScreen, 'status'), 1.5, 1.15, 1.6, '+x');
 
   // ── the washroom: x 0..2, z -2..-0.5 ──
@@ -68,8 +69,9 @@ export function sampleRoom(p, o = {}) {
   hang(part(shortBreaker, { conduit: 0.55 }), 4.0, 1.0, -0.5, '+z');
   placeInto(p, part(handhold, { upright: true, len: 0.5 }), { at: at(3.6, 0, 0.5), rot: [0, PI, 0] });
   // a pipe along the washroom side, under the cornice, on hangers into it
-  const py = 2.08, pz = -0.5 + FACE + 0.09;
+  const py = 2.08, pz = -0.5 + 0.176;   // (clear of the portal frames' ribs, 0.104 out from the wall line)
   placeInto(p, part(longPipe, { len: 5 }), { at: at(2.5, py, pz) });
   for (const x of [0.75, 2.5, 4.25]) placeInto(p, part(pipe, 'flange'), { at: at(x, py, pz) });
+  for (const x of [FACE + 0.035, 5 - FACE - 0.035]) placeInto(p, part(pipe, 'sleeve'), { at: at(x, py, pz) });   // (where it goes through each end wall)
   return p;
 }

@@ -20,6 +20,10 @@
 //                           ship builder puts wall either side, on both faces, at least as long as a leaf (two leaves:
 //                           clear / 2 + 0.05 each side; one: clear + 0.05 on its side)
 //   corner(p, o)            { v: 'inside' | 'outside', top }
+//   frame(p, o)             a portal frame across a room or corridor: the station's rib, with its light strip, on each
+//                           wall and a beam across the ceiling between them (the station's corridor rhythm): { wid (1:
+//                           between the two wall lines, at z = -wid/2 and +wid/2), strip (true), top }. Drawn in the
+//                           x = 0 plane; place one at a join between wall panels.
 //   floorRun(p, o)          { len (2), wid (1), v ('walk': a corridor's floor, a grated walkway down its middle with a
 //                           light strip each side; 'deck', 'tread', 'grating', 'vent'), tile (1), walk (0.25: each half
 //                           of the walkway) }
@@ -36,7 +40,7 @@
 //                           ('+z', '-z', '+x', '-x': which way the wall faces) }. FACING has the turns. A ship wall's
 //                           panels stand up to 1 cm proud in places (the lower bay left of a pilaster, the upper bay
 //                           right of it): a label or other flat decal goes on one of the flat bays.
-import { wallPanel, rib, trim, corner as stationCorner, floorTile, ceilingTile, hatch, slabRow, band, backing, zOf, G, BAND } from '../shell.js';
+import { wallPanel, rib, trim, beam, corner as stationCorner, floorTile, ceilingTile, hatch, slabRow, band, backing, zOf, G, BAND } from '../shell.js';
 import { Piece } from '../piece.js';
 import { put } from '../geo.js';
 import { part, placeInto } from './place.js';
@@ -107,6 +111,15 @@ export const doorway = lean(function doorway(p, o = {}) {
 
 // ── corners ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 export const corner = lean(function corner(p, o = {}) { stationCorner(p, o.v || 'inside', shipSizes({ top: o.top })); return p; });
+
+// ── portal frames ───────────────────────────────────────────────────────────────────────────────────────────────────
+const beamOf = lean((p, o) => beam(p, 'plain', { w: o.w, h: ROOM }));
+export const frame = lean(function frame(p, o = {}) {
+  const { wid = 1, strip = true, top = TOP } = o, r = part(ribOf, { v: strip ? 'strip' : 'plain', top });
+  placeInto(p, r, { at: [0, 0, -wid / 2] }); placeInto(p, r, { at: [0, 0, wid / 2], rot: [0, PI, 0] });
+  placeInto(p, part(beamOf, { w: wid }), { rot: [0, PI / 2, 0] });
+  return p;
+});
 
 // ── floors and ceilings ─────────────────────────────────────────────────────────────────────────────────────────────
 const floorOf = lean((p, o) => floorTile(p, o.v, { w: o.w, d: o.d, tex: 1, walk: o.walk }));

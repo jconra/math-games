@@ -10,17 +10,17 @@ import { holoTable } from './science.js';
 
 export const PRESETS = {
   cabinGalley: { 'sink and hob': {}, long: { len: 2.0, sink: -0.75, hob: 0.25 }, short: { len: 1.0, sink: -0.25, hob: 0.25, upper: false }, 'sink only': { len: 1.5, sink: 0, hob: null } },
-  cabinFridge: { tall: {}, narrow: { w: 0.5 } },
+  cabinFridge: { '0.6 m wide': {}, '0.5 m wide': { w: 0.5 } },
   cabinDinette: { L: { form: 'L' }, facing: { form: 'facing', bench: 1.0, table: [1.0, 0.7] }, single: { form: 'single', bench: 1.5, table: [1.2, 0.8] }, 'for two': { form: 'single', bench: 1.0, table: [0.9, 0.6] } },
   cabinToilet: { wall: {} },
-  cabinBasin: { mirror: {}, wide: { w: 0.6 } },
+  cabinBasin: { '0.5 m': {}, '0.6 m': { w: 0.6 } },
   cabinShower: { stall: {}, '1 m': { w: 1.0, depth: 1.0 } },
   cabinMedBed: { raised: {}, flat: { back: 0 }, 'arm left': { arm: -1 } },
   cabinScanner: { hood: {} },
   cabinPharmacy: { '2 m': {}, '1.5 m': { len: 1.5 }, '1 m': { len: 1.0, shelves: 3 } },
   cabinStretcher: { trolley: {}, low: { top: 0.5 } },
-  cabinReactor: { upright: {}, drum: { form: 'drum' }, 'no pipes': { pipes: 0 } },
-  cabinHolo: { terrain: {}, planet: { show: 'planet' } },
+  cabinReactor: { upright: {}, drum: { form: 'drum' }, 'big drum': { form: 'drum', w: 1.8, len: 2.6 }, 'no pipes': { pipes: 0 } },
+  cabinHolo: { terrain: {}, planet: { show: 'planet' }, console: { form: 'console' } },
 };
 const entry = (id, name, mount, foot, fn) => ({ name, group: 'Ship cabin', at: 'free', mount, variants: Object.keys(PRESETS[id]), foot, build: (p, v) => fn(p, PRESETS[id][v] ?? {}) });
 export const CABIN_FIT = {

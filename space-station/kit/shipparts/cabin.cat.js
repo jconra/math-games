@@ -7,11 +7,11 @@
 //   are in kit/shipparts/cabin/ship.js. Each variant is a named preset of its part's options (PRESETS).
 //   `mount` (read by the rigs) says how a part stands: 'shell' (a wall on its wall line, facing +z: nothing behind the
 //   line), 'wall' (a fitting against a wall: nothing behind the wall's face), 'line' (a wall with a face both ways),
-//   'corner', 'floor', 'ceiling', 'free' (centred), 'room' (the sample).
+//   'corner', 'frame' (across a room, its walls at z = +-wid/2), 'floor', 'ceiling', 'free' (centred), 'room' (the sample).
 //   A room file on the ship grid can ask for any length: `accepts` lets through variants like '3.5 m' or 'dark 3 m'
 //   (a wall run), 'walk 4 x 1' or 'deck 3.5 x 2.5' (a floor run, length x width), '4 x 1' or 'unlit 2 x 1' (a ceiling
 //   run).
-import { wallRun, doorway, corner, floorRun, ceilingRun, hullSlope, bulkhead, onWall } from './cabin.js';
+import { wallRun, doorway, corner, frame, floorRun, ceilingRun, hullSlope, bulkhead, onWall } from './cabin.js';
 import { bunkBed, lockers } from './cabin/quarters.js';
 import { rollerLane, tieDown, ROLLER_TOP } from './cabin/cargo.js';
 import { handhold, ladder } from './cabin/climb.js';
@@ -55,6 +55,7 @@ export const PRESETS = {
   cabinWall: { '2 m': { len: 2 }, '1 m': { len: 1 }, '0.5 m': { len: 0.5 }, '1.5 m': { len: 1.5 }, 'dark 2 m': { len: 2, v: 'dark' }, 'ribs 3 m': { len: 3, ribs: true }, 'floor glow 2 m': { len: 2, glow: true } },
   cabinDoor: { room: {}, 'room, one leaf': { leaves: -1 }, stretcher: { w: 2, clear: 1.5 }, locked: { locked: true } },
   cabinCorner: { inside: { v: 'inside' }, outside: { v: 'outside' } },
+  cabinFrame: { corridor: { wid: 1 }, 'room 2.5 m': { wid: 2.5 }, unlit: { wid: 1, strip: false } },
   cabinFloor: { corridor: { v: 'walk', len: 2, wid: 1 }, deck: { v: 'deck', len: 2, wid: 2 }, tread: { v: 'tread', len: 2, wid: 2 }, grating: { v: 'grating', len: 2, wid: 1 }, vent: { v: 'vent', len: 1, wid: 1 }, 'half-metre tiles': { v: 'deck', len: 1, wid: 1, tile: 0.5 } },
   cabinCeiling: { corridor: { len: 2, wid: 1 }, room: { len: 2, wid: 2 }, 'every tile lit': { len: 2, wid: 1, lights: 1 }, unlit: { len: 2, wid: 1, lights: 0 } },
   cabinSlope: { '45 degrees': {}, shallow: { y0: 2.0, run: 0.75 }, low: { y0: 1.75, run: 0.6 } },
@@ -81,6 +82,7 @@ export const CABIN = {
   cabinWall: entry('cabinWall', 'Wall run', 'shell', [2, 2.5, 0.3], wallRun),
   cabinDoor: entry('cabinDoor', 'Doorway', 'line', [2, 2.5, 0.3], doorway),
   cabinCorner: entry('cabinCorner', 'Corner', 'corner', [0.5, 2.5, 0.5], corner),
+  cabinFrame: entry('cabinFrame', 'Portal frame', 'frame', [0.4, 2.5, 1], frame),
   cabinSlope: entry('cabinSlope', 'Wall under the hull\'s slope', 'shell', [2, 2.5, 0.8], slopeWall),
   cabinFloor: entry('cabinFloor', 'Floor run', 'floor', [2, 0.1, 2], floorRun),
   cabinCeiling: entry('cabinCeiling', 'Ceiling run', 'ceiling', [2, 0.3, 2], ceilingRun),

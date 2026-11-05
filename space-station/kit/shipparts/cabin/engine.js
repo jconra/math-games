@@ -3,7 +3,9 @@
 //   reactor(p, o)
 //     o.form 'upright'  'upright': a glowing core standing floor to ceiling in a cage of bars and rings, between a
 //                       charcoal base housing and a top housing whose collar meets the ceiling; 'drum': a long drum
-//                       lying along x on two cradles, glowing bands between its rings, a pipe up from it into the ceiling
+//                       lying along x on two cradles, heavy charcoal rings with a lit seam in each, a white pipe and
+//                       two copper ones up from it into the ceiling (his engineering pictures' drum, as big as the room
+//                       takes: o.w 1.8 gives a drum 1.4 m across)
 //     o.w 1.2           the footprint (upright: w x w; drum: its depth along z)
 //     o.len 2.0         the drum's length along x
 //     o.h 2.5           the ceiling (the upright's collar and the drum's pipe reach it, no further)
@@ -80,14 +82,14 @@ export function reactor(p, o = {}) {
 
 // the drum: lying along x, rings round it, glowing bands between, end caps, cradles, a pipe up and runs out each end
 function drum(p, o) {
-  const len = o.len ?? 2.0, w = o.w ?? 1.2, h = o.h ?? 2.5, out = o.pipes ?? 0.4, R = Math.min(0.45, w / 2 - 0.15), cy = R + 0.25, hl = len / 2;
+  const len = o.len ?? 2.0, w = o.w ?? 1.2, h = o.h ?? 2.5, out = o.pipes ?? 0.4, R = Math.min(0.75, w / 2 - 0.2), cy = R + 0.25, hl = len / 2;
   const along = (g, x) => { put(g, [x, cy, 0], [0, 0, PI / 2]); return g; };
   // the shell in segments, a glowing band between each, a charcoal ring over each joint
   const n = Math.max(2, Math.round((len - 0.5) / 0.4)), L = (len - 0.5) / n;
   for (let k = 0; k < n; k++) {
     const x = -hl + 0.25 + (k + 0.5) * L;
     p.add('solid', along(cylinder(R, L - 0.1, [0, 0, 0], 32), x), 'grey');
-    if (k) { const xj = -hl + 0.25 + k * L; p.add('glow', along(cylinder(R - 0.01, 0.1, [0, 0, 0], 32), xj), CORE); p.add('solid', along(lathe([[R - 0.005, -0.09], [R + 0.05, -0.08], [R + 0.05, -0.055], [R - 0.005, -0.05]], 32), xj), 'black'); p.add('solid', along(lathe([[R - 0.005, 0.05], [R + 0.05, 0.055], [R + 0.05, 0.08], [R - 0.005, 0.09]], 32), xj), 'black'); }
+    if (k) { const xj = -hl + 0.25 + k * L, t = 0.035 + R * 0.06; p.add('glow', along(cylinder(R - 0.01, 0.1, [0, 0, 0], 32), xj), CORE); p.add('solid', along(lathe([[R - 0.005, -0.09], [R + t, -0.085], [R + t, -0.03], [R - 0.005, -0.025]], 32), xj), 'black'); p.add('solid', along(lathe([[R - 0.005, 0.025], [R + t, 0.03], [R + t, 0.085], [R - 0.005, 0.09]], 32), xj), 'black'); }
   }
   // the end caps: domed charcoal, a yellow ring
   for (const sx of [-1, 1]) {
@@ -100,6 +102,11 @@ function drum(p, o) {
   const top = cy + R;
   placeInto(p, part(pipe, 'straight'), { at: [0, (top + h) / 2, 0], rot: [0, 0, PI / 2], scale: [(h - top) / 2, 1, 1] });
   placeInto(p, part(pipe, 'sleeve'), { at: [0, top + 0.03, 0], rot: [0, 0, PI / 2] });
+  // two copper lines up out of the shell's shoulders into the ceiling, a charcoal collar where each leaves it
+  for (const sx of [-1, 1]) {
+    const x = sx * Math.min(hl - 0.5, hl * 0.55), y0 = cy + R * 0.92, z = -R * 0.38;
+    p.cyl('orange', 0.045, h - y0, [x, (y0 + h) / 2, z], null, 14); p.cyl('black', 0.065, 0.06, [x, y0 + 0.03, z], null, 14); p.cyl('black', 0.065, 0.04, [x, h - 0.02, z], null, 14);
+  }
   if (out > 0) for (const sx of [-1, 1]) { run(p, sx * (hl - 0.05), sx * (hl + out), cy, 0); placeInto(p, part(pipe, sx > 0 ? 'valve' : 'sleeve'), { at: [sx * (hl + (sx > 0 ? 0.15 : 0.04)), cy, 0] }); }
   // a straight rail along the front (+z), on posts
   if (o.rail ?? true) {

@@ -1,4 +1,4 @@
-// THE SCIENCE AREA: the round holo table. A charcoal pedestal, a dark top ringed in blue light with a lens in its
+// THE SCIENCE AREA: the holo table: round (the sheet's), or a console island (the game's maker's science-lab picture). A charcoal pedestal, a dark top ringed in blue light with a lens in its
 // middle, and above it a hologram in the station's shield light (the hangar door's see-through blue, kit/materials.js):
 // a patch of terrain with glowing contour lines over it ('terrain'), or a planet with a ring of light round it
 // ('planet'), in a faint cone of light up from the lens.
@@ -7,11 +7,14 @@
 //     o.top 0.9      the top's height (a table to stand round)
 //     o.show 'terrain'   or 'planet'
 //     o.size 0.5     the hologram's size across
+//     o.form 'round' or 'console': a waist-high block, o.w x o.d (1.4 x 0.9), off-white with a charcoal top, a dark
+//                    glass top inset ringed in blue light, a row of screens down its front edge
 // Frame: free-standing, centred on the origin, on the deck (y = 0).
 import * as THREE from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { circle, cylinder, lathe, sweep, MeshData } from '../../geo.js';
 import { lean } from './galley.js';
+import { SCREEN_RECT } from '../../tex.js';
 
 const PI = Math.PI;
 const v3 = (x, y, z) => new THREE.Vector3(x, y, z);
@@ -22,7 +25,22 @@ const hill = (u, v) => (0.55 * Math.exp(-((u + 0.3) ** 2 + (v - 0.2) ** 2) * 4) 
 
 export function holoTable(p, o = {}) {
   p = lean(p);
-  const R = o.r ?? 0.35, top = o.top ?? 0.9, show = o.show ?? 'terrain', S = o.size ?? 0.5;
+  const R = o.r ?? 0.35, top = o.top ?? 0.9, show = o.show ?? 'terrain', S = o.size ?? (o.form === 'console' ? 0.8 : 0.5);
+  if (o.form === 'console') {
+    // a block to stand round: a dark plinth, off-white sides, a charcoal top with a glass inset ringed in blue light
+    const w = o.w ?? 1.4, d = o.d ?? 0.9, hw = w / 2, hd = d / 2;
+    p.slab('dark', -hw + 0.04, hw - 0.04, 0, 0.1, -hd + 0.04, hd - 0.04, { r: 0.01 });
+    p.slab('white', -hw, hw, 0.1, top - 0.05, -hd, hd, { r: 0.02, cell: 0.6 });
+    p.slab('band', -hw - 0.002, hw + 0.002, 0.55, 0.65, -hd - 0.002, hd + 0.002, { r: 0.006 });
+    p.slab('black', -hw - 0.02, hw + 0.02, top - 0.05, top, -hd - 0.02, hd + 0.02, { r: 0.015 });
+    p.slab('dark', -hw + 0.06, hw - 0.06, top, top + 0.004, -hd + 0.06, hd - 0.06, { r: 0 });
+    for (const [x0, x1, z0, z1] of [[-hw + 0.04, hw - 0.04, -hd + 0.04, -hd + 0.05], [-hw + 0.04, hw - 0.04, hd - 0.05, hd - 0.04], [-hw + 0.04, -hw + 0.05, -hd + 0.05, hd - 0.05], [hw - 0.05, hw - 0.04, -hd + 0.05, hd - 0.05]]) p.glowSlab(BLUE, x0, x1, top, top + 0.006, z0, z1);
+    // screens along its front, under the top's lip, in charcoal bezels
+    for (const [x, sc] of [[-hw * 0.5, 'radar'], [hw * 0.5, 'status']]) { p.slab('black', x - 0.2, x + 0.2, top - 0.3, top - 0.08, hd, hd + 0.012, { r: 0.006 }); p.screen(SCREEN_RECT[sc], 0.36, 0.18, [x, top - 0.19, hd + 0.013], null, 1.1); }
+    // the lens in the middle of the top, where the hologram rises from
+    p.add('glow', cylinder(0.07, 0.01, [0, top + 0.006, 0], 20), [0.3, 1.0, 2.6]);
+    p.add('solid', sweep(circle(0.012, 8), ring(0.085, top + 0.008, 20), { closed: true }), 'gun');
+  } else {
   // the pedestal and the top
   p.lathe('black', [[0.001, 0], [0.26, 0], [0.27, 0.025], [0.24, 0.05], [0.09, 0.09], [0.075, top - 0.2], [R * 0.7, top - 0.07], [R - 0.01, top - 0.045], [0.001, top - 0.045]], 28);
   p.lathe('black', [[0.001, top - 0.045], [R - 0.01, top - 0.045], [R, top - 0.03], [R, top - 0.01], [R - 0.012, top], [0.001, top]], 32);
@@ -30,6 +48,7 @@ export function holoTable(p, o = {}) {
   p.add('glow', sweep(circle(0.007, 6), ring(R - 0.022, top + 0.003), { closed: true }), BLUE);
   p.add('glow', cylinder(0.07, 0.01, [0, top + 0.006, 0], 20), [0.3, 1.0, 2.6]);
   p.add('solid', sweep(circle(0.012, 8), ring(0.085, top + 0.008, 20), { closed: true }), 'gun');
+  }
   // the cone of light up from the lens to the hologram (bright at its two ends, see-through between)
   // (its uv runs from near the sheet's edge at the lens, 0.14, to its middle at the top, 0.5: the shield light is bright at its
   // edges, so the cone glows at the lens and fades out upward)

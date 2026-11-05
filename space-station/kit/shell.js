@@ -306,7 +306,11 @@ export function rib(p, v, s) {
     for (const y of sized ? [1.0, 1.6, TOP - 0.3] : [1.0, 1.6, 2.2]) p.light([0, y, Z(RF + 0.08)], 1.25, [1, 0.98, 0.95], [0, 0, 1], 7);
   }
 }
-export function beam(p) { p.slab('black', -1, 1, H - 0.14, H + 0.02, -0.11, 0.11, { r: 0.02, skip: ['+y'] }); }
+// a ceiling beam across, 2 m along x (sizes: w, h; a ship's is slimmer: 0.1 deep, 0.14 wide)
+export function beam(p, v, s) {
+  if (!s) { p.slab('black', -1, 1, H - 0.14, H + 0.02, -0.11, 0.11, { r: 0.02, skip: ['+y'] }); return; }
+  const { w = 2, h = H } = s; p.slab('black', -w / 2, w / 2, h - 0.1, h + 0.02, -0.07, 0.07, { r: 0.015, skip: ['+y'] });
+}
 
 // ── trim ──────────────────────────────────────────────────────────────────────────────────────────────────────────
 // variants: base (a dark skirting), glow (a light strip along the floor's edge), cornice and cornice-grey (the slant
