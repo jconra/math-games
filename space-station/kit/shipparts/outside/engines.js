@@ -5,7 +5,8 @@
 //       Frame: the middle of its front face at the origin (that face goes against the hull's tail), the drum running
 //       back along -z to its nozzle at z = -len. r 1.1 (the drum's radius), len 1.9, sides 8 (an octagon, flat on
 //       the bottom, as his medic and explorer ships) or 24 (round, as his miner's), band the paint round the drum's
-//       front (null: all dark, the default, as his; 'hull' off-white; 'yellow'), lit true (glowing) or false (parked: a dim glow).
+//       front (null: all dark, the default, as his; 'hull' off-white; 'yellow'), lit true (glowing) or false (parked: a dim glow),
+//       glow 1 (its glows scaled by this: under 1 a deeper blue, less blown out to white by the bloom).
 //   enginePod(p, { r, len, sides, band, lit, pylon })
 //       A smaller nacelle with an intake at the front. Frame: its axis along z, the intake's lip at z = 0, its nozzle
 //       at z = -len. r 0.55, len 2.6, pylon { side: -1, len: 0.6 } a flat strut from its side toward -x (or +x) to the
@@ -35,8 +36,9 @@ const BAND = { hull: SHIP.hull, yellow: SHIP.yellow, white2: SHIP.hull2, grey: S
 
 export function mainEngine(p, o = {}) {
   const R = o.r ?? 1.1, L = o.len ?? 1.9, n = o.sides ?? 8, lit = o.lit ?? true, band = BAND[o.band ?? null] || SHIP.trim;
-  const glow = { glow: lit ? GLOW_SHIP.engine : GLOW_SHIP.engineDim }, core = { glow: lit ? GLOW_SHIP.hot : GLOW_SHIP.engineDim };   // (a cyan ring, a white-hot middle)
-  const halo = { glow: lit ? GLOW_SHIP.halo : GLOW_SHIP.engineDim.map((c) => c * 0.6) };
+  const gs = o.glow ?? 1, sc = (c) => (gs === 1 ? c : c.map((v) => v * gs));
+  const glow = { glow: sc(lit ? GLOW_SHIP.engine : GLOW_SHIP.engineDim) }, core = { glow: sc(lit ? GLOW_SHIP.hot : GLOW_SHIP.engineDim) };   // (a cyan ring, a white-hot middle)
+  const halo = { glow: sc(lit ? GLOW_SHIP.halo : GLOW_SHIP.engineDim.map((c) => c * 0.6)) };
   const acc = new Acc(), T = SHIP.trim;
   // the profile, front to back: a collar against the hull, a chamfer, the drum (a pale band, then dark), a seam,
   // the glowing band in a groove, a heavy rear rim, the back face stepping into a recess, the nozzle ring, the core
