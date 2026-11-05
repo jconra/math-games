@@ -16,7 +16,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { makeMaterials, U } from '../../kit/materials.js';
 import { createSky, SKY_VIEWS } from '../../world/sky.js';
-import { PIECES, GROUPS, pieceList } from '../../kit/catalog.js';
+import { PIECES, GROUPS, SHIP_GROUPS, pieceList } from '../../kit/catalog.js';
 import { buildRoom, updateDoors, setDoors, loadRoom, roomBounds, updateZones } from '../../kit/layout.js';
 import { loadBake, packBake } from '../../kit/bakefile.js';
 import { plane, put } from '../../kit/geo.js';
@@ -30,6 +30,8 @@ const QUALITY = {
   medium: { ratio: 1.5, bloom: true, shadowMap: true, bake: { voxel: 0.07, rays: 28, shadows: true }, probe: 128 },
   high: { ratio: 2, bloom: true, shadowMap: true, bake: { voxel: 0.05, rays: 40, shadows: true }, probe: 256 },
 };
+// (shipPart: the part on show is a ship part, kit/shipparts; lastPart: the last one looked at on each tab)
+const shipPart = () => SHIP_GROUPS.includes(PIECES[state.part]?.group), lastPart = { station: 'hatch', ship: null };
 const state = { tab: 'parts', part: 'hatch', variant: 'arch', room: 'corridor', view: 'q', doors: 'auto', quality: q.get('q') in QUALITY ? q.get('q') : (matchMedia('(pointer: coarse)').matches ? 'medium' : 'high') };
 
 // ── renderer, scene, camera ───────────────────────────────────────────────────────────────────────────────────────
@@ -166,7 +168,7 @@ function standGeo() {
 let partBusy = 0;
 async function showPart(id = state.part, variant) {
   const def = PIECES[id]; variant = variant ?? (id === state.part ? state.variant : def.variants[0]); if (!def.variants.includes(variant)) variant = def.variants[0];
-  state.tab = 'parts'; state.part = id; state.variant = variant; const my = ++partBusy;
+  state.tab = 'parts'; state.part = id; state.variant = variant; lastPart[shipPart() ? 'ship' : 'station'] = id; const my = ++partBusy;
   loading('Cutting the ' + def.name.toLowerCase() + '…', true); await frame(); if (my !== partBusy) return;
   clearStage(); setEnv('studio'); dust.visible = false;
   // wall kit hangs at a metre; ceiling things come down to near eye height; everything else stands on the stand
@@ -242,10 +244,13 @@ function sep(row, label) { const s = document.createElement('span'); s.className
 function menu() {
   const I = $('#items'), T = $('#tabs'); I.innerHTML = ''; T.innerHTML = ''; for (const k in chips) delete chips[k];
   if (state.tab === 'parts') {
-    for (const g of GROUPS) { sep(I, g); for (const id of pieceList(g)) chip(I, 'p:' + id, PIECES[id].name, () => showPart(id, PIECES[id].variants[0])); }
+    // (the station's kit, or the ship parts on their own tab: whichever the part on show belongs to; empty groups left out)
+    for (const g of shipPart() ? SHIP_GROUPS : GROUPS) { const ids = pieceList(g); if (!ids.length) continue; sep(I, g); for (const id of ids) chip(I, 'p:' + id, PIECES[id].name, () => showPart(id, PIECES[id].variants[0])); }
   } else if (state.tab === 'sky') { sep(I, 'Look at'); for (const [id, V] of Object.entries(SKY_VIEWS)) chip(I, 's:' + id, V.name, () => showSky(id)); }
   else for (const [id, name] of ROOMS) chip(I, 'r:' + id, name, () => showRoom(id));
-  chip(T, 't:parts', 'Parts', () => { if (state.tab !== 'parts') { state.view = 'q'; showPart(); } });
+  chip(T, 't:parts', 'Parts', () => { if (state.tab !== 'parts' || shipPart()) { state.view = 'q'; showPart(shipPart() ? lastPart.station : state.part); } });
+  // (the ship parts' tab, once there are any)
+  if (SHIP_GROUPS.some((g) => pieceList(g).length)) chip(T, 't:ships', 'Ship parts', () => { if (state.tab !== 'parts' || !shipPart()) { state.view = 'q'; showPart(lastPart.ship || SHIP_GROUPS.map((g) => pieceList(g)[0]).find(Boolean)); } });
   chip(T, 't:rooms', 'Rooms', () => { if (state.tab !== 'rooms') { state.view = 'start'; showRoom(); } });
   chip(T, 't:sky', 'Sky', () => { if (state.tab !== 'sky') showSky(); });
   sep(T, 'Graphics');
@@ -267,7 +272,7 @@ function menu() {
 function chipsOn() {
   for (const [k, b] of Object.entries(chips)) {
     const [t, v] = k.split(':');
-    b.classList.toggle('on', (t === 't' && v === state.tab) || (t === 'p' && v === state.part) || (t === 'r' && v === state.room) || (t === 'v' && v === state.variant) || (t === 'w' && v === state.view) || (t === 'd' && v === state.doors) || (t === 's' && v === state.sky) || (t === 'u' && +v === sky.turn));
+    b.classList.toggle('on', (t === 't' && (v === 'ships' ? state.tab === 'parts' && shipPart() : v === state.tab && !(v === 'parts' && shipPart()))) || (t === 'p' && v === state.part) || (t === 'r' && v === state.room) || (t === 'v' && v === state.variant) || (t === 'w' && v === state.view) || (t === 'd' && v === state.doors) || (t === 's' && v === state.sky) || (t === 'u' && +v === sky.turn));
   }
   const on = document.querySelector('#items .chip.on'); if (on) on.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 }

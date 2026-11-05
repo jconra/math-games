@@ -11,8 +11,13 @@ import { column, ceilBig, catwalk, rail, plinth, stairs, ramp, opening, plazaTil
 import { bayDoor, mark, airlock, crate, fuel, gangway } from './hangar.js';
 import { bunk, cabinet, desk, chair, counter, table, dispenser, booth, jobs, sign, planter } from './furniture.js';
 import { ship } from './ship.js';
+import { OUTSIDE } from './shipparts/outside.cat.js';
+import { COCKPIT } from './shipparts/cockpit.cat.js';
+import { CABIN } from './shipparts/cabin.cat.js';
 
 export const GROUPS = ['Shell', 'Wall kit', 'Windows', 'Big rooms', 'Furniture', 'Hangar'];
+// the ship parts (kit/shipparts/*.cat.js), on the Kit Lab's own "Ship parts" tab: reusable parts the ships are built from
+export const SHIP_GROUPS = ['Ship outside', 'Ship cockpit', 'Ship cabin'];
 export const PIECES = {
   floor: { name: 'Floor tile', group: 'Shell', at: 'cell', variants: ['walk', 'tread', 'grating', 'vent', 'deck', 'walkL', 'plaza', 'plaza2'], foot: [2, 0.1, 2], build: (p, v) => (v.startsWith('plaza') ? plazaTile(p, v) : floorTile(p, v)) },
   ceiling: { name: 'Ceiling tile', group: 'Shell', at: 'cell', variants: ['panel', 'light', 'tray'], foot: [2, 0.4, 2], build: ceilingTile, y: 2.8 },
@@ -62,6 +67,7 @@ export const PIECES = {
   fuel: { name: 'Fuel line', group: 'Hangar', at: 'free', variants: ['pump', 'pipe', 'elbow', 'hose'], foot: [2, 1.5, 1], build: fuel },
   gangway: { name: 'Boarding stair', group: 'Hangar', at: 'free', variants: ['seven'], foot: [1.3, 2.3, 3.3], build: gangway },
   ship: { name: 'Shuttle (a stand-in)', group: 'Hangar', at: 'free', variants: ['kestrel'], foot: [9.7, 4.8, 11.2], build: ship },
+  ...OUTSIDE, ...COCKPIT, ...CABIN,
 };
 
 // A junction square, 2 x 2 cells round a grid point: the floors make a walkway cross, the ceilings a light over each
