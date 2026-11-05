@@ -75,8 +75,8 @@ export function sideDoor(p, o = {}) {
       if (fold) {
         // (the cladding: a plate under the treads along the flight, a charcoal edge down each side)
         const at = (x, t, off) => [x, -DECK * t + below[0] * off, len * t + below[1] * off];
-        bar(s, SHIP.grey, at(0, 0.03, 0.175), at(0, 0.78, 0.175), 0.86, 0.015);   // (grey, as his dark doors)
-        for (const x of [-0.43, 0.43]) bar(s, SHIP.trim, at(x, 0.03, 0.17), at(x, 0.78, 0.17), 0.04, 0.03);
+        bar(s, SHIP.grey, at(0, 0.03, 0.175), at(0, 0.88, 0.175), 0.86, 0.015);   // (grey, as his dark doors)
+        for (const x of [-0.43, 0.43]) bar(s, SHIP.trim, at(x, 0.03, 0.17), at(x, 0.88, 0.17), 0.04, 0.03);
       }
       box(s, SHIP.frame, [-hw, hw], [-DECK, -DECK + 0.04], fold ? [len - 0.14, len + 0.02] : [len - 0.1, len + 0.12]);   // (a folding flight's foot plate stays under its line, clear of the leaf when folded)
       s.flush(q);

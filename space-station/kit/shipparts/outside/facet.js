@@ -139,17 +139,17 @@ export function facet(acc, pts, out, look, opts = {}) {
     }
   }
 }
-// a window: dark glass in a charcoal frame, set into a band of the panel's own paint round it (the off-white panels
-// his canopy's windows sit in), the glass sunk a little into the facet
+// a window: dark glass in a heavy charcoal frame (a flat dark band round it and a raised frame inside that, as his
+// canopies), the glass sunk a little into the facet
 export const PANES = 6;   // (the kit's glass is faint: a ship's windows are six panes deep, smoked dark, still see-through)
-const PILLAR = 0.1;   // (the off-white round each window: his canopy windows are set into panels)
+const PILLAR = 0.1;   // (a flat charcoal band round each window, outside its raised frame: his canopies' heavy dark frames)
 function glassPane(acc, P, n, look) {
   const fw = look.frameW ?? FRAME_W, mid = inset(P, n, PILLAR), inner = inset(mid, n, fw), lift = 0.02, sink = -0.02, back = sink - 0.006 * PANES - 0.004, F = look.frame || SHIP.frame;
   // (a facet too small or thin to hold a window stays a plain panel)
   const L = P.length, same = (A, B) => { for (let i = 0; i < L; i++) { const j = (i + 1) % L; if (A[j].clone().sub(A[i]).dot(B[j].clone().sub(B[i])) <= 1e-6) return false; } return true; };
   if (!same(P, inner)) return facet(acc, P, n, { ...look, glass: false });
   // the pillar band, flat on the facet (the hull's paint), its back the inside off-white, its edges closed
-  for (let i = 0; i < P.length; i++) { const j = (i + 1) % P.length; acc.poly([P[i], P[j], mid[j], mid[i]], n, look.paint); acc.poly([P[i], mid[i], mid[j], P[j]].map((q) => q.clone().addScaledVector(n, -THICK)), n.clone().negate(), SHIP.inner); }
+  for (let i = 0; i < P.length; i++) { const j = (i + 1) % P.length; acc.poly([P[i], P[j], mid[j], mid[i]], n, F); acc.poly([P[i], mid[i], mid[j], P[j]].map((q) => q.clone().addScaledVector(n, -THICK)), n.clone().negate(), SHIP.inner); }
   rim(acc, P, n, 0, -THICK, SHIP.inner);
   // the frame, raised, its back behind the glass
   ringFrame(acc, mid, inner, n, lift, back, F);

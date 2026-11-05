@@ -81,7 +81,7 @@ export function laserArm(p, o = {}) {
   joint(acc, [0, 0, 0], 0.5, 0.72);
   // three jointed sections, as his: the upper arm, the forearm, a short wrist that carries the cutter
   let elbow, wrist, head;
-  if (pose === 'working') { elbow = [0.4, 0.25, U * 0.8]; wrist = [0.5, -1.0, U * 0.8 + F * 0.55]; head = [0.5, -1.15, U * 0.8 + F * 0.55 + 0.5]; }   // (bent hard at the elbow, the cutter reaching forward and down, as his)
+  if (pose === 'working') { elbow = [0.4, 0.3, U * 0.8]; wrist = [0.5, -0.55, U * 0.8 + F * 0.6]; head = [0.5, -0.62, U * 0.8 + F * 0.6 + 0.5]; }   // (bent hard at the elbow, the cutter reaching forward and down, as his)
   else { elbow = [0.3, -0.12, -U]; wrist = [1.0, -0.3, -U + F]; head = [1.03, -0.32, -U + F + 0.55]; }   // (the forearm outside the upper arm, clear of it)
   segment(p, acc, [0, 0, 0], elbow, 0.66, 0.72);
   joint(acc, elbow, 0.44, 0.72);
