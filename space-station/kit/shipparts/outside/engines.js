@@ -114,7 +114,8 @@ export function thrusterPod(p, o = {}) {
     const q = new Acc();
     const jet = [GLOW_SHIP.engine, GLOW_SHIP.engine, GLOW_SHIP.jet, GLOW_SHIP.jet, GLOW_SHIP.halo.map((c) => c * 0.7), GLOW_SHIP.halo.map((c) => c * 0.5)];   // (bright at the nozzle, darker blue to its tip)
     latheZ(q, [[0, 0], [0.11 * k, 0], [0.15 * k, 0.08 * k], [0.13 * k, 0.2 * k], [0.08 * k, 0.34 * k], [0.03 * k, 0.46 * k], [0, 0.5 * k]].map(([r, z]) => [r, -z]), 16, (i) => ({ glow: jet[i] }), { flat: false });
-    for (const e of q.by.values()) { const pp = e.m.p, nn = e.m.n; for (let i = 0; i < pp.length; i += 3) { pp[i + 2] = zf - pp[i + 2]; nn[i + 2] = -nn[i + 2]; } merge(acc, e); }
+    // (turned to point out of the nozzle: a mirror in z, so each triangle's corners are swapped back round too)
+    for (const e of q.by.values()) { const pp = e.m.p, nn = e.m.n, ix = e.m.ix; for (let i = 0; i < pp.length; i += 3) { pp[i + 2] = zf - pp[i + 2]; nn[i + 2] = -nn[i + 2]; } for (let i = 0; i < ix.length; i += 3) { const t = ix[i + 1]; ix[i + 1] = ix[i + 2]; ix[i + 2] = t; } merge(acc, e); }
   }
   acc.flush(p);
   if (o.plume) p.light([0, 0, d + 0.4 * k], 0.6, [0.3, 0.7, 1.6], [0, 0, 1], 2.5);

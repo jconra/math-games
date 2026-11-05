@@ -4,7 +4,8 @@
 // lattice, so pieces meet edge to edge; the look is flat panels meeting at creases, as in the game's maker's pictures.
 // Frame: a piece faces +z (outward) at turn 0, its origin on a lattice point (a cell edge or corner, at its level).
 // Units below: n cells (0.5 m) across and along, n steps (0.5 m) up. A ratio a:b is a cells across to b steps up:
-// 1:1 is 45 degrees, 1:2 steep (63 degrees), 2:1 shallow (27 degrees).
+// 1:1 is 45 degrees, 1:2 steep (63 degrees), 2:1 shallow (27 degrees); any ratio up to 4:4 is a lattice slope too (2:2, a
+// 45 degree chamfer a metre across).
 //
 //   hullPanel   a flat panel.  'xN' a run N cells wide (1, 2, 4), 'hN' N steps tall (vertical, facing +z, from y 0 up);
 //               'roof xN dM' / 'belly xN dM' level, N cells along x by M along z, centred on the origin, facing up /
@@ -249,9 +250,9 @@ function facetsRoundHole(acc, look) {
 const okPaint = (ws) => ws.every((w) => PAINT_WORDS.has(w));
 export const ACCEPTS = {
   hullPanel: (s) => { const ws = s.split(' '); return /^(x[124]( h[1-6])?|(roof|belly) x[124]( d[124])?|(roof|belly) tri (1:1|1:2|2:1))$/.test(ws.filter((w) => !PAINT_WORDS.has(w)).join(' ')) && okPaint(ws.filter((w) => PAINT_WORDS.has(w))); },
-  hullSlope: (s) => /^((up|down) (1:1|1:2|2:1) x[124]|dslope (up|down) (1:1|1:2|2:1) plan (1:1|1:2|2:1)( [LR])?)$/.test(s.split(' ').filter((w) => !PAINT_WORDS.has(w)).join(' ')),
-  hullAngle: (s) => /^(1:1|1:2|2:1)( h[1-6])?( [LR])?$/.test(s.split(' ').filter((w) => !PAINT_WORDS.has(w)).join(' ')),
-  hullCorner: (s) => /^((hip|valley) (up|down) (1:1|1:2|2:1)(\/(1:1|2:1))?|gable (up|down) (1:1|1:2|2:1)( [LR])?)$/.test(s.split(' ').filter((w) => !PAINT_WORDS.has(w)).join(' ')),
+  hullSlope: (s) => /^((up|down) ([1-4]:[1-4]) x[124]|dslope (up|down) ([1-4]:[1-4]) plan ([1-4]:[1-4])( [LR])?)$/.test(s.split(' ').filter((w) => !PAINT_WORDS.has(w)).join(' ')),
+  hullAngle: (s) => /^([1-4]:[1-4])( h[1-6])?( [LR])?$/.test(s.split(' ').filter((w) => !PAINT_WORDS.has(w)).join(' ')),
+  hullCorner: (s) => /^((hip|valley) (up|down) ([1-4]:[1-4])(\/[1-4]:[1-4])?|gable (up|down) ([1-4]:[1-4])( [LR])?)$/.test(s.split(' ').filter((w) => !PAINT_WORDS.has(w)).join(' ')),
   hullCap: (s) => { const ws = s.split(' ').filter((w) => !PAINT_WORDS.has(w)); return ['nose', 'tail'].includes(ws[0]) && !!SECTIONS[ws[1]] && !!CAP_STYLES[ws[2]] && (ws.length === 3 || (ws[3] === 'mouth' && /^\d+x\d+$/.test(ws[4] || ''))); },
   hullOpening: (s) => /^(door( x[24])?( h[45])?|window x[24]|porthole|mouth \d+x\d+|hatch [23])$/.test(s.split(' ').filter((w) => !PAINT_WORDS.has(w)).join(' ')),
 };
