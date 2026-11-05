@@ -132,9 +132,9 @@ export function ramp(p, o = {}) {
   // hazard stripe down each edge, a dark edge beam
   const section = (L, first) => (q) => {
     const a = new Acc();
-    box(a, SHIP.grey, [-w / 2, w / 2], [-t, 0], [0, L]);
+    box(a, SHIP.gun, [-w / 2, w / 2], [-t, 0], [0, L]);   // (dark metal, as his)
     box(a, SHIP.trim, [-w / 2, -w / 2 + 0.08], [-t - 0.06, 0.02], [0, L]); box(a, SHIP.trim, [w / 2 - 0.08, w / 2], [-t - 0.06, 0.02], [0, L]);
-    for (let z = 0.25; z < L - 0.1; z += 0.3) box(a, SHIP.gun, [-w / 2 + 0.3, w / 2 - 0.3], [0, 0.015], [z, z + 0.05]);
+    for (let z = 0.25; z < L - 0.1; z += 0.3) box(a, SHIP.grey, [-w / 2 + 0.3, w / 2 - 0.3], [0, 0.015], [z, z + 0.05]);
     // (the underside, which is the outside when shut: off-white panels like the hull, with a seam)
     box(a, SHIP.hull, [-w / 2 + 0.02, w / 2 - 0.02], [-t - 0.005, -t], [0.02, L - 0.02]);
     if (!first) box(a, SHIP.frame, [-w / 2, w / 2], [-t, 0.01], [L - 0.06, L]);

@@ -27,7 +27,7 @@ export const SHIP = {
   teal: s('#1f9c86', 0.42, 0.03, 0.3),
   canister: s('#a8a088', 0.45, 0.35, 0.9),
   canBand: s('#d8951c', 0.45, 0.05, 0.6),
-  inner: s(SURF.white[0], SURF.white[1], SURF.white[2], SURF.white[3]),
+  inner: s(SURF.white[0], SURF.white[1], SURF.white[2], 0.35),   // (less grime than the station's own walls)
   frame: s('#2c2f34', 0.35, 0.5, 0.4),
   gun: s(SURF.gun[0], SURF.gun[1], SURF.gun[2], SURF.gun[3]),
   chrome: s(SURF.chrome[0], SURF.chrome[1], SURF.chrome[2], SURF.chrome[3]),

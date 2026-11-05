@@ -16,7 +16,7 @@ import { Piece } from '../piece.js';
 import { placeInto } from './place.js';
 
 // a variant's words as options: 'miner parked' -> { r: 1.35, len: 2.2, sides: 24, band: 'grey', lit: false }
-const ENGINE_V = { 'medic': { r: 1.1, len: 1.9 }, 'miner': { r: 1.35, len: 2.2, sides: 24, band: 'grey' }, 'explorer': { r: 0.95, len: 1.7, sides: 24 }, 'parked': { lit: false }, 'dark': { band: null }, 'yellow': { band: 'yellow' } };
+const ENGINE_V = { 'medic': { r: 1.1, len: 1.9 }, 'miner': { r: 1.35, len: 2.2, sides: 24, band: 'grey' }, 'explorer': { r: 0.95, len: 1.7, sides: 24 }, 'parked': { lit: false }, 'pale': { band: 'hull' }, 'yellow': { band: 'yellow' } };
 const optsOf = (v, table) => v.split(' ').reduce((o, w) => ({ ...o, ...(table[w] || {}) }), {});
 const THRUSTER_V = { top: { mount: 'top' }, side: { mount: 'side' }, under: { mount: 'under' }, jet: { plume: true }, 'left': { yaw: 90 }, 'right': { yaw: -90 }, 'back': { yaw: 180 }, 'up': { pitch: 45 }, 'down': { pitch: -45 }, 'tilt': { yaw: 35, pitch: 25 } };
 
@@ -49,7 +49,7 @@ export const OUTSIDE = {
     variants: ['door', 'door h4', 'door x4', 'window x2', 'window x4', 'porthole', 'mouth 6x5', 'hatch 2', 'hatch 3'] },
   // engines: the main engine's front face goes against the tail (the drum runs back along -z)
   mainEngine: { name: 'Main engine', group: G, at: 'free', foot: [2.4, 2.4, 2], build: (p, v) => mainEngine(p, optsOf(v, ENGINE_V)), accepts: (v) => v.split(' ').every((w) => ENGINE_V[w]),
-    variants: ['medic', 'medic parked', 'miner', 'explorer', 'medic yellow'] },
+    variants: ['medic', 'medic parked', 'medic pale', 'miner', 'explorer', 'medic yellow'] },
   enginePod: mirrorable({ name: 'Engine pod', group: G, at: 'free', foot: [1.4, 1.2, 2.7], build: (p, v) => enginePod(p, { ...optsOf(v, { yellow: { band: 'yellow' }, parked: { lit: false }, big: { r: 0.8, len: 3.2 }, round: { sides: 24 } }), pylon: v.includes('pylon') ? { side: -1, len: 0.6 } : null }),
     variants: ['pylon', 'plain', 'yellow pylon', 'big round', 'parked'] }),
   // manoeuvring thrusters: a pod on a mount, the pod turned on its pivot (yaw, pitch), its jet on or off
@@ -60,8 +60,8 @@ export const OUTSIDE = {
   wing: mirrorable({ name: 'Wing', group: G, at: 'free', foot: [3.4, 0.4, 3.6], variants: ['swept', 'delta', 'red stripe'],
     build: (p, v, m) => wing(p, { ...(v.includes('delta') ? { root: 3.4, tip: 0.5, span: 2.6, sweep: 2.8 } : {}), ...(m ? { light: 'green' } : {}), ...(v.includes('red stripe') ? { stripe: 'red' } : {}) }) }),
   stubWing: mirrorable({ name: 'Stub wing', group: G, at: 'free', foot: [1.4, 0.5, 2], variants: ['plain', 'red stripe'], build: (p, v) => stubWing(p, v === 'red stripe' ? { stripe: 'red' } : {}) }),
-  tailFin: { name: 'Tail fin', group: G, at: 'free', foot: [0.3, 1.1, 2.2], variants: ['tall', 'twin', 'red stripe'],
-    build: (p, v) => tailFin(p, v === 'twin' ? { root: 1.5, tip: 0.6, span: 0.9, sweep: 0.9 } : v === 'red stripe' ? { stripe: 'red' } : {}) },
+  tailFin: { name: 'Tail fin', group: G, at: 'free', foot: [0.3, 1.1, 2.2], variants: ['tall', 'small', 'red stripe'],
+    build: (p, v) => tailFin(p, v === 'small' ? { root: 1.2, tip: 0.5, span: 0.7, sweep: 0.9 } : v === 'red stripe' ? { stripe: 'red' } : {}) },
   landingLeg: { name: 'Landing leg', group: G, at: 'free', foot: [0.8, 1.3, 0.8], variants: ['short', 'long', 'wide pad'],
     build: (p, v) => landingLeg(p, v === 'long' ? { len: 1.3, out: 0.45 } : v === 'wide pad' ? { pad: 1.1 } : {}) },
   // ways in: each fits a hull opening, placed on the same point as it

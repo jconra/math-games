@@ -83,9 +83,9 @@ export function laserArm(p, o = {}) {
   let elbow, wrist, head;
   if (pose === 'working') { elbow = [0.3, -0.35, U * 0.94]; wrist = [0.4, -0.8, U * 0.94 + F * 0.9]; head = [0.4, -0.86, U * 0.94 + F * 0.9 + 0.5]; }   // (the cutter faces forward)
   else { elbow = [0.3, -0.12, -U]; wrist = [0.75, -0.3, -U + F]; head = [0.78, -0.32, -U + F + 0.55]; }
-  segment(p, acc, [0, 0, 0], elbow, 0.56, 0.62);
+  segment(p, acc, [0, 0, 0], elbow, 0.66, 0.72);
   joint(acc, elbow, 0.44, 0.72);
-  segment(p, acc, elbow, wrist, 0.48, 0.54);
+  segment(p, acc, elbow, wrist, 0.56, 0.62);
   joint(acc, wrist, 0.36, 0.6);
   bar(acc, SHIP.trim, wrist, head, 0.36, 0.4);
   // the cutting head: a toothed wheel (facing along the wrist) round a glowing orange core
