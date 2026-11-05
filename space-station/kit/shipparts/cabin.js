@@ -160,7 +160,7 @@ export const hullSlope = lean(function hullSlope(p, o = {}) {
 // ── a bulkhead with the station's arched hatch, at a ship's size ─────────────────────────────────────────────────────
 export const bulkhead = lean(function bulkhead(p, o = {}) {
   const { w = 2, clear = 0.9, spring = 1.5, k = 0.5, skin = 0.06, near = 1.8 } = o;
-  hatch(p, 'arch', { hw: clear / 2, spring, half: w / 2, h: ROOM, skin, core: 0.02, k, near, portal: false });
+  hatch(p, 'arch', { hw: clear / 2, spring, half: w / 2, h: ROOM, skin, core: 0.02, k, near, portal: false, lean: true });
   return p;
 });
 

@@ -6,9 +6,12 @@
 //                     rides on the rollers' tops, ROLLER_TOP above the deck.
 //   tieDown(p, o)     a rail let into the deck with an anchor slot every 0.125 m and a fold-down ring every 0.5 m:
 //                     { len (5.5) }
+import { lean } from '../cabin.js';
+
 export const ROLLER_TOP = 0.03;
 const PI = Math.PI;
-export function rollerLane(p, o = {}) {
+// (both drawn lean, as the ship's shell is: a hauler has two lanes and four rails, each 5.5 m)
+export const rollerLane = lean(function rollerLane(p, o = {}) {
   const { len = 5.5, wid = 2.0, pitch = 0.25, rows = 3, guide = true } = o, hl = len / 2, hw = wid / 2, R = 0.028, cy = ROLLER_TOP - R;
   // the lane's bed: a charcoal frame let into the deck, a dark trough under each row of rollers
   const span = wid / rows;
@@ -21,7 +24,7 @@ export function rollerLane(p, o = {}) {
   const n = Math.max(1, Math.floor(len / pitch + 1e-6)), x0 = -hl + (len - n * pitch) / 2 + pitch / 2;
   for (let i = 0; i < n; i++) {
     const x = x0 + i * pitch;
-    for (let j = 0; j < rows; j++) { const z0 = -hw + j * span + 0.045, z1 = -hw + (j + 1) * span - 0.045; p.cyl('rail', R, z1 - z0, [x, cy, (z0 + z1) / 2], [PI / 2, 0, 0], 8); }
+    for (let j = 0; j < rows; j++) { const z0 = -hw + j * span + 0.045, z1 = -hw + (j + 1) * span - 0.045; p.cyl('rail', R, z1 - z0, [x, cy, (z0 + z1) / 2], [PI / 2, 0, 0], 7); }
   }
   // guide rails along both edges, yellow with a charcoal cap (the pallets run between them)
   if (guide) for (const sz of [-1, 1]) {
@@ -31,16 +34,16 @@ export function rollerLane(p, o = {}) {
     for (let x = -hl + 0.25; x < hl; x += 1) p.slab('black', x - 0.05, x + 0.05, 0, 0.06, z - sz * 0.045 - 0.015, z - sz * 0.045 + 0.015, { r: 0.005 });
   }
   return p;
-}
-export function tieDown(p, o = {}) {
+});
+export const tieDown = lean(function tieDown(p, o = {}) {
   const { len = 5.5 } = o, hl = len / 2;
   p.slab('rail', -hl, hl, -0.02, 0.004, -0.03, 0.03, { r: 0.004, cell: 1.2 });
   for (let x = -hl + 0.0625; x < hl; x += 0.125) p.slab('dark', x - 0.03, x + 0.03, -0.006, 0.0045, -0.009, 0.009, { r: 0 });
   // a fold-down ring every half metre, lying flat in its slot
   for (let x = -hl + 0.25; x < hl; x += 0.5) {
     p.slab('black', x - 0.04, x + 0.04, 0.0, 0.012, -0.022, 0.022, { r: 0.006 });
-    p.box('rail', [0.07, 0.008, 0.012], [x, 0.016, -0.03], null, { r: 0.003 }); p.box('rail', [0.07, 0.008, 0.012], [x, 0.016, 0.03], null, { r: 0.003 });
-    p.box('rail', [0.012, 0.008, 0.07], [x + 0.035, 0.016, 0], null, { r: 0.003 });
+    p.box('rail', [0.07, 0.008, 0.012], [x, 0.016, -0.03], null, { r: 0 }); p.box('rail', [0.07, 0.008, 0.012], [x, 0.016, 0.03], null, { r: 0 });
+    p.box('rail', [0.012, 0.008, 0.07], [x + 0.035, 0.016, 0], null, { r: 0 });
   }
   return p;
-}
+});

@@ -348,7 +348,8 @@ function slant2(p, h, TOP, Z) { // the corner post's top: up to the ceiling, out
 // with bolt flanges and tick marks round the arch, a yellow stripe inside the rim, dark latch blocks either side, and
 // two leaves that slide apart into the bulkhead. variant 'arch' (a hatch), 'wide' (a broader arch, 1.6 m: two people
 // pass each other in it, for the main ways through a station) or 'blind' (no opening: a corridor's end).
-// Sizes: hw, spring, half, skin, core (as HATCH), h, k (everything round the arch, scaled), near, portal (false: no
+// Sizes: hw, spring, half, skin, core (as HATCH), h, k (everything round the arch, scaled), near, lean (the arch's
+// rings swept in fewer steps, fewer bolts), portal (false: no
 // posts and lintel round it).
 export const HATCH = { hw: 0.56, spring: 1.66, half: 2, skin: 0.25, core: 0.06 };
 export const HATCH_WIDE = { ...HATCH, hw: 0.8, spring: 1.5 };
@@ -389,15 +390,15 @@ export function hatch(p, v, s) {
   // the bulkhead's own edges, closing the pocket between the two faces (hidden in a corridor, seen on its own)
   for (const sg of [-1, 1]) p.slab('white', sg > 0 ? half - 0.02 : -half, sg > 0 ? half : -half + 0.02, 0, Hh, -skin, skin, { r: 0.004, cell: 0.6 });
   p.slab('white', -half, half, Hh - 0.02, Hh, -skin, skin, { r: 0.004, cell: 0.6 });
-  const R = (r0, r1, z0, z1, rr = 0.012) => rrect(r1 - r0, z1 - z0, rr, 2, (r0 + r1) / 2, (z0 + z1) / 2);
-  const path = () => arch(hw, spring, { seg: 22, step: 0.4 });
+  const R = (r0, r1, z0, z1, rr = 0.012) => rrect(r1 - r0, z1 - z0, rr, D.lean ? 1 : 2, (r0 + r1) / 2, (z0 + z1) / 2);
+  const path = () => arch(hw, spring, D.lean ? { seg: 14, step: 1 } : { seg: 22, step: 0.4 });
   p.sweep('black', R(K(-0.002), J, -skin - K(0.03), skin + K(0.03), 0.016), path());
   for (const sg of [1, -1]) {
     const q = new (p.constructor)();
     q.sweep('yellow', R(Y[0], Y[1], skin - K(0.01), skin + K(0.026), 0.005), path());
     q.sweep('grey2', R(B[0], B[1], core, skin + K(0.02), 0.008), path());
     q.sweep('black', R(O[0], O[1], skin - K(0.01), skin + K(0.045), 0.016), path());
-    for (const f of arch(hw + (B[0] + B[1]) / 2, spring, { seg: 12, step: 0.42 })) q.cyl('grey', K(0.013), K(0.012), [f.p.x, f.p.y, skin + K(0.024)], [PI / 2, 0, 0], 10);
+    for (const f of arch(hw + (B[0] + B[1]) / 2, spring, D.lean ? { seg: 8, step: 0.8 } : { seg: 12, step: 0.42 })) q.cyl('grey', K(0.013), K(0.012), [f.p.x, f.p.y, skin + K(0.024)], [PI / 2, 0, 0], D.lean ? 6 : 10);
     for (let i = 0; i <= 8; i++) { const a = PI * i / 8, c = Math.cos(a), sn = Math.sin(a), r0 = hw + O[1] + K(0.03), r1 = r0 + K(0.08); q.box('black', [K(0.016), r1 - r0, K(0.012)], [c * (r0 + r1) / 2, spring + sn * (r0 + r1) / 2, skin + K(0.006)], [0, 0, a - PI / 2]); }
     // the latches: two blocks on one side, one bigger with a round lock face on the other, each on a bracket plate,
     // a level rod running out of each across the wall
