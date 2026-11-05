@@ -48,10 +48,10 @@ export function sideDoor(p, o = {}) {
     box(a, SHIP.trim, [-W / 2 + 0.12, W / 2 - 0.12], [0.55, 0.7], [0.0125, 0.017]);
     box(a, SHIP.frame, [-0.2, 0.2], [1.3, 1.62], [0.0125, 0.02]);
     box(a, SHIP.yellow, [W / 2 - 0.16, W / 2 - 0.1], [0.9, 1.15], [0.0125, 0.02]);
-    box(a, SHIP.trim, [-W / 2 - 0.03, -W / 2], [-0.02, H + 0.03], [-0.016, 0.016]);
+    box(a, SHIP.trim, [-W / 2 - 0.03, -W / 2], [-0.02, H + 0.03], [-0.0125, 0.0125]);
     a.flush(q);
     q.glass(0.34, 0.26, [0, 1.46, 0.021]);
-  }, { at: [0, 0, -0.2875], slide: [W + 0.05, 0, 0], door: 0 });
+  }, { at: [0, 0, -0.284], slide: [W + 0.05, 0, 0], door: 0 });
   // a light over it (green), and the light it gives
   const a = new Acc();
   box(a, SHIP.trim, [-0.3, 0.3], [H + 0.12, H + 0.2], [0, 0.05]);
@@ -77,14 +77,14 @@ export function sideDoor(p, o = {}) {
         bar(s, SHIP.hull, at(0, 0.03, 0.175), at(0, 0.78, 0.175), 0.86, 0.015);
         for (const x of [-0.43, 0.43]) bar(s, SHIP.trim, at(x, 0.03, 0.17), at(x, 0.78, 0.17), 0.04, 0.03);
       }
-      box(s, SHIP.frame, [-hw, hw], [-DECK, -DECK + 0.04], [len - 0.1, len + 0.12]);
+      box(s, SHIP.frame, [-hw, hw], [-DECK, -DECK + 0.04], fold ? [len - 0.14, len + 0.02] : [len - 0.1, len + 0.12]);   // (a folding flight's foot plate stays under its line, clear of the leaf when folded)
       s.flush(q);
     };
     if (!fold) { const q = new (p.constructor)(); flight(q); for (const part of q.parts) { part.geo.translate(0, 0, 0.02); p.parts.push(part); } }
     else {
       // folded up inside the opening, in front of the leaf (turned about a hinge across the opening's floor until the
       // flight stands up), swung down and out to open
-      const down = Math.atan2(DECK, len), shut = -(PI / 2 + down), at = [0, 0, -0.195];
+      const down = Math.atan2(DECK, len), shut = -(PI / 2 + down), at = [0, 0, -0.165];
       p.leaf('ship-door-steps', flight, { at, rot: [shut, 0, 0], hinge: { at, axis: [1, 0, 0], angle: -shut }, door: 0 });
     }
   }
