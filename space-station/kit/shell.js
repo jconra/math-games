@@ -178,7 +178,7 @@ function wallSizes(s) {
   const w = s.w ?? 2, h = s.h ?? H, top = s.top ?? TOP, D = s.depth, d = s.door || {}, hw = (d.w ?? 1.1) / 2, dt = d.h ?? 2.25, rel = D ? D.relief : 1;
   return { w, k: w / 2, h, top, Z: zOf(D), T: (t) => t * rel * 0.4, R: (x) => x * rel, pilaster: s.pilaster ?? true, inset: [0.95, top - 0.16], sized: true, lean: !!s.lean, ro: s.lean ? { skip: ['-z', '-x', '+x'] } : {},
     door: { hw, top: dt, side: hw + 0.07, back: hw + 0.05, backY: dt + 0.05, lintel: dt + 0.07, plate: [dt + 0.15, dt + 0.22], glow: [dt + 0.17, dt + 0.2], ly: dt + 0.18,
-      win: [dt - 0.55, dt - 0.2], winL: [dt - 0.525, dt - 0.225], wy: dt - 0.375, leaves: d.leaves ?? 2, near: d.near ?? 2.4, sense: Math.min(1.2, dt / 2), key: `:${w}x${h}:${hw * 2}x${dt}:${d.leaves ?? 2}:${D ? D.face : ''}` } };
+      win: [dt - 0.43, dt - 0.08], winL: [dt - 0.405, dt - 0.105], wy: dt - 0.255, leaves: d.leaves ?? 2, near: d.near ?? 2.4, sense: Math.min(1.2, dt / 2), key: `:${w}x${h}:${hw * 2}x${dt}:${d.leaves ?? 2}:${D ? D.face : ''}` } };
 }
 // one side of a wall, x from -1 to 1 (G in from each end): which panels it has
 function wallSide(p, v, S) {
