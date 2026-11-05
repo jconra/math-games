@@ -33,7 +33,7 @@ export const SHIP = {
   chrome: s(SURF.chrome[0], SURF.chrome[1], SURF.chrome[2], SURF.chrome[3]),
 };
 export const GLOW_SHIP = {
-  engine: [1.4, 4.6, 9.5], engineDim: [0.35, 1.2, 2.6], strip: [0.9, 3.0, 7.5], jet: [1.6, 4.2, 9.0],
+  engine: [0.6, 2.1, 4.8], engineDim: [0.2, 0.7, 1.6], strip: [0.8, 2.6, 6.2], jet: [1.0, 2.8, 6.0],
   warm: [7.0, 5.6, 3.0], cutter: [8.0, 3.4, 0.7],
 };
 // the paint names a hull piece's variant may carry (kit/shipparts/outside/hull.js), and the surface each stands for
