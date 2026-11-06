@@ -34,7 +34,7 @@
 //
 // A VISOR (an android's helmet: Captain Vega): the head part's second mesh, its material named 'visor', laid out as
 // seen from the front (x across, up up, one scale both ways, the visor's middle at the layout's middle). It is plain
-// dark glass, and the face on it is drawn by its shader as glowing strokes, as his sheet draws them: EXPRESSIONS
+// dark glass, and the face on it is drawn by its shader as glowing strokes, as the character sheet draws them: EXPRESSIONS
 // (neutral, happy, thinking with its turning ring of dots, surprised), set with c.setExpression(name).
 //
 //   const lib = await loadCrew()                lib.list: crew.json; lib.part(kind, id) -> its glTF; lib.clipsFor(suit id)
@@ -226,7 +226,7 @@ vec3 crShift(vec3 c, vec3 to, vec3 ref, float m) { return max(c + (to - ref) * m
 // The face is drawn in the visor's own layout (p: x across, y up, the visor's middle at 0, its width about 1) by
 // distances to strokes: a stroke's core and a soft glow round it, added to the light the glass gives off. The eyes are
 // 0.38 apart; each expression is the sheet's:
-//   neutral    two upright eyes and a short straight mouth (his sheet shows none: a plain one), blinking now and then
+//   neutral    two upright eyes and a short straight mouth (the character sheet shows none: a plain one), blinking now and then
 //   happy      eyes closed in arcs (upside-down U's) and a smile
 //   thinking   one eye a dash, the other a ring of dots turning as a loading ring does, the mouth a small frown
 //   surprised  round eyes, a small round mouth
