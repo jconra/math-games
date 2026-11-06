@@ -1,0 +1,236 @@
+{
+ "name": "Explorer C (built)",
+ "about": "Explorer C as built from the 3,000-triangle smart mesh made from the game's maker's picture, its landing legs from the 8,000-triangle one: flat paint by rules (white skin, black spars and flaps, a grey belly, dark trim, blue light strips, his yellow accents), a smoked glass canopy in one black spar part placed along every edge, an airstair door, retracting gear, and the cockpit with two bucket seats.",
+ "grid": {
+  "cell": 0.5,
+  "step": 0.5,
+  "deck": 1.74
+ },
+ "views": {
+  "start": {
+   "at": [
+    14,
+    7.5,
+    15
+   ],
+   "look": [
+    0,
+    2.4,
+    0.3
+   ],
+   "fov": 40
+  },
+  "side": {
+   "at": [
+    28,
+    3,
+    0
+   ],
+   "look": [
+    0,
+    2.8,
+    0
+   ],
+   "fov": 36
+  },
+  "front": {
+   "at": [
+    0,
+    3.2,
+    28
+   ],
+   "look": [
+    0,
+    2.8,
+    0
+   ],
+   "fov": 30
+  },
+  "rear": {
+   "at": [
+    0,
+    3.4,
+    -28
+   ],
+   "look": [
+    0,
+    2.8,
+    0
+   ],
+   "fov": 30
+  },
+  "door": {
+   "at": [
+    7.5,
+    1.8,
+    4.5
+   ],
+   "look": [
+    2.6,
+    2.4,
+    1.6
+   ],
+   "fov": 50
+  },
+  "cockpit": {
+   "at": [
+    0.5,
+    3.31,
+    4.6
+   ],
+   "look": [
+    0.5,
+    2.9,
+    9
+   ],
+   "fov": 75
+  }
+ },
+ "probe": [
+  0,
+  4,
+  0
+ ],
+ "pieces": [
+  {
+   "piece": "ebHull",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "hull"
+  },
+  {
+   "piece": "ebCanopy",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "glass"
+  },
+  {
+   "piece": "ebMarks",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "marks"
+  },
+  {
+   "piece": "ebWells",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "wells"
+  },
+  {
+   "piece": "ebDoorway",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "port"
+  },
+  {
+   "piece": "ebDoorway",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "starboard"
+  },
+  {
+   "piece": "ebAirstair",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "port"
+  },
+  {
+   "piece": "ebGear",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "nose"
+  },
+  {
+   "piece": "ebGearDoors",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "nose"
+  },
+  {
+   "piece": "ebGear",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "port"
+  },
+  {
+   "piece": "ebGearDoors",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "port"
+  },
+  {
+   "piece": "ebGear",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "starboard"
+  },
+  {
+   "piece": "ebGearDoors",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "starboard"
+  },
+  {
+   "piece": "ebCockpit",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "two seats"
+  }
+ ]
+}

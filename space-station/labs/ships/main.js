@@ -9,8 +9,14 @@
 // ONE MENU along the bottom. In 3D: drag to look round, wheel or pinch to come closer, W A S D move (Space up, C down,
 // Shift faster). On the plan: drag walls, furniture and doors; tap to select; drag elsewhere to move it, wheel or pinch
 // to zoom, double-click to fit. Edits are kept in this browser; Download saves the blueprint as a file.
-//   ?ship=explorer-b|explorer-a  ?bp=<blueprint id>  ?view=3d|split|plan|both
-//   window.SHIPLAB = { ready, options, option(id), ship(id), view(v), cam(c), hull(h), show(k, on), result(), bp() }
+//   BUILT: Explorer C built from the 3k smart mesh as the kit's own parts (kit/ships/explorer-built.js), loaded as a
+//     layout file (kit/rooms/ship-explorer-built.json) through the kit's layout code, so its doors and movers work:
+//     Gear up / down folds the landing legs into their wells (then shuts the wells' doors), Door open / shut swings
+//     the airstair door down to the ground; Dirt sets the grime over its clean paint; Show "Meshy B" lays Meshy B over
+//     it, see-through, to compare
+//   ?ship=built|explorer-b|explorer-a  ?bp=<blueprint id>  ?view=3d|split|plan|both
+//   window.SHIPLAB = { ready, options, option(id), ship(id), view(v), cam(c), hull(h), show(k, on), result(), bp(),
+//     gear(up), door(open), dirt(amount), moving() }
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -18,13 +24,21 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { checkBlueprint, ROOM_KINDS, ITEM_KINDS, doorWall, wallsAt, snap, HEAD, CEIL } from './blueprint.js';
 import { Plan } from './plan.js';
+import { buildRoom, updateDoors, loadRoom } from '../../kit/layout.js';
+import { makeMaterials } from '../../kit/materials.js';
+import { grimeMaterials, GRIME, gearStep } from '../../kit/ships/explorer-built.js';
 
 const $ = (s) => document.querySelector(s), q = new URLSearchParams(location.search);
-// the ships: each a prepared shell (its .glb and .space.json in assets/ships)
+// the ships: each a prepared shell (its .glb and .space.json in assets/ships), or a layout built by the kit (its
+// .space.json measured from it)
 const SHIPS = [
+  { id: 'built', name: 'Built', layout: 'ship-explorer-built', shell: 'explorer-built', note: 'Explorer C built from the 3k smart mesh: flat paint, a glass canopy, the airstair door, gear that folds away' },
   { id: 'explorer-b', name: 'Meshy B', shell: 'explorer-meshy-b', note: 'Explorer C from his 3/4 view' },
   { id: 'explorer-a', name: 'Meshy A', shell: 'explorer-meshy-a', note: 'Explorer C from his four views' },
 ];
+// (close views of the built ship: where from and what at)
+const SPOTS = { Canopy: { at: [6.5, 6.8, 12.5], look: [0, 3.7, 5.2] }, Door: { at: [7.6, 1.6, 4.4], look: [2.2, 2.4, 1.6] }, Seats: { at: [0, 3.75, 3.65], look: [0, 3.0, 7.6] } };
+const DIRT = { None: 0, Some: 0.45, Lots: 0.9 };
 const OPTIONS = ['explorer-c-plan', 'explorer-c-row', 'explorer-c-side'];
 const VIEWS = { '3d': '3D', split: '3D + plan', plan: 'Plan', both: 'Plan + side' };
 const CAMS = { Hero: [1, 0.45, 1], Side: [1, 0.05, 0], Front: [0, 0.12, 1], Rear: [0, 0.12, -1], Top: [0.001, 1, 0], Above: [0.55, 1.15, 0.7] };
@@ -32,9 +46,11 @@ const HULLS = { solid: 'Solid', plain: 'Plain', wire: 'Wireframe', xray: 'See-th
 // (Plain: the shape alone, no paint; Wireframe: every triangle, to judge where the model spends them)
 const PLAIN = new THREE.MeshStandardMaterial({ color: 0xc9ced4, roughness: 0.55, metalness: 0.05, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
 const WIRE = new THREE.LineBasicMaterial({ color: 0x14202c, transparent: true, opacity: 0.55 });
+const WIREFILL = new THREE.MeshBasicMaterial({ color: 0x14202c, wireframe: true, transparent: true, opacity: 0.55 });
 const st = {
   ship: null, shell: null, space: null, opt: null, bp: null, stock: {}, edits: {}, result: null, sel: null,
-  view: VIEWS[q.get('view')] ? q.get('view') : 'split', cam: 'Hero', hull: 'xray', show: { space: true, rooms: true, checks: true, person: true }, undo: [], pending: false,
+  view: VIEWS[q.get('view')] ? q.get('view') : 'split', cam: 'Hero', hull: 'xray', show: { space: true, rooms: true, checks: true, person: true, meshy: false }, undo: [], pending: false,
+  gear: 'down', door: 'shut', dirt: 'Some',
 };
 
 // ── renderer, scene, camera ───────────────────────────────────────────────────────────────────────────────────────
@@ -74,9 +90,26 @@ const BP3 = new THREE.Group(); scene.add(BP3);
 // ── loading a ship: its shell and the space measured inside it ───────────────────────────────────────────────────
 const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
 const shells = new Map();
+const spaceOf = (S) => fetch(`../../assets/ships/${S.shell}.space.json`).then((r) => { if (!r.ok) throw new Error('Ship Lab: no space file for ' + S.shell); return r.json(); });
+// a ship that is a layout: built by the kit's own layout code (its doors and movers with it), in its grime materials
+async function loadBuilt(S) {
+  const [room, space] = await Promise.all([loadRoom(`../../kit/rooms/${S.layout}.json`), spaceOf(S)]);
+  const built = buildRoom(room, grimeMaterials(makeMaterials(), { dirt: DIRT[st.dirt] }), { bake: { voxel: 0.08, rays: 24 } });
+  const holder = new THREE.Group(), model = built.group; holder.add(model);
+  model.traverse((o) => {
+    if (!o.isMesh) return;
+    o.userData.mat = o.material;
+    o.userData.xray = o.material.name === 'glass' ? o.material : new THREE.MeshStandardMaterial({ vertexColors: !o.isInstancedMesh && !/glow/.test(o.name), color: /glow/.test(o.name) ? 0x6fc8ff : 0xffffff, transparent: true, opacity: 0.2, depthWrite: false, roughness: 0.6 });
+    o.userData.plain = o.material.name === 'glass' ? o.material : PLAIN;
+  });
+  holder.updateMatrixWorld(true);
+  const size = new THREE.Box3().setFromObject(holder).getSize(new THREE.Vector3());
+  return { holder, model, tris: built.stats.tris, size, space, built };
+}
 async function loadShell(S) {
   if (shells.has(S.id)) return shells.get(S.id);
-  const [g, space] = await Promise.all([loader.loadAsync(`../../assets/ships/${S.shell}.glb`), fetch(`../../assets/ships/${S.shell}.space.json`).then((r) => { if (!r.ok) throw new Error('Ship Lab: no space file for ' + S.shell); return r.json(); })]);
+  if (S.layout) { const rec = await loadBuilt(S); shells.set(S.id, rec); return rec; }
+  const [g, space] = await Promise.all([loader.loadAsync(`../../assets/ships/${S.shell}.glb`), spaceOf(S)]);
   const model = g.scene, holder = new THREE.Group(); holder.add(model);
   // (a prepared shell is placed in its file; an older one lies along x, nose -x: turned, scaled to 17.3 m, stood up)
   if (!model.userData.shipPrep) {
@@ -103,11 +136,15 @@ function setHull(mode) {
   if (!st.shell) return;
   st.shell.holder.visible = mode !== 'hidden';
   st.shell.model.traverse((o) => {
-    if (!o.isMesh) return;
+    if (!o.isMesh || !o.userData.mat) return;   // (not a wireframe's own mesh: it keeps its wire material)
     o.material = mode === 'xray' ? o.userData.xray : mode === 'plain' || mode === 'wire' ? o.userData.plain : o.userData.mat;
-    o.castShadow = mode === 'solid' || mode === 'plain' || mode === 'wire'; o.renderOrder = mode === 'xray' ? 10 : 0;
-    // (the wireframe: every triangle's edges, made the first time it's asked for, lifted a hair so it shows over the faces)
-    if (mode === 'wire' && !o.userData.wire) { o.userData.wire = new THREE.LineSegments(new THREE.WireframeGeometry(o.geometry), WIRE); o.add(o.userData.wire); }
+    o.castShadow = (mode === 'solid' || mode === 'plain' || mode === 'wire') && o.material.name !== 'glass'; o.renderOrder = mode === 'xray' ? 10 : o.material.name === 'glass' ? 2 : 0;
+    // (the wireframe: every triangle's edges, made the first time it's asked for, lifted a hair so it shows over the faces;
+    // a moving part's (an instanced mesh) is a wireframe copy of it that moves with it)
+    if (mode === 'wire' && !o.userData.wire) {
+      if (o.isInstancedMesh) { const w = new THREE.InstancedMesh(o.geometry, WIREFILL, o.count); w.instanceMatrix = o.instanceMatrix; w.frustumCulled = false; o.userData.wire = w; o.parent.add(w); }
+      else { o.userData.wire = new THREE.LineSegments(new THREE.WireframeGeometry(o.geometry), WIRE); o.add(o.userData.wire); }
+    }
     if (o.userData.wire) o.userData.wire.visible = mode === 'wire';
   });
 }
@@ -116,9 +153,27 @@ async function showShip(S) {
   const rec = await loadShell(S);
   if (st.shell) scene.remove(st.shell.holder);
   st.ship = S; st.shell = rec; st.space = rec.space; scene.add(rec.holder); setHull(st.hull);
-  const d = st.space.doors?.port; person.position.set(d ? d.face + 1.2 : rec.size.x / 2 + 0.9, 0, d ? (d.z[0] + d.z[1]) / 2 - 1.6 : 1);
+  const d = st.space.doors?.port; person.position.set(d ? d.face + 1.2 : rec.size.x / 2 + 0.9, 0, d ? (d.z[0] + d.z[1]) / 2 - (S.layout ? 2.4 : 1.6) : 1);
+  if (!S.layout && st.show.meshy) { st.show.meshy = false; }
+  await showMeshy();
   plan.hFor = null; recheck(true); setCam(st.cam); url(); menu();
   loading.hidden = true;
+}
+// Meshy B laid over the built ship, see-through, to compare (its own shell, a see-through copy of its paint)
+let meshyOver = null;
+async function showMeshy() {
+  const on = st.show.meshy && st.ship?.layout;
+  if (on && !meshyOver) {
+    const rec = await loadShell(SHIPS.find((S) => S.id === 'explorer-b')), holder = new THREE.Group();
+    rec.holder.updateMatrixWorld(true);
+    rec.model.traverse((o) => {
+      if (!o.isMesh) return;
+      const m = new THREE.Mesh(o.geometry, new THREE.MeshBasicMaterial({ map: o.userData.mat?.map || null, transparent: true, opacity: 0.3, depthWrite: false }));
+      m.matrixAutoUpdate = false; m.matrix.copy(o.matrixWorld); m.renderOrder = 12; holder.add(m);
+    });
+    meshyOver = holder;
+  }
+  if (meshyOver) { if (on) scene.add(meshyOver); else scene.remove(meshyOver); }
 }
 
 // ── the blueprints: the three options (and edits kept in this browser) ───────────────────────────────────────────
@@ -215,6 +270,7 @@ function layout() {
 function setView(v) { st.view = v; url(); layout(); setCam(st.cam); menu(); }
 function setCam(name) {
   st.cam = name; if (!st.shell) return;
+  if (SPOTS[name]) { if (!st.ship.layout) { setCam('Hero'); return; } camera.position.set(...SPOTS[name].at); controls.target.set(...SPOTS[name].look); controls.update(); return; }
   // (how far back: the ship's half-size across the screen and up it, from this side, fitted to the view's shape)
   const s = st.shell.size, d = new THREE.Vector3(...CAMS[name]).normalize(), t = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
   // (and the part of it nearer the eye than its middle: half its depth from this side)
@@ -256,10 +312,15 @@ function menu() {
   const opts = OPTIONS.filter((id) => st.stock[id]).concat(st.edits.uploaded ? ['uploaded'] : []);
   $('#items').replaceChildren(lab('Blueprint'), ...opts.map((id) => chip(((st.edits[id] || st.stock[id])?.name || id) + (isEdited(id) && id !== 'uploaded' ? ' •' : ''), id === st.opt, () => showOption(id))),
     sep(), lab('Ship'), ...SHIPS.map((S) => chip(S.name, S === st.ship, () => showShip(S), false, S.note)));
+  const built = !!st.ship?.layout;
   $('#tabs').replaceChildren(lab('View'), ...Object.entries(VIEWS).map(([k, t]) => chip(t, k === st.view, () => setView(k), true)),
-    sep(), lab('Camera'), ...Object.keys(CAMS).map((k) => chip(k, k === st.cam, () => { setCam(k); if (st.view !== '3d' && st.view !== 'split') setView('split'); menu(); }, true)),
+    sep(), lab('Camera'), ...[...Object.keys(CAMS), ...(built ? Object.keys(SPOTS) : [])].map((k) => chip(k, k === st.cam, () => { setCam(k); if (st.view !== '3d' && st.view !== 'split') setView('split'); menu(); }, true)),
     sep(), lab('Hull'), ...Object.entries(HULLS).map(([k, t]) => chip(t, k === st.hull, () => { setHull(k); menu(); }, true)),
-    sep(), lab('Show'), ...[['space', 'Space'], ['rooms', 'Rooms'], ['checks', 'Checks'], ['person', 'Person']].map(([k, t]) => chip(t, st.show[k], () => { show(k, !st.show[k]); menu(); }, true)));
+    sep(), lab('Show'), ...[['space', 'Space'], ['rooms', 'Rooms'], ['checks', 'Checks'], ['person', 'Person'], ...(built ? [['meshy', 'Meshy B']] : [])].map(([k, t]) => chip(t, st.show[k], () => { show(k, !st.show[k]); menu(); }, true, k === 'meshy' ? 'Meshy B laid over the built ship, see-through' : '')),
+    // (the built ship's moving parts and its grime)
+    ...(built ? [sep(), lab('Gear'), chip(st.gear === 'up' ? 'Gear down' : 'Gear up', false, () => { st.gear = st.gear === 'up' ? 'down' : 'up'; menu(); }, true, 'Fold the landing legs into their wells, or let them down'),
+      sep(), lab('Door'), chip(st.door === 'open' ? 'Door shut' : 'Door open', false, () => { st.door = st.door === 'open' ? 'shut' : 'open'; menu(); }, true, 'Swing the airstair door down to the ground, or up shut'),
+      sep(), lab('Dirt'), ...Object.keys(DIRT).map((k) => chip(k, k === st.dirt, () => { st.dirt = k; GRIME.dirt.value = DIRT[k]; menu(); }, true))] : []));
   const add = document.createElement('select'); add.className = 'sl-add'; add.setAttribute('aria-label', 'Add');
   add.append(new Option('Add…', ''));
   const og = (label, entries) => { const g = document.createElement('optgroup'); g.label = label; for (const [v, t] of entries) g.append(new Option(t, v)); add.append(g); };
@@ -276,7 +337,7 @@ function menu() {
   for (const b of $('#edit').querySelectorAll('button')) if (['Turn', 'Name', 'Remove'].includes(b.textContent)) b.disabled = !S || (b.textContent === 'Turn' && S.type !== 'item') || (b.textContent === 'Name' && S.type === 'door');
   requestAnimationFrame(layout);
 }
-function show(k, on) { st.show[k] = on; plan.show.space = st.show.space; plan.show.checks = st.show.checks; person.visible = st.show.person; build3d(); plan.draw(); }
+function show(k, on) { st.show[k] = on; plan.show.space = st.show.space; plan.show.checks = st.show.checks; person.visible = st.show.person; build3d(); plan.draw(); if (k === 'meshy') showMeshy(); }
 
 // ── editing: add, turn, rename, remove, download, upload ─────────────────────────────────────────────────────────
 const uid = (bp, base) => { let n = 1; const ids = new Set([...bp.rooms, ...(bp.items || []), ...(bp.doors || [])].map((o) => o.id)); while (ids.has(base + '-' + n)) n++; return base + '-' + n; };
@@ -365,6 +426,9 @@ let last = performance.now(), fpsT = 0, frames = 0, fps = 0;
 renderer.setAnimationLoop((t) => {
   const dt = Math.min(0.1, (t - last) / 1000); last = t;
   const on = canvas.style.display !== 'none';
+  // (the built ship's gear and airstair door, moving to where the menu asks)
+  const B = st.shell?.built;
+  if (B && st.ship?.layout && !st.hold) { gearStep(B, st.gear === 'up', dt, updateDoors); updateDoors(B.doors.filter((D) => D.piece === 'ebAirstair'), person.position, dt, st.door); }
   if (on) { fly(dt); controls.update(); renderer.render(scene, camera); frames++; }
   fpsT += dt; if (fpsT > 0.5) { fps = Math.round(frames / fpsT); frames = 0; fpsT = 0; }
   if (st.shell) hud.textContent = `${st.ship.name}: ${st.shell.size.z.toFixed(1)} × ${st.shell.size.x.toFixed(1)} × ${st.shell.size.y.toFixed(1)} m · deck ${st.space.deck} m up · ${Math.round(st.shell.tris).toLocaleString()} tris` + (on ? ` · ${fps} fps` : '');
@@ -381,4 +445,17 @@ window.SHIPLAB = {
   option: (id) => showOption(id), ship: (id) => showShip(SHIPS.find((S) => S.id === id)), view: setView, cam: (c) => { setCam(c); menu(); },
   hull: (h) => { setHull(h); menu(); }, show: (k, on) => { show(k, on); menu(); }, result: () => st.result, bp: () => st.bp, select,
   panel: (open) => { $('#panel').open = open; }, fit: () => { plan.fit(); plan.draw(); },
+  gear: (up) => { st.gear = up ? 'up' : 'down'; menu(); }, door: (open) => { st.door = open ? 'open' : 'shut'; menu(); },
+  dirt: (k) => { st.dirt = k; GRIME.dirt.value = DIRT[k]; menu(); },
+  // (how far each of the built ship's doors is open, 0 to 1: the gear legs, the wells' doors, the airstair)
+  moving: () => (st.shell?.built ? st.shell.built.doors.map((D) => ({ piece: D.piece, t: +D.t.toFixed(3) })) : []),
+  // (for pictures part way: hold the built ship's moving parts where `at` says, { gear, doors, stair } each 0 to 1; null
+  // lets them go on to where the menu asks)
+  pose: (at) => {
+    const B = st.shell?.built; st.hold = !!at; if (!B || !at) return;
+    const of = { gear: 'ebGear', doors: 'ebGearDoors', stair: 'ebAirstair' };
+    // (each moved there from an end, so its leaves are set: from shut by t, or to shut from open)
+    for (const [k, t] of Object.entries(at)) for (const D of B.doors.filter((d) => d.piece === of[k])) { D.t = t > 0 ? 0 : 1; updateDoors([D], person.position, t > 0 ? t / D.speed : 2 / D.speed, t > 0 ? 'open' : 'shut'); }
+  },
+  built: () => st.shell?.built || null, three: THREE, scene, camera, renderer, controls,
 };

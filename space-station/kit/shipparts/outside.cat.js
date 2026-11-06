@@ -104,3 +104,5 @@ import { SHIP_EXPLORER } from '../ships/ship-explorer.js';
 Object.assign(OUTSIDE, SHIP_EXPLORER);
 import { SHIP_HAULER } from '../ships/ship-hauler.js';
 Object.assign(OUTSIDE, SHIP_HAULER);
+import { SHIP_EXPLORER_BUILT } from '../ships/explorer-built.js';
+Object.assign(OUTSIDE, SHIP_EXPLORER_BUILT);
