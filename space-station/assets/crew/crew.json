@@ -1,11 +1,25 @@
 {
-  "about": "The crew's parts (each skinned to the Mathwood people's skeleton and carrying it; made by ~/pw/space-math/rigs/crew-rig/) and the characters put together from them (kit/crew.js makeCrew). A recipe: { suit, head, hair, colours: { job, skin, hair } }; a colour left out keeps the part's own. Any head goes on any suit of the same skeleton, any hair on any head (the attachment rules: ~/pw/space-math/characters/CHARACTERS.md).",
+  "about": "The crew's parts (each skinned to a Mathwood people's skeleton, 'm' the men's or 'f' the women's, and carrying it; made by ~/pw/space-math/rigs/crew-rig/) and the characters put together from them (kit/crew.js makeCrew). A recipe: { suit, head, hair, colours: { job, skin, hair } }; a colour left out keeps the part's own. The suit's skeleton sets the clips. Any head goes on any suit and any hair on any head: a head attaches at the Neck and Head joints and hair at the Head joint (the attachment rules: ~/pw/space-math/characters/CHARACTERS.md).",
   "parts": {
-    "suit": [{ "id": "crew1", "name": "Station suit", "file": "suit_crew1.glb", "skeleton": "m" }],
-    "head": [{ "id": "crew1", "name": "Crew 1 (his portrait)", "file": "head_crew1.glb", "skeleton": "m" }],
-    "hair": [{ "id": "crew1", "name": "Short swept", "file": "hair_crew1.glb", "skeleton": "m" }]
+    "suit": [
+      { "id": "crew1", "name": "Station suit", "file": "suit_crew1.glb", "skeleton": "m" },
+      { "id": "captain1", "name": "Captain's jumpsuit", "file": "suit_captain1.glb", "skeleton": "f" }
+    ],
+    "head": [
+      { "id": "crew1", "name": "Crew 1 (his portrait)", "file": "head_crew1.glb", "skeleton": "m" },
+      { "id": "captain1", "name": "Captain (her portrait)", "file": "head_captain1.glb", "skeleton": "f" }
+    ],
+    "hair": [
+      { "id": "crew1", "name": "Short swept", "file": "hair_crew1.glb", "skeleton": "m" },
+      { "id": "captain1", "name": "Braided crown and bun", "file": "hair_captain1.glb", "skeleton": "f" },
+      { "id": "q_short", "name": "Short tousled (Mathwood)", "file": "hair_q_short.glb", "skeleton": "m" },
+      { "id": "q_mohawk", "name": "Mohawk (Mathwood)", "file": "hair_q_mohawk.glb", "skeleton": "m" },
+      { "id": "q_bob", "name": "Two-tone bob (Mathwood)", "file": "hair_q_bob.glb", "skeleton": "m" },
+      { "id": "q_long", "name": "Long (Mathwood)", "file": "hair_q_long.glb", "skeleton": "m" }
+    ]
   },
   "recipes": {
-    "crew1": { "name": "Crew 1", "suit": "crew1", "head": "crew1", "hair": "crew1", "colours": { "job": "explorer" } }
+    "crew1": { "name": "Crew 1", "suit": "crew1", "head": "crew1", "hair": "crew1", "colours": { "job": "explorer" } },
+    "captain1": { "name": "Captain", "suit": "captain1", "head": "captain1", "hair": "captain1", "colours": { "job": "explorer" } }
   }
 }

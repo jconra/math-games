@@ -32,10 +32,12 @@
 // each channel's ratio to the head's own), so the texture's shading and detail stay and the part's own colours give it
 // back exactly.
 //
-//   const lib = await loadCrew()                lib.list: crew.json; lib.clips: the retargeted clips (CLIPS' names)
+//   const lib = await loadCrew()                lib.list: crew.json; lib.part(kind, id) -> its glTF; lib.clipsFor(suit id)
+//                                               -> { body, rig, clips (fitted to that suit), stride }
 //   const c = await makeCrew(lib, recipe)       recipe { suit, head, hair, colours: { job, skin, hair } }
 //     c.root (place and turn it: feet on y 0, facing +z), c.person (Mathwood's Person), c.play(name, { fade, speed, once }),
-//     c.update(dt), c.setColours({ job, skin, hair }), c.meshes { suit, head, hair }, c.bones, c.dispose()
+//     c.update(dt), c.setColours({ job, skin, hair }), c.meshes { suit, head, hair }, c.bones, c.body ('m' | 'f': the
+//     suit's skeleton, whose clips it plays), c.stride (m/s at speed 1: { Walk, Run }), c.dispose()
 //   JOBS, SKIN_TONES, HAIR_COLOURS, CLIPS
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
@@ -45,14 +47,15 @@ import { Person, STRIDE } from '../../mathwood-valley/world/objects/people.js';
 export const CREW_DIR = new URL('../assets/crew/', import.meta.url).href;
 export const PEOPLE_DIR = new URL('../../mathwood-valley/models/people/', import.meta.url).href;
 
-// the Mathwood men's clips a crew member can use (the gun, lasso, riding and instrument clips left out), by file
+// the Mathwood clips a crew member can use (the gun, lasso, riding and instrument clips left out), by skeleton (the men's
+// 'm' and the women's 'f' are built differently: a suit is rigged to one of them) and file
+const BASIC = ['Idle', 'Idle_Neutral', 'Walk', 'Run', 'Run_Back', 'Run_Left', 'Run_Right', 'Wave', 'Interact', 'Roll', 'HitRecieve', 'Death'];
+const CROWD = ['Stand_Listen', 'Stand_Clap', 'Sit_Listen', 'Sit_Clap', 'Stool_Bar', 'Stool_Clap'];
 export const CLIP_FILES = {
-  'anims_m.glb': ['Idle', 'Idle_Neutral', 'Walk', 'Run', 'Run_Back', 'Run_Left', 'Run_Right', 'Wave', 'Interact', 'Roll', 'HitRecieve', 'Death'],
-  'clips_crowd_m.glb': ['Stand_Listen', 'Stand_Clap', 'Sit_Listen', 'Sit_Clap', 'Stool_Bar', 'Stool_Clap', 'Bar_Polish'],
-  'clips_work_m.glb': ['Hammer', 'Tend_Forge'],
-  'clips_drive_m.glb': ['Drive'],
+  m: { 'anims_m.glb': BASIC, 'clips_crowd_m.glb': [...CROWD, 'Bar_Polish'], 'clips_work_m.glb': ['Hammer', 'Tend_Forge'], 'clips_drive_m.glb': ['Drive'] },
+  f: { 'anims_f.glb': BASIC, 'clips_crowd_f.glb': CROWD, 'clips_drive_f.glb': ['Drive'] },
 };
-export const CLIPS = Object.values(CLIP_FILES).flat();
+export const CLIPS = [...new Set(Object.values(CLIP_FILES).flatMap((F) => Object.values(F).flat()))];
 // (the clips that play once and hold their last pose)
 export const ONCE = new Set(['Death', 'Roll', 'HitRecieve']);
 
@@ -75,27 +78,39 @@ const lin = (s) => new THREE.Color(s);          // (sRGB string -> three's linea
 // ── loading ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 export async function loadCrew({ dir = CREW_DIR, people = PEOPLE_DIR } = {}) {
   const list = await (await fetch(dir + 'crew.json')).json();
-  const files = await Promise.all(Object.keys(CLIP_FILES).map((f) => loader.loadAsync(people + f)));
-  const raw = [];
-  Object.keys(CLIP_FILES).forEach((f, i) => { for (const c of files[i].animations) if (CLIP_FILES[f].includes(c.name)) raw.push(c); });
-  const parts = new Map();
-  const lib = { dir, list, raw, clips: null, rig: null, stride: null };
+  const parts = new Map(), raws = new Map(), fitted = new Map();
+  const lib = { dir, list };
+  lib.entry = (kind, id) => (list.parts[kind] || []).find((p) => p.id === id);
+  // a skeleton's own clips, as the Mathwood files have them (loaded once, when a suit on that skeleton first comes)
+  lib.rawClips = (body) => {
+    if (!raws.has(body)) {
+      const F = CLIP_FILES[body];
+      raws.set(body, Promise.all(Object.keys(F).map((f) => loader.loadAsync(people + f))).then((files) => {
+        const raw = []; Object.keys(F).forEach((f, i) => { for (const c of files[i].animations) if (F[f].includes(c.name)) raw.push(c); });
+        return raw;
+      }));
+    }
+    return raws.get(body);
+  };
   lib.part = (kind, id) => {
     const key = kind + ':' + id;
     if (!parts.has(key)) {
-      const P = (list.parts[kind] || []).find((p) => p.id === id);
+      const P = lib.entry(kind, id);
       if (!P) return Promise.reject(new Error(`crew: no ${kind} "${id}" in crew.json`));
-      parts.set(key, loader.loadAsync(dir + P.file).then((g) => {
-        const rig = g.scene.userData.crewRig;
-        // (the clips are fitted once, to the first part's skeleton: every part carries the same one)
-        if (rig && !lib.clips) {
-          const rest = {}; g.scene.traverse((o) => { if (o.isBone) rest[o.name] = o.quaternion.toArray(); });
-          lib.rig = rig; lib.clips = retargetClips(raw, rig, rest); lib.stride = strideOf(rig);
-        }
-        return g;
-      }));
+      parts.set(key, loader.loadAsync(dir + P.file));
     }
     return parts.get(key);
+  };
+  // the clips fitted to one suit (its own bones' lengths: see the top), once a suit
+  lib.clipsFor = async (id) => {
+    if (!fitted.has(id)) {
+      fitted.set(id, (async () => {
+        const g = await lib.part('suit', id), rig = g.scene.userData.crewRig, body = lib.entry('suit', id).skeleton || 'm';
+        const rest = {}; g.scene.traverse((o) => { if (o.isBone) rest[o.name] = o.quaternion.toArray(); });
+        return { body, rig, clips: retargetClips(await lib.rawClips(body), rig, rest), stride: strideOf(rig, body) };
+      })());
+    }
+    return fitted.get(id);
   };
   return lib;
 }
@@ -138,7 +153,7 @@ function retargetMoves(clips, rig) {
   });
 }
 // how fast the Walk and Run carry the crew at speed 1 (m/s): the Mathwood men's, with the hips' height
-const strideOf = (rig) => { const k = rig.dstRest.Body[1] / rig.srcRest.Body[1]; return { Walk: STRIDE.m.Walk * k, Run: STRIDE.m.Run * k }; };
+const strideOf = (rig, body) => { const k = rig.dstRest.Body[1] / rig.srcRest.Body[1], S = STRIDE[body] || STRIDE.m; return { Walk: S.Walk * k, Run: S.Run * k }; };
 
 // ── the materials: each part's own, patched for its colours ────────────────────────────────────────────────────────
 const KIND_DEF = { suit: 'CREW_SUIT', head: 'CREW_HEAD', hair: 'CREW_HAIR' };
@@ -235,11 +250,11 @@ function assemble(suit, others) {
 
 export async function makeCrew(lib, recipe) {
   const R = { suit: recipe.suit, head: recipe.head, hair: recipe.hair };
-  const [suit, head, hair] = await Promise.all(['suit', 'head', 'hair'].map((k) => (R[k] ? lib.part(k, R[k]) : null)));
+  const [suit, head, hair, fit] = await Promise.all([...['suit', 'head', 'hair'].map((k) => (R[k] ? lib.part(k, R[k]) : null)), lib.clipsFor(R.suit)]);
   const tpl = assemble(suit, [['head', head], ['hair', hair]].filter((x) => x[1]));
   const refsOf = { suit: suit && suit.scene.userData.crewPart, head: head && head.scene.userData.crewPart, hair: hair && hair.scene.userData.crewPart };
-  // a Person of the Mathwood world, from the template (its clone, mixer, fades and bone keeping)
-  const person = new Person({ clips: { m: lib.clips } }, { scene: tpl, body: 'm' }, { shadows: true });
+  // a Person of the Mathwood world, from the template (its clone, mixer, fades and bone keeping), on the suit's skeleton
+  const person = new Person({ clips: { [fit.body]: fit.clips } }, { scene: tpl, body: fit.body }, { shadows: true });
   const meshes = {}, mats = [];
   const made = person.mesh.material;            // (the Mathwood vertex-colour material it made: not ours)
   person.root.traverse((o) => {
@@ -256,7 +271,7 @@ export async function makeCrew(lib, recipe) {
   const shin = {}; for (const s of ['L', 'R']) shin[s] = bones['LowerLeg' + s].getWorldPosition(new THREE.Vector3()).distanceTo(bones['Foot' + s].getWorldPosition(new THREE.Vector3()));
   const A = new THREE.Vector3(), Y = new THREE.Vector3(), M = new THREE.Matrix4();
   const c = {
-    root: person.root, person, meshes, bones, recipe: { ...recipe }, stride: lib.stride,
+    root: person.root, person, meshes, bones, recipe: { ...recipe }, stride: fit.stride, body: fit.body, rig: fit.rig,
     play: (name, o = {}) => person.play(name, { once: ONCE.has(name), ...o }),
     update(dt) {
       person.update(dt);

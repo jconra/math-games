@@ -2,10 +2,11 @@
 // the characters in assets/crew/crew.json), standing on the station's own floor (the kit's pieces), playing the
 // Mathwood people's clips.
 // ONE MENU along the bottom:
-//   the characters (one entry a recipe) and every clip they can play, and its speed;
-//   the wardrobe: Head, Hair, Suit (each part a choice: any goes with any), Job colours (the suit's marks, light lines
-//     and panels), Skin tone, Hair colour;
-//   the view: cameras (a face close-up that follows the head), Plain (no paint), Wireframe, the 1.8 m marker, the bones.
+//   the characters (one entry a recipe) and every clip their suit's skeleton has (the men's or the women's), its speed;
+//   the wardrobe: Head, Hair, Suit (each part a choice: any goes with any, the Mathwood hair among them), Job colours
+//     (the suit's marks, light lines and panels), Skin tone, Hair colour;
+//   the view: cameras (Face, Head and Nape follow the head: from the front-left, straight on, from behind), Plain (no
+//     paint), Wireframe, the 1.8 m marker, the bones.
 // Drag to look round, wheel or pinch to come closer, W A S D move (Space up, C down, Shift faster).
 //   ?who=<recipe id>  ?clip=<name>  ?cam=<name>
 //   window.CREWLAB = { ready, clips, play(name), pose(name, t), cam(name), show(k, on), recipe(r), colours(c), state(),
@@ -28,7 +29,9 @@ const CLIP_GROUPS = [
   ['Hit', ['HitRecieve', 'Death']],
 ];
 const LABEL = { Idle_Neutral: 'Idle 2', HitRecieve: 'Hit', Run_Back: 'Run back', Run_Left: 'Run left', Run_Right: 'Run right', Stand_Listen: 'Listen', Stand_Clap: 'Clap', Sit_Listen: 'Sit', Sit_Clap: 'Sit clap', Stool_Bar: 'Stool', Stool_Clap: 'Stool clap', Bar_Polish: 'Polish', Tend_Forge: 'Tend' };
-const CAMS = { Full: [1.15, 1.25, 3.5, 0.93], Front: [0, 1.1, 3.8, 0.93], Side: [3.8, 1.1, 0, 0.93], Back: [0, 1.1, -3.8, 0.93], Face: null, Hands: null };
+const CAMS = { Full: [1.15, 1.25, 3.5, 0.93], Front: [0, 1.1, 3.8, 0.93], Side: [3.8, 1.1, 0, 0.93], Back: [0, 1.1, -3.8, 0.93], Face: null, Head: null, Nape: null, Hands: null };
+// (the close cameras on the head, following it: from the front-left, straight in front, from behind; offsets in metres)
+const HEAD_CAMS = { Face: [0.22, 0.04, 0.62], Head: [0, 0.03, 0.7], Nape: [-0.25, 0.08, -0.65] };
 
 // ── renderer, scene, camera ───────────────────────────────────────────────────────────────────────────────────────
 const canvas = $('#c'), hud = $('#hud'), loading = $('#loading');
@@ -122,7 +125,7 @@ const _h = new THREE.Vector3(), _f = new THREE.Vector3();
 function headAt(v) { const B = st.crew?.bones; if (!B) return v.set(0, 1.7, 0); return B.Head.getWorldPosition(v).add(_f.set(0, 0.09, 0.03)); }
 function setCam(name) {
   st.cam = name;
-  if (name === 'Face') { headAt(_h); controls.target.copy(_h); camera.position.set(_h.x + 0.22, _h.y + 0.04, _h.z + 0.62); }
+  if (HEAD_CAMS[name]) { const o = HEAD_CAMS[name]; headAt(_h); controls.target.copy(_h); camera.position.set(_h.x + o[0], _h.y + o[1], _h.z + o[2]); }
   else if (name === 'Hands') { controls.target.set(0, 1.0, 0.1); camera.position.set(0.7, 1.35, 1.4); }
   else { const [x, y, z, ty] = CAMS[name]; controls.target.set(0, ty, 0); camera.position.set(x, y, z); }
   controls.update();
@@ -143,7 +146,8 @@ function pick(label, kind, value, none) {
 function menu() {
   const R = st.recipe || {}, C = R.colours || {};
   $('#who').replaceChildren(lab('Crew'), ...Object.entries(RECIPES).map(([id, r]) => chip(r.name, id === st.who, () => { st.who = id; show(r); })),
-    ...CLIP_GROUPS.flatMap(([g, list]) => [sep(), lab(g), ...list.filter((n) => CLIPS.includes(n)).map((n) => chip(LABEL[n] || n, n === st.clip, () => play(n), true))]),
+    // (each skeleton's own clips: the women's have no polishing, hammering or forge clips)
+    ...CLIP_GROUPS.flatMap(([g, list]) => [sep(), lab(g), ...list.filter((n) => st.crew?.person.actions[n]).map((n) => chip(LABEL[n] || n, n === st.clip, () => play(n), true))]),
     sep(), lab('Speed'), ...[[0.25, '¼'], [0.5, '½'], [1, '1×']].map(([v, t]) => chip(t, v === st.speed && !st.paused, () => { st.speed = v; st.paused = false; if (st.crew?.person.cur) st.crew.person.cur.setEffectiveTimeScale(v); menu(); }, true)),
     chip(st.paused ? 'Play' : 'Pause', st.paused, () => { st.paused = !st.paused; menu(); }, true));
   $('#wear').replaceChildren(lab('Head'), pick('Head', 'head', R.head), lab('Hair'), pick('Hair', 'hair', R.hair, true), lab('Suit'), pick('Suit', 'suit', R.suit),
@@ -188,10 +192,10 @@ renderer.setAnimationLoop((t) => {
   const dt = Math.min(0.1, (t - last) / 1000); last = t;
   const c = st.crew;
   if (c && !st.paused) {
-    if (st.cam === 'Face') headAt(_prev);
+    if (HEAD_CAMS[st.cam]) headAt(_prev);
     c.update(dt);
-    // (the face camera keeps the head in frame as the clip moves it)
-    if (st.cam === 'Face') { headAt(_h); _h.sub(_prev); controls.target.add(_h); camera.position.add(_h); }
+    // (the head cameras keep the head in frame as the clip moves it)
+    if (HEAD_CAMS[st.cam]) { headAt(_h); _h.sub(_prev); controls.target.add(_h); camera.position.add(_h); }
   }
   fly(dt); controls.update(); renderer.render(scene, camera); frames++;
   fpsT += dt; if (fpsT > 0.5) { fps = Math.round(frames / fpsT); frames = 0; fpsT = 0; }
@@ -226,6 +230,6 @@ window.CREWLAB = {
   ready: true, clips: () => CLIPS.filter((n) => st.crew?.person.actions[n]), play: (n) => play(n), pose, cam: (c) => { setCam(c); menu(); },
   show: (k, on) => { if (k === 'paint' || k === 'plain' || k === 'wire') setPaint(k); if (k === 'marker') { st.marker = on; marker.visible = on; } if (k === 'bones') setBones(on); if (k === 'floor' && floorGroup) floorGroup.visible = on; menu(); },
   recipe: async (r) => { await show(r); triCount(); return st.recipe; }, who: async (id) => { st.who = id; await show(RECIPES[id]); triCount(); },
-  colours: (c) => colours(c), state: () => ({ who: st.who, clip: st.clip, recipe: st.recipe, tris, fps, parts: Object.keys(st.crew?.meshes || {}), rig: lib.rig && { turnDiffMaxDeg: lib.rig.turnDiffMaxDeg } }),
+  colours: (c) => colours(c), state: () => ({ who: st.who, clip: st.clip, recipe: st.recipe, tris, fps, parts: Object.keys(st.crew?.meshes || {}), body: st.crew?.body, rig: st.crew?.rig && { turnDiffMaxDeg: st.crew.rig.turnDiffMaxDeg } }),
   measure, crew: () => st.crew, three: THREE, scene, camera, renderer, controls,
 };
