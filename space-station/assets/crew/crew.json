@@ -9,7 +9,16 @@
     "head": [
       { "id": "crew1", "name": "Crew 1 (his portrait)", "file": "head_crew1.glb", "skeleton": "m" },
       { "id": "captain1", "name": "Captain (her portrait)", "file": "head_captain1.glb", "skeleton": "f" },
-      { "id": "vega", "name": "Vega's helmet (visor)", "file": "head_vega.glb", "skeleton": "m" }
+      { "id": "vega", "name": "Vega's helmet (visor)", "file": "head_vega.glb", "skeleton": "m" },
+      { "id": "h1", "name": "Head 1 (top left)", "file": "head_h1.glb", "skeleton": "m" },
+      { "id": "h2", "name": "Head 2 (top middle)", "file": "head_h2.glb", "skeleton": "f" },
+      { "id": "h3", "name": "Head 3 (top right)", "file": "head_h3.glb", "skeleton": "m" },
+      { "id": "h4", "name": "Head 4 (middle left)", "file": "head_h4.glb", "skeleton": "f" },
+      { "id": "h5", "name": "Head 5 (middle)", "file": "head_h5.glb", "skeleton": "m" },
+      { "id": "h6", "name": "Head 6 (middle right)", "file": "head_h6.glb", "skeleton": "f" },
+      { "id": "h7", "name": "Head 7 (bottom left)", "file": "head_h7.glb", "skeleton": "m" },
+      { "id": "h8", "name": "Head 8 (bottom middle)", "file": "head_h8.glb", "skeleton": "f" },
+      { "id": "h9", "name": "Head 9 (bottom right)", "file": "head_h9.glb", "skeleton": "m" }
     ],
     "hair": [
       { "id": "crew1", "name": "Short swept", "file": "hair_crew1.glb", "skeleton": "m" },
