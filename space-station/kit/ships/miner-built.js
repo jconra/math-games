@@ -31,7 +31,6 @@
 import * as THREE from 'three';
 import { Acc } from '../shipparts/outside/facet.js';
 import { part } from '../shipparts/place.js';
-import { GLOW_SHIP } from '../shipparts/palette.js';
 import { SURF } from '../materials.js';
 import * as C from './built-common.js';
 import { HULL, ENGINE as ENG, ENGINE_AT, CANISTER, CANISTER_AT, MOUNT, ARM, POD, DECK as DECK0, HATCH, PARTS, Q } from './miner-built.hull.js';
@@ -47,10 +46,10 @@ const AX = [V3(1, 0, 0), V3(0, 1, 0), V3(0, 0, 1)];
 // ── THE PALETTE (sRGB; roughness, metalness, wear): his picture's colours ──────────────────────────────────────────
 const s = (c, r, m, w) => ({ c, r, m, w });
 export const PAL = {
-  cream: s('#d6cdb6', 0.55, 0.04, 0.55),       // the off-white panels
-  creamEdge: s('#d6cdb6', 0.55, 0.04, 1.0),
-  dark: s('#3a3e44', 0.5, 0.3, 0.6),           // the dark graphite bulk
-  darkEdge: s('#3a3e44', 0.5, 0.3, 1.0),
+  cream: s('#cfc5ac', 0.55, 0.04, 0.55),       // the off-white panels
+  creamEdge: s('#cfc5ac', 0.55, 0.04, 1.0),
+  dark: s('#474c53', 0.5, 0.3, 0.6),           // the dark graphite bulk
+  darkEdge: s('#474c53', 0.5, 0.3, 1.0),
   black: s('#1b1d20', 0.42, 0.3, 0.4),         // the canopy's spars, the hazard stripes' black
   blackEdge: s('#1b1d20', 0.42, 0.3, 0.9),
   yellow: s('#e2ae1c', 0.45, 0.03, 0.6),       // hazard yellow: the stripes, the canisters' bands, the clamps
@@ -63,7 +62,7 @@ export const PAL = {
   deck: s('#55595f', 0.6, 0.3, 0.6),
   nozzle: s('#1f2125', 0.4, 0.75, 0.8), rim: s('#2c2f34', 0.32, 0.8, 0.7), core: s('#141619', 0.45, 0.8, 0.8),
 };
-export const GLOW = { strip: GLOW_SHIP.strip, warm: [3.4, 1.35, 0.22], cutter: [2.8, 0.75, 0.08], pod: [0.12, 1.1, 3.2], red: [4.0, 0.15, 0.05], green: [0.2, 3.5, 0.6], white: [4, 4, 4] };
+export const GLOW = { strip: [0.06, 0.62, 3.4], warm: [3.6, 1.15, 0.12], cutter: [3.4, 0.85, 0.06], pod: [0.06, 0.62, 3.4], red: [4.0, 0.15, 0.05], green: [0.2, 3.5, 0.6], white: [4, 4, 4] };
 
 // ── PAINTING THE HULL ────────────────────────────────────────────────────────────────────────────────────────────────
 // ZONES (built-common.js paintFaces): a |x| + b y + c z <= d inside each plane
@@ -93,6 +92,7 @@ export const RULES = [
   ['the keel: dark', (f) => f.part === 'keel', 'dark'],
   ['the belly: grey', (f) => f.n.y < -0.55, 'belly'],
   ['the roof\'s modules: dark', (f) => f.part === 'roof', edge('dark')],
+  ['the roof\'s spine: a graphite strip down its middle behind the canopy', (f) => f.n.y > 0.7 && Math.abs(f.c.x) < 0.7 && f.c.z < 2.9 && f.c.y > 4.1, 'dark'],
   ['behind the canisters, and the stern\'s sides: dark', (f) => f.c.z < -0.55 && Math.abs(f.n.x) > 0.55, edge('dark')],
   ['the stern round the engine: dark (cream panels on its top)', (f) => f.c.z < -5.6 && f.n.y < 0.6, edge('dark')],
   ['the lower band: dark', (f) => f.zone === 'lower', edge('dark')],
@@ -128,7 +128,12 @@ const drawKinds = (acc, faces, paint, tf = dk) => { for (const F of faces) { con
 // (plume.js) in the bowl.
 const ENGINE_PAINT = { o: PAL.dark, b: PAL.dark, r: PAL.rim, w: PAL.nozzle, f: PAL.core };
 // (the blue ring: a band of glow round the drum's band, a hair proud of it, from the band's own faces that face out)
-const RING = { z: [-8.05, -7.78], lift: 0.012 };
+const RING = (() => {
+  // (the band's widest, across and up, from its own vertices)
+  const M = mesh(ENG); let rx = 0, ry = 0, z0 = 1e9, z1 = -1e9;
+  for (let t = 0; t < M.tris.length / 3; t++) if (ENG.kind[t] === 'b') for (let k = 0; k < 3; k++) { const v = at(M, M.tris[t * 3 + k]); rx = Math.max(rx, Math.abs(v.x - ENGINE_AT.axis[0])); ry = Math.max(ry, Math.abs(v.y - ENGINE_AT.axis[1])); z0 = Math.min(z0, v.z); z1 = Math.max(z1, v.z); }
+  const zm = (z0 + z1) / 2; return { r: [rx + 0.012, ry + 0.012], z: [zm - 0.09, zm + 0.09] };
+})();
 // THE MOUNTS (the 8k's cradles, back plate, rails and middle clamps, port and starboard): kinds k cradle, p plate, m
 // rail, y clamp
 const MOUNT_PAINT = { k: PAL.dark, p: PAL.dark, m: PAL.metal, y: PAL.yellow };
@@ -137,13 +142,15 @@ function mbHull(p) {
   C.drawFaces(acc, hullFaces(), { PAL, dk, backSurf: PAL.dark });
   const eng = kindFaces(ENG);
   drawKinds(acc, eng, (F) => ENGINE_PAINT[F.kind]);
-  for (const F of eng) if (F.kind === 'b' && Math.hypot(F.n.x, F.n.y) > 0.85) { const c = F.T[0].clone().add(F.T[1]).add(F.T[2]).multiplyScalar(1 / 3); if (c.z > RING.z[0] && c.z < RING.z[1]) acc.tris([F.T.map((v) => dk(v.clone().addScaledVector(F.n, RING.lift)))], F.n, GLOW.strip, 'glow'); }
+  // (the ring: a strip of light all round the band, a hair proud of its widest)
+  { const [ax, ay] = ENGINE_AT.axis, n = 32, P = (i, z, out) => { const t = (i / n) * PI * 2, rx = RING.r[0] + out, ry = RING.r[1] + out; return V3(ax + Math.cos(t) * rx, ay + Math.sin(t) * ry, z); };
+    for (let i = 0; i < n; i++) { const q = [P(i, RING.z[0], 0), P(i + 1, RING.z[0], 0), P(i + 1, RING.z[1], 0), P(i, RING.z[1], 0)], m = q[0].clone().add(q[2]).multiplyScalar(0.5); acc.poly(q.map(dk), V3(m.x - ax, m.y - ay, 0).normalize(), GLOW.strip, 'glow', 99); } }
   acc.flush(p);
   return p;
 }
 function mbMounts(p) { const acc = new Acc(); for (const m of [false, true]) drawKinds(acc, kindFaces(MOUNT, (v) => v, m), (F) => MOUNT_PAINT[F.kind]); return acc.flush(p); }
 // THE JETS (plume.js): the main engine's, from the middle of its core, straight aft, as wide as the bowl's mouth
-export const JET = { len: 6.0, gain: 1.0 };
+export const JET = { len: 9.0, gain: 1.0 };
 export function jetNozzles() {
   const { axis, back, r } = ENGINE_AT, mouth = Math.min(r[0], r[1]) * 0.8;
   return [{ at: [axis[0], axis[1], back + 0.55], dir: [0, 0, -1], r: mouth * 0.92 }];
@@ -169,7 +176,7 @@ export const CANOPY = {
     ['windscreen', 'quad', [['W0', 'W1', "W1'", "W0'"]]],
     ['roof', 'six-sided (four corners)', [['W1', 'T2', 'R1', "R1'", "T2'", "W1'"]]],
   ],
-  spar: { w: 0.06, out: 0.035, in: 0.03 }, sill: { w: 0.13, out: 0.02, shift: 0.06 },
+  spar: { w: 0.06, out: 0.035, in: 0.03 }, sill: { w: 0.1, out: 0.02, shift: 0.025 },
   straight: 3,
 };
 let PANES = null;
@@ -236,9 +243,20 @@ function mbMarks(p) {
 export const CANISTERS = { lift: [0, CANISTER_AT.R + 0.12, 0], rise: 3.0, spots: [] };
 for (const [side, sx] of [['port', 1], ['starboard', -1]]) for (const S of CANISTER_AT.spots) CANISTERS.spots.push({ name: `${side} ${S.row} ${S.end}`, at: [sx * S.at[0], S.at[1], S.at[2]], turn: S.turn, side, row: S.row, end: S.end });
 const CAN_PAINT = { c: PAL.can, e: PAL.canEnd, y: PAL.yellow };
+// (a strap: a flat band round the canister, n-sided, its outer face and its edges)
+export const STRAPS = { at: [CANISTER_AT.half - 0.32, -CANISTER_AT.half + 0.2], w: 0.2, out: 0.035, n: 16 };
+function strap(acc, z, R) {
+  const { w, out, n } = STRAPS, P = (i, zz, r) => { const t = (i / n) * PI * 2; return V3(Math.cos(t) * r, Math.sin(t) * r, zz); }, r1 = R + out;
+  for (let i = 0; i < n; i++) {
+    const t = ((i + 0.5) / n) * PI * 2, nn = V3(Math.cos(t), Math.sin(t), 0);
+    acc.poly([P(i, z - w / 2, r1), P(i + 1, z - w / 2, r1), P(i + 1, z + w / 2, r1), P(i, z + w / 2, r1)], nn, PAL.yellow, 'solid', 99);
+    for (const [zz, sz] of [[z - w / 2, -1], [z + w / 2, 1]]) acc.poly([P(i, zz, R - 0.02), P(i + 1, zz, R - 0.02), P(i + 1, zz, r1), P(i, zz, r1)], V3(0, 0, sz), PAL.yellow, 'solid', 99);
+  }
+}
 function canisterLeaf(lp) {
   const acc = new Acc(), R = CANISTER_AT.R;
   drawKinds(acc, kindFaces(CANISTER), (F) => CAN_PAINT[F.kind], (v) => v);
+  for (const z of STRAPS.at) strap(acc, z, R);
   // (the lug the crane hooks: a dark block with a yellow eye on the canister's top, at its middle)
   C.boxAt(acc, V3(0, R + 0.04, 0), AX, [0.09, 0.05, 0.16], PAL.dark, ['v-'], (v) => v);
   C.boxAt(acc, V3(0, R + 0.13, 0), AX, [0.025, 0.05, 0.09], PAL.yellow, ['v-'], (v) => v);
@@ -261,9 +279,10 @@ function mbCanister(p, name) {
 export const ARMS = { stow: { shoulder: 0, elbow: -3.0, wrist: 2.3 }, speed: 0.45, spin: 7.0 };
 const ARM_PAINT = (seg) => (F) => {
   if (F.kind === 'w') return F.n.x * F.n.x > 0.6 ? PAL.dark : PAL.metal;
-  if (F.kind === 'j') return PAL.metal;
-  if (F.kind === 's') return PAL.yellow;
+  if (F.kind === 'j') return PAL.black;
+  if (F.kind === 's') return PAL.black;
   if (F.band != null) return F.band % 2 ? PAL.black : PAL.yellow;
+  if (seg === 'fore') return PAL.yellow;
   return PAL.dark;
 };
 // HAZARD STRIPES: a face cut into bands across it (where y + z (ship frame) steps by STRIPE.w), every other one
@@ -290,7 +309,7 @@ function bands(faces, test, g = (v) => v.y + STRIPE.lean * v.z, w = STRIPE.w) {
 const sideOfArm = (F) => F.kind === 'a' && Math.abs(F.n.x) > 0.45;
 function mbArm(p, side) {
   const m = side === 'port', J = ARM.joints, jp = (k) => { const v = V3(...J[k].at); if (m) v.x = -v.x; return dk(v); };
-  const segFaces = (k) => { const f = kindFaces(ARM.segs[k], (v) => v, m); return k === 'upper' || k === 'fore' ? bands(f, sideOfArm) : f; };
+  const segFaces = (k) => { const f = kindFaces(ARM.segs[k], (v) => v, m); return k === 'upper' ? bands(f, sideOfArm) : f; };
   const acc = new Acc(); drawKinds(acc, segFaces('mount'), ARM_PAINT('mount')); acc.flush(p);
   const H = { shoulder: { at: jp('shoulder').toArray(), axis: [1, 0, 0], angle: ARMS.stow.shoulder }, elbow: { at: jp('elbow').toArray(), axis: [1, 0, 0], angle: ARMS.stow.elbow }, wrist: { at: jp('wrist').toArray(), axis: [1, 0, 0], angle: ARMS.stow.wrist } };
   const leaf = (k, hinges, extra) => p.leaf(`mb:arm ${k}:${side}`, (lp) => { const a = new Acc(); drawKinds(a, segFaces(k), ARM_PAINT(k)); if (extra) extra(a); a.flush(lp); }, { door: 'arm', hinge: hinges });
@@ -299,7 +318,7 @@ function mbArm(p, side) {
   leaf('hand', [H.shoulder, H.elbow, H.wrist]);
   // (the wheel: its hub glowing orange, his picture's cutter, on both faces)
   const w = jp('wheel');
-  leaf('cutter', [H.shoulder, H.elbow, H.wrist], (a) => { for (const sx of [1, -1]) { const x = w.x + sx * (J.wheel.size[0] / 2 + 0.01); const r = 0.13, P = []; for (let i = 0; i < 8; i++) { const t = (i / 8) * PI * 2; P.push(V3(x, w.y + Math.cos(t) * r, w.z + Math.sin(t) * r)); } a.poly(sx > 0 ? P : P.slice().reverse(), V3(sx, 0, 0), GLOW.cutter, 'glow', 99); } });
+  leaf('cutter', [H.shoulder, H.elbow, H.wrist], (a) => { for (const sx of [1, -1]) { const x = w.x + sx * (J.wheel.size[0] / 2 + 0.01); const r = 0.24, P = []; for (let i = 0; i < 8; i++) { const t = (i / 8) * PI * 2; P.push(V3(x, w.y + Math.cos(t) * r, w.z + Math.sin(t) * r)); } a.poly(sx > 0 ? P : P.slice().reverse(), V3(sx, 0, 0), GLOW.cutter, 'glow', 99); } });
   p.door('arm', [0, -DECK, 0], 0, ARMS.speed);
   return p;
 }
@@ -339,19 +358,20 @@ function mbPod(p, name) {
   return p;
 }
 // the pods' jets (plume.js): one at each end of each pod, at rest; the lab (podStep) aims them as the pods turn
-export const POD_JET = { len: 7.0, gain: 0.9, r: 0.16 };
+export const POD_JET = { len: 10.0, gain: 1.2, r: 0.2, thrust: 0.85 };
 export function podJets() { const out = []; for (const P of PODS) for (const sz of [1, -1]) out.push({ at: [P.at[0], P.at[1], P.at[2] + sz * (POD.size[2] / 2 + 0.01)], dir: [0, 0, sz], r: POD_JET.r, pod: P.name, end: sz }); return out; }
 
 // ── THE LIFT ─────────────────────────────────────────────────────────────────────────────────────────────────────────
-// His picture's lift under the belly: a platform with railings that lowers to the ground, the door opening above it.
-// The hatch is cut through the belly (HATCH); over it a shaft up to the deck and the airlock (its walls, ceiling, light
-// and inner door, shut). The platform plugs the hatch in flight (its underside the belly); lowered (door 'lift'), it
-// stands on the ground, its railings swung up from flat, four rods at its corners running up into the shaft's corners.
+// His picture's lift under the belly: a broad platform with railings and a hazard-striped edge that lowers to the
+// ground, a dark column with amber lights standing at its back, the door opening above it. The hatch is cut through the
+// belly (HATCH); over it a shaft up to the deck and the airlock (its walls, ceiling, light and inner door, shut). The
+// platform plugs the hatch in flight (its underside the belly; its column up in the airlock); lowered (door 'lift'), it
+// stands on the ground, its railings swung up from flat, rods at its front corners running up into the shaft's corners.
 // Over it the hatch's two doors (door 'hatch') slide apart under the deck. Through the open hatch: 2.0 m and more from
 // the platform up into the airlock.
 export const LIFT = (() => {
   const [x0, x1] = HATCH.x, [z0, z1] = HATCH.z, belly = 1.37, top = DECK - 0.12;
-  return { x: [x0, x1], z: [z0, z1], zc: (z0 + z1) / 2, half: 0.69, belly, top, drop: belly, leaf: 0.04, rail: 0.9, rod: 1.5, airlock: { x: 1.0, z: [z0 - 0.25, z1 + 0.25], h: 2.1 }, speed: 0.35, hatchSpeed: 0.8 };
+  return { x: [x0, x1], z: [z0, z1], zc: (z0 + z1) / 2, hx: (x1 - x0) / 2 - 0.06, hz: (z1 - z0) / 2 - 0.06, belly, top, drop: belly, leaf: 0.04, rail: 0.9, rod: 1.5, column: { h: 1.55, t: 0.1 }, airlock: { x: (x1 - x0) / 2 + 0.1, z: [z0 - 0.25, z1 + 0.25], h: 2.1 }, speed: 0.35, hatchSpeed: 0.8 };
 })();
 function mbLift(p) {
   const L = LIFT, acc = new Acc(), [x0, x1] = L.x, [z0, z1] = L.z, y0 = L.belly, A = L.airlock, top = DECK + A.h;
@@ -371,34 +391,46 @@ function mbLift(p) {
   p.light([0, A.h - 0.2, L.zc], 1.4, [1, 0.94, 0.85], [0, -1, 0], 4.0);
   // THE PLATFORM (door 'lift'): a slab plugging the hatch, its top under the hatch's doors, its underside the belly; the
   // hazard stripes round its top edge; down, it slides LIFT.drop to the ground
-  const h = L.half, zc = L.zc, pt = L.top, pb = L.belly;
+  const hx = L.hx, hz = L.hz, zc = L.zc, pt = L.top, pb = L.belly;
   p.leaf('mb:lift platform', (lp) => {
     const a = new Acc();
-    C.boxAt(a, V3(0, (pt + pb) / 2, zc), AX, [h, (pt - pb) / 2, h], PAL.dark, [], dk);
-    // (its tread: a grey deck plate; a yellow and black band round its edge)
-    a.poly([V3(-h + 0.1, pt + 0.004, zc - h + 0.1), V3(h - 0.1, pt + 0.004, zc - h + 0.1), V3(h - 0.1, pt + 0.004, zc + h - 0.1), V3(-h + 0.1, pt + 0.004, zc + h - 0.1)].map(dk), V3(0, 1, 0), PAL.deck, 'solid', 99);
-    const n = 10;
+    C.boxAt(a, V3(0, (pt + pb) / 2, zc), AX, [hx, (pt - pb) / 2, hz], PAL.dark, [], dk);
+    // (its tread: a grey deck plate; a yellow and black band round its top edge and down its sides)
+    a.poly([V3(-hx + 0.1, pt + 0.004, zc - hz + 0.1), V3(hx - 0.1, pt + 0.004, zc - hz + 0.1), V3(hx - 0.1, pt + 0.004, zc + hz - 0.1), V3(-hx + 0.1, pt + 0.004, zc + hz - 0.1)].map(dk), V3(0, 1, 0), PAL.deck, 'solid', 99);
+    const n = 12;
     for (let i = 0; i < n; i++) for (const [sx, sz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      const u0 = -h + (2 * h) * i / n, u1 = -h + (2 * h) * (i + 1) / n, col = i % 2 ? PAL.black : PAL.yellow, e = 0.1;
-      const q = sx ? [V3(sx * (h - e), pt + 0.004, zc + u0), V3(sx * h, pt + 0.004, zc + u0), V3(sx * h, pt + 0.004, zc + u1), V3(sx * (h - e), pt + 0.004, zc + u1)] : [V3(u0, pt + 0.004, zc + sz * (h - e)), V3(u1, pt + 0.004, zc + sz * (h - e)), V3(u1, pt + 0.004, zc + sz * h), V3(u0, pt + 0.004, zc + sz * h)];
+      const hu = sx ? hz : hx, u0 = -hu + (2 * hu) * i / n, u1 = -hu + (2 * hu) * (i + 1) / n, col = i % 2 ? PAL.black : PAL.yellow, e = 0.1;
+      const q = sx ? [V3(sx * (hx - e), pt + 0.004, zc + u0), V3(sx * hx, pt + 0.004, zc + u0), V3(sx * hx, pt + 0.004, zc + u1), V3(sx * (hx - e), pt + 0.004, zc + u1)] : [V3(u0, pt + 0.004, zc + sz * (hz - e)), V3(u1, pt + 0.004, zc + sz * (hz - e)), V3(u1, pt + 0.004, zc + sz * hz), V3(u0, pt + 0.004, zc + sz * hz)];
       a.poly(q.map(dk), V3(0, 1, 0), col, 'solid', 99);
+      // (and down the platform's side there)
+      const y0 = pt - 0.12, d = sx ? [V3(sx * (hx + 0.003), y0, zc + u0), V3(sx * (hx + 0.003), y0, zc + u1), V3(sx * (hx + 0.003), pt, zc + u1), V3(sx * (hx + 0.003), pt, zc + u0)] : [V3(u0, y0, zc + sz * (hz + 0.003)), V3(u1, y0, zc + sz * (hz + 0.003)), V3(u1, pt, zc + sz * (hz + 0.003)), V3(u0, pt, zc + sz * (hz + 0.003))];
+      a.poly(d.map(dk), sx ? V3(sx, 0, 0) : V3(0, 0, sz), col, 'solid', 99);
     }
+    // THE COLUMN at its back: a dark panel standing on it, its door's outline and two amber light strips on its face (his
+    // picture's lift tower; in flight it stands up in the airlock)
+    const K = L.column, zk = zc - hz + 0.06 + K.t / 2, yk = pt + K.h / 2;
+    C.boxAt(a, V3(0, yk, zk), AX, [hx - 0.12, K.h / 2, K.t / 2], PAL.dark, ['v-'], dk);
+    for (const [x0b, x1b] of [[-0.46, -0.42], [0.42, 0.46]]) C.boxAt(a, V3((x0b + x1b) / 2, pt + 0.72, zk + K.t / 2 + 0.004), AX, [(x1b - x0b) / 2, 0.68, 0.004], PAL.black, ['w-'], dk);
+    C.boxAt(a, V3(0, pt + 1.41, zk + K.t / 2 + 0.004), AX, [0.46, 0.02, 0.004], PAL.black, ['w-'], dk);
+    for (const xs of [-0.62, 0.62]) a.poly([V3(xs - 0.03, pt + 0.2, zk + K.t / 2 + 0.006), V3(xs + 0.03, pt + 0.2, zk + K.t / 2 + 0.006), V3(xs + 0.03, pt + 1.35, zk + K.t / 2 + 0.006), V3(xs - 0.03, pt + 1.35, zk + K.t / 2 + 0.006)].map(dk), V3(0, 0, 1), GLOW.warm, 'glow', 99);
     a.flush(lp);
   }, { door: 'lift', slide: [0, -L.drop, 0] });
   // the railings (port and starboard): posts and two rails, folded flat inward over the platform in flight, swung up
   // as it lowers
+  // (the railings run from the column's front to the platform's front)
+  const zr0 = zc - hz + 0.06 + L.column.t + 0.08, zr1 = zc + hz - 0.06, zrm = (zr0 + zr1) / 2;
   for (const sx of [1, -1]) {
-    const hx = sx * (h - 0.04), hy = pt + 0.02 + (sx < 0 ? 0.04 : 0);
+    const rx = sx * (hx - 0.04), hy = pt + 0.02 + (sx < 0 ? 0.04 : 0);
     p.leaf(`mb:lift railing:${sx > 0 ? 'port' : 'starboard'}`, (lp) => {
       const a = new Acc(), R = L.rail;
       // (drawn standing; its base turns it flat)
-      for (const z of [zc - h + 0.06, zc, zc + h - 0.06]) C.boxAt(a, V3(hx, hy + R / 2, z), AX, [0.02, R / 2, 0.02], PAL.yellow, [], dk);
-      for (const y of [hy + R, hy + R * 0.55]) C.boxAt(a, V3(hx, y, zc), AX, [0.02, 0.02, h - 0.06], PAL.yellow, [], dk);
+      for (const z of [zr0, zrm, zr1]) C.boxAt(a, V3(rx, hy + R / 2, z), AX, [0.02, R / 2, 0.02], PAL.yellow, [], dk);
+      for (const y of [hy + R, hy + R * 0.55]) C.boxAt(a, V3(rx, y, zrm), AX, [0.02, 0.02, (zr1 - zr0) / 2], PAL.yellow, [], dk);
       a.flush(lp);
-    }, { ...C.leafPose(C.turnAbout(dk(V3(hx, hy, zc)), V3(0, 0, 1), sx * PI / 2)), door: 'lift', slide: [0, -L.drop, 0], hinge: { at: dk(V3(hx, hy, zc)).toArray(), axis: [0, 0, 1], angle: -sx * PI / 2 } });
+    }, { ...C.leafPose(C.turnAbout(dk(V3(rx, hy, zc)), V3(0, 0, 1), sx * PI / 2)), door: 'lift', slide: [0, -L.drop, 0], hinge: { at: dk(V3(rx, hy, zc)).toArray(), axis: [0, 0, 1], angle: -sx * PI / 2 } });
   }
-  // the rods at its corners: standing on it, up into the shaft's corners (into the airlock in flight)
-  for (const [sx, sz] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) p.leaf('mb:lift rod', (lp) => { const a = new Acc(); C.boxAt(a, V3(0, L.rod / 2, 0), AX, [0.03, L.rod / 2, 0.03], PAL.metal, ['v-'], (v) => v); a.flush(lp); }, { at: dk(V3(sx * (h - 0.04), pt, zc + sz * (h - 0.04))).toArray(), door: 'lift', slide: [0, -L.drop, 0] });
+  // the rods at its front corners: standing on it, up into the shaft's corners (into the airlock in flight)
+  for (const sx of [1, -1]) p.leaf('mb:lift rod', (lp) => { const a = new Acc(); C.boxAt(a, V3(0, L.rod / 2, 0), AX, [0.03, L.rod / 2, 0.03], PAL.metal, ['v-'], (v) => v); a.flush(lp); }, { at: dk(V3(sx * (hx - 0.04), pt, zc + hz - 0.04)).toArray(), door: 'lift', slide: [0, -L.drop, 0] });
   p.door('lift', [0, -DECK, zc], 0, L.speed);
   // THE HATCH'S DOORS (door 'hatch'): two halves in the deck over the platform, sliding out under it to open
   for (const sx of [1, -1]) p.leaf(`mb:hatch:${sx > 0 ? 'port' : 'starboard'}`, (lp) => {
@@ -426,18 +458,19 @@ function legLeaves(p, side) {
   const hinge = { at: dk(V3(x, ya, z)).toArray(), axis: [1, 0, 0], angle: GEAR.fold }, ankle = { at: dk(V3(x, yf, z)).toArray(), axis: [1, 0, 0], angle: GEAR.foot };
   p.leaf('mb:leg strut:' + side, (lp) => {
     const a = new Acc();
-    C.boxAt(a, V3(x, (ya + 0.12 + yk) / 2, z), AX, [0.13, (ya + 0.12 - yk) / 2, 0.13], PAL.dark, [], dk);      // the strut
-    C.boxAt(a, V3(x, ya, z), AX, [0.17, 0.09, 0.09], PAL.metal, [], dk);                                         // its axle's boss
-    C.boxAt(a, V3(x, yk, z), AX, [0.17, 0.11, 0.16], PAL.dark, [], dk);                                          // the knee
-    C.boxAt(a, V3(x, (yk + yf) / 2, z), AX, [0.07, (yk - yf) / 2, 0.07], PAL.metal, [], dk);                    // the piston
-    for (const sy of [0.2, -0.2]) C.boxAt(a, V3(x + s * 0.135, (ya + yk) / 2 + sy, z), AX, [0.005, 0.12, 0.1], PAL.yellow, ['u-'], dk);   // (yellow marks on its outer face)
+    C.boxAt(a, V3(x, (ya + 0.12 + yk) / 2, z), AX, [0.19, (ya + 0.12 - yk) / 2, 0.17], PAL.dark, [], dk);      // the strut
+    C.boxAt(a, V3(x, ya, z), AX, [0.23, 0.1, 0.1], PAL.metal, [], dk);                                           // its axle's boss
+    C.boxAt(a, V3(x, yk, z), AX, [0.23, 0.13, 0.2], PAL.dark, [], dk);                                           // the knee
+    C.boxAt(a, V3(x, (yk + yf) / 2, z), AX, [0.1, (yk - yf) / 2, 0.1], PAL.metal, [], dk);                      // the piston
+    for (const sy of [0.2, -0.2]) C.boxAt(a, V3(x + s * 0.195, (ya + yk) / 2 + sy, z), AX, [0.005, 0.12, 0.13], PAL.yellow, ['u-'], dk);   // (yellow marks on its outer face)
     a.flush(lp);
   }, { door: 'gear', hinge });
   p.leaf('mb:leg foot:' + side, (lp) => {
     const a = new Acc();
-    C.boxAt(a, V3(x, yf, z), AX, [0.09, 0.07, 0.09], PAL.metal, [], dk);
-    C.boxAt(a, V3(x, 0.05, z), AX, [0.33, 0.05, 0.4], PAL.dark, [], dk);
-    a.poly([V3(x - 0.33, 0.0, z - 0.4), V3(x + 0.33, 0.0, z - 0.4), V3(x + 0.33, 0.0, z + 0.4), V3(x - 0.33, 0.0, z + 0.4)].map(dk).reverse(), V3(0, -1, 0), PAL.rubber, 'solid', 99);
+    C.boxAt(a, V3(x, yf, z), AX, [0.13, 0.07, 0.13], PAL.metal, [], dk);
+    C.boxAt(a, V3(x, 0.05, z), AX, [0.35, 0.05, 0.42], PAL.dark, [], dk);
+    C.boxAt(a, V3(x, 0.115, z), AX, [0.22, 0.03, 0.28], PAL.yellow, ['v-'], dk);
+    a.poly([V3(x - 0.35, 0.0, z - 0.42), V3(x + 0.35, 0.0, z - 0.42), V3(x + 0.35, 0.0, z + 0.42), V3(x - 0.35, 0.0, z + 0.42)].map(dk).reverse(), V3(0, -1, 0), PAL.rubber, 'solid', 99);
     a.flush(lp);
   }, { door: 'gear', hinge: [hinge, ankle] });
   p.door('gear', [0, -DECK, 0], 0, GEAR.speed);
@@ -479,7 +512,7 @@ export const STREAKS = [
   [0, 1.5, 6.4, 0, -0.1, -1, 3.0, 1.0], [1.3, 2.6, 5.4, 0, -0.3, -1, 2.6, 0.35], [-1.3, 2.6, 5.4, 0, -0.3, -1, 2.6, 0.35],
   [0, 4.6, -0.5, 0, -0.1, -1, 3.0, 0.5], [2.2, 1.8, -0.6, 0, -0.2, -1, 4.8, 0.35], [-2.2, 1.8, -0.6, 0, -0.2, -1, 4.8, 0.35],
 ];
-export const GRIME = { dirt: { value: 0.6 } };
+export const GRIME = { dirt: { value: 0.85 } };
 export const grimeMaterials = (mats, { dirt } = {}) => C.grimeMaterials(mats, { dirt, streaks: STREAKS, deck: DECK, grime: GRIME, key: 'mbgrime', glowKey: 'mbglow' });
 
 // ── MOVING THE PARTS (the game, or the lab) ─────────────────────────────────────────────────────────────────────────
@@ -533,8 +566,8 @@ export function canisterStep(built, on) { for (const D of built.doors.filter((q)
 // ── IN THE SHIP LAB (labs/ships/main.js) ────────────────────────────────────────────────────────────────────────────
 export const LAB = {
   controls: ['arms', 'thrusters', 'canisters', 'gear', 'door', 'dirt', 'throttle'],
-  dirt: { None: 0, Some: 0.6, Lots: 1.0 },
-  spots: { Canopy: { at: [5.2, 6.4, 10.5], look: [0, 3.9, 4.2] }, Lift: { at: [6.5, 1.2, 4.5], look: [0, 1.4, -0.6] }, Seats: { at: [0, 4.35, 2.9], look: [0, 3.45, 7.0] }, Arms: { at: [7.5, 3.6, 11.5], look: [0, 1.8, 5.5] } },
+  dirt: { None: 0, Some: 0.85, Lots: 1.25 },
+  spots: { Canopy: { at: [5.2, 6.4, 10.5], look: [0, 3.9, 4.2] }, Lift: { at: [6.5, 1.2, 4.5], look: [0, 1.4, -0.6] }, Seats: { at: [0, 4.05, 3.75], look: [0, 3.5, 7.0] }, Arms: { at: [7.5, 3.6, 11.5], look: [0, 1.8, 5.5] } },
   doorTip: 'Lower the lift\'s platform to the ground and open the hatch over it, or close it and raise the platform',
   materials: (mats, dirt) => grimeMaterials(mats, { dirt }),
   setDirt: (v) => { GRIME.dirt.value = v; },
@@ -544,7 +577,7 @@ export const LAB = {
     liftStep(B, st.door === 'open', dt, updateDoors);
     armStep(B, st.arms === 'stowed', dt, updateDoors, time * ARMS.spin);
     const pj = jets?.find((J) => J.role === 'pods')?.set;
-    if (pj) pj.setThrust(st.thrusters ? 0.7 : 0);
+    if (pj) pj.setThrust(st.thrusters ? POD_JET.thrust : 0);
     podStep(B, st.thrusters, time, pj);
     canisterStep(B, st.canisters);
   },
@@ -562,7 +595,7 @@ export const LAB = {
     }
     if (at.arms != null) armStep(B, at.arms > 0.5, 0, () => false, at.spin ?? 0);
     const pj = jets?.find((J) => J.role === 'pods')?.set;
-    if (at.thrusters != null) { if (pj) pj.setThrust(at.thrusters === false ? 0 : 0.7, true); podStep(B, at.thrusters !== false, at.thrusters === false ? 0 : at.thrusters, pj); }
+    if (at.thrusters != null) { if (pj) pj.setThrust(at.thrusters === false ? 0 : POD_JET.thrust, true); podStep(B, at.thrusters !== false, at.thrusters === false ? 0 : at.thrusters, pj); }
     if (at.canisters != null) canisterStep(B, at.canisters);
   },
 };

@@ -198,7 +198,7 @@ function nozzle(acc, sd) {
 }
 // THE JETS (plume.js): where each starts and how big: at the middle of its nozzle's core, streaming straight aft, as
 // wide as the bowl's mouth (its rim's inner edge); the plume's length at full thrust in those radii
-export const JET = { len: 6.5, gain: 1.0 };
+export const JET = { len: 9.0, gain: 1.0 };
 export function jetNozzles() {
   const { pos, tris, sides } = nozzleMesh(), out = [];
   for (const sd of [1, -1]) {
