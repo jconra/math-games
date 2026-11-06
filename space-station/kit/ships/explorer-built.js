@@ -8,10 +8,11 @@
 // DECK, 1.74 m off the ground: the doorway's sill), centred on the ship's middle (x 0, z 0).
 //   ebHull       'hull'      the 3k hull, painted by RULES (and ZONES, which split a few faces where a colour line
 //                            must cross one: the dark lower band, the wings' flaps and yellow tips, the fins' rudders
-//                            and stripes, the engines' blue rings)
-//   ebCanopy     'glass'     its canopy: each flat facet a pane of smoked glass (faces nearly in one plane are one
-//                            pane), one black spar along every edge between panes and round the sill: all one part,
-//                            the spar, placed again and again
+//                            and stripes, the engines' blue rings); and the engines' nozzles, cut from the 8k, their
+//                            cores glowing by the throttle (setThrottle)
+//   ebCanopy     'glass'     its canopy: nine panes of smoked glass (three down each side, three over the top), one
+//                            straight black spar along each border between them and a wider one round the sill: all
+//                            one part, the spar, placed again and again
 //   ebMarks      'marks'     what is laid on the skin: the blue light strips, the nose's lamps, the yellow marks by the
 //                            door, the nav lights
 //   ebDoorway    'port' / 'starboard'   a doorway's sides and sill; port: the airlock behind it (its floor, walls,
@@ -92,8 +93,13 @@ export const ZONES = [
 // area, thin (a narrow face: an edge strip) }
 const edge = (paint) => (f) => (f.thin ? paint + 'Edge' : paint);
 export const RULES = [
-  ['the canopy: glass', (f) => f.part === 'canopy', 'glass'],
-  ['engines: the dish at the back glows', (f) => f.part === 'engine' && f.c.z < -8.2 && f.n.z < -0.6, 'nozzle'],
+  // (the canopy's own faces: glass where a pane covers them (ebCanopy draws it); the rest is its frame, black, but for
+  // the flaps that hang down the hull's sides from the shelf along the sill, or face out sideways low at its back, and the
+  // strip under the windscreen's foot, down to the nose: white, the nose's skin; and any of the hull's own faces a pane
+  // covers (a bump on the roof under the glass) go too)
+  ['the canopy: glass, its frame', (f) => f.part === 'canopy', (f) => (canopyPanes().covers(f.c) ? 'glass' : (Math.abs(f.n.x) > 0.75 && f.c.y < 4.2) || (Math.abs(f.c.x) > 1.2 && f.pts.some((v) => v.y < 2.6)) || f.c.z > 7.45 ? edge('skin')(f) : edge('black')(f))],
+  ['under the canopy\'s glass: gone', (f) => canopyPanes().covers(f.c, 0.12), 'glass'],
+  ['engines: their backs, behind the blue ring: gone (the 8k\'s nozzles take their place: ebHull)', (f) => f.part === 'engine' && f.c.z < NOZZLE.cut, 'gone'],
   ['engines: the blue ring', (f) => f.zone === 'ring', 'ring'],
   ['engines and their pylons: dark', (f) => f.part === 'engine' || f.part === 'pylon', edge('trim')],
   ['wings: the flaps black', (f) => f.zone === 'flap', edge('black')],
@@ -159,66 +165,252 @@ export function hullFaces() {
   }).filter((f) => f.area > 1e-7);
   return FACES;
 }
-// a face's paint as a surface for the solid material, or a glow
-const GLOWS = { nozzle: GLOW.nozzle, ring: GLOW.ring };
+// a face's paint as a surface for the solid material, or a glow (faces 'glass' and 'gone' are drawn by others)
+const GLOWS = { ring: GLOW.ring };
+const drawn = (f) => f.paint !== 'glass' && f.paint !== 'gone';
 function ebHull(p) {
   const acc = new Acc();
   for (const f of hullFaces()) {
-    if (f.paint === 'glass') continue;
+    if (!drawn(f)) continue;
     const tri = [f.pts.map(dk)];
     if (GLOWS[f.paint]) acc.tris(tri, f.n, GLOWS[f.paint], 'glow'); else acc.tris(tri, f.n, PAL[f.paint]);
     // (its back, dark, where a crack in the skin lets its inside be seen)
     if (f.back) acc.tris([[tri[0][0], tri[0][2], tri[0][1]]], f.n.clone().negate(), PAL.trim);
   }
+  for (const side of [1, -1]) nozzle(acc, side);
   acc.flush(p);
-  // (the engines light the hangar floor behind them a little, and the nozzles their own dishes)
-  for (const sx of [1, -1]) p.light([sx * 2.32, 3.49 - DECK, -8.9], 0.6, [0.3, 0.6, 1.0], [0, 0, -1], 3);
   return p;
 }
 
+// ── THE ENGINES' NOZZLES ────────────────────────────────────────────────────────────────────────────────────────────
+// The game's maker: "the back exhaust nozzles should use the 8k design. If flying in 3rd person the back of the ship is
+// what you see." The 8k's port engine's back, cut off behind its last groove (z NOZZLE.cut, the back edge of the 3k's
+// blue ring): its outside, its dark metal rim, the bowl recessed half a metre into it, and the core at the bowl's
+// bottom; set on each of the 3k's engines in place of the 3k's own back (its faces behind the cut are gone), its
+// radius fitted to the 3k's engine at the cut (the 8k's is 5% smaller there), the starboard one mirrored. A thin strip
+// in the plane of the cut joins the 3k's ring of corners there to the 8k's.
+// The core glows only while the engines run, by the throttle (setThrottle): off, it is dark as the abyss.
+// NOZZLE: made by ~/pw/space-math/rigs/explorer-built/rig/nozcut.mjs from the 8k (do not edit by hand): positions about
+// the engine's own axis (int16, 2048 to the metre; z the ship's own), triangles (uint16), each face's kind: o its
+// outside, r the rim, w the bowl's wall, f the core at its bottom
+export const NOZZLE = { cut: -7.76, rCut: 1.0623, pos: '8vdZAtjBYPeQArTB8/bu/7TBhffu/9jB8fiOBNjBhPcFAOzB7fdZAuzB9/duAuzB7fiOBOzBCQYNBtjB5QRnB7TBnAQwB9jB0QYOBTe+EQb/BezBWwdsBOzBYwdqBMbBBwYOBuzBqAQnB+zBy/rnBje+SP14CLTBWv0dCDe+3/jpBDe+b/rnBrTBSvtDBkq9lfl8BDi9dwXR+LTBYwfP+rTB4wY8+9jB0QYF+ze++QJ397TBHAUZ+Te+QAVQ+djBwQT6Bje+jAKKCLTBaAIdCNjB3/ju/826OvnM/c26Fvju/zi9cfhZAji9OvkjAs26p/n/Ac26XvkAAM26EwB4COzB/P94CNjB/P96COzBf/0LCOrBgP0LCOzBf/0LCOzBZQXYA826+ANpBc26LwTEBc260gUhBM26UgYRAs26nQPqAyS/9wTIASS/cfiV/Ti9p/nw/c26J/rO+826hgi1ArTBBwiiAje+UgahBEq9yP0++c26Evy8+s26/v2r+c26Svur+Uq9yvtP+s26/P/1+M26kf2I+Eq9ov4Y+yS//P9i+c26Jfxf/CS//P/u/yS/oADh+iS/TggFAOzBUAju/9jB9QdZAtjB9gdZAuzBUgju/+zB6wduAuzBlPp6BtjBjfp3BuzBmfqDBuzBfv0KCOzB+vieBOzBDQJDBs26/P8eB826MQLVBs26/P+fBs26MgEyBSS/0Qbe/c26Ywen/Uq9UgZz+0q90gXO+826LAcAAM26ZQUX/M26Ugbw/c26YPdM/aLBhPjz+rTB8fhz++rBqfde/Te+zfgY+ze+YPeD/djB9AgAALTB+geZ/ezB9QeD/djB/P/CB0q9aAJnB0q9yP3DBs26lPqH+djBfvqX+ezB8fhy++zBgPwI+FnBNvwj+OzBqfpx+ezBb/rj+KLBjfqF+ezBFQUx+ezBRgVS+ezBUQVi+ezB7/om/yS/gfs1AiS/lPop/M26egIdCDe+/P94CDe+/P/lCLTBvgcAAEq9Yghx/Te+MQI++c26+gG9+c26eASr+Uq9hPjpBLTBqfeQAje+Tvfu/ze+c/eC/ezBcveD/erBcveD/ezBZQWT/yS/rwRx/SS/mgYAAM26kf1nB0q9SP1397TBkP5399jBiv529+zB0fzk9+zBlPrGA826OfoPBM26QQRP+s26aAKI+Eq9/P8a+Eq9DAO7+yS/+AO8+s26EvxXBc26yvvEBc26/v1DBs26tvzGAyS/ov7pBCS/0QY1As26eARWBkq9YwdsAji9BgkAADe+g/lg+0q9uPoZ+Te+hghM/bTBfQIXCOzBaAIgCOzB/P9k9ze+egLS9ze+/P8J97TB+QIa+NjB/P9399jB5QY8++zB7wZR++zBnQQzB+zBf/fu/+zBcveE/ezBbf3S9ze+9geD/ezB9AIU+OzBGwMk+OzBEwB39+zBtP539+zBm/5w9+zB', tris: 'AAABAAIAAAACAAMAAAAEAAEAAAADAAUAAAAFAAYAAAAGAAcAAAAHAAgAAAAIAAQACQAKAAsACQAMAAoACQANAA4ACQAOAA8ACQAPAAwACQAQAA0ACQALABEACQARABAAEgATABQAEgAVABYAEgAWABMAEgAUABcAEgAYABUAEgAXABgAGQAaABsAGQAcABoAGQAdAB4AGQAbAB8AGQAfAB0AGQAeABwACgAMACAACgAhACIACgAgACEACgAiAAsAIwAkACUAIwAlACYAIwAnACgAIwAoACkAIwAmACcAIwApACQAKgArACwALAArAC0ALAAtAC4ALgAtAC8AMAAxADIAMAAyADMAMAAzADQAMAA1ADEAMAA2ADUAMAA0ADYAJAA3ACUAJAA4ADkAJAApADgAJAA5ADcADAA6ADsADAA7ADwADAAPADoADAA8ACAAPQA+AD8APQBAAEEAPQBCAEMAPQBDAEAAPQA/AEIAPQBBAD4ARABFAD8ARABGAEcARABHAEgARAA/AEYARABIAEUASQBKAEsASQBLAEwATQBKAEkATABLAE4ATwBQAFEATwBRAFIATwBSAC0ATwATABYATwAWAAQATwAEAFMATwBTAFAATwAtABMAVABVAFYAVAAxADUAVABXAFUAVABYAFcAVAA1AFgAVABWADEAWQBaAFsAWQBbAFwAWQBdAFoAWQBcAF4AWQBfAF0AWQBeAF8AYABhAGIAYABjAGQAYABiAGUAYAACAGMAYABkAGEAYABlAAIASgBmAEsASgBNAGcASgBnAGgASgBoAGYAVQBpAGoAVQBXAGsAVQBqAFYAVQBrAGkAbABtAG4AbABuAGIAbABvAHAAbABwAHEAbABhAHIAbABiAGEAbABxAHMAbABzAG0AbAByAG8AdAAfAHUAdQAfAHYAdwB4AEcAdwBGAHkAdwBHAEYAdwB5ADgAdwA4ACkAdwApAHgAIQB6AHsAIQAgAHoAIQB7AHwAIQB8ACsAIQArACIAWgBdAH0AWgAcAFsAWgB+ABwAWgB9AH4ARQB/AEIARQCAAH8ARQBCAD8ARQBIAIAAWwAcAB4AWwCBAFwAWwAeAIEAAQCCAIMAAQCEAAIAAQAEAIIAAQCDAIQAhQCGAGIAhQBiAG4AhwCGAIUAiACJAEcAiABHADYAiAA2ADQAiAA0AIoAiACKAIkAaQB6AGoAaQCLAHsAaQB7AHoAaQBrAIsAUwAEAAgAMQBWADIAbwByAIwAbwCNAI4AbwCOAI8AbwCPAHAAbwCMAI0AJQCEAIMAJQA3AIQAJQCDACYAggAVAIMAggAWABUAggAEABYAOgAPAEsAOgBmADsAOgBLAGYAJwCQACgAJwCRAJAAJwAmABgAJwAYAJEAfwCSAJMAfwCAAJIAfwCTAJQAfwCUAEIAlQCJAF4AlQBHAIkAlQBeAJYAlQCWAEgAlQBIAEcATgBLAA8ATgAPAA4AlwCQAJEAlwCYAJkAlwCaAJAAlwCZAJsAlwCRAJgAlwCbAJoAXQBfAIoAXQCcAH0AXQCKAJwAPgBGAD8APgB5AEYAPgBBAHkAeACQAJoAeAAoAJAAeACaAEcAeAApACgAegAgAJ0AegCdAGoAVwBYAJkAVwCZAGsAhABjAAIAhAA3AGMAkgCAAJYAkgBcAIEAkgCBAJMAkgCWAFwAgABIAJYALwAtAFIAOwCeADwAOwBmAJ8AOwCfAJ4AMgBWAGoAMgCdADwAMgBqAJ0AMgA8ADMAQACgAEEAQABkAKAAQABDAKEAQAChAGQAGgAcAH4AGgB+AKIAGgBoABsAGgCiAGgAYQBkAKEAYQChAHIAEwB8ABQAEwAtAHwAngAzADwAngB9AJwAngCfAH0AngCcADMAYwCgAGQAYwA3AKAAowAiAKQApAAiACsApAArACoAWAA1AEcAWABHAJsAWACbAJkAiwCYABcAiwBrAJgAiwAUAHsAiwAXABQAkwClAJQAkwCBAKYAkwCmAKUApwClAKYApwAdAKgApwCMAKUApwCmAB0ApwCoAKkApwCpAIwAqgAbAKsAdgAfABsAdgAbAKoAoAA3ADkAoAA5AEEAiQBfAF4AiQCKAF8AEQALAKwArAALACIArAAiAKMAfgB9AJ8AfgCfAKIAZgBoAKIAZgCiAJ8AFQAmAIMAFQAYACYArQADAIYArQCGAK4ArgCGAIcABQADAK0AIAA8AJ0AQgCUAEMAMwCcADQApQCMAK8ApQCvAJQAYgCGAGUAXACWAF4ANQA2AEcAAgBlAAMAsABoAGcAmACRABcAmABrAJkAHQAfAKgAHQCmAB4AGwBoALAAGwCwAKsAmgCbAEcAQwCvAKEAQwCUAK8AkQAYABcAewAUAHwAgQAeAKYAcgChAK8AcgCvAIwAeQBBADkAeQA5ADgAsQCoALIAsgCoAB8AsgAfAHQAjQCMAKkAjQCpALMAjQCzALQAAwBlAIYAfAAtACsAnACKADQAswCpAKgAswCoALEAjgCNALUAtQCNALQA', kind: 'oooooooooooooooooooooooooooooooooorroroooorrrwwworrooooorooorrwffwwoooooooooooorwrwwrooorrrooooooooooorooooooooooooofwfwwwooooooooorrrwooooooooooffwwwoooooroooooooooooooorroooroowfwwfoorrwwrwrorwwrwwfwoowrooroorwoooooooooooooooooooooooooooooffwoooooooooooooooooowwooooooooooooooorooorfoooroooofooooooorrooooooooroooo' };
+export const NOZ_PAINT = { o: PAL.trim, r: s('#2c2f34', 0.32, 0.8, 0.7), w: s('#1f2125', 0.4, 0.75, 0.8) };
+// (the core: a glow whose colour is a mark, not a colour: red under -1 says "an engine's core" (its heat -1 - red);
+// the built ship's glow material (grimeMaterials) lights it by the throttle; any other draws it black)
+const CORE = [-2, 0, 0];
+let NOZ = null;
+function nozzleMesh() {
+  if (NOZ) return NOZ;
+  const p16 = new Int16Array(bytes(NOZZLE.pos)), tris = new Uint16Array(bytes(NOZZLE.tris)), pos = [];
+  for (let i = 0; i < p16.length; i += 3) pos.push(V3(p16[i] / Q, p16[i + 1] / Q, p16[i + 2] / Q));
+  // the 3k's engine at the cut, each side: the ring of corners its faces end on (the zone's cut), its middle and radius
+  const sides = {};
+  for (const sd of [1, -1]) {
+    const ring = new Map();
+    for (const f of hullFaces()) {
+      if (f.part !== 'engine' || !drawn(f) || Math.sign(f.c.x) !== sd) continue;
+      for (let e = 0; e < 3; e++) { const a = f.pts[e], b = f.pts[(e + 1) % 3]; if (Math.abs(a.z - NOZZLE.cut) < 1e-4 && Math.abs(b.z - NOZZLE.cut) < 1e-4) for (const v of [a, b]) ring.set(v.x.toFixed(4) + ',' + v.y.toFixed(4), v); }
+    }
+    const R = [...ring.values()], xs = R.map((v) => v.x), ys = R.map((v) => v.y);
+    const c = V3((Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2, NOZZLE.cut);
+    sides[sd] = { ring: R, c, r: R.reduce((t, v) => t + Math.hypot(v.x - c.x, v.y - c.y), 0) / R.length };
+  }
+  NOZ = { pos, tris, sides };
+  return NOZ;
+}
+function nozzle(acc, sd) {
+  const { pos, tris, sides } = nozzleMesh(), S = sides[sd], k = S.r / NOZZLE.rCut;
+  const at = (v) => V3(S.c.x + sd * v.x * k, S.c.y + v.y * k, v.z);
+  for (let t = 0; t < tris.length / 3; t++) {
+    let T = [0, 1, 2].map((j) => at(pos[tris[t * 3 + j]])); if (sd < 0) T = [T[0], T[2], T[1]];
+    const n = tnorm(T); if (n.lengthSq() < 1e-14) continue; n.normalize();
+    const kind = NOZZLE.kind[t];
+    if (kind === 'f') acc.tris([T.map(dk)], n, CORE, 'glow'); else acc.tris([T.map(dk)], n, NOZ_PAINT[kind]);
+  }
+  // the join: the 3k's ring and the 8k's, both in the plane of the cut, stitched round by their angles (a strip a few
+  // centimetres wide at most, facing back, and forward too)
+  const ang = (v) => Math.atan2(v.y - S.c.y, v.x - S.c.x);
+  const A = S.ring.slice().sort((a, b) => ang(a) - ang(b)), seen = new Set(), B = [];
+  for (const v of pos) if (Math.abs(v.z - NOZZLE.cut) < 1e-3) { const w = at(v), key = w.x.toFixed(4) + ',' + w.y.toFixed(4); if (!seen.has(key)) { seen.add(key); B.push(w); } }
+  B.sort((a, b) => ang(a) - ang(b));
+  const strip = [], na = A.length, nb = B.length, turn = (L, i) => ang(L[i % L.length]) + (i >= L.length ? 2 * PI : 0);
+  for (let i = 0, j = 0; i < na || j < nb;) {
+    if (j >= nb || (i < na && turn(A, i + 1) <= turn(B, j + 1))) { strip.push([A[i % na], A[(i + 1) % na], B[j % nb]]); i++; } else { strip.push([A[i % na], B[(j + 1) % nb], B[j % nb]]); j++; }
+  }
+  for (const T of strip) { if (tnorm(T).lengthSq() < 1e-14) continue; const P = T.map(dk); acc.tris([P], V3(0, 0, -1), PAL.trim); acc.tris([[P[0], P[2], P[1]]], V3(0, 0, 1), PAL.trim); }
+}
+// THE THROTTLE: how hard the engines run, 0 (off: the cores dark) to 1 (full afterburn); the cores' glow follows it,
+// its colour and brightness: a dull deep orange at idle, bright orange, then hot white-yellow at full power, and blue
+// at full afterburn (linear colours, over 1 for the bloom). ENGINE.color is the uniform the glow material reads.
+export const THROTTLE = { Off: 0, Idle: 0.15, Half: 0.5, Full: 0.8, Afterburn: 1 };
+const HEAT = [[0, [0, 0, 0]], [0.04, [0.05, 0.009, 0.0015]], [0.15, [0.2, 0.04, 0.006]], [0.5, [0.85, 0.22, 0.03]], [0.8, [2.2, 1.5, 0.55]], [0.92, [1.0, 1.1, 2.0]], [1, [0.1, 0.45, 3.2]]];
+export const ENGINE = { throttle: 0, color: { value: new THREE.Color(0, 0, 0) } };
+export function setThrottle(t) {
+  t = Math.max(0, Math.min(1, t)); ENGINE.throttle = t;
+  let i = 1; while (i < HEAT.length - 1 && HEAT[i][0] < t) i++;
+  const [t0, c0] = HEAT[i - 1], [t1, c1] = HEAT[i], u = t1 > t0 ? Math.max(0, Math.min(1, (t - t0) / (t1 - t0))) : 1;
+  ENGINE.color.value.setRGB(c0[0] + (c1[0] - c0[0]) * u, c0[1] + (c1[1] - c0[1]) * u, c0[2] + (c1[2] - c0[2]) * u);
+  return t;
+}
+
 // ── THE CANOPY ──────────────────────────────────────────────────────────────────────────────────────────────────────
-// its faces gathered into panes: neighbours (sharing an edge) whose planes are within PANE_DEG of each other are one
-// pane; the spars go along every edge between two panes and along the canopy's own outline (the sill)
-export const CANOPY = { paneDeg: 3, pairDeg: 24, spar: { w: 0.06, out: 0.035, in: 0.03 }, layers: 2 };
+// Nine panes of glass, as the game's maker counts them ("3 on each side, 3 on top") and drew the frames over Meshy B's
+// canopy: down each side a front triangle, a middle quad and a rear pentagon ("the forward glass is one triangle, the
+// middle a square, the rear, 5 sides"); across the top the windscreen, the roof's front and the roof's rear. Each pane
+// is one clean polygon through named corners on the 3k's canopy, its glass shaded smooth so it reads as one piece. One
+// straight black spar runs along each border from corner to corner (a border that runs on straight past a corner is
+// one spar), and a wider one round the outline, the sill. The 3k's own canopy faces are dropped where a pane covers
+// them; the rest (the shelf along the sill, the strips where the canopy meets the roof behind) are painted as the frame.
+// CORNERS, each given on the port side (the starboard one is found the same way on its own side: the 3k is nearly but
+// not quite symmetric): the middle of the 3k's canopy vertices within r of the point, or (no r) the one nearest it.
+//   the shoulder line   T1 over the windscreen's corner, T2 at the second cross frame, T3 at the back
+//   the sill            J at the front, S1 at the first cross frame, S3 at the back (S1 to S3 is the inner edge of the
+//                       3k's shelf, one straight edge); S2 on it where the second cross frame comes down (at T2's z)
+//   the back            B, its corner on the side, where the rear pane's back edge turns
+//   the nose            F the windscreen's foot each side, F0 its middle (the sill runs straight past it): the top of
+//                       the 3k's step there (the strip under it, down to the nose, is the nose's white skin)
+//   the crown           C1, C2, C3 on the middle line, where each cross frame and the back cross it
+export const CANOPY = {
+  corners: {
+    T1: { at: [1.11, 3.84, 6.42], r: 0.13 }, T2: { at: [1.40, 4.39, 4.80], r: 0.13 }, T3: { at: [1.62, 4.60, 3.16], r: 0.15 },
+    J: { at: [1.08, 2.72, 7.65] }, S1: { at: [1.90, 3.0, 6.46] }, S3: { at: [2.43, 3.28, 3.86] }, B: { at: [2.2, 4.04, 3.0] },
+    F: { at: [0.86, 2.83, 7.78] }, F0: { at: [0.03, 2.77, 7.84], mid: true },
+    C1: { at: [0, 3.95, 6.43], r: 0.1, mid: true }, C2: { at: [0, 4.5, 4.83], r: 0.12, mid: true }, C3: { at: [0.03, 4.87, 2.95], mid: true },
+  },
+  // the panes: name, shape, and its corners in order round it (a side's pane: its own side's; a top pane: unmarked the
+  // port side's, ' the starboard's; ~ a point the outline passes through that is no corner); a pane bent along its
+  // middle (the roof, over its crown) is given as its two halves
+  side: [['front', 'triangle', ['J', 'S1', 'T1']], ['middle', 'quad', ['S1', 'S2', 'T2', 'T1']], ['rear', 'pentagon', ['S2', 'S3', 'B', 'T3', 'T2']]],
+  top: [
+    ['windscreen', 'seven-sided, bent round the nose', [['T1', 'J', 'F', '~F0', "F'", "J'", "T1'", 'C1']]],
+    ['roof front', 'six-sided, bent over its crown', [['T1', 'C1', 'C2', 'T2'], ['C1', "T1'", "T2'", 'C2']]],
+    ['roof rear', 'six-sided, bent over its crown', [['T2', 'C2', 'C3', 'T3'], ['C2', "T2'", "T3'", 'C3']]],
+  ],
+  // the spars: w wide, standing `out` out of the glass and `in` into it; round the outline (the sill) wider, lower
+  // (`out` there; low enough at the windscreen's foot that the nose, not the spar, sets the look down ahead), and moved
+  // out by `shift`, so it covers the edge of the painted shelf and the skin as well as the glass's
+  spar: { w: 0.06, out: 0.035, in: 0.03 }, sill: { w: 0.13, out: 0.02, shift: 0.06 },
+  straight: 3,   // (degrees: two borders meeting at a corner within this of a straight line are one spar)
+};
 let PANES = null;
+// the 3k's canopy faces (its own triangles, in the ship's frame) and their corners, welded
+function canopyMesh() {
+  const M = mesh(HULL), part = new Uint8Array(bytes(HULL.part)), ci = PARTS.indexOf('canopy'), faces = [], verts = new Map();
+  for (let t = 0; t < M.tris.length / 3; t++) {
+    if ((part[t] & 0x7f) !== ci) continue;
+    const pts = [0, 1, 2].map((k) => at(M, M.tris[t * 3 + k]));
+    if (tnorm(pts).length() < 2e-7) continue;
+    faces.push(pts); for (const v of pts) verts.set([v.x, v.y, v.z].map((q) => Math.round(q * 2000)).join(), v);
+  }
+  return { faces, verts: [...verts.values()] };
+}
+// a polygon's plane: its normal (Newell's, unit) and its middle
+function planeOf(P) {
+  const n = V3(0, 0, 0), c = V3(0, 0, 0);
+  P.forEach((a, i) => { const b = P[(i + 1) % P.length]; n.x += (a.y - b.y) * (a.z + b.z); n.y += (a.z - b.z) * (a.x + b.x); n.z += (a.x - b.x) * (a.y + b.y); c.add(a); });
+  return { n: n.normalize(), c: c.multiplyScalar(1 / P.length) };
+}
+// (the canopy's outside: away from a line along the ship over the cabin's floor)
+const outward = (n, c) => (n.dot(V3(c.x, c.y - 2.3, c.z - 5.0)) < 0 ? n.negate() : n);
 export function canopyPanes() {
   if (PANES) return PANES;
-  const F = hullFaces().filter((f) => f.paint === 'glass'), key = (v) => [v.x, v.y, v.z].map((q) => Math.round(q * 2000)).join(',');
-  const edges = new Map();
-  F.forEach((f, i) => { for (let e = 0; e < 3; e++) { const a = key(f.pts[e]), b = key(f.pts[(e + 1) % 3]), k = a < b ? a + '|' + b : b + '|' + a; let E = edges.get(k); if (!E) edges.set(k, (E = { a: f.pts[e], b: f.pts[(e + 1) % 3], faces: [] })); E.faces.push(i); } });
-  const par = F.map((_, i) => i), find = (a) => { while (par[a] !== a) a = par[a] = par[par[a]]; return a; }, cos = Math.cos(CANOPY.paneDeg * PI / 180);
-  for (const E of edges.values()) if (E.faces.length === 2 && F[E.faces[0]].n.dot(F[E.faces[1]].n) > cos) par[find(E.faces[0])] = find(E.faces[1]);
-  // (then the 3k's triangles paired into four-sided panes, the flattest pairs first, where the two make a convex quad
-  // bent less than pairDeg along its diagonal: the frame then runs in rails and posts, as his canopy's, not a web of
-  // triangles; the pane's glass keeps the two triangles)
-  const size = new Map(); F.forEach((_, i) => { const r = find(i); size.set(r, (size.get(r) || 0) + 1); });
-  const cand = [...edges.values()].filter((E) => E.faces.length === 2 && find(E.faces[0]) !== find(E.faces[1])).map((E) => ({ E, d: F[E.faces[0]].n.dot(F[E.faces[1]].n) })).sort((a, b) => b.d - a.d);
-  const pcos = Math.cos(CANOPY.pairDeg * PI / 180);
-  for (const { E, d } of cand) {
-    const [i, j] = E.faces; if (d < pcos || size.get(find(i)) !== 1 || size.get(find(j)) !== 1) continue;
-    // (convex: the two corners off the shared edge lie either side of it, and the quad's corners all turn one way)
-    const oi = F[i].pts.find((v) => v.distanceTo(E.a) > 1e-6 && v.distanceTo(E.b) > 1e-6), oj = F[j].pts.find((v) => v.distanceTo(E.a) > 1e-6 && v.distanceTo(E.b) > 1e-6);
-    const q = [E.a, oi, E.b, oj], nn = F[i].n.clone().add(F[j].n);
-    const turn = (k) => Math.sign(q[(k + 1) % 4].clone().sub(q[k]).cross(q[(k + 2) % 4].clone().sub(q[(k + 1) % 4])).dot(nn));
-    if (![1, 2, 3].every((k) => turn(k) === turn(0))) continue;
-    const r = find(i); par[r] = find(j); size.set(find(j), 2);
+  const C = CANOPY, { faces, verts } = canopyMesh();
+  // the corners, port (+1) and starboard (-1)
+  const spot = (name, s) => {
+    const K = C.corners[name], at0 = V3(s * K.at[0], K.at[1], K.at[2]), near = verts.filter((v) => (K.mid || Math.sign(v.x) === s) && v.distanceTo(at0) < (K.r || 0.3));
+    if (!near.length) return at0;
+    if (!K.r) return near.reduce((b, v) => (v.distanceTo(at0) < b.distanceTo(at0) ? v : b)).clone();
+    const m = near.reduce((t, v) => t.add(v), V3(0, 0, 0)).multiplyScalar(1 / near.length); if (K.mid) m.x = 0; return m;
+  };
+  const P = {};
+  for (const s of [1, -1]) {
+    const k = s > 0 ? '' : "'";
+    for (const name of Object.keys(C.corners)) if (!C.corners[name].mid) P[name + k] = spot(name, s);
+    // (S2: on the sill, S1 to S3, at T2's z)
+    const a = P['S1' + k], b = P['S3' + k], t = (P['T2' + k].z - a.z) / (b.z - a.z); P['S2' + k] = a.clone().lerp(b, t);
   }
-  const pane = F.map((_, i) => find(i));
-  // the spar lines: an edge with one face (the outline) or two faces of different panes
-  const spars = [];
+  for (const name of Object.keys(C.corners)) if (C.corners[name].mid) P[name] = spot(name, 1);
+  // the panes, each a list of parts (polygons of points; a point's `pass`: no corner, a spar runs straight past it)
+  const panes = [];
+  const pt = (name, side) => { const pass = name[0] === '~', base = name.replace('~', ''), key = side < 0 && !C.corners[base.replace("'", '')]?.mid ? (base.endsWith("'") ? base.slice(0, -1) : base + "'") : base; return { key, v: P[key], pass }; };
+  for (const s of [1, -1]) for (const [name, shape, list] of C.side) panes.push({ name: (s > 0 ? 'port ' : 'starboard ') + name, shape, parts: [list.map((q) => pt(q, s))] });
+  for (const [name, shape, parts] of C.top) panes.push({ name, shape, parts: parts.map((list) => list.map((q) => pt(q, 1))) });
+  // each pane's glass: its parts cut into triangles (in each part's own plane), facing out; its normals smoothed over
+  // the whole pane, so it shades as one piece
+  for (const pane of panes) {
+    const tris = [];
+    for (const part0 of pane.parts) {
+      const Q = part0.map((q) => q.v), { n, c } = planeOf(Q); outward(n, c);
+      const r = Math.abs(n.y) < 0.9 ? V3(0, 1, 0).cross(n).normalize() : V3(1, 0, 0).cross(n).normalize(), u = n.clone().cross(r);
+      const flat = Q.map((v) => new THREE.Vector2(v.dot(r), v.dot(u)));
+      for (const [i, j, k] of THREE.ShapeUtils.triangulateShape(flat, [])) { const T = [Q[i], Q[j], Q[k]]; if (tnorm(T).dot(n) < 0) T.reverse(); tris.push(T); }
+      part0.plane = { n, c, r, u, flat: THREE.ShapeUtils.isClockWise(flat) ? flat.slice().reverse() : flat };
+    }
+    const key = (v) => [v.x, v.y, v.z].map((q) => Math.round(q * 1e4)).join(), sum = new Map();
+    for (const T of tris) { const w = tnorm(T); for (const v of T) { const k = key(v); sum.set(k, (sum.get(k) || V3(0, 0, 0)).add(w)); } }
+    pane.tris = tris; pane.normalAt = (v) => sum.get(key(v)).clone().normalize();
+    pane.n = tris.reduce((t, T) => t.add(tnorm(T)), V3(0, 0, 0)).normalize();
+  }
+  // the borders: every edge of every part between two points, gathered by the pair of corners at its ends; an edge two
+  // panes share is a border between them, one in a single part only the outline (an edge inside one pane, between its
+  // two halves, is no border)
+  const edges = new Map(), ek = (a, b) => (a < b ? a + '|' + b : b + '|' + a);
+  panes.forEach((pane, pi) => pane.parts.forEach((part0, qi) => part0.forEach((q, i) => {
+    const q2 = part0[(i + 1) % part0.length], k = ek(q.key, q2.key);
+    let E = edges.get(k); if (!E) edges.set(k, (E = { a: q, b: q2, uses: [] })); E.uses.push({ pi, qi });
+  })));
+  const outline = [], borders = [];
   for (const E of edges.values()) {
-    if (E.faces.length === 2 && pane[E.faces[0]] === pane[E.faces[1]]) continue;
-    const n = E.faces.reduce((s2, i) => s2.add(F[i].n), V3(0, 0, 0)).normalize();
-    spars.push({ a: E.a, b: E.b, n, outline: E.faces.length === 1 });
+    const ps = [...new Set(E.uses.map((u) => u.pi))];
+    if (ps.length === 1 && E.uses.length === 2) continue;   // (inside a pane)
+    const n = ps.reduce((t, pi) => t.add(panes[pi].n), V3(0, 0, 0)).normalize(), isOut = ps.length === 1;
+    const e = { a: E.a, b: E.b, n, outline: isOut, panes: ps.map((pi) => panes[pi].name), pane: ps[0] };
+    borders.push(e); if (isOut) outline.push({ a: E.a.v, b: E.b.v, pane: panes[ps[0]] });
   }
-  PANES = { faces: F, pane, spars, panes: new Set(pane).size };
+  // the spars: borders joined into straight runs, through a point the outline passes (~), or a corner where two of the
+  // same kind meet in a straight line (the sill past S2)
+  const runs = borders.map((e) => ({ pts: [e.a, e.b], n: e.n.clone(), outline: e.outline, panes: e.panes, pane: e.pane }));
+  const straight = Math.cos(C.straight * PI / 180);
+  for (let merged = true; merged;) {
+    merged = false;
+    for (let i = 0; i < runs.length && !merged; i++) for (let j = 0; j < runs.length && !merged; j++) {
+      const A = runs[i], Bq = runs[j]; if (i === j || A.outline !== Bq.outline) continue;
+      // (A's end meets B's start, either way round)
+      for (const [fa, fb] of [[false, false], [false, true], [true, false], [true, true]]) {
+        const pa = fa ? A.pts.slice().reverse() : A.pts, pb = fb ? Bq.pts.slice().reverse() : Bq.pts;
+        if (pa[pa.length - 1].key !== pb[0].key) continue;
+        const da = pa[pa.length - 1].v.clone().sub(pa[0].v).normalize(), db = pb[pb.length - 1].v.clone().sub(pb[0].v).normalize();
+        if (!pa[pa.length - 1].pass && da.dot(db) < straight) continue;
+        A.pts = pa.concat(pb.slice(1)); A.n.add(Bq.n).normalize(); A.panes = [...new Set(A.panes.concat(Bq.panes))]; runs.splice(j, 1); merged = true; break;
+      }
+    }
+  }
+  const spars = runs.map((R) => {
+    const a = R.pts[0].v, b = R.pts[R.pts.length - 1].v, along = b.clone().sub(a).normalize(), n = R.n.clone().addScaledVector(along, -R.n.dot(along)).normalize();
+    // (the sill: moved out, across the line in the glass's plane, away from its pane's middle)
+    let side = V3(0, 0, 0);
+    if (R.outline) { side = along.clone().cross(n); if (side.dot(panes[R.pane].tris.flat().reduce((t, v) => t.add(v), V3(0, 0, 0)).multiplyScalar(1 / (3 * panes[R.pane].tris.length)).sub(a)) > 0) side.negate(); }
+    return { a, b, n, outline: R.outline, side, panes: R.panes, from: R.pts[0].key, to: R.pts[R.pts.length - 1].key };
+  });
+  // the 3k's faces the panes cover (their middles inside a part, near its plane): dropped
+  // (a point under a pane: within `near` of its plane, inside its outline or within 4 cm of it, so the 3k's strips along
+  // a border between two panes go with them)
+  const inPart = (c, near = 0.3) => panes.some((pane) => pane.parts.some((q) => { const L = q.plane; if (Math.abs(c.clone().sub(L.c).dot(L.n)) > near) return false; const p2 = new THREE.Vector2(c.dot(L.r), c.dot(L.u)); return pointInPoly(p2, L.flat) || L.flat.some((a, i) => distSeg(p2, a, L.flat[(i + 1) % L.flat.length]) < 0.04); }));
+  const covered = (f) => inPart(f.reduce((t, v) => t.add(v), V3(0, 0, 0)).multiplyScalar(1 / 3));
+  PANES = { panes, spars, outline, corners: P, covers: inPart, dropped: faces.filter(covered).length, painted: faces.filter((f) => !covered(f)).length, count: panes.length };
   return PANES;
 }
-// THE SPAR: one part, a black bar 1 m long along z, w across (x), standing `out` out of the glass and `in` into it (y
-// is out of the glass); placed along each spar line, stretched to its length (and its width more, so the bars meet
-// and overlap at every joint: none stops short)
+const distSeg = (p, a, b) => { const ab = b.clone().sub(a), t = Math.max(0, Math.min(1, p.clone().sub(a).dot(ab) / (ab.lengthSq() || 1))); return p.distanceTo(a.clone().addScaledVector(ab, t)); };
+function pointInPoly(p, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const a = poly[i], b = poly[j]; if ((a.y > p.y) !== (b.y > p.y) && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside; }
+  return inside;
+}
+// THE SPAR: one part, a black bar 1 m long along z, 1 across (x; placed, it is stretched to the spar's width), standing
+// `out` out of the glass and `in` into it (y is out of the glass); placed along each spar, stretched to its length and a
+// width more, so the bars meet and overlap at every corner: none stops short
 export function spar(p) {
-  const { w, out, in: dep } = CANOPY.spar, acc = new Acc(), x0 = -w / 2, x1 = w / 2, y0 = -dep, y1 = out, z0 = -0.5, z1 = 0.5;
+  const { out, in: dep } = CANOPY.spar, acc = new Acc(), x0 = -0.5, x1 = 0.5, y0 = -dep, y1 = out, z0 = -0.5, z1 = 0.5;
   const q = (pts, n) => acc.poly(pts.map((a) => V3(...a)), V3(...n), PAL.blackEdge, 'solid', 99);
   q([[x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1]], [0, 1, 0]);      // its face
   q([[x1, y0, z0], [x1, y1, z0], [x1, y1, z1], [x1, y0, z1]], [1, 0, 0]);      // its sides
@@ -227,20 +419,39 @@ export function spar(p) {
   return acc.flush(p);
 }
 const _m = new THREE.Matrix4(), _e = new THREE.Euler();
+// the glass: smoked, a little in from the frame's face, seen from outside and from the seats (a face each way); each
+// pane's triangles cut evenly into ones no longer than `step` (its normals blended across them, so the pane shades
+// smooth; and the checks can cut a hole in it)
+export const GLASS = { inset: 0.008, step: 0.6 };
 function ebCanopy(p) {
-  const { faces, spars } = canopyPanes(), acc = new Acc(), L = CANOPY.layers;
-  // the glass: each face, a few layers deep (smoked), each with a face each way (seen from outside and from the seats)
-  for (const f of faces) for (let k = 0; k < L; k++) {
-    const P = f.pts.map((v) => dk(v).addScaledVector(f.n, -0.006 - 0.008 * k));
-    acc.tris([P], f.n, null, 'glass'); acc.tris([[P[0], P[2], P[1]]], f.n.clone().negate(), null, 'glass');
+  const { panes, spars } = canopyPanes(), acc = new Acc(), m = acc.mesh(null, 'glass');
+  for (const pane of panes) {
+    const k = Math.max(1, Math.ceil(Math.max(...pane.tris.flatMap((T) => [0, 1, 2].map((i) => T[i].distanceTo(T[(i + 1) % 3])))) / GLASS.step));
+    for (const T of pane.tris) {
+      const N = T.map((v) => pane.normalAt(v)), at = (i, j) => { const u = i / k, w = j / k, n = N[0].clone().multiplyScalar(1 - u - w).addScaledVector(N[1], u).addScaledVector(N[2], w).normalize(); return { v: dk(T[0].clone().multiplyScalar(1 - u - w).addScaledVector(T[1], u).addScaledVector(T[2], w)).addScaledVector(n, -GLASS.inset), n }; };
+      const tri = (A, B, C) => { for (const [Q, sg] of [[[A, B, C], 1], [[A, C, B], -1]]) { const i0 = m.count; for (const q of Q) m.v(q.v.x, q.v.y, q.v.z, sg * q.n.x, sg * q.n.y, sg * q.n.z); m.ix.push(i0, i0 + 1, i0 + 2); } };
+      for (let i = 0; i < k; i++) for (let j = 0; j < k - i; j++) { tri(at(i, j), at(i + 1, j), at(i, j + 1)); if (i + j < k - 1) tri(at(i + 1, j), at(i + 1, j + 1), at(i, j + 1)); }
+    }
   }
   acc.flush(p);
-  const S = part(spar), w = CANOPY.spar.w;
+  const S = part(spar), { w, out } = CANOPY.spar, { w: ws, shift } = CANOPY.sill, low = CANOPY.sill.out / out;
   for (const sp of spars) {
     const a = dk(sp.a), b = dk(sp.b), along = b.clone().sub(a), len = along.length(); if (len < 0.01) continue;
-    const z = along.normalize(), y = sp.n.clone().addScaledVector(z, -sp.n.dot(z)).normalize(), x = y.clone().cross(z);
+    const z = along.normalize(), y = sp.n, x = y.clone().cross(z), wide = sp.outline ? ws : w;
     _m.makeBasis(x, y, z); _e.setFromRotationMatrix(_m);
-    placeInto(p, S, { at: a.clone().add(b).multiplyScalar(0.5).toArray(), rot: [_e.x, _e.y, _e.z], scale: [1, 1, len + w] });
+    const mid = a.clone().add(b).multiplyScalar(0.5).addScaledVector(sp.side, sp.outline ? shift : 0);
+    placeInto(p, S, { at: mid.toArray(), rot: [_e.x, _e.y, _e.z], scale: [wide, sp.outline ? low : 1, len + wide] });
+  }
+  // (at each corner of the outline, where two sill spars meet at an angle, a square of the same spar fills the notch
+  // between their ends)
+  const ends = new Map();
+  for (const sp of spars) if (sp.outline) for (const [k, v] of [[sp.from, sp.a], [sp.to, sp.b]]) { const e = ends.get(k) || { v, sp: [] }; e.sp.push(sp); ends.set(k, e); }
+  for (const { v, sp: two } of ends.values()) {
+    if (two.length !== 2) continue;
+    const y = two[0].n.clone().add(two[1].n).normalize(), side = two[0].side.clone().add(two[1].side).normalize();
+    const z = side.clone().addScaledVector(y, -side.dot(y)).normalize(), x = y.clone().cross(z);
+    _m.makeBasis(x, y, z); _e.setFromRotationMatrix(_m);
+    placeInto(p, S, { at: dk(v).addScaledVector(side, shift).toArray(), rot: [_e.x, _e.y, _e.z], scale: [ws, low, ws] });
   }
   return p;
 }
@@ -260,7 +471,7 @@ export const MARKS = {
 function rayHull(o, d) {
   let best = null, bt = 1e9;
   for (const f of hullFaces()) {
-    if (f.paint === 'glass') continue;
+    if (!drawn(f)) continue;
     const [A, B, C] = f.pts, e1 = B.clone().sub(A), e2 = C.clone().sub(A), pv = d.clone().cross(e2), det = e1.dot(pv);
     if (Math.abs(det) < 1e-12) continue;
     const tv = o.clone().sub(A), u = tv.dot(pv) / det; if (u < 0 || u > 1) continue;
@@ -337,7 +548,7 @@ function ebCockpit(p) {
   // THE TUB: everything under the glass closed, so no gap shows the sky from the seats (and nobody sees into the empty
   // hull through the canopy): from every edge of the canopy's outline a dark wall down and in to the floor, which
   // reaches out to them (no wider than tubX each side); the bulkhead behind with the cabin's door in it, shut
-  const acc = new Acc(), fy = DECK + C.floor, out = canopyPanes().spars.filter((sp) => sp.outline);
+  const acc = new Acc(), fy = DECK + C.floor, out = canopyPanes().outline;
   // (a wall's foot: under its edge, but no wider than tubX, nor than the hull there less 10 cm: a ray out from the
   // middle line at the floor's height finds the hull's inside)
   const inside = new Map(), halfAt = (s, z) => { const k = s + ':' + z.toFixed(3); if (!inside.has(k)) { const h = rayHull(V3(0, fy + 0.04, z), V3(s, 0, 0)); inside.set(k, h ? Math.abs(h.p.x) - 0.1 : 0); } return inside.get(k); };
@@ -714,7 +925,9 @@ varying float vAO; varying vec3 vBake; varying vec2 vWearUv; varying vec3 vRMW; 
   mat.customProgramCacheKey = () => 'ebgrime' + (inst ? 'i' : '');
   return mat;
 }
-// the kit's material set with the painted ones swapped for grime; and a darker smoked glass for the canopy
+// the kit's material set with the painted ones swapped for grime; a smoked glass for the canopy (one layer: the seats
+// show through it); and the glow with the engines' cores lit by the throttle (a core's colour is its mark, CORE: its
+// heat times ENGINE.color; every other glow as it was)
 export function grimeMaterials(mats, { dirt } = {}) {
   if (dirt != null) GRIME.dirt.value = dirt;
   const wear = kitTextures().wear, M = { ...mats };
@@ -722,7 +935,15 @@ export function grimeMaterials(mats, { dirt } = {}) {
   M.solidInst = grimePatch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.6, metalness: 0 }), true, wear);
   M.glass = new THREE.MeshStandardMaterial({ color: 0x0d1720, roughness: 0.06, metalness: 0.2, transparent: true, opacity: 0.42, depthWrite: false, envMapIntensity: 0.9 });
   M.glassInst = M.glass;
-  M.solid.name = 'solid'; M.solidInst.name = 'solidInst'; M.glass.name = 'glass';
+  M.glow = new THREE.MeshBasicMaterial({ vertexColors: true });
+  M.glow.onBeforeCompile = (sh) => {
+    sh.uniforms.uEngine = ENGINE.color;
+    sh.fragmentShader = sh.fragmentShader.replace('#include <common>', '#include <common>\nuniform vec3 uEngine;')
+      .replace('#include <color_fragment>', '#include <color_fragment>\n  if ( vColor.r < -0.5 ) diffuseColor.rgb = uEngine * ( -vColor.r - 1.0 );');
+  };
+  M.glow.customProgramCacheKey = () => 'ebglow';
+  M.glowInst = M.glow;
+  M.solid.name = 'solid'; M.solidInst.name = 'solidInst'; M.glass.name = 'glass'; M.glow.name = 'glow';
   return M;
 }
 

@@ -12,11 +12,12 @@
 //   BUILT: Explorer C built from the 3k smart mesh as the kit's own parts (kit/ships/explorer-built.js), loaded as a
 //     layout file (kit/rooms/ship-explorer-built.json) through the kit's layout code, so its doors and movers work:
 //     Gear up / down folds the landing legs into their wells (then shuts the wells' doors), Door open / shut swings
-//     the airstair door down to the ground; Dirt sets the grime over its clean paint; Show "Meshy B" lays Meshy B over
-//     it, see-through, to compare
+//     the airstair door down to the ground; Dirt sets the grime over its clean paint; Throttle runs the engines up
+//     (Off: their cores dark; Idle a dull orange, up through bright orange and white-yellow to blue at Afterburn), the
+//     glow easing to the new setting; Show "Meshy B" lays Meshy B over it, see-through, to compare
 //   ?ship=built|explorer-b|explorer-a  ?bp=<blueprint id>  ?view=3d|split|plan|both
 //   window.SHIPLAB = { ready, options, option(id), ship(id), view(v), cam(c), hull(h), show(k, on), result(), bp(),
-//     gear(up), door(open), dirt(amount), moving() }
+//     gear(up), door(open), dirt(amount), throttle(v, now) (v a setting's name or 0 to 1; now: no easing), moving() }
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -26,7 +27,7 @@ import { checkBlueprint, ROOM_KINDS, ITEM_KINDS, doorWall, wallsAt, snap, HEAD, 
 import { Plan } from './plan.js';
 import { buildRoom, updateDoors, loadRoom } from '../../kit/layout.js';
 import { makeMaterials } from '../../kit/materials.js';
-import { grimeMaterials, GRIME, gearStep } from '../../kit/ships/explorer-built.js';
+import { grimeMaterials, GRIME, gearStep, setThrottle, THROTTLE, ENGINE } from '../../kit/ships/explorer-built.js';
 
 const $ = (s) => document.querySelector(s), q = new URLSearchParams(location.search);
 // the ships: each a prepared shell (its .glb and .space.json in assets/ships), or a layout built by the kit (its
@@ -50,7 +51,7 @@ const WIREFILL = new THREE.MeshBasicMaterial({ color: 0x14202c, wireframe: true,
 const st = {
   ship: null, shell: null, space: null, opt: null, bp: null, stock: {}, edits: {}, result: null, sel: null,
   view: VIEWS[q.get('view')] ? q.get('view') : 'split', cam: 'Hero', hull: 'xray', show: { space: true, rooms: true, checks: true, person: true, meshy: false }, undo: [], pending: false,
-  gear: 'down', door: 'shut', dirt: 'Some',
+  gear: 'down', door: 'shut', dirt: 'Some', throttle: 'Off', throttleT: 0,
 };
 
 // ── renderer, scene, camera ───────────────────────────────────────────────────────────────────────────────────────
@@ -320,7 +321,8 @@ function menu() {
     // (the built ship's moving parts and its grime)
     ...(built ? [sep(), lab('Gear'), chip(st.gear === 'up' ? 'Gear down' : 'Gear up', false, () => { st.gear = st.gear === 'up' ? 'down' : 'up'; menu(); }, true, 'Fold the landing legs into their wells, or let them down'),
       sep(), lab('Door'), chip(st.door === 'open' ? 'Door shut' : 'Door open', false, () => { st.door = st.door === 'open' ? 'shut' : 'open'; menu(); }, true, 'Swing the airstair door down to the ground, or up shut'),
-      sep(), lab('Dirt'), ...Object.keys(DIRT).map((k) => chip(k, k === st.dirt, () => { st.dirt = k; GRIME.dirt.value = DIRT[k]; menu(); }, true))] : []));
+      sep(), lab('Dirt'), ...Object.keys(DIRT).map((k) => chip(k, k === st.dirt, () => { st.dirt = k; GRIME.dirt.value = DIRT[k]; menu(); }, true)),
+      sep(), lab('Throttle'), ...Object.keys(THROTTLE).map((k) => chip(k, k === st.throttle, () => { st.throttle = k; st.throttleT = THROTTLE[k]; menu(); }, true, k === 'Off' ? 'Engines off: their cores dark' : 'Run the engines up or down to ' + k))] : []));
   const add = document.createElement('select'); add.className = 'sl-add'; add.setAttribute('aria-label', 'Add');
   add.append(new Option('Add…', ''));
   const og = (label, entries) => { const g = document.createElement('optgroup'); g.label = label; for (const [v, t] of entries) g.append(new Option(t, v)); add.append(g); };
@@ -429,6 +431,8 @@ renderer.setAnimationLoop((t) => {
   // (the built ship's gear and airstair door, moving to where the menu asks)
   const B = st.shell?.built;
   if (B && st.ship?.layout && !st.hold) { gearStep(B, st.gear === 'up', dt, updateDoors); updateDoors(B.doors.filter((D) => D.piece === 'ebAirstair'), person.position, dt, st.door); }
+  // (the engines' glow easing to the throttle asked for: the whole range in about a second and a half)
+  if (ENGINE.throttle !== st.throttleT) { const d = st.throttleT - ENGINE.throttle, step = dt * 0.7; setThrottle(Math.abs(d) <= step ? st.throttleT : ENGINE.throttle + Math.sign(d) * step); }
   if (on) { fly(dt); controls.update(); renderer.render(scene, camera); frames++; }
   fpsT += dt; if (fpsT > 0.5) { fps = Math.round(frames / fpsT); frames = 0; fpsT = 0; }
   if (st.shell) hud.textContent = `${st.ship.name}: ${st.shell.size.z.toFixed(1)} × ${st.shell.size.x.toFixed(1)} × ${st.shell.size.y.toFixed(1)} m · deck ${st.space.deck} m up · ${Math.round(st.shell.tris).toLocaleString()} tris` + (on ? ` · ${fps} fps` : '');
@@ -447,6 +451,7 @@ window.SHIPLAB = {
   panel: (open) => { $('#panel').open = open; }, fit: () => { plan.fit(); plan.draw(); },
   gear: (up) => { st.gear = up ? 'up' : 'down'; menu(); }, door: (open) => { st.door = open ? 'open' : 'shut'; menu(); },
   dirt: (k) => { st.dirt = k; GRIME.dirt.value = DIRT[k]; menu(); },
+  throttle: (v, now) => { const t = typeof v === 'string' ? THROTTLE[v] : Math.max(0, Math.min(1, +v)); st.throttleT = t; st.throttle = Object.keys(THROTTLE).find((k) => THROTTLE[k] === t) || null; if (now) setThrottle(t); menu(); return t; },
   // (how far each of the built ship's doors is open, 0 to 1: the gear legs, the wells' doors, the airstair)
   moving: () => (st.shell?.built ? st.shell.built.doors.map((D) => ({ piece: D.piece, t: +D.t.toFixed(3) })) : []),
   // (for pictures part way: hold the built ship's moving parts where `at` says, { gear, doors, stair } each 0 to 1; null
