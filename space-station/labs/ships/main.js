@@ -28,7 +28,10 @@ const SHIPS = [
 const OPTIONS = ['explorer-c-plan', 'explorer-c-row', 'explorer-c-side'];
 const VIEWS = { '3d': '3D', split: '3D + plan', plan: 'Plan', both: 'Plan + side' };
 const CAMS = { Hero: [1, 0.45, 1], Side: [1, 0.05, 0], Front: [0, 0.12, 1], Rear: [0, 0.12, -1], Top: [0.001, 1, 0], Above: [0.55, 1.15, 0.7] };
-const HULLS = { solid: 'Solid', xray: 'See-through', hidden: 'Hidden' };
+const HULLS = { solid: 'Solid', plain: 'Plain', wire: 'Wireframe', xray: 'See-through', hidden: 'Hidden' };
+// (Plain: the shape alone, no paint; Wireframe: every triangle, to judge where the model spends them)
+const PLAIN = new THREE.MeshStandardMaterial({ color: 0xc9ced4, roughness: 0.55, metalness: 0.05, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+const WIRE = new THREE.LineBasicMaterial({ color: 0x14202c, transparent: true, opacity: 0.55 });
 const st = {
   ship: null, shell: null, space: null, opt: null, bp: null, stock: {}, edits: {}, result: null, sel: null,
   view: VIEWS[q.get('view')] ? q.get('view') : 'split', cam: 'Hero', hull: 'xray', show: { space: true, rooms: true, checks: true, person: true }, undo: [], pending: false,
@@ -88,6 +91,7 @@ async function loadShell(S) {
     tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3;
     o.userData.mat = o.material;                                     // (its own material, and a see-through copy)
     o.userData.xray = Object.assign(o.material.clone(), { transparent: true, opacity: 0.2, depthWrite: false });
+    o.userData.plain = PLAIN;
   });
   holder.updateMatrixWorld(true);
   const size = new THREE.Box3().setFromObject(holder).getSize(new THREE.Vector3());
@@ -98,7 +102,14 @@ function setHull(mode) {
   st.hull = mode;
   if (!st.shell) return;
   st.shell.holder.visible = mode !== 'hidden';
-  st.shell.model.traverse((o) => { if (o.isMesh) { o.material = mode === 'xray' ? o.userData.xray : o.userData.mat; o.castShadow = mode === 'solid'; o.renderOrder = mode === 'xray' ? 10 : 0; } });
+  st.shell.model.traverse((o) => {
+    if (!o.isMesh) return;
+    o.material = mode === 'xray' ? o.userData.xray : mode === 'plain' || mode === 'wire' ? o.userData.plain : o.userData.mat;
+    o.castShadow = mode === 'solid' || mode === 'plain' || mode === 'wire'; o.renderOrder = mode === 'xray' ? 10 : 0;
+    // (the wireframe: every triangle's edges, made the first time it's asked for, lifted a hair so it shows over the faces)
+    if (mode === 'wire' && !o.userData.wire) { o.userData.wire = new THREE.LineSegments(new THREE.WireframeGeometry(o.geometry), WIRE); o.add(o.userData.wire); }
+    if (o.userData.wire) o.userData.wire.visible = mode === 'wire';
+  });
 }
 async function showShip(S) {
   loading.hidden = false; loading.classList.add('soft');
