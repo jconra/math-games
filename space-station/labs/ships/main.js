@@ -9,15 +9,20 @@
 // ONE MENU along the bottom. In 3D: drag to look round, wheel or pinch to come closer, W A S D move (Space up, C down,
 // Shift faster). On the plan: drag walls, furniture and doors; tap to select; drag elsewhere to move it, wheel or pinch
 // to zoom, double-click to fit. Edits are kept in this browser; Download saves the blueprint as a file.
-//   BUILT: Explorer C built from the 3k smart mesh as the kit's own parts (kit/ships/explorer-built.js), loaded as a
-//     layout file (kit/rooms/ship-explorer-built.json) through the kit's layout code, so its doors and movers work:
-//     Gear up / down folds the landing legs into their wells (then shuts the wells' doors), Door open / shut swings
-//     the airstair door down to the ground; Dirt sets the grime over its clean paint; Throttle runs the engines up
-//     (Off: their cores dark; Idle a dull orange, up through bright orange and white-yellow to blue at Afterburn), the
-//     glow easing to the new setting; Show "Meshy B" lays Meshy B over it, see-through, to compare
-//   ?ship=built|explorer-b|explorer-a  ?bp=<blueprint id>  ?view=3d|split|plan|both
+//   BUILT SHIPS: made from smart meshes as the kit's own parts (kit/ships/<ship>-built.js, sharing built-common.js),
+//     each loaded as a layout file (kit/rooms/ship-<ship>-built.json) through the kit's layout code, so its doors and
+//     movers work. Each ship's module says which controls it has (its LAB: controls, close views, materials, jets, how
+//     its parts follow the menu). Explorer C ("Built"): Gear up / down folds the landing legs into their wells (then
+//     shuts the wells' doors), Door open / shut swings the airstair door down to the ground; Show "Meshy B" lays Meshy
+//     B over it, see-through. The Miner ("Miner (built)"): Arms stowed / reaching (the cutter heads spin when
+//     reaching), Thrusters (the corner pods swivel and fire), Canisters on / off (the eight ore canisters on their
+//     mounts), Door (the belly lift's door), Gear. Both: Dirt sets the grime over the clean paint; Throttle runs the
+//     engines up (plume.js, the jet: Off nothing, the nozzles dark; Idle a dull orange, up through bright orange and
+//     white-yellow to blue at Afterburn), easing to the new setting.
+//   ?ship=built|miner|explorer-b|explorer-a  ?bp=<blueprint id>  ?view=3d|split|plan|both
 //   window.SHIPLAB = { ready, options, option(id), ship(id), view(v), cam(c), hull(h), show(k, on), result(), bp(),
-//     gear(up), door(open), dirt(amount), throttle(v, now) (v a setting's name or 0 to 1; now: no easing), moving() }
+//     gear(up), door(open), dirt(amount), throttle(v, now) (v a setting's name or 0 to 1; now: no easing), arms(reach),
+//     thrusters(on), canisters(on), moving(), jets() }
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -27,20 +32,23 @@ import { checkBlueprint, ROOM_KINDS, ITEM_KINDS, doorWall, wallsAt, snap, HEAD, 
 import { Plan } from './plan.js';
 import { buildRoom, updateDoors, loadRoom } from '../../kit/layout.js';
 import { makeMaterials } from '../../kit/materials.js';
-import { grimeMaterials, GRIME, gearStep, setThrottle, THROTTLE, ENGINE } from '../../kit/ships/explorer-built.js';
+import { setThrottle, THROTTLE, ENGINE } from '../../kit/ships/built-common.js';
+import { makeJets } from '../../kit/ships/plume.js';
+import * as EB from '../../kit/ships/explorer-built.js';
 
 const $ = (s) => document.querySelector(s), q = new URLSearchParams(location.search);
 // the ships: each a prepared shell (its .glb and .space.json in assets/ships), or a layout built by the kit (its
 // .space.json measured from it)
+// (a built ship: lab, its module's LAB; and each ship's blueprints, bps)
+const EXPLORER_BPS = ['explorer-c-plan', 'explorer-c-row', 'explorer-c-side'];
 const SHIPS = [
-  { id: 'built', name: 'Built', layout: 'ship-explorer-built', shell: 'explorer-built', note: 'Explorer C built from the 3k smart mesh: flat paint, a glass canopy, the airstair door, gear that folds away' },
-  { id: 'explorer-b', name: 'Meshy B', shell: 'explorer-meshy-b', note: 'Explorer C from his 3/4 view' },
-  { id: 'explorer-a', name: 'Meshy A', shell: 'explorer-meshy-a', note: 'Explorer C from his four views' },
+  { id: 'built', name: 'Built', layout: 'ship-explorer-built', shell: 'explorer-built', lab: EB.LAB, bps: EXPLORER_BPS, note: 'Explorer C built from the 3k smart mesh: flat paint, a glass canopy, the airstair door, gear that folds away' },
+  { id: 'explorer-b', name: 'Meshy B', shell: 'explorer-meshy-b', bps: EXPLORER_BPS, note: 'Explorer C from his 3/4 view' },
+  { id: 'explorer-a', name: 'Meshy A', shell: 'explorer-meshy-a', bps: EXPLORER_BPS, note: 'Explorer C from his four views' },
 ];
-// (close views of the built ship: where from and what at)
-const SPOTS = { Canopy: { at: [6.5, 6.8, 12.5], look: [0, 3.7, 5.2] }, Door: { at: [7.6, 1.6, 4.4], look: [2.2, 2.4, 1.6] }, Seats: { at: [0, 3.75, 3.65], look: [0, 3.0, 7.6] } };
-const DIRT = { None: 0, Some: 0.45, Lots: 0.9 };
-const OPTIONS = ['explorer-c-plan', 'explorer-c-row', 'explorer-c-side'];
+const OPTIONS = [...new Set(SHIPS.flatMap((S) => S.bps))];
+// (the dirt's settings: the ship's own, or the Explorer's)
+const dirtOf = () => st.ship?.lab?.dirt || EB.LAB.dirt;
 const VIEWS = { '3d': '3D', split: '3D + plan', plan: 'Plan', both: 'Plan + side' };
 const CAMS = { Hero: [1, 0.45, 1], Side: [1, 0.05, 0], Front: [0, 0.12, 1], Rear: [0, 0.12, -1], Top: [0.001, 1, 0], Above: [0.55, 1.15, 0.7] };
 const HULLS = { solid: 'Solid', plain: 'Plain', wire: 'Wireframe', xray: 'See-through', hidden: 'Hidden' };
@@ -51,7 +59,7 @@ const WIREFILL = new THREE.MeshBasicMaterial({ color: 0x14202c, wireframe: true,
 const st = {
   ship: null, shell: null, space: null, opt: null, bp: null, stock: {}, edits: {}, result: null, sel: null,
   view: VIEWS[q.get('view')] ? q.get('view') : 'split', cam: 'Hero', hull: 'xray', show: { space: true, rooms: true, checks: true, person: true, meshy: false }, undo: [], pending: false,
-  gear: 'down', door: 'shut', dirt: 'Some', throttle: 'Off', throttleT: 0,
+  gear: 'down', door: 'shut', dirt: 'Some', throttle: 'Off', throttleT: 0, arms: 'reaching', thrusters: false, canisters: true,
 };
 
 // ── renderer, scene, camera ───────────────────────────────────────────────────────────────────────────────────────
@@ -95,8 +103,11 @@ const spaceOf = (S) => fetch(`../../assets/ships/${S.shell}.space.json`).then((r
 // a ship that is a layout: built by the kit's own layout code (its doors and movers with it), in its grime materials
 async function loadBuilt(S) {
   const [room, space] = await Promise.all([loadRoom(`../../kit/rooms/${S.layout}.json`), spaceOf(S)]);
-  const built = buildRoom(room, grimeMaterials(makeMaterials(), { dirt: DIRT[st.dirt] }), { bake: { voxel: 0.08, rays: 24 } });
+  const built = buildRoom(room, S.lab.materials(makeMaterials(), (S.lab.dirt || EB.LAB.dirt)[st.dirt]), { bake: { voxel: 0.08, rays: 24 } });
   const holder = new THREE.Group(), model = built.group; holder.add(model);
+  // (its jets: plume.js, laid in its nozzles, the throttle's; and its thrusters' own, if it has them)
+  const jets = (S.lab.jets?.() || []).map((J) => ({ role: J.role, set: makeJets(J.nozzles, J.opts) }));
+  for (const J of jets) holder.add(J.set.group);
   model.traverse((o) => {
     if (!o.isMesh) return;
     o.userData.mat = o.material;
@@ -105,7 +116,7 @@ async function loadBuilt(S) {
   });
   holder.updateMatrixWorld(true);
   const size = new THREE.Box3().setFromObject(holder).getSize(new THREE.Vector3());
-  return { holder, model, tris: built.stats.tris, size, space, built };
+  return { holder, model, tris: built.stats.tris, size, space, built, jets };
 }
 async function loadShell(S) {
   if (shells.has(S.id)) return shells.get(S.id);
@@ -155,7 +166,10 @@ async function showShip(S) {
   if (st.shell) scene.remove(st.shell.holder);
   st.ship = S; st.shell = rec; st.space = rec.space; scene.add(rec.holder); setHull(st.hull);
   const d = st.space.doors?.port; person.position.set(d ? d.face + 1.2 : rec.size.x / 2 + 0.9, 0, d ? (d.z[0] + d.z[1]) / 2 - (S.layout ? 2.4 : 1.6) : 1);
-  if (!S.layout && st.show.meshy) { st.show.meshy = false; }
+  if (!S.lab?.overlay && st.show.meshy) { st.show.meshy = false; }
+  if (S.lab) S.lab.setDirt((S.lab.dirt || EB.LAB.dirt)[st.dirt]);
+  // (its own blueprints: the one shown stays if it is one of them)
+  if (S.bps && !S.bps.includes(st.opt) && st.opt !== 'uploaded') showOption(S.bps[0]);
   await showMeshy();
   plan.hFor = null; recheck(true); setCam(st.cam); url(); menu();
   loading.hidden = true;
@@ -163,7 +177,7 @@ async function showShip(S) {
 // Meshy B laid over the built ship, see-through, to compare (its own shell, a see-through copy of its paint)
 let meshyOver = null;
 async function showMeshy() {
-  const on = st.show.meshy && st.ship?.layout;
+  const on = st.show.meshy && st.ship?.lab?.overlay;
   if (on && !meshyOver) {
     const rec = await loadShell(SHIPS.find((S) => S.id === 'explorer-b')), holder = new THREE.Group();
     rec.holder.updateMatrixWorld(true);
@@ -271,7 +285,8 @@ function layout() {
 function setView(v) { st.view = v; url(); layout(); setCam(st.cam); menu(); }
 function setCam(name) {
   st.cam = name; if (!st.shell) return;
-  if (SPOTS[name]) { if (!st.ship.layout) { setCam('Hero'); return; } camera.position.set(...SPOTS[name].at); controls.target.set(...SPOTS[name].look); controls.update(); return; }
+  const spot = st.ship.lab?.spots?.[name];
+  if (!CAMS[name]) { if (!spot) { setCam('Hero'); return; } camera.position.set(...spot.at); controls.target.set(...spot.look); controls.update(); return; }
   // (how far back: the ship's half-size across the screen and up it, from this side, fitted to the view's shape)
   const s = st.shell.size, d = new THREE.Vector3(...CAMS[name]).normalize(), t = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
   // (and the part of it nearer the eye than its middle: half its depth from this side)
@@ -310,19 +325,22 @@ const chip = (label, on, fn, sub, title) => { const b = document.createElement('
 const lab = (t) => { const s = document.createElement('span'); s.className = 'kl-label'; s.textContent = t; return s; };
 const sep = () => Object.assign(document.createElement('span'), { className: 'kl-sep' });
 function menu() {
-  const opts = OPTIONS.filter((id) => st.stock[id]).concat(st.edits.uploaded ? ['uploaded'] : []);
+  const opts = (st.ship?.bps || OPTIONS).filter((id) => st.stock[id]).concat(st.edits.uploaded ? ['uploaded'] : []);
   $('#items').replaceChildren(lab('Blueprint'), ...opts.map((id) => chip(((st.edits[id] || st.stock[id])?.name || id) + (isEdited(id) && id !== 'uploaded' ? ' •' : ''), id === st.opt, () => showOption(id))),
     sep(), lab('Ship'), ...SHIPS.map((S) => chip(S.name, S === st.ship, () => showShip(S), false, S.note)));
-  const built = !!st.ship?.layout;
+  const L = st.ship?.lab, has = (k) => !!L?.controls.includes(k), spots = L?.spots || {};
   $('#tabs').replaceChildren(lab('View'), ...Object.entries(VIEWS).map(([k, t]) => chip(t, k === st.view, () => setView(k), true)),
-    sep(), lab('Camera'), ...[...Object.keys(CAMS), ...(built ? Object.keys(SPOTS) : [])].map((k) => chip(k, k === st.cam, () => { setCam(k); if (st.view !== '3d' && st.view !== 'split') setView('split'); menu(); }, true)),
+    sep(), lab('Camera'), ...[...Object.keys(CAMS), ...Object.keys(spots)].map((k) => chip(k, k === st.cam, () => { setCam(k); if (st.view !== '3d' && st.view !== 'split') setView('split'); menu(); }, true)),
     sep(), lab('Hull'), ...Object.entries(HULLS).map(([k, t]) => chip(t, k === st.hull, () => { setHull(k); menu(); }, true)),
-    sep(), lab('Show'), ...[['space', 'Space'], ['rooms', 'Rooms'], ['checks', 'Checks'], ['person', 'Person'], ...(built ? [['meshy', 'Meshy B']] : [])].map(([k, t]) => chip(t, st.show[k], () => { show(k, !st.show[k]); menu(); }, true, k === 'meshy' ? 'Meshy B laid over the built ship, see-through' : '')),
-    // (the built ship's moving parts and its grime)
-    ...(built ? [sep(), lab('Gear'), chip(st.gear === 'up' ? 'Gear down' : 'Gear up', false, () => { st.gear = st.gear === 'up' ? 'down' : 'up'; menu(); }, true, 'Fold the landing legs into their wells, or let them down'),
-      sep(), lab('Door'), chip(st.door === 'open' ? 'Door shut' : 'Door open', false, () => { st.door = st.door === 'open' ? 'shut' : 'open'; menu(); }, true, 'Swing the airstair door down to the ground, or up shut'),
-      sep(), lab('Dirt'), ...Object.keys(DIRT).map((k) => chip(k, k === st.dirt, () => { st.dirt = k; GRIME.dirt.value = DIRT[k]; menu(); }, true)),
-      sep(), lab('Throttle'), ...Object.keys(THROTTLE).map((k) => chip(k, k === st.throttle, () => { st.throttle = k; st.throttleT = THROTTLE[k]; menu(); }, true, k === 'Off' ? 'Engines off: their cores dark' : 'Run the engines up or down to ' + k))] : []));
+    sep(), lab('Show'), ...[['space', 'Space'], ['rooms', 'Rooms'], ['checks', 'Checks'], ['person', 'Person'], ...(L?.overlay ? [['meshy', 'Meshy B']] : [])].map(([k, t]) => chip(t, st.show[k], () => { show(k, !st.show[k]); menu(); }, true, k === 'meshy' ? 'Meshy B laid over the built ship, see-through' : '')),
+    // (the built ship's moving parts and its grime: the controls its module names)
+    ...(has('arms') ? [sep(), lab('Arms'), chip(st.arms === 'stowed' ? 'Arms reaching' : 'Arms stowed', false, () => { st.arms = st.arms === 'stowed' ? 'reaching' : 'stowed'; menu(); }, true, 'Fold the mining arms in for flight, or reach them out to dig (the cutter heads spin)')] : []),
+    ...(has('thrusters') ? [sep(), lab('Thrusters'), chip(st.thrusters ? 'Thrusters off' : 'Thrusters', st.thrusters, () => { st.thrusters = !st.thrusters; menu(); }, true, 'The corner pods swivel and fire')] : []),
+    ...(has('canisters') ? [sep(), lab('Canisters'), chip(st.canisters ? 'Canisters off' : 'Canisters on', false, () => { st.canisters = !st.canisters; menu(); }, true, 'The eight ore canisters on their mounts, or the mounts empty')] : []),
+    ...(has('gear') ? [sep(), lab('Gear'), chip(st.gear === 'up' ? 'Gear down' : 'Gear up', false, () => { st.gear = st.gear === 'up' ? 'down' : 'up'; menu(); }, true, L.gearTip || 'Fold the landing legs into their wells, or let them down')] : []),
+    ...(has('door') ? [sep(), lab('Door'), chip(st.door === 'open' ? 'Door shut' : 'Door open', false, () => { st.door = st.door === 'open' ? 'shut' : 'open'; menu(); }, true, L.doorTip || 'Swing the airstair door down to the ground, or up shut')] : []),
+    ...(has('dirt') ? [sep(), lab('Dirt'), ...Object.keys(dirtOf()).map((k) => chip(k, k === st.dirt, () => { st.dirt = k; L.setDirt(dirtOf()[k]); menu(); }, true))] : []),
+    ...(has('throttle') ? [sep(), lab('Throttle'), ...Object.keys(THROTTLE).map((k) => chip(k, k === st.throttle, () => { st.throttle = k; st.throttleT = THROTTLE[k]; menu(); }, true, k === 'Off' ? 'Engines off: no jet, the nozzles dark' : 'Run the engines up or down to ' + k))] : []));
   const add = document.createElement('select'); add.className = 'sl-add'; add.setAttribute('aria-label', 'Add');
   add.append(new Option('Add…', ''));
   const og = (label, entries) => { const g = document.createElement('optgroup'); g.label = label; for (const [v, t] of entries) g.append(new Option(t, v)); add.append(g); };
@@ -429,20 +447,22 @@ renderer.setAnimationLoop((t) => {
   const dt = Math.min(0.1, (t - last) / 1000); last = t;
   const on = canvas.style.display !== 'none';
   // (the built ship's gear and airstair door, moving to where the menu asks)
-  const B = st.shell?.built;
-  if (B && st.ship?.layout && !st.hold) { gearStep(B, st.gear === 'up', dt, updateDoors); updateDoors(B.doors.filter((D) => D.piece === 'ebAirstair'), person.position, dt, st.door); }
-  // (the engines' glow easing to the throttle asked for: the whole range in about a second and a half)
+  const B = st.shell?.built, L = st.ship?.lab;
+  if (B && L && !st.hold) L.step(B, st, dt, { updateDoors, person, jets: st.shell.jets, time: t / 1000 });
+  // (the engines easing to the throttle asked for: the whole range in about a second and a half; the jets follow it)
   if (ENGINE.throttle !== st.throttleT) { const d = st.throttleT - ENGINE.throttle, step = dt * 0.7; setThrottle(Math.abs(d) <= step ? st.throttleT : ENGINE.throttle + Math.sign(d) * step); }
+  for (const J of st.shell?.jets || []) { if (J.role === 'main') J.set.setThrust(ENGINE.throttle, true); J.set.update(dt); }
   if (on) { fly(dt); controls.update(); renderer.render(scene, camera); frames++; }
   fpsT += dt; if (fpsT > 0.5) { fps = Math.round(frames / fpsT); frames = 0; fpsT = 0; }
   if (st.shell) hud.textContent = `${st.ship.name}: ${st.shell.size.z.toFixed(1)} × ${st.shell.size.x.toFixed(1)} × ${st.shell.size.y.toFixed(1)} m · deck ${st.space.deck} m up · ${Math.round(st.shell.tris).toLocaleString()} tris` + (on ? ` · ${fps} fps` : '');
 });
 
 await loadOptions();
-st.opt = OPTIONS.includes(q.get('bp')) || (q.get('bp') === 'uploaded' && st.edits.uploaded) ? q.get('bp') : OPTIONS[0];
+const S0 = SHIPS.find((S) => S.id === q.get('ship')) || SHIPS[0];
+st.opt = S0.bps.includes(q.get('bp')) || (q.get('bp') === 'uploaded' && st.edits.uploaded) ? q.get('bp') : S0.bps[0];
 st.bp = st.edits[st.opt] || clone(st.stock[st.opt]);
 layout();
-await showShip(SHIPS.find((S) => S.id === q.get('ship')) || SHIPS[0]);
+await showShip(S0);
 if (q.has('rig')) $('#panel').open = true;
 window.SHIPLAB = {
   ready: true, options: () => OPTIONS.slice(), ships: SHIPS.map((S) => S.id),
@@ -450,17 +470,19 @@ window.SHIPLAB = {
   hull: (h) => { setHull(h); menu(); }, show: (k, on) => { show(k, on); menu(); }, result: () => st.result, bp: () => st.bp, select,
   panel: (open) => { $('#panel').open = open; }, fit: () => { plan.fit(); plan.draw(); },
   gear: (up) => { st.gear = up ? 'up' : 'down'; menu(); }, door: (open) => { st.door = open ? 'open' : 'shut'; menu(); },
-  dirt: (k) => { st.dirt = k; GRIME.dirt.value = DIRT[k]; menu(); },
-  throttle: (v, now) => { const t = typeof v === 'string' ? THROTTLE[v] : Math.max(0, Math.min(1, +v)); st.throttleT = t; st.throttle = Object.keys(THROTTLE).find((k) => THROTTLE[k] === t) || null; if (now) setThrottle(t); menu(); return t; },
+  dirt: (k) => { st.dirt = k; st.ship?.lab?.setDirt(dirtOf()[k]); menu(); },
+  throttle: (v, now) => { const t = typeof v === 'string' ? THROTTLE[v] : Math.max(0, Math.min(1, +v)); st.throttleT = t; st.throttle = Object.keys(THROTTLE).find((k) => THROTTLE[k] === t) || null; if (now) { setThrottle(t); for (const J of st.shell?.jets || []) if (J.role === 'main') J.set.setThrust(t, true); } menu(); return t; },
+  arms: (reach) => { st.arms = reach ? 'reaching' : 'stowed'; menu(); }, thrusters: (on) => { st.thrusters = !!on; menu(); }, canisters: (on) => { st.canisters = !!on; menu(); },
+  jets: () => (st.shell?.jets || []).map((J) => ({ role: J.role, thrust: +J.set.thrust.toFixed(3), on: J.set.jets.map((j) => j.tube.visible) })),
   // (how far each of the built ship's doors is open, 0 to 1: the gear legs, the wells' doors, the airstair)
   moving: () => (st.shell?.built ? st.shell.built.doors.map((D) => ({ piece: D.piece, t: +D.t.toFixed(3) })) : []),
   // (for pictures part way: hold the built ship's moving parts where `at` says, { gear, doors, stair } each 0 to 1; null
   // lets them go on to where the menu asks)
+  // (for pictures part way: the built ship's moving parts held where `at` says (its module's pose: the Explorer's
+  // { gear, doors, stair } each 0 to 1); null lets them go on to where the menu asks)
   pose: (at) => {
-    const B = st.shell?.built; st.hold = !!at; if (!B || !at) return;
-    const of = { gear: 'ebGear', doors: 'ebGearDoors', stair: 'ebAirstair' };
-    // (each moved there from an end, so its leaves are set: from shut by t, or to shut from open)
-    for (const [k, t] of Object.entries(at)) for (const D of B.doors.filter((d) => d.piece === of[k])) { D.t = t > 0 ? 0 : 1; updateDoors([D], person.position, t > 0 ? t / D.speed : 2 / D.speed, t > 0 ? 'open' : 'shut'); }
+    const B = st.shell?.built; st.hold = !!at; if (!B || !at || !st.ship?.lab) return;
+    st.ship.lab.pose(B, at, { updateDoors, person, jets: st.shell.jets });
   },
   built: () => st.shell?.built || null, three: THREE, scene, camera, renderer, controls,
 };

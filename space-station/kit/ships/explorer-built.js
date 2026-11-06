@@ -9,7 +9,8 @@
 //   ebHull       'hull'      the 3k hull, painted by RULES (and ZONES, which split a few faces where a colour line
 //                            must cross one: the dark lower band, the wings' flaps and yellow tips, the fins' rudders
 //                            and stripes, the engines' blue rings); and the engines' nozzles, cut from the 8k, their
-//                            cores glowing by the throttle (setThrottle)
+//                            cores dark metal (the jet's colour and glow are plume.js's, laid in each nozzle:
+//                            jetNozzles)
 //   ebCanopy     'glass'     its canopy: nine panes of smoked glass (three down each side, three over the top), one
 //                            straight black spar along each border between them and a wider one round the sill: all
 //                            one part, the spar, placed again and again
@@ -146,15 +147,14 @@ function ebHull(p) {
 // bottom; set on each of the 3k's engines in place of the 3k's own back (its faces behind the cut are gone), its
 // radius fitted to the 3k's engine at the cut (the 8k's is 5% smaller there), the starboard one mirrored. A thin strip
 // in the plane of the cut joins the 3k's ring of corners there to the 8k's.
-// The core glows only while the engines run, by the throttle (setThrottle): off, it is dark as the abyss.
+// The game's maker: "For the engine exhaust the model should basically always be dark. It's the jet, which should be a
+// fancy shader effect ... that actually has color and glow." So the nozzle is dark metal, its core too; the jet
+// (plume.js, from his own afterburner) is laid in each nozzle by jetNozzles, and the throttle drives it.
 // NOZZLE: made by ~/pw/space-math/rigs/explorer-built/rig/nozcut.mjs from the 8k (do not edit by hand): positions about
 // the engine's own axis (int16, 2048 to the metre; z the ship's own), triangles (uint16), each face's kind: o its
 // outside, r the rim, w the bowl's wall, f the core at its bottom
 export const NOZZLE = { cut: -7.76, rCut: 1.0623, pos: '8vdZAtjBYPeQArTB8/bu/7TBhffu/9jB8fiOBNjBhPcFAOzB7fdZAuzB9/duAuzB7fiOBOzBCQYNBtjB5QRnB7TBnAQwB9jB0QYOBTe+EQb/BezBWwdsBOzBYwdqBMbBBwYOBuzBqAQnB+zBy/rnBje+SP14CLTBWv0dCDe+3/jpBDe+b/rnBrTBSvtDBkq9lfl8BDi9dwXR+LTBYwfP+rTB4wY8+9jB0QYF+ze++QJ397TBHAUZ+Te+QAVQ+djBwQT6Bje+jAKKCLTBaAIdCNjB3/ju/826OvnM/c26Fvju/zi9cfhZAji9OvkjAs26p/n/Ac26XvkAAM26EwB4COzB/P94CNjB/P96COzBf/0LCOrBgP0LCOzBf/0LCOzBZQXYA826+ANpBc26LwTEBc260gUhBM26UgYRAs26nQPqAyS/9wTIASS/cfiV/Ti9p/nw/c26J/rO+826hgi1ArTBBwiiAje+UgahBEq9yP0++c26Evy8+s26/v2r+c26Svur+Uq9yvtP+s26/P/1+M26kf2I+Eq9ov4Y+yS//P9i+c26Jfxf/CS//P/u/yS/oADh+iS/TggFAOzBUAju/9jB9QdZAtjB9gdZAuzBUgju/+zB6wduAuzBlPp6BtjBjfp3BuzBmfqDBuzBfv0KCOzB+vieBOzBDQJDBs26/P8eB826MQLVBs26/P+fBs26MgEyBSS/0Qbe/c26Ywen/Uq9UgZz+0q90gXO+826LAcAAM26ZQUX/M26Ugbw/c26YPdM/aLBhPjz+rTB8fhz++rBqfde/Te+zfgY+ze+YPeD/djB9AgAALTB+geZ/ezB9QeD/djB/P/CB0q9aAJnB0q9yP3DBs26lPqH+djBfvqX+ezB8fhy++zBgPwI+FnBNvwj+OzBqfpx+ezBb/rj+KLBjfqF+ezBFQUx+ezBRgVS+ezBUQVi+ezB7/om/yS/gfs1AiS/lPop/M26egIdCDe+/P94CDe+/P/lCLTBvgcAAEq9Yghx/Te+MQI++c26+gG9+c26eASr+Uq9hPjpBLTBqfeQAje+Tvfu/ze+c/eC/ezBcveD/erBcveD/ezBZQWT/yS/rwRx/SS/mgYAAM26kf1nB0q9SP1397TBkP5399jBiv529+zB0fzk9+zBlPrGA826OfoPBM26QQRP+s26aAKI+Eq9/P8a+Eq9DAO7+yS/+AO8+s26EvxXBc26yvvEBc26/v1DBs26tvzGAyS/ov7pBCS/0QY1As26eARWBkq9YwdsAji9BgkAADe+g/lg+0q9uPoZ+Te+hghM/bTBfQIXCOzBaAIgCOzB/P9k9ze+egLS9ze+/P8J97TB+QIa+NjB/P9399jB5QY8++zB7wZR++zBnQQzB+zBf/fu/+zBcveE/ezBbf3S9ze+9geD/ezB9AIU+OzBGwMk+OzBEwB39+zBtP539+zBm/5w9+zB', tris: 'AAABAAIAAAACAAMAAAAEAAEAAAADAAUAAAAFAAYAAAAGAAcAAAAHAAgAAAAIAAQACQAKAAsACQAMAAoACQANAA4ACQAOAA8ACQAPAAwACQAQAA0ACQALABEACQARABAAEgATABQAEgAVABYAEgAWABMAEgAUABcAEgAYABUAEgAXABgAGQAaABsAGQAcABoAGQAdAB4AGQAbAB8AGQAfAB0AGQAeABwACgAMACAACgAhACIACgAgACEACgAiAAsAIwAkACUAIwAlACYAIwAnACgAIwAoACkAIwAmACcAIwApACQAKgArACwALAArAC0ALAAtAC4ALgAtAC8AMAAxADIAMAAyADMAMAAzADQAMAA1ADEAMAA2ADUAMAA0ADYAJAA3ACUAJAA4ADkAJAApADgAJAA5ADcADAA6ADsADAA7ADwADAAPADoADAA8ACAAPQA+AD8APQBAAEEAPQBCAEMAPQBDAEAAPQA/AEIAPQBBAD4ARABFAD8ARABGAEcARABHAEgARAA/AEYARABIAEUASQBKAEsASQBLAEwATQBKAEkATABLAE4ATwBQAFEATwBRAFIATwBSAC0ATwATABYATwAWAAQATwAEAFMATwBTAFAATwAtABMAVABVAFYAVAAxADUAVABXAFUAVABYAFcAVAA1AFgAVABWADEAWQBaAFsAWQBbAFwAWQBdAFoAWQBcAF4AWQBfAF0AWQBeAF8AYABhAGIAYABjAGQAYABiAGUAYAACAGMAYABkAGEAYABlAAIASgBmAEsASgBNAGcASgBnAGgASgBoAGYAVQBpAGoAVQBXAGsAVQBqAFYAVQBrAGkAbABtAG4AbABuAGIAbABvAHAAbABwAHEAbABhAHIAbABiAGEAbABxAHMAbABzAG0AbAByAG8AdAAfAHUAdQAfAHYAdwB4AEcAdwBGAHkAdwBHAEYAdwB5ADgAdwA4ACkAdwApAHgAIQB6AHsAIQAgAHoAIQB7AHwAIQB8ACsAIQArACIAWgBdAH0AWgAcAFsAWgB+ABwAWgB9AH4ARQB/AEIARQCAAH8ARQBCAD8ARQBIAIAAWwAcAB4AWwCBAFwAWwAeAIEAAQCCAIMAAQCEAAIAAQAEAIIAAQCDAIQAhQCGAGIAhQBiAG4AhwCGAIUAiACJAEcAiABHADYAiAA2ADQAiAA0AIoAiACKAIkAaQB6AGoAaQCLAHsAaQB7AHoAaQBrAIsAUwAEAAgAMQBWADIAbwByAIwAbwCNAI4AbwCOAI8AbwCPAHAAbwCMAI0AJQCEAIMAJQA3AIQAJQCDACYAggAVAIMAggAWABUAggAEABYAOgAPAEsAOgBmADsAOgBLAGYAJwCQACgAJwCRAJAAJwAmABgAJwAYAJEAfwCSAJMAfwCAAJIAfwCTAJQAfwCUAEIAlQCJAF4AlQBHAIkAlQBeAJYAlQCWAEgAlQBIAEcATgBLAA8ATgAPAA4AlwCQAJEAlwCYAJkAlwCaAJAAlwCZAJsAlwCRAJgAlwCbAJoAXQBfAIoAXQCcAH0AXQCKAJwAPgBGAD8APgB5AEYAPgBBAHkAeACQAJoAeAAoAJAAeACaAEcAeAApACgAegAgAJ0AegCdAGoAVwBYAJkAVwCZAGsAhABjAAIAhAA3AGMAkgCAAJYAkgBcAIEAkgCBAJMAkgCWAFwAgABIAJYALwAtAFIAOwCeADwAOwBmAJ8AOwCfAJ4AMgBWAGoAMgCdADwAMgBqAJ0AMgA8ADMAQACgAEEAQABkAKAAQABDAKEAQAChAGQAGgAcAH4AGgB+AKIAGgBoABsAGgCiAGgAYQBkAKEAYQChAHIAEwB8ABQAEwAtAHwAngAzADwAngB9AJwAngCfAH0AngCcADMAYwCgAGQAYwA3AKAAowAiAKQApAAiACsApAArACoAWAA1AEcAWABHAJsAWACbAJkAiwCYABcAiwBrAJgAiwAUAHsAiwAXABQAkwClAJQAkwCBAKYAkwCmAKUApwClAKYApwAdAKgApwCMAKUApwCmAB0ApwCoAKkApwCpAIwAqgAbAKsAdgAfABsAdgAbAKoAoAA3ADkAoAA5AEEAiQBfAF4AiQCKAF8AEQALAKwArAALACIArAAiAKMAfgB9AJ8AfgCfAKIAZgBoAKIAZgCiAJ8AFQAmAIMAFQAYACYArQADAIYArQCGAK4ArgCGAIcABQADAK0AIAA8AJ0AQgCUAEMAMwCcADQApQCMAK8ApQCvAJQAYgCGAGUAXACWAF4ANQA2AEcAAgBlAAMAsABoAGcAmACRABcAmABrAJkAHQAfAKgAHQCmAB4AGwBoALAAGwCwAKsAmgCbAEcAQwCvAKEAQwCUAK8AkQAYABcAewAUAHwAgQAeAKYAcgChAK8AcgCvAIwAeQBBADkAeQA5ADgAsQCoALIAsgCoAB8AsgAfAHQAjQCMAKkAjQCpALMAjQCzALQAAwBlAIYAfAAtACsAnACKADQAswCpAKgAswCoALEAjgCNALUAtQCNALQA', kind: 'oooooooooooooooooooooooooooooooooorroroooorrrwwworrooooorooorrwffwwoooooooooooorwrwwrooorrrooooooooooorooooooooooooofwfwwwooooooooorrrwooooooooooffwwwoooooroooooooooooooorroooroowfwwfoorrwwrwrorwwrwwfwoowrooroorwoooooooooooooooooooooooooooooffwoooooooooooooooooowwooooooooooooooorooorfoooroooofooooooorrooooooooroooo' };
-export const NOZ_PAINT = { o: PAL.trim, r: s('#2c2f34', 0.32, 0.8, 0.7), w: s('#1f2125', 0.4, 0.75, 0.8) };
-// (the core: a glow whose colour is a mark, not a colour: red under -1 says "an engine's core" (its heat -1 - red);
-// the built ship's glow material (grimeMaterials) lights it by the throttle; any other draws it black)
-const CORE = [-2, 0, 0];
+export const NOZ_PAINT = { o: PAL.trim, r: s('#2c2f34', 0.32, 0.8, 0.7), w: s('#1f2125', 0.4, 0.75, 0.8), f: s('#141619', 0.45, 0.8, 0.8) };
 let NOZ = null;
 function nozzleMesh() {
   if (NOZ) return NOZ;
@@ -182,7 +182,7 @@ function nozzle(acc, sd) {
     let T = [0, 1, 2].map((j) => at(pos[tris[t * 3 + j]])); if (sd < 0) T = [T[0], T[2], T[1]];
     const n = tnorm(T); if (n.lengthSq() < 1e-14) continue; n.normalize();
     const kind = NOZZLE.kind[t];
-    if (kind === 'f') acc.tris([T.map(dk)], n, CORE, 'glow'); else acc.tris([T.map(dk)], n, NOZ_PAINT[kind]);
+    acc.tris([T.map(dk)], n, NOZ_PAINT[kind]);
   }
   // the join: the 3k's ring and the 8k's, both in the plane of the cut, stitched round by their angles (a strip a few
   // centimetres wide at most, facing back, and forward too)
@@ -196,9 +196,21 @@ function nozzle(acc, sd) {
   }
   for (const T of strip) { if (tnorm(T).lengthSq() < 1e-14) continue; const P = T.map(dk); acc.tris([P], V3(0, 0, -1), PAL.trim); acc.tris([[P[0], P[2], P[1]]], V3(0, 0, 1), PAL.trim); }
 }
-// THE THROTTLE (built-common.js: THROTTLE, ENGINE, setThrottle): how hard the engines run, 0 (off: the cores dark) to
-// 1 (full afterburn); the cores' glow follows it, its colour and brightness: a dull deep orange at idle, bright orange,
-// then hot white-yellow at full power, and blue at full afterburn. ENGINE.color is the uniform the glow material reads.
+// THE JETS (plume.js): where each starts and how big: at the middle of its nozzle's core, streaming straight aft, as
+// wide as the bowl's mouth (its rim's inner edge); the plume's length at full thrust in those radii
+export const JET = { len: 6.5, gain: 1.0 };
+export function jetNozzles() {
+  const { pos, tris, sides } = nozzleMesh(), out = [];
+  for (const sd of [1, -1]) {
+    const S = sides[sd], k = S.r / NOZZLE.rCut, core = new Set(), rim = new Set();
+    for (let t = 0; t < tris.length / 3; t++) for (let j = 0; j < 3; j++) (NOZZLE.kind[t] === 'f' ? core : NOZZLE.kind[t] === 'r' ? rim : new Set()).add(tris[t * 3 + j]);
+    const cz = [...core].reduce((a, i) => a + pos[i].z, 0) / core.size, rr = Math.min(...[...rim].map((i) => Math.hypot(pos[i].x, pos[i].y))) * k;
+    out.push({ at: [S.c.x, S.c.y, cz], dir: [0, 0, -1], r: rr * 0.9 });
+  }
+  return out;
+}
+// THE THROTTLE (built-common.js: THROTTLE, ENGINE, setThrottle): how hard the engines run, 0 (off: no jet, the nozzles
+// dark) to 1 (full afterburn); the jets follow it.
 
 // ── THE CANOPY ──────────────────────────────────────────────────────────────────────────────────────────────────────
 // Nine panes of glass, as the game's maker counts them ("3 on each side, 3 on top") and drew the frames over Meshy B's
@@ -504,6 +516,26 @@ export const STREAKS = [
 ];
 export const GRIME = { dirt: { value: 0.45 } };
 export const grimeMaterials = (mats, { dirt } = {}) => C.grimeMaterials(mats, { dirt, streaks: STREAKS, deck: DECK, grime: GRIME, key: 'ebgrime', glowKey: 'ebglow' });
+
+// ── IN THE SHIP LAB (labs/ships/main.js): this ship's controls, its close views, its materials, its jets, and how its
+// moving parts follow the menu (st: the lab's state; ctx: { updateDoors (the kit's), person (the lab's person, whose
+// coming near opens the airstair) })
+export const LAB = {
+  controls: ['gear', 'door', 'dirt', 'throttle'],
+  dirt: { None: 0, Some: 0.45, Lots: 0.9 },
+  spots: { Canopy: { at: [6.5, 6.8, 12.5], look: [0, 3.7, 5.2] }, Door: { at: [7.6, 1.6, 4.4], look: [2.2, 2.4, 1.6] }, Seats: { at: [0, 3.75, 3.65], look: [0, 3.0, 7.6] } },
+  overlay: 'explorer-b',
+  materials: (mats, dirt) => grimeMaterials(mats, { dirt }),
+  setDirt: (v) => { GRIME.dirt.value = v; },
+  jets: () => [{ role: 'main', nozzles: jetNozzles(), opts: JET }],
+  step(B, st, dt, { updateDoors, person }) { gearStep(B, st.gear === 'up', dt, updateDoors); updateDoors(B.doors.filter((D) => D.piece === 'ebAirstair'), person.position, dt, st.door); },
+  // (for pictures part way: the moving parts held where `at` says, { gear, doors, stair } each 0 to 1; each moved there
+  // from an end, so its leaves are set: from shut by t, or to shut from open)
+  pose(B, at, { updateDoors, person }) {
+    const of = { gear: 'ebGear', doors: 'ebGearDoors', stair: 'ebAirstair' };
+    for (const [k, t] of Object.entries(at)) for (const D of B.doors.filter((d) => d.piece === of[k])) { D.t = t > 0 ? 0 : 1; updateDoors([D], person.position, t > 0 ? t / D.speed : 2 / D.speed, t > 0 ? 'open' : 'shut'); }
+  },
+};
 
 // ── the catalog ─────────────────────────────────────────────────────────────────────────────────────────────────────
 const GR = 'Ships';
