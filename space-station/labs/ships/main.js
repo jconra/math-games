@@ -1,47 +1,60 @@
-// THE SHIP LAB: the ships' outsides at true size. Each one is a model generated (Meshy, image to 3D) from the game's
-// maker's picture of it, made light for the web (space-station/assets/ships/). Next here: the space inside each one and
-// blueprints of the rooms drawn to fit it.
-//   Drag to look round the ship, pinch or wheel to come closer; W A S D move (Space up, C down, Shift faster).
-//   ?ship=<id> opens one ship.
+// THE SHIP LAB: a ship's outside at true size, the space inside it, and blueprints of its rooms drawn on that space.
+//   The outside: a model generated (Meshy, image to 3D) from the game's maker's picture, made light for the web and
+//     placed in the files at true size, nose +z, its left (port) +x, its feet on y 0 (space-station/assets/ships/).
+//   The space inside: measured from the model as a solid, next to it (<shell>.space.json): the floor at the door's
+//     sill, the clear height over every 0.1 m, the outlines at the floor, head height and the ceiling.
+//   The blueprints: rooms, doors and furniture as data (space-station/kit/ships/<id>.blueprint.json; blueprint.js
+//     says what is in one and holds the checks), drawn on the plan and the side section and as boxes in 3D, checked
+//     live as they are edited.
+// ONE MENU along the bottom. In 3D: drag to look round, wheel or pinch to come closer, W A S D move (Space up, C down,
+// Shift faster). On the plan: drag walls, furniture and doors; tap to select; drag elsewhere to move it, wheel or pinch
+// to zoom, double-click to fit. Edits are kept in this browser; Download saves the blueprint as a file.
+//   ?ship=explorer-b|explorer-a  ?bp=<blueprint id>  ?view=3d|split|plan|both
+//   window.SHIPLAB = { ready, options, option(id), ship(id), view(v), cam(c), hull(h), show(k, on), result(), bp() }
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { checkBlueprint, ROOM_KINDS, ITEM_KINDS, doorWall, wallsAt, snap, HEAD, CEIL } from './blueprint.js';
+import { Plan } from './plan.js';
 
-// the ships: each model's file, the length it is drawn at (nose to nozzle, metres) and how it lies in its file
-//   (the generated models lie along x with the nose toward -x and the ship's left toward +z: turned a quarter so the
-//   nose is +z and the ship's left +x, as the kit's ships)
+const $ = (s) => document.querySelector(s), q = new URLSearchParams(location.search);
+// the ships: each a prepared shell (its .glb and .space.json in assets/ships)
 const SHIPS = [
-  { id: 'explorer-b', name: 'Explorer C · Meshy B', file: 'explorer-meshy-b.glb', len: 17.3, turn: Math.PI / 2, note: 'from the 3/4 view' },
-  { id: 'explorer-a', name: 'Explorer C · Meshy A', file: 'explorer-meshy-a.glb', len: 17.3, turn: Math.PI / 2, note: 'from four views' },
+  { id: 'explorer-b', name: 'Meshy B', shell: 'explorer-meshy-b', note: 'Explorer C from his 3/4 view' },
+  { id: 'explorer-a', name: 'Meshy A', shell: 'explorer-meshy-a', note: 'Explorer C from his four views' },
 ];
+const OPTIONS = ['explorer-c-plan', 'explorer-c-row', 'explorer-c-side'];
+const VIEWS = { '3d': '3D', split: '3D + plan', plan: 'Plan', both: 'Plan + side' };
+const CAMS = { Hero: [1, 0.45, 1], Side: [1, 0.05, 0], Front: [0, 0.12, 1], Rear: [0, 0.12, -1], Top: [0.001, 1, 0], Above: [0.55, 1.15, 0.7] };
+const HULLS = { solid: 'Solid', xray: 'See-through', hidden: 'Hidden' };
+const st = {
+  ship: null, shell: null, space: null, opt: null, bp: null, stock: {}, edits: {}, result: null, sel: null,
+  view: VIEWS[q.get('view')] ? q.get('view') : 'split', cam: 'Hero', hull: 'xray', show: { space: true, rooms: true, checks: true, person: true }, undo: [], pending: false,
+};
 
-const canvas = document.getElementById('c'), hud = document.getElementById('hud'), loading = document.getElementById('loading');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+// ── renderer, scene, camera ───────────────────────────────────────────────────────────────────────────────────────
+const canvas = $('#c'), hud = $('#hud'), loading = $('#loading');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: q.has('rig') });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-renderer.outputColorSpace = THREE.SRGBColorSpace;
-renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
+renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
 renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x0b1017);
 scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
 scene.add(new THREE.HemisphereLight(0xcfe3ff, 0x20262e, 0.6));
 const sun = new THREE.DirectionalLight(0xffffff, 2.2);
-sun.position.set(12, 20, 10); sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048); Object.entries({ left: -16, right: 16, top: 16, bottom: -16, near: 1, far: 60 }).forEach(([k, v]) => { sun.shadow.camera[k] = v; });
-sun.shadow.bias = -0.0005;
+sun.position.set(12, 20, 10); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); sun.shadow.bias = -0.0005;
+Object.entries({ left: -16, right: 16, top: 16, bottom: -16, near: 1, far: 60 }).forEach(([k, v]) => { sun.shadow.camera[k] = v; });
 scene.add(sun);
-
 // the hangar floor: dark, a metre grid, a lighter line every 5 m
 scene.fog = new THREE.Fog(0x0b1017, 45, 170);
 const floor = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshStandardMaterial({ color: 0x1a2129, roughness: 0.85, metalness: 0.1 }));
 floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
 const grid = new THREE.GridHelper(60, 60, 0x3a4a5c, 0x26313d); grid.position.y = 0.002; scene.add(grid);
 const grid5 = new THREE.GridHelper(60, 12, 0x4f6a86, 0x4f6a86); grid5.position.y = 0.003; scene.add(grid5);
-
-// a person 1.8 m tall, to show the ship's size
+// a person 1.8 m tall, to show the ship's size (by the ship's door)
 const person = new THREE.Group();
 {
   const m = new THREE.MeshStandardMaterial({ color: 0xd7dde4, roughness: 0.6 });
@@ -50,86 +63,278 @@ const person = new THREE.Group();
   for (const o of [body, head]) { o.castShadow = true; person.add(o); }
 }
 scene.add(person);
-
 const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 400);
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true; controls.dampingFactor = 0.08; controls.maxPolarAngle = Math.PI * 0.495; controls.minDistance = 1.5; controls.maxDistance = 80;
+const BP3 = new THREE.Group(); scene.add(BP3);
 
-// ── the ships ──
+// ── loading a ship: its shell and the space measured inside it ───────────────────────────────────────────────────
 const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
-const loaded = new Map();
-let ship = null, cur = null, xray = false;
-async function loadShip(S) {
-  if (loaded.has(S.id)) return loaded.get(S.id);
-  const g = await loader.loadAsync(`../../assets/ships/${S.file}`);
-  const model = g.scene, box0 = new THREE.Box3().setFromObject(model), size0 = box0.getSize(new THREE.Vector3());
-  const holder = new THREE.Group(); holder.add(model);
-  holder.rotation.y = S.turn; holder.scale.setScalar(S.len / size0.x);
-  holder.updateMatrixWorld(true);
-  const box = new THREE.Box3().setFromObject(holder), c = box.getCenter(new THREE.Vector3());
-  holder.position.set(-c.x, -box.min.y, -c.z);
+const shells = new Map();
+async function loadShell(S) {
+  if (shells.has(S.id)) return shells.get(S.id);
+  const [g, space] = await Promise.all([loader.loadAsync(`../../assets/ships/${S.shell}.glb`), fetch(`../../assets/ships/${S.shell}.space.json`).then((r) => { if (!r.ok) throw new Error('Ship Lab: no space file for ' + S.shell); return r.json(); })]);
+  const model = g.scene, holder = new THREE.Group(); holder.add(model);
+  // (a prepared shell is placed in its file; an older one lies along x, nose -x: turned, scaled to 17.3 m, stood up)
+  if (!model.userData.shipPrep) {
+    const b0 = new THREE.Box3().setFromObject(model), s0 = b0.getSize(new THREE.Vector3());
+    holder.rotation.y = Math.PI / 2; holder.scale.setScalar(17.3 / s0.x); holder.updateMatrixWorld(true);
+    const b = new THREE.Box3().setFromObject(holder), c = b.getCenter(new THREE.Vector3()); holder.position.set(-c.x, -b.min.y, -c.z);
+  }
   let tris = 0;
   model.traverse((o) => {
     if (!o.isMesh) return;
     o.castShadow = o.receiveShadow = true;
     tris += (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3;
     o.userData.mat = o.material;                                     // (its own material, and a see-through copy)
-    o.userData.xray = Object.assign(o.material.clone(), { transparent: true, opacity: 0.22, depthWrite: false });
+    o.userData.xray = Object.assign(o.material.clone(), { transparent: true, opacity: 0.2, depthWrite: false });
   });
   holder.updateMatrixWorld(true);
   const size = new THREE.Box3().setFromObject(holder).getSize(new THREE.Vector3());
-  const rec = { holder, model, tris, size };
-  loaded.set(S.id, rec);
-  return rec;
+  const rec = { holder, model, tris, size, space };
+  shells.set(S.id, rec); return rec;
 }
-function setXray(on) {
-  xray = on;
-  if (ship) ship.model.traverse((o) => { if (o.isMesh) { o.material = on ? o.userData.xray : o.userData.mat; o.castShadow = !on; } });
+function setHull(mode) {
+  st.hull = mode;
+  if (!st.shell) return;
+  st.shell.holder.visible = mode !== 'hidden';
+  st.shell.model.traverse((o) => { if (o.isMesh) { o.material = mode === 'xray' ? o.userData.xray : o.userData.mat; o.castShadow = mode === 'solid'; o.renderOrder = mode === 'xray' ? 10 : 0; } });
 }
-async function show(S) {
+async function showShip(S) {
   loading.hidden = false; loading.classList.add('soft');
-  const rec = await loadShip(S);
-  if (ship) scene.remove(ship.holder);
-  ship = rec; cur = S; scene.add(rec.holder); setXray(xray);
-  person.position.set(rec.size.x / 2 + 0.9, 0, 1.0);                 // (beside the ship's left, about mid-ship)
-  history.replaceState(null, '', `?ship=${S.id}`);
-  view(curView);
-  drawMenu();
+  const rec = await loadShell(S);
+  if (st.shell) scene.remove(st.shell.holder);
+  st.ship = S; st.shell = rec; st.space = rec.space; scene.add(rec.holder); setHull(st.hull);
+  const d = st.space.doors?.port; person.position.set(d ? d.face + 1.2 : rec.size.x / 2 + 0.9, 0, d ? (d.z[0] + d.z[1]) / 2 - 1.6 : 1);
+  plan.hFor = null; recheck(true); setCam(st.cam); url(); menu();
   loading.hidden = true;
 }
 
-// ── the views (his picture's angles): the ship's nose is +z, its left +x ──
-const VIEWS = {
-  Hero: [1.0, 0.45, 1.0], Side: [1, 0.05, 0], Front: [0, 0.12, 1], Rear: [0, 0.12, -1], Top: [0.001, 1, 0],
-};
-let curView = 'Hero';
-function view(name) {
-  curView = name;
-  if (!ship) return;
-  const s = ship.size, R = Math.max(s.x, s.z, s.y * 2) * 0.5, d = new THREE.Vector3(...VIEWS[name]).normalize();
-  const fit = R / Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * (camera.aspect < 1 ? 1.35 / camera.aspect : 1.15);
-  controls.target.set(0, s.y * 0.42, 0);
-  camera.position.copy(controls.target).addScaledVector(d, fit);
-  controls.update();
+// ── the blueprints: the three options (and edits kept in this browser) ───────────────────────────────────────────
+const clone = (o) => JSON.parse(JSON.stringify(o));
+async function loadOptions() {
+  await Promise.all(OPTIONS.map(async (id) => { const r = await fetch(`../../kit/ships/${id}.blueprint.json`); if (!r.ok) throw new Error('Ship Lab: no blueprint ' + id); st.stock[id] = await r.json(); }));
+  try { const saved = JSON.parse(localStorage.getItem('shiplab.edits') || '{}'); for (const [k, v] of Object.entries(saved)) if (v?.rooms) st.edits[k] = v; } catch (e) { /* (no storage here: edits last until the page closes) */ }
+}
+function saveEdits() { try { localStorage.setItem('shiplab.edits', JSON.stringify(st.edits)); } catch (e) { /* (as above) */ } }
+const isEdited = (id) => !!st.edits[id];
+function showOption(id) {
+  st.opt = id; st.bp = st.edits[id] || clone(st.stock[id]); st.sel = null; st.undo = [];
+  recheck(true); url(); menu();
+}
+function recheck(rebuild) {
+  if (!st.bp || !st.space) return;
+  st.result = checkBlueprint(st.bp, st.space);
+  plan.draw(); panel(); if (rebuild) build3d();
+}
+// an edit: a copy kept for Undo first (once per drag), then the change, the checks again
+function edit(fn, live) {
+  if (!st.pending) { st.undo.push(JSON.stringify(st.bp)); if (st.undo.length > 60) st.undo.shift(); }
+  st.pending = !!live;
+  fn(st.bp);
+  st.edits[st.opt] = st.bp;
+  recheck(!live); if (!live) { saveEdits(); menu(); }
+}
+function commit() { st.pending = false; recheck(true); saveEdits(); menu(); }
+function undo() { const s = st.undo.pop(); if (!s) return; st.bp = JSON.parse(s); st.edits[st.opt] = st.bp; saveEdits(); recheck(true); menu(); }
+function resetOption() { if (!st.stock[st.opt]) return; delete st.edits[st.opt]; saveEdits(); showOption(st.opt); }
+function select(sel) { st.sel = sel; plan.draw(); panel(); menu(); }
+
+// ── the blueprint in 3D: room floors and walls as see-through boxes, furniture as solid boxes, the doors' frames ─────
+const matCache = new Map();
+const mat = (key, make) => { if (!matCache.has(key)) matCache.set(key, make()); return matCache.get(key); };
+function build3d() {
+  for (const o of [...BP3.children]) { BP3.remove(o); o.geometry?.dispose(); if (o.isGroup) o.traverse((c) => c.geometry?.dispose()); }
+  if (!st.bp || !st.space) return;
+  const deck = st.space.deck, bp = st.bp;
+  if (st.show.rooms) {
+    for (const r of bp.rooms) {
+      const K = ROOM_KINDS[r.kind] || { color: '#888888' }, [x0, z0, x1, z1] = r.rect, f = deck + (r.floor || 0), top = typeof r.ceiling === 'number' ? r.ceiling : r.ceiling === 'canopy' ? HEAD : CEIL;
+      const fl = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, 0.04, z1 - z0), mat('rf' + K.color, () => new THREE.MeshBasicMaterial({ color: K.color, transparent: true, opacity: 0.55, depthWrite: false })));
+      fl.position.set((x0 + x1) / 2, f + 0.02, (z0 + z1) / 2); BP3.add(fl);
+      const box = new THREE.BoxGeometry(x1 - x0, top, z1 - z0);
+      const walls = new THREE.Mesh(box, mat('rw' + K.color, () => new THREE.MeshBasicMaterial({ color: K.color, transparent: true, opacity: 0.07, depthWrite: false, side: THREE.DoubleSide })));
+      walls.position.set((x0 + x1) / 2, f + top / 2, (z0 + z1) / 2); BP3.add(walls);
+      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(box), mat('re' + K.color, () => new THREE.LineBasicMaterial({ color: K.color })));
+      edges.position.copy(walls.position); BP3.add(edges);
+    }
+    for (const it of bp.items || []) {
+      const K = ITEM_KINDS[it.kind] || { color: '#999999' }, r = bp.rooms.find((q) => q.id === it.room), f = deck + (r?.floor || 0), [x0, z0, x1, z1] = it.rect;
+      const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0 - 0.02, it.h, z1 - z0 - 0.02), mat('it' + K.color, () => new THREE.MeshStandardMaterial({ color: K.color, roughness: 0.7 })));
+      m.position.set((x0 + x1) / 2, f + it.h / 2, (z0 + z1) / 2); m.castShadow = true; BP3.add(m);
+    }
+    for (const d of bp.doors || []) {
+      const w = doorWall(bp, d); if (!w) continue;
+      const r = bp.rooms.find((q) => q.id === d.rooms[0]), f = deck + (r?.floor || 0), outer = d.rooms[1] === 'outside', hgt = outer ? Math.min(2, st.space.doors?.port?.height || 2) : 2;
+      const g = new THREE.Mesh(new THREE.BoxGeometry(w.along === 'z' ? 0.08 : d.width, hgt, w.along === 'z' ? d.width : 0.08), mat(outer ? 'do' : 'di', () => new THREE.MeshBasicMaterial({ color: outer ? 0xffb347 : 0xffe08a, transparent: true, opacity: 0.8 })));
+      g.position.set(w.along === 'z' ? w.x : d.at[0], f + hgt / 2, w.along === 'z' ? d.at[1] : w.z); BP3.add(g);
+    }
+  }
+  // the marks of the checks that fail, red on the floor
+  if (st.show.checks && st.result) for (const m of st.result.marks) {
+    if (!m.rect || !['floor', 'head', 'ceiling', 'headroom', 'corridor'].includes(m.check)) continue;
+    const [x0, z0, x1, z1] = m.rect, red = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, 0.06, z1 - z0), mat('bad', () => new THREE.MeshBasicMaterial({ color: 0xff3030 })));
+    red.position.set((x0 + x1) / 2, deck + 0.05, (z0 + z1) / 2); BP3.add(red);
+  }
+  // the space's outlines: at the floor, head height and the ceiling
+  if (st.show.space) {
+    for (const [k, h, col] of [['floor', 0.03, 0xe8eef5], ['head', HEAD, 0xf2b547], ['ceiling', CEIL, 0x4fd6ff]]) {
+      for (const p of st.space.outlines[k]) {
+        const pts = p.map(([x, z]) => new THREE.Vector3(x, deck + h, z));
+        BP3.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts), mat('ol' + k, () => new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.85 }))));
+      }
+    }
+  }
 }
 
-// ── the menu: the ships; then the views, see-through and the person ──
-const items = document.getElementById('items'), tabs = document.getElementById('tabs');
-const chip = (label, on, fn, sub) => { const b = document.createElement('button'); b.className = 'chip' + (sub ? ' sub' : '') + (on ? ' on' : ''); b.textContent = label; b.onclick = fn; return b; };
-const label = (t) => { const s = document.createElement('span'); s.className = 'kl-label'; s.textContent = t; return s; };
-function drawMenu() {
-  items.replaceChildren(...SHIPS.map((S) => chip(S.name, S === cur, () => show(S))));
-  tabs.replaceChildren(label('View'), ...Object.keys(VIEWS).map((v) => chip(v, v === curView, () => { view(v); drawMenu(); }, true)),
-    Object.assign(document.createElement('span'), { className: 'kl-sep' }),
-    chip('See-through', xray, () => { setXray(!xray); drawMenu(); }, true),
-    chip('Person', person.visible, () => { person.visible = !person.visible; drawMenu(); }, true));
-  document.documentElement.style.setProperty('--bar', document.getElementById('bar').offsetHeight + 'px');
+// ── the views: 3D, 3D over the plan, the plan, the plan over the side section ──────────────────────────────────────
+const plan = new Plan($('#p'), { data: () => st, select, edit, commit });
+function layout() {
+  const bar = $('#bar').offsetHeight, top = $('#top').offsetHeight, W = innerWidth, A = Math.max(80, innerHeight - bar);
+  document.documentElement.style.setProperty('--bar', bar + 'px'); document.documentElement.style.setProperty('--top', top + 'px');
+  $('#panel').style.top = top + 'px';
+  const show3d = st.view === '3d' || st.view === 'split', h3 = st.view === 'split' ? Math.round(A * 0.5) : A;
+  canvas.style.display = show3d ? 'block' : 'none'; canvas.style.height = h3 + 'px'; canvas.style.width = W + 'px';
+  if (show3d) { renderer.setSize(W, h3, false); camera.aspect = W / h3; camera.updateProjectionMatrix(); }
+  if (st.view === '3d') plan.place(0, 0, 0, 0, 'plan');
+  else if (st.view === 'split') plan.place(0, h3, W, A - h3, 'plan');
+  else plan.place(0, 0, W, A, st.view === 'both' ? 'both' : 'plan');
+  plan.draw();
+}
+function setView(v) { st.view = v; url(); layout(); setCam(st.cam); menu(); }
+function setCam(name) {
+  st.cam = name; if (!st.shell) return;
+  // (how far back: the ship's half-size across the screen and up it, from this side, fitted to the view's shape)
+  const s = st.shell.size, d = new THREE.Vector3(...CAMS[name]).normalize(), t = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+  // (and the part of it nearer the eye than its middle: half its depth from this side)
+  const [across, up, near] = { Hero: [0.32 * (s.x + s.z), 0.5 * s.y + 2, 0.15 * (s.x + s.z)], Side: [s.z / 2, s.y / 2, s.x * 0.3], Front: [s.x / 2, s.y / 2, s.z / 2], Rear: [s.x / 2, s.y / 2, s.z / 2], Top: [s.z / 2, s.x / 2, s.y / 2], Above: [0.2 * (s.x + s.z), 0.2 * (s.x + s.z), 0] }[name];
+  const fit = Math.max(across / (t * camera.aspect), up / t) * 1.1 + near;
+  controls.target.set(0, name === 'Above' || name === 'Top' ? st.space.deck + 1 : s.y * 0.42, 0);
+  camera.position.copy(controls.target).addScaledVector(d, fit); controls.update();
+}
+function url() { if (st.ship && st.opt) history.replaceState(null, '', `?ship=${st.ship.id}&bp=${st.opt}&view=${st.view}`); }
+
+// ── the checks panel ─────────────────────────────────────────────────────────────────────────────────────────────
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function panel() {
+  const R = st.result; if (!R) return;
+  const fails = R.checks.filter((k) => !k.pass).length;
+  $('#sum').innerHTML = fails ? `<span class="no">✗ ${fails} of ${R.checks.length} checks fail</span><span>· ${esc(st.bp.name)}</span>` : `<span class="ok">✓ All ${R.checks.length} checks pass</span><span>· ${esc(st.bp.name)}</span>`;
+  let h = `<div class="idea">${esc(st.bp.idea || '')}</div>`;
+  if (st.bp.shell && st.bp.shell !== st.ship.shell) h += `<div class="idea no">Drawn for ${esc(st.bp.shell)}; checked here against ${esc(st.ship.shell)}.</div>`;
+  h += '<ul>' + R.checks.map((k) => `<li><b class="${k.pass ? 'ok' : 'no'}">${k.pass ? '✓' : '✗'} ${esc(k.name)}</b><br><span>${esc(k.detail)}</span></li>`).join('') + '</ul>';
+  h += '<h3>Rooms</h3><table>' + R.sizes.map((s) => `<tr><td><span class="sl-swatch" style="background:${ROOM_KINDS[s.kind]?.color || '#888'}"></span>${esc(s.name)}</td><td>${s.l} × ${s.w} m</td><td>${s.area} m²</td><td>${s.ceiling === 'canopy' ? 'canopy' : s.ceiling + ' m'}${s.floor ? ' (+' + s.floor + ')' : ''}</td><td class="${s.ok ? 'ok' : 'no'}">${s.ok ? '' : 'small'}</td></tr>`).join('') + '</table>';
+  const kinds = [...new Set((st.bp.items || []).map((i) => i.kind))].filter((k) => ITEM_KINDS[k]);
+  h += '<h3>Furniture key</h3><div class="sel">' + kinds.map((k) => `<span class="sl-swatch" style="background:${ITEM_KINDS[k].color}"></span><b>${esc(ITEM_KINDS[k].tag)}</b> ${esc(ITEM_KINDS[k].label)} (${ITEM_KINDS[k].h} m)`).join(' · ') + '</div>';
+  const S = st.sel, o = S && (S.type === 'room' ? st.bp.rooms.find((r) => r.id === S.id) : S.type === 'item' ? st.bp.items.find((i) => i.id === S.id) : st.bp.doors.find((d) => d.id === S.id));
+  if (o) {
+    h += '<h3>Selected</h3><div class="sel">';
+    if (S.type === 'room') h += `${esc(o.name)}: ${o.rect[3] - o.rect[1]} m long, ${o.rect[2] - o.rect[0]} m wide, ceiling ${o.ceiling ?? CEIL}${typeof o.ceiling === 'number' || o.ceiling === undefined ? ' m' : ''}. Drag its walls on the grid.`;
+    if (S.type === 'item') h += `${esc(o.name || ITEM_KINDS[o.kind]?.label)} (${esc(ITEM_KINDS[o.kind]?.label || o.kind)}): ${o.rect[3] - o.rect[1]} × ${o.rect[2] - o.rect[0]} m, ${o.h} m tall, in ${esc(st.bp.rooms.find((r) => r.id === o.room)?.name || o.room)}. Drag it; Turn turns it.`;
+    if (S.type === 'door') h += `Door ${esc(o.id)}: ${o.width} m wide, between ${esc(o.rooms.join(' and '))}. Drag it along a wall, or onto another.`;
+    h += '</div>';
+  }
+  $('#panelBody').innerHTML = h;
 }
 
-// ── W A S D: move the view (Space up, C down, Shift faster) ──
+// ── the menu: blueprints and ships; views and what to show; editing ──────────────────────────────────────────────
+const chip = (label, on, fn, sub, title) => { const b = document.createElement('button'); b.className = 'chip' + (sub ? ' sub' : '') + (on ? ' on' : ''); b.textContent = label; b.onclick = fn; if (title) b.title = title; return b; };
+const lab = (t) => { const s = document.createElement('span'); s.className = 'kl-label'; s.textContent = t; return s; };
+const sep = () => Object.assign(document.createElement('span'), { className: 'kl-sep' });
+function menu() {
+  const opts = OPTIONS.filter((id) => st.stock[id]).concat(st.edits.uploaded ? ['uploaded'] : []);
+  $('#items').replaceChildren(lab('Blueprint'), ...opts.map((id) => chip(((st.edits[id] || st.stock[id])?.name || id) + (isEdited(id) && id !== 'uploaded' ? ' •' : ''), id === st.opt, () => showOption(id))),
+    sep(), lab('Ship'), ...SHIPS.map((S) => chip(S.name, S === st.ship, () => showShip(S), false, S.note)));
+  $('#tabs').replaceChildren(lab('View'), ...Object.entries(VIEWS).map(([k, t]) => chip(t, k === st.view, () => setView(k), true)),
+    sep(), lab('Camera'), ...Object.keys(CAMS).map((k) => chip(k, k === st.cam, () => { setCam(k); if (st.view !== '3d' && st.view !== 'split') setView('split'); menu(); }, true)),
+    sep(), lab('Hull'), ...Object.entries(HULLS).map(([k, t]) => chip(t, k === st.hull, () => { setHull(k); menu(); }, true)),
+    sep(), lab('Show'), ...[['space', 'Space'], ['rooms', 'Rooms'], ['checks', 'Checks'], ['person', 'Person']].map(([k, t]) => chip(t, st.show[k], () => { show(k, !st.show[k]); menu(); }, true)));
+  const add = document.createElement('select'); add.className = 'sl-add'; add.setAttribute('aria-label', 'Add');
+  add.append(new Option('Add…', ''));
+  const og = (label, entries) => { const g = document.createElement('optgroup'); g.label = label; for (const [v, t] of entries) g.append(new Option(t, v)); add.append(g); };
+  og('Rooms', Object.entries(ROOM_KINDS).map(([k, K]) => ['room:' + k, K.label]));
+  og('Furniture', Object.entries(ITEM_KINDS).map(([k, K]) => ['item:' + k, K.label]));
+  og('Doors', [['door', 'Door']]);
+  add.onchange = () => { if (add.value) addThing(add.value); add.value = ''; };
+  const S = st.sel;
+  $('#edit').replaceChildren(lab('Edit'), add,
+    chip('Turn', false, turnSel, true, 'Turn the selected furniture a quarter'), chip('Name', false, renameSel, true, 'Rename the selected room or furniture'),
+    chip('Remove', false, removeSel, true, 'Remove the selected room, furniture or door'), chip('Undo', false, undo, true),
+    chip('Reset', false, resetOption, true, 'Back to the blueprint as it came'),
+    sep(), chip('Download', false, download, true, 'Save this blueprint as a file'), chip('Upload', false, () => $('#file').click(), true, 'Open a blueprint file'));
+  for (const b of $('#edit').querySelectorAll('button')) if (['Turn', 'Name', 'Remove'].includes(b.textContent)) b.disabled = !S || (b.textContent === 'Turn' && S.type !== 'item') || (b.textContent === 'Name' && S.type === 'door');
+  requestAnimationFrame(layout);
+}
+function show(k, on) { st.show[k] = on; plan.show.space = st.show.space; plan.show.checks = st.show.checks; person.visible = st.show.person; build3d(); plan.draw(); }
+
+// ── editing: add, turn, rename, remove, download, upload ─────────────────────────────────────────────────────────
+const uid = (bp, base) => { let n = 1; const ids = new Set([...bp.rooms, ...(bp.items || []), ...(bp.doors || [])].map((o) => o.id)); while (ids.has(base + '-' + n)) n++; return base + '-' + n; };
+function viewCentre() { const P = plan.P; return P ? plan.world(P.x + P.w / 2, P.y + P.h / 2) : { x: 0, z: 0 }; }
+function addThing(what) {
+  const c = viewCentre(); let sel = null;
+  edit((bp) => {
+    if (what.startsWith('room:')) {
+      const kind = what.slice(5), x = snap(c.x, 0.5), z = snap(c.z, 0.5), id = uid(bp, kind);
+      bp.rooms.push({ id, name: ROOM_KINDS[kind].label, kind, rect: [x - 1, z - 1, x + 1, z + 1], ceiling: kind === 'cockpit' ? 'canopy' : CEIL }); sel = { type: 'room', id };
+    } else if (what.startsWith('item:')) {
+      const kind = what.slice(5), K = ITEM_KINDS[kind], id = uid(bp, kind);
+      const inRoom = st.sel?.type === 'room' ? bp.rooms.find((r) => r.id === st.sel.id) : bp.rooms.find((r) => c.x > r.rect[0] && c.x < r.rect[2] && c.z > r.rect[1] && c.z < r.rect[3]);
+      const cx = inRoom ? (inRoom.rect[0] + inRoom.rect[2]) / 2 : c.x, cz = inRoom ? (inRoom.rect[1] + inRoom.rect[3]) / 2 : c.z;
+      const x0 = snap(cx - K.w / 2, 0.25), z0 = snap(cz - K.d / 2, 0.25);
+      (bp.items ||= []).push({ id, kind, room: inRoom?.id || bp.rooms[0]?.id, rect: [x0, z0, x0 + K.w, z0 + K.d], h: K.h, name: K.label }); sel = { type: 'item', id };
+    } else if (what === 'door') {
+      const hits = wallsAt(bp, c.x, c.z, 6); if (!hits.length) return;
+      const b = hits[0], id = uid(bp, 'door'), at = b.along === 'z' ? [b.x, snap(c.z, 0.25)] : [snap(c.x, 0.25), b.z];
+      const on = hits.filter((h) => h.along === b.along && Math.abs((h.x ?? h.z) - (b.x ?? b.z)) < 1e-6).map((h) => h.room);
+      (bp.doors ||= []).push({ id, rooms: [on[0], on[1] || on[0]], at, width: 0.8 }); sel = { type: 'door', id };
+    }
+  });
+  if (sel) select(sel);
+}
+function turnSel() {
+  if (st.sel?.type !== 'item') return;
+  edit((bp) => { const it = bp.items.find((i) => i.id === st.sel.id); if (!it) return; const [x0, z0, x1, z1] = it.rect, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, W = z1 - z0, L = x1 - x0, nx = snap(cx - W / 2, 0.25), nz = snap(cz - L / 2, 0.25); it.rect = [nx, nz, nx + W, nz + L]; });
+}
+function renameSel() {
+  const S = st.sel; if (!S || S.type === 'door') return;
+  const o = S.type === 'room' ? st.bp.rooms.find((r) => r.id === S.id) : st.bp.items.find((i) => i.id === S.id); if (!o) return;
+  const name = prompt('Name', o.name || ''); if (name == null || !name.trim()) return;
+  edit((bp) => { const t = S.type === 'room' ? bp.rooms.find((r) => r.id === S.id) : bp.items.find((i) => i.id === S.id); t.name = name.trim(); });
+}
+function removeSel() {
+  const S = st.sel; if (!S) return;
+  edit((bp) => {
+    if (S.type === 'room') { bp.rooms = bp.rooms.filter((r) => r.id !== S.id); bp.items = (bp.items || []).filter((i) => i.room !== S.id); bp.doors = (bp.doors || []).filter((d) => !d.rooms.includes(S.id)); }
+    if (S.type === 'item') bp.items = bp.items.filter((i) => i.id !== S.id);
+    if (S.type === 'door') bp.doors = bp.doors.filter((d) => d.id !== S.id);
+  });
+  select(null);
+}
+function download() {
+  const blob = new Blob([JSON.stringify(st.bp, null, 2) + '\n'], { type: 'application/json' }), a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = `${st.bp.id || 'blueprint'}.blueprint.json`; document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+$('#file').addEventListener('change', async (e) => {
+  const f = e.target.files?.[0]; e.target.value = ''; if (!f) return;
+  try {
+    const bp = JSON.parse(await f.text());
+    if (!Array.isArray(bp.rooms) || bp.rooms.some((r) => !Array.isArray(r.rect) || r.rect.length !== 4)) throw new Error('not a blueprint: it needs "rooms", each with a "rect" [x0, z0, x1, z1]');
+    bp.items ||= []; bp.doors ||= []; bp.name = bp.name || f.name;
+    st.edits.uploaded = bp; saveEdits(); showOption('uploaded');
+  } catch (err) { console.error('Ship Lab: could not open ' + f.name + ': ' + err.message); }
+});
+
+// ── W A S D: move the view (Space up, C down, Shift faster) ──────────────────────────────────────────────────────
 const keys = new Set();
-addEventListener('keydown', (e) => { if (e.target.tagName !== 'INPUT') { keys.add(e.code); if (e.code === 'Space') e.preventDefault(); } });
+addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') { undo(); e.preventDefault(); return; }
+  if ((e.code === 'Delete' || e.code === 'Backspace') && st.sel) { removeSel(); e.preventDefault(); return; }
+  keys.add(e.code); if (e.code === 'Space') e.preventDefault();
+});
 addEventListener('keyup', (e) => keys.delete(e.code));
+addEventListener('blur', () => keys.clear());
 const _f = new THREE.Vector3(), _r = new THREE.Vector3(), _m = new THREE.Vector3();
 function fly(dt) {
   if (!keys.size) return;
@@ -143,19 +348,26 @@ function fly(dt) {
   camera.position.add(_m); controls.target.add(_m);
 }
 
-// ── the frame ──
-function resize() {
-  const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
-}
-addEventListener('resize', resize); resize();
+// ── the frame ────────────────────────────────────────────────────────────────────────────────────────────────────
+addEventListener('resize', layout);
 let last = performance.now(), fpsT = 0, frames = 0, fps = 0;
 renderer.setAnimationLoop((t) => {
   const dt = Math.min(0.1, (t - last) / 1000); last = t;
-  fly(dt); controls.update(); renderer.render(scene, camera);
-  frames++; fpsT += dt; if (fpsT > 0.5) { fps = Math.round(frames / fpsT); frames = 0; fpsT = 0; }
-  if (ship) hud.textContent = `${cur.name} — ${ship.size.z.toFixed(1)} × ${ship.size.x.toFixed(1)} × ${ship.size.y.toFixed(1)} m (long, wide, tall) · ${Math.round(ship.tris).toLocaleString()} tris · ${fps} fps`;
+  const on = canvas.style.display !== 'none';
+  if (on) { fly(dt); controls.update(); renderer.render(scene, camera); frames++; }
+  fpsT += dt; if (fpsT > 0.5) { fps = Math.round(frames / fpsT); frames = 0; fpsT = 0; }
+  if (st.shell) hud.textContent = `${st.ship.name}: ${st.shell.size.z.toFixed(1)} × ${st.shell.size.x.toFixed(1)} × ${st.shell.size.y.toFixed(1)} m · deck ${st.space.deck} m up · ${Math.round(st.shell.tris).toLocaleString()} tris` + (on ? ` · ${fps} fps` : '');
 });
 
-const want = new URLSearchParams(location.search).get('ship');
-await show(SHIPS.find((S) => S.id === want) || SHIPS[0]);
-window.SHIPLAB = { ready: true };
+await loadOptions();
+st.opt = OPTIONS.includes(q.get('bp')) || (q.get('bp') === 'uploaded' && st.edits.uploaded) ? q.get('bp') : OPTIONS[0];
+st.bp = st.edits[st.opt] || clone(st.stock[st.opt]);
+layout();
+await showShip(SHIPS.find((S) => S.id === q.get('ship')) || SHIPS[0]);
+if (q.has('rig')) $('#panel').open = true;
+window.SHIPLAB = {
+  ready: true, options: () => OPTIONS.slice(), ships: SHIPS.map((S) => S.id),
+  option: (id) => showOption(id), ship: (id) => showShip(SHIPS.find((S) => S.id === id)), view: setView, cam: (c) => { setCam(c); menu(); },
+  hull: (h) => { setHull(h); menu(); }, show: (k, on) => { show(k, on); menu(); }, result: () => st.result, bp: () => st.bp, select,
+  panel: (open) => { $('#panel').open = open; }, fit: () => { plan.fit(); plan.draw(); },
+};

@@ -1,0 +1,52 @@
+{
+  "id": "explorer-c-plan",
+  "name": "His deck plan",
+  "idea": "As close to his deck plan as the shell allows: one straight corridor from the cockpit to engineering; the galley and the bunks to starboard; gear storage, the airlock and the science lab to port; engineering across the stern.",
+  "ship": "ship-explorer",
+  "shell": "explorer-meshy-b",
+  "grid": { "cell": 0.5, "step": 0.5, "deck": 1.65 },
+  "rooms": [
+    { "id": "cockpit", "name": "Cockpit", "kind": "cockpit", "rect": [-1.5, 4, 1.5, 6.5], "floor": 0.3, "ceiling": "canopy" },
+    { "id": "corridor", "name": "Corridor", "kind": "corridor", "rect": [-0.5, -3, 0.5, 4], "ceiling": 2.5 },
+    { "id": "storage", "name": "Gear storage", "kind": "storage", "rect": [0.5, 2.5, 2, 4], "ceiling": 2.5 },
+    { "id": "airlock", "name": "Airlock", "kind": "airlock", "rect": [0.5, 1, 2.5, 2.5], "ceiling": 2 },
+    { "id": "science", "name": "Science lab", "kind": "science", "rect": [0.5, -3, 2, 1], "ceiling": 2.5 },
+    { "id": "galley", "name": "Galley / mess", "kind": "galley", "rect": [-2, 1, -0.5, 4], "ceiling": 2.5 },
+    { "id": "bunks", "name": "Bunks", "kind": "bunks", "rect": [-2, -3, -0.5, 1], "ceiling": 2.5 },
+    { "id": "engineering", "name": "Engineering", "kind": "engineering", "rect": [-2, -5, 2, -3], "ceiling": 2.3 }
+  ],
+  "doors": [
+    { "id": "outer", "rooms": ["airlock", "outside"], "at": [2.5, 1.75], "width": 1 },
+    { "id": "airlock-in", "rooms": ["airlock", "corridor"], "at": [0.5, 1.75], "width": 0.8 },
+    { "id": "cockpit", "rooms": ["cockpit", "corridor"], "at": [0, 4], "width": 0.8 },
+    { "id": "storage", "rooms": ["storage", "corridor"], "at": [0.5, 3], "width": 0.8 },
+    { "id": "galley", "rooms": ["galley", "corridor"], "at": [-0.5, 2], "width": 0.8 },
+    { "id": "bunks", "rooms": ["bunks", "corridor"], "at": [-0.5, -1], "width": 0.8 },
+    { "id": "science", "rooms": ["science", "corridor"], "at": [0.5, -1], "width": 0.8 },
+    { "id": "engineering", "rooms": ["engineering", "corridor"], "at": [0, -3], "width": 1 }
+  ],
+  "items": [
+    { "id": "seat-l", "kind": "seat", "room": "cockpit", "rect": [0.25, 5, 1, 5.75], "h": 1.3, "name": "Bucket seat, left" },
+    { "id": "seat-r", "kind": "seat", "room": "cockpit", "rect": [-1, 5, -0.25, 5.75], "h": 1.3, "name": "Bucket seat, right" },
+    { "id": "pedestal", "kind": "console", "room": "cockpit", "rect": [-0.25, 5, 0.25, 5.75], "h": 0.8, "name": "Throttle pedestal" },
+    { "id": "dash", "kind": "console", "room": "cockpit", "rect": [-1.5, 5.75, 1.5, 6.5], "h": 0.8, "name": "Flight console" },
+    { "id": "side-l", "kind": "console", "room": "cockpit", "rect": [1, 4.25, 1.5, 5.75], "h": 0.9, "name": "Side console, left" },
+    { "id": "side-r", "kind": "console", "room": "cockpit", "rect": [-1.5, 4.25, -1, 5.75], "h": 0.9, "name": "Side console, right" },
+    { "id": "shelves", "kind": "rack", "room": "storage", "rect": [1.5, 2.5, 2, 4], "h": 1.8, "name": "Gear shelves" },
+    { "id": "samples", "kind": "locker", "room": "storage", "rect": [0.5, 3.5, 1.5, 4], "h": 2, "name": "Sample lockers" },
+    { "id": "suits", "kind": "locker", "room": "airlock", "rect": [0.5, 1, 2, 1.25], "h": 2, "name": "Suit lockers" },
+    { "id": "lab-bench", "kind": "counter", "room": "science", "rect": [1.5, -3, 2, 1], "h": 0.9, "name": "Lab bench and screens" },
+    { "id": "survey", "kind": "holo", "room": "science", "rect": [0.5, -3, 1.5, -1.75], "h": 0.9, "name": "Survey table" },
+    { "id": "bench-a", "kind": "bench", "room": "galley", "rect": [-2, 1, -1, 1.5], "h": 0.45, "name": "Bench" },
+    { "id": "table", "kind": "table", "room": "galley", "rect": [-2, 1.5, -1, 2.25], "h": 0.75, "name": "Mess table" },
+    { "id": "bench-b", "kind": "bench", "room": "galley", "rect": [-2, 2.25, -1, 2.75], "h": 0.45, "name": "Bench" },
+    { "id": "counter", "kind": "counter", "room": "galley", "rect": [-2, 2.75, -1.5, 4], "h": 0.9, "name": "Galley counter" },
+    { "id": "fridge", "kind": "locker", "room": "galley", "rect": [-1.5, 3.5, -1, 4], "h": 2, "name": "Cold store" },
+    { "id": "bunk-2", "kind": "bunk", "room": "bunks", "rect": [-2, -1, -1, 1], "h": 1.9, "name": "Bunks, 2-high" },
+    { "id": "bunk-1", "kind": "bed", "room": "bunks", "rect": [-2, -3, -1, -1], "h": 0.6, "name": "Bunk, single" },
+    { "id": "crew-lockers", "kind": "locker", "room": "bunks", "rect": [-1, -3, -0.5, -2.5], "h": 2, "name": "Crew lockers" },
+    { "id": "reactor", "kind": "machine", "room": "engineering", "rect": [-2, -5, -0.75, -3.75], "h": 1.8, "name": "Reactor" },
+    { "id": "drive", "kind": "machine", "room": "engineering", "rect": [0.75, -5, 2, -3.75], "h": 1.8, "name": "Drive and pumps" },
+    { "id": "eng-station", "kind": "console", "room": "engineering", "rect": [-0.5, -5, 0.5, -4.5], "h": 1.2, "name": "Engineering station" }
+  ]
+}

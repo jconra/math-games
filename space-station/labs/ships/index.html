@@ -4,24 +4,29 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Ship Lab</title>
-<meta name="description" content="A space station lab: the ships' outsides, generated from the game's maker's pictures, at true size.">
+<meta name="description" content="A space station lab: the ships' outsides, generated from the game's maker's pictures, at true size; the space inside them, measured; and blueprints of the rooms drawn to fit it, checked as you edit.">
 <!-- the on-screen error box comes first, so a crash shows on screen instead of a blank page -->
 <script src="../../../mathwood-valley/oops.js"></script>
 <link rel="stylesheet" href="../kit/kit.css?v=1">
+<link rel="stylesheet" href="ships.css?v=2">
 <script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/" } }</script>
 </head>
 <body>
-<canvas id="c" aria-label="A ship"></canvas>
-<div class="kl-top">
+<canvas id="c" aria-label="The ship in 3D"></canvas>
+<canvas id="p" aria-label="The ship's deck plan and side section"></canvas>
+<div class="kl-top" id="top">
   <h1>Ship Lab</h1><a href="../">All labs</a>
   <span class="kl-hud" id="hud" aria-live="polite"></span>
 </div>
-<!-- ONE MENU: the bar along the bottom (the ships, then the views and what to show) -->
+<details class="sl-panel" id="panel"><summary id="sum">Checks</summary><div id="panelBody"></div></details>
+<!-- ONE MENU: the bar along the bottom (the blueprints and ships; the views and what to show; editing) -->
 <nav class="kl-bar" id="bar" aria-label="Ship Lab menu">
-  <div class="kl-row" id="items" role="listbox" aria-label="Ships"></div>
+  <div class="kl-row" id="items" role="listbox" aria-label="Blueprints and ships"></div>
   <div class="kl-row" id="tabs"></div>
+  <div class="kl-row" id="edit"></div>
 </nav>
+<input type="file" id="file" accept=".json,application/json" hidden>
 <div class="kl-loading" id="loading">Bringing the ship in…</div>
-<script type="module" src="main.js?v=1"></script>
+<script type="module" src="main.js?v=2"></script>
 </body>
 </html>

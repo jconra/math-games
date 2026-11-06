@@ -1,0 +1,24 @@
+/* The Ship Lab, on the Kit Lab's look (../kit/kit.css): the 3D view and the drawings share the screen above the
+   one menu; a small panel under the title holds the checks (it folds away). */
+#c { position: fixed; left: 0; top: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+#p { position: fixed; left: 0; top: 0; display: none; touch-action: none; }
+.sl-panel { position: fixed; left: 0; z-index: 7; width: min(100%, 380px); max-height: calc(100% - var(--bar, 120px) - var(--top, 40px) - 12px);
+  overflow: auto; background: var(--glass); border: 1px solid var(--edge); border-width: 0 1px 1px 0; border-radius: 0 0 10px 0; font-size: 12.5px; }
+.sl-panel summary { cursor: pointer; padding: 6px 12px; font-weight: 700; list-style: none; display: block; }
+.sl-panel summary > span + span { margin-left: 6px; }
+.sl-panel summary::-webkit-details-marker { display: none; }
+.sl-panel summary::before { content: '▸'; color: var(--mute); margin-right: 6px; }
+.sl-panel[open] summary::before { content: '▾'; }
+.sl-panel .ok { color: #7fe3a6; } .sl-panel .no { color: #ff7a6e; }
+.sl-panel ul { list-style: none; margin: 0; padding: 0 12px 4px; }
+.sl-panel li { padding: 3px 0; border-top: 1px solid rgba(79, 182, 255, 0.12); line-height: 1.35; }
+.sl-panel li b { font-weight: 700; }
+.sl-panel li span { color: var(--ink-2); }
+.sl-panel h3 { font: 700 11px/1 system-ui, sans-serif; letter-spacing: 0.08em; text-transform: uppercase; color: var(--mute); padding: 8px 12px 4px; }
+.sl-panel table { border-collapse: collapse; margin: 0 12px 8px; font-variant-numeric: tabular-nums; }
+.sl-panel td { padding: 2px 8px 2px 0; color: var(--ink-2); }
+.sl-panel td:first-child { color: var(--ink); }
+.sl-panel .sel { padding: 4px 12px 8px; color: var(--ink-2); }
+.sl-panel .idea { padding: 2px 12px 6px; color: var(--ink-2); font-style: italic; }
+.sl-swatch { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; }
+.kl-row select.sl-add { max-width: 150px; }
