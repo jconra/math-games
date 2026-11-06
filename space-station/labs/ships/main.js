@@ -22,7 +22,7 @@
 //   ?ship=built|miner|explorer-b|explorer-a  ?bp=<blueprint id>  ?view=3d|split|plan|both
 //   window.SHIPLAB = { ready, options, option(id), ship(id), view(v), cam(c), hull(h), show(k, on), result(), bp(),
 //     gear(up), door(open), dirt(amount), throttle(v, now) (v a setting's name or 0 to 1; now: no easing), arms(reach),
-//     thrusters(on), canisters(on), moving(), jets() }
+//     thrusters(on), canisters(on), moving(), jets(), shipFor(shell) (the ship whose shell that is: a blueprint's own) }
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -470,7 +470,7 @@ layout();
 await showShip(S0);
 if (q.has('rig')) $('#panel').open = true;
 window.SHIPLAB = {
-  ready: true, options: () => OPTIONS.slice(), ships: SHIPS.map((S) => S.id),
+  ready: true, options: () => OPTIONS.slice(), ships: SHIPS.map((S) => S.id), shipFor: (shell) => SHIPS.find((S) => S.shell === shell)?.id || null,
   option: (id) => showOption(id), ship: (id) => showShip(SHIPS.find((S) => S.id === id)), view: setView, cam: (c) => { setCam(c); menu(); },
   hull: (h) => { setHull(h); menu(); }, show: (k, on) => { show(k, on); menu(); }, result: () => st.result, bp: () => st.bp, select,
   panel: (open) => { $('#panel').open = open; }, fit: () => { plan.fit(); plan.draw(); },

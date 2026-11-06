@@ -49,12 +49,12 @@ const s = (c, r, m, w) => ({ c, r, m, w });
 export const PAL = {
   cream: s('#d6cdb6', 0.55, 0.04, 0.55),       // the off-white panels
   creamEdge: s('#d6cdb6', 0.55, 0.04, 1.0),
-  dark: s('#2f3236', 0.5, 0.3, 0.6),           // the dark graphite bulk
-  darkEdge: s('#2f3236', 0.5, 0.3, 1.0),
+  dark: s('#3a3e44', 0.5, 0.3, 0.6),           // the dark graphite bulk
+  darkEdge: s('#3a3e44', 0.5, 0.3, 1.0),
   black: s('#1b1d20', 0.42, 0.3, 0.4),         // the canopy's spars, the hazard stripes' black
   blackEdge: s('#1b1d20', 0.42, 0.3, 0.9),
   yellow: s('#e2ae1c', 0.45, 0.03, 0.6),       // hazard yellow: the stripes, the canisters' bands, the clamps
-  belly: s('#4c5056', 0.6, 0.25, 0.8),         // the belly
+  belly: s('#555a61', 0.6, 0.25, 0.8),         // the belly
   metal: s('#6d7177', 0.4, 0.6, 0.6),          // joints, rails, rods
   can: s('#cbc2a8', 0.5, 0.18, 0.85),          // the canisters' bodies
   canEnd: s('#3a3d42', 0.45, 0.4, 0.8),        // their rounded ends
@@ -63,7 +63,7 @@ export const PAL = {
   deck: s('#55595f', 0.6, 0.3, 0.6),
   nozzle: s('#1f2125', 0.4, 0.75, 0.8), rim: s('#2c2f34', 0.32, 0.8, 0.7), core: s('#141619', 0.45, 0.8, 0.8),
 };
-export const GLOW = { strip: GLOW_SHIP.strip, warm: GLOW_SHIP.warm, cutter: GLOW_SHIP.cutter, red: [6.0, 0.5, 0.3], green: [0.5, 5.0, 1.4], white: [4, 4, 4] };
+export const GLOW = { strip: GLOW_SHIP.strip, warm: [3.4, 1.35, 0.22], cutter: [2.8, 0.75, 0.08], pod: [0.12, 1.1, 3.2], red: [4.0, 0.15, 0.05], green: [0.2, 3.5, 0.6], white: [4, 4, 4] };
 
 // ── PAINTING THE HULL ────────────────────────────────────────────────────────────────────────────────────────────────
 // ZONES (built-common.js paintFaces): a |x| + b y + c z <= d inside each plane
@@ -78,18 +78,23 @@ export const ZONES = [
   { zone: 'lower', parts: ['body', 'side', 'canopy'], planes: [[0, 1, 0, 2.55]] },
   // the cheeks' hazard stripes: under the canopy's front side window, his "////" in yellow and black
   ...stripes('cheek', ['body'], [[0, 0, 1, 5.55], [0, 0, -1, -3.75], [0, 1, 0, 3.2], [0, -1, 0, -2.55], [-1, 0, 0, -0.95]], 0.9, 0.34, 5.4, 9.2),
+  // the scoop's lip: its front edge, yellow and black bands leaning across it (|x| + y), his picture's
+  ...[...Array(14).keys()].map((k) => ({ zone: k % 2 ? 'lipBlack' : 'lipYellow', parts: ['scoop'], planes: [[0, 0, -1, -6.25], [-1, -0.8, 0, -(k * 0.22)], [1, 0.8, 0, (k + 1) * 0.22]] })),
 ];
 const edge = (paint) => (f) => (f.thin ? paint + 'Edge' : paint);
 export const RULES = [
-  ['the canopy: glass, its frame', (f) => f.part === 'canopy', (f) => (canopyPanes().covers(f.c) ? 'glass' : f.zone === 'lower' ? edge('dark')(f) : edge('black')(f))],
+  // (the canopy's faces no pane covers are the hood round the glass: cream, as his picture's; the spars are its frame)
+  ['the canopy: glass, its hood', (f) => f.part === 'canopy', (f) => (canopyPanes().covers(f.c) ? 'glass' : f.zone === 'lower' ? edge('dark')(f) : edge('cream')(f))],
   ['under the canopy\'s glass: gone', (f) => canopyPanes().covers(f.c, 0.12), 'glass'],
   ['the cheeks\' stripes', (f) => f.zone === 'cheekYellow', 'yellow'],
   ['the cheeks\' stripes, black', (f) => f.zone === 'cheekBlack', 'black'],
+  ['the scoop\'s lip: yellow and black', (f) => f.zone === 'lipYellow' || f.zone === 'lipBlack', (f) => (f.zone === 'lipYellow' ? 'yellow' : 'black')],
   ['the scoop: dark, its tines metal', (f) => f.part === 'scoop', (f) => (f.thin ? 'metal' : 'dark')],
   ['the keel: dark', (f) => f.part === 'keel', 'dark'],
   ['the belly: grey', (f) => f.n.y < -0.55, 'belly'],
   ['the roof\'s modules: dark', (f) => f.part === 'roof', edge('dark')],
-  ['behind the canisters: dark', (f) => f.c.z < -0.55 && f.c.z > -6.3 && Math.abs(f.n.x) > 0.55, edge('dark')],
+  ['behind the canisters, and the stern\'s sides: dark', (f) => f.c.z < -0.55 && Math.abs(f.n.x) > 0.55, edge('dark')],
+  ['the stern round the engine: dark (cream panels on its top)', (f) => f.c.z < -5.6 && f.n.y < 0.6, edge('dark')],
   ['the lower band: dark', (f) => f.zone === 'lower', edge('dark')],
   ['the side blocks\' fronts and backs: dark', (f) => f.part === 'side' && Math.abs(f.n.z) > 0.6, edge('dark')],
   ['everything else: cream', () => true, edge('cream')],
@@ -189,9 +194,9 @@ function mbCanopy(p) { return C.drawCanopy(p, canopyPanes(), CANOPY, GLASS, part
 export const MARKS = {
   // his blue strips: under the windscreen across the nose, along each side block, along the roof's sides aft
   strips: [{ side: true, z: [0.75, 1.45], y: 2.9, h: 0.07 }, { side: true, z: [-6.9, -6.35], y: 3.7, h: 0.07 }],
-  noseStrip: { x: 0.32, y: 3.1, h: 0.06 },
+  noseStrip: { x: 0.34, y: 2.98, h: 0.07 },
   // his amber headlamps: one each side on the nose's lower face
-  lamps: [{ x: 0.95, y: 2.55, w: 0.36, h: 0.14 }],
+  lamps: [{ x: 0.95, y: 2.5, w: 0.44, h: 0.2 }],
 };
 const onSide = (s, y, z, lift = 0.012) => { const h = rayHull(V3(s * 8, y, z), V3(-s, 0, 0)); return h ? h.p.addScaledVector(h.n, lift) : null; };
 const onFront = (x, y, lift = 0.012) => { const h = rayHull(V3(x, y, 12), V3(0, 0, -1)); return h ? h.p.addScaledVector(h.n, lift) : null; };
@@ -253,18 +258,39 @@ function mbCanister(p, name) {
 // out and down to dig (door 'arm' at 0); stowed (1) it folds up beside the cheek for flight: the shoulder lifts the
 // upper arm, the elbow folds the forearm back under it, the wrist tucks the hand in. Hazard stripes run along the
 // upper arm and the forearm (his picture's yellow and black).
-export const ARMS = { stow: { shoulder: 0.62, elbow: -2.35, wrist: -1.1 }, speed: 0.45, spin: 7.0 };
+export const ARMS = { stow: { shoulder: 0, elbow: -3.0, wrist: 2.3 }, speed: 0.45, spin: 7.0 };
 const ARM_PAINT = (seg) => (F) => {
   if (F.kind === 'w') return F.n.x * F.n.x > 0.6 ? PAL.dark : PAL.metal;
   if (F.kind === 'j') return PAL.metal;
   if (F.kind === 's') return PAL.yellow;
-  // (the plates: yellow along their tops on the upper arm and forearm, dark elsewhere)
-  if ((seg === 'upper' || seg === 'fore') && F.n.y > 0.55) return PAL.yellow;
-  return seg === 'mount' ? PAL.dark : PAL.dark;
+  if (F.band != null) return F.band % 2 ? PAL.black : PAL.yellow;
+  return PAL.dark;
 };
+// HAZARD STRIPES: a face cut into bands across it (where y + z (ship frame) steps by STRIPE.w), every other one
+// yellow: on the upper arm's and forearm's sides, and the scoop's lip (his picture's yellow and black)
+export const STRIPE = { w: 0.2, lean: 1.0 };
+function bands(faces, test, g = (v) => v.y + STRIPE.lean * v.z, w = STRIPE.w) {
+  const out = [];
+  for (const F of faces) {
+    if (!test(F)) { out.push(F); continue; }
+    const vals = F.T.map(g), lo = Math.floor(Math.min(...vals) / w), hi = Math.floor(Math.max(...vals) / w);
+    for (let b = lo; b <= hi; b++) {
+      // (the part of the triangle between the band's two lines)
+      let P = F.T;
+      for (const [c, keepAbove] of [[b * w, true], [(b + 1) * w, false]]) {
+        const Q = []; for (let i = 0; i < P.length; i++) { const a = P[i], e = P[(i + 1) % P.length], fa = (g(a) - c) * (keepAbove ? 1 : -1), fe = (g(e) - c) * (keepAbove ? 1 : -1); if (fa >= 0) Q.push(a); if ((fa > 0 && fe < 0) || (fa < 0 && fe > 0)) Q.push(a.clone().lerp(e, fa / (fa - fe))); }
+        P = Q; if (P.length < 3) break;
+      }
+      if (P.length < 3) continue;
+      for (let i = 1; i < P.length - 1; i++) { const T = [P[0], P[i], P[i + 1]]; if (tnorm(T).lengthSq() > 1e-12) out.push({ ...F, T, band: ((b % 2) + 2) % 2 }); }
+    }
+  }
+  return out;
+}
+const sideOfArm = (F) => F.kind === 'a' && Math.abs(F.n.x) > 0.45;
 function mbArm(p, side) {
   const m = side === 'port', J = ARM.joints, jp = (k) => { const v = V3(...J[k].at); if (m) v.x = -v.x; return dk(v); };
-  const segFaces = (k) => kindFaces(ARM.segs[k], (v) => v, m);
+  const segFaces = (k) => { const f = kindFaces(ARM.segs[k], (v) => v, m); return k === 'upper' || k === 'fore' ? bands(f, sideOfArm) : f; };
   const acc = new Acc(); drawKinds(acc, segFaces('mount'), ARM_PAINT('mount')); acc.flush(p);
   const H = { shoulder: { at: jp('shoulder').toArray(), axis: [1, 0, 0], angle: ARMS.stow.shoulder }, elbow: { at: jp('elbow').toArray(), axis: [1, 0, 0], angle: ARMS.stow.elbow }, wrist: { at: jp('wrist').toArray(), axis: [1, 0, 0], angle: ARMS.stow.wrist } };
   const leaf = (k, hinges, extra) => p.leaf(`mb:arm ${k}:${side}`, (lp) => { const a = new Acc(); drawKinds(a, segFaces(k), ARM_PAINT(k)); if (extra) extra(a); a.flush(lp); }, { door: 'arm', hinge: hinges });
@@ -306,14 +332,14 @@ function mbPod(p, name) {
     // (its collar on the pylon, and a blue light in each end round the nozzle: his picture's)
     C.boxAt(a, V3(0, -P.up * (half + 0.02), 0), AX, [0.13, 0.04, 0.16], PAL.metal, [], (v) => v);
     const hz = POD.size[2] / 2 + 0.004;
-    for (const sz of [1, -1]) { const q = [[-0.2, -0.13], [0.2, -0.13], [0.2, 0.13], [-0.2, 0.13]].map(([x, y]) => V3(x, y, sz * hz)); a.poly(sz > 0 ? q : q.slice().reverse(), V3(0, 0, sz), GLOW.strip, 'glow', 99); }
+    for (const sz of [1, -1]) { const q = [[-0.14, -0.08], [0.14, -0.08], [0.14, 0.08], [-0.14, 0.08]].map(([x, y]) => V3(x, y, sz * hz)); a.poly(sz > 0 ? q : q.slice().reverse(), V3(0, 0, sz), GLOW.pod, 'glow', 99); }
     a.flush(lp);
   }, { at: dk(c).toArray(), door: 'pod', hinge: [yaw, pitch] });
   p.door('pod', dk(c).toArray(), 0, 1);
   return p;
 }
 // the pods' jets (plume.js): one at each end of each pod, at rest; the lab (podStep) aims them as the pods turn
-export const POD_JET = { len: 4.0, gain: 0.9, r: 0.16 };
+export const POD_JET = { len: 7.0, gain: 0.9, r: 0.16 };
 export function podJets() { const out = []; for (const P of PODS) for (const sz of [1, -1]) out.push({ at: [P.at[0], P.at[1], P.at[2] + sz * (POD.size[2] / 2 + 0.01)], dir: [0, 0, sz], r: POD_JET.r, pod: P.name, end: sz }); return out; }
 
 // ── THE LIFT ─────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -427,7 +453,7 @@ function mbWells(p) { const acc = new Acc(); for (const W of Object.values(WELLS
 // (the canopy's sill is high on this ship: a pilot sitting on the cabin's deck would not see over it), the seats'
 // middles at SEATS_Z; no overheads (the glass is the roof), no engineer, handholds or locker. The tub under the glass
 // closes the cockpit off (no sky through a gap), the bulkhead behind with the cabin's door (shut) and steps down to it.
-export const COCKPIT = { floor: 0.62, seatsZ: 4.25, wallX: 1.12, gap: 0.42, dash: { w: 1.9, h: 0.86, knee: 0.6, bow: 0.12, depth: 1.25 }, canopy: { y: 3.37 - DECK - 0.62, z: 5.82 - 4.25, slope: 0.6 }, tubX: 1.2 };
+export const COCKPIT = { floor: 0.62, seatsZ: 4.25, wallX: 1.05, gap: 0.42, dash: { w: 1.5, h: 0.72, knee: 0.55, bow: 0.12, depth: 0.85 }, canopy: { y: 3.37 - DECK - 0.62, z: 5.82 - 4.25, slope: 0.6 }, tubX: 1.2 };
 export const COCKPIT_DROP = /^overhead|^handhold|^engineer|^locker/;
 export function builtCockpitPlan() { return C.builtCockpitPlan(COCKPIT, COCKPIT_DROP); }
 function mbCockpit(p) {
