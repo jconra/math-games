@@ -13,7 +13,7 @@
 //   mbMounts     'both sides'   the canisters' fixed mounts (the 8k's cradles, back plates, rails, middle clamps)
 //   mbCanopy     'glass'     the canopy: the panes his picture has (a windscreen, a roof pane, three down each side) in
 //                            smoked glass, one black spar part along every border and round the outline
-//   mbMarks      'marks'     what is laid on the skin: the blue light strips, the amber headlamps, the nav lights
+//   mbMarks      'marks'     what is laid on the skin: the blue light strips, the amber headlamps
 //   mbCanister   (8)         an ore canister on its mount: a kit door leaf (door 'canister': slid out off its cradle,
 //                            the station's crane's first move; then up by the lug on its top, CANISTERS.lift)
 //   mbArm        'port' / 'starboard'   a mining arm: its mount on the cheek, and the upper arm, forearm, hand and
@@ -62,7 +62,8 @@ export const PAL = {
   deck: s('#55595f', 0.6, 0.3, 0.6),
   nozzle: s('#1f2125', 0.4, 0.75, 0.8), rim: s('#2c2f34', 0.32, 0.8, 0.7), core: s('#141619', 0.45, 0.8, 0.8),
 };
-export const GLOW = { strip: [0.06, 0.62, 3.4], warm: [3.6, 1.15, 0.12], cutter: [3.4, 0.85, 0.06], pod: [0.06, 0.62, 3.4], red: [4.0, 0.15, 0.05], green: [0.2, 3.5, 0.6], white: [4, 4, 4] };
+// (glows kept below the point where they wash out to white: the blue stays blue, the amber amber)
+export const GLOW = { strip: [0.04, 0.5, 2.1], warm: [2.1, 0.78, 0.1], cutter: [1.9, 0.5, 0.04], pod: [0.04, 0.5, 2.1] };
 
 // ── PAINTING THE HULL ────────────────────────────────────────────────────────────────────────────────────────────────
 // ZONES (built-common.js paintFaces): a |x| + b y + c z <= d inside each plane
@@ -75,6 +76,8 @@ const stripes = (zone, parts, region, lean, width, from, to) => {
 export const ZONES = [
   // the dark lower band along the body and the blocks on its sides: under y 2.55 (his dark lower hull)
   { zone: 'lower', parts: ['body', 'side', 'canopy'], planes: [[0, 1, 0, 2.55]] },
+  // the nose's lower face: under y 2.8 forward of z 5.6, his dark band with the headlamps in it
+  { zone: 'face', parts: ['body'], planes: [[0, 1, 0, 2.8], [0, 0, -1, -5.6]] },
   // the cheeks' hazard stripes: under the canopy's front side window, his "////" in yellow and black
   ...stripes('cheek', ['body'], [[0, 0, 1, 5.55], [0, 0, -1, -3.75], [0, 1, 0, 3.2], [0, -1, 0, -2.55], [-1, 0, 0, -0.95]], 0.9, 0.34, 5.4, 9.2),
   // the scoop's lip: its front edge, yellow and black bands leaning across it (|x| + y), his picture's
@@ -96,6 +99,7 @@ export const RULES = [
   ['behind the canisters, and the stern\'s sides: dark', (f) => f.c.z < -0.55 && Math.abs(f.n.x) > 0.55, edge('dark')],
   ['the stern round the engine: dark (cream panels on its top)', (f) => f.c.z < -5.6 && f.n.y < 0.6, edge('dark')],
   ['the lower band: dark', (f) => f.zone === 'lower', edge('dark')],
+  ['the nose\'s lower face: dark', (f) => f.zone === 'face', edge('dark')],
   ['the side blocks\' fronts and backs: dark', (f) => f.part === 'side' && Math.abs(f.n.z) > 0.6, edge('dark')],
   ['everything else: cream', () => true, edge('cream')],
 ];
@@ -132,7 +136,7 @@ const RING = (() => {
   // (the band's widest, across and up, from its own vertices)
   const M = mesh(ENG); let rx = 0, ry = 0, z0 = 1e9, z1 = -1e9;
   for (let t = 0; t < M.tris.length / 3; t++) if (ENG.kind[t] === 'b') for (let k = 0; k < 3; k++) { const v = at(M, M.tris[t * 3 + k]); rx = Math.max(rx, Math.abs(v.x - ENGINE_AT.axis[0])); ry = Math.max(ry, Math.abs(v.y - ENGINE_AT.axis[1])); z0 = Math.min(z0, v.z); z1 = Math.max(z1, v.z); }
-  const zm = (z0 + z1) / 2; return { r: [rx + 0.012, ry + 0.012], z: [zm - 0.09, zm + 0.09] };
+  const zm = (z0 + z1) / 2, hz = Math.min(0.2, (z1 - z0) / 2 - 0.03); return { r: [rx + 0.012, ry + 0.012], z: [zm - hz, zm + hz], n: 36 };
 })();
 // THE MOUNTS (the 8k's cradles, back plate, rails and middle clamps, port and starboard): kinds k cradle, p plate, m
 // rail, y clamp
@@ -142,9 +146,9 @@ function mbHull(p) {
   C.drawFaces(acc, hullFaces(), { PAL, dk, backSurf: PAL.dark });
   const eng = kindFaces(ENG);
   drawKinds(acc, eng, (F) => ENGINE_PAINT[F.kind]);
-  // (the ring: a strip of light all round the band, a hair proud of its widest)
-  { const [ax, ay] = ENGINE_AT.axis, n = 32, P = (i, z, out) => { const t = (i / n) * PI * 2, rx = RING.r[0] + out, ry = RING.r[1] + out; return V3(ax + Math.cos(t) * rx, ay + Math.sin(t) * ry, z); };
-    for (let i = 0; i < n; i++) { const q = [P(i, RING.z[0], 0), P(i + 1, RING.z[0], 0), P(i + 1, RING.z[1], 0), P(i, RING.z[1], 0)], m = q[0].clone().add(q[2]).multiplyScalar(0.5); acc.poly(q.map(dk), V3(m.x - ax, m.y - ay, 0).normalize(), GLOW.strip, 'glow', 99); } }
+  // (the ring: bars of light all round the band, a hair proud of its widest; two segments lit, one dark)
+  { const [ax, ay] = ENGINE_AT.axis, n = RING.n, P = (i, z, out) => { const t = (i / n) * PI * 2, rx = RING.r[0] + out, ry = RING.r[1] + out; return V3(ax + Math.cos(t) * rx, ay + Math.sin(t) * ry, z); };
+    for (let i = 0; i < n; i++) { if (i % 3 === 2) continue; const q = [P(i, RING.z[0], 0), P(i + 1, RING.z[0], 0), P(i + 1, RING.z[1], 0), P(i, RING.z[1], 0)], m = q[0].clone().add(q[2]).multiplyScalar(0.5); acc.poly(q.map(dk), V3(m.x - ax, m.y - ay, 0).normalize(), GLOW.strip, 'glow', 99); } }
   acc.flush(p);
   return p;
 }
@@ -202,8 +206,9 @@ export const MARKS = {
   // his blue strips: under the windscreen across the nose, along each side block, along the roof's sides aft
   strips: [{ side: true, z: [0.75, 1.45], y: 2.9, h: 0.07 }, { side: true, z: [-6.9, -6.35], y: 3.7, h: 0.07 }],
   noseStrip: { x: 0.34, y: 2.98, h: 0.07 },
-  // his amber headlamps: one each side on the nose's lower face
-  lamps: [{ x: 0.95, y: 2.5, w: 0.44, h: 0.2 }],
+  // his amber headlamps: one each side in the nose's dark lower face, each a housing standing out of it (the same both
+  // sides: the 3k is not quite symmetric) with its glowing face at the front
+  lamps: [{ x: 0.85, y: 2.5, w: 0.42, h: 0.18, rim: 0.035 }],
 };
 const onSide = (s, y, z, lift = 0.012) => { const h = rayHull(V3(s * 8, y, z), V3(-s, 0, 0)); return h ? h.p.addScaledVector(h.n, lift) : null; };
 const onFront = (x, y, lift = 0.012) => { const h = rayHull(V3(x, y, 12), V3(0, 0, -1)); return h ? h.p.addScaledVector(h.n, lift) : null; };
@@ -220,15 +225,16 @@ function mbMarks(p) {
       }
     }
     for (const Lm of MARKS.lamps) {
-      const c = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => onFront(s * Lm.x + a * Lm.w / 2, Lm.y + b * Lm.h / 2));
-      if (c.every((v) => v)) acc.poly(c.map(dk), V3(0, 0, 1), GLOW.warm, 'glow', 99);
-      p.light([s * Lm.x, Lm.y - DECK, 7.4], 0.6, [1.2, 0.85, 0.45], [0, -0.3, 1], 4);
+      // (how far forward the face is round the lamp, both sides: the housing's front stands just in front of it all)
+      const zs = []; for (const ss of [1, -1]) for (const a of [-1, 1]) for (const b of [-1, 1]) { const h = onFront(ss * Lm.x + a * (Lm.w / 2 + Lm.rim), Lm.y + b * (Lm.h / 2 + Lm.rim), 0); if (h) zs.push(h.z); }
+      const zf = Math.max(...zs) + 0.04, zb = Math.min(...zs) - 0.06, x = s * Lm.x;
+      boxAt(acc, V3(x, Lm.y, (zf + zb) / 2), AX, [Lm.w / 2 + Lm.rim, Lm.h / 2 + Lm.rim, (zf - zb) / 2], PAL.black, ['w-']);
+      acc.poly([V3(x - Lm.w / 2, Lm.y - Lm.h / 2, zf + 0.004), V3(x + Lm.w / 2, Lm.y - Lm.h / 2, zf + 0.004), V3(x + Lm.w / 2, Lm.y + Lm.h / 2, zf + 0.004), V3(x - Lm.w / 2, Lm.y + Lm.h / 2, zf + 0.004)].map(dk), V3(0, 0, 1), GLOW.warm, 'glow', 99);
+      p.light([x, Lm.y - DECK, zf + 0.3], 0.6, [1.2, 0.85, 0.45], [0, -0.3, 1], 4);
     }
   }
   { const N = MARKS.noseStrip, c = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([a, b]) => onFront(a * N.x, N.y + b * N.h / 2)); if (c.every((v) => v)) acc.poly(c.map(dk), V3(0, 0, 1), GLOW.strip, 'glow', 99); }
-  // nav lights: red port, green starboard, on the side blocks' outer corners; white on the stern's top
-  const nav = (c, col) => C.boxAtGlow(acc, c, 0.05, col, dk);
-  nav(V3(2.17, 2.9, 1.5), GLOW.red); nav(V3(-2.17, 2.9, 1.5), GLOW.green); nav(V3(0, 4.42, -6.9), GLOW.white);
+  // (no nav lights: his picture has none)
   acc.flush(p);
   return p;
 }
@@ -309,18 +315,38 @@ function bands(faces, test, g = (v) => v.y + STRIPE.lean * v.z, w = STRIPE.w) {
   return out;
 }
 const sideOfArm = (F) => F.kind === 'a' && Math.abs(F.n.x) > 0.45;
+// THE CUTTER WHEEL (on the hand, spinning about its axle across the ship): a drum of CUTTER.n sides with a tooth on each,
+// graphite; on each face a yellow ring and the hub glowing orange. Its size the 8k's wheel's (at its teeth's tips).
+export const CUTTER = { r: 0.4, tooth: 0.08, half: 0.22, n: 12, ring: [0.27, 0.36], hub: 0.17 };
+function cutterWheel(a, w) {
+  const { r, tooth, half, n, ring, hub } = CUTTER, P = (t, rr, x) => V3(x, w.y + Math.cos(t) * rr, w.z + Math.sin(t) * rr), ang = (i) => (i / n) * PI * 2;
+  for (let i = 0; i < n; i++) {
+    const t0 = ang(i), t1 = ang(i + 1), tm = (t0 + t1) / 2, out = V3(0, Math.cos(tm), Math.sin(tm));
+    // the rim
+    a.poly([P(t0, r, w.x - half), P(t1, r, w.x - half), P(t1, r, w.x + half), P(t0, r, w.x + half)], out, PAL.dark, 'solid', 99);
+    // the tooth: a block on the rim, leaning forward the way the wheel turns
+    const c = P(tm, r + tooth / 2, w.x), u = out, v = V3(0, -Math.sin(tm), Math.cos(tm));
+    C.boxAt(a, c, [V3(1, 0, 0), u, v], [half * 0.85, tooth / 2, 0.06], PAL.metal, [], (q) => q);
+    // its faces: the hub, the dark ring, the yellow ring, the dark edge
+    for (const sx of [1, -1]) {
+      const x = w.x + sx * half, nn = V3(sx, 0, 0);
+      a.poly([V3(x, w.y, w.z), P(t0, hub, x), P(t1, hub, x)], nn, GLOW.cutter, 'glow', 99);
+      for (const [r0, r1, col] of [[hub, ring[0], PAL.dark], [ring[0], ring[1], PAL.yellow], [ring[1], r, PAL.dark]]) a.poly([P(t0, r0, x), P(t1, r0, x), P(t1, r1, x), P(t0, r1, x)], nn, col, 'solid', 99);
+    }
+  }
+}
 function mbArm(p, side) {
   const m = side === 'port', J = ARM.joints, jp = (k) => { const v = V3(...J[k].at); if (m) v.x = -v.x; return dk(v); };
-  const segFaces = (k) => { const f = kindFaces(ARM.segs[k], (v) => v, m); return k === 'upper' ? bands(f, sideOfArm) : f; };
+  const segFaces = (k) => { const f = kindFaces(ARM.segs[k], (v) => v, m); return k === 'upper' || k === 'fore' ? bands(f, sideOfArm) : f; };
   const acc = new Acc(); drawKinds(acc, segFaces('mount'), ARM_PAINT('mount')); acc.flush(p);
   const H = { shoulder: { at: jp('shoulder').toArray(), axis: [1, 0, 0], angle: ARMS.stow.shoulder }, elbow: { at: jp('elbow').toArray(), axis: [1, 0, 0], angle: ARMS.stow.elbow }, wrist: { at: jp('wrist').toArray(), axis: [1, 0, 0], angle: ARMS.stow.wrist } };
-  const leaf = (k, hinges, extra) => p.leaf(`mb:arm ${k}:${side}`, (lp) => { const a = new Acc(); drawKinds(a, segFaces(k), ARM_PAINT(k)); if (extra) extra(a); a.flush(lp); }, { door: 'arm', hinge: hinges });
+  const leaf = (k, hinges, extra, own) => p.leaf(`mb:arm ${k}:${side}`, (lp) => { const a = new Acc(); if (!own) drawKinds(a, segFaces(k), ARM_PAINT(k)); if (extra) extra(a); a.flush(lp); }, { door: 'arm', hinge: hinges });
   leaf('upper', [H.shoulder]);
   leaf('fore', [H.shoulder, H.elbow]);
   leaf('hand', [H.shoulder, H.elbow, H.wrist]);
   // (the wheel: its hub glowing orange, his picture's cutter, on both faces)
   const w = jp('wheel');
-  leaf('cutter', [H.shoulder, H.elbow, H.wrist], (a) => { for (const sx of [1, -1]) { const x = w.x + sx * (J.wheel.size[0] / 2 + 0.01); const r = 0.24, P = []; for (let i = 0; i < 8; i++) { const t = (i / 8) * PI * 2; P.push(V3(x, w.y + Math.cos(t) * r, w.z + Math.sin(t) * r)); } a.poly(sx > 0 ? P : P.slice().reverse(), V3(sx, 0, 0), GLOW.cutter, 'glow', 99); } });
+  leaf('cutter', [H.shoulder, H.elbow, H.wrist], (a) => cutterWheel(a, w), true);
   p.door('arm', [0, -DECK, 0], 0, ARMS.speed);
   return p;
 }
@@ -384,7 +410,7 @@ function mbLift(p) {
   for (const [P, n] of [[[V3(ax0, DECK, az0), V3(x0, DECK, az0), V3(x0, DECK, az1), V3(ax0, DECK, az1)], V3(0, 1, 0)], [[V3(x1, DECK, az0), V3(ax1, DECK, az0), V3(ax1, DECK, az1), V3(x1, DECK, az1)], V3(0, 1, 0)], [[V3(x0, DECK, az0), V3(x1, DECK, az0), V3(x1, DECK, z0), V3(x0, DECK, z0)], V3(0, 1, 0)], [[V3(x0, DECK, z1), V3(x1, DECK, z1), V3(x1, DECK, az1), V3(x0, DECK, az1)], V3(0, 1, 0)]]) polyTo(acc, P, n, PAL.deck);
   for (const [a, b, n] of [[[ax0, az0], [ax1, az0], V3(0, 0, 1)], [[ax1, az1], [ax0, az1], V3(0, 0, -1)], [[ax1, az0], [ax1, az1], V3(-1, 0, 0)], [[ax0, az1], [ax0, az0], V3(1, 0, 0)]]) polyTo(acc, [V3(a[0], DECK, a[1]), V3(b[0], DECK, b[1]), V3(b[0], top, b[1]), V3(a[0], top, a[1])], n, PAL.inner);
   polyTo(acc, [V3(ax0, top, az0), V3(ax1, top, az0), V3(ax1, top, az1), V3(ax0, top, az1)], V3(0, -1, 0), PAL.inner);
-  acc.poly([V3(-0.4, top - 0.005, L.zc - 0.4), V3(0.4, top - 0.005, L.zc - 0.4), V3(0.4, top - 0.005, L.zc + 0.4), V3(-0.4, top - 0.005, L.zc + 0.4)].map(dk), V3(0, -1, 0), [2.6, 2.4, 2.0], 'glow', 99);
+  acc.poly([V3(-0.45, top - 0.005, L.zc - 0.12), V3(0.45, top - 0.005, L.zc - 0.12), V3(0.45, top - 0.005, L.zc + 0.12), V3(-0.45, top - 0.005, L.zc + 0.12)].map(dk), V3(0, -1, 0), [1.5, 1.4, 1.2], 'glow', 99);
   boxAt(acc, V3(0, DECK + 1.0, az1 - 0.02), AX, [0.45, 1.0, 0.02], PAL.dark, ['w+']);
   boxAt(acc, V3(0, DECK + 1.0, az1 - 0.045), AX, [0.012, 0.96, 0.004], PAL.black, ['w+']);
   acc.poly([V3(-0.4, DECK + 2.06, az1 - 0.03), V3(0.4, DECK + 2.06, az1 - 0.03), V3(0.4, DECK + 2.1, az1 - 0.03), V3(-0.4, DECK + 2.1, az1 - 0.03)].map(dk).reverse(), V3(0, 0, -1), GLOW.strip, 'glow', 99);
