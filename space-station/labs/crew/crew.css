@@ -1,0 +1,4 @@
+/* The Crew Lab, on the Kit Lab's look (../kit/kit.css). Colour swatches in the menu are round chips. */
+.chip.sw { width: 26px; height: 26px; padding: 0; border-radius: 50%; border: 2px solid #2f3d50; }
+.chip.sw.on { border-color: var(--blue-hi); box-shadow: 0 0 0 2px var(--blue); }
+.kl-row select { max-width: 150px; }

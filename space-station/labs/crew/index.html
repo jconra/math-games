@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Crew Lab</title>
+<meta name="description" content="A space station lab: the crew, put together from a suit, a head and hair on the Mathwood people's skeleton, playing the Mathwood clips, with colours by job.">
+<!-- the on-screen error box comes first, so a crash shows on screen instead of a blank page -->
+<script src="../../../mathwood-valley/oops.js"></script>
+<link rel="stylesheet" href="../kit/kit.css?v=1">
+<link rel="stylesheet" href="crew.css?v=1">
+<script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/" } }</script>
+</head>
+<body>
+<canvas id="c" aria-label="A crew member in 3D"></canvas>
+<div class="kl-top" id="top">
+  <h1>Crew Lab</h1><a href="../">All labs</a>
+  <span class="kl-hud" id="hud" aria-live="polite"></span>
+</div>
+<!-- ONE MENU: the bar along the bottom (who and what they do; the wardrobe; the view) -->
+<nav class="kl-bar" id="bar" aria-label="Crew Lab menu">
+  <div class="kl-row" id="who" role="listbox" aria-label="Characters and clips"></div>
+  <div class="kl-row" id="wear" aria-label="Wardrobe"></div>
+  <div class="kl-row" id="view" aria-label="View"></div>
+</nav>
+<div class="kl-loading" id="loading">Waking the crew…</div>
+<script type="module" src="main.js?v=1"></script>
+</body>
+</html>
