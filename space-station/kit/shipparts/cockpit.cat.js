@@ -14,7 +14,9 @@ import { cockpitSet } from './cockpit/set.js';
 import { mfd } from './cockpit/look.js';
 
 const G = 'Ship cockpit', free = (name, variants, foot, build) => ({ name, group: G, at: 'free', variants, foot, build });
-const SEATS = { pilot: { stick: 'left' }, 'co-pilot': { stick: 'right' }, grey: { look: 'grey', stick: 'left' }, station: { look: 'station', stick: 'left' }, 'slid back': { slide: -0.1 }, bare: { harness: false } };
+const SEATS = { pilot: { stick: 'left' }, 'co-pilot': { stick: 'right' }, grey: { look: 'grey', stick: 'left' }, station: { look: 'station', stick: 'left' }, 'slid back': { slide: -0.1 }, bare: { harness: false },
+  // (the bucket seat in the ships' colours: the ships' own flight seats)
+  bucket: { shape: 'bucket', look: 'ship', stick: 'left', badge: 'pilot' }, 'bucket co-pilot': { shape: 'bucket', look: 'ship', stick: 'right', badge: 'co-pilot' } };
 
 export const COCKPIT = {
   cpSeat: free('Flight seat', Object.keys(SEATS), [0.7, 1.4, 0.8], (p, v) => flightSeat(p, SEATS[v])),

@@ -1,6 +1,8 @@
 // THE COCKPIT'S LOOK: what the cockpit parts (kit/shipparts/cockpit/*) share.
 //   SEAT_LOOK[look]   the seats' upholstery: 'tan' (his pictures: caramel leather all over, on a dark frame), 'grey'
-//                     (the hauler picture's light grey), 'station' (the station's own dark cushions on off-white shells)
+//                     (the hauler picture's light grey), 'station' (the station's own dark cushions on off-white shells),
+//                     'ship' (the ships' own colours: a shell in the hull's cream white, dark grey cushions and trim, the
+//                     ships' yellow harness; with the bucket seat it is the ships' seat)
 //                     { pad, seam, shell, arm, frame, strap }
 //   LIT               dimmer glows for small lit buttons and lamps (the station's GLOW is for light strips: too bright
 //                     for a grid of buttons)
@@ -20,6 +22,7 @@ import * as THREE from 'three';
 import { SCREEN_RECT } from '../../tex.js';
 import { bevelBox, put } from '../../geo.js';
 import { placeInto } from '../place.js';
+import { SHIP } from '../palette.js';
 
 export const LEAN = { r: 0.004, seg: 1, cell: 9, loops: [] }, FLAT = { r: 0 };
 // the cockpit's consoles: a near-black charcoal body and a darker top, so the screens are the brightest thing (his
@@ -30,6 +33,7 @@ export const SEAT_LOOK = {
   tan: { pad: pad('#a8783e', 0.7), seam: pad('#8b5f30', 0.74), shell: pad('#7f5a2f', 0.62), arm: pad('#8b5f30', 0.74), frame: 'gun', strap: pad('#232529', 0.9) },
   grey: { pad: pad('#aeaaa0', 0.78), seam: pad('#8d897f', 0.8), shell: pad('#7f7b72', 0.66), arm: pad('#8d897f', 0.8), frame: 'gun', strap: pad('#232529', 0.9) },
   station: { pad: pad('#2d3036', 0.85), seam: pad('#24272c', 0.88), shell: 'white', arm: pad('#2d3036', 0.85), frame: 'black', strap: 'yellow' },
+  ship: { pad: pad('#45484e', 0.86), seam: pad('#383b40', 0.88), shell: SHIP.hull, arm: pad('#45484e', 0.86), frame: SHIP.trim, strap: SHIP.yellow },
 };
 export const LIT = { blue: [0.06, 0.75, 3.2], amber: [3.2, 1.05, 0.04], green: [0.06, 2.6, 0.2], white: [2.0, 2.0, 2.1], red: [3.2, 0.06, 0.04], off: null };
 
