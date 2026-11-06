@@ -14,8 +14,8 @@
 //   mbCanopy     'glass'     the canopy: the panes his picture has (a windscreen, a roof pane, three down each side) in
 //                            smoked glass, one black spar part along every border and round the outline
 //   mbMarks      'marks'     what is laid on the skin: the blue light strips, the amber headlamps, the nav lights
-//   mbCanister   (8)         an ore canister on its mount: a kit door leaf (door 'canister'), lifted straight up by
-//                            the station's crane (its lift point: CANISTERS.lift)
+//   mbCanister   (8)         an ore canister on its mount: a kit door leaf (door 'canister': slid out off its cradle,
+//                            the station's crane's first move; then up by the lug on its top, CANISTERS.lift)
 //   mbArm        'port' / 'starboard'   a mining arm: its mount on the cheek, and the upper arm, forearm, hand and
 //                            cutter wheel as leaves of one door ('arm', 1 stowed), each turning at its joint; the wheel
 //                            also spins (the lab, or the game, spins it: armStep)
@@ -235,12 +235,14 @@ function mbMarks(p) {
 
 // ── THE CANISTERS ───────────────────────────────────────────────────────────────────────────────────────────────────
 // Eight, four a side: two rows (upper and lower), each a front and a back canister, his picture's. Each is the same
-// canister (the 8k's, miner-built.hull.js CANISTER), a kit door leaf on its mount, its band at its outer end (the back
-// ones turned end for end), its plain inner end the one that plugs into the smelter's sockets. The station's crane
-// lifts each straight up by the lug on its top (CANISTERS.lift: from the canister's middle); the door 'canister' lifts
-// it LIFT metres (for the crane: its first move). The upper ones come off first: a lower canister lifts out once the
-// one over it is gone.
-export const CANISTERS = { lift: [0, CANISTER_AT.R + 0.12, 0], rise: 3.0, spots: [] };
+// canister (the 8k's, miner-built.hull.js CANISTER: its body and rounded ends), a kit door leaf on its mount, with two
+// clean yellow straps (STRAPS: one near each end; the two at the joint between a front and a back canister make his
+// middle band; the back ones are turned end for end); either end can plug into the smelter's sockets. The station's
+// crane hooks the lug on its top (CANISTERS.lift: from the canister's middle). The cradle and the top rail of the row
+// above stand over the inboard half of each canister, so it cannot go straight up: its first move is OUT, away from
+// the hull, by CANISTERS.out (the door 'canister' slides it so: 1 m clears the canister and cradle above it, so any
+// canister can come off in any order), then up.
+export const CANISTERS = { lift: [0, CANISTER_AT.R + 0.12, 0], out: 1.0, spots: [] };
 for (const [side, sx] of [['port', 1], ['starboard', -1]]) for (const S of CANISTER_AT.spots) CANISTERS.spots.push({ name: `${side} ${S.row} ${S.end}`, at: [sx * S.at[0], S.at[1], S.at[2]], turn: S.turn, side, row: S.row, end: S.end });
 const CAN_PAINT = { c: PAL.can, e: PAL.canEnd, y: PAL.yellow };
 // (a strap: a flat band round the canister, n-sided, its outer face and its edges)
@@ -264,7 +266,7 @@ function canisterLeaf(lp) {
 }
 function mbCanister(p, name) {
   const S = CANISTERS.spots.find((q) => q.name === name), c = dk(V3(...S.at));
-  p.leaf('mb:canister', canisterLeaf, { at: c.toArray(), rot: [0, S.turn ? PI : 0, 0], slide: [0, CANISTERS.rise, 0], door: 'canister' });
+  p.leaf('mb:canister', canisterLeaf, { at: c.toArray(), rot: [0, S.turn ? PI : 0, 0], slide: [Math.sign(S.at[0]) * CANISTERS.out, 0, 0], door: 'canister' });
   p.door('canister', c.toArray(), 0, 0.5);
   return p;
 }
