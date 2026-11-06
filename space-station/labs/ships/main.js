@@ -35,14 +35,16 @@ import { makeMaterials } from '../../kit/materials.js';
 import { setThrottle, THROTTLE, ENGINE } from '../../kit/ships/built-common.js';
 import { makeJets } from '../../kit/ships/plume.js';
 import * as EB from '../../kit/ships/explorer-built.js';
+import * as MB from '../../kit/ships/miner-built.js';
 
 const $ = (s) => document.querySelector(s), q = new URLSearchParams(location.search);
 // the ships: each a prepared shell (its .glb and .space.json in assets/ships), or a layout built by the kit (its
 // .space.json measured from it)
 // (a built ship: lab, its module's LAB; and each ship's blueprints, bps)
-const EXPLORER_BPS = ['explorer-c-plan', 'explorer-c-row', 'explorer-c-side'];
+const EXPLORER_BPS = ['explorer-c-plan', 'explorer-c-row', 'explorer-c-side'], MINER_BPS = ['miner-mess-forward', 'miner-bunks-forward', 'miner-ore-cockpit'];
 const SHIPS = [
   { id: 'built', name: 'Built', layout: 'ship-explorer-built', shell: 'explorer-built', lab: EB.LAB, bps: EXPLORER_BPS, note: 'Explorer C built from the 3k smart mesh: flat paint, a glass canopy, the airstair door, gear that folds away' },
+  { id: 'miner', name: 'Miner (built)', layout: 'ship-miner-built', shell: 'miner-built', lab: MB.LAB, bps: MINER_BPS, note: 'The Miner built from the 3k smart mesh with the 8k\'s engine, canisters, arms and thruster pods: arms that fold, pods that swivel, eight canisters on their mounts, the belly lift' },
   { id: 'explorer-b', name: 'Meshy B', shell: 'explorer-meshy-b', bps: EXPLORER_BPS, note: 'Explorer C from his 3/4 view' },
   { id: 'explorer-a', name: 'Meshy A', shell: 'explorer-meshy-a', bps: EXPLORER_BPS, note: 'Explorer C from his four views' },
 ];
@@ -165,7 +167,8 @@ async function showShip(S) {
   const rec = await loadShell(S);
   if (st.shell) scene.remove(st.shell.holder);
   st.ship = S; st.shell = rec; st.space = rec.space; scene.add(rec.holder); setHull(st.hull);
-  const d = st.space.doors?.port; person.position.set(d ? d.face + 1.2 : rec.size.x / 2 + 0.9, 0, d ? (d.z[0] + d.z[1]) / 2 - (S.layout ? 2.4 : 1.6) : 1);
+  const d = st.space.doors?.port, bd = st.space.doors?.belly;
+  person.position.set(bd ? bd.x[1] + 0.9 : d ? d.face + 1.2 : rec.size.x / 2 + 0.9, 0, bd ? (bd.z[0] + bd.z[1]) / 2 + 1.6 : d ? (d.z[0] + d.z[1]) / 2 - (S.layout ? 2.4 : 1.6) : 1);
   if (!S.lab?.overlay && st.show.meshy) { st.show.meshy = false; }
   if (S.lab) S.lab.setDirt((S.lab.dirt || EB.LAB.dirt)[st.dirt]);
   // (its own blueprints: the one shown stays if it is one of them)
@@ -246,6 +249,8 @@ function build3d() {
     }
     for (const d of bp.doors || []) {
       const w = doorWall(bp, d); if (!w) continue;
+      // (a hatch: a square in its room's floor)
+      if (w.hatch) { const r = bp.rooms.find((q) => q.id === d.rooms[0]), f = deck + (r?.floor || 0), m = new THREE.Mesh(new THREE.BoxGeometry(d.width, 0.06, d.width), mat('do', () => new THREE.MeshBasicMaterial({ color: 0xffb347, transparent: true, opacity: 0.8 }))); m.position.set(w.x, f + 0.03, w.z); BP3.add(m); continue; }
       const r = bp.rooms.find((q) => q.id === d.rooms[0]), f = deck + (r?.floor || 0), outer = d.rooms[1] === 'outside', hgt = outer ? Math.min(2, st.space.doors?.port?.height || 2) : 2;
       const g = new THREE.Mesh(new THREE.BoxGeometry(w.along === 'z' ? 0.08 : d.width, hgt, w.along === 'z' ? d.width : 0.08), mat(outer ? 'do' : 'di', () => new THREE.MeshBasicMaterial({ color: outer ? 0xffb347 : 0xffe08a, transparent: true, opacity: 0.8 })));
       g.position.set(w.along === 'z' ? w.x : d.at[0], f + hgt / 2, w.along === 'z' ? d.at[1] : w.z); BP3.add(g);

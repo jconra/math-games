@@ -12,7 +12,9 @@
 //   floor    a room's floor above the deck (the cockpit stands 0.3 m up over the nose leg); ceiling: its height above
 //            that floor, or "canopy" where the glass is the room's top (then only the head room where people walk counts)
 //   doors    on the wall two rooms share ("at" its middle, on that wall); "outside" for the ship's own door, which must
-//            be in the shell's door opening
+//            be in the shell's door opening. A hatch ("hatch": true) is a door in a room's floor instead: a square
+//            "width" on a side, "at" its middle, inside its room; the outer door of a shell whose door is in its belly
+//            (the space file's doors.belly: the Miner's lift) is one, inside the belly's opening
 //   items    furniture as footprints with a height: beds, seats, counters, consoles, lockers, tables, machinery
 // A SPACE file (assets/ships/<shell>.space.json, from the rigs' space.mjs) holds the shell's clear inside: on a 0.1 m
 // grid, where each spot's clear space starts and ends above the deck (H.floorCm, H.topCm).
@@ -82,6 +84,8 @@ export function spaceAt(space) {
 export function doorWall(bp, door) {
   const R = Object.fromEntries(bp.rooms.map((r) => [r.id, r]));
   const [ia, ib] = door.rooms || [], a = R[ia], b = ib === 'outside' ? null : R[ib], [x, z] = door.at, hw = door.width / 2;
+  // (a hatch: in its room's floor, wholly inside it; its square as rect)
+  if (door.hatch) { if (!a || x - hw < a.rect[0] - 0.01 || x + hw > a.rect[2] + 0.01 || z - hw < a.rect[1] - 0.01 || z + hw > a.rect[3] + 0.01) return null; return { hatch: true, along: 'hatch', x, z, span: [x - hw, x + hw], rect: [x - hw, z - hw, x + hw, z + hw] }; }
   const edges = (r) => [{ x: r.rect[0], lo: r.rect[1], hi: r.rect[3] }, { x: r.rect[2], lo: r.rect[1], hi: r.rect[3] }, { z: r.rect[1], lo: r.rect[0], hi: r.rect[2] }, { z: r.rect[3], lo: r.rect[0], hi: r.rect[2] }];
   const on = (e) => (e.x !== undefined ? Math.abs(e.x - x) < 0.01 && z - hw >= e.lo - 0.01 && z + hw <= e.hi + 0.01 : Math.abs(e.z - z) < 0.01 && x - hw >= e.lo - 0.01 && x + hw <= e.hi + 0.01);
   if (!a) return null;
@@ -154,8 +158,10 @@ export function checkBlueprint(bp, space) {
     if (!(d.width >= DOOR - EPS)) problems.push(`${d.width} m wide (at least ${DOOR})`);
     if (!wall) problems.push(d.rooms?.[1] === 'outside' ? `not on a wall of ${d.rooms?.[0]}` : `not on a wall ${d.rooms?.join(' and ')} share`);
     if (wall && d.rooms[1] === 'outside') {
-      const sd = space.doors?.port || space.doors?.starboard;
-      if (!sd) problems.push('the shell has no door');
+      const sd = space.doors?.port || space.doors?.starboard, bd = space.doors?.belly;
+      if (bd) { const r = wall.rect; if (!wall.hatch) problems.push(`not a hatch: the shell's door is in its belly (x ${bd.x[0]} to ${bd.x[1]}, z ${bd.z[0]} to ${bd.z[1]})`); else if (r[0] < bd.x[0] - 0.05 || r[2] > bd.x[1] + 0.05 || r[1] < bd.z[0] - 0.05 || r[3] > bd.z[1] + 0.05) problems.push(`not in the shell's belly door (x ${bd.x[0]} to ${bd.x[1]}, z ${bd.z[0]} to ${bd.z[1]})`); }
+      else if (!sd) problems.push('the shell has no door');
+      else if (wall.hatch) problems.push('a hatch: the shell\'s door is in its side');
       else {
         const side = sd.side === 'port' ? 1 : -1;
         if (wall.along !== 'z' || side * wall.x < 0 || Math.abs(sd.face - wall.x) > 0.7 || wall.span[0] < sd.z[0] - 0.05 || wall.span[1] > sd.z[1] + 0.05) problems.push(`not in the shell's door (z ${sd.z[0]} to ${sd.z[1]}, its face at x ${sd.face})`);
@@ -181,7 +187,8 @@ export function checkBlueprint(bp, space) {
     const w = outer.wall, ri = roomIx[outer.door.rooms[0]];
     for (let n = 0; n < N; n++) {
       if (!stand[n] || roomOf[n] !== ri) continue; const a = n % nx, b = (n / nx) | 0;
-      if (Math.abs(cx(a) - w.x) < BODY + 0.3 && cz(b) > w.span[0] && cz(b) < w.span[1]) { reach[n] = 1; q.push(n); }
+      // (a hatch: on it, or within a step of it)
+      if (w.hatch ? cx(a) > w.rect[0] - 0.3 && cx(a) < w.rect[2] + 0.3 && cz(b) > w.rect[1] - 0.3 && cz(b) < w.rect[3] + 0.3 : Math.abs(cx(a) - w.x) < BODY + 0.3 && cz(b) > w.span[0] && cz(b) < w.span[1]) { reach[n] = 1; q.push(n); }
     }
   }
   while (q.length) {
@@ -226,7 +233,7 @@ export function checkBlueprint(bp, space) {
   for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) if (overlap(items[i].rect, items[j].rect)) fit.push({ what: `${items[i].name || items[i].kind} and ${items[j].name || items[j].kind} overlap`, rect: items[i].rect });
   for (const r of doorRes) {
     if (!r.wall) continue;
-    const w = r.wall, zone = w.along === 'z' ? [w.x - DOOR_CLEAR, w.span[0], w.x + DOOR_CLEAR, w.span[1]] : [w.span[0], w.z - DOOR_CLEAR, w.span[1], w.z + DOOR_CLEAR];
+    const w = r.wall, zone = w.hatch ? w.rect : w.along === 'z' ? [w.x - DOOR_CLEAR, w.span[0], w.x + DOOR_CLEAR, w.span[1]] : [w.span[0], w.z - DOOR_CLEAR, w.span[1], w.z + DOOR_CLEAR];
     for (const it of items) if (overlap(zone, it.rect)) fit.push({ what: `${it.name || ITEM_KINDS[it.kind]?.label} is in the doorway of ${r.door.id}`, rect: it.rect });
   }
   // ── sizes ──

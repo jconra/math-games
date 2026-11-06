@@ -1,0 +1,366 @@
+{
+ "name": "Miner (built)",
+ "about": "The Miner as built from the 3,000-triangle smart mesh made from the game's maker's picture, with the 8,000-triangle one's round engine, ore canisters and mounts, jointed mining arms and thruster pods: flat paint by rules (cream panels, dark graphite, hazard yellow and black, blue light strips, amber headlamps), a smoked glass canopy of the panes his picture has, eight canisters on fixed mounts, arms that fold for flight, swivelling thruster pods, the belly lift and two landing legs that fold away, and the cockpit with two bucket seats.",
+ "grid": {
+  "cell": 0.5,
+  "step": 0.5,
+  "deck": 1.82
+ },
+ "views": {
+  "start": {
+   "at": [
+    15,
+    8,
+    16
+   ],
+   "look": [
+    0,
+    2.4,
+    0.3
+   ],
+   "fov": 40
+  },
+  "side": {
+   "at": [
+    30,
+    3,
+    0
+   ],
+   "look": [
+    0,
+    2.6,
+    0
+   ],
+   "fov": 36
+  },
+  "front": {
+   "at": [
+    0,
+    3,
+    30
+   ],
+   "look": [
+    0,
+    2.6,
+    0
+   ],
+   "fov": 30
+  },
+  "rear": {
+   "at": [
+    0,
+    3,
+    -30
+   ],
+   "look": [
+    0,
+    2.6,
+    0
+   ],
+   "fov": 30
+  },
+  "lift": {
+   "at": [
+    6.5,
+    1.2,
+    4.5
+   ],
+   "look": [
+    0,
+    1.4,
+    -0.6
+   ],
+   "fov": 50
+  },
+  "cockpit": {
+   "at": [
+    0.5,
+    3.6399999999999997,
+    4.35
+   ],
+   "look": [
+    0.5,
+    3.3,
+    9
+   ],
+   "fov": 75
+  }
+ },
+ "probe": [
+  0,
+  4,
+  0
+ ],
+ "pieces": [
+  {
+   "piece": "mbHull",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "hull"
+  },
+  {
+   "piece": "mbMounts",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "both sides"
+  },
+  {
+   "piece": "mbCanopy",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "glass"
+  },
+  {
+   "piece": "mbMarks",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "marks"
+  },
+  {
+   "piece": "mbWells",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "pods"
+  },
+  {
+   "piece": "mbLift",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "belly"
+  },
+  {
+   "piece": "mbGear",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "port"
+  },
+  {
+   "piece": "mbGearDoors",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "port"
+  },
+  {
+   "piece": "mbGear",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "starboard"
+  },
+  {
+   "piece": "mbGearDoors",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "starboard"
+  },
+  {
+   "piece": "mbArm",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "port"
+  },
+  {
+   "piece": "mbArm",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "starboard"
+  },
+  {
+   "piece": "mbPod",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "top front port"
+  },
+  {
+   "piece": "mbPod",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "top front starboard"
+  },
+  {
+   "piece": "mbPod",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "top rear port"
+  },
+  {
+   "piece": "mbPod",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "top rear starboard"
+  },
+  {
+   "piece": "mbPod",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "bottom rear port"
+  },
+  {
+   "piece": "mbPod",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "bottom rear starboard"
+  },
+  {
+   "piece": "mbCanister",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "port upper front"
+  },
+  {
+   "piece": "mbCanister",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "port upper back"
+  },
+  {
+   "piece": "mbCanister",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "port lower front"
+  },
+  {
+   "piece": "mbCanister",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "port lower back"
+  },
+  {
+   "piece": "mbCanister",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "starboard upper front"
+  },
+  {
+   "piece": "mbCanister",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "starboard upper back"
+  },
+  {
+   "piece": "mbCanister",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "starboard lower front"
+  },
+  {
+   "piece": "mbCanister",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "starboard lower back"
+  },
+  {
+   "piece": "mbCockpit",
+   "cell": [
+    0,
+    0
+   ],
+   "turn": 0,
+   "level": 0,
+   "variant": "two seats"
+  }
+ ]
+}

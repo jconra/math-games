@@ -64,8 +64,8 @@ export class Plan {
     const { bp } = D, w = this.world(sx, sy), tol = (touch ? 16 : 8) / this.V.s;
     // doors first (they sit on walls), then items, then walls, then rooms
     for (const d of bp.doors || []) {
-      const wl = doorWall(bp, d) || { along: 'z', x: d.at[0], span: [d.at[1] - d.width / 2, d.at[1] + d.width / 2] };
-      const near = wl.along === 'z' ? Math.abs(w.x - (wl.x ?? d.at[0])) < tol && w.z > wl.span[0] - tol && w.z < wl.span[1] + tol : Math.abs(w.z - (wl.z ?? d.at[1])) < tol && w.x > wl.span[0] - tol && w.x < wl.span[1] + tol;
+      const wl = doorWall(bp, d) || { along: d.hatch ? 'hatch' : 'z', x: d.at[0], span: [d.at[1] - d.width / 2, d.at[1] + d.width / 2], rect: [d.at[0] - d.width / 2, d.at[1] - d.width / 2, d.at[0] + d.width / 2, d.at[1] + d.width / 2] };
+      const near = d.hatch ? w.x > wl.rect[0] - tol && w.x < wl.rect[2] + tol && w.z > wl.rect[1] - tol && w.z < wl.rect[3] + tol : wl.along === 'z' ? Math.abs(w.x - (wl.x ?? d.at[0])) < tol && w.z > wl.span[0] - tol && w.z < wl.span[1] + tol : Math.abs(w.z - (wl.z ?? d.at[1])) < tol && w.x > wl.span[0] - tol && w.x < wl.span[1] + tol;
       if (near) return { type: 'door', id: d.id };
     }
     for (const it of [...(bp.items || [])].reverse()) { const r = it.rect; if (w.x >= r[0] && w.x <= r[2] && w.z >= r[1] && w.z <= r[3]) return { type: 'item', id: it.id }; }
@@ -134,6 +134,8 @@ export class Plan {
     }, true);
     if (h.type === 'door') this.h.edit((bp) => {
       const d = bp.doors.find((q) => q.id === h.id); if (!d) return;
+      // (a hatch slides about its room's floor, on the half grid)
+      if (d.hatch) { d.at = [snap(w.x, 0.25), snap(w.z, 0.25)]; return; }
       const hits = wallsAt(bp, w.x, w.z, 0.6); if (!hits.length) return;
       const best = hits[0];
       if (best.along === 'z') d.at = [best.x, snap(w.z, 0.25)]; else d.at = [snap(w.x, 0.25), best.z];
@@ -196,6 +198,8 @@ export class Plan {
     g.strokeStyle = COL.mid; g.setLineDash([3, 5]); g.beginPath(); g.moveTo(P.x, this.pY(0)); g.lineTo(P.x + P.w, this.pY(0)); g.stroke(); g.setLineDash([]);
     // the shell's door
     const sd = space.doors?.port; if (sd) { g.strokeStyle = COL.outer; g.lineWidth = 3; g.beginPath(); g.moveTo(this.pX(sd.z[0]), this.pY(sd.face)); g.lineTo(this.pX(sd.z[1]), this.pY(sd.face)); g.stroke(); }
+    // (a belly door: its opening's outline, dashed)
+    const bd = space.doors?.belly; if (bd) { g.strokeStyle = COL.outer; g.lineWidth = 2; g.setLineDash([4, 3]); const [X, Y, W, H] = this.sr([bd.x[0], bd.z[0], bd.x[1], bd.z[1]]); g.strokeRect(X, Y, W, H); g.setLineDash([]); }
     if (bp) this.drawBlueprint(D);
     this.legend(P);
     g.restore();
@@ -249,6 +253,8 @@ export class Plan {
     }
     for (const d of bp.doors || []) {
       const w = doorWall(bp, d), outer = d.rooms?.[1] === 'outside';
+      // (a hatch: its square in the floor, an X across it)
+      if (d.hatch) { const hw = d.width / 2, [X, Y, W, H] = this.sr([d.at[0] - hw, d.at[1] - hw, d.at[0] + hw, d.at[1] + hw]); g.strokeStyle = outer ? COL.outer : COL.door; g.lineWidth = 2.5; g.setLineDash(w ? [] : [3, 3]); g.strokeRect(X, Y, W, H); g.beginPath(); g.moveTo(X, Y); g.lineTo(X + W, Y + H); g.moveTo(X + W, Y); g.lineTo(X, Y + H); g.stroke(); g.setLineDash([]); continue; }
       const seg = w ? (w.along === 'z' ? [[this.pX(w.span[0]), this.pY(w.x)], [this.pX(w.span[1]), this.pY(w.x)]] : [[this.pX(w.z), this.pY(w.span[0])], [this.pX(w.z), this.pY(w.span[1])]]) : [[this.pX(d.at[1]) - d.width * s / 2, this.pY(d.at[0])], [this.pX(d.at[1]) + d.width * s / 2, this.pY(d.at[0])]];
       g.strokeStyle = COL.bg; g.lineWidth = 6; g.beginPath(); g.moveTo(...seg[0]); g.lineTo(...seg[1]); g.stroke();
       g.strokeStyle = outer ? COL.outer : COL.door; g.lineWidth = 3; g.setLineDash(w ? [] : [3, 3]); g.beginPath(); g.moveTo(...seg[0]); g.lineTo(...seg[1]); g.stroke(); g.setLineDash([]);
