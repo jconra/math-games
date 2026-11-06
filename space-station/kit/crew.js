@@ -32,13 +32,19 @@
 // each channel's ratio to the head's own), so the texture's shading and detail stay and the part's own colours give it
 // back exactly.
 //
+// A VISOR (an android's helmet: Captain Vega): the head part's second mesh, its material named 'visor', laid out as
+// seen from the front (x across, up up, one scale both ways, the visor's middle at the layout's middle). It is plain
+// dark glass, and the face on it is drawn by its shader as glowing strokes, as his sheet draws them: EXPRESSIONS
+// (neutral, happy, thinking with its turning ring of dots, surprised), set with c.setExpression(name).
+//
 //   const lib = await loadCrew()                lib.list: crew.json; lib.part(kind, id) -> its glTF; lib.clipsFor(suit id)
 //                                               -> { body, rig, clips (fitted to that suit), stride }
 //   const c = await makeCrew(lib, recipe)       recipe { suit, head, hair, colours: { job, skin, hair } }
 //     c.root (place and turn it: feet on y 0, facing +z), c.person (Mathwood's Person), c.play(name, { fade, speed, once }),
-//     c.update(dt), c.setColours({ job, skin, hair }), c.meshes { suit, head, hair }, c.bones, c.body ('m' | 'f': the
-//     suit's skeleton, whose clips it plays), c.stride (m/s at speed 1: { Walk, Run }), c.dispose()
-//   JOBS, SKIN_TONES, HAIR_COLOURS, CLIPS
+//     c.update(dt), c.setColours({ job, skin, hair }), c.meshes { suit, head, hair, visor }, c.bones, c.body ('m' | 'f':
+//     the suit's skeleton, whose clips it plays), c.stride (m/s at speed 1: { Walk, Run }), c.dispose(),
+//     c.setExpression(name) (a visor's face; recipe.expression sets the first), c.expression
+//   JOBS, SKIN_TONES, HAIR_COLOURS, CLIPS, EXPRESSIONS
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
@@ -70,6 +76,9 @@ export const JOBS = {
 };
 export const SKIN_TONES = ['#f2d3bd', '#e8bf9f', '#d9a37f', '#c48a62', '#a66d45', '#86522f', '#663b22', '#47291a'];
 export const HAIR_COLOURS = ['#17110d', '#2e1f15', '#4a2f1d', '#6b4127', '#8f5a32', '#b4824f', '#d8bc84', '#a83c22', '#8f8a84', '#d6d3cc'];
+
+// a visor's faces (kit/crew.js visorMaterial), in the order its shader numbers them
+export const EXPRESSIONS = { neutral: 'Neutral', happy: 'Happy', thinking: 'Thinking', surprised: 'Surprised' };
 
 const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 const clean = (n) => THREE.PropertyBinding.sanitizeNodeName(n);
@@ -213,6 +222,66 @@ vec3 crShift(vec3 c, vec3 to, vec3 ref, float m) { return max(c + (to - ref) * m
   m.customProgramCacheKey = () => 'crew-1-' + Object.keys(m.defines).join('-');
   return m;
 }
+// ── a visor: dark glass, and a face drawn on it ──────────────────────────────────────────────────────────────────
+// The face is drawn in the visor's own layout (p: x across, y up, the visor's middle at 0, its width about 1) by
+// distances to strokes: a stroke's core and a soft glow round it, added to the light the glass gives off. The eyes are
+// 0.38 apart; each expression is the sheet's:
+//   neutral    two upright eyes and a short straight mouth (his sheet shows none: a plain one), blinking now and then
+//   happy      eyes closed in arcs (upside-down U's) and a smile
+//   thinking   one eye a dash, the other a ring of dots turning as a loading ring does, the mouth a small frown
+//   surprised  round eyes, a small round mouth
+const VISOR_GLSL = `
+uniform int vsExpr; uniform float vsTime, vsGlow; uniform vec3 vsCol;
+float vsSeg(vec2 p, vec2 a, vec2 b) { vec2 pa = p - a, ba = b - a; float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0); return length(pa - ba * h); }
+// (an arc of the circle round c of radius r, from angle a0 to a1 (radians, a0 < a1): a stroke's distance)
+float vsArc(vec2 p, vec2 c, float r, float a0, float a1) {
+  vec2 q = p - c; float a = atan(q.y, q.x), m = 0.5 * (a0 + a1), h = 0.5 * (a1 - a0);
+  if (abs(mod(a - m + 3.14159265, 6.2831853) - 3.14159265) <= h) return abs(length(q) - r);
+  return min(length(p - c - r * vec2(cos(a0), sin(a0))), length(p - c - r * vec2(cos(a1), sin(a1))));
+}
+float vsFace(vec2 uv) {
+  vec2 p = vec2(uv.x - 0.5, 0.5 - uv.y);
+  float d = 1e3;
+  if (vsExpr == 1) {
+    d = min(d, vsArc(p, vec2(-0.19, 0.03), 0.075, 0.45, 2.69));
+    d = min(d, vsArc(p, vec2(0.19, 0.03), 0.075, 0.45, 2.69));
+    d = min(d, vsArc(p, vec2(0.0, -0.05), 0.16, -2.45, -0.69));
+  } else if (vsExpr == 2) {
+    d = min(d, vsSeg(p, vec2(-0.27, 0.06), vec2(-0.12, 0.06)));
+    for (int i = 0; i < 8; i++) {
+      float a = float(i) * 0.7853982 + vsTime * 3.0;
+      d = min(d, length(p - vec2(0.19, 0.06) - 0.072 * vec2(cos(a), sin(a))) - (0.006 + 0.011 * float(i) / 7.0));
+    }
+    d = min(d, vsArc(p, vec2(0.0, -0.25), 0.075, 0.75, 2.39));
+  } else if (vsExpr == 3) {
+    d = min(d, length(p - vec2(-0.19, 0.06)) - 0.052);
+    d = min(d, length(p - vec2(0.19, 0.06)) - 0.052);
+    d = min(d, abs(length(p - vec2(0.0, -0.17)) - 0.042));
+  } else {
+    float b = fract(vsTime / 4.3); b = 1.0 - smoothstep(0.0, 0.025, b) * (1.0 - smoothstep(0.035, 0.06, b));
+    float e = 0.045 * b;
+    d = min(d, vsSeg(p, vec2(-0.19, 0.06 - e), vec2(-0.19, 0.06 + e)) - 0.012);
+    d = min(d, vsSeg(p, vec2(0.19, 0.06 - e), vec2(0.19, 0.06 + e)) - 0.012);
+    d = min(d, vsSeg(p, vec2(-0.08, -0.16), vec2(0.08, -0.16)));
+  }
+  float w = 0.017;
+  return (1.0 - smoothstep(w * 0.55, w, d)) + 0.22 * exp(-max(d - w, 0.0) * 34.0);
+}
+`;
+function visorMaterial(src) {
+  const m = new THREE.MeshStandardMaterial({ name: 'visor', color: 0x05070a, roughness: 0.14, metalness: 0.0, envMapIntensity: 1.3 });
+  const u = m.userData.visor = { vsExpr: { value: 0 }, vsTime: { value: 0 }, vsGlow: { value: 1.5 }, vsCol: { value: new THREE.Color(0x35f2e4) } };
+  m.defines = { USE_UV: '' };
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, u);
+    sh.fragmentShader = VISOR_GLSL + sh.fragmentShader.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+  totalEmissiveRadiance += vsCol * vsGlow * vsFace(vUv);`);
+  };
+  m.customProgramCacheKey = () => 'crew-visor-1';
+  if (src && src.dispose) src.dispose();
+  return m;
+}
+
 function setColours(mats, { job, skin, hair } = {}) {
   const J = JOBS[job] || JOBS.explorer;
   for (const m of mats) {
@@ -257,11 +326,14 @@ export async function makeCrew(lib, recipe) {
   const person = new Person({ clips: { [fit.body]: fit.clips } }, { scene: tpl, body: fit.body }, { shadows: true });
   const meshes = {}, mats = [];
   const made = person.mesh.material;            // (the Mathwood vertex-colour material it made: not ours)
+  // (the template's own materials, in the same order as the clone's meshes: a head with a visor has two)
+  const src = []; tpl.traverse((t) => { if (t.isSkinnedMesh) src.push(t.material); });
+  let i = 0, visor = null;
   person.root.traverse((o) => {
     if (!o.isSkinnedMesh) return;
-    const kind = o.userData.part || 'suit';
-    const mat = crewMaterial(o.material === made ? findSource(tpl, o) : o.material, kind, refsOf[kind]);
-    o.material = mat; mats.push(mat); meshes[kind] = o;
+    const kind = o.userData.part || 'suit', own = o.material === made ? src[i] : o.material; i++;
+    if (own && own.name === 'visor') { o.material = visor = visorMaterial(); meshes.visor = o; }
+    else { const mat = crewMaterial(own, kind, refsOf[kind]); o.material = mat; mats.push(mat); meshes[kind] = o; }
     o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false;
   });
   made.dispose();
@@ -284,12 +356,18 @@ export async function makeCrew(lib, recipe) {
         f.position.copy(f.parent.worldToLocal(A));
       }
       person.root.updateMatrixWorld(true);
+      if (visor) visor.userData.visor.vsTime.value += dt;
     },
     setColours(col) { c.recipe.colours = { ...(c.recipe.colours || {}), ...col }; setColours(mats, c.recipe.colours); },
-    dispose() { for (const m of mats) m.dispose(); person.mixer.stopAllAction(); person.root.removeFromParent(); },
+    expression: null,
+    setExpression(name) {
+      const k = Object.keys(EXPRESSIONS).indexOf(name);
+      c.expression = k >= 0 ? name : 'neutral'; c.recipe.expression = c.expression;
+      if (visor) visor.userData.visor.vsExpr.value = Math.max(0, k);
+    },
+    dispose() { for (const m of mats) m.dispose(); if (visor) visor.dispose(); person.mixer.stopAllAction(); person.root.removeFromParent(); },
   };
   c.setColours(recipe.colours || {});
+  c.setExpression(recipe.expression || 'neutral');
   return c;
 }
-// (the template's own material for a cloned mesh, by name)
-function findSource(tpl, o) { let m = null; tpl.traverse((t) => { if (t.isSkinnedMesh && t.name === o.name) m = t.material; }); return m; }

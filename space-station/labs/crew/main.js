@@ -4,17 +4,19 @@
 // ONE MENU along the bottom:
 //   the characters (one entry a recipe) and every clip their suit's skeleton has (the men's or the women's), its speed;
 //   the wardrobe: Head, Hair, Suit (each part a choice: any goes with any, the Mathwood hair among them), Job colours
-//     (the suit's marks, light lines and panels), Skin tone, Hair colour;
+//     (the suit's marks, light lines and panels), Skin tone, Hair colour; a visor's face (an android's helmet: Captain
+//     Vega's expressions), when the head has one;
 //   the view: cameras (Face, Head and Nape follow the head: from the front-left, straight on, from behind), Plain (no
 //     paint), Wireframe, the 1.8 m marker, the bones.
 // Drag to look round, wheel or pinch to come closer, W A S D move (Space up, C down, Shift faster).
 //   ?who=<recipe id>  ?clip=<name>  ?cam=<name>
 //   window.CREWLAB = { ready, clips, play(name), pose(name, t), cam(name), show(k, on), recipe(r), colours(c), state(),
+//     expression(name) (a visor's face),
 //     measure() (the body's lowest point and each boot's, in the pose shown), three, scene, camera, renderer }
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { loadCrew, makeCrew, CLIPS, JOBS, SKIN_TONES, HAIR_COLOURS } from '../../kit/crew.js';
+import { loadCrew, makeCrew, CLIPS, JOBS, SKIN_TONES, HAIR_COLOURS, EXPRESSIONS } from '../../kit/crew.js';
 import { makeMaterials } from '../../kit/materials.js';
 import { buildRoom } from '../../kit/layout.js';
 
@@ -150,7 +152,9 @@ function menu() {
     ...CLIP_GROUPS.flatMap(([g, list]) => [sep(), lab(g), ...list.filter((n) => st.crew?.person.actions[n]).map((n) => chip(LABEL[n] || n, n === st.clip, () => play(n), true))]),
     sep(), lab('Speed'), ...[[0.25, '¼'], [0.5, '½'], [1, '1×']].map(([v, t]) => chip(t, v === st.speed && !st.paused, () => { st.speed = v; st.paused = false; if (st.crew?.person.cur) st.crew.person.cur.setEffectiveTimeScale(v); menu(); }, true)),
     chip(st.paused ? 'Play' : 'Pause', st.paused, () => { st.paused = !st.paused; menu(); }, true));
-  $('#wear').replaceChildren(lab('Head'), pick('Head', 'head', R.head), lab('Hair'), pick('Hair', 'hair', R.hair, true), lab('Suit'), pick('Suit', 'suit', R.suit),
+  // (a visor's face: only when the head has a visor)
+  const face = st.crew?.meshes.visor ? [sep(), lab('Visor'), ...Object.entries(EXPRESSIONS).map(([k, t]) => chip(t, st.crew.expression === k, () => expression(k), true))] : [];
+  $('#wear').replaceChildren(lab('Head'), pick('Head', 'head', R.head), lab('Hair'), pick('Hair', 'hair', R.hair, true), lab('Suit'), pick('Suit', 'suit', R.suit), ...face,
     sep(), lab('Job'), ...Object.entries(JOBS).map(([k, J]) => chip(J.name, (C.job || 'explorer') === k, () => colours({ job: k }), true)),
     sep(), lab('Skin'), swatch('linear-gradient(135deg,#d9a37f,#86522f)', !C.skin, () => colours({ skin: null }), 'His own skin'), ...SKIN_TONES.map((s) => swatch(s, C.skin === s, () => colours({ skin: s }), 'Skin ' + s)),
     sep(), lab('Hair colour'), swatch('linear-gradient(135deg,#6b4127,#2e1f15)', !C.hair, () => colours({ hair: null }), 'His own hair'), ...HAIR_COLOURS.map((s) => swatch(s, C.hair === s, () => colours({ hair: s }), 'Hair ' + s)));
@@ -160,6 +164,7 @@ function menu() {
     chip('Bones', st.bones, () => { setBones(!st.bones); menu(); }, true, 'The skeleton'));
   requestAnimationFrame(layout);
 }
+function expression(k) { st.recipe.expression = k; st.crew?.setExpression(k); menu(); }
 function colours(c) { st.recipe.colours = { ...(st.recipe.colours || {}), ...c }; for (const k of Object.keys(c)) if (c[k] == null) delete st.recipe.colours[k]; st.crew?.setColours(st.recipe.colours); menu(); }
 function layout() {
   const bar = $('#bar').offsetHeight, W = innerWidth, H = Math.max(80, innerHeight - bar);
@@ -230,6 +235,6 @@ window.CREWLAB = {
   ready: true, clips: () => CLIPS.filter((n) => st.crew?.person.actions[n]), play: (n) => play(n), pose, cam: (c) => { setCam(c); menu(); },
   show: (k, on) => { if (k === 'paint' || k === 'plain' || k === 'wire') setPaint(k); if (k === 'marker') { st.marker = on; marker.visible = on; } if (k === 'bones') setBones(on); if (k === 'floor' && floorGroup) floorGroup.visible = on; menu(); },
   recipe: async (r) => { await show(r); triCount(); return st.recipe; }, who: async (id) => { st.who = id; await show(RECIPES[id]); triCount(); },
-  colours: (c) => colours(c), state: () => ({ who: st.who, clip: st.clip, recipe: st.recipe, tris, fps, parts: Object.keys(st.crew?.meshes || {}), body: st.crew?.body, rig: st.crew?.rig && { turnDiffMaxDeg: st.crew.rig.turnDiffMaxDeg } }),
+  colours: (c) => colours(c), expression: (k) => expression(k), state: () => ({ who: st.who, clip: st.clip, recipe: st.recipe, tris, fps, parts: Object.keys(st.crew?.meshes || {}), body: st.crew?.body, expression: st.crew?.expression, rig: st.crew?.rig && { turnDiffMaxDeg: st.crew.rig.turnDiffMaxDeg } }),
   measure, crew: () => st.crew, three: THREE, scene, camera, renderer, controls,
 };
