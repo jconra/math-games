@@ -42,14 +42,24 @@
 // The Mathwood hair comes smooth-shaded (crew.json `smooth`: the same triangles, its vertices merged and its normals
 // smoothed) unless loadCrew({ smoothHair: false }) or lib.smoothHair = false (then its flat facets, as the pack has them).
 //
+// A HAIR'S FIT (crew.json: a hair entry's optional `fit`, made with the Crew Lab's Fit row; see "a hair's fit" below):
+// nudged, sized, its lower edges tucked in toward the head, on every head or one head's own way. Applied to the person's
+// own copy of the hair's positions when it's put together, so the game and the lab show the same.
+//
 //   const lib = await loadCrew()                lib.list: crew.json; lib.part(kind, id) -> its glTF; lib.clipsFor(suit id)
-//                                               -> { body, rig, clips (fitted to that suit), stride }; lib.hairAtlas()
+//                                               -> { body, rig, clips (fitted to that suit), stride }; lib.hairAtlas();
+//                                               lib.fitOf(hair id, head id) -> the fit makeCrew gives that hair on that
+//                                               head; lib.fits { hair id: fit } (empty: a layer over crew.json's, each
+//                                               entry replacing that hair's whole fit; the Crew Lab's while it's edited)
 //   const c = await makeCrew(lib, recipe)       recipe { suit, head, hair, colours: { job, skin, hair } }
 //     c.root (place and turn it: feet on y 0, facing +z), c.person (Mathwood's Person), c.play(name, { fade, speed, once }),
 //     c.update(dt), c.setColours({ job, skin, hair }), c.meshes { suit, head, hair, visor }, c.bones, c.body ('m' | 'f':
 //     the suit's skeleton, whose clips it plays), c.stride (m/s at speed 1: { Walk, Run }), c.dispose(),
-//     c.setExpression(name) (a visor's face; recipe.expression sets the first), c.expression
-//   JOBS, SKIN_TONES, HAIR_COLOURS, CLIPS, EXPRESSIONS
+//     c.setExpression(name) (a visor's face; recipe.expression sets the first), c.expression,
+//     await c.setFit(fit) (the hair's fit, live: { offset, scale, tuck, tuckStart } as lib.fitOf gives; null: as made),
+//     c.fit (the fit it wears), c.fitStats ({ tucked: points the tuck moved, held: of those, how many it stopped 4 mm off
+//     the head })
+//   JOBS, SKIN_TONES, HAIR_COLOURS, CLIPS, EXPRESSIONS, fitFor, SKULL, HAIR_CLEAR
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
@@ -130,6 +140,15 @@ export async function loadCrew({ dir = CREW_DIR, people = PEOPLE_DIR, smoothHair
     if (!parts.has(key)) parts.set(key, loader.loadAsync(dir + file));
     return parts.get(key);
   };
+  // a hair's fit on a head (a hair's fit, below): lib.fits' entry for that hair if it has one, else crew.json's
+  lib.fits = {};
+  lib.fitOf = (hair, head) => {
+    if (!hair) return null;
+    return fitFor(Object.prototype.hasOwnProperty.call(lib.fits, hair) ? lib.fits[hair] : (lib.entry('hair', hair) || {}).fit, head);
+  };
+  // a head's outline round the skull's upright axis, for the tuck (once a head)
+  const fields = new Map();
+  lib.headField = (id) => { if (!fields.has(id)) fields.set(id, lib.part('head', id).then(headField)); return fields.get(id); };
   // the card hair's one shared strand atlas and its normal map (list.hairAtlas), loaded once for every style
   let atlas = null;
   lib.hairAtlas = () => atlas || (atlas = Promise.all([hairTexture(dir + list.hairAtlas.map, true), hairTexture(dir + list.hairAtlas.normal, false)])
@@ -402,6 +421,205 @@ function setColours(mats, { job, skin, hair } = {}) {
   }
 }
 
+// ── a hair's fit ────────────────────────────────────────────────────────────────────────────────────────────────────
+// Every hair is shaped on the standard skull, so one fit serves it on every head. In crew.json, a hair entry's `fit`:
+//   offset [x, y, z]  metres, in the head's frame (y up, z forward, x to their left), after the size
+//   scale             the size, about the standard skull's centre (1: as made)
+//   tuck              0..1: how much of the gap between the hair and the head its lower parts close, each point drawn in
+//                     level toward the skull's upright axis. Nothing at tuckStart below the hair's top, growing to all of
+//                     it at the hair's bottom edge (long hair: at the jaw line, fading out over 4 cm below it, so tails
+//                     and long ends keep hanging as made). The head it's measured on is the head it's on, and no point
+//                     comes nearer to it than 4 mm (the attachment rule: HAIR_CLEAR). Cards and shell move by the same
+//                     rule, so their layers keep their order.
+//   tuckStart         metres below the hair's top where the tuck begins (0: the crown)
+//   heads             { <head id>: { offset, scale, tuck, tuckStart } }: one head's own adjustments, each ADDED to the
+//                     hair's own (offsets and tucks added, scales multiplied); a field left out adds nothing
+// The head's frame is the Head bone's own: every crew skeleton's Head bone is unturned at rest, so its frame is the
+// game's (y up, z forward, metres) from the Head joint, on every suit, and the fit rides the head through every clip.
+export const SKULL = [0, 0.106, -0.012];      // the standard skull's centre from the Head joint (the attachment rules)
+export const HAIR_CLEAR = 0.004;              // hair stays this far off the head (metres)
+// (the head's frame: where long hair's tuck is full, and how far below it it fades)
+const TUCK_JAW = -0.025, TUCK_FADE = 0.04;
+// the fit a hair wears on a head: its own fit with that head's adjustments added (any field left out: as made)
+export function fitFor(f, head) {
+  f = f || {}; const d = (f.heads && head && f.heads[head]) || {};
+  const o = f.offset || [], p = d.offset || [];
+  return { offset: [0, 1, 2].map((i) => (+o[i] || 0) + (+p[i] || 0)), scale: (f.scale == null ? 1 : +f.scale) * (d.scale == null ? 1 : +d.scale),
+    tuck: Math.min(1, Math.max(0, (+f.tuck || 0) + (+d.tuck || 0))), tuckStart: Math.max(0, (+f.tuckStart || 0) + (+d.tuckStart || 0)) };
+}
+const asMade = (f) => !f || (!f.offset.some((v) => Math.abs(v) > 1e-7) && Math.abs(f.scale - 1) < 1e-7 && !(f.tuck > 0));
+// a part's bind space -> the head's frame (its Head bone's own)
+function frameOf(mesh) {
+  const i = mesh.skeleton.bones.findIndex((b) => b.name === 'Head');
+  return new THREE.Matrix4().multiplyMatrices(mesh.skeleton.boneInverses[i], mesh.bindMatrix);
+}
+// THE HEAD FIELD: the head's outline round the skull's upright axis (through SKULL), as the farthest the head reaches
+// out from that axis at each height (2 mm bands) and each way round (2 degree steps), from points spread over its
+// triangles 1.2 mm apart. Below the Head joint, and below the neck's cut wherever that is higher, it's never narrower
+// than above: hair is never drawn in under the jaw, or under the neck's cut into the column where only the plug inside
+// the collar is (the cut is the head's open edge, its vertices joined where they meet; on some heads it rises well above
+// the Head joint behind the neck). D is that widened by 6 mm up and down and 6 degrees either way (a point at least 4 mm
+// outside D is at least 4 mm off the head); S is D smoothed (the gap the tuck closes, so it bends the hair smoothly).
+const HF = { y0: -0.2, dy: 0.002, ny: 260, nt: 180 };
+const binT = (dx, dz) => ((Math.floor((Math.atan2(dx, dz) + Math.PI) / (2 * Math.PI) * HF.nt) % HF.nt) + HF.nt) % HF.nt;
+function headField(g) {
+  const { ny, nt } = HF, R = new Float32Array(ny * nt), a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  const put = (x, y, z) => {
+    const yb = Math.floor((y - HF.y0) / HF.dy); if (yb < 0 || yb >= ny) return;
+    const dx = x - SKULL[0], dz = z - SKULL[2], r = Math.hypot(dx, dz), k = yb * nt + binT(dx, dz);
+    if (r > R[k]) R[k] = r;
+  };
+  // (the vertices joined where they meet, 0.05 mm apart or less, so the open edges are the head's own, not its texture's
+  // seams; an edge is open when one triangle alone has it)
+  const joined = new Map(), edges = new Map(), at = [];
+  const join = (x, y, z) => { const k = Math.round(x * 2e4) + ',' + Math.round(y * 2e4) + ',' + Math.round(z * 2e4); let i = joined.get(k); if (i == null) { i = at.length; joined.set(k, i); at.push([x, y, z]); } return i; };
+  g.scene.traverse((o) => {
+    if (!o.isSkinnedMesh) return;
+    const M = frameOf(o), pos = o.geometry.attributes.position, idx = o.geometry.index, P = new Float32Array(pos.count * 3), J = new Int32Array(pos.count);
+    for (let i = 0; i < pos.count; i++) { a.fromBufferAttribute(pos, i).applyMatrix4(M).toArray(P, i * 3); J[i] = join(a.x, a.y, a.z); }
+    const n = idx ? idx.count : pos.count;
+    for (let t = 0; t + 2 < n; t += 3) {
+      const i0 = idx ? idx.getX(t) : t, i1 = idx ? idx.getX(t + 1) : t + 1, i2 = idx ? idx.getX(t + 2) : t + 2;
+      for (const [p, q] of [[J[i0], J[i1]], [J[i1], J[i2]], [J[i2], J[i0]]]) { const e = p < q ? p * 1e7 + q : q * 1e7 + p; edges.set(e, (edges.get(e) || 0) + 1); }
+      a.fromArray(P, i0 * 3); b.fromArray(P, i1 * 3); c.fromArray(P, i2 * 3);
+      const s = Math.min(64, Math.max(1, Math.ceil(Math.max(a.distanceTo(b), b.distanceTo(c), c.distanceTo(a)) / 0.0012)));
+      for (let u = 0; u <= s; u++) for (let v = 0; v <= s - u; v++) {
+        const fu = u / s, fv = v / s, fw = 1 - fu - fv;
+        put(a.x * fw + b.x * fu + c.x * fv, a.y * fw + b.y * fu + c.y * fv, a.z * fw + b.z * fu + c.z * fv);
+      }
+    }
+  });
+  // (the neck's cut: the highest open edge each way round, below the skull's middle; widened 6 degrees either way)
+  const cut = new Float32Array(nt).fill(-Infinity);
+  for (const [e, k] of edges) {
+    if (k !== 1) continue;
+    const p = at[Math.floor(e / 1e7)], q = at[e % 1e7];
+    if (Math.max(p[1], q[1]) > SKULL[1] - 0.05) continue;
+    const s = Math.max(1, Math.ceil(Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]) / 0.001));
+    for (let i = 0; i <= s; i++) {
+      const f = i / s, x = p[0] + (q[0] - p[0]) * f, y = p[1] + (q[1] - p[1]) * f, z = p[2] + (q[2] - p[2]) * f, t = binT(x - SKULL[0], z - SKULL[2]);
+      if (y > cut[t]) cut[t] = y;
+    }
+  }
+  const cutW = cut.map((_, t) => { let m = -Infinity; for (let e = -3; e <= 3; e++) m = Math.max(m, cut[(((t + e) % nt) + nt) % nt]); return m; });
+  // (carried down from the Head joint, or from 4 mm above the cut where that's higher)
+  for (let t = 0; t < nt; t++) {
+    const from = Math.min(ny - 1, Math.floor((Math.max(0, cutW[t] + 0.004) - HF.y0) / HF.dy));
+    for (let yb = from - 1; yb >= 0; yb--) R[yb * nt + t] = Math.max(R[yb * nt + t], R[(yb + 1) * nt + t]);
+  }
+  const D = filterField(filterField(R, 3, 0, Math.max), 0, 3, Math.max);
+  const S = filterField(filterField(D, 4, 0, null), 0, 4, null);
+  return { D, S };
+}
+// (a field filtered over +-k bands of height and +-j steps round: the largest, or the mean when fn is null)
+function filterField(F, k, j, fn) {
+  const { ny, nt } = HF, out = new Float32Array(F.length);
+  for (let y = 0; y < ny; y++) for (let t = 0; t < nt; t++) {
+    let m = 0, n = 0;
+    for (let d = -k; d <= k; d++) {
+      const yy = y + d; if (yy < 0 || yy >= ny) { if (!fn) n++; continue; }
+      for (let e = -j; e <= j; e++) { const v = F[yy * nt + (((t + e) % nt) + nt) % nt]; if (fn) { if (v > m) m = v; } else { m += v; n++; } }
+    }
+    out[y * nt + t] = fn ? m : m / n;
+  }
+  return out;
+}
+// (the field at a point: the nearest band and step, or blended between the four round it)
+function fieldAt(F, y, dx, dz, blend) {
+  const { ny, nt } = HF, fy = (y - HF.y0) / HF.dy - 0.5, ft = (Math.atan2(dx, dz) + Math.PI) / (2 * Math.PI) * nt - 0.5;
+  const at = (yy, tt) => (yy < 0 || yy >= ny ? 0 : F[yy * nt + (((tt % nt) + nt) % nt)]);
+  if (!blend) return at(Math.round(fy), Math.round(ft));
+  const y0 = Math.floor(fy), t0 = Math.floor(ft), wy = fy - y0, wt = ft - t0;
+  return (at(y0, t0) * (1 - wt) + at(y0, t0 + 1) * wt) * (1 - wy) + (at(y0 + 1, t0) * (1 - wt) + at(y0 + 1, t0 + 1) * wt) * wy;
+}
+const smooth01 = (x) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
+// (an attribute's values as plain floats; a part's own, kept on its geometry once read)
+function floatsOf(a) {
+  const n = a.count, k = a.itemSize, out = new Float32Array(n * k), get = [a.getX, a.getY, a.getZ, a.getW];
+  for (let j = 0; j < k; j++) { const g = get[j]; for (let i = 0; i < n; i++) out[i * k + j] = g.call(a, i); }
+  return out;
+}
+function partFloats(src, k) {
+  const c = src.userData.fitFloats || (src.userData.fitFloats = {});
+  if (!c[k]) c[k] = k === 'n0' ? normalsOf(partFloats(src, 'position'), src.index, src.attributes.position.count) : floatsOf(src.attributes[k]);
+  return c[k];
+}
+// (area-weighted vertex normals of positions P on the triangles of index I)
+function normalsOf(P, I, n) {
+  const N = new Float32Array(n * 3), m = I ? I.count : n;
+  for (let t = 0; t + 2 < m; t += 3) {
+    const i = (I ? I.getX(t) : t) * 3, j = (I ? I.getX(t + 1) : t + 1) * 3, k = (I ? I.getX(t + 2) : t + 2) * 3;
+    const ux = P[j] - P[i], uy = P[j + 1] - P[i + 1], uz = P[j + 2] - P[i + 2], vx = P[k] - P[i], vy = P[k + 1] - P[i + 1], vz = P[k + 2] - P[i + 2];
+    const cx = uy * vz - uz * vy, cy = uz * vx - ux * vz, cz = ux * vy - uy * vx;
+    for (const q of [i, j, k]) { N[q] += cx; N[q + 1] += cy; N[q + 2] += cz; }
+  }
+  return N;
+}
+// A hair's own geometry for a fit: its positions, normals and strand directions its own, the rest (index, uv, skin
+// weights, colours) shared with the part's. Its normals turn as the tuck turns the surface under them (the turn from
+// the part's surface to the tucked one, at each point), so the card hair's outward-bent normals and the Mathwood hair's
+// smooth or flat shading stay as made, and its strand directions turn with them.
+const OWN = ['position', 'normal', '_strand'];
+function ownGeometry(src) {
+  const g = new THREE.BufferGeometry(); g.name = (src.name || 'hair') + ' (fit)';
+  g.setIndex(src.index);
+  for (const [k, a] of Object.entries(src.attributes)) g.setAttribute(k, OWN.includes(k) ? new THREE.BufferAttribute(floatsOf(a), a.itemSize) : a);
+  for (const gr of src.groups) g.addGroup(gr.start, gr.count, gr.materialIndex);
+  g.userData.fitShared = Object.keys(src.attributes).filter((k) => !OWN.includes(k));
+  return g;
+}
+// (only its own buffers freed: the part's shared ones stay for every other person wearing it)
+function disposeOwn(g) { g.setIndex(null); for (const k of g.userData.fitShared || []) g.deleteAttribute(k); g.dispose(); }
+const _q = new THREE.Quaternion(), _a = new THREE.Vector3(), _b = new THREE.Vector3(), _v = new THREE.Vector3();
+function applyFit(dst, src, M, fit, field) {
+  const pos = src.attributes.position, n = pos.count, s = fit.scale, o = fit.offset, F = new Float32Array(n * 3);
+  let top = -Infinity, bot = Infinity;
+  for (let i = 0; i < n; i++) {
+    _v.fromBufferAttribute(pos, i).applyMatrix4(M);
+    F[i * 3] = SKULL[0] + (_v.x - SKULL[0]) * s + o[0]; F[i * 3 + 1] = SKULL[1] + (_v.y - SKULL[1]) * s + o[1]; F[i * 3 + 2] = SKULL[2] + (_v.z - SKULL[2]) * s + o[2];
+    top = Math.max(top, F[i * 3 + 1]); bot = Math.min(bot, F[i * 3 + 1]);
+  }
+  const stats = { tucked: 0, held: 0 };
+  if (fit.tuck > 0 && field) {
+    const full = Math.max(bot, TUCK_JAW), start = Math.max(top - fit.tuckStart, full + 0.01);
+    for (let i = 0; i < n; i++) {
+      const y = F[i * 3 + 1];
+      let w = smooth01((start - y) / (start - full));
+      if (y < full) w *= 1 - smooth01((full - y) / TUCK_FADE);
+      if (w <= 0) continue;
+      const dx = F[i * 3] - SKULL[0], dz = F[i * 3 + 2] - SKULL[2], r = Math.hypot(dx, dz);
+      if (r < 1e-4) continue;
+      const gap = r - fieldAt(field.S, y, dx, dz, true) - HAIR_CLEAR;
+      if (gap <= 0) continue;
+      const want = r - fit.tuck * w * gap, least = fieldAt(field.D, y, dx, dz, false) + HAIR_CLEAR, r2 = Math.max(want, least);
+      if (r2 >= r) continue;
+      const k = r2 / r; F[i * 3] = SKULL[0] + dx * k; F[i * 3 + 2] = SKULL[2] + dz * k;
+      stats.tucked++; if (least > want) stats.held++;
+    }
+  }
+  const Mi = M.clone().invert(), P = dst.attributes.position.array;
+  for (let i = 0; i < n; i++) _v.fromArray(F, i * 3).applyMatrix4(Mi).toArray(P, i * 3);
+  dst.attributes.position.needsUpdate = true;
+  // the normals and strands: as made, turned where the tuck turned the surface
+  const turn = [];
+  for (const k of ['normal', '_strand']) {
+    const A = dst.attributes[k]; if (!A) continue;
+    A.array.set(partFloats(src, k)); A.needsUpdate = true;
+    if (A.itemSize === 3) turn.push(A);
+  }
+  if (stats.tucked && turn.length) {
+    const N0 = partFloats(src, 'n0'), N1 = normalsOf(P, src.index, n);
+    for (let i = 0; i < n; i++) {
+      _a.fromArray(N0, i * 3); _b.fromArray(N1, i * 3);
+      if (_a.lengthSq() < 1e-20 || _b.lengthSq() < 1e-20) continue;
+      _q.setFromUnitVectors(_a.normalize(), _b.normalize());
+      for (const A of turn) { _v.fromArray(A.array, i * 3).applyQuaternion(_q).toArray(A.array, i * 3); }
+    }
+  }
+  dst.boundingBox = null; dst.boundingSphere = null;
+  return stats;
+}
+
 // ── a person, put together from a recipe ────────────────────────────────────────────────────────────────────────────
 // the parts' skinned meshes bound to one skeleton (the suit's): a template a Person is cloned from
 function assemble(suit, others) {
@@ -441,9 +659,11 @@ export async function makeCrew(lib, recipe) {
   // (the template's own materials, in the same order as the clone's meshes: a head with a visor has two)
   const src = []; tpl.traverse((t) => { if (t.isSkinnedMesh) src.push(t.material); });
   let i = 0, visor = null;
+  const hairMeshes = [];
   person.root.traverse((o) => {
     if (!o.isSkinnedMesh) return;
     const kind = o.userData.part || 'suit', own = o.material === made ? src[i] : o.material; i++;
+    if (kind === 'hair') hairMeshes.push(o);
     if (own && own.name === 'visor') { o.material = visor = visorMaterial(); meshes.visor = o; }
     else if (kind === 'hair' && atlas) {
       const mat = hairCardMaterial(refsOf.hair || {}, atlas); o.material = mat; mats.push(mat); meshes.hair = o;
@@ -480,9 +700,30 @@ export async function makeCrew(lib, recipe) {
       c.expression = k >= 0 ? name : 'neutral'; c.recipe.expression = c.expression;
       if (visor) visor.userData.visor.vsExpr.value = Math.max(0, k);
     },
-    dispose() { for (const m of mats) m.dispose(); if (visor) visor.dispose(); person.mixer.stopAllAction(); person.root.removeFromParent(); },
+    // the hair's fit (a hair's fit, above): each hair mesh gets its own positions while it wears one
+    fit: null, fitStats: { tucked: 0, held: 0 },
+    async setFit(fit) {
+      const f = fit ? fitFor(fit) : null, plain = asMade(f);
+      const field = !plain && f.tuck > 0 && R.head ? await lib.headField(R.head) : null;
+      const stats = { tucked: 0, held: 0 };
+      for (const [m, g0, M] of hairFit) {
+        if (plain) { if (m.geometry !== g0) { disposeOwn(m.geometry); m.geometry = g0; } continue; }
+        if (m.geometry === g0) m.geometry = ownGeometry(g0);
+        const s = applyFit(m.geometry, g0, M, f, field); stats.tucked += s.tucked; stats.held += s.held;
+      }
+      c.fit = plain ? null : f; c.fitStats = stats;
+      return stats;
+    },
+    dispose() {
+      for (const m of mats) m.dispose(); if (visor) visor.dispose();
+      for (const [m, g0] of hairFit) if (m.geometry !== g0) { disposeOwn(m.geometry); m.geometry = g0; }
+      person.mixer.stopAllAction(); person.root.removeFromParent();
+    },
   };
+  // (each hair mesh, the part's own geometry it shares, and its bind space -> the head's frame)
+  const hairFit = hairMeshes.map((m) => [m, m.geometry, frameOf(m)]);
   c.setColours(recipe.colours || {});
   c.setExpression(recipe.expression || 'neutral');
+  await c.setFit(lib.fitOf(R.hair, R.head));
   return c;
 }
