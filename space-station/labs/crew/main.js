@@ -4,7 +4,8 @@
 // ONE MENU along the bottom:
 //   the characters (one entry a recipe) and every clip their suit's skeleton has (the men's or the women's), its speed;
 //   the wardrobe: Head, Hair, Suit (each part a choice: any goes with any; the hair: the Blender styles from the game's
-//     maker's grid, drawn as card hair, and the Mathwood hair), Job colours (the suit's marks, light lines and panels),
+//     maker's grid, drawn as card hair, and the Mathwood hair), Job colours (the suit's marks, light lines and panels; a
+//     suit that keeps its own colours, the captains', takes none), Uniform (the suit's whites: a few colours or any),
 //     Skin tone, Hair colour; a visor's face (an android's helmet: Captain Vega's expressions), when the head has one;
 //   the view: cameras (Face, Head and Nape follow the head: from the front-left, straight on, from behind), Plain (no
 //     paint), Wireframe, the 1.8 m marker, the bones, Smooth hair (the Mathwood hair smooth-shaded, or off: its flat
@@ -26,7 +27,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { loadCrew, makeCrew, fitFor, CLIPS, JOBS, SKIN_TONES, HAIR_COLOURS, EXPRESSIONS } from '../../kit/crew.js';
+import { loadCrew, makeCrew, fitFor, CLIPS, JOBS, UNIFORM_COLOURS, SKIN_TONES, HAIR_COLOURS, EXPRESSIONS } from '../../kit/crew.js';
 import { makeMaterials } from '../../kit/materials.js';
 import { buildRoom } from '../../kit/layout.js';
 
@@ -185,8 +186,19 @@ function menuRows() {
     chip(st.paused ? 'Play' : 'Pause', st.paused, () => { st.paused = !st.paused; menu(); }, true));
   // (a visor's face: only when the head has a visor)
   const face = st.crew?.meshes.visor ? [sep(), lab('Visor'), ...Object.entries(EXPRESSIONS).map(([k, t]) => chip(t, st.crew.expression === k, () => expression(k), true))] : [];
+  // (a suit that keeps its own colours: the job chips do nothing on it, and say so)
+  const sm = st.crew?.meshes.suit, own = !!(sm && (sm.userData.paint || sm.material).userData.crewOwnColours);
+  const jobLab = lab(own ? 'Job (own colours)' : 'Job'); if (own) jobLab.title = 'This suit keeps its own colours: a job changes nothing on it (its whites still take the Uniform colour)';
+  // (any uniform colour: previewed as it's picked, kept when the picker closes)
+  const any = document.createElement('input'); any.type = 'color'; any.className = 'kl-colour'; any.value = C.uniform || '#8a96a3';
+  any.title = 'Any uniform colour'; any.setAttribute('aria-label', 'Any uniform colour');
+  if (C.uniform && !UNIFORM_COLOURS.includes(C.uniform)) any.classList.add('on');
+  any.oninput = () => st.crew?.setColours({ ...(st.recipe.colours || {}), uniform: any.value });
+  any.onchange = () => colours({ uniform: any.value });
   $('#wear').replaceChildren(lab('Head'), pick('Head', 'head', R.head), lab('Hair'), pick('Hair', 'hair', R.hair, true), lab('Suit'), pick('Suit', 'suit', R.suit), ...face,
-    sep(), lab('Job'), ...Object.entries(JOBS).map(([k, J]) => chip(J.name, (C.job || 'explorer') === k, () => colours({ job: k }), true)),
+    sep(), jobLab, ...Object.entries(JOBS).map(([k, J]) => chip(J.name, (C.job || 'explorer') === k, () => colours({ job: k }), true)),
+    sep(), lab('Uniform'), swatch('linear-gradient(135deg,#f4f5f6,#9aa3ad)', !C.uniform, () => colours({ uniform: null }), 'The uniform as made'),
+    ...UNIFORM_COLOURS.map((s) => swatch(s, C.uniform === s, () => colours({ uniform: s }), 'Uniform ' + s)), any,
     sep(), lab('Skin'), swatch('linear-gradient(135deg,#d9a37f,#86522f)', !C.skin, () => colours({ skin: null }), 'His own skin'), ...SKIN_TONES.map((s) => swatch(s, C.skin === s, () => colours({ skin: s }), 'Skin ' + s)),
     sep(), lab('Hair colour'), swatch('linear-gradient(135deg,#6b4127,#2e1f15)', !C.hair, () => colours({ hair: null }), 'His own hair'), ...HAIR_COLOURS.map((s) => swatch(s, C.hair === s, () => colours({ hair: s }), 'Hair ' + s)));
   $('#view').replaceChildren(lab('Camera'), ...Object.keys(CAMS).map((k) => chip(k, k === st.cam, () => { setCam(k); menu(); }, true)),
@@ -197,7 +209,9 @@ function menuRows() {
 }
 async function smoothHair(on) { lib.smoothHair = !!on; if (st.recipe) await show(st.recipe); triCount(); menu(); }
 function expression(k) { st.recipe.expression = k; st.crew?.setExpression(k); menu(); }
-function colours(c) { st.recipe.colours = { ...(st.recipe.colours || {}), ...c }; for (const k of Object.keys(c)) if (c[k] == null) delete st.recipe.colours[k]; st.crew?.setColours(st.recipe.colours); menu(); }
+// (a colour set back to the part's own (null) is left out of the recipe, but passed on as null: the person merges what it's
+// given into its own colours, so a key left out would keep the colour it had)
+function colours(c) { st.recipe.colours = { ...(st.recipe.colours || {}), ...c }; for (const k of Object.keys(c)) if (c[k] == null) delete st.recipe.colours[k]; st.crew?.setColours({ ...st.recipe.colours, ...c }); menu(); }
 
 // ── FIT: the heads and hair one by one, and the hair fitted (kit/crew.js, "a hair's fit") ─────────────────────────────
 // This browser's fits (lib.fits: a hair's entry replaces crew.json's fit for that hair) are kept in localStorage as

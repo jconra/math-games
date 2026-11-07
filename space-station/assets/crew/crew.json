@@ -1,11 +1,24 @@
 {
-  "about": "The crew's parts (each skinned to a Mathwood people's skeleton, 'm' the men's or 'f' the women's, and carrying it; made by ~/pw/space-math/rigs/crew-rig/) and the characters put together from them (kit/crew.js makeCrew). A recipe: { suit, head, hair, colours: { job, skin, hair }, expression }; a colour left out keeps the part's own; expression is a visor's face (neutral, happy, thinking, surprised). The suit's skeleton sets the clips. Any head goes on any suit and any hair on any head: a head attaches at the Neck and Head joints and hair at the Head joint (the attachment rules: ~/pw/space-math/characters/CHARACTERS.md).",
+  "about": "The crew's parts (each skinned to a Mathwood people's skeleton, 'm' the men's or 'f' the women's, and carrying it; made by ~/pw/space-math/rigs/crew-rig/) and the characters put together from them (kit/crew.js makeCrew). A recipe: { suit, head, hair, colours: { job, uniform, skin, hair }, expression }; a colour left out keeps the part's own (job: the suit's marks, lines and panels, unless the suit keeps its own colours; uniform: its whites); expression is a visor's face (neutral, happy, thinking, surprised). The suit's skeleton sets the clips. Any head goes on any suit and any hair on any head: a head attaches at the Neck and Head joints and hair at the Head joint (the attachment rules: ~/pw/space-math/characters/CHARACTERS.md).",
   "hairAtlas": { "map": "hair_atlas.webp", "normal": "hair_atlas_n.webp" },
   "parts": {
     "suit": [
       { "id": "crew1", "name": "Station suit", "file": "suit_crew1.glb", "skeleton": "m" },
       { "id": "captain1", "name": "Captain's jumpsuit", "file": "suit_captain1.glb", "skeleton": "f" },
-      { "id": "vega", "name": "Captain Vega (android, coat)", "file": "suit_vega.glb", "skeleton": "m" }
+      { "id": "vega", "name": "Captain Vega (android, coat)", "file": "suit_vega.glb", "skeleton": "m" },
+      { "id": "smelter", "name": "Smelter's suit", "file": "suit_smelter.glb", "skeleton": "m" },
+      { "id": "medic", "name": "Medic's uniform", "file": "suit_medic.glb", "skeleton": "f" },
+      { "id": "cook", "name": "Cook's jacket and apron", "file": "suit_cook.glb", "skeleton": "m" },
+      { "id": "security", "name": "Security", "file": "suit_security.glb", "skeleton": "f" },
+      { "id": "dockWorker", "name": "Dock worker", "file": "suit_dockWorker.glb", "skeleton": "f" },
+      { "id": "civilian", "name": "Civilian clothes", "file": "suit_civilian.glb", "skeleton": "m" },
+      { "id": "spaceMan", "name": "Spacesuit (men's)", "file": "suit_spaceMan.glb", "skeleton": "m" },
+      { "id": "spaceWoman", "name": "Spacesuit (women's)", "file": "suit_spaceWoman.glb", "skeleton": "f" },
+      { "id": "captainMan", "name": "Captain's uniform (men's)", "file": "suit_captainMan.glb", "skeleton": "m" },
+      { "id": "captainOld", "name": "Captain's coat (older)", "file": "suit_captainOld.glb", "skeleton": "m" },
+      { "id": "captainWoman", "name": "Captain's uniform (women's)", "file": "suit_captainWoman.glb", "skeleton": "f" },
+      { "id": "atlantis1", "name": "Atlantis 1 (crew uniform)", "file": "suit_atlantis1.glb", "skeleton": "m" },
+      { "id": "atlantis2", "name": "Atlantis 2 (crew uniform)", "file": "suit_atlantis2.glb", "skeleton": "f" }
     ],
     "head": [
       { "id": "crew1", "name": "Crew 1 (his portrait)", "file": "head_crew1.glb", "skeleton": "m" },
@@ -39,6 +52,19 @@
   "recipes": {
     "crew1": { "name": "Crew 1", "suit": "crew1", "head": "crew1", "hair": "crew1", "colours": { "job": "explorer" } },
     "captain1": { "name": "Captain", "suit": "captain1", "head": "captain1", "hair": "captain1", "colours": { "job": "explorer" } },
-    "vega": { "name": "Captain Vega", "suit": "vega", "head": "vega", "hair": null, "colours": { "job": "explorer" }, "expression": "happy" }
+    "vega": { "name": "Captain Vega", "suit": "vega", "head": "vega", "hair": null, "colours": { "job": "explorer" }, "expression": "happy" },
+    "smelter": { "name": "Smelter", "suit": "smelter", "head": "h1", "hair": "buzz", "colours": { "job": "explorer" } },
+    "medic": { "name": "Medic", "suit": "medic", "head": "h2", "hair": "ponytail", "colours": { "job": "explorer" } },
+    "cook": { "name": "Cook", "suit": "cook", "head": "h5", "hair": "crop", "colours": { "job": "explorer" } },
+    "security": { "name": "Security", "suit": "security", "head": "h4", "hair": "q_bob", "colours": { "job": "explorer" } },
+    "dockWorker": { "name": "Dock worker", "suit": "dockWorker", "head": "h8", "hair": "crop", "colours": { "job": "explorer" } },
+    "civilian": { "name": "Civilian", "suit": "civilian", "head": "h7", "hair": "sidepart", "colours": { "job": "explorer" } },
+    "spaceMan": { "name": "Spacesuit (men's)", "suit": "spaceMan", "head": "crew1", "hair": "crew1", "colours": { "job": "explorer" } },
+    "spaceWoman": { "name": "Spacesuit (women's)", "suit": "spaceWoman", "head": "captain1", "hair": "captain1", "colours": { "job": "explorer" } },
+    "captainMan": { "name": "Captain (men's)", "suit": "captainMan", "head": "h9", "hair": "wavy", "colours": { "job": "explorer", "hair": "#4a2f1d" } },
+    "captainOld": { "name": "Captain (older)", "suit": "captainOld", "head": "h3", "hair": "crop", "colours": { "job": "explorer", "hair": "#c9c5be" } },
+    "captainWoman": { "name": "Captain (women's)", "suit": "captainWoman", "head": "h6", "hair": "captain1", "colours": { "job": "explorer", "hair": "#17110d" } },
+    "atlantis1": { "name": "Atlantis 1", "suit": "atlantis1", "head": "h5", "hair": "q_short", "colours": { "job": "explorer", "hair": "#4a2f1d" } },
+    "atlantis2": { "name": "Atlantis 2", "suit": "atlantis2", "head": "h2", "hair": "wavy", "colours": { "job": "explorer", "hair": "#2e1f15" } }
   }
 }

@@ -1,6 +1,12 @@
 /* The Crew Lab, on the Kit Lab's look (../kit/kit.css). Colour swatches in the menu are round chips. */
 .chip.sw { width: 26px; height: 26px; padding: 0; border-radius: 50%; border: 2px solid #2f3d50; }
 .chip.sw.on { border-color: var(--blue-hi); box-shadow: 0 0 0 2px var(--blue); }
+/* any uniform colour: the browser's own colour picker, round like a swatch */
+.kl-colour { flex: none; width: 30px; height: 30px; padding: 0; border: 2px solid #2f3d50; border-radius: 50%; background: none; cursor: pointer; }
+.kl-colour.on { border-color: var(--blue-hi); box-shadow: 0 0 0 2px var(--blue); }
+.kl-colour::-webkit-color-swatch-wrapper { padding: 2px; }
+.kl-colour::-webkit-color-swatch { border: none; border-radius: 50%; }
+.kl-colour::-moz-color-swatch { border: none; border-radius: 50%; }
 .kl-row select { max-width: 150px; }
 .kl-row[hidden] { display: none; }
 /* the Fit rows: a value between its two buttons, the fit in words, the box Copy fits fills */

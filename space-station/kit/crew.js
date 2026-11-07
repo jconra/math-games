@@ -22,10 +22,14 @@
 // rules, ~/pw/space-math/characters/CHARACTERS.md): a head is skinned to the Neck and Head bones only and its neck runs
 // down inside the collar; hair is skinned to the Head bone only and sits on the standard skull.
 //
-// COLOURS without new textures: each part's material is patched so its marked areas take a colour (the masks ride in
-// the textures' spare channels, written by the rig's post step):
-//   suit   the amber marks (the metal-roughness texture's red), the teal light lines (the colour texture's alpha; they
-//          glow) and the dark panels (the normal map's alpha), by JOBS
+// COLOURS without new textures: each part's material is patched so its marked areas take a colour (the masks, written
+// by the rig's post step):
+//   suit   the amber marks, the teal light lines (they glow) and the dark panels, by JOBS; the whites (the light, near-
+//          neutral cloth and plates), by the UNIFORM colour. All four in the suit's own small mask texture (in its
+//          material's occlusion slot at strength 0: R marks, G lines, B 128 neither, up to 255 white, down to 0 panel);
+//          a suit made before it (no whites) has the first three in its textures' spare channels (the metal-roughness
+//          texture's red, the colour texture's alpha, the normal map's alpha), still read. A suit that keeps its own
+//          colours (crewPart.jobColours false: the captains' uniforms) takes no job colour, only the uniform colour.
 //   head   the skin (the colour texture's alpha), by a skin tone
 //   hair   all of it, by a hair colour
 // A colour is laid on as a shift from the part's own (measured) colour, scaled by how light each texel is (skin: by
@@ -51,15 +55,15 @@
 //                                               lib.fitOf(hair id, head id) -> the fit makeCrew gives that hair on that
 //                                               head; lib.fits { hair id: fit } (empty: a layer over crew.json's, each
 //                                               entry replacing that hair's whole fit; the Crew Lab's while it's edited)
-//   const c = await makeCrew(lib, recipe)       recipe { suit, head, hair, colours: { job, skin, hair } }
+//   const c = await makeCrew(lib, recipe)       recipe { suit, head, hair, colours: { job, uniform, skin, hair } }
 //     c.root (place and turn it: feet on y 0, facing +z), c.person (Mathwood's Person), c.play(name, { fade, speed, once }),
-//     c.update(dt), c.setColours({ job, skin, hair }), c.meshes { suit, head, hair, visor }, c.bones, c.body ('m' | 'f':
+//     c.update(dt), c.setColours({ job, uniform, skin, hair }), c.meshes { suit, head, hair, visor }, c.bones, c.body ('m' | 'f':
 //     the suit's skeleton, whose clips it plays), c.stride (m/s at speed 1: { Walk, Run }), c.dispose(),
 //     c.setExpression(name) (a visor's face; recipe.expression sets the first), c.expression,
 //     await c.setFit(fit) (the hair's fit, live: { offset, scale, tuck, tuckStart } as lib.fitOf gives; null: as made),
 //     c.fit (the fit it wears), c.fitStats ({ tucked: points the tuck moved, held: of those, how many it stopped 4 mm off
 //     the head })
-//   JOBS, SKIN_TONES, HAIR_COLOURS, CLIPS, EXPRESSIONS, fitFor, SKULL, HAIR_CLEAR
+//   JOBS, UNIFORM_COLOURS, SKIN_TONES, HAIR_COLOURS, CLIPS, EXPRESSIONS, fitFor, SKULL, HAIR_CLEAR
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
@@ -89,6 +93,8 @@ export const JOBS = {
   hauler: { name: 'Hauler', marks: '#ff6a12', lines: '#ff8a2a', panels: '#3b322c' },
   staff: { name: 'Station staff', marks: '#3d7fe0', lines: '#4fb6ff', panels: '#6c7682' },
 };
+// the uniform's whites (any sRGB colour; null keeps the suit's own): a few to pick from
+export const UNIFORM_COLOURS = ['#e9ecef', '#c9ccd1', '#8a96a3', '#3b4a5c', '#1f3a6b', '#2f6db3', '#2b6b5a', '#6b2d34', '#b8742a', '#d9c7a1'];
 export const SKIN_TONES = ['#f2d3bd', '#e8bf9f', '#d9a37f', '#c48a62', '#a66d45', '#86522f', '#663b22', '#47291a'];
 export const HAIR_COLOURS = ['#17110d', '#2e1f15', '#4a2f1d', '#6b4127', '#8f5a32', '#b4824f', '#d8bc84', '#a83c22', '#8f8a84', '#d6d3cc'];
 
@@ -215,6 +221,7 @@ function crewUniforms(refs) {
     crMarks: { value: R('marks', 0xe0a020) }, crMarksRef: { value: R('marks', 0xe0a020) },
     crLines: { value: R('lines', 0x20c0c0) }, crLinesRef: { value: R('lines', 0x20c0c0) },
     crPanels: { value: R('panels', 0x202020) }, crPanelsRef: { value: R('panels', 0x202020) },
+    crWhites: { value: R('whites', 0xc8c8c8) }, crWhitesRef: { value: R('whites', 0xc8c8c8) },
     crSkin: { value: R('skin', 0xc08060) }, crSkinRef: { value: R('skin', 0xc08060) },
     crHair: { value: R('hair', 0x402010) }, crHairRef: { value: R('hair', 0x402010) },
     crGlow: { value: refs && refs.glow != null ? refs.glow : 0.0 },
@@ -229,10 +236,18 @@ function crewMaterial(src, kind, part) {
   // (the suit's generated normal map is busy, ripples where the plates are smooth: half strength)
   else if (m.normalMap) m.normalScale.set(0.5, 0.5);
   m.defines = { ...(m.defines || {}), [KIND_DEF[kind]]: '' };
-  if (has.marks) m.defines.CREW_MARKS = ''; if (has.lines) m.defines.CREW_LINES = ''; if (has.panels) m.defines.CREW_PANELS = ''; if (has.skin) m.defines.CREW_SKIN = '';
+  // (a suit's own mask texture: in the occlusion slot at strength 0, taken out of it as the masks)
+  if (kind === 'suit' && has.tex === 'occlusion' && m.aoMap) { u.crMaskMap = { value: m.aoMap }; m.aoMap = null; m.defines.CREW_MASKTEX = ''; }
+  else if (has.marks) m.defines.CREW_MARKS = '';
+  if (!('CREW_MASKTEX' in m.defines)) { if (has.lines) m.defines.CREW_LINES = ''; if (has.panels) m.defines.CREW_PANELS = ''; }
+  if (has.skin) m.defines.CREW_SKIN = '';
+  m.userData.crewOwnColours = !!(part && part.jobColours === false);
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u);
-    sh.fragmentShader = `uniform vec3 crMarks, crMarksRef, crLines, crLinesRef, crPanels, crPanelsRef, crSkin, crSkinRef, crHair, crHairRef; uniform float crGlow;
+    sh.fragmentShader = `uniform vec3 crMarks, crMarksRef, crLines, crLinesRef, crPanels, crPanelsRef, crWhites, crWhitesRef, crSkin, crSkinRef, crHair, crHairRef; uniform float crGlow;
+#ifdef CREW_MASKTEX
+uniform sampler2D crMaskMap;
+#endif
 float crLum(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 // (a mask kept in an alpha channel between 4 and 255: lossy WebP drops the colour under a fully clear pixel)
 float crA(float a) { return clamp((a * 255.0 - 4.0) / 251.0, 0.0, 1.0); }
@@ -242,6 +257,17 @@ vec3 crShift(vec3 c, vec3 to, vec3 ref, float m) { return max(c + (to - ref) * m
       .replace('#include <map_fragment>', `#include <map_fragment>
   float crLineMask = 0.0;
 #ifdef USE_MAP
+  #if defined(CREW_SUIT) && defined(CREW_MASKTEX)
+  {
+    vec4 crM = texture2D(crMaskMap, vMapUv);
+    float crB = crM.b * 255.0;
+    crLineMask = crM.g;
+    diffuseColor.rgb = crShift(diffuseColor.rgb, crWhites, crWhitesRef, clamp((crB - 128.0) / 127.0, 0.0, 1.0));
+    diffuseColor.rgb = crShift(diffuseColor.rgb, crLines, crLinesRef, crLineMask);
+    diffuseColor.rgb = crShift(diffuseColor.rgb, crMarks, crMarksRef, crM.r);
+    diffuseColor.rgb = crShift(diffuseColor.rgb, crPanels, crPanelsRef, clamp((128.0 - crB) / 128.0, 0.0, 1.0));
+  }
+  #endif
   #if defined(CREW_SUIT) && defined(CREW_LINES)
     crLineMask = crA(sampledDiffuseColor.a);
     diffuseColor.rgb = crShift(diffuseColor.rgb, crLines, crLinesRef, crLineMask);
@@ -411,11 +437,13 @@ function visorMaterial(src) {
   return m;
 }
 
-function setColours(mats, { job, skin, hair } = {}) {
-  const J = JOBS[job] || JOBS.explorer;
+function setColours(mats, { job, uniform, skin, hair } = {}) {
   for (const m of mats) {
     const u = m.userData.crew; if (!u) continue;
+    // (a suit that keeps its own colours takes no job's: its marks, lines and panels as made)
+    const J = (!m.userData.crewOwnColours && JOBS[job]) || JOBS.explorer;
     for (const k of ['marks', 'lines', 'panels']) { const key = 'cr' + k[0].toUpperCase() + k.slice(1); u[key].value.copy(J[k] ? lin(J[k]) : u[key + 'Ref'].value); }
+    u.crWhites.value.copy(uniform ? lin(uniform) : u.crWhitesRef.value);
     u.crSkin.value.copy(skin ? lin(skin) : u.crSkinRef.value);
     u.crHair.value.copy(hair ? lin(hair) : u.crHairRef.value);
   }
