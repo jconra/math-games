@@ -11,8 +11,8 @@
 //                            lower band, the yellow stripes, the fin's tip); its two ring engines, their recesses dark
 //                            metal (the jet is plume.js's, jetNozzles), blue light bars round each drum
 //   mdCanopy     'glass'     the canopy: the panes his picture has (the windscreen across the front and, each side, its
-//                            corner pane and the side window behind it) in smoked glass, a black spar part along every
-//                            border and round the outline
+//                            corner pane and the side window behind it) in smoked glass warmed to his bronze tint
+//                            (GLASS_TINT), a black spar part along every border and round the outline
 //   mdMarks      'marks'     what is laid on the skin: the blue light strips, the amber headlamps, the teal pulse line
 //                            (the medical mark: no red cross, a protected symbol)
 //   mdBay        'med bay'   the bay between the two side openings (Meshy's tunnel through the ship): its floor, end
@@ -22,13 +22,13 @@
 //   mdRamp       'port' / 'starboard'   a ramp: two leaves of one door ('ramp', 1 down): the main section closes the
 //                            opening standing up, hinged at the sill; the foot section, folded against its inside,
 //                            swings out to carry it on to the ground
-//   mdCrewDoor   'port' / 'starboard'   a crew door: the doorway's jambs and the door itself, an airstair (door 'crew',
-//                            1 open) hinged at the sill, its inside a steep stair to the ground
+//   mdCrewDoor   'port' / 'starboard'   a crew door: the doorway's graphite frame and the door itself, an airstair (door
+//                            'crew', 1 open) hinged at the sill, its inside a steep stair to the ground
 //   mdAirlock    'port' / 'starboard'   the small airlock behind it, its inner door (shut)
 //   mdGear       'port front' / 'port rear' / 'starboard front' / 'starboard rear'   a landing leg (the 8k's): its pad and
 //                            drum (one leaf) and its struts and block (another) rise into a well in the belly (door
 //                            'gear', 1 up), the struts sliding into the drum as they go; the pad's sole closes the well
-//   mdWells      'wells'     the legs' wells: dark walls from the belly up, and their tops (the rear two stand 0.3 m
+//   mdWells      'wells'     the legs' wells: dark walls from the belly up, and their tops (the rear two stand 0.29 m
 //                            over the cabin's deck: a ledge; the front two under the flight deck)
 //   mdCockpit    'two seats' two bucket seats side by side, the pedestal between them, the dash and side consoles, on
 //                            a flight deck raised over the cabin's, the hull's inside round it dark; the bulkhead behind
@@ -66,10 +66,11 @@ export const PAL = {
   tread: s('#62666c', 0.7, 0.35, 0.7),         // the ramps' tread plates
   bay: s('#857660', 0.6, 0.12, 0.4),           // the bay's warm wall panels (his picture's lit bay)
   bayDark: s('#4b4239', 0.6, 0.15, 0.4),
-  mattress: s('#e6dec6', 0.85, 0.0, 0.25), pillow: s('#f1ede2', 0.9, 0.0, 0.2),
+  mattress: s('#e6dec6', 0.85, 0.0, 0.25), pillow: s('#f1ede2', 0.9, 0.0, 0.2), blanket: s('#8fb4c9', 0.9, 0.0, 0.25),
   drum: s('#737a83', 0.55, 0.22, 0.6), drumEdge: s('#737a83', 0.55, 0.22, 1.0),   // the engines' drums: lighter metal, matt (seen from behind, a shiny one mirrors the dark)
   nozzle: s('#2a2d32', 0.4, 0.75, 0.8), rim: s('#9299a1', 0.45, 0.3, 0.7), core: s('#16181b', 0.45, 0.8, 0.8),
   screen: s('#0c1418', 0.2, 0.1, 0.2),
+  legs: s('#33373d', 0.5, 0.35, 0.6),          // the legs: dark graphite (his)
 };
 // (glows kept below the point where they wash out to white: the blue stays blue, the amber amber)
 export const GLOW = { strip: [0.08, 0.85, 3.2], warm: [2.1, 0.78, 0.1], bay: [2.2, 1.45, 0.62], teal: [0.06, 1.7, 1.25], keypad: [0.1, 0.9, 2.2], white: [2.4, 2.3, 2.1] };
@@ -202,7 +203,7 @@ export const MARKS = {
   // under the windscreen, across the nose (his blue strip in a dark housing)
   noseStrip: { x: 0.36, y: 3.05, h: 0.07 },
   // his amber headlamps in the nose's dark chin, each a housing standing out of it with its glowing face at the front
-  lamps: [{ x: 0.62, y: 2.18, w: 0.4, h: 0.15, rim: 0.035 }],
+  lamps: [{ x: 0.62, y: 2.16, w: 0.5, h: 0.2, rim: 0.035 }],
   // THE MEDICAL MARK: a teal pulse line (a heartbeat's trace) along each side, aft of the bay (a red cross is a
   // protected symbol): its points (along z, up y) from its start, metres; its width
   pulse: { z0: -2.35, y0: 3.62, w: 0.045, pts: [[0, 0], [0.32, 0], [0.4, 0.1], [0.48, 0], [0.56, 0], [0.62, -0.12], [0.7, 0.42], [0.78, -0.26], [0.86, 0], [1.0, 0], [1.08, 0.08], [1.18, 0], [1.6, 0]] },
@@ -248,14 +249,23 @@ function mdMarks(p) {
 // (his picture's lit bay), the inner doors fore and aft (shut, wide enough for a stretcher), and the two patient beds,
 // one each side of the middle line in the bay's aft half, lying across the ship (as both meshes have them), each with a
 // monitor on the aft wall showing the teal pulse line. The forward half is the stretcher's way from either ramp.
-export const BEDS = { x: [0.55, 2.35], z: [-1.32, -0.42], h: 0.62, mattress: 0.14 };
+export const BEDS = { x: [0.55, 2.35], z: [-1.7, -0.8], h: 0.62, mattress: 0.14 };
 export const INNER = { w: 1.3, h: 2.05 };
 // the cabinets along the starboard opening when its ramp is sealed (the one-ramp layout): drawers, shelves, a screen
 export const EQUIP = { x: [-2.58, -2.1], z: [-0.48, 1.48], h: 2.0, console: { x: [-2.0, -0.55], z: [1.0, 1.48], h: 0.9 } };
-const bayPaint = (f) => (f.n.y > 0.7 ? PAL.deck : f.n.y < -0.7 ? PAL.inner : Math.abs(f.c.x) > BAY.x - 0.05 ? PAL.dark : PAL.bay);
+const bayPaint = (n, c) => (n.y > 0.7 ? PAL.deck : n.y < -0.7 ? PAL.inner : Math.abs(c.x) > BAY.x - 0.05 ? PAL.dark : PAL.bay);
+// (each of Meshy's bay faces turned to face into the bay: some of the 3k's face out, into the hull)
+const BAY_MID = V3(0, (BAY.floor + BAY.ceil) / 2, (BAY.ends[0] + BAY.ends[1]) / 2);
 function mdBay(p) {
   const acc = new Acc(), F = hullFaces().filter((f) => f.paint === 'bay');
-  for (const f of F) acc.tris([f.pts.map(dk)], f.n, bayPaint(f));
+  for (const f of F) { const toMid = BAY_MID.clone().sub(f.c), n = f.n.dot(toMid) < 0 ? f.n.clone().negate() : f.n; acc.tris([f.pts.map(dk)], n, bayPaint(n, f.c)); }
+  // THE LINTELS: a graphite header across the top of each opening (the 3k's opening's top corners are chamfered: the
+  // ramp is a plain rectangle under it), an amber light strip under its inner edge (his)
+  for (const sx of [1, -1]) {
+    const Lt = RAMP.lintel, xm = sx * (Lt.x[0] + Lt.x[1]) / 2, hx = (Lt.x[1] - Lt.x[0]) / 2, ym = (Lt.y[0] + Lt.y[1]) / 2, hy = (Lt.y[1] - Lt.y[0]) / 2, zm = (BAY.ends[0] + BAY.ends[1]) / 2, hz = (BAY.ends[1] - BAY.ends[0]) / 2;
+    boxAt(acc, V3(xm, ym, zm), AX, [hx, hy, hz], PAL.darkEdge);
+    polyTo(acc, [V3(sx * (Lt.x[0] + 0.05), Lt.y[0] - 0.004, -1.4), V3(sx * (Lt.x[0] + 0.12), Lt.y[0] - 0.004, -1.4), V3(sx * (Lt.x[0] + 0.12), Lt.y[0] - 0.004, 1.2), V3(sx * (Lt.x[0] + 0.05), Lt.y[0] - 0.004, 1.2)], V3(0, -1, 0), GLOW.warm, 'glow');
+  }
   const [za, zf] = BAY.ends, y0 = BAY.floor, y1 = BAY.ceil, xs = BAY.x - 0.02;
   // (hazard edges along each opening's sill: yellow and black, on the deck)
   for (const sx of [1, -1]) {
@@ -283,6 +293,9 @@ function mdBay(p) {
       boxAt(acc, V3(xm + a * (hx - 0.08), y0 + 0.04, zm + b * (hz - 0.08)), AX, [0.04, 0.04, 0.03], PAL.rubber, ['v-']);
     }
     boxAt(acc, V3(xm, yt + BEDS.mattress / 2, zm), AX, [hx - 0.03, BEDS.mattress / 2, hz - 0.03], PAL.mattress, ['v-']);
+    // (a blanket over its foot two thirds: pale blue, hanging a little over the sides)
+    const bx0 = sx * (b0 + 0.6), bx1 = sx * (b1 - 0.02);
+    boxAt(acc, V3((bx0 + bx1) / 2, yt + BEDS.mattress + 0.012, zm), AX, [Math.abs(bx1 - bx0) / 2, 0.012, hz - 0.01], PAL.blanket, ['v-']);
     const xp = sx * (b0 + 0.22);
     boxAt(acc, V3(xp, yt + BEDS.mattress + 0.05, zm), AX, [0.16, 0.05, hz - 0.12], PAL.pillow, ['v-']);
     // (rails along its long sides: yellow, his)
@@ -321,74 +334,72 @@ function mdBay(p) {
 }
 
 // ── THE RAMPS ───────────────────────────────────────────────────────────────────────────────────────────────────────
-// Each opening's ramp is its door. Up, the main section (A) stands in the opening on the 3k's sill lip, its outside
-// (RAMP.face) white with a graphite frame, its tread facing into the bay, its top corners cut to the opening's (the 3k's
-// opening has chamfered top corners); it is hinged on its outside's lower edge, on the lip (RAMP.hinge), so nothing of
-// it sweeps below the lip as it turns, and down its underside rests on it. The foot section (B), a little narrower (it
-// swings through the bay, past the jambs, which bulge in at the opening's ends), lies folded against A's tread, inside.
-// Going down (door 'ramp', 0 up to 1 down), A swings out and down about its hinge and B unfolds about the joint at A's
-// top (on the tread's side), until the two lie in one line from the lip to the ground, the foot's underside on it.
+// Each opening's ramp is its door. The 3k's opening has chamfered top corners: a fixed graphite lintel (in mdBay,
+// RAMP.lintel) fills its top across, so the ramp is a plain rectangle under it. Up, the main section (A) stands in the
+// opening on the 3k's sill lip, its outside (RAMP.face) white in a graphite frame, with panel seams and a hazard band by
+// the hinge, its tread facing into the bay; it is hinged on its outside's lower edge, on the lip (RAMP.hinge), so
+// nothing of it sweeps below the lip as it turns, and down its underside rests on it. The foot section (B), as wide,
+// lies folded against A's tread, inside. Going down (door 'ramp', 0 up to 1 down), A swings out and down about its
+// hinge; B stays folded on it until A has swung RAMP.unfold of the way (its top well outside the hull), then unfolds
+// about the joint at A's top, until the two lie in one line from the lip to the ground, the foot's underside on it
+// (rampStep and LAB.pose time B's hinge so: the kit's own door code alone would turn both together, B through the bay).
 // Tread grey, hazard edges yellow and black (his).
 export const RAMP = (() => {
-  const face = 2.98, sill = 1.68, head = 4.13, A = head - sill, B = 1.4, T = 0.11, bevel = 0, chamfer = 0.32;
-  const zA = [-1.83, 1.64], zB = [-1.83 + chamfer, 1.64 - chamfer];
+  const face = 2.98, sill = 1.68, head = 3.86, A = head - sill, B = 1.67, T = 0.11, z = [-1.83, 1.64];
   // (the slope: down, its underside runs from the hinge to the ground)
   const slope = Math.asin(sill / (A + B));
-  return { face, sill, head, A, B, T, bevel, chamfer, zA, zB, slope, swing: PI / 2 + slope, speed: 0.32, hinge: [face, sill] };
+  return { face, sill, head, A, B, T, z, slope, swing: PI / 2 + slope, speed: 0.32, hinge: [face, sill], unfold: 0.4, lintel: { y: [head + 0.005, BAY.ceil + 0.02], x: [BAY.x - 0.02, face + 0.005] } };
 })();
-// (a slab along the ramp from u0 to u1, metres from the hinge (stowed: up the opening), across [z0, z1], T thick: its
-// tread at x = face - T (stowed), its outside at the face (from `bevel` up, on A: under it a bevel down to the hinge
-// line; its top corners cut by `chamfer`); B is drawn as A's continuation in line, then folded by its leaf's base)
+// (a slab along the ramp from u0 to u1, metres from the hinge (stowed: up the opening), across z, T thick: its tread at
+// x = face - T (stowed), its outside at the face; B is drawn as A's continuation in line, then folded by its leaf's base)
 function rampSection(a, s, u0, u1, isA) {
-  const R = RAMP, xo = s * R.face, xt = s * (R.face - R.T), [z0, z1] = isA ? R.zA : R.zB, bv = isA ? R.bevel : 0, ch = isA ? R.chamfer : 0;
+  const R = RAMP, xo = s * R.face, xt = s * (R.face - R.T), [z0, z1] = R.z;
   const P = ([x, u, z]) => V3(x, R.sill + u, z), poly = (q, n, surf) => a.poly(q.map((v) => dk(P(v))), n, surf, 'solid', 99);
-  // (its outline across: [u, z] round it, the chamfered corners on A's top)
-  const outline = (lo, e = 0) => (ch ? [[lo, z0 + e], [u1 - ch - e * 0.4, z0 + e], [u1 - e, z0 + ch + e * 0.4], [u1 - e, z1 - ch - e * 0.4], [u1 - ch - e * 0.4, z1 - e], [lo, z1 - e]] : [[lo, z0 + e], [u1 - e, z0 + e], [u1 - e, z1 - e], [lo, z1 - e]]);
   // the tread (facing the bay when stowed: -s x), hazard edges along its sides, the plates' seams
-  const e = 0.13, xr = xt - s * 0.002, ut = u1 - (ch ? ch + 0.05 : 0);
-  poly(outline(u0).map(([u, z]) => [xt, u, z]), V3(-s, 0, 0), PAL.tread);
-  const nB = Math.max(2, Math.round((ut - u0) / 0.2));
+  const e = 0.13, xr = xt - s * 0.002;
+  poly([[xt, u0, z0 + e], [xt, u1, z0 + e], [xt, u1, z1 - e], [xt, u0, z1 - e]], V3(-s, 0, 0), PAL.tread);
+  const nB = Math.max(2, Math.round((u1 - u0) / 0.2));
   for (let i = 0; i < nB; i++) {
-    const ua = u0 + (ut - u0) * i / nB, ub = u0 + (ut - u0) * (i + 1) / nB, col = i % 2 ? PAL.black : PAL.yellow;
+    const ua = u0 + (u1 - u0) * i / nB, ub = u0 + (u1 - u0) * (i + 1) / nB, col = i % 2 ? PAL.black : PAL.yellow;
     for (const [za, zb] of [[z0, z0 + e], [z1 - e, z1]]) poly([[xr, ua, za], [xr, ub, za], [xr, ub, zb], [xr, ua, zb]], V3(-s, 0, 0), col);
   }
-  for (let u = u0 + 0.6; u < ut - 0.2; u += 0.6) poly([[xr - s * 0.001, u - 0.01, z0 + e], [xr - s * 0.001, u + 0.01, z0 + e], [xr - s * 0.001, u + 0.01, z1 - e], [xr - s * 0.001, u - 0.01, z1 - e]], V3(-s, 0, 0), PAL.dark);
-  // the outside: on A white with a graphite frame round it, on B graphite (the ramp's underside); A's bevel under it
-  const f = 0.12, ub0 = u0 + bv;
+  for (let u = u0 + 0.6; u < u1 - 0.2; u += 0.6) poly([[xr - s * 0.001, u - 0.01, z0 + e], [xr - s * 0.001, u + 0.01, z0 + e], [xr - s * 0.001, u + 0.01, z1 - e], [xr - s * 0.001, u - 0.01, z1 - e]], V3(-s, 0, 0), PAL.dark);
+  // the outside: on A white in a graphite frame, two panel seams across it and a hazard band by the hinge; on B graphite
+  // (the ramp's underside)
+  const f = 0.12;
   if (isA) {
-    const O = outline(ub0), I = outline(ub0 + f, f);
-    poly(I.map(([u, z]) => [xo, u, z]), V3(s, 0, 0), PAL.skin);
-    // (on it: two panel seams across, and a yellow and black hazard band along its foot, by the hinge)
+    poly([[xo, u0 + f, z0 + f], [xo, u1 - f, z0 + f], [xo, u1 - f, z1 - f], [xo, u0 + f, z1 - f]], V3(s, 0, 0), PAL.skin);
+    for (const q of [[[xo, u0, z0], [xo, u1, z0], [xo, u1, z0 + f], [xo, u0, z0 + f]], [[xo, u0, z1 - f], [xo, u1, z1 - f], [xo, u1, z1], [xo, u0, z1]], [[xo, u0, z0 + f], [xo, u0 + f, z0 + f], [xo, u0 + f, z1 - f], [xo, u0, z1 - f]], [[xo, u1 - f, z0 + f], [xo, u1, z0 + f], [xo, u1, z1 - f], [xo, u1 - f, z1 - f]]]) poly(q, V3(s, 0, 0), PAL.dark);
     const xp = xo + s * 0.003, za = z0 + f, zb = z1 - f;
-    for (const k of [1, 2]) { const u = ub0 + f + (u1 - ch - ub0 - f) * k / 3; poly([[xp, u - 0.012, za], [xp, u + 0.012, za], [xp, u + 0.012, zb], [xp, u - 0.012, zb]], V3(s, 0, 0), PAL.dark); }
-    const nH = 16, h0 = ub0 + f, h1 = h0 + 0.16;
+    for (const k of [1, 2]) { const u = u0 + f + (u1 - u0 - 2 * f) * k / 3; poly([[xp, u - 0.012, za], [xp, u + 0.012, za], [xp, u + 0.012, zb], [xp, u - 0.012, zb]], V3(s, 0, 0), PAL.dark); }
+    const nH = 16, h0 = u0 + f, h1 = h0 + 0.16;
     for (let i = 0; i < nH; i++) { const zi = za + (zb - za) * i / nH, zj = za + (zb - za) * (i + 1) / nH; poly([[xp, h0, zi], [xp, h1, zi], [xp, h1, zj], [xp, h0, zj]], V3(s, 0, 0), i % 2 ? PAL.black : PAL.yellow); }
-    for (let i = 0; i < O.length; i++) { const j = (i + 1) % O.length; poly([O[i], O[j], I[j], I[i]].map(([u, z]) => [xo, u, z]), V3(s, 0, 0), PAL.dark); }
-    poly([[xt, u0, z0], [xo, ub0, z0], [xo, ub0, z1], [xt, u0, z1]], V3(s * bv, -R.T, 0).normalize(), PAL.darkEdge);
-  } else poly(outline(u0).map(([u, z]) => [xo, u, z]), V3(s, 0, 0), PAL.dark);
-  // its edges round the outline (on A, the bevel cuts the ends' lower corner) and, on B, its lower edge at the joint
-  const O = outline(u0);
-  for (let i = 0; i < O.length; i++) {
-    const j = (i + 1) % O.length, [ua, za] = O[i], [ub, zb] = O[j]; if (Math.abs(ua - u0) < 1e-9 && Math.abs(ub - u0) < 1e-9) continue;
-    const nn = V3(0, -(zb - za), ub - ua).normalize();
-    const mid = [(ua + ub) / 2, (za + zb) / 2], toC = [mid[0] - (u0 + u1) / 2, mid[1] - (z0 + z1) / 2];
-    if (nn.y * toC[0] + nn.z * toC[1] < 0) nn.negate();
-    const lowA = (u) => (isA && u < ub0 ? xt + (xo - xt) * (u - u0) / bv : xo);
-    const isTop = Math.abs(ua - u1) < 1e-9 && Math.abs(ub - u1) < 1e-9;
-    poly([[xt, ua, za], [lowA(ua), ua, za], [lowA(ub), ub, zb], [xt, ub, zb]], nn, !isA && isTop ? PAL.yellow : PAL.darkEdge);
-  }
-  if (!isA) poly([[xo, u0, z0], [xo, u0, z1], [xt, u0, z1], [xt, u0, z0]], V3(0, -1, 0), PAL.darkEdge);
+  } else poly([[xo, u0, z0], [xo, u1, z0], [xo, u1, z1], [xo, u0, z1]], V3(s, 0, 0), PAL.dark);
+  // its edges: the ends across z, the top (B's: the foot, yellow) and the bottom
+  poly([[xo, u0, z0], [xt, u0, z0], [xt, u1, z0], [xo, u1, z0]], V3(0, 0, -1), PAL.darkEdge);
+  poly([[xo, u0, z1], [xo, u1, z1], [xt, u1, z1], [xt, u0, z1]], V3(0, 0, 1), PAL.darkEdge);
+  poly([[xo, u1, z0], [xt, u1, z0], [xt, u1, z1], [xo, u1, z1]], V3(0, 1, 0), isA ? PAL.darkEdge : PAL.yellow);
+  poly([[xo, u0, z0], [xo, u0, z1], [xt, u0, z1], [xt, u0, z0]], V3(0, -1, 0), PAL.darkEdge);
 }
 function mdRamp(p, side) {
   const s = side === 'starboard' ? -1 : 1, R = RAMP, xt = R.face - R.T;
   const h1 = { at: dk(V3(s * R.face, R.sill, 0)).toArray(), axis: [0, 0, 1], angle: -s * R.swing };
   // (the joint at A's top on the tread's side; B drawn in line above A, then folded down onto A's tread: the leaf's
-  // base turns it there, and its hinge unfolds it, the turn of 180 degrees through the bay's side)
+  // base turns it there, and its hinge unfolds it, the turn of 180 degrees)
   const J = V3(s * xt, R.sill + R.A, 0), fold = C.turnAbout(dk(J), V3(0, 0, 1), s * PI);
   p.leaf('md:ramp A:' + side, (lp) => { const a = new Acc(); rampSection(a, s, 0, R.A, true); a.flush(lp); }, { door: 'ramp', hinge: h1 });
   p.leaf('md:ramp B:' + side, (lp) => { const a = new Acc(); rampSection(a, s, R.A, R.A + R.B, false); a.flush(lp); }, { ...C.leafPose(fold), door: 'ramp', hinge: [h1, { at: dk(J).toArray(), axis: [0, 0, 1], angle: -s * PI }] });
   p.door('ramp', [s * 4.5, -DECK + 1, 0], 0, R.speed);
   return p;
+}
+// (B's hinge timed: the main section turns as the kit turns it, eased; the foot unfolds over the rest of the way, once
+// the main section is RAMP.unfold out)
+const easeT = (t) => t * t * (3 - 2 * t);
+function rampFoot(built) {
+  for (const D of doorsOf(built, 'mdRamp')) for (const L of D.leaves) {
+    if (!L.meshes?.[0]?.name.includes('ramp B')) continue;
+    C.poseLeaf(L, [easeT(D.t), easeT(Math.max(0, Math.min(1, (D.t - RAMP.unfold) / (1 - RAMP.unfold))))]);
+  }
 }
 
 // ── THE CREW DOORS ──────────────────────────────────────────────────────────────────────────────────────────────────
@@ -486,7 +497,7 @@ function mdAirlock(p, side) {
 // over its well, and the struts and block rise LEGS.slip less, their feet sliding up into the drum. Starboard's are
 // port's mirrored.
 export const GEAR = { speed: 0.42, at: { 'port front': ['front', 1], 'port rear': ['rear', 1], 'starboard front': ['front', -1], 'starboard rear': ['rear', -1] } };
-const LEG_PAINT = { p: PAL.dark, d: PAL.dark, b: PAL.metal, s: PAL.dark, k: PAL.dark };
+const LEG_PAINT = { p: PAL.legs, d: PAL.legs, b: PAL.metal, s: PAL.legs, k: PAL.legs };
 function legFaces(name, mirror) {
   const M = mesh(LEG[name]), out = [];
   for (let t = 0; t < M.tris.length / 3; t++) {
@@ -590,9 +601,12 @@ const doorsOf = (built, piece, side) => built.doors.filter((D) => D.piece === pi
 // the gear: up (1) or down (0)
 export const gearStep = (built, up, dt, updateDoors) => updateDoors(doorsOf(built, 'mdGear'), new THREE.Vector3(), dt, up ? 'open' : 'shut');
 // the ramps: down or up; with one ramp (the starboard opening sealed) the starboard one stays up
+// (the foot section's unfolding timed by rampFoot: a game driving the ramps calls this, not the kit's door code alone)
 export function rampStep(built, down, both, dt, updateDoors) {
   const eye = new THREE.Vector3(), a = updateDoors(doorsOf(built, 'mdRamp', 'port'), eye, dt, down ? 'open' : 'shut');
-  return updateDoors(doorsOf(built, 'mdRamp', 'starboard'), eye, dt, down && both ? 'open' : 'shut') || a;
+  const b = updateDoors(doorsOf(built, 'mdRamp', 'starboard'), eye, dt, down && both ? 'open' : 'shut');
+  rampFoot(built);
+  return a || b;
 }
 // the cabinets along the starboard opening: shown with one ramp
 export function equipStep(built, show) { for (const D of doorsOf(built, 'mdBay')) for (const L of D.leaves) C.poseLeaf(L, 0, null, !show); }
@@ -620,6 +634,7 @@ export const LAB = {
       if (!of[k]) continue;
       for (const D of doorsOf(B, ...of[k])) { D.t = t > 0 ? 0 : 1; updateDoors([D], new THREE.Vector3(), t > 0 ? t / D.speed : 2 / D.speed, t > 0 ? 'open' : 'shut'); }
     }
+    rampFoot(B);
     if (at.equip != null) equipStep(B, at.equip);
   },
 };
