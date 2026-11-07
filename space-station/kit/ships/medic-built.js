@@ -51,7 +51,7 @@ const AX = [V3(1, 0, 0), V3(0, 1, 0), V3(0, 0, 1)];
 // ── THE PALETTE (sRGB; roughness, metalness, wear): his picture's colours ──────────────────────────────────────────
 const s = (c, r, m, w) => ({ c, r, m, w });
 export const PAL = {
-  skin: s('#d9d5ca', 0.5, 0.04, 0.5),          // the white skin
+  skin: s('#d8d0bf', 0.5, 0.04, 0.5),          // the white skin (warm, his)
   skinEdge: s('#d9d5ca', 0.5, 0.04, 1.0),
   dark: s('#43484f', 0.5, 0.3, 0.6),           // the graphite panels and lower band
   darkEdge: s('#43484f', 0.5, 0.3, 1.0),
@@ -67,21 +67,21 @@ export const PAL = {
   bay: s('#857660', 0.6, 0.12, 0.4),           // the bay's warm wall panels (his picture's lit bay)
   bayDark: s('#4b4239', 0.6, 0.15, 0.4),
   mattress: s('#e6dec6', 0.85, 0.0, 0.25), pillow: s('#f1ede2', 0.9, 0.0, 0.2),
-  drum: s('#5d636b', 0.45, 0.45, 0.6), drumEdge: s('#5d636b', 0.45, 0.45, 1.0),   // the engines' drums: lighter metal
-  nozzle: s('#2a2d32', 0.4, 0.75, 0.8), rim: s('#6a7078', 0.32, 0.7, 0.7), core: s('#16181b', 0.45, 0.8, 0.8),
+  drum: s('#737a83', 0.55, 0.22, 0.6), drumEdge: s('#737a83', 0.55, 0.22, 1.0),   // the engines' drums: lighter metal, matt (seen from behind, a shiny one mirrors the dark)
+  nozzle: s('#2a2d32', 0.4, 0.75, 0.8), rim: s('#9299a1', 0.45, 0.3, 0.7), core: s('#16181b', 0.45, 0.8, 0.8),
   screen: s('#0c1418', 0.2, 0.1, 0.2),
 };
 // (glows kept below the point where they wash out to white: the blue stays blue, the amber amber)
-export const GLOW = { strip: [0.04, 0.5, 2.1], warm: [2.1, 0.78, 0.1], bay: [2.2, 1.45, 0.62], teal: [0.06, 1.7, 1.25], keypad: [0.1, 0.9, 2.2], white: [2.4, 2.3, 2.1] };
+export const GLOW = { strip: [0.08, 0.85, 3.2], warm: [2.1, 0.78, 0.1], bay: [2.2, 1.45, 0.62], teal: [0.06, 1.7, 1.25], keypad: [0.1, 0.9, 2.2], white: [2.4, 2.3, 2.1] };
 
 // ── PAINTING THE HULL ────────────────────────────────────────────────────────────────────────────────────────────────
 // ZONES (built-common.js paintFaces): a |x| + b y + c z <= d inside each plane
 // (a band leaning along z: inside where y - lean z lies between lo and hi, and z between z0 and z1)
 const band = (zone, y0, y1, z0, z1, lean = 0, parts = ['body']) => ({ zone, parts, planes: [[0, -1, lean, -y0 + lean * 0], [0, 1, -lean, y1], [0, 0, -1, -z0], [0, 0, 1, z1]] });
 export const ZONES = [
-  // the dark lower band: the hull under y 2.0 (his graphite lower hull and skirts), under 2.45 on the nose's chin
+  // the dark lower band: the hull under y 2.0 (his graphite lower hull and skirts), under 2.25 on the nose's chin
   { zone: 'lower', parts: ['body', 'canopy'], planes: [[0, 1, 0, 2.0]] },
-  { zone: 'lower', parts: ['body', 'canopy'], planes: [[0, 1, 0, 2.45], [0, 0, -1, -5.6]] },
+  { zone: 'lower', parts: ['body', 'canopy'], planes: [[0, 1, 0, 2.25], [0, 0, -1, -5.6]] },
   // the yellow stripe along each side of the nose (his long bar leaning back), and the short bar ahead of it
   band('noseYellow', 2.62, 2.98, 4.3, 6.0, 0.08), band('noseYellow', 2.62, 2.98, 6.15, 6.55, 0.08),
   // the three yellow bars leaning on the stern's sides, his "///"
@@ -90,6 +90,8 @@ export const ZONES = [
   { zone: 'finTip', parts: ['body'], planes: [[0, -1, 0, -7.05], [1, 0, 0, 0.5]] },
 ];
 const edge = (paint) => (f) => (f.thin ? paint + 'Edge' : paint);
+// (round the doorways: the cuts leave thin slivers there that are no plates' edges)
+const nearDoor = (c) => Math.abs(c.x) > 2.3 && c.y > 1.5 && c.y < 4.5 && ((c.z > CREW.z[0] - 0.25 && c.z < CREW.z[1] + 0.25) || (c.z > BAY.ends[0] - 0.3 && c.z < BAY.ends[1] + 0.3));
 // (the engines: a face's distance from its ring's axis, and which ring)
 const ringOf = (c) => ENGINE_AT[c.x >= 0 ? 0 : 1], fromAxis = (c, E) => Math.hypot(c.x - E.axis[0], c.y - E.axis[1]);
 export const RULES = [
@@ -108,11 +110,11 @@ export const RULES = [
   ['the belly: grey', (f) => f.n.y < -0.55, 'belly'],
   ['the lower band: graphite', (f) => f.zone === 'lower', edge('dark')],
   // (his panels' graphite frames: the 3k's thin strips along the edges of its plates)
-  ['the plates\' edges: graphite', (f) => f.thin && f.part === 'body', 'darkEdge'],
+  ['the plates\' edges: graphite', (f) => f.thin && f.part === 'body' && !nearDoor(f.c), 'darkEdge'],
   // (his yellow patches on the shoulders either side of the cockpit, seen from above)
-  ['the shoulders\' yellow patches', (f) => f.n.y > 0.45 && Math.abs(f.c.x) > 2.0 && f.c.z > 2.9 && f.c.z < 4.6 && f.c.y > 3.6, 'yellow'],
+  ['the shoulders\' yellow patches', (f) => f.n.y > 0.45 && Math.abs(f.c.x) > 2.0 && f.c.z > 2.9 && f.c.z < 4.6 && f.c.y > 3.95, 'yellow'],
   ['the roof\'s modules: graphite', (f) => f.c.y > 5.35 && Math.abs(f.c.x) < 1.25 && f.c.z > -6 && f.c.z < 3.4 && (f.n.y < 0.7 || Math.abs(f.c.z + 0.2) < 1.4), edge('dark')],
-  ['the stern round the engines: graphite', (f) => f.c.z < -6.0 && f.c.y < 5.3, edge('dark')],
+  ['the stern round the engines: graphite (cream between them, his)', (f) => f.c.z < -6.0 && f.c.y < 5.3 && (Math.abs(f.c.x) > 0.62 || f.c.y < 2.9), edge('dark')],
   ['everything else: white', () => true, edge('skin')],
 ];
 let FACES = null;
@@ -329,7 +331,7 @@ function mdBay(p) {
 // Tread grey, hazard edges yellow and black (his).
 export const RAMP = (() => {
   const face = 2.98, sill = 1.68, head = 4.13, A = head - sill, B = 1.4, T = 0.11, bevel = 0, chamfer = 0.32;
-  const zA = [-1.83, 1.64], zB = [-1.7, 1.49];
+  const zA = [-1.83, 1.64], zB = [-1.83 + chamfer, 1.64 - chamfer];
   // (the slope: down, its underside runs from the hinge to the ground)
   const slope = Math.asin(sill / (A + B));
   return { face, sill, head, A, B, T, bevel, chamfer, zA, zB, slope, swing: PI / 2 + slope, speed: 0.32, hinge: [face, sill] };
@@ -356,6 +358,11 @@ function rampSection(a, s, u0, u1, isA) {
   if (isA) {
     const O = outline(ub0), I = outline(ub0 + f, f);
     poly(I.map(([u, z]) => [xo, u, z]), V3(s, 0, 0), PAL.skin);
+    // (on it: two panel seams across, and a yellow and black hazard band along its foot, by the hinge)
+    const xp = xo + s * 0.003, za = z0 + f, zb = z1 - f;
+    for (const k of [1, 2]) { const u = ub0 + f + (u1 - ch - ub0 - f) * k / 3; poly([[xp, u - 0.012, za], [xp, u + 0.012, za], [xp, u + 0.012, zb], [xp, u - 0.012, zb]], V3(s, 0, 0), PAL.dark); }
+    const nH = 16, h0 = ub0 + f, h1 = h0 + 0.16;
+    for (let i = 0; i < nH; i++) { const zi = za + (zb - za) * i / nH, zj = za + (zb - za) * (i + 1) / nH; poly([[xp, h0, zi], [xp, h1, zi], [xp, h1, zj], [xp, h0, zj]], V3(s, 0, 0), i % 2 ? PAL.black : PAL.yellow); }
     for (let i = 0; i < O.length; i++) { const j = (i + 1) % O.length; poly([O[i], O[j], I[j], I[i]].map(([u, z]) => [xo, u, z]), V3(s, 0, 0), PAL.dark); }
     poly([[xt, u0, z0], [xo, ub0, z0], [xo, ub0, z1], [xt, u0, z1]], V3(s * bv, -R.T, 0).normalize(), PAL.darkEdge);
   } else poly(outline(u0).map(([u, z]) => [xo, u, z]), V3(s, 0, 0), PAL.dark);
@@ -432,11 +439,13 @@ function crewPanel(acc, s, steps) {
 function mdCrewDoor(p, side) {
   const s = side === 'starboard' ? -1 : 1, acc = new Acc(), [z0, z1] = CREW.z, xo = s * CREWDOOR.face, y0 = DECK, y1 = CREW.y[1];
   const jamb = (pts, n, surf) => polyTo(acc, pts, n, surf);
-  // the jambs: the doorway's sides, head and sill, from the skin (a hair out) in to the airlock's mouth
-  const xs = s * (CREWDOOR.face + 0.12), xa = s * (CREWDOOR.face - 0.18);
-  jamb([V3(xs, y0, z0), V3(xa, y0, z0), V3(xa, y1, z0), V3(xs, y1, z0)], V3(0, 0, 1), PAL.darkEdge);
-  jamb([V3(xs, y0, z1), V3(xs, y1, z1), V3(xa, y1, z1), V3(xa, y0, z1)], V3(0, 0, -1), PAL.darkEdge);
-  jamb([V3(xs, y1, z0), V3(xa, y1, z0), V3(xa, y1, z1), V3(xs, y1, z1)], V3(0, -1, 0), PAL.darkEdge);
+  // the frame: the doorway's sides, head and sill as solid graphite bars from the airlock's mouth out through the skin,
+  // standing 12 cm proud of it (his door's frame), the sill a deck plate
+  const xs = s * (CREWDOOR.face + 0.12), xa = s * (CREWDOOR.face - 0.18), xm = (xs + xa) / 2, hx = Math.abs(xs - xa) / 2, F = 0.07;
+  boxAt(acc, V3(xm, (y0 + y1 + F) / 2, z0 - F / 2), AX, [hx, (y1 + F - y0) / 2, F / 2], PAL.darkEdge);
+  boxAt(acc, V3(xm, (y0 + y1 + F) / 2, z1 + F / 2), AX, [hx, (y1 + F - y0) / 2, F / 2], PAL.darkEdge);
+  boxAt(acc, V3(xm, y1 + F / 2, (z0 + z1) / 2), AX, [hx, F / 2, (z1 - z0) / 2], PAL.darkEdge);
+  boxAt(acc, V3(xm, y0 - F / 2, (z0 + z1) / 2), AX, [hx, F / 2, (z1 - z0) / 2 + F], PAL.darkEdge, ['v+']);
   jamb([V3(xs, y0, z0), V3(xs, y0, z1), V3(xa, y0, z1), V3(xa, y0, z0)], V3(0, 1, 0), PAL.deck);
   acc.flush(p);
   // THE AIRSTAIR (door 'crew'): hinged at the sill on the skin's face, swinging out and down until its top rests on
@@ -477,7 +486,7 @@ function mdAirlock(p, side) {
 // over its well, and the struts and block rise LEGS.slip less, their feet sliding up into the drum. Starboard's are
 // port's mirrored.
 export const GEAR = { speed: 0.42, at: { 'port front': ['front', 1], 'port rear': ['rear', 1], 'starboard front': ['front', -1], 'starboard rear': ['rear', -1] } };
-const LEG_PAINT = { p: PAL.dark, d: PAL.dark, b: PAL.metal, s: PAL.metal, k: PAL.dark };
+const LEG_PAINT = { p: PAL.dark, d: PAL.dark, b: PAL.metal, s: PAL.dark, k: PAL.dark };
 function legFaces(name, mirror) {
   const M = mesh(LEG[name]), out = [];
   for (let t = 0; t < M.tris.length / 3; t++) {
@@ -567,7 +576,13 @@ export const STREAKS = [
   [0, 5.6, 0.5, 0, -0.1, -1, 3.0, 0.5], [2.75, 3.75, 3.35, 0, -1, -0.2, 1.6, 0.3], [-2.75, 3.75, 3.35, 0, -1, -0.2, 1.6, 0.3],
 ];
 export const GRIME = { dirt: { value: 0.45 } };
-export const grimeMaterials = (mats, { dirt } = {}) => C.grimeMaterials(mats, { dirt, streaks: STREAKS, deck: DECK, grime: GRIME, key: 'mdgrime', glowKey: 'mdglow' });
+// (the glass: the shared smoked glass warmed to his picture's bronze tint)
+export const GLASS_TINT = { color: 0x2a1c0e, opacity: 0.45 };
+export const grimeMaterials = (mats, { dirt } = {}) => {
+  const M = C.grimeMaterials(mats, { dirt, streaks: STREAKS, deck: DECK, grime: GRIME, key: 'mdgrime', glowKey: 'mdglow' });
+  M.glass = M.glass.clone(); M.glass.color.setHex(GLASS_TINT.color); M.glass.opacity = GLASS_TINT.opacity; M.glass.name = 'glass'; M.glassInst = M.glass;
+  return M;
+};
 
 // ── MOVING THE PARTS (the game, or the lab) ─────────────────────────────────────────────────────────────────────────
 // (a built ship's doors of one piece, by side: port +x, starboard -x)
