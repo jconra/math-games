@@ -231,8 +231,9 @@ function crewMaterial(src, kind, part) {
   const m = src.clone(), refs = part && part.refs;
   const u = m.userData.crew = crewUniforms(refs);
   const has = part && part.masks ? part.masks : {};
-  // (skin and hair: no sheen of the room's reflections; the painted face carries its own light and shade)
-  if (kind !== 'suit') { m.roughness = Math.max(m.roughness, 0.78); m.envMapIntensity = 0.55; }
+  // (skin and hair: no sheen of the room's reflections; the painted face carries its own light and shade. A part that
+  // gives its own skin roughness (crewPart.rough: the Tripo heads) wears it as it is)
+  if (kind !== 'suit') { m.roughness = part && part.rough != null ? part.rough : Math.max(m.roughness, 0.78); m.envMapIntensity = 0.55; }
   // (the suit's generated normal map is busy, ripples where the plates are smooth: half strength)
   else if (m.normalMap) m.normalScale.set(0.5, 0.5);
   m.defines = { ...(m.defines || {}), [KIND_DEF[kind]]: '' };

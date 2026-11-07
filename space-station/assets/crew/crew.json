@@ -32,7 +32,18 @@
       { "id": "h6", "name": "Head 6 (middle right)", "file": "head_h6.glb", "skeleton": "f" },
       { "id": "h7", "name": "Head 7 (bottom left)", "file": "head_h7.glb", "skeleton": "m" },
       { "id": "h8", "name": "Head 8 (bottom middle)", "file": "head_h8.glb", "skeleton": "f" },
-      { "id": "h9", "name": "Head 9 (bottom right)", "file": "head_h9.glb", "skeleton": "m" }
+      { "id": "h9", "name": "Head 9 (bottom right)", "file": "head_h9.glb", "skeleton": "m" },
+      { "id": "t1", "name": "Tripo 1 (man, about 40)", "file": "head_t1.glb", "skeleton": "m" },
+      { "id": "t2", "name": "Tripo 2 (man, mid 20s, beard)", "file": "head_t2.glb", "skeleton": "m" },
+      { "id": "t3", "name": "Tripo 3 (woman, early 30s)", "file": "head_t3.glb", "skeleton": "f" },
+      { "id": "t4", "name": "Tripo 4 (man, late 50s)", "file": "head_t4.glb", "skeleton": "m" },
+      { "id": "t5", "name": "Tripo 5 (woman, 60s)", "file": "head_t5.glb", "skeleton": "f" },
+      { "id": "t6", "name": "Tripo 6 (man, 30s)", "file": "head_t6.glb", "skeleton": "m" },
+      { "id": "t7", "name": "Tripo 7 (woman, mid 20s)", "file": "head_t7.glb", "skeleton": "f" },
+      { "id": "t8", "name": "Tripo 8 (man, 40s)", "file": "head_t8.glb", "skeleton": "m" },
+      { "id": "t9", "name": "Tripo 9 (woman, 40s, freckles)", "file": "head_t9.glb", "skeleton": "f" },
+      { "id": "t10", "name": "Tripo 10 (teen boy, about 16)", "file": "head_t10.glb", "skeleton": "m" },
+      { "id": "t11", "name": "Tripo 11 (woman, 70s)", "file": "head_t11.glb", "skeleton": "f" }
     ],
     "hair": [
       { "id": "crew1", "name": "Short swept", "file": "hair_crew1.glb", "skeleton": "m" },
