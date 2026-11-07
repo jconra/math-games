@@ -68,7 +68,7 @@ export const PAL = {
   bayDark: s('#4b4239', 0.6, 0.15, 0.4),
   mattress: s('#e6dec6', 0.85, 0.0, 0.25), pillow: s('#f1ede2', 0.9, 0.0, 0.2),
   drum: s('#5d636b', 0.45, 0.45, 0.6), drumEdge: s('#5d636b', 0.45, 0.45, 1.0),   // the engines' drums: lighter metal
-  nozzle: s('#1f2125', 0.4, 0.75, 0.8), rim: s('#3c4046', 0.32, 0.8, 0.7), core: s('#141619', 0.45, 0.8, 0.8),
+  nozzle: s('#2a2d32', 0.4, 0.75, 0.8), rim: s('#6a7078', 0.32, 0.7, 0.7), core: s('#16181b', 0.45, 0.8, 0.8),
   screen: s('#0c1418', 0.2, 0.1, 0.2),
 };
 // (glows kept below the point where they wash out to white: the blue stays blue, the amber amber)
@@ -101,11 +101,17 @@ export const RULES = [
   ['the engines\' rims', (f) => f.part === 'engines' && f.n.z < -0.6, 'rim'],
   ['the engines\' drums', (f) => f.part === 'engines', edge('drum')],
   ['the stripes', (f) => f.zone === 'noseYellow' || f.zone === 'aftYellow' || f.zone === 'finTip', 'yellow'],
-  ['the fin\'s trailing edge: graphite', (f) => f.c.y > 5.7 && Math.abs(f.c.x) < 0.5 && f.c.z < -6.6, edge('dark')],
+  // (the fin: white, its trailing part graphite, his)
+  ['the fin\'s trailing part: graphite', (f) => f.c.y > 5.7 && Math.abs(f.c.x) < 0.5 && f.c.z < -7.75, edge('dark')],
+  ['the fin: white', (f) => f.c.y > 5.7 && Math.abs(f.c.x) < 0.5 && f.c.z < -4.0, edge('skin')],
   ['the bay openings\' frames: graphite', (f) => Math.abs(f.c.x) > 2.45 && f.c.z > BAY.ends[0] - 0.22 && f.c.z < BAY.ends[1] + 0.22 && f.c.y > 1.5 && f.c.y < 4.45 && (Math.abs(f.n.z) > 0.5 || Math.abs(f.n.y) > 0.5 || f.thin), edge('dark')],
   ['the belly: grey', (f) => f.n.y < -0.55, 'belly'],
   ['the lower band: graphite', (f) => f.zone === 'lower', edge('dark')],
-  ['the roof\'s modules: graphite', (f) => f.c.y > 5.35 && Math.abs(f.c.x) < 1.25 && f.c.z > -6 && f.c.z < 3.4 && f.n.y < 0.7, edge('dark')],
+  // (his panels' graphite frames: the 3k's thin strips along the edges of its plates)
+  ['the plates\' edges: graphite', (f) => f.thin && f.part === 'body', 'darkEdge'],
+  // (his yellow patches on the shoulders either side of the cockpit, seen from above)
+  ['the shoulders\' yellow patches', (f) => f.n.y > 0.45 && Math.abs(f.c.x) > 2.0 && f.c.z > 2.9 && f.c.z < 4.6 && f.c.y > 3.6, 'yellow'],
+  ['the roof\'s modules: graphite', (f) => f.c.y > 5.35 && Math.abs(f.c.x) < 1.25 && f.c.z > -6 && f.c.z < 3.4 && (f.n.y < 0.7 || Math.abs(f.c.z + 0.2) < 1.4), edge('dark')],
   ['the stern round the engines: graphite', (f) => f.c.z < -6.0 && f.c.y < 5.3, edge('dark')],
   ['everything else: white', () => true, edge('skin')],
 ];
