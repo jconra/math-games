@@ -12,7 +12,9 @@
 //   floor    a room's floor above the deck (the cockpit stands 0.3 m up over the nose leg); ceiling: its height above
 //            that floor, or "canopy" where the glass is the room's top (then only the head room where people walk counts)
 //   doors    on the wall two rooms share ("at" its middle, on that wall); "outside" for the ship's own door, which must
-//            be in the shell's door opening. A hatch ("hatch": true) is a door in a room's floor instead: a square
+//            be in one of the shell's door openings (the space file's doors.list, when it has more than one each side:
+//            the Medic's ramps and crew doors; else doors.port or doors.starboard). A hatch ("hatch": true) is a door in a
+//            room's floor instead: a square
 //            "width" on a side, "at" its middle, inside its room; the outer door of a shell whose door is in its belly
 //            (the space file's doors.belly: the Miner's lift) is one, inside the belly's opening
 //   items    furniture as footprints with a height: beds, seats, counters, consoles, lockers, tables, machinery
@@ -31,6 +33,9 @@
 //   walk      a walk from the outer door to every room (through doors only)
 //   fit       rooms do not overlap; items inside their room, not on each other, not in a doorway
 //   sizes     each room at least its kind's size
+//   stretcher (only where there are patient beds) a stretcher's way, STRETCHER wide, from an outer door to the long
+//             side of every patient bed: a wider walk, through doors at least that wide
+export const STRETCHER = 1.0;
 export const HEAD = 2.0, CEIL = 2.5, CORRIDOR = 0.9, DOOR = 0.8, BODY = 0.5, DOOR_CLEAR = 0.5, LEDGE = 0.3;
 
 // the kinds of room: colour, the least floor area (m2) and least width (m)
@@ -44,6 +49,7 @@ export const ROOM_KINDS = {
   storage: { label: 'Storage', color: '#a0a8b4', min: 1, minW: 0.5 },
   washroom: { label: 'Washroom', color: '#9fdcff', min: 1.5, minW: 1 },
   corridor: { label: 'Corridor', color: '#6b7a8c', min: 0, minW: CORRIDOR },
+  medbay: { label: 'Med bay', color: '#5fd3c4', min: 6, minW: 2 },
 };
 // the kinds of item: default footprint (across, along: metres, quarter metres), height, colour, a short label
 export const ITEM_KINDS = {
@@ -60,6 +66,9 @@ export const ITEM_KINDS = {
   machine: { label: 'Machinery', w: 1, d: 1.5, h: 1.8, color: '#c0563f', tag: 'M' },
   shower: { label: 'Shower', w: 0.75, d: 0.75, h: 2, color: '#9fdcff', tag: 'Sh' },
   toilet: { label: 'Toilet', w: 0.5, d: 0.75, h: 0.8, color: '#cfe8f7', tag: 'WC' },
+  patient: { label: 'Patient bed', w: 1, d: 2, h: 0.8, color: '#e6dec6', tag: 'P' },
+  scanner: { label: 'Triage scanner', w: 1, d: 2.25, h: 1.5, color: '#46b8a8', tag: 'Sc' },
+  pharmacy: { label: 'Pharmacy wall', w: 0.5, d: 1.5, h: 2, color: '#9fe0d6', tag: 'Ph' },
 };
 
 const EPS = 1e-6;
@@ -158,19 +167,19 @@ export function checkBlueprint(bp, space) {
     if (!(d.width >= DOOR - EPS)) problems.push(`${d.width} m wide (at least ${DOOR})`);
     if (!wall) problems.push(d.rooms?.[1] === 'outside' ? `not on a wall of ${d.rooms?.[0]}` : `not on a wall ${d.rooms?.join(' and ')} share`);
     if (wall && d.rooms[1] === 'outside') {
-      const sd = space.doors?.port || space.doors?.starboard, bd = space.doors?.belly;
+      const sds = space.doors?.list || [space.doors?.port || space.doors?.starboard].filter(Boolean), sd = sds[0], bd = space.doors?.belly;
       if (bd) { const r = wall.rect; if (!wall.hatch) problems.push(`not a hatch: the shell's door is in its belly (x ${bd.x[0]} to ${bd.x[1]}, z ${bd.z[0]} to ${bd.z[1]})`); else if (r[0] < bd.x[0] - 0.05 || r[2] > bd.x[1] + 0.05 || r[1] < bd.z[0] - 0.05 || r[3] > bd.z[1] + 0.05) problems.push(`not in the shell's belly door (x ${bd.x[0]} to ${bd.x[1]}, z ${bd.z[0]} to ${bd.z[1]})`); }
       else if (!sd) problems.push('the shell has no door');
       else if (wall.hatch) problems.push('a hatch: the shell\'s door is in its side');
       else {
-        const side = sd.side === 'port' ? 1 : -1;
-        if (wall.along !== 'z' || side * wall.x < 0 || Math.abs(sd.face - wall.x) > 0.7 || wall.span[0] < sd.z[0] - 0.05 || wall.span[1] > sd.z[1] + 0.05) problems.push(`not in the shell's door (z ${sd.z[0]} to ${sd.z[1]}, its face at x ${sd.face})`);
+        const inDoor = (q) => { const side = q.side === 'port' ? 1 : -1; return !(wall.along !== 'z' || side * wall.x < 0 || Math.abs(q.face - wall.x) > 0.7 || wall.span[0] < q.z[0] - 0.05 || wall.span[1] > q.z[1] + 0.05); };
+        if (!sds.some(inDoor)) problems.push(sds.length > 1 ? `not in any of the shell's doors (${sds.map((q) => `${q.name || q.side}: z ${q.z[0]} to ${q.z[1]}, face x ${q.face}`).join('; ')})` : `not in the shell's door (z ${sd.z[0]} to ${sd.z[1]}, its face at x ${sd.face})`);
       }
     }
     return { door: d, wall, problems };
   });
   // ── the walk: from the outer door, cell to cell; from one room into another only through a door ──
-  const outer = doorRes.find((r) => r.wall && r.door.rooms[1] === 'outside' && !r.problems.length);
+  const outers = doorRes.filter((r) => r.wall && r.door.rooms[1] === 'outside' && !r.problems.length), outer = outers[0];
   const reach = new Uint8Array(N), q = [];
   const doorOK = (n, m) => {
     // the edge between cells n and m: crossing allowed if a door of those two rooms spans it
@@ -182,8 +191,8 @@ export function checkBlueprint(bp, space) {
     }
     return false;
   };
-  if (outer) {
-    // start on the cells just inside the outer door
+  for (const outer of outers) {
+    // start on the cells just inside each outer door
     const w = outer.wall, ri = roomIx[outer.door.rooms[0]];
     for (let n = 0; n < N; n++) {
       if (!stand[n] || roomOf[n] !== ri) continue; const a = n % nx, b = (n / nx) | 0;
@@ -201,6 +210,40 @@ export function checkBlueprint(bp, space) {
     }
   }
   const reached = new Set(); for (let n = 0; n < N; n++) if (reach[n]) reached.add(roomOf[n]);
+  // ── the stretcher's way (only where there are patient beds): the walk again with a body STRETCHER wide, from the
+  // outer doors, from room to room only through doors at least that wide; each patient bed needs some of it along one
+  // of its long sides (within 0.6 m)
+  const beds = items.filter((it) => it.kind === 'patient'), bedsOff = [];
+  if (beds.length) {
+    const ks = Math.max(k, Math.floor(STRETCHER / c / 2)), wide = new Uint8Array(N), r2 = new Uint8Array(N), q2 = [];
+    for (let b = 0; b < nz; b++) for (let a = 0; a < nx; a++) {
+      let ok = free[a + nx * b] === 1;
+      for (let db = -ks; ok && db <= ks; db++) for (let da = -ks; ok && da <= ks; da++) { const aa = a + da, bb = b + db; ok = aa >= 0 && bb >= 0 && aa < nx && bb < nz && free[aa + nx * bb] === 1; }
+      wide[a + nx * b] = ok ? 1 : 0;
+    }
+    const wideDoor = (n, m) => { if (!doorOK(n, m)) return false; const ra = rooms[roomOf[n]].id, rb = rooms[roomOf[m]].id; return doorRes.some((r) => r.wall && !r.problems.length && r.door.rooms.includes(ra) && r.door.rooms.includes(rb) && r.door.width >= STRETCHER - EPS); };
+    for (const outer of outers) {
+      if (outer.door.width < STRETCHER - EPS) continue;
+      const w = outer.wall, ri = roomIx[outer.door.rooms[0]];
+      for (let n = 0; n < N; n++) { if (!wide[n] || roomOf[n] !== ri) continue; const a = n % nx, b = (n / nx) | 0; if (w.hatch ? false : Math.abs(cx(a) - w.x) < STRETCHER / 2 + 0.35 && cz(b) > w.span[0] && cz(b) < w.span[1]) { r2[n] = 1; q2.push(n); } }
+    }
+    while (q2.length) {
+      const n = q2.pop(), a = n % nx, b = (n / nx) | 0;
+      for (const [da, db] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const aa = a + da, bb = b + db; if (aa < 0 || bb < 0 || aa >= nx || bb >= nz) continue;
+        const m = aa + nx * bb; if (r2[m] || !wide[m]) continue;
+        if (roomOf[m] !== roomOf[n] && !wideDoor(n, m)) continue;
+        r2[m] = 1; q2.push(m);
+      }
+    }
+    // (the stretcher's body covers the cells round its middle: the bed's side is reached where any of those touch it)
+    const near = new Uint8Array(N); for (let n = 0; n < N; n++) if (r2[n]) { const a = n % nx, b = (n / nx) | 0; for (let db = -ks; db <= ks; db++) for (let da = -ks; da <= ks; da++) { const aa = a + da, bb = b + db; if (aa >= 0 && bb >= 0 && aa < nx && bb < nz) near[aa + nx * bb] = 1; } }
+    for (const it of beds) {
+      const [x0, z0, x1, z1] = it.rect, alongZ = z1 - z0 >= x1 - x0, sides = alongZ ? [[x0 - 0.6, z0, x0, z1], [x1, z0, x1 + 0.6, z1]] : [[x0, z0 - 0.6, x1, z0], [x0, z1, x1, z1 + 0.6]];
+      const hit = sides.some((R) => { for (let n = 0; n < N; n++) { if (!near[n]) continue; const a = n % nx, b = (n / nx) | 0; if (inRect(R, cx(a), cz(b))) return true; } return false; });
+      if (!hit) bedsOff.push(it);
+    }
+  }
   // ── corridors: the clear width across, all along ──
   const corrBad = [];
   for (const [i, r] of rooms.entries()) {
@@ -257,6 +300,7 @@ export function checkBlueprint(bp, space) {
   for (const r of doorRes) if (r.problems.length) add('doors', { door: r.door.id, at: r.door.at, what: r.problems.join('; ') });
   rooms.forEach((r, i) => { if (!reached.has(i)) add('walk', { room: r.id, rect: r.rect, what: `${r.name} cannot be walked to` }); });
   for (const f of fit) add('fit', { rect: f.rect, what: f.what });
+  for (const it of bedsOff) add('stretcher', { rect: it.rect, what: `${it.name || 'a patient bed'} cannot be reached with a stretcher` });
   for (const s of sizes) if (!s.ok) add('sizes', { room: s.id, rect: rooms[roomIx[s.id]].rect, what: `${s.name} is ${s.w} x ${s.l} m (${s.area} m2; at least ${s.min} m2)` });
   const count = (id) => marks.filter((m) => m.check === id).length, m2 = (l) => +(new Set(l.filter((n) => n >= 0)).size * c * c).toFixed(2);
   const checks = [
@@ -269,6 +313,7 @@ export function checkBlueprint(bp, space) {
     { id: 'walk', name: 'A walk to every room', pass: !!outer && reached.size === rooms.length, detail: !outer ? 'no outer door in the shell\'s door' : reached.size === rooms.length ? `all ${rooms.length} rooms from the outer door` : marks.filter((m) => m.check === 'walk').map((m) => m.what).join('; ') },
     { id: 'fit', name: 'Rooms and items fit together', pass: !fit.length, detail: fit.length ? fit.map((f) => f.what).join('; ') : 'no overlaps, doorways clear' },
     { id: 'sizes', name: 'Room sizes', pass: sizes.every((s) => s.ok), detail: sizes.map((s) => `${s.name} ${s.w}x${s.l}`).join(', ') },
+    ...(beds.length ? [{ id: 'stretcher', name: `A stretcher's way (${STRETCHER} m) to every patient bed`, pass: !bedsOff.length, detail: bedsOff.length ? bedsOff.map((it) => `${it.name || 'a patient bed'} cannot be reached`).join('; ') : `${beds.length} beds from the outer doors, through doors ${STRETCHER} m wide or more` }] : []),
   ];
   return { checks, marks, sizes, pass: checks.every((k) => k.pass), reach, stand, grid: { x0: H.x0, z0: H.z0, nx, nz, c } };
 }

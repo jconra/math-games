@@ -1,0 +1,32 @@
+{
+ "name": "Medic (built)",
+ "about": "The Medic as built from the 3,000-triangle smart mesh made from the game's maker's picture, with its own stern and two ring engines, and the 8,000-triangle one's four landing legs: flat paint by rules (white skin, graphite panels and lower band, yellow accents, blue light strips, amber headlamps, a teal pulse line for the medical mark), a smoked glass canopy of the panes his picture has, the med bay between the two side openings with its two patient beds, a ramp in each opening that folds to close it, a crew door each side that is an airstair, four legs that rise into the belly, and the cockpit with two bucket seats.",
+ "grid": { "cell": 0.5, "step": 0.5, "deck": 1.74 },
+ "views": {
+  "start": { "at": [15, 8, 16], "look": [0, 2.6, 0.3], "fov": 40 },
+  "side": { "at": [30, 3.2, 0], "look": [0, 3.0, 0], "fov": 36 },
+  "front": { "at": [0, 3.2, 30], "look": [0, 3.0, 0], "fov": 30 },
+  "rear": { "at": [0, 3.2, -30], "look": [0, 3.0, 0], "fov": 30 },
+  "bay": { "at": [8.5, 2.6, 3.5], "look": [0, 2.6, -0.2], "fov": 50 },
+  "cockpit": { "at": [0.5, 3.56, 4.75], "look": [0.5, 3.3, 9], "fov": 75 }
+ },
+ "probe": [0, 4, -3],
+ "pieces": [
+  { "piece": "mdHull", "cell": [0, 0], "turn": 0, "level": 0, "variant": "hull" },
+  { "piece": "mdCanopy", "cell": [0, 0], "turn": 0, "level": 0, "variant": "glass" },
+  { "piece": "mdMarks", "cell": [0, 0], "turn": 0, "level": 0, "variant": "marks" },
+  { "piece": "mdBay", "cell": [0, 0], "turn": 0, "level": 0, "variant": "med bay" },
+  { "piece": "mdWells", "cell": [0, 0], "turn": 0, "level": 0, "variant": "wells" },
+  { "piece": "mdRamp", "cell": [0, 0], "turn": 0, "level": 0, "variant": "port" },
+  { "piece": "mdRamp", "cell": [0, 0], "turn": 0, "level": 0, "variant": "starboard" },
+  { "piece": "mdCrewDoor", "cell": [0, 0], "turn": 0, "level": 0, "variant": "port" },
+  { "piece": "mdCrewDoor", "cell": [0, 0], "turn": 0, "level": 0, "variant": "starboard" },
+  { "piece": "mdAirlock", "cell": [0, 0], "turn": 0, "level": 0, "variant": "port" },
+  { "piece": "mdAirlock", "cell": [0, 0], "turn": 0, "level": 0, "variant": "starboard" },
+  { "piece": "mdGear", "cell": [0, 0], "turn": 0, "level": 0, "variant": "port front" },
+  { "piece": "mdGear", "cell": [0, 0], "turn": 0, "level": 0, "variant": "port rear" },
+  { "piece": "mdGear", "cell": [0, 0], "turn": 0, "level": 0, "variant": "starboard front" },
+  { "piece": "mdGear", "cell": [0, 0], "turn": 0, "level": 0, "variant": "starboard rear" },
+  { "piece": "mdCockpit", "cell": [0, 0], "turn": 0, "level": 0, "variant": "two seats" }
+ ]
+}

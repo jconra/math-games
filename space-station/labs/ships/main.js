@@ -16,13 +16,15 @@
 //     shuts the wells' doors), Door open / shut swings the airstair door down to the ground; Show "Meshy B" lays Meshy
 //     B over it, see-through. The Miner ("Miner (built)"): Arms stowed / reaching (the cutter heads spin when
 //     reaching), Thrusters (the corner pods swivel and fire), Canisters on / off (the eight ore canisters on their
-//     mounts), Door (the belly lift's door), Gear. Both: Dirt sets the grime over the clean paint; Throttle runs the
+//     mounts), Door (the belly lift's door), Gear. The Medic ("Medic (built)"): Ramps down / up (each ramp unfolds as it
+//     comes down), Ramp: both sides or one (port; the starboard opening sealed, cabinets along it inside), Door (the
+//     crew doors' airstairs), Gear. All: Dirt sets the grime over the clean paint; Throttle runs the
 //     engines up (plume.js, the jet: Off nothing, the nozzles dark; Idle a dull orange, up through bright orange and
 //     white-yellow to blue at Afterburn), easing to the new setting.
-//   ?ship=built|miner|explorer-b|explorer-a  ?bp=<blueprint id>  ?view=3d|split|plan|both
+//   ?ship=built|miner|medic|explorer-b|explorer-a  ?bp=<blueprint id>  ?view=3d|split|plan|both
 //   window.SHIPLAB = { ready, options, option(id), ship(id), view(v), cam(c), hull(h), show(k, on), result(), bp(),
 //     gear(up), door(open), dirt(amount), throttle(v, now) (v a setting's name or 0 to 1; now: no easing), arms(reach),
-//     thrusters(on), canisters(on), moving(), jets(), shipFor(shell) (the ship whose shell that is: a blueprint's own) }
+//     thrusters(on), canisters(on), ramps(down), rampCount('one' | 'both'), moving(), jets(), shipFor(shell) (the ship whose shell that is: a blueprint's own) }
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -36,15 +38,18 @@ import { setThrottle, THROTTLE, ENGINE } from '../../kit/ships/built-common.js';
 import { makeJets } from '../../kit/ships/plume.js';
 import * as EB from '../../kit/ships/explorer-built.js';
 import * as MB from '../../kit/ships/miner-built.js';
+import * as MD from '../../kit/ships/medic-built.js';
 
 const $ = (s) => document.querySelector(s), q = new URLSearchParams(location.search);
 // the ships: each a prepared shell (its .glb and .space.json in assets/ships), or a layout built by the kit (its
 // .space.json measured from it)
 // (a built ship: lab, its module's LAB; and each ship's blueprints, bps)
 const EXPLORER_BPS = ['explorer-c-plan', 'explorer-c-row', 'explorer-c-side'], MINER_BPS = ['miner-mess-forward', 'miner-bunks-forward', 'miner-ore-cockpit'];
+const MEDIC_BPS = ['medic-bunks-across', 'medic-side-by-side', 'medic-one-ramp'];
 const SHIPS = [
   { id: 'built', name: 'Built', layout: 'ship-explorer-built', shell: 'explorer-built', lab: EB.LAB, bps: EXPLORER_BPS, note: 'Explorer C built from the 3k smart mesh: flat paint, a glass canopy, the airstair door, gear that folds away' },
   { id: 'miner', name: 'Miner (built)', layout: 'ship-miner-built', shell: 'miner-built', lab: MB.LAB, bps: MINER_BPS, note: 'The Miner built from the 3k smart mesh with the 8k\'s engine, canisters, arms and thruster pods: arms that fold, pods that swivel, eight canisters on their mounts, the belly lift' },
+  { id: 'medic', name: 'Medic (built)', layout: 'ship-medic-built', shell: 'medic-built', lab: MD.LAB, bps: MEDIC_BPS, note: 'The Medic built from the 3k smart mesh with its own ring engines and the 8k\'s legs: a ramp in each side opening into the med bay (or one, the other sealed), a crew door each side, legs that rise into the belly' },
   { id: 'explorer-b', name: 'Meshy B', shell: 'explorer-meshy-b', bps: EXPLORER_BPS, note: 'Explorer C from his 3/4 view' },
   { id: 'explorer-a', name: 'Meshy A', shell: 'explorer-meshy-a', bps: EXPLORER_BPS, note: 'Explorer C from his four views' },
 ];
@@ -61,7 +66,7 @@ const WIREFILL = new THREE.MeshBasicMaterial({ color: 0x14202c, wireframe: true,
 const st = {
   ship: null, shell: null, space: null, opt: null, bp: null, stock: {}, edits: {}, result: null, sel: null,
   view: VIEWS[q.get('view')] ? q.get('view') : 'split', cam: 'Hero', hull: 'xray', show: { space: true, rooms: true, checks: true, person: true, meshy: false }, undo: [], pending: false,
-  gear: 'down', door: 'shut', dirt: 'Some', throttle: 'Off', throttleT: 0, arms: 'reaching', thrusters: false, canisters: true,
+  gear: 'down', door: 'shut', dirt: 'Some', throttle: 'Off', throttleT: 0, arms: 'reaching', thrusters: false, canisters: true, ramps: 'up', rampCount: 'both',
 };
 
 // ── renderer, scene, camera ───────────────────────────────────────────────────────────────────────────────────────
@@ -204,6 +209,7 @@ function saveEdits() { try { localStorage.setItem('shiplab.edits', JSON.stringif
 const isEdited = (id) => !!st.edits[id];
 function showOption(id) {
   st.opt = id; st.bp = st.edits[id] || clone(st.stock[id]); st.sel = null; st.undo = [];
+  if (st.bp?.ramps) st.rampCount = st.bp.ramps;   // (a blueprint drawn for one ramp, or both: the ship's ramps follow it)
   recheck(true); url(); menu();
 }
 function recheck(rebuild) {
@@ -342,6 +348,8 @@ function menu() {
     ...(has('arms') ? [sep(), lab('Arms'), chip(st.arms === 'stowed' ? 'Arms reaching' : 'Arms stowed', false, () => { st.arms = st.arms === 'stowed' ? 'reaching' : 'stowed'; menu(); }, true, 'Fold the mining arms in for flight, or reach them out to dig (the cutter heads spin)')] : []),
     ...(has('thrusters') ? [sep(), lab('Thrusters'), chip(st.thrusters ? 'Thrusters off' : 'Thrusters', st.thrusters, () => { st.thrusters = !st.thrusters; menu(); }, true, 'The corner pods swivel and fire')] : []),
     ...(has('canisters') ? [sep(), lab('Canisters'), chip(st.canisters ? 'Canisters off' : 'Canisters on', false, () => { st.canisters = !st.canisters; menu(); }, true, 'The eight ore canisters on their mounts, or the mounts empty')] : []),
+    ...(has('ramps') ? [sep(), lab('Ramps'), chip(st.ramps === 'down' ? 'Ramps up' : 'Ramps down', false, () => { st.ramps = st.ramps === 'down' ? 'up' : 'down'; menu(); }, true, 'Lower the ramps to the ground (each unfolds as it comes down), or raise them to close the bay')] : []),
+    ...(has('rampCount') ? [lab('Ramp'), ...[['both', 'Both sides'], ['one', 'One (port)']].map(([k, t]) => chip(t, st.rampCount === k, () => { st.rampCount = k; menu(); }, true, k === 'one' ? 'Only the port ramp opens; the starboard opening is sealed, with medical cabinets along it inside' : 'A ramp in each side opening'))] : []),
     ...(has('gear') ? [sep(), lab('Gear'), chip(st.gear === 'up' ? 'Gear down' : 'Gear up', false, () => { st.gear = st.gear === 'up' ? 'down' : 'up'; menu(); }, true, L.gearTip || 'Fold the landing legs into their wells, or let them down')] : []),
     ...(has('door') ? [sep(), lab('Door'), chip(st.door === 'open' ? 'Door shut' : 'Door open', false, () => { st.door = st.door === 'open' ? 'shut' : 'open'; menu(); }, true, L.doorTip || 'Swing the airstair door down to the ground, or up shut')] : []),
     ...(has('dirt') ? [sep(), lab('Dirt'), ...Object.keys(dirtOf()).map((k) => chip(k, k === st.dirt, () => { st.dirt = k; L.setDirt(dirtOf()[k]); menu(); }, true))] : []),
@@ -478,6 +486,7 @@ window.SHIPLAB = {
   dirt: (k) => { st.dirt = k; st.ship?.lab?.setDirt(dirtOf()[k]); menu(); },
   throttle: (v, now) => { const t = typeof v === 'string' ? THROTTLE[v] : Math.max(0, Math.min(1, +v)); st.throttleT = t; st.throttle = Object.keys(THROTTLE).find((k) => THROTTLE[k] === t) || null; if (now) { setThrottle(t); for (const J of st.shell?.jets || []) if (J.role === 'main') J.set.setThrust(t, true); } menu(); return t; },
   arms: (reach) => { st.arms = reach ? 'reaching' : 'stowed'; menu(); }, thrusters: (on) => { st.thrusters = !!on; menu(); }, canisters: (on) => { st.canisters = !!on; menu(); },
+  ramps: (down) => { st.ramps = down ? 'down' : 'up'; menu(); }, rampCount: (k) => { st.rampCount = k === 'one' ? 'one' : 'both'; menu(); },
   jets: () => (st.shell?.jets || []).map((J) => ({ role: J.role, thrust: +J.set.thrust.toFixed(3), on: J.set.jets.map((j) => j.tube.visible) })),
   // (how far each of the built ship's doors is open, 0 to 1: the gear legs, the wells' doors, the airstair)
   moving: () => (st.shell?.built ? st.shell.built.doors.map((D) => ({ piece: D.piece, t: +D.t.toFixed(3) })) : []),

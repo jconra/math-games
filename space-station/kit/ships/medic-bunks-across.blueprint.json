@@ -1,0 +1,558 @@
+{
+  "id": "medic-bunks-across",
+  "name": "Bunks behind the bay",
+  "idea": "Both ramps open into the med bay, its two patient beds across the ship in its aft half and the stretcher's way between the ramps in front of them. Forward, the crew hall: the cockpit ahead, an airlock at each crew door, a washroom and a supply store. Aft, the crew's bunk room right behind the bay (two 2-high bunks across the ship, standing over the rear legs' wells), engineering behind it at the stern.",
+  "ship": "ship-medic-built",
+  "shell": "medic-built",
+  "grid": {
+    "cell": 0.5,
+    "step": 0.5,
+    "deck": 1.74
+  },
+  "ramps": "both",
+  "rooms": [
+    {
+      "id": "cockpit",
+      "name": "Cockpit",
+      "kind": "cockpit",
+      "rect": [
+        -1.0,
+        4.0,
+        1.0,
+        6.5
+      ],
+      "ceiling": "canopy",
+      "floor": 0.8
+    },
+    {
+      "id": "hall",
+      "name": "Crew hall",
+      "kind": "corridor",
+      "rect": [
+        -1.0,
+        1.5,
+        1.0,
+        4.0
+      ],
+      "ceiling": 2.5
+    },
+    {
+      "id": "airlock-p",
+      "name": "Airlock (port crew door)",
+      "kind": "airlock",
+      "rect": [
+        1.0,
+        2.5,
+        2.5,
+        4.0
+      ],
+      "ceiling": 2.0
+    },
+    {
+      "id": "airlock-s",
+      "name": "Airlock (starboard crew door)",
+      "kind": "airlock",
+      "rect": [
+        -2.5,
+        2.5,
+        -1.0,
+        4.0
+      ],
+      "ceiling": 2.0
+    },
+    {
+      "id": "wash",
+      "name": "Washroom",
+      "kind": "washroom",
+      "rect": [
+        1.0,
+        1.5,
+        2.5,
+        2.5
+      ],
+      "ceiling": 2.0
+    },
+    {
+      "id": "store",
+      "name": "Supply store",
+      "kind": "storage",
+      "rect": [
+        -2.5,
+        1.5,
+        -1.0,
+        2.5
+      ],
+      "ceiling": 2.0
+    },
+    {
+      "id": "bay",
+      "name": "Med bay",
+      "kind": "medbay",
+      "rect": [
+        -2.5,
+        -2.0,
+        2.5,
+        1.5
+      ],
+      "ceiling": 2.4
+    },
+    {
+      "id": "bunks",
+      "name": "Crew bunks",
+      "kind": "bunks",
+      "rect": [
+        -2.5,
+        -3.5,
+        2.5,
+        -2.0
+      ],
+      "ceiling": 2.4
+    },
+    {
+      "id": "eng",
+      "name": "Engineering",
+      "kind": "engineering",
+      "rect": [
+        -2.5,
+        -5.5,
+        2.5,
+        -3.5
+      ],
+      "ceiling": 2.3
+    }
+  ],
+  "doors": [
+    {
+      "id": "ramp-p",
+      "rooms": [
+        "bay",
+        "outside"
+      ],
+      "at": [
+        2.5,
+        0.5
+      ],
+      "width": 1.5
+    },
+    {
+      "id": "ramp-s",
+      "rooms": [
+        "bay",
+        "outside"
+      ],
+      "at": [
+        -2.5,
+        0.5
+      ],
+      "width": 1.5
+    },
+    {
+      "id": "crew-p",
+      "rooms": [
+        "airlock-p",
+        "outside"
+      ],
+      "at": [
+        2.5,
+        3.35
+      ],
+      "width": 0.8
+    },
+    {
+      "id": "crew-s",
+      "rooms": [
+        "airlock-s",
+        "outside"
+      ],
+      "at": [
+        -2.5,
+        3.35
+      ],
+      "width": 0.8
+    },
+    {
+      "id": "d-cockpit",
+      "rooms": [
+        "hall",
+        "cockpit"
+      ],
+      "at": [
+        0,
+        4.0
+      ],
+      "width": 0.8
+    },
+    {
+      "id": "d-bay",
+      "rooms": [
+        "hall",
+        "bay"
+      ],
+      "at": [
+        0,
+        1.5
+      ],
+      "width": 1.0
+    },
+    {
+      "id": "d-airlock-p",
+      "rooms": [
+        "hall",
+        "airlock-p"
+      ],
+      "at": [
+        1.0,
+        3.25
+      ],
+      "width": 0.8
+    },
+    {
+      "id": "d-airlock-s",
+      "rooms": [
+        "hall",
+        "airlock-s"
+      ],
+      "at": [
+        -1.0,
+        3.25
+      ],
+      "width": 0.8
+    },
+    {
+      "id": "d-wash",
+      "rooms": [
+        "hall",
+        "wash"
+      ],
+      "at": [
+        1.0,
+        2.0
+      ],
+      "width": 0.8
+    },
+    {
+      "id": "d-store",
+      "rooms": [
+        "hall",
+        "store"
+      ],
+      "at": [
+        -1.0,
+        2.0
+      ],
+      "width": 0.8
+    },
+    {
+      "id": "d-bunks",
+      "rooms": [
+        "bay",
+        "bunks"
+      ],
+      "at": [
+        0,
+        -2.0
+      ],
+      "width": 1.0
+    },
+    {
+      "id": "d-eng",
+      "rooms": [
+        "bunks",
+        "eng"
+      ],
+      "at": [
+        0,
+        -3.5
+      ],
+      "width": 0.8
+    }
+  ],
+  "items": [
+    {
+      "id": "seat-pilot",
+      "kind": "seat",
+      "room": "cockpit",
+      "rect": [
+        0.25,
+        5.0,
+        1.0,
+        5.75
+      ],
+      "h": 1.3,
+      "name": "Pilot"
+    },
+    {
+      "id": "seat-copilot",
+      "kind": "seat",
+      "room": "cockpit",
+      "rect": [
+        -1.0,
+        5.0,
+        -0.25,
+        5.75
+      ],
+      "h": 1.3,
+      "name": "Co-pilot"
+    },
+    {
+      "id": "dash",
+      "kind": "console",
+      "room": "cockpit",
+      "rect": [
+        -1.0,
+        5.75,
+        1.0,
+        6.5
+      ],
+      "h": 0.75,
+      "name": "Dash"
+    },
+    {
+      "id": "pedestal",
+      "kind": "console",
+      "room": "cockpit",
+      "rect": [
+        -0.25,
+        5.0,
+        0.25,
+        5.75
+      ],
+      "h": 0.75,
+      "name": "Throttle pedestal"
+    },
+    {
+      "id": "suits-p",
+      "kind": "locker",
+      "room": "airlock-p",
+      "rect": [
+        1.5,
+        2.5,
+        2.0,
+        3.0
+      ],
+      "h": 2.0,
+      "name": "Suit locker"
+    },
+    {
+      "id": "suits-s",
+      "kind": "locker",
+      "room": "airlock-s",
+      "rect": [
+        -2.0,
+        2.5,
+        -1.5,
+        3.0
+      ],
+      "h": 2.0,
+      "name": "Suit locker"
+    },
+    {
+      "id": "toilet",
+      "kind": "toilet",
+      "room": "wash",
+      "rect": [
+        2.0,
+        1.5,
+        2.5,
+        2.25
+      ],
+      "h": 0.8,
+      "name": "Toilet"
+    },
+    {
+      "id": "basin",
+      "kind": "counter",
+      "room": "wash",
+      "rect": [
+        1.5,
+        1.5,
+        2.0,
+        2.0
+      ],
+      "h": 0.9,
+      "name": "Basin"
+    },
+    {
+      "id": "shelves",
+      "kind": "rack",
+      "room": "store",
+      "rect": [
+        -2.5,
+        1.5,
+        -2.0,
+        2.5
+      ],
+      "h": 1.9,
+      "name": "Supplies (stretchers, blankets, splints)"
+    },
+    {
+      "id": "bed-p",
+      "kind": "patient",
+      "room": "bay",
+      "rect": [
+        0.25,
+        -1.5,
+        2.25,
+        -0.5
+      ],
+      "h": 0.8,
+      "name": "Patient bed (port)"
+    },
+    {
+      "id": "bed-s",
+      "kind": "patient",
+      "room": "bay",
+      "rect": [
+        -2.25,
+        -1.5,
+        -0.25,
+        -0.5
+      ],
+      "h": 0.8,
+      "name": "Patient bed (starboard)"
+    },
+    {
+      "id": "bunk-p",
+      "kind": "bunk",
+      "room": "bunks",
+      "rect": [
+        0.5,
+        -3.5,
+        2.5,
+        -2.5
+      ],
+      "h": 1.9,
+      "name": "2-high bunk (port), over the rear leg's well"
+    },
+    {
+      "id": "bunk-s",
+      "kind": "bunk",
+      "room": "bunks",
+      "rect": [
+        -2.5,
+        -3.5,
+        -0.5,
+        -2.5
+      ],
+      "h": 1.9,
+      "name": "2-high bunk (starboard), over the rear leg's well"
+    },
+    {
+      "id": "lock-1",
+      "kind": "locker",
+      "room": "bunks",
+      "rect": [
+        1.5,
+        -2.5,
+        2.0,
+        -2.0
+      ],
+      "h": 2.0,
+      "name": "Locker"
+    },
+    {
+      "id": "lock-2",
+      "kind": "locker",
+      "room": "bunks",
+      "rect": [
+        2.0,
+        -2.5,
+        2.5,
+        -2.0
+      ],
+      "h": 2.0,
+      "name": "Locker"
+    },
+    {
+      "id": "lock-3",
+      "kind": "locker",
+      "room": "bunks",
+      "rect": [
+        -2.0,
+        -2.5,
+        -1.5,
+        -2.0
+      ],
+      "h": 2.0,
+      "name": "Locker"
+    },
+    {
+      "id": "lock-4",
+      "kind": "locker",
+      "room": "bunks",
+      "rect": [
+        -2.5,
+        -2.5,
+        -2.0,
+        -2.0
+      ],
+      "h": 2.0,
+      "name": "Locker"
+    },
+    {
+      "id": "pumps-p",
+      "kind": "machine",
+      "room": "eng",
+      "rect": [
+        1.25,
+        -4.5,
+        2.5,
+        -3.5
+      ],
+      "h": 1.6,
+      "name": "Pumps (over the port well)"
+    },
+    {
+      "id": "pumps-s",
+      "kind": "machine",
+      "room": "eng",
+      "rect": [
+        -2.5,
+        -4.5,
+        -1.25,
+        -3.5
+      ],
+      "h": 1.6,
+      "name": "Oxygen plant (over the starboard well)"
+    },
+    {
+      "id": "drive",
+      "kind": "machine",
+      "room": "eng",
+      "rect": [
+        -1.0,
+        -5.5,
+        1.0,
+        -4.5
+      ],
+      "h": 1.8,
+      "name": "Reactor and drive"
+    },
+    {
+      "id": "eng-desk",
+      "kind": "console",
+      "room": "eng",
+      "rect": [
+        1.5,
+        -5.5,
+        2.5,
+        -5.0
+      ],
+      "h": 0.9,
+      "name": "Engineering station"
+    },
+    {
+      "id": "tools",
+      "kind": "rack",
+      "room": "eng",
+      "rect": [
+        -2.5,
+        -5.5,
+        -1.5,
+        -5.0
+      ],
+      "h": 1.9,
+      "name": "Tools and spares"
+    }
+  ]
+}

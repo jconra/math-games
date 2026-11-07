@@ -196,8 +196,12 @@ export class Plan {
     }
     // the middle line
     g.strokeStyle = COL.mid; g.setLineDash([3, 5]); g.beginPath(); g.moveTo(P.x, this.pY(0)); g.lineTo(P.x + P.w, this.pY(0)); g.stroke(); g.setLineDash([]);
-    // the shell's door
-    const sd = space.doors?.port; if (sd) { g.strokeStyle = COL.outer; g.lineWidth = 3; g.beginPath(); g.moveTo(this.pX(sd.z[0]), this.pY(sd.face)); g.lineTo(this.pX(sd.z[1]), this.pY(sd.face)); g.stroke(); }
+    // the shell's door (or doors: the space file's list, when it has one; a sealed one, when the blueprint has only one
+    // ramp, dashed)
+    for (const sd of space.doors?.list || [space.doors?.port].filter(Boolean)) {
+      const sealed = bp?.ramps === 'one' && sd.kind === 'ramp' && sd.side === 'starboard';
+      g.strokeStyle = COL.outer; g.lineWidth = 3; if (sealed) g.setLineDash([6, 5]); g.beginPath(); g.moveTo(this.pX(sd.z[0]), this.pY(sd.face)); g.lineTo(this.pX(sd.z[1]), this.pY(sd.face)); g.stroke(); g.setLineDash([]);
+    }
     // (a belly door: its opening's outline, dashed)
     const bd = space.doors?.belly; if (bd) { g.strokeStyle = COL.outer; g.lineWidth = 2; g.setLineDash([4, 3]); const [X, Y, W, H] = this.sr([bd.x[0], bd.z[0], bd.x[1], bd.z[1]]); g.strokeRect(X, Y, W, H); g.setLineDash([]); }
     if (bp) this.drawBlueprint(D);
