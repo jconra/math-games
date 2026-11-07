@@ -54,16 +54,21 @@ const camera = new THREE.PerspectiveCamera(38, 1, 0.05, 120);
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true; controls.dampingFactor = 0.08; controls.minDistance = 0.25; controls.maxDistance = 25;
 
-// the station's floor: a few of the kit's own plaza tiles, a wall behind with its ribs and trim (kit/layout.js)
+// the station's floor: a few of the kit's own plaza tiles, a wall behind with its ribs and trim (kit/layout.js). The
+// wall is its own room (a room is merged into one mesh per material), so it can be hidden while the camera is behind
+// it, as the Back camera is, and never stands between the camera and the person.
 const ROOM = { name: 'Crew Lab floor', pieces: [] };
+const WALL = { name: 'Crew Lab wall', pieces: [] };
 for (let x = -1; x <= 1; x++) for (let z = -1; z <= 1; z++) ROOM.pieces.push({ piece: 'floor', cell: [x, z], turn: 0, variant: x === 0 && z === 0 ? 'plaza2' : 'plaza' });
-for (let x = -1; x <= 1; x++) for (const v of ['base', 'cornice']) ROOM.pieces.push({ piece: 'trim', cell: [x, -1.5], turn: 0, variant: v });
-for (let x = -1; x <= 1; x++) ROOM.pieces.push({ piece: 'wall', cell: [x, -1.5], turn: 0, variant: x === 0 ? 'plain' : 'dark' });
-for (const x of [-0.5, 0.5]) ROOM.pieces.push({ piece: 'rib', cell: [x, -1.5], turn: 0, variant: 'strip' });
-let floorGroup = null;
+for (let x = -1; x <= 1; x++) for (const v of ['base', 'cornice']) WALL.pieces.push({ piece: 'trim', cell: [x, -1.5], turn: 0, variant: v });
+for (let x = -1; x <= 1; x++) WALL.pieces.push({ piece: 'wall', cell: [x, -1.5], turn: 0, variant: x === 0 ? 'plain' : 'dark' });
+for (const x of [-0.5, 0.5]) WALL.pieces.push({ piece: 'rib', cell: [x, -1.5], turn: 0, variant: 'strip' });
+let floorGroup = null, wallGroup = null, wallZ = -Infinity;
 try {
-  const built = buildRoom(ROOM, makeMaterials(), { bake: { voxel: 0.09, rays: 20, shadows: false } });
-  floorGroup = built.group; floorGroup.traverse((o) => { if (o.isMesh) o.receiveShadow = true; }); scene.add(floorGroup);
+  const mats = makeMaterials(), bake = { bake: { voxel: 0.09, rays: 20, shadows: false } };
+  floorGroup = buildRoom(ROOM, mats, bake).group; floorGroup.traverse((o) => { if (o.isMesh) o.receiveShadow = true; }); scene.add(floorGroup);
+  wallGroup = buildRoom(WALL, mats, bake).group; scene.add(wallGroup);
+  wallZ = new THREE.Box3().setFromObject(wallGroup).max.z;
 } catch (e) { console.warn('Crew Lab: the kit floor could not be built (' + e.message + '); a plain floor instead'); }
 if (!floorGroup) { const f = new THREE.Mesh(new THREE.PlaneGeometry(6, 6), new THREE.MeshStandardMaterial({ color: 0x2a323c, roughness: 0.8 })); f.rotation.x = -Math.PI / 2; f.receiveShadow = true; scene.add(f); }
 
@@ -202,7 +207,9 @@ renderer.setAnimationLoop((t) => {
     // (the head cameras keep the head in frame as the clip moves it)
     if (HEAD_CAMS[st.cam]) { headAt(_h); _h.sub(_prev); controls.target.add(_h); camera.position.add(_h); }
   }
-  fly(dt); controls.update(); renderer.render(scene, camera); frames++;
+  fly(dt); controls.update();
+  if (wallGroup) wallGroup.visible = camera.position.z > wallZ;
+  renderer.render(scene, camera); frames++;
   fpsT += dt; if (fpsT > 0.5) { fps = Math.round(frames / fpsT); frames = 0; fpsT = 0; }
   if (c) hud.textContent = `${RECIPES[st.who]?.name || ''} · ${LABEL[st.clip] || st.clip} · ${tris.toLocaleString()} tris · ${fps} fps`;
 });
