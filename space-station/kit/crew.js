@@ -50,20 +50,28 @@
 // nudged, sized, its lower edges tucked in toward the head, on every head or one head's own way. Applied to the person's
 // own copy of the hair's positions when it's put together, so the game and the lab show the same.
 //
+// REAL EYES (the Tripo heads, ~/pw/space-math/rigs/crew-heads/): a ball and a clear wet layer on each of the head's eye
+// bones (EyeL, EyeR, under its Head bone); the lids rest on the balls. The gaze looks at a point or straight ahead, with
+// small darting movements, jumping and settling as eyes do (THE GAZE, below). A part's own bones (bones the suit's
+// skeleton lacks, all under the Head bone) are added to the person's skeleton when it's put together. A head without
+// eyes (the Meshy heads, crew 1's, the captain's, Vega's helmet) is as it was.
+//
 //   const lib = await loadCrew()                lib.list: crew.json; lib.part(kind, id) -> its glTF; lib.clipsFor(suit id)
 //                                               -> { body, rig, clips (fitted to that suit), stride }; lib.hairAtlas();
 //                                               lib.fitOf(hair id, head id) -> the fit makeCrew gives that hair on that
 //                                               head; lib.fits { hair id: fit } (empty: a layer over crew.json's, each
 //                                               entry replacing that hair's whole fit; the Crew Lab's while it's edited)
-//   const c = await makeCrew(lib, recipe)       recipe { suit, head, hair, colours: { job, uniform, skin, hair } }
+//   const c = await makeCrew(lib, recipe)       recipe { suit, head, hair, colours: { job, uniform, skin, hair, eyes } }
 //     c.root (place and turn it: feet on y 0, facing +z), c.person (Mathwood's Person), c.play(name, { fade, speed, once }),
-//     c.update(dt), c.setColours({ job, uniform, skin, hair }), c.meshes { suit, head, hair, visor }, c.bones, c.body ('m' | 'f':
+//     c.update(dt), c.setColours({ job, uniform, skin, hair, eyes }), c.meshes { suit, head, hair, visor, eyes, cornea },
+//     c.bones, c.lookAt(point | null, { dart }) (real eyes: where they look; null straight ahead), c.gaze (null without),
+//     c.body ('m' | 'f':
 //     the suit's skeleton, whose clips it plays), c.stride (m/s at speed 1: { Walk, Run }), c.dispose(),
 //     c.setExpression(name) (a visor's face; recipe.expression sets the first), c.expression,
 //     await c.setFit(fit) (the hair's fit, live: { offset, scale, tuck, tuckStart } as lib.fitOf gives; null: as made),
 //     c.fit (the fit it wears), c.fitStats ({ tucked: points the tuck moved, held: of those, how many it stopped 4 mm off
 //     the head })
-//   JOBS, UNIFORM_COLOURS, SKIN_TONES, HAIR_COLOURS, CLIPS, EXPRESSIONS, fitFor, SKULL, HAIR_CLEAR
+//   JOBS, UNIFORM_COLOURS, SKIN_TONES, HAIR_COLOURS, EYE_COLOURS, CLIPS, EXPRESSIONS, fitFor, SKULL, HAIR_CLEAR
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
@@ -438,8 +446,112 @@ function visorMaterial(src) {
   return m;
 }
 
-function setColours(mats, { job, uniform, skin, hair } = {}) {
+// ── real eyes (the Tripo heads) ────────────────────────────────────────────────────────────────────────────────────
+// Each eye is a ball (material 'eye': the white and the iris, from one shared texture: the grey iris inside 0.25 of the
+// layout's middle, the white beyond) and a clear layer over it (material 'cornea': a thin shell bulging over the iris),
+// both on the eye's bone (EyeL, EyeR, under the Head bone, at the ball's centre). The head's lids rest on the ball and
+// turn in behind it, so the ball turns freely under them. The part's crewPart.eyes gives { r: the ball's radius, iris:
+// the iris's own colour as painted, sclera: the white's }; a recipe's colours.eyes tints the iris.
+//   - the ball: the iris tinted (the texture's grey over its mean, times the colour), the pupil painted black (crPupil:
+//     its share of the iris's radius), the white the head's own; and the lids' shade: the ball darker toward its top
+//     (the upper lid's shadow), measured in the head's frame, not the ball's, so the shade stays as the ball turns.
+//   - the clear layer: black and glossy, ADDED over the ball (no colour of its own: only the light and the room it
+//     reflects), so the eye has its wet shine and catches the light.
+export const EYE_COLOURS = ['#2e1c10', '#4a2e18', '#6b4426', '#8a6a3a', '#6a6a3c', '#4f7354', '#3f6b8c', '#7d9cbd', '#8e959b'];
+const IRIS_MEAN = 0.214, WHITE_MEAN = 0.708;     // (the iris texture's mean grey and its white, linear)
+function eyeMaterial(src, eyes) {
+  const m = new THREE.MeshStandardMaterial({ name: 'eye', map: src && src.map, roughness: 0.4, metalness: 0, envMapIntensity: 0.35 });
+  const u = m.userData.eye = { crIris: { value: lin(eyes.iris || '#4a2e18') }, crIrisOwn: { value: lin(eyes.iris || '#4a2e18') }, crSclera: { value: lin(eyes.sclera || '#d6cfc6') },
+    crPupil: { value: 0.36 }, crEyeR: { value: eyes.r || 0.0125 }, crEyeC: { value: [new THREE.Vector3(), new THREE.Vector3()] }, crEyeUp: { value: new THREE.Vector3(0, 1, 0) } };
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, u);
+    sh.fragmentShader = 'uniform vec3 crIris, crSclera, crEyeUp; uniform float crPupil, crEyeR; uniform vec3 crEyeC[2];\n' + sh.fragmentShader
+      .replace('#include <map_fragment>', `#include <map_fragment>
+  {
+    float r = length(vMapUv - 0.5);
+    float iris = 1.0 - smoothstep(0.236, 0.256, r);
+    float pupil = 1.0 - smoothstep(crPupil * 0.25 - 0.007, crPupil * 0.25 + 0.003, r);
+    vec3 c = diffuseColor.rgb;
+    diffuseColor.rgb = mix(c * crSclera / ${WHITE_MEAN}, c * crIris / ${IRIS_MEAN}, iris);
+    diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.004), pupil);
+    // (the lids' shade: by height in the head's frame from the nearer ball's centre, all in view space)
+    vec3 p = -vViewPosition;
+    vec3 cc = distance(p, crEyeC[0]) < distance(p, crEyeC[1]) ? crEyeC[0] : crEyeC[1];
+    float up = dot(p - cc, crEyeUp) / crEyeR;
+    diffuseColor.rgb *= (1.0 - 0.5 * smoothstep(0.0, 0.62, up)) * 0.9;
+  }`);
+  };
+  m.customProgramCacheKey = () => 'crew-eye-1';
+  return m;
+}
+function corneaMaterial() {
+  return new THREE.MeshStandardMaterial({ name: 'cornea', color: 0x000000, roughness: 0.06, metalness: 0, envMapIntensity: 1.1,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
+}
+// THE GAZE: where the eyes look. A target (a point in the world) or none (straight ahead); each eye turns to it from its
+// own place (so near things draw the eyes in), within an eye's reach (34 degrees either way, 20 up, 12 down: the lids
+// don't follow the eyes, so a look far down would stare). The eyes
+// don't track smoothly: they jump (a saccade) to where they should look once it's more than 1.5 degrees off, overshoot a
+// little and settle (a stiff spring, a little under-damped); while the target holds still they dart now and then to a
+// point a degree or two beside it and back. All in the Head bone's frame, so the gaze rides the head through every clip.
+const GAZE = { yaw: 0.6, up: 0.35, down: 0.21, jump: 0.026, w: 55, z: 0.62, dart: [0.6, 2.4], dartYaw: 0.044, dartPitch: 0.03 };
+function makeGaze(root, head, eyes) {
+  root.updateMatrixWorld(true);
+  const q0 = eyes.map((b) => b.quaternion.clone());
+  const toHead = head.getWorldQuaternion(new THREE.Quaternion()).invert().multiply(root.getWorldQuaternion(new THREE.Quaternion()));
+  const F = new THREE.Vector3(0, 0, 1).applyQuaternion(toHead), U = new THREE.Vector3(0, 1, 0).applyQuaternion(toHead), Lf = new THREE.Vector3(1, 0, 0).applyQuaternion(toHead);
+  const g = { target: null, fix: [0, 0], cur: [0, 0], vel: [0, 0], dart: [0, 0], next: 0.5, t: 0, eye: [[0, 0], [0, 0]], darting: true };
+  const P = new THREE.Vector3(), D = new THREE.Vector3(), Q = new THREE.Quaternion();
+  const clampYP = (y, p) => [Math.max(-GAZE.yaw, Math.min(GAZE.yaw, y)), Math.max(-GAZE.down, Math.min(GAZE.up, p))];
+  // each eye's wanted (yaw, pitch) in the head's frame
+  function wanted() {
+    if (!g.target) return [[0, 0], [0, 0]];
+    P.copy(g.target); head.worldToLocal(P);
+    return eyes.map((b) => { D.copy(P).sub(b.position).normalize(); return clampYP(Math.atan2(D.dot(Lf), D.dot(F)), Math.asin(Math.max(-1, Math.min(1, D.dot(U))))); });
+  }
+  g.lookAt = (target, { dart = true } = {}) => { g.target = target ? target.clone() : null; g.darting = dart; };
+  g.update = (dt) => {
+    g.t += dt;
+    const w = wanted(), mid = [(w[0][0] + w[1][0]) / 2, (w[0][1] + w[1][1]) / 2];
+    const want = clampYP(mid[0] + g.dart[0], mid[1] + g.dart[1]);
+    // (a jump when the eyes are far enough off where they should look; darts now and then while it holds)
+    if (Math.hypot(want[0] - g.fix[0], want[1] - g.fix[1]) > GAZE.jump) { g.dart = [0, 0]; g.fix = clampYP(mid[0], mid[1]); g.next = g.t + 0.3 + Math.random() * 0.8; }
+    else if (g.darting && g.t > g.next) {
+      // (back to the target itself now and then; else a point 1 to 2.5 degrees beside it, any way round, flatter up and down)
+      const a = Math.random() * 2 * Math.PI, r = 0.4 + 0.6 * Math.random();
+      g.dart = Math.random() < 0.35 ? [0, 0] : [Math.cos(a) * r * GAZE.dartYaw, Math.sin(a) * r * GAZE.dartPitch];
+      g.fix = clampYP(mid[0] + g.dart[0], mid[1] + g.dart[1]);
+      g.next = g.t + GAZE.dart[0] + Math.random() * (GAZE.dart[1] - GAZE.dart[0]);
+    }
+    // (the spring toward the fixation: stiff, a little under-damped, stepped finely so a slow frame can't upset it)
+    const n = Math.max(1, Math.ceil(dt / 0.004)), h = dt / n;
+    for (let s = 0; s < n; s++) for (let k = 0; k < 2; k++) {
+      const a = GAZE.w * GAZE.w * (g.fix[k] - g.cur[k]) - 2 * GAZE.z * GAZE.w * g.vel[k];
+      g.vel[k] += a * h; g.cur[k] += g.vel[k] * h;
+    }
+    eyes.forEach((b, i) => {
+      // (each eye: the shared gaze, plus its own turn toward a near target)
+      const y = g.cur[0] + (w[i][0] - mid[0]), p = g.cur[1] + (w[i][1] - mid[1]);
+      g.eye[i] = [y, p];
+      D.copy(F).multiplyScalar(Math.cos(p) * Math.cos(y)).addScaledVector(Lf, Math.cos(p) * Math.sin(y)).addScaledVector(U, Math.sin(p)).normalize();
+      Q.setFromUnitVectors(F, D); b.quaternion.copy(Q).multiply(q0[i]);
+    });
+  };
+  // (the lids' shade on the balls: their centres and the head's up, in view space, each time they're drawn)
+  g.shade = (mesh, mat) => {
+    const C = new THREE.Vector3(), HQ = new THREE.Quaternion();
+    mesh.onBeforeRender = (renderer, scene, camera) => {
+      const u = mat.userData.eye; if (!u) return;
+      eyes.forEach((b, i) => u.crEyeC.value[i].copy(b.getWorldPosition(C)).applyMatrix4(camera.matrixWorldInverse));
+      u.crEyeUp.value.copy(U).applyQuaternion(head.getWorldQuaternion(HQ)).transformDirection(camera.matrixWorldInverse);
+    };
+  };
+  return g;
+}
+
+function setColours(mats, { job, uniform, skin, hair, eyes } = {}) {
   for (const m of mats) {
+    if (m.userData.eye) { const e = m.userData.eye; e.crIris.value.copy(eyes ? lin(eyes) : e.crIrisOwn.value); }
     const u = m.userData.crew; if (!u) continue;
     // (a suit that keeps its own colours takes no job's: its marks, lines and panels as made)
     const J = (!m.userData.crewOwnColours && JOBS[job]) || JOBS.explorer;
@@ -665,6 +777,7 @@ function assemble(suit, others) {
   for (const [kind, g] of others) {
     g.scene.traverse((o) => {
       if (!o.isSkinnedMesh) return;
+      addOwnBones(o.skeleton.bones, bones);
       const m = new THREE.SkinnedMesh(o.geometry, o.material); m.name = o.name; m.userData.part = kind;
       m.position.copy(o.position); m.quaternion.copy(o.quaternion); m.scale.copy(o.scale);
       host.add(m);
@@ -672,6 +785,23 @@ function assemble(suit, others) {
     });
   }
   return tpl;
+}
+// A part's own bones, which the suit's skeleton doesn't have (a Tripo head's eye bones and face bones, all under its
+// Head bone): each made on the template under the bone of its parent's name, where the part has it from that parent,
+// so it rides the suit's Head bone (whichever skeleton) as it rode the part's own.
+function addOwnBones(list, bones) {
+  let left = list.filter((b) => !bones[b.name]);
+  while (left.length) {
+    const next = [];
+    for (const b of left) {
+      const p = b.parent && bones[b.parent.name];
+      if (!p) { next.push(b); continue; }
+      const n = new THREE.Bone(); n.name = b.name; n.position.copy(b.position); n.quaternion.copy(b.quaternion); n.scale.copy(b.scale);
+      p.add(n); bones[b.name] = n;
+    }
+    if (next.length === left.length) throw new Error('crew: a part\'s bones hang from no bone the suit has: ' + next.map((b) => b.name).join(', '));
+    left = next;
+  }
 }
 
 export async function makeCrew(lib, recipe) {
@@ -694,6 +824,8 @@ export async function makeCrew(lib, recipe) {
     const kind = o.userData.part || 'suit', own = o.material === made ? src[i] : o.material; i++;
     if (kind === 'hair') hairMeshes.push(o);
     if (own && own.name === 'visor') { o.material = visor = visorMaterial(); meshes.visor = o; }
+    else if (own && own.name === 'eye') { const mat = eyeMaterial(own, (refsOf.head || {}).eyes || {}); o.material = mat; mats.push(mat); meshes.eyes = o; o.castShadow = false; o.receiveShadow = false; o.frustumCulled = false; return; }
+    else if (own && own.name === 'cornea') { const mat = corneaMaterial(); o.material = mat; mats.push(mat); meshes.cornea = o; o.castShadow = false; o.receiveShadow = false; o.frustumCulled = false; o.renderOrder = 1; return; }
     else if (kind === 'hair' && atlas) {
       const mat = hairCardMaterial(refsOf.hair || {}, atlas); o.material = mat; mats.push(mat); meshes.hair = o;
       o.customDepthMaterial = hairDepthMaterial(atlas); mats.push(o.customDepthMaterial);
@@ -706,6 +838,9 @@ export async function makeCrew(lib, recipe) {
   person.root.updateMatrixWorld(true);
   const shin = {}; for (const s of ['L', 'R']) shin[s] = bones['LowerLeg' + s].getWorldPosition(new THREE.Vector3()).distanceTo(bones['Foot' + s].getWorldPosition(new THREE.Vector3()));
   const A = new THREE.Vector3(), Y = new THREE.Vector3(), M = new THREE.Matrix4();
+  // (real eyes: a ball on each eye bone; the gaze turns them, see THE GAZE)
+  const gaze = meshes.eyes && bones.EyeL && bones.EyeR ? makeGaze(person.root, bones.Head, [bones.EyeL, bones.EyeR]) : null;
+  if (gaze) gaze.shade(meshes.eyes, meshes.eyes.material);
   const c = {
     root: person.root, person, meshes, bones, recipe: { ...recipe }, stride: fit.stride, body: fit.body, rig: fit.rig,
     play: (name, o = {}) => person.play(name, { once: ONCE.has(name), ...o }),
@@ -721,7 +856,12 @@ export async function makeCrew(lib, recipe) {
       }
       person.root.updateMatrixWorld(true);
       if (visor) visor.userData.visor.vsTime.value += dt;
+      if (gaze) gaze.update(dt);
     },
+    // where the eyes look (a head with real eyes): a point in the world (copied: call again to follow it), or null
+    // (straight ahead); dart: the small darting movements while it holds (on unless false)
+    gaze,
+    lookAt(target, o) { if (gaze) gaze.lookAt(target, o); },
     setColours(col) { c.recipe.colours = { ...(c.recipe.colours || {}), ...col }; setColours(mats, c.recipe.colours); },
     expression: null,
     setExpression(name) {

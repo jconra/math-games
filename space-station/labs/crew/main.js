@@ -7,6 +7,8 @@
 //     maker's grid, drawn as card hair, and the Mathwood hair), Job colours (the suit's marks, light lines and panels; a
 //     suit that keeps its own colours, the captains', takes none), Uniform (the suit's whites: a few colours or any),
 //     Skin tone, Hair colour; a visor's face (an android's helmet: Captain Vega's expressions), when the head has one;
+//     Eyes (a head with real eyes: the Tripo heads): the iris's colour (its own as painted, or one of EYE_COLOURS) and
+//     Look at camera (the eyes follow the camera, darting a little as eyes do; off: straight ahead);
 //   the view: cameras (Face, Head and Nape follow the head: from the front-left, straight on, from behind), Plain (no
 //     paint), Wireframe, the 1.8 m marker, the bones, Smooth hair (the Mathwood hair smooth-shaded, or off: its flat
 //     facets as the pack has them);
@@ -18,21 +20,22 @@
 //     browser as they're made (over crew.json's own) and worn at once; Copy fits gives them all as JSON for crew.json
 //     (shown in a box as well, to select by hand where copying fails); Clear my changes goes back to crew.json's.
 // Drag to look round, wheel or pinch to come closer, W A S D move (Space up, C down, Shift faster), the arrow keys step.
-//   ?who=<recipe id>  ?clip=<name>  ?cam=<name>  ?flathair (the Mathwood hair flat-shaded to start)
+//   ?who=<recipe id>  ?clip=<name>  ?cam=<name>  ?flathair (the Mathwood hair flat-shaded to start)  ?look (Look at camera on)
 //   window.CREWLAB = { ready, clips, play(name), pose(name, t), cam(name), show(k, on), recipe(r), colours(c), state(),
 //     expression(name) (a visor's face), smoothHair(on) (the Mathwood hair's shading; rebuilds the character),
+//     look(on) (the eyes on the camera, a head with real eyes),
 //     measure() (the body's lowest point and each boot's, in the pose shown), fit() (the Fit row's state: the fit worn,
 //     this browser's fits, the text Copy fits gives), step(kind, d) (the head or hair d along; resolves when shown),
 //     three, scene, camera, renderer }
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { loadCrew, makeCrew, fitFor, CLIPS, JOBS, UNIFORM_COLOURS, SKIN_TONES, HAIR_COLOURS, EXPRESSIONS } from '../../kit/crew.js';
+import { loadCrew, makeCrew, fitFor, CLIPS, JOBS, UNIFORM_COLOURS, SKIN_TONES, HAIR_COLOURS, EYE_COLOURS, EXPRESSIONS } from '../../kit/crew.js';
 import { makeMaterials } from '../../kit/materials.js';
 import { buildRoom } from '../../kit/layout.js';
 
 const $ = (s) => document.querySelector(s), q = new URLSearchParams(location.search);
-const st = { who: null, crew: null, clip: q.get('clip') || 'Idle', speed: 1, paused: false, cam: q.get('cam') || 'Full', paint: 'paint', marker: true, bones: false, recipe: null };
+const st = { who: null, crew: null, clip: q.get('clip') || 'Idle', speed: 1, paused: false, cam: q.get('cam') || 'Full', paint: 'paint', marker: true, bones: false, recipe: null, look: q.has('look') };
 // (the clips in the menu, grouped as the people use them)
 const CLIP_GROUPS = [
   ['Stand', ['Idle', 'Idle_Neutral', 'Wave', 'Interact', 'Stand_Listen', 'Stand_Clap']],
@@ -120,6 +123,7 @@ async function show(recipe) {
   for (const m of Object.values(c.meshes)) m.userData.paint = m.material;
   setPaint(st.paint); setBones(st.bones);
   c.play(st.clip in c.person.actions ? st.clip : 'Idle', { fade: 0 }); c.update(0);
+  if (!st.look) c.lookAt(null);
   triCount(); menu();
 }
 function setPaint(p) {
@@ -195,12 +199,16 @@ function menuRows() {
   if (C.uniform && !UNIFORM_COLOURS.includes(C.uniform)) any.classList.add('on');
   any.oninput = () => st.crew?.setColours({ ...(st.recipe.colours || {}), uniform: any.value });
   any.onchange = () => colours({ uniform: any.value });
+  // (real eyes: the iris's colour and where they look)
+  const ownIris = st.crew?.meshes.eyes?.material.userData.eye?.crIrisOwn.value.getStyle();
+  const eyes = st.crew?.gaze ? [sep(), lab('Eyes'), swatch(ownIris || '#4a2e18', !C.eyes, () => colours({ eyes: null }), 'Their own eyes'), ...EYE_COLOURS.map((s) => swatch(s, C.eyes === s, () => colours({ eyes: s }), 'Eyes ' + s)),
+    chip('Look at camera', st.look, () => look(!st.look), true, 'The eyes follow the camera (off: straight ahead)')] : [];
   $('#wear').replaceChildren(lab('Head'), pick('Head', 'head', R.head), lab('Hair'), pick('Hair', 'hair', R.hair, true), lab('Suit'), pick('Suit', 'suit', R.suit), ...face,
     sep(), jobLab, ...Object.entries(JOBS).map(([k, J]) => chip(J.name, (C.job || 'explorer') === k, () => colours({ job: k }), true)),
     sep(), lab('Uniform'), swatch('linear-gradient(135deg,#f4f5f6,#9aa3ad)', !C.uniform, () => colours({ uniform: null }), 'The uniform as made'),
     ...UNIFORM_COLOURS.map((s) => swatch(s, C.uniform === s, () => colours({ uniform: s }), 'Uniform ' + s)), any,
     sep(), lab('Skin'), swatch('linear-gradient(135deg,#d9a37f,#86522f)', !C.skin, () => colours({ skin: null }), 'His own skin'), ...SKIN_TONES.map((s) => swatch(s, C.skin === s, () => colours({ skin: s }), 'Skin ' + s)),
-    sep(), lab('Hair colour'), swatch('linear-gradient(135deg,#6b4127,#2e1f15)', !C.hair, () => colours({ hair: null }), 'His own hair'), ...HAIR_COLOURS.map((s) => swatch(s, C.hair === s, () => colours({ hair: s }), 'Hair ' + s)));
+    sep(), lab('Hair colour'), swatch('linear-gradient(135deg,#6b4127,#2e1f15)', !C.hair, () => colours({ hair: null }), 'His own hair'), ...HAIR_COLOURS.map((s) => swatch(s, C.hair === s, () => colours({ hair: s }), 'Hair ' + s)), ...eyes);
   $('#view').replaceChildren(lab('Camera'), ...Object.keys(CAMS).map((k) => chip(k, k === st.cam, () => { setCam(k); menu(); }, true)),
     sep(), lab('Show'), ...[['paint', 'Painted'], ['plain', 'Plain'], ['wire', 'Wireframe']].map(([k, t]) => chip(t, st.paint === k, () => { setPaint(k); menu(); }, true)),
     chip('1.8 m', st.marker, () => { st.marker = !st.marker; marker.visible = st.marker; menu(); }, true, 'A 1.8 m post beside them'),
@@ -209,6 +217,7 @@ function menuRows() {
 }
 async function smoothHair(on) { lib.smoothHair = !!on; if (st.recipe) await show(st.recipe); triCount(); menu(); }
 function expression(k) { st.recipe.expression = k; st.crew?.setExpression(k); menu(); }
+function look(on) { st.look = !!on; if (!st.look) st.crew?.lookAt(null); menu(); }
 // (a colour set back to the part's own (null) is left out of the recipe, but passed on as null: the person merges what it's
 // given into its own colours, so a key left out would keep the colour it had)
 function colours(c) { st.recipe.colours = { ...(st.recipe.colours || {}), ...c }; for (const k of Object.keys(c)) if (c[k] == null) delete st.recipe.colours[k]; st.crew?.setColours({ ...st.recipe.colours, ...c }); menu(); }
@@ -415,6 +424,7 @@ const _prev = new THREE.Vector3();
 renderer.setAnimationLoop((t) => {
   const dt = Math.min(0.1, (t - last) / 1000); last = t;
   const c = st.crew;
+  if (c && st.look && c.gaze) c.lookAt(camera.position);
   if (c && !st.paused) {
     if (HEAD_CAMS[st.cam]) headAt(_prev);
     c.update(dt);
@@ -456,8 +466,9 @@ window.CREWLAB = {
   ready: true, clips: () => CLIPS.filter((n) => st.crew?.person.actions[n]), play: (n) => play(n), pose, cam: (c) => { setCam(c); menu(); },
   show: (k, on) => { if (k === 'paint' || k === 'plain' || k === 'wire') setPaint(k); if (k === 'marker') { st.marker = on; marker.visible = on; } if (k === 'bones') setBones(on); if (k === 'floor' && floorGroup) floorGroup.visible = on; menu(); },
   recipe: async (r) => { await show(r); return st.recipe; }, who: async (id) => { st.who = id; await show(RECIPES[id]); },
-  colours: (c) => colours(c), expression: (k) => expression(k), smoothHair: (on) => smoothHair(on),
+  colours: (c) => colours(c), expression: (k) => expression(k), smoothHair: (on) => smoothHair(on), look: (on) => look(on),
   state: () => ({ who: st.who, clip: st.clip, recipe: st.recipe, tris, fps, parts: Object.keys(st.crew?.meshes || {}), body: st.crew?.body, expression: st.crew?.expression, rig: st.crew?.rig && { turnDiffMaxDeg: st.crew.rig.turnDiffMaxDeg }, smoothHair: lib.smoothHair,
+    look: st.look, eyes: !!st.crew?.gaze, gaze: st.crew?.gaze ? { target: st.crew.gaze.target && st.crew.gaze.target.toArray(), eye: st.crew.gaze.eye } : null,
     shown: shownSeq === showSeq }),
   fit: () => ({ open: fitSt.open, scope: fitSt.scope, fine: fitSt.fine, hair: st.recipe?.hair, head: st.recipe?.head, wearing: st.crew?.fit || null, stats: st.crew?.fitStats,
     wearingFor: st.crew && { hair: st.crew.recipe.hair, head: st.crew.recipe.head }, mine: copy(lib.fits), text: fitsText(), box: fitSt.out, note: fitSt.note }),
