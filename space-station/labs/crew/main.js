@@ -12,6 +12,9 @@
 //   the view: cameras (Face, Head and Nape follow the head: from the front-left, straight on, from behind), Plain (no
 //     paint), Wireframe, the 1.8 m marker, the bones, Smooth hair (the Mathwood hair smooth-shaded, or off: its flat
 //     facets as the pack has them);
+//   FACE (folds away; a head with face bones: the Tripo heads): a slider for each of FACE's (jaw width, jaw length,
+//     chin, cheekbones, nose length and width, nose bridge, brow, eye spacing and size, ears), -1 to 1, kept in the
+//     recipe (st.recipe.face), and Reset;
 //   FIT (folds away): judge every head and hair one by one and fit the hair shown (kit/crew.js, "a hair's fit"): the
 //     head and the hair before and after (the arrow keys too: left and right the hair, up and down the head), nudges up,
 //     forward and to their left in millimetres (Fine: smaller steps), Size, Tuck (draws the lower edges in toward the
@@ -23,14 +26,14 @@
 //   ?who=<recipe id>  ?clip=<name>  ?cam=<name>  ?flathair (the Mathwood hair flat-shaded to start)  ?look (Look at camera on)
 //   window.CREWLAB = { ready, clips, play(name), pose(name, t), cam(name), show(k, on), recipe(r), colours(c), state(),
 //     expression(name) (a visor's face), smoothHair(on) (the Mathwood hair's shading; rebuilds the character),
-//     look(on) (the eyes on the camera, a head with real eyes),
+//     look(on) (the eyes on the camera, a head with real eyes), face(values) (the face sliders: { slider: -1..1 }),
 //     measure() (the body's lowest point and each boot's, in the pose shown), fit() (the Fit row's state: the fit worn,
 //     this browser's fits, the text Copy fits gives), step(kind, d) (the head or hair d along; resolves when shown),
 //     three, scene, camera, renderer }
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { loadCrew, makeCrew, fitFor, CLIPS, JOBS, UNIFORM_COLOURS, SKIN_TONES, HAIR_COLOURS, EYE_COLOURS, EXPRESSIONS } from '../../kit/crew.js';
+import { loadCrew, makeCrew, fitFor, CLIPS, JOBS, UNIFORM_COLOURS, SKIN_TONES, HAIR_COLOURS, EYE_COLOURS, FACE, EXPRESSIONS } from '../../kit/crew.js';
 import { makeMaterials } from '../../kit/materials.js';
 import { buildRoom } from '../../kit/layout.js';
 
@@ -177,6 +180,7 @@ function menu() {
   // (each row kept where it was scrolled to: on a phone the rows scroll sideways)
   const rows = [...document.querySelectorAll('#bar .kl-row')], keep = rows.map((r) => r.scrollLeft);
   menuRows();
+  faceRows();
   fitRows();
   rows.forEach((r, i) => { r.scrollLeft = keep[i]; });
   requestAnimationFrame(layout);
@@ -221,6 +225,29 @@ function look(on) { st.look = !!on; if (!st.look) st.crew?.lookAt(null); menu();
 // (a colour set back to the part's own (null) is left out of the recipe, but passed on as null: the person merges what it's
 // given into its own colours, so a key left out would keep the colour it had)
 function colours(c) { st.recipe.colours = { ...(st.recipe.colours || {}), ...c }; for (const k of Object.keys(c)) if (c[k] == null) delete st.recipe.colours[k]; st.crew?.setColours({ ...st.recipe.colours, ...c }); menu(); }
+
+// ── FACE: the face bones' sliders (kit/crew.js FACE), kept in the recipe ─────────────────────────────────────────────
+const FACE_OPEN = 'crewlab.faceOpen';
+const faceSt = { open: (() => { try { return localStorage.getItem(FACE_OPEN) !== '0'; } catch (_) { return true; } })() };
+function face(values) { st.recipe.face = { ...(values || {}) }; for (const k of Object.keys(st.recipe.face)) if (!st.recipe.face[k]) delete st.recipe.face[k]; st.crew?.setFace(st.recipe.face); }
+function faceRows() {
+  const row = $('#face'), sl = st.crew?.faceSliders || [];
+  row.hidden = !sl.length; if (!sl.length) { row.replaceChildren(); return; }
+  const F = st.recipe.face || {}, open = faceSt.open, n = Object.keys(F).length;
+  const fold = chip(open ? 'Face ▾' : 'Face ▸', open, () => { faceSt.open = !faceSt.open; try { localStorage.setItem(FACE_OPEN, faceSt.open ? '1' : '0'); } catch (_) {} menu(); }, false, 'The face\'s shape: show or fold the sliders');
+  fold.setAttribute('aria-expanded', String(open));
+  if (!open) { row.replaceChildren(fold, val(n ? `${n} changed` : 'as made')); row.lastChild.classList.add('wide'); return; }
+  const items = [fold];
+  for (const k of sl) {
+    const r = document.createElement('input'); r.type = 'range'; r.min = -100; r.max = 100; r.step = 1; r.value = Math.round((F[k] || 0) * 100);
+    r.setAttribute('aria-label', FACE[k].name); r.title = FACE[k].name + ' (less to more)';
+    const v = val(((F[k] || 0) * 100 > 0 ? '+' : '') + Math.round((F[k] || 0) * 100));
+    r.oninput = () => { const f = { ...(st.recipe.face || {}), [k]: +r.value / 100 }; face(f); v.textContent = (+r.value > 0 ? '+' : '') + r.value; };
+    items.push(sep(), lab(FACE[k].name), r, v);
+  }
+  items.push(sep(), chip('Reset', false, () => { face({}); menu(); }, true, 'Every slider back to the face as made'));
+  row.replaceChildren(...items);
+}
 
 // ── FIT: the heads and hair one by one, and the hair fitted (kit/crew.js, "a hair's fit") ─────────────────────────────
 // This browser's fits (lib.fits: a hair's entry replaces crew.json's fit for that hair) are kept in localStorage as
@@ -397,7 +424,7 @@ function layout() {
 // (up, down), the Fit row's own keys ────────────────────────────────────────────────────────────────────────────
 const keys = new Set();
 const ARROWS = { ArrowLeft: ['hair', -1], ArrowRight: ['hair', 1], ArrowUp: ['head', -1], ArrowDown: ['head', 1] };
-const typing = (t) => t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA';
+const typing = (t) => t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA';   // (a face slider too)
 addEventListener('keydown', (e) => {
   if (typing(e.target)) return;
   if (ARROWS[e.code] && !e.altKey && !e.ctrlKey && !e.metaKey) { e.preventDefault(); step(...ARROWS[e.code]); return; }
@@ -466,9 +493,9 @@ window.CREWLAB = {
   ready: true, clips: () => CLIPS.filter((n) => st.crew?.person.actions[n]), play: (n) => play(n), pose, cam: (c) => { setCam(c); menu(); },
   show: (k, on) => { if (k === 'paint' || k === 'plain' || k === 'wire') setPaint(k); if (k === 'marker') { st.marker = on; marker.visible = on; } if (k === 'bones') setBones(on); if (k === 'floor' && floorGroup) floorGroup.visible = on; menu(); },
   recipe: async (r) => { await show(r); return st.recipe; }, who: async (id) => { st.who = id; await show(RECIPES[id]); },
-  colours: (c) => colours(c), expression: (k) => expression(k), smoothHair: (on) => smoothHair(on), look: (on) => look(on),
+  colours: (c) => colours(c), expression: (k) => expression(k), smoothHair: (on) => smoothHair(on), look: (on) => look(on), face: (v) => { face(v); menu(); },
   state: () => ({ who: st.who, clip: st.clip, recipe: st.recipe, tris, fps, parts: Object.keys(st.crew?.meshes || {}), body: st.crew?.body, expression: st.crew?.expression, rig: st.crew?.rig && { turnDiffMaxDeg: st.crew.rig.turnDiffMaxDeg }, smoothHair: lib.smoothHair,
-    look: st.look, eyes: !!st.crew?.gaze, gaze: st.crew?.gaze ? { target: st.crew.gaze.target && st.crew.gaze.target.toArray(), eye: st.crew.gaze.eye } : null,
+    look: st.look, eyes: !!st.crew?.gaze, faceSliders: st.crew?.faceSliders || [], face: st.recipe?.face || {}, gaze: st.crew?.gaze ? { target: st.crew.gaze.target && st.crew.gaze.target.toArray(), eye: st.crew.gaze.eye } : null,
     shown: shownSeq === showSeq }),
   fit: () => ({ open: fitSt.open, scope: fitSt.scope, fine: fitSt.fine, hair: st.recipe?.hair, head: st.recipe?.head, wearing: st.crew?.fit || null, stats: st.crew?.fitStats,
     wearingFor: st.crew && { hair: st.crew.recipe.hair, head: st.crew.recipe.head }, mine: copy(lib.fits), text: fitsText(), box: fitSt.out, note: fitSt.note }),

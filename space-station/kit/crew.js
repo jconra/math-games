@@ -56,6 +56,12 @@
 // skeleton lacks, all under the Head bone) are added to the person's skeleton when it's put together. A head without
 // eyes (the Meshy heads, crew 1's, the captain's, Vega's helmet) is as it was.
 //
+// FACE BONES (the Tripo heads): small bones under the Head bone (Jaw, Chin, Cheek.L/R, Nose, Bridge, Brow, EyeSocket.L/R,
+// Ear.L/R) with smooth weights over the face, each moved or sized from its rest by the sliders in FACE, -1 to 1, kept to
+// a believable range so the skin's texture doesn't smear. A recipe's `face` { slider: value } sets them. They ride the
+// Head bone, so the clips carry them, and they leave the scalp alone, so the hair's fit is as it was. The eye sockets
+// carry the eye bones with them (spacing and size), so the lids stay on the balls.
+//
 //   const lib = await loadCrew()                lib.list: crew.json; lib.part(kind, id) -> its glTF; lib.clipsFor(suit id)
 //                                               -> { body, rig, clips (fitted to that suit), stride }; lib.hairAtlas();
 //                                               lib.fitOf(hair id, head id) -> the fit makeCrew gives that hair on that
@@ -65,13 +71,14 @@
 //     c.root (place and turn it: feet on y 0, facing +z), c.person (Mathwood's Person), c.play(name, { fade, speed, once }),
 //     c.update(dt), c.setColours({ job, uniform, skin, hair, eyes }), c.meshes { suit, head, hair, visor, eyes, cornea },
 //     c.bones, c.lookAt(point | null, { dart }) (real eyes: where they look; null straight ahead), c.gaze (null without),
-//     c.body ('m' | 'f':
+//     c.setFace({ slider: -1..1 }) (face bones: FACE's sliders; recipe.face sets the first), c.faceSliders (the sliders this
+//     head has: [] without), c.body ('m' | 'f':
 //     the suit's skeleton, whose clips it plays), c.stride (m/s at speed 1: { Walk, Run }), c.dispose(),
 //     c.setExpression(name) (a visor's face; recipe.expression sets the first), c.expression,
 //     await c.setFit(fit) (the hair's fit, live: { offset, scale, tuck, tuckStart } as lib.fitOf gives; null: as made),
 //     c.fit (the fit it wears), c.fitStats ({ tucked: points the tuck moved, held: of those, how many it stopped 4 mm off
 //     the head })
-//   JOBS, UNIFORM_COLOURS, SKIN_TONES, HAIR_COLOURS, EYE_COLOURS, CLIPS, EXPRESSIONS, fitFor, SKULL, HAIR_CLEAR
+//   JOBS, UNIFORM_COLOURS, SKIN_TONES, HAIR_COLOURS, EYE_COLOURS, FACE, CLIPS, EXPRESSIONS, fitFor, SKULL, HAIR_CLEAR
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
@@ -549,6 +556,45 @@ function makeGaze(root, head, eyes) {
   return g;
 }
 
+// ── face bones ─────────────────────────────────────────────────────────────────────────────────────────────────────
+// Each slider, at 1, moves its bones by `move` (metres, in the Head bone's frame: x to their left, y up, z forward) and
+// sizes them by 1 + `scale` along each axis; at -1 the other way; values between in proportion. The ranges: jaw width
+// 5%, jaw length and chin 4 mm, cheekbones 2 mm out (1.5 forward), nose length 10% and width 18%, the bridge 3 mm, the
+// brow 2.5 mm, the eyes 2.5 mm apart each and 8% in size, the ears 6%. (The jaw's width, the cheekbones and the ears
+// are held where hair over them stays outside the head with every slider at its end: faceclear.cjs)
+const eyes3 = (k) => [k, k, k];
+export const FACE = {
+  jawWidth: { name: 'Jaw width', bones: { Jaw: { scale: [0.05, 0, 0] } } },
+  jawLength: { name: 'Jaw length', bones: { Chin: { move: [0, -0.004, 0] } } },
+  chin: { name: 'Chin', bones: { Chin: { move: [0, 0, 0.004] } } },
+  cheekbones: { name: 'Cheekbones', bones: { CheekL: { move: [0.002, 0, 0.0015] }, CheekR: { move: [-0.002, 0, 0.0015] } } },
+  noseLength: { name: 'Nose length', bones: { Nose: { scale: [0, 0.1, 0.03] } } },
+  noseWidth: { name: 'Nose width', bones: { Nose: { scale: [0.18, 0, 0] } } },
+  noseBridge: { name: 'Nose bridge', bones: { Bridge: { move: [0, 0, 0.003] } } },
+  brow: { name: 'Brow', bones: { Brow: { move: [0, 0, 0.0025] } } },
+  eyeSpacing: { name: 'Eye spacing', bones: { EyeSocketL: { move: [0.0025, 0, 0] }, EyeSocketR: { move: [-0.0025, 0, 0] }, EyeL: { move: [0.0025, 0, 0] }, EyeR: { move: [-0.0025, 0, 0] } } },
+  eyeSize: { name: 'Eye size', bones: { EyeSocketL: { scale: eyes3(0.08) }, EyeSocketR: { scale: eyes3(0.08) }, EyeL: { scale: eyes3(0.08) }, EyeR: { scale: eyes3(0.08) } } },
+  ears: { name: 'Ears', bones: { EarL: { scale: eyes3(0.06) }, EarR: { scale: eyes3(0.06) } } },
+};
+// the face bones a person has, at rest; and the sliders whose bones they all are
+function faceRig(bones) {
+  const rest = {};
+  for (const S of Object.values(FACE)) for (const b of Object.keys(S.bones)) if (bones[b] && !rest[b]) rest[b] = { p: bones[b].position.clone(), s: bones[b].scale.clone() };
+  const sliders = Object.keys(FACE).filter((k) => Object.keys(FACE[k].bones).every((b) => rest[b]) && Object.keys(FACE[k].bones).some((b) => !/^Eye[LR]$/.test(b)));
+  return { rest, sliders };
+}
+function applyFace(bones, rig, values = {}) {
+  for (const [b, r] of Object.entries(rig.rest)) { bones[b].position.copy(r.p); bones[b].scale.copy(r.s); }
+  for (const k of rig.sliders) {
+    const v = Math.max(-1, Math.min(1, +values[k] || 0)); if (!v) continue;
+    for (const [b, e] of Object.entries(FACE[k].bones)) {
+      const B = bones[b];
+      if (e.move) B.position.set(B.position.x + e.move[0] * v, B.position.y + e.move[1] * v, B.position.z + e.move[2] * v);
+      if (e.scale) B.scale.set(B.scale.x * (1 + e.scale[0] * v), B.scale.y * (1 + e.scale[1] * v), B.scale.z * (1 + e.scale[2] * v));
+    }
+  }
+}
+
 function setColours(mats, { job, uniform, skin, hair, eyes } = {}) {
   for (const m of mats) {
     if (m.userData.eye) { const e = m.userData.eye; e.crIris.value.copy(eyes ? lin(eyes) : e.crIrisOwn.value); }
@@ -841,6 +887,8 @@ export async function makeCrew(lib, recipe) {
   // (real eyes: a ball on each eye bone; the gaze turns them, see THE GAZE)
   const gaze = meshes.eyes && bones.EyeL && bones.EyeR ? makeGaze(person.root, bones.Head, [bones.EyeL, bones.EyeR]) : null;
   if (gaze) gaze.shade(meshes.eyes, meshes.eyes.material);
+  // (face bones, at rest before the clips' first frame)
+  const faceR = faceRig(bones);
   const c = {
     root: person.root, person, meshes, bones, recipe: { ...recipe }, stride: fit.stride, body: fit.body, rig: fit.rig,
     play: (name, o = {}) => person.play(name, { once: ONCE.has(name), ...o }),
@@ -862,6 +910,9 @@ export async function makeCrew(lib, recipe) {
     // (straight ahead); dart: the small darting movements while it holds (on unless false)
     gaze,
     lookAt(target, o) { if (gaze) gaze.lookAt(target, o); },
+    // the face bones (FACE): the sliders this head has, and their values (-1..1) set
+    faceSliders: faceR.sliders,
+    setFace(values) { c.recipe.face = { ...(values || {}) }; applyFace(bones, faceR, c.recipe.face); },
     setColours(col) { c.recipe.colours = { ...(c.recipe.colours || {}), ...col }; setColours(mats, c.recipe.colours); },
     expression: null,
     setExpression(name) {
@@ -893,6 +944,7 @@ export async function makeCrew(lib, recipe) {
   const hairFit = hairMeshes.map((m) => [m, m.geometry, frameOf(m)]);
   c.setColours(recipe.colours || {});
   c.setExpression(recipe.expression || 'neutral');
+  if (faceR.sliders.length) c.setFace(recipe.face || {});
   await c.setFit(lib.fitOf(R.hair, R.head));
   return c;
 }
