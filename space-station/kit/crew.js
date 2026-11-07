@@ -37,8 +37,13 @@
 // dark glass, and the face on it is drawn by its shader as glowing strokes, as the character sheet draws them: EXPRESSIONS
 // (neutral, happy, thinking with its turning ring of dots, surprised), set with c.setExpression(name).
 //
+// CARD HAIR (Blender-made styles: a smooth shell plus hair cards, crew.json `cards: true`): one shared grey strand atlas
+// for every style (crew.json hairAtlas), tinted by the hair colour, drawn in one alpha-to-coverage pass (hairCardMaterial).
+// The Mathwood hair comes smooth-shaded (crew.json `smooth`: the same triangles, its vertices merged and its normals
+// smoothed) unless loadCrew({ smoothHair: false }) or lib.smoothHair = false (then its flat facets, as the pack has them).
+//
 //   const lib = await loadCrew()                lib.list: crew.json; lib.part(kind, id) -> its glTF; lib.clipsFor(suit id)
-//                                               -> { body, rig, clips (fitted to that suit), stride }
+//                                               -> { body, rig, clips (fitted to that suit), stride }; lib.hairAtlas()
 //   const c = await makeCrew(lib, recipe)       recipe { suit, head, hair, colours: { job, skin, hair } }
 //     c.root (place and turn it: feet on y 0, facing +z), c.person (Mathwood's Person), c.play(name, { fade, speed, once }),
 //     c.update(dt), c.setColours({ job, skin, hair }), c.meshes { suit, head, hair, visor }, c.bones, c.body ('m' | 'f':
@@ -84,8 +89,22 @@ const loader = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
 const clean = (n) => THREE.PropertyBinding.sanitizeNodeName(n);
 const lin = (s) => new THREE.Color(s);          // (sRGB string -> three's linear working colour)
 
+// a texture as GLTFLoader loads one (an ImageBitmap where it can, never premultiplied, so the colour under the strand
+// atlas's clear texels survives for the mipmaps; laid out as glTF's: no flip)
+const UA = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+const FF = UA.includes('Firefox') ? +(UA.match(/Firefox\/([0-9]+)\./) || [0, 0])[1] : -1;
+const texLoader = typeof createImageBitmap === 'undefined' || /^((?!chrome|android).)*safari/i.test(UA) || (FF >= 0 && FF < 98)
+  ? new THREE.TextureLoader() : new THREE.ImageBitmapLoader().setOptions({ imageOrientation: 'none', premultiplyAlpha: 'none' });
+function hairTexture(url, srgb) {
+  return new Promise((ok, no) => texLoader.load(url, (img) => {
+    const t = img.isTexture ? img : new THREE.Texture(img);
+    t.flipY = false; t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace; t.anisotropy = 4; t.needsUpdate = true;
+    ok(t);
+  }, undefined, no));
+}
+
 // ── loading ─────────────────────────────────────────────────────────────────────────────────────────────────────────
-export async function loadCrew({ dir = CREW_DIR, people = PEOPLE_DIR } = {}) {
+export async function loadCrew({ dir = CREW_DIR, people = PEOPLE_DIR, smoothHair = true } = {}) {
   const list = await (await fetch(dir + 'crew.json')).json();
   const parts = new Map(), raws = new Map(), fitted = new Map();
   const lib = { dir, list };
@@ -101,15 +120,20 @@ export async function loadCrew({ dir = CREW_DIR, people = PEOPLE_DIR } = {}) {
     }
     return raws.get(body);
   };
+  // (the Mathwood hair comes smooth-shaded unless lib.smoothHair is set false: an entry's `smooth` file)
+  lib.smoothHair = smoothHair;
+  lib.fileOf = (kind, id) => { const P = lib.entry(kind, id); return P && (kind === 'hair' && lib.smoothHair && P.smooth ? P.smooth : P.file); };
   lib.part = (kind, id) => {
-    const key = kind + ':' + id;
-    if (!parts.has(key)) {
-      const P = lib.entry(kind, id);
-      if (!P) return Promise.reject(new Error(`crew: no ${kind} "${id}" in crew.json`));
-      parts.set(key, loader.loadAsync(dir + P.file));
-    }
+    const P = lib.entry(kind, id);
+    if (!P) return Promise.reject(new Error(`crew: no ${kind} "${id}" in crew.json`));
+    const file = lib.fileOf(kind, id), key = kind + ':' + file;
+    if (!parts.has(key)) parts.set(key, loader.loadAsync(dir + file));
     return parts.get(key);
   };
+  // the card hair's one shared strand atlas and its normal map (list.hairAtlas), loaded once for every style
+  let atlas = null;
+  lib.hairAtlas = () => atlas || (atlas = Promise.all([hairTexture(dir + list.hairAtlas.map, true), hairTexture(dir + list.hairAtlas.normal, false)])
+    .then(([map, normalMap]) => ({ map, normalMap })));
   // the clips fitted to one suit (its own bones' lengths: see the top), once a suit
   lib.clipsFor = async (id) => {
     if (!fitted.has(id)) {
@@ -166,10 +190,9 @@ const strideOf = (rig, body) => { const k = rig.dstRest.Body[1] / rig.srcRest.Bo
 
 // ── the materials: each part's own, patched for its colours ────────────────────────────────────────────────────────
 const KIND_DEF = { suit: 'CREW_SUIT', head: 'CREW_HEAD', hair: 'CREW_HAIR' };
-function crewMaterial(src, kind, part) {
-  const m = src.clone(), refs = part && part.refs;
+function crewUniforms(refs) {
   const R = (n, d) => (refs && refs[n] ? new THREE.Color().fromArray(refs[n]) : new THREE.Color(d));
-  const u = m.userData.crew = {
+  return {
     crMarks: { value: R('marks', 0xe0a020) }, crMarksRef: { value: R('marks', 0xe0a020) },
     crLines: { value: R('lines', 0x20c0c0) }, crLinesRef: { value: R('lines', 0x20c0c0) },
     crPanels: { value: R('panels', 0x202020) }, crPanelsRef: { value: R('panels', 0x202020) },
@@ -177,6 +200,10 @@ function crewMaterial(src, kind, part) {
     crHair: { value: R('hair', 0x402010) }, crHairRef: { value: R('hair', 0x402010) },
     crGlow: { value: refs && refs.glow != null ? refs.glow : 0.0 },
   };
+}
+function crewMaterial(src, kind, part) {
+  const m = src.clone(), refs = part && part.refs;
+  const u = m.userData.crew = crewUniforms(refs);
   const has = part && part.masks ? part.masks : {};
   // (skin and hair: no sheen of the room's reflections; the painted face carries its own light and shade)
   if (kind !== 'suit') { m.roughness = Math.max(m.roughness, 0.78); m.envMapIntensity = 0.55; }
@@ -221,6 +248,89 @@ vec3 crShift(vec3 c, vec3 to, vec3 ref, float m) { return max(c + (to - ref) * m
   };
   m.customProgramCacheKey = () => 'crew-1-' + Object.keys(m.defines).join('-');
   return m;
+}
+
+// ── card hair (made in Blender: ~/pw/space-math/rigs/crew-hair/) ─────────────────────────────────────────────────
+// One mesh: a smooth shell under the hair (opaque texels of the atlas) and hair cards over it (strand clumps with
+// coverage in the alpha), all mapped into one shared grey strand atlas (lib.hairAtlas) and tinted by the hair colour
+// (the colour over the atlas's mean value, so the hair averages out to the colour picked). Drawn in ONE pass: an alpha
+// cut-out with alpha-to-coverage (MSAA turns the cut into soft edges; no sorting), double-sided, the normals never
+// flipped on back faces (the cards carry normals bent outward from the head, so both faces light as the hair's outer
+// surface), the cut sharpened by its screen-space rate and lifted with the mip level so cards don't thin out at a
+// distance. A strand highlight (Kajiya-Kay, two lobes) runs along each vertex's strand direction (_strand, skinned with
+// the bones). The vertex colour darkens the inner layers (rgb) and fades the roots at the hairline (alpha). Shadows are
+// cast through a cut-out depth material (c.meshes.hair.customDepthMaterial).
+export const HAIR_SPEC = { shift1: -0.08, shift2: 0.12, exp1: 90.0, exp2: 18.0, spec1: 0.045, spec2: 0.5 };
+const HAIR_CUT = 0.42;
+function hairCardMaterial(part, atlas) {
+  // (a style's own look, from its part: how strong its highlight and its strands' relief are, how rough it is)
+  const refs = part.refs || {}, look = { spec: 1, normal: 0.7, rough: 0.78, env: 0.55, ...(part.look || {}) };
+  const m = new THREE.MeshStandardMaterial({ name: 'hair_cards', map: atlas.map, normalMap: atlas.normalMap, vertexColors: true,
+    alphaTest: HAIR_CUT, alphaToCoverage: true, side: THREE.DoubleSide, roughness: look.rough, metalness: 0, envMapIntensity: look.env });
+  m.normalScale.set(look.normal, -look.normal);   // (glTF's normal maps are +y up the texture; three's uv runs the other way)
+  const u = m.userData.crew = crewUniforms(refs);
+  u.crMean = { value: part.mean || 0.5 }; u.crTexSize = { value: (atlas.map.image && atlas.map.image.width) || 1024 };
+  for (const [k, v] of Object.entries(HAIR_SPEC)) u['cr_' + k] = { value: /^spec/.test(k) ? v * look.spec : v };
+  m.onBeforeCompile = (sh) => {
+    Object.assign(sh.uniforms, u);
+    sh.vertexShader = 'attribute vec3 _strand; varying vec3 vCrStrand;\n' + sh.vertexShader.replace('#include <defaultnormal_vertex>', `#include <defaultnormal_vertex>
+  vec3 crS = _strand;
+#ifdef USE_SKINNING
+  crS = (skinMatrix * vec4(crS, 0.0)).xyz;
+#endif
+  vCrStrand = normalize((modelViewMatrix * vec4(crS, 0.0)).xyz + 1e-6);`);
+    sh.fragmentShader = `varying vec3 vCrStrand;
+uniform vec3 crHair; uniform float crMean, crTexSize, cr_shift1, cr_shift2, cr_exp1, cr_exp2, cr_spec1, cr_spec2;
+` + sh.fragmentShader
+      .replace('#include <map_fragment>', `#include <map_fragment>
+  diffuseColor.rgb *= crHair / crMean;`)
+      .replace('#include <normal_fragment_begin>', THREE.ShaderChunk.normal_fragment_begin.replace(/\n[^\n]*\*= faceDirection;/g, ''))
+      .replace('#include <alphatest_fragment>', `
+  {
+    // (a fade in the vertex alpha (a hairline, a card's roots) takes the darker strands first, so a faded edge breaks
+    // up along the strands instead of ending in a clean line)
+    float crVA = 1.0;
+#ifdef USE_COLOR_ALPHA
+    crVA = vColor.a;
+#endif
+    diffuseColor.a = opacity * sampledDiffuseColor.a * clamp((crVA - (1.0 - sampledDiffuseColor.r) * 0.85) / 0.15, 0.0, 1.0);
+    vec2 crT = vMapUv * crTexSize;
+    float crMip = max(0.0, 0.5 * log2(max(dot(dFdx(crT), dFdx(crT)), dot(dFdy(crT), dFdy(crT)))));
+    diffuseColor.a *= 1.0 + crMip * 0.25;
+    // (the cut sharpened to about a pixel wide, so alpha-to-coverage spreads only the edge across the MSAA samples;
+    // three r158 has no define of its own for alpha-to-coverage, and without MSAA this is a plain cut-out a pixel wider)
+    diffuseColor.a = clamp((diffuseColor.a - alphaTest) / max(fwidth(diffuseColor.a), 0.0001) + 0.5, 0.0, 1.0);
+    if (diffuseColor.a <= 0.0) discard;
+  }`)
+      .replace('#include <opaque_fragment>', `
+#if NUM_DIR_LIGHTS > 0
+  {
+    vec3 crDx = dFdx(-vViewPosition), crDy = dFdy(-vViewPosition);
+    vec3 crStr = normalize(vCrStrand - normal * dot(vCrStrand, normal) + 1e-6);
+    vec3 crV = normalize(vViewPosition);
+    // (cards seen edge-on have no steady strand direction: their highlight fades out)
+    float crFace = smoothstep(0.08, 0.35, abs(dot(normalize(cross(crDx, crDy)), crV)));
+    float crGrain = sampledDiffuseColor.r;
+    vec3 crHi = vec3(0.0);
+    for (int i = 0; i < NUM_DIR_LIGHTS; i++) {
+      vec3 L = directionalLights[i].direction; vec3 H = normalize(L + crV);
+      vec3 T1 = normalize(crStr + normal * cr_shift1), T2 = normalize(crStr + normal * cr_shift2);
+      float d1 = dot(T1, H), d2 = dot(T2, H);
+      float s1 = pow(sqrt(max(0.0, 1.0 - d1 * d1)), cr_exp1), s2 = pow(sqrt(max(0.0, 1.0 - d2 * d2)), cr_exp2);
+      float lit = smoothstep(-0.15, 0.45, dot(normal, L)) * crFace;
+      crHi += directionalLights[i].color * lit * (s1 * cr_spec1 * mix(0.4, 1.3, crGrain) + s2 * cr_spec2 * diffuseColor.rgb * crGrain);
+    }
+    outgoingLight += crHi;
+  }
+#endif
+#include <opaque_fragment>`);
+  };
+  m.customProgramCacheKey = () => 'crew-hair-cards-1';
+  return m;
+}
+// (the shadow a card hair casts: its strands' cut-out, not its cards' rectangles)
+function hairDepthMaterial(atlas) {
+  return new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: atlas.map, alphaTest: 0.5, side: THREE.DoubleSide });
 }
 // ── a visor: dark glass, and a face drawn on it ──────────────────────────────────────────────────────────────────
 // The face is drawn in the visor's own layout (p: x across, y up, the visor's middle at 0, its width about 1) by
@@ -319,7 +429,9 @@ function assemble(suit, others) {
 
 export async function makeCrew(lib, recipe) {
   const R = { suit: recipe.suit, head: recipe.head, hair: recipe.hair };
-  const [suit, head, hair, fit] = await Promise.all([...['suit', 'head', 'hair'].map((k) => (R[k] ? lib.part(k, R[k]) : null)), lib.clipsFor(R.suit)]);
+  const cards = !!(R.hair && (lib.entry('hair', R.hair) || {}).cards);
+  const [suit, head, hair, fit, atlas] = await Promise.all([...['suit', 'head', 'hair'].map((k) => (R[k] ? lib.part(k, R[k]) : null)), lib.clipsFor(R.suit),
+    cards ? lib.hairAtlas() : null]);
   const tpl = assemble(suit, [['head', head], ['hair', hair]].filter((x) => x[1]));
   const refsOf = { suit: suit && suit.scene.userData.crewPart, head: head && head.scene.userData.crewPart, hair: hair && hair.scene.userData.crewPart };
   // a Person of the Mathwood world, from the template (its clone, mixer, fades and bone keeping), on the suit's skeleton
@@ -333,7 +445,10 @@ export async function makeCrew(lib, recipe) {
     if (!o.isSkinnedMesh) return;
     const kind = o.userData.part || 'suit', own = o.material === made ? src[i] : o.material; i++;
     if (own && own.name === 'visor') { o.material = visor = visorMaterial(); meshes.visor = o; }
-    else { const mat = crewMaterial(own, kind, refsOf[kind]); o.material = mat; mats.push(mat); meshes[kind] = o; }
+    else if (kind === 'hair' && atlas) {
+      const mat = hairCardMaterial(refsOf.hair || {}, atlas); o.material = mat; mats.push(mat); meshes.hair = o;
+      o.customDepthMaterial = hairDepthMaterial(atlas); mats.push(o.customDepthMaterial);
+    } else { const mat = crewMaterial(own, kind, refsOf[kind]); o.material = mat; mats.push(mat); meshes[kind] = o; }
     o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false;
   });
   made.dispose();

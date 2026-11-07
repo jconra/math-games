@@ -1,5 +1,6 @@
 {
   "about": "The crew's parts (each skinned to a Mathwood people's skeleton, 'm' the men's or 'f' the women's, and carrying it; made by ~/pw/space-math/rigs/crew-rig/) and the characters put together from them (kit/crew.js makeCrew). A recipe: { suit, head, hair, colours: { job, skin, hair }, expression }; a colour left out keeps the part's own; expression is a visor's face (neutral, happy, thinking, surprised). The suit's skeleton sets the clips. Any head goes on any suit and any hair on any head: a head attaches at the Neck and Head joints and hair at the Head joint (the attachment rules: ~/pw/space-math/characters/CHARACTERS.md).",
+  "hairAtlas": { "map": "hair_atlas.webp", "normal": "hair_atlas_n.webp" },
   "parts": {
     "suit": [
       { "id": "crew1", "name": "Station suit", "file": "suit_crew1.glb", "skeleton": "m" },
@@ -23,10 +24,16 @@
     "hair": [
       { "id": "crew1", "name": "Short swept", "file": "hair_crew1.glb", "skeleton": "m" },
       { "id": "captain1", "name": "Braided crown and bun", "file": "hair_captain1.glb", "skeleton": "f" },
-      { "id": "q_short", "name": "Short tousled (Mathwood)", "file": "hair_q_short.glb", "skeleton": "m" },
-      { "id": "q_mohawk", "name": "Mohawk (Mathwood)", "file": "hair_q_mohawk.glb", "skeleton": "m" },
-      { "id": "q_bob", "name": "Two-tone bob (Mathwood)", "file": "hair_q_bob.glb", "skeleton": "m" },
-      { "id": "q_long", "name": "Long (Mathwood)", "file": "hair_q_long.glb", "skeleton": "m" }
+      { "id": "q_short", "name": "Short tousled (Mathwood)", "file": "hair_q_short.glb", "skeleton": "m", "smooth": "hair_q_short_smooth.glb" },
+      { "id": "q_mohawk", "name": "Mohawk (Mathwood)", "file": "hair_q_mohawk.glb", "skeleton": "m", "smooth": "hair_q_mohawk_smooth.glb" },
+      { "id": "q_bob", "name": "Two-tone bob (Mathwood)", "file": "hair_q_bob.glb", "skeleton": "m", "smooth": "hair_q_bob_smooth.glb" },
+      { "id": "q_long", "name": "Long (Mathwood)", "file": "hair_q_long.glb", "skeleton": "m", "smooth": "hair_q_long_smooth.glb" },
+      { "id": "crop", "name": "Short messy crop", "file": "hair_crop.glb", "skeleton": "m", "cards": true },
+      { "id": "buzz", "name": "Buzz cut", "file": "hair_buzz.glb", "skeleton": "m", "cards": true },
+      { "id": "sidepart", "name": "Swept side part", "file": "hair_sidepart.glb", "skeleton": "m", "cards": true },
+      { "id": "wavy", "name": "Wavy shoulder-length", "file": "hair_wavy.glb", "skeleton": "m", "cards": true },
+      { "id": "ponytail", "name": "High ponytail", "file": "hair_ponytail.glb", "skeleton": "m", "cards": true },
+      { "id": "afro", "name": "Afro", "file": "hair_afro.glb", "skeleton": "m", "cards": true }
     ]
   },
   "recipes": {

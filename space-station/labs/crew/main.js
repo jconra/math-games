@@ -3,15 +3,16 @@
 // Mathwood people's clips.
 // ONE MENU along the bottom:
 //   the characters (one entry a recipe) and every clip their suit's skeleton has (the men's or the women's), its speed;
-//   the wardrobe: Head, Hair, Suit (each part a choice: any goes with any, the Mathwood hair among them), Job colours
-//     (the suit's marks, light lines and panels), Skin tone, Hair colour; a visor's face (an android's helmet: Captain
-//     Vega's expressions), when the head has one;
+//   the wardrobe: Head, Hair, Suit (each part a choice: any goes with any; the hair: the Blender styles from the game's
+//     maker's grid, drawn as card hair, and the Mathwood hair), Job colours (the suit's marks, light lines and panels),
+//     Skin tone, Hair colour; a visor's face (an android's helmet: Captain Vega's expressions), when the head has one;
 //   the view: cameras (Face, Head and Nape follow the head: from the front-left, straight on, from behind), Plain (no
-//     paint), Wireframe, the 1.8 m marker, the bones.
+//     paint), Wireframe, the 1.8 m marker, the bones, Smooth hair (the Mathwood hair smooth-shaded, or off: its flat
+//     facets as the pack has them).
 // Drag to look round, wheel or pinch to come closer, W A S D move (Space up, C down, Shift faster).
-//   ?who=<recipe id>  ?clip=<name>  ?cam=<name>
+//   ?who=<recipe id>  ?clip=<name>  ?cam=<name>  ?flathair (the Mathwood hair flat-shaded to start)
 //   window.CREWLAB = { ready, clips, play(name), pose(name, t), cam(name), show(k, on), recipe(r), colours(c), state(),
-//     expression(name) (a visor's face),
+//     expression(name) (a visor's face), smoothHair(on) (the Mathwood hair's shading; rebuilds the character),
 //     measure() (the body's lowest point and each boot's, in the pose shown), three, scene, camera, renderer }
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
@@ -91,7 +92,7 @@ let skel = null;
 
 // ── the crew ───────────────────────────────────────────────────────────────────────────────────────────────────────
 loading.textContent = 'Waking the crew…';
-const lib = await loadCrew();
+const lib = await loadCrew({ smoothHair: !q.has('flathair') });
 const RECIPES = lib.list.recipes;
 async function show(recipe) {
   st.recipe = JSON.parse(JSON.stringify(recipe));
@@ -166,9 +167,11 @@ function menu() {
   $('#view').replaceChildren(lab('Camera'), ...Object.keys(CAMS).map((k) => chip(k, k === st.cam, () => { setCam(k); menu(); }, true)),
     sep(), lab('Show'), ...[['paint', 'Painted'], ['plain', 'Plain'], ['wire', 'Wireframe']].map(([k, t]) => chip(t, st.paint === k, () => { setPaint(k); menu(); }, true)),
     chip('1.8 m', st.marker, () => { st.marker = !st.marker; marker.visible = st.marker; menu(); }, true, 'A 1.8 m post beside them'),
-    chip('Bones', st.bones, () => { setBones(!st.bones); menu(); }, true, 'The skeleton'));
+    chip('Bones', st.bones, () => { setBones(!st.bones); menu(); }, true, 'The skeleton'),
+    chip('Smooth hair', lib.smoothHair, () => smoothHair(!lib.smoothHair), true, 'The Mathwood hair smooth-shaded (off: its flat facets, as the pack has them)'));
   requestAnimationFrame(layout);
 }
+async function smoothHair(on) { lib.smoothHair = !!on; if (st.recipe) await show(st.recipe); triCount(); menu(); }
 function expression(k) { st.recipe.expression = k; st.crew?.setExpression(k); menu(); }
 function colours(c) { st.recipe.colours = { ...(st.recipe.colours || {}), ...c }; for (const k of Object.keys(c)) if (c[k] == null) delete st.recipe.colours[k]; st.crew?.setColours(st.recipe.colours); menu(); }
 function layout() {
@@ -242,6 +245,7 @@ window.CREWLAB = {
   ready: true, clips: () => CLIPS.filter((n) => st.crew?.person.actions[n]), play: (n) => play(n), pose, cam: (c) => { setCam(c); menu(); },
   show: (k, on) => { if (k === 'paint' || k === 'plain' || k === 'wire') setPaint(k); if (k === 'marker') { st.marker = on; marker.visible = on; } if (k === 'bones') setBones(on); if (k === 'floor' && floorGroup) floorGroup.visible = on; menu(); },
   recipe: async (r) => { await show(r); triCount(); return st.recipe; }, who: async (id) => { st.who = id; await show(RECIPES[id]); triCount(); },
-  colours: (c) => colours(c), expression: (k) => expression(k), state: () => ({ who: st.who, clip: st.clip, recipe: st.recipe, tris, fps, parts: Object.keys(st.crew?.meshes || {}), body: st.crew?.body, expression: st.crew?.expression, rig: st.crew?.rig && { turnDiffMaxDeg: st.crew.rig.turnDiffMaxDeg } }),
+  colours: (c) => colours(c), expression: (k) => expression(k), smoothHair: (on) => smoothHair(on),
+  state: () => ({ who: st.who, clip: st.clip, recipe: st.recipe, tris, fps, parts: Object.keys(st.crew?.meshes || {}), body: st.crew?.body, expression: st.crew?.expression, rig: st.crew?.rig && { turnDiffMaxDeg: st.crew.rig.turnDiffMaxDeg }, smoothHair: lib.smoothHair }),
   measure, crew: () => st.crew, three: THREE, scene, camera, renderer, controls,
 };
