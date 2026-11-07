@@ -8,16 +8,25 @@
 //     Skin tone, Hair colour; a visor's face (an android's helmet: Captain Vega's expressions), when the head has one;
 //   the view: cameras (Face, Head and Nape follow the head: from the front-left, straight on, from behind), Plain (no
 //     paint), Wireframe, the 1.8 m marker, the bones, Smooth hair (the Mathwood hair smooth-shaded, or off: its flat
-//     facets as the pack has them).
-// Drag to look round, wheel or pinch to come closer, W A S D move (Space up, C down, Shift faster).
+//     facets as the pack has them);
+//   FIT (folds away): judge every head and hair one by one and fit the hair shown (kit/crew.js, "a hair's fit"): the
+//     head and the hair before and after (the arrow keys too: left and right the hair, up and down the head), nudges up,
+//     forward and to their left in millimetres (Fine: smaller steps), Size, Tuck (draws the lower edges in toward the
+//     head, never nearer than 4 mm) and where the tuck starts below the crown, Reset; a fit is the hair's on every head
+//     unless "Just this head" is on (then it's that head's own adjustment, added to the hair's). Fits are kept in this
+//     browser as they're made (over crew.json's own) and worn at once; Copy fits gives them all as JSON for crew.json
+//     (shown in a box as well, to select by hand where copying fails); Clear my changes goes back to crew.json's.
+// Drag to look round, wheel or pinch to come closer, W A S D move (Space up, C down, Shift faster), the arrow keys step.
 //   ?who=<recipe id>  ?clip=<name>  ?cam=<name>  ?flathair (the Mathwood hair flat-shaded to start)
 //   window.CREWLAB = { ready, clips, play(name), pose(name, t), cam(name), show(k, on), recipe(r), colours(c), state(),
 //     expression(name) (a visor's face), smoothHair(on) (the Mathwood hair's shading; rebuilds the character),
-//     measure() (the body's lowest point and each boot's, in the pose shown), three, scene, camera, renderer }
+//     measure() (the body's lowest point and each boot's, in the pose shown), fit() (the Fit row's state: the fit worn,
+//     this browser's fits, the text Copy fits gives), step(kind, d) (the head or hair d along; resolves when shown),
+//     three, scene, camera, renderer }
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { loadCrew, makeCrew, CLIPS, JOBS, SKIN_TONES, HAIR_COLOURS, EXPRESSIONS } from '../../kit/crew.js';
+import { loadCrew, makeCrew, fitFor, CLIPS, JOBS, SKIN_TONES, HAIR_COLOURS, EXPRESSIONS } from '../../kit/crew.js';
 import { makeMaterials } from '../../kit/materials.js';
 import { buildRoom } from '../../kit/layout.js';
 
@@ -94,16 +103,23 @@ let skel = null;
 loading.textContent = 'Waking the crew…';
 const lib = await loadCrew({ smoothHair: !q.has('flathair') });
 const RECIPES = lib.list.recipes;
+// (one character shown: a choice made while the one before is still being put together wins, and the one before is
+// dropped, so stepping fast through the heads never leaves two standing)
+let showSeq = 0, shownSeq = 0;
 async function show(recipe) {
+  const seq = ++showSeq;
   st.recipe = JSON.parse(JSON.stringify(recipe));
-  const old = st.crew;
   const c = await makeCrew(lib, st.recipe);
-  if (old) { old.dispose(); }
-  st.crew = c; scene.add(c.root);
+  // (a fit changed while it was being put together: the latest)
+  const want = lib.fitOf(c.recipe.hair, c.recipe.head);
+  if (seq === showSeq && JSON.stringify(fitFor(c.fit)) !== JSON.stringify(want)) await c.setFit(want);
+  if (seq !== showSeq) { c.dispose(); return; }
+  if (st.crew) st.crew.dispose();
+  st.crew = c; scene.add(c.root); shownSeq = seq;
   for (const m of Object.values(c.meshes)) m.userData.paint = m.material;
   setPaint(st.paint); setBones(st.bones);
   c.play(st.clip in c.person.actions ? st.clip : 'Idle', { fade: 0 }); c.update(0);
-  menu();
+  triCount(); menu();
 }
 function setPaint(p) {
   st.paint = p; if (!st.crew) return;
@@ -148,10 +164,19 @@ function pick(label, kind, value, none) {
   const s = document.createElement('select'); s.setAttribute('aria-label', label);
   if (none) s.append(new Option('None', ''));
   for (const p of lib.list.parts[kind] || []) s.append(new Option(p.name, p.id));
-  s.value = value || ''; s.onchange = () => { st.recipe[kind] = s.value || null; show(st.recipe); };
+  // (the list lets go of the keys once a choice is made, so the arrow keys step the heads and hair again)
+  s.value = value || ''; s.onchange = () => { s.blur(); st.recipe[kind] = s.value || null; show(st.recipe); };
   return s;
 }
 function menu() {
+  // (each row kept where it was scrolled to: on a phone the rows scroll sideways)
+  const rows = [...document.querySelectorAll('#bar .kl-row')], keep = rows.map((r) => r.scrollLeft);
+  menuRows();
+  fitRows();
+  rows.forEach((r, i) => { r.scrollLeft = keep[i]; });
+  requestAnimationFrame(layout);
+}
+function menuRows() {
   const R = st.recipe || {}, C = R.colours || {};
   $('#who').replaceChildren(lab('Crew'), ...Object.entries(RECIPES).map(([id, r]) => chip(r.name, id === st.who, () => { st.who = id; show(r); })),
     // (each skeleton's own clips: the women's have no polishing, hammering or forge clips)
@@ -169,11 +194,175 @@ function menu() {
     chip('1.8 m', st.marker, () => { st.marker = !st.marker; marker.visible = st.marker; menu(); }, true, 'A 1.8 m post beside them'),
     chip('Bones', st.bones, () => { setBones(!st.bones); menu(); }, true, 'The skeleton'),
     chip('Smooth hair', lib.smoothHair, () => smoothHair(!lib.smoothHair), true, 'The Mathwood hair smooth-shaded (off: its flat facets, as the pack has them)'));
-  requestAnimationFrame(layout);
 }
 async function smoothHair(on) { lib.smoothHair = !!on; if (st.recipe) await show(st.recipe); triCount(); menu(); }
 function expression(k) { st.recipe.expression = k; st.crew?.setExpression(k); menu(); }
 function colours(c) { st.recipe.colours = { ...(st.recipe.colours || {}), ...c }; for (const k of Object.keys(c)) if (c[k] == null) delete st.recipe.colours[k]; st.crew?.setColours(st.recipe.colours); menu(); }
+
+// ── FIT: the heads and hair one by one, and the hair fitted (kit/crew.js, "a hair's fit") ─────────────────────────────
+// This browser's fits (lib.fits: a hair's entry replaces crew.json's fit for that hair) are kept in localStorage as
+// they're made; the first change to a hair starts from crew.json's fit for it.
+const FIT_KEY = 'crewlab.fits.v1', FIT_OPEN = 'crewlab.fitOpen';
+const STEPS = { move: [0.002, 0.0005], size: [0.01, 0.0025], tuck: [0.1, 0.025], start: [0.01, 0.0025] };   // (each: [step, fine step])
+const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+const copy = (o) => JSON.parse(JSON.stringify(o == null ? {} : o));
+const rnd = (v, p) => Math.round(v / p) * p;
+function hairFit(id) { return own(lib.fits, id) ? lib.fits[id] : (lib.entry('hair', id) || {}).fit; }
+// (a fit with nothing in it left out: offsets of zero, a size of 1, no tuck, empty head entries; numbers rounded)
+function tidy(f, base) {
+  const o = {};
+  if (!f) return o;
+  if (f.offset && f.offset.some((v) => Math.abs(v) >= 0.00005)) o.offset = f.offset.map((v) => +rnd(v || 0, 0.0001).toFixed(4));
+  if (f.scale != null && Math.abs(f.scale - 1) >= 0.00005) o.scale = +(+f.scale).toFixed(4);
+  if (f.tuck && Math.abs(f.tuck) >= 0.0005) o.tuck = +(+f.tuck).toFixed(3);
+  if (f.tuckStart && Math.abs(f.tuckStart) >= 0.00005) o.tuckStart = +(+f.tuckStart).toFixed(4);
+  if (base == null && f.heads) {
+    const H = {}; for (const [h, d] of Object.entries(f.heads)) { const t = tidy(d, f); if (Object.keys(t).length) H[h] = t; }
+    if (Object.keys(H).length) o.heads = H;
+  }
+  return o;
+}
+function readMine() {
+  try { const j = JSON.parse(localStorage.getItem(FIT_KEY) || '{}'); return j && typeof j === 'object' && !Array.isArray(j) ? j : {}; } catch (_) { return {}; }
+}
+function saveMine() {
+  // (a hair whose fit is back to crew.json's own is no longer a change)
+  for (const id of Object.keys(lib.fits)) if (JSON.stringify(tidy(lib.fits[id])) === JSON.stringify(tidy((lib.entry('hair', id) || {}).fit))) delete lib.fits[id];
+  try { if (Object.keys(lib.fits).length) localStorage.setItem(FIT_KEY, JSON.stringify(lib.fits)); else localStorage.removeItem(FIT_KEY); return true; }
+  catch (_) { fitSt.note = 'This browser would not keep the fits: Copy fits before you leave.'; return false; }
+}
+lib.fits = readMine();
+const fitSt = { open: (() => { try { return localStorage.getItem(FIT_OPEN) !== '0'; } catch (_) { return true; } })(), scope: 'all', fine: false, out: null, note: '' };
+// a change to the hair shown: to its fit on every head, or (Just this head) to that head's own adjustment
+async function fitEdit(change) {
+  const hair = st.recipe?.hair, head = st.recipe?.head; if (!hair) return;
+  if (!own(lib.fits, hair)) lib.fits[hair] = copy((lib.entry('hair', hair) || {}).fit);
+  const F = lib.fits[hair];
+  if (fitSt.scope === 'head' && head) { F.heads = F.heads || {}; change(F.heads[head] = F.heads[head] || {}, F); }
+  else change(F, null);
+  lib.fits[hair] = tidy(F);
+  fitSt.note = '';
+  saveMine(); await wearFit();
+}
+async function wearFit() { if (st.crew) await st.crew.setFit(lib.fitOf(st.crew.recipe.hair, st.crew.recipe.head)); fitRowsKeep(); }
+const fine = (k) => STEPS[k][fitSt.fine ? 1 : 0];
+// (each change keeps the fit worn within its limits: the tuck 0 to 100%, the size 80 to 125%, the start 0 to 30 cm)
+function nudge(axis, dir) { fitEdit((t) => { t.offset = t.offset || [0, 0, 0]; t.offset[axis] = rnd((t.offset[axis] || 0) + dir * fine('move'), 0.0001); }); }
+function resize(dir) {
+  fitEdit((t, base) => {
+    const b = base ? (base.scale == null ? 1 : base.scale) : 1, now = (t.scale == null ? 1 : t.scale) * b;
+    const next = Math.min(1.25, Math.max(0.8, now + dir * fine('size')));
+    t.scale = +(next / b).toFixed(5);
+  });
+}
+function retuck(key, dir, max) {
+  fitEdit((t, base) => {
+    const b = base ? base[key] || 0 : 0, next = Math.min(max, Math.max(0, b + (t[key] || 0) + dir * fine(key === 'tuck' ? 'tuck' : 'start')));
+    t[key] = +(next - b).toFixed(5);
+  });
+}
+function fitReset() {
+  const hair = st.recipe?.hair, head = st.recipe?.head; if (!hair) return;
+  fitEdit((t, base) => {
+    if (base) { delete base.heads[head]; return; }
+    for (const k of ['offset', 'scale', 'tuck', 'tuckStart']) delete t[k];
+  });
+}
+function clearMine() {
+  if (!Object.keys(lib.fits).length) { fitSt.note = 'No changes of yours to clear.'; fitRowsKeep(); return; }
+  if (!confirm('Clear your fits in this browser and go back to crew.json\'s? (Copy fits first to keep them.)')) return;
+  lib.fits = {}; saveMine(); fitSt.note = 'Back to crew.json\'s fits.'; wearFit();
+}
+// every hair's fit (this browser's over crew.json's), for crew.json: one hair a line
+function fitsText() {
+  const lines = [];
+  for (const P of lib.list.parts.hair) { const t = tidy(hairFit(P.id)); if (Object.keys(t).length) lines.push('  ' + JSON.stringify(P.id) + ': ' + JSON.stringify(t)); }
+  return lines.length ? '{\n' + lines.join(',\n') + '\n}' : '{}';
+}
+async function copyFits() {
+  const text = fitsText(); fitSt.out = text;
+  let ok = false;
+  try { await Promise.race([navigator.clipboard.writeText(text), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 1500))]); ok = true; } catch (_) { ok = false; }
+  fitRowsKeep();
+  let box = $('#fitout textarea');
+  if (box && !ok) { box.focus(); box.select(); try { ok = document.execCommand('copy'); } catch (_) { ok = false; } }
+  fitSt.note = ok ? 'Copied. The text is in the box below too.' : 'Copying did not work here: the text is in the box below, selected; copy it from there.';
+  fitRowsKeep(); requestAnimationFrame(layout);
+  box = $('#fitout textarea');
+  if (box) { box.focus({ preventScroll: true }); box.select(); }
+}
+// the head or the hair before or after (the hair's list starts with none), wrapping round
+async function step(kind, d) {
+  if (!st.recipe) return;
+  const ids = [...(kind === 'hair' ? [null] : []), ...lib.list.parts[kind].map((p) => p.id)];
+  const i = Math.max(0, ids.indexOf(st.recipe[kind] || null));
+  await show({ ...st.recipe, [kind]: ids[(i + d + ids.length) % ids.length] });
+}
+// (a fit's few words: "up 2.0 mm, tuck 30%")
+function fitWords(f) {
+  if (!f) return 'as made';
+  const mm = (v) => (Math.abs(v) * 1000).toFixed(1), w = [];
+  const [x, y, z] = f.offset;
+  if (Math.abs(y) >= 0.00005) w.push((y > 0 ? 'up ' : 'down ') + mm(y));
+  if (Math.abs(z) >= 0.00005) w.push((z > 0 ? 'fwd ' : 'back ') + mm(z));
+  if (Math.abs(x) >= 0.00005) w.push((x > 0 ? 'their left ' : 'their right ') + mm(x));
+  const s = w.length ? [w.join(', ') + ' mm'] : [];
+  if (Math.abs(f.scale - 1) >= 0.00005) s.push('size ' + +(f.scale * 100).toFixed(2) + '%');
+  if (f.tuck > 0) s.push('tuck ' + Math.round(f.tuck * 100) + '%' + (f.tuckStart > 0 ? ' from ' + +(f.tuckStart * 100).toFixed(2) + ' cm down' : ''));
+  return s.length ? s.join(', ') : 'as made';
+}
+const val = (t, title) => { const s = document.createElement('span'); s.className = 'kl-val'; s.textContent = t; if (title) s.title = title; return s; };
+// (a value with a button either side: what it does goes in each button's title)
+const knob = (label, value, less, more, tl, tm, title) => [lab(label), chip(less[0], false, less[1], true, tl), val(value, title), chip(more[0], false, more[1], true, tm)];
+function fitRowsKeep() { const rows = ['#fit', '#fit2', '#fitout'].map((s) => $(s)), keep = rows.map((r) => r.scrollLeft); fitRows(); rows.forEach((r, i) => { r.scrollLeft = keep[i]; }); }
+function fitRows() {
+  const R = st.recipe || {}, hair = R.hair, head = R.head, open = fitSt.open;
+  const F = hair ? hairFit(hair) : null, f = hair ? fitFor(F, head) : null, ownHead = !!(F && F.heads && F.heads[head] && Object.keys(F.heads[head]).length);
+  const P = hair && lib.entry('hair', hair), H = lib.entry('head', head);
+  const mine = Object.keys(lib.fits).length;
+  const fold = chip(open ? 'Fit ▾' : 'Fit ▸', open, () => { fitSt.open = !fitSt.open; try { localStorage.setItem(FIT_OPEN, fitSt.open ? '1' : '0'); } catch (_) {} menu(); }, false, 'Fit the hair: show or fold these rows');
+  fold.setAttribute('aria-expanded', String(open));
+  const what = val(`${P ? P.name : 'No hair'} on ${H ? H.name : 'no head'}: ${hair ? fitWords(f) : '-'}`);
+  what.classList.add('wide');
+  if (!open) {
+    $('#fit').replaceChildren(fold, what); $('#fit2').hidden = true; $('#fitout').hidden = true; return;
+  }
+  const scope = chip('Just this head' + (ownHead ? ' •' : ''), fitSt.scope === 'head', () => { fitSt.scope = fitSt.scope === 'head' ? 'all' : 'head'; fitRowsKeep(); }, true,
+    'On: changes are this head\'s own, added to the hair\'s fit on every head (• this head has some). Off: the hair\'s fit on every head.');
+  $('#fit').replaceChildren(fold,
+    lab('Head'), chip('‹', false, () => step('head', -1), true, 'The head before (up arrow)'), chip('›', false, () => step('head', 1), true, 'The next head (down arrow)'),
+    lab('Hair'), chip('‹', false, () => step('hair', -1), true, 'The hair before (left arrow)'), chip('›', false, () => step('hair', 1), true, 'The next hair (right arrow)'),
+    sep(), scope,
+    chip('Fine', fitSt.fine, () => { fitSt.fine = !fitSt.fine; fitRowsKeep(); }, true, 'Small steps: 0.5 mm, 0.25%, tuck 2.5%, 2.5 mm (off: 2 mm, 1%, 10%, 1 cm)'),
+    chip('Reset', false, fitReset, true, fitSt.scope === 'head' ? 'This head back to the hair\'s fit on every head' : 'This hair back to as made (each head\'s own adjustments stay)'),
+    sep(), chip('Copy fits', false, copyFits, true, 'Every hair\'s fit as JSON, for crew.json'),
+    chip('Clear my changes' + (mine ? ` (${mine})` : ''), false, clearMine, true, 'Forget this browser\'s fits: back to crew.json\'s'),
+    what, ...(fitSt.note && fitSt.out == null ? [val(fitSt.note)] : []));
+  $('#fit').lastChild.classList.add('wide');
+  const row2 = $('#fit2'); row2.hidden = false;
+  if (!hair) row2.replaceChildren(val('No hair on: step to one (‹ › or the left and right arrows)'));
+  else {
+    const mm = (v) => (v >= 0.00005 ? '+' : v <= -0.00005 ? '−' : '') + (Math.abs(v) * 1000).toFixed(1) + ' mm', st2 = st.crew?.fitStats;
+    row2.replaceChildren(
+      ...knob('Up', mm(f.offset[1]), ['▼', () => nudge(1, -1)], ['▲', () => nudge(1, 1)], 'Down', 'Up'), sep(),
+      ...knob('Forward', mm(f.offset[2]), ['−', () => nudge(2, -1)], ['+', () => nudge(2, 1)], 'Back (toward the nape)', 'Forward (toward the face)'), sep(),
+      ...knob('Their left', mm(f.offset[0]), ['−', () => nudge(0, -1)], ['+', () => nudge(0, 1)], 'To their right (your left as you face them)', 'To their left (your right as you face them)'), sep(),
+      ...knob('Size', +(f.scale * 100).toFixed(2) + '%', ['−', () => resize(-1)], ['+', () => resize(1)], 'A touch smaller', 'A touch bigger'), sep(),
+      ...knob('Tuck', Math.round(f.tuck * 100) + '%', ['−', () => retuck('tuck', -1, 1)], ['+', () => retuck('tuck', 1, 1)], 'Less', 'More: the lower edges drawn in toward the head',
+        st2 && f.tuck > 0 ? `${st2.tucked} points drawn in, ${st2.held} of them stopped 4 mm off the head` : 'How much of the gap to the head the lower edges close'),
+      ...knob('Starts', +(f.tuckStart * 100).toFixed(2) + ' cm', ['−', () => retuck('tuckStart', -1, 0.3)], ['+', () => retuck('tuckStart', 1, 0.3)], 'Higher (nearer the crown)', 'Lower',
+        'How far below the top of the hair the tuck begins'));
+  }
+  const out = $('#fitout');
+  out.hidden = fitSt.out == null;
+  if (fitSt.out != null) {
+    const box = document.createElement('textarea'); box.readOnly = true; box.spellcheck = false; box.value = fitSt.out; box.setAttribute('aria-label', 'Every hair\'s fit, as JSON');
+    box.rows = Math.min(6, fitSt.out.split('\n').length);
+    // (what copying did, on its own line above the box: on a phone the Fit row's far end is out of sight)
+    const said = fitSt.note ? [Object.assign(val(fitSt.note), { className: 'kl-val wide said' })] : [];
+    out.replaceChildren(...said, box, chip('Close', false, () => { fitSt.out = null; fitSt.note = ''; menu(); }, true, 'Hide the box'));
+  }
+}
 function layout() {
   const bar = $('#bar').offsetHeight, W = innerWidth, H = Math.max(80, innerHeight - bar);
   document.documentElement.style.setProperty('--bar', bar + 'px');
@@ -181,10 +370,18 @@ function layout() {
   renderer.setSize(W, H, false); camera.aspect = W / H; camera.updateProjectionMatrix();
 }
 
-// ── W A S D: move the view (Space up, C down, Shift faster) ──────────────────────────────────────────────────────
+// ── W A S D: move the view (Space up, C down, Shift faster); the arrow keys step the hair (left, right) and the head
+// (up, down), the Fit row's own keys ────────────────────────────────────────────────────────────────────────────
 const keys = new Set();
-addEventListener('keydown', (e) => { if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return; keys.add(e.code); if (e.code === 'Space') e.preventDefault(); });
-addEventListener('keyup', (e) => keys.delete(e.code));
+const ARROWS = { ArrowLeft: ['hair', -1], ArrowRight: ['hair', 1], ArrowUp: ['head', -1], ArrowDown: ['head', 1] };
+const typing = (t) => t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA';
+addEventListener('keydown', (e) => {
+  if (typing(e.target)) return;
+  if (ARROWS[e.code] && !e.altKey && !e.ctrlKey && !e.metaKey) { e.preventDefault(); step(...ARROWS[e.code]); return; }
+  keys.add(e.code); if (e.code === 'Space') e.preventDefault();
+});
+// (Space flies up; it doesn't also press the menu button last pressed)
+addEventListener('keyup', (e) => { keys.delete(e.code); if (e.code === 'Space' && e.target.tagName === 'BUTTON') e.preventDefault(); });
 addEventListener('blur', () => keys.clear());
 const _r = new THREE.Vector3(), _m = new THREE.Vector3(), _w = new THREE.Vector3();
 function fly(dt) {
@@ -244,8 +441,12 @@ function measure() {
 window.CREWLAB = {
   ready: true, clips: () => CLIPS.filter((n) => st.crew?.person.actions[n]), play: (n) => play(n), pose, cam: (c) => { setCam(c); menu(); },
   show: (k, on) => { if (k === 'paint' || k === 'plain' || k === 'wire') setPaint(k); if (k === 'marker') { st.marker = on; marker.visible = on; } if (k === 'bones') setBones(on); if (k === 'floor' && floorGroup) floorGroup.visible = on; menu(); },
-  recipe: async (r) => { await show(r); triCount(); return st.recipe; }, who: async (id) => { st.who = id; await show(RECIPES[id]); triCount(); },
+  recipe: async (r) => { await show(r); return st.recipe; }, who: async (id) => { st.who = id; await show(RECIPES[id]); },
   colours: (c) => colours(c), expression: (k) => expression(k), smoothHair: (on) => smoothHair(on),
-  state: () => ({ who: st.who, clip: st.clip, recipe: st.recipe, tris, fps, parts: Object.keys(st.crew?.meshes || {}), body: st.crew?.body, expression: st.crew?.expression, rig: st.crew?.rig && { turnDiffMaxDeg: st.crew.rig.turnDiffMaxDeg }, smoothHair: lib.smoothHair }),
+  state: () => ({ who: st.who, clip: st.clip, recipe: st.recipe, tris, fps, parts: Object.keys(st.crew?.meshes || {}), body: st.crew?.body, expression: st.crew?.expression, rig: st.crew?.rig && { turnDiffMaxDeg: st.crew.rig.turnDiffMaxDeg }, smoothHair: lib.smoothHair,
+    shown: shownSeq === showSeq }),
+  fit: () => ({ open: fitSt.open, scope: fitSt.scope, fine: fitSt.fine, hair: st.recipe?.hair, head: st.recipe?.head, wearing: st.crew?.fit || null, stats: st.crew?.fitStats,
+    wearingFor: st.crew && { hair: st.crew.recipe.hair, head: st.crew.recipe.head }, mine: copy(lib.fits), text: fitsText(), box: fitSt.out, note: fitSt.note }),
+  step: (kind, d) => step(kind, d),
   measure, crew: () => st.crew, three: THREE, scene, camera, renderer, controls,
 };

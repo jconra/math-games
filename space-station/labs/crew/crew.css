@@ -2,3 +2,13 @@
 .chip.sw { width: 26px; height: 26px; padding: 0; border-radius: 50%; border: 2px solid #2f3d50; }
 .chip.sw.on { border-color: var(--blue-hi); box-shadow: 0 0 0 2px var(--blue); }
 .kl-row select { max-width: 150px; }
+.kl-row[hidden] { display: none; }
+/* the Fit rows: a value between its two buttons, the fit in words, the box Copy fits fills */
+.kl-val { flex: none; min-width: 58px; text-align: center; font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--ink); white-space: nowrap; }
+.kl-val.wide { min-width: 0; text-align: left; color: var(--ink-2); padding: 0 4px; }
+#fit .chip.sub, #fit2 .chip.sub { min-width: 30px; }
+#fitout { flex-wrap: wrap; }
+#fitout .said { flex: 1 0 100%; white-space: normal; color: var(--ink); }
+#fitout textarea { flex: 1 1 auto; min-width: 220px; max-width: 760px; resize: vertical; border: 1px solid #2f3d50; border-radius: 8px; padding: 4px 6px;
+  background: #0d141d; color: var(--ink); font: 12px/1.35 ui-monospace, "Cascadia Mono", "DejaVu Sans Mono", monospace; white-space: pre; }
+@media (max-width: 520px) { .kl-row select { max-width: 120px; } }
