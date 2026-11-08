@@ -8,7 +8,7 @@
 <!-- the on-screen error box comes first, so a crash shows on screen instead of a blank page -->
 <script src="../../../mathwood-valley/oops.js"></script>
 <link rel="stylesheet" href="../kit/kit.css?v=1">
-<link rel="stylesheet" href="crew.css?v=4">
+<link rel="stylesheet" href="crew.css?v=5">
 <script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/" } }</script>
 </head>
 <body>
@@ -17,7 +17,7 @@
   <h1>Crew Lab</h1><a href="../">All labs</a>
   <span class="kl-hud" id="hud" aria-live="polite"></span>
 </div>
-<!-- ONE MENU: the bar along the bottom (who and what they do; the wardrobe; the view; the face's sliders and the hair's fit, which fold away) -->
+<!-- ONE MENU: the bar along the bottom (who and what they do; the wardrobe; the view; the face's sliders, the hair's fit and its buzz, which fold away) -->
 <nav class="kl-bar" id="bar" aria-label="Crew Lab menu">
   <div class="kl-row" id="who" role="listbox" aria-label="Characters and clips"></div>
   <div class="kl-row" id="wear" aria-label="Wardrobe"></div>
@@ -26,8 +26,10 @@
   <div class="kl-row" id="fit" aria-label="Hair fit"></div>
   <div class="kl-row" id="fit2" aria-label="Hair fit: move, size and tuck" hidden></div>
   <div class="kl-row" id="fitout" aria-label="Hair fits to copy" hidden></div>
+  <div class="kl-row" id="buzz" aria-label="The hair's buzz"></div>
+  <div class="kl-row" id="buzzout" aria-label="Hair buzzes to copy" hidden></div>
 </nav>
 <div class="kl-loading" id="loading">Waking the crew…</div>
-<script type="module" src="main.js?v=13"></script>
+<script type="module" src="main.js?v=14"></script>
 </body>
 </html>

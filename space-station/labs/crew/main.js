@@ -24,14 +24,18 @@
 //     the top of the hair, Reset; a fit is the hair's on every head
 //     unless "Just this head" is on (then it's that head's own adjustment, added to the hair's). Fits are kept in this
 //     browser as they're made (over crew.json's own) and worn at once; Copy fits gives them all as JSON for crew.json
-//     (shown in a box as well, to select by hand where copying fails); Clear my changes goes back to crew.json's.
+//     (shown in a box as well, to select by hand where copying fails); Clear my changes goes back to crew.json's;
+//   BUZZ (folds away; 2026-11-08): each haircut's own buzz (kit/crew.js THE PAINT FIELD), the short hair a barber leaves
+//     outside the cut: its sideburns (how far below the top of the ear, or none) and nape taper (how far below the hair's
+//     edge, 0 none), kept in this browser as they're made and worn at once, Copy buzzes for crew.json; and the view: the
+//     stubble and the scalp's shade under the hair, each on or off, and the ears found, tinted.
 // Drag to look round, wheel or pinch to come closer, W A S D move (Space up, C down, Shift faster), the arrow keys step.
 //   ?who=<recipe id>  ?clip=<name>  ?cam=<name>  ?flathair (the Mathwood hair flat-shaded to start)  ?look (Look at camera on)
 //   window.CREWLAB = { ready, clips, play(name), pose(name, t), cam(name), show(k, on), recipe(r), colours(c), state(),
 //     expression(name) (a visor's face), smoothHair(on) (the Mathwood hair's shading; rebuilds the character),
 //     look(on) (the eyes on the camera, a head with real eyes), face(values) (the face sliders: { slider: -1..1 }),
 //     measure() (the body's lowest point and each boot's, in the pose shown), fit() (the Fit row's state: the fit worn,
-//     this browser's fits, the text Copy fits gives), step(kind, d) (the head or hair d along; resolves when shown),
+//     this browser's fits, the text Copy fits gives), buzz() (the Buzz row's state), buzzView({ buzz, under, ears }), step(kind, d) (the head or hair d along; resolves when shown),
 //     crew() (the person shown), lib (kit/crew.js's loadCrew: lib.armsOut tries an arms-out angle), three, scene, camera,
 //     renderer }
 import * as THREE from 'three';
@@ -128,7 +132,7 @@ async function show(recipe) {
   if (st.crew) st.crew.dispose();
   st.crew = c; scene.add(c.root); shownSeq = seq;
   for (const m of Object.values(c.meshes)) m.userData.paint = m.material;
-  setPaint(st.paint); setBones(st.bones);
+  setPaint(st.paint); setBones(st.bones); c.paintView(buzzSt.view);
   c.play(st.clip in c.person.actions ? st.clip : 'Idle', { fade: 0 }); c.update(0);
   if (!st.look) c.lookAt(null);
   triCount(); menu();
@@ -198,6 +202,7 @@ function menu() {
   menuRows();
   faceRows();
   fitRows();
+  buzzRows();
   rows.forEach((r, i) => { r.scrollLeft = keep[i]; });
   requestAnimationFrame(layout);
 }
@@ -446,6 +451,103 @@ function tuckSlider(v) {
   r.onchange = () => { r.blur(); setTuck(+r.value / 100); };
   return r;
 }
+// ── BUZZ: each haircut's own buzz (kit/crew.js THE PAINT FIELD): the short hair a barber leaves outside the cut ──────
+// Shown and changed for the hair worn: its sideburns (how far below the top of the ear, or none) and its nape taper (how
+// far below the hair's edge at the back, 0 none), on every head. Kept in this browser as they're made (lib.buzzes over
+// crew.json's own, null: none) and worn at once; Copy buzzes gives every hair's as JSON for crew.json. The view: the
+// stubble and the scalp's shade under the hair each on or off, and the ears found (tinted: no
+// paint ever goes there).
+const BUZZ_KEY = 'crewlab.buzz.v1', BUZZ_OPEN = 'crewlab.buzzOpen';
+const BUZZ_STEP = { sideburns: [2, 0.5], nape: [2, 0.5] }, BUZZ_SB0 = 10;
+const buzzSt = { open: (() => { try { return localStorage.getItem(BUZZ_OPEN) === '1'; } catch (_) { return false; } })(), view: { buzz: true, under: true, ears: false }, out: null, note: '' };
+// (a buzz with nothing in it left out: no sideburns (null), a nape of 0; numbers rounded; null when nothing is left)
+function tidyBuzz(b) {
+  if (!b) return null;
+  const o = {};
+  if (b.sideburns != null && Number.isFinite(+b.sideburns)) o.sideburns = +(+b.sideburns).toFixed(1);
+  if (+b.nape > 0) o.nape = +(+b.nape).toFixed(1);
+  if (b.look && Object.keys(b.look).length) o.look = b.look;
+  return Object.keys(o).length ? o : null;
+}
+function readBuzzes() { try { const j = JSON.parse(localStorage.getItem(BUZZ_KEY) || '{}'); return j && typeof j === 'object' && !Array.isArray(j) ? j : {}; } catch (_) { return {}; } }
+function saveBuzzes() {
+  for (const id of Object.keys(lib.buzzes)) if (JSON.stringify(tidyBuzz(lib.buzzes[id])) === JSON.stringify(tidyBuzz((lib.entry('hair', id) || {}).buzz))) delete lib.buzzes[id];
+  try { if (Object.keys(lib.buzzes).length) localStorage.setItem(BUZZ_KEY, JSON.stringify(lib.buzzes)); else localStorage.removeItem(BUZZ_KEY); }
+  catch (_) { buzzSt.note = 'This browser would not keep the buzzes: Copy buzzes before you leave.'; }
+}
+lib.buzzes = readBuzzes();
+// (what paints a hair has: a painted cut (the buzz cut), its bust's own marks, its scalp's shade)
+const hairPaints = (P) => ({ cut: !!(P && P.paint && !P.file), marks: !!(P && P.paint && P.marks), under: !!(P && P.scalp && P.scalp.line) });
+function buzzEdit(change) {
+  const hair = st.recipe?.hair; if (!hair) return;
+  const b = { ...(lib.buzzOf(hair) || {}) }; change(b);
+  lib.buzzes[hair] = tidyBuzz(b); buzzSt.note = '';
+  saveBuzzes(); st.crew?.setBuzz(lib.buzzOf(hair)); buzzRowsKeep();
+}
+function buzzReset() { const hair = st.recipe?.hair; if (!hair) return; delete lib.buzzes[hair]; saveBuzzes(); st.crew?.setBuzz(lib.buzzOf(hair)); buzzRowsKeep(); }
+function buzzClear() {
+  if (!Object.keys(lib.buzzes).length) { buzzSt.note = 'No changes of yours to clear.'; buzzRowsKeep(); return; }
+  if (!confirm('Clear your buzzes in this browser and go back to crew.json\'s? (Copy buzzes first to keep them.)')) return;
+  lib.buzzes = {}; saveBuzzes(); buzzSt.note = 'Back to crew.json\'s buzzes.'; st.crew?.setBuzz(lib.buzzOf(st.recipe?.hair)); buzzRowsKeep();
+}
+// every hair's buzz (this browser's over crew.json's), for crew.json: one hair a line (null: none)
+function buzzesText() {
+  const lines = [];
+  for (const P of lib.list.parts.hair) { const h = hairPaints(P); if (!h.cut && !h.marks && !h.under) continue; lines.push('  ' + JSON.stringify(P.id) + ': ' + JSON.stringify(tidyBuzz(lib.buzzOf(P.id)))); }
+  return lines.length ? '{\n' + lines.join(',\n') + '\n}' : '{}';
+}
+async function copyBuzzes() {
+  const text = buzzesText(); buzzSt.out = text;
+  let ok = false;
+  try { await Promise.race([navigator.clipboard.writeText(text), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 1500))]); ok = true; } catch (_) { ok = false; }
+  buzzRowsKeep();
+  let box = $('#buzzout textarea');
+  if (box && !ok) { box.focus(); box.select(); try { ok = document.execCommand('copy'); } catch (_) { ok = false; } }
+  buzzSt.note = ok ? 'Copied. The text is in the box below too.' : 'Copying did not work here: the text is in the box below, selected; copy it from there.';
+  buzzRowsKeep(); requestAnimationFrame(layout);
+  box = $('#buzzout textarea'); if (box) { box.focus({ preventScroll: true }); box.select(); }
+}
+function buzzView(v) { Object.assign(buzzSt.view, v); st.crew?.paintView(buzzSt.view); buzzRowsKeep(); }
+// (a buzz's few words: "sideburns 12 mm below the ear's top, nape taper 16 mm")
+function buzzWords(P, b) {
+  const h = hairPaints(P), w = [];
+  if (h.cut) w.push('the cut itself');
+  if (h.marks) w.push('its bust\'s own fade');
+  if (b && b.sideburns != null) w.push(b.sideburns === 0 ? 'sideburns to the ear\'s top' : `sideburns ${Math.abs(b.sideburns)} mm ${b.sideburns > 0 ? 'below' : 'above'} the ear's top`);
+  if (b && b.nape > 0) w.push(`nape taper ${b.nape} mm`);
+  return w.length ? w.join(', ') : 'none: skin outside the hair';
+}
+function buzzRowsKeep() { const rows = ['#buzz', '#buzzout'].map((s) => $(s)), keep = rows.map((r) => r.scrollLeft); buzzRows(); rows.forEach((r, i) => { r.scrollLeft = keep[i]; }); }
+function buzzRows() {
+  const hair = st.recipe?.hair, P = hair && lib.entry('hair', hair), h = hairPaints(P), painted = h.cut || h.marks || h.under, open = buzzSt.open;
+  const b = hair ? lib.buzzOf(hair) : null, mine = Object.keys(lib.buzzes).length, isMine = !!(hair && Object.prototype.hasOwnProperty.call(lib.buzzes, hair));
+  const fold = chip(open ? 'Buzz ▾' : 'Buzz ▸', open, () => { buzzSt.open = !buzzSt.open; try { localStorage.setItem(BUZZ_OPEN, buzzSt.open ? '1' : '0'); } catch (_) {} menu(); }, false, 'The short hair outside the haircut (sideburns, a nape taper) and the paint under it: show or fold');
+  fold.setAttribute('aria-expanded', String(open));
+  const what = val(!hair ? 'No hair' : !painted ? `${P.name}: paints nothing on the skin` : `${P.name}: ${buzzWords(P, b)}` + (isMine ? ' (yours)' : ''));
+  what.classList.add('wide');
+  if (!open) { $('#buzz').replaceChildren(fold, what); $('#buzzout').hidden = true; return; }
+  const V = buzzSt.view, fine = (k) => BUZZ_STEP[k][fitSt.fine ? 1 : 0];
+  const view = [lab('Show'), chip('Stubble', V.buzz, () => buzzView({ buzz: !V.buzz }), true, 'The buzz: the stubble outside the hair (and the buzz cut itself)'),
+    chip('Scalp shade', V.under, () => buzzView({ under: !V.under }), true, 'The dark shade under the hair, which stops 4 mm inside its edge'),
+    chip('Ears', V.ears, () => buzzView({ ears: !V.ears }), true, 'The ears found on this head, tinted: no paint ever goes there')];
+  const edit = !hair || !painted ? [] : [sep(),
+    lab('Sideburns'), chip(b && b.sideburns != null ? 'On' : 'None', b && b.sideburns != null, () => buzzEdit((t) => { t.sideburns = t.sideburns != null ? null : BUZZ_SB0; }), true, 'Sideburns in front of each ear, or none'),
+    ...(b && b.sideburns != null ? [chip('▲', false, () => buzzEdit((t) => { t.sideburns -= fine('sideburns'); }), true, 'Shorter (their foot higher)'), val((b.sideburns > 0 ? '' : b.sideburns < 0 ? '−' : '') + Math.abs(b.sideburns) + ' mm', 'How far below the top of the ear they reach (− above it)'),
+      chip('▼', false, () => buzzEdit((t) => { t.sideburns += fine('sideburns'); }), true, 'Longer (their foot lower)')] : []),
+    sep(), lab('Nape'), chip('−', false, () => buzzEdit((t) => { t.nape = Math.max(0, (+t.nape || 0) - fine('nape')); }), true, 'A shorter taper at the back (0: none)'),
+    val((b && b.nape > 0 ? b.nape : 0) + ' mm', 'How far below the hair\'s edge at the back the taper reaches'), chip('+', false, () => buzzEdit((t) => { t.nape = (+t.nape || 0) + fine('nape'); }), true, 'A longer taper at the back'),
+    sep(), chip('Reset', false, buzzReset, true, 'This hair\'s buzz back to crew.json\'s')];
+  $('#buzz').replaceChildren(fold, ...view, ...edit, sep(), chip('Copy buzzes', false, copyBuzzes, true, 'Every hair\'s buzz as JSON, for crew.json'),
+    chip('Clear my changes' + (mine ? ` (${mine})` : ''), false, buzzClear, true, 'Forget this browser\'s buzzes: back to crew.json\'s'), what, ...(buzzSt.note && buzzSt.out == null ? [val(buzzSt.note)] : []));
+  $('#buzz').lastChild.classList.add('wide');
+  const out = $('#buzzout'); out.hidden = buzzSt.out == null;
+  if (buzzSt.out != null) {
+    const box = document.createElement('textarea'); box.readOnly = true; box.spellcheck = false; box.value = buzzSt.out; box.setAttribute('aria-label', 'Every hair\'s buzz, as JSON');
+    box.rows = Math.min(6, buzzSt.out.split('\n').length);
+    const said = buzzSt.note ? [Object.assign(val(buzzSt.note), { className: 'kl-val wide said' })] : [];
+    out.replaceChildren(...said, box, chip('Close', false, () => { buzzSt.out = null; buzzSt.note = ''; menu(); }, true, 'Hide the box'));
+  }
+}
 function layout() {
   const bar = $('#bar').offsetHeight, W = innerWidth, H = Math.max(80, innerHeight - bar);
   document.documentElement.style.setProperty('--bar', bar + 'px');
@@ -530,6 +632,8 @@ window.CREWLAB = {
   state: () => ({ who: st.who, clip: st.clip, recipe: st.recipe, tris, fps, parts: Object.keys(st.crew?.meshes || {}), body: st.crew?.body, hand: st.crew?.hand, expression: st.crew?.expression, rig: st.crew?.rig && { turnDiffMaxDeg: st.crew.rig.turnDiffMaxDeg }, smoothHair: lib.smoothHair,
     look: st.look, eyes: !!st.crew?.gaze, faceSliders: st.crew?.faceSliders || [], face: st.recipe?.face || {}, gaze: st.crew?.gaze ? { target: st.crew.gaze.target && st.crew.gaze.target.toArray(), eye: st.crew.gaze.eye } : null,
     shown: shownSeq === showSeq }),
+  buzz: () => ({ open: buzzSt.open, view: { ...buzzSt.view }, hair: st.recipe?.hair, wearing: st.crew?.buzz ?? null, shown: st.crew ? { ...st.crew.paintShown } : null, mine: copy(lib.buzzes), text: buzzesText(), box: buzzSt.out, note: buzzSt.note }),
+  buzzView: (v) => buzzView(v),
   fit: () => ({ open: fitSt.open, scope: fitSt.scope, fine: fitSt.fine, hair: st.recipe?.hair, head: st.recipe?.head, wearing: st.crew?.fit || null, stats: st.crew?.fitStats,
     wearingFor: st.crew && { hair: st.crew.recipe.hair, head: st.crew.recipe.head }, mine: copy(lib.fits), text: fitsText(), box: fitSt.out, note: fitSt.note }),
   step: (kind, d) => step(kind, d),

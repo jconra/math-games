@@ -54,7 +54,10 @@
 // The Mathwood hair comes smooth-shaded (crew.json `smooth`: the same triangles, its vertices merged and its normals
 // smoothed) unless loadCrew({ smoothHair: false }) or lib.smoothHair = false (then its flat facets, as the pack has them).
 // PAINT HAIR (crew.json `paint`: the buzz cut): no mesh, a stubble layer in the head's own material (PAINTS); with a `file`
-// too (the pink side-swept hair, the mohawk), its mesh AND the paint on the head (a shaved side's stubble and lines).
+// too (the pink side-swept hair, the mohawk), its mesh AND the paint on the head (a shaved side's stubble).
+// EACH HAIRCUT ITS OWN BUZZ, NEVER ON THE EARS (2026-11-08, PAINTS and THE PAINT FIELD): outside a hair's edge only the
+// short hair a barber leaves with that cut (crew.json `buzz`: sideburns, a nape taper; a harvested hair's marks); the
+// scalp's shade under it stops 4 mm inside its edge; every head's ears (crew.json `ears`) take no paint.
 //
 // A HAIR'S FIT (crew.json: a hair entry's optional `fit`, made with the Crew Lab's Fit row; see "a hair's fit" below):
 // nudged, sized, tucked (drawn in toward the head's centre, thickness kept, down to 2 mm off the head it's on), on every
@@ -86,6 +89,9 @@
 //                                               head; lib.fits { hair id: fit } (empty: a layer over crew.json's, each
 //                                               entry replacing that hair's whole fit; the Crew Lab's while it's edited)
 //                                               lib.handFor(suit id) -> the hand part a suit wears unless a recipe names one
+//                                               lib.buzzOf(hair id) -> the buzz makeCrew gives that hair; lib.buzzes
+//                                               { hair id: buzz | null } (empty: a layer over crew.json's; the Crew Lab's
+//                                               while it's edited); lib.earsOf(head id) -> that head's ears
 //   const c = await makeCrew(lib, recipe)       recipe { suit, head, hair, hand, colours: { job, uniform, skin, hair, eyes } }
 //     c.root (place and turn it: feet on y 0, facing +z), c.person (Mathwood's Person), c.play(name, { fade, speed, once }),
 //     c.update(dt), c.setColours({ job, uniform, skin, hair, eyes }), c.meshes { suit, head, hair, hand, visor, eyes, cornea },
@@ -96,7 +102,9 @@
 //     c.setExpression(name) (a visor's face; recipe.expression sets the first), c.expression,
 //     await c.setFit(fit) (the hair's fit, live: { offset, scale, tuck, tuckStart } as lib.fitOf gives; null: as made),
 //     c.fit (the fit it wears), c.fitStats ({ tucked: points the tuck moved, held: of those, how many it stopped 2 mm off
-//     the head }), c.paint (paint hair's name, or null), c.collarStats (the collar fit: { moved: points, mostMm, meanMm:
+//     the head }), c.paint (paint hair's name, or null), c.buzz (the hair's buzz it wears), c.setBuzz(buzz) (live: { sideburns,
+//     nape } as lib.buzzOf gives; null: none), c.paintView({ buzz, under, ears }) (what the head's paint shows: each
+//     layer on or off, the ears found tinted; c.paintShown as set), c.collarStats (the collar fit: { moved: points, mostMm, meanMm:
 //     how far they came in, pastMm: how far the hidden neck reached past the collar's outside, wideMm: how much wider
 //     than the collar's top the neck is, wideAt: where (degrees round, 0 ahead, 90 its left), coverMm: how far down a
 //     wide neck covers the collar, deep: points left because the wall was deeper inside the neck than COLLAR.deep, rides:
@@ -107,7 +115,7 @@
 //   .applied false); lib.collarRide (true: the hidden neck rides with the cloth; false: drawn in only);
 //   lib.collarOf(suit id, template) -> the collar
 //   JOBS, UNIFORM_COLOURS, SKIN_TONES, HAIR_COLOURS, EYE_COLOURS, FACE, CLIPS, EXPRESSIONS, PAINTS, fitFor, SKULL,
-//   HAIR_CLEAR, TUCK_CLEAR, TUCK_MAX, COLLAR_CLEAR, COLLAR_BAND
+//   HAIR_CLEAR, TUCK_CLEAR, TUCK_MAX, COLLAR_CLEAR, COLLAR_BAND, SIDEBURN, NAPE, UNDER_SOFT, EAR_SOFT, lineAt, paintField
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
@@ -210,6 +218,11 @@ export async function loadCrew({ dir = CREW_DIR, people = PEOPLE_DIR, smoothHair
   // a paint's marks (a hair entry's `marks`: BOTH, at PAINTS), once a file; wrapping round across (azimuth +-180)
   const markTex = new Map();
   lib.paintMarks = (file) => { if (!markTex.has(file)) markTex.set(file, hairTexture(dir + file, true).then((t) => { t.wrapS = THREE.RepeatWrapping; t.needsUpdate = true; return t; })); return markTex.get(file); };
+  // a hair's buzz (THE PAINT FIELD): lib.buzzes' entry for that hair if it has one (the Crew Lab's while it's edited;
+  // null there: none), else crew.json's; and a head's ears (its own, or every head's together)
+  lib.buzzes = {};
+  lib.buzzOf = (hair) => (!hair ? null : Object.prototype.hasOwnProperty.call(lib.buzzes, hair) ? lib.buzzes[hair] : (lib.entry('hair', hair) || {}).buzz || null);
+  lib.earsOf = (head) => (head && (lib.entry('head', head) || {}).ears) || list.ears || null;
   // the clips fitted to one suit (its own bones' lengths: see the top), once a suit; with hands (HANDS), the hand
   // part's own finger joints in place of the suit's (once a suit and hand)
   lib.clipsFor = async (id, hand = null) => {
@@ -330,17 +343,22 @@ function crewMaterial(src, kind, part, paint) {
   const m = src.clone(), refs = part && part.refs;
   const u = m.userData.crew = crewUniforms(refs);
   const has = part && part.masks ? part.masks : {};
-  // (paint on a head with skin: PAINTS below; paint.over: a hair's own changes to its look, paint.line its own hairline)
-  const P = paint && kind === 'head' && has.skin && PAINTS[paint.kind] ? { ...PAINTS[paint.kind], ...(paint.over || {}) } : null;
-  if (P) {
-    u.crPaintMap = { value: paint.atlas.map }; u.crPaintTile = { value: new THREE.Vector3(...P.tile) };
-    u.crPaintLook = { value: new THREE.Vector4(P.mean, P.size, P.cover, P.soft) };
-    u.crPaintMore = { value: new THREE.Vector4(P.coarse, P.tone, P.shade, P.wander) };
-    u.crLine = { value: lineSamples(paint.line || P.line) };
-    u.crHeadFrame = { value: paint.frame };
-    if (paint.marks) u.crMarkMap = { value: paint.marks };
-    if (paint.colour) u.crHairRef.value.copy(lin(paint.colour));
-    else if (paint.colourLinear) u.crHairRef.value.fromArray(paint.colourLinear);
+  // (paint on a head with skin: PAINTS and THE PAINT FIELD below (paintOf): the stubble's look (a hair's own changes to
+  // PAINTS.stubble), the scalp shade's (to PAINTS.under), the buzz cut's hairline, the field, a hair's marks)
+  const PT = paint && kind === 'head' && has.skin ? paint : null;
+  if (PT) {
+    const B = { ...PAINTS.stubble, ...(PT.buzzLook || {}) }, U = { ...PAINTS.under, ...(PT.underLook || {}) };
+    u.crPaintMap = { value: PT.atlas.map }; u.crPaintTile = { value: new THREE.Vector3(...B.tile) };
+    u.crBuzzLook = { value: new THREE.Vector4(B.mean, B.size, B.cover, B.soft) };
+    u.crBuzzMore = { value: new THREE.Vector4(B.coarse, B.tone, B.shade, B.wander) };
+    u.crUnderLook = { value: new THREE.Vector4(U.cover, U.coarse, U.tone, U.shade) };
+    u.crPaintShow = { value: new THREE.Vector4(1, 1, 1, 0) };
+    u.crField = { value: PT.field };
+    if (PT.line) u.crLine = { value: lineSamples(PT.line) };
+    u.crHeadFrame = { value: PT.frame };
+    if (PT.marks) u.crMarkMap = { value: PT.marks };
+    if (PT.colour) u.crHairRef.value.copy(lin(PT.colour));
+    else if (PT.colourLinear) u.crHairRef.value.fromArray(PT.colourLinear);
     u.crHair.value.copy(u.crHairRef.value);
   }
   // (skin and hair: no sheen of the room's reflections; the painted face carries its own light and shade. A part that
@@ -354,11 +372,15 @@ function crewMaterial(src, kind, part, paint) {
   else if (has.marks) m.defines.CREW_MARKS = '';
   if (!('CREW_MASKTEX' in m.defines)) { if (has.lines) m.defines.CREW_LINES = ''; if (has.panels) m.defines.CREW_PANELS = ''; }
   if (has.skin) m.defines.CREW_SKIN = '';
-  if (P) { m.defines.CREW_PAINT = ''; m.defines.CR_LINE_N = LINE_N; m.defines.CR_SKULL = `vec3(${SKULL.map((v) => v.toFixed(4)).join(', ')})`; if (paint.marks) m.defines.CR_MARKS = ''; }
+  if (PT) {
+    m.defines.CREW_PAINT = ''; m.defines.CR_SKULL = `vec3(${SKULL.map((v) => v.toFixed(4)).join(', ')})`;
+    if (PT.line) { m.defines.CR_LINE = ''; m.defines.CR_LINE_N = LINE_N; }
+    if (PT.marks) m.defines.CR_MARKS = '';
+  }
   m.userData.crewOwnColours = !!(part && part.jobColours === false);
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u);
-    if (P) sh.vertexShader = 'uniform mat4 crHeadFrame; varying vec3 vCrHead; varying vec3 vCrHeadN;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+    if (PT) sh.vertexShader = 'uniform mat4 crHeadFrame; varying vec3 vCrHead; varying vec3 vCrHeadN;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
   vCrHead = (crHeadFrame * vec4(position, 1.0)).xyz; vCrHeadN = mat3(crHeadFrame) * normal;`);
     sh.fragmentShader = `uniform vec3 crMarks, crMarksRef, crLines, crLinesRef, crPanels, crPanelsRef, crWhites, crWhitesRef, crSkin, crSkinRef, crHair, crHairRef; uniform float crGlow;
 #ifdef CREW_MASKTEX
@@ -417,7 +439,7 @@ vec3 crShift(vec3 c, vec3 to, vec3 ref, float m) { return max(c + (to - ref) * m
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
   totalEmissiveRadiance += crLines * crLineMask * crGlow;`);
   };
-  m.customProgramCacheKey = () => 'crew-1-' + Object.keys(m.defines).join('-');
+  m.customProgramCacheKey = () => 'crew-2-' + Object.keys(m.defines).join('-');
   return m;
 }
 
@@ -531,21 +553,29 @@ function hairDepthMaterial(atlas) {
 // the Blender styles' hairlines are), so one mask fits every head on the standard skull. The same tile looked up again
 // 4.3 times larger gives patches of thicker and thinner stubble, which still read at a few metres where the fine strands
 // have blurred to a tint, and break the hairline up so it is never a clean curve; the line also wanders (`wander`),
-// arcs over each ear (clear of the ears of every head) and fades over `soft` degrees; the scalp shows through where the
+// arcs over each ear (and each head's own ears are cut out of it: THE PAINT FIELD) and fades over `soft` degrees; the scalp shows through where the
 // strands are dark (`cover` at most) and is shaded a little under them (`shade`); `tone` scales the hair's colour.
-// A hair's crew.json entry (a Blender style's, or a hair harvested from Tripo) may give `scalp: { line, look }`: its own
-// hairline, and the 'under' paint is laid in that footprint (a dark shade of the hair's colour), so any gap under the
-// hair reads as hair and its shadow.
 // A hairline is elevations by azimuth, either side alike (azimuths 0 to 180), or ALL ROUND (2026-11-07: azimuths -180 to
 // 180, 90 their left; a table with a negative azimuth is read so): a hair that isn't the same both sides has a line of
 // its own each side.
 // BOTH (2026-11-07, the pink side-swept hair): a hair entry with a `file` AND a `paint` wears its mesh and the paint
-// together: the paint (its `colour`, in the footprint of its `scalp.line`, so under the hair it is the scalp's shade) and,
-// with `marks` (a texture in the assets folder, laid round the standard skull's centre: azimuth -180 to 180 across,
-// elevation 90 at the top down to -90; its upper half the painted lines (their own colour; alpha, how much line), its
-// lower half's alpha the stubble's density outside the line (a shaved side's fade)), the stubble on a shaved side and the
-// lines drawn over it, on the head's own skin so it suits every skin tone. The stubble takes the hair colour picked (as
-// the buzz cut's); the lines keep their own colour until a hair colour is picked, then take it at their own lightness.
+// together: with `marks` (a texture in the assets folder, laid round the standard skull's centre: azimuth -180 to 180
+// across, elevation 90 at the top down to -90; its lower half's alpha the stubble's density (a shaved side's fade, taken
+// from his bust); its upper half once held painted lines, no longer drawn: 2026-11-08, "You don't have to include
+// glowing marks and stuff with the haircut", and the textures now carry none), the stubble on a shaved side, on the
+// head's own skin so it suits every skin tone. The stubble takes the hair colour picked (as the buzz cut's).
+// EACH HAIRCUT ITS OWN BUZZ, NEVER ON THE EARS (2026-11-08): a hair's paint is two layers on the head's skin, both cut
+// round the ears, laid out by THE PAINT FIELD (below) from crew.json:
+//   the BUZZ (PAINTS.stubble's look, a hair's `buzz.look` changing it): the short hair a barber leaves outside that
+//     cut's edge: the buzz cut's own hairline (`line`, PAINTS.stubble.line unless the entry gives one), a harvested
+//     hair's `marks` (his bust's own fade and shaved sides), or a hair's `buzz` { sideburns, nape } (THE PAINT FIELD);
+//     none where the cut leaves none, so nothing shows past the hair that a barber wouldn't leave;
+//   the scalp's SHADE under the hair (PAINTS.under's look, `scalp.look` changing it): a dark shade of the hair's colour
+//     in the footprint of `scalp.line`, so a gap under the hair reads as hair and its shadow. The line is measured from
+//     the hair itself (buzzdata, ~/pw/space-math/rigs/crew-buzz/): UNDER_MARGIN (4 mm) INSIDE the hair's edge all
+//     round, so the shade never shows past it as a band; `scalp.edge` is the edge itself.
+// (Before, a hair's whole scalp line was painted, and it reached past the hair: crew 1's swept hair showed a band of
+// stubble in front of and above his ears, and on them.)
 //   tile [u0, v0, size]: the atlas's stubble tile (glTF's uv); mean: its mean grey (the tint is the colour over it);
 //   size: metres a tile on the head; coarse: how much the large patches thin and thicken it
 export const PAINTS = {
@@ -554,25 +584,104 @@ export const PAINTS = {
     line: [[0, 31], [20, 30], [40, 25], [55, 14], [63, 0], [70, -6], [78, -9], [84, -7], [88, -3], [92, 4], [97, 8], [104, 9], [110, 7], [114, 3],
       [118, -3], [124, -13], [132, -25], [145, -36], [160, -41], [180, -43]],
   },
-  under: {
-    tile: [0.546875, 0.796875, 0.15625], mean: 0.3884, size: 0.022, cover: 0.75, soft: 2.0, coarse: 0.4, tone: 0.45, shade: 0.35, wander: 0.5,
-    line: null,
-  },
+  // (the shade comes in over `soft` degrees above its line, never below it)
+  under: { cover: 0.75, soft: 2.0, coarse: 0.4, tone: 0.45, shade: 0.35 },
 };
 const LINE_N = 49;        // (a hairline as 49 elevations, 7.5 degrees apart all round, -180 (the nape, their right) to 180)
-function lineSamples(T) {
-  // (a table either side alike (no negative azimuth) is read at the azimuth's size)
-  const round = T.some((p) => p[0] < 0);
-  const at = (a) => { if (!round) a = Math.abs(a); if (a <= T[0][0]) return T[0][1];
-    for (let i = 1; i < T.length; i++) if (a <= T[i][0]) return T[i - 1][1] + (T[i][1] - T[i - 1][1]) * (a - T[i - 1][0]) / Math.max(T[i][0] - T[i - 1][0], 1e-6); return T[T.length - 1][1]; };
-  return Array.from({ length: LINE_N }, (_, i) => new THREE.Vector2(-180 + i * 7.5, at(-180 + i * 7.5)));
+// (a hairline's elevation at an azimuth; a table either side alike (no negative azimuth) is read at the azimuth's size)
+export function lineAt(T, a) {
+  if (!T.some((p) => p[0] < 0)) a = Math.abs(a);
+  if (a <= T[0][0]) return T[0][1];
+  for (let i = 1; i < T.length; i++) if (a <= T[i][0]) return T[i - 1][1] + (T[i][1] - T[i - 1][1]) * (a - T[i - 1][0]) / Math.max(T[i][0] - T[i - 1][0], 1e-6);
+  return T[T.length - 1][1];
+}
+function lineSamples(T) { return Array.from({ length: LINE_N }, (_, i) => new THREE.Vector2(-180 + i * 7.5, lineAt(T, -180 + i * 7.5))); }
+
+// THE PAINT FIELD (2026-11-08): each person with paint carries one small texture laid round the standard skull's centre
+// as the marks are (azimuth -180 to 180 across, 90 their left; elevation 90 at the top down to -90; a degree a texel),
+// made when the person is put together, from crew.json alone:
+//   r  the hair's own BUZZ (its `buzz`; the Crew Lab's lib.buzzes while he edits one):
+//        sideburns  a strip just in front of each ear (SIDEBURN.width degrees wide, its back at the ear's clear margin),
+//                   from SIDEBURN.under degrees in under the hair's edge down to `sideburns` mm below the top of that ear (0: level with it; less than
+//                   0: higher); its foot soft over SIDEBURN.soft degrees. Left out (or null): none.
+//        nape       a taper at the back: from in under the hair's edge (scalp.edge) down `nape` mm below it, fading out downward, round to
+//                   behind the ears (full from NAPE.full degrees round from the face, none nearer it than NAPE.from).
+//   g  the scalp's SHADE under the hair: 0 below `scalp.line`, full UNDER_SOFT degrees above it
+//   b  the EARS: 1 on each ear and a margin round it (the head's crew.json `ears`, measured from its own geometry by
+//      buzzdata: where the head stands out from its smooth outline at the sides, grown by EAR_MARGIN; crew.json's `ears`
+//      for a head without its own: every head's together). Every paint is taken off there: the buzz, the shade, the buzz
+//      cut, a hair's marks.
+// A millimetre on the head is taken as on the standard skull (MM_DEG millimetres a degree).
+export const SIDEBURN = { width: 11, soft: 1.5, under: 5 }, NAPE = { from: 112, full: 140 }, UNDER_SOFT = 2.0, EAR_SOFT = 1.5;
+const MM_DEG = 0.09 * Math.PI / 180 * 1000, FW = 360, FH = 180;
+const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+// (an ear's table [[azimuth, bottom, top], ...] each 2 degrees (azimuths their side's own, 0 to 180), grown by the margin:
+// the bottom and top at an azimuth, null off the ear)
+function earAt(tab, a) {
+  if (!tab || !tab.length || a < tab[0][0] - 1 || a > tab[tab.length - 1][0] + 1) return null;
+  if (a <= tab[0][0]) return [tab[0][1], tab[0][2], 1 - (tab[0][0] - a)];
+  for (let i = 1; i < tab.length; i++) if (a <= tab[i][0]) { const t = (a - tab[i - 1][0]) / Math.max(tab[i][0] - tab[i - 1][0], 1e-6); return [tab[i - 1][1] + (tab[i][1] - tab[i - 1][1]) * t, tab[i - 1][2] + (tab[i][2] - tab[i - 1][2]) * t, 1]; }
+  const L = tab[tab.length - 1]; return [L[1], L[2], 1 - (a - L[0])];
+}
+// the field's texels (Uint8 RGBA, FW x FH) for a hair entry (HE), its buzz and a head's ears; into `data` when given
+export function paintField(HE, buzz, ears, data) {
+  const D = data || new Uint8Array(FW * FH * 4), sc = HE && HE.scalp, under = sc && sc.line, edge = sc && (sc.edge || sc.line);
+  const B = buzz || {}, sb = B.sideburns != null && Number.isFinite(+B.sideburns) ? +B.sideburns : null, nape = +B.nape > 0 ? +B.nape : 0;
+  // (each side's ear: its own front and top; the sideburn's strip in front of it)
+  const side = { L: ears && ears.L, R: ears && ears.R };
+  for (let j = 0; j < FW; j++) {
+    const az = -180 + j + 0.5, S = az >= 0 ? side.L : side.R, sa = Math.abs(az);
+    const uLine = under ? lineAt(under, az) : 999, eLine = edge ? lineAt(edge, az) : 999;
+    // (the sideburn's strip: how much of it at this azimuth, and its foot; its back at the front of the ear's clear margin,
+    // its top SIDEBURN.under degrees in under the hair's edge)
+    let sw = 0, foot = 999;
+    if (sb != null && S && S.front != null) {
+      const back = S.tab && S.tab.length ? S.tab[0][0] + 1 : S.front, front = back - SIDEBURN.width;
+      sw = sstep(front, front + SIDEBURN.soft, sa) * (1 - sstep(back - SIDEBURN.soft, back, sa));
+      foot = S.top - sb / MM_DEG;
+    }
+    const nw = nape ? sstep(NAPE.from, NAPE.full, sa) : 0, nFoot = eLine - nape / MM_DEG;
+    const ear = S && S.tab ? earAt(S.tab, sa) : null;
+    for (let i = 0; i < FH; i++) {
+      const el = 90 - i - 0.5, o = (i * FW + j) * 4;
+      let r = 0;
+      if (sw > 0) r = Math.max(r, sw * sstep(foot - SIDEBURN.soft / 2, foot + SIDEBURN.soft / 2, el) * (1 - sstep(eLine + SIDEBURN.under - 2, eLine + SIDEBURN.under, el)));
+      if (nw > 0 && eLine < 90) r = Math.max(r, nw * (el >= eLine ? 1 - sstep(eLine + SIDEBURN.under - 2, eLine + SIDEBURN.under, el) : Math.min(1, Math.max(0, (el - nFoot) / Math.max(eLine - nFoot, 1e-3)))));
+      const g = sstep(uLine, uLine + UNDER_SOFT, el);
+      const b = ear ? ear[2] * sstep(ear[0] - EAR_SOFT, ear[0], el) * (1 - sstep(ear[1], ear[1] + EAR_SOFT, el)) : 0;
+      D[o] = Math.round(255 * r); D[o + 1] = Math.round(255 * g); D[o + 2] = Math.round(255 * Math.max(0, Math.min(1, b))); D[o + 3] = 255;
+    }
+  }
+  return D;
+}
+function fieldTexture(D) {
+  const t = new THREE.DataTexture(D, FW, FH, THREE.RGBAFormat, THREE.UnsignedByteType);
+  t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearFilter; t.generateMipmaps = false;
+  t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.ClampToEdgeWrapping; t.colorSpace = THREE.NoColorSpace; t.needsUpdate = true;
+  return t;
+}
+// a person's paint (on its head), from its hair entry: null when the hair paints nothing. The buzz cut (a paint with no
+// mesh): its hairline and look; a hair with a mesh: its marks, its buzz, its shade
+function paintOf(HE, buzz, ears, { atlas, marks, frame, hairRefs }) {
+  const sc = HE.scalp && HE.scalp.line ? HE.scalp : null, cut = !!(HE.paint && PAINTS[HE.paint] && !HE.file);
+  if (!cut && !sc && !(HE.paint && marks)) return null;
+  const field = fieldTexture(paintField(HE, buzz, ears));
+  // (a hair with a mesh and paint (BOTH) whose scalp.look was its stubble's look before its own buzz.look)
+  const buzzLook = { ...((buzz && buzz.look) || (HE.file && HE.paint && sc && sc.look) || {}) };
+  return { atlas, frame, marks: HE.paint ? marks : null, field, line: cut ? (HE.line || PAINTS[HE.paint].line) : null,
+    buzzLook, underLook: sc && !(HE.file && HE.paint && !(buzz && buzz.look)) ? sc.look : null,
+    colour: HE.colour || null, colourLinear: HE.colour ? null : ((hairRefs || {}).refs || {}).hair };
 }
 const PAINT_GLSL = `
-uniform sampler2D crPaintMap; uniform vec3 crPaintTile; uniform vec4 crPaintLook, crPaintMore; uniform vec2 crLine[CR_LINE_N];
+uniform sampler2D crPaintMap, crField; uniform vec3 crPaintTile; uniform vec4 crBuzzLook, crBuzzMore, crUnderLook, crPaintShow;
+#ifdef CR_LINE
+uniform vec2 crLine[CR_LINE_N];
+#endif
 #ifdef CR_MARKS
 uniform sampler2D crMarkMap;
 #endif
 varying vec3 vCrHead; varying vec3 vCrHeadN;
+#ifdef CR_LINE
 // (the hairline's elevation at an azimuth from the face (-180 to 180, 90 their left))
 float crLineAt(float a) {
   for (int i = 1; i < CR_LINE_N; i++) {
@@ -580,6 +689,7 @@ float crLineAt(float a) {
   }
   return crLine[CR_LINE_N - 1].y;
 }
+#endif
 // (the stubble tile at st (in tiles, unbroken across them): its mip level from st itself, so the tile's repeats leave no seams)
 float crTile(vec2 st, vec2 gx, vec2 gy) {
   vec2 uv = crPaintTile.xy + fract(st) * crPaintTile.z;
@@ -598,32 +708,40 @@ vec3 crPaint(vec3 skin) {
   vec3 q = vCrHead - CR_SKULL; vec3 d = normalize(q);
   float el = degrees(asin(clamp(d.y, -1.0, 1.0))), az = degrees(atan(d.x, d.z)), ar = radians(az);
   vec3 w = pow(abs(normalize(vCrHeadN)), vec3(4.0)); w /= (w.x + w.y + w.z);
-  vec3 P = vCrHead / crPaintLook.y, Px = dFdx(P), Py = dFdy(P);
+  vec3 P = vCrHead / crBuzzLook.y, Px = dFdx(P), Py = dFdy(P);
   float s = crTri(P, Px, Py, w);
   // (the large patches: the same tile 4.3 times larger and shifted, about 1 on average)
   float k = 0.233; vec3 Q = P * k + vec3(0.37, 0.11, 0.73);
-  float c = crTri(Q, Px * k, Py * k, w) / crPaintLook.x;
-  float line = crLineAt(az) + crPaintMore.w * (0.8 * sin(ar * 7.0) + 0.5 * sin(ar * 17.0 + 1.3) + 0.35 * sin(ar * 29.0 + 0.4) + 1.6 * (c - 1.0));
-  float m = smoothstep(line - 0.3 * crPaintLook.w, line + crPaintLook.w, el);
+  float c = crTri(Q, Px * k, Py * k, w) / crBuzzLook.x;
+  // (THE PAINT FIELD: r the hair's own buzz, g the scalp's shade, b the ears; azimuth across, wrapping round)
+  vec4 F = texture2D(crField, vec2(az / 360.0 + 0.5, clamp((90.0 - el) / 180.0, 0.0, 1.0)));
+  float clear = 1.0 - F.b;
+  float mB = F.r;
+#ifdef CR_LINE
+  // (the buzz cut's hairline, wandering)
+  float line = crLineAt(az) + crBuzzMore.w * (0.8 * sin(ar * 7.0) + 0.5 * sin(ar * 17.0 + 1.3) + 0.35 * sin(ar * 29.0 + 0.4) + 1.6 * (c - 1.0));
+  mB = max(mB, smoothstep(line - 0.3 * crBuzzLook.w, line + crBuzzLook.w, el));
+#endif
 #ifdef CR_MARKS
-  // (a shaved side's marks (BOTH, above), round the skull's centre: the lines in the upper half, the stubble's density
-  // outside the line in the lower half's alpha; glTF's layout, no flip: the image's top at v 0)
+  // (a shaved side's marks (BOTH, above), round the skull's centre: the stubble's density in the lower half's alpha;
+  // glTF's layout, no flip: the image's top at v 0. The upper half's painted lines are not drawn (2026-11-08: a haircut's
+  // paint is its stubble only; the marks no longer carry any))
   float mv = clamp((90.0 - el) / 180.0, 0.002, 0.998) * 0.5, mu = az / 360.0 + 0.5;
-  vec4 mk = texture2D(crMarkMap, vec2(mu, mv));
-  m = max(m, texture2D(crMarkMap, vec2(mu, 0.5 + mv)).a);
+  mB = max(mB, texture2D(crMarkMap, vec2(mu, 0.5 + mv)).a);
 #endif
-  crPaintM = m;
-  float dens = m * clamp(1.0 + crPaintMore.x * (c - 1.0), 0.15, 1.4);
-  float cover = clamp(crPaintLook.z * dens * smoothstep(0.06, 0.45, s), 0.0, 1.0);
-  vec3 col = mix(skin * (1.0 - crPaintMore.z * m), crHair * crPaintMore.y * (s / crPaintLook.x), cover);
-#ifdef CR_MARKS
-  // (the lines over it: their own colour, or a hair colour picked at their own lightness)
-  float picked = step(1e-5, dot(crHair - crHairRef, crHair - crHairRef));
-  vec3 Ly = vec3(0.2126, 0.7152, 0.0722);
-  vec3 lc = mix(mk.rgb, crHair * clamp(dot(mk.rgb, Ly) / max(dot(crHair, Ly), 1e-4), 0.0, 4.0), picked);
-  col = mix(col, lc, mk.a);
-  crPaintM = max(crPaintM, mk.a);
-#endif
+  // (never on the ears; each layer shown unless the lab's view takes it off)
+  mB *= clear * crPaintShow.x;
+  float mU = F.g * clear * crPaintShow.y;
+  float sc = smoothstep(0.06, 0.45, s), st = s / crBuzzLook.x;
+  // the buzz: stubble, the scalp showing through where the strands are dark and shaded a little under them
+  float dB = mB * clamp(1.0 + crBuzzMore.x * (c - 1.0), 0.15, 1.4);
+  vec3 col = mix(skin * (1.0 - crBuzzMore.z * mB), crHair * crBuzzMore.y * st, clamp(crBuzzLook.z * dB * sc, 0.0, 1.0));
+  // the scalp's shade under the hair, over it
+  float dU = mU * clamp(1.0 + crUnderLook.y * (c - 1.0), 0.15, 1.4);
+  col = mix(col * (1.0 - crUnderLook.w * mU), crHair * crUnderLook.z * st, clamp(crUnderLook.x * dU * sc, 0.0, 1.0));
+  crPaintM = max(mB, mU);
+  // (the lab's view of the ears found: tinted)
+  col = mix(col, vec3(0.85, 0.12, 0.55), 0.6 * F.b * crPaintShow.w);
   return col;
 }`;
 // ── a visor: dark glass, and a face drawn on it ──────────────────────────────────────────────────────────────────
@@ -1474,7 +1592,7 @@ export async function makeCrew(lib, recipe) {
   const made = person.mesh.material;            // (the Mathwood vertex-colour material it made: not ours)
   // (the template's own materials, in the same order as the clone's meshes: a head with a visor has two)
   const src = []; tpl.traverse((t) => { if (t.isSkinnedMesh) src.push(t.material); });
-  let i = 0, visor = null;
+  let i = 0, visor = null, painted = null;
   const hairMeshes = [];
   person.root.traverse((o) => {
     if (!o.isSkinnedMesh) return;
@@ -1487,11 +1605,10 @@ export async function makeCrew(lib, recipe) {
       const mat = hairCardMaterial(refsOf.hair || {}, atlas); o.material = mat; mats.push(mat); meshes.hair = o;
       o.customDepthMaterial = hairDepthMaterial(atlas); mats.push(o.customDepthMaterial);
     } else {
-      // (a painted cut on the head; or under a hair that gives its hairline (crew.json scalp), the scalp's shade in its footprint)
-      const sc = HE.scalp && HE.scalp.line ? HE.scalp : null;
-      const pt = kind !== 'head' ? null : paint ? { kind: paint, atlas, colour: HE.colour, frame: frameOf(o), marks, ...(HE.file && sc ? { line: sc.line, over: sc.look } : {}) }
-        : sc ? { kind: 'under', atlas, line: sc.line, over: sc.look, colourLinear: ((refsOf.hair || {}).refs || {}).hair, frame: frameOf(o) } : null;
+      // (a painted cut on the head, or a hair's buzz and the scalp's shade under it: THE PAINT FIELD)
+      const pt = kind === 'head' && R.hair ? paintOf(HE, lib.buzzOf(R.hair), lib.earsOf(R.head), { atlas, marks, frame: frameOf(o), hairRefs: refsOf.hair }) : null;
       const mat = crewMaterial(own, kind, refsOf[kind], pt); o.material = mat; mats.push(mat); meshes[kind] = o;
+      if (pt) { painted = pt; pt.mat = mat; }
       // (the hands, when no skin tone is given, take the head's own skin: HANDS)
       const hs = kind === 'hand' && refsOf.head && refsOf.head.refs && refsOf.head.refs.skin;
       if (hs) mat.userData.crewSkinOf = new THREE.Color().fromArray(hs);
@@ -1588,8 +1705,24 @@ export async function makeCrew(lib, recipe) {
       c.fit = plain ? null : f; c.fitStats = stats;
       return stats;
     },
+    // the hair's buzz (THE PAINT FIELD), live: { sideburns, nape, look } as lib.buzzOf gives (null: none); the field
+    // remade (a look's change needs the person put together again)
+    buzz: lib.buzzOf(R.hair),
+    setBuzz(buzz) {
+      c.buzz = buzz || null;
+      if (painted) { paintField(HE, c.buzz, lib.earsOf(R.head), painted.field.image.data); painted.field.needsUpdate = true; }
+    },
+    // what the paint shows (the Crew Lab's view): { buzz, under, ears } (each true or false: the buzz, the scalp's
+    // shade; ears: the ears found, tinted); c.paintShown, as set
+    paintShown: { buzz: true, under: true, ears: false },
+    paintView(v = {}) {
+      Object.assign(c.paintShown, v);
+      const u = painted && painted.mat.userData.crew, S = c.paintShown;
+      if (u && u.crPaintShow) u.crPaintShow.value.set(S.buzz ? 1 : 0, S.under ? 1 : 0, 0, S.ears ? 1 : 0);
+    },
     dispose() {
       for (const m of mats) m.dispose(); if (visor) visor.dispose();
+      if (painted) painted.field.dispose();
       for (const [m, g0] of hairFit) if (m.geometry !== g0) { disposeOwn(m.geometry); m.geometry = g0; }
       if (collarGeo) disposeOwn(collarGeo);
       person.mixer.stopAllAction(); person.root.removeFromParent();
