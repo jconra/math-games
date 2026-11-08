@@ -20,9 +20,15 @@
 // skinned to the full skeleton and carries it; the head and the hair are bound to the suit's own bones when a person
 // is put together, so any head goes with any suit and any hair with any head. Where they meet is fixed (the attachment
 // rules, ~/pw/space-math/characters/CHARACTERS.md): a head is skinned to the Neck and Head bones and its neck runs
-// down inside the collar (a Tripo head's neck carries on as a skin bib about 15 cm below the Neck joint, widening into
-// the chest inside the suit and riding the Chest bone lower down, so an open collar shows neck and chest skin); hair is
-// skinned to the Head bone only and sits on the standard skull.
+// down inside the collar (a Tripo head's neck is its own, as made, down to where its model ends: never cut or
+// lengthened; bound by height, it blends from the Neck bone to the Chest bone below the Neck joint), and the part of it
+// hidden inside the collar is drawn in clear of the cloth (THE COLLAR FIT, below); hair is skinned to the Head bone only
+// and sits on the standard skull.
+//
+// THE COLLAR FIT (2026-11-07): when a person is put together, the suit's collar is measured from the suit itself (its
+// rim, its centre and its inner wall all the way round, down the inside) and the head's neck points that sit below the
+// rim, hidden in the collar, are drawn in toward its centre to stay COLLAR_CLEAR inside the wall; the neck above the rim,
+// what shows, never moves. c.collarStats says how far (see "the collar fit", below).
 //
 // COLOURS without new textures: each part's material is patched so its marked areas take a colour (the masks, written
 // by the rig's post step):
@@ -89,9 +95,17 @@
 //     c.setExpression(name) (a visor's face; recipe.expression sets the first), c.expression,
 //     await c.setFit(fit) (the hair's fit, live: { offset, scale, tuck, tuckStart } as lib.fitOf gives; null: as made),
 //     c.fit (the fit it wears), c.fitStats ({ tucked: points the tuck moved, held: of those, how many it stopped 2 mm off
-//     the head }), c.paint (paint hair's name, or null)
+//     the head }), c.paint (paint hair's name, or null), c.collarStats (the collar fit: { moved: points, mostMm, meanMm:
+//     how far they came in, pastMm: how far the hidden neck reached past the collar's outside, wideMm: how much wider
+//     than the collar's top the neck is, wideAt: where (degrees round, 0 ahead, 90 its left), coverMm: how far down a
+//     wide neck covers the collar, deep: points left because the wall was deeper inside the neck than COLLAR.deep, rides:
+//     points riding with the cloth, applied: whether the fit is on },
+//     or null without one), c.collar (the suit's collar as measured), c.collarDepth (each
+//     head point's depth below where the fit starts, metres; minus above it), c.collarMoved (how far each came in, mm)
+//   lib.collarFit (true: the collar fit on; false: off, the heads as made, its numbers still measured: collarStats
+//   .applied false); lib.collarOf(suit id, template) -> the collar
 //   JOBS, UNIFORM_COLOURS, SKIN_TONES, HAIR_COLOURS, EYE_COLOURS, FACE, CLIPS, EXPRESSIONS, PAINTS, fitFor, SKULL,
-//   HAIR_CLEAR, TUCK_CLEAR, TUCK_MAX
+//   HAIR_CLEAR, TUCK_CLEAR, TUCK_MAX, COLLAR_CLEAR, COLLAR_BAND
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
@@ -183,6 +197,10 @@ export async function loadCrew({ dir = CREW_DIR, people = PEOPLE_DIR, smoothHair
   // how far a head reaches along every line from the skull's centre, for the tuck (once a head: THE HEAD'S REACH)
   const fields = new Map();
   lib.headField = (id) => { if (!fields.has(id)) fields.set(id, lib.part('head', id).then(headField)); return fields.get(id); };
+  // a suit's collar, for the collar fit (once a suit: THE COLLAR FIT), measured on a person's template at its rest
+  const collars = new Map();
+  lib.collarFit = true;
+  lib.collarOf = (id, tpl) => { if (!collars.has(id)) collars.set(id, collarOf(tpl)); return collars.get(id); };
   // the card hair's one shared strand atlas and its normal map (list.hairAtlas), loaded once for every style
   let atlas = null;
   lib.hairAtlas = () => atlas || (atlas = Promise.all([hairTexture(dir + list.hairAtlas.map, true), hairTexture(dir + list.hairAtlas.normal, false)])
@@ -833,7 +851,7 @@ function frameOf(mesh) {
 // heads it rises well above the Head joint behind the neck, or runs along a jaw's rim: a line with no head over the cut
 // (the neck's opening) has no S, and hair on it is never drawn in; the jaw and neck under the cut still hold it off.
 const RF = { ne: 180, na: 360, nt: 180 };
-const REACH_MAX = 0.2;          // (metres from the centre: past the chin and the nape, short of the bib inside the suit)
+const REACH_MAX = 0.2;          // (metres from the centre: past the chin and the nape, short of the neck's end inside the suit)
 const DEG = 180 / Math.PI;
 // (the neck's cut is kept each 2 degrees round the skull's upright axis)
 const binT = (dx, dz) => ((Math.floor((Math.atan2(dx, dz) + Math.PI) / (2 * Math.PI) * RF.nt) % RF.nt) + RF.nt) % RF.nt;
@@ -868,9 +886,9 @@ function headField(g) {
   }
   const cutW = cut.map((_, t) => { let m = -Infinity; for (let e = -3; e <= 3; e++) m = Math.max(m, cut[(((t + e) % nt) + nt) % nt]); return m; });
   // (every point counts toward how far the head reaches (RA: what the hair is kept off); those over the neck's cut alone
-  // toward where the tuck draws to (R). Points farther than REACH_MAX from the centre count for neither: a head's skin
-  // bib runs on down inside the suit, and a line through the nape that met the bib's far side would read the head as
-  // reaching past the hair there, holding the hair where it is)
+  // toward where the tuck draws to (R). Points farther than REACH_MAX from the centre count for neither: a head's neck
+  // runs on down inside the suit, and a line through the nape that met the neck's far side low down would read the head
+  // as reaching past the hair there, holding the hair where it is)
   const put = (x, y, z) => {
     const dx = x - SKULL[0], dy = y - SKULL[1], dz = z - SKULL[2];
     const r = Math.hypot(dx, dy, dz); if (r < 1e-6 || r > REACH_MAX) return;
@@ -1040,6 +1058,309 @@ function applyFit(dst, src, M, fit, field) {
   return stats;
 }
 
+// ── the collar fit ──────────────────────────────────────────────────────────────────────────────────────────────────
+// (2026-11-07; the game's maker: "detect if it is going through the collar and adjust accordingly... finding the center
+// of the collar would be something a script is good at.") Every head keeps its own neck as made; where that neck runs
+// down inside a suit's collar, the part hidden there is drawn in so it never pokes through the cloth. Per head and suit,
+// when a person is put together (as the hair's tuck is), on the person's own copy of the head's positions.
+//   THE COLLAR (once a suit; collarOf): the suit at its rest, in its Head bone's frame (metres, y up, z forward, the
+//   Head joint at 0). Level slices of it every COLLAR.step from COLLAR.below under its Neck joint up to 2 cm under its
+//   Head joint; on each, from the collar's centre outward, the first of the suit's OUTSIDE met each 5 degrees round (a
+//   face turned away from the neck: the collar's cloth; its inner hem, a funnel closing a suit's inside and a lining or
+//   plug painted with one texel all lie inside that, hidden): the WALL (none within COLLAR.reach: open there, as a V
+//   neck's front; nothing nearer the centre than COLLAR.least counts). The CENTRE on each level: the middle of the wall's points where
+//   the wall goes at least three quarters of the way round (found from the Neck joint's line, then found again from
+//   there); elsewhere the nearest such level's. The RIM each way round: the highest level with a wall there (the top of
+//   the collar's cloth, to COLLAR.step). The wall is eased (the least within 10 degrees and a level, then the mean
+//   within 10 degrees), so a fold or a seam doesn't dent the neck.
+//   THE FIT (neckFit): each head point at the suit's rest; below the rim at its own angle round the centre, and riding
+//   the neck (its Head bone's share under a half: the chin and the face never move), it is kept COLLAR_CLEAR inside the
+//   wall at its height, drawn in level toward the centre, only as far as it is past that (never more than COLLAR.deep:
+//   a wall deeper inside the neck than that is a suit's inner surface, and the point is left; counted as deep). Going
+//   down from the rim, a wall that comes in by over COLLAR.jump in a level is such an inner surface too. The fit grows from nothing at
+//   the rim to full COLLAR_BAND below it, so the neck above the rim, what shows, never moves and there is no seam.
+//   Where a neck is wider than the collar's top (it covers the collar: the collar's top hidden inside the neck), the
+//   neck below the rim is what shows, down to where the collar comes out from under it: that stretch never moves either
+//   (the head keeps its own shape; counted as wideMm, coverMm), and the fit starts below it.
+//   Nothing is cut, nothing is stretched: a neck too short for a collar stays as short.
+//   THE HIDDEN NECK RIDES WITH THE CLOTH: from 5 mm below where the fit starts, a point's skin weights blend toward those
+//   of the nearest suit point (full COLLAR_BAND further down; its spine bones only, Hips to Head: a neck never rides an
+//   arm, and where the cloth there rides mostly the arms the point keeps its own), so in every clip it moves as the
+//   collar round it moves
+//   (bound by height alone, a neck turned on its Neck bone while the cloth beside it followed the suit's own weights, and
+//   came out through the back of a tight collar in some clips). Each changed point's place in the head's own bind space
+//   is solved again through its new weights, so at the suit's rest it stands exactly where the fit put it.
+export const COLLAR_CLEAR = 0.003;            // the hidden neck kept this far inside the collar's inner wall (metres)
+export const COLLAR_BAND = 0.015;             // the fit grows from nothing at the rim to full this far below it
+// (least: nothing nearer the collar's centre than this is a collar a neck goes into (no neck is thinner than about
+// 4.6 cm): an older suit's leftovers inside its collar (captain1's) are passed)
+// (far: where the look in starts: a wall must be the suit's OUTERMOST cloth along its line out to here, so an inner
+// surface with the suit's own back or a pack beyond it (spaceMan's funnel inside its ring) is never taken for the
+// collar; a wall farther than reach is none (the suit is far off there). jump: the most a collar's outside comes in from
+// one level to the next, going down; deep: the most a neck point is ever drawn in, a safety stop)
+const COLLAR = { step: 0.005, below: 0.15, top: -0.02, nt: 72, reach: 0.16, far: 0.35, least: 0.042, around: 0.75, jump: 0.01, deep: 0.045 };
+// (the spine's bones: what the hidden neck may ride, borrowed from the cloth beside it)
+const SPINE = /^(Hips|Abdomen|Torso|Chest|Neck|Head)$/;
+// (an attribute's k-th component of item i, as a number: a packed attribute's unpacked)
+const comp = (A, i, k) => (k === 0 ? A.getX(i) : k === 1 ? A.getY(i) : k === 2 ? A.getZ(i) : A.getW(i));
+// (a skinned mesh's point i at its skeleton's pose now, in the frame F)
+function poseOf(m, i, F, out) { m.getVertexPosition(i, out); return out.applyMatrix4(m.matrixWorld).applyMatrix4(F); }
+function collarOf(tpl) {
+  tpl.updateMatrixWorld(true);
+  const bones = {}; tpl.traverse((o) => { if (o.isBone) bones[o.name] = o; });
+  if (!bones.Head || !bones.Neck) return null;
+  const F = bones.Head.matrixWorld.clone().invert(), N = bones.Neck.getWorldPosition(new THREE.Vector3()).applyMatrix4(F);
+  const { step, nt } = COLLAR, y0 = N.y - COLLAR.below, ny = Math.max(2, Math.floor((COLLAR.top - y0) / step) + 1);
+  // (the suit's triangles round the neck, at rest, sliced level by level into segments (x, z))
+  // (the cloth that counts is the suit's OUTSIDE, what a poke-through would show past: the first cloth met coming in
+  // toward the neck. A collar's inner hem, the inner surfaces some suits close their insides with (a funnel down from
+  // the rim) and a face painted with one texel (a lining or a plug: the older suits') lie inside it; the hem still hides
+  // the skin from above. Which way a face is wound is not trusted.) And the suit's points there with their bones and
+  // weights (by bone name), on a 1 cm grid, so the hidden neck can move as the cloth beside it moves.
+  const seg = Array.from({ length: ny }, () => []), a = new THREE.Vector3(), b = new THREE.Vector3(), c = new THREE.Vector3();
+  const cloth = { P: [], B: [], W: [], names: [], grid: new Map() }, nameAt = new Map();
+  tpl.traverse((m) => {
+    if (!m.isSkinnedMesh || m.userData.part !== 'suit') return;
+    const g = m.geometry, n = g.attributes.position.count, P = new Float32Array(n * 3), I = g.index, UV = g.attributes.uv;
+    const si = g.attributes.skinIndex, sw = g.attributes.skinWeight;
+    for (let i = 0; i < n; i++) {
+      poseOf(m, i, F, a).toArray(P, i * 3);
+      if (Math.abs(a.x - N.x) > 0.25 || Math.abs(a.z - N.z) > 0.25 || a.y < y0 - 0.05 || a.y > COLLAR.top + 0.02) continue;
+      const q = cloth.P.length / 3; cloth.P.push(a.x, a.y, a.z);
+      for (let k = 0; k < 4; k++) {
+        const nm = m.skeleton.bones[comp(si, i, k)].name; if (!nameAt.has(nm)) { nameAt.set(nm, cloth.names.length); cloth.names.push(nm); }
+        cloth.B.push(nameAt.get(nm)); cloth.W.push(comp(sw, i, k));
+      }
+      const key = `${Math.floor(a.x / 0.01)},${Math.floor(a.y / 0.01)},${Math.floor(a.z / 0.01)}`;
+      (cloth.grid.get(key) || cloth.grid.set(key, []).get(key)).push(q);
+    }
+    const near = (k) => Math.abs(P[k] - N.x) < COLLAR.far + 0.05 && Math.abs(P[k + 2] - N.z) < COLLAR.far + 0.05 && P[k + 1] > y0 - step && P[k + 1] < COLLAR.top + step;
+    const m3 = I ? I.count : n;
+    for (let t = 0; t + 2 < m3; t += 3) {
+      const i0 = I ? I.getX(t) : t, i1 = I ? I.getX(t + 1) : t + 1, i2 = I ? I.getX(t + 2) : t + 2, ia = i0 * 3, ib = i1 * 3, ic = i2 * 3;
+      if (!near(ia) && !near(ib) && !near(ic)) continue;
+      if (UV && Math.hypot(UV.getX(i0) - UV.getX(i1), UV.getY(i0) - UV.getY(i1)) + Math.hypot(UV.getX(i0) - UV.getX(i2), UV.getY(i0) - UV.getY(i2)) < 1e-5) continue;
+      a.fromArray(P, ia); b.fromArray(P, ib); c.fromArray(P, ic);
+      const lo = Math.min(a.y, b.y, c.y), hi = Math.max(a.y, b.y, c.y);
+      for (let k = Math.max(0, Math.ceil((lo - y0) / step)); k < ny && y0 + k * step <= hi; k++) {
+        const y = y0 + k * step, pts = [];
+        for (const [p, q] of [[a, b], [b, c], [c, a]]) {
+          if ((p.y - y) * (q.y - y) > 0 || p.y === q.y) continue;
+          const f = (y - p.y) / (q.y - p.y); pts.push(p.x + (q.x - p.x) * f, p.z + (q.z - p.z) * f);
+        }
+        if (pts.length >= 4) seg[k].push(pts[0], pts[1], pts[2], pts[3]);
+      }
+    }
+  });
+  // (the suit's outside at angle th (0 ahead, +z; 90 the head's left, +x) round (cx, cz) on level k: the first cloth met
+  // coming in from COLLAR.far toward the centre, its distance from the centre (none nearer than COLLAR.least); Infinity
+  // when there's none or it is farther than COLLAR.reach)
+  const ray = (k, cx, cz, th) => {
+    const dx = Math.sin(th), dz = Math.cos(th), S = seg[k]; let best = -Infinity;
+    for (let s = 0; s < S.length; s += 4) {
+      const ex = S[s + 2] - S[s], ez = S[s + 3] - S[s + 1], den = dx * ez - dz * ex; if (Math.abs(den) < 1e-12) continue;
+      const wx = S[s] - cx, wz = S[s + 1] - cz, t = (wx * ez - wz * ex) / den, u = (wx * dz - wz * dx) / den;
+      if (t >= COLLAR.least && t <= COLLAR.far && t > best && u >= 0 && u <= 1) best = t;
+    }
+    return best > 0 && best <= COLLAR.reach ? best : Infinity;
+  };
+  const TH = Array.from({ length: nt }, (_, j) => -Math.PI + (j + 0.5) * 2 * Math.PI / nt);
+  const cx = new Float32Array(ny).fill(N.x), cz = new Float32Array(ny).fill(N.z), round = new Uint8Array(ny);
+  for (let k = 0; k < ny; k++) {
+    for (let it = 0; it < 2; it++) {
+      let sx = 0, sz = 0, h = 0;
+      for (const th of TH) { const r = ray(k, cx[k], cz[k], th); if (r < Infinity) { sx += cx[k] + r * Math.sin(th); sz += cz[k] + r * Math.cos(th); h++; } }
+      if (h < COLLAR.around * nt) break;
+      cx[k] = sx / h; cz[k] = sz / h; round[k] = 1;
+    }
+  }
+  // (a level whose wall doesn't go round takes the nearest level's centre that does, below first)
+  for (let k = 0; k < ny; k++) if (!round[k]) for (let d = 1; d < ny; d++) {
+    const q = [k - d, k + d].find((j) => j >= 0 && j < ny && round[j]); if (q != null) { cx[k] = cx[q]; cz[k] = cz[q]; break; }
+  }
+  const W = Array.from({ length: ny }, (_, k) => Float32Array.from(TH, (th) => ray(k, cx[k], cz[k], th)));
+  // (the rim each way round: the highest level with a wall there, to the top)
+  const rim = new Float32Array(nt).fill(-Infinity);
+  for (let j = 0; j < nt; j++) for (let k = ny - 1; k >= 0; k--) if (W[k][j] < Infinity) { rim[j] = y0 + k * step; break; }
+  // (down from the rim, a wall that comes in by more than COLLAR.jump in one level is not the collar's outside but an
+  // inner surface met where the outside is out of reach (spaceMan's funnel under its ring): passed, as no wall)
+  for (let j = 0; j < nt; j++) {
+    if (!(rim[j] > -Infinity)) continue;
+    let last = Infinity;
+    for (let k = Math.round((rim[j] - y0) / step); k >= 0; k--) {
+      const v = W[k][j]; if (!(v < Infinity)) continue;
+      if (last < Infinity && v < last - COLLAR.jump) { W[k][j] = Infinity; continue; }
+      last = v;
+    }
+  }
+  // (the wall eased: the least within 2 steps round and a level, then the mean within 2 steps round of the walls there)
+  const E = W.map((row, k) => Float32Array.from(row, (_, j) => {
+    let m = Infinity;
+    for (let dk = -1; dk <= 1; dk++) { const kk = k + dk; if (kk < 0 || kk >= ny) continue; for (let dj = -2; dj <= 2; dj++) m = Math.min(m, W[kk][(j + dj + nt) % nt]); }
+    return row[j] < Infinity ? m : Infinity;
+  }));
+  const wall = E.map((row) => Float32Array.from(row, (v, j) => {
+    if (!(v < Infinity)) return Infinity;
+    let s = 0, n = 0; for (let dj = -2; dj <= 2; dj++) { const u = row[(j + dj + nt) % nt]; if (u < Infinity) { s += u; n++; } }
+    return s / n;
+  }));
+  return { y0, step, ny, nt, cx, cz, wall, rim, neck: N.toArray(), round: Array.from(round), cloth };
+}
+// the collar's wall at height y and angle th round the centre (bilinear; the least of the cells that have one, nearer
+// an opening; Infinity where none has), and the rim at angle th (linear round)
+function wallAt(C, y, th) {
+  const fk = (y - C.y0) / C.step, fj = (th + Math.PI) / (2 * Math.PI) * C.nt - 0.5;
+  const k0 = Math.floor(fk), j0 = Math.floor(fj), wk = fk - k0, wj = fj - j0;
+  let s = 0, ws = 0, m = Infinity;
+  for (const [dk, a] of [[0, 1 - wk], [1, wk]]) for (const [dj, b] of [[0, 1 - wj], [1, wj]]) {
+    const k = Math.min(C.ny - 1, Math.max(0, k0 + dk)), v = C.wall[k][(((j0 + dj) % C.nt) + C.nt) % C.nt];
+    if (v < Infinity) { s += v * a * b; ws += a * b; m = Math.min(m, v); }
+  }
+  return ws > 0.999 ? s / ws : m;
+}
+function rimAt(C, th) {
+  const fj = (th + Math.PI) / (2 * Math.PI) * C.nt - 0.5, j0 = Math.floor(fj), w = fj - j0;
+  const a = C.rim[((j0 % C.nt) + C.nt) % C.nt], b = C.rim[(((j0 + 1) % C.nt) + C.nt) % C.nt];
+  return a > -Infinity && b > -Infinity ? a + (b - a) * w : Math.max(a, b);
+}
+const centreAt = (C, y) => {
+  const fk = Math.min(C.ny - 1, Math.max(0, (y - C.y0) / C.step)), k0 = Math.floor(fk), k1 = Math.min(C.ny - 1, k0 + 1), w = fk - k0;
+  return [C.cx[k0] + (C.cx[k1] - C.cx[k0]) * w, C.cz[k0] + (C.cz[k1] - C.cz[k0]) * w];
+};
+// (the head's points moved: m the template's head mesh at the suit's rest, C its suit's collar. Returns the moved
+// positions in the head's own bind space (the geometry's), each point's depth below the rim, and the numbers)
+function neckFit(m, C) {
+  m.updateMatrixWorld(true);
+  const bones = m.skeleton.bones, head = bones.find((b) => b.name === 'Head');
+  const F = head.matrixWorld.clone().invert();
+  // (which of the skin's bones ride the Head: the Head and every bone under it (the eyes', the face's))
+  const rides = bones.map((b) => { for (let p = b; p; p = p.parent) if (p === head) return true; return false; });
+  const g = m.geometry, pos = g.attributes.position, n = pos.count, si = g.attributes.skinIndex, sw = g.attributes.skinWeight;
+  const P = floatsOf(pos), depth = new Float32Array(n).fill(-1), moved = new Float32Array(n), X = new THREE.Vector3();
+  const st = { moved: 0, mostMm: 0, meanMm: 0, pastMm: 0, wideMm: 0, wideAt: null, coverMm: 0, deep: 0, rides: 0 };
+  let sum = 0;
+  // (every point at the suit's rest, in its Head bone's frame: its height, its angle and distance round the collar's
+  // centre, its Head share; and the neck's outside on the collar's grid, the farthest of the neck's points (the Head's
+  // share under a half) in each level and step round)
+  const PX = new Float32Array(n * 3), TH = new Float32Array(n), RR = new Float32Array(n), HW = new Float32Array(n);
+  const NR = Array.from({ length: C.ny }, () => new Float32Array(C.nt).fill(-Infinity));
+  for (let i = 0; i < n; i++) {
+    poseOf(m, i, F, X); X.toArray(PX, i * 3);
+    const [cx, cz] = centreAt(C, X.y), dx = X.x - cx, dz = X.z - cz;
+    RR[i] = Math.hypot(dx, dz); TH[i] = Math.atan2(dx, dz);
+    let hw = 0; for (let k = 0; k < 4; k++) if (rides[comp(si, i, k)]) hw += comp(sw, i, k);
+    HW[i] = hw;
+    const k = Math.round((X.y - C.y0) / C.step), j = Math.floor((TH[i] + Math.PI) / (2 * Math.PI) * C.nt) % C.nt;
+    if (hw < 0.5 && k >= 0 && k < C.ny && RR[i] > NR[k][j]) NR[k][j] = RR[i];
+  }
+  // (where the fit starts each way round: at the rim, unless the neck there COVERS the collar's top (wider than the
+  // collar's outside by over 2 mm: the collar's top is hidden inside the neck, and the neck below the rim is what
+  // shows); then from where the collar comes out from under the neck. The covered stretch never moves: a neck wider
+  // than a collar keeps its own shape, and is counted (wideMm, coverMm))
+  const near = (k, j) => { let v = -Infinity; for (let dk = -1; dk <= 1; dk++) { const kk = k + dk; if (kk < 0 || kk >= C.ny) continue; for (let dj = -1; dj <= 1; dj++) v = Math.max(v, NR[kk][(j + dj + C.nt) % C.nt]); } return v; };
+  const start = new Float32Array(C.nt).fill(-Infinity), band = new Float32Array(C.nt).fill(COLLAR_BAND);
+  for (let j = 0; j < C.nt; j++) {
+    if (!(C.rim[j] > -Infinity)) continue;
+    let k = Math.min(C.ny - 1, Math.round((C.rim[j] - C.y0) / C.step));
+    const k0 = k, w0 = C.wall[k][j], r0 = near(k, j);
+    if (w0 < Infinity && r0 - w0 > st.wideMm / 1000) { st.wideMm = (r0 - w0) * 1000; st.wideAt = Math.round((-Math.PI + (j + 0.5) * 2 * Math.PI / C.nt) * DEG); }
+    while (k > 0) { const r = near(k, j), w = C.wall[k][j]; if (!(r > -Infinity) || !(w < Infinity) || r <= w + 0.002) break; k--; }
+    start[j] = C.y0 + k * C.step; st.coverMm = Math.max(st.coverMm, (k0 - k) * C.step * 1000);
+    // (where the collar comes out from under a wider neck, skin and cloth already meet: the fit comes in over 5 mm)
+    if (k < k0) band[j] = 0.005;
+  }
+  const bandAt = (th) => band[(((Math.round((th + Math.PI) / (2 * Math.PI) * C.nt - 0.5)) % C.nt) + C.nt) % C.nt];
+  const startAt = (th) => {
+    const fj = (th + Math.PI) / (2 * Math.PI) * C.nt - 0.5, j0 = Math.floor(fj), w = fj - j0;
+    const a = start[((j0 % C.nt) + C.nt) % C.nt], b = start[(((j0 + 1) % C.nt) + C.nt) % C.nt];
+    return a > -Infinity && b > -Infinity ? a + (b - a) * w : Math.max(a, b);
+  };
+  // (each bone's whole skin matrix at this rest (the head's bind space to the world); the head's weights as numbers; the
+  // suit's points round the neck, nearest within 3 cm on its 1 cm grid)
+  const S4 = bones.map((b, i) => new THREE.Matrix4().multiplyMatrices(b.matrixWorld, m.skeleton.boneInverses[i]).multiply(m.bindMatrix));
+  const byName = new Map(bones.map((b, i) => [b.name, i]));
+  const SI = new Uint16Array(n * 4), SW = new Float32Array(n * 4);
+  for (let i = 0; i < n; i++) for (let k = 0; k < 4; k++) { SI[i * 4 + k] = comp(si, i, k); SW[i * 4 + k] = comp(sw, i, k); }
+  const CL = C.cloth;
+  const nearestCloth = (x, y, z) => {
+    let best = -1, bd = 0.03 * 0.03; const gx = Math.floor(x / 0.01), gy = Math.floor(y / 0.01), gz = Math.floor(z / 0.01);
+    for (let a = -3; a <= 3; a++) for (let b = -3; b <= 3; b++) for (let c = -3; c <= 3; c++) {
+      const L2 = CL.grid.get(`${gx + a},${gy + b},${gz + c}`); if (!L2) continue;
+      for (const q of L2) { const d2 = (CL.P[q * 3] - x) ** 2 + (CL.P[q * 3 + 1] - y) ** 2 + (CL.P[q * 3 + 2] - z) ** 2; if (d2 < bd) { bd = d2; best = q; } }
+    }
+    return best;
+  };
+  const Mw = new THREE.Matrix4(), Me = Mw.elements, Xw = new THREE.Vector3(), w0 = new Uint16Array(4), w1 = new Float32Array(4);
+  for (let i = 0; i < n; i++) {
+    X.fromArray(PX, i * 3);
+    const r = RR[i], th = TH[i], [cx, cz] = centreAt(C, X.y), dx = X.x - cx, dz = X.z - cz;
+    const top = startAt(th); if (!(top > -Infinity)) continue;
+    const below = top - X.y; depth[i] = below;
+    if (below <= 0) continue;
+    const ride = 1 - smooth01((HW[i] - 0.2) / 0.3), w = smooth01(below / bandAt(th)) * ride;
+    // (in toward the centre, to COLLAR_CLEAR inside the suit's outside)
+    let r2 = r;
+    const a = wallAt(C, X.y, th) - COLLAR_CLEAR;
+    if (a < Infinity && r > a && w > 0 && r > 1e-5) {
+      if (r - a > COLLAR.deep) st.deep++;
+      else { st.pastMm = Math.max(st.pastMm, (r - a) * 1000); r2 = r - w * (r - a); }
+    }
+    // (and riding as the cloth beside it rides: its weights blended toward the nearest suit point's, from 5 mm below the
+    // start to full COLLAR_BAND further down, so in every clip the hidden neck moves with the collar round it)
+    const wb = CL ? smooth01((below - 0.005) / COLLAR_BAND) * ride : 0;
+    let rew = false;
+    for (let k = 0; k < 4; k++) { w0[k] = SI[i * 4 + k]; w1[k] = SW[i * 4 + k]; }
+    if (wb > 0) {
+      const q = nearestCloth(X.x, X.y, X.z);
+      // (only the cloth's spine bones count: the cloth at the neck's foot is often the shoulders' tops, which ride the
+      // arms, and a neck must never swing with an arm; where the cloth there rides mostly the arms, the point keeps its own)
+      let sp = 0; if (q >= 0) for (let k = 0; k < 4; k++) if (SPINE.test(CL.names[CL.B[q * 4 + k]])) sp += CL.W[q * 4 + k];
+      if (q >= 0 && sp >= 0.5) {
+        const acc = new Map();
+        for (let k = 0; k < 4; k++) { const wt = SW[i * 4 + k] * (1 - wb); if (wt > 0) acc.set(SI[i * 4 + k], (acc.get(SI[i * 4 + k]) || 0) + wt); }
+        for (let k = 0; k < 4; k++) { const nm = CL.names[CL.B[q * 4 + k]], bi = byName.get(nm), wt = CL.W[q * 4 + k] * wb / sp; if (bi != null && wt > 0 && SPINE.test(nm)) acc.set(bi, (acc.get(bi) || 0) + wt); }
+        const top4 = [...acc.entries()].sort((p, q2) => q2[1] - p[1]).slice(0, 4), s = top4.reduce((t, e) => t + e[1], 0);
+        if (s > 1e-6) { for (let k = 0; k < 4; k++) { SI[i * 4 + k] = top4[k] ? top4[k][0] : 0; SW[i * 4 + k] = top4[k] ? top4[k][1] / s : 0; } rew = true; }
+      }
+    }
+    if (r2 === r && !rew) continue;
+    // (its bind place solved anew, so at this rest, through its (new) weights, it stands where the fit puts it)
+    const k2 = r2 / r; Xw.set(cx + dx * k2, X.y, cz + dz * k2).applyMatrix4(head.matrixWorld);
+    Me.fill(0);
+    for (let k = 0; k < 4; k++) { const wt = SW[i * 4 + k]; if (!wt) continue; const E = S4[SI[i * 4 + k]].elements; for (let e = 0; e < 16; e++) Me[e] += wt * E[e]; }
+    if (Math.abs(Mw.determinant()) < 1e-18) { for (let k = 0; k < 4; k++) { SI[i * 4 + k] = w0[k]; SW[i * 4 + k] = w1[k]; } continue; }
+    Xw.applyMatrix4(Mw.invert()); P[i * 3] = Xw.x; P[i * 3 + 1] = Xw.y; P[i * 3 + 2] = Xw.z;
+    if (rew) st.rides++;
+    if (r2 < r) { const mm = (r - r2) * 1000; st.moved++; sum += mm; st.mostMm = Math.max(st.mostMm, mm); moved[i] = mm; }
+  }
+  st.meanMm = st.moved ? sum / st.moved : 0;
+  for (const k of ['mostMm', 'meanMm', 'pastMm', 'wideMm', 'coverMm']) st[k] = Math.round(st[k] * 10) / 10;
+  return { P, SI, SW, depth, moved, start, stats: st };
+}
+// (a head's own geometry for the collar fit: its positions, normals and skin weights its own, the rest shared with the
+// part's; the normals turned as the fit turned the surface under them)
+const COLLAR_OWN = ['position', 'normal', 'skinIndex', 'skinWeight'];
+function collarGeometry(src, P, SI, SW) {
+  const g = new THREE.BufferGeometry(); g.name = (src.name || 'head') + ' (collar fit)';
+  g.setIndex(src.index);
+  for (const [k, a] of Object.entries(src.attributes)) {
+    g.setAttribute(k, k === 'position' ? new THREE.BufferAttribute(P, 3) : k === 'normal' ? new THREE.BufferAttribute(floatsOf(a), 3)
+      : k === 'skinIndex' ? new THREE.Uint16BufferAttribute(SI, 4) : k === 'skinWeight' ? new THREE.BufferAttribute(SW, 4) : a);
+  }
+  for (const gr of src.groups) g.addGroup(gr.start, gr.count, gr.materialIndex);
+  g.userData.fitShared = Object.keys(src.attributes).filter((k) => !COLLAR_OWN.includes(k));
+  const A = g.attributes.normal;
+  if (A) {
+    const n = P.length / 3, N0 = partFloats(src, 'n0'), N1 = normalsOf(P, src.index, n);
+    for (let i = 0; i < n; i++) {
+      _a.fromArray(N0, i * 3); _b.fromArray(N1, i * 3);
+      if (_a.lengthSq() < 1e-20 || _b.lengthSq() < 1e-20 || _a.normalize().dot(_b.normalize()) > 0.999999) continue;
+      _q.setFromUnitVectors(_a, _b); _v.fromArray(A.array, i * 3).applyQuaternion(_q).toArray(A.array, i * 3);
+    }
+  }
+  return g;
+}
+
 // ── a person, put together from a recipe ────────────────────────────────────────────────────────────────────────────
 // the parts' skinned meshes bound to one skeleton (the suit's): a template a Person is cloned from
 function assemble(suit, others) {
@@ -1094,6 +1415,20 @@ export async function makeCrew(lib, recipe) {
   const [suit, head, hair, hand, fit, atlas] = await Promise.all([...['suit', 'head', 'hair', 'hand'].map((k) => (R[k] && !(k === 'hair' && paint) ? lib.part(k, R[k]) : null)), lib.clipsFor(R.suit, R.hand),
     cards || paint || (HE.scalp && HE.scalp.line) ? lib.hairAtlas() : null]);
   const tpl = assemble(suit, [['head', head], ['hair', hair], ['hand', hand]].filter((x) => x[1]));
+  // THE COLLAR FIT: the suit's collar and the head's points below its rim, on the template at the suit's rest (before any
+  // clip), applied to the person's own copy of the head's positions below
+  // (measured always, so its numbers can be read with the fit off; applied only while lib.collarFit is on)
+  let collar = null, neck = null;
+  if (head) {
+    tpl.updateMatrixWorld(true);
+    collar = lib.collarOf(R.suit, tpl);
+    let hm = null;
+    tpl.traverse((o) => {
+      if (!o.isSkinnedMesh || o.userData.part !== 'head' || ['eye', 'cornea', 'visor'].includes(o.material && o.material.name)) return;
+      if (!hm || o.geometry.attributes.position.count > hm.geometry.attributes.position.count) hm = o;
+    });
+    if (collar && hm) neck = neckFit(hm, collar);
+  }
   const refsOf = { suit: suit && suit.scene.userData.crewPart, head: head && head.scene.userData.crewPart, hair: hair && hair.scene.userData.crewPart, hand: hand && hand.scene.userData.crewPart };
   // a Person of the Mathwood world, from the template (its clone, mixer, fades and bone keeping), on the suit's skeleton
   const person = new Person({ clips: { [fit.body]: fit.clips } }, { scene: tpl, body: fit.body }, { shadows: true });
@@ -1126,6 +1461,10 @@ export async function makeCrew(lib, recipe) {
     o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false;
   });
   made.dispose();
+  // (the collar fit on the person's head: its own positions where any point moved)
+  const collarGeo = lib.collarFit !== false && neck && (neck.stats.moved || neck.stats.rides) && meshes.head ? collarGeometry(meshes.head.geometry, neck.P, neck.SI, neck.SW) : null;
+  if (collarGeo) meshes.head.geometry = collarGeo;
+  if (neck) neck.stats.applied = !!collarGeo;
   const bones = {}; person.root.traverse((o) => { if (o.isBone) bones[o.name] = o; });
   // the shins' lengths, for the foot rule (the rest pose: the foot's root on the shin's line)
   person.root.updateMatrixWorld(true);
@@ -1194,6 +1533,9 @@ export async function makeCrew(lib, recipe) {
       c.expression = k >= 0 ? name : 'neutral'; c.recipe.expression = c.expression;
       if (visor) visor.userData.visor.vsExpr.value = Math.max(0, k);
     },
+    // the collar fit (the collar fit, above): how far the hidden neck came in; the suit's collar; each head point's depth
+    // below the rim (metres; minus above it)
+    collarStats: neck ? neck.stats : null, collar, collarDepth: neck ? neck.depth : null, collarMoved: neck ? neck.moved : null,
     // the hair's fit (a hair's fit, above): each hair mesh gets its own positions while it wears one
     fit: null, fitStats: { tucked: 0, held: 0 },
     async setFit(fit) {
@@ -1211,6 +1553,7 @@ export async function makeCrew(lib, recipe) {
     dispose() {
       for (const m of mats) m.dispose(); if (visor) visor.dispose();
       for (const [m, g0] of hairFit) if (m.geometry !== g0) { disposeOwn(m.geometry); m.geometry = g0; }
+      if (collarGeo) disposeOwn(collarGeo);
       person.mixer.stopAllAction(); person.root.removeFromParent();
     },
   };
