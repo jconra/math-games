@@ -17,8 +17,10 @@
 //     recipe (st.recipe.face), and Reset;
 //   FIT (folds away): judge every head and hair one by one and fit the hair shown (kit/crew.js, "a hair's fit"): the
 //     head and the hair before and after (the arrow keys too: left and right the hair, up and down the head), nudges up,
-//     forward and to their left in millimetres (Fine: smaller steps), Size, Tuck (draws the lower edges in toward the
-//     head, never nearer than 4 mm) and where the tuck starts below the crown, Reset; a fit is the hair's on every head
+//     forward and to their left in millimetres (Fine: smaller steps), Size, Tuck (0 to 500%, by its buttons or its
+//     slider: draws the hair in toward the head's centre at every height, keeping its thickness; 100% puts its underside
+//     2 mm off this head, past that it's pressed thinner too; never nearer than 2 mm) and where the tuck is full below
+//     the top of the hair, Reset; a fit is the hair's on every head
 //     unless "Just this head" is on (then it's that head's own adjustment, added to the hair's). Fits are kept in this
 //     browser as they're made (over crew.json's own) and worn at once; Copy fits gives them all as JSON for crew.json
 //     (shown in a box as well, to select by hand where copying fails); Clear my changes goes back to crew.json's.
@@ -33,7 +35,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { loadCrew, makeCrew, fitFor, CLIPS, JOBS, UNIFORM_COLOURS, SKIN_TONES, HAIR_COLOURS, EYE_COLOURS, FACE, EXPRESSIONS } from '../../kit/crew.js';
+import { loadCrew, makeCrew, fitFor, TUCK_MAX, CLIPS, JOBS, UNIFORM_COLOURS, SKIN_TONES, HAIR_COLOURS, EYE_COLOURS, FACE, EXPRESSIONS } from '../../kit/crew.js';
 import { makeMaterials } from '../../kit/materials.js';
 import { buildRoom } from '../../kit/layout.js';
 
@@ -284,7 +286,7 @@ function saveMine() {
 lib.fits = readMine();
 const fitSt = { open: (() => { try { return localStorage.getItem(FIT_OPEN) !== '0'; } catch (_) { return true; } })(), scope: 'all', fine: false, out: null, note: '' };
 // a change to the hair shown: to its fit on every head, or (Just this head) to that head's own adjustment
-async function fitEdit(change) {
+async function fitEdit(change, quiet) {
   const hair = st.recipe?.hair, head = st.recipe?.head; if (!hair) return;
   if (!own(lib.fits, hair)) lib.fits[hair] = copy((lib.entry('hair', hair) || {}).fit);
   const F = lib.fits[hair];
@@ -292,11 +294,12 @@ async function fitEdit(change) {
   else change(F, null);
   lib.fits[hair] = tidy(F);
   fitSt.note = '';
-  saveMine(); await wearFit();
+  saveMine(); await wearFit(quiet);
 }
-async function wearFit() { if (st.crew) await st.crew.setFit(lib.fitOf(st.crew.recipe.hair, st.crew.recipe.head)); fitRowsKeep(); }
+// (quiet: the rows left as they are, while the tuck's slider is dragged)
+async function wearFit(quiet) { if (st.crew) await st.crew.setFit(lib.fitOf(st.crew.recipe.hair, st.crew.recipe.head)); if (!quiet) fitRowsKeep(); }
 const fine = (k) => STEPS[k][fitSt.fine ? 1 : 0];
-// (each change keeps the fit worn within its limits: the tuck 0 to 100%, the size 80 to 125%, the start 0 to 30 cm)
+// (each change keeps the fit worn within its limits: the tuck 0 to 500%, the size 80 to 125%, the start 0 to 30 cm)
 function nudge(axis, dir) { fitEdit((t) => { t.offset = t.offset || [0, 0, 0]; t.offset[axis] = rnd((t.offset[axis] || 0) + dir * fine('move'), 0.0001); }); }
 function resize(dir) {
   fitEdit((t, base) => {
@@ -310,6 +313,10 @@ function retuck(key, dir, max) {
     const b = base ? base[key] || 0 : 0, next = Math.min(max, Math.max(0, b + (t[key] || 0) + dir * fine(key === 'tuck' ? 'tuck' : 'start')));
     t[key] = +(next - b).toFixed(5);
   });
+}
+// (the tuck set to a value (the slider), on every head or this head's own: what the hair's own fit doesn't give)
+function setTuck(v, quiet) {
+  return fitEdit((t, base) => { const b = base ? base.tuck || 0 : 0; t.tuck = +(Math.min(TUCK_MAX, Math.max(0, v)) - b).toFixed(5); }, quiet);
 }
 function fitReset() {
   const hair = st.recipe?.hair, head = st.recipe?.head; if (!hair) return;
@@ -391,6 +398,7 @@ function fitRows() {
   $('#fit').lastChild.classList.add('wide');
   const row2 = $('#fit2'); row2.hidden = false;
   if (!hair) row2.replaceChildren(val('No hair on: step to one (‹ › or the left and right arrows)'));
+  else if (P && P.paint) row2.replaceChildren(val('A painted cut (stubble on the skin itself): nothing to fit'));
   else {
     const mm = (v) => (v >= 0.00005 ? '+' : v <= -0.00005 ? '−' : '') + (Math.abs(v) * 1000).toFixed(1) + ' mm', st2 = st.crew?.fitStats;
     row2.replaceChildren(
@@ -398,10 +406,11 @@ function fitRows() {
       ...knob('Forward', mm(f.offset[2]), ['−', () => nudge(2, -1)], ['+', () => nudge(2, 1)], 'Back (toward the nape)', 'Forward (toward the face)'), sep(),
       ...knob('Their left', mm(f.offset[0]), ['−', () => nudge(0, -1)], ['+', () => nudge(0, 1)], 'To their right (your left as you face them)', 'To their left (your right as you face them)'), sep(),
       ...knob('Size', +(f.scale * 100).toFixed(2) + '%', ['−', () => resize(-1)], ['+', () => resize(1)], 'A touch smaller', 'A touch bigger'), sep(),
-      ...knob('Tuck', Math.round(f.tuck * 100) + '%', ['−', () => retuck('tuck', -1, 1)], ['+', () => retuck('tuck', 1, 1)], 'Less', 'More: the lower edges drawn in toward the head',
-        st2 && f.tuck > 0 ? `${st2.tucked} points drawn in, ${st2.held} of them stopped 4 mm off the head` : 'How much of the gap to the head the lower edges close'),
-      ...knob('Starts', +(f.tuckStart * 100).toFixed(2) + ' cm', ['−', () => retuck('tuckStart', -1, 0.3)], ['+', () => retuck('tuckStart', 1, 0.3)], 'Higher (nearer the crown)', 'Lower',
-        'How far below the top of the hair the tuck begins'));
+      ...knob('Tuck', Math.round(f.tuck * 100) + '%', ['−', () => retuck('tuck', -1, TUCK_MAX)], ['+', () => retuck('tuck', 1, TUCK_MAX)], 'Less', 'More: drawn in toward the head\'s centre',
+        st2 && f.tuck > 0 ? `${st2.tucked} points drawn in, ${st2.held} of them stopped 2 mm off the head` : 'The hair drawn in toward the head\'s centre, its thickness kept: 100% puts its underside 2 mm off this head; past 100% it\'s pressed thinner too'),
+      tuckSlider(f.tuck), sep(),
+      ...knob('Full from', +(f.tuckStart * 100).toFixed(2) + ' cm', ['−', () => retuck('tuckStart', -1, 0.3)], ['+', () => retuck('tuckStart', 1, 0.3)], 'Higher (nearer the crown)', 'Lower',
+        'How far below the top of the hair the tuck is full (above it, it fades out over 2 cm; 0: full all over)'));
   }
   const out = $('#fitout');
   out.hidden = fitSt.out == null;
@@ -412,6 +421,14 @@ function fitRows() {
     const said = fitSt.note ? [Object.assign(val(fitSt.note), { className: 'kl-val wide said' })] : [];
     out.replaceChildren(...said, box, chip('Close', false, () => { fitSt.out = null; fitSt.note = ''; menu(); }, true, 'Hide the box'));
   }
+}
+// (the tuck's slider, 0 to 500%: the fit worn as it's dragged, the rows remade when it's let go)
+function tuckSlider(v) {
+  const r = document.createElement('input'); r.type = 'range'; r.min = 0; r.max = Math.round(TUCK_MAX * 100); r.step = 5; r.value = Math.round(v * 100);
+  r.setAttribute('aria-label', 'Tuck'); r.title = 'Tuck: 0 to ' + Math.round(TUCK_MAX * 100) + '% (100%: the underside 2 mm off this head; past it, pressed thinner)';
+  r.oninput = () => { const k = r.previousElementSibling && r.previousElementSibling.previousElementSibling; if (k) k.textContent = r.value + '%'; setTuck(+r.value / 100, true); };
+  r.onchange = () => { r.blur(); setTuck(+r.value / 100); };
+  return r;
 }
 function layout() {
   const bar = $('#bar').offsetHeight, W = innerWidth, H = Math.max(80, innerHeight - bar);

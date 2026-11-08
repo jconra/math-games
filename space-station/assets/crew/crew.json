@@ -52,12 +52,12 @@
       { "id": "q_mohawk", "name": "Mohawk (Mathwood)", "file": "hair_q_mohawk.glb", "skeleton": "m", "smooth": "hair_q_mohawk_smooth.glb" },
       { "id": "q_bob", "name": "Two-tone bob (Mathwood)", "file": "hair_q_bob.glb", "skeleton": "m", "smooth": "hair_q_bob_smooth.glb" },
       { "id": "q_long", "name": "Long (Mathwood)", "file": "hair_q_long.glb", "skeleton": "m", "smooth": "hair_q_long_smooth.glb" },
-      { "id": "crop", "name": "Short messy crop", "file": "hair_crop.glb", "skeleton": "m", "cards": true },
-      { "id": "buzz", "name": "Buzz cut", "file": "hair_buzz.glb", "skeleton": "m", "cards": true },
-      { "id": "sidepart", "name": "Swept side part", "file": "hair_sidepart.glb", "skeleton": "m", "cards": true },
-      { "id": "wavy", "name": "Wavy shoulder-length", "file": "hair_wavy.glb", "skeleton": "m", "cards": true },
-      { "id": "ponytail", "name": "High ponytail", "file": "hair_ponytail.glb", "skeleton": "m", "cards": true },
-      { "id": "afro", "name": "Afro", "file": "hair_afro.glb", "skeleton": "m", "cards": true }
+      { "id": "crop", "name": "Short messy crop", "file": "hair_crop.glb", "skeleton": "m", "cards": true, "fit": { "tuck": 1 } },
+      { "id": "buzz", "name": "Buzz cut", "paint": "stubble", "colour": "#4a2f1d", "skeleton": "m" },
+      { "id": "sidepart", "name": "Swept side part", "file": "hair_sidepart.glb", "skeleton": "m", "cards": true, "fit": { "tuck": 1 } },
+      { "id": "wavy", "name": "Wavy chin-length", "file": "hair_wavy.glb", "skeleton": "m", "cards": true, "fit": { "tuck": 1 } },
+      { "id": "ponytail", "name": "High ponytail", "file": "hair_ponytail.glb", "skeleton": "m", "cards": true, "fit": { "tuck": 1 } },
+      { "id": "afro", "name": "Afro", "file": "hair_afro.glb", "skeleton": "m", "cards": true, "fit": { "tuck": 1 } }
     ]
   },
   "recipes": {
