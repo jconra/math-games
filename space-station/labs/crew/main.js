@@ -4,7 +4,8 @@
 // ONE MENU along the bottom:
 //   the characters (one entry a recipe) and every clip their suit's skeleton has (the men's or the women's), its speed;
 //   the wardrobe: Head, Hair, Suit (each part a choice: any goes with any; the hair: the Blender styles from the game's
-//     maker's grid, drawn as card hair, and the Mathwood hair), Job colours (the suit's marks, light lines and panels; a
+//     maker's grid, drawn as card hair, and the Mathwood hair), Hands (by suit: the man's on a men's-skeleton suit, the
+//     woman's on a women's; or either, or none), Job colours (the suit's marks, light lines and panels; a
 //     suit that keeps its own colours, the captains', takes none), Uniform (the suit's whites: a few colours or any),
 //     Skin tone, Hair colour; a visor's face (an android's helmet: Captain Vega's expressions), when the head has one;
 //     Eyes (a head with real eyes: the Tripo heads): the iris's colour (its own as painted, or one of EYE_COLOURS) and
@@ -31,7 +32,8 @@
 //     look(on) (the eyes on the camera, a head with real eyes), face(values) (the face sliders: { slider: -1..1 }),
 //     measure() (the body's lowest point and each boot's, in the pose shown), fit() (the Fit row's state: the fit worn,
 //     this browser's fits, the text Copy fits gives), step(kind, d) (the head or hair d along; resolves when shown),
-//     three, scene, camera, renderer }
+//     crew() (the person shown), lib (kit/crew.js's loadCrew: lib.armsOut tries an arms-out angle), three, scene, camera,
+//     renderer }
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
@@ -178,6 +180,18 @@ function pick(label, kind, value, none) {
   s.value = value || ''; s.onchange = () => { s.blur(); st.recipe[kind] = s.value || null; show(st.recipe); };
   return s;
 }
+// (the hands: the suit's skeleton's unless one is picked; None for none. A suit made with hands of its own wears none
+// unless picked)
+function handPick(R) {
+  const s = document.createElement('select'); s.setAttribute('aria-label', 'Hands');
+  const dflt = lib.handFor(R.suit), dn = dflt ? (lib.entry('hand', dflt) || {}).name : 'its own';
+  s.append(new Option(`By suit (${dn})`, ''));
+  for (const p of lib.list.parts.hand || []) s.append(new Option(p.name, p.id));
+  s.append(new Option('None', 'none'));
+  s.value = R.hand === undefined ? '' : R.hand === null ? 'none' : R.hand;
+  s.onchange = () => { s.blur(); if (s.value === '') delete st.recipe.hand; else st.recipe.hand = s.value === 'none' ? null : s.value; show(st.recipe); };
+  return s;
+}
 function menu() {
   // (each row kept where it was scrolled to: on a phone the rows scroll sideways)
   const rows = [...document.querySelectorAll('#bar .kl-row')], keep = rows.map((r) => r.scrollLeft);
@@ -209,7 +223,7 @@ function menuRows() {
   const ownIris = st.crew?.meshes.eyes?.material.userData.eye?.crIrisOwn.value.getStyle();
   const eyes = st.crew?.gaze ? [sep(), lab('Eyes'), swatch(ownIris || '#4a2e18', !C.eyes, () => colours({ eyes: null }), 'Their own eyes'), ...EYE_COLOURS.map((s) => swatch(s, C.eyes === s, () => colours({ eyes: s }), 'Eyes ' + s)),
     chip('Look at camera', st.look, () => look(!st.look), true, 'The eyes follow the camera (off: straight ahead)')] : [];
-  $('#wear').replaceChildren(lab('Head'), pick('Head', 'head', R.head), lab('Hair'), pick('Hair', 'hair', R.hair, true), lab('Suit'), pick('Suit', 'suit', R.suit), ...face,
+  $('#wear').replaceChildren(lab('Head'), pick('Head', 'head', R.head), lab('Hair'), pick('Hair', 'hair', R.hair, true), lab('Suit'), pick('Suit', 'suit', R.suit), lab('Hands'), handPick(R), ...face,
     sep(), jobLab, ...Object.entries(JOBS).map(([k, J]) => chip(J.name, (C.job || 'explorer') === k, () => colours({ job: k }), true)),
     sep(), lab('Uniform'), swatch('linear-gradient(135deg,#f4f5f6,#9aa3ad)', !C.uniform, () => colours({ uniform: null }), 'The uniform as made'),
     ...UNIFORM_COLOURS.map((s) => swatch(s, C.uniform === s, () => colours({ uniform: s }), 'Uniform ' + s)), any,
@@ -511,11 +525,11 @@ window.CREWLAB = {
   show: (k, on) => { if (k === 'paint' || k === 'plain' || k === 'wire') setPaint(k); if (k === 'marker') { st.marker = on; marker.visible = on; } if (k === 'bones') setBones(on); if (k === 'floor' && floorGroup) floorGroup.visible = on; menu(); },
   recipe: async (r) => { await show(r); return st.recipe; }, who: async (id) => { st.who = id; await show(RECIPES[id]); },
   colours: (c) => colours(c), expression: (k) => expression(k), smoothHair: (on) => smoothHair(on), look: (on) => look(on), face: (v) => { face(v); menu(); },
-  state: () => ({ who: st.who, clip: st.clip, recipe: st.recipe, tris, fps, parts: Object.keys(st.crew?.meshes || {}), body: st.crew?.body, expression: st.crew?.expression, rig: st.crew?.rig && { turnDiffMaxDeg: st.crew.rig.turnDiffMaxDeg }, smoothHair: lib.smoothHair,
+  state: () => ({ who: st.who, clip: st.clip, recipe: st.recipe, tris, fps, parts: Object.keys(st.crew?.meshes || {}), body: st.crew?.body, hand: st.crew?.hand, expression: st.crew?.expression, rig: st.crew?.rig && { turnDiffMaxDeg: st.crew.rig.turnDiffMaxDeg }, smoothHair: lib.smoothHair,
     look: st.look, eyes: !!st.crew?.gaze, faceSliders: st.crew?.faceSliders || [], face: st.recipe?.face || {}, gaze: st.crew?.gaze ? { target: st.crew.gaze.target && st.crew.gaze.target.toArray(), eye: st.crew.gaze.eye } : null,
     shown: shownSeq === showSeq }),
   fit: () => ({ open: fitSt.open, scope: fitSt.scope, fine: fitSt.fine, hair: st.recipe?.hair, head: st.recipe?.head, wearing: st.crew?.fit || null, stats: st.crew?.fitStats,
     wearingFor: st.crew && { hair: st.crew.recipe.hair, head: st.crew.recipe.head }, mine: copy(lib.fits), text: fitsText(), box: fitSt.out, note: fitSt.note }),
   step: (kind, d) => step(kind, d),
-  measure, crew: () => st.crew, three: THREE, scene, camera, renderer, controls,
+  measure, crew: () => st.crew, lib, three: THREE, scene, camera, renderer, controls,
 };

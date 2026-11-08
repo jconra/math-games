@@ -66,14 +66,22 @@
 // Head bone, so the clips carry them, and they leave the scalp alone, so the hair's fit is as it was. The eye sockets
 // carry the eye bones with them (spacing and size), so the lids stay on the balls.
 //
+// HANDS (2026-11-07; ~/pw/space-math/rigs/crew-rig/hands.py): a suit is clothing only, open at its cuffs, and the hands
+// are their own part (crew.json parts.hand: both hands in one mesh, skinned to the forearm, wrist and finger bones, with
+// a skin mask so the skin tone tints them). A suit wears its skeleton's hands (the entry with that `skeleton`) unless
+// the recipe names one (`hand`: an id, or null for none); a suit made with hands of its own (crew.json `ownHands`)
+// wears none unless named. The hand is laid on the suit's own wrists (HANDS, below): its stub runs back inside the
+// cuff, and stub and cuff fade from the forearm to the wrist by the same rule, so they move together in every clip.
+//
 //   const lib = await loadCrew()                lib.list: crew.json; lib.part(kind, id) -> its glTF; lib.clipsFor(suit id)
 //                                               -> { body, rig, clips (fitted to that suit), stride }; lib.hairAtlas();
 //                                               lib.fitOf(hair id, head id) -> the fit makeCrew gives that hair on that
 //                                               head; lib.fits { hair id: fit } (empty: a layer over crew.json's, each
 //                                               entry replacing that hair's whole fit; the Crew Lab's while it's edited)
-//   const c = await makeCrew(lib, recipe)       recipe { suit, head, hair, colours: { job, uniform, skin, hair, eyes } }
+//                                               lib.handFor(suit id) -> the hand part a suit wears unless a recipe names one
+//   const c = await makeCrew(lib, recipe)       recipe { suit, head, hair, hand, colours: { job, uniform, skin, hair, eyes } }
 //     c.root (place and turn it: feet on y 0, facing +z), c.person (Mathwood's Person), c.play(name, { fade, speed, once }),
-//     c.update(dt), c.setColours({ job, uniform, skin, hair, eyes }), c.meshes { suit, head, hair, visor, eyes, cornea },
+//     c.update(dt), c.setColours({ job, uniform, skin, hair, eyes }), c.meshes { suit, head, hair, hand, visor, eyes, cornea },
 //     c.bones, c.lookAt(point | null, { dart }) (real eyes: where they look; null straight ahead), c.gaze (null without),
 //     c.setFace({ slider: -1..1 }) (face bones: FACE's sliders; recipe.face sets the first), c.faceSliders (the sliders this
 //     head has: [] without), c.body ('m' | 'f':
@@ -179,18 +187,66 @@ export async function loadCrew({ dir = CREW_DIR, people = PEOPLE_DIR, smoothHair
   let atlas = null;
   lib.hairAtlas = () => atlas || (atlas = Promise.all([hairTexture(dir + list.hairAtlas.map, true), hairTexture(dir + list.hairAtlas.normal, false)])
     .then(([map, normalMap]) => ({ map, normalMap })));
-  // the clips fitted to one suit (its own bones' lengths: see the top), once a suit
-  lib.clipsFor = async (id) => {
-    if (!fitted.has(id)) {
-      fitted.set(id, (async () => {
-        const g = await lib.part('suit', id), rig = g.scene.userData.crewRig, body = lib.entry('suit', id).skeleton || 'm';
+  // the clips fitted to one suit (its own bones' lengths: see the top), once a suit; with hands (HANDS), the hand
+  // part's own finger joints in place of the suit's (once a suit and hand)
+  lib.clipsFor = async (id, hand = null) => {
+    const key = id + '|' + (hand || '');
+    if (!fitted.has(key)) {
+      fitted.set(key, (async () => {
+        const g = await lib.part('suit', id), body = lib.entry('suit', id).skeleton || 'm';
+        const rig = handRig(g.scene.userData.crewRig, hand ? (await lib.part('hand', hand)).scene.userData.crewRig : null);
         const rest = {}; g.scene.traverse((o) => { if (o.isBone) rest[o.name] = o.quaternion.toArray(); });
         return { body, rig, clips: retargetClips(await lib.rawClips(body), rig, rest), stride: strideOf(rig, body) };
       })());
     }
-    return fitted.get(id);
+    return fitted.get(key);
+  };
+  // the hands a suit wears unless a recipe names some (HANDS): its skeleton's, none if the suit has its own
+  lib.handFor = (suit) => {
+    const S = lib.entry('suit', suit); if (!S || S.ownHands) return null;
+    const H = (list.parts.hand || []).filter((h) => (h.skeleton || 'm') === (S.skeleton || 'm'));
+    return (H.find((h) => h.default) || H[0] || {}).id || null;
   };
   return lib;
+}
+
+// ── HANDS ────────────────────────────────────────────────────────────────────────────────────────────────────────────
+// A hand part carries the full skeleton but deforms only by the forearms, the wrists and the fingers. It is laid on the
+// suit's own wrists: each of its bones' bind is taken from the person's skeleton at rest, shifted by how far the suit's
+// wrist is from the hand's (each side its own), so at rest the hand stands at the suit's wrist exactly as it was made at
+// its own, and every bone moves it from there as it moves the suit. The fingers are the hand's: the joints under each
+// wrist (the hand bones) take the hand part's rest places, in the template and in the clips' moves (handRig).
+const HAND_BONE = /^(Thumb|Index|Middle|Ring|Pinky)\d\.?[LR]$/;
+// (the clips whose hands rest on something (a seat, a wheel, a bar, a hammer): no arms out (ARMS OUT, in makeCrew))
+const ARMS_KEEP = /^(Sit_|Stool_|Drive|Bar_Polish|Hammer|Tend_Forge)/;
+function handRig(rig, hand) {
+  if (!hand) return rig;
+  const dst = { ...rig.dstRest };
+  for (const [b, v] of Object.entries(hand.dstRest || {})) if (HAND_BONE.test(b)) dst[b] = v;
+  return { ...rig, dstRest: dst, hand: true };
+}
+// (the template's hand bones put at the hand's rest places (rig: the hand part's crewRig); then each of the hand's bones
+// bound from the template's rest, shifted by the wrists' difference. Returns the shift, each side)
+// (the part's own skin matrices at its rest are kept inside the new ones: a packed file's inverse bind matrices also
+// carry its points' unpacking (gltf-transform's quantize folds it in there for a skinned mesh), so they're never
+// replaced, only led by the template's bone: new = template bone at rest, inverted x the shift x the part's own bone at
+// rest x its own inverse bind)
+function layHand(tpl, bones, m, o, rig) {
+  if (rig) for (const [b, v] of Object.entries(rig.dstRest || {})) { const B = bones[clean(b)]; if (B && HAND_BONE.test(b)) B.position.fromArray(v); }
+  tpl.updateMatrixWorld(true);
+  let top = o; while (top.parent) top = top.parent; top.updateMatrixWorld(true);
+  const own = o.skeleton.bones.map((b) => b.name), shift = {};
+  for (const s of ['L', 'R']) {
+    const i = own.indexOf('Wrist' + s); if (i < 0 || !bones['Wrist' + s]) continue;
+    shift[s] = bones['Wrist' + s].getWorldPosition(new THREE.Vector3()).sub(o.skeleton.bones[i].getWorldPosition(new THREE.Vector3()));
+  }
+  const inv = own.map((name, i) => {
+    const B = bones[name], s = /[LR]$/.test(name) ? name.slice(-1) : null, d = (s && shift[s]) || new THREE.Vector3();
+    return new THREE.Matrix4().copy(B.matrixWorld).invert().multiply(new THREE.Matrix4().makeTranslation(d.x, d.y, d.z))
+      .multiply(o.skeleton.bones[i].matrixWorld).multiply(o.skeleton.boneInverses[i]);
+  });
+  m.bind(new THREE.Skeleton(own.map((n) => bones[n]), inv), o.bindMatrix);
+  return shift;
 }
 
 // the clips' position tracks laid on the crew's own rest offsets (see the top); and every bone a clip leaves alone that
@@ -234,7 +290,7 @@ function retargetMoves(clips, rig) {
 const strideOf = (rig, body) => { const k = rig.dstRest.Body[1] / rig.srcRest.Body[1], S = STRIDE[body] || STRIDE.m; return { Walk: S.Walk * k, Run: S.Run * k }; };
 
 // ── the materials: each part's own, patched for its colours ────────────────────────────────────────────────────────
-const KIND_DEF = { suit: 'CREW_SUIT', head: 'CREW_HEAD', hair: 'CREW_HAIR' };
+const KIND_DEF = { suit: 'CREW_SUIT', head: 'CREW_HEAD', hair: 'CREW_HAIR', hand: 'CREW_HAND' };
 function crewUniforms(refs) {
   const R = (n, d) => (refs && refs[n] ? new THREE.Color().fromArray(refs[n]) : new THREE.Color(d));
   return {
@@ -314,9 +370,9 @@ vec3 crShift(vec3 c, vec3 to, vec3 ref, float m) { return max(c + (to - ref) * m
   #if defined(CREW_SUIT) && defined(CREW_PANELS)
     diffuseColor.rgb = crShift(diffuseColor.rgb, crPanels, crPanelsRef, crA(texture2D(normalMap, vNormalMapUv).a));
   #endif
-  #if defined(CREW_HEAD) && defined(CREW_SKIN)
+  #if (defined(CREW_HEAD) || defined(CREW_HAND)) && defined(CREW_SKIN)
     // (skin by each channel's ratio, not a shift: a darker tone darkens the painted face's own light and shade
-    // alike, where a shift would take more red than blue out of the shadows and turn them green)
+    // alike, where a shift would take more red than blue out of the shadows and turn them green; the hands the same)
     diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * clamp(crSkin / max(crSkinRef, vec3(1e-4)), 0.1, 4.0), crA(sampledDiffuseColor.a));
   #endif
   diffuseColor.a = opacity;
@@ -689,7 +745,8 @@ function setColours(mats, { job, uniform, skin, hair, eyes } = {}) {
     const J = (!m.userData.crewOwnColours && JOBS[job]) || JOBS.explorer;
     for (const k of ['marks', 'lines', 'panels']) { const key = 'cr' + k[0].toUpperCase() + k.slice(1); u[key].value.copy(J[k] ? lin(J[k]) : u[key + 'Ref'].value); }
     u.crWhites.value.copy(uniform ? lin(uniform) : u.crWhitesRef.value);
-    u.crSkin.value.copy(skin ? lin(skin) : u.crSkinRef.value);
+    // (hands with no skin tone given take the head's own skin, so they match the face: m.userData.crewSkinOf)
+    u.crSkin.value.copy(skin ? lin(skin) : m.userData.crewSkinOf || u.crSkinRef.value);
     u.crHair.value.copy(hair ? lin(hair) : u.crHairRef.value);
   }
 }
@@ -965,7 +1022,9 @@ function assemble(suit, others) {
       const m = new THREE.SkinnedMesh(o.geometry, o.material); m.name = o.name; m.userData.part = kind;
       m.position.copy(o.position); m.quaternion.copy(o.quaternion); m.scale.copy(o.scale);
       host.add(m);
-      m.bind(new THREE.Skeleton(o.skeleton.bones.map((b) => bones[b.name]), o.skeleton.boneInverses), o.bindMatrix);
+      // (hands: laid on the suit's own wrists, HANDS above)
+      if (kind === 'hand') tpl.userData.handShift = layHand(tpl, bones, m, o, g.scene.userData.crewRig);
+      else m.bind(new THREE.Skeleton(o.skeleton.bones.map((b) => bones[b.name]), o.skeleton.boneInverses), o.bindMatrix);
     });
   }
   return tpl;
@@ -989,13 +1048,14 @@ function addOwnBones(list, bones) {
 }
 
 export async function makeCrew(lib, recipe) {
-  const R = { suit: recipe.suit, head: recipe.head, hair: recipe.hair };
+  // (the hands: the recipe's if it names them (null: none), else the suit's skeleton's: HANDS)
+  const R = { suit: recipe.suit, head: recipe.head, hair: recipe.hair, hand: recipe.hand !== undefined ? recipe.hand : lib.handFor(recipe.suit) };
   // (card hair and paint hair draw from the shared strand atlas; paint hair has no part of its own: PAINTS)
   const HE = (R.hair && lib.entry('hair', R.hair)) || {}, cards = !!HE.cards, paint = HE.paint && PAINTS[HE.paint] ? HE.paint : null;
-  const [suit, head, hair, fit, atlas] = await Promise.all([...['suit', 'head', 'hair'].map((k) => (R[k] && !(k === 'hair' && paint) ? lib.part(k, R[k]) : null)), lib.clipsFor(R.suit),
+  const [suit, head, hair, hand, fit, atlas] = await Promise.all([...['suit', 'head', 'hair', 'hand'].map((k) => (R[k] && !(k === 'hair' && paint) ? lib.part(k, R[k]) : null)), lib.clipsFor(R.suit, R.hand),
     cards || paint ? lib.hairAtlas() : null]);
-  const tpl = assemble(suit, [['head', head], ['hair', hair]].filter((x) => x[1]));
-  const refsOf = { suit: suit && suit.scene.userData.crewPart, head: head && head.scene.userData.crewPart, hair: hair && hair.scene.userData.crewPart };
+  const tpl = assemble(suit, [['head', head], ['hair', hair], ['hand', hand]].filter((x) => x[1]));
+  const refsOf = { suit: suit && suit.scene.userData.crewPart, head: head && head.scene.userData.crewPart, hair: hair && hair.scene.userData.crewPart, hand: hand && hand.scene.userData.crewPart };
   // a Person of the Mathwood world, from the template (its clone, mixer, fades and bone keeping), on the suit's skeleton
   const person = new Person({ clips: { [fit.body]: fit.clips } }, { scene: tpl, body: fit.body }, { shadows: true });
   const meshes = {}, mats = [];
@@ -1017,6 +1077,9 @@ export async function makeCrew(lib, recipe) {
     } else {
       const pt = kind === 'head' && paint ? { kind: paint, atlas, colour: HE.colour, frame: frameOf(o) } : null;
       const mat = crewMaterial(own, kind, refsOf[kind], pt); o.material = mat; mats.push(mat); meshes[kind] = o;
+      // (the hands, when no skin tone is given, take the head's own skin: HANDS)
+      const hs = kind === 'hand' && refsOf.head && refsOf.head.refs && refsOf.head.refs.skin;
+      if (hs) mat.userData.crewSkinOf = new THREE.Color().fromArray(hs);
     }
     o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false;
   });
@@ -1031,10 +1094,36 @@ export async function makeCrew(lib, recipe) {
   if (gaze) gaze.shade(meshes.eyes, meshes.eyes.material);
   // (face bones, at rest before the clips' first frame)
   const faceR = faceRig(bones);
+  // ARMS OUT (crew.json suit entry `armsOut`, degrees, 2026-11-07): bulky trousers or a coat's skirts that the hands would
+  // sink into in the standing clips: each upper arm turned out that far from the body, as much as it hangs down (none
+  // when it's raised or reaching forward), on top of the clip and taken off again before the next frame's clip
+  // (lib.armsOut { suit id: degrees }: tried in place of crew.json's, as the checks do)
+  // (only while standing or moving: a clip that sits, drives or works (ARMS_KEEP) puts the hands on something, and the
+  // turn eases in and out over a third of a second as the clips change)
+  const armsOut = THREE.MathUtils.degToRad(lib.armsOut && lib.armsOut[R.suit] != null ? lib.armsOut[R.suit] : (lib.entry('suit', R.suit) || {}).armsOut || 0), armQ = {};
+  const _d = new THREE.Vector3(), _ax = new THREE.Vector3(), _q = new THREE.Quaternion(), _pq = new THREE.Quaternion(), _rq = new THREE.Quaternion();
+  let armsW = 1;
+  function armsOutApply(dt) {
+    const want = ARMS_KEEP.test(person.curName || '') ? 0 : 1;
+    armsW = dt > 0 ? armsW + Math.max(-dt * 3, Math.min(dt * 3, want - armsW)) : want;
+    person.root.getWorldQuaternion(_rq);
+    for (const [s, sg] of [['L', 1], ['R', -1]]) {
+      const ua = bones['UpperArm' + s], la = bones['LowerArm' + s]; if (!ua || !la) continue;
+      armQ[s] = ua.quaternion.clone();
+      _d.subVectors(la.getWorldPosition(_d), ua.getWorldPosition(_ax)).normalize();
+      const down = new THREE.Vector3(0, -1, 0).applyQuaternion(_rq), w = Math.max(0, _d.dot(down)) ** 2 * armsW;
+      if (w <= 0) continue;
+      _ax.set(0, 0, 1).applyQuaternion(_rq).applyQuaternion(ua.parent.getWorldQuaternion(_pq).invert());
+      ua.quaternion.premultiply(_q.setFromAxisAngle(_ax, armsOut * sg * w));
+    }
+    person.root.updateMatrixWorld(true);
+  }
   const c = {
-    root: person.root, person, meshes, bones, recipe: { ...recipe }, stride: fit.stride, body: fit.body, rig: fit.rig, paint,
+    root: person.root, person, meshes, bones, recipe: { ...recipe }, stride: fit.stride, body: fit.body, rig: fit.rig, paint, hand: R.hand,
     play: (name, o = {}) => person.play(name, { once: ONCE.has(name), ...o }),
     update(dt) {
+      // (arms out: the clip's own turn back first, so the mixer, which writes only what changed, never stacks it)
+      if (armsOut) for (const s of ['L', 'R']) if (armQ[s]) bones['UpperArm' + s].quaternion.copy(armQ[s]);
       person.update(dt);
       // each foot at its shin's end (see the top)
       person.root.updateMatrixWorld(true);
@@ -1045,6 +1134,7 @@ export async function makeCrew(lib, recipe) {
         f.position.copy(f.parent.worldToLocal(A));
       }
       person.root.updateMatrixWorld(true);
+      if (armsOut) armsOutApply(dt);
       if (visor) visor.userData.visor.vsTime.value += dt;
       if (gaze) gaze.update(dt);
     },
