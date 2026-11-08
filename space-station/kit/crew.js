@@ -103,7 +103,8 @@
 //     or null without one), c.collar (the suit's collar as measured), c.collarDepth (each
 //     head point's depth below where the fit starts, metres; minus above it), c.collarMoved (how far each came in, mm)
 //   lib.collarFit (true: the collar fit on; false: off, the heads as made, its numbers still measured: collarStats
-//   .applied false); lib.collarOf(suit id, template) -> the collar
+//   .applied false); lib.collarRide (true: the hidden neck rides with the cloth; false: drawn in only);
+//   lib.collarOf(suit id, template) -> the collar
 //   JOBS, UNIFORM_COLOURS, SKIN_TONES, HAIR_COLOURS, EYE_COLOURS, FACE, CLIPS, EXPRESSIONS, PAINTS, fitFor, SKULL,
 //   HAIR_CLEAR, TUCK_CLEAR, TUCK_MAX, COLLAR_CLEAR, COLLAR_BAND
 import * as THREE from 'three';
@@ -199,7 +200,7 @@ export async function loadCrew({ dir = CREW_DIR, people = PEOPLE_DIR, smoothHair
   lib.headField = (id) => { if (!fields.has(id)) fields.set(id, lib.part('head', id).then(headField)); return fields.get(id); };
   // a suit's collar, for the collar fit (once a suit: THE COLLAR FIT), measured on a person's template at its rest
   const collars = new Map();
-  lib.collarFit = true;
+  lib.collarFit = true; lib.collarRide = true;
   lib.collarOf = (id, tpl) => { if (!collars.has(id)) collars.set(id, collarOf(tpl)); return collars.get(id); };
   // the card hair's one shared strand atlas and its normal map (list.hairAtlas), loaded once for every style
   let atlas = null;
@@ -1229,7 +1230,7 @@ const centreAt = (C, y) => {
 };
 // (the head's points moved: m the template's head mesh at the suit's rest, C its suit's collar. Returns the moved
 // positions in the head's own bind space (the geometry's), each point's depth below the rim, and the numbers)
-function neckFit(m, C) {
+function neckFit(m, C, rideOn = true) {
   m.updateMatrixWorld(true);
   const bones = m.skeleton.bones, head = bones.find((b) => b.name === 'Head');
   const F = head.matrixWorld.clone().invert();
@@ -1307,7 +1308,7 @@ function neckFit(m, C) {
     }
     // (and riding as the cloth beside it rides: its weights blended toward the nearest suit point's, from 5 mm below the
     // start to full COLLAR_BAND further down, so in every clip the hidden neck moves with the collar round it)
-    const wb = CL ? smooth01((below - 0.005) / COLLAR_BAND) * ride : 0;
+    const wb = CL && rideOn ? smooth01((below - 0.005) / COLLAR_BAND) * ride : 0;
     let rew = false;
     for (let k = 0; k < 4; k++) { w0[k] = SI[i * 4 + k]; w1[k] = SW[i * 4 + k]; }
     if (wb > 0) {
@@ -1427,7 +1428,7 @@ export async function makeCrew(lib, recipe) {
       if (!o.isSkinnedMesh || o.userData.part !== 'head' || ['eye', 'cornea', 'visor'].includes(o.material && o.material.name)) return;
       if (!hm || o.geometry.attributes.position.count > hm.geometry.attributes.position.count) hm = o;
     });
-    if (collar && hm) neck = neckFit(hm, collar);
+    if (collar && hm) neck = neckFit(hm, collar, lib.collarRide !== false);
   }
   const refsOf = { suit: suit && suit.scene.userData.crewPart, head: head && head.scene.userData.crewPart, hair: hair && hair.scene.userData.crewPart, hand: hand && hand.scene.userData.crewPart };
   // a Person of the Mathwood world, from the template (its clone, mixer, fades and bone keeping), on the suit's skeleton
