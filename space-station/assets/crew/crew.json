@@ -42,7 +42,9 @@
       { "id": "t8", "name": "Tripo 8 (man, 40s)", "file": "head_t8.glb", "skeleton": "m", "eyes": true, "face": true },
       { "id": "t9", "name": "Tripo 9 (woman, 40s, freckles)", "file": "head_t9.glb", "skeleton": "f", "eyes": true, "face": true },
       { "id": "t10", "name": "Tripo 10 (teen boy, about 16)", "file": "head_t10.glb", "skeleton": "m", "eyes": true, "face": true },
-      { "id": "t11", "name": "Tripo 11 (woman, 70s)", "file": "head_t11.glb", "skeleton": "f", "eyes": true, "face": true }
+      { "id": "t11", "name": "Tripo 11 (woman, 70s)", "file": "head_t11.glb", "skeleton": "f", "eyes": true, "face": true },
+      { "id": "crew1", "name": "Crew 1", "file": "head_crew1.glb", "skeleton": "m", "eyes": true, "face": true },
+      { "id": "captain", "name": "Captain", "file": "head_captain.glb", "skeleton": "f", "eyes": true, "face": true }
     ],
     "hair": [
       { "id": "captain1", "name": "Braided crown and bun", "file": "hair_captain1.glb", "skeleton": "f" },
@@ -64,7 +66,8 @@
     ]
   },
   "recipes": {
-    "captain1": { "name": "Captain", "suit": "captain1", "head": "captain1", "hair": "captain1", "colours": { "job": "explorer" } },
+    "captain1": { "name": "Captain", "suit": "captain1", "head": "captain", "hair": "braidcrown", "colours": { "job": "explorer" } },
+    "crew1": { "name": "Crew 1", "suit": "spaceMan", "head": "crew1", "hair": "crop", "colours": { "job": "explorer" } },
     "vega": { "name": "Captain Vega", "suit": "vega", "head": "vega", "hair": null, "colours": { "job": "explorer" }, "expression": "happy" },
     "smelter": { "name": "Smelter", "suit": "smelter", "head": "t8", "hair": "buzz", "colours": { "job": "miner" } },
     "medic": { "name": "Medic", "suit": "medic", "head": "t9", "hair": "ponytail", "colours": { "job": "medic" } },
