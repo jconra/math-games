@@ -19,8 +19,10 @@
 // THE PARTS (space-station/assets/crew/: suit_<id>.glb, head_<id>.glb, hair_<id>.glb; listed in crew.json). Each is
 // skinned to the full skeleton and carries it; the head and the hair are bound to the suit's own bones when a person
 // is put together, so any head goes with any suit and any hair with any head. Where they meet is fixed (the attachment
-// rules, ~/pw/space-math/characters/CHARACTERS.md): a head is skinned to the Neck and Head bones only and its neck runs
-// down inside the collar; hair is skinned to the Head bone only and sits on the standard skull.
+// rules, ~/pw/space-math/characters/CHARACTERS.md): a head is skinned to the Neck and Head bones and its neck runs
+// down inside the collar (a Tripo head's neck carries on as a skin bib about 15 cm below the Neck joint, widening into
+// the chest inside the suit and riding the Chest bone lower down, so an open collar shows neck and chest skin); hair is
+// skinned to the Head bone only and sits on the standard skull.
 //
 // COLOURS without new textures: each part's material is patched so its marked areas take a colour (the masks, written
 // by the rig's post step):
