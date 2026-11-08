@@ -412,7 +412,9 @@ function fitRows() {
   $('#fit').lastChild.classList.add('wide');
   const row2 = $('#fit2'); row2.hidden = false;
   if (!hair) row2.replaceChildren(val('No hair on: step to one (‹ › or the left and right arrows)'));
-  else if (P && P.paint) row2.replaceChildren(val('A painted cut (stubble on the skin itself): nothing to fit'));
+  // (a painted cut alone has nothing to fit; a hair with a mesh and a paint (the pink side-swept) fits its mesh, the paint
+  // staying on the skin)
+  else if (P && P.paint && !P.file) row2.replaceChildren(val('A painted cut (stubble on the skin itself): nothing to fit'));
   else {
     const mm = (v) => (v >= 0.00005 ? '+' : v <= -0.00005 ? '−' : '') + (Math.abs(v) * 1000).toFixed(1) + ' mm', st2 = st.crew?.fitStats;
     row2.replaceChildren(
