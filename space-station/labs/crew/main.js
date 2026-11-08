@@ -33,7 +33,8 @@
 //     A pair placed by hand in Blender (the hair rig's placement.sh: fit.heads[<head>].placed) wears the hair as cut,
 //     exactly as he placed it, and says so; its nudges, Width, Height, Depth and Turn still tune it.
 //     SAVING (2026-11-08): Copy fits and Save fits give EVERYTHING the Fit row sets, this browser's over crew.json's, as
-//     one JSON object { "hairs": { <hair id>: its fit (its pairs in fit.heads) }, "heads": { <head id>: its hairFit } };
+//     one JSON object { "hairs": { <hair id>: its fit (its pairs in fit.heads) }, "heads": { <head id>: its hairFit },
+//     "buzzes": { <hair id>: its buzz (the Buzz row's), null for none } };
 //     Save fits downloads it as crewFits-<yyyy-mm-dd-hhmm>.json (to Downloads), for the hair rig's merge_fits.mjs.
 //   BUZZ (folds away; 2026-11-08): each haircut's own buzz (kit/crew.js THE PAINT FIELD), the short hair a barber leaves
 //     outside the cut: its sideburns (how far below the top of the ear, or none) and nape taper (how far below the hair's
@@ -406,8 +407,11 @@ function fitsText() {
   const hairs = [], heads = [];
   for (const P of lib.list.parts.hair) { const t = tidy(hairFit(P.id)); if (Object.keys(t).length) hairs.push('    ' + JSON.stringify(P.id) + ': ' + JSON.stringify(t)); }
   for (const P of lib.list.parts.head) { const t = headTidy(lib.headFitOf(P.id)); if (Object.keys(t).length) heads.push('    ' + JSON.stringify(P.id) + ': ' + JSON.stringify(t)); }
+  // (and every painted hair's buzz, as the Buzz row's Copy buzzes gives it: null for none)
+  const buzzes = [];
+  for (const P of lib.list.parts.hair) { const h = hairPaints(P); if (h.cut || h.marks || h.under) buzzes.push('    ' + JSON.stringify(P.id) + ': ' + JSON.stringify(tidyBuzz(lib.buzzOf(P.id)))); }
   const block = (L) => (L.length ? '{\n' + L.join(',\n') + '\n  }' : '{}');
-  return '{\n  "hairs": ' + block(hairs) + ',\n  "heads": ' + block(heads) + '\n}';
+  return '{\n  "hairs": ' + block(hairs) + ',\n  "heads": ' + block(heads) + ',\n  "buzzes": ' + block(buzzes) + '\n}';
 }
 // (Save fits: the same text as a file, crewFits-<yyyy-mm-dd-hhmm>.json, to the browser's downloads)
 function saveFits() {
@@ -490,7 +494,7 @@ function fitRows() {
     chip('Fine', fitSt.fine, () => { fitSt.fine = !fitSt.fine; fitRowsKeep(); }, true, 'Small steps: 0.5 mm, 0.25%, tuck 2.5%, 2.5 mm (off: 2 mm, 1%, 10%, 1 cm)'),
     chip('Reset', false, fitReset, true, fitSt.scope === 'head' ? 'This head back to the hair\'s fit on every head' : 'This hair back to as made (each head\'s own adjustments stay)'),
     sep(), chip('Copy fits', false, copyFits, true, 'Everything the Fit row sets (every hair\'s fit and pairs, every head\'s own setting) as JSON, for crew.json'),
-    chip('Save fits', false, saveFits, true, 'Adjust, press Save fits: the file (crewFits-<date>.json) goes to Downloads, for merging into crew.json (merge_fits.mjs)'),
+    chip('Save fits', false, saveFits, true, 'Adjust, press Save fits: the file (crewFits-<date>.json: every fit and buzz) goes to Downloads, for merging into crew.json (merge_fits.mjs)'),
     chip('Clear my changes' + (mine ? ` (${mine})` : ''), false, clearMine, true, 'Forget this browser\'s fits: back to crew.json\'s'),
     what, levels(hair, head), ...(fitSt.note && fitSt.out == null ? [val(fitSt.note)] : []));
   $('#fit').lastChild.classList.add('wide');

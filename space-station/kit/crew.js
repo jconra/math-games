@@ -1618,6 +1618,36 @@ function hugFit(F, B0, src, M, fit, field, hug, stats) {
   return stats;
 }
 
+// THE SHADE FOLLOWS THE HAIR (2026-11-08): the scalp's shade starts 4 mm inside a hair's edge as made (scalp.line,
+// THE PAINT FIELD); the hug takes the dragged-down edge in under the skin, so on a head the hair's visible edge can stand
+// higher than that. After the fit, the hair's edge as worn on this head (each 2 degrees round: the lowest of its points
+// standing WORN_OUT or more off the head's skin, the middle of five neighbours), and the person's paint field made again
+// with the shade starting no lower than WORN_IN above it and the buzz's edge no lower than it (c.paintScalp: the line and
+// edge worn).
+const WORN_OUT = 0.0005, WORN_IN = 4 / (0.09 * Math.PI / 180 * 1000);
+function wornScalp(sc, hairFit, field) {
+  const NA = 180, low = new Float32Array(NA).fill(Infinity), v = new THREE.Vector3();
+  for (const [m, , M] of hairFit) {
+    const P = m.geometry.attributes.position;
+    for (let i = 0; i < P.count; i++) {
+      v.fromBufferAttribute(P, i).applyMatrix4(M);
+      const dx = v.x - SKULL[0], dy = v.y - SKULL[1], dz = v.z - SKULL[2], r = Math.hypot(dx, dy, dz); if (r < 1e-4) continue;
+      const S = reach(field.S, dx, dy, dz, r, true); if (!(S > 0) || r < S + WORN_OUT) continue;
+      const el = Math.asin(Math.max(-1, Math.min(1, dy / r))) * DEG, k = ((Math.floor((Math.atan2(dx, dz) * DEG + 180) / 2) % NA) + NA) % NA;
+      if (el < low[k]) low[k] = el;
+    }
+  }
+  const edgeAt = (a) => { const k0 = Math.floor((a + 180) / 2), V = []; for (let d = -2; d <= 2; d++) { const x = low[(((k0 + d) % NA) + NA) % NA]; if (x < 90) V.push(x); } V.sort((p, q) => p - q); return V.length >= 3 ? V[V.length >> 1] : null; };
+  const line = [], edge = []; let raised = 0;
+  for (let a = -180; a <= 180; a += 7.5) {
+    const e = edgeAt(a), l0 = lineAt(sc.line, a), e0 = lineAt(sc.edge || sc.line, a);
+    const l1 = e == null ? l0 : Math.max(l0, e + WORN_IN), e1 = e == null ? e0 : Math.max(e0, e);
+    if (l1 > l0 + 0.05) raised++;
+    line.push([a, +l1.toFixed(2)]); edge.push([a, +e1.toFixed(2)]);
+  }
+  return { ...sc, line, edge, raised };
+}
+
 // ── the collar fit ──────────────────────────────────────────────────────────────────────────────────────────────────
 // (2026-11-07; the game's maker: "detect if it is going through the collar and adjust accordingly... finding the center
 // of the collar would be something a script is good at.") Every head keeps its own neck as made; where that neck runs
@@ -2115,6 +2145,10 @@ export async function makeCrew(lib, recipe) {
       }
       c.fitSkirt = skirts;
       c.fit = plain ? null : f; c.fitStats = stats;
+      // (THE SHADE FOLLOWS THE HAIR: the paint field again, from the hair's edge as worn on this head)
+      const sc = HE.scalp && HE.scalp.line ? HE.scalp : null;
+      c.paintScalp = sc && field ? wornScalp(sc, hairFit, field) : sc;
+      if (painted && sc) { paintField(c.paintScalp === sc ? HE : { ...HE, scalp: c.paintScalp }, c.buzz, lib.earsOf(R.head), painted.field.image.data); painted.field.needsUpdate = true; }
       return stats;
     },
     // the hair's buzz (THE PAINT FIELD), live: { sideburns, nape, look } as lib.buzzOf gives (null: none); the field
@@ -2122,7 +2156,7 @@ export async function makeCrew(lib, recipe) {
     buzz: lib.buzzOf(R.hair),
     setBuzz(buzz) {
       c.buzz = buzz || null;
-      if (painted) { paintField(HE, c.buzz, lib.earsOf(R.head), painted.field.image.data); painted.field.needsUpdate = true; }
+      if (painted) { paintField(c.paintScalp && c.paintScalp !== HE.scalp ? { ...HE, scalp: c.paintScalp } : HE, c.buzz, lib.earsOf(R.head), painted.field.image.data); painted.field.needsUpdate = true; }
     },
     // what the paint shows (the Crew Lab's view): { buzz, under, ears } (each true or false: the buzz, the scalp's
     // shade; ears: the ears found, tinted); c.paintShown, as set
