@@ -24,7 +24,17 @@
 //     the top of the hair, Reset; a fit is the hair's on every head
 //     unless "Just this head" is on (then it's that head's own adjustment, added to the hair's). Fits are kept in this
 //     browser as they're made (over crew.json's own) and worn at once; Copy fits gives them all as JSON for crew.json
-//     (shown in a box as well, to select by hand where copying fails); Clear my changes goes back to crew.json's;
+//     (shown in a box as well, to select by hand where copying fails); Clear my changes goes back to crew.json's.
+//     2026-11-08: Width, Height, Depth (each its own scale, as a percentage) and Turn (degrees round the upright line),
+//     Hug (the inner layer drawn to its Gap off this head: kit/crew.js THE HUG; on, off or scaled) and its Gap (mm);
+//     these show the level being set: the hair on every head, Just this head (the pair's own), or "This head, every
+//     hair" (the head's own setting under every hair worn on it: crew.json's head entry hairFit; there only the nudges,
+//     Width, Height, Depth and Turn). The line under the rows reads both levels as percentages ("This head: width -8%").
+//     A pair placed by hand in Blender (the hair rig's placement.sh: fit.heads[<head>].placed) wears the hair as cut,
+//     exactly as he placed it, and says so; its nudges, Width, Height, Depth and Turn still tune it.
+//     SAVING (2026-11-08): Copy fits and Save fits give EVERYTHING the Fit row sets, this browser's over crew.json's, as
+//     one JSON object { "hairs": { <hair id>: its fit (its pairs in fit.heads) }, "heads": { <head id>: its hairFit } };
+//     Save fits downloads it as crewFits-<yyyy-mm-dd-hhmm>.json (to Downloads), for the hair rig's merge_fits.mjs.
 //   BUZZ (folds away; 2026-11-08): each haircut's own buzz (kit/crew.js THE PAINT FIELD), the short hair a barber leaves
 //     outside the cut: its sideburns (how far below the top of the ear, or none) and nape taper (how far below the hair's
 //     edge, 0 none), kept in this browser as they're made and worn at once, Copy buzzes for crew.json; and the view: the
@@ -41,7 +51,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { loadCrew, makeCrew, fitFor, TUCK_MAX, CLIPS, JOBS, UNIFORM_COLOURS, SKIN_TONES, HAIR_COLOURS, EYE_COLOURS, FACE, EXPRESSIONS } from '../../kit/crew.js';
+import { loadCrew, makeCrew, fitFor, TUCK_MAX, HUG_GAP, HUG_MAX, HUG_DEFAULT, CLIPS, JOBS, UNIFORM_COLOURS, SKIN_TONES, HAIR_COLOURS, EYE_COLOURS, FACE, EXPRESSIONS } from '../../kit/crew.js';
 import { makeMaterials } from '../../kit/materials.js';
 import { buildRoom } from '../../kit/layout.js';
 
@@ -273,8 +283,8 @@ function faceRows() {
 // ── FIT: the heads and hair one by one, and the hair fitted (kit/crew.js, "a hair's fit") ─────────────────────────────
 // This browser's fits (lib.fits: a hair's entry replaces crew.json's fit for that hair) are kept in localStorage as
 // they're made; the first change to a hair starts from crew.json's fit for it.
-const FIT_KEY = 'crewlab.fits.v1', FIT_OPEN = 'crewlab.fitOpen';
-const STEPS = { move: [0.002, 0.0005], size: [0.01, 0.0025], tuck: [0.1, 0.025], start: [0.01, 0.0025] };   // (each: [step, fine step])
+const FIT_KEY = 'crewlab.fits.v1', FIT_OPEN = 'crewlab.fitOpen', HEAD_KEY = 'crewlab.headfits.v1';
+const STEPS = { move: [0.002, 0.0005], size: [0.01, 0.0025], tuck: [0.1, 0.025], start: [0.01, 0.0025], dim: [0.01, 0.0025], turn: [1, 0.25], hug: [0.1, 0.025], gap: [0.0005, 0.00025] };   // (each: [step, fine step])
 const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 const copy = (o) => JSON.parse(JSON.stringify(o == null ? {} : o));
 const rnd = (v, p) => Math.round(v / p) * p;
@@ -283,30 +293,49 @@ function hairFit(id) { return own(lib.fits, id) ? lib.fits[id] : (lib.entry('hai
 function tidy(f, base) {
   const o = {};
   if (!f) return o;
+  if (f.placed) o.placed = true;
   if (f.offset && f.offset.some((v) => Math.abs(v) >= 0.00005)) o.offset = f.offset.map((v) => +rnd(v || 0, 0.0001).toFixed(4));
   if (f.scale != null && Math.abs(f.scale - 1) >= 0.00005) o.scale = +(+f.scale).toFixed(4);
+  if (f.dims && f.dims.some((v) => Math.abs((v == null ? 1 : v) - 1) >= 0.00005)) o.dims = f.dims.map((v) => +(v == null ? 1 : +v).toFixed(4));
+  if (f.turn && Math.abs(f.turn) >= 0.005) o.turn = +(+f.turn).toFixed(2);
   if (f.tuck && Math.abs(f.tuck) >= 0.0005) o.tuck = +(+f.tuck).toFixed(3);
   if (f.tuckStart && Math.abs(f.tuckStart) >= 0.00005) o.tuckStart = +(+f.tuckStart).toFixed(4);
+  // (the hug and its gap: the hair's own against their defaults, a pair's as what it adds)
+  if (f.hug != null && Math.abs(f.hug - (base == null ? HUG_DEFAULT : 0)) >= 0.0005) o.hug = +(+f.hug).toFixed(3);
+  if (f.hugGap != null && Math.abs(f.hugGap - (base == null ? HUG_GAP : 0)) >= 0.00005) o.hugGap = +(+f.hugGap).toFixed(5);
   if (base == null && f.heads) {
     const H = {}; for (const [h, d] of Object.entries(f.heads)) { const t = tidy(d, f); if (Object.keys(t).length) H[h] = t; }
     if (Object.keys(H).length) o.heads = H;
   }
   return o;
 }
-function readMine() {
-  try { const j = JSON.parse(localStorage.getItem(FIT_KEY) || '{}'); return j && typeof j === 'object' && !Array.isArray(j) ? j : {}; } catch (_) { return {}; }
+function readMine(key = FIT_KEY) {
+  try { const j = JSON.parse(localStorage.getItem(key) || '{}'); return j && typeof j === 'object' && !Array.isArray(j) ? j : {}; } catch (_) { return {}; }
 }
+// (a head's own setting under every hair, as written: crew.json's head entry hairFit, or this browser's)
+const headTidy = (h) => { const t = tidy(h || {}, {}); delete t.hug; delete t.hugGap; delete t.tuck; delete t.tuckStart; delete t.scale; delete t.placed; return t; };
 function saveMine() {
-  // (a hair whose fit is back to crew.json's own is no longer a change)
+  // (a hair whose fit is back to crew.json's own is no longer a change; nor a head's own setting)
   for (const id of Object.keys(lib.fits)) if (JSON.stringify(tidy(lib.fits[id])) === JSON.stringify(tidy((lib.entry('hair', id) || {}).fit))) delete lib.fits[id];
-  try { if (Object.keys(lib.fits).length) localStorage.setItem(FIT_KEY, JSON.stringify(lib.fits)); else localStorage.removeItem(FIT_KEY); return true; }
-  catch (_) { fitSt.note = 'This browser would not keep the fits: Copy fits before you leave.'; return false; }
+  for (const id of Object.keys(lib.headFits)) if (JSON.stringify(headTidy(lib.headFits[id])) === JSON.stringify(headTidy((lib.entry('head', id) || {}).hairFit))) delete lib.headFits[id];
+  try {
+    if (Object.keys(lib.fits).length) localStorage.setItem(FIT_KEY, JSON.stringify(lib.fits)); else localStorage.removeItem(FIT_KEY);
+    if (Object.keys(lib.headFits).length) localStorage.setItem(HEAD_KEY, JSON.stringify(lib.headFits)); else localStorage.removeItem(HEAD_KEY);
+    return true;
+  } catch (_) { fitSt.note = 'This browser would not keep the fits: Copy fits before you leave.'; return false; }
 }
-lib.fits = readMine();
+lib.fits = readMine(); lib.headFits = readMine(HEAD_KEY);
 const fitSt = { open: (() => { try { return localStorage.getItem(FIT_OPEN) !== '0'; } catch (_) { return true; } })(), scope: 'all', fine: false, out: null, note: '' };
 // a change to the hair shown: to its fit on every head, or (Just this head) to that head's own adjustment
 async function fitEdit(change, quiet) {
-  const hair = st.recipe?.hair, head = st.recipe?.head; if (!hair) return;
+  const hair = st.recipe?.hair, head = st.recipe?.head;
+  // ("This head, every hair": the head's own setting, under every hair worn on it)
+  if (fitSt.scope === 'headAll' && head) {
+    if (!own(lib.headFits, head)) lib.headFits[head] = copy((lib.entry('head', head) || {}).hairFit);
+    change(lib.headFits[head], 'headAll'); lib.headFits[head] = headTidy(lib.headFits[head]);
+    fitSt.note = ''; saveMine(); await wearFit(quiet); return;
+  }
+  if (!hair) return;
   if (!own(lib.fits, hair)) lib.fits[hair] = copy((lib.entry('hair', hair) || {}).fit);
   const F = lib.fits[hair];
   if (fitSt.scope === 'head' && head) { F.heads = F.heads || {}; change(F.heads[head] = F.heads[head] || {}, F); }
@@ -337,23 +366,59 @@ function retuck(key, dir, max) {
 function setTuck(v, quiet) {
   return fitEdit((t, base) => { const b = base ? base.tuck || 0 : 0; t.tuck = +(Math.min(TUCK_MAX, Math.max(0, v)) - b).toFixed(5); }, quiet);
 }
+// (the level being set's own width, height or depth (axis 0, 1, 2), turn, hug and gap: kept within 70 to 130%, 45
+// degrees, 0 to 100% and 0 to 15 mm worn)
+const scopeOwn = (t, base) => (base === 'headAll' || base == null ? t : t);
+function redim(axis, dir) {
+  fitEdit((t) => { t.dims = [0, 1, 2].map((i) => (t.dims && t.dims[i] != null ? +t.dims[i] : 1)); t.dims[axis] = +Math.min(1.3, Math.max(0.7, t.dims[axis] + dir * fine('dim'))).toFixed(5); });
+}
+function returnTo(dir) { fitEdit((t) => { t.turn = +Math.min(45, Math.max(-45, (+t.turn || 0) + dir * fine('turn'))).toFixed(3); }); }
+function rehug(dir, to) {
+  fitEdit((t, base) => {
+    const own0 = base == null ? (t.hug == null ? HUG_DEFAULT : +t.hug) : +t.hug || 0, under = base == null ? 0 : (base.hug == null ? HUG_DEFAULT : +base.hug);
+    const worn = to != null ? to : Math.min(HUG_MAX, Math.max(0, under + own0 + dir * fine('hug')));
+    t.hug = +(worn - under).toFixed(4);
+  });
+}
+function regap(dir) {
+  fitEdit((t, base) => {
+    const own0 = base == null ? (t.hugGap == null ? HUG_GAP : +t.hugGap) : +t.hugGap || 0, under = base == null ? 0 : (base.hugGap == null ? HUG_GAP : +base.hugGap);
+    t.hugGap = +(Math.min(0.015, Math.max(0, under + own0 + dir * fine('gap'))) - under).toFixed(5);
+  });
+}
 function fitReset() {
-  const hair = st.recipe?.hair, head = st.recipe?.head; if (!hair) return;
+  const hair = st.recipe?.hair, head = st.recipe?.head;
+  if (fitSt.scope === 'headAll') { if (head) fitEdit((t) => { for (const k of Object.keys(t)) delete t[k]; }); return; }
+  if (!hair) return;
   fitEdit((t, base) => {
     if (base) { delete base.heads[head]; return; }
-    for (const k of ['offset', 'scale', 'tuck', 'tuckStart']) delete t[k];
+    for (const k of ['offset', 'scale', 'dims', 'turn', 'tuck', 'tuckStart', 'hug', 'hugGap']) delete t[k];
   });
 }
 function clearMine() {
-  if (!Object.keys(lib.fits).length) { fitSt.note = 'No changes of yours to clear.'; fitRowsKeep(); return; }
+  if (!Object.keys(lib.fits).length && !Object.keys(lib.headFits).length) { fitSt.note = 'No changes of yours to clear.'; fitRowsKeep(); return; }
   if (!confirm('Clear your fits in this browser and go back to crew.json\'s? (Copy fits first to keep them.)')) return;
-  lib.fits = {}; saveMine(); fitSt.note = 'Back to crew.json\'s fits.'; wearFit();
+  lib.fits = {}; lib.headFits = {}; saveMine(); fitSt.note = 'Back to crew.json\'s fits.'; wearFit();
 }
 // every hair's fit (this browser's over crew.json's), for crew.json: one hair a line
 function fitsText() {
-  const lines = [];
-  for (const P of lib.list.parts.hair) { const t = tidy(hairFit(P.id)); if (Object.keys(t).length) lines.push('  ' + JSON.stringify(P.id) + ': ' + JSON.stringify(t)); }
-  return lines.length ? '{\n' + lines.join(',\n') + '\n}' : '{}';
+  // (every hair's fit and every head's own setting, this browser's over crew.json's: the whole of what the Fit row sets)
+  const hairs = [], heads = [];
+  for (const P of lib.list.parts.hair) { const t = tidy(hairFit(P.id)); if (Object.keys(t).length) hairs.push('    ' + JSON.stringify(P.id) + ': ' + JSON.stringify(t)); }
+  for (const P of lib.list.parts.head) { const t = headTidy(lib.headFitOf(P.id)); if (Object.keys(t).length) heads.push('    ' + JSON.stringify(P.id) + ': ' + JSON.stringify(t)); }
+  const block = (L) => (L.length ? '{\n' + L.join(',\n') + '\n  }' : '{}');
+  return '{\n  "hairs": ' + block(hairs) + ',\n  "heads": ' + block(heads) + '\n}';
+}
+// (Save fits: the same text as a file, crewFits-<yyyy-mm-dd-hhmm>.json, to the browser's downloads)
+function saveFits() {
+  const d = new Date(), z = (v) => String(v).padStart(2, '0');
+  const name = `crewFits-${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}-${z(d.getHours())}${z(d.getMinutes())}.json`;
+  try {
+    const url = URL.createObjectURL(new Blob([fitsText() + '\n'], { type: 'application/json' })), a = document.createElement('a');
+    a.href = url; a.download = name; document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 4000);
+    fitSt.note = `Saved ${name} (your Downloads), for merging into crew.json.`; fitSt.saved = name;
+  } catch (e) { fitSt.note = 'Saving did not work here (' + e.message + '): use Copy fits.'; }
+  fitRowsKeep();
 }
 async function copyFits() {
   const text = fitsText(); fitSt.out = text;
@@ -385,7 +450,17 @@ function fitWords(f) {
   const s = w.length ? [w.join(', ') + ' mm'] : [];
   if (Math.abs(f.scale - 1) >= 0.00005) s.push('size ' + +(f.scale * 100).toFixed(2) + '%');
   if (f.tuck > 0) s.push('tuck ' + Math.round(f.tuck * 100) + '%' + (f.tuckStart > 0 ? ' from ' + +(f.tuckStart * 100).toFixed(2) + ' cm down' : ''));
+  const dw = dimsWords(f.dims, f.turn); if (dw) s.push(dw);
+  if (f.placed) s.unshift('placed by hand');
+  else s.push(f.hug > 0 ? 'hug ' + Math.round(f.hug * 100) + '% to ' + +(f.hugGap * 1000).toFixed(2) + ' mm' : 'no hug');
   return s.length ? s.join(', ') : 'as made';
+}
+// (width, height, depth as percentages more or less, and a turn: "width -8%, turn 1.2°")
+const pc = (v) => { const d = (v - 1) * 100; return (d >= 0.05 ? '+' : d <= -0.05 ? '−' : '') + Math.abs(d).toFixed(Math.abs(d) < 10 ? 1 : 0) + '%'; };
+function dimsWords(d, turn) {
+  const w = []; if (d) ['width', 'height', 'depth'].forEach((k, i) => { if (Math.abs((d[i] == null ? 1 : d[i]) - 1) >= 0.0005) w.push(k + ' ' + pc(d[i])); });
+  if (turn && Math.abs(turn) >= 0.005) w.push('turn ' + (+turn).toFixed(2) + '°');
+  return w.join(', ');
 }
 const val = (t, title) => { const s = document.createElement('span'); s.className = 'kl-val'; s.textContent = t; if (title) s.title = title; return s; };
 // (a value with a button either side: what it does goes in each button's title)
@@ -396,7 +471,7 @@ function fitRows() {
   const F = hair ? hairFit(hair) : null, f = hair ? fitFor(F, head) : null, ownHead = !!(F && F.heads && F.heads[head] && Object.keys(F.heads[head]).length);
   const P = hair && lib.entry('hair', hair), H = lib.entry('head', head);
   const mine = Object.keys(lib.fits).length;
-  const fold = chip(open ? 'Fit ▾' : 'Fit ▸', open, () => { fitSt.open = !fitSt.open; try { localStorage.setItem(FIT_OPEN, fitSt.open ? '1' : '0'); } catch (_) {} menu(); }, false, 'Fit the hair: show or fold these rows');
+  const fold = chip(open ? 'Fit ▾' : 'Fit ▸', open, () => { fitSt.open = !fitSt.open; try { localStorage.setItem(FIT_OPEN, fitSt.open ? '1' : '0'); } catch (_) {} menu(); }, false, 'Fit the hair: show or fold these rows. Adjust, press Save fits: the file goes to Downloads, for merging into crew.json.');
   fold.setAttribute('aria-expanded', String(open));
   const what = val(`${P ? P.name : 'No hair'} on ${H ? H.name : 'no head'}: ${hair ? fitWords(f) : '-'}`);
   what.classList.add('wide');
@@ -405,22 +480,34 @@ function fitRows() {
   }
   const scope = chip('Just this head' + (ownHead ? ' •' : ''), fitSt.scope === 'head', () => { fitSt.scope = fitSt.scope === 'head' ? 'all' : 'head'; fitRowsKeep(); }, true,
     'On: changes are this head\'s own, added to the hair\'s fit on every head (• this head has some). Off: the hair\'s fit on every head.');
+  const HL = lib.headFitOf(head), hasHL = !!(HL && Object.keys(headTidy(HL)).length);
+  const scopeH = chip('This head, every hair' + (hasHL ? ' •' : ''), fitSt.scope === 'headAll', () => { fitSt.scope = fitSt.scope === 'headAll' ? 'all' : 'headAll'; fitRowsKeep(); }, true,
+    'On: changes are this head\'s own setting, under every hair worn on it (crew.json: the head\'s hairFit; • it has one). Off: the hair\'s fit.');
   $('#fit').replaceChildren(fold,
     lab('Head'), chip('‹', false, () => step('head', -1), true, 'The head before (up arrow)'), chip('›', false, () => step('head', 1), true, 'The next head (down arrow)'),
     lab('Hair'), chip('‹', false, () => step('hair', -1), true, 'The hair before (left arrow)'), chip('›', false, () => step('hair', 1), true, 'The next hair (right arrow)'),
-    sep(), scope,
+    sep(), scope, scopeH,
     chip('Fine', fitSt.fine, () => { fitSt.fine = !fitSt.fine; fitRowsKeep(); }, true, 'Small steps: 0.5 mm, 0.25%, tuck 2.5%, 2.5 mm (off: 2 mm, 1%, 10%, 1 cm)'),
     chip('Reset', false, fitReset, true, fitSt.scope === 'head' ? 'This head back to the hair\'s fit on every head' : 'This hair back to as made (each head\'s own adjustments stay)'),
-    sep(), chip('Copy fits', false, copyFits, true, 'Every hair\'s fit as JSON, for crew.json'),
+    sep(), chip('Copy fits', false, copyFits, true, 'Everything the Fit row sets (every hair\'s fit and pairs, every head\'s own setting) as JSON, for crew.json'),
+    chip('Save fits', false, saveFits, true, 'Adjust, press Save fits: the file (crewFits-<date>.json) goes to Downloads, for merging into crew.json (merge_fits.mjs)'),
     chip('Clear my changes' + (mine ? ` (${mine})` : ''), false, clearMine, true, 'Forget this browser\'s fits: back to crew.json\'s'),
-    what, ...(fitSt.note && fitSt.out == null ? [val(fitSt.note)] : []));
+    what, levels(hair, head), ...(fitSt.note && fitSt.out == null ? [val(fitSt.note)] : []));
   $('#fit').lastChild.classList.add('wide');
   const row2 = $('#fit2'); row2.hidden = false;
   if (!hair) row2.replaceChildren(val('No hair on: step to one (‹ › or the left and right arrows)'));
   // (a painted cut alone has nothing to fit; a hair with a mesh and a paint (the pink side-swept) fits its mesh, the paint
   // staying on the skin)
   else if (P && P.paint && !P.file) row2.replaceChildren(val('A painted cut (stubble on the skin itself): nothing to fit'));
-  else {
+  else if (fitSt.scope === 'headAll') {
+    // (the head's own setting: its nudges, width, height, depth and turn, as this head gives them to every hair)
+    const H = lib.headFitOf(head) || {}, o = H.offset || [0, 0, 0], mm = (v) => ((v || 0) >= 0.00005 ? '+' : (v || 0) <= -0.00005 ? '−' : '') + (Math.abs(v || 0) * 1000).toFixed(1) + ' mm';
+    row2.replaceChildren(
+      ...knob('Up', mm(o[1]), ['▼', () => nudge(1, -1)], ['▲', () => nudge(1, 1)], 'Down (every hair on this head)', 'Up (every hair on this head)'), sep(),
+      ...knob('Forward', mm(o[2]), ['−', () => nudge(2, -1)], ['+', () => nudge(2, 1)], 'Back', 'Forward'), sep(),
+      ...knob('Their left', mm(o[0]), ['−', () => nudge(0, -1)], ['+', () => nudge(0, 1)], 'To their right', 'To their left'), sep(),
+      ...dimKnobs(H), val('This head\'s own, under every hair worn on it'));
+  } else {
     const mm = (v) => (v >= 0.00005 ? '+' : v <= -0.00005 ? '−' : '') + (Math.abs(v) * 1000).toFixed(1) + ' mm', st2 = st.crew?.fitStats;
     row2.replaceChildren(
       ...knob('Up', mm(f.offset[1]), ['▼', () => nudge(1, -1)], ['▲', () => nudge(1, 1)], 'Down', 'Up'), sep(),
@@ -431,7 +518,9 @@ function fitRows() {
         st2 && f.tuck > 0 ? `${st2.tucked} points drawn in, ${st2.held} of them stopped 2 mm off the head` : 'The hair drawn in toward the head\'s centre, its thickness kept: 100% puts its underside 2 mm off this head; past 100% it\'s pressed thinner too'),
       tuckSlider(f.tuck), sep(),
       ...knob('Full from', +(f.tuckStart * 100).toFixed(2) + ' cm', ['−', () => retuck('tuckStart', -1, 0.3)], ['+', () => retuck('tuckStart', 1, 0.3)], 'Higher (nearer the crown)', 'Lower',
-        'How far below the top of the hair the tuck is full (above it, it fades out over 2 cm; 0: full all over)'));
+        'How far below the top of the hair the tuck is full (above it, it fades out over 2 cm; 0: full all over)'), sep(),
+      ...dimKnobs(fitSt.scope === 'head' ? ((F && F.heads && F.heads[head]) || {}) : (F || {})), sep(),
+      ...hugKnobs(f, F, st2));
   }
   const out = $('#fitout');
   out.hidden = fitSt.out == null;
@@ -442,6 +531,30 @@ function fitRows() {
     const said = fitSt.note ? [Object.assign(val(fitSt.note), { className: 'kl-val wide said' })] : [];
     out.replaceChildren(...said, box, chip('Close', false, () => { fitSt.out = null; fitSt.note = ''; menu(); }, true, 'Hide the box'));
   }
+}
+// (width, height, depth and turn: the level being set's own, as percentages and degrees)
+function dimKnobs(L) {
+  const d = [0, 1, 2].map((i) => (L.dims && L.dims[i] != null ? +L.dims[i] : 1)), lvl = fitSt.scope === 'headAll' ? 'this head\'s own (every hair)' : fitSt.scope === 'head' ? 'this pair\'s own' : 'the hair\'s own (every head)';
+  return [...knob('Width', pc(d[0]), ['−', () => redim(0, -1)], ['+', () => redim(0, 1)], 'Narrower', 'Wider', 'Width, ' + lvl), sep(),
+    ...knob('Height', pc(d[1]), ['−', () => redim(1, -1)], ['+', () => redim(1, 1)], 'Lower', 'Taller', 'Height, ' + lvl), sep(),
+    ...knob('Depth', pc(d[2]), ['−', () => redim(2, -1)], ['+', () => redim(2, 1)], 'Shallower', 'Deeper', 'Depth (front to back), ' + lvl), sep(),
+    ...knob('Turn', (+L.turn || 0).toFixed(2) + '°', ['↻', () => returnTo(-1)], ['↺', () => returnTo(1)], 'Its front to their right', 'Its front to their left', 'Turn round the upright line, ' + lvl)];
+}
+// (the hug, worn: on or off, how much, and how far off the scalp it leaves the hair's inner layer)
+function hugKnobs(f, F, st2) {
+  const on = f.hug > 0, words = st2 && on ? `${st2.hugged} points moved (${st2.under} of the dragged-down edge tucked under, ${st2.cleared} held clear of the head), the most ${st2.hugMostMm} mm` : 'The hair\'s inner layer drawn to the gap off this head; the dragged-down edge tucked under with it';
+  if (f.placed) return [val('Placed by hand in Blender: worn as he placed it (no tuck, no hug)')];
+  return [chip(on ? 'Hug on' : 'Hug off', on, () => rehug(0, on ? 0 : HUG_DEFAULT), true, 'The hug on or off (' + (fitSt.scope === 'head' ? 'this head' : 'every head') + ')'),
+    ...knob('Hug', Math.round(f.hug * 100) + '%', ['−', () => rehug(-1)], ['+', () => rehug(1)], 'Less', 'More', words), sep(),
+    ...knob('Gap', (f.hugGap * 1000).toFixed(2) + ' mm', ['−', () => regap(-1)], ['+', () => regap(1)], 'Nearer the skin', 'Further off', 'How far off the scalp the hug leaves the inner layer')];
+}
+// (both levels read as percentages: this head's own setting under every hair, and this hair on this head)
+function levels(hair, head) {
+  const H = headTidy(lib.headFitOf(head)), F = hair ? hairFit(hair) : null, D = F && F.heads && F.heads[head] ? tidy(F.heads[head], {}) : {};
+  const mmw = (o) => (o && o.some((v) => Math.abs(v) >= 0.00005) ? ['up', 'forward', 'their left'].map((k, i) => [k, o[[1, 2, 0][i]]]).filter(([, v]) => Math.abs(v) >= 0.00005).map(([k, v]) => k + ' ' + (v > 0 ? '+' : '−') + (Math.abs(v) * 1000).toFixed(1) + ' mm').join(', ') : '');
+  const one = (L) => [dimsWords(L.dims, L.turn), mmw(L.offset)].filter(Boolean).join(', ') || 'as made';
+  const v = val(`This head (every hair): ${one(H)} · this hair on this head: ${D.placed ? 'placed by hand' + (one(D) !== 'as made' ? ', ' + one(D) : '') : one(D)}`);
+  v.classList.add('wide'); return v;
 }
 // (the tuck's slider, 0 to 500%: the fit worn as it's dragged, the rows remade when it's let go)
 function tuckSlider(v) {
@@ -635,7 +748,7 @@ window.CREWLAB = {
   buzz: () => ({ open: buzzSt.open, view: { ...buzzSt.view }, hair: st.recipe?.hair, wearing: st.crew?.buzz ?? null, shown: st.crew ? { ...st.crew.paintShown } : null, mine: copy(lib.buzzes), text: buzzesText(), box: buzzSt.out, note: buzzSt.note }),
   buzzView: (v) => buzzView(v),
   fit: () => ({ open: fitSt.open, scope: fitSt.scope, fine: fitSt.fine, hair: st.recipe?.hair, head: st.recipe?.head, wearing: st.crew?.fit || null, stats: st.crew?.fitStats,
-    wearingFor: st.crew && { hair: st.crew.recipe.hair, head: st.crew.recipe.head }, mine: copy(lib.fits), text: fitsText(), box: fitSt.out, note: fitSt.note }),
+    wearingFor: st.crew && { hair: st.crew.recipe.hair, head: st.crew.recipe.head }, mine: copy(lib.fits), mineHeads: copy(lib.headFits), text: fitsText(), box: fitSt.out, note: fitSt.note, saved: fitSt.saved || null }),
   step: (kind, d) => step(kind, d),
   measure, crew: () => st.crew, lib, three: THREE, scene, camera, renderer, controls,
 };

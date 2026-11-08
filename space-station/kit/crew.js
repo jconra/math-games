@@ -63,9 +63,10 @@
 // scalp's shade under it stops 4 mm inside its edge; every head's ears (crew.json `ears`) take no paint.
 //
 // A HAIR'S FIT (crew.json: a hair entry's optional `fit`, made with the Crew Lab's Fit row; see "a hair's fit" below):
-// nudged, sized, tucked (drawn in toward the head's centre, thickness kept, down to 2 mm off the head it's on), on every
-// head or one head's own way. Applied to the person's own copy of the hair's positions when it's put together, so the
-// game and the lab show the same.
+// nudged, sized, tucked (drawn in toward the head's centre, thickness kept, down to 2 mm off the head it's on) and hugged
+// (its inner layer drawn to 3 mm off THIS head, the dragged-down edge tucked under with it: THE HUG), on every head or
+// one head's own way. Applied to the person's own copy of the hair's positions when it's put together, so the game and
+// the lab show the same.
 //
 // REAL EYES (the Tripo heads, ~/pw/space-math/rigs/crew-heads/): a ball and a clear wet layer on each of the head's eye
 // bones (EyeL, EyeR, under its Head bone); the lids rest on the balls. The gaze looks at a point or straight ahead, with
@@ -103,9 +104,10 @@
 //     head has: [] without), c.body ('m' | 'f':
 //     the suit's skeleton, whose clips it plays), c.stride (m/s at speed 1: { Walk, Run }), c.dispose(),
 //     c.setExpression(name) (a visor's face; recipe.expression sets the first), c.expression,
-//     await c.setFit(fit) (the hair's fit, live: { offset, scale, tuck, tuckStart } as lib.fitOf gives; null: as made),
-//     c.fit (the fit it wears), c.fitStats ({ tucked: points the tuck moved, held: of those, how many it stopped 2 mm off
-//     the head }), c.paint (paint hair's name, or null), c.buzz (the hair's buzz it wears), c.setBuzz(buzz) (live: { sideburns,
+//     await c.setFit(fit) (the hair's fit, live: { offset, scale, dims, turn, tuck, tuckStart, hug, hugGap, placed } as
+//     lib.fitOf gives; null: as made), c.fit (the fit it wears), c.fitStats ({ tucked: points the tuck moved, held: of
+//     those, how many it stopped 2 mm off the head; hugged, under, cleared, hugHeld, hugMostMm: THE HUG's }), c.fitSkirt,
+//     c.paint (paint hair's name, or null), c.buzz (the hair's buzz it wears), c.setBuzz(buzz) (live: { sideburns,
 //     nape } as lib.buzzOf gives; null: none), c.paintView({ buzz, under, ears }) (what the head's paint shows: each
 //     layer on or off, the ears found tinted; c.paintShown as set), c.collarStats (the collar fit: { moved: points, mostMm, meanMm:
 //     how far they came in, pastMm: how far the hidden neck reached past the collar's outside, wideMm: how much wider
@@ -118,8 +120,8 @@
 //   .applied false); lib.collarRide (true: the hidden neck rides with the cloth; false: drawn in only);
 //   lib.collarOf(suit id, template) -> the collar
 //   JOBS, UNIFORM_COLOURS, SKIN_TONES, HAIR_COLOURS, EYE_COLOURS, FACE, CLIPS, EXPRESSIONS, PAINTS, fitFor, SKULL,
-//   HAIR_CLEAR, TUCK_CLEAR, TUCK_MAX, COLLAR_CLEAR, COLLAR_BAND, SIDEBURN, NAPE, UNDER_SOFT, EAR_SOFT, lineAt, paintField,
-//   HAIR_STRANDS (the Mathwood hair's strand look), STRAND_S, STRAND_P
+//   HAIR_CLEAR, TUCK_CLEAR, TUCK_MAX, HUG_GAP, HUG_MAX, HUG_DEFAULT, COLLAR_CLEAR, COLLAR_BAND, SIDEBURN, NAPE, UNDER_SOFT,
+//   EAR_SOFT, lineAt, paintField, HAIR_STRANDS (the Mathwood hair's strand look), STRAND_S, STRAND_P
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
@@ -204,9 +206,13 @@ export async function loadCrew({ dir = CREW_DIR, people = PEOPLE_DIR, smoothHair
   };
   // a hair's fit on a head (a hair's fit, below): lib.fits' entry for that hair if it has one, else crew.json's
   lib.fits = {};
+  // a head's own setting for every hair worn on it (a head entry's hairFit: { dims, offset }): lib.headFits' for that
+  // head if it has one (the Crew Lab's while it's edited), else crew.json's
+  lib.headFits = {};
+  lib.headFitOf = (head) => (!head ? null : Object.prototype.hasOwnProperty.call(lib.headFits, head) ? lib.headFits[head] : (lib.entry('head', head) || {}).hairFit || null);
   lib.fitOf = (hair, head) => {
     if (!hair) return null;
-    return fitFor(Object.prototype.hasOwnProperty.call(lib.fits, hair) ? lib.fits[hair] : (lib.entry('hair', hair) || {}).fit, head);
+    return fitFor(Object.prototype.hasOwnProperty.call(lib.fits, hair) ? lib.fits[hair] : (lib.entry('hair', hair) || {}).fit, head, lib.headFitOf(head));
   };
   // how far a head reaches along every line from the skull's centre, for the tuck (once a head: THE HEAD'S REACH)
   const fields = new Map();
@@ -1126,9 +1132,20 @@ function setColours(mats, { job, uniform, skin, hair, eyes } = {}) {
 }
 
 // ── a hair's fit ────────────────────────────────────────────────────────────────────────────────────────────────────
-// Every hair is shaped on the standard skull, so one fit serves it on every head. In crew.json, a hair entry's `fit`:
+// Every hair is shaped on the standard skull, so one fit serves it on every head. The settings layer up (2026-11-08, the
+// game's maker: "different settings for the hair if applied to that head, like +8% scale to the x axis for this head"):
+//   1. THE HEAD'S OWN (crew.json, a head entry's `hairFit`: { dims, offset, turn }): applied to EVERY hair worn on that head
+//      (a narrow skull's x -8% for all hairs); started from each head's skull against the standard skull (the hair
+//      rig's skulls.py) and from his placements by hand;
+//   2. THE HAIR'S OWN (a hair entry's `fit`), on every head;
+//   3. THE PAIR'S (the hair's fit.heads[<head id>]), only where one hair on one head needs more;
+//   then the hair's tuck and THE HUG (below), worked out on this head.
+// A hair entry's `fit`:
 //   offset [x, y, z]  metres, in the head's frame (y up, z forward, x to their left), after the size
 //   scale             the size, about the standard skull's centre (1: as made)
+//   dims [x, y, z]    width, height and depth, each its own scale about the standard skull's centre (1: as made)
+//   turn              degrees round the upright line through the standard skull's centre (+: the hair's front to its
+//                     left), after the size
 //   tuck              0..5 (0% to 500%): the hair drawn in toward the CENTRE of the head (the standard skull's, SKULL),
 //                     at every height, each point along its own line from the centre: the sides come in as well as the
 //                     edges. Every point on one line moves alike, so the hair keeps its thickness and its layers their
@@ -1140,24 +1157,43 @@ function setColours(mats, { job, uniform, skin, hair, eyes } = {}) {
 //                     below it (not at all 4 cm under it), so tails and long ends keep hanging as made.
 //   tuckStart         metres below the hair's top where the tuck is full; above that it fades out over 2 cm (0: full
 //                     all over)
-//   heads             { <head id>: { offset, scale, tuck, tuckStart } }: one head's own adjustments, each ADDED to the
-//                     hair's own (offsets and tucks added, scales multiplied); a field left out adds nothing
+//   hug               0..1 (0% to 100%; left out: 100%): THE HUG, after the tuck: the hair's inner layer drawn to its
+//                     hugGap off THIS head's scalp wherever it stands further off, the dragged-down edge tucked under with
+//                     it; 0 is off (the tuck alone, as before 2026-11-08)
+//   hugGap            metres (left out: HUG_GAP, 3 mm): how far off the scalp the hug leaves the inner layer; under
+//                     TUCK_CLEAR (the short coils: almost on the skin) it is also how near any point may come
+//   heads             { <head id>: { offset, scale, dims, turn, tuck, tuckStart, hug, hugGap, placed } }: the pair's own,
+//                     each ADDED to the hair's own and the head's (offsets, turns, tucks, hugs and gaps added, scales and
+//                     dims multiplied); a field left out adds nothing. `placed` (his placement by hand, written by the
+//                     hair rig's placement.py from his Blender file): the hair AS CUT (its _CUT points, before the
+//                     harvest lifted it clear of every head) with the head's own and the pair's dims, turn and offset,
+//                     and nothing else: not the hair's own numbers, no tuck, no hug: exactly as he placed it
 // The head's frame is the Head bone's own: every crew skeleton's Head bone is unturned at rest, so its frame is the
 // game's (y up, z forward, metres) from the Head joint, on every suit, and the fit rides the head through every clip.
 export const SKULL = [0, 0.106, -0.012];      // the standard skull's centre from the Head joint (the attachment rules)
 export const HAIR_CLEAR = 0.004;              // hair as made stays this far off every head (metres)
 export const TUCK_CLEAR = 0.002;              // the tuck draws hair in to this far off the head it's on, never nearer
 export const TUCK_MAX = 5;                    // the most tuck there is (500%)
+export const HUG_GAP = 0.003;                 // the hug draws the hair's inner layer to this far off the head it's on
+export const HUG_MAX = 1, HUG_DEFAULT = 1;    // the most hug there is (100%), and a fit's when it gives none
 // (the head's frame: where long hair's tuck is full and how far below it it fades; how far above tuckStart it fades in)
 const TUCK_JAW = -0.025, TUCK_FADE = 0.04, TUCK_RAMP = 0.02;
-// the fit a hair wears on a head: its own fit with that head's adjustments added (any field left out: as made)
-export function fitFor(f, head) {
-  f = f || {}; const d = (f.heads && head && f.heads[head]) || {};
-  const o = f.offset || [], p = d.offset || [];
-  return { offset: [0, 1, 2].map((i) => (+o[i] || 0) + (+p[i] || 0)), scale: (f.scale == null ? 1 : +f.scale) * (d.scale == null ? 1 : +d.scale),
-    tuck: Math.min(TUCK_MAX, Math.max(0, (+f.tuck || 0) + (+d.tuck || 0))), tuckStart: Math.max(0, (+f.tuckStart || 0) + (+d.tuckStart || 0)) };
+const CUT_K = 20;      // (a harvested hair's _cut: the way to where each point was cut, metres times this)
+// the fit a hair wears on a head: the head's own (hl: its entry's hairFit), the hair's own and the pair's, layered (any
+// field left out: as made). A fit already worn (resolved) comes back as it is.
+const v3 = (a, i, z) => (a && a[i] != null && isFinite(+a[i]) ? +a[i] : z);
+export function fitFor(f, head, hl) {
+  if (f && f.resolved) return { ...f, offset: [...f.offset], dims: [...f.dims] };   // (turn, a number, as it is)
+  f = f || {}; const d = (f.heads && head && f.heads[head]) || {}, H = hl || {}, placed = !!d.placed, o = placed ? {} : f;
+  return { offset: [0, 1, 2].map((i) => v3(H.offset, i, 0) + v3(o.offset, i, 0) + v3(d.offset, i, 0)),
+    scale: (o.scale == null ? 1 : +o.scale) * (d.scale == null ? 1 : +d.scale),
+    dims: [0, 1, 2].map((i) => v3(H.dims, i, 1) * v3(o.dims, i, 1) * v3(d.dims, i, 1)),
+    turn: (+H.turn || 0) + (+o.turn || 0) + (+d.turn || 0),
+    tuck: placed ? 0 : Math.min(TUCK_MAX, Math.max(0, (+o.tuck || 0) + (+d.tuck || 0))), tuckStart: Math.max(0, (+o.tuckStart || 0) + (+d.tuckStart || 0)),
+    hug: placed ? 0 : Math.min(HUG_MAX, Math.max(0, (o.hug == null ? HUG_DEFAULT : +o.hug || 0) + (+d.hug || 0))),
+    hugGap: Math.max(0, (o.hugGap == null ? HUG_GAP : +o.hugGap || 0) + (+d.hugGap || 0)), placed, resolved: true };
 }
-const asMade = (f) => !f || (!f.offset.some((v) => Math.abs(v) > 1e-7) && Math.abs(f.scale - 1) < 1e-7 && !(f.tuck > 0));
+const asMade = (f) => !f || (!f.placed && !f.offset.some((v) => Math.abs(v) > 1e-7) && Math.abs(f.scale - 1) < 1e-7 && !f.dims.some((v) => Math.abs(v - 1) > 1e-7) && !f.turn && !(f.tuck > 0) && !(f.hug > 0));
 // a part's bind space -> the head's frame (its Head bone's own)
 function frameOf(mesh) {
   const i = mesh.skeleton.bones.findIndex((b) => b.name === 'Head');
@@ -1325,12 +1361,21 @@ function underOf(src, M) {
   return (c.under = out);
 }
 const _q = new THREE.Quaternion(), _a = new THREE.Vector3(), _b = new THREE.Vector3(), _v = new THREE.Vector3();
-function applyFit(dst, src, M, fit, field) {
+function applyFit(dst, src, M, fit, field, hug) {
   const pos = src.attributes.position, n = pos.count, s = fit.scale, o = fit.offset, F = new Float32Array(n * 3);
+  // (the points the fit starts from (B0, the head's frame): the part's own; a hair that keeps where it was cut (_cut, the
+  // way from each point to where it was cut, in the head's axes, times CUT_K: the hair rig's tripo_hair.py, 2026-11-08)
+  // starts from the hair AS CUT, on every head: lifted clear of THIS head alone by the clearance (THE HUG, below), not
+  // of every head at once as the harvest lifted it; a placement by hand wears it as cut, exactly)
+  const cut = src.attributes._cut || null, B0 = new Float32Array(n * 3);
+  const k = [0, 1, 2].map((i) => s * fit.dims[i]), tc = Math.cos((fit.turn || 0) / DEG), ts = Math.sin((fit.turn || 0) / DEG);
   let top = -Infinity;
   for (let i = 0; i < n; i++) {
     _v.fromBufferAttribute(pos, i).applyMatrix4(M);
-    F[i * 3] = SKULL[0] + (_v.x - SKULL[0]) * s + o[0]; F[i * 3 + 1] = SKULL[1] + (_v.y - SKULL[1]) * s + o[1]; F[i * 3 + 2] = SKULL[2] + (_v.z - SKULL[2]) * s + o[2];
+    if (cut) { _v.x += cut.getX(i) / CUT_K; _v.y += cut.getY(i) / CUT_K; _v.z += cut.getZ(i) / CUT_K; }
+    _v.toArray(B0, i * 3);
+    const x = (_v.x - SKULL[0]) * k[0], z = (_v.z - SKULL[2]) * k[2];
+    F[i * 3] = SKULL[0] + tc * x + ts * z + o[0]; F[i * 3 + 1] = SKULL[1] + (_v.y - SKULL[1]) * k[1] + o[1]; F[i * 3 + 2] = SKULL[2] - ts * x + tc * z + o[2];
     top = Math.max(top, F[i * 3 + 1]);
   }
   const stats = { tucked: 0, held: 0 };
@@ -1356,17 +1401,19 @@ function applyFit(dst, src, M, fit, field) {
       stats.tucked++; if (least > r1) stats.held++;
     }
   }
+  Object.assign(stats, { hugged: 0, under: 0, cleared: 0, hugHeld: 0, hugMostMm: 0, skirt: null });
+  if (field && !fit.placed) hugFit(F, B0, src, M, fit, field, hug || {}, stats);
   const Mi = M.clone().invert(), P = dst.attributes.position.array;
   for (let i = 0; i < n; i++) _v.fromArray(F, i * 3).applyMatrix4(Mi).toArray(P, i * 3);
   dst.attributes.position.needsUpdate = true;
-  // the normals and strands: as made, turned where the tuck turned the surface
+  // the normals and strands: as made, turned where the tuck and the hug turned the surface
   const turn = [];
   for (const k of ['normal', '_strand']) {
     const A = dst.attributes[k]; if (!A) continue;
     A.array.set(partFloats(src, k)); A.needsUpdate = true;
     if (A.itemSize === 3) turn.push(A);
   }
-  if (stats.tucked && turn.length) {
+  if ((stats.tucked || stats.hugged || stats.cleared || cut || fit.turn || fit.dims.some((v) => Math.abs(v - 1) > 1e-7)) && turn.length) {
     const N0 = partFloats(src, 'n0'), N1 = normalsOf(P, src.index, n);
     for (let i = 0; i < n; i++) {
       _a.fromArray(N0, i * 3); _b.fromArray(N1, i * 3);
@@ -1376,6 +1423,198 @@ function applyFit(dst, src, M, fit, field) {
     }
   }
   dst.boundingBox = null; dst.boundingSphere = null;
+  return stats;
+}
+
+// ── the hug ──────────────────────────────────────────────────────────────────────────────────────────────────────────
+// (2026-11-08; the game's maker on the grey bob: "this haircut should be closer to the skin, the area I dragged down to
+// cover any gap is showing too much"; on the short coils: "It needs to be really close to the shape of the head".) A hair
+// harvested from a Tripo bust is one shape lifted clear of every head, its edge flared in under the scalp. The tuck draws
+// each line of it in by how far its underside stands off the head; but near the hairline the underside it finds is the
+// flared edge, already under the skin, so the hair there stays where the lift left it: a lip standing 1 to 3 cm off the
+// forehead and temples, and the dragged-down band from the lip to the skin showing as a flat smear. THE HUG, per head and
+// hair, when a person is put together (after the tuck, on the same copy of the hair's positions), along each point's line
+// from the skull's centre (SKULL):
+//   - THE SKIRT: the dragged-down edge: points within SKIRT of the hairline (the hair's open edge chains of EDGE_MAIN or
+//     more, along its surface; card hair: its shell's) with hair standing further out over them (within 8 degrees, by
+//     SKIRT_COVER), and any point within SKIRT_FLARE of it under this head's skin (the flare). They follow the hair
+//     over them.
+//   - THE INNER LAYER: on a 2 degree grid round the centre, the innermost of the rest (card hair: each point less its
+//     height over the hair's underside, _UNDER, as the tuck does).
+//   - HOW FAR: where the inner layer stands more than the hair's hugGap off this head's scalp (the head's reach, as the
+//     tuck's S), in by the difference. Filled over the grid where only skirt lies, then the mean within 2 degrees (so
+//     the hair bends smoothly; the most within 4 degrees over-drew everything near a lip to the floor).
+//   - EACH POINT moves along its line by that times the hug (0..1) and the tuck's own fade below the jaw (long ends hang
+//     as made); a point HUG_SOFT above the inner layer goes HUG_OUTER as far (a gentle falloff outward through the hair's
+//     thickness: the outside keeps more of its volume); a skirt point the whole way.
+//   - THE CLEARANCE, after the hug and whatever moved the hair before it (the head's own and the pair's dims and offsets
+//     can narrow a hair into a head): no point but the skirt ends nearer this head than TUCK_CLEAR (or its hugGap, if
+//     less), or than it was as made; one that would is moved out with its line (the most each 2 degree cell needs, the
+//     most within 4 degrees and the mean of that, so the hair bends out rather than dents), then singly.
+//   - The skirt goes on in under the skin with the hair over it (as the flare is), and a skirt point already under the
+//     skin stays under it.
+// c.fitStats: hugged (points the hug moved), under (skirt points taken in under the skin), cleared (points moved out by
+// the clearance), hugHeld (held by it), hugMostMm (the most a point moved); c.fitSkirt (the skirt, a flag a point, each
+// hair mesh in turn, for the checks).
+const HUG_SOFT = 0.02, HUG_OUTER = 0.5;
+const SKIRT = 0.025, SKIRT_FLARE = 0.01, SKIRT_COVER = 0.002, SKIRT_UNDER = 0.001, EDGE_MAIN = 0.10, HUG_INSIDE = 0.002, HUG_MARGIN = 0.0004;
+const HC = { ne: 90, na: 180 };     // (the grid: 2 degree cells, elevation by azimuth round from the face)
+function hugCell(dx, dy, dz, r) {
+  const e = Math.min(HC.ne - 1, Math.max(0, Math.floor((Math.asin(Math.max(-1, Math.min(1, dy / r))) * DEG + 90) / 2)));
+  return e * HC.na + ((((Math.floor((Math.atan2(dx, dz) * DEG + 180) / 2)) % HC.na) + HC.na) % HC.na);
+}
+// (a grid's values within k cells (wider toward the poles): the largest, the least or the mean of those that have one;
+// NaN where none has)
+function hugFilter(A, k, op) {
+  const { ne, na } = HC, out = new Float32Array(A.length).fill(NaN);
+  for (let e = 0; e < ne; e++) {
+    const cw = Math.min(na >> 1, Math.ceil(k / Math.max(0.05, Math.cos(((e + 0.5) * 2 - 90) / DEG))));
+    for (let a = 0; a < na; a++) {
+      let m = op === 'max' ? -Infinity : Infinity, s = 0, c = 0;
+      for (let de = -k; de <= k; de++) {
+        const ee = e + de; if (ee < 0 || ee >= ne) continue;
+        for (let da = -cw; da <= cw; da++) {
+          const v = A[ee * na + ((((a + da) % na) + na) % na)]; if (v !== v) continue;
+          c++; s += v; if (op === 'max' ? v > m : v < m) m = v;
+        }
+      }
+      if (c) out[e * na + a] = op === 'mean' ? s / c : m;
+    }
+  }
+  return out;
+}
+// (cells with no value take the mean of their neighbours', pass by pass)
+function hugFill(A, passes) {
+  for (let p = 0; p < passes; p++) {
+    const B = hugFilter(A, 1, 'mean'); let left = 0;
+    for (let k = 0; k < A.length; k++) if (A[k] !== A[k]) { A[k] = B[k]; if (B[k] !== B[k]) left++; }
+    if (!left) break;
+  }
+  return A;
+}
+// THE HAIRLINE, once a part: each point's distance along the hair's surface to its open edge chains EDGE_MAIN long or
+// more (metres, Infinity past SKIRT x 1.6), its points joined where they meet (0.05 mm); card hair: its shell's faces
+// only (a corner on the atlas's opaque patches, v over 0.76, as the checks tell them)
+function hairlineOf(src, M, cards) {
+  const c = src.userData.fitFloats || (src.userData.fitFloats = {});
+  if (c.hairline) return c.hairline;
+  const pos = src.attributes.position, n = pos.count, I = src.index, m = I ? I.count : n, uv = src.attributes.uv;
+  const id = new Int32Array(n), at = [], keys = new Map();
+  for (let i = 0; i < n; i++) {
+    _v.fromBufferAttribute(pos, i).applyMatrix4(M);
+    const k = Math.round(_v.x * 2e4) + ',' + Math.round(_v.y * 2e4) + ',' + Math.round(_v.z * 2e4);
+    let j = keys.get(k); if (j == null) { j = at.length / 3; keys.set(k, j); at.push(_v.x, _v.y, _v.z); }
+    id[i] = j;
+  }
+  const W = at.length / 3, E = new Map();
+  for (let t = 0; t + 2 < m; t += 3) {
+    const v = [I ? I.getX(t) : t, I ? I.getX(t + 1) : t + 1, I ? I.getX(t + 2) : t + 2];
+    if (cards && !(uv && v.some((j) => uv.getY(j) > 0.76))) continue;
+    for (const [p, q] of [[id[v[0]], id[v[1]]], [id[v[1]], id[v[2]]], [id[v[2]], id[v[0]]]]) {
+      if (p === q) continue;
+      const e = p < q ? p * W + q : q * W + p; E.set(e, (E.get(e) || 0) + 1);
+    }
+  }
+  const len = (p, q) => Math.hypot(at[p * 3] - at[q * 3], at[p * 3 + 1] - at[q * 3 + 1], at[p * 3 + 2] - at[q * 3 + 2]);
+  // (the open edges, gathered into chains: a chain's length is its edges')
+  const root = new Int32Array(W).map((_, i) => i), find = (x) => { while (root[x] !== x) x = root[x] = root[root[x]]; return x; };
+  const adj = Array.from({ length: W }, () => []), open = [];
+  for (const [e, k] of E) {
+    const p = Math.floor(e / W), q = e % W, l = len(p, q);
+    adj[p].push(q, l); adj[q].push(p, l);
+    if (k === 1) { open.push(p, q, l); root[find(p)] = find(q); }
+  }
+  const chain = new Map();
+  for (let i = 0; i < open.length; i += 3) { const r = find(open[i]); chain.set(r, (chain.get(r) || 0) + open[i + 2]); }
+  // (from every point of a long chain, outward along the surface: Dijkstra, a binary heap)
+  const D = new Float32Array(W).fill(Infinity), cap = SKIRT * 1.6, H = [];
+  const push = (d, i) => { H.push([d, i]); let k = H.length - 1; while (k > 0) { const p = (k - 1) >> 1; if (H[p][0] <= H[k][0]) break; [H[p], H[k]] = [H[k], H[p]]; k = p; } };
+  const pop = () => { const top = H[0], last = H.pop(); if (H.length) { H[0] = last; let k = 0; for (;;) { const l = 2 * k + 1, r = l + 1; let s = k; if (l < H.length && H[l][0] < H[s][0]) s = l; if (r < H.length && H[r][0] < H[s][0]) s = r; if (s === k) break; [H[s], H[k]] = [H[k], H[s]]; k = s; } } return top; };
+  for (let i = 0; i < open.length; i += 3) for (const p of [open[i], open[i + 1]]) if (chain.get(find(p)) >= EDGE_MAIN && D[p] > 0) { D[p] = 0; push(0, p); }
+  while (H.length) {
+    const [d, p] = pop(); if (d > D[p]) continue;
+    const A = adj[p];
+    for (let k = 0; k < A.length; k += 2) { const q = A[k], nd = d + A[k + 1]; if (nd < D[q] && nd < cap) { D[q] = nd; push(nd, q); } }
+  }
+  const out = new Float32Array(n); for (let i = 0; i < n; i++) out[i] = D[id[i]];
+  return (c.hairline = out);
+}
+// (hug: { cards: card hair }; F: the hair's positions in the head's frame, moved; B0: where they started (the part as
+// made, or as cut), for the clearance as made)
+function hugFit(F, B0, src, M, fit, field, hug, stats) {
+  const n = F.length / 3, NC = HC.ne * HC.na, s = fit.scale, gap = fit.hugGap, clear = Math.min(TUCK_CLEAR, gap);
+  const under = hug.cards && src.attributes._under ? underOf(src, M) : null, edge = hairlineOf(src, M, hug.cards);
+  const r = new Float32Array(n), cell = new Int32Array(n), Sv = new Float32Array(n), Dv = new Float32Array(n), w = new Float32Array(n), lo = new Float32Array(n);
+  const Rmax = new Float32Array(NC).fill(NaN);
+  for (let i = 0; i < n; i++) {
+    const dx = F[i * 3] - SKULL[0], y = F[i * 3 + 1], dy = y - SKULL[1], dz = F[i * 3 + 2] - SKULL[2], ri = Math.hypot(dx, dy, dz);
+    r[i] = ri; lo[i] = -Infinity; if (ri < 1e-4) { cell[i] = -1; continue; }
+    const k = hugCell(dx, dy, dz, ri); cell[i] = k;
+    Sv[i] = reach(field.S, dx, dy, dz, ri, true); Dv[i] = reach(field.D, dx, dy, dz, ri, false);
+    // (the tuck's fade below the jaw: long ends hang as made)
+    w[i] = y < TUCK_JAW ? 1 - smooth01((TUCK_JAW - y) / TUCK_FADE) : 1;
+    if (!(Rmax[k] >= ri)) Rmax[k] = ri;
+    // (how near it may come, along its line: `clear` off the head (the most it reaches within 3 degrees, and HUG_MARGIN for
+    // the reach's sampling), or as near as it was made, which may be under that reach (by an ear, on a bump); a point
+    // plainly under the skin as made (HUG_INSIDE under the head's mean reach: the flare, his dragged-in edge, hair cutting
+    // in) none)
+    const ex = B0[i * 3] - SKULL[0], ey = B0[i * 3 + 1] - SKULL[1], ez = B0[i * 3 + 2] - SKULL[2], r0 = Math.hypot(ex, ey, ez);
+    const D0 = r0 > 1e-4 ? reach(field.D, ex, ey, ez, r0, false) : 0, S0 = r0 > 1e-4 ? reach(field.S, ex, ey, ez, r0, true) : 0;
+    if (D0 > 0 && Dv[i] > 0 && !(S0 > 0 && r0 < S0 - HUG_INSIDE)) lo[i] = Dv[i] + Math.min(clear + HUG_MARGIN, r0 - D0);
+  }
+  const over = hugFilter(Rmax, 4, 'max'), skirt = new Uint8Array(n), L = new Float32Array(NC).fill(NaN);
+  for (let i = 0; i < n; i++) {
+    const k = cell[i]; if (k < 0) continue;
+    skirt[i] = (edge[i] < SKIRT && over[k] > r[i] + SKIRT_COVER) || (edge[i] < SKIRT_FLARE && Sv[i] > 0 && r[i] < Sv[i]) ? 1 : 0;
+    if (skirt[i] || w[i] <= 0 || !(Sv[i] > 0)) continue;
+    const l = r[i] - (under ? under[i] * s : 0); if (!(L[k] <= l)) L[k] = l;
+  }
+  const u = new THREE.Vector3(), cellDir = (k) => {
+    const el = ((Math.floor(k / HC.na) + 0.5) * 2 - 90) / DEG, az = ((k % HC.na + 0.5) * 2 - 180) / DEG;
+    return u.set(Math.cos(el) * Math.sin(az), Math.sin(el), Math.cos(el) * Math.cos(az));
+  };
+  const r1 = Float32Array.from(r);
+  // THE HUG: how far each cell's inner layer wants to come in
+  if (fit.hug > 0) {
+    const want = new Float32Array(NC).fill(NaN);
+    for (let k = 0; k < NC; k++) {
+      if (L[k] !== L[k]) continue;
+      cellDir(k); const S = reach(field.S, u.x, u.y, u.z, 1, true);
+      if (S > 0) want[k] = Math.max(0, L[k] - S - gap);
+    }
+    hugFill(want, 8); hugFill(L, 8);
+    const P = hugFilter(want, 1, 'mean');
+    for (let i = 0; i < n; i++) {
+      const k = cell[i]; if (k < 0 || w[i] <= 0 || !(Sv[i] > 0) || !(Dv[i] > 0)) continue;
+      const pull = (P[k] || 0) * fit.hug * w[i]; if (!(pull > 1e-6)) continue;
+      r1[i] = r[i] - pull * (skirt[i] || !(L[k] === L[k]) ? 1 : 1 - (1 - HUG_OUTER) * smooth01((r[i] - L[k]) / HUG_SOFT));
+      if (!skirt[i] && r1[i] < Math.min(r[i], lo[i])) { r1[i] = Math.min(r[i], lo[i]); stats.hugHeld++; }
+    }
+  }
+  // THE CLEARANCE: lines moved out where a point (not the skirt) would end nearer than it may
+  const need = new Float32Array(NC).fill(NaN); let any = false;
+  for (let i = 0; i < n; i++) {
+    const k = cell[i]; if (k < 0 || skirt[i] || !(lo[i] > r1[i] + 1e-6)) continue;
+    const d = lo[i] - r1[i]; if (!(need[k] >= d)) need[k] = d; any = true;
+  }
+  if (any) {
+    const N = hugFilter(hugFilter(need, 2, 'max'), 2, 'mean');
+    for (let i = 0; i < n; i++) {
+      const k = cell[i]; if (k < 0 || !(N[k] > 1e-6)) continue;
+      const before = r1[i]; r1[i] += N[k];
+      if (skirt[i] && r[i] < Sv[i]) r1[i] = Math.min(r1[i], Math.max(before, Sv[i] - SKIRT_UNDER));
+      if (r1[i] > before + 1e-6) stats.cleared++;
+    }
+    for (let i = 0; i < n; i++) if (!skirt[i] && lo[i] > r1[i]) { r1[i] = lo[i]; stats.cleared++; }
+  }
+  for (let i = 0; i < n; i++) {
+    if (cell[i] < 0 || Math.abs(r1[i] - r[i]) < 1e-6) continue;
+    const q = r1[i] / r[i];
+    F[i * 3] = SKULL[0] + (F[i * 3] - SKULL[0]) * q; F[i * 3 + 1] = SKULL[1] + (F[i * 3 + 1] - SKULL[1]) * q; F[i * 3 + 2] = SKULL[2] + (F[i * 3 + 2] - SKULL[2]) * q;
+    stats.hugged++; if (skirt[i] && r[i] >= Sv[i] && r1[i] < Sv[i]) stats.under++;
+    stats.hugMostMm = Math.max(stats.hugMostMm, +(Math.abs(r1[i] - r[i]) * 1000).toFixed(1));
+  }
+  stats.skirt = skirt;
   return stats;
 }
 
@@ -1861,16 +2100,20 @@ export async function makeCrew(lib, recipe) {
     // below the rim (metres; minus above it)
     collarStats: neck ? neck.stats : null, collar, collarDepth: neck ? neck.depth : null, collarMoved: neck ? neck.moved : null,
     // the hair's fit (a hair's fit, above): each hair mesh gets its own positions while it wears one
-    fit: null, fitStats: { tucked: 0, held: 0 },
+    fit: null, fitStats: { tucked: 0, held: 0, hugged: 0, under: 0, cleared: 0, hugHeld: 0, hugMostMm: 0 }, fitSkirt: [],
     async setFit(fit) {
-      const f = fit ? fitFor(fit) : null, plain = asMade(f);
-      const field = !plain && f.tuck > 0 && R.head ? await lib.headField(R.head) : null;
-      const stats = { tucked: 0, held: 0 };
+      // (a fit given as written (not as lib.fitOf gives it) wears this head's own setting under it)
+      const f = fit ? (fit.resolved ? fitFor(fit) : fitFor(fit, R.head, lib.headFitOf(R.head))) : null, plain = asMade(f);
+      const field = !plain && !f.placed && R.head ? await lib.headField(R.head) : null;
+      const stats = { tucked: 0, held: 0, hugged: 0, under: 0, cleared: 0, hugHeld: 0, hugMostMm: 0 }, skirts = [];
       for (const [m, g0, M] of hairFit) {
         if (plain) { if (m.geometry !== g0) { disposeOwn(m.geometry); m.geometry = g0; } continue; }
         if (m.geometry === g0) m.geometry = ownGeometry(g0);
-        const s = applyFit(m.geometry, g0, M, f, field); stats.tucked += s.tucked; stats.held += s.held;
+        const s = applyFit(m.geometry, g0, M, f, field, { cards });
+        for (const k of Object.keys(stats)) stats[k] = k === 'hugMostMm' ? Math.max(stats[k], s[k] || 0) : stats[k] + (s[k] || 0);
+        skirts.push(s.skirt || null);
       }
+      c.fitSkirt = skirts;
       c.fit = plain ? null : f; c.fitStats = stats;
       return stats;
     },
