@@ -291,7 +291,7 @@ const copy = (o) => JSON.parse(JSON.stringify(o == null ? {} : o));
 const rnd = (v, p) => Math.round(v / p) * p;
 function hairFit(id) { return own(lib.fits, id) ? lib.fits[id] : (lib.entry('hair', id) || {}).fit; }
 // (a fit with nothing in it left out: offsets of zero, a size of 1, no tuck, empty head entries; numbers rounded)
-function tidy(f, base) {
+function tidy(f, base, hid) {
   const o = {};
   if (!f) return o;
   if (f.placed) o.placed = true;
@@ -302,7 +302,7 @@ function tidy(f, base) {
   if (f.tuck && Math.abs(f.tuck) >= 0.0005) o.tuck = +(+f.tuck).toFixed(3);
   if (f.tuckStart && Math.abs(f.tuckStart) >= 0.00005) o.tuckStart = +(+f.tuckStart).toFixed(4);
   // (the hug and its gap: the hair's own against their defaults, a pair's as what it adds)
-  if (f.hug != null && Math.abs(f.hug - (base == null ? HUG_DEFAULT : 0)) >= 0.0005) o.hug = +(+f.hug).toFixed(3);
+  if (f.hug != null && Math.abs(f.hug - (base == null ? (hid ? lib.hugDefaultOf(hid) : HUG_DEFAULT) : 0)) >= 0.0005) o.hug = +(+f.hug).toFixed(3);
   if (f.hugGap != null && Math.abs(f.hugGap - (base == null ? HUG_GAP : 0)) >= 0.00005) o.hugGap = +(+f.hugGap).toFixed(5);
   if (base == null && f.heads) {
     const H = {}; for (const [h, d] of Object.entries(f.heads)) { const t = tidy(d, f); if (Object.keys(t).length) H[h] = t; }
@@ -317,7 +317,7 @@ function readMine(key = FIT_KEY) {
 const headTidy = (h) => { const t = tidy(h || {}, {}); delete t.hug; delete t.hugGap; delete t.tuck; delete t.tuckStart; delete t.scale; delete t.placed; return t; };
 function saveMine() {
   // (a hair whose fit is back to crew.json's own is no longer a change; nor a head's own setting)
-  for (const id of Object.keys(lib.fits)) if (JSON.stringify(tidy(lib.fits[id])) === JSON.stringify(tidy((lib.entry('hair', id) || {}).fit))) delete lib.fits[id];
+  for (const id of Object.keys(lib.fits)) if (JSON.stringify(tidy(lib.fits[id], null, id)) === JSON.stringify(tidy((lib.entry('hair', id) || {}).fit, null, id))) delete lib.fits[id];
   for (const id of Object.keys(lib.headFits)) if (JSON.stringify(headTidy(lib.headFits[id])) === JSON.stringify(headTidy((lib.entry('head', id) || {}).hairFit))) delete lib.headFits[id];
   try {
     if (Object.keys(lib.fits).length) localStorage.setItem(FIT_KEY, JSON.stringify(lib.fits)); else localStorage.removeItem(FIT_KEY);
@@ -341,7 +341,7 @@ async function fitEdit(change, quiet) {
   const F = lib.fits[hair];
   if (fitSt.scope === 'head' && head) { F.heads = F.heads || {}; change(F.heads[head] = F.heads[head] || {}, F); }
   else change(F, null);
-  lib.fits[hair] = tidy(F);
+  lib.fits[hair] = tidy(F, null, hair);
   fitSt.note = '';
   saveMine(); await wearFit(quiet);
 }
@@ -376,7 +376,7 @@ function redim(axis, dir) {
 function returnTo(dir) { fitEdit((t) => { t.turn = +Math.min(45, Math.max(-45, (+t.turn || 0) + dir * fine('turn'))).toFixed(3); }); }
 function rehug(dir, to) {
   fitEdit((t, base) => {
-    const own0 = base == null ? (t.hug == null ? HUG_DEFAULT : +t.hug) : +t.hug || 0, under = base == null ? 0 : (base.hug == null ? HUG_DEFAULT : +base.hug);
+    const d0 = lib.hugDefaultOf(st.recipe?.hair), own0 = base == null ? (t.hug == null ? d0 : +t.hug) : +t.hug || 0, under = base == null ? 0 : (base.hug == null ? d0 : +base.hug);
     const worn = to != null ? to : Math.min(HUG_MAX, Math.max(0, under + own0 + dir * fine('hug')));
     t.hug = +(worn - under).toFixed(4);
   });
@@ -405,7 +405,7 @@ function clearMine() {
 function fitsText() {
   // (every hair's fit and every head's own setting, this browser's over crew.json's: the whole of what the Fit row sets)
   const hairs = [], heads = [];
-  for (const P of lib.list.parts.hair) { const t = tidy(hairFit(P.id)); if (Object.keys(t).length) hairs.push('    ' + JSON.stringify(P.id) + ': ' + JSON.stringify(t)); }
+  for (const P of lib.list.parts.hair) { const t = tidy(hairFit(P.id), null, P.id); if (Object.keys(t).length) hairs.push('    ' + JSON.stringify(P.id) + ': ' + JSON.stringify(t)); }
   for (const P of lib.list.parts.head) { const t = headTidy(lib.headFitOf(P.id)); if (Object.keys(t).length) heads.push('    ' + JSON.stringify(P.id) + ': ' + JSON.stringify(t)); }
   // (and every painted hair's buzz, as the Buzz row's Copy buzzes gives it: null for none)
   const buzzes = [];
@@ -472,7 +472,7 @@ const knob = (label, value, less, more, tl, tm, title) => [lab(label), chip(less
 function fitRowsKeep() { const rows = ['#fit', '#fit2', '#fitout'].map((s) => $(s)), keep = rows.map((r) => r.scrollLeft); fitRows(); rows.forEach((r, i) => { r.scrollLeft = keep[i]; }); }
 function fitRows() {
   const R = st.recipe || {}, hair = R.hair, head = R.head, open = fitSt.open;
-  const F = hair ? hairFit(hair) : null, f = hair ? fitFor(F, head) : null, ownHead = !!(F && F.heads && F.heads[head] && Object.keys(F.heads[head]).length);
+  const F = hair ? hairFit(hair) : null, f = hair ? fitFor(F, head, lib.headFitOf(head), lib.hugDefaultOf(hair)) : null, ownHead = !!(F && F.heads && F.heads[head] && Object.keys(F.heads[head]).length);
   const P = hair && lib.entry('hair', hair), H = lib.entry('head', head);
   const mine = Object.keys(lib.fits).length;
   const fold = chip(open ? 'Fit ▾' : 'Fit ▸', open, () => { fitSt.open = !fitSt.open; try { localStorage.setItem(FIT_OPEN, fitSt.open ? '1' : '0'); } catch (_) {} menu(); }, false, 'Fit the hair: show or fold these rows. Adjust, press Save fits: the file goes to Downloads, for merging into crew.json.');
@@ -548,7 +548,7 @@ function dimKnobs(L) {
 function hugKnobs(f, F, st2) {
   const on = f.hug > 0, words = st2 && on ? `${st2.hugged} points moved (${st2.under} of the dragged-down edge tucked under, ${st2.cleared} held clear of the head), the most ${st2.hugMostMm} mm` : 'The hair\'s inner layer drawn to the gap off this head; the dragged-down edge tucked under with it';
   if (f.placed) return [val('Placed by hand in Blender: worn as he placed it (no tuck, no hug)')];
-  return [chip(on ? 'Hug on' : 'Hug off', on, () => rehug(0, on ? 0 : HUG_DEFAULT), true, 'The hug on or off (' + (fitSt.scope === 'head' ? 'this head' : 'every head') + ')'),
+  return [chip(on ? 'Hug on' : 'Hug off', on, () => rehug(0, on ? 0 : HUG_MAX), true, 'The hug on or off (' + (fitSt.scope === 'head' ? 'this head' : 'every head') + ')'),
     ...knob('Hug', Math.round(f.hug * 100) + '%', ['−', () => rehug(-1)], ['+', () => rehug(1)], 'Less', 'More', words), sep(),
     ...knob('Gap', (f.hugGap * 1000).toFixed(2) + ' mm', ['−', () => regap(-1)], ['+', () => regap(1)], 'Nearer the skin', 'Further off', 'How far off the scalp the hug leaves the inner layer')];
 }

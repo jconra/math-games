@@ -210,9 +210,11 @@ export async function loadCrew({ dir = CREW_DIR, people = PEOPLE_DIR, smoothHair
   // head if it has one (the Crew Lab's while it's edited), else crew.json's
   lib.headFits = {};
   lib.headFitOf = (head) => (!head ? null : Object.prototype.hasOwnProperty.call(lib.headFits, head) ? lib.headFits[head] : (lib.entry('head', head) || {}).hairFit || null);
+  // (the hug a hair wears when its fit gives none: the crew's own hairs (a scalp line) hugged, the rest not)
+  lib.hugDefaultOf = (hair) => { const E = (hair && lib.entry('hair', hair)) || {}; return E.scalp && E.scalp.line ? HUG_DEFAULT : 0; };
   lib.fitOf = (hair, head) => {
     if (!hair) return null;
-    return fitFor(Object.prototype.hasOwnProperty.call(lib.fits, hair) ? lib.fits[hair] : (lib.entry('hair', hair) || {}).fit, head, lib.headFitOf(head));
+    return fitFor(Object.prototype.hasOwnProperty.call(lib.fits, hair) ? lib.fits[hair] : (lib.entry('hair', hair) || {}).fit, head, lib.headFitOf(head), lib.hugDefaultOf(hair));
   };
   // how far a head reaches along every line from the skull's centre, for the tuck (once a head: THE HEAD'S REACH)
   const fields = new Map();
@@ -1157,7 +1159,9 @@ function setColours(mats, { job, uniform, skin, hair, eyes } = {}) {
 //                     below it (not at all 4 cm under it), so tails and long ends keep hanging as made.
 //   tuckStart         metres below the hair's top where the tuck is full; above that it fades out over 2 cm (0: full
 //                     all over)
-//   hug               0..1 (0% to 100%; left out: 100%): THE HUG, after the tuck: the hair's inner layer drawn to its
+//   hug               0..1 (0% to 100%; left out: 100% for the crew's own hairs, the ones with a scalp line (built in
+//                     Blender or harvested), 0 for the rest: the Mathwood hairs, the old captain1 hair; lib.hugDefaultOf):
+//                     THE HUG, after the tuck: the hair's inner layer drawn to its
 //                     hugGap off THIS head's scalp wherever it stands further off, the dragged-down edge tucked under with
 //                     it; 0 is off (the tuck alone, as before 2026-11-08)
 //   hugGap            metres (left out: HUG_GAP, 3 mm): how far off the scalp the hug leaves the inner layer; under
@@ -1182,7 +1186,7 @@ const CUT_K = 20;      // (a harvested hair's _cut: the way to where each point 
 // the fit a hair wears on a head: the head's own (hl: its entry's hairFit), the hair's own and the pair's, layered (any
 // field left out: as made). A fit already worn (resolved) comes back as it is.
 const v3 = (a, i, z) => (a && a[i] != null && isFinite(+a[i]) ? +a[i] : z);
-export function fitFor(f, head, hl) {
+export function fitFor(f, head, hl, hug0 = HUG_DEFAULT) {
   if (f && f.resolved) return { ...f, offset: [...f.offset], dims: [...f.dims] };   // (turn, a number, as it is)
   f = f || {}; const d = (f.heads && head && f.heads[head]) || {}, H = hl || {}, placed = !!d.placed, o = placed ? {} : f;
   return { offset: [0, 1, 2].map((i) => v3(H.offset, i, 0) + v3(o.offset, i, 0) + v3(d.offset, i, 0)),
@@ -1190,7 +1194,7 @@ export function fitFor(f, head, hl) {
     dims: [0, 1, 2].map((i) => v3(H.dims, i, 1) * v3(o.dims, i, 1) * v3(d.dims, i, 1)),
     turn: (+H.turn || 0) + (+o.turn || 0) + (+d.turn || 0),
     tuck: placed ? 0 : Math.min(TUCK_MAX, Math.max(0, (+o.tuck || 0) + (+d.tuck || 0))), tuckStart: Math.max(0, (+o.tuckStart || 0) + (+d.tuckStart || 0)),
-    hug: placed ? 0 : Math.min(HUG_MAX, Math.max(0, (o.hug == null ? HUG_DEFAULT : +o.hug || 0) + (+d.hug || 0))),
+    hug: placed ? 0 : Math.min(HUG_MAX, Math.max(0, (o.hug == null ? hug0 : +o.hug || 0) + (+d.hug || 0))),
     hugGap: Math.max(0, (o.hugGap == null ? HUG_GAP : +o.hugGap || 0) + (+d.hugGap || 0)), placed, resolved: true };
 }
 const asMade = (f) => !f || (!f.placed && !f.offset.some((v) => Math.abs(v) > 1e-7) && Math.abs(f.scale - 1) < 1e-7 && !f.dims.some((v) => Math.abs(v - 1) > 1e-7) && !f.turn && !(f.tuck > 0) && !(f.hug > 0));
@@ -1588,7 +1592,9 @@ function hugFit(F, B0, src, M, fit, field, hug, stats) {
       const k = cell[i]; if (k < 0 || w[i] <= 0 || !(Sv[i] > 0) || !(Dv[i] > 0)) continue;
       const pull = (P[k] || 0) * fit.hug * w[i]; if (!(pull > 1e-6)) continue;
       r1[i] = r[i] - pull * (skirt[i] || !(L[k] === L[k]) ? 1 : 1 - (1 - HUG_OUTER) * smooth01((r[i] - L[k]) / HUG_SOFT));
-      if (!skirt[i] && r1[i] < Math.min(r[i], lo[i])) { r1[i] = Math.min(r[i], lo[i]); stats.hugHeld++; }
+      // (a point under the head's mean reach as made (beside an ear the reach can't tell it from the skin) never drawn further in)
+      const fl = lo[i] === -Infinity ? r[i] : Math.min(r[i], lo[i]);
+      if (!skirt[i] && r1[i] < fl) { r1[i] = fl; stats.hugHeld++; }
     }
   }
   // THE CLEARANCE: lines moved out where a point (not the skirt) would end nearer than it may
@@ -2133,8 +2139,9 @@ export async function makeCrew(lib, recipe) {
     fit: null, fitStats: { tucked: 0, held: 0, hugged: 0, under: 0, cleared: 0, hugHeld: 0, hugMostMm: 0 }, fitSkirt: [],
     async setFit(fit) {
       // (a fit given as written (not as lib.fitOf gives it) wears this head's own setting under it)
-      const f = fit ? (fit.resolved ? fitFor(fit) : fitFor(fit, R.head, lib.headFitOf(R.head))) : null, plain = asMade(f);
-      const field = !plain && !f.placed && R.head ? await lib.headField(R.head) : null;
+      const f = fit ? (fit.resolved ? fitFor(fit) : fitFor(fit, R.head, lib.headFitOf(R.head), lib.hugDefaultOf(R.hair))) : null, plain = asMade(f);
+      // (the head's reach: for the tuck and the hug, and for the shade's line as worn (a placement by hand too))
+      const field = !plain && R.head ? await lib.headField(R.head) : null;
       const stats = { tucked: 0, held: 0, hugged: 0, under: 0, cleared: 0, hugHeld: 0, hugMostMm: 0 }, skirts = [];
       for (const [m, g0, M] of hairFit) {
         if (plain) { if (m.geometry !== g0) { disposeOwn(m.geometry); m.geometry = g0; } continue; }
