@@ -523,7 +523,7 @@ function buzzRows() {
   const b = hair ? lib.buzzOf(hair) : null, mine = Object.keys(lib.buzzes).length, isMine = !!(hair && Object.prototype.hasOwnProperty.call(lib.buzzes, hair));
   const fold = chip(open ? 'Buzz ▾' : 'Buzz ▸', open, () => { buzzSt.open = !buzzSt.open; try { localStorage.setItem(BUZZ_OPEN, buzzSt.open ? '1' : '0'); } catch (_) {} menu(); }, false, 'The short hair outside the haircut (sideburns, a nape taper) and the paint under it: show or fold');
   fold.setAttribute('aria-expanded', String(open));
-  const what = val(!hair ? 'No hair' : !painted ? `${P.name}: paints nothing on the skin` : `${P.name}: ${buzzWords(P, b)}` + (isMine ? ' (yours)' : ''));
+  const what = val(!hair ? 'No hair' : !painted ? `${P ? P.name : hair}: paints nothing on the skin` : `${P.name}: ${buzzWords(P, b)}` + (isMine ? ' (yours)' : ''));
   what.classList.add('wide');
   if (!open) { $('#buzz').replaceChildren(fold, what); $('#buzzout').hidden = true; return; }
   const V = buzzSt.view, fine = (k) => BUZZ_STEP[k][fitSt.fine ? 1 : 0];
