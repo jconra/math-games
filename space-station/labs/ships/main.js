@@ -30,7 +30,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
-import { checkBlueprint, ROOM_KINDS, ITEM_KINDS, doorWall, wallsAt, snap, HEAD, CEIL } from './blueprint.js';
+import { checkBlueprint, ROOM_KINDS, ITEM_KINDS, doorWall, wallsAt, snap, hangs, HEAD, CEIL } from './blueprint.js';
 import { Plan } from './plan.js';
 import { buildRoom, updateDoors, loadRoom } from '../../kit/layout.js';
 import { makeMaterials } from '../../kit/materials.js';
@@ -249,7 +249,7 @@ function build3d() {
       edges.position.copy(walls.position); BP3.add(edges);
     }
     for (const it of bp.items || []) {
-      const K = ITEM_KINDS[it.kind] || { color: '#999999' }, r = bp.rooms.find((q) => q.id === it.room), f = deck + (r?.floor || 0), [x0, z0, x1, z1] = it.rect;
+      const K = ITEM_KINDS[it.kind] || { color: '#999999' }, r = bp.rooms.find((q) => q.id === it.room), f = deck + (r?.floor || 0) + +(it.y || 0), [x0, z0, x1, z1] = it.rect;
       const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0 - 0.02, it.h, z1 - z0 - 0.02), mat('it' + K.color, () => new THREE.MeshStandardMaterial({ color: K.color, roughness: 0.7 })));
       m.position.set((x0 + x1) / 2, f + it.h / 2, (z0 + z1) / 2); m.castShadow = true; BP3.add(m);
     }
@@ -319,13 +319,13 @@ function panel() {
   h += '<ul>' + R.checks.map((k) => `<li><b class="${k.pass ? 'ok' : 'no'}">${k.pass ? '✓' : '✗'} ${esc(k.name)}</b><br><span>${esc(k.detail)}</span></li>`).join('') + '</ul>';
   h += '<h3>Rooms</h3><table>' + R.sizes.map((s) => `<tr><td><span class="sl-swatch" style="background:${ROOM_KINDS[s.kind]?.color || '#888'}"></span>${esc(s.name)}</td><td>${s.l} × ${s.w} m</td><td>${s.area} m²</td><td>${s.ceiling === 'canopy' ? 'canopy' : s.ceiling + ' m'}${s.floor ? ' (+' + s.floor + ')' : ''}</td><td class="${s.ok ? 'ok' : 'no'}">${s.ok ? '' : 'small'}</td></tr>`).join('') + '</table>';
   const kinds = [...new Set((st.bp.items || []).map((i) => i.kind))].filter((k) => ITEM_KINDS[k]);
-  h += '<h3>Furniture key</h3><div class="sel">' + kinds.map((k) => `<span class="sl-swatch" style="background:${ITEM_KINDS[k].color}"></span><b>${esc(ITEM_KINDS[k].tag)}</b> ${esc(ITEM_KINDS[k].label)} (${ITEM_KINDS[k].h} m)`).join(' · ') + '</div>';
+  h += '<h3>Furniture key</h3><div class="sel">' + kinds.map((k) => `<span class="sl-swatch" style="background:${ITEM_KINDS[k].color}"></span><b>${esc(ITEM_KINDS[k].tag)}</b> ${esc(ITEM_KINDS[k].label)} (${ITEM_KINDS[k].hang ? 'hangs, dashed on the plan' : ITEM_KINDS[k].h + ' m'})`).join(' · ') + '</div>';
   const S = st.sel, o = S && (S.type === 'room' ? st.bp.rooms.find((r) => r.id === S.id) : S.type === 'item' ? st.bp.items.find((i) => i.id === S.id) : st.bp.doors.find((d) => d.id === S.id));
   if (o) {
     h += '<h3>Selected</h3><div class="sel">';
     if (S.type === 'room') h += `${esc(o.name)}: ${o.rect[3] - o.rect[1]} m long, ${o.rect[2] - o.rect[0]} m wide, ceiling ${o.ceiling ?? CEIL}${typeof o.ceiling === 'number' || o.ceiling === undefined ? ' m' : ''}. Drag its walls on the grid.`;
-    if (S.type === 'item') h += `${esc(o.name || ITEM_KINDS[o.kind]?.label)} (${esc(ITEM_KINDS[o.kind]?.label || o.kind)}): ${o.rect[3] - o.rect[1]} × ${o.rect[2] - o.rect[0]} m, ${o.h} m tall, in ${esc(st.bp.rooms.find((r) => r.id === o.room)?.name || o.room)}. Drag it; Turn turns it.`;
-    if (S.type === 'door') h += `Door ${esc(o.id)}: ${o.width} m wide, between ${esc(o.rooms.join(' and '))}. Drag it along a wall, or onto another.`;
+    if (S.type === 'item') h += `${esc(o.name || ITEM_KINDS[o.kind]?.label)} (${esc(ITEM_KINDS[o.kind]?.label || o.kind)}): ${o.rect[3] - o.rect[1]} × ${o.rect[2] - o.rect[0]} m, ${hangs(o) ? `hanging from ${o.y} to ${+o.y + +o.h} m` : o.h + ' m tall'}, in ${esc(st.bp.rooms.find((r) => r.id === o.room)?.name || o.room)}. Drag it; Turn turns it.`;
+    if (S.type === 'door') h += `Door ${esc(o.id)}: ${o.width} m wide, between ${esc(o.rooms.join(' and '))}${o.rooms[1] === 'outside' ? '' : (o.leaves ?? 2) === 2 ? ', two leaves parting into the wall' : ', one leaf sliding into the wall'}. Drag it along a wall, or onto another.`;
     h += '</div>';
   }
   $('#panelBody').innerHTML = h;
@@ -385,8 +385,10 @@ function addThing(what) {
       const kind = what.slice(5), K = ITEM_KINDS[kind], id = uid(bp, kind);
       const inRoom = st.sel?.type === 'room' ? bp.rooms.find((r) => r.id === st.sel.id) : bp.rooms.find((r) => c.x > r.rect[0] && c.x < r.rect[2] && c.z > r.rect[1] && c.z < r.rect[3]);
       const cx = inRoom ? (inRoom.rect[0] + inRoom.rect[2]) / 2 : c.x, cz = inRoom ? (inRoom.rect[1] + inRoom.rect[3]) / 2 : c.z;
-      const x0 = snap(cx - K.w / 2, 0.25), z0 = snap(cz - K.d / 2, 0.25);
-      (bp.items ||= []).push({ id, kind, room: inRoom?.id || bp.rooms[0]?.id, rect: [x0, z0, x0 + K.w, z0 + K.d], h: K.h, name: K.label }); sel = { type: 'item', id };
+      let x0 = snap(cx - K.w / 2, 0.25); const z0 = snap(cz - K.d / 2, 0.25);
+      // (a hanging item: against the nearer side wall of its room, at its kind's height)
+      if (K.hang && inRoom) x0 = c.x > cx ? inRoom.rect[2] - K.w : inRoom.rect[0];
+      (bp.items ||= []).push({ id, kind, room: inRoom?.id || bp.rooms[0]?.id, rect: [x0, z0, x0 + K.w, z0 + K.d], h: K.h, ...(K.hang ? { y: K.y } : {}), name: K.label }); sel = { type: 'item', id };
     } else if (what === 'door') {
       const hits = wallsAt(bp, c.x, c.z, 6); if (!hits.length) return;
       const b = hits[0], id = uid(bp, 'door'), at = b.along === 'z' ? [b.x, snap(c.z, 0.25)] : [snap(c.x, 0.25), b.z];

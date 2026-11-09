@@ -4,7 +4,7 @@
 //   drag a room's wall (every room's wall on that line moves with it, and its doors), drag an item or a door
 //   (a door snaps onto the nearest wall); a tap selects; drag empty space to move the view; wheel or pinch to zoom;
 //   double-click (or double-tap) to fit.
-import { ROOM_KINDS, ITEM_KINDS, doorWall, wallsAt, snap, normRect, HEAD, CEIL } from './blueprint.js';
+import { ROOM_KINDS, ITEM_KINDS, doorWall, doorReach, hangs, wallsAt, snap, normRect, HEAD, CEIL } from './blueprint.js';
 
 const COL = {
   bg: '#0a0f16', grid: 'rgba(120,150,180,0.10)', grid1: 'rgba(120,150,180,0.20)', mid: 'rgba(159,220,255,0.35)',
@@ -244,11 +244,19 @@ export class Plan {
     }
     // the marks of the checks that fail: the cells, under the furniture's outlines
     for (const m of bad) if (m.rect && ['floor', 'head', 'ceiling', 'headroom', 'corridor'].includes(m.check)) { const [X, Y, W, H] = this.sr(m.rect); g.fillStyle = COL.bad; g.fillRect(X, Y, W, H); }
-    // items
-    for (const it of bp.items || []) {
+    // items: those standing on the floor, then the hanging ones over them (a light fill, a dashed outline, their tag in
+    // a corner so the one under shows too)
+    const standing = (bp.items || []).filter((it) => !hangs(it)), hanging = (bp.items || []).filter(hangs);
+    for (const it of standing) {
       const K = ITEM_KINDS[it.kind] || { color: '#999', tag: '?' }, [X, Y, W, H] = this.sr(it.rect);
       g.fillStyle = K.color + 'c8'; g.fillRect(X, Y, W, H); g.strokeStyle = '#0a0f16'; g.lineWidth = 1; g.strokeRect(X + 0.5, Y + 0.5, W - 1, H - 1);
       if (Math.min(W, H) > fs * 1.2) { g.fillStyle = '#0a0f16'; g.font = `700 ${Math.round(fs * 0.85)}px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(K.tag, X + W / 2, Y + H / 2); }
+    }
+    for (const it of hanging) {
+      const K = ITEM_KINDS[it.kind] || { color: '#999', tag: '?' }, [X, Y, W, H] = this.sr(it.rect);
+      g.fillStyle = K.color + '40'; g.fillRect(X, Y, W, H);
+      g.strokeStyle = K.color; g.lineWidth = 2; g.setLineDash([5, 3]); g.strokeRect(X + 1.5, Y + 1.5, W - 3, H - 3); g.setLineDash([]);
+      if (Math.min(W, H) > fs * 1.2) { g.font = `700 ${Math.round(fs * 0.7)}px ${FONT}`; g.textAlign = 'left'; g.textBaseline = 'top'; g.lineWidth = 3; g.strokeStyle = 'rgba(10,15,22,0.85)'; g.strokeText(K.tag, X + 4, Y + 3); g.fillStyle = K.color; g.fillText(K.tag, X + 4, Y + 3); }
     }
     // walls, then the doors over them
     for (const r of bp.rooms) {
@@ -259,6 +267,12 @@ export class Plan {
       const w = doorWall(bp, d), outer = d.rooms?.[1] === 'outside';
       // (a hatch: its square in the floor, an X across it)
       if (d.hatch) { const hw = d.width / 2, [X, Y, W, H] = this.sr([d.at[0] - hw, d.at[1] - hw, d.at[0] + hw, d.at[1] + hw]); g.strokeStyle = outer ? COL.outer : COL.door; g.lineWidth = 2.5; g.setLineDash(w ? [] : [3, 3]); g.strokeRect(X, Y, W, H); g.beginPath(); g.moveTo(X, Y); g.lineTo(X + W, Y + H); g.moveTo(X + W, Y); g.lineTo(X, Y + H); g.stroke(); g.setLineDash([]); continue; }
+      // (the pockets: where its open leaves park, a thin line along the wall either side of it)
+      if (w && !outer) for (const [lo, hi] of doorReach(d, w).pockets) {
+        g.strokeStyle = COL.door + '99'; g.lineWidth = 2; g.setLineDash([2, 2]); g.beginPath();
+        if (w.along === 'z') { g.moveTo(this.pX(lo), this.pY(w.x)); g.lineTo(this.pX(hi), this.pY(w.x)); } else { g.moveTo(this.pX(w.z), this.pY(lo)); g.lineTo(this.pX(w.z), this.pY(hi)); }
+        g.stroke(); g.setLineDash([]);
+      }
       const seg = w ? (w.along === 'z' ? [[this.pX(w.span[0]), this.pY(w.x)], [this.pX(w.span[1]), this.pY(w.x)]] : [[this.pX(w.z), this.pY(w.span[0])], [this.pX(w.z), this.pY(w.span[1])]]) : [[this.pX(d.at[1]) - d.width * s / 2, this.pY(d.at[0])], [this.pX(d.at[1]) + d.width * s / 2, this.pY(d.at[0])]];
       g.strokeStyle = COL.bg; g.lineWidth = 6; g.beginPath(); g.moveTo(...seg[0]); g.lineTo(...seg[1]); g.stroke();
       g.strokeStyle = outer ? COL.outer : COL.door; g.lineWidth = 3; g.setLineDash(w ? [] : [3, 3]); g.beginPath(); g.moveTo(...seg[0]); g.lineTo(...seg[1]); g.stroke(); g.setLineDash([]);
@@ -279,6 +293,7 @@ export class Plan {
     }
     // the other marks: doors, rooms not reached, overlaps, rooms too small
     for (const m of bad) {
+      if (m.check === 'pockets' && m.rect) { const [X, Y, W, H] = this.sr(m.rect); g.fillStyle = COL.badLine; g.fillRect(X - 1, Y - 1, W + 2, H + 2); }
       if (m.check === 'doors' && m.at) { const X = this.pX(m.at[1]), Y = this.pY(m.at[0]); g.strokeStyle = COL.badLine; g.lineWidth = 2.5; g.beginPath(); g.arc(X, Y, 9, 0, Math.PI * 2); g.moveTo(X - 5, Y - 5); g.lineTo(X + 5, Y + 5); g.moveTo(X + 5, Y - 5); g.lineTo(X - 5, Y + 5); g.stroke(); }
       if ((m.check === 'walk' || m.check === 'fit' || m.check === 'sizes') && m.rect) { const [X, Y, W, H] = this.sr(m.rect); g.strokeStyle = COL.badLine; g.lineWidth = 2.5; g.setLineDash([6, 4]); g.strokeRect(X + 2, Y + 2, W - 4, H - 4); g.setLineDash([]); }
     }
@@ -307,10 +322,12 @@ export class Plan {
     if (bp) {
       const bad = this.show.checks && result ? result.marks : [];
       // items from the side (all of them, see-through), then the rooms' boxes
+      // (a hanging item at its own height, dashed round)
       for (const it of bp.items || []) {
-        const K = ITEM_KINDS[it.kind] || { color: '#999' }, r = bp.rooms.find((q) => q.id === it.room), f = r?.floor || 0;
+        const K = ITEM_KINDS[it.kind] || { color: '#999' }, r = bp.rooms.find((q) => q.id === it.room), f = (r?.floor || 0) + +(it.y || 0);
         const X0 = this.pX(it.rect[3]), X1 = this.pX(it.rect[1]), Y0 = this.sY(f + it.h), Y1 = this.sY(f);
         g.fillStyle = K.color + '70'; g.fillRect(X0, Y0, X1 - X0, Y1 - Y0);
+        if (hangs(it)) { g.strokeStyle = K.color; g.lineWidth = 1.2; g.setLineDash([4, 3]); g.strokeRect(X0, Y0, X1 - X0, Y1 - Y0); g.setLineDash([]); }
       }
       for (const r of bp.rooms) {
         const K = ROOM_KINDS[r.kind] || { color: '#888' }, f = r.floor || 0, top = typeof r.ceiling === 'number' ? r.ceiling : r.ceiling === 'canopy' ? HEAD : CEIL;
