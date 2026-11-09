@@ -1459,6 +1459,18 @@ function applyFit(dst, src, M, fit, field, hug) {
   }
   Object.assign(stats, { hugged: 0, under: 0, cleared: 0, hugHeld: 0, hugMostMm: 0, skirt: null });
   if (field && !fit.placed) hugFit(F, B0, src, M, fit, field, hug || {}, stats);
+  // (a placement by hand: worn as placed, but a point it leaves a hair's breadth under THIS head's skin (PLACED_UNDER:
+  // his point on his head 0.1 mm off it, the parts' packing moving each a few hundredths: the long-neck t10's forehead
+  // under the short curly) held just outside it, along the skin's own normal; deeper, his dragged-in edge, left)
+  else if (fit.placed && hug && hug.tris) {
+    const H = hug.tris, P = [0, 0, 0];
+    for (let i = 0; i < n; i++) {
+      P[0] = F[i * 3]; P[1] = F[i * 3 + 1]; P[2] = F[i * 3 + 2];
+      let d = nearestHead(H, ...P); if (!nearestHead.found || nearestHead.out || d > PLACED_UNDER) continue;
+      for (let k = 0; k < 4 && nearestHead.found && !nearestHead.out; k++) { const nn = nearestHead.n, st = d + 0.00003; P[0] += nn.x * st; P[1] += nn.y * st; P[2] += nn.z * st; d = nearestHead(H, ...P); }
+      F[i * 3] = P[0]; F[i * 3 + 1] = P[1]; F[i * 3 + 2] = P[2]; stats.cleared++;
+    }
+  }
   const Mi = M.clone().invert(), P = dst.attributes.position.array;
   for (let i = 0; i < n; i++) _v.fromArray(F, i * 3).applyMatrix4(Mi).toArray(P, i * 3);
   dst.attributes.position.needsUpdate = true;
@@ -1525,6 +1537,8 @@ const HUG_DEEP = 0.015, HUG_PUSH = 0.008;   // (a line through the neck: its mos
 // dragged-in edge, the flare; a point a hair's breadth under as made (a hair cut on another head, its as-cut place on this
 // one; the nearest triangle's facing unsure at a crease) is held just outside instead)
 const EXACT_UNDER = 0.001;
+// (a placement by hand: a point under the skin by no more than this is the parts' packing, not his doing: held just out)
+const PLACED_UNDER = 0.0002;
 const HC = { ne: 90, na: 180 };     // (the grid: 2 degree cells, elevation by azimuth round from the face)
 function hugCell(dx, dy, dz, r) {
   const e = Math.min(HC.ne - 1, Math.max(0, Math.floor((Math.asin(Math.max(-1, Math.min(1, dy / r))) * DEG + 90) / 2)));
@@ -2298,7 +2312,7 @@ export async function makeCrew(lib, recipe) {
       // (a fit given as written (not as lib.fitOf gives it) wears this head's own setting under it)
       const f = fit ? (fit.resolved ? fitFor(fit) : fitFor(fit, R.head, lib.headFitOf(R.head), lib.hugDefaultOf(R.hair))) : null, plain = asMade(f);
       // (the head's reach: for the tuck and the hug, and for the shade's line as worn (a placement by hand too))
-      const field = !plain && R.head ? await lib.headField(R.head) : null, tris = field && !f.placed ? await lib.headTris(R.head) : null;
+      const field = !plain && R.head ? await lib.headField(R.head) : null, tris = field ? await lib.headTris(R.head) : null;
       const stats = { tucked: 0, held: 0, hugged: 0, under: 0, cleared: 0, hugHeld: 0, hugMostMm: 0 }, skirts = [];
       for (const [m, g0, M] of hairFit) {
         if (plain) { if (m.geometry !== g0) { disposeOwn(m.geometry); m.geometry = g0; } continue; }
