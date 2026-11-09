@@ -354,7 +354,7 @@ export function builtCockpitPlan() { return C.builtCockpitPlan(COCKPIT, COCKPIT_
 // mirrored; just outside the science lab's walls, slopes and ceiling), a curtain from the canopy's edge down to the
 // lid, and a panel in the wall's plane up to the glass: from just under the cabin wall's top (`under`; the wall's face
 // toward the cockpit reaches `wallHalf` each side, `wallTop` up), and beside it down to the cockpit's floor.
-export const CABIN_TUB = { z: 4.0, lid: [[2.05, 0.95], [2.05, 1.95], [1.35, 2.55]], under: 0.05, wallHalf: 1.47, wallTop: 2.5 };
+export const CABIN_TUB = { z: 4.0, lid: [[2.05, 0.95], [2.05, 1.95], [1.35, 2.55]], under: 0.05, wallHalf: 1.47, wallTop: 2.5, panel: s('#c8c6c1', 0.58, 0.04, 0.4) };
 function cabinTub(acc, outline, { fy, tubX, rayIn, wallSurf, floorSurf }) {
   const Cz = CABIN_TUB.z, ahead = [0, 0, -1, -Cz];
   // (the tub's walls and floor ahead of the cut: as built-common.js's cockpitTub, each polygon clipped at the cut)
@@ -407,7 +407,10 @@ function cabinTub(acc, outline, { fy, tubX, rayIn, wallSurf, floorSurf }) {
   // cockpit's floor, so nothing behind the wall shows past its ends)
   const fyD = fy - DECK, L = CABIN_TUB.wallHalf - 0.02, wt = CABIN_TUB.wallTop - u;
   const low = [[sx, sy], [tubX, fyD], [L, fyD], [L, wt], [-L, wt], [-L, fyD], [-tubX, fyD], [-sx, sy]];
-  both([...top.map(([x, y]) => V3(x, y, Cz)), ...low.map(([x, y]) => V3(x, DECK + y, Cz))], V3(0, 0, 1));
+  // (a pale panel, so the cabin's wall carries on up to the glass: the bulkhead behind the seats, not a wall in a hole;
+  // its back, toward the dark over the lab, dark)
+  const P = [...top.map(([x, y]) => V3(x, y, Cz)), ...low.map(([x, y]) => V3(x, DECK + y, Cz))];
+  polyTo(acc, P, V3(0, 0, 1), CABIN_TUB.panel); polyTo(acc, P, V3(0, 0, -1), wallSurf);
 }
 function ebCockpit(p, variant) {
   const Cp = COCKPIT, cabin = variant === 'two seats, cabin';
@@ -471,8 +474,13 @@ function ebDoorway(p, variant) {
     // THE ALCOVE (the cabin built inside): from the cabin's wall line out to the door's plane, its sides at the jambs and
     // its ceiling at the head, dark (the door's plane crosses the wall line just over the deck, at y yc)
     const xi = CABIN.wall, top = DECK + AIRLOCK.top, yc = DOOR.hinge + (xi - DOOR.xHinge) / (DOOR.xHead - DOOR.xHinge) * (DOOR.head - DOOR.hinge);
-    polyTo(acc, [V3(xi, top, z0), V3(doorX(top), top, z0), V3(doorX(top), top, z1), V3(xi, top, z1)], V3(0, -1, 0), PAL.trim);
-    for (const [z, nz] of [[z0, 1], [z1, -1]]) polyTo(acc, [V3(xi, yc, z), V3(doorX(top), top, z), V3(xi, top, z)], V3(0, 0, nz), PAL.trimEdge);
+    // (pale, as the stand-in airlock's were, and lit: a strip along its head and a light over the door, so the shut door
+    // and its steps read from the airlock)
+    polyTo(acc, [V3(xi, top, z0), V3(doorX(top), top, z0), V3(doorX(top), top, z1), V3(xi, top, z1)], V3(0, -1, 0), PAL.inner);
+    for (const [z, nz] of [[z0, 1], [z1, -1]]) polyTo(acc, [V3(xi, yc, z), V3(doorX(top), top, z), V3(xi, top, z)], V3(0, 0, nz), PAL.inner);
+    const zm = (z0 + z1) / 2, xs = xi + 0.25;
+    acc.poly([V3(xs - 0.04, top - 0.004, zm - 0.6), V3(xs + 0.04, top - 0.004, zm - 0.6), V3(xs + 0.04, top - 0.004, zm + 0.6), V3(xs - 0.04, top - 0.004, zm + 0.6)].map(dk), V3(0, -1, 0), [2.6, 2.4, 2.0], 'glow', 99);
+    p.light([xs, AIRLOCK.top - 0.1, zm], 1.2, [1, 0.94, 0.85], [0.3, -1, 0], 3);
   } else if (s > 0) {
     // THE AIRLOCK behind the port door: its deck, walls (the station's off-white), ceiling, and the inner door shut in its
     // inner wall (a dark panel, a lit strip over it)

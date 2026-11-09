@@ -220,7 +220,9 @@ function cabinFor(S, bp, look) {
   if (cabins.has(key)) return cabins.get(key);
   const id = 'cabin' + (++cabinSeq), space = st.space, L = LOOKS[look], parts = {};
   PIECES[id] = { name: 'Cabin: ' + (bp.name || bp.id), group: 'Ships', at: 'free', variants: ['walls', 'ceilings'], foot: [5, 2.5, 10], build: (p, v) => { buildCabin(p, bp, { space, which: v, outer: S.lab.cabin.outer, look }); Object.assign(parts, p.stats); if (p.runs?.length) parts.runs = p.runs; } };
-  if (!cabinMats[look]) { cabinMats[look] = makeMaterials(); if (L.floor) { cabinMats[look].floor.color.set(L.floor); cabinMats[look].floorInst.color.set(L.floor); } }
+  // (the floor tinted for the look; less of a mirror than the station's, so the lab's bright surroundings don't show as
+  // white patches on a ship's small floors)
+  if (!cabinMats[look]) { cabinMats[look] = makeMaterials(); for (const k of ['floor', 'floorInst']) { const m = cabinMats[look][k]; if (L.floor) m.color.set(L.floor); m.metalness = 0.35; m.envMapIntensity = 0.35; } }
   const room = { name: 'cabin', grid: { cell: 0.5, step: 0.5, deck: space.deck }, rooms: ['walls', 'ceilings'].map((v) => ({ id: v, pieces: [{ piece: id, cell: [0, 0], turn: 0, level: 0, variant: v }] })) };
   const built = buildRoom(room, cabinMats[look], { bake: { voxel: 0.08, rays: 24 } });
   delete PIECES[id]; forgetPiece(id);

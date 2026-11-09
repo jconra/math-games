@@ -63,7 +63,7 @@ const TONES = {
   warm: { glow: [3.4, 3.0, 2.4], light: [1.0, 0.88, 0.7] },
   cool: { glow: [2.7, 3.05, 3.6], light: [0.84, 0.92, 1.0] },
   plain: { glow: [3.2, 3.15, 3.0], light: [1.0, 0.97, 0.92] },
-  amber: { glow: GLOW.amber.map((v) => v * 0.8), light: [1.0, 0.68, 0.32] },
+  amber: { glow: GLOW.amber.map((v) => v * 0.8), light: [1.45, 0.98, 0.46] },
 };
 export const LOOKS = {
   light: {
@@ -78,7 +78,7 @@ export const LOOKS = {
   warm: {
     name: 'Warm',
     surf: {
-      white: ['#6b6e72', 0.42, 0.55, 0.9], white2: ['#7a7c7f', 0.4, 0.55, 0.8], grey2: ['#5f6266', 0.45, 0.5, 0.85], grey: ['#56595e', 0.45, 0.5, 0.6],
+      white: ['#7d8085', 0.42, 0.5, 0.9], white2: ['#8a8c90', 0.4, 0.5, 0.8], grey2: ['#6c6f73', 0.45, 0.5, 0.85], grey: ['#606368', 0.45, 0.5, 0.6],
       band: ['#34373b', 0.45, 0.45, 1.0], dark: ['#26282b', 0.5, 0.4, 0.8], black: ['#2e3033', 0.35, 0.55, 0.6],
     },
     tone: 'amber', rooms: {},
@@ -104,7 +104,9 @@ function recolour(p, look, toneAt) {
     return { mat, geo: g };
   });
   p.parts = doParts(p.parts);
-  p.lights = p.lights.map((l) => (l.color && l.color[1] > 0.85 && l.color[0] > 0.85 ? { ...l, color: toneAt(l.at[0], l.at[2]).light } : l));
+  // (the strips' and panels' lights take the room's tone; a doorway's green status light, which would tint a small room's
+  // ceiling green, is dimmed to a glint)
+  p.lights = p.lights.map((l) => (l.color && l.color[1] > 0.85 && l.color[0] > 0.85 ? { ...l, color: toneAt(l.at[0], l.at[2]).light } : l.color && l.color[1] > 0.9 && l.color[0] < 0.5 ? { ...l, i: l.i * 0.2 } : l));
   const leaves = new Map();
   p.movers = p.movers.map((mv) => {
     if (!leaves.has(mv.piece)) { const q = new Piece(); q.parts = doParts(mv.piece.parts); q.lights = mv.piece.lights; leaves.set(mv.piece, q); }
