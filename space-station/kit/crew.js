@@ -53,6 +53,9 @@
 // for every style (crew.json hairAtlas), tinted by the hair colour, drawn in one alpha-to-coverage pass (hairCardMaterial).
 // The Mathwood hair comes smooth-shaded (crew.json `smooth`: the same triangles, its vertices merged and its normals
 // smoothed) unless loadCrew({ smoothHair: false }) or lib.smoothHair = false (then its flat facets, as the pack has them).
+// THE MATHWOOD HAIR'S STRANDS (2026-11-08, crewPart.strands; HAIR_STRANDS below): its smooth locks drawn as hair, not
+// moulded plastic: fine strands from the same strand atlas running from each lock's root to its tip, a strand highlight
+// that slides across the locks, darker roots and grooves, a little colour from lock to lock; shape and colour pick as made.
 // PAINT HAIR (crew.json `paint`: the buzz cut): no mesh, a stubble layer in the head's own material (PAINTS); with a `file`
 // too (the pink side-swept hair, the mohawk), its mesh AND the paint on the head (a shaved side's stubble).
 // EACH HAIRCUT ITS OWN BUZZ, NEVER ON THE EARS (2026-11-08, PAINTS and THE PAINT FIELD): outside a hair's edge only the
@@ -115,7 +118,8 @@
 //   .applied false); lib.collarRide (true: the hidden neck rides with the cloth; false: drawn in only);
 //   lib.collarOf(suit id, template) -> the collar
 //   JOBS, UNIFORM_COLOURS, SKIN_TONES, HAIR_COLOURS, EYE_COLOURS, FACE, CLIPS, EXPRESSIONS, PAINTS, fitFor, SKULL,
-//   HAIR_CLEAR, TUCK_CLEAR, TUCK_MAX, COLLAR_CLEAR, COLLAR_BAND, SIDEBURN, NAPE, UNDER_SOFT, EAR_SOFT, lineAt, paintField
+//   HAIR_CLEAR, TUCK_CLEAR, TUCK_MAX, COLLAR_CLEAR, COLLAR_BAND, SIDEBURN, NAPE, UNDER_SOFT, EAR_SOFT, lineAt, paintField,
+//   HAIR_STRANDS (the Mathwood hair's strand look), STRAND_S, STRAND_P
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
@@ -339,10 +343,13 @@ function crewUniforms(refs) {
     crGlow: { value: refs && refs.glow != null ? refs.glow : 0.0 },
   };
 }
-function crewMaterial(src, kind, part, paint) {
+function crewMaterial(src, kind, part, paint, atlas) {
   const m = src.clone(), refs = part && part.refs;
   const u = m.userData.crew = crewUniforms(refs);
   const has = part && part.masks ? part.masks : {};
+  // (the Mathwood hair's strands: a hair part that carries them (crewPart.strands), with the strand atlas)
+  const SL = kind === 'hair' && part && part.strands && atlas ? { ...HAIR_STRANDS, ...((part.strands && part.strands.look) || {}) } : null;
+  if (SL) strandUniforms(u, SL, atlas);
   // (paint on a head with skin: PAINTS and THE PAINT FIELD below (paintOf): the stubble's look (a hair's own changes to
   // PAINTS.stubble), the scalp shade's (to PAINTS.under), the buzz cut's hairline, the field, a hair's marks)
   const PT = paint && kind === 'head' && has.skin ? paint : null;
@@ -366,7 +373,9 @@ function crewMaterial(src, kind, part, paint) {
   if (kind !== 'suit') { m.roughness = part && part.rough != null ? part.rough : Math.max(m.roughness, 0.78); m.envMapIntensity = 0.55; }
   // (the suit's generated normal map is busy, ripples where the plates are smooth: half strength)
   else if (m.normalMap) m.normalScale.set(0.5, 0.5);
+  if (SL) { m.roughness = SL.rough; m.envMapIntensity = SL.env; }
   m.defines = { ...(m.defines || {}), [KIND_DEF[kind]]: '' };
+  if (SL) Object.assign(m.defines, { CREW_STRANDS: '', CR_S_SCALE: STRAND_S.toFixed(3), CR_P_SCALE: STRAND_P.toFixed(3) });
   // (a suit's own mask texture: in the occlusion slot at strength 0, taken out of it as the masks)
   if (kind === 'suit' && has.tex === 'occlusion' && m.aoMap) { u.crMaskMap = { value: m.aoMap }; m.aoMap = null; m.defines.CREW_MASKTEX = ''; }
   else if (has.marks) m.defines.CREW_MARKS = '';
@@ -382,12 +391,17 @@ function crewMaterial(src, kind, part, paint) {
     Object.assign(sh.uniforms, u);
     if (PT) sh.vertexShader = 'uniform mat4 crHeadFrame; varying vec3 vCrHead; varying vec3 vCrHeadN;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
   vCrHead = (crHeadFrame * vec4(position, 1.0)).xyz; vCrHeadN = mat3(crHeadFrame) * normal;`);
+    if (SL) sh.vertexShader = STRAND_VERTEX + sh.vertexShader.replace('#include <defaultnormal_vertex>', `#include <defaultnormal_vertex>
+  crStrandVertex();`);
     sh.fragmentShader = `uniform vec3 crMarks, crMarksRef, crLines, crLinesRef, crPanels, crPanelsRef, crWhites, crWhitesRef, crSkin, crSkinRef, crHair, crHairRef; uniform float crGlow;
 #ifdef CREW_MASKTEX
 uniform sampler2D crMaskMap;
 #endif
 #ifdef CREW_PAINT
 ${PAINT_GLSL}
+#endif
+#ifdef CREW_STRANDS
+${STRAND_GLSL}
 #endif
 float crLum(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 // (a mask kept in an alpha channel between 4 and 255: lossy WebP drops the colour under a fully clear pixel)
@@ -429,6 +443,9 @@ vec3 crShift(vec3 c, vec3 to, vec3 ref, float m) { return max(c + (to - ref) * m
 #ifdef CREW_HAIR
   diffuseColor.rgb = crShift(diffuseColor.rgb, crHair, crHairRef, 1.0);
 #endif
+#ifdef CREW_STRANDS
+  diffuseColor.rgb = crStrands(diffuseColor.rgb);
+#endif
 #ifdef CREW_PAINT
   diffuseColor.rgb = crPaint(diffuseColor.rgb);
 #endif`)
@@ -438,6 +455,8 @@ vec3 crShift(vec3 c, vec3 to, vec3 ref, float m) { return max(c + (to - ref) * m
 #endif`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
   totalEmissiveRadiance += crLines * crLineMask * crGlow;`);
+    if (SL) sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>' + STRAND_NORMAL)
+      .replace('#include <opaque_fragment>', STRAND_LIGHT + '\n#include <opaque_fragment>');
   };
   m.customProgramCacheKey = () => 'crew-2-' + Object.keys(m.defines).join('-');
   return m;
@@ -543,6 +562,152 @@ uniform vec3 crHair; uniform float crMean, crTexSize, cr_shift1, cr_shift2, cr_e
 function hairDepthMaterial(atlas) {
   return new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: atlas.map, alphaTest: 0.5, side: THREE.DoubleSide });
 }
+
+// ── the Mathwood hair's strands (2026-11-08) ─────────────────────────────────────────────────────────────────────────
+// The game's maker: "Can you give the textures from Mathwood a hairlike texture? Right now they look cool, but kind of
+// like plastic." Every Mathwood hair is built of locks (tubes of four-sided rings from a root to a tip) and the bob and
+// long hair of a skull cap under them. Its build (~/pw/space-math/rigs/mathwood-hair/strands.mjs) writes into each
+// vertex where it is on its lock: _strand (the strand's direction, root to tip; the cap: down from the crown), _flow (its
+// share of the way round the lock, with the lock's first and last lines marked so the face across the wrap carries the
+// strands on round without a seam; 0 weight at the tip, so the tip's faces run into it) and _hair (how far from the
+// root, the lock's girth and length, how open the point is: 0 shut in by other locks). The hair's material
+// (crewMaterial, CREW_STRANDS) is the part's own with, over the hair colour picked:
+//   fine strands: the strand atlas's sheet tile (straight strands), `width` metres of hair across a repeat and `length`
+//     along it, round each lock a whole number of repeats (its girth over `width`), so they run from root to tip and
+//     close round it, light and dark `contrast` times the tile's own;
+//   clumps: the atlas's stubble tile drawn out along the strands (`clumpWidth` across a repeat, `clumpLength` along),
+//     streaks of every width, so the strands never stand evenly spaced like wood grain (`clumpContrast`);
+//   darker roots (`rootDark`, gone `rootLen` metres along), the grooves' shade (`ao` of the openness), the shade
+//   taking on the hair's own colour as it deepens (`deep`: a blond's shade golden brown, not olive), a little brightness
+//   and warmth from lock to lock (`lockVar`), `gain` so it averages about the colour picked; each lock its own place in
+//   the tiles (a number from its girth and length);
+//   the shape's light: each point's normal leant toward the way out from the skull's centre, across the strands only
+//     (`puff`; none along a spike that stands straight out), so the locks shade as one soft mass of hair instead of
+//     carved four-sided sticks;
+//   the light: rougher (`rough`, `env`), the smooth surface's own round highlight (`gloss` of it) and some of the room's
+//     reflection (`envGloss`) taken off, the room's light on it taking the hair's own colour (`scatter`), and a strand
+//     highlight (Kajiya-Kay, two lobes as the card hair's: `shift`, `exp`, `spec`) along each point's strand direction,
+//     so it lies across the locks as a band and slides along them as the light and eye move, broken up by the strands
+//     (`wobble`), tinted by the hair's colour (`tint`, more for light hair: white on blond read as paper); from the
+//     directional lights, and `sky` of it from the hemisphere light above, so the back of the head has its sheen too;
+//     seen at a glancing angle, toward the hair's outline, dimmed (`rim`), or the locks' edges glowed like paper's.
+// The colour the shade takes on (`deep`, `scatter`) grows with how light the hair is (none for black or dark brown,
+// whose shade only darkens; full from about a mid blond), as light bounces among light hair and hardly among dark; the
+// strands' contrast eases a little on light hair (on blond it read as wood grain).
+// A hair part without crewPart.strands (the card hair, the Tripo hair, the captain's braids) is drawn as before; this
+// costs it nothing. A part can change any of these (crewPart.strands.look).
+export const HAIR_STRANDS = {
+  width: 0.006, length: 0.35, contrast: 0.6, clumpWidth: 0.03, clumpLength: 0.3, clumpContrast: 0.8, wobble: 0.15,
+  rootDark: 0.3, rootLen: 0.035, ao: 0.4, deep: 0.8, scatter: 0.8, gain: 1.05, lockVar: 0.07, puff: 0.6,
+  shift1: -0.07, shift2: 0.12, exp1: 50.0, exp2: 10.0, spec1: 0.13, spec2: 0.4, tint: 0.5, sky: 0.7, rim: 0.6, gloss: 0.9,
+  envGloss: 0.75, rough: 0.9, env: 1.0,
+};
+// (_hair's distance along from the root and girth, stored over these many metres; the build's S_SCALE and P_SCALE)
+export const STRAND_S = 0.5, STRAND_P = 1.0;
+// (the strand atlas's sheet tile (straight strands) and stubble tile: u0, v0 and size in glTF's uv, and the mean, linear)
+const STRAND_TILE = [0.046875, 0.796875, 0.15625, 0.5803], CLUMP_TILE = [0.546875, 0.796875, 0.15625, 0.3884];
+function strandUniforms(u, L, atlas) {
+  const V = (...a) => ({ value: new THREE.Vector4(...a) });
+  Object.assign(u, {
+    crStrandMap: { value: atlas.map }, crStrandTile: V(...STRAND_TILE), crStrandTile2: V(...CLUMP_TILE),
+    crStrandLook: V(L.width, L.length, L.contrast, L.wobble), crStrandClump: V(L.clumpWidth, L.clumpLength, L.clumpContrast, L.lockVar),
+    crStrandShade: V(L.rootDark, L.rootLen, L.puff, 0), crStrandDeep: V(L.ao, L.deep, L.scatter, L.gain),
+    crStrandSpec: V(L.shift1, L.shift2, L.exp1, L.exp2), crStrandSpec2: V(L.spec1, L.spec2, L.sky, L.gloss),
+    crStrandSpec3: V(L.envGloss, L.tint, L.rim, 0),
+    // (the skull's centre in the part's own frame: makeCrew sets it from the hair mesh as bound)
+    crStrandSkull: { value: new THREE.Vector3() },
+  });
+}
+const STRAND_VERTEX = `attribute vec3 _strand; attribute vec4 _flow; attribute vec4 _hair; uniform vec3 crStrandSkull;
+varying vec3 vCrStrand; varying vec3 vCrRadial; varying vec4 vCrFlow; varying vec4 vCrHairV;
+#ifdef USE_SKINNING
+#define CR_SKIN(v) v = (skinMatrix * vec4(v, 0.0)).xyz
+#else
+#define CR_SKIN(v)
+#endif
+#define crStrandVertex() { vec3 crS = _strand, crR = position - crStrandSkull; CR_SKIN(crS); CR_SKIN(crR); vCrStrand = normalize((modelViewMatrix * vec4(crS, 0.0)).xyz + 1e-6); vCrRadial = (modelViewMatrix * vec4(crR, 0.0)).xyz; vCrFlow = _flow; vCrHairV = _hair; }
+`;
+const STRAND_GLSL = `
+uniform sampler2D crStrandMap;
+uniform vec4 crStrandTile, crStrandTile2, crStrandLook, crStrandClump, crStrandShade, crStrandDeep, crStrandSpec, crStrandSpec2, crStrandSpec3;
+varying vec3 vCrStrand; varying vec3 vCrRadial; varying vec4 vCrFlow; varying vec4 vCrHairV;
+float crStrandG = 0.0;          // (this point's strands against the mean, -1 dark to 1 light: the highlight's wobble)
+float crStrandO = 1.0;          // (how open it is, with the grooves' shade: the highlight's too)
+vec3 crStrandHue = vec3(1.0);   // (the hair's own colour, its brightest channel 1)
+float crStrandLight = 0.0;      // (how light the hair colour is: 0 dark brown and darker, 1 from about a mid blond)
+// (a tile of the atlas at st (in repeats, unbroken across them), over its mean: its mip level from st itself, so the
+// repeats leave no seams)
+float crTileAt(vec4 T, vec2 st, vec2 gx, vec2 gy) {
+  vec2 uv = T.xy + fract(st) * T.z;
+#if __VERSION__ >= 300
+  return textureGrad(crStrandMap, uv, gx * T.z, gy * T.z).r / T.w;
+#else
+  return texture2D(crStrandMap, uv).r / T.w;
+#endif
+}
+// (a layer of strands: m repeats round the lock (whole, so the ring closes), along metres a repeat along it; the wrap's
+// jump of m repeats is no change in the strands, so it's taken out of the mip level's rates)
+float crLayer(vec4 T, float a, float s, float m, float along, vec2 off) {
+  vec2 st = vec2(a * m + off.x, s / along + off.y), gx = dFdx(st), gy = dFdy(st);
+  gx.x -= m * floor(gx.x / m + 0.5); gy.x -= m * floor(gy.x / m + 0.5);
+  return crTileAt(T, st, gx, gy);
+}
+// (the two lobes of the strand highlight from one light)
+vec3 crKK(vec3 L, vec3 lc, vec3 n, vec3 V, vec3 T1, vec3 T2, vec3 tint, vec3 diff) {
+  vec3 H = normalize(L + V);
+  float d1 = dot(T1, H), d2 = dot(T2, H);
+  float s1 = pow(max(0.0, 1.0 - d1 * d1), 0.5 * crStrandSpec.z), s2 = pow(max(0.0, 1.0 - d2 * d2), 0.5 * crStrandSpec.w);
+  return lc * smoothstep(-0.1, 0.5, dot(n, L)) * (s1 * crStrandSpec2.x * tint + s2 * crStrandSpec2.y * diff);
+}
+vec3 crStrands(vec3 col) {
+  // (round the lock, 0 to 1: the wrap's face adds its first line's 1; the tip's faces divided by their ring's weight)
+  float w = max(vCrFlow.w, 1e-3);
+  float a = (vCrFlow.x + (vCrFlow.z > 1e-3 ? vCrFlow.y : 0.0)) / w;
+  float s = vCrHairV.x * CR_S_SCALE, girth = vCrHairV.y * CR_P_SCALE, len = vCrHairV.z * CR_S_SCALE;
+  float own = fract(sin(girth * 1271.3 + len * 3117.7) * 43758.5453);
+  crStrandLight = smoothstep(0.03, 0.35, dot(crHair, vec3(0.2126, 0.7152, 0.0722)));
+  float t = crLayer(crStrandTile, a, s, max(1.0, floor(girth / crStrandLook.x + 0.5)), crStrandLook.y, vec2(own * 17.0, own * 5.3));
+  float c = crLayer(crStrandTile2, a, s, max(1.0, floor(girth / crStrandClump.x + 0.5)), crStrandClump.y, vec2(own * 7.0, own * 3.1));
+  crStrandG = clamp(t - 1.0 + 0.5 * (c - 1.0), -1.0, 1.0);
+  float ease = 1.0 - 0.3 * crStrandLight;
+  float f = max(0.0, 1.0 + crStrandLook.z * ease * (t - 1.0)) * max(0.0, 1.0 + crStrandClump.z * ease * (c - 1.0));
+  float root = mix(1.0 - crStrandShade.x, 1.0, smoothstep(0.0, crStrandShade.y, s));
+  crStrandO = mix(1.0, vCrHairV.w, crStrandDeep.x);
+  crStrandHue = col / max(max(col.r, max(col.g, col.b)), 1e-4);
+  // (deeper is darker and, in light hair, more of its own colour: light that goes in among it comes out coloured)
+  float d = root * crStrandO;
+  vec3 deep = d * mix(vec3(1.0), crStrandHue, crStrandDeep.y * crStrandLight * (1.0 - d));
+  float lock = 1.0 + crStrandClump.w * (own - 0.5) * 2.0;
+  vec3 warm = vec3(1.0 + 0.06 * (own - 0.5), 1.0, 1.0 - 0.06 * (own - 0.5));
+  return col * warm * deep * (f * lock * crStrandDeep.w);
+}`;
+// (the locks shaded as one soft mass: the normal leant toward the way out from the skull's centre, by as much of that way
+// as lies across the strands)
+const STRAND_NORMAL = `
+  {
+    vec3 crT0 = normalize(vCrStrand), crR = normalize(vCrRadial + 1e-6);
+    normal = normalize(normal + (crR - crT0 * dot(crR, crT0)) * crStrandShade.z);
+  }`;
+const STRAND_LIGHT = `
+  // (the smooth surface's own round highlight and some of the room's reflection taken off: they're the plastic; and
+  // light that goes in among hair comes out coloured: the room's light on it takes the hair's own colour)
+  outgoingLight -= reflectedLight.directSpecular * crStrandSpec2.w + reflectedLight.indirectSpecular * crStrandSpec3.x;
+  outgoingLight += reflectedLight.indirectDiffuse * (pow(crStrandHue, vec3(crStrandDeep.z * crStrandLight)) - 1.0);
+  {
+    vec3 crT = normalize(vCrStrand - normal * dot(vCrStrand, normal) + 1e-6), crV = normalize(vViewPosition);
+    float crWob = crStrandG * crStrandLook.w;
+    vec3 crT1 = normalize(crT + normal * (crStrandSpec.x + crWob)), crT2 = normalize(crT + normal * (crStrandSpec.y + crWob));
+    vec3 crTint = mix(vec3(1.0), crStrandHue, min(1.0, crStrandSpec3.y + 0.3 * crStrandLight)) * (1.0 + 0.5 * crStrandG), crHi = vec3(0.0);
+#if NUM_DIR_LIGHTS > 0
+    for (int i = 0; i < NUM_DIR_LIGHTS; i++) crHi += crKK(directionalLights[i].direction, directionalLights[i].color, normal, crV, crT1, crT2, crTint, diffuseColor.rgb);
+#endif
+#if NUM_HEMI_LIGHTS > 0
+    // (the sky's light from above: a soft band too, so hair turned away from the lamps still has its sheen)
+    for (int i = 0; i < NUM_HEMI_LIGHTS; i++) crHi += crStrandSpec2.z * crKK(hemisphereLights[i].direction, hemisphereLights[i].skyColor, normal, crV, crT1, crT2, crTint, diffuseColor.rgb);
+#endif
+    // (dimmed toward the outline, where it lit the locks' edges like paper's)
+    outgoingLight += crHi * crStrandO * (1.0 - crStrandSpec3.z * (1.0 - smoothstep(0.0, 0.4, abs(dot(normal, crV)))));
+  }`;
 
 // ── paint: stubble on the head's own skin (the buzz cut, and the scalp's shade under a hair with a line) ────────────
 // A hair entry with `paint` (crew.json: the name of one of PAINTS, and its own `colour`) has no mesh: it is a layer in
@@ -1568,8 +1733,10 @@ export async function makeCrew(lib, recipe) {
   // (card hair, paint hair and the scalp's shade under a hair draw from the shared strand atlas; paint hair has no part of
   // its own unless it gives a `file` too (BOTH, at PAINTS): then its mesh and its paint together, the paint's marks loaded)
   const HE = (R.hair && lib.entry('hair', R.hair)) || {}, cards = !!HE.cards, paint = HE.paint && PAINTS[HE.paint] ? HE.paint : null;
-  const [suit, head, hair, hand, fit, atlas, marks] = await Promise.all([...['suit', 'head', 'hair', 'hand'].map((k) => (R[k] && !(k === 'hair' && paint && !HE.file) ? lib.part(k, R[k]) : null)), lib.clipsFor(R.suit, R.hand),
+  const [suit, head, hair, hand, fit, atlas0, marks] = await Promise.all([...['suit', 'head', 'hair', 'hand'].map((k) => (R[k] && !(k === 'hair' && paint && !HE.file) ? lib.part(k, R[k]) : null)), lib.clipsFor(R.suit, R.hand),
     cards || paint || (HE.scalp && HE.scalp.line) ? lib.hairAtlas() : null, paint && HE.marks ? lib.paintMarks(HE.marks) : null]);
+  // (the Mathwood hair's strands draw from the strand atlas too: THE MATHWOOD HAIR'S STRANDS)
+  const atlas = atlas0 || (hair && (hair.scene.userData.crewPart || {}).strands ? await lib.hairAtlas() : null);
   const tpl = assemble(suit, [['head', head], ['hair', hair], ['hand', hand]].filter((x) => x[1]));
   // THE COLLAR FIT: the suit's collar and the head's points below its rim, on the template at the suit's rest (before any
   // clip), applied to the person's own copy of the head's positions below
@@ -1607,7 +1774,9 @@ export async function makeCrew(lib, recipe) {
     } else {
       // (a painted cut on the head, or a hair's buzz and the scalp's shade under it: THE PAINT FIELD)
       const pt = kind === 'head' && R.hair ? paintOf(HE, lib.buzzOf(R.hair), lib.earsOf(R.head), { atlas, marks, frame: frameOf(o), hairRefs: refsOf.hair }) : null;
-      const mat = crewMaterial(own, kind, refsOf[kind], pt); o.material = mat; mats.push(mat); meshes[kind] = o;
+      const mat = crewMaterial(own, kind, refsOf[kind], pt, kind === 'hair' ? atlas : null); o.material = mat; mats.push(mat); meshes[kind] = o;
+      // (the Mathwood hair's strands: the skull's centre in the hair's own frame, for the way out from it)
+      if (mat.userData.crew.crStrandSkull) mat.userData.crew.crStrandSkull.value.fromArray(SKULL).applyMatrix4(frameOf(o).invert());
       if (pt) { painted = pt; pt.mat = mat; }
       // (the hands, when no skin tone is given, take the head's own skin: HANDS)
       const hs = kind === 'hand' && refsOf.head && refsOf.head.refs && refsOf.head.refs.skin;
