@@ -32,7 +32,9 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { checkBlueprint, ROOM_KINDS, ITEM_KINDS, doorWall, wallsAt, snap, hangs, HEAD, CEIL } from './blueprint.js';
 import { Plan } from './plan.js';
-import { buildRoom, updateDoors, loadRoom } from '../../kit/layout.js';
+import { buildRoom, updateDoors, setDoors, loadRoom, forgetPiece } from '../../kit/layout.js';
+import { PIECES } from '../../kit/catalog.js';
+import { buildCabin, LOOKS } from '../../kit/ships/cabin-built.js';
 import { makeMaterials } from '../../kit/materials.js';
 import { setThrottle, THROTTLE, ENGINE } from '../../kit/ships/built-common.js';
 import { makeJets } from '../../kit/ships/plume.js';
@@ -67,6 +69,9 @@ const st = {
   ship: null, shell: null, space: null, opt: null, bp: null, stock: {}, edits: {}, result: null, sel: null,
   view: VIEWS[q.get('view')] ? q.get('view') : 'split', cam: 'Hero', hull: 'xray', show: { space: true, rooms: true, checks: true, person: true, meshy: false }, undo: [], pending: false,
   gear: 'down', door: 'shut', dirt: 'Some', throttle: 'Off', throttleT: 0, arms: 'reaching', thrusters: false, canisters: true, ramps: 'up', rampCount: 'both',
+  // (the cabin built inside from the blueprint: shown, its look, its ceilings, its doors (auto: they open as the eye or
+  // the person comes near), a pose holding them part open)
+  inside: q.get('inside') !== '0', look: LOOKS[q.get('look')] ? q.get('look') : 'light', roof: true, cabinDoors: 'auto', doorsAt: null,
 };
 
 // ── renderer, scene, camera ───────────────────────────────────────────────────────────────────────────────────────
@@ -108,8 +113,11 @@ const loader = new GLTFLoader(); loader.setMeshoptDecoder(MeshoptDecoder);
 const shells = new Map();
 const spaceOf = (S) => fetch(`../../assets/ships/${S.shell}.space.json`).then((r) => { if (!r.ok) throw new Error('Ship Lab: no space file for ' + S.shell); return r.json(); });
 // a ship that is a layout: built by the kit's own layout code (its doors and movers with it), in its grime materials
-async function loadBuilt(S) {
+async function loadBuilt(S, inside) {
   const [room, space] = await Promise.all([loadRoom(`../../kit/rooms/${S.layout}.json`), spaceOf(S)]);
+  // (with the cabin inside: the pieces it changes, swapped for their cabin variants)
+  const swap = inside && S.lab.cabin?.swap;
+  if (swap) room.pieces = room.pieces.map((pl) => (swap[pl.piece]?.[pl.variant] ? { ...pl, variant: swap[pl.piece][pl.variant] } : pl));
   const built = buildRoom(room, S.lab.materials(makeMaterials(), (S.lab.dirt || EB.LAB.dirt)[st.dirt]), { bake: { voxel: 0.08, rays: 24 } });
   const holder = new THREE.Group(), model = built.group; holder.add(model);
   // (its jets: plume.js, laid in its nozzles, the throttle's; and its thrusters' own, if it has them)
@@ -125,9 +133,11 @@ async function loadBuilt(S) {
   const size = new THREE.Box3().setFromObject(holder).getSize(new THREE.Vector3());
   return { holder, model, tris: built.stats.tris, size, space, built, jets };
 }
+const hasCabin = (S) => !!S?.lab?.cabin;
 async function loadShell(S) {
-  if (shells.has(S.id)) return shells.get(S.id);
-  if (S.layout) { const rec = await loadBuilt(S); shells.set(S.id, rec); return rec; }
+  const inside = hasCabin(S) && st.inside, key = S.id + (inside ? ':inside' : '');
+  if (shells.has(key)) return shells.get(key);
+  if (S.layout) { const rec = await loadBuilt(S, inside); shells.set(key, rec); return rec; }
   const [g, space] = await Promise.all([loader.loadAsync(`../../assets/ships/${S.shell}.glb`), spaceOf(S)]);
   const model = g.scene, holder = new THREE.Group(); holder.add(model);
   // (a prepared shell is placed in its file; an older one lies along x, nose -x: turned, scaled to 17.3 m, stood up)
@@ -148,7 +158,7 @@ async function loadShell(S) {
   holder.updateMatrixWorld(true);
   const size = new THREE.Box3().setFromObject(holder).getSize(new THREE.Vector3());
   const rec = { holder, model, tris, size, space };
-  shells.set(S.id, rec); return rec;
+  shells.set(key, rec); return rec;
 }
 function setHull(mode) {
   st.hull = mode;
@@ -179,7 +189,7 @@ async function showShip(S) {
   // (its own blueprints: the one shown stays if it is one of them)
   if (S.bps && !S.bps.includes(st.opt) && st.opt !== 'uploaded') showOption(S.bps[0]);
   await showMeshy();
-  plan.hFor = null; recheck(true); setCam(st.cam); url(); menu();
+  plan.hFor = null; recheck(true); await showCabin(); setCam(st.cam); url(); menu();
   loading.hidden = true;
 }
 // Meshy B laid over the built ship, see-through, to compare (its own shell, a see-through copy of its paint)
@@ -199,6 +209,66 @@ async function showMeshy() {
   if (meshyOver) { if (on) scene.add(meshyOver); else scene.remove(meshyOver); }
 }
 
+// ── the cabin: the rooms built inside the ship from the blueprint shown (kit/ships/cabin-built.js), with the kit's
+// layout code like the ship (its own materials: no grime inside); its ceilings a zone of their own, so Ceilings off
+// lifts them away to look in from above. One built cabin per blueprint and look is kept (the last few).
+let cabinSeq = 0, cabinMats = {};
+const cabins = new Map();
+const cabinOn = () => hasCabin(st.ship) && st.inside && st.bp && (!st.bp.shell || st.bp.shell === st.ship.shell);
+function cabinFor(S, bp, look) {
+  const key = S.id + '|' + look + '|' + JSON.stringify(bp);
+  if (cabins.has(key)) return cabins.get(key);
+  const id = 'cabin' + (++cabinSeq), space = st.space, L = LOOKS[look], parts = {};
+  PIECES[id] = { name: 'Cabin: ' + (bp.name || bp.id), group: 'Ships', at: 'free', variants: ['walls', 'ceilings'], foot: [5, 2.5, 10], build: (p, v) => { buildCabin(p, bp, { space, which: v, outer: S.lab.cabin.outer, look }); Object.assign(parts, p.stats); if (p.runs?.length) parts.runs = p.runs; } };
+  if (!cabinMats[look]) { cabinMats[look] = makeMaterials(); if (L.floor) { cabinMats[look].floor.color.set(L.floor); cabinMats[look].floorInst.color.set(L.floor); } }
+  const room = { name: 'cabin', grid: { cell: 0.5, step: 0.5, deck: space.deck }, rooms: ['walls', 'ceilings'].map((v) => ({ id: v, pieces: [{ piece: id, cell: [0, 0], turn: 0, level: 0, variant: v }] })) };
+  const built = buildRoom(room, cabinMats[look], { bake: { voxel: 0.08, rays: 24 } });
+  delete PIECES[id]; forgetPiece(id);
+  const rec = { key, built, group: built.group, tris: built.stats.tris, perZone: built.stats.perZone, parts };
+  cabins.set(key, rec);
+  // (keep the last four)
+  while (cabins.size > 4) { const [k, old] = cabins.entries().next().value; if (old === st.cabin) break; scene.remove(old.group); old.built.dispose(); cabins.delete(k); }
+  return rec;
+}
+async function showCabin() {
+  const want = cabinOn() ? cabinFor(st.ship, st.bp, st.look) : null;
+  if (st.cabin && st.cabin !== want) scene.remove(st.cabin.group);
+  st.cabin = want;
+  if (want) { scene.add(want.group); for (const z of want.built.zones) z.group.visible = z.id !== 'ceilings' || st.roof; if (st.doorsAt != null) setDoors(want.built.doors, st.doorsAt); }
+  build3d();
+}
+let cabinTimer = 0;
+// (after an edit: the cabin again, a moment later, so a run of edits builds it once)
+function cabinSoon() { clearTimeout(cabinTimer); cabinTimer = setTimeout(() => { showCabin(); menu(); }, 350); }
+// THE CAMERAS IN THE ROOMS: one at eye height (1.6 m over its floor) in each room the cabin builds; and Row: from
+// engineering's back wall along the middle line, through every door to the cockpit (with the doors open)
+const EYE = 1.6, EYE_FOV = 72;
+// (each room's: the blueprint's own spot for it (its `eyes`), or standing on the free spot farthest from the middle of
+// its furniture, looking across at it, a little down)
+function roomSpots() {
+  if (!cabinOn()) return {};
+  const out = {}, deck = st.space.deck, bp = st.bp;
+  for (const r of bp.rooms) {
+    if (r.ceiling === 'canopy') continue;
+    const [x0, z0, x1, z1] = r.rect, f = deck + (r.floor || 0) + EYE, name = (r.name || r.id).split(/[ /]/)[0];
+    const own = bp.eyes?.[r.id];
+    if (own) { out[name] = { at: [own.at[0], f, own.at[1]], look: [own.look[0], f - 0.35, own.look[1]], fov: EYE_FOV, room: r.id }; continue; }
+    const its = (bp.items || []).filter((it) => it.room === r.id), stands = its.filter((it) => !+(it.y || 0));
+    const mid = its.length ? its.reduce((m, it) => [m[0] + (it.rect[0] + it.rect[2]) / 2 / its.length, m[1] + (it.rect[1] + it.rect[3]) / 2 / its.length], [0, 0]) : [(x0 + x1) / 2, z0];
+    let best = null;
+    for (let x = x0 + 0.3; x <= x1 - 0.3 + 1e-6; x += 0.25) for (let z = z0 + 0.3; z <= z1 - 0.3 + 1e-6; z += 0.25) {
+      if (stands.some((it) => x > it.rect[0] - 0.25 && x < it.rect[2] + 0.25 && z > it.rect[1] - 0.25 && z < it.rect[3] + 0.25)) continue;
+      const d = Math.hypot(mid[0] - x, mid[1] - z); if (!best || d > best.d) best = { d, e: [x, z] };
+    }
+    if (!best || best.d < 0.3) continue;
+    const k = Math.max(2.2, best.d) / best.d, look = [best.e[0] + (mid[0] - best.e[0]) * k, f - 0.55, best.e[1] + (mid[1] - best.e[1]) * k];
+    out[name] = { at: [best.e[0], f, best.e[1]], look, fov: EYE_FOV, room: r.id };
+  }
+  const zs = bp.rooms.filter((r) => r.ceiling !== 'canopy').map((r) => r.rect[1]);
+  out.Row = { at: [0, deck + EYE, Math.min(...zs) + 0.3], look: [0, deck + EYE - 0.1, 6.0], fov: 50, row: true };
+  return out;
+}
+
 // ── the blueprints: the three options (and edits kept in this browser) ───────────────────────────────────────────
 const clone = (o) => JSON.parse(JSON.stringify(o));
 async function loadOptions() {
@@ -215,7 +285,7 @@ function showOption(id) {
 function recheck(rebuild) {
   if (!st.bp || !st.space) return;
   st.result = checkBlueprint(st.bp, st.space);
-  plan.draw(); panel(); if (rebuild) build3d();
+  plan.draw(); panel(); if (rebuild) { build3d(); if (hasCabin(st.ship)) cabinSoon(); }
 }
 // an edit: a copy kept for Undo first (once per drag), then the change, the checks again
 function edit(fn, live) {
@@ -236,7 +306,7 @@ const mat = (key, make) => { if (!matCache.has(key)) matCache.set(key, make()); 
 function build3d() {
   for (const o of [...BP3.children]) { BP3.remove(o); o.geometry?.dispose(); if (o.isGroup) o.traverse((c) => c.geometry?.dispose()); }
   if (!st.bp || !st.space) return;
-  const deck = st.space.deck, bp = st.bp;
+  const deck = st.space.deck, bp = st.bp, built = !!st.cabin;   // (the cabin built: its own walls and furniture boxes)
   if (st.show.rooms) {
     for (const r of bp.rooms) {
       const K = ROOM_KINDS[r.kind] || { color: '#888888' }, [x0, z0, x1, z1] = r.rect, f = deck + (r.floor || 0), top = typeof r.ceiling === 'number' ? r.ceiling : r.ceiling === 'canopy' ? HEAD : CEIL;
@@ -244,11 +314,11 @@ function build3d() {
       fl.position.set((x0 + x1) / 2, f + 0.02, (z0 + z1) / 2); BP3.add(fl);
       const box = new THREE.BoxGeometry(x1 - x0, top, z1 - z0);
       const walls = new THREE.Mesh(box, mat('rw' + K.color, () => new THREE.MeshBasicMaterial({ color: K.color, transparent: true, opacity: 0.07, depthWrite: false, side: THREE.DoubleSide })));
-      walls.position.set((x0 + x1) / 2, f + top / 2, (z0 + z1) / 2); BP3.add(walls);
+      walls.position.set((x0 + x1) / 2, f + top / 2, (z0 + z1) / 2); if (!built) BP3.add(walls);
       const edges = new THREE.LineSegments(new THREE.EdgesGeometry(box), mat('re' + K.color, () => new THREE.LineBasicMaterial({ color: K.color })));
       edges.position.copy(walls.position); BP3.add(edges);
     }
-    for (const it of bp.items || []) {
+    for (const it of built ? [] : bp.items || []) {
       const K = ITEM_KINDS[it.kind] || { color: '#999999' }, r = bp.rooms.find((q) => q.id === it.room), f = deck + (r?.floor || 0) + +(it.y || 0), [x0, z0, x1, z1] = it.rect;
       const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0 - 0.02, it.h, z1 - z0 - 0.02), mat('it' + K.color, () => new THREE.MeshStandardMaterial({ color: K.color, roughness: 0.7 })));
       m.position.set((x0 + x1) / 2, f + it.h / 2, (z0 + z1) / 2); m.castShadow = true; BP3.add(m);
@@ -296,7 +366,8 @@ function layout() {
 function setView(v) { st.view = v; url(); layout(); setCam(st.cam); menu(); }
 function setCam(name) {
   st.cam = name; if (!st.shell) return;
-  const spot = st.ship.lab?.spots?.[name];
+  const spot = st.ship.lab?.spots?.[name] || roomSpots()[name], fov = spot?.fov || 40;
+  if (camera.fov !== fov) { camera.fov = fov; camera.updateProjectionMatrix(); }
   if (!CAMS[name]) { if (!spot) { setCam('Hero'); return; } camera.position.set(...spot.at); controls.target.set(...spot.look); controls.update(); return; }
   // (how far back: the ship's half-size across the screen and up it, from this side, fitted to the view's shape)
   const s = st.shell.size, d = new THREE.Vector3(...CAMS[name]).normalize(), t = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
@@ -306,7 +377,7 @@ function setCam(name) {
   controls.target.set(0, name === 'Above' || name === 'Top' ? st.space.deck + 1 : s.y * 0.42, 0);
   camera.position.copy(controls.target).addScaledVector(d, fit); controls.update();
 }
-function url() { if (st.ship && st.opt) history.replaceState(null, '', `?ship=${st.ship.id}&bp=${st.opt}&view=${st.view}`); }
+function url() { if (st.ship && st.opt) history.replaceState(null, '', `?ship=${st.ship.id}&bp=${st.opt}&view=${st.view}` + (hasCabin(st.ship) ? (st.inside ? `&look=${st.look}` : '&inside=0') : '')); }
 
 // ── the checks panel ─────────────────────────────────────────────────────────────────────────────────────────────
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -341,9 +412,14 @@ function menu() {
     sep(), lab('Ship'), ...SHIPS.map((S) => chip(S.name, S === st.ship, () => showShip(S), false, S.note)));
   const L = st.ship?.lab, has = (k) => !!L?.controls.includes(k), spots = L?.spots || {};
   $('#tabs').replaceChildren(lab('View'), ...Object.entries(VIEWS).map(([k, t]) => chip(t, k === st.view, () => setView(k), true)),
-    sep(), lab('Camera'), ...[...Object.keys(CAMS), ...Object.keys(spots)].map((k) => chip(k, k === st.cam, () => { setCam(k); if (st.view !== '3d' && st.view !== 'split') setView('split'); menu(); }, true)),
+    sep(), lab('Camera'), ...[...Object.keys(CAMS), ...Object.keys(spots), ...Object.keys(roomSpots())].map((k) => chip(k, k === st.cam, () => { setCam(k); if (st.view !== '3d' && st.view !== 'split') setView('split'); menu(); }, true)),
     sep(), lab('Hull'), ...Object.entries(HULLS).map(([k, t]) => chip(t, k === st.hull, () => { setHull(k); menu(); }, true)),
     sep(), lab('Show'), ...[['space', 'Space'], ['rooms', 'Rooms'], ['checks', 'Checks'], ['person', 'Person'], ...(L?.overlay ? [['meshy', 'Meshy B']] : [])].map(([k, t]) => chip(t, st.show[k], () => { show(k, !st.show[k]); menu(); }, true, k === 'meshy' ? 'Meshy B laid over the built ship, see-through' : '')),
+    // (the cabin built inside from the blueprint: shown or not, its look, its ceilings, its doors)
+    ...(hasCabin(st.ship) ? [sep(), lab('Inside'), chip('Inside', st.inside, () => setInside(!st.inside), true, 'The rooms built inside the ship from the blueprint shown, with the cabin kit\'s walls and sliding doors (furniture as the plan\'s boxes)'),
+      ...(st.inside ? [lab('Look'), ...Object.entries(LOOKS).map(([k, L]) => chip(L.name, k === st.look, () => setLook(k), true, k === 'light' ? 'His bunk and mess pictures: warm light-grey panels, a charcoal floor, warm-white light' : 'His concept sheet\'s insets: grey steel panels, amber light strips, blue leather')),
+        chip('Ceilings', st.roof, () => setRoof(!st.roof), true, 'Lift the cabin\'s ceilings off to look in from above (with the hull see-through or hidden)'),
+        lab('Doors'), ...[['auto', 'Auto'], ['open', 'Open'], ['shut', 'Shut']].map(([k, t]) => chip(t, st.cabinDoors === k && st.doorsAt == null, () => { st.cabinDoors = k; st.doorsAt = null; menu(); }, true, k === 'auto' ? 'The sliding doors open as the eye (or the person) comes near' : k === 'open' ? 'Every sliding door open' : 'Every sliding door shut'))] : [])] : []),
     // (the built ship's moving parts and its grime: the controls its module names)
     ...(has('arms') ? [sep(), lab('Arms'), chip(st.arms === 'stowed' ? 'Arms reaching' : 'Arms stowed', false, () => { st.arms = st.arms === 'stowed' ? 'reaching' : 'stowed'; menu(); }, true, 'Fold the mining arms in for flight, or reach them out to dig (the cutter heads spin)')] : []),
     ...(has('thrusters') ? [sep(), lab('Thrusters'), chip(st.thrusters ? 'Thrusters off' : 'Thrusters', st.thrusters, () => { st.thrusters = !st.thrusters; menu(); }, true, 'The corner pods swivel and fire')] : []),
@@ -370,6 +446,9 @@ function menu() {
   for (const b of $('#edit').querySelectorAll('button')) if (['Turn', 'Name', 'Remove'].includes(b.textContent)) b.disabled = !S || (b.textContent === 'Turn' && S.type !== 'item') || (b.textContent === 'Name' && S.type === 'door');
   requestAnimationFrame(layout);
 }
+async function setInside(on) { st.inside = !!on; await showShip(st.ship); }
+async function setLook(k) { if (!LOOKS[k]) return; st.look = k; loading.hidden = false; await new Promise((r) => setTimeout(r, 30)); await showCabin(); loading.hidden = true; url(); menu(); }
+function setRoof(on) { st.roof = !!on; if (st.cabin) for (const z of st.cabin.built.zones) if (z.id === 'ceilings') z.group.visible = st.roof; menu(); }
 function show(k, on) { st.show[k] = on; plan.show.space = st.show.space; plan.show.checks = st.show.checks; person.visible = st.show.person; build3d(); plan.draw(); if (k === 'meshy') showMeshy(); }
 
 // ── editing: add, turn, rename, remove, download, upload ─────────────────────────────────────────────────────────
@@ -464,12 +543,14 @@ renderer.setAnimationLoop((t) => {
   // (the built ship's gear and airstair door, moving to where the menu asks)
   const B = st.shell?.built, L = st.ship?.lab;
   if (B && L && !st.hold) L.step(B, st, dt, { updateDoors, person, jets: st.shell.jets, time: t / 1000 });
+  // (the cabin's sliding doors: open as the eye comes near when it is in the ship, else the person; or all open or shut)
+  if (st.cabin && st.doorsAt == null) { const c = camera.position, inShip = Math.abs(c.x) < 2.6 && c.z > -5.6 && c.z < 7 && c.y > st.space.deck - 0.3 && c.y < st.space.deck + 3; updateDoors(st.cabin.built.doors, inShip ? c : person.position, dt, st.cabinDoors); }
   // (the engines easing to the throttle asked for: the whole range in about a second and a half; the jets follow it)
   if (ENGINE.throttle !== st.throttleT) { const d = st.throttleT - ENGINE.throttle, step = dt * 0.7; setThrottle(Math.abs(d) <= step ? st.throttleT : ENGINE.throttle + Math.sign(d) * step); }
   for (const J of st.shell?.jets || []) { if (J.role === 'main') J.set.setThrust(ENGINE.throttle, true); J.set.update(dt); }
   if (on) { fly(dt); controls.update(); renderer.render(scene, camera); frames++; }
   fpsT += dt; if (fpsT > 0.5) { fps = Math.round(frames / fpsT); frames = 0; fpsT = 0; }
-  if (st.shell) hud.textContent = `${st.ship.name}: ${st.shell.size.z.toFixed(1)} × ${st.shell.size.x.toFixed(1)} × ${st.shell.size.y.toFixed(1)} m · deck ${st.space.deck} m up · ${Math.round(st.shell.tris).toLocaleString()} tris` + (on ? ` · ${fps} fps` : '');
+  if (st.shell) hud.textContent = `${st.ship.name}: ${st.shell.size.z.toFixed(1)} × ${st.shell.size.x.toFixed(1)} × ${st.shell.size.y.toFixed(1)} m · deck ${st.space.deck} m up · ${Math.round(st.shell.tris + (st.cabin?.tris || 0)).toLocaleString()} tris` + (st.cabin ? ` (inside ${Math.round(st.cabin.tris).toLocaleString()})` : '') + (on ? ` · ${fps} fps` : '');
 });
 
 await loadOptions();
@@ -501,4 +582,10 @@ window.SHIPLAB = {
     st.ship.lab.pose(B, at, { updateDoors, person, jets: st.shell.jets });
   },
   built: () => st.shell?.built || null, three: THREE, scene, camera, renderer, controls,
+  // (the cabin: shown or not, its look, its ceilings; its doors 'auto' | 'open' | 'shut', or held part open (0 to 1),
+  // null lets them go; what it is: its triangles, by zone, its doors and how open each is; the cameras in its rooms)
+  inside: (on) => setInside(on), look: (k) => setLook(k), roof: (on) => setRoof(on),
+  cabinDoors: (v) => { if (typeof v === 'number') { st.doorsAt = Math.max(0, Math.min(1, v)); if (st.cabin) setDoors(st.cabin.built.doors, st.doorsAt); } else { st.doorsAt = null; st.cabinDoors = v || 'auto'; } menu(); },
+  cabin: () => (st.cabin ? { tris: st.cabin.tris, perZone: st.cabin.perZone, parts: st.cabin.parts, draws: st.cabin.built.stats.draws, doors: st.cabin.built.doors.map((D) => +D.t.toFixed(3)), bakeMs: st.cabin.built.stats.bake.ms, ms: st.cabin.built.stats.ms } : null),
+  roomSpots: () => roomSpots(), ship3: () => ({ tris: st.shell?.tris, stats: st.shell?.built?.stats || null }),
 };

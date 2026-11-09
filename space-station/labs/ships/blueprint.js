@@ -20,6 +20,8 @@
 //            "width" is the clear opening. Every inside door is a pocket door (the cabin kit's doorway): its leaves slide
 //            into the wall beside it. "leaves": 2 (the default: two leaves parting), or 1 / -1 (one leaf, sliding toward
 //            +x or -x on a wall along x, +z or -z on a wall along z). doorReach says how much wall that takes.
+//   eyes     (optional) where the lab's camera stands in each room, by room id: { "at": [x, z], "look": [x, z] }, at a
+//            person's eye height (the lab finds a spot itself for a room not listed)
 //   items    furniture as footprints with a height: beds, seats, counters, consoles, lockers, tables, machinery
 //            "y": a HANGING item's bottom above its room's floor (an overhead cabinet in the wall's top corner): it hangs
 //            on a wall, over furniture or high enough to walk under; people walk beneath it only where it is 2.0 m up

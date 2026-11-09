@@ -27,6 +27,10 @@ export function builtPiece(id, variant, coarse = false) {
   return p;
 }
 
+// forget a piece drawn once and kept (a piece made for one build only: the Ship Lab's cabin, built from a blueprint
+// that is edited)
+export function forgetPiece(id) { for (const k of [...CACHE.keys()]) if (k.startsWith(id + ':')) CACHE.delete(k); }
+
 // a placement turned by a parent's quarter turns (the same turn as placeMatrix)
 function turnCell([x, z], t) { for (let i = 0; i < ((t % 4) + 4) % 4; i++) [x, z] = [z, -x]; return [x, z]; }
 // prefabs (pieces made of pieces) opened out into plain pieces; anything unknown is reported, not built

@@ -346,9 +346,80 @@ const boxAtGlow = (acc, c, h, col) => C.boxAtGlow(acc, c, h, col, dk);
 export const COCKPIT = { floor: 0.3, seatsZ: 4.9, wallX: 1.3, gap: 0.45, dash: { w: 2.0, h: 1.0, knee: 0.64, bow: 0.15, depth: 1.8 }, canopy: { y: 2.64 - DECK - 0.3, z: 8.0 - 4.9, slope: 0.7 }, tubX: 1.5 };
 export const COCKPIT_DROP = /^overhead|^handhold|^engineer|^locker/;
 export function builtCockpitPlan() { return C.builtCockpitPlan(COCKPIT, COCKPIT_DROP); }
-function ebCockpit(p) {
-  const Cp = COCKPIT;
+// THE COCKPIT WITH THE CABIN BEHIND IT ('two seats, cabin'): the tub cut at the cabin's wall (CABIN_TUB.z, the wall the
+// blueprint's cockpit shares with the science lab), its floor and walls only ahead of it: the cabin's own wall, with its
+// doorway, closes the cockpit there, and a riser at the doorway is the step up onto the cockpit's raised floor. The
+// canopy's back runs on over the room behind (back to z 2.95), so under that glass the room's top is closed off dark:
+// a LID over its ceiling and slopes and down its sides (`lid`: the port half of its section, deck-relative x and y,
+// mirrored; just outside the science lab's walls, slopes and ceiling), a curtain from the canopy's edge down to the
+// lid, and a panel in the wall's plane up to the glass: from just under the cabin wall's top (`under`; the wall's face
+// toward the cockpit reaches `wallHalf` each side, `wallTop` up), and beside it down to the cockpit's floor.
+export const CABIN_TUB = { z: 4.0, lid: [[2.05, 0.95], [2.05, 1.95], [1.35, 2.55]], under: 0.05, wallHalf: 1.47, wallTop: 2.5 };
+function cabinTub(acc, outline, { fy, tubX, rayIn, wallSurf, floorSurf }) {
+  const Cz = CABIN_TUB.z, ahead = [0, 0, -1, -Cz];
+  // (the tub's walls and floor ahead of the cut: as built-common.js's cockpitTub, each polygon clipped at the cut)
+  const inside = new Map(), halfAt = (s, z) => { const k = s + ':' + z.toFixed(3); if (!inside.has(k)) { const h = rayIn(V3(0, fy + 0.04, z), V3(s, 0, 0)); inside.set(k, h ? Math.abs(h.p.x) - 0.1 : 0); } return inside.get(k); };
+  const foot = (v) => { const s = Math.sign(v.x) || 1; return V3(s * Math.max(0, Math.min(Math.abs(v.x), tubX, halfAt(s, v.z))), fy, v.z); };
+  const ctr = outline.reduce((s2, sp) => s2.add(sp.a).add(sp.b), V3(0, 0, 0)).multiplyScalar(1 / (2 * outline.length));
+  for (const sp of outline) {
+    if (Math.abs(sp.a.y - fy) < 0.02 && Math.abs(sp.b.y - fy) < 0.02) continue;
+    const q = C.clipPlane([sp.a, sp.b, foot(sp.b), foot(sp.a)], ahead)[0].filter((v, i, Q) => Q.findIndex((w) => w.distanceTo(v) < 1e-6) === i);
+    if (q.length < 3) continue;
+    const n = tnorm(q.slice(0, 3)).lengthSq() > 1e-10 ? tnorm(q.slice(0, 3)).normalize() : tnorm([q[0], q[2], q[3] || q[1]]).normalize();
+    const mid = sp.a.clone().add(sp.b).multiplyScalar(0.5); if (n.dot(V3(ctr.x - mid.x, 0, ctr.z - mid.z)) < 0) n.negate();
+    polyTo(acc, q, n, wallSurf);
+  }
+  const fl = []; for (const sp of outline) fl.push(foot(sp.a), foot(sp.b));
+  const floor = C.clipPlane(C.convexHullXZ(fl).map((v) => V3(v.x, fy, v.z)), ahead)[0];
+  polyTo(acc, floor, V3(0, 1, 0), floorSurf);
+  // (the riser: the floor's edge at the cut, facing the room behind)
+  const fx = Math.max(...floor.filter((v) => Math.abs(v.z - Cz) < 1e-4).map((v) => Math.abs(v.x)), 0.5);
+  polyTo(acc, [V3(-fx, DECK, Cz), V3(fx, DECK, Cz), V3(fx, fy, Cz), V3(-fx, fy, Cz)], V3(0, 0, -1), PAL.trimEdge);
+  // THE LID behind the cut: its section (both halves) and the nearest point on it to a point (deck-relative x, y)
+  const half = CABIN_TUB.lid, sec = [...half.map(([x, y]) => [x, y]), ...half.slice().reverse().map(([x, y]) => [-x, y])];
+  const near = (x, y) => { let best = null, bd = Infinity; for (let i = 0; i < sec.length - 1; i++) { const [ax, ay] = sec[i], [bx, by] = sec[i + 1], dx = bx - ax, dy = by - ay, t = Math.max(0, Math.min(1, ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy))), px = ax + t * dx, py = ay + t * dy, d = Math.hypot(x - px, y - py); if (d < bd) { bd = d; best = [px, py]; } } return best; };
+  const both = (pts, n) => { polyTo(acc, pts, n, wallSurf); polyTo(acc, pts, n.clone().negate(), wallSurf); };
+  let zMin = Cz;
+  for (const sp of outline) {
+    // (the edge's part behind the cut)
+    let a = sp.a, b = sp.b; if (a.z > Cz && b.z > Cz) continue;
+    if (a.z > Cz) a = b.clone().lerp(a, (Cz - b.z) / (a.z - b.z)); else if (b.z > Cz) b = a.clone().lerp(b, (Cz - a.z) / (b.z - a.z));
+    const fa = near(a.x, a.y - DECK), fb = near(b.x, b.y - DECK);
+    zMin = Math.min(zMin, a.z, b.z);
+    const P = [a, b, V3(fb[0], DECK + fb[1], b.z), V3(fa[0], DECK + fa[1], a.z)].filter((v, i, Q) => Q.findIndex((w) => w.distanceTo(v) < 1e-6) === i);
+    if (P.length >= 3 && tnorm(P.slice(0, 3)).lengthSq() > 1e-12) both(P, tnorm(P.slice(0, 3)).normalize());
+  }
+  for (let i = 0; i < sec.length - 1; i++) {
+    const [ax, ay] = sec[i], [bx, by] = sec[i + 1], n = V3(by - ay, -(bx - ax), 0).normalize();
+    both([V3(ax, DECK + ay, zMin - 0.02), V3(bx, DECK + by, zMin - 0.02), V3(bx, DECK + by, Cz), V3(ax, DECK + ay, Cz)], n);
+  }
+  // THE PANEL at the cut, from the lid (lowered by `under`, behind the wall's top) up to the glass: the glass's section
+  // there from the panes' triangles, as a line over the top from sill to sill
+  const arch = [];
+  for (const pane of canopyPanes().panes) for (const T of pane.tris) for (let e = 0; e < 3; e++) {
+    const A = T[e], B = T[(e + 1) % 3]; if ((A.z - Cz) * (B.z - Cz) > 0 || Math.abs(A.z - B.z) < 1e-9) continue;
+    const t = (Cz - A.z) / (B.z - A.z); arch.push([A.x + (B.x - A.x) * t, A.y + (B.y - A.y) * t]);
+  }
+  arch.sort((p1, p2) => p1[0] - p2[0]);
+  const top = arch.filter((pt, i) => i === 0 || pt[0] - arch[i - 1][0] > 0.02);
+  const sx = Math.max(...top.map(([x]) => Math.abs(x))), sy = Math.min(...top.map(([, y]) => y)) - DECK, u = CABIN_TUB.under;
+  // (its lower edge: over the cabin's wall, `under` below its top; beside the wall, down inside the tub's walls to the
+  // cockpit's floor, so nothing behind the wall shows past its ends)
+  const fyD = fy - DECK, L = CABIN_TUB.wallHalf - 0.02, wt = CABIN_TUB.wallTop - u;
+  const low = [[sx, sy], [tubX, fyD], [L, fyD], [L, wt], [-L, wt], [-L, fyD], [-tubX, fyD], [-sx, sy]];
+  both([...top.map(([x, y]) => V3(x, y, Cz)), ...low.map(([x, y]) => V3(x, DECK + y, Cz))], V3(0, 0, 1));
+}
+function ebCockpit(p, variant) {
+  const Cp = COCKPIT, cabin = variant === 'two seats, cabin';
   C.cockpitParts(p, builtCockpitPlan(), Cp);
+  if (cabin) {
+    const acc = new Acc(), fy = DECK + Cp.floor;
+    cabinTub(acc, canopyPanes().outline, { fy, tubX: Cp.tubX, rayIn: rayHull, wallSurf: PAL.trim, floorSurf: PAL.deck });
+    acc.flush(p);
+    for (const x of [-0.5, 0.5]) p.light([x, Cp.floor + 2.0, Cp.seatsZ - 0.2], 1.1, [1.25, 0.85, 0.55], [0, -1, 0.2], 3.2);
+    p.light([0, Cp.floor + 1.3, Cp.seatsZ + 1.0], 0.8, [0.35, 0.65, 1.0], [0, 0.2, -1], 2.5);
+    return p;
+  }
   // THE TUB (built-common.js cockpitTub): everything under the glass closed, so no gap shows the sky from the seats (and
   // nobody sees into the empty hull through the canopy); the bulkhead behind with the cabin's door in it, shut
   const acc = new Acc(), fy = DECK + Cp.floor;
@@ -375,7 +446,12 @@ const DOOR_U = V3(DOOR.xHead - DOOR.xHinge, DOOR.head - DOOR.hinge, 0).normalize
 // the airlock behind the port door (its inner wall at x AIRLOCK.x, its ceiling at AIRLOCK.top over the deck), the
 // step inside the doorway (its riser AIRLOCK.riser in from the hinge line)
 export const AIRLOCK = { x: 0.9, top: 2.06, riser: 0.16, z: DOOR.z };
-function ebDoorway(p, side) {
+// 'port, cabin': the same doorway when the cabin is built inside (cabin-built.js, from a blueprint): its own airlock
+// room meets the door, so the stand-in airlock here goes; what stays is the alcove between the cabin's wall line
+// (CABIN.wall) and the door's plane: its sides and its ceiling at the opening's head
+export const CABIN = { wall: 2.0 };
+function ebDoorway(p, variant) {
+  const cabin = variant === 'port, cabin', side = cabin ? 'port' : variant;
   const s = side === 'starboard' ? -1 : 1, acc = new Acc(), [z0, z1] = DOOR.z, J = JAMBS[side];
   // the jambs: between the door's plane and the skin, at each end of the doorway, dark (the black edge round the door)
   J.forEach(({ z, profile }, i) => {
@@ -391,7 +467,13 @@ function ebDoorway(p, side) {
   polyTo(acc, [V3(s * xr, DOOR.hinge, z0), V3(s * DOOR.xHinge, DOOR.hinge, z0), V3(s * DOOR.xHinge, DOOR.hinge, z1), V3(s * xr, DOOR.hinge, z1)], V3(0, 1, 0), PAL.deck);
   // (the step's sides, the jambs carried down to it)
   for (const [z, nz] of [[z0, 1], [z1, -1]]) polyTo(acc, [V3(s * xr, DOOR.hinge, z), V3(s * DOOR.xHinge, DOOR.hinge, z), V3(s * doorX(DECK), DECK, z), V3(s * xr, DECK, z)], V3(0, 0, nz), PAL.trimEdge);
-  if (s > 0) {
+  if (cabin) {
+    // THE ALCOVE (the cabin built inside): from the cabin's wall line out to the door's plane, its sides at the jambs and
+    // its ceiling at the head, dark (the door's plane crosses the wall line just over the deck, at y yc)
+    const xi = CABIN.wall, top = DECK + AIRLOCK.top, yc = DOOR.hinge + (xi - DOOR.xHinge) / (DOOR.xHead - DOOR.xHinge) * (DOOR.head - DOOR.hinge);
+    polyTo(acc, [V3(xi, top, z0), V3(doorX(top), top, z0), V3(doorX(top), top, z1), V3(xi, top, z1)], V3(0, -1, 0), PAL.trim);
+    for (const [z, nz] of [[z0, 1], [z1, -1]]) polyTo(acc, [V3(xi, yc, z), V3(doorX(top), top, z), V3(xi, top, z)], V3(0, 0, nz), PAL.trimEdge);
+  } else if (s > 0) {
     // THE AIRLOCK behind the port door: its deck, walls (the station's off-white), ceiling, and the inner door shut in its
     // inner wall (a dark panel, a lit strip over it)
     const xi = AIRLOCK.x, top = DECK + AIRLOCK.top;
@@ -525,6 +607,9 @@ export const LAB = {
   dirt: { None: 0, Some: 0.45, Lots: 0.9 },
   spots: { Canopy: { at: [6.5, 6.8, 12.5], look: [0, 3.7, 5.2] }, Door: { at: [7.6, 1.6, 4.4], look: [2.2, 2.4, 1.6] }, Seats: { at: [0, 3.75, 3.65], look: [0, 3.0, 7.6] } },
   overlay: 'explorer-b',
+  // (the cabin built inside from the blueprint shown, kit/ships/cabin-built.js: the pieces that change with it, and the
+  // ship's own door as the cabin meets it: the opening's head over the deck, and where the deck stops at its step)
+  cabin: { swap: { ebDoorway: { port: 'port, cabin' }, ebCockpit: { 'two seats': 'two seats, cabin' } }, outer: { head: AIRLOCK.top, sill: +(DOOR.xHinge - AIRLOCK.riser).toFixed(3) } },
   materials: (mats, dirt) => grimeMaterials(mats, { dirt }),
   setDirt: (v) => { GRIME.dirt.value = v; },
   jets: () => [{ role: 'main', nozzles: jetNozzles(), opts: JET }],
@@ -543,10 +628,10 @@ export const SHIP_EXPLORER_BUILT = {
   ebHull: { name: 'Explorer C (built): hull', group: GR, at: 'free', foot: [13, 6.3, 17.3], variants: ['hull'], build: ebHull },
   ebCanopy: { name: 'Explorer C (built): canopy', group: GR, at: 'free', foot: [5, 2, 6], variants: ['glass'], build: ebCanopy },
   ebMarks: { name: 'Explorer C (built): lights and marks', group: GR, at: 'free', foot: [13, 6, 17], variants: ['marks'], build: (p) => ebMarks(p) },
-  ebDoorway: { name: 'Explorer C (built): doorway', group: GR, at: 'free', foot: [3, 2.5, 2], variants: ['port', 'starboard'], build: ebDoorway },
+  ebDoorway: { name: 'Explorer C (built): doorway', group: GR, at: 'free', foot: [3, 2.5, 2], variants: ['port', 'starboard', 'port, cabin'], build: ebDoorway },
   ebAirstair: { name: 'Explorer C (built): airstair door', group: GR, at: 'free', foot: [3, 2.5, 2], variants: ['port'], build: ebAirstair },
   ebGear: { name: 'Explorer C (built): landing leg', group: GR, at: 'free', foot: [2, 1.6, 2], variants: ['nose', 'port', 'starboard'], build: ebGear },
   ebGearDoors: { name: 'Explorer C (built): gear well doors', group: GR, at: 'free', foot: [2, 1, 2], variants: ['nose', 'port', 'starboard'], build: ebGearDoors },
   ebWells: { name: 'Explorer C (built): gear wells', group: GR, at: 'free', foot: [5, 1, 9], variants: ['wells'], build: ebWells },
-  ebCockpit: { name: 'Explorer C (built): cockpit', group: GR, at: 'free', foot: [3, 2, 3], variants: ['two seats'], build: (p) => ebCockpit(p) },
+  ebCockpit: { name: 'Explorer C (built): cockpit', group: GR, at: 'free', foot: [3, 2, 3], variants: ['two seats', 'two seats, cabin'], build: (p, v) => ebCockpit(p, v) },
 };
