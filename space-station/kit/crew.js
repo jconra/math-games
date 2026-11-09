@@ -1140,8 +1140,9 @@ function setColours(mats, { job, uniform, skin, hair, eyes } = {}) {
 // Every hair is shaped on the standard skull, so one fit serves it on every head. The settings layer up (2026-11-08, the
 // game's maker: "different settings for the hair if applied to that head, like +8% scale to the x axis for this head"):
 //   1. THE HEAD'S OWN (crew.json, a head entry's `hairFit`: { dims, offset, turn }): applied to EVERY hair worn on that head
-//      (a narrow skull's x -8% for all hairs); started from each head's skull against the standard skull (the hair
-//      rig's skulls.py) and from his placements by hand;
+//      (a narrow skull's x -8% for all hairs); started from each head's skull against the Tripo heads' mean (the hair
+//      rig's skulls.py, setheads.py); it fades out below the jaw as the tuck does (a skull's shape: long ends hang as
+//      their hair made them, clear of the neck);
 //   2. THE HAIR'S OWN (a hair entry's `fit`), on every head;
 //   3. THE PAIR'S (the hair's fit.heads[<head id>]), only where one hair on one head needs more;
 //   then the hair's tuck and THE HUG (below), worked out on this head.
@@ -1198,7 +1199,9 @@ export function fitFor(f, head, hl, hug0 = HUG_DEFAULT) {
     turn: (+H.turn || 0) + (+o.turn || 0) + (+d.turn || 0),
     tuck: placed ? 0 : Math.min(TUCK_MAX, Math.max(0, (+o.tuck || 0) + (+d.tuck || 0))), tuckStart: Math.max(0, (+o.tuckStart || 0) + (+d.tuckStart || 0)),
     hug: placed ? 0 : Math.min(HUG_MAX, Math.max(0, (o.hug == null ? hug0 : +o.hug || 0) + (+d.hug || 0))),
-    hugGap: Math.max(0, (o.hugGap == null ? HUG_GAP : +o.hugGap || 0) + (+d.hugGap || 0)), placed, resolved: true };
+    hugGap: Math.max(0, (o.hugGap == null ? HUG_GAP : +o.hugGap || 0) + (+d.hugGap || 0)), placed, resolved: true,
+    // (the head's own share, apart: applyFit fades it out below the jaw, as the tuck fades)
+    head: { dims: [0, 1, 2].map((i) => v3(H.dims, i, 1)), turn: +H.turn || 0, offset: [0, 1, 2].map((i) => v3(H.offset, i, 0)) } };
 }
 const asMade = (f) => !f || (!f.placed && !f.offset.some((v) => Math.abs(v) > 1e-7) && Math.abs(f.scale - 1) < 1e-7 && !f.dims.some((v) => Math.abs(v - 1) > 1e-7) && !f.turn && !(f.tuck > 0) && !(f.hug > 0));
 // a part's bind space -> the head's frame (its Head bone's own)
@@ -1375,14 +1378,27 @@ function applyFit(dst, src, M, fit, field, hug) {
   // starts from the hair AS CUT, on every head: lifted clear of THIS head alone by the clearance (THE HUG, below), not
   // of every head at once as the harvest lifted it; a placement by hand wears it as cut, exactly)
   const cut = src.attributes._cut || null, B0 = new Float32Array(n * 3);
-  const k = [0, 1, 2].map((i) => s * fit.dims[i]), tc = Math.cos((fit.turn || 0) / DEG), ts = Math.sin((fit.turn || 0) / DEG);
+  // (the sizes, the turn and the offset: in one step for a placement by hand (exactly as placement.py measured it); else
+  // the hair's and the pair's, then the head's own, which fades out below the jaw as the tuck does: a head's setting is
+  // its skull's shape, and long ends hang as their hair made them, clear of the neck)
+  const Hd = (!fit.placed && fit.head) || null, one = (q, k, t, oo, out) => {
+    const c = Math.cos(t / DEG), sn = Math.sin(t / DEG), x = (q[0] - SKULL[0]) * k[0], z = (q[2] - SKULL[2]) * k[2];
+    out[0] = SKULL[0] + c * x + sn * z + oo[0]; out[1] = SKULL[1] + (q[1] - SKULL[1]) * k[1] + oo[1]; out[2] = SKULL[2] - sn * x + c * z + oo[2]; return out;
+  };
+  const kA = Hd ? [0, 1, 2].map((i) => s * fit.dims[i] / Hd.dims[i]) : [0, 1, 2].map((i) => s * fit.dims[i]), tA = Hd ? (fit.turn || 0) - Hd.turn : fit.turn || 0;
+  const oA = Hd ? [0, 1, 2].map((i) => o[i] - Hd.offset[i]) : o, q0 = [0, 0, 0], q1 = [0, 0, 0], q2 = [0, 0, 0];
   let top = -Infinity;
   for (let i = 0; i < n; i++) {
     _v.fromBufferAttribute(pos, i).applyMatrix4(M);
     if (cut) { _v.x += cut.getX(i) / CUT_K; _v.y += cut.getY(i) / CUT_K; _v.z += cut.getZ(i) / CUT_K; }
-    _v.toArray(B0, i * 3);
-    const x = (_v.x - SKULL[0]) * k[0], z = (_v.z - SKULL[2]) * k[2];
-    F[i * 3] = SKULL[0] + tc * x + ts * z + o[0]; F[i * 3 + 1] = SKULL[1] + (_v.y - SKULL[1]) * k[1] + o[1]; F[i * 3 + 2] = SKULL[2] - ts * x + tc * z + o[2];
+    _v.toArray(B0, i * 3); _v.toArray(q0);
+    one(q0, kA, tA, oA, q1);
+    if (Hd) {
+      one(q1, Hd.dims, Hd.turn, Hd.offset, q2);
+      const wj = q1[1] < TUCK_JAW ? 1 - smooth01((TUCK_JAW - q1[1]) / TUCK_FADE) : 1;
+      for (let a = 0; a < 3; a++) q1[a] += (q2[a] - q1[a]) * wj;
+    }
+    F[i * 3] = q1[0]; F[i * 3 + 1] = q1[1]; F[i * 3 + 2] = q1[2];
     top = Math.max(top, F[i * 3 + 1]);
   }
   const stats = { tucked: 0, held: 0 };
@@ -1461,7 +1477,9 @@ function applyFit(dst, src, M, fit, field, hug) {
 //     head's mean reach (the near skin) as well as its most (a line down through a neck meets the neck's far side); and
 //     last THE EXACT CLEARANCE: a point ending within a few mm of the skin measured against the head's own triangles
 //     (lib.headTris) and moved out along its line until it is as far off as it may be (the reach can't see an ear or a
-//     bump beside the line; inside or out told by the nearest triangle's own facing).
+//     bump beside the line; inside or out told by the nearest triangle's own facing). A line whose most reach runs
+//     HUG_DEEP past its mean goes down through the neck: a point on one is never drawn in nor pushed along its line, only
+//     out along the nearest skin's own normal by the exact clearance.
 //   - The skirt goes on in under the skin with the hair over it (as the flare is), and a skirt point already under the
 //     skin stays under it.
 // c.fitStats: hugged (points the hug moved), under (skirt points taken in under the skin), cleared (points moved out by
@@ -1469,6 +1487,7 @@ function applyFit(dst, src, M, fit, field, hug) {
 // hair mesh in turn, for the checks).
 const HUG_SOFT = 0.02, HUG_OUTER = 0.5;
 const SKIRT = 0.025, SKIRT_FLARE = 0.01, SKIRT_COVER = 0.002, SKIRT_UNDER = 0.001, EDGE_MAIN = 0.10, HUG_INSIDE = 0.002, HUG_MARGIN = 0.0004;
+const HUG_DEEP = 0.015, HUG_PUSH = 0.008;   // (a line through the neck: its most reach this far past its mean; the most a line is pushed out)
 const HC = { ne: 90, na: 180 };     // (the grid: 2 degree cells, elevation by azimuth round from the face)
 function hugCell(dx, dy, dz, r) {
   const e = Math.min(HC.ne - 1, Math.max(0, Math.floor((Math.asin(Math.max(-1, Math.min(1, dy / r))) * DEG + 90) / 2)));
@@ -1552,7 +1571,7 @@ function hairlineOf(src, M, cards) {
 }
 // THE EXACT CLEARANCE (the hug's last pass): a head's triangles in its frame in HT_CELL cells; a point's distance to the
 // nearest of them within a cell either way (HT_CELL: anything further counts as HT_CELL)
-const HT_CELL = 0.005, _ta = new THREE.Vector3(), _tb = new THREE.Vector3(), _tc = new THREE.Vector3(), _tp = new THREE.Vector3(), _tq = new THREE.Vector3(), _tt = new THREE.Triangle();
+const HT_CELL = 0.005; nearestHead.n = new THREE.Vector3(); const _ta = new THREE.Vector3(), _tb = new THREE.Vector3(), _tc = new THREE.Vector3(), _tp = new THREE.Vector3(), _tq = new THREE.Vector3(), _tt = new THREE.Triangle();
 function headTris(g) {
   const T = [], grid = new Map(), v = new THREE.Vector3(), key = (x, y, z) => x + ',' + y + ',' + z;
   g.scene.traverse((o) => {
@@ -1570,7 +1589,7 @@ function headTris(g) {
 }
 // (and nearestHead.found: whether any is within reach; nearestHead.out: whether the point lies on the outer side of that
 // nearest triangle (its winding: every head is wound outward))
-function nearestHead(H, x, y, z) {
+function nearestHead(H, x, y, z) {   // (nearestHead.n: that triangle's outward normal)
   const cx = Math.floor(x / HT_CELL), cy = Math.floor(y / HT_CELL), cz = Math.floor(z / HT_CELL), seen = new Set(); let best = HT_CELL;
   nearestHead.out = false; nearestHead.found = false;
   _tp.set(x, y, z);
@@ -1580,7 +1599,7 @@ function nearestHead(H, x, y, z) {
       if (seen.has(t)) continue; seen.add(t);
       _ta.fromArray(H.T, t * 9); _tb.fromArray(H.T, t * 9 + 3); _tc.fromArray(H.T, t * 9 + 6); _tt.set(_ta, _tb, _tc).closestPointToPoint(_tp, _tq);
       const d = _tq.distanceTo(_tp);
-      if (d < best) { best = d; nearestHead.found = true; _tb.sub(_ta); _tc.sub(_ta); _tb.cross(_tc); nearestHead.out = _tb.dot(_ta.subVectors(_tp, _tq)) >= 0; }
+      if (d < best) { best = d; nearestHead.found = true; _tb.sub(_ta); _tc.sub(_ta); _tb.cross(_tc); nearestHead.out = _tb.dot(_ta.subVectors(_tp, _tq)) >= 0; nearestHead.n.copy(_tb).normalize(); }
     }
   }
   return best;
@@ -1590,7 +1609,7 @@ function nearestHead(H, x, y, z) {
 function hugFit(F, B0, src, M, fit, field, hug, stats) {
   const n = F.length / 3, NC = HC.ne * HC.na, s = fit.scale, gap = fit.hugGap, clear = Math.min(TUCK_CLEAR, gap);
   const under = hug.cards && src.attributes._under ? underOf(src, M) : null, edge = hairlineOf(src, M, hug.cards);
-  const r = new Float32Array(n), cell = new Int32Array(n), Sv = new Float32Array(n), Dv = new Float32Array(n), w = new Float32Array(n), lo = new Float32Array(n);
+  const r = new Float32Array(n), cell = new Int32Array(n), Sv = new Float32Array(n), Dv = new Float32Array(n), w = new Float32Array(n), lo = new Float32Array(n), deep = new Uint8Array(n);
   const Rmax = new Float32Array(NC).fill(NaN);
   for (let i = 0; i < n; i++) {
     const dx = F[i * 3] - SKULL[0], y = F[i * 3 + 1], dy = y - SKULL[1], dz = F[i * 3 + 2] - SKULL[2], ri = Math.hypot(dx, dy, dz);
@@ -1603,13 +1622,18 @@ function hugFit(F, B0, src, M, fit, field, hug, stats) {
     // (how near it may come, along its line: `clear` off the head (the most it reaches within 3 degrees, and HUG_MARGIN for
     // the reach's sampling), or as near as it was made, which may be under that reach (by an ear, on a bump); and as far
     // off its mean reach, the near skin (a line down through the neck: the most it reaches is the neck's far side, and
-    // hair hanging beside the neck was drawn onto it); a point plainly under the skin as made (HUG_INSIDE under the head's
-    // mean reach: the flare, his dragged-in edge, hair cutting in) none)
+    // hair hanging beside the neck was drawn onto it); a line whose most reach runs HUG_DEEP past its mean goes down
+    // through the neck, and out along it is into the neck: a point on one is left where the tuck and the sizes put it,
+    // never drawn in, never pushed out; a point plainly under the skin as made (HUG_INSIDE under the head's mean reach:
+    // the flare, his dragged-in edge, hair cutting in) none)
     const ex = B0[i * 3] - SKULL[0], ey = B0[i * 3 + 1] - SKULL[1], ez = B0[i * 3 + 2] - SKULL[2], r0 = Math.hypot(ex, ey, ez);
     const D0 = r0 > 1e-4 ? reach(field.D, ex, ey, ez, r0, false) : 0, S0 = r0 > 1e-4 ? reach(field.S, ex, ey, ez, r0, true) : 0;
     if (D0 > 0 && Dv[i] > 0 && !(S0 > 0 && r0 < S0 - HUG_INSIDE)) {
-      lo[i] = Dv[i] + Math.min(clear + HUG_MARGIN, r0 - D0);
-      if (Sv[i] > 0 && r0 >= S0) lo[i] = Math.max(lo[i], Sv[i] + Math.min(clear + HUG_MARGIN, r0 - S0));
+      deep[i] = Dv[i] - Sv[i] > HUG_DEEP || D0 - S0 > HUG_DEEP ? 1 : 0;
+      if (!deep[i]) {
+        lo[i] = Dv[i] + Math.min(clear + HUG_MARGIN, r0 - D0);
+        if (Sv[i] > 0 && r0 >= S0) lo[i] = Math.max(lo[i], Sv[i] + Math.min(clear + HUG_MARGIN, r0 - S0));
+      }
     }
   }
   const over = hugFilter(Rmax, 4, 'max'), skirt = new Uint8Array(n), L = new Float32Array(NC).fill(NaN);
@@ -1647,7 +1671,7 @@ function hugFit(F, B0, src, M, fit, field, hug, stats) {
   const need = new Float32Array(NC).fill(NaN); let any = false;
   for (let i = 0; i < n; i++) {
     const k = cell[i]; if (k < 0 || skirt[i] || !(lo[i] > r1[i] + 1e-6)) continue;
-    const d = lo[i] - r1[i]; if (!(need[k] >= d)) need[k] = d; any = true;
+    const d = Math.min(HUG_PUSH, lo[i] - r1[i]); if (!(need[k] >= d)) need[k] = d; any = true;
   }
   if (any) {
     const N = hugFilter(hugFilter(need, 2, 'max'), 2, 'mean');
@@ -1666,7 +1690,17 @@ function hugFit(F, B0, src, M, fit, field, hug, stats) {
     const H = hug.tris, at = (i, rr) => { const q = rr / r[i]; return [SKULL[0] + (F[i * 3] - SKULL[0]) * q, SKULL[1] + (F[i * 3 + 1] - SKULL[1]) * q, SKULL[2] + (F[i * 3 + 2] - SKULL[2]) * q]; };
     for (let i = 0; i < n; i++) {
       if (cell[i] < 0 || skirt[i] || !(Sv[i] > 0)) continue;
-      if (r1[i] - Sv[i] > 0.005 && r1[i] - Dv[i] > 0.004) continue;
+      if (r1[i] - Sv[i] > 0.015 && r1[i] - Dv[i] > 0.010) continue;
+      // (a line down through the neck: out along it is into the neck; moved out along the nearest skin's own normal instead,
+      // its own new place kept (F), its line's radius left)
+      if (deep[i]) {
+        const P = at(i, r1[i]); let d1 = nearestHead(H, ...P); if (d1 >= clear + 1e-4 && nearestHead.out) continue;
+        const d0 = nearestHead(H, B0[i * 3], B0[i * 3 + 1], B0[i * 3 + 2]); if (nearestHead.found ? !nearestHead.out : true) continue;
+        const want = Math.min(clear, d0) - 0.00005; d1 = nearestHead(H, ...P); if (!nearestHead.out) d1 = -d1; if (d1 >= want) continue;
+        for (let k = 0; k < 6 && d1 < want; k++) { const nn = nearestHead.n, st = (want - d1) * 1.2 + 0.00005; P[0] += nn.x * st; P[1] += nn.y * st; P[2] += nn.z * st; d1 = nearestHead(H, ...P); if (!nearestHead.out) d1 = -d1; }
+        const q = r[i] / r1[i]; F[i * 3] = SKULL[0] + (P[0] - SKULL[0]) * q; F[i * 3 + 1] = SKULL[1] + (P[1] - SKULL[1]) * q; F[i * 3 + 2] = SKULL[2] + (P[2] - SKULL[2]) * q;
+        stats.cleared++; stats.hugged++; continue;
+      }
       let d1 = nearestHead(H, ...at(i, r1[i])); if (d1 >= clear + 1e-4) continue;
       // (as made: how far off, and on the outside (a point under the skin as made, the flare or his dragged-in edge, is left)
       // (none within reach as made: far off the skin, unless the reach says it lay under it)
