@@ -219,6 +219,9 @@ export async function loadCrew({ dir = CREW_DIR, people = PEOPLE_DIR, smoothHair
   // how far a head reaches along every line from the skull's centre, for the tuck (once a head: THE HEAD'S REACH)
   const fields = new Map();
   lib.headField = (id) => { if (!fields.has(id)) fields.set(id, lib.part('head', id).then(headField)); return fields.get(id); };
+  // its triangles in 5 mm cells, for the hug's exact clearance (once a head: THE HUG)
+  const triGrids = new Map();
+  lib.headTris = (id) => { if (!triGrids.has(id)) triGrids.set(id, lib.part('head', id).then(headTris)); return triGrids.get(id); };
   // a suit's collar, for the collar fit (once a suit: THE COLLAR FIT), measured on a person's template at its rest
   const collars = new Map();
   lib.collarFit = true; lib.collarRide = true;
@@ -1454,7 +1457,11 @@ function applyFit(dst, src, M, fit, field, hug) {
 //   - THE CLEARANCE, after the hug and whatever moved the hair before it (the head's own and the pair's dims and offsets
 //     can narrow a hair into a head): no point but the skirt ends nearer this head than TUCK_CLEAR (or its hugGap, if
 //     less), or than it was as made; one that would is moved out with its line (the most each 2 degree cell needs, the
-//     most within 4 degrees and the mean of that, so the hair bends out rather than dents), then singly.
+//     most within 4 degrees and the mean of that, so the hair bends out rather than dents), then singly; held off the
+//     head's mean reach (the near skin) as well as its most (a line down through a neck meets the neck's far side); and
+//     last THE EXACT CLEARANCE: a point ending within a few mm of the skin measured against the head's own triangles
+//     (lib.headTris) and moved out along its line until it is as far off as it may be (the reach can't see an ear or a
+//     bump beside the line; inside or out told by the nearest triangle's own facing).
 //   - The skirt goes on in under the skin with the hair over it (as the flare is), and a skirt point already under the
 //     skin stays under it.
 // c.fitStats: hugged (points the hug moved), under (skirt points taken in under the skin), cleared (points moved out by
@@ -1543,6 +1550,41 @@ function hairlineOf(src, M, cards) {
   const out = new Float32Array(n); for (let i = 0; i < n; i++) out[i] = D[id[i]];
   return (c.hairline = out);
 }
+// THE EXACT CLEARANCE (the hug's last pass): a head's triangles in its frame in HT_CELL cells; a point's distance to the
+// nearest of them within a cell either way (HT_CELL: anything further counts as HT_CELL)
+const HT_CELL = 0.005, _ta = new THREE.Vector3(), _tb = new THREE.Vector3(), _tc = new THREE.Vector3(), _tp = new THREE.Vector3(), _tq = new THREE.Vector3(), _tt = new THREE.Triangle();
+function headTris(g) {
+  const T = [], grid = new Map(), v = new THREE.Vector3(), key = (x, y, z) => x + ',' + y + ',' + z;
+  g.scene.traverse((o) => {
+    if (!o.isSkinnedMesh) return;
+    const M = frameOf(o), P = o.geometry.attributes.position, I = o.geometry.index, n = I ? I.count : P.count, Q = new Float32Array(P.count * 3);
+    for (let i = 0; i < P.count; i++) v.fromBufferAttribute(P, i).applyMatrix4(M).toArray(Q, i * 3);
+    for (let t = 0; t + 2 < n; t += 3) {
+      const ids = [I ? I.getX(t) : t, I ? I.getX(t + 1) : t + 1, I ? I.getX(t + 2) : t + 2], k = T.length / 9;
+      for (const j of ids) T.push(Q[j * 3], Q[j * 3 + 1], Q[j * 3 + 2]);
+      const lo = [0, 1, 2].map((a) => Math.floor(Math.min(...ids.map((j) => Q[j * 3 + a])) / HT_CELL)), hi = [0, 1, 2].map((a) => Math.floor(Math.max(...ids.map((j) => Q[j * 3 + a])) / HT_CELL));
+      for (let x = lo[0]; x <= hi[0]; x++) for (let y = lo[1]; y <= hi[1]; y++) for (let z = lo[2]; z <= hi[2]; z++) { const kk = key(x, y, z); if (!grid.has(kk)) grid.set(kk, []); grid.get(kk).push(k); }
+    }
+  });
+  return { T: Float32Array.from(T), grid };
+}
+// (and nearestHead.found: whether any is within reach; nearestHead.out: whether the point lies on the outer side of that
+// nearest triangle (its winding: every head is wound outward))
+function nearestHead(H, x, y, z) {
+  const cx = Math.floor(x / HT_CELL), cy = Math.floor(y / HT_CELL), cz = Math.floor(z / HT_CELL), seen = new Set(); let best = HT_CELL;
+  nearestHead.out = false; nearestHead.found = false;
+  _tp.set(x, y, z);
+  for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (let k = -1; k <= 1; k++) {
+    const L = H.grid.get((cx + i) + ',' + (cy + j) + ',' + (cz + k)); if (!L) continue;
+    for (const t of L) {
+      if (seen.has(t)) continue; seen.add(t);
+      _ta.fromArray(H.T, t * 9); _tb.fromArray(H.T, t * 9 + 3); _tc.fromArray(H.T, t * 9 + 6); _tt.set(_ta, _tb, _tc).closestPointToPoint(_tp, _tq);
+      const d = _tq.distanceTo(_tp);
+      if (d < best) { best = d; nearestHead.found = true; _tb.sub(_ta); _tc.sub(_ta); _tb.cross(_tc); nearestHead.out = _tb.dot(_ta.subVectors(_tp, _tq)) >= 0; }
+    }
+  }
+  return best;
+}
 // (hug: { cards: card hair }; F: the hair's positions in the head's frame, moved; B0: where they started (the part as
 // made, or as cut), for the clearance as made)
 function hugFit(F, B0, src, M, fit, field, hug, stats) {
@@ -1616,6 +1658,24 @@ function hugFit(F, B0, src, M, fit, field, hug, stats) {
       if (r1[i] > before + 1e-6) stats.cleared++;
     }
     for (let i = 0; i < n; i++) if (!skirt[i] && lo[i] > r1[i]) { r1[i] = lo[i]; stats.cleared++; }
+  }
+  // THE EXACT CLEARANCE: a point (not the skirt, not under the skin as made) that ends within a few mm of the skin is
+  // measured against the head's own triangles, and moved out along its line until it is as far off as the smaller of
+  // TUCK_CLEAR (its gap, if less) and its distance as made: the radial reach can't see a bump or an ear beside the line
+  if (hug.tris) {
+    const H = hug.tris, at = (i, rr) => { const q = rr / r[i]; return [SKULL[0] + (F[i * 3] - SKULL[0]) * q, SKULL[1] + (F[i * 3 + 1] - SKULL[1]) * q, SKULL[2] + (F[i * 3 + 2] - SKULL[2]) * q]; };
+    for (let i = 0; i < n; i++) {
+      if (cell[i] < 0 || skirt[i] || !(Sv[i] > 0)) continue;
+      if (r1[i] - Sv[i] > 0.005 && r1[i] - Dv[i] > 0.004) continue;
+      let d1 = nearestHead(H, ...at(i, r1[i])); if (d1 >= clear + 1e-4) continue;
+      // (as made: how far off, and on the outside (a point under the skin as made, the flare or his dragged-in edge, is left)
+      // (none within reach as made: far off the skin, unless the reach says it lay under it)
+      const d0 = nearestHead(H, B0[i * 3], B0[i * 3 + 1], B0[i * 3 + 2]); if (nearestHead.found ? !nearestHead.out : lo[i] === -Infinity) continue;
+      const want = Math.min(clear, d0) - 0.00005; d1 = nearestHead(H, ...at(i, r1[i])); if (nearestHead.out && d1 >= want) continue;
+      if (!nearestHead.out) d1 = -d1;
+      for (let k = 0; k < 6 && d1 < want; k++) { r1[i] += (want - d1) * 1.3 + 0.00005; d1 = nearestHead(H, ...at(i, r1[i])); if (!nearestHead.out) d1 = -d1; }
+      stats.cleared++; stats.exact = (stats.exact || 0) + 1;
+    }
   }
   for (let i = 0; i < n; i++) {
     if (cell[i] < 0 || Math.abs(r1[i] - r[i]) < 1e-6) continue;
@@ -2147,12 +2207,12 @@ export async function makeCrew(lib, recipe) {
       // (a fit given as written (not as lib.fitOf gives it) wears this head's own setting under it)
       const f = fit ? (fit.resolved ? fitFor(fit) : fitFor(fit, R.head, lib.headFitOf(R.head), lib.hugDefaultOf(R.hair))) : null, plain = asMade(f);
       // (the head's reach: for the tuck and the hug, and for the shade's line as worn (a placement by hand too))
-      const field = !plain && R.head ? await lib.headField(R.head) : null;
+      const field = !plain && R.head ? await lib.headField(R.head) : null, tris = field && !f.placed ? await lib.headTris(R.head) : null;
       const stats = { tucked: 0, held: 0, hugged: 0, under: 0, cleared: 0, hugHeld: 0, hugMostMm: 0 }, skirts = [];
       for (const [m, g0, M] of hairFit) {
         if (plain) { if (m.geometry !== g0) { disposeOwn(m.geometry); m.geometry = g0; } continue; }
         if (m.geometry === g0) m.geometry = ownGeometry(g0);
-        const s = applyFit(m.geometry, g0, M, f, field, { cards });
+        const s = applyFit(m.geometry, g0, M, f, field, { cards, tris });
         for (const k of Object.keys(stats)) stats[k] = k === 'hugMostMm' ? Math.max(stats[k], s[k] || 0) : stats[k] + (s[k] || 0);
         skirts.push(s.skirt || null); if (s.dbg) c.fitDbg = s.dbg;
       }
