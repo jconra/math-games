@@ -1,4 +1,4 @@
-// THE CABIN FROM A BLUEPRINT: a ship's rooms built from its blueprint (labs/ships/blueprint.js has the format and the
+// THE CABIN FROM A BLUEPRINT: a ship's rooms built from its blueprint (kit/ships/blueprint.js has the format and the
 // checks) with the cabin kit's own parts (kit/shipparts/cabin.js): the walls, the sliding doors, the floors and ceilings
 // and the slanted top corners where the rooms meet the hull's sides. Written for any ship's blueprint; first used on
 // Explorer C's "Rooms in a row".
@@ -38,7 +38,7 @@ import { wallRun, doorway, floorRun, ceilingRun, hullSlope } from '../shipparts/
 import { FACE, ROOM } from '../shipparts/cabin/ship.js';
 import { SURF, GLOW } from '../materials.js';
 import { Piece } from '../piece.js';
-import { ITEM_KINDS, doorWall, hangs, spaceAt } from '../../labs/ships/blueprint.js';
+import { ITEM_KINDS, doorWall, hangs, spaceAt } from './blueprint.js';
 
 const PI = Math.PI, EPS = 1e-6;
 export const LINING_PANEL = 3.75, FILLER = 0.3, FRAME = 0.1;
