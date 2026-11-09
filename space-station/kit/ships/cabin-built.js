@@ -47,6 +47,9 @@ export const LINING_PANEL = 3.75, FILLER = 0.3, FRAME = 0.1;
 export const WALL = { top: ROOM, base: false, cornice: false }, DOOR_TOP = 2.45;
 // the slope's foot over the deck: at most SLOPE.top, never under SLOPE.least (the kit's wall needs 1.67 m over its band)
 export const SLOPE = { top: 2.0, least: 1.7 };
+// the rooms' light, for the bake: a room's ceiling panel at least `least` in all (the kit's panel scales with its size);
+// the bounce, `bounce` a square metre (at least `bounceLeast`)
+export const LIGHT = { least: 7, bounce: 1.3, bounceLeast: 3 };
 
 // ── THE LOOKS ─────────────────────────────────────────────────────────────────────────────────────────────────────
 // The kit's parts with each of the station's surfaces (kit/materials.js SURF) swapped: surf; the light strips' and
@@ -251,7 +254,18 @@ export function buildCabin(p, bp, opts = {}) {
       const L = LOOKS[look], soft = L && (it.kind === 'bench' ? L.leather : it.kind === 'bunk' || it.kind === 'bed' ? L.bedding : null);
       const surf = it.kind === 'casing' ? 'black' : { c: soft || mute(K.color), r: soft ? 0.6 : 0.7, m: 0.05, w: 0.3 };
       q.slab(surf, x0 + g, x1 - g, f, f + +it.h, z0 + g, z1 - g, { r: 0, cell: 9, loops: [] }); stats.furniture = (stats.furniture || 0) + 12;
+      // (a door casing's face at the edge of the ship's own door: an amber strip up its inner edge, so the opening
+      // reads from inside, framed as his concept's airlock is)
+      if (it.kind === 'casing') for (const { w } of outerDoors) {
+        if (w.along !== 'z' || Math.abs(w.x - (w.x > 0 ? x1 : x0)) > 0.01) continue;
+        const sz = Math.abs(z1 - w.span[0]) < 0.01 ? 1 : Math.abs(z0 - w.span[1]) < 0.01 ? -1 : 0; if (!sz) continue;
+        const zf = sz > 0 ? z1 + 0.002 : z0 - 0.002, xe = w.x > 0 ? x0 + 0.04 : x1 - 0.04, d = w.x > 0 ? 1 : -1;
+        q.glowSlab('amber', Math.min(xe, xe + d * 0.035), Math.max(xe, xe + d * 0.035), f + 0.08, f + +it.h - 0.06, Math.min(zf, zf + sz * 0.004), Math.max(zf, zf + sz * 0.004));
+        q.light([xe + d * 0.1, f + 1.0, zf + sz * 0.15], 0.25, [1, 0.97, 0.92], [0, 0, sz], 2.5);
+      }
     }
+    // (the ship's own door: a yellow nosing along the deck's edge at its step, across the opening)
+    for (const { w } of outerDoors) if (w.along === 'z' && outer.sill != null) { const xs = w.x > 0 ? outer.sill : -outer.sill, d = w.x > 0 ? -1 : 1; q.slab('yellow', Math.min(xs, xs + d * 0.07), Math.max(xs, xs + d * 0.07), -0.004, 0.006, w.span[0], w.span[1], { r: 0, cell: 9, loops: [] }); }
   }
   if (ceilings) {
     // ── the ceilings: each room's, between its slopes, at ROOM ──
@@ -261,9 +275,19 @@ export function buildCabin(p, bp, opts = {}) {
       if (b - a < 0.05) continue;
       // (one tile the room's size, lit: the station's light panel in the middle of the ceiling; tiles cost the same
       // whatever their size, and a lit one about five unlit)
-      const len = +(z1 - z0).toFixed(3), wid = +(b - a).toFixed(3);
+      const len = +(z1 - z0).toFixed(3), wid = +(b - a).toFixed(3), n0 = q.lights.length;
       put('ceilings', part(ceilingRun, { len, wid, tile: Math.max(len, wid), lights: 1, h: ROOM }), { at: [(a + b) / 2, f, zm], rot: [0, PI / 2, 0] });
+      // (a small room's panel at least LIGHT.least in all, so the washroom is not a cave)
+      const lit = q.lights.slice(n0), sum = lit.reduce((t, l) => t + l.i, 0); if (sum > 0 && sum < LIGHT.least) for (const l of lit) l.i *= LIGHT.least / sum;
     }
+  }
+  // the bounce: in each room, a soft light pointing up from the middle at waist height (the light a pale floor and
+  // furniture would throw back up), for the bake, so the ceilings and the slanted corners are not black (the kit's
+  // panels light straight down)
+  if (walls) for (const r of rooms) {
+    if (canopy(r)) continue;
+    const [x0, z0, x1, z1] = r.rect, area = (x1 - x0) * (z1 - z0);
+    q.light([(x0 + x1) / 2, +(r.floor || 0) + 1.0, (z0 + z1) / 2], Math.max(LIGHT.bounceLeast, LIGHT.bounce * area), [1, 0.97, 0.92], [0, 1, 0], 5);
   }
   // a partition's run on a line along x that meets the hull's sides: the middle full height, each end within the slope's
   // run of a side line cut down to the slope's foot, and a gusset (a triangle of panel) filling the corner up to it
