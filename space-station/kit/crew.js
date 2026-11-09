@@ -79,6 +79,10 @@
 // a believable range so the skin's texture doesn't smear. A recipe's `face` { slider: value } sets them. They ride the
 // Head bone, so the clips carry them, and they leave the scalp alone, so the hair's fit is as it was. The eye sockets
 // carry the eye bones with them (spacing and size), so the lids stay on the balls.
+// THE SMILE (2026-11-08; ~/pw/space-math/rigs/crew-smile): a head built with the smile's bones (Mouth.L/R at the mouth's
+// corners, under Jaw; LowerLid.L/R at the eyeballs' centres, under the eye sockets) has FACE.smile: a little closed-mouth
+// smile, the corners up, back and out, the cheeks up a touch and the lower lids turned up round the balls. Every head
+// that has it wears FACE.smile.default unless its recipe's face sets `smile` (0: a straight face).
 //
 // HANDS (2026-11-07; ~/pw/space-math/rigs/crew-rig/hands.py): a suit is clothing only, open at its cuffs, and the hands
 // are their own part (crew.json parts.hand: both hands in one mesh, skinned to the forearm, wrist and finger bones, with
@@ -1089,6 +1093,9 @@ function makeGaze(root, head, eyes) {
 // 5%, jaw length and chin 4 mm, cheekbones 2 mm out (1.5 forward), nose length 10% and width 18%, the bridge 3 mm, the
 // brow 2.5 mm, the eyes 2.5 mm apart each and 8% in size, the ears 6%. (The jaw's width, the cheekbones and the ears
 // are held where hair over them stays outside the head with every slider at its end: faceclear.cjs)
+// `turn` (radians round the bone's own x, y, z) turns a bone, `default` is the value a recipe that doesn't set the slider
+// gets. THE SMILE at 1: the mouth's corners 4.5 mm up, 0.7 mm back and 0.5 mm out, the cheeks 1.2 mm up, the lower lids
+// turned 4 degrees up round the balls (their edge about 0.85 mm); worn at `default` (two thirds of that: the corners 3 mm up).
 const eyes3 = (k) => [k, k, k];
 export const FACE = {
   jawWidth: { name: 'Jaw width', bones: { Jaw: { scale: [0.05, 0, 0] } } },
@@ -1102,22 +1109,26 @@ export const FACE = {
   eyeSpacing: { name: 'Eye spacing', bones: { EyeSocketL: { move: [0.0025, 0, 0] }, EyeSocketR: { move: [-0.0025, 0, 0] }, EyeL: { move: [0.0025, 0, 0] }, EyeR: { move: [-0.0025, 0, 0] } } },
   eyeSize: { name: 'Eye size', bones: { EyeSocketL: { scale: eyes3(0.08) }, EyeSocketR: { scale: eyes3(0.08) }, EyeL: { scale: eyes3(0.08) }, EyeR: { scale: eyes3(0.08) } } },
   ears: { name: 'Ears', bones: { EarL: { scale: eyes3(0.06) }, EarR: { scale: eyes3(0.06) } } },
+  smile: { name: 'Smile', default: 0.67, bones: { MouthL: { move: [0.0005, 0.0045, -0.0007] }, MouthR: { move: [-0.0005, 0.0045, -0.0007] },
+    CheekL: { move: [0, 0.0012, 0] }, CheekR: { move: [0, 0.0012, 0] }, LowerLidL: { turn: [-0.07, 0, 0] }, LowerLidR: { turn: [-0.07, 0, 0] } } },
 };
 // the face bones a person has, at rest; and the sliders whose bones they all are
 function faceRig(bones) {
   const rest = {};
-  for (const S of Object.values(FACE)) for (const b of Object.keys(S.bones)) if (bones[b] && !rest[b]) rest[b] = { p: bones[b].position.clone(), s: bones[b].scale.clone() };
+  for (const S of Object.values(FACE)) for (const b of Object.keys(S.bones)) if (bones[b] && !rest[b]) rest[b] = { p: bones[b].position.clone(), s: bones[b].scale.clone(), q: bones[b].quaternion.clone() };
   const sliders = Object.keys(FACE).filter((k) => Object.keys(FACE[k].bones).every((b) => rest[b]) && Object.keys(FACE[k].bones).some((b) => !/^Eye[LR]$/.test(b)));
   return { rest, sliders };
 }
+const _faceQ = new THREE.Quaternion(), _faceE = new THREE.Euler();
 function applyFace(bones, rig, values = {}) {
-  for (const [b, r] of Object.entries(rig.rest)) { bones[b].position.copy(r.p); bones[b].scale.copy(r.s); }
+  for (const [b, r] of Object.entries(rig.rest)) { bones[b].position.copy(r.p); bones[b].scale.copy(r.s); bones[b].quaternion.copy(r.q); }
   for (const k of rig.sliders) {
-    const v = Math.max(-1, Math.min(1, +values[k] || 0)); if (!v) continue;
+    const v = Math.max(-1, Math.min(1, +(values[k] != null ? values[k] : FACE[k].default) || 0)); if (!v) continue;
     for (const [b, e] of Object.entries(FACE[k].bones)) {
       const B = bones[b];
       if (e.move) B.position.set(B.position.x + e.move[0] * v, B.position.y + e.move[1] * v, B.position.z + e.move[2] * v);
       if (e.scale) B.scale.set(B.scale.x * (1 + e.scale[0] * v), B.scale.y * (1 + e.scale[1] * v), B.scale.z * (1 + e.scale[2] * v));
+      if (e.turn) B.quaternion.multiply(_faceQ.setFromEuler(_faceE.set(e.turn[0] * v, e.turn[1] * v, e.turn[2] * v)));
     }
   }
 }

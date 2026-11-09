@@ -14,8 +14,9 @@
 //     paint), Wireframe, the 1.8 m marker, the bones, Smooth hair (the Mathwood hair smooth-shaded, or off: its flat
 //     facets as the pack has them);
 //   FACE (folds away; a head with face bones: the Tripo heads): a slider for each of FACE's (jaw width, jaw length,
-//     chin, cheekbones, nose length and width, nose bridge, brow, eye spacing and size, ears), -1 to 1, kept in the
-//     recipe (st.recipe.face), and Reset;
+//     chin, cheekbones, nose length and width, nose bridge, brow, eye spacing and size, ears; the smile on a head built
+//     with its bones, shown at the value it's worn at, FACE.smile.default, until set), -1 to 1, kept in the recipe
+//     (st.recipe.face; a slider at its default left out), and Reset (every slider back to its default);
 //   FIT (folds away): judge every head and hair one by one and fit the hair shown (kit/crew.js, "a hair's fit"): the
 //     head and the hair before and after (the arrow keys too: left and right the hair, up and down the head), nudges up,
 //     forward and to their left in millimetres (Fine: smaller steps), Size, Tuck (0 to 500%, by its buttons or its
@@ -261,7 +262,9 @@ function colours(c) { st.recipe.colours = { ...(st.recipe.colours || {}), ...c }
 // ── FACE: the face bones' sliders (kit/crew.js FACE), kept in the recipe ─────────────────────────────────────────────
 const FACE_OPEN = 'crewlab.faceOpen';
 const faceSt = { open: (() => { try { return localStorage.getItem(FACE_OPEN) !== '0'; } catch (_) { return true; } })() };
-function face(values) { st.recipe.face = { ...(values || {}) }; for (const k of Object.keys(st.recipe.face)) if (!st.recipe.face[k]) delete st.recipe.face[k]; st.crew?.setFace(st.recipe.face); }
+// (a slider at its default (FACE[k].default, else 0) is left out of the recipe: the smile's 0 is kept, a straight face)
+const faceDefault = (k) => (FACE[k] && FACE[k].default) || 0;
+function face(values) { st.recipe.face = { ...(values || {}) }; for (const k of Object.keys(st.recipe.face)) if ((+st.recipe.face[k] || 0) === faceDefault(k)) delete st.recipe.face[k]; st.crew?.setFace(st.recipe.face); }
 function faceRows() {
   const row = $('#face'), sl = st.crew?.faceSliders || [];
   row.hidden = !sl.length; if (!sl.length) { row.replaceChildren(); return; }
@@ -271,13 +274,14 @@ function faceRows() {
   if (!open) { row.replaceChildren(fold, val(n ? `${n} changed` : 'as made')); row.lastChild.classList.add('wide'); return; }
   const items = [fold];
   for (const k of sl) {
-    const r = document.createElement('input'); r.type = 'range'; r.min = -100; r.max = 100; r.step = 1; r.value = Math.round((F[k] || 0) * 100);
-    r.setAttribute('aria-label', FACE[k].name); r.title = FACE[k].name + ' (less to more)';
-    const v = val(((F[k] || 0) * 100 > 0 ? '+' : '') + Math.round((F[k] || 0) * 100));
+    const f = F[k] != null ? +F[k] : faceDefault(k);
+    const r = document.createElement('input'); r.type = 'range'; r.min = -100; r.max = 100; r.step = 1; r.value = Math.round(f * 100);
+    r.setAttribute('aria-label', FACE[k].name); r.title = FACE[k].name + ' (less to more)' + (faceDefault(k) ? `; worn at ${Math.round(faceDefault(k) * 100)} unless set` : '');
+    const v = val((f * 100 > 0 ? '+' : '') + Math.round(f * 100));
     r.oninput = () => { const f = { ...(st.recipe.face || {}), [k]: +r.value / 100 }; face(f); v.textContent = (+r.value > 0 ? '+' : '') + r.value; };
     items.push(sep(), lab(FACE[k].name), r, v);
   }
-  items.push(sep(), chip('Reset', false, () => { face({}); menu(); }, true, 'Every slider back to the face as made'));
+  items.push(sep(), chip('Reset', false, () => { face({}); menu(); }, true, sl.some(faceDefault) ? 'Every slider back to its default (the face as made, with its little smile)' : 'Every slider back to the face as made'));
   row.replaceChildren(...items);
 }
 
