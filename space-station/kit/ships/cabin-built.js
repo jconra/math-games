@@ -78,7 +78,7 @@ export const LOOKS = {
       band: ['#9a9893', 0.55, 0.1, 0.7], dark: ['#3b3b3d', 0.55, 0.3, 0.7], black: ['#3e3f42', 0.4, 0.45, 0.5],
     },
     tone: 'plain', rooms: { galley: 'warm', science: 'cool', bunks: 'cool' },
-    floor: '#6d6d70', leather: '#9a4a24', bedding: '#3a3d42',
+    floor: '#a4a4a8', leather: '#9a4a24', bedding: '#3a3d42',
   },
   warm: {
     name: 'Warm',

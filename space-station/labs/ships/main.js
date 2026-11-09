@@ -224,7 +224,9 @@ function cabinFor(S, bp, look) {
   // white patches on a ship's small floors)
   if (!cabinMats[look]) { cabinMats[look] = makeMaterials(); for (const k of ['floor', 'floorInst']) { const m = cabinMats[look][k]; if (L.floor) m.color.set(L.floor); m.metalness = 0.35; m.envMapIntensity = 0.35; } }
   const room = { name: 'cabin', grid: { cell: 0.5, step: 0.5, deck: space.deck }, rooms: ['walls', 'ceilings'].map((v) => ({ id: v, pieces: [{ piece: id, cell: [0, 0], turn: 0, level: 0, variant: v }] })) };
-  const built = buildRoom(room, cabinMats[look], { bake: { voxel: 0.08, rays: 24 } });
+  // (baked without shadows: on the bake's 8 cm grid a 45-degree slope fills its cells in steps thick enough that its own
+  // points start inside them, so it shadows itself from every light; the corner darkening stays)
+  const built = buildRoom(room, cabinMats[look], { bake: { voxel: 0.08, rays: 24, shadows: false } });
   delete PIECES[id]; forgetPiece(id);
   const rec = { key, built, group: built.group, tris: built.stats.tris, perZone: built.stats.perZone, parts };
   cabins.set(key, rec);
