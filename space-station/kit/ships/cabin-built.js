@@ -46,10 +46,12 @@ export const LINING_PANEL = 3.75, FILLER = 0.3, FRAME = 0.1;
 // and the doorways' own cornice is cut down to a lip under it (DOOR_TOP)
 export const WALL = { top: ROOM, base: false, cornice: false }, DOOR_TOP = 2.45;
 // the slope's foot over the deck: at most SLOPE.top, never under SLOPE.least (the kit's wall needs 1.67 m over its band)
-export const SLOPE = { top: 2.0, least: 1.7 };
+// (margin: how far under the measured space's top at the wall it starts, so there is room outside it for what closes
+// the hull off: under a canopy, the cockpit's dark lid)
+export const SLOPE = { top: 2.0, least: 1.7, margin: 0.15 };
 // the rooms' light, for the bake: a room's ceiling panel at least `least` in all (the kit's panel scales with its size);
 // the bounce, `bounce` a square metre (at least `bounceLeast`)
-export const LIGHT = { least: 7, bounce: 1.3, bounceLeast: 3 };
+export const LIGHT = { least: 7, bounce: 1.3, bounceLeast: 3, slope: 1.1, slopeEvery: 1.5 };
 
 // ── THE LOOKS ─────────────────────────────────────────────────────────────────────────────────────────────────────
 // The kit's parts with each of the station's surfaces (kit/materials.js SURF) swapped: surf; the light strips' and
@@ -63,10 +65,10 @@ export const LIGHT = { least: 7, bounce: 1.3, bounceLeast: 3 };
 //   warm    his concept sheet's insets: grey steel panels, dark bands, amber light everywhere, blue leather
 // (a tone: `glow` the strip's colour at full (linear, over 1 for the bloom), `light` the colour it casts)
 const TONES = {
-  warm: { glow: [3.4, 3.0, 2.4], light: [1.0, 0.88, 0.7] },
+  warm: { glow: [3.4, 3.1, 2.65], light: [1.0, 0.92, 0.8] },
   cool: { glow: [2.7, 3.05, 3.6], light: [0.84, 0.92, 1.0] },
   plain: { glow: [3.2, 3.15, 3.0], light: [1.0, 0.97, 0.92] },
-  amber: { glow: GLOW.amber.map((v) => v * 0.8), light: [1.45, 0.98, 0.46] },
+  amber: { glow: GLOW.amber.map((v) => v * 0.8), light: [1.3, 1.0, 0.62] },
 };
 export const LOOKS = {
   light: {
@@ -81,7 +83,7 @@ export const LOOKS = {
   warm: {
     name: 'Warm',
     surf: {
-      white: ['#7d8085', 0.42, 0.5, 0.9], white2: ['#8a8c90', 0.4, 0.5, 0.8], grey2: ['#6c6f73', 0.45, 0.5, 0.85], grey: ['#606368', 0.45, 0.5, 0.6],
+      white: ['#6c727a', 0.42, 0.5, 0.9], white2: ['#79808a', 0.4, 0.5, 0.8], grey2: ['#5e646c', 0.45, 0.5, 0.85], grey: ['#555b62', 0.45, 0.5, 0.6],
       band: ['#34373b', 0.45, 0.45, 1.0], dark: ['#26282b', 0.5, 0.4, 0.8], black: ['#2e3033', 0.35, 0.55, 0.6],
     },
     tone: 'amber', rooms: {},
@@ -164,7 +166,7 @@ export function buildCabin(p, bp, opts = {}) {
   const linings = [];
   for (const e of E) for (const [lo, hi] of sideOf(e)) {
     let Tmin = Infinity; for (let z = lo + 0.05; z < hi; z += 0.1) Tmin = Math.min(Tmin, at(e.v + e.side * 0.05, z)[1]);
-    let y0 = Math.max(SLOPE.least, Math.min(SLOPE.top, Math.floor((Tmin + EPS) * 20) / 20));
+    let y0 = Math.max(SLOPE.least, Math.min(SLOPE.top, Math.floor((Tmin - SLOPE.margin + EPS) * 20) / 20));
     const od = outerDoors.find((o) => o.w.along === 'z' && Math.abs(o.w.x - e.v) < EPS && o.w.span[0] < hi && o.w.span[1] > lo);
     if (od && outer.head) y0 = outer.head;
     linings.push({ ...e, lo, hi, y0, run: +(ROOM - y0).toFixed(3), door: od || null });
@@ -206,6 +208,9 @@ export function buildCabin(p, bp, opts = {}) {
       // (the slope over the whole stretch, the door's opening too; its strip lights the room under it)
       const len = +(S.hi - S.lo).toFixed(3), pos = place(S.v, (S.lo + S.hi) / 2, 'x', S.side);
       put('slopes', part(hullSlope, { len, y0: S.y0, run: S.run, panel: Math.min(LINING_PANEL, len / Math.ceil(len / LINING_PANEL - EPS)) }), pos);
+      // (the slope's own fill, for the bake: soft lights under it, a little in from the wall, looking up at it; tall
+      // furniture against the wall would shade it from the room's middle)
+      for (let z = S.lo + LIGHT.slopeEvery / 2; z < S.hi; z += LIGHT.slopeEvery) q.light([S.v + S.side * 0.9, S.y0 - 0.15, z], LIGHT.slope, [1, 0.97, 0.92], [-S.side * 0.7, 0.7, 0], 3);
     }
     // ── the partitions: every face that is not a lining ──
     for (const e of E) {

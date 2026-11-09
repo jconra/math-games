@@ -354,7 +354,7 @@ export function builtCockpitPlan() { return C.builtCockpitPlan(COCKPIT, COCKPIT_
 // mirrored; just outside the science lab's walls, slopes and ceiling), a curtain from the canopy's edge down to the
 // lid, and a panel in the wall's plane up to the glass: from just under the cabin wall's top (`under`; the wall's face
 // toward the cockpit reaches `wallHalf` each side, `wallTop` up), and beside it down to the cockpit's floor.
-export const CABIN_TUB = { z: 4.0, lid: [[2.05, 0.95], [2.05, 1.95], [1.35, 2.55]], under: 0.05, wallHalf: 1.47, wallTop: 2.5, panel: s('#c8c6c1', 0.58, 0.04, 0.4) };
+export const CABIN_TUB = { z: 4.0, lid: [[2.08, 0.95], [2.08, 1.78], [1.26, 2.6]], under: 0.05, wallHalf: 1.47, wallTop: 2.5, panel: s('#c8c6c1', 0.58, 0.04, 0.4) };
 function cabinTub(acc, outline, { fy, tubX, rayIn, wallSurf, floorSurf }) {
   const Cz = CABIN_TUB.z, ahead = [0, 0, -1, -Cz];
   // (the tub's walls and floor ahead of the cut: as built-common.js's cockpitTub, each polygon clipped at the cut)
