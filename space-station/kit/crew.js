@@ -1747,6 +1747,13 @@ function hugFit(F, B0, src, M, fit, field, hug, stats) {
       const want = in0 ? 0.00002 : Math.max(0.00002, Math.min(clear, d0) - 0.00005); d1 = nearestHead(H, ...at(i, r1[i])); if (nearestHead.out && d1 >= want) continue;
       if (!nearestHead.out) d1 = -d1;
       for (let k = 0; k < 6 && d1 < want; k++) { r1[i] += (want - d1) * 1.3 + 0.00005; d1 = nearestHead(H, ...at(i, r1[i])); if (!nearestHead.out) d1 = -d1; }
+      // (still too near after six steps out along its line, which there runs along the skin (over an ear's fold): out
+      // along the nearest skin's own normal from where it got to, its line's radius left)
+      if (d1 < want) {
+        const P = at(i, r1[i]);
+        for (let k = 0; k < 6 && d1 < want; k++) { const nn = nearestHead.n, st = (want - d1) * 1.2 + 0.00005; P[0] += nn.x * st; P[1] += nn.y * st; P[2] += nn.z * st; d1 = nearestHead(H, ...P); if (!nearestHead.out) d1 = -d1; }
+        const q = r[i] / r1[i]; F[i * 3] = SKULL[0] + (P[0] - SKULL[0]) * q; F[i * 3 + 1] = SKULL[1] + (P[1] - SKULL[1]) * q; F[i * 3 + 2] = SKULL[2] + (P[2] - SKULL[2]) * q;
+      }
       stats.cleared++; stats.exact = (stats.exact || 0) + 1;
     }
   }
