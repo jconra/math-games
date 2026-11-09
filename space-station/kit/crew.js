@@ -1559,12 +1559,16 @@ function hugFit(F, B0, src, M, fit, field, hug, stats) {
     w[i] = y < TUCK_JAW ? 1 - smooth01((TUCK_JAW - y) / TUCK_FADE) : 1;
     if (!(Rmax[k] >= ri)) Rmax[k] = ri;
     // (how near it may come, along its line: `clear` off the head (the most it reaches within 3 degrees, and HUG_MARGIN for
-    // the reach's sampling), or as near as it was made, which may be under that reach (by an ear, on a bump); a point
-    // plainly under the skin as made (HUG_INSIDE under the head's mean reach: the flare, his dragged-in edge, hair cutting
-    // in) none)
+    // the reach's sampling), or as near as it was made, which may be under that reach (by an ear, on a bump); and as far
+    // off its mean reach, the near skin (a line down through the neck: the most it reaches is the neck's far side, and
+    // hair hanging beside the neck was drawn onto it); a point plainly under the skin as made (HUG_INSIDE under the head's
+    // mean reach: the flare, his dragged-in edge, hair cutting in) none)
     const ex = B0[i * 3] - SKULL[0], ey = B0[i * 3 + 1] - SKULL[1], ez = B0[i * 3 + 2] - SKULL[2], r0 = Math.hypot(ex, ey, ez);
     const D0 = r0 > 1e-4 ? reach(field.D, ex, ey, ez, r0, false) : 0, S0 = r0 > 1e-4 ? reach(field.S, ex, ey, ez, r0, true) : 0;
-    if (D0 > 0 && Dv[i] > 0 && !(S0 > 0 && r0 < S0 - HUG_INSIDE)) lo[i] = Dv[i] + Math.min(clear + HUG_MARGIN, r0 - D0);
+    if (D0 > 0 && Dv[i] > 0 && !(S0 > 0 && r0 < S0 - HUG_INSIDE)) {
+      lo[i] = Dv[i] + Math.min(clear + HUG_MARGIN, r0 - D0);
+      if (Sv[i] > 0 && r0 >= S0) lo[i] = Math.max(lo[i], Sv[i] + Math.min(clear + HUG_MARGIN, r0 - S0));
+    }
   }
   const over = hugFilter(Rmax, 4, 'max'), skirt = new Uint8Array(n), L = new Float32Array(NC).fill(NaN);
   for (let i = 0; i < n; i++) {
@@ -1621,6 +1625,8 @@ function hugFit(F, B0, src, M, fit, field, hug, stats) {
     stats.hugMostMm = Math.max(stats.hugMostMm, +(Math.abs(r1[i] - r[i]) * 1000).toFixed(1));
   }
   stats.skirt = skirt;
+  // (for the checks: what the hug saw at the points globalThis.__hugDbg names)
+  if (globalThis.__hugDbg) stats.dbg = globalThis.__hugDbg.map((i) => ({ i, r: r[i], r1: r1[i], lo: lo[i], Sv: Sv[i], Dv: Dv[i], skirt: skirt[i], edge: edge[i], w: w[i], L: L[cell[i]] }));
   return stats;
 }
 
@@ -2148,7 +2154,7 @@ export async function makeCrew(lib, recipe) {
         if (m.geometry === g0) m.geometry = ownGeometry(g0);
         const s = applyFit(m.geometry, g0, M, f, field, { cards });
         for (const k of Object.keys(stats)) stats[k] = k === 'hugMostMm' ? Math.max(stats[k], s[k] || 0) : stats[k] + (s[k] || 0);
-        skirts.push(s.skirt || null);
+        skirts.push(s.skirt || null); if (s.dbg) c.fitDbg = s.dbg;
       }
       c.fitSkirt = skirts;
       c.fit = plain ? null : f; c.fitStats = stats;
