@@ -117,7 +117,8 @@
 //     how far they came in, pastMm: how far the hidden neck reached past the collar's outside, wideMm: how much wider
 //     than the collar's top the neck is, wideAt: where (degrees round, 0 ahead, 90 its left), coverMm: how far down a
 //     wide neck covers the collar, deep: points left because the wall was deeper inside the neck than COLLAR.deep, rides:
-//     points riding with the cloth, applied: whether the fit is on },
+//     points riding with the cloth, tucked: steps round (of 72) where a neck wider than an opening's rim is drawn in
+//     behind the cloth below it, applied: whether the fit is on },
 //     or null without one), c.collar (the suit's collar as measured), c.collarDepth (each
 //     head point's depth below where the fit starts, metres; minus above it), c.collarMoved (how far each came in, mm)
 //   lib.collarFit (true: the collar fit on; false: off, the heads as made, its numbers still measured: collarStats
@@ -1823,7 +1824,11 @@ function wornScalp(sc, hairFit, field) {
 //   the rim to full COLLAR_BAND below it, so the neck above the rim, what shows, never moves and there is no seam.
 //   Where a neck is wider than the collar's top (it covers the collar: the collar's top hidden inside the neck), the
 //   neck below the rim is what shows, down to where the collar comes out from under it: that stretch never moves either
-//   (the head keeps its own shape; counted as wideMm, coverMm), and the fit starts below it.
+//   (the head keeps its own shape; counted as wideMm, coverMm), and the fit starts below it. But where the rim is an
+//   OPENING's (COLLAR.open below the collar's highest: the civilian's T-shirt neckline under its open jacket), a wider
+//   neck lies over the cloth below, not over a collar's top (t10's long neck: a V of skin on the shirt with a hard
+//   edge): it is drawn in behind the cloth from the rim, over 5 mm (2026-11-09; counted as tucked), the neck above the
+//   rim, what shows, as made.
 //   Nothing is cut, nothing is stretched: a neck too short for a collar stays as short.
 //   THE HIDDEN NECK RIDES WITH THE CLOTH: from 5 mm below where the fit starts, a point's skin weights blend toward those
 //   of the nearest suit point (full COLLAR_BAND further down; its spine bones only, Hips to Head: a neck never rides an
@@ -1839,8 +1844,9 @@ export const COLLAR_BAND = 0.015;             // the fit grows from nothing at t
 // (far: where the look in starts: a wall must be the suit's OUTERMOST cloth along its line out to here, so an inner
 // surface with the suit's own back or a pack beyond it (spaceMan's funnel inside its ring) is never taken for the
 // collar; a wall farther than reach is none (the suit is far off there). jump: the most a collar's outside comes in from
-// one level to the next, going down; deep: the most a neck point is ever drawn in, a safety stop)
-const COLLAR = { step: 0.005, below: 0.15, top: -0.02, nt: 72, reach: 0.16, far: 0.35, least: 0.042, around: 0.75, jump: 0.01, deep: 0.045 };
+// one level to the next, going down; deep: the most a neck point is ever drawn in, a safety stop; open: a rim this far
+// below the collar's highest is an opening's (a shirt's neckline under an open collar), never a collar's top)
+const COLLAR = { step: 0.005, below: 0.15, top: -0.02, nt: 72, reach: 0.16, far: 0.35, least: 0.042, around: 0.75, jump: 0.01, deep: 0.045, open: 0.05 };
 // (the spine's bones: what the hidden neck may ride, borrowed from the cloth beside it)
 const SPINE = /^(Hips|Abdomen|Torso|Chest|Neck|Head)$/;
 // (an attribute's k-th component of item i, as a number: a packed attribute's unpacked)
@@ -1979,7 +1985,7 @@ function neckFit(m, C, rideOn = true) {
   const rides = bones.map((b) => { for (let p = b; p; p = p.parent) if (p === head) return true; return false; });
   const g = m.geometry, pos = g.attributes.position, n = pos.count, si = g.attributes.skinIndex, sw = g.attributes.skinWeight;
   const P = floatsOf(pos), depth = new Float32Array(n).fill(-1), moved = new Float32Array(n), X = new THREE.Vector3();
-  const st = { moved: 0, mostMm: 0, meanMm: 0, pastMm: 0, wideMm: 0, wideAt: null, coverMm: 0, deep: 0, rides: 0 };
+  const st = { moved: 0, mostMm: 0, meanMm: 0, pastMm: 0, wideMm: 0, wideAt: null, coverMm: 0, deep: 0, rides: 0, tucked: 0 };
   let sum = 0;
   // (every point at the suit's rest, in its Head bone's frame: its height, its angle and distance round the collar's
   // centre, its Head share; and the neck's outside on the collar's grid, the farthest of the neck's points (the Head's
@@ -2000,12 +2006,17 @@ function neckFit(m, C, rideOn = true) {
   // shows); then from where the collar comes out from under the neck. The covered stretch never moves: a neck wider
   // than a collar keeps its own shape, and is counted (wideMm, coverMm))
   const near = (k, j) => { let v = -Infinity; for (let dk = -1; dk <= 1; dk++) { const kk = k + dk; if (kk < 0 || kk >= C.ny) continue; for (let dj = -1; dj <= 1; dj++) v = Math.max(v, NR[kk][(j + dj + C.nt) % C.nt]); } return v; };
-  const start = new Float32Array(C.nt).fill(-Infinity), band = new Float32Array(C.nt).fill(COLLAR_BAND);
+  const start = new Float32Array(C.nt).fill(-Infinity), band = new Float32Array(C.nt).fill(COLLAR_BAND), rimTop = Math.max(...C.rim);
   for (let j = 0; j < C.nt; j++) {
     if (!(C.rim[j] > -Infinity)) continue;
     let k = Math.min(C.ny - 1, Math.round((C.rim[j] - C.y0) / C.step));
     const k0 = k, w0 = C.wall[k][j], r0 = near(k, j);
     if (w0 < Infinity && r0 - w0 > st.wideMm / 1000) { st.wideMm = (r0 - w0) * 1000; st.wideAt = Math.round((-Math.PI + (j + 0.5) * 2 * Math.PI / C.nt) * DEG); }
+    // (2026-11-09: where the rim is an OPENING's, over COLLAR.open below the collar's highest (the civilian's T-shirt
+    // under its open jacket: its neckline 7.5 cm below the jacket's collar), a neck wider than it isn't covering a
+    // collar's top but lying over the cloth below (t10's long neck: a V of skin on the shirt, a hard edge): it is drawn
+    // in behind the cloth from the rim, over 5 mm; the neck above the rim, what shows, as made)
+    if (rimTop - C.rim[j] > COLLAR.open) { if (w0 < Infinity && r0 - w0 > 0.002) { st.tucked++; band[j] = 0.005; } start[j] = C.rim[j]; continue; }
     while (k > 0) { const r = near(k, j), w = C.wall[k][j]; if (!(r > -Infinity) || !(w < Infinity) || r <= w + 0.002) break; k--; }
     start[j] = C.y0 + k * C.step; st.coverMm = Math.max(st.coverMm, (k0 - k) * C.step * 1000);
     // (where the collar comes out from under a wider neck, skin and cloth already meet: the fit comes in over 5 mm)
