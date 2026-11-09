@@ -325,7 +325,10 @@ function saveMine() {
     return true;
   } catch (_) { fitSt.note = 'This browser would not keep the fits: Copy fits before you leave.'; return false; }
 }
-lib.fits = readMine(); lib.headFits = readMine(HEAD_KEY);
+// (hairs renamed to their files' names (2026-11-08): this browser's fits and buzzes kept under the old ids follow them)
+const RENAMED = { pinkside: 'pinkSide', bumpy: 'coil', greybob: 'mediumFull' };
+function renamed(o) { for (const [a, b] of Object.entries(RENAMED)) if (own(o, a)) { if (!own(o, b)) o[b] = o[a]; delete o[a]; } return o; }
+lib.fits = renamed(readMine()); lib.headFits = readMine(HEAD_KEY);
 const fitSt = { open: (() => { try { return localStorage.getItem(FIT_OPEN) !== '0'; } catch (_) { return true; } })(), scope: 'all', fine: false, out: null, note: '' };
 // a change to the hair shown: to its fit on every head, or (Just this head) to that head's own adjustment
 async function fitEdit(change, quiet) {
@@ -591,7 +594,7 @@ function saveBuzzes() {
   try { if (Object.keys(lib.buzzes).length) localStorage.setItem(BUZZ_KEY, JSON.stringify(lib.buzzes)); else localStorage.removeItem(BUZZ_KEY); }
   catch (_) { buzzSt.note = 'This browser would not keep the buzzes: Copy buzzes before you leave.'; }
 }
-lib.buzzes = readBuzzes();
+lib.buzzes = renamed(readBuzzes());
 // (what paints a hair has: a painted cut (the buzz cut), its bust's own marks, its scalp's shade)
 const hairPaints = (P) => ({ cut: !!(P && P.paint && !P.file), marks: !!(P && P.paint && P.marks), under: !!(P && P.scalp && P.scalp.line) });
 function buzzEdit(change) {
