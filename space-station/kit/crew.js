@@ -1696,7 +1696,7 @@ function hugFit(F, B0, src, M, fit, field, hug, stats) {
       if (deep[i]) {
         const P = at(i, r1[i]); let d1 = nearestHead(H, ...P); if (d1 >= clear + 1e-4 && nearestHead.out) continue;
         const d0 = nearestHead(H, B0[i * 3], B0[i * 3 + 1], B0[i * 3 + 2]); if (nearestHead.found ? !nearestHead.out : true) continue;
-        const want = Math.min(clear, d0) - 0.00005; d1 = nearestHead(H, ...P); if (!nearestHead.out) d1 = -d1; if (d1 >= want) continue;
+        const want = Math.max(0.00002, Math.min(clear, d0) - 0.00005); d1 = nearestHead(H, ...P); if (!nearestHead.out) d1 = -d1; if (d1 >= want) continue;
         for (let k = 0; k < 6 && d1 < want; k++) { const nn = nearestHead.n, st = (want - d1) * 1.2 + 0.00005; P[0] += nn.x * st; P[1] += nn.y * st; P[2] += nn.z * st; d1 = nearestHead(H, ...P); if (!nearestHead.out) d1 = -d1; }
         const q = r[i] / r1[i]; F[i * 3] = SKULL[0] + (P[0] - SKULL[0]) * q; F[i * 3 + 1] = SKULL[1] + (P[1] - SKULL[1]) * q; F[i * 3 + 2] = SKULL[2] + (P[2] - SKULL[2]) * q;
         stats.cleared++; stats.hugged++; continue;
@@ -1705,7 +1705,7 @@ function hugFit(F, B0, src, M, fit, field, hug, stats) {
       // (as made: how far off, and on the outside (a point under the skin as made, the flare or his dragged-in edge, is left)
       // (none within reach as made: far off the skin, unless the reach says it lay under it)
       const d0 = nearestHead(H, B0[i * 3], B0[i * 3 + 1], B0[i * 3 + 2]); if (nearestHead.found ? !nearestHead.out : lo[i] === -Infinity) continue;
-      const want = Math.min(clear, d0) - 0.00005; d1 = nearestHead(H, ...at(i, r1[i])); if (nearestHead.out && d1 >= want) continue;
+      const want = Math.max(0.00002, Math.min(clear, d0) - 0.00005); d1 = nearestHead(H, ...at(i, r1[i])); if (nearestHead.out && d1 >= want) continue;
       if (!nearestHead.out) d1 = -d1;
       for (let k = 0; k < 6 && d1 < want; k++) { r1[i] += (want - d1) * 1.3 + 0.00005; d1 = nearestHead(H, ...at(i, r1[i])); if (!nearestHead.out) d1 = -d1; }
       stats.cleared++; stats.exact = (stats.exact || 0) + 1;
