@@ -369,7 +369,6 @@ function setTuck(v, quiet) {
 }
 // (the level being set's own width, height or depth (axis 0, 1, 2), turn, hug and gap: kept within 70 to 130%, 45
 // degrees, 0 to 100% and 0 to 15 mm worn)
-const scopeOwn = (t, base) => (base === 'headAll' || base == null ? t : t);
 function redim(axis, dir) {
   fitEdit((t) => { t.dims = [0, 1, 2].map((i) => (t.dims && t.dims[i] != null ? +t.dims[i] : 1)); t.dims[axis] = +Math.min(1.3, Math.max(0.7, t.dims[axis] + dir * fine('dim'))).toFixed(5); });
 }
