@@ -19,6 +19,10 @@
 //                           near (1.6: how close before it opens) }. The leaves slide on into the walls beside it: a
 //                           ship builder puts wall either side, on both faces, at least as long as a leaf (two leaves:
 //                           clear / 2 + 0.05 each side; one: clear + 0.05 on its side)
+//                           frame: 'oct' draws the game's maker's 8-sided doorway instead (kit/shipparts/cabin/door.js:
+//                           a chamfered opening, a stepped bevelled frame with light strips, border-bevelled leaves that
+//                           part with a stepped seam, a sign over it, a control panel beside it; its own options there:
+//                           h, signs, panels); the station's own doorway, the default, is drawn exactly as before
 //   corner(p, o)            { v: 'inside' | 'outside', top }
 //   frame(p, o)             a portal frame across a room or corridor: the station's rib, with its light strip, on each
 //                           wall and a beam across the ceiling between them (the station's corridor rhythm): { wid (1:
@@ -45,6 +49,7 @@ import { Piece } from '../piece.js';
 import { put } from '../geo.js';
 import { part, placeInto } from './place.js';
 import { ROOM, FACE, DEPTH } from './cabin/ship.js';
+import { octDoor } from './cabin/door.js';
 import { SURF } from '../materials.js';
 
 const PI = Math.PI;
@@ -100,6 +105,7 @@ export function wallRun(p, o = {}) {
 
 // ── doorways ────────────────────────────────────────────────────────────────────────────────────────────────────────
 export const doorway = lean(function doorway(p, o = {}) {
+  if (o.frame === 'oct') return octDoor(p, { room: ROOM, ...o });
   const { w = 1, clear = 0.8, h = DOOR_H, leaves = 2, locked = false, near = 1.6, top = TOP } = o;
   wallPanel(p, locked ? 'locked' : 'door', shipSizes({ w, top, door: { w: clear, h, leaves, near } }));
   // the cornice along both faces, and the skirting either side of the frame where there is wall to carry it

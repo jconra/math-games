@@ -13,8 +13,15 @@
 //     look       'light' (the game's maker's own reference pictures for the bunks and the mess: warm light-grey panels,
 //                a charcoal floor, warm-white light strips) or 'warm' (his concept sheet's insets: grey steel panels, amber
 //                light strips, blue leather) - see LOOKS
-//     items      true: the blueprint's furniture as the plan's boxes (its colours, muted), hanging cabinets at their
-//                height, the door casings dark
+//     items      true: the blueprint's furniture: the rooms the cabin kit has fittings for furnished with them
+//                (kit/ships/cabin-furnish.js; so far the galley / mess), the rest as the plan's boxes (its colours,
+//                muted), hanging cabinets at their height, the door casings dark
+//     doorFrame  'oct' (or the blueprint's own "doorFrame"): the game's maker's 8-sided doorways (kit/shipparts/cabin/
+//                door.js), each with a sign over it naming the room it leads to on each face, and a control panel beside
+//                it on whichever side has clear wall; else the station's doorway at a ship's size
+// What it gives back on the piece: p.stats (triangles by what they are), p.runs (the runs of wall, for the lab),
+// p.notes, and p.seesOutside: the rooms that can see out of the ship, by id: 'canopy' (always, through the glass) or
+// 'door' (while the hull's door is open). Everywhere else the outside world could be left out (not done yet).
 // How it is put together (the kit's parts cost about the same per panel whatever its length, and a doorway about two
 // panels, so a ship's whole inside stays near 35,000 triangles):
 //   - down each hull side, a LINING: one run of wall per stretch of rooms whose hull comes down alike (panels up to
@@ -39,6 +46,9 @@ import { FACE, ROOM } from '../shipparts/cabin/ship.js';
 import { SURF, GLOW } from '../materials.js';
 import { Piece } from '../piece.js';
 import { ITEM_KINDS, doorWall, hangs, spaceAt } from './blueprint.js';
+import { furnishRoom } from './cabin-furnish.js';
+import { SIGNS } from '../shipparts/cabin/print.js';
+import { makeMaterials } from '../materials.js';
 
 const PI = Math.PI, EPS = 1e-6;
 export const LINING_PANEL = 3.75, FILLER = 0.3, FRAME = 0.1;
@@ -49,9 +59,28 @@ export const WALL = { top: ROOM, base: false, cornice: false }, DOOR_TOP = 2.45;
 // (margin: how far under the measured space's top at the wall it starts, so there is room outside it for what closes
 // the hull off: under a canopy, the cockpit's dark lid)
 export const SLOPE = { top: 2.0, least: 1.7, margin: 0.15 };
-// the rooms' light, for the bake: a room's ceiling panel at least `least` in all (the kit's panel scales with its size);
-// the bounce, `bounce` a square metre (at least `bounceLeast`)
-export const LIGHT = { least: 7, bounce: 1.3, bounceLeast: 3, slope: 1.1, slopeEvery: 1.5 };
+// the rooms' light, for the bake. The game's maker (2026-11-09): "a low light level, and have the light noticeably glowing
+// from the light strips. So there is a lot of contrast and dynamic lighting." So the rooms are lit low and mostly by
+// their strips (the slopes' feet, the cabinets' undersides, the benches' toes, the door frames), each throwing a pool on
+// what is near it:
+//   panel    the kit's ceiling panel at this share of its own strength (it scales with the room's size), at least
+//            `least` in all (so a small room still has a pool under its light)
+//   bounce   the light a floor throws back up, `bounce` a square metre (at least `bounceLeast`): just enough that a
+//            ceiling is not black
+//   slope    the soft lights under each slope (every `slopeEvery`), looking up at it; `slopeStrip`: the slope's own strip
+//            along its foot, at this share of the kit's
+//   ambient  how much of the lab's or game's own sky and surroundings reaches inside (cabinMaterials): little; env, how
+//            much of them the cabin's surfaces mirror
+// (The bake is in a point light's units: about 1 on a pale wall already reads light grey once tone-mapped, so the fill is
+// kept near 0.15 and the strips' pools reach 1 to 3.)
+//   scale    every baked light at this share, the fittings' own strips (a light marked `strip`) at `strips` times that
+export const LIGHT = { panel: 0.2, least: 1.3, bounce: 0.09, bounceLeast: 0.35, slope: 0.12, slopeEvery: 1.5, slopeStrip: 0.6, ambient: 0.08, env: 0.18, scale: 0.22, strips: 2.2 };
+// THE POOLS: a baked light lives in the vertices, and a ship's walls have few (a panel is drawn in big steps), so the
+// bake cannot draw a pool of light on a wall. A pool is a real-time light instead: the fittings mark where theirs are
+// (a light with `pool: { i, reach }`: the strip under a cabinet, a bench's toe strip, a door's frame), each room's ceiling
+// panel gives one, and p.pools lists them by room ({ at, color, i, reach, room }), for a lab or the game to light the
+// few of the room the eye is in. `panel`: the ceiling's pool, this much a square metre of ceiling (between least and most).
+export const POOLS = { panel: 0.26, least: 0.4, most: 1.3, reach: 3.2 };
 
 // ── THE LOOKS ─────────────────────────────────────────────────────────────────────────────────────────────────────
 // The kit's parts with each of the station's surfaces (kit/materials.js SURF) swapped: surf; the light strips' and
@@ -65,20 +94,22 @@ export const LIGHT = { least: 7, bounce: 1.3, bounceLeast: 3, slope: 1.1, slopeE
 //   warm    his concept sheet's insets: grey steel panels, dark bands, amber light everywhere, blue leather
 // (a tone: `glow` the strip's colour at full (linear, over 1 for the bloom), `light` the colour it casts)
 const TONES = {
-  warm: { glow: [3.4, 3.1, 2.65], light: [1.0, 0.92, 0.8] },
+  warm: { glow: [3.7, 3.0, 2.1], light: [1.0, 0.86, 0.68] },
   cool: { glow: [2.7, 3.05, 3.6], light: [0.84, 0.92, 1.0] },
   plain: { glow: [3.2, 3.15, 3.0], light: [1.0, 0.97, 0.92] },
-  amber: { glow: GLOW.amber.map((v) => v * 0.8), light: [1.3, 1.0, 0.62] },
+  amber: { glow: [4.3, 3.2, 1.7], light: [1.3, 1.0, 0.62] },
 };
 export const LOOKS = {
   light: {
     name: 'Light',
+    // (light to mid greys, as his pictures' panels are under their dim light: round one's were near white in the small
+    // rooms)
     surf: {
-      white: ['#bdbbb6', 0.62, 0.04, 0.6], white2: ['#c8c6c1', 0.58, 0.04, 0.5], grey2: ['#a9a7a2', 0.58, 0.05, 0.6], grey: ['#8f8d89', 0.5, 0.15, 0.5],
-      band: ['#9a9893', 0.55, 0.1, 0.7], dark: ['#3b3b3d', 0.55, 0.3, 0.7], black: ['#3e3f42', 0.4, 0.45, 0.5],
+      white: ['#9f9e9a', 0.6, 0.05, 0.6], white2: ['#adaba6', 0.56, 0.05, 0.5], grey2: ['#8e8c88', 0.56, 0.08, 0.6], grey: ['#7a7975', 0.5, 0.15, 0.5],
+      band: ['#7f7d79', 0.55, 0.1, 0.7], dark: ['#2f3032', 0.55, 0.3, 0.7], black: ['#343538', 0.4, 0.45, 0.5],
     },
     tone: 'plain', rooms: { galley: 'warm', science: 'cool', bunks: 'cool' },
-    floor: '#a4a4a8', leather: '#9a4a24', bedding: '#3a3d42',
+    floor: '#e4e5ea', floorGain: 7, leather: '#9c5a34', bedding: '#3a3d42',
   },
   warm: {
     name: 'Warm',
@@ -87,9 +118,29 @@ export const LOOKS = {
       band: ['#34373b', 0.45, 0.45, 1.0], dark: ['#26282b', 0.5, 0.4, 0.8], black: ['#2e3033', 0.35, 0.55, 0.6],
     },
     tone: 'amber', rooms: {},
-    floor: '#8a8580', leather: '#22355e', bedding: '#22355e',
+    floor: '#aaa5a0', floorGain: 6, leather: '#22355e', bedding: '#22355e',
   },
 };
+// THE CABIN'S MATERIALS: the kit's own (kit/materials.js), with only a little of the outside's light let in (LIGHT.ambient:
+// the sky light and the surroundings' glow that a lab or the game lights everything with), so the cabin is lit by its
+// strips; reflections of the surroundings low (LIGHT.env); the floor tinted for the look and less of a mirror.
+export function cabinMaterials(look) {
+  const M = makeMaterials(), L = LOOKS[look] || LOOKS.light, amb = { value: LIGHT.ambient };
+  for (const k of ['solid', 'solidInst', 'floor', 'floorInst', 'decal', 'decalInst']) {
+    const m = M[k], before = m.onBeforeCompile, key = m.customProgramCacheKey;
+    m.onBeforeCompile = (sh, r) => {
+      before(sh, r); sh.uniforms.uCabinAmb = amb;
+      sh.fragmentShader = sh.fragmentShader.replace('uniform float uAOStrength;', 'uniform float uAOStrength; uniform float uCabinAmb;').replace('reflectedLight.indirectDiffuse *= ambientOcclusion;', 'reflectedLight.indirectDiffuse *= ambientOcclusion * uCabinAmb;');
+    };
+    m.customProgramCacheKey = () => key() + 'cabin';
+    m.envMapIntensity = LIGHT.env;
+  }
+  // (the floor's plates are drawn dark (kit/tex.js, the deck's #34373d): in the cabin's low light its tint goes well over
+  // 1 (floorGain), else it reads black)
+  for (const k of ['floor', 'floorInst']) { if (L.floor) M[k].color.set(L.floor).multiplyScalar(L.floorGain ?? 1); M[k].metalness = 0.25; M[k].envMapIntensity = LIGHT.env; }
+  M.ambient = amb;   // (a lab may turn it: M.ambient.value)
+  return M;
+}
 // (the station's glows the strips and panels are drawn with, and how bright each is against the tone's full)
 const GLOWS = [[GLOW.soft, 0.6], [GLOW.strip, 1.0], [GLOW.white, 1.3]];
 const lin = (hex) => { const c = new THREE.Color(hex); return [c.r, c.g, c.b]; };
@@ -147,7 +198,7 @@ function split(lo, hi, cover) {
 const minus = (lo, hi, holes) => split(lo, hi, holes).outside;
 
 export function buildCabin(p, bp, opts = {}) {
-  const { space = null, which = 'all', outer = {}, look = 'light', items = true } = opts;
+  const { space = null, which = 'all', outer = {}, look = 'light', items = true } = opts, oct = (opts.doorFrame ?? bp.doorFrame) === 'oct';
   const walls = which !== 'ceilings', ceilings = which !== 'walls';
   const q = new Piece();   // (drawn into a piece of its own, re-surfaced for the look, then copied into p)
   // (triangles by what they are, for the lab: stats)
@@ -206,8 +257,9 @@ export function buildCabin(p, bp, opts = {}) {
       const holes = holesOn(S), pieces = minus(S.lo, S.hi, holes);
       for (const [lo, hi] of pieces) runAtLine(S, lo, hi, { lining: true, wall: { top: S.y0, cornice: false } });
       // (the slope over the whole stretch, the door's opening too; its strip lights the room under it)
-      const len = +(S.hi - S.lo).toFixed(3), pos = place(S.v, (S.lo + S.hi) / 2, 'x', S.side);
+      const len = +(S.hi - S.lo).toFixed(3), pos = place(S.v, (S.lo + S.hi) / 2, 'x', S.side), n0 = q.lights.length;
       put('slopes', part(hullSlope, { len, y0: S.y0, run: S.run, panel: Math.min(LINING_PANEL, len / Math.ceil(len / LINING_PANEL - EPS)) }), pos);
+      for (const l of q.lights.slice(n0)) l.i *= LIGHT.slopeStrip;
       // (the slope's own fill, for the bake: soft lights under it, a little in from the wall, looking up at it; tall
       // furniture against the wall would shade it from the room's middle)
       for (let z = S.lo + LIGHT.slopeEvery / 2; z < S.hi; z += LIGHT.slopeEvery) q.light([S.v + S.side * 0.9, S.y0 - 0.15, z], LIGHT.slope, [1, 0.97, 0.92], [-S.side * 0.7, 0.7, 0], 3);
@@ -237,8 +289,12 @@ export function buildCabin(p, bp, opts = {}) {
       // (the kit's leaves: +1 slides to the doorway's own +x: along the ship's +x on a wall along x (turned 0), and
       // along +z on a wall along z (turned -90 degrees, which takes its +x to the ship's +z))
       const pos = P.axis === 'z' ? { at: [(P.lo + P.hi) / 2, 0, P.v], rot: [0, 0, 0] } : { at: [P.v, 0, (P.lo + P.hi) / 2], rot: [0, -PI / 2, 0] };
-      put('doorways', part(doorway, { w, clear: d.width, leaves: L === 2 ? 2 : L > 0 ? 1 : -1, top: DOOR_TOP }), { ...pos, id: `door ${d.id}:` });
+      const style = oct ? { frame: 'oct', ...octFaces(P, L) } : {};
+      put('doorways', part(doorway, { w, clear: d.width, leaves: L === 2 ? 2 : L > 0 ? 1 : -1, top: DOOR_TOP, ...style }), { ...pos, id: `door ${d.id}:` });
     }
+    // (the 8-sided doors' leaves of one size and kind are one kind of leaf wherever they hang, whatever each doorway's
+    // signs: one draw for all of them)
+    for (const mv of q.movers) { const i = mv.key.indexOf('oct-leaf:'); if (i > 0) mv.key = mv.key.slice(i); }
     // ── the floors (a room under glass has the ship's own) ──
     for (const r of rooms) {
       if (canopy(r)) continue;
@@ -249,16 +305,24 @@ export function buildCabin(p, bp, opts = {}) {
       const parts = od && outer.sill != null ? [[x0, z0, x1, s0], od.w.x > 0 ? [x0, s0, outer.sill, s1] : [-outer.sill, s0, x1, s1], [x0, s1, x1, z1]] : [[x0, z0, x1, z1]];
       for (const [a0, b0, a1, b1] of parts) {
         if (a1 - a0 < 0.02 || b1 - b0 < 0.02) continue;
-        put('floors', part(floorRun, { v: 'deck', len: +(b1 - b0).toFixed(3), wid: +(a1 - a0).toFixed(3), tile: 2 }), { at: [(a0 + a1) / 2, f, (b0 + b1) / 2], rot: [0, PI / 2, 0] });
+        // (in 1 m tiles: the cabin kit's floor maps a metre of floor to one plate of the floor's texture, so a bigger tile
+        // ran on past the deck's plate into the texture's other plates, vents and gratings)
+        put('floors', part(floorRun, { v: 'deck', len: +(b1 - b0).toFixed(3), wid: +(a1 - a0).toFixed(3), tile: 1 }), { at: [(a0 + a1) / 2, f, (b0 + b1) / 2], rot: [0, PI / 2, 0] });
       }
     }
-    // ── the furniture: the plan's boxes ──
+    // ── the furniture: the kit's fittings where it has them for a room's kind, else the plan's boxes ──
+    const furnished = new Set();
+    if (items) {
+      const slopeAt = (axis, v, a) => { if (axis !== 'x') return null; const L = linings.find((s) => Math.abs(s.v - v) < EPS && a >= s.lo - EPS && a <= s.hi + EPS); return L ? { y0: L.y0, run: L.run } : null; };
+      const openings = (axis, v) => panels.filter((P) => P.axis === axis && Math.abs(P.v - v) < EPS).map((P) => (P.outer ? [P.lo, P.hi] : [P.lo - 0.2, P.hi + 0.2]));
+      for (const r of rooms) if (!canopy(r)) for (const id of furnishRoom(q, bp, r, { put, slopeAt, openings, look: LOOKS[look] })) furnished.add(id);
+    }
     if (items) for (const it of bp.items || []) {
-      const r = byId[it.room]; if (!r || canopy(r)) continue;
+      const r = byId[it.room]; if (!r || canopy(r) || furnished.has(it.id)) continue;
       const K = ITEM_KINDS[it.kind] || { color: '#999999' }, [x0, z0, x1, z1] = it.rect, f = +(r.floor || 0) + +(it.y || 0), g = 0.01;
       const L = LOOKS[look], soft = L && (it.kind === 'bench' ? L.leather : it.kind === 'bunk' || it.kind === 'bed' ? L.bedding : null);
       const surf = it.kind === 'casing' ? 'black' : { c: soft || mute(K.color), r: soft ? 0.6 : 0.7, m: 0.05, w: 0.3 };
-      q.slab(surf, x0 + g, x1 - g, f, f + +it.h, z0 + g, z1 - g, { r: 0, cell: 9, loops: [] }); stats.furniture = (stats.furniture || 0) + 12;
+      q.slab(surf, x0 + g, x1 - g, f, f + +it.h, z0 + g, z1 - g, { r: 0, cell: 9, loops: [] }); stats.boxes = (stats.boxes || 0) + 12;
       // (a door casing's face at the edge of the ship's own door: an amber strip up its inner edge, so the opening
       // reads from inside, framed as his concept's airlock is)
       if (it.kind === 'casing') for (const { w } of outerDoors) {
@@ -282,8 +346,10 @@ export function buildCabin(p, bp, opts = {}) {
       // whatever their size, and a lit one about five unlit)
       const len = +(z1 - z0).toFixed(3), wid = +(b - a).toFixed(3), n0 = q.lights.length;
       put('ceilings', part(ceilingRun, { len, wid, tile: Math.max(len, wid), lights: 1, h: ROOM }), { at: [(a + b) / 2, f, zm], rot: [0, PI / 2, 0] });
-      // (a small room's panel at least LIGHT.least in all, so the washroom is not a cave)
-      const lit = q.lights.slice(n0), sum = lit.reduce((t, l) => t + l.i, 0); if (sum > 0 && sum < LIGHT.least) for (const l of lit) l.i *= LIGHT.least / sum;
+      // (the panel at LIGHT.panel of the kit's strength, but at least LIGHT.least in all, so a small room still has its pool)
+      const lit = q.lights.slice(n0), sum = lit.reduce((t, l) => t + l.i, 0) * LIGHT.panel; for (const l of lit) l.i *= LIGHT.panel * (sum > 0 && sum < LIGHT.least ? LIGHT.least / sum : 1);
+      // (its pool, a little under the panel)
+      q.lights.push({ at: [(a + b) / 2, f + ROOM - 0.3, zm], i: 0, color: [1, 0.97, 0.92], dir: null, reach: POOLS.reach, pool: { i: Math.max(POOLS.least, Math.min(POOLS.most, POOLS.panel * len * wid)), reach: POOLS.reach } });
     }
   }
   // the bounce: in each room, a soft light pointing up from the middle at waist height (the light a pale floor and
@@ -321,9 +387,52 @@ export function buildCabin(p, bp, opts = {}) {
   // (each room's tone by its kind; outside every room, the look's own)
   const L = LOOKS[look] || LOOKS.light, toneAt = (x, z) => { const r = rooms.find((q2) => x >= q2.rect[0] - 0.1 && x <= q2.rect[2] + 0.1 && z >= q2.rect[1] && z < q2.rect[3]); return TONES[(r && L.rooms[r.kind]) || L.tone]; };
   recolour(q, look, toneAt);
+  for (const l of q.lights) if (!l.pool) l.i *= LIGHT.scale * (l.strip ? LIGHT.strips : 1);
   placeInto(p, q, {});
   p.notes = notes; p.runs = runs; p.stats = { ...(p.stats || {}), ...Object.fromEntries(Object.entries(stats).map(([k, v]) => [k, Math.round(v)])) };
+  p.seesOutside = seesOutside(bp);
+  // (the pools, each in the room it is in; one standing in a doorway goes to the room it faces)
+  const roomAt = (x, z) => rooms.find((r) => x >= r.rect[0] - EPS && x <= r.rect[2] + EPS && z >= r.rect[1] - EPS && z <= r.rect[3] + EPS)?.id ?? null;
+  p.pools = q.lights.filter((l) => l.pool).map((l) => ({ at: l.at.map((v) => +v.toFixed(3)), color: l.color, i: l.pool.i, reach: l.pool.reach, room: roomAt(l.at[0], l.at[2]) }));
   return p;
+
+  // an 8-sided doorway's two faces (kit/shipparts/cabin/door.js): the sign each shows (the kind of the room beyond it)
+  // and the side of the door its control panel takes (in the doorway's own x, which is the ship's +x on a wall along x
+  // and the ship's +z on a wall along z): the side away from where a single leaf parks if that wall is clear, else the
+  // other, else none. Clear: inside its room's own wall (not past a corner), no other doorway there, nothing tall standing
+  // against the wall there and nothing hanging low over it.
+  function octFaces(P, L) {
+    const c = (P.lo + P.hi) / 2, k = (P.hi - P.lo) / 2, d = P.door;
+    const sideRoom = (s) => rooms.find((r) => d.rooms.includes(r.id) && Math.abs((P.axis === 'z' ? (s > 0 ? r.rect[1] : r.rect[3]) : (s > 0 ? r.rect[0] : r.rect[2])) - P.v) < EPS);
+    // (the front face looks into the room on the line's high side on a wall along x (turned 0), on its low side on a wall
+    // along z (turned -90 degrees: the doorway's +z is the ship's -x))
+    const fs = P.axis === 'z' ? 1 : -1, front = sideRoom(fs), back = sideRoom(-fs);
+    const free = (room, s) => {
+      if (!room || canopy(room)) return false;
+      const a = c + s * (k + 0.11), [lo, hi] = P.axis === 'z' ? [room.rect[0], room.rect[2]] : [room.rect[1], room.rect[3]];
+      if (a - 0.08 < lo + FACE + 0.02 || a + 0.08 > hi - FACE - 0.02) return false;
+      if (panels.some((Q) => Q !== P && sameLine(Q, P) && Q.lo < a + 0.08 && Q.hi > a - 0.08)) return false;
+      return !(bp.items || []).some((it) => {
+        if (it.room !== room.id) return false;
+        const [x0, z0, x1, z1] = it.rect, [ia, ib] = P.axis === 'z' ? [x0, x1] : [z0, z1], [ja, jb] = P.axis === 'z' ? [z0, z1] : [x0, x1];
+        return Math.min(Math.abs(ja - P.v), Math.abs(jb - P.v)) < 0.4 && (hangs(it) ? +it.y < 1.45 : +it.h > 0.95) && ia < a + 0.08 && ib > a - 0.08;
+      });
+    };
+    const prefer = L === 2 ? [1, -1] : [-Math.sign(L), Math.sign(L)], pick = (room) => prefer.find((s) => free(room, s)) ?? 0;
+    const sign = (r) => (r && SIGNS[r.kind] ? r.kind : undefined);
+    // (a side where another doorway's frame meets this one's: no light strips there, so two doors side by side share a
+    // plain post)
+    const shared = [-1, 1].filter((s) => panels.some((Q) => Q !== P && !Q.outer && sameLine(Q, P) && Math.abs((s < 0 ? Q.hi : Q.lo) - (s < 0 ? P.lo : P.hi)) < 0.02));
+    return { signs: { front: sign(back), back: sign(front) }, panels: { front: pick(front), back: pick(back) }, ...(shared.length ? { shared } : {}) };
+  }
+}
+// the rooms that can see out of the ship, by id: under a canopy ('canopy': always, through its glass) and those the
+// ship's own door opens from ('door': while it is open). Every other room sees only the cabin.
+export function seesOutside(bp) {
+  const out = {};
+  for (const r of bp.rooms || []) if (r.ceiling === 'canopy') out[r.id] = 'canopy';
+  for (const d of bp.doors || []) if (d.rooms?.[1] === 'outside' && !out[d.rooms[0]]) out[d.rooms[0]] = 'door';
+  return out;
 }
 // a sliver of wall too short for a panel: a plain one, its band across it (on its line, the room in its +z)
 function filler(p, len, pos, o) {

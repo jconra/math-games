@@ -6,6 +6,7 @@
 //   screen  the glowing blue screens (a math station, a status board, a terminal, a radar)
 // (the sky outside the windows is world/sky.js)
 import * as THREE from 'three';
+import { cabinPrint } from './shipparts/cabin/print.js';
 
 const canvas = (w, h = w) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
 function rng(seed) { let s = seed >>> 0 || 1; return () => { s ^= s << 13; s >>>= 0; s ^= s >> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; }; }
@@ -144,6 +145,7 @@ export function decalAtlas() {
   // a solid white swatch (for painted marks that only need the tint)
   { const [x, y] = cell(15); g.fillStyle = '#fff'; g.fillRect(x + 4, y + 4, 248, 56); rect.solid = uvOf(x + 8, y + 8, 240, 48); }
   cockpitPrint(g, cell, uvOf, rect);
+  cabinPrint(g, cell, uvOf, rect);   // (a ship cabin's posters, door signs and stencils: cells 32-55, which the station never uses)
   const t = tex(c, true, false); t.generateMipmaps = true;
   return { map: t, rect };
 }

@@ -16,6 +16,8 @@ import { bunkBed, lockers } from './cabin/quarters.js';
 import { rollerLane, tieDown, ROLLER_TOP } from './cabin/cargo.js';
 import { handhold, ladder } from './cabin/climb.js';
 import { sampleRoom } from './cabin/sample.js';
+import { stationDoorSample } from './cabin/door.js';
+import { bevelSheet } from './cabin/bevelsheet.js';
 import { CABIN_FIT } from './cabin/fit.cat.js';
 import { part, placeInto } from './place.js';
 import { breaker, jbox, extinguisher, wallScreen, label, pipe, cableTray } from '../wallkit.js';
@@ -53,7 +55,14 @@ function lane(p, o) {
 
 export const PRESETS = {
   cabinWall: { '2 m': { len: 2 }, '1 m': { len: 1 }, '0.5 m': { len: 0.5 }, '1.5 m': { len: 1.5 }, 'dark 2 m': { len: 2, v: 'dark' }, 'ribs 3 m': { len: 3, ribs: true }, 'floor glow 2 m': { len: 2, glow: true } },
-  cabinDoor: { room: {}, 'room, one leaf': { leaves: -1 }, stretcher: { w: 2, clear: 1.5 }, locked: { locked: true } },
+  cabinDoor: { room: {}, 'room, one leaf': { leaves: -1 }, stretcher: { w: 2, clear: 1.5 }, locked: { locked: true },
+    // (the game's maker's 8-sided door, kit/shipparts/cabin/door.js: the way a ship's cabin asks for it)
+    '8-sided, two leaves': { frame: 'oct', w: 1, clear: 0.8, signs: { front: 'galley', back: 'science' }, panels: { front: 1, back: 1 } },
+    '8-sided, one leaf': { frame: 'oct', w: 1, clear: 0.8, leaves: -1, signs: { front: 'bunks', back: 'galley' }, panels: { front: 1, back: -1 } },
+    '8-sided, 1 m': { frame: 'oct', w: 1.2, clear: 1.0, signs: { front: 'engineering', back: 'bunks' }, panels: { front: -1, back: 1 } },
+    '8-sided, washroom': { frame: 'oct', w: 0.8, clear: 0.6, leaves: 1, signs: { front: 'washroom' }, panels: {} } },
+  cabinStationDoor: { 'new door': {}, 'beside the old': { both: true } },
+  cabinBevel: { sheet: {} },
   cabinCorner: { inside: { v: 'inside' }, outside: { v: 'outside' } },
   cabinFrame: { corridor: { wid: 1 }, 'room 2.5 m': { wid: 2.5 }, unlit: { wid: 1, strip: false } },
   cabinFloor: { corridor: { v: 'walk', len: 2, wid: 1 }, deck: { v: 'deck', len: 2, wid: 2 }, tread: { v: 'tread', len: 2, wid: 2 }, grating: { v: 'grating', len: 2, wid: 1 }, vent: { v: 'vent', len: 1, wid: 1 }, 'half-metre tiles': { v: 'deck', len: 1, wid: 1, tile: 0.5 } },
@@ -85,6 +94,8 @@ export const CABIN = {
   cabinSample: entry('cabinSample', 'Sample: corridor and rooms', 'room', [5, 2.6, 5], sampleRoom),
   cabinWall: entry('cabinWall', 'Wall run', 'shell', [2, 2.5, 0.3], wallRun),
   cabinDoor: entry('cabinDoor', 'Doorway', 'line', [2, 2.5, 0.3], doorway),
+  cabinStationDoor: entry('cabinStationDoor', 'Sample: a station door, 8-sided', 'room', [6, 3, 2], stationDoorSample),
+  cabinBevel: entry('cabinBevel', 'Bevel helper: variants', 'room', [3.8, 1.6, 0.4], bevelSheet),
   cabinCorner: entry('cabinCorner', 'Corner', 'corner', [0.5, 2.5, 0.5], corner),
   cabinFrame: entry('cabinFrame', 'Portal frame', 'frame', [0.4, 2.5, 1], frame),
   cabinSlope: entry('cabinSlope', 'Wall under the hull\'s slope', 'shell', [2, 2.5, 0.8], slopeWall),

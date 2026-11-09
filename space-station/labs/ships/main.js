@@ -24,17 +24,23 @@
 //   ?ship=built|miner|medic|explorer-b|explorer-a  ?bp=<blueprint id>  ?view=3d|split|plan|both
 //   window.SHIPLAB = { ready, options, option(id), ship(id), view(v), cam(c), hull(h), show(k, on), result(), bp(),
 //     gear(up), door(open), dirt(amount), throttle(v, now) (v a setting's name or 0 to 1; now: no easing), arms(reach),
-//     thrusters(on), canisters(on), ramps(down), rampCount('one' | 'both'), moving(), jets(), shipFor(shell) (the ship whose shell that is: a blueprint's own) }
+//     thrusters(on), canisters(on), ramps(down), rampCount('one' | 'both'), moving(), jets(), shipFor(shell) (the ship whose shell that is: a blueprint's own),
+//     bloom(on) (the light strips' glow: ?bloom=1 or 0; off by default on a phone), pools(on) (their pools of real-time
+//     light in the room the eye is in: ?pools=1 or 0, else as the glow), fps(), draw() (one frame, as the loop draws it) }
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { checkBlueprint, ROOM_KINDS, ITEM_KINDS, doorWall, wallsAt, snap, hangs, HEAD, CEIL } from './blueprint.js';
 import { Plan } from './plan.js';
 import { buildRoom, updateDoors, setDoors, loadRoom, forgetPiece } from '../../kit/layout.js';
 import { PIECES } from '../../kit/catalog.js';
-import { buildCabin, LOOKS } from '../../kit/ships/cabin-built.js';
+import { buildCabin, LOOKS, cabinMaterials } from '../../kit/ships/cabin-built.js';
 import { makeMaterials } from '../../kit/materials.js';
 import { setThrottle, THROTTLE, ENGINE } from '../../kit/ships/built-common.js';
 import { makeJets } from '../../kit/ships/plume.js';
@@ -72,6 +78,11 @@ const st = {
   // (the cabin built inside from the blueprint: shown, its look, its ceilings, its doors (auto: they open as the eye or
   // the person comes near), a pose holding them part open)
   inside: q.get('inside') !== '0', look: LOOKS[q.get('look')] ? q.get('look') : 'light', roof: true, cabinDoors: 'auto', doorsAt: null,
+  // (the light strips' glow: a bloom pass over the picture; on by default but on a phone (?bloom=1 or 0 to choose))
+  bloom: q.has('bloom') ? q.get('bloom') === '1' : !matchMedia('(pointer: coarse)').matches,
+  // (the pools of light by the strips of the room the eye is in: a few real-time lights, kit/ships/cabin-built.js POOLS;
+  // with the glow unless ?pools=1 or 0)
+  pools: q.has('pools') ? q.get('pools') === '1' : q.has('bloom') ? q.get('bloom') === '1' : !matchMedia('(pointer: coarse)').matches,
 };
 
 // ── renderer, scene, camera ───────────────────────────────────────────────────────────────────────────────────────
@@ -105,6 +116,30 @@ const person = new THREE.Group();
 scene.add(person);
 const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 400);
 const controls = new OrbitControls(camera, canvas);
+// ── the glow: a bloom pass (the Kit Lab's) catching the light strips, when st.bloom ──
+let composer = null;
+function setBloom(on) {
+  st.bloom = !!on;
+  if (st.bloom && !composer) {
+    const size = renderer.getDrawingBufferSize(new THREE.Vector2()).max(new THREE.Vector2(2, 2));
+    composer = new EffectComposer(renderer, new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType, samples: 4 }));
+    composer.addPass(new RenderPass(scene, camera)); composer.addPass(new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.42, 0.38, 2.0)); composer.addPass(new OutputPass());
+    composer.setSize(canvas.clientWidth || innerWidth, canvas.clientHeight || innerHeight);
+  } else if (!st.bloom && composer) { composer.dispose(); composer = null; }
+}
+// ── the pools: POOL_N real-time lights, set where the cabin's pools are in the room the eye is in (none outside the
+// cabin); in the scene only while st.pools, as every lit surface pays for them ──
+const POOL_N = 8, poolLights = Array.from({ length: POOL_N }, () => new THREE.PointLight(0xffffff, 0, 2, 2));
+let poolKey = null;
+function setPools(on) { st.pools = !!on; for (const L of poolLights) { if (st.pools) scene.add(L); else scene.remove(L); } poolKey = null; }
+function updatePools() {
+  if (!st.pools) return;
+  const P = st.cabin?.parts?.pools, deck = st.space?.deck ?? 0, c = camera.position;
+  const r = P && st.bp ? st.bp.rooms.find((R) => c.x >= R.rect[0] && c.x <= R.rect[2] && c.z >= R.rect[1] && c.z <= R.rect[3] && c.y > deck - 0.3 && c.y < deck + 3.2) : null;
+  const key = (r?.id ?? '-') + '|' + (st.cabin?.key ?? ''); if (key === poolKey) return; poolKey = key;
+  const mine = r ? P.filter((p) => p.room === r.id).sort((a, b) => b.i - a.i).slice(0, POOL_N) : [];
+  poolLights.forEach((L, i) => { const p = mine[i]; L.intensity = p ? p.i : 0; if (!p) return; L.position.set(p.at[0], p.at[1] + deck, p.at[2]); L.color.setRGB(...p.color); L.distance = p.reach; });
+}
 controls.enableDamping = true; controls.dampingFactor = 0.08; controls.maxPolarAngle = Math.PI * 0.495; controls.minDistance = 1.5; controls.maxDistance = 80;
 const BP3 = new THREE.Group(); scene.add(BP3);
 
@@ -219,10 +254,10 @@ function cabinFor(S, bp, look) {
   const key = S.id + '|' + look + '|' + JSON.stringify(bp);
   if (cabins.has(key)) return cabins.get(key);
   const id = 'cabin' + (++cabinSeq), space = st.space, L = LOOKS[look], parts = {};
-  PIECES[id] = { name: 'Cabin: ' + (bp.name || bp.id), group: 'Ships', at: 'free', variants: ['walls', 'ceilings'], foot: [5, 2.5, 10], build: (p, v) => { buildCabin(p, bp, { space, which: v, outer: S.lab.cabin.outer, look }); Object.assign(parts, p.stats); if (p.runs?.length) parts.runs = p.runs; } };
-  // (the floor tinted for the look; less of a mirror than the station's, so the lab's bright surroundings don't show as
-  // white patches on a ship's small floors)
-  if (!cabinMats[look]) { cabinMats[look] = makeMaterials(); for (const k of ['floor', 'floorInst']) { const m = cabinMats[look][k]; if (L.floor) m.color.set(L.floor); m.metalness = 0.35; m.envMapIntensity = 0.35; } }
+  PIECES[id] = { name: 'Cabin: ' + (bp.name || bp.id), group: 'Ships', at: 'free', variants: ['walls', 'ceilings'], foot: [5, 2.5, 10], build: (p, v) => { buildCabin(p, bp, { space, which: v, outer: S.lab.cabin.outer, look }); Object.assign(parts, p.stats); if (p.runs?.length) parts.runs = p.runs; parts.seesOutside = p.seesOutside; parts.pools = [...(parts.pools || []), ...(p.pools || [])]; } };
+  // (the cabin's own materials: lit by its strips, little of the lab's sky light let in, the floor tinted for the look,
+  // less of a mirror than the station's)
+  if (!cabinMats[look]) cabinMats[look] = cabinMaterials(look);
   const room = { name: 'cabin', grid: { cell: 0.5, step: 0.5, deck: space.deck }, rooms: ['walls', 'ceilings'].map((v) => ({ id: v, pieces: [{ piece: id, cell: [0, 0], turn: 0, level: 0, variant: v }] })) };
   // (baked without shadows: on the bake's 8 cm grid a 45-degree slope fills its cells in steps thick enough that its own
   // points start inside them, so it shadows itself from every light; the corner darkening stays)
@@ -361,7 +396,7 @@ function layout() {
   $('#panel').style.top = top + 'px';
   const show3d = st.view === '3d' || st.view === 'split', h3 = st.view === 'split' ? Math.round(A * 0.5) : A;
   canvas.style.display = show3d ? 'block' : 'none'; canvas.style.height = h3 + 'px'; canvas.style.width = W + 'px';
-  if (show3d) { renderer.setSize(W, h3, false); camera.aspect = W / h3; camera.updateProjectionMatrix(); }
+  if (show3d) { renderer.setSize(W, h3, false); camera.aspect = W / h3; camera.updateProjectionMatrix(); composer?.setSize(W, h3); }
   if (st.view === '3d') plan.place(0, 0, 0, 0, 'plan');
   else if (st.view === 'split') plan.place(0, h3, W, A - h3, 'plan');
   else plan.place(0, 0, W, A, st.view === 'both' ? 'both' : 'plan');
@@ -423,6 +458,7 @@ function menu() {
     ...(hasCabin(st.ship) ? [sep(), lab('Inside'),
       ...(st.inside ? [...Object.entries(LOOKS).map(([k, L]) => chip(L.name, k === st.look, () => setLook(k), true, k === 'light' ? 'His bunk, mess and science pictures: one light grey, a charcoal floor; warm light in the mess, cool in the lab and bunks' : 'His concept sheet\'s insets: grey steel panels, amber light strips, blue leather')),
         chip('Ceilings', st.roof, () => setRoof(!st.roof), true, 'Lift the cabin\'s ceilings off to look in from above (with the hull see-through or hidden)'),
+        chip('Glow', st.bloom || st.pools, () => { const on = !(st.bloom || st.pools); setBloom(on); setPools(on); menu(); }, true, 'The light strips\' glow and their pools of light (a bloom pass and a few real-time lights in the room you are in; off by default on a phone)'),
         lab('Doors'), ...[['auto', 'Auto'], ['open', 'Open'], ['shut', 'Shut']].map(([k, t]) => chip(t, st.cabinDoors === k && st.doorsAt == null, () => { st.cabinDoors = k; st.doorsAt = null; menu(); }, true, k === 'auto' ? 'The sliding doors open as the eye (or the person) comes near' : k === 'open' ? 'Every sliding door open' : 'Every sliding door shut'))] : []),
       chip(st.inside ? 'Inside off' : 'Inside on', false, () => setInside(!st.inside), true, 'The rooms built inside the ship from the blueprint shown, with the cabin kit\'s walls and sliding doors (furniture as the plan\'s boxes)')] : []),
     // (the built ship's moving parts and its grime: the controls its module names)
@@ -553,7 +589,7 @@ renderer.setAnimationLoop((t) => {
   // (the engines easing to the throttle asked for: the whole range in about a second and a half; the jets follow it)
   if (ENGINE.throttle !== st.throttleT) { const d = st.throttleT - ENGINE.throttle, step = dt * 0.7; setThrottle(Math.abs(d) <= step ? st.throttleT : ENGINE.throttle + Math.sign(d) * step); }
   for (const J of st.shell?.jets || []) { if (J.role === 'main') J.set.setThrust(ENGINE.throttle, true); J.set.update(dt); }
-  if (on) { fly(dt); controls.update(); renderer.render(scene, camera); frames++; }
+  if (on) { fly(dt); controls.update(); updatePools(); if (composer) composer.render(); else renderer.render(scene, camera); frames++; }
   fpsT += dt; if (fpsT > 0.5) { fps = Math.round(frames / fpsT); frames = 0; fpsT = 0; }
   if (st.shell) hud.textContent = `${st.ship.name}: ${st.shell.size.z.toFixed(1)} × ${st.shell.size.x.toFixed(1)} × ${st.shell.size.y.toFixed(1)} m · deck ${st.space.deck} m up · ${Math.round(st.shell.tris + (st.cabin?.tris || 0)).toLocaleString()} tris` + (st.cabin ? ` (inside ${Math.round(st.cabin.tris).toLocaleString()})` : '') + (on ? ` · ${fps} fps` : '');
 });
@@ -562,6 +598,7 @@ await loadOptions();
 const S0 = SHIPS.find((S) => S.id === q.get('ship')) || SHIPS[0];
 st.opt = S0.bps.includes(q.get('bp')) || (q.get('bp') === 'uploaded' && st.edits.uploaded) ? q.get('bp') : S0.bps[0];
 st.bp = st.edits[st.opt] || clone(st.stock[st.opt]);
+setBloom(st.bloom); setPools(st.pools);
 layout();
 await showShip(S0);
 if (q.has('rig')) $('#panel').open = true;
@@ -593,4 +630,7 @@ window.SHIPLAB = {
   cabinDoors: (v) => { if (typeof v === 'number') { st.doorsAt = Math.max(0, Math.min(1, v)); if (st.cabin) setDoors(st.cabin.built.doors, st.doorsAt); } else { st.doorsAt = null; st.cabinDoors = v || 'auto'; } menu(); },
   cabin: () => (st.cabin ? { tris: st.cabin.tris, perZone: st.cabin.perZone, parts: st.cabin.parts, draws: st.cabin.built.stats.draws, doors: st.cabin.built.doors.map((D) => +D.t.toFixed(3)), bakeMs: st.cabin.built.stats.bake.ms, ms: st.cabin.built.stats.ms } : null),
   roomSpots: () => roomSpots(), ship3: () => ({ tris: st.shell?.tris, stats: st.shell?.built?.stats || null }),
+  bloom: (on) => { setBloom(on); menu(); }, pools: (on) => { setPools(on); menu(); }, fps: () => fps,
+  // (one frame drawn as the loop draws it, for a rig timing frames)
+  draw: () => { updatePools(); if (composer) composer.render(); else renderer.render(scene, camera); },
 };
