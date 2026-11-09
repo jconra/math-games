@@ -67,7 +67,7 @@ export function furnishRoom(q, bp, room, ctx) {
     for (const [side, along, a0, a1, pos] of [['-x', 'z', z0, z1, x0 - 0.03], ['+x', 'z', z0, z1, x1 + 0.03], ['-z', 'x', x0, x1, z0 - 0.03], ['+z', 'x', x0, x1, z1 + 0.03]]) {
       if (near(side)) continue;
       const n = a1 - a0 >= 0.9 ? 2 : 1;
-      for (let k = 0; k < n; k++) { const a = a0 + (a1 - a0) * (k + 1) / (n + 1); spots.push(along === 'z' ? [pos, a] : [a, pos]); }
+      for (let k = 0; k < n; k++) { const a = a0 + (a1 - a0) * (n === 1 ? 0.5 : k ? 0.76 : 0.24); spots.push(along === 'z' ? [pos, a] : [a, pos]); }
     }
     for (const [sx, sz] of spots) ctx.put('mess: stools', part(stool, {}), { at: [sx, f, sz] });
     const top = f + h;
@@ -118,19 +118,23 @@ export function furnishRoom(q, bp, room, ctx) {
 // band (0.18 to 1.14 m) and one over it (1.6 m to under the wall's top, the hull's slope or the ceiling), in fields up to
 // 1.2 m wide. Clear: no doorway (and its control panel) on that stretch, and for the lower field nothing standing
 // against the wall there, for the upper nothing hanging there nor standing taller than 1.5 m.
-const FIELD = { lower: [0.18, 1.14], upper: 1.6, most: 1.2, gap: 0.06, end: 0.07 };
+const FIELD = { lower: [0.18, 1.14], middle: [1.0, 1.52], upper: 1.6, most: 1.2, gap: 0.06, end: 0.07 };
 function wallFields(ctx, room, items, at) {
   const [X0, Z0, X1, Z1] = room.rect;
   for (const W of [{ axis: 'x', v: X0, side: 1, lo: Z0, hi: Z1 }, { axis: 'x', v: X1, side: -1, lo: Z0, hi: Z1 }, { axis: 'z', v: Z0, side: 1, lo: X0, hi: X1 }, { axis: 'z', v: Z1, side: -1, lo: X0, hi: X1 }]) {
     const slope = ctx.slopeAt(W.axis, W.v, (W.lo + W.hi) / 2), top = slope ? slope.y0 - 0.07 : (typeof room.ceiling === 'number' ? room.ceiling : 2.5) - 0.12;
     const doors = ctx.openings(W.axis, W.v), against = items.filter((it) => { const w = wallOf(it, room); return w && w.axis === W.axis && Math.abs(w.v - W.v) < EPS; });
     const span = (it) => (W.axis === 'z' ? [it.rect[0], it.rect[2]] : [it.rect[1], it.rect[3]]);
-    for (const [y0, y1, blocks] of [[...FIELD.lower, against.filter((it) => !+(it.y || 0)).map(span)], [FIELD.upper, top, against.filter((it) => +(it.y || 0) || +it.h > 1.5).map(span)]]) {
+    // (and over a low bench or counter, between its top and the band's top: the middle field, under any cabinet there)
+    const low = against.filter((it) => !+(it.y || 0) && +it.h <= 0.95).map(span), hangLow = against.filter((it) => +(it.y || 0) && +it.y < FIELD.middle[1] + 0.08);
+    const middle = [FIELD.middle[0], Math.min(FIELD.middle[1], ...hangLow.map((it) => +it.y - 0.08)), [...against.filter((it) => !+(it.y || 0) && +it.h > 0.95).map(span), ...low.length ? [] : [[-1e9, 1e9]]]];
+    const lowFree = (fs) => fs.flatMap(([p, q]) => low.filter(([a, b]) => b > p && a < q).map(([a, b]) => [Math.max(p, a), Math.min(q, b)]));
+    for (const [y0, y1, blocks, only] of [[...FIELD.lower, against.filter((it) => !+(it.y || 0)).map(span)], [FIELD.upper, top, against.filter((it) => +(it.y || 0) || +it.h > 1.5).map(span)], [...middle, true]]) {
       if (y1 - y0 < 0.25) continue;
       // (the clear stretches: the wall's face less the doorways and the blocks)
       let free = [[W.lo + FACE + FIELD.end, W.hi - FACE - FIELD.end]];
       for (const [a, b] of [...doors, ...blocks]) free = free.flatMap(([p, q]) => (b <= p || a >= q ? [[p, q]] : [[p, a - FIELD.gap], [b + FIELD.gap, q]]));
-      for (const [p, q] of free) {
+      for (const [p, q] of only ? lowFree(free) : free) {
         if (q - p < 0.4) continue;
         const n = Math.ceil((q - p + FIELD.gap) / (FIELD.most + FIELD.gap) - EPS), w = (q - p - FIELD.gap * (n - 1)) / n;
         for (let i = 0; i < n; i++) { const a = p + i * (w + FIELD.gap) + w / 2; ctx.put('mess: wall fields', part(wallField, { w: +w.toFixed(3), h: +(y1 - y0).toFixed(3), y: +((y0 + y1) / 2).toFixed(3), c: 0.05 }), at(W, a)); }

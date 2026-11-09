@@ -74,7 +74,7 @@ export const SLOPE = { top: 2.0, least: 1.7, margin: 0.15 };
 // (The bake is in a point light's units: about 1 on a pale wall already reads light grey once tone-mapped, so the fill is
 // kept near 0.15 and the strips' pools reach 1 to 3.)
 //   scale    every baked light at this share, the fittings' own strips (a light marked `strip`) at `strips` times that
-export const LIGHT = { panel: 0.2, least: 1.3, bounce: 0.09, bounceLeast: 0.35, slope: 0.12, slopeEvery: 1.5, slopeStrip: 0.6, ambient: 0.08, env: 0.18, scale: 0.22, strips: 2.2 };
+export const LIGHT = { panel: 0.2, least: 1.3, bounce: 0.09, bounceLeast: 0.35, slope: 0.12, slopeEvery: 1.5, slopeStrip: 0.4, ambient: 0.08, env: 0.18, scale: 0.18, strips: 2.6 };
 // THE POOLS: a baked light lives in the vertices, and a ship's walls have few (a panel is drawn in big steps), so the
 // bake cannot draw a pool of light on a wall. A pool is a real-time light instead: the fittings mark where theirs are
 // (a light with `pool: { i, reach }`: the strip under a cabinet, a bench's toe strip, a door's frame), each room's ceiling
@@ -137,7 +137,8 @@ export function cabinMaterials(look) {
   }
   // (the floor's plates are drawn dark (kit/tex.js, the deck's #34373d): in the cabin's low light its tint goes well over
   // 1 (floorGain), else it reads black)
-  for (const k of ['floor', 'floorInst']) { if (L.floor) M[k].color.set(L.floor).multiplyScalar(L.floorGain ?? 1); M[k].metalness = 0.25; M[k].envMapIntensity = LIGHT.env; }
+  // (not metal: a metal's reflection takes its colour, and this one's is raised)
+  for (const k of ['floor', 'floorInst']) { if (L.floor) M[k].color.set(L.floor).multiplyScalar(L.floorGain ?? 1); M[k].metalness = 0; M[k].envMapIntensity = LIGHT.env; }
   M.ambient = amb;   // (a lab may turn it: M.ambient.value)
   return M;
 }
@@ -420,10 +421,12 @@ export function buildCabin(p, bp, opts = {}) {
     };
     const prefer = L === 2 ? [1, -1] : [-Math.sign(L), Math.sign(L)], pick = (room) => prefer.find((s) => free(room, s)) ?? 0;
     const sign = (r) => (r && SIGNS[r.kind] ? r.kind : undefined);
-    // (a side where another doorway's frame meets this one's: no light strips there, so two doors side by side share a
-    // plain post)
-    const shared = [-1, 1].filter((s) => panels.some((Q) => Q !== P && !Q.outer && sameLine(Q, P) && Math.abs((s < 0 ? Q.hi : Q.lo) - (s < 0 ? P.lo : P.hi)) < 0.02));
-    return { signs: { front: sign(back), back: sign(front) }, panels: { front: pick(front), back: pick(back) }, ...(shared.length ? { shared } : {}) };
+    // (a side where another doorway's frame meets this one's, or where the frame ends in its room's corner against a wall
+    // across: no light strips there on that face, so two doors side by side share a plain post and a corner stays clear)
+    const meets = (s) => panels.some((Q) => Q !== P && !Q.outer && sameLine(Q, P) && Math.abs((s < 0 ? Q.hi : Q.lo) - (s < 0 ? P.lo : P.hi)) < 0.02);
+    const cornered = (room, s) => { if (!room) return false; const [lo, hi] = P.axis === 'z' ? [room.rect[0], room.rect[2]] : [room.rect[1], room.rect[3]]; return s < 0 ? P.lo - lo < 0.06 : hi - P.hi < 0.06; };
+    const sharedOf = (room) => [-1, 1].filter((s) => meets(s) || cornered(room, s));
+    return { signs: { front: sign(back), back: sign(front) }, panels: { front: pick(front), back: pick(back) }, shared: { front: sharedOf(front), back: sharedOf(back) } };
   }
 }
 // the rooms that can see out of the ship, by id: under a canopy ('canopy': always, through its glass) and those the

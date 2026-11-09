@@ -48,7 +48,7 @@ function draw(g, cell, uvOf, rect) {
       // (the words wrapped to the width, as big as fit in what is left under the art)
       const tx = x + m, tw = pw - 2 * m, ty = y + m + artH + (P.art ? ph * 0.04 : 0), th = ph - (ty - y) - m;
       for (let px = 48; px >= 12; px -= 2) {
-        g.font = F(px); const lines = wrap(g, P.text, tw), lh = px * 1.12;
+        g.font = F(px); const lines = balance(g, P.text, tw), lh = px * 1.12;
         if (lines.length * lh > th || lines.some((l) => g.measureText(l).width > tw)) continue;
         g.textAlign = 'left'; lines.forEach((l, k) => g.fillText(l, tx, ty + lh * (k + 0.5) + (th - lines.length * lh) * 0.15));
         g.fillRect(tx, Math.min(y + ph - m * 0.6, ty + lh * lines.length + (th - lines.length * lh) * 0.15 + px * 0.35), tw * 0.22, Math.max(3, px * 0.12));
@@ -59,6 +59,12 @@ function draw(g, cell, uvOf, rect) {
   });
   // row 13 (cells 52-55): the signs over the doors, two to a cell (256 x 32)
   Object.entries(SIGNS).forEach(([k, t], i) => { const [cx, cy] = cell(52 + (i >> 1)), y = cy + (i & 1) * 32; clip(cx, y, 256, 32, () => { g.font = F(24); fit(t, cx + 128, y + 17, 240); }); rect['cabin:sign:' + k] = uvOf(cx, y, 256, 32); });
+}
+// (the same number of lines as wrapping to the width gives, but as even as they will go: no lone word on the last line)
+function balance(g, text, w) {
+  const n = wrap(g, text, w).length; let lo = 0, hi = w;
+  for (let i = 0; i < 20; i++) { const m = (lo + hi) / 2; if (wrap(g, text, m).length > n) lo = m; else hi = m; }
+  return wrap(g, text, hi);
 }
 function wrap(g, text, w) {
   const out = []; let line = '';

@@ -19,7 +19,8 @@
 //     leaves (2)    2: parting; 1 / -1: one leaf sliding toward +x / -x
 //     frameW (0.1)  the frame's width round the opening (the blueprint's FRAME: its pocket checks count on it)
 //     chamfer ([0.12, 0.16])  the opening's corners: [foot, top] (the foot's at most 0.12 of the opening's width)
-//     shared        the sides (-1, +1, the doorway's own x) where another doorway's frame meets this one: no strips there
+//     shared        the sides (-1, +1, the doorway's own x) with no strips: where another doorway's frame meets this one, or
+//                   it ends in a room's corner; a list for both faces, or { front, back }
 //     face, slot, leaf  how deep the wall's layers sit: its faces (0.03 from the line), the gap the leaves run in
 //                   (0.0125 each side), a leaf's half thickness (0.0105): a ship's thin wall; the station's are 0.22,
 //                   0.03 and 0.026
@@ -40,7 +41,8 @@ import { part, placeInto } from '../place.js';
 const PI = Math.PI, K = 2 - Math.SQRT2;
 export const OCT = { frame: 0.1, chamfer: [0.12, 0.16], slot: 0.0125, leaf: 0.0105, overlap: 0.035, seam: 0.035, gap: 0.003 };
 // the surfaces (the station's names: a cabin's look swaps each, kit/ships/cabin-built.js)
-const FRAME_SURF = 'black', LEAF_SURF = 'white2', FIELD_SURF = 'grey2', WALL_SURF = 'white';
+// (the leaves a steel grey, darker than the walls, their field darker still: his door's leaves are gunmetal)
+const FRAME_SURF = 'black', LEAF_SURF = 'grey2', FIELD_SURF = 'grey', WALL_SURF = 'white';
 
 export function octDoor(p, o = {}) {
   const clear = o.clear ?? 0.8, h = o.h ?? 2.0, fw = o.frameW ?? OCT.frame, w = o.w ?? clear + 2 * fw, [cb, ct] = o.chamfer ?? [Math.min(OCT.chamfer[0], clear * 0.12), OCT.chamfer[1]];
@@ -70,7 +72,7 @@ export function octDoor(p, o = {}) {
     A('dark', prism([[-k, 0], O[0], O[7], O[6], O[5], O[4], O[3], O[2], O[1], [k, 0], [k, h + fw], [-k, h + fw]], slot, slot, { front: false, sides: false }));
     // the light strips up each side, upper and lower; a small dark plate at mid-height between them
     for (const sx of [-1, 1]) {
-      if ((o.shared || []).includes(sgn > 0 ? sx : -sx)) continue;   // (another doorway's frame meets it there)
+      if ((Array.isArray(o.shared) ? o.shared : o.shared?.[side] || []).includes(sgn > 0 ? sx : -sx)) continue;   // (another doorway's frame, or a corner, there)
       for (const [y0, y1] of [[0.12 * h, 0.44 * h], [0.56 * h, 0.88 * h]]) {
         A('white', plate(shape(0.1 * f, y1 - y0, 0.004, sx * stripX, (y0 + y1) / 2)), [0, 0, stripZ], null, 'glow');
         lights.push({ at: [sx * (stripX + 0.06), (y0 + y1) / 2, stripZ + 0.12], i: 0.15, color: [1, 0.98, 0.95], dir: [0, -0.35, 0.94], reach: 1.6, strip: true });

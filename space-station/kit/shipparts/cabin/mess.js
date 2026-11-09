@@ -122,7 +122,8 @@ export function topCabinets(p, o = {}) {
   if (o.strip !== false) {
     add(p, 'white', plate(shape(len - 0.05, 0.014, 0.004)), [0, y - 0.027, depth - 0.05], [PI / 2, 0, 0], 'glow');
     for (let x = -len / 2 + 0.25; x < len / 2; x += 0.5) strip(p, [x, y - 0.06, depth - 0.02], 0.55, [0, -0.92, 0.38], 2.2);
-    pool(p, [0, y - 0.38, depth + 0.22], 0.45 * len, 1.9);
+    // (its pool close enough to wash the wall and what stands under it, not so close as to make a spot on the wall)
+    pool(p, [0, y - 0.22, Math.max(depth - 0.05, 0.44)], 0.62 * len, 1.8);
   }
   return p;
 }
