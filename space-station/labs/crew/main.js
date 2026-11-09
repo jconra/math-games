@@ -30,9 +30,12 @@
 //     Hug (the inner layer drawn to its Gap off this head: kit/crew.js THE HUG; on, off or scaled) and its Gap (mm);
 //     these show the level being set: the hair on every head, Just this head (the pair's own), or "This head, every
 //     hair" (the head's own setting under every hair worn on it: crew.json's head entry hairFit; there only the nudges,
-//     Width, Height, Depth and Turn). The line under the rows reads both levels as percentages ("This head: width -8%").
-//     A pair placed by hand in Blender (the hair rig's placement.sh: fit.heads[<head>].placed) wears the hair as cut,
-//     exactly as he placed it, and says so; its nudges, Width, Height, Depth and Turn still tune it.
+//     Width, Height, Depth, Turn, Tilt and Lean). The line under the rows reads both levels as percentages ("This head:
+//     width -8%"). Tilt (2026-11-08, the game's maker: "a way to rotate the head on the x axis too"): degrees round the
+//     line from ear to ear, + the hair's front down; Lean: round the line from the nape to the face, + its top to their
+//     left (kit/crew.js hairRotation). A pair placed by hand in Blender (the hair rig's placement.sh:
+//     fit.heads[<head>].placed) wears the hair as cut, exactly as he placed it, and says so; its nudges, Width, Height,
+//     Depth, Turn, Tilt and Lean still tune it.
 //     SAVING (2026-11-08): Copy fits and Save fits give EVERYTHING the Fit row sets, this browser's over crew.json's, as
 //     one JSON object { "hairs": { <hair id>: its fit (its pairs in fit.heads) }, "heads": { <head id>: its hairFit },
 //     "buzzes": { <hair id>: its buzz (the Buzz row's), null for none } };
@@ -289,7 +292,7 @@ function faceRows() {
 // This browser's fits (lib.fits: a hair's entry replaces crew.json's fit for that hair) are kept in localStorage as
 // they're made; the first change to a hair starts from crew.json's fit for it.
 const FIT_KEY = 'crewlab.fits.v1', FIT_OPEN = 'crewlab.fitOpen', HEAD_KEY = 'crewlab.headfits.v1';
-const STEPS = { move: [0.002, 0.0005], size: [0.01, 0.0025], tuck: [0.1, 0.025], start: [0.01, 0.0025], dim: [0.01, 0.0025], turn: [1, 0.25], hug: [0.1, 0.025], gap: [0.0005, 0.00025] };   // (each: [step, fine step])
+const STEPS = { move: [0.002, 0.0005], size: [0.01, 0.0025], tuck: [0.1, 0.025], start: [0.01, 0.0025], dim: [0.01, 0.0025], turn: [1, 0.25], tilt: [1, 0.25], lean: [1, 0.25], hug: [0.1, 0.025], gap: [0.0005, 0.00025] };   // (each: [step, fine step])
 const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
 const copy = (o) => JSON.parse(JSON.stringify(o == null ? {} : o));
 const rnd = (v, p) => Math.round(v / p) * p;
@@ -302,7 +305,7 @@ function tidy(f, base, hid) {
   if (f.offset && f.offset.some((v) => Math.abs(v) >= 0.00005)) o.offset = f.offset.map((v) => +rnd(v || 0, 0.0001).toFixed(4));
   if (f.scale != null && Math.abs(f.scale - 1) >= 0.00005) o.scale = +(+f.scale).toFixed(4);
   if (f.dims && f.dims.some((v) => Math.abs((v == null ? 1 : v) - 1) >= 0.00005)) o.dims = f.dims.map((v) => +(v == null ? 1 : +v).toFixed(4));
-  if (f.turn && Math.abs(f.turn) >= 0.005) o.turn = +(+f.turn).toFixed(2);
+  for (const k of ['turn', 'tilt', 'lean']) if (f[k] && Math.abs(f[k]) >= 0.005) o[k] = +(+f[k]).toFixed(2);
   if (f.tuck && Math.abs(f.tuck) >= 0.0005) o.tuck = +(+f.tuck).toFixed(3);
   if (f.tuckStart && Math.abs(f.tuckStart) >= 0.00005) o.tuckStart = +(+f.tuckStart).toFixed(4);
   // (the hug and its gap: the hair's own against their defaults, a pair's as what it adds)
@@ -379,7 +382,7 @@ function setTuck(v, quiet) {
 function redim(axis, dir) {
   fitEdit((t) => { t.dims = [0, 1, 2].map((i) => (t.dims && t.dims[i] != null ? +t.dims[i] : 1)); t.dims[axis] = +Math.min(1.3, Math.max(0.7, t.dims[axis] + dir * fine('dim'))).toFixed(5); });
 }
-function returnTo(dir) { fitEdit((t) => { t.turn = +Math.min(45, Math.max(-45, (+t.turn || 0) + dir * fine('turn'))).toFixed(3); }); }
+function returnTo(dir, k = 'turn') { fitEdit((t) => { t[k] = +Math.min(45, Math.max(-45, (+t[k] || 0) + dir * fine(k))).toFixed(3); }); }
 function rehug(dir, to) {
   fitEdit((t, base) => {
     const d0 = lib.hugDefaultOf(st.recipe?.hair), own0 = base == null ? (t.hug == null ? d0 : +t.hug) : +t.hug || 0, under = base == null ? 0 : (base.hug == null ? d0 : +base.hug);
@@ -399,7 +402,7 @@ function fitReset() {
   if (!hair) return;
   fitEdit((t, base) => {
     if (base) { delete base.heads[head]; return; }
-    for (const k of ['offset', 'scale', 'dims', 'turn', 'tuck', 'tuckStart', 'hug', 'hugGap']) delete t[k];
+    for (const k of ['offset', 'scale', 'dims', 'turn', 'tilt', 'lean', 'tuck', 'tuckStart', 'hug', 'hugGap']) delete t[k];
   });
 }
 function clearMine() {
@@ -460,16 +463,16 @@ function fitWords(f) {
   const s = w.length ? [w.join(', ') + ' mm'] : [];
   if (Math.abs(f.scale - 1) >= 0.00005) s.push('size ' + +(f.scale * 100).toFixed(2) + '%');
   if (f.tuck > 0) s.push('tuck ' + Math.round(f.tuck * 100) + '%' + (f.tuckStart > 0 ? ' from ' + +(f.tuckStart * 100).toFixed(2) + ' cm down' : ''));
-  const dw = dimsWords(f.dims, f.turn); if (dw) s.push(dw);
+  const dw = dimsWords(f.dims, f); if (dw) s.push(dw);
   if (f.placed) s.unshift('placed by hand');
   else s.push(f.hug > 0 ? 'hug ' + Math.round(f.hug * 100) + '% to ' + +(f.hugGap * 1000).toFixed(2) + ' mm' : 'no hug');
   return s.length ? s.join(', ') : 'as made';
 }
-// (width, height, depth as percentages more or less, and a turn: "width -8%, turn 1.2°")
+// (width, height, depth as percentages more or less, and a turn, tilt and lean: "width -8%, turn 1.2°, tilt 3.0°")
 const pc = (v) => { const d = (v - 1) * 100; return (d >= 0.05 ? '+' : d <= -0.05 ? '−' : '') + Math.abs(d).toFixed(Math.abs(d) < 10 ? 1 : 0) + '%'; };
-function dimsWords(d, turn) {
+function dimsWords(d, A) {
   const w = []; if (d) ['width', 'height', 'depth'].forEach((k, i) => { if (Math.abs((d[i] == null ? 1 : d[i]) - 1) >= 0.0005) w.push(k + ' ' + pc(d[i])); });
-  if (turn && Math.abs(turn) >= 0.005) w.push('turn ' + (+turn).toFixed(2) + '°');
+  for (const k of ['turn', 'tilt', 'lean']) if (A && A[k] && Math.abs(A[k]) >= 0.005) w.push(k + ' ' + (+A[k]).toFixed(2) + '°');
   return w.join(', ');
 }
 const val = (t, title) => { const s = document.createElement('span'); s.className = 'kl-val'; s.textContent = t; if (title) s.title = title; return s; };
@@ -542,13 +545,15 @@ function fitRows() {
     out.replaceChildren(...said, box, chip('Close', false, () => { fitSt.out = null; fitSt.note = ''; menu(); }, true, 'Hide the box'));
   }
 }
-// (width, height, depth and turn: the level being set's own, as percentages and degrees)
+// (width, height, depth, turn, tilt and lean: the level being set's own, as percentages and degrees)
 function dimKnobs(L) {
   const d = [0, 1, 2].map((i) => (L.dims && L.dims[i] != null ? +L.dims[i] : 1)), lvl = fitSt.scope === 'headAll' ? 'this head\'s own (every hair)' : fitSt.scope === 'head' ? 'this pair\'s own' : 'the hair\'s own (every head)';
   return [...knob('Width', pc(d[0]), ['−', () => redim(0, -1)], ['+', () => redim(0, 1)], 'Narrower', 'Wider', 'Width, ' + lvl), sep(),
     ...knob('Height', pc(d[1]), ['−', () => redim(1, -1)], ['+', () => redim(1, 1)], 'Lower', 'Taller', 'Height, ' + lvl), sep(),
     ...knob('Depth', pc(d[2]), ['−', () => redim(2, -1)], ['+', () => redim(2, 1)], 'Shallower', 'Deeper', 'Depth (front to back), ' + lvl), sep(),
-    ...knob('Turn', (+L.turn || 0).toFixed(2) + '°', ['↻', () => returnTo(-1)], ['↺', () => returnTo(1)], 'Its front to their right', 'Its front to their left', 'Turn round the upright line, ' + lvl)];
+    ...knob('Turn', (+L.turn || 0).toFixed(2) + '°', ['↻', () => returnTo(-1)], ['↺', () => returnTo(1)], 'Its front to their right', 'Its front to their left', 'Turn round the upright line, ' + lvl), sep(),
+    ...knob('Tilt', (+L.tilt || 0).toFixed(2) + '°', ['▲', () => returnTo(-1, 'tilt')], ['▼', () => returnTo(1, 'tilt')], 'Its front up (the back down)', 'Its front down (the back up)', 'Tilt round the line from ear to ear, ' + lvl), sep(),
+    ...knob('Lean', (+L.lean || 0).toFixed(2) + '°', ['◀', () => returnTo(-1, 'lean')], ['▶', () => returnTo(1, 'lean')], 'Its top to their right', 'Its top to their left', 'Lean round the line from the nape to the face, ' + lvl)];
 }
 // (the hug, worn: on or off, how much, and how far off the scalp it leaves the hair's inner layer)
 function hugKnobs(f, F, st2) {
@@ -562,7 +567,7 @@ function hugKnobs(f, F, st2) {
 function levels(hair, head) {
   const H = headTidy(lib.headFitOf(head)), F = hair ? hairFit(hair) : null, D = F && F.heads && F.heads[head] ? tidy(F.heads[head], {}) : {};
   const mmw = (o) => (o && o.some((v) => Math.abs(v) >= 0.00005) ? ['up', 'forward', 'their left'].map((k, i) => [k, o[[1, 2, 0][i]]]).filter(([, v]) => Math.abs(v) >= 0.00005).map(([k, v]) => k + ' ' + (v > 0 ? '+' : '−') + (Math.abs(v) * 1000).toFixed(1) + ' mm').join(', ') : '');
-  const one = (L) => [dimsWords(L.dims, L.turn), mmw(L.offset)].filter(Boolean).join(', ') || 'as made';
+  const one = (L) => [dimsWords(L.dims, L), mmw(L.offset)].filter(Boolean).join(', ') || 'as made';
   const v = val(`This head (every hair): ${one(H)} · this hair on this head: ${D.placed ? 'placed by hand' + (one(D) !== 'as made' ? ', ' + one(D) : '') : one(D)}`);
   v.classList.add('wide'); return v;
 }
