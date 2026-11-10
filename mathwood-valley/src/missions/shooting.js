@@ -298,7 +298,7 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
       helpEl: q('.bsr-help'), barEl: q('.bsr-bar'), cylEl: q('.bsr-cyl'), gunWords: q('.bsr-gunwords'), streakEl: q('.bsr-streak b'), bestEl: q('.bsr-best b'), dotsEl: q('.bsr-dots'), tagEls: [], sayT: 0 };
     q('.bsr-done:not(.bsr-helpb)').addEventListener('click', (e) => { e.stopPropagation(); J.done(); });
     q('.bsr-helpb').addEventListener('click', (e) => { e.stopPropagation(); e.currentTarget.blur(); askHelp(); });
-    flagCard(ui.cardEl, () => (card ? { choices: card.targets.map((x) => String(x.n)), right: rightNow(card, gone).map((i) => String(card.targets[i].n)).join(', ') } : {}));   // ("Confusing?": src/ui/flag.js)
+    flagCard(ui.cardEl, () => (card ? { choices: card.targets.map((x) => String(x.n)), right: rightNow(card, gone).map((i) => String(card.targets[i].n)).join(', ') } : {}));   // (marked for the help menu's form: src/ui/flag.js)
     el.addEventListener('pointerdown', onDown); el.addEventListener('pointermove', onMove); el.addEventListener('pointerup', onUp); el.addEventListener('pointercancel', () => { down = null; });
     addEventListener('keydown', onKey, true);
     gunWords(); dots();
@@ -611,6 +611,8 @@ export function makeShootingJob({ W, folk, P, I = null, camera, canvas, renderer
   J.pick = (n) => { if (!card) return false; const i = card.targets.findIndex((x, k) => x.n === n && R.targets[k].alive); if (i < 0) return false; const b = screenOf(R.targets[i].mid); return fire(b.x, b.y); };
   // the card's sum for the tools' Work it out (src/math/jobsums.js): an estimating card's exact sum, else none
   J.workSum = () => (state === 'aim' && card ? rangeSum(card) : null);
+  // the help menu's "Skip to a new question" (src/ui/helpmenu.js; main.js has moved the level first): a new card now
+  J.skip = () => { if (state !== 'aim' || !card || between || !ui) return false; newCard(); return true; };
   // (for rigs: cards at the rider's level are made, unseen, until one passes test(card), and that one is dealt)
   J.dealUntil = (test, tries = 200000) => {
     if (state !== 'aim') return false;

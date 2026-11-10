@@ -167,7 +167,7 @@ export function makeFishingJob({ W, folk, rider, sites, player = () => null, aud
     },
     state: () => ({ now: now ? { id: now.id, i: now.i, placing: now.placing } : null, pct: pctOf(rider, 'fishing') }),
   };
-  flagAsker(asker, 'fishing');   // ("Confusing?" on the catch's question card: src/ui/flag.js)
+  flagAsker(asker, 'fishing');   // (the catch's question card marked for the help menu's form: src/ui/flag.js)
 
   // ── the records the builder keeps: the saddlebags, the biggest fish, the fish book ─────────────────────────────
   const buckles = [];

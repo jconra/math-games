@@ -262,7 +262,7 @@ export function makeWindmillJob({ W, folk, rider, sites, player = () => null, hu
       yard: { ...yard, update: (dt, look, eyeAt) => { yard.update(dt); millInWay(eyeAt, look); } },
       groundY: site.groundY, low: W.tier === 'potato',
       asker: flagAsker(levelAsker(rider, { most: 'g7' }), 'windmill'),   // (the levels' 'building' place; the windmill's builder asks up to level 7)
-      // ("Confusing?" on its question card: src/ui/flag.js)
+      // (its question card marked for the help menu's form: src/ui/flag.js)
       best: { read: () => ({ height: 0, W: 0, D: 0, ...((b && b.best) || {}) }), write: () => { saveT = 0.01; } },
       start: b ? { tower: b.tower, lumber: b.lumber, bonus: b.bonus } : null,
       // (the builder's camera starts on the side the rider came from, so the glide doesn't swing round the hill)

@@ -4,7 +4,8 @@
 //   openLockbox(root, { rider, box: { tier, from }, onBox, onDone, next })
 //     from: 'sheriff' (seized boxes at the desk), 'loot' (the saddlebags) or 'practice' ("Just lock boxes" on the title)
 //     -> { el, close(), workSum() (the sum on screen for the tools' Work it out: the part being asked, a find-x box's
-//          line; src/math/jobsums.js partSum / blankWork; or null) }
+//          line; src/math/jobsums.js partSum / blankWork; or null), redeal() (a new box at the level now: the help
+//          menu's skip; false for a store order's equation or a box already opening) }
 //   opts.workOut(): "Work it out" in the top strip (the game's tools, src/ui/tools.js: the HUD is under the box);
 //   opts.toolsOpen(): a tool is up over the box (the box hears no keys meanwhile)
 //   onBox(result)   (optional) runs as each box finishes, solved or set aside: the caller pays the gold and records
@@ -458,10 +459,10 @@ export function openLockbox(root = document.body, opts = {}) {
   purseN.textContent = String(purseNow());
 
   root.appendChild(el);
-  // "Confusing?" on the box (src/ui/flag.js): the beginning line, the part asked now, its answers, and x
+  // the box marked for the help menu's form (src/ui/flag.js; the old "Confusing?"): the beginning line, the part asked now, its answers, and x
   flagCard(panel, () => (cur ? { job: 'boxes', strand: cur.plan && cur.plan.strand, pct: cur.plan && cur.plan.at, right: cur.problem && cur.problem.x != null ? cur.problem.x : null,
     text: [...cur.body.querySelectorAll('.lbx-start-l, .lbx-focus:not([hidden])')].map((e) => e.innerText).join(' · '),
-    choices: [...cur.body.querySelectorAll('.lbx-grid button')].map((b) => { const c = b.cloneNode(true); c.querySelectorAll('kbd').forEach((k) => k.remove()); return c.textContent.replace(/\s+/g, ' ').trim(); }) } : null), { style: 'right:auto;left:12px;bottom:auto;top:58px;transform:none' });
+    choices: [...cur.body.querySelectorAll('.lbx-grid button')].map((b) => { const c = b.cloneNode(true); c.querySelectorAll('kbd').forEach((k) => k.remove()); return c.textContent.replace(/\s+/g, ' ').trim(); }) } : null));
   requestAnimationFrame(() => el.classList.add('in'));
   el.focus({ preventScroll: true });
 
@@ -2442,6 +2443,14 @@ export function openLockbox(root = document.body, opts = {}) {
     close: () => end('closed'),
     // the sum on screen for the tools' Work it out (the box's own controller reads it), or null
     workSum: () => { try { return !closed && cur && cur.workSum ? cur.workSum() : null; } catch (e) { console.warn(e); return null; } },
+    // the help menu's "Skip to a new question" (src/ui/helpmenu.js; the game has moved the level first): a new box slides
+    // in, as the level arrows deal one; not a store order's own equation or a box already opening. -> true if dealt
+    redeal: () => {
+      if (closed || !cur || forcedNow || opts.rung) return false;
+      const ph = cur.phase(); if (ph === 'open' || ph === 'done') return false;
+      slideTo(infoNow); showLevel();
+      return true;
+    },
     // for test rigs: the box being worked and its phase (play | anim | parts | brackets | nlpick | review | open | done)
     debug: {
       get box() { return cur.B; },

@@ -36,7 +36,7 @@
 //   JB.jobs             the jobs on the board now: [{ id, name, what, pic, saddle }]
 //   JB.screenOf(id)     (rigs) where that job's notice is on the page { x, y, on } (the board in view), or null
 //   JB.state(), JB.dispose()
-//   BOARD_JOBS, BOARD, boardSpot(W), drawPic(ctx, kind, x, y, size)
+//   BOARD_JOBS, BOARD, boardSpot(W), drawPic(ctx, kind, x, y, size), picURL(kind, px) (a notice's picture as an image address: the help menu's video thumbnail too)
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { makePanel } from './shop.js';
@@ -244,7 +244,7 @@ export function drawPic(ctx, kind, x, y, size) {
 }
 // a picture as an image (for the panel's cards)
 const picURLs = new Map();
-function picURL(kind, px = 160) {
+export function picURL(kind, px = 160) {
   const key = kind + px; if (picURLs.has(key)) return picURLs.get(key);
   const cv = document.createElement('canvas'); cv.width = cv.height = px; drawPic(cv.getContext('2d'), kind, 0, 0, px);
   const u = cv.toDataURL('image/png'); picURLs.set(key, u); return u;

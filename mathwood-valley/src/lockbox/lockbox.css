@@ -91,7 +91,7 @@
 .lbx-name { display: flex; flex-direction: column; min-width: 0; }
 .lbx-tier { font: 400 26px/1.05 Rye, Georgia, serif; color: #f6e3b8; letter-spacing: 0.01em; text-shadow: 0 2px 0 #4a2d14; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lbx-rung { font: 400 14px/1.3 Bitter, serif; color: var(--mute); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lbx-lv { margin-left: 92px; /* (clear of the "Confusing?" tab at the strip's corner) */ display: inline-flex; align-items: center; gap: 4px; font: 400 14px/1.3 Bitter, serif; color: #f0e2c0; min-width: 0; }
+.lbx-lv { display: inline-flex; align-items: center; gap: 4px; font: 400 14px/1.3 Bitter, serif; color: #f0e2c0; min-width: 0; }
 .lbx-lv[hidden] { display: none; }
 .lbx-lvt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .lbx-lv button { flex: none; width: 28px; height: 26px; border-radius: 6px; border: 1px solid var(--brass-lo); background: rgba(0, 0, 0, 0.25); color: var(--brass-hi); font: 700 18px/1 Bitter, serif; cursor: pointer; }

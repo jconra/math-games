@@ -20,6 +20,7 @@
 //                              reads the card aloud again (a small speaker button in the card's corner; none without
 //                              it); returns the card element
 //   H.ruleEl                   the rule card element (the times chart keeps it in view)
+//   H.cornerEl                 the top right corner's row with the Menu button (the help button "?" goes in it)
 //   H.hint({ say, line, skip, also }) | H.hint(null)   the line under the rule card after a wrong pick: skip is the
 //                              trainer's skip-count list, where the wrong number is a string like '(27)'
 //   H.hintEl                   that line's element (the times chart keeps clear of it)
@@ -237,7 +238,7 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
       </div>
     </div>
     <div class="bmh-corner">
-      <button class="bmh-menu" type="button" title="Menu (Esc)">${ICON.menu}<span>Menu</span></button>
+      <div class="bmh-corner-row"><button class="bmh-menu" type="button" title="Menu (Esc)">${ICON.menu}<span>Menu</span></button></div>
       <div class="bmh-perf" hidden></div>
     </div>
     <div class="bmh-help"></div>
@@ -559,6 +560,7 @@ export function makeHud(root, { onMenu = () => {}, onPrompt = () => {}, onTouch 
 
   const H = {
     el, ruleEl, hintEl, helpEl, meterEl, jobEl: $('.bmh-job'),
+    cornerEl: $('.bmh-corner-row'),   // (the top right corner's row: the help button goes in it, left of Menu: src/ui/helpmenu.js)
     closeHelp: () => closeHelp(), helpOpen: () => helpEl.children.length > 0,
     show(on) { el.classList.toggle('is-hidden', !on); if (!on) { prompt(null); caption(null); if (quiet()) { buckleQ.length = 0; if (buckleBusy && buckleWatch) endBuckle(); } } },
     purse, toast, prompt, caption, rule, hint, compass, buckle, shift, meter,

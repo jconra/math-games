@@ -100,7 +100,7 @@ export function makeStoreSlip(root = document.body, { onPick = () => {}, onDone 
   const slip = $('.bmo-slip'), coinsEl = $('.bmo-coins'), help = $('.bmo-help'), drawBtn = $('.bmo-draw'), thanks = $('.bmo-thanks');
   const purseN = $('.bmo-purse b'), purseEl = $('.bmo-purse'), fly = $('.bmo-fly'), waitEl = $('.bmo-wait');
   let order = null, busy = false, shown = 0, disposed = false;
-  // "Confusing?" on the slip: the story, the coins, the ones already tried and the right one (src/ui/flag.js)
+  // the slip marked for the help menu's form (the old "Confusing?"): the story, the coins, the ones already tried and the right one (src/ui/flag.js)
   flagCard($('.bmo-tools'), () => (order ? { text: `${order.story || ''} ${order.ask || ''}`, choices: (order.coins || []).map((c) => c.label), right: ((order.coins || []).find((c) => c.good) || {}).label,
     picked: [...coinsEl.querySelectorAll('.bmo-coin.is-wrong')].map((b) => (order.coins[+b.dataset.i] || {}).label) } : null),
     { style: 'position:static;transform:none;margin-left:auto;align-self:center' });   // (in the row with "Read it to me", at its right end)

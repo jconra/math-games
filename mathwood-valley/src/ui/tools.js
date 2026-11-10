@@ -46,6 +46,7 @@
 //     onLevel(placeId, view)   the rider's level there was stepped by hand (main.js saves the rider)
 //   T.el (the strip), T.update() (main.js calls it a few times a second: the sum's label, the place and its level),
 //   T.work() (the lock box's and a builder's own Work it out buttons call it too), T.own() (the entry, empty),
+//   T.workOn(sum) (a given sum in columns: the help menu's example),
 //   T.treat({ kind, n, name, busy } | null) the apple button (busy: dimmed, the horse munching) (src/feeding.js; onTreat() when it is pressed),
 //   T.pet({ name, busy } | null) the hand button beside it (src/feeding.js; onPet() when it is pressed),
 //   T.chart(), T.step(dir) (the level tool's arrows), T.close(), T.busy() (a tool is up), T.state() (for rigs:
@@ -131,6 +132,17 @@ export function makeTools({ hud, rider = () => null, sum = () => null, own = () 
     }
     hold(true);
     return s ? openWork(s) : openOwn();
+  };
+  // a given sum in columns (the help menu's example: src/ui/helpmenu.js), taught the same way as the one on screen
+  T.workOn = (sum) => {
+    const s = readSum(sum);
+    if (!s) return false;
+    closeNote();
+    if (panel) { panel.close(); panel = null; }
+    if (!canOpen() && !chartOn) return false;
+    if (chartOn) closeChartNow();
+    hold(true);
+    return openWork({ ...s, ask: 'An example' });
   };
   T.own = () => {
     closeNote();

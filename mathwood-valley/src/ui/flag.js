@@ -1,61 +1,52 @@
 // flag.js: the small feedback pieces on screen (what they send is src/feedback.js).
 //
-//   flagCard(el, info, { style })   a small "Confusing?" chip on a question card. Tapping it marks the question there
-//                                 and then (what was asked, the choices, what was picked so far, the right answer) and
-//                                 offers a one-line note; the mark is sent with the note, or on its own when the note
-//                                 is skipped or left (about 25 s). One line per card:
+//   flagCard(el, info, { show })  marks a question card: what is asked there and then (what was asked, the choices,
+//                                 what was picked so far, the right answer). Nothing is drawn on the card any more:
+//                                 the old "Confusing?" chip's job is now the help button's ("?", top corner:
+//                                 src/ui/helpmenu.js), whose form fills in the question on screen from these cards and
+//                                 sends it the same way the chip's mark was sent (FB.send('question', ...)). One line
+//                                 per card:
 //                                   flagCard(cardEl, () => ({ text, choices, right, picked, strand, pct, job }))
 //                                 info() may leave any of them out (the job comes from the game, the strand, the point
 //                                 and the answers picked lately from the last answers recorded, the text from the card),
-//                                 or return null when the card isn't a question just now (the chip hides).
-//                                 Calling it again on the same card only swaps info (a card rebuilt each question).
-//   flagAsker(asker, job, card)   the same chip for a builder's question card (labs/*/builder.js): wraps the asker's
+//                                 or return null when the card isn't a question just now. show() (optional) says whether
+//                                 it counts now. Calling it again on the same card only swaps info (a card rebuilt each
+//                                 question).
+//   flagAsker(asker, job, card)   the same for a builder's question card (labs/*/builder.js): wraps the asker's
 //                                 asked(q) and answered(q, right) in place and returns it. card() -> the card element
 //                                 (siteCard by default: the card of the build site open now)
+//   questionNow(job)              the question on screen now, gathered from the marked card that can be seen (the one
+//                                 for this job first), or null
+//   sendQuestion(data)            sends a question's report (the help menu's form: helpplan.js reportOf)
 //   rateJob(job)                  a thumbs up / down chip low in the middle for a job just finished; it fades by itself
 //   menuRows({ report })          the pause menu's "Tell us" (or "Maker's note" with ?maker) and the share switch:
 //                                 -> [tellButton, tellBox, shareButton] to put among the menu's buttons
+//   NO_NAMES, hush(el), ensureCss()   for the help menu's form (the same words, the same taps kept off the game)
 //
-// Nothing here ever blocks play: no screen to click through, the game keeps going while a note is typed, and the keys
-// typed into a note never reach the game (they are stopped before any of the game's own key listeners).
+// Nothing here ever blocks play, and the keys typed into a note never reach the game (they are stopped before any of
+// the game's own key listeners: anything marked data-bmfb-type, the help menu's box too).
 
 import { FB } from '../feedback.js';
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const plain = (t) => String(t == null ? '' : t).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
 const cap = (t, n) => { const s = plain(t); return s.length > n ? s.slice(0, n - 1) + '…' : s; };
-const NO_NAMES = "Please don't put names in here.";
+export const NO_NAMES = "Please don't put names in here.";
 export const JOB_WORDS = { roundup: 'the round-up', sheep: 'doctoring the sheep', pigs: 'penning the pigs', store: 'the store counter',
   delivery: 'the delivery', wagon: 'guarding the wagon', deer: 'the deer photographs', range: 'the bottle range', loot: "the gang's loot",
   boxes: 'the lock boxes', windmill: 'building the windmill', bridge: 'building the bridge', fishing: 'fishing' };
-export const FLAG = { noteMs: 25000, rateMs: 9000, rateAgainMs: 10 * 60000 };
+export const FLAG = { rateMs: 9000, rateAgainMs: 10 * 60000 };
 
 // ── STYLE ───────────────────────────────────────────────────────────────────────────────────────────────────────
-function ensureCss() {
+export function ensureCss() {
   if (typeof document === 'undefined' || document.getElementById('bmfb-css')) return;
   const s = document.createElement('style'); s.id = 'bmfb-css';
   s.textContent = `
 :root { --bmfb-paper: #f6ecd6; --bmfb-ink: #2c1d12; --bmfb-ink2: #5d4a36; --bmfb-edge: #a8865a; --bmfb-btn: #6d4b2b; --bmfb-btn-hi: #82593a; --bmfb-cream: #f4e8cf; --bmfb-good: #4f7a32; }
-.bmfb-flag { position: absolute; right: 10px; bottom: 0; transform: translateY(55%); z-index: 4; pointer-events: auto; cursor: pointer;
-  font: 600 12px/1 Bitter, Georgia, serif; color: var(--bmfb-ink2); background: var(--bmfb-paper); border: 1px solid var(--bmfb-edge);
-  border-radius: 999px; padding: 4px 9px; box-shadow: 0 1px 3px rgba(0,0,0,0.25); opacity: 0.88; white-space: nowrap; }
-.bmfb-flag:hover { opacity: 1; color: var(--bmfb-ink); }
-.bmfb-flag[hidden] { display: none; }
-.bmfb-flag.is-marked { color: var(--bmfb-cream); background: var(--bmfb-btn); border-color: #3b2a1e; opacity: 1; }
-@media (pointer: coarse) { .bmfb-flag { font-size: 13px; padding: 6px 11px; } }
-.bmfb-note { position: fixed; z-index: 95; width: min(330px, calc(100vw - 32px)); box-sizing: border-box; padding: 10px 12px 9px;
-  background: var(--bmfb-paper); color: var(--bmfb-ink); border: 1px solid var(--bmfb-edge); border-radius: 10px;
-  box-shadow: 0 6px 22px rgba(0,0,0,0.35); font: 500 14px/1.3 Bitter, Georgia, serif; pointer-events: auto; }
-.bmfb-note b { display: block; font-weight: 700; margin-bottom: 6px; }
-.bmfb-note .bmfb-row { display: flex; gap: 6px; }
-.bmfb-note input { flex: 1; min-width: 0; font: 500 15px Bitter, Georgia, serif; padding: 6px 8px; border: 1px solid var(--bmfb-edge);
-  border-radius: 6px; background: #fffaf0; color: var(--bmfb-ink); }
-.bmfb-note small, .bmfb-tell small.bmfb-nonames { display: block; margin-top: 5px; font-size: 12px; color: var(--bmfb-ink2); }
-.bmfb-note button, .bmfb-tell button { font: 600 14px Bitter, Georgia, serif; color: var(--bmfb-cream); background: var(--bmfb-btn);
+.bmfb-tell small.bmfb-nonames { display: block; margin-top: 5px; font-size: 12px; color: var(--bmfb-ink2); }
+.bmfb-tell button { font: 600 14px Bitter, Georgia, serif; color: var(--bmfb-cream); background: var(--bmfb-btn);
   border: 1px solid #3b2a1e; border-radius: 6px; padding: 6px 11px; cursor: pointer; }
-.bmfb-note button:hover, .bmfb-tell button:hover { background: var(--bmfb-btn-hi); }
-.bmfb-note .bmfb-x { position: absolute; top: 4px; right: 5px; padding: 1px 7px; background: transparent; color: var(--bmfb-ink2); border: 0; font-size: 18px; }
-.bmfb-note .bmfb-x:hover { background: transparent; color: var(--bmfb-ink); }
+.bmfb-tell button:hover { background: var(--bmfb-btn-hi); }
 .bmfb-rate { position: fixed; left: 50%; bottom: 132px; z-index: 34; transform: translate(-50%, 8px); opacity: 0; pointer-events: none;
   display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 14px; border-radius: 999px; background: rgba(36, 24, 14, 0.88);
   color: #f1e6cc; font: 600 14px Bitter, Georgia, serif; border: 1px solid #8a6a3a; transition: opacity 0.35s, transform 0.35s; white-space: nowrap; }
@@ -94,20 +85,17 @@ function guard(e) {
 }
 try { if (typeof addEventListener === 'function') for (const t of ['keydown', 'keyup', 'keypress']) addEventListener(t, guard, true); } catch (e) { /* (no page) */ }
 // (a tap or a click on these never reaches the valley or the card under them as a pick, a shot or a drag)
-const hush = (el) => { for (const t of ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'touchstart', 'touchend', 'click', 'dblclick']) el.addEventListener(t, (e) => e.stopPropagation()); };
+export const hush = (el) => { for (const t of ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'touchstart', 'touchend', 'click', 'dblclick']) el.addEventListener(t, (e) => e.stopPropagation()); };
 
-// ── "CONFUSING?" ON A QUESTION CARD ─────────────────────────────────────────────────────────────────────────────
-function gather(el, info) {
-  let o = null;
-  try { o = typeof info === 'function' ? info() : info; } catch (e) { o = null; }
+// ── THE QUESTION CARDS: what the help menu's form fills in ─────────────────────────────────────────────────────────
+function gather(el, o) {
   o = o && typeof o === 'object' ? { ...o } : {};
   let c = {}; try { c = FB.context() || {}; } catch (e) { c = {}; }
   const job = o.job || c.job || null;
   const recent = FB.recent(90000).filter((a) => !job || !a.job || a.job === job);
   const last = recent[recent.length - 1] || null;
-  const own = el.querySelector(':scope > .bmfb-flag');
   let text = o.text;
-  if (text == null) { try { text = (el.innerText || el.textContent || '').replace(own ? own.textContent : '', ''); } catch (e) { text = ''; } }
+  if (text == null) { try { text = el.innerText || el.textContent || ''; } catch (e) { text = ''; } }
   return {
     job, strand: o.strand ?? (last ? last.strand : null), pct: o.pct ?? (last ? last.pct : null), step: o.step ?? null,
     text: cap(text, 900), choices: Array.isArray(o.choices) ? o.choices.slice(0, 12).map((x) => cap(x, 80)) : null,
@@ -117,75 +105,49 @@ function gather(el, info) {
   };
 }
 
-let note = null;   // the one note box open now
-function closeNote(send = true) {
-  if (!note) return;
-  const n = note; note = null;
-  clearTimeout(n.timer); removeEventListener('resize', n.place);
-  n.box.remove();
-  if (send) FB.send('question', { ...n.q, note: n.input.value.trim().slice(0, 300) || null });
-  n.chip.textContent = send ? 'Sent, thanks!' : 'Confusing?';
-  setTimeout(() => { n.chip.classList.remove('is-marked'); n.chip.textContent = 'Confusing?'; }, send ? 2200 : 0);
+const cards = new Set();   // the marked cards: { el, info, show, at (the order they were marked in) }
+let marks = 0;
+// can it be seen now: on the page, not hidden or faded out (a slip slid away keeps its place in the page), on screen
+function seen(el) {
+  if (!el || !el.isConnected) return false;
+  try {
+    for (let e = el; e && e.nodeType === 1; e = e.parentElement) {
+      if (e.hidden) return false;
+      const cs = getComputedStyle(e);
+      if (cs.display === 'none' || cs.visibility === 'hidden' || +cs.opacity < 0.05) return false;
+    }
+    const r = el.getBoundingClientRect();
+    return r.width > 2 && r.height > 2 && r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth;
+  } catch (e) { return false; }
 }
-function openNote(chip, q) {
-  closeNote(true);
-  const box = document.createElement('div'); box.className = 'bmfb-note'; box.setAttribute('role', 'dialog'); box.setAttribute('aria-label', 'A note about this question');
-  box.dataset.bmfbForm = '1';
-  box.innerHTML = `<button type="button" class="bmfb-x" aria-label="No note">×</button><b>Marked, thank you! Want to say why?</b>
-    <div class="bmfb-row"><input type="text" maxlength="300" data-bmfb-type="1" placeholder="What was confusing?" aria-label="What was confusing"><button type="button" data-bmfb-send="1">Send</button></div>
-    <small>${NO_NAMES}</small>`;
-  hush(box);
-  document.body.appendChild(box);
-  const input = box.querySelector('input');
-  // beside the card when there is room (the card's hint line under it stays in view), else under the chip, else above
-  const card = chip.parentNode && chip.parentNode.getBoundingClientRect ? chip.parentNode : chip;
-  const place = () => {
-    const r = chip.getBoundingClientRect(), c = card.getBoundingClientRect(), w = box.offsetWidth, h = box.offsetHeight, vw = innerWidth, vh = innerHeight;
-    const yy = Math.min(Math.max(8, c.top), vh - h - 8);
-    let x, y;
-    if (c.right + 10 + w <= vw - 16) { x = c.right + 10; y = yy; }
-    else if (c.left - 10 - w >= 16) { x = c.left - 10 - w; y = yy; }
-    else { x = Math.min(Math.max(16, r.right - w), vw - w - 16); y = r.bottom + 8; if (y + h > vh - 8) y = Math.max(8, r.top - h - 8); }
-    box.style.left = `${x}px`; box.style.top = `${y}px`;
-  };
-  place();
-  note = { box, input, chip, q, place, timer: setTimeout(() => closeNote(true), FLAG.noteMs) };
-  addEventListener('resize', place);
-  // (typing holds the box open; it goes off by itself a while after the last key)
-  input.addEventListener('input', () => { if (!note) return; clearTimeout(note.timer); note.timer = setTimeout(() => closeNote(true), FLAG.noteMs * 2); });
-  box.querySelector('[data-bmfb-send]').addEventListener('click', () => closeNote(true));
-  box.querySelector('.bmfb-x').addEventListener('click', () => closeNote(true));
-  // (no focus on a touch screen: the keyboard would cover the game; a click into the box brings it up)
-  if (!(matchMedia && matchMedia('(pointer: coarse)').matches)) setTimeout(() => { try { input.focus({ preventScroll: true }); } catch (e) { /* */ } }, 30);
-}
-
-export function flagCard(el, info = null, { style = '', show = null } = {}) {
+export function flagCard(el, info = null, { show = null } = {}) {
   try {
     if (!el || typeof document === 'undefined') return null;
-    ensureCss();
-    if (el._bmFlag) { el._bmFlag.info = info; if (show) el._bmFlag.show = show; el._bmFlag.attach(); return el._bmFlag.chip; }
-    const chip = document.createElement('button');
-    chip.type = 'button'; chip.className = 'bmfb-flag'; chip.textContent = 'Confusing?';
-    chip.title = 'Mark this question as confusing'; if (style) chip.style.cssText = style;
-    hush(chip);
-    const F = { chip, info, show };
-    chip.addEventListener('click', (e) => {
-      e.preventDefault(); chip.blur();
-      if (chip.classList.contains('is-marked')) { if (note && note.chip === chip) closeNote(true); return; }
-      const q = gather(el, F.info);
-      chip.classList.add('is-marked'); chip.textContent = 'Marked';
-      openNote(chip, q);
-    });
-    try { if (getComputedStyle(el).position === 'static') el.style.position = 'relative'; } catch (e) { /* */ }
-    const visible = () => { let on = true; try { on = !F.show || !!F.show(); } catch (e) { on = true; } if (chip.hidden === on) chip.hidden = !on; };
-    F.attach = () => { if (chip.parentNode !== el) el.appendChild(chip); visible(); };
-    F.attach();
-    // (a card whose insides are rebuilt for each question gets the chip back; a card that changes kind shows or hides it)
-    new MutationObserver(() => F.attach()).observe(el, { childList: true, attributes: true, attributeFilter: ['class', 'hidden'] });
-    el._bmFlag = F;
-    return chip;
+    let F = el._bmFlag;
+    if (!F) { F = { el, info, show }; el._bmFlag = F; cards.add(F); }
+    F.info = info; if (show) F.show = show; F.at = ++marks;
+    return el;
   } catch (e) { return null; }
 }
+// the question on screen now: the marked cards that can be seen and say they are a question (info() not null, show()
+// not false), this job's first, then the one marked last
+export function questionNow(job = null) {
+  if (typeof document === 'undefined') return null;
+  const up = [];
+  for (const F of cards) {
+    if (!F.el.isConnected) continue;
+    try { if (F.show && !F.show()) continue; } catch (e) { continue; }
+    if (!seen(F.el)) continue;
+    let o = null; try { o = typeof F.info === 'function' ? F.info() : F.info; } catch (e) { o = null; }
+    if (F.info != null && o == null) continue;   // (the card isn't a question just now)
+    up.push({ F, q: gather(F.el, o) });
+  }
+  if (!up.length) return null;
+  up.sort((a, b) => (Number(b.q.job === job) - Number(a.q.job === job)) || b.F.at - a.F.at);
+  return up[0].q;
+}
+// a question's report, sent as the old chip's mark was (src/feedback.js: kind 'question')
+export const sendQuestion = (data) => FB.send('question', data);
 
 // a build site's question card (src/buildsite.js opens a lab's builder in a .bsite overlay; its card is #question,
 // or #card at the dock)
@@ -206,7 +168,7 @@ export function flagAsker(asker, job, card = siteCard) {
     asker.asked = function (x, ...rest) {
       q = x || null; picks = [];
       const r = asked ? asked.call(this, x, ...rest) : undefined;
-      try { const el = card(); if (el) flagCard(el, info, { style: 'top:8px;bottom:auto;transform:none' }); } catch (e) { /* (the chip is a help, never in the way) */ }
+      try { const el = card(); if (el) flagCard(el, info); } catch (e) { /* (the mark is a help, never in the way) */ }
       return r;
     };
     if (answered) asker.answered = function (x, right, ...rest) { picks.push(right ? 'right' : 'wrong'); return answered.call(this, x, right, ...rest); };

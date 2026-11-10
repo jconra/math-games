@@ -30,6 +30,7 @@
 //   S.prompt          the words for the prompt while the player is by a site's person (else null); S.talk() opens it
 //   S.open(id), S.close(how)   ('done' | 'esc' | 'walk' | 'ride'); S.active: the open site's record, or null
 //   S.update(dt)      each frame, AFTER the player has moved (it places the camera while a builder is up)
+//   S.session()       the open builder's session (below), or null: the help menu deals its question again with it
 //   S.state(), S.dispose()
 //
 // ctx, given to a site's mount: { root (the element the builder's page goes in: an #app over the game), group,
@@ -255,6 +256,7 @@ export function makeBuildSites({ W, camera, canvas, player = () => null, obstacl
     clearView(look.set(open.site.origin.x, Math.max(open.site.origin.y + 1, look.y), open.site.origin.z));
   };
 
+  S.session = () => (open && open.session) || null;
   S.state = () => ({ open: open ? { id: open.site.id, phase: open.phase, t: open.t, ready: !!open.session } : null, back: !!back, prompt: S.prompt, near: near && near.id, lens: lensK,
     sites: [...sites.values()].map((s) => ({ id: s.id, x: s.x, z: s.z, meet: s.meet ? s.meet() : null })) });
   S.dispose = () => {

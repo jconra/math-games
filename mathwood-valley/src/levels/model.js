@@ -61,6 +61,9 @@
 //   levelFor(rider, placeId, { now, most })   -> what to ask now: { place, level (the ladder entry), id, i, n (levels),
 //                                    into, count, pct, placing, capped }   (meets the place the first time: save after)
 //                                    most: the hardest level id the job asking can ask (the windmill stops at 7)
+//                                    eased: true for the one easier question after a skip (the level below)
+//   skipLevel(rider, placeId, { now })   the help menu's skip: a gentle miss, never recorded as an answer (see A SKIP)
+//                                 -> { id, before, moved, into, placed, ease }
 //   recordLevel(rider, placeId, { right, level, ms, size, sitDown, hidden, idle, now })
 //                                 -> { id, i, before, moved (levels: +1, -1, 0), into, placed, justPlaced, fast, timed,
 //                                      outlier, pct }      level: the id asked (default: the rider's level)
@@ -81,6 +84,7 @@ import { ageStart } from '../math/skill.js';
 export const LEVELS = {
   UP: 1,            // a right answer adds this to `into`...
   DOWN: 4,          // ...a miss takes this off: 1 up, 4 down settles where about 4 in 5 are right (the design's)
+  SKIP_DOWN: 2,     // a skipped question (the help menu's skip, skipLevel below): half a miss, and the next one easier
   FAST_UP: 2,       // a fast right sit-down answer, from the place's fastFrom level up
   COUNT: 5,         // a level's count when its ladder doesn't give one (the design's "5 questions")
   FLUKES: 1,        // placement: a missed level answered right on its check this many times, and the climb goes on
@@ -154,6 +158,9 @@ function cleanPlace(P, s) {
   s.days = (Array.isArray(s.days) ? s.days : []).filter((x) => Array.isArray(x) && fin(+x[0])).slice(-LEVELS.DAYS_KEEP)
     .map((x) => [Math.floor(+x[0]), clamp(Math.round(num(x[1], 0)), 0, 100)]);
   s.met = num(s.met, 0); s.last = num(s.last, 0);
+  // (a skip's two: only kept tidy where a skip has been, so a save that never skipped stays exactly as it was)
+  if ('ease' in s) s.ease = s.ease === true && s.placed;
+  if ('k' in s) s.k = Math.max(0, Math.floor(num(s.k, 0)));
   if (s.placed) s.base = null;
   else if (!isObj(s.base) || !['climb', 'check', 'down'].includes(s.base.phase)) s.base = newBase();
   else {
@@ -245,6 +252,7 @@ export function startHere(rider, placeId, id, { now = Date.now() } = {}) {
   s.off = s.off.filter((x) => x !== id);
   moveTo(P, s, i, 0);
   s.placed = true; s.base = null; s.start = id;
+  if (s.ease) s.ease = false;   // (a level picked by hand: the next question is from it, not a skip's easier one)
   return true;
 }
 
@@ -315,10 +323,55 @@ export function levelFor(rider, placeId, { now = Date.now(), most = null } = {})
     s.base.cap = mi >= 0 ? P.levels[mi].id : null;
     if (mi >= 0 && i > mi) { moveTo(P, s, mi, 0); i = mi; }
   } else if (mi >= 0 && i > mi) { capped = true; i = mi; }
-  const into = i === idx(P, s.id) ? s.into : 0;
+  let into = i === idx(P, s.id) ? s.into : 0;
+  // (a skip just now (skipLevel): the next question comes from the level below the one asked, near its end, until the
+  // next answer here is recorded; at the lowest level that is on there is nothing easier)
+  let eased = false;
+  if (s.placed && s.ease === true) { const e = prevOn(P, s, i); if (e != null) { i = e; into = countOf(P.levels[e]) - 1; eased = true; } }
   const L = P.levels[i];
   return { place: placeId, level: L, id: L.id, i, n: P.levels.length, into, count: countOf(L),
-    pct: levelPct(placeId, L.id, into), placing: !s.placed, capped };
+    pct: levelPct(placeId, L.id, into), placing: !s.placed, capped, eased };
+}
+
+// ---- a skip -----------------------------------------------------------------------------------------------------------
+
+// THE HELP MENU'S "SKIP TO A NEW QUESTION" (src/ui/helpmenu.js): a gentle miss. The skipped question is never recorded
+// as an answer: the counts (n, r), the history, the stats, the accuracy and the badges never see it. Only the rider's
+// place on the ladder moves, and the next question comes a little easier:
+//   after placement   half a miss off the bar (LEVELS.SKIP_DOWN, 2 where a miss takes 4; below 0 the rider goes back a
+//                     level, as with a miss), and the next question here comes from the level below, once (`ease`:
+//                     levelFor gives that level until the next answer here is recorded; a right answer down there
+//                     doesn't move the rider up, as with any answer below their level)
+//   finding the level the climb stops there: the rider settles on the highest level answered right so far, or, with
+//                     none yet, steps down a level and the way down goes on from there
+// -> { id, before, moved (-1, 0), into, placed, ease }
+export function skipLevel(rider, placeId, { now = Date.now() } = {}) {
+  const P = placeOf(placeId);
+  const s = ensure(rider, placeId, now);
+  const cur = idx(P, s.id), before = s.id;
+  s.k = Math.max(0, Math.floor(num(s.k, 0))) + 1;
+  if (!s.placed) {
+    const B = s.base;
+    B.n++;
+    if (B.lo != null) { moveTo(P, s, idx(P, B.lo), 0); s.placed = true; s.base = null; }
+    else {
+      B.phase = 'down'; B.got = 0;
+      const pv = prevOn(P, s, cur);
+      if (pv == null) { moveTo(P, s, cur, 0); s.placed = true; s.base = null; } else moveTo(P, s, pv, 0);
+    }
+    if (!s.placed && B.n >= placeMost(P)) { moveTo(P, s, idx(P, s.id), 0); s.placed = true; s.base = null; }
+  } else {
+    let c = cur, into = s.into - LEVELS.SKIP_DOWN;
+    while (into < 0) {
+      const pv = prevOn(P, s, c);
+      if (pv == null) { into = 0; break; }
+      c = pv; into += countOf(P.levels[c]);
+    }
+    moveTo(P, s, c, Math.max(0, Math.round(into * 100) / 100));
+    s.ease = true;
+  }
+  const i = idx(P, s.id);
+  return { id: s.id, before, moved: Math.sign(i - cur), into: s.into, placed: s.placed, ease: s.ease === true };
 }
 
 // ---- recording an answer --------------------------------------------------------------------------------------------
@@ -332,6 +385,7 @@ export function recordLevel(rider, placeId, opts = {}) {
   let at = typeof opts.level === 'string' ? idx(P, opts.level) : cur;
   if (at < 0) at = cur;
   const before = s.id, beforeI = cur, wasPlaced = s.placed;
+  if (s.ease) s.ease = false;   // (a skip's one easier question: any answer here ends it)
 
   // time (sit-down answers only; see LEVELS FAST, QUICK, SLOW)
   let timed = false, fast = false, outlier = false;
@@ -484,6 +538,7 @@ export function setLevelAt(rider, placeId, id, { placed = true, into = 0, now = 
   const s = ensure(rider, placeId, now);
   moveTo(P, s, i, into);
   s.placed = !!placed; s.base = placed ? null : newBase();
+  if (s.ease) s.ease = false;
   return s;
 }
 

@@ -141,9 +141,6 @@
 .bmh-meter.is-hit .bmh-meter-pic { transform: translateX(1px) rotate(-3deg); }
 .bmh-meter-sub { color: var(--ink-2); font-size: 13px; white-space: nowrap; }
 .bmh-meter-sub:empty { display: none; }
-/* (clear of the card's "Confusing?" chip, which hangs half under the card's bottom edge: src/ui/flag.js) */
-.bmh-rule:has(.bmfb-flag:not([hidden])) + .bmh-meter { margin-top: 6px; }
-@media (pointer: coarse) { .bmh-rule:has(.bmfb-flag:not([hidden])) + .bmh-meter { margin-top: 12px; } }
 
 .bmh-hint {
   max-width: min(640px, 80vw); padding: 8px 16px 10px; border-radius: 9px; text-align: center;
@@ -308,6 +305,7 @@
   .bmh-shift-pips { display: none; }
   .bmh-top { top: 8px; align-items: stretch; }
   .bmh-compass { width: auto; margin: 0 58px 0 186px; }
+  .bmh:has(.bmh-corner-row .bmq-btn:not([hidden])) .bmh-compass { margin-right: 108px; }   /* (the help button "?" beside Menu) */
   .bmh-job { margin-top: 20px; align-self: center; gap: 6px; }
   .bmh:has(.bmh-shift:not([hidden])) .bmh-job { margin-top: 36px; }   /* (the purse a line taller with the shift counter) */
   /* the job card and the line under it kept compact, so they cover less of the herd, the flock or the pens' signs: the

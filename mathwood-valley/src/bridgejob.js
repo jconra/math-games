@@ -256,7 +256,7 @@ export function makeBridgeJob({ W, folk, rider, sites, refresh = () => {}, hud =
       yard, groundY, waterY, low: W.tier === 'potato', span: S, words: wordsHere, engineerSide: C.side, zoom: innerWidth < innerHeight ? 1.2 : 1.75, loadsWait: 800,   // (a phone held upright: its lens is wide already)
       libs: animals && traffic && traffic.lib ? { animals, folk, wagons: traffic.lib } : null,
       asker: flagAsker(levelAsker(rider), 'bridge'),   // (the levels' 'building' place, all 8 levels)
-      // ("Confusing?" on its question card: src/ui/flag.js)
+      // (its question card marked for the help menu's form: src/ui/flag.js)
       best: { read: () => ({ rating: -1, S, ...((b && b.best) || {}) }), write: () => { saveT = 0.01; } },
       pay: (rating) => pay(rating),
       tested: (card) => tested(card),

@@ -373,7 +373,7 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
     document.body.classList.add('bmd-viewing');
     vf.el = el; vf.frameEl = el.querySelector('.bmd-frame'); vf.tagsEl = el.querySelector('.bmd-tags'); vf.helpEl = el.querySelector('.bmd-help');
     vf.eqEl = el.querySelector('.bmd-eq b'); vf.wordsEl = el.querySelector('.bmd-eq i'); vf.flashEl = el.querySelector('.bmd-flash');
-    flagCard(el.querySelector('.bmd-eq'), () => (vf && vf.shot ? { choices: vf.shot.values.map(numText), right: numText(vf.shot.values[vf.shot.right]) } : {}));   // ("Confusing?": src/ui/flag.js)
+    flagCard(el.querySelector('.bmd-eq'), () => (vf && vf.shot ? { choices: vf.shot.values.map(numText), right: numText(vf.shot.values[vf.shot.right]) } : {}));   // (marked for the help menu's form: src/ui/flag.js)
     vf.pics = 0; vf.missed = false; vf.busy = false; vf.idle = 0; vf.helped = false; vf.hover = -1; vf.ready = false; vf.typed = '';
     el.querySelector('.bmd-done:not(.bmd-helpb)').addEventListener('click', (e) => { e.stopPropagation(); DJ.done(); });
     el.querySelector('.bmd-helpb').addEventListener('click', (e) => { e.stopPropagation(); e.currentTarget.blur(); askHelp(); });
@@ -768,6 +768,9 @@ export function makeDeerJob({ W, deer, P, I = null, camera, canvas, rider, hud, 
   DJ.tags = () => (vf && vf.items ? vf.items.map((it) => ({ value: vf.shot.values[it.i], x: Math.round(it.x), y: Math.round(it.y), key: String(vf.shot.values[it.i]), on: it.on && vf.ready, right: it.i === vf.shot.right })) : []);
   DJ.pick = (value) => { if (!vf || !vf.shot) return false; const i = vf.shot.values.indexOf(value); if (i < 0) return false; shoot(i); return true; };
   DJ.workSum = () => (DJ.active && vf && vf.shot ? deerSum(vf.shot) : null);   // (the tools' Work it out: src/math/jobsums.js)
+  // the help menu's "Skip to a new question" (src/ui/helpmenu.js; main.js has moved the level first, and the next
+  // photo's level is the easier one already: the job's own one-easier is not added on top)
+  DJ.skip = () => { if (!DJ.active || !vf || !vf.shot || vf.busy) return false; easier = false; newShot(); return true; };
   DJ.herd = () => herd;   // (the job's herd, or null till the deer are in)
   // (the camera could go up from where the player stands: Miss Wren's words when she lends it, src/jobfolk.js)
   DJ.inReach = () => {

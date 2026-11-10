@@ -18,6 +18,7 @@
 //   ?dev                      shortcut buttons: +100 gold, jump to each place, start the round-up, a lock box, a saddle, a dog
 //   ?perf                     frames a second, draw calls and the tier, top right
 //   ?dof                      depth of field in the close-ups (a builder up, the dock, the cabin), gaming tier only: src/fx/dof.js
+//   ?helplook=pulse           the help button's "seems stuck" look as a slow pulse, not the turning arc (to compare them)
 // For rigs: window.BM = { world, player, rider, state, dev: { gold(n), goto(place), mission(name), lockbox(), tier,
 //   skill(strand, pct, { placed }), skills(), level(place, id, { placed }), levels(), ... }, skills (the src/math/skill.js
 //   module), levels (src/levels/model.js), facts (src/math/facts.js), feedback (src/feedback.js),
@@ -25,7 +26,9 @@
 import * as THREE from 'three';
 import { watchGraphics, openGfxCheck, gfxReport } from './gfxcheck.js';   // (first: its load retries and counts go on before anything loads)
 import { FB } from './feedback.js';
-import { flagCard, rateJob, menuRows } from './ui/flag.js';   // (first: its key guard for the note boxes goes on before any of the game's key listeners)
+import { flagCard, rateJob, menuRows, questionNow } from './ui/flag.js';   // (first: its key guard for the note boxes goes on before any of the game's key listeners)
+import { makeHelpMenu, HELPQ } from './ui/helpmenu.js';
+import { makeStuckWatch, howtoLink, HOWTO, buildSummary, LINKS, videoJob } from './helpplan.js';
 import './curvetangent.js';   // (the roads' per-frame curve sums without the garbage)
 import { makeWorld } from './world.js';
 import { chooseTier, wantAntialias } from '../world/quality.js';
@@ -63,7 +66,7 @@ import { makeDeliveryJob } from './missions/delivery.js';
 import { makeWagonJob } from './missions/wagonjob.js';
 import { makeLootJob } from './missions/loot.js';
 import { makeShops, makePanel, boxTier, PRICES, PAY } from './shop.js';
-import { makeHob, HOB } from './hob.js';
+import { makeHob, HOB, hobTip } from './hob.js';
 import { makeJobFolk } from './jobfolk.js';
 import { howdyCamera, hideHowdies } from './ui/howdy.js';
 import { makeTownPeople, addHomes } from './townpeople.js';
@@ -71,7 +74,9 @@ import { makeStage } from './stage.js';
 import { makeSaloonFolk } from './saloonfolk.js';
 import { makeGraphTeacher } from './graphteacher.js';
 import { makeBandCard } from './ui/bandcard.js';
-import { makeJobsBoard } from './jobsboard.js';
+import { makeJobsBoard, BOARD_JOBS, picURL } from './jobsboard.js';
+import { examplesOf } from './levels/places.js';
+import { LOADS } from '../labs/bridge/frame.js';
 import { makeTraffic } from './traffic.js';
 import { roadCurve } from './wagon.js';
 import { makeCabin } from './cabin/cabin.js';
@@ -148,8 +153,8 @@ const hud = makeHud($('hud-root'), {
   onPrompt: () => { if (paused) return; if (door) openCounter(door.id); else if (I) I.press('KeyE'); },
   onTouch: (code) => { if (I) I.press(code); },
 });
-// "Confusing?" on the field jobs' question card (the round-up, the farm jobs, the wagon's gang): only while a question
-// is up there (not on a travel card, nor on "Wave done!")
+// the field jobs' question card (the round-up, the farm jobs, the wagon's gang) marked for the help menu's form (src/ui/
+// flag.js): a question only while one is up there (not on a travel card, nor on "Wave done!")
 flagCard(hud.ruleEl, () => fieldQuestion(), { show: () => !hud.ruleEl.hidden && !/\bis-(travel|job)\b/.test(hud.ruleEl.className) && !!askingJob() && askingJob() !== 'panel' });
 // THE TOOLS (src/ui/tools.js): a strip along the bottom, from any job: Work it out (the sum on screen in columns: each
 // job hands over the sum of the part it is on, src/math/jobsums.js; the store's and the deliveries' own order sum; the
@@ -199,6 +204,127 @@ const TOOLS = makeTools({ hud, rider: () => rider,
   onOpen: () => pause('tools'), onClose: () => resume('tools'),
   onTreat: () => { if (FEEDER && state === 'play' && !paused) FEEDER.feed(); }, onPet: () => { if (FEEDER && state === 'play' && !paused) FEEDER.pet(); } });   // (the apple button: a treat to the horse in reach, src/feeding.js)
 BM.tools = TOOLS; BM.camera = camera;
+
+// ── THE HELP BUTTON (src/ui/helpmenu.js; its rules: src/helpplan.js) ────────────────────────────────────────────────
+// A "?" always in the top corner while playing: beside Menu, in a builder's top bar, in the lock box's strip. Its menu
+// shows Hob's advice, an example, a skip, the old "Confusing?" form and the how-to video; it lights up gently while the
+// rider seems stuck (helpplan.js STUCK). The game waits while it is open.
+const STUCKW = makeStuckWatch();
+const JOB_NAMES = { ...Object.fromEntries(BOARD_JOBS.map((j) => [j.id, j.name])), sell: 'Selling your goods', fire: 'The cabin fire' };
+const JOB_PICS = Object.fromEntries(BOARD_JOBS.map((j) => [j.id, j.pic]));
+// where the "?" goes now, or null (the title, the pause menu, a shop's or the jobs board's panel)
+function helpHost() {
+  if (state === 'boxes' || boxOpen) return document.querySelector('.lbx:not(.out) .lbx-right');   // (a lock box: its strip)
+  if (state !== 'play' || warming) return null;
+  if (BS && BS.active) return document.querySelector('.bsite .bar.top .tools');   // (a builder: its top bar)
+  if ([...pausedBy].some((w) => w !== 'help' && w !== 'tools')) return null;
+  return hud.cornerEl;
+}
+// a builder's question card up (the miller's, the engineer's, the dock's catch card)
+const siteAsking = () => !!document.querySelector('.bsite #question:not([hidden]), .bsite #card:not([hidden])');
+let siteSince = 0;   // (when the builder up now was opened: "how long" in the form's line about the build)
+// what the build site up now has built, as numbers and as a line
+function buildInfo(job) {
+  const mins = siteSince ? Math.round((performance.now() - siteSince) / 6000) / 10 : null;
+  const n = (v) => (Array.isArray(v) ? v.length : Number.isFinite(+v) ? +v : 0);
+  try {
+    if (job === 'windmill' && WMJ && WMJ.builder) {
+      const st = WMJ.builder.handle.state(), best = st.best && typeof st.best === 'object' ? st.best.height : st.best;
+      const d = { boards: st.boards, height: Math.round(st.height * 100) / 100, W: st.W, D: st.D, full: st.full, best: Number.isFinite(best) ? best : null, mins };
+      return { data: d, summary: buildSummary('windmill', d) };
+    }
+    if (job === 'bridge' && BRJ && BRJ.builder) {
+      const st = BRJ.builder.handle.state(), r = BRJ.rating();
+      const d = { boards: st.boards, deck: !!st.deck, planks: n(st.planks), carries: r >= 0 && LOADS[r] ? LOADS[r].short : null, next: LOADS[r + 1] ? LOADS[r + 1].short : null, mins };
+      return { data: d, summary: buildSummary('bridge', d) };
+    }
+    if (job === 'fishing' && FJ && FJ.builder) {
+      const st = FJ.builder.handle.state(), d = { kept: n(st.kept), back: n(st.back), mins };
+      return { data: d, summary: buildSummary('fishing', d) };
+    }
+  } catch (e) { console.warn('help: the build could not be read', e); }
+  return null;
+}
+// SKIP TO A NEW QUESTION: the jobs that can deal the question up again (the same hooks the level tool's arrows use,
+// main.js relevel; the range and the deer camera deal a new card or photo; a builder's card is dealt again; a lock box
+// slides in a new box). Not yet: the wagon's gang, the loot's slip and selling goods (the menu shows no skip there).
+const siteRedeal = () => { const s = BS && BS.session(); return !!(s && s.relevel && s.relevel()); };
+const SKIPS = { roundup: () => RU && RU.relevel(), sheep: () => SH && SH.relevel(), pigs: () => PG && PG.relevel(), store: () => SJ && SJ.relevel(),
+  delivery: () => DL && DL.relevel(), graphs: () => GT && GT.relevel(), range: () => SR && SR.skip(), deer: () => DJ && DJ.skip(),
+  windmill: siteRedeal, bridge: siteRedeal, fishing: siteRedeal, boxes: () => !!(BOX && BOX.redeal && BOX.redeal()) };
+const placeForJob = (job) => (job === 'boxes' ? 'lockbox' : placeOfJob(job));
+// the skip: a gentle miss for the level there (src/levels/model.js skipLevel: never an answer, half a miss off the
+// bar, the next one from the level below), then the job deals again. If the job can't deal again just now (an order
+// already started), the level is put back as it was: nothing happened.
+function skipNow(job) {
+  const f = SKIPS[job], place = placeForJob(job);
+  if (!f || !place || !rider) return false;
+  const lv = LEVELS.levelsOf(rider).places, had = Object.prototype.hasOwnProperty.call(lv, place), was = had ? JSON.stringify(lv[place]) : null;
+  let r = null;
+  try { r = LEVELS.skipLevel(rider, place); } catch (e) { console.error(e); return false; }
+  let ok = false;
+  try { ok = !!f(); } catch (e) { console.error(e); }
+  if (!ok) { if (had) lv[place] = JSON.parse(was); else delete lv[place]; return false; }
+  saveRider(rider);
+  STUCKW.opened();
+  FB.event('skip', { job, place, from: r.before, to: r.id, ease: r.ease });
+  return true;
+}
+// what the help menu shows, read as it opens (before the game waits: a paused game has no question up)
+function helpContext() {
+  const job = jobNow(), name = JOB_NAMES[job] || (job ? job : 'Riding about'), touch = !!(I && I.touch);
+  const aj = state === 'play' ? askingJob() : null;
+  const q = questionNow(job);
+  const up = !!q || !!BOX || (!!aj && aj !== 'panel' && aj !== 'build') || (!!(BS && BS.active) && siteAsking());
+  // Old Hob: what he is saying here (a line of his about this job in the last two minutes; with no job, any line in the
+  // last minute; on a lock box, his line on the box), and his tip for this job; at a builder, its own person's words too
+  const last = hob && hob.last ? hob.last() : null;
+  let now = last && (job ? last.job === job && last.ago < 120 : last.ago < 60) ? last.text : null;
+  if (BOX) { const e = document.querySelector('.lbx:not(.out) .lbx-hob-say'); if (e && e.textContent.trim()) now = e.textContent.trim(); }
+  let other = null;
+  try {
+    const s = BS && BS.active && BS.session(), st = s && s.handle && s.handle.state ? s.handle.state() : null;
+    if (st && st.say) other = { who: job === 'bridge' ? 'The engineer just said' : job === 'fishing' ? 'The fisherman just said' : 'The miller just said', text: st.say };
+  } catch (e) { /* (the builder's words are a help, never in the way) */ }
+  const hobPart = { now, tip: hobTip(job || null, touch), other };
+  // an example of this place's questions at the rider's level, made by the place's own question maker
+  const place = placeForJob(job), st = place && rider ? LEVELS.stateOf(rider, place) : null;
+  let seed = (Date.now() % 100000) + 1;
+  const one = () => { try { return examplesOf(place, st.id, { n: 1, seed: seed++ })[0] || null; } catch (e) { return null; } };
+  const first = st ? one() : null;
+  const example = first ? { first, next: one, lead: up ? 'A question like this one, at your level, worked out:' : 'The kind of question this job asks, at your level, worked out:' } : null;
+  // the helpers that already teach it, one press each
+  const helpers = [];
+  try { const f = JOB_SUM[workJob()]; if (up && f && f()) helpers.push({ label: 'Work it out', line: 'The sum on your screen, in columns, a step at a time', run: () => TOOLS.work() }); } catch (e) { /* */ }
+  if (state === 'play' && helpJob()) helpers.push({ label: 'Show me a picture', line: 'The help picture for the question you are on', run: () => TOOLS.help() });
+  if (BS && BS.active && (job === 'windmill' || job === 'bridge')) helpers.push({ label: 'Show me how to build', line: 'The ghost hand plays the moves again', run: () => { const s = BS.session(); if (s && s.showMe && s.showMe.play) s.showMe.play(); } });
+  if (BOX) helpers.push({ label: 'Ask Hob', line: 'Hob shows a next move on the box', run: () => { const b = document.querySelector('.lbx:not(.out) .lbx-ask'); if (b) b.click(); } });
+  const build = BS && BS.active ? buildInfo(job) : null;
+  const where = placeNow();
+  const summary = build ? build.summary : `${job ? `${name}: ` : ''}no question up just now${where ? ` (${where})` : ''}.`;
+  const link = howtoLink(job);
+  const video = link ? { link, at: Number.isFinite(HOWTO.at[videoJob(job)]) ? HOWTO.at[videoJob(job)] : null, length: HOWTO.length, name: JOB_NAMES[videoJob(job)] || 'Mathwood Valley', pic: JOB_PICS[videoJob(job)] ? picURL(JOB_PICS[videoJob(job)], 220) : null } : null;
+  return { job, name, q: q || (up && aj === job ? { job, text: name } : null), hob: hobPart, example, helpers, workOn: (s) => TOOLS.workOn(s),
+    skip: up && SKIPS[job] ? () => skipNow(job) : null, summary, build: build ? build.data : null, video, links: LINKS, place: where, tier: W ? W.tier : quality.tier };
+}
+const HELP = makeHelpMenu({ host: helpHost, context: helpContext, watch: STUCKW, look: Q.get('helplook') === 'pulse' ? 'pulse' : HELPQ.look,
+  onOpen: () => { if (TOOLS.busy()) TOOLS.close(); if (state === 'play') pause('help'); },
+  onClose: () => { if (state === 'play') resume('help'); } });
+// the "seems stuck" clock: twice a second, counted only while the game runs (not under the pause menu, a shop's panel,
+// a tool or the help itself; a lock box and a builder count: they are questions)
+let helpT = performance.now();
+setInterval(() => {
+  const t = performance.now(), dt = Math.min(1, (t - helpT) / 1000); helpT = t;
+  if (BS && BS.active) { if (!siteSince) siteSince = t; } else siteSince = 0;
+  if (!document.hidden && (state === 'play' || state === 'boxes') && ![...pausedBy].some((w) => w !== 'box')) {
+    const building = !!(BS && BS.active && (BS.active.id === 'windmill' || BS.active.id === 'bridge'));
+    let progress = null;
+    if (building) { try { const s = BS.session(), st = s && s.handle && s.handle.state(); progress = st ? `${st.boards}|${st.W ?? st.S}|${st.D}|${st.deck ? 1 : 0}|${st.phase}` : null; } catch (e) { progress = null; } }
+    const aj = state === 'play' ? askingJob() : null;
+    STUCKW.tick(dt, { asking: !!BOX || (!!aj && aj !== 'panel' && aj !== 'build') || (!!(BS && BS.active) && siteAsking()), building, progress });
+  }
+  HELP.update();
+}, 500);
 
 // ── LOADING: the world, the people and the cattle, all at once ─────────────────────────────────────────────────────
 let W = null, folk = null, animals = null, I = null;
@@ -957,6 +1083,7 @@ const deviceType = () => { try { const m = Math.min(screen.width, screen.height)
 FB.context = () => ({ job: jobNow(), rider: riderNo(), tier: W ? W.tier : quality.tier, place: placeNow(), state });
 // every answer as the skill model records it (src/math/skill.js onRecord: the one place all the jobs' answers land)
 SKILLS.onRecord((list, out, opts) => {
+  if (list[0]) STUCKW.answered(list[0].strand, !!opts.right);   // (the help button's "seems stuck": wrong answers in a row on one kind)
   list.forEach((x, i) => { const r = out[x.strand] || {}; FB.answered({ strand: x.strand, at: x.at ?? r.before, right: !!opts.right, ms: i === 0 && opts.sitDown ? opts.ms : null,
     level: r.level, before: r.before, placed: r.placed, justPlaced: r.justPlaced, also: i > 0 }); });
 });
@@ -1531,6 +1658,10 @@ Object.assign(BM, {
   dev, hud, title: T, camera, renderer, screenOf, prices: PRICES, loading, skills: SKILLS,
   levels: LEVELS, facts: FACTS,   // (src/levels/model.js: each place's ladder and the rider's level there; src/math/facts.js: the times facts)
   feedback: FB,   // (src/feedback.js: FB.state() says the device id, the switch and what was sent)
+  // the help button (src/ui/helpmenu.js): its menu, the stuck watch, what it would show now, the skip; dev.video(id,
+  // { at, length }) puts a video id in (for pictures of the video part before the real one is uploaded)
+  help: { menu: HELP, watch: STUCKW, context: helpContext, skip: skipNow, howto: HOWTO,
+    dev: { video(id, { at = null, length = null } = {}) { HOWTO.id = id || ''; HOWTO.length = length; if (at) Object.assign(HOWTO.at, at); return howtoLink(jobNow()); } } },
   fps: (seconds = 3) => new Promise((res) => { let n = 0; const a = performance.now(); const f = () => { n++; if (performance.now() - a < seconds * 1000) requestAnimationFrame(f); else res(n * 1000 / (performance.now() - a)); }; requestAnimationFrame(f); }),
   // a frame's real cost, not held to the screen's refresh: n frames drawn back to back, each waited for
   frameMs: (n = 60) => { const gl = renderer.getContext(), px = new Uint8Array(4); let worst = 0; const a = performance.now();

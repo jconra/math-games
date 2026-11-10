@@ -208,6 +208,30 @@ const JOB = { arrive: 'roundup', catch: 'roundup', miss: 'roundup', waveDone: 'r
   deliveryRoundUp: 'delivery', animal: 'home', goodsCollected: 'home', goodsSold: 'store', banditCatch: 'wagon', banditMiss: 'wagon', banditLoop: 'wagon', banditsDone: 'wagon', boxGrabbed: 'wagon',
   deerArrive: 'deer', deerSpooked: 'deer', deerSetup: 'deer', deerFlip: 'deer', deerRight: 'deer', deerWrong: 'deer', deerDone: 'deer',
   lootShare: 'loot', lootMiss: 'loot', lootRight: 'loot', lootGuard: 'loot', lootFled: 'loot', lootCamp: 'loot' };
+// HIS TIP FOR EACH JOB: what the help menu's "Old Hob says" shows (src/ui/helpmenu.js), under the last thing he said
+// there. [with a mouse and keys, on a touch screen], or one line for both. His own lines where he has one; the ones
+// written for the help menu say what that job's own helpers and people already teach.
+export const TIPS = {
+  roundup: [LINES.arrive, LINES.arriveTouch],
+  sheep: [LINES.farmArrive, LINES.farmArriveTouch],
+  pigs: LINES.pigsArrive,
+  store: LINES.storeStart,
+  sell: "Read what Ezra offers for your goods, work out the money, then pick the coin.",
+  delivery: LINES.deliveryWork,
+  wagon: ["The card up top says the gang's number. Rope only the riders wearing a number in that gang: point at one and click, or press F.",
+    "The card up top says the gang's number. Tap only the riders wearing a number in that gang, or press Rope."],
+  deer: [LINES.deerSetup, LINES.deerSetupTouch],
+  range: ["Read Miss Opal's card first: it says which bottle to shoot. Then aim with the mouse and click, or press Space.",
+    "Read Miss Opal's card first: it says which bottle to shoot. Put your finger on that bottle and lift it to fire."],
+  loot: LINES.lootShare,
+  boxes: 'Whatever you do to one side, do to the other, and the box stays balanced. Get x on its own and it pops open. Ask Hob shows a next move.',
+  windmill: 'Posts and flat boards make squares, and a square folds over in the wind. Brace each side from the foot of one post to the top of the next: a triangle can\'t fold. Show me plays the moves again.',
+  bridge: 'A square of boards folds under a load. A brace from corner to corner makes triangles, and triangles hold. Get the frame up, lay the deck, then test her. Show me plays the moves again.',
+  fishing: 'Cast out and wait for a bite, then reel her in. Read the card about your catch before you keep it or throw it back.',
+  graphs: 'Across first, then up or down: the first number walks along the bottom, the second climbs.',
+  none: "Pick a job off the jobs board in the square, and my hoofprints show you the way. There's no rush out here.",
+};
+export const hobTip = (job, touch = false) => { const t = TIPS[job] || TIPS.none; return Array.isArray(t) ? t[touch ? 1 : 0] : t; };
 const KEEP_JOB = 5;
 const WANT_FOR = 120;    // seconds the trail leads where his line just sent the rider (the stable, after the first wave's pay)
 const NEAR_AGAIN = 180;  // seconds before Hob says something about the same place again (walking past again and again doesn't set him off each time)
@@ -238,7 +262,10 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
   let asking = null;               // (the job whose question is up where the player is, or 'panel': see B.update)
   let sentTo = null;               // (a place his line just sent the rider to: { place, until }; the trail leads there, B.wants)
   let key = null;                  // (the event being handled, so the line it says remembers where it came from)
+  let lastSaid = null;             // (the last line he said: the help menu shows it, src/ui/helpmenu.js)
   const B = {};
+  // the last line he said: { text, job (the job it is about, or null), ago (seconds) }, or null
+  B.last = () => (lastSaid ? { text: lastSaid.text, job: JOB[lastSaid.key] || null, ago: Math.max(0, now - lastSaid.at) } : null);
   // (urgent: the why of a pick just made, said even while Hob is waiting his turn)
   B.say = (text, ms, { urgent = false, first = false } = {}) => {
     if (!text) return;
@@ -246,6 +273,7 @@ export function makeHob({ W, hud, rider, scene = W.scene, I = null, voice = null
     if (speaking > 0 || (hold && !urgent) || held(key, urgent)) { if (!queue.some((q) => q.text === text)) queue[key === 'waveDone' || first ? 'unshift' : 'push']({ text, ms, key, at: now }); return; }
     const t = ms || Math.max(4500, 1800 + text.length * 55);
     hud.caption(text, t); speaking = t / 1000 + 0.4; saying = { text, ms, key, urgent };
+    lastSaid = { text, key, at: now };
     if (voice) voice.speak(text, { key });
     // (the saddle line sends the rider to the stable: the trail goes there for a while, once it is really said)
     if (text === LINES.waveSaddle || text === LINES.waveRide || text === LINES.waveDonkey || text === LINES.saddleNoHorse || text === LINES.horseNoSaddle) sentTo = { place: 'stable', until: now + WANT_FOR };
