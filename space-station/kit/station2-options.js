@@ -360,7 +360,7 @@ function scanThin(p) {
   // 3: a slim ring on a low base, bands of light round it, the table passing through it
   const R = 1.05, T = 0.24, cy = 1.2, zc = 0.9;
   const ring = p.lathe('white2', [[R - T, -0.3], [R + T, -0.3], [R + T + 0.04, -0.2], [R + T + 0.04, 0.2], [R + T, 0.3], [R - T, 0.3], [R - T - 0.03, 0.2], [R - T - 0.03, -0.2], [R - T, -0.3]], 56); put(ring, [0, cy, zc], [PI / 2, 0, 0]);
-  for (const dz of [-0.31, 0.31]) p.add('glow', put(cylinder(R - T + 0.02, 0.01, [0, 0, 0], 56), [0, cy, zc + dz], [PI / 2, 0, 0]), [0.25, 2.6, 2.3]);
+  for (const dz of [-0.31, 0.31]) p.add('glow', put(lathe2([[R - T + 0.1, 0], [R - T + 0.02, 0]], 56), [0, cy, zc + dz], [dz < 0 ? -PI / 2 : PI / 2, 0, 0]), [0.25, 2.6, 2.3]);
   p.slab('band', -0.55, 0.55, 0, 0.25, zc - 0.45, zc + 0.45, o9); p.slab('white2', -0.35, 0.35, 0.25, cy - R - T + 0.05, zc - 0.25, zc + 0.25, o9);
   pulseLine(p, -0.4, 0.4, cy + R + 0.05, zc + 0.31, 0.1);
   scanTable(p, -0.4, 3.1 + 1.3);
@@ -382,7 +382,7 @@ export function scannerOption(p, v) {
   (SCANS[v[0]] || scanRing)(p);
   p.slab('white2', -2.6, 2.6, 0, 3, -0.3, -0.05, { r: 0, cell: 9, loops: [] });   // (a stretch of the room's back wall)
   floorQuad(p, 'deck', -2.6, 2.6, -0.05, 5.2, 0.006);
-  placed(p, person, [1.6, 0, 4.4], -0.6);
+  placed(p, person, [2.0, 0, 2.7], -0.9);
 }
 
 // ── THE WALL SOCKETS where the Miner's canisters are emptied into the crusher: a stretch of the hangar's wall with
@@ -390,7 +390,7 @@ export function scannerOption(p, v) {
 function sockCollar(p, x, y, used) {
   // 1: a round collar with four clamps and a ring of light (green: in use; amber: empty, its shutter shut)
   p.lathe('gun', [[CAN_R + 0.06, 0], [CAN_R + 0.3, 0], [CAN_R + 0.3, 0.18], [CAN_R + 0.2, 0.26], [CAN_R + 0.06, 0.26], [CAN_R + 0.06, 0]], 36).rotateX(PI / 2).translate(x, y, 0);
-  p.add('glow', put(cylinder(CAN_R + 0.17, 0.01, [0, 0, 0], 36), [x, y, 0.27], [PI / 2, 0, 0]), used ? 'green' : 'amber');
+  p.add('glow', put(lathe2([[CAN_R + 0.2, 0], [CAN_R + 0.12, 0]], 36), [x, y, 0.27], [PI / 2, 0, 0]), used ? 'green' : 'amber');
   for (let k = 0; k < 4; k++) { const a = PI / 4 + k * PI / 2; p.box('yellow', [0.16, 0.2, 0.3], [x + Math.cos(a) * (CAN_R + 0.12), y + Math.sin(a) * (CAN_R + 0.12), 0.32], [0, 0, a], o9); }
   if (!used) { p.add('solid', put(cylinder(CAN_R + 0.06, 0.03, [0, 0, 0], 36), [x, y, 0.06], [PI / 2, 0, 0]), 'black'); for (let k = 0; k < 6; k++) p.box('dark', [0.04, CAN_R * 1.9, 0.02], [x, y, 0.08], [0, 0, k * PI / 6], { r: 0.003, cell: 9, loops: [] }); }
 }

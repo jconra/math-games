@@ -13,6 +13,8 @@
 //              room's walking room and sight lines can be judged ('box WxHxD', 'cyl RxH' standing, 'cylx RxL' lying)
 //   hood3      the medic ship's triage hood (kit/shipparts/cabin/medical.js, imported) under a station room's 3 m ceiling
 //   pulse      the medical mark, the medic ship's teal pulse line, as a wall-kit item ('short' 1.6 m, 'long' 3.2 m)
+//   skin       plain outer plating: the outside of a wall (or a roof) where a window sees it, since a room's own wall
+//              panels are built to be seen from inside only ('3 m', '7 m', '8 m', '11 m' high; 'roof' lies flat)
 import { WALL_FACE as WF, ROOM_H as H } from './grid.js';
 import { MeshData, plane, put, fixWinding, cylinder } from './geo.js';
 import { floorQuad, backing, slabRow, hatch, G, Z0 } from './shell.js';
@@ -181,7 +183,29 @@ export function standIn(p, v) {
 // the triage hood: a FREE piece standing on the deck, its rods up to a 3 m ceiling
 export function hood3(p) { triageHood(p, { ceil: H }); }
 // the mark: a wall-kit item, its middle at y = 0
-export function pulse(p, v) { const L = v === 'long' ? 3.2 : 1.6; pulseLine(p, -L / 2, L / 2, 0, 0.004, 0.22); }
+export function pulse(p, v) {
+  const L = v === 'long' ? 3.2 : 1.6;
+  p.slab('black', -L / 2 - 0.12, L / 2 + 0.12, -0.24, 0.24, 0, 0.025, { r: 0.02, cell: 9, loops: [] });
+  pulseLine(p, -L / 2, L / 2, 0, 0.03, 0.26);
+}
+
+// ── plain outer plating ──────────────────────────────────────────────────────────────────────────────────────────
+// An EDGE piece facing out of the station (its turn is the way out): its face on the wall line, nothing behind it (the
+// room's own panels stand behind, on the room's side). Grey plates with a dark seam every 1.5 m and a dark rib at
+// each end. 'roof': a CELL piece, a flat 2 x 2 m plate facing up, its top at y = 0 (stood on a room's roof).
+export function skin(p, v) {
+  const flat = { r: 0, cell: 9, loops: [] }, thin = { r: 0, skip: ['-z'], cell: 9, loops: [] };
+  if (v === 'roof') {
+    p.slab('grey', -1, 1, -0.05, 0, -1, 1, { ...flat, skip: ['-y'] });
+    p.slab('band', -1, 1, 0, 0.012, 0.97, 1, flat); p.slab('band', 0.97, 1, 0, 0.012, -1, 0.97, flat);
+    return;
+  }
+  const h = parseFloat(v);
+  p.slab('grey2', -1, 1, 0, h, -0.03, 0, thin);
+  for (let y = 1.5; y < h - 0.1; y += 1.5) p.slab('band', -1, 1, y - 0.02, y + 0.02, 0, 0.008, flat);
+  p.slab('band', 0.94, 1, 0, h, 0, 0.03, flat);
+  p.slab('dark', -1, 1, h - 0.12, h, 0, 0.05, flat);
+}
 
 export const STATION2 = {
   baydoor2: { name: 'Big hangar door', group: 'Hangar', at: 'point', variants: ['open'], foot: [24, 11, 5.5], build: bayDoor2 },
@@ -192,6 +216,7 @@ export const STATION2 = {
   hatchshut: { name: 'Sealed hatch', group: 'Shell', at: 'point', variants: ['wide'], foot: [4, 3, 0.6], build: hatchShut },
   board: { name: 'Crew board', group: 'Wall kit', at: 'wall', variants: ['medic', 'mining', 'explore', 'medic big', 'mining big', 'explore big'], foot: [2.6, 1.8, 0.1], build: board },
   hood3: { name: 'Triage hood (3 m ceiling)', group: 'Medical', at: 'free', variants: ['hood'], foot: [1.2, 1.0, 1.9], build: hood3 },
+  skin: { name: 'Outer plating', group: 'Big rooms', at: 'edge', variants: ['3 m', '7 m', '8 m', '11 m', 'roof'], foot: [2, 11, 0.1], build: skin },
   pulse: { name: 'Medical mark (pulse line)', group: 'Medical', at: 'wall', variants: ['short', 'long'], foot: [3.2, 0.3, 0.02], build: pulse },
   ...OPTIONS2,
 };
