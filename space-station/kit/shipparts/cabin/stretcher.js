@@ -71,7 +71,7 @@ export function stowedStretcher(p, o = {}) {
   const L = o.len ?? 1.85, y0 = o.y0 ?? 0.18, W = o.w ?? 0.5;
   // (folded: its top frame down to just over its base frame, the scissor lying flat between; turned up on end, its
   // wheels to the wall)
-  placeInto(p, part(ambulanceStretcher, { len: L, w: W, frame: 0.26, back: 0, rails: 'down', legs: 'lift', straps: true }), { at: [0, y0 + L / 2 + 0.14, FACE + 0.01], rot: [PI / 2, 0, 0] });
-  for (const y of [y0 + 0.4, y0 + L - 0.2]) { const g = new THREE.BoxGeometry(W + 0.1, 0.05, 0.36); g.translate(0, y, FACE + 0.18); add(p, 'gun', g); }
+  placeInto(p, part(ambulanceStretcher, { len: L, w: W, frame: 0.2, back: 0, rails: 'down', legs: 'lift', straps: true }), { at: [0, y0 + L / 2 + 0.14, FACE + 0.005], rot: [PI / 2, 0, 0] });
+  for (const y of [y0 + 0.4, y0 + L - 0.2]) { const g = new THREE.BoxGeometry(W + 0.1, 0.05, 0.3); g.translate(0, y, FACE + 0.15); add(p, 'gun', g); }
   return p;
 }

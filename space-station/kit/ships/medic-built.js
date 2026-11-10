@@ -308,7 +308,9 @@ function mdBay(p, variant) {
     if (cabin) polyTo(acc, [V3(sx * CABIN_WALL, y0, oa), V3(sx * RAMP.face, y0, oa), V3(sx * RAMP.face, y0, ob), V3(sx * CABIN_WALL, y0, ob)], V3(0, 1, 0), PAL.deck);
     for (let i = 0; i < n; i++) { const z0 = oa + (ob - oa) * i / n, z1 = oa + (ob - oa) * (i + 1) / n; polyTo(acc, [V3(x0, y0 + 0.004, z0), V3(x1, y0 + 0.004, z0), V3(x1, y0 + 0.004, z1), V3(x0, y0 + 0.004, z1)], V3(0, 1, 0), i % 2 ? PAL.black : PAL.yellow); }
   }
-  if (cabin) { acc.flush(p); return p; }
+  // (with the cabin: a light from each lintel's strip down onto the ramp standing in the opening, so from inside it reads
+  // as a ramp, its cleats and hazard edges, not a dark wall)
+  if (cabin) { acc.flush(p); for (const sx of [1, -1]) p.light([sx * (CABIN_WALL + 0.12), RAMP.head - DECK - 0.05, (oa + ob) / 2], 0.9, [1.2, 0.95, 0.6], [sx, -0.6, 0], 2.2); return p; }
   // the light strips: two across the ceiling, and one over each opening's head inside (his amber strip)
   for (const z of [-0.95, 0.75]) polyTo(acc, [V3(-1.9, y1 - 0.006, z - 0.06), V3(1.9, y1 - 0.006, z - 0.06), V3(1.9, y1 - 0.006, z + 0.06), V3(-1.9, y1 - 0.006, z + 0.06)], V3(0, -1, 0), GLOW.bay, 'glow');
   // the inner doors: one in each end wall, on the middle line (a dark panel with a lit strip over it and a seam)
@@ -402,6 +404,14 @@ function rampSection(a, s, u0, u1, isA) {
     for (const [za, zb] of [[z0, z0 + e], [z1 - e, z1]]) poly([[xr, ua, za], [xr, ub, za], [xr, ub, zb], [xr, ua, zb]], V3(-s, 0, 0), col);
   }
   for (let u = u0 + 0.6; u < u1 - 0.2; u += 0.6) poly([[xr - s * 0.001, u - 0.01, z0 + e], [xr - s * 0.001, u + 0.01, z0 + e], [xr - s * 0.001, u + 0.01, z1 - e], [xr - s * 0.001, u - 0.01, z1 - e]], V3(-s, 0, 0), PAL.dark);
+  // (the cleats across the tread, every 0.3 m: dark bars standing 2 cm proud, for grip going up and down; seen from
+  // inside the bay, the ramp standing up is a ramp, not a blank wall)
+  const xc = xt - s * 0.02;
+  for (let u = u0 + 0.15; u < u1 - 0.08; u += 0.3) {
+    poly([[xc, u - 0.02, z0 + e], [xc, u + 0.02, z0 + e], [xc, u + 0.02, z1 - e], [xc, u - 0.02, z1 - e]], V3(-s, 0, 0), PAL.metal);
+    poly([[xt, u + 0.02, z0 + e], [xc, u + 0.02, z0 + e], [xc, u + 0.02, z1 - e], [xt, u + 0.02, z1 - e]], V3(0, 1, 0), PAL.darkEdge);
+    poly([[xt, u - 0.02, z0 + e], [xt, u - 0.02, z1 - e], [xc, u - 0.02, z1 - e], [xc, u - 0.02, z0 + e]], V3(0, -1, 0), PAL.darkEdge);
+  }
   // the outside: on A white in a graphite frame, two panel seams across it and a hazard band by the hinge; on B graphite
   // (the ramp's underside)
   const f = 0.12;

@@ -127,35 +127,37 @@ export function armLamp(p, o = {}) {
   // the head: a shallow dome, its rim; under it the disc, throwing its beam down onto the bed
   add(p, 'white2', aim(spun([[0.19, 0.0], [0.185, 0.03], [0.15, 0.075], [0.08, 0.105], [0.001, 0.11]], { seg: 12, caps: [false, false] }), [hx, hy, hz]));
   add(p, 'black', aim(spun([[0.16, -0.014], [0.19, -0.012], [0.19, 0.0]], { seg: 12, caps: [false, false] }), [hx, hy, hz]));
-  downlight(p, { at: [hx, hy - 0.012 + 0.022, hz], r: 0.13, i: o.i ?? 0.55, reach: 2.2, drop: dropTo, pool: o.pool ?? 0.45, poolDrop: 0.6, poolReach: 1.6, spread: 0.3, beam: o.beam ?? 1, color: [1, 0.98, 0.94] });
+  downlight(p, { at: [hx, hy - 0.012 + 0.022, hz], r: 0.13, i: o.i ?? 0.55, reach: 2.2, drop: dropTo, pool: o.pool ?? 0.45, poolDrop: 0.6, poolReach: 1.6, spread: 0.2, beam: o.beam ?? 0.8, color: [1, 0.98, 0.94] });
   return p;
 }
 
 // ── the strap-webbing pouch panels ──────────────────────────────────────────────────────────────────────────────
 // what shows over a row's strap in each sort of panel: a list of [thing, look]; drawn in turn across the row
+const RED = { c: '#b8352a', r: 0.6, m: 0, w: 0.3 }, GREEN = { c: '#3f8a4a', r: 0.6, m: 0, w: 0.3 };
 const STOCK = {
-  airway: [['bulb', BLUE], ['packet', PLASTIC], ['tube', 'white']],
-  fluids: [['bag', PLASTIC], ['bag', PLASTIC], ['tube', 'white']],
-  meds: [['bottle', 'white'], ['bottle', AMBER], ['bottle', 'white']],
-  wound: [['packet', 'white'], ['roll', 'white'], ['packet', 'white']],
-  diag: [['device', DEVICE], ['roll', CASE], ['device', DEVICE]],
-  tools: [['scissors', 'rail'], ['scissors', 'rail'], ['tube', 'rail']],
-  resp: [['mask', 'white'], ['bulb', BLUE], ['mask', 'white']],
-  monitor: [['device', DEVICE], ['roll', CASE], ['device', DEVICE]],
-  misc: [['can', 'white'], ['packet', PLASTIC], ['bottle', AMBER]],
-  masks: [['mask', 'white'], ['mask', 'white'], ['mask', 'white']],
-  o2: [['o2', TANK], ['o2', TANK]],
+  airway: [['bulb', BLUE], ['packet', PLASTIC], ['tube', 'white'], ['bag', PLASTIC]],
+  fluids: [['bag', PLASTIC], ['tube', 'white'], ['bag', PLASTIC], ['packet', 'white']],
+  meds: [['bottle', 'white'], ['bottle', AMBER], ['box', 'white'], ['bottle', 'white']],
+  wound: [['packet', 'white'], ['roll', 'white'], ['packet', PLASTIC], ['roll', 'white']],
+  diag: [['device', DEVICE], ['roll', CASE], ['tube', 'white'], ['box', BLUE]],
+  tools: [['scissors', 'rail'], ['tube', 'rail'], ['scissors', 'rail'], ['packet', 'white']],
+  resp: [['mask', 'white'], ['bulb', BLUE], ['mask', 'white'], ['tube', 'white']],
+  monitor: [['device', DEVICE], ['roll', CASE], ['box', GREEN], ['tube', 'white']],
+  misc: [['can', 'white'], ['packet', PLASTIC], ['bottle', AMBER], ['box', RED]],
+  masks: [['mask', 'white'], ['mask', 'white'], ['mask', 'white'], ['mask', 'white']],
+  o2: [['o2', TANK], ['o2', TANK], ['o2', TANK]],
 };
 function thing(p, kind, look, x, y, z) {
   if (kind === 'bottle') { cyl(p, look, 0.022, 0.1, [x, y + 0.05, z], null, 5); box(p, 'black', x - 0.012, x + 0.012, y + 0.1, y + 0.12, z - 0.004, z + 0.012); }
-  else if (kind === 'packet') box(p, look, x - 0.04, x + 0.04, y, y + 0.13, z - 0.006, z + 0.006);
-  else if (kind === 'bag') { box(p, look, x - 0.05, x + 0.05, y, y + 0.16, z - 0.012, z + 0.012); box(p, BLUE, x - 0.035, x + 0.035, y + 0.09, y + 0.12, z + 0.012, z + 0.014); }
+  else if (kind === 'packet') box(p, look, x - 0.03, x + 0.03, y, y + 0.13, z - 0.006, z + 0.006);
+  else if (kind === 'box') box(p, look, x - 0.028, x + 0.028, y, y + 0.1, z - 0.018, z + 0.018);
+  else if (kind === 'bag') { box(p, look, x - 0.032, x + 0.032, y, y + 0.16, z - 0.012, z + 0.012); box(p, BLUE, x - 0.024, x + 0.024, y + 0.09, y + 0.12, z + 0.012, z + 0.014); }
   else if (kind === 'tube') cyl(p, look, 0.009, 0.15, [x, y + 0.075, z], null, 5);
   else if (kind === 'roll') cyl(p, look, 0.03, 0.08, [x, y + 0.04, z], null, 6);
   else if (kind === 'device') { box(p, look, x - 0.04, x + 0.04, y, y + 0.12, z - 0.02, z + 0.02); box(p, 'dark', x - 0.028, x + 0.028, y + 0.07, y + 0.105, z + 0.02, z + 0.023); }
   else if (kind === 'scissors') { for (const s of [-1, 1]) { const g = new THREE.BoxGeometry(0.012, 0.15, 0.006); g.rotateZ(s * 0.18); g.translate(x, y + 0.07, z); add(p, look, g); } box(p, 'black', x - 0.03, x + 0.03, y + 0.12, y + 0.16, z - 0.005, z + 0.005); }
   else if (kind === 'bulb') { cyl(p, look, 0.034, 0.11, [x, y + 0.055, z], null, 6); cyl(p, 'black', 0.02, 0.03, [x, y + 0.125, z], null, 5); }
-  else if (kind === 'mask') { const g = new THREE.CylinderGeometry(0.022, 0.04, 0.045, 7, 1); g.rotateX(-PI / 2); g.scale(1, 1.25, 1); g.translate(x, y + 0.08, z + 0.02); add(p, look, g); }
+  else if (kind === 'mask') { const g = new THREE.CylinderGeometry(0.02, 0.034, 0.04, 7, 1); g.rotateX(-PI / 2); g.scale(1, 1.25, 1); g.translate(x, y + 0.08, z + 0.02); add(p, look, g); box(p, 'black', x - 0.03, x + 0.03, y + 0.075, y + 0.085, z - 0.004, z + 0.004); }
   else if (kind === 'can') { cyl(p, look, 0.024, 0.13, [x, y + 0.065, z], null, 5); box(p, 'red', x - 0.01, x + 0.01, y + 0.13, y + 0.155, z - 0.01, z + 0.01); }
   else if (kind === 'o2') { cyl(p, look, 0.034, 0.2, [x, y + 0.1, z], null, 6); cyl(p, SHOULDER, 0.026, 0.04, [x, y + 0.215, z], null, 6); box(p, 'black', x - 0.01, x + 0.01, y + 0.235, y + 0.265, z - 0.01, z + 0.01); }
 }
@@ -166,12 +168,13 @@ export function pouchPanel(p, o = {}) {
   for (const s of [-1, 1]) box(p, WEB, x + s * w * 0.27 - 0.016, x + s * w * 0.27 + 0.016, y0 + 0.02, y0 + h - lab - 0.01, FACE + 0.012, FACE + 0.02);
   // the label: a white strip across its top, the word in dark segment lettering
   if (o.label) { box(p, LABEL, x - w / 2 + 0.025, x + w / 2 - 0.025, y0 + h - lab + 0.004, y0 + h - 0.012, FACE + 0.012, FACE + 0.02); segText(p, o.label, { h: 0.026, at: [x, y0 + h - lab / 2 - 0.004, FACE + 0.0205], look: 'black', gap: 0.007 }); }
-  // the rows: the things standing in each pocket, its strap in front of them
-  const S = STOCK[o.kind] || STOCK.misc, rh = (h - lab - 0.03) / rows;
+  // the rows: the things packed in each pocket (each row starting further along the stock, so no two rows match), and
+  // the pocket's strap in front of them, deep enough to tuck them in
+  const S = STOCK[o.kind] || STOCK.misc, rh = (h - lab - 0.03) / rows, n = S.length;
   for (let r = 0; r < rows; r++) {
-    const yb = y0 + 0.02 + r * rh, ys = yb + rh * 0.12, n = S.length;
-    S.forEach(([k, look], i) => thing(p, k, look, x - w / 2 + (i + 0.5) * w / n, ys, z + 0.03));
-    box(p, WEB, x - w / 2 + 0.01, x + w / 2 - 0.01, ys + 0.005, ys + 0.055, FACE + 0.012, z + 0.058);
+    const yb = y0 + 0.02 + r * rh, ys = yb + rh * 0.1;
+    for (let i = 0; i < n; i++) { const [k, look] = S[(i + r * 2) % n]; thing(p, k, look, x - w / 2 + (i + 0.5) * w / n, ys + ((i * 7 + r * 3) % 4) * 0.008, z + 0.03); }
+    box(p, WEB, x - w / 2 + 0.01, x + w / 2 - 0.01, ys - 0.005, ys + 0.075, FACE + 0.012, z + 0.058);
   }
   return p;
 }
@@ -199,8 +202,8 @@ export function o2Tank(p, o = {}) {
   cyl(p, 'rail', 0.03, 0.012, [x, h + 0.075, z], null, 8);
   cyl(p, 'white', 0.028, 0.02, [x, h + 0.03, z + 0.04], [PI / 2, 0, 0], 8);
   // its strap to the wall: a band round it, a plate on the wall
-  add(p, WEB, spun([[r + 0.006, h * 0.62], [r + 0.006, h * 0.62 + 0.045]], { seg: 6, caps: [false, false] }), at);
-  box(p, 'black', x - 0.07, x + 0.07, h * 0.62 - 0.01, h * 0.62 + 0.055, FACE, FACE + 0.015);
+  add(p, 'yellow', spun([[r + 0.006, h * 0.62], [r + 0.006, h * 0.62 + 0.045]], { seg: 6, caps: [false, false] }), at);
+  box(p, 'rail', x - 0.07, x + 0.07, h * 0.62 - 0.01, h * 0.62 + 0.055, FACE, FACE + 0.015);
   segText(p, 'O2', { h: 0.06, at: [x, h * 0.42, z + r + 0.002], look: 'white2', gap: 0.012 });
   return p;
 }
@@ -215,8 +218,10 @@ export function wallStretcher(p, o = {}) {
   }
   box(p, MATTRESS, x - w / 2 + 0.04, x + w / 2 - 0.04, y0 + 0.16, y1 - 0.16, z + 0.005, z + 0.045);
   for (const y of [y0 + 0.5, (y0 + y1) / 2, y1 - 0.5]) { box(p, WEB, x - w / 2 + 0.03, x + w / 2 - 0.03, y - 0.025, y + 0.025, z + 0.045, z + 0.05); box(p, 'rail', x + w / 2 - 0.14, x + w / 2 - 0.08, y - 0.03, y + 0.03, z + 0.05, z + 0.056); }
-  // the two clips holding it to the wall
-  for (const y of [y0 + 0.3, y1 - 0.3]) box(p, 'gun', x - w / 2 - 0.02, x + w / 2 + 0.02, y - 0.03, y + 0.03, FACE, z + 0.052);
+  // the two clips holding it to the wall, and a hook bar over its top with its two hooks (light metal)
+  for (const y of [y0 + 0.3, y1 - 0.3]) box(p, 'rail', x - w / 2 - 0.02, x + w / 2 + 0.02, y - 0.03, y + 0.03, FACE, z + 0.052);
+  box(p, 'rail', x - w / 2 + 0.02, x + w / 2 - 0.02, y1 + 0.02, y1 + 0.05, FACE, FACE + 0.03);
+  for (const s of [-1, 1]) box(p, 'rail', x + s * (w / 2 - 0.05) - 0.012, x + s * (w / 2 - 0.05) + 0.012, y1 - 0.04, y1 + 0.05, FACE + 0.02, z + 0.03);
   return p;
 }
 
@@ -311,10 +316,17 @@ export function hazmatLocker(p, o = {}) {
   glowStrip(p, sw - 0.06, [sx, gy1 - 0.02, zi + 0.004], [0, 0, 0], { wid: 0.01, i: 0.14, dir: [0, -0.7, 0.7], reach: 1.2 });
   for (const [a0, a1, b0, b1] of [[gx0 - 0.02, gx1 + 0.02, gy0 - 0.02, gy0], [gx0 - 0.02, gx1 + 0.02, gy1, gy1 + 0.02], [gx0 - 0.02, gx0, gy0, gy1], [gx1, gx1 + 0.02, gy0, gy1]]) box(p, 'black', a0, a1, b0, b1, zf, zf + 0.014);
   p.glass(gx1 - gx0, gy1 - gy0, [sx, (gy0 + gy1) / 2, zf + 0.008]);
+  glints(p, gx0, gx1, gy0, gy1, zf + 0.0095);
   box(p, 'black', gx1 - 0.05, gx1 - 0.03, 0.95, 1.15, zf + 0.012, zf + 0.03);
   box(p, LABEL, gx0, gx1, gy1 + 0.04, gy1 + 0.11, d - 0.004, d + 0.002);
   segText(p, 'HAZMAT', { h: 0.034, at: [sx, gy1 + 0.075, d + 0.0025], look: 'black', gap: 0.009 });
   return p;
+}
+
+// two pale streaks across a pane of glass (a reflection's glint, so the glass reads as glass)
+export function glints(p, x0, x1, y0, y1, z) {
+  const w = x1 - x0, h = y1 - y0;
+  for (const [a, b, t] of [[0.15, 0.55, 0.012], [0.32, 0.62, 0.005]]) { const g = lineGeo([[x0 + w * a, y0 + h * (b + 0.25)], [x0 + w * (a + 0.4), y0 + h * b]], t, z); if (g) add(p, { c: '#d6e2e8', r: 0.1, m: 0.3, w: 0.05 }, g); }
 }
 
 // ── the x-ray viewer ────────────────────────────────────────────────────────────────────────────────────────────

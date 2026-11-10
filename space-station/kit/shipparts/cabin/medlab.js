@@ -23,14 +23,15 @@ import { FACE, NAVY } from './ship.js';
 import { screen, glowStrip, FLAT } from './bits.js';
 import { spun } from './round.js';
 import { segText } from './segtext.js';
-import { wallStretcher, BRIGHT_YELLOW, ORANGE, LABEL, DEVICE, PLASTIC } from './medbay.js';
+import { wallStretcher, glints, BRIGHT_YELLOW, ORANGE, LABEL, DEVICE, PLASTIC } from './medbay.js';
 
 const PI = Math.PI;
 const box = (p, look, x0, x1, y0, y1, z0, z1) => p.slab(look, Math.min(x0, x1), Math.max(x0, x1), Math.min(y0, y1), Math.max(y0, y1), Math.min(z0, z1), Math.max(z0, z1), { r: 0, cell: 9, loops: [] });
 const cyl = (p, look, r, h, at, seg = 8) => { const g = new THREE.CylinderGeometry(r, r, h, seg, 1); g.translate(...at); return add(p, look, g); };
 // a plan with its front corners cut (its back on the wall at FACE), as a FLAT prism from y0 to y1
 const planOf = (x0, x1, d, cl, cr) => { const P = [[x0, FACE], [x1, FACE]]; if (cr) P.push([x1, d - cr], [x1 - cr, d]); else P.push([x1, d]); if (cl) P.push([x0 + cl, d], [x0, d - cl]); else P.push([x0, d]); return P.map(([a, b]) => [a, -b]); };
-const BOXES = [{ c: '#d9dcd8', r: 0.7 }, { c: '#7fb8b0', r: 0.6 }, { c: '#e8a050', r: 0.6 }, { c: '#9cb4d0', r: 0.6 }, { c: '#e6e2d2', r: 0.75 }, { c: '#c86a5a', r: 0.6 }];
+// (medicine boxes: mostly white, a few in colour)
+const BOXES = [{ c: '#e2e2dc', r: 0.7 }, { c: '#d9dcd8', r: 0.7 }, { c: '#e6e2d2', r: 0.75 }, { c: '#9cb4d0', r: 0.6 }, { c: '#e2e2dc', r: 0.7 }, { c: '#7fb8b0', r: 0.6 }, { c: '#e8a050', r: 0.6 }];
 const rng = (seed) => { let s = seed; return () => { s = (s * 16807) % 2147483647; return s / 2147483647; }; };
 
 // ── the drugs cabinet ───────────────────────────────────────────────────────────────────────────────────────────
@@ -45,7 +46,8 @@ export function drugsCabinet(p, o = {}) {
   for (let s = 0; s < n; s++) {
     const y = gy0 + s * sh;
     box(p, 'white2', gx0, gx1, y, y + 0.012, zf, zf + 0.012);
-    for (let x = gx0 + 0.02; x < gx1 - 0.06;) { const bw = 0.04 + R() * 0.06, bh = 0.07 + R() * (sh - 0.12); if (R() > 0.15) box(p, BOXES[Math.floor(R() * BOXES.length)], x, Math.min(gx1 - 0.02, x + bw), y + 0.012, y + 0.012 + bh, zf + 0.001, zf + 0.008); x += bw + 0.012; }
+    // (boxes lying on their sides, wider than tall, stacked two high here and there; a white bottle now and then)
+    for (let x = gx0 + 0.02; x < gx1 - 0.06;) { const bw = 0.06 + R() * 0.05, bh = 0.04 + R() * 0.05, x1 = Math.min(gx1 - 0.02, x + bw), k = R(); if (k > 0.82) { cyl(p, 'white', 0.018, 0.09, [x + 0.02, y + 0.057, zf + 0.006], 5); x += 0.05; continue; } box(p, BOXES[Math.floor(R() * BOXES.length)], x, x1, y + 0.012, y + 0.012 + bh, zf + 0.001, zf + 0.008); if (k > 0.55) box(p, BOXES[Math.floor(R() * BOXES.length)], x + 0.005, x1 - 0.005, y + 0.012 + bh, y + 0.012 + bh * 1.9, zf + 0.001, zf + 0.008); x += bw + 0.008; }
   }
   glowStrip(p, gx1 - gx0 - 0.06, [0, gy1 - 0.02, zf + 0.01], [0, 0, 0], { wid: 0.01, i: 0.16, dir: [0, -0.7, 0.7], reach: 1.2 });
   // the two glass doors in dark frames, the lower drawers under them, the keypad lock between them with its red light
@@ -53,6 +55,7 @@ export function drugsCabinet(p, o = {}) {
   for (const [a0, a1] of [[gx0, xm - 0.006], [xm + 0.006, gx1]]) {
     for (const [b0, b1, e0, e1] of [[a0 - 0.012, a1 + 0.012, gy0 - 0.02, gy0], [a0 - 0.012, a1 + 0.012, gy1, gy1 + 0.02], [a0 - 0.012, a0 + 0.004, gy0, gy1], [a1 - 0.004, a1 + 0.012, gy0, gy1]]) box(p, 'black', b0, b1, e0, e1, zf + 0.012, zf + 0.026);
     p.glass(a1 - a0, gy1 - gy0, [(a0 + a1) / 2, (gy0 + gy1) / 2, zf + 0.02]);
+    glints(p, a0, a1, gy0, gy1, zf + 0.0215);
   }
   for (let k = 0; k < 2; k++) { const y0 = base + 0.02 + k * 0.11, y1 = y0 + 0.1; add(p, 'white2', relief(shape(x1 - x0 - 2 * c - 0.02, y1 - y0, 0.02, 0, (y0 + y1) / 2), [{ inset: 0, depth: 0.006, bevel: 0.005 }]), [0, 0, d + 0.001]); add(p, o.handle || 'black', plate(shape(0.14, 0.02, 0.007, 0, y1 - 0.03)), [0, 0, d + 0.0075]); }
   box(p, 'black', xm - 0.035, xm + 0.035, 1.05, 1.21, zf + 0.026, zf + 0.036);
@@ -102,7 +105,7 @@ export function labShelves(p, o = {}) {
     for (let x = x0 + 0.06; x < x1 - 0.06;) {
       const kind = R();
       if (kind < 0.45) { const r = 0.025 + R() * 0.015, hh = 0.1 + R() * 0.08; cyl(p, R() > 0.5 ? { c: '#6b3d1c', r: 0.15 } : { c: '#c9d8de', r: 0.12 }, r, hh, [x + r, y + hh / 2, FACE + 0.08 + R() * 0.06], 6); x += 2 * r + 0.02; }
-      else if (kind < 0.8) { const bw = 0.06 + R() * 0.06, bh = 0.08 + R() * 0.1; box(p, BOXES[Math.floor(R() * BOXES.length)], x, x + bw, y, y + bh, FACE + 0.04, d - 0.04); x += bw + 0.015; }
+      else if (kind < 0.7) { const bw = 0.08 + R() * 0.06, bh = 0.05 + R() * 0.05; box(p, BOXES[Math.floor(R() * BOXES.length)], x, x + bw, y, y + bh, FACE + 0.04, d - 0.04); x += bw + 0.015; }
       else { box(p, 'white2', x, x + 0.14, y, y + 0.05, FACE + 0.06, FACE + 0.14); for (let i = 0; i < 5; i++) cyl(p, i % 2 ? { c: '#d9c25a', r: 0.3 } : { c: '#8fd0c8', r: 0.3 }, 0.008, 0.09, [x + 0.018 + i * 0.026, y + 0.07, FACE + 0.1], 5); x += 0.16; }
     }
   }
@@ -134,7 +137,7 @@ export function labIsland(p, o = {}) {
       add(p, 'white2', g, [xf, yc, zc], [0, s * PI / 2, 0]);
       add(p, o.handle || 'black', plate(shape(0.12, 0.018, 0.006)), [xf + s * 0.0065, yc + 0.06, zc], [0, s * PI / 2, 0]);
     }
-    glowStrip(p, len - 2 * c - 0.04, [s * (w / 2 - 0.04 - 0.001), 0.05, 0], [0, s * PI / 2, 0], { wid: 0.01, i: 0.12, dir: [s * 0.8, -0.6, 0], reach: 1.0 });
+    glowStrip(p, len - 2 * c - 0.04, [s * (w / 2 - 0.04 - 0.001), 0.05, 0], [0, s * PI / 2, 0], { wid: 0.01, i: 0.35, dir: [s * 0.8, -0.6, 0], reach: 1.2, pool: 0.12, poolReach: 1.2 });
   }
   return p;
 }

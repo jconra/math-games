@@ -26,7 +26,6 @@ import { FACE, NAVY, SHEET } from './ship.js';
 import { glowStrip, FLAT } from './bits.js';
 import { segText } from './segtext.js';
 import { lines, lineGeo } from './medbay.js';
-import { sinkTop } from './galley.js';
 
 const PI = Math.PI;
 const box = (p, look, x0, x1, y0, y1, z0, z1) => p.slab(look, Math.min(x0, x1), Math.max(x0, x1), Math.min(y0, y1), Math.max(y0, y1), Math.min(z0, z1), Math.max(z0, z1), { r: 0, cell: 9, loops: [] });
@@ -96,7 +95,17 @@ export function vanity(p, o = {}) {
   add(p, 'white2', relief(shape(w - 0.12, h - 0.24, 0.025, 0, (h + 0.07) / 2), [{ inset: 0, depth: 0.006, bevel: 0.005 }]), [0, 0, d + 0.001]);
   add(p, o.handle || 'black', plate(shape(0.14, 0.02, 0.007, 0, h - 0.13)), [0, 0, d + 0.0075]);
   glowStrip(p, w - 0.12, [0, 0.05, d - 0.04 + 0.001], [0, 0, 0], { wid: 0.008, i: 0.1, dir: [0, -0.6, 0.8], reach: 0.8 });
-  const q = new p.constructor(); sinkTop(q, 0, h + 0.002, d * 0.55, Math.min(0.34, w - 0.1), Math.min(0.26, d - 0.1)); for (const pt of q.parts) p.parts.push(pt);
+  basinTop(p, 0, h, d * 0.55, Math.min(0.34, w - 0.1), Math.min(0.26, d - 0.1));
+  return p;
+}
+// a basin set in a worktop, cheaply (about 90 triangles): its steel rim, the bowl seen from above, a tap on a stem at its
+// back with its spout (x, y the worktop's top, z the basin's middle out from the wall; w across, d deep)
+export function basinTop(p, x, y, z, w = 0.34, d = 0.26) {
+  const S = { c: '#a9adb2', r: 0.28, m: 0.85, w: 0.35 }, t = 0.02, hw = w / 2, hd = d / 2;
+  for (const [a0, a1, b0, b1] of [[-hw, hw, -hd, -hd + t], [-hw, hw, hd - t, hd], [-hw, -hw + t, -hd + t, hd - t], [hw - t, hw, -hd + t, hd - t]]) box(p, S, x + a0, x + a1, y, y + 0.006, z + b0, z + b1);
+  box(p, 'dark', x - hw + t, x + hw - t, y - 0.002, y + 0.001, z - hd + t, z + hd - t);
+  const g = new THREE.CylinderGeometry(0.014, 0.016, 0.2, 6, 1); g.translate(x, y + 0.1, z - hd - 0.035); add(p, 'chrome', g);
+  box(p, 'chrome', x - 0.012, x + 0.012, y + 0.18, y + 0.205, z - hd - 0.04, z - hd + 0.08);
   return p;
 }
 

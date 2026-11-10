@@ -25,7 +25,6 @@ import * as ML from '../shipparts/cabin/medlab.js';
 import * as MC from '../shipparts/cabin/medcrew.js';
 import * as LB from '../shipparts/cabin/lab.js';
 import { stool, messTable, mug, galleyRun, coffeeMachine } from '../shipparts/cabin/mess.js';
-import { sinkTop } from '../shipparts/cabin/galley.js';
 import { screen } from '../shipparts/cabin/bits.js';
 import { postersFor } from '../shipparts/cabin/print.js';
 
@@ -37,7 +36,8 @@ const PI = Math.PI, EPS = 1e-6, r3 = (v) => +v.toFixed(3);
 // of its ramp's opening. Along each, from the door outward (u: metres from the door's frame):
 //   forward, port (the grab-and-go wall by the ramp that faces the medical centre): a fire extinguisher low by the door;
 //     the strap-pouch wall (AIRWAY, IV / FLUIDS, MEDS over WOUND CARE, DIAGNOSTICS, TOOLS, over the TRAUMA bag, the small
-//     O2 bottles and the spare masks), shallow drawers under it, lockers over it; the folding stretcher at the hull end
+//     O2 bottles and the spare masks), shallow drawers under it, lockers over it; the ambulance stretcher folded flat on
+//     end at the hull end
 //   forward, starboard: the fire axe by the door; a counter of shallow drawers with the x-ray viewer over it, the gas mask
 //     on its hook; the hazmat locker at the hull end; lockers over the counter
 //   aft, port (behind the port bed): two oxygen tanks at the walkway end; the RESPIRATORY, MONITORING and MISC pouches
@@ -47,8 +47,9 @@ const PI = Math.PI, EPS = 1e-6, r3 = (v) => +v.toFixed(3);
 //   each bed's hull side, at its head: the head panel (oxygen, air, suction), the vital signs monitor, the IV bags over
 //     their pumps
 // Over each bed a lamp on a jointed arm, parked over the bed's middle (never forward of the bed into the see-through
-// band); a downlight over the walkway. On the deck, a yellow line along each edge of the band from each ramp's mouth to
-// the walkway, KEEP CLEAR at each mouth. Nothing stands or hangs in the band (z -0.75 to 1.25 in the chosen plan: the
+// band); two downlights before the forward wall's runs; a wash light over the stretcher and over the hazmat locker. On
+// the deck, a yellow line along each edge of the band from each ramp's mouth to the walkway, KEEP CLEAR at each mouth.
+// Nothing stands or hangs in the band (z -0.75 to 1.25 in the chosen plan: the
 // ramps' openings), in the walkway between the beds, or in a door's way.
 export const BAY = { door: 0.12, top: [1.96, 2.45], depth: 0.22 };
 function furnishMedBay({ bp, room, ctx, done, items, f, at, A }) {
@@ -144,7 +145,7 @@ function furnishMedBay({ bp, room, ctx, done, items, f, at, A }) {
       ctx.put('medbay: lamps', part(MB.armLamp, { ceil: ROOM, head: [r3(bx - mx), 1.98, -0.04], drop: 1.13 }), { at: [r3(mx), f, r3(mid)] });
     }
   }
-  // ── the downlight over the walkway, the lines on the deck, KEEP CLEAR at the ramps' mouths ──
+  // ── the downlights, the lines on the deck, KEEP CLEAR at the ramps' mouths ──
   const ramps = (bp.doors || []).filter((d) => d.rooms[0] === room.id && d.rooms[1] === 'outside');
   // (two, before the forward wall's two runs of gear, over the band kept clear: they light the gear walls and the way
   // across; the lamps over the beds light the aft half)
@@ -216,9 +217,10 @@ function furnishLab({ bp, room, ctx, done, items, f, at, A }) {
       ctx.put('lab: on the island', part(ML.centrifuge, {}), { at: T(-0.15, -len * 0.25), rot: [0, ry, 0] });
       ctx.put('lab: on the island', part(ML.analyser, {}), { at: T(0.17, -len * 0.22), rot: [0, ry + PI / 2, 0] });
       ctx.put('lab: on the island', part(LB.vialRack, { seed: 5 }), { at: T(0.16, len * 0.08), rot: [0, ry + PI / 2, 0] });
-      ctx.put('lab: on the island', part(LB.vialRack, { seed: 8 }), { at: T(-0.14, 0.02), rot: [0, ry - PI / 2, 0] });
       ctx.put('lab: on the island', part(ML.standScreen, { live: 'rest', seed: 0.35 }), { at: T(0.16, len * 0.36), rot: [0, ry + PI / 2 + 0.4, 0] });
       if (ctx.disc) ctx.disc(room, r3(cx), r3(cz));
+      // (and one over the hall's half of the room, between the island and the airlock's and washroom's doors)
+      if (ctx.disc && room.rect[2] - x1 > 1.0) ctx.disc(room, r3((x1 + room.rect[2]) / 2 + 0.1), r3(cz));
       done.add(it.id);
     } else if (it.kind === 'overhead' && W) {
       const mid = (W.lo + W.hi) / 2, len = W.hi - W.lo, slope = ctx.slopeAt(W.axis, W.v, mid), y1 = Math.min(+it.y + h, slope ? slope.y0 : 9);
@@ -244,12 +246,12 @@ function furnishLab({ bp, room, ctx, done, items, f, at, A }) {
   }
   // (a downlight over the bench, clear of the hull's slope)
   const bench = items.find((it) => it.kind === 'counter' && wallOf(it, room));
-  if (ctx.disc && bench) { const W = wallOf(bench, room); if (W.axis === 'x') { const z = stool ? (stool.rect[1] + stool.rect[3]) / 2 : (W.lo + W.hi) / 2, x = W.v + W.side * (W.depth + 0.2); ctx.disc(room, r3(x), r3(z)); } }
+  if (ctx.disc && bench) { const W = wallOf(bench, room); if (W.axis === 'x') { const z = stool ? (stool.rect[1] + stool.rect[3]) / 2 : (W.lo + W.hi) / 2, x = W.v + W.side * (W.depth + 0.45); ctx.disc(room, r3(x), r3(z)); } }
   hangPosters(ctx, room, items, at, postersFor('science'), 'lab: posters', blocks);
   wallFields(ctx, room, items, at, { tag: 'lab: wall fields', touch: true, also: asItems(blocks) });
 }
 // a sink set in a worktop (a wall fitting, its middle 0.24 out from the wall, at the worktop's height y 0)
-function sinkPart(p) { sinkTop(p, 0, 0.002, 0.27, 0.36, 0.3); return p; }
+function sinkPart(p) { MC.basinTop(p, 0, 0.002, 0.27, 0.36, 0.3); return p; }
 // a screen on a wall, its own screen() (live where o.live names a programme)
 function screenPart(p, o) { return screen(p, { w: o.w, h: o.h, live: o.live, seed: o.seed, bezel: 0.02, depth: 0.016 }, [0, 0, 0]); }
 
@@ -269,9 +271,12 @@ function furnishCrew(args) {
   const own = items.map((it) => {
     if (it === bunk && cub) return { ...it, head: (cub.rect[1] + cub.rect[3]) / 2 > (it.rect[1] + it.rect[3]) / 2 ? 'high' : 'low' };
     if (it === cub) return { ...it, kind: 'casing' };
-    if (it === bank) return { ...it, rect: clipFromDoors(bp, room, it) };
+    if (it === bank) return { ...it, kind: 'casing', rect: clipFromDoors(bp, room, it) };
     return it;
   });
+  // (the grow pod's place over the kitchen counter, held as a box so no wall panel or poster takes it: GROWPOD)
+  const kc = items.find((it) => it.kind === 'counter' && wallOf(it, room));
+  if (kc) { const W = wallOf(kc, room), mid = (W.lo + W.hi) / 2, gs = growPodSide(room, W, mid), c = mid + (W.axis === 'z' ? W.side : -W.side) * gs * GROWPOD.along, h = GROWPOD.size / 2 + 0.02; own.push({ id: '_growpod', kind: 'casing', room: room.id, rect: W.axis === 'z' ? (W.side > 0 ? [c - h, W.v, c + h, W.v + 0.05] : [c - h, W.v - 0.05, c + h, W.v]) : (W.side > 0 ? [W.v, c - h, W.v + 0.05, c + h] : [W.v - 0.05, c - h, W.v, c + h]), y: GROWPOD.y - GROWPOD.size / 2 - 0.02, h: GROWPOD.size + 0.04 }); }
   ROOMS.bunks({ ...args, items: own });
   for (const it of items) {
     const W = wallOf(it, room), [x0, z0, x1, z1] = it.rect, h = +it.h;
@@ -280,6 +285,19 @@ function furnishCrew(args) {
       const mid = (W.lo + W.hi) / 2, cxr = (room.rect[0] + room.rect[2]) / 2, face = localX(W, mid, cxr) > localX(W, mid, mid) ? 1 : -1;
       const covered = bank && wallOf(bank, room)?.v === W.v ? wallOf(bank, room).depth : 0;
       ctx.put('crew: cubby', part(MC.cubby, { w: r3(W.hi - W.lo), depth: W.depth, h, face, free: [r3(FACE + covered + 0.03), r3(W.depth - 0.03)], handle: A.handle }), at(W, mid));
+      done.add(it.id);
+    } else if (it === bank && W) {
+      // (the bank of shallow lockers, one for each of the crew, numbered 01 to 03 (the berths' numbers): three lockers
+      // side by side, kept clear of the door's frame, the free end by the door cut at 45 degrees)
+      const [a0, b0, a1, b1] = clipFromDoors(bp, room, it), Wc = wallOf({ ...it, rect: [a0, b0, a1, b1] }, room), lo = Wc.lo, hi = Wc.hi, n3 = 3, uw = (hi - lo) / n3, slope = ctx.slopeAt(Wc.axis, Wc.v, (lo + hi) / 2);
+      const hh = Math.min(+it.h || 2.0, slope ? slope.y0 + Wc.depth - 0.02 : 2.5), door = (bp.doors || []).find((d) => d.rooms.includes(room.id) && d.rooms[1] !== 'outside' && Math.abs((Wc.axis === 'z' ? d.at[1] : d.at[0]) - Wc.v) < EPS);
+      const dc = door ? (Wc.axis === 'z' ? door.at[0] : door.at[1]) : null;
+      for (let k = 0; k < n3; k++) {
+        const m = lo + uw * (k + 0.5), nearDoor = dc != null && (k === 0 ? Math.abs(lo - dc) : k === n3 - 1 ? Math.abs(hi - dc) : 9) < 0.8, endSide = k === 0 ? lo : hi, cut = [0, 0];
+        if (nearDoor) cut[localX(Wc, m, endSide) > 0 ? 1 : 0] = 0.08;
+        const num = dc != null && Math.abs(hi - dc) < Math.abs(lo - dc) ? n3 - k : k + 1;
+        ctx.put('crew: lockers', part(shallowLocker, { w: r3(uw), depth: Wc.depth, h: r3(hh), cols: 1, ends: cut, nums: [num, null], handle: A.handle, trim: A.trim }), at(Wc, r3(m)));
+      }
       done.add(it.id);
     } else if (it.kind === 'bed' && W) {
       const mid = (W.lo + W.hi) / 2, len = W.hi - W.lo;
@@ -313,13 +331,25 @@ function furnishCrew(args) {
     } else if (it.kind === 'counter' && W) {
       const mid = (W.lo + W.hi) / 2, len = W.hi - W.lo, th = h || 0.9;
       ctx.put('crew: kitchen', part(galleyRun, { len: r3(len), depth: W.depth, top: th, end: [0, 0], handle: A.handle, trim: A.trim }), at(W, mid));
-      ctx.put('crew: kitchen', part(coffeeMachine, {}), { at: toWorld(W, mid, [len * 0.22, f + th, 0.2]), rot: [0, rotOf(W), 0] });
-      ctx.put('crew: kitchen', part(sinkPart, {}), { at: toWorld(W, mid, [-len * 0.2, f + th, 0]), rot: [0, rotOf(W), 0] });
-      ctx.put('crew: small things', part(mug, { look: A.cup }), { at: toWorld(W, mid, [len * 0.02, f + th, 0.32]), rot: [0, 0.7, 0] });
+      // (the coffee machine at the end away from GROWPOD's place, the sink in the middle, its tap clear of that place)
+      const gs = growPodSide(room, W, mid);
+      ctx.put('crew: kitchen', part(coffeeMachine, {}), { at: toWorld(W, mid, [-gs * len * 0.32, f + th, 0.2]), rot: [0, rotOf(W), 0] });
+      ctx.put('crew: kitchen', part(sinkPart, {}), { at: toWorld(W, mid, [-gs * len * 0.03, f + th, 0]), rot: [0, rotOf(W), 0] });
+      ctx.put('crew: small things', part(mug, { look: A.cup }), { at: toWorld(W, mid, [gs * len * 0.3, f + th, 0.36]), rot: [0, 0.7, 0] });
       done.add(it.id);
     }
   }
 }
+// THE GROW POD'S PLACE (the game's maker wants a grow pod, a small round window into a turning hydroponic garden, in every
+// ship; its piece is being made on another branch): kept free on the wall over the kitchen counter, its middle `along`
+// from the counter's middle toward the end away from the room's middle (the bed's foot is at the other end), `y` over
+// the deck, a square `size`
+// across of flat wall; the wall here is the crew room's stern wall, and behind it there is more than 0.35 m of free space
+// (the inside-space file: free from the deck to 3.5 m for 0.45 m behind it). Nothing of the room's stands or hangs there
+// (the coffee machine is at the counter's other end, the sink's tap stops 2 cm short of it).
+export const GROWPOD = { along: 0.24, y: 1.25, size: 0.45 };
+// (which end of the counter the pod takes: +1 or -1 in the counter's own x: the end away from the room's middle across)
+function growPodSide(room, W, mid) { const c = W.axis === 'z' ? (room.rect[0] + room.rect[2]) / 2 : (room.rect[1] + room.rect[3]) / 2; return localX(W, mid, c) >= localX(W, mid, mid) ? -1 : 1; }
 // (whether item `a` stands at one end of item `b`, touching it)
 const touchesEnd = (a, b) => (Math.abs(a.rect[1] - b.rect[3]) < 0.01 || Math.abs(a.rect[3] - b.rect[1]) < 0.01) && a.rect[0] < b.rect[2] && a.rect[2] > b.rect[0];
 // an item's rect clipped clear of the frames of the room's inside doors in its wall (their opening, the frame's 0.1 and
