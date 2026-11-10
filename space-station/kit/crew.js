@@ -902,13 +902,18 @@ function lineSamples(T) { return Array.from({ length: LINE_N }, (_, i) => new TH
 //                   0: higher); its foot soft over SIDEBURN.soft degrees. Left out (or null): none.
 //        nape       a taper at the back: from in under the hair's edge (scalp.edge) down `nape` mm below it, fading out downward, round to
 //                   behind the ears (full from NAPE.full degrees round from the face, none nearer it than NAPE.from).
+//        front      a hairline along the forehead (2026-11-10; the game's maker, of Ren's crop: "needs to be sunk into
+//                   his head better along the forehead, it looks really choppy"): the same taper as the nape's, from in
+//                   under the hair's edge down `front` mm below it, fading out downward, across the face (full to
+//                   FRONT.full degrees round from the face, none past FRONT.to), so a cut-out edge of hair reads as
+//                   growing out of the scalp, short hair thinning out below it.
 //   g  the scalp's SHADE under the hair: 0 below `scalp.line`, full UNDER_SOFT degrees above it
 //   b  the EARS: 1 on each ear and a margin round it (the head's crew.json `ears`, measured from its own geometry by
 //      buzzdata: where the head stands out from its smooth outline at the sides, grown by EAR_MARGIN; crew.json's `ears`
 //      for a head without its own: every head's together). Every paint is taken off there: the buzz, the shade, the buzz
 //      cut, a hair's marks.
 // A millimetre on the head is taken as on the standard skull (MM_DEG millimetres a degree).
-export const SIDEBURN = { width: 11, soft: 1.5, under: 5 }, NAPE = { from: 112, full: 140 }, UNDER_SOFT = 2.0, EAR_SOFT = 1.5;
+export const SIDEBURN = { width: 11, soft: 1.5, under: 5 }, NAPE = { from: 112, full: 140 }, FRONT = { full: 55, to: 80 }, UNDER_SOFT = 2.0, EAR_SOFT = 1.5;
 const MM_DEG = 0.09 * Math.PI / 180 * 1000, FW = 360, FH = 180;
 const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 // (an ear's table [[azimuth, bottom, top], ...] each 2 degrees (azimuths their side's own, 0 to 180), grown by the margin:
@@ -922,7 +927,7 @@ function earAt(tab, a) {
 // the field's texels (Uint8 RGBA, FW x FH) for a hair entry (HE), its buzz and a head's ears; into `data` when given
 export function paintField(HE, buzz, ears, data) {
   const D = data || new Uint8Array(FW * FH * 4), sc = HE && HE.scalp, under = sc && sc.line, edge = sc && (sc.edge || sc.line);
-  const B = buzz || {}, sb = B.sideburns != null && Number.isFinite(+B.sideburns) ? +B.sideburns : null, nape = +B.nape > 0 ? +B.nape : 0;
+  const B = buzz || {}, sb = B.sideburns != null && Number.isFinite(+B.sideburns) ? +B.sideburns : null, nape = +B.nape > 0 ? +B.nape : 0, fr = +B.front > 0 ? +B.front : 0;
   // (each side's ear: its own front and top; the sideburn's strip in front of it)
   const side = { L: ears && ears.L, R: ears && ears.R };
   for (let j = 0; j < FW; j++) {
@@ -937,12 +942,14 @@ export function paintField(HE, buzz, ears, data) {
       foot = S.top - sb / MM_DEG;
     }
     const nw = nape ? sstep(NAPE.from, NAPE.full, sa) : 0, nFoot = eLine - nape / MM_DEG;
+    const fw = fr ? 1 - sstep(FRONT.full, FRONT.to, sa) : 0, fFoot = eLine - fr / MM_DEG;
     const ear = S && S.tab ? earAt(S.tab, sa) : null;
     for (let i = 0; i < FH; i++) {
       const el = 90 - i - 0.5, o = (i * FW + j) * 4;
       let r = 0;
       if (sw > 0) r = Math.max(r, sw * sstep(foot - SIDEBURN.soft / 2, foot + SIDEBURN.soft / 2, el) * (1 - sstep(eLine + SIDEBURN.under - 2, eLine + SIDEBURN.under, el)));
       if (nw > 0 && eLine < 90) r = Math.max(r, nw * (el >= eLine ? 1 - sstep(eLine + SIDEBURN.under - 2, eLine + SIDEBURN.under, el) : Math.min(1, Math.max(0, (el - nFoot) / Math.max(eLine - nFoot, 1e-3)))));
+      if (fw > 0 && eLine < 90) r = Math.max(r, fw * (el >= eLine ? 1 - sstep(eLine + SIDEBURN.under - 2, eLine + SIDEBURN.under, el) : Math.min(1, Math.max(0, (el - fFoot) / Math.max(eLine - fFoot, 1e-3))) ** 1.5));
       const g = sstep(uLine, uLine + UNDER_SOFT, el);
       const b = ear ? ear[2] * sstep(ear[0] - EAR_SOFT, ear[0], el) * (1 - sstep(ear[1], ear[1] + EAR_SOFT, el)) : 0;
       D[o] = Math.round(255 * r); D[o + 1] = Math.round(255 * g); D[o + 2] = Math.round(255 * Math.max(0, Math.min(1, b))); D[o + 3] = 255;

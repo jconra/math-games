@@ -618,13 +618,14 @@ function tuckSlider(v) {
   return r;
 }
 // ── BUZZ: each haircut's own buzz (kit/crew.js THE PAINT FIELD): the short hair a barber leaves outside the cut ──────
-// Shown and changed for the hair worn: its sideburns (how far below the top of the ear, or none) and its nape taper (how
-// far below the hair's edge at the back, 0 none), on every head. Kept in this browser as they're made (lib.buzzes over
+// Shown and changed for the hair worn: its sideburns (how far below the top of the ear, or none), its nape taper (how
+// far below the hair's edge at the back, 0 none) and its front (2026-11-10: the hairline along the forehead, how far
+// below the hair's front edge, 0 none), on every head. Kept in this browser as they're made (lib.buzzes over
 // crew.json's own, null: none) and worn at once; Copy buzzes gives every hair's as JSON for crew.json. The view: the
 // stubble and the scalp's shade under the hair each on or off, and the ears found (tinted: no
 // paint ever goes there).
 const BUZZ_KEY = 'crewlab.buzz.v1', BUZZ_OPEN = 'crewlab.buzzOpen';
-const BUZZ_STEP = { sideburns: [2, 0.5], nape: [2, 0.5] }, BUZZ_SB0 = 10;
+const BUZZ_STEP = { sideburns: [2, 0.5], nape: [2, 0.5], front: [1, 0.5] }, BUZZ_SB0 = 10;
 const buzzSt = { open: (() => { try { return localStorage.getItem(BUZZ_OPEN) === '1'; } catch (_) { return false; } })(), view: { buzz: true, under: true, ears: false }, out: null, note: '' };
 // (a buzz with nothing in it left out: no sideburns (null), a nape of 0; numbers rounded; null when nothing is left)
 function tidyBuzz(b) {
@@ -632,6 +633,7 @@ function tidyBuzz(b) {
   const o = {};
   if (b.sideburns != null && Number.isFinite(+b.sideburns)) o.sideburns = +(+b.sideburns).toFixed(1);
   if (+b.nape > 0) o.nape = +(+b.nape).toFixed(1);
+  if (+b.front > 0) o.front = +(+b.front).toFixed(1);
   if (b.look && Object.keys(b.look).length) o.look = b.look;
   return Object.keys(o).length ? o : null;
 }
@@ -681,6 +683,7 @@ function buzzWords(P, b) {
   if (h.marks) w.push('its bust\'s own fade');
   if (b && b.sideburns != null) w.push(b.sideburns === 0 ? 'sideburns to the ear\'s top' : `sideburns ${Math.abs(b.sideburns)} mm ${b.sideburns > 0 ? 'below' : 'above'} the ear's top`);
   if (b && b.nape > 0) w.push(`nape taper ${b.nape} mm`);
+  if (b && b.front > 0) w.push(`hairline ${b.front} mm along the forehead`);
   return w.length ? w.join(', ') : 'none: skin outside the hair';
 }
 function buzzRowsKeep() { const rows = ['#buzz', '#buzzout'].map((s) => $(s)), keep = rows.map((r) => r.scrollLeft); buzzRows(); rows.forEach((r, i) => { r.scrollLeft = keep[i]; }); }
@@ -702,6 +705,9 @@ function buzzRows() {
       chip('▼', false, () => buzzEdit((t) => { t.sideburns += fine('sideburns'); }), true, 'Longer (their foot lower)')] : []),
     sep(), lab('Nape'), chip('−', false, () => buzzEdit((t) => { t.nape = Math.max(0, (+t.nape || 0) - fine('nape')); }), true, 'A shorter taper at the back (0: none)'),
     val((b && b.nape > 0 ? b.nape : 0) + ' mm', 'How far below the hair\'s edge at the back the taper reaches'), chip('+', false, () => buzzEdit((t) => { t.nape = (+t.nape || 0) + fine('nape'); }), true, 'A longer taper at the back'),
+    // (2026-11-10: the hairline along the forehead, short hair thinning out below the hair's front edge)
+    sep(), lab('Front'), chip('−', false, () => buzzEdit((t) => { t.front = Math.max(0, (+t.front || 0) - fine('front')); }), true, 'A narrower hairline along the forehead (0: none)'),
+    val((b && b.front > 0 ? b.front : 0) + ' mm', 'How far below the hair\'s front edge the short hair reaches, thinning out'), chip('+', false, () => buzzEdit((t) => { t.front = (+t.front || 0) + fine('front'); }), true, 'A wider hairline along the forehead'),
     sep(), chip('Reset', false, buzzReset, true, 'This hair\'s buzz back to crew.json\'s')];
   $('#buzz').replaceChildren(fold, ...view, ...edit, sep(), chip('Copy buzzes', false, copyBuzzes, true, 'Every hair\'s buzz as JSON, for crew.json'),
     chip('Clear my changes' + (mine ? ` (${mine})` : ''), false, buzzClear, true, 'Forget this browser\'s buzzes: back to crew.json\'s'), what, ...(buzzSt.note && buzzSt.out == null ? [val(buzzSt.note)] : []));
