@@ -2,7 +2,8 @@
 // those. I hope the forge area is dark so the molten metal reall glows"), built to his first reference picture: two
 // big upright towers of worn dark metal, stencilled 1 and 2, pipes up their sides, glowing slots, each pouring molten
 // metal from its underside as a glowing column into a ladle on a cart; a grating catwalk at the pour's height with
-// yellow and black rails, a hot-surfaces plate by each ladle, and the thermal console with its live screens.
+// yellow and black rails, a hot-surfaces plate by each ladle, and the thermal console with its live screens
+// (FURNACE 1 and FURNACE 2: the melt's temperature, its status, its level).
 //
 //   forge      a POINT piece for the smelter's hall (12 x 12 m inside, 11 m high), its middle on the hall's middle,
 //              its front (+z) toward the crusher (south), +x toward the lobby's hatch (east). 'two towers'.
@@ -101,11 +102,12 @@ function ladle(p, x, z) {
   for (let k = 0; k < 4; k++) { const a = k * PI / 2 + PI / 4; p.light([x + 0.9 * Math.cos(a), 1.3, z + 0.9 * Math.sin(a)], 5, FIRE, [0.5 * Math.cos(a), 0.85, 0.5 * Math.sin(a)], 9); }
   haze(p, [x, y1, z], [0, -1, 0], { r: 0.1, spread: 0.26, length: y1 - y0, strength: 1 });
   haze(p, [x, top, z], [0, 1, 0], { r: 0.5, spread: 0.32, length: 3.6, strength: 0.55 });
+  haze(p, [x, top - 0.2, z + 0.6], [0, 1, 0], { r: 1.3, spread: 0.18, length: 6.5, strength: 0.28 });
   // the rails it runs on, north to the casting line; the hot-surfaces plate before it
   for (const sx of [-1, 1]) p.slab('black', x + sx * 0.3 - 0.04, x + sx * 0.3 + 0.04, 0, 0.03, z - 2.9, z + 0.9, thin);
   p.slab('yellow', x - 0.8, x + 0.8, 0, 0.025, z + 1.3, z + 1.9, thin);
   floorDecal(p, 'hazard', 1.5, 0.5, x, z + 1.6, 0, '#d9b23a', 0.028);
-  placed(p, (q) => { q.slab('black', -0.03, 0.03, 0, 1.15, -0.03, 0.03, thin); warning(q, 0, 1.25, 0.03, 0.42); }, [x + 0.95, 0, z + 1.6], 0);
+  placed(p, (q) => { q.slab('black', -0.3, 0.3, -0.62, 0.0, -0.02, 0.0, thin); warning(q, 0, -0.3, 0.0, 0.46); }, [x, FORGE.walk.y - 0.12, FORGE.walk.z[0] - 0.03], PI);
 }
 
 // ── the catwalk at the pour's height, its stair, its rails ────────────────────────────────────────────────────────
@@ -136,7 +138,7 @@ export function forge(p) {
   FORGE.towers.forEach(([x, z], i) => { tower(p, x, z, String(i + 1)); ladle(p, x, z); });
   catwalk(p);
   // the console, east of the towers, its screens toward the lobby's side (the operator faces the pours past them)
-  placed(p, (q) => thermalConsole(q, { shows: ['drive', 'systems'], seeds: [0.25, 0.75] }), [4.4, 0, -1.6], PI / 2);
+  placed(p, (q) => thermalConsole(q, { shows: ['furnace', 'furnace'], seeds: [0.25, 0.75] }), [4.4, 0, -1.6], PI / 2);
 }
 
 export const FORGE_PIECES = {

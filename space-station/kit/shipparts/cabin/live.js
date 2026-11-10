@@ -26,6 +26,9 @@
 //   7 systems   a status board: AIR, POWER, HEAT, WATER, HULL, a lamp and a bar each; a lamp goes amber now and then
 //   8 airlock   the same board for the airlock: INNER DOOR, OUTER DOOR, PRESSURE, SUITS, VENT
 //   9 water     the washroom's: three tanks (COLD, HOT, WASTE), their levels lapping, FILTER and PUMP lamps
+//  10 furnace   the smelter's forge (kit/forge.js): FURNACE 1 (seed under a half) or FURNACE 2, the melt's TEMP in
+//               DEG C wandering a few degrees, a STABLE lamp that goes amber with POURING now and then, the MELT's
+//               level in a bar, a trend line
 // Nothing in any of them blinks faster than once a second, and what blinks is small (a cursor, a lamp).
 //
 // THE WORDS come from one small sheet of its own (512 x 512, one channel, drawn once when the first material is made
@@ -37,8 +40,8 @@ import { GLOW, U } from '../../materials.js';
 import { flicker } from './flicker.js';
 import { LIVE_VERTEX, liveFragment } from './live.glsl.js';
 
-export const SHOWS = { lamp: 0, survey: 1, chart: 2, rest: 3, drive: 4, scan: 5, log: 6, systems: 7, airlock: 8, water: 9 };
-export const SHOW_LABEL = ['lamp', 'wire planet', 'star chart', 'sleep trace', 'engine readouts', 'scanner sweep', "ship's log", 'systems board', 'airlock board', 'water tanks'];
+export const SHOWS = { lamp: 0, survey: 1, chart: 2, rest: 3, drive: 4, scan: 5, log: 6, systems: 7, airlock: 8, water: 9, furnace: 10 };
+export const SHOW_LABEL = ['lamp', 'wire planet', 'star chart', 'sleep trace', 'engine readouts', 'scanner sweep', "ship's log", 'systems board', 'airlock board', 'water tanks', 'furnace readouts'];
 export const LAMP_MODES = { steady: 0, flicker: 1, blink: 2, breathe: 3 };
 // what the material shares: the flicker light's brightness this frame, which seed of flicker it is
 export const LIVE = { flick: { value: 1 }, seed: 0, sheet: null, adv: 0.45 };
@@ -49,7 +52,7 @@ export function liveTick(t) { LIVE.flick.value = flicker(t, LIVE.seed); return L
 
 function showOf(s) {
   const n = typeof s === 'number' ? s : SHOWS[s];
-  if (!(n >= 1 && n <= 9)) throw new Error('kit: no live screen ' + s);
+  if (!(n >= 1 && n <= 10)) throw new Error('kit: no live screen ' + s);
   return n;
 }
 const setColor = (g, v) => {
@@ -90,7 +93,8 @@ const S = 512, ROW = 20, HI = 2, SPREAD = 4;
 export const LOG = ['AIR MIX STEADY', 'HULL TEMP MINUS 41', 'REACTOR AT IDLE', 'WATER LOOP 2 PUMP OK', 'CABIN PRESSURE 101', 'DRIVE COILS COOL', 'STAR FIX GOOD 3 OF 3', 'SOLAR WIND LOW', 'GROW POD LIGHTS ON', 'FILTER 4 CLEAN IN 9 DAYS', 'BATTERY BANK FULL', 'ANTENNA TRACKING HOME',
   'DUST COUNT LOW', 'SPIN STEADY', 'COOLANT FLOW 12', 'DOCK CLAMPS FREE', 'CARGO BAY SEALED', 'NIGHT LIGHTS AT 30', 'SCAN SWEEP CLEAR', 'FUEL CELLS 88 PERCENT', 'ROUTE HELD', 'LAB FRIDGE MINUS 4', 'GALLEY HEATER OFF', 'ALL QUIET'];
 export const LABELS = ['SURVEY', 'STAR CHART', 'REST', 'DRIVE', 'SCAN', 'SHIP LOG', 'SYSTEMS', 'AIRLOCK', 'WATER', 'TURN', 'RANGE', 'PULSE', 'THRUST', 'BREATH', 'TREND',
-  'AIR', 'POWER', 'HEAT', 'WATER', 'HULL', 'INNER DOOR', 'OUTER DOOR', 'PRESSURE', 'SUITS', 'VENT', 'COLD', 'HOT', 'WASTE', 'FILTER', 'PUMP', 'FUEL', 'COILS', 'FLOW', 'TARGET', 'CLEAR'];
+  'AIR', 'POWER', 'HEAT', 'WATER', 'HULL', 'INNER DOOR', 'OUTER DOOR', 'PRESSURE', 'SUITS', 'VENT', 'COLD', 'HOT', 'WASTE', 'FILTER', 'PUMP', 'FUEL', 'COILS', 'FLOW', 'TARGET', 'CLEAR',
+  'FURNACE 1', 'FURNACE 2', 'TEMP', 'DEG C', 'STATUS', 'STABLE', 'POURING', 'MELT'];   // (35..42: the furnace's, kit/forge.js)
 const SIGNS = '.:%-+/';
 
 // how far each pixel is (squared) from the nearest pixel that is `on` (the two-pass method: columns, then rows)

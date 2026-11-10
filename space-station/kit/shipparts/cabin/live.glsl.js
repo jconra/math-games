@@ -275,6 +275,37 @@ void water( vec2 s, float A, float px, float t, float seed, inout vec3 col ) {
 }
 `;
 
+// 10 furnace: the smelter's forge (kit/forge.js)
+const SHOWS_D = `
+void furnace( vec2 s, float A, float px, float t, float seed, inout vec3 col ) {
+  float which = step( 0.5, seed ), x0 = -A * 0.5 + 0.07;
+  stamp( s, vec2( x0, 0.36 ), 0.08, label( 35.0 + which ), 9.0, C_INK );
+  col += C_DIM * 0.9 * ln( s.y - 0.325, 0.0, px ) * step( abs( s.x ), A * 0.5 - 0.07 );
+  // the melt's temperature, big, wandering a few degrees; TEMP over it, DEG C after it
+  float temp = floor( 1480.0 - which * 15.0 + 6.0 * sin( t * 0.37 + seed * 9.0 ) + 3.0 * sin( t * 1.13 + 2.0 ) + 0.5 );
+  stamp( s, vec2( x0, 0.17 ), 0.066, label( 37.0 ), 9.0, C_LINE * 1.4 );
+  number( s, vec2( x0, -0.07 ), 0.2, temp, 4, C_AMB * 1.6 );
+  stamp( s, vec2( x0 + 0.2 * ADV * 4.0 + 0.03, -0.07 ), 0.07, label( 38.0 ), 9.0, C_LINE * 1.4 );
+  // its status: a lamp and a word; now and then it pours (amber, POURING) for a few seconds
+  float pour = warnOf( t, 3.0 + which, seed );
+  lamp( s, vec2( x0 + 0.045, -0.3 ), px, mix( C_GOOD, C_AMB, pour ), col );
+  stamp( s, vec2( x0 + 0.125, -0.336 ), 0.072, label( 40.0 + step( 0.5, pour ) ), 9.0, mix( C_INK, C_AMB * 1.5, pour ) );
+  // the melt's level: a tall bar of twelve lamps at the right, the top two amber; it sags while it pours
+  float bx = A * 0.5 - 0.2, bw = 0.09, yy = ( s.y + 0.4 ) / 0.68, lev = 0.78 + 0.05 * sin( t * 0.21 + seed * 5.0 ) - 0.18 * pour, si = floor( yy * 12.0 );
+  if ( abs( s.x - bx ) < bw && yy > 0.0 && yy < 1.0 ) {
+    float cell = band( s.x, bx - bw * 0.8, bx + bw * 0.8, px ) * band( fract( yy * 12.0 ), 0.18, 0.86, px * 12.0 / 0.68 );
+    col += mix( C_DIM * 0.55, si >= 10.0 ? C_AMB * 1.3 : C_HOT * 1.4, step( ( si + 0.5 ) / 12.0, lev ) ) * cell;
+  }
+  stamp( s, vec2( bx - 0.09, -0.47 ), 0.055, label( 42.0 ), 9.0, C_LINE * 1.2 );
+  // a trend line creeping left, between the number and the bar
+  float tx0 = A * 0.02, tx1 = A * 0.5 - 0.34, tu = ( s.x - tx0 ) / ( tx1 - tx0 );
+  if ( tu > 0.0 && tu < 1.0 ) {
+    float xx = tu * 5.0 + t * 0.25, y = 0.12 + 0.06 * sin( xx * 1.3 + seed * 3.0 ) + 0.025 * sin( xx * 3.7 + 1.0 );
+    col += C_AMB * 1.3 * ln( s.y - y, 0.005, px ) + C_DIM * 0.9 * ln( s.y, 0.0, px );
+  }
+}
+`;
+
 const MAIN = `
 void main() {
   vec3 col;
@@ -305,7 +336,8 @@ void main() {
     else if ( prog < 5.5 ) scan( s, A, px, t, seed, col );
     else if ( prog < 6.5 ) logShow( s, A, px, t, seed, col );
     else if ( prog < 8.5 ) board( s, A, px, t, seed, prog - 7.0, col );
-    else water( s, A, px, t, seed, col );
+    else if ( prog < 9.5 ) water( s, A, px, t, seed, col );
+    else furnace( s, A, px, t, seed, col );
     // the words (one lookup)
     if ( gT.z > 0.0 ) {
       float w = gT.z * px * 0.7 / ( 2.0 * SPREAD ), a = texture2D( uSheet, gT.xy / 512.0 ).r;
@@ -326,4 +358,4 @@ void main() {
   #include <colorspace_fragment>
 }`;
 
-export const liveFragment = (o) => [HEAD(o), SHOWS_A, SHOWS_B, SHOWS_C, MAIN].join('\n');
+export const liveFragment = (o) => [HEAD(o), SHOWS_A, SHOWS_B, SHOWS_C, SHOWS_D, MAIN].join('\n');

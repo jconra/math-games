@@ -212,7 +212,7 @@ async function showRoom(id = state.room) {
   built = buildRoom(R, mats, { bake: QUALITY[state.quality].bake, ...more });
   STAGE.add(built.group);
   if (built.stats.problems.length) console.warn('kit lab: the room has problems', built.stats.problems);
-  setDoors(built.doors, state.doors === 'open' ? 1 : 0);
+  setDoors(built.doors, state.doors === 'open' ? 1 : 0); showBeams();   // (the beams of lit haze some lights carry: the forge's)
   dust.visible = false; if (R.rooms) updateZones(built, new THREE.Vector3(...(R.views?.start?.at || [0, 1.6, 0])), 0.01);
   setEnv('room', R.probe || R.views?.start?.at || [0, 1.6, 0]); if (R.rooms) zoneProbes(built); dust.visible = state.quality !== 'low';
   if (!(state.view in (R.views || {}))) state.view = 'start';
