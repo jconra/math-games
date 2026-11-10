@@ -5,7 +5,7 @@
   "spawn": {"at":[-3,1.7,3],"look":[-1,1.5,2],"room":"quarters"},
   "routes": {"ship":{"from":"spawn","to":"the shuttle's door","path":[[-1.5,1.5],[-1,1],[0.5,1],[0.5,12.25],[5,12.25],[5.5,12.5],[9.5,12.5],[11,12.5],[11,15.3],[22.375,15.3],[22.375,13.75]]}},
   "portals": [{"a":"quarters","b":"qc","box":[[-1.4,0,1.4],[-0.6,2.3,2.6]],"door":[-1,2]},{"a":"qc","b":"c1","box":[[-1,0,6.6],[3,3,7.4]],"door":[1,7]},{"a":"c1","b":"terminal","box":[[-1,0,20.6],[3,3,21.4]]},{"a":"terminal","b":"airlock","box":[[-9.4,0,29],[-8.6,3,33]]},{"a":"terminal","b":"c2","box":[[10.6,0,23],[11.4,3,27]]},{"a":"qc","b":"loop","box":[[2.6,0,0.09999999999999998],[3.4,2.4,1.9]],"door":[3,1]},{"a":"loop","b":"spine-n","box":[[12.6,0,0.09999999999999998],[13.4,2.4,1.9]],"door":[13,1]},{"a":"c2","b":"junction","box":[[12.6,0,24.1],[13.4,2.4,25.9]],"door":[13,25]},{"a":"junction","b":"stub-explorer","box":[[16.6,0,24.1],[17.4,2.4,25.9]],"door":[17,25]},{"a":"junction","b":"spine-n","box":[[14.1,0,22.6],[15.9,2.4,23.4]],"door":[15,23]},{"a":"junction","b":"spine-s","box":[[14.1,0,26.6],[15.9,2.4,27.4]],"door":[15,27]},{"a":"spine-n","b":"stub-miner","box":[[16.6,0,-5.9],[17.4,2.4,-4.1]],"door":[17,-5]},{"a":"spine-s","b":"stub-medic","box":[[16.6,0,54.1],[17.4,2.4,55.9]],"door":[17,55]},{"a":"stub-miner","b":"hangar-miner","box":[[18.6,0,-7],[19.4,3,-3]]},{"a":"stub-explorer","b":"hangar","box":[[18.6,0,23],[19.4,3,27]]},{"a":"stub-medic","b":"hangar-medic","box":[[18.6,0,53],[19.4,3,57]]},{"a":"hangar-miner","b":"smelter-lobby","box":[[42.1,0,-19.4],[43.9,2.4,-18.6]],"door":[43,-19]},{"a":"smelter-lobby","b":"smelter-hall","box":[[38.6,0,-23.9],[39.4,2.4,-22.1]],"door":[39,-23]},{"a":"smelter-hall","b":"smelter-store","box":[[38.6,0,-28.6],[39.4,2.3,-27.4]],"door":[39,-28]},{"a":"smelter-lobby","b":"smelter-control","box":[[44.6,0,-22.6],[45.4,2.3,-21.4]],"door":[45,-22]},{"a":"smelter-control","b":"hangar-miner","box":[[45.4,1.05,-19.3],[52.6,2.2,-18.7]]},{"a":"hangar-medic","b":"medical","box":[[42.1,0,68.6],[43.9,2.4,69.4]],"door":[43,69]},{"a":"medical","b":"med-ward","box":[[38.6,0,75.4],[39.4,2.3,76.6]],"door":[39,76]},{"a":"medical","b":"med-scanner","box":[[39.4,0,76.6],[40.6,2.3,77.4]],"door":[40,77]},{"a":"medical","b":"med-scanner","box":[[41.375,1.05,76.7],[44.625,2.2,77.3]]},{"a":"medical","b":"med-pharmacy","box":[[46.6,0,69.4],[47.4,2.3,70.6]],"door":[47,70]},{"a":"medical","b":"med-lab","box":[[46.6,0,73.4],[47.4,2.3,74.6]],"door":[47,74]},{"a":"med-lab","b":"med-booth","box":[[49.4,0,76.6],[50.6,2.3,77.4]],"door":[50,77]},{"a":"med-scanner","b":"med-booth","box":[[46.7,1.05,77.375],[47.3,2.2,80.625]]},{"a":"med-scanner","b":"med-equip","box":[[46.6,0,81.4],[47.4,2.3,82.6]],"door":[47,82]}],
-  "places": {"jobsBoard":[1,4.3,25],"shipDoor":[44.75,1.26,26.24],"galley":[9,0,30],"airlock":[-15,0,31],"pad":[42.3,0,25],"pads":{"miner":[42.3,0,-5],"explorer":[42.3,0,25],"medic":[42.3,0,55]},"entrances":{"miner":[19,0,-5],"explorer":[19,0,25],"medic":[19,0,55]},"junction":[15,0,25],"smelterConsole":[49,0,-20.4],"sockets":[[29,0.75,-18.4],[29,2,-18.4],[31.5,0.75,-18.4],[31.5,2,-18.4],[34,0.75,-18.4],[34,2,-18.4],[36.5,0.75,-18.4],[36.5,2,-18.4]],"emptiesStack":[48.4,0,-16.1],"crane":{"y":9,"track":[[29,-16.1],[48,-16.1],[48,-1.4],[35.85,-1.4],[35.85,-10.6],[29,-10.6]]},"triageDesk":[33.9,0,74],"triageBays":[[34.7,0,71.4],[37.4,0,71.4]],"medicalEntrance":[43,0,70],"wardBeds":[[34.1,0,76.4],[35.9,0,76.4],[37.7,0,76.4]],"recoveryBeds":[[34.1,0,83.6],[35.9,0,83.6],[37.7,0,83.6]],"scanner":[43,0,83.8],"boothConsole":[48.6,0,79]},
+  "places": {"jobsBoard":[1,4.3,25],"shipDoor":[43.9,1.74,23.1],"galley":[9,0,30],"airlock":[-15,0,31],"pad":[42.3,0,25],"pads":{"miner":[42.3,0,-5],"explorer":[42.3,0,25],"medic":[42.3,0,55]},"entrances":{"miner":[19,0,-5],"explorer":[19,0,25],"medic":[19,0,55]},"junction":[15,0,25],"smelterConsole":[49,0,-20.4],"sockets":[[29,0.75,-18.4],[29,2,-18.4],[31.5,0.75,-18.4],[31.5,2,-18.4],[34,0.75,-18.4],[34,2,-18.4],[36.5,0.75,-18.4],[36.5,2,-18.4]],"emptiesStack":[48.4,0,-16.1],"crane":{"y":9,"track":[[29,-16.1],[48,-16.1],[48,-1.4],[35.85,-1.4],[35.85,-10.6],[29,-10.6]]},"triageDesk":[33.9,0,74],"triageBays":[[34.7,0,71.4],[37.4,0,71.4]],"medicalEntrance":[43,0,70],"wardBeds":[[34.1,0,76.4],[35.9,0,76.4],[37.7,0,76.4]],"recoveryBeds":[[34.1,0,83.6],[35.9,0,83.6],[37.7,0,83.6]],"scanner":[43,0,83.8],"boothConsole":[48.6,0,79],"ships":{"miner":{"at":[42.3,0,-5],"nose":"+x"},"explorer":{"at":[42.3,0,25],"nose":"+x"},"medic":{"at":[42.3,0,55],"nose":"-x"}},"shipStair":[43.9,0,21.3]},
   "views": {
     "spawn": {"at":[-3,1.7,3],"look":[-1,1.5,2],"fov":66},
     "quarters": {"at":[-1.5,1.7,2.2],"look":[-4.3,1,3.6],"fov":72},
@@ -33,7 +33,7 @@
     "miner-crane": {"at":[53.5,1.7,-3.5],"look":[40,6.2,-14],"fov":78},
     "medical": {"at":[43,1.7,69.9],"look":[43,1.6,84],"fov":76},
     "medical-triage": {"at":[42.6,1.7,75.4],"look":[34.5,1.4,71],"fov":76},
-    "med-ward": {"at":[38.3,1.7,77.9],"look":[34,1.2,76],"fov":78},
+    "med-ward": {"at":[36,1.7,78.6],"look":[36,1.1,75],"fov":80},
     "med-recovery": {"at":[36,1.7,79.6],"look":[35,1.2,84.5],"fov":80},
     "med-scanner": {"at":[40.4,1.7,77.9],"look":[43.4,1.3,84],"fov":78},
     "med-pharmacy": {"at":[47.6,1.7,70],"look":[50.6,1.3,72.4],"fov":80},
@@ -42,6 +42,9 @@
     "med-equip": {"at":[47.6,1.7,82],"look":[50.6,1.2,84],"fov":80},
     "qc-window": {"at":[1,1.7,0.2],"look":[8,3,-12],"fov":74},
     "terminal-window": {"at":[6,5.7,35.6],"look":[16,3,50],"fov":74},
+    "miner-ship": {"at":[52,1.7,4.5],"look":[42.3,3,-5],"fov":70},
+    "explorer-ship": {"at":[52,1.7,34.5],"look":[42.3,3,25],"fov":70},
+    "medic-ship": {"at":[52,1.7,64.5],"look":[42.3,3,55],"fov":70},
     "windows": {"at":[-2.5,1.7,30.5],"look":[0,3.3,37],"fov":72},
     "gallery": {"at":[-6,5.7,22.4],"look":[4,2.5,33],"fov":72},
     "corridor": {"at":[1,1.7,0.2],"look":[1,1.5,12],"fov":62},
@@ -3880,9 +3883,7 @@
         {"piece":"crate","cell":[13,19],"turn":0,"variant":"stack","off":[0.4,0,-0.3]},
         {"piece":"crate","cell":[18.5,19],"turn":0,"variant":"long","off":[-0.4,0,-0.2]},
         {"piece":"crate","cell":[19,19],"turn":0,"variant":"small","off":[0.4,0,-0.1]},
-        {"piece":"crate","cell":[12,17],"turn":1,"variant":"cart","off":[0.2,0,0]},
-        {"piece":"ship","cell":[21,12.5],"turn":1,"variant":"kestrel","off":[0,0,0.3]},
-        {"piece":"gangway","cell":[22.5,14],"turn":0,"variant":"seven","off":[-0.25,0,-0.34]}
+        {"piece":"crate","cell":[12,17],"turn":1,"variant":"cart","off":[0.2,0,0]}
       ]
     },
     {
@@ -6254,6 +6255,82 @@
         {"piece":"skin","cell":[9.5,32],"turn":3,"variant":"11 m"},
         {"piece":"skin","cell":[9.5,33],"turn":3,"variant":"11 m"},
         {"piece":"skin","cell":[9.5,34],"turn":3,"variant":"11 m"}
+      ]
+    },
+    {
+      "id": "ship-miner",
+      "name": "The Miner, parked",
+      "with": ["hangar-miner"],
+      "pieces": [
+        {"piece":"mbHull","cell":[21,-2.5],"turn":1,"variant":"hull","off":[0,1.82,0.3]},
+        {"piece":"mbMounts","cell":[21,-2.5],"turn":1,"variant":"both sides","off":[0,1.82,0.3]},
+        {"piece":"mbCanopy","cell":[21,-2.5],"turn":1,"variant":"glass","off":[0,1.82,0.3]},
+        {"piece":"mbMarks","cell":[21,-2.5],"turn":1,"variant":"marks","off":[0,1.82,0.3]},
+        {"piece":"mbWells","cell":[21,-2.5],"turn":1,"variant":"pods","off":[0,1.82,0.3]},
+        {"piece":"mbLift","cell":[21,-2.5],"turn":1,"variant":"belly","off":[0,1.82,0.3],"hold":0},
+        {"piece":"mbGear","cell":[21,-2.5],"turn":1,"variant":"port","off":[0,1.82,0.3],"hold":0},
+        {"piece":"mbGearDoors","cell":[21,-2.5],"turn":1,"variant":"port","off":[0,1.82,0.3],"hold":0},
+        {"piece":"mbGear","cell":[21,-2.5],"turn":1,"variant":"starboard","off":[0,1.82,0.3],"hold":0},
+        {"piece":"mbGearDoors","cell":[21,-2.5],"turn":1,"variant":"starboard","off":[0,1.82,0.3],"hold":0},
+        {"piece":"mbArm","cell":[21,-2.5],"turn":1,"variant":"port","off":[0,1.82,0.3],"hold":1},
+        {"piece":"mbArm","cell":[21,-2.5],"turn":1,"variant":"starboard","off":[0,1.82,0.3],"hold":1},
+        {"piece":"mbPod","cell":[21,-2.5],"turn":1,"variant":"top front port","off":[0,1.82,0.3],"hold":0},
+        {"piece":"mbPod","cell":[21,-2.5],"turn":1,"variant":"top front starboard","off":[0,1.82,0.3],"hold":0},
+        {"piece":"mbPod","cell":[21,-2.5],"turn":1,"variant":"top rear port","off":[0,1.82,0.3],"hold":0},
+        {"piece":"mbPod","cell":[21,-2.5],"turn":1,"variant":"top rear starboard","off":[0,1.82,0.3],"hold":0},
+        {"piece":"mbPod","cell":[21,-2.5],"turn":1,"variant":"bottom rear port","off":[0,1.82,0.3],"hold":0},
+        {"piece":"mbPod","cell":[21,-2.5],"turn":1,"variant":"bottom rear starboard","off":[0,1.82,0.3],"hold":0},
+        {"piece":"mbCanister","cell":[21,-2.5],"turn":1,"variant":"port upper front","off":[0,1.82,0.3],"hold":0},
+        {"piece":"mbCanister","cell":[21,-2.5],"turn":1,"variant":"port upper back","off":[0,1.82,0.3],"hold":0},
+        {"piece":"mbCanister","cell":[21,-2.5],"turn":1,"variant":"port lower front","off":[0,1.82,0.3],"hold":0},
+        {"piece":"mbCanister","cell":[21,-2.5],"turn":1,"variant":"port lower back","off":[0,1.82,0.3],"hold":0},
+        {"piece":"mbCanister","cell":[21,-2.5],"turn":1,"variant":"starboard upper front","off":[0,1.82,0.3],"hold":0},
+        {"piece":"mbCanister","cell":[21,-2.5],"turn":1,"variant":"starboard upper back","off":[0,1.82,0.3],"hold":0},
+        {"piece":"mbCanister","cell":[21,-2.5],"turn":1,"variant":"starboard lower front","off":[0,1.82,0.3],"hold":0},
+        {"piece":"mbCanister","cell":[21,-2.5],"turn":1,"variant":"starboard lower back","off":[0,1.82,0.3],"hold":0},
+        {"piece":"mbCockpit","cell":[21,-2.5],"turn":1,"variant":"two seats","off":[0,1.82,0.3]}
+      ]
+    },
+    {
+      "id": "ship-explorer",
+      "name": "The Explorer, parked",
+      "with": ["hangar"],
+      "pieces": [
+        {"piece":"ebHull","cell":[21,12.5],"turn":1,"variant":"hull","off":[0,1.74,0.3]},
+        {"piece":"ebCanopy","cell":[21,12.5],"turn":1,"variant":"glass","off":[0,1.74,0.3]},
+        {"piece":"ebMarks","cell":[21,12.5],"turn":1,"variant":"marks","off":[0,1.74,0.3]},
+        {"piece":"ebWells","cell":[21,12.5],"turn":1,"variant":"wells","off":[0,1.74,0.3]},
+        {"piece":"ebDoorway","cell":[21,12.5],"turn":1,"variant":"port","off":[0,1.74,0.3]},
+        {"piece":"ebDoorway","cell":[21,12.5],"turn":1,"variant":"starboard","off":[0,1.74,0.3]},
+        {"piece":"ebAirstair","cell":[21,12.5],"turn":1,"variant":"port","off":[0,1.74,0.3]},
+        {"piece":"ebGear","cell":[21,12.5],"turn":1,"variant":"nose","off":[0,1.74,0.3],"hold":0},
+        {"piece":"ebGearDoors","cell":[21,12.5],"turn":1,"variant":"nose","off":[0,1.74,0.3],"hold":0},
+        {"piece":"ebGear","cell":[21,12.5],"turn":1,"variant":"port","off":[0,1.74,0.3],"hold":0},
+        {"piece":"ebGearDoors","cell":[21,12.5],"turn":1,"variant":"port","off":[0,1.74,0.3],"hold":0},
+        {"piece":"ebGear","cell":[21,12.5],"turn":1,"variant":"starboard","off":[0,1.74,0.3],"hold":0},
+        {"piece":"ebGearDoors","cell":[21,12.5],"turn":1,"variant":"starboard","off":[0,1.74,0.3],"hold":0},
+        {"piece":"ebCockpit","cell":[21,12.5],"turn":1,"variant":"two seats","off":[0,1.74,0.3]}
+      ]
+    },
+    {
+      "id": "ship-medic",
+      "name": "The Medic, parked",
+      "with": ["hangar-medic"],
+      "pieces": [
+        {"piece":"mdHull","cell":[21,27.5],"turn":3,"variant":"hull","off":[0,1.74,-0.3]},
+        {"piece":"mdCanopy","cell":[21,27.5],"turn":3,"variant":"glass","off":[0,1.74,-0.3]},
+        {"piece":"mdMarks","cell":[21,27.5],"turn":3,"variant":"marks","off":[0,1.74,-0.3]},
+        {"piece":"mdBay","cell":[21,27.5],"turn":3,"variant":"med bay","off":[0,1.74,-0.3]},
+        {"piece":"mdWells","cell":[21,27.5],"turn":3,"variant":"wells","off":[0,1.74,-0.3]},
+        {"piece":"mdRamp","cell":[21,27.5],"turn":3,"variant":"port","off":[0,1.74,-0.3]},
+        {"piece":"mdRamp","cell":[21,27.5],"turn":3,"variant":"starboard","off":[0,1.74,-0.3]},
+        {"piece":"mdCrewDoor","cell":[21,27.5],"turn":3,"variant":"port","off":[0,1.74,-0.3]},
+        {"piece":"mdAirlock","cell":[21,27.5],"turn":3,"variant":"port","off":[0,1.74,-0.3]},
+        {"piece":"mdGear","cell":[21,27.5],"turn":3,"variant":"port front","off":[0,1.74,-0.3],"hold":0},
+        {"piece":"mdGear","cell":[21,27.5],"turn":3,"variant":"port rear","off":[0,1.74,-0.3],"hold":0},
+        {"piece":"mdGear","cell":[21,27.5],"turn":3,"variant":"starboard front","off":[0,1.74,-0.3],"hold":0},
+        {"piece":"mdGear","cell":[21,27.5],"turn":3,"variant":"starboard rear","off":[0,1.74,-0.3],"hold":0},
+        {"piece":"mdCockpit","cell":[21,27.5],"turn":3,"variant":"two seats","off":[0,1.74,-0.3]}
       ]
     }
   ]

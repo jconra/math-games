@@ -126,7 +126,9 @@ export function buildRoom(room, mats, opts = {}) {
       const e = _m.elements.slice(); for (const [k, g] of Object.entries(pieceByMat(p))) lists[k].push({ geo: g, e });
       for (const L of p.lights) lights.push({ ...L, at: _v.set(...L.at).applyMatrix4(_m).toArray(), dir: L.dir ? _d.set(...L.dir).transformDirection(_m).toArray() : null });
       const mine = new Map();
-      for (const dr of p.doors) { const D = { piece: pl.piece, at: pl.cell, zone: zd.id, sense: new THREE.Vector3(...dr.sense).applyMatrix4(_m), near: dr.near, speed: dr.speed, t: 0, target: 0, leaves: [] }; doors.push(D); mine.set(dr.id, D); }
+      // (a placement's `hold`: its doors stay at that much open whatever comes near, whatever the mode: a parked ship's
+      // folded arms and lowered legs)
+      for (const dr of p.doors) { const h = pl.hold ?? null, D = { piece: pl.piece, at: pl.cell, zone: zd.id, sense: new THREE.Vector3(...dr.sense).applyMatrix4(_m), near: dr.near, speed: dr.speed, t: h ?? 0, target: h ?? 0, hold: h, leaves: [] }; doors.push(D); mine.set(dr.id, D); }
       for (const mv of p.movers) {
         if (!leafGroups.has(mv.key)) leafGroups.set(mv.key, { piece: mv.piece, list: [] });
         const leaf = { M: _m.clone(), base: mv.base, slide: mv.slide, door: mine.get(mv.door) };
@@ -190,7 +192,7 @@ export function buildRoom(room, mats, opts = {}) {
       }
       meshes.push(im); group.add(im); stats.draws++; stats.tris += g.index.count / 3 * G.list.length;
     }
-    G.list.forEach((leaf, i) => { leaf.meshes = meshes; leaf.index = i; setLeaf(leaf, 0); });
+    G.list.forEach((leaf, i) => { leaf.meshes = meshes; leaf.index = i; setLeaf(leaf, leaf.door?.hold ?? 0); });
     stats.leaves += G.list.length;
   }
   stats.tris = Math.round(stats.tris); stats.ms = Math.round(performance.now() - t0); stats.mergeMs = Math.round(tMerge - t0);
@@ -254,7 +256,7 @@ export function updateDoors(doors, eye, dt, mode = 'auto') {
   let moved = false;
   for (const D of doors) {
     const dx = eye.x - D.sense.x, dz = eye.z - D.sense.z, dy = Math.max(0, Math.abs(eye.y - D.sense.y) - 1.4);
-    D.target = mode === 'open' ? 1 : mode === 'shut' ? 0 : (Math.hypot(dx, dz, dy) < D.near ? 1 : 0);
+    D.target = D.hold != null ? D.hold : mode === 'open' ? 1 : mode === 'shut' ? 0 : (Math.hypot(dx, dz, dy) < D.near ? 1 : 0);
     if (D.t === D.target) continue;
     D.t = D.t < D.target ? Math.min(D.target, D.t + dt * D.speed) : Math.max(D.target, D.t - dt * D.speed * 0.8);
     for (const leaf of D.leaves) setLeaf(leaf, D.t);
@@ -262,7 +264,7 @@ export function updateDoors(doors, eye, dt, mode = 'auto') {
   }
   return moved;
 }
-export function setDoors(doors, t) { for (const D of doors) { D.t = D.target = t; for (const leaf of D.leaves) setLeaf(leaf, t); } }
+export function setDoors(doors, t) { for (const D of doors) { const v = D.hold ?? t; D.t = D.target = v; for (const leaf of D.leaves) setLeaf(leaf, v); } }
 
 // the box a room's pieces fill (their own parts and door leaves, as placed)
 export function roomBounds(room) {
