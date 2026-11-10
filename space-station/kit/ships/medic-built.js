@@ -386,6 +386,10 @@ function mdBay(p, variant) {
 // Tread grey, hazard edges yellow and black (his).
 // the ramps' path strips' glow (dim amber)
 export const RAMP_STRIP = [1.3, 0.8, 0.3];
+// the ramps' grip tape: patches side by side across the tread (across), the gaps between them and between rows (gap),
+// a row's length (row), the tape's look (dark, matt, its wear at full so the wear map reads as grit); the hazard
+// stripes' width (stripe)
+export const RAMP_TAPE = { across: 3, gap: 0.08, row: 0.5, stripe: 0.09, look: { c: '#1d1f22', r: 0.97, m: 0.0, w: 1.0 } };
 export const RAMP = (() => {
   // (z: the ramp across its opening, 2 cm clear of each closer's jamb; it was [-1.83, 1.64] in Meshy's whole opening)
   const face = 2.98, sill = 1.68, head = 3.86, A = head - sill, B = 1.67, T = 0.11, z = [OPENING.z[0] + 0.02, OPENING.z[1] - 0.02];
@@ -398,27 +402,56 @@ export const RAMP = (() => {
 function rampSection(a, s, u0, u1, isA) {
   const R = RAMP, xo = s * R.face, xt = s * (R.face - R.T), [z0, z1] = R.z;
   const P = ([x, u, z]) => V3(x, R.sill + u, z), poly = (q, n, surf) => a.poly(q.map((v) => dk(P(v))), n, surf, 'solid', 99);
-  // the tread (facing the bay when stowed: -s x), hazard edges along its sides, the plates' seams
-  const e = 0.13, xr = xt - s * 0.002;
-  poly([[xt, u0, z0 + e], [xt, u1, z0 + e], [xt, u1, z1 - e], [xt, u0, z1 - e]], V3(-s, 0, 0), PAL.tread);
-  const nB = Math.max(2, Math.round((u1 - u0) / 0.2));
-  for (let i = 0; i < nB; i++) {
-    const ua = u0 + (u1 - u0) * i / nB, ub = u0 + (u1 - u0) * (i + 1) / nB, col = i % 2 ? PAL.black : PAL.yellow;
-    for (const [za, zb] of [[z0, z0 + e], [z1 - e, z1]]) poly([[xr, ua, za], [xr, ub, za], [xr, ub, zb], [xr, ua, zb]], V3(-s, 0, 0), col);
-  }
-  for (let u = u0 + 0.6; u < u1 - 0.2; u += 0.6) poly([[xr - s * 0.001, u - 0.01, z0 + e], [xr - s * 0.001, u + 0.01, z0 + e], [xr - s * 0.001, u + 0.01, z1 - e], [xr - s * 0.001, u - 0.01, z1 - e]], V3(-s, 0, 0), PAL.dark);
-  // (two path strips up the tread just inside its hazard edges, dim amber, unlit by anything else: seen from inside the
-  // bay the ramp standing up reads as a ramp, and down it lights the way up)
-  for (const zs of [z0 + e + 0.03, z1 - e - 0.055]) a.poly([[xr - s * 0.0015, u0 + 0.05, zs], [xr - s * 0.0015, u1 - 0.05, zs], [xr - s * 0.0015, u1 - 0.05, zs + 0.025], [xr - s * 0.0015, u0 + 0.05, zs + 0.025]].map((v) => dk(P(v))), V3(-s, 0, 0), RAMP_STRIP, 'glow', 99);
-  // (the cleats across the tread, every 0.3 m: bars standing 2 cm proud, for grip going up and down)
+  // the tread (facing the bay when stowed: -s x). The game's maker, 2026-11-10: "I feel the ramps need more texture
+  // though. Like stripes and patches of grip tape." So, painted on (no texture, no draw of its own: the cabin's solid
+  // material, its wear map giving the tape its grit): yellow-and-black hazard stripes on a slant down both edges and
+  // across the hinge end (A) and the foot (B); patches of dark grip tape between them, RAMP_TAPE.across side by side
+  // with gaps, rows RAMP_TAPE.row long with a cleat in each gap between rows; the amber path strips kept
+  const e = 0.13, T = RAMP_TAPE, clampU = (u) => Math.max(u0, Math.min(u1, u));
+  // (one face painted: on the plane x0, facing d along x: its plate; a hazard band down both edges and one across the
+  // end at u = end, running inwards (dir +1 up, -1 down); the grip tape in rows between; two path strips; back: the
+  // u's of the gaps between rows, for the cleats)
+  const paint = (x0, d, plate, end, dir) => {
+    const N = V3(d, 0, 0), xr = x0 + d * 0.002, xs = x0 + d * 0.0025, xg = x0 + d * 0.001, xl = x0 + d * 0.0035;
+    poly([[x0, u0, z0 + e], [x0, u1, z0 + e], [x0, u1, z1 - e], [x0, u0, z1 - e]], N, plate);
+    // (a hazard band: a yellow field, black stripes slanting across it at 45 degrees, T.stripe wide with as much between)
+    const hazardAlong = (za, zb) => {
+      poly([[xr, u0, za], [xr, u1, za], [xr, u1, zb], [xr, u0, zb]], N, PAL.yellow);
+      for (let u = u0 - (zb - za); u < u1; u += 2 * T.stripe) poly([[xs, clampU(u), za], [xs, clampU(u + T.stripe), za], [xs, clampU(u + T.stripe + (zb - za)), zb], [xs, clampU(u + (zb - za)), zb]], N, PAL.black);
+    };
+    const hazardAcross = (ua, ub) => {
+      const za = z0 + e, zb = z1 - e, k = ub - ua, c = (v) => Math.max(za, Math.min(zb, v));
+      poly([[xr, ua, za], [xr, ub, za], [xr, ub, zb], [xr, ua, zb]], N, PAL.yellow);
+      for (let z = za - k; z < zb; z += 2 * T.stripe) poly([[xs, ua, c(z)], [xs, ua, c(z + T.stripe)], [xs, ub, c(z + T.stripe + k)], [xs, ub, c(z + k)]], N, PAL.black);
+    };
+    hazardAlong(z0, z0 + e); hazardAlong(z1 - e, z1);
+    const band = 0.15, ua0 = dir > 0 ? u0 + band : u0 + 0.04, ub1 = dir > 0 ? u1 - 0.04 : u1 - band;
+    if (dir > 0) hazardAcross(end, end + band); else hazardAcross(end - band, end);
+    // (the grip tape: rows of patches across the width between the path strips)
+    const zl = z0 + e + 0.075, zh = z1 - e - 0.075, pw = (zh - zl - (T.across - 1) * T.gap) / T.across;
+    const rows = Math.max(1, Math.floor((ub1 - ua0 + T.gap) / (T.row + T.gap))), rl = (ub1 - ua0 - (rows - 1) * T.gap) / rows, gaps = [];
+    for (let r = 0; r < rows; r++) {
+      const ua = ua0 + r * (rl + T.gap), ub = ua + rl;
+      for (let k = 0; k < T.across; k++) { const za = zl + k * (pw + T.gap), zb = za + pw; poly([[xg, ua, za], [xg, ub, za], [xg, ub, zb], [xg, ua, zb]], N, T.look); }
+      if (r < rows - 1) gaps.push(ub + T.gap / 2);
+    }
+    // (two path strips just inside the hazard edges, dim amber, unlit by anything else: seen from inside the bay the
+    // ramp standing up reads as a ramp, and down they light the way up)
+    for (const zs of [z0 + e + 0.03, z1 - e - 0.055]) a.poly([[xl, u0 + 0.05, zs], [xl, u1 - 0.05, zs], [xl, u1 - 0.05, zs + 0.025], [xl, u0 + 0.05, zs + 0.025]].map((v) => dk(P(v))), N, RAMP_STRIP, 'glow', 99);
+    return gaps;
+  };
+  // (the tread: on A the band across the hinge end, on B across the foot)
+  const gaps = paint(xt, -s, PAL.tread, isA ? u0 : u1, isA ? 1 : -1);
+  // (the cleats across the tread, one in each gap between the rows of tape: bars standing 2 cm proud)
   const xc = xt - s * 0.02;
-  for (let u = u0 + 0.15; u < u1 - 0.08; u += 0.3) {
+  for (const u of gaps) {
     poly([[xc, u - 0.02, z0 + e], [xc, u + 0.02, z0 + e], [xc, u + 0.02, z1 - e], [xc, u - 0.02, z1 - e]], V3(-s, 0, 0), PAL.metal);
     poly([[xt, u + 0.02, z0 + e], [xc, u + 0.02, z0 + e], [xc, u + 0.02, z1 - e], [xt, u + 0.02, z1 - e]], V3(0, 1, 0), PAL.darkEdge);
     poly([[xt, u - 0.02, z0 + e], [xt, u - 0.02, z1 - e], [xc, u - 0.02, z1 - e], [xc, u - 0.02, z0 + e]], V3(0, -1, 0), PAL.darkEdge);
   }
-  // the outside: on A white in a graphite frame, two panel seams across it and a hazard band by the hinge; on B graphite
-  // (the ramp's underside)
+  // the outside: on A white in a graphite frame, two panel seams across it and a hazard band by the hinge; on B (the
+  // ramp's underside when down, but folded onto A's tread when the ramp is up: the big panel seen from the bay) painted
+  // like the tread, its band across the joint end (on top when stowed, A's hinge band below: a hazard frame all round)
   const f = 0.12;
   if (isA) {
     poly([[xo, u0 + f, z0 + f], [xo, u1 - f, z0 + f], [xo, u1 - f, z1 - f], [xo, u0 + f, z1 - f]], V3(s, 0, 0), PAL.skin);
@@ -427,7 +460,7 @@ function rampSection(a, s, u0, u1, isA) {
     for (const k of [1, 2]) { const u = u0 + f + (u1 - u0 - 2 * f) * k / 3; poly([[xp, u - 0.012, za], [xp, u + 0.012, za], [xp, u + 0.012, zb], [xp, u - 0.012, zb]], V3(s, 0, 0), PAL.dark); }
     const nH = 16, h0 = u0 + f, h1 = h0 + 0.16;
     for (let i = 0; i < nH; i++) { const zi = za + (zb - za) * i / nH, zj = za + (zb - za) * (i + 1) / nH; poly([[xp, h0, zi], [xp, h1, zi], [xp, h1, zj], [xp, h0, zj]], V3(s, 0, 0), i % 2 ? PAL.black : PAL.yellow); }
-  } else poly([[xo, u0, z0], [xo, u1, z0], [xo, u1, z1], [xo, u0, z1]], V3(s, 0, 0), PAL.dark);
+  } else paint(xo, s, PAL.tread, u0, 1);
   // its edges: the ends across z, the top (B's: the foot, yellow) and the bottom
   poly([[xo, u0, z0], [xt, u0, z0], [xt, u1, z0], [xo, u1, z0]], V3(0, 0, -1), PAL.darkEdge);
   poly([[xo, u0, z1], [xo, u1, z1], [xt, u1, z1], [xt, u0, z1]], V3(0, 0, 1), PAL.darkEdge);
