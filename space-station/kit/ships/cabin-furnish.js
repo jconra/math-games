@@ -610,7 +610,7 @@ function busyWalls({ room, ctx, items, at, extra, machines, named, PW, pipeY, r3
       // a slim box each side of the station's screens, over its desk, between them and the pipes down to the deck
       for (const S of stations.filter((S) => S.W.axis === W.axis && Math.abs(S.W.v - W.v) < EPS)) for (const k of [-1, 1]) {
         const x = r3(localX(W, mid, S.mid) + k * (S.len / 2 + 0.03)), clear = !machines.some((M) => { const [a, b] = alongOf(M.it, W).map((v) => localX(W, mid, v)).sort((u, v) => u - v); return x + 0.07 > a && x - 0.07 < b; });
-        if (clear) ctx.put(tag, part(junctionBox, { x, y: 1.28, w: 0.11, h: 0.42, d: 0.06, lamp: k > 0 ? 'blink' : 'steady', caution: false, glands: [1, 1], seed: seed++ }), at(W, mid));
+        if (clear) ctx.put(tag, part(junctionBox, { x, y: 1.6, w: 0.11, h: 0.36, d: 0.06, lamp: k > 0 ? 'blink' : 'steady', caution: false, glands: [1, 1], seed: seed++ }), at(W, mid));
       }
       continue;
     }

@@ -39,7 +39,7 @@
 import * as THREE from 'three';
 import { shape, solid, plate, relief, prism, add } from '../../bevel.js';
 import { FACE, ROOM } from './ship.js';
-import { FLAT } from './bits.js';
+import { FLAT, strip } from './bits.js';
 import { GUN, STEEL } from './mess.js';
 import { tube, spun, aim } from './round.js';
 import { liveLamp } from './live.js';
@@ -49,7 +49,7 @@ const PI = Math.PI;
 const w = (c, r = 0.55) => ({ c, r, m: 0.05, w: 0.2 });
 export const WIRES = [w('#1d1e21'), w('#9a3020'), w('#3a3c41'), w('#b48e2c'), w('#2c5590'), w('#6a6d73'), w('#357040'), w('#1d1e21'), w('#b9b6ae'), w('#a35a20')];
 const lighter = (s) => { const c = new THREE.Color(s.c).lerp(new THREE.Color('#e2e0da'), 0.45); return { ...s, c: '#' + c.getHexString(), r: s.r - 0.2 }; };
-const DIAL = { c: '#d9d6cc', r: 0.45, m: 0, w: 0.2 }, SHADOW = { c: '#2a2b2e', r: 0.8, m: 0, w: 0.2 }, TIE = { c: '#151618', r: 0.5, m: 0.1, w: 0.2 }, BOX = { c: '#868a90', r: 0.42, m: 0.35, w: 0.45 };
+const DIAL = [0.34, 0.31, 0.24], SHADOW = { c: '#2a2b2e', r: 0.8, m: 0, w: 0.2 }, TIE = { c: '#151618', r: 0.5, m: 0.1, w: 0.2 }, BOX = { c: '#868a90', r: 0.42, m: 0.35, w: 0.45 };
 
 // ── a flat strip along a line in the xy plane, its two edges `a` and `b` off the line (left of it, as it runs) ──
 function offsetLine(P, d) {
@@ -155,11 +155,13 @@ export function breakerBox(p, o = {}) {
       const cx = x - bw / 2 + 0.035 + cw * (c + 0.5), k = (r * cols + c + seed) % 7;
       toggle(p, cx, ry - 0.006, z, k === 3 || k === 5 ? -1 : 1);
       const lamp = LAMPS[(r * 5 + c * 3 + seed) % LAMPS.length], B = blink.findIndex(([br, bc]) => br === r && bc === c);
-      if (B >= 0) liveLamp(p, { w: 0.012, h: 0.012, mode: 'blink', every: 4 + ((B * 3 + seed) % 4), glow: lamp, phase: ((B * 0.37 + seed * 0.21) % 1) }, [cx, ry + 0.03, z + 0.0012]);
-      else add(p, lamp, plate(shape(0.011, 0.011, 0.003, cx, ry + 0.03)), [0, 0, z + 0.0012], null, 'glow');
+      if (B >= 0) liveLamp(p, { w: 0.014, h: 0.014, mode: 'blink', every: 4 + ((B * 3 + seed) % 4), glow: lamp, phase: ((B * 0.37 + seed * 0.21) % 1) }, [cx, ry + 0.03, z + 0.0012]);
+      else add(p, lamp, plate(shape(0.013, 0.013, 0.003, cx, ry + 0.03)), [0, 0, z + 0.0012], null, 'glow');
     }
     p.decal('breakerTags', bw - 0.08, 0.022, [x, ry - 0.04, z + 0.001], null, '#cfccc4');
   }
+  // (its lamps' own glow on its face and the wall round it, for the bake: faint)
+  strip(p, [x, y, z + 0.08], 0.05, [0, 0, -1], 0.45, [0.7, 1.0, 0.75]);
   // the stencil over them (its name), a hazard band under them
   // (the station's own stencils, kit/tex.js LABELS: 'label:BUS-C', 'label:BUS-D', 'label:AIR-2' ...)
   if (o.label) p.decal(o.label, Math.min(0.2, bw - 0.12), Math.min(0.2, bw - 0.12) / 4, [x, y + bh / 2 - 0.048, z + 0.001], null, '#2c2e32');
@@ -167,9 +169,9 @@ export function breakerBox(p, o = {}) {
 }
 export function junctionBox(p, o = {}) {
   const x = o.x ?? 0, y = o.y ?? 0.6, bw = o.w ?? 0.24, bh = o.h ?? 0.3, d = o.d ?? 0.07;
-  add(p, BOX, solid(shape(bw, bh, 0.025, x, y), d, { edge: 0.006, back: false }), [0, 0, FACE]);
+  add(p, BOX, solid(shape(bw, bh, Math.min(0.025, bw * 0.11), x, y), d, { edge: 0.006, back: false }), [0, 0, FACE]);
   const z = FACE + d;
-  add(p, 'grey2', relief(shape(bw - 0.03, bh - 0.03, 0.02, x, y), [{ inset: 0, depth: 0.004, bevel: 0.004 }, { inset: 0.018, depth: 0.0015, bevel: 0.003 }]), [0, 0, z]);
+  add(p, 'grey2', relief(shape(bw - 0.03, bh - 0.03, Math.min(0.02, bw * 0.09), x, y), [{ inset: 0, depth: 0.004, bevel: 0.004 }, { inset: 0.018, depth: 0.0015, bevel: 0.003 }]), [0, 0, z]);
   add(p, 'black', plate(shape(0.018, 0.07, 0.006, x + bw / 2 - 0.035, y)), [0, 0, z + 0.0045]);
   if (o.caution !== false) p.decal('cp:caution', bw * 0.6, bw * 0.15, [x - 0.01, y + bh / 2 - 0.06, z + 0.0046], null, '#c9a032');
   if (o.lamp === 'blink') liveLamp(p, { w: 0.014, h: 0.014, mode: 'blink', every: 5, glow: 'amber', phase: (o.seed ?? 0) * 0.3 % 1 }, [x - bw / 2 + 0.035, y - bh / 2 + 0.035, z + 0.0046]);
@@ -186,7 +188,8 @@ export function gauges(p, o = {}) {
   for (let i = 0; i < n; i++) {
     const cx = x - pw / 2 + 0.03 + r + i * (2 * r + 0.03);
     add(p, STEEL, aim(spun([[r * 0.86, 0], [r, 0.004], [r, 0.012], [r * 0.86, 0.016]], { seg: 16, caps: [false, false] }), [cx, y + 0.005, z], [0, 0, 1]));
-    add(p, DIAL, plate(shape(r * 1.72, r * 1.72, r * 1.72 * 0.293, cx, y + 0.005)), [0, 0, z + 0.004]);
+    // (its face backlit, a dim warm white: a gauge reads in a dark room)
+    add(p, DIAL, plate(shape(r * 1.72, r * 1.72, r * 1.72 * 0.293, cx, y + 0.005)), [0, 0, z + 0.004], null, 'glow');
     p.decal('cp:ticks', r * 1.6, r * 1.6, [cx, y + 0.005, z + 0.0048], null, '#2a2c30');
     const a = PI * (1.25 - 1.5 * (turn[i % turn.length] ?? 0.5));
     add(p, 'red', plate(shape(r * 0.75, 0.004, 0.0015, r * 0.3, 0)), [cx, y + 0.005, z + 0.0056], [0, 0, a]);
@@ -195,10 +198,12 @@ export function gauges(p, o = {}) {
 }
 
 // ── a whole stretch of wall ─────────────────────────────────────────────────────────────────────────────────────
-// (in its own x from -w/2 to w/2; its things kept 0.03 in from each end)
+// (in its own x from -w/2 to w/2; its things kept 0.06 in from each end. Two arrangements, so two stretches side by side
+// are not one copied: an even seed has its gauges high and its junction box low, an odd one the other way round, three
+// gauges, the lamp plate higher)
 export function wallKit(p, o = {}) {
-  const W = o.w ?? 1, top = o.top ?? 2.45, f = o.flip ? -1 : 1, seed = o.seed ?? 0, e = W / 2 - 0.03;
-  const bwid = Math.min(0.42, W * 0.48), bx = f * (e - bwid / 2), ox = -f * (e - 0.17), by = Math.min(1.46, top - 0.75);
+  const W = o.w ?? 1, top = o.top ?? 2.45, f = o.flip ? -1 : 1, seed = o.seed ?? 0, e = W / 2 - 0.06, odd = seed % 2 === 1;
+  const bwid = Math.min(0.42, W * 0.44), bx = f * (e - bwid / 2), ox = -f * (e - 0.17), by = Math.min(1.46, top - 0.75);
   // the bundle along its top, dropping at 45 degrees to the box of switches, on down its side to the deck
   const ty = top - 0.14;
   if (o.tray !== false) wireCard(p, { pts: [[-W / 2, ty], [W / 2, ty]], n: 9, seed, ties: 0.28 });
@@ -210,13 +215,14 @@ export function wallKit(p, o = {}) {
   wireCard(p, { pts: [[bx - f * (bwid / 2 - 0.03), by - 0.3], [bx - f * (bwid / 2 - 0.03), 0.16]], n: 4, seed: seed + 6, ties: 0.3 });
   // on the other side: the gauges high, a junction box low, a hanging pair of cables between it and the box of switches,
   // a conduit from it up to the bundle
-  gauges(p, { x: ox, y: by + 0.2, n: 2, turn: [0.3 + 0.1 * seed, 0.7] });
-  const jy = 0.62;
+  const jy = odd ? by + 0.14 : 0.62, ly = odd ? 0.98 : (0.62 + by) / 2 - 0.02;
+  gauges(p, odd ? { x: ox, y: 0.66, n: 3, r: 0.038, turn: [0.6, 0.25, 0.8] } : { x: ox, y: by + 0.2, n: 2, turn: [0.3 + 0.1 * seed, 0.7] });
   junctionBox(p, { x: ox, y: jy, lamp: 'blink', seed });
-  cables(p, { a: [bx - f * bwid / 2, by - 0.18, FACE + 0.06], b: [ox + f * 0.06, jy + 0.15, FACE + 0.04], sag: 0.14, n: 2 });
-  conduit(p, { pts: [[ox - f * 0.07, jy + 0.15], [ox - f * 0.07, by - 0.02], [ox - f * 0.07 - f * 0.08, by + 0.06], [ox - f * 0.07 - f * 0.08, ty - 0.03]], z: FACE + 0.02, r: 0.01 });
-  // a small plate of three more lamps and a key switch between the gauges and the junction box
-  const ly = (jy + by) / 2 - 0.02;
+  // (the hanging pair: from the box of switches' side, drooping across to the lamp plate or the junction box)
+  cables(p, { a: [bx - f * (bwid / 2 + 0.005), by - 0.22, FACE + 0.05], b: odd ? [ox + f * 0.125, jy - 0.08, FACE + 0.045] : [ox + f * 0.08, ly + 0.01, FACE + 0.03], sag: 0.17, n: 2 });
+  const cx = ox - f * 0.07, cy = odd ? Math.max(jy + 0.2, ty - 0.3) : by - 0.02;   // (an even one jogs out round its gauges)
+  conduit(p, { pts: [[cx, jy + 0.15], [cx, cy], [cx - f * 0.08, cy + 0.08], [cx - f * 0.08, ty - 0.03]], z: FACE + 0.02, r: 0.01 });
+  // a small plate of three more lamps and a key switch
   add(p, 'black', solid(shape(0.15, 0.07, 0.015, ox, ly), 0.012, { edge: 0.003, back: false }), [0, 0, FACE]);
   for (let i = 0; i < 3; i++) add(p, ['green', 'amber', 'green'][(i + seed) % 3], plate(shape(0.014, 0.014, 0.004, ox - 0.04 + i * 0.03, ly + 0.012)), [0, 0, FACE + 0.0125], null, 'glow');
   add(p, 'rail', plate(shape(0.022, 0.022, 0.011, ox + 0.05, ly + 0.012)), [0, 0, FACE + 0.0125]);
@@ -224,7 +230,7 @@ export function wallKit(p, o = {}) {
   // its lower half: a bundle across it at waist height (behind the conduits), dropping into a terminal box along its foot
   // (a long low box, a row of lamps and tags on it), a small pipe along the deck under that
   const wy = 0.98;
-  wireCard(p, { pts: [[-W / 2, wy], [ox + f * 0.16, wy], [ox + f * 0.08, wy - 0.08], [ox + f * 0.08, jy + 0.16]], n: 7, seed: seed + 2, ties: 0.26 });
+  wireCard(p, { pts: odd ? [[-W / 2, wy - 0.12], [W / 2, wy - 0.12]] : [[-W / 2, wy], [ox + f * 0.16, wy], [ox + f * 0.08, wy - 0.08], [ox + f * 0.08, jy + 0.16]], n: 7, seed: seed + 2, ties: 0.26 });
   wireCard(p, { pts: [[bx - f * 0.02, wy + 0.06], [W / 2 * f, wy + 0.06]].sort((a, b) => a[0] - b[0]), n: 6, seed: seed + 5, ties: 0.3 });
   const tw = W - 0.14, ty0 = 0.3;
   boxBody(p, BOX, 0, ty0, tw, 0.15, 0.06, 0.02);
