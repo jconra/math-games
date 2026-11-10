@@ -25,7 +25,9 @@ import { SEAM, O } from './reactor.js';
 import { spun, tube, aim, bolts, flange, valve, clamp } from './round.js';
 
 const PI = Math.PI, DRUM = { c: '#8f949b', r: 0.5, m: 0.4, w: 0.4 };
-export const DRIVE_GLOW = [0.3, 0.85, 2.1], DRIVE_LIGHT = 1, DRIVE_TAG = 'drive-glow';
+// (the glow's colour, linear: a deep blue, its red and green kept low so the tone curve does not take it to white; and the
+// light it throws, bluer than a strip's)
+export const DRIVE_GLOW = [0.05, 0.3, 1.7], DRIVE_LIGHT = 1, DRIVE_TAG = 'drive-glow', DRIVE_TINT = [0.35, 0.6, 1.0];
 
 export function driveDims(o = {}) {
   const len = o.len ?? 1.5, depth = o.depth ?? 1.25, h = Math.min(o.h ?? 1.8, 1.9), back = o.back || -1, s = -back;
@@ -97,7 +99,7 @@ export function drivePumps(p, o = {}) {
     clamp(p, [xr, o.pipeY - 0.16, zd], [0, 1, 0], 0.042, [D.X0, o.pipeY - 0.16, zd]);
   }
   // its light (DRIVE_LIGHT of it): the blue glow at the drum's end, and a pool in front of it (tagged)
-  strip(p, [X(L) + s * 0.12, yd, zd], 0.35 * DRIVE_LIGHT, [s, 0, 0], 1.6, [0.55, 0.8, 1.0]);
-  p.lights.push({ at: [X(L * 0.6), yd - 0.2, zd + R + 0.45], i: 0, color: [0.55, 0.8, 1.0], dir: null, reach: 2.0, pool: { i: 0.35 * DRIVE_LIGHT, reach: 2.0, tag: DRIVE_TAG } });
+  strip(p, [X(L) + s * 0.12, yd, zd], 0.35 * DRIVE_LIGHT, [s, 0, 0], 1.6, DRIVE_TINT);
+  p.lights.push({ at: [X(L * 0.6), yd - 0.2, zd + R + 0.45], i: 0, color: DRIVE_TINT, dir: null, reach: 2.0, pool: { i: 0.35 * DRIVE_LIGHT, reach: 2.0, tag: DRIVE_TAG } });
   return p;
 }

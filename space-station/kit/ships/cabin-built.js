@@ -367,7 +367,9 @@ export function buildCabin(p, bp, opts = {}) {
       const [x0, z0, x1, z1] = r.rect, zm = (z0 + z1) / 2, a = x0 + runAt(x0, zm), b = x1 - runAt(x1, zm), f = +(r.floor || 0), xm = (a + b) / 2;
       if (b - a < 0.4) continue;
       const list = discs[r.id] || (z1 - z0 > 2.6 ? [{ x: xm, z: z0 + (z1 - z0) * 0.28 }, { x: xm, z: z1 - (z1 - z0) * 0.28 }] : [{ x: xm, z: zm }]);
-      for (const D of list) put('downlights', part(downlight, { drop: ROOM, ...(D.o || {}) }), { at: [Math.max(a + 0.16, Math.min(b - 0.16, D.x)), f + ROOM, D.z] });
+      // (a room may set its downlights' beams: "beam": { "spread" (the half angle, radians), "strength" } in the blueprint)
+      const B = r.beam || {}, beamO = { ...(B.spread ? { spread: B.spread } : {}), ...(B.strength ? { beam: B.strength } : {}) };
+      for (const D of list) put('downlights', part(downlight, { drop: ROOM, ...(D.o || {}), ...beamO }), { at: [Math.max(a + 0.16, Math.min(b - 0.16, D.x)), f + ROOM, D.z] });
     }
     if (items) for (const it of bp.items || []) {
       const r = byId[it.room]; if (!r || canopy(r) || furnished.has(it.id)) continue;
