@@ -9,6 +9,7 @@ import { reactor } from './engine.js';
 import { holoTable } from './science.js';
 import { cornerBench, messTable, stool, topCabinets, coldStore, galleyRun, coffeeMachine, mug, fruitBowl, poster } from './mess.js';
 import { bunkStack, crewLocker } from './bunks.js';
+import { labBench, microscope, glovebox, vialRack, tablet, sampleCase, surveyTable, labStool } from './lab.js';
 import { starScreen } from './bits.js';
 import { placeInto, part } from '../place.js';
 
@@ -37,6 +38,10 @@ export const PRESETS = {
   cabinBunks: { '2-high, ladder': { open: [-0.5, 0.92], head: 1, nums: [1, 2] }, 'open its whole length': { nums: [3, 4], head: -1 } },
   cabinCrewLocker: { numbered: { num: 1 }, 'with a poster': { num: 2, poster: 4 } },
   cabinStarScreen: { '8-sided': { w: 0.6, h: 0.34, seed: 3 }, 'no planet': { w: 0.5, h: 0.3, planet: false, seed: 9 } },
+  cabinLabBench: { 'with its things': { things: true }, '1.5 m': {}, '2 m, no knee space': { len: 2, knee: -1 } },
+  cabinSurveyTable: { '1 x 1.25 m': {}, '0.9 m square': { w: 0.9, depth: 0.9 } },
+  cabinSampleCase: { '1.5 m': {}, '1 m': { len: 1, h: 1.6 } },
+  cabinLabStool: { 'grey pad': {}, 'navy pad': { pad: '#22355e' } },
 };
 const entry = (id, name, mount, foot, fn) => ({ name, group: 'Ship cabin', at: 'free', mount, variants: Object.keys(PRESETS[id]), foot, build: (p, v) => fn(p, PRESETS[id][v] ?? {}) });
 export const CABIN_FIT = {
@@ -62,4 +67,8 @@ export const CABIN_FIT = {
   cabinBunks: entry('cabinBunks', 'Bunks: berths, 2-high', 'wall', [2, 1.9, 1.1], bunkStack),
   cabinCrewLocker: entry('cabinCrewLocker', 'Bunks: locker', 'wall', [0.5, 2.0, 0.5], crewLocker),
   cabinStarScreen: entry('cabinStarScreen', 'Star screen, 8-sided', 'wall', [0.7, 0.4, 0.05], (p, o) => placeInto(p, part(starScreen, o), { at: [0, 0.3, 0] })),
+  cabinLabBench: entry('cabinLabBench', 'Lab: bench', 'wall', [1.5, 1.3, 0.5], (p, o) => { labBench(p, o); if (o.things) { placeInto(p, part(glovebox, {}), { at: [-0.48, 0.9, 0.05] }); placeInto(p, part(microscope, {}), { at: [-0.12, 0.9, 0.24], rot: [0, 0.4, 0] }); placeInto(p, part(vialRack, { seed: 1 }), { at: [0.42, 0.9, 0.16] }); placeInto(p, part(tablet, {}), { at: [0.12, 0.9, 0.37], rot: [0, -0.25, 0] }); } return p; }),
+  cabinSurveyTable: entry('cabinSurveyTable', 'Lab: survey table', 'wall', [1.0, 0.95, 1.25], surveyTable),
+  cabinSampleCase: entry('cabinSampleCase', 'Lab: SAMPLES case', 'wall', [1.5, 1.8, 0.25], sampleCase),
+  cabinLabStool: entry('cabinLabStool', 'Lab: stool', 'free', [0.46, 0.95, 0.46], labStool),
 };

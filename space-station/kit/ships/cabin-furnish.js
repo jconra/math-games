@@ -28,7 +28,9 @@ import { part } from '../shipparts/place.js';
 import { FACE } from '../shipparts/cabin/ship.js';
 import { cornerBench, messTable, stool, topCabinets, coldStore, galleyRun, coffeeMachine, mug, bottle, fruitBowl, poster, wallField } from '../shipparts/cabin/mess.js';
 import { bunkStack, crewLocker } from '../shipparts/cabin/bunks.js';
-import { postersFor } from '../shipparts/cabin/print.js';
+import { labBench, microscope, glovebox, vialRack, tablet, sampleCase, surveyTable, labStool } from '../shipparts/cabin/lab.js';
+import { screen, starScreen } from '../shipparts/cabin/bits.js';
+import { POSTERS, postersFor } from '../shipparts/cabin/print.js';
 import { hangs } from './blueprint.js';
 
 const PI = Math.PI, EPS = 1e-6;
@@ -53,7 +55,7 @@ export function furnishRoom(q, bp, room, ctx) {
   F({ q, bp, room, ctx, done, items, f, at, A: accents(ctx.look) });
   return done;
 }
-const ROOMS = { galley: furnishGalley, bunks: furnishBunks };
+const ROOMS = { galley: furnishGalley, bunks: furnishBunks, science: furnishScience };
 
 // ── the galley ──────────────────────────────────────────────────────────────────────────────────────────────────
 function furnishGalley({ room, ctx, done, items, f, at, A }) {
@@ -161,8 +163,127 @@ function furnishBunks({ bp, room, ctx, done, items, at, A }) {
     done.add(it.id);
   }
   topCorner(ctx, room, items, done, at, A, 'bunks');
+  // (posters no locker took, on the clearest walls)
+  const hung = new Set(withPoster.values()), left = posters.filter((i) => !hung.has(i));
+  if (left.length) hangPosters(ctx, room, items, at, left, 'bunks: posters');
   wallFields(ctx, room, items, at, { tag: 'bunks: wall fields', touch: true });
 }
+// ── the science lab ─────────────────────────────────────────────────────────────────────────────────────────────
+// The bench (a counter) with its drawers, a knee space in its middle for the stool, a screen on the wall over it (under
+// its cabinets, where they hang over it), the glovebox at the end the cabinets leave clear, the microscope, vials and a
+// tablet on it; the sample store (a tall locker) as the SAMPLES case; the survey table (the holo item) against its wall,
+// an 8-sided star screen over it; the stool at the knee space if it is out of the doors' way; the posters on the clearest
+// walls.
+function furnishScience({ room, ctx, done, items, f, at, A }) {
+  const extra = [];
+  for (const it of items.filter((x) => x.kind === 'counter')) {
+    const W = wallOf(it, room); if (!W) continue;
+    const mid = (W.lo + W.hi) / 2, len = W.hi - W.lo, n = Math.max(1, Math.round(len / 0.5)), cw = len / n, knee = n >= 3 ? Math.floor(n / 2) : -1, top = +it.h || 0.9;
+    ctx.put('lab: bench', part(labBench, { len, depth: W.depth, top, knee, end: openEnds(W, room, items, it, mid), handle: A.handle, trim: A.trim }), at(W, mid));
+    // (the cabinets over it, as a stretch of its own x)
+    const over = items.find((o) => o.kind === 'overhead' && wallOf(o, room)?.axis === W.axis && Math.abs(wallOf(o, room).v - W.v) < EPS && alongOf(o, W)[1] > W.lo && alongOf(o, W)[0] < W.hi);
+    const span = over ? alongOf(over, W).map((a) => localX(W, mid, a)).sort((a, b) => a - b) : null, kx = knee >= 0 ? -len / 2 + cw * (knee + 0.5) : 0;
+    // the glovebox at the end with nothing hanging over it, the screen under the cabinets (or in the middle)
+    // (the glovebox at the end with nothing hanging over it; the microscope between it and the knee space; the screen
+    // on the knee space's other side, under the cabinets where they are)
+    const gEnd = span ? (span[0] + len / 2 > len / 2 - span[1] ? -1 : 1) : -1, gx = gEnd * (len / 2 - 0.25);
+    const sTop = over ? +over.y - 0.06 : top + 0.62, sh = Math.min(0.36, sTop - top - 0.12), sw = Math.min(0.56, sh * 1.6);
+    let sx = kx - gEnd * (sw / 2 + 0.03); if (span) sx = Math.max(span[0] + sw / 2, Math.min(span[1] - sw / 2, sx));
+    const on = (fn, o, x, z, y = top, r = 0) => { const P = toWorld(W, mid, [x, f + y, z]); ctx.put('lab: on the bench', part(fn, o), { at: P, rot: [0, rotOf(W) + r, 0] }); };
+    if (len >= 1.2) on(glovebox, { w: 0.44 }, gx, FACE + 0.02);
+    on(microscope, {}, kx + gEnd * 0.13, 0.25, top, -gEnd * 0.35);
+    on(vialRack, { seed: 1 }, kx - gEnd * 0.42, 0.16);
+    on(tablet, {}, kx - gEnd * 0.12, 0.37, top, -0.25);
+    if (sh > 0.2) { ctx.put('lab: screen', part(screen, { w: +sw.toFixed(3), h: +sh.toFixed(3), rect: 'math', sub: [0.03, 0.04, 0.97, 0.8], light: 0.12 }), { at: toWorld(W, mid, [sx, f + sTop - sh / 2 - 0.05, FACE]), rot: [0, rotOf(W), 0] }); extra.push(block(W, sx - sw / 2 - 0.04, sx + sw / 2 + 0.04, mid, sTop - sh - 0.1, sTop)); }
+    // the stool at the knee space, out of the doors' way
+    if (knee >= 0) { const P = toWorld(W, mid, [kx, f, W.depth + 0.12]); if (!inDoorway(room, ctx, P[0], P[2], 0.25)) ctx.put('lab: stool', part(labStool, { pad: A.pad }), { at: P, rot: [0, rotOf(W) + PI, 0] }); }
+    done.add(it.id);
+  }
+  for (const it of items) {
+    if (done.has(it.id)) continue;
+    const W = wallOf(it, room); if (!W) continue;
+    const mid = (W.lo + W.hi) / 2, len = W.hi - W.lo;
+    if (it.kind === 'locker' && +it.h >= 1.2) {
+      const slope = ctx.slopeAt(W.axis, W.v, mid), h = Math.min(+it.h, slope ? slope.y0 + 0.02 : +it.h);
+      ctx.put('lab: sample case', part(sampleCase, { len, depth: W.depth, h: +h.toFixed(3), handle: A.handle, trim: A.trim }), at(W, mid)); done.add(it.id);
+    } else if (it.kind === 'holo') {
+      ctx.put('lab: survey table', part(surveyTable, { w: len, depth: W.depth, h: +it.h || 0.9, trim: A.trim }), at(W, mid)); done.add(it.id);
+      // (the star screen over it, on its wall, where the wall is clear there)
+      const slope = ctx.slopeAt(W.axis, W.v, mid), y1 = slope ? slope.y0 - 0.08 : 2.25, sh = Math.min(0.48, y1 - (+it.h || 0.9) - 0.42), sw = Math.min(len - 0.16, sh * 1.6);
+      if (sh > 0.25 && clearStretches(ctx, room, items, roomWall(room, W), y1 - sh - 0.06, y1, extra).some(([p, q]) => p <= mid - sw / 2 - 0.04 && q >= mid + sw / 2 + 0.04)) {
+        ctx.put('lab: star screen', part(starScreen, { w: +sw.toFixed(3), h: +sh.toFixed(3), seed: 11 }), { ...at(W, mid, y1 - sh / 2 - 0.04), at: toWorld(W, mid, [0, f + y1 - sh / 2 - 0.04, FACE]) });
+        extra.push(block(W, mid - sw / 2 - 0.05, mid + sw / 2 + 0.05, mid, y1 - sh - 0.08, y1));
+      }
+    }
+  }
+  topCorner(ctx, room, items, done, at, A, 'lab');
+  const screens = extra.slice();
+  hangPosters(ctx, room, items, at, postersFor('science'), 'lab: posters', extra);
+  wallFields(ctx, room, items, at, { tag: 'lab: wall fields', touch: true, also: asItems(screens) });
+}
+
+// ── placing helpers ─────────────────────────────────────────────────────────────────────────────────────────────
+// a point in a wall fitting's own frame ([x along the wall, y, z out from the wall line]) in the ship's, and the fitting's
+// turn about y (as placing)
+const rotOf = (W) => (W.axis === 'z' ? (W.side > 0 ? 0 : PI) : (W.side > 0 ? PI / 2 : -PI / 2));
+function toWorld(W, mid, [x, y, z]) {
+  if (W.axis === 'z') return W.side > 0 ? [mid + x, y, W.v + z] : [mid - x, y, W.v - z];
+  return W.side > 0 ? [W.v + z, y, mid - x] : [W.v - z, y, mid + x];
+}
+// the whole of the room's wall an item's wall W lies on
+const roomWall = (room, W) => ({ ...W, lo: W.axis === 'z' ? room.rect[0] : room.rect[1], hi: W.axis === 'z' ? room.rect[2] : room.rect[3] });
+// a block on wall W for clearStretches (in the wall's own stretch, world): [lo, hi] along it, [y0, y1]; from x0 to x1 in a
+// fitting's own x there (its middle at mid)
+const block = (W, x0, x1, mid, y0, y1) => { const a = W.axis === 'z' ? W.side * x0 + mid : -W.side * x0 + mid, b = W.axis === 'z' ? W.side * x1 + mid : -W.side * x1 + mid; return { axis: W.axis, v: W.v, side: W.side, lo: Math.min(a, b), hi: Math.max(a, b), y0, y1 }; };
+// blocks as plan items hanging on their walls (for wallFields: `also`)
+const asItems = (blocks) => blocks.map((B) => ({ rect: B.axis === 'x' ? (B.side > 0 ? [B.v, B.lo, B.v + 0.05, B.hi] : [B.v - 0.05, B.lo, B.v, B.hi]) : (B.side > 0 ? [B.lo, B.v, B.hi, B.v + 0.05] : [B.lo, B.v - 0.05, B.hi, B.v]), y: Math.max(0.01, B.y0), h: B.y1 - Math.max(0.01, B.y0) }));
+// whether a point stands in a doorway's way: within `r` of the stretch 0.9 m into the room in front of any of its inside doors
+function inDoorway(room, ctx, x, z, r) {
+  const [X0, Z0, X1, Z1] = room.rect;
+  for (const W of [{ axis: 'x', v: X0, side: 1 }, { axis: 'x', v: X1, side: -1 }, { axis: 'z', v: Z0, side: 1 }, { axis: 'z', v: Z1, side: -1 }]) {
+    for (const [a, b] of ctx.openings(W.axis, W.v)) {
+      const n = W.axis === 'x' ? (x - W.v) * W.side : (z - W.v) * W.side, t = W.axis === 'x' ? z : x;
+      if (n > -r && n < 0.9 + r && t > a + 0.15 - r && t < b - 0.15 + r) return true;
+    }
+  }
+  return false;
+}
+// an item's ends along its wall that are open to the room (not at a wall, nothing standing against them): the worktop's
+// chamfer [left, right] in its own x
+function openEnds(W, room, items, it, mid) {
+  const [R0, R1] = W.axis === 'z' ? [room.rect[0], room.rect[2]] : [room.rect[1], room.rect[3]];
+  const open = (a) => Math.abs(a - R0) > EPS && Math.abs(a - R1) > EPS && !items.some((o) => o !== it && !+(o.y || 0) && alongOf(o, W).some((v) => Math.abs(v - a) < 0.06) && wallOf(o, room)?.v === W.v);
+  const ends = [W.lo, W.hi].map((a) => (open(a) ? 0.08 : 0));
+  return localX(W, mid, W.lo) < 0 ? ends : ends.slice().reverse();
+}
+// the clear stretches of wall W (along it, world) between heights y0 and y1: its face less its doorways (and their
+// panels), what stands against it reaching into the band or hangs on it there, the blocks given; none under a slope that
+// starts below the band's top
+function clearStretches(ctx, room, items, W, y0, y1, blocks = []) {
+  const slope = ctx.slopeAt(W.axis, W.v, (W.lo + W.hi) / 2); if (slope && slope.y0 < y1 + 0.04) return [];
+  const touches = (it) => { const [x0, z0, x1, z1] = it.rect; return W.axis === 'x' ? Math.abs((W.side > 0 ? x0 : x1) - W.v) < EPS && z1 > W.lo + EPS && z0 < W.hi - EPS : Math.abs((W.side > 0 ? z0 : z1) - W.v) < EPS && x1 > W.lo + EPS && x0 < W.hi - EPS; };
+  const cut = [...ctx.openings(W.axis, W.v),
+    ...items.filter((it) => touches(it) && (hangs(it) ? +it.y < y1 + 0.02 && +it.y + +it.h > y0 : +it.h > y0 - 0.02)).map((it) => alongOf(it, W)),
+    ...blocks.filter((B) => B.axis === W.axis && Math.abs(B.v - W.v) < EPS && B.y1 > y0 && B.y0 < y1).map((B) => [B.lo, B.hi])];
+  let free = [[W.lo + FACE + 0.07, W.hi - FACE - 0.07]];
+  for (const [a, b] of cut) free = free.flatMap(([p, q]) => (b <= p || a >= q ? [[p, q]] : [[p, a - 0.05], [b + 0.05, q]]));
+  return free.filter(([p, q]) => q - p > 0.1);
+}
+// a room's posters (POSTERS indices) on its clearest walls at eye height (each poster's middle at 1.4 m), one to a clear
+// stretch, the widest stretches first; each placed is added to `blocks`
+function hangPosters(ctx, room, items, at, list, tag, blocks = []) {
+  const [X0, Z0, X1, Z1] = room.rect, walls = [{ axis: 'x', v: X0, side: 1, lo: Z0, hi: Z1 }, { axis: 'x', v: X1, side: -1, lo: Z0, hi: Z1 }, { axis: 'z', v: Z0, side: 1, lo: X0, hi: X1 }, { axis: 'z', v: Z1, side: -1, lo: X0, hi: X1 }];
+  for (const i of list) {
+    const P = POSTERS[i], y = 1.4, y0 = y - P.h / 2 - 0.04, y1 = y + P.h / 2 + 0.04;
+    const spots = walls.flatMap((W) => clearStretches(ctx, room, items, W, y0, y1, blocks).map(([p, q]) => ({ W, p, q }))).filter((s) => s.q - s.p >= P.w + 0.08).sort((a, b) => (b.q - b.p) - (a.q - a.p));
+    const s = spots[0]; if (!s) continue;
+    const c = (s.p + s.q) / 2, mid = (s.W.lo + s.W.hi) / 2;
+    ctx.put(tag, part(poster, { i, y }), at(s.W, c));
+    blocks.push({ axis: s.W.axis, v: s.W.v, lo: c - P.w / 2 - 0.3, hi: c + P.w / 2 + 0.3, y0: 0, y1: 3 });
+  }
+  return blocks;
+}
+
 // the overhead cabinets in a room's top corners (the mess's)
 function topCorner(ctx, room, items, done, at, A, tag) {
   for (const it of items) {
