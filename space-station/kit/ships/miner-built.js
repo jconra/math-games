@@ -918,8 +918,9 @@ function setArm(D, q) {
 }
 // THE ARMS SHOWN where their doors say they are. spin: the wheel's angle now (it turns while its arm is out). over:
 // { port: {...}, starboard: {...} } joint angles given outright; over.rock false: no rock.
-// The rock waits where the claw will hold it, and drifts in along the claw's own line as the claw comes onto it.
-const _rk = new THREE.Matrix4(), _rs = new THREE.Vector3();
+// The rock is there, whole, from the moment the arms are asked to work until the ship lands (built.rockOn): it waits
+// out along the line the claw will hold it on, drifts in as the claw comes onto it, and back out as it lets go.
+const _rk = new THREE.Matrix4();
 export function armShow(built, spin = 0, over = null) {
   let claw = null;
   for (const D of built.doors) {
@@ -928,13 +929,13 @@ export function armShow(built, spin = 0, over = null) {
     setArm(D, armAngles(tool, A.side, D.t, D.work || 0, D.grip || 0, tool === 'cutter' ? spin * out : 0, over?.[A.side]));
     if (tool !== 'cutter') claw = D;
   }
-  const show = claw && (claw.work || 0) > 0 && over?.rock !== false, port = ARMS.claw === 'port';
+  const show = claw && ((claw.work || 0) > 0 || built.rockOn) && over?.rock !== false, port = ARMS.claw === 'port';
   if (built.rocks) for (const r of Object.values(built.rocks)) r.visible = false;
   if (!show) return;
   const rock = ((built.rocks ||= {})[port ? 'port' : 'starboard'] ||= (() => { const r = rockMesh(port); built.group.add(r); return r; })());
-  const e = ease(claw.work), grow = Math.min(1, claw.work * 5), at = CLAWS[ARMS.design].rock + ROCK.drift * (1 - e);
+  const e = ease(claw.work || 0), at = CLAWS[ARMS.design].rock + ROCK.drift * (1 - e);
   const palm = armPose(ARMS.claw, { ...armAngles(ARMS.design, ARMS.claw, 0, 1, 0), ...(over?.[ARMS.claw] || {}) }, ARMS.design).palm;
-  rock.matrix.multiplyMatrices(claw.leaves[0].M, palm).multiply(_rk.makeTranslation(0, 0, at)).scale(_rs.set(grow, grow, grow));
+  rock.matrix.multiplyMatrices(claw.leaves[0].M, palm).multiply(_rk.makeTranslation(0, 0, at));
   rock.matrixWorldNeedsUpdate = true; rock.visible = true;
 }
 // THE ARMS' MOVES, a step of dt seconds toward `want`: 'stowed' (folded against the hull), 'reach' (out and down ahead
@@ -952,6 +953,7 @@ export function armStep(built, want, dt, opts = {}) {
   let moved = false;
   const go = (D, k, goal, rate) => { const v = D[k], n = v < goal ? Math.min(goal, v + rate * dt) : Math.max(goal, v - rate * dt); if (n !== v) { D[k] = n; moved = true; } };
   const out = want !== 'stowed', work = want === 'work', cutOff = cutters.every((D) => D.work <= 0);
+  if (work && !built.rockOn) { built.rockOn = true; moved = true; }
   if (claw) {
     // the claw: it shuts only where it stands (reaching, or on the rock), opens only once the cutter is off the rock,
     // and comes onto the rock or off it only while open
@@ -977,6 +979,7 @@ export function parkedStep(built, gearUp, arms, dt, updateDoors, opts) {
   // (a ship just built stands on its legs with its arms as the 8k made them, reaching: parked, they are folded at once)
   if (!built.armsParked) { built.armsParked = true; if (!legs.every((D) => D.t >= 1)) for (const D of A) D.t = D.target = 1; }
   const armsIn = A.every((D) => D.t >= 1), legsUp = legs.every((D) => D.t >= 1);
+  if (!gearUp && built.rockOn) { built.rockOn = false; built.armsAs = null; }
   const m = gearStep(built, gearUp || !armsIn, dt, updateDoors);
   return armStep(built, gearUp && legsUp ? arms : 'stowed', dt, opts) || m;
 }
