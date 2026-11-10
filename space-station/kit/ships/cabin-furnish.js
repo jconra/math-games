@@ -134,7 +134,18 @@ function furnishGalley({ room, ctx, done, items, f, at, A }) {
       // (the end of it at the room's edge runs on into the wall across)
       const [R0, R1] = W.axis === 'z' ? [room.rect[0], room.rect[2]] : [room.rect[1], room.rect[3]], wallEnd = Math.abs(W.lo - R0) < EPS ? W.lo : Math.abs(W.hi - R1) < EPS ? W.hi : null;
       const counter = items.find((o) => o.kind === 'counter');
-      ctx.put('mess: drink unit', part(drinkUnit, { w: len, depth: W.depth, top: faceTop(W, mid), base: +(counter?.h || 0.9), wall: wallEnd == null ? 0 : Math.sign(localX(W, mid, wallEnd)), cup: A.cup, handle: A.handle }), at(W, mid));
+      // (what hangs against its face, a cabinet over the counter beside it: the stretch of its face that leaves clear, so
+      // the second machine stands where it can be seen and reached: the game's maker, after the first sheets: "The upper
+      // drink machine is blocked by the cabinets")
+      const faceAt = W.v + W.side * W.depth, k = W.axis === 'x' ? 0 : 1;
+      let clear = [-len / 2, len / 2];
+      for (const o of items) {
+        if (o === it || !hangs(o) || Math.min(Math.abs(o.rect[k] - faceAt), Math.abs(o.rect[k + 2] - faceAt)) > EPS) continue;
+        const [a, b] = alongOf(o, W).map((v) => localX(W, mid, v)).sort((u, v) => u - v);
+        if (b <= clear[0] || a >= clear[1]) continue;
+        clear = a - clear[0] > clear[1] - b ? [clear[0], a - 0.02] : [b + 0.02, clear[1]];
+      }
+      ctx.put('mess: drink unit', part(drinkUnit, { w: len, depth: W.depth, top: faceTop(W, mid), base: +(counter?.h || 0.9), wall: wallEnd == null ? 0 : Math.sign(localX(W, mid, wallEnd)), clear: clear.map((v) => +v.toFixed(3)), cup: A.cup, handle: A.handle }), at(W, mid));
       done.add(it.id);
     } else if (it.kind === 'locker' && +it.h >= 1.8) {
       const flush = besideDrinks(W);
