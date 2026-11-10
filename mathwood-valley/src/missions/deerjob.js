@@ -49,6 +49,7 @@
 //   DJ.pick(value)    for rigs: photograph the deer wearing this number;  DJ.done() as "Done for now"
 //   DJ.herd()         the job's herd (null till the deer are in)
 //   DJ.inReach()      the camera could be set up from where the player stands (the herd settled, SNAP.setMin to setMax off)
+//   DJ.skip()         the help menu's skip: a new photo's question now (false while a picture is being taken)
 //   DJ.workSum()      the photo's sum for the tools' Work it out ("9 + ? = 12": 12 − 9, the kid picks it), or null
 //   DJ.state()        for rigs;  DJ.dispose()
 import * as THREE from 'three';

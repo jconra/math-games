@@ -245,11 +245,12 @@ function buildInfo(job) {
   } catch (e) { console.warn('help: the build could not be read', e); }
   return null;
 }
-// SKIP TO A NEW QUESTION: the jobs that can deal the question up again (the same hooks the level tool's arrows use,
-// main.js relevel; the range and the deer camera deal a new card or photo; a builder's card is dealt again; a lock box
-// slides in a new box). Not yet: the wagon's gang, the loot's slip and selling goods (the menu shows no skip there).
+// SKIP TO A NEW QUESTION: the jobs that can deal the question up again (mostly the hooks the level tool's arrows use,
+// relevel above; the store's own skip also swaps an order after a wrong coin; the range and the deer camera deal a new
+// card or photo; a builder's card is dealt again; a lock box slides in a new box). Not yet: the wagon's gang, the
+// loot's slip and selling goods (the menu shows no skip there).
 const siteRedeal = () => { const s = BS && BS.session(); return !!(s && s.relevel && s.relevel()); };
-const SKIPS = { roundup: () => RU && RU.relevel(), sheep: () => SH && SH.relevel(), pigs: () => PG && PG.relevel(), store: () => SJ && SJ.relevel(),
+const SKIPS = { roundup: () => RU && RU.relevel(), sheep: () => SH && SH.relevel(), pigs: () => PG && PG.relevel(), store: () => SJ && SJ.skip(),
   delivery: () => DL && DL.relevel(), graphs: () => GT && GT.relevel(), range: () => SR && SR.skip(), deer: () => DJ && DJ.skip(),
   windmill: siteRedeal, bridge: siteRedeal, fishing: siteRedeal, boxes: () => !!(BOX && BOX.redeal && BOX.redeal()) };
 const placeForJob = (job) => (job === 'boxes' ? 'lockbox' : placeOfJob(job));
@@ -292,7 +293,7 @@ function helpContext() {
   let seed = (Date.now() % 100000) + 1;
   const one = () => { try { return examplesOf(place, st.id, { n: 1, seed: seed++ })[0] || null; } catch (e) { return null; } };
   const first = st ? one() : null;
-  const example = first ? { first, next: one, lead: up ? 'A question like this one, at your level, worked out:' : 'The kind of question this job asks, at your level, worked out:' } : null;
+  const example = first ? { first, next: one, lead: up ? 'A question like this one, at your level, and its answer:' : 'The kind of question this job asks, at your level, and its answer:' } : null;
   // the helpers that already teach it, one press each
   const helpers = [];
   try { const f = JOB_SUM[workJob()]; if (up && f && f()) helpers.push({ label: 'Work it out', line: 'The sum on your screen, in columns, a step at a time', run: () => TOOLS.work() }); } catch (e) { /* */ }

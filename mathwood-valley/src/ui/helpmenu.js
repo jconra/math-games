@@ -144,7 +144,6 @@ export function makeHelpMenu({ host = () => null, context = () => ({}), onOpen =
   document.body.appendChild(menu);
   let lookNow = look === 'pulse' ? 'pulse' : 'arc';
   let ctx = null, opened = false;
-  const folds = {};   // (which folding parts the rider opened, kept for this ride)
 
   // ── THE BUTTON: hosted where the screen has room for it, lit while the rider seems stuck ───────────────────────────
   function place() {
@@ -164,8 +163,7 @@ export function makeHelpMenu({ host = () => null, context = () => ({}), onOpen =
   // ── THE MENU ──────────────────────────────────────────────────────────────────────────────────────────────────
   function sec(id, title, body, { fold = false, open = false, small = '' } = {}) {
     if (!fold) return `<section class="bmq-sec bmq-${id}" data-sec="${id}">${body}</section>`;
-    const o = folds[id] ?? open;
-    return `<details class="bmq-sec bmq-${id}" data-sec="${id}"${o ? ' open' : ''}><summary>${esc(title)}${small ? `<small>${esc(small)}</small>` : ''}</summary>${body}</details>`;
+    return `<details class="bmq-sec bmq-${id}" data-sec="${id}"${open ? ' open' : ''}><summary>${esc(title)}${small ? `<small>${esc(small)}</small>` : ''}</summary>${body}</details>`;
   }
   // h: { now (what Hob just said here), tip (his tip for this job), other: { who, text } (the builder's own person) }
   function hobPart(c) {
@@ -177,7 +175,7 @@ export function makeHelpMenu({ host = () => null, context = () => ({}), onOpen =
   function examplePart(c) {
     const ex = c.example && c.example.first;
     const helpers = (c.helpers || []).map((x, i) => `<button type="button" class="bmq-b${i ? ' is-plain' : ''}" data-helper="${i}" title="${esc(x.line || '')}">${esc(x.label)}</button>`).join('');
-    return `${ex ? `<p class="bmq-lead">${esc(c.example.lead || 'A question like this one, at your level, worked out:')}</p>
+    return `${ex ? `<p class="bmq-lead">${esc(c.example.lead || 'A question like this one, at your level, and its answer:')}</p>
       <div class="bmq-ex" data-ex><span class="q"></span><span class="a"></span></div>
       <div class="bmq-btns"><button type="button" class="bmq-b is-plain" data-do="another">Another example</button><button type="button" class="bmq-b is-plain" data-do="workex" hidden>Work this one out with me</button></div>` : ''}
       ${helpers ? `${ex ? '<p class="bmq-lead" style="margin-top:10px">For the one on your screen:</p>' : ''}<div class="bmq-btns">${helpers}</div>` : ''}`;
@@ -194,7 +192,7 @@ export function makeHelpMenu({ host = () => null, context = () => ({}), onOpen =
     const v = c.video, frac = v.length && v.at != null ? Math.max(0, Math.min(1, v.at / v.length)) : 0;
     const time = v.at != null ? `${clockText(v.at)}${v.length ? ` / ${clockText(v.length)}` : ''}` : v.length ? `0:00 / ${clockText(v.length)}` : '';
     return `<a class="bmq-yt" href="${esc(v.link)}" target="_blank" rel="noopener noreferrer" aria-label="Watch how ${esc(v.name || 'this job')} works, on YouTube (opens a new tab)">
-        ${v.pic ? `<img src="${esc(v.pic)}" alt="">` : ''}<span class="bmq-yt-title">How to play Mathwood Valley: ${esc(v.name || 'the jobs')}</span>
+        ${v.pic ? `<img src="${esc(v.pic)}" alt="">` : ''}<span class="bmq-yt-title">How to play: ${esc(v.name || 'Mathwood Valley')}</span>
         <span class="bmq-yt-play">${PLAY_SVG}</span><span class="bmq-yt-bar"></span>
         <span class="bmq-yt-track"><i style="width:${(frac * 100).toFixed(1)}%"></i><b style="left:${(frac * 100).toFixed(1)}%"></b></span>
         <span class="bmq-yt-tri"></span>${time ? `<span class="bmq-yt-time">${time}</span>` : ''}<span class="bmq-yt-logo">YouTube</span></a>
@@ -219,7 +217,6 @@ export function makeHelpMenu({ host = () => null, context = () => ({}), onOpen =
       <div class="bmq-head"><b>Help</b><span>${esc(c.name || '')}</span></div>${html}`;
     // the example
     if (menu.querySelector('[data-ex]')) showEx(c.example.first);
-    menu.querySelectorAll('details').forEach((d) => d.addEventListener('toggle', () => { folds[d.dataset.sec] = d.open; }));
     // the form: sent the way the old chip's mark was (an empty box sends the mark on its own)
     const form = menu.querySelector('.bmq-form');
     if (form) {

@@ -36,6 +36,7 @@
 //   SR.active         the gun is up (or the view is going to or from the firing line);  SR.paused: a panel is open
 //   SR.marks()        the compass mark for the range
 //   SR.tags()         for rigs: the targets on the screen [{ n, x, y, right, alive }];  SR.pick(n) shoots the one with n
+//   SR.skip()         the help menu's skip: a new card now (false between cards or with no card up)
 //   SR.workSum()      the card's sum for the tools' Work it out (an estimating card's exact sum: the estimate stays
 //                     the kid's), else null
 //   SR.dealUntil(test) for rigs: deal the first card made at the rider's level that passes test(card)

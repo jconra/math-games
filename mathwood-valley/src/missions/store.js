@@ -577,6 +577,16 @@ export function makeStoreJob({ W, folk, P, I, camera, rider, hud, hob = null, re
     serve(c);
     return true;
   };
+  // the help menu's "Skip to a new question" (src/ui/helpmenu.js; main.js has moved the level first): as relevel, and
+  // also after a wrong coin (the kid has tried it and wants another): the same customer brings a new order. (Not held
+  // back by order.fixed: src/math/wordproblems.js marks every order made at a level step fixed, not only a rig's)
+  J.skip = () => {
+    if (!J.active || !order || longPanel || U.busy || eqPending) return false;
+    const c = people.find((x) => x.state === 'serve'); if (!c) return false;
+    if (served[served.length - 1] === c.who.name) served.pop();
+    serve(c);
+    return true;
+  };
   J.people = people;    // (read each frame by the wagons, which stop for customers: no copies made)
   // (the end of the line while the counter is open: where the town sends one more to wait, src/townpeople.js)
   J.lineSpot = () => (IN && J.active ? queue2At : null);
