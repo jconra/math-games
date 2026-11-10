@@ -6,7 +6,7 @@ import * as MB from './medbay.js';
 import * as ML from './medlab.js';
 import * as MC from './medcrew.js';
 import { ambulanceStretcher, stowedStretcher } from './stretcher.js';
-import { hisMask, cylMask } from './gasmask.js';
+import { hisMask } from './gasmask.js';
 import { segText } from './segtext.js';
 import { FACE } from './ship.js';
 
@@ -22,7 +22,7 @@ const PRESETS = {
   medicDefib: { 'on its bracket': {} },
   medicSpineBoard: { 'on two brackets': {} },
   medicHazmat: { 'glass door': {} },
-  medicMasks: { 'his model and from cylinders': {}, 'his model': { only: 'his' }, 'from cylinders': { only: 'cyl' } },
+  medicMasks: { 'his model': {} },
   medicXray: { 'chest and hand': {} },
   medicVitals: { live: { live: 'rest' }, still: {} },
   medicIV: { 'two bags, two pumps': {} },
@@ -57,7 +57,7 @@ export const MEDIC_FIT = {
   medicDefib: entry('medicDefib', 'Medic: defibrillator', 'wall', [0.5, 0.4, 0.2], (p) => MB.defib(p, { y0: 0.05 })),
   medicSpineBoard: entry('medicSpineBoard', 'Medic: spine board', 'wall', [1.9, 0.5, 0.1], (p) => MB.spineBoard(p, { y0: 0.05 })),
   medicHazmat: entry('medicHazmat', 'Medic: hazmat locker', 'wall', [0.5, 2.1, 0.3], (p) => MB.hazmatLocker(p, { w: 0.46, h: 2.08, cut: [0.07, 0] })),
-  medicMasks: entry('medicMasks', 'Medic: gas masks', 'wall', [0.6, 0.3, 0.2], (p, o) => { if (o.only !== 'cyl') hisMask(p, { size: 0.24, at: [o.only ? 0 : -0.15, 0.02, FACE] }); if (o.only !== 'his') cylMask(p, { size: 0.24, at: [o.only ? 0 : 0.15, 0.02, FACE] }); return p; }),
+  medicMasks: entry('medicMasks', 'Medic: gas mask (his model)', 'wall', [0.35, 0.3, 0.2], (p) => hisMask(p, { size: 0.24, at: [0, 0.02, FACE] })),
   medicXray: entry('medicXray', 'Medic: x-ray viewer', 'wall', [0.8, 0.8, 0.12], (p) => MB.xrayViewer(p, { y0: 0.08, w: 0.66, h: 0.56 })),
   medicVitals: entry('medicVitals', 'Medic: vital signs monitor', 'wall', [0.55, 0.4, 0.1], (p, o) => MB.vitalsMonitor(p, { y: 0.2, w: 0.44, h: 0.28, ...o })),
   medicIV: entry('medicIV', 'Medic: IV bags and pumps', 'wall', [0.35, 1.1, 0.15], (p) => MB.ivStation(p, { y0: 0.02, top: 1.0 })),
