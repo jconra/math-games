@@ -354,48 +354,48 @@ void main() {
   return m;
 }
 
-// ── REAL PLANTS: A HYDROPONIC DRUM (the planting 'drum': kit/shipparts/cabin/growpod.js builds it) ─────────────────
-// The game's maker, 2026-11-10: "I think it would be cool if the plants were 3d and it looked like the leaves had some
-// depth." Then: "I like the brighter white and green look more, I like them rotating right next to the glass. It would
-// be cool if some edges looked more detailed that are closer to the glass and some more blurry since they are further
-// away. If it could just be a thin cylinder with actual green models in there ... make it look like hydroponics, not
-// clay buckets."
-// So a drum pod is not a picture: a slim white tube turns right behind the glass, its plants (real leaves and stems, a
-// few hundred triangles a plant) growing out of dark net cups all round it, in a bright white-green chamber, behind a
-// lightly frosted pane. Two materials, so ALL the drum pods in a room's batch are two draws:
-//   podInside(time)   the chamber and everything in it (solid). The drum turns, and its leaves may sway, on the
-//                     graphics card from the one clock: nothing is done for it each frame.
+// ── REAL PLANTS: A ROTARY GARDEN SEEN END-ON (the planting 'rotary': kit/shipparts/cabin/growpod.js builds it) ──────
+// The game's maker, 2026-11-10, pointing back at the very first picture pod: "The very first one was the closest to what
+// I want. It is just green and white, which is what I want. The plants have thier roots around the circumference of the
+// cylinder, which is what I want. The only improvements I wanted where more interesting looking plants (those just look
+// like grass) and for the 3d effect as you walk by."
+// So a rotary pod is not a picture: a white drum lies behind the glass with its axle pointing straight out of the wall,
+// and its plants (real leaves and stems, about a hundred triangles a plant) are rooted all round its inside, in rings
+// one behind another, growing in toward a white lamp down the middle. The drum turns slowly about that axle, the plants
+// with it. Behind a lightly frosted pane. Two materials, so ALL the rotary pods in a room's batch are two draws:
+//   podInside(time)   the drum and everything in it (solid). The drum turns, and its leaves may sway, on the graphics
+//                     card from the one clock: nothing is done for it each frame.
 //   podPane()         the frosted pane (see-through, drawn after): a milky haze, its fine grain, the lamp's glow in it,
 //                     a shadow under the frame's rim and a faint sheen
-// THE DEPTH IS REAL. The chamber goes back behind the wall's face (about as deep as the glass is wide), so as the eye
-// moves the leaves slide past one another and behind the frame as real things do. The wall does not hide them: each
-// corner of them is moved along the eye's own line (which leaves it on the same spot of the screen) into a thin layer
-// just behind the glass, in front of the wall's face, their order kept; and only what is seen through the opening is
-// drawn. What stands in front of the pod (its frame, a coffee maker) still hides them.
-// NEAR SHARP, FAR SOFT: the chamber is full of the grow light's white-green glow, and the further in a leaf is the more
-// of the glow lies over it, so the far side of the drum is paler, softer-edged and lower in contrast (no blur is done).
+// THE DEPTH IS REAL. The drum goes back behind the wall's face (about as deep as the glass is wide) and is wider than
+// the glass, so as the eye moves the near ring of leaves slides over the deeper ones and the glass's edge hides and
+// shows the rings behind. The wall does not hide them: each corner of them is moved along the eye's own line (which
+// leaves it on the same spot of the screen) into a thin layer just behind the glass, in front of the wall's face, their
+// order kept; and only what is seen through the opening is drawn. What stands in front of the pod still hides them.
+// NEAR SHARP, FAR SOFT: the drum is full of the lamp's white-green glow, and the further in a leaf is the more of the
+// glow lies over it, so the deeper rings are paler, softer-edged and lower in contrast (no blur is done).
 // What each corner of the inside carries (growpod.js fills them in):
 //   normal   the pod's facing (its glass's outward normal: placed with the piece, so it turns with it)
-//   aLocal   where it is in the pod's own frame (metres: x right, y up, z out of the glass; the glass's middle is 0),
-//            and what it is: 0 still (the chamber), 1 turning on an upright axle, 2 the lamp, 3 turning on an axle
-//            across the glass
+//   aLocal   where it is in the pod's own frame (metres: x right, y up, z out of the glass; the glass's middle is 0, and
+//            the drum's axle is the z line through it), and what it is: 0 still, 1 turning with the drum, 2 the lamp
 //   aCol     its colour (linear); for a leaf, how far out along the leaf it is (0.05 at its stem .. 1 at its tip: lit
 //            from either side, and how far it sways), 0 for anything else
 //   aPod     the glass's half-size, its shape (0 eight-sided, 1 round), how fast it turns (radians a second), where in
 //            its turn it starts
-//   aLamp    the lamp's colour (0 warm white .. 1 pink-white), how far the leaves sway (0: still), the pod's own
-//            brightness (1), how lit the places furthest from the lamp are
-// The chamber's sizes, in half-sizes of the glass (growpod.js builds to them; the glass lights and fogs by them):
-//   axle     how far in the drum's axle is (its leaves' tips come to just behind the glass); core: the tube's radius
-//   wide, top, floor, back   the chamber's half-width, its ceiling, its floor and how deep its back wall is
-//   lamp     the lamp bar across the top: its half-length, height and depth
+//   aLamp    the lamp's colour (0 warm .. 1 pink, both kept near white), how far the leaves sway (0: still), the pod's
+//            own brightness (1), how lit the places furthest from the lamp are
+// The drum's sizes, in half-sizes of the glass (growpod.js builds to them; the glass lights and fogs by them):
+//   drum     its radius (past the glass's edge: the roots round it are behind the frame from in front)
+//   back     how deep its back is
+//   lamp     the lamp down the middle: where it starts and ends (depths), and its radius (lampR)
 //   fog      how much glow a half-size further in adds, from how far in (fogFrom), and the most there is (fogMost)
-export const INSIDE = { axle: 0.9, core: 0.3, wide: 1.25, top: 1.2, floor: -1.2, back: 2.2, lamp: [0.75, 0.9, -0.2], fog: 0.35, fogFrom: 0.35, fogMost: 0.7 };
+export const INSIDE = { drum: 1.12, back: 2.05, lamp: [-0.32, -1.95], lampR: 0.14, fog: 0.34, fogFrom: 0.35, fogMost: 0.6 };
 const f3 = (v) => v.toFixed(4);
 const PODEDGE = 'float podEdge( vec2 q, float rnd ) { vec2 a = abs( q ); return mix( max( max( a.x, a.y ), ( a.x + a.y ) * 0.70710678 ), length( q ), rnd ); }';
-const LAMPCOL = 'vec3 podLampCol( float tint ) { return mix( vec3( 1.0, 0.86, 0.68 ), vec3( 1.0, 0.68, 0.84 ), tint ); }';
+// (the lamp: white, a breath of warm or pink in it)
+const LAMPCOL = 'vec3 podLampCol( float tint ) { return mix( mix( vec3( 1.0, 0.86, 0.68 ), vec3( 1.0, 0.68, 0.84 ), tint ), vec3( 0.93, 1.0, 0.93 ), 0.8 ); }';
 export function podInside(time) {
-  const I = INSIDE, L = I.lamp;
+  const I = INSIDE, [LA, LB] = I.lamp;
   const m = new THREE.ShaderMaterial({
     uniforms: { uTime: time || { value: 0 }, uGlow: UGLOW },
     fog: false, side: THREE.DoubleSide,
@@ -411,17 +411,13 @@ void main() {
   // the pod's own frame in the piece (its facing is the normal), and the glass's middle
   vec3 f = normalize( normal ), r = normalize( cross( vec3( 0.0, 1.0, 0.0 ), f ) ), u = cross( f, r );
   vec3 g = position - ( r * aLocal.x + u * aLocal.y + f * aLocal.z );
-  float hs = aPod.x, t = uTime, za = -${f3(I.axle)} * hs;
+  float hs = aPod.x, t = uTime;
   // a leaf sways a little (more toward its tip; neighbouring leaves nearly together)
   vec3 q = aLocal.xyz, ph = q / hs;
-  q += aLamp.y * aCol.w * hs * 0.035 * vec3( sin( t * 1.7 + ph.x * 3.0 + ph.y * 2.0 ), 0.5 * sin( t * 1.3 + ph.y * 3.0 ), cos( t * 1.5 + ph.z * 3.0 + ph.x ) );
-  // the drum and its plants turn: on an upright axle (1) or one across the glass (3); with a positive speed the near
-  // side of an across drum goes down (its tops come toward the eye)
-  float turning = step( 0.5, aLocal.w ) * ( 1.0 - step( 1.5, aLocal.w ) * step( aLocal.w, 2.5 ) ), across = step( 2.5, aLocal.w );
-  float a = ( aPod.w + t * aPod.z ) * turning, c = cos( a ), s = sin( a );
-  vec3 o = q - vec3( 0.0, 0.0, za );
-  vec3 up = vec3( o.x * c + o.z * s, o.y, o.z * c - o.x * s ), ac = vec3( o.x, o.y * c - o.z * s, o.y * s + o.z * c );
-  q = mix( up, ac, across ) + vec3( 0.0, 0.0, za );
+  q += aLamp.y * aCol.w * hs * 0.035 * vec3( sin( t * 1.7 + ph.x * 3.0 + ph.y * 2.0 ), sin( t * 1.3 + ph.y * 3.0 + ph.z ), 0.5 * cos( t * 1.5 + ph.z * 3.0 + ph.x ) );
+  // the drum and its plants turn about its axle (the z line through the glass's middle)
+  float a = ( aPod.w + t * aPod.z ) * step( 0.5, aLocal.w ) * step( aLocal.w, 1.5 ), c = cos( a ), s = sin( a );
+  q.xy = vec2( q.x * c - q.y * s, q.x * s + q.y * c );
   vec4 w = m * vec4( g + r * q.x + u * q.y + f * q.z, 1.0 );
   vec3 gw = ( m * vec4( g, 1.0 ) ).xyz, fw = normalize( mat3( m ) * f );
   vW = w.xyz; vG = gw; vF = fw;
@@ -449,22 +445,19 @@ void main() {
   vec3 d = vW - vG, lp = vec3( dot( d, r ), dot( d, u ), dot( d, vF ) ) / hs;
   vec3 n = normalize( cross( dFdx( vW ), dFdy( vW ) ) ); n = dot( n, cameraPosition - vW ) < 0.0 ? -n : n;
   vec3 nl = vec3( dot( n, r ), dot( n, u ), dot( n, vF ) );
-  // the lamp: a bar across the top near the front. Lit by how near it is and how a facet faces it (a leaf from either
-  // side, less through it)
-  float leafy = clamp( vCol.w * 20.0, 0.0, 1.0 ), lampK = step( 1.5, vKind ) * step( vKind, 2.5 );
+  // the lamp down the middle: lit by how near it is and how a facet faces it (a leaf from either side, less through it)
+  float leafy = clamp( vCol.w * 20.0, 0.0, 1.0 ), lampK = step( 1.5, vKind );
   vec3 lampCol = podLampCol( vLamp.x );
-  vec3 lc = vec3( clamp( lp.x, -${f3(L[0])}, ${f3(L[0])} ), ${f3(L[1])}, ${f3(L[2])} ) - lp; float dist = max( length( lc ), 1e-4 );
+  vec3 lc = vec3( 0.0, 0.0, clamp( lp.z, ${f3(LB)}, ${f3(LA)} ) ) - lp; float dist = max( length( lc ), 1e-4 );
   float dl = dot( nl, lc / dist ), face = mix( max( dl, 0.0 ), dl > 0.0 ? dl : -0.6 * dl, leafy );
-  float near = 1.0 / ( 1.0 + 1.0 * dist * dist );
+  float near = 1.0 / ( 1.0 + 1.2 * dist * dist );
   float lit = vLamp.w + ( 1.0 - vLamp.w ) * near * ( 0.3 + 0.7 * face );
-  vec3 col = vCol.rgb * lit * mix( vec3( 1.0 ), lampCol, 0.3 ) * 1.15;
-  // soft ribs up the chamber's back
-  col *= 1.0 + 0.4 * step( vKind, 0.5 ) * step( lp.z, -${f3(I.back - 0.05)} ) * pow( 0.5 + 0.5 * cos( lp.x * 12.0 ), 6.0 );
-  // the lamp itself (never as bright as white)
-  col = mix( col, lampCol * 0.75, lampK );
-  // the grow light's glow, more of it the further in: the far side of the drum paler and softer
+  vec3 col = vCol.rgb * lit * mix( vec3( 1.0 ), lampCol, 0.3 ) * 1.05;
+  // the lamp itself: white
+  col = mix( col, lampCol * 0.9, lampK );
+  // the lamp's glow, more of it the further in: the deeper rings paler and softer
   float fog = min( ${f3(I.fogMost)}, ${f3(I.fog)} * max( -lp.z - ${f3(I.fogFrom)}, 0.0 ) ) * ( 1.0 - lampK );
-  col = mix( col, MILK * 0.85 * mix( vec3( 1.0 ), lampCol, 0.2 ), fog );
+  col = mix( col, vec3( 0.16, 0.29, 0.16 ) * mix( vec3( 1.0 ), lampCol, 0.3 ), fog );
   gl_FragColor = vec4( col * uGlow * vLamp.z, 1.0 );
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -473,11 +466,11 @@ void main() {
   m.extensions.derivatives = true;   // (dFdx, on WebGL 1)
   return m;
 }
-// the frosted pane in front of a drum's plants. Its corners carry what a picture pod's glass does (aPod: the glass's
+// the frosted pane in front of a rotary's plants. Its corners carry what a picture pod's glass does (aPod: the glass's
 // half-size, the pod's brightness, its shape; aLook: the frost's haze and grain; aLamp: 0, the lamp's brightness and
 // colour, how lit the furthest places are)
 export function podPane() {
-  const L = INSIDE.lamp;
+  const [LA, LB] = INSIDE.lamp;
   const m = new THREE.ShaderMaterial({
     uniforms: { uGlow: UGLOW },
     fog: false, transparent: true, depthWrite: false, premultipliedAlpha: true,
@@ -505,8 +498,8 @@ float podGrain( vec2 p ) { vec2 i = floor( p ), f = fract( p ); f = f * f * ( 3.
 void main() {
   float hs = vPod.x, d0 = podEdge( vQ, vPod.z );
   vec3 eye = normalize( vEye ), lampCol = podLampCol( vLamp.z ) * vLamp.y;
-  // the lamp bar as the eye sees it through the glass: where the lines to its two ends cross the glass
-  vec3 cam = vec3( vQ * hs, 0.0 ) + vEye, b0 = vec3( -${f3(L[0])}, ${f3(L[1])}, ${f3(L[2])} ) * hs, b1 = vec3( ${f3(L[0])}, ${f3(L[1])}, ${f3(L[2])} ) * hs;
+  // the lamp down the middle as the eye sees it through the glass: where the lines to its two ends cross the glass
+  vec3 cam = vec3( vQ * hs, 0.0 ) + vEye, b0 = vec3( 0.0, 0.0, ${f3(LA)} ) * hs, b1 = vec3( 0.0, 0.0, ${f3(LB)} ) * hs;
   vec2 p0 = ( cam + ( b0 - cam ) * ( cam.z / ( cam.z - b0.z ) ) ).xy / hs, p1 = ( cam + ( b1 - cam ) * ( cam.z / ( cam.z - b1.z ) ) ).xy / hs;
   vec2 pa = vQ - p0, ba = p1 - p0; float dlamp = length( pa - ba * clamp( dot( pa, ba ) / dot( ba, ba ), 0.0, 1.0 ) );
   // the frost: a light milky haze (thicker seen from the side), with its fine grain (gone once a grain is under a pixel)
@@ -514,7 +507,7 @@ void main() {
   vec2 pm = vQ * hs / 0.0012; float fw = max( fwidth( pm.x ), fwidth( pm.y ) );
   haze = clamp( haze * ( 1.0 + ( podGrain( pm ) - 0.5 ) * 2.2 * vLook.y * clamp( 1.3 - fw, 0.0, 1.0 ) ), 0.0, 1.0 );
   float lit = smoothstep( -1.1, 0.75, vQ.y ), k = vLamp.w + ( 1.0 - vLamp.w ) * lit * sqrt( lit );
-  vec3 col = MILK * ( 0.3 + 0.7 * k ) * haze + lampCol * exp( -6.0 * dlamp ) * ( 0.05 + 0.5 * vLook.x );
+  vec3 col = MILK * ( 0.3 + 0.7 * k ) * haze + lampCol * exp( -6.0 * dlamp ) * ( 0.08 + 0.6 * vLook.x );
   // the shadow under the frame's rim, then a faint sheen sliding as the eye moves
   float sh = 0.4 * smoothstep( 0.86, 1.0, d0 ); col *= 1.0 - sh;
   float sheen = ( vQ.y - 0.8 * vQ.x - 0.55 + 1.2 * eye.x - 0.6 * eye.y ) / 0.3;
