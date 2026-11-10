@@ -6,10 +6,13 @@
 //   screen  the glowing blue screens
 //   glow    the light strips (bright enough for the bloom to catch)
 //   glass   windows (faintly reflecting the room; the sky behind them is world/sky.js)
+//   podIn, podPane   the grow pods: what is behind their glass (turning, from the clock) and their frosted panes
+//           (kit/growglass.js)
 // Light: each vertex carries a baked corner darkening (aAO, 0..1) and the strip light that reaches it (aBake, the
 // light's irradiance, in the same units as a three.js point light), worked out once when a room is built (bake.js).
 import * as THREE from 'three';
 import { wearTexture, floorAtlas, decalAtlas, screenAtlas } from './tex.js';
+import { podInside, podPane } from './growglass.js';
 // (these three import U and GLOW from here and use them only inside their functions, so the circle is harmless)
 import { liveScreenMaterial } from './shipparts/cabin/live.js';
 import { coreMaterial } from './shipparts/cabin/livecore.js';
@@ -132,6 +135,8 @@ export function makeMaterials() {
   M.live = liveScreenMaterial(); M.liveInst = M.live;
   // (molten metal, moving: the smelter's pours, slots and ladles, kit/melt.js)
   M.melt = meltMaterial(); M.meltInst = M.melt;
+  // (the grow pods: what is behind their glass, turning from the clock, and their frosted panes, kit/growglass.js)
+  M.podIn = podInside(U.time); M.podInInst = M.podIn; M.podPane = podPane(); M.podPaneInst = M.podPane;
   M.glass = new THREE.MeshStandardMaterial({ color: 0x0b141d, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.12, depthWrite: false, envMapIntensity: 0.35 });
   M.glassInst = M.glass;
   M.shield = shieldMaterial(); M.shieldInst = M.shield;
@@ -139,7 +144,7 @@ export function makeMaterials() {
   return M;
 }
 // the materials a piece can draw with, in the order the batch draws them
-export const MAT_KEYS = ['solid', 'floor', 'decal', 'screen', 'glow', 'core', 'driveGlow', 'live', 'melt', 'glass', 'shield'];
+export const MAT_KEYS = ['solid', 'floor', 'decal', 'screen', 'glow', 'core', 'driveGlow', 'live', 'melt', 'podIn', 'podPane', 'glass', 'shield'];
 // which ones are lights themselves: their colours given a vertex, no shadow cast or taken
 export const GLOWING = new Set(['glow', 'core', 'driveGlow', 'live', 'melt']);
 // which ones take the baked light (the rest glow on their own or are see-through)

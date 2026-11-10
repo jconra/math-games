@@ -17,6 +17,7 @@ import { reactorCore, drivePumps, engStation, gearShelves } from './engroom.js';
 import { starScreen, screen, glowStrip } from './bits.js';
 import { wallPipes, pipeRun, grating, hoopRail } from './engpipes.js';
 import { downlight, washLight } from './lights.js';
+import { growPod } from './growpod.js';
 import { shape, solid, add } from '../../bevel.js';
 import { placeInto, part } from '../place.js';
 
@@ -74,6 +75,7 @@ export const PRESETS = {
   cabinEngRail: { 'low': { len: 1.14, h: 0.5, z: 0.5 }, 'waist high': { len: 1.6, h: 0.95, z: 0.5 } },
   cabinDownlight: { 'in a ceiling': {}, 'small, under a locker': { r: 0.05, y: 1.4, drop: 0.5 } },
   cabinWashLight: { '2 m': { len: 2, y: 1.6 }, '1 m': { len: 1, y: 1.6 } },
+  cabinGrowPod: { 'round, 30 cm': {}, 'eight-sided, 30 cm': { shape: 'oct' }, 'round, 45 cm': { size: 0.45 }, 'two side by side': { n: 2, plate: false, gap: 0.07 }, 'the leaves swaying (a choice)': { sway: 1 } },
 };
 const entry = (id, name, mount, foot, fn) => ({ name, group: 'Ship cabin', at: 'free', mount, variants: Object.keys(PRESETS[id]), foot, build: (p, v) => fn(p, PRESETS[id][v] ?? {}) });
 export const CABIN_FIT = {
@@ -131,4 +133,6 @@ export const CABIN_FIT = {
   // over a square of deck for its light to land on; the Kit Lab draws its beam with dust in it, kit/beams.js)
   cabinDownlight: entry('cabinDownlight', 'Light: downlight disc', 'free', [1.1, 2.5, 1.1], (p, o) => { const y = o.y ?? 2.5; add(p, 'white2', solid(shape(0.7, 0.7, 0.06), 0.02, { edge: 0.004 }), [0, y + 0.02, 0], [Math.PI / 2, 0, 0]); if (!o.y) add(p, GUN, solid(shape(1.1, 1.1, 0.1), 0.02, { edge: 0.004 }), [0, 0, 0], [Math.PI / 2, 0, 0]); return downlight(p, { drop: y - 0.03, ...o, at: [0, y, 0] }); }),
   cabinWashLight: entry('cabinWashLight', 'Light: wall wash strip', 'wall', [2.0, 1.8, 0.1], washLight),
+  // (the grow pod, kit/shipparts/cabin/growpod.js: a rotary garden of real plants turning behind frosted glass)
+  cabinGrowPod: entry('cabinGrowPod', 'Grow pod: rotary garden', 'wall', [1.0, 0.6, 0.05], (p, o) => placeInto(p, part(growPod, { y: 0.3, ...o }), { at: [0, 0, 0] })),
 };

@@ -26,6 +26,7 @@ import * as MC from '../shipparts/cabin/medcrew.js';
 import * as LB from '../shipparts/cabin/lab.js';
 import { stool, messTable, mug, galleyRun, coffeeMachine } from '../shipparts/cabin/mess.js';
 import { screen } from '../shipparts/cabin/bits.js';
+import { growPod } from '../shipparts/cabin/growpod.js';
 import { postersFor } from '../shipparts/cabin/print.js';
 
 const PI = Math.PI, EPS = 1e-6, r3 = (v) => +v.toFixed(3);
@@ -336,13 +337,14 @@ function furnishCrew(args) {
       ctx.put('crew: kitchen', part(coffeeMachine, {}), { at: toWorld(W, mid, [-gs * len * 0.32, f + th, 0.2]), rot: [0, rotOf(W), 0] });
       ctx.put('crew: kitchen', part(sinkPart, {}), { at: toWorld(W, mid, [-gs * len * 0.03, f + th, 0]), rot: [0, rotOf(W), 0] });
       ctx.put('crew: small things', part(mug, { look: A.cup }), { at: toWorld(W, mid, [gs * len * 0.3, f + th, 0.36]), rot: [0, 0.7, 0] });
+      ctx.put('crew: grow pod', part(growPod, { size: 0.30, y: GROWPOD.y }), at(W, mid + (W.axis === 'z' ? W.side : -W.side) * gs * GROWPOD.along));
       done.add(it.id);
     }
   }
 }
 // THE GROW POD'S PLACE (the game's maker wants a grow pod, a small round window into a turning hydroponic garden, in every
-// ship; its piece is being made on another branch): kept free on the wall over the kitchen counter, its middle `along`
-// from the counter's middle toward the end away from the room's middle (the bed's foot is at the other end), `y` over
+// ship: kit/shipparts/cabin/growpod.js, hung here in the counter's furnishing): kept free on the wall over the kitchen
+// counter, its middle `along` from the counter's middle toward the end away from the room's middle (the bed's foot is at the other end), `y` over
 // the deck, a square `size`
 // across of flat wall; the wall here is the crew room's stern wall, and behind it there is more than 0.35 m of free space
 // (the inside-space file: free from the deck to 3.5 m for 0.45 m behind it). Nothing of the room's stands or hangs there
