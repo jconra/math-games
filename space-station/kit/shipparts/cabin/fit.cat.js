@@ -8,6 +8,8 @@ import { medBed, scanner, pharmacy, stretcher } from './medical.js';
 import { reactor } from './engine.js';
 import { holoTable } from './science.js';
 import { cornerBench, messTable, stool, topCabinets, coldStore, galleyRun, coffeeMachine, mug, fruitBowl, poster } from './mess.js';
+import { bunkStack, crewLocker } from './bunks.js';
+import { starScreen } from './bits.js';
 import { placeInto, part } from '../place.js';
 
 export const PRESETS = {
@@ -30,7 +32,11 @@ export const PRESETS = {
   cabinTopCabinets: { 'under the hull\'s slope': { len: 1.5, slope: { y0: 2.0, run: 0.5 }, poster: 0 }, 'to the ceiling': { len: 0.75, y: 1.55, depth: 0.25 } },
   cabinColdStore: { '0.5 m': { poster: 3 } },
   cabinGalleyRun: { '1.25 m': { len: 1.25, end: [0.08, 0] }, 'with its things': { len: 1.25, end: [0.08, 0], things: true } },
-  cabinPoster: { 'the four': {} },
+  cabinPoster: { 'the four': {}, 'the rooms\' eight': { from: 4 } },
+  // (the other rooms, round two: kit/shipparts/cabin/bunks.js, lab.js, airlock.js, washroom.js, engroom.js)
+  cabinBunks: { '2-high, ladder': { open: [-0.5, 0.92], head: 1, nums: [1, 2] }, 'open its whole length': { nums: [3, 4], head: -1 } },
+  cabinCrewLocker: { numbered: { num: 1 }, 'with a poster': { num: 2, poster: 4 } },
+  cabinStarScreen: { '8-sided': { w: 0.6, h: 0.34, seed: 3 }, 'no planet': { w: 0.5, h: 0.3, planet: false, seed: 9 } },
 };
 const entry = (id, name, mount, foot, fn) => ({ name, group: 'Ship cabin', at: 'free', mount, variants: Object.keys(PRESETS[id]), foot, build: (p, v) => fn(p, PRESETS[id][v] ?? {}) });
 export const CABIN_FIT = {
@@ -52,5 +58,8 @@ export const CABIN_FIT = {
   cabinTopCabinets: entry('cabinTopCabinets', 'Mess: top-corner cabinets', 'wall', [1.5, 2.5, 0.5], topCabinets),
   cabinColdStore: entry('cabinColdStore', 'Mess: cold store', 'wall', [0.5, 2.0, 0.5], coldStore),
   cabinGalleyRun: entry('cabinGalleyRun', 'Mess: galley counter', 'wall', [1.25, 1.3, 0.5], (p, o) => { galleyRun(p, o); if (o.things) { placeInto(p, part(coffeeMachine, {}), { at: [0.0, 0.9, 0.3] }); placeInto(p, part(mug, {}), { at: [0.24, 0.9, 0.33], rot: [0, 0.7, 0] }); placeInto(p, part(mug, {}), { at: [0.33, 0.9, 0.2] }); placeInto(p, part(fruitBowl, {}), { at: [-0.4, 0.9, 0.27] }); } return p; }),
-  cabinPoster: entry('cabinPoster', 'Mess: posters', 'wall', [2.4, 1.0, 0.05], (p) => { [-0.9, -0.3, 0.35, 0.95].forEach((x, i) => placeInto(p, part(poster, { i, dark: i === 1, y: 0.6 }), { at: [x, 0, 0] })); return p; }),
+  cabinPoster: entry('cabinPoster', 'Posters', 'wall', [2.4, 1.0, 0.05], (p, o) => { if (o.from) { for (let i = 0; i < 8; i++) placeInto(p, part(poster, { i: o.from + i, y: i < 4 ? 0.75 : 0.3 }), { at: [-0.84 + (i % 4) * 0.56, 0, 0] }); return p; } [-0.9, -0.3, 0.35, 0.95].forEach((x, i) => placeInto(p, part(poster, { i, dark: i === 1, y: 0.6 }), { at: [x, 0, 0] })); return p; }),
+  cabinBunks: entry('cabinBunks', 'Bunks: berths, 2-high', 'wall', [2, 1.9, 1.1], bunkStack),
+  cabinCrewLocker: entry('cabinCrewLocker', 'Bunks: locker', 'wall', [0.5, 2.0, 0.5], crewLocker),
+  cabinStarScreen: entry('cabinStarScreen', 'Star screen, 8-sided', 'wall', [0.7, 0.4, 0.05], (p, o) => placeInto(p, part(starScreen, o), { at: [0, 0.3, 0] })),
 };

@@ -85,16 +85,21 @@ export const POOLS = { panel: 0.26, least: 0.4, most: 1.3, reach: 3.2 };
 // ── THE LOOKS ─────────────────────────────────────────────────────────────────────────────────────────────────────
 // The kit's parts with each of the station's surfaces (kit/materials.js SURF) swapped: surf; the light strips' and
 // ceiling panels' glow and the light they cast (for the bake) by TONE, each room taking its kind's tone (rooms);
-// floor (a tint on the floor's tread plate); leather (the bench cushions, and the furniture boxes of benches not yet
-// furnished), bedding (the bunks'); accents (which of the mess's other things take the leather's colour too, for
-// kit/ships/cabin-furnish.js: 'stools' their top pads, 'mugs' the mugs and the bottle, 'handles' the cabinets', counter's
-// and cold store's handle slots, 'trim' the table's rim, the bench's base panel, the cabinets' rail and the worktop's
-// edge); the other furniture boxes: the plan's colours, muted.
+// floor (a tint on the floor's tread plate); leather (the bench cushions, and the furniture boxes of benches not
+// furnished), bedding (the boxes of bunks not furnished); accents (which other things take the leather's colour too, for
+// kit/ships/cabin-furnish.js, in every room: 'stools' the stools' top pads (the mess's, the lab's), 'mugs' the mugs and
+// the bottle, 'handles' every handle slot (cabinets, counters, the cold store, drawers, lockers), 'trim' the table's rim,
+// the bench bases' panels, the cabinets' rails, the worktops' edges, the lockers' and bunks' tags and rails, the ladders,
+// 'bedding' the bunks' blankets and pillows); the other furniture boxes: the plan's colours, muted.
+// Every surface in the leather's colour is marked with its accent's name as it is drawn (kit/bevel.js add), and
+// buildCabin gives where they are in the merged cabin (p.accent, accentRanges): a live recolour (a player picking his
+// ship's accent colour) rewrites those vertices' colours, no rebuild and no new bake (the light is in aBake and aAO, apart
+// from the colours).
 //   light   his three reference pictures (2026-11-09: the bunks, the mess, the science lab): one light grey for every
 //           panel, the band a softer grey, charcoal trim, a charcoal floor; the light warm white in the mess, cool white
-//           in the science lab and the bunks, a plain white elsewhere; the bunks' charcoal bedding. The leather navy (his
-//           pick from the bench colours, 2026-11-09; his mess picture's was rust, '#9c5a34'), and everything
-//           in the mess his pick D matched to it: the stools' tops, the mugs and bottle, the handles, the trim
+//           in the science lab and the bunks, a plain white elsewhere. The leather navy (his pick from the bench colours,
+//           2026-11-09; his mess picture's was rust, '#9c5a34'), and everything his pick D matched to it: the stools'
+//           tops, the mugs and bottle, the handles, the trim; the bunks' bedding navy too (his direction, 2026-11-09)
 //   warm    his concept sheet's insets: grey steel panels, dark bands, amber light everywhere, blue leather
 // (a tone: `glow` the strip's colour at full (linear, over 1 for the bloom), `light` the colour it casts)
 const TONES = {
@@ -113,7 +118,7 @@ export const LOOKS = {
       band: ['#7f7d79', 0.55, 0.1, 0.7], dark: ['#2f3032', 0.55, 0.3, 0.7], black: ['#343538', 0.4, 0.45, 0.5],
     },
     tone: 'plain', rooms: { galley: 'warm', science: 'cool', bunks: 'cool' },
-    floor: '#e4e5ea', floorGain: 7, leather: '#22355e', accents: ['stools', 'mugs', 'handles', 'trim'], bedding: '#3a3d42',
+    floor: '#e4e5ea', floorGain: 7, leather: '#22355e', accents: ['stools', 'mugs', 'handles', 'trim', 'bedding'], bedding: '#22355e',
   },
   warm: {
     name: 'Warm',
@@ -122,7 +127,7 @@ export const LOOKS = {
       band: ['#34373b', 0.45, 0.45, 1.0], dark: ['#26282b', 0.5, 0.4, 0.8], black: ['#2e3033', 0.35, 0.55, 0.6],
     },
     tone: 'amber', rooms: {},
-    floor: '#aaa5a0', floorGain: 6, leather: '#22355e', accents: ['stools', 'mugs', 'handles', 'trim'], bedding: '#22355e',
+    floor: '#aaa5a0', floorGain: 6, leather: '#22355e', accents: ['stools', 'mugs', 'handles', 'trim', 'bedding'], bedding: '#22355e',
   },
 };
 // THE CABIN'S MATERIALS: the kit's own (kit/materials.js), with only a little of the outside's light let in (LIGHT.ambient:
@@ -320,7 +325,7 @@ export function buildCabin(p, bp, opts = {}) {
     if (items) {
       const slopeAt = (axis, v, a) => { if (axis !== 'x') return null; const L = linings.find((s) => Math.abs(s.v - v) < EPS && a >= s.lo - EPS && a <= s.hi + EPS); return L ? { y0: L.y0, run: L.run } : null; };
       const openings = (axis, v) => panels.filter((P) => P.axis === axis && Math.abs(P.v - v) < EPS).map((P) => (P.outer ? [P.lo, P.hi] : [P.lo - 0.2, P.hi + 0.2]));
-      for (const r of rooms) if (!canopy(r)) for (const id of furnishRoom(q, bp, r, { put, slopeAt, openings, look: LOOKS[look] })) furnished.add(id);
+      for (const r of rooms) if (!canopy(r)) for (const id of furnishRoom(q, bp, r, { put, slopeAt, openings, look: LOOKS[look], outer, outerDoors })) furnished.add(id);
     }
     if (items) for (const it of bp.items || []) {
       const r = byId[it.room]; if (!r || canopy(r) || furnished.has(it.id)) continue;
@@ -396,6 +401,7 @@ export function buildCabin(p, bp, opts = {}) {
   placeInto(p, q, {});
   p.notes = notes; p.runs = runs; p.stats = { ...(p.stats || {}), ...Object.fromEntries(Object.entries(stats).map(([k, v]) => [k, Math.round(v)])) };
   p.seesOutside = seesOutside(bp);
+  p.accent = accentRanges(p);
   // (the pools, each in the room it is in; one standing in a doorway goes to the room it faces)
   const roomAt = (x, z) => rooms.find((r) => x >= r.rect[0] - EPS && x <= r.rect[2] + EPS && z >= r.rect[1] - EPS && z <= r.rect[3] + EPS)?.id ?? null;
   p.pools = q.lights.filter((l) => l.pool).map((l) => ({ at: l.at.map((v) => +v.toFixed(3)), color: l.color, i: l.pool.i, reach: l.pool.reach, room: roomAt(l.at[0], l.at[2]) }));
@@ -432,6 +438,22 @@ export function buildCabin(p, bp, opts = {}) {
     const sharedOf = (room) => [-1, 1].filter((s) => meets(s) || cornered(room, s));
     return { signs: { front: sign(back), back: sign(front) }, panels: { front: pick(front), back: pick(back) }, shared: { front: sharedOf(front), back: sharedOf(back) } };
   }
+}
+// THE ACCENTS, FOR A LIVE RECOLOUR: every part drawn in the look's leather colour carries its accent's name (kit/bevel.js
+// add: its geometry's userData.accent; a clone keeps it). Here, where they fall among the piece's solid parts merged in
+// order, as kit/layout.js merges a piece (its solid parts one after another, in one mesh per material): { ranges:
+// [[first vertex, count, accent]], byKey: { accent: vertices }, verts (all its solid vertices) }. A cabin alone in its zone
+// (the Ship Lab's walls) has these as its zone's merged solid mesh's own vertex ranges: a recolour writes the new colour
+// into those vertices of its colour attribute (bytes, four to a vertex, once built) and marks it for upload.
+export function accentRanges(p) {
+  const ranges = [], byKey = {}; let v = 0;
+  for (const { mat, geo } of p.parts) {
+    if (mat !== 'solid') continue;
+    const n = geo.attributes.position.count, k = geo.userData?.accent;
+    if (k) { const last = ranges[ranges.length - 1]; if (last && last[0] + last[1] === v && last[2] === k) last[1] += n; else ranges.push([v, n, k]); byKey[k] = (byKey[k] || 0) + n; }
+    v += n;
+  }
+  return { ranges, byKey, verts: v };
 }
 // the rooms that can see out of the ship, by id: under a canopy ('canopy': always, through its glass) and those the
 // ship's own door opens from ('door': while it is open). Every other room sees only the cabin.

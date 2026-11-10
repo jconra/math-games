@@ -179,7 +179,13 @@ export function prism(points, z0, z1, opts = {}) {
 export function plate(s, z = 0) { const o = new Out(); cap(o, { pts: octagon(s), z }, true); return o.geometry(); }
 
 // a part of a piece: geometry g turned by rot and moved to at (kit/geo.js put), added to piece p as `mat` ('solid' with
-// a surface, 'glow' with a glow, 'decal' with a tint...)
-export function add(p, look, g, at, rot, mat = 'solid') { put(g, at || [0, 0, 0], rot || [0, 0, 0]); return p.add(mat, g, look); }
+// a surface, 'glow' with a glow, 'decal' with a tint...). A surface with an `accent` (a ship cabin's accent colour:
+// kit/ships/cabin-built.js LOOKS) marks the geometry with it (userData.accent), so where it ends up can be found again
+// after the piece is merged, for a live recolour
+export function add(p, look, g, at, rot, mat = 'solid') {
+  put(g, at || [0, 0, 0], rot || [0, 0, 0]); const out = p.add(mat, g, look);
+  if (look && typeof look === 'object' && !Array.isArray(look) && look.accent) out.userData.accent = look.accent;
+  return out;
+}
 // how many triangles a geometry has
 export const tris = (g) => (g.index ? g.index.count : g.attributes.position.count) / 3;

@@ -145,7 +145,7 @@ export function decalAtlas() {
   // a solid white swatch (for painted marks that only need the tint)
   { const [x, y] = cell(15); g.fillStyle = '#fff'; g.fillRect(x + 4, y + 4, 248, 56); rect.solid = uvOf(x + 8, y + 8, 240, 48); }
   cockpitPrint(g, cell, uvOf, rect);
-  cabinPrint(g, cell, uvOf, rect);   // (a ship cabin's posters, door signs and stencils: cells 32-55, which the station never uses)
+  cabinPrint(g, cell, uvOf, rect);   // (a ship cabin's posters, door signs, stencils and labels: cells 24-55, which the station never uses)
   const t = tex(c, true, false); t.generateMipmaps = true;
   return { map: t, rect };
 }

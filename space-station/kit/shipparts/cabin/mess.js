@@ -35,16 +35,18 @@ import { FACE } from './ship.js';
 import { POSTERS } from './print.js';
 
 const PI = Math.PI, FLAT = [-PI / 2, 0, 0];   // (FLAT: a shape drawn in x, y lies down, its y running to -z, its depth up)
-const STEEL = { c: '#b0b4ba', r: 0.34, m: 0.45, w: 0.3 }, PAD = { c: '#6c7078', r: 0.6, m: 0.05, w: 0.3 }, GUN = { c: '#6f747c', r: 0.4, m: 0.3, w: 0.4 }, TOP = { c: '#b4b5b2', r: 0.36, m: 0.25, w: 0.4 };
-const leatherOf = (c) => ({ c: c || '#22355e', r: 0.66, m: 0.0, w: 0.25 });
-const decalQuad = (w, h, rect) => { const r = kitTextures().decal.rect[rect]; if (!r) throw new Error('kit: no decal ' + rect); return plane(w, h, { uv: r, cell: 9 }); };
+export const STEEL = { c: '#b0b4ba', r: 0.34, m: 0.45, w: 0.3 }, PAD = { c: '#6c7078', r: 0.6, m: 0.05, w: 0.3 }, GUN = { c: '#6f747c', r: 0.4, m: 0.3, w: 0.4 }, TOP = { c: '#b4b5b2', r: 0.36, m: 0.25, w: 0.4 };
+// the leather (a cabin's look gives its colour: marked as that look's accent `key`, for a live recolour); none given:
+// the default navy, unmarked
+export const leatherOf = (c, key = 'leather') => ({ c: c || '#22355e', r: 0.66, m: 0.0, w: 0.25, ...(c ? { accent: key } : {}) });
+export const decalQuad = (w, h, rect) => { const r = kitTextures().decal.rect[rect]; if (!r) throw new Error('kit: no decal ' + rect); return plane(w, h, { uv: r, cell: 9 }); };
 // a light for the bake, warm white (the room's tone takes it over: kit/ships/cabin-built.js)
-const LIGHT = [1, 0.97, 0.92];
+export const LIGHT = [1, 0.97, 0.92];
 // a pool of light from a strip, for a cabin's real-time lights (kit/ships/cabin-built.js POOLS): not in the bake, which
 // has the strip's own lights
-const pool = (p, at, i, reach) => p.lights.push({ at, i: 0, color: LIGHT, dir: null, reach, pool: { i, reach } });
+export const pool = (p, at, i, reach, color = LIGHT) => p.lights.push({ at, i: 0, color, dir: null, reach, pool: { i, reach } });
 // a strip's own light for the bake (marked, so a cabin keeps its strips brighter than its fill: cabin-built.js LIGHT)
-const strip = (p, at, i, dir, reach) => p.lights.push({ at, i, color: LIGHT, dir, reach, strip: true });
+export const strip = (p, at, i, dir, reach, color = LIGHT) => p.lights.push({ at, i, color, dir, reach, strip: true });
 
 // ── the corner bench ─────────────────────────────────────────────────────────────────────────────────────────────
 export function cornerBench(p, o = {}) {
@@ -84,7 +86,7 @@ export function stool(p, o = {}) {
   const h = o.h ?? 0.45, S = (a, z) => ({ s: shape(a, a, a * 0.27), z });
   add(p, GUN, loft([S(0.3, 0), S(0.3, 0.022), S(0.22, 0.06), S(0.11, h * 0.47), S(0.24, h - 0.075), S(0.27, h - 0.06)], { start: false }), [0, 0, 0], FLAT);
   add(p, STEEL, solid(shape(0.35, 0.35, 0.095), 0.028, { edge: 0.007 }), [0, h - 0.065, 0], FLAT);
-  add(p, o.pad ? leatherOf(o.pad) : PAD, solid(shape(0.32, 0.32, 0.085), 0.04, { edge: 0.012, back: false }), [0, h - 0.04, 0], FLAT);
+  add(p, o.pad ? leatherOf(o.pad, 'stools') : PAD, solid(shape(0.32, 0.32, 0.085), 0.04, { edge: 0.012, back: false }), [0, h - 0.04, 0], FLAT);
   return p;
 }
 
