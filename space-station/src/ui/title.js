@@ -8,15 +8,27 @@
 //   T.setProgress(0.4, 'Building the rooms'); T.nudge(); T.hide(); T.show(); T.player()
 //
 // What this game adds to the engine: the look pictures (looks.js), a panel for the chosen crew member with the whole
-// person and a row to change their look, and the words. Nothing here opens by itself.
+// person and rows to change their look and their height (THE HEIGHT, below), and the words. Nothing here opens by itself.
 import { showTitle as showShared, esc } from '../../../shared/title/title.js';
 import * as save from '../save.js';
 import { GAME_NAME } from '../name.js';
 import { LOOKS, lookById } from '../looks.js';
 import { pictureOf, onPicture } from '../portraits.js';
+import { SIZES } from '../../kit/crew.js';
 
 const P = 'cst';
-const SHEET = new URL('./title.css?v=1', import.meta.url).href;
+const SHEET = new URL('./title.css?v=2', import.meta.url).href;
+
+// THE HEIGHT (2026-11-10; the game's maker: "Maybe we can offer a size option, but I don't think we need new models"):
+// three steps of the crew kit's SIZES, saved with the crew member as their look's `size` (Medium is left out, so a crew
+// member saved before this is Medium), and laid over the look's recipe (looks.js recipeOf): the whole person scaled.
+const HEIGHTS = [['shorter', 'Shorter'], ['medium', 'Medium'], ['taller', 'Taller']].map(([k, word]) => ({ k, word, v: SIZES[k] }));
+const sizeOf = (look) => { const v = look && +look.size; return HEIGHTS.some((h) => h.v === v) ? v : 1; };
+const heightRow = (cur, act) => `<div class="${P}-heights" role="radiogroup" aria-label="Height" data-nav="radio">
+  ${HEIGHTS.map((h) => `<button class="${P}-agech is-skip" role="radio" aria-checked="${cur === h.v}" tabindex="${cur === h.v ? 0 : -1}"
+      data-act="${act}" data-v="${h.v}" data-k="${act}:${h.k}">${h.word}</button>`).join('')}
+</div>`;
+const withSize = (look, v) => { const l = { ...(look || {}) }; if (v === 1) delete l.size; else l.size = v; return l; };
 
 // Ready names for a crew member who types none (a child who cannot read yet just taps "Come aboard").
 const NAMES = ['Rookie', 'Comet', 'Scout', 'Pixel', 'Ace', 'Sparks', 'Jet', 'Echo', 'Dash', 'Rocket', 'Nova', 'Orbit'];
@@ -70,13 +82,15 @@ const theme = {
   names: NAMES,
   // (no skin and hair dots: a look here is a whole ready-made person, shown as a picture made ahead of time)
   portrait: pic,
-  lookOf: (draft, look) => ({ id: look.id }),      // what is saved with a new crew member
+  lookOf: (draft, look) => withSize({ id: look.id }, draft.size || 1),      // what is saved with a new crew member
   lookCardOf: (look) => ({ id: look.id }),
-  // a fresh form starts on a look no saved crew member has (two children's crew don't look the same by accident)
+  // a fresh form starts on a look no saved crew member has (two children's crew don't look the same by accident), Medium
   draft(players) {
     const used = new Set(players.map((p) => p.look && p.look.id)), free = LOOKS.find((l) => !used.has(l.id));
-    return free ? { look: free.id } : {};
+    return free ? { look: free.id, size: 1 } : { size: 1 };
   },
+  // the Height row on the new crew member's form
+  formMore: (d) => `<section><h3 class="${P}-label">Height</h3>${heightRow(d.size || 1, 'size')}</section>`,
   brand,
   when: aboard,
   cardSaid: (p) => `${esc(p.name)}, ${esc(aboard(p.last).toLowerCase())}`,
@@ -88,10 +102,25 @@ const theme = {
       <div class="${P}-about">
         <p class="${P}-line">You start in your room. Walk around the station and see who is there.</p>
         <section><h3 class="${P}-label">Look</h3>${lookRow(cur)}</section>
+        <section><h3 class="${P}-label">Height</h3>${heightRow(sizeOf(p.look), 'setsize')}</section>
       </div>
     </div>`;
   },
   actions: {
+    // the height on the new crew member's form
+    size(ctx, data) {
+      const v = +data.v; if (!ctx.S.draft || !HEIGHTS.some((h) => h.v === v)) return;
+      ctx.S.draft.size = v;
+      ctx.keepFocus(() => ctx.draw.panel());
+    },
+    // another height for the chosen crew member, saved straight away
+    setsize(ctx, data) {
+      const p = ctx.current(), v = +data.v;
+      if (!p || !HEIGHTS.some((h) => h.v === v) || sizeOf(p.look) === v) return;
+      p.look = withSize(p.look, v);
+      ctx.changed(p);
+      ctx.keepFocus(() => ctx.draw.panel());
+    },
     // another look for the chosen crew member, saved straight away
     setlook(ctx, data) {
       const p = ctx.current();
@@ -114,7 +143,7 @@ const theme = {
     players: 'Crew',
     newPlayer: 'New crew member',
     formTitle: 'New crew member',
-    formLine: 'Pick a name and a look',
+    formLine: 'Pick a name, a look and a height',
     nameHolder: (pick) => `Type a name, or be ${pick}`,
     anyName: 'Crew',
     pickLook: 'Pick your look',

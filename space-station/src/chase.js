@@ -7,6 +7,7 @@
 //   chase.update(dt, { feet, heading, speed, look: { dx, dy }, zoom })
 //   chase.near                    how far the camera is from the player's head (m): the game hides the body when close
 //   chase.yaw                     where the camera looks (radians, as a heading): "forward" for the keys and stick
+//   chase.eye                     the head's height over the feet it follows (m; CAM.eye times the person's size)
 //
 // NEVER THROUGH A WALL: each frame five lines go from the player's head toward where the camera wants to be (the
 // middle one, one either side and one above and below); the camera stops short of the first wall any of them meets,
@@ -29,7 +30,7 @@ const damp = (a, b, k, dt) => b + (a - b) * Math.exp(-k * dt);
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
 export function makeChase(camera, walls) {
-  const C = { yaw: 0, pitch: CAM.pitch, zoom: 1, reach: CAM.dist, idle: 99, near: CAM.dist };
+  const C = { yaw: 0, pitch: CAM.pitch, zoom: 1, reach: CAM.dist, idle: 99, near: CAM.dist, eye: CAM.eye };
   const focus = new THREE.Vector3(), dir = new THREE.Vector3(), side = new THREE.Vector3(), up = new THREE.Vector3(), o = new THREE.Vector3();
 
   function dirOf(yaw, pitch) { return dir.set(-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)).normalize(); }
@@ -52,7 +53,7 @@ export function makeChase(camera, walls) {
   }
 
   C.snap = (feet, heading) => {
-    focus.set(feet.x, feet.y + CAM.eye, feet.z);
+    focus.set(feet.x, feet.y + C.eye, feet.z);
     C.pitch = CAM.pitch; C.zoom = 1; C.idle = 99;
     // straight behind, or the nearest clear way round to it
     let best = heading, bestT = -1;
@@ -69,7 +70,7 @@ export function makeChase(camera, walls) {
   C.update = (dt, { feet, heading, speed = 0, look = null, zoom = 0 }) => {
     // the head, followed smoothly (up and down more slowly: a stair is a little lift, not a jolt)
     focus.x = damp(focus.x, feet.x, CAM.follow, dt); focus.z = damp(focus.z, feet.z, CAM.follow, dt);
-    focus.y = damp(focus.y, feet.y + CAM.eye, CAM.rise, dt);
+    focus.y = damp(focus.y, feet.y + C.eye, CAM.rise, dt);
     if (look && (look.dx || look.dy)) {
       C.yaw = wrap(C.yaw - look.dx * CAM.turn);
       C.pitch = Math.max(CAM.pitchMin, Math.min(CAM.pitchMax, C.pitch + look.dy * CAM.tilt));

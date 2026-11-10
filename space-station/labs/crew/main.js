@@ -5,8 +5,12 @@
 //   the characters (one entry a recipe) and every clip their suit's skeleton has (the men's or the women's), its speed;
 //   the wardrobe: Head, Hair, Suit (each part a choice: any goes with any; the hair: the Blender styles from the game's
 //     maker's grid, drawn as card hair, and the Mathwood hair), Hands (by suit: the man's on a men's-skeleton suit, the
-//     woman's on a women's; or either, or none), Job colours (the suit's marks, light lines and panels; a
-//     suit that keeps its own colours, the captains', takes none), Uniform (the suit's whites: a few colours or any),
+//     woman's on a women's; or either, or none), Seat (2026-11-10: how much lower this head sits in this suit's
+//     collar, kit/crew.js THE SEAT; - and + in 2 mm steps, kept in this browser, Copy seats for crew.json), Job colours
+//     (the suit's marks, light lines and panels; a suit that keeps its own colours, the captains', takes none), Bands
+//     (2026-11-10: the suit's whites, the station uniforms' white bands: as made, the eight BAND_COLOURS by name, then
+//     More: the older uniform colours, or any), Height (2026-11-10: the recipe's size, kit/crew.js SIZES: Shorter,
+//     Medium, Taller),
 //     Skin tone, Hair colour; a visor's face (an android's helmet: Captain Vega's expressions), when the head has one;
 //     Eyes (a head with real eyes: the Tripo heads): the iris's colour (its own as painted, or one of EYE_COLOURS) and
 //     Look at camera (the eyes follow the camera, darting a little as eyes do; off: straight ahead);
@@ -56,7 +60,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { loadCrew, makeCrew, fitFor, TUCK_MAX, HUG_GAP, HUG_MAX, HUG_DEFAULT, CLIPS, JOBS, UNIFORM_COLOURS, SKIN_TONES, HAIR_COLOURS, EYE_COLOURS, FACE, EXPRESSIONS } from '../../kit/crew.js';
+import { loadCrew, makeCrew, fitFor, TUCK_MAX, HUG_GAP, HUG_MAX, HUG_DEFAULT, CLIPS, JOBS, UNIFORM_COLOURS, BAND_COLOURS, SIZES, SKIN_TONES, HAIR_COLOURS, EYE_COLOURS, FACE, EXPRESSIONS } from '../../kit/crew.js';
 import { makeMaterials } from '../../kit/materials.js';
 import { buildRoom } from '../../kit/layout.js';
 
@@ -243,18 +247,52 @@ function menuRows() {
   const ownIris = st.crew?.meshes.eyes?.material.userData.eye?.crIrisOwn.value.getStyle();
   const eyes = st.crew?.gaze ? [sep(), lab('Eyes'), swatch(ownIris || '#4a2e18', !C.eyes, () => colours({ eyes: null }), 'Their own eyes'), ...EYE_COLOURS.map((s) => swatch(s, C.eyes === s, () => colours({ eyes: s }), 'Eyes ' + s)),
     chip('Look at camera', st.look, () => look(!st.look), true, 'The eyes follow the camera (off: straight ahead)')] : [];
-  $('#wear').replaceChildren(lab('Head'), pick('Head', 'head', R.head), lab('Hair'), pick('Hair', 'hair', R.hair, true), lab('Suit'), pick('Suit', 'suit', R.suit), lab('Hands'), handPick(R), ...face,
+  // (the bands: the uniform's whites, the station uniforms' white bands; the eight band colours by name, then the older
+  // uniform colours and any colour)
+  const bands = Object.values(BAND_COLOURS);
+  $('#wear').replaceChildren(lab('Head'), pick('Head', 'head', R.head), lab('Hair'), pick('Hair', 'hair', R.hair, true), lab('Suit'), pick('Suit', 'suit', R.suit), lab('Hands'), handPick(R), ...seatChips(R), ...face,
     sep(), jobLab, ...Object.entries(JOBS).map(([k, J]) => chip(J.name, (C.job || 'explorer') === k, () => colours({ job: k }), true)),
-    sep(), lab('Uniform'), swatch('linear-gradient(135deg,#f4f5f6,#9aa3ad)', !C.uniform, () => colours({ uniform: null }), 'The uniform as made'),
-    ...UNIFORM_COLOURS.map((s) => swatch(s, C.uniform === s, () => colours({ uniform: s }), 'Uniform ' + s)), any,
+    sep(), lab('Bands'), swatch('linear-gradient(135deg,#f4f5f6,#9aa3ad)', !C.uniform, () => colours({ uniform: null }), 'The bands as made (white)'),
+    ...Object.entries(BAND_COLOURS).map(([n, s]) => swatch(s, C.uniform === s, () => colours({ uniform: s }), 'Bands: ' + n)),
+    lab('More'), ...UNIFORM_COLOURS.filter((s) => !bands.includes(s)).map((s) => swatch(s, C.uniform === s, () => colours({ uniform: s }), 'Uniform ' + s)), any,
     sep(), lab('Skin'), swatch('linear-gradient(135deg,#d9a37f,#86522f)', !C.skin, () => colours({ skin: null }), 'His own skin'), ...SKIN_TONES.map((s) => swatch(s, C.skin === s, () => colours({ skin: s }), 'Skin ' + s)),
-    sep(), lab('Hair colour'), swatch('linear-gradient(135deg,#6b4127,#2e1f15)', !C.hair, () => colours({ hair: null }), 'His own hair'), ...HAIR_COLOURS.map((s) => swatch(s, C.hair === s, () => colours({ hair: s }), 'Hair ' + s)), ...eyes);
+    sep(), lab('Hair colour'), swatch('linear-gradient(135deg,#6b4127,#2e1f15)', !C.hair, () => colours({ hair: null }), 'His own hair'), ...HAIR_COLOURS.map((s) => swatch(s, C.hair === s, () => colours({ hair: s }), 'Hair ' + s)), ...eyes,
+    // (the height: the recipe's size, the whole person scaled about the feet; Medium leaves it out)
+    sep(), lab('Height'), ...Object.entries(SIZES).map(([k, v]) => chip(k[0].toUpperCase() + k.slice(1), (+R.size || 1) === v, () => resize2(v), true, `${k[0].toUpperCase() + k.slice(1)}: ${Math.round(v * 100)}% of the body as made`)));
   $('#view').replaceChildren(lab('Camera'), ...Object.keys(CAMS).map((k) => chip(k, k === st.cam, () => { setCam(k); menu(); }, true)),
     sep(), lab('Show'), ...[['paint', 'Painted'], ['plain', 'Plain'], ['wire', 'Wireframe']].map(([k, t]) => chip(t, st.paint === k, () => { setPaint(k); menu(); }, true)),
     chip('1.8 m', st.marker, () => { st.marker = !st.marker; marker.visible = st.marker; menu(); }, true, 'A 1.8 m post beside them'),
     chip('Bones', st.bones, () => { setBones(!st.bones); menu(); }, true, 'The skeleton'),
     chip('Smooth hair', lib.smoothHair, () => smoothHair(!lib.smoothHair), true, 'The Mathwood hair smooth-shaded (off: its flat facets, as the pack has them)'));
 }
+// THE SEAT (kit/crew.js): how much lower this head sits in this suit's collar, in 2 mm steps (+ lower, - higher), tried
+// at once and kept in this browser over crew.json's (lib.seats); Copy seats gives every head's seats this browser has
+// changed, as JSON for crew.json's head entries (`"seat": { "<suit id>": metres }`)
+const SEAT_KEY = 'crewlab.seats.v1';
+try { const j = JSON.parse(localStorage.getItem(SEAT_KEY) || '{}'); if (j && typeof j === 'object' && !Array.isArray(j)) lib.seats = j; } catch (_) { /* none kept */ }
+const seatMap = (s) => (s == null ? {} : typeof s === 'number' ? { all: s } : { ...s });
+function seatChips(R) {
+  if (!R.head || !R.suit) return [];
+  const mm = Math.round(lib.seatOf(R.head, R.suit) * 1000), t = lab(`${mm} mm`);
+  t.title = 'How much lower this head sits in this suit\'s collar (its neck goes deeper in; nothing is cut)';
+  return [lab('Seat'), chip('−', false, () => reseat(-2), true, 'Seat this head 2 mm higher in this suit'), t,
+    chip('+', false, () => reseat(2), true, 'Seat this head 2 mm lower in this suit (deeper in the collar)'),
+    chip('Copy seats', false, copySeats, true, 'Copy the seats changed here, as JSON for crew.json')];
+}
+async function reseat(dmm) {
+  const R = st.recipe; if (!R?.head || !R.suit) return;
+  const m = seatMap(own(lib.seats, R.head) ? lib.seats[R.head] : (lib.entry('head', R.head) || {}).seat);
+  m[R.suit] = Math.min(0.04, Math.max(-0.02, Math.round((lib.seatOf(R.head, R.suit) * 1000 + dmm)) / 1000));
+  lib.seats[R.head] = m;
+  try { localStorage.setItem(SEAT_KEY, JSON.stringify(lib.seats)); } catch (_) { /* not kept: Copy seats before leaving */ }
+  await show(R);
+}
+async function copySeats() {
+  const text = JSON.stringify(lib.seats);
+  try { await navigator.clipboard.writeText(text); hud.textContent = 'Seats copied: ' + text; } catch (_) { hud.textContent = 'Seats: ' + text; }
+}
+// (a height picked: the person put together again at that size)
+async function resize2(v) { if (!st.recipe) return; if (v === 1) delete st.recipe.size; else st.recipe.size = v; await show(st.recipe); }
 async function smoothHair(on) { lib.smoothHair = !!on; if (st.recipe) await show(st.recipe); triCount(); menu(); }
 function expression(k) { st.recipe.expression = k; st.crew?.setExpression(k); menu(); }
 function look(on) { st.look = !!on; if (!st.look) st.crew?.lookAt(null); menu(); }

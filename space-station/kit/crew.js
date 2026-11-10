@@ -100,7 +100,8 @@
 //                                               lib.buzzOf(hair id) -> the buzz makeCrew gives that hair; lib.buzzes
 //                                               { hair id: buzz | null } (empty: a layer over crew.json's; the Crew Lab's
 //                                               while it's edited); lib.earsOf(head id) -> that head's ears
-//   const c = await makeCrew(lib, recipe)       recipe { suit, head, hair, hand, colours: { job, uniform, skin, hair, eyes } }
+//   const c = await makeCrew(lib, recipe)       recipe { suit, head, hair, hand, colours: { job, uniform, skin, hair, eyes }, size }
+//     (size: the whole person scaled about the feet, SIZES; left out 1; c.size; c.stride scaled with it)
 //     c.root (place and turn it: feet on y 0, facing +z), c.person (Mathwood's Person), c.play(name, { fade, speed, once }),
 //     c.update(dt), c.setColours({ job, uniform, skin, hair, eyes }), c.meshes { suit, head, hair, hand, visor, eyes, cornea },
 //     c.bones, c.lookAt(point | null, { dart }) (real eyes: where they look; null straight ahead), c.gaze (null without),
@@ -124,7 +125,9 @@
 //   lib.collarFit (true: the collar fit on; false: off, the heads as made, its numbers still measured: collarStats
 //   .applied false); lib.collarRide (true: the hidden neck rides with the cloth; false: drawn in only);
 //   lib.collarOf(suit id, template) -> the collar
-//   JOBS, UNIFORM_COLOURS, SKIN_TONES, HAIR_COLOURS, EYE_COLOURS, FACE, CLIPS, EXPRESSIONS, PAINTS, fitFor, hairRotation, SKULL,
+//   lib.seats, lib.seatOf(head id, suit id) (THE SEAT: how much lower a head sits in a suit's collar)
+//   JOBS, UNIFORM_COLOURS, BAND_COLOURS (THE BANDS), SKIN_TONES, SKIN_LIMIT and skinTone (THE SKIN'S LIMITS),
+//   HAIR_UNDERSIDE (THE HAIR'S UNDERSIDE), HAIR_COLOURS, EYE_COLOURS, FACE, CLIPS, EXPRESSIONS, PAINTS, fitFor, hairRotation, SKULL,
 //   HAIR_CLEAR, TUCK_CLEAR, TUCK_MAX, HUG_GAP, HUG_MAX, HUG_DEFAULT, COLLAR_CLEAR, COLLAR_BAND, SIDEBURN, NAPE, UNDER_SOFT,
 //   EAR_SOFT, lineAt, paintField, HAIR_STRANDS (the Mathwood hair's strand look), STRAND_S, STRAND_P
 import * as THREE from 'three';
@@ -158,7 +161,58 @@ export const JOBS = {
 };
 // the uniform's whites (any sRGB colour; null keeps the suit's own): a few to pick from
 export const UNIFORM_COLOURS = ['#e9ecef', '#c9ccd1', '#8a96a3', '#3b4a5c', '#1f3a6b', '#2f6db3', '#2b6b5a', '#6b2d34', '#b8742a', '#d9c7a1'];
+// THE BANDS (2026-11-10; the game's maker: "it would be cool of some of those uniforms where tinted in different colors
+// (the white bands), Purple should be an option"). The station uniforms' white bands (atlantis1's stripes on the chest
+// and arms, atlantis2's chest and side panels) are their whites, so a recipe's colours.uniform tints them, and left out
+// they stay white as made. These eight read well on the dark grey cloth (light enough to stand out, not so light they
+// glow), by name, for the Crew Lab's Bands row and the looks' recipes:
+export const BAND_COLOURS = { white: '#e9ecef', purple: '#9b6ddb', teal: '#2ec4b6', orange: '#f0892e', red: '#d9463e', blue: '#3f8fe8', gold: '#e3b341', green: '#5cbf5a' };
+// a person's height (a recipe's `size`, the whole body scaled about the feet: THE SIZE, in makeCrew), three steps
+export const SIZES = { shorter: 0.9, medium: 1, taller: 1.07 };
 export const SKIN_TONES = ['#f2d3bd', '#e8bf9f', '#d9a37f', '#c48a62', '#a66d45', '#86522f', '#663b22', '#47291a'];
+// THE SKIN'S LIMITS (2026-11-10; the game's maker: "some of the light skin looks completely white... They look like a
+// vampire", and of two characters' hands: "I have never seen hand this white, they should have a limit on how light
+// they can go"). A skin tone was laid on as each channel's ratio of the tone to the part's own measured skin, held to
+// 0.1 to 4 times: a pale tone on a darker head or hand was multiplied up 2 to 4 times (blue up to 10 times wanted, 4
+// given: a pale tone on an orange head came out yellow), its painted highlights past white; and the two palest tones are
+// lighter and greyer than skin reads under the title's bright, cool portrait light, so even their mean read as white.
+// Now (skinTone, and the head's and hands' shader):
+//   the tone's LIGHTNESS (linear luminance): past `soft` it is eased toward `most`, never reaching it, so the palest
+//     tones stay the lightest, in order, but no lighter than skin;
+//   its WARMTH: a pale tone's colour (its distance from grey) grown till its blue is at most 1 - `warm` of its red, its
+//     lightness kept, so cool lights and the tone curve can't grey it to chalk;
+//   the LIFT: the most a tone may lighten the HEAD it's on, `lift` times its own skin (a head made darker, whose features
+//     were made for it, comes out light, never washed out: of the looks' heads only t9 and t2 are held by it);
+//   the hands wear the colour the head came out at, `hands` as light (the backs of the hands face the light more than a
+//     face, whose painted shading darkens it), so they match the face;
+//   on the part (the shader): the tone's colour times the texel's own light against the part's mean (the painted light
+//     and shade, freckles and all, kept whole) times `hue` of the texel's own colour against the mean (lips and cheeks
+//     keep some of their colour; the head's own hue no longer fights the tone's channel by channel, so no clamp);
+//     and a texel lightened past `shine` eased toward `shineMost`, never darker than it was painted, so the painted
+//     highlights never run to white.
+// A part in its own skin (no tone given) is drawn exactly as made.
+// (2026-11-10, measured on every tone on the looks' seven heads and both hands, in the portrait and station light:
+// ~/pw/space-math/CREW_fixes.md. A blind critic still found the palest faces grey and waxy at warm 0.62, most 0.46,
+// hue 0.5: so warmer, a touch darker, more of the lips' and cheeks' own colour; a second found Ivy (t9, fair) still
+// chalky and at odds with her features, so the lift 3 -> 2.5. The cost: the palest three tones come out close together,
+// fair a little lighter than light, light than tan)
+export const SKIN_LIMIT = { soft: 0.28, most: 0.43, warm: 0.70, lift: 2.5, hands: 0.85, hue: 0.75, shine: 0.42, shineMost: 0.62 };
+const lumOf = (c) => 0.2126 * c.r + 0.7152 * c.g + 0.0722 * c.b;
+const ease = (l, k, M) => (l <= k ? l : k + (M - k) * (1 - Math.exp(-(l - k) / Math.max(M - k, 1e-6))));
+// the colour a skin tone comes out at on a head (linear Colours: the tone picked, the head's own measured skin), by
+// THE SKIN'S LIMITS; the hands are given this colour times SKIN_LIMIT.hands
+export function skinTone(tone, own, L = SKIN_LIMIT) {
+  const t = tone.clone(), l = lumOf(t), s = t.r > 1e-6 ? 1 - t.b / t.r : 1;
+  const k = L.warm && s > 1e-6 && s < L.warm ? L.warm / s : 1;
+  if (k > 1) {
+    t.g = Math.max(t.r * 0.02, t.r - (t.r - t.g) * k); t.b = Math.max(t.r * 0.02, t.r - (t.r - t.b) * k);
+    const l2 = lumOf(t); if (l2 > 1e-6) t.multiplyScalar(l / l2);
+  }
+  if (l > 1e-6) t.multiplyScalar(ease(l, L.soft, L.most) / l);
+  const lo = own ? lumOf(own) : 0;
+  if (lo > 1e-6 && lumOf(t) > lo * L.lift) t.multiplyScalar(lo * L.lift / lumOf(t));
+  return t;
+}
 export const HAIR_COLOURS = ['#17110d', '#2e1f15', '#4a2f1d', '#6b4127', '#8f5a32', '#b4824f', '#d8bc84', '#a83c22', '#8f8a84', '#d6d3cc'];
 
 // a visor's faces (kit/crew.js visorMaterial), in the order its shader numbers them
@@ -215,6 +269,15 @@ export async function loadCrew({ dir = CREW_DIR, people = PEOPLE_DIR, smoothHair
   // head if it has one (the Crew Lab's while it's edited), else crew.json's
   lib.headFits = {};
   lib.headFitOf = (head) => (!head ? null : Object.prototype.hasOwnProperty.call(lib.headFits, head) ? lib.headFits[head] : (lib.entry('head', head) || {}).hairFit || null);
+  // how much lower a head sits in a suit's collar (THE SEAT, metres): lib.seats' for that head if it has one (the Crew
+  // Lab's while it's tried), else crew.json's `seat`: { <suit id>: metres, all: metres (any other suit) } or one number
+  // (every suit); else 0
+  lib.seats = {};
+  lib.seatOf = (head, suit) => {
+    const s = !head ? null : Object.prototype.hasOwnProperty.call(lib.seats, head) ? lib.seats[head] : (lib.entry('head', head) || {}).seat;
+    if (s == null) return 0;
+    return +(typeof s === 'number' ? s : (s[suit] != null ? s[suit] : s.all)) || 0;
+  };
   // (the hug a hair wears when its fit gives none: the crew's own hairs (a scalp line) hugged, the rest not)
   lib.hugDefaultOf = (hair) => { const E = (hair && lib.entry('hair', hair)) || {}; return E.scalp && E.scalp.line ? HUG_DEFAULT : 0; };
   lib.fitOf = (hair, head) => {
@@ -355,6 +418,8 @@ function crewUniforms(refs) {
     crPanels: { value: R('panels', 0x202020) }, crPanelsRef: { value: R('panels', 0x202020) },
     crWhites: { value: R('whites', 0xc8c8c8) }, crWhitesRef: { value: R('whites', 0xc8c8c8) },
     crSkin: { value: R('skin', 0xc08060) }, crSkinRef: { value: R('skin', 0xc08060) },
+    // (THE SKIN'S LIMITS on the part: shine, shineMost, and how much of the texel's own colour (1: all, as made))
+    crSkinLook: { value: new THREE.Vector3(SKIN_LIMIT.shine, SKIN_LIMIT.shineMost, 1) },
     crHair: { value: R('hair', 0x402010) }, crHairRef: { value: R('hair', 0x402010) },
     crGlow: { value: refs && refs.glow != null ? refs.glow : 0.0 },
   };
@@ -366,6 +431,10 @@ function crewMaterial(src, kind, part, paint, atlas) {
   // (the Mathwood hair's strands: a hair part that carries them (crewPart.strands), with the strand atlas)
   const SL = kind === 'hair' && part && part.strands && atlas ? { ...HAIR_STRANDS, ...((part.strands && part.strands.look) || {}) } : null;
   if (SL) strandUniforms(u, SL, atlas);
+  // (a plain hair mesh, not the Mathwood hair's strands: its shading normal leant out from the skull's centre, THE HAIR'S
+  // UNDERSIDE; the skull's centre in its own frame set by makeCrew)
+  const PB = kind === 'hair' && !SL && HAIR_UNDERSIDE.plain > 0;
+  if (PB) { u.crStrandSkull = { value: new THREE.Vector3() }; u.crBend = { value: HAIR_UNDERSIDE.plain }; }
   // (paint on a head with skin: PAINTS and THE PAINT FIELD below (paintOf): the stubble's look (a hair's own changes to
   // PAINTS.stubble), the scalp shade's (to PAINTS.under), the buzz cut's hairline, the field, a hair's marks)
   const PT = paint && kind === 'head' && has.skin ? paint : null;
@@ -392,6 +461,7 @@ function crewMaterial(src, kind, part, paint, atlas) {
   if (SL) { m.roughness = SL.rough; m.envMapIntensity = SL.env; }
   m.defines = { ...(m.defines || {}), [KIND_DEF[kind]]: '' };
   if (SL) Object.assign(m.defines, { CREW_STRANDS: '', CR_S_SCALE: STRAND_S.toFixed(3), CR_P_SCALE: STRAND_P.toFixed(3) });
+  if (PB) m.defines.CREW_BEND = '';
   // (a suit's own mask texture: in the occlusion slot at strength 0, taken out of it as the masks)
   if (kind === 'suit' && has.tex === 'occlusion' && m.aoMap) { u.crMaskMap = { value: m.aoMap }; m.aoMap = null; m.defines.CREW_MASKTEX = ''; }
   else if (has.marks) m.defines.CREW_MARKS = '';
@@ -409,7 +479,15 @@ function crewMaterial(src, kind, part, paint, atlas) {
   vCrHead = (crHeadFrame * vec4(position, 1.0)).xyz; vCrHeadN = mat3(crHeadFrame) * normal;`);
     if (SL) sh.vertexShader = STRAND_VERTEX + sh.vertexShader.replace('#include <defaultnormal_vertex>', `#include <defaultnormal_vertex>
   crStrandVertex();`);
-    sh.fragmentShader = `uniform vec3 crMarks, crMarksRef, crLines, crLinesRef, crPanels, crPanelsRef, crWhites, crWhitesRef, crSkin, crSkinRef, crHair, crHairRef; uniform float crGlow;
+    if (PB) sh.vertexShader = 'uniform vec3 crStrandSkull; varying vec3 vCrRadial;\n' + sh.vertexShader.replace('#include <defaultnormal_vertex>', `#include <defaultnormal_vertex>
+  {
+    vec3 crR = position - crStrandSkull;
+#ifdef USE_SKINNING
+    crR = (skinMatrix * vec4(crR, 0.0)).xyz;
+#endif
+    vCrRadial = (modelViewMatrix * vec4(crR, 0.0)).xyz;
+  }`);
+    sh.fragmentShader = `uniform vec3 crMarks, crMarksRef, crLines, crLinesRef, crPanels, crPanelsRef, crWhites, crWhitesRef, crSkin, crSkinRef, crHair, crHairRef; uniform float crGlow; uniform vec3 crSkinLook;
 #ifdef CREW_MASKTEX
 uniform sampler2D crMaskMap;
 #endif
@@ -450,9 +528,20 @@ vec3 crShift(vec3 c, vec3 to, vec3 ref, float m) { return max(c + (to - ref) * m
     diffuseColor.rgb = crShift(diffuseColor.rgb, crPanels, crPanelsRef, crA(texture2D(normalMap, vNormalMapUv).a));
   #endif
   #if (defined(CREW_HEAD) || defined(CREW_HAND)) && defined(CREW_SKIN)
-    // (skin by each channel's ratio, not a shift: a darker tone darkens the painted face's own light and shade
-    // alike, where a shift would take more red than blue out of the shadows and turn them green; the hands the same)
-    diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * clamp(crSkin / max(crSkinRef, vec3(1e-4)), 0.1, 4.0), crA(sampledDiffuseColor.a));
+    // (skin by ratios, not a shift: a darker tone darkens the painted face's own light and shade alike, where a shift
+    // would take more red than blue out of the shadows and turn them green; the hands the same. THE SKIN'S LIMITS: the
+    // tone times the texel's light against the part's mean, times crSkinLook.z of its own colour against the mean (1,
+    // a part in its own skin: exactly as made); a texel lightened past crSkinLook.x eased toward .y, never darker than
+    // it was painted, so a pale tone's painted highlights never run to white)
+    {
+      vec3 crC = diffuseColor.rgb, crR = max(crSkinRef, vec3(1e-4));
+      float crL0 = crLum(crC), crLR = max(crLum(crR), 1e-4);
+      vec3 crQ = clamp((crC / crR) * (crLR / max(crL0, 1e-4)), 0.25, 4.0);
+      vec3 crO = crSkin * (crL0 / crLR) * pow(crQ, vec3(crSkinLook.z));
+      float crL = crLum(crO), crK = crSkinLook.x, crM = crSkinLook.y;
+      if (crL > crK && crL > crL0) crO *= max(crK + (crM - crK) * (1.0 - exp(-(crL - crK) / max(crM - crK, 1e-4))), crL0) / crL;
+      diffuseColor.rgb = mix(crC, crO, crA(sampledDiffuseColor.a));
+    }
   #endif
   diffuseColor.a = opacity;
 #endif
@@ -471,6 +560,8 @@ vec3 crShift(vec3 c, vec3 to, vec3 ref, float m) { return max(c + (to - ref) * m
 #endif`)
       .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
   totalEmissiveRadiance += crLines * crLineMask * crGlow;`);
+    if (PB) sh.fragmentShader = 'varying vec3 vCrRadial; uniform float crBend;\n' + sh.fragmentShader.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+  normal = normalize(mix(normal, normalize(vCrRadial + 1e-6), crBend));`);
     if (SL) sh.fragmentShader = sh.fragmentShader.replace('#include <normal_fragment_maps>', '#include <normal_fragment_maps>' + STRAND_NORMAL)
       .replace('#include <opaque_fragment>', STRAND_LIGHT + '\n#include <opaque_fragment>');
   };
@@ -489,6 +580,18 @@ vec3 crShift(vec3 c, vec3 to, vec3 ref, float m) { return max(c + (to - ref) * m
 // the bones). The vertex colour darkens the inner layers (rgb) and fades the roots at the hairline (alpha). Shadows are
 // cast through a cut-out depth material (c.meshes.hair.customDepthMaterial).
 export const HAIR_SPEC = { shift1: -0.08, shift2: 0.12, exp1: 90.0, exp2: 18.0, spec1: 0.045, spec2: 0.5 };
+// THE HAIR'S UNDERSIDE (2026-11-10; the game's maker, of Sol's side part: "the dark line at the top of his forehead that
+// is caused I assume from the hair curling under", and "the answer to the hair might be to change the normals to point
+// up so they don't show dark areas on the bottom? I think we did something like that for plants"). The line was the
+// side part's front lip, where it curls under over the forehead: its underside faces down, away from the lamps, and
+// counted as the hair's inside (darkened, no highlight), so it read as a dark band across the forehead; not the scalp's
+// shade under the hair (off, the band stayed), not a cast shadow (off, it stayed), not the skin (no hair: no band).
+// Now the card hair's shading normal is leant `bend` of the way toward the line out from the skull's centre (as the
+// foliage's normals lean up), and its inside is judged by that normal, so a curl turning under lights as the hair's
+// outside (0.8 flattened the hair's shape; 0.5 kept it); a plain hair mesh (a harvested or Tripo hair) is leant `plain`
+// (its own curls carry their shape, and 0.5 washed them flat); the Mathwood hair has its strands' own `puff`.
+// `inside`: how much of the card hair's darkening of its inner side is kept (1: all, as before).
+export const HAIR_UNDERSIDE = { bend: 0.5, plain: 0.3, inside: 1 };
 const HAIR_CUT = 0.42;
 function hairCardMaterial(part, atlas) {
   // (a style's own look, from its part: how strong its highlight and its strands' relief are, how rough it is)
@@ -499,15 +602,19 @@ function hairCardMaterial(part, atlas) {
   const u = m.userData.crew = crewUniforms(refs);
   u.crMean = { value: part.mean || 0.5 }; u.crTexSize = { value: (atlas.map.image && atlas.map.image.width) || 1024 };
   for (const [k, v] of Object.entries(HAIR_SPEC)) u['cr_' + k] = { value: /^spec/.test(k) ? v * look.spec : v };
+  // (THE HAIR'S UNDERSIDE: the skull's centre in the part's own frame (makeCrew sets it), how far the shading normal leans
+  // out from it, and how much of the inside's darkening is kept)
+  u.crStrandSkull = { value: new THREE.Vector3() }; u.crBend = { value: HAIR_UNDERSIDE.bend }; u.crInsideK = { value: HAIR_UNDERSIDE.inside };
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, u);
-    sh.vertexShader = 'attribute vec3 _strand; varying vec3 vCrStrand;\n' + sh.vertexShader.replace('#include <defaultnormal_vertex>', `#include <defaultnormal_vertex>
-  vec3 crS = _strand;
+    sh.vertexShader = 'attribute vec3 _strand; varying vec3 vCrStrand; uniform vec3 crStrandSkull; varying vec3 vCrRadial;\n' + sh.vertexShader.replace('#include <defaultnormal_vertex>', `#include <defaultnormal_vertex>
+  vec3 crS = _strand, crR = position - crStrandSkull;
 #ifdef USE_SKINNING
-  crS = (skinMatrix * vec4(crS, 0.0)).xyz;
+  crS = (skinMatrix * vec4(crS, 0.0)).xyz; crR = (skinMatrix * vec4(crR, 0.0)).xyz;
 #endif
-  vCrStrand = normalize((modelViewMatrix * vec4(crS, 0.0)).xyz + 1e-6);`);
-    sh.fragmentShader = `varying vec3 vCrStrand;
+  vCrStrand = normalize((modelViewMatrix * vec4(crS, 0.0)).xyz + 1e-6);
+  vCrRadial = (modelViewMatrix * vec4(crR, 0.0)).xyz;`);
+    sh.fragmentShader = `varying vec3 vCrStrand; varying vec3 vCrRadial; uniform float crBend, crInsideK;
 uniform vec3 crHair; uniform float crMean, crTexSize, cr_shift1, cr_shift2, cr_exp1, cr_exp2, cr_spec1, cr_spec2;
 ` + sh.fragmentShader
       .replace('#include <map_fragment>', `#include <map_fragment>
@@ -519,9 +626,17 @@ uniform vec3 crHair; uniform float crMean, crTexSize, cr_shift1, cr_shift2, cr_e
   // (round 3: the shell's own faces are wound outward, so its inside is its back faces; a card's winding isn't kept one
   // way, so only a card plainly facing away by its normal counts, or hanging hair seen level went dark in blotches. The
   // shell is the faces mapped to the atlas's opaque patches: v above 0.76 as glTF lays it out)
-  float crInside = vMapUv.y > 0.76 ? (gl_FrontFacing ? 0.0 : 1.0) : smoothstep(-0.12, -0.45, dot(normalize(vNormal), normalize(vViewPosition)));
+  // (THE HAIR'S UNDERSIDE, 2026-11-10: by the normal leant crBend of the way out from the skull's centre, so a curl's
+  // underside facing the eye from above the face counts as hair's outside; crInsideK of the darkening kept)
+  vec3 crNg = normalize(mix(normalize(vNormal), normalize(vCrRadial + 1e-6), crBend));
+  float crFacing = smoothstep(-0.12, -0.45, dot(crNg, normalize(vViewPosition)));
+  float crInside = crInsideK * (vMapUv.y > 0.76 ? (gl_FrontFacing ? 0.0 : mix(1.0, crFacing, crBend)) : crFacing);
   diffuseColor.rgb *= 1.0 - 0.35 * crInside;`)
       .replace('#include <normal_fragment_begin>', THREE.ShaderChunk.normal_fragment_begin.replace(/\n[^\n]*\*= faceDirection;/g, ''))
+      .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+  // (the shading normal, strands' relief and all, leant out from the skull's centre: the hair lights as one soft mass,
+  // a curl's underside as its top)
+  normal = normalize(mix(normal, normalize(vCrRadial + 1e-6), crBend));`)
       .replace('#include <alphatest_fragment>', `
   {
     // (a fade in the vertex alpha (a hairline, a card's roots) takes the darker strands first, so a faded edge breaks
@@ -571,7 +686,7 @@ uniform vec3 crHair; uniform float crMean, crTexSize, cr_shift1, cr_shift2, cr_e
   outgoingLight = mix(outgoingLight, (reflectedLight.directDiffuse + reflectedLight.indirectDiffuse) * 0.75, crInside);
 #include <opaque_fragment>`);
   };
-  m.customProgramCacheKey = () => 'crew-hair-cards-3';
+  m.customProgramCacheKey = () => 'crew-hair-cards-4';
   return m;
 }
 // (the shadow a card hair casts: its strands' cut-out, not its cards' rectangles)
@@ -1142,8 +1257,11 @@ function setColours(mats, { job, uniform, skin, hair, eyes } = {}) {
     const J = (!m.userData.crewOwnColours && JOBS[job]) || JOBS.explorer;
     for (const k of ['marks', 'lines', 'panels']) { const key = 'cr' + k[0].toUpperCase() + k.slice(1); u[key].value.copy(J[k] ? lin(J[k]) : u[key + 'Ref'].value); }
     u.crWhites.value.copy(uniform ? lin(uniform) : u.crWhitesRef.value);
-    // (hands with no skin tone given take the head's own skin, so they match the face: m.userData.crewSkinOf)
-    u.crSkin.value.copy(skin ? lin(skin) : m.userData.crewSkinOf || u.crSkinRef.value);
+    // (hands with no skin tone given take the head's own skin, so they match the face: m.userData.crewSkinOf; a tone
+    // given comes out as THE SKIN'S LIMITS let it on the head, and the hands wear that same colour: skinTone)
+    u.crSkinLook.value.set(SKIN_LIMIT.shine, SKIN_LIMIT.shineMost, skin ? SKIN_LIMIT.hue : 1);
+    u.crSkin.value.copy(skin ? skinTone(lin(skin), m.userData.crewSkinHead || u.crSkinRef.value) : m.userData.crewSkinOf || u.crSkinRef.value);
+    if (skin && m.userData.crewHand) u.crSkin.value.multiplyScalar(SKIN_LIMIT.hands);
     u.crHair.value.copy(hair ? lin(hair) : u.crHairRef.value);
   }
 }
@@ -1236,6 +1354,8 @@ export function hairRotation(turn, tilt, lean) {
 }
 // a part's bind space -> the head's frame (its Head bone's own)
 function frameOf(mesh) {
+  // (a head seated lower (THE SEAT) keeps the frame it was bound in: its fit, paint and strands are worked out there)
+  if (mesh.userData.frame) return new THREE.Matrix4().fromArray(mesh.userData.frame);
   const i = mesh.skeleton.bones.findIndex((b) => b.name === 'Head');
   return new THREE.Matrix4().multiplyMatrices(mesh.skeleton.boneInverses[i], mesh.bindMatrix);
 }
@@ -2158,6 +2278,41 @@ function assemble(suit, others) {
 // A part's own bones, which the suit's skeleton doesn't have (a Tripo head's eye bones and face bones, all under its
 // Head bone): each made on the template under the bone of its parent's name, where the part has it from that parent,
 // so it rides the suit's Head bone (whichever skeleton) as it rode the part's own.
+// THE SEAT (2026-11-10; the game's maker, of two heads: "Their necks are too long. I stretched the necks down so the
+// bottoms had no chance of being seen, but they need to be pushed down into the torso more"): a head entry's `seat`
+// (crew.json: { <suit id>: metres, all: metres } or one number for every suit; lib.seats over it while the Crew Lab
+// tries one; lib.seatOf) lowers the head in that suit, straight down at the suit's rest, deeper into the collar: its
+// neck as made (never cut, never stretched), its eyes and face bones, and the hair worn on it, all alike; the collar fit
+// then draws in whatever of the neck now lies inside the collar. Per suit, because a neck's length shows against each
+// suit's own collar: t9 and t3 20 mm lower in the station uniform (atlantis2) look right, but in the medic's high
+// collar and the spacesuit's ring the same 20 mm rested the chin on the collar. Done
+// on the bind, not the points: each suit bone the head and hair are skinned to carries them `seat` lower (its inverse
+// bind led by the drop at rest), and the part's own bones (eyes, face) are moved down that far, so every point drops
+// the same whatever its weights, and the head still turns on the suit's own neck and head joints. Each mesh keeps the
+// frame it was bound in (frameOf), so the hair's fit, the paint and the strands are worked out exactly as before.
+function seatHead(tpl, d) {
+  tpl.updateMatrixWorld(true);
+  const shared = new Set(), meshes = [];
+  tpl.traverse((o) => {
+    if (!o.isSkinnedMesh) return;
+    if (o.userData.part === 'suit') for (const b of o.skeleton.bones) shared.add(b.name);
+    else if (o.userData.part === 'head' || o.userData.part === 'hair') meshes.push(o);
+  });
+  const drop = new THREE.Matrix4().makeTranslation(0, -d, 0), moved = new Set(), w = new THREE.Vector3();
+  for (const m of meshes) {
+    m.userData.frame = frameOf(m).toArray();
+    // (new matrices: the part's own are shared by every person made from it)
+    m.skeleton.boneInverses = m.skeleton.boneInverses.map((inv, i) => {
+      const b = m.skeleton.bones[i];
+      return shared.has(b.name) ? new THREE.Matrix4().copy(b.matrixWorld).invert().multiply(drop).multiply(b.matrixWorld).multiply(inv) : inv.clone();
+    });
+    for (const b of m.skeleton.bones) {
+      if (shared.has(b.name) || !b.parent || !shared.has(b.parent.name) || moved.has(b)) continue;
+      moved.add(b); b.getWorldPosition(w); w.y -= d; b.position.copy(b.parent.worldToLocal(w));
+    }
+  }
+  tpl.updateMatrixWorld(true);
+}
 function addOwnBones(list, bones) {
   let left = list.filter((b) => !bones[b.name]);
   while (left.length) {
@@ -2184,6 +2339,10 @@ export async function makeCrew(lib, recipe) {
   // (the Mathwood hair's strands draw from the strand atlas too: THE MATHWOOD HAIR'S STRANDS)
   const atlas = atlas0 || (hair && (hair.scene.userData.crewPart || {}).strands ? await lib.hairAtlas() : null);
   const tpl = assemble(suit, [['head', head], ['hair', hair], ['hand', hand]].filter((x) => x[1]));
+  // THE SEAT: the head (its neck, its eyes and face bones) and its hair lowered into the collar by the head's own `seat`,
+  // before the collar fit measures the neck
+  const seat = head ? lib.seatOf(R.head, R.suit) : 0;
+  if (seat) seatHead(tpl, seat);
   // THE COLLAR FIT: the suit's collar and the head's points below its rim, on the template at the suit's rest (before any
   // clip), applied to the person's own copy of the head's positions below
   // (measured always, so its numbers can be read with the fit off; applied only while lib.collarFit is on)
@@ -2196,7 +2355,10 @@ export async function makeCrew(lib, recipe) {
       if (!o.isSkinnedMesh || o.userData.part !== 'head' || ['eye', 'cornea', 'visor'].includes(o.material && o.material.name)) return;
       if (!hm || o.geometry.attributes.position.count > hm.geometry.attributes.position.count) hm = o;
     });
-    if (collar && hm) neck = neckFit(hm, collar, lib.collarRide !== false);
+    // (a suit whose collar stands open round the neck (crew.json `collarRide: false`: atlantis1) keeps the neck's own
+    // weights: there the riding neck is in view, and as the head turned it sheared from the neck above into steps of
+    // light and dark, Sol's "dark triangles", 2026-11-10)
+    if (collar && hm) neck = neckFit(hm, collar, lib.collarRide !== false && (lib.entry('suit', R.suit) || {}).collarRide !== false);
   }
   const refsOf = { suit: suit && suit.scene.userData.crewPart, head: head && head.scene.userData.crewPart, hair: hair && hair.scene.userData.crewPart, hand: hand && hand.scene.userData.crewPart };
   // a Person of the Mathwood world, from the template (its clone, mixer, fades and bone keeping), on the suit's skeleton
@@ -2216,6 +2378,7 @@ export async function makeCrew(lib, recipe) {
     else if (own && own.name === 'cornea') { const mat = corneaMaterial(); o.material = mat; mats.push(mat); meshes.cornea = o; o.castShadow = false; o.receiveShadow = false; o.frustumCulled = false; o.renderOrder = 1; return; }
     else if (kind === 'hair' && cards) {
       const mat = hairCardMaterial(refsOf.hair || {}, atlas); o.material = mat; mats.push(mat); meshes.hair = o;
+      mat.userData.crew.crStrandSkull.value.fromArray(SKULL).applyMatrix4(frameOf(o).invert());
       o.customDepthMaterial = hairDepthMaterial(atlas); mats.push(o.customDepthMaterial);
     } else {
       // (a painted cut on the head, or a hair's buzz and the scalp's shade under it: THE PAINT FIELD)
@@ -2227,6 +2390,8 @@ export async function makeCrew(lib, recipe) {
       // (the hands, when no skin tone is given, take the head's own skin: HANDS)
       const hs = kind === 'hand' && refsOf.head && refsOf.head.refs && refsOf.head.refs.skin;
       if (hs) mat.userData.crewSkinOf = new THREE.Color().fromArray(hs);
+      // (a tone given is worked out against the head's own skin, for the head and the hands alike: THE SKIN'S LIMITS)
+      if (kind === 'head' || kind === 'hand') { mat.userData.crewSkinHead = hs ? mat.userData.crewSkinOf.clone() : null; mat.userData.crewHand = kind === 'hand'; }
     }
     o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false;
   });
@@ -2239,6 +2404,13 @@ export async function makeCrew(lib, recipe) {
   // the shins' lengths, for the foot rule (the rest pose: the foot's root on the shin's line)
   person.root.updateMatrixWorld(true);
   const shin = {}; for (const s of ['L', 'R']) shin[s] = bones['LowerLeg' + s].getWorldPosition(new THREE.Vector3()).distanceTo(bones['Foot' + s].getWorldPosition(new THREE.Vector3()));
+  // THE SIZE (2026-11-10; the game's maker: "Maybe we can offer a size option, but I don't think we need new models"): a
+  // recipe's `size` scales the whole person about their feet (SIZES: shorter, medium, taller; left out, 1 as made). Set
+  // on the root after everything above is measured at the suit's own rest (the collar fit, the hair's fit and the shins
+  // all work in the parts' own sizes), so the clips, the feet at the shins' ends (their lengths scaled by the bones'
+  // world scale) and the stride all follow it
+  const size = +recipe.size > 0 ? Math.min(1.25, Math.max(0.75, +recipe.size)) : 1;
+  if (size !== 1) { person.root.scale.setScalar(size); person.root.updateMatrixWorld(true); }
   const A = new THREE.Vector3(), Y = new THREE.Vector3(), M = new THREE.Matrix4();
   // (real eyes: a ball on each eye bone; the gaze turns them, see THE GAZE)
   const gaze = meshes.eyes && bones.EyeL && bones.EyeR ? makeGaze(person.root, bones.Head, [bones.EyeL, bones.EyeR]) : null;
@@ -2270,7 +2442,9 @@ export async function makeCrew(lib, recipe) {
     person.root.updateMatrixWorld(true);
   }
   const c = {
-    root: person.root, person, meshes, bones, recipe: { ...recipe }, stride: fit.stride, body: fit.body, rig: fit.rig, paint, hand: R.hand,
+    root: person.root, person, meshes, bones, recipe: { ...recipe }, body: fit.body, rig: fit.rig, paint, hand: R.hand,
+    // (THE SIZE: the whole person scaled, and their stride with them)
+    size, stride: { Walk: fit.stride.Walk * size, Run: fit.stride.Run * size },
     play: (name, o = {}) => person.play(name, { once: ONCE.has(name), ...o }),
     update(dt) {
       // (arms out: the clip's own turn back first, so the mixer, which writes only what changed, never stacks it)

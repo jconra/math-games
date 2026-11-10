@@ -22,7 +22,7 @@ import { loadCrew } from '../kit/crew.js';
 import { drawLooks, drawn } from './portraits.js';
 import { recipeOf } from './looks.js';
 import { makeWalls } from './walls.js';
-import { makeChase } from './chase.js';
+import { makeChase, CAM } from './chase.js';
 import { makePlayer, shine } from './player.js';
 import { makePeople, resolve } from './people.js';
 import { START } from './spots.js';
@@ -155,6 +155,8 @@ async function boot() {
       P.place(s.pos, s.heading ?? 0);
       P.zone = W.zoneAt(P.pos); shine(P.c, W.envAt(P.pos));
       player = { key, id: p.id, P };
+      // (the camera follows the head at this person's own height: their size, the title's Height row)
+      chase.eye = CAM.eye * (P.c.size || 1);
       chase.snap(P.pos, P.heading);
     }
     GAME.mode = 'play';

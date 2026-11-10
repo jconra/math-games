@@ -198,6 +198,7 @@
 .cst-input::placeholder { color: var(--faint); font-weight: 400; }
 /* (the ages in ONE row: "Skip", then 5 to 16+) */
 .cst-agepick { display: grid; grid-template-columns: auto repeat(12, minmax(0, 1fr)); gap: 5px; }
+.cst-heights { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; max-width: 380px; }   /* the Height row (title.js) */
 .cst-agech { --cut: 7px; min-width: 0; height: 36px; padding: 0; display: grid; place-items: center; font-size: 14px; font-weight: 600; color: var(--dim); }
 .cst-agech.is-skip { padding: 0 12px; }
 .cst-agech:hover { color: var(--ink); }
