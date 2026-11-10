@@ -253,7 +253,7 @@ const WORDS = {
   makeFirst: 'Make a rider first',
   loading: 'Loading the valley',
   ready: 'The valley is ready',
-  grownIntro: 'How each rider is doing. The game finds each rider\'s level in every kind of math by itself and keeps it where about 4 answers in 5 are right. Everything stays on this device; nothing is sent anywhere.',
+  grownIntro: 'How each rider is doing. The game finds each rider\'s level in every kind of math by itself and keeps it where about 4 answers in 5 are right. Names and saves stay on this device, and no personal data is sent: only game data (how answers go and which jobs get played, never names), to help make the game better. It can be switched off in the pause menu.',
   noPlayers: 'No riders yet.',
   deletePlayer: 'Delete rider',
   deleteAsk: (name) => `Delete ${name} for good? Their gold, fame and progress go too. This can't be undone.`,
