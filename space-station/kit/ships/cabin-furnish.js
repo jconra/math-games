@@ -29,7 +29,9 @@ import { FACE } from '../shipparts/cabin/ship.js';
 import { cornerBench, messTable, stool, topCabinets, coldStore, galleyRun, coffeeMachine, mug, bottle, fruitBowl, poster, wallField } from '../shipparts/cabin/mess.js';
 import { bunkStack, crewLocker } from '../shipparts/cabin/bunks.js';
 import { labBench, microscope, glovebox, vialRack, tablet, sampleCase, surveyTable, labStool } from '../shipparts/cabin/lab.js';
-import { screen, starScreen } from '../shipparts/cabin/bits.js';
+import { suitLockers, pressurePanel, wallBench } from '../shipparts/cabin/airlock.js';
+import { showerStall, toiletBasin } from '../shipparts/cabin/washroom.js';
+import { screen, starScreen, hazard } from '../shipparts/cabin/bits.js';
 import { POSTERS, postersFor } from '../shipparts/cabin/print.js';
 import { hangs } from './blueprint.js';
 
@@ -55,7 +57,7 @@ export function furnishRoom(q, bp, room, ctx) {
   F({ q, bp, room, ctx, done, items, f, at, A: accents(ctx.look) });
   return done;
 }
-const ROOMS = { galley: furnishGalley, bunks: furnishBunks, science: furnishScience };
+const ROOMS = { galley: furnishGalley, bunks: furnishBunks, science: furnishScience, airlock: furnishAirlock, washroom: furnishWash };
 
 // ── the galley ──────────────────────────────────────────────────────────────────────────────────────────────────
 function furnishGalley({ room, ctx, done, items, f, at, A }) {
@@ -174,7 +176,7 @@ function furnishBunks({ bp, room, ctx, done, items, at, A }) {
 // tablet on it; the sample store (a tall locker) as the SAMPLES case; the survey table (the holo item) against its wall,
 // an 8-sided star screen over it; the stool at the knee space if it is out of the doors' way; the posters on the clearest
 // walls.
-function furnishScience({ room, ctx, done, items, f, at, A }) {
+function furnishScience({ bp, room, ctx, done, items, f, at, A }) {
   const extra = [];
   for (const it of items.filter((x) => x.kind === 'counter')) {
     const W = wallOf(it, room); if (!W) continue;
@@ -196,7 +198,7 @@ function furnishScience({ room, ctx, done, items, f, at, A }) {
     on(tablet, {}, kx - gEnd * 0.12, 0.37, top, -0.25);
     if (sh > 0.2) { ctx.put('lab: screen', part(screen, { w: +sw.toFixed(3), h: +sh.toFixed(3), rect: 'math', sub: [0.03, 0.04, 0.97, 0.8], light: 0.12 }), { at: toWorld(W, mid, [sx, f + sTop - sh / 2 - 0.05, FACE]), rot: [0, rotOf(W), 0] }); extra.push(block(W, sx - sw / 2 - 0.04, sx + sw / 2 + 0.04, mid, sTop - sh - 0.1, sTop)); }
     // the stool at the knee space, out of the doors' way
-    if (knee >= 0) { const P = toWorld(W, mid, [kx, f, W.depth + 0.12]); if (!inDoorway(room, ctx, P[0], P[2], 0.25)) ctx.put('lab: stool', part(labStool, { pad: A.pad }), { at: P, rot: [0, rotOf(W) + PI, 0] }); }
+    if (knee >= 0) { const P = toWorld(W, mid, [kx, f, W.depth + 0.12]); if (!inDoorway(bp, room, P[0], P[2], 0.25)) ctx.put('lab: stool', part(labStool, { pad: A.pad }), { at: P, rot: [0, rotOf(W) + PI, 0] }); }
     done.add(it.id);
   }
   for (const it of items) {
@@ -222,7 +224,97 @@ function furnishScience({ room, ctx, done, items, f, at, A }) {
   wallFields(ctx, room, items, at, { tag: 'lab: wall fields', touch: true, also: asItems(screens) });
 }
 
+// ── the airlock ─────────────────────────────────────────────────────────────────────────────────────────────────
+// The lockers as suit lockers (a suit behind a window in each half metre; a single one carries the airlock's poster on its
+// door instead); the pressure panel by the hull's door, on the clear wall nearest it; a fold-down bench on a clear
+// stretch of wall out of the doorways' way, if one is long enough; hazard hatching at the hull's door (a band on the floor
+// inside its step, and up the casings' faces beside their amber strips).
+function furnishAirlock({ bp, room, ctx, done, items, f, at, A }) {
+  const extra = [], posters = postersFor('airlock'), lockers = items.filter((it) => it.kind === 'locker' && !hangs(it)).map((it) => ({ it, W: wallOf(it, room) })).filter((L) => L.W);
+  const single = posters.length ? lockers.find((L) => Math.round((L.W.hi - L.W.lo) / 0.5) === 1) : null;
+  for (const L of lockers) {
+    const { it, W } = L, mid = (W.lo + W.hi) / 2;
+    ctx.put('airlock: suit lockers', part(suitLockers, { len: W.hi - W.lo, depth: W.depth, h: +it.h || 2, poster: L === single ? posters[0] : null, handle: A.handle, trim: A.trim }), at(W, mid));
+    done.add(it.id);
+  }
+  const outer = (ctx.outerDoors || []).filter((o) => o.d.rooms[0] === room.id), walls = roomWalls(room);
+  // the pressure panel: the clear stretch (at its height) whose end comes nearest the hull door's wall
+  if (outer.length) {
+    const ow = outer[0].w, pw = 0.3, best = [];
+    for (const W of walls) {
+      if (ow.along === 'z' ? W.axis === 'x' && Math.abs(W.v - ow.x) < EPS : W.axis === 'z' && Math.abs(W.v - ow.z) < EPS) continue;
+      for (const [a, b] of clearStretches(ctx, room, items, W, 0.98, 1.58, extra)) {
+        if (b - a < pw + 0.02) continue;
+        const line = ow.along === 'z' ? ow.x : ow.z, d0 = W.axis === (ow.along === 'z' ? 'z' : 'x') ? Math.min(Math.abs(a - line), Math.abs(b - line)) : 9;
+        best.push({ W, c: Math.abs(a - line) < Math.abs(b - line) ? a + pw / 2 + 0.01 : b - pw / 2 - 0.01, d0 });
+      }
+    }
+    const B = best.sort((p, q) => p.d0 - q.d0)[0];
+    if (B) { ctx.put('airlock: pressure panel', part(pressurePanel, { w: pw, h: 0.46, y: 1.28 }), at(B.W, B.c)); extra.push({ axis: B.W.axis, v: B.W.v, side: B.W.side, lo: B.c - pw / 2 - 0.02, hi: B.c + pw / 2 + 0.02, y0: 0.98, y1: 1.58 }); }
+  }
+  // the bench: a stretch of wall clear from the floor to over its back pad, long enough, its seat out of the doorways' way
+  for (const W of walls) {
+    if (outer.some((o) => (o.w.along === 'z' ? W.axis === 'x' && Math.abs(W.v - o.w.x) < EPS : W.axis === 'z' && Math.abs(W.v - o.w.z) < EPS))) continue;
+    const S = clearStretches(ctx, room, items, W, 0, 0.92, extra, { end: 0.0, cut: 0.0 }).find(([a, b]) => b - a >= 0.42);
+    if (!S) continue;
+    const len = Math.min(0.5, S[1] - S[0] - 0.02), c = (S[0] + S[1]) / 2, P = toWorld(W, c, [0, 0, 0.17]);
+    if (inDoorway(bp, room, P[0], P[2], 0.17)) continue;
+    ctx.put('airlock: bench', part(wallBench, { len: +len.toFixed(3), depth: 0.3, leather: A.leather?.c, trim: A.trim }), at(W, c));
+    extra.push({ axis: W.axis, v: W.v, side: W.side, lo: c - len / 2, hi: c + len / 2, y0: 0, y1: 0.8 });
+    break;
+  }
+  doorHazard(ctx, room, items, f);
+  const left = posters.filter((i) => !(single && i === posters[0]));
+  if (left.length) hangPosters(ctx, room, items, at, left, 'airlock: posters', extra.slice());
+  wallFields(ctx, room, items, at, { tag: 'airlock: wall fields', touch: true, also: asItems(extra) });
+}
+// ── the washroom ────────────────────────────────────────────────────────────────────────────────────────────────
+// The shower a stall on its wall, glass on its ends open to the room; the toilet hung on its wall at the end in the room's
+// corner, a small basin beside it with a mirror-screen over it (when the toilet's box is long enough); the casings'
+// hazard hatching at the hull door; its poster on its clearest wall.
+function furnishWash({ room, ctx, done, items, f, at, A }) {
+  const extra = [];
+  for (const it of items) {
+    const W = wallOf(it, room); if (!W || done.has(it.id)) continue;
+    const mid = (W.lo + W.hi) / 2, len = W.hi - W.lo, [R0, R1] = W.axis === 'z' ? [room.rect[0], room.rect[2]] : [room.rect[1], room.rect[3]];
+    const atWall = (a) => Math.abs(a - R0) < EPS || Math.abs(a - R1) < EPS, lo = localX(W, mid, W.lo);
+    if (it.kind === 'shower') {
+      const ends = [!atWall(W.lo), !atWall(W.hi)];
+      ctx.put('wash: shower', part(showerStall, { len, depth: W.depth, h: +it.h || 2, ends: lo < 0 ? ends : ends.slice().reverse(), trim: A.trim }), at(W, mid));
+      done.add(it.id);
+    } else if (it.kind === 'toilet') {
+      const side = atWall(W.lo) ? Math.sign(lo) : atWall(W.hi) ? -Math.sign(lo) : 1, bx = -side * (len / 2 - 0.16);
+      ctx.put('wash: toilet and basin', part(toiletBasin, { len, depth: W.depth, side, handle: A.handle, trim: A.trim }), at(W, mid));
+      if (len >= 0.65) extra.push(block(W, bx - 0.18, bx + 0.18, mid, 1.08, 1.68));
+      done.add(it.id);
+    }
+  }
+  doorHazard(ctx, room, items, f);
+  const fields = extra.slice();
+  hangPosters(ctx, room, items, at, postersFor('washroom'), 'wash: posters', extra);
+  wallFields(ctx, room, items, at, { tag: 'wash: wall fields', touch: true, also: asItems(fields) });
+}
+
+// hazard hatching at the ship's own door, where it opens from this room: a band on the floor inside its step, and up the
+// face of each casing beside the opening (by its amber strip)
+function doorHazard(ctx, room, items, f) {
+  const O = ctx.outer || {};
+  for (const { d, w } of ctx.outerDoors || []) {
+    if (w.along !== 'z' || O.sill == null) continue;
+    const s = w.x > 0 ? 1 : -1, [z0, z1] = [Math.max(w.span[0], room.rect[1]), Math.min(w.span[1], room.rect[3])];
+    if (d.rooms[0] === room.id && z1 - z0 > 0.2) ctx.put('airlock: hazard', part(hazardBand, { len: +(z1 - z0 - 0.06).toFixed(3), wid: 0.13 }), { at: [s * (O.sill - 0.07 - 0.075), f + 0.004, (z0 + z1) / 2], rot: [-PI / 2, 0, PI / 2] });
+    for (const it of items.filter((x) => x.kind === 'casing')) {
+      const [x0, cz0, x1, cz1] = it.rect, sz = Math.abs(cz1 - w.span[0]) < 0.01 ? 1 : Math.abs(cz0 - w.span[1]) < 0.01 ? -1 : 0; if (!sz) continue;
+      if (Math.abs(w.x - (w.x > 0 ? x1 : x0)) > 0.01) continue;
+      const zf = sz > 0 ? cz1 + 0.003 : cz0 - 0.003, xe = w.x > 0 ? x0 + 0.13 : x1 - 0.13, h = +it.h || 2;
+      ctx.put(room.kind === 'airlock' ? 'airlock: hazard' : 'wash: hazard', part(hazardBand, { len: +(h - 0.25).toFixed(3), wid: 0.07 }), { at: [xe, f + h / 2, zf], rot: [0, sz > 0 ? 0 : PI, PI / 2] });
+    }
+  }
+}
+function hazardBand(p, o) { return hazard(p, o.len, o.wid, [0, 0, 0]); }
+
 // ── placing helpers ─────────────────────────────────────────────────────────────────────────────────────────────
+const roomWalls = (room) => { const [X0, Z0, X1, Z1] = room.rect; return [{ axis: 'x', v: X0, side: 1, lo: Z0, hi: Z1 }, { axis: 'x', v: X1, side: -1, lo: Z0, hi: Z1 }, { axis: 'z', v: Z0, side: 1, lo: X0, hi: X1 }, { axis: 'z', v: Z1, side: -1, lo: X0, hi: X1 }]; };
 // a point in a wall fitting's own frame ([x along the wall, y, z out from the wall line]) in the ship's, and the fitting's
 // turn about y (as placing)
 const rotOf = (W) => (W.axis === 'z' ? (W.side > 0 ? 0 : PI) : (W.side > 0 ? PI / 2 : -PI / 2));
@@ -237,13 +329,17 @@ const roomWall = (room, W) => ({ ...W, lo: W.axis === 'z' ? room.rect[0] : room.
 const block = (W, x0, x1, mid, y0, y1) => { const a = W.axis === 'z' ? W.side * x0 + mid : -W.side * x0 + mid, b = W.axis === 'z' ? W.side * x1 + mid : -W.side * x1 + mid; return { axis: W.axis, v: W.v, side: W.side, lo: Math.min(a, b), hi: Math.max(a, b), y0, y1 }; };
 // blocks as plan items hanging on their walls (for wallFields: `also`)
 const asItems = (blocks) => blocks.map((B) => ({ rect: B.axis === 'x' ? (B.side > 0 ? [B.v, B.lo, B.v + 0.05, B.hi] : [B.v - 0.05, B.lo, B.v, B.hi]) : (B.side > 0 ? [B.lo, B.v, B.hi, B.v + 0.05] : [B.lo, B.v - 0.05, B.hi, B.v]), y: Math.max(0.01, B.y0), h: B.y1 - Math.max(0.01, B.y0) }));
-// whether a point stands in a doorway's way: within `r` of the stretch 0.9 m into the room in front of any of its inside doors
-function inDoorway(room, ctx, x, z, r) {
+// whether a point stands in a doorway's way: within `r` of the stretch 0.9 m into the room in front of any of its doors'
+// clear openings
+function inDoorway(bp, room, x, z, r) {
   const [X0, Z0, X1, Z1] = room.rect;
-  for (const W of [{ axis: 'x', v: X0, side: 1 }, { axis: 'x', v: X1, side: -1 }, { axis: 'z', v: Z0, side: 1 }, { axis: 'z', v: Z1, side: -1 }]) {
-    for (const [a, b] of ctx.openings(W.axis, W.v)) {
-      const n = W.axis === 'x' ? (x - W.v) * W.side : (z - W.v) * W.side, t = W.axis === 'x' ? z : x;
-      if (n > -r && n < 0.9 + r && t > a + 0.15 - r && t < b - 0.15 + r) return true;
+  for (const d of bp.doors || []) {
+    if (!d.rooms.includes(room.id)) continue;
+    const [dx, dz] = d.at, hw = d.width / 2;
+    for (const W of [{ axis: 'x', v: X0, side: 1 }, { axis: 'x', v: X1, side: -1 }, { axis: 'z', v: Z0, side: 1 }, { axis: 'z', v: Z1, side: -1 }]) {
+      if (Math.abs((W.axis === 'x' ? dx : dz) - W.v) > EPS) continue;
+      const n = W.axis === 'x' ? (x - W.v) * W.side : (z - W.v) * W.side, t = W.axis === 'x' ? z : x, c = W.axis === 'x' ? dz : dx;
+      if (n > -r && n < 0.9 + r && t > c - hw - r && t < c + hw + r) return true;
     }
   }
   return false;
@@ -258,15 +354,16 @@ function openEnds(W, room, items, it, mid) {
 }
 // the clear stretches of wall W (along it, world) between heights y0 and y1: its face less its doorways (and their
 // panels), what stands against it reaching into the band or hangs on it there, the blocks given; none under a slope that
-// starts below the band's top
-function clearStretches(ctx, room, items, W, y0, y1, blocks = []) {
+// starts below the band's top. (m: the margins kept from the wall's ends (end, 0.07) and from what cuts it (cut, 0.05))
+function clearStretches(ctx, room, items, W, y0, y1, blocks = [], m = {}) {
   const slope = ctx.slopeAt(W.axis, W.v, (W.lo + W.hi) / 2); if (slope && slope.y0 < y1 + 0.04) return [];
   const touches = (it) => { const [x0, z0, x1, z1] = it.rect; return W.axis === 'x' ? Math.abs((W.side > 0 ? x0 : x1) - W.v) < EPS && z1 > W.lo + EPS && z0 < W.hi - EPS : Math.abs((W.side > 0 ? z0 : z1) - W.v) < EPS && x1 > W.lo + EPS && x0 < W.hi - EPS; };
   const cut = [...ctx.openings(W.axis, W.v),
     ...items.filter((it) => touches(it) && (hangs(it) ? +it.y < y1 + 0.02 && +it.y + +it.h > y0 : +it.h > y0 - 0.02)).map((it) => alongOf(it, W)),
     ...blocks.filter((B) => B.axis === W.axis && Math.abs(B.v - W.v) < EPS && B.y1 > y0 && B.y0 < y1).map((B) => [B.lo, B.hi])];
-  let free = [[W.lo + FACE + 0.07, W.hi - FACE - 0.07]];
-  for (const [a, b] of cut) free = free.flatMap(([p, q]) => (b <= p || a >= q ? [[p, q]] : [[p, a - 0.05], [b + 0.05, q]]));
+  const e = m.end ?? 0.07, k = m.cut ?? 0.05;
+  let free = [[W.lo + FACE + e, W.hi - FACE - e]];
+  for (const [a, b] of cut) free = free.flatMap(([p, q]) => (b <= p || a >= q ? [[p, q]] : [[p, a - k], [b + k, q]]));
   return free.filter(([p, q]) => q - p > 0.1);
 }
 // a room's posters (POSTERS indices) on its clearest walls at eye height (each poster's middle at 1.4 m), one to a clear
