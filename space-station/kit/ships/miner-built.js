@@ -288,9 +288,10 @@ function mbCanister(p, name) {
 // other arm could harvest"): the arm on ARMS.claw's side carries a CLAW (one of CLAWS), the other keeps the 8k's hand
 // and its cutter wheel. The claw's wrist also turns it sideways (pan) and about its own length (roll), and the
 // shoulder swings the whole arm in toward the nose (yaw), so the two tools can meet on a rock ahead of the ship.
-// PARKED MEANS FOLDED ("The arms should probably fold in when parked too"): door 'arm' at 0, where a ship just built
-// stands, is the arms STOWED against the hull; 1 is the arms reaching out and down, as the 8k made them. How they
-// fold is one of FOLDS. Past reaching there is WORK: the claw on a rock ahead of the nose, the cutter on it (armStep).
+// PARKED MEANS FOLDED ("The arms should probably fold in when parked too"): door 'arm' at 0 is the arms reaching out
+// and down, as the 8k made them; 1 is the arms STOWED against the hull (where a parked ship holds them: parkedStep,
+// and the station's `hold`). How they fold is one of FOLDS. Past reaching there is WORK: the claw on a rock ahead of
+// the nose, the cutter on it (armStep).
 export const ARMS = {
   claw: 'port',        // which arm carries the claw: the left, as a right-handed digger holds the work in the left
                        // hand and the tool in the right (it is also the pilot's side)
@@ -318,8 +319,9 @@ export const ARMS = {
 export const FOLDS = {
   under: { name: 'Down and under', curl: [[0, 0], [0.25, 1]], ways: {
     cutter: [[0.05, 0, 0, 0], [0.108, -0.2, 0.1, 0.1], [0.309, -0.4, 0.3, 0.8], [0.511, -0.4, 1, 1.4], [0.798, -0.2, 2, 0.7], [0.971, 0, 2.4, 0.1], [1, 0, 2.5, 0]],
+    'cutter-big': [[0.05, 0, 0, 0], [0.103, -0.2, 0.1, 0.1], [0.156, -0.4, 0.2, 0.3], [0.499, -0.4, 0.7, 1.6], [0.842, -0.2, 2, 0.8], [0.947, -0.2, 2.3, 0.4], [0.974, -0.2, 2.4, 0.2], [1, -0.2, 2.5, 0.1]],
     fingers: [[0.25, 0, 0, 0], [0.438, -0.4, 0.1, 1.1], [0.591, -0.4, 0.3, 2], [0.83, -0.4, 1.7, 1.7], [1, 0, 2.5, 0.7]],
-    jaws: [[0.25, 0, 0, 0], [0.45, -0.2, -0.2, 1.2], [0.583, -0.2, 0, 2], [0.65, -0.4, 0.4, 2], [0.817, -0.4, 1.4, 1.8], [1, 0, 2.5, 0.9]],
+    jaws: [[0.25, 0, 0, 0], [0.45, -0.2, -0.2, 1.2], [0.583, -0.2, 0, 2], [0.65, -0.4, 0.4, 2], [0.817, -0.4, 1.4, 1.8], [1, 0, 2.5, 0.8]],
     cage: [[0.25, 0, 0, 0], [0.378, -0.4, 0.1, 0.8], [0.569, -0.4, 0.1, 2], [0.681, -0.4, 0.8, 2.1], [0.872, -0.2, 2, 1.4], [0.968, 0, 2.3, 0.8], [1, 0, 2.5, 0.6]],
     grapple: [[0.25, 0, 0, 0], [0.417, -0.2, -0.1, 1], [0.6, -0.2, 0.1, 2.1], [0.867, -0.4, 1.7, 1.7], [0.983, 0, 2.4, 1], [1, 0, 2.5, 0.9]],
   } },
@@ -329,10 +331,10 @@ export const FOLDS = {
   } },
 };
 const ease = (t) => t * t * (3 - 2 * t);
-// (an arm's joints [shoulder, elbow, wrist] at a moment of its way: held before the first and after the last)
+// (an arm's joints at a moment of its way, each row [when, ...angles]: held before the first and after the last)
 function wayAt(rows, u) {
   if (u <= rows[0][0]) return rows[0].slice(1);
-  for (let i = 1; i < rows.length; i++) if (u <= rows[i][0]) { const a = rows[i - 1], b = rows[i], f = (u - a[0]) / (b[0] - a[0]); return [1, 2, 3].map((k) => a[k] + (b[k] - a[k]) * f); }
+  for (let i = 1; i < rows.length; i++) if (u <= rows[i][0]) { const a = rows[i - 1], b = rows[i], f = (u - a[0]) / (b[0] - a[0]); return a.slice(1).map((v, k) => v + (b[k + 1] - v) * f); }
   return rows[rows.length - 1].slice(1);
 }
 // (a value from its moments [[when, value], ...]: held before the first and after the last, eased between)
@@ -484,7 +486,7 @@ export const CLAWS = {
   },
   // 3. four slim stiff ribs curving round the rock, like a scrap yard's grab: a cage
   cage: {
-    name: 'Four-rib cage', knuckles: [45, 135, 225, 315].map((phi) => ({ phi, r: 0.36, z: 0.7 })), rock: 2.02, open: [-0.45], stow: [0.56],
+    name: 'Four-rib cage', knuckles: [45, 135, 225, 315].map((phi) => ({ phi, r: 0.36, z: 0.7 })), rock: 2.02, open: [-0.2], stow: [0.56],
     segs: [{ path: [[-1.04, 0.72], [0.532, 0.72], [0.487, 0.6]], w: [0.085, 0.07], d: [0.1, 0.07], drum: [0.13, 0.12], teeth: [[1.1, 0.08, [0]], [1.75, 0.08, [0]]], tip: [0.24, 0.16] }],
     palm(a) { collar(a, 0.45, 0.1, [0.17, 0.2], [0.17, 0.2]); drum(a, null, V3(0, 0, 0.62), _Z, 0.36, 0.1, 8, PAL.dark, PAL.black); lamp(a, V3(0, 0, 0.724), 0.1); },
   },
@@ -598,22 +600,31 @@ export function gripOf(design, mirror = false) {
     return [a, close(-0.9, 2.4, (x) => hit(second(x), touch[1]))];
   }));
 }
-// WORKING A ROCK: what each tool's arm adds to the reaching pose to bring the claw onto a rock held ahead of the nose,
-// high enough to be seen over the dash, and the cutter's wheel down onto that rock (found by the rig
-// ~/pw/space-math/rigs/miner-arms/worksearch.mjs; yaw, pan and roll inward, so one set serves whichever side)
+// WORKING A ROCK: what each tool's arm adds to the reaching pose to bring the claw onto a rock held ahead of the nose
+// (every claw holds it in the same place, its middle on the ship's middle line 2.9 m up and 2 m past the nose, so it
+// stands in the pilot's view and one cutter pose serves them all), and the cutter's wheel down onto the top of that
+// rock, a few cm in (found by the rig ~/pw/space-math/rigs/miner-arms/worksearch.mjs; yaw, pan and roll inward, so
+// one set serves whichever side). The cage turns a little about its length, so the cutter comes down between its ribs.
 export const WORK = {
-  cutter: { yaw: 0.3, shoulder: -0.55, elbow: -0.2, wrist: -0.3 },
-  fingers: { yaw: 0.33, shoulder: -0.6, elbow: -0.3, wrist: -0.1, pan: 0.5, roll: 0 },
-  jaws: { yaw: 0.33, shoulder: -0.6, elbow: -0.3, wrist: -0.1, pan: 0.5, roll: 0 },
-  cage: { yaw: 0.33, shoulder: -0.6, elbow: -0.3, wrist: -0.1, pan: 0.5, roll: 0 },
-  grapple: { yaw: 0.33, shoulder: -0.6, elbow: -0.3, wrist: -0.1, pan: 0.5, roll: 0 },
+  // (the cutter goes round: up beside the rock first, then in over its top and down onto it; `way` as FOLDS' rows,
+  // [when, yaw, shoulder, elbow, wrist], from reaching (0) to here (1); rig cutway.mjs)
+  cutter: { yaw: 0.5, shoulder: -0.7, elbow: -0.2, wrist: 0, way: [[0.6, 0.1, -0.85, -0.2, 0]] },
+  'cutter-big': { yaw: 0.45, shoulder: -0.52, elbow: -0.6, wrist: 0.2, way: [[0.6, 0.1, -0.85, -0.6, 0.2]] },
+  fingers: { yaw: 0.35, shoulder: -0.7, elbow: 0.5, wrist: 0, pan: 0.7, roll: 0 },
+  jaws: { yaw: 0.35, shoulder: -0.7, elbow: 0.5, wrist: 0, pan: 0.7, roll: 0 },
+  cage: { yaw: 0.4, shoulder: 0.2, elbow: -0.7, wrist: 0, pan: 0.5, roll: -0.4 },
+  grapple: { yaw: 0.35, shoulder: -0.7, elbow: 0.4, wrist: 0.2, pan: 0.7, roll: 0 },
 };
 // An arm's pose from where it is in its moves: its tool ('cutter', or a claw's name), how far folded (0 reaching, 1
 // stowed), how far onto the rock (0 reaching, 1 working), how far its claw has closed (0 open, 1 gripping), the
 // wheel's angle. over: joint angles given outright (the rigs' searches).
 export function armAngles(tool, side, fold = 0, work = 0, grip = 0, spin = 0, over = null) {
-  const F = FOLDS[ARMS.fold], K = WORK[tool], e = ease(work), u = ease(fold), [fs, fe, fw] = wayAt(F.ways[tool], u);
-  const q = { yaw: K.yaw * e, shoulder: fs + K.shoulder * e, elbow: fe + K.elbow * e, wrist: fw + K.wrist * e, pan: (K.pan || 0) * e, roll: (K.roll || 0) * e, spin };
+  // (a cutter wheel of another size has its own way and work pose where it needs one: 'cutter-<size>')
+  const own = (O) => (tool === 'cutter' && O['cutter-' + ARMS.cutter] ? O['cutter-' + ARMS.cutter] : O[tool]);
+  const F = FOLDS[ARMS.fold], K = own(WORK), e = ease(work), u = ease(fold), [fs, fe, fw] = wayAt(own(F.ways), u);
+  // (onto the rock straight, or by the work pose's own way: rows [when, yaw, shoulder, elbow, wrist], ending on it)
+  const [ky, ks, ke, kw] = K.way ? wayAt([[0, 0, 0, 0, 0], ...K.way, [1, K.yaw, K.shoulder, K.elbow, K.wrist]], e) : [K.yaw * e, K.shoulder * e, K.elbow * e, K.wrist * e];
+  const q = { yaw: ky, shoulder: fs + ks, elbow: fe + ke, wrist: fw + kw, pan: (K.pan || 0) * e, roll: (K.roll || 0) * e, spin };
   if (tool !== 'cutter') {
     const D = CLAWS[tool], curl = keyed(F.curl, u), G = gripOf(tool, side === 'port'), eg = ease(grip);
     q.fingers = D.knuckles.map((_, i) => D.open.map((o, k) => (o + (G[i][k] - o) * eg) * (1 - curl) + D.stow[k] * curl));
@@ -625,9 +636,11 @@ export function armAngles(tool, side, fold = 0, work = 0, grip = 0, spin = 0, ov
 // claw on ARMS.claw's side, the cutter on the other); or, ARMS.spare, every tool, for the lab to swap. Leaves (the
 // key of each is 'mb:arm <name>:<side>'): upper, fore; the cutter's: hand, wheel-<size>; a claw's: cwrist (the
 // wrist's drum, the neck, the drum it pans on), <claw>-palm, <claw>-f (a finger's first part, one leaf each) and
-// <claw>-g (its second part). Every leaf stands where it is STOWED (the door at 0, where a ship just built is); its
-// hinges unfold shoulder, elbow and wrist to the reaching pose for the kit's plain door (layout.js setLeaf). armStep
-// poses them itself: the fold in its own order, the work, the grip.
+// <claw>-g (its second part). Every leaf stands where it is with the arm REACHING (the door at 0, where a ship just
+// built is, as the 8k made it), and is hinged to fold to STOWED at 1 for the kit's plain door (layout.js setLeaf, and a
+// placement's `hold`: the station's parked Miner holds 1): shoulder, elbow and wrist, and a finger's knuckle and its
+// middle joint, each about its axis where it is when reaching, all at once. armStep poses them itself: the fold in its
+// own order (FOLDS), the work, the grip.
 const _dp = new THREE.Vector3(), _dq = new THREE.Quaternion(), _ds = new THREE.Vector3();
 function mbArm(p, side) {
   const m = side === 'port', A = armOf(side);
@@ -635,34 +648,37 @@ function mbArm(p, side) {
   const kinds = (k, keep) => (lp) => { const a = new Acc(); drawKinds(a, keep ? segFaces(k).filter(keep) : segFaces(k), ARM_PAINT(k)); a.flush(lp); };
   const acc = new Acc(); drawKinds(acc, segFaces('mount'), ARM_PAINT('mount')); acc.flush(p);
   const tools = ARMS.spare ? ['cutter', ...Object.keys(CLAWS)] : [ARMS.claw === side ? ARMS.design : 'cutter'];
-  const put = (name, X, q0, P0, n, build) => {
+  // (q1 the stowed pose; n how many of the arm's joints the leaf is beyond; more: its finger's own hinges)
+  const put = (name, X, q1, n, build, more = []) => {
     X.decompose(_dp, _dq, _ds); const e = new THREE.Euler().setFromQuaternion(_dq, 'XYZ');
-    const hinge = [{ at: A.S.toArray(), axis: [1, 0, 0], angle: -q0.shoulder }, { at: A.E.clone().applyMatrix4(P0.upper).toArray(), axis: [1, 0, 0], angle: -q0.elbow }, { at: A.W.clone().applyMatrix4(P0.fore).toArray(), axis: [1, 0, 0], angle: -q0.wrist }].slice(0, n);
+    const hinge = [{ at: A.S.toArray(), axis: [1, 0, 0], angle: q1.shoulder }, { at: A.E.toArray(), axis: [1, 0, 0], angle: q1.elbow }, { at: A.W.toArray(), axis: [1, 0, 0], angle: q1.wrist }].slice(0, n).concat(more);
     p.leaf(`mb:arm ${name}:${side}`, build, { at: _dp.toArray(), rot: [e.x, e.y, e.z], door: 'arm', hinge });
   };
+  const hingeOf = (X, angle) => ({ at: V3(0, 0, 0).applyMatrix4(X).toArray(), axis: V3(1, 0, 0).transformDirection(X).toArray(), angle });
   let wristMade = false;
   tools.forEach((tool, ti) => {
-    const q0 = armAngles(tool, side, 1), P0 = armPose(side, q0, tool === 'cutter' ? ARMS.design : tool, ARMS.cutter);
-    if (ti === 0) { put('upper', P0.upper, q0, P0, 1, kinds('upper')); put('fore', P0.fore, q0, P0, 2, kinds('fore')); }
+    const q0 = armAngles(tool, side, 0), q1 = armAngles(tool, side, 1), P0 = armPose(side, q0, tool === 'cutter' ? ARMS.design : tool, ARMS.cutter);
+    if (ti === 0) { put('upper', P0.upper, q1, 1, kinds('upper')); put('fore', P0.fore, q1, 2, kinds('fore')); }
     if (tool === 'cutter') {
-      put('hand', P0.hand, q0, P0, 3, kinds('hand'));
+      put('hand', P0.hand, q1, 3, kinds('hand'));
       // (the wheel: its hub glowing orange, his picture's cutter, on both faces)
-      for (const size of ARMS.spare ? Object.keys(CUTTERS) : [ARMS.cutter]) put('wheel-' + size, P0.hand, q0, P0, 3, (lp) => { const a = new Acc(); cutterWheel(a, wheelAt(side, CUTTERS[size]), CUTTERS[size]); a.flush(lp); });
+      for (const size of ARMS.spare ? Object.keys(CUTTERS) : [ARMS.cutter]) put('wheel-' + size, P0.hand, q1, 3, (lp) => { const a = new Acc(); cutterWheel(a, wheelAt(side, CUTTERS[size]), CUTTERS[size]); a.flush(lp); });
       return;
     }
     const D = CLAWS[tool];
     if (!wristMade) {
       wristMade = true;
-      put('cwrist', P0.hand, q0, P0, 3, (lp) => {
+      put('cwrist', P0.hand, q1, 3, (lp) => {
         const a = new Acc(); drawKinds(a, segFaces('hand').filter((F) => F.kind === 'j'), ARM_PAINT('hand'));
         bar(a, A.Cw.clone().multiply(new THREE.Matrix4().makeTranslation(0, 0, 0.1)), [[0, 0.22]], [0.2, 0.16], [0.18, 0.15], { back: PAL.dark, inside: PAL.dark, side: PAL.dark, ends: PAL.dark });
         drum(a, A.Cw, V3(0, 0, CLAW.pan), _Y, 0.17, 0.23, 6, PAL.black, PAL.metal);
         a.flush(lp);
       });
     }
-    put(tool + '-palm', P0.palm, q0, P0, 3, (lp) => { const a = new Acc(); D.palm(a); a.flush(lp); });
-    D.knuckles.forEach((_, i) => put(tool + '-f', P0.f[i], q0, P0, 3, (lp) => { const a = new Acc(); fingerSeg(a, D.segs[0]); a.flush(lp); }));
-    if (D.segs[1]) D.knuckles.forEach((_, i) => put(tool + '-g', P0.g[i], q0, P0, 3, (lp) => { const a = new Acc(); fingerSeg(a, D.segs[1]); a.flush(lp); }));
+    put(tool + '-palm', P0.palm, q1, 3, (lp) => { const a = new Acc(); D.palm(a); a.flush(lp); });
+    const knuckle = (i) => hingeOf(P0.f[i], q1.fingers[i][0] - q0.fingers[i][0]);
+    D.knuckles.forEach((_, i) => put(tool + '-f', P0.f[i], q1, 3, (lp) => { const a = new Acc(); fingerSeg(a, D.segs[0]); a.flush(lp); }, [knuckle(i)]));
+    if (D.segs[1]) D.knuckles.forEach((_, i) => put(tool + '-g', P0.g[i], q1, 3, (lp) => { const a = new Acc(); fingerSeg(a, D.segs[1]); a.flush(lp); }, [knuckle(i), hingeOf(P0.g[i], q1.fingers[i][1] - q0.fingers[i][1])]));
   });
   // (near 0: nobody walking up opens it; the ship's own rule moves it, armStep)
   p.door('arm', [0, -DECK, 0], 0, ARMS.speed);
@@ -871,7 +887,7 @@ export function liftStep(built, open, dt, updateDoors) {
   if (open) { const m = updateDoors(lift, eye, dt, 'open'); return lift.every((D) => D.t >= 1) ? updateDoors(hatch, eye, dt, 'open') || m : m; }
   const m = updateDoors(hatch, eye, dt, 'shut'); return hatch.every((D) => D.t <= 0) ? updateDoors(lift, eye, dt, 'shut') || m : m;
 }
-// THE ARMS. Each arm's door carries where that arm is in its moves: t (0 stowed to 1 reaching), work (0 reaching to 1
+// THE ARMS. Each arm's door carries where that arm is in its moves: t (0 reaching to 1 stowed), work (0 reaching to 1
 // on the rock) and, the claw's arm, grip (0 open to 1 shut).
 // (an arm's leaves by what they are, read once from their names: 'mb:arm <name>:<side>')
 function armLeaves(D) {
@@ -908,8 +924,8 @@ export function armShow(built, spin = 0, over = null) {
   let claw = null;
   for (const D of built.doors) {
     if (D.piece !== 'mbArm') continue;
-    const A = armLeaves(D), tool = toolOf(A.side), out = Math.max(0, 1 - (1 - D.t) * 3);
-    setArm(D, armAngles(tool, A.side, 1 - D.t, D.work || 0, D.grip || 0, tool === 'cutter' ? spin * out : 0, over?.[A.side]));
+    const A = armLeaves(D), tool = toolOf(A.side), out = Math.max(0, 1 - D.t * 3);
+    setArm(D, armAngles(tool, A.side, D.t, D.work || 0, D.grip || 0, tool === 'cutter' ? spin * out : 0, over?.[A.side]));
     if (tool !== 'cutter') claw = D;
   }
   const show = claw && (claw.work || 0) > 0 && over?.rock !== false, port = ARMS.claw === 'port';
@@ -940,16 +956,16 @@ export function armStep(built, want, dt, opts = {}) {
     // the claw: it shuts only where it stands (reaching, or on the rock), opens only once the cutter is off the rock,
     // and comes onto the rock or off it only while open
     const gripGoal = !out ? 0 : work ? (claw.work >= 1 && opts.grip !== false ? 1 : 0) : claw.work <= 0 && opts.grip === true ? 1 : 0;
-    if (gripGoal > claw.grip ? claw.t >= 1 : cutOff) go(claw, 'grip', gripGoal, ARMS.gripSpeed);
-    if (claw.grip <= 0 && claw.t >= 1) go(claw, 'work', work ? 1 : 0, ARMS.workSpeed);
+    if (gripGoal > claw.grip ? claw.t <= 0 : cutOff) go(claw, 'grip', gripGoal, ARMS.gripSpeed);
+    if (claw.grip <= 0 && claw.t <= 0) go(claw, 'work', work ? 1 : 0, ARMS.workSpeed);
   }
   // the cutter: onto the rock once the claw holds it (or, with no claw built, once it is out)
-  for (const D of cutters) { const goal = work && D.t >= 1 && (!claw || (claw.work >= 1 && claw.grip >= 1)) ? 1 : 0; go(D, 'work', goal, ARMS.workSpeed); }
+  for (const D of cutters) { const goal = work && D.t <= 0 && (!claw || (claw.work >= 1 && claw.grip >= 1)) ? 1 : 0; go(D, 'work', goal, ARMS.workSpeed); }
   // the fold: out freely; back only once both tools are off the rock and the claw is open
-  for (const D of arms) if (out || (arms.every((q) => q.work <= 0) && (!claw || claw.grip <= 0))) go(D, 't', out ? 1 : 0, ARMS.speed * (out ? 1 : 0.8));
-  for (const D of arms) D.target = out ? 1 : 0;
+  for (const D of arms) if (out || (arms.every((q) => q.work <= 0) && (!claw || claw.grip <= 0))) go(D, 't', out ? 0 : 1, ARMS.speed * (out ? 1 : 0.8));
+  for (const D of arms) D.target = out ? 0 : 1;
   // (folded and still, and shown that way already: nothing to do)
-  const as = `${ARMS.design} ${ARMS.claw} ${ARMS.fold} ${ARMS.cutter}`, still = !moved && !opts.over && built.armsAs === as && arms.every((D) => D.t <= 0);
+  const as = `${ARMS.design} ${ARMS.claw} ${ARMS.fold} ${ARMS.cutter}`, still = !moved && !opts.over && built.armsAs === as && arms.every((D) => D.t >= 1);
   if (!still) { armShow(built, opts.spin || 0, opts.over); built.armsAs = as; }
   return moved;
 }
@@ -958,7 +974,9 @@ export function armStep(built, want, dt, opts = {}) {
 // gearUp: the legs wanted up; arms: what the arms are wanted to do ('stowed', 'reach', 'work'). (LAB.step, and the game)
 export function parkedStep(built, gearUp, arms, dt, updateDoors, opts) {
   const A = built.doors.filter((D) => D.piece === 'mbArm'), legs = built.doors.filter((D) => D.piece === 'mbGear' || D.piece === 'mbGearDoors');
-  const armsIn = A.every((D) => D.t <= 0), legsUp = legs.every((D) => D.t >= 1);
+  // (a ship just built stands on its legs with its arms as the 8k made them, reaching: parked, they are folded at once)
+  if (!built.armsParked) { built.armsParked = true; if (!legs.every((D) => D.t >= 1)) for (const D of A) D.t = D.target = 1; }
+  const armsIn = A.every((D) => D.t >= 1), legsUp = legs.every((D) => D.t >= 1);
   const m = gearStep(built, gearUp || !armsIn, dt, updateDoors);
   return armStep(built, gearUp && legsUp ? arms : 'stowed', dt, opts) || m;
 }
@@ -1036,7 +1054,7 @@ export const LAB = {
     if (['arms', 'work', 'cut', 'grip', 'spin', 'joints', 'rock', 'design', 'claw', 'fold', 'cutter'].some((k) => at[k] != null)) {
       for (const D of B.doors.filter((d) => d.piece === 'mbArm')) {
         const side = armLeaves(D).side, isClaw = side === ARMS.claw;
-        if (at.arms != null) D.t = D.target = 1 - (Array.isArray(at.arms) ? at.arms[side === 'port' ? 0 : 1] : at.arms);
+        if (at.arms != null) D.t = D.target = Array.isArray(at.arms) ? at.arms[side === 'port' ? 0 : 1] : at.arms;
         D.work = (isClaw ? at.work : at.cut ?? at.work) ?? 0; D.grip = isClaw ? at.grip ?? 0 : 0;
       }
       B.clawOn = ARMS.claw; B.armsAs = null;
