@@ -29,10 +29,13 @@
 //   podSheet()           the sheet itself (for a lab to show, or to count)
 //   podGlass(time)       the material; time: a { value } of seconds (the kit's U.time) for the slow movement
 //
-// TO SWITCH IT ON, the 'pod' material goes in the kit's list: three lines in kit/materials.js
-//   import { podGlass } from './growglass.js';                    (with the other imports)
-//   M.pod = podGlass(U.time); M.podInst = M.pod;                  (in makeMaterials(), with the other materials)
-//   'pod' in MAT_KEYS, before 'glass':   ['solid', 'floor', 'decal', 'screen', 'glow', 'pod', 'glass', 'shield']
+// TO SWITCH IT ON, the pods' three materials go in the kit's list: three lines in kit/materials.js
+//   import { podGlass, podInside, podPane } from './growglass.js';      (with the other imports)
+//   M.pod = podGlass(U.time); M.podInst = M.pod; M.podIn = podInside(U.time); M.podInInst = M.podIn; M.podPane = podPane(); M.podPaneInst = M.podPane;
+//                                                                       (in makeMaterials(), with the other materials)
+//   'pod', 'podIn', 'podPane' in MAT_KEYS, before 'glass':
+//     ['solid', 'floor', 'decal', 'screen', 'glow', 'core', 'driveGlow', 'pod', 'podIn', 'podPane', 'glass', 'shield']
+//   ('pod' draws the picture pods; 'podIn' and 'podPane' the real-plant ones: see REAL PLANTS, below)
 //
 // THE SHEET: 512 pixels high, GROW.sheet wide (512: three kinds; 1024: six). Near pictures 256 x 256, far ones 128 x 128.
 // sRGB, 8 bits, with mip levels (about 1.4 MB on the graphics card at 512 x 512).
@@ -305,7 +308,7 @@ void main() {
   float d0 = podEdge( vQ, rnd );
   vec3 milk = MILK * ( 0.3 + 0.7 * podLit( vQ, d0, vLamp ) );
   // the back: where the eye's line ends on it, or (past its edge) where the line meets the pod's side wall on the way
-  vec2 qf = vQ - lean * uDepth.y; float df = podEdge( qf, rnd ), side = step( 1.0, df ), s = clamp( ( 1.0 - d0 ) / max( df - d0, 1e-4 ), 0.0, 1.0 );
+  vec2 qf = vQ - lean * uDepth.y; float df = podEdge( qf, rnd ), side = smoothstep( 1.0, 1.03, df ), s = clamp( ( 1.0 - d0 ) / max( df - d0, 1e-4 ), 0.0, 1.0 );
   qf = mix( qf, vQ + ( qf - vQ ) * s, side ); df = min( df, 1.0 );
   vec2 qn = vQ - lean * uDepth.x; float dn = podEdge( qn, rnd );
   // stirring leaves sway sideways (hardly up and down: a trough's edge stays put)
@@ -322,7 +325,11 @@ void main() {
   back = mix( back, lamp, ( 1.0 - smoothstep( 0.035, 0.035 + soft, length( lb ) ) ) * ( 1.0 - vLamp.x ) );
   // (the pod's own side wall, where the eye's line meets it before the back: dim, dimmer further in)
   back = mix( back, milk * ( 0.3 - 0.18 * s ), side );
-  vec4 front = podPic( podTurn( qns * flip + shift, ang ) + stir, vCell.xy, uCell.xy ) * ( 1.0 - smoothstep( 0.97, 1.03, dn ) );
+  // the near leaves stop at the pod's side wall. Seen from the side that edge shows on the glass's far side: there
+  // they thin out toward the wall over a few times the shift (a hard cut reads as the edge of a picture); seen from
+  // straight in front nothing changes
+  float thin = clamp( -dot( qn, lean ) * uDepth.x * 2.5, 0.0, 0.45 );
+  vec4 front = podPic( podTurn( qns * flip + shift, ang ) + stir, vCell.xy, uCell.xy ) * ( 1.0 - smoothstep( 0.97 - thin, 1.03, dn ) );
   vec3 col = front.rgb * podLit( qn, min( dn, 1.0 ), vLamp ) + back * ( 1.0 - front.a );
   // the lamp's glow in the frost round it
   col += lamp * mix( exp( -5.0 * length( lb ) ), 0.7 * exp( -7.0 * abs( d0 - 0.93 ) ), vLamp.x ) * ( 0.08 + 0.6 * vLook.x );
@@ -339,6 +346,166 @@ void main() {
   float sheen = ( vQ.y - 0.8 * vQ.x - 0.55 + 1.2 * eye.x - 0.6 * eye.y ) / 0.3;
   col += vec3( 0.75, 0.88, 1.0 ) * 0.04 * exp( -sheen * sheen ) * ( 1.0 - smoothstep( 0.85, 1.0, d0 ) );
   gl_FragColor = vec4( col * uGlow * vPod.y, 1.0 );
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`,
+  });
+  m.extensions.derivatives = true;   // (fwidth, on WebGL 1)
+  return m;
+}
+
+// ── REAL PLANTS (the planting 'carousel': kit/shipparts/cabin/growpod.js builds them) ──────────────────────────────
+// The game's maker, 2026-11-10: "is it just a picture? I think it would be cool if the plants were 3d and it looked like
+// the leaves had some depth." A carousel pod is not a picture: its plants are real leaves, stems, pots and fruit (a few
+// hundred triangles a plant) standing on a turntable with an upright axle, in a chamber behind the glass, and its glass
+// is a lightly frosted pane in front of them. Two materials, so ALL the carousel pods in a room's batch are two draws:
+//   podInside(time)   the chamber and everything in it (solid). The turntable and its plants go round on the graphics
+//                     card, from the one clock: nothing is done for it each frame.
+//   podPane()         the frosted pane (see-through, drawn after): a milky haze, its fine grain, the lamp's glow in it,
+//                     a shadow under the frame's rim and a faint sheen
+// THE DEPTH IS REAL. The chamber goes back behind the wall's face (a little deeper than the glass is wide), so as the eye
+// moves the plants slide past one another and behind the frame as real things do. The wall does not hide them: each
+// corner of them is moved along the eye's own line (which leaves it on the same spot of the screen) into a thin layer
+// just behind the glass, in front of the wall's face, their order kept; and only what is seen through the opening is
+// drawn. What stands in front of the pod (its frame, a coffee maker) still hides them.
+// Further in, the chamber's own haze takes more of them: near plants clearer, far ones softer and dimmer.
+// What each corner of the inside carries (growpod.js fills them in):
+//   normal   the pod's facing (its glass's outward normal: placed with the piece, so it turns with it)
+//   aLocal   where it is in the pod's own frame (metres: x right, y up, z out of the glass; the glass's middle is 0),
+//            and what it is: 0 still (the chamber, the axle), 1 turning (the turntable and the plants), 2 the lamp
+//   aCol     its colour (linear) and 1 for a leaf (lit from either side: thin, light comes through it)
+//   aPod     the glass's half-size, its shape (0 eight-sided, 1 round), how fast it turns (radians a second), where in
+//            its turn it starts
+//   aLamp    the lamp's colour (0 warm white .. 1 pink-white), the lamp's brightness (1), the pod's own brightness (1),
+//            how lit the places furthest from the lamp are
+// The chamber's sizes, in half-sizes of the glass (growpod.js builds to them; the glass lights and fogs by them):
+//   ring     how far out on the turntable the plants stand (past the glass's edge: they go out of sight at the sides)
+//   table    the turntable's radius, its top's height (tableY) and how far in its axle is (axle)
+//   wide, top, floor, back   the chamber's half-width, its ceiling, its floor and how deep its back wall is
+//   lamp     the lamp bar across the top: its half-length, height and depth
+//   fog      how much haze a half-size further in adds, and the most there is (fogMost)
+export const INSIDE = { ring: 1.0, table: 1.22, tableY: -0.72, axle: 1.32, wide: 1.34, top: 1.12, floor: -1.06, back: 2.66, lamp: [0.75, 0.82, -0.3], fog: 0.24, fogMost: 0.62 };
+const f3 = (v) => v.toFixed(4);
+const PODEDGE = 'float podEdge( vec2 q, float rnd ) { vec2 a = abs( q ); return mix( max( max( a.x, a.y ), ( a.x + a.y ) * 0.70710678 ), length( q ), rnd ); }';
+const LAMPCOL = 'vec3 podLampCol( float tint ) { return mix( vec3( 1.0, 0.86, 0.68 ), vec3( 1.0, 0.68, 0.84 ), tint ); }';
+export function podInside(time) {
+  const I = INSIDE, L = I.lamp;
+  const m = new THREE.ShaderMaterial({
+    uniforms: { uTime: time || { value: 0 }, uGlow: UGLOW },
+    fog: false, side: THREE.DoubleSide,
+    vertexShader: `attribute vec4 aLocal; attribute vec4 aCol; attribute vec4 aPod; attribute vec4 aLamp;
+uniform float uTime;
+varying vec3 vW; varying vec3 vG; varying vec3 vF; varying vec4 vCol; varying vec4 vPod; varying vec4 vLamp; varying float vKind;
+void main() {
+  vCol = aCol; vPod = aPod; vLamp = aLamp; vKind = aLocal.w;
+  mat4 m = modelMatrix;
+  #ifdef USE_INSTANCING
+    m = m * instanceMatrix;
+  #endif
+  // the pod's own frame in the piece (its facing is the normal), and the glass's middle
+  vec3 f = normalize( normal ), r = normalize( cross( vec3( 0.0, 1.0, 0.0 ), f ) ), u = cross( f, r );
+  vec3 g = position - ( r * aLocal.x + u * aLocal.y + f * aLocal.z );
+  // the turntable and its plants go round the upright axle
+  float hs = aPod.x, a = ( aPod.w + uTime * aPod.z ) * step( 0.5, aLocal.w ) * step( aLocal.w, 1.5 ), c = cos( a ), s = sin( a ), za = -${f3(I.axle)} * hs;
+  vec3 q = aLocal.xyz; vec2 o = vec2( q.x, q.z - za );
+  q.x = o.x * c + o.y * s; q.z = o.y * c - o.x * s + za;
+  vec4 w = m * vec4( g + r * q.x + u * q.y + f * q.z, 1.0 );
+  vec3 gw = ( m * vec4( g, 1.0 ) ).xyz, fw = normalize( mat3( m ) * f );
+  vW = w.xyz; vG = gw; vF = fw;
+  // its depth on the screen: along the eye's line to a thin layer 0.8 to 3.4 mm behind the glass, its order kept
+  float hc = dot( cameraPosition - gw, fw ), h = -dot( w.xyz - gw, fw );
+  float h2 = 0.0008 + 0.0026 * clamp( h / ( ${f3(I.back + 0.1)} * hs ), 0.0, 1.0 );
+  vec3 wc = cameraPosition + ( w.xyz - cameraPosition ) * ( ( hc + h2 ) / max( hc + h, 1e-5 ) );
+  // (seen from behind the glass's plane: nothing)
+  gl_Position = hc > 0.002 ? projectionMatrix * viewMatrix * vec4( wc, 1.0 ) : vec4( 0.0, 0.0, 2.0, 1.0 );
+}`,
+    fragmentShader: `uniform float uGlow;
+varying vec3 vW; varying vec3 vG; varying vec3 vF; varying vec4 vCol; varying vec4 vPod; varying vec4 vLamp; varying float vKind;
+#include <common>
+const vec3 MILK = vec3( 0.25, 0.33, 0.26 );
+${PODEDGE}
+${LAMPCOL}
+void main() {
+  float hs = vPod.x;
+  vec3 r = normalize( cross( vec3( 0.0, 1.0, 0.0 ), vF ) ), u = cross( vF, r );
+  // only what is seen through the opening: where the eye's line crosses the glass
+  float hc = dot( cameraPosition - vG, vF ), h = -dot( vW - vG, vF );
+  vec3 x = cameraPosition + ( vW - cameraPosition ) * ( hc / max( hc + h, 1e-5 ) ) - vG;
+  if ( podEdge( vec2( dot( x, r ), dot( x, u ) ) / hs, vPod.y ) > 1.02 ) discard;
+  // the place in the pod (half-sizes), and the facet's own facing (toward the eye)
+  vec3 d = vW - vG, lp = vec3( dot( d, r ), dot( d, u ), dot( d, vF ) ) / hs;
+  vec3 n = normalize( cross( dFdx( vW ), dFdy( vW ) ) ); n = dot( n, cameraPosition - vW ) < 0.0 ? -n : n;
+  vec3 nl = vec3( dot( n, r ), dot( n, u ), dot( n, vF ) );
+  // the lamp: a bar across the top near the front. Lit by how near it is and how a facet faces it (a leaf from either
+  // side, less through it)
+  vec3 lampCol = podLampCol( vLamp.x );
+  vec3 lc = vec3( clamp( lp.x, -${f3(L[0])}, ${f3(L[0])} ), ${f3(L[1])}, ${f3(L[2])} ) - lp; float dist = max( length( lc ), 1e-4 );
+  float dl = dot( nl, lc / dist ), face = mix( max( dl, 0.0 ), dl > 0.0 ? dl : -0.55 * dl, vCol.w );
+  float near = 1.0 / ( 1.0 + 1.4 * dist * dist );
+  float lit = vLamp.w + ( 1.0 - vLamp.w ) * near * ( 0.3 + 0.7 * face );
+  vec3 col = vCol.rgb * lit * mix( vec3( 1.0 ), lampCol, 0.3 ) * 1.6;
+  // soft ribs up the chamber's back
+  col *= 1.0 + 0.6 * step( vKind, 0.5 ) * step( lp.z, -${f3(I.back - 0.05)} ) * pow( 0.5 + 0.5 * cos( lp.x * 12.0 ), 6.0 );
+  // the lamp itself (never as bright as white)
+  col = mix( col, lampCol * 0.72 * vLamp.y, step( 1.5, vKind ) );
+  // the chamber's haze: more of it the further in
+  float fog = min( ${f3(I.fogMost)}, ${f3(I.fog)} * max( -lp.z - 0.15, 0.0 ) ) * step( vKind, 1.5 );
+  col = mix( col, MILK * 0.16 * mix( vec3( 1.0 ), lampCol, 0.25 ), fog );
+  gl_FragColor = vec4( col * uGlow * vLamp.z, 1.0 );
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`,
+  });
+  m.extensions.derivatives = true;   // (dFdx, on WebGL 1)
+  return m;
+}
+// the frosted pane in front of a carousel's plants. Its corners carry what a picture pod's glass does (aPod: the glass's
+// half-size, the pod's brightness, its shape; aLook: the frost's haze and grain; aLamp: 0, the lamp's brightness and
+// colour, how lit the furthest places are)
+export function podPane() {
+  const L = INSIDE.lamp;
+  const m = new THREE.ShaderMaterial({
+    uniforms: { uGlow: UGLOW },
+    fog: false, transparent: true, depthWrite: false, premultipliedAlpha: true,
+    vertexShader: `attribute vec4 aPod; attribute vec4 aLook; attribute vec4 aLamp;
+varying vec2 vQ; varying vec3 vEye; varying vec4 vPod; varying vec4 vLook; varying vec4 vLamp;
+void main() {
+  vQ = uv; vPod = aPod; vLook = aLook; vLamp = aLamp;
+  mat4 m = modelMatrix;
+  #ifdef USE_INSTANCING
+    m = m * instanceMatrix;
+  #endif
+  vec4 w = m * vec4( position, 1.0 );
+  vec3 n = normalize( mat3( m ) * normal ), r = abs( n.y ) > 0.95 ? vec3( 1.0, 0.0, 0.0 ) : normalize( cross( vec3( 0.0, 1.0, 0.0 ), n ) ), u = cross( n, r ), e = cameraPosition - w.xyz;
+  vEye = vec3( dot( e, r ), dot( e, u ), dot( e, n ) );
+  gl_Position = projectionMatrix * viewMatrix * w;
+}`,
+    fragmentShader: `uniform float uGlow;
+varying vec2 vQ; varying vec3 vEye; varying vec4 vPod; varying vec4 vLook; varying vec4 vLamp;
+#include <common>
+const vec3 MILK = vec3( 0.25, 0.33, 0.26 );
+${PODEDGE}
+${LAMPCOL}
+float podHash( vec2 p ) { p = fract( p * vec2( 0.1031, 0.103 ) ); p += dot( p, p.yx + 33.33 ); return fract( ( p.x + p.y ) * p.x ); }
+float podGrain( vec2 p ) { vec2 i = floor( p ), f = fract( p ); f = f * f * ( 3.0 - 2.0 * f ); return mix( mix( podHash( i ), podHash( i + vec2( 1.0, 0.0 ) ), f.x ), mix( podHash( i + vec2( 0.0, 1.0 ) ), podHash( i + vec2( 1.0, 1.0 ) ), f.x ), f.y ); }
+void main() {
+  float hs = vPod.x, d0 = podEdge( vQ, vPod.z );
+  vec3 eye = normalize( vEye ), lampCol = podLampCol( vLamp.z ) * vLamp.y;
+  // the lamp bar as the eye sees it through the glass: where the lines to its two ends cross the glass
+  vec3 cam = vec3( vQ * hs, 0.0 ) + vEye, b0 = vec3( -${f3(L[0])}, ${f3(L[1])}, ${f3(L[2])} ) * hs, b1 = vec3( ${f3(L[0])}, ${f3(L[1])}, ${f3(L[2])} ) * hs;
+  vec2 p0 = ( cam + ( b0 - cam ) * ( cam.z / ( cam.z - b0.z ) ) ).xy / hs, p1 = ( cam + ( b1 - cam ) * ( cam.z / ( cam.z - b1.z ) ) ).xy / hs;
+  vec2 pa = vQ - p0, ba = p1 - p0; float dlamp = length( pa - ba * clamp( dot( pa, ba ) / dot( ba, ba ), 0.0, 1.0 ) );
+  // the frost: a light milky haze (thicker seen from the side), with its fine grain (gone once a grain is under a pixel)
+  float haze = 0.03 + 0.75 * vLook.x + ( 1.0 - vLook.x ) * 0.45 * pow( 1.0 - eye.z, 3.0 );
+  vec2 pm = vQ * hs / 0.0012; float fw = max( fwidth( pm.x ), fwidth( pm.y ) );
+  haze = clamp( haze * ( 1.0 + ( podGrain( pm ) - 0.5 ) * 2.2 * vLook.y * clamp( 1.3 - fw, 0.0, 1.0 ) ), 0.0, 1.0 );
+  float lit = smoothstep( -1.1, 0.75, vQ.y ), k = vLamp.w + ( 1.0 - vLamp.w ) * lit * sqrt( lit );
+  vec3 col = MILK * ( 0.3 + 0.7 * k ) * haze + lampCol * exp( -6.0 * dlamp ) * ( 0.05 + 0.5 * vLook.x );
+  // the shadow under the frame's rim, then a faint sheen sliding as the eye moves
+  float sh = 0.4 * smoothstep( 0.86, 1.0, d0 ); col *= 1.0 - sh;
+  float sheen = ( vQ.y - 0.8 * vQ.x - 0.55 + 1.2 * eye.x - 0.6 * eye.y ) / 0.3;
+  col += vec3( 0.75, 0.88, 1.0 ) * 0.04 * exp( -sheen * sheen ) * ( 1.0 - smoothstep( 0.85, 1.0, d0 ) );
+  gl_FragColor = vec4( col * uGlow * vPod.y, 1.0 - ( 1.0 - haze ) * ( 1.0 - sh ) );
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }`,
