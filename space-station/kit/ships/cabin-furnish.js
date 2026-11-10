@@ -21,13 +21,18 @@
 //   - the mess's posters (kit/shipparts/cabin/print.js POSTERS, in order): the middle cabinet over the bench, the wall
 //     over the second bench, the hull's side under the cabinets, the cold store's door
 // The bunk room: each bunk a 2-high berth stack on its wall (its openings where nothing stands in front of it, the pillows
-// at the open end, the ladder at the foot end), berths numbered through the ship (upper first, in plan order); each
-// locker numbered for the berth it serves (its name's "upper" / "lower", else in turn), its posters on the lockers that
-// face whoever comes in; the overhead cabinets as the mess's.
+// at the end its "head" names, else at the open end; the ladder at the foot end), berths numbered through the ship (upper
+// first, in plan order). An overhead item on a stack's own footprint: the lockers right above the berths, flush with the
+// bed fronts. A locker whose plan has a diagonal from a stack's front corner: a thin end locker, its doors on the
+// diagonal. A locker up to 0.3 m off its wall: the ship's shallow built-in (kit/shipparts/cabin/lockers.js), its corners
+// cut as its plan says, joined to the bed fronts on a fillet, its two tall doors numbered for that stack's berths. Any
+// other locker: a crew locker numbered for the berth it serves (its name's "upper" / "lower", else in turn). The room's
+// posters: on the end lockers, then on the crew lockers that face whoever comes in; other overhead cabinets as the mess's.
 import { part } from '../shipparts/place.js';
 import { FACE } from '../shipparts/cabin/ship.js';
 import { cornerBench, messTable, stool, topCabinets, coldStore, galleyRun, coffeeMachine, mug, bottle, fruitBowl, poster, wallField } from '../shipparts/cabin/mess.js';
 import { bunkStack, crewLocker } from '../shipparts/cabin/bunks.js';
+import { shallowLocker, endLocker, berthLockers, lockerBody } from '../shipparts/cabin/lockers.js';
 import { labBench, microscope, glovebox, vialRack, tablet, sampleCase, surveyTable, labStool, ringLight } from '../shipparts/cabin/lab.js';
 import { suitLockers, pressurePanel, wallBench } from '../shipparts/cabin/airlock.js';
 import { showerStall, toiletBasin } from '../shipparts/cabin/washroom.js';
@@ -35,7 +40,7 @@ import { reactorCore, drivePumps, engStation, gearShelves } from '../shipparts/c
 import { screen, starScreen, hazard, pipe, COPPER } from '../shipparts/cabin/bits.js';
 import { shape, solid, relief, add } from '../bevel.js';
 import { POSTERS, postersFor } from '../shipparts/cabin/print.js';
-import { hangs } from './blueprint.js';
+import { hangs, cutsOf, outlineOf, inItem } from './blueprint.js';
 
 const PI = Math.PI, EPS = 1e-6;
 // the wall an item stands against in its room: { axis ('x': the line x = v, running along z; 'z': the line z = v), v,
@@ -139,28 +144,97 @@ function furnishGalley({ room, ctx, done, items, f, at, A }) {
 }
 
 // ── the bunk room ───────────────────────────────────────────────────────────────────────────────────────────────
-function furnishBunks({ bp, room, ctx, done, items, at, A }) {
+function furnishBunks({ bp, room, ctx, done, items, f, at, A }) {
   const nums = berthNumbers(bp), stacks = items.filter((it) => it.kind === 'bunk').map((it) => ({ it, W: wallOf(it, room) })).filter((S) => S.W);
+  const lockers = items.filter((it) => it.kind === 'locker' && !hangs(it)).map((it) => ({ it, W: wallOf(it, room) })).filter((L) => L.W);
+  const SHALLOW = 0.3, JOIN = 0.07, ceil = typeof room.ceiling === 'number' ? room.ceiling : 2.5, r3 = (v) => +v.toFixed(3);
+  // a stack's bed fronts: on the plan (its footprint's edge), and as built (bunkStack's front, 0.02 m inside that)
+  const faceOf = (W, built) => W.v + W.side * (W.depth - (built ? 0.02 : 0));
+  // a shallow locker that runs up to a stack's front: which stack, and with which end of its own stretch
+  for (const L of lockers) {
+    L.meet = null; if (L.W.depth > SHALLOW + EPS) continue;
+    for (const S of stacks) if (S.W.axis !== L.W.axis && inFront(L.it, S.W)) for (const e of ['lo', 'hi']) if (Math.abs(L.W[e] - faceOf(S.W)) < 0.03) L.meet = { S, e };
+  }
   for (const S of stacks) {
     const { it, W } = S, mid = (W.lo + W.hi) / 2, len = W.hi - W.lo, h = +it.h || 1.9;
-    // (what stands in front of its face, as stretches of its own x)
-    const blocks = items.filter((o) => o !== it && !hangs(o) && inFront(o, W)).map((o) => alongOf(o, W).map((a) => localX(W, mid, a)).sort((a, b) => a - b));
+    // (what stands in front of its face, as stretches of its own x; a shallow locker that runs up to it with the fillet
+    // that joins the two)
+    const blocks = items.filter((o) => o !== it && !hangs(o) && inFront(o, W)).map((o) => {
+      const [a, b] = alongOf(o, W).map((v) => localX(W, mid, v)).sort((p, q) => p - q), j = lockers.some((L) => L.it === o && L.meet?.S === S) ? JOIN + 0.06 : 0;
+      return [a - j, b + j];
+    });
     let open = [[-len / 2 + 0.08, len / 2 - 0.08]];
     for (const [a, b] of blocks) open = open.flatMap(([p, q]) => (b <= p || a >= q ? [[p, q]] : [[p, a - 0.05], [b + 0.05, q]])).filter(([p, q]) => q - p > 0.05);
     const best = open.sort((a, b) => (b[1] - b[0]) - (a[1] - a[0]))[0], use = best && best[1] - best[0] >= 0.9 ? best : [-len / 2 + 0.08, len / 2 - 0.08];
-    const bmid = blocks.length ? blocks.reduce((t, [a, b]) => t + a + b, 0) / (2 * blocks.length) : -1, head = bmid < (use[0] + use[1]) / 2 ? 1 : -1;
-    ctx.put('bunks: berths', part(bunkStack, { len, depth: W.depth, h, open: use.map((v) => +v.toFixed(3)), head, nums: nums.get(it.id), bedding: A.bedding, handle: A.handle, trim: A.trim }), at(W, mid));
+    // (the pillows: at the end the plan names ("head": "low" / "high", the end of its long side at the lower or higher
+    // plan coordinate), else at the open end)
+    const bmid = blocks.length ? blocks.reduce((t, [a, b]) => t + a + b, 0) / (2 * blocks.length) : -1;
+    const head = it.head === 'low' || it.head === 'high' ? (localX(W, mid, it.head === 'low' ? W.lo : W.hi) > 0 ? 1 : -1) : bmid < (use[0] + use[1]) / 2 ? 1 : -1;
+    S.use = use.map(r3);
+    ctx.put('bunks: berths', part(bunkStack, { len, depth: W.depth, h, open: S.use, head, nums: nums.get(it.id), bedding: A.bedding, handle: A.handle, trim: A.trim }), at(W, mid));
     done.add(it.id);
   }
-  // the lockers: each the number of the berth it serves; the posters on those facing whoever comes in
-  const lockers = items.filter((it) => it.kind === 'locker' && !hangs(it)).map((it) => ({ it, W: wallOf(it, room) })).filter((L) => L.W);
-  const into = enterDir(bp, room), facing = (W) => (W.axis === 'x' ? [W.side, 0] : [0, W.side]);
-  const posters = postersFor('bunks'), byView = lockers.slice().sort((a, b) => score(b.W) - score(a.W)), withPoster = new Map(byView.slice(0, posters.length).filter((L) => score(L.W) > 0.3).map((L, i) => [L.it.id, posters[i]]));
+  // the lockers right above the berths (an overhead item on a stack's own footprint): their faces flush with the bed
+  // fronts, their doors over the openings
+  for (const it of items.filter((o) => o.kind === 'overhead' && hangs(o))) {
+    const S = stacks.find((T) => T.it.rect.every((v, i) => Math.abs(v - it.rect[i]) < EPS)); if (!S) continue;
+    const { W } = S, mid = (W.lo + W.hi) / 2, y = +it.y, top = Math.min(ceil, y + (+it.h || 0.6)), slope = ctx.slopeAt(W.axis, W.v, mid);
+    const lid = Math.max(0.05, W.depth - 0.02 - (slope ? Math.min(slope.run, Math.max(0, top - slope.y0)) : FACE));
+    ctx.put('bunks: lockers over the berths', part(berthLockers, { len: r3(W.hi - W.lo), depth: W.depth, y, top, clip: [r3(S.use[0] - 0.07), r3(S.use[1] + 0.07)], lid: r3(lid), handle: A.handle, trim: A.trim }), at(W, mid));
+    done.add(it.id);
+  }
+  // the lockers on the floor, three sorts:
+  //   an END locker: its plan has a diagonal that starts at a stack's front corner (the thin locker between the beds' feet
+  //     and the wall): its body from its plan, its doors on the diagonal
+  //   a SHALLOW one (up to 0.3 m off its wall): the ship's shallow built-in, its corners cut as the plan says, run out to
+  //     the bed fronts on a fillet where it meets them; its two tall doors numbered for that stack's berths
+  //   any other: a crew locker, numbered for the berth it serves (its name's "upper" / "lower", else in turn)
+  const endFace = (it) => {
+    const P = outlineOf(it);
+    for (let i = 0; i < P.length; i++) {
+      const a = P[i], b = P[(i + 1) % P.length]; if (Math.abs(a[0] - b[0]) < EPS || Math.abs(a[1] - b[1]) < EPS) continue;
+      for (const S of stacks) for (const v of [S.W.lo, S.W.hi]) { const c = S.W.axis === 'x' ? [faceOf(S.W), v] : [v, faceOf(S.W)]; for (const [p, q] of [[a, b], [b, a]]) if (dist(p, c) < 0.03) return { S, p, q }; }
+    }
+    return null;
+  };
+  const ends = [], shallow = [], crew = [];
+  for (const L of lockers) { const D = endFace(L.it); if (D) ends.push({ ...L, D }); else if (L.W.depth <= SHALLOW + EPS) shallow.push(L); else crew.push(L); }
+  const posters = postersFor('bunks'), hung = new Set();
+  ends.forEach((L, i) => {
+    const { it, D } = L, { S } = D, k = S.W.axis === 'x' ? 0 : 1, h = Math.min(ceil, +it.h || ceil), [X0, Z0, X1, Z1] = room.rect;
+    // (its face: from the bed fronts as built, to the face of the wall its far end stands on)
+    const p = D.p.slice(); p[k] = faceOf(S.W, true);
+    const onX = Math.abs(D.q[0] - X0) < EPS || Math.abs(D.q[0] - X1) < EPS, onZ = Math.abs(D.q[1] - Z0) < EPS || Math.abs(D.q[1] - Z1) < EPS;
+    const across = onZ ? Math.abs(D.q[1] - p[1]) : onX ? Math.abs(D.q[0] - p[0]) : 0, t = across > EPS ? FACE / across : 0;
+    const q = [D.q[0] + (p[0] - D.q[0]) * t, D.q[1] + (p[1] - D.q[1]) * t], len = dist(p, q), m = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+    let n = [(q[1] - p[1]) / len, -(q[0] - p[0]) / len]; if (inItem(it, m[0] + n[0] * 0.02, m[1] + n[1] * 0.02)) n = [-n[0], -n[1]];
+    const pts = []; for (const v of outlineOf(it)) { const u = dist(v, D.p) < EPS ? p : v; if (!pts.length || dist(pts[pts.length - 1], u) > EPS) pts.push(u.map(r3)); }
+    if (pts.length > 1 && dist(pts[0], pts[pts.length - 1]) < EPS) pts.pop();
+    const poster = posters[i] ?? null; if (poster != null) hung.add(poster);
+    ctx.put('bunks: end lockers', part(lockerBody, { pts, h }), { at: [0, f, 0], rot: [0, 0, 0] });
+    ctx.put('bunks: end lockers', part(endLocker, { w: r3(len), h, poster, handle: A.handle, trim: A.trim }), { at: [m[0], f, m[1]], rot: [0, Math.atan2(n[0], n[1]), 0] });
+    done.add(it.id);
+  });
+  const nearest = (it) => stacks.slice().sort((a, b) => dist(centre(a.it), centre(it)) - dist(centre(b.it), centre(it)))[0];
+  for (const L of shallow) {
+    const { it, W, meet } = L, mid = (W.lo + W.hi) / 2, end = (e) => (localX(W, mid, W[e]) > 0 ? 1 : 0), S = meet?.S || nearest(it), n = S ? nums.get(S.it.id) : null;
+    const ext = [0, 0], join = [0, 0], cut = [0, 0], slope = ctx.slopeAt(W.axis, W.v, mid);
+    if (meet) { ext[end(meet.e)] = 0.02; join[end(meet.e)] = JOIN; }
+    for (const C of cutsOf(it)) {
+      const front = (W.axis === 'z' ? C.hz : C.hx) === (W.side > 0), e = (W.axis === 'z' ? C.hx : C.hz) ? 'hi' : 'lo';
+      if (front && !join[end(e)]) cut[end(e)] = Math.min(C.a, C.b);
+    }
+    const h = Math.min(ceil, +it.h || ceil, slope ? slope.y0 + W.depth - 0.02 : ceil);
+    ctx.put('bunks: lockers', part(shallowLocker, { w: r3(W.hi - W.lo), depth: W.depth, h, ext, join, ends: cut, nums: n ? [n[0], n[1] ?? null] : null, handle: A.handle, trim: A.trim }), at(W, mid));
+    done.add(it.id);
+  }
+  // (the crew lockers: the posters the end lockers left, on those facing whoever comes in)
+  const into = enterDir(bp, room), facing = (W) => (W.axis === 'x' ? [W.side, 0] : [0, W.side]), free = posters.filter((i) => !hung.has(i));
+  const byView = crew.slice().sort((a, b) => score(b.W) - score(a.W)), withPoster = new Map(byView.slice(0, free.length).filter((L) => score(L.W) > 0.3).map((L, i) => [L.it.id, free[i]]));
   function score(W) { const [fx, fz] = facing(W); return -(fx * into[0] + fz * into[1]); }
   const served = new Map();
-  for (const L of lockers) {
-    const { it, W } = L, mid = (W.lo + W.hi) / 2, c = centre(it);
-    const S = stacks.slice().sort((a, b) => dist(centre(a.it), c) - dist(centre(b.it), c))[0], n = S ? nums.get(S.it.id) : null;
+  for (const L of crew) {
+    const { it, W } = L, mid = (W.lo + W.hi) / 2, S = nearest(it), n = S ? nums.get(S.it.id) : null;
     const name = (it.name || '').toLowerCase(), k = served.get(S) || 0; served.set(S, k + 1);
     const num = n ? (n.length === 1 ? n[0] : /upper/.test(name) ? n[0] : /lower/.test(name) ? n[1] : n[k % 2]) : null;
     ctx.put('bunks: lockers', part(crewLocker, { w: W.hi - W.lo, depth: W.depth, h: +it.h || 2, num, poster: withPoster.get(it.id) ?? null, handle: A.handle, trim: A.trim }), at(W, mid));
@@ -168,7 +242,8 @@ function furnishBunks({ bp, room, ctx, done, items, at, A }) {
   }
   topCorner(ctx, room, items, done, at, A, 'bunks');
   // (posters no locker took, on the clearest walls)
-  const hung = new Set(withPoster.values()), left = posters.filter((i) => !hung.has(i));
+  for (const i of withPoster.values()) hung.add(i);
+  const left = posters.filter((i) => !hung.has(i));
   if (left.length) hangPosters(ctx, room, items, at, left, 'bunks: posters');
   wallFields(ctx, room, items, at, { tag: 'bunks: wall fields', touch: true });
 }

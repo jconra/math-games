@@ -9,6 +9,7 @@ import { reactor } from './engine.js';
 import { holoTable } from './science.js';
 import { cornerBench, messTable, stool, topCabinets, coldStore, galleyRun, coffeeMachine, mug, fruitBowl, poster } from './mess.js';
 import { bunkStack, crewLocker } from './bunks.js';
+import { shallowLocker, endLocker, lockerBody, berthLockers } from './lockers.js';
 import { labBench, microscope, glovebox, vialRack, tablet, sampleCase, surveyTable, labStool, ringLight } from './lab.js';
 import { suitLockers, pressurePanel, wallBench } from './airlock.js';
 import { showerStall, toiletBasin } from './washroom.js';
@@ -40,6 +41,11 @@ export const PRESETS = {
   // (the other rooms, round two: kit/shipparts/cabin/bunks.js, lab.js, airlock.js, washroom.js, engroom.js)
   cabinBunks: { '2-high, ladder': { open: [-0.5, 0.92], head: 1, nums: [1, 2] }, 'open its whole length': { nums: [3, 4], head: -1 } },
   cabinCrewLocker: { numbered: { num: 1 }, 'with a poster': { num: 2, poster: 4 } },
+  // (the built-ins of round three, kit/shipparts/cabin/lockers.js: shallow, as if they ran on into the wall, their free
+  // ends cut at 45 degrees)
+  cabinShallowLocker: { 'numbered, one end cut, one joined': { w: 0.4, ends: [0.08, 0], join: [0, 0.07], nums: [1, 2] }, 'two doors wide, labelled': { w: 1.0, cols: 2, h: 2.2, ends: [0.08, 0.08], label: 'label:tools' }, 'with a poster': { w: 0.5, ends: [0.08, 0.08], poster: 9 } },
+  cabinEndLocker: { 'across a corner, a poster': { poster: 5 }, plain: {} },
+  cabinBerthLockers: { 'over a 2.2 m stack': { len: 2.2, depth: 1, clip: [-0.77, 1.09], lid: 0.5, stack: true }, 'the lockers alone': { len: 2, depth: 1, lid: 0.5 } },
   cabinStarScreen: { '8-sided': { w: 0.6, h: 0.34, seed: 3 }, 'no planet': { w: 0.5, h: 0.3, planet: false, seed: 9 } },
   cabinLabBench: { 'with its things': { things: true }, '1.5 m': {}, '2 m, no knee space': { len: 2, knee: -1 } },
   cabinSurveyTable: { '1 x 1.25 m': {}, '0.9 m square': { w: 0.9, depth: 0.9 } },
@@ -80,6 +86,10 @@ export const CABIN_FIT = {
   cabinPoster: entry('cabinPoster', 'Posters', 'wall', [2.4, 1.0, 0.05], (p, o) => { if (o.from) { for (let i = 0; i < 8; i++) placeInto(p, part(poster, { i: o.from + i, y: i < 4 ? 0.75 : 0.3 }), { at: [-0.84 + (i % 4) * 0.56, 0, 0] }); return p; } [-0.9, -0.3, 0.35, 0.95].forEach((x, i) => placeInto(p, part(poster, { i, dark: i === 1, y: 0.6 }), { at: [x, 0, 0] })); return p; }),
   cabinBunks: entry('cabinBunks', 'Bunks: berths, 2-high', 'wall', [2, 1.9, 1.1], bunkStack),
   cabinCrewLocker: entry('cabinCrewLocker', 'Bunks: locker', 'wall', [0.5, 2.0, 0.5], crewLocker),
+  cabinShallowLocker: entry('cabinShallowLocker', 'Built-in: shallow locker', 'wall', [1.0, 2.5, 0.3], shallowLocker),
+  // (its body from a plan across a corner, its face on the diagonal: from (-0.2, 0.42) to (0.2, 0.1))
+  cabinEndLocker: entry('cabinEndLocker', 'Built-in: thin end locker, face on a diagonal', 'wall', [0.5, 2.5, 0.45], (p, o) => { placeInto(p, part(lockerBody, { pts: [[-0.2, 0.03], [0.2, 0.03], [0.2, 0.1], [-0.2, 0.42]] }), { at: [0, 0, 0] }); placeInto(p, part(endLocker, { w: 0.51, ...o }), { at: [0, 0, 0.26], rot: [0, Math.atan2(0.32, 0.4), 0] }); return p; }),
+  cabinBerthLockers: entry('cabinBerthLockers', 'Bunks: lockers over the berths', 'wall', [2.2, 2.5, 1.1], (p, o) => { if (o.stack) placeInto(p, part(bunkStack, { len: 2.2, depth: 1, open: [-0.7, 1.02], head: -1, nums: [1, 2] }), { at: [0, 0, 0] }); return berthLockers(p, o); }),
   cabinStarScreen: entry('cabinStarScreen', 'Star screen, 8-sided', 'wall', [0.7, 0.4, 0.05], (p, o) => placeInto(p, part(starScreen, o), { at: [0, 0.3, 0] })),
   cabinLabBench: entry('cabinLabBench', 'Lab: bench', 'wall', [1.5, 1.3, 0.5], (p, o) => { labBench(p, o); if (o.things) { placeInto(p, part(glovebox, {}), { at: [-0.48, 0.9, 0.05] }); placeInto(p, part(microscope, {}), { at: [-0.12, 0.9, 0.24], rot: [0, 0.4, 0] }); placeInto(p, part(vialRack, { seed: 1 }), { at: [0.42, 0.9, 0.16] }); placeInto(p, part(tablet, {}), { at: [0.12, 0.9, 0.37], rot: [0, -0.25, 0] }); } return p; }),
   cabinSurveyTable: entry('cabinSurveyTable', 'Lab: survey table', 'wall', [1.0, 0.95, 1.25], surveyTable),

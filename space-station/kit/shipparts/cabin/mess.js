@@ -30,7 +30,7 @@ import * as THREE from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
 import { shape, solid, loft, prism, plate, relief, RINGS, add } from '../../bevel.js';
 import { kitTextures } from '../../materials.js';
-import { plane } from '../../geo.js';
+import { plane, put } from '../../geo.js';
 import { FACE } from './ship.js';
 import { POSTERS } from './print.js';
 
@@ -50,6 +50,22 @@ export const strip = (p, at, i, dir, reach, color = LIGHT) => p.lights.push({ at
 // a poster's own light for the bake (no fitting; marked, so a cabin turns it on only where its rooms are kept dim:
 // cabin-built.js LIGHT.posters): `at` the poster's middle, `n` the way it faces. A poster stays easy to read in a dim room.
 export const posterLight = (p, at, n = [0, 0, 1], i = 0.3, off = 0.45, reach = 0.95) => p.lights.push({ at: [at[0] + n[0] * off, at[1] + n[1] * off, at[2] + n[2] * off], i, color: LIGHT, dir: [-n[0], -n[1], -n[2]], reach, poster: true });
+// A PICTURE LIGHT: a poster's light with the fitting it comes from (the game's maker, 2026-11-09: "Right now it just looks
+// like light just magically appears"): a small dark hood over the poster's top edge, a glowing strip under it, and the
+// light it throws down the poster (marked `poster`, as posterLight's). `at`: the middle of the poster's top edge, on the
+// surface it hangs on; `rot`: that surface's turn (it faces +z before it is turned); `w`: the poster's width.
+const _pe = new THREE.Euler(), _pv = new THREE.Vector3();
+const turned = (rot, v) => _pv.set(...v).applyEuler(_pe.set(...(rot || [0, 0, 0]))).toArray();
+export function pictureLight(p, at, rot, w, o = {}) {
+  const hw = Math.max(0.1, Math.min(w * 0.72, 0.34)), out = o.out ?? 0.042, R = rot || [0, 0, 0];
+  add(p, o.look || 'black', solid(shape(hw, 0.024, 0.007, 0, 0.02), out, { edge: 0.005, back: false }), at, R);
+  // (the strip under the hood, facing down: turned in the hood's own frame first, then with it)
+  const g = plate(shape(hw - 0.03, 0.013, 0.004)); put(g, [0, 0.0075, out - 0.017], [PI / 2, 0, 0]);
+  add(p, 'white', g, at, R, 'glow');
+  const q = turned(R, [0, o.drop ?? -0.03, o.off ?? 0.2]);
+  p.lights.push({ at: [at[0] + q[0], at[1] + q[1], at[2] + q[2]], i: o.i ?? 0.3, color: LIGHT, dir: turned(R, [0, -0.45, -0.89]), reach: o.reach ?? 0.95, poster: true });
+  return p;
+}
 
 // ── the corner bench ─────────────────────────────────────────────────────────────────────────────────────────────
 export function cornerBench(p, o = {}) {

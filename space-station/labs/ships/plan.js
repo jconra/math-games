@@ -4,7 +4,7 @@
 //   drag a room's wall (every room's wall on that line moves with it, and its doors), drag an item or a door
 //   (a door snaps onto the nearest wall); a tap selects; drag empty space to move the view; wheel or pinch to zoom;
 //   double-click (or double-tap) to fit.
-import { ROOM_KINDS, ITEM_KINDS, doorWall, doorReach, hangs, wallsAt, snap, normRect, HEAD, CEIL } from './blueprint.js';
+import { ROOM_KINDS, ITEM_KINDS, doorWall, doorReach, hangs, wallsAt, snap, normRect, HEAD, CEIL, outlineOf } from './blueprint.js';
 
 const COL = {
   bg: '#0a0f16', grid: 'rgba(120,150,180,0.10)', grid1: 'rgba(120,150,180,0.20)', mid: 'rgba(159,220,255,0.35)',
@@ -249,7 +249,11 @@ export class Plan {
     const standing = (bp.items || []).filter((it) => !hangs(it)), hanging = (bp.items || []).filter(hangs);
     for (const it of standing) {
       const K = ITEM_KINDS[it.kind] || { color: '#999', tag: '?' }, [X, Y, W, H] = this.sr(it.rect);
-      g.fillStyle = K.color + 'c8'; g.fillRect(X, Y, W, H); g.strokeStyle = '#0a0f16'; g.lineWidth = 1; g.strokeRect(X + 0.5, Y + 0.5, W - 1, H - 1);
+      g.fillStyle = K.color + 'c8'; g.strokeStyle = '#0a0f16'; g.lineWidth = 1;
+      if (it.cut) {
+        // (corners cut off its plan: its real outline, so a diagonal face shows as one)
+        g.beginPath(); outlineOf(it).forEach(([x, z], i) => { const [px, py] = this.sr([x, z, x, z]); if (i) g.lineTo(px, py); else g.moveTo(px, py); }); g.closePath(); g.fill(); g.stroke();
+      } else { g.fillRect(X, Y, W, H); g.strokeRect(X + 0.5, Y + 0.5, W - 1, H - 1); }
       if (Math.min(W, H) > fs * 1.2) { g.fillStyle = '#0a0f16'; g.font = `700 ${Math.round(fs * 0.85)}px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(K.tag, X + W / 2, Y + H / 2); }
     }
     for (const it of hanging) {

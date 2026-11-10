@@ -19,8 +19,8 @@ import { shape, solid, loft, plate, add } from '../../bevel.js';
 import { kitTextures } from '../../materials.js';
 import { plane } from '../../geo.js';
 import { SCREEN_RECT } from '../../tex.js';
-import { pool, strip, posterLight, LIGHT, leatherOf, decalQuad } from './mess.js';
-export { pool, strip, posterLight, LIGHT, leatherOf, decalQuad };
+import { pool, strip, posterLight, pictureLight, LIGHT, leatherOf, decalQuad } from './mess.js';
+export { pool, strip, posterLight, pictureLight, LIGHT, leatherOf, decalQuad };
 
 const PI = Math.PI;
 export const FLAT = [-PI / 2, 0, 0];   // (a shape drawn in x, y lies down, its y running to -z, its depth up)
