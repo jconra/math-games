@@ -20,6 +20,7 @@ import { createSky } from '../world/sky.js';
 import { buildRoom, updateDoors, setDoors, loadRoom, updateZones, zoneAt } from '../kit/layout.js';
 import { loadBake } from '../kit/bakefile.js';
 import { makeDust } from '../kit/dust.js';
+import { makeBeams, beamsOf } from '../kit/beams.js';
 
 // low: no bloom, 1x; medium: bloom, 1.5x; high: bloom, a sharper room picture, 2x (the Kit Lab's own three steps; the
 // `bake` numbers are used only for a room whose saved light no longer matches it)
@@ -90,6 +91,10 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
   };
   const built = buildRoom(R, mats, { bake: Q.bake, saved, zoneMats, compact: true });
   scene.add(built.group);
+  // (the beams of lit haze some lights carry, as the Kit Lab shows them: the forge's pours; none at low quality)
+  const beamList = qName === 'low' ? [] : beamsOf(built.lights || []);
+  const beams = beamList.length ? makeBeams(beamList) : null;
+  if (beams) scene.add(beams.object);
   if (built.stats.problems.length) console.warn('station: ' + built.stats.problems.join('; '));
   setDoors(built.doors, 0);
   const start = new THREE.Vector3(...(R.views?.start?.at || R.spawn?.at || [0, 1.6, 0]));
@@ -156,5 +161,5 @@ export async function loadStation({ canvas, quality = null, rig = false, room = 
     draw(dt);
   }
 
-  return { renderer, scene, camera, R, built, mats, sky, dust, fill, stats, quality: qName, frame, resize, view, place, room: roomOf, envAt, zoneAt: (p) => zoneAt(built, p), keepShut, get env() { return envTex; } };
+  return { renderer, scene, camera, R, built, mats, sky, dust, fill, beams, stats, quality: qName, frame, resize, view, place, room: roomOf, envAt, zoneAt: (p) => zoneAt(built, p), keepShut, get env() { return envTex; } };
 }
