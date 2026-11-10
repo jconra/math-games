@@ -31,7 +31,9 @@ import { bunkStack, crewLocker } from '../shipparts/cabin/bunks.js';
 import { labBench, microscope, glovebox, vialRack, tablet, sampleCase, surveyTable, labStool } from '../shipparts/cabin/lab.js';
 import { suitLockers, pressurePanel, wallBench } from '../shipparts/cabin/airlock.js';
 import { showerStall, toiletBasin } from '../shipparts/cabin/washroom.js';
-import { screen, starScreen, hazard } from '../shipparts/cabin/bits.js';
+import { reactorCore, drivePumps, engStation, gearShelves } from '../shipparts/cabin/engroom.js';
+import { screen, starScreen, hazard, pipe, COPPER } from '../shipparts/cabin/bits.js';
+import { shape, solid, add } from '../bevel.js';
 import { POSTERS, postersFor } from '../shipparts/cabin/print.js';
 import { hangs } from './blueprint.js';
 
@@ -57,7 +59,7 @@ export function furnishRoom(q, bp, room, ctx) {
   F({ q, bp, room, ctx, done, items, f, at, A: accents(ctx.look) });
   return done;
 }
-const ROOMS = { galley: furnishGalley, bunks: furnishBunks, science: furnishScience, airlock: furnishAirlock, washroom: furnishWash };
+const ROOMS = { galley: furnishGalley, bunks: furnishBunks, science: furnishScience, airlock: furnishAirlock, washroom: furnishWash, engineering: furnishEngineering };
 
 // ── the galley ──────────────────────────────────────────────────────────────────────────────────────────────────
 function furnishGalley({ room, ctx, done, items, f, at, A }) {
@@ -293,6 +295,58 @@ function furnishWash({ room, ctx, done, items, f, at, A }) {
   const fields = extra.slice();
   hangPosters(ctx, room, items, at, postersFor('washroom'), 'wash: posters', extra);
   wallFields(ctx, room, items, at, { tag: 'wash: wall fields', touch: true, also: asItems(fields) });
+}
+
+// ── engineering ─────────────────────────────────────────────────────────────────────────────────────────────────
+// The machines on their walls: the one named a reactor (or the first, if none is) the reactor, the others the drive and its
+// pumps, each with its end against a wall across (its pipes go into it); the console the engineering station; the lockers
+// tool lockers (half a metre each, labelled TOOLS, the first with a poster); the racks gear shelves. Along the wall most of
+// the machines back onto, two copper pipes, wall to wall, high, and under them the poster about parallel pipes.
+function furnishEngineering({ room, ctx, done, items, f, at, A }) {
+  const extra = [], posters = postersFor('engineering'), ceiling = typeof room.ceiling === 'number' ? room.ceiling : 2.5;
+  const machines = items.filter((it) => it.kind === 'machine').map((it) => ({ it, W: wallOf(it, room) })).filter((M) => M.W);
+  const named = machines.find((M) => /reactor/i.test(M.it.name || '')) || machines[0], backs = [];
+  for (const M of machines) {
+    const { it, W } = M, mid = (W.lo + W.hi) / 2, len = W.hi - W.lo, [R0, R1] = W.axis === 'z' ? [room.rect[0], room.rect[2]] : [room.rect[1], room.rect[3]];
+    const atWall = (a) => Math.abs(a - R0) < EPS || Math.abs(a - R1) < EPS, back = atWall(W.lo) ? Math.sign(localX(W, mid, W.lo)) : atWall(W.hi) ? Math.sign(localX(W, mid, W.hi)) : 0;
+    if (back) backs.push(W.axis === 'z' ? { axis: 'x', v: atWall(W.lo) ? W.lo : W.hi } : { axis: 'z', v: atWall(W.lo) ? W.lo : W.hi });
+    if (M === named) ctx.put('engineering: reactor', part(reactorCore, { len, depth: W.depth, h: +it.h || 1.8, back, ceiling, trim: A.trim }), at(W, mid));
+    else ctx.put('engineering: drive and pumps', part(drivePumps, { len, depth: W.depth, h: +it.h || 1.8, back: back || -1, trim: A.trim }), at(W, mid));
+    done.add(it.id);
+  }
+  let posterAt = 0;
+  for (const it of items) {
+    if (done.has(it.id)) continue;
+    const W = wallOf(it, room); if (!W) continue;
+    const mid = (W.lo + W.hi) / 2, len = W.hi - W.lo;
+    if (it.kind === 'console') { ctx.put('engineering: station', part(engStation, { len, depth: W.depth, h: +it.h || 1.2, handle: A.handle, trim: A.trim }), at(W, mid)); done.add(it.id); }
+    else if (it.kind === 'locker' && !hangs(it)) {
+      const n = Math.max(1, Math.round(len / 0.5)), uw = len / n;
+      for (let k = 0; k < n; k++) { const lx = -len / 2 + uw * (k + 0.5), P = posters[0] != null && posterAt === 0 && k === 0 ? posters[0] : null; if (P != null) posterAt++; ctx.put('engineering: tool lockers', part(crewLocker, { w: uw, depth: W.depth, h: +it.h || 2, label: 'label:tools', poster: P, handle: A.handle, trim: A.trim }), { at: toWorld(W, mid, [lx, f, 0]), rot: [0, rotOf(W), 0] }); }
+      done.add(it.id);
+    } else if (it.kind === 'rack') { ctx.put('engineering: gear shelves', part(gearShelves, { len, depth: W.depth, h: +it.h || 1.8, trim: A.trim }), at(W, mid)); done.add(it.id); }
+  }
+  // the parallel pipes, along the wall the machines back onto most, and their poster under them
+  const count = new Map(); for (const B of backs) { const k = B.axis + B.v; count.set(k, [B, (count.get(k)?.[1] || 0) + 1]); }
+  const PB = [...count.values()].sort((a, b) => b[1] - a[1])[0]?.[0], left = posters.slice(posterAt);
+  if (PB) {
+    const W = roomWalls(room).find((w) => w.axis === PB.axis && Math.abs(w.v - PB.v) < EPS), y = Math.min(ceiling - 0.38, 2.0);
+    ctx.put('engineering: pipes', part(parallelPipes, { len: +(W.hi - W.lo - 2 * FACE).toFixed(3), y }), at(W, (W.lo + W.hi) / 2));
+    extra.push({ axis: W.axis, v: W.v, side: W.side, lo: W.lo, hi: W.hi, y0: y - 0.08, y1: y + 0.26 });
+    if (left.length) {
+      const P = POSTERS[left[0]], py = y - 0.12 - P.h / 2 - 0.05, S = clearStretches(ctx, room, items, W, py - P.h / 2 - 0.03, py + P.h / 2 + 0.03, []).filter(([a, b]) => b - a >= P.w + 0.06).sort((a, b) => (b[1] - b[0]) - (a[1] - a[0]))[0];
+      if (S) { ctx.put('engineering: posters', part(poster, { i: left[0], y: +py.toFixed(3) }), at(W, (S[0] + S[1]) / 2)); left.shift(); }
+    }
+  }
+  if (left.length) hangPosters(ctx, room, items, at, left, 'engineering: posters', extra.slice());
+  wallFields(ctx, room, items, at, { tag: 'engineering: wall fields', touch: true, also: asItems(extra) });
+}
+// two copper pipes along a wall, parallel, on brackets (a wall fitting: o.len, o.y the lower one's middle)
+function parallelPipes(p, o) {
+  const len = o.len, y = o.y, z = FACE + 0.07;
+  for (const yy of [y, y + 0.17]) pipe(p, COPPER, [-len / 2, yy, z], [len / 2, yy, z], 0.042, { flange0: 0.25, flange1: 0.25 });
+  for (let x = -len / 2 + 0.3; x < len / 2 - 0.1; x += 0.6) add(p, 'black', solid(shape(0.05, 0.3, 0.012, x, y + 0.085), z + 0.03 - FACE, { edge: 0.006, back: false }), [0, 0, FACE]);
+  return p;
 }
 
 // hazard hatching at the ship's own door, where it opens from this room: a band on the floor inside its step, and up the

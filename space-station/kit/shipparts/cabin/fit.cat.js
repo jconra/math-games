@@ -12,6 +12,7 @@ import { bunkStack, crewLocker } from './bunks.js';
 import { labBench, microscope, glovebox, vialRack, tablet, sampleCase, surveyTable, labStool } from './lab.js';
 import { suitLockers, pressurePanel, wallBench } from './airlock.js';
 import { showerStall, toiletBasin } from './washroom.js';
+import { reactorCore, drivePumps, engStation, gearShelves } from './engroom.js';
 import { starScreen } from './bits.js';
 import { placeInto, part } from '../place.js';
 
@@ -49,6 +50,11 @@ export const PRESETS = {
   cabinAirlockBench: { 'fold-down': {}, 'navy cushion': { leather: '#22355e' } },
   cabinShowerStall: { 'corner, one end open': { ends: [false, true] }, 'both ends open': { ends: [true, true] } },
   cabinToiletBasin: { 'toilet and basin': {}, 'toilet alone': { len: 0.5 } },
+  cabinReactor2: { 'in its corner': { back: 1 }, 'free of the walls': { back: 0 } },
+  cabinDrivePumps: { 'drum and two pumps': { back: -1 } },
+  cabinEngStation: { '1 m': {}, '1.5 m': { len: 1.5 } },
+  cabinToolLockers: { 'two, a poster': { poster: 9 } },
+  cabinGearShelves: { '1 m': {}, '1.5 m': { len: 1.5 } },
 };
 const entry = (id, name, mount, foot, fn) => ({ name, group: 'Ship cabin', at: 'free', mount, variants: Object.keys(PRESETS[id]), foot, build: (p, v) => fn(p, PRESETS[id][v] ?? {}) });
 export const CABIN_FIT = {
@@ -83,4 +89,9 @@ export const CABIN_FIT = {
   cabinAirlockBench: entry('cabinAirlockBench', 'Airlock: bench', 'wall', [0.45, 0.9, 0.34], wallBench),
   cabinShowerStall: entry('cabinShowerStall', 'Washroom: shower', 'wall', [0.75, 2.0, 0.75], showerStall),
   cabinToiletBasin: entry('cabinToiletBasin', 'Washroom: toilet and basin', 'wall', [0.75, 1.7, 0.6], toiletBasin),
+  cabinReactor2: entry('cabinReactor2', 'Engineering: reactor, glowing core', 'wall', [1.5, 2.5, 1.25], reactorCore),
+  cabinDrivePumps: entry('cabinDrivePumps', 'Engineering: drive and pumps', 'wall', [1.5, 1.8, 1.25], drivePumps),
+  cabinEngStation: entry('cabinEngStation', 'Engineering: station', 'wall', [1.0, 1.5, 0.5], engStation),
+  cabinToolLockers: entry('cabinToolLockers', 'Engineering: tool lockers', 'wall', [1.0, 2.0, 0.5], (p, o) => { for (const [x, P] of [[-0.25, o.poster], [0.25, null]]) placeInto(p, part(crewLocker, { label: 'label:tools', poster: P }), { at: [x, 0, 0] }); return p; }),
+  cabinGearShelves: entry('cabinGearShelves', 'Engineering: gear shelves', 'wall', [1.0, 1.8, 0.5], gearShelves),
 };
