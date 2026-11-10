@@ -20,23 +20,27 @@
 //     o.plant   'ring'   a rotary garden: five potted plants on a wheel's rim, growing in toward its middle
 //               'climb'  climbers out of a planter, winding up in front of a honeycomb frame
 //               'herbs'  herbs in two troughs, one above the other
-//               'carousel'  REAL plants, not a picture (the game's maker, 2026-11-10: "I think it would be cool if the
-//                        plants were 3d and it looked like the leaves had some depth"): five potted plants on a
-//                        turntable with an upright axle, in a chamber behind a lightly frosted pane. The near ones
-//                        cross the glass one way, the far ones cross back behind them, smaller and hazier; all upright;
-//                        walking past, the near ones slide across the far ones. Its lamp is a bar across the top.
+//               'drum'   REAL plants, not a picture: a hydroponic drum (the game's maker, 2026-11-10: "I like them
+//                        rotating right next to the glass ... a thin cylinder with actual green models in there ...
+//                        make it look like hydroponics, not clay buckets"). A white tube turns just behind a lightly
+//                        frosted pane, 25 plants growing out of grey net cups all round it (lettuce, basil, chives, a
+//                        little vine with red fruit, frilly lettuce), in a bright white-green chamber. The near leaves
+//                        pass the glass sharp; the far side of the drum is paler and softer. Walking past, the near
+//                        leaves slide across the far ones. o.axis: 'across' (the glass: its tops come over toward you;
+//                        the one picked) or 'up' (a tower). o.sway: how far its leaves sway (0: still; 1 a little).
+//                        Its lamp is a bar across the top.
 //               (a list gives each pod of a row its own)
 //     o.lamp    where the grow lamp is: 'top' (a strip along the top) or 'rim' (a line of light round the rim; not for
-//               a carousel). The plants are brightest by it and darker away from it (o.shade: how lit the furthest
-//               are: 0.22 a ring, 0.3 climbers, 0.5 herbs, 0.2 a carousel); it never turns.
+//               a drum). The plants are brightest by it and darker away from it (o.shade: how lit the furthest
+//               are: 0.22 a ring, 0.3 climbers, 0.5 herbs, 0.4 a drum); it never turns.
 //     o.tint    the lamp's colour: 'pink' (pink-white) or 'warm' (warm white), or a number between (0 warm .. 1 pink);
 //               o.lampGlow its own brightness (1)
 //     o.move    true (the planting's own: a ring TURNS slowly, its plants hanging as they go round and brightening as
-//               they pass the lamp; a carousel's turntable goes round; the others' leaves sway a little), 'turn',
+//               they pass the lamp; a drum turns; the others' leaves sway a little), 'turn',
 //               'stir', or false (still). The glass, its grain and the frame never move; the movement is worked out on
 //               the graphics card from the kit's one clock (materials.js U.time): nothing is done for it each frame.
-//     o.turn    a turning pod's seconds for one turn (GROW.turn: 60); negative turns it the other way (a carousel's
-//               near plants cross from left to right, its far ones from right to left; negative: the other way)
+//     o.turn    a turning pod's seconds for one turn (GROW.turn: 60); negative turns it the other way (an across
+//               drum's near side goes down, its tops coming over toward you; an upright one's near side goes right)
 //     o.y       the height of its middle (1.33)
 //     o.glow    this pod's own brightness (1), times GROW.glow (kit/growglass.js: THE number that sets how bright every
 //               pod's glass is)
@@ -48,16 +52,17 @@
 //     o.trim    the frame's surface (black: the satin charcoal of the ships' ribs and rims), o.clamp the clamps' (the
 //               mess's gunmetal: a named surface the cabin's looks would turn into the frame's own black)
 //     o.seed    which painting of its planting (1): each different one is another picture on the pods' sheet (a
-//               carousel: its plants grown another way: other greens, other leaves, turned another way on the table)
+//               drum: its plants grown another way: other greens, other leaves, turned another way in their cups)
 //     o.deep    how deep the pod looks, times the usual (1)
 //   growPodSize(o)   [w, h, d]: the whole fitting's size on the wall (frames and back plate), and how far it stands out
 // COST (counted in a built room). One pod: the eight-sided frame 48 triangles, a round one 144; each clamp 38; the glass
 // 6 (round: 22); a back plate 22. So 206 an eight-sided pod, 318 a round one (54 and 166 with no clamps; 340 a round one
 // on a plate), 640 a row of three eight-sided; a plate's trim 22 more. The frame, clamps and plate are the cabin's
 // 'solid' material (no new draw). A picture pod's glass is the 'pod' material: every one in a room's batch is ONE draw,
-// with one texture (512 x 512 for three kinds of pod). A CAROUSEL (real plants) is 1,542 triangles with its frame and
-// clamps (its inside 1,336: chamber 10, axle 12, lamp 12, turntable 60, plants about 1,240): its inside is the 'podIn'
-// material and its pane 'podPane', so all the carousels in a batch are TWO draws, no texture.
+// with one texture (512 x 512 for three kinds of pod). A DRUM (real plants) is 3,392 triangles with its frame and
+// clamps (its inside 3,186: chamber 10, lamp 12, tube 24, 25 net cups 18 each, plants about 2,690, so about 110 a
+// plant): its inside is the 'podIn' material and its pane 'podPane', so all the drums in a batch are TWO draws, no
+// texture.
 // THE MATERIALS must be in the kit's list: three lines in kit/materials.js (kit/growglass.js gives them).
 import * as THREE from 'three';
 import { shape, relief, solid, RINGS, add } from '../../bevel.js';
@@ -75,7 +80,8 @@ const RINGS_RIM = [{ inset: 0, depth: RIM.proud, bevel: RIM.out }, { inset: RIM.
 // a back plate: how far it stands out (clear of the wall's own raised panels, which would show through a thinner one),
 // how far it shows round the frames
 const PLATE = 0.013, PLATE_EDGE = 0.035, PLATE_TRIM = 0.008;   // (PLATE_TRIM: how wide a trim shows round a plate)
-const SHADE = { ring: 0.22, climb: 0.3, herbs: 0.5, carousel: 0.2 };   // how lit the plants furthest from the lamp are, by planting
+const SHADE = { ring: 0.22, climb: 0.3, herbs: 0.5, drum: 0.4 };   // how lit the plants furthest from the lamp are, by planting
+const AXIS = 'across';                      // a drum's axle, unless o.axis says: 'across' the glass or 'up'
 const SEG = 24;                             // a round pod's sides
 const LIGHT = [0.72, 1.0, 0.74];            // the light a pod throws (not so green or so white that a cabin's look re-tones it)
 const rand = (seed) => { let a = (Math.imul(seed | 0, 2654435761) ^ 0x9e3779b9) >>> 0; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
@@ -111,94 +117,85 @@ function glassPlate(round, hs, over) {
 }
 const fill = (g, name, val) => { const n = g.attributes.position.count, a = new Float32Array(n * 4); for (let i = 0; i < n; i++) a.set(val, i * 4); g.setAttribute(name, new THREE.BufferAttribute(a, 4)); };
 
-// ── a carousel's inside: REAL plants on a turntable (kit/growglass.js podInside draws it; INSIDE: its sizes) ─────────
-// In the pod's own frame: x right, y up, z out of the glass, the glass's middle 0. Five plants in clay pots, no two
-// alike (a tall leafy stem, a broad-leaved head, a tuft of thin blades, a two-stemmed vine with red fruit, a low round
-// bush), each leaf a folded, drooping blade of 12 triangles in one of several greens; about 200 to 330 triangles a plant.
+// ── a drum's inside: REAL plants on a turning hydroponic tube (kit/growglass.js podInside draws it; INSIDE: sizes) ──
+// In the pod's own frame: x right, y up, z out of the glass, the glass's middle 0. A white tube turns just behind the
+// glass, its axle across the glass or upright; dark net cups sit in rings round it, and out of each grows a plant, by
+// turns: a lettuce, a basil, a tuft of chives, a little vine with red fruit, a frilly lettuce. Each leaf is a folded,
+// drooping blade of 12 triangles in one of several greens (about 60 to 110 triangles a plant, 20 plants). Behind it a
+// pale chamber and the lamp bar across the top.
 const lin = (hex) => { const n = parseInt(hex.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255].map((c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }); };
 const GREENS = ['#3f7a2a', '#4d8c34', '#5f9e3c', '#6aa84a', '#2f6b2e', '#7ab650', '#3a6e3a', '#86b95a'].map(lin);
 const RIB = lin('#d2e6a0'), STEM = lin('#5d7f35');
-function insideOf(hs, R) {
-  // (u: the unit the sizes are in: the glass's half-size for the chamber, a little more for the plants)
+const RINGS_AT = [-1.0, -0.5, 0, 0.5, 1.0], CUPS = 5;   // (where the rings of cups are along the tube, half-sizes; cups a ring)
+function insideOf(hs, R, across) {
+  // (u: the unit the sizes are in: the glass's half-size for the chamber and the tube, more for the plants)
   const I = INSIDE, P = [], L = [], C = [], ix = [];
   let u = hs;
-  // (a corner: placed by T, marked with what it is: 0 still, 1 turning, 2 the lamp)
+  // (a corner: placed by T, marked with what it is: 0 still, 1 turning upright, 2 the lamp, 3 turning across; a leaf's
+  // corners carry how far out along it they are)
   let T = (q) => q, kind = 0;
   const v = (q, col, leafy = 0) => { const w = T(q); P.push(w[0], w[1], w[2]); L.push(w[0], w[1], w[2], kind); C.push(col[0], col[1], col[2], leafy); return P.length / 3 - 1; };
   const tri = (a, b, c) => ix.push(a, b, c), quad = (a, b, c, d) => { tri(a, b, c); tri(a, c, d); };
   const box = (x0, x1, y0, y1, z0, z1, col) => { const c = [[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0], [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]].map((q) => v(q, col)); for (const [a, b, cc, d] of [[0, 1, 2, 3], [5, 4, 7, 6], [4, 0, 3, 7], [1, 5, 6, 2], [3, 2, 6, 7], [4, 5, 1, 0]]) quad(c[a], c[b], c[cc], c[d]); };
   const prism = (pts, r, col, sides = 3) => { let prev = null; for (const q of pts) { const ring = []; for (let k = 0; k < sides; k++) ring.push(v([q[0] + r * Math.cos(k * TAU / sides), q[1], q[2] + r * Math.sin(k * TAU / sides)], col)); if (prev) for (let k = 0; k < sides; k++) quad(prev[k], prev[(k + 1) % sides], ring[(k + 1) % sides], ring[k]); prev = ring; } };
-  const green = (lift = 0) => { const g = GREENS[Math.floor(R() * GREENS.length)], k = 0.85 + 0.3 * R() + lift; return g.map((c) => Math.min(1, c * k)); };
-  // a leaf from its stem end b, pointing along yaw, `pitch` above level, len x wid, its tip drooping, folded along its rib
+  const green = (lift = 0) => { const g = GREENS[Math.floor(R() * GREENS.length)], k = 0.9 + 0.3 * R() + lift; return g.map((c) => Math.min(1, c * k)); };
+  // a leaf from its stem end b, pointing along yaw, `pitch` above level (level: across the plant's own up), len x wid,
+  // its tip drooping, folded along its rib
   const leaf = (b, yaw, pitch, len, wid, droop, col, fold = 0.25) => {
     const dx = Math.sin(yaw), dz = Math.cos(yaw), cp = Math.cos(pitch), sp = Math.sin(pitch), rib = col.map((c, i) => c + (RIB[i] - c) * 0.18);
     const mid = (t) => [b[0] + dx * len * t * cp, b[1] + len * t * sp - droop * len * t * t, b[2] + dz * len * t * cp];
-    const M = [0, 0.25, 0.5, 0.75, 1].map((t) => v(mid(t), rib, 1));
-    const side = (sg) => [0.25, 0.5, 0.75].map((t, k) => { const m = mid(t), w = wid * [0.8, 1.0, 0.68][k] * 0.5; return v([m[0] + dz * w * sg, m[1] - fold * w, m[2] - dx * w * sg], col, 1); });
+    const M = [0, 0.25, 0.5, 0.75, 1].map((t) => v(mid(t), rib, 0.05 + 0.95 * t));
+    const side = (sg) => [0.25, 0.5, 0.75].map((t, k) => { const m = mid(t), w = wid * [0.8, 1.0, 0.68][k] * 0.5; return v([m[0] + dz * w * sg, m[1] - fold * w, m[2] - dx * w * sg], col, 0.05 + 0.95 * t); });
     for (const S of [side(1), side(-1)]) { tri(M[0], S[0], M[1]); tri(M[1], S[0], S[1]); tri(M[1], S[1], M[2]); tri(M[2], S[1], S[2]); tri(M[2], S[2], M[3]); tri(M[3], S[2], M[4]); }
   };
   const fruit = (c, r, col) => { const q = [[r, 0, 0], [-r, 0, 0], [0, r, 0], [0, -r, 0], [0, 0, r], [0, 0, -r]].map((d) => v([c[0] + d[0], c[1] + d[1], c[2] + d[2]], col)); for (const [a, b] of [[0, 4], [4, 1], [1, 5], [5, 0]]) { tri(q[a], q[b], q[2]); tri(q[b], q[a], q[3]); } };
-  // a clay pot standing on y = 0, soil in its mouth: gives the soil's height
-  const pot = () => {
-    const rb = 0.1 * u, rt = 0.135 * u, h = 0.19 * u, clay = lin('#7f5a40'), clay2 = lin('#9c7553'), soil = lin('#2b1e14'), a = [], b = [], s = [];
-    for (let k = 0; k < 8; k++) { const t = k / 8 * TAU, c = Math.cos(t), sn = Math.sin(t); a.push(v([rb * c, 0, rb * sn], clay)); b.push(v([rt * c, h, rt * sn], clay2)); s.push(v([rt * 0.92 * c, h * 0.9, rt * 0.92 * sn], soil)); }
-    for (let k = 0; k < 8; k++) quad(a[k], a[(k + 1) % 8], b[(k + 1) % 8], b[k]);
-    const m = v([0, h * 0.9, 0], soil); for (let k = 0; k < 8; k++) tri(m, s[k], s[(k + 1) % 8]);
-    return h * 0.9;
-  };
+  // a net cup at the plant's foot, sunk in the tube, its mouth at y = 0
+  const cup = () => { const a = [], b = [], dark = lin('#4f5853'), rim = lin('#7d8781'); for (let k = 0; k < 6; k++) { const t = k / 6 * TAU, c = Math.cos(t), s = Math.sin(t); a.push(v([0.05 * u * c, -0.09 * u, 0.05 * u * s], dark)); b.push(v([0.07 * u * c, 0.005 * u, 0.07 * u * s], rim)); } for (let k = 0; k < 6; k++) quad(a[k], a[(k + 1) % 6], b[(k + 1) % 6], b[k]); const m = v([0, -0.02 * u, 0], dark); for (let k = 0; k < 6; k++) tri(m, b[k], b[(k + 1) % 6]); };
   const PLANT = [
-    // a tall leafy stem, its leaves turning round it up its length, a small tuft at the top
-    () => { const s0 = pot(), lean = (R() - 0.5) * 0.15, H = 0.95 * u, at = (y) => [lean * (y - s0), y, 0];
-      prism([0, 0.25, 0.5, 0.75, 1].map((t) => at(s0 + t * (H - s0))), 0.012 * u, STEM);
-      let yaw = R() * TAU; for (let k = 0; k < 10; k++) { const t = k / 9, l = (0.32 - 0.14 * t) * u; yaw += 2.4; leaf(at(s0 + 0.08 * u + t * (H - s0 - 0.1 * u)), yaw, 0.35 + 0.4 * t, l, l * 0.45, 0.3, green()); }
-      for (let k = 0; k < 3; k++) leaf(at(H), yaw + k * 2.1, 1.1, 0.12 * u, 0.06 * u, 0.1, green(0.15)); },
-    // a broad-leaved head: the outer leaves low and long, the young middle ones upright and paler
-    () => { const s0 = pot(); let yaw = R() * TAU;
-      for (let k = 0; k < 14; k++) { const t = k / 13, l = (0.46 - 0.16 * t) * u; yaw += 2.4; leaf([0, s0, 0], yaw, 0.45 + 0.7 * t, l, l * 0.62, 0.45 * (1 - t) + 0.1, green(0.12 * t), 0.35); } },
-    // a tuft of thin blades, arching
-    () => { const s0 = pot(); for (let k = 0; k < 16; k++) { const yaw = R() * TAU, r = 0.05 * u * R(); leaf([r * Math.sin(yaw), s0, r * Math.cos(yaw)], yaw, 1.2 + 0.28 * R(), (0.55 + 0.3 * R()) * u, 0.05 * u, 0.25 + 0.2 * R(), green(), 0.1); } },
-    // a vine of two stems leaning apart, red fruit hanging under every other leaf
-    () => { const s0 = pot(), red = lin('#c8371f');
-      for (const sg of [-1, 1]) {
-        const H = (0.7 + 0.1 * R()) * u, at = (y) => [sg * 0.22 * (y - s0) + 0.02 * u * Math.sin(y / u * 9), y, 0];
-        prism([0, 0.25, 0.5, 0.75, 1].map((t) => at(s0 + t * (H - s0))), 0.01 * u, STEM);
-        let yaw = R() * TAU;
-        for (let k = 0; k < 7; k++) {
-          const t = k / 6, l = (0.24 - 0.09 * t) * u, p0 = at(s0 + 0.08 * u + t * (H - s0 - 0.08 * u)); yaw += 2.4;
-          leaf(p0, yaw, 0.3 + 0.3 * t, l, l * 0.55, 0.25, green());
-          if (k % 2) fruit([p0[0] - Math.sin(yaw) * 0.04 * u, p0[1] - 0.035 * u, p0[2] - Math.cos(yaw) * 0.04 * u], (0.045 + 0.012 * R()) * u, red);
-        }
-      } },
-    // a low round bush of small leaves
-    () => { const s0 = pot(), c = [0, s0 + 0.16 * u, 0]; prism([[0, s0, 0], c], 0.014 * u, STEM);
-      for (let k = 0; k < 26; k++) { const yaw = R() * TAU, el = Math.acos(1 - 1.15 * R()), r0 = 0.12 * u, l = (0.13 + 0.06 * R()) * u; leaf([c[0] + Math.sin(el) * Math.sin(yaw) * r0, c[1] + Math.cos(el) * r0 * 0.8, c[2] + Math.sin(el) * Math.cos(yaw) * r0], yaw, PI / 2 - el, l, l * 0.75, 0.15, green(0.08)); } },
+    // a lettuce: a loose head of broad leaves, the outer ones low, the young middle ones upright and paler
+    () => { let yaw = R() * TAU; for (let k = 0; k < 9; k++) { const t = k / 8, l = (0.4 - 0.14 * t) * u; yaw += 2.4; leaf([0, 0, 0], yaw, 0.35 + 0.85 * t, l, l * 0.68, 0.4 * (1 - t) + 0.08, green(0.15 * t), 0.4); } },
+    // a basil: a short stem, its leaves in pairs
+    () => { const H = 0.34 * u; prism([[0, 0, 0], [0, H / 2, 0], [0, H, 0]], 0.012 * u, STEM); let yaw = R() * TAU;
+      for (let k = 0; k < 3; k++) { const y = (0.12 + 0.13 * k) * u, l = (0.2 - 0.03 * k) * u; yaw += PI / 2; for (const sg of [0, PI]) leaf([0, y, 0], yaw + sg, 0.45, l, l * 0.6, 0.2, green(0.1)); }
+      for (const sg of [0, PI]) leaf([0, H, 0], yaw + PI / 2 + sg, 1.0, 0.1 * u, 0.06 * u, 0.05, green(0.2)); },
+    // chives: a tuft of thin blades, arching
+    () => { for (let k = 0; k < 8; k++) { const yaw = R() * TAU, r = 0.03 * u * R(); leaf([r * Math.sin(yaw), 0, r * Math.cos(yaw)], yaw, 1.2 + 0.3 * R(), (0.42 + 0.2 * R()) * u, 0.045 * u, 0.22 + 0.15 * R(), green(), 0.1); } },
+    // a little vine arching over, three-part leaves along it, red fruit hanging from its end
+    () => { const red = lin('#c8371f'), sg = R() < 0.5 ? 1 : -1, at = (t) => [sg * 0.26 * u * t * t, 0.4 * u * Math.sin(t * 1.9), 0.04 * u * t];
+      prism([0, 0.33, 0.66, 1].map(at), 0.01 * u, STEM);
+      for (const t of [0.35, 0.7]) { const p0 = at(t); for (let j = 0; j < 3; j++) { const l = 0.15 * u; leaf(p0, j * 2.1 + t * 3, 0.5, l, l * 0.7, 0.2, green(0.05)); } }
+      const e = at(1); fruit([e[0], e[1] - 0.06 * u, e[2]], 0.05 * u, red); fruit([e[0] - sg * 0.07 * u, e[1] - 0.1 * u, e[2] + 0.02 * u], 0.042 * u, red); },
+    // a frilly lettuce: many narrow leaves, paler
+    () => { let yaw = R() * TAU; for (let k = 0; k < 10; k++) { const t = k / 9, l = (0.34 - 0.1 * t) * u; yaw += 2.4; leaf([0, 0, 0], yaw, 0.5 + 0.8 * t, l, l * 0.45, 0.3, green(0.22), 0.45); } },
   ];
-  // the chamber (back, sides, floor, ceiling), its axle and the lamp bar: still
-  u = hs;
-  const X = I.wide * u, Y0 = I.floor * u, Y1 = I.top * u, Z0 = -I.back * u, Z1 = -0.002, wall = lin('#1e2823'), wall2 = lin('#151c19');
+  // the chamber (pale: the grow light fills it) and the lamp bar: still
+  const X = I.wide * u, Y0 = I.floor * u, Y1 = I.top * u, Z0 = -I.back * u, Z1 = -0.002, wall = lin('#55625a'), wall2 = lin('#47534b');
   quad(v([-X, Y0, Z0], wall2), v([X, Y0, Z0], wall2), v([X, Y1, Z0], wall), v([-X, Y1, Z0], wall));
   quad(v([-X, Y0, Z1], wall2), v([-X, Y0, Z0], wall2), v([-X, Y1, Z0], wall), v([-X, Y1, Z1], wall));
   quad(v([X, Y0, Z0], wall2), v([X, Y0, Z1], wall2), v([X, Y1, Z1], wall), v([X, Y1, Z0], wall));
   quad(v([-X, Y0, Z1], wall2), v([X, Y0, Z1], wall2), v([X, Y0, Z0], wall2), v([-X, Y0, Z0], wall2));
   quad(v([-X, Y1, Z0], wall), v([X, Y1, Z0], wall), v([X, Y1, Z1], wall), v([-X, Y1, Z1], wall));
-  const za = -I.axle * u, ty = I.tableY * u;
-  prism([[0, ty, za], [0, Y1, za]], 0.028 * u, lin('#4d544f'), 6);
   kind = 2; const [lx, ly, lz] = I.lamp; box(-lx * u, lx * u, (ly - 0.03) * u, (ly + 0.03) * u, (lz - 0.035) * u, (lz + 0.035) * u, [1, 1, 1]);
-  // the turntable (its top in two shades by turns, so its turning shows; a pale rim) and the plants on it: turning
-  kind = 1;
-  const TR = I.table * u, th = 0.06 * u, SEG = 20, top = [lin('#383e3a'), lin('#2c322e')], rim = lin('#5d635e');
-  for (let i = 0; i < SEG; i++) {
-    const a0 = i / SEG * TAU, a1 = (i + 1) / SEG * TAU, c = top[i % 2], p0 = [TR * Math.sin(a0), ty, za + TR * Math.cos(a0)], p1 = [TR * Math.sin(a1), ty, za + TR * Math.cos(a1)];
-    tri(v([0, ty, za], c), v(p0, c), v(p1, c));
-    quad(v(p0, rim), v(p1, rim), v([p1[0], ty - th, p1[2]], rim), v([p0[0], ty - th, p0[2]], rim));
-  }
-  const rr = I.ring * u;
-  u = 1.35 * hs;   // (the plants: a little bigger than the chamber's unit)
-  PLANT.forEach((build, i) => {
-    const a = i / PLANT.length * TAU + 0.14 * Math.sin(i * 2.4 + 1), px = rr * Math.sin(a), pz = za + rr * Math.cos(a), yaw = R() * TAU, cy = Math.cos(yaw), sy = Math.sin(yaw);
-    T = (q) => [px + q[0] * cy + q[2] * sy, ty + q[1], pz - q[0] * sy + q[2] * cy];
-    build();
+  // the tube (white, a faint stripe now and then so its turning shows) and its plants: turning
+  kind = across ? 3 : 1;
+  const za = -I.axle * u, rc = I.core * u, N = 12, end = (across ? I.wide : I.top) * u - 0.004, white = [lin('#dde3dd'), lin('#c9d1ca')];
+  const onTube = (s, a, r) => (across ? [s, r * Math.cos(a), za + r * Math.sin(a)] : [r * Math.sin(a), s, za + r * Math.cos(a)]);
+  for (let k = 0; k < N; k++) { const a0 = k / N * TAU, a1 = (k + 1) / N * TAU, c = white[k % 4 === 0 ? 1 : 0]; quad(v(onTube(-end, a0, rc), c), v(onTube(end, a0, rc), c), v(onTube(end, a1, rc), c), v(onTube(-end, a1, rc), c)); }
+  const tu = u; u = 1.55 * hs;   // (the plants, bigger: their leaves cover the tube)
+  RINGS_AT.forEach((s0, ring) => {
+    for (let j = 0; j < CUPS; j++) {
+      const a = (j + (ring % 2) * 0.5) / CUPS * TAU + (R() - 0.5) * 0.25, s = s0 * tu + (R() - 0.5) * 0.08 * tu;
+      const rd = across ? [0, Math.cos(a), Math.sin(a)] : [Math.sin(a), 0, Math.cos(a)], base = onTube(s, a, rc + 0.01 * tu);
+      // (it grows straight out of an across tube; out and up from an upright one, as a tower garden's do)
+      let d = across ? rd : [rd[0] * 0.7, 0.72, rd[2] * 0.7]; const dl = Math.hypot(...d); d = d.map((x) => x / dl);
+      const ax = across ? [1, 0, 0] : [0, 1, 0], c1 = [ax[1] * d[2] - ax[2] * d[1], ax[2] * d[0] - ax[0] * d[2], ax[0] * d[1] - ax[1] * d[0]], cl = Math.hypot(...c1), e1 = c1.map((x) => x / cl);
+      const e2 = [e1[1] * d[2] - e1[2] * d[1], e1[2] * d[0] - e1[0] * d[2], e1[0] * d[1] - e1[1] * d[0]], ph = R() * TAU, cp = Math.cos(ph), sp = Math.sin(ph);
+      const f1 = e1.map((x, i) => x * cp + e2[i] * sp), f2 = e1.map((x, i) => -x * sp + e2[i] * cp);
+      T = (q) => [0, 1, 2].map((i) => base[i] + f1[i] * q[0] + d[i] * q[1] + f2[i] * q[2]);
+      cup(); PLANT[(ring * 2 + j) % PLANT.length]();
+    }
   });
+  T = (q) => q;
   // (aLocal and aCol go on after the piece takes the geometry: a piece keeps only position, normal and uv)
   const g = new THREE.BufferGeometry(), nor = new Float32Array(P.length); for (let i = 2; i < nor.length; i += 3) nor[i] = 1;
   g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
@@ -232,17 +229,17 @@ export function growPod(p, o = {}) {
       add(p, o.clamp ?? GUN, solid(shape(0.05, 0.04, 0.009), RIM.proud + 0.008, { edge: 0.005, back: false }), [cx + rc * Math.cos(a), y + rc * Math.sin(a), z0], [0, 0, a]);
     }
     const tint = typeof o.tint === 'number' ? o.tint : (o.tint ?? 'pink') === 'warm' ? 0 : 1, glassAt = [cx, y, z0 + RIM.glass - 0.0005];
-    if (plant === 'carousel') {
+    if (plant === 'drum') {
       // REAL plants: the chamber and all in it (one draw for all the pods' insides), the frosted pane in front (another)
-      if (!MAT_KEYS.includes('podIn') || !MAT_KEYS.includes('podPane')) throw new Error('kit: a carousel grow pod needs the \'podIn\' and \'podPane\' materials in kit/materials.js (the lines to add are at the top of kit/growglass.js)');
-      const [geo, more] = insideOf(hs, rand((o.seed ?? 1) * 7919 + k * 131)), gi = add(p, null, geo, glassAt, null, 'podIn');
+      if (!MAT_KEYS.includes('podIn') || !MAT_KEYS.includes('podPane')) throw new Error('kit: a drum grow pod needs the \'podIn\' and \'podPane\' materials in kit/materials.js (the lines to add are at the top of kit/growglass.js)');
+      const [geo, more] = insideOf(hs, rand((o.seed ?? 1) * 7919 + k * 131), (o.axis ?? AXIS) === 'across'), gi = add(p, null, geo, glassAt, null, 'podIn');
       for (const [name, a] of Object.entries(more)) gi.setAttribute(name, a);
       fill(gi, 'aPod', [hs, round ? 1 : 0, move === false || !turn ? 0 : TAU / turn, R() * TAU]);
-      fill(gi, 'aLamp', [tint, o.lampGlow ?? 1, o.glow ?? 1, o.shade ?? SHADE.carousel]);
+      fill(gi, 'aLamp', [tint, o.sway ?? 0, o.glow ?? 1, o.shade ?? SHADE.drum]);
       const gp = add(p, null, glassPlate(round, hs, 0.004), glassAt, null, 'podPane');
       fill(gp, 'aPod', [hs, o.glow ?? 1, round ? 1 : 0, 1]);
       fill(gp, 'aLook', [F.haze, F.grain, 1, R()]);
-      fill(gp, 'aLamp', [0, o.lampGlow ?? 1, tint, o.shade ?? SHADE.carousel]);
+      fill(gp, 'aLamp', [0, o.lampGlow ?? 1, tint, o.shade ?? SHADE.drum]);
     } else {
       // the glass: which pictures it shows, and how (kit/growglass.js)
       const g = add(p, null, glassPlate(round, hs, 0.004), glassAt, null, 'pod'), cell = podCell(plant, frost, o.seed ?? 1);
