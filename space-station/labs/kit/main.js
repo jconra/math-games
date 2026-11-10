@@ -22,6 +22,7 @@ import { loadBake, packBake } from '../../kit/bakefile.js';
 import { plane, put } from '../../kit/geo.js';
 import { Piece } from '../../kit/piece.js';
 import { makeDust } from '../../kit/dust.js';
+import { makeBeams, beamsOf } from '../../kit/beams.js';
 
 const $ = (s) => document.querySelector(s), q = new URLSearchParams(location.search);
 const ROOMS = [['corridor', 'Corridor'], ['junction', 'Junction + room'], ['station', 'The station'], ['hull-sample', 'A sample hull'], ['ship-sample', 'A sample cabin'], ['ship-miner', 'Miner A'], ['ship-medic', 'Medic A'], ['ship-explorer', 'Explorer C'], ['ship-hauler', 'Hauler A']];
@@ -157,7 +158,10 @@ function touchControls() {
 }
 
 // ── building what's shown ────────────────────────────────────────────────────────────────────────────────────────
-function clearStage() { if (built) { built.dispose(); built = null; } STAGE.clear(); }
+function clearStage() { if (built) { built.dispose(); built = null; } if (beams) { beams.dispose(); beams = null; } STAGE.clear(); }
+// the beams of light with dust in them (kit/beams.js), under each light of the part that makes one; not at Low quality
+let beams = null;
+function showBeams() { const list = state.quality === 'low' ? [] : beamsOf(built.lights); if (list.length) { beams = makeBeams(list); STAGE.add(beams.object); } }
 function loading(text, soft) { const L = $('#loading'); L.textContent = text; L.hidden = !text; L.classList.toggle('soft', !!soft); }
 const frame = () => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
 // a round dark stand for the parts, part of the bake (so a part darkens the floor under it)
@@ -175,7 +179,7 @@ async function showPart(id = state.part, variant) {
   const lift = def.at === 'wall' || def.at === 'free' ? 1.0 : def.y ? 0.8 - def.y : 0;
   const room = { name: def.name, pieces: [{ piece: id, cell: [0, 0], turn: 0, variant, off: [0, lift, 0] }] };
   built = buildRoom(room, mats, { bake: { ...QUALITY[state.quality].bake, shadows: true }, extra: { solid: [standGeo()] } });
-  STAGE.add(built.group); setDoors(built.doors, state.doors === 'open' ? 1 : 0);
+  STAGE.add(built.group); setDoors(built.doors, state.doors === 'open' ? 1 : 0); showBeams();
   // frame it
   const box = roomBounds(room);
   framed.c = box.getCenter(new THREE.Vector3()); framed.r = Math.max(0.25, box.getSize(new THREE.Vector3()).length() / 2);
@@ -459,7 +463,7 @@ async function packBakeB64() {
 const KL = window.KL = {
   ready: false, part: (id, v) => showPart(id, v), room: (id) => showRoom(id), view, quality, doors, stats, bench,
   cam: (at, look, fov) => lookFrom(at, look, fov), orbit: (yaw, pitch, dist) => { cam.mode = 'orbit'; cam.yaw = yaw; cam.pitch = pitch; if (dist) cam.dist = dist; applyCam(); },
-  list: () => Object.keys(PIECES), variants: (id) => PIECES[id].variants, rooms: () => ROOMS.map((r) => r[0]), get built() { return built; },
+  list: () => Object.keys(PIECES), variants: (id) => PIECES[id].variants, rooms: () => ROOMS.map((r) => r[0]), get built() { return built; }, get beams() { return beams; },
   get roomData() { return roomData; }, renderer, scene, camera, mats, state,
   sky: (name) => showSky(name), skyTurn, theSky: sky, skyViews: () => Object.keys(SKY_VIEWS),
 };

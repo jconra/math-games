@@ -45,6 +45,7 @@ import { buildCabin, LOOKS, cabinMaterials } from '../../kit/ships/cabin-built.j
 import { makeMaterials } from '../../kit/materials.js';
 import { setThrottle, THROTTLE, ENGINE } from '../../kit/ships/built-common.js';
 import { makeJets } from '../../kit/ships/plume.js';
+import { makeBeams } from '../../kit/beams.js';
 import * as EB from '../../kit/ships/explorer-built.js';
 import * as MB from '../../kit/ships/miner-built.js';
 import * as MD from '../../kit/ships/medic-built.js';
@@ -78,7 +79,7 @@ const st = {
   gear: 'down', door: 'shut', dirt: 'Some', throttle: 'Off', throttleT: 0, arms: 'reaching', thrusters: false, canisters: true, ramps: 'up', rampCount: 'both',
   // (the cabin built inside from the blueprint: shown, its look, its ceilings, its doors (auto: they open as the eye or
   // the person comes near), a pose holding them part open)
-  inside: q.get('inside') !== '0', look: LOOKS[q.get('look')] ? q.get('look') : 'light', roof: true, cabinDoors: 'auto', doorsAt: null,
+  inside: q.get('inside') !== '0', look: LOOKS[q.get('look')] ? q.get('look') : 'light', roof: true, beams: q.get('beams') !== '0', cabinDoors: 'auto', doorsAt: null,
   // (the look's light level, where it has levels (the Light look: kit/ships/cabin-built.js LEVELS); null: the look's own)
   level: q.get('level') || null,
   // (the light strips' glow: a bloom pass over the picture; on by default but on a phone (?bloom=1 or 0 to choose))
@@ -132,7 +133,7 @@ function setBloom(on) {
 }
 // ── the pools: POOL_N real-time lights, set where the cabin's pools are in the room the eye is in (none outside the
 // cabin); in the scene only while st.pools, as every lit surface pays for them ──
-const POOL_N = 8, poolLights = Array.from({ length: POOL_N }, () => new THREE.PointLight(0xffffff, 0, 2, 2));
+const POOL_N = 10, poolLights = Array.from({ length: POOL_N }, () => new THREE.PointLight(0xffffff, 0, 2, 2));
 let poolKey = null;
 function setPools(on) { st.pools = !!on; for (const L of poolLights) { if (st.pools) scene.add(L); else scene.remove(L); } poolKey = null; }
 function updatePools() {
@@ -258,7 +259,7 @@ function cabinFor(S, bp, look) {
   const level = levelOf(look), lk = look + (level ? ':' + level : ''), key = S.id + '|' + lk + '|' + JSON.stringify(bp);
   if (cabins.has(key)) return cabins.get(key);
   const id = 'cabin' + (++cabinSeq), space = st.space, L = LOOKS[look], parts = {};
-  PIECES[id] = { name: 'Cabin: ' + (bp.name || bp.id), group: 'Ships', at: 'free', variants: ['walls', 'ceilings'], foot: [5, 2.5, 10], build: (p, v) => { buildCabin(p, bp, { space, which: v, outer: S.lab.cabin.outer, look, level }); Object.assign(parts, p.stats); if (p.runs?.length) parts.runs = p.runs; parts.seesOutside = p.seesOutside; parts.pools = [...(parts.pools || []), ...(p.pools || [])]; } };
+  PIECES[id] = { name: 'Cabin: ' + (bp.name || bp.id), group: 'Ships', at: 'free', variants: ['walls', 'ceilings'], foot: [5, 2.5, 10], build: (p, v) => { buildCabin(p, bp, { space, which: v, outer: S.lab.cabin.outer, look, level }); Object.assign(parts, p.stats); if (p.runs?.length) parts.runs = p.runs; parts.seesOutside = p.seesOutside; parts.pools = [...(parts.pools || []), ...(p.pools || [])]; parts.beams = [...(parts.beams || []), ...(p.beams || [])]; parts.lightList = [...(parts.lightList || []), ...(p.lightList || [])]; } };
   // (the cabin's own materials: lit by its strips, little of the lab's sky light let in, the floor tinted for the look,
   // less of a mirror than the station's)
   if (!cabinMats[lk]) cabinMats[lk] = cabinMaterials(look, level);
@@ -268,16 +269,19 @@ function cabinFor(S, bp, look) {
   const built = buildRoom(room, cabinMats[lk], { bake: { voxel: 0.08, rays: 24, shadows: false } });
   delete PIECES[id]; forgetPiece(id);
   const rec = { key, built, group: built.group, tris: built.stats.tris, perZone: built.stats.perZone, parts };
+  // (the beams of light with dust in them, under the ceilings' discs: kit/beams.js, two draws for the whole cabin; the
+  // list is in the cabin's own frame, deck at 0)
+  rec.beams = makeBeams(parts.beams); rec.beams.object.position.y = space.deck - built.group.position.y; built.group.add(rec.beams.object); rec.beams.set(st.beams);
   cabins.set(key, rec);
   // (keep the last four)
-  while (cabins.size > 4) { const [k, old] = cabins.entries().next().value; if (old === st.cabin) break; scene.remove(old.group); old.built.dispose(); cabins.delete(k); }
+  while (cabins.size > 4) { const [k, old] = cabins.entries().next().value; if (old === st.cabin) break; scene.remove(old.group); old.built.dispose(); old.beams.dispose(); cabins.delete(k); }
   return rec;
 }
 async function showCabin() {
   const want = cabinOn() ? cabinFor(st.ship, st.bp, st.look) : null;
   if (st.cabin && st.cabin !== want) scene.remove(st.cabin.group);
   st.cabin = want;
-  if (want) { scene.add(want.group); for (const z of want.built.zones) z.group.visible = z.id !== 'ceilings' || st.roof; if (st.doorsAt != null) setDoors(want.built.doors, st.doorsAt); }
+  if (want) { scene.add(want.group); want.beams.set(st.beams); for (const z of want.built.zones) z.group.visible = z.id !== 'ceilings' || st.roof; if (st.doorsAt != null) setDoors(want.built.doors, st.doorsAt); }
   build3d();
 }
 let cabinTimer = 0;
@@ -462,6 +466,7 @@ function menu() {
     ...(hasCabin(st.ship) ? [sep(), lab('Inside'),
       ...(st.inside ? [...Object.entries(LOOKS).map(([k, L]) => chip(L.name, k === st.look, () => setLook(k), true, k === 'light' ? 'His bunk, mess and science pictures: one light grey, a charcoal floor; warm light in the mess, cool in the lab and bunks' : 'His concept sheet\'s insets: grey steel panels, amber light strips, blue leather')),
         ...(LOOKS[st.look].levels ? [lab('Light'), ...Object.entries(LOOKS[st.look].levels).map(([k, V]) => chip(V.name, k === levelOf(st.look), () => setLevel(k), true, 'How dim the rooms are between their pools of light and glowing strips' + (k === LOOKS[st.look].level ? ' (this one is the game\'s)' : '')))] : []),
+        chip('Light beams', st.beams, () => setBeams(!st.beams), true, 'The beams of light under the ceilings\' discs, with dust drifting through them'),
         chip('Ceilings', st.roof, () => setRoof(!st.roof), true, 'Lift the cabin\'s ceilings off to look in from above (with the hull see-through or hidden)'),
         chip('Glow', st.bloom || st.pools, () => { const on = !(st.bloom || st.pools); setBloom(on); setPools(on); menu(); }, true, 'The light strips\' glow and their pools of light (a bloom pass and a few real-time lights in the room you are in; off by default on a phone)'),
         lab('Doors'), ...[['auto', 'Auto'], ['open', 'Open'], ['shut', 'Shut']].map(([k, t]) => chip(t, st.cabinDoors === k && st.doorsAt == null, () => { st.cabinDoors = k; st.doorsAt = null; menu(); }, true, k === 'auto' ? 'The sliding doors open as the eye (or the person) comes near' : k === 'open' ? 'Every sliding door open' : 'Every sliding door shut'))] : []),
@@ -495,6 +500,7 @@ function menu() {
 async function setInside(on) { st.inside = !!on; await showShip(st.ship); }
 async function setLook(k) { if (!LOOKS[k]) return; st.look = k; loading.hidden = false; await new Promise((r) => setTimeout(r, 30)); await showCabin(); loading.hidden = true; url(); menu(); }
 async function setLevel(k) { st.level = k || null; loading.hidden = false; await new Promise((r) => setTimeout(r, 30)); await showCabin(); loading.hidden = true; url(); menu(); }
+function setBeams(on) { st.beams = !!on; if (st.cabin) st.cabin.beams.set(st.beams); menu(); }
 function setRoof(on) { st.roof = !!on; if (st.cabin) for (const z of st.cabin.built.zones) if (z.id === 'ceilings') z.group.visible = st.roof; menu(); }
 function show(k, on) { st.show[k] = on; plan.show.space = st.show.space; plan.show.checks = st.show.checks; person.visible = st.show.person; build3d(); plan.draw(); if (k === 'meshy') showMeshy(); }
 
@@ -633,6 +639,9 @@ window.SHIPLAB = {
   // (the cabin: shown or not, its look, its ceilings; its doors 'auto' | 'open' | 'shut', or held part open (0 to 1),
   // null lets them go; what it is: its triangles, by zone, its doors and how open each is; the cameras in its rooms)
   inside: (on) => setInside(on), look: (k) => setLook(k), roof: (on) => setRoof(on),
+  // (the beams of light: beams(false) hides them; beams() says what there is: { on, beams, motes, draws, triangles, list:
+  // each beam's room and place in the cabin's own frame, deck at 0 })
+  beams: (on) => (on === undefined ? { on: st.beams, ...(st.cabin?.beams.stats || {}), list: (st.cabin?.parts.beams || []).map((b) => ({ room: b.room, at: b.at.map((v) => +v.toFixed(3)), length: b.length })) } : setBeams(on)),
   // (the look's light level: level('darker') sets it, level() says which is shown)
   level: (k) => (k === undefined ? levelOf(st.look) : setLevel(k)),
   cabinDoors: (v) => { if (typeof v === 'number') { st.doorsAt = Math.max(0, Math.min(1, v)); if (st.cabin) setDoors(st.cabin.built.doors, st.doorsAt); } else { st.doorsAt = null; st.cabinDoors = v || 'auto'; } menu(); },
