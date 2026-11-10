@@ -30,7 +30,7 @@
 // posters: on the end lockers, then on the crew lockers that face whoever comes in; other overhead cabinets as the mess's.
 import { part } from '../shipparts/place.js';
 import { FACE, ROOM } from '../shipparts/cabin/ship.js';
-import { cornerBench, messTable, stool, topCabinets, coldStore, galleyRun, coffeeMachine, mug, bottle, fruitBowl, poster, wallField } from '../shipparts/cabin/mess.js';
+import { cornerBench, messTable, stool, topCabinets, coldStore, drinkUnit, backsplash, galleyRun, coffeeMachine, mug, bottle, fruitBowl, poster, wallField } from '../shipparts/cabin/mess.js';
 import { bunkStack, crewLocker } from '../shipparts/cabin/bunks.js';
 import { shallowLocker, endLocker, berthLockers, lockerBody } from '../shipparts/cabin/lockers.js';
 import { labBench, microscope, glovebox, vialRack, tablet, sampleCase, surveyTable, labStool, ringLight } from '../shipparts/cabin/lab.js';
@@ -46,6 +46,10 @@ import { POSTERS, postersFor } from '../shipparts/cabin/print.js';
 import { hangs, cutsOf, outlineOf, inItem } from './blueprint.js';
 
 const PI = Math.PI, EPS = 1e-6;
+// the grow pods' openings in the wall over a galley counter with a drink unit: a pod's frame across (about 0.42: the pod's
+// own design, kit/shipparts/cabin/growpod.js on another branch), the gap between two frames, the height of their middles
+// over the deck, an opening across its flats (the frame with a reveal round it)
+export const POD = { frame: 0.42, gap: 0.05, y: 1.24, hole: 0.44 };
 // the wall an item stands against in its room: { axis ('x': the line x = v, running along z; 'z': the line z = v), v,
 // side (+1: the room on the line's high side), lo, hi (its stretch along the line), depth (out from the line) }
 export function wallOf(it, room) {
@@ -111,28 +115,60 @@ function furnishGalley({ room, ctx, done, items, f, at, A }) {
     ctx.put('mess: small things', part(bottle, { look: A.cup }), { at: [cx - 0.08, top, cz - 0.05] });
     done.add(it.id);
   }
-  // ── against the walls: the cold store, the counter (and what stands on it), the cabinets in the top corners ──
+  // ── against the walls: the cold store, the drink unit beside it, the counter (and what stands on it), the cabinets in
+  // the top corners ──
+  // (the drink unit: an item with "fit": "drinks", the game's maker's drawing of 2026-11-10: a coffee maker with a second
+  // drink machine stacked over it, built in beside the cold store. Its face and the cold store's share one plane, each
+  // as deep as its plan box, both up to where the hull's slope meets them: one flush wall, no crevice)
+  const DR = items.find((it) => it.fit === 'drinks'), drW = DR ? wallOf(DR, room) : null, ceiling = typeof room.ceiling === 'number' ? room.ceiling : 2.5;
+  const besideDrinks = (W) => !!drW && W.axis === drW.axis && Math.abs(W.v - drW.v) < EPS && (Math.abs(W.lo - drW.hi) < EPS || Math.abs(W.hi - drW.lo) < EPS);
+  const faceTop = (W, mid) => { const s = ctx.slopeAt(W.axis, W.v, mid); return s ? +(s.y0 + W.depth + 0.02).toFixed(3) : ceiling; };
   let posterAt = 0;
+  const splash = [];
   for (const it of items) {
     if (done.has(it.id)) continue;
     const W = wallOf(it, room); if (!W) continue;
     const mid = (W.lo + W.hi) / 2, len = W.hi - W.lo;
-    if (it.kind === 'locker' && +it.h >= 1.8) { ctx.put('mess: cold store', part(coldStore, { w: len, depth: W.depth - 0.03, h: +it.h, poster: 3, handle: A.handle }), at(W, mid)); done.add(it.id); }
-    else if (it.kind === 'counter') {
-      // (an end open to the room, not at a wall and with nothing standing against it, gets a chamfered worktop corner)
+    if (it === DR) {
+      // (the end of it at the room's edge runs on into the wall across)
+      const [R0, R1] = W.axis === 'z' ? [room.rect[0], room.rect[2]] : [room.rect[1], room.rect[3]], wallEnd = Math.abs(W.lo - R0) < EPS ? W.lo : Math.abs(W.hi - R1) < EPS ? W.hi : null;
+      const counter = items.find((o) => o.kind === 'counter');
+      ctx.put('mess: drink unit', part(drinkUnit, { w: len, depth: W.depth, top: faceTop(W, mid), base: +(counter?.h || 0.9), wall: wallEnd == null ? 0 : Math.sign(localX(W, mid, wallEnd)), cup: A.cup, handle: A.handle }), at(W, mid));
+      done.add(it.id);
+    } else if (it.kind === 'locker' && +it.h >= 1.8) {
+      const flush = besideDrinks(W);
+      ctx.put('mess: cold store', part(coldStore, { w: len, depth: flush ? W.depth : W.depth - 0.03, h: +it.h, ...(flush ? { top: faceTop(W, mid) } : {}), poster: 3, handle: A.handle }), at(W, mid)); done.add(it.id);
+    } else if (it.kind === 'counter') {
+      // (an end open to the room, not at a wall and with nothing standing against it, gets a chamfered worktop corner; the
+      // drink unit closes the end it stands at)
       const [R0, R1] = W.axis === 'z' ? [room.rect[0], room.rect[2]] : [room.rect[1], room.rect[3]];
       const span = (o) => (W.axis === 'z' ? [o.rect[0], o.rect[2]] : [o.rect[1], o.rect[3]]);
-      const open = (a) => Math.abs(a - R0) > EPS && Math.abs(a - R1) > EPS && !items.some((o) => o !== it && !+(o.y || 0) && span(o).some((v) => Math.abs(v - a) < 0.06) && wallOf(o, room)?.v === W.v);
+      const open = (a) => Math.abs(a - R0) > EPS && Math.abs(a - R1) > EPS && !items.some((o) => o !== it && !+(o.y || 0) && span(o).some((v) => Math.abs(v - a) < 0.06) && (wallOf(o, room)?.v === W.v || o === DR));
       const ends = [W.lo, W.hi].map((a) => (open(a) ? 0.08 : 0)), ch = localX(W, mid, W.lo) < 0 ? ends : ends.slice().reverse();
       ctx.put('mess: counter', part(galleyRun, { len, depth: W.depth, top: +it.h || 0.9, end: ch, handle: A.handle, trim: A.trim }), at(W, mid));
       // (on it, in from the wall: the coffee machine part way from its closed end (a tall neighbour may hide that end),
-      // two mugs beside it, the bowl of fruit toward the open end)
+      // two mugs beside it, the bowl of fruit toward the open end; with the drink unit at its closed end, no coffee
+      // machine on the worktop: the mugs by the drink unit, the bowl toward the open end)
       const P = at(W, mid, +it.h || 0.9), inward = (d) => (W.axis === 'z' ? [0, 0, W.side * d] : [W.side * d, 0, 0]), alongV = W.axis === 'z' ? [1, 0, 0] : [0, 0, 1];
       const far = ends[0] ? W.hi : W.lo, sgn = far === W.hi ? -1 : 1, pt = (a, d) => { const o = inward(d); return [P.at[0] + alongV[0] * (a - mid) + o[0], P.at[1], P.at[2] + alongV[2] * (a - mid) + o[2]]; };
-      ctx.put('mess: small things', part(coffeeMachine, {}), { at: pt(far + sgn * len * 0.4, 0.19), rot: P.rot });
-      ctx.put('mess: small things', part(mug, { look: A.cup }), { at: pt(far + sgn * len * 0.58, 0.14), rot: [0, P.rot[1] + 0.7, 0] });
-      ctx.put('mess: small things', part(mug, { look: A.cup }), { at: pt(far + sgn * len * 0.65, 0.3), rot: [0, P.rot[1] - 0.4, 0] });
-      ctx.put('mess: small things', part(fruitBowl, {}), { at: pt(far + sgn * len * 0.84, 0.24), rot: P.rot });
+      if (!DR) ctx.put('mess: small things', part(coffeeMachine, {}), { at: pt(far + sgn * len * 0.4, 0.19), rot: P.rot });
+      ctx.put('mess: small things', part(mug, { look: A.cup }), { at: pt(far + sgn * (DR ? 0.2 : len * 0.58), 0.14), rot: [0, P.rot[1] + 0.7, 0] });
+      ctx.put('mess: small things', part(mug, { look: A.cup }), { at: pt(far + sgn * (DR ? 0.3 : len * 0.65), 0.3), rot: [0, P.rot[1] - 0.4, 0] });
+      ctx.put('mess: small things', part(fruitBowl, {}), { at: pt(far + sgn * len * (DR ? 0.78 : 0.84), 0.24), rot: P.rot });
+      // THE WALL OVER IT, with the drink unit: one panel from the worktop to the cabinets, the grow pods' two openings in
+      // it, side by side, centred in the clear wall between the drink unit's face and the door's control panel (each 0.44
+      // across: a pod's frame, about 0.42, with a reveal round it; middles POD.y over the deck)
+      if (DR) {
+        const over = items.find((o) => o.kind === 'overhead' && wallOf(o, room)?.axis === W.axis && Math.abs(wallOf(o, room).v - W.v) < EPS && alongOf(o, W)[1] > W.lo && alongOf(o, W)[0] < W.hi);
+        let clear = [[W.lo, W.hi]]; for (const [a, b] of ctx.openings(W.axis, W.v)) clear = clear.flatMap(([p, q]) => (b <= p || a >= q ? [[p, q]] : [[p, a], [b, q]].filter(([u, v]) => v - u > 0.05)));
+        const S = clear.sort((a, b) => (b[1] - b[0]) - (a[1] - a[0]))[0], free = S[1] - S[0] - 0.05 + 1e-6, n = free >= 2 * POD.frame + POD.gap ? 2 : free >= POD.frame ? 1 : 0, c = (S[0] + S[1]) / 2;
+        const pods = Array.from({ length: n }, (_, k) => +(c + (k - (n - 1) / 2) * (POD.frame + POD.gap)).toFixed(3));
+        ctx.put('mess: wall over the counter', part(backsplash, { len: +len.toFixed(3), y0: +it.h || 0.9, y1: over ? +(+over.y - 0.03).toFixed(3) : 1.55, holes: pods.map((x) => [+localX(W, mid, x).toFixed(3), POD.y]), hole: POD.hole }), at(W, mid));
+        splash.push({ rect: it.rect, h: 1.5 });
+        // THE GROW PODS (kit/shipparts/cabin/growpod.js, on another branch): when it is in, these lines put one in each
+        // opening (and `blanks: false` on the backsplash above leaves the openings clear for them):
+        //   for (const [k, x] of pods.entries()) ctx.put('mess: grow pods', part(growPod, { shape: 'oct', size: 0.30, plant: 'drum', frost: 'medium', seed: k + 1, y: POD.y }), at(W, x));
+      }
       done.add(it.id);
     } else if (it.kind === 'overhead') {
       const slope = ctx.slopeAt(W.axis, W.v, mid), poster = W.depth >= 0.4 && posterAt === 0 ? 0 : null; if (poster === 0) posterAt++;
@@ -145,7 +181,7 @@ function furnishGalley({ room, ctx, done, items, f, at, A }) {
   const along = benches.find((b) => !slopeOver(b.W)), hull = benches.find((b) => slopeOver(b.W));
   if (along) ctx.put('mess: posters', part(poster, { i: 1, dark: true, y: 1.42 }), at(along.W, (along.back[0] + along.back[1]) / 2));
   if (hull) ctx.put('mess: posters', part(poster, { i: 2, y: 1.33 }), at(hull.W, (hull.W.lo + hull.W.hi) / 2));
-  wallFields(ctx, room, items, at);
+  wallFields(ctx, room, items, at, { also: splash });
 }
 
 // ── the bunk room ───────────────────────────────────────────────────────────────────────────────────────────────

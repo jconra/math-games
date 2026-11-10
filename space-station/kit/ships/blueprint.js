@@ -32,6 +32,8 @@
 //            "head" (a bunk, optional): "low" or "high": the pillows at the end of its long side with the lower or the
 //            higher plan coordinate (so the foot and the ladder at the other); left out, the furnishing puts the pillows
 //            at the end nothing stands in front of. The checker does not read it
+//            "fit" (optional): a particular fitting the room's furnishing builds for this item: "drinks" (a galley's
+//            drink unit, a locker beside the cold store: kit/ships/cabin-furnish.js). The checker does not read it
 //   splay    (a door, optional, "splay": true) furniture may stand beside this door on a 45 degree splay: the space kept
 //            clear in front of it narrows from the opening's edges (instead of the opening's whole width for 0.5 m), and
 //            in exchange a person's 0.5 m square must fit standing in the doorway, wholly inside the opening, on each

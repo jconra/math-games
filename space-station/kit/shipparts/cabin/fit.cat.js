@@ -7,7 +7,7 @@ import { toilet, basin, shower } from './wash.js';
 import { medBed, scanner, pharmacy, stretcher } from './medical.js';
 import { reactor } from './engine.js';
 import { holoTable } from './science.js';
-import { cornerBench, messTable, stool, topCabinets, coldStore, galleyRun, coffeeMachine, mug, fruitBowl, poster, GUN } from './mess.js';
+import { cornerBench, messTable, stool, topCabinets, coldStore, drinkUnit, backsplash, galleyRun, coffeeMachine, mug, fruitBowl, poster, GUN } from './mess.js';
 import { bunkStack, crewLocker } from './bunks.js';
 import { shallowLocker, endLocker, lockerBody, berthLockers } from './lockers.js';
 import { labBench, microscope, glovebox, vialRack, tablet, sampleCase, surveyTable, labStool, ringLight } from './lab.js';
@@ -39,7 +39,11 @@ export const PRESETS = {
   cabinMessTable: { '0.75 x 1 m': {}, 'with stools': { stools: true } },
   cabinStool: { '8-sided': {} },
   cabinTopCabinets: { 'under the hull\'s slope': { len: 1.5, slope: { y0: 2.0, run: 0.5 }, poster: 0 }, 'to the ceiling': { len: 0.75, y: 1.55, depth: 0.25 } },
-  cabinColdStore: { '0.5 m': { poster: 3 } },
+  cabinColdStore: { '0.5 m': { poster: 3 }, 'shallow, up to a slope': { depth: 0.35, poster: 3, top: 2.37 } },
+  // (round four, the game's maker's drawing of the galley: the drink unit built in beside the cold store, flush with it, and
+  // the wall over the counter with the grow pods' two openings)
+  cabinDrinkUnit: { 'beside the cold store, under a slope': { w: 0.5, depth: 0.35, top: 2.37, wall: -1 }, 'to the ceiling': { w: 0.5, depth: 0.35, top: 2.5 }, 'with the cold store': { w: 0.5, depth: 0.35, top: 2.37, wall: -1, store: true } },
+  cabinBacksplash: { 'two pod openings, blanked': { len: 0.95, y0: 0.9, y1: 1.52, holes: [[-0.235, 1.24], [0.235, 1.24]] }, 'open (pods to come)': { len: 0.95, y0: 0.9, y1: 1.52, holes: [[-0.235, 1.24], [0.235, 1.24]], blanks: false } },
   cabinGalleyRun: { '1.25 m': { len: 1.25, end: [0.08, 0] }, 'with its things': { len: 1.25, end: [0.08, 0], things: true } },
   cabinPoster: { 'the four': {}, 'the rooms\' eight': { from: 4 } },
   // (the other rooms, round two: kit/shipparts/cabin/bunks.js, lab.js, airlock.js, washroom.js, engroom.js)
@@ -96,6 +100,8 @@ export const CABIN_FIT = {
   cabinStool: entry('cabinStool', 'Mess: stool', 'free', [0.35, 0.45, 0.35], stool),
   cabinTopCabinets: entry('cabinTopCabinets', 'Mess: top-corner cabinets', 'wall', [1.5, 2.5, 0.5], topCabinets),
   cabinColdStore: entry('cabinColdStore', 'Mess: cold store', 'wall', [0.5, 2.0, 0.5], coldStore),
+  cabinDrinkUnit: entry('cabinDrinkUnit', 'Mess: drink unit (coffee maker, a second machine over it)', 'wall', [1.0, 2.5, 0.4], (p, o) => { drinkUnit(p, o); if (o.store) placeInto(p, part(coldStore, { w: 0.5, depth: 0.35, h: 2, top: o.top, poster: 3 }), { at: [0.5, 0, 0] }); return p; }),
+  cabinBacksplash: entry('cabinBacksplash', 'Mess: the wall over the counter, pod openings', 'wall', [1.0, 1.6, 0.05], backsplash),
   cabinGalleyRun: entry('cabinGalleyRun', 'Mess: galley counter', 'wall', [1.25, 1.3, 0.5], (p, o) => { galleyRun(p, o); if (o.things) { placeInto(p, part(coffeeMachine, {}), { at: [0.0, 0.9, 0.3] }); placeInto(p, part(mug, {}), { at: [0.24, 0.9, 0.33], rot: [0, 0.7, 0] }); placeInto(p, part(mug, {}), { at: [0.33, 0.9, 0.2] }); placeInto(p, part(fruitBowl, {}), { at: [-0.4, 0.9, 0.27] }); } return p; }),
   cabinPoster: entry('cabinPoster', 'Posters', 'wall', [2.4, 1.0, 0.05], (p, o) => { if (o.from) { for (let i = 0; i < 8; i++) placeInto(p, part(poster, { i: o.from + i, y: i < 4 ? 0.75 : 0.3 }), { at: [-0.84 + (i % 4) * 0.56, 0, 0] }); return p; } [-0.9, -0.3, 0.35, 0.95].forEach((x, i) => placeInto(p, part(poster, { i, dark: i === 1, y: 0.6 }), { at: [x, 0, 0] })); return p; }),
   cabinBunks: entry('cabinBunks', 'Bunks: berths, 2-high', 'wall', [2, 1.9, 1.1], bunkStack),

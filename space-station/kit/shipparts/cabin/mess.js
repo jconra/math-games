@@ -19,7 +19,19 @@
 //                       it; none: up to the ceiling), o.lean (0.35: how far the front leans back toward the wall, per metre
 //                       up), o.units (about 0.5 m each), o.poster (a POSTERS index for the middle one's front), o.strip,
 //                       o.handle (the handle slots' surface: black), o.trim (the rail under them: black)
-//   coldStore(p, o)     a tall cold store: o.w (0.5), o.depth, o.h (2.0), o.poster, o.handle
+//   coldStore(p, o)     a tall cold store: o.w (0.5), o.depth, o.h (2.0), o.poster, o.handle; o.top (left out: its top is
+//                       at o.h): its face runs on up to o.top (to meet the hull's slope over it), a short third door over
+//                       the second
+//   drinkUnit(p, o)     the drink unit built into the wall beside the cold store, its face flush with the cold store's:
+//                       a coffee maker in a lit cup bay, a second drink machine stacked over it (its own cup bay, a live
+//                       screen with the water tanks), a cupboard over them up to the hull's slope. o.w (along the wall,
+//                       0.5), o.depth (0.35: its face, as the cold store's), o.top (2.5: the face's top), o.base (0.9: the
+//                       worktop the coffee maker's cup bay stands on), o.wall (-1 / +1: that end runs FACE into a wall
+//                       across), o.cup (a mug's surface), o.handle
+//   backsplash(p, o)    the wall over the galley counter: one raised panel from the worktop to the cabinets over it, with
+//                       an eight-sided opening for each grow pod: o.len, o.y0 (0.9), o.y1 (1.55), o.holes ([[x, y], ...]:
+//                       each opening's middle), o.hole (0.44: an opening across its flats), o.blanks (false: no blanking
+//                       plates in the openings; a pod's frame stands in each)
 //   galleyRun(p, o)     the counter: o.len, o.depth, o.top (0.9), o.end ([left, right] chamfer of the worktop's front
 //                       corners in plan: an open end 0.08), o.handle, o.trim (the worktop's edge: black)
 //   coffeeMachine(p), mug(p, o), fruitBowl(p), bottle(p, o)   (free, standing on y = 0; a mug's and the bottle's o.look:
@@ -28,11 +40,13 @@
 //   wallField(p, o)     a raised chamfered field on a wall's face: o.w, o.h (centred on x 0, y o.y)
 import * as THREE from 'three';
 import { mergeVertices } from 'three/addons/utils/BufferGeometryUtils.js';
-import { shape, solid, loft, prism, plate, relief, RINGS, add } from '../../bevel.js';
+import { shape, solid, loft, prism, plate, relief, RINGS, add, octagon } from '../../bevel.js';
 import { kitTextures } from '../../materials.js';
 import { plane, put } from '../../geo.js';
 import { FACE } from './ship.js';
 import { POSTERS } from './print.js';
+import { liveFace, liveLamp } from './live.js';
+import { part, placeInto } from '../place.js';
 
 const PI = Math.PI, FLAT = [-PI / 2, 0, 0];   // (FLAT: a shape drawn in x, y lies down, its y running to -z, its depth up)
 export const STEEL = { c: '#b0b4ba', r: 0.34, m: 0.45, w: 0.3 }, PAD = { c: '#6c7078', r: 0.6, m: 0.05, w: 0.3 }, GUN = { c: '#6f747c', r: 0.4, m: 0.3, w: 0.4 }, TOP = { c: '#b4b5b2', r: 0.36, m: 0.25, w: 0.4 };
@@ -154,10 +168,12 @@ export function topCabinets(p, o = {}) {
 
 // ── the cold store ──────────────────────────────────────────────────────────────────────────────────────────────
 export function coldStore(p, o = {}) {
-  const w = o.w ?? 0.5, depth = o.depth ?? 0.47, h = o.h ?? 2.0, d = depth - FACE;
-  add(p, 'white', solid(shape(w - 0.008, h - 0.004, [0, 0.025], 0, h / 2), d, { edge: 0.008, back: false }), [0, 0, FACE]);
-  // two doors, each a raised border-bevel panel, a dark handle slot by its edge; a small status screen
+  const w = o.w ?? 0.5, depth = o.depth ?? 0.47, h = o.h ?? 2.0, d = depth - FACE, H = o.top > h + 0.1 ? o.top : h;
+  add(p, 'white', solid(shape(w - 0.008, H - 0.004, [0, H > h ? 0 : 0.025], 0, H / 2), d, { edge: 0.008, back: false }), [0, 0, FACE]);
+  // two doors, each a raised border-bevel panel, a dark handle slot by its edge; a small status screen (o.top: a short
+  // third door over them, up to where the hull's slope meets the face)
   const doors = [[0.08, 1.2], [1.24, h - 0.06]];
+  if (H > h) { add(p, 'white2', relief(shape(w - 0.05, H - h - 0.03, 0.03, 0, (h + H) / 2 - 0.01), [{ inset: 0, depth: 0.007, bevel: 0.006 }, { inset: 0.025, depth: 0.0035, bevel: 0.004 }]), [0, 0, FACE + d]); add(p, o.handle || 'black', plate(shape(Math.min(0.2, w * 0.45), 0.022, 0.009, 0, h + 0.05)), [0, 0, FACE + d + 0.0075]); }
   for (const [y0, y1] of doors) {
     add(p, 'white2', relief(shape(w - 0.05, y1 - y0, 0.04, 0, (y0 + y1) / 2), [{ inset: 0, depth: 0.007, bevel: 0.006 }, { inset: 0.032, depth: 0.0035, bevel: 0.004 }]), [0, 0, FACE + d]);
     add(p, o.handle || 'black', plate(shape(0.024, Math.min(0.32, (y1 - y0) * 0.4), 0.009, w / 2 - 0.06, y0 < 1 ? y1 - 0.25 : y0 + 0.22)), [0, 0, FACE + d + 0.0075]);
@@ -185,6 +201,95 @@ export function galleyRun(p, o = {}) {
   // the worktop: its front corners chamfered where its ends are open; a charcoal edge under it
   add(p, o.trim || 'black', solid(shape(len, depth - FACE + 0.02, [eL, eR, 0, 0], 0, -(FACE + (depth - FACE + 0.02) / 2)), 0.025, { edge: 0.005 }), [0, top - 0.04, 0], FLAT);
   add(p, TOP, solid(shape(len - 0.01, depth - FACE + 0.01, [Math.max(0, eL - 0.004), Math.max(0, eR - 0.004), 0, 0], 0, -(FACE + (depth - FACE + 0.01) / 2)), 0.016, { edge: 0.004, back: false }), [0, top - 0.016, 0], FLAT);
+  return p;
+}
+
+// ── the drink unit: the coffee maker built into the wall, a second drink machine over it ──────────────────────────
+// The game's maker (2026-11-10): "rotate the coffee maker so it faces the ships center (rather than aft) and build the
+// wall more flush around it. You could even stack the coffee maker so it looks like another drink machine above it and
+// make it all part of the wall tat is flush. Right now it is a dark crevice there". So it stands in the corner beside the
+// cold store, its face in the cold store's plane: from the worktop up, a coffee maker's cup bay (lit, a mug on its drip
+// tray, the brew head over it, a lamp that breathes while it brews), the second machine's cup bay over it (a tap, its
+// live screen with the water tanks), a cupboard to where the hull's slope meets the face. A dark reveal between the three
+// panels, as the lockers' doors have. Its other end runs into the wall across; the counter's end meets its face.
+const OCT_CUT = 1 - Math.SQRT1_2;   // (a regular octagon's corner cut, as a share of its width)
+// a panel standing `t` out of its face at z, its outline `outer`, with a cup bay cut into it (`bay`: a shape, `deep` into
+// the panel's face: its walls brushed steel, its back a softly lit panel, so the bay reads as a lit niche and what stands
+// in it shows against the light; a fine bevelled rim round the panel)
+const BAY_BACK = [0.5, 0.44, 0.35];   // (the lit back of a cup bay: a dim warm white, linear; not the strips' full glow)
+function bayPanel(p, outer, bay, z, deep, t = 0.007) {
+  add(p, 'white2', prism(octagon(outer), z, z + t, { holes: bay ? [octagon(bay)] : [], back: false }));
+  add(p, 'white2', relief(outer, [{ inset: 0, depth: 0.003, bevel: 0.003 }, { inset: 0.008, depth: 0, bevel: 0.003 }], { hole: true }), [0, 0, z + t]);
+  if (!bay) return;
+  add(p, STEEL, relief(bay, [{ inset: 0, depth: -deep, bevel: 0.006 }], { hole: true }), [0, 0, z + t]);
+  add(p, BAY_BACK, plate(shape(bay.w - 0.014, bay.h - 0.014, bay.c.map((c) => Math.max(0, c - 0.004)), bay.x, bay.y)), [0, 0, z + t - deep + 0.0005], null, 'glow');
+}
+export function drinkUnit(p, o = {}) {
+  const w = o.w ?? 0.5, depth = o.depth ?? 0.35, top = o.top ?? 2.5, base = o.base ?? 0.9, wall = o.wall ?? 0, t = 0.007;
+  // (the stretch of its face that shows: an end in a wall across runs FACE into it)
+  const x0 = -w / 2 + (wall < 0 ? FACE : 0), x1 = w / 2 - (wall > 0 ? FACE : 0), xc = (x0 + x1) / 2, pw = x1 - x0 - 0.016;
+  const y1 = Math.min(base + 0.5, top - 0.3), y2 = Math.min(y1 + 0.58, top - 0.1);
+  // (its two cup bays: the coffee maker's from just over the worktop, the drink machine's over it)
+  const bw = Math.min(0.26, pw - 0.12), by0 = base + 0.03, by1 = base + 0.33, bay = shape(bw, by1 - by0, [0, 0, 0.05, 0.05], xc, (by0 + by1) / 2);
+  const qw = Math.min(0.2, pw - 0.16), qy0 = y1 + 0.06, qy1 = qy0 + 0.2, bay2 = shape(qw, qy1 - qy0, [0, 0, 0.04, 0.04], xc - 0.05, (qy0 + qy1) / 2), holes = [octagon(bay), octagon(bay2)];
+  // the body, the wall's face out to its face, the deck to its top (the counter's end hides it under the worktop; over the
+  // hull's slope the slope does), open where the bays go in; the dark reveal over its face, the panels on it
+  add(p, 'white', prism(octagon(shape(w - 0.004, top, 0, 0, top / 2)), FACE, depth, { holes, back: false }));
+  add(p, 'dark', prism(octagon(shape(x1 - x0 - 0.004, top - base - 0.002, 0, xc, (base + top) / 2)), depth, depth + 0.0006, { holes, back: false, sides: false }));
+  // THE COFFEE MAKER: its cup bay, the brew head in its top, a drip tray, a mug
+  bayPanel(p, shape(pw, y1 - base - 0.012, 0.03, xc, (base + 0.006 + y1 - 0.006) / 2), bay, depth, 0.17, t);
+  const zb = depth + t, zm = zb - 0.085;   // (the bay's face; the middle of its depth)
+  add(p, 'black', solid(shape(bw - 0.03, 0.13, 0.012, xc, -zm), 0.014, { edge: 0.003 }), [0, by0, 0], FLAT);
+  for (let k = -2; k <= 2; k++) add(p, GUN, plate(shape(bw - 0.07, 0.008, 0.003, xc, -zm + k * 0.022)), [0, by0 + 0.0145, 0], FLAT);
+  add(p, STEEL, solid(shape(0.11, 0.1, 0.02, xc, -zm), 0.05, { edge: 0.006 }), [0, by1 - 0.05, 0], FLAT);
+  // (the nozzle: drawn along +z, turned to hang down; turned so, a shape's y is the bay's z)
+  add(p, 'black', loft([{ s: shape(0.03, 0.03, 0.009, xc, zm), z: 0 }, { s: shape(0.022, 0.022, 0.006, xc, zm), z: 0.03 }]), [0, by1 - 0.05, 0], [PI / 2, 0, 0]);
+  // (the bay's light: a strip under its front top edge, facing down on the cup, and its lit back)
+  add(p, 'white', plate(shape(bw - 0.06, 0.01, 0.004)), [xc, by1 - 0.004, zb - 0.012], [PI / 2, 0, 0], 'glow');
+  strip(p, [xc, by1 - 0.03, zb - 0.03], 0.5, [0, -0.8, 0.6], 0.7);
+  placeInto(p, part(mug, { look: o.cup }), { at: [xc + 0.02, by0 + 0.0145, zm - 0.005], rot: [0, PI / 2 + 0.5, 0] });
+  // its controls over the bay: a dark strip, three buttons, the brewing lamp (it breathes, slowly)
+  const cy = (by1 + y1) / 2 + 0.005;
+  add(p, 'black', solid(shape(pw - 0.07, 0.05, 0.012, xc, cy), 0.004, { edge: 0.0015, back: false }), [0, 0, zb]);
+  for (const [k, look] of [[-1, 'amber'], [0, 'white'], [1, 'white']]) add(p, look, plate(shape(0.026, 0.016, 0.005, xc - 0.05 + k * 0.045, cy)), [0, 0, zb + 0.0045], null, 'glow');
+  liveLamp(p, { w: 0.05, h: 0.012, mode: 'breathe', every: 6, glow: 'amber', phase: 0.3 }, [xc + 0.09, cy, zb + 0.0045]);
+  // THE DRINK MACHINE over it: a smaller cup bay with a tap, its grille, its live screen (the water tanks), two buttons
+  bayPanel(p, shape(pw, y2 - y1 - 0.012, 0.03, xc, (y1 + y2) / 2), bay2, depth, 0.13, t);
+  add(p, GUN, solid(shape(qw - 0.03, 0.09, 0.01, xc - 0.05, -(zb - 0.065)), 0.01, { edge: 0.003 }), [0, qy0, 0], FLAT);
+  add(p, STEEL, loft([{ s: shape(0.03, 0.03, 0.009, xc - 0.05, zb - 0.07), z: 0 }, { s: shape(0.024, 0.024, 0.007, xc - 0.05, zb - 0.07), z: 0.045 }]), [0, qy1, 0], [PI / 2, 0, 0]);
+  add(p, 'white', plate(shape(qw - 0.05, 0.008, 0.003)), [xc - 0.05, qy1 - 0.004, zb - 0.01], [PI / 2, 0, 0], 'glow');
+  strip(p, [xc - 0.05, qy1 - 0.03, zb - 0.03], 0.35, [0, -0.8, 0.6], 0.6);
+  for (const [k, look] of [[0, 'blue'], [1, 'white']]) add(p, look, plate(shape(0.024, 0.024, 0.006, xc + qw / 2 + 0.02, qy0 + 0.05 + k * 0.06)), [0, 0, zb + 0.0005], null, 'glow');
+  const sw = Math.min(0.2, pw - 0.06), sh = Math.min(0.12, y2 - qy1 - 0.06), sy = (qy1 + y2) / 2 + 0.005;
+  if (sh > 0.06) {
+    add(p, 'black', solid(shape(sw + 0.02, sh + 0.02, 0.012, xc, sy), 0.008, { edge: 0.002, back: false, front: [{ inset: 0.006, depth: -0.004, bevel: 0.003 }] }), [0, 0, zb]);
+    liveFace(p, { show: 'water', seed: 0.37, w: sw, h: sh, c: 0.008 }, [xc, sy, zb + 0.0052]);
+  }
+  // THE CUPBOARD over them, to the top: a door, its handle slot along its foot
+  if (top - y2 > 0.12) {
+    add(p, 'white2', relief(shape(pw, top - y2 - 0.012, 0.03, xc, (y2 + top) / 2), [{ inset: 0, depth: t, bevel: 0.006 }, { inset: 0.025, depth: 0.0035, bevel: 0.004 }]), [0, 0, depth]);
+    add(p, o.handle || 'black', plate(shape(Math.min(0.2, pw * 0.45), 0.022, 0.009, xc, y2 + 0.05)), [0, 0, depth + t + 0.0005]);
+  }
+  return p;
+}
+
+// ── the wall over the galley counter ────────────────────────────────────────────────────────────────────────────
+// One raised panel from the worktop to the cabinets (no panel seams across it), and an eight-sided opening in it for each
+// grow pod (kit/shipparts/cabin/growpod.js, another helper's: its chamber goes on behind the wall's face), each with a
+// bevelled lip down to the wall's face; until a pod stands in one, a blanking plate.
+export function backsplash(p, o = {}) {
+  // (12 mm thick: the wall's own raised panels stand up to 1 cm out of its face, and must not show through it)
+  const len = o.len ?? 1, y0 = o.y0 ?? 0.9, y1 = o.y1 ?? 1.55, hs = o.hole ?? 0.44, t = 0.012, z = FACE;
+  const oct = (x, y, s) => shape(s, s, s * OCT_CUT, x, y), holes = o.holes || [];
+  add(p, 'white2', prism(octagon(shape(len, y1 - y0, [0, 0, 0.03, 0.03], 0, (y0 + y1) / 2)), z, z + t, { holes: holes.map(([x, y]) => octagon(oct(x, y, hs))), back: false }));
+  add(p, 'white2', relief(shape(len, y1 - y0, [0, 0, 0.03, 0.03], 0, (y0 + y1) / 2), [{ inset: 0, depth: 0.003, bevel: 0.003 }, { inset: 0.01, depth: 0, bevel: 0.003 }], { hole: true }), [0, 0, z + t]);
+  for (const [x, y] of holes) {
+    add(p, 'white2', relief(oct(x, y, hs + 0.02), [{ inset: 0, depth: 0.003, bevel: 0.003 }, { inset: 0.004, depth: -t - 0.003 + 0.0005, bevel: 0.003 }], { hole: true }), [0, 0, z + t]);
+    if (o.blanks === false) continue;
+    // (the blanking plate, level with the panel's face, sunk a little in its middle; four screws)
+    add(p, 'grey2', relief(oct(x, y, hs - 0.004), [{ inset: 0, depth: 0.002, bevel: 0.002 }, { inset: 0.035, depth: -0.001, bevel: 0.003 }]), [0, 0, z + t + 0.0005]);
+    for (const [a, b] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) add(p, GUN, solid(shape(0.016, 0.016, 0.005, x + a * hs * 0.3, y + b * hs * 0.3), 0.003, { edge: 0.0012, back: false }), [0, 0, z + t + 0.002]);
+  }
   return p;
 }
 
