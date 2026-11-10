@@ -99,7 +99,7 @@ export function labShelves(p, o = {}) {
   for (const x of [x0 + 0.012, x1 - 0.012]) add(p, 'white', prism([[FACE, y0], [d - 0.05, y0], [d, y0 + 0.05], [d, y1 - 0.08], [d - 0.08, y1], [FACE, y1]].map(([a, b]) => [-a, b]), x - 0.012, x + 0.012), [0, 0, 0], [0, PI / 2, 0]);
   const ys = [y0, y0 + (y1 - y0) * 0.5, y1 - 0.025];
   for (const y of ys) box(p, 'white2', x0 + 0.024, x1 - 0.024, y, y + 0.02, FACE, d - 0.01);
-  glowStrip(p, w - 0.1, [0, y0 - 0.001, (FACE + d) / 2], [PI / 2, 0, 0], { wid: 0.012, i: 0.24, dir: [0, -1, 0.1], reach: 1.4, pool: 0.08, poolAt: [0, y0 - 0.45, d] });
+  glowStrip(p, w - 0.1, [0, y0 - 0.001, (FACE + d) / 2], [PI / 2, 0, 0], { wid: 0.012, i: o.light ?? 0.24, glow: o.glow, color: o.color, dir: [0, -1, 0.1], reach: 1.4, pool: o.pool ?? 0.08, poolAt: [0, y0 - 0.45, d] });
   // reagent bottles, brown and clear, boxes, and a rack of sample tubes
   for (const y of [ys[0] + 0.02, ys[1] + 0.02]) {
     for (let x = x0 + 0.06; x < x1 - 0.06;) {

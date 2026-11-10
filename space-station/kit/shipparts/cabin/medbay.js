@@ -127,7 +127,7 @@ export function armLamp(p, o = {}) {
   // the head: a shallow dome, its rim; under it the disc, throwing its beam down onto the bed
   add(p, 'white2', aim(spun([[0.19, 0.0], [0.185, 0.03], [0.15, 0.075], [0.08, 0.105], [0.001, 0.11]], { seg: 12, caps: [false, false] }), [hx, hy, hz]));
   add(p, 'black', aim(spun([[0.16, -0.014], [0.19, -0.012], [0.19, 0.0]], { seg: 12, caps: [false, false] }), [hx, hy, hz]));
-  downlight(p, { at: [hx, hy - 0.012 + 0.022, hz], r: 0.13, i: o.i ?? 0.55, reach: 2.2, drop: dropTo, pool: o.pool ?? 0.45, poolDrop: 0.6, poolReach: 1.6, spread: 0.2, beam: o.beam ?? 0.8, color: [1, 0.98, 0.94] });
+  downlight(p, { at: [hx, hy - 0.012 + 0.022, hz], r: 0.13, i: o.i ?? 0.55, reach: o.reach ?? 2.2, drop: dropTo, pool: o.pool ?? 0.45, poolDrop: 0.6, poolReach: o.poolReach ?? 1.6, spread: 0.2, beam: o.beam ?? 0.8, color: o.color || [1, 0.98, 0.94] });
   return p;
 }
 
@@ -442,7 +442,7 @@ export function wallCabinet(p, o = {}) {
   // under it
   const fx0 = x0 + cl, fx1 = x1 - cr;
   add(p, o.trim || 'black', prism([[FACE, y0 + 0.04], [FACE, y0], [d - 0.035, y0], [d + 0.004, y0 + 0.039], [d + 0.004, y0 + 0.04]].map(([a, b]) => [-a, b]), fx0 + 0.01, fx1 - 0.01), [0, 0, 0], [0, PI / 2, 0]);
-  glowStrip(p, fx1 - fx0 - 0.08, [(fx0 + fx1) / 2, y0 + 0.0195 - 0.0009, d - 0.0155 + 0.0009], [PI / 4, 0, 0], { wid: 0.012, i: o.light ?? 0.22, dir: [0, -0.8, 0.6], reach: 1.6, pool: o.pool ?? 0.06, poolAt: [(fx0 + fx1) / 2, y0 - 0.5, d + 0.25] });
+  glowStrip(p, fx1 - fx0 - 0.08, [(fx0 + fx1) / 2, y0 + 0.0195 - 0.0009, d - 0.0155 + 0.0009], [PI / 4, 0, 0], { wid: 0.012, i: o.light ?? 0.22, glow: o.glow, color: o.color, dir: [0, -0.8, 0.6], reach: 1.6, pool: o.pool ?? 0.06, poolAt: [(fx0 + fx1) / 2, y0 - 0.5, d + 0.25]});
   // the doors on its face, raised, each with its handle slot and a small blue light
   const dw = (fx1 - fx0 - 0.016) / cols;
   for (let c = 0; c < cols; c++) {

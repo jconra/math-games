@@ -31,6 +31,31 @@ import { postersFor } from '../shipparts/cabin/print.js';
 
 const PI = Math.PI, EPS = 1e-6, r3 = (v) => +v.toFixed(3);
 
+// THE MEDIC'S OWN LIGHT. The game's maker, 2026-11-10: "I think the medic rooms can be brighter, due to the nature of the
+// work". So the med bay and the pharmacy and lab are lit for medical work, brighter and whiter than the ship's darker
+// level, which stays as it is for every other room (the Medic's crew room and engineering keep it, and Explorer C's
+// rooms, his pick for that ship, are not touched): more downlights, each brighter, with a bigger pool, in a cool working
+// white; the lamps over the beds brighter, their pools wider; the strips under the high lockers and the lab's shelves
+// brighter and cool white. Every light still comes from a fitting you can see (a disc in its rim, a lamp's head, a strip
+// on its rail), and the rooms keep their pools: brighter pools and more of them, not even light.
+//   on       false: the two rooms back to the ship's darker level, as they were (one switch)
+//   color    the light the fittings throw (linear; kept under 0.85 red so the cabin does not re-tone it to the room's warm
+//            white) and glow, the strips' own glow
+//   disc     each downlight: its light in the bake (i), its real-time pool (pool, poolReach), its disc's radius (r)
+//   lamp     the lamps over the beds: their light, pool and reach
+//   strip    the strips under the high lockers and the shelves: their light, times this; stripPool, their pools
+//   beam     the beams with dust under the discs and lamps: stronger, so they still read against the brighter walls
+//   extra    the downlights added (their beams off, so the beams that are there still read as events): the med bay's over
+//            the band's middle and over the walkway between the beds' feet, the lab's by the supplies rack
+export const CLINIC = {
+  on: true, color: [0.82, 0.93, 1.06], glow: [2.9, 3.2, 3.6],
+  disc: { i: 1.5, pool: 1.0, poolReach: 3.2, r: 0.1 }, lamp: { i: 1.8, pool: 1.2, reach: 2.8, poolReach: 2.2, beam: 1.5 }, beam: 1.7,
+  strip: 2.4, stripPool: 0.16, extra: true,
+};
+// (a downlight's options in the two rooms; null: the kit's own)
+const clinicDisc = (beam = true) => (CLINIC.on ? { i: CLINIC.disc.i, pool: CLINIC.disc.pool, poolReach: CLINIC.disc.poolReach, r: CLINIC.disc.r, color: CLINIC.color, beam: beam ? CLINIC.beam : 0 } : undefined);
+const clinicStrip = (base) => (CLINIC.on ? { light: r3(base * CLINIC.strip), glow: CLINIC.glow, color: CLINIC.color, pool: CLINIC.stripPool } : {});
+
 // ── the med bay ─────────────────────────────────────────────────────────────────────────────────────────────────
 // His four corners (2026-11-10, "these walls I drew Red on should have gear on them"): the forward wall either side of
 // the door from the lab, the aft wall either side of the door to the crew room, and the hull's side beside each bed, aft
@@ -69,7 +94,7 @@ function furnishMedBay({ bp, room, ctx, done, items, f, at, A }) {
   const topLockers = (W, R, u0, u1) => {
     const a0 = R.at(u0), a1 = R.at(u1), mid = (a0 + a1) / 2, len = Math.abs(a1 - a0), k = localX(W, mid, R.at(u1)) > 0 ? 1 : -1;
     const cut = k > 0 ? [0.05, 0.06] : [0.06, 0.05];
-    put('lockers', MB.wallCabinet, { x0: r3(-len / 2), x1: r3(len / 2), y0: BAY.top[0], y1: BAY.top[1], depth: 0.2, cut, handle: A.handle, trim: A.trim }, W, mid, [BAY.top[0], 2.6], len / 2);
+    put('lockers', MB.wallCabinet, { x0: r3(-len / 2), x1: r3(len / 2), y0: BAY.top[0], y1: BAY.top[1], depth: 0.2, cut, handle: A.handle, trim: A.trim, ...clinicStrip(0.22) }, W, mid, [BAY.top[0], 2.6], len / 2);
   };
   // the drawers on a run from u0 to u1, h high (a worktop over them if they are a counter)
   const drawers = (W, R, u0, u1, h, rows, counter) => {
@@ -143,14 +168,17 @@ function furnishMedBay({ bp, room, ctx, done, items, f, at, A }) {
       if (mid - 0.4 > aft) put('IV', MB.ivStation, { y0: 1.0, top: 1.98 }, SW, aft, [0.95, 2.02], 0.16);
       // the lamp on its arm: its mount on the ceiling a little in from the bed's middle, its head parked over the bed
       const bx = W.v + (W.side) * len / 2, mx = W.v + W.side * len * 0.72;
-      ctx.put('medbay: lamps', part(MB.armLamp, { ceil: ROOM, head: [r3(bx - mx), 1.98, -0.04], drop: 1.13 }), { at: [r3(mx), f, r3(mid)] });
+      ctx.put('medbay: lamps', part(MB.armLamp, { ceil: ROOM, head: [r3(bx - mx), 1.98, -0.04], drop: 1.13, ...(CLINIC.on ? { ...CLINIC.lamp, color: CLINIC.color } : {}) }), { at: [r3(mx), f, r3(mid)] });
     }
   }
   // ── the downlights, the lines on the deck, KEEP CLEAR at the ramps' mouths ──
   const ramps = (bp.doors || []).filter((d) => d.rooms[0] === room.id && d.rooms[1] === 'outside');
   // (two, before the forward wall's two runs of gear, over the band kept clear: they light the gear walls and the way
   // across; the lamps over the beds light the aft half)
-  if (ctx.disc) for (const s of [1, -1]) ctx.disc(room, r3(s * Math.min(1.35, (X1 - X0) / 2 - 0.9)), r3(Z1 - 0.5));
+  if (ctx.disc) for (const s of [1, -1]) ctx.disc(room, r3(s * Math.min(1.35, (X1 - X0) / 2 - 0.9)), r3(Z1 - 0.5), clinicDisc());
+  // (the Medic's own light, CLINIC: two more, their beams off: over the band's middle, and over the walkway between the
+  // beds' feet, lighting both aft corners)
+  if (ctx.disc && CLINIC.on && CLINIC.extra) { ctx.disc(room, 0, r3(ramps.length ? ramps[0].at[1] : (Z0 + Z1) / 2), clinicDisc(false)); ctx.disc(room, 0, r3(Z0 + 0.7), clinicDisc(false)); }
   for (const d of ramps) {
     const s = d.at[0] > 0 ? 1 : -1, [z0, z1] = [d.at[1] - d.width / 2, d.at[1] + d.width / 2], xa = s * 0.62, xb = d.at[0] - s * 0.06;
     ctx.put('medbay: deck marks', part(deckLines, { len: r3(Math.abs(xb - xa)), z: [r3(z0 + 0.03), r3(z1 - 0.03)], end: s, mid: r3(d.at[1]) }), { at: [r3((xa + xb) / 2), f, 0] });
@@ -219,13 +247,13 @@ function furnishLab({ bp, room, ctx, done, items, f, at, A }) {
       ctx.put('lab: on the island', part(ML.analyser, {}), { at: T(0.17, -len * 0.22), rot: [0, ry + PI / 2, 0] });
       ctx.put('lab: on the island', part(LB.vialRack, { seed: 5 }), { at: T(0.16, len * 0.08), rot: [0, ry + PI / 2, 0] });
       ctx.put('lab: on the island', part(ML.standScreen, { live: 'rest', seed: 0.35 }), { at: T(0.16, len * 0.36), rot: [0, ry + PI / 2 + 0.4, 0] });
-      if (ctx.disc) ctx.disc(room, r3(cx), r3(cz));
+      if (ctx.disc) ctx.disc(room, r3(cx), r3(cz), clinicDisc());
       // (and one over the hall's half of the room, between the island and the airlock's and washroom's doors)
-      if (ctx.disc && room.rect[2] - x1 > 1.0) ctx.disc(room, r3((x1 + room.rect[2]) / 2 + 0.1), r3(cz));
+      if (ctx.disc && room.rect[2] - x1 > 1.0) ctx.disc(room, r3((x1 + room.rect[2]) / 2 + 0.1), r3(cz), clinicDisc());
       done.add(it.id);
     } else if (it.kind === 'overhead' && W) {
       const mid = (W.lo + W.hi) / 2, len = W.hi - W.lo, slope = ctx.slopeAt(W.axis, W.v, mid), y1 = Math.min(+it.y + h, slope ? slope.y0 : 9);
-      ctx.put('lab: shelves', part(ML.labShelves, { w: r3(len), y0: +it.y, y1: r3(y1), d: W.depth }), at(W, mid));
+      ctx.put('lab: shelves', part(ML.labShelves, { w: r3(len), y0: +it.y, y1: r3(y1), d: W.depth, ...clinicStrip(0.24) }), at(W, mid));
       blocks.push({ axis: W.axis, v: W.v, side: W.side, lo: W.lo, hi: W.hi, y0: +it.y - 0.05, y1 });
       done.add(it.id);
     } else if (it.kind === 'pharmacy' && W) {
@@ -247,7 +275,10 @@ function furnishLab({ bp, room, ctx, done, items, f, at, A }) {
   }
   // (a downlight over the bench, clear of the hull's slope)
   const bench = items.find((it) => it.kind === 'counter' && wallOf(it, room));
-  if (ctx.disc && bench) { const W = wallOf(bench, room); if (W.axis === 'x') { const z = stool ? (stool.rect[1] + stool.rect[3]) / 2 : (W.lo + W.hi) / 2, x = W.v + W.side * (W.depth + 0.45); ctx.disc(room, r3(x), r3(z)); } }
+  if (ctx.disc && bench) { const W = wallOf(bench, room); if (W.axis === 'x') { const z = stool ? (stool.rect[1] + stool.rect[3]) / 2 : (W.lo + W.hi) / 2, x = W.v + W.side * (W.depth + 0.45); ctx.disc(room, r3(x), r3(z), clinicDisc()); } }
+  // (the Medic's own light, CLINIC: one more, its beam off, over the way in from the med bay, by the supplies rack)
+  const rack = items.find((it) => it.kind === 'rack');
+  if (ctx.disc && CLINIC.on && CLINIC.extra && rack) ctx.disc(room, r3((rack.rect[0] + rack.rect[2]) / 2), r3((rack.rect[1] + rack.rect[3]) / 2 + (rack.rect[1] - room.rect[1] < 0.3 ? 0.55 : -0.55)), clinicDisc(false));
   hangPosters(ctx, room, items, at, postersFor('science'), 'lab: posters', blocks);
   wallFields(ctx, room, items, at, { tag: 'lab: wall fields', touch: true, also: asItems(blocks) });
 }
