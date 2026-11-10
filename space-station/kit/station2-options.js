@@ -15,7 +15,20 @@
 //                          the pours' height; hazard plates on the floor
 //     '4 hooded crucible'  a low open crucible you look down into, the melt's glow lighting a big hood and its duct
 //                          above; rails all round with a way in at the front
-import { bevelBox, put, circle, bend, line, cylinder, lathe as lathe2 } from './geo.js';
+//   craneopt     the Miner hangar's ceiling crane (9 m up): 8 m of its track with its carriage lifting a canister
+//     '1 monorail hoist'   a hangar's monorail: an I-beam, a trolley on its bottom flange, a yellow chain hoist, a hook
+//                          block and two lifting straps round the canister
+//     '2 twin-rail spreader'  two rails, a wide trolley, a spreader beam whose end clamps grip the canister's ends
+//     '3 arm on a track'   an enclosed track with a light strip, a carriage with a jointed arm and four fingers
+//     '4 telescopic mast'  a stiff mast of three sliding sections down to a round lifting magnet with a ring of light
+//   scanneropt   the medical centre's big scanner (2.2 wide, 2.4 tall, 1.9 deep, its table 3.1 m long), its back on a
+//                stretch of wall: '1 ring' (the classic: a rounded housing, a round bore with a ring of light), '2 open'
+//                (two great round plates above and below), '3 thin ring' (a slim ring on a low base), '4 pod' (a
+//                capsule under a clear lid, an arch of light over it)
+//   socketopt    the wall sockets the canisters are emptied through: one in use, one empty, on a stretch of wall:
+//                '1 clamp collar', '2 cradle and valve', '3 floor well' (the canister stands upright), '4 hatch'
+import { bevelBox, put, circle, bend, line, cylinder, rrect, lathe as lathe2 } from './geo.js';
+import { pulseLine } from './shipparts/cabin/medical.js';
 import { floorQuad } from './shell.js';
 import { SCREEN_RECT } from './tex.js';
 import { floorDecal } from './station2.js';
@@ -111,6 +124,7 @@ function furnaceHis(p, hall) {
   for (const s of [-1, 1]) glowBox(p, EMBER, [0.02, y1 - y0, zf - 2.03], [s * (mw - 0.012), (y0 + y1) / 2, (2.03 + zf) / 2]);   // (its sides)
   glowBox(p, EMBER, [mw * 2, 0.02, zf - 2.03], [0, y1 - 0.012, (2.03 + zf) / 2]);                     // (its roof)
   glowBox(p, WHITE_HOT, [mw * 2 - 0.04, 0.05, zf - 2.08], [0, y0 + 0.04, (2.05 + zf) / 2]);           // (the melt on the hearth)
+  [0.34, 0.62, 0.46, 0.72, 0.4, 0.55].forEach((h, i) => glowBox(p, i % 2 ? HOT : WHITE_HOT, [0.07, h, 0.04], [-0.55 + i * 0.22, y0 + 0.06 + h / 2, 2.1 + (i % 3) * 0.06]));   // (tongues of flame)
   p.light([0, 1.75, zf + 0.4], 20, FIRE, [0, 0, 1], 15); p.light([0, 1.0, zf + 0.8], 6, FIRE, null, 10); p.light([0, 2.6, zf + 0.5], 4, FIRE, [0, 0.6, 0.8], 10);
   haze(p, [0, 1.75, zf - 0.1], [0, 0.34, 0.94], { r: 0.6, spread: 0.32, length: 2.0, strength: 0.7 });
   // the plate over the mouth: a number, a warning sign, a stripe
@@ -123,6 +137,8 @@ function furnaceHis(p, hall) {
   p.cyl('gun', 0.16, 4.8, [px, 2.7, pz], null, 14); p.cyl('gun', 0.16, 0.6, [px * 0.88, 5.0, pz * 0.88], [0, -2.4, PI / 2], 14);
   for (const y of [1.0, 2.4, 3.8]) p.box('black', [0.42, 0.1, 0.42], [px, y, pz], [0, -2.4, 0], o9);
   p.box('gun', [0.6, 0.9, 0.34], [2.12 * Math.cos(0.55), 1.7, 2.12 * Math.sin(0.55)], [0, Math.atan2(Math.cos(0.55), Math.sin(0.55)), 0], o9);
+  // a ladder up the back-left to the ring walkway
+  { const a = 3.75; placed(p, (q) => { for (const x of [-0.24, 0.24]) q.slab('black', x - 0.03, x + 0.03, 0, 4.3, -0.03, 0.03, o9); for (let y = 0.3; y < 3.4; y += 0.3) q.cyl('yellow', 0.02, 0.48, [0, y, 0], [0, 0, PI / 2], 8); }, [2.3 * Math.cos(a), 0, 2.3 * Math.sin(a)], Math.atan2(Math.cos(a), Math.sin(a))); }
   // the floor: grating, a hazard ring round the furnace, curved rails across its front
   deck(p, -4.5, 4.5, -3.2, 4.6); hazardRing(p, 2.55); railArc(p, 3.4, 0.4, PI - 0.4, 0, 6);
   placed(p, thermalConsole, [-3.35, 0, 2.35], 0.95);
@@ -216,6 +232,207 @@ function furnaceHood(p, hall) {
 const LOOKS = { 1: furnaceHis, 2: furnacePour, 3: furnaceTwo, 4: furnaceHood };
 export function furnaceOption(p, v) { (LOOKS[v[0]] || furnaceHis)(p, v.endsWith(' in the hall')); }
 
+
+// ── the ore canister, as the built Miner carries it (0.94 m across, 2.18 m long), lying along x, its middle at `at` ──
+const CAN_R = 0.47, CAN_L = 2.18;
+function canister(p, at, ry = 0, upright = false) {
+  placed(p, (q) => {
+    q.cyl('white2', CAN_R, CAN_L - 0.24, [0, 0, 0], [0, 0, PI / 2], 28);
+    for (const s of [-1, 1]) {
+      q.cyl('black', CAN_R + 0.03, 0.1, [s * (CAN_L / 2 - 0.17), 0, 0], [0, 0, PI / 2], 28);
+      q.lathe('gun', [[CAN_R - 0.02, 0], [CAN_R - 0.08, 0.06], [0.22, 0.1], [0.001, 0.11]], 24, [0, 0, 0]).rotateZ(-s * PI / 2).translate(s * (CAN_L / 2 - 0.12), 0, 0);
+    }
+    q.cyl('yellow', CAN_R + 0.006, 0.18, [0.35, 0, 0], [0, 0, PI / 2], 28);
+    if (upright) for (const part of q.parts) part.geo.rotateZ(PI / 2);
+  }, at, ry);
+}
+// a bar of section w x d from a to b in the x-y plane, at depth z
+function bar(p, surf, a, b, w, d, z = 0) { const dx = b[0] - a[0], dy = b[1] - a[1]; p.box(surf, [w, Math.hypot(dx, dy), d], [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, z], [0, 0, -Math.atan2(dx, dy)], { r: 0.004, cell: 9, loops: [] }); }
+// an I-beam along x from x0 to x1, its top at y (0.3 deep, 0.2 wide flanges)
+function ibeam(p, x0, x1, y, z = 0, surf = 'black') {
+  p.slab(surf, x0, x1, y - 0.03, y, z - 0.1, z + 0.1, o9); p.slab(surf, x0, x1, y - 0.3, y - 0.27, z - 0.1, z + 0.1, o9);
+  p.slab(surf, x0, x1, y - 0.27, y - 0.03, z - 0.012, z + 0.012, o9);
+}
+// a hanger from a roof plate at 11 m down to y, at (x, z)
+const hanger = (p, x, z, y) => { p.cyl('black', 0.03, 11 - y, [x, (11 + y) / 2, z], null, 8); p.slab('black', x - 0.15, x + 0.15, 10.96, 11.0, z - 0.15, z + 0.15, o9); };
+// a short stretch of the hangar's roof at 11 m (so the hangers have something to hang from)
+const roofBit = (p, x0, x1, z0, z1) => p.slab('dark', x0, x1, 11.0, 11.12, z0, z1, { r: 0, cell: 9, loops: [] });
+
+// ── THE CRANE: a ceiling monorail that carries the Miner's canisters (9 m up in the hangar) ──────────────────────────
+// each sketch: 8 m of its track (along x), its carriage over the middle with a canister lifted to about 3 m
+const TY = 9.3;   // (the track's top)
+function craneHook(p) {
+  // 1: a hangar's monorail hoist: an I-beam, a trolley riding its bottom flange, a yellow chain hoist, a hook block and
+  // two lifting straps round the canister
+  roofBit(p, -4.2, 4.2, -0.6, 0.6); ibeam(p, -4, 4, TY); for (const x of [-3.2, 0.0, 3.2]) hanger(p, x, 0, TY);
+  for (const s of [-1, 1]) { p.slab('gun', -0.45, 0.45, TY - 0.55, TY - 0.08, s * 0.16 - 0.03, s * 0.16 + 0.03, o9); for (const x of [-0.28, 0.28]) p.cyl('black', 0.07, 0.05, [x, TY - 0.24, s * 0.12], [PI / 2, 0, 0], 12); }
+  p.slab('yellow', -0.35, 0.35, TY - 1.25, TY - 0.55, -0.28, 0.28, o9); p.cyl('black', 0.16, 0.62, [0, TY - 0.9, 0], [PI / 2, 0, 0], 16);
+  p.slab('black', -0.36, 0.36, TY - 1.3, TY - 1.22, -0.3, 0.3, o9); p.decal('hazard', 0.6, 0.12, [0, TY - 0.7, 0.285], null, '#d9b23a');
+  const yb = 3.0 + CAN_R + 0.75;
+  for (const x of [-0.06, 0.06]) p.cyl('chrome', 0.014, TY - 1.3 - yb, [x, (TY - 1.3 + yb) / 2, 0], null, 6);
+  p.slab('yellow', -0.18, 0.18, yb - 0.3, yb, -0.1, 0.1, o9); p.cyl('black', 0.05, 0.3, [0, yb - 0.38, 0], null, 10);
+  // the straps: from the hook out to two loops under the canister
+  for (const s of [-1, 1]) {
+    const x = s * 0.6; bar(p, 'orange', [0, yb - 0.5], [x, 3.0 + CAN_R], 0.07, 0.015);
+    const ring = p.lathe('orange', [[CAN_R + 0.01, -0.04], [CAN_R + 0.03, -0.04], [CAN_R + 0.03, 0.04], [CAN_R + 0.01, 0.04]], 28); put(ring, [x, 3.0, 0], [0, 0, PI / 2]);
+  }
+  canister(p, [0, 3.0, 0]);
+}
+function craneSpreader(p) {
+  // 2: twin rails and a wide trolley: two cables down to a spreader beam whose end clamps grip the canister's ends
+  roofBit(p, -4.2, 4.2, -1.2, 1.2); for (const z of [-0.8, 0.8]) { ibeam(p, -4, 4, TY, z); for (const x of [-3.2, 3.2]) hanger(p, x, z, TY); }
+  p.slab('yellow', -0.8, 0.8, TY - 0.75, TY - 0.32, -1.0, 1.0, o9); p.slab('black', -0.82, 0.82, TY - 0.8, TY - 0.72, -1.02, 1.02, o9);
+  for (const z of [-0.8, 0.8]) for (const x of [-0.55, 0.55]) p.cyl('black', 0.09, 0.08, [x, TY - 0.24, z], [PI / 2, 0, 0], 12);
+  p.cyl('black', 0.22, 1.5, [0, TY - 0.55, 0], [PI / 2, 0, 0], 18); p.decal('hazard', 1.4, 0.16, [0, TY - 0.5, 1.003], null, '#d9b23a');
+  const ys = 3.0 + CAN_R + 0.5;
+  for (const x of [-0.9, 0.9]) p.cyl('chrome', 0.016, TY - 0.8 - ys, [x, (TY - 0.8 + ys) / 2, 0], null, 6);
+  p.slab('black', -1.45, 1.45, ys - 0.12, ys + 0.12, -0.14, 0.14, o9); p.slab('yellow', -1.4, 1.4, ys - 0.1, ys + 0.1, -0.15, 0.15, o9);
+  for (const s of [-1, 1]) { p.slab('black', s * 1.3 - 0.1, s * 1.3 + 0.1, 3.0 - 0.1, ys - 0.1, -0.12, 0.12, o9); p.cyl('gun', 0.2, 0.12, [s * (CAN_L / 2 + 0.02), 3.0, 0], [0, 0, PI / 2], 16); }
+  p.glowSlab('green', -0.3, 0.3, ys - 0.02, ys + 0.02, 0.15, 0.16);
+  canister(p, [0, 3.0, 0]);
+}
+function craneArm(p) {
+  // 3: an enclosed track (pale panels, a light strip under it) and a carriage with a jointed arm whose three fingers
+  // close round the canister's middle
+  roofBit(p, -4.2, 4.2, -0.8, 0.8);
+  p.slab('white2', -4, 4, TY - 0.5, TY, -0.32, 0.32, o9); p.slab('black', -4, 4, TY - 0.56, TY - 0.5, -0.06, 0.06, o9); p.glowSlab('blue', -3.9, 3.9, TY - 0.565, TY - 0.56, -0.025, 0.025);
+  for (const x of [-3.2, 3.2]) hanger(p, x, 0, TY);
+  p.slab('white2', -0.6, 0.6, TY - 1.0, TY - 0.5, -0.38, 0.38, o9); p.slab('black', -0.62, 0.62, TY - 1.05, TY - 0.95, -0.4, 0.4, o9);
+  p.cyl('gun', 0.22, 0.3, [0, TY - 1.2, 0], null, 18);
+  // shoulder, upper arm down and out, elbow, forearm back in, wrist over the canister
+  const sh = [0, TY - 1.35, 0], el = [0.9, 6.0, 0], wr = [0, 3.0 + CAN_R + 0.55, 0];
+  const seg = (a, b, r) => { const d = [b[0] - a[0], b[1] - a[1]], L = Math.hypot(...d); p.cyl('white2', r, L, [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, 0], [0, 0, -Math.atan2(d[0], d[1])], 16); };
+  seg(sh, el, 0.17); seg(el, wr, 0.14);
+  for (const j of [sh, el]) p.cyl('black', 0.24, 0.42, j, [PI / 2, 0, 0], 20);
+  p.cyl('black', 0.2, 0.3, wr, null, 18); p.glowSlab('orange', -0.21, 0.21, wr[1] + 0.05, wr[1] + 0.08, -0.21, 0.21);
+  p.slab('gun', -0.6, 0.6, wr[1] - 0.1, wr[1], -0.12, 0.12, o9);
+  for (const dz of [-0.45, 0.45]) for (const ry of [-PI / 2, PI / 2]) placed(p, (q) => { q.box('gun', [0.09, 0.7, 0.12], [0, -0.3, CAN_R + 0.12], [-0.35, 0, 0], o9); q.box('gun', [0.09, 0.5, 0.1], [0, -0.75, CAN_R - 0.02], [0.5, 0, 0], o9); }, [wr[0], wr[1], dz], ry);
+  canister(p, [0, 3.0, 0], PI / 2);
+}
+function craneMast(p) {
+  // 4: a carriage with a stiff telescopic mast (three square sections) down to a round lifting plate whose glowing
+  // ring holds the canister from above by magnet
+  roofBit(p, -4.2, 4.2, -0.6, 0.6); ibeam(p, -4, 4, TY, 0, 'gun'); for (const x of [-3.2, 0.0, 3.2]) hanger(p, x, 0, TY);
+  p.slab('orange', -0.7, 0.7, TY - 0.95, TY - 0.3, -0.45, 0.45, o9); p.slab('black', -0.72, 0.72, TY - 0.33, TY - 0.27, -0.47, 0.47, o9);
+  const top = TY - 0.95, plate = 3.0 + CAN_R + 0.04;
+  const secs = [[0.3, top, top - 2.0], [0.24, top - 1.9, top - 3.6], [0.18, top - 3.5, plate + 0.3]];
+  for (const [w, y1, y0] of secs) { p.slab('yellow', -w / 2, w / 2, y0, y1, -w / 2, w / 2, o9); p.slab('black', -w / 2 - 0.02, w / 2 + 0.02, y0, y0 + 0.08, -w / 2 - 0.02, w / 2 + 0.02, o9); }
+  p.lathe('gun', [[0.001, plate + 0.3], [0.5, plate + 0.22], [0.62, plate + 0.08], [0.62, plate], [0.001, plate]], 32);
+  p.add('glow', put(cylinder(0.64, 0.025, [0, plate + 0.04, 0], 32), [0, 0, 0]), 'blue');
+  canister(p, [0, 3.0, 0], PI / 2);
+}
+const CRANES = { 1: craneHook, 2: craneSpreader, 3: craneArm, 4: craneMast };
+export function craneOption(p, v) {
+  (CRANES[v[0]] || craneHook)(p);
+  deck(p, -4.5, 4.5, -3.0, 3.0); placed(p, person, [2.4, 0, 1.6], -0.5);
+}
+
+// ── THE BIG SCANNER (the medical centre's MRI-type scanner: a magnet 2.2 wide, 2.4 tall, 1.9 deep, its bore 0.7 m across,
+// its table 3.1 m long toward the way in, +z). Each sketch stands with its back on z = 0 (a wall) ──────────────────
+const MAG = { w: 2.2, h: 2.4, d: 1.9, bore: 0.35, by: 1.15 };
+function scanTable(p, z0, len, y = 0.82) {
+  p.slab('white2', -0.42, 0.42, 0, y - 0.12, z0 + len - 1.3, z0 + len - 0.2, o9);   // (its pedestal, at the room end)
+  p.slab('band', -0.38, 0.38, y - 0.12, y - 0.04, z0, z0 + len, o9);
+  p.slab({ c: '#2b3a52', r: 0.8, m: 0, w: 0 }, -0.3, 0.3, y - 0.04, y + 0.02, z0 + 0.3, z0 + len - 0.1, { r: 0.03, cell: 9, loops: [] });
+}
+function scanRing(p) {
+  // 1: the classic: a pale rounded housing with a round bore, a teal ring of light at its mouth, a long table into it
+  const g = p.extrude('white2', rrect(MAG.w, MAG.h, 0.5, 6, 0, MAG.h / 2).pts, MAG.d, 0.06, { holes: [circle(MAG.bore, 40).pts.map(([x, y]) => [x, y + MAG.by]).reverse()], curve: 24 }); put(g, [0, 0, 0.05]);
+  p.slab('band', -MAG.w / 2 + 0.1, MAG.w / 2 - 0.1, 0, 0.18, 0.1, MAG.d, o9);
+  const ring = p.lathe('black', [[MAG.bore + 0.06, 0], [MAG.bore + 0.2, 0], [MAG.bore + 0.2, 0.03], [MAG.bore + 0.06, 0.03]], 40); put(ring, [0, MAG.by, MAG.d + 0.06], [PI / 2, 0, 0]);
+  p.add('glow', put(lathe2([[MAG.bore + 0.19, 0], [MAG.bore + 0.07, 0]], 40), [0, MAG.by, MAG.d + 0.1], [PI / 2, 0, 0]), [0.25, 2.6, 2.3]);
+  p.add('glow', put(cylinder(MAG.bore - 0.005, 0.01, [0, 0, 0], 40), [0, MAG.by, 0.4], [PI / 2, 0, 0]), [0.2, 1.4, 1.3]);
+  pulseLine(p, -0.5, 0.5, 2.05, MAG.d + 0.07, 0.12);
+  scanTable(p, MAG.d - 0.9, 3.1 + 0.9);
+  p.light([0, 1.3, MAG.d + 0.6], 1.2, [0.5, 1, 0.95], [0, 0, 1], 4);
+}
+function scanOpen(p) {
+  // 2: open: two great round plates above and below the patient, a pillar behind joining them, open on three sides
+  p.lathe('white2', [[0.001, 0], [1.1, 0], [1.15, 0.12], [1.15, 0.55], [1.05, 0.62], [0.001, 0.62]], 40, [0, 0, 1.1]);
+  p.lathe('white2', [[0.001, 1.65], [1.05, 1.65], [1.15, 1.72], [1.15, 2.2], [1.05, 2.4], [0.001, 2.4]], 40, [0, 0, 1.1]);
+  p.slab('white2', -0.75, 0.75, 0.3, 2.2, 0.02, 0.6, { r: 0.08, cell: 1.5, loops: [] });
+  p.add('glow', cylinder(0.9, 0.01, [0, 1.645, 1.1], 40), [0.25, 2.6, 2.3]); p.add('glow', cylinder(0.9, 0.01, [0, 0.625, 1.1], 40), [0.2, 1.6, 1.4]);
+  pulseLine(p, -0.45, 0.45, 2.0, 1.25 + 0.0, 0.1);
+  scanTable(p, 0.5, 3.1 + 0.6, 0.95);
+  p.light([0, 1.2, 1.6], 1.2, [0.5, 1, 0.95], null, 4);
+}
+function scanThin(p) {
+  // 3: a slim ring on a low base, bands of light round it, the table passing through it
+  const R = 1.05, T = 0.24, cy = 1.2, zc = 0.9;
+  const ring = p.lathe('white2', [[R - T, -0.3], [R + T, -0.3], [R + T + 0.04, -0.2], [R + T + 0.04, 0.2], [R + T, 0.3], [R - T, 0.3], [R - T - 0.03, 0.2], [R - T - 0.03, -0.2], [R - T, -0.3]], 56); put(ring, [0, cy, zc], [PI / 2, 0, 0]);
+  for (const dz of [-0.31, 0.31]) p.add('glow', put(cylinder(R - T + 0.02, 0.01, [0, 0, 0], 56), [0, cy, zc + dz], [PI / 2, 0, 0]), [0.25, 2.6, 2.3]);
+  p.slab('band', -0.55, 0.55, 0, 0.25, zc - 0.45, zc + 0.45, o9); p.slab('white2', -0.35, 0.35, 0.25, cy - R - T + 0.05, zc - 0.25, zc + 0.25, o9);
+  pulseLine(p, -0.4, 0.4, cy + R + 0.05, zc + 0.31, 0.1);
+  scanTable(p, -0.4, 3.1 + 1.3);
+  p.light([0, 1.3, zc + 0.8], 1.2, [0.5, 1, 0.95], [0, 0, 1], 4);
+}
+function scanPod(p) {
+  // 4: a closed pod: the patient lies in a capsule under a clear lid, an arch of light slides along over it
+  p.slab('white2', -0.6, 0.6, 0, 0.5, 0.2, 3.3, { r: 0.12, cell: 1.5, loops: [] });
+  p.slab('band', -0.62, 0.62, 0.5, 0.62, 0.15, 3.35, o9);
+  p.glass(1.0, 2.9, [0, 0.95, 1.75], [-PI / 2, 0, 0]);
+  for (const s of [-1, 1]) p.slab('white2', s * 0.62 - 0.08, s * 0.62 + 0.08, 0.6, 1.0, 0.2, 3.3, o9);
+  const arch = p.lathe('white2', [[1.15, -0.18], [1.32, -0.18], [1.32, 0.18], [1.15, 0.18], [1.15, -0.18]], 48); put(arch, [0, 0, 2.2], [PI / 2, 0, 0]);
+  p.add('glow', put(lathe2([[1.16, 0], [1.2, 0]], 48), [0, 0, 2.39], [PI / 2, 0, 0]), [0.25, 2.6, 2.3]);
+  p.slab('white2', -0.5, 0.5, 0, 1.6, 0.0, 0.25, o9); pulseLine(p, -0.35, 0.35, 1.3, 0.255, 0.1);
+  p.light([0, 1.3, 2.2], 1.2, [0.5, 1, 0.95], null, 4);
+}
+const SCANS = { 1: scanRing, 2: scanOpen, 3: scanThin, 4: scanPod };
+export function scannerOption(p, v) {
+  (SCANS[v[0]] || scanRing)(p);
+  p.slab('white2', -2.6, 2.6, 0, 3, -0.3, -0.05, { r: 0, cell: 9, loops: [] });   // (a stretch of the room's back wall)
+  floorQuad(p, 'deck', -2.6, 2.6, -0.05, 5.2, 0.006);
+  placed(p, person, [1.6, 0, 4.4], -0.6);
+}
+
+// ── THE WALL SOCKETS where the Miner's canisters are emptied into the crusher: a stretch of the hangar's wall with
+// one socket in use (a canister plugged in) and one empty ─────────────────────────────────────────────────────────
+function sockCollar(p, x, y, used) {
+  // 1: a round collar with four clamps and a ring of light (green: in use; amber: empty, its shutter shut)
+  p.lathe('gun', [[CAN_R + 0.06, 0], [CAN_R + 0.3, 0], [CAN_R + 0.3, 0.18], [CAN_R + 0.2, 0.26], [CAN_R + 0.06, 0.26], [CAN_R + 0.06, 0]], 36).rotateX(PI / 2).translate(x, y, 0);
+  p.add('glow', put(cylinder(CAN_R + 0.17, 0.01, [0, 0, 0], 36), [x, y, 0.27], [PI / 2, 0, 0]), used ? 'green' : 'amber');
+  for (let k = 0; k < 4; k++) { const a = PI / 4 + k * PI / 2; p.box('yellow', [0.16, 0.2, 0.3], [x + Math.cos(a) * (CAN_R + 0.12), y + Math.sin(a) * (CAN_R + 0.12), 0.32], [0, 0, a], o9); }
+  if (!used) { p.add('solid', put(cylinder(CAN_R + 0.06, 0.03, [0, 0, 0], 36), [x, y, 0.06], [PI / 2, 0, 0]), 'black'); for (let k = 0; k < 6; k++) p.box('dark', [0.04, CAN_R * 1.9, 0.02], [x, y, 0.08], [0, 0, k * PI / 6], { r: 0.003, cell: 9, loops: [] }); }
+}
+function sockCradle(p, x, y, used) {
+  // 2: a cradle on two brackets the canister lies in, its end pushed into a valve block on the wall
+  p.slab('gun', x - 0.5, x + 0.5, y - 0.55, y + 0.55, 0, 0.35, o9); p.cyl('black', 0.3, 0.12, [x, y, 0.41], [PI / 2, 0, 0], 24);
+  p.glowSlab(used ? 'green' : 'amber', x - 0.35, x - 0.2, y + 0.38, y + 0.46, 0.35, 0.36);
+  for (const z of [0.9, 2.1]) { p.slab('yellow', x - 0.08, x + 0.08, 0, y - CAN_R - 0.05, z - 0.08, z + 0.08, o9); p.lathe('yellow', [[CAN_R + 0.02, -0.06], [CAN_R + 0.08, -0.06], [CAN_R + 0.08, 0.06], [CAN_R + 0.02, 0.06]], 24).rotateX(PI / 2).translate(x, y, z); }
+}
+function sockWell(p, x, y, used) {
+  // 3: a well in the floor the canister stands upright in; a pump head on the wall over it
+  p.lathe('gun', [[CAN_R + 0.05, 0], [CAN_R + 0.35, 0], [CAN_R + 0.35, 0.12], [CAN_R + 0.05, 0.12]], 36, [x, 0, 1.0]);
+  p.add('solid', cylinder(CAN_R + 0.05, 0.02, [x, 0.02, 1.0], 36), 'black');
+  hazardRing(p, CAN_R + 0.55, x, 1.0);
+  p.slab('gun', x - 0.35, x + 0.35, 2.5, 3.1, 0, 0.5, o9); p.cyl('black', 0.1, 0.4, [x, 2.3, 0.35], null, 12);
+  p.glowSlab(used ? 'green' : 'amber', x - 0.25, x + 0.25, 2.95, 3.0, 0.5, 0.51);
+}
+function sockHatch(p, x, y, used) {
+  // 4: a square hatch in the wall with a lit frame: the canister slides right in; empty, its shutter is down
+  const h = CAN_R + 0.15;
+  for (const [a, b, c, d] of [[-h - 0.15, -h, -h - 0.15, h + 0.15], [h, h + 0.15, -h - 0.15, h + 0.15], [-h, h, h, h + 0.15], [-h, h, -h - 0.15, -h]]) p.slab('gun', x + a, x + b, y + c, y + d, 0, 0.18, o9);
+  p.glowSlab(used ? 'green' : 'amber', x - h, x + h, y + h + 0.02, y + h + 0.05, 0.18, 0.19);
+  p.slab('black', x - h, x + h, y - h, y + h, 0.0, 0.02, o9);
+  if (!used) for (let k = 0; k < 5; k++) p.slab('dark', x - h + 0.02, x + h - 0.02, y - h + k * 0.25 + 0.02, y - h + k * 0.25 + 0.23, 0.02, 0.05, { r: 0.01, cell: 9, loops: [] });
+  p.decal('hazard', 2 * h + 0.3, 0.14, [x, y - h - 0.25, 0.005], null, '#d9b23a');
+}
+const SOCKS = { 1: sockCollar, 2: sockCradle, 3: sockWell, 4: sockHatch };
+export function socketOption(p, v) {
+  const k = v[0], f = SOCKS[k] || sockCollar, y = k === '3' ? 0 : 0.85;
+  p.slab('white2', -3.2, 3.2, 0, 3.0, -0.25, 0, { r: 0, cell: 9, loops: [] });   // (a stretch of the hangar's wall)
+  p.slab('black', -3.2, 3.2, 0, 0.12, -0.25, 0.04, o9);
+  floorQuad(p, 'tread', -3.2, 3.2, 0, 4.4, 0.006);
+  f(p, -1.4, y, true); f(p, 1.4, y, false);
+  if (k === '3') canister(p, [-1.4, CAN_L / 2 + 0.02, 1.0], 0, true);
+  else canister(p, [-1.4, y, (k === '4' ? 0.6 : k === '2' ? 1.5 : 0.26 + CAN_L / 2)], PI / 2);
+  placed(p, person, [2.4, 0, 3.0], -0.5);
+}
+
+
 export const OPTIONS2 = {
   furnaceopt: { name: 'Furnace (options to choose from)', group: 'Options', at: 'point', variants: ['1 like the picture', '2 pouring tower', '3 two towers', '4 hooded crucible', '1 in the hall', '2 in the hall', '3 in the hall', '4 in the hall'], foot: [9, 7, 9], build: furnaceOption },
+  craneopt: { name: 'Crane (options to choose from)', group: 'Options', at: 'point', variants: ['1 monorail hoist', '2 twin-rail spreader', '3 arm on a track', '4 telescopic mast'], foot: [9, 11, 6], build: craneOption },
+  scanneropt: { name: 'Big scanner (options to choose from)', group: 'Options', at: 'point', variants: ['1 ring', '2 open', '3 thin ring', '4 pod'], foot: [5.2, 3, 5.4], build: scannerOption },
+  socketopt: { name: 'Wall socket (options to choose from)', group: 'Options', at: 'point', variants: ['1 clamp collar', '2 cradle and valve', '3 floor well', '4 hatch'], foot: [6.4, 3, 4.4], build: socketOption },
 };

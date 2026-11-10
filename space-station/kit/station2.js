@@ -11,11 +11,14 @@
 //              beside its bottom chord (dark shades, a pool of light on the floor far below)
 //   standin    a STAND-IN for a prop that is still to be designed: a plain mid-grey block or drum of its size, so a
 //              room's walking room and sight lines can be judged ('box WxHxD', 'cyl RxH' standing, 'cylx RxL' lying)
+//   hood3      the medic ship's triage hood (kit/shipparts/cabin/medical.js, imported) under a station room's 3 m ceiling
+//   pulse      the medical mark, the medic ship's teal pulse line, as a wall-kit item ('short' 1.6 m, 'long' 3.2 m)
 import { WALL_FACE as WF, ROOM_H as H } from './grid.js';
 import { MeshData, plane, put, fixWinding, cylinder } from './geo.js';
 import { floorQuad, backing, slabRow, hatch, G, Z0 } from './shell.js';
 import { kitTextures } from './materials.js';
 import { SCREEN_RECT, CREWS } from './tex.js';
+import { scanner as triageHood, pulseLine } from './shipparts/cabin/medical.js';
 import { OPTIONS2 } from './station2-options.js';   // (sketches of props still to be designed, to choose from)
 
 const PI = Math.PI;
@@ -174,6 +177,12 @@ export function standIn(p, v) {
   else p.slab(STAND, -n[0] / 2, n[0] / 2, 0, n[1], -n[2] / 2, n[2] / 2, { r: 0.02, cell: 1.5, loops: [] });   // wide x high x deep
 }
 
+// ── the medical centre's pieces from the medic ship (imported, never copied) ────────────────────────────────────────
+// the triage hood: a FREE piece standing on the deck, its rods up to a 3 m ceiling
+export function hood3(p) { triageHood(p, { ceil: H }); }
+// the mark: a wall-kit item, its middle at y = 0
+export function pulse(p, v) { const L = v === 'long' ? 3.2 : 1.6; pulseLine(p, -L / 2, L / 2, 0, 0.004, 0.22); }
+
 export const STATION2 = {
   baydoor2: { name: 'Big hangar door', group: 'Hangar', at: 'point', variants: ['open'], foot: [24, 11, 5.5], build: bayDoor2 },
   pad: { name: 'Big landing pad', group: 'Hangar', at: 'free', variants: ['ring', 'ring 1'], foot: [19, 0.1, 19], build: pad },
@@ -182,5 +191,7 @@ export const STATION2 = {
   wall3: { name: 'Third storey panel', group: 'Big rooms', at: 'edge', variants: ['plain', 'vent'], foot: [2, 3, 0.3], build: wall3 },
   hatchshut: { name: 'Sealed hatch', group: 'Shell', at: 'point', variants: ['wide'], foot: [4, 3, 0.6], build: hatchShut },
   board: { name: 'Crew board', group: 'Wall kit', at: 'wall', variants: ['medic', 'mining', 'explore', 'medic big', 'mining big', 'explore big'], foot: [2.6, 1.8, 0.1], build: board },
+  hood3: { name: 'Triage hood (3 m ceiling)', group: 'Medical', at: 'free', variants: ['hood'], foot: [1.2, 1.0, 1.9], build: hood3 },
+  pulse: { name: 'Medical mark (pulse line)', group: 'Medical', at: 'wall', variants: ['short', 'long'], foot: [3.2, 0.3, 0.02], build: pulse },
   ...OPTIONS2,
 };
