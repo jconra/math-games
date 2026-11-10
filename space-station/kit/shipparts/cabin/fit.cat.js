@@ -18,6 +18,7 @@ import { starScreen, screen, glowStrip } from './bits.js';
 import { wallPipes, pipeRun, grating, hoopRail } from './engpipes.js';
 import { downlight, washLight } from './lights.js';
 import { growPod } from './growpod.js';
+import { wallKit, wireCard, cables, breakerBox, junctionBox, gauges, trunking, slopeCard } from './engwalls.js';
 import { shape, solid, add } from '../../bevel.js';
 import { placeInto, part } from '../place.js';
 
@@ -78,6 +79,11 @@ export const PRESETS = {
   cabinEngGrating: { 'down an aisle': { len: 1.84, wid: 0.9 }, 'short': { len: 1, wid: 0.6 } },
   cabinEngRail: { 'low': { len: 1.14, h: 0.5, z: 0.5 }, 'waist high': { len: 1.6, h: 0.95, z: 0.5 } },
   cabinDownlight: { 'in a ceiling': {}, 'small, under a locker': { r: 0.05, y: 1.4, drop: 0.5 } },
+  // (round four, engineering's walls busy: kit/shipparts/cabin/engwalls.js)
+  cabinEngWallKit: { 'a stretch of wall, 0.8 m': { w: 0.8, top: 2.45 }, '1 m, the other way round': { w: 1.0, top: 2.45, flip: true, seed: 1, label: 'label:BUS-D' } },
+  cabinEngWires: { 'painted bundles, cables hanging': {} },
+  cabinEngBoxes: { 'switches, junction box, gauges': {}, 'a small box of switches': { small: true } },
+  cabinEngTrunking: { 'along the ceiling\'s edge, 1.7 m': { len: 1.7, y0: 2.0, out: 1.02, drop: 0.16 }, 'and the bundle on the slope': { len: 1.7, y0: 2.0, out: 1.02, drop: 0.16, slope: true } },
   cabinWashLight: { '2 m': { len: 2, y: 1.6 }, '1 m': { len: 1, y: 1.6 } },
   cabinGrowPod: { 'round, 30 cm': {}, 'eight-sided, 30 cm': { shape: 'oct' }, 'round, 45 cm': { size: 0.45 }, 'two side by side': { n: 2, plate: false, gap: 0.07 }, 'the leaves swaying (a choice)': { sway: 1 } },
 };
@@ -134,6 +140,10 @@ export const CABIN_FIT = {
   cabinEngPipes: entry('cabinEngPipes', 'Engineering: two pipes along a wall', 'wall', [3.0, 2.3, 0.3], wallPipes),
   cabinEngPipeRun: entry('cabinEngPipeRun', 'Engineering: a pipe through points', 'free', [2.6, 2.5, 0.8], pipeRun),
   cabinEngGrating: entry('cabinEngGrating', 'Engineering: floor grating', 'free', [2.0, 0.05, 1.0], grating),
+  cabinEngWallKit: entry('cabinEngWallKit', 'Engineering: a stretch of wall filled', 'wall', [1.0, 2.5, 0.15], wallKit),
+  cabinEngWires: entry('cabinEngWires', 'Engineering: wiring painted on cards, cables', 'wall', [1.2, 1.6, 0.1], (p) => { wireCard(p, { pts: [[-0.6, 1.4], [0.1, 1.4], [0.25, 1.25], [0.25, 0.3]], n: 9 }); wireCard(p, { pts: [[-0.5, 0.2], [-0.5, 1.2]], n: 5, seed: 3 }); cables(p, { a: [-0.3, 1.1, 0.09], b: [0.1, 0.7, 0.07], sag: 0.15, n: 3 }); return p; }),
+  cabinEngBoxes: entry('cabinEngBoxes', 'Engineering: switch boxes, junction box, gauges', 'wall', [1.0, 1.6, 0.12], (p, o) => { if (o.small) return breakerBox(p, { x: 0, y: 1.2, w: 0.36, h: 0.34, rows: 2, cols: 5, blink: [[0, 2]], label: 'label:BUS-D' }); breakerBox(p, { x: -0.2, y: 1.3, blink: [[0, 1], [2, 3]], label: 'label:BUS-C' }); junctionBox(p, { x: 0.28, y: 0.8, lamp: 'blink' }); gauges(p, { x: 0.28, y: 1.45, n: 2 }); return p; }),
+  cabinEngTrunking: entry('cabinEngTrunking', 'Engineering: trunking along the ceiling\'s edge', 'wall', [1.8, 2.5, 1.1], (p, o) => { trunking(p, o); if (o.slope) slopeCard(p, { y0: 2.0, run: 0.5, len: 1.8, s: 0.56 }); return p; }),
   cabinEngRail: entry('cabinEngRail', 'Engineering: tube rail', 'wall', [1.6, 1.0, 0.6], hoopRail),
   // (the light fittings, kit/shipparts/cabin/lights.js: the disc under a square of ceiling, to show how it sits in one,
   // over a square of deck for its light to land on; the Kit Lab draws its beam with dust in it, kit/beams.js)

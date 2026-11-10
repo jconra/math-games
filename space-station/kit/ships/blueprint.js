@@ -22,6 +22,9 @@
 //            +x or -x on a wall along x, +z or -z on a wall along z). doorReach says how much wall that takes.
 //   eyes     (optional) where the lab's camera stands in each room, by room id: { "at": [x, z], "look": [x, z] }, at a
 //            person's eye height (the lab finds a spot itself for a room not listed)
+//   a room, optional: "busy": true (an engineering room: its walls filled with wiring, boxes of switches, gauges, a
+//            trunking along the ceiling's edges: kit/ships/cabin-furnish.js); "beam": { "spread", "strength" } (its
+//            ceiling discs' beams: the half angle in radians, 0.16, and how strong, 1). The checker reads neither
 //   items    furniture as footprints with a height: beds, seats, counters, consoles, lockers, tables, machinery
 //            "y": a HANGING item's bottom above its room's floor (an overhead cabinet in the wall's top corner): it hangs
 //            on a wall, over furniture or high enough to walk under; people walk beneath it only where it is 2.0 m up

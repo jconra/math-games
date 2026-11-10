@@ -40,6 +40,7 @@ import { reactorCore, drivePumps, driveDims, engStation, gearShelves } from '../
 import { reactorPort } from '../shipparts/cabin/reactor.js';
 import { wallPipes, pipeRun, grating, hoopRail } from '../shipparts/cabin/engpipes.js';
 import { washLight } from '../shipparts/cabin/lights.js';
+import { wallKit, wireCard, slopeCard, trunking, breakerBox, gauges, junctionBox } from '../shipparts/cabin/engwalls.js';
 import { screen, starScreen, hazard } from '../shipparts/cabin/bits.js';
 import { shape, relief, add } from '../bevel.js';
 import { POSTERS, postersFor } from '../shipparts/cabin/print.js';
@@ -432,8 +433,17 @@ function furnishWash({ room, ctx, done, items, f, at, A }) {
 // pipe down to the deck from the pair in each narrow gap between what stands on that wall. Overhead, a pipe from the
 // reactor's shoulder across the room to the drive's valve chest. Down the aisle to the station a floor grating; a low
 // rail before the reactor. The room's downlights: one over the aisle, one before each machine.
+// A room with "busy": true (the game's maker, 2026-11-10: "I'd expect every sq inch of an area like that to be used in a
+// real ship"): its walls filled (kit/shipparts/cabin/engwalls.js): each clear stretch of the wall its door is in, floor to
+// top, a bundle of wires along its top, a box of switches with lamps, conduit, gauges, a junction box, cables hanging
+// between; a bundle along each hull slope; a trunking along each side where the ceiling meets the slope (over the
+// machines and lockers: in Explorer C it also hides the hull's own skin, which dips under the ceiling there), the pipe
+// overhead brought down under it; a bundle along the wall the machines back onto, under its pipes; on the hull walls over
+// and beside the machines, bundles and a box of switches. And its light kept low between its fittings (its downlights,
+// their beams and the wash light turned down), its glows as bright as they were. Without "busy", as before.
 function furnishEngineering({ bp, room, ctx, done, items, f, at, A }) {
   const extra = [], posters = postersFor('engineering'), ceiling = typeof room.ceiling === 'number' ? room.ceiling : 2.5, r3 = (v) => +v.toFixed(3);
+  const busy = !!room.busy, TRUNK = busy ? { out: 1.02, drop: 0.16 } : null, DISC = busy ? { i: 0.18, pool: 0.17, beam: 0.55 } : undefined;
   const [X0, Z0, X1, Z1] = room.rect, cx = (X0 + X1) / 2, cz = (Z0 + Z1) / 2;
   const machines = items.filter((it) => it.kind === 'machine').map((it) => ({ it, W: wallOf(it, room) })).filter((M) => M.W);
   const named = machines.find((M) => /reactor/i.test(M.it.name || '')) || machines[0], backs = [];
@@ -468,7 +478,7 @@ function furnishEngineering({ bp, room, ctx, done, items, f, at, A }) {
   if (D) {
     const P0 = toWorld(named.W, named.mid, reactorPort(named.o)), P1 = toWorld(D.W, D.mid, driveDims(D.o).chest);
     const top = (x, z) => { let y = ROOM; for (const v of [X0, X1]) { const S = ctx.slopeAt('x', v, z); if (S) y = Math.min(y, S.y0 + Math.abs(x - v)); } return y; };
-    const yT = Math.min(ROOM - 0.14, top(P0[0], P0[2]) - 0.14, top(P1[0], P1[2]) - 0.14);
+    const yT = Math.min(ROOM - 0.14, top(P0[0], P0[2]) - 0.14, top(P1[0], P1[2]) - 0.14, TRUNK ? ROOM - TRUNK.drop - 0.1 : 9);
     if (yT > Math.max(P0[1], P1[1]) + 0.3) {
       const up0 = [P0[0], yT, P0[2]], up1 = [P1[0], yT, P1[2]], jog = named.W.axis === 'x' ? Math.abs(P1[2] - P0[2]) : Math.abs(P1[0] - P0[0]);
       // (a jog too short to bend through: the level leg runs a little askew instead)
@@ -520,7 +530,7 @@ function furnishEngineering({ bp, room, ctx, done, items, f, at, A }) {
     let yTop = y + 0.26;
     const wy = y + 0.3, ins = slopes.map((s) => (s == null ? 0.05 : Math.max(0.05, wy + 0.08 - s))), wlen = wl - ins[0] - ins[1];
     if (!PS && wy + 0.08 < ROOM && wlen > 0.6) {
-      ctx.put('engineering: lights', part(washLight, { len: r3(wlen), y: r3(wy) }), at(W, mid + (W.axis === 'z' ? W.side : -W.side) * (ins[0] - ins[1]) / 2));
+      ctx.put('engineering: lights', part(washLight, { len: r3(wlen), y: r3(wy), ...(busy ? { i: 0.09, pool: 0.07 } : {}) }), at(W, mid + (W.axis === 'z' ? W.side : -W.side) * (ins[0] - ins[1]) / 2));
       yTop = wy + 0.07;
     }
     extra.push({ axis: W.axis, v: W.v, side: W.side, lo: W.lo, hi: W.hi, y0: y - 0.08, y1: yTop });
@@ -553,15 +563,66 @@ function furnishEngineering({ bp, room, ctx, done, items, f, at, A }) {
   // the station)
   if (ctx.disc && machines.length) {
     let mx = 0, mz = 0;
-    for (const M of machines) { const c = centre(M.it); mx += c[0] / machines.length; mz += c[1] / machines.length; const z = c[1] + (cz - c[1]) * 0.4, x = clearOfSlopes(ctx, room, c[0] + (cx - c[0]) * 0.4, z, 0.14, ROOM); if (x != null) ctx.disc(room, r3(x), r3(z)); }
+    for (const M of machines) { const c = centre(M.it); mx += c[0] / machines.length; mz += c[1] / machines.length; const z = c[1] + (cz - c[1]) * 0.4, x = clearOfSlopes(ctx, room, c[0] + (cx - c[0]) * 0.4, z, 0.14, ROOM); if (x != null) ctx.disc(room, r3(x), r3(z), DISC); }
     const dx = cx - mx, dz = cz - mz, dl = Math.hypot(dx, dz), px = dl > 0.05 ? -dz / dl : 0, pz = dl > 0.05 ? dx / dl : 0, half = (Math.abs(px) * (X1 - X0) + Math.abs(pz) * (Z1 - Z0)) * 0.29;
     for (const s of dl > 0.05 ? [-1, 1] : [0]) {
-      const az = Math.max(Z0 + 0.5, Math.min(Z1 - 0.5, cz + dz * 1.2 + pz * half * s)), ax = clearOfSlopes(ctx, room, Math.max(X0 + 0.5, Math.min(X1 - 0.5, cx + dx * 1.2 + px * half * s)), az, 0.14, ROOM);
-      if (ax != null) ctx.disc(room, r3(ax), r3(az));
+      // (busy: these two close before the wall across from the machines, past the trunkings' ends, washing its fittings)
+      const az = busy && Math.abs(dz) > Math.abs(dx) ? (dz > 0 ? Z1 - 0.3 : Z0 + 0.3) : Math.max(Z0 + 0.5, Math.min(Z1 - 0.5, cz + dz * 1.2 + pz * half * s)), ax = clearOfSlopes(ctx, room, Math.max(X0 + 0.5, Math.min(X1 - 0.5, cx + dx * 1.2 + px * half * s)), az, 0.14, ROOM);
+      if (ax != null) ctx.disc(room, r3(ax), r3(az), DISC);
     }
   }
+  if (busy) busyWalls({ room, ctx, items, at, extra, machines, named, PW, pipeY, r3, stations });
   if (left.length) hangPosters(ctx, room, items, at, left, 'engineering: posters', extra.slice());
   wallFields(ctx, room, items, at, { tag: 'engineering: wall fields', touch: true, also: asItems(extra) });
+}
+// ENGINEERING'S WALLS FILLED (a room with "busy": true; see furnishEngineering)
+function busyWalls({ room, ctx, items, at, extra, machines, named, PW, pipeY, r3, stations }) {
+  const [X0, Z0, X1, Z1] = room.rect, tag = 'engineering: walls';
+  let seed = 0;
+  for (const W of roomWalls(room)) {
+    const slope = ctx.slopeAt(W.axis, W.v, (W.lo + W.hi) / 2), mid = (W.lo + W.hi) / 2, doors = ctx.openings(W.axis, W.v);
+    if (slope) {
+      // a hull side: a bundle along its slope, the trunking along the ceiling's edge over it (in from each end wall
+      // enough to clear the pipes and the downlights there)
+      const len = W.hi - W.lo - 2 * FACE;
+      ctx.put(tag, part(slopeCard, { y0: slope.y0, run: slope.run, ceiling: ROOM, len: r3(len), s: 0.56, n: 8, seed: seed++ }), at(W, mid));
+      const t0 = W.lo + 0.34, t1 = W.hi - 0.4;
+      if (t1 - t0 > 0.6) ctx.put(tag, part(trunking, { len: r3(t1 - t0), y0: slope.y0, ceiling: ROOM, out: 1.02, drop: 0.16, seed: seed++ }), at(W, (t0 + t1) / 2));
+      // over and beside the machines against it: a bundle under the slope's foot along each; over the drive's drum a box
+      // of switches and gauges; at the machine's end toward the room's door wall, a bundle down to the deck
+      for (const M of machines.filter((M) => M.W.axis === W.axis && Math.abs(M.W.v - W.v) < EPS)) {
+        const [a, b] = [M.W.lo, M.W.hi], m = (a + b) / 2, L = b - a - 0.1, yb = slope.y0 - 0.075;
+        ctx.put(tag, part(wireCard, { pts: [[-L / 2, yb], [L / 2, yb]], n: 6, seed: seed++, ties: 0.3 }), at(W, m));
+        const toDoor = Math.abs(a - Z1) < Math.abs(b - Z1) ? a : b, e = r3(localX(W, m, toDoor) - Math.sign(localX(W, m, toDoor)) * 0.12);
+        ctx.put(tag, part(wireCard, { pts: [[e, yb], [e, 0.1]], n: 4, seed: seed++, ties: 0.3 }), at(W, m));
+        if (M === named) ctx.put(tag, part(junctionBox, { x: e, y: 1.25, w: 0.17, h: 0.46, d: 0.075, lamp: 'blink', glands: [1, 1], seed: seed++ }), at(W, m));
+        if (M !== named) {
+          ctx.put(tag, part(breakerBox, { x: r3(-e * 0.3), y: r3(yb - 0.25), w: 0.36, h: 0.34, rows: 2, cols: 5, blink: [[0, 2]], label: 'label:BUS-D', seed: seed++ }), at(W, m));
+          ctx.put(tag, part(gauges, { x: r3(-e * 0.3 - Math.sign(e) * 0.36), y: r3(yb - 0.22), n: 3, r: 0.04, turn: [0.55, 0.3, 0.75] }), at(W, m));
+        }
+      }
+      continue;
+    }
+    if (PW && W.axis === PW.axis && Math.abs(W.v - PW.v) < EPS) {
+      // the wall the machines back onto: a bundle under its pipes, wall to wall (behind the risers, over the poster)
+      const L = W.hi - W.lo - 2 * FACE - 0.04;
+      ctx.put(tag, part(wireCard, { pts: [[-L / 2, pipeY - 0.105], [L / 2, pipeY - 0.105]], n: 7, seed: seed++, ties: 0.34 }), at(W, mid));
+      // a slim box each side of the station's screens, over its desk, between them and the pipes down to the deck
+      for (const S of stations.filter((S) => S.W.axis === W.axis && Math.abs(S.W.v - W.v) < EPS)) for (const k of [-1, 1]) {
+        const x = r3(localX(W, mid, S.mid) + k * (S.len / 2 + 0.03)), clear = !machines.some((M) => { const [a, b] = alongOf(M.it, W).map((v) => localX(W, mid, v)).sort((u, v) => u - v); return x + 0.07 > a && x - 0.07 < b; });
+        if (clear) ctx.put(tag, part(junctionBox, { x, y: 1.28, w: 0.11, h: 0.42, d: 0.06, lamp: k > 0 ? 'blink' : 'steady', caution: false, glands: [1, 1], seed: seed++ }), at(W, mid));
+      }
+      continue;
+    }
+    if (!doors.length) continue;
+    // the wall the door is in: each clear stretch, floor to top, filled; its box of switches at its end away from the door
+    for (const [a, b] of clearStretches(ctx, room, items, W, 0.05, ROOM - 0.06, extra, { end: 0, cut: 0.03 })) {
+      if (b - a < 0.6) continue;
+      const m = (a + b) / 2, d = doors.map(([p, q]) => (p + q) / 2).sort((u, v) => Math.abs(u - m) - Math.abs(v - m))[0];
+      ctx.put(tag, part(wallKit, { w: r3(b - a), top: r3(ROOM - 0.05), flip: localX(W, m, d) > 0, seed: seed++, label: seed % 2 ? 'label:BUS-C' : 'label:BUS-D' }), at(W, m));
+      extra.push({ axis: W.axis, v: W.v, side: W.side, lo: a, hi: b, y0: 0, y1: ROOM });
+    }
+  }
 }
 
 // hazard hatching at the ship's own door, where it opens from this room: a band on the floor inside its step, and up the
