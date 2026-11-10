@@ -40,6 +40,8 @@ import { part } from '../shipparts/place.js';
 import { SURF } from '../materials.js';
 import * as C from './built-common.js';
 import { HULL, ENGINE_AT, LEG, LEGS, WELLS, WELL_TOP, DECK as DECK0, BAY, CREW, PARTS, Q } from './medic-built.hull.js';
+// (the Medic's own furnishing for its rooms, for the cabin built inside it from a blueprint: kit/ships/cabin-built.js)
+import './medic-furnish.js';
 export { WELL_TOP };
 export { THROTTLE, ENGINE, setThrottle } from './built-common.js';
 
@@ -253,27 +255,60 @@ function mdMarks(p) {
 // monitor on the aft wall showing the teal pulse line. The forward half is the stretcher's way from either ramp.
 export const BEDS = { x: [0.55, 2.35], z: [-1.7, -0.8], h: 0.62, mattress: 0.14 };
 export const INNER = { w: 1.3, h: 2.05 };
+// THE RAMP OPENINGS, NARROWED (the game's maker, 2026-11-10, marking the med bay's walls for gear: "these walls I drew
+// Red on should have gear on them", the side walls beside each patient bed among them). Meshy's openings ran nearly the
+// bay's whole length (z -1.9 to 1.67); each is now 2 m, at the bay's forward end, as every Medic plan draws its ramps
+// (z -0.75 to 1.25): the rest of each opening is closed by a fixed panel (CLOSER) in the hull's skin, so there is solid
+// wall beside each bed inside, and with both ramps down the bay still opens right through the ship across its forward
+// half. CLOSER: its outer face (x), how far it runs past the opening's ends into the skin (over), its foot and top (y).
+export const OPENING = { z: [-0.75, 1.25] };
+export const CLOSER = { x: 2.97, over: 0.08, y: [1.62, 3.865], frame: 0.1 };
 // the cabinets along the starboard opening when its ramp is sealed (the one-ramp layout): drawers, shelves, a screen
 export const EQUIP = { x: [-2.58, -2.1], z: [-0.48, 1.48], h: 2.0, console: { x: [-2.0, -0.55], z: [1.0, 1.48], h: 0.9 } };
 const bayPaint = (n, c) => (n.y > 0.7 ? PAL.deck : n.y < -0.7 ? PAL.inner : Math.abs(c.x) > BAY.x - 0.05 ? PAL.dark : PAL.bay);
 // (each of Meshy's bay faces turned to face into the bay: some of the 3k's face out, into the hull)
 const BAY_MID = V3(0, (BAY.floor + BAY.ceil) / 2, (BAY.ends[0] + BAY.ends[1]) / 2);
-function mdBay(p) {
-  const acc = new Acc(), F = hullFaces().filter((f) => f.paint === 'bay');
-  for (const f of F) { const toMid = BAY_MID.clone().sub(f.c), n = f.n.dot(toMid) < 0 ? f.n.clone().negate() : f.n; acc.tris([f.pts.map(dk)], n, bayPaint(n, f.c)); }
+// 'med bay, cabin': the same with the cabin built inside from a blueprint (kit/ships/cabin-built.js; the Ship Lab's
+// LAB.cabin swap): the cabin has its own floor, walls, ceiling, doors and furniture, so of the bay only what belongs to
+// the hull stays: the closers, the lintels (run in to the cabin's wall line), and a sill plate across each opening from
+// the cabin's wall line out to the ramp's hinge, its hazard edge by the hinge.
+export const CABIN_WALL = 2.5;
+function mdBay(p, variant) {
+  const cabin = variant === 'med bay, cabin', acc = new Acc(), F = hullFaces().filter((f) => f.paint === 'bay');
+  if (!cabin) for (const f of F) { const toMid = BAY_MID.clone().sub(f.c), n = f.n.dot(toMid) < 0 ? f.n.clone().negate() : f.n; acc.tris([f.pts.map(dk)], n, bayPaint(n, f.c)); }
   // THE LINTELS: a graphite header across the top of each opening (the 3k's opening's top corners are chamfered: the
-  // ramp is a plain rectangle under it), an amber light strip under its inner edge (his)
+  // ramp is a plain rectangle under it), an amber light strip under its inner edge (his), over the ramp's opening
   for (const sx of [1, -1]) {
-    const Lt = RAMP.lintel, xm = sx * (Lt.x[0] + Lt.x[1]) / 2, hx = (Lt.x[1] - Lt.x[0]) / 2, ym = (Lt.y[0] + Lt.y[1]) / 2, hy = (Lt.y[1] - Lt.y[0]) / 2, zm = (BAY.ends[0] + BAY.ends[1]) / 2, hz = (BAY.ends[1] - BAY.ends[0]) / 2;
+    const Lt = RAMP.lintel, xi = cabin ? CABIN_WALL : Lt.x[0], xm = sx * (xi + Lt.x[1]) / 2, hx = (Lt.x[1] - xi) / 2, ym = (Lt.y[0] + Lt.y[1]) / 2, hy = (Lt.y[1] - Lt.y[0]) / 2, zm = (BAY.ends[0] + BAY.ends[1]) / 2, hz = (BAY.ends[1] - BAY.ends[0]) / 2;
     boxAt(acc, V3(xm, ym, zm), AX, [hx, hy, hz], PAL.darkEdge);
-    polyTo(acc, [V3(sx * (Lt.x[0] + 0.05), Lt.y[0] - 0.004, -1.4), V3(sx * (Lt.x[0] + 0.12), Lt.y[0] - 0.004, -1.4), V3(sx * (Lt.x[0] + 0.12), Lt.y[0] - 0.004, 1.2), V3(sx * (Lt.x[0] + 0.05), Lt.y[0] - 0.004, 1.2)], V3(0, -1, 0), GLOW.warm, 'glow');
+    const [o0, o1] = OPENING.z;
+    polyTo(acc, [V3(sx * (xi + 0.05), Lt.y[0] - 0.004, o0 + 0.1), V3(sx * (xi + 0.12), Lt.y[0] - 0.004, o0 + 0.1), V3(sx * (xi + 0.12), Lt.y[0] - 0.004, o1 - 0.1), V3(sx * (xi + 0.05), Lt.y[0] - 0.004, o1 - 0.1)], V3(0, -1, 0), GLOW.warm, 'glow');
   }
-  const [za, zf] = BAY.ends, y0 = BAY.floor, y1 = BAY.ceil, xs = BAY.x - 0.02;
-  // (hazard edges along each opening's sill: yellow and black, on the deck)
+  // THE CLOSERS: the opening aft of and forward of the ramp's 2 m, closed in the skin's plane: a white panel in a
+  // graphite frame (as the ramp's own outside), a seam across it; its ends at the opening graphite jambs, in to the
+  // bay's side (or the cabin's wall line); its inside the bay's wall panel (the cabin's lining stands there instead)
+  for (const sx of [1, -1]) for (const [za, zb, end] of [[BAY.ends[0] - CLOSER.over, OPENING.z[0], 1], [OPENING.z[1], BAY.ends[1] + CLOSER.over, -1]]) {
+    const xo = sx * CLOSER.x, xi = sx * (cabin ? CABIN_WALL : BAY.x - 0.02), [ya, yb] = CLOSER.y, f = CLOSER.frame, out = V3(sx, 0, 0);
+    const face = (q, surf) => polyTo(acc, q.map(([y, z]) => V3(xo, y, z)), out, surf);
+    // (the frame round the panel: along its foot and top, and down its two ends)
+    face([[ya, za], [ya + f, za], [ya + f, zb], [ya, zb]], PAL.dark); face([[yb - f, za], [yb, za], [yb, zb], [yb - f, zb]], PAL.dark);
+    face([[ya + f, za], [yb - f, za], [yb - f, za + f], [ya + f, za + f]], PAL.dark); face([[ya + f, zb - f], [yb - f, zb - f], [yb - f, zb], [ya + f, zb]], PAL.dark);
+    face([[ya + f, za + f], [yb - f, za + f], [yb - f, zb - f], [ya + f, zb - f]], PAL.skin);
+    { const y = (ya + yb) / 2 + 0.25; polyTo(acc, [V3(xo + sx * 0.003, y - 0.012, za + f), V3(xo + sx * 0.003, y + 0.012, za + f), V3(xo + sx * 0.003, y + 0.012, zb - f), V3(xo + sx * 0.003, y - 0.012, zb - f)], out, PAL.dark); }
+    // (the jamb at the opening's end: from the skin in to the inside)
+    const zj = end > 0 ? zb : za;
+    polyTo(acc, [V3(xi, ya, zj), V3(xo, ya, zj), V3(xo, yb, zj), V3(xi, yb, zj)], V3(0, 0, end), PAL.darkEdge);
+    if (!cabin) polyTo(acc, [V3(xi, ya, za), V3(xi, ya, zb), V3(xi, yb, zb), V3(xi, yb, za)], V3(-sx, 0, 0), PAL.bay);
+  }
+  const [za, zf] = BAY.ends, y0 = BAY.floor, y1 = BAY.ceil, xs = BAY.x - 0.02, [oa, ob] = OPENING.z;
+  // (hazard edges along each opening's sill: yellow and black, on the deck; with the cabin, by the ramp's hinge, on a
+  // sill plate from the cabin's wall line out to it)
   for (const sx of [1, -1]) {
-    const n = 14, e = 0.12, x0 = sx * (xs - e), x1 = sx * xs;
-    for (let i = 0; i < n; i++) { const z0 = za + (zf - za) * i / n, z1 = za + (zf - za) * (i + 1) / n; polyTo(acc, [V3(x0, y0 + 0.004, z0), V3(x1, y0 + 0.004, z0), V3(x1, y0 + 0.004, z1), V3(x0, y0 + 0.004, z1)], V3(0, 1, 0), i % 2 ? PAL.black : PAL.yellow); }
+    const n = 8, e = 0.12, x0 = sx * ((cabin ? RAMP.face - 0.01 : xs) - e), x1 = sx * (cabin ? RAMP.face - 0.01 : xs);
+    if (cabin) polyTo(acc, [V3(sx * CABIN_WALL, y0, oa), V3(sx * RAMP.face, y0, oa), V3(sx * RAMP.face, y0, ob), V3(sx * CABIN_WALL, y0, ob)], V3(0, 1, 0), PAL.deck);
+    for (let i = 0; i < n; i++) { const z0 = oa + (ob - oa) * i / n, z1 = oa + (ob - oa) * (i + 1) / n; polyTo(acc, [V3(x0, y0 + 0.004, z0), V3(x1, y0 + 0.004, z0), V3(x1, y0 + 0.004, z1), V3(x0, y0 + 0.004, z1)], V3(0, 1, 0), i % 2 ? PAL.black : PAL.yellow); }
   }
+  if (cabin) { acc.flush(p); return p; }
   // the light strips: two across the ceiling, and one over each opening's head inside (his amber strip)
   for (const z of [-0.95, 0.75]) polyTo(acc, [V3(-1.9, y1 - 0.006, z - 0.06), V3(1.9, y1 - 0.006, z - 0.06), V3(1.9, y1 - 0.006, z + 0.06), V3(-1.9, y1 - 0.006, z + 0.06)], V3(0, -1, 0), GLOW.bay, 'glow');
   // the inner doors: one in each end wall, on the middle line (a dark panel with a lit strip over it and a seam)
@@ -347,7 +382,8 @@ function mdBay(p) {
 // (rampStep and LAB.pose time B's hinge so: the kit's own door code alone would turn both together, B through the bay).
 // Tread grey, hazard edges yellow and black (his).
 export const RAMP = (() => {
-  const face = 2.98, sill = 1.68, head = 3.86, A = head - sill, B = 1.67, T = 0.11, z = [-1.83, 1.64];
+  // (z: the ramp across its opening, 2 cm clear of each closer's jamb; it was [-1.83, 1.64] in Meshy's whole opening)
+  const face = 2.98, sill = 1.68, head = 3.86, A = head - sill, B = 1.67, T = 0.11, z = [OPENING.z[0] + 0.02, OPENING.z[1] - 0.02];
   // (the slope: down, its underside runs from the hinge to the ground)
   const slope = Math.asin(sill / (A + B));
   return { face, sill, head, A, B, T, z, slope, swing: PI / 2 + slope, speed: 0.32, hinge: [face, sill], unfold: 0.4, lintel: { y: [head + 0.005, BAY.ceil + 0.02], x: [BAY.x - 0.02, face + 0.005] } };
@@ -469,7 +505,16 @@ function mdCrewDoor(p, side) {
 }
 // THE AIRLOCK behind each crew door (a piece of its own, so the measuring of the inside can leave it out): its floor,
 // walls (the station's off-white), ceiling and light; the inner door in its inner wall (shut), a lit strip over it
+// 'port, cabin': with the cabin built inside, its own airlock room meets the door, so this stand-in goes; what stays is
+// a dark head plate over the doorway in the cabin's wall line, from the door frame's head up past the cabin wall's top
+// there (the slope over the hull's doors starts at the ramps' head, LAB.cabin.outer.head, a little over this door's)
 function mdAirlock(p, side) {
+  if (side === 'port, cabin') {
+    const acc = new Acc(), [z0, z1] = CREW.z, x = CABIN_WALL + 0.005, ya = CREW.y[1] - 0.01, yb = DECK + RAMP.head - DECK + 0.03;
+    polyTo(acc, [V3(x, ya, z0 - 0.05), V3(x, ya, z1 + 0.05), V3(x, yb, z1 + 0.05), V3(x, yb, z0 - 0.05)], V3(-1, 0, 0), PAL.dark);
+    polyTo(acc, [V3(x, ya, z0 - 0.05), V3(CREWDOOR.face - 0.18, ya, z0 - 0.05), V3(CREWDOOR.face - 0.18, ya, z1 + 0.05), V3(x, ya, z1 + 0.05)], V3(0, -1, 0), PAL.dark);
+    return acc.flush(p);
+  }
   const s = side === 'starboard' ? -1 : 1, acc = new Acc(), [z0, z1] = CREW.z, xi = s * CREWDOOR.inner, y0 = DECK, y1 = CREW.y[1], top = DECK + CREWDOOR.top;
   const xa = s * (CREWDOOR.face - 0.18), jamb = (pts, n, surf) => polyTo(acc, pts, n, surf);
   // the airlock: its floor, walls, ceiling; the inner door in its inner wall (shut), a lit strip over it
@@ -556,23 +601,61 @@ function mdWells(p) {
 export const COCKPIT = { floor: 0.8, seatsZ: 5.5, wallX: 1.3, gap: 0.42, back: 4.05, dash: { w: 1.7, h: 0.72, knee: 0.55, bow: 0.12, depth: 1.0 }, canopy: { y: 3.31 - DECK - 0.8, z: 7.38 - 5.5, slope: 0.7 } };
 export const COCKPIT_DROP = /^overhead|^handhold|^engineer|^locker/;
 export function builtCockpitPlan() { return C.builtCockpitPlan(COCKPIT, COCKPIT_DROP); }
-function mdCockpit(p) {
-  const Cp = COCKPIT;
+// 'two seats, cabin': with the cabin built inside, the cabin's own wall and doorway (the plan's cockpit door, on the
+// middle line at the cockpit's back) close the cockpit there: the bulkhead keeps a hole round that doorway's frame, and
+// STEPS climb from the doorway on the cabin's deck to the raised flight deck, which starts at their top. STAIR: the
+// doorway's frame (half its width, its height over the cabin's deck), the steps' width, their tread depth and count
+// (each riser the flight deck's height over the count).
+export const STAIR = { hole: [0.52, 2.5], half: 0.44, tread: 0.2, n: 4 };
+function mdCockpit(p, variant) {
+  const Cp = COCKPIT, cabin = variant === 'two seats, cabin';
   C.cockpitParts(p, builtCockpitPlan(), Cp);
-  const acc = new Acc(), fy = DECK + Cp.floor;
-  // the flight deck: from the bulkhead to the nose, out to the hull's inside (less 5 cm), every 0.25 m
+  const acc = new Acc(), fy = DECK + Cp.floor, zTop = Cp.back + (cabin ? STAIR.tread * (STAIR.n - 1) + 0.01 : 0);
+  // the flight deck: from the bulkhead (with the cabin, from the steps' top) to the nose, out to the hull's inside (less
+  // 5 cm), every 0.25 m
   const half = (z) => { const h = rayHull(V3(0, fy + 0.03, z), V3(1, 0, 0)), h2 = rayHull(V3(0, fy + 0.03, z), V3(-1, 0, 0)); return [h ? h.p.x - 0.05 : 0.5, h2 ? h2.p.x + 0.05 : -0.5]; };
-  const zs = []; for (let z = Cp.back; z < 8.2; z += 0.25) zs.push(z);
+  const zs = []; for (let z = zTop; z < 8.2; z += 0.25) zs.push(z);
   const rows = zs.map((z) => [z, ...half(z)]).filter(([, a, b]) => a - b > 0.2);
   for (let i = 0; i < rows.length - 1; i++) { const [za, pa, sa] = rows[i], [zb, pb, sb] = rows[i + 1]; polyTo(acc, [V3(sa, fy, za), V3(pa, fy, za), V3(pb, fy, zb), V3(sb, fy, zb)], V3(0, 1, 0), PAL.deck); }
   // the bulkhead behind: the hull's section there (its inside, less 3 cm, every 0.2 m up from the cabin's deck to the
-  // roof), in strips; the door (shut) in it
+  // roof), in strips; the door (shut) in it (with the cabin: a hole round the cabin's doorway instead, and the steps)
   const zb = Cp.back, up = rayHull(V3(0, fy + 0.5, zb), V3(0, 1, 0)), yt = up ? up.p.y - 0.03 : fy + 2.2;
   const sect = []; for (let y = DECK; y < yt + 1e-6; y = Math.min(yt, y + 0.2)) { const a = rayHull(V3(0, y, zb), V3(1, 0, 0)), b = rayHull(V3(0, y, zb), V3(-1, 0, 0)); sect.push([y, a ? a.p.x - 0.03 : 0.3, b ? b.p.x + 0.03 : -0.3]); if (y >= yt) break; }
-  for (let i = 0; i < sect.length - 1; i++) { const [ya, pa, sa] = sect[i], [yb, pb, sb] = sect[i + 1]; polyTo(acc, [V3(sa, ya, zb), V3(pa, ya, zb), V3(pb, yb, zb), V3(sb, yb, zb)], V3(0, 0, 1), PAL.dark); }
+  const [hx, hy] = STAIR.hole;
+  for (let i = 0; i < sect.length - 1; i++) {
+    const [ya, pa, sa] = sect[i], [yb, pb, sb] = sect[i + 1];
+    if (!cabin || ya >= DECK + hy - 1e-6) { polyTo(acc, [V3(sa, ya, zb), V3(pa, ya, zb), V3(pb, yb, zb), V3(sb, yb, zb)], V3(0, 0, 1), PAL.dark); continue; }
+    // (beside the hole: each side's strip, and over it where the strip runs past its top)
+    const y2 = Math.min(yb, DECK + hy), t = (y2 - ya) / (yb - ya), pm = pa + (pb - pa) * t, sm = sa + (sb - sa) * t;
+    if (pa > hx) polyTo(acc, [V3(hx, ya, zb), V3(pa, ya, zb), V3(pm, y2, zb), V3(hx, y2, zb)], V3(0, 0, 1), PAL.dark);
+    if (sa < -hx) polyTo(acc, [V3(sa, ya, zb), V3(-hx, ya, zb), V3(-hx, y2, zb), V3(sm, y2, zb)], V3(0, 0, 1), PAL.dark);
+    if (yb > y2 + 1e-6) polyTo(acc, [V3(sm, y2, zb), V3(pm, y2, zb), V3(pb, yb, zb), V3(sb, yb, zb)], V3(0, 0, 1), PAL.dark);
+  }
+  if (cabin) {
+    // THE STEPS: treads (deck plate, a yellow nosing) and risers (graphite) up from the doorway, between two dark
+    // stringers; the flight deck's front edge beside them down to the cabin's deck
+    const n = STAIR.n, rise = Cp.floor / n, w = STAIR.half;
+    for (let k = 0; k < n; k++) {
+      const y = DECK + rise * (k + 1), za = zb + STAIR.tread * k, zb2 = k === n - 1 ? zTop : za + STAIR.tread;
+      polyTo(acc, [V3(-w, y - rise, za), V3(w, y - rise, za), V3(w, y, za), V3(-w, y, za)], V3(0, 0, -1), PAL.dark);
+      if (k < n - 1) polyTo(acc, [V3(-w, y, za), V3(w, y, za), V3(w, y, zb2), V3(-w, y, zb2)], V3(0, 1, 0), PAL.deck);
+      polyTo(acc, [V3(-w, y + 0.002, za), V3(w, y + 0.002, za), V3(w, y + 0.002, za + 0.04), V3(-w, y + 0.002, za + 0.04)], V3(0, 1, 0), PAL.yellow);
+    }
+    for (const sx of [1, -1]) {
+      const x = sx * (w + 0.03);
+      boxAt(acc, V3(x, (DECK + fy) / 2, (zb + zTop) / 2), AX, [0.03, (fy - DECK) / 2 + 0.02, (zTop - zb) / 2], PAL.dark);
+      // (the flight deck's front edge beside the steps, out to the hull)
+      const o = rows[0]; if (!o) continue;
+      const xe = sx > 0 ? o[1] : o[2];
+      polyTo(acc, sx > 0 ? [V3(w + 0.06, DECK, zTop), V3(xe, DECK, zTop), V3(xe, fy, zTop), V3(w + 0.06, fy, zTop)] : [V3(xe, DECK, zTop), V3(-w - 0.06, DECK, zTop), V3(-w - 0.06, fy, zTop), V3(xe, fy, zTop)], V3(0, 0, -1), PAL.dark);
+    }
+    // (a light strip under the flight deck's lip over the top step)
+    polyTo(acc, [V3(-w + 0.04, fy - 0.004, zTop - 0.02), V3(w - 0.04, fy - 0.004, zTop - 0.02), V3(w - 0.04, fy - 0.004, zTop - 0.05), V3(-w + 0.04, fy - 0.004, zTop - 0.05)], V3(0, -1, 0), GLOW.strip, 'glow');
+  } else {
   boxAt(acc, V3(0, fy + 0.95, zb + 0.03), AX, [0.42, 0.95, 0.03], PAL.bayDark, ['w-']);
   boxAt(acc, V3(0, fy + 0.95, zb + 0.065), AX, [0.012, 0.91, 0.006], PAL.black, ['w-']);
   polyTo(acc, [V3(-0.38, fy + 1.96, zb + 0.062), V3(0.38, fy + 1.96, zb + 0.062), V3(0.38, fy + 2.0, zb + 0.062), V3(-0.38, fy + 2.0, zb + 0.062)], V3(0, 0, 1), GLOW.strip, 'glow');
+  }
   // (the flight deck's front edge down to the cabin's deck behind the bulkhead: the steps are in the cabin)
   acc.flush(p);
   for (const x of [-0.5, 0.5]) p.light([x, Cp.floor + 1.75, Cp.seatsZ - 0.3], 1.0, [1.25, 0.85, 0.55], [0, -1, 0.2], 3.0);
@@ -618,6 +701,10 @@ export const LAB = {
   controls: ['ramps', 'rampCount', 'gear', 'door', 'dirt', 'throttle'],
   dirt: { None: 0, Some: 0.45, Lots: 0.9 },
   spots: { Canopy: { at: [6.0, 6.6, 12.5], look: [0, 3.9, 5.6] }, Bay: { at: [8.5, 2.6, 3.5], look: [0, 2.6, -0.2] }, Ramp: { at: [9.0, 1.6, -6.5], look: [3.5, 1.4, 0] }, Door: { at: [6.8, 1.8, 6.5], look: [2.6, 2.4, 3.3] }, Seats: { at: [0, 3.95, 4.55], look: [0, 3.4, 8.0] } },
+  // (the cabin built inside from the blueprint shown, kit/ships/cabin-built.js: the pieces that change with it, and the
+  // ship's own doors as the cabin meets them: the ramps' head over the deck (the slope over each side's doors starts
+  // there), and where the deck stops at the crew door's frame)
+  cabin: { swap: { mdBay: { 'med bay': 'med bay, cabin' }, mdAirlock: { port: 'port, cabin' }, mdCockpit: { 'two seats': 'two seats, cabin' } }, outer: { head: +(RAMP.head - DECK).toFixed(3), sill: +(CREWDOOR.face - 0.18).toFixed(3) } },
   doorTip: 'Open the crew door (an airstair down to the ground, on the port side), or shut it',
   gearTip: 'Raise the landing legs into their wells, or let them down',
   materials: (mats, dirt) => grimeMaterials(mats, { dirt }),
@@ -647,11 +734,11 @@ export const SHIP_MEDIC_BUILT = {
   mdHull: { name: 'Medic (built): hull', group: GR, at: 'free', foot: [6.5, 7, 17.4], variants: ['hull'], build: mdHull },
   mdCanopy: { name: 'Medic (built): canopy', group: GR, at: 'free', foot: [4, 2, 3.5], variants: ['glass'], build: mdCanopy },
   mdMarks: { name: 'Medic (built): lights and marks', group: GR, at: 'free', foot: [6.5, 5, 17], variants: ['marks'], build: (p) => mdMarks(p) },
-  mdBay: { name: 'Medic (built): med bay', group: GR, at: 'free', foot: [5.3, 2.5, 3.7], variants: ['med bay'], build: (p) => mdBay(p) },
+  mdBay: { name: 'Medic (built): med bay', group: GR, at: 'free', foot: [5.3, 2.5, 3.7], variants: ['med bay', 'med bay, cabin'], build: (p, v) => mdBay(p, v) },
   mdRamp: { name: 'Medic (built): ramp', group: GR, at: 'free', foot: [1, 2.5, 3.6], variants: ['port', 'starboard'], build: mdRamp },
   mdCrewDoor: { name: 'Medic (built): crew door', group: GR, at: 'free', foot: [0.5, 2.1, 1.0], variants: ['port'], build: mdCrewDoor },
-  mdAirlock: { name: 'Medic (built): crew airlock', group: GR, at: 'free', foot: [1.4, 2.1, 1.3], variants: ['port'], build: mdAirlock },
+  mdAirlock: { name: 'Medic (built): crew airlock', group: GR, at: 'free', foot: [1.4, 2.1, 1.3], variants: ['port', 'port, cabin'], build: mdAirlock },
   mdGear: { name: 'Medic (built): landing leg', group: GR, at: 'free', foot: [1.1, 1.5, 1.8], variants: Object.keys(GEAR.at), build: mdGear },
   mdWells: { name: 'Medic (built): leg wells', group: GR, at: 'free', foot: [5, 1.2, 10.5], variants: ['wells'], build: mdWells },
-  mdCockpit: { name: 'Medic (built): cockpit', group: GR, at: 'free', foot: [3.5, 2, 3.5], variants: ['two seats'], build: (p) => mdCockpit(p) },
+  mdCockpit: { name: 'Medic (built): cockpit', group: GR, at: 'free', foot: [3.5, 2, 3.5], variants: ['two seats', 'two seats, cabin'], build: (p, v) => mdCockpit(p, v) },
 };

@@ -19,6 +19,7 @@ import { sampleRoom } from './cabin/sample.js';
 import { stationDoorSample } from './cabin/door.js';
 import { bevelSheet } from './cabin/bevelsheet.js';
 import { CABIN_FIT } from './cabin/fit.cat.js';
+import { MEDIC_FIT } from './cabin/medic.cat.js';
 import { part, placeInto } from './place.js';
 import { breaker, jbox, extinguisher, wallScreen, label, pipe, cableTray } from '../wallkit.js';
 import { crate } from '../hangar.js';
@@ -105,6 +106,7 @@ export const CABIN = {
   cabinBunk: entry('cabinBunk', 'Bunk bed, set in', 'wall', [2, 2.5, 1], bunkBed),
   cabinLockers: entry('cabinLockers', 'Lockers', 'wall', [1, 2.1, 0.5], lockers),
   ...CABIN_FIT,
+  ...MEDIC_FIT,
   cabinRollers: entry('cabinRollers', 'Roller lane', 'floor', [2.5, 0.2, 2.1], lane),
   cabinTieDown: entry('cabinTieDown', 'Tie-down rail', 'floor', [2, 0.05, 0.1], tieDown),
   cabinHandhold: entry('cabinHandhold', 'Handhold', 'wall', [0.5, 0.2, 0.1], handhold),

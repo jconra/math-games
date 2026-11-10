@@ -61,7 +61,7 @@ const placing = (W, mid) => ({ at: W.axis === 'z' ? [mid, 0, W.v] : [W.v, 0, mid
 const localX = (W, mid, a) => (W.axis === 'z' ? W.side : -W.side) * (a - mid);
 
 export function furnishRoom(q, bp, room, ctx) {
-  const F = ROOMS[room.kind]; if (!F) return new Set();
+  const F = MORE[bp.shell + ':' + room.kind] || ROOMS[room.kind]; if (!F) return new Set();
   const done = new Set(), items = (bp.items || []).filter((it) => it.room === room.id), f = +(room.floor || 0);
   const at = (W, mid, y = 0) => { const P = placing(W, mid); P.at[1] = f + y; return P; };
   F({ q, bp, room, ctx, done, items, f, at, A: accents(ctx.look) });
@@ -709,3 +709,10 @@ function wallFields(ctx, room, items0, at, o = {}) {
     }
   }
 }
+
+// ── another ship's own rooms ──────────────────────────────────────────────────────────────────────────────────────
+// MORE: a ship's own furnishing for a kind of room, by its blueprint's shell and the room's kind ('medic-built:medbay'),
+// used before the kinds above; a ship's module adds its own (kit/ships/medic-furnish.js, the Medic's). And what such a
+// furnishing may use from here.
+export const MORE = {};
+export { ROOMS, placing, localX, accents, wallFields, clearStretches, hangPosters, roomWalls, roomWall, toWorld, rotOf, block, asItems, inDoorway, openEnds, topCorner, alongOf, centre, clearOfSlopes, doorHazard, berthNumbers };
