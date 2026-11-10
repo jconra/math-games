@@ -9,7 +9,7 @@ import { reactor } from './engine.js';
 import { holoTable } from './science.js';
 import { cornerBench, messTable, stool, topCabinets, coldStore, galleyRun, coffeeMachine, mug, fruitBowl, poster } from './mess.js';
 import { bunkStack, crewLocker } from './bunks.js';
-import { labBench, microscope, glovebox, vialRack, tablet, sampleCase, surveyTable, labStool } from './lab.js';
+import { labBench, microscope, glovebox, vialRack, tablet, sampleCase, surveyTable, labStool, ringLight } from './lab.js';
 import { suitLockers, pressurePanel, wallBench } from './airlock.js';
 import { showerStall, toiletBasin } from './washroom.js';
 import { reactorCore, drivePumps, engStation, gearShelves } from './engroom.js';
@@ -45,6 +45,7 @@ export const PRESETS = {
   cabinSurveyTable: { '1 x 1.25 m': {}, '0.9 m square': { w: 0.9, depth: 0.9 } },
   cabinSampleCase: { '1.5 m': {}, '1 m': { len: 1, h: 1.6 } },
   cabinLabStool: { 'grey pad': {}, 'navy pad': { pad: '#22355e' } },
+  cabinRingLight: { 'hung over the survey table': { r: 0.3, drop: 0.27 } },
   cabinSuitLockers: { 'two, suits behind windows': { len: 1 }, 'one, with a poster': { len: 0.5, poster: 11 } },
   cabinPressurePanel: { 'by the hull door': {} },
   cabinAirlockBench: { 'fold-down': {}, 'navy cushion': { leather: '#22355e' } },
@@ -84,6 +85,7 @@ export const CABIN_FIT = {
   cabinSurveyTable: entry('cabinSurveyTable', 'Lab: survey table', 'wall', [1.0, 0.95, 1.25], surveyTable),
   cabinSampleCase: entry('cabinSampleCase', 'Lab: SAMPLES case', 'wall', [1.5, 1.8, 0.25], sampleCase),
   cabinLabStool: entry('cabinLabStool', 'Lab: stool', 'free', [0.46, 0.95, 0.46], labStool),
+  cabinRingLight: entry('cabinRingLight', 'Lab: ring light over the survey table', 'free', [0.7, 0.4, 0.7], (p, o) => placeInto(p, part(ringLight, o), { at: [0, 0.1, 0] })),
   cabinSuitLockers: entry('cabinSuitLockers', 'Airlock: suit lockers', 'wall', [1.0, 2.0, 0.25], suitLockers),
   cabinPressurePanel: entry('cabinPressurePanel', 'Airlock: pressure panel', 'wall', [0.4, 1.6, 0.08], pressurePanel),
   cabinAirlockBench: entry('cabinAirlockBench', 'Airlock: bench', 'wall', [0.45, 0.9, 0.34], wallBench),

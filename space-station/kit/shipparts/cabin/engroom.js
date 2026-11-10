@@ -8,8 +8,10 @@
 // Frames (kit/shipparts/cabin/ship.js): a WALL fitting stands on a wall line, x along the wall, centred; z = 0 on the line,
 // its back at the wall's face (FACE), facing +z; y = 0 the deck.
 //   reactorCore(p, o)  o.len (1.5), o.depth (1.25), o.h (1.8), o.back (+1: the end of it against a wall across, where its
-//                      pipes go: +x; -1; 0 none), o.ceiling (2.5: its pipe up goes to it), o.trim
-//   drivePumps(p, o)   o.len (1.5), o.depth (1.25), o.h (1.8), o.back (the drum's end at a wall: -1, its own -x; +1), o.trim
+//                      pipes go: +x; -1; 0 none), o.ceiling (2.5: its pipe up goes to it), o.pipeY (the height of pipes
+//                      along the wall it backs onto: its pipe up turns there into that wall, meeting them), o.trim
+//   drivePumps(p, o)   o.len (1.5), o.depth (1.25), o.h (1.8), o.back (the drum's end at a wall: -1, its own -x; +1),
+//                      o.pipeY (as the reactor's: a pipe up from the drum to them), o.trim
 //   engStation(p, o)   o.len (1), o.depth (0.5), o.h (1.2: its desk's back; the screens rise over it), o.handle, o.trim
 //   gearShelves(p, o)  o.len (1), o.depth (0.5), o.h (1.8), o.trim
 import { shape, solid, loft, plate, relief, prism, add } from '../../bevel.js';
@@ -19,7 +21,7 @@ import { PANEL } from './bunks.js';
 import { GUN, STEEL } from './mess.js';
 
 const PI = Math.PI;
-const CORE = [1.7, 3.3, 5.6], SEAM = [0.6, 1.9, 4.2], DRUM = { c: '#9b9fa5', r: 0.36, m: 0.7, w: 0.35 };
+const CORE = [0.55, 1.4, 2.7], CORE_END = [0.08, 0.3, 0.95], SEAM = [0.6, 1.9, 4.2], DRUM = { c: '#8f949b', r: 0.5, m: 0.4, w: 0.4 };
 // an 8-sided section of width a (and b) at z, centred on (x, y) in the loft's own plane
 const O = (a, z, x = 0, y = 0, b = a) => ({ s: shape(a, b, Math.min(a, b) * 0.293, x, y), z });
 
@@ -31,10 +33,12 @@ export function reactorCore(p, o = {}) {
   add(p, 'dark', loft([O(d * 1.08, 0, 0, -zc), O(d * 1.08, 0.06, 0, -zc), O(d * 0.98, 0.12, 0, -zc)]), at, FLAT);
   add(p, GUN, loft([O(d * 0.9, 0.12, 0, -zc), O(d * 0.9, 0.4, 0, -zc), O(d * 0.84, 0.45, 0, -zc)], { start: false }), at, FLAT);
   col(d * 0.92, 0.36, 0.38, SEAM, 'glow', { start: false, end: false });
-  col(d * 0.42, 0.45, h * 0.73, CORE, 'glow', { start: false, end: false });
+  // (the core brightest in its middle, deeper blue toward its ends: one colour a section, the glow's vertices take them)
+  const cy0 = 0.45, cy1 = h * 0.73, core = add(p, [1, 1, 1], loft([O(d * 0.42, cy0, 0, -zc), O(d * 0.42, (cy0 + cy1) / 2, 0, -zc), O(d * 0.42, cy1, 0, -zc)], { start: false, end: false }), at, FLAT, 'glow');
+  { const P = core.attributes.position.array, C = core.attributes.color.array; for (let i = 0; i < P.length / 3; i++) { const t = Math.sin(PI * Math.max(0, Math.min(1, (P[i * 3 + 1] - cy0) / (cy1 - cy0)))); for (let k = 0; k < 3; k++) C[i * 3 + k] = CORE_END[k] + (CORE[k] - CORE_END[k]) * t; } }
   const r = d * 0.36, ribs = 8;
   for (let i = 0; i < ribs; i++) { const a = (i + 0.5) / ribs * PI * 2, x = Math.cos(a) * r, z = zc + Math.sin(a) * r; add(p, o.trim || 'black', loft([O(0.05, 0, x, -z), O(0.05, h * 0.73 - 0.45, x, -z)], { start: false, end: false }), [0, 0.45, 0], FLAT); }
-  for (const y of [0.62, h * 0.55]) add(p, STEEL, loft([O(d * 0.86, y, 0, -zc), O(d * 0.86, y + 0.045, 0, -zc)], { start: false, end: false }), at, FLAT);
+  for (const y of [0.62, h * 0.55]) add(p, STEEL, loft([O(d * 0.79, y, 0, -zc), O(d * 0.79, y + 0.045, 0, -zc)], { start: false, end: false }), at, FLAT);
   add(p, GUN, loft([O(d * 0.84, h * 0.73, 0, -zc), O(d * 0.9, h * 0.73 + 0.05, 0, -zc), O(d * 0.9, h * 0.88, 0, -zc), O(d * 0.6, h * 0.95, 0, -zc), O(d * 0.36, h, 0, -zc)], { start: false }), at, FLAT);
   col(d * 0.92, h * 0.78, h * 0.79, SEAM, 'glow', { start: false, end: false });
   // the label and the caution plate on the lower housing's front facet
@@ -43,11 +47,15 @@ export function reactorCore(p, o = {}) {
   add(p, '#c9a032', decalQuad(0.2, 0.05, 'cp:caution'), [0, 0.18, fz], null, 'decal');
   // pipes: two from the upper housing into the wall across (the end it backs onto), one up from the cap to the ceiling
   if (back) for (const [y, look] of [[h * 0.83, COPPER], [h * 0.64, 'yellow']]) pipe(p, look, [back * d * 0.4, y, zc - 0.12 * (look === COPPER ? 1 : -1)], [back * (len / 2 - FACE + 0.01), y, zc - 0.12 * (look === COPPER ? 1 : -1)], 0.045);
-  pipe(p, COPPER, [0, h - 0.01, zc], [0, (o.ceiling ?? 2.5) - 0.01, zc], 0.06);
+  if (o.pipeY && back) {
+    pipe(p, COPPER, [0, h - 0.01, zc], [0, o.pipeY + 0.06, zc], 0.055, { flange1: 0.1 });
+    pipe(p, COPPER, [0, o.pipeY, zc], [back * (len / 2 - FACE + 0.01), o.pipeY, zc], 0.042, { flange0: 0.08 });
+    add(p, GUN, loft([O(0.15, o.pipeY - 0.075, 0, -zc), O(0.15, o.pipeY + 0.075, 0, -zc)]), at, FLAT);
+  } else pipe(p, COPPER, [0, h - 0.01, zc], [0, (o.ceiling ?? 2.5) - 0.01, zc], 0.06);
   // the core's light, and its pool; a hazard band on the floor in front of it
-  strip(p, [0, h * 0.5, zc + d * 0.5], 1.1, null, 3.2, [0.55, 0.8, 1.0]);
-  strip(p, [0, h * 0.5, zc - d * 0.5], 0.5, null, 2.0, [0.55, 0.8, 1.0]);
-  pool(p, [0, h * 0.55, zc + d * 0.65], 1.25, 3.0, [0.5, 0.75, 1.0]);
+  strip(p, [0, h * 0.5, zc + d * 0.5], 0.5, null, 2.4, [0.55, 0.8, 1.0]);
+  strip(p, [0, h * 0.5, zc - d * 0.5], 0.2, null, 1.6, [0.55, 0.8, 1.0]);
+  pool(p, [0, h * 0.5, zc + d * 0.6], 0.8, 2.3, [0.5, 0.75, 1.0]);
   hazard(p, Math.min(len - 0.1, d * 1.2), 0.08, [0, 0.003, zc + d * 0.62], [-PI / 2, 0, 0]);
   return p;
 }
@@ -59,11 +67,12 @@ export function drivePumps(p, o = {}) {
   // (the drum along x: a loft along +z turned a quarter, so its sections' x is the ship's -z: centred on -zd... its own
   // (x, y) = (-z, y))
   const D = (a, xx) => ({ s: shape(a, a, a * 0.293, -zd, yd), z: xx });
-  add(p, DRUM, loft([D(2 * R * 0.8, x0), D(2 * R, x0 + 0.06), D(2 * R, x1 - 0.12), D(2 * R * 0.72, x1 - 0.02), D(2 * R * 0.5, x1)]), [0, 0, 0], rot);
+  add(p, DRUM, loft([D(2 * R * 0.8, x0), D(2 * R, x0 + 0.06), D(2 * R, x1 - 0.12)], { end: false }), [0, 0, 0], rot);
+  add(p, GUN, loft([D(2 * R, x1 - 0.12), D(2 * R * 0.72, x1 - 0.02), D(2 * R * 0.5, x1)], { start: false }), [0, 0, 0], rot);
   for (const xx of [x0 + 0.18, (x0 + x1) / 2, x1 - 0.24]) add(p, GUN, loft([D(2 * R * 1.12, xx - 0.035), D(2 * R * 1.12, xx + 0.035)], { start: false, end: false }), [0, 0, 0], rot);
   add(p, SEAM, loft([D(2 * R * 1.02, (x0 + x1) / 2 + 0.05), D(2 * R * 1.02, (x0 + x1) / 2 + 0.065)], { start: false, end: false }), [0, 0, 0], rot, 'glow');
   // (its end: a blue ring of light round the cap, as the concept's engines)
-  add(p, [0.45, 1.3, 3.2], loft([D(2 * R * 0.79, x1 - 0.075), D(2 * R * 0.79, x1 - 0.05)], { start: false, end: false }), [0, 0, 0], rot, 'glow');
+  add(p, [0.3, 0.85, 2.1], loft([D(2 * R * 0.79, x1 - 0.075), D(2 * R * 0.79, x1 - 0.05)], { start: false, end: false }), [0, 0, 0], rot, 'glow');
   // the cradles under it
   for (const xx of [x0 + 0.32, x1 - 0.38]) add(p, 'dark', prism([[-zd - R * 0.9, 0], [-zd + R * 0.9, 0], [-zd + R * 0.55, yd - R * 0.7], [-zd - R * 0.55, yd - R * 0.7]], xx - 0.05, xx + 0.05), [0, 0, 0], rot);
   // the pumps: on a skid in front of the drum, each a faceted column with a motor on top, piped to the drum in copper
@@ -72,11 +81,14 @@ export function drivePumps(p, o = {}) {
   for (const xp of [-len * 0.16, len * 0.14]) {
     add(p, 'yellow', loft([O(0.2, 0.06, xp, -zp), O(0.2, 0.42, xp, -zp), O(0.15, 0.46, xp, -zp)]), [0, 0, 0], FLAT);
     add(p, GUN, solid(shape(0.17, 0.17, 0.03, xp, -zp), 0.14, { edge: 0.012 }), [0, 0.46, 0], FLAT);
-    pipe(p, COPPER, [xp, 0.3, zp - 0.11], [xp, 0.3, zd + R * 0.6], 0.035);
+    pipe(p, COPPER, [xp, 0.6, zp], [xp, yd + 0.04, zp], 0.035, { flange1: 0 });
+    pipe(p, COPPER, [xp, yd, zp + 0.035], [xp, yd, zd + R * 0.85], 0.035, { flange0: 0 });
   }
+  // (a pipe up from the drum by the wall it backs onto, to the pipes along that wall, if there are)
+  if (o.pipeY) { const xr = back < 0 ? -len / 2 + FACE + 0.07 : len / 2 - FACE - 0.07; pipe(p, COPPER, [xr, yd + R * 0.9, zd], [xr, o.pipeY + 0.04, zd], 0.042, { flange0: 0.04 }); }
   // its light: the blue glow at the drum's end, a lit seam
   strip(p, [x1 + 0.12, yd, zd], 0.35, [Math.sign(x1) || 1, 0, 0], 1.6, [0.55, 0.8, 1.0]);
-  pool(p, [x1 * 0.6, yd, zd + R + 0.3], 0.45, 2.2, [0.55, 0.8, 1.0]);
+  pool(p, [x1 * 0.3, yd - 0.2, zd + R + 0.45], 0.35, 2.0, [0.55, 0.8, 1.0]);
   return p;
 }
 
@@ -123,7 +135,8 @@ export function gearShelves(p, o = {}) {
     for (const [w, hh, look, k] of row) {
       const cw = Math.min(w, len / 2 - 0.05 - x), ch = Math.min(hh + ((i * 3 + k) % 3) * 0.03, room); if (cw < 0.12) break;
       add(p, look, solid(shape(cw, d - 0.06, 0.02, x + cw / 2, -zc), ch, { edge: 0.01, front: [{ inset: 0.02, depth: 0.005, bevel: 0.005 }] }), [0, y, 0], FLAT);
-      if ((i + k) % 4 === 1) hazard(p, cw - 0.04, 0.035, [x + cw / 2, y + ch * 0.55, FACE + d - 0.028]);
+      add(p, look, relief(shape(cw - 0.04, ch - 0.04, 0.015, x + cw / 2, y + ch / 2), PANEL), [0, 0, FACE + d - 0.03]);
+      if ((i + k) % 4 === 1) hazard(p, cw - 0.06, 0.035, [x + cw / 2, y + ch * 0.55, FACE + d - 0.03 + 0.0075]);
       x += cw + 0.04;
     }
   });

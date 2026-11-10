@@ -42,7 +42,8 @@ export function labBench(p, o = {}) {
       add(p, 'white2', relief(shape(cw - 0.03, dh - 0.02, 0.03, x, y), PANEL), [0, 0, FACE + d]);
       add(p, o.handle || 'black', plate(shape(Math.min(0.2, cw * 0.45), 0.022, 0.009, x, y + dh * 0.22)), [0, 0, FACE + d + 0.0075]);
       const L = labels[li++ % labels.length], wide = L === 'analysis' || L === 'samples' || L === 'reactor';
-      printed(p, 'label:' + L, wide ? 0.24 : 0.11, wide ? 0.03 : 0.055, [x, y - dh * 0.12, FACE + d + 0.0042], null, '#26282c');
+      add(p, 'black', solid(shape(wide ? 0.25 : 0.12, wide ? 0.04 : 0.05, 0.008, x, y - dh * 0.12), 0.003, { edge: 0.001, back: false }), [0, 0, FACE + d + 0.0035]);
+      printed(p, 'label:' + L, wide ? 0.22 : 0.1, wide ? 0.0275 : 0.05, [x, y - dh * 0.12, FACE + d + 0.0069], null, '#e8e6de');
     }
   }
   // the knee space: its back panel, a little darker
@@ -76,7 +77,7 @@ export function glovebox(p, o = {}) {
   for (const s of [-1, 1]) {
     const x = s * w * 0.22, y = h * 0.42;
     add(p, 'black', relief(shape(0.12, 0.12, 0.035, x, y), [{ inset: 0, depth: 0.012, bevel: 0.008 }, { inset: 0.01, depth: 0.004, bevel: 0.006 }], { hole: true, jamb: -0.006 }), [0, 0, d]);
-    add(p, { c: '#1b1d22', r: 0.85, m: 0, w: 0.1 }, loft([{ s: shape(0.1, 0.1, 0.03, x, y), z: 0 }, { s: shape(0.08, 0.08, 0.024, x, y + 0.02), z: 0.14 }, { s: shape(0.07, 0.06, 0.02, x, y + 0.03), z: 0.2 }], { start: false }), [0, 0, d - 0.006], [0, PI, 0]);
+    add(p, { c: '#1b1d22', r: 0.85, m: 0, w: 0.1 }, loft([{ s: shape(0.1, 0.1, 0.03, x, y), z: 0 }, { s: shape(0.085, 0.085, 0.025, x, y + 0.01), z: 0.07 }], { start: false }), [0, 0, d - 0.006], [0, PI, 0]);
   }
   glowStrip(p, w - 0.12, [0, h - 0.04, d * 0.55], [PI / 2, 0, 0], { i: 0.08, reach: 0.6, color: [0.75, 0.88, 1.0] });
   // a small screen on its front frame
@@ -134,6 +135,10 @@ export function sampleCase(p, o = {}) {
   }
   glowStrip(p, len - 0.16, [0, dy1 - 0.035, back + 0.03], [PI / 2, 0, 0], { i: 0.12, dir: [0, 0.3, 0.95], reach: 0.9, color: [0.8, 0.92, 1.0], pool: 0.12, poolAt: [0, (dy0 + dy1) / 2, fz + 0.3] });
   GLASSPANE(p, len - 0.12, dy1 - dy0 - 0.05, [0, (dy0 + dy1) / 2, fz + 0.002]);
+  // (SAMPLES again over the display, as a header with hazard stripes either side: it shows over whatever stands in front)
+  const hy = (dy1 + h) / 2 - 0.002, lw = Math.min(0.36, len * 0.3);
+  printed(p, 'label:samples', lw, lw / 8, [0, hy, fz + 0.0015], null, '#2c2e32');
+  for (const s of [-1, 1]) hazard(p, Math.min(0.24, (len - lw) / 2 - 0.12), 0.035, [s * (lw / 2 + 0.04 + Math.min(0.24, (len - lw) / 2 - 0.12) / 2), hy, fz + 0.0015]);
   return p;
 }
 
@@ -154,6 +159,19 @@ export function surveyTable(p, o = {}) {
   strip(p, [0, h + 0.1, zc], 0.45, [0, 1, 0], 2.2, [0.6, 0.82, 1.0]);
   strip(p, [0, h + 0.05, zc + td / 2 + 0.15], 0.2, [0, 0, 1], 1.6, [0.6, 0.82, 1.0]);
   pool(p, [0, h + 0.25, zc + 0.2], 0.55, 2.0, [0.62, 0.82, 1.0]);
+  return p;
+}
+
+// ── the ring of light hung over the survey table (his science picture's ring, lower: under the hull's slope) ──
+//   ringLight(p, o)   free: o.r (0.3: half its width), o.drop (0.3: how far it hangs, its cables up to the ceiling); the
+//                     ring's underside at y = 0
+export function ringLight(p, o = {}) {
+  const r = o.r ?? 0.3, drop = o.drop ?? 0.3, s = shape(2 * r, 2 * r, 2 * r * 0.293), DOWN = [PI / 2, 0, 0];
+  add(p, o.trim || 'black', relief(s, [{ inset: 0, depth: 0.035, bevel: 0.012 }, { inset: 0.055, depth: 0.0, bevel: 0.012 }], { hole: true }), [0, 0.035, 0], DOWN);
+  add(p, [2.2, 2.5, 2.9], relief(shape(2 * r - 0.03, 2 * r - 0.03, (2 * r - 0.03) * 0.293), [{ inset: 0.028, depth: 0, bevel: 0 }], { hole: true }), [0, -0.0015, 0], DOWN, 'glow');
+  for (const x of [-r * 0.75, r * 0.75]) add(p, o.trim || 'black', loft([{ s: shape(0.016, 0.016, 0.005, x, 0), z: 0 }, { s: shape(0.016, 0.016, 0.005, x, 0), z: drop }], { start: false, end: false }), [0, 0.035, 0], FLAT);
+  strip(p, [0, -0.12, 0], 0.32, [0, -1, 0], 2.0, [0.85, 0.93, 1.0]);
+  pool(p, [0, -0.35, 0], 0.5, 2.0, [0.85, 0.93, 1.0]);
   return p;
 }
 

@@ -28,12 +28,12 @@ import { part } from '../shipparts/place.js';
 import { FACE } from '../shipparts/cabin/ship.js';
 import { cornerBench, messTable, stool, topCabinets, coldStore, galleyRun, coffeeMachine, mug, bottle, fruitBowl, poster, wallField } from '../shipparts/cabin/mess.js';
 import { bunkStack, crewLocker } from '../shipparts/cabin/bunks.js';
-import { labBench, microscope, glovebox, vialRack, tablet, sampleCase, surveyTable, labStool } from '../shipparts/cabin/lab.js';
+import { labBench, microscope, glovebox, vialRack, tablet, sampleCase, surveyTable, labStool, ringLight } from '../shipparts/cabin/lab.js';
 import { suitLockers, pressurePanel, wallBench } from '../shipparts/cabin/airlock.js';
 import { showerStall, toiletBasin } from '../shipparts/cabin/washroom.js';
 import { reactorCore, drivePumps, engStation, gearShelves } from '../shipparts/cabin/engroom.js';
 import { screen, starScreen, hazard, pipe, COPPER } from '../shipparts/cabin/bits.js';
-import { shape, solid, add } from '../bevel.js';
+import { shape, solid, relief, add } from '../bevel.js';
 import { POSTERS, postersFor } from '../shipparts/cabin/print.js';
 import { hangs } from './blueprint.js';
 
@@ -211,12 +211,22 @@ function furnishScience({ bp, room, ctx, done, items, f, at, A }) {
       const slope = ctx.slopeAt(W.axis, W.v, mid), h = Math.min(+it.h, slope ? slope.y0 + 0.02 : +it.h);
       ctx.put('lab: sample case', part(sampleCase, { len, depth: W.depth, h: +h.toFixed(3), handle: A.handle, trim: A.trim }), at(W, mid)); done.add(it.id);
     } else if (it.kind === 'holo') {
-      ctx.put('lab: survey table', part(surveyTable, { w: len, depth: W.depth, h: +it.h || 0.9, trim: A.trim }), at(W, mid)); done.add(it.id);
-      // (the star screen over it, on its wall, where the wall is clear there)
-      const slope = ctx.slopeAt(W.axis, W.v, mid), y1 = slope ? slope.y0 - 0.08 : 2.25, sh = Math.min(0.48, y1 - (+it.h || 0.9) - 0.42), sw = Math.min(len - 0.16, sh * 1.6);
-      if (sh > 0.25 && clearStretches(ctx, room, items, roomWall(room, W), y1 - sh - 0.06, y1, extra).some(([p, q]) => p <= mid - sw / 2 - 0.04 && q >= mid + sw / 2 + 0.04)) {
-        ctx.put('lab: star screen', part(starScreen, { w: +sw.toFixed(3), h: +sh.toFixed(3), seed: 11 }), { ...at(W, mid, y1 - sh / 2 - 0.04), at: toWorld(W, mid, [0, f + y1 - sh / 2 - 0.04, FACE]) });
-        extra.push(block(W, mid - sw / 2 - 0.05, mid + sw / 2 + 0.05, mid, y1 - sh - 0.08, y1));
+      // (the table a little narrower than its box, moved off whatever tall stands at one end (or a wall there))
+      const h = +it.h || 0.9, [R0, R1] = W.axis === 'z' ? [room.rect[0], room.rect[2]] : [room.rect[1], room.rect[3]], tw = Math.min(len - 0.1, Math.max(0.7, len * 0.84));
+      const tall = (a) => Math.abs(a - R0) < EPS || Math.abs(a - R1) < EPS || items.some((o) => o !== it && !hangs(o) && +o.h > 1.0 && alongOf(o, W).some((v) => Math.abs(v - a) < 0.06));
+      const away = tall(W.hi) && !tall(W.lo) ? -1 : tall(W.lo) && !tall(W.hi) ? 1 : 0, tmid = mid + away * (len - tw) / 2;
+      ctx.put('lab: survey table', part(surveyTable, { w: +tw.toFixed(3), depth: W.depth, h, trim: A.trim }), at(W, tmid)); done.add(it.id);
+      // the ring of light hung over it (his picture's ring), clear of the hull's slopes
+      const ceil = typeof room.ceiling === 'number' ? room.ceiling : 2.5, yr = ceil - 0.3, rr = Math.min(0.3, tw * 0.36), C = toWorld(W, tmid, [0, 0, FACE + (W.depth - FACE) / 2]);
+      const cx = clearOfSlopes(ctx, room, C[0], C[2], rr, yr + 0.035);
+      if (cx != null) ctx.put('lab: ring light', part(ringLight, { r: rr, drop: +(ceil - yr - 0.035).toFixed(3), trim: A.trim }), { at: [cx, f + yr, C[2]] });
+      // (the star screen over it, on its wall, where the wall is clear there and the slopes leave room)
+      const slope = ctx.slopeAt(W.axis, W.v, tmid), y1 = slope ? slope.y0 - 0.08 : Math.min(2.0, ceil - 0.4), sh = Math.min(0.42, y1 - h - 0.42), sw = Math.min(tw - 0.12, sh * 1.6);
+      let smid = tmid;
+      if (W.axis === 'z') { const c2 = clearOfSlopes(ctx, room, tmid, W.v, sw / 2 + 0.03, y1); smid = c2 ?? tmid; }
+      if (sh > 0.25 && clearStretches(ctx, room, items, roomWall(room, W), y1 - sh - 0.06, y1, extra).some(([p, q]) => p <= smid - sw / 2 - 0.04 && q >= smid + sw / 2 + 0.04)) {
+        ctx.put('lab: star screen', part(starScreen, { w: +sw.toFixed(3), h: +sh.toFixed(3), seed: 11 }), { ...at(W, smid), at: toWorld(W, smid, [0, f + y1 - sh / 2 - 0.04, FACE]) });
+        extra.push(block(W, -sw / 2 - 0.05, sw / 2 + 0.05, smid, y1 - sh - 0.08, y1));
       }
     }
   }
@@ -306,12 +316,20 @@ function furnishEngineering({ room, ctx, done, items, f, at, A }) {
   const extra = [], posters = postersFor('engineering'), ceiling = typeof room.ceiling === 'number' ? room.ceiling : 2.5;
   const machines = items.filter((it) => it.kind === 'machine').map((it) => ({ it, W: wallOf(it, room) })).filter((M) => M.W);
   const named = machines.find((M) => /reactor/i.test(M.it.name || '')) || machines[0], backs = [];
+  // (first, each machine's end against a wall across, and the wall most of them back onto: the pipes' wall)
   for (const M of machines) {
-    const { it, W } = M, mid = (W.lo + W.hi) / 2, len = W.hi - W.lo, [R0, R1] = W.axis === 'z' ? [room.rect[0], room.rect[2]] : [room.rect[1], room.rect[3]];
-    const atWall = (a) => Math.abs(a - R0) < EPS || Math.abs(a - R1) < EPS, back = atWall(W.lo) ? Math.sign(localX(W, mid, W.lo)) : atWall(W.hi) ? Math.sign(localX(W, mid, W.hi)) : 0;
-    if (back) backs.push(W.axis === 'z' ? { axis: 'x', v: atWall(W.lo) ? W.lo : W.hi } : { axis: 'z', v: atWall(W.lo) ? W.lo : W.hi });
-    if (M === named) ctx.put('engineering: reactor', part(reactorCore, { len, depth: W.depth, h: +it.h || 1.8, back, ceiling, trim: A.trim }), at(W, mid));
-    else ctx.put('engineering: drive and pumps', part(drivePumps, { len, depth: W.depth, h: +it.h || 1.8, back: back || -1, trim: A.trim }), at(W, mid));
+    const { W } = M, mid = (W.lo + W.hi) / 2, [R0, R1] = W.axis === 'z' ? [room.rect[0], room.rect[2]] : [room.rect[1], room.rect[3]];
+    const atWall = (a) => Math.abs(a - R0) < EPS || Math.abs(a - R1) < EPS;
+    M.back = atWall(W.lo) ? Math.sign(localX(W, mid, W.lo)) : atWall(W.hi) ? Math.sign(localX(W, mid, W.hi)) : 0;
+    M.backWall = M.back ? (W.axis === 'z' ? { axis: 'x', v: atWall(W.lo) ? W.lo : W.hi } : { axis: 'z', v: atWall(W.lo) ? W.lo : W.hi }) : null;
+    if (M.backWall) backs.push(M.backWall);
+  }
+  const count = new Map(); for (const B of backs) { const k = B.axis + B.v; count.set(k, [B, (count.get(k)?.[1] || 0) + 1]); }
+  const PB = [...count.values()].sort((a, b) => b[1] - a[1])[0]?.[0], pipeY = PB ? +Math.min(ceiling - 0.38, 2.0).toFixed(3) : null;
+  for (const M of machines) {
+    const { it, W } = M, mid = (W.lo + W.hi) / 2, len = W.hi - W.lo, py = PB && M.backWall && M.backWall.axis === PB.axis && Math.abs(M.backWall.v - PB.v) < EPS ? pipeY : null;
+    if (M === named) ctx.put('engineering: reactor', part(reactorCore, { len, depth: W.depth, h: +it.h || 1.8, back: M.back, ceiling, pipeY: py, trim: A.trim }), at(W, mid));
+    else ctx.put('engineering: drive and pumps', part(drivePumps, { len, depth: W.depth, h: +it.h || 1.8, back: M.back || -1, pipeY: py, trim: A.trim }), at(W, mid));
     done.add(it.id);
   }
   let posterAt = 0;
@@ -327,10 +345,9 @@ function furnishEngineering({ room, ctx, done, items, f, at, A }) {
     } else if (it.kind === 'rack') { ctx.put('engineering: gear shelves', part(gearShelves, { len, depth: W.depth, h: +it.h || 1.8, trim: A.trim }), at(W, mid)); done.add(it.id); }
   }
   // the parallel pipes, along the wall the machines back onto most, and their poster under them
-  const count = new Map(); for (const B of backs) { const k = B.axis + B.v; count.set(k, [B, (count.get(k)?.[1] || 0) + 1]); }
-  const PB = [...count.values()].sort((a, b) => b[1] - a[1])[0]?.[0], left = posters.slice(posterAt);
+  const left = posters.slice(posterAt);
   if (PB) {
-    const W = roomWalls(room).find((w) => w.axis === PB.axis && Math.abs(w.v - PB.v) < EPS), y = Math.min(ceiling - 0.38, 2.0);
+    const W = roomWalls(room).find((w) => w.axis === PB.axis && Math.abs(w.v - PB.v) < EPS), y = pipeY;
     ctx.put('engineering: pipes', part(parallelPipes, { len: +(W.hi - W.lo - 2 * FACE).toFixed(3), y }), at(W, (W.lo + W.hi) / 2));
     extra.push({ axis: W.axis, v: W.v, side: W.side, lo: W.lo, hi: W.hi, y0: y - 0.08, y1: y + 0.26 });
     if (left.length) {
@@ -362,10 +379,14 @@ function doorHazard(ctx, room, items, f) {
       if (Math.abs(w.x - (w.x > 0 ? x1 : x0)) > 0.01) continue;
       const zf = sz > 0 ? cz1 + 0.003 : cz0 - 0.003, xe = w.x > 0 ? x0 + 0.13 : x1 - 0.13, h = +it.h || 2;
       ctx.put(room.kind === 'airlock' ? 'airlock: hazard' : 'wash: hazard', part(hazardBand, { len: +(h - 0.25).toFixed(3), wid: 0.07 }), { at: [xe, f + h / 2, zf], rot: [0, sz > 0 ? 0 : PI, PI / 2] });
+      // (and on its face toward the room, a pale raised panel: the casing is dark, and from inside it read as a hole)
+      const fx = w.x > 0 ? x0 : x1, fw = cz1 - cz0 - 0.04;
+      if (fw > 0.1) ctx.put(room.kind === 'airlock' ? 'airlock: casing panels' : 'wash: casing panels', part(casingPanel, { w: +fw.toFixed(3), h: +(h - 0.12).toFixed(3) }), { at: [fx - (w.x > 0 ? 0.001 : -0.001), f + h / 2, (cz0 + cz1) / 2], rot: [0, w.x > 0 ? -PI / 2 : PI / 2, 0] });
     }
   }
 }
 function hazardBand(p, o) { return hazard(p, o.len, o.wid, [0, 0, 0]); }
+function casingPanel(p, o) { add(p, 'white2', relief(shape(o.w, o.h, 0.03), [{ inset: 0, depth: 0.007, bevel: 0.006 }, { inset: 0.025, depth: 0.0035, bevel: 0.004 }])); return p; }
 
 // ── placing helpers ─────────────────────────────────────────────────────────────────────────────────────────────
 const roomWalls = (room) => { const [X0, Z0, X1, Z1] = room.rect; return [{ axis: 'x', v: X0, side: 1, lo: Z0, hi: Z1 }, { axis: 'x', v: X1, side: -1, lo: Z0, hi: Z1 }, { axis: 'z', v: Z0, side: 1, lo: X0, hi: X1 }, { axis: 'z', v: Z1, side: -1, lo: X0, hi: X1 }]; };
@@ -376,6 +397,15 @@ function toWorld(W, mid, [x, y, z]) {
   if (W.axis === 'z') return W.side > 0 ? [mid + x, y, W.v + z] : [mid - x, y, W.v - z];
   return W.side > 0 ? [W.v + z, y, mid - x] : [W.v - z, y, mid + x];
 }
+// a thing `half` either side of x (at z along the room), its top at yTop: x moved in from the hull's sides until their
+// slopes clear it (a slope over a side at y0 is 45 degrees: d in from the wall it is y0 + d up), or null if it can't be
+const clearOfSlopes = (ctx, room, x, z, half, yTop) => {
+  let lo = room.rect[0] + half + 0.03, hi = room.rect[2] - half - 0.03;
+  const a = ctx.slopeAt('x', room.rect[0], z), b = ctx.slopeAt('x', room.rect[2], z);
+  if (a && yTop + 0.05 > a.y0) lo = Math.max(lo, room.rect[0] + (yTop + 0.05 - a.y0) + half);
+  if (b && yTop + 0.05 > b.y0) hi = Math.min(hi, room.rect[2] - (yTop + 0.05 - b.y0) - half);
+  return lo > hi ? null : Math.max(lo, Math.min(hi, x));
+};
 // the whole of the room's wall an item's wall W lies on
 const roomWall = (room, W) => ({ ...W, lo: W.axis === 'z' ? room.rect[0] : room.rect[1], hi: W.axis === 'z' ? room.rect[2] : room.rect[3] });
 // a block on wall W for clearStretches (in the wall's own stretch, world): [lo, hi] along it, [y0, y1]; from x0 to x1 in a

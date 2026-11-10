@@ -148,6 +148,9 @@ export function cabinMaterials(look) {
   // 1 (floorGain), else it reads black)
   // (not metal: a metal's reflection takes its colour, and this one's is raised)
   for (const k of ['floor', 'floorInst']) { if (L.floor) M[k].color.set(L.floor).multiplyScalar(L.floorGain ?? 1); M[k].metalness = 0; M[k].envMapIntensity = LIGHT.env; }
+  // (the cabin's glass (a glovebox, a display case, the suit lockers' windows, the shower) a little frosted: the station's
+  // is mirror-smooth, and a pool's light close in front of it showed as a hard white spot)
+  M.glass.roughness = 0.42; M.glass.envMapIntensity = LIGHT.env;
   M.ambient = amb;   // (a lab may turn it: M.ambient.value)
   return M;
 }

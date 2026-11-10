@@ -31,8 +31,11 @@ export function bunkStack(p, o = {}) {
   const front = D - 0.02, pz = front - 0.04, back = FACE + 0.006, base = 0.08;
   // (each berth: its hollow from y0 to y1, its opening from oy0 to oy1; lower first)
   const berths = H >= 1.5 ? [{ y0: 0.3, y1: 0.98, num: o.nums?.[1] }, { y0: 1.08, y1: Math.min(1.8, H - 0.1), num: o.nums?.[0] }] : [{ y0: 0.3, y1: Math.min(0.98, H - 0.1), num: o.nums?.[0] }];
-  const fm = 0.07, c0 = 0.1;
-  const openingOf = (B) => shape(ox1 - ox0, B.y1 - B.y0 - 0.12, c0, (ox0 + ox1) / 2, (B.y0 + B.y1) / 2 + 0.004);
+  const fm = 0.07, c0 = 0.1, ladder = o.ladder !== false && berths.length > 1, LW = 0.44;
+  // (with a ladder, the lower berth's opening stops short of the foot end, so the ladder stands on the casing in front of
+  // it, as in his picture; the upper one runs over it)
+  if (ladder) Object.assign(berths[0], head > 0 ? { ox0: ox0 + LW } : { ox1: ox1 - LW });
+  const openingOf = (B) => { const a = B.ox0 ?? ox0, b = B.ox1 ?? ox1; return shape(b - a, B.y1 - B.y0 - 0.12, c0, (a + b) / 2, (B.y0 + B.y1) / 2 + 0.004); };
   const frameOf = (B) => { const s = openingOf(B); return { ...s, w: s.w + 2 * fm, h: s.h + 2 * fm, c: s.c.map((v) => v + fm * K) }; };
   // the front: a pale panel with the frames' outlines cut from it; the frames, stepping down into each opening; the
   // ends and the top
@@ -56,10 +59,11 @@ export function bunkStack(p, o = {}) {
   add(p, o.handle || 'black', plate(shape(0.24, 0.022, 0.009, (dx0 + dx1) / 2, dy + dh * 0.2)), [0, 0, front + 0.0075]);
   for (const B of berths) berth(p, B);
   // the ladder at the foot end of the openings: two rails, rungs with a lit edge
-  if (o.ladder !== false && berths.length > 1) {
-    const lx = head > 0 ? ox0 + 0.2 : ox1 - 0.2, z = front + 0.055, S = (a, zz) => ({ s: shape(a, a, a * 0.29), z: zz });
-    for (const s of [-1, 1]) add(p, trim, loft([S(0.032, 0), S(0.032, H - 0.02)], { start: false }), [lx + s * 0.16, 0, z], FLAT);
-    for (const y of [0.38, 0.76, 1.14, 1.52]) {
+  // (its rails up to the upper berth's frame, its top rung on the band between the berths)
+  if (ladder) {
+    const lx = head > 0 ? ox0 + 0.2 : ox1 - 0.2, z = front + 0.055, S = (a, zz) => ({ s: shape(a, a, a * 0.29), z: zz }), up = openingOf(berths[1]), top = up.y - up.h / 2 - fm - 0.005;
+    for (const s of [-1, 1]) add(p, trim, loft([S(0.032, 0), S(0.032, top)]), [lx + s * 0.16, 0, z], FLAT);
+    for (const y of [top * 0.34, top * 0.67, top - 0.03]) {
       add(p, trim, solid(shape(0.31, 0.075, 0.016, lx, -z), 0.045, { edge: 0.008 }), [0, y - 0.045, 0], FLAT);
       add(p, 'white', plate(shape(0.24, 0.009, 0.003)), [lx, y - 0.02, z + 0.0378], null, 'glow');
     }
@@ -73,24 +77,26 @@ export function bunkStack(p, o = {}) {
     // the mattress (pale), the blanket from the foot end with its folded edge, the pillow at the head
     const mw = cw - 0.03, md = cd - 0.05, mt = 0.1, top = B.y0 + mt;
     add(p, SHEET, solid(shape(mw, md, 0.03, 0, -zc), mt, { edge: 0.025 }), [0, B.y0, 0], FLAT);
-    const bl = mw * 0.62, bx = -head * (mw / 2 - bl / 2);
+    const bl = mw * 0.74, bx = -head * (mw / 2 - bl / 2);
     // (soft: its edges well rounded, a stitched line sunk round its top)
     add(p, bedding, solid(shape(bl + 0.01, md + 0.02, 0.05, bx, -zc), 0.045, { edge: 0.022, back: false, front: [{ inset: 0.035, depth: -0.005, bevel: 0.006 }, { inset: 0.004, depth: 0, bevel: 0.006 }] }), [0, top - 0.014, 0], FLAT);
     add(p, bedding, solid(shape(0.1, md + 0.03, 0.04, bx + head * (bl / 2 - 0.02), -zc), 0.055, { edge: 0.024, back: false }), [0, top - 0.01, 0], FLAT);
-    add(p, bedding, solid(shape(0.26, md * 0.74, 0.07, head * (mw / 2 - 0.17), -zc), 0.12, { edge: 0.05, back: false }), [0, top - 0.01, 0], FLAT);
+    // (the pillow soft: fuller in its middle than at its top and foot)
+    const px = head * (mw / 2 - 0.17), PS = (a, b, y) => ({ s: shape(a, b, Math.min(a, b) * 0.38, px, -zc), z: y });
+    add(p, bedding, loft([PS(0.22, md * 0.66, 0), PS(0.27, md * 0.76, 0.055), PS(0.2, md * 0.64, 0.12)], { start: false }), [0, top - 0.01, 0], FLAT);
     // the light strip along the top of the opening, inside; the reading light over the pillow
-    glowStrip(p, op.w * 0.82, [op.x, B.y1 - 0.002, pz - 0.035], [PI / 2, 0, 0], { i: 0.16, dir: [0, -0.4, 0.92], reach: 1.1 });
-    add(p, 'white', plate(shape(0.07, 0.07, 0.02)), [head * (cw / 2 - 0.22), B.y1 - 0.002, zc], [PI / 2, 0, 0], 'glow');
+    glowStrip(p, op.w * 0.82, [op.x, B.y1 - 0.002, pz - 0.035], [PI / 2, 0, 0], { glow: 'soft', i: 0.16, dir: [0, -0.4, 0.92], reach: 1.1 });
+    add(p, 'soft', plate(shape(0.07, 0.07, 0.02)), [head * (cw / 2 - 0.22), B.y1 - 0.002, zc], [PI / 2, 0, 0], 'glow');
     strip(p, [head * (cw / 2 - 0.22), B.y1 - 0.08, zc], 0.14, [0, -1, 0], 0.9);
-    pool(p, [op.x * 0.6, (B.y0 + B.y1) / 2 + 0.05, zc + 0.15], 0.3, 1.3);
+    pool(p, [op.x * 0.6, B.y0 + 0.25, zc + 0.25], 0.16, 1.1);
     // on its back wall: the 8-sided star screen, and the small screen by the pillow
     const sh = Math.min(0.32, ch - 0.26), sw = Math.min(0.66, op.w * 0.5);
-    placeInto(p, part(starScreen, { w: +sw.toFixed(3), h: +sh.toFixed(3), seed: 3 }), { at: [-head * 0.05, top + 0.06 + sh / 2 + 0.05, back], rot: [0, 0, 0] });
+    placeInto(p, part(starScreen, { w: +sw.toFixed(3), h: +sh.toFixed(3), seed: 3 }), { at: [op.x - head * Math.min(0.1, op.w / 2 - sw / 2 - 0.04), top + 0.06 + sh / 2 + 0.05, back], rot: [0, 0, 0] });
     screen(p, { w: 0.13, h: 0.08, rect: 'status', sub: [0.03, 0.08, 0.6, 0.62], gain: 1.1, depth: 0.012, bezel: 0.016 }, [head * (cw / 2 - 0.2), top + 0.26, back]);
     // its number on the band under its opening, by the end away from the ladder: the print, a small dark tag with a light
     if (B.num) {
       const nx = head > 0 ? op.x + op.w / 2 - 0.12 : op.x - op.w / 2 + 0.12, ny = op.y - op.h / 2 - fm - 0.042;
-      printed(p, 'num:' + B.num, 0.064, 0.064, [nx - head * 0.11, ny, front + 0.0015], null, '#3a3d42');
+      printed(p, 'num:' + B.num, 0.076, 0.076, [nx - head * 0.11, ny, front + 0.0015], null, '#3a3d42');
       add(p, trim, solid(shape(0.11, 0.04, 0.012, nx + head * 0.02, ny), 0.008, { edge: 0.003, back: false }), [0, 0, front]);
       add(p, 'blue', plate(shape(0.05, 0.008, 0.003)), [nx + head * 0.02, ny, front + 0.0085], null, 'glow');
     }
@@ -116,7 +122,7 @@ export function crewLocker(p, o = {}) {
   }
   // its number at the upper door's top left (or its label)
   const [uy0, uy1] = doors[1];
-  if (o.num) printed(p, 'num:' + o.num, 0.075, 0.075, [-w / 2 + 0.085, uy1 - 0.08, fz + 0.004], null, '#3a3d42');
+  if (o.num) printed(p, 'num:' + o.num, 0.095, 0.095, [-w / 2 + 0.09, uy1 - 0.08, fz + 0.004], null, '#3a3d42');
   if (o.label) printed(p, o.label, 0.2, 0.05, [-0.02, uy1 - 0.21, fz + 0.004], null, '#3a3d42');
   // a poster on the upper door's field, framed
   if (o.poster != null) {

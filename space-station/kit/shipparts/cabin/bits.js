@@ -75,7 +75,7 @@ export function starScreen(p, o = {}) {
     pos.push(px, py, z); col.push(0.02, 0.04, 0.09);
     for (let i = 0; i <= N; i++) {
       const a = PI * 0.5 + (PI * 0.62) * (i / N), x = px + Math.cos(a) * pr, y = py + Math.sin(a) * pr, k = lit(a);
-      const [cx, cy] = clampIn(O, x, y, px, py); pos.push(cx, cy, z); col.push(0.05 + 0.5 * k, 0.1 + 0.85 * k, 0.2 + 1.5 * k);
+      const [cx, cy] = clampIn(O, x, y, px, py); pos.push(cx, cy, z); col.push(0.04 + 0.22 * k, 0.07 + 0.42 * k, 0.16 + 0.85 * k);
     }
     for (let i = 0; i < N; i++) idx.push(n0, n0 + 1 + i, n0 + 2 + i);
   }
