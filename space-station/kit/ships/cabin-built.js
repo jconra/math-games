@@ -74,13 +74,15 @@ export const SLOPE = { top: 2.0, least: 1.7, margin: 0.15 };
 // (The bake is in a point light's units: about 1 on a pale wall already reads light grey once tone-mapped, so the fill is
 // kept near 0.15 and the strips' pools reach 1 to 3.)
 //   scale    every baked light at this share, the fittings' own strips (a light marked `strip`) at `strips` times that
-export const LIGHT = { panel: 0.2, least: 1.3, bounce: 0.09, bounceLeast: 0.35, slope: 0.12, slopeEvery: 1.5, slopeStrip: 0.4, ambient: 0.08, env: 0.18, scale: 0.18, strips: 2.6 };
+export const LIGHT = { panel: 0.2, least: 1.3, bounce: 0.09, bounceLeast: 0.35, slope: 0.12, slopeEvery: 1.5, slopeStrip: 0.4, ambient: 0.08, env: 0.18, scale: 0.18, strips: 2.6, posters: 0 };
 // THE POOLS: a baked light lives in the vertices, and a ship's walls have few (a panel is drawn in big steps), so the
 // bake cannot draw a pool of light on a wall. A pool is a real-time light instead: the fittings mark where theirs are
 // (a light with `pool: { i, reach }`: the strip under a cabinet, a bench's toe strip, a door's frame), each room's ceiling
 // panel gives one, and p.pools lists them by room ({ at, color, i, reach, room }), for a lab or the game to light the
 // few of the room the eye is in. `panel`: the ceiling's pool, this much a square metre of ceiling (between least and most).
-export const POOLS = { panel: 0.26, least: 0.4, most: 1.3, reach: 3.2 };
+// `ceiling`: the ceiling's pool at this share (it reaches the whole of a small room, so it is that room's fill);
+// `fittings`: the fittings' own pools (the strips') at this share.
+export const POOLS = { panel: 0.26, least: 0.4, most: 1.3, reach: 3.2, ceiling: 1, fittings: 1 };
 
 // ── THE LOOKS ─────────────────────────────────────────────────────────────────────────────────────────────────────
 // The kit's parts with each of the station's surfaces (kit/materials.js SURF) swapped: surf; the light strips' and
@@ -130,11 +132,33 @@ export const LOOKS = {
     floor: '#aaa5a0', floorGain: 6, leather: '#22355e', accents: ['stools', 'mugs', 'handles', 'trim', 'bedding'], bedding: '#22355e',
   },
 };
+// THE LIGHT LOOK'S LIGHT LEVELS. The game's maker (2026-11-09): "I think darker and moodier is good." Dim rooms with
+// clear pools of light and glowing strips, not everything turned down alike: at a darker level the fill goes down (the
+// ceiling panels' light, the floors' bounce, the slopes' fill: `scale`; the lab's sky light: `ambient`; the mirror of
+// the surroundings: `env`), while the fittings' own strips keep nearly all their light (`strips` goes up as `scale`
+// goes down: a strip's light is scale x strips), the ceiling's pool goes down (`pools.ceiling`: in a small room it
+// reaches every wall, so it is fill) and the strips' own pools keep theirs (`pools.fittings`). `posters`: each poster's
+// own light (a light just in front of it, no fitting; none as the look was), so a poster stays easy to read in a dim
+// room without the room being brightened. Each level names only the
+// numbers it changes from LIGHT and POOLS. The Warm look has no levels: it uses LIGHT and POOLS as they are.
+export const LEVELS = {
+  asnow: { name: 'As it was' },
+  darker: { name: 'Darker', scale: 0.07, strips: 6, posters: 4, ambient: 0.03, env: 0.07, pools: { ceiling: 0.25 } },
+  darkest: { name: 'Darkest', scale: 0.035, strips: 11, posters: 9, ambient: 0.012, env: 0.035, pools: { ceiling: 0.08 } },
+};
+// THE LEVEL THE LIGHT LOOK USES: 'asnow' | 'darker' | 'darkest' (the one line to change to pick another)
+export const LEVEL = 'darker';
+LOOKS.light.levels = LEVELS; LOOKS.light.level = LEVEL;
+// the light's numbers for a look at a level (the look's own level if none is named; a look with no levels: LIGHT as it is)
+export function lightOf(look, level) {
+  const L = LOOKS[look] || LOOKS.light, V = L.levels?.[level] || L.levels?.[L.level] || {};
+  return { ...LIGHT, ...V, pools: { ...POOLS, ...(V.pools || {}) } };
+}
 // THE CABIN'S MATERIALS: the kit's own (kit/materials.js), with only a little of the outside's light let in (LIGHT.ambient:
 // the sky light and the surroundings' glow that a lab or the game lights everything with), so the cabin is lit by its
 // strips; reflections of the surroundings low (LIGHT.env); the floor tinted for the look and less of a mirror.
-export function cabinMaterials(look) {
-  const M = makeMaterials(), L = LOOKS[look] || LOOKS.light, amb = { value: LIGHT.ambient };
+export function cabinMaterials(look, level) {
+  const M = makeMaterials(), L = LOOKS[look] || LOOKS.light, LT = lightOf(look, level), amb = { value: LT.ambient };
   for (const k of ['solid', 'solidInst', 'floor', 'floorInst', 'decal', 'decalInst']) {
     const m = M[k], before = m.onBeforeCompile, key = m.customProgramCacheKey;
     m.onBeforeCompile = (sh, r) => {
@@ -142,15 +166,15 @@ export function cabinMaterials(look) {
       sh.fragmentShader = sh.fragmentShader.replace('uniform float uAOStrength;', 'uniform float uAOStrength; uniform float uCabinAmb;').replace('reflectedLight.indirectDiffuse *= ambientOcclusion;', 'reflectedLight.indirectDiffuse *= ambientOcclusion * uCabinAmb;');
     };
     m.customProgramCacheKey = () => key() + 'cabin';
-    m.envMapIntensity = LIGHT.env;
+    m.envMapIntensity = LT.env;
   }
   // (the floor's plates are drawn dark (kit/tex.js, the deck's #34373d): in the cabin's low light its tint goes well over
   // 1 (floorGain), else it reads black)
   // (not metal: a metal's reflection takes its colour, and this one's is raised)
-  for (const k of ['floor', 'floorInst']) { if (L.floor) M[k].color.set(L.floor).multiplyScalar(L.floorGain ?? 1); M[k].metalness = 0; M[k].envMapIntensity = LIGHT.env; }
+  for (const k of ['floor', 'floorInst']) { if (L.floor) M[k].color.set(L.floor).multiplyScalar(L.floorGain ?? 1); M[k].metalness = 0; M[k].envMapIntensity = LT.env; }
   // (the cabin's glass (a glovebox, a display case, the suit lockers' windows, the shower) a little frosted: the station's
   // is mirror-smooth, and a pool's light close in front of it showed as a hard white spot)
-  M.glass.roughness = 0.42; M.glass.envMapIntensity = LIGHT.env;
+  M.glass.roughness = 0.42; M.glass.envMapIntensity = LT.env;
   M.ambient = amb;   // (a lab may turn it: M.ambient.value)
   return M;
 }
@@ -212,6 +236,8 @@ const minus = (lo, hi, holes) => split(lo, hi, holes).outside;
 
 export function buildCabin(p, bp, opts = {}) {
   const { space = null, which = 'all', outer = {}, look = 'light', items = true } = opts, oct = (opts.doorFrame ?? bp.doorFrame) === 'oct';
+  // (the light's numbers for this look, at the level asked for or the look's own: LT the bake's, PL the pools')
+  const LT = lightOf(look, opts.level), PL = LT.pools;
   const walls = which !== 'ceilings', ceilings = which !== 'walls';
   const q = new Piece();   // (drawn into a piece of its own, re-surfaced for the look, then copied into p)
   // (triangles by what they are, for the lab: stats)
@@ -272,10 +298,10 @@ export function buildCabin(p, bp, opts = {}) {
       // (the slope over the whole stretch, the door's opening too; its strip lights the room under it)
       const len = +(S.hi - S.lo).toFixed(3), pos = place(S.v, (S.lo + S.hi) / 2, 'x', S.side), n0 = q.lights.length;
       put('slopes', part(hullSlope, { len, y0: S.y0, run: S.run, panel: Math.min(LINING_PANEL, len / Math.ceil(len / LINING_PANEL - EPS)) }), pos);
-      for (const l of q.lights.slice(n0)) l.i *= LIGHT.slopeStrip;
+      for (const l of q.lights.slice(n0)) l.i *= LT.slopeStrip;
       // (the slope's own fill, for the bake: soft lights under it, a little in from the wall, looking up at it; tall
       // furniture against the wall would shade it from the room's middle)
-      for (let z = S.lo + LIGHT.slopeEvery / 2; z < S.hi; z += LIGHT.slopeEvery) q.light([S.v + S.side * 0.9, S.y0 - 0.15, z], LIGHT.slope, [1, 0.97, 0.92], [-S.side * 0.7, 0.7, 0], 3);
+      for (let z = S.lo + LT.slopeEvery / 2; z < S.hi; z += LT.slopeEvery) q.light([S.v + S.side * 0.9, S.y0 - 0.15, z], LT.slope, [1, 0.97, 0.92], [-S.side * 0.7, 0.7, 0], 3);
     }
     // ── the partitions: every face that is not a lining ──
     for (const e of E) {
@@ -359,10 +385,10 @@ export function buildCabin(p, bp, opts = {}) {
       // whatever their size, and a lit one about five unlit)
       const len = +(z1 - z0).toFixed(3), wid = +(b - a).toFixed(3), n0 = q.lights.length;
       put('ceilings', part(ceilingRun, { len, wid, tile: Math.max(len, wid), lights: 1, h: ROOM }), { at: [(a + b) / 2, f, zm], rot: [0, PI / 2, 0] });
-      // (the panel at LIGHT.panel of the kit's strength, but at least LIGHT.least in all, so a small room still has its pool)
-      const lit = q.lights.slice(n0), sum = lit.reduce((t, l) => t + l.i, 0) * LIGHT.panel; for (const l of lit) l.i *= LIGHT.panel * (sum > 0 && sum < LIGHT.least ? LIGHT.least / sum : 1);
+      // (the panel at LT.panel of the kit's strength, but at least LT.least in all, so a small room still has its pool)
+      const lit = q.lights.slice(n0), sum = lit.reduce((t, l) => t + l.i, 0) * LT.panel; for (const l of lit) l.i *= LT.panel * (sum > 0 && sum < LT.least ? LT.least / sum : 1);
       // (its pool, a little under the panel)
-      q.lights.push({ at: [(a + b) / 2, f + ROOM - 0.3, zm], i: 0, color: [1, 0.97, 0.92], dir: null, reach: POOLS.reach, pool: { i: Math.max(POOLS.least, Math.min(POOLS.most, POOLS.panel * len * wid)), reach: POOLS.reach } });
+      q.lights.push({ at: [(a + b) / 2, f + ROOM - 0.3, zm], i: 0, color: [1, 0.97, 0.92], dir: null, reach: PL.reach, pool: { i: Math.max(PL.least, Math.min(PL.most, PL.panel * len * wid)), reach: PL.reach, ceiling: true } });
     }
   }
   // the bounce: in each room, a soft light pointing up from the middle at waist height (the light a pale floor and
@@ -371,7 +397,7 @@ export function buildCabin(p, bp, opts = {}) {
   if (walls) for (const r of rooms) {
     if (canopy(r)) continue;
     const [x0, z0, x1, z1] = r.rect, area = (x1 - x0) * (z1 - z0);
-    q.light([(x0 + x1) / 2, +(r.floor || 0) + 1.0, (z0 + z1) / 2], Math.max(LIGHT.bounceLeast, LIGHT.bounce * area), [1, 0.97, 0.92], [0, 1, 0], 5);
+    q.light([(x0 + x1) / 2, +(r.floor || 0) + 1.0, (z0 + z1) / 2], Math.max(LT.bounceLeast, LT.bounce * area), [1, 0.97, 0.92], [0, 1, 0], 5);
   }
   // a partition's run on a line along x that meets the hull's sides: the middle full height, each end within the slope's
   // run of a side line cut down to the slope's foot, and a gusset (a triangle of panel) filling the corner up to it
@@ -400,14 +426,14 @@ export function buildCabin(p, bp, opts = {}) {
   // (each room's tone by its kind; outside every room, the look's own)
   const L = LOOKS[look] || LOOKS.light, toneAt = (x, z) => { const r = rooms.find((q2) => x >= q2.rect[0] - 0.1 && x <= q2.rect[2] + 0.1 && z >= q2.rect[1] && z < q2.rect[3]); return TONES[(r && L.rooms[r.kind]) || L.tone]; };
   recolour(q, look, toneAt);
-  for (const l of q.lights) if (!l.pool) l.i *= LIGHT.scale * (l.strip ? LIGHT.strips : 1);
+  for (const l of q.lights) if (!l.pool) l.i *= LT.scale * (l.strip ? LT.strips : l.poster ? LT.posters : 1);
   placeInto(p, q, {});
   p.notes = notes; p.runs = runs; p.stats = { ...(p.stats || {}), ...Object.fromEntries(Object.entries(stats).map(([k, v]) => [k, Math.round(v)])) };
   p.seesOutside = seesOutside(bp);
   p.accent = accentRanges(p);
   // (the pools, each in the room it is in; one standing in a doorway goes to the room it faces)
   const roomAt = (x, z) => rooms.find((r) => x >= r.rect[0] - EPS && x <= r.rect[2] + EPS && z >= r.rect[1] - EPS && z <= r.rect[3] + EPS)?.id ?? null;
-  p.pools = q.lights.filter((l) => l.pool).map((l) => ({ at: l.at.map((v) => +v.toFixed(3)), color: l.color, i: l.pool.i, reach: l.pool.reach, room: roomAt(l.at[0], l.at[2]) }));
+  p.pools = q.lights.filter((l) => l.pool).map((l) => ({ at: l.at.map((v) => +v.toFixed(3)), color: l.color, i: +(l.pool.i * (l.pool.ceiling ? PL.ceiling : PL.fittings)).toFixed(3), reach: l.pool.reach, room: roomAt(l.at[0], l.at[2]) }));
   return p;
 
   // an 8-sided doorway's two faces (kit/shipparts/cabin/door.js): the sign each shows (the kind of the room beyond it)

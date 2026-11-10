@@ -12,7 +12,7 @@
 import { shape, solid, loft, plate, relief, prism, octagon, add } from '../../bevel.js';
 import { FACE } from './ship.js';
 import { POSTERS } from './print.js';
-import { FLAT, printed, glowStrip, screen, hazard, leatherOf, decalQuad } from './bits.js';
+import { FLAT, printed, glowStrip, screen, hazard, leatherOf, decalQuad, posterLight } from './bits.js';
 import { PANEL } from './bunks.js';
 
 const PI = Math.PI, K = 2 - Math.SQRT2;
@@ -39,6 +39,7 @@ export function suitLockers(p, o = {}) {
       const P = POSTERS[o.poster], s = Math.min((uw - 0.17) / P.w, 0.5 / P.h), pw = P.w * s, ph = P.h * s, py = 1.45, px = -0.02;
       add(p, 'white2', solid(shape(pw + 0.03, ph + 0.03, 0.016, x + px, py), 0.005, { edge: 0.0015, back: false, front: [{ inset: 0.008, depth: -0.0015, bevel: 0.0015 }] }), [0, 0, fz + 0.0035]);
       add(p, '#33363b', decalQuad(pw, ph, 'cabin:poster:' + o.poster), [x + px, py, fz + 0.0073], null, 'decal');
+      posterLight(p, [x + px, py, fz]);
       return;
     }
     // the window: its frame, the hollow behind, the glass, the suit inside, a light over it
