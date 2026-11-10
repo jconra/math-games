@@ -7,6 +7,9 @@
 //                                   0.5), o.color, o.drop (how far down its beam goes: 2.3, to the deck), o.spread
 //                                   (the beam's half angle in radians, 0.16), o.beam (its strength, 1; 0: none), o.look
 //                                   Its light carries `beam`: kit/beams.js draws a cone with dust from each of those.
+//                                   WHERE ITS BEAM LANDS (o.drop under it: the deck, or the table it was asked to end
+//                                   at) a pool of its own, small and strong (LAND), so the light reads as coming from
+//                                   the disc: o.land scales it (0: none). A cabin lists it with its pools (tag 'landing').
 //   stripLight(p, len, at, rot, o)  a glowing strip in a small dark channel (at, rot and o as bits.js's glowStrip: the
 //                                   strip faces +z of `rot`, x along it): for where a strip has nothing to sit in
 //   washLight(p, o)                 a wall fitting: a housing along a wall, its underside cut at 45 degrees, a strip on
@@ -19,6 +22,11 @@ import { GUN, LIGHT } from './mess.js';
 import { spun, aim } from './round.js';
 
 const PI = Math.PI;
+// THE BEAM'S LANDING (the game's maker, after round four's sheets: "the beams are cool, but where they land it doesn't seem
+// to be appropriately bright"): a real-time pool just over where a downlight's beam comes down, `up` over it, reaching
+// `reach`, its strength `i` times the beam's strength. Close to what it lights and short of reach, it makes a bright
+// patch about the beam's own width there, and adds little to the rest of the room.
+export const LAND = { up: 0.42, reach: 1.25, i: 0.5 };
 
 export function downlight(p, o = {}) {
   const R = o.r ?? 0.09, at = o.at || [0, 0, 0], col = o.color || LIGHT, drop = o.drop ?? 2.3;
@@ -30,6 +38,8 @@ export function downlight(p, o = {}) {
   // (its pool for a cabin's real-time lights: a point of light well under the disc, so it falls on what is below and
   // not back on the ceiling; `disc`: a cabin scales it as a downlight's, kit/ships/cabin-built.js POOLS.discs)
   if (o.pool !== 0) p.lights.push({ at: [at[0], at[1] - (o.poolDrop ?? 0.9), at[2]], i: 0, color: col, dir: null, reach: o.poolReach ?? 2.6, pool: { i: o.pool ?? 0.5, reach: o.poolReach ?? 2.6, disc: true } });
+  // (where its beam lands: its own pool, as strong as the beam)
+  if (o.beam !== 0 && o.land !== 0) { const k = (o.beam ?? 1) * (o.land ?? 1), up = Math.min(LAND.up, drop * 0.4); p.lights.push({ at: [at[0], at[1] - drop + up, at[2]], i: 0, color: col, dir: null, reach: LAND.reach, pool: { i: +(LAND.i * k).toFixed(3), reach: LAND.reach, disc: true, tag: 'landing' } }); }
   return p;
 }
 
