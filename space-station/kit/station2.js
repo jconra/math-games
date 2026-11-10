@@ -16,15 +16,16 @@ import { MeshData, plane, put, fixWinding, cylinder } from './geo.js';
 import { floorQuad, backing, slabRow, hatch, G, Z0 } from './shell.js';
 import { kitTextures } from './materials.js';
 import { SCREEN_RECT, CREWS } from './tex.js';
+import { OPTIONS2 } from './station2-options.js';   // (sketches of props still to be designed, to choose from)
 
 const PI = Math.PI;
 // a decal lying on the floor (facing up), w along x by d along z, centred at (x, z), turned by a about the up axis
-function floorDecal(p, rect, w, d, x, z, a = 0, tint = '#d9b23a', y = 0.004) {
+export function floorDecal(p, rect, w, d, x, z, a = 0, tint = '#d9b23a', y = 0.004) {
   const r = kitTextures().decal.rect[rect], g = plane(w, d, { uv: r, cell: 9 });
   put(g, [0, 0, 0], [-PI / 2, 0, 0]); put(g, [x, y, z], [0, a, 0]); return p.add('decal', g, tint);
 }
 // a ring of paint on the floor, radius r0 to r1
-function floorRing(p, r0, r1, tint, n = 96, y = 0.004) {
+export function floorRing(p, r0, r1, tint, n = 96, y = 0.004) {
   const rect = kitTextures().decal.rect.solid, u = (rect[0] + rect[2]) / 2, v = (rect[1] + rect[3]) / 2, m = new MeshData();
   for (let i = 0; i <= n; i++) { const a = PI * 2 * i / n, c = Math.cos(a), s = Math.sin(a); m.v(c * r0, y, s * r0, 0, 1, 0, u, v); m.v(c * r1, y, s * r1, 0, 1, 0, u, v); }
   for (let i = 0; i < n; i++) m.quad(i * 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
@@ -181,4 +182,5 @@ export const STATION2 = {
   wall3: { name: 'Third storey panel', group: 'Big rooms', at: 'edge', variants: ['plain', 'vent'], foot: [2, 3, 0.3], build: wall3 },
   hatchshut: { name: 'Sealed hatch', group: 'Shell', at: 'point', variants: ['wide'], foot: [4, 3, 0.6], build: hatchShut },
   board: { name: 'Crew board', group: 'Wall kit', at: 'wall', variants: ['medic', 'mining', 'explore', 'medic big', 'mining big', 'explore big'], foot: [2.6, 1.8, 0.1], build: board },
+  ...OPTIONS2,
 };
