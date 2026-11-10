@@ -44,13 +44,17 @@ import { wallKit, wireCard, slopeCard, trunking, breakerBox, gauges, junctionBox
 import { screen, starScreen, hazard } from '../shipparts/cabin/bits.js';
 import { shape, relief, add } from '../bevel.js';
 import { POSTERS, postersFor } from '../shipparts/cabin/print.js';
+import { growPod, growPodSize } from '../shipparts/cabin/growpod.js';
 import { hangs, cutsOf, outlineOf, inItem } from './blueprint.js';
 
 const PI = Math.PI, EPS = 1e-6;
-// the grow pods' openings in the wall over a galley counter with a drink unit: a pod's frame across (about 0.42: the pod's
-// own design, kit/shipparts/cabin/growpod.js on another branch), the gap between two frames, the height of their middles
-// over the deck, an opening across its flats (the frame with a reveal round it)
-export const POD = { frame: 0.42, gap: 0.05, y: 1.24, hole: 0.44 };
+// THE GROW PODS over a galley counter with a drink unit (kit/shipparts/cabin/growpod.js, the rotary garden the game's maker
+// approved): the pod (o: eight-sided, to sit in the wall's eight-sided openings and match the ship's own shape; 30 cm
+// glass, as he picked), its frame across (from the piece itself), the gap between two frames, the height of their middles
+// over the deck, an opening across its flats (the frame with a 1 cm reveal round it)
+const POD_O = { shape: 'oct', size: 0.30 };
+export const POD = { o: POD_O, frame: +growPodSize(POD_O)[0].toFixed(3), gap: 0.05, y: 1.24 };
+POD.hole = +(POD.frame + 0.02).toFixed(3);
 // the wall an item stands against in its room: { axis ('x': the line x = v, running along z; 'z': the line z = v), v,
 // side (+1: the room on the line's high side), lo, hi (its stretch along the line), depth (out from the line) }
 export function wallOf(it, room) {
@@ -168,18 +172,17 @@ function furnishGalley({ room, ctx, done, items, f, at, A }) {
       ctx.put('mess: small things', part(mug, { look: A.cup }), { at: pt(far + sgn * (DR ? 0.3 : len * 0.65), 0.3), rot: [0, P.rot[1] - 0.4, 0] });
       ctx.put('mess: small things', part(fruitBowl, {}), { at: pt(far + sgn * len * (DR ? 0.78 : 0.84), 0.24), rot: P.rot });
       // THE WALL OVER IT, with the drink unit: one panel from the worktop to the cabinets, the grow pods' two openings in
-      // it, side by side, centred in the clear wall between the drink unit's face and the door's control panel (each 0.44
-      // across: a pod's frame, about 0.42, with a reveal round it; middles POD.y over the deck)
+      // it, side by side, centred in the clear wall between the drink unit's face and the door's control panel (each a
+      // pod's frame with a reveal round it; middles POD.y over the deck), a pod in each
       if (DR) {
         const over = items.find((o) => o.kind === 'overhead' && wallOf(o, room)?.axis === W.axis && Math.abs(wallOf(o, room).v - W.v) < EPS && alongOf(o, W)[1] > W.lo && alongOf(o, W)[0] < W.hi);
         let clear = [[W.lo, W.hi]]; for (const [a, b] of ctx.openings(W.axis, W.v)) clear = clear.flatMap(([p, q]) => (b <= p || a >= q ? [[p, q]] : [[p, a], [b, q]].filter(([u, v]) => v - u > 0.05)));
         const S = clear.sort((a, b) => (b[1] - b[0]) - (a[1] - a[0]))[0], free = S[1] - S[0] - 0.05 + 1e-6, n = free >= 2 * POD.frame + POD.gap ? 2 : free >= POD.frame ? 1 : 0, c = (S[0] + S[1]) / 2;
         const pods = Array.from({ length: n }, (_, k) => +(c + (k - (n - 1) / 2) * (POD.frame + POD.gap)).toFixed(3));
-        ctx.put('mess: wall over the counter', part(backsplash, { len: +len.toFixed(3), y0: +it.h || 0.9, y1: over ? +(+over.y - 0.03).toFixed(3) : 1.55, holes: pods.map((x) => [+localX(W, mid, x).toFixed(3), POD.y]), hole: POD.hole }), at(W, mid));
+        ctx.put('mess: wall over the counter', part(backsplash, { len: +len.toFixed(3), y0: +it.h || 0.9, y1: over ? +(+over.y - 0.03).toFixed(3) : 1.55, holes: pods.map((x) => [+localX(W, mid, x).toFixed(3), POD.y]), hole: POD.hole, blanks: false }), at(W, mid));
         splash.push({ rect: it.rect, h: 1.5 });
-        // THE GROW PODS (kit/shipparts/cabin/growpod.js, on another branch): when it is in, these lines put one in each
-        // opening (and `blanks: false` on the backsplash above leaves the openings clear for them):
-        //   for (const [k, x] of pods.entries()) ctx.put('mess: grow pods', part(growPod, { shape: 'oct', size: 0.30, plant: 'drum', frost: 'medium', seed: k + 1, y: POD.y }), at(W, x));
+        // (each its own garden: seed 1 and 2, its plants grown another way)
+        for (const [k, x] of pods.entries()) ctx.put('mess: grow pods', part(growPod, { ...POD.o, seed: k + 1, y: POD.y }), at(W, x));
       }
       done.add(it.id);
     } else if (it.kind === 'overhead') {
