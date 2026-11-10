@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Crew looks: the pictures</title>
+<meta name="description" content="Makes the small pictures of the looks a new crew member can pick from, out of the real 3D characters.">
+<!-- the on-screen error box comes first, so a crash shows on screen instead of a blank page -->
+<script src="../../../shared/oops.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0d1116; color: #e8eaec; font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding: 20px 16px 40px; }
+  h1 { font-size: 22px; font-weight: 650; }
+  p { color: #a9b0b8; max-width: 70ch; margin: 6px 0 18px; }
+  code { color: #f0a25a; }
+  #grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+  figure { background: #171c23; border: 1px solid #2a323c; padding: 10px; display: grid; gap: 8px; justify-items: center; }
+  figure img { display: block; max-width: 100%; height: auto; }
+  figure img.face { width: 128px; }
+  figure img.body { width: 150px; }
+  figcaption { font-size: 13px; color: #a9b0b8; text-align: center; }
+  figcaption b { color: #e8eaec; display: block; }
+  #note { margin: 14px 0; color: #f0a25a; }
+</style>
+<script type="importmap">{ "imports": { "three": "https://unpkg.com/three@0.158.0/build/three.module.js", "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/" } }</script>
+</head>
+<body>
+<h1>Crew looks</h1>
+<p>Every look a new crew member can pick from (<code>src/looks.js</code>), drawn from the real 3D characters by the
+same code the title screen uses (<code>src/portraits.js</code>). The title draws them in each player's browser, so a
+change to a look or to the crew kit shows there by itself.</p>
+<div id="note" aria-live="polite">Putting the crew together…</div>
+<div id="grid"></div>
+<script type="module" src="looks-page.js?v=2"></script>
+</body>
+</html>

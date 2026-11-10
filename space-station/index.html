@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<!-- the game's name is ONE constant, src/name.js; the game writes it here when it starts -->
+<title>Space station</title>
+<meta name="description" content="A math game on a space station: pick a crew member and walk aboard.">
+<meta name="theme-color" content="#0a0c10">
+<link rel="icon" href="data:,">
+<!-- the error box comes first, so anything that goes wrong shows on the screen (a phone has no console) -->
+<script src="../shared/oops.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; }
+  /* (until the station's first picture is drawn the title floats over open space: stars, and a faint glow low down) */
+  body { background: url(assets/stars.svg) 0 0 / 600px 600px, radial-gradient(ellipse 90% 50% at 60% 108%, #24405e 0%, rgba(20, 30, 44, 0) 70%), #05070b; color: #eef1f4; font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Roboto, Arial, sans-serif; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; opacity: 0; transition: opacity 0.9s ease; }
+  #game.is-on { opacity: 1; }
+  #title-root, #hud-root { position: fixed; inset: 0; pointer-events: none; }
+  #title-root > *, #hud-root > * { pointer-events: auto; }
+  /* (the title, hidden while walking, lets the drags through to the view) */
+  #title-root > .is-hidden, #hud-root > [hidden] { pointer-events: none; }
+  noscript { position: fixed; inset: 0; display: grid; place-items: center; font-size: 18px; font-weight: 600; }
+  /* while walking: one small eight-sided button back to the crew screen (a phone has no Escape key) */
+  .hud-menu { position: absolute; top: max(12px, env(safe-area-inset-top)); left: max(12px, env(safe-area-inset-left)); height: 40px; padding: 0 16px;
+    border: 0; color: #eef1f4; font-family: inherit; font-size: 13px; font-weight: 700; line-height: 40px; letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer;
+    background: rgba(14, 18, 24, 0.72); box-shadow: inset 0 0 0 1.5px rgba(150, 200, 240, 0.45);
+    clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px), 0 10px); }
+  .hud-menu:hover, .hud-menu:focus-visible { background: rgba(240, 140, 50, 0.9); color: #14100c; outline: none; }
+  .hud-menu kbd { font: inherit; opacity: 0.6; margin-left: 8px; }
+  @media (pointer: coarse) { .hud-menu kbd { display: none; } }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://unpkg.com/three@0.158.0/build/three.module.js",
+  "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<noscript>This game needs JavaScript turned on.</noscript>
+<canvas id="game"></canvas>
+<div id="hud-root"></div>
+<div id="title-root"></div>
+<!-- phones keep old files: bump ?v= here when the game changes (only this one needs it) -->
+<script type="module" src="src/main.js?v=2"></script>
+</body>
+</html>
