@@ -1,7 +1,7 @@
 // OPTIONS TO CHOOSE FROM: quick sketches of props that are still to be designed, each several ways, so the game's maker
 // can pick one before it is built properly. Each is a POINT piece standing on its point, its front toward +z, with a
 // person-sized figure (1.8 m) beside it for scale and the floor round it. Drawn in the station's own materials; the
-// glowing parts use the kit's 'core' material (its own mesh, so a moving glow can be put on it later); the haze is the
+// glowing parts use the kit's 'melt' material (molten metal, moving: kit/melt.js); the haze is the
 // kit's beams of light with dust (kit/beams.js), shown wherever a part is looked at in the Kit Lab.
 //
 //   furnaceopt   the smelter's furnace (the plan: about 4 m across, under the hall's 7 m ceiling). Each look also
@@ -29,27 +29,29 @@
 //                '1 clamp collar', '2 cradle and valve', '3 floor well' (the canister stands upright), '4 hatch'
 import { bevelBox, put, circle, bend, line, cylinder, rrect, lathe as lathe2 } from './geo.js';
 import { pulseLine } from './shipparts/cabin/medical.js';
+import { liveFace } from './shipparts/cabin/live.js';
 import { floorQuad } from './shell.js';
-import { SCREEN_RECT } from './tex.js';
 import { floorDecal } from './station2.js';
 
 const PI = Math.PI;
-const HOT = [2.2, 0.6, 0.08], WHITE_HOT = [4.2, 1.7, 0.32], EMBER = [1.5, 0.36, 0.05], FIRE = [1, 0.48, 0.16];
-const IRON = { c: '#6a6c70', r: 0.5, m: 0.55, w: 1.0 };     // a furnace's worn steel
+// (shared with the smelter's real furnace, kit/forge.js)
+export const HOT = [2.2, 0.6, 0.08], WHITE_HOT = [4.2, 1.7, 0.32], EMBER = [1.5, 0.36, 0.05], FIRE = [1, 0.48, 0.16];
+export const IRON = { c: '#6a6c70', r: 0.5, m: 0.55, w: 1.0 };     // a furnace's worn steel
 const SUIT = { c: '#56708c', r: 0.65, m: 0, w: 0 };        // the scale figure: one plain blue-grey
-const o9 = { r: 0.02, cell: 1.5, loops: [] };
+export const o9 = { r: 0.02, cell: 1.5, loops: [] };
+const MELT = 'melt';   // (the glowing parts' material)
 
 // ── small helpers ─────────────────────────────────────────────────────────────────────────────────────────────────
 // a sub-piece built in its own frame, then stood at `at` turned by ry about the up axis
-function placed(p, build, at, ry = 0) {
+export function placed(p, build, at, ry = 0) {
   const q = new (p.constructor)(); build(q);
   const c = Math.cos(ry), s = Math.sin(ry), R = (v) => [v[0] * c + v[2] * s, v[1], -v[0] * s + v[2] * c];
   for (const part of q.parts) { put(part.geo, at, [0, ry, 0]); p.parts.push(part); }
   for (const L of q.lights) { const a = R(L.at); p.lights.push({ ...L, at: [a[0] + at[0], a[1] + at[1], a[2] + at[2]], dir: L.dir && R(L.dir) }); }
 }
-const glowBox = (p, look, size, at, rot) => { const g = bevelBox(size, [0, 0, 0], { r: 0.003, seg: 1, cell: 9 }); put(g, at, rot || [0, 0, 0]); return p.add('core', g, look); };
+export const glowBox = (p, look, size, at, rot) => { const g = bevelBox(size, [0, 0, 0], { r: 0.003, seg: 1, cell: 9 }); put(g, at, rot || [0, 0, 0]); return p.add(MELT, g, look); };
 // a light that throws (almost) nothing itself but carries a beam of lit haze
-const haze = (p, at, dir, beam, color = FIRE) => p.lights.push({ at, i: 0.001, color, dir, reach: 0.5, beam });
+export const haze = (p, at, dir, beam, color = FIRE) => p.lights.push({ at, i: 0.001, color, dir, reach: 0.5, beam });
 // the figure for scale: 1.8 m tall, standing on y = 0, facing +z
 function person(q) {
   q.cyl(SUIT, 0.075, 0.86, [-0.1, 0.43, 0], null, 10); q.cyl(SUIT, 0.075, 0.86, [0.1, 0.43, 0], null, 10);
@@ -59,16 +61,16 @@ function person(q) {
 }
 // yellow safety rails: two tubes (0.55 and 1.05 m up) on posts, round an arc (angles from +x toward +z) or along a line
 const RAILP = circle(0.028, 8);
-function railArc(q, R, a0, a1, y0 = 0, posts = 6, cx = 0, cz = 0) {
+export function railArc(q, R, a0, a1, y0 = 0, posts = 6, cx = 0, cz = 0) {
   for (const h of [0.55, 1.05]) q.sweep('yellow', RAILP, bend([cx, y0 + h, cz], R, [1, 0, 0], [0, 0, 1], a0, a1, Math.max(8, Math.round(Math.abs(a1 - a0) * R * 2))));
   for (let i = 0; i <= posts; i++) { const a = a0 + (a1 - a0) * i / posts; q.cyl('yellow', 0.034, 1.07, [cx + R * Math.cos(a), y0 + 0.535, cz + R * Math.sin(a)], null, 8); }
 }
-function railLine(q, [ax, az], [bx, bz], y0 = 0, posts = 2) {
+export function railLine(q, [ax, az], [bx, bz], y0 = 0, posts = 2) {
   for (const h of [0.55, 1.05]) q.sweep('yellow', RAILP, line([ax, y0 + h, az], [bx, y0 + h, bz], [0, 1, 0], 4));
   for (let i = 0; i <= posts; i++) { const t = i / posts; q.cyl('yellow', 0.034, 1.07, [ax + (bx - ax) * t, y0 + 0.535, az + (bz - az) * t], null, 8); }
 }
 // a stencilled digit on a plate's face (facing +z at z), h tall, centred on (x, y)
-function digit(q, ch, x, y, z, h, surf = 'black') {
+export function digit(q, ch, x, y, z, h, surf = 'black') {
   const w = h * 0.58, t = h * 0.15, g = h * 0.035, s = (x0, x1, y0, y1) => q.slab(surf, x + x0, x + x1, y + y0, y + y1, z, z + 0.012, { r: 0.003, cell: 9, loops: [] });
   if (ch === '1') { s(-t / 2, t / 2, -h / 2, h / 2); s(-t * 2, -t / 2 - g, h / 2 - t, h / 2); return; }
   // '2': top, upper right, middle, lower left, bottom (stencil gaps where the strokes meet)
@@ -76,14 +78,14 @@ function digit(q, ch, x, y, z, h, surf = 'black') {
   s(-w / 2, -w / 2 + t, -h / 2 + t + g, -g); s(-w / 2 + g, w / 2 - g, -h / 2, -h / 2 + t);
 }
 // a warning sign: a yellow triangle with a black bar and dot, facing +z, s on a side, its middle at (x, y)
-function warning(q, x, y, z, s) {
+export function warning(q, x, y, z, s) {
   const g = q.extrude('yellow', [[-s / 2, -s * 0.29], [s / 2, -s * 0.29], [0, s * 0.58]], 0.02, 0.004); put(g, [x, y, z]);
   q.slab('black', x - s * 0.045, x + s * 0.045, y - s * 0.02, y + s * 0.3, z + 0.02, z + 0.026, { r: 0.002, cell: 9, loops: [] });
   q.slab('black', x - s * 0.045, x + s * 0.045, y - s * 0.17, y - s * 0.08, z + 0.02, z + 0.026, { r: 0.002, cell: 9, loops: [] });
 }
 // a ring of hazard paint on the floor
-function hazardRing(q, R, cx = 0, cz = 0) { const n = Math.round(2 * PI * R / 0.55); for (let k = 0; k < n; k++) { const a = 2 * PI * (k + 0.5) / n; floorDecal(q, 'hazard', 0.52, 0.24, cx + R * Math.cos(a), cz + R * Math.sin(a), -a + PI / 2, '#d9b23a', 0.016); } }
-const coreDisc = (p, look, r, y, x = 0, z = 0, seg = 32) => p.add('core', cylinder(r, 0.03, [x, y, z], seg), look);
+export function hazardRing(q, R, cx = 0, cz = 0) { const n = Math.round(2 * PI * R / 0.55); for (let k = 0; k < n; k++) { const a = 2 * PI * (k + 0.5) / n; floorDecal(q, 'hazard', 0.52, 0.24, cx + R * Math.cos(a), cz + R * Math.sin(a), -a + PI / 2, '#d9b23a', 0.016); } }
+export const coreDisc = (p, look, r, y, x = 0, z = 0, seg = 32) => p.add(MELT, cylinder(r, 0.03, [x, y, z], seg), look);
 // the floor round a sketch: grating, a hazard edge along its front
 function deck(q, x0, x1, z0, z1) {
   floorQuad(q, 'grating', x0, x1, z0, z1, 0.012);
@@ -91,8 +93,9 @@ function deck(q, x0, x1, z0, z1) {
 }
 
 // ── the console that runs the furnace ("THERMAL SYSTEMS" in his picture): a chunky desk, two screens on a raised back,
-// rows of lit buttons on a sloping top, cabinet doors under it. Its operator's side is +z. ───────────────────────────
-export function thermalConsole(q) {
+// rows of lit buttons on a sloping top, cabinet doors under it. Its operator's side is +z. Its two screens are live
+// (kit/shipparts/cabin/live.js): o.shows, the two programmes, o.seeds ───────────────────────────────────────────────
+export function thermalConsole(q, o = {}) {
   q.slab('gun', -0.95, 0.95, 0, 0.88, -0.45, 0.32, o9);
   for (const x of [-0.48, 0.48]) q.slab('black', x - 0.42, x + 0.42, 0.1, 0.72, 0.32, 0.335, { r: 0.004, cell: 9, loops: [] });
   for (const x of [-0.12, 0.12]) q.slab('rail', x - 0.015, x + 0.015, 0.36, 0.56, 0.335, 0.36, { r: 0.006, cell: 9, loops: [] });
@@ -105,7 +108,8 @@ export function thermalConsole(q) {
   }
   q.slab('gun', -0.95, 0.95, 0.88, 1.78, -0.45, -0.2, o9);
   q.slab('black', -0.95, 0.95, 1.74, 1.8, -0.47, -0.16, o9);
-  q.screen(SCREEN_RECT.radar, 0.74, 0.5, [-0.43, 1.36, -0.196]); q.screen(SCREEN_RECT.status, 0.74, 0.5, [0.43, 1.36, -0.196]);
+  const shows = o.shows || ['drive', 'scan'], seeds = o.seeds || [0.2, 0.7];
+  [-0.43, 0.43].forEach((x, i) => { q.slab('black', x - 0.4, x + 0.4, 1.08, 1.64, -0.21, -0.19, { r: 0.01, cell: 9, loops: [] }); liveFace(q, { show: shows[i], seed: seeds[i], w: 0.74, h: 0.5, c: 0.03 }, [x, 1.36, -0.186]); });
   q.light([0, 1.3, 0.25], 0.35, [0.55, 0.8, 1], [0, 0, 1], 2.5);
 }
 
@@ -215,7 +219,7 @@ function furnaceHood(p, hall) {
   p.lathe(IRON, [[0.001, 0], [1.95, 0], [1.95, 1.12], [2.08, 1.16], [2.08, 1.34], [1.5, 1.34], [1.5, 1.05], [0.001, 1.05]], 40);
   for (const y of [0.25, 0.75]) p.lathe('black', [[1.93, y], [1.99, y], [1.99, y + 0.1], [1.93, y + 0.1]], 40);
   coreDisc(p, HOT, 1.49, 1.07, 0, 0, 40); coreDisc(p, WHITE_HOT, 0.75, 1.085, 0, 0, 24);
-  p.add('core', put(lathe2([[1.49, 1.34], [1.49, 1.08]], 40), [0, 0, 0]), EMBER);   // (the melt's glow up the crucible's inside)
+  p.add(MELT, put(lathe2([[1.49, 1.34], [1.49, 1.08]], 40), [0, 0, 0]), EMBER);   // (the melt's glow up the crucible's inside)
   p.slab(IRON, -0.35, 0.35, 1.0, 1.3, 1.9, 2.55, o9); glowBox(p, HOT, [0.3, 0.02, 0.6], [0, 1.29, 2.22]);   // (the pouring lip)
   // the hood: a broad cone over it on its duct to the ceiling, lit orange from below
   p.lathe('gun', [[2.25, 3.3], [2.32, 3.36], [2.32, 3.58], [0.78, 4.92], [0.78, 7.0], [0.68, 7.0], [0.68, 4.86], [2.2, 3.52], [2.2, 3.3]], 40);

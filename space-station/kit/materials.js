@@ -10,9 +10,10 @@
 // light's irradiance, in the same units as a three.js point light), worked out once when a room is built (bake.js).
 import * as THREE from 'three';
 import { wearTexture, floorAtlas, decalAtlas, screenAtlas } from './tex.js';
-// (these two import U and GLOW from here and use them only inside their functions, so the circle is harmless)
+// (these three import U and GLOW from here and use them only inside their functions, so the circle is harmless)
 import { liveScreenMaterial } from './shipparts/cabin/live.js';
 import { coreMaterial } from './shipparts/cabin/livecore.js';
+import { meltMaterial } from './melt.js';
 
 // the surfaces: [colour (sRGB), roughness, metalness, wear]
 export const SURF = {
@@ -129,6 +130,8 @@ export function makeMaterials() {
   M.core = coreMaterial(); M.coreInst = M.core; M.driveGlow = new THREE.MeshBasicMaterial({ vertexColors: true });
   // (every live screen and changing lamp on a ship: one material, one draw, kit/shipparts/cabin/live.js)
   M.live = liveScreenMaterial(); M.liveInst = M.live;
+  // (molten metal, moving: the smelter's pours, slots and ladles, kit/melt.js)
+  M.melt = meltMaterial(); M.meltInst = M.melt;
   M.glass = new THREE.MeshStandardMaterial({ color: 0x0b141d, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.12, depthWrite: false, envMapIntensity: 0.35 });
   M.glassInst = M.glass;
   M.shield = shieldMaterial(); M.shieldInst = M.shield;
@@ -136,9 +139,9 @@ export function makeMaterials() {
   return M;
 }
 // the materials a piece can draw with, in the order the batch draws them
-export const MAT_KEYS = ['solid', 'floor', 'decal', 'screen', 'glow', 'core', 'driveGlow', 'live', 'glass', 'shield'];
+export const MAT_KEYS = ['solid', 'floor', 'decal', 'screen', 'glow', 'core', 'driveGlow', 'live', 'melt', 'glass', 'shield'];
 // which ones are lights themselves: their colours given a vertex, no shadow cast or taken
-export const GLOWING = new Set(['glow', 'core', 'driveGlow', 'live']);
+export const GLOWING = new Set(['glow', 'core', 'driveGlow', 'live', 'melt']);
 // which ones take the baked light (the rest glow on their own or are see-through)
 export const BAKED = new Set(['solid', 'floor', 'decal']);
 

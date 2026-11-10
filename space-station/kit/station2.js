@@ -21,7 +21,8 @@ import { floorQuad, backing, slabRow, hatch, G, Z0 } from './shell.js';
 import { kitTextures } from './materials.js';
 import { SCREEN_RECT, CREWS } from './tex.js';
 import { scanner as triageHood, pulseLine } from './shipparts/cabin/medical.js';
-import { OPTIONS2 } from './station2-options.js';   // (sketches of props still to be designed, to choose from)
+import { OPTIONS2 } from './station2-options.js';
+import { FORGE_PIECES } from './forge.js';   // (the smelter's forge: the two towers)   // (sketches of props still to be designed, to choose from)
 
 const PI = Math.PI;
 // a decal lying on the floor (facing up), w along x by d along z, centred at (x, z), turned by a about the up axis
@@ -219,4 +220,5 @@ export const STATION2 = {
   skin: { name: 'Outer plating', group: 'Big rooms', at: 'edge', variants: ['3 m', '7 m', '8 m', '11 m', 'roof'], foot: [2, 11, 0.1], build: skin },
   pulse: { name: 'Medical mark (pulse line)', group: 'Medical', at: 'wall', variants: ['short', 'long'], foot: [3.2, 0.3, 0.02], build: pulse },
   ...OPTIONS2,
+  ...FORGE_PIECES,
 };
