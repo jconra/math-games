@@ -15,7 +15,10 @@ void main() {
 const HEAD = (o) => `uniform float uTime; uniform float uFlick; uniform sampler2D uSheet; uniform vec3 uPanelA; uniform vec3 uPanelB;
 varying vec2 vUv; varying vec3 vData;
 #include <common>
-const vec3 C_INK = vec3( 0.62, 0.86, 1.0 ), C_LINE = vec3( 0.16, 0.55, 1.0 ), C_DIM = vec3( 0.05, 0.2, 0.36 ), C_AMB = vec3( 1.0, 0.48, 0.09 ), C_GOOD = vec3( 0.2, 0.9, 0.72 );
+// the colours: a palette (live.js LIVE_PALETTES), set on the material, so one switch turns every screen at once.
+// INK words and the brightest lines, LINE the drawing, DIM the faint parts, AMB the warm accent, GOOD the green, HOT and
+// WASTE the water tanks' fills; SAT how much the colour is deepened at the end (1: as drawn)
+uniform vec3 C_INK; uniform vec3 C_LINE; uniform vec3 C_DIM; uniform vec3 C_AMB; uniform vec3 C_GOOD; uniform vec3 C_HOT; uniform vec3 C_WASTE; uniform float uSat;
 const float TAU = 6.2831853, ADV = ${o.adv.toFixed(4)}, SPREAD = ${o.spread.toFixed(1)};
 const float LEN[${o.lens.length}] = float[${o.lens.length}]( ${o.lens.map((n) => n.toFixed(1)).join(', ')} );
 vec3 gT; vec3 gTc;      // the words asked for at this pixel: where on the sheet (its pixels), how big, what colour
@@ -253,7 +256,7 @@ void water( vec2 s, float A, float px, float t, float seed, inout vec3 col ) {
     float top = -hf.y + 2.0 * hf.y * lev + 0.012 * sin( q.x * 38.0 + t * 1.3 + fi ) + 0.006 * sin( q.x * 61.0 - t * 0.9 ) + 0.014 * q.x / hf.x * sin( t * 0.7 + fi * 0.5 );
     // (cold: the screen's blue. Hot: clear pale water under an amber surface line; an amber fill, dim as fills are,
     // read as mud. Waste: dull and greyed. lc is the surface line's colour, fc the fill's.)
-    vec3 lc = i == 1 ? C_AMB * 1.2 : ( i == 2 ? mix( C_DIM * 2.0, C_AMB * 0.55, 0.45 ) : C_LINE ), fc = i == 1 ? C_INK * 0.75 : lc;
+    vec3 lc = i == 1 ? C_AMB * 1.2 : ( i == 2 ? C_WASTE : C_LINE ), fc = i == 1 ? C_HOT : lc;
     float within = smoothstep( 0.0, px * 1.5, d - 0.014 );
     col += C_LINE * ln( d, 0.004, px );
     col += within * ( fc * 0.36 * ( 1.0 - smoothstep( top - px, top + px, q.y ) ) * ( 0.5 + 0.5 * ( q.y + hf.y ) / ( 2.0 * hf.y ) ) + lc * 1.5 * ln( q.y - top, 0.003, px ) );
@@ -314,6 +317,8 @@ void main() {
     col += C_LINE * 0.4 * ln( ed - 0.024, 0.0025, px );
     // a slow band of refresh going down the glass
     col *= 1.0 + 0.07 * smoothstep( 0.1, 0.0, abs( fract( vUv.y + t * 0.05 + seed ) - 0.5 ) );
+    // (the palette's deepening: away from grey by SAT, as the tone curve pales bright colours toward white)
+    col = max( mix( vec3( dot( col, vec3( 0.2126, 0.7152, 0.0722 ) ) ), col, uSat ), 0.0 );
     col = max( col, uPanelB * 0.6 ) * vData.x;
   }
   gl_FragColor = vec4( col, 1.0 );

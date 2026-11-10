@@ -11,7 +11,8 @@
 //                             on for a second and a half every o.every seconds, 4), 'breathe' (a slow swell, o.every, 5);
 //                             o.glow a glow name (kit/materials.js GLOW) or a linear colour; o.phase 0..1
 //   liveScreenMaterial(o)     the material (o.time: the clock uniform, U.time by default; o.dark: false for the kit's
-//                             blue panel instead of the dark one)
+//                             blue panel instead of the dark one; o.palette: 'soft' or 'vivid', LIVE_PALETTES)
+//   livePalette(m, name)      change a live material's palette while it runs (every screen at once)
 //   liveTick(t)               once a frame: works out the flicker light's brightness for time t and hands it to the
 //                             material; returns it (multiply the strip's pool of light by it)
 //
@@ -41,6 +42,8 @@ export const SHOW_LABEL = ['lamp', 'wire planet', 'star chart', 'sleep trace', '
 export const LAMP_MODES = { steady: 0, flicker: 1, blink: 2, breathe: 3 };
 // what the material shares: the flicker light's brightness this frame, which seed of flicker it is
 export const LIVE = { flick: { value: 1 }, seed: 0, sheet: null, adv: 0.45 };
+// the tag on the tired strip's pool of light (bits.js glowStrip o.flicker): multiply that pool by liveTick(t)
+export const FLICKER_TAG = 'flicker';
 
 export function liveTick(t) { LIVE.flick.value = flicker(t, LIVE.seed); return LIVE.flick.value; }
 
@@ -60,7 +63,7 @@ export function liveFace(p, o = {}, at = [0, 0, 0], rot = [0, 0, 0]) {
   const w = o.w ?? 0.5, h = o.h ?? 0.3, c = o.c ?? o.oct ?? 0.012, show = showOf(o.show ?? 'survey');
   const g = plate(shape(w, h, c)), uv = g.attributes.uv.array, P = g.attributes.position.array;
   for (let i = 0; i < uv.length / 2; i++) { uv[i * 2] = P[i * 3] / w + 0.5; uv[i * 2 + 1] = P[i * 3 + 1] / h + 0.5; }
-  add(p, null, g, at, rot, 'live');
+  add(p, [1, 1, 1], g, at, rot, 'live');   // (its colours are set below: they carry the programme, not a colour)
   // each vertex: brightness; programme (whole part) and seed (the part after the point); the face's width over its
   // height in hundredths (whole part) and its corner cut over its height (the part after the point, less a quarter:
   // nothing sits right on a whole number, where rounding on the way to the pixel could tip it over)
@@ -74,7 +77,7 @@ export function liveLamp(p, o = {}, at = [0, 0, 0], rot = [0, 0, 0]) {
   const g = plate(shape(w, h, o.c ?? Math.min(w, h) * 0.25)), uv = g.attributes.uv.array;
   // (a lamp says so in its uv: 2 + its mode, and where in its cycle it starts with how long the cycle is)
   for (let i = 0; i < uv.length / 2; i++) { uv[i * 2] = 2 + mode; uv[i * 2 + 1] = Math.round(o.every ?? (mode === 3 ? 5 : 4)) + 0.02 + 0.96 * clamp((o.phase ?? 0) % 1, 0, 1); }
-  add(p, null, g, at, rot, 'live');
+  add(p, [1, 1, 1], g, at, rot, 'live');
   const k = o.gain ?? 1, c = Array.isArray(o.glow) ? o.glow : GLOW[o.glow || 'strip'];
   setColor(g, [c[0] * k, c[1] * k, c[2] * k]);
   return g;
@@ -108,13 +111,19 @@ function farFrom(on, N) {
   return out;
 }
 
+const FONT = `bold ${15 * HI}px "DejaVu Sans Mono", "Consolas", "Menlo", monospace`;
+// one letter's step, in line heights (measured once: the shader is written with it)
+function letterStep() {
+  if (LIVE.step) return LIVE.adv;
+  const g = document.createElement('canvas').getContext('2d'); g.font = FONT;
+  LIVE.adv = g.measureText('0').width / HI / ROW; LIVE.step = true; return LIVE.adv;
+}
 export function liveSheet() {
   if (LIVE.sheet) return LIVE.sheet;
   const N = S * HI, cv = document.createElement('canvas'); cv.width = cv.height = N;
   const g = cv.getContext('2d', { willReadFrequently: true });
   g.fillStyle = '#000'; g.fillRect(0, 0, N, N); g.fillStyle = '#fff'; g.textBaseline = 'middle';
-  g.font = `bold ${15 * HI}px "DejaVu Sans Mono", "Consolas", "Menlo", monospace`;
-  LIVE.adv = g.measureText('0').width / HI / ROW;      // one letter's step, in line heights
+  g.font = FONT; letterStep();
   const midOf = (row) => (row * ROW + ROW / 2 + 1) * HI;
   LOG.forEach((s, i) => g.fillText('> ' + s, 3 * HI, midOf(i), 250 * HI));
   LABELS.forEach((s, i) => g.fillText(s, (256 + 128 * Math.floor(i / 25) + 3) * HI, midOf(i % 25), 122 * HI));
@@ -134,17 +143,50 @@ export function liveSheet() {
   return (LIVE.sheet = t);
 }
 
+// ── the colours ─────────────────────────────────────────────────────────────────────────────────────
+// Two palettes (linear colours). 'soft' is the first one filmed: pale blues, the tone curve takes the bright parts
+// toward white. 'vivid' is deeper and richer (the game's maker asked to see more colour, the pastels first): the same
+// drawing, the blues deeper, the amber and the green stronger, the hot tank warm and the waste tank murky, the panel a
+// deeper navy, and the whole deepened a little more at the end (sat). Not neon: nothing is brighter than before.
+// panel: the panel behind the drawing, top and bottom.
+export const LIVE_PALETTES = {
+  soft: {
+    ink: [0.62, 0.86, 1.0], line: [0.16, 0.55, 1.0], dim: [0.05, 0.2, 0.36], amb: [1.0, 0.48, 0.09], good: [0.2, 0.9, 0.72],
+    hot: [0.465, 0.645, 0.75], waste: [0.3025, 0.3388, 0.4183], sat: 1, panel: [[0.012, 0.046, 0.078], [0.005, 0.02, 0.038]],
+  },
+  vivid: {
+    ink: [0.3, 0.78, 1.0], line: [0.03, 0.36, 1.0], dim: [0.015, 0.11, 0.34], amb: [1.0, 0.3, 0.015], good: [0.04, 0.88, 0.3],
+    hot: [1.0, 0.26, 0.02], waste: [0.3, 0.42, 0.04], sat: 1.3, panel: [[0.003, 0.016, 0.058], [0.001, 0.006, 0.026]],
+  },
+};
+// the palette a ship's screens wear unless told otherwise
+export const LIVE_PALETTE = 'soft';
+// (the kit's brighter blue panel, for liveScreenMaterial({ dark: false }))
+const BLUE_PANEL = [[0.018, 0.122, 0.212], [0.008, 0.05, 0.095]];
+const UNI = { ink: 'C_INK', line: 'C_LINE', dim: 'C_DIM', amb: 'C_AMB', good: 'C_GOOD', hot: 'C_HOT', waste: 'C_WASTE' };
+
+// put a palette on a live material (every screen drawn with it changes at once): a name from LIVE_PALETTES
+export function livePalette(m, name = LIVE_PALETTE) {
+  const P = LIVE_PALETTES[name]; if (!P) throw new Error('kit: no live palette ' + name);
+  const u = m.uniforms, panel = m.userData.dark === false ? BLUE_PANEL : P.panel;
+  for (const [k, n] of Object.entries(UNI)) u[n].value.set(...P[k]);
+  u.uSat.value = P.sat; u.uPanelA.value.set(...panel[0]); u.uPanelB.value.set(...panel[1]);
+  m.userData.palette = name;
+  return m;
+}
+
 export function liveScreenMaterial(o = {}) {
-  const sheet = liveSheet(), dark = o.dark ?? true;
+  const V = () => ({ value: new THREE.Vector3() }); letterStep();
   const m = new THREE.ShaderMaterial({
+    // (the words' sheet is drawn the first time a live screen is drawn, not when the material is made: every lab and
+    // the game make the kit's materials, and most never draw a live screen)
     uniforms: {
-      uTime: o.time || U.time, uFlick: LIVE.flick, uSheet: { value: sheet },
-      // the panel behind the drawing, top and bottom (linear): a dark glass, or the kit's blue panel
-      uPanelA: { value: dark ? new THREE.Vector3(0.012, 0.046, 0.078) : new THREE.Vector3(0.018, 0.122, 0.212) },
-      uPanelB: { value: dark ? new THREE.Vector3(0.005, 0.02, 0.038) : new THREE.Vector3(0.008, 0.05, 0.095) },
+      uTime: o.time || U.time, uFlick: LIVE.flick, uSheet: { get value() { return liveSheet(); } },
+      uPanelA: V(), uPanelB: V(), uSat: { value: 1 },
+      C_INK: V(), C_LINE: V(), C_DIM: V(), C_AMB: V(), C_GOOD: V(), C_HOT: V(), C_WASTE: V(),
     },
     vertexColors: true, fog: false, vertexShader: LIVE_VERTEX, fragmentShader: liveFragment({ adv: LIVE.adv, spread: SPREAD, lens: LOG.map((l) => l.length + 2) }),
   });
-  m.name = 'live';
-  return m;
+  m.name = 'live'; m.userData.dark = o.dark ?? true;
+  return livePalette(m, o.palette ?? LIVE_PALETTE);
 }

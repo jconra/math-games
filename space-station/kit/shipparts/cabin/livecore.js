@@ -5,7 +5,8 @@
 //                               its length along y (turn it only about y: rot [0, a, 0]); o.look (a name or number from
 //                               CORE_LOOKS), o.seed (0..1)
 //   coreMaterial(o)             the material (o.time: the clock uniform; o.body, o.hot: its two colours, linear;
-//                               o.axis: which way the column's length runs in its mesh, [0, 1, 0])
+//                               o.axis: which way the column's length runs in its mesh, [0, 1, 0]; o.thin: for the
+//                               flow and bolts, how much its streams thin toward the ends of the tube, 0..1, THIN)
 //   corePulse(t, look)          time in, brightness out (about 0.45 to 1): the room's point light is multiplied by this,
 //                               so the room breathes with the core. The same sums as the material's, so they agree.
 //
@@ -13,6 +14,10 @@
 //   1 flow     plasma running up the column in streams that wind slowly round it
 //   2 throb    a heart of light at the middle that swells and fades (once in 4.2 seconds), fine slow movement inside it
 //   3 fusion   a small bright knot held at the middle, threads of light reaching out from it to the wall and wandering
+//   4 flowbolts  the flow and the fusion's bolts together (the game's maker asked for this one, and it is the default):
+//              the flow's streams thinner, and thinning further toward the ends, so the middle is full and the ends
+//              calm; bolts of light wandering through it, each from a point that drifts about inside the column (not
+//              only its middle) out to the wall, coming and going
 // The picture is worked out along the line of sight THROUGH the column (it is a surface, but it reads as a depth of
 // light: the knot stays in the middle as you walk round it). Nothing in it changes faster than a slow breath.
 // A sideways glow for the drive is the same flow with o.axis along the drive: its own material, so its own draw.
@@ -20,20 +25,22 @@ import * as THREE from 'three';
 import { add } from '../../bevel.js';
 import { U } from '../../materials.js';
 
-export const CORE_LOOKS = { flow: 1, throb: 2, fusion: 3 };
-export const CORE_LABEL = ['', 'plasma flowing', 'slow throb', 'fusion knot'];
+export const CORE_LOOKS = { flow: 1, throb: 2, fusion: 3, flowbolts: 4 };
+export const CORE_LABEL = ['', 'plasma flowing', 'slow throb', 'fusion knot', 'flow and bolts'];
+// the look a ship's reactor wears unless told otherwise, and how much the flow and bolts' streams thin toward the ends
+export const CORE_LOOK = 'flowbolts', THIN = 0.5;
 const TAU = Math.PI * 2;
-const lookOf = (s) => { const n = typeof s === 'number' ? s : CORE_LOOKS[s]; if (!(n >= 1 && n <= 3)) throw new Error('kit: no core look ' + s); return n; };
+const lookOf = (s) => { const n = typeof s === 'number' ? s : CORE_LOOKS[s]; if (!(n >= 1 && n <= 4)) throw new Error('kit: no core look ' + s); return n; };
 
-export function corePulse(t, look = 1) {
+export function corePulse(t, look = CORE_LOOK) {
   const n = lookOf(look);
-  if (n === 1) return 0.86 + 0.09 * Math.sin(t * 0.7) + 0.05 * Math.sin(t * 1.9 + 1.3);
+  if (n === 1 || n === 4) return 0.86 + 0.09 * Math.sin(t * 0.7) + 0.05 * Math.sin(t * 1.9 + 1.3);
   if (n === 2) return 0.45 + 0.55 * (0.5 - 0.5 * Math.cos(t * TAU / 4.2));
   return 0.82 + 0.1 * Math.sin(t * 0.9) + 0.06 * Math.sin(t * 2.6 + 0.7);
 }
 
 export function coreColumn(p, o = {}, at = [0, 0, 0], rot = [0, 0, 0]) {
-  const r = o.r ?? 0.21, h = o.h ?? 1, n = o.sides ?? 16, look = lookOf(o.look ?? 'flow');
+  const r = o.r ?? 0.21, h = o.h ?? 1, n = o.sides ?? 16, look = lookOf(o.look ?? CORE_LOOK);
   const P = [], N = [], UV = [], I = [];
   for (let i = 0; i <= n; i++) {
     const a = (i / n) * TAU, c = Math.cos(a), s = Math.sin(a);
@@ -43,7 +50,7 @@ export function coreColumn(p, o = {}, at = [0, 0, 0], rot = [0, 0, 0]) {
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(P, 3)); g.setAttribute('normal', new THREE.Float32BufferAttribute(N, 3));
   g.setAttribute('uv', new THREE.Float32BufferAttribute(UV, 2)); g.setIndex(I);
-  add(p, null, g, at, rot, 'core');
+  add(p, [1, 1, 1], g, at, rot, 'core');   // (its colours are set just below: they carry the look, not a colour)
   // each vertex: the look (whole part) and seed (the part after the point), the column's radius, its height
   const k = g.attributes.position.count, col = new Float32Array(k * 3), sd = 0.05 + 0.9 * Math.min(Math.max((o.seed ?? 0) % 1, 0), 1);
   for (let i = 0; i < k; i++) { col[i * 3] = look + sd; col[i * 3 + 1] = r; col[i * 3 + 2] = h; }
@@ -65,7 +72,7 @@ void main() {
   gl_Position = projectionMatrix * viewMatrix * vec4( vW, 1.0 );
 }`;
 
-const FRAG = `uniform float uTime; uniform vec3 uBody; uniform vec3 uHot;
+const FRAG = `uniform float uTime; uniform vec3 uBody; uniform vec3 uHot; uniform float uThin;
 varying vec3 vW; varying vec3 vC; varying vec3 vAx; varying vec3 vE1; varying vec3 vData; varying vec2 vUv;
 #include <common>
 const float TAU = 6.2831853;
@@ -121,7 +128,7 @@ void main() {
     float fog = len * 0.026 * ( 0.6 + 0.4 * vnoise( vec3( p0.x * 1.5, p0.y * 1.2 - t * 0.2, p0.z * 1.5 ) ) );
     float acc = body * ( 0.3 + 0.9 * bt ) + fog * ( 0.5 + 0.5 * bt ), hot = heart * ( 0.15 + 0.85 * bt ) * ( 0.45 + 1.0 * vein );
     col = uBody * acc * 1.25 + uHot * hot * hot * 0.2;
-  } else {
+  } else if ( look < 3.5 ) {
     // FUSION: a knot of light held at the middle, five threads reaching from it to the wall, coming and going
     float pulse = 0.82 + 0.1 * sin( t * 0.9 ) + 0.06 * sin( t * 2.6 + 0.7 );
     vec3 pc = p0 - d * dot( p0, d ); float b2 = dot( pc, pc );
@@ -148,6 +155,39 @@ void main() {
       hot += life * exp( -ds * ds / 0.00022 );
     }
     col = uBody * ( soft * 0.95 + halo * 0.8 + len * 0.006 ) * pulse + uHot * ( knot * 1.3 * pulse + hot * 0.4 );
+  } else {
+    // FLOW AND BOLTS: the flow's streams, thinner (finer across and fewer), and thinner still toward the ends of the tube
+    // by uThin, so the middle is full and the ends calm; with four bolts wandering through it
+    float pulse = 0.86 + 0.09 * sin( t * 0.7 ) + 0.05 * sin( t * 1.9 + 1.3 ), acc = 0.0;
+    for ( int i = 0; i < 4; i++ ) {
+      vec3 p = p0 + d * len * ( float( i ) + 0.5 ) / 4.0; float rho2 = dot( p.xz, p.xz ), tw = p.y * 0.22 + t * 0.12, c = cos( tw ), s = sin( tw );
+      float yn = clamp( abs( p.y ) / hh, 0.0, 1.0 ), endk = uThin * pow( yn, 1.5 ), lo = 0.56 + 0.3 * endk;
+      p.xz = vec2( c * p.x - s * p.z, s * p.x + c * p.z );
+      float n = vnoise( vec3( p.x * 3.1, p.y * 0.55 - t * 0.5, p.z * 3.1 ) + seed * 19.0 ), n2 = vnoise( vec3( p.x * 6.5, p.y * 1.4 - t * 1.27, p.z * 6.5 ) + 7.3 );
+      float ridge = smoothstep( lo, lo + 0.2, n ); ridge *= ridge;
+      acc += ( ridge * ( 0.4 + 1.1 * n2 ) * ( 1.0 - 0.55 * rho2 ) * 1.9 + 0.06 * exp( -rho2 * 3.0 ) * ( 0.6 + 0.6 * n2 ) ) * ( 1.0 - 0.7 * endk );
+    }
+    acc *= len * 0.25 * pulse; acc /= 1.0 + 0.6 * acc;
+    // the bolts: each from a point that drifts about inside the column (anywhere within half its radius of the middle,
+    // and up and down the middle half of it) to the wall, by way of a point well off the straight way, in five
+    // stretches with kinks; a spark where it starts, a splash where it lands
+    float soft = 0.0, hot = 0.0;
+    for ( int i = 0; i < 4; i++ ) {
+      float fi = float( i ) + seed * 7.0, life = smoothstep( 0.2, 0.65, 0.5 + 0.5 * sin( t * ( 0.47 + 0.09 * fi ) + fi * 2.4 ) );
+      vec3 a = vec3( 0.5 * sin( t * 0.23 + fi * 2.1 ), min( hh * 0.5, 1.2 ) * sin( t * 0.19 + fi * 1.3 ), 0.5 * cos( t * 0.29 + fi * 3.7 ) );
+      float phi = fi * 1.5708 + 0.9 * sin( t * 0.3 + fi * 1.7 ) + 0.4 * sin( t * 0.7 + fi * 4.3 );
+      vec3 w = vec3( 0.97 * cos( phi ), clamp( a.y + 0.7 * sin( t * 0.31 + fi * 2.9 ), -hh * 0.8, hh * 0.8 ), 0.97 * sin( phi ) );
+      vec3 ctl = ( a + w ) * 0.5 + 0.4 * vec3( sin( t * 0.9 + fi * 5.1 ), sin( t * 1.2 + fi * 3.3 ), cos( t * 0.8 + fi * 1.9 ) ), q = a; float ds = 9.0;
+      for ( int j = 1; j <= 5; j++ ) {
+        float sj = float( j ) / 5.0, fj = float( j ) + fi * 3.0, sk = 1.0 - sj;
+        vec3 b = sk * sk * a + 2.0 * sj * sk * ctl + sj * sj * w + 0.07 * sin( sj * 3.14159 ) * vec3( sin( fj * 7.1 + t * 1.6 ), sin( fj * 4.7 - t * 1.3 ), cos( fj * 5.9 + t * 1.1 ) );
+        ds = min( ds, nearSeg( p0, d, q, b ) ); q = b;
+      }
+      vec3 pa = p0 + d * max( dot( a - p0, d ), 0.0 ) - a, pw = p0 + d * max( dot( w - p0, d ), 0.0 ) - w;
+      soft += life * ( exp( -ds * ds / 0.0009 ) + 0.003 / ( ds + 0.035 ) + 0.45 * exp( -dot( pw, pw ) / 0.012 ) + 0.5 * exp( -dot( pa, pa ) / 0.008 ) );
+      hot += life * ( exp( -ds * ds / 0.00022 ) + 0.8 * exp( -dot( pa, pa ) / 0.0012 ) );
+    }
+    col = uBody * ( acc * 0.8 + soft * 0.9 * pulse ) + uHot * ( acc * acc * acc * 0.14 + hot * 0.6 );
   }
   // the glass round it: a faint sheen toward its edges; dimmer where it runs into its collars
   float facing = clamp( -dot( p0.xz, d.xz ) / max( length( p0.xz ) * length( d.xz ), 1e-4 ), 0.0, 1.0 );
@@ -163,6 +203,7 @@ export function coreMaterial(o = {}) {
     uniforms: {
       uTime: o.time || U.time, uAxis: { value: new THREE.Vector3(...(o.axis || [0, 1, 0])).normalize() },
       uBody: { value: new THREE.Vector3(...(o.body || [0.25, 0.8, 2.2])) }, uHot: { value: new THREE.Vector3(...(o.hot || [2.6, 4.4, 7.5])) },
+      uThin: { value: o.thin ?? THIN },
     },
     vertexColors: true, fog: false, vertexShader: VERT, fragmentShader: FRAG,
   });

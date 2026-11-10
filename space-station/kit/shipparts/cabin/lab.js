@@ -17,6 +17,7 @@
 import { shape, solid, loft, plate, relief, prism, octagon, add } from '../../bevel.js';
 import { FACE } from './ship.js';
 import { FLAT, printed, glowStrip, screen, pool, strip, hazard, leatherOf } from './bits.js';
+import { liveFace } from './live.js';
 import { PANEL } from './bunks.js';
 import { STEEL, GUN, TOP } from './mess.js';
 import { SCREEN_RECT } from '../../tex.js';
@@ -152,9 +153,10 @@ export function surveyTable(p, o = {}) {
   // the top: a charcoal rim, a glowing band round its edge (the ring of light), the map sunk into it
   add(p, o.trim || 'black', solid(shape(tw, td, c, 0, -zc), 0.05, { edge: 0.01, back: false, front: [{ inset: 0.035, depth: 0.004, bevel: 0.004 }, { inset: 0.012, depth: -0.008, bevel: 0.006 }] }), [0, h - 0.06, 0], FLAT);
   add(p, [0.45, 1.4, 3.2], loft([{ s: shape(tw + 0.008, td + 0.008, c + 0.002, 0, -zc), z: 0 }, { s: shape(tw + 0.008, td + 0.008, c + 0.002, 0, -zc), z: 0.014 }], { start: false, end: false }), [0, h - 0.04, 0], FLAT, 'glow');
-  const mw = tw - 0.11, md = td - 0.11, mc = Math.max(0.01, c - 0.04), g = plate(shape(mw, md, mc)), uv = g.attributes.uv.array, P = g.attributes.position.array, R = SCREEN_RECT.radar;
-  for (let i = 0; i < uv.length / 2; i++) { uv[i * 2] = R[0] + (P[i * 3] / mw + 0.5) * (R[2] - R[0]); uv[i * 2 + 1] = R[1] + (P[i * 3 + 1] / md + 0.5) * (R[3] - R[1]); }
-  add(p, [1.5, 1.5, 1.5], g, [0, h - 0.008 + 0.0012, zc], FLAT, 'screen');
+  // (the map: a live screen lying flat, the star chart drifting, kit/shipparts/cabin/live.js; the lab's wall screen
+  // shows the wire planet, so the two never show the same thing)
+  const mw = tw - 0.11, md = td - 0.11, mc = Math.max(0.01, c - 0.04);
+  liveFace(p, { show: 'chart', w: mw, h: md, c: mc, seed: 0.71 }, [0, h - 0.008 + 0.0012, zc], FLAT);
   // its light up from the map, and its pool
   strip(p, [0, h + 0.1, zc], 0.45, [0, 1, 0], 2.2, [0.6, 0.82, 1.0]);
   strip(p, [0, h + 0.05, zc + td / 2 + 0.15], 0.2, [0, 0, 1], 1.6, [0.6, 0.82, 1.0]);

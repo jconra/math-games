@@ -10,6 +10,9 @@
 // light's irradiance, in the same units as a three.js point light), worked out once when a room is built (bake.js).
 import * as THREE from 'three';
 import { wearTexture, floorAtlas, decalAtlas, screenAtlas } from './tex.js';
+// (these two import U and GLOW from here and use them only inside their functions, so the circle is harmless)
+import { liveScreenMaterial } from './shipparts/cabin/live.js';
+import { coreMaterial } from './shipparts/cabin/livecore.js';
 
 // the surfaces: [colour (sRGB), roughness, metalness, wear]
 export const SURF = {
@@ -121,9 +124,11 @@ export function makeMaterials() {
   M.screenInst = M.screen;
   M.glow = new THREE.MeshBasicMaterial({ vertexColors: true });
   M.glowInst = M.glow;
-  // (a machine's glowing heart, each kind its own mesh so a moving material can be put on it later: a ship reactor's core,
-  // the glow at the end of its drive. Until then they glow steadily, as the strips do.)
-  M.core = new THREE.MeshBasicMaterial({ vertexColors: true }); M.driveGlow = new THREE.MeshBasicMaterial({ vertexColors: true });
+  // (a machine's glowing heart, each kind its own mesh: a ship reactor's core, moving (kit/shipparts/cabin/livecore.js:
+  // its look is in its vertices), and the glow at the end of its drive, which glows steadily as the strips do)
+  M.core = coreMaterial(); M.coreInst = M.core; M.driveGlow = new THREE.MeshBasicMaterial({ vertexColors: true });
+  // (every live screen and changing lamp on a ship: one material, one draw, kit/shipparts/cabin/live.js)
+  M.live = liveScreenMaterial(); M.liveInst = M.live;
   M.glass = new THREE.MeshStandardMaterial({ color: 0x0b141d, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.12, depthWrite: false, envMapIntensity: 0.35 });
   M.glassInst = M.glass;
   M.shield = shieldMaterial(); M.shieldInst = M.shield;
@@ -131,9 +136,9 @@ export function makeMaterials() {
   return M;
 }
 // the materials a piece can draw with, in the order the batch draws them
-export const MAT_KEYS = ['solid', 'floor', 'decal', 'screen', 'glow', 'core', 'driveGlow', 'glass', 'shield'];
+export const MAT_KEYS = ['solid', 'floor', 'decal', 'screen', 'glow', 'core', 'driveGlow', 'live', 'glass', 'shield'];
 // which ones are lights themselves: their colours given a vertex, no shadow cast or taken
-export const GLOWING = new Set(['glow', 'core', 'driveGlow']);
+export const GLOWING = new Set(['glow', 'core', 'driveGlow', 'live']);
 // which ones take the baked light (the rest glow on their own or are see-through)
 export const BAKED = new Set(['solid', 'floor', 'decal']);
 

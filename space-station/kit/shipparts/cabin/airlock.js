@@ -6,7 +6,8 @@
 // Frames (kit/shipparts/cabin/ship.js): a WALL fitting stands on a wall line, x along the wall, centred; z = 0 on the line,
 // its back at the wall's face (FACE), facing +z; y = 0 the deck.
 //   suitLockers(p, o)   o.len (1: a unit each half metre), o.depth (0.25), o.h (2), o.poster (a POSTERS index: a single
-//                       unit carries it on its door instead of a window), o.handle, o.trim
+//                       unit carries it on its door instead of a window), o.handle, o.trim, o.flicker (true: the
+//                       ship's one tired strip along its top front edge)
 //   pressurePanel(p, o) o.w (0.34), o.h (0.5), o.y (1.25, its middle)
 //   wallBench(p, o)     o.len (0.45), o.depth (0.34), o.seat (0.45), o.leather (the cushion's colour), o.trim
 import { shape, solid, loft, plate, relief, prism, octagon, add } from '../../bevel.js';
@@ -50,6 +51,10 @@ export function suitLockers(p, o = {}) {
     suit(p, x, w.y, FACE + 0.07);
     glowStrip(p, uw - 0.12, [x, h - 0.135, FACE + 0.06], [PI / 2, 0, 0], { i: 0.1, dir: [0, -0.2, 1], reach: 0.9, pool: 0.25, poolAt: [x, w.y, fz + 0.4] });
   });
+  // (o.flicker: THE tired strip, one on a ship (kit/shipparts/cabin/flicker.js): along the lockers' top front edge on a
+  // 45 degree cut, lighting their fronts; it dips now and then, gently, never strobing. Most of its light is its pool
+  // (real-time, so it can dip) and little is baked (which cannot), else the dip is lost in the steady light)
+  if (o.flicker) glowStrip(p, len - 0.14, [0, h - 0.018, fz + 0.006], [PI / 4, 0, 0], { flicker: true, wid: 0.018, i: 0.06, dir: [0, -0.5, 1], reach: 1.8, pool: 1.3, poolAt: [0, h - 0.6, fz + 0.75], poolReach: 2.2 });
   return p;
 }
 // a suit on its hook: the helmet (a faceted dome, its visor dark), the shoulders and chest, the arms hanging; its middle at
@@ -69,7 +74,7 @@ function suit(p, x, y, z) {
 export function pressurePanel(p, o = {}) {
   const w = o.w ?? 0.34, h = o.h ?? 0.5, y = o.y ?? 1.25;
   add(p, 'black', solid(shape(w, h, 0.05, 0, y), 0.03, { edge: 0.006, back: false, front: [{ inset: 0.012, depth: -0.004, bevel: 0.004 }] }), [0, 0, FACE]);
-  screen(p, { w: w - 0.08, h: h * 0.36, rect: 'status', sub: [0.02, 0.05, 0.98, 0.85], gain: 1.3, depth: 0.012, bezel: 0.014 }, [0, y + h * 0.2, FACE + 0.026]);
+  screen(p, { w: w - 0.08, h: h * 0.36, live: 'airlock', seed: 0.5, gain: 1.3, depth: 0.012, bezel: 0.014 }, [0, y + h * 0.2, FACE + 0.026]);
   // the big CYCLE button (green), the stop (red), each in a chamfered bezel
   for (const [bx, c, s] of [[-w * 0.2, 'green', 0.09], [w * 0.25, 'red', 0.06]]) {
     add(p, 'dark', relief(shape(s + 0.03, s + 0.03, (s + 0.03) * 0.3, bx, y - h * 0.17), [{ inset: 0, depth: 0.008, bevel: 0.006 }]), [0, 0, FACE + 0.026]);

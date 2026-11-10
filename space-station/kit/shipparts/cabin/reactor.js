@@ -7,9 +7,9 @@
 // the lower housing that climbs the wall with a valve.
 //
 // THE CORE IS ITS OWN PIECE. It is drawn with the kit material 'core' (kit/materials.js), not 'glow', so in a built cabin
-// it is its own mesh: cabin.group.getObjectByName('core') (material mats.core, a plain unlit vertex-coloured one), one
-// draw. Its uv: u once round the column, v 0 at its foot to 1 at its top. A moving plasma is a new material given to
-// that mesh. Until then it glows steadily, brightest in its middle (vertex colours).
+// it is its own mesh: cabin.group.getObjectByName('core') (material mats.core), one draw. It MOVES: the column and its
+// material are kit/shipparts/cabin/livecore.js (coreColumn, coreMaterial), driven by the shared clock; o.core picks its
+// look (CORE_LOOK, the flow and bolts, unless told otherwise), and corePulse(t, look) is its brightness for the pool.
 // THE LIGHT IT THROWS is one number, CORE_LIGHT: it scales the core's baked light and its real-time pool. The pool is
 // tagged (cabin.parts.pools' entry with tag CORE_TAG), so the game can find it and pulse it.
 //
@@ -23,6 +23,7 @@ import { FACE } from './ship.js';
 import { FLAT, printed, strip, hazard, COPPER, decalQuad } from './bits.js';
 import { GUN, STEEL } from './mess.js';
 import { spun, tube, aim, bolts, flange, valve } from './round.js';
+import { coreColumn, CORE_LOOK } from './livecore.js';
 
 const PI = Math.PI;
 export const CORE = [0.55, 1.4, 2.7], CORE_END = [0.08, 0.3, 0.95], SEAM = [0.6, 1.9, 4.2];
@@ -49,8 +50,8 @@ export function reactorCore(p, o = {}) {
   sp(SEAM, [[0.446, 0.342], [0.446, 0.358]], { caps: [false, false] }, 'glow');
   bolts(p, STEEL, [0, 0.43, zc], [0, 1, 0], d * 0.4475, 16);
   // THE CORE (its own material: see the head of this file)
-  const rows = 8, core = sp([1, 1, 1], Array.from({ length: rows + 1 }, (_, i) => [0.25, cy0 + (cy1 - cy0) * i / rows, i / rows]), { seg: 32, caps: [false, false] }, 'core');
-  { const V = core.attributes.uv.array, K = core.attributes.color.array; for (let i = 0; i < K.length / 3; i++) { const t = Math.sin(PI * V[i * 2 + 1]); for (let k = 0; k < 3; k++) K[i * 3 + k] = CORE_END[k] + (CORE[k] - CORE_END[k]) * t; } }
+  // (moving: kit/shipparts/cabin/livecore.js. o.core: its look, a name or number from CORE_LOOKS; o.seed)
+  coreColumn(p, { r: 0.25 * d, h: cy1 - cy0, sides: 32, look: o.core ?? CORE_LOOK, seed: o.seed ?? 0.3 }, [0, cy0, zc]);
   // its cage: six slim ribs with a gusset at each foot (none dead ahead: the core shows wide between the two front ones),
   // a hoop near each end
   const y0 = cy0 - 0.03, y1 = U(0.07), rib = [[0.33, y0], [0.41, y0], [0.41, y0 + 0.03], [0.372, y0 + 0.09], [0.372, y1 - 0.09], [0.41, y1 - 0.03], [0.41, y1], [0.33, y1]].map(([r, y]) => [r * d, y]);

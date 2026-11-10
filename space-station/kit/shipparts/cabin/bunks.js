@@ -97,10 +97,11 @@ export function bunkStack(p, o = {}) {
     add(p, 'soft', plate(shape(0.07, 0.07, 0.02)), [lx, B.y1 - 0.002, zc], [PI / 2, 0, 0], 'glow');
     strip(p, [lx, B.y1 - 0.08, zc], 0.14, [0, -1, 0], 0.9);
     pool(p, [op.x * 0.6, B.y0 + 0.25, zc + 0.25], 0.16, 1.1);
-    // on its back wall: the 8-sided star screen, and the small screen by the pillow
+    // on its back wall: the 8-sided screen (live: the upper berth the wire planet, the lower the star chart, so the two never
+    // show the same thing) and the small screen by the pillow (live: the sleeper's trace, a rate of its own)
     const sh = Math.min(0.32, ch - 0.26), sw = Math.min(0.66, op.w * 0.5);
-    placeInto(p, part(starScreen, { w: +sw.toFixed(3), h: +sh.toFixed(3), seed: 3 }), { at: [op.x - head * Math.min(0.1, op.w / 2 - sw / 2 - 0.04), top + 0.06 + sh / 2 + 0.05, back], rot: [0, 0, 0] });
-    screen(p, { w: 0.13, h: 0.08, rect: 'status', sub: [0.03, 0.08, 0.6, 0.62], gain: 1.1, depth: 0.012, bezel: 0.016 }, [lx + head * 0.02, top + 0.26, back]);
+    placeInto(p, part(starScreen, { w: +sw.toFixed(3), h: +sh.toFixed(3), show: B === berths[1] ? 'survey' : 'chart', seed: 3 + (B.num ?? 0) }), { at: [op.x - head * Math.min(0.1, op.w / 2 - sw / 2 - 0.04), top + 0.06 + sh / 2 + 0.05, back], rot: [0, 0, 0] });
+    screen(p, { w: 0.13, h: 0.08, live: 'rest', seed: ((B.num ?? 1) * 0.37) % 1, gain: 1.1, depth: 0.012, bezel: 0.016 }, [lx + head * 0.02, top + 0.26, back]);
     // its number on the band under its opening, by the end away from the ladder: the print, a small dark tag with a light
     if (B.num) {
       const nx = head > 0 ? op.x + op.w / 2 - 0.12 : op.x - op.w / 2 + 0.12, ny = op.y - op.h / 2 - fm - 0.042;

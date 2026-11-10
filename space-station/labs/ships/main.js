@@ -42,7 +42,10 @@ import { Plan } from './plan.js';
 import { buildRoom, updateDoors, setDoors, loadRoom, forgetPiece } from '../../kit/layout.js';
 import { PIECES } from '../../kit/catalog.js';
 import { buildCabin, LOOKS, cabinMaterials } from '../../kit/ships/cabin-built.js';
-import { makeMaterials } from '../../kit/materials.js';
+import { makeMaterials, U } from '../../kit/materials.js';
+import { liveTick, livePalette, LIVE, FLICKER_TAG } from '../../kit/shipparts/cabin/live.js';
+import { corePulse, CORE_LOOK } from '../../kit/shipparts/cabin/livecore.js';
+import { CORE_TAG } from '../../kit/shipparts/cabin/reactor.js';
 import { setThrottle, THROTTLE, ENGINE } from '../../kit/ships/built-common.js';
 import { makeJets } from '../../kit/ships/plume.js';
 import { makeBeams } from '../../kit/beams.js';
@@ -87,6 +90,9 @@ const st = {
   // (the pools of light by the strips of the room the eye is in: a few real-time lights, kit/ships/cabin-built.js POOLS;
   // with the glow unless ?pools=1 or 0)
   pools: q.has('pools') ? q.get('pools') === '1' : q.has('bloom') ? q.get('bloom') === '1' : !matchMedia('(pointer: coarse)').matches,
+  // (the cabin's motion: the live screens, the reactor's core, the one tired strip, the dust in the beams (?motion=0:
+  // all held still); the screens' palette (?screens=vivid))
+  motion: q.get('motion') !== '0', screens: q.get('screens') === 'vivid' ? 'vivid' : 'soft',
 };
 
 // ── renderer, scene, camera ───────────────────────────────────────────────────────────────────────────────────────
@@ -142,8 +148,21 @@ function updatePools() {
   const r = P && st.bp ? st.bp.rooms.find((R) => c.x >= R.rect[0] && c.x <= R.rect[2] && c.z >= R.rect[1] && c.z <= R.rect[3] && c.y > deck - 0.3 && c.y < deck + 3.2) : null;
   const key = (r?.id ?? '-') + '|' + (st.cabin?.key ?? ''); if (key === poolKey) return; poolKey = key;
   const mine = r ? P.filter((p) => p.room === r.id).sort((a, b) => b.i - a.i).slice(0, POOL_N) : [];
-  poolLights.forEach((L, i) => { const p = mine[i]; L.intensity = p ? p.i : 0; if (!p) return; L.position.set(p.at[0], p.at[1] + deck, p.at[2]); L.color.setRGB(...p.color); L.distance = p.reach; });
+  poolLights.forEach((L, i) => { const p = mine[i]; L.userData.pool = p || null; L.intensity = p ? p.i : 0; if (!p) return; L.position.set(p.at[0], p.at[1] + deck, p.at[2]); L.color.setRGB(...p.color); L.distance = p.reach; });
 }
+// ── the cabin's motion: its clock (U.time, the kit's shared one) runs while st.motion, unless a rig holds it; the
+// tired strip's pool and the reactor core's follow them (kit/shipparts/cabin/live.js, livecore.js), and the beams' dust
+// keeps the same clock ──
+let clock = 0;
+function moveCabin(dt) {
+  if (st.motion && st.clockHeld == null) clock += dt;
+  const t = st.clockHeld ?? clock; U.time.value = t;
+  const f = st.motion || st.clockHeld != null ? liveTick(t) : (LIVE.flick.value = 1), c = st.motion || st.clockHeld != null ? corePulse(t, CORE_LOOK) : 1;
+  for (const L of poolLights) { const p = L.userData.pool; if (p?.tag === FLICKER_TAG) L.intensity = p.i * f; else if (p?.tag === CORE_TAG) L.intensity = p.i * c; }
+  st.cabin?.beams?.update?.(t);
+}
+function setMotion(on) { st.motion = !!on; menu(); }
+function setScreens(k) { st.screens = k === 'vivid' ? 'vivid' : 'soft'; for (const M of Object.values(cabinMats)) livePalette(M.live, st.screens); menu(); }
 controls.enableDamping = true; controls.dampingFactor = 0.08; controls.maxPolarAngle = Math.PI * 0.495; controls.minDistance = 1.5; controls.maxDistance = 80;
 const BP3 = new THREE.Group(); scene.add(BP3);
 
@@ -263,6 +282,7 @@ function cabinFor(S, bp, look) {
   // (the cabin's own materials: lit by its strips, little of the lab's sky light let in, the floor tinted for the look,
   // less of a mirror than the station's)
   if (!cabinMats[lk]) cabinMats[lk] = cabinMaterials(look, level);
+  livePalette(cabinMats[lk].live, st.screens);
   const room = { name: 'cabin', grid: { cell: 0.5, step: 0.5, deck: space.deck }, rooms: ['walls', 'ceilings'].map((v) => ({ id: v, pieces: [{ piece: id, cell: [0, 0], turn: 0, level: 0, variant: v }] })) };
   // (baked without shadows: on the bake's 8 cm grid a 45-degree slope fills its cells in steps thick enough that its own
   // points start inside them, so it shadows itself from every light; the corner darkening stays)
@@ -468,6 +488,8 @@ function menu() {
         ...(LOOKS[st.look].levels ? [lab('Light'), ...Object.entries(LOOKS[st.look].levels).map(([k, V]) => chip(V.name, k === levelOf(st.look), () => setLevel(k), true, 'How dim the rooms are between their pools of light and glowing strips' + (k === LOOKS[st.look].level ? ' (this one is the game\'s)' : '')))] : []),
         chip('Light beams', st.beams, () => setBeams(!st.beams), true, 'The beams of light under the ceilings\' discs, with dust drifting through them'),
         chip('Ceilings', st.roof, () => setRoof(!st.roof), true, 'Lift the cabin\'s ceilings off to look in from above (with the hull see-through or hidden)'),
+        chip('Motion', st.motion, () => setMotion(!st.motion), true, 'The cabin moving: its screens, the reactor\'s core, one tired light in the airlock, the dust in the beams (off: all held still)'),
+        chip(st.screens === 'vivid' ? 'Screens: vivid' : 'Screens: soft', st.screens === 'vivid', () => setScreens(st.screens === 'vivid' ? 'soft' : 'vivid'), true, 'The live screens\' colours: soft (pale blues) or vivid (deeper, richer colour)'),
         chip('Glow', st.bloom || st.pools, () => { const on = !(st.bloom || st.pools); setBloom(on); setPools(on); menu(); }, true, 'The light strips\' glow and their pools of light (a bloom pass and a few real-time lights in the room you are in; off by default on a phone)'),
         lab('Doors'), ...[['auto', 'Auto'], ['open', 'Open'], ['shut', 'Shut']].map(([k, t]) => chip(t, st.cabinDoors === k && st.doorsAt == null, () => { st.cabinDoors = k; st.doorsAt = null; menu(); }, true, k === 'auto' ? 'The sliding doors open as the eye (or the person) comes near' : k === 'open' ? 'Every sliding door open' : 'Every sliding door shut'))] : []),
       chip(st.inside ? 'Inside off' : 'Inside on', false, () => setInside(!st.inside), true, 'The rooms built inside the ship from the blueprint shown, with the cabin kit\'s walls and sliding doors (furniture as the plan\'s boxes)')] : []),
@@ -601,7 +623,7 @@ renderer.setAnimationLoop((t) => {
   // (the engines easing to the throttle asked for: the whole range in about a second and a half; the jets follow it)
   if (ENGINE.throttle !== st.throttleT) { const d = st.throttleT - ENGINE.throttle, step = dt * 0.7; setThrottle(Math.abs(d) <= step ? st.throttleT : ENGINE.throttle + Math.sign(d) * step); }
   for (const J of st.shell?.jets || []) { if (J.role === 'main') J.set.setThrust(ENGINE.throttle, true); J.set.update(dt); }
-  if (on) { fly(dt); controls.update(); updatePools(); if (composer) composer.render(); else renderer.render(scene, camera); frames++; }
+  if (on) { fly(dt); controls.update(); updatePools(); moveCabin(dt); if (composer) composer.render(); else renderer.render(scene, camera); frames++; }
   fpsT += dt; if (fpsT > 0.5) { fps = Math.round(frames / fpsT); frames = 0; fpsT = 0; }
   if (st.shell) hud.textContent = `${st.ship.name}: ${st.shell.size.z.toFixed(1)} × ${st.shell.size.x.toFixed(1)} × ${st.shell.size.y.toFixed(1)} m · deck ${st.space.deck} m up · ${Math.round(st.shell.tris + (st.cabin?.tris || 0)).toLocaleString()} tris` + (st.cabin ? ` (inside ${Math.round(st.cabin.tris).toLocaleString()})` : '') + (on ? ` · ${fps} fps` : '');
 });
@@ -649,5 +671,8 @@ window.SHIPLAB = {
   roomSpots: () => roomSpots(), ship3: () => ({ tris: st.shell?.tris, stats: st.shell?.built?.stats || null }),
   bloom: (on) => { setBloom(on); menu(); }, pools: (on) => { setPools(on); menu(); }, fps: () => fps,
   // (one frame drawn as the loop draws it, for a rig timing frames)
-  draw: () => { updatePools(); if (composer) composer.render(); else renderer.render(scene, camera); },
+  // (the cabin's motion: motion(on); time(t) holds its clock at t seconds (a rig filming a frame at a time), time(null)
+  // lets it run on; screens('soft' | 'vivid') the screens' palette)
+  motion: (on) => setMotion(on), time: (t) => { st.clockHeld = t == null ? null : +t; moveCabin(0); }, screens: (k) => setScreens(k),
+  draw: () => { updatePools(); moveCabin(0); if (composer) composer.render(); else renderer.render(scene, camera); },
 };

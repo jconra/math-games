@@ -40,7 +40,7 @@ export function showerStall(p, o = {}) {
   add(p, STEEL, loft([{ s: shape(0.03, 0.03, 0.009), z: 0 }, { s: shape(0.03, 0.03, 0.009), z: 0.22 }]), [0, h - 0.17, FACE], null);
   add(p, STEEL, loft([{ s: shape(0.16, 0.16, 0.047), z: 0 }, { s: shape(0.18, 0.18, 0.053), z: 0.03 }]), [0, h - 0.2, FACE + 0.22], [PI / 2, 0, 0]);
   add(p, 'dark', plate(shape(0.15, 0.15, 0.044)), [0, h - 0.231, FACE + 0.22], [PI / 2, 0, 0]);
-  screen(p, { w: 0.1, h: 0.07, rect: 'status', sub: [0.03, 0.08, 0.6, 0.5], gain: 1.1, depth: 0.014, bezel: 0.016 }, [len * 0.25, 1.2, FACE]);
+  screen(p, { w: 0.1, h: 0.07, live: 'water', seed: 0.3, gain: 1.1, depth: 0.014, bezel: 0.016 }, [len * 0.25, 1.2, FACE]);
   glowStrip(p, len - 0.12, [0, h - 0.06, FACE + 0.02], [PI / 4, 0, 0], { i: 0.3, dir: [0, 0, 1], reach: 1.6, color: [0.85, 0.93, 1.0], pool: 0.35, poolAt: [0, 1.1, zc] });
   return p;
 }

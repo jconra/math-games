@@ -46,13 +46,13 @@ export function engStation(p, o = {}) {
   const z0 = depth - 0.01, z1 = FACE + 0.14, y0 = desk, y1 = desk + 0.13;
   add(p, o.trim || 'black', slab(plan(z0, 0.005).map(([x, z]) => [x, Math.max(z, z1)]), y0, (x, z) => y0 + 0.03 + (z0 - z) / (z0 - z1) * (y1 - y0 - 0.03)));
   const tilt = Math.atan2(y1 - y0 - 0.03, z0 - z1), mid = [0, (y0 + 0.03 + y1) / 2 + 0.003, (z0 + z1) / 2];
-  screen(p, { w: 0.34, h: 0.17, rect: 'terminal', sub: [0.02, 0.04, 0.98, 0.98], gain: 1.3, depth: 0.008, bezel: 0.012 }, [-len * 0.18, mid[1], mid[2]], [-PI / 2 + tilt, 0, 0]);
+  screen(p, { w: 0.34, h: 0.17, live: 'log', seed: 0.21, gain: 1.3, depth: 0.008, bezel: 0.012 }, [-len * 0.18, mid[1], mid[2]], [-PI / 2 + tilt, 0, 0]);
   const BT = ['green', 'amber', 'blue', 'amber', 'green', 'blue'];
   for (let k = 0; k < 6; k++) { const bx = len * 0.12 + (k % 3) * 0.07, bz = (k < 3 ? -0.04 : 0.03); add(p, BT[k], plate(shape(0.04, 0.026, 0.008)), localAt([0, mid[1] + 0.004, mid[2]], [-PI / 2 + tilt, 0, 0], [bx, bz, 0.002]), [-PI / 2 + tilt, 0, 0], 'glow'); }
   // the two screens over it, in bezels, a light strip under them lighting the desk
   const sy = desk + 0.13 + 0.26;
-  screen(p, { w: len * 0.4, h: 0.26, rect: 'status', gain: 1.3, light: 0.14 }, [-len * 0.22, sy, FACE]);
-  screen(p, { w: len * 0.4, h: 0.26, rect: 'radar', gain: 1.3, light: 0.14 }, [len * 0.22, sy, FACE]);
+  screen(p, { w: len * 0.4, h: 0.26, live: 'systems', seed: 0.62, gain: 1.3, light: 0.14 }, [-len * 0.22, sy, FACE]);
+  screen(p, { w: len * 0.4, h: 0.26, live: 'drive', seed: 0.44, gain: 1.3, light: 0.14 }, [len * 0.22, sy, FACE]);
   glowStrip(p, len * 0.86, [0, sy - 0.16, FACE + 0.02], [PI / 3, 0, 0], { i: 0.2, dir: [0, -0.2, 1], reach: 1.2, pool: 0.4, poolAt: [0, desk + 0.3, depth + 0.25] });
   // its name on the control top's front lip (the station's ENG-1 stencil)
   p.decal('label:ENG-1', 0.1, 0.025, [0, y0 + 0.015, z0 + 0.0015], null, '#c9c7bf');

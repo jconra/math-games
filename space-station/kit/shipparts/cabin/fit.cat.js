@@ -14,7 +14,7 @@ import { labBench, microscope, glovebox, vialRack, tablet, sampleCase, surveyTab
 import { suitLockers, pressurePanel, wallBench } from './airlock.js';
 import { showerStall, toiletBasin } from './washroom.js';
 import { reactorCore, drivePumps, engStation, gearShelves } from './engroom.js';
-import { starScreen } from './bits.js';
+import { starScreen, screen, glowStrip } from './bits.js';
 import { wallPipes, pipeRun, grating, hoopRail } from './engpipes.js';
 import { downlight, washLight } from './lights.js';
 import { shape, solid, add } from '../../bevel.js';
@@ -49,7 +49,10 @@ export const PRESETS = {
   cabinShallowLocker: { 'numbered, one end cut, one joined': { w: 0.4, ends: [0.08, 0], join: [0, 0.07], nums: [1, 2] }, 'two doors wide, labelled': { w: 1.0, cols: 2, h: 2.2, ends: [0.08, 0.08], label: 'label:tools' }, 'with a poster': { w: 0.5, ends: [0.08, 0.08], poster: 9 } },
   cabinEndLocker: { 'across a corner, a poster': { poster: 5 }, plain: {} },
   cabinBerthLockers: { 'over a 2.2 m stack': { len: 2.2, depth: 1, clip: [-0.77, 1.09], lid: 0.5, stack: true }, 'the lockers alone': { len: 2, depth: 1, lid: 0.5 } },
-  cabinStarScreen: { '8-sided': { w: 0.6, h: 0.34, seed: 3 }, 'no planet': { w: 0.5, h: 0.3, planet: false, seed: 9 } },
+  cabinStarScreen: { '8-sided: wire planet': { w: 0.6, h: 0.34, seed: 3 }, '8-sided: star chart': { w: 0.5, h: 0.3, show: 'chart', seed: 9 } },
+  cabinLiveScreens: { 'all nine programmes': {}, 'one, filling the frame': { one: true } },
+  cabinCoreLooks: { 'flow and bolts': { core: 'flowbolts' }, 'plasma flowing': { core: 'flow' }, 'slow throb': { core: 'throb' }, 'fusion knot': { core: 'fusion' } },
+  cabinFlickerStrip: { 'over a locker': {} },
   cabinLabBench: { 'with its things': { things: true }, '1.5 m': {}, '2 m, no knee space': { len: 2, knee: -1 } },
   cabinSurveyTable: { '1 x 1.25 m': {}, '0.9 m square': { w: 0.9, depth: 0.9 } },
   cabinSampleCase: { '1.5 m': {}, '1 m': { len: 1, h: 1.6 } },
@@ -111,6 +114,10 @@ export const CABIN_FIT = {
   cabinShowerStall: entry('cabinShowerStall', 'Washroom: shower', 'wall', [0.75, 2.0, 0.75], showerStall),
   cabinToiletBasin: entry('cabinToiletBasin', 'Washroom: toilet and basin', 'wall', [0.75, 1.7, 0.6], toiletBasin),
   cabinReactor2: entry('cabinReactor2', 'Engineering: reactor, glowing core', 'wall', [1.5, 2.5, 1.25], reactorCore),
+  // (the moving parts, kit/shipparts/cabin/live.js, livecore.js: the screens' programmes, the core's looks, the tired strip)
+  cabinLiveScreens: entry('cabinLiveScreens', 'Screens: the live programmes', 'wall', [2.4, 1.6, 0.05], (p, o) => { for (let i = 0; i < (o.one ? 1 : 9); i++) screen(p, { w: o.one ? 1.2 : 0.7, h: o.one ? 0.72 : 0.42, oct: 0.02, live: i + 1, seed: (i * 0.37) % 1 }, o.one ? [0, 0.8, 0] : [(i % 3 - 1) * 0.8, 0.3 + (2 - Math.floor(i / 3)) * 0.52, 0]); return p; }),
+  cabinCoreLooks: entry('cabinCoreLooks', 'Engineering: reactor, the core\'s looks', 'wall', [1.5, 2.5, 1.25], (p, o) => reactorCore(p, { back: 0, ...o })),
+  cabinFlickerStrip: entry('cabinFlickerStrip', 'Light: the tired strip (one on a ship)', 'wall', [1.0, 2.2, 0.5], (p) => { placeInto(p, part(crewLocker, { h: 1.8 }), { at: [0, 0, 0] }); glowStrip(p, 0.9, [0, 2.02, 0.03], [0, 0, 0], { flicker: true, i: 0.3, pool: 0.6, poolAt: [0, 1.5, 0.7] }); return p; }),
   cabinDrivePumps: entry('cabinDrivePumps', 'Engineering: drive and pumps', 'wall', [1.5, 1.8, 1.25], drivePumps),
   cabinEngStation: entry('cabinEngStation', 'Engineering: station', 'wall', [1.0, 1.5, 0.5], engStation),
   // (shallow: the ship's built-in, kit/shipparts/cabin/lockers.js; deep: two crew lockers, for a plan that gives them half a metre)

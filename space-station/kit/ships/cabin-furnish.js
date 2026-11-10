@@ -326,7 +326,7 @@ function furnishAirlock({ bp, room, ctx, done, items, f, at, A }) {
   const single = posters.length ? lockers.find((L) => Math.round((L.W.hi - L.W.lo) / 0.5) === 1) : null;
   for (const L of lockers) {
     const { it, W } = L, mid = (W.lo + W.hi) / 2;
-    ctx.put('airlock: suit lockers', part(suitLockers, { len: W.hi - W.lo, depth: W.depth, h: +it.h || 2, poster: L === single ? posters[0] : null, handle: A.handle, trim: A.trim }), at(W, mid));
+    ctx.put('airlock: suit lockers', part(suitLockers, { len: W.hi - W.lo, depth: W.depth, h: +it.h || 2, poster: L === single ? posters[0] : null, flicker: L === lockers.find((M) => M !== single), handle: A.handle, trim: A.trim }), at(W, mid));
     done.add(it.id);
   }
   const outer = (ctx.outerDoors || []).filter((o) => o.d.rooms[0] === room.id), walls = roomWalls(room);

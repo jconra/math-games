@@ -15,6 +15,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import { makeMaterials, U } from '../../kit/materials.js';
+import { liveTick } from '../../kit/shipparts/cabin/live.js';
 import { createSky, SKY_VIEWS } from '../../world/sky.js';
 import { PIECES, GROUPS, SHIP_GROUPS, pieceList } from '../../kit/catalog.js';
 import { buildRoom, updateDoors, setDoors, loadRoom, roomBounds, updateZones } from '../../kit/layout.js';
@@ -372,7 +373,7 @@ function zoneProbes(b) {
 }
 // every frame: the shield's time, which rooms are near enough to draw; true while a rig holds the picture still
 function stationTick(now) {
-  U.time.value = now / 1000;
+  U.time.value = now / 1000; liveTick(U.time.value);   // (the tired strip's brightness, kit/shipparts/cabin/live.js)
   if (built?.zones?.length > 1 && !frozen) updateZones(built, camera.position, station.range, camera, roomData[state.room]?.portals);
   return frozen;
 }
