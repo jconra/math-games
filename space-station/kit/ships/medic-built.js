@@ -384,6 +384,8 @@ function mdBay(p, variant) {
 // about the joint at A's top, until the two lie in one line from the lip to the ground, the foot's underside on it
 // (rampStep and LAB.pose time B's hinge so: the kit's own door code alone would turn both together, B through the bay).
 // Tread grey, hazard edges yellow and black (his).
+// the ramps' path strips' glow (dim amber)
+export const RAMP_STRIP = [1.3, 0.8, 0.3];
 export const RAMP = (() => {
   // (z: the ramp across its opening, 2 cm clear of each closer's jamb; it was [-1.83, 1.64] in Meshy's whole opening)
   const face = 2.98, sill = 1.68, head = 3.86, A = head - sill, B = 1.67, T = 0.11, z = [OPENING.z[0] + 0.02, OPENING.z[1] - 0.02];
@@ -405,8 +407,10 @@ function rampSection(a, s, u0, u1, isA) {
     for (const [za, zb] of [[z0, z0 + e], [z1 - e, z1]]) poly([[xr, ua, za], [xr, ub, za], [xr, ub, zb], [xr, ua, zb]], V3(-s, 0, 0), col);
   }
   for (let u = u0 + 0.6; u < u1 - 0.2; u += 0.6) poly([[xr - s * 0.001, u - 0.01, z0 + e], [xr - s * 0.001, u + 0.01, z0 + e], [xr - s * 0.001, u + 0.01, z1 - e], [xr - s * 0.001, u - 0.01, z1 - e]], V3(-s, 0, 0), PAL.dark);
-  // (the cleats across the tread, every 0.3 m: dark bars standing 2 cm proud, for grip going up and down; seen from
-  // inside the bay, the ramp standing up is a ramp, not a blank wall)
+  // (two path strips up the tread just inside its hazard edges, dim amber, unlit by anything else: seen from inside the
+  // bay the ramp standing up reads as a ramp, and down it lights the way up)
+  for (const zs of [z0 + e + 0.03, z1 - e - 0.055]) a.poly([[xr - s * 0.0015, u0 + 0.05, zs], [xr - s * 0.0015, u1 - 0.05, zs], [xr - s * 0.0015, u1 - 0.05, zs + 0.025], [xr - s * 0.0015, u0 + 0.05, zs + 0.025]].map((v) => dk(P(v))), V3(-s, 0, 0), RAMP_STRIP, 'glow', 99);
+  // (the cleats across the tread, every 0.3 m: bars standing 2 cm proud, for grip going up and down)
   const xc = xt - s * 0.02;
   for (let u = u0 + 0.15; u < u1 - 0.08; u += 0.3) {
     poly([[xc, u - 0.02, z0 + e], [xc, u + 0.02, z0 + e], [xc, u + 0.02, z1 - e], [xc, u - 0.02, z1 - e]], V3(-s, 0, 0), PAL.metal);
