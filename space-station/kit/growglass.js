@@ -387,9 +387,10 @@ void main() {
 // The drum's sizes, in half-sizes of the glass (growpod.js builds to them; the glass lights and fogs by them):
 //   drum     its radius (past the glass's edge: the roots round it are behind the frame from in front)
 //   back     how deep its back is
-//   lamp     the lamp down the middle: where it starts and ends (depths), and its radius (lampR)
+//   lamp     the lamp down the middle: where it starts and ends (depths); glowR how far its glow reaches out from
+//            the axle, glow how bright its core is
 //   fog      how much glow a half-size further in adds, from how far in (fogFrom), and the most there is (fogMost)
-export const INSIDE = { drum: 1.12, back: 2.05, lamp: [-0.32, -1.95], lampR: 0.14, fog: 0.34, fogFrom: 0.35, fogMost: 0.6 };
+export const INSIDE = { drum: 1.12, back: 2.05, lamp: [-0.32, -1.95], glowR: 0.3, glow: 0.85, fog: 0.34, fogFrom: 0.35, fogMost: 0.6 };
 const f3 = (v) => v.toFixed(4);
 const PODEDGE = 'float podEdge( vec2 q, float rnd ) { vec2 a = abs( q ); return mix( max( max( a.x, a.y ), ( a.x + a.y ) * 0.70710678 ), length( q ), rnd ); }';
 // (the lamp: white, a breath of warm or pink in it)
@@ -453,11 +454,18 @@ void main() {
   float near = 1.0 / ( 1.0 + 1.2 * dist * dist );
   float lit = vLamp.w + ( 1.0 - vLamp.w ) * near * ( 0.3 + 0.7 * face );
   vec3 col = vCol.rgb * lit * mix( vec3( 1.0 ), lampCol, 0.3 ) * 1.05;
-  // the lamp itself: white
+  // (a lamp part, if a pod has one: white)
   col = mix( col, lampCol * 0.9, lampK );
   // the lamp's glow, more of it the further in: the deeper rings paler and softer
   float fog = min( ${f3(I.fogMost)}, ${f3(I.fog)} * max( -lp.z - ${f3(I.fogFrom)}, 0.0 ) ) * ( 1.0 - lampK );
-  col = mix( col, vec3( 0.16, 0.29, 0.16 ) * mix( vec3( 1.0 ), lampCol, 0.3 ), fog );
+  col = mix( col, vec3( 0.11, 0.3, 0.09 ) * mix( vec3( 1.0 ), lampCol, 0.25 ), fog );
+  // THE LAMP'S GLOW: soft, never a hard shape. How near the eye's line to this place passes the lamp's axis on its way
+  // (half-sizes; the end of the line is this place itself): a bright white-green core down the middle, falling off
+  // softly into the leaves, seen through the deeper rings and the drum's back, and behind any leaf in front of it
+  vec3 cl = vec3( dot( cameraPosition - vG, r ), dot( cameraPosition - vG, u ), hc ) / hs, dv = lp - cl;
+  float tq = clamp( -dot( cl.xy, dv.xy ) / max( dot( dv.xy, dv.xy ), 1e-6 ), 0.0, 1.0 );
+  vec3 pc = cl + dv * tq; float dz = max( max( ${f3(LB)} - pc.z, pc.z - ${f3(LA)} ), 0.0 ), dg2 = dot( pc.xy, pc.xy ) + dz * dz;
+  col += lampCol * ${f3(I.glow)} * exp( -dg2 / ${f3(I.glowR * I.glowR)} );
   gl_FragColor = vec4( col * uGlow * vLamp.z, 1.0 );
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -490,7 +498,7 @@ void main() {
     fragmentShader: `uniform float uGlow;
 varying vec2 vQ; varying vec3 vEye; varying vec4 vPod; varying vec4 vLook; varying vec4 vLamp;
 #include <common>
-const vec3 MILK = vec3( 0.25, 0.33, 0.26 );
+const vec3 MILK = vec3( 0.2, 0.34, 0.19 );   // (greener than a picture pod's: the plants' green through the frost)
 ${PODEDGE}
 ${LAMPCOL}
 float podHash( vec2 p ) { p = fract( p * vec2( 0.1031, 0.103 ) ); p += dot( p, p.yx + 33.33 ); return fract( ( p.x + p.y ) * p.x ); }

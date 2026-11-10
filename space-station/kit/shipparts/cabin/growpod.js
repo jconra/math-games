@@ -61,9 +61,9 @@
 // 6 (round: 22); a back plate 22. So 206 an eight-sided pod, 318 a round one (54 and 166 with no clamps; 340 a round one
 // on a plate), 640 a row of three eight-sided; a plate's trim 22 more. The frame, clamps and plate are the cabin's
 // 'solid' material (no new draw). A picture pod's glass is the 'pod' material: every one in a room's batch is ONE draw,
-// with one texture (512 x 512 for three kinds of pod). A ROTARY (real plants) is 3,866 triangles round with its frame and
-// clamps, 3,754 eight-sided (its inside 3,548: lamp 24, drum 72, 28 feet 20 each (a cup and two roots), plants
-// about 2,890, so about 100 a plant): its inside is the 'podIn' material and its pane 'podPane', so all the rotaries in a
+// with one texture (512 x 512 for three kinds of pod). A ROTARY (real plants) is 3,806 triangles round with its frame and
+// clamps, 3,694 eight-sided (its inside 3,488: drum 72, 28 feet 20 each (a cup and two roots), plants about 2,856,
+// so about 100 a plant; its lamp is a glow, no triangles): its inside is the 'podIn' material and its pane 'podPane', so all the rotaries in a
 // batch are TWO draws, no texture.
 // THE MATERIALS must be in the kit's list: three lines in kit/materials.js (kit/growglass.js gives them).
 import * as THREE from 'three';
@@ -149,7 +149,8 @@ function insideOf(hs, R) {
     const side = (sg) => [0.25, 0.5, 0.75].map((t, k) => { const m = mid(t), w = wid * [0.8, 1.0, 0.68][k] * 0.5; return v([m[0] + dz * w * sg, m[1] - fold * w, m[2] - dx * w * sg], col, 0.05 + 0.95 * t); });
     for (const S of [side(1), side(-1)]) { tri(M[0], S[0], M[1]); tri(M[1], S[0], S[1]); tri(M[1], S[1], M[2]); tri(M[2], S[1], S[2]); tri(M[2], S[2], M[3]); tri(M[3], S[2], M[4]); }
   };
-  const bud = (c, r, col) => { const q = [[r, 0, 0], [-r, 0, 0], [0, r, 0], [0, -r, 0], [0, 0, r], [0, 0, -r]].map((d) => v([c[0] + d[0], c[1] + d[1], c[2] + d[2]], col)); for (const [a, b] of [[0, 4], [4, 1], [1, 5], [5, 0]]) { tri(q[a], q[b], q[2]); tri(q[b], q[a], q[3]); } };
+  // a small round white blossom at c, a shallow six-sided cup facing along the plant's own up, its middle cream
+  const blossom = (c, r) => { const m = v(c, lin('#e9e6c6')), ring = []; for (let k = 0; k < 6; k++) { const t = k / 6 * TAU; ring.push(v([c[0] + r * Math.cos(t), c[1] + 0.3 * r, c[2] + r * Math.sin(t)], lin('#f5f7f2'))); } for (let k = 0; k < 6; k++) tri(m, ring[k], ring[(k + 1) % 6]); };
   // the plant's foot at the drum's wall: a pale cup, and two pale roots lying along the wall from it (flat strips)
   const PALE = lin('#e6e3cf'), CUP = [lin('#a9b3ac'), lin('#d3dad4')];
   const foot = () => {
@@ -176,15 +177,13 @@ function insideOf(hs, R) {
     () => { const sg = R() < 0.5 ? 1 : -1, at = (t) => [sg * 0.26 * u * t * t, 0.4 * u * Math.sin(t * 1.9), 0.04 * u * t];
       prism([0, 0.33, 0.66, 1].map(at), 0.01 * u, STEM);
       for (const t of [0.35, 0.7]) { const p0 = at(t); for (let j = 0; j < 3; j++) { const l = 0.15 * u; leaf(p0, j * 2.1 + t * 3, 0.5, l, l * 0.7, 0.2, green(0.05)); } }
-      const e = at(1); for (let j = 0; j < 3; j++) bud([e[0] + (j - 1) * 0.05 * u, e[1] + 0.02 * u * (j % 2), e[2] + 0.02 * u], 0.03 * u, lin('#f2f4ee')); },
+      const e = at(1); for (let j = 0; j < 3; j++) blossom([e[0] + (j - 1) * 0.05 * u, e[1] + 0.02 * u * (j % 2), e[2] + 0.02 * u], 0.036 * u); },
   ];
-  // the lamp down the middle (still): a white rod, its near end closed
-  kind = 2; const [la, lb] = I.lamp, lr = I.lampR * u, rod = [lb, la].map((z) => { const ring = []; for (let k = 0; k < 8; k++) ring.push(v([lr * Math.cos(k * TAU / 8), lr * Math.sin(k * TAU / 8), z * u], [1, 1, 1])); return ring; });
-  for (let k = 0; k < 8; k++) quad(rod[0][k], rod[0][(k + 1) % 8], rod[1][(k + 1) % 8], rod[1][k]);
-  const cap = v([0, 0, la * u], [1, 1, 1]); for (let k = 0; k < 8; k++) tri(cap, rod[1][k], rod[1][(k + 1) % 8]);
-  // the drum (turning): its wall a pale green-white, every fourth strip a shade darker so the turning shows, and its back
+  // (the lamp down the middle has no shape of its own: the glass draws it as a soft glow, kit/growglass.js)
+  // the drum (turning): its wall green (the plants' own colour in the gaps), every fourth strip a shade darker so the
+  // turning shows, and its back
   kind = 1;
-  const RD = I.drum * u, Z0 = -I.back * u, Z1 = -0.002, N = 24, white = [lin('#a3c09f'), lin('#8fab8b')];
+  const RD = I.drum * u, Z0 = -I.back * u, Z1 = -0.002, N = 24, white = [lin('#7fb46c'), lin('#6c9f5b')];
   const back = v([0, 0, Z0], white[0]);
   for (let k = 0; k < N; k++) {
     const a0 = k / N * TAU, a1 = (k + 1) / N * TAU, c = white[k % 4 === 0 ? 1 : 0];
