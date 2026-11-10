@@ -13,7 +13,7 @@
 //                       (hidden until src/helpplan.js HOWTO has a video id)
 //   External Links      not yet (src/helpplan.js LINKS is empty: the game's maker said hold off)
 // The "?" draws attention, gently, while the rider seems stuck (src/helpplan.js STUCK): a slowly turning arc round it
-// (HELPQ.look 'arc', the default) or a slow pulse ('pulse'). Never a flash: one turn in 3 s, or one swell in 2.6 s;
+// (HELPQ.look 'pulse', the default: the game's maker's pick) or the turning arc ('arc'). Never a flash: one turn in 3 s, or one swell in 2.6 s;
 // with "reduce motion" asked for, a steady ring. Every part closes with the X, Esc, or a tap outside.
 //
 //   const H = makeHelpMenu({ host, context, onOpen, onClose, watch, look })
@@ -30,7 +30,7 @@ import { sectionsFor, reportOf, clockText, sumIn } from '../helpplan.js';
 import { NO_NAMES, hush, ensureCss as ensureFbCss, sendQuestion } from './flag.js';
 import { HOB_FACE } from './hud.js';
 
-export const HELPQ = { look: 'arc', keys: ['Slash', 'NumpadDivide'], keyLabel: '?' };
+export const HELPQ = { look: 'pulse', keys: ['Slash', 'NumpadDivide'], keyLabel: '?' };
 
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const X_SVG = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>';

@@ -18,7 +18,7 @@
 //   ?dev                      shortcut buttons: +100 gold, jump to each place, start the round-up, a lock box, a saddle, a dog
 //   ?perf                     frames a second, draw calls and the tier, top right
 //   ?dof                      depth of field in the close-ups (a builder up, the dock, the cabin), gaming tier only: src/fx/dof.js
-//   ?helplook=pulse           the help button's "seems stuck" look as a slow pulse, not the turning arc (to compare them)
+//   ?helplook=arc             the help button's "seems stuck" look as the turning arc, not the slow pulse (to compare them)
 // For rigs: window.BM = { world, player, rider, state, dev: { gold(n), goto(place), mission(name), lockbox(), tier,
 //   skill(strand, pct, { placed }), skills(), level(place, id, { placed }), levels(), ... }, skills (the src/math/skill.js
 //   module), levels (src/levels/model.js), facts (src/math/facts.js), feedback (src/feedback.js),
@@ -308,7 +308,7 @@ function helpContext() {
   return { job, name, q: q || (up && aj === job ? { job, text: name } : null), hob: hobPart, example, helpers, workOn: (s) => TOOLS.workOn(s),
     skip: up && SKIPS[job] ? () => skipNow(job) : null, summary, build: build ? build.data : null, video, links: LINKS, place: where, tier: W ? W.tier : quality.tier };
 }
-const HELP = makeHelpMenu({ host: helpHost, context: helpContext, watch: STUCKW, look: Q.get('helplook') === 'pulse' ? 'pulse' : HELPQ.look,
+const HELP = makeHelpMenu({ host: helpHost, context: helpContext, watch: STUCKW, look: Q.get('helplook') === 'arc' ? 'arc' : HELPQ.look,
   onOpen: () => { if (TOOLS.busy()) TOOLS.close(); if (state === 'play') pause('help'); },
   onClose: () => { if (state === 'play') resume('help'); },
   // (in a builder's top bar: the bar's stats are fitted again beside it, the base giving way on a narrow phone)
