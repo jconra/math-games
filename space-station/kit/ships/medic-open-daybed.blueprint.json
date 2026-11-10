@@ -1,0 +1,567 @@
+{
+  "id": "medic-open-daybed",
+  "name": "His drawing, with the stacked bunks across the stern",
+  "idea": "Drawn from the marks of the game's maker on the earlier plan \"Engineering and quarters side by side\". The starboard airlock and the supply store are one pharmacy and lab area, open to the crew hall with no wall or door: one big room, with an island counter for the lab's gear. One airlock, on the port side, with the washroom beside it. Both ramps open into the med bay, and with both down you see straight through the ship. There is no aft corridor: its wall is gone and the crew's quarters are one room, with a small kitchen and a table in what was the corridor's rear. Engineering keeps its wall and its door. Every bed is a normal single. Here the 2-high bunk lies across the stern and the third bunk is a low day bed along the hull, a settee by day, so the crew room is open at head height from the door to the kitchen. The pharmacy and lab are as in his drawing.",
+  "ship": "ship-medic-built",
+  "shell": "medic-built",
+  "grid": {
+    "cell": 0.5,
+    "step": 0.5,
+    "deck": 1.74
+  },
+  "ramps": "both",
+  "sealed": [
+    "starboard crew door"
+  ],
+  "rooms": [
+    {
+      "id": "cockpit",
+      "name": "Cockpit",
+      "kind": "cockpit",
+      "rect": [
+        -1.0,
+        4.0,
+        1.0,
+        6.5
+      ],
+      "ceiling": "canopy",
+      "floor": 0.8
+    },
+    {
+      "id": "open",
+      "name": "Pharmacy + lab",
+      "kind": "lab",
+      "rect": [
+        -2.5,
+        1.5,
+        1.0,
+        4.0
+      ],
+      "ceiling": 2.2
+    },
+    {
+      "id": "airlock",
+      "name": "Airlock",
+      "kind": "airlock",
+      "rect": [
+        1.0,
+        2.5,
+        2.5,
+        4.0
+      ],
+      "ceiling": 2.0
+    },
+    {
+      "id": "wash",
+      "name": "Washroom",
+      "kind": "washroom",
+      "rect": [
+        1.0,
+        1.5,
+        2.5,
+        2.5
+      ],
+      "ceiling": 2.0
+    },
+    {
+      "id": "bay",
+      "name": "Med bay",
+      "kind": "medbay",
+      "rect": [
+        -2.5,
+        -2.0,
+        2.5,
+        1.5
+      ],
+      "ceiling": 2.4
+    },
+    {
+      "id": "crew",
+      "name": "Crew room",
+      "kind": "bunks",
+      "rect": [
+        -2.5,
+        -5.5,
+        0.5,
+        -2.0
+      ],
+      "ceiling": 2.3
+    },
+    {
+      "id": "eng",
+      "name": "Engineering",
+      "kind": "engineering",
+      "rect": [
+        0.5,
+        -5.5,
+        2.5,
+        -2.0
+      ],
+      "ceiling": 2.3
+    }
+  ],
+  "doors": [
+    {
+      "id": "ramp-p",
+      "rooms": [
+        "bay",
+        "outside"
+      ],
+      "at": [
+        2.5,
+        0.25
+      ],
+      "width": 2.0
+    },
+    {
+      "id": "ramp-s",
+      "rooms": [
+        "bay",
+        "outside"
+      ],
+      "at": [
+        -2.5,
+        0.25
+      ],
+      "width": 2.0
+    },
+    {
+      "id": "crew-p",
+      "rooms": [
+        "airlock",
+        "outside"
+      ],
+      "at": [
+        2.5,
+        3.35
+      ],
+      "width": 0.8
+    },
+    {
+      "id": "d-cockpit",
+      "rooms": [
+        "open",
+        "cockpit"
+      ],
+      "at": [
+        0,
+        4.0
+      ],
+      "width": 0.8
+    },
+    {
+      "id": "d-bay",
+      "rooms": [
+        "open",
+        "bay"
+      ],
+      "at": [
+        0,
+        1.5
+      ],
+      "width": 1.0
+    },
+    {
+      "id": "d-airlock",
+      "rooms": [
+        "open",
+        "airlock"
+      ],
+      "at": [
+        1.0,
+        3.25
+      ],
+      "width": 0.8
+    },
+    {
+      "id": "d-wash",
+      "rooms": [
+        "open",
+        "wash"
+      ],
+      "at": [
+        1.0,
+        2.0
+      ],
+      "width": 0.8
+    },
+    {
+      "id": "d-crew",
+      "rooms": [
+        "bay",
+        "crew"
+      ],
+      "at": [
+        0,
+        -2.0
+      ],
+      "width": 1.0
+    },
+    {
+      "id": "d-eng",
+      "rooms": [
+        "crew",
+        "eng"
+      ],
+      "at": [
+        0.5,
+        -2.75
+      ],
+      "width": 0.8
+    }
+  ],
+  "items": [
+    {
+      "id": "seat-pilot",
+      "kind": "seat",
+      "room": "cockpit",
+      "rect": [
+        0.25,
+        5.0,
+        1.0,
+        5.75
+      ],
+      "h": 1.3,
+      "name": "Pilot"
+    },
+    {
+      "id": "seat-copilot",
+      "kind": "seat",
+      "room": "cockpit",
+      "rect": [
+        -1.0,
+        5.0,
+        -0.25,
+        5.75
+      ],
+      "h": 1.3,
+      "name": "Co-pilot"
+    },
+    {
+      "id": "dash",
+      "kind": "console",
+      "room": "cockpit",
+      "rect": [
+        -1.0,
+        5.75,
+        1.0,
+        6.5
+      ],
+      "h": 0.75,
+      "name": "Dash"
+    },
+    {
+      "id": "pedestal",
+      "kind": "console",
+      "room": "cockpit",
+      "rect": [
+        -0.25,
+        5.0,
+        0.25,
+        5.75
+      ],
+      "h": 0.75,
+      "name": "Throttle pedestal"
+    },
+    {
+      "id": "suits",
+      "kind": "locker",
+      "room": "airlock",
+      "rect": [
+        1.5,
+        2.5,
+        2.0,
+        3.0
+      ],
+      "h": 2.0,
+      "name": "Suit locker"
+    },
+    {
+      "id": "toilet",
+      "kind": "toilet",
+      "room": "wash",
+      "rect": [
+        2.0,
+        1.5,
+        2.5,
+        2.25
+      ],
+      "h": 0.8,
+      "name": "Toilet"
+    },
+    {
+      "id": "basin",
+      "kind": "counter",
+      "room": "wash",
+      "rect": [
+        1.5,
+        1.5,
+        2.0,
+        2.0
+      ],
+      "h": 0.9,
+      "name": "Basin"
+    },
+    {
+      "id": "bed-p",
+      "kind": "patient",
+      "room": "bay",
+      "rect": [
+        0.5,
+        -1.75,
+        2.5,
+        -0.75
+      ],
+      "h": 0.8,
+      "name": "Patient bed (port), 1.0 x 2.0 m"
+    },
+    {
+      "id": "bed-s",
+      "kind": "patient",
+      "room": "bay",
+      "rect": [
+        -2.5,
+        -1.75,
+        -0.5,
+        -0.75
+      ],
+      "h": 0.8,
+      "name": "Patient bed (starboard), 1.0 x 2.0 m"
+    },
+    {
+      "id": "pumps",
+      "kind": "machine",
+      "room": "eng",
+      "rect": [
+        1.25,
+        -4.5,
+        2.5,
+        -2.5
+      ],
+      "h": 1.6,
+      "name": "Pumps and oxygen plant (over the port well)"
+    },
+    {
+      "id": "drive",
+      "kind": "machine",
+      "room": "eng",
+      "rect": [
+        1.0,
+        -5.5,
+        2.5,
+        -4.75
+      ],
+      "h": 1.8,
+      "name": "Reactor and drive"
+    },
+    {
+      "id": "eng-desk",
+      "kind": "console",
+      "room": "eng",
+      "rect": [
+        0.5,
+        -5.5,
+        1.0,
+        -4.0
+      ],
+      "h": 0.9,
+      "name": "Engineering station"
+    },
+    {
+      "id": "drugs",
+      "kind": "pharmacy",
+      "room": "open",
+      "rect": [
+        -2.5,
+        1.5,
+        -2.25,
+        2.75
+      ],
+      "h": 2.0,
+      "name": "Pharmacy: drug cabinets, locked (shallow, set into the hull wall)"
+    },
+    {
+      "id": "labwall",
+      "kind": "rack",
+      "room": "open",
+      "rect": [
+        -2.5,
+        2.75,
+        -2.25,
+        4.0
+      ],
+      "h": 1.9,
+      "name": "Lab: reagents, sample racks, a slim fridge (shallow, set into the hull wall)"
+    },
+    {
+      "id": "supplies",
+      "kind": "rack",
+      "room": "open",
+      "rect": [
+        -2.25,
+        1.5,
+        -0.5,
+        1.75
+      ],
+      "h": 1.9,
+      "name": "Supplies: stretchers hung flat, blankets, splints (by the bay's door)"
+    },
+    {
+      "id": "island",
+      "kind": "counter",
+      "room": "open",
+      "rect": [
+        -1.5,
+        2.5,
+        -0.75,
+        3.5
+      ],
+      "h": 0.9,
+      "name": "Lab island: microscope, centrifuge, analyser, sample racks, a small screen (0.75 x 1.0 m, corners cut at 45 degrees)"
+    },
+    {
+      "id": "bunk",
+      "kind": "bunk",
+      "room": "crew",
+      "rect": [
+        -2.5,
+        -5.5,
+        -0.5,
+        -4.5
+      ],
+      "h": 1.9,
+      "name": "2-high bunk, 1.0 x 2.0 m (across the stern; its ladder at the foot end; a foot-board between it and the kitchen counter)"
+    },
+    {
+      "id": "bed",
+      "kind": "bed",
+      "room": "crew",
+      "rect": [
+        -2.5,
+        -4.5,
+        -1.5,
+        -2.5
+      ],
+      "h": 0.25,
+      "name": "The third crew's bunk, 1.0 x 2.0 m: a day bed, a settee by day (a mattress on the boxed-in top of the starboard well, 0.55 m above the deck)"
+    },
+    {
+      "id": "cubby",
+      "kind": "locker",
+      "room": "crew",
+      "rect": [
+        -2.5,
+        -2.5,
+        -1.5,
+        -2.0
+      ],
+      "h": 0.6,
+      "name": "At the day bed's head: a box for its bedding, a side table by day"
+    },
+    {
+      "id": "table",
+      "kind": "table",
+      "room": "crew",
+      "rect": [
+        0.0,
+        -4.25,
+        0.5,
+        -3.25
+      ],
+      "h": 0.75,
+      "name": "Table (against the engineering wall), 0.5 x 1.0 m"
+    },
+    {
+      "id": "stool-1",
+      "kind": "bench",
+      "room": "crew",
+      "rect": [
+        -0.5,
+        -3.75,
+        0.0,
+        -3.25
+      ],
+      "h": 0.45,
+      "name": "Stool"
+    },
+    {
+      "id": "stool-2",
+      "kind": "bench",
+      "room": "crew",
+      "rect": [
+        -0.5,
+        -4.25,
+        0.0,
+        -3.75
+      ],
+      "h": 0.45,
+      "name": "Stool"
+    },
+    {
+      "id": "stool-3",
+      "kind": "bench",
+      "room": "crew",
+      "rect": [
+        0.0,
+        -4.75,
+        0.5,
+        -4.25
+      ],
+      "h": 0.45,
+      "name": "Third stool (at the table's end; tucks under it)"
+    },
+    {
+      "id": "galley",
+      "kind": "counter",
+      "room": "crew",
+      "rect": [
+        -0.5,
+        -5.5,
+        0.5,
+        -5.0
+      ],
+      "h": 0.9,
+      "name": "Kitchen: sink, hob, fridge under"
+    },
+    {
+      "id": "cupboard",
+      "kind": "overhead",
+      "room": "crew",
+      "rect": [
+        -0.5,
+        -5.5,
+        0.5,
+        -5.25
+      ],
+      "h": 0.6,
+      "name": "Kitchen cupboard (over the counter)",
+      "y": 1.5
+    },
+    {
+      "id": "lockers",
+      "kind": "locker",
+      "room": "crew",
+      "rect": [
+        -1.5,
+        -2.25,
+        -0.5,
+        -2.0
+      ],
+      "h": 2.0,
+      "name": "Three lockers set into the wall (0.33 m wide each, 0.25 m deep)"
+    },
+    {
+      "id": "step",
+      "kind": "bench",
+      "room": "crew",
+      "rect": [
+        -1.5,
+        -4.5,
+        -1.25,
+        -2.5
+      ],
+      "h": 0.3,
+      "name": "The settee's front edge, 0.25 m wide and 0.3 m high: it boxes in the 7 cm of the leg's well the bed leaves showing; a shoe drawer in the rest"
+    }
+  ]
+}

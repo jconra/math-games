@@ -199,6 +199,7 @@ export class Plan {
     // the shell's door (or doors: the space file's list, when it has one; a sealed one, when the blueprint has only one
     // ramp, dashed)
     for (const sd of space.doors?.list || [space.doors?.port].filter(Boolean)) {
+      if (bp?.sealed?.includes(sd.name)) continue;   // (a doorway this blueprint leaves as hull: not drawn as a door)
       const sealed = bp?.ramps === 'one' && sd.kind === 'ramp' && sd.side === 'starboard';
       g.strokeStyle = COL.outer; g.lineWidth = 3; if (sealed) g.setLineDash([6, 5]); g.beginPath(); g.moveTo(this.pX(sd.z[0]), this.pY(sd.face)); g.lineTo(this.pX(sd.z[1]), this.pY(sd.face)); g.stroke(); g.setLineDash([]);
     }

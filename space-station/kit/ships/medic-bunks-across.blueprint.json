@@ -1,6 +1,6 @@
 {
   "id": "medic-bunks-across",
-  "name": "Bunks behind the bay",
+  "name": "Earlier (two airlocks): bunks behind the bay",
   "idea": "Both ramps open into the med bay, its two patient beds across the ship in its aft half and the stretcher's way between the ramps in front of them. Forward, the crew hall: the cockpit ahead, an airlock at each crew door, a washroom and a supply store. Aft, the crew's bunk room right behind the bay (two 2-high bunks across the ship, standing over the rear legs' wells), engineering behind it at the stern.",
   "ship": "ship-medic-built",
   "shell": "medic-built",

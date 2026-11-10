@@ -1,6 +1,6 @@
 {
   "id": "medic-side-by-side",
-  "name": "Engineering and quarters side by side",
+  "name": "Earlier (two airlocks): engineering and quarters side by side",
   "idea": "Both ramps open into the med bay, as in the first. Aft, a corridor down the middle: engineering to port (its pumps over the port leg's well), the crew's quarters to starboard (a 2-high bunk over the starboard well and a third bunk across the stern: a bunk each for three).",
   "ship": "ship-medic-built",
   "shell": "medic-built",

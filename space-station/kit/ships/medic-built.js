@@ -1,5 +1,5 @@
 // THE MEDIC, BUILT: the ship's own parts, on the 3,000-triangle smart mesh made from the game's maker's picture (its
-// data is medic-built.hull.js, made by the rig ~/pw/space-math/rigs/medic-built/rig/makehull.mjs), with the four legs
+// data is medic-built.hull.js, made by the rig ~/pw/space-math/rigs/medic-plan/hull/makehull.mjs), with the four legs
 // from the 8,000-triangle one. The 3k's own stern and its two ring engines are kept (the game's maker: they suit the
 // Medic). Everything is painted in flat colours from a small palette, face by face, by the rules below, with the grime
 // over it. The machinery it shares with Explorer C and the Miner is built-common.js.
@@ -22,9 +22,11 @@
 //   mdRamp       'port' / 'starboard'   a ramp: two leaves of one door ('ramp', 1 down): the main section closes the
 //                            opening standing up, hinged at the sill; the foot section, folded against its inside,
 //                            swings out to carry it on to the ground
-//   mdCrewDoor   'port' / 'starboard'   a crew door: the doorway's graphite frame and the door itself, an airstair (door
-//                            'crew', 1 open) hinged at the sill, its inside a steep stair to the ground
-//   mdAirlock    'port' / 'starboard'   the small airlock behind it, its inner door (shut)
+//   mdCrewDoor   'port'      the crew door: the doorway's graphite frame and the door itself, an airstair (door
+//                            'crew', 1 open) hinged at the sill, its inside a steep stair to the ground. One only, on
+//                            the port side (the game's maker, 2026-11-10: one airlock is enough; the other side's room
+//                            is the pharmacy and lab): the starboard side there is whole hull, never cut
+//   mdAirlock    'port'      the small airlock behind it, its inner door (shut)
 //   mdGear       'port front' / 'port rear' / 'starboard front' / 'starboard rear'   a landing leg (the 8k's): its pad and
 //                            drum (one leaf) and its struts and block (another) rise into a well in the belly (door
 //                            'gear', 1 up), the struts sliding into the drum as they go; the pad's sole closes the well
@@ -91,8 +93,8 @@ export const ZONES = [
   { zone: 'finTip', parts: ['body'], planes: [[0, -1, 0, -7.05], [1, 0, 0, 0.5]] },
 ];
 const edge = (paint) => (f) => (f.thin ? paint + 'Edge' : paint);
-// (round the doorways: the cuts leave thin slivers there that are no plates' edges)
-const nearDoor = (c) => Math.abs(c.x) > 2.3 && c.y > 1.5 && c.y < 4.5 && ((c.z > CREW.z[0] - 0.25 && c.z < CREW.z[1] + 0.25) || (c.z > BAY.ends[0] - 0.3 && c.z < BAY.ends[1] + 0.3));
+// (round the doorways: the cuts leave thin slivers there that are no plates' edges; the crew doorway is port's only)
+const nearDoor = (c) => Math.abs(c.x) > 2.3 && c.y > 1.5 && c.y < 4.5 && ((c.x > 0 && c.z > CREW.z[0] - 0.25 && c.z < CREW.z[1] + 0.25) || (c.z > BAY.ends[0] - 0.3 && c.z < BAY.ends[1] + 0.3));
 // (the engines: a face's distance from its ring's axis, and which ring)
 const ringOf = (c) => ENGINE_AT[c.x >= 0 ? 0 : 1], fromAxis = (c, E) => Math.hypot(c.x - E.axis[0], c.y - E.axis[1]);
 export const RULES = [
@@ -581,10 +583,10 @@ function mdCockpit(p) {
 // ── THE GRIME (built-common.js grimeMaterials) ──────────────────────────────────────────────────────────────────────
 export const STREAKS = [
   // [x, y, z, flow dx, dy, dz, length, width]: soot forward up each ring's drum from its rim; runs down from the bay
-  // openings' heads and the crew doors; the roof's vents
+  // openings' heads and the crew door (port); the roof's vents
   [1.77, 3.62, -8.7, 0, 0, 1, 1.6, 1.3], [-1.85, 3.62, -8.7, 0, 0, 1, 1.6, 1.3],
   [2.95, 4.2, -1.9, 0, -1, -0.15, 2.2, 0.3], [2.95, 4.2, 1.7, 0, -1, -0.15, 2.2, 0.3], [-2.95, 4.2, -1.9, 0, -1, -0.15, 2.2, 0.3], [-2.95, 4.2, 1.7, 0, -1, -0.15, 2.2, 0.3],
-  [0, 5.6, 0.5, 0, -0.1, -1, 3.0, 0.5], [2.75, 3.75, 3.35, 0, -1, -0.2, 1.6, 0.3], [-2.75, 3.75, 3.35, 0, -1, -0.2, 1.6, 0.3],
+  [0, 5.6, 0.5, 0, -0.1, -1, 3.0, 0.5], [2.75, 3.75, 3.35, 0, -1, -0.2, 1.6, 0.3],
 ];
 export const GRIME = { dirt: { value: 0.45 } };
 // (the glass: the shared smoked glass warmed to his picture's bronze tint)
@@ -616,7 +618,7 @@ export const LAB = {
   controls: ['ramps', 'rampCount', 'gear', 'door', 'dirt', 'throttle'],
   dirt: { None: 0, Some: 0.45, Lots: 0.9 },
   spots: { Canopy: { at: [6.0, 6.6, 12.5], look: [0, 3.9, 5.6] }, Bay: { at: [8.5, 2.6, 3.5], look: [0, 2.6, -0.2] }, Ramp: { at: [9.0, 1.6, -6.5], look: [3.5, 1.4, 0] }, Door: { at: [6.8, 1.8, 6.5], look: [2.6, 2.4, 3.3] }, Seats: { at: [0, 3.95, 4.55], look: [0, 3.4, 8.0] } },
-  doorTip: 'Open the crew doors (each an airstair down to the ground), or shut them',
+  doorTip: 'Open the crew door (an airstair down to the ground, on the port side), or shut it',
   gearTip: 'Raise the landing legs into their wells, or let them down',
   materials: (mats, dirt) => grimeMaterials(mats, { dirt }),
   setDirt: (v) => { GRIME.dirt.value = v; },
@@ -647,8 +649,8 @@ export const SHIP_MEDIC_BUILT = {
   mdMarks: { name: 'Medic (built): lights and marks', group: GR, at: 'free', foot: [6.5, 5, 17], variants: ['marks'], build: (p) => mdMarks(p) },
   mdBay: { name: 'Medic (built): med bay', group: GR, at: 'free', foot: [5.3, 2.5, 3.7], variants: ['med bay'], build: (p) => mdBay(p) },
   mdRamp: { name: 'Medic (built): ramp', group: GR, at: 'free', foot: [1, 2.5, 3.6], variants: ['port', 'starboard'], build: mdRamp },
-  mdCrewDoor: { name: 'Medic (built): crew door', group: GR, at: 'free', foot: [0.5, 2.1, 1.0], variants: ['port', 'starboard'], build: mdCrewDoor },
-  mdAirlock: { name: 'Medic (built): crew airlock', group: GR, at: 'free', foot: [1.4, 2.1, 1.3], variants: ['port', 'starboard'], build: mdAirlock },
+  mdCrewDoor: { name: 'Medic (built): crew door', group: GR, at: 'free', foot: [0.5, 2.1, 1.0], variants: ['port'], build: mdCrewDoor },
+  mdAirlock: { name: 'Medic (built): crew airlock', group: GR, at: 'free', foot: [1.4, 2.1, 1.3], variants: ['port'], build: mdAirlock },
   mdGear: { name: 'Medic (built): landing leg', group: GR, at: 'free', foot: [1.1, 1.5, 1.8], variants: Object.keys(GEAR.at), build: mdGear },
   mdWells: { name: 'Medic (built): leg wells', group: GR, at: 'free', foot: [5, 1.2, 10.5], variants: ['wells'], build: mdWells },
   mdCockpit: { name: 'Medic (built): cockpit', group: GR, at: 'free', foot: [3.5, 2, 3.5], variants: ['two seats'], build: (p) => mdCockpit(p) },

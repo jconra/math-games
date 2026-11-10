@@ -77,6 +77,8 @@ export const ROOM_KINDS = {
   washroom: { label: 'Washroom', color: '#9fdcff', min: 1.5, minW: 1, door: 0.6 },
   corridor: { label: 'Corridor', color: '#6b7a8c', min: 0, minW: CORRIDOR },
   medbay: { label: 'Med bay', color: '#5fd3c4', min: 6, minW: 2 },
+  // (a medical ship's pharmacy and lab: its own colour beside the med bay's, which a survey ship's science lab is not)
+  lab: { label: 'Pharmacy / medical lab', color: '#b5d94c', min: 2, minW: 1 },
 };
 // the kinds of item: default footprint (across, along: metres, quarter metres), height, colour, a short label
 export const ITEM_KINDS = {

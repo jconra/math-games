@@ -1,6 +1,6 @@
 {
   "id": "medic-one-ramp",
-  "name": "One ramp: the pharmacy wall",
+  "name": "Earlier (two airlocks): one ramp, the pharmacy wall",
   "idea": "Only the port ramp: the starboard opening is sealed (the lab's Ramp: One), and the med bay gains that side for equipment: a pharmacy wall along it and a treatment console by the hall's door. The rest is as Bunks behind the bay.",
   "ship": "ship-medic-built",
   "shell": "medic-built",
