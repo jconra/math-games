@@ -310,7 +310,9 @@ function helpContext() {
 }
 const HELP = makeHelpMenu({ host: helpHost, context: helpContext, watch: STUCKW, look: Q.get('helplook') === 'pulse' ? 'pulse' : HELPQ.look,
   onOpen: () => { if (TOOLS.busy()) TOOLS.close(); if (state === 'play') pause('help'); },
-  onClose: () => { if (state === 'play') resume('help'); } });
+  onClose: () => { if (state === 'play') resume('help'); },
+  // (in a builder's top bar: the bar's stats are fitted again beside it, the base giving way on a narrow phone)
+  onPlaced: () => { const s = BS && BS.active && BS.session(); if (s && s.resize) s.resize(); } });
 // the "seems stuck" clock: twice a second, counted only while the game runs (not under the pause menu, a shop's panel,
 // a tool or the help itself; a lock box and a builder count: they are questions)
 let helpT = performance.now();

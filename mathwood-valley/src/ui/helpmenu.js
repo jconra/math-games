@@ -21,7 +21,7 @@
 //     context()   what the menu shows, read as it opens (main.js helpContext): { job, name, q, hob: { now, tip, other }, example:
 //                 { first, next() } | null, helpers: [{ label, line, run }], skip: fn | null, summary, build, video:
 //                 { link, at, length, name, pic } | null, links, place, tier }
-//     onOpen() / onClose()   the game waits while it is open
+//     onOpen() / onClose()   the game waits while it is open; onPlaced(host): the ? has just gone into a new place
 //     watch       the "seems stuck" watch (helpplan.js makeStuckWatch): its light, and opened() as the menu opens
 //   H.button, H.menu, H.update() (a few times a second: the host, the light), H.open(), H.close(), H.toggle(),
 //   H.isOpen(), H.look(name), H.state() (for rigs), H.dispose()
@@ -130,7 +130,7 @@ function ensureCss() {
   document.head.appendChild(s);
 }
 
-export function makeHelpMenu({ host = () => null, context = () => ({}), onOpen = () => {}, onClose = () => {}, watch = null, look = HELPQ.look } = {}) {
+export function makeHelpMenu({ host = () => null, context = () => ({}), onOpen = () => {}, onClose = () => {}, onPlaced = () => {}, watch = null, look = HELPQ.look } = {}) {
   ensureCss(); ensureFbCss();
   const btn = document.createElement('button');
   btn.type = 'button'; btn.className = 'bmq-btn'; btn.hidden = true;
@@ -149,7 +149,7 @@ export function makeHelpMenu({ host = () => null, context = () => ({}), onOpen =
   function place() {
     let h = null; try { h = host(); } catch (e) { h = null; }
     if (!h) { if (!btn.hidden) btn.hidden = true; if (opened) H.close(); return; }
-    if (btn.parentNode !== h) h.appendChild(btn);
+    if (btn.parentNode !== h) { h.appendChild(btn); try { onPlaced(h); } catch (e) { console.error(e); } }
     if (btn.hidden) btn.hidden = false;
   }
   function light() {
