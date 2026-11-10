@@ -130,6 +130,14 @@ export function buildRoom(room, mats, opts = {}) {
       // folded arms and lowered legs)
       for (const dr of p.doors) { const h = pl.hold ?? null, D = { piece: pl.piece, at: pl.cell, zone: zd.id, sense: new THREE.Vector3(...dr.sense).applyMatrix4(_m), near: dr.near, speed: dr.speed, t: h ?? 0, target: h ?? 0, hold: h, leaves: [] }; doors.push(D); mine.set(dr.id, D); }
       for (const mv of p.movers) {
+        // (a leaf whose door is held never moves: it is posed once and goes into the room's own still geometry, so it
+        // is drawn with its room and costs no batch of its own: a parked ship's folded arms, its legs)
+        const held = mine.get(mv.door);
+        if (held && held.hold != null) {
+          const e2 = leafMatrix({ M: _m, base: mv.base, slide: mv.slide, hinge: mv.hinge }, held.hold, _lm).elements.slice();
+          for (const [k, g] of Object.entries(pieceByMat(mv.piece))) lists[k].push({ geo: g, e: e2 });
+          continue;
+        }
         if (!leafGroups.has(mv.key)) leafGroups.set(mv.key, { piece: mv.piece, list: [] });
         const leaf = { M: _m.clone(), base: mv.base, slide: mv.slide, door: mine.get(mv.door) };
         if (mv.hinge) leaf.hinge = mv.hinge;
@@ -238,17 +246,21 @@ export function zoneAt(built, eye) {
 }
 
 const ease = (t) => t * t * (3 - 2 * t);
-const _h = new THREE.Matrix4(), _hp = new THREE.Vector3(), _ha = new THREE.Vector3();
-function setLeaf(leaf, t) {
-  _t.makeTranslation(leaf.slide.x * ease(t), leaf.slide.y * ease(t), leaf.slide.z * ease(t));
-  _m.copy(leaf.M).multiply(_t);
+const _h = new THREE.Matrix4(), _hp = new THREE.Vector3(), _ha = new THREE.Vector3(), _lt = new THREE.Matrix4(), _lm = new THREE.Matrix4();
+// where a leaf stands when its door is open by t (0..1), into `out`
+function leafMatrix(leaf, t, out) {
+  _lt.makeTranslation(leaf.slide.x * ease(t), leaf.slide.y * ease(t), leaf.slide.z * ease(t));
+  out.copy(leaf.M).multiply(_lt);
   // (a leaf that swings: each hinge in turn, outermost first, turns it by its angle about its axis through its point;
   // a ramp's fold is a hinge on the ramp, given where it is when shut. Sliding leaves have none.)
   if (leaf.hinge) for (const H of leaf.hinge) {
     _hp.fromArray(H.at); _ha.fromArray(H.axis);
-    _m.multiply(_h.makeTranslation(_hp.x, _hp.y, _hp.z)).multiply(_h.makeRotationAxis(_ha, H.angle * ease(t))).multiply(_h.makeTranslation(-_hp.x, -_hp.y, -_hp.z));
+    out.multiply(_h.makeTranslation(_hp.x, _hp.y, _hp.z)).multiply(_h.makeRotationAxis(_ha, H.angle * ease(t))).multiply(_h.makeTranslation(-_hp.x, -_hp.y, -_hp.z));
   }
-  _m.multiply(leaf.base);
+  return out.multiply(leaf.base);
+}
+function setLeaf(leaf, t) {
+  leafMatrix(leaf, t, _m);
   for (const im of leaf.meshes) { im.setMatrixAt(leaf.index, _m); im.instanceMatrix.needsUpdate = true; }
 }
 // doors open by themselves as someone comes near (mode 'auto'), or stay 'open' or 'shut'; returns whether any moved
