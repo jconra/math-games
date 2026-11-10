@@ -100,7 +100,7 @@ export function bunkStack(p, o = {}) {
     // on its back wall: the 8-sided screen (live: the upper berth the wire planet, the lower the star chart, so the two never
     // show the same thing) and the small screen by the pillow (live: the sleeper's trace, a rate of its own)
     const sh = Math.min(0.32, ch - 0.26), sw = Math.min(0.66, op.w * 0.5);
-    placeInto(p, part(starScreen, { w: +sw.toFixed(3), h: +sh.toFixed(3), show: B === berths[1] ? 'survey' : 'chart', seed: 3 + (B.num ?? 0) }), { at: [op.x - head * Math.min(0.1, op.w / 2 - sw / 2 - 0.04), top + 0.06 + sh / 2 + 0.05, back], rot: [0, 0, 0] });
+    placeInto(p, part(starScreen, { w: +sw.toFixed(3), h: +sh.toFixed(3), show: B === berths[1] ? 'survey' : 'chart', seed: 3 + (B.num ?? 0) }), { at: [op.x, B === berths[1] ? (top + 0.045 + B.y1) / 2 : top + 0.06 + sh / 2 + 0.05, back], rot: [0, 0, 0] });   // (centred across the opening; the upper berth's also centred up and down between the blanket and its ceiling, as it sat low (seen from the floor its mattress hid the screen's foot) and toward the foot end before, 2026-11-10)
     screen(p, { w: 0.13, h: 0.08, live: 'rest', seed: ((B.num ?? 1) * 0.37) % 1, gain: 1.1, depth: 0.012, bezel: 0.016 }, [lx + head * 0.02, top + 0.26, back]);
     // its number on the band under its opening, by the end away from the ladder: the print, a small dark tag with a light
     if (B.num) {
