@@ -156,11 +156,11 @@ export const LIVE_PALETTES = {
   },
   vivid: {
     ink: [0.3, 0.78, 1.0], line: [0.03, 0.36, 1.0], dim: [0.015, 0.11, 0.34], amb: [1.0, 0.3, 0.015], good: [0.04, 0.88, 0.3],
-    hot: [1.0, 0.26, 0.02], waste: [0.3, 0.42, 0.04], sat: 1.3, panel: [[0.003, 0.016, 0.058], [0.001, 0.006, 0.026]],
+    hot: [1.0, 0.26, 0.02], waste: [0.3, 0.42, 0.04], sat: 1.3, panel: [[0.012, 0.046, 0.078], [0.005, 0.02, 0.038]],   // (the soft palette's teal panel: the game's maker found the deep navy one cold)
   },
 };
 // the palette a ship's screens wear unless told otherwise
-export const LIVE_PALETTE = 'soft';
+export const LIVE_PALETTE = 'vivid';   // (his pick, 2026-11-10: the vivid colours on the teal panel)
 // (the kit's brighter blue panel, for liveScreenMaterial({ dark: false }))
 const BLUE_PANEL = [[0.018, 0.122, 0.212], [0.008, 0.05, 0.095]];
 const UNI = { ink: 'C_INK', line: 'C_LINE', dim: 'C_DIM', amb: 'C_AMB', good: 'C_GOOD', hot: 'C_HOT', waste: 'C_WASTE' };

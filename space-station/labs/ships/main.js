@@ -92,7 +92,7 @@ const st = {
   pools: q.has('pools') ? q.get('pools') === '1' : q.has('bloom') ? q.get('bloom') === '1' : !matchMedia('(pointer: coarse)').matches,
   // (the cabin's motion: the live screens, the reactor's core, the one tired strip, the dust in the beams (?motion=0:
   // all held still); the screens' palette (?screens=vivid))
-  motion: q.get('motion') !== '0', screens: q.get('screens') === 'vivid' ? 'vivid' : 'soft',
+  motion: q.get('motion') !== '0', screens: q.get('screens') === 'soft' ? 'soft' : 'vivid',
 };
 
 // ── renderer, scene, camera ───────────────────────────────────────────────────────────────────────────────────────
