@@ -14,6 +14,7 @@ import { ship } from './ship.js';
 import { OUTSIDE } from './shipparts/outside.cat.js';
 import { COCKPIT } from './shipparts/cockpit.cat.js';
 import { CABIN } from './shipparts/cabin.cat.js';
+import { STATION2 } from './station2.js';
 
 export const GROUPS = ['Shell', 'Wall kit', 'Windows', 'Big rooms', 'Furniture', 'Hangar'];
 // the ship parts (kit/shipparts/*.cat.js), on the Kit Lab's own "Ship parts" tab: reusable parts the ships are built from
@@ -67,6 +68,8 @@ export const PIECES = {
   fuel: { name: 'Fuel line', group: 'Hangar', at: 'free', variants: ['pump', 'pipe', 'elbow', 'hose'], foot: [2, 1.5, 1], build: fuel },
   gangway: { name: 'Boarding stair', group: 'Hangar', at: 'free', variants: ['seven'], foot: [1.3, 2.3, 3.3], build: gangway },
   ship: { name: 'Shuttle (a stand-in)', group: 'Hangar', at: 'free', variants: ['kestrel'], foot: [9.7, 4.8, 11.2], build: ship },
+  // the station's build-out (kit/station2.js): the big hangars' door, pad and lamps, a third storey, stand-ins
+  ...STATION2,
   ...OUTSIDE, ...COCKPIT, ...CABIN,
 };
 
