@@ -100,8 +100,8 @@ async function boot() {
 
   // ── the menu button while walking (a phone has no Escape key) ─────────────────────────────────────────────────
   const menu = document.createElement('button');
-  menu.className = 'hud-menu'; menu.type = 'button'; menu.innerHTML = 'Crew<kbd>Esc</kbd>'; menu.hidden = true;
-  menu.setAttribute('aria-label', 'Back to the crew screen');
+  menu.className = 'hud-menu'; menu.type = 'button'; menu.textContent = 'Crew'; menu.hidden = true;
+  menu.setAttribute('aria-label', 'Back to the crew screen (Esc)');
   menu.addEventListener('click', toTitle);
   document.getElementById('hud-root').appendChild(menu);
 
@@ -117,7 +117,7 @@ async function boot() {
       P.update(dt, { move, run: auto.way ? auto.run : input.run, yaw: chase.yaw, others: people ? people.list : [] });
       chase.update(dt, { feet: P.pos, heading: P.heading, speed: P.speed, look: input.takeLook(), zoom: input.takeZoom() });
       setFov(60);
-      P.c.root.visible = chase.near > 0.6;
+      P.c.root.visible = chase.near > 0.4;     // (closer than that, the camera would be inside the head)
       // (lit by the room they are in: a new room's light as they walk into it)
       if (GAME.frames % 10 === 0) { const z = W.zoneAt(P.pos); if (z && z !== P.zone) { P.zone = z; shine(P.c, W.envAt(P.pos)); } }
     }

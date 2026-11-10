@@ -9,8 +9,8 @@
 //   chase.yaw                     where the camera looks (radians, as a heading): "forward" for the keys and stick
 //
 // NEVER THROUGH A WALL: each frame five lines go from the player's head toward where the camera wants to be (the
-// middle one and four round it, the width of the camera's near view); the camera stops short of the first wall any of
-// them meets, at once, and eases back out when the way clears.
+// middle one, one either side and one above and below); the camera stops short of the first wall any of them meets,
+// at once, and eases back out when the way clears.
 import * as THREE from 'three';
 
 export const CAM = {
@@ -20,7 +20,10 @@ export const CAM = {
   zoomMin: 0.45, zoomMax: 1.7,           // the wheel or a pinch, times dist
   swingAfter: 1.5, swing: 2.4,           // seconds left alone while walking before it swings back behind; how fast
   follow: 14, rise: 6,                   // how quickly the head is followed, along and up (stairs: a little slower)
-  margin: 0.24, spread: 0.16,            // kept off a wall (m); the side lines' spread round the middle one (m)
+  // kept off a wall (m); the side lines' spread round the middle one (m): wide enough that a door's frame or a pillar
+  // just beside the camera brings it in through the doorway, rather than filling half the picture
+  // (0.16 left door frames filling half the picture; 0.34 pulled the camera right in at every narrow door)
+  margin: 0.24, spread: 0.26,
 };
 const damp = (a, b, k, dt) => b + (a - b) * Math.exp(-k * dt);
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -35,7 +38,7 @@ export function makeChase(camera, walls) {
     side.set(-dir.z, 0, dir.x).normalize(); up.crossVectors(side, dir).normalize();
     let t = walls.reach(focus, dir, len);
     for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-      o.copy(focus).addScaledVector(side, a * CAM.spread).addScaledVector(up, b * CAM.spread * 0.75);
+      o.copy(focus).addScaledVector(side, a * CAM.spread).addScaledVector(up, b * 0.14);
       // (a side line that starts inside a wall is the head brushing it: not counted)
       if (walls.solidAt(o.x, o.y, o.z)) continue;
       t = Math.min(t, walls.reach(o, dir, len));

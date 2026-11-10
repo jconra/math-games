@@ -19,7 +19,7 @@ export const STAND = 'Stand_Listen';
 // LIT BY THE ROOM THEY ARE IN: the station's light is painted into its walls (its saved light), so there are no lamps
 // for a character to catch; a character takes its light from the room's own picture of itself (station.js W.envAt),
 // more strongly than the kit's default, and is given the next room's as it walks into it.
-export const SHINE = 2.2;
+export const SHINE = 3;
 export function shine(c, env) {
   c.root.traverse((o) => {
     if (!o.isMesh) return;
