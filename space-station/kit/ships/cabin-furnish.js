@@ -4,7 +4,8 @@
 //   furnishRoom(q, bp, room, ctx) -> the ids of the items it built
 //     ctx: { put(what, src, o) (the builder's placeInto, counting triangles by `what`: 'mess: benches' and so on), slopeAt(axis, v, at) (the hull's
 //            slope over a wall line at a point along it: { y0, run } or null), openings(axis, v) (the stretches along a
-//            wall line its doorways and their control panels take), look (the cabin's LOOKS entry) }
+//            wall line its doorways and their control panels take), look (the cabin's LOOKS entry: its leather colours the
+//            bench cushions, and the things its accents name: kit/ships/cabin-built.js LOOKS) }
 // How an item is read:
 //   - against a wall: the item's long side that lies on one of its room's walls (a square item: any side on a wall);
 //     its fitting stands on that wall line, facing into the room (kit/shipparts/cabin/ship.js's wall frame)
@@ -38,6 +39,7 @@ export function furnishRoom(q, bp, room, ctx) {
   if (room.kind !== 'galley') return new Set();
   const done = new Set(), items = (bp.items || []).filter((it) => it.room === room.id), f = +(room.floor || 0);
   const at = (W, mid, y = 0) => { const P = placing(W, mid); P.at[1] = f + y; return P; };
+  const A = accents(ctx.look);
   // ── benches, in an L where two meet ──
   const benches = items.filter((it) => it.kind === 'bench').map((it) => ({ it, W: wallOf(it, room) })).filter((b) => b.W);
   const BACK = 0.09, slopeOver = (W) => ctx.slopeAt(W.axis, W.v, (W.lo + W.hi) / 2);
@@ -55,13 +57,13 @@ export function furnishRoom(q, bp, room, ctx) {
       }
     }
     const L = (r) => r.map((a) => +localX(W, mid, a).toFixed(4)).sort((a, b) => a - b);
-    ctx.put('mess: benches', part(cornerBench, { len, depth: W.depth, seat: +B.it.h || 0.45, seatAt: L(seat), backAt: L(back), leather: ctx.look?.leather }), at(W, mid));
+    ctx.put('mess: benches', part(cornerBench, { len, depth: W.depth, seat: +B.it.h || 0.45, seatAt: L(seat), backAt: L(back), leather: ctx.look?.leather, trim: A.trim }), at(W, mid));
     B.back = back; done.add(B.it.id);
   }
   // ── the table and its stools; a mug or two and a bottle on it ──
   for (const it of items.filter((x) => x.kind === 'table')) {
     const [x0, z0, x1, z1] = it.rect, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, h = +it.h || 0.75;
-    ctx.put('mess: table', part(messTable, { w: x1 - x0, d: z1 - z0, h }), { at: [cx, f, cz] });
+    ctx.put('mess: table', part(messTable, { w: x1 - x0, d: z1 - z0, h, trim: A.trim }), { at: [cx, f, cz] });
     const near = (side) => items.some((o) => o !== it && !+(o.y || 0) && (side === '-x' ? Math.abs(o.rect[2] - x0) < 0.06 && o.rect[1] < z1 && o.rect[3] > z0 : side === '+x' ? Math.abs(o.rect[0] - x1) < 0.06 && o.rect[1] < z1 && o.rect[3] > z0 : side === '-z' ? Math.abs(o.rect[3] - z0) < 0.06 && o.rect[0] < x1 && o.rect[2] > x0 : Math.abs(o.rect[1] - z1) < 0.06 && o.rect[0] < x1 && o.rect[2] > x0));
     const spots = [];
     for (const [side, along, a0, a1, pos] of [['-x', 'z', z0, z1, x0 - 0.03], ['+x', 'z', z0, z1, x1 + 0.03], ['-z', 'x', x0, x1, z0 - 0.03], ['+z', 'x', x0, x1, z1 + 0.03]]) {
@@ -69,11 +71,11 @@ export function furnishRoom(q, bp, room, ctx) {
       const n = a1 - a0 >= 0.9 ? 2 : 1;
       for (let k = 0; k < n; k++) { const a = a0 + (a1 - a0) * (n === 1 ? 0.5 : k ? 0.76 : 0.24); spots.push(along === 'z' ? [pos, a] : [a, pos]); }
     }
-    for (const [sx, sz] of spots) ctx.put('mess: stools', part(stool, {}), { at: [sx, f, sz] });
+    for (const [sx, sz] of spots) ctx.put('mess: stools', part(stool, { pad: A.pad }), { at: [sx, f, sz] });
     const top = f + h;
-    ctx.put('mess: small things', part(mug, {}), { at: [cx + 0.15 * (x1 - x0) / 0.75, top, cz - 0.25], rot: [0, 2.2, 0] });
-    ctx.put('mess: small things', part(mug, {}), { at: [cx - 0.12, top, cz + 0.22], rot: [0, -0.6, 0] });
-    ctx.put('mess: small things', part(bottle, {}), { at: [cx - 0.08, top, cz - 0.05] });
+    ctx.put('mess: small things', part(mug, { look: A.cup }), { at: [cx + 0.15 * (x1 - x0) / 0.75, top, cz - 0.25], rot: [0, 2.2, 0] });
+    ctx.put('mess: small things', part(mug, { look: A.cup }), { at: [cx - 0.12, top, cz + 0.22], rot: [0, -0.6, 0] });
+    ctx.put('mess: small things', part(bottle, { look: A.cup }), { at: [cx - 0.08, top, cz - 0.05] });
     done.add(it.id);
   }
   // ── against the walls: the cold store, the counter (and what stands on it), the cabinets in the top corners ──
@@ -82,26 +84,26 @@ export function furnishRoom(q, bp, room, ctx) {
     if (done.has(it.id)) continue;
     const W = wallOf(it, room); if (!W) continue;
     const mid = (W.lo + W.hi) / 2, len = W.hi - W.lo;
-    if (it.kind === 'locker' && +it.h >= 1.8) { ctx.put('mess: cold store', part(coldStore, { w: len, depth: W.depth - 0.03, h: +it.h, poster: 3 }), at(W, mid)); done.add(it.id); }
+    if (it.kind === 'locker' && +it.h >= 1.8) { ctx.put('mess: cold store', part(coldStore, { w: len, depth: W.depth - 0.03, h: +it.h, poster: 3, handle: A.handle }), at(W, mid)); done.add(it.id); }
     else if (it.kind === 'counter') {
       // (an end open to the room, not at a wall and with nothing standing against it, gets a chamfered worktop corner)
       const [R0, R1] = W.axis === 'z' ? [room.rect[0], room.rect[2]] : [room.rect[1], room.rect[3]];
       const span = (o) => (W.axis === 'z' ? [o.rect[0], o.rect[2]] : [o.rect[1], o.rect[3]]);
       const open = (a) => Math.abs(a - R0) > EPS && Math.abs(a - R1) > EPS && !items.some((o) => o !== it && !+(o.y || 0) && span(o).some((v) => Math.abs(v - a) < 0.06) && wallOf(o, room)?.v === W.v);
       const ends = [W.lo, W.hi].map((a) => (open(a) ? 0.08 : 0)), ch = localX(W, mid, W.lo) < 0 ? ends : ends.slice().reverse();
-      ctx.put('mess: counter', part(galleyRun, { len, depth: W.depth, top: +it.h || 0.9, end: ch }), at(W, mid));
+      ctx.put('mess: counter', part(galleyRun, { len, depth: W.depth, top: +it.h || 0.9, end: ch, handle: A.handle, trim: A.trim }), at(W, mid));
       // (on it, in from the wall: the coffee machine part way from its closed end (a tall neighbour may hide that end),
       // two mugs beside it, the bowl of fruit toward the open end)
       const P = at(W, mid, +it.h || 0.9), inward = (d) => (W.axis === 'z' ? [0, 0, W.side * d] : [W.side * d, 0, 0]), alongV = W.axis === 'z' ? [1, 0, 0] : [0, 0, 1];
       const far = ends[0] ? W.hi : W.lo, sgn = far === W.hi ? -1 : 1, pt = (a, d) => { const o = inward(d); return [P.at[0] + alongV[0] * (a - mid) + o[0], P.at[1], P.at[2] + alongV[2] * (a - mid) + o[2]]; };
       ctx.put('mess: small things', part(coffeeMachine, {}), { at: pt(far + sgn * len * 0.4, 0.19), rot: P.rot });
-      ctx.put('mess: small things', part(mug, {}), { at: pt(far + sgn * len * 0.58, 0.14), rot: [0, P.rot[1] + 0.7, 0] });
-      ctx.put('mess: small things', part(mug, {}), { at: pt(far + sgn * len * 0.65, 0.3), rot: [0, P.rot[1] - 0.4, 0] });
+      ctx.put('mess: small things', part(mug, { look: A.cup }), { at: pt(far + sgn * len * 0.58, 0.14), rot: [0, P.rot[1] + 0.7, 0] });
+      ctx.put('mess: small things', part(mug, { look: A.cup }), { at: pt(far + sgn * len * 0.65, 0.3), rot: [0, P.rot[1] - 0.4, 0] });
       ctx.put('mess: small things', part(fruitBowl, {}), { at: pt(far + sgn * len * 0.84, 0.24), rot: P.rot });
       done.add(it.id);
     } else if (it.kind === 'overhead') {
       const slope = ctx.slopeAt(W.axis, W.v, mid), poster = W.depth >= 0.4 && posterAt === 0 ? 0 : null; if (poster === 0) posterAt++;
-      ctx.put('mess: top cabinets', part(topCabinets, { len, y: +it.y, depth: W.depth, ceiling: room.ceiling === undefined || typeof room.ceiling !== 'number' ? 2.5 : room.ceiling, slope, poster }), at(W, mid));
+      ctx.put('mess: top cabinets', part(topCabinets, { len, y: +it.y, depth: W.depth, ceiling: room.ceiling === undefined || typeof room.ceiling !== 'number' ? 2.5 : room.ceiling, slope, poster, handle: A.handle, trim: A.trim }), at(W, mid));
       done.add(it.id);
     }
   }
@@ -112,6 +114,18 @@ export function furnishRoom(q, bp, room, ctx) {
   if (hull) ctx.put('mess: posters', part(poster, { i: 2, y: 1.33 }), at(hull.W, (hull.W.lo + hull.W.hi) / 2));
   wallFields(ctx, room, items, at);
   return done;
+}
+
+// the look's accents: the surfaces for the things it names (kit/ships/cabin-built.js LOOKS accents), in its leather's
+// colour; undefined: the fitting's own
+function accents(look) {
+  const c = look?.leather, on = (k) => !!c && (look.accents || []).includes(k);
+  return {
+    pad: on('stools') ? c : undefined,
+    cup: on('mugs') ? { c, r: 0.3, m: 0, w: 0.2 } : undefined,
+    handle: on('handles') ? { c, r: 0.4, m: 0.2, w: 0.3 } : undefined,
+    trim: on('trim') ? { c, r: 0.45, m: 0.2, w: 0.3 } : undefined,
+  };
 }
 
 // ── the walls' chamfered fields: on each of the room's walls, wherever it is clear, a raised border-bevel field under the

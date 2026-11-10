@@ -1,5 +1,5 @@
 // THE MESS, in the bevel helper's language (kit/bevel.js), from the game's maker's mess picture
-// (refs/ships/explorer_mess_ref_2026-11-09.png): a corner bench in rust leather on a dark base with a warm light strip
+// (refs/ships/explorer_mess_ref_2026-11-09.png): a corner bench in leather (navy, his pick; rust in his picture) on a dark base with a warm light strip
 // under it, a steel table with chamfered corners on a faceted pedestal, faceted stools with 8-sided tops, cabinets in the
 // wall's top corners with slanted fronts and a light strip under them, a tall cold store, the galley counter with a
 // coffee machine, mugs and a bowl of fruit, and framed posters (their words in kit/shipparts/cabin/print.js POSTERS).
@@ -10,17 +10,20 @@
 //   cornerBench(p, o)   one run of the L: o.len (its stretch of wall), o.depth (0.5 from the line), o.seat (0.45),
 //                       o.seatAt [x0, x1] and o.backAt [x0, x1] (where along it the seat and the back cushion run: at the
 //                       L's corner one bench's seat runs on into it and the other's back), o.leather (the cushions'
-//                       colour), o.glow (true: the warm strip under the seat's front)
-//   messTable(p, o)     o.w (x), o.d (z), o.h (0.75)
-//   stool(p, o)         o.h (0.45)
+//                       colour), o.glow (true: the warm strip under the seat's front), o.trim (its base panel's surface:
+//                       black)
+//   messTable(p, o)     o.w (x), o.d (z), o.h (0.75), o.trim (the top's rim: black)
+//   stool(p, o)         o.h (0.45), o.pad (the top pad's leather colour: a grey pad)
 //   topCabinets(p, o)   a row of cabinets in a wall's top corner: o.len, o.y (their bottom), o.depth (from the line, at
 //                       the bottom), o.ceiling (2.5), o.slope { y0, run } (the hull's slope over them: their tops follow
 //                       it; none: up to the ceiling), o.lean (0.35: how far the front leans back toward the wall, per metre
-//                       up), o.units (about 0.5 m each), o.poster (a POSTERS index for the middle one's front), o.strip
-//   coldStore(p, o)     a tall cold store: o.w (0.5), o.depth, o.h (2.0), o.poster
+//                       up), o.units (about 0.5 m each), o.poster (a POSTERS index for the middle one's front), o.strip,
+//                       o.handle (the handle slots' surface: black), o.trim (the rail under them: black)
+//   coldStore(p, o)     a tall cold store: o.w (0.5), o.depth, o.h (2.0), o.poster, o.handle
 //   galleyRun(p, o)     the counter: o.len, o.depth, o.top (0.9), o.end ([left, right] chamfer of the worktop's front
-//                       corners in plan: an open end 0.08)
-//   coffeeMachine(p), mug(p), fruitBowl(p), bottle(p)   (free, standing on y = 0)
+//                       corners in plan: an open end 0.08), o.handle, o.trim (the worktop's edge: black)
+//   coffeeMachine(p), mug(p, o), fruitBowl(p), bottle(p, o)   (free, standing on y = 0; a mug's and the bottle's o.look:
+//                       their body's surface)
 //   poster(p, o)        a framed poster on a wall's face: o.i (a POSTERS index), o.dark (a dark print with light words)
 //   wallField(p, o)     a raised chamfered field on a wall's face: o.w, o.h (centred on x 0, y o.y)
 import * as THREE from 'three';
@@ -33,7 +36,7 @@ import { POSTERS } from './print.js';
 
 const PI = Math.PI, FLAT = [-PI / 2, 0, 0];   // (FLAT: a shape drawn in x, y lies down, its y running to -z, its depth up)
 const STEEL = { c: '#b0b4ba', r: 0.34, m: 0.45, w: 0.3 }, PAD = { c: '#6c7078', r: 0.6, m: 0.05, w: 0.3 }, GUN = { c: '#6f747c', r: 0.4, m: 0.3, w: 0.4 }, TOP = { c: '#b4b5b2', r: 0.36, m: 0.25, w: 0.4 };
-const leatherOf = (c) => ({ c: c || '#9c5a34', r: 0.66, m: 0.0, w: 0.25 });
+const leatherOf = (c) => ({ c: c || '#22355e', r: 0.66, m: 0.0, w: 0.25 });
 const decalQuad = (w, h, rect) => { const r = kitTextures().decal.rect[rect]; if (!r) throw new Error('kit: no decal ' + rect); return plane(w, h, { uv: r, cell: 9 }); };
 // a light for the bake, warm white (the room's tone takes it over: kit/ships/cabin-built.js)
 const LIGHT = [1, 0.97, 0.92];
@@ -48,7 +51,7 @@ export function cornerBench(p, o = {}) {
   const len = o.len ?? 1.5, depth = o.depth ?? 0.5, seat = o.seat ?? 0.45, leather = leatherOf(o.leather), [s0, s1] = o.seatAt || [-len / 2, len / 2], [b0, b1] = o.backAt || [-len / 2, len / 2];
   const kick = 0.08, baseTop = seat - 0.1, front = depth - 0.03, backT = 0.09;
   // the dark base, a sunk panel along its front; the toe space under it, set back, its warm strip lighting the floor
-  add(p, 'black', solid(shape(len - 0.004, baseTop - kick, [0, 0.012], 0, (kick + baseTop) / 2), front - FACE, { edge: 0.008, back: false, front: [{ inset: 0.035, depth: -0.004, bevel: 0.005 }] }), [0, 0, FACE]);
+  add(p, o.trim || 'black', solid(shape(len - 0.004, baseTop - kick, [0, 0.012], 0, (kick + baseTop) / 2), front - FACE, { edge: 0.008, back: false, front: [{ inset: 0.035, depth: -0.004, bevel: 0.005 }] }), [0, 0, FACE]);
   add(p, 'dark', solid(shape(len - 0.004, kick, 0, 0, kick / 2), front - 0.07 - FACE, { edge: 0.004, back: false }), [0, 0, FACE]);
   if (o.glow !== false) {
     add(p, 'white', plate(shape(len - 0.06, 0.012, 0.004)), [0, kick - 0.002, front - 0.03], [PI / 2, 0, 0], 'glow');
@@ -68,7 +71,7 @@ export function cornerBench(p, o = {}) {
 export function messTable(p, o = {}) {
   const w = o.w ?? 0.75, d = o.d ?? 1.0, h = o.h ?? 0.75, c = Math.min(w, d) * 0.12;
   // the top: a charcoal rim, the steel top on it with a fine sunk line round its edge
-  add(p, 'black', solid(shape(w, d, c), 0.034, { edge: 0.008 }), [0, h - 0.046, 0], FLAT);
+  add(p, o.trim || 'black', solid(shape(w, d, c), 0.034, { edge: 0.008 }), [0, h - 0.046, 0], FLAT);
   add(p, STEEL, solid(shape(w - 0.026, d - 0.026, c - 0.008), 0.012, { edge: 0.004, back: false, front: [{ inset: 0.045, depth: -0.0015, bevel: 0.002 }, { inset: 0.004, depth: 0, bevel: 0.002 }] }), [0, h - 0.012, 0], FLAT);
   // the pedestal: a wide faceted foot, a column narrowing a little toward it, a head under the top
   const S = (a, b, z) => ({ s: shape(a, b, Math.min(a, b) * 0.3), z }), k = Math.min(w, d);
@@ -81,7 +84,7 @@ export function stool(p, o = {}) {
   const h = o.h ?? 0.45, S = (a, z) => ({ s: shape(a, a, a * 0.27), z });
   add(p, GUN, loft([S(0.3, 0), S(0.3, 0.022), S(0.22, 0.06), S(0.11, h * 0.47), S(0.24, h - 0.075), S(0.27, h - 0.06)], { start: false }), [0, 0, 0], FLAT);
   add(p, STEEL, solid(shape(0.35, 0.35, 0.095), 0.028, { edge: 0.007 }), [0, h - 0.065, 0], FLAT);
-  add(p, PAD, solid(shape(0.32, 0.32, 0.085), 0.04, { edge: 0.012, back: false }), [0, h - 0.04, 0], FLAT);
+  add(p, o.pad ? leatherOf(o.pad) : PAD, solid(shape(0.32, 0.32, 0.085), 0.04, { edge: 0.012, back: false }), [0, h - 0.04, 0], FLAT);
   return p;
 }
 
@@ -110,7 +113,7 @@ export function topCabinets(p, o = {}) {
     // its front: a raised border bevel; a dark handle slot along its lip
     const fy = y + lip + (yT - y - lip) / 2, fz = depth - (fy - y - lip) * lean;
     add(p, 'white2', relief(shape(uw - gap - 0.05, fl - 0.05, 0.045), [{ inset: 0, depth: 0.005, bevel: 0.005 }, { inset: 0.03, depth: 0.0025, bevel: 0.004 }]), [xc, fy, fz + 0.0005], [-a, 0, 0]);
-    add(p, 'black', plate(shape(Math.min(0.22, uw * 0.45), 0.022, 0.009)), [xc, y + lip * 0.5, depth + 0.0008]);
+    add(p, o.handle || 'black', plate(shape(Math.min(0.22, uw * 0.45), 0.022, 0.009)), [xc, y + lip * 0.5, depth + 0.0008]);
     if (o.poster != null && i === Math.floor(n / 2)) {
       const P = POSTERS[o.poster], s = Math.min((uw - 0.12) / P.w, (fl - 0.12) / P.h);
       // (on the field, 2.5 mm up off the front: a little more, along the front's own outward normal)
@@ -118,7 +121,7 @@ export function topCabinets(p, o = {}) {
     }
   }
   // under them, a charcoal rail with a warm strip along its front, lighting the wall and what stands below
-  add(p, 'black', solid(shape(len, depth - 0.02 - FACE, 0, 0, -(FACE + (depth - 0.02 - FACE) / 2)), 0.026, { edge: 0.004 }), [0, y - 0.026, 0], FLAT);
+  add(p, o.trim || 'black', solid(shape(len, depth - 0.02 - FACE, 0, 0, -(FACE + (depth - 0.02 - FACE) / 2)), 0.026, { edge: 0.004 }), [0, y - 0.026, 0], FLAT);
   if (o.strip !== false) {
     add(p, 'white', plate(shape(len - 0.05, 0.014, 0.004)), [0, y - 0.027, depth - 0.05], [PI / 2, 0, 0], 'glow');
     for (let x = -len / 2 + 0.25; x < len / 2; x += 0.5) strip(p, [x, y - 0.06, depth - 0.02], 0.55, [0, -0.92, 0.38], 2.2);
@@ -136,7 +139,7 @@ export function coldStore(p, o = {}) {
   const doors = [[0.08, 1.2], [1.24, h - 0.06]];
   for (const [y0, y1] of doors) {
     add(p, 'white2', relief(shape(w - 0.05, y1 - y0, 0.04, 0, (y0 + y1) / 2), [{ inset: 0, depth: 0.007, bevel: 0.006 }, { inset: 0.032, depth: 0.0035, bevel: 0.004 }]), [0, 0, FACE + d]);
-    add(p, 'black', plate(shape(0.024, Math.min(0.32, (y1 - y0) * 0.4), 0.009, w / 2 - 0.06, y0 < 1 ? y1 - 0.25 : y0 + 0.22)), [0, 0, FACE + d + 0.0075]);
+    add(p, o.handle || 'black', plate(shape(0.024, Math.min(0.32, (y1 - y0) * 0.4), 0.009, w / 2 - 0.06, y0 < 1 ? y1 - 0.25 : y0 + 0.22)), [0, 0, FACE + d + 0.0075]);
   }
   // (the screen on the lower door's field, 3.5 mm out)
   add(p, { c: '#101418', r: 0.2, m: 0.3, w: 0.1 }, plate(shape(0.13, 0.05, 0.01, -0.05, 1.08)), [0, 0, FACE + d + 0.0041]);
@@ -156,10 +159,10 @@ export function galleyRun(p, o = {}) {
   for (let i = 0; i < n; i++) {
     const x = -len / 2 + 0.005 + dw * (i + 0.5);
     add(p, 'white2', relief(shape(dw - 0.03, top - 0.04 - kick - 0.05, 0.035, x, (kick + top - 0.04) / 2), [{ inset: 0, depth: 0.007, bevel: 0.006 }, { inset: 0.03, depth: 0.0035, bevel: 0.004 }]), [0, 0, FACE + d]);
-    add(p, 'black', plate(shape(Math.min(0.2, dw * 0.5), 0.022, 0.009, x, top - 0.04 - 0.09)), [0, 0, FACE + d + 0.0075]);
+    add(p, o.handle || 'black', plate(shape(Math.min(0.2, dw * 0.5), 0.022, 0.009, x, top - 0.04 - 0.09)), [0, 0, FACE + d + 0.0075]);
   }
   // the worktop: its front corners chamfered where its ends are open; a charcoal edge under it
-  add(p, 'black', solid(shape(len, depth - FACE + 0.02, [eL, eR, 0, 0], 0, -(FACE + (depth - FACE + 0.02) / 2)), 0.025, { edge: 0.005 }), [0, top - 0.04, 0], FLAT);
+  add(p, o.trim || 'black', solid(shape(len, depth - FACE + 0.02, [eL, eR, 0, 0], 0, -(FACE + (depth - FACE + 0.02) / 2)), 0.025, { edge: 0.005 }), [0, top - 0.04, 0], FLAT);
   add(p, TOP, solid(shape(len - 0.01, depth - FACE + 0.01, [Math.max(0, eL - 0.004), Math.max(0, eR - 0.004), 0, 0], 0, -(FACE + (depth - FACE + 0.01) / 2)), 0.016, { edge: 0.004, back: false }), [0, top - 0.016, 0], FLAT);
   return p;
 }
@@ -183,9 +186,9 @@ export function mug(p, o = {}) {
   add(p, '#d9d6cf', decalQuad(0.035, 0.035, 'cabin:delta'), [0, 0.05, 0.0385], null, 'decal');
   return p;
 }
-export function bottle(p) {
+export function bottle(p, o = {}) {
   const S = (a, z) => ({ s: shape(a, a, a * 0.29), z });
-  add(p, 'gun', loft([S(0.07, 0), S(0.07, 0.2), S(0.05, 0.23), S(0.045, 0.27)]), [0, 0, 0], FLAT);
+  add(p, o.look || 'gun', loft([S(0.07, 0), S(0.07, 0.2), S(0.05, 0.23), S(0.045, 0.27)]), [0, 0, 0], FLAT);
   add(p, 'black', loft([S(0.05, 0), S(0.05, 0.03)]), [0, 0.27, 0], FLAT);
   return p;
 }

@@ -85,12 +85,15 @@ export const POOLS = { panel: 0.26, least: 0.4, most: 1.3, reach: 3.2 };
 // ── THE LOOKS ─────────────────────────────────────────────────────────────────────────────────────────────────────
 // The kit's parts with each of the station's surfaces (kit/materials.js SURF) swapped: surf; the light strips' and
 // ceiling panels' glow and the light they cast (for the bake) by TONE, each room taking its kind's tone (rooms);
-// floor (a tint on the floor's tread plate); leather (the furniture boxes of the benches), bedding (the bunks'); the
-// other furniture boxes: the plan's colours, muted.
+// floor (a tint on the floor's tread plate); leather (the bench cushions, and the furniture boxes of benches not yet
+// furnished), bedding (the bunks'); accents (which of the mess's other things take the leather's colour too, for
+// kit/ships/cabin-furnish.js: 'stools' their top pads, 'mugs' the mugs and the bottle, 'handles' the cabinets', counter's
+// and cold store's handle slots, 'trim' the table's rim, the bench's base panel, the cabinets' rail and the worktop's
+// edge); the other furniture boxes: the plan's colours, muted.
 //   light   his three reference pictures (2026-11-09: the bunks, the mess, the science lab): one light grey for every
 //           panel, the band a softer grey, charcoal trim, a charcoal floor; the light warm white in the mess, cool white
-//           in the science lab and the bunks, a plain white elsewhere; the mess's rust-orange leather, the bunks'
-//           charcoal bedding
+//           in the science lab and the bunks, a plain white elsewhere; the bunks' charcoal bedding. The leather navy (his
+//           pick from the bench colours, 2026-11-09; his mess picture's was rust, '#9c5a34'), the stools' tops to match
 //   warm    his concept sheet's insets: grey steel panels, dark bands, amber light everywhere, blue leather
 // (a tone: `glow` the strip's colour at full (linear, over 1 for the bloom), `light` the colour it casts)
 const TONES = {
@@ -109,7 +112,7 @@ export const LOOKS = {
       band: ['#7f7d79', 0.55, 0.1, 0.7], dark: ['#2f3032', 0.55, 0.3, 0.7], black: ['#343538', 0.4, 0.45, 0.5],
     },
     tone: 'plain', rooms: { galley: 'warm', science: 'cool', bunks: 'cool' },
-    floor: '#e4e5ea', floorGain: 7, leather: '#9c5a34', bedding: '#3a3d42',
+    floor: '#e4e5ea', floorGain: 7, leather: '#22355e', accents: ['stools'], bedding: '#3a3d42',
   },
   warm: {
     name: 'Warm',
@@ -118,7 +121,7 @@ export const LOOKS = {
       band: ['#34373b', 0.45, 0.45, 1.0], dark: ['#26282b', 0.5, 0.4, 0.8], black: ['#2e3033', 0.35, 0.55, 0.6],
     },
     tone: 'amber', rooms: {},
-    floor: '#aaa5a0', floorGain: 6, leather: '#22355e', bedding: '#22355e',
+    floor: '#aaa5a0', floorGain: 6, leather: '#22355e', accents: ['stools'], bedding: '#22355e',
   },
 };
 // THE CABIN'S MATERIALS: the kit's own (kit/materials.js), with only a little of the outside's light let in (LIGHT.ambient:
