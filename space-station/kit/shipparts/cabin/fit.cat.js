@@ -7,7 +7,7 @@ import { toilet, basin, shower } from './wash.js';
 import { medBed, scanner, pharmacy, stretcher } from './medical.js';
 import { reactor } from './engine.js';
 import { holoTable } from './science.js';
-import { cornerBench, messTable, stool, topCabinets, coldStore, galleyRun, coffeeMachine, mug, fruitBowl, poster } from './mess.js';
+import { cornerBench, messTable, stool, topCabinets, coldStore, galleyRun, coffeeMachine, mug, fruitBowl, poster, GUN } from './mess.js';
 import { bunkStack, crewLocker } from './bunks.js';
 import { shallowLocker, endLocker, lockerBody, berthLockers } from './lockers.js';
 import { labBench, microscope, glovebox, vialRack, tablet, sampleCase, surveyTable, labStool, ringLight } from './lab.js';
@@ -15,6 +15,9 @@ import { suitLockers, pressurePanel, wallBench } from './airlock.js';
 import { showerStall, toiletBasin } from './washroom.js';
 import { reactorCore, drivePumps, engStation, gearShelves } from './engroom.js';
 import { starScreen } from './bits.js';
+import { wallPipes, pipeRun, grating, hoopRail } from './engpipes.js';
+import { downlight, washLight } from './lights.js';
+import { shape, solid, add } from '../../bevel.js';
 import { placeInto, part } from '../place.js';
 
 export const PRESETS = {
@@ -57,11 +60,17 @@ export const PRESETS = {
   cabinAirlockBench: { 'fold-down': {}, 'navy cushion': { leather: '#22355e' } },
   cabinShowerStall: { 'corner, one end open': { ends: [false, true] }, 'both ends open': { ends: [true, true] } },
   cabinToiletBasin: { 'toilet and basin': {}, 'toilet alone': { len: 0.5 } },
-  cabinReactor2: { 'in its corner': { back: 1 }, 'free of the walls': { back: 0 } },
-  cabinDrivePumps: { 'drum and two pumps': { back: -1 } },
+  cabinReactor2: { 'in its corner': { back: 1 }, 'free of the walls': { back: 0 }, 'piped to the wall pipes': { back: 1, pipeY: 2 } },
+  cabinDrivePumps: { 'drum and two pumps': { back: -1 }, 'piped to the wall pipes': { back: -1, pipeY: 2 }, 'long and slim': { back: 1, len: 2, depth: 1, pipeY: 1.92 } },
   cabinEngStation: { '1 m': {}, '1.5 m': { len: 1.5 } },
-  cabinToolLockers: { 'two, a poster': { poster: 9 } },
-  cabinGearShelves: { '1 m': {}, '1.5 m': { len: 1.5 } },
+  cabinToolLockers: { 'shallow, one end cut, a poster': { poster: 9 }, 'deep (crew lockers)': { deep: true, poster: 9 } },
+  cabinGearShelves: { 'shallow, 1 m': { depth: 0.32 }, '1 m': {}, '1.5 m': { len: 1.5 } },
+  cabinEngPipes: { 'a pair, wall to wall': { len: 3 }, 'with two risers': { len: 3, risers: [[-0.6, 1], [0.6, 0]] }, 'into a slope at each end': { len: 3, slopes: [2, 2], risers: [[0, 1]] } },
+  cabinEngPipeRun: { 'up, across on hangers, down': { pts: [[-1.2, 1.7, 0], [-1.2, 2.36, 0], [1.2, 2.36, 0], [1.2, 1.45, 0]], ceiling: 2.5, valve: [2, 0.5, [0, 0, 1]] }, 'with a jog': { pts: [[-1.2, 0.6, 0], [-1.2, 1.6, 0], [0.4, 1.6, 0], [0.4, 1.6, 0.6], [0.4, 0.4, 0.6]] } },
+  cabinEngGrating: { 'down an aisle': { len: 1.84, wid: 0.9 }, 'short': { len: 1, wid: 0.6 } },
+  cabinEngRail: { 'low': { len: 1.14, h: 0.5, z: 0.5 }, 'waist high': { len: 1.6, h: 0.95, z: 0.5 } },
+  cabinDownlight: { 'in a ceiling': {}, 'small, under a locker': { r: 0.05, y: 1.4, drop: 0.5 } },
+  cabinWashLight: { '2 m': { len: 2, y: 1.6 }, '1 m': { len: 1, y: 1.6 } },
 };
 const entry = (id, name, mount, foot, fn) => ({ name, group: 'Ship cabin', at: 'free', mount, variants: Object.keys(PRESETS[id]), foot, build: (p, v) => fn(p, PRESETS[id][v] ?? {}) });
 export const CABIN_FIT = {
@@ -104,6 +113,15 @@ export const CABIN_FIT = {
   cabinReactor2: entry('cabinReactor2', 'Engineering: reactor, glowing core', 'wall', [1.5, 2.5, 1.25], reactorCore),
   cabinDrivePumps: entry('cabinDrivePumps', 'Engineering: drive and pumps', 'wall', [1.5, 1.8, 1.25], drivePumps),
   cabinEngStation: entry('cabinEngStation', 'Engineering: station', 'wall', [1.0, 1.5, 0.5], engStation),
-  cabinToolLockers: entry('cabinToolLockers', 'Engineering: tool lockers', 'wall', [1.0, 2.0, 0.5], (p, o) => { for (const [x, P] of [[-0.25, o.poster], [0.25, null]]) placeInto(p, part(crewLocker, { label: 'label:tools', poster: P }), { at: [x, 0, 0] }); return p; }),
+  // (shallow: the ship's built-in, kit/shipparts/cabin/lockers.js; deep: two crew lockers, for a plan that gives them half a metre)
+  cabinToolLockers: entry('cabinToolLockers', 'Engineering: tool lockers', 'wall', [1.0, 2.2, 0.5], (p, o) => { if (!o.deep) return shallowLocker(p, { w: 1, depth: 0.22, h: 2.2, cols: 2, ends: [0.14, 0], label: 'label:tools', poster: o.poster }); for (const [x, P] of [[-0.25, o.poster], [0.25, null]]) placeInto(p, part(crewLocker, { label: 'label:tools', poster: P }), { at: [x, 0, 0] }); return p; }),
   cabinGearShelves: entry('cabinGearShelves', 'Engineering: gear shelves', 'wall', [1.0, 1.8, 0.5], gearShelves),
+  cabinEngPipes: entry('cabinEngPipes', 'Engineering: two pipes along a wall', 'wall', [3.0, 2.3, 0.3], wallPipes),
+  cabinEngPipeRun: entry('cabinEngPipeRun', 'Engineering: a pipe through points', 'free', [2.6, 2.5, 0.8], pipeRun),
+  cabinEngGrating: entry('cabinEngGrating', 'Engineering: floor grating', 'free', [2.0, 0.05, 1.0], grating),
+  cabinEngRail: entry('cabinEngRail', 'Engineering: tube rail', 'wall', [1.6, 1.0, 0.6], hoopRail),
+  // (the light fittings, kit/shipparts/cabin/lights.js: the disc under a square of ceiling, to show how it sits in one,
+  // over a square of deck for its light to land on; the Kit Lab draws its beam with dust in it, kit/beams.js)
+  cabinDownlight: entry('cabinDownlight', 'Light: downlight disc', 'free', [1.1, 2.5, 1.1], (p, o) => { const y = o.y ?? 2.5; add(p, 'white2', solid(shape(0.7, 0.7, 0.06), 0.02, { edge: 0.004 }), [0, y + 0.02, 0], [Math.PI / 2, 0, 0]); if (!o.y) add(p, GUN, solid(shape(1.1, 1.1, 0.1), 0.02, { edge: 0.004 }), [0, 0, 0], [Math.PI / 2, 0, 0]); return downlight(p, { drop: y - 0.03, ...o, at: [0, y, 0] }); }),
+  cabinWashLight: entry('cabinWashLight', 'Light: wall wash strip', 'wall', [2.0, 1.8, 0.1], washLight),
 };

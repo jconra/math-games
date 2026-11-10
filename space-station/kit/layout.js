@@ -11,7 +11,7 @@ import { placeMatrix, onGrid, WALL_FACE } from './grid.js';
 import { Piece } from './piece.js';
 import { bake, bakeWith, makeVoxels, lightBins, lightAt } from './bake.js';
 import { applyBake } from './bakefile.js';
-import { MAT_KEYS, BAKED } from './materials.js';
+import { MAT_KEYS, BAKED, GLOWING } from './materials.js';
 
 const CACHE = new Map();
 // a piece drawn once in its own frame, kept for every copy
@@ -166,7 +166,7 @@ export function buildRoom(room, mats, opts = {}) {
     const zm = opts.zoneMats?.(z.with?.[0] || z.id) || mats; z.mats = zm;   // (a door's zone shares its first room's materials)
     for (const k of MAT_KEYS) {
       const g = z.merged[k]; if (!g) continue;
-      const m = new THREE.Mesh(g, zm[k]); m.name = k; m.castShadow = k !== 'glass' && k !== 'glow' && k !== 'shield'; m.receiveShadow = k !== 'glow'; m.matrixAutoUpdate = false;
+      const m = new THREE.Mesh(g, zm[k]); m.name = k; m.castShadow = k !== 'glass' && !GLOWING.has(k) && k !== 'shield'; m.receiveShadow = !GLOWING.has(k); m.matrixAutoUpdate = false;
       if (k === 'glass') m.renderOrder = 2; if (k === 'shield') m.renderOrder = 3;
       g.computeBoundingBox(); g.computeBoundingSphere(); z.box.union(g.boundingBox);
       zg.add(m); const tris = g.index.count / 3; stats.draws++; stats.tris += tris; z.tris += tris; stats.perMat[k] = Math.round((stats.perMat[k] || 0) + tris);

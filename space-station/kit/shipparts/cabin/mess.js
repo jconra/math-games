@@ -47,12 +47,10 @@ export const LIGHT = [1, 0.97, 0.92];
 export const pool = (p, at, i, reach, color = LIGHT) => p.lights.push({ at, i: 0, color, dir: null, reach, pool: { i, reach } });
 // a strip's own light for the bake (marked, so a cabin keeps its strips brighter than its fill: cabin-built.js LIGHT)
 export const strip = (p, at, i, dir, reach, color = LIGHT) => p.lights.push({ at, i, color, dir, reach, strip: true });
-// a poster's own light for the bake (no fitting; marked, so a cabin turns it on only where its rooms are kept dim:
-// cabin-built.js LIGHT.posters): `at` the poster's middle, `n` the way it faces. A poster stays easy to read in a dim room.
-export const posterLight = (p, at, n = [0, 0, 1], i = 0.3, off = 0.45, reach = 0.95) => p.lights.push({ at: [at[0] + n[0] * off, at[1] + n[1] * off, at[2] + n[2] * off], i, color: LIGHT, dir: [-n[0], -n[1], -n[2]], reach, poster: true });
 // A PICTURE LIGHT: a poster's light with the fitting it comes from (the game's maker, 2026-11-09: "Right now it just looks
 // like light just magically appears"): a small dark hood over the poster's top edge, a glowing strip under it, and the
-// light it throws down the poster (marked `poster`, as posterLight's). `at`: the middle of the poster's top edge, on the
+// light it throws down the poster (marked `poster`: cabin-built.js LIGHT.posters turns these up where the rooms are
+// kept dim, so a poster stays easy to read). `at`: the middle of the poster's top edge, on the
 // surface it hangs on; `rot`: that surface's turn (it faces +z before it is turned); `w`: the poster's width.
 const _pe = new THREE.Euler(), _pv = new THREE.Vector3();
 const turned = (rot, v) => _pv.set(...v).applyEuler(_pe.set(...(rot || [0, 0, 0]))).toArray();
@@ -139,7 +137,8 @@ export function topCabinets(p, o = {}) {
       const P = POSTERS[o.poster], s = Math.min((uw - 0.12) / P.w, (fl - 0.12) / P.h);
       // (on the field, 2.5 mm up off the front: a little more, along the front's own outward normal)
       add(p, '#3a3d42', decalQuad(P.w * s, P.h * s, 'cabin:poster:' + o.poster), [xc, fy + 0.0036 * Math.sin(a), fz + 0.0005 + 0.0036 * Math.cos(a)], [-a, 0, 0], 'decal');
-      posterLight(p, [xc, fy, fz], [0, Math.sin(a), Math.cos(a)]);
+      // (its light: a hood on the front over its top edge, turned with the front)
+      const u = P.h * s / 2 + 0.008; pictureLight(p, [xc, fy + u * Math.cos(a), fz + 0.0005 - u * Math.sin(a)], [-a, 0, 0], P.w * s);
     }
   }
   // under them, a charcoal rail with a warm strip along its front, lighting the wall and what stands below
@@ -167,7 +166,7 @@ export function coldStore(p, o = {}) {
   add(p, { c: '#101418', r: 0.2, m: 0.3, w: 0.1 }, plate(shape(0.13, 0.05, 0.01, -0.05, 1.08)), [0, 0, FACE + d + 0.0041]);
   add(p, 'blue', plate(shape(0.1, 0.012, 0.004, -0.05, 1.08)), [0, 0, FACE + d + 0.0045], null, 'glow');
   // (its poster framed on the upper door's field: a pale plate with a sunk border, the print on it)
-  if (o.poster != null) { const P = POSTERS[o.poster], s = Math.min((w - 0.14) / P.w, 0.5 / P.h), pw = P.w * s + 0.04, ph = P.h * s + 0.04, z = FACE + d + 0.0035; add(p, 'white2', solid(shape(pw, ph, 0.02, -0.02, 1.62), 0.006, { edge: 0.002, back: false, front: [{ inset: 0.01, depth: -0.002, bevel: 0.002 }] }), [0, 0, z]); add(p, '#33363b', decalQuad(P.w * s, P.h * s, 'cabin:poster:' + o.poster), [-0.02, 1.62, z + 0.0045], null, 'decal'); posterLight(p, [-0.02, 1.62, z]); }
+  if (o.poster != null) { const P = POSTERS[o.poster], s = Math.min((w - 0.14) / P.w, 0.5 / P.h), pw = P.w * s + 0.04, ph = P.h * s + 0.04, z = FACE + d + 0.0035; add(p, 'white2', solid(shape(pw, ph, 0.02, -0.02, 1.62), 0.006, { edge: 0.002, back: false, front: [{ inset: 0.01, depth: -0.002, bevel: 0.002 }] }), [0, 0, z]); add(p, '#33363b', decalQuad(P.w * s, P.h * s, 'cabin:poster:' + o.poster), [-0.02, 1.62, z + 0.0045], null, 'decal'); pictureLight(p, [-0.02, 1.62 + ph / 2 + 0.004, z + 0.002], null, pw); }
   return p;
 }
 
@@ -232,7 +231,7 @@ export function poster(p, o = {}) {
   const look = dark ? { c: '#22252a', r: 0.5, m: 0.1, w: 0.3 } : 'white2';
   add(p, look, solid(shape(w, h, 0.03, 0, y), 0.012, { edge: 0.003, back: false, front: [{ inset: 0.016, depth: -0.003, bevel: 0.003 }] }), [0, 0, FACE]);
   add(p, dark ? '#dcd9d2' : '#2c2e32', decalQuad(w - 0.06, h - 0.06, 'cabin:poster:' + (o.i ?? 0)), [0, y, FACE + 0.0095], null, 'decal');
-  posterLight(p, [0, y, FACE]);
+  pictureLight(p, [0, y + h / 2 + 0.006, FACE], null, w);
   return p;
 }
 export function wallField(p, o = {}) {

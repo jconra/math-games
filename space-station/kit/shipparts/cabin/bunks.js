@@ -18,7 +18,7 @@
 import { shape, solid, loft, plate, relief, prism, octagon, add } from '../../bevel.js';
 import { FACE, SHEET } from './ship.js';
 import { POSTERS } from './print.js';
-import { FLAT, printed, glowStrip, screen, starScreen, pool, strip, posterLight, decalQuad, localAt } from './bits.js';
+import { FLAT, printed, glowStrip, screen, starScreen, pool, strip, pictureLight, decalQuad, localAt } from './bits.js';
 import { part, placeInto } from '../place.js';
 
 const PI = Math.PI, K = 2 - Math.SQRT2;
@@ -138,7 +138,7 @@ export function crewLocker(p, o = {}) {
     const P = POSTERS[o.poster], s = Math.min((w - 0.2) / P.w, (uy1 - uy0 - 0.34) / P.h), pw = P.w * s + 0.03, ph = P.h * s + 0.03, px = -0.035, py = uy0 + (uy1 - uy0) * 0.42, z = fz + 0.0035;
     add(p, 'white2', solid(shape(pw, ph, 0.016, px, py), 0.005, { edge: 0.0015, back: false, front: [{ inset: 0.008, depth: -0.0015, bevel: 0.0015 }] }), [0, 0, z]);
     add(p, '#33363b', decalQuad(P.w * s, P.h * s, 'cabin:poster:' + o.poster), [px, py, z + 0.0038], null, 'decal');
-    posterLight(p, [px, py, z]);
+    pictureLight(p, [px, py + ph / 2 + 0.006, z], null, pw);
   }
   return p;
 }

@@ -29,16 +29,19 @@
 // other locker: a crew locker numbered for the berth it serves (its name's "upper" / "lower", else in turn). The room's
 // posters: on the end lockers, then on the crew lockers that face whoever comes in; other overhead cabinets as the mess's.
 import { part } from '../shipparts/place.js';
-import { FACE } from '../shipparts/cabin/ship.js';
+import { FACE, ROOM } from '../shipparts/cabin/ship.js';
 import { cornerBench, messTable, stool, topCabinets, coldStore, galleyRun, coffeeMachine, mug, bottle, fruitBowl, poster, wallField } from '../shipparts/cabin/mess.js';
 import { bunkStack, crewLocker } from '../shipparts/cabin/bunks.js';
 import { shallowLocker, endLocker, berthLockers, lockerBody } from '../shipparts/cabin/lockers.js';
 import { labBench, microscope, glovebox, vialRack, tablet, sampleCase, surveyTable, labStool, ringLight } from '../shipparts/cabin/lab.js';
 import { suitLockers, pressurePanel, wallBench } from '../shipparts/cabin/airlock.js';
 import { showerStall, toiletBasin } from '../shipparts/cabin/washroom.js';
-import { reactorCore, drivePumps, engStation, gearShelves } from '../shipparts/cabin/engroom.js';
-import { screen, starScreen, hazard, pipe, COPPER } from '../shipparts/cabin/bits.js';
-import { shape, solid, relief, add } from '../bevel.js';
+import { reactorCore, drivePumps, driveDims, engStation, gearShelves } from '../shipparts/cabin/engroom.js';
+import { reactorPort } from '../shipparts/cabin/reactor.js';
+import { wallPipes, pipeRun, grating, hoopRail } from '../shipparts/cabin/engpipes.js';
+import { washLight } from '../shipparts/cabin/lights.js';
+import { screen, starScreen, hazard } from '../shipparts/cabin/bits.js';
+import { shape, relief, add } from '../bevel.js';
 import { POSTERS, postersFor } from '../shipparts/cabin/print.js';
 import { hangs, cutsOf, outlineOf, inItem } from './blueprint.js';
 
@@ -68,6 +71,8 @@ const ROOMS = { galley: furnishGalley, bunks: furnishBunks, science: furnishScie
 
 // ── the galley ──────────────────────────────────────────────────────────────────────────────────────────────────
 function furnishGalley({ room, ctx, done, items, f, at, A }) {
+  // (the room's one downlight: over the table, its beam coming down on it and ending at its top)
+  const TB = items.find((it) => it.kind === 'table'); if (ctx.disc && TB) { const c = centre(TB); ctx.disc(room, +c[0].toFixed(3), +c[1].toFixed(3), { drop: ROOM - 0.76 }); }
   // ── benches, in an L where two meet ──
   const benches = items.filter((it) => it.kind === 'bench').map((it) => ({ it, W: wallOf(it, room) })).filter((b) => b.W);
   const BACK = 0.09, slopeOver = (W) => ctx.slopeAt(W.axis, W.v, (W.lo + W.hi) / 2);
@@ -385,60 +390,142 @@ function furnishWash({ room, ctx, done, items, f, at, A }) {
 // ── engineering ─────────────────────────────────────────────────────────────────────────────────────────────────
 // The machines on their walls: the one named a reactor (or the first, if none is) the reactor, the others the drive and its
 // pumps, each with its end against a wall across (its pipes go into it); the console the engineering station; the lockers
-// tool lockers (half a metre each, labelled TOOLS, the first with a poster); the racks gear shelves. Along the wall most of
-// the machines back onto, two copper pipes, wall to wall, high, and under them the poster about parallel pipes.
-function furnishEngineering({ room, ctx, done, items, f, at, A }) {
-  const extra = [], posters = postersFor('engineering'), ceiling = typeof room.ceiling === 'number' ? room.ceiling : 2.5;
+// tool lockers (up to 0.3 m off their wall: the ship's shallow built-in, labelled TOOLS, a poster on its first door; a
+// deeper one: crew lockers half a metre each); the racks gear shelves. Along the wall most of the machines back onto, two
+// copper pipes, wall to wall, high, the poster about parallel pipes under them and a light over them washing the wall; a
+// pipe down to the deck from the pair in each narrow gap between what stands on that wall. Overhead, a pipe from the
+// reactor's shoulder across the room to the drive's valve chest. Down the aisle to the station a floor grating; a low
+// rail before the reactor. The room's downlights: one over the aisle, one before each machine.
+function furnishEngineering({ bp, room, ctx, done, items, f, at, A }) {
+  const extra = [], posters = postersFor('engineering'), ceiling = typeof room.ceiling === 'number' ? room.ceiling : 2.5, r3 = (v) => +v.toFixed(3);
+  const [X0, Z0, X1, Z1] = room.rect, cx = (X0 + X1) / 2, cz = (Z0 + Z1) / 2;
   const machines = items.filter((it) => it.kind === 'machine').map((it) => ({ it, W: wallOf(it, room) })).filter((M) => M.W);
   const named = machines.find((M) => /reactor/i.test(M.it.name || '')) || machines[0], backs = [];
   // (first, each machine's end against a wall across, and the wall most of them back onto: the pipes' wall)
   for (const M of machines) {
     const { W } = M, mid = (W.lo + W.hi) / 2, [R0, R1] = W.axis === 'z' ? [room.rect[0], room.rect[2]] : [room.rect[1], room.rect[3]];
     const atWall = (a) => Math.abs(a - R0) < EPS || Math.abs(a - R1) < EPS;
+    M.mid = mid;
     M.back = atWall(W.lo) ? Math.sign(localX(W, mid, W.lo)) : atWall(W.hi) ? Math.sign(localX(W, mid, W.hi)) : 0;
     M.backWall = M.back ? (W.axis === 'z' ? { axis: 'x', v: atWall(W.lo) ? W.lo : W.hi } : { axis: 'z', v: atWall(W.lo) ? W.lo : W.hi }) : null;
     if (M.backWall) backs.push(M.backWall);
   }
   const count = new Map(); for (const B of backs) { const k = B.axis + B.v; count.set(k, [B, (count.get(k)?.[1] || 0) + 1]); }
-  const PB = [...count.values()].sort((a, b) => b[1] - a[1])[0]?.[0], pipeY = PB ? +Math.min(ceiling - 0.38, 2.0).toFixed(3) : null;
+  const PB = [...count.values()].sort((a, b) => b[1] - a[1])[0]?.[0];
+  // (the pipes' wall; how high the pair runs: under the ceiling, and under the foot of that wall's own slope if it has one)
+  const PW = PB ? roomWalls(room).find((w) => w.axis === PB.axis && Math.abs(w.v - PB.v) < EPS) : null, PS = PW ? ctx.slopeAt(PW.axis, PW.v, (PW.lo + PW.hi) / 2) : null;
+  const pipeY = PW ? +Math.min(ceiling - 0.38, 2.0, PS ? PS.y0 - 0.32 : 9).toFixed(3) : null;
   for (const M of machines) {
-    const { it, W } = M, mid = (W.lo + W.hi) / 2, len = W.hi - W.lo, py = PB && M.backWall && M.backWall.axis === PB.axis && Math.abs(M.backWall.v - PB.v) < EPS ? pipeY : null;
-    if (M === named) ctx.put('engineering: reactor', part(reactorCore, { len, depth: W.depth, h: +it.h || 1.8, back: M.back, ceiling, pipeY: py, trim: A.trim }), at(W, mid));
-    else ctx.put('engineering: drive and pumps', part(drivePumps, { len, depth: W.depth, h: +it.h || 1.8, back: M.back || -1, pipeY: py, trim: A.trim }), at(W, mid));
-    done.add(it.id);
+    const { it, W } = M, len = W.hi - W.lo, py = PB && M.backWall && M.backWall.axis === PB.axis && Math.abs(M.backWall.v - PB.v) < EPS ? pipeY : null;
+    M.o = M === named ? { len, depth: W.depth, h: +it.h || 1.8, back: M.back, ceiling, pipeY: py, trim: A.trim } : { len, depth: W.depth, h: +it.h || 1.8, back: M.back || -1, pipeY: py, trim: A.trim };
+  }
+  // (the drive across the room from the reactor: its valve chest opposite the reactor's port, for the pipe overhead)
+  const D = named ? machines.find((M) => M !== named && M.W.axis === named.W.axis && Math.abs(M.W.v - named.W.v) > 1) : null;
+  if (D) D.o.chest = r3(localX(D.W, D.mid, named.mid));
+  for (const M of machines) {
+    if (M === named) ctx.put('engineering: reactor', part(reactorCore, M.o), at(M.W, M.mid));
+    else ctx.put('engineering: drive and pumps', part(drivePumps, M.o), at(M.W, M.mid));
+    done.add(M.it.id);
+  }
+  // the pipe overhead: up from the reactor's port, across under the ceiling on hangers, down to the drive's valve chest
+  // (a valve on the way down); only where the ceiling leaves it room over both
+  if (D) {
+    const P0 = toWorld(named.W, named.mid, reactorPort(named.o)), P1 = toWorld(D.W, D.mid, driveDims(D.o).chest);
+    const top = (x, z) => { let y = ROOM; for (const v of [X0, X1]) { const S = ctx.slopeAt('x', v, z); if (S) y = Math.min(y, S.y0 + Math.abs(x - v)); } return y; };
+    const yT = Math.min(ROOM - 0.14, top(P0[0], P0[2]) - 0.14, top(P1[0], P1[2]) - 0.14);
+    if (yT > Math.max(P0[1], P1[1]) + 0.3) {
+      const up0 = [P0[0], yT, P0[2]], up1 = [P1[0], yT, P1[2]], jog = named.W.axis === 'x' ? Math.abs(P1[2] - P0[2]) : Math.abs(P1[0] - P0[0]);
+      // (a jog too short to bend through: the level leg runs a little askew instead)
+      const pts = (jog < 0.3 ? [P0, up0, up1, P1] : [P0, up0, named.W.axis === 'x' ? [P1[0], yT, P0[2]] : [P0[0], yT, P1[2]], up1, P1]).map((q) => q.map(r3));
+      const stem = D.W.axis === 'x' ? [0, 0, Math.sign(cz - P1[2]) || 1] : [Math.sign(cx - P1[0]) || 1, 0, 0];
+      ctx.put('engineering: pipes', part(pipeRun, { pts, ceiling: ROOM, valve: [pts.length - 2, 0.5, stem] }), { at: [0, f, 0], rot: [0, 0, 0] });
+    }
   }
   let posterAt = 0;
+  const stations = [];
   for (const it of items) {
     if (done.has(it.id)) continue;
     const W = wallOf(it, room); if (!W) continue;
     const mid = (W.lo + W.hi) / 2, len = W.hi - W.lo;
-    if (it.kind === 'console') { ctx.put('engineering: station', part(engStation, { len, depth: W.depth, h: +it.h || 1.2, handle: A.handle, trim: A.trim }), at(W, mid)); done.add(it.id); }
+    if (it.kind === 'console') { ctx.put('engineering: station', part(engStation, { len, depth: W.depth, h: +it.h || 1.2, handle: A.handle, trim: A.trim }), at(W, mid)); stations.push({ it, W, mid, len }); done.add(it.id); }
     else if (it.kind === 'locker' && !hangs(it)) {
-      const n = Math.max(1, Math.round(len / 0.5)), uw = len / n;
-      for (let k = 0; k < n; k++) { const lx = -len / 2 + uw * (k + 0.5), P = posters[0] != null && posterAt === 0 && k === 0 ? posters[0] : null; if (P != null) posterAt++; ctx.put('engineering: tool lockers', part(crewLocker, { w: uw, depth: W.depth, h: +it.h || 2, label: 'label:tools', poster: P, handle: A.handle, trim: A.trim }), { at: toWorld(W, mid, [lx, f, 0]), rot: [0, rotOf(W), 0] }); }
+      if (W.depth <= 0.3 + EPS) {
+        // (the ship's shallow built-in, as the bunk room's: its plan's cut corners at its free ends, under a slope only as
+        // tall as the slope lets its front be)
+        const end = (e) => (localX(W, mid, W[e]) > 0 ? 1 : 0), cut = [0, 0], slope = ctx.slopeAt(W.axis, W.v, mid);
+        for (const C of cutsOf(it)) { const front = (W.axis === 'z' ? C.hz : C.hx) === (W.side > 0), e = (W.axis === 'z' ? C.hx : C.hz) ? 'hi' : 'lo'; if (front) cut[end(e)] = Math.min(C.a, C.b); }
+        const h = Math.min(ceiling, +it.h || ceiling, slope ? slope.y0 + W.depth - 0.02 : ceiling), P = posters[0] != null && posterAt === 0 ? posters[0] : null; if (P != null) posterAt++;
+        ctx.put('engineering: tool lockers', part(shallowLocker, { w: r3(len), depth: W.depth, h: r3(h), ends: cut, cols: Math.max(1, Math.round(len / 0.5)), label: 'label:tools', poster: P, handle: A.handle, trim: A.trim }), at(W, mid));
+      } else {
+        const n = Math.max(1, Math.round(len / 0.5)), uw = len / n;
+        for (let k = 0; k < n; k++) { const lx = -len / 2 + uw * (k + 0.5), P = posters[0] != null && posterAt === 0 && k === 0 ? posters[0] : null; if (P != null) posterAt++; ctx.put('engineering: tool lockers', part(crewLocker, { w: uw, depth: W.depth, h: +it.h || 2, label: 'label:tools', poster: P, handle: A.handle, trim: A.trim }), { at: toWorld(W, mid, [lx, f, 0]), rot: [0, rotOf(W), 0] }); }
+      }
       done.add(it.id);
     } else if (it.kind === 'rack') { ctx.put('engineering: gear shelves', part(gearShelves, { len, depth: W.depth, h: +it.h || 1.8, trim: A.trim }), at(W, mid)); done.add(it.id); }
   }
-  // the parallel pipes, along the wall the machines back onto most, and their poster under them
+  // the parallel pipes, along the wall the machines back onto most; their risers; the light over them; their poster under them
   const left = posters.slice(posterAt);
-  if (PB) {
-    const W = roomWalls(room).find((w) => w.axis === PB.axis && Math.abs(w.v - PB.v) < EPS), y = pipeY;
-    ctx.put('engineering: pipes', part(parallelPipes, { len: +(W.hi - W.lo - 2 * FACE).toFixed(3), y }), at(W, (W.lo + W.hi) / 2));
-    extra.push({ axis: W.axis, v: W.v, side: W.side, lo: W.lo, hi: W.hi, y0: y - 0.08, y1: y + 0.26 });
+  if (PW) {
+    const W = PW, mid = (W.lo + W.hi) / 2, y = pipeY, wl = W.hi - W.lo - 2 * FACE;
+    // (what stands on that wall, along it: a pipe down to the deck in each narrow gap between two of them, from the upper
+    // and the lower pipe in turn)
+    const onWall = (it) => { const [x0, z0, x1, z1] = it.rect; return Math.abs((W.axis === 'x' ? (W.side > 0 ? x0 : x1) : (W.side > 0 ? z0 : z1)) - W.v) < EPS; };
+    const on = items.filter((it) => !hangs(it) && onWall(it)).map((it) => alongOf(it, W)).sort((p, q) => p[0] - q[0]), risers = [];
+    for (let i = 0; i + 1 < on.length; i++) {
+      const g = on[i + 1][0] - on[i][1], m = (on[i][1] + on[i + 1][0]) / 2, lx = localX(W, mid, m);
+      if (g < 0.18 || g > 0.7 || ctx.openings(W.axis, W.v).some(([p, q]) => m > p - 0.1 && m < q + 0.1)) continue;
+      risers.push([r3(lx), risers.length % 2 ? 0 : 1]);
+      extra.push(block(W, lx - 0.1, lx + 0.1, mid, 0, y));
+    }
+    // (a hull side's slope across an end of the wall: the height it starts at, for the pipes' flanges and the light's ends)
+    const sl = (v) => (W.axis === 'z' ? ctx.slopeAt('x', v, W.v + W.side * 0.1)?.y0 ?? null : null);
+    const slopes = localX(W, mid, W.lo) < 0 ? [sl(W.lo), sl(W.hi)] : [sl(W.hi), sl(W.lo)];
+    ctx.put('engineering: pipes', part(wallPipes, { len: r3(wl), y, risers, slopes }), at(W, mid));
+    let yTop = y + 0.26;
+    const wy = y + 0.3, ins = slopes.map((s) => (s == null ? 0.05 : Math.max(0.05, wy + 0.08 - s))), wlen = wl - ins[0] - ins[1];
+    if (!PS && wy + 0.08 < ROOM && wlen > 0.6) {
+      ctx.put('engineering: lights', part(washLight, { len: r3(wlen), y: r3(wy) }), at(W, mid + (W.axis === 'z' ? W.side : -W.side) * (ins[0] - ins[1]) / 2));
+      yTop = wy + 0.07;
+    }
+    extra.push({ axis: W.axis, v: W.v, side: W.side, lo: W.lo, hi: W.hi, y0: y - 0.08, y1: yTop });
     if (left.length) {
-      const P = POSTERS[left[0]], py = y - 0.12 - P.h / 2 - 0.05, S = clearStretches(ctx, room, items, W, py - P.h / 2 - 0.03, py + P.h / 2 + 0.03, []).filter(([a, b]) => b - a >= P.w + 0.06).sort((a, b) => (b[1] - b[0]) - (a[1] - a[0]))[0];
+      const P = POSTERS[left[0]], py = y - 0.12 - P.h / 2 - 0.05, S = clearStretches(ctx, room, items, W, py - P.h / 2 - 0.03, py + P.h / 2 + 0.03, extra.filter((B) => B.y0 === 0)).filter(([a, b]) => b - a >= P.w + 0.06).sort((a, b) => (b[1] - b[0]) - (a[1] - a[0]))[0];
       if (S) { ctx.put('engineering: posters', part(poster, { i: left[0], y: +py.toFixed(3) }), at(W, (S[0] + S[1]) / 2)); left.shift(); }
+    }
+  }
+  // the grating: down the aisle before the station, from its front to what stands across from it (or the wall there)
+  for (const S of stations) {
+    const { W, mid, len } = S, front = W.v + W.side * W.depth;
+    let end = W.axis === 'z' ? (W.side > 0 ? Z1 : Z0) : (W.side > 0 ? X1 : X0);
+    for (const it of items) {
+      if (it === S.it || hangs(it)) continue;
+      const [a, b] = alongOf(it, W), [n0, n1] = W.axis === 'z' ? [it.rect[1], it.rect[3]] : [it.rect[0], it.rect[2]], near = W.side > 0 ? n0 : n1;
+      if (b > mid - len / 2 + 0.05 && a < mid + len / 2 - 0.05 && (near - front) * W.side > -EPS) end = W.side > 0 ? Math.min(end, near) : Math.max(end, near);
+    }
+    const run = Math.abs(end - front) - 0.16; if (run < 0.6) continue;
+    const m = front + W.side * (0.06 + run / 2);
+    ctx.put('engineering: grating', part(grating, { len: r3(run), wid: r3(Math.min(len - 0.1, 1)) }), { at: W.axis === 'z' ? [mid, f, m] : [m, f, mid], rot: [0, W.axis === 'z' ? PI / 2 : 0, 0] });
+  }
+  // a low rail before the reactor, along its aisle edge (not across a doorway)
+  if (named) {
+    const { W, mid } = named, len = Math.max(0.5, W.hi - W.lo - 0.36), z = W.depth + 0.02, feet = [-len / 2, len / 2].map((x) => toWorld(W, mid, [x, 0, z]));
+    if (!feet.some((q) => inDoorway(bp, room, q[0], q[2], 0.1))) ctx.put('engineering: rails', part(hoopRail, { len: r3(len), h: 0.5, z: r3(z) }), at(W, mid));
+  }
+  // the downlights: one before each machine (toward the room's middle, clear of the slopes), its beam coming down past
+  // the machine's pipes; and two on the other side of the room's middle from the machines, one to each side of the way
+  // through (before the lockers and shelves there: none over the middle, where its beam would hang between the door and
+  // the station)
+  if (ctx.disc && machines.length) {
+    let mx = 0, mz = 0;
+    for (const M of machines) { const c = centre(M.it); mx += c[0] / machines.length; mz += c[1] / machines.length; const z = c[1] + (cz - c[1]) * 0.4, x = clearOfSlopes(ctx, room, c[0] + (cx - c[0]) * 0.4, z, 0.14, ROOM); if (x != null) ctx.disc(room, r3(x), r3(z)); }
+    const dx = cx - mx, dz = cz - mz, dl = Math.hypot(dx, dz), px = dl > 0.05 ? -dz / dl : 0, pz = dl > 0.05 ? dx / dl : 0, half = (Math.abs(px) * (X1 - X0) + Math.abs(pz) * (Z1 - Z0)) * 0.29;
+    for (const s of dl > 0.05 ? [-1, 1] : [0]) {
+      const az = Math.max(Z0 + 0.5, Math.min(Z1 - 0.5, cz + dz * 1.2 + pz * half * s)), ax = clearOfSlopes(ctx, room, Math.max(X0 + 0.5, Math.min(X1 - 0.5, cx + dx * 1.2 + px * half * s)), az, 0.14, ROOM);
+      if (ax != null) ctx.disc(room, r3(ax), r3(az));
     }
   }
   if (left.length) hangPosters(ctx, room, items, at, left, 'engineering: posters', extra.slice());
   wallFields(ctx, room, items, at, { tag: 'engineering: wall fields', touch: true, also: asItems(extra) });
-}
-// two copper pipes along a wall, parallel, on brackets (a wall fitting: o.len, o.y the lower one's middle)
-function parallelPipes(p, o) {
-  const len = o.len, y = o.y, z = FACE + 0.07;
-  for (const yy of [y, y + 0.17]) pipe(p, COPPER, [-len / 2, yy, z], [len / 2, yy, z], 0.042, { flange0: 0.25, flange1: 0.25 });
-  for (let x = -len / 2 + 0.3; x < len / 2 - 0.1; x += 0.6) add(p, 'black', solid(shape(0.05, 0.3, 0.012, x, y + 0.085), z + 0.03 - FACE, { edge: 0.006, back: false }), [0, 0, FACE]);
-  return p;
 }
 
 // hazard hatching at the ship's own door, where it opens from this room: a band on the floor inside its step, and up the

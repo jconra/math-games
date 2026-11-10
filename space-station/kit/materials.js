@@ -121,6 +121,9 @@ export function makeMaterials() {
   M.screenInst = M.screen;
   M.glow = new THREE.MeshBasicMaterial({ vertexColors: true });
   M.glowInst = M.glow;
+  // (a machine's glowing heart, each kind its own mesh so a moving material can be put on it later: a ship reactor's core,
+  // the glow at the end of its drive. Until then they glow steadily, as the strips do.)
+  M.core = new THREE.MeshBasicMaterial({ vertexColors: true }); M.driveGlow = new THREE.MeshBasicMaterial({ vertexColors: true });
   M.glass = new THREE.MeshStandardMaterial({ color: 0x0b141d, roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.12, depthWrite: false, envMapIntensity: 0.35 });
   M.glassInst = M.glass;
   M.shield = shieldMaterial(); M.shieldInst = M.shield;
@@ -128,7 +131,9 @@ export function makeMaterials() {
   return M;
 }
 // the materials a piece can draw with, in the order the batch draws them
-export const MAT_KEYS = ['solid', 'floor', 'decal', 'screen', 'glow', 'glass', 'shield'];
+export const MAT_KEYS = ['solid', 'floor', 'decal', 'screen', 'glow', 'core', 'driveGlow', 'glass', 'shield'];
+// which ones are lights themselves: their colours given a vertex, no shadow cast or taken
+export const GLOWING = new Set(['glow', 'core', 'driveGlow']);
 // which ones take the baked light (the rest glow on their own or are see-through)
 export const BAKED = new Set(['solid', 'floor', 'decal']);
 

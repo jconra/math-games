@@ -6,7 +6,7 @@
 //           hinges) to open
 import * as THREE from 'three';
 import { bevelBox, sweep, extrude, lathe, plane, put, cylinder, fixWinding } from './geo.js';
-import { SURF, GLOW, kitTextures } from './materials.js';
+import { SURF, GLOW, GLOWING, kitTextures } from './materials.js';
 
 const lin = (hex) => { const c = new THREE.Color(hex); return [c.r, c.g, c.b]; };
 const SURF_LIN = {};
@@ -31,7 +31,7 @@ export class Piece {
     for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g.deleteAttribute(k);
     if (!g.attributes.uv) fill(g, 'uv', 2, [0, 0]);
     if (mat === 'solid') { const s = surfOf(look); fill(g, 'color', 3, s.c); fill(g, 'aRMW', 3, [s.r, s.m, s.w]); }
-    else if (mat === 'glow') fill(g, 'color', 3, Array.isArray(look) ? look : GLOW[look]);
+    else if (GLOWING.has(mat)) fill(g, 'color', 3, Array.isArray(look) ? look : GLOW[look]);
     else if (mat === 'decal' || mat === 'screen') fill(g, 'color', 3, Array.isArray(look) ? look : lin(look || '#ffffff'));
     fixWinding(g); this.parts.push({ mat, geo: g });
     return g;

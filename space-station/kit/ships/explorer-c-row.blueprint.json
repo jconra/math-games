@@ -68,7 +68,7 @@
     { "id": "reactor", "kind": "machine", "room": "engineering", "rect": [-2, -5, -0.75, -3.5], "h": 1.8, "name": "Reactor" },
     { "id": "drive", "kind": "machine", "room": "engineering", "rect": [0.75, -5, 2, -3.5], "h": 1.8, "name": "Drive and pumps" },
     { "id": "eng-station", "kind": "console", "room": "engineering", "rect": [-0.5, -5, 0.5, -4.5], "h": 1.2, "name": "Engineering station" },
-    { "id": "tool-lockers", "kind": "locker", "room": "engineering", "rect": [1.5, -3.5, 2, -2.5], "h": 2, "name": "Gear and tool lockers" },
-    { "id": "gear-lockers", "kind": "rack", "room": "engineering", "rect": [-2, -3.5, -1.5, -2.5], "h": 1.8, "name": "Gear shelves" }
+    { "id": "tool-lockers", "kind": "locker", "room": "engineering", "rect": [1.78, -3.5, 2, -2.5], "cut": { "x0z0": 0.14 }, "h": 2.2, "name": "Tool lockers (shallow)", "notes": "0.22 m off the hull, as if they run on into it; the free end by the drive cut at 45 degrees" },
+    { "id": "gear-lockers", "kind": "rack", "room": "engineering", "rect": [-2, -3.5, -1.68, -2.5], "h": 1.8, "name": "Gear shelves (shallow)", "notes": "0.32 m off the hull: deep enough for their boxes, no more" }
   ]
 }
