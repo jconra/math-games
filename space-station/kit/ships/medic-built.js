@@ -308,9 +308,10 @@ function mdBay(p, variant) {
     if (cabin) polyTo(acc, [V3(sx * CABIN_WALL, y0, oa), V3(sx * RAMP.face, y0, oa), V3(sx * RAMP.face, y0, ob), V3(sx * CABIN_WALL, y0, ob)], V3(0, 1, 0), PAL.deck);
     for (let i = 0; i < n; i++) { const z0 = oa + (ob - oa) * i / n, z1 = oa + (ob - oa) * (i + 1) / n; polyTo(acc, [V3(x0, y0 + 0.004, z0), V3(x1, y0 + 0.004, z0), V3(x1, y0 + 0.004, z1), V3(x0, y0 + 0.004, z1)], V3(0, 1, 0), i % 2 ? PAL.black : PAL.yellow); }
   }
-  // (with the cabin: a light from each lintel's strip down onto the ramp standing in the opening, so from inside it reads
-  // as a ramp, its cleats and hazard edges, not a dark wall)
-  if (cabin) { acc.flush(p); for (const sx of [1, -1]) p.light([sx * (CABIN_WALL + 0.12), RAMP.head - DECK - 0.05, (oa + ob) / 2], 0.9, [1.2, 0.95, 0.6], [sx, -0.6, 0], 2.2); return p; }
+  // (with the cabin: the bay's light on the ramps standing in their openings, so from inside each reads as a ramp, its
+  // cleats and hazard edges, not a dark wall. The kit lights a door leaf by the light at one point of it, here the bay's
+  // middle, so these stand where the bay's own ceiling lights were, dimmer, for the cabin's darker light)
+  if (cabin) { acc.flush(p); for (const z of [-0.95, 0.75]) p.light([0, BAY.ceil - DECK - 0.2, z], 1.1, [1.0, 0.95, 0.85], [0, -1, 0], 4.5); return p; }
   // the light strips: two across the ceiling, and one over each opening's head inside (his amber strip)
   for (const z of [-0.95, 0.75]) polyTo(acc, [V3(-1.9, y1 - 0.006, z - 0.06), V3(1.9, y1 - 0.006, z - 0.06), V3(1.9, y1 - 0.006, z + 0.06), V3(-1.9, y1 - 0.006, z + 0.06)], V3(0, -1, 0), GLOW.bay, 'glow');
   // the inner doors: one in each end wall, on the middle line (a dark panel with a lit strip over it and a seam)
