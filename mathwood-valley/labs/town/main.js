@@ -6,7 +6,8 @@
 //   Save: served from this machine (127.0.0.1 or localhost), sent to the little save script
 //   (~/pw/bandit-math/rigs/town/save_server.cjs, port 8998), which writes it into the game's folder; anywhere else (or
 //   with the script not running) downloaded, to hand over. Open… reads one back; Back to saved goes back to the game's.
-// The work in hand is also kept in this browser as it goes (the Build bar's own copy), so a reload doesn't lose it.
+// Nothing is kept in this browser between visits: every load (and Back to saved) starts from the game's own town, and leaving
+// with changes not yet saved or downloaded asks first. Download hands over the changes as decor.json.
 // Fences: a style picked from the pictures goes on the next fence run (saved on its stroke as `style`; the plain fence
 // has none), the Gate tool puts a gate in the fence clicked (it takes that fence's style), Height sizes the next run.
 // ONE MENU: the Build bar along the bottom (every kind of thing, Select / Add / Clear, Move and Turn with Snap, Undo,
@@ -29,9 +30,9 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { makeValley, TIER_SET } from '../../world/valley.js';
 import { chooseTier, wantAntialias, TIERS } from '../../world/quality.js';
 import { BASE } from '../../world/base.js';
-import { VillageEditor } from '../../world/objects/villageEditor.js';
+import { VillageEditor, forgetLayout } from '../../world/objects/villageEditor.js';
 import { normalise as normaliseTown, footprintOf } from '../../world/objects/village.js';
-import { normalisePlanting, newId, newSeed } from '../../world/objects/planting.js';
+import { normalisePlanting, newId, newSeed, forgetPlanting } from '../../world/objects/planting.js';
 import { applyDecor } from '../../world/objects/decor.js';
 import { PROP_KINDS } from '../../world/objects/townProps.js';
 import { KIND_INFO } from '../../world/objects/growth.js';
@@ -74,6 +75,9 @@ const treeClear = (() => { const sq = GAME.square || GAME.spawn; if (!sq) return
 
 // (the website's landmarks, which the western town doesn't use, left off this lab's palette: before the Build bar is made)
 for (const k of ['valehexGlobe', 'stateMap', 'obelisk']) { const i = PROP_KINDS.findIndex((P) => P.kind === k); if (i >= 0 && !SHIPPED.layout.items.some((it) => it.kind === k)) PROP_KINDS.splice(i, 1); }
+// NOTHING IS KEPT IN THIS BROWSER between visits (the game's maker's wish, 2026-11-10: "I don't even really want the browser to
+// remember anything"): every load starts from the game's own town; the work in hand leaves only as a saved or downloaded file
+forgetPlanting(); forgetLayout();
 say('Laying the land…');
 const V = await makeValley({ renderer, camera, controls, quality: QUAL, lab: true, slice: true, showcase: false, folk: false, look: Q.get('look') === 'summer' ? 'summer' : 'green', treeClear });
 TL.V = V;
@@ -225,7 +229,11 @@ TL.open = (decor) => {
 };
 $('tlLoad').onclick = () => $('tlFile').click();
 $('tlFile').onchange = async () => { const f = $('tlFile').files[0]; if (!f) return; try { TL.open(JSON.parse(await f.text())); } catch (e) { say("That file isn't a decor file.", 'unsaved'); } $('tlFile').value = ''; };
-$('tlRevert').onclick = async () => { if (TL.text() === SAVED || confirm('Throw away the changes since the last save? (Undo can bring them back.)')) { await tool.loadDefault(); SAVED = TL.text(); say('Back to the saved town.'); } };
+// Back to saved: the page loaded again from the game's own files (exactly what a fresh visit shows)
+let leaving = false;
+$('tlRevert').onclick = () => { if (TL.text() === SAVED || confirm('Throw away the changes since the last save?')) { forgetPlanting(); forgetLayout(); leaving = true; location.reload(); } };
+// (leaving with changes not yet saved or downloaded asks first: nothing is kept for next time)
+addEventListener('beforeunload', (e) => { if (!leaving && TL.ready && TL.text() !== SAVED) { e.preventDefault(); e.returnValue = ''; } });
 
 // ── quick picks: the Build bar set for the job (the buttons in the row over the bar; rigs: TL.pick(name)) ──────────
 const use = (state, info) => {
