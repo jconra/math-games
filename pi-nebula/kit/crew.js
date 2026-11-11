@@ -16,7 +16,7 @@
 //     its own shin's end every frame (the clips keep that rule on their own skeleton: the foot's root = the shin's root
 //     + the shin's own direction x the shin's length), or a longer shin would leave the boot behind.
 //
-// THE PARTS (space-station/assets/crew/: suit_<id>.glb, head_<id>.glb, hair_<id>.glb; listed in crew.json). Each is
+// THE PARTS (pi-nebula/assets/crew/: suit_<id>.glb, head_<id>.glb, hair_<id>.glb; listed in crew.json). Each is
 // skinned to the full skeleton and carries it; the head and the hair are bound to the suit's own bones when a person
 // is put together, so any head goes with any suit and any hair with any head. Where they meet is fixed (the attachment
 // rules, ~/pw/space-math/characters/CHARACTERS.md): a head is skinned to the Neck and Head bones and its neck runs

@@ -1,7 +1,7 @@
 // SHIP BLUEPRINTS: the rooms of a ship drawn on the space its shell actually has, and the checks that keep them
 // inside it. Plain data and plain functions (no three.js), so the lab and the rigs run the very same checks.
 //
-// A BLUEPRINT is a JSON file (space-station/kit/ships/<id>.blueprint.json):
+// A BLUEPRINT is a JSON file (pi-nebula/kit/ships/<id>.blueprint.json):
 //   { "id", "name", "idea", "ship", "shell": "<a shell in assets/ships>", "grid": { "cell": 0.5, "step": 0.5, "deck": metres },
 //     "rooms": [ { "id", "name", "kind", "rect": [x0, z0, x1, z1], "floor": 0, "ceiling": 2.5 } ],
 //     "doors": [ { "id", "rooms": ["a", "b" | "outside"], "at": [x, z], "width": 0.8, "leaves"?, "splay"? } ],

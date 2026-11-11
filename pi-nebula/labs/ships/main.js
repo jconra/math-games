@@ -1,9 +1,9 @@
 // THE SHIP LAB: a ship's outside at true size, the space inside it, and blueprints of its rooms drawn on that space.
 //   The outside: a model generated (Meshy, image to 3D) from the game's maker's picture, made light for the web and
-//     placed in the files at true size, nose +z, its left (port) +x, its feet on y 0 (space-station/assets/ships/).
+//     placed in the files at true size, nose +z, its left (port) +x, its feet on y 0 (pi-nebula/assets/ships/).
 //   The space inside: measured from the model as a solid, next to it (<shell>.space.json): the floor at the door's
 //     sill, the clear height over every 0.1 m, the outlines at the floor, head height and the ceiling.
-//   The blueprints: rooms, doors and furniture as data (space-station/kit/ships/<id>.blueprint.json; blueprint.js
+//   The blueprints: rooms, doors and furniture as data (pi-nebula/kit/ships/<id>.blueprint.json; blueprint.js
 //     says what is in one and holds the checks), drawn on the plan and the side section and as boxes in 3D, checked
 //     live as they are edited.
 // ONE MENU along the bottom. In 3D: drag to look round, wheel or pinch to come closer, W A S D move (Space up, C down,

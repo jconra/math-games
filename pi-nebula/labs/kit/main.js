@@ -1,4 +1,4 @@
-// THE KIT LAB: the station kit (space-station/kit/), built by the very code the game will use.
+// THE KIT LAB: the station kit (pi-nebula/kit/), built by the very code the game will use.
 //   Parts: each piece alone on a stand, with its variants, to look round (drag turns round it).
 //   Rooms: test rooms read from kit/rooms/*.json (drag turns the view where it stands).
 //   Sky: the sky outside the windows (world/sky.js) with nothing in the way: named looks, and the planet's turn.
