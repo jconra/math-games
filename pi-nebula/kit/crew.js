@@ -127,7 +127,10 @@
 //   lib.collarFit (true: the collar fit on; false: off, the heads as made, its numbers still measured: collarStats
 //   .applied false); lib.collarRide (true: the hidden neck rides with the cloth; false: drawn in only);
 //   lib.collarOf(suit id, template) -> the collar
-//   lib.seats, lib.seatOf(head id, suit id) (THE SEAT: how much lower a head sits in a suit's collar)
+//   lib.headPlaceOf(head id, suit id) -> { seat, forward, size, levels: { suit, head, pair } } (THE HEAD'S PLACE: how a
+//   head sits on an outfit, its three levels added up); lib.headPlaces { suits: { id: headFit }, heads: { id: headFit } }
+//   (empty: a layer over crew.json's, the Crew Lab's while it's tried); lib.seatOf(head id, suit id) (the seat alone);
+//   lib.seats (the older layer over a head's older `seat`); HEAD_LIMITS; c.place (the place a person wears)
 //   JOBS, UNIFORM_COLOURS, BAND_COLOURS (THE BANDS), SKIN_TONES, SKIN_LIMIT and skinTone (THE SKIN'S LIMITS),
 //   HAIR_UNDERSIDE (THE HAIR'S UNDERSIDE), HAIR_COLOURS, EYE_COLOURS, FACE, CLIPS, EXPRESSIONS, PAINTS, fitFor, hairRotation, SKULL,
 //   HAIR_CLEAR, TUCK_CLEAR, TUCK_MAX, HUG_GAP, HUG_MAX, HUG_DEFAULT, COLLAR_CLEAR, COLLAR_BAND, SIDEBURN, NAPE, UNDER_SOFT,
@@ -271,15 +274,29 @@ export async function loadCrew({ dir = CREW_DIR, people = PEOPLE_DIR, smoothHair
   // head if it has one (the Crew Lab's while it's edited), else crew.json's
   lib.headFits = {};
   lib.headFitOf = (head) => (!head ? null : Object.prototype.hasOwnProperty.call(lib.headFits, head) ? lib.headFits[head] : (lib.entry('head', head) || {}).hairFit || null);
-  // how much lower a head sits in a suit's collar (THE SEAT, metres): lib.seats' for that head if it has one (the Crew
-  // Lab's while it's tried), else crew.json's `seat`: { <suit id>: metres, all: metres (any other suit) } or one number
-  // (every suit); else 0
+  // how a head sits on an outfit (THE SEAT and THE HEAD'S PLACE): lib.headPlaceOf(head, suit) -> { seat, forward, size,
+  // levels: { suit, head, pair } each { seat, forward, size } }, the three levels added up (sizes multiplied). Each
+  // outfit's and head's headFit is lib.headPlaces' for it if it has one (the Crew Lab's while it's tried; a head's
+  // replacing its older `seat` too), else crew.json's
+  lib.headPlaces = { suits: {}, heads: {} };
+  // (the older form: a head entry's `seat`, and lib.seats over it, as the Crew Lab kept them before 2026-11-11)
   lib.seats = {};
-  lib.seatOf = (head, suit) => {
-    const s = !head ? null : Object.prototype.hasOwnProperty.call(lib.seats, head) ? lib.seats[head] : (lib.entry('head', head) || {}).seat;
-    if (s == null) return 0;
-    return +(typeof s === 'number' ? s : (s[suit] != null ? s[suit] : s.all)) || 0;
+  const own = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+  const lvl = (o) => ({ seat: +(o && o.seat) || 0, forward: +(o && o.forward) || 0, size: o && +o.size > 0 ? +o.size : 1 });
+  lib.headPlaceOf = (head, suit) => {
+    const S = (own(lib.headPlaces.suits, suit) ? lib.headPlaces.suits[suit] : (lib.entry('suit', suit) || {}).headFit) || {};
+    const mine = !!head && own(lib.headPlaces.heads, head), H = (mine ? lib.headPlaces.heads[head] : head && (lib.entry('head', head) || {}).headFit) || {};
+    const old = !head || mine ? null : own(lib.seats, head) ? lib.seats[head] : (lib.entry('head', head) || {}).seat;
+    const levels = { suit: lvl(S), head: lvl(H), pair: lvl(H.suits && H.suits[suit]) };
+    if (old != null) {
+      if (typeof old === 'number') levels.head.seat += +old || 0;
+      else { if (old[suit] != null) levels.pair.seat += +old[suit] || 0; else if (old.all != null) levels.head.seat += +old.all || 0; }
+    }
+    const L = Object.values(levels), cl = (v, [lo, hi]) => Math.min(hi, Math.max(lo, v));
+    return { seat: cl(L.reduce((a, l) => a + l.seat, 0), HEAD_LIMITS.seat), forward: cl(L.reduce((a, l) => a + l.forward, 0), HEAD_LIMITS.forward),
+      size: cl(L.reduce((a, l) => a * l.size, 1), HEAD_LIMITS.size), levels };
   };
+  lib.seatOf = (head, suit) => lib.headPlaceOf(head, suit).seat;
   // (the hug a hair wears when its fit gives none: the crew's own hairs (a scalp line) hugged, the rest not)
   lib.hugDefaultOf = (hair) => { const E = (hair && lib.entry('hair', hair)) || {}; return E.scalp && E.scalp.line ? HUG_DEFAULT : 0; };
   lib.fitOf = (hair, head) => {
@@ -2388,44 +2405,66 @@ function assemble(suit, others) {
   }
   return tpl;
 }
-// A part's own bones, which the suit's skeleton doesn't have (a Tripo head's eye bones and face bones, all under its
-// Head bone): each made on the template under the bone of its parent's name, where the part has it from that parent,
-// so it rides the suit's Head bone (whichever skeleton) as it rode the part's own.
 // THE SEAT (2026-11-10; the game's maker, of two heads: "Their necks are too long. I stretched the necks down so the
-// bottoms had no chance of being seen, but they need to be pushed down into the torso more"): a head entry's `seat`
-// (crew.json: { <suit id>: metres, all: metres } or one number for every suit; lib.seats over it while the Crew Lab
-// tries one; lib.seatOf) lowers the head in that suit, straight down at the suit's rest, deeper into the collar: its
-// neck as made (never cut, never stretched), its eyes and face bones, and the hair worn on it, all alike; the collar fit
-// then draws in whatever of the neck now lies inside the collar. Per suit, because a neck's length shows against each
-// suit's own collar: t9 and t3 20 mm lower in the station uniform (atlantis2) look right, but in the medic's high
-// collar and the spacesuit's ring the same 20 mm rested the chin on the collar. Done
-// on the bind, not the points: each suit bone the head and hair are skinned to carries them `seat` lower (its inverse
-// bind led by the drop at rest), and the part's own bones (eyes, face) are moved down that far, so every point drops
-// the same whatever its weights, and the head still turns on the suit's own neck and head joints. Each mesh keeps the
-// frame it was bound in (frameOf), so the hair's fit, the paint and the strands are worked out exactly as before.
-function seatHead(tpl, d) {
+// bottoms had no chance of being seen, but they need to be pushed down into the torso more") and THE HEAD'S PLACE
+// (2026-11-11; the game's maker: "When I have the cook outfit selected, almost every head looks small compared to the
+// body... Can we add forward/reverse and size for heads"). How a head sits on an outfit, three settings:
+//   seat     metres lower (+), deeper into the collar
+//   forward  metres forward (+, toward the face) or back
+//   size     a scale (1: as made), about the Head joint: the head grows round its own joint, the neck under it reaching
+//            further down inside the collar
+// each set at three levels, which add up (seats and forwards added, sizes multiplied: lib.headPlaceOf):
+//   THIS OUTFIT, EVERY HEAD   the outfit's entry's `headFit` { seat, forward, size } (the cook's: every head too small)
+//   THIS HEAD, EVERY OUTFIT   the head's entry's `headFit` { seat, forward, size }
+//   THIS HEAD ON THIS OUTFIT  the head's entry's `headFit.suits[<outfit id>]` { seat, forward, size }
+// (the older form, a head entry's `seat`: { <suit id>: metres, all: metres } or one number for every suit, still read:
+// a suit's seat at the pair's level, `all` or one number at the head's; lib.seats over it, as the Crew Lab once kept)
+// The Crew Lab tries its own over crew.json's (lib.headPlaces: { suits: { <id>: headFit }, heads: { <id>: headFit } },
+// each entry replacing that outfit's or head's whole headFit, and a head's older `seat` with it). All of it at zero by
+// default: a person as made. Per outfit, because a neck's length shows against each outfit's own collar: t9 and t3 20 mm
+// lower in the station uniform (atlantis2) look right, but in the medic's high collar and the spacesuit's ring the same
+// 20 mm rested the chin on the collar.
+// Done on the bind, not the points (placeHead): each outfit bone the head and hair are skinned to carries them by the
+// move at rest (its inverse bind led by it), and the part's own bones (eyes, face) are moved, turned and sized the same,
+// so every point moves alike whatever its weights, the head's neck as made (never cut, never stretched), its eyes, face
+// and the hair worn on it all together, and the head still turns on the outfit's own neck and head joints. The collar fit
+// then draws in whatever of the neck now lies inside the collar. Each mesh keeps the frame it was bound in (frameOf), so
+// the hair's fit, the paint and the strands are worked out exactly as before, and a sized head carries its hair sized.
+export const HEAD_LIMITS = { seat: [-0.03, 0.06], forward: [-0.04, 0.04], size: [0.8, 1.25] };
+function placeHead(tpl, { seat = 0, forward = 0, size = 1 }) {
   tpl.updateMatrixWorld(true);
   const shared = new Set(), meshes = [];
+  let pivot = null;
   tpl.traverse((o) => {
     if (!o.isSkinnedMesh) return;
-    if (o.userData.part === 'suit') for (const b of o.skeleton.bones) shared.add(b.name);
+    if (o.userData.part === 'suit') for (const b of o.skeleton.bones) { shared.add(b.name); if (b.name === 'Head' && !pivot) pivot = b.getWorldPosition(new THREE.Vector3()); }
     else if (o.userData.part === 'head' || o.userData.part === 'hair') meshes.push(o);
   });
-  const drop = new THREE.Matrix4().makeTranslation(0, -d, 0), moved = new Set(), w = new THREE.Vector3();
+  // (the move at rest: sized about the Head joint, then lowered and brought forward)
+  const T = new THREE.Matrix4().makeTranslation(0, -seat, forward);
+  if (size !== 1 && pivot) T.multiply(new THREE.Matrix4().makeTranslation(pivot.x, pivot.y, pivot.z)).multiply(new THREE.Matrix4().makeScale(size, size, size)).multiply(new THREE.Matrix4().makeTranslation(-pivot.x, -pivot.y, -pivot.z));
+  const moved = new Set(), w = new THREE.Vector3(), L = new THREE.Matrix4();
   for (const m of meshes) {
     m.userData.frame = frameOf(m).toArray();
     // (new matrices: the part's own are shared by every person made from it)
     m.skeleton.boneInverses = m.skeleton.boneInverses.map((inv, i) => {
       const b = m.skeleton.bones[i];
-      return shared.has(b.name) ? new THREE.Matrix4().copy(b.matrixWorld).invert().multiply(drop).multiply(b.matrixWorld).multiply(inv) : inv.clone();
+      return shared.has(b.name) ? new THREE.Matrix4().copy(b.matrixWorld).invert().multiply(T).multiply(b.matrixWorld).multiply(inv) : inv.clone();
     });
     for (const b of m.skeleton.bones) {
       if (shared.has(b.name) || !b.parent || !shared.has(b.parent.name) || moved.has(b)) continue;
-      moved.add(b); b.getWorldPosition(w); w.y -= d; b.position.copy(b.parent.worldToLocal(w));
+      moved.add(b);
+      // (a bone of the part's own hanging from an outfit bone: moved as the head moves; sized too, its own bones under it
+      // following, so the eyes and the face bones size with the head)
+      if (size === 1) { b.getWorldPosition(w); w.y -= seat; w.z += forward; b.position.copy(b.parent.worldToLocal(w)); }
+      else { L.copy(b.parent.matrixWorld).invert().multiply(T).multiply(b.matrixWorld); L.decompose(b.position, b.quaternion, b.scale); }
     }
   }
   tpl.updateMatrixWorld(true);
 }
+// A part's own bones, which the suit's skeleton doesn't have (a Tripo head's eye bones and face bones, all under its
+// Head bone): each made on the template under the bone of its parent's name, where the part has it from that parent,
+// so it rides the suit's Head bone (whichever skeleton) as it rode the part's own.
 function addOwnBones(list, bones) {
   let left = list.filter((b) => !bones[b.name]);
   while (left.length) {
@@ -2452,10 +2491,10 @@ export async function makeCrew(lib, recipe) {
   // (the Mathwood hair's strands draw from the strand atlas too: THE MATHWOOD HAIR'S STRANDS)
   const atlas = atlas0 || (hair && (hair.scene.userData.crewPart || {}).strands ? await lib.hairAtlas() : null);
   const tpl = assemble(suit, [['head', head], ['hair', hair], ['hand', hand]].filter((x) => x[1]));
-  // THE SEAT: the head (its neck, its eyes and face bones) and its hair lowered into the collar by the head's own `seat`,
-  // before the collar fit measures the neck
-  const seat = head ? lib.seatOf(R.head, R.suit) : 0;
-  if (seat) seatHead(tpl, seat);
+  // THE SEAT and THE HEAD'S PLACE: the head (its neck, its eyes and face bones) and its hair lowered, brought forward and
+  // sized as the outfit, the head and the pair say, before the collar fit measures the neck
+  const place = head ? lib.headPlaceOf(R.head, R.suit) : null;
+  if (place && (place.seat || place.forward || place.size !== 1)) placeHead(tpl, place);
   // THE COLLAR FIT: the suit's collar and the head's points below its rim, on the template at the suit's rest (before any
   // clip), applied to the person's own copy of the head's positions below
   // (measured always, so its numbers can be read with the fit off; applied only while lib.collarFit is on)
@@ -2556,6 +2595,8 @@ export async function makeCrew(lib, recipe) {
   }
   const c = {
     root: person.root, person, meshes, bones, recipe: { ...recipe }, body: fit.body, rig: fit.rig, paint, hand: R.hand,
+    // (THE HEAD'S PLACE: how this head sits on this outfit, each level's and the total)
+    place,
     // (THE SIZE: the whole person scaled, and their stride with them)
     size, stride: { Walk: fit.stride.Walk * size, Run: fit.stride.Run * size },
     play: (name, o = {}) => person.play(name, { once: ONCE.has(name), ...o }),

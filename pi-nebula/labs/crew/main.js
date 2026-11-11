@@ -11,8 +11,11 @@
 //   BODIES   a grid of picture buttons, one an outfit (thumbs.js: drawn from the kit as the window opens; the one worn
 //            outlined), and under it Hands (by outfit: the man's on a men's-skeleton outfit, the woman's on a women's;
 //            either; none) and Height (the recipe's size, kit/crew.js SIZES: Shorter, Medium, Taller)
-//   HEADS    a grid of picture buttons, one a head, and under it how the head sits on the outfit: Seat (kit/crew.js THE
-//            SEAT: how much lower this head sits in this outfit's collar, in 2 mm steps)
+//   HEADS    a grid of picture buttons, one a head, and under it how the head sits on the outfit (kit/crew.js THE SEAT
+//            and THE HEAD'S PLACE): what the changes apply to, one of three (This outfit, every head; This head, every
+//            outfit; This head on this outfit only), a line adding the levels up ("Size: Cook's jacket and apron
+//            (every head) +6%, this head (every outfit) +2% = +8%"); Seat (lower into the collar) and Forward in 2 mm
+//            steps, Size in 1% steps (Fine: 0.5 mm and 0.25%); Reset (the level chosen back to nothing)
 //   HAIR     a grid of picture buttons ("No hair" first), and under it its FIT (kit/crew.js "a hair's fit"): what the
 //            changes apply to, one of three (This hair, every head: the hair's own fit; This hair on this head only: the
 //            pair's own, added to the hair's; Every hair on this head: the head's own setting, crew.json's head entry
@@ -39,7 +42,8 @@
 //            been saved since; Save fits (a file, crewFits-<yyyy-mm-dd-hhmm>.json, to Downloads, for the hair rig's
 //            merge_fits.mjs), Copy fits (the same text, also shown in a box to copy by hand), Clear my changes
 //   Saved and copied text: { "hairs": { <hair id>: its fit (pairs in fit.heads) }, "heads": { <head id>: its hairFit },
-//     "buzzes": { <hair id>: its buzz | null }, "seats": { <head id>: { <suit id>: metres } } }
+//     "buzzes": { <hair id>: its buzz | null }, "outfits": { <outfit id>: its headFit { seat, forward, size } },
+//     "headPlaces": { <head id>: its headFit { seat, forward, size, suits: { <outfit id>: { seat, forward, size } } } } }
 // Drag to look round, wheel or pinch to come closer, W A S D move (Space up, C down, Shift faster); the arrow keys step
 // the hair (left, right) and the head (up, down); Esc closes the window in front.
 //   ?who=<recipe id>  ?clip=<name>  ?cam=<name>  ?flathair (the Mathwood hair flat-shaded to start)  ?look (Look at camera on)
@@ -54,7 +58,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { loadCrew, makeCrew, fitFor, TUCK_MAX, HUG_GAP, HUG_MAX, HUG_DEFAULT, CLIPS, JOBS, UNIFORM_COLOURS, BAND_COLOURS, SIZES, SKIN_TONES, HAIR_COLOURS, EYE_COLOURS, FACE, EXPRESSIONS } from '../../kit/crew.js';
+import { loadCrew, makeCrew, fitFor, HEAD_LIMITS, TUCK_MAX, HUG_GAP, HUG_MAX, HUG_DEFAULT, CLIPS, JOBS, UNIFORM_COLOURS, BAND_COLOURS, SIZES, SKIN_TONES, HAIR_COLOURS, EYE_COLOURS, FACE, EXPRESSIONS } from '../../kit/crew.js';
 import { makeMaterials } from '../../kit/materials.js';
 import { buildRoom } from '../../kit/layout.js';
 import { makeMenus } from './windows.js';
@@ -275,7 +279,7 @@ function bodiesWin() {
 // HEADS: the heads, and how this one sits on this outfit
 function headsWin() {
   const R = st.recipe || {};
-  return [grid('head', lib.list.parts.head, R.head, 'Heads'), sec('How this head sits in this outfit', ...seatBits(R))];
+  return [grid('head', lib.list.parts.head, R.head, 'Heads'), ...headBits(R)];
 }
 // POSE: the clips and their speed
 function poseWin() {
@@ -321,24 +325,112 @@ function look(on) { st.look = !!on; if (!st.look) st.crew?.lookAt(null); menu();
 // given into its own colours, so a key left out would keep the colour it had)
 function colours(c) { st.recipe.colours = { ...(st.recipe.colours || {}), ...c }; for (const k of Object.keys(c)) if (c[k] == null) delete st.recipe.colours[k]; st.crew?.setColours({ ...st.recipe.colours, ...c }); menu(); }
 
-// ── THE SEAT (kit/crew.js): how much lower this head sits in this outfit's collar, in 2 mm steps (+ lower, - higher),
-// tried at once and kept in this browser over crew.json's (lib.seats); Save fits and Copy fits carry them ─────────────
-const SEAT_KEY = 'crewlab.seats.v1';
-try { const j = JSON.parse(localStorage.getItem(SEAT_KEY) || '{}'); if (j && typeof j === 'object' && !Array.isArray(j)) lib.seats = j; } catch (_) { /* none kept */ }
-const seatMap = (s) => (s == null ? {} : typeof s === 'number' ? { all: s } : { ...s });
-function seatBits(R) {
-  if (!R.head || !R.suit) return [note('Pick a head and an outfit.')];
-  const mm = Math.round(lib.seatOf(R.head, R.suit) * 1000);
-  return [row(knob('Seat', `${mm} mm`, ['▲', () => reseat(-2)], ['▼', () => reseat(2)], 'Seat this head 2 mm higher in this outfit', 'Seat this head 2 mm lower in this outfit (deeper in the collar)',
-    'How much lower this head sits in this outfit\'s collar (its neck goes deeper in; nothing is cut)'))];
+// ── HOW THE HEAD SITS (kit/crew.js THE SEAT and THE HEAD'S PLACE): Seat (lower, into the collar), Forward (toward the
+// face) and Size, at one of three levels that add up (sizes multiply): this outfit, every head (the outfit's headFit);
+// this head, every outfit (the head's headFit); this head on this outfit only (the head's headFit.suits[<outfit>]).
+// Tried at once and kept in this browser over crew.json's (lib.headPlaces, each outfit's or head's whole headFit);
+// Save fits and Copy fits carry them ("outfits" and "headPlaces") ─────────────────────────────────────────────────
+const PLACE_KEY = 'crewlab.headplaces.v1', OLD_SEAT_KEY = 'crewlab.seats.v1';
+const has = (o, k) => Object.prototype.hasOwnProperty.call(o, k), dup = (o) => JSON.parse(JSON.stringify(o == null ? {} : o));
+const HEAD_LEVELS = [
+  ['suit', 'This outfit, every head', 'Your changes are this outfit\'s own: every head worn on it sits this way'],
+  ['head', 'This head, every outfit', 'Your changes are this head\'s own: it sits this way on every outfit'],
+  ['pair', 'This head on this outfit only', 'Your changes are this pair\'s own: only this head on this outfit'],
+];
+const PLACE_STEP = { seat: [0.002, 0.0005], forward: [0.002, 0.0005], size: [0.01, 0.0025] };   // (each: [step, Fine step])
+const headSt = { scope: 'pair', fine: false };
+// (a head's headFit as crew.json gives it, its older `seat` folded in: a suit's at the pair's level, all at the head's)
+function headPlaceStart(h) {
+  const E = lib.entry('head', h) || {}, o = dup(E.headFit), s = E.seat;
+  if (s != null) {
+    if (typeof s === 'number') o.seat = (+o.seat || 0) + s;
+    else for (const [k, v] of Object.entries(s)) { if (k === 'all') o.seat = (+o.seat || 0) + v; else { o.suits = o.suits || {}; const P = o.suits[k] = o.suits[k] || {}; P.seat = (+P.seat || 0) + v; } }
+  }
+  return o;
 }
-async function reseat(dmm) {
+// (a level with nothing in it left out: seats and forwards of zero, a size of 1; numbers rounded; empty pairs dropped)
+function placeTidy(o) {
+  const t = {}; if (!o) return t;
+  if (Math.abs(+o.seat || 0) >= 0.00005) t.seat = +(+o.seat).toFixed(4);
+  if (Math.abs(+o.forward || 0) >= 0.00005) t.forward = +(+o.forward).toFixed(4);
+  if (o.size != null && Math.abs(+o.size - 1) >= 0.00005) t.size = +(+o.size).toFixed(4);
+  if (o.suits) { const S = {}; for (const [k, v] of Object.entries(o.suits)) { const x = placeTidy(v); delete x.suits; if (Object.keys(x).length) S[k] = x; } if (Object.keys(S).length) t.suits = S; }
+  return t;
+}
+function savePlaces() {
+  // (an outfit or a head back to crew.json's own is no longer a change)
+  for (const id of Object.keys(lib.headPlaces.suits)) if (JSON.stringify(placeTidy(lib.headPlaces.suits[id])) === JSON.stringify(placeTidy((lib.entry('suit', id) || {}).headFit))) delete lib.headPlaces.suits[id];
+  for (const id of Object.keys(lib.headPlaces.heads)) if (JSON.stringify(placeTidy(lib.headPlaces.heads[id])) === JSON.stringify(placeTidy(headPlaceStart(id)))) delete lib.headPlaces.heads[id];
+  try { if (Object.keys(lib.headPlaces.suits).length || Object.keys(lib.headPlaces.heads).length) localStorage.setItem(PLACE_KEY, JSON.stringify(lib.headPlaces)); else localStorage.removeItem(PLACE_KEY); }
+  catch (_) { fitSt.note = 'This browser would not keep the head settings: Save fits before you leave.'; }
+}
+// (this browser's, and the seats an older Crew Lab kept (crewlab.seats.v1), brought into this form once)
+try {
+  const j = JSON.parse(localStorage.getItem(PLACE_KEY) || '{}');
+  if (j && typeof j === 'object') lib.headPlaces = { suits: j.suits && typeof j.suits === 'object' ? j.suits : {}, heads: j.heads && typeof j.heads === 'object' ? j.heads : {} };
+  const old = JSON.parse(localStorage.getItem(OLD_SEAT_KEY) || 'null');
+  if (old && typeof old === 'object') {
+    for (const [h, s] of Object.entries(old)) {
+      if (has(lib.headPlaces.heads, h) || !lib.entry('head', h)) continue;
+      const o = dup((lib.entry('head', h) || {}).headFit), m = typeof s === 'number' ? { all: s } : s || {};
+      for (const [k, v] of Object.entries(m)) { if (k === 'all') o.seat = +v || 0; else { o.suits = o.suits || {}; (o.suits[k] = o.suits[k] || {}).seat = +v || 0; } }
+      lib.headPlaces.heads[h] = o;
+    }
+    localStorage.removeItem(OLD_SEAT_KEY);
+    savePlaces();
+  }
+} catch (_) { /* none kept */ }
+lib.seats = {};
+// the level chosen's own settings, for the outfit and head worn (made in this browser's layer on the first change)
+function placeLevel(R, make) {
+  const lv = headSt.scope;
+  if (lv === 'suit') {
+    if (!has(lib.headPlaces.suits, R.suit)) { if (!make) return (lib.entry('suit', R.suit) || {}).headFit || {}; lib.headPlaces.suits[R.suit] = dup((lib.entry('suit', R.suit) || {}).headFit); }
+    return lib.headPlaces.suits[R.suit];
+  }
+  if (!has(lib.headPlaces.heads, R.head)) { if (!make) { const o = headPlaceStart(R.head); return lv === 'head' ? o : (o.suits && o.suits[R.suit]) || {}; } lib.headPlaces.heads[R.head] = headPlaceStart(R.head); }
+  const H = lib.headPlaces.heads[R.head];
+  if (lv === 'head') return H;
+  if (!make) return (H.suits && H.suits[R.suit]) || {};
+  H.suits = H.suits || {}; return (H.suits[R.suit] = H.suits[R.suit] || {});
+}
+async function replace(key, dir) {
   const R = st.recipe; if (!R?.head || !R.suit) return;
-  const m = seatMap(own(lib.seats, R.head) ? lib.seats[R.head] : (lib.entry('head', R.head) || {}).seat);
-  m[R.suit] = Math.min(0.04, Math.max(-0.02, Math.round((lib.seatOf(R.head, R.suit) * 1000 + dmm)) / 1000));
-  lib.seats[R.head] = m; st.dirty = true;
-  try { localStorage.setItem(SEAT_KEY, JSON.stringify(lib.seats)); } catch (_) { /* not kept: Save fits before leaving */ }
-  await show(R);
+  const o = placeLevel(R, true), d = PLACE_STEP[key][headSt.fine ? 1 : 0], [lo, hi] = HEAD_LIMITS[key];
+  if (key === 'size') o.size = +Math.min(hi, Math.max(lo, (o.size == null ? 1 : +o.size) + dir * d)).toFixed(4);
+  else o[key] = +Math.min(hi, Math.max(lo, (+o[key] || 0) + dir * d)).toFixed(4);
+  st.dirty = true; savePlaces(); await show(R);
+}
+async function placeReset() {
+  const R = st.recipe; if (!R?.head || !R.suit) return;
+  const o = placeLevel(R, true); delete o.seat; delete o.forward; delete o.size;
+  st.dirty = true; savePlaces(); await show(R);
+}
+// (in words: "20 mm lower", "3 mm forward", "+6%")
+const seatW = (v) => (Math.abs(v) < 0.00005 ? '0 mm' : `${+(Math.abs(v) * 1000).toFixed(1)} mm ${v > 0 ? 'lower' : 'higher'}`);
+const fwdW = (v) => (Math.abs(v) < 0.00005 ? '0 mm' : `${+(Math.abs(v) * 1000).toFixed(1)} mm ${v > 0 ? 'forward' : 'back'}`);
+const sizeW = (v) => { const d = (v - 1) * 100; return Math.abs(d) < 0.005 ? '0%' : (d > 0 ? '+' : '−') + +Math.abs(d).toFixed(2) + '%'; };
+function headBits(R) {
+  if (!R.head || !R.suit) return [note('Pick a head and an outfit.')];
+  const P = lib.headPlaceOf(R.head, R.suit), L = placeLevel(R, false), lvName = { suit: `${nameOf('suit', R.suit)} (every head)`, head: 'this head (every outfit)', pair: 'this head on this outfit' };
+  const lvl = HEAD_LEVELS.map(([k, t, ti]) => { const x = P.levels[k], any = x.seat || x.forward || x.size !== 1; return [k, t + (any ? ' •' : ''), ti + (any ? ' (• it has some)' : '')]; });
+  // (each setting's levels added up: "Size: Cook's jacket (every head) +6%, this head (every outfit) +2% = +8%")
+  const sum = el('div', 'cw-sum'), lines = [];
+  for (const [key, name, fmt, def] of [['seat', 'Seat', seatW, 0], ['forward', 'Forward', fwdW, 0], ['size', 'Size', sizeW, 1]]) {
+    const parts = ['suit', 'head', 'pair'].filter((k) => Math.abs(P.levels[k][key] - def) > 1e-7).map((k) => `${lvName[k]} ${fmt(P.levels[k][key])}`);
+    if (parts.length) lines.push(`${name}: ${parts.join(', ')}${parts.length > 1 ? ' = ' + fmt(P[key]) : ''}`);
+  }
+  if (!lines.length) lines.push('As made: this head sits on this outfit as the parts were made.');
+  for (const l of lines) sum.append(el('div', null, l));
+  const v = (k) => (k === 'size' ? (L.size == null ? 1 : +L.size) : +L[k] || 0), lvTitle = HEAD_LEVELS.find((x) => x[0] === headSt.scope)[1].toLowerCase();
+  return [sec('How this head sits: your changes apply to', choice(lvl, headSt.scope, (k) => { headSt.scope = k; paint('heads'); }, 'What the head changes apply to'), sum),
+    sec(HEAD_LEVELS.find((x) => x[0] === headSt.scope)[1],
+      row(knob('Seat', seatW(v('seat')), ['▲', () => replace('seat', -1)], ['▼', () => replace('seat', 1)], 'Higher in the collar', 'Lower: deeper in the collar (its neck goes deeper in; nothing is cut)', 'How much lower the head sits, ' + lvTitle),
+        knob('Forward', fwdW(v('forward')), ['−', () => replace('forward', -1)], ['+', () => replace('forward', 1)], 'Back', 'Forward (toward the face)', 'How far forward the head sits, ' + lvTitle),
+        knob('Size', sizeW(v('size')), ['−', () => replace('size', -1)], ['+', () => replace('size', 1)], 'A touch smaller', 'A touch bigger', 'The head\'s size (its hair, eyes and face with it), ' + lvTitle)),
+      row(chip('Fine', headSt.fine, () => { headSt.fine = !headSt.fine; paint('heads'); }, true, 'Small steps: 0.5 mm and 0.25% (off: 2 mm and 1%)'),
+        chip('Reset', false, placeReset, true, 'The level chosen back to nothing'))),
+    note('The neck is never cut: to look down between the collar and the neck, Camera: Down the collar.')];
 }
 
 // ── FACE: the face bones' sliders (kit/crew.js FACE), kept in the recipe; a visor's face ──────────────────────────────
@@ -485,9 +577,9 @@ function fitReset() {
 async function clearMine() {
   const n = changeList().length;
   if (!n) { fitSt.note = 'No changes of yours to clear.'; paint('changes'); return; }
-  if (!confirm('Clear all your changes in this browser (hair fits, buzzes, seats) and go back to crew.json\'s? (Save fits first to keep them.)')) return;
-  lib.fits = {}; lib.headFits = {}; lib.buzzes = {}; lib.seats = {};
-  saveMine(); saveBuzzes(); try { localStorage.removeItem(SEAT_KEY); } catch (_) { /* none */ }
+  if (!confirm('Clear all your changes in this browser (hair fits, buzzes, how heads sit) and go back to crew.json\'s? (Save fits first to keep them.)')) return;
+  lib.fits = {}; lib.headFits = {}; lib.buzzes = {}; lib.headPlaces = { suits: {}, heads: {} };
+  saveMine(); saveBuzzes(); savePlaces();
   st.dirty = false; fitSt.note = 'Back to crew.json\'s.'; fitSt.out = null;
   if (st.recipe) await show(st.recipe); else menu();
 }
@@ -498,9 +590,13 @@ function fitsText() {
   for (const P of lib.list.parts.head) { const t = headTidy(lib.headFitOf(P.id)); if (Object.keys(t).length) heads.push('    ' + JSON.stringify(P.id) + ': ' + JSON.stringify(t)); }
   // (and every painted hair's buzz: null for none)
   for (const P of lib.list.parts.hair) { const h = hairPaints(P); if (h.cut || h.marks || h.under) buzzes.push('    ' + JSON.stringify(P.id) + ': ' + JSON.stringify(tidyBuzz(lib.buzzOf(P.id)))); }
-  const seats = Object.entries(lib.seats).map(([h, s]) => '    ' + JSON.stringify(h) + ': ' + JSON.stringify(s));
+  // (and how heads sit: every outfit's headFit and every head's, this browser's over crew.json's; {} for one that this
+  // browser took back to nothing, so the merge takes it out)
+  const outfits = [], places = [];
+  for (const P of lib.list.parts.suit) { const t = placeTidy(has(lib.headPlaces.suits, P.id) ? lib.headPlaces.suits[P.id] : P.headFit); if (Object.keys(t).length || has(lib.headPlaces.suits, P.id)) outfits.push('    ' + JSON.stringify(P.id) + ': ' + JSON.stringify(t)); }
+  for (const P of lib.list.parts.head) { const t = placeTidy(has(lib.headPlaces.heads, P.id) ? lib.headPlaces.heads[P.id] : headPlaceStart(P.id)); if (Object.keys(t).length || has(lib.headPlaces.heads, P.id)) places.push('    ' + JSON.stringify(P.id) + ': ' + JSON.stringify(t)); }
   const block = (L) => (L.length ? '{\n' + L.join(',\n') + '\n  }' : '{}');
-  return '{\n  "hairs": ' + block(hairs) + ',\n  "heads": ' + block(heads) + ',\n  "buzzes": ' + block(buzzes) + ',\n  "seats": ' + block(seats) + '\n}';
+  return '{\n  "hairs": ' + block(hairs) + ',\n  "heads": ' + block(heads) + ',\n  "buzzes": ' + block(buzzes) + ',\n  "outfits": ' + block(outfits) + ',\n  "headPlaces": ' + block(places) + '\n}';
 }
 // (Save fits: the same text as a file, crewFits-<yyyy-mm-dd-hhmm>.json, to the browser's downloads)
 function saveFits() {
@@ -725,7 +821,14 @@ function changeList() {
   for (const id of Object.keys(lib.fits)) L.push(['Hair fit', nameOf('hair', id)]);
   for (const id of Object.keys(lib.headFits)) L.push(['Every hair on a head', nameOf('head', id)]);
   for (const id of Object.keys(lib.buzzes)) L.push(['Buzz', nameOf('hair', id)]);
-  for (const [h, s] of Object.entries(lib.seats)) for (const [suit, v] of Object.entries(seatMap(s))) L.push(['Seat', `${nameOf('head', h)} in ${suit === 'all' ? 'every outfit' : nameOf('suit', suit)}: ${Math.round(v * 1000)} mm`]);
+  const placeW = (o) => [o.seat ? 'seat ' + seatW(o.seat) : '', o.forward ? fwdW(o.forward) : '', o.size != null && o.size !== 1 ? 'size ' + sizeW(o.size) : ''].filter(Boolean).join(', ') || 'back to as made';
+  for (const [id, o] of Object.entries(lib.headPlaces.suits)) L.push(['Every head on an outfit', `${nameOf('suit', id)}: ${placeW(placeTidy(o))}`]);
+  for (const [id, o0] of Object.entries(lib.headPlaces.heads)) {
+    const o = placeTidy(o0), w = [];
+    if (o.seat || o.forward || o.size) w.push(`every outfit: ${placeW(o)}`);
+    for (const [suit, x] of Object.entries(o.suits || {})) w.push(`on ${nameOf('suit', suit)}: ${placeW(x)}`);
+    L.push(['How a head sits', `${nameOf('head', id)}, ${w.join('; ') || 'back to as made'}`]);
+  }
   return L;
 }
 function changesWin() {
@@ -735,7 +838,7 @@ function changesWin() {
   else for (const [k, t] of L) { const d = el('div'); d.append(Object.assign(el('b', null, k + ': ')), t); what.append(d); }
   out.push(sec('Your changes (kept in this browser, worn at once)', what,
     note(L.length ? (st.dirty ? 'Changed since you last saved or copied them.' : fitSt.saved ? `Saved in ${fitSt.saved}.` : 'Kept in this browser. Save fits to send them.') : '')));
-  out.push(sec('Save and send', row(chip('Save fits', false, saveFits, true, 'Everything you changed (hair fits, buzzes, seats) as a file, crewFits-<date>.json, to your Downloads, for merging into crew.json (merge_fits.mjs)'),
+  out.push(sec('Save and send', row(chip('Save fits', false, saveFits, true, 'Everything you changed (hair fits, buzzes, how heads sit) as a file, crewFits-<date>.json, to your Downloads, for merging into crew.json (merge_fits.mjs)'),
     chip('Copy fits', false, copyFits, true, 'The same text, copied (and shown in a box below)'),
     chip('Clear my changes' + (L.length ? ` (${L.length})` : ''), false, clearMine, true, 'Forget this browser\'s changes: back to crew.json\'s')),
   fitSt.note ? note(fitSt.note) : null));
@@ -837,5 +940,7 @@ window.CREWLAB = {
   fit: () => ({ open: M.isOpen('hair'), scope: fitSt.scope, fine: fitSt.fine, hair: st.recipe?.hair, head: st.recipe?.head, wearing: st.crew?.fit || null, stats: st.crew?.fitStats,
     wearingFor: st.crew && { hair: st.crew.recipe.hair, head: st.crew.recipe.head }, mine: copy(lib.fits), mineHeads: copy(lib.headFits), text: fitsText(), box: fitSt.out, note: fitSt.note, saved: fitSt.saved || null, changes: changeList() }),
   step: (kind, d) => step(kind, d), win: (id, on) => M.open(id, on), menus: () => M.state(), thumbs,
+  // (how the head sits: the level chosen, a step of a setting at it, what the person wears, this browser's layer)
+  place: () => ({ scope: headSt.scope, fine: headSt.fine, wearing: st.crew?.place || null, mine: dup(lib.headPlaces) }), placeLevel: (k) => { headSt.scope = k; paint('heads'); }, placeStep: (key, dir) => replace(key, dir),
   measure, crew: () => st.crew, lib, three: THREE, scene, camera, renderer, controls,
 };
