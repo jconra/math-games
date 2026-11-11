@@ -19,7 +19,7 @@ import * as save from './save.js';
 import { showTitle } from './ui/title.js';
 import { loadStation } from './station.js';
 import { loadCrew } from '../kit/crew.js';
-import { drawLooks, drawn } from './portraits.js';
+import { drawLooks, drawn, keptAll, onPicture } from './portraits.js';
 import { recipeOf } from './looks.js';
 import { makeWalls } from './walls.js';
 import { makeChase, CAM } from './chase.js';
@@ -48,9 +48,20 @@ async function boot() {
 
   // the crew kit, for the looks' pictures, the player and the people (one copy for all three)
   const libP = loadCrew();
-  libP.then((lib) => drawLooks(lib, { first: [chosen && chosen.look && chosen.look.id, ...players.map((p) => p.look && p.look.id)] })).catch(fail);
+  const looksP = libP.then((lib) => drawLooks(lib, { first: [chosen && chosen.look && chosen.look.id, ...players.map((p) => p.look && p.look.id)] }));
+  looksP.catch(fail);
+  // THE LOOKS FIRST: on a visit with no pictures kept from the last one, the station waits until the looks' pictures are
+  // drawn, so the title's choices aren't empty frames while the station takes the network and the graphics card (the
+  // game's maker, 2026-11-11: "we need to prioritize loading the characters you can pick"); with them kept, both at once
+  let from = 0.02;
+  if (!keptAll()) {
+    T.setProgress(0.02, 'Getting the crew ready');
+    const off = onPicture(() => T.setProgress(0.02 + 0.16 * Math.min(1, drawn.looks / 8), 'Getting the crew ready'));
+    try { await looksP; } catch (e) { /* the station loads all the same */ }
+    off(); from = 0.18;
+  }
 
-  const W = await loadStation({ canvas, quality: q.get('q'), rig: RIG, say: (f, words) => T.setProgress(0.02 + f * 0.8, words) });
+  const W = await loadStation({ canvas, quality: q.get('q'), rig: RIG, say: (f, words) => T.setProgress(from + f * (0.82 - from), words) });
   GAME.W = W;
 
   // ── where a person can walk ──────────────────────────────────────────────────────────────────────────────────

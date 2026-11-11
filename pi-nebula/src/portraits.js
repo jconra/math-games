@@ -119,6 +119,8 @@ for (const l of LOOKS) for (const kind of ['face', 'body']) { const d = kept[l.i
 export const pictureOf = (id, kind = 'face') => PICS.get(lookById(id).id + '_' + kind) || null;
 export const onPicture = (fn) => { heard.add(fn); return () => heard.delete(fn); };
 export const drawn = { looks: 0, ms: 0, done: false, failed: null };
+// (every look's pictures kept from the last visit: then the title isn't waiting on this visit's drawing)
+export const keptAll = () => LOOKS.every((l) => PICS.has(l.id + '_face') && PICS.has(l.id + '_body'));
 
 const breath = () => new Promise((go) => { requestAnimationFrame(() => setTimeout(go, 0)); setTimeout(go, 100); });
 export async function drawLooks(lib, { first = [] } = {}) {
